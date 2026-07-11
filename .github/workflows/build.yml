@@ -1,18 +1,17 @@
 name: Build packages
 
-# Builds the package with the official OpenWrt SDK for several targets.
-# - On a version tag (v*) the built packages are attached to a GitHub Release.
-# - Can also be run manually (workflow_dispatch) to get artifacts.
+# The package is PKGARCH:=all (arch-independent), so ONE build per package
+# format is enough for every device:
+#   - a 23.05 SDK produces the .ipk
+#   - a snapshot SDK produces the .apk
+# On a version tag (v*) the artifacts are attached to a GitHub Release;
+# the workflow can also be run manually from the Actions tab.
 
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
-  pull_request:
-    paths:
-      - 'luci-app-5gmodem/**'
-      - '.github/workflows/build.yml'
 
 permissions:
   contents: write
@@ -24,15 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # <target_arch>-<openwrt_version>. 23.05 produces .ipk,
-        # SNAPSHOT produces .apk (apk-tools). Add/remove freely.
+        # <target_arch>-<openwrt_version>. x86_64 is only the *builder*;
+        # the resulting package is arch-independent and installs anywhere.
         arch:
-          - x86_64-23.05.5
-          - aarch64_cortex-a53-23.05.5
-          - arm_cortex-a7_neon-vfpv4-23.05.5
-          - mipsel_24kc-23.05.5
-          - x86_64-SNAPSHOT
-          - aarch64_cortex-a53-SNAPSHOT
+          - x86_64-23.05.5   # -> .ipk
+          - x86_64-SNAPSHOT  # -> .apk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -44,13 +39,32 @@ jobs:
           FEEDNAME: fdmodem
           PACKAGES: luci-app-5gmodem
           NO_REFRESH_CHECK: 1
+          # keep memory in check while heavy deps (glib2 via modemmanager)
+          # compile on the runner
+          MAKEFLAGS: -j2
           V: s
 
       - name: Collect packages
         run: |
           mkdir -p out
           find bin/ -type f \( -name 'luci-app-5gmodem*.ipk' -o -name 'luci-app-5gmodem*.apk' \) -exec cp -v {} out/ \;
-          ls -l out/
+          echo "--- collected ---"; ls -l out/
+
+      - name: Upload build logs on failure
+        if: failure()
+        run: |
+          mkdir -p logs
+          # buildroot logs (if the action kept them) + our package build dir
+          find . -type d -name logs -exec cp -r {} logs/ \; 2>/dev/null || true
+          find bin/ -maxdepth 6 -name '*.log' -exec cp {} logs/ \; 2>/dev/null || true
+          tar -czf build-logs.tar.gz logs 2>/dev/null || true
+      - name: Upload logs artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.arch }}
+          path: build-logs.tar.gz
+          if-no-files-found: ignore
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
