@@ -4,6 +4,8 @@
 
 chmod +x /usr/share/5gmodem/5gmodem.sh 2>&1 &
 chmod +x /usr/share/5gmodem/detect.sh 2>&1 &
+chmod +x /usr/share/5gmodem/bands.sh 2>&1 &
+chmod +x /usr/share/5gmodem/ttl.sh /usr/share/5gmodem/mkiface.sh /usr/share/5gmodem/update.sh /usr/share/5gmodem/reboot_modem.sh 2>&1 &
 chmod +x /usr/share/5gmodem/check.gcom 2>&1 &
 chmod +x /usr/share/5gmodem/info.gcom 2>&1 &
 chmod +x /usr/share/5gmodem/vendorproduct.gcom 2>&1 &

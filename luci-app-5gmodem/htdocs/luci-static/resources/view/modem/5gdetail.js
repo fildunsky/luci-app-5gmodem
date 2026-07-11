@@ -407,6 +407,93 @@ function loadBands() {
 	});
 }
 
+/* ---- Управление диапазонами через modemband (для модемов, у которых mmcli
+   не отдаёт бенды: не под ModemManager, или MM их не показывает). Данные и
+   применение - вендорными AT-командами через /usr/share/5gmodem/bands.sh. ---- */
+var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+
+function buildBandButtonsNum(supported, enabled, btype) {
+	var pfx = (btype == 'lte') ? 'B' : 'n';
+	return (supported || []).map(function(n) {
+		n = parseInt(n, 10);
+		return E('button', {
+			'class': 'btn cbi-button' + ((enabled || []).indexOf(n) >= 0 ? ' cbi-button-action important' : ''),
+			'data-band': String(n),
+			'data-btype': btype,
+			'click': function(ev) {
+				ev.preventDefault();
+				ev.currentTarget.classList.toggle('cbi-button-action');
+				ev.currentTarget.classList.toggle('important');
+			}
+		}, pfx + n);
+	});
+}
+
+/* Показать блок частот и заполнить кнопки из bands.sh (без mmcli). Режим сети
+   (Auto/2G/…) остаётся скрытым - он управляется только через mmcli. */
+function loadBandsModemband() {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
+		var j = {};
+		try { j = JSON.parse(out) || {}; } catch (e) { return; }
+		if (j.error || (!j.supported && !j.supported5gnsa && !j.supported5gsa)) { return; }
+		bandSource = 'modemband';
+
+		var supLte = (j.supported || []).map(function(o) { return o.band; });
+		var supNsa = (j.supported5gnsa || []).map(function(o) { return o.band; });
+		var enLte  = j.enabled || [];
+		var enNsa  = j.enabled5gnsa || [];
+
+		[ 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+			var e = document.getElementById(id); if (e) { e.style.display = ''; }
+		});
+
+		var lteC = document.getElementById('bands-lte');
+		if (lteC) {
+			lteC.innerHTML = '';
+			if (supLte.length) { buildBandButtonsNum(supLte, enLte, 'lte').forEach(function(b) { lteC.appendChild(b); }); }
+			else { lteC.textContent = '-'; }
+		}
+		var nrRow = document.getElementById('bands5gn');
+		var nrC = document.getElementById('bands-nr');
+		if (nrC) {
+			nrC.innerHTML = '';
+			if (supNsa.length) { buildBandButtonsNum(supNsa, enNsa, 'nsa').forEach(function(b) { nrC.appendChild(b); }); }
+			else if (nrRow) { nrRow.style.display = 'none'; }   // нет 5G - прячем строку
+		}
+	});
+}
+
+/* Применить/сбросить диапазоны через modemband */
+function applyBandsModemband(reset) {
+	var lte = [], nsa = [];
+	if (!reset) {
+		document.querySelectorAll('#bands-lte .cbi-button-action').forEach(function(b) { lte.push(b.getAttribute('data-band')); });
+		document.querySelectorAll('#bands-nr .cbi-button-action').forEach(function(b) { nsa.push(b.getAttribute('data-band')); });
+		if (!lte.length && !nsa.length) {
+			ui.addNotification(null, E('p', _('Select at least one band')), 'error');
+			return Promise.resolve();
+		}
+	}
+	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying bands...')));
+	var hasLte = document.querySelector('#bands-lte .cbi-button') != null;
+	var hasNsa = document.querySelector('#bands-nr .cbi-button') != null;
+	var p = Promise.resolve();
+	if (hasLte) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands', reset ? 'default' : lte.join(' ') ]); }); }
+	if (hasNsa) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', reset ? 'default' : nsa.join(' ') ]); }); }
+	return p.then(function() {
+		ui.hideModal();
+		if (ui.addTimeLimitedNotification) {
+			ui.addTimeLimitedNotification(null, E('p', _('Bands set. The modem will reconnect.')), 5000, 'info');
+		} else {
+			ui.addNotification(null, E('p', _('Bands set. The modem will reconnect.')), 'info');
+		}
+		window.setTimeout(loadBandsModemband, 2000);
+	}).catch(function(err) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
+	});
+}
+
 /* Ссылка на карту вышек 4cells.ru по данным соты. Подтверждено примерами:
      LTE (tech=3): num = eNB = CID >> 8, lac = TAC (или LAC)
      UMTS(tech=2): num = CID, lac = LAC
@@ -477,6 +564,7 @@ function revealMgmtWhenReady() {
 }
 
 function applyBands() {
+	if (bandSource == 'modemband') { return applyBandsModemband(false); }
 	var sel = [];
 	document.querySelectorAll('#bands-lte .cbi-button-action, #bands-nr .cbi-button-action').forEach(function(b) {
 		sel.push(b.getAttribute('data-band'));
@@ -505,15 +593,17 @@ function applyBands() {
 }
 
 function resetBands() {
+	if (bandSource == 'modemband') { return applyBandsModemband(true); }
 	document.querySelectorAll('#bands-lte .cbi-button, #bands-nr .cbi-button').forEach(function(b) {
 		b.classList.add('cbi-button-action', 'important');
 	});
 	return applyBands();
 }
 
-/* Перезагрузка модема: reboot_modem.sh шлёт AT+CFUN=1,1 и после
-   переподключения перезапускает ModemManager (иначе MM пробует опросить
-   модем слишком рано, пока он ещё грузится, и теряет его). */
+/* «Перезагрузка» модема: reboot_modem.sh перезапускает радио (CFUN=4->1),
+   заставляя заново зарегистрироваться в сети. Полный CFUN=1,1 не используем -
+   он переэнумерирует USB, из-за чего MM временно теряет MBIM-классификацию и
+   на минуты роняет соединение. */
 function rebootModem() {
 	if (!confirm(_('Restart the modem now? The connection will drop for a while.')))
 		return Promise.resolve();
@@ -927,6 +1017,12 @@ simDialog: baseclass.extend({
 			       mmModes.allowed == allowed.split('|').sort().join('|') &&
 			       (mmModes.pref || '') == (preferred || '');
 		};
+
+		// Модем не под ModemManager -> пробуем управлять бендами через
+		// modemband (вендорные AT-команды). MM-модемы идут по пути mmcli.
+		if (!mmHasModem) {
+			window.setTimeout(loadBandsModemband, 400);
+		}
 
 		active_select();
 
@@ -1574,7 +1670,7 @@ simDialog: baseclass.extend({
 						' ',
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
-							'data-tooltip': _('Restart the modem (AT+CFUN=1,1)'),
+							'data-tooltip': _('Restart the modem radio (re-register on the network)'),
 							'click': ui.createHandlerFn(this, function() { return rebootModem(); })
 						}, _('Restart modem'))
 					]),

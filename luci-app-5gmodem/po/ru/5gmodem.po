@@ -2056,3 +2056,9 @@ msgstr "Не удалось установить обновление."
 
 msgid "Update installed. Reload the page to see the changes."
 msgstr "Обновление установлено. Обновите страницу, чтобы увидеть изменения."
+
+msgid "Restart the modem radio (re-register on the network)"
+msgstr "Перезапустить радио модема (перерегистрация в сети)"
+
+msgid "Update is taking too long. Check the connection and try again."
+msgstr "Обновление идёт слишком долго. Проверьте соединение и попробуйте снова."

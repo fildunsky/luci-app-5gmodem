@@ -41,22 +41,52 @@ function checkUpdate() {
 	});
 }
 
+function updBusy(busy) {
+	var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
+	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
+}
+
+/* Установка идёт в фоне (update.sh install), результат пишется в файл;
+   опрашиваем update.sh status, чтобы не упереться в таймаут XHR. */
+function pollInstall(tries) {
+	tries = tries || 0;
+	if (tries > 75) {   // ~5 минут
+		updSet('upd-status', _('Update is taking too long. Check the connection and try again.'));
+		updBusy(false);
+		return;
+	}
+	window.setTimeout(function() {
+		fs.exec('/usr/share/5gmodem/update.sh', [ 'status' ]).then(function(res) {
+			var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+			// still running, or an empty/garbled response -> keep polling
+			if (d.running || (typeof d.success === 'undefined' && !d.error)) { pollInstall(tries + 1); return; }
+			if (d.success) {
+				updSet('upd-current', d.current || '—');
+				updShow('upd-install', false);
+				updSet('upd-status', _('Update installed. Reload the page to see the changes.'));
+			} else {
+				updSet('upd-status', d.error || _('Failed to install the update.'));
+			}
+			updBusy(false);
+		}).catch(function() {
+			pollInstall(tries + 1);
+		});
+	}, 4000);
+}
+
 function installUpdate() {
 	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
 	updSet('upd-status', _('Installing the update…'));
-	var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
-	if (bi) { bi.disabled = true; } if (bc) { bc.disabled = true; }
+	updBusy(true);
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-		if (!d.success) { updSet('upd-status', d.error || _('Failed to install the update.')); return; }
-		updSet('upd-current', d.current || '—');
-		updShow('upd-install', false);
-		updSet('upd-status', _('Update installed. Reload the page to see the changes.'));
+		if (d.started) { pollInstall(0); return; }
+		// synchronous error (no package manager etc.)
+		updSet('upd-status', d.error || _('Failed to install the update.'));
+		updBusy(false);
 	}).catch(function(err) {
 		updSet('upd-status', _('Failed to install the update.') + ' ' + (err.message || err));
-	}).finally(function() {
-		var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
-		if (bi) { bi.disabled = false; } if (bc) { bc.disabled = false; }
+		updBusy(false);
 	});
 }
 

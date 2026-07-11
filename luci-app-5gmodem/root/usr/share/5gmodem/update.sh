@@ -15,6 +15,7 @@ PAGE="https://github.com/$REPO/releases/latest"
 PKG="luci-app-5gmodem"
 I18N="luci-i18n-5gmodem-ru"
 TMP=/tmp
+STATUS=/tmp/5gmodem_update.json
 
 json_esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -74,42 +75,60 @@ check)
 	;;
 
 install)
-	PM=$(pkgman)
-	[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; exit 0; }
-	case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
+	# The download + install of two packages over a modem link can take longer
+	# than the LuCI RPC/XHR timeout, so we run it in the background, write the
+	# result to a status file, and let the UI poll 'update.sh status'.
+	rm -f "$STATUS" "$STATUS.tmp"
+	echo '{"started":true}'
+	(
+		do_install() {
+			PM=$(pkgman)
+			[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; return; }
+			case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
 
-	INSTALLED=""
-	# app first, then its translation (translation depends on the app)
-	for BASE in "$PKG" "$I18N"; do
-		URL=$(asset_url "$BASE" "$EXT")
-		if [ -z "$URL" ]; then
-			# the translation is optional; only the app is mandatory
-			[ "$BASE" = "$I18N" ] && continue
-			echo '{"success":false,"error":"Release asset for '"$BASE"' not found"}'
-			exit 0
-		fi
-		F="$TMP/$BASE.$EXT"
-		rm -f "$F"
-		if ! wget -qO "$F" --timeout=60 "$URL" 2>/dev/null; then
-			echo '{"success":false,"error":"Download failed for '"$BASE"'"}'
-			exit 0
-		fi
-		if [ "$PM" = apk ]; then
-			apk add --allow-untrusted "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; exit 0; }
-		else
-			opkg install --force-reinstall "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; exit 0; }
-		fi
-		rm -f "$F"
-		INSTALLED="$INSTALLED $BASE"
-	done
+			INSTALLED=""
+			for BASE in "$PKG" "$I18N"; do
+				URL=$(asset_url "$BASE" "$EXT")
+				if [ -z "$URL" ]; then
+					# the translation is optional; only the app is mandatory
+					[ "$BASE" = "$I18N" ] && continue
+					echo '{"success":false,"error":"Release asset for '"$BASE"' not found"}'; return
+				fi
+				F="$TMP/$BASE.$EXT"
+				rm -f "$F"
+				if ! wget -qO "$F" --timeout=90 "$URL" 2>/dev/null; then
+					echo '{"success":false,"error":"Download failed for '"$BASE"'"}'; return
+				fi
+				if [ "$PM" = apk ]; then
+					apk add --allow-untrusted "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return; }
+				else
+					opkg install --force-reinstall "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return; }
+				fi
+				rm -f "$F"
+				INSTALLED="$INSTALLED $BASE"
+			done
 
-	rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
-	CUR=$(installed_version "$PM")
-	printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+			CUR=$(installed_version "$PM")
+			printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+		}
+		# write to a temp file and move into place only when done, so
+		# 'status' can tell "running" (no final file yet) from "finished"
+		do_install > "$STATUS.tmp" 2>/dev/null
+		mv "$STATUS.tmp" "$STATUS"
+	) >/dev/null 2>&1 &
+	;;
+
+status)
+	if [ -s "$STATUS" ]; then
+		cat "$STATUS"
+	else
+		echo '{"running":true}'
+	fi
 	;;
 
 *)
-	echo '{"success":false,"error":"usage: update.sh check|install"}'
+	echo '{"success":false,"error":"usage: update.sh check|install|status"}'
 	exit 1
 	;;
 esac

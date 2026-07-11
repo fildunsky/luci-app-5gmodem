@@ -1,0 +1,126 @@
+# Compal RXM-G1 (custom firmware, VID:PID 05c6:90d6, reports via mmcli as
+# "Tri Cascade Inc. VOS_5G", revision contains "RXMG1") - driven through
+# ModemManager (mmcli --set-current-bands) instead of AT, since this
+# firmware exposes NO LTE/NR band-lock AT command at all (confirmed via
+# AT$QCCLAC + AT$QCBANDPREF=? on this exact unit: only legacy 2G/3G/WLAN
+# indices exist, nothing touching LTE/NR bands).
+#
+# IMPORTANT - read before relying on setbands()/setbands5gnsa() below:
+#   - mmcli's own author has warned that playing with --set-current-bands
+#     is risky and not something to do casually; there is also at least
+#     one public report of mmcli segfaulting on --set-current-bands with
+#     a Qualcomm/QMI modem. This has worked correctly in testing on this
+#     specific unit/firmware, but a bad combination on different hardware
+#     could in principle leave the modem in a state that needs a reboot
+#     (or, in the worst case reported elsewhere, worse) to recover from.
+#   - --set-current-bands REPLACES the modem's entire band list, across
+#     ALL technologies (3G/4G/5G) at once - it is not "set only the LTE
+#     bands and leave everything else alone". To avoid silently disabling
+#     3G/5G when the person only meant to change LTE bands (or vice
+#     versa), setbands()/setbands5gnsa() below read the CURRENT full band
+#     list first, keep every band belonging to other technologies as-is,
+#     and only replace the eutran-*/ngran-* portion being targeted.
+
+_DEVICE=/dev/ttyUSB1
+_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
+_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"
+
+getinfo() {
+	echo "Compal RXM-G1"
+}
+
+_mm_current_bands() {
+	mmcli -m any -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs
+}
+
+# returns the modem's full current band list, MINUS any band matching
+# the given prefix (e.g. "eutran-" or "ngran-") - used to preserve other
+# technologies' bands when changing just one technology's bands
+_mm_other_bands() {
+	PREFIX="$1"
+	for B in $(_mm_current_bands); do
+		case "$B" in
+			${PREFIX}*) ;;
+			*) printf "%s " "$B" ;;
+		esac
+	done
+}
+
+_mm_join_pipe() {
+	OUT=""
+	for B in "$@"; do
+		[ -z "$B" ] && continue
+		OUT="${OUT}${OUT:+|}${B}"
+	done
+	echo "$OUT"
+}
+
+getsupportedbands() {
+	mmcli -m any -K 2>/dev/null \
+		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
+		| sed -n 's/^eutran-//p' \
+		| xargs
+}
+
+getbands() {
+	for B in $(_mm_current_bands); do
+		case "$B" in
+			eutran-*) echo "${B#eutran-}";;
+		esac
+	done | xargs
+}
+
+setbands() {
+	BANDS="$1"
+	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+
+	NEW_EUTRAN=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		NEW_EUTRAN="${NEW_EUTRAN}${NEW_EUTRAN:+|}eutran-${BAND}"
+	done
+	[ -z "$NEW_EUTRAN" ] && return 1
+
+	OTHER=$(_mm_other_bands "eutran-")
+	FULL=$(_mm_join_pipe $OTHER)
+	FULL="${FULL}${FULL:+|}${NEW_EUTRAN}"
+
+	mmcli -m any "--set-current-bands=$FULL"
+}
+
+getsupportedbands5gnsa() {
+	mmcli -m any -K 2>/dev/null \
+		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
+		| sed -n 's/^ngran-//p' \
+		| xargs
+}
+
+getbands5gnsa() {
+	for B in $(_mm_current_bands); do
+		case "$B" in
+			ngran-*) echo "${B#ngran-}";;
+		esac
+	done | xargs
+}
+
+setbands5gnsa() {
+	BANDS="$1"
+	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_5GNSA_BANDS"
+
+	NEW_NGRAN=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		NEW_NGRAN="${NEW_NGRAN}${NEW_NGRAN:+|}ngran-${BAND}"
+	done
+	[ -z "$NEW_NGRAN" ] && return 1
+
+	OTHER=$(_mm_other_bands "ngran-")
+	FULL=$(_mm_join_pipe $OTHER)
+	FULL="${FULL}${FULL:+|}${NEW_NGRAN}"
+
+	mmcli -m any "--set-current-bands=$FULL"
+}
