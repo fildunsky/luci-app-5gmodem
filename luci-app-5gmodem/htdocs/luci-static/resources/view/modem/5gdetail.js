@@ -511,25 +511,24 @@ function resetBands() {
 	return applyBands();
 }
 
-/* Перезагрузка модема командой AT+CFUN=1,1 (порт берём из detect.sh) */
+/* Перезагрузка модема: reboot_modem.sh шлёт AT+CFUN=1,1 и после
+   переподключения перезапускает ModemManager (иначе MM пробует опросить
+   модем слишком рано, пока он ещё грузится, и теряет его). */
 function rebootModem() {
 	if (!confirm(_('Restart the modem now? The connection will drop for a while.')))
 		return Promise.resolve();
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Restarting the modem...')));
-	return fs.exec_direct('/usr/share/5gmodem/detect.sh').then(function(port) {
-		port = (port || '').trim();
-		if (!port || port.indexOf('/dev/') !== 0) {
-			ui.hideModal();
+	return fs.exec('/usr/share/5gmodem/reboot_modem.sh').then(function(res) {
+		ui.hideModal();
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (d.success === false) {
 			ui.addNotification(null, E('p', _('Modem AT port not found')), 'error');
 			return;
 		}
-		return fs.exec('/usr/bin/sms_tool', [ '-d', port, 'at', 'AT+CFUN=1,1' ]).then(function() {
-			ui.hideModal();
-			if (ui.addTimeLimitedNotification)
-				ui.addTimeLimitedNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 6000, 'info');
-			else
-				ui.addNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 'info');
-		});
+		if (ui.addTimeLimitedNotification)
+			ui.addTimeLimitedNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 8000, 'info');
+		else
+			ui.addNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 'info');
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to restart the modem') + ': ' + (err.message || err)), 'error');

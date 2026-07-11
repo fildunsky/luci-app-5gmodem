@@ -1,0 +1,138 @@
+# DW5821e Snapdragon X20 LTE
+
+O=$(sms_tool -d $DEVICE at "at+temp")
+T=$(echo "$O" | awk -F: '/xo_therm_buf:/ {print $2}' | xargs | tr -d '\r\n')
+if [ -n "$T" ]; then
+TEMP="$T &deg;C"
+else
+O=$(sms_tool -d $DEVICE at "at^temp?")
+T=$(echo "$O" | awk '{gsub("C","");print $2}' | sort -r | head -n 1 | tr -d '\r\n')
+[ -n "$T" ] && TEMP="$T &deg;C"
+fi
+
+O=$(sms_tool -d $DEVICE at "at^ca_info?;^debug?")
+
+O1=$(echo "$O" | sed -n '/^RAT:/,/^SCell1:/p')
+[ -z "$O1" ] && O1=$(echo "$O" | sed -n '/^EARFCN/,/^SCell1:/p')
+
+T=$(echo "$O1" | awk '/TAC:/ {print $2}' | tr -d '\r\n')
+if [ -n "$T" ]; then
+T_DEC=$T
+T_HEX=$(printf "%X" "$T")
+fi
+
+T=$(echo "$O" | awk '/^RSSI:/ {print $2}' | sed 's/dBm//' | tr -d '\r\n')
+[ -n "$T" ] && RSSI=$T
+T=$(echo "$O" | awk '/^RSRP:/ {print $2}' | sed 's/dBm//' | tr -d '\r\n')
+[ -n "$T" ] && RSRP=$T
+T=$(echo "$O" | awk '/^RSRQ:/ {print $2}' | sed 's/dB//' | tr -d '\r\n')
+[ -n "$T" ] && RSRQ=$T
+T=$(echo "$O" | awk '/^RS-SINR/ {print $2}' | sed 's/dB//' | tr -d '\r\n')
+[ -n "$T" ] && SINR=$T
+T=$(echo "$O" | awk '/^RS-SNR/ {print $2}' | sed 's/dB//' | tr -d '\r\n')
+[ -n "$T" ] && SINR=$T
+
+T=$(echo "$O1" | awk '/^BAND:/ {print $2}' | tr -d '\r\n')
+if [ -n "$T" ]; then
+B=$(band4g $T)
+PBAND="$B"
+MODE="$MODE $B"
+fi
+T=$(echo "$O1" | awk '/^BW:/ {print $2}' | tr -d '\r\n')
+[ -n "$T" ] && PBAND="$PBAND @$T MHz"
+T=$(echo "$O1" | awk -F'[()]' '/^eNB ID\(PCI\)/ {print $4}' | tr -d '\r\n')
+[ -n "$T" ] && PCI="$T"
+T=$(echo "$O1" | awk '/^EARFCN/ {print $2}' | xargs | tr -d '\r\n')
+if [ -n "$T" ]; then
+EARFCN="$(echo $T | cut -f1 -d/)"
+fi
+
+T=$(echo "$O" | awk '/^SCC1 info:/ {print $5}')
+if [ -n "$T" ]; then
+T=${T/,/}; T=${T/LTE_B/}
+S1BAND="$(band4g $T)"
+MODE="${MODE/LTE/LTE_A} / $(band4g $T)"
+T=$(echo "$O" | awk '/^SCC1 info:/ {print $8}')
+[ -n "$T" ] && S1BAND="$S1BAND @$T MHz"
+O1=$(echo "$O" | sed -n '/^SCell1:/,/^SCell2:/p')
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $2}')
+[ -n "$T" ] && S1EARFCN="$T"
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $4}' | xargs)
+[ -n "$T" ] && S1PCI="$T"
+fi
+
+T=$(echo "$O" | awk '/^SCC2 info:/ {print $5}')
+if [ -n "$T" ]; then
+T=${T/,/}; T=${T/LTE_B/}
+S2BAND="$(band4g $T)"
+MODE="${MODE} / $(band4g $T)"
+T=$(echo "$O" | awk '/^SCC2 info:/ {print $8}')
+[ -n "$T" ] && S2BAND="$S2BAND @$T MHz"
+O1=$(echo "$O" | sed -n '/^SCell2:/,/^SCell3:/p')
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $2}')
+[ -n "$T" ] && S2EARFCN="$T"
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $4}' | xargs)
+[ -n "$T" ] && S2PCI="$T"
+fi
+
+T=$(echo "$O" | awk '/^SCC3 info:/ {print $5}')
+if [ -n "$T" ]; then
+T=${T/,/}; T=${T/LTE_B/}
+S3BAND="$(band4g $T)"
+MODE="${MODE} / $(band4g $T)"
+T=$(echo "$O" | awk '/^SCC3 info:/ {print $8}')
+[ -n "$T" ] && S3BAND="$S3BAND @$T MHz"
+O1=$(echo "$O" | sed -n '/^SCell3:/,/^SCell4:/p')
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $2}')
+[ -n "$T" ] && S3EARFCN="$T"
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $4}' | xargs)
+[ -n "$T" ] && S3PCI="$T"
+fi
+
+T=$(echo "$O" | awk '/^SCC4 info:/ {print $5}')
+if [ -n "$T" ]; then
+T=${T/,/}; T=${T/LTE_B/}
+S4BAND="$(band4g $T)"
+MODE="${MODE} / $(band4g $T)"
+T=$(echo "$O" | awk '/^SCC4 info:/ {print $8}')
+[ -n "$T" ] && S4BAND="$S4BAND @$T MHz"
+O1=$(echo "$O" | sed -n '/^SCell4:/,/^SCell5:/p')
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $2}')
+[ -n "$T" ] && S4EARFCN="$T"
+T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $4}' | xargs)
+[ -n "$T" ] && S4PCI="$T"
+fi
+
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
+
+LAC_HEX=$(printf "%X" $LAC_DEC)
+[ -n "$LAC_DEC" ] && TAC_HEX=$LAC_HEX
+CID_HEX=$(printf "%X" $CID_DEC)
+[ -z "$TAC_DEC" ] && [ -n "$TAC_HEX" ] && TAC_DEC=$(echo $((0x$TAC_HEX)))
+
+PV=$(cat /sys/kernel/debug/usb/devices)
+PVCUT=$(echo $PV | awk -F 'Vendor=413c ProdID=81e0' '{print $2}' | cut -c-1520)
+if echo "$PVCUT" | grep -q "Driver=qmi_wwan"; then
+PROTO="qmi"
+elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"; then
+PROTO="mbim"
+elif echo "$PVCUT" | grep -q "Driver=cdc_ether"; then
+PROTO="ecm"
+fi
+
+PVMODEL=$(echo $PV | awk -F 'Vendor=413c ProdID=81e0' '{print $2}' | cut -c-150)
+if [ -z "$MODEL" ]; then
+MODELBCUT=$(echo $PVMODEL | awk -F 'Manufacturer=|S: Product=' '{print $2}' | sed s/"Inc. "// | xargs)
+MODELACUT=$(echo $PVMODEL | awk -F 'Product=| S: SerialNumber' '{print $2}' | xargs)
+MODEL="$MODELBCUT $MODELACUT"
+fi
+
+# FW
+OF=$(sms_tool -d $DEVICE at "ati")
+FW=$(echo $OF | tr -s "\n" | xargs | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)
+
+NR_IMEI=$(sms_tool -d $DEVICE at "AT+GSN" | grep -oE '[0-9]{15}' | head -1)
+
+NR_IMSI=$(sms_tool -d $DEVICE at "AT+CIMI" | grep -oE '[0-9]{10,15}' | head -1)
+
+NR_ICCID=$(sms_tool -d $DEVICE at "AT+ICCID" | grep -oE '[0-9A-Fa-f]{18,22}' | head -1)

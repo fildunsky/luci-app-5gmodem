@@ -2011,3 +2011,48 @@ msgstr "Модем для создания интерфейса не найде�
 
 msgid "Failed to create the modem interface"
 msgstr "Не удалось создать интерфейс модема"
+
+msgid "Update"
+msgstr "Обновление"
+
+msgid "Check for updates"
+msgstr "Проверить обновления"
+
+msgid "Install update"
+msgstr "Установить обновление"
+
+msgid "Release page"
+msgstr "Страница релиза"
+
+msgid "Current version"
+msgstr "Текущая версия"
+
+msgid "Latest version"
+msgstr "Последняя версия"
+
+msgid "It also installs the translation if available."
+msgstr "Русификация ставится вместе с программой, если доступна."
+
+msgid "Checking the latest release…"
+msgstr "Проверка последнего релиза…"
+
+msgid "Could not check for updates."
+msgstr "Не удалось проверить обновления."
+
+msgid "A new version is available."
+msgstr "Доступна новая версия."
+
+msgid "You have the latest version."
+msgstr "Установлена последняя версия."
+
+msgid "Download and install the latest version now?"
+msgstr "Скачать и установить последнюю версию сейчас?"
+
+msgid "Installing the update…"
+msgstr "Установка обновления…"
+
+msgid "Failed to install the update."
+msgstr "Не удалось установить обновление."
+
+msgid "Update installed. Reload the page to see the changes."
+msgstr "Обновление установлено. Обновите страницу, чтобы увидеть изменения."

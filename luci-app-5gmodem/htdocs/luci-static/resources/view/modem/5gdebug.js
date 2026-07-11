@@ -13,6 +13,53 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
+/* --- Проверка/установка обновления с GitHub (app + перевод) --- */
+function updSet(id, txt) { var e = document.getElementById(id); if (e) { e.textContent = txt; } }
+function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
+
+function checkUpdate() {
+	updSet('upd-status', _('Checking the latest release…'));
+	updShow('upd-install', false);
+	var b = document.getElementById('upd-check'); if (b) { b.disabled = true; }
+	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		updSet('upd-current', d.current || '—');
+		updSet('upd-latest', d.latest || '—');
+		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
+		if (!d.success) {
+			updSet('upd-status', d.error || _('Could not check for updates.'));
+		} else if (d.update_available == 1 || d.update_available === true) {
+			updShow('upd-install', true);
+			updSet('upd-status', _('A new version is available.'));
+		} else {
+			updSet('upd-status', _('You have the latest version.'));
+		}
+	}).catch(function(err) {
+		updSet('upd-status', _('Could not check for updates.') + ' ' + (err.message || err));
+	}).finally(function() {
+		var b = document.getElementById('upd-check'); if (b) { b.disabled = false; }
+	});
+}
+
+function installUpdate() {
+	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
+	updSet('upd-status', _('Installing the update…'));
+	var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
+	if (bi) { bi.disabled = true; } if (bc) { bc.disabled = true; }
+	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (!d.success) { updSet('upd-status', d.error || _('Failed to install the update.')); return; }
+		updSet('upd-current', d.current || '—');
+		updShow('upd-install', false);
+		updSet('upd-status', _('Update installed. Reload the page to see the changes.'));
+	}).catch(function(err) {
+		updSet('upd-status', _('Failed to install the update.') + ' ' + (err.message || err));
+	}).finally(function() {
+		var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
+		if (bi) { bi.disabled = false; } if (bc) { bc.disabled = false; }
+	});
+}
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -356,6 +403,41 @@ return view.extend({
 }
 `));
 
+		/* Блок проверки/установки обновления (над Диагностикой) */
+		var updateBlock = E('div', { 'class': 'cbi-section tg5g' }, [
+			E('h3', {}, [ _('Update') ]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('luci-app-5gmodem')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('div', { 'style': 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px' }, [
+						E('button', {
+							'class': 'cbi-button cbi-button-action',
+							'id': 'upd-check',
+							'click': ui.createHandlerFn(this, function() { return checkUpdate(); })
+						}, [ _('Check for updates') ]),
+						E('button', {
+							'class': 'cbi-button cbi-button-positive',
+							'id': 'upd-install',
+							'style': 'display:none',
+							'click': ui.createHandlerFn(this, function() { return installUpdate(); })
+						}, [ _('Install update') ]),
+						E('a', {
+							'class': 'cbi-button',
+							'id': 'upd-release',
+							'href': 'https://github.com/fildunsky/luci-app-5gmodem/releases/latest',
+							'target': '_blank', 'rel': 'noopener',
+							'style': 'display:none'
+						}, [ _('Release page') ]),
+					]),
+					E('div', { 'class': 'cbi-value-description' }, [
+						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
+						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
+						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, [ _('It also installs the translation if available.') ]),
+					]),
+				]),
+			]),
+		]);
+
 		var diag = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Diagnostics') ]),
 			table,
@@ -391,6 +473,7 @@ return view.extend({
 			return E('div', {}, [
 				modemInfo,
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ]),
+				updateBlock,
 				diag
 			]);
 		});
