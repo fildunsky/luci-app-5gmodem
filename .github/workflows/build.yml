@@ -1,0 +1,67 @@
+name: Build packages
+
+# Builds the package with the official OpenWrt SDK for several targets.
+# - On a version tag (v*) the built packages are attached to a GitHub Release.
+# - Can also be run manually (workflow_dispatch) to get artifacts.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'luci-app-5gmodem/**'
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # <target_arch>-<openwrt_version>. 23.05 produces .ipk,
+        # SNAPSHOT produces .apk (apk-tools). Add/remove freely.
+        arch:
+          - x86_64-23.05.5
+          - aarch64_cortex-a53-23.05.5
+          - arm_cortex-a7_neon-vfpv4-23.05.5
+          - mipsel_24kc-23.05.5
+          - x86_64-SNAPSHOT
+          - aarch64_cortex-a53-SNAPSHOT
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with OpenWrt SDK
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}
+          FEEDNAME: fdmodem
+          PACKAGES: luci-app-5gmodem
+          NO_REFRESH_CHECK: 1
+          V: s
+
+      - name: Collect packages
+        run: |
+          mkdir -p out
+          find bin/ -type f \( -name 'luci-app-5gmodem*.ipk' -o -name 'luci-app-5gmodem*.apk' \) -exec cp -v {} out/ \;
+          ls -l out/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-5gmodem-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: false

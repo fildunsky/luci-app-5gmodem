@@ -19,11 +19,43 @@
 # the ports while probing them itself, and the first boot is slow), and
 # an early exit left the flags unset.
 
+# Manual invocation (no hotplug env, e.g. from uci-defaults at install
+# time): scan the bus for an already-connected Compal and synthesize the
+# hotplug variables so the same body runs without waiting for a reboot.
+if [ -z "$ACTION" ]; then
+	for d in /sys/bus/usb/devices/*; do
+		[ -f "$d/idVendor" ] || continue
+		[ "$(cat "$d/idVendor")" = "05c6" ] || continue
+		_pid=$(cat "$d/idProduct")
+		case "$_pid" in 90d5|90d6) ;; *) continue ;; esac
+		ACTION="add"; DEVTYPE="usb_device"
+		# hotplug's $PRODUCT strips the vendor's leading zero (5c6, not 05c6)
+		PRODUCT="5c6/$_pid/0"
+		DEVPATH="${d#/sys}"
+		break
+	done
+fi
+
 [ "$ACTION" = "add" ] || exit 0
 [ "$DEVTYPE" = "usb_device" ] || exit 0
 
+# The Compal RXM-G1 firmware uses the unique id 05c6:90d6, but the early
+# prototype still reports the old 05c6:90d5 - which is ALSO used by the
+# Foxconn T99W175. Only treat 90d5 as the Compal when the USB descriptor
+# says so (Tri Cascade / VOS_5G); otherwise leave the T99W175 alone.
+WANTID=""
 case "$PRODUCT" in
-	5c6/90d6/*) ;;
+	5c6/90d6/*)
+		WANTID="05c6:90d6"
+		;;
+	5c6/90d5/*)
+		_p=$(cat "/sys$DEVPATH/product" 2>/dev/null)
+		_m=$(cat "/sys$DEVPATH/manufacturer" 2>/dev/null)
+		case "$_p$_m" in
+			*VOS_5G*|*Tri?Cascade*) WANTID="05c6:90d5" ;;
+			*) exit 0 ;;
+		esac
+		;;
 	*) exit 0 ;;
 esac
 
@@ -101,7 +133,7 @@ esac
 		for tty in /sys/class/tty/ttyUSB*; do
 			[ -e "$tty" ] || continue
 			t="${tty##*/}"
-			[ "$(tty_vidpid "$t")" = "05c6:90d6" ] || continue
+			[ "$(tty_vidpid "$t")" = "$WANTID" ] || continue
 			# the DIAG port stays silent and trips the 5s sms_tool
 			# timeout, the AT port answers OK
 			if sms_tool -d "/dev/$t" at "AT" >/dev/null 2>&1; then

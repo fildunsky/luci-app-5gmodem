@@ -45,7 +45,7 @@
 				"/etc/modem/ussdcodes/*.user": [ "read" ],
 				"/etc/modem/ussdcodes.user": [ "read" ]
 			},
-			"uci": [ "5gmodem", "sms_tool_js", "modemdefine", "defmodems" ],
+			"uci": [ "5gmodem", "sms_tool_js", "modemdefine", "defmodems", "network", "firewall" ],
 			"ubus": {
 				"file": [ "read" ],
 				"sms_forward": [ "forward" ]
@@ -56,6 +56,7 @@
 			"file": {
 				"/bin/cat": [ "exec" ],
 				"/usr/share/5gmodem/ttl.sh": [ "exec" ],
+				"/usr/share/5gmodem/mkiface.sh": [ "exec" ],
 				"/bin/sh -x /usr/share/5gmodem/5gmodem.sh": [ "exec" ],
 				"/bin/ls /dev": [ "exec" ],
 				"/bin/chmod": [ "exec" ],
@@ -78,7 +79,7 @@
 				"/etc/modem/ussdcodes/*": [ "write" ],
 				"/etc/modem/ussdcodes.user": [ "write" ]
 			},
-			"uci": [ "5gmodem", "sms_tool_js", "modemdefine" ],
+			"uci": [ "5gmodem", "sms_tool_js", "modemdefine", "network", "firewall" ],
 			"ubus": {
 				"file": [ "read", "write", "remove" ]
 			}

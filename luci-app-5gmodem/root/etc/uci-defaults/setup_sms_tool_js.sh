@@ -22,6 +22,11 @@ fi
 
 uci commit sms_tool_js >/dev/null 2>&1
 
+# If a Compal RXM-G1 is already connected at install time, auto-configure
+# it now (via_mm / WMS routes / AT ports) instead of waiting for a reboot.
+[ -x /etc/hotplug.d/usb/70-sms-tool-js-modems ] && \
+	ACTION="" /etc/hotplug.d/usb/70-sms-tool-js-modems >/dev/null 2>&1 &
+
 rm -rf /tmp/luci-indexcache >/dev/null 2>&1 &
 rm -rf /tmp/luci-modulecache/ >/dev/null 2>&1 &
 exit 0

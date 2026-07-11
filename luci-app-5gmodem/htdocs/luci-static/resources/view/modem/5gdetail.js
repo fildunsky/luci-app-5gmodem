@@ -103,11 +103,17 @@ document.head.append(E('style', {'type': 'text/css'},
 .tginfo-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+}
+.tginfo-status {
   min-width: 8em;
 }
 .tginfo-status > *,
 .tginfo-info > * {
   line-height: 1.5;
+}
+/* короткие строки статуса не переносим, длинные - можно */
+.tginfo-status > * {
   white-space: nowrap;
 }
 .tginfo-status .tginfo-reg,
@@ -121,16 +127,23 @@ document.head.append(E('style', {'type': 'text/css'},
 .tginfo-info {
   font-size: 92%;
   opacity: 0.9;
+  flex: 1 1 16em;
 }
 .tginfo-info .tginfo-tech {
   font-weight: 600;
   opacity: 1;
+  overflow-wrap: anywhere;
+}
+/* частоты в скобках - без жирного */
+.tginfo-info .tginfo-freq {
+  font-weight: normal;
 }
 .tginfo-info .tginfo-ip {
   font-variant-numeric: tabular-nums;
 }
+/* подписи IPv4:/IPv6: - жирным */
 .tginfo-info .tginfo-iplabel {
-  opacity: 0.7;
+  font-weight: 600;
   margin-right: 0.35em;
 }
 .tginfo-temp {
@@ -394,6 +407,75 @@ function loadBands() {
 	});
 }
 
+/* Ссылка на карту вышек 4cells.ru по данным соты. Подтверждено примерами:
+     LTE (tech=3): num = eNB = CID >> 8, lac = TAC (или LAC)
+     UMTS(tech=2): num = CID, lac = LAC
+     GSM (tech=1): num = CID, без параметра lac
+   plmn = MCC + MNC (каждое дополняется до 3 цифр). 5G NSA идёт по LTE-якорю
+   (tech=3). Для 5G SA формула пока неизвестна - кнопку не показываем. */
+function cell4cellsUrl(json) {
+	var mcc = parseInt(json.operator_mcc, 10);
+	var mnc = parseInt(json.operator_mnc, 10);
+	var cid = parseInt(json.cid_dec, 10);
+	if (isNaN(mcc) || isNaN(mnc) || isNaN(cid) || cid <= 0) { return null; }
+
+	var lac = parseInt((json.tac_d && String(json.tac_d).length ? json.tac_d : (json.tac_dec || '')), 10);
+	if (isNaN(lac)) { lac = parseInt(json.lac_dec || '', 10); }
+
+	var mode = String(json.mode || '').toUpperCase();
+	var tech, num, needLac = true;
+	if (mode.indexOf('GSM') >= 0 || mode.indexOf('EDGE') >= 0 || mode.indexOf('GPRS') >= 0 || mode.indexOf('2G') >= 0) {
+		tech = 1; num = cid; needLac = false;               // GSM - без lac
+	} else if (mode.indexOf('WCDMA') >= 0 || mode.indexOf('UMTS') >= 0 || mode.indexOf('HSPA') >= 0 || mode.indexOf('3G') >= 0) {
+		tech = 2; num = cid;                                // UMTS
+	} else if (mode.indexOf('5G SA') >= 0) {
+		return null;                                        // NR SA - формула неизвестна
+	} else {                                                // LTE / 5G NSA
+		tech = 3; num = Math.floor(cid / 256);
+	}
+
+	var p3 = function(x) { x = String(x); while (x.length < 3) { x = '0' + x; } return x; };
+	var url = 'https://4cells.ru/?plmn=' + p3(mcc) + p3(mnc) + '&tech=' + tech + '&num=' + num;
+	if (needLac) {
+		if (isNaN(lac)) { return null; }
+		url += '&lac=' + lac;
+	}
+	return url;
+}
+
+/* Подсветить активную кнопку режима сети по выводу mmcli -K */
+function refreshModeButtons(mmK) {
+	var mm = String(mmK || '').match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
+	if (!mm) { return; }
+	var allowed = mm[1].split(',').map(function(x) { return x.trim(); }).sort().join('|');
+	var pref = (mm[2].trim() == 'none' ? '' : mm[2].trim());
+	document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
+		var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
+		var p = b.getAttribute('data-preferred') || '';
+		var on = (a == allowed && p == pref);
+		b.classList.toggle('cbi-button-action', on);
+		b.classList.toggle('important', on);
+	});
+}
+
+/* Модем мог быть не готов на момент отрисовки: блок управления частотами
+   тогда скрыт и пуст. Когда модем появляется, показать строки и заполнить
+   кнопки без ручного обновления страницы. Тяжёлый mmcli -K дёргаем только
+   пока блок ещё скрыт. */
+function revealMgmtWhenReady() {
+	var row = document.getElementById('modeswn');
+	if (!row || row.style.display != 'none') { return; }
+	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), '').then(function(mmK) {
+		if (!/current-modes/.test(mmK)) { return; }
+		[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+			var e = document.getElementById(id);
+			if (e) { e.style.display = ''; }
+		});
+		refreshModeButtons(mmK);
+		loadBands();
+	});
+}
+
 function applyBands() {
 	var sel = [];
 	document.querySelectorAll('#bands-lte .cbi-button-action, #bands-nr .cbi-button-action').forEach(function(b) {
@@ -427,6 +509,31 @@ function resetBands() {
 		b.classList.add('cbi-button-action', 'important');
 	});
 	return applyBands();
+}
+
+/* Перезагрузка модема командой AT+CFUN=1,1 (порт берём из detect.sh) */
+function rebootModem() {
+	if (!confirm(_('Restart the modem now? The connection will drop for a while.')))
+		return Promise.resolve();
+	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Restarting the modem...')));
+	return fs.exec_direct('/usr/share/5gmodem/detect.sh').then(function(port) {
+		port = (port || '').trim();
+		if (!port || port.indexOf('/dev/') !== 0) {
+			ui.hideModal();
+			ui.addNotification(null, E('p', _('Modem AT port not found')), 'error');
+			return;
+		}
+		return fs.exec('/usr/bin/sms_tool', [ '-d', port, 'at', 'AT+CFUN=1,1' ]).then(function() {
+			ui.hideModal();
+			if (ui.addTimeLimitedNotification)
+				ui.addTimeLimitedNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 6000, 'info');
+			else
+				ui.addNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 'info');
+		});
+	}).catch(function(err) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to restart the modem') + ': ' + (err.message || err)), 'error');
+	});
 }
 
 /* Зафиксировать TTL/hop-limit на интерфейсе модема через ttl.sh */
@@ -842,8 +949,11 @@ simDialog: baseclass.extend({
 
 			if(!json.hasOwnProperty('error')){
 				
-				if (json.registration == 'SIM not inserted' || json.registration == '-') { 
-					ui.addNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 'info');
+				if (json.registration == 'SIM not inserted' || json.registration == '-') {
+					if (ui.addTimeLimitedNotification)
+						ui.addTimeLimitedNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 5000, 'info');
+					else
+						ui.addNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 'info');
 				}
 				if (json.registration == 'SIM PIN required') { 
 					ui.addNotification(null, E('p', _('SIM PIN required')), 'info');
@@ -866,12 +976,17 @@ simDialog: baseclass.extend({
 				if (json.registration == 'SIM PUK2 required') { 
 					ui.addNotification(null, E('p', _('SIM PUK2 required')), 'info');
 				}
-				if (json.signal == '0' || json.signal == '' || json.signal == '-') {
-					ui.addNotification(null, E('p', _('There is a problem reading data from the modem. <br /><br /><b>Please check:</b> <ul><li>1. Modem availability in the system.</li><li>2. The correct installation of the SIM card in the modem.</li><li> 3. Port for communication with the modem.</li><li><ul>')), 'info');
-				}
-				else {
+				{
+					/* Раньше огромный баннер «модем не найден» + вложенный ниже
+					   poll.add висели в else и запускались только если при
+					   первой отрисовке уже был сигнал. На загрузке без сигнала
+					   опрос вообще не стартовал - страница не обновлялась (не
+					   появлялись кнопки диапазонов), пока её не обновишь руками.
+					   Теперь опрос стартует всегда, а вместо баннера - краткое
+					   самоисчезающее уведомление. */
 					if (json.connt == '' || json.connt == '-') {
-						ui.addNotification(null, E('p', _('There is a problem reading connection data. <br /><br /><b>Please check:</b> <ul><li>1. Connection of the modem to the internet, the correctness of the entered APN. Some modems need to force the APN on the modem using at commands to connect to internet.</li><li> 2. Check that the correct interface assigned to the modem is selected. The default name of the interface in the package is wan.</li><li><ul>')), 'info');
+						if (ui.addTimeLimitedNotification)
+							ui.addTimeLimitedNotification(null, E('p', _('Waiting for the modem to connect…')), 4000, 'info');
 					}
 
 
@@ -880,36 +995,27 @@ simDialog: baseclass.extend({
 					.then(function(res) {
 					var json = JSON.parse(res);
 
-				if (!json.cport.includes('192.')) {
-					if (json.signal == '0' || json.signal == '') {
-						fs.exec('sleep 3');
-							if (json.signal == '0' || json.signal == '' || json.signal == '-') {
-							L.ui.showModal(_('5gmodem'), [
-							E('p', { 'class': 'spinning' }, _('Waiting to read data from the modem...'))
-							]);
+				// Раньше при signal==0 показывался модал и страница сама
+				// перезагружалась каждые 5 c - на модемах, медленно поднимающих
+				// сеть, это давало бесконечные перезагрузки. Страница и так
+				// открывается с пустыми полями и обновляется по опросу.
+				revealMgmtWhenReady();
 
-							window.setTimeout(function() {
-							location.reload();
-							}, 5000).finally();
-							}
-					}
-					else {
-					L.hideModal();
-					}
-				}
-					
 					var icon, wicon, ticon, t;
 					var wicon = L.resource('icons/loading.gif');
-					var ticon = L.resource('icons/ctime.png');
+					var ticon = L.resource('icons/ctime.svg');
 
 					// Мобильные иконки уровня сигнала (цветные "палочки":
 					// красный слабый -> зелёный сильный). Иконки luci
 					// signal-*.svg - это WiFi-столбики, для сотовой сети не
 					// подходят.
-					var p = (json.signal);
-					if (p < 0)
-						icon = L.resource('icons/mobile-signal-000-000.svg');
-					else if (p == 0)
+					// json.signal - строка ("-"/""/число); приводим к числу,
+					// иначе "-" (нет данных) проваливался в else -> полная
+					// зелёная шкала при 0%.
+					var p = parseInt(json.signal, 10);
+					if (isNaN(p) || p < 0)
+						p = 0;
+					if (p == 0)
 						icon = L.resource('icons/mobile-signal-000-000.svg');
 					else if (p < 20)
 						icon = L.resource('icons/mobile-signal-000-020.svg');
@@ -1000,7 +1106,11 @@ simDialog: baseclass.extend({
 						view.textContent = '-';
 						}
 						else {
-						view.textContent = json.mode;
+						// частоты в скобках -> отдельный span (не жирный)
+						var mtext = json.mode.replace(/[&<>]/g, function(c) {
+							return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+						});
+						view.innerHTML = mtext.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
 						}
 					}
 
@@ -1219,13 +1329,27 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('cid')) {
 						var view = document.getElementById("cid");
-						if (json.cid_dec == '' || json.cid_hex == '') { 
-						var cc = json.cid_hex   + ' ' + json.cid_dec;
-						var cd = cc.split(' ').join('');
-						view.textContent = cd;
+						var cidText;
+						if (json.cid_dec == '' || json.cid_hex == '') {
+						cidText = (json.cid_hex + ' ' + json.cid_dec).split(' ').join('');
 						}
 						else {
-						view.innerHTML = json.cid_dec + ' (' + '' + json.cid_hex + ')';
+						cidText = json.cid_dec + ' (' + json.cid_hex + ')';
+						}
+						// Cell ID -> стандартная кнопка с пином и номером соты,
+						// по клику открывает карту вышек 4cells.ru
+						var url4 = cell4cellsUrl(json);
+						if (url4 && json.cid_dec && json.cid_dec != '-') {
+							view.innerHTML = '';
+							view.appendChild(E('button', {
+								'class': 'cbi-button',
+								'style': 'margin:0;',
+								'title': _('View the tower on the 4cells.ru map'),
+								'click': function() { window.open(url4, '_blank', 'noopener'); }
+							}, '\u{1F4CD}' + json.cid_dec));
+						}
+						else {
+							view.textContent = cidText;
 						}
 					}
 
@@ -1447,7 +1571,13 @@ simDialog: baseclass.extend({
 							'class': 'btn cbi-button',
 							'data-tooltip': _('Enable all supported bands'),
 							'click': ui.createHandlerFn(this, function() { return resetBands(); })
-						}, _('All bands'))
+						}, _('All bands')),
+						' ',
+						E('button', {
+							'class': 'btn cbi-button cbi-button-remove',
+							'data-tooltip': _('Restart the modem (AT+CFUN=1,1)'),
+							'click': ui.createHandlerFn(this, function() { return rebootModem(); })
+						}, _('Restart modem'))
 					]),
 					]),
 			]),

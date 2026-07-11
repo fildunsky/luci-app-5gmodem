@@ -160,6 +160,31 @@ return view.extend({
 			uci.unset('5gmodem', section_id, 'at_port');
 		};
 
+		/* Кнопка: создать сетевой интерфейс модема автоматически. */
+		o = s.option(form.Button, '_mkiface');
+		o.title = _('Modem interface');
+		o.description = _('Create a network interface for the modem automatically (the control protocol is detected). If it already exists, it is just brought up.');
+		o.inputtitle = _('Create modem interface');
+		o.inputstyle = 'apply';
+		o.onclick = function() {
+			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
+			return fs.exec('/usr/share/5gmodem/mkiface.sh').then(function(res) {
+				ui.hideModal();
+				var out = {};
+				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+				if (out.result == 'created') {
+					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto)), 'info');
+				} else if (out.result == 'exists') {
+					ui.addNotification(null, E('p', _('Interface "%s" already exists — bringing it up.').format(out.iface)), 'info');
+				} else {
+					ui.addNotification(null, E('p', _('No modem found to create an interface for.')), 'error');
+				}
+			}).catch(function(err) {
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
+			});
+		};
+
 		/* ---------------- Информация о модеме (перенесена со страницы Сеть) -- */
 		function infoVal(v) {
 			return (v != null && String(v).length > 0 && String(v) != '-') ? String(v) : '-';
@@ -167,7 +192,7 @@ return view.extend({
 		function inforow(label, value) {
 			return E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left', 'width': '33%' }, [ label ]),
-				E('td', { 'class': 'td left' }, [ value ]),
+				E('td', { 'class': 'td left tg-info-val' }, [ value ]),
 			]);
 		}
 		var infoRows = [
@@ -297,6 +322,38 @@ return view.extend({
 .tg5g h3 {
   margin-top: 0;
 }
+
+/* Лишняя разделительная полоса под флагом «Автоопределение …»: когда
+   ручные поля скрыты (depends), в proton2025 они остаются в DOM как
+   display:none и не дают флагу стать :last-child, из-за чего видна его
+   нижняя граница. Убираем границу у последнего ВИДИМОГО ряда формы. */
+.tg-modem-form .cbi-value:not([style*="none"]):not(:has(~ .cbi-value:not([style*="none"]))) {
+  border-bottom: none;
+}
+
+/* Вторая колонка «Информация о модеме» - моноширинным, как терминал */
+.tg-info-table .tg-info-val {
+  font-family: var(--font-monospace, monospace);
+}
+
+/* На узких/мобильных экранах три колонки диагностики складываются в
+   столбик, иначе третья («Проверка данных скриптами 5gmodem») уезжает
+   за край и не переносится. */
+@media (max-width: 640px) {
+  .tg-diag-table,
+  .tg-diag-table .tr,
+  .tg-diag-table .td {
+    display: block;
+    width: 100% !important;
+  }
+  .tg-diag-table .td {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .tg-diag-table .td > .cbi-value-title {
+    min-height: 0;
+  }
+}
 `));
 
 		var diag = E('div', { 'class': 'cbi-section tg5g' }, [
@@ -333,7 +390,7 @@ return view.extend({
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
 				modemInfo,
-				formNode,
+				E('div', { 'class': 'tg-modem-form' }, [ formNode ]),
 				diag
 			]);
 		});

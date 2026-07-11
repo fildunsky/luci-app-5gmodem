@@ -1,4 +1,14 @@
 # Foxconn T99W175 (FW 6.0.0.6)
+#
+# The 05c6:90d5 id is shared with an early Compal RXM-G1 prototype that
+# still reports the old id (later moved to the unique 05c6:90d6). They
+# need completely different handling, so when the attached device is
+# actually the Compal (USB descriptor "Tri Cascade" / "VOS_5G"), hand
+# over to the 90d6 profile and skip the T99W175 logic below.
+if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
+	. "$RES/modem/usb/05c690d6"
+	return 0 2>/dev/null || exit 0
+fi
 
 O=$(sms_tool -d $DEVICE at "AT^TEMP?")
 

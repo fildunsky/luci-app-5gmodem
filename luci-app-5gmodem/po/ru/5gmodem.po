@@ -101,7 +101,7 @@ msgid "Not registered"
 msgstr "Не зарегистрирован в сети"
 
 msgid "Registered"
-msgstr "Зарегистрирован в сети"
+msgstr "В сети"
 
 msgid "Registered (roaming)"
 msgstr "Зарегистрирован в другой сети (роуминг)"
@@ -1938,7 +1938,7 @@ msgid "Select 'No' if the router has a single LED or the LED serves several purp
 msgstr "Выберите «Нет», если у роутера один светодиод или светодиод выполняет несколько задач. Для надёжной работы при совмещённом светодиоде он должен быть определён в системе."
 
 msgid "The phone number should start with the country prefix (for example 48 for Poland, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
-msgstr "Номер телефона должен начинаться с кода страны (например, 48 для Польши, без «+»). Номера из 3, 4 или 5 цифр считаются «короткими», и код страны к ним добавлять не нужно."
+msgstr "Номер телефона должен начинаться с кода страны (например, 7 для России, без «+»). Номера из 3-5 цифр считаются «короткими», и код страны к ним добавлять не нужно."
 
 msgid "Each line must use the format 'Contact name;phone number'. The file is saved to <code>/etc/modem/phonebook.user</code>."
 msgstr "Каждая строка должна иметь формат «Имя контакта;номер телефона». Файл сохраняется в <code>/etc/modem/phonebook.user</code>."
@@ -1960,3 +1960,54 @@ msgstr "Входящие СМС"
 
 msgid "Send SMS"
 msgstr "Отправить СМС"
+
+msgid "Restart modem"
+msgstr "Перезагрузить модем"
+
+msgid "Restart the modem (AT+CFUN=1,1)"
+msgstr "Перезагрузить модем (AT+CFUN=1,1)"
+
+msgid "Restart the modem now? The connection will drop for a while."
+msgstr "Перезагрузить модем сейчас? Соединение на время прервётся."
+
+msgid "Restarting the modem..."
+msgstr "Перезагрузка модема…"
+
+msgid "Modem AT port not found"
+msgstr "AT-порт модема не найден"
+
+msgid "The modem is restarting. This can take a minute."
+msgstr "Модем перезагружается. Это может занять до минуты."
+
+msgid "Failed to restart the modem"
+msgstr "Не удалось перезагрузить модем"
+
+msgid "Waiting for the modem to connect…"
+msgstr "Ожидание подключения модема…"
+
+msgid "View the tower on the 4cells.ru map"
+msgstr "Посмотреть вышку на карте 4cells.ru"
+
+msgid "Modem interface"
+msgstr "Интерфейс модема"
+
+msgid "Create a network interface for the modem automatically (the control protocol is detected). If it already exists, it is just brought up."
+msgstr "Автоматически создать сетевой интерфейс для модема (протокол управления определяется сам). Если интерфейс уже есть, просто поднять его."
+
+msgid "Create modem interface"
+msgstr "Создать интерфейс модема"
+
+msgid "Creating the modem interface..."
+msgstr "Создание интерфейса модема…"
+
+msgid "Interface \"%s\" created (%s), bringing it up…"
+msgstr "Интерфейс «%s» создан (%s), поднимаю…"
+
+msgid "Interface \"%s\" already exists — bringing it up."
+msgstr "Интерфейс «%s» уже существует — поднимаю."
+
+msgid "No modem found to create an interface for."
+msgstr "Модем для создания интерфейса не найден."
+
+msgid "Failed to create the modem interface"
+msgstr "Не удалось создать интерфейс модема"
