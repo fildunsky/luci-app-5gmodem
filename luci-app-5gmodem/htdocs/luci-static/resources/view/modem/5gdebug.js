@@ -46,8 +46,10 @@ function updBusy(busy) {
 	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
 }
 
-/* Установка идёт в фоне (update.sh install), результат пишется в файл;
-   опрашиваем update.sh status, чтобы не упереться в таймаут XHR. */
+/* Установка идёт в фоне (update.sh install), результат пишется в
+   /tmp/5gmodem_update.json. Опрашиваем сам ФАЙЛ, а не update.sh: во время
+   установки update.sh подменяется на версию из нового пакета, и её набор
+   команд может отличаться - чтение файла от этого не зависит. */
 function pollInstall(tries) {
 	tries = tries || 0;
 	if (tries > 75) {   // ~5 минут
@@ -56,10 +58,11 @@ function pollInstall(tries) {
 		return;
 	}
 	window.setTimeout(function() {
-		fs.exec('/usr/share/5gmodem/update.sh', [ 'status' ]).then(function(res) {
-			var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-			// still running, or an empty/garbled response -> keep polling
-			if (d.running || (typeof d.success === 'undefined' && !d.error)) { pollInstall(tries + 1); return; }
+		L.resolveDefault(fs.read_direct('/tmp/5gmodem_update.json'), '').then(function(txt) {
+			txt = String(txt || '').trim();
+			if (!txt) { pollInstall(tries + 1); return; }   // файла ещё нет -> идёт установка
+			var d = {}; try { d = JSON.parse(txt); } catch (e) { pollInstall(tries + 1); return; }
+			if (d.running) { pollInstall(tries + 1); return; }
 			if (d.success) {
 				updSet('upd-current', d.current || '—');
 				updShow('upd-install', false);
@@ -68,8 +71,6 @@ function pollInstall(tries) {
 				updSet('upd-status', d.error || _('Failed to install the update.'));
 			}
 			updBusy(false);
-		}).catch(function() {
-			pollInstall(tries + 1);
 		});
 	}, 4000);
 }

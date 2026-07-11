@@ -13,7 +13,7 @@ MAINTAINER:=Fil Dunsky <filipp.dunsky@gmail.com>
 LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands.
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.0.10
+PKG_VERSION:=1.0.11
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

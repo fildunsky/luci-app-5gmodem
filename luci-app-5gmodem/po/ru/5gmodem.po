@@ -2062,3 +2062,6 @@ msgstr "Перезапустить радио модема (перерегист
 
 msgid "Update is taking too long. Check the connection and try again."
 msgstr "Обновление идёт слишком долго. Проверьте соединение и попробуйте снова."
+
+msgid "USSD session is active — type your reply and press Send."
+msgstr "USSD-сессия активна — введите ответ и нажмите «Отправить»."

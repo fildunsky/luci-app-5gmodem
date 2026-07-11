@@ -88,7 +88,8 @@ return view.extend({
 			   contain apostrophes. Errors (stderr) are left untouched
 			   and shown as-is. */
 			if (exec == 'mmcli') {
-				let mm = (res.stdout || '').match(/(?:reply from network|response)[^']*'([\s\S]+)'/) ||
+				let mm = (res.stdout || '').match(/(?:reply|request) from network:\s*'([\s\S]+)'/) ||
+					(res.stdout || '').match(/(?:reply from network|response)[^']*'([\s\S]+)'/) ||
 					(res.stdout || '').match(/'([\s\S]+)'/);
 				if (mm && mm[1]) {
 					res.stdout = mm[1];
@@ -325,7 +326,22 @@ return view.extend({
 			let self = this;
 			return this.getMMModemNumber()
 				.then(function(modemNum) {
-					return self.handleCommand('mmcli', ['-m', modemNum, '--timeout=30', '--3gpp-ussd-initiate=' + ussd]);
+					// Интерактивная USSD-сессия: если сеть ждёт ответ
+					// (открытая сессия) - шлём respond, иначе initiate.
+					var arg = self.ussdSessionActive
+						? ('--3gpp-ussd-respond=' + ussd)
+						: ('--3gpp-ussd-initiate=' + ussd);
+					return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=30', arg ]).then(function() {
+						// достоверно узнаём состояние сессии из статуса
+						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--3gpp-ussd-status' ]), {}).then(function(r) {
+							self.ussdSessionActive = /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');
+							self.ussdModemNum = modemNum;
+							var out = document.querySelector('.ussdcommand-output');
+							if (self.ussdSessionActive && out) {
+								out.innerText = (out.innerText || '') + '\n\n' + _('USSD session is active — type your reply and press Send.');
+							}
+						});
+					});
 				})
 				.catch(function(err) {
 					ui.addNotification(null, E('p', [ _('Failed to detect modem: ') + String(err) ]), 'danger');
@@ -363,9 +379,15 @@ return view.extend({
 		let ov = document.getElementById('cmdvalue');
 		ov.value = '';
 
+		// отменяем открытую USSD-сессию, чтобы следующий код шёл как initiate
+		if (this.ussdSessionActive && this.ussdModemNum != null) {
+			L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', this.ussdModemNum, '--3gpp-ussd-cancel' ]));
+			this.ussdSessionActive = false;
+		}
+
 		document.getElementById('cmdvalue').focus();
 	},
-	
+
 	handleClearOut: function(ev) {
 		let out = document.querySelector('.ussdcommand-output');
 		let fullhistory = document.getElementById('history-full')?.checked;
