@@ -41,8 +41,8 @@ Dependencies (`sms-tool`, `comgt`, `qmi-utils`, `modemmanager`, USB-serial kmods
 The package builds with the standard OpenWrt SDK. As a feed:
 
 ```sh
-# in your OpenWrt / SDK checkout — "modem" here is just a feed name you pick
-echo "src-git modem https://github.com/<you>/luci-app-5gmodem.git" >> feeds.conf.default
+# in your OpenWrt — "modem" here is just a feed name you pick
+echo "src-git modem https://github.com/fildunsky/luci-app-5gmodem.git" >> feeds.conf.default
 ./scripts/feeds update modem
 ./scripts/feeds install luci-app-5gmodem
 make package/luci-app-5gmodem/compile V=s
