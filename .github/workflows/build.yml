@@ -26,7 +26,8 @@ jobs:
         # <target_arch>-<openwrt_version>. x86_64 is only the *builder*;
         # the resulting package is arch-independent and installs anywhere.
         arch:
-          - x86_64-23.05.5   # -> .ipk
+          - x86_64-24.10.7   # -> .ipk (24.10 still defaults to opkg/ipk; its
+                             #    libxslt host tool builds fine, unlike 23.05.5)
           - x86_64-SNAPSHOT  # -> .apk
     steps:
       - name: Checkout
@@ -73,7 +74,8 @@ jobs:
       - name: Collect packages
         run: |
           mkdir -p out
-          find bin/ -type f \( -name 'luci-app-5gmodem*.ipk' -o -name 'luci-app-5gmodem*.apk' \) -exec cp -v {} out/ \;
+          # grab the app AND its translation subpackages (luci-i18n-5gmodem-*)
+          find bin/ -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} out/ \;
           echo "--- collected ---"; ls -l out/
 
       - name: Upload build artifacts
