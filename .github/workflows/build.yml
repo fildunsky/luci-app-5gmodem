@@ -36,35 +36,45 @@ jobs:
         uses: openwrt/gh-action-sdk@main
         env:
           ARCH: ${{ matrix.arch }}
-          FEEDNAME: fdmodem
+          FEEDNAME: modem
           PACKAGES: luci-app-5gmodem
           NO_REFRESH_CHECK: 1
-          # keep memory in check while heavy deps (glib2 via modemmanager)
-          # compile on the runner
+          # write per-package build logs to logs/ so a failure is diagnosable,
+          # and keep memory in check while heavy deps compile on the runner
+          BUILD_LOG: 1
           MAKEFLAGS: -j2
           V: s
 
-      - name: Collect packages
-        run: |
-          mkdir -p out
-          find bin/ -type f \( -name 'luci-app-5gmodem*.ipk' -o -name 'luci-app-5gmodem*.apk' \) -exec cp -v {} out/ \;
-          echo "--- collected ---"; ls -l out/
-
-      - name: Upload build logs on failure
+      # If the build failed, surface the ACTUAL error (the toplevel "Error 2"
+      # is useless; the real one is the first failing package's compile log).
+      - name: Show failing build log
         if: failure()
         run: |
-          mkdir -p logs
-          # buildroot logs (if the action kept them) + our package build dir
-          find . -type d -name logs -exec cp -r {} logs/ \; 2>/dev/null || true
-          find bin/ -maxdepth 6 -name '*.log' -exec cp {} logs/ \; 2>/dev/null || true
+          echo "::group::failing package logs"
+          found=0
+          for f in $(find logs -name '*.txt' 2>/dev/null); do
+            if grep -qiE 'Error [0-9]|: error:|ERROR:|collect2|No such file' "$f"; then
+              echo "----------------- $f -----------------"
+              tail -n 80 "$f"
+              found=1
+            fi
+          done
+          [ "$found" = 1 ] || echo "no package log with an obvious error was found under logs/"
+          echo "::endgroup::"
           tar -czf build-logs.tar.gz logs 2>/dev/null || true
-      - name: Upload logs artifact
+      - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs-${{ matrix.arch }}
           path: build-logs.tar.gz
           if-no-files-found: ignore
+
+      - name: Collect packages
+        run: |
+          mkdir -p out
+          find bin/ -type f \( -name 'luci-app-5gmodem*.ipk' -o -name 'luci-app-5gmodem*.apk' \) -exec cp -v {} out/ \;
+          echo "--- collected ---"; ls -l out/
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
