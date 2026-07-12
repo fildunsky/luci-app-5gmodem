@@ -2,20 +2,29 @@
 
 O=$(sms_tool -d $DEVICE at "at#servinfo;#cainfo?")
 
+# EARFCN -> LTE band (3GPP 36.101 Table 5.7.3-1). Покрываем распространённые
+# в РФ/Европе диапазоны, включая TDD B38/B40/B41 (раньше их не было, поэтому
+# вторичная несущая B40 определялась как "?").
 channeltoband()
 {
-	if [ $1 -ge 0 ] && [ $1 -le 599 ]; then
-		echo "1"
-	elif [ $1 -ge 1200 ] && [ $1 -le 1949 ]; then
-		echo "3"
-	elif [ $1 -ge 2750 ] && [ $1 -le 3449 ]; then
-		echo "7"
-	elif [ $1 -ge 3450 ] && [ $1 -le 3799 ]; then
-		echo "8"
-	elif [ $1 -ge 6150 ] && [ $1 -le 6449 ]; then
-		echo "20"
-	else
-		echo "?"
+	if   [ $1 -ge 0 ]     && [ $1 -le 599 ];   then echo "1"
+	elif [ $1 -ge 600 ]   && [ $1 -le 1199 ];  then echo "2"
+	elif [ $1 -ge 1200 ]  && [ $1 -le 1949 ];  then echo "3"
+	elif [ $1 -ge 1950 ]  && [ $1 -le 2399 ];  then echo "4"
+	elif [ $1 -ge 2400 ]  && [ $1 -le 2649 ];  then echo "5"
+	elif [ $1 -ge 2750 ]  && [ $1 -le 3449 ];  then echo "7"
+	elif [ $1 -ge 3450 ]  && [ $1 -le 3799 ];  then echo "8"
+	elif [ $1 -ge 5010 ]  && [ $1 -le 5179 ];  then echo "13"
+	elif [ $1 -ge 5730 ]  && [ $1 -le 5849 ];  then echo "17"
+	elif [ $1 -ge 6000 ]  && [ $1 -le 6149 ];  then echo "19"
+	elif [ $1 -ge 6150 ]  && [ $1 -le 6449 ];  then echo "20"
+	elif [ $1 -ge 6450 ]  && [ $1 -le 6599 ];  then echo "21"
+	elif [ $1 -ge 9210 ]  && [ $1 -le 9659 ];  then echo "28"
+	elif [ $1 -ge 37750 ] && [ $1 -le 38249 ]; then echo "38"
+	elif [ $1 -ge 38650 ] && [ $1 -le 39649 ]; then echo "40"
+	elif [ $1 -ge 39650 ] && [ $1 -le 41589 ]; then echo "41"
+	elif [ $1 -ge 66436 ] && [ $1 -le 67335 ]; then echo "66"
+	else echo "?"
 	fi
 }
 
@@ -54,7 +63,8 @@ case "$MODE_NUM" in
 			T1=$(channeltoband $T)
 			PBAND="$(band4g $T1 "")"
 			ADDON="$ADDON"'{"Primary band":"'$(band4g $T1 "")'"}'
-			MODE=$(band4g $T1 "LTE ")
+			# band4g игнорирует 2-й аргумент, поэтому префикс "LTE" ставим сами
+			MODE="LTE | $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $5}' | xargs)
 		if [ -n "$T" ]; then
@@ -91,9 +101,8 @@ case "$MODE_NUM" in
 		if [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
-			S1BAND=="$(band4g $T1 "")"
-#			ADDON="$ADDON"'{"(S1) band":"'$(band4g $T1 "")'"}'
-#			MODE="${MODE/LTE/LTE_A} / "$(band4g $T1 "")
+			S1BAND="$(band4g $T1)"
+			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $17}' | xargs)
 		if [ -n "$T" ]; then
@@ -126,9 +135,9 @@ case "$MODE_NUM" in
 		if [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
-			S2BAND=="$(band4g $T1 "")"
+			S2BAND="$(band4g $T1)"
 			ADDON="$ADDON"'{"(S2) band":"'$(band4g $T1 "")'"}'
-			MODE="${MODE} / "$(band4g $T1 "")
+			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $28}' | xargs)
 		if [ -n "$T" ]; then
@@ -159,4 +168,16 @@ case "$MODE_NUM" in
 		;;
 esac
 
-MODE=$(echo $MODE | sed 's,/,+,')
+# Несколько несущих (есть " / ") -> агрегация -> LTE-A. Разделитель / -> +.
+if echo "$MODE" | grep -q " / "; then
+	MODE=$(echo "$MODE" | sed 's/^LTE |/LTE-A |/')
+fi
+MODE=$(echo "$MODE" | sed 's, / , + ,g')
+
+# Модель и прошивка (в основном скрипте для этого модема не заполняются).
+# Убираем \r ПЕРВЫМ делом: иначе пустая на вид строка "\r" не отсекается как
+# пустая, и head -1 хватал её вместо реального значения.
+_M=$(sms_tool -d "$DEVICE" at "AT+CGMM" 2>/dev/null | tr -d '\r' | grep -vE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+[ -n "$_M" ] && MODEL="Telit $_M"
+_F=$(sms_tool -d "$DEVICE" at "AT+CGMR" 2>/dev/null | tr -d '\r' | grep -vE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+[ -n "$_F" ] && FW="$_F"

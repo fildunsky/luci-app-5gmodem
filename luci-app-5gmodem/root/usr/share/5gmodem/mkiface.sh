@@ -27,14 +27,41 @@ REQ="${2:-auto}"
 
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
 
-# --- locate the cdc-wdm control node and its driver ---
+# --- multi-modem: build the interface for the ACTIVE modem (by USB path), so
+# two modems get SEPARATE interfaces + separate cdc-wdm nodes instead of both
+# clobbering a single "modem" interface (which made the IP look shared). ---
+AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+MSEC=""
+WANTWDM=""
+if [ -n "$AMP" ]; then
+	MSEC="m_$(echo "$AMP" | sed 's/[^A-Za-z0-9]/_/g')"
+	# interface name: prefer the one remembered for THIS modem, default "modem".
+	# Then guarantee uniqueness - if that name is already claimed by ANOTHER
+	# modem's section, bump to modem2/modem3/… so two modems never share one
+	# interface (which made the IP look shared).
+	USED=$(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\(.*\)'\$/\1=\2/p" | grep -v "^$MSEC=" | cut -d= -f2)
+	cand=$(uci -q get "5gmodem.$MSEC.network")
+	[ -n "$cand" ] || cand="modem"
+	n=1
+	while echo " $USED " | grep -q " $cand "; do n=$((n + 1)); cand="modem$n"; done
+	IF="$cand"
+	# the cdc-wdm control node that belongs to THIS modem
+	WANTWDM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null)
+fi
+
+# --- locate the cdc-wdm control node and its driver (this modem's, if known) ---
 DEV=""; DRV=""
-for wdm in /dev/cdc-wdm*; do
-	[ -c "$wdm" ] || continue
-	DEV="$wdm"
-	DRV=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$wdm")/device/driver" 2>/dev/null)")
-	break
-done
+if [ -n "$WANTWDM" ] && [ -c "$WANTWDM" ]; then
+	DEV="$WANTWDM"
+	DRV=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$WANTWDM")/device/driver" 2>/dev/null)")
+else
+	for wdm in /dev/cdc-wdm*; do
+		[ -c "$wdm" ] || continue
+		DEV="$wdm"
+		DRV=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$wdm")/device/driver" 2>/dev/null)")
+		break
+	done
+fi
 
 # --- decide the proto ---
 # auto: pick from the cdc-wdm driver. Any other value is passed through as-is,
@@ -134,6 +161,13 @@ fi
 # here, on the router, so LuCI does not raise an "unsaved changes" banner.
 uci -q set "5gmodem.@5gmodem[0].network=$IF"
 uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
+# remember the interface+proto for THIS modem so switching back restores it and
+# the other modem keeps its own separate interface (no clobbering, distinct IP).
+if [ -n "$MSEC" ]; then
+	uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
+	uci -q set "5gmodem.$MSEC.network=$IF"
+	uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+fi
 uci -q commit 5gmodem
 
 # SMS/USSD routing must follow the modem's owner:

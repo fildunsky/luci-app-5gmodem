@@ -2119,3 +2119,30 @@ msgstr "Текущие настройки интерфейса модема «%s
 
 msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
 msgstr "Текущие настройки интерфейса модема «%s». Полное редактирование — на странице Сеть → Интерфейсы."
+
+msgid "Modem %d"
+msgstr "Модем %d"
+
+msgid "Switching to the selected modem…"
+msgstr "Переключаю на выбранный модем…"
+
+msgid "🌐 Network"
+msgstr "🌐 Сеть"
+
+msgid "⚙️ Modem Settings"
+msgstr "⚙️ Настройки модема"
+
+msgid "💬 Inbox"
+msgstr "💬 Входящие"
+
+msgid "📨 Outbox"
+msgstr "📨 Исходящие"
+
+msgid "📟 USSD"
+msgstr "📟 USSD"
+
+msgid "</> AT"
+msgstr "</> AT"
+
+msgid "modem"
+msgstr "модем"

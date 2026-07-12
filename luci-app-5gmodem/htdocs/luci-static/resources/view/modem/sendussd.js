@@ -301,10 +301,26 @@ return view.extend({
 	getMMModemNumber: function() {
 		return fs.exec('mmcli', ['-L']).then(function(res) {
 			let out = ((res.stdout || '') + '\n' + (res.stderr || '')).trim();
-			let m = out.match(/\/Modem\/(\d+)/);
-			if (m && m[1])
-				return m[1];
-			return Promise.reject(_('No modems found by ModemManager (mmcli -L).'));
+			let ids = [], re = /\/Modem\/(\d+)/g, mm;
+			while ((mm = re.exec(out)) !== null) { ids.push(mm[1]); }
+			if (!ids.length)
+				return Promise.reject(_('No modems found by ModemManager (mmcli -L).'));
+			if (ids.length === 1)
+				return ids[0];
+			// Несколько модемов (напр. внутренний + USB): раньше брался ПЕРВЫЙ,
+			// а он мог быть выключен (disabled) -> USSD падал с "modem not enabled
+			// yet". Выбираем модем в самом «рабочем» состоянии: connected >
+			// registered > enabled, пропуская disabled/locked.
+			var rank = { connected: 4, registered: 3, searching: 2, enabled: 1 };
+			return Promise.all(ids.map(function(id) {
+				return L.resolveDefault(fs.exec('mmcli', [ '-m', id, '-K' ]), {}).then(function(r) {
+					var s = (((r && r.stdout) || '').match(/generic\.state\s*:\s*(\S+)/) || [])[1] || '';
+					return { id: id, r: (rank[s] || 0) };
+				});
+			})).then(function(list) {
+				list.sort(function(a, b) { return b.r - a.r; });
+				return list[0].id;
+			});
 		});
 	},
 
@@ -336,7 +352,16 @@ return view.extend({
 					var arg = self.ussdSessionActive
 						? ('--3gpp-ussd-respond=' + ussd)
 						: ('--3gpp-ussd-initiate=' + ussd);
-					return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=30', arg ]).then(function() {
+					// Перед НОВОЙ сессией сбрасываем возможную зависшую: после
+					// таймаута/ошибки прошлого запроса ModemManager оставляет
+					// статус "active", и следующие initiate падают с "a session
+					// is already active". Отмена возвращает в idle (ошибку отмены
+					// игнорируем - если отменять нечего).
+					return (!self.ussdSessionActive
+							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--3gpp-ussd-cancel' ]), {})
+							: Promise.resolve())
+						.then(function() { return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=30', arg ]); })
+						.then(function() {
 						// достоверно узнаём состояние сессии из статуса
 						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--3gpp-ussd-status' ]), {}).then(function(r) {
 							self.ussdSessionActive = /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');

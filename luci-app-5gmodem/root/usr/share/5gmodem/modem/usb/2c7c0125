@@ -60,7 +60,10 @@ if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
 	RSRP="$T"
 	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
 	RSRQ="$T"
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", $1*0.2-20}')
+	# Поле SINR в QENG="servingcell" у EC21/EC25 уже в дБ (сверено с AT+QCSQ:
+	# QENG SINR=2 ≈ QCSQ 112 -> 112/5-20 = 2.4 дБ). Прежняя формула *0.2-20
+	# давала абсурдные ~-19 дБ на рабочем соединении.
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
 	SINR="$T"
 fi
 

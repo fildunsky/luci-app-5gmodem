@@ -178,7 +178,10 @@ return view.extend({
 			L.resolveDefault(uci.load('network')),
 			// установленные обработчики протоколов (luci-proto-*): по ним строим
 			// список доступных типов интерфейса для кнопки создания
-			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), [])
+			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), []),
+			// карта портов -> модем (vid:pid, модель), чтобы подписать выпадашки
+			// портов: какой /dev/ttyUSB* какому модему принадлежит
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listports.sh'), '{}')
 		]);
 	},
 
@@ -187,6 +190,17 @@ return view.extend({
 		try { json = JSON.parse(res[0] || '{}'); } catch (e) {}
 		if (!json || typeof json != 'object') json = {};
 		var devs = res[1] || [];
+
+		/* карта порт -> {vidpid, product} для подписи выпадашек портов */
+		var portInfo = {};
+		try { portInfo = JSON.parse(res[6] || '{}') || {}; } catch (e) {}
+		function portLabel(name) {
+			var full = '/dev/' + name;
+			var i = portInfo[full];
+			if (i && i.product) { return full + ' — ' + i.product + (i.vidpid ? ' (' + i.vidpid + ')' : ''); }
+			if (i && i.vidpid && i.vidpid != ':') { return full + ' — ' + i.vidpid; }
+			return full;
+		}
 
 		/* Список установленных на роутере обработчиков протоколов (имена файлов
 		   protocol/<name>.js). По нему динамически строим выбор типа интерфейса,
@@ -232,7 +246,7 @@ return view.extend({
 				<br />Traditional modem: one of the available ttyUSBX ports.<br /> \
 				<br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."));
 		devs.sort((a, b) => a.name > b.name);
-		devs.forEach(dev => o.value('/dev/' + dev.name));
+		devs.forEach(dev => o.value('/dev/' + dev.name, portLabel(dev.name)));
 		o.placeholder = _('Please select a port');
 		o.rmempty = true;
 		o.depends('auto_port', '0');
@@ -240,7 +254,7 @@ return view.extend({
 		o = s.option(form.Value, 'at_port',
 			_('Port for AT / SMS / USSD'),
 			_('AT command port used for SMS, USSD and AT commands. On most modems it is the same as the modem communication port.'));
-		devs.forEach(dev => o.value('/dev/' + dev.name));
+		devs.forEach(dev => o.value('/dev/' + dev.name, portLabel(dev.name)));
 		o.placeholder = _('Please select a port');
 		o.rmempty = true;
 		o.depends('auto_port', '0');

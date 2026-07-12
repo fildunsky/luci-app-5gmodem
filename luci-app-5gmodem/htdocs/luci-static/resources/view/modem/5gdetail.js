@@ -1622,7 +1622,7 @@ simDialog: baseclass.extend({
 				}, _('☰')),
 			]),
 
-			E('h3', {}, [ _('General Information') ]),
+			E('h3', { 'id': 'modemname', 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;' }, [ _('Modem') ]),
 
 			/* Компактная строка состояния: слева иконка уровня сигнала с
 			   процентами, затем иконка SIM, три строки статуса (регистрация /

@@ -412,8 +412,11 @@ SPN=""
 if [ -n "$SIMID" ] && [ -f "$SPNCACHE" ] && [ "$(cut -f1 "$SPNCACHE")" = "$SIMID" ]; then
 	SPN=$(cut -f2- "$SPNCACHE")
 else
-	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/.*+CRSM:[^"]*"\([0-9A-Fa-f]*\)".*/\1/p')
+	# Ответ CRSM у разных модемов: с кавычками ("...") у Compal, БЕЗ кавычек у
+	# Telit LM960 (+CRSM: 144,0,00542D...). Убираем кавычки и берём hex после
+	# двух статус-байтов (sw1,sw2,), чтобы работало в обоих форматах.
+	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r"' \
+		| sed -n 's/.*+CRSM:[^,]*,[^,]*,\([0-9A-Fa-f][0-9A-Fa-f]*\).*/\1/p')
 	if [ -n "$SPNHEX" ]; then
 		# первый байт - условие отображения, пропускаем; далее имя (GSM7/ASCII)
 		# до заполнителя FF. Печатаемые ASCII декодируем, старшие байты UCS2 (00)
@@ -427,7 +430,11 @@ else
 		[ -n "$SPN" ] && [ -n "$SIMID" ] && printf '%s\t%s\n' "$SIMID" "$SPN" > "$SPNCACHE"
 	fi
 fi
-# Применяем SPN, если он осмысленный (не пусто и не одни цифры/пробелы).
+# Определяем брендовое имя из SPN (если осмысленное). НЕ присваиваем COPS
+# здесь: модем-специфичные скрипты (напр. Telit 1bc71040) ниже перезаписывают
+# COPS именем сети из своих AT-команд. Поэтому применяем SPN В САМОМ КОНЦЕ,
+# после источения профиля модема (см. блок перед выводом JSON).
+SPN_NAME=""
 if [ -n "$SPN" ] && ! echo "$SPN" | grep -qE '^[0-9 ]*$'; then
 	# Если SPN совпадает (без учёта регистра) с именем сети из mccmnc.dat -
 	# это обычный оператор: берём аккуратно оформленное имя из базы
@@ -436,9 +443,9 @@ if [ -n "$SPN" ] && ! echo "$SPN" | grep -qE '^[0-9 ]*$'; then
 	MCCNAME=""
 	[ -n "$COPS_NUM" ] && MCCNAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
 	if [ -n "$MCCNAME" ] && [ "$(echo "$SPN" | tr 'A-Z' 'a-z')" = "$(echo "$MCCNAME" | tr 'A-Z' 'a-z')" ]; then
-		COPS="$MCCNAME"
+		SPN_NAME="$MCCNAME"
 	else
-		COPS="$SPN"
+		SPN_NAME="$SPN"
 	fi
 fi
 
@@ -598,6 +605,11 @@ fi
 # показывался mbim. Берём напрямую из uci выбранного интерфейса $SEC.
 IFPROTO=$(uci -q get "network.$SEC.proto")
 [ -n "$IFPROTO" ] && PROTO="$IFPROTO"
+
+# Брендовое имя оператора с SIM (SPN) применяем В КОНЦЕ - после модем-скриптов,
+# которые могли перезаписать COPS именем хост-сети (напр. Telit ставит "Tele2
+# RU", тогда как на SIM записан бренд MVNO "T-Mobile").
+[ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
 
 cat <<EOF
 {
