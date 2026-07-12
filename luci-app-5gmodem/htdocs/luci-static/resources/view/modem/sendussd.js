@@ -268,7 +268,12 @@ return view.extend({
 		
 		return fs.read_direct('/etc/modem/ussdcodes/' + selectedFile).then(function(content) {
 			selectElement.innerHTML = '';
-			
+			// плейсхолдер первым пунктом: иначе первый реальный USSD-код уже
+			// "выбран" и повторный клик по нему не даёт события change.
+			let ph = document.createElement('option');
+			ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
+			selectElement.appendChild(ph);
+
 			let codes = (content || '').trim().split('\n');
 			codes.forEach(function(cmd) {
 				if (cmd.trim()) {
@@ -281,7 +286,7 @@ return view.extend({
 					selectElement.appendChild(option);
 				}
 			});
-			
+
 			let cmdInput = document.getElementById('cmdvalue');
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
@@ -552,9 +557,13 @@ return view.extend({
 									L.resolveDefault(fs.read_direct('/etc/modem/ussdcodes/' + fileToLoad), '').then(function(content) {
 										let selectElement = document.getElementById('tk');
 										if (!selectElement) return;
-										
+
 										selectElement.innerHTML = '';
-										
+										// плейсхолдер первым пунктом (см. handleFileChange)
+										let ph = document.createElement('option');
+										ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
+										selectElement.appendChild(ph);
+
 										let codes = (content || '').trim().split('\n');
 										codes.forEach(function(cmd) {
 											if (cmd.trim()) {

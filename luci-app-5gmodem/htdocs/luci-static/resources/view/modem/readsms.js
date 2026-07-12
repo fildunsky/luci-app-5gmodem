@@ -632,6 +632,9 @@ return view.extend({
 	},
                                                                                                                                               
 	handleRefresh: function(ev) {
+		// Обновляем только список сообщений, без перезагрузки всей страницы.
+		// Фолбэк на reload, если doRefresh ещё не готов (ранний клик).
+		if (typeof this._doRefresh == 'function') { return this._doRefresh(false); }
 		window.location.reload();
 	},
 
@@ -659,6 +662,7 @@ return view.extend({
 
 	renderMain: function(data) {
 
+		var self = this;
 		var sections, store;
 		var view = document.getElementById("smssarea");
 		store = '-';
@@ -666,7 +670,11 @@ return view.extend({
 		uci.load('sms_tool_js').then(function() {
 		var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
 		var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
-		var smsM = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms'));
+		// mergesms может быть не задан в uci (свежая конфигурация): тогда
+		// ни ветка smsM=="1" (склейка), ни smsM=="0" не выполнялись, и
+		// сообщения не рендерились (обновлялся только счётчик). Нормализуем
+		// к "1"/"0", по умолчанию "0" (без склейки).
+		var smsM = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms')) == '1' ? '1' : '0';
 		var algo = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'algorithm'));
 		var hide = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'bnumber'));
 		var ledn = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'lednotify'));
@@ -938,14 +946,15 @@ return view.extend({
 						});
 
 				} else {
-					if ( t.lenght < 1 )
-						{
-						msg_bar(Math.floor(u), t);
-						}
+					// status вернул пусто (нет порта / модем не ответил).
+					// t и u здесь не определены - прежний код обращался к
+					// t.lenght (к тому же опечатка) и бросал исключение,
+					// которое роняло автополлинг на каждом тике. Просто
+					// показываем подсказку, без обращения к t/u.
 					ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
 				}
 
-			if (document.getElementById('msg')) {
+			if (document.getElementById('msg') && typeof u !== 'undefined') {
 				msg_bar(Math.floor(u), t);
 			    }
     		});
@@ -954,6 +963,9 @@ return view.extend({
 		/* Автообновление входящих: новые SMS появляются сами, без ручного
 		   «Обновить». poll снимается автоматически при уходе со страницы. */
 		poll.add(function() { return doRefresh(false); }, 15);
+		/* Кнопка «Обновить» теперь обновляет только список сообщений
+		   (см. handleRefresh), а не перезагружает всю страницу. */
+		self._doRefresh = doRefresh;
 		});
 
 		var v = E('div', { 'class': 'cbi-section' }, [

@@ -174,7 +174,11 @@ return view.extend({
 				});
 			}),
 			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(uci.load('sms_tool_js'))
+			L.resolveDefault(uci.load('sms_tool_js')),
+			L.resolveDefault(uci.load('network')),
+			// установленные обработчики протоколов (luci-proto-*): по ним строим
+			// список доступных типов интерфейса для кнопки создания
+			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), [])
 		]);
 	},
 
@@ -183,6 +187,16 @@ return view.extend({
 		try { json = JSON.parse(res[0] || '{}'); } catch (e) {}
 		if (!json || typeof json != 'object') json = {};
 		var devs = res[1] || [];
+
+		/* Список установленных на роутере обработчиков протоколов (имена файлов
+		   protocol/<name>.js). По нему динамически строим выбор типа интерфейса,
+		   чтобы показывать только реально доступные протоколы (у кого-то стоит
+		   luci-proto-xmm/atc для Fibocom, у кого-то нет). */
+		var protoAvail = {};
+		(res[5] || []).forEach(function(f) {
+			var m = (f.name || '').match(/^([a-z0-9]+)\.js$/);
+			if (m) { protoAvail[m[1]] = true; }
+		});
 
 		/* ---------------- Настройки модема (бывшая вкладка Modem Settings) --- */
 		var m, s, o;
@@ -196,12 +210,21 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
-		o = s.option(widgets.NetworkSelect, 'network', _('Interface'),
+		/* Раньше здесь был widgets.NetworkSelect. Он через
+		   network.getNetworks() тянет обработчики протоколов всех
+		   интерфейсов (L.require('protocol.<name>')). Если в netifd есть
+		   proto 3g/wwan, а их luci-обработчик не установлен, require даёт
+		   404, промис отклоняется и ВСЯ страница настроек модема перестаёт
+		   открываться. Заменили на простой список имён интерфейсов из uci -
+		   он самодостаточен и ничего не подгружает. */
+		o = s.option(form.ListValue, 'network', _('Interface'),
 			_('Network interface for Internet access.'));
-		o.exclude = s.section;
-		o.nocreate = true;
-		o.rmempty = true;
 		o.depends('auto_port', '0');
+		o.rmempty = true;
+		(uci.sections('network', 'interface') || []).forEach(function(iface) {
+			var nm = iface['.name'];
+			if (nm && nm != 'loopback') { o.value(nm, nm + (iface.proto ? ' (' + iface.proto + ')' : '')); }
+		});
 
 		o = s.option(form.Value, 'device',
 			_('Port for modem communication'),
@@ -238,19 +261,45 @@ return view.extend({
 			uci.unset('5gmodem', section_id, 'at_port');
 		};
 
-		/* Выбор протокола + кнопка создания интерфейса модема. */
+		/* Выбор протокола + кнопка создания интерфейса модема. Список типов
+		   строится по установленным на роутере обработчикам протоколов, так
+		   что для Fibocom с luci-proto-xmm/atc появятся XMM/ATC и т.д. */
 		o = s.option(form.ListValue, 'iface_proto', _('Interface protocol'),
-			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems).'));
+			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem).'));
 		o.value('auto', _('Auto (detect)'));
-		o.value('mbim', 'MBIM (umbim)');
-		o.value('modemmanager', 'ModemManager');
+		/* человекочитаемые подписи известных модемных протоколов */
+		var protoLabels = {
+			'mbim': 'MBIM (umbim)',
+			'qmi': 'QMI (uqmi)',
+			'ncm': 'NCM',
+			'xmm': 'XMM (Fibocom / Intel)',
+			'atc': 'AT (atc)',
+			'wwan': 'WWAN (auto)',
+			'3g': '3G / PPP',
+			'modemmanager': 'ModemManager'
+		};
+		/* порядок вывода; показываем только те, чей обработчик установлен */
+		[ 'mbim', 'qmi', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
+		});
+		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,
+		   чтобы список не был пустым */
+		if (!protoAvail['mbim'] && !protoAvail['modemmanager']) {
+			o.value('mbim', protoLabels['mbim']);
+			o.value('modemmanager', protoLabels['modemmanager']);
+		}
 		o.default = 'auto';
 		o.rmempty = false;
+
+		/* Имя интерфейса модема и признак его существования - для подписи
+		   кнопки (создать/пересоздать) и для встроенной вьюхи ниже. */
+		var mIfName = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
+		var mIfExists = !!uci.get('network', mIfName);
 
 		o = s.option(form.Button, '_mkiface');
 		o.title = _('Modem interface');
 		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
-		o.inputtitle = _('Create modem interface');
+		o.inputtitle = mIfExists ? _('Recreate modem interface') : _('Create modem interface');
 		o.inputstyle = 'apply';
 		o.onclick = function() {
 			var sid = null;
@@ -261,8 +310,9 @@ return view.extend({
 				var opt = this.map.lookupOption('iface_proto', sid);
 				if (opt && opt[0]) { var el = opt[0].getUIElement(sid); if (el) { proto = el.getValue() || 'auto'; } }
 			} catch (e) {}
-			// запоминаем выбор пользователя, чтобы он отображался при возврате
-			if (sid) { uci.set('5gmodem', sid, 'iface_proto', proto); uci.save(); }
+			// Выбор протокола запоминает сам mkiface.sh (uci commit на
+			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
+			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
 			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto ]).then(function(res) {
 				ui.hideModal();

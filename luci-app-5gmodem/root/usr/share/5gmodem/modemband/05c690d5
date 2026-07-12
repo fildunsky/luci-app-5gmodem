@@ -1,3 +1,16 @@
+# Идентификатор 05c6:90d5 делят Foxconn T99W175 / Thales MV31-W и ранний
+# прототип Compal RXM-G1 (тот же ID). У прошивки Compal НЕТ AT-команд бенд-лока
+# (AT^BAND_PREF не отвечает), бенды доступны только через mmcli. Поэтому, если
+# по USB-дескриптору это Compal (Tri Cascade / VOS_5G), передаём управление
+# профилю 05c690d6 (mmcli), как это делает скрипт метрик modem/usb/05c690d5.
+# Без этого bands.sh отдавал бы захардкоженный список бендов Thales, рисуя в UI
+# нерабочие кнопки (текущие бенды через AT^BAND_PREF не читались -> ничего не
+# подсвечено), вместо честного "управление невозможно в режиме mbim".
+if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
+	. "$RES/05c690d6"
+	return 0 2>/dev/null || exit 0
+fi
+
 _DEVICE=/dev/ttyUSB2
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"

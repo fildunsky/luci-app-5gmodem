@@ -305,6 +305,7 @@ fi
 COPS=""
 COPS_MCC=""
 COPS_MNC=""
+COPS_FROM_MODEM=0   # 1, если имя получено от самого модема, а не из mccmnc.dat
 COPS_NUM=$(echo "$O" | awk -F[\"] '/^\+COPS:\s*.,2/ {print $2}')
 if [ -n "$COPS_NUM" ]; then
 	COPS_MCC=${COPS_NUM:0:3}
@@ -318,15 +319,23 @@ TCOPS=$(echo "$O" | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
 # кратно 4 считаем UCS2: латиницу (00XX) декодируем, иначе (кириллица и т.п.)
 # отбрасываем в пользу mccmnc.dat-имени.
 if [ -n "$TCOPS" ] && [ $(( ${#TCOPS} % 4 )) -eq 0 ] && echo "$TCOPS" | grep -qE '^[0-9A-Fa-f]+$'; then
-	if echo "$TCOPS" | grep -qE '^(00[0-9A-Fa-f]{2})+$'; then
-		TCOPS=$(echo "$TCOPS" | sed 's/\(....\)/\1 /g' | tr ' ' '\n' | while read h; do
-			[ -n "$h" ] && printf "\\$(printf '%03o' $((16#${h#00})))"
-		done)
-	else
-		TCOPS=""
-	fi
+	# Каждые 4 hex = один codepoint UCS2. Декодируем в UTF-8 весь BMP,
+	# включая кириллицу ("Т-Мобайл" = 0422002D041C...), а не только латиницу -
+	# иначе кириллическое имя MVNO терялось и подменялось хост-сетью Tele2.
+	DEC=""
+	for h in $(echo "$TCOPS" | sed 's/\(....\)/\1 /g'); do
+		c=$((0x$h))   # busybox ash не понимает 16#, используем 0x
+		if [ "$c" -lt 128 ]; then
+			DEC="$DEC$(printf "\\$(printf '%03o' "$c")")"
+		elif [ "$c" -lt 2048 ]; then
+			DEC="$DEC$(printf "\\$(printf '%03o' $((192 | (c >> 6))))\\$(printf '%03o' $((128 | (c & 63))))")"
+		else
+			DEC="$DEC$(printf "\\$(printf '%03o' $((224 | (c >> 12))))\\$(printf '%03o' $((128 | ((c >> 6) & 63))))\\$(printf '%03o' $((128 | (c & 63))))")"
+		fi
+	done
+	[ -n "$DEC" ] && TCOPS="$DEC"
 fi
-[ "x$TCOPS" != "x" ] && COPS="$TCOPS"
+[ "x$TCOPS" != "x" ] && { COPS="$TCOPS"; COPS_FROM_MODEM=1; }
 
 if [ -z "$COPS" ]; then
 	if [ -n "$COPS_NUM" ]; then
@@ -359,13 +368,77 @@ case "$COPS" in
 	;;
 esac
 
-# Финальная нормализация имени оператора: если после всех проверок в имени нет
-# ни одной буквы (модем вернул мусорный числовой alphanumeric, напр. модем
-# Compal отдаёт "0062003 0062003"), берём имя из mccmnc.dat по числовому коду.
-if [ -n "$COPS" ] && ! echo "$COPS" | grep -q '[A-Za-z]'; then
-	if [ -n "$COPS_NUM" ]; then
+# Финальная нормализация имени оператора.
+# Раньше проверяли отсутствие латиницы (grep '[A-Za-z]') - но кириллическое
+# имя (Т-Мобайл) латиницы не содержит и ошибочно считалось мусором, после чего
+# подменялось хост-сетью из mccmnc.dat (Tele2). Теперь мусором считаем имя ТОЛЬКО
+# из цифр/пробелов (напр. "0062003 0062003").
+#
+# Модем-MVNO то отдаёт свой бренд ("Т-Мобайл"), то мусор; mccmnc.dat знает лишь
+# хост-сеть (Tele2). Поэтому хорошее буквенное имя запоминаем для этого кода
+# оператора, а при мусоре берём последнее запомненное имя, и лишь если его нет -
+# имя из mccmnc.dat.
+# Идентификатор SIM (IMSI) - ключ кэшей оператора/SPN. Без него при горячей
+# замене SIM показывался бы закэшированный старый оператор (поставили Билайн, а
+# светится Т-Мобайл). При смене SIM IMSI меняется -> кэш инвалидируется.
+SIMID=$(sms_tool -d "$DEVICE" at "AT+CIMI" 2>/dev/null | tr -d '\r' | grep -oE '[0-9]{14,16}' | head -1)
+
+OPCACHE="/tmp/5gmodem_operator"
+if [ -n "$COPS" ] && echo "$COPS" | grep -qE '^[0-9 ]+$'; then
+	CACHED=""
+	if [ -n "$SIMID" ] && [ -f "$OPCACHE" ] && [ "$(cut -f1 "$OPCACHE")" = "$SIMID" ]; then
+		CACHED=$(cut -f2- "$OPCACHE")
+	fi
+	if [ -n "$CACHED" ]; then
+		COPS="$CACHED"
+	elif [ -n "$COPS_NUM" ]; then
 		NAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
 		[ -n "$NAME" ] && COPS="$NAME"
+	fi
+elif [ "$COPS_FROM_MODEM" = "1" ] && [ -n "$SIMID" ] && [ -n "$COPS" ]; then
+	# запоминаем только имя, полученное от самого модема (не из mccmnc.dat),
+	# иначе кэш затёрся бы хост-сетью Tele2 при первом же мусорном чтении
+	printf '%s\t%s\n' "$SIMID" "$COPS" > "$OPCACHE"
+fi
+
+# Имя оператора с SIM (EF_SPN, файл 6F46) - самое надёжное брендовое имя
+# абонента. Для MVNO (Т-Мобайл / T-Mobile на сети Tele2) модем часто отдаёт
+# мусор ("T0"), а числовой код 25020 указывает лишь на хост-сеть Tele2, тогда
+# как на SIM записано настоящее "T-Mobile". Кэшируем по IMSI (не читаем CRSM
+# каждый раз, но при замене SIM перечитываем); если модем не умеет CRSM или
+# IMSI не прочитался - тихо пропускаем.
+SPNCACHE="/tmp/5gmodem_spn"
+SPN=""
+if [ -n "$SIMID" ] && [ -f "$SPNCACHE" ] && [ "$(cut -f1 "$SPNCACHE")" = "$SIMID" ]; then
+	SPN=$(cut -f2- "$SPNCACHE")
+else
+	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/.*+CRSM:[^"]*"\([0-9A-Fa-f]*\)".*/\1/p')
+	if [ -n "$SPNHEX" ]; then
+		# первый байт - условие отображения, пропускаем; далее имя (GSM7/ASCII)
+		# до заполнителя FF. Печатаемые ASCII декодируем, старшие байты UCS2 (00)
+		# и служебные - пропускаем.
+		SPN=$(echo "$SPNHEX" | sed 's/^..//' | sed 's/\(..\)/\1 /g' | tr ' ' '\n' | while read b; do
+			[ -z "$b" ] && continue
+			{ [ "$b" = "FF" ] || [ "$b" = "ff" ]; } && break
+			v=$((0x$b))   # busybox ash не понимает 16#, используем 0x
+			[ "$v" -ge 32 ] && [ "$v" -lt 127 ] && printf "\\$(printf '%03o' "$v")"
+		done)
+		[ -n "$SPN" ] && [ -n "$SIMID" ] && printf '%s\t%s\n' "$SIMID" "$SPN" > "$SPNCACHE"
+	fi
+fi
+# Применяем SPN, если он осмысленный (не пусто и не одни цифры/пробелы).
+if [ -n "$SPN" ] && ! echo "$SPN" | grep -qE '^[0-9 ]*$'; then
+	# Если SPN совпадает (без учёта регистра) с именем сети из mccmnc.dat -
+	# это обычный оператор: берём аккуратно оформленное имя из базы
+	# ("beeline" -> "Beeline"). Если отличается - это MVNO, оставляем SPN
+	# ("T-Mobile" вместо хост-сети "Tele2").
+	MCCNAME=""
+	[ -n "$COPS_NUM" ] && MCCNAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
+	if [ -n "$MCCNAME" ] && [ "$(echo "$SPN" | tr 'A-Z' 'a-z')" = "$(echo "$MCCNAME" | tr 'A-Z' 'a-z')" ]; then
+		COPS="$MCCNAME"
+	else
+		COPS="$SPN"
 	fi
 fi
 

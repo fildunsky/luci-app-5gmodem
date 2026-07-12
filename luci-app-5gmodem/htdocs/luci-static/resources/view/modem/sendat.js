@@ -158,7 +158,14 @@ return view.extend({
 		
 		return fs.read_direct('/etc/modem/atcmmds/' + selectedFile).then(function(content) {
 			selectElement.innerHTML = '';
-			
+			// Плейсхолдер первым пунктом: иначе первая реальная команда (AT)
+			// уже "выбрана" и повторный клик по ней не даёт события change,
+			// то есть её нельзя применить. С плейсхолдером выбор любой
+			// команды, включая первую, всегда генерирует change.
+			let ph = document.createElement('option');
+			ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
+			selectElement.appendChild(ph);
+
 			let commands = (content || '').trim().split('\n');
 			commands.forEach(function(cmd) {
 				if (cmd.trim()) {
@@ -171,7 +178,7 @@ return view.extend({
 					selectElement.appendChild(option);
 				}
 			});
-			
+
 			let cmdInput = document.getElementById('cmdvalue');
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
@@ -304,9 +311,13 @@ return view.extend({
 									L.resolveDefault(fs.read_direct('/etc/modem/atcmmds/' + fileToLoad), '').then(function(content) {
 										let selectElement = document.getElementById('tk');
 										if (!selectElement) return;
-										
+
 										selectElement.innerHTML = '';
-										
+										// плейсхолдер первым пунктом (см. handleFileChange)
+										let ph = document.createElement('option');
+										ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
+										selectElement.appendChild(ph);
+
 										let commands = (content || '').trim().split('\n');
 										commands.forEach(function(cmd) {
 											if (cmd.trim()) {

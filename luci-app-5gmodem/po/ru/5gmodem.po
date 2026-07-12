@@ -2080,3 +2080,42 @@ msgstr "Создать (или переключить) сетевой интер
 
 msgid "Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands."
 msgstr "Управление диапазонами и режимом сети недоступно для этого модема в текущем режиме интерфейса. Чтобы управлять диапазонами, переключите интерфейс на ModemManager (в настройках модема)."
+
+msgid "Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands."
+msgstr "Управление диапазонами и режимом сети недоступно в режиме %s. Чтобы управлять диапазонами, переключите интерфейс на ModemManager (в настройках модема)."
+
+msgid "Bands set, restarting the modem radio to apply them..."
+msgstr "Диапазоны заданы, перезапускаю радио модема для их применения..."
+
+msgid "Restart radio"
+msgstr "Перезапуск радио"
+
+msgid "Full restart"
+msgstr "Полная перезагрузка"
+
+msgid "Radio restart (CFUN=4→1): quickly re-registers on the network without re-enumerating USB. Try this first."
+msgstr "Перезапуск радио (CFUN=4→1): быстрое переподключение к сети без переинициализации USB. Сначала попробуйте это."
+
+msgid "Full restart (CFUN=1,1): the modem reboots and re-enumerates on USB. Slower, connection drops ~1 min; use when the radio restart did not help."
+msgstr "Полная перезагрузка (CFUN=1,1): модем перезагружается и заново инициализируется на USB. Дольше, связь пропадает ~1 мин; используйте, если перезапуск радио не помог."
+
+msgid "Fully restart the modem (CFUN=1,1)? It will reboot and re-enumerate on USB - this takes longer and the connection will drop for about a minute."
+msgstr "Полностью перезагрузить модем (CFUN=1,1)? Он перезагрузится и заново инициализируется на USB — это дольше, связь пропадёт примерно на минуту."
+
+msgid "Restart the modem radio now? The connection will drop for a while."
+msgstr "Перезапустить радио модема сейчас? Связь ненадолго пропадёт."
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem)."
+msgstr "Протокол для кнопки «Создать интерфейс модема». «Авто» выбирает его по драйверу модема (рекомендуется). Показываются только протоколы, обработчик которых установлен на роутере. Любой протокол, кроме ModemManager, отключает ModemManager (совместно управлять модемом они не могут)."
+
+msgid "Recreate modem interface"
+msgstr "Пересоздать интерфейс модема"
+
+msgid "Modem interface settings"
+msgstr "Настройки интерфейса модема"
+
+msgid "Live settings of the current modem interface \"%s\". Edit and press Save & Apply at the bottom; use \"Recreate\" above to rebuild it with the chosen protocol."
+msgstr "Текущие настройки интерфейса модема «%s». Отредактируйте и нажмите «Сохранить и применить» внизу; кнопка «Пересоздать» выше перестроит его с выбранным протоколом."
+
+msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
+msgstr "Текущие настройки интерфейса модема «%s». Полное редактирование — на странице Сеть → Интерфейсы."

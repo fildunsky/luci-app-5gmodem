@@ -329,7 +329,6 @@ function SIMdata(data) {
 	rows.push(_('SIM IMSI'), sdata.imsi || '-');
 	rows.push(_('SIM ICCID'), sdata.iccid || '-');
 	rows.push(_('Modem IMEI'), sdata.imei || '-');
-	rows.push(_('Hint'), _('CLICK ME TO SEE NEW MENU'));
 	return ui.itemlist(E('span'), rows);
 }
 
@@ -411,6 +410,11 @@ function loadBands() {
    не отдаёт бенды: не под ModemManager, или MM их не показывает). Данные и
    применение - вендорными AT-командами через /usr/share/5gmodem/bands.sh. ---- */
 var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+/* Протокол интерфейса модема (из json.protocol). В режиме modemmanager бендами
+   управляют через mmcli, поэтому пояснение «переключите на ModemManager» там НЕ
+   показываем - если mmcli временно не готов (напр. модем пересоздают), это
+   транзитное состояние, а не «нельзя управлять». */
+var ifaceProtoIsMM = false;
 
 function buildBandButtonsNum(supported, enabled, btype) {
 	var pfx = (btype == 'lte') ? 'B' : 'n';
@@ -436,10 +440,24 @@ function loadBandsModemband() {
 		var j = {};
 		var note = document.getElementById('bandnote');
 		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }
-		if (j.error || (!j.supported && !j.supported5gnsa && !j.supported5gsa)) {
-			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов ->
-			// в этом режиме управлять бендами нельзя, показываем пояснение.
-			if (note) { note.style.display = ''; }
+		// Считаем управление доступным, только если список поддерживаемых бендов
+		// НЕПУСТ. Раньше проверяли !j.supported, но bands.sh отдаёт пустой массив
+		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
+		// рисовать строки бендов с прочерком вместо пояснения.
+		var hasBands = (j.supported && j.supported.length) ||
+		               (j.supported5gnsa && j.supported5gnsa.length) ||
+		               (j.supported5gsa && j.supported5gsa.length);
+		if (j.error || !hasBands) {
+			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
+			[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
+			});
+			// Пояснение «переключите на ModemManager» показываем ТОЛЬКО если
+			// интерфейс НЕ modemmanager. В режиме modemmanager пустой список -
+			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
+			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
+			if (note) { note.style.display = ifaceProtoIsMM ? 'none' : ''; }
+			if (ifaceProtoIsMM) { window.setTimeout(revealMgmtWhenReady, 1500); }
 			return;
 		}
 		if (note) { note.style.display = 'none'; }
@@ -487,14 +505,19 @@ function applyBandsModemband(reset) {
 	var p = Promise.resolve();
 	if (hasLte) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands', reset ? 'default' : lte.join(' ') ]); }); }
 	if (hasNsa) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', reset ? 'default' : nsa.join(' ') ]); }); }
+	// После смены бендов перезапускаем радио модема (CFUN=4->1): без этого
+	// модем не начинает использовать новый набор частот / агрегацию до
+	// переподключения, и скорость остаётся низкой. Мягкий рестарт, без
+	// переэнумерации USB.
+	p = p.then(function() { return fs.exec('/usr/share/5gmodem/reboot_modem.sh'); });
 	return p.then(function() {
 		ui.hideModal();
 		if (ui.addTimeLimitedNotification) {
-			ui.addTimeLimitedNotification(null, E('p', _('Bands set. The modem will reconnect.')), 5000, 'info');
+			ui.addTimeLimitedNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 6000, 'info');
 		} else {
-			ui.addNotification(null, E('p', _('Bands set. The modem will reconnect.')), 'info');
+			ui.addNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 'info');
 		}
-		window.setTimeout(loadBandsModemband, 2000);
+		window.setTimeout(loadBandsModemband, 4000);
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
@@ -556,11 +579,17 @@ function refreshModeButtons(mmK) {
    тогда скрыт и пуст. Когда модем появляется, показать строки и заполнить
    кнопки без ручного обновления страницы. Тяжёлый mmcli -K дёргаем только
    пока блок ещё скрыт. */
-function revealMgmtWhenReady() {
+function revealMgmtWhenReady(tries) {
 	var row = document.getElementById('modeswn');
 	if (!row || row.style.display != 'none') { return; }
 	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), '').then(function(mmK) {
-		if (!/current-modes/.test(mmK)) { return; }
+		if (!/current-modes/.test(mmK)) {
+			// mmcli ещё не готов (модем под MM поднимается): повторяем
+			// несколько раз, чтобы блок частот появился сам после пересоздания.
+			var n = (tries || 0);
+			if (ifaceProtoIsMM && n < 8) { window.setTimeout(function() { revealMgmtWhenReady(n + 1); }, 2000); }
+			return;
+		}
 		[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 			var e = document.getElementById(id);
 			if (e) { e.style.display = ''; }
@@ -582,17 +611,22 @@ function applyBands() {
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying bands...')));
 	return fs.exec('/usr/bin/mmcli', [ '-m', 'any', '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
-		ui.hideModal();
-		if (res.code === 0) {
-			if (ui.addTimeLimitedNotification) {
-				ui.addTimeLimitedNotification(null, E('p', _('Bands set. The modem will reconnect.')), 5000, 'info');
-			} else {
-				ui.addNotification(null, E('p', _('Bands set. The modem will reconnect.')), 'info');
-			}
-			window.setTimeout(loadBands, 1500);
-		} else {
+		if (res.code !== 0) {
+			ui.hideModal();
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
+			return;
 		}
+		// Мягкий рестарт радио (CFUN=4->1), чтобы модем начал использовать
+		// новый набор частот сразу, а не после следующего переподключения.
+		return fs.exec('/usr/share/5gmodem/reboot_modem.sh').then(function() {
+			ui.hideModal();
+			if (ui.addTimeLimitedNotification) {
+				ui.addTimeLimitedNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 6000, 'info');
+			} else {
+				ui.addNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 'info');
+			}
+			window.setTimeout(loadBands, 4000);
+		});
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + err.message), 'error');
@@ -607,15 +641,20 @@ function resetBands() {
 	return applyBands();
 }
 
-/* «Перезагрузка» модема: reboot_modem.sh перезапускает радио (CFUN=4->1),
-   заставляя заново зарегистрироваться в сети. Полный CFUN=1,1 не используем -
-   он переэнумерирует USB, из-за чего MM временно теряет MBIM-классификацию и
-   на минуты роняет соединение. */
-function rebootModem() {
-	if (!confirm(_('Restart the modem now? The connection will drop for a while.')))
+/* Перезагрузка модема, два режима:
+   - soft (CFUN=4->1): перезапуск только радио, без переэнумерации USB. Быстрое
+     переподключение к сети, MM сохраняет MBIM-классификацию.
+   - hard (CFUN=1,1): полная перезагрузка модема с переинициализацией USB.
+     Дольше; на MM-модемах порт может кратко переклассифицироваться. Для случаев,
+     когда мягкий рестарт не помог. */
+function rebootModem(hard) {
+	var msg = hard
+		? _('Fully restart the modem (CFUN=1,1)? It will reboot and re-enumerate on USB - this takes longer and the connection will drop for about a minute.')
+		: _('Restart the modem radio now? The connection will drop for a while.');
+	if (!confirm(msg))
 		return Promise.resolve();
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Restarting the modem...')));
-	return fs.exec('/usr/share/5gmodem/reboot_modem.sh').then(function(res) {
+	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ hard ? 'hard' : 'soft' ]).then(function(res) {
 		ui.hideModal();
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
@@ -1001,6 +1040,10 @@ simDialog: baseclass.extend({
 		var def4 = ttlget.def4 || '64';
 		var def6 = ttlget.def6 || '64';
 
+		// протокол интерфейса (modemmanager/mbim/qmi/...) - для логики
+		// доступности управления бендами
+		ifaceProtoIsMM = (String(initjson.protocol || '').toLowerCase() === 'modemmanager');
+
 		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
 		var mmHasModem = /current-modes/.test(mmK);
 		var mmModes = (function() {
@@ -1272,12 +1315,20 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('protocol')) {
 						var view = document.getElementById("protocol");
-						if (!json.protocol.length > 1) { 
+						if (!json.protocol.length > 1) {
 						view.textContent = '-';
 						}
 						else {
 						view.textContent = json.protocol;
 						}
+					}
+
+					/* Пояснение в «Управление частотами»: показываем реальный
+					   протокол интерфейса (mbim/qmi), чтобы было «Управление
+					   невозможно в режиме mbim», а не абстрактный текст. */
+					if (document.getElementById('bandnote-text') && json.protocol && json.protocol != '-') {
+						document.getElementById('bandnote-text').textContent =
+							_('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
 					}
 
 					if (document.getElementById('temp')) {
@@ -1289,7 +1340,13 @@ simDialog: baseclass.extend({
 						}
 						else {
 						viewn.style.display = '';
-						view.textContent = String(t).replace('&deg;', '°').replace(/\s*C\b/, '°C');
+						/* Значение приходит как "32 &deg;C". Нормализуем к
+						   ровно одному градусу: раньше два .replace давали
+						   "32 °°C" (первый ставил °, второй добавлял ещё один
+						   перед C). Берём число и приписываем " °C". */
+						var raw = String(t).replace('&deg;', '°');
+						var m = raw.match(/-?\d+(?:\.\d+)?/);
+						view.textContent = m ? (m[0] + ' °C') : raw;
 						}
 					}
 
@@ -1614,9 +1671,7 @@ simDialog: baseclass.extend({
 
 				E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 					E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
-						E('svg', { 'width': '16', 'height': '16', 'viewBox': '0 0 24 24', 'fill': 'none', 'stroke': 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, [
-							E('path', { 'd': 'M14 14.76V4a2 2 0 0 0-4 0v10.76a4 4 0 1 0 4 0z' })
-						])
+						E('img', { 'src': L.resource('icons/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
 					]),
 					E('span', { 'id': 'temp' }, [ '-' ]),
 				]),
@@ -1673,13 +1728,7 @@ simDialog: baseclass.extend({
 							'class': 'btn cbi-button',
 							'data-tooltip': _('Enable all supported bands'),
 							'click': ui.createHandlerFn(this, function() { return resetBands(); })
-						}, _('All bands')),
-						' ',
-						E('button', {
-							'class': 'btn cbi-button cbi-button-remove',
-							'data-tooltip': _('Restart the modem radio (re-register on the network)'),
-							'click': ui.createHandlerFn(this, function() { return rebootModem(); })
-						}, _('Restart modem'))
+						}, _('All bands'))
 					]),
 					]),
 				/* Пояснение, когда управление диапазонами недоступно (напр.
@@ -1689,7 +1738,25 @@ simDialog: baseclass.extend({
 				   списка бендов. */
 				E('tr', { 'class': 'tr', 'id': 'bandnote', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'colspan': '2' }, [
-						E('em', { 'style': 'opacity:.8' }, _('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.'))
+						E('em', { 'id': 'bandnote-text', 'style': 'opacity:.8' }, _('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.'))
+					]),
+					]),
+				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
+				   modemmanager), независимо от доступности управления бендами. */
+				E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Restart modem') ]),
+					E('td', { 'class': 'td left tginfo-modesw' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-remove',
+							'data-tooltip': _('Radio restart (CFUN=4→1): quickly re-registers on the network without re-enumerating USB. Try this first.'),
+							'click': ui.createHandlerFn(this, function() { return rebootModem(false); })
+						}, _('Restart radio')),
+						' ',
+						E('button', {
+							'class': 'btn cbi-button cbi-button-remove',
+							'data-tooltip': _('Full restart (CFUN=1,1): the modem reboots and re-enumerates on USB. Slower, connection drops ~1 min; use when the radio restart did not help.'),
+							'click': ui.createHandlerFn(this, function() { return rebootModem(true); })
+						}, _('Full restart'))
 					]),
 					]),
 			]),

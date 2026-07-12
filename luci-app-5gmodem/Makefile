@@ -11,9 +11,10 @@ PKG_NAME:=luci-app-5gmodem
 LUCI_TITLE:=LuCI support for 5G modems (info, SMS, USSD, AT)
 MAINTAINER:=Fil Dunsky <filipp.dunsky@gmail.com>
 LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands.
-LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager
+LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
+	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.0.12
+PKG_VERSION:=1.0.13
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
