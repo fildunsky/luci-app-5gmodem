@@ -2065,3 +2065,18 @@ msgstr "Обновление идёт слишком долго. Проверь�
 
 msgid "USSD session is active — type your reply and press Send."
 msgstr "USSD-сессия активна — введите ответ и нажмите «Отправить»."
+
+msgid "Interface protocol"
+msgstr "Протокол интерфейса"
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems)."
+msgstr "Протокол для кнопки «Создать интерфейс модема». «Авто» определяет по драйверу модема (рекомендуется). MBIM (ядерный umbim) — самый надёжный для MBIM-модемов, отключает ModemManager. ModemManager включает управление модемом через MM (больше метрик, но на части модемов нестабильно)."
+
+msgid "Auto (detect)"
+msgstr "Авто (определить)"
+
+msgid "Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem)."
+msgstr "Создать (или переключить) сетевой интерфейс модема с выбранным выше протоколом. Переключение на MBIM отключает ModemManager; на ModemManager — включает его (совместно управлять модемом они не могут)."
+
+msgid "Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands."
+msgstr "Управление диапазонами и режимом сети недоступно для этого модема в текущем режиме интерфейса. Чтобы управлять диапазонами, переключите интерфейс на ModemManager (в настройках модема)."

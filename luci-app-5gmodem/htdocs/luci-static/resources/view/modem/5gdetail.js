@@ -434,8 +434,15 @@ function buildBandButtonsNum(supported, enabled, btype) {
 function loadBandsModemband() {
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
 		var j = {};
-		try { j = JSON.parse(out) || {}; } catch (e) { return; }
-		if (j.error || (!j.supported && !j.supported5gnsa && !j.supported5gsa)) { return; }
+		var note = document.getElementById('bandnote');
+		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }
+		if (j.error || (!j.supported && !j.supported5gnsa && !j.supported5gsa)) {
+			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов ->
+			// в этом режиме управлять бендами нельзя, показываем пояснение.
+			if (note) { note.style.display = ''; }
+			return;
+		}
+		if (note) { note.style.display = 'none'; }
 		bandSource = 'modemband';
 
 		var supLte = (j.supported || []).map(function(o) { return o.band; });
@@ -1097,7 +1104,7 @@ simDialog: baseclass.extend({
 				revealMgmtWhenReady();
 
 					var icon, wicon, ticon, t;
-					var wicon = L.resource('icons/loading.gif');
+					var wicon = L.resource('icons/cloading.svg');
 					var ticon = L.resource('icons/ctime.svg');
 
 					// Мобильные иконки уровня сигнала (цветные "палочки":
@@ -1673,6 +1680,16 @@ simDialog: baseclass.extend({
 							'data-tooltip': _('Restart the modem radio (re-register on the network)'),
 							'click': ui.createHandlerFn(this, function() { return rebootModem(); })
 						}, _('Restart modem'))
+					]),
+					]),
+				/* Пояснение, когда управление диапазонами недоступно (напр.
+				   Compal RXM-G1 в режиме umbim/uqmi: у прошивки нет AT-команд
+				   бенд-лока, а mmcli выключен). Показывается из
+				   loadBandsModemband(), когда ни mmcli, ни modemband не дали
+				   списка бендов. */
+				E('tr', { 'class': 'tr', 'id': 'bandnote', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'colspan': '2' }, [
+						E('em', { 'style': 'opacity:.8' }, _('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.'))
 					]),
 					]),
 			]),

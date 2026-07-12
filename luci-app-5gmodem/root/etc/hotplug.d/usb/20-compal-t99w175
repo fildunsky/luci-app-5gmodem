@@ -1,0 +1,31 @@
+#!/bin/sh
+
+# Проверяем основное событие добавления устройства
+if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
+
+    if echo "$PRODUCT" | grep -qE "^5c6/90d5/|^5c6/90d6/"; then
+
+        PID=$(echo "$PRODUCT" | cut -d'/' -f2)
+
+        # Небольшая пауза, чтобы USB-стек ядра успел распознать устройство
+        sleep 5
+
+        if [ "$PID" = "90d5" ]; then
+            logger -t hotplug-compal "Modem 90d5 found. Activating via generic..."
+            echo "05c6 90d5" > /sys/bus/usb-serial/drivers/generic/new_id
+        
+        elif [ "$PID" = "90d6" ]; then
+            logger -t hotplug-compal "Modem 90d6 found. Activating via option1..."
+            echo "05c6 90d6" > /sys/bus/usb-serial/drivers/option1/new_id
+        fi
+
+        logger -t hotplug-compal "Ports activated for PID $PID. Scheduling ModemManager restart..."
+
+        # Асинхронно пинаем сеть и MM, когда всё гарантированно улеглось
+        (
+            sleep 5
+            logger -t hotplug-compal "Restarting modemmanager to clear negotiation state"
+            /etc/init.d/modemmanager restart
+        ) &
+    fi
+fi

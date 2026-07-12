@@ -6,6 +6,7 @@
 'require uci';
 'require view';
 'require rpc';
+'require poll';
 'require sms-tool-js.smssettings as smssettings';
 
 /*
@@ -48,12 +49,23 @@ td input[type="checkbox"] {
 }
 
 td .sms-row-icon {
-  display: block;
-  text-align: center;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 10px;
 }
 
 td .sms-row-icon img {
   vertical-align: middle;
+}
+
+/* Первая ячейка строки = чекбокс + иконка сообщения. Колонка .checker
+   узкая (7%), поэтому чекбокс с иконкой не влезали в одну строку и иконку
+   переносило вниз («невидимый перенос строки»). Запрещаем перенос и даём
+   ячейке минимальную ширину. !important - тема proton2025 задаёт свои
+   правила для td. */
+#smsTable td:first-child {
+  white-space: nowrap !important;
+  min-width: 64px;
 }
 
 #smsTable tr:nth-child(odd) td{
@@ -671,10 +683,17 @@ return view.extend({
 		var sections = uci.sections('sms_tool_js');
 		var led = sections[0].smsled;
 
-		if (storeL == "SM")
-      			document.querySelector('input[name="filter_area"][value="sim"]').checked = true;
-		if (storeL == "ME")
-      			document.querySelector('input[name="filter_area"][value="memory"]').checked = true;
+		/* Эти radio живут в DOM, который renderMain ещё не вернул и не
+		   прикрепил к странице: sms_tool_js уже загружен в load(), поэтому
+		   этот .then() выполняется микрозадачей ДО вставки DOM, и
+		   querySelector возвращает null. Раньше обращение к .checked на null
+		   бросало исключение, промис отклонялся, и цепочка status/recv ниже
+		   вообще не запускалась - сообщения не появлялись. Ставим отметку
+		   только если элемент уже существует (на автополлинге он есть). */
+		var simRadio = document.querySelector('input[name="filter_area"][value="sim"]');
+		var memRadio = document.querySelector('input[name="filter_area"][value="memory"]');
+		if (storeL == "SM" && simRadio) simRadio.checked = true;
+		if (storeL == "ME" && memRadio) memRadio.checked = true;
 		if (ledn == "1")
 			{
 				switch (ledt) {
@@ -688,7 +707,13 @@ return view.extend({
 					}
 			}
 
-		L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+		/* doRefresh(updateCount): читает статус + входящие и перерисовывает
+		   таблицу. Вызывается один раз при заходе и затем по таймеру
+		   (poll.add) - новые SMS появляются сами, без ручного «Обновить».
+		   updateCount=true только на первом вызове: обновление счётчика
+		   sms_count дёргает uci.apply(), которое нельзя гонять каждые N сек. */
+		function doRefresh(updateCount) {
+		return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
 				.then(function(res) {
 					if (res) {
 							var total = res.substring(res.indexOf("total"));
@@ -789,7 +814,7 @@ return view.extend({
 												}, Object.create(null));
 											}
 													if (u){
-															var Lres = L.resource('icons/newdelsms.png');
+															var Lres = L.resource('icons/cmessage.svg');
 
 															for (var i = 0; i < result.length; i++) {
             													var row = table.insertRow(-1);
@@ -831,7 +856,7 @@ return view.extend({
 															axx = axx.replace(/,/g, ' ');
 															axx = axx.replace(/-/g, ' ');
 
-															format_with_modem_index(axx).then(function(formattedIndex) {
+															if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
 																update_sms_count_for_modem(u).then(function(updatedCount) {
 																	uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count_index', formattedIndex);
 																	uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedCount);
@@ -861,7 +886,7 @@ return view.extend({
 
 										if (u){
 
-											var Lres = L.resource('icons/newdelsms.png');
+											var Lres = L.resource('icons/cmessage.svg');
 
 											for (var i = 0; i < sortedData.length; i++) {
                                             var row = table.insertRow(-1);
@@ -899,7 +924,7 @@ return view.extend({
 											axx = axx.replace(/,/g, ' ');
 											axx = axx.replace(/-/g, ' ');
 
-											format_with_modem_index(axx).then(function(formattedIndex) {
+											if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
 												update_sms_count_for_modem(u).then(function(updatedCount) {
 													uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count_index', formattedIndex);
 													uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedCount);
@@ -924,6 +949,11 @@ return view.extend({
 				msg_bar(Math.floor(u), t);
 			    }
     		});
+		}
+		doRefresh(true);
+		/* Автообновление входящих: новые SMS появляются сами, без ручного
+		   «Обновить». poll снимается автоматически при уходе со страницы. */
+		poll.add(function() { return doRefresh(false); }, 15);
 		});
 
 		var v = E('div', { 'class': 'cbi-section' }, [

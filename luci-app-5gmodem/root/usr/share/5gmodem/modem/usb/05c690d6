@@ -17,6 +17,17 @@ if command -v mmcli >/dev/null 2>&1; then
 			;;
 	esac
 fi
+# umbim/uqmi mode: ModemManager is disabled, so mmcli returns nothing and
+# _MM_OK stays 0. Still recognise the Compal by its USB descriptor so the
+# rich qmicli/AT path below runs instead of falling through to the T99W175
+# "at^debug?" branch (which this firmware does not answer -> empty bands).
+# The band aggregation itself uses qmicli, which works over QMI-in-MBIM
+# even while umbim owns the cdc-wdm control channel.
+if [ "$_IS_COMPAL" = "0" ]; then
+	if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
+		_IS_COMPAL=1
+	fi
+fi
 
 if [ "$_IS_COMPAL" = "1" ]; then
 # ========================================================================
@@ -26,28 +37,38 @@ if [ "$_IS_COMPAL" = "1" ]; then
 _QMICLI_OK=0
 command -v qmicli >/dev/null 2>&1 && _QMICLI_OK=1
 
-# --- General modem info, TAC, Cell ID, MCC/MNC - all from one mmcli call ---
-TAC_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
-CID_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
-if [ -n "$TAC_HEX" ] && [ "x$TAC_HEX" != "x--" ]; then
-	TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
-	TAC_HEX=$(echo "$TAC_HEX" | tr 'a-f' 'A-F')
-fi
-if [ -n "$CID_HEX" ] && [ "x$CID_HEX" != "x--" ]; then
-	CID_DEC=$(printf "%d" "0x$CID_HEX" 2>/dev/null)
-	CID_HEX=$(echo "$CID_HEX" | tr 'a-f' 'A-F')
-fi
+# --- General modem info, TAC, Cell ID, MCC/MNC ---
+if [ "$_MM_OK" = "1" ]; then
+	# ModemManager running: pull it all from one mmcli call
+	TAC_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
+	CID_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
+	if [ -n "$TAC_HEX" ] && [ "x$TAC_HEX" != "x--" ]; then
+		TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
+		TAC_HEX=$(echo "$TAC_HEX" | tr 'a-f' 'A-F')
+	fi
+	if [ -n "$CID_HEX" ] && [ "x$CID_HEX" != "x--" ]; then
+		CID_DEC=$(printf "%d" "0x$CID_HEX" 2>/dev/null)
+		CID_HEX=$(echo "$CID_HEX" | tr 'a-f' 'A-F')
+	fi
 
-NR_IMEI=$(echo "$_MM_K" | awk -F': *' '/^modem\.3gpp\.imei/{print $2}' | xargs)
-[ "x$NR_IMEI" = "x--" ] && NR_IMEI=""
+	NR_IMEI=$(echo "$_MM_K" | awk -F': *' '/^modem\.3gpp\.imei/{print $2}' | xargs)
+	[ "x$NR_IMEI" = "x--" ] && NR_IMEI=""
 
-MODELREV=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.revision/{print $2}' | xargs)
-MODELNAME=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.model/{print $2}' | xargs)
+	MODELREV=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.revision/{print $2}' | xargs)
+	MODELNAME=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.model/{print $2}' | xargs)
+	FW="$MODELREV"
+else
+	# umbim/uqmi mode: ModemManager is off, so use plain AT for the info.
+	# TAC/CID come from the +CEREG/+CREG already parsed by 5gmodem.sh
+	# (TAC/TAC_HEX, LAC/CID_HEX) - leave those as-is.
+	NR_IMEI=$(sms_tool -d "$DEVICE" at "AT+CGSN" | sed 's/^AT+CGSN //' | tr -dc '0-9')
+	MODELNAME=$(sms_tool -d "$DEVICE" at "AT+CGMM" | sed 's/^AT+CGMM //' | tr -d '\r' | xargs)
+	FW=$(sms_tool -d "$DEVICE" at "AT+CGMR" | sed 's/^AT+CGMR //' | tr -d '\r' | xargs)
+fi
 # modem.generic.model reports the generic chipset platform name
 # ("VOS_5G") on this firmware, not the actual modem model - override
 # with the real name, keep the platform name alongside for reference.
-MODEL="Compal RXM-G1 ($MODELNAME)"
-FW="$MODELREV"
+MODEL="Compal RXM-G1 (${MODELNAME:-VOS_5G})"
 
 # IMSI/ICCID are not exposed over the modem.3gpp.* keys on this MM
 # version - keep using AT for just these two (cheap single commands)

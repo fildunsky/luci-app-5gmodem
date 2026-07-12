@@ -61,6 +61,13 @@ esac
 
 # Everything below runs detached: tty ports show up after the usb_device event
 (
+	# This modem does NOT expose its serial (AT/DIAG) ports on its own - the
+	# kernel only creates cdc-wdm0 (MBIM). Bind the generic usb-serial driver
+	# by VID:PID so ttyUSB* appear, which the AT metrics / SMS / USSD paths
+	# need. Idempotent (new_id can be written repeatedly). This removes the
+	# usual rc.local "echo ... > .../generic/new_id" hack.
+	echo "${WANTID%%:*} ${WANTID##*:}" > /sys/bus/usb-serial/drivers/generic/new_id 2>/dev/null
+
 	# The package config may not exist yet on the very first boot (the
 	# uci-defaults script may run after coldplug) - create the section
 	# instead of bailing out.
@@ -101,7 +108,7 @@ esac
 			sleep 5
 		done
 		if [ -n "$WDM" ]; then
-			for c in 1 2 3 none; do
+			for c in 0 1 2 3 none; do
 				qmicli -p -d "$WDM" \
 					--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \
 					>/dev/null 2>&1

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- License: CC Attribution. Made by Elnodos: https://elnodos.gumroad.com -->
+<svg width="800px" height="800px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Message</title>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Message">
+            <rect id="Rectangle" fill-rule="nonzero" x="0" y="0" width="24" height="24">
+
+</rect>
+            <path d="M4,6 C4,4.89543 4.89543,4 6,4 L18,4 C19.1046,4 20,4.89543 20,6 L20,14 C20,15.1046 19.1046,16 18,16 L12.2071,16 C12.0745,16 11.9473,16.0527 11.8536,16.1464 L8.85355,19.1464 C8.53857,19.4614 8,19.2383 8,18.7929 L8,16.5 C8,16.2239 7.77614,16 7.5,16 L6,16 C4.89543,16 4,15.1046 4,14 L4,6 Z" id="Path" stroke="#BBBBBB" stroke-width="2" stroke-linecap="round">
+
+</path>
+            <line x1="8" y1="8" x2="16" y2="8" id="Path" stroke="#BBBBBB" stroke-width="2" stroke-linecap="round">
+
+</line>
+            <line x1="8" y1="12" x2="11" y2="12" id="Path" stroke="#BBBBBB" stroke-width="2" stroke-linecap="round">
+
+</line>
+        </g>
+    </g>
+</svg>

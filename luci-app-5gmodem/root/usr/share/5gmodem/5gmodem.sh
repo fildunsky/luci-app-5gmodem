@@ -312,6 +312,20 @@ if [ -n "$COPS_NUM" ]; then
 fi
 
 TCOPS=$(echo "$O" | awk -F[\"] '/^\+COPS:\s*.,0/ {print $2}')
+# Некоторые модемы (напр. Compal RXM-G1) отдают имя оператора в UCS2-hex,
+# т.е. "beeline" приходит как 006200650065006C0069006E0065. Настоящее имя
+# содержит нешестнадцатеричные буквы, поэтому строку из ОДНИХ hex длиной
+# кратно 4 считаем UCS2: латиницу (00XX) декодируем, иначе (кириллица и т.п.)
+# отбрасываем в пользу mccmnc.dat-имени.
+if [ -n "$TCOPS" ] && [ $(( ${#TCOPS} % 4 )) -eq 0 ] && echo "$TCOPS" | grep -qE '^[0-9A-Fa-f]+$'; then
+	if echo "$TCOPS" | grep -qE '^(00[0-9A-Fa-f]{2})+$'; then
+		TCOPS=$(echo "$TCOPS" | sed 's/\(....\)/\1 /g' | tr ' ' '\n' | while read h; do
+			[ -n "$h" ] && printf "\\$(printf '%03o' $((16#${h#00})))"
+		done)
+	else
+		TCOPS=""
+	fi
+fi
 [ "x$TCOPS" != "x" ] && COPS="$TCOPS"
 
 if [ -z "$COPS" ]; then
@@ -344,6 +358,16 @@ case "$COPS" in
         fi
 	;;
 esac
+
+# Финальная нормализация имени оператора: если после всех проверок в имени нет
+# ни одной буквы (модем вернул мусорный числовой alphanumeric, напр. модем
+# Compal отдаёт "0062003 0062003"), берём имя из mccmnc.dat по числовому коду.
+if [ -n "$COPS" ] && ! echo "$COPS" | grep -q '[A-Za-z]'; then
+	if [ -n "$COPS_NUM" ]; then
+		NAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
+		[ -n "$NAME" ] && COPS="$NAME"
+	fi
+fi
 
 
 # operator location from temporary config
@@ -480,9 +504,27 @@ sanitize_number() {
 [ -z "$1" ] && echo "-" || echo "$1"
 }
 
-# IP addresses of the modem network interface (for the main page)
-IPADDR=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
-IPADDR6=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+# IP addresses of the modem network interface (for the main page).
+# umbim/MBIM puts the address on a virtual <iface>_4 / <iface>_6 child, not on
+# the parent, so read straight from the l3 device - works for umbim,
+# modemmanager, qmi and plain static alike. ubus children are a fallback.
+L3DEV=$(ifstatus "$SEC" 2>/dev/null | awk -F\" '/l3_device/ {print $4; exit}')
+IPADDR=""
+IPADDR6=""
+if [ -n "$L3DEV" ]; then
+	IPADDR=$(ip -4 addr show dev "$L3DEV" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | grep -v '^127\.' | head -1)
+	IPADDR6=$(ip -6 addr show dev "$L3DEV" scope global 2>/dev/null | awk '/inet6 /{print $2}' | cut -d/ -f1 | head -1)
+fi
+[ -z "$IPADDR" ]  && IPADDR=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+[ -z "$IPADDR" ]  && IPADDR=$(ifstatus "${SEC}_4" 2>/dev/null | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+[ -z "$IPADDR6" ] && IPADDR6=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+[ -z "$IPADDR6" ] && IPADDR6=$(ifstatus "${SEC}_6" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+
+# Реальный протокол интерфейса модема (modemmanager/mbim/qmi/ncm/...). Раньше
+# в JSON шла случайная переменная цикла $PROTO, из-за чего при modemmanager
+# показывался mbim. Берём напрямую из uci выбранного интерфейса $SEC.
+IFPROTO=$(uci -q get "network.$SEC.proto")
+[ -n "$IFPROTO" ] && PROTO="$IFPROTO"
 
 cat <<EOF
 {

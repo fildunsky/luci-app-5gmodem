@@ -238,22 +238,38 @@ return view.extend({
 			uci.unset('5gmodem', section_id, 'at_port');
 		};
 
-		/* Кнопка: создать сетевой интерфейс модема автоматически. */
+		/* Выбор протокола + кнопка создания интерфейса модема. */
+		o = s.option(form.ListValue, 'iface_proto', _('Interface protocol'),
+			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems).'));
+		o.value('auto', _('Auto (detect)'));
+		o.value('mbim', 'MBIM (umbim)');
+		o.value('modemmanager', 'ModemManager');
+		o.default = 'auto';
+		o.rmempty = false;
+
 		o = s.option(form.Button, '_mkiface');
 		o.title = _('Modem interface');
-		o.description = _('Create a network interface for the modem automatically (the control protocol is detected). If it already exists, it is just brought up.');
+		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
 		o.inputtitle = _('Create modem interface');
 		o.inputstyle = 'apply';
 		o.onclick = function() {
+			var sid = null;
+			var ss = uci.sections('5gmodem', '5gmodem');
+			if (ss && ss[0]) { sid = ss[0]['.name']; }
+			var proto = 'auto';
+			try {
+				var opt = this.map.lookupOption('iface_proto', sid);
+				if (opt && opt[0]) { var el = opt[0].getUIElement(sid); if (el) { proto = el.getValue() || 'auto'; } }
+			} catch (e) {}
+			// запоминаем выбор пользователя, чтобы он отображался при возврате
+			if (sid) { uci.set('5gmodem', sid, 'iface_proto', proto); uci.save(); }
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh').then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
 					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto)), 'info');
-				} else if (out.result == 'exists') {
-					ui.addNotification(null, E('p', _('Interface "%s" already exists — bringing it up.').format(out.iface)), 'info');
 				} else {
 					ui.addNotification(null, E('p', _('No modem found to create an interface for.')), 'error');
 				}
