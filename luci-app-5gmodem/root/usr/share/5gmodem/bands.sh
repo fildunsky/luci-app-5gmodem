@@ -305,6 +305,22 @@ setbands5gsa() {
 	echo "Unsupported"
 }
 
+# network mode (2G/3G/4G) - space-separated "id:label" pairs, e.g.
+# "2:Auto 13:2G 14:3G 38:4G". "Unsupported" hides the mode selector.
+getsupportedmodes() {
+	echo "Unsupported"
+}
+
+# currently selected mode id
+getmode() {
+	echo "Unsupported"
+}
+
+# set mode by id
+setmode() {
+	echo "Unsupported"
+}
+
 
 RES="/usr/share/5gmodem/modemband"
 
@@ -409,10 +425,32 @@ case $1 in
 	"setbands5gsa")
 		[ -n "$2" ] && setbands5gsa "$2"
 		;;
+	"getsupportedmodes")
+		getsupportedmodes
+		;;
+	"getmode")
+		getmode
+		;;
+	"setmode")
+		[ -n "$2" ] && setmode "$2"
+		;;
 	"json")
 		. /usr/share/libubox/jshn.sh
 		json_init
 		json_add_string modem "$(getinfo)"
+		MODES=$(getsupportedmodes)
+		if [ "x$MODES" != "xUnsupported" ]; then
+			CURMODE=$(getmode)
+			json_add_string currentmode "$CURMODE"
+			json_add_array modes
+			for PAIR in $MODES; do
+				json_add_object ""
+				json_add_string id "${PAIR%%:*}"
+				json_add_string label "${PAIR#*:}"
+				json_close_object
+			done
+			json_close_array
+		fi
 		json_add_array supported
 		T=$(getsupportedbands)
 		if [ "x$T" != "xUnsupported" ]; then

@@ -101,6 +101,9 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 
 		# NOTE: deliberately leave ModemManager as-is (another modem may need it);
 		# the fibocom path uses AT + the usbnet device and does not touch MM.
+		# refresh the ModemManager ignore list (fibocom is a kernel proto -> MM
+		# must not touch this modem)
+		/usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
 		ifup "$IF" >/dev/null 2>&1
 		json created fibocom "$FNET"
 		exit 0
@@ -264,6 +267,10 @@ if [ -n "$DEV" ] && command -v qmicli >/dev/null 2>&1; then
 			>/dev/null 2>&1
 	done
 fi
+
+# refresh the ModemManager ignore list for the chosen proto: hide the modem from
+# MM for kernel protos (qmi/mbim/...), or let MM see it for the modemmanager proto
+/usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
 
 ifup "$IF" >/dev/null 2>&1
 

@@ -14,7 +14,7 @@ LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, 
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.1.1
+PKG_VERSION:=1.1.2
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

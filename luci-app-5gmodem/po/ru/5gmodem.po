@@ -107,10 +107,10 @@ msgid "Registered (roaming)"
 msgstr "Зарегистрирован в другой сети (роуминг)"
 
 msgid "Registered, only SMS"
-msgstr "Зарегистрирован в сети, только SMS"
+msgstr "В сети, только SMS"
 
 msgid "Registered (roaming), only SMS"
-msgstr "Зарегистрирован в другой сети (роуминг), только SMS"
+msgstr "В сети, только SMS (роуминг)"
 
 msgid "Searching.."
 msgstr "Поиск.."

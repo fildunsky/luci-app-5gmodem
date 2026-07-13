@@ -301,18 +301,19 @@ return view.extend({
 	},
 
 	handleSWarea: function(ev) {
-		switch (document.querySelector('input[name="filter_area"]:checked').value) {
-		case 'sim':
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'storage', "SM");
-			uci.save();
-			uci.apply();
-			break;
-		case 'memory':
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'storage', "ME");
-			uci.save();
-			uci.apply();
-			break;
-		}
+		var self = this;
+		var val = document.querySelector('input[name="filter_area"]:checked').value;
+		var stg = (val === 'sim') ? 'SM' : 'ME';
+		uci.set('sms_tool_js', '@sms_tool_js[0]', 'storage', stg);
+		// save() must resolve BEFORE apply(): the previous code fired both without
+		// chaining, so apply() ran before the change was staged and the value
+		// stayed in "unsaved changes" (the user had to apply manually). Chain
+		// them, then re-read the inbox from the newly selected storage.
+		return uci.save().then(function() {
+			return uci.apply();
+		}).then(function() {
+			if (typeof self._doRefresh == 'function') { self._doRefresh(false); }
+		});
 	},
 
     handleForward: function(ev) {
@@ -721,6 +722,17 @@ return view.extend({
 		   updateCount=true только на первом вызове: обновление счётчика
 		   sms_count дёргает uci.apply(), которое нельзя гонять каждые N сек. */
 		function doRefresh(updateCount) {
+		// Re-read the storage and port FRESH on every tick (not the values
+		// captured once at render): otherwise switching SIM<->Modem storage has
+		// no effect until a full page reload, and an empty storage value read at
+		// load time keeps failing. Default to ME - most USB modems deliver
+		// incoming SMS to modem memory, and reading with an empty '-s ' fails.
+		var storeL = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
+		var portR = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		if (!portR) {
+			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
+			return Promise.resolve();
+		}
 		return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
 				.then(function(res) {
 					if (res) {
@@ -946,12 +958,12 @@ return view.extend({
 						});
 
 				} else {
-					// status вернул пусто (нет порта / модем не ответил).
-					// t и u здесь не определены - прежний код обращался к
-					// t.lenght (к тому же опечатка) и бросал исключение,
-					// которое роняло автополлинг на каждом тике. Просто
-					// показываем подсказку, без обращения к t/u.
-					ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
+					// status вернул пусто. Порт здесь заведомо задан (проверили
+					// в начале doRefresh), значит это либо пустой ящик, либо
+					// модем на миг занят на этом тике автополлинга. НЕ показываем
+					// «укажите порт» (это ввод в заблуждение и мигало бы каждые
+					// 15 c) и НЕ трогаем уже показанный список - ждём следующий
+					// тик. t/u не определены - к ним не обращаемся.
 				}
 
 			if (document.getElementById('msg') && typeof u !== 'undefined') {

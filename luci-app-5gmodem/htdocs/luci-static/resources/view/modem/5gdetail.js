@@ -488,6 +488,25 @@ function loadBandsModemband() {
 			if (supNsa.length) { buildBandButtonsNum(supNsa, enNsa, 'nsa').forEach(function(b) { nrC.appendChild(b); }); }
 			else if (nrRow) { nrRow.style.display = 'none'; }   // нет 5G - прячем строку
 		}
+
+		// Режим сети (2G/3G/4G) через AT+CNMP (bands.sh getmode/setmode) - для
+		// модемов не под ModemManager, где mmcli-переключатель недоступен.
+		var modeRow = document.getElementById('modeswn');
+		var modeC = document.getElementById('modesw-btns');
+		if (modeC && j.modes && j.modes.length) {
+			modeC.innerHTML = '';
+			j.modes.forEach(function(m) {
+				var on = (String(j.currentmode) === String(m.id));
+				modeC.appendChild(E('button', {
+					'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+					'data-mode': String(m.id),
+					'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
+				}, m.label));
+			});
+			if (modeRow) { modeRow.style.display = ''; }
+		} else if (modeRow) {
+			modeRow.style.display = 'none';
+		}
 	});
 }
 
@@ -743,6 +762,27 @@ function setNetMode(allowed, preferred, label) {
 		} else {
 			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '')), 'error');
 		}
+	}).catch(function(err) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + err.message), 'error');
+	});
+}
+
+/* Смена режима сети (2G/3G/4G) для modemband-модемов - через вендорную
+   AT-команду (bands.sh setmode -> AT+CNMP), не через mmcli. Затем мягкий
+   рестарт радио, чтобы модем перерегистрировался в выбранном режиме. */
+function setNetModeAT(id, label) {
+	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function() {
+		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
+	}).then(function() {
+		ui.hideModal();
+		if (ui.addTimeLimitedNotification) {
+			ui.addTimeLimitedNotification(null, E('p', _('Network mode set: %s').format(label)), 5000, 'info');
+		} else {
+			ui.addNotification(null, E('p', _('Network mode set: %s').format(label)), 'info');
+		}
+		window.setTimeout(loadBandsModemband, 4000);
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + err.message), 'error');

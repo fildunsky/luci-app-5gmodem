@@ -1,50 +1,150 @@
+#!/bin/sh
+#
+# SimCom modems on USB id 1e0e:9001. This id is shared by several models, so we
+# branch on the model reported by AT+CGMM:
+#   - SIM7100E  : LTE Cat3, 4G only. Bands via AT+CNBP (GSM,UMTS,LTE hex masks),
+#                 mode (2G/3G/4G) via AT+CNMP. No 5G.
+#   - SIM8200 / SIM7906 and similar: 5G, bands via AT+CSYSSEL.
+#
+# _DEVICE is a sane default; bands.sh overrides it with the app's detected AT
+# port before calling any function here.
+
 _DEVICE=/dev/ttyUSB2
+
+# SIM7100E hardware band capability (LTE FDD B1/B3/B7/B8/B20, TDD B38/B40).
+_SIM7100_LTE_BANDS="1 3 7 8 20 38 40"
+
+# 8200-family defaults (only used on the non-7100 branch)
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
 _DEFAULT_5GSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
 
-getinfo() {
-	echo "SIMCOM SIM8200EA-M2"
+_is_7100() {
+	sms_tool -d $_DEVICE at "AT+CGMM" | grep -q "7100"
 }
 
+getinfo() {
+	if _is_7100; then
+		echo "SIMCOM SIM7100E"
+	else
+		echo "SIMCOM SIM8200EA-M2"
+	fi
+}
+
+# ---- 4G bands ----
+
 getsupportedbands() {
-	echo "$_DEFAULT_LTE_BANDS"
+	if _is_7100; then
+		echo "$_SIM7100_LTE_BANDS"
+	else
+		echo "$_DEFAULT_LTE_BANDS"
+	fi
 }
 
 getbands() {
-	O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"lte_band\"")
-	echo "$O" | awk -F, '/^\+CSYSSEL: "lte_band",/{gsub(":"," ");print $2}' | xargs
+	if _is_7100; then
+		# AT+CNBP? -> <mode>,<lte_mask>,<extra> ; the 2nd field is the LTE band
+		# bitmask (bit N-1 = band N) - the writable/effective LTE selection.
+		# (The 3rd field is not the band selection; writing it has no effect.)
+		# Decode with the dispatcher's 64-bit-safe helper and keep only bands
+		# this hardware supports, so the UI (whose checkboxes are the supported
+		# set) shows them consistently.
+		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
+		HEX=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}')
+		[ -n "$HEX" ] || { echo ""; return; }
+		ALL=$(hextobands "$HEX")
+		OUT=""
+		for b in $ALL; do
+			for s in $_SIM7100_LTE_BANDS; do
+				[ "$b" = "$s" ] && OUT="$OUT $b"
+			done
+		done
+		echo $OUT | xargs
+	else
+		O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"lte_band\"")
+		echo "$O" | awk -F, '/^\+CSYSSEL: "lte_band",/{gsub(":"," ");print $2}' | xargs
+	fi
 }
 
 setbands() {
 	BANDS="$1"
-	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
 
-	T=""
-	for BAND in $BANDS; do
-		case $BAND in
-			''|*[!0-9]*) continue ;;
-		esac
-		[ -n "$T" ] && T="${T}:"
-		T="${T}${BAND}"
-	done
+	if _is_7100; then
+		[ "$BANDS" = "default" ] && BANDS="$_SIM7100_LTE_BANDS"
 
-	[ -n "$T" ] && sms_tool -d $_DEVICE at "AT+CSYSSEL=\"lte_band\",$T"
+		# build the 64-bit LTE hex mask (bit N-1 = band N) with the dispatcher's
+		# helper - replaces the old hand-rolled nibble math, which miscomputed
+		# the mask (e.g. the full default came out as 0xA0000080C05 instead of
+		# 0xA0000800C5), so a reset left several bands unselected.
+		LTEHEX=$(bandstohex "$BANDS")
+		[ -n "$LTEHEX" ] && [ "$LTEHEX" != "0" ] || return 1
+		# the modem wants a full 16-hex-digit (64-bit) value
+		LTEHEX=$(printf "%016s" "$LTEHEX" | tr ' ' 0)
+
+		# CNBP write takes TWO parameters: <mode>,<lte_mask>. The LTE selection
+		# is the SECOND field (a 3-parameter write is silently ignored on this
+		# firmware). Preserve the current <mode> (GSM/UMTS) field and set the LTE
+		# mask. Applying the change (radio restart) is done by the caller
+		# (reboot_modem.sh), so no disruptive CFUN cycle here.
+		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
+		MODE=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | sed 's/^+CNBP://' | awk -F, '{print $1}')
+		[ -n "$MODE" ] || MODE=0x0002000000400180
+		sms_tool -d $_DEVICE at "AT+CNBP=$MODE,0x$LTEHEX"
+	else
+		[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+		T=""
+		for BAND in $BANDS; do
+			case $BAND in
+				''|*[!0-9]*) continue ;;
+			esac
+			[ -n "$T" ] && T="${T}:"
+			T="${T}${BAND}"
+		done
+		[ -n "$T" ] && sms_tool -d $_DEVICE at "AT+CSYSSEL=\"lte_band\",$T"
+	fi
 }
 
+# ---- network mode (2G/3G/4G) via AT+CNMP, SIM7100 only ----
+# CNMP values on SIM7100E: 2=Auto, 13=GSM only, 14=WCDMA only, 19=GSM+WCDMA,
+# 38=LTE only. Reported as "id:label" pairs so the UI can render buttons.
+
+getsupportedmodes() {
+	_is_7100 || { echo "Unsupported"; return; }
+	echo "2:Auto 13:2G 14:3G 38:4G 19:2G+3G"
+}
+
+getmode() {
+	_is_7100 || { echo "Unsupported"; return; }
+	sms_tool -d $_DEVICE at "AT+CNMP?" | awk -F: '/^\+CNMP:/{gsub(/[^0-9]/,"",$2);print $2}' | head -1
+}
+
+setmode() {
+	_is_7100 || return
+	M="$1"
+	case "$M" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT+CNMP=$M"
+}
+
+# ---- 5G: not present on SIM7100 (must return "Unsupported", NOT empty, so the
+# dispatcher/UI hides the 5G sections entirely) ----
+
 getsupportedbands5gnsa() {
+	_is_7100 && { echo "Unsupported"; return; }
 	echo "$_DEFAULT_5GNSA_BANDS"
 }
 
 getbands5gnsa() {
+	_is_7100 && { echo "Unsupported"; return; }
 	O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nsa_nr5g_band\"")
 	echo "$O" | awk -F, '/^\+CSYSSEL: "nsa_nr5g_band",/{gsub(":"," ");print $2}' | xargs
 }
 
 setbands5gnsa() {
+	_is_7100 && return
 	BANDS="$1"
 	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_5GNSA_BANDS"
-
 	T=""
 	for BAND in $BANDS; do
 		case $BAND in
@@ -53,23 +153,24 @@ setbands5gnsa() {
 		[ -n "$T" ] && T="${T}:"
 		T="${T}${BAND}"
 	done
-
 	[ -n "$T" ] && sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nsa_nr5g_band\",$T"
 }
 
 getsupportedbands5gsa() {
+	_is_7100 && { echo "Unsupported"; return; }
 	echo "$_DEFAULT_5GSA_BANDS"
 }
 
 getbands5gsa() {
+	_is_7100 && { echo "Unsupported"; return; }
 	O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nr5g_band\"")
 	echo "$O" | awk -F, '/^\+CSYSSEL: "nr5g_band",/{gsub(":"," ");print $2}' | xargs
 }
 
 setbands5gsa() {
+	_is_7100 && return
 	BANDS="$1"
 	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_5GSA_BANDS"
-
 	T=""
 	for BAND in $BANDS; do
 		case $BAND in
@@ -78,6 +179,5 @@ setbands5gsa() {
 		[ -n "$T" ] && T="${T}:"
 		T="${T}${BAND}"
 	done
-
 	[ -n "$T" ] && sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nr5g_band\",$T"
 }

@@ -133,6 +133,30 @@ save_to() {
 	uci -q commit "$CFG"
 }
 
+# Pick the SMS read storage for the active modem. Incoming messages land in
+# different places by modem: many USB modems (e.g. SimCom SIM7100) deliver them
+# to ME (modem memory), not SM (SIM) - reading SM then shows an empty inbox and
+# the UI complains there is no port. Probe both and prefer the one that holds
+# messages; default to ME (the common case). Only sets the value when the user
+# has not chosen one, so it never overrides a manual SIM/Memory pick.
+set_sms_storage() {
+	AT="$1"
+	[ -n "$AT" ] && [ -e "$AT" ] || return 0
+	command -v sms_tool >/dev/null 2>&1 || return 0
+	uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1 || return 0
+	[ -z "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" ] || return 0
+	me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+	sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+	if   [ "${me:-0}" -gt 0 ] 2>/dev/null; then STG=ME
+	elif [ "${sm:-0}" -gt 0 ] 2>/dev/null; then STG=SM
+	elif [ -n "$me" ]; then STG=ME          # ME supported, just empty
+	elif [ -n "$sm" ]; then STG=SM          # only SM answered
+	else STG=ME
+	fi
+	uci -q set "sms_tool_js.@sms_tool_js[0].storage=$STG"
+	uci -q commit sms_tool_js
+}
+
 case "$1" in
 active)
 	active_path
@@ -180,6 +204,7 @@ switch)
 			uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"
 		done
 		uci -q commit sms_tool_js
+		set_sms_storage "$ATP"
 	fi
 
 	# drop the cached AT port so detect.sh re-resolves for the new modem
@@ -223,10 +248,15 @@ resolve)
 		if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
 			for k in readport sendport ussdport atport; do uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"; done
 			uci -q commit sms_tool_js
+			set_sms_storage "$ATP"
 		fi
 	fi
 
 	# --- recover the connections ---
+	# 0) refresh the ModemManager ignore rules from the current per-modem protos,
+	#    so MM keeps its hands off modems we drive via a kernel proto (qmi/mbim/
+	#    atc/fibocom/...). Runs on boot (coldplug) and every hotplug.
+	"$RES/mm-filter.sh" >/dev/null 2>&1
 	# 1) put ModemManager in the state the modem mix needs (creating an atc/mbim
 	#    interface had disabled MM and taken the modemmanager modems down).
 	apply_mm_state

@@ -190,7 +190,7 @@ fi
 
 O=""
 if [ -e /usr/bin/sms_tool ]; then
-	O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?")
+	O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?;+CEREG?")
 else
 	O=$(gcom -d $DEVICE -s $RES/info.gcom 2>/dev/null)
 fi
@@ -518,6 +518,20 @@ case "$T" in
 	7*) REG="7";;
 	*) REG="";;
 esac
+
+# EPS/data registration (CEREG) overrides a "SMS only" CS status. Many LTE data
+# modems (e.g. Fibocom FM350-GL) register the CS/voice domain as "SMS only"
+# (CREG 6/7) on every operator while the PS/data domain is fully registered and
+# the connection works fine - showing "registered, SMS only" then just confuses
+# the user. So when CS says SMS-only but CEREG says registered (1=home, 5=roam),
+# report the data status instead.
+if [ "$REG" = "6" ] || [ "$REG" = "7" ]; then
+	CEREG_STAT=$(echo "$O" | busybox awk -F[,] '/^\+CEREG/{gsub(/[[:space:]"]+/,"");print $2;exit}')
+	case "$CEREG_STAT" in
+		1) REG="1";;
+		5) REG="5";;
+	esac
+fi
 
 # MODE
 if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" == "x0" ]; then

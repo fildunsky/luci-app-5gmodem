@@ -38,5 +38,15 @@ else
 	sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
 fi
 
+# A radio restart drops the data bearer. ModemManager-managed modems reconnect
+# on their own, but kernel qmi/mbim/atc interfaces need a nudge - otherwise the
+# connection stays DOWN after applying bands/mode (the whole point was to keep
+# using it). Re-up the app's interface once the radio has had a moment to
+# re-attach. Backgrounded so this script still returns promptly to the UI.
+IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+if [ -n "$IF" ]; then
+	( sleep 6; ifup "$IF" >/dev/null 2>&1 ) &
+fi
+
 echo "{\"success\":true,\"mode\":\"$MODE\"}"
 exit 0
