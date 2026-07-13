@@ -5,6 +5,7 @@
 'require ui';
 'require uci';
 'require view';
+'require view.modem.modemtabs as modemtabs';
 'require rpc';
 'require poll';
 'require sms-tool-js.smssettings as smssettings';
@@ -653,6 +654,7 @@ return view.extend({
 	},
 
 	render: function(data) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 		var self = this;
 		return Promise.resolve(this.renderMain(data)).then(function(main) {
 			return smssettings.panel('receive').then(function(panel) {
@@ -756,83 +758,46 @@ return view.extend({
 									   which prints spaces). */
 									var json = JSON.parse(res2).msg || [];
 
+									/* sms_tool's UCS2 decoder replaces code points U+0080..U+00FF
+									   (non-breaking space, guillemets «», …) with U+FFFD (�).
+									   Operators use those mostly as spaces, so swap � -> space to
+									   keep the text readable (real fix belongs in sms_tool). */
+									json.forEach(function(o) {
+										if (o && typeof o.content === 'string') {
+											o.content = o.content.replace(/\uFFFD/g, ' ');
+										}
+									});
+
 									var aidx = [];
 
 									/* Merging messages */
 									if (smsM == "1") {
 
-											var result = [];
-
-											if (algo == "Advanced")
-											{
-												switch (direct) {
-  														case 'Start':
-    															var Data = json.sort((a, b) => {
-  																if (a.timestamp === b.timestamp && a.sender === b.sender) {
-    																	return a.part - b.part;
-  																} else if (a.timestamp === b.timestamp) {
-    																	return a.sender - b.sender;
-  																} else {
-    																	return a.timestamp.localeCompare(b.timestamp);
-  																}
-															});
-    															break;
-  														case 'End':
-    															var Data = json.sort((a, b) => {
-  																if (a.timestamp === b.timestamp && a.sender === b.sender) {
-    																	return b.part - a.part;
-  																} else if (a.timestamp === b.timestamp) {
-    																	return a.sender - b.sender;
-  																} else {
-    																	return a.timestamp.localeCompare(b.timestamp);
-  																}
-															});
-    															break;
-  														default:
-												}
-
-												var SortedSMS = Data.sort((function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp) }));
-												var combinedjson = {};
-
-												for (const parts of SortedSMS) {
-  												const { sender, timestamp, total, content, index } = parts;
-
-  												if (total) {
-    													const key = `${sender}-${timestamp}-${total}`;
-    														if (combinedjson[key]) {
-      															combinedjson[key].content += content;
-      															combinedjson[key].index += '-' + index;
-   														} else {
-      															combinedjson[key] = { sender, timestamp, total, content, index };
-    														}
-  												} else {
-    													const newkey = `${sender}-${timestamp}-${index}`;
-    													combinedjson[newkey] = { sender, timestamp, total, content, index };
-  													}
-												}
-												var result = Object.values(combinedjson);
-											}
-
-											if (algo == "Simple")
-											{
-												var SortedSMS = json.sort((function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp) }));
-
-												SortedSMS.forEach(function (o) {
-    													if (!this[o.sender]) {
-        													this[o.sender] = { index: o.index, sender: o.sender, timestamp: o.timestamp, part: o.part, total: o.total, content: o.content };
-        													result.push(this[o.sender]);
-        													return;
-    														}
-														if (this[o.sender].total == o.total && this[o.sender].timestamp == o.timestamp && this[o.sender].sender == o.sender && this[o.sender].part > 0) {
-    														this[o.sender].index += '-' + o.index;    			
-														this[o.sender].content += o.content;}
-														else {
-															this[o.sender] = { index: o.index, sender: o.sender, timestamp: o.timestamp, part: o.part, total: o.total, content: o.content };
-        														result.push(this[o.sender]);
-        														return;
-															}
-												}, Object.create(null));
-											}
+											/* Склейка многочастных SMS. Части ОДНОГО сообщения несут один
+											   и тот же UDH-reference, но приходят с чуть разными
+											   таймстампами (отличаются на секунды), поэтому прежняя
+											   группировка по timestamp их разбивала - сообщение
+											   показывалось кусками. Группируем по reference (одиночные -
+											   по index), сортируем части по part и склеиваем по порядку. */
+											var groups = {};
+											json.forEach(function(o) {
+												var key = (o.reference != null && o.total > 1)
+													? o.sender + '#ref#' + o.reference + '#' + o.total
+													: o.sender + '#one#' + o.timestamp + '#' + o.index;
+												(groups[key] = groups[key] || []).push(o);
+											});
+											var result = Object.keys(groups).map(function(k) {
+												var parts = groups[k].sort(function(a, b) { return (a.part || 0) - (b.part || 0); });
+												var first = parts[0];
+												return {
+													sender: first.sender,
+													timestamp: first.timestamp,
+													total: first.total,
+													index: parts.map(function(p) { return p.index; }).join('-'),
+													content: parts.map(function(p) { return p.content; }).join('')
+												};
+											});
+											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
 													if (u){
 															var Lres = L.resource('icons/cmessage.svg');
 

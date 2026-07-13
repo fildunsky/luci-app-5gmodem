@@ -54,7 +54,7 @@ fi
 # fill via an AT PDP dial. ModemManager cannot enable them (fails with
 # UnexpectedDataValue) and mbim/qmi need a cdc-wdm that does not exist here - so
 # route them to our 'fibocom' netifd proto instead of the mbim fallback below. ---
-if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] || [ "$REQ" = fibocom ]; }; then
+if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] || [ "$REQ" = fibocom ] || [ "$REQ" = atc ] || [ "$REQ" = xmm ]; }; then
 	FNET=""
 	for n in /sys/bus/usb/devices/$AMP:*/net/*; do
 		[ -e "$n" ] || continue
@@ -64,11 +64,46 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		OLDAPN=$(uci -q get "network.$IF.apn")
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
-		uci set "network.$IF.proto=fibocom"
-		uci set "network.$IF.usbpath=$AMP"
-		uci set "network.$IF.device=$FNET"
-		uci set "network.$IF.apn=${OLDAPN:-internet}"
-		uci set "network.$IF.pdptype=IPV4V6"
+
+		# Default to the built-in 'fibocom' proto: stable, SMS-safe (does not
+		# touch the modem's SMS) and self-healing. 'atc' and 'xmm' are used ONLY
+		# when the user explicitly selects them AND the handler is installed -
+		# atc in particular takes over SMS and holds an AT port open, so making
+		# it a silent default caused deregistration/port churn on multi-modem
+		# setups. Opt-in keeps auto-detection predictable.
+		FPROTO=fibocom
+		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && FPROTO=xmm
+		[ "$REQ" = atc ] && [ -f /lib/netifd/proto/atc.sh ] && FPROTO=atc
+
+		if [ "$FPROTO" = atc ]; then
+			# atc dials over an AT port and derives the usbnet device itself. It
+			# keeps that port open for URC monitoring, so hand it a DIFFERENT AT
+			# port than the app's metrics/SMS port to avoid clashing reads.
+			METRIC_AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+			ATCPORT=""
+			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/ttyACM*; do
+				[ -e "$t" ] || continue
+				tt="/dev/$(basename "$t")"
+				[ "$tt" = "$METRIC_AT" ] && continue
+				sms_tool -d "$tt" at "AT" >/dev/null 2>&1 && { ATCPORT="$tt"; break; }
+			done
+			[ -n "$ATCPORT" ] || ATCPORT="$METRIC_AT"
+			uci set "network.$IF.proto=atc"
+			uci set "network.$IF.device=$ATCPORT"
+			uci set "network.$IF.apn=${OLDAPN:-internet}"
+			uci set "network.$IF.pdp=IPV4V6"
+			uci set "network.$IF.metric=20"
+			FDEV="$ATCPORT"
+			# remember the atc data port so resolve can re-pin it after renumbering
+			[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.data_at_port=$ATCPORT"
+		else
+			uci set "network.$IF.proto=$FPROTO"
+			uci set "network.$IF.usbpath=$AMP"
+			uci set "network.$IF.device=$FNET"
+			uci set "network.$IF.apn=${OLDAPN:-internet}"
+			uci set "network.$IF.pdptype=IPV4V6"
+			FDEV="$FNET"
+		fi
 		# secondary uplink by default so (re)creating it never hijacks another
 		# modem's default route; lower the metric in Network > Interfaces to make
 		# it primary.
@@ -84,11 +119,11 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 
 		# point the app at this interface and remember it for this modem
 		uci -q set "5gmodem.@5gmodem[0].network=$IF"
-		uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
+		uci -q set "5gmodem.@5gmodem[0].iface_proto=$FPROTO"
 		if [ -n "$MSEC" ]; then
 			uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
 			uci -q set "5gmodem.$MSEC.network=$IF"
-			uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+			uci -q set "5gmodem.$MSEC.iface_proto=$FPROTO"
 		fi
 		uci -q commit 5gmodem
 
@@ -105,7 +140,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# must not touch this modem)
 		/usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
 		ifup "$IF" >/dev/null 2>&1
-		json created fibocom "$FNET"
+		json created "$FPROTO" "$FDEV"
 		exit 0
 	fi
 fi

@@ -5,6 +5,7 @@
 'require ui';
 'require uci';
 'require view';
+'require view.modem.modemtabs as modemtabs';
 'require sms-tool-js.editors as editors';
 
 /*
@@ -231,6 +232,7 @@ return view.extend({
 	},
 
 	render: function (loadResults) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 
 	let info = _('User interface for sending AT commands using sms-tool.').format('');
 	

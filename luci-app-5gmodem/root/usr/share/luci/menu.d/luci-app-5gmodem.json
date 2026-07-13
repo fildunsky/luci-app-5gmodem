@@ -22,7 +22,7 @@
 	},
 
 	"admin/modem/5gmodem/detail": {
-		"title": "🌐 Network",
+		"title": "Network",
 		"order": 10,
 		"action": {
 			"type": "view",
@@ -31,7 +31,7 @@
 	},
 
 	"admin/modem/5gmodem/diagnostics": {
-		"title": "⚙️ Modem Settings",
+		"title": "Modem Settings",
 		"order": 20,
 		"action": {
 			"type": "view",
@@ -40,7 +40,7 @@
 	},
 
 	"admin/modem/5gmodem/readsms": {
-		"title": "💬 Inbox",
+		"title": "Inbox",
 		"order": 30,
 		"action": {
 			"type": "view",
@@ -49,7 +49,7 @@
 	},
 
 	"admin/modem/5gmodem/sendsms": {
-		"title": "📨 Outbox",
+		"title": "Outbox",
 		"order": 40,
 		"action": {
 			"type": "view",
@@ -58,7 +58,7 @@
 	},
 
 	"admin/modem/5gmodem/sendussd": {
-		"title": "📟 USSD",
+		"title": "USSD",
 		"order": 50,
 		"action": {
 			"type": "view",
@@ -67,7 +67,7 @@
 	},
 
 	"admin/modem/5gmodem/sendat": {
-		"title": "</> AT",
+		"title": "AT",
 		"order": 60,
 		"action": {
 			"type": "view",

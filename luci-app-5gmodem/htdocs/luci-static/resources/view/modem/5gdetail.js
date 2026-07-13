@@ -3,6 +3,7 @@
 'require form';
 'require fs';
 'require view';
+'require view.modem.modemtabs as modemtabs';
 'require ui';
 'require uci';
 'require poll';
@@ -1072,6 +1073,7 @@ simDialog: baseclass.extend({
 	},
 
 	render: function(res) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 		var m, s, o;
 
 		var data = Array.isArray(res) ? res[0] : res;

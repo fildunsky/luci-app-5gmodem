@@ -299,10 +299,15 @@ if [ -z "$T_MODE" ]; then
   fi
 fi
 
-# Modem data forcing
-if [ "$CSQ" = "0" ]; then
-$CSQ="1"
-$CSQ_PER="10"
+# Signal bar: AT+CSQ (RSSI-based) is pessimistic and inconsistent on the FM350 -
+# it reports a narrowband RSSI, so CSQ reads ~9 (=29%) even with a fine LTE
+# signal and excellent throughput, while other modems in the same spot report a
+# wideband RSSI and show 70%+. Derive the bar from RSRP instead (the
+# standardized, comparable LTE metric): RSRP -108 -> 70%, -102 -> 80%, >=-90 ->
+# 100%. This makes the FM350 reflect real quality instead of looking broken.
+if [ -n "$RSRP" ]; then
+	CSQ_PER=$(awk -v r="$RSRP" 'BEGIN{p=(r+150)*5/3; if(p<0)p=0; if(p>100)p=100; printf "%d", p}')
+	CSQ=$(( 31 * CSQ_PER / 100 ))
 fi
 
 # Modem

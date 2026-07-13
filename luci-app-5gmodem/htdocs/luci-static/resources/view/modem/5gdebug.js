@@ -1,5 +1,6 @@
 'use strict';
 'require view';
+'require view.modem.modemtabs as modemtabs';
 'require dom';
 'require fs';
 'require ui';
@@ -186,6 +187,7 @@ return view.extend({
 	},
 
 	render: function(res) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 		var json = {};
 		try { json = JSON.parse(res[0] || '{}'); } catch (e) {}
 		if (!json || typeof json != 'object') json = {};
@@ -357,7 +359,7 @@ return view.extend({
 			inforow(_('Modem type'), infoVal(json.modem)),
 			inforow(_('Revision / Firmware'), infoVal(json.firmware)),
 			inforow(_('IP adress / Communication Port'), infoVal(json.cport)),
-			inforow(_('Protocol'), infoVal(json.protocol)),
+			inforow(_('Protocol'), E('span', { 'class': 'tg-proto-badge' }, infoVal(json.protocol))),
 		];
 		var t = json.mtemp;
 		if (t != null && String(t).length > 1 && String(t).indexOf(' ') < 0 && String(t) != '-') {
@@ -428,6 +430,18 @@ return view.extend({
 
 		document.head.append(E('style', {'type': 'text/css'},
 `
+.tg-proto-badge {
+  display: inline-block;
+  padding: 1px 9px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.12);
+  font-weight: 600;
+  font-size: 0.9em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 .tg-code {
   background: #161c26;
   border: 1px solid rgba(255, 255, 255, 0.08);

@@ -5,6 +5,7 @@
 'require ui';
 'require uci';
 'require view';
+'require view.modem.modemtabs as modemtabs';
 'require sms-tool-js.editors as editors';
 'require sms-tool-js.smssettings as smssettings';
 
@@ -473,6 +474,7 @@ return view.extend({
 	},
 
 	render: function (loadResults) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 		var self = this;
 		return Promise.resolve(this.renderMain(loadResults)).then(function(main) {
 			return smssettings.panel('send').then(function(panel) {

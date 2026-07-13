@@ -1,0 +1,78 @@
+'use strict';
+'require form';
+'require network';
+
+// LuCI protocol handler for the "fibocom" netifd proto shipped by
+// luci-app-5gmodem (AT-dialed RNDIS/ECM modems such as Fibocom FM350-GL that
+// ModemManager cannot drive). Without this handler the Network > Interfaces
+// page shows the interface as "unsupported" and it flickers out of the list.
+
+network.registerPatternVirtual(/^fibocom-.+$/);
+network.registerErrorCode('NO_NETDEV',     _('No usbnet device found for the modem'));
+network.registerErrorCode('NO_AT_PORT',    _('No AT control port found'));
+network.registerErrorCode('NO_IP_ADDRESS', _('Modem did not provide an IP address'));
+
+return network.registerProtocol('fibocom', {
+	getI18n: function() {
+		return _('Fibocom (AT-dial)');
+	},
+
+	getIfname: function() {
+		return this._ubus('l3_device') || 'wan';
+	},
+
+	getPackageName: function() {
+		return 'luci-app-5gmodem';
+	},
+
+	isFloating: function() {
+		return true;
+	},
+
+	isVirtual: function() {
+		return true;
+	},
+
+	getDevices: function() {
+		return null;
+	},
+
+	containsDevice: function(ifname) {
+		return (network.getIfnameOf(ifname) == this.getIfname());
+	},
+
+	renderFormOptions: function(s) {
+		var o;
+
+		o = s.taboption('general', form.Value, 'apn', _('APN'));
+		o.validate = function(section_id, value) {
+			if (value == null || value == '')
+				return true;
+			if (!/^[a-zA-Z0-9\-.]*[a-zA-Z0-9]$/.test(value))
+				return _('Invalid APN provided');
+			return true;
+		};
+
+		o = s.taboption('general', form.ListValue, 'pdptype', _('IP Protocol'));
+		o.default = 'IPV4V6';
+		o.value('IP', _('IPv4'));
+		o.value('IPV4V6', _('IPv4+IPv6'));
+		o.value('IPV6', _('IPv6'));
+
+		// These are managed by the 5G Modem app (mkiface.sh) - declared here so
+		// editing the interface in LuCI does not drop them on save.
+		o = s.taboption('advanced', form.Value, 'usbpath', _('USB path'),
+			_('Stable USB topology path of the modem (managed by the 5G Modem app)'));
+
+		o = s.taboption('advanced', form.Value, 'device', _('Network device'),
+			_('usbnet device, auto-resolved from the USB path'));
+
+		o = s.taboption('advanced', form.Value, 'atport', _('AT port'),
+			_('AT command port used for dialing; auto-selected when empty'));
+
+		o = s.taboption('advanced', form.Value, 'metric', _('Metric'),
+			_('Route metric - higher value means lower priority'));
+		o.datatype = 'uinteger';
+		o.placeholder = '0';
+	}
+});

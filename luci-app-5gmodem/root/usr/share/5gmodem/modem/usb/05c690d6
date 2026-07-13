@@ -68,8 +68,11 @@ else
 	# TAC/CID come from the +CEREG/+CREG already parsed by 5gmodem.sh
 	# (TAC/TAC_HEX, LAC/CID_HEX) - leave those as-is.
 	NR_IMEI=$(sms_tool -d "$DEVICE" at "AT+CGSN" | sed 's/^AT+CGSN //' | tr -dc '0-9')
-	MODELNAME=$(sms_tool -d "$DEVICE" at "AT+CGMM" | sed 's/^AT+CGMM //' | tr -d '\r' | xargs)
-	FW=$(sms_tool -d "$DEVICE" at "AT+CGMR" | sed 's/^AT+CGMR //' | tr -d '\r' | xargs)
+	# take the response line only - drop the echoed command, OK/ERROR and blanks
+	# (the old sed left "AT+CGMM" in the name because the echo ends in \r, not a
+	# space, so "^AT+CGMM " never matched -> "Compal RXM-G1 (AT+CGMM SG500M2-X)").
+	MODELNAME=$(sms_tool -d "$DEVICE" at "AT+CGMM" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+	FW=$(sms_tool -d "$DEVICE" at "AT+CGMR" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
 fi
 # modem.generic.model reports the generic chipset platform name
 # ("VOS_5G") on this firmware, not the actual modem model - override

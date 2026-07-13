@@ -113,5 +113,34 @@ return baseclass.extend({
 			ensureCss();
 			return E('div', { 'class': 'modembar' }, [ tabsBar(st.modems, st.active) ]);
 		});
+	},
+
+	/* Тема-независимая вставка шапки в DOM. Тема proton2025 вставляет её сама
+	   (в chrome над под-вкладками); в остальных темах (bootstrap и пр.) шапки
+	   не было. Этот метод вызывается КАЖДОЙ вьюхой приложения и:
+	     - НЕ дублирует, если .modembar уже есть (случай proton2025);
+	     - иначе вставляет ряд вкладок перед меню под-вкладок (в любой теме),
+	       а если его нет - в начало основной области.
+	   Возвращает Promise. Ставится через опрос DOM, т.к. на момент render()
+	   под-вкладки могут быть ещё не вставлены. */
+	attach: function() {
+		if (document.querySelector('.modembar')) { return Promise.resolve(); }
+		return this.renderBar().then(function(bar) {
+			if (!bar || document.querySelector('.modembar')) { return; }
+			var tries = 0;
+			(function place() {
+				if (document.querySelector('.modembar')) { return; }
+				var anchor = document.querySelector('#tabmenu')
+					|| document.querySelector('ul.cbi-tabmenu')
+					|| document.querySelector('.cbi-tabmenu');
+				if (anchor && anchor.parentNode) {
+					anchor.parentNode.insertBefore(bar, anchor);
+					return;
+				}
+				if (tries++ < 20) { window.setTimeout(place, 150); return; }
+				var c = document.querySelector('#maincontent') || document.querySelector('#view') || document.body;
+				if (c) { c.insertBefore(bar, c.firstChild); }
+			})();
+		});
 	}
 });

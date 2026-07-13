@@ -32,12 +32,29 @@ modem_product() {
 	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].product" 2>/dev/null | head -1
 }
 
+# AT probe of ONE port, time-bounded to ~4s. sms_tool has no timeout option and
+# blocks ~35s on a silent DIAG port with no reply, which made switching modems
+# take half a minute (the UI "Switching…" spinner hung). Run it in the
+# background and kill it if it does not answer quickly.
+at_probe() {
+	sms_tool -d "$1" at "AT" >/dev/null 2>&1 &
+	_p=$!
+	_n=0
+	while kill -0 "$_p" 2>/dev/null; do
+		_n=$((_n + 1))
+		if [ "$_n" -ge 4 ]; then kill "$_p" 2>/dev/null; wait "$_p" 2>/dev/null; return 1; fi
+		sleep 1
+	done
+	wait "$_p" 2>/dev/null   # sms_tool exit code: 0 when the port answered AT
+	return $?
+}
+
 # first tty that answers "AT" = the modem's AT port
 detect_at() {
 	for t in "$@"; do
 		[ -e "$t" ] || continue
 		case "$t" in /dev/ttyUSB*|/dev/ttyACM*) ;; *) continue ;; esac
-		if sms_tool -d "$t" at "AT" >/dev/null 2>&1; then echo "$t"; return 0; fi
+		if at_probe "$t"; then echo "$t"; return 0; fi
 	done
 	return 1
 }
@@ -89,7 +106,26 @@ ensure_iface() {
 	case "$PROTO" in
 		mbim|qmi|xmm|ncm) NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
-		atc|3g|wwan|ppp)  NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
+		atc)
+			# atc holds its AT port open for URC monitoring, so it must stay on a
+			# tty DISTINCT from the app's metrics/SMS port (data_at_port marks such
+			# a modem). Re-resolve an AT-answering tty under this modem's path that
+			# is not the metrics port, and remember it.
+			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
+				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
+				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
+					[ -e "$t" ] || continue
+					tt="/dev/$(basename "$t")"
+					[ "$tt" = "$MET" ] && continue
+					at_probe "$tt" && { NEW="$tt"; break; }
+				done
+				[ -n "$NEW" ] || NEW=$(uci -q get "$CFG.$SEC.at_port")
+				[ -n "$NEW" ] && uci -q set "$CFG.$SEC.data_at_port=$NEW"
+			else
+				NEW=$(uci -q get "$CFG.$SEC.at_port")
+			fi
+			;;
+		3g|wwan|ppp)      NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
 		fibocom)          NEW=$(for n in /sys/bus/usb/devices/$P:*/net/*; do [ -e "$n" ] && { basename "$n"; break; }; done) ;;
 	esac
 	CHG=0
@@ -178,10 +214,17 @@ switch)
 
 	SEC=$(ensure_section "$P")
 
-	# AT port: always resolve from this modem's OWN current ports (ttyUSB numbers
-	# are not stable, so a saved one may now belong to another modem). Fast via
-	# ModemManager, else probe.
-	ATP=$(at_for_path "$P")
+	# AT port: prefer the port already saved for THIS modem when it is still
+	# valid (present AND still one of this modem's own ports). ttyUSB numbers
+	# only change on re-enumeration (unplug / reboot), which the resolve hotplug
+	# fixes - so a plain tab switch needs no slow AT re-probe. Fall back to a
+	# full detect only when the saved port is gone or now belongs elsewhere.
+	SAVED=$(uci -q get "$CFG.$SEC.at_port")
+	if [ -n "$SAVED" ] && [ -e "$SAVED" ] && modem_ttys "$P" | grep -qxF "$SAVED"; then
+		ATP="$SAVED"
+	else
+		ATP=$(at_for_path "$P")
+	fi
 
 	# apply to the working config. detect.sh (and thus 5gmodem.sh) resolves the
 	# modem port from 5gmodem.device FIRST - so we pin BOTH device and at_port
