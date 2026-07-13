@@ -334,7 +334,7 @@ function SIMdata(data) {
 
 /* Подсветить кнопку текущего режима (читается из mmcli -K current-modes) */
 function updateModeButtons() {
-	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), '').then(function(out) {
+	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
 		var m = (out || '').match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
 		if (!m) { return; }
 		var allowed = m[1].split(',').map(function(x) { return x.trim(); }).sort().join('|');
@@ -390,7 +390,7 @@ function renderBandToggles(contId, bands, current) {
 }
 
 function loadBands() {
-	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), '').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
 		if (!out) { return; }
 		var supported = [], current = [];
 		out.split('\n').forEach(function(ln) {
@@ -410,6 +410,9 @@ function loadBands() {
    не отдаёт бенды: не под ModemManager, или MM их не показывает). Данные и
    применение - вендорными AT-командами через /usr/share/5gmodem/bands.sh. ---- */
 var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+/* Индекс ACTIVE модема в ModemManager (для управления бендами/режимом при
+   нескольких модемах). 'any' - фолбэк для одного модема. Ставится в load(). */
+var mmIdx = 'any';
 /* Протокол интерфейса модема (из json.protocol). В режиме modemmanager бендами
    управляют через mmcli, поэтому пояснение «переключите на ModemManager» там НЕ
    показываем - если mmcli временно не готов (напр. модем пересоздают), это
@@ -582,7 +585,7 @@ function refreshModeButtons(mmK) {
 function revealMgmtWhenReady(tries) {
 	var row = document.getElementById('modeswn');
 	if (!row || row.style.display != 'none') { return; }
-	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), '').then(function(mmK) {
+	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(mmK) {
 		if (!/current-modes/.test(mmK)) {
 			// mmcli ещё не готов (модем под MM поднимается): повторяем
 			// несколько раз, чтобы блок частот появился сам после пересоздания.
@@ -610,7 +613,7 @@ function applyBands() {
 		return Promise.resolve();
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying bands...')));
-	return fs.exec('/usr/bin/mmcli', [ '-m', 'any', '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
+	return fs.exec('/usr/bin/mmcli', [ '-m', mmIdx, '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.hideModal();
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
@@ -726,7 +729,7 @@ function updateSimIcon(name) {
 
 function setNetMode(allowed, preferred, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
-	var args = [ '-m', 'any', '--set-allowed-modes=' + allowed ];
+	var args = [ '-m', mmIdx, '--set-allowed-modes=' + allowed ];
 	if (preferred) { args.push('--set-preferred-mode=' + preferred); }
 	return fs.exec('/usr/bin/mmcli', args).then(function(res) {
 		ui.hideModal();
@@ -1014,12 +1017,18 @@ simDialog: baseclass.extend({
 		// "Режим сети"/диапазонов рисовались сразу заполненными в render()
 		// (раньше они дорисовывались асинхронно после отрисовки и страница
 		// подпрыгивала при загрузке).
-		return Promise.all([
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ])),
-			L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', 'any', '-K' ]), ''),
-			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ttl.sh', [ 'get' ]), ''),
-		]);
+		// Сначала узнаём индекс АКТИВНОГО модема в MM, чтобы читать/менять
+		// бенды/режим именно у него, а не у "any" (с двумя модемами это был бы
+		// не тот модем).
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '').then(function(idx) {
+			mmIdx = (String(idx || '').trim()) || 'any';
+			return Promise.all([
+				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ])),
+				L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), ''),
+				L.resolveDefault(uci.load('5gmodem')),
+				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ttl.sh', [ 'get' ]), ''),
+			]);
+		});
 	},
 
 	render: function(res) {
@@ -1285,12 +1294,18 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('modem')) {
 						var view = document.getElementById("modem");
-						if (!json.modem.length > 1) { 
+						if (!json.modem.length > 1) {
 						view.textContent = '-';
 						}
 						else {
 						view.textContent = json.modem;
 						}
+					}
+
+					// Заголовок блока = полное имя активного модема (моноширинный)
+					if (document.getElementById('modemname')) {
+						document.getElementById('modemname').textContent =
+							(json.modem && json.modem.length > 1) ? json.modem : _('Modem');
 					}
 
 					if (document.getElementById('fw')) {

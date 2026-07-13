@@ -308,17 +308,32 @@ setbands5gsa() {
 
 RES="/usr/share/5gmodem/modemband"
 
-_DEVS=$(awk '{gsub("="," ");
-if ($0 ~ /Bus.*Lev.*Prnt.*Port.*/) {T=$0}
-if ($0 ~ /Vendor.*ProdID/) {idvendor[T]=$3; idproduct[T]=$5}
-if ($0 ~ /Product/) {product[T]=$3}}
-END {for (idx in idvendor) {printf "%s%s\n%s%s%s\n", idvendor[idx], idproduct[idx], idvendor[idx], idproduct[idx], product[idx]}}' /sys/kernel/debug/usb/devices)
-for _DEV in $_DEVS; do
-	if [ -e "$RES/$_DEV" ]; then
-		. "$RES/$_DEV"
-		break
-	fi
-done
+# Multi-modem: load the band profile of the ACTIVE modem (by USB path), not of
+# whichever USB device is enumerated first - otherwise band management operates
+# on the wrong modem (both tabs showed/set the same bands).
+_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_AVIDPID=""
+[ -n "$_AMP" ] && _AVIDPID=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$_AMP\"].vidpid" 2>/dev/null | tr -d ':')
+
+if [ -n "$_AMP" ]; then
+	# active modem is known: use ONLY its profile. If it has none (e.g. Fibocom
+	# without a band profile), leave _DEVICE unset -> "unsupported", instead of
+	# falling back to ANOTHER modem's profile (which would manage the wrong one).
+	[ -n "$_AVIDPID" ] && [ -e "$RES/$_AVIDPID" ] && . "$RES/$_AVIDPID"
+else
+	# no active modem configured (single-modem legacy): scan for any profile.
+	_DEVS=$(awk '{gsub("="," ");
+	if ($0 ~ /Bus.*Lev.*Prnt.*Port.*/) {T=$0}
+	if ($0 ~ /Vendor.*ProdID/) {idvendor[T]=$3; idproduct[T]=$5}
+	if ($0 ~ /Product/) {product[T]=$3}}
+	END {for (idx in idvendor) {printf "%s%s\n%s%s%s\n", idvendor[idx], idproduct[idx], idvendor[idx], idproduct[idx], product[idx]}}' /sys/kernel/debug/usb/devices)
+	for _DEV in $_DEVS; do
+		if [ -e "$RES/$_DEV" ]; then
+			. "$RES/$_DEV"
+			break
+		fi
+	done
+fi
 
 if [ -z "$_DEVICE" ]; then
 	if [ "x$1" = "xjson" ]; then

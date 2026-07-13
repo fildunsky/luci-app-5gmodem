@@ -42,6 +42,75 @@ detect_at() {
 	return 1
 }
 
+# ModemManager modem index whose USB device path matches a usb topology path
+mm_index_for_path() {
+	[ -n "$1" ] || return 1
+	command -v mmcli >/dev/null 2>&1 || return 1
+	for m in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
+		d=$(mmcli -m "$m" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p' | xargs)
+		case "$d" in */"$1") echo "$m"; return 0 ;; esac
+	done
+	return 1
+}
+
+# cdc-wdm control node of the modem at a usb path
+wdm_for_path() {
+	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null
+}
+
+# ModemManager must run if ANY modem interface uses the modemmanager proto (they
+# need MM). Creating an mbim/qmi/atc interface used to blindly disable MM and
+# thereby break the modemmanager modems -> keep MM's state driven by ALL
+# interfaces, not just the one being created.
+apply_mm_state() {
+	command -v mmcli >/dev/null 2>&1 || return 0
+	if uci show network 2>/dev/null | grep -q "\.proto='modemmanager'"; then
+		/etc/init.d/modemmanager enabled >/dev/null 2>&1 || /etc/init.d/modemmanager enable >/dev/null 2>&1
+		pgrep -f ModemManager >/dev/null 2>&1 || /etc/init.d/modemmanager start >/dev/null 2>&1
+	elif uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
+		# kernel owns the control channel -> MM must be off
+		/etc/init.d/modemmanager stop >/dev/null 2>&1
+		/etc/init.d/modemmanager disable >/dev/null 2>&1
+	fi
+}
+
+# repair a modem's interface: re-point its device to the current node for THIS
+# modem's stable USB path (cdc-wdm / ttyUSB numbers are unstable), then bring it
+# up if the device changed or it is not up. This is what auto-recovers the
+# connection after a reboot / modem swap when the pinned device went stale.
+ensure_iface() {
+	P="$1"; SEC="$2"
+	IF=$(uci -q get "$CFG.$SEC.network")
+	[ -n "$IF" ] || return 0
+	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
+	PROTO=$(uci -q get "network.$IF.proto")
+	CUR=$(uci -q get "network.$IF.device")
+	NEW=""
+	case "$PROTO" in
+		mbim|qmi|xmm|ncm) NEW=$(wdm_for_path "$P") ;;
+		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
+		atc|3g|wwan|ppp)  NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
+		fibocom)          NEW=$(for n in /sys/bus/usb/devices/$P:*/net/*; do [ -e "$n" ] && { basename "$n"; break; }; done) ;;
+	esac
+	CHG=0
+	if [ -n "$NEW" ] && { [ -e "$NEW" ] || [ -d "/sys/class/net/$NEW" ]; } && [ "$NEW" != "$CUR" ]; then
+		uci -q set "network.$IF.device=$NEW"; uci -q commit network; CHG=1
+	fi
+	if [ "$CHG" = 1 ] || ! ifstatus "$IF" 2>/dev/null | grep -q '"up": true'; then
+		ifup "$IF" >/dev/null 2>&1
+	fi
+}
+
+# AT port of the modem at a usb path: fast via ModemManager, else probe its ttys
+at_for_path() {
+	mi=$(mm_index_for_path "$1")
+	if [ -n "$mi" ]; then
+		p=$(mmcli -m "$mi" 2>/dev/null | grep -oE '(ttyUSB[0-9]+|ttyACM[0-9]+) \(at\)' | sed 's/ (at)//' | head -1)
+		[ -n "$p" ] && [ -e "/dev/$p" ] && { echo "/dev/$p"; return 0; }
+	fi
+	detect_at $(modem_ttys "$1")
+}
+
 # make sure a 'modem' section exists for a path; echo its name
 ensure_section() {
 	SEC=$(secname "$1")
@@ -85,12 +154,10 @@ switch)
 
 	SEC=$(ensure_section "$P")
 
-	# AT port: saved one (if still present) wins, else auto-detect among the
-	# modem's own ports so ports of a different modem are never picked.
-	ATP=$(uci -q get "$CFG.$SEC.at_port")
-	if [ -z "$ATP" ] || [ ! -e "$ATP" ]; then
-		ATP=$(detect_at $(modem_ttys "$P"))
-	fi
+	# AT port: always resolve from this modem's OWN current ports (ttyUSB numbers
+	# are not stable, so a saved one may now belong to another modem). Fast via
+	# ModemManager, else probe.
+	ATP=$(at_for_path "$P")
 
 	# apply to the working config. detect.sh (and thus 5gmodem.sh) resolves the
 	# modem port from 5gmodem.device FIRST - so we pin BOTH device and at_port
@@ -121,8 +188,76 @@ switch)
 	printf '{"result":"ok","path":"%s","at_port":"%s","network":"%s"}\n' "$P" "$ATP" "$NET"
 	;;
 
+resolve)
+	# Re-resolve ports/devices for all PRESENT modems by their STABLE USB path.
+	# ttyUSB numbering shifts when a modem is added/removed or on reboot, so a
+	# pinned ttyUSB goes stale ("Bad file descriptor", no data). Run on boot
+	# (coldplug) and on USB hotplug add/remove -> the app self-heals, no manual
+	# re-creation needed.
+	PRESENT=$("$RES/listmodems.sh" | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+
+	# refresh at_port for every present, configured modem
+	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		P=$(uci -q get "$CFG.$SEC.path")
+		[ -n "$P" ] || continue
+		echo " $PRESENT " | grep -q " $P " || continue
+		A=$(at_for_path "$P")
+		[ -n "$A" ] && uci -q set "$CFG.$SEC.at_port=$A"
+	done
+	uci -q commit "$CFG"
+
+	# active modem: if it was unplugged, fall back to the first present one
+	AMP=$(active_path)
+	if [ -z "$AMP" ] || ! echo " $PRESENT " | grep -q " $AMP "; then
+		AMP=$(echo "$PRESENT" | awk '{print $1}')
+		[ -n "$AMP" ] && uci -q set "$CFG.@5gmodem[0].active_modem=$AMP" && uci -q commit "$CFG"
+	fi
+	[ -n "$AMP" ] || { echo '{"result":"no-modems"}'; exit 0; }
+
+	# apply the active modem's fresh AT port to the working config + SMS ports
+	SEC=$(secname "$AMP")
+	ATP=$(uci -q get "$CFG.$SEC.at_port")
+	if [ -n "$ATP" ] && [ -e "$ATP" ]; then
+		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
+		uci -q set "$CFG.@5gmodem[0].device=$ATP"
+		if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+			for k in readport sendport ussdport atport; do uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"; done
+			uci -q commit sms_tool_js
+		fi
+	fi
+
+	# --- recover the connections ---
+	# 1) put ModemManager in the state the modem mix needs (creating an atc/mbim
+	#    interface had disabled MM and taken the modemmanager modems down).
+	apply_mm_state
+	# 2) repair EVERY present modem's interface device (stale after renumbering)
+	#    and bring it up if it is down - so all modems reconnect automatically.
+	for s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		p=$(uci -q get "$CFG.$s.path")
+		[ -n "$p" ] || continue
+		echo " $PRESENT " | grep -q " $p " || continue
+		ensure_iface "$p" "$s"
+	done
+
+	# point the app at the active modem's interface
+	IF=$(uci -q get "$CFG.$SEC.network"); [ -n "$IF" ] && uci -q set "$CFG.@5gmodem[0].network=$IF"
+	uci -q commit "$CFG"
+	rm -f /tmp/modem
+	printf '{"result":"resolved","active":"%s","at_port":"%s"}\n' "$AMP" "$ATP"
+	;;
+
+mmindex)
+	# ModemManager index of the ACTIVE modem (for band/mode targeting)
+	mm_index_for_path "$(active_path)"
+	;;
+
+wdm)
+	# cdc-wdm control node of the ACTIVE modem (for qmicli targeting)
+	wdm_for_path "$(active_path)"
+	;;
+
 *)
-	echo "usage: $0 active|switch <path>|save <path>" >&2
+	echo "usage: $0 active|switch <path>|save <path>|resolve|mmindex|wdm" >&2
 	exit 1
 	;;
 esac

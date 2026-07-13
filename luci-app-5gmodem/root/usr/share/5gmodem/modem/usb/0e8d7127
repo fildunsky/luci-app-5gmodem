@@ -23,6 +23,36 @@ convert_bw() {
   esac
 }
 
+# This FM350-GL firmware's GTCCINFO does NOT carry a band field, so derive the
+# LTE band from the serving EARFCN (E-UTRA DL channel, 3GPP TS 36.101 Table 5.7.3-1).
+earfcn2band() {
+	[ -n "$1" ] || return
+	e=$1
+	if   [ "$e" -le 599 ];   then echo 1
+	elif [ "$e" -le 1199 ];  then echo 2
+	elif [ "$e" -le 1949 ];  then echo 3
+	elif [ "$e" -le 2399 ];  then echo 4
+	elif [ "$e" -le 2649 ];  then echo 5
+	elif [ "$e" -ge 2750 ] && [ "$e" -le 3449 ]; then echo 7
+	elif [ "$e" -ge 3450 ] && [ "$e" -le 3799 ]; then echo 8
+	elif [ "$e" -ge 5010 ] && [ "$e" -le 5179 ]; then echo 12
+	elif [ "$e" -ge 5180 ] && [ "$e" -le 5279 ]; then echo 13
+	elif [ "$e" -ge 5730 ] && [ "$e" -le 5849 ]; then echo 17
+	elif [ "$e" -ge 5850 ] && [ "$e" -le 5999 ]; then echo 18
+	elif [ "$e" -ge 6000 ] && [ "$e" -le 6149 ]; then echo 19
+	elif [ "$e" -ge 6150 ] && [ "$e" -le 6449 ]; then echo 20
+	elif [ "$e" -ge 8040 ] && [ "$e" -le 8689 ]; then echo 25
+	elif [ "$e" -ge 8690 ] && [ "$e" -le 9039 ]; then echo 26
+	elif [ "$e" -ge 9210 ] && [ "$e" -le 9659 ]; then echo 28
+	elif [ "$e" -ge 36200 ] && [ "$e" -le 36349 ]; then echo 34
+	elif [ "$e" -ge 37750 ] && [ "$e" -le 38249 ]; then echo 38
+	elif [ "$e" -ge 38250 ] && [ "$e" -le 38649 ]; then echo 39
+	elif [ "$e" -ge 38650 ] && [ "$e" -le 39649 ]; then echo 40
+	elif [ "$e" -ge 39650 ] && [ "$e" -le 41589 ]; then echo 41
+	elif [ "$e" -ge 41590 ] && [ "$e" -le 43589 ]; then echo 42
+	fi
+}
+
 O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?;+GTCAINFO?")
 
 case "$MODE_NUM" in
@@ -40,22 +70,26 @@ esac
 
 T_MODE=""
 
-T1=$(echo "$O" | grep -A3 '+GTCCINFO:' | grep "1,[49],${COPS_MCC}")
+# serving cell = first GTCCINFO data row (index 1). This firmware's row layout is:
+#   idx,rat,mcc,mnc,TAC(hex),CellID(hex),PCI,EARFCN,,,SINR,-,RSRP,RSRQ
+T1=$(echo "$O" | grep -A3 '+GTCCINFO:' | grep -E "^1,[49]," | head -1)
 if [ -n "$T1" ]; then
   T_RAT=$(echo "$T1" | awk -F, '{print $2}')
   T=$(echo "$T1" | awk -F, '{print $5}')
   if [ -n "$T" ]; then
-    T_DEC=$(printf "%d" "0x$T")
+    T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
     T_HEX=$T
   fi
   T=$(echo "$T1" | awk -F, '{print $7}')
   if [ -n "$T" ]; then
-    EARFCN=$T
+    PCI=$T
   fi
   T=$(echo "$T1" | awk -F, '{print $8}')
   if [ -n "$T" ]; then
-    PCI=$T
+    EARFCN=$T
   fi
+  # band: prefer an explicit field ($9, index+100) if the firmware ever provides
+  # one; otherwise derive it from the EARFCN (this unit leaves $9 empty).
   T=$(echo "$T1" | awk -F, '{print $9}')
   if [ -n "$T" ]; then
     case $T_RAT in
@@ -70,6 +104,13 @@ if [ -n "$T1" ]; then
         PBAND="$(band5g $T)"
         ;;
     esac
+  elif [ "$T_RAT" = "4" ] && [ -n "$EARFCN" ]; then
+    T=$(earfcn2band "$EARFCN")
+    if [ -n "$T" ]; then
+      T_MODE="$(band4g $T)"
+      PBAND="$(band4g $T)"
+      MODE="$MODE $(band4g $T)"
+    fi
   fi
   T=$(echo "$T1" | awk -F, '{print $11}')
   if [ -n "$T" -a "$T" -ne "255" ]; then
@@ -270,7 +311,7 @@ MODELA=$(echo "$OA" | awk -F [:,] '/\+CGMM/{print $2}' | xargs)
 OB=$(sms_tool -d $DEVICE at "AT+CGMI?")
 MODELB=$(echo "$OB" | awk -F [:,] '/\+CGMI/{print $2}' | xargs)
 MODELBCUT=$(echo $MODELB | sed s/"Wireless Inc."//)
-MODEL="$MODELBCUT $MODELA"
+MODEL=$(echo "$MODELBCUT $MODELA" | xargs)
 
 OF=$(sms_tool -d $DEVICE at "AT+GMR?")
 FW=$(echo "$OF" | awk -F[,:] '/\+GMR:/ {print $2}' | xargs)

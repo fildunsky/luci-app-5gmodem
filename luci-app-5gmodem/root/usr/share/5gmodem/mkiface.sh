@@ -49,6 +49,64 @@ if [ -n "$AMP" ]; then
 	WANTWDM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null)
 fi
 
+# --- AT-dialed RNDIS/ECM modems (Fibocom FM350-GL 0e8d:7127 and similar): they
+# expose NO cdc-wdm control channel; data rides a usbnet device (eth*) that we
+# fill via an AT PDP dial. ModemManager cannot enable them (fails with
+# UnexpectedDataValue) and mbim/qmi need a cdc-wdm that does not exist here - so
+# route them to our 'fibocom' netifd proto instead of the mbim fallback below. ---
+if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] || [ "$REQ" = fibocom ]; }; then
+	FNET=""
+	for n in /sys/bus/usb/devices/$AMP:*/net/*; do
+		[ -e "$n" ] || continue
+		FNET=$(basename "$n"); break
+	done
+	if [ -n "$FNET" ]; then
+		OLDAPN=$(uci -q get "network.$IF.apn")
+		uci -q delete "network.$IF" 2>/dev/null
+		uci set "network.$IF=interface"
+		uci set "network.$IF.proto=fibocom"
+		uci set "network.$IF.usbpath=$AMP"
+		uci set "network.$IF.device=$FNET"
+		uci set "network.$IF.apn=${OLDAPN:-internet}"
+		uci set "network.$IF.pdptype=IPV4V6"
+		# secondary uplink by default so (re)creating it never hijacks another
+		# modem's default route; lower the metric in Network > Interfaces to make
+		# it primary.
+		uci set "network.$IF.metric=20"
+		uci commit network
+
+		# add to the 'wan' firewall zone for NAT/forwarding
+		Z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+		if [ -n "$Z" ] && ! uci -q get "firewall.$Z.network" | grep -qw "$IF"; then
+			uci add_list "firewall.$Z.network=$IF"
+			uci commit firewall
+		fi
+
+		# point the app at this interface and remember it for this modem
+		uci -q set "5gmodem.@5gmodem[0].network=$IF"
+		uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
+		if [ -n "$MSEC" ]; then
+			uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
+			uci -q set "5gmodem.$MSEC.network=$IF"
+			uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+		fi
+		uci -q commit 5gmodem
+
+		# SMS/USSD via the AT port - ModemManager cannot manage this modem
+		if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+			uci -q set "sms_tool_js.@sms_tool_js[0].sms_via_mm=0"
+			uci -q set "sms_tool_js.@sms_tool_js[0].ussd_via_mm=0"
+			uci -q commit sms_tool_js
+		fi
+
+		# NOTE: deliberately leave ModemManager as-is (another modem may need it);
+		# the fibocom path uses AT + the usbnet device and does not touch MM.
+		ifup "$IF" >/dev/null 2>&1
+		json created fibocom "$FNET"
+		exit 0
+	fi
+fi
+
 # --- locate the cdc-wdm control node and its driver (this modem's, if known) ---
 DEV=""; DRV=""
 if [ -n "$WANTWDM" ] && [ -c "$WANTWDM" ]; then
@@ -77,19 +135,22 @@ case "$REQ" in
 	*) PROTO="$REQ" ;;
 esac
 
-# --- ModemManager service: on ONLY for the modemmanager proto; every other
-# proto (umbim/uqmi/ncm/xmm/atc/...) drives the modem itself and would fight
-# ModemManager over the control channel, so MM is stopped+disabled. ---
-case "$PROTO" in
-	modemmanager)
-		/etc/init.d/modemmanager enable >/dev/null 2>&1
-		/etc/init.d/modemmanager restart >/dev/null 2>&1
-		;;
-	*)
-		/etc/init.d/modemmanager stop >/dev/null 2>&1
-		/etc/init.d/modemmanager disable >/dev/null 2>&1
-		;;
-esac
+# --- ModemManager service, MULTI-MODEM aware. MM must run if THIS interface OR
+# any EXISTING interface uses the modemmanager proto (they need MM). Only
+# stop+disable MM when nothing needs it and a kernel proto (mbim/qmi) needs the
+# control channel free. Previously this blindly disabled MM for any non-MM proto
+# (e.g. creating an atc interface), which took the OTHER modemmanager modems
+# down. A restart (when MM must run) also clears a wedged MM. ---
+_MM_WANT=0
+[ "$PROTO" = "modemmanager" ] && _MM_WANT=1
+uci show network 2>/dev/null | grep -q "\.proto='modemmanager'" && _MM_WANT=1
+if [ "$_MM_WANT" = "1" ]; then
+	/etc/init.d/modemmanager enable >/dev/null 2>&1
+	/etc/init.d/modemmanager restart >/dev/null 2>&1
+elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
+	/etc/init.d/modemmanager stop >/dev/null 2>&1
+	/etc/init.d/modemmanager disable >/dev/null 2>&1
+fi
 
 # --- AT / serial control port (for serial-based protos) ---
 ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)

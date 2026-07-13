@@ -22,6 +22,9 @@
 #     and only replace the eutran-*/ngran-* portion being targeted.
 
 _DEVICE=/dev/ttyUSB1
+# Multi-modem: read/set bands on the ACTIVE modem, not "any" (with two modems
+# "mmcli -m "$_MMIDX"" hits the wrong one -> both tabs show/set the same bands).
+_MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"
 
@@ -30,7 +33,7 @@ getinfo() {
 }
 
 _mm_current_bands() {
-	mmcli -m any -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs
+	mmcli -m "$_MMIDX" -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs
 }
 
 # returns the modem's full current band list, MINUS any band matching
@@ -56,7 +59,7 @@ _mm_join_pipe() {
 }
 
 getsupportedbands() {
-	mmcli -m any -K 2>/dev/null \
+	mmcli -m "$_MMIDX" -K 2>/dev/null \
 		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
 		| sed -n 's/^eutran-//p' \
 		| xargs
@@ -87,11 +90,11 @@ setbands() {
 	FULL=$(_mm_join_pipe $OTHER)
 	FULL="${FULL}${FULL:+|}${NEW_EUTRAN}"
 
-	mmcli -m any "--set-current-bands=$FULL"
+	mmcli -m "$_MMIDX" "--set-current-bands=$FULL"
 }
 
 getsupportedbands5gnsa() {
-	mmcli -m any -K 2>/dev/null \
+	mmcli -m "$_MMIDX" -K 2>/dev/null \
 		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
 		| sed -n 's/^ngran-//p' \
 		| xargs
@@ -122,5 +125,5 @@ setbands5gnsa() {
 	FULL=$(_mm_join_pipe $OTHER)
 	FULL="${FULL}${FULL:+|}${NEW_NGRAN}"
 
-	mmcli -m any "--set-current-bands=$FULL"
+	mmcli -m "$_MMIDX" "--set-current-bands=$FULL"
 }

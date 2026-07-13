@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# Keep luci-app-5gmodem's ports/interfaces valid across modem add/remove and
+# reboots. ttyUSB / cdc-wdm numbering is NOT stable - when a modem is plugged,
+# unplugged or the router reboots, the numbers shift, and a pinned ttyUSB goes
+# stale ("Bad file descriptor", no metrics). On any modem USB event (and on
+# boot via coldplug) we re-resolve every configured modem's AT port and the
+# active modem's interface device from its STABLE USB topology path.
+#
+# Events come in bursts (a modem exposes several interfaces); we coalesce them
+# with a lock so 'resolve' runs once, a few seconds after things settle.
+
+[ "$ACTION" = "add" ] || [ "$ACTION" = "remove" ] || exit 0
+[ "$DEVTYPE" = "usb_device" ] || exit 0
+
+# only bother for the app if it's configured
+[ -f /etc/config/5gmodem ] || exit 0
+
+mkdir -p /tmp/5gmodem 2>/dev/null
+
+(
+	# first event of a burst grabs the lock and does the work; the rest exit
+	flock -n 9 || exit 0
+	sleep 5
+	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+) 9>/tmp/5gmodem/resolve.lock &
+
+exit 0

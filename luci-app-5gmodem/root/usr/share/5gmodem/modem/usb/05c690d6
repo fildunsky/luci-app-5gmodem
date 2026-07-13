@@ -6,10 +6,16 @@
 # running ModemManager daemon / qmi-proxy (confirmed on this exact
 # unit: ~25ms per mmcli/qmicli call vs ~100-300ms per AT command)
 
+# Multi-modem: target the ACTIVE modem (by USB path), not "any" / the first
+# cdc-wdm - otherwise with two modems mmcli/qmicli read the WRONG modem (bands,
+# signal, everything). Fall back to any / cdc-wdm0 for the single-modem case.
+_MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
+_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null); [ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
+
 _IS_COMPAL=0
 _MM_OK=0
 if command -v mmcli >/dev/null 2>&1; then
-	_MM_K=$(mmcli -m any -K 2>/dev/null)
+	_MM_K=$(mmcli -m "$_MMIDX" -K 2>/dev/null)
 	case "$_MM_K" in
 		*RXMG1*)
 			_IS_COMPAL=1
@@ -95,7 +101,7 @@ if [ "$REGOK" = "1" ]; then
 		if [ "$_QMICLI_OK" = "1" ]; then
 			# --- Carrier aggregation via QMI (richer than +LCAINFO: also
 			# gives PCI/EARFCN/bandwidth per carrier, and activation state) ---
-			OCA=$(qmicli -d /dev/cdc-wdm0 -p --nas-get-lte-cphy-ca-info 2>/dev/null)
+			OCA=$(qmicli -d "$_WDM" -p --nas-get-lte-cphy-ca-info 2>/dev/null)
 
 			# more than one cell block present -> CA is at least configured
 			echo "$OCA" | grep -q "^Secondary Cell" && MODE="LTE-A"
@@ -138,7 +144,7 @@ if [ "$REGOK" = "1" ]; then
 			done
 
 			# --- Signal: RSSI/RSRQ/RSRP/SNR via QMI (PCC) ---
-			OSIG=$(qmicli -d /dev/cdc-wdm0 -p --nas-get-signal-info 2>/dev/null)
+			OSIG=$(qmicli -d "$_WDM" -p --nas-get-signal-info 2>/dev/null)
 			LTEBLOCK=$(echo "$OSIG" | awk '/^LTE:/{f=1; next} /^5G:|^$/{f=0} f')
 			T=$(echo "$LTEBLOCK" | sed -n "s/.*RSSI: '\(-\?[0-9.]*\).*/\1/p")
 			[ -n "$T" ] && RSSI="$T"
@@ -221,7 +227,7 @@ if [ "$REGOK" = "1" ]; then
 		echo " $ATECH " | grep -q " lte "  && HAS_LTE=1
 		echo " $ATECH " | grep -q " 5gnr " && HAS_NR=1
 
-		ORF=$(qmicli -d /dev/cdc-wdm0 -p --nas-get-rf-band-info 2>/dev/null)
+		ORF=$(qmicli -d "$_WDM" -p --nas-get-rf-band-info 2>/dev/null)
 		# all aggregated LTE bands (unique, keep order)
 		LSTR=""
 		for NUM in $(echo "$ORF" | sed -n "s/.*Active Band Class: *'eutran-\([0-9]*\)'.*/\1/p" | awk '!s[$0]++'); do
@@ -254,7 +260,7 @@ if [ "$REGOK" = "1" ]; then
 
 		# Signal (LTE block for NSA anchor; guard so existing values win)
 		if [ -z "$RSRP" ]; then
-			OSIG=$(qmicli -d /dev/cdc-wdm0 -p --nas-get-signal-info 2>/dev/null)
+			OSIG=$(qmicli -d "$_WDM" -p --nas-get-signal-info 2>/dev/null)
 			LB=$(echo "$OSIG" | awk '/^LTE:/{f=1;next} /^5G:|^$/{f=0} f')
 			T=$(echo "$LB" | sed -n "s/.*RSSI: '\(-\?[0-9.]*\).*/\1/p"); [ -n "$T" ] && RSSI="$T"
 			T=$(echo "$LB" | sed -n "s/.*RSRQ: '\(-\?[0-9.]*\).*/\1/p"); [ -n "$T" ] && RSRQ="$T"
