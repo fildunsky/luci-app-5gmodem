@@ -9,4 +9,6 @@ CUSTOMER ➜ AT^CUSTOMER?;AT^CUSTOMER?
 Перезагрузка ➜ AT+CFUN=1,1;AT+CFUN=1,1
 Аггрегации Compal ➜ AT+LCAINFO
 Качество сигнала Compal ➜ AT+CESQ
-Инфа о БС + Сигнал Compal ➜ AT+BINFO;+CESQ
+Инфа о БС + Сигнал Compal ➜ AT+BINFO;AT+CESQ
+Прочитать номер SIM ➜ AT+CPBS="ON";AT+CNUM
+Записать номер на SIM ➜ AT+CSCS="IRA";AT+CPBS="ON";AT+CPBW=1,"+7987654321",145,"Number"

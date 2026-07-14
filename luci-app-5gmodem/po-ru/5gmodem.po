@@ -2146,3 +2146,15 @@ msgstr "Показывать панель «Приоритет интернет�
 
 msgid "3G bands"
 msgstr "Диапазоны 3G"
+
+msgid "5G Modem"
+msgstr "5G модем"
+
+msgid "Carrier aggregation (per component)"
+msgstr "Агрегация несущих (по компонентам)"
+
+msgid "Component"
+msgstr "Компонент"
+
+msgid "Bandwidth"
+msgstr "Полоса"

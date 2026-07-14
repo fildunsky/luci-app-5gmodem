@@ -196,7 +196,11 @@ fi
 
 O=""
 if [ -e /usr/bin/sms_tool ]; then
-	O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?;+CEREG?")
+	# Один round-trip на всё «ядро»: PIN, сигнал, оператор (буквенный+числовой),
+	# CREG/CEREG (с =2, чтобы CEREG отдал TAC), номер (CNUM) и IMSI (CIMI).
+	# Раньше COPS?, CEREG и CIMI дёргались ещё и отдельными вызовами - каждый
+	# лишний AT-сеанс добавлял ~0.5-1 c к загрузке страницы.
+	O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?;+CEREG=2;+CEREG?;+CNUM;+CIMI")
 else
 	O=$(gcom -d $DEVICE -s $RES/info.gcom 2>/dev/null)
 fi
@@ -350,15 +354,27 @@ if [ -z "$COPS" ]; then
 	fi
 fi
 [ -z "$COPS" ] && COPS=$COPS_NUM
+
+# Телефонный номер (MSISDN) из AT+CNUM, если SIM его хранит.
+# Формат: +CNUM: "<alpha>","<number>",<type>[,...]  (type 145 = международный).
+# Берём поле в кавычках, которое похоже на номер (5+ цифр, возможен '+'); alpha в
+# UCS2-hex содержит буквы (E/B/F...) и под шаблон не попадает.
+PHONE=$(echo "$O" | awk -F'"' '/^\+CNUM:/{for(i=1;i<=NF;i++){if($i ~ /^[+]?[0-9][0-9][0-9][0-9][0-9]+$/){print $i; exit}}}')
+if [ -n "$PHONE" ] && [ "${PHONE#+}" = "$PHONE" ]; then
+	echo "$O" | grep '^+CNUM:' | grep -q ',145' && PHONE="+$PHONE"
+fi
+
 case "$COPS" in
     *\ *) 
         COPS=$(echo "$COPS" | awk '{if(NF==2 && tolower($1)==tolower($2)){print $1}else{print $0}}')
         ;;
 esac
 
-isp=$(sms_tool -d "$DEVICE" at "AT+COPS?" | sed -n '2p' | cut -d '"' -f2 | tr -d '\r')
 isp_num="$COPS_MCC $COPS_MNC"
 isp_numws="$COPS_MCC$COPS_MNC"
+# Числовой код оператора уже получен батчем (AT+COPS? формат 2 == COPS_MCC+MNC),
+# отдельный round-trip к модему не нужен. Используем как ключ mccmnc.dat.
+isp="$isp_numws"
 
 case "$COPS" in
     *[!0-9]* | '')
@@ -387,7 +403,8 @@ esac
 # Идентификатор SIM (IMSI) - ключ кэшей оператора/SPN. Без него при горячей
 # замене SIM показывался бы закэшированный старый оператор (поставили Билайн, а
 # светится Т-Мобайл). При смене SIM IMSI меняется -> кэш инвалидируется.
-SIMID=$(sms_tool -d "$DEVICE" at "AT+CIMI" 2>/dev/null | tr -d '\r' | grep -oE '[0-9]{14,16}' | head -1)
+# IMSI уже в батче (+CIMI отдаёт его отдельной строкой из одних цифр).
+SIMID=$(echo "$O" | tr -d '\r' | grep -xE '[0-9]{14,16}' | head -1)
 
 OPCACHE="/tmp/5gmodem_operator"
 if [ -n "$COPS" ] && echo "$COPS" | grep -qE '^[0-9 ]+$'; then
@@ -554,9 +571,10 @@ case "$MODE_NUM" in
 	 *) MODE="-";;
 esac
 
-# TAC
-OTX=$(sms_tool -d $DEVICE at "at+cereg")
-TAC=$(echo "$OTX" | awk -F[,] '/^\+CEREG/ {printf "%s", toupper($3)}' | sed 's/[^A-F0-9]//g')
+# TAC - из CEREG, уже полученного батчем (там включён CEREG=2, поэтому поле TAC
+# присутствует). Отдельный вызов at+cereg убран; к тому же прежний без CEREG=2
+# возвращал "+CEREG: 0,1" без TAC, т.е. tac_hex всегда был пустым.
+TAC=$(echo "$O" | awk -F[,] '/^\+CEREG/ {printf "%s", toupper($3)}' | sed 's/[^A-F0-9]//g')
 if [ "x$TAC" != "x" ]; then
 	TAC_HEX=$(printf %d 0x$TAC)
 else
@@ -631,6 +649,19 @@ IFPROTO=$(uci -q get "network.$SEC.proto")
 # RU", тогда как на SIM записан бренд MVNO "T-Mobile").
 [ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
 
+# MSISDN (номер телефона) - универсальный фолбэк для ВСЕХ модемов. AT+CNUM выше
+# отдаёт номер на AT-модемах; если он пуст, а модем управляется ModemManager
+# (напр. Compal, который на AT+CNUM молчит), берём номер из mmcli own-numbers.
+# Так номер читается везде, где SIM его хранит, независимо от типа модема.
+if [ -z "$PHONE" ] && command -v mmcli >/dev/null 2>&1; then
+	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	if [ -n "$_MI" ]; then
+		PHONE=$(mmcli -m "$_MI" -K 2>/dev/null \
+			| sed -n 's/^modem\.generic\.own-numbers[^:]*:[[:space:]]*//p' \
+			| tr -d ' ' | grep -E '^[+]?[0-9]{5,}$' | head -1)
+	fi
+fi
+
 cat <<EOF
 {
 "ipaddr":"$(sanitize_string "$IPADDR")",
@@ -649,6 +680,7 @@ cat <<EOF
 "csq":"$(sanitize_number "$CSQ")",
 "signal":"$(sanitize_number "$CSQ_PER")",
 "operator_name":"$(sanitize_string "$COPS")",
+"phone":"$(sanitize_string "$PHONE")",
 "operator_mcc":"$(sanitize_string "$COPS_MCC")",
 "operator_mnc":"$(sanitize_string "$COPS_MNC")",
 "location":"$(sanitize_string "$LOC")",
@@ -681,6 +713,10 @@ cat <<EOF
 "s4band":"$(sanitize_string "$S4BAND")",
 "s4pci":"$(sanitize_number "$S4PCI")",
 "s4earfcn":"$(sanitize_number "$S4EARFCN")",
+"s1rsrp":"$(sanitize_number "$S1RSRP")",
+"s2rsrp":"$(sanitize_number "$S2RSRP")",
+"s3rsrp":"$(sanitize_number "$S3RSRP")",
+"s4rsrp":"$(sanitize_number "$S4RSRP")",
 "rsrp":"$(sanitize_number "$RSRP")",
 "rsrq":"$(sanitize_number "$RSRQ")",
 "rssi":"$(sanitize_number "$RSSI")",

@@ -250,6 +250,21 @@ for LINE in $LINES; do
     esac
   fi
 
+  # Per-SCC RSRP (LTE): GTCAINFO SCC field $13 is ALREADY in dBm (255 = n/a).
+  # Field mapping confirmed against modemdata's FM350 (0e8d7127) parser. LTE SCC
+  # rows don't carry per-carrier RSRQ/SINR (modemdata doesn't emit them either);
+  # those exist only for 5G-NSA SCC (via GTCCINFO), added separately below.
+  T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $13}')
+  if [ -n "$T" ] && [ "$T" != "255" ]; then
+    case $IDX in
+      "1") S1RSRP="$T";;
+      "2") S2RSRP="$T";;
+      "3") S3RSRP="$T";;
+      "4") S4RSRP="$T";;
+      *);;
+    esac
+  fi
+
   IDX=$((IDX + 1))
 done
 

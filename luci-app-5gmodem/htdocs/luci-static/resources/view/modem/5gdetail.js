@@ -68,6 +68,41 @@ document.head.append(E('style', {'type': 'text/css'},
   flex: 0 0 auto;
 }
 
+/* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц
+   (fixed + 33% на первую колонку + overflow-wrap:anywhere), иначе ячейки
+   переносятся, высота строки скачет и страница дёргается при обновлении.
+   Одна строка на ячейку -> высота постоянна. */
+#ca-table {
+  table-layout: fixed;
+  width: 100%;
+}
+#ca-table .td, #ca-table .th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  padding: 2px 8px 2px 0;
+}
+/* фиксированные пропорции колонок -> таблица всегда ровно 100% ширины, без
+   горизонтального переполнения (и без появляющегося/пропадающего скролла,
+   который менял высоту на proton2025) */
+#ca-table .td:nth-child(1), #ca-table .th:nth-child(1) { width: 9%; }
+#ca-table .td:nth-child(2), #ca-table .th:nth-child(2) { width: 23%; }
+#ca-table .td:nth-child(3), #ca-table .th:nth-child(3) { width: 12%; }
+#ca-table .td:nth-child(4), #ca-table .th:nth-child(4) { width: 10%; }
+#ca-table .td:nth-child(5), #ca-table .th:nth-child(5) { width: 13%; }
+#ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 11%; }
+
+/* Значение диапазона (pband/SCC) меняет длину при переселении соты
+   (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
+   раскладкой длинное значение переносилось на 2 строки -> высота строки
+   скакала -> страница дёргалась при опросе. Держим значение в одну строку. */
+#pband {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Секции без табличных полос и рамок - как на странице статуса LuCI */
 .tginfo .table,
 .tginfo .table .tr,
@@ -126,6 +161,11 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 .tginfo-status .tginfo-op {
   font-weight: 600;
+}
+.tginfo-status .tginfo-phone {
+  font-size: 85%;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
 }
 .tginfo-info {
   font-size: 92%;
@@ -359,6 +399,97 @@ function updateModeButtons() {
    modemband для этого модема). */
 var bandsOther = [];
 
+/* Показать/скрыть строку-контейнер значения БЕЗ дёрганья высоты страницы при
+   мигании данных. Показываем сразу, как появились данные; прячем только после
+   нескольких подряд пустых опросов. Иначе кратковременный '-' (парсинг у FM350
+   иногда моргает) менял высоту на каждый опрос -> браузер сам скроллил страницу. */
+function setRowVisible(view, hasData) {
+	var tr = view && view.parentNode;
+	if (!tr) { return; }
+	if (hasData) { tr.style.display = ''; tr.removeAttribute('data-empty'); return; }
+	var n = (parseInt(tr.getAttribute('data-empty'), 10) || 0) + 1;
+	tr.setAttribute('data-empty', String(n));
+	if (n >= 3) { tr.style.display = 'none'; }
+}
+
+/* Цвет оценки метрики CA-компонента (пороги как в modemdata). */
+var CA_COLOR = { green: '#2fb885', orange: '#c99a3f', red: '#d95c5c' };
+function caQuality(key, v) {
+	v = parseFloat(v);
+	if (isNaN(v)) { return null; }
+	switch (key) {
+		case 'rsrp': return v >= -80 ? 'green' : (v >= -100 ? 'orange' : 'red');
+		case 'rsrq': return v >= -10 ? 'green' : (v >= -15 ? 'orange' : 'red');
+		case 'sinr': return v >= 20 ? 'green' : (v >= 0 ? 'orange' : 'red');
+		case 'rssi': return v >= -65 ? 'green' : (v >= -85 ? 'orange' : 'red');
+	}
+	return null;
+}
+
+/* Разбить строку диапазона "B7 (2600 MHz) @20 MHz" на {band, bw}. */
+function caSplitBand(s) {
+	s = String(s || '');
+	var p = s.split(' @');
+	return { band: (p[0] || '').trim(), bw: (p[1] || '').trim() };
+}
+
+/* Построить таблицу «CA по компонентам» из уже имеющихся полей json (pband/sNband
+   + метрики serving для PCC). Пер-SCC RSRP/RSRQ/SINR появятся, когда бэкенд начнёт
+   их отдавать (jsonполя sNrsrp/...). Блок прячется, если компонентов нет. */
+function renderCaTable(json) {
+	var tbl = document.getElementById('ca-table');
+	var sec = document.getElementById('ca-comp');
+	if (!tbl) { return; }
+	// Данные по компонентам, разложенные по ключу CC (PCC/SCC1..4).
+	var data = {};
+	var hasPcc = json.pband && json.pband != '-';
+	if (hasPcc) {
+		var p = caSplitBand(json.pband);
+		data['PCC'] = { band: p.band, bw: p.bw, pci: json.pci, earfcn: json.earfcn,
+			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr };
+	}
+	[ '1', '2', '3', '4' ].forEach(function(i) {
+		var b = json['s' + i + 'band'];
+		if (b && b != '-') {
+			var sb = caSplitBand(b);
+			data['SCC' + i] = { band: sb.band, bw: sb.bw,
+				pci: json['s' + i + 'pci'], earfcn: json['s' + i + 'earfcn'],
+				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'], sinr: json['s' + i + 'sinr'] };
+		}
+	});
+	// Видимость блока привязана к ПОДКЛЮЧЕНИЮ (наличию pband), а НЕ к числу
+	// компонентов: переселение соты «одиночная <-> агрегация» блок не трогает,
+	// поэтому высота на опрос не меняется. Прячем только при реальном обрыве
+	// (pband пуст несколько опросов подряд - дебаунс).
+	if (sec) {
+		if (hasPcc) { sec.style.display = ''; sec.removeAttribute('data-empty'); }
+		else {
+			var n = (parseInt(sec.getAttribute('data-empty'), 10) || 0) + 1;
+			sec.setAttribute('data-empty', String(n));
+			if (n >= 3) { sec.style.display = 'none'; }
+		}
+	}
+	var txt = function(v) { return (v != null && v !== '' && v !== '-') ? String(v) : '-'; };
+	var isMetric = { rsrp: 1, rsrq: 1, sinr: 1 };
+	function paintCell(td, key, c) {
+		td.textContent = txt(c[key]);
+		td.style.color = '';
+		td.style.fontWeight = '';
+		if (isMetric[key]) {
+			var col = (c[key] != null && c[key] !== '' && c[key] !== '-') ? caQuality(key, c[key]) : null;
+			if (col) { td.style.color = CA_COLOR[col]; td.style.fontWeight = '600'; }
+		}
+	}
+	// Заполняем ЗАРАНЕЕ нарисованные строки (см. разметку). Строки не создаются
+	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
+	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr' ];
+	tbl.querySelectorAll('tr.ca-row').forEach(function(row) {
+		var c = data[row.getAttribute('data-cc')] || {};
+		var tds = row.querySelectorAll('td');
+		cols.forEach(function(k, j) { if (tds[j + 1]) { paintCell(tds[j + 1], k, c); } });
+	});
+}
+
 function bandLabel(b) {
 	if (b.indexOf('eutran-') == 0) { return 'B' + b.substring(7); }
 	if (b.indexOf('ngran-') == 0) { return 'n' + b.substring(6); }
@@ -401,6 +532,17 @@ function loadBands() {
 			var m = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
 			if (m) { (m[1] == 'supported' ? supported : current).push(m[2]); }
 		});
+		// No bands from mmcli. Distinguish two cases:
+		//  - modem that NEVER exposes bands via mmcli (e.g. Fibocom FM350 under MM):
+		//    fall back to the vendor AT band path (GTACT via bands.sh);
+		//  - modem that normally HAS mmcli bands but is momentarily empty (e.g. the
+		//    Compal while it re-registers after a SIM swap): keep the last-good view,
+		//    do NOT switch to the AT path - otherwise the band block flickers.
+		if (!supported.length) {
+			if (mmcliBandsLoaded) { return; }
+			return loadBandsModemband();
+		}
+		mmcliBandsLoaded = true;
 		// utran (3G) is now managed by its own toggles, so it's NOT part of the
 		// preserved "other" set anymore (only cdma and the like stay untouched).
 		bandsOther = current.filter(function(b) {
@@ -421,6 +563,11 @@ function loadBands() {
    не отдаёт бенды: не под ModemManager, или MM их не показывает). Данные и
    применение - вендорными AT-командами через /usr/share/5gmodem/bands.sh. ---- */
 var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+/* true once mmcli has returned a non-empty band list for the active modem; used
+   to tell a real "no mmcli bands" modem (FM350) from a transient empty (Compal
+   re-registering) so the band block does not flicker. Resets on modem switch
+   because the view fully reloads. */
+var mmcliBandsLoaded = false;
 /* Индекс ACTIVE модема в ModemManager (для управления бендами/режимом при
    нескольких модемах). 'any' - фолбэк для одного модема. Ставится в load(). */
 var mmIdx = 'any';
@@ -462,6 +609,11 @@ function loadBandsModemband() {
 		               (j.supported5gnsa && j.supported5gnsa.length) ||
 		               (j.supported5gsa && j.supported5gsa.length);
 		if (j.error || !hasBands) {
+			// Транзитный пустой ответ (bands.sh иногда конкурирует с опросом метрик
+			// за AT-порт FM350): если бенды уже загружены по modemband-пути, НЕ
+			// сносим блок - иначе строки «Режим сети»/диапазоны моргают на каждый
+			// опрос (и re-reveal их снова показывает).
+			if (bandSource == 'modemband') { return; }
 			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
 			[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
@@ -476,6 +628,9 @@ function loadBandsModemband() {
 		}
 		if (note) { note.style.display = 'none'; }
 		bandSource = 'modemband';
+		// modemband (вендорные AT) не управляет 3G/UTRAN - прячем строку «Диапазоны
+		// 3G», чтобы она не висела пустой и не моргала с re-reveal.
+		var row3g = document.getElementById('bands3gn'); if (row3g) { row3g.style.display = 'none'; }
 
 		var supLte = (j.supported || []).map(function(o) { return o.band; });
 		var supNsa = (j.supported5gnsa || []).map(function(o) { return o.band; });
@@ -1133,9 +1288,11 @@ simDialog: baseclass.extend({
 			       (mmModes.pref || '') == (preferred || '');
 		};
 
-		// Модем не под ModemManager -> пробуем управлять бендами через
-		// modemband (вендорные AT-команды). MM-модемы идут по пути mmcli.
-		if (!mmHasModem) {
+		// Управляем бендами через modemband (вендорные AT-команды), если модем
+		// НЕ под ModemManager, ЛИБО он под MM, но mmcli не отдаёт для него ни
+		// одного бенда (напр. Fibocom FM350 под MM: плагин показывает 0 бендов,
+		// зато GTACT работает). Иначе - путь mmcli.
+		if (!mmHasModem || !mmSup.length) {
 			window.setTimeout(loadBandsModemband, 400);
 		}
 
@@ -1214,6 +1371,8 @@ simDialog: baseclass.extend({
 					var icon, wicon, ticon, t;
 					var wicon = L.resource('icons/cloading.svg');
 					var ticon = L.resource('icons/ctime.svg');
+					var dicon = L.resource('icons/cdown.svg');   // скачивание (rx)
+					var uicon = L.resource('icons/cup.svg');     // загрузка (tx)
 
 					// Мобильные иконки уровня сигнала (цветные "палочки":
 					// красный слабый -> зелёный сильный). Иконки luci
@@ -1250,7 +1409,7 @@ simDialog: baseclass.extend({
 						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' +_('Waiting for connection data...'), wicon, p);
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' + formatDuration(json.conn_time_sec) + ' ' + ' | \u25bc\u202f' + json.rx + ' \u25b2\u202f' + json.tx, ticon, t);
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + formatDuration(json.conn_time_sec) + ' | ' + '<img style="width:15px;height:15px;vertical-align:-2px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:15px;height:15px;vertical-align:-2px" src="' + uicon + '"/>\u202f' + json.tx;
 						}
 					}
 
@@ -1263,6 +1422,16 @@ simDialog: baseclass.extend({
 						view.textContent = checkOperatorName(json.operator_name);
 						}
 						updateSimIcon(json.operator_name);
+					}
+
+					if (document.getElementById('phone')) {
+						var pv = document.getElementById('phone');
+						if (json.phone && String(json.phone).length > 3 && json.phone != '-') {
+							pv.textContent = json.phone;
+							pv.style.display = '';
+						} else {
+							pv.style.display = 'none';
+						}
 					}
 
 					if (document.getElementById('location')) {
@@ -1515,10 +1684,10 @@ simDialog: baseclass.extend({
 						var view = document.getElementById("mccmnc");
 						if (json.operator_mcc == '-' & json.operator_mnc == '-') {
 						view.textContent = '-';
-						view.parentNode.style.display = 'none';
+						setRowVisible(view, false);
 						}
 						else {
-						view.parentNode.style.display = '';
+						setRowVisible(view, true);
 						view.textContent = json.operator_mcc + " " + json.operator_mnc;
 						}
 					}
@@ -1547,17 +1716,17 @@ simDialog: baseclass.extend({
 							if (json.tac_d.length > 1 || json.tac_h.length > 1) {
 							var tac_dh =  json.tac_d + ' (' + json.tac_h + ')';
 									view.textContent = tac_dh;
-									view.parentNode.style.display = '';
+									setRowVisible(view, true);
 							}
 							else {
 								if (json.tac_dec.length > 1 || json.tac_hex.length > 1) {
 									var tac_dh =  json.tac_dec + ' (' + json.tac_hex + ')';
 									view.textContent = tac_dh;
-									view.parentNode.style.display = '';
+									setRowVisible(view, true);
 								}
 								else {
 									view.textContent = '-';
-									view.parentNode.style.display = 'none';
+									setRowVisible(view, false);
 								}
 							}
 					}
@@ -1571,7 +1740,7 @@ simDialog: baseclass.extend({
 						else {
 						cidText = json.cid_dec + ' (' + json.cid_hex + ')';
 						}
-						view.parentNode.style.display = (cidText === '' || cidText === '-') ? 'none' : '';
+						setRowVisible(view, !(cidText === '' || cidText === '-'));
 						// Cell ID -> стандартная кнопка с пином и номером соты,
 						// по клику открывает карту вышек 4cells.ru
 						var url4 = cell4cellsUrl(json);
@@ -1604,73 +1773,10 @@ simDialog: baseclass.extend({
 						}
 					}
 
-					if (document.getElementById('s1band')) {
-						var view = document.getElementById("s1band");
-						if (json.s1band == '-') {
-						view.textContent = '-';
-						view.parentNode.style.display = 'none';
-						}
-						else {
-							view.parentNode.style.display = '';
-							if (json.s1pci.length > 0 && json.s1pci != '-' && json.s1earfcn.length > 0 && json.s1earfcn != '-') {
-								view.textContent = json.s1band + ' | ' + json.s1pci + ' ' + json.s1earfcn;
-							}
-							else {
-								view.textContent = json.s1band;
-							}
-						}
-					}
-					
-					if (document.getElementById('s2band')) {
-						var view = document.getElementById("s2band");
-						if (json.s2band == '-') {
-						view.textContent = '-';
-						view.parentNode.style.display = 'none';
-						}
-						else {
-							view.parentNode.style.display = '';
-							if (json.s2pci.length > 0 && json.s2pci != '-' && json.s2earfcn.length > 0 && json.s2earfcn != '-') {
-								view.textContent = json.s2band + ' | ' + json.s2pci + ' ' + json.s2earfcn;
-							}
-							else {
-								view.textContent = json.s2band;
-							}
-						}
-					}
-					
-					if (document.getElementById('s3band')) {
-						var view = document.getElementById("s3band");
-						if (json.s3band == '-') {
-						view.textContent = '-';
-						view.parentNode.style.display = 'none';
-						}
-						else {
-							view.parentNode.style.display = '';
-							if (json.s3pci.length > 0 && json.s3pci != '-' && json.s3earfcn.length > 0 && json.s3earfcn != '-') {
-								view.textContent = json.s3band + ' | ' + json.s3pci + ' ' + json.s3earfcn;
-							}
-							else {
-								view.textContent = json.s3band;
-							}
-						}
-					}
-					
-					if (document.getElementById('s4band')) {
-						var view = document.getElementById("s4band");
-						if (json.s4band == '-') {
-						view.textContent = '-';
-						view.parentNode.style.display = 'none';
-						}
-						else {
-							view.parentNode.style.display = '';
-							if (json.s4pci.length > 0 && json.s4pci != '-' && json.s4earfcn.length > 0 && json.s4earfcn != '-') {
-								view.textContent = json.s4band + ' | ' + json.s4pci + ' ' + json.s4earfcn;
-							}
-							else {
-								view.textContent = json.s4band;
-							}
-						}
-					}
+					/* Строки SCC1..4 в «Информации о соте» убраны — их показывает
+					   отдельная CA-таблица ниже (стабильнее, без скачков высоты). */
+					/* CA-таблица по компонентам (PCC + активные SCC) */
+					renderCaTable(json);
 					});
 				});	
 
@@ -1737,6 +1843,7 @@ simDialog: baseclass.extend({
 				E('div', { 'class': 'tginfo-status' }, [
 					E('div', { 'id': 'sim', 'class': 'tginfo-reg' }, [ '-' ]),
 					E('div', { 'id': 'operator', 'class': 'tginfo-op' }, [ '-' ]),
+					E('div', { 'id': 'phone', 'class': 'tginfo-phone', 'style': 'display:none' }, [ '' ]),
 					E('div', { 'id': 'location', 'class': 'tginfo-loc' }, [ '-' ]),
 				]),
 
@@ -1972,24 +2079,42 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Primary band (PCC) | PCI & EARFCN')]),
 					E('td', { 'class': 'td left', 'id': 'pband' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC1)')]),
-					E('td', { 'class': 'td left', 'id': 's1band' }, [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC2)')]),
-					E('td', { 'class': 'td left', 'id': 's2band' }, [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC3)')]),
-					E('td', { 'class': 'td left', 'id': 's3band' }, [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC4)')]),
-					E('td', { 'class': 'td left', 'id': 's4band' }, [ '-' ]),
-					]),
+				// Строки «Диапазон CA (SCC1..4)» убраны намеренно: их полностью и
+				// стабильнее показывает отдельная CA-таблица ниже (#ca-table).
+				// Раньше эти строки появлялись/прятались при (де)агрегации и меняли
+				// высоту страницы -> при просмотре снизу её дёргало вверх.
 
 				])
+			]),
+			E('div', { 'class': 'cbi-section tginfo', 'id': 'ca-comp', 'style': 'display:none' }, [
+				E('h3', {}, [ _('Carrier aggregation (per component)') ]),
+				E('table', { 'class': 'table', 'id': 'ca-table' }, [
+					E('tr', { 'class': 'tr table-titles ca-head' }, [
+						E('th', { 'class': 'th left' }, [ 'CC' ]),
+						E('th', { 'class': 'th left' }, [ 'Band' ]),
+						E('th', { 'class': 'th' }, [ 'BW' ]),
+						E('th', { 'class': 'th' }, [ 'PCI' ]),
+						E('th', { 'class': 'th' }, [ 'EARFCN' ]),
+						E('th', { 'class': 'th' }, [ 'RSRP' ]),
+						E('th', { 'class': 'th' }, [ 'RSRQ' ]),
+						E('th', { 'class': 'th' }, [ 'SINR' ]),
+					]),
+				].concat([ 'PCC', 'SCC1', 'SCC2', 'SCC3', 'SCC4' ].map(function(cc) {
+					// Строки рисуются ЗАРАНЕЕ и с прочерками, а опрос лишь заполняет
+					// ячейки. Строки НИКОГДА не добавляются/не удаляются, поэтому
+					// высота таблицы постоянна и страницу внизу не дёргает при
+					// переселении соты (единичная <-> агрегация). Как в 3ginfo-lite.
+					return E('tr', { 'class': 'tr ca-row', 'data-cc': cc }, [
+						E('td', { 'class': 'td left' }, [ cc ]),
+						E('td', { 'class': 'td left' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+					]);
+				})))
 			])
 			]);
 		}, o, this);

@@ -44,6 +44,11 @@ chmod +x "$${IPKG_INSTROOT}"/usr/share/5gmodem/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/lib/netifd/proto/fibocom.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/uci-defaults/*.sh 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
+[ -n "$${IPKG_INSTROOT}" ] || {
+	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
+	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
+}
 if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
 	mkdir -p "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n"
 	cp "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" \

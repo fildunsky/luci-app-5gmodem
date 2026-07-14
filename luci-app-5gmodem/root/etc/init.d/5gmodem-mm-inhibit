@@ -1,0 +1,19 @@
+#!/bin/sh /etc/rc.common
+# Keeps ModemManager off kernel-proto modems where udev-ignore can't work
+# (libudev-zero). See /usr/share/5gmodem/mm-inhibit.sh.
+
+START=95
+USE_PROCD=1
+
+start_service() {
+	procd_open_instance
+	procd_set_param command /usr/share/5gmodem/mm-inhibit.sh
+	procd_set_param respawn
+	procd_set_param stdout 0
+	procd_set_param stderr 0
+	procd_close_instance
+}
+
+stop_service() {
+	/usr/share/5gmodem/mm-inhibit.sh stop 2>/dev/null
+}
