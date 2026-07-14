@@ -2,10 +2,13 @@
 
 A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite), [`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js) and some pieces of `modemband` into a single app.
 
-![Screenshot](https://github.com/user-attachments/assets/d53b7a96-3a25-4198-b29d-5c1d9464e7c3)
+
+<img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-43-48" src="https://github.com/user-attachments/assets/5f9f9a63-a3c9-44a1-8f0f-4625b20c90a5" />
+<img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-44-54" src="https://github.com/user-attachments/assets/f14f264f-ef81-47b0-8f79-bb7c6982ac55" />
 
 ## Features
 
+- **Dual modem mode and uplink switcher** 
 - **Network** — signal level, operator, registration state, technology with carrier aggregation (e.g. `LTE-A | B1 + B40 / B7 / B3`), interface IPv4/IPv6, connection statistics and modem temperature (when the modem reports it).
 - **Band & mode management** — pick the network mode (Auto / 2G / 3G / 4G / 4G+5G / 5G) and toggle individual LTE/NR bands via ModemManager (`mmcli`).
 - **TTL fixing** — force incoming/outgoing IPv4 TTL and IPv6 hop-limit on the modem interface (via an `nftables` include in `fw4`).
