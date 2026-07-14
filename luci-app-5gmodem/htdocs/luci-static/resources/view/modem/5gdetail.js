@@ -86,12 +86,13 @@ document.head.append(E('style', {'type': 'text/css'},
 /* фиксированные пропорции колонок -> таблица всегда ровно 100% ширины, без
    горизонтального переполнения (и без появляющегося/пропадающего скролла,
    который менял высоту на proton2025) */
-#ca-table .td:nth-child(1), #ca-table .th:nth-child(1) { width: 9%; }
-#ca-table .td:nth-child(2), #ca-table .th:nth-child(2) { width: 23%; }
-#ca-table .td:nth-child(3), #ca-table .th:nth-child(3) { width: 12%; }
-#ca-table .td:nth-child(4), #ca-table .th:nth-child(4) { width: 10%; }
-#ca-table .td:nth-child(5), #ca-table .th:nth-child(5) { width: 13%; }
-#ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 11%; }
+#ca-table .td:nth-child(1), #ca-table .th:nth-child(1) { width: 7%; }
+#ca-table .td:nth-child(2), #ca-table .th:nth-child(2) { width: 19%; }
+#ca-table .td:nth-child(3), #ca-table .th:nth-child(3) { width: 10%; }
+#ca-table .td:nth-child(4), #ca-table .th:nth-child(4) { width: 8%; }
+#ca-table .td:nth-child(5), #ca-table .th:nth-child(5) { width: 10%; }
+#ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 9%; }
+#ca-table .td:nth-child(10), #ca-table .th:nth-child(10) { width: 10%; }
 
 /* Значение диапазона (pband/SCC) меняет длину при переселении соты
    (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
@@ -446,7 +447,8 @@ function renderCaTable(json) {
 	if (hasPcc) {
 		var p = caSplitBand(json.pband);
 		data['PCC'] = { band: p.band, bw: p.bw, pci: json.pci, earfcn: json.earfcn,
-			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr };
+			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr,
+			mimo: json.pmimo, mod: json.pmod };
 	}
 	[ '1', '2', '3', '4' ].forEach(function(i) {
 		var b = json['s' + i + 'band'];
@@ -454,7 +456,8 @@ function renderCaTable(json) {
 			var sb = caSplitBand(b);
 			data['SCC' + i] = { band: sb.band, bw: sb.bw,
 				pci: json['s' + i + 'pci'], earfcn: json['s' + i + 'earfcn'],
-				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'], sinr: json['s' + i + 'sinr'] };
+				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'], sinr: json['s' + i + 'sinr'],
+				mimo: json['s' + i + 'mimo'], mod: json['s' + i + 'mod'] };
 		}
 	});
 	// Видимость блока привязана к ПОДКЛЮЧЕНИЮ (наличию pband), а НЕ к числу
@@ -482,7 +485,7 @@ function renderCaTable(json) {
 	}
 	// Заполняем ЗАРАНЕЕ нарисованные строки (см. разметку). Строки не создаются
 	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
-	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr' ];
+	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr', 'mimo', 'mod' ];
 	tbl.querySelectorAll('tr.ca-row').forEach(function(row) {
 		var c = data[row.getAttribute('data-cc')] || {};
 		var tds = row.querySelectorAll('td');
@@ -770,6 +773,13 @@ function refreshModeButtons(mmK) {
 function revealMgmtWhenReady(tries) {
 	var row = document.getElementById('modeswn');
 	if (!row || row.style.display != 'none') { return; }
+	// Блок частот уже инициализирован вендорным путём (bands.sh/GTACT) - строка
+	// «Режим сети» скрыта ОСОЗНАННО (модем не отдаёт CNMP-режимы). Не лезем в
+	// mmcli: у модема вне MM (напр. инхибированный FM350) mmIdx='any' попадает в
+	// ЧУЖОЙ модем (Compal), и выходил цикл на каждый опрос: reveal показывал
+	// строку с чужими кнопками -> loadBandsModemband прятал -> высота страницы
+	// прыгала (тот самый скролл-баг).
+	if (bandSource == 'modemband') { return; }
 	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(mmK) {
 		if (!/current-modes/.test(mmK)) {
 			// mmcli ещё не готов (модем под MM поднимается): повторяем
@@ -1177,6 +1187,18 @@ simDialog: baseclass.extend({
 				]);
 			};
 
+			// Тип SIM (USIM/eSIM) и переключатель слотов - строки скрыты и
+			// заполняются асинхронно из simslot.sh (AT+SIMTYPE / AT+GTDUALSIM
+			// либо mmcli sim-slots). Кнопки появляются, только если слотов >= 2.
+			var typeRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
+				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM type') ]),
+				E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; user-select:text;', 'id': 'simslot-type' }, [ '-' ]),
+			]);
+			var slotRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
+				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM slot') ]),
+				E('td', { 'class': 'td left', 'style': 'padding:8px 0;', 'id': 'simslot-btns' }, [ '' ]),
+			]);
+
 			ui.showModal(this.title, [
 				E('div', { 'class': 'cbi-section' }, [
 					E('div', { 'class': 'cbi-section-descr' }, this.description),
@@ -1184,6 +1206,8 @@ simDialog: baseclass.extend({
 						simRow(_('SIM IMSI'), json.imsi),
 						simRow(_('SIM ICCID'), json.iccid),
 						simRow(_('Modem IMEI'), json.imei),
+						typeRow,
+						slotRow,
 					]),
 				]),
 				E('div', { 'class': 'right' }, [
@@ -1193,6 +1217,43 @@ simDialog: baseclass.extend({
 					}, _('Close')),
 				]),
 			]);
+
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+				var st = {};
+				try { st = JSON.parse(out) || {}; } catch (e) { return; }
+				if (st.type) {
+					var tc = document.getElementById('simslot-type');
+					if (tc) { tc.textContent = st.type; typeRow.style.display = ''; }
+				}
+				if (st.slots && st.slots.length >= 2) {
+					var bc = document.getElementById('simslot-btns');
+					if (!bc) { return; }
+					bc.innerHTML = '';
+					st.slots.forEach(function(s) {
+						var on = (String(st.active) === String(s.id));
+						bc.appendChild(E('button', {
+							'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+							'style': 'margin-right:6px',
+							'click': function(ev) {
+								ev.preventDefault();
+								if (on) { return; }   // уже активный
+								ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
+								fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
+									ui.hideModal();
+									var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
+									if (ui.addTimeLimitedNotification) {
+										ui.addTimeLimitedNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), 6000, ok ? 'info' : 'error');
+									} else {
+										ui.addNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), ok ? 'info' : 'error');
+									}
+									if (!poll.active()) poll.start();
+								}).catch(function() { ui.hideModal(); });
+							}
+						}, s.label));
+					});
+					slotRow.style.display = '';
+				}
+			});
 		},
 
 		handleDissmis: function(ev) {
@@ -1481,16 +1542,23 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('mode')) {
 						var view = document.getElementById("mode");
-						if (!json.mode.length > 1) {
-						view.textContent = '-';
+						var mv = String(json.mode || '').trim();
+						if (mv && mv != '-') {
+							// валидный режим -> показать (частоты в скобках отдельным span)
+							var mtext = mv.replace(/[&<>]/g, function(c) {
+								return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
+							});
+							view.innerHTML = mtext.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
 						}
-						else {
-						// частоты в скобках -> отдельный span (не жирный)
-						var mtext = json.mode.replace(/[&<>]/g, function(c) {
-							return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
-						});
-						view.innerHTML = mtext.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
+						else if (!view.textContent || !view.textContent.trim()) {
+							// ещё не было валидного значения -> стабильный placeholder,
+							// а НЕ пустая строка (пустой div схлопывался -> шапка меняла
+							// высоту и дёргала страницу внизу при флапе модема).
+							view.textContent = '-';
 						}
+						// иначе: пустой/«-» опрос при переподключении модема ИГНОРИРУЕМ и
+						// оставляем последнее валидное значение (строка «липкая», высота
+						// шапки постоянна -> нет мигания и скачков скролла).
 					}
 
 					if (document.getElementById('modemip')) {
@@ -2098,6 +2166,8 @@ simDialog: baseclass.extend({
 						E('th', { 'class': 'th' }, [ 'RSRP' ]),
 						E('th', { 'class': 'th' }, [ 'RSRQ' ]),
 						E('th', { 'class': 'th' }, [ 'SINR' ]),
+						E('th', { 'class': 'th' }, [ 'MIMO' ]),
+						E('th', { 'class': 'th' }, [ 'Mod' ]),
 					]),
 				].concat([ 'PCC', 'SCC1', 'SCC2', 'SCC3', 'SCC4' ].map(function(cc) {
 					// Строки рисуются ЗАРАНЕЕ и с прочерками, а опрос лишь заполняет
@@ -2107,6 +2177,8 @@ simDialog: baseclass.extend({
 					return E('tr', { 'class': 'tr ca-row', 'data-cc': cc }, [
 						E('td', { 'class': 'td left' }, [ cc ]),
 						E('td', { 'class': 'td left' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td' }, [ '-' ]),
 						E('td', { 'class': 'td' }, [ '-' ]),
 						E('td', { 'class': 'td' }, [ '-' ]),
 						E('td', { 'class': 'td' }, [ '-' ]),

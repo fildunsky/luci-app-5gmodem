@@ -23,6 +23,20 @@ convert_bw() {
   esac
 }
 
+# Модуляция из GTCAINFO (<dl_modulation>/<ul_modulation>, мануал 11.1.16):
+# 0 BPSK, 1 QPSK, 2 16QAM, 3 64QAM, 4 256QAM, 5 1024QAM, 6 UNKNOWN.
+convert_mod() {
+  case "${1}" in
+    "0") echo "BPSK";;
+    "1") echo "QPSK";;
+    "2") echo "16QAM";;
+    "3") echo "64QAM";;
+    "4") echo "256QAM";;
+    "5") echo "1024QAM";;
+    *) echo "";;
+  esac
+}
+
 # This FM350-GL firmware's GTCCINFO does NOT carry a band field, so derive the
 # LTE band from the serving EARFCN (E-UTRA DL channel, 3GPP TS 36.101 Table 5.7.3-1).
 earfcn2band() {
@@ -70,8 +84,13 @@ esac
 
 T_MODE=""
 
-# serving cell = first GTCCINFO data row (index 1). This firmware's row layout is:
-#   idx,rat,mcc,mnc,TAC(hex),CellID(hex),PCI,EARFCN,,,SINR,-,RSRP,RSRQ
+# serving cell = first GTCCINFO data row (index 1). Row layout per the FM350
+# AT manual (V2.10, 11.1.15), подтверждено живым выводом (EARFCN=3400 у B7,
+# PCI=366 <= 503):
+#   idx,rat,mcc,mnc,TAC(hex),CellID(hex),EARFCN,PCI,band,bw,SINR,rxlev,RSRP,RSRQ
+# ВАЖНО: в унаследованном коде $7/$8 были перепутаны (PCI<->EARFCN). Из-за
+# этого при пустом GTCAINFO (RRC idle) fallback считал бэнд из PCI как из
+# EARFCN и pband прыгал (B1<->B3) на каждый переход idle<->active.
 T1=$(echo "$O" | grep -A3 '+GTCCINFO:' | grep -E "^1,[49]," | head -1)
 if [ -n "$T1" ]; then
   T_RAT=$(echo "$T1" | awk -F, '{print $2}')
@@ -82,11 +101,11 @@ if [ -n "$T1" ]; then
   fi
   T=$(echo "$T1" | awk -F, '{print $7}')
   if [ -n "$T" ]; then
-    PCI=$T
+    EARFCN=$T
   fi
   T=$(echo "$T1" | awk -F, '{print $8}')
   if [ -n "$T" ]; then
-    EARFCN=$T
+    PCI=$T
   fi
   # band: prefer an explicit field ($9, index+100) if the firmware ever provides
   # one; otherwise derive it from the EARFCN (this unit leaves $9 empty).
@@ -159,6 +178,17 @@ for LINE in $LINES; do
   T_PCI=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $3}')
   T_EARFCN=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $4}')
   T_DBW=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $5}')
+  # PCC: у ЭТОЙ прошивки на одно поле больше, чем в мануале (лишний ul_bw):
+  #   band,pci,earfcn,dl_bw,ul_bw,dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp
+  # (живой пример: PCC:107,366,3400,50,50,1,1,1,1,-104). Значит слои MIMO
+  # (DL) = $7, модуляция (DL) = $9. MIMO валиден только в 1..4 (0/255 = нет
+  # передачи) - иначе прочерк и для MIMO, и для модуляции.
+  T_MIMO=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $7}')
+  T_MOD=$(convert_mod "$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $9}')")
+  case "$T_MIMO" in
+    1|2|3|4) ;;
+    *) T_MIMO=""; T_MOD="";;
+  esac
 
   if [ -n "$T_BAND" ]; then
     DBW=""
@@ -168,16 +198,20 @@ for LINE in $LINES; do
 
     if [ "$T_BAND" -lt "200" ]; then
       T_BAND=$((T_BAND - 100))
-      T_4G_MODE="$(band4g ${T_BAND}) + "      
+      T_4G_MODE="$(band4g ${T_BAND}) + "
       T_4G_PBAND="$(band4g ${T_BAND})${DBW}"
       T_4G_PCI="$T_PCI"
       T_4G_EARFCN="$T_EARFCN"
+      T_4G_MIMO="$T_MIMO"
+      T_4G_MOD="$T_MOD"
     elif [ "$T_BAND" -gt "500" ]; then
       T_BAND=$(echo "$T_BAND" | sed 's/^50//')
-      T_5G_MODE="$(band5g ${T_BAND}) + "      
+      T_5G_MODE="$(band5g ${T_BAND}) + "
       T_5G_PBAND="$(band5g ${T_BAND})${DBW}"
       T_5G_PCI="$T_PCI"
       T_5G_EARFCN="$T_EARFCN"
+      T_5G_MIMO="$T_MIMO"
+      T_5G_MOD="$T_MOD"
     fi
   fi
 
@@ -188,10 +222,14 @@ if [ -n "$T_4G_PBAND" ]; then
   PBAND="$T_4G_PBAND"
   PCI="$T_4G_PCI"
   EARFCN="$T_4G_EARFCN"
+  PMIMO="$T_4G_MIMO"
+  PMOD="$T_4G_MOD"
 elif [ -n "$T_5G_PBAND" ]; then
   PBAND="$T_5G_PBAND"
   PCI="$T_5G_PCI"
   EARFCN="$T_5G_EARFCN"
+  PMIMO="$T_5G_MIMO"
+  PMOD="$T_5G_MOD"
 fi
 
 
@@ -264,6 +302,24 @@ for LINE in $LINES; do
       *);;
     esac
   fi
+
+  # SCC ровно по мануалу (11.1.16): state,ul_cfg,band,pci,earfcn,dl_bw,ul_bw,
+  # dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp -> MIMO (DL) = $9, модуляция (DL) = $11.
+  # mimo=0/255 значит "по SCC сейчас ничего не передаётся" (простой) - тогда
+  # прочерк и для MIMO, и для модуляции (mod=0/BPSK там просто заглушка).
+  T_SMIMO=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $9}')
+  case "$T_SMIMO" in
+    1|2|3|4)
+      T_SMOD=$(convert_mod "$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $11}')")
+      case $IDX in
+        "1") S1MIMO="$T_SMIMO"; S1MOD="$T_SMOD";;
+        "2") S2MIMO="$T_SMIMO"; S2MOD="$T_SMOD";;
+        "3") S3MIMO="$T_SMIMO"; S3MOD="$T_SMOD";;
+        "4") S4MIMO="$T_SMIMO"; S4MOD="$T_SMOD";;
+        *);;
+      esac
+      ;;
+  esac
 
   IDX=$((IDX + 1))
 done

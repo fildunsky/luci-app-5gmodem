@@ -100,22 +100,35 @@ proto_fibocom_setup() {
 		return 1
 	fi
 
-	# define the APN
-	sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
-
-	# activate the PDP context and read the assigned IPv4 from CGPADDR, retrying
-	# a few times: right after a network restart / modem swap the context can
-	# take a moment to come up, and a single try would leave the interface down
-	# until netifd happens to retry.
+	# FAST PATH: if the PDP context is ALREADY active with a valid address, reuse
+	# it instead of re-dialing. netifd calls teardown+setup on any reconfigure -
+	# e.g. a route-metric change from the WAN-priority switcher, or a spurious
+	# reload - and a cold re-dial tore the data session for ~30-60 s every time we
+	# switched TO this modem. Together with the teardown that no longer releases
+	# the context, a priority switch becomes instant and lossless (we just
+	# re-publish the IP/route with the new metric).
 	local ip="" try
-	for try in 1 2 3 4 5 6; do
-		sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
-		sleep 2
+	if sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
-		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && break
-		ip=""
-	done
+		[ "$ip" = "0.0.0.0" ] && ip=""
+	fi
+
+	# COLD DIAL: define the APN, activate the PDP context and read the assigned
+	# IPv4 from CGPADDR, retrying a few times - right after a modem swap / USB
+	# re-enumeration the context needs a moment, and a single try would leave the
+	# interface down until netifd happens to retry.
+	if [ -z "$ip" ]; then
+		sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
+		for try in 1 2 3 4 5 6; do
+			sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
+			sleep 2
+			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
+				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
+			[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && break
+			ip=""
+		done
+	fi
 	if [ -z "$ip" ]; then
 		proto_notify_error "$interface" NO_IP_ADDRESS
 		proto_block_restart "$interface"
@@ -145,14 +158,14 @@ proto_fibocom_setup() {
 
 proto_fibocom_teardown() {
 	local interface="$1"
-	local usbpath atport
-	json_get_vars usbpath atport
 
-	# release the PDP context so "interface down" really means data off
-	local dial="$atport"
-	[ -z "$dial" ] && [ -n "$usbpath" ] && dial=$(_fibocom_atport "$usbpath" "$(uci -q get 5gmodem.@5gmodem[0].at_port)")
-	[ -n "$dial" ] && sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
-
+	# NOTE: we deliberately do NOT deactivate the PDP context here. netifd calls
+	# teardown+setup on any interface reconfigure (notably a route-metric change
+	# from the WAN-priority switcher); releasing the context (AT+CGACT=0,1) each
+	# time tore the data session and forced a slow re-dial. Leaving the bearer up
+	# lets setup's fast path reuse it, so switching priority is instant and
+	# lossless. The bearer costs nothing while the interface is down (no route, no
+	# traffic); a true disconnect happens on USB re-enumeration / modem controls.
 	proto_init_update "*" 0
 	proto_send_update "$interface"
 }

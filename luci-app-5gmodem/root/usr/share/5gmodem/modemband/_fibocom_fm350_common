@@ -1,6 +1,39 @@
 # Unified for NSA/SA
 _DEFAULT_5G_BANDS="1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79"
 
+# --- Режим сети через AT+GTACT (первый параметр <rat>) --------------------
+# По мануалу FM350 (AT Commands V2.10, 11.1.14): 1=UMTS, 2=LTE, 4=LTE/UMTS,
+# 10=Automatic, 14=NR, 16=NR/WCDMA, 17=NR/LTE, 20=NR/WCDMA/LTE.
+# PreferredAct (2-й/3-й параметры): 2=WCDMA, 3=LTE, 6=NR - должны входить в
+# выбранный <rat>, поэтому подбираются под него. Список бендов (хвост GTACT?)
+# при смене режима сохраняем как есть.
+getsupportedmodes() {
+    echo "20:Auto 1:3G 4:3G+4G 2:4G 17:4G+5G 14:5G"
+}
+
+getmode() {
+    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
+    echo "$O" | awk -F[:,] '/^\+GTACT:/{gsub(/ /,"",$2); print $2; exit}'
+}
+
+setmode() {
+    M="$1"
+    case "$M" in
+        ''|*[!0-9]*) return ;;
+    esac
+    # Шлём ТОЛЬКО rat (+преференции для мульти-RAT). Список бендов НЕ передаём:
+    # модем сам подставляет разрешённые бенды под включённые RAT (проверено:
+    # GTACT=2 убирает UMTS-бенды, GTACT=20,6,3 возвращает полный список), а
+    # команда с явным списком чужих для rat бендов отвергается (CME).
+    case "$M" in
+        20|17) A="$M,6,3" ;;   # NR приоритетнее, затем LTE
+        16)    A="$M,6,2" ;;
+        4)     A="$M,3,2" ;;
+        *)     A="$M" ;;
+    esac
+    sms_tool -d $_DEVICE at "AT+GTACT=$A"
+}
+
 getinfo() {
   O=$(sms_tool -d $_DEVICE at "AT+CGMM?")
   _NAME="Fibocom $(echo "$O" | awk -F[:,] '/^\+CGMM:/{gsub("\"","");print $2}' | xargs)"

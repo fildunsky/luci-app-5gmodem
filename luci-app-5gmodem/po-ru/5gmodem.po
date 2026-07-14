@@ -2158,3 +2158,18 @@ msgstr "Компонент"
 
 msgid "Bandwidth"
 msgstr "Полоса"
+
+msgid "SIM type"
+msgstr "Тип SIM"
+
+msgid "SIM slot"
+msgstr "SIM-слот"
+
+msgid "Switching SIM slot..."
+msgstr "Переключение SIM-слота..."
+
+msgid "SIM slot switched: %s"
+msgstr "SIM-слот переключён: %s"
+
+msgid "SIM slot switch failed"
+msgstr "Не удалось переключить SIM-слот"
