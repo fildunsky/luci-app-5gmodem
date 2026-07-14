@@ -86,12 +86,15 @@ install)
 			[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; return; }
 			case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
 
+			PREV=$(installed_version "$PM")
+
+			# The Russian translation is now BUNDLED into the main package (its .lmo
+			# is deployed by the package's postinst), so it is no longer downloaded
+			# here. Other languages stay as separate packages, unaffected.
 			INSTALLED=""
-			for BASE in "$PKG" "$I18N"; do
+			for BASE in "$PKG"; do
 				URL=$(asset_url "$BASE" "$EXT")
 				if [ -z "$URL" ]; then
-					# the translation is optional; only the app is mandatory
-					[ "$BASE" = "$I18N" ] && continue
 					echo '{"success":false,"error":"Release asset for '"$BASE"' not found"}'; return
 				fi
 				F="$TMP/$BASE.$EXT"
@@ -108,9 +111,29 @@ install)
 				INSTALLED="$INSTALLED $BASE"
 			done
 
+			# Retire the obsolete standalone luci-i18n-5gmodem-ru left over from
+			# older installs (the app now carries the Russian .lmo itself). Best
+			# effort - a no-op if it isn't installed. Removing it also deletes the
+			# .lmo it used to own, so re-deploy the bundled copy right after.
+			case "$PM" in
+				apk)  apk del "$I18N" >/dev/null 2>&1 ;;
+				opkg) opkg remove "$I18N" >/dev/null 2>&1 ;;
+			esac
+			[ -f /usr/share/5gmodem/i18n/5gmodem.ru.lmo ] && \
+				cp /usr/share/5gmodem/i18n/5gmodem.ru.lmo \
+					/usr/lib/lua/luci/i18n/5gmodem.ru.lmo 2>/dev/null
+
 			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
 			CUR=$(installed_version "$PM")
-			printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+			# Verify the version actually changed. opkg/apk return 0 even when the
+			# downloaded package has the SAME version as installed (e.g. a release
+			# whose asset was built/labelled with an OLD version) - which used to
+			# report a silent "success" while nothing changed. Surface that.
+			if [ -n "$PREV" ] && [ "$CUR" = "$PREV" ]; then
+				printf '{"success":false,"current":"%s","error":"Reinstalled but version stayed %s - the release asset looks mispackaged (rebuild/reupload it)"}\n' "$(json_esc "$CUR")" "$(json_esc "$CUR")"
+			else
+				printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+			fi
 		}
 		# write to a temp file and move into place only when done, so
 		# 'status' can tell "running" (no final file yet) from "finished"

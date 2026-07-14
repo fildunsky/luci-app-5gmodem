@@ -38,14 +38,23 @@ function vendor(m) {
 	var vid = String((m && m.vidpid) || '').split(':')[0].toLowerCase();
 	var map = {
 		'1bc7': 'Telit', '2c7c': 'Quectel', '2cb7': 'Fibocom',
-		'1e2d': 'Cinterion', '12d1': 'Huawei', '19d2': 'ZTE',
+		'0e8d': 'Fibocom', '1e2d': 'Cinterion', '12d1': 'Huawei', '19d2': 'ZTE',
 		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell', '05c6': 'Compal'
 	};
 	return map[vid] || '';
 }
 
-function label(m, i) {
+/* clean up the raw USB product string into a readable model. The Compal exposes
+   only "VOS_5G"/"RXMG1" in its descriptor - show the marketed model instead, to
+   match the "Compal RXM-G1" name used in the info-page header. */
+function modelName(m) {
 	var p = (m && m.product) ? String(m.product).trim() : '';
+	if (/^(VOS_5G|RXMG1|RXM-G1)$/i.test(p)) { return 'RXM-G1'; }
+	return p;
+}
+
+function label(m, i) {
+	var p = modelName(m);
 	var v = vendor(m);
 	var generic = (!p || /^android$/i.test(p) || /^usb/i.test(p) || (/modem/i.test(p) && p.length < 6));
 	if (generic) { return v ? (v + ' ' + _('modem')) : _('Modem %d').format(i + 1); }

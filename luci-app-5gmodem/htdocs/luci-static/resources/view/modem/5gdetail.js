@@ -4,6 +4,7 @@
 'require fs';
 'require view';
 'require view.modem.modemtabs as modemtabs';
+'require view.modem.netpri as netpri';
 'require ui';
 'require uci';
 'require poll';
@@ -28,6 +29,7 @@ document.head.append(E('style', {'type': 'text/css'},
 
 /* Кнопки диапазонов - строго одинаковой ширины (фиксированная, а не
    min-width, иначе 3-символьные шире 2-символьных), стандартной высоты */
+#bands-3g .cbi-button,
 #bands-lte .cbi-button,
 #bands-nr .cbi-button {
   width: 3.4em;
@@ -360,6 +362,7 @@ var bandsOther = [];
 function bandLabel(b) {
 	if (b.indexOf('eutran-') == 0) { return 'B' + b.substring(7); }
 	if (b.indexOf('ngran-') == 0) { return 'n' + b.substring(6); }
+	if (b.indexOf('utran-') == 0) { return 'B' + b.substring(6); }
 	return b;
 }
 
@@ -381,11 +384,11 @@ function buildBandButtons(supported, current, prefix) {
 	});
 }
 
-function renderBandToggles(contId, bands, current) {
+function renderBandToggles(contId, bands, current, prefix) {
 	var cont = document.getElementById(contId);
 	if (!cont) { return; }
 	cont.innerHTML = '';
-	buildBandButtons(bands, current, bands.length && bands[0].indexOf('ngran-') == 0 ? 'ngran-' : 'eutran-').forEach(function(btn) {
+	buildBandButtons(bands, current, prefix).forEach(function(btn) {
 		cont.appendChild(btn);
 	});
 }
@@ -398,12 +401,19 @@ function loadBands() {
 			var m = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
 			if (m) { (m[1] == 'supported' ? supported : current).push(m[2]); }
 		});
+		// utran (3G) is now managed by its own toggles, so it's NOT part of the
+		// preserved "other" set anymore (only cdma and the like stay untouched).
 		bandsOther = current.filter(function(b) {
-			return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0;
+			return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0 && b.indexOf('utran-') != 0;
 		});
 		var numsort = function(a, b) { return parseInt(a.replace(/\D+/g, ''), 10) - parseInt(b.replace(/\D+/g, ''), 10); };
-		renderBandToggles('bands-lte', supported.filter(function(b) { return b.indexOf('eutran-') == 0; }).sort(numsort), current);
-		renderBandToggles('bands-nr', supported.filter(function(b) { return b.indexOf('ngran-') == 0; }).sort(numsort), current);
+		var utran = supported.filter(function(b) { return b.indexOf('utran-') == 0; }).sort(numsort);
+		renderBandToggles('bands-3g', utran, current, 'utran-');
+		renderBandToggles('bands-lte', supported.filter(function(b) { return b.indexOf('eutran-') == 0; }).sort(numsort), current, 'eutran-');
+		renderBandToggles('bands-nr', supported.filter(function(b) { return b.indexOf('ngran-') == 0; }).sort(numsort), current, 'ngran-');
+		// show the 3G row only if the modem actually exposes UTRAN bands
+		var row3g = document.getElementById('bands3gn');
+		if (row3g) { row3g.style.display = utran.length ? '' : 'none'; }
 	});
 }
 
@@ -453,7 +463,7 @@ function loadBandsModemband() {
 		               (j.supported5gsa && j.supported5gsa.length);
 		if (j.error || !hasBands) {
 			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
-			[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+			[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
 			});
 			// Пояснение «переключите на ModemManager» показываем ТОЛЬКО если
@@ -613,7 +623,7 @@ function revealMgmtWhenReady(tries) {
 			if (ifaceProtoIsMM && n < 8) { window.setTimeout(function() { revealMgmtWhenReady(n + 1); }, 2000); }
 			return;
 		}
-		[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+		[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 			var e = document.getElementById(id);
 			if (e) { e.style.display = ''; }
 		});
@@ -625,7 +635,7 @@ function revealMgmtWhenReady(tries) {
 function applyBands() {
 	if (bandSource == 'modemband') { return applyBandsModemband(false); }
 	var sel = [];
-	document.querySelectorAll('#bands-lte .cbi-button-action, #bands-nr .cbi-button-action').forEach(function(b) {
+	document.querySelectorAll('#bands-3g .cbi-button-action, #bands-lte .cbi-button-action, #bands-nr .cbi-button-action').forEach(function(b) {
 		sel.push(b.getAttribute('data-band'));
 	});
 	if (!sel.length) {
@@ -658,7 +668,7 @@ function applyBands() {
 
 function resetBands() {
 	if (bandSource == 'modemband') { return applyBandsModemband(true); }
-	document.querySelectorAll('#bands-lte .cbi-button, #bands-nr .cbi-button').forEach(function(b) {
+	document.querySelectorAll('#bands-3g .cbi-button, #bands-lte .cbi-button, #bands-nr .cbi-button').forEach(function(b) {
 		b.classList.add('cbi-button-action', 'important');
 	});
 	return applyBands();
@@ -795,7 +805,7 @@ function setNetModeAT(id, label) {
 function modesw_show() {
 	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-L' ]), '').then(function(out) {
 		if (!out || out.indexOf('/Modem/') < 0) { return; }
-		[ 'modeswn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+		[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 			var row = document.getElementById(id);
 			if (row) { row.style.display = ''; }
 		});
@@ -1074,6 +1084,7 @@ simDialog: baseclass.extend({
 
 	render: function(res) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		netpri.attach();     /* «Приоритет интернета» — переключатель аплинка */
 		var m, s, o;
 
 		var data = Array.isArray(res) ? res[0] : res;
@@ -1110,9 +1121,12 @@ simDialog: baseclass.extend({
 			var b = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
 			if (b) { (b[1] == 'supported' ? mmSup : mmCur).push(b[2]); }
 		});
-		// bandsOther: не-eutran/ngran диапазоны сохраняем при смене (см. applyBands)
-		bandsOther = mmCur.filter(function(b) { return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0; });
+		// bandsOther: при смене сохраняем только НЕ-управляемые диапазоны (cdma и
+		// т.п.); utran теперь управляется своими тумблерами (см. applyBands/loadBands)
+		bandsOther = mmCur.filter(function(b) { return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0 && b.indexOf('utran-') != 0; });
 		var msStyle = mmHasModem ? null : 'display:none';
+		// 3G (UTRAN) row is shown only when the modem actually exposes utran bands
+		var has3g = mmHasModem && mmSup.some(function(b) { return b.indexOf('utran-') == 0; });
 		var modeActive = function(allowed, preferred) {
 			return mmModes &&
 			       mmModes.allowed == allowed.split('|').sort().join('|') &&
@@ -1499,10 +1513,12 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('mccmnc')) {
 						var view = document.getElementById("mccmnc");
-						if (json.operator_mcc == '-' & json.operator_mnc == '-') { 
+						if (json.operator_mcc == '-' & json.operator_mnc == '-') {
 						view.textContent = '-';
+						view.parentNode.style.display = 'none';
 						}
 						else {
+						view.parentNode.style.display = '';
 						view.textContent = json.operator_mcc + " " + json.operator_mnc;
 						}
 					}
@@ -1531,14 +1547,17 @@ simDialog: baseclass.extend({
 							if (json.tac_d.length > 1 || json.tac_h.length > 1) {
 							var tac_dh =  json.tac_d + ' (' + json.tac_h + ')';
 									view.textContent = tac_dh;
+									view.parentNode.style.display = '';
 							}
 							else {
 								if (json.tac_dec.length > 1 || json.tac_hex.length > 1) {
 									var tac_dh =  json.tac_dec + ' (' + json.tac_hex + ')';
 									view.textContent = tac_dh;
+									view.parentNode.style.display = '';
 								}
 								else {
 									view.textContent = '-';
+									view.parentNode.style.display = 'none';
 								}
 							}
 					}
@@ -1552,6 +1571,7 @@ simDialog: baseclass.extend({
 						else {
 						cidText = json.cid_dec + ' (' + json.cid_hex + ')';
 						}
+						view.parentNode.style.display = (cidText === '' || cidText === '-') ? 'none' : '';
 						// Cell ID -> стандартная кнопка с пином и номером соты,
 						// по клику открывает карту вышек 4cells.ru
 						var url4 = cell4cellsUrl(json);
@@ -1575,7 +1595,7 @@ simDialog: baseclass.extend({
 						view.textContent = '-';
 						}
 						else {
-							if (json.pci.length > 0 && json.earfcn.length > 0) { 
+							if (json.pci.length > 0 && json.pci != '-' && json.earfcn.length > 0 && json.earfcn != '-') { 
 								view.textContent = json.pband + ' | ' + json.pci + ' ' + json.earfcn;
 							}
 							else {
@@ -1586,11 +1606,13 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('s1band')) {
 						var view = document.getElementById("s1band");
-						if (json.s1band == '-') { 
+						if (json.s1band == '-') {
 						view.textContent = '-';
+						view.parentNode.style.display = 'none';
 						}
 						else {
-							if (json.s1pci.length > 0 && json.s1earfcn.length > 0) { 
+							view.parentNode.style.display = '';
+							if (json.s1pci.length > 0 && json.s1pci != '-' && json.s1earfcn.length > 0 && json.s1earfcn != '-') {
 								view.textContent = json.s1band + ' | ' + json.s1pci + ' ' + json.s1earfcn;
 							}
 							else {
@@ -1601,11 +1623,13 @@ simDialog: baseclass.extend({
 					
 					if (document.getElementById('s2band')) {
 						var view = document.getElementById("s2band");
-						if (json.s2band == '-') { 
+						if (json.s2band == '-') {
 						view.textContent = '-';
+						view.parentNode.style.display = 'none';
 						}
 						else {
-							if (json.s2pci.length > 0 && json.s2earfcn.length > 0) { 
+							view.parentNode.style.display = '';
+							if (json.s2pci.length > 0 && json.s2pci != '-' && json.s2earfcn.length > 0 && json.s2earfcn != '-') {
 								view.textContent = json.s2band + ' | ' + json.s2pci + ' ' + json.s2earfcn;
 							}
 							else {
@@ -1616,11 +1640,13 @@ simDialog: baseclass.extend({
 					
 					if (document.getElementById('s3band')) {
 						var view = document.getElementById("s3band");
-						if (json.s3band == '-') { 
+						if (json.s3band == '-') {
 						view.textContent = '-';
+						view.parentNode.style.display = 'none';
 						}
 						else {
-							if (json.s3pci.length > 0 && json.s3earfcn.length > 0) { 
+							view.parentNode.style.display = '';
+							if (json.s3pci.length > 0 && json.s3pci != '-' && json.s3earfcn.length > 0 && json.s3earfcn != '-') {
 								view.textContent = json.s3band + ' | ' + json.s3pci + ' ' + json.s3earfcn;
 							}
 							else {
@@ -1631,11 +1657,13 @@ simDialog: baseclass.extend({
 					
 					if (document.getElementById('s4band')) {
 						var view = document.getElementById("s4band");
-						if (json.s4band == '-') {  
+						if (json.s4band == '-') {
 						view.textContent = '-';
+						view.parentNode.style.display = 'none';
 						}
 						else {
-							if (json.s4pci.length > 0 && json.s4earfcn.length > 0) { 
+							view.parentNode.style.display = '';
+							if (json.s4pci.length > 0 && json.s4pci != '-' && json.s4earfcn.length > 0 && json.s4earfcn != '-') {
 								view.textContent = json.s4band + ' | ' + json.s4pci + ' ' + json.s4earfcn;
 							}
 							else {
@@ -1763,6 +1791,11 @@ simDialog: baseclass.extend({
 						}, this))
 					),
 					]),
+				E('tr', { 'class': 'tr', 'id': 'bands3gn', 'style': has3g ? msStyle : 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('3G bands')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-3g' },
+						mmHasModem ? buildBandButtons(mmSup, mmCur, 'utran-') : [ '-' ]),
+					]),
 				E('tr', { 'class': 'tr', 'id': 'bandsn', 'style': msStyle }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('LTE bands')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-lte' },
@@ -1819,37 +1852,41 @@ simDialog: baseclass.extend({
 			]),
 			]),
 
-			/* Отдельный блок - фиксация TTL / hop-limit на интерфейсе модема */
-			E('div', { 'class': 'cbi-section tginfo' }, [
-			E('h3', {}, [ _('TTL fixing') ]),
-			E('table', { 'class': 'table' }, [
-				E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('TTL IPv4 (in / out)') ]),
-					E('td', { 'class': 'td left' }, [
-						E('input', { 'id': 'ttl4in', 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:4em;text-align:center', 'placeholder': def4, 'value': ttlv('ttl4in') }),
-						' / ',
-						E('input', { 'id': 'ttl4out', 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:4em;text-align:center', 'placeholder': def4, 'value': ttlv('ttl4out') }),
+			/* Компактный сворачиваемый блок фиксации TTL / hop-limit (не карточка,
+			   стиль как у панели «Приоритет интернета»); по умолчанию свёрнут. */
+			(function() {
+				var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
+				var collapsed = true;
+				try { collapsed = (localStorage.getItem('ttl-collapsed') !== '0'); } catch (e) {}
+				var chev = E('span', { 'style': 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (collapsed ? '0' : '180') + 'deg)' });
+				chev.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+				var row = E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.5em 0 .2em 0' }, [
+					E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+						E('span', { 'style': 'opacity:.8' }, _('TTL IPv4 (in / out)')),
+						mkin('ttl4in', def4), ' / ', mkin('ttl4out', def4)
 					]),
-				]),
-				has6 ? E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Hop Limit IPv6 (in / out)') ]),
-					E('td', { 'class': 'td left' }, [
-						E('input', { 'id': 'ttl6in', 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:4em;text-align:center', 'placeholder': def6, 'value': ttlv('ttl6in') }),
-						' / ',
-						E('input', { 'id': 'ttl6out', 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:4em;text-align:center', 'placeholder': def6, 'value': ttlv('ttl6out') }),
-					]),
-				]) : '',
-				E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
-					E('td', { 'class': 'td left' }, [
-						E('button', {
-							'class': 'btn cbi-button cbi-button-action important',
-							'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
-						}, _('Apply')),
-					]),
-				]),
-			]),
-			]),
+					has6 ? E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+						E('span', { 'style': 'opacity:.8' }, _('Hop Limit IPv6 (in / out)')),
+						mkin('ttl6in', def6), ' / ', mkin('ttl6out', def6)
+					]) : '',
+					E('button', {
+						'class': 'btn cbi-button cbi-button-action important',
+						'style': 'white-space:nowrap',
+						'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
+					}, _('Apply'))
+				]);
+				var body = E('div', { 'style': 'display:' + (collapsed ? 'none' : 'block') }, [ row ]);
+				var title = E('div', {
+					'style': 'display:inline-flex;align-items:center;gap:.35em;cursor:pointer;user-select:none;font-weight:600;opacity:.85;padding:.15em 0',
+					'click': function() {
+						var expand = (body.style.display === 'none');
+						body.style.display = expand ? 'block' : 'none';
+						chev.style.transform = 'rotate(' + (expand ? '180' : '0') + 'deg)';
+						try { localStorage.setItem('ttl-collapsed', expand ? '0' : '1'); } catch (e) {}
+					}
+				}, [ chev, E('span', {}, _('TTL fixing')) ]);
+				return E('div', { 'style': 'margin:0 0 1em 0' }, [ title, body ]);
+			}).call(this),
 
 			E('div', { 'class': 'cbi-section tginfo' }, [
 			E('h3', {}, [ _('Cell / Signal Information') ]),
@@ -1935,19 +1972,19 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Primary band (PCC) | PCI & EARFCN')]),
 					E('td', { 'class': 'td left', 'id': 'pband' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC1)')]),
 					E('td', { 'class': 'td left', 'id': 's1band' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC2)')]),
 					E('td', { 'class': 'td left', 'id': 's2band' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC3)')]),
 					E('td', { 'class': 'td left', 'id': 's3band' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CA band (SCC4)')]),
 					E('td', { 'class': 'td left', 'id': 's4band' }, [ '-' ]),
 					]),

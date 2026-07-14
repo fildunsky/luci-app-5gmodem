@@ -2131,3 +2131,18 @@ msgstr "Исходящие"
 
 msgid "modem"
 msgstr "модем"
+
+msgid "Internet priority"
+msgstr "Приоритет интернета"
+
+msgid "Switching the primary uplink…"
+msgstr "Переключение основного канала…"
+
+msgid "Show the internet-priority switcher"
+msgstr "Показывать переключатель приоритета интернета"
+
+msgid "Show the \"Internet priority\" bar on the Network page for quickly switching the primary uplink (modems / WAN / Wi-Fi)."
+msgstr "Показывать панель «Приоритет интернета» на странице «Сеть» для быстрого переключения основного канала (модемы / WAN / Wi-Fi)."
+
+msgid "3G bands"
+msgstr "Диапазоны 3G"
