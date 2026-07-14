@@ -336,6 +336,11 @@ return view.extend({
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
 					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto)), 'info');
+					// The Modem Information block is rendered once and not polled, so
+					// its protocol badge would keep showing the OLD protocol (e.g. mbim)
+					// until a manual page reload. Update it to the new protocol now.
+					var pb = document.querySelector('.tg-proto-badge');
+					if (pb && out.proto) { pb.textContent = out.proto; }
 				} else {
 					ui.addNotification(null, E('p', _('No modem found to create an interface for.')), 'error');
 				}

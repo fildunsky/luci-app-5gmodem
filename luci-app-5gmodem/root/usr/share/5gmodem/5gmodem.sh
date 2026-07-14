@@ -183,6 +183,12 @@ getdevicevendorproduct() {
 RES="/usr/share/5gmodem"
 
 DEVICE=$($RES/detect.sh)
+# Bounded probe: sms_tool has no timeout and blocks ~35s on a silent/DIAG port,
+# so a wrong pinned port froze this whole page on every metrics poll (only
+# fixable by editing the config by hand). If the port does not answer AT within
+# a few seconds, treat it as not found - every sms_tool call below then fails
+# instantly instead of hanging.
+[ -n "$DEVICE" ] && ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
 if [ -z "$DEVICE" ]; then
 	echo '{"error":"Device not found"}'
 	exit 0

@@ -74,16 +74,27 @@ fi
 AUTO=$(uci -q get 5gmodem.@5gmodem[0].auto_port)
 [ "$AUTO" = "0" ] && { echo ""; exit 0; }
 
-# ModemManager: read the modem's AT port directly. Most reliable for
-# MBIM/QMI modems (e.g. Compal RXM-G1) where scanning raw ttyUSB ports
-# with check.gcom is unreliable because ModemManager holds the ports.
-if command -v mmcli >/dev/null 2>&1; then
-	MMPORTS=$(mmcli -m any 2>/dev/null | grep -oE "(ttyUSB[0-9]+|ttyACM[0-9]+|wwan[0-9]+[a-z]*) \(at\)")
-	ATP=$(echo "$MMPORTS" | sed -n 's/ (at)//p' | head -1)
-	if [ -n "$ATP" ] && [ -e "/dev/$ATP" ]; then
-		echo "/dev/$ATP"
-		exit 0
-	fi
+# Multi-modem: return the ACTIVE modem's AT port, tracked by the app's
+# modemswitch/listmodems by STABLE USB path. This replaces the old
+# "mmcli -m any", which read whichever modem ModemManager listed FIRST (the
+# wrong one when two modems are present) and required MM to be running - but our
+# modems are deliberately hidden from MM. modemswitch pins at_port and the
+# resolve hotplug self-heals it across renumbering.
+ACTP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+if [ -n "$ACTP" ] && [ -e "$ACTP" ]; then
+	echo "$ACTP"
+	exit 0
+fi
+# not pinned yet (fresh boot before resolve): resolve the active modem's AT port
+# by probing the ttys of its USB path (time-bounded, skips DIAG ports).
+AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
+	for T in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null); do
+		if /usr/share/5gmodem/atprobe.sh "$T"; then
+			echo "$T"
+			exit 0
+		fi
+	done
 fi
 
 # from temporary config
@@ -109,9 +120,12 @@ if [ -e "$WAN" ]; then
 	DEVICES="$DEVICESFOUND"
 fi
 
+# Probe each candidate for an AT reply, time-bounded (~4s each). The old
+# 'gcom check.gcom' has no timeout and blocked ~35s on a silent DIAG port, so
+# auto-detection froze the page. atprobe.sh caps the wait AND rejects DIAG/NMEA
+# ports (they never answer AT), so we land on a real AT port.
 for DEVICE in $DEVICES; do
-	gcom -d $DEVICE -s /usr/share/5gmodem/check.gcom >/dev/null 2>&1
-	if [ $? = 0 ]; then
+	if /usr/share/5gmodem/atprobe.sh "$DEVICE"; then
 		echo "$DEVICE" | tee $MODEMFILE
 		exit 0
 	fi

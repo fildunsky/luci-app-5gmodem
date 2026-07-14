@@ -53,7 +53,7 @@ earfcn2band() {
 	fi
 }
 
-O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?;+GTCAINFO?")
+O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?;+GTCAINFO?;+CESQ")
 
 case "$MODE_NUM" in
   7*) 
@@ -299,15 +299,35 @@ if [ -z "$T_MODE" ]; then
   fi
 fi
 
+# GTCCINFO doesn't always return its serving-cell row in a given poll (handover,
+# CA changes, a busy port), which used to leave RSRP empty for that one poll and
+# made the bar drop to the pessimistic AT+CSQ value (~25%) - a visible flicker.
+# Fall back to AT+CESQ, which reports the standardized RSRP directly and reliably:
+#   +CESQ: rxlev,ber,rscp,ecno,rsrq,rsrp   (rsrp 0..97 -> dBm = rsrp-141; 255=n/a)
+if [ -z "$RSRP" ]; then
+	CE_RSRP=$(echo "$O" | tr -d '\r' | sed -n 's/.*+CESQ:[[:space:]]*//p' | head -1 | awk -F, '{print $6}')
+	if [ -n "$CE_RSRP" ] && [ "$CE_RSRP" != "255" ]; then
+		RSRP=$((CE_RSRP - 141))
+	fi
+fi
+
 # Signal bar: AT+CSQ (RSSI-based) is pessimistic and inconsistent on the FM350 -
 # it reports a narrowband RSSI, so CSQ reads ~9 (=29%) even with a fine LTE
 # signal and excellent throughput, while other modems in the same spot report a
 # wideband RSSI and show 70%+. Derive the bar from RSRP instead (the
 # standardized, comparable LTE metric): RSRP -108 -> 70%, -102 -> 80%, >=-90 ->
 # 100%. This makes the FM350 reflect real quality instead of looking broken.
+#
+# Cache the last good percentage so that a rare poll where BOTH GTCCINFO and CESQ
+# miss cannot make the bar dip to the pessimistic AT+CSQ value.
+SIGCACHE="/tmp/5gmodem_fm350_sig_${DEVICE##*/}"
 if [ -n "$RSRP" ]; then
 	CSQ_PER=$(awk -v r="$RSRP" 'BEGIN{p=(r+150)*5/3; if(p<0)p=0; if(p>100)p=100; printf "%d", p}')
 	CSQ=$(( 31 * CSQ_PER / 100 ))
+	echo "$CSQ_PER" > "$SIGCACHE" 2>/dev/null
+elif [ -f "$SIGCACHE" ] && [ -z "$(find "$SIGCACHE" -mmin +2 2>/dev/null)" ]; then
+	CSQ_PER=$(cat "$SIGCACHE" 2>/dev/null)
+	[ -n "$CSQ_PER" ] && CSQ=$(( 31 * CSQ_PER / 100 ))
 fi
 
 # Modem

@@ -77,7 +77,7 @@ fi
 # modem.generic.model reports the generic chipset platform name
 # ("VOS_5G") on this firmware, not the actual modem model - override
 # with the real name, keep the platform name alongside for reference.
-MODEL="Compal RXM-G1 (${MODELNAME:-VOS_5G})"
+MODEL="Compal RXM-G1"
 
 # IMSI/ICCID are not exposed over the modem.3gpp.* keys on this MM
 # version - keep using AT for just these two (cheap single commands)
