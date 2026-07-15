@@ -649,11 +649,16 @@ fi
 
 fi
 
+# Оба хелпера вырезают ВСЕ управляющие символы C0 (0x00-0x1F), а не только
+# \r\n: у некоторых модемов (напр. DW5821e) разбор AT оставлял в значении
+# сигнала «сырой» control-символ, который попадал прямо в JSON-строку и ронял
+# парсер («Bad control character in string literal in JSON»). Числовые поля
+# тоже эмитятся как строки в кавычках, поэтому чистить их безопасно и нужно.
 sanitize_string() {
-[ -z "$1" ] && echo "-" || echo "$1" | tr -d '\r\n'
+[ -z "$1" ] && echo "-" || echo "$1" | tr -d '\000-\037'
 }
 sanitize_number() {
-[ -z "$1" ] && echo "-" || echo "$1"
+[ -z "$1" ] && echo "-" || echo "$1" | tr -d '\000-\037'
 }
 
 # IP addresses of the modem network interface (for the main page).

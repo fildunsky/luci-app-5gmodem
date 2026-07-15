@@ -80,11 +80,31 @@ function activeIface(list) {
 	return best;
 }
 
-/* per-type icon from the app's icon set (modem / Wi-Fi / WAN); null for the rest */
+/* Оператор -> файл иконки (та же таблица, что в главном блоке 5gdetail). */
+function operatorIcon(name) {
+	var n = (name || '').toLowerCase();
+	if (n.indexOf('t-mobile') >= 0 || n.indexOf('tinkoff') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('т-банк') >= 0 || n.indexOf('t-mob') >= 0) { return 'op-tbank'; }
+	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
+	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
+	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
+	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2' || n.indexOf('t2 ') == 0 || n.indexOf(' t2') >= 0) { return 'op-t2'; }
+	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
+	return null;
+}
+
+/* per-type icon from the app's icon set (modem / Wi-Fi / WAN); null for the rest.
+   Для модема - как в главном блоке SIM: иконка ОПЕРАТОРА, если он определён
+   (o.label несёт имя оператора), иначе простая SIM-карта (op-sim.png). */
 function typeIcon(o) {
-	var f = (o.type === 'wifi')  ? 'cwifi.svg'
-	      : (o.type === 'wan')   ? 'cwan.svg'
-	      : (o.type === 'modem') ? 'csim_iface.svg'
+	if (o.type === 'modem') {
+		var oi = operatorIcon(o.label);
+		return E('img', {
+			'class': 'netpri-ic', 'src': L.resource('icons/' + (oi ? oi : 'op-sim') + '.png'),
+			'width': 16, 'height': 16, 'alt': ''
+		});
+	}
+	var f = (o.type === 'wifi') ? 'cwifi.svg'
+	      : (o.type === 'wan')  ? 'cwan.svg'
 	      : null;
 	if (!f) { return null; }
 	return E('img', {

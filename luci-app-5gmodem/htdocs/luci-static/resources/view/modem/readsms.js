@@ -676,8 +676,10 @@ return view.extend({
 		// mergesms может быть не задан в uci (свежая конфигурация): тогда
 		// ни ветка smsM=="1" (склейка), ни smsM=="0" не выполнялись, и
 		// сообщения не рендерились (обновлялся только счётчик). Нормализуем
-		// к "1"/"0", по умолчанию "0" (без склейки).
-		var smsM = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms')) == '1' ? '1' : '0';
+		// к "1"/"0". По умолчанию (значение НЕ задано) - "1" (склейка вкл.):
+		// многочастные SMS показываются целиком. Явный "0" уважается.
+		var _mv = uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms');
+		var smsM = (_mv == null || _mv === '') ? '1' : (_mv == '1' ? '1' : '0');
 		var algo = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'algorithm'));
 		var hide = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'bnumber'));
 		var ledn = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'lednotify'));
@@ -750,6 +752,14 @@ return view.extend({
 
  									var table = document.getElementById('smsTable');
 									while (table.rows.length > 1) { table.deleteRow(1); }					
+
+									/* Баг sms_tool 2025.08.x (-j): кодпойнты, у которых МЛАДШИЙ
+									   байт >= 0x80 (U+00A0 nbsp, «» U+00AB/BB, …), в JSON-кодере
+									   знакорасширяются — он печатает "ÿffffa0" вместо
+									   " ". JSON.parse затем даёт "ÿffffa0" (то, что видел
+									   пользователь). Чиним шаблон "\uHHffffffLL" -> "\uHHLL"
+									   ДО разбора. Настоящее место фикса — JSON-эскейпер sms_tool. */
+									res2 = res2.replace(/\\u([0-9a-fA-F]{2})f{6}([0-9a-fA-F]{2})/g, '\\u$1$2');
 
 									/* Proper parsing instead of positional slicing:
 									   substring(7) relied on the exact byte format

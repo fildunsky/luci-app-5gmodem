@@ -24,6 +24,9 @@
 
 IF="${1:-modem}"
 REQ="${2:-auto}"
+# APN, переданный из UI (автоподстановка по оператору или ручной ввод). Если
+# задан - применяем его; иначе сохраняем старый APN интерфейса, иначе 'internet'.
+APNARG="$3"
 
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
 
@@ -90,7 +93,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			[ -n "$ATCPORT" ] || ATCPORT="$METRIC_AT"
 			uci set "network.$IF.proto=atc"
 			uci set "network.$IF.device=$ATCPORT"
-			uci set "network.$IF.apn=${OLDAPN:-internet}"
+			uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
 			uci set "network.$IF.pdp=IPV4V6"
 			uci set "network.$IF.metric=20"
 			FDEV="$ATCPORT"
@@ -100,7 +103,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci set "network.$IF.proto=$FPROTO"
 			uci set "network.$IF.usbpath=$AMP"
 			uci set "network.$IF.device=$FNET"
-			uci set "network.$IF.apn=${OLDAPN:-internet}"
+			uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
 			uci set "network.$IF.pdptype=IPV4V6"
 			FDEV="$FNET"
 		fi
@@ -110,9 +113,15 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		uci set "network.$IF.metric=20"
 		uci commit network
 
-		# add to the 'wan' firewall zone for NAT/forwarding
+		# add to the 'wan' firewall zone for NAT/forwarding. Самолечащий:
+		# сперва убираем ВСЕ вхождения $IF (старые версии приложения могли
+		# накопить дубликаты - интерфейс появлялся в зоне по 4 раза и столько же
+		# раз в «Приоритете интернета»), потом добавляем РОВНО один.
 		Z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
-		if [ -n "$Z" ] && ! uci -q get "firewall.$Z.network" | grep -qw "$IF"; then
+		if [ -n "$Z" ]; then
+			while uci -q get "firewall.$Z.network" | grep -qw "$IF"; do
+				uci del_list "firewall.$Z.network=$IF"
+			done
 			uci add_list "firewall.$Z.network=$IF"
 			uci commit firewall
 		fi
@@ -228,7 +237,7 @@ uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
 uci set "network.$IF.device=$IDEV"
-uci set "network.$IF.apn=${OLDAPN:-internet}"
+uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
 case "$PROTO" in
 	modemmanager)
 		uci set "network.$IF.iptype=ipv4v6"
@@ -246,13 +255,15 @@ case "$PROTO" in
 esac
 uci commit network
 
-# add to the 'wan' firewall zone (if one exists) so NAT/forwarding works
+# add to the 'wan' firewall zone (if one exists) so NAT/forwarding works.
+# Самолечащий (см. выше): убрать все дубликаты $IF, добавить ровно один.
 Z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
 if [ -n "$Z" ]; then
-	if ! uci -q get "firewall.$Z.network" | grep -qw "$IF"; then
-		uci add_list "firewall.$Z.network=$IF"
-		uci commit firewall
-	fi
+	while uci -q get "firewall.$Z.network" | grep -qw "$IF"; do
+		uci del_list "firewall.$Z.network=$IF"
+	done
+	uci add_list "firewall.$Z.network=$IF"
+	uci commit firewall
 fi
 
 # point the app at the interface, and remember the user's protocol choice

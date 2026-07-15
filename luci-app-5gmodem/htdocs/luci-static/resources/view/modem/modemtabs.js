@@ -84,6 +84,28 @@ function loadModems() {
 	});
 }
 
+/* Показ/скрытие вкладки eSIM по живому состоянию. esim.sh status -> {available,
+   active}; active=1 => текущий слот модема - eSIM (только тогда lpac работает и
+   управление профилями имеет смысл, см. форум prusa: нужен AT+GTDUALSIM=1).
+   Ссылку вкладки ищем в меню под-вкладок (href .../5gmodem/esim); прячем её <li>.
+   Ретраим, т.к. тема может отрисовать под-вкладки позже нашего вызова. */
+function applyEsimTabVisibility(tries) {
+	tries = tries || 0;
+	var links = document.querySelectorAll('a[href*="5gmodem/esim"]');
+	if (!links.length) {
+		if (tries < 25) { window.setTimeout(function() { applyEsimTabVisibility(tries + 1); }, 150); }
+		return;
+	}
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/esim.sh', [ 'status' ]), '').then(function(out) {
+		var st = {}; try { st = JSON.parse(out || '{}'); } catch (e) {}
+		var show = !!st.active;   // «включена eSIM» = активен eSIM-слот
+		document.querySelectorAll('a[href*="5gmodem/esim"]').forEach(function(a) {
+			var li = (a.closest && a.closest('li')) || a.parentNode;
+			if (li) { li.style.display = show ? '' : 'none'; }
+		});
+	});
+}
+
 function tabsBar(modems, active) {
 	var tabs = modems.map(function(m, i) {
 		var isActive = (m.path === active);
@@ -133,6 +155,11 @@ return baseclass.extend({
 	   Возвращает Promise. Ставится через опрос DOM, т.к. на момент render()
 	   под-вкладки могут быть ещё не вставлены. */
 	attach: function() {
+		// Вкладку eSIM показываем ТОЛЬКО когда включена eSIM (активен eSIM-слот):
+		// меню LuCI статично и кэшируется, поэтому прячем ссылку на лету - modemtabs
+		// выполняется на КАЖДОЙ странице модема. Запускаем независимо от числа
+		// модемов (renderBar ниже возвращает null при одном модеме).
+		applyEsimTabVisibility(0);
 		if (document.querySelector('.modembar')) { return Promise.resolve(); }
 		return this.renderBar().then(function(bar) {
 			if (!bar || document.querySelector('.modembar')) { return; }

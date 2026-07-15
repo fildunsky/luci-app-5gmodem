@@ -20,10 +20,43 @@
 MODE="$1"
 PORT="$2"
 case "$MODE" in
-	soft|hard) ;;
+	soft|hard|power|haspower) ;;
 	/dev/*)    PORT="$MODE"; MODE="soft" ;;   # старый вызов: reboot_modem.sh <port>
 	*)         MODE="soft" ;;
 esac
+
+# Аппаратная перезагрузка модема по питанию через GPIO платы (например
+# modem_power у Huasifei WH3000; у части плат - 4g/5g1/5g2). Работает независимо
+# от AT: снимаем питание слота (value=1), пауза, возвращаем (value=0); интерфейс
+# поднимается ~1 мин. На WH3000 это питает ТОЛЬКО M.2-слот (USB-модем не трогает).
+# Список известных имён GPIO сброса/питания модема (по target/.../03_gpio_switches).
+# modem_reset (напр. Almond 3S, GPIO33 active_high) сбрасывается той же
+# последовательностью 1->пауза->0, что и modem_power, поэтому в общем списке.
+POWER_GPIOS="modem_power modem_reset 4g 5g1 5g2"
+first_power_gpio() {
+	for _g in $POWER_GPIOS; do
+		[ -e "/sys/class/gpio/$_g/value" ] && { echo "$_g"; return 0; }
+	done
+	return 1
+}
+
+if [ "$MODE" = haspower ]; then
+	# наличие кнопки: отдаём имя первого доступного GPIO питания (или пусто)
+	echo "{\"gpio\":\"$(first_power_gpio)\"}"
+	exit 0
+fi
+
+if [ "$MODE" = power ]; then
+	# 2-й аргумент можно использовать как явное имя GPIO; иначе - первый доступный
+	G="$PORT"; [ -n "$G" ] || G=$(first_power_gpio)
+	GP="/sys/class/gpio/$G/value"
+	[ -n "$G" ] && [ -e "$GP" ] || { echo '{"success":false,"error":"no modem power gpio"}'; exit 0; }
+	# в фоне: снять питание, пауза 5с, вернуть. Скрипт возвращается сразу, чтобы
+	# XHR не висел всю паузу + переподнятие интерфейса.
+	( echo 1 > "$GP" 2>/dev/null; sleep 5; echo 0 > "$GP" 2>/dev/null ) &
+	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
+	exit 0
+fi
 
 [ -n "$PORT" ] || PORT=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 [ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }

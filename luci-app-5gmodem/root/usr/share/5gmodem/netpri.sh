@@ -178,8 +178,10 @@ list)
 	printf '['
 	first=1
 	NEEDREFRESH=0
-	# sort by interface name, like the LuCI "Interfaces" overview (naturalCompare)
-	for n in $(wan_nets | tr ' ' '\n' | sort); do
+	# sort by interface name, like the LuCI "Interfaces" overview (naturalCompare).
+	# uniq: firewall-зона могла накопить дубликаты интерфейса (см. mkiface.sh) -
+	# показываем каждый uplink РОВНО один раз, даже если конфиг ещё не вылечен.
+	for n in $(wan_nets | tr ' ' '\n' | sort | uniq); do
 		[ -n "$n" ] || continue
 		uci -q get "network.$n" >/dev/null 2>&1 || continue
 		[ "$n" = wan6 ] && continue                                   # ipv6 twin of wan
@@ -224,6 +226,15 @@ refresh)
 		[ -n "$n" ] || continue
 		[ "$(iface_type "$n")" = modem ] && operator_probe "$n"
 	done
+	;;
+
+op)
+	# Оператор ОДНОГО интерфейса (для автоподстановки APN на форме создания
+	# интерфейса). Сначала мгновенный кэш; если пусто - разовый bounded-probe.
+	I="${2:-$(uci -q get 5gmodem.@5gmodem[0].network)}"; [ -n "$I" ] || I=modem
+	OP=$(operator_cached "$I")
+	[ -n "$OP" ] || { operator_probe "$I" 2>/dev/null; OP=$(operator_cached "$I"); }
+	printf '%s' "$OP"
 	;;
 
 set)

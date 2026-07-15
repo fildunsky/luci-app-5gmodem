@@ -312,6 +312,35 @@ return view.extend({
 		var mIfName = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
 		var mIfExists = !!uci.get('network', mIfName);
 
+		/* Оператор -> APN российских операторов (и MVNO). Пусто = неизвестен. */
+		function apnForOperator(name) {
+			var n = (name || '').toLowerCase();
+			if (n.indexOf('t-mobile') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('t-mob') >= 0) { return 'tt'; }
+			if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'sberbank'; }
+			if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'internet.beeline.ru'; }
+			if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'internet.mts.ru'; }
+			if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'internet'; }
+			if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'internet.tele2.ru'; }
+			if (n.indexOf('yota') >= 0) { return 'internet.yota'; }
+			return '';
+		}
+
+		/* Поле APN над кнопкой создания. Если интерфейс уже есть - берём его
+		   текущий APN; иначе автоподстановка по оператору (можно исправить,
+		   пусто = провайдерский по умолчанию). Чистое UI-поле, в uci не пишется. */
+		o = s.option(form.Value, '_apn', _('APN'),
+			_('APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default.'));
+		o.placeholder = 'internet';
+		o.rmempty = true;
+		o.write = function() {};
+		o.remove = function() {};
+		o.load = function(section_id) {
+			var cur = uci.get('network', mIfName, 'apn');
+			if (cur) { return cur; }
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh', [ 'op', mIfName ]), '')
+				.then(function(op) { return apnForOperator((op || '').trim()); });
+		};
+
 		o = s.option(form.Button, '_mkiface');
 		o.title = _('Modem interface');
 		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
@@ -326,11 +355,16 @@ return view.extend({
 				var opt = this.map.lookupOption('iface_proto', sid);
 				if (opt && opt[0]) { var el = opt[0].getUIElement(sid); if (el) { proto = el.getValue() || 'auto'; } }
 			} catch (e) {}
+			var apn = '';
+			try {
+				var aopt = this.map.lookupOption('_apn', sid);
+				if (aopt && aopt[0]) { var ael = aopt[0].getUIElement(sid); if (ael) { apn = (ael.getValue() || '').trim(); } }
+			} catch (e) {}
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apn ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}

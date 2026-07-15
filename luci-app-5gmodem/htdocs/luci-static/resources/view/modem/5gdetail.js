@@ -94,6 +94,48 @@ document.head.append(E('style', {'type': 'text/css'},
 #ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 9%; }
 #ca-table .td:nth-child(10), #ca-table .th:nth-child(10) { width: 10%; }
 
+/* Мобильная раскладка: 10 колонок не влезают на узкий экран (значения
+   обрезались многоточием). Ниже 800px превращаем каждую строку-компонент
+   (PCC/SCC) в компактную «карточку» с подписями (data-l через ::before).
+   Всё видно и помещается; высота стабильна - карточек всегда 5, как строк в
+   таблице (см. renderCaTable), поэтому (де)агрегация не меняет высоту блока.
+   ВАЖНО: брейкпоинт 800px = как у proton2025. Тема на <=800px вешает на
+   таблицы 'overflow-x:auto !important'; при (де)агрегации ширина CA-контента
+   менялась -> горизонтальный скролл появлялся/исчезал -> высота элемента
+   прыгала -> страницу дёргало. display:block (карточки) убирает широкую
+   таблицу и сам скролл, поэтому прыжок пропадает. */
+@media (max-width: 800px) {
+  #ca-table, #ca-table .tr { display: block; width: 100%; }
+  #ca-table .ca-head { display: none; }
+  #ca-table .ca-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 1em;
+    border: 1px solid rgba(128,128,128,.25);
+    border-radius: 6px;
+    padding: .35em .6em;
+    margin: 0 0 .45em 0;
+  }
+  #ca-table .ca-row .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    padding: 1px 0;
+  }
+  #ca-table .ca-row .ca-cc {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(128,128,128,.2);
+    margin-bottom: .15em;
+  }
+  #ca-table .ca-row .td[data-l]::before {
+    content: attr(data-l) ": ";
+    opacity: .6;
+  }
+}
+
 /* Значение диапазона (pband/SCC) меняет длину при переселении соты
    (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
    раскладкой длинное значение переносилось на 2 строки -> высота строки
@@ -1006,6 +1048,40 @@ function rebootModem(hard) {
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to restart the modem') + ': ' + (err.message || err)), 'error');
+	});
+}
+
+/* Аппаратная перезагрузка модема по питанию (GPIO modem_power и т.п.). Кнопка
+   показывается только если у платы есть такой GPIO (см. reboot_modem.sh haspower). */
+function rebootModemPower() {
+	if (!confirm(_('Power-cycle the modem via the board power line? Power is cut for a few seconds and the modem re-appears in about a minute. On some boards this affects only the M.2 slot.')))
+		return Promise.resolve();
+	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Power-cycling the modem...')));
+	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'power' ]).then(function(res) {
+		ui.hideModal();
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (d.success === false) {
+			ui.addNotification(null, E('p', _('No modem power GPIO on this board')), 'error');
+			return;
+		}
+		if (ui.addTimeLimitedNotification)
+			ui.addTimeLimitedNotification(null, E('p', _('The modem is power-cycling. This can take a minute.')), 8000, 'info');
+		else
+			ui.addNotification(null, E('p', _('The modem is power-cycling. This can take a minute.')), 'info');
+	}).catch(function(err) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to power-cycle the modem') + ': ' + (err.message || err)), 'error');
+	});
+}
+
+/* Показать кнопку «Перезагрузка по питанию», только если у платы есть GPIO
+   питания модема. Дёшево: один exec reboot_modem.sh haspower при загрузке. */
+function initPowerBtn() {
+	var b = document.getElementById('btn-power-reboot');
+	if (!b) { return; }
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'haspower' ]), '').then(function(out) {
+		var g = ''; try { g = (JSON.parse(out || '{}').gpio) || ''; } catch (e) {}
+		if (g) { b.style.display = ''; }
 	});
 }
 
@@ -2152,7 +2228,18 @@ simDialog: baseclass.extend({
 							'class': 'btn cbi-button cbi-button-remove',
 							'data-tooltip': _('Full restart (CFUN=1,1): the modem reboots and re-enumerates on USB. Slower, connection drops ~1 min; use when the radio restart did not help.'),
 							'click': ui.createHandlerFn(this, function() { return rebootModem(true); })
-						}, _('Full restart'))
+						}, _('Full restart')),
+						' ',
+						/* Аппаратная перезагрузка по питанию - только на платах с GPIO
+						   питания модема (WH3000 Pro и т.п.). Скрыта, показывается из
+						   initPowerBtn() после проверки reboot_modem.sh haspower. */
+						E('button', {
+							'id': 'btn-power-reboot',
+							'class': 'btn cbi-button cbi-button-negative',
+							'style': 'display:none',
+							'data-tooltip': _('Hardware power-cycle via the board power line (GPIO). Cuts power to the modem slot for a few seconds; it re-appears in ~1 min. Use when a full restart is not enough. On some boards affects only the M.2 slot.'),
+							'click': ui.createHandlerFn(this, function() { return rebootModemPower(); })
+						}, _('Power restart'))
 					]),
 					]),
 			]),
@@ -2293,17 +2380,19 @@ simDialog: baseclass.extend({
 					// ячейки. Строки НИКОГДА не добавляются/не удаляются, поэтому
 					// высота таблицы постоянна и страницу внизу не дёргает при
 					// переселении соты (единичная <-> агрегация). Как в 3ginfo-lite.
+					// data-l: подпись колонки для мобильной «карточной» раскладки
+					// (в @media узкого экрана показывается через ::before).
 					return E('tr', { 'class': 'tr ca-row', 'data-cc': cc }, [
-						E('td', { 'class': 'td left' }, [ cc ]),
-						E('td', { 'class': 'td left' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
-						E('td', { 'class': 'td' }, [ '-' ]),
+						E('td', { 'class': 'td left ca-cc' }, [ cc ]),
+						E('td', { 'class': 'td left', 'data-l': 'Band' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'BW' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'PCI' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'RSRP' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'RSRQ' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'SINR' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'MIMO' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'Mod' }, [ '-' ]),
 					]);
 				})))
 				])
@@ -2311,7 +2400,12 @@ simDialog: baseclass.extend({
 		]);
 		}, o, this);
 
-		return m.render();
+		return m.render().then(function(node) {
+			// после вставки DOM показать кнопку перезагрузки по питанию, если у
+			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
+			window.setTimeout(initPowerBtn, 0);
+			return node;
+		});
 	},
 
 	handleSaveApply: null,

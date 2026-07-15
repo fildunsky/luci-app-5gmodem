@@ -38,9 +38,16 @@ latest_tag() {
 	api_json | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
-# asset_url <basename> <ext>  - browser_download_url of a matching asset
+# asset_url <basename> <ext>  - browser_download_url of a matching asset.
+# ВАЖНО: якоримся на ИМЯ ФАЙЛА ассета ('/<basename>-<цифра версии>...ext'), а НЕ
+# на подстроку в любом месте URL. Иначе имя репозитория в пути
+# (github.com/<user>/luci-app-5gmodem/releases/...) совпадает у КАЖДОГО ассета, и
+# жадный .* в sed выбирал ПОСЛЕДНИЙ .apk (i18n-пакет, напр. zh-tw). Установка
+# i18n не меняла версию главного пакета -> ложное «версия осталась 1.2.3».
 asset_url() {
-	api_json | sed -n 's|.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*'"$1"'[^"]*\.'"$2"'\)".*|\1|p' | head -n1
+	# разделитель имя-версия: apk = '-' (luci-app-5gmodem-1.2.5), ipk = '_'
+	# (luci-app-5gmodem_1.2.5) -> допускаем оба через [-_].
+	api_json | sed -n 's|.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*/'"$1"'[-_][0-9][^"]*\.'"$2"'\)".*|\1|p' | head -n1
 }
 
 # version_gt <a> <b>  - prints 1 if a > b else 0 (numeric, dot-separated)
