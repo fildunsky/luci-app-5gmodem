@@ -2173,3 +2173,84 @@ msgstr "SIM-слот переключён: %s"
 
 msgid "SIM slot switch failed"
 msgstr "Не удалось переключить SIM-слот"
+
+msgid "Profile"
+msgstr "Профиль"
+
+msgid "Enable"
+msgstr "Включить"
+
+msgid "Disable"
+msgstr "Выключить"
+
+msgid "Enabled"
+msgstr "Включён"
+
+msgid "Disabled"
+msgstr "Выключен"
+
+msgid "Free memory"
+msgstr "Свободно"
+
+msgid "Download profile"
+msgstr "Скачать профиль"
+
+msgid "Applying eSIM operation..."
+msgstr "Выполнение операции eSIM..."
+
+msgid "Downloading eSIM profile..."
+msgstr "Скачивание профиля eSIM..."
+
+msgid "eSIM operation done"
+msgstr "Операция eSIM выполнена"
+
+msgid "eSIM operation failed: %s"
+msgstr "Операция eSIM не удалась: %s"
+
+msgid "eSIM profile downloaded"
+msgstr "Профиль eSIM скачан"
+
+msgid "Delete eSIM profile"
+msgstr "Удаление профиля eSIM"
+
+msgid "Delete profile \"%s\" (%s)? This cannot be undone."
+msgstr "Удалить профиль «%s» (%s)? Это действие необратимо."
+
+msgid "Switch to the eSIM slot (SIM buttons in the header above) to manage eSIM profiles."
+msgstr "Для управления профилями eSIM переключитесь на eSIM-слот (кнопки SIM в шапке выше)."
+
+msgid "Reading eUICC..."
+msgstr "Чтение eUICC..."
+
+msgid "eUICC is not responding (%s), retrying..."
+msgstr "eUICC не отвечает (%s), повтор..."
+
+msgid "Add eSIM profile"
+msgstr "Добавить профиль eSIM"
+
+msgid "eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem."
+msgstr "Управление eSIM недоступно: не установлен пакет lpac, либо активный модем не AT-типа."
+
+msgid "The physical SIM is active now. Switch to the eSIM slot to manage eSIM profiles."
+msgstr "Сейчас активна физическая SIM. Переключитесь на eSIM-слот для управления профилями eSIM."
+
+msgid "Switch to eSIM slot"
+msgstr "Переключиться на eSIM-слот"
+
+msgid "Switching to the eSIM slot..."
+msgstr "Переключение на eSIM-слот..."
+
+msgid "Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete."
+msgstr "Управление профилями встроенной SIM (eUICC): добавление по коду активации, включение, выключение, удаление."
+
+msgid "eUICC is not responding (%s). Try Refresh in a few seconds."
+msgstr "eUICC не отвечает (%s). Нажмите «Обновить» через несколько секунд."
+
+msgid "No profiles installed"
+msgstr "Профилей нет"
+
+msgid "Downloading eSIM profile... This can take a minute, do not leave the page."
+msgstr "Скачивание профиля eSIM... Это может занять до минуты, не покидайте страницу."
+
+msgid "Download failed: %s"
+msgstr "Не удалось скачать: %s"

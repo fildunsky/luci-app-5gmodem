@@ -270,12 +270,15 @@ CONN_TIME="-"
 RX="-"
 TX="-"
 
-NETUP=$(ifstatus $SEC | grep "\"up\": true")
+# Один вызов ifstatus на интерфейс (раньше его дёргали ~6 раз - каждый
+# отдельный ubus-запрос ~0.5с = основной тормоз опроса). Парсим всё отсюда.
+SECSTATUS=$(ifstatus "$SEC" 2>/dev/null)
+NETUP=$(echo "$SECSTATUS" | grep "\"up\": true")
 if [ -n "$NETUP" ]; then
 
 		CT=$(uci -q -P /var/state/ get network.$SEC.connect_time)
 		if [ -z $CT ]; then
-			CT=$(ifstatus $SEC | awk -F[:,] '/uptime/ {print $2}' | xargs)
+			CT=$(echo "$SECSTATUS" | awk -F[:,] '/uptime/ {print $2}' | xargs)
 		else
 			UPTIME=$(cut -d. -f1 /proc/uptime)
 			CT=$((UPTIME-CT))
@@ -291,7 +294,7 @@ if [ -n "$NETUP" ]; then
 			
 		fi
 		
-		IFACE=$(ifstatus $SEC | awk -F\" '/l3_device/ {print $4}')
+		IFACE=$(echo "$SECSTATUS" | awk -F\" '/l3_device/ {print $4}')
 		if [ -n "$IFACE" ]; then
 			RX=$(ifconfig $IFACE | awk -F[\(\)] '/bytes/ {printf "%s",$2}')
 			TX=$(ifconfig $IFACE | awk -F[\(\)] '/bytes/ {printf "%s",$4}')
@@ -597,6 +600,37 @@ if echo "x$CONF_DEVICE" | grep -q "192.168."; then
 	SEC=${SEC:-wan}
 else
 
+# --- Модульный опрос + кэш статичных полей ---------------------------------
+# $2 = список нужных секций (core,signal,ca). Пусто/"all" = все (обратная
+# совместимость). Профили читают WANT_SIGNAL/WANT_CA, чтобы не дёргать AT/QMI
+# для свёрнутых блоков страницы.
+SECTIONS="${2:-all}"
+WANT_SIGNAL=1; WANT_CA=1
+case "$SECTIONS" in
+	all|"") ;;
+	*)
+		case ",$SECTIONS," in *,signal,*) WANT_SIGNAL=1;; *) WANT_SIGNAL=0;; esac
+		case ",$SECTIONS," in *,ca,*)     WANT_CA=1;;     *) WANT_CA=0;;     esac
+		;;
+esac
+
+# Кэш статичных полей (модель/IMEI/прошивка/ICCID) - они не меняются, но
+# опрашивались КАЖДЫЙ опрос (5 из 6 AT-вызовов = основные ~секунды). Ключ - USB-
+# путь модема; при смене SIM (IMSI из батча != сохранённого) кэш сбрасывается.
+_STKEY=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
+[ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
+STATIC_CACHE="/tmp/5gmodem_static_$_STKEY"
+if [ -n "$SIMID" ] && [ "$(cat "${STATIC_CACHE}.imsi" 2>/dev/null)" != "$SIMID" ]; then
+	rm -f "${STATIC_CACHE}"_* 2>/dev/null
+	printf '%s' "$SIMID" > "${STATIC_CACHE}.imsi"
+fi
+# at_static <key> <atcmd> : сырой ответ из кэша, иначе запрос + кэш.
+at_static() {
+	_cf="${STATIC_CACHE}_$1"
+	[ -s "$_cf" ] && { cat "$_cf"; return; }
+	sms_tool -d "$DEVICE" at "$2" 2>/dev/null | tee "$_cf"
+}
+
 if [ -e /usr/bin/sms_tool ]; then
 	REGOK=0
 	[ "x$REG" == "x1" ] || [ "x$REG" == "x5" ] || [ "x$REG" == "x6" ] || [ "x$REG" == "x7" ] && REGOK=1
@@ -626,16 +660,19 @@ sanitize_number() {
 # umbim/MBIM puts the address on a virtual <iface>_4 / <iface>_6 child, not on
 # the parent, so read straight from the l3 device - works for umbim,
 # modemmanager, qmi and plain static alike. ubus children are a fallback.
-L3DEV=$(ifstatus "$SEC" 2>/dev/null | awk -F\" '/l3_device/ {print $4; exit}')
+# IP-блок читает СВЕЖИЙ статус интерфейса (SECSTATUS считается раньше, до
+# финализации SEC для некоторых конфигов, и мог быть для другого/пустого SEC).
+IFSTAT=$(ifstatus "$SEC" 2>/dev/null)
+L3DEV=$(echo "$IFSTAT" | awk -F\" '/l3_device/ {print $4; exit}')
 IPADDR=""
 IPADDR6=""
 if [ -n "$L3DEV" ]; then
 	IPADDR=$(ip -4 addr show dev "$L3DEV" 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | grep -v '^127\.' | head -1)
 	IPADDR6=$(ip -6 addr show dev "$L3DEV" scope global 2>/dev/null | awk '/inet6 /{print $2}' | cut -d/ -f1 | head -1)
 fi
-[ -z "$IPADDR" ]  && IPADDR=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+[ -z "$IPADDR" ]  && IPADDR=$(echo "$IFSTAT" | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
 [ -z "$IPADDR" ]  && IPADDR=$(ifstatus "${SEC}_4" 2>/dev/null | grep -A4 '"ipv4-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
-[ -z "$IPADDR6" ] && IPADDR6=$(ifstatus "$SEC" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
+[ -z "$IPADDR6" ] && IPADDR6=$(echo "$IFSTAT" | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
 [ -z "$IPADDR6" ] && IPADDR6=$(ifstatus "${SEC}_6" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
 
 # Реальный протокол интерфейса модема (modemmanager/mbim/qmi/ncm/...). Раньше
@@ -660,6 +697,13 @@ if [ -z "$PHONE" ] && command -v mmcli >/dev/null 2>&1; then
 			| sed -n 's/^modem\.generic\.own-numbers[^:]*:[[:space:]]*//p' \
 			| tr -d ' ' | grep -E '^[+]?[0-9]{5,}$' | head -1)
 	fi
+fi
+
+# Разрешённое имя оператора кладём в кэш, читаемый переключателем приоритета
+# (netpri.sh): у MBIM/QMI-модемов оператор часто доступен только здесь (числовой
+# COPS + mccmnc.dat / UCS2), а не через отдельный AT+COPS у netpri.
+if [ -n "$SEC" ] && [ -n "$COPS" ] && ! echo "$COPS" | grep -qE '^[0-9 ]*$'; then
+	printf '%s' "$COPS" > "/tmp/5gmodem_op_$SEC" 2>/dev/null
 fi
 
 cat <<EOF

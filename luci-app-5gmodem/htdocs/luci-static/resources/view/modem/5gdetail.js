@@ -190,6 +190,45 @@ document.head.append(E('style', {'type': 'text/css'},
   font-weight: 600;
   margin-right: 0.35em;
 }
+/* правая колонка шапки: SIM-слоты над температурой, прижаты вправо */
+.tginfo-right {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+/* маленькие кнопки переключения SIM-слота */
+.tginfo-simslot .cbi-button {
+  padding: 1px 8px;
+  font-size: 80%;
+  line-height: 1.5;
+  margin-left: 4px;
+}
+/* подпись типа SIM (USIM/eSIM) слева от кнопок */
+.tginfo-simslot .tginfo-simslot-type {
+  font-size: 80%;
+  opacity: 0.7;
+  margin-right: 4px;
+}
+/* секция eSIM */
+.esim-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 88%;
+  opacity: 0.8;
+  margin-bottom: 8px;
+}
+.esim-dl {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+#esim-profiles .btn {
+  padding: 1px 8px;
+  font-size: 85%;
+  margin-left: 4px;
+}
 .tginfo-temp {
   display: inline-flex;
   align-items: center;
@@ -363,12 +402,53 @@ pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
 
+/* Переключатель SIM-слотов в шапке (над температурой). Кнопки появляются,
+   только если у активного модема >= 2 слотов: AT+GTDUALSIM (Fibocom) или
+   mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
+function loadSimSlots() {
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+		var st = {};
+		try { st = JSON.parse(out) || {}; } catch (e) { return; }
+		var box = document.getElementById('simslotn');
+		if (!box) { return; }
+		if (!st.slots || st.slots.length < 2) { box.style.display = 'none'; return; }
+		box.innerHTML = '';
+		if (st.type) {
+			box.appendChild(E('span', { 'class': 'tginfo-simslot-type', 'title': _('SIM type') }, [ st.type ]));
+		}
+		st.slots.forEach(function(s) {
+			var on = (String(st.active) === String(s.id));
+			box.appendChild(E('button', {
+				'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+				'click': function(ev) {
+					ev.preventDefault();
+					if (on) { return; }
+					ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
+					fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
+						ui.hideModal();
+						var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
+						if (ui.addTimeLimitedNotification) {
+							ui.addTimeLimitedNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), 6000, ok ? 'info' : 'error');
+						} else {
+							ui.addNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), ok ? 'info' : 'error');
+						}
+						// перечитать активный слот после перерегистрации модема
+						window.setTimeout(loadSimSlots, 4000);
+					}).catch(function() { ui.hideModal(); });
+				}
+			}, [ s.label ]));
+		});
+		box.style.display = '';
+	});
+}
+
 function SIMdata(data) {
 	var sdata = {};
 	try { sdata = JSON.parse(data) || {}; } catch (e) {}
 
 	var rows = [];
-	if (sdata.simslot != null && String(sdata.simslot).length > 0)
+	// «-» значит «слот неизвестен» - строку в подсказке не показываем вовсе
+	if (sdata.simslot != null && String(sdata.simslot).length > 0 && sdata.simslot != '-')
 		rows.push(_('SIM Slot'), sdata.simslot);
 	rows.push(_('SIM IMSI'), sdata.imsi || '-');
 	rows.push(_('SIM ICCID'), sdata.iccid || '-');
@@ -528,6 +608,10 @@ function renderBandToggles(contId, bands, current, prefix) {
 }
 
 function loadBands() {
+	// Модульный опрос: пока блок «Управление частотами» свёрнут, НЕ дёргаем
+	// mmcli/bands.sh (это ускоряет загрузку). Данные подтянутся при раскрытии
+	// (см. onBlockExpand['freq']).
+	if (!blockExpanded('freq')) { return Promise.resolve(); }
 	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
 		if (!out) { return; }
 		var supported = [], current = [];
@@ -597,9 +681,65 @@ function buildBandButtonsNum(supported, enabled, btype) {
 	});
 }
 
+/* ---- Сворачиваемые блоки страницы «Сеть» -------------------------------
+   Все блоки, кроме шапки (модем/SIM/сеть/соединение), сворачиваемы и свёрнуты
+   по умолчанию. Состояние — в localStorage. Модульный опрос: данные блока
+   обновляются/запрашиваются только когда он раскрыт (см. blockExpanded и
+   реестр onBlockExpand). */
+var onBlockExpand = {};
+function blockExpanded(key) {
+	try { return localStorage.getItem('5gm-blk-' + key) === '1'; } catch (e) { return false; }
+}
+function collapsibleSection(key, titleText, content, extraAttrs) {
+	var expanded = blockExpanded(key);   // по умолчанию свёрнут
+	var chev = E('span', { 'style': 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (expanded ? '180' : '0') + 'deg)' });
+	chev.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+	var body = E('div', { 'style': 'display:' + (expanded ? 'block' : 'none') }, content);
+	var title = E('h3', {
+		'style': 'display:flex;align-items:center;gap:.35em;cursor:pointer;user-select:none;margin-bottom:' + (expanded ? '.5em' : '0'),
+		'click': function() {
+			var exp = (body.style.display === 'none');
+			body.style.display = exp ? 'block' : 'none';
+			title.style.marginBottom = exp ? '.5em' : '0';
+			chev.style.transform = 'rotate(' + (exp ? '180' : '0') + 'deg)';
+			try { localStorage.setItem('5gm-blk-' + key, exp ? '1' : '0'); } catch (e) {}
+			if (exp && typeof onBlockExpand[key] === 'function') { onBlockExpand[key](); }
+		}
+	}, [ chev, E('span', {}, titleText) ]);
+	var attrs = { 'class': 'cbi-section tginfo', 'data-blk': key };
+	if (extraAttrs) { for (var k in extraAttrs) { attrs[k] = extraAttrs[k]; } }
+	return E('div', attrs, [ title, body ]);
+}
+// При раскрытии блока «Управление частотами» подтягиваем данные (пока свёрнут -
+// band-функции возвращают сразу, mmcli/bands.sh не дёргаются). loadBands/
+// loadBandsModemband - function declarations, поэтому доступны здесь.
+onBlockExpand['freq'] = function() {
+	if (typeof loadBandsModemband === 'function') { loadBandsModemband(); }
+	if (typeof loadBands === 'function') { loadBands(); }
+};
+
+/* Единая сортировка режимов сети для ВСЕХ модемов: Auto, затем по поколению с
+   комбинациями сразу после младшего поколения:
+   Auto | 2G | 2G+3G | 3G | 3G+4G | 4G | 4G+5G | 5G.
+   Ранг = min_gen*10 + (max_gen-min_gen). Метки в профилях латиницей ("2G"). */
+function netModeRank(label) {
+	var s = String(label || '');
+	if (/auto/i.test(s)) { return -1; }
+	var gens = (s.match(/([0-9])\s*G/gi) || []).map(function(x) { return parseInt(x, 10); });
+	if (!gens.length) { return 999; }
+	var mn = Math.min.apply(null, gens), mx = Math.max.apply(null, gens);
+	return mn * 10 + (mx - mn);
+}
+function sortNetModes(modes) {
+	return (modes || []).slice().sort(function(a, b) {
+		return netModeRank(a.label) - netModeRank(b.label);
+	});
+}
+
 /* Показать блок частот и заполнить кнопки из bands.sh (без mmcli). Режим сети
    (Auto/2G/…) остаётся скрытым - он управляется только через mmcli. */
 function loadBandsModemband() {
+	if (!blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
 		var j = {};
 		var note = document.getElementById('bandnote');
@@ -664,7 +804,7 @@ function loadBandsModemband() {
 		var modeC = document.getElementById('modesw-btns');
 		if (modeC && j.modes && j.modes.length) {
 			modeC.innerHTML = '';
-			j.modes.forEach(function(m) {
+			sortNetModes(j.modes).forEach(function(m) {
 				var on = (String(j.currentmode) === String(m.id));
 				modeC.appendChild(E('button', {
 					'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
@@ -1187,16 +1327,12 @@ simDialog: baseclass.extend({
 				]);
 			};
 
-			// Тип SIM (USIM/eSIM) и переключатель слотов - строки скрыты и
-			// заполняются асинхронно из simslot.sh (AT+SIMTYPE / AT+GTDUALSIM
-			// либо mmcli sim-slots). Кнопки появляются, только если слотов >= 2.
+			// Тип SIM (USIM/eSIM) - строка скрыта и заполняется асинхронно из
+			// simslot.sh. Переключатель СЛОТОВ живёт в шапке страницы (над
+			// температурой, см. loadSimSlots), здесь его не дублируем.
 			var typeRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
 				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM type') ]),
 				E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; user-select:text;', 'id': 'simslot-type' }, [ '-' ]),
-			]);
-			var slotRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM slot') ]),
-				E('td', { 'class': 'td left', 'style': 'padding:8px 0;', 'id': 'simslot-btns' }, [ '' ]),
 			]);
 
 			ui.showModal(this.title, [
@@ -1207,7 +1343,6 @@ simDialog: baseclass.extend({
 						simRow(_('SIM ICCID'), json.iccid),
 						simRow(_('Modem IMEI'), json.imei),
 						typeRow,
-						slotRow,
 					]),
 				]),
 				E('div', { 'class': 'right' }, [
@@ -1224,34 +1359,6 @@ simDialog: baseclass.extend({
 				if (st.type) {
 					var tc = document.getElementById('simslot-type');
 					if (tc) { tc.textContent = st.type; typeRow.style.display = ''; }
-				}
-				if (st.slots && st.slots.length >= 2) {
-					var bc = document.getElementById('simslot-btns');
-					if (!bc) { return; }
-					bc.innerHTML = '';
-					st.slots.forEach(function(s) {
-						var on = (String(st.active) === String(s.id));
-						bc.appendChild(E('button', {
-							'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
-							'style': 'margin-right:6px',
-							'click': function(ev) {
-								ev.preventDefault();
-								if (on) { return; }   // уже активный
-								ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
-								fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
-									ui.hideModal();
-									var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
-									if (ui.addTimeLimitedNotification) {
-										ui.addTimeLimitedNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), 6000, ok ? 'info' : 'error');
-									} else {
-										ui.addNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), ok ? 'info' : 'error');
-									}
-									if (!poll.active()) poll.start();
-								}).catch(function() { ui.hideModal(); });
-							}
-						}, s.label));
-					});
-					slotRow.style.display = '';
 				}
 			});
 		},
@@ -1358,6 +1465,7 @@ simDialog: baseclass.extend({
 		}
 
 		active_select();
+		window.setTimeout(loadSimSlots, 600);
 
 		var upModemDialog = new this.modemDialog(
 			_('Defined modems'),
@@ -1423,6 +1531,23 @@ simDialog: baseclass.extend({
 					.then(function(res) {
 					var json = JSON.parse(res);
 
+				// Анти-скачок скролла (proton2025). Опрос метрик может схлопнуть
+				// строки (напр. "MCC MNC"/локация при "-") - высота страницы
+				// уменьшается, и если пользователь домотал до самого низа, вьюпорт
+				// «прыгает» вверх на высоту строки. На bootstrap это гасит
+				// браузерный scroll-anchoring, а на proton (root-скроллер +
+				// flex-body) он не срабатывает. Если были у низа - после всех
+				// правок DOM (rAF, до отрисовки) вернём к низу. Отмотал вверх хоть
+				// на пару пикселей - не трогаем.
+				var _scrollEl = document.scrollingElement || document.documentElement;
+				var _wasBottom = (_scrollEl.scrollTop + _scrollEl.clientHeight) >= (_scrollEl.scrollHeight - 3);
+				if (_wasBottom) {
+					requestAnimationFrame(function() {
+						var e = document.scrollingElement || document.documentElement;
+						e.scrollTop = e.scrollHeight;
+					});
+				}
+
 				// Раньше при signal==0 показывался модал и страница сама
 				// перезагружалась каждые 5 c - на модемах, медленно поднимающих
 				// сеть, это давало бесконечные перезагрузки. Страница и так
@@ -1485,9 +1610,12 @@ simDialog: baseclass.extend({
 						updateSimIcon(json.operator_name);
 					}
 
+					// Номер приоритетнее: если он есть - показываем номер и прячем
+					// «Страну»; если номера нет - вместо него показываем «Страну».
+					var _hasPhone = (json.phone && String(json.phone).length > 3 && json.phone != '-');
 					if (document.getElementById('phone')) {
 						var pv = document.getElementById('phone');
-						if (json.phone && String(json.phone).length > 3 && json.phone != '-') {
+						if (_hasPhone) {
 							pv.textContent = json.phone;
 							pv.style.display = '';
 						} else {
@@ -1497,14 +1625,13 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('location')) {
 						var viewloc = document.getElementById("location");
-						if (!json.location.length > 2) {
-						viewloc.style.display = 'none';
+						var _loc = String(json.location || '');
+						if (!_hasPhone && _loc.length > 1 && _loc != '-') {
+							viewloc.style.display = '';
+							viewloc.textContent = _(_loc);
+						} else {
+							viewloc.style.display = 'none';
 						}
-						else {
-						viewloc.style.display = '';
-						viewloc.textContent = _(json.location);
-						}
-
 					}
 
 					if (document.getElementById('sim')) {
@@ -1929,18 +2056,22 @@ simDialog: baseclass.extend({
 					E('div', { 'id': 'connst', 'class': 'tginfo-conn' }, [ '-' ]),
 				]),
 
-				E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
-					E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
-						E('img', { 'src': L.resource('icons/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+				/* Правая колонка: переключатель SIM-слотов (если их >= 2) НАД
+				   температурой. Заполняется асинхронно из simslot.sh. */
+				E('div', { 'class': 'tginfo-right' }, [
+					E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
+					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
+						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
+							E('img', { 'src': L.resource('icons/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+						]),
+						E('span', { 'id': 'temp' }, [ '-' ]),
 					]),
-					E('span', { 'id': 'temp' }, [ '-' ]),
 				]),
 			]),
 			]),
 
-			/* Второй блок - управление частотами */
-			E('div', { 'class': 'cbi-section tginfo' }, [
-			E('h3', {}, [ _('Frequency management') ]),
+			/* Второй блок - управление частотами (сворачиваемый) */
+			collapsibleSection('freq', _('Frequency management'), [
 			E('table', { 'class': 'table' }, [
 				E('tr', { 'class': 'tr', 'id': 'modeswn', 'style': msStyle }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Network mode')]),
@@ -2063,8 +2194,7 @@ simDialog: baseclass.extend({
 				return E('div', { 'style': 'margin:0 0 1em 0' }, [ title, body ]);
 			}).call(this),
 
-			E('div', { 'class': 'cbi-section tginfo' }, [
-			E('h3', {}, [ _('Cell / Signal Information') ]),
+			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [
 				E('tr', { 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('MCC MNC')]),
@@ -2154,8 +2284,7 @@ simDialog: baseclass.extend({
 
 				])
 			]),
-			E('div', { 'class': 'cbi-section tginfo', 'id': 'ca-comp', 'style': 'display:none' }, [
-				E('h3', {}, [ _('Carrier aggregation (per component)') ]),
+			collapsibleSection('ca', _('Carrier aggregation (per component)'), [
 				E('table', { 'class': 'table', 'id': 'ca-table' }, [
 					E('tr', { 'class': 'tr table-titles ca-head' }, [
 						E('th', { 'class': 'th left' }, [ 'CC' ]),
@@ -2187,7 +2316,7 @@ simDialog: baseclass.extend({
 						E('td', { 'class': 'td' }, [ '-' ]),
 					]);
 				})))
-			])
+			], { 'id': 'ca-comp', 'style': 'display:none' }),
 			]);
 		}, o, this);
 

@@ -7,8 +7,9 @@ CUSTOMER ➜ AT^CUSTOMER?;AT^CUSTOMER?
 Скорость USB ➜ AT^USBTYPE?;AT^USBTYPE?
 Отладка ➜ AT^DEBUG?;AT^DEBUG?
 Перезагрузка ➜ AT+CFUN=1,1;AT+CFUN=1,1
-Аггрегации Compal ➜ AT+LCAINFO
-Качество сигнала Compal ➜ AT+CESQ
-Инфа о БС + Сигнал Compal ➜ AT+BINFO;AT+CESQ
-Прочитать номер SIM ➜ AT+CPBS="ON";AT+CNUM
-Записать номер на SIM ➜ AT+CSCS="IRA";AT+CPBS="ON";AT+CPBW=1,"+7987654321",145,"Number"
+Аггрегации Compal ➜ AT+LCAINFO;AT+LCAINFO
+Качество сигнала Compal ➜ AT+CESQ;AT+CESQ
+Инфа о БС + Сигнал Compal ➜ AT+BINFO;AT+BINFO;AT+CESQ
+Прочитать номер SIM ➜ AT+CPBS="ON";AT+CPBS="ON";AT+CNUM
+Записать номер на SIM ➜ AT+CSCS="IRA";AT+CSCS="IRA";AT+CPBS="ON";AT+CPBW=1,"+79876543210",145,"Number"
+

@@ -10,11 +10,12 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=luci-app-5gmodem
 LUCI_TITLE:=LuCI support for 5G modems (info, SMS, USSD, AT)
 MAINTAINER:=Fil Dunsky <filipp.dunsky@gmail.com>
-LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands.
+LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands. \
+	Optional eSIM (eUICC) profile management when the lpac package is installed.
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.2.3
+PKG_VERSION:=1.2.4
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -74,12 +75,20 @@ include $(TOPDIR)/feeds/luci/luci.mk
 # All other languages are still emitted as separate luci-i18n-5gmodem-<lang>
 # packages by luci.mk (one per po/<lang>/), so foreign users keep installing
 # their translation as usual. Russian lives in po-ru/ (deliberately OUTSIDE the
-# po/* glob, so luci.mk does NOT build a standalone luci-i18n-5gmodem-ru); we
-# compile it here, at build time, to a path this package owns. postinst (above)
-# then copies it into LuCI's i18n dir on the device.
+# po/* glob, so luci.mk does NOT build a standalone luci-i18n-5gmodem-ru).
+#
+# The compiled catalog is COMMITTED at root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
+# so it ALWAYS ships (luci.mk's Build/Prepare copies ./root/* into the package).
+# The hook below just refreshes it from po-ru/ when po2lmo is available at build
+# time - and is prefixed with '-' so a missing/failing po2lmo can NEVER break the
+# build (the committed .lmo remains). Earlier this hook was the ONLY source and,
+# when po2lmo was absent in CI, the package shipped with NO Russian at all.
+# Regenerate the committed file after editing po-ru/: `po2lmo po-ru/5gmodem.po
+# root/usr/share/5gmodem/i18n/5gmodem.ru.lmo`. postinst copies it into LuCI's
+# i18n dir on the device.
 define Build/Prepare/luci-app-5gmodem
 	$(INSTALL_DIR) $(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n
-	po2lmo $(CURDIR)/po-ru/5gmodem.po \
+	-$(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po-ru/5gmodem.po \
 		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
 endef
 

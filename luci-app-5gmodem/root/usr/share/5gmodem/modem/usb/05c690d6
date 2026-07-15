@@ -67,12 +67,12 @@ else
 	# umbim/uqmi mode: ModemManager is off, so use plain AT for the info.
 	# TAC/CID come from the +CEREG/+CREG already parsed by 5gmodem.sh
 	# (TAC/TAC_HEX, LAC/CID_HEX) - leave those as-is.
-	NR_IMEI=$(sms_tool -d "$DEVICE" at "AT+CGSN" | sed 's/^AT+CGSN //' | tr -dc '0-9')
+	NR_IMEI=$(at_static imei "AT+CGSN" | sed 's/^AT+CGSN //' | tr -dc '0-9')
 	# take the response line only - drop the echoed command, OK/ERROR and blanks
 	# (the old sed left "AT+CGMM" in the name because the echo ends in \r, not a
 	# space, so "^AT+CGMM " never matched -> "Compal RXM-G1 (AT+CGMM SG500M2-X)").
-	MODELNAME=$(sms_tool -d "$DEVICE" at "AT+CGMM" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
-	FW=$(sms_tool -d "$DEVICE" at "AT+CGMR" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+	MODELNAME=$(at_static model "AT+CGMM" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+	FW=$(at_static fw "AT+CGMR" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
 fi
 # modem.generic.model reports the generic chipset platform name
 # ("VOS_5G") on this firmware, not the actual modem model - override
@@ -81,12 +81,10 @@ MODEL="Compal RXM-G1"
 
 # IMSI/ICCID are not exposed over the modem.3gpp.* keys on this MM
 # version - keep using AT for just these two (cheap single commands)
-O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
-NR_C=$(echo "$O" | sed 's/^AT+CIMI //')
-[ -n "$NR_C" ] && NR_IMSI="$NR_C"
+[ -n "$SIMID" ] && NR_IMSI="$SIMID"
 
-O=$(sms_tool -d $DEVICE at "AT+ICCID")
-NR_D=$(echo "$O" | awk -F[:] '/^\+ICCID:/{print $2}' | xargs)
+O=$(at_static iccid "AT+ICCID")
+NR_D=$(echo "$O" | awk -F[:] '/ICCID:/{print $2}' | xargs)
 [ -n "$NR_D" ] && NR_ICCID="$NR_D"
 
 # --- Protocol, from mmcli's own driver report instead of /sys parsing ---

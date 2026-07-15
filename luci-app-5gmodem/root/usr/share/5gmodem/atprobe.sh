@@ -21,7 +21,9 @@ D="$1"
 # under a second while a silent one is capped at 4s.
 sms_tool -d "$D" at "AT" >/dev/null 2>&1 &
 p=$!
-( sleep 4; kill "$p" 2>/dev/null ) &
+# 2 c достаточно: реальный AT-порт отвечает <0.3 c, а раньше 4 c на каждом
+# молчащем DIAG-порту складывались в ~8 c холодного детекта.
+( sleep 2; kill "$p" 2>/dev/null ) &
 k=$!
 
 wait "$p" 2>/dev/null

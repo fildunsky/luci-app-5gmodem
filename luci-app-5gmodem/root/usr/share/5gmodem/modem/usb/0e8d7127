@@ -131,25 +131,28 @@ if [ -n "$T1" ]; then
       MODE="$MODE $(band4g $T)"
     fi
   fi
+  # Метрики берём ТОЛЬКО в допустимых по мануалу диапазонах (11.1.15): при
+  # реинициализации прошивка шлёт мусор (напр. rssnr=8192 -> «SINR 4096.0 dB»
+  # растягивал таблицу в горизонтальный скролл и дёргал страницу).
   T=$(echo "$T1" | awk -F, '{print $11}')
-  if [ -n "$T" -a "$T" -ne "255" ]; then
+  if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
-      4) SINR=$(echo "$T" | awk '{printf "%0.1f", $1/2 }');;
-      9) SINR=$(echo "$T" | awk '{printf "%0.1f", ($1-45)/2-1 }');;
+      4) [ "$T" -ge -100 ] && [ "$T" -le 100 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", $1/2 }');;
+      9) [ "$T" -ge 0 ] && [ "$T" -le 127 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", ($1-45)/2-1 }');;
     esac
   fi
   T=$(echo "$T1" | awk -F, '{print $13}')
-  if [ -n "$T" -a "$T" -ne "255" ]; then
+  if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
-      4) RSRP=$((T - 141));;
-      9) RSRP=$((T - 157));;
+      4) [ "$T" -ge 0 ] && [ "$T" -le 140 ] && RSRP=$((T - 141));;
+      9) [ "$T" -ge 0 ] && [ "$T" -le 157 ] && RSRP=$((T - 157));;
     esac
   fi
   T=$(echo "$T1" | awk -F, '{print $14}')
-  if [ -n "$T" -a "$T" -ne "255" ]; then
+  if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
-      4) RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-34)/2-3 }');;
-      9) RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-87)/2 }');;
+      4) [ "$T" -ge 0 ] && [ "$T" -le 40 ] && RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-34)/2-3 }');;
+      9) [ "$T" -ge 0 ] && [ "$T" -le 127 ] && RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-87)/2 }');;
     esac
   fi
   if [ -n "$CSQ" ]; then
@@ -293,7 +296,7 @@ for LINE in $LINES; do
   # rows don't carry per-carrier RSRQ/SINR (modemdata doesn't emit them either);
   # those exist only for 5G-NSA SCC (via GTCCINFO), added separately below.
   T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $13}')
-  if [ -n "$T" ] && [ "$T" != "255" ]; then
+  if [ -n "$T" ] && [ "$T" != "255" ] && [ "$T" -le -40 ] 2>/dev/null && [ "$T" -ge -157 ] 2>/dev/null; then
     case $IDX in
       "1") S1RSRP="$T";;
       "2") S2RSRP="$T";;
@@ -402,31 +405,32 @@ elif [ -f "$SIGCACHE" ] && [ -z "$(find "$SIGCACHE" -mmin +2 2>/dev/null)" ]; th
 fi
 
 # Modem
-OA=$(sms_tool -d $DEVICE at "AT+CGMM?")
+OA=$(at_static cgmm "AT+CGMM?")
 MODELA=$(echo "$OA" | awk -F [:,] '/\+CGMM/{print $2}' | xargs)
-OB=$(sms_tool -d $DEVICE at "AT+CGMI?")
+OB=$(at_static cgmi "AT+CGMI?")
 MODELB=$(echo "$OB" | awk -F [:,] '/\+CGMI/{print $2}' | xargs)
 MODELBCUT=$(echo $MODELB | sed s/"Wireless Inc."//)
 MODEL=$(echo "$MODELBCUT $MODELA" | xargs)
 
-OF=$(sms_tool -d $DEVICE at "AT+GMR?")
+OF=$(at_static gmr "AT+GMR?")
 FW=$(echo "$OF" | awk -F[,:] '/\+GMR:/ {print $2}' | xargs)
 
 # International Mobile Equipment Identity (IMEI)
-OAA=$(sms_tool -d $DEVICE at "AT+CGSN?")
+OAA=$(at_static cgsn "AT+CGSN?")
 NR_IMEI=$(echo "$OAA" | awk -F[,:] '/\+CGSN:/ {print $2}' | xargs)
 
 # International Mobile Subscriber Identity (IMSI)
-OBB=$(sms_tool -d $DEVICE at "AT+CIMI?")
-NR_IMSI=$(echo "$OBB" | awk -F [,:] '/\+CIMI:/ {print $2}' | xargs)
+[ -n "$SIMID" ] && NR_IMSI="$SIMID" || NR_IMSI=$(at_static cimi "AT+CIMI?" | awk -F [,:] '/\+CIMI:/ {print $2}' | xargs)
 
 # Integrated Circuit Card Identifier (ICCID)
-OCC=$(sms_tool -d $DEVICE at "AT+ICCID")
+OCC=$(at_static iccid "AT+ICCID")
 NR_ICCID=$(echo "$OCC" | awk -F [,:] '/\+ICCID:/ {print $2}' | xargs)
 
-# Temp
+# Temp. Во время реинициализации (смена SIM-слота, ресет) сенсоры ETHERMAL
+# отдают заглушки (32767=0x7FFF, -127, -28479 и т.п.) - без фильтра в шапке
+# светилось "32767.0 °C". Берём только правдоподобные значения.
 OT=$(sms_tool -d "$DEVICE" at "AT+ETHERMAL?")
-TM=$(echo "$OT" | awk -F, '/\+ETHERMAL:/{ sum+=$2; count++ } END { if(count > 0) { printf "%.1f", sum/count } else { print 0 } }' | xargs)
+TM=$(echo "$OT" | awk -F, '/\+ETHERMAL:/{ v=$2+0; if (v > -40 && v < 150) { sum+=v; count++ } } END { if(count > 0) { printf "%.1f", sum/count } }' | xargs)
 if [ -n "$TM" ]; then
   TEMP="$TM &deg;C"
 fi

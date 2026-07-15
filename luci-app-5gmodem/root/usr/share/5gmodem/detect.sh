@@ -89,8 +89,33 @@ fi
 # by probing the ttys of its USB path (time-bounded, skips DIAG ports).
 AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
+	# Дешёвый кэш: atprobe молчащего DIAG-порта ждёт ~4 c, а перебор до
+	# рабочего порта (напр. 3-го) давал ~8 c НА КАЖДЫЙ вызов detect.sh (а его
+	# за загрузку страницы зовут несколько раз). Один раз найденный порт
+	# кэшируем; проверка живого порта - это одна быстрая atprobe (~0.5 c).
+	ATCACHE="/tmp/5gmodem_atport_$(echo "$AMP" | tr -c 'A-Za-z0-9' '_')"
+	CP=$(cat "$ATCACHE" 2>/dev/null)
+	# Проверку кэша НЕ делаем через atprobe: на MM-модеме atprobe шлёт AT на
+	# порт, которым владеет ModemManager, и ждёт ~4 c (это и был весь тормоз
+	# загрузки). Достаточно, что tty жив (символьное устройство). Если модем
+	# переперечислился - tty исчезнет и кэш инвалидируется; смена функции того
+	# же номера редка, и тогда downstream-запрос сам вызовет пере-детект.
+	if [ -n "$CP" ] && [ -c "$CP" ]; then
+		echo "$CP"
+		exit 0
+	fi
 	for T in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null); do
 		if /usr/share/5gmodem/atprobe.sh "$T"; then
+			echo "$T" > "$ATCACHE"
+			# ПИННИМ порт в uci: переживает ребут, и следующий detect берёт
+			# быстрый путь (at_port pinned) вместо перебора DIAG-портов через
+			# atprobe (это и был весь холодный детект ~8 c). Пиннится один раз -
+			# дальше сюда не доходим. Если модем переперечислится и tty исчезнет,
+			# быстрый путь провалит [ -e ] и мы снова окажемся здесь.
+			[ "$(uci -q get 5gmodem.@5gmodem[0].at_port)" = "$T" ] || {
+				uci -q set 5gmodem.@5gmodem[0].at_port="$T"
+				uci -q commit 5gmodem 2>/dev/null
+			}
 			echo "$T"
 			exit 0
 		fi

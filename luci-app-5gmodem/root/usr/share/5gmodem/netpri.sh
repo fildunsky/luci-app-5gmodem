@@ -38,10 +38,28 @@ iface_ip() {
 modem_section() {  # -> "m_<path>" whose network== $1, or empty
 	uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='$1'\$/\1/p" | head -1
 }
+# Является ли $1 модем-интерфейсом? Мульти-модем -> m_*-секция; одиночный
+# (legacy) конфиг -> @5gmodem[0].network указывает на этот интерфейс.
+is_modem() {
+	[ -n "$(modem_section "$1")" ] && return 0
+	[ -n "$1" ] && [ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && return 0
+	return 1
+}
+# USB-путь и AT-порт модема, обслуживающего $1, независимо от стиля конфига.
+modem_path_for() {
+	s=$(modem_section "$1")
+	if [ -n "$s" ]; then uci -q get "5gmodem.$s.path"; return; fi
+	[ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && uci -q get 5gmodem.@5gmodem[0].active_modem
+}
+modem_atport_for() {
+	s=$(modem_section "$1")
+	if [ -n "$s" ]; then uci -q get "5gmodem.$s.at_port"; return; fi
+	[ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && uci -q get 5gmodem.@5gmodem[0].at_port
+}
 iface_type() {
 	i="$1"
 	case "$i" in wan|wan6) echo wan; return;; esac
-	[ -n "$(modem_section "$i")" ] && { echo modem; return; }
+	is_modem "$i" && { echo modem; return; }
 	dev=$(ifup_state "$i" '@["l3_device"]')
 	case "$dev" in phy*-sta*|wlan*) echo wifi; return;; esac
 	echo other
@@ -61,7 +79,13 @@ at_query() {
 # background. Cache is valid for 30 min.
 operator_cached() {
 	cf="/tmp/netpri_op_$1"
-	[ -f "$cf" ] && [ -z "$(find "$cf" -mmin +30 2>/dev/null)" ] && cat "$cf"
+	if [ -f "$cf" ] && [ -z "$(find "$cf" -mmin +30 2>/dev/null)" ]; then
+		cat "$cf"; return
+	fi
+	# Фолбэк: имя оператора, уже разрешённое основным опросом (5gmodem.sh
+	# обрабатывает UCS2/mccmnc.dat и пишет буквенное имя в /tmp/5gmodem_op_<iface>).
+	# У MBIM/QMI-модемов оператор часто доступен только оттуда.
+	if [ -f "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; fi
 }
 
 # Probe the operator for ONE modem iface via AT+COPS and cache the result (used only
@@ -71,9 +95,19 @@ operator_cached() {
 # port that returns an operator name. Each modem has its own ports - no switch.
 operator_probe() {
 	i="$1"
-	sec=$(modem_section "$i"); [ -n "$sec" ] || return
-	path=$(uci -q get "5gmodem.$sec.path")
-	cands=$(uci -q get "5gmodem.$sec.at_port")
+	is_modem "$i" || return
+	# MM-модемы: имя оператора берём из mmcli (AT+COPS конфликтует с
+	# ModemManager, который держит порт, и на MBIM/QMI часто пуст).
+	if [ "$(uci -q get "network.$i.proto")" = "modemmanager" ]; then
+		mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+		if [ -n "$mi" ]; then
+			nm=$(mmcli -m "$mi" -K 2>/dev/null \
+				| sed -n 's/^modem\.3gpp\.operator-name *: *//p' | head -1)
+			[ -n "$nm" ] && [ "$nm" != "--" ] && { printf '%s' "$nm" > "/tmp/netpri_op_$i"; return; }
+		fi
+	fi
+	path=$(modem_path_for "$i")
+	cands=$(modem_atport_for "$i")
 	if [ -n "$path" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 		cands="$cands $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
 			| jsonfilter -e "@[@.path=\"$path\"].tty[*]" 2>/dev/null)"
@@ -89,6 +123,14 @@ operator_probe() {
 				for(j=1;j<=h;j++) if($j!=$(j+h)) same=0;
 				if(same){ s=$1; for(j=2;j<=h;j++) s=s" "$j; print s; next } }
 			print }')
+		# Нет буквенного имени (многие MBIM/QMI отдают только числовой код) ->
+		# берём числовой код (формат 2) и имя из mccmnc.dat, как в 5gmodem.sh.
+		if [ -z "$name" ] || echo "$name" | grep -qE '^[0-9 ]*$'; then
+			num=$(at_query "$port" "AT+COPS=3,2;+COPS?" | tr -d '\r' \
+				| sed -n 's/.*+COPS[^"]*"\([0-9]\{4,\}\)".*/\1/p' | head -1)
+			[ -n "$num" ] && name=$(awk -F';' '/^'"$num"';/{print $3}' \
+				/usr/share/5gmodem/mccmnc.dat 2>/dev/null | head -1 | sed 's/^ *//;s/ *$//')
+		fi
 		[ -n "$name" ] && { printf '%s' "$name" > "/tmp/netpri_op_$i"; return; }
 	done
 }
@@ -96,12 +138,12 @@ operator_probe() {
 # modem model name for the small top line (matches the modem-switch tab). Product
 # from listmodems (by stable USB path), with a couple of friendly overrides.
 model_for() {
-	sec=$(modem_section "$1"); [ -n "$sec" ] || return
-	path=$(uci -q get "5gmodem.$sec.path")
+	is_modem "$1" || return
+	path=$(modem_path_for "$1")
 	prod=""
 	[ -n "$path" ] && prod=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
 		| jsonfilter -e "@[@.path=\"$path\"].product" 2>/dev/null | head -1)
-	[ -n "$prod" ] || prod=$(uci -q get "5gmodem.$sec.product")
+	if [ -z "$prod" ]; then sec=$(modem_section "$1"); [ -n "$sec" ] && prod=$(uci -q get "5gmodem.$sec.product"); fi
 	case "$prod" in
 		VOS_5G|RXMG1|RXM-G1) echo "Compal RXM-G1" ;;
 		FM350*) echo "Fibocom $prod" ;;
