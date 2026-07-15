@@ -771,10 +771,10 @@ cat <<EOF
 "s3mod":"$(sanitize_string "$S3MOD")",
 "s4mimo":"$(sanitize_string "$S4MIMO")",
 "s4mod":"$(sanitize_string "$S4MOD")",
-"rsrp":"$(sanitize_number "$RSRP")",
-"rsrq":"$(sanitize_number "$RSRQ")",
-"rssi":"$(sanitize_number "$RSSI")",
-"sinr":"$(sanitize_number "$SINR")"
+"rsrp":"$(sanitize_string "$RSRP")",
+"rsrq":"$(sanitize_string "$RSRQ")",
+"rssi":"$(sanitize_string "$RSSI")",
+"sinr":"$(sanitize_string "$SINR")"
 }
 EOF
 exit 0
