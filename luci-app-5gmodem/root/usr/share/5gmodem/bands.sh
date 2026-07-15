@@ -351,14 +351,7 @@ else
 	done
 fi
 
-if [ -z "$_DEVICE" ]; then
-	if [ "x$1" = "xjson" ]; then
-		echo '{"error":"No supported modem was found, quitting..."}'
-	else
-		echo "No supported modem was found, quitting..."
-	fi
-	exit 0
-else
+if [ -n "$_DEVICE" ]; then
 	# prefer the AT port configured/detected by luci-app-5gmodem, fall back
 	# to the profile's default _DEVICE
 	_ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
@@ -367,13 +360,29 @@ else
 		/dev/*) [ -e "$_ATP" ] && _DEVICE="$_ATP" ;;
 	esac
 fi
-if [ ! -e "$_DEVICE" ]; then
-	if [ "x$1" = "xjson" ]; then
-		echo '{"error":"Port not found, quitting..."}'
-	else
-		echo "Port not found, quitting..."
-	fi
-	exit 0
+
+# _PORT_OK=1 only when we can actually talk to the modem. The STATIC lists
+# (getsupported*/getsupportedmodes) come from the modemband profile - already
+# sourced above - and must be reported REGARDLESS of port state, so the band /
+# mode buttons are always shown. This is the recovery path: if the modem is
+# rebooted onto a band with no coverage, its AT port may vanish or hang, but the
+# user still needs the buttons to switch back to a working band. Only the LIVE
+# queries (getbands/getmode = current selection) are gated on the port.
+_PORT_OK=0
+[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] && _PORT_OK=1
+
+# Non-json (single-value) callers still expect the classic port guard: a live
+# query on a missing port is meaningless. The json builder handles it per-field.
+if [ "x$1" != "xjson" ]; then
+	case "$1" in
+		getsupported*) : ;;  # static, no port needed
+		*)
+			if [ "$_PORT_OK" != "1" ]; then
+				echo "Port not found, quitting..."
+				exit 0
+			fi
+			;;
+	esac
 fi
 
 case $1 in
@@ -440,8 +449,9 @@ case $1 in
 		json_add_string modem "$(getinfo)"
 		MODES=$(getsupportedmodes)
 		if [ "x$MODES" != "xUnsupported" ]; then
-			CURMODE=$(getmode)
-			json_add_string currentmode "$CURMODE"
+			# currentmode is a LIVE query - only when the port is reachable.
+			# The modes list itself is static and always shown (recovery path).
+			[ "$_PORT_OK" = "1" ] && json_add_string currentmode "$(getmode)"
 			json_add_array modes
 			for PAIR in $MODES; do
 				json_add_object ""
@@ -464,8 +474,8 @@ case $1 in
 		fi
 		json_close_array
 		json_add_array enabled
-		T=$(getbands)
-		if [ "x$T" != "xUnsupported" ]; then
+		T=$([ "$_PORT_OK" = "1" ] && getbands)
+		if [ -n "$T" ] && [ "x$T" != "xUnsupported" ]; then
 			for BAND in $T; do
 				json_add_int "" $BAND
 			done
@@ -484,8 +494,8 @@ case $1 in
 			done
 			json_close_array
 			json_add_array enabled5gnsa
-			T=$(getbands5gnsa)
-			if [ "x$T" != "xUnsupported" ]; then
+			T=$([ "$_PORT_OK" = "1" ] && getbands5gnsa)
+			if [ -n "$T" ] && [ "x$T" != "xUnsupported" ]; then
 				for BAND in $T; do
 					json_add_int "" $BAND
 				done
@@ -504,8 +514,8 @@ case $1 in
 			done
 			json_close_array
 			json_add_array enabled5gsa
-			T=$(getbands5gsa)
-			if [ "x$T" != "xUnsupported" ]; then
+			T=$([ "$_PORT_OK" = "1" ] && getbands5gsa)
+			if [ -n "$T" ] && [ "x$T" != "xUnsupported" ]; then
 				for BAND in $T; do
 					json_add_int "" $BAND
 				done

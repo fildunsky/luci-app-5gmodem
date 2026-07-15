@@ -2158,41 +2158,28 @@ simDialog: baseclass.extend({
 			]),
 			]),
 
-			/* Компактный сворачиваемый блок фиксации TTL / hop-limit (не карточка,
-			   стиль как у панели «Приоритет интернета»); по умолчанию свёрнут. */
-			(function() {
-				var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
-				var collapsed = true;
-				try { collapsed = (localStorage.getItem('ttl-collapsed') !== '0'); } catch (e) {}
-				var chev = E('span', { 'style': 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (collapsed ? '0' : '180') + 'deg)' });
-				chev.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
-				var row = E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.5em 0 .2em 0' }, [
-					E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
-						E('span', { 'style': 'opacity:.8' }, _('TTL IPv4 (in / out)')),
-						mkin('ttl4in', def4), ' / ', mkin('ttl4out', def4)
-					]),
-					has6 ? E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
-						E('span', { 'style': 'opacity:.8' }, _('Hop Limit IPv6 (in / out)')),
-						mkin('ttl6in', def6), ' / ', mkin('ttl6out', def6)
-					]) : '',
-					E('button', {
-						'class': 'btn cbi-button cbi-button-action important',
-						'style': 'white-space:nowrap',
-						'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
-					}, _('Apply'))
-				]);
-				var body = E('div', { 'style': 'display:' + (collapsed ? 'none' : 'block') }, [ row ]);
-				var title = E('div', {
-					'style': 'display:inline-flex;align-items:center;gap:.35em;cursor:pointer;user-select:none;font-weight:600;opacity:.85;padding:.15em 0',
-					'click': function() {
-						var expand = (body.style.display === 'none');
-						body.style.display = expand ? 'block' : 'none';
-						chev.style.transform = 'rotate(' + (expand ? '180' : '0') + 'deg)';
-						try { localStorage.setItem('ttl-collapsed', expand ? '0' : '1'); } catch (e) {}
-					}
-				}, [ chev, E('span', {}, _('TTL fixing')) ]);
-				return E('div', { 'style': 'margin:0 0 1em 0' }, [ title, body ]);
-			}).call(this),
+			/* Блок фиксации TTL / hop-limit - на такой же плашке (collapsibleSection),
+			   как остальные блоки страницы; по умолчанию свёрнут. */
+			collapsibleSection('ttl', _('TTL fixing'), [
+				(function() {
+					var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
+					return E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.2em 0' }, [
+						E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+							E('span', { 'style': 'opacity:.8' }, _('TTL IPv4 (in / out)')),
+							mkin('ttl4in', def4), ' / ', mkin('ttl4out', def4)
+						]),
+						has6 ? E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+							E('span', { 'style': 'opacity:.8' }, _('Hop Limit IPv6 (in / out)')),
+							mkin('ttl6in', def6), ' / ', mkin('ttl6out', def6)
+						]) : '',
+						E('button', {
+							'class': 'btn cbi-button cbi-button-action important',
+							'style': 'white-space:nowrap',
+							'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
+						}, _('Apply'))
+					]);
+				}).call(this)
+			]),
 
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [
@@ -2282,10 +2269,13 @@ simDialog: baseclass.extend({
 				// Раньше эти строки появлялись/прятались при (де)агрегации и меняли
 				// высоту страницы -> при просмотре снизу её дёргало вверх.
 
-				])
-			]),
-			collapsibleSection('ca', _('Carrier aggregation (per component)'), [
-				E('table', { 'class': 'table', 'id': 'ca-table' }, [
+				]),
+				/* Детали агрегации несущих (CA) - в ТОМ ЖЕ сворачиваемом блоке, что и
+				   метрики. Обёртка #ca-comp прячется, когда нет подключения (см.
+				   renderCaTable), скрывая только CA-таблицу внутри блока. */
+				E('div', { 'id': 'ca-comp', 'style': 'display:none;margin-top:.6em' }, [
+					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Carrier aggregation (per component)')),
+					E('table', { 'class': 'table', 'id': 'ca-table' }, [
 					E('tr', { 'class': 'tr table-titles ca-head' }, [
 						E('th', { 'class': 'th left' }, [ 'CC' ]),
 						E('th', { 'class': 'th left' }, [ 'Band' ]),
@@ -2316,8 +2306,9 @@ simDialog: baseclass.extend({
 						E('td', { 'class': 'td' }, [ '-' ]),
 					]);
 				})))
-			], { 'id': 'ca-comp', 'style': 'display:none' }),
-			]);
+				])
+			])
+		]);
 		}, o, this);
 
 		return m.render();

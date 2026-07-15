@@ -43,9 +43,34 @@ run_lpac() {
 	rm -f "$_OUT"
 }
 
-port_ok() {   # eUICC доступен на этом порту? (дорогая проба chip info)
-	( export LPAC_APDU=at LPAC_APDU_AT_DEVICE="$1"; run_lpac 20 chip info ) \
-		| grep -q '"code":0'
+# AT-команда с ограничением по времени (sms_tool сам таймаута не имеет и на
+# молчащем порту висит ~35 c). Возвращает ответ без CR.
+at_bounded() {
+	_ao="/tmp/5gmodem_esim_at.$$"
+	sms_tool -d "$1" at "$2" > "$_ao" 2>/dev/null &
+	_ap=$!
+	( sleep "${3:-6}"; kill "$_ap" 2>/dev/null ) & _aw=$!
+	wait "$_ap" 2>/dev/null; kill "$_aw" 2>/dev/null; wait "$_aw" 2>/dev/null
+	tr -d '\r' < "$_ao"; rm -f "$_ao"
+}
+
+# eUICC-порт? БЕЗОПАСНАЯ и БЫСТРАЯ проба через AT+CCHO (открыть логический канал
+# к ISD-R). Порт eUICC мгновенно отвечает "+CCHO: N" (номер канала) - закрываем
+# его (CCHC=N) за собой. Остальные AT-порты отвечают ERROR/пусто сразу.
+#
+# ВАЖНО: раньше здесь перебирали порты через "lpac chip info". На FM350 номер
+# eUICC-порта плавает при каждой переперечисления USB, а lpac на НЕВЕРНОМ порту
+# шлёт CGLA и ВИСНЕТ ~20-40 c, ОСТАВЛЯЯ логический канал открытым. За несколько
+# таких проб все каналы ISD-R утекают, и eUICC перестаёт отвечать до аппаратного
+# сброса (переподключения модема). CCHO-проба быстрая и мусора не оставляет.
+port_ok() {
+	_AID=$(uci -q get lpac.global.custom_isd_r_aid 2>/dev/null)
+	[ -n "$_AID" ] || _AID="A0000005591010FFFFFFFF8900000100"
+	_CH=$(at_bounded "$1" "AT+CCHO=\"$_AID\"" 6 \
+		| sed -n 's/^+CCHO: *\([0-9]\).*/\1/p' | head -1)
+	[ -n "$_CH" ] || return 1
+	at_bounded "$1" "AT+CCHC=$_CH" 4 >/dev/null   # закрыть канал за собой
+	return 0
 }
 
 # Живой AT-порт активного модема (дёшево). detect.sh после переперечисления
@@ -72,8 +97,10 @@ esim_active() {   # AT+SIMTYPE: 1 = ESIM
 # Найти eUICC-порт. Быстрый путь: кэш жив и отвечает на AT - доверяем без
 # дорогой lpac-пробы. Иначе перебираем tty модема с пробой chip info.
 find_port() {
+	# Проверяем кэш CCHO-пробой (а не только atprobe): номер eUICC-порта на FM350
+	# плавает при переперечислении, и AT-живой, но НЕ-eUICC порт повесил бы lpac.
 	C=$(cat "$PORTCACHE" 2>/dev/null)
-	if [ -n "$C" ] && [ -e "$C" ] && "$RES/atprobe.sh" "$C" >/dev/null 2>&1; then
+	if [ -n "$C" ] && [ -e "$C" ] && port_ok "$C"; then
 		echo "$C"; return 0
 	fi
 	rm -f "$PORTCACHE"
@@ -145,6 +172,13 @@ esim_active "$D" || { err "esim slot not active"; exit 0; }
 
 PORT=$(find_port)
 [ -n "$PORT" ] || { err "no eUICC-capable AT port"; exit 0; }
+
+# Закрыть возможные УТЕКШИЕ логические каналы ISD-R перед работой lpac. Если
+# прошлый вызов lpac прибил сторожевой таймер посреди APDU-обмена, его канал
+# остался открытым; у eUICC их всего несколько, и накопившиеся утечки вешают
+# следующий CCHO намертво (до аппаратного сброса модема). Чистим 1-4 - lpac
+# откроет свой канал с чистого листа.
+for _ch in 1 2 3 4; do at_bounded "$PORT" "AT+CCHC=$_ch" 3 >/dev/null; done
 
 flush_notifications() {
 	R=$(export LPAC_APDU=at LPAC_APDU_AT_DEVICE="$PORT"; run_lpac 60 notification process -a -r)
