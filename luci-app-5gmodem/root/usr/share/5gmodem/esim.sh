@@ -164,15 +164,26 @@ do_lpac() {
 case "$1" in
 status)
 	AVAIL=0; ACTIVE=0
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
 	if [ -x "$LPAC" ]; then
 		_NET=$(uci -q show 5gmodem 2>/dev/null | sed -n \
-			"s/^5gmodem\.\(m_[^.]*\)\.path='$(uci -q get 5gmodem.@5gmodem[0].active_modem)'\$/\1/p" | head -1)
+			"s/^5gmodem\.\(m_[^.]*\)\.path='$_AP'\$/\1/p" | head -1)
 		_PROTO=$(uci -q get "network.$(uci -q get "5gmodem.$_NET.network").proto")
 		if [ "$_PROTO" != "modemmanager" ]; then
 			D=$(live_port)
 			if [ -n "$D" ]; then
 				AVAIL=1
 				esim_active "$D" && ACTIVE=1
+				# запомнить ХОРОШИЙ ответ (ключ - стабильный USB-путь модема)
+				printf '{"available":%s,"active":%s}\n' "$AVAIL" "$ACTIVE" > "$_SCACHE"
+			elif [ -s "$_SCACHE" ]; then
+				# Порт не ответил: он общий с метриками и simslot.sh, коллизии
+				# неизбежны, а модем мог ещё и переперечисляться. Раньше отсюда
+				# уходил available=0, и вкладка eSIM ПРОПАДАЛА при живом eUICC -
+				# при том что кнопки слотов рядом оставались (у них свой опрос).
+				# Отдаём последний валидный ответ вместо ложного «eSIM нет».
+				cat "$_SCACHE"; exit 0
 			fi
 		fi
 	fi

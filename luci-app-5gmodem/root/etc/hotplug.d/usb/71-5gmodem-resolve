@@ -18,10 +18,17 @@
 
 mkdir -p /tmp/5gmodem 2>/dev/null
 
+# Кэш listmodems.sh недействителен СРАЗУ: модем появился/исчез. Сбрасываем до
+# всякого sleep, чтобы никто не успел прочитать устаревший список (у кэша есть
+# и TTL-страховка, но она грубее - см. listmodems.sh).
+rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
+
 (
 	# first event of a burst grabs the lock and does the work; the rest exit
 	flock -n 9 || exit 0
 	sleep 5
+	# порты уже переустановились - пересобрать кэш заново, а не отдать протухший
+	/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
 	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 ) 9>/tmp/5gmodem/resolve.lock &
 

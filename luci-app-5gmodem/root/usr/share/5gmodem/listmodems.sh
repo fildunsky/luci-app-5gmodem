@@ -10,6 +10,37 @@
 #   [ { "path":"2-1.4", "vidpid":"05c6:90d6", "product":"VOS_5G",
 #       "tty":["/dev/ttyUSB4","/dev/ttyUSB5"], "wdm":["/dev/cdc-wdm1"] }, ... ]
 #
+# ПРОИЗВОДИТЕЛЬНОСТЬ (замерено на WH3000 через /proc/uptime; busybox date не
+# понимает %N и молча даёт нули - мерить только так):
+# скрипт зовётся 6 РАЗ за одну загрузку страницы (netpri.sh - 4 из них, плюс
+# modemtabs/simslot/bands/modemswitch) и стоил 0.19 c за вызов = 1.14 c, то есть
+# 48% всего бэкенда страницы. Отсюда два изменения:
+#   1) КЭШ вывода в /tmp (инвалидация hotplug-хуком + короткий TTL-страховка);
+#   2) ОДИН проход по портам вместо O(n^2): раньше owner_node() звался для
+#      каждого порта, а затем ЕЩЁ РАЗ для каждого порта внутри цикла по модемам
+#      (~100 readlink на 11 портов).
+#
+#   listmodems.sh              - обычный вызов (может отдать кэш)
+#   listmodems.sh --refresh    - пересобрать и обновить кэш (зовёт hotplug-хук)
+
+CACHE=/tmp/5gmodem_listmodems.cache
+STAMP=/tmp/5gmodem_listmodems.stamp
+TTL=8   # секунд; страховка, если hotplug-инвалидация не сработала
+
+uptime_s() { cut -d. -f1 /proc/uptime; }
+
+if [ "$1" = "--refresh" ]; then
+	rm -f "$CACHE" "$STAMP"
+elif [ -s "$CACHE" ]; then
+	# find -mmin умеет только минуты, поэтому возраст считаем по /proc/uptime
+	_now=$(uptime_s)
+	_then=$(cat "$STAMP" 2>/dev/null)
+	case "$_then" in ''|*[!0-9]*) _then="" ;; esac
+	if [ -n "$_then" ] && [ "$((_now - _then))" -ge 0 ] && [ "$((_now - _then))" -lt "$TTL" ]; then
+		cat "$CACHE"
+		exit 0
+	fi
+fi
 
 esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -23,39 +54,50 @@ owner_node() {
 	[ -f "$p/idVendor" ] && echo "$p"
 }
 
-# collect the distinct owner nodes (one per modem), preserving first-seen order
+# ОДИН проход: каждый порт сразу кладём в список СВОЕГО модема.
+# NODES хранит порядок первого появления (как и раньше), TTYS_<i>/WDMS_<i> - порты.
 NODES=""
+NCNT=0
 for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -e "$t" ] || continue
 	n=$(owner_node "$t")
 	[ -n "$n" ] || continue
-	case " $NODES " in *" $n "*) ;; *) NODES="$NODES $n" ;; esac
+
+	idx=""
+	i=1
+	for known in $NODES; do
+		[ "$known" = "$n" ] && { idx=$i; break; }
+		i=$((i + 1))
+	done
+	if [ -z "$idx" ]; then
+		NCNT=$((NCNT + 1)); idx=$NCNT
+		NODES="$NODES $n"
+	fi
+
+	case "$t" in
+		/dev/ttyUSB*|/dev/ttyACM*) eval "TTYS_$idx=\"\${TTYS_$idx}\${TTYS_$idx:+,}\\\"$t\\\"\"" ;;
+		*)                         eval "WDMS_$idx=\"\${WDMS_$idx}\${WDMS_$idx:+,}\\\"$t\\\"\"" ;;
+	esac
 done
 
-first=1
-printf '['
+OUT=""
+i=0
 for n in $NODES; do
+	i=$((i + 1))
 	path=$(basename "$n")
 	vid=$(cat "$n/idVendor" 2>/dev/null)
 	pid=$(cat "$n/idProduct" 2>/dev/null)
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
-
-	# ports belonging to this node
-	ttys=""; wdms=""
-	for t in /dev/ttyUSB* /dev/ttyACM*; do
-		[ -e "$t" ] || continue
-		[ "$(owner_node "$t")" = "$n" ] || continue
-		ttys="$ttys${ttys:+,}\"$t\""
-	done
-	for t in /dev/cdc-wdm* /dev/wwan*; do
-		[ -e "$t" ] || continue
-		[ "$(owner_node "$t")" = "$n" ] || continue
-		wdms="$wdms${wdms:+,}\"$t\""
-	done
-
-	[ "$first" = 1 ] || printf ','
-	first=0
-	printf '{"path":"%s","vidpid":"%s:%s","product":"%s","tty":[%s],"wdm":[%s]}' \
-		"$path" "$vid" "$pid" "$prod" "$ttys" "$wdms"
+	eval "ttys=\$TTYS_$i"
+	eval "wdms=\$WDMS_$i"
+	[ -n "$OUT" ] && OUT="$OUT,"
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"tty\":[$ttys],\"wdm\":[$wdms]}"
 done
-printf ']\n'
+OUT="[$OUT]"
+
+# Кэш пишем атомарно (tmp+mv): скрипт зовут несколько процессов разом при
+# открытии страницы, и читатель не должен увидеть обрывок файла.
+printf '%s\n' "$OUT" > "$CACHE.tmp" 2>/dev/null && mv "$CACHE.tmp" "$CACHE" 2>/dev/null
+uptime_s > "$STAMP" 2>/dev/null
+
+printf '%s\n' "$OUT"

@@ -15,7 +15,7 @@ LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, 
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.2.7
+PKG_VERSION:=1.2.8
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -28,19 +28,7 @@ define Package/luci-app-5gmodem/conffiles
 /etc/modem/ussdcodes/*.user
 endef
 
-# Deploy the bundled Russian translation. The .lmo ships at a path THIS package
-# owns (/usr/share/5gmodem/i18n/), and postinst copies it into LuCI's i18n dir.
-# Doing it via postinst (a plain cp) instead of shipping it straight to
-# /usr/lib/lua/luci/i18n/ avoids an apk file-ownership CONFLICT with an old
-# standalone luci-i18n-5gmodem-ru that older installs still have (apk on the
-# device is run without --force-overwrite by the in-app updater). Defined before
-# the luci.mk include so its default postinst (which we replicate) is skipped.
 define Package/luci-app-5gmodem/postinst
-#!/bin/sh
-# Belt-and-suspenders: guarantee the app's executable files carry +x. A source
-# file committed without it makes 5gmodem.sh's helpers fail "Permission denied"
-# (blank info page), the netifd proto not load ("unsupported protocol type",
-# modem gets no IP), or the resolve hotplug not run (modem<->iface link lost).
 chmod +x "$${IPKG_INSTROOT}"/usr/share/5gmodem/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/lib/netifd/proto/fibocom.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
@@ -59,6 +47,9 @@ fi
 	rm -f /tmp/luci-indexcache.*
 	rm -rf /tmp/luci-modulecache/
 	/etc/init.d/rpcd reload 2>/dev/null
+	find /www/luci-static/resources/view/modem \
+		/www/luci-static/resources/protocol/fibocom.js \
+		/www/luci-static/resources/icons -exec touch {} + 2>/dev/null
 }
 exit 0
 endef
@@ -71,21 +62,6 @@ endef
 
 include $(TOPDIR)/feeds/luci/luci.mk
 
-# --- Russian is bundled INTO the main package -------------------------------
-# All other languages are still emitted as separate luci-i18n-5gmodem-<lang>
-# packages by luci.mk (one per po/<lang>/), so foreign users keep installing
-# their translation as usual. Russian lives in po-ru/ (deliberately OUTSIDE the
-# po/* glob, so luci.mk does NOT build a standalone luci-i18n-5gmodem-ru).
-#
-# The compiled catalog is COMMITTED at root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
-# so it ALWAYS ships (luci.mk's Build/Prepare copies ./root/* into the package).
-# The hook below just refreshes it from po-ru/ when po2lmo is available at build
-# time - and is prefixed with '-' so a missing/failing po2lmo can NEVER break the
-# build (the committed .lmo remains). Earlier this hook was the ONLY source and,
-# when po2lmo was absent in CI, the package shipped with NO Russian at all.
-# Regenerate the committed file after editing po-ru/: `po2lmo po-ru/5gmodem.po
-# root/usr/share/5gmodem/i18n/5gmodem.ru.lmo`. postinst copies it into LuCI's
-# i18n dir on the device.
 define Build/Prepare/luci-app-5gmodem
 	$(INSTALL_DIR) $(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n
 	-$(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po-ru/5gmodem.po \

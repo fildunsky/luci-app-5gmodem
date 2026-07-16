@@ -290,8 +290,31 @@ resolve)
 		P=$(uci -q get "$CFG.$SEC.path")
 		[ -n "$P" ] || continue
 		echo " $PRESENT " | grep -q " $P " || continue
-		A=$(at_for_path "$P")
-		[ -n "$A" ] && uci -q set "$CFG.$SEC.at_port=$A"
+		# Порты появляются НЕ мгновенно: после hotplug-add ядро заводит ttyUSB*
+		# ещё несколько секунд (FM350 отдаёт 7 штук), а hotplug ждёт всего 5с.
+		# Ждём порт, но не бесконечно (resolve всегда вызывается из фона).
+		A=""; _try=0
+		while [ "$_try" -lt 6 ]; do
+			A=$(at_for_path "$P")
+			[ -n "$A" ] && break
+			_try=$((_try + 1)); sleep 2
+		done
+		if [ -n "$A" ]; then
+			uci -q set "$CFG.$SEC.at_port=$A"
+		else
+			# Порт не отдался. Раньше СТАРОЕ значение молча оставалось в конфиге -
+			# а после «включили роутер без модема, воткнули позже» нумерация ttyUSB
+			# другая, и там лежал порт от прошлой загрузки, часто уже принадлежащий
+			# СОСЕДНЕМУ модему: метрики читали чужой tty (0% сигнала, ни uptime, ни
+			# rx/tx - до ручного переключения модема в UI, которое всё чинило).
+			# Сохранённый оставляем, ТОЛЬКО если он ещё существует и принадлежит
+			# ЭТОМУ модему (значит, AT-проба просто столкнулась за порт); иначе
+			# чистим - пусто честнее чужого (см. инвариант в ветке switch).
+			SAVED=$(uci -q get "$CFG.$SEC.at_port")
+			if [ -n "$SAVED" ] && { [ ! -e "$SAVED" ] || ! modem_ttys "$P" | grep -qxF "$SAVED"; }; then
+				uci -q delete "$CFG.$SEC.at_port" 2>/dev/null
+			fi
+		fi
 	done
 	uci -q commit "$CFG"
 

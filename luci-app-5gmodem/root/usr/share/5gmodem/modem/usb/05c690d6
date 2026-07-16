@@ -222,7 +222,17 @@ if [ "$REGOK" = "1" ]; then
 	# pure LTE): lte + 5gnr -> 5G NSA, 5gnr only -> 5G SA, lte only -> LTE
 	# (LTE-A when more than one LTE band is aggregated). This fixes 5G being
 	# shown as "LTE", and forcing 4G correctly falls back to "LTE".
-	if [ "$_QMICLI_OK" = "1" ] && { [ "x$MODE_NUM" = "x13" ] || [ "x$MODE_NUM" = "x11" ]; }; then
+	# Условие расширено: раньше блок был заперт под MODE_NUM=13/11 (5G), а
+	# MODE_NUM берётся из поля AcT строки +COPS. На прошивке Compal gcom/info.gcom
+	# НЕ отдаёт +COPS вовсе -> MODE_NUM пуст -> блок не выполнялся ни разу, и в UI
+	# оставалось голое "LTE" без диапазонов. Ветка MODE_NUM=7 тут тоже не помощник:
+	# её источник --nas-get-lte-cphy-ca-info отвечает QMI error 74
+	# 'InformationUnavailable'. Рабочий источник один - --nas-get-rf-band-info
+	# (отдаёт 'eutran-N'/'ngran-N' + Active Channel), поэтому пробуем его всегда,
+	# когда qmicli жив, а диапазонов в MODE ещё нет. HAS_LTE/HAS_NR ниже ставятся
+	# по самим band class'ам, так что пустой ATECH (MM выключен) не мешает.
+	if [ "$_QMICLI_OK" = "1" ] && { [ "x$MODE_NUM" = "x13" ] || [ "x$MODE_NUM" = "x11" ] \
+		|| ! echo "$MODE" | grep -q "B[0-9]"; }; then
 		ATECH=$(echo "$_MM_K" | awk -F': *' '/access-technologies\.value/{print $2}' | xargs)
 		HAS_LTE=0; HAS_NR=0
 		echo " $ATECH " | grep -q " lte "  && HAS_LTE=1

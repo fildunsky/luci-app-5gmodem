@@ -47,6 +47,53 @@ function updBusy(busy) {
 	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
 }
 
+/* Ресурсы приложения, которые браузер кэширует и которые меняются с релизом.
+   Держим списком, а не угадыванием: L.resource() даёт правильный префикс. */
+var CACHED_RES = [
+	'view/modem/5gdetail.js', 'view/modem/5gdebug.js', 'view/modem/5gesim.js',
+	'view/modem/netpri.js', 'view/modem/modemtabs.js', 'view/modem/readsms.js',
+	'view/modem/sendsms.js', 'view/modem/sendussd.js', 'view/modem/sendat.js',
+	'protocol/fibocom.js'
+];
+
+/* Принудительно перетянуть наши ресурсы МИМО кэша браузера.
+   Очистить кэш из JS нельзя (такого API нет ни в одном браузере), но
+   fetch(cache:'reload') обязан сходить в сеть и ПЕРЕЗАПИСАТЬ кэш-запись - это
+   ровно то, что делает ручной hard-refresh, только точечно и в один клик.
+   Зачем это вообще: uhttpd отдаёт статику без Cache-Control/Expires, а пакет
+   до недавнего ставил файлы с датой 1970 -> браузер по эвристике (RFC 9111,
+   ~10% возраста) считал их свежими НА ГОДЫ и не перепроверял. postinst теперь
+   делает touch, но на устройствах со старым кэшем это надо пробить один раз. */
+function refreshResources() {
+	if (typeof window.fetch !== 'function') { return Promise.resolve(); }
+	return Promise.all(CACHED_RES.map(function(r) {
+		return fetch(L.resource(r), { cache: 'reload', credentials: 'same-origin' })
+			.catch(function() { /* нет файла/оффлайн - не мешаем остальным */ });
+	}));
+}
+
+/* Завершение обновления: свежий JS + свежие ACL.
+   Логаут тут НЕ ради красоты: наш acl.d перечисляет пути ПОИМЁННО, а rpcd
+   выдаёт права сессии в момент ЛОГИНА. Новый скрипт в пакете (так появлялись
+   esim.sh/simslot.sh/netpri.sh) для уже залогиненной сессии = молчаливый
+   "Access denied", пока не перезайдёшь; rpcd reload сессии не переоформляет.
+   Сам по себе логаут кэш браузера НЕ трогает - поэтому сначала refreshResources. */
+function finishUpdate() {
+	updSet('upd-status', _('Update installed. Refreshing resources…'));
+	refreshResources().then(function() {
+		updSet('upd-status', _('Update installed. Signing out to apply it…'));
+		window.setTimeout(function() {
+			var u = L.url('admin/logout');
+			if (!u) { window.location.reload(); return; }
+			// Токен добавляем на всякий случай: часть сборок LuCI защищает
+			// действия от CSRF и без него отдаёт 403, а лишний параметр там,
+			// где он не нужен, просто игнорируется.
+			if (L.env && L.env.token) { u += '?token=' + encodeURIComponent(L.env.token); }
+			window.location.href = u;
+		}, 1200);
+	});
+}
+
 /* Установка идёт в фоне (update.sh install), результат пишется в
    /tmp/5gmodem_update.json. Опрашиваем сам ФАЙЛ, а не update.sh: во время
    установки update.sh подменяется на версию из нового пакета, и её набор
@@ -67,7 +114,7 @@ function pollInstall(tries) {
 			if (d.success) {
 				updSet('upd-current', d.current || '—');
 				updShow('upd-install', false);
-				updSet('upd-status', _('Update installed. Reload the page to see the changes.'));
+				finishUpdate();
 			} else {
 				updSet('upd-status', d.error || _('Failed to install the update.'));
 			}

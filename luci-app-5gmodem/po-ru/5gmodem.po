@@ -2278,3 +2278,9 @@ msgstr "Пожалуйста, подождите, идёт чтение eUICC �
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "Профиль eSIM загружен. Перезагружаю модем, чтобы он применился..."
+
+msgid "Update installed. Refreshing resources…"
+msgstr "Обновление установлено. Обновляю ресурсы…"
+
+msgid "Update installed. Signing out to apply it…"
+msgstr "Обновление установлено. Выхожу из сессии, чтобы оно применилось…"

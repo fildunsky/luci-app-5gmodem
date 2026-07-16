@@ -208,10 +208,16 @@ return view.extend({
 });
 
 /* --- вспомогательные (вне view, работают с DOM) ------------------------- */
-var _viewReload = function() {
+var _viewReload = function(tries) {
 	// найти активный view-инстанс сложно; проще перечитать напрямую
-	esimExec([ 'dump' ]).then(function(d) {
-		if (lpaOk(d.profiles || {})) { renderProfiles(d.profiles.payload.data || []); }
+	tries = (typeof tries === 'number') ? tries : 0;
+	return esimExec([ 'dump' ]).then(function(d) {
+		if (lpaOk(d.profiles || {})) { renderProfiles(d.profiles.payload.data || []); return; }
+		/* eUICC ещё занят сразу после операции (у lpac перед каждой командой идёт
+		   чистка логических каналов, но модем отвечает не мгновенно). Раньше
+		   попытка была ОДНА: если она не проходила, список молча оставался
+		   старым - удалённый профиль продолжал висеть в таблице до ручного F5. */
+		if (tries < 3) { window.setTimeout(function() { _viewReload(tries + 1); }, 4000); }
 	});
 };
 

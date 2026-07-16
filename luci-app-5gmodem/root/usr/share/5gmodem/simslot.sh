@@ -28,6 +28,27 @@ case "$_PROTO" in
 	*) MI="" ;;                         # kernel-proto -> только AT-путь
 esac
 
+# Compal RXM-G1 (SG500M2-X) - ИСКЛЮЧЕНИЕ: даже под ModemManager слоты берём по AT.
+# У этой прошивки MM отдаёт НЕВЕРНУЮ картину слотов (залипает на SIM2, показывает
+# активной пустую), а +CEISWITCHSIM даёт правду - включая факт наличия карты по
+# CD-пину. Управление слотами через mmcli на ней тоже не работает, так что
+# mmcli-путь здесь бесполезен в обе стороны.
+_AVIDPID=""; _APROD=""
+if [ -n "$_AP" ]; then
+	_AJ=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+	_AVIDPID=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].vidpid" 2>/dev/null)
+	_APROD=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].product" 2>/dev/null)
+fi
+case "$_AVIDPID" in
+	05c6:90d6) MI="" ;;
+	# 05c6:90d5 делят Compal и Foxconn T99W175 / Thales MV31-W - у последних
+	# слоты через MM работают штатно, поэтому здесь смотрим на дескриптор
+	# (как это делает modemband/05c690d5), а не на один VID:PID.
+	05c6:90d5)
+		case "$_APROD" in VOS_5G*|RXMG1*|*Tri\ Cascade*) MI="" ;; esac
+		;;
+esac
+
 # ---- ModemManager-модем -----------------------------------------------------
 if [ -n "$MI" ]; then
 	case "$1" in
@@ -103,7 +124,16 @@ live_port() {
 }
 
 D=$(live_port)
-[ -n "$D" ] || { echo '{"error":"no device"}'; exit 0; }
+if [ -z "$D" ]; then
+	# Ни один tty модема не отвечает: он переперечисляется после смены слота/CFUN
+	# или порт занят метриками. Для status это НЕ «слотов нет» - отдаём последний
+	# валидный ответ, иначе кнопки SIM/eSIM просто исчезают на ровном месте
+	# (этот ранний выход стоял ДО кэша и обходил его). Для set - честная ошибка.
+	if [ "$1" != "set" ] && [ -s "/tmp/5gmodem_slots_$_AP" ]; then
+		cat "/tmp/5gmodem_slots_$_AP"; exit 0
+	fi
+	echo '{"error":"no device"}'; exit 0
+fi
 
 # Фибокомовский AT+GTDUALSIM есть далеко не у всех: у Compal RXM-G1 (SG500M2-X)
 # его НЕТ, поэтому AT-ветка отдавала пустой список слотов и в mbim-режиме кнопок
@@ -152,7 +182,10 @@ set)
 	if echo "$O" | grep -q "ERROR"; then
 		echo '{"error":"switch failed"}'
 	else
-		( slot_redial ) >/dev/null 2>&1 &
+		rm -f "/tmp/5gmodem_slots_$_AP"   # активный слот изменился - кэш недействителен
+		# fds отвязаны ОТ ПОДОБОЛОЧКИ: иначе она держит пайпы rpcd все ~120 с
+		# ожидания модема, и XHR из UI упадёт по таймауту (см. reboot_modem.sh).
+		( slot_redial ) >/dev/null 2>&1 </dev/null &
 		echo '{"result":"ok"}'
 	fi
 	;;
@@ -215,7 +248,21 @@ set)
 			done
 		fi
 	fi
-	echo "{\"type\":\"$TYPE\",\"slots\":[$OUT],\"active\":\"$ACT\"}"
+	# Кэш последнего ХОРОШЕГО ответа (в /tmp, ключ - стабильный USB-путь модема).
+	# AT-порт делят метрики, esim.sh и мы: при коллизии любой из запросов выше
+	# отдаёт пусто, и раньше это летело прямо в UI - отсюда «неконсистентность»:
+	# то нет кнопок слотов совсем (пустой slots), то кнопки есть, но ни одна не
+	# подсвечена (пустой active, когда GTDUALSIM? не ответил, а GTDUALSIM=? успел).
+	# Пустой ответ теперь заменяем последним валидным; кэш сбрасывает ветка set.
+	_CACHE="/tmp/5gmodem_slots_$_AP"
+	if [ -n "$OUT" ] && [ -n "$ACT" ]; then
+		printf '{"type":"%s","slots":[%s],"active":"%s"}\n' "$TYPE" "$OUT" "$ACT" > "$_CACHE"
+		cat "$_CACHE"
+	elif [ -s "$_CACHE" ]; then
+		cat "$_CACHE"
+	else
+		echo "{\"type\":\"$TYPE\",\"slots\":[$OUT],\"active\":\"$ACT\"}"
+	fi
 	;;
 esac
 exit 0

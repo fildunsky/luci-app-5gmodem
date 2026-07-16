@@ -51,9 +51,15 @@ if [ "$MODE" = power ]; then
 	G="$PORT"; [ -n "$G" ] || G=$(first_power_gpio)
 	GP="/sys/class/gpio/$G/value"
 	[ -n "$G" ] && [ -e "$GP" ] || { echo '{"success":false,"error":"no modem power gpio"}'; exit 0; }
-	# в фоне: снять питание, пауза 5с, вернуть. Скрипт возвращается сразу, чтобы
-	# XHR не висел всю паузу + переподнятие интерфейса.
-	( echo 1 > "$GP" 2>/dev/null; sleep 5; echo 0 > "$GP" 2>/dev/null ) &
+	# В фоне: снять питание, пауза 5с, вернуть.
+	# ВАЖНО - >/dev/null 2>&1 </dev/null НА САМОЙ подоболочке, а не только на
+	# командах внутри. Скрипт вызывается через rpcd (LuCI fs.exec), а тот ждёт не
+	# только выхода процесса, но и EOF на пайпах stdout/stderr. Фоновая
+	# подоболочка наследовала эти пайпы и держала их открытыми -> rpcd упирался в
+	# свой 30-секундный таймаут, и UI показывал «ошибка XHR», хотя питание уже
+	# было переключено (ровно этот симптом и наблюдался). С отвязанными
+	# дескрипторами ubus file exec отвечает мгновенно (проверено на роутере).
+	( echo 1 > "$GP" 2>/dev/null; sleep 5; echo 0 > "$GP" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
 	exit 0
 fi
@@ -68,7 +74,10 @@ if [ "$MODE" = "hard" ]; then
 	# the background and return at once; the resolve hotplug re-pins ports and
 	# brings the interface back after re-enumeration (no ifup here - the port is
 	# gone).
-	( sms_tool -d "$PORT" at "AT+CFUN=1,1" >/dev/null 2>&1 ) &
+	# Редирект нужен НА подоболочке (см. ветку power выше): иначе она наследует
+	# пайпы rpcd и держит их, пока sms_tool ждёт ответа от исчезнувшего порта, -
+	# rpcd досиживает до таймаута, и «фон» не спасает от «ошибки XHR».
+	( sms_tool -d "$PORT" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
 else
 	# Soft radio restart (CFUN=4 -> CFUN=1): no USB re-enumeration, the port
 	# stays. This drops the data bearer, so nudge the app's interface back up
@@ -78,7 +87,7 @@ else
 	sleep 3
 	sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
 	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
-	[ -n "$IF" ] && ( sleep 6; ifup "$IF" >/dev/null 2>&1 ) &
+	[ -n "$IF" ] && ( sleep 6; ifup "$IF" ) >/dev/null 2>&1 </dev/null &
 fi
 
 echo "{\"success\":true,\"mode\":\"$MODE\"}"
