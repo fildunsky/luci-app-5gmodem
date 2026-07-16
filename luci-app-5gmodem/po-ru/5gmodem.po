@@ -1937,7 +1937,7 @@ msgstr "Удаляет все SMS, в том числе не отображае�
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "Выберите «Нет», если у роутера один светодиод или светодиод выполняет несколько задач. Для надёжной работы при совмещённом светодиоде он должен быть определён в системе."
 
-msgid "The phone number should start with the country prefix (for example 48 for Poland, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
+msgid "The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
 msgstr "Номер телефона должен начинаться с кода страны (например, 7 для России, без «+»). Номера из 3-5 цифр считаются «короткими», и код страны к ним добавлять не нужно."
 
 msgid "Each line must use the format 'Contact name;phone number'. The file is saved to <code>/etc/modem/phonebook.user</code>."

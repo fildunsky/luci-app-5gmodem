@@ -24,11 +24,45 @@
 
 IF="${1:-modem}"
 REQ="${2:-auto}"
-# APN, переданный из UI (автоподстановка по оператору или ручной ввод). Если
-# задан - применяем его; иначе сохраняем старый APN интерфейса, иначе 'internet'.
+# APN, переданный из UI (автоподстановка по оператору или ручной ввод).
+#   <строка> - применить его;
+#   "-"      - ЯВНО без APN (оператор опознан, но APN для него неизвестен) -> опцию
+#              удаляем, модем возьмёт APN сети по умолчанию;
+#   пусто    - аргумент не передан (вызов не из UI) -> сохранить прежний APN.
+# Разделять "-" и пусто пришлось потому, что раньше стереть APN было НЕЛЬЗЯ:
+# ${APNARG:-${OLDAPN:-internet}} трактует пустую строку как «не передано» и
+# молча возвращал прежнее значение.
 APNARG="$3"
 
+# Записать APN интерфейса $1 по правилам выше ($2 = прежний APN)
+set_apn_opt() {
+	case "$APNARG" in
+		-)  uci -q delete "network.$1.apn" ;;
+		"") uci set "network.$1.apn=${2:-internet}" ;;
+		*)  uci set "network.$1.apn=$APNARG" ;;
+	esac
+}
+
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
+
+# Безопасный (пере)запуск ModemManager.
+# НЕЛЬЗЯ `/etc/init.d/modemmanager restart`: procd поднимает новый процесс, не
+# дожидаясь, пока прежний отпустит имя на D-Bus. Новый не может забрать
+# org.freedesktop.ModemManager1 ("could not acquire the service name") и сразу
+# умирает, а старый уже остановлен - MM пропадает на 1-2 минуты и "теряет модем"
+# (видно в логе: два "ModemManager is shut down" подряд, затем пауза ~68 c до
+# respawn'а). Поэтому: остановить, ДОЖДАТЬСЯ исчезновения процесса, запустить.
+# Если MM не запущен - просто стартуем (как это делает modemswitch.sh).
+mm_restart_safe() {
+	if pgrep -f ModemManager >/dev/null 2>&1; then
+		/etc/init.d/modemmanager stop >/dev/null 2>&1
+		_n=0
+		while pgrep -f ModemManager >/dev/null 2>&1 && [ "$_n" -lt 15 ]; do
+			sleep 1; _n=$((_n + 1))
+		done
+	fi
+	/etc/init.d/modemmanager start >/dev/null 2>&1
+}
 
 # --- multi-modem: build the interface for the ACTIVE modem (by USB path), so
 # two modems get SEPARATE interfaces + separate cdc-wdm nodes instead of both
@@ -93,7 +127,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			[ -n "$ATCPORT" ] || ATCPORT="$METRIC_AT"
 			uci set "network.$IF.proto=atc"
 			uci set "network.$IF.device=$ATCPORT"
-			uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
+			set_apn_opt "$IF" "$OLDAPN"
 			uci set "network.$IF.pdp=IPV4V6"
 			uci set "network.$IF.metric=20"
 			FDEV="$ATCPORT"
@@ -103,7 +137,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci set "network.$IF.proto=$FPROTO"
 			uci set "network.$IF.usbpath=$AMP"
 			uci set "network.$IF.device=$FNET"
-			uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
+			set_apn_opt "$IF" "$OLDAPN"
 			uci set "network.$IF.pdptype=IPV4V6"
 			FDEV="$FNET"
 		fi
@@ -193,7 +227,7 @@ _MM_WANT=0
 uci show network 2>/dev/null | grep -q "\.proto='modemmanager'" && _MM_WANT=1
 if [ "$_MM_WANT" = "1" ]; then
 	/etc/init.d/modemmanager enable >/dev/null 2>&1
-	/etc/init.d/modemmanager restart >/dev/null 2>&1
+	mm_restart_safe
 elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
 	/etc/init.d/modemmanager stop >/dev/null 2>&1
 	/etc/init.d/modemmanager disable >/dev/null 2>&1
@@ -237,7 +271,7 @@ uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
 uci set "network.$IF.device=$IDEV"
-uci set "network.$IF.apn=${APNARG:-${OLDAPN:-internet}}"
+set_apn_opt "$IF" "$OLDAPN"
 case "$PROTO" in
 	modemmanager)
 		uci set "network.$IF.iptype=ipv4v6"
@@ -318,7 +352,26 @@ fi
 # MM for kernel protos (qmi/mbim/...), or let MM see it for the modemmanager proto
 /usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
 
-ifup "$IF" >/dev/null 2>&1
+if [ "$PROTO" = "modemmanager" ]; then
+	# ifup ТОЛЬКО после того, как MM реально увидит модем. Сразу после
+	# (пере)запуска MM модема ещё нет - он допрашивает порты десятки секунд, - а
+	# прото modemmanager в этот момент не находит его, netifd пишет "Device not
+	# managed by ModemManager", кладёт интерфейс и БОЛЬШЕ НЕ ПРОБУЕТ. Именно так
+	# после пересоздания интерфейса модем оставался registered, но без IP.
+	# В ФОНЕ и с отвязанными дескрипторами: скрипт зовут через rpcd (LuCI
+	# fs.exec), а тот ждёт EOF на пайпах и упирается в свой 30-секундный таймаут -
+	# ожидание в основном потоке дало бы UI "ошибку XHR" при успешной операции.
+	(
+		_n=0
+		while [ "$_n" -lt 120 ]; do
+			mmcli -L 2>/dev/null | grep -q "/Modem/" && break
+			sleep 2; _n=$((_n + 2))
+		done
+		ifup "$IF"
+	) >/dev/null 2>&1 </dev/null &
+else
+	ifup "$IF" >/dev/null 2>&1
+fi
 
 json created "$PROTO" "$IDEV"
 exit 0

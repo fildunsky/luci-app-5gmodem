@@ -436,8 +436,8 @@ function addSendOptions(s) {
 	var o;
 
 	o = s.option(form.Value, 'pnumber', _('Prefix number'),
-		_("The phone number should start with the country prefix (for example 48 for Poland, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."));
-	o.default = '48';
+		_("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."));
+	o.default = '7';
 	o.validate = function(section_id, value) {
 		if (value.match(/^[0-9]+(?:\.[0-9]+)?$/))
 			return true;

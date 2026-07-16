@@ -387,10 +387,29 @@ return view.extend({
 		o.write = function() {};
 		o.remove = function() {};
 		o.load = function(section_id) {
-			var cur = uci.get('network', mIfName, 'apn');
-			if (cur) { return cur; }
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh', [ 'op', mIfName ]), '')
-				.then(function(op) { return apnForOperator((op || '').trim()); });
+			/* APN определяем по ОПЕРАТОРУ при каждом открытии страницы, СВЕЖИМ
+			   опросом. Раньше здесь было два слоя устаревания, и после смены SIM
+			   поле показывало APN прежнего оператора:
+			     1) если APN уже прописан в интерфейсе - оператора не спрашивали
+			        вовсе и возвращали старое значение;
+			     2) netpri.sh op отдавал operator_cached - файл в /tmp, живущий
+			        30 минут.
+			   Теперь: 'fresh' сбрасывает кэш и опрашивает модем заново. */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh',
+					[ 'op', mIfName, 'fresh' ]), '')
+				.then(function(op) {
+					op = (op || '').trim();
+					if (!op) {
+						/* Оператора прочитать НЕ УДАЛОСЬ (порт занят, модем ещё
+						   поднимается) - это НЕ то же самое, что «оператора нет в
+						   базе». Показываем текущий APN интерфейса: предложить
+						   стереть рабочий APN из-за неудачной пробы нельзя. */
+						return uci.get('network', mIfName, 'apn') || '';
+					}
+					/* Оператор известен: его APN, либо пусто - если в базе его нет
+					   (тогда кнопка применит «без APN», см. sentinel '-' ниже). */
+					return apnForOperator(op);
+				});
 		};
 
 		o = s.option(form.Button, '_mkiface');
@@ -412,11 +431,16 @@ return view.extend({
 				var aopt = this.map.lookupOption('_apn', sid);
 				if (aopt && aopt[0]) { var ael = aopt[0].getUIElement(sid); if (ael) { apn = (ael.getValue() || '').trim(); } }
 			} catch (e) {}
+			// Пустое поле = ЯВНО без APN (оператор опознан, но его нет в базе, либо
+			// пользователь стёр сам). Передаём sentinel '-', иначе mkiface.sh не
+			// отличит это от «аргумент не передан» и молча сохранит ПРЕЖНИЙ APN -
+			// стереть его было бы невозможно.
+			var apnArg = apn || '-';
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apn ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}

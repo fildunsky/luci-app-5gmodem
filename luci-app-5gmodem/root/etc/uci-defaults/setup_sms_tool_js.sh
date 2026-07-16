@@ -20,6 +20,10 @@ if ! uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
 	uci set sms_tool_js.config=sms_tool_js
 fi
 
+[ "$(uci -q get sms_tool_js.@sms_tool_js[0].pnumber)" = "48" ] && {
+	uci -q set sms_tool_js.@sms_tool_js[0].pnumber='7'
+}
+
 uci commit sms_tool_js >/dev/null 2>&1
 
 # If a Compal RXM-G1 is already connected at install time, auto-configure

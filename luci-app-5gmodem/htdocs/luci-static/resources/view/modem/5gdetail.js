@@ -464,6 +464,7 @@ pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
    только если у активного модема >= 2 слотов: AT+GTDUALSIM (Fibocom) или
    mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
 var simSlotsSeen = false;   // список слотов хоть раз пришёл нормальным
+var simSlotsTries = 0;
 function loadSimSlots() {
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
 		var st = {};
@@ -476,7 +477,18 @@ function loadSimSlots() {
 			   отдаёт {"error":"no device"}. Раньше кнопки в этот момент ПРОПАДАЛИ
 			   и не возвращались до ручного обновления страницы. Если список уже
 			   был - оставляем последний хороший и ждём следующего опроса. */
-			if (!simSlotsSeen) { box.style.display = 'none'; }
+			if (!simSlotsSeen) {
+				box.style.display = 'none';
+				/* Первое открытие после ПЕРЕЗАГРУЗКИ РОУТЕРА: кэша в /tmp ещё нет
+				   (его чистит загрузка), а первая проба сталкивается за AT-порт с
+				   опросом метрик и возвращает пусто. Липкий кэш тут не спасает -
+				   спасать ещё нечем. Раньше кнопки в этот момент прятались до
+				   ручного F5; теперь просто повторяем, пока порт не освободится. */
+				if (simSlotsTries < 6) {
+					simSlotsTries++;
+					window.setTimeout(loadSimSlots, 3000);
+				}
+			}
 			return;
 		}
 		simSlotsSeen = true;
@@ -1521,22 +1533,21 @@ simDialog: baseclass.extend({
 
 	formdata: { threeginfo: {} },
 	
+	/* render-first: НИЧЕГО не ждём перед отрисовкой.
+	   Раньше здесь блокировались: modemswitch.sh mmindex (~0.09 c), затем
+	   Promise.all(5gmodem.sh json ~0.58 c, mmcli -K, uci, ttl.sh) - и всё это
+	   время страница была ПУСТОЙ. Теперь отдаём пустые данные: render() рисует
+	   скелет с прочерками сразу, а значения подставляет первый тик poll (он и
+	   так опрашивает всё это каждые 5 c). Тяжёлые вызовы никуда не делись - они
+	   ушли с критического пути.
+	   mmIdx получаем в фоне: он нужен только кнопкам режимов/бендов, а блок
+	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
-		// mmcli -K забираем ВМЕСТЕ с основными данными, чтобы строки
-		// "Режим сети"/диапазонов рисовались сразу заполненными в render()
-		// (раньше они дорисовывались асинхронно после отрисовки и страница
-		// подпрыгивала при загрузке).
-		// Сначала узнаём индекс АКТИВНОГО модема в MM, чтобы читать/менять
-		// бенды/режим именно у него, а не у "any" (с двумя модемами это был бы
-		// не тот модем).
-		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '').then(function(idx) {
-			mmIdx = (String(idx || '').trim()) || 'any';
-			return Promise.all([
-				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ])),
-				L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), ''),
-				L.resolveDefault(uci.load('5gmodem')),
-				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ttl.sh', [ 'get' ]), ''),
-			]);
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
+			.then(function(idx) { mmIdx = (String(idx || '').trim()) || 'any'; });
+		// uci грузим синхронно: из него render() читает настройки TTL.
+		return L.resolveDefault(uci.load('5gmodem')).then(function() {
+			return [ '{}', '', null, '{}' ];
 		});
 	},
 

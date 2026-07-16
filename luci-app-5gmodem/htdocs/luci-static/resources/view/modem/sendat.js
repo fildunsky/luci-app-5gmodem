@@ -14,6 +14,23 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
+/* Строка шаблона AT: "подпись;команда[;команда...]" - разделитель ';' служит и
+   для отделения подписи, и для перечисления команд. Собирая команды обратно,
+   их надо СКЛЕИТЬ В ОДНУ AT-строку по правилам V.250/27.007: префикс "AT"
+   допустим РОВНО ОДИН РАЗ, в самом начале; последующие команды идут без него.
+   Раньше склейка сохраняла "AT" у каждой, и модем получал
+   AT+CPBS="ON";AT+CNUM - проверено на живом модеме: "No response from modem." /
+   "NO CARRIER". Правильный вид AT+CPBS="ON";+CNUM отвечает нормально. Из-за
+   этого не работали ровно те строки шаблона, где команд больше одной.
+   Снимаем "AT" только у РАСШИРЕННЫХ команд, т.е. начинающихся с + ^ $ * или #:
+   у базовых (ATI, ATZ) обрезка префикса сломала бы саму команду. */
+function atChain(cmds) {
+	return cmds.map(function(c, i) {
+		c = String(c).trim();
+		return (i === 0) ? c : c.replace(/^at(?=[+^$*#])/i, '');
+	}).join(';');
+}
+
 
 /* Вывод в стиле блока кода современных md-редакторов - как на странице
    диагностики 5gmodem. Цвета фиксированные, одинаковы в любой теме.
@@ -172,7 +189,7 @@ return view.extend({
 				if (cmd.trim()) {
 					let fields = cmd.split(/;/);
 					let name = fields[0];
-					let code = fields.slice(1).join(";") || fields[0];
+					let code = atChain(fields.slice(1)) || fields[0];
 					let option = document.createElement('option');
 					option.value = code;
 					option.textContent = name;
@@ -325,7 +342,7 @@ return view.extend({
 											if (cmd.trim()) {
 												let fields = cmd.split(/;/);
 												let name = fields[0];
-												let code = fields.slice(1).join(";") || fields[0];
+												let code = atChain(fields.slice(1)) || fields[0];
 												let option = document.createElement('option');
 												option.value = code;
 												option.textContent = name;
@@ -390,7 +407,7 @@ return view.extend({
 											if (!cmd.trim()) return null;
 											let fields = cmd.split(/;/);
 											let name = fields[0];
-											let code = fields.slice(1).join(";") || fields[0];
+											let code = atChain(fields.slice(1)) || fields[0];
 											return E('option', { 'value': code }, name );
 										}).filter(function(opt) { return opt !== null; });
 									})()

@@ -19,13 +19,48 @@ if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
             echo "05c6 90d6" > /sys/bus/usb-serial/drivers/option1/new_id
         fi
 
-        logger -t hotplug-compal "Ports activated for PID $PID. Scheduling ModemManager restart..."
+        logger -t hotplug-compal "Ports activated for PID $PID. Waiting for ModemManager to pick the modem up..."
 
-        # Асинхронно пинаем сеть и MM, когда всё гарантированно улеглось
         (
             sleep 5
-            logger -t hotplug-compal "Restarting modemmanager to clear negotiation state"
-            /etc/init.d/modemmanager restart
-        ) &
+            # РАНЬШЕ ЗДЕСЬ БЫЛ /etc/init.d/modemmanager restart - и именно он
+            # ломал загрузку. Проверено по логу: restart поднимает ВТОРОЙ экземпляр
+            # MM, тот не может забрать имя org.freedesktop.ModemManager1 у ещё
+            # живого первого ("could not acquire the service name") и сразу умирает
+            # ("ModemManager is shut down"), а старый уже остановлен. В итоге MM
+            # отсутствует ~95 c, возвращается только respawn'ом procd, модем
+            # появляется в MM лишь к 2:10 после включения - всё это время
+            # интерфейс без IP. Порты мы привязали через new_id выше; работающий
+            # MM подхватывает их своим hotplug-обработчиком, перезапуск не нужен.
+
+            # Поднять интерфейс после того, как MM увидит модем.
+            # На загрузке netifd стартует РАНЬШЕ ModemManager: прото не находит
+            # шину ("couldn't get bus: Could not connect"), объявляет "Device not
+            # managed by ModemManager" и кладёт интерфейс НАСОВСЕМ. Повторной
+            # попытки нет ни у кого - модем так и остаётся без IP, пока вручную
+            # не переключишь прото туда-обратно (это просто новый ifup при живом
+            # MM). Наш restart выше делает ситуацию лишь хуже: он приходит уже
+            # ПОСЛЕ того, как netifd сдался. Поэтому ждём, пока MM реально
+            # увидит модем, и поднимаем интерфейсы сами.
+            # Ждём щедро: на холодной загрузке MM поднимается и допрашивает порты
+            # не мгновенно (замерено: модем появляется в MM через ~30 c даже без
+            # лишнего restart). 60 c не хватало - цикл сдавался за секунды до
+            # готовности и ifup не делал вовсе.
+            n=0
+            while [ "$n" -lt 180 ]; do
+                mmcli -L 2>/dev/null | grep -q "/Modem/" && break
+                sleep 2; n=$((n + 2))
+            done
+            if [ "$n" -ge 180 ]; then
+                logger -t hotplug-compal "ModemManager did not report a modem in ${n}s, skipping ifup"
+                exit 0
+            fi
+            logger -t hotplug-compal "ModemManager is up after ${n}s, bringing up modemmanager interfaces"
+            for i in $(uci -q show network | sed -n "s/^network\.\([^.]*\)\.proto='modemmanager'\$/\1/p"); do
+                ifstatus "$i" 2>/dev/null | grep -q '"up": true' && continue
+                logger -t hotplug-compal "ifup $i"
+                ifup "$i"
+            done
+        ) >/dev/null 2>&1 </dev/null &
     fi
 fi

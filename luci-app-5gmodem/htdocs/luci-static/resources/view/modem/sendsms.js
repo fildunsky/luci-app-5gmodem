@@ -500,7 +500,7 @@ return view.extend({
 		prefixnum = sections[0].pnumber;
 	}
 	if ( sections[0].information == '1' ) {
-		ui.addNotification(null, E('p', _("The phone number should start with the country prefix (for example 48 for Poland, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix.") ), 'info');
+		ui.addNotification(null, E('p', _("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix.") ), 'info');
 	}
 	
 		let info = _('User interface for sending messages using sms-tool.').format('');
