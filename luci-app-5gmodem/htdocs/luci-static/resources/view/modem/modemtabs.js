@@ -26,6 +26,10 @@ var CSS = `
 }
 .modembar .modemtabs-bar .modemtab {
 	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
+	display: inline-flex; align-items: center; gap: .4em;
+}
+.modembar .modemtabs-bar .modemtab .modemtab-ic {
+	width: 16px; height: 16px; flex: 0 0 auto; display: block;
 }
 .modembar .modemtabs-bar .modemtab.active { pointer-events: none; }
 `;
@@ -96,13 +100,19 @@ function applyEsimTabVisibility(tries) {
 		if (tries < 25) { window.setTimeout(function() { applyEsimTabVisibility(tries + 1); }, 150); }
 		return;
 	}
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/esim.sh', [ 'status' ]), '').then(function(out) {
-		var st = {}; try { st = JSON.parse(out || '{}'); } catch (e) {}
-		var show = !!st.active;   // «включена eSIM» = активен eSIM-слот
+	var setVis = function(show) {
 		document.querySelectorAll('a[href*="5gmodem/esim"]').forEach(function(a) {
 			var li = (a.closest && a.closest('li')) || a.parentNode;
 			if (li) { li.style.display = show ? '' : 'none'; }
 		});
+	};
+	// ИНВЕРСИЯ: прячем СРАЗУ, показываем только после подтверждения, что eSIM-слот
+	// активен. Раньше было наоборот (LuCI рисует вкладку всегда, а мы прятали её
+	// лишь после ответа esim.sh ~1 c) - на модемах без eSIM вкладка мигала.
+	setVis(false);
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/esim.sh', [ 'status' ]), '').then(function(out) {
+		var st = {}; try { st = JSON.parse(out || '{}'); } catch (e) {}
+		if (st && st.active) { setVis(true); }
 	});
 }
 
@@ -120,7 +130,14 @@ function tabsBar(modems, active) {
 				L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
 					.then(function() { window.location.reload(); });
 			}
-		}, label(m, i));
+		}, [
+			/* иконка модема перед именем */
+			E('img', {
+				'class': 'modemtab-ic', 'src': L.resource('icons/cmodem.svg'),
+				'width': 16, 'height': 16, 'alt': ''
+			}),
+			E('span', {}, label(m, i))
+		]);
 	});
 	return E('div', { 'class': 'modemtabs-bar' }, tabs);
 }

@@ -68,6 +68,12 @@ document.head.append(E('style', {'type': 'text/css'},
   flex: 0 0 auto;
 }
 
+/* Иконка-индикатор роуминга (croaming.svg), перед статусом «В сети». */
+.tginfo-roam {
+  display: inline-block; width: 1.2em; height: 1.2em; margin-right: .35em;
+  vertical-align: -0.2em; flex: 0 0 auto;
+}
+
 /* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц
    (fixed + 33% на первую колонку + overflow-wrap:anywhere), иначе ячейки
    переносятся, высота строки скачет и страница дёргается при обновлении.
@@ -231,6 +237,16 @@ document.head.append(E('style', {'type': 'text/css'},
 .tginfo-info .tginfo-iplabel {
   font-weight: 600;
   margin-right: 0.35em;
+}
+/* IPv6 длинный (до 39 символов) - уменьшаем шрифт, чтобы строка влезала на
+   мобильном в ОДИН ряд и не вылезала за край экрана. */
+#modemip6 {
+  font-size: 0.78em;
+  letter-spacing: -0.2px;
+  word-break: break-all;
+}
+@media (max-width: 800px) {
+  #modemip6 { font-size: 0.7em; }
 }
 /* правая колонка шапки: SIM-слоты над температурой, прижаты вправо */
 .tginfo-right {
@@ -447,24 +463,41 @@ pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 /* Переключатель SIM-слотов в шапке (над температурой). Кнопки появляются,
    только если у активного модема >= 2 слотов: AT+GTDUALSIM (Fibocom) или
    mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
+var simSlotsSeen = false;   // список слотов хоть раз пришёл нормальным
 function loadSimSlots() {
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
 		var st = {};
 		try { st = JSON.parse(out) || {}; } catch (e) { return; }
 		var box = document.getElementById('simslotn');
 		if (!box) { return; }
-		if (!st.slots || st.slots.length < 2) { box.style.display = 'none'; return; }
+		if (!st.slots || st.slots.length < 2) {
+			/* Транзитная пустота: сразу после смены слота модем ресетится и
+			   переперечисляется на USB (у FM350 - десятки секунд), simslot.sh
+			   отдаёт {"error":"no device"}. Раньше кнопки в этот момент ПРОПАДАЛИ
+			   и не возвращались до ручного обновления страницы. Если список уже
+			   был - оставляем последний хороший и ждём следующего опроса. */
+			if (!simSlotsSeen) { box.style.display = 'none'; }
+			return;
+		}
+		simSlotsSeen = true;
 		box.innerHTML = '';
 		if (st.type) {
 			box.appendChild(E('span', { 'class': 'tginfo-simslot-type', 'title': _('SIM type') }, [ st.type ]));
 		}
 		st.slots.forEach(function(s) {
 			var on = (String(st.active) === String(s.id));
+			/* present приходит там, где прошивка умеет сказать, есть ли в слоте
+			   карта (Compal, +CEISWITCHSIM: "SIM inserted 0/1"). Переключение на
+			   ПУСТОЙ слот оставит модем без SIM и уронит связь - гасим кнопку.
+			   Где present не сообщают (FM350), поведение прежнее. */
+			var empty = (s.present !== undefined && String(s.present) === '0' && !on);
 			box.appendChild(E('button', {
-				'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+				'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : '') + (empty ? ' cbi-button-disabled' : ''),
+				'disabled': empty ? '' : null,
+				'title': empty ? _('Slot is empty (no SIM inserted)') : null,
 				'click': function(ev) {
 					ev.preventDefault();
-					if (on) { return; }
+					if (on || empty) { return; }
 					ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
 					fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
 						ui.hideModal();
@@ -474,8 +507,18 @@ function loadSimSlots() {
 						} else {
 							ui.addNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), ok ? 'info' : 'error');
 						}
-						// перечитать активный слот после перерегистрации модема
-						window.setTimeout(loadSimSlots, 4000);
+						/* Перечитать активный слот, КОГДА модем вернётся. Разового
+						   опроса через 4 с не хватало: FM350 после смены слота
+						   уходит на переперечисление USB на десятки секунд, ответ
+						   был «нет устройства», и подсветка активной кнопки
+						   оставалась старой до ручного F5. Опрашиваем с запасом -
+						   лишние опросы дёшевы, а simslot.sh «липкий» (см. выше).
+						   Интерфейс переподнимает бэкенд (simslot.sh slot_redial),
+						   чтобы IP не остался от прежней SIM даже если уйти со
+						   страницы. */
+						[ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ].forEach(function(ms) {
+							window.setTimeout(loadSimSlots, ms);
+						});
 					}).catch(function() { ui.hideModal(); });
 				}
 			}, [ s.label ]));
@@ -654,6 +697,7 @@ function loadBands() {
 	// mmcli/bands.sh (это ускоряет загрузку). Данные подтянутся при раскрытии
 	// (см. onBlockExpand['freq']).
 	if (!blockExpanded('freq')) { return Promise.resolve(); }
+	if (bandsGated) { return Promise.resolve(); }   // управление запрещено бэкендом
 	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
 		if (!out) { return; }
 		var supported = [], current = [];
@@ -692,6 +736,15 @@ function loadBands() {
    не отдаёт бенды: не под ModemManager, или MM их не показывает). Данные и
    применение - вендорными AT-командами через /usr/share/5gmodem/bands.sh. ---- */
 var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+/* true, когда bands.sh сказал, что управление диапазонами/режимом СЕЙЧАС
+   невозможно (профиль объявил _BAND_VIA=mmcli, а интерфейс на kernel-прото
+   mbim/qmi -> модем скрыт от ModemManager). Это авторитетный ответ бэкенда, и
+   он ЗАПРЕЩАЕТ mmcli-путь: без флага loadBandsModemband() рисовал надпись
+   «переключите на ModemManager», а revealMgmtWhenReady() тут же дёргал
+   mmcli -m any -K, попадал в ЧУЖОЙ модем (FM350 виден MM как failed) и показывал
+   его «Режимы сети» с кнопками и пустые «Диапазоны» - блок мигал на каждый опрос.
+   (bandSource для этого не годится: в запрещённой ветке он остаётся 'mmcli'.) */
+var bandsGated = false;
 /* true once mmcli has returned a non-empty band list for the active modem; used
    to tell a real "no mmcli bands" modem (FM350) from a transient empty (Compal
    re-registering) so the band block does not flicker. Resets on modem switch
@@ -808,10 +861,14 @@ function loadBandsModemband() {
 			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
 			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
 			if (note) { note.style.display = ifaceProtoIsMM ? 'none' : ''; }
+			// Надпись показана => управление запрещено: гасим mmcli-путь, иначе он
+			// перерисует блок чужими данными и всё замигает (см. bandsGated).
+			bandsGated = !ifaceProtoIsMM;
 			if (ifaceProtoIsMM) { window.setTimeout(revealMgmtWhenReady, 1500); }
 			return;
 		}
 		if (note) { note.style.display = 'none'; }
+		bandsGated = false;
 		bandSource = 'modemband';
 		// modemband (вендорные AT) не управляет 3G/UTRAN - прячем строку «Диапазоны
 		// 3G», чтобы она не висела пустой и не моргала с re-reveal.
@@ -962,6 +1019,8 @@ function revealMgmtWhenReady(tries) {
 	// строку с чужими кнопками -> loadBandsModemband прятал -> высота страницы
 	// прыгала (тот самый скролл-баг).
 	if (bandSource == 'modemband') { return; }
+	// Бэкенд уже сказал «управлять нельзя» и показал надпись - не лезем в mmcli.
+	if (bandsGated) { return; }
 	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(mmK) {
 		if (!/current-modes/.test(mmK)) {
 			// mmcli ещё не готов (модем под MM поднимается): повторяем
@@ -1483,7 +1542,8 @@ simDialog: baseclass.extend({
 
 	render: function(res) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
-		netpri.attach();     /* «Приоритет интернета» — переключатель аплинка */
+		/* «Приоритет интернета» рисуется ВНУТРИ контента (netpri.mount() ниже),
+		   а не вставкой над вкладками - см. mount(). */
 		var m, s, o;
 
 		var data = Array.isArray(res) ? res[0] : res;
@@ -1731,14 +1791,18 @@ simDialog: baseclass.extend({
 						if (json.registration == '3') { 
 							view.textContent = _('Registering denied');
 						}
-						if (json.registration == '5') { 
-							view.textContent = _('Registered (roaming)');
+						if (json.registration == '5') {
+							// роуминг: показываем как обычную сеть («В сети»), а факт
+							// роуминга - иконкой croaming.svg перед текстом.
+							view.innerHTML = '<img class="tginfo-roam" src="' + L.resource('icons/croaming.svg') + '" alt="" title="' + _('Roaming') + '">';
+							view.appendChild(document.createTextNode(_('Online')));
 						}
-						if (json.registration == '6') { 
+						if (json.registration == '6') {
 							view.textContent = _('Registered, only SMS');
 						}
-						if (json.registration == '7') { 
-							view.textContent = _('Registered (roaming), only SMS');
+						if (json.registration == '7') {
+							view.innerHTML = '<img class="tginfo-roam" src="' + L.resource('icons/croaming.svg') + '" alt="" title="' + _('Roaming') + '">';
+							view.appendChild(document.createTextNode(_('Online, only SMS')));
 						}
 					}
 					}
@@ -1847,7 +1911,19 @@ simDialog: baseclass.extend({
 						var viewn = document.getElementById("tempn");
 						var t = json.mtemp;
 						if (t == null || t == '' || t == '-' || (!t.length > 1 && t.includes(' '))) {
-						viewn.style.display = 'none';
+						/* Градусов нет. У части прошивок (Compal RXM-G1) их не отдаёт
+						   НИ ОДНА AT-команда: единственная тепловая - +CEITHERM, и та
+						   даёт уровень троттлинга 0-3. Показываем его словом: выдавать
+						   уровень за °C нельзя, но и молчать про перегрев не стоит. */
+						var lv = parseInt(json.mtherm, 10);
+						if (!isNaN(lv) && lv >= 0 && lv <= 3) {
+							var lbl = [ _('Normal'), _('Warm'), _('Hot'), _('Critical') ][lv];
+							viewn.style.display = '';
+							view.textContent = lbl;
+							view.title = _('Modem thermal throttling level: %d of 3').format(lv);
+						} else {
+							viewn.style.display = 'none';
+						}
 						}
 						else {
 						viewn.style.display = '';
@@ -2068,6 +2144,10 @@ simDialog: baseclass.extend({
 		s.render = L.bind(function(view, section_id) {
 
 			return E([], [
+
+			/* «Приоритет интернета» - первым в контенте страницы (под под-вкладками),
+			   виден на всех темах и на мобильном. */
+			netpri.mount(),
 
 			E('div', { 'class': 'cbi-section tginfo' }, [
 

@@ -285,6 +285,7 @@ return view.extend({
 		o.value('auto', _('Auto (detect)'));
 		/* человекочитаемые подписи известных модемных протоколов */
 		var protoLabels = {
+			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
 			'qmi': 'QMI (uqmi)',
 			'ncm': 'NCM',
@@ -294,8 +295,12 @@ return view.extend({
 			'3g': '3G / PPP',
 			'modemmanager': 'ModemManager'
 		};
-		/* порядок вывода; показываем только те, чей обработчик установлен */
-		[ 'mbim', 'qmi', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+		/* Порядок вывода; показываем только те, чей обработчик установлен.
+		   'fibocom' - наш прото (шипим и luci-proto, и netifd-обработчик), им
+		   поднимается FM350: у него нет cdc-wdm, поэтому mbim/qmi/ModemManager с
+		   ним не работают. В protoAvail он был всегда, но отсутствовал в ЭТОМ
+		   списке и в protoLabels - поэтому в выпадашку и не попадал. */
+		[ 'fibocom', 'mbim', 'qmi', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
 			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
 		});
 		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,

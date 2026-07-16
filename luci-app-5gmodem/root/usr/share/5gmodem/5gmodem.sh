@@ -707,8 +707,25 @@ fi
 # Разрешённое имя оператора кладём в кэш, читаемый переключателем приоритета
 # (netpri.sh): у MBIM/QMI-модемов оператор часто доступен только здесь (числовой
 # COPS + mccmnc.dat / UCS2), а не через отдельный AT+COPS у netpri.
+# ЗАЩИТА ОТ ОТРАВЛЕНИЯ КЭША: $SEC берётся из 5gmodem.network, а $DEVICE - из
+# 5gmodem.device/at_port. Если эти два поля разъехались по модемам (см. инвариант
+# в modemswitch.sh), COPS прочитан с порта СОСЕДА, и запись в кэш этого
+# интерфейса показала бы его оператора у обоих модемов. Пишем, только если порт
+# действительно принадлежит модему интерфейса $SEC; иначе молчим - netpri.sh
+# сделает собственный probe по стабильному USB-пути.
+op_cache_iface() {
+	[ -n "$DEVICE" ] || { printf '%s' "$SEC"; return; }
+	_n=$(readlink -f "/sys/class/tty/$(basename "$DEVICE")/device" 2>/dev/null)
+	while [ -n "$_n" ] && [ "$_n" != "/" ] && [ ! -f "$_n/idVendor" ]; do _n="${_n%/*}"; done
+	[ -f "$_n/idVendor" ] || { printf '%s' "$SEC"; return; }
+	_s=$(uci -q show 5gmodem 2>/dev/null \
+		| sed -n "s/^5gmodem\.\(m_[^.]*\)\.path='$(basename "$_n")'\$/\1/p" | head -1)
+	[ -n "$_s" ] || { printf '%s' "$SEC"; return; }
+	uci -q get "5gmodem.$_s.network"
+}
 if [ -n "$SEC" ] && [ -n "$COPS" ] && ! echo "$COPS" | grep -qE '^[0-9 ]*$'; then
-	printf '%s' "$COPS" > "/tmp/5gmodem_op_$SEC" 2>/dev/null
+	OPIF=$(op_cache_iface)
+	[ -n "$OPIF" ] && printf '%s' "$COPS" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
 fi
 
 cat <<EOF
@@ -723,6 +740,7 @@ cat <<EOF
 "tx":"$(sanitize_number "$TX")",
 "modem":"$(sanitize_string "$MODEL")",
 "mtemp":"$(sanitize_string "$TEMP")",
+"mtherm":"$(sanitize_number "$THERM")",
 "firmware":"$(sanitize_string "$FW")",
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",

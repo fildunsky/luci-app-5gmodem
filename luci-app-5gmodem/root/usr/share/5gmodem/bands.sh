@@ -371,6 +371,34 @@ fi
 _PORT_OK=0
 [ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] && _PORT_OK=1
 
+# УПРАВЛЯЕМОСТЬ в ТЕКУЩЕМ протоколе интерфейса. Профиль объявляет транспорт:
+#   _BAND_VIA=at    (по умолчанию) - вендорные AT-команды, работают всегда;
+#   _BAND_VIA=mmcli - только через ModemManager (у прошивки нет AT бенд-лока,
+#                     напр. Compal RXM-G1).
+# mmcli-профиль на KERNEL-протоколе (mbim/qmi/ncm/...) неуправляем: mm-filter
+# прячет такой модем от ModemManager, mmcli его не видит - ни считать, ни
+# применить бенды/режим нельзя. Тогда глушим ВСЕ статичные списки, и UI покажет
+# подсказку «управление диапазонами доступно только через ModemManager» вместо
+# кнопок, которые всё равно не сработали бы.
+if [ "$_BAND_VIA" = "mmcli" ]; then
+	_IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
+	if [ "$(uci -q get "network.$_IFACE.proto" 2>/dev/null)" != "modemmanager" ]; then
+		getsupportedbands()      { echo "Unsupported"; }
+		getsupportedbands5gnsa() { echo "Unsupported"; }
+		getsupportedbands5gsa()  { echo "Unsupported"; }
+		getsupportedmodes()      { echo "Unsupported"; }
+		_PORT_OK=0
+	else
+		# Для mmcli-профиля наличие tty НИЧЕГО не значит в обе стороны: управление
+		# идёт через ModemManager (у такой прошивки рабочего AT-порта может не быть
+		# вовсе - у Compal RXM-G1 ни один из его ttyUSB не отвечает на AT), а _DEVICE
+		# выше мог подмениться AT-портом ДРУГОГО модема. Живые запросы гейтим по
+		# тому, что действительно требуется - доступности самого mmcli.
+		_PORT_OK=0
+		mmcli -m "$_MMIDX" -K >/dev/null 2>&1 && _PORT_OK=1
+	fi
+fi
+
 # Non-json (single-value) callers still expect the classic port guard: a live
 # query on a missing port is meaningless. The json builder handles it per-field.
 if [ "x$1" != "xjson" ]; then

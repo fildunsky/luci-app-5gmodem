@@ -6,7 +6,12 @@
 # Без этого bands.sh отдавал бы захардкоженный список бендов Thales, рисуя в UI
 # нерабочие кнопки (текущие бенды через AT^BAND_PREF не читались -> ничего не
 # подсвечено), вместо честного "управление невозможно в режиме mbim".
-if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
+# Проверяем ДВА источника: debugfs (может быть не смонтирована на части сборок)
+# и sysfs (есть всегда). Если Compal не опознан, мы уходим в Thales-ветку - а это
+# AT-профиль БЕЗ _BAND_VIA=mmcli, т.е. гейт в bands.sh не сработает и UI покажет
+# нерабочие кнопки бендов/режимов вместо честной надписи (см. 05c690d6).
+if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null \
+	|| grep -qiE "VOS_5G|RXMG1" /sys/bus/usb/devices/*/product 2>/dev/null; then
 	. "$RES/05c690d6"
 	return 0 2>/dev/null || exit 0
 fi

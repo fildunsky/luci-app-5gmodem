@@ -2254,3 +2254,27 @@ msgstr "Скачивание профиля eSIM... Это может занят
 
 msgid "Download failed: %s"
 msgstr "Не удалось скачать: %s"
+
+msgid "Normal"
+msgstr "В норме"
+
+msgid "Warm"
+msgstr "Тёплый"
+
+msgid "Hot"
+msgstr "Горячий"
+
+msgid "Critical"
+msgstr "Критично"
+
+msgid "Modem thermal throttling level: %d of 3"
+msgstr "Уровень теплового троттлинга модема: %d из 3"
+
+msgid "Slot is empty (no SIM inserted)"
+msgstr "Слот пуст (SIM-карта не вставлена)"
+
+msgid "Please wait, reading eUICC - updating the profile list can be slow."
+msgstr "Пожалуйста, подождите, идёт чтение eUICC — обновление списка профилей может быть долгим."
+
+msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
+msgstr "Профиль eSIM загружен. Перезагружаю модем, чтобы он применился..."

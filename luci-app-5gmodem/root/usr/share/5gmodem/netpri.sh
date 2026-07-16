@@ -178,6 +178,9 @@ list)
 	printf '['
 	first=1
 	NEEDREFRESH=0
+	# USB-пути присутствующих сейчас модемов (один вызов на весь список).
+	PRESENT_PATHS=" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+		| jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ') "
 	# sort by interface name, like the LuCI "Interfaces" overview (naturalCompare).
 	# uniq: firewall-зона могла накопить дубликаты интерфейса (см. mkiface.sh) -
 	# показываем каждый uplink РОВНО один раз, даже если конфиг ещё не вылечен.
@@ -186,6 +189,16 @@ list)
 		uci -q get "network.$n" >/dev/null 2>&1 || continue
 		[ "$n" = wan6 ] && continue                                   # ipv6 twin of wan
 		[ "$(uci -q get "network.$n.disabled")" = "1" ] && continue
+		# Отсутствующий модем в списке приоритетов не нужен: его интерфейс остаётся
+		# в firewall-зоне (мы его не удаляем - модем ещё вернётся), но выбирать его
+		# приоритетом бессмысленно, трафика через него всё равно не будет. Прячем
+		# ТОЛЬКО если модем наш и мы точно знаем его USB-путь: при неизвестной
+		# секции (одномодемный legacy-конфиг) поведение прежнее - показываем.
+		if [ "$(iface_type "$n")" = modem ]; then
+			_ms=$(modem_section "$n")
+			_mp=""; [ -n "$_ms" ] && _mp=$(uci -q get "5gmodem.$_ms.path")
+			if [ -n "$_mp" ] && ! echo "$PRESENT_PATHS" | grep -q " $_mp "; then continue; fi
+		fi
 		# NOTE: no IP filter - keep every uplink visible even without an address, so
 		# a modem that briefly drops its IP while re-dialing after a switch does not
 		# vanish from the bar (which used to leave only Wi-Fi looking "selected").

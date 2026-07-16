@@ -21,7 +21,18 @@
 #     list first, keep every band belonging to other technologies as-is,
 #     and only replace the eutran-*/ngran-* portion being targeted.
 
-_DEVICE=/dev/ttyUSB1
+# _DEVICE НЕ задаём намеренно. У этой прошивки нет ни одной рабочей AT-команды
+# управления, и ни один её ttyUSB не отвечает на голый AT (проверено на живом
+# модеме: ttyUSB7/ttyUSB9 молчат, у ttyUSB8 даже нет device-node). Раньше здесь
+# стоял _DEVICE=/dev/ttyUSB1 - порт ЧУЖОГО модема (FM350): bands.sh считал по нему
+# _PORT_OK=1 и «доказывал» работоспособность Compal наличием порта соседа.
+# Управляемость теперь определяется доступностью mmcli (см. _BAND_VIA в bands.sh).
+#
+# Транспорт управления диапазонами/режимом: "mmcli" - только через ModemManager
+# (у этой прошивки НЕТ AT-команд бенд-лока, см. шапку). bands.sh по этому флагу
+# понимает, что на kernel-прото (mbim/qmi) бендами управлять НЕЛЬЗЯ, и вместо
+# неработающих кнопок UI покажет подсказку «переключите интерфейс на ModemManager».
+_BAND_VIA=mmcli
 # Multi-modem: read/set bands on the ACTIVE modem, not "any" (with two modems
 # "mmcli -m "$_MMIDX"" hits the wrong one -> both tabs show/set the same bands).
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
@@ -59,10 +70,11 @@ _mm_join_pipe() {
 }
 
 getsupportedbands() {
-	mmcli -m "$_MMIDX" -K 2>/dev/null \
-		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
-		| sed -n 's/^eutran-//p' \
-		| xargs
+	# СТАТИЧНЫЙ список из конфига (а не из mmcli): кнопки диапазонов должны
+	# показываться ВСЕГДА, даже когда mmcli завис/не отдаёт бенды - иначе на
+	# зависшем модеме их не восстановить через приложение. Текущий выбор
+	# (подсветку) даёт живой getbands() ниже; применение - setbands() через mmcli.
+	echo "$_DEFAULT_LTE_BANDS"
 }
 
 getbands() {
@@ -94,10 +106,60 @@ setbands() {
 }
 
 getsupportedbands5gnsa() {
-	mmcli -m "$_MMIDX" -K 2>/dev/null \
-		| awk -F': *' '/^modem\.generic\.supported-bands\.value/{print $2}' \
-		| sed -n 's/^ngran-//p' \
-		| xargs
+	# СТАТИЧНЫЙ список из конфига (см. getsupportedbands): кнопки 5G-диапазонов
+	# показываем всегда, независимо от доступности mmcli.
+	echo "$_DEFAULT_5GNSA_BANDS"
+}
+
+# ---- Режим сети (2G/3G/4G/5G) --------------------------------------------
+# У этой прошивки нет AT-переключения RAT, поэтому режим ставим через
+# ModemManager (--set-allowed-modes/--set-preferred-mode). Список режимов
+# СТАТИЧНЫЙ (из конфига) - кнопки видны всегда, пока управление доступно
+# (см. _BAND_VIA + гейт в bands.sh), даже если модем сейчас молчит: это путь
+# восстановления модема, ушедшего в режим, где нет сети.
+_MODES="1:Auto 2:3G 3:3G+4G 4:4G 5:4G+5G 6:5G"
+
+# id -> "<allowed> <preferred>" для mmcli
+_mm_modes_for_id() {
+	case "$1" in
+		1) echo "2g|3g|4g|5g 5g" ;;
+		2) echo "3g" ;;
+		3) echo "3g|4g 4g" ;;
+		4) echo "4g" ;;
+		5) echo "4g|5g 5g" ;;
+		6) echo "5g" ;;
+	esac
+}
+
+getsupportedmodes() {
+	echo "$_MODES"
+}
+
+getmode() {
+	# "modem.generic.current-modes : allowed: 3g, 4g, 5g; preferred: 5g"
+	AL=$(mmcli -m "$_MMIDX" -K 2>/dev/null \
+		| sed -n 's/^modem\.generic\.current-modes *: *//p' | head -1 \
+		| sed -n 's/.*allowed: *\([^;]*\).*/\1/p' | tr -d ' ')
+	case "$AL" in
+		*2g*3g*4g*5g*) echo 1 ;;
+		3g,4g)         echo 3 ;;
+		4g,5g)         echo 5 ;;
+		3g)            echo 2 ;;
+		4g)            echo 4 ;;
+		5g)            echo 6 ;;
+		*)             echo "" ;;
+	esac
+}
+
+setmode() {
+	MP=$(_mm_modes_for_id "$1"); [ -n "$MP" ] || return 1
+	M=$(echo "$MP" | awk '{print $1}')
+	P=$(echo "$MP" | awk '{print $2}')
+	if [ -n "$P" ]; then
+		mmcli -m "$_MMIDX" --set-allowed-modes="$M" --set-preferred-mode="$P"
+	else
+		mmcli -m "$_MMIDX" --set-allowed-modes="$M"
+	fi
 }
 
 getbands5gnsa() {

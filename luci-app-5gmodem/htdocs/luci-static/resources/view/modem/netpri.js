@@ -176,6 +176,41 @@ function buildBar(list, redraw) {
 }
 
 return baseclass.extend({
+	/* Смонтировать блок ВНУТРИ контента страницы (под под-вкладками, как обычный
+	   элемент вьюхи). Возвращает контейнер СРАЗУ (синхронно), наполняется асинхронно
+	   и живёт своим поллом. Так блок виден на всех темах и на мобильном - в отличие
+	   от старой вставки над вкладками, которую мобильная вёрстка прятала. Вставляется
+	   самой вьюхой (5gdetail) в начало контента - код проще, без DOM-инъекций. */
+	mount: function() {
+		ensureCss();
+		var wrap = E('div', { 'class': 'netpri-mount' });
+		var redraw = function(l2) {
+			var fresh = buildBar(l2, redraw);
+			if (wrap.firstChild) { wrap.replaceChild(fresh, wrap.firstChild); }
+			else { wrap.appendChild(fresh); }
+		};
+		var apply = function(list) {
+			// НЕ убираем блок на пустом ответе: при переключении модема (перезагрузка
+			// active_modem) netpri.sh list на миг может вернуть [], и блок мигал/пропадал.
+			// Просто перерисовываем при наличии данных; последнее содержимое «липкое».
+			if (list && list.length) { redraw(list); }
+		};
+		L.resolveDefault(loadList()).then(apply);
+		/* wrap возвращается СИНХРОННО, а в DOM его вставляет вьюха ПОЗЖЕ. Поэтому
+		   «нет в DOM» на первых тиках - это ещё не «блок убрали»: раньше поллер в
+		   такой момент снимал сам себя НАВСЕГДА, и блок оставался пустым div'ом -
+		   отсюда «Internet priority отрисовывается не всегда». Снимаемся только
+		   после того, как блок реально побывал в DOM и оттуда исчез. */
+		var seen = false;
+		var pollFn = function() {
+			if (document.body.contains(wrap)) { seen = true; }
+			else if (seen) { poll.remove(pollFn); return Promise.resolve(); }
+			return loadList().then(apply);
+		};
+		poll.add(pollFn, 5);
+		return wrap;
+	},
+
 	/* Promise<DOM|null>. null — если ни одного WAN-аплинка с IP нет. */
 	renderBar: function() {
 		return loadList().then(function(list) {

@@ -96,7 +96,13 @@ apply_mm_state() {
 # up if the device changed or it is not up. This is what auto-recovers the
 # connection after a reboot / modem swap when the pinned device went stale.
 ensure_iface() {
-	P="$1"; SEC="$2"
+	# ВСЕ переменные - local. Без этого функция затирала ГЛОБАЛЬНЫЕ SEC/P/IF
+	# вызывающего, а resolve зовёт её в цикле по ВСЕМ присутствующим модемам:
+	# после цикла SEC указывала на ПОСЛЕДНИЙ модем цикла, а не на активный, и
+	# строка "point the app at the active modem's interface" прописывала в
+	# @5gmodem[0].network интерфейс ЧУЖОГО модема (at_port/active_modem при этом
+	# оставались от активного). Так секция и разъезжалась на каждой загрузке.
+	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
@@ -230,10 +236,25 @@ switch)
 	# modem port from 5gmodem.device FIRST - so we pin BOTH device and at_port
 	# to this modem's AT port, otherwise detect.sh falls through to
 	# "mmcli -m any" and reads a different modem.
+	# ИНВАРИАНТ: active_modem, at_port/device и network в @5gmodem[0] обязаны
+	# описывать ОДИН И ТОТ ЖЕ модем. Раньше at_port обновлялся только при непустом
+	# $ATP, а active_modem/network - всегда: если порт нового модема в этот момент
+	# не разрешался (он как раз переэнумерируется после CFUN=1,1 / загрузки), то
+	# at_port ОСТАВАЛСЯ от ПРЕДЫДУЩЕГО модема. Секция описывала два разных модема,
+	# и все потребители at_port (основной опрос, netpri, sms_tool) читали ЧУЖОЙ:
+	# оператор соседа попадал в кэш этого интерфейса - отсюда «Beeline у обоих».
+	# Пустой at_port безопаснее чужого: его потребители трактуют как «порта нет»,
+	# а resolve/hotplug проставит верный, когда модем вернётся на шину.
 	uci -q set "$CFG.@5gmodem[0].active_modem=$P"
+	# Явный выбор пользователя: resolve вернёт активность сюда, когда модем
+	# переживёт переперечисление USB (напр. после AT+CFUN=1,1) - см. ветку resolve.
+	uci -q set "$CFG.@5gmodem[0].preferred_modem=$P"
 	if [ -n "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"
+	else
+		uci -q delete "$CFG.@5gmodem[0].at_port" 2>/dev/null
+		uci -q delete "$CFG.@5gmodem[0].device" 2>/dev/null
 	fi
 	NET=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$NET" ] && uci -q set "$CFG.@5gmodem[0].network=$NET"
@@ -274,9 +295,21 @@ resolve)
 	done
 	uci -q commit "$CFG"
 
-	# active modem: if it was unplugged, fall back to the first present one
+	# Активный модем. preferred_modem - ЯВНЫЙ выбор пользователя (ставится веткой
+	# switch). Модем может пропасть с шины НЕНАДОЛГО: AT+CFUN=1,1 (перезагрузка
+	# модема, в т.ч. наша - после добавления eSIM-профиля) переперечисляет USB на
+	# десятки секунд. Раньше resolve в этот момент НАВСЕГДА переставлял активность
+	# на соседа, и после возвращения модема она к нему не возвращалась - выбор
+	# пользователя молча терялся. Теперь: вернулся предпочтительный - отдаём
+	# активность ему; нет - временно берём первый присутствующий, НЕ трогая
+	# preferred_modem, чтобы следующий resolve всё вернул на место.
 	AMP=$(active_path)
-	if [ -z "$AMP" ] || ! echo " $PRESENT " | grep -q " $AMP "; then
+	PREF=$(uci -q get "$CFG.@5gmodem[0].preferred_modem")
+	if [ -n "$PREF" ] && echo " $PRESENT " | grep -q " $PREF " && [ "$AMP" != "$PREF" ]; then
+		AMP="$PREF"
+		uci -q set "$CFG.@5gmodem[0].active_modem=$AMP"
+		uci -q commit "$CFG"
+	elif [ -z "$AMP" ] || ! echo " $PRESENT " | grep -q " $AMP "; then
 		AMP=$(echo "$PRESENT" | awk '{print $1}')
 		[ -n "$AMP" ] && uci -q set "$CFG.@5gmodem[0].active_modem=$AMP" && uci -q commit "$CFG"
 	fi
@@ -293,6 +326,11 @@ resolve)
 			uci -q commit sms_tool_js
 			set_sms_storage "$ATP"
 		fi
+	else
+		# см. инвариант в ветке switch: лучше пусто, чем порт ЧУЖОГО модема
+		# (active_modem/network ниже переезжают на $AMP в любом случае).
+		uci -q delete "$CFG.@5gmodem[0].at_port" 2>/dev/null
+		uci -q delete "$CFG.@5gmodem[0].device" 2>/dev/null
 	fi
 
 	# --- recover the connections ---
@@ -312,7 +350,10 @@ resolve)
 		ensure_iface "$p" "$s"
 	done
 
-	# point the app at the active modem's interface
+	# point the app at the active modem's interface. SEC пересчитываем от $AMP
+	# заново (а не полагаемся на значение до цикла ensure_iface выше) - страховка
+	# на случай, если какой-нибудь хелпер снова начнёт трогать глобальные имена.
+	SEC=$(secname "$AMP")
 	IF=$(uci -q get "$CFG.$SEC.network"); [ -n "$IF" ] && uci -q set "$CFG.@5gmodem[0].network=$IF"
 	uci -q commit "$CFG"
 	rm -f /tmp/modem

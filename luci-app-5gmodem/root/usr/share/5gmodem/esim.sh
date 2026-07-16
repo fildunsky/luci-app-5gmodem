@@ -24,23 +24,41 @@
 
 RES="/usr/share/5gmodem"
 LPAC="/usr/lib/lpac"
+BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
 PORTCACHE="/tmp/5gmodem_esim_port"
 
 err() { echo "{\"type\":\"lpa\",\"payload\":{\"code\":-1,\"message\":\"$1\",\"data\":\"\"}}"; }
 
-# lpac под сторожевым таймером (v2.3.0 без таймаута чтения может зависнуть).
-# run_lpac <timeout_s> <args...>  (порт берётся из окружения LPAC_APDU_AT_DEVICE)
+# lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). На FM350-GL прямой
+# AT-драйвер lpac 2.3.0 виснет, а его stdio в нашей сборке не читает stdin - зато
+# lpac 2.1.x stdio читает корректно, а транспорт APDU (CCHO/CGLA/CCHC) делает мост.
+# Пламбинг «зеркальный»: мост читает запросы lpac из FIFO и пишет ответы в pipe ->
+# stdin lpac; stdout lpac -> FIFO -> stdin моста. Финальный "lpa"-результат мост
+# кладёт в файл. Всё под сторожевым таймером.
+# run_lpac <timeout_s> <args...>   (порт = $PORT, установленный вызывающим кодом)
 run_lpac() {
 	_T="$1"; shift
-	_OUT="/tmp/5gmodem_esim_out.$$"
-	"$LPAC" "$@" > "$_OUT" 2>/dev/null &
+	# Чистим утёкшие логические каналы ISD-R ПЕРЕД КАЖДОЙ операцией lpac: после
+	# предыдущей операции канал мог остаться открытым (или закрылся не полностью),
+	# и следующий CCHO завис бы -> euicc_init падает. Одна операция = чистый старт.
+	for _c in 1 2 3 4 5 6 7 8; do at_bounded "$PORT" "AT+CCHC=$_c" 2 >/dev/null; done
+	_RES="/tmp/5gmodem_esim_res.$$"
+	_LOOP="/tmp/5gmodem_esim_loop.$$"
+	rm -f "$_RES" "$_LOOP"; mkfifo "$_LOOP" 2>/dev/null
+	# Зеркальный пайплайн: мост читает запросы lpac из FIFO (loop), пишет ответы в
+	# pipe -> stdin lpac; stdout lpac -> loop -> stdin моста. Мост выходит на "lpa"
+	# результате -> lpac ловит SIGPIPE и завершается -> пайплайн закрывается сразу.
+	sh "$BRIDGE" "$PORT" "$_RES" < "$_LOOP" | LPAC_APDU=stdio "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
 	_PID=$!
-	( sleep "$_T"; kill "$_PID" 2>/dev/null ) &
-	_WD=$!
-	wait "$_PID" 2>/dev/null
-	kill "$_WD" 2>/dev/null; wait "$_WD" 2>/dev/null
-	if [ -s "$_OUT" ]; then cat "$_OUT"; else err "timeout"; fi
-	rm -f "$_OUT"
+	# Опрос вместо wait+сторож: busybox плохо реапит сабшелл пайплайна через wait
+	# (зомби + зависание на 40 c). kill -0 ловит завершение мгновенно. Мост выходит
+	# на "lpa", lpac умирает по SIGPIPE -> пайплайн закрывается в ту же секунду.
+	_n=0
+	while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
+	kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null
+	rm -f "$_LOOP"
+	if [ -s "$_RES" ]; then cat "$_RES"; else err "timeout"; fi
+	rm -f "$_RES"
 }
 
 # AT-команда с ограничением по времени (sms_tool сам таймаута не имеет и на
@@ -55,8 +73,13 @@ at_bounded() {
 }
 
 # eUICC-порт? БЕЗОПАСНАЯ и БЫСТРАЯ проба через AT+CCHO (открыть логический канал
-# к ISD-R). Порт eUICC мгновенно отвечает "+CCHO: N" (номер канала) - закрываем
-# его (CCHC=N) за собой. Остальные AT-порты отвечают ERROR/пусто сразу.
+# к ISD-R). Порт eUICC мгновенно отвечает номером канала - закрываем его (CCHC=N)
+# за собой. Остальные AT-порты отвечают ERROR/пусто сразу.
+#
+# ФОРМАТ ОТВЕТА: стандарт "+CCHO: N", НО FM350-GL отдаёт ГОЛЫЙ номер канала (просто
+# "1") без префикса - как и в нашем патче lpac (0002-...bare-CCHO). Принимаем ОБА,
+# иначе find_port не распознаёт рабочий eUICC-порт и dump падает с "no eUICC-capable
+# AT port", хотя CCHO по факту работает.
 #
 # ВАЖНО: раньше здесь перебирали порты через "lpac chip info". На FM350 номер
 # eUICC-порта плавает при каждой переперечисления USB, а lpac на НЕВЕРНОМ порту
@@ -66,8 +89,11 @@ at_bounded() {
 port_ok() {
 	_AID=$(uci -q get lpac.global.custom_isd_r_aid 2>/dev/null)
 	[ -n "$_AID" ] || _AID="A0000005591010FFFFFFFF8900000100"
-	_CH=$(at_bounded "$1" "AT+CCHO=\"$_AID\"" 6 \
-		| sed -n 's/^+CCHO: *\([0-9]\).*/\1/p' | head -1)
+	_R=$(at_bounded "$1" "AT+CCHO=\"$_AID\"" 6)
+	# формат "+CCHO: N"
+	_CH=$(echo "$_R" | sed -n 's/^+CCHO: *\([0-9][0-9]*\).*/\1/p' | head -1)
+	# либо голый номер канала (FM350): строка ТОЛЬКО из цифр (не эхо "AT+CCHO=...")
+	[ -n "$_CH" ] || _CH=$(echo "$_R" | grep -E '^[0-9]+$' | head -1)
 	[ -n "$_CH" ] || return 1
 	at_bounded "$1" "AT+CCHC=$_CH" 4 >/dev/null   # закрыть канал за собой
 	return 0
@@ -125,11 +151,11 @@ find_port() {
 # после переперечисления) сбрасываем кэш, ищем порт заново и повторяем один раз.
 do_lpac() {
 	_T="$1"; shift
-	R=$(export LPAC_APDU=at LPAC_APDU_AT_DEVICE="$PORT"; run_lpac "$_T" "$@")
+	R=$(run_lpac "$_T" "$@")
 	if ! echo "$R" | grep -q '"code":0'; then
 		rm -f "$PORTCACHE"
 		PORT=$(find_port)
-		[ -n "$PORT" ] && R=$(export LPAC_APDU=at LPAC_APDU_AT_DEVICE="$PORT"; run_lpac "$_T" "$@")
+		[ -n "$PORT" ] && R=$(run_lpac "$_T" "$@")
 	fi
 	echo "$R"
 }
@@ -170,18 +196,19 @@ D=$(live_port)
 [ -n "$D" ] || { err "no AT port"; exit 0; }
 esim_active "$D" || { err "esim slot not active"; exit 0; }
 
+# ПЕРЕД поиском порта закрываем ВСЕ возможные УТЕКШИЕ логические каналы ISD-R.
+# Утечка (от прибитого сторожём lpac или прерванной CCHO-пробы) вешает CCHO
+# НАМЕРТВО: find_port не находит eUICC-порт ("no eUICC-capable AT port"), хотя
+# CCHO по факту работает. ПРОВЕРЕНО (FM350): после закрытия всех каналов CCHO
+# снова открывает канал - т.е. клин лечится БЕЗ power-cycle. Каналы общие для
+# eUICC, поэтому чистим на живом AT-порту D до пробы портов.
+for _ch in 1 2 3 4 5 6 7 8 9 10; do at_bounded "$D" "AT+CCHC=$_ch" 2 >/dev/null; done
+
 PORT=$(find_port)
 [ -n "$PORT" ] || { err "no eUICC-capable AT port"; exit 0; }
 
-# Закрыть возможные УТЕКШИЕ логические каналы ISD-R перед работой lpac. Если
-# прошлый вызов lpac прибил сторожевой таймер посреди APDU-обмена, его канал
-# остался открытым; у eUICC их всего несколько, и накопившиеся утечки вешают
-# следующий CCHO намертво (до аппаратного сброса модема). Чистим 1-4 - lpac
-# откроет свой канал с чистого листа.
-for _ch in 1 2 3 4; do at_bounded "$PORT" "AT+CCHC=$_ch" 3 >/dev/null; done
-
 flush_notifications() {
-	R=$(export LPAC_APDU=at LPAC_APDU_AT_DEVICE="$PORT"; run_lpac 60 notification process -a -r)
+	R=$(run_lpac 60 notification process -a -r)
 	echo "$R" | grep -q '"code":0' || { rm -f "$PORTCACHE"; }
 }
 

@@ -135,12 +135,31 @@ return view.extend({
 	},
 
 	// перечитать eUICC (chip info + список профилей одним вызовом dump)
-	reload: function() {
+	reload: function(tries) {
+		var self = this;
+		// строго число: если reload когда-нибудь повесят прямо на 'click', сюда
+		// прилетит Event - он truthy, и ретраи молча выключились бы.
+		tries = (typeof tries === 'number') ? tries : 0;
 		var meta = document.getElementById('esim-meta');
-		if (meta) { meta.innerHTML = ''; meta.appendChild(E('em', _('Reading eUICC...'))); }
+		// dump = chip info + список профилей через lpac по APDU-мосту: на FM350 это
+		// ~10 с и дольше. Без явного предупреждения пустая строка выглядит как
+		// «ничего не нашлось», и люди уходят со страницы, не дождавшись.
+		if (meta) {
+			meta.innerHTML = '';
+			meta.appendChild(E('em', { 'class': 'spinning' },
+				_('Please wait, reading eUICC - updating the profile list can be slow.')));
+		}
 		esimExec([ 'dump' ]).then(function(d) {
 			var chip = d.chip || {}, profs = d.profiles || {};
 			if (!lpaOk(chip) && !lpaOk(profs)) {
+				// Первая попытка часто не проходит: eUICC мог остаться с занятыми
+				// логическими каналами после предыдущей сессии (esim.sh чистит их
+				// через AT+CCHC перед каждой операцией) или модем ещё поднимается
+				// после CFUN. Не пугаем ошибкой сразу - молча повторяем.
+				if (tries < 2) {
+					window.setTimeout(function() { self.reload(tries + 1); }, 4000);
+					return;
+				}
 				if (meta) {
 					meta.innerHTML = '';
 					meta.appendChild(E('span', { 'style': 'color:#d95c5c' },
@@ -171,9 +190,19 @@ return view.extend({
 			ui.hideModal();
 			var j = {}; try { j = JSON.parse(res.stdout || '') || {}; } catch (e) {}
 			var ok = lpaOk(j);
-			notify(ok, _('eSIM profile downloaded'), _('Download failed: %s').format(lpaMsg(j)));
-			if (ok && inp) { inp.value = ''; }
-			self.reload();
+			if (!ok) {
+				notify(false, null, _('Download failed: %s').format(lpaMsg(j)));
+				self.reload();
+				return;
+			}
+			if (inp) { inp.value = ''; }
+			// Новый профиль модем видит только после полной перезагрузки (AT+CFUN=1,1),
+			// а не после перезапуска радио: eUICC перечитывается при инициализации.
+			// Модем при этом переэнумерируется на USB, поэтому список перечитываем с
+			// запасом по времени - раньше порта просто ещё нет.
+			notify(true, _('eSIM profile downloaded. Rebooting the modem to apply it...'), null);
+			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			window.setTimeout(function() { self.reload(); }, 25000);
 		}).catch(function() { ui.hideModal(); });
 	},
 });

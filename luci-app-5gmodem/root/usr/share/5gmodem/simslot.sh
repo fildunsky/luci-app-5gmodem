@@ -105,16 +105,54 @@ live_port() {
 D=$(live_port)
 [ -n "$D" ] || { echo '{"error":"no device"}'; exit 0; }
 
+# Фибокомовский AT+GTDUALSIM есть далеко не у всех: у Compal RXM-G1 (SG500M2-X)
+# его НЕТ, поэтому AT-ветка отдавала пустой список слотов и в mbim-режиме кнопок
+# переключения не было вовсе. Там слоты живут за +CEISWITCHSIM (см. ниже).
+at_has_gtdualsim() {
+	sms_tool -d "$D" at "AT+GTDUALSIM=?" 2>/dev/null | tr -d '\r' | grep -qE '\(0[-,]1\)'
+}
+
+# Переподнять интерфейс активного модема ПОСЛЕ смены слота.
+# Без этого netifd продолжает держать адрес, выданный СТАРОЙ SIM: слот
+# переключён, а IP (и трафик) остаются от прежней карты до ручного ifdown/ifup.
+# Работаем в фоне: модем после смены слота ресетится и переперечисляется на USB
+# (у FM350 - десятки секунд), а HTTP-запрос из UI столько не живёт.
+slot_redial() {
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_n=0
+	while [ "$_n" -lt 120 ]; do
+		sleep 3; _n=$((_n + 3))
+		[ -n "$_AP" ] || break
+		/usr/share/5gmodem/listmodems.sh 2>/dev/null | grep -q "\"$_AP\"" && break
+	done
+	# resolve перепривязывает device после переперечисления (ttyUSB/cdc-wdm поехали)
+	# и возвращает активность предпочтительному модему.
+	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+	_IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_IF" ] || return 0
+	ifdown "$_IF" >/dev/null 2>&1
+	sleep 2
+	ifup "$_IF" >/dev/null 2>&1
+}
+
 case "$1" in
 set)
 	[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
-	O=$(sms_tool -d "$D" at "AT+GTDUALSIM=$2" 2>/dev/null)
+	if at_has_gtdualsim; then
+		O=$(sms_tool -d "$D" at "AT+GTDUALSIM=$2" 2>/dev/null)
+	else
+		# Compal: id - номер ФИЗИЧЕСКОГО слота (1/2). Команда переназначает этот
+		# слот на интерфейс SIM1 модема (AT+CEISWITCHSIM=? -> "1:Set physical SIM
+		# SLOT 1 to SIM1, 2:Set physical SIM SLOT 2 to SIM1").
+		O=$(sms_tool -d "$D" at "AT+CEISWITCHSIM=$2" 2>/dev/null)
+	fi
 	# Ошибка - только явный ERROR. Пустой ответ = успех: модем (FM350) после
 	# смены слота мгновенно ресетится/переперечисляется и не успевает ответить
 	# "OK" - слот при этом фактически переключён (проверено живьём).
 	if echo "$O" | grep -q "ERROR"; then
 		echo '{"error":"switch failed"}'
 	else
+		( slot_redial ) >/dev/null 2>&1 &
 		echo '{"result":"ok"}'
 	fi
 	;;
@@ -154,6 +192,28 @@ set)
 		# оба слота одного типа (две физические SIM) - вернуть номерные метки
 		[ "$L0" = "$L1" ] && { L0="SIM1"; L1="SIM2"; }
 		OUT='{"id":"0","label":"'$L0'"},{"id":"1","label":"'$L1'"}'
+	fi
+
+	# --- Compal RXM-G1 (SG500M2-X): слоты через +CEISWITCHSIM ----------------
+	# Прошивка не знает ни AT+SIMTYPE, ни AT+GTDUALSIM (выше оба дали пусто), и
+	# в mbim-режиме кнопок слотов не появлялось. Формат ответа:
+	#   AT+CEISWITCHSIM? -> "Physical SIM SLOT 1 maps to SIM1,SIM inserted 1, ..."
+	#                       "Physical SIM SLOT 2 maps to SIM2,SIM inserted 0, ..."
+	# id = номер ФИЗИЧЕСКОГО слота (1/2); активен тот, который сейчас maps to SIM1.
+	if [ -z "$OUT" ]; then
+		CEI=$(sms_tool -d "$D" at "AT+CEISWITCHSIM?" 2>/dev/null | tr -d '\r')
+		if echo "$CEI" | grep -q "^Physical SIM SLOT"; then
+			ACT=$(echo "$CEI" | sed -n 's/^Physical SIM SLOT \([0-9]\) maps to SIM1,.*/\1/p' | head -1)
+			OUT=""
+			for _i in 1 2; do
+				# «SIM inserted» в строке ДВА раза (второй - про CD-пин), поэтому
+				# якорим первое вхождение, а не берём жадное .*
+				_ins=$(echo "$CEI" | sed -n "s/^Physical SIM SLOT $_i maps to SIM[0-9],SIM inserted \([0-9]\).*/\1/p" | head -1)
+				[ -n "$_ins" ] || continue
+				[ -n "$OUT" ] && OUT="$OUT,"
+				OUT="$OUT{\"id\":\"$_i\",\"label\":\"SIM$_i\",\"present\":\"$_ins\"}"
+			done
+		fi
 	fi
 	echo "{\"type\":\"$TYPE\",\"slots\":[$OUT],\"active\":\"$ACT\"}"
 	;;
