@@ -43,7 +43,134 @@ set_apn_opt() {
 	esac
 }
 
+# Тип PDP для НОВОГО интерфейса: ipv4 | ipv4v6 (4-й аргумент из UI).
+# По умолчанию ipv4, а не ipv4v6, как было раньше: dual-stack ломает дозвон на
+# части модемов (Quectel EC21 проверен живьём - поднялся только после смены на
+# ipv4), а выгоды от IPv6 у сотовых операторов РФ почти нет: его либо не выдают,
+# либо выдают криво. Кому нужен - переключает в настройках модема.
+# СУЩЕСТВУЮЩИЕ интерфейсы не трогаем: если аргумент не передан (вызов не из UI),
+# сохраняем то, что уже стоит.
+PDPARG="$4"
+
+# Записать тип PDP интерфейса $1. Имя опции и РЕГИСТР значения отличаются у
+# разных прото: atc ждёт pdp=IPV4V6 (верхний), fibocom - pdptype=IPV4V6,
+# qmi/mbim - pdptype=ipv4v6 (нижний). Поэтому вид значения задаёт вызывающий:
+# $2 = имя опции (pdp|pdptype), $3 = 'upper' для верхнего регистра.
+set_pdp_opt() {
+	_opt="$2"; _up="$3"
+	_v="$PDPARG"
+	[ -n "$_v" ] || _v=$(uci -q get "network.$1.$_opt")   # не из UI - оставить как есть
+	[ -n "$_v" ] || _v="ipv4"                             # новый интерфейс - по умолчанию ipv4
+	case "$_v" in
+		ipv4v6|IPV4V6) _v=ipv4v6 ;;
+		*)             _v=ipv4 ;;
+	esac
+	[ "$_up" = upper ] && _v=$(echo "$_v" | tr a-z A-Z)
+	uci set "network.$1.$_opt=$_v"
+}
+
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
+
+# ---- подготовка kernel-прото (qmi/mbim) -------------------------------------
+# Диагностика живого EC21 (см. ниже) показала цепочку, из-за которой модем
+# оставался без интернета НАВСЕГДА, хотя сам был полностью исправен:
+#   1) ModemManager и uqmi одновременно претендовали на один cdc-wdm ->
+#      QMI-стек модема заклинивало;
+#   2) uqmi ВИСЛА НАВЕЧНО, игнорируя собственный -t 3000 (в qmi.sh над этим
+#      вызовом даже стоит комментарий "timeout 3s to avoid hanging uqmi"),
+#      и держала cdc-wdm открытым;
+#   3) все следующие запросы -> "Request timed out" / "No data link!",
+#      netifd клал интерфейс и пробовал снова - бесконечный цикл;
+#   4) модем при этом отвечал по AT: CGMM=EC21, CPIN=READY. Умирал только QMI.
+# Лечится сбросом модема (AT+CFUN=1,1): после переэнумерации QMI оживает.
+# Здесь мы делаем это автоматически ПЕРЕД поднятием интерфейса.
+
+# Запустить команду с ЖЁСТКИМ ограничением по времени: busybox не имеет timeout(1),
+# а uqmi не соблюдает свой -t. Возвращает вывод; при зависании убивает процесс.
+run_bounded() {   # $1 = секунды, далее команда
+	_lim="$1"; shift
+	_out="/tmp/5gmodem_bounded.$$"
+	rm -f "$_out"
+	( "$@" >"$_out" 2>&1 ) &
+	_p=$!
+	_n=0
+	while kill -0 "$_p" 2>/dev/null && [ "$_n" -lt "$_lim" ]; do sleep 1; _n=$((_n + 1)); done
+	kill -9 "$_p" 2>/dev/null
+	cat "$_out" 2>/dev/null
+	rm -f "$_out"
+}
+
+# QMI отвечает? Спрашиваем UIM (а НЕ --get-pin-status: на EC21 он штатно отдаёт
+# "Not supported" даже на здоровом модеме, это не признак поломки).
+qmi_alive() {   # $1 = cdc-wdm
+	case "$(run_bounded 8 uqmi -d "$1" -t 5000 --uim-get-sim-state)" in
+		*card_application_state*|*card_slot*) return 0 ;;
+	esac
+	return 1
+}
+
+# AT-порт этого модема (для сброса)
+at_port_of() {   # $1 = usb path
+	for _t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null); do
+		[ -e "$_t" ] || continue
+		case "$(run_bounded 6 sms_tool -d "$_t" at "AT+CGMM")" in
+			*ERROR*|*"No response"*|"") continue ;;
+			*) echo "$_t"; return 0 ;;
+		esac
+	done
+	return 1
+}
+
+# Подготовить модем к kernel-прото: отобрать порт у MM, снять зависшие uqmi,
+# при заклиненном QMI - сбросить модем и дождаться возвращения на шину.
+kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
+	_wdm="$1"; _path="$2"
+	[ -n "$_wdm" ] && [ -e "$_wdm" ] || return 0
+
+	# 1) MM не должен держать ЭТОТ модем. Прячет его mm-inhibit.sh
+	# (mmcli --inhibit-device), но демон ходит раз в 15 c, а нам порт нужен
+	# СЕЙЧАС. Если MM нужен другому модему, глушить его нельзя: аккуратно
+	# перезапускаем и ждём, пока он отпустит наш модем - инхибитор подхватит.
+	if pgrep -f ModemManager >/dev/null 2>&1; then
+		if mmcli -L 2>/dev/null | grep -q "/Modem/"; then
+			echo "prepare: ModemManager is running - restarting it so it releases $_wdm" >&2
+			mm_restart_safe
+			_n=0
+			while [ "$_n" -lt 20 ]; do
+				mmcli -L 2>/dev/null | grep -q "$(basename "$_path")" || break
+				sleep 1; _n=$((_n + 1))
+			done
+		fi
+	fi
+
+	# 2) Зависшая uqmi держит cdc-wdm - её надо снять, иначе всё упрётся в неё.
+	for _p in $(pgrep -f "uqmi .*$_wdm" 2>/dev/null); do
+		echo "prepare: killing wedged uqmi (pid $_p) holding $_wdm" >&2
+		kill -9 "$_p" 2>/dev/null
+	done
+
+	# 3) QMI жив? Если нет - сброс модема. Только для qmi: у mbim свой стек.
+	[ "$PROTO" = qmi ] || return 0
+	qmi_alive "$_wdm" && return 0
+
+	_atp=$(at_port_of "$_path")
+	[ -n "$_atp" ] || { echo "prepare: QMI wedged and no AT port to reset the modem" >&2; return 1; }
+	echo "prepare: QMI is wedged - resetting the modem via AT+CFUN=1,1 on $_atp" >&2
+	( sms_tool -d "$_atp" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
+
+	# ждём возвращения на шину (переэнумерация) + готовности QMI
+	_n=0
+	while [ "$_n" -lt 90 ]; do
+		sleep 3; _n=$((_n + 3))
+		/usr/share/5gmodem/listmodems.sh --refresh 2>/dev/null | grep -q "\"$_path\"" || continue
+		_w=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$_path\"].wdm[0]" 2>/dev/null)
+		[ -n "$_w" ] && [ -e "$_w" ] || continue
+		qmi_alive "$_w" && { echo "prepare: QMI recovered after ${_n}s" >&2; return 0; }
+	done
+	echo "prepare: QMI did not recover in ${_n}s" >&2
+	return 1
+}
 
 # Безопасный (пере)запуск ModemManager.
 # НЕЛЬЗЯ `/etc/init.d/modemmanager restart`: procd поднимает новый процесс, не
@@ -76,7 +203,13 @@ if [ -n "$AMP" ]; then
 	# Then guarantee uniqueness - if that name is already claimed by ANOTHER
 	# modem's section, bump to modem2/modem3/… so two modems never share one
 	# interface (which made the IP look shared).
-	USED=$(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\(.*\)'\$/\1=\2/p" | grep -v "^$MSEC=" | cut -d= -f2)
+	# tr '\n' ' ' обязателен: cut отдаёт имена ПОСТРОЧНО, а проверка ниже делает
+	# `echo " $USED " | grep -q " $cand "` - пробелы приклеиваются лишь к началу
+	# ПЕРВОЙ и концу ПОСЛЕДНЕЙ строки. У имени в середине (и у первого в строке)
+	# ведущего пробела нет, " modem " не совпадает - и занятое имя молча
+	# считалось свободным. Так два модема получали ОДИН интерфейс "modem", ради
+	# чего эта проверка и писалась (общий IP, см. комментарий выше).
+	USED=$(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\(.*\)'\$/\1=\2/p" | grep -v "^$MSEC=" | cut -d= -f2 | tr '\n' ' ')
 	cand=$(uci -q get "5gmodem.$MSEC.network")
 	[ -n "$cand" ] || cand="modem"
 	n=1
@@ -128,7 +261,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci set "network.$IF.proto=atc"
 			uci set "network.$IF.device=$ATCPORT"
 			set_apn_opt "$IF" "$OLDAPN"
-			uci set "network.$IF.pdp=IPV4V6"
+			set_pdp_opt "$IF" pdp upper
 			uci set "network.$IF.metric=20"
 			FDEV="$ATCPORT"
 			# remember the atc data port so resolve can re-pin it after renumbering
@@ -138,7 +271,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci set "network.$IF.usbpath=$AMP"
 			uci set "network.$IF.device=$FNET"
 			set_apn_opt "$IF" "$OLDAPN"
-			uci set "network.$IF.pdptype=IPV4V6"
+			set_pdp_opt "$IF" pdptype upper
 			FDEV="$FNET"
 		fi
 		# secondary uplink by default so (re)creating it never hijacks another
@@ -179,9 +312,13 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 
 		# NOTE: deliberately leave ModemManager as-is (another modem may need it);
 		# the fibocom path uses AT + the usbnet device and does not touch MM.
-		# refresh the ModemManager ignore list (fibocom is a kernel proto -> MM
-		# must not touch this modem)
-		/usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
+		# fibocom - kernel-прото: MM трогать этот модем не должен. Ставим флаг и
+		# применяем инхибицию (udev-правила на OpenWrt не работают, см. mm-inhibit.sh).
+		if [ -n "$MSEC" ]; then
+			uci -q set "5gmodem.$MSEC.mm_exclude=1"
+			uci -q commit 5gmodem
+			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+		fi
 		ifup "$IF" >/dev/null 2>&1
 		json created "$FPROTO" "$FDEV"
 		exit 0
@@ -274,10 +411,10 @@ uci set "network.$IF.device=$IDEV"
 set_apn_opt "$IF" "$OLDAPN"
 case "$PROTO" in
 	modemmanager)
-		uci set "network.$IF.iptype=ipv4v6"
+		set_pdp_opt "$IF" iptype   # у прото modemmanager опция называется iptype
 		;;
 	qmi|mbim|xmm)
-		uci set "network.$IF.pdptype=ipv4v6"
+		set_pdp_opt "$IF" pdptype
 		uci set "network.$IF.auth=none"
 		;;
 	ncm|atc|3g|wwan)
@@ -350,7 +487,21 @@ fi
 
 # refresh the ModemManager ignore list for the chosen proto: hide the modem from
 # MM for kernel protos (qmi/mbim/...), or let MM see it for the modemmanager proto
-/usr/share/5gmodem/mm-filter.sh >/dev/null 2>&1
+
+# Флаг «прятать от ModemManager» для ЭТОГО модема: включаем всем kernel-прото
+# (MM и ядро не делят один управляющий канал - MM забирает его, и интерфейс
+# остаётся без IP), выключаем для прото modemmanager - им MM обязан управлять.
+# Ставим при КАЖДОМ создании: смена прото меняет и правильное значение. Дальше
+# пользователь может переопределить галкой в настройках модема.
+if [ -n "$MSEC" ]; then
+	case "$PROTO" in
+		modemmanager) uci -q set "5gmodem.$MSEC.mm_exclude=0" ;;
+		*)            uci -q set "5gmodem.$MSEC.mm_exclude=1" ;;
+	esac
+	uci -q commit 5gmodem
+	# применить немедленно, не дожидаясь 15-секундного прохода демона
+	/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+fi
 
 if [ "$PROTO" = "modemmanager" ]; then
 	# ifup ТОЛЬКО после того, как MM реально увидит модем. Сразу после
@@ -367,6 +518,18 @@ if [ "$PROTO" = "modemmanager" ]; then
 			mmcli -L 2>/dev/null | grep -q "/Modem/" && break
 			sleep 2; _n=$((_n + 2))
 		done
+		ifup "$IF"
+	) >/dev/null 2>&1 </dev/null &
+elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ]; then
+	# kernel-прото: сначала автоматически привести модем в рабочее состояние
+	# (отобрать порт у MM, снять зависшие uqmi, при заклиненном QMI - сбросить
+	# модем), и только потом ifup. Иначе netifd упрётся в мёртвый управляющий
+	# канал и зациклится, оставив модем без интернета до ручного вмешательства.
+	# В ФОНЕ с отвязанными дескрипторами: подготовка может занять до ~2 минут
+	# (сброс + переэнумерация), а rpcd ждёт EOF и упал бы по таймауту (XHR error).
+	(
+		kernel_proto_prepare "$IDEV" "$AMP" || logger -t 5gmodem-mkiface \
+			"kernel_proto_prepare failed for $IF ($PROTO) - bringing it up anyway"
 		ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
 else

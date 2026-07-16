@@ -328,14 +328,63 @@ RES="/usr/share/5gmodem/modemband"
 # whichever USB device is enumerated first - otherwise band management operates
 # on the wrong modem (both tabs showed/set the same bands).
 _AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-_AVIDPID=""
-[ -n "$_AMP" ] && _AVIDPID=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$_AMP\"].vidpid" 2>/dev/null | tr -d ':')
+_AVIDPID=""; _APROD=""
+if [ -n "$_AMP" ]; then
+	_ALM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+	_AVIDPID=$(echo "$_ALM" | jsonfilter -e "@[@.path=\"$_AMP\"].vidpid" 2>/dev/null | tr -d ':')
+	# Модель из USB-дескриптора - ровно то, из чего легаси-путь ниже строит имя
+	# "<vidpid><Product>". Пробелы/слэши в имени файла невозможны, поэтому такие
+	# дескрипторы (напр. "USB Modem") просто не дадут совпадения - это нормально.
+	_APROD=$(echo "$_ALM" | jsonfilter -e "@[@.path=\"$_AMP\"].product" 2>/dev/null | head -1)
+	case "$_APROD" in *[!A-Za-z0-9_.-]*) _APROD="" ;; esac
+fi
 
 if [ -n "$_AMP" ]; then
 	# active modem is known: use ONLY its profile. If it has none (e.g. Fibocom
 	# without a band profile), leave _DEVICE unset -> "unsupported", instead of
 	# falling back to ANOTHER modem's profile (which would manage the wrong one).
-	[ -n "$_AVIDPID" ] && [ -e "$RES/$_AVIDPID" ] && . "$RES/$_AVIDPID"
+	#
+	# Порядок важен: сперва профиль С МОДЕЛЬЮ в имени, затем общий по vidpid.
+	# Раньше здесь искался ТОЛЬКО "<vidpid>", а у части Quectel общего файла не
+	# существует вовсе - есть лишь "2c7c0306EP06-E", "2c7c0800RM500Q-GL" и т.п.
+	# Из-за этого при двух модемах EP06/EG18/RM500Q оставались БЕЗ профиля бендов
+	# ("Unsupported"), хотя файл лежал рядом: имя с моделью понимал только
+	# легаси-путь ниже (он берёт Product= из debugfs). Теперь оба пути ищут
+	# одинаково. Модель точнее, поэтому она в приоритете.
+	_found=""
+	for _cand in "$_AVIDPID$_APROD" "$_AVIDPID"; do
+		[ -n "$_cand" ] || continue
+		[ -e "$RES/$_cand" ] || continue
+		_found="$_cand"; break
+	done
+
+	# Дескриптору верить нельзя: EC21 представляется как "Android" (проверено),
+	# и такие модемы не совпадут ни с "<vidpid>EP06-E", ни с чем-либо ещё. Если
+	# по дескриптору и по чистому vidpid ничего нет - спрашиваем МОДЕЛЬ у самого
+	# модема (AT+CGMM даёт "EC21"/"EP06") и ищем файл, чьё имя с неё НАЧИНАЕТСЯ:
+	# в базе профили названы полным вариантом ("2c7c0306EP06-E"), а CGMM отдаёт
+	# базовую модель без суффикса региона. Это же различает EG06-E и EP06-E,
+	# сидящие на ОДНОМ vidpid 2c7c0306.
+	# AT-запрос делаем только здесь, в последнюю очередь: на большинстве модемов
+	# профиль находится раньше, и лишнего обращения к порту не будет.
+	if [ -z "$_found" ] && [ -n "$_AVIDPID" ]; then
+		_atp=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		if [ -n "$_atp" ] && [ -e "$_atp" ]; then
+			_mdl=$(sms_tool -d "$_atp" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+				| grep -vE '^(AT|OK|ERROR|$)' | head -1 | tr -d ' ')
+			case "$_mdl" in
+				''|*[!A-Za-z0-9_.-]*) _mdl="" ;;
+			esac
+			if [ -n "$_mdl" ]; then
+				for _f in "$RES/$_AVIDPID$_mdl"*; do
+					[ -e "$_f" ] || continue
+					_found=$(basename "$_f"); break
+				done
+			fi
+		fi
+	fi
+
+	[ -n "$_found" ] && . "$RES/$_found"
 else
 	# no active modem configured (single-modem legacy): scan for any profile.
 	_DEVS=$(awk '{gsub("="," ");
@@ -375,9 +424,9 @@ _PORT_OK=0
 #   _BAND_VIA=at    (по умолчанию) - вендорные AT-команды, работают всегда;
 #   _BAND_VIA=mmcli - только через ModemManager (у прошивки нет AT бенд-лока,
 #                     напр. Compal RXM-G1).
-# mmcli-профиль на KERNEL-протоколе (mbim/qmi/ncm/...) неуправляем: mm-filter
-# прячет такой модем от ModemManager, mmcli его не видит - ни считать, ни
-# применить бенды/режим нельзя. Тогда глушим ВСЕ статичные списки, и UI покажет
+# mmcli-профиль на KERNEL-протоколе (mbim/qmi/ncm/...) неуправляем: такой модем
+# прячет от ModemManager инхибитор (mm-inhibit.sh), mmcli его не видит - ни
+# считать, ни применить бенды/режим нельзя. Тогда глушим ВСЕ статичные списки, и UI покажет
 # подсказку «управление диапазонами доступно только через ModemManager» вместо
 # кнопок, которые всё равно не сработали бы.
 if [ "$_BAND_VIA" = "mmcli" ]; then

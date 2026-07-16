@@ -363,6 +363,12 @@ return view.extend({
 		   кнопки (создать/пересоздать) и для встроенной вьюхи ниже. */
 		var mIfName = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
 		var mIfExists = !!uci.get('network', mIfName);
+		/* Секция АКТИВНОГО модема (m_<usb-путь> с заменой не-буквенно-цифровых на
+		   '_') - в ней живут пер-модемные настройки, напр. mm_exclude. */
+		var mSec = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			return p ? ('m_' + String(p).replace(/[^A-Za-z0-9]/g, '_')) : '';
+		})();
 
 		/* Оператор -> APN российских операторов (и MVNO). Пусто = неизвестен. */
 		function apnForOperator(name) {
@@ -412,6 +418,49 @@ return view.extend({
 				});
 		};
 
+		/* Тип PDP для создаваемого интерфейса. Чистое UI-поле (в uci не пишется):
+		   применяет его mkiface.sh 4-м аргументом. По умолчанию IPv4 - dual-stack
+		   ломает дозвон на части модемов (Quectel EC21 проверен живьём: поднялся
+		   только после смены на IPv4), а IPv6 у сотовых операторов РФ чаще нет,
+		   чем есть. Существующий интерфейс сохраняет свой тип, пока его не
+		   пересоздадут этой кнопкой. */
+		/* Прятать ЭТОТ модем от ModemManager (mm-inhibit.sh держит инхибицию).
+		   Пишем в секцию модема, а не в общую: у каждого модема свой режим.
+		   Значение читается/пишется вручную - form.Map тут привязан к @5gmodem[0]. */
+		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
+			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));
+		o.default = '1';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			if (!mSec) { return Promise.resolve(); }
+			return fs.exec('/usr/share/5gmodem/mm-inhibit.sh',
+				[ 'set-exclude', mSec, String(value) === '1' ? '1' : '0' ]);
+		};
+		o.remove = function() { return Promise.resolve(); };
+		o.load = function(section_id) {
+			if (!mSec) { return '1'; }
+			var v = uci.get('5gmodem', mSec, 'mm_exclude');
+			if (v === '0' || v === '1') { return v; }
+			// умолчание совпадает с логикой mm-inhibit.sh: прячем kernel-прото
+			var p = String(uci.get('network', mIfName, 'proto') || '');
+			return (p && p !== 'modemmanager') ? '1' : '0';
+		};
+
+		o = s.option(form.ListValue, '_pdptype', _('IP type'),
+			_('IP type for the modem interface. IPv4 is the safe default: dual-stack (IPv4/IPv6) prevents some modems from connecting at all, and mobile operators rarely provide usable IPv6.'));
+		o.value('ipv4', _('IPv4 only (recommended)'));
+		o.value('ipv4v6', _('IPv4 and IPv6'));
+		o.write = function() {};
+		o.remove = function() {};
+		o.load = function(section_id) {
+			// показываем то, что стоит у существующего интерфейса (имя опции
+			// зависит от прото: modemmanager - iptype, остальные - pdptype/pdp)
+			var v = uci.get('network', mIfName, 'pdptype')
+				|| uci.get('network', mIfName, 'iptype')
+				|| uci.get('network', mIfName, 'pdp') || '';
+			return (String(v).toLowerCase() === 'ipv4v6') ? 'ipv4v6' : 'ipv4';
+		};
+
 		o = s.option(form.Button, '_mkiface');
 		o.title = _('Modem interface');
 		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
@@ -436,11 +485,16 @@ return view.extend({
 			// отличит это от «аргумент не передан» и молча сохранит ПРЕЖНИЙ APN -
 			// стереть его было бы невозможно.
 			var apnArg = apn || '-';
+			var pdp = 'ipv4';
+			try {
+				var popt = this.map.lookupOption('_pdptype', sid);
+				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4'; } }
+			} catch (e) {}
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
@@ -457,6 +511,35 @@ return view.extend({
 			}).catch(function(err) {
 				ui.hideModal();
 				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
+			});
+		};
+
+		/* Забыть модемы, которых больше нет на шине.
+		   ЯВНОЕ действие: автоматически по отключению так делать нельзя - модем
+		   штатно пропадает на минуту при AT+CFUN=1,1 (в т.ч. по нашей же команде
+		   после добавления eSIM-профиля), и настройки терялись бы на ровном месте.
+		   Подмену модема на том же USB-порту приложение чистит само (см.
+		   swap_cleanup в modemswitch.sh) - эта кнопка для случая «модем убрали
+		   насовсем». Сама привязка модема и удаляется; интерфейс в network/firewall
+		   остаётся: он мог быть настроен вручную. */
+		o = s.option(form.Button, '_forget');
+		o.title = _('Disconnected modems');
+		o.description = _('Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name.');
+		o.inputtitle = _('Forget disconnected modems');
+		o.inputstyle = 'remove';
+		o.onclick = function() {
+			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Removing…')));
+			return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'forget' ]).then(function(res) {
+				ui.hideModal();
+				var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+				var n = parseInt(d.forgotten, 10) || 0;
+				ui.addNotification(null, E('p', n
+					? _('Forgotten modems: %d').format(n)
+					: _('Nothing to forget: every remembered modem is connected.')), 'info');
+				if (n) { window.setTimeout(function() { window.location.reload(); }, 1200); }
+			}).catch(function(err) {
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('Failed to forget disconnected modems') + ': ' + (err.message || err)), 'error');
 			});
 		};
 

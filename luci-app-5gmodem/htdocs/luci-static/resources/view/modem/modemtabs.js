@@ -43,15 +43,33 @@ function vendor(m) {
 	var map = {
 		'1bc7': 'Telit', '2c7c': 'Quectel', '2cb7': 'Fibocom',
 		'0e8d': 'Fibocom', '1e2d': 'Cinterion', '12d1': 'Huawei', '19d2': 'ZTE',
-		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell', '05c6': 'Compal'
+		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell', '05c6': 'Compal',
+		'1e0e': 'SimCom'
 	};
 	return map[vid] || '';
 }
+
+/* Точная модель по VID:PID - для модемов, чей USB-дескриптор бесполезен.
+   Quectel EC21 прошит как "Android", и вкладка называлась "Quectel модем":
+   дескриптор уходил в ветку generic ниже. VID:PID при этом однозначен.
+   Тот же список ведётся в netpri.sh (model_for) для «Приоритета интернета». */
+var MODEL_BY_VIDPID = {
+	'2c7c:0121': 'EC21',    '2c7c:0125': 'EC25',   '2c7c:0296': 'BG96',
+	'2c7c:0306': 'EP06',    '2c7c:0512': 'EG12',   '2c7c:0620': 'EM060K',
+	'2c7c:0800': 'RM500Q',  '2c7c:0801': 'RM520N', '2c7c:0900': 'RG500Q'
+};
 
 /* clean up the raw USB product string into a readable model. The Compal exposes
    only "VOS_5G"/"RXMG1" in its descriptor - show the marketed model instead, to
    match the "Compal RXM-G1" name used in the info-page header. */
 function modelName(m) {
+	/* Имя, разобранное основным опросом по AT+CGMM и сохранённое в секции модема
+	   (5gmodem.m_<путь>.model) - самое точное. Нужно там, где ни дескриптор, ни
+	   VID:PID не помогают: SimCom говорит "SimTech, Incorporated", а её
+	   1e0e:9001 общий для SIM7100/7600/8200 - различить можно только по AT. */
+	if (m && m.model) { return String(m.model).trim(); }
+	var id = String((m && m.vidpid) || '').toLowerCase();
+	if (MODEL_BY_VIDPID[id]) { return MODEL_BY_VIDPID[id]; }
 	var p = (m && m.product) ? String(m.product).trim() : '';
 	if (/^(VOS_5G|RXMG1|RXM-G1)$/i.test(p)) { return 'RXM-G1'; }
 	return p;
@@ -60,7 +78,8 @@ function modelName(m) {
 function label(m, i) {
 	var p = modelName(m);
 	var v = vendor(m);
-	var generic = (!p || /^android$/i.test(p) || /^usb/i.test(p) || (/modem/i.test(p) && p.length < 6));
+	var generic = (!p || /^android$/i.test(p) || /^usb/i.test(p) || /^simtech/i.test(p)
+		|| (/modem/i.test(p) && p.length < 6));
 	if (generic) { return v ? (v + ' ' + _('modem')) : _('Modem %d').format(i + 1); }
 	if (v && p.toLowerCase().indexOf(v.toLowerCase()) < 0) { return v + ' ' + p; }
 	return p;

@@ -78,14 +78,18 @@ at_query() {
 # 'list' uses this so it never blocks; the cache is filled by 'refresh' in the
 # background. Cache is valid for 30 min.
 operator_cached() {
+	# ПРИОРИТЕТ у имени от ОСНОВНОГО опроса (5gmodem.sh пишет /tmp/5gmodem_op_<iface>):
+	# только он разбирает UCS2, mccmnc.dat и MVNO. Наш operator_probe знает лишь
+	# имя СЕТИ, поэтому раньше в «Приоритете интернета» появлялся «Tele2 RU» там,
+	# где главная карточка честно показывала «T-Mobile»: probe писал свой кэш, а
+	# он проверялся ПЕРВЫМ и затенял точное имя.
+	if [ -f "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; return; fi
+	# Фолбэк - собственный кэш probe: основной опрос ведёт файл только для
+	# АКТИВНОГО модема, а в списке показываются все.
 	cf="/tmp/netpri_op_$1"
 	if [ -f "$cf" ] && [ -z "$(find "$cf" -mmin +30 2>/dev/null)" ]; then
 		cat "$cf"; return
 	fi
-	# Фолбэк: имя оператора, уже разрешённое основным опросом (5gmodem.sh
-	# обрабатывает UCS2/mccmnc.dat и пишет буквенное имя в /tmp/5gmodem_op_<iface>).
-	# У MBIM/QMI-модемов оператор часто доступен только оттуда.
-	if [ -f "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; fi
 }
 
 # Probe the operator for ONE modem iface via AT+COPS and cache the result (used only
@@ -140,15 +144,58 @@ operator_probe() {
 model_for() {
 	is_modem "$1" || return
 	path=$(modem_path_for "$1")
-	prod=""
-	[ -n "$path" ] && prod=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$path\"].product" 2>/dev/null | head -1)
-	if [ -z "$prod" ]; then sec=$(modem_section "$1"); [ -n "$sec" ] && prod=$(uci -q get "5gmodem.$sec.product"); fi
-	case "$prod" in
-		VOS_5G|RXMG1|RXM-G1) echo "Compal RXM-G1" ;;
-		FM350*) echo "Fibocom $prod" ;;
-		*) echo "$prod" ;;
+	prod=""; vidpid=""
+	if [ -n "$path" ]; then
+		_lm=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+		prod=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].product" 2>/dev/null | head -1)
+		vidpid=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].vidpid" 2>/dev/null | head -1)
+	fi
+	# Имя модели, разобранное основным опросом по AT+CGMM (5gmodem.m_<путь>.model),
+	# ТОЧНЕЕ дескриптора: у SimCom он говорит "SimTech, Incorporated", у Quectel
+	# EC21 - "Android", а VID:PID 1e0e:9001 общий для 7100/7600/8200.
+	sec=$(modem_section "$1")
+	if [ -n "$sec" ]; then
+		_m=$(uci -q get "5gmodem.$sec.model")
+		[ -n "$_m" ] && { echo "$_m"; return; }
+	fi
+	if [ -z "$prod" ] && [ -n "$sec" ]; then prod=$(uci -q get "5gmodem.$sec.product"); fi
+
+	# USB-дескриптор часто врёт: Quectel EC21 представляется как "Android",
+	# Compal - как "VOS_5G". Поэтому НЕ доверяем product вслепую: сперва точная
+	# модель по VID:PID, затем бренд по VID (как в modemtabs.js), и лишь потом
+	# сам дескриптор.
+	case "$vidpid" in
+		2c7c:0121) echo "Quectel EC21"; return ;;
+		2c7c:0125) echo "Quectel EC25"; return ;;
+		2c7c:0296) echo "Quectel BG96"; return ;;
+		2c7c:0306) echo "Quectel EP06"; return ;;
+		2c7c:0512) echo "Quectel EG12"; return ;;
+		2c7c:0620) echo "Quectel EM060K"; return ;;
+		2c7c:0800) echo "Quectel RM500Q"; return ;;
+		2c7c:0801) echo "Quectel RM520N"; return ;;
+		2c7c:0900) echo "Quectel RG500Q"; return ;;
 	esac
+	case "$prod" in
+		VOS_5G|RXMG1|RXM-G1) echo "Compal RXM-G1"; return ;;
+		FM350*) echo "Fibocom $prod"; return ;;
+	esac
+
+	# Дескриптор бесполезен (Android/USB Modem/пусто) - подставляем бренд по VID.
+	case "$prod" in
+		''|[Aa]ndroid|USB*|[Mm]odem)
+			case "${vidpid%%:*}" in
+				2c7c) echo "Quectel"; return ;;
+				1bc7) echo "Telit"; return ;;
+				2cb7|0e8d) echo "Fibocom"; return ;;
+				1e2d) echo "Cinterion"; return ;;
+				12d1) echo "Huawei"; return ;;
+				19d2) echo "ZTE"; return ;;
+				2dee|0489) echo "Foxconn"; return ;;
+				05c6) echo "Compal"; return ;;
+			esac
+			;;
+	esac
+	echo "$prod"
 }
 
 # SSID of a Wi-Fi station interface
@@ -250,7 +297,21 @@ op)
 	# страница открывается редко, в отличие от list, который дёргается поллом.
 	I="${2:-$(uci -q get 5gmodem.@5gmodem[0].network)}"; [ -n "$I" ] || I=modem
 	if [ "$3" = fresh ]; then
-		rm -f "/tmp/netpri_op_$I" "/tmp/5gmodem_op_$I"
+		# Сбрасываем ТОЛЬКО свой кэш. Файл /tmp/5gmodem_op_<iface> принадлежит
+		# ОСНОВНОМУ опросу (5gmodem.sh) и содержит имя, разобранное со всей
+		# логикой: UCS2, mccmnc.dat и, главное, MVNO (сеть Tele2 25020 -> бренд
+		# «Т-Мобайл»). Наш operator_probe этого не умеет и вернул бы имя СЕТИ -
+		# именно так в «Приоритете интернета» появлялся Tele2 вместо Т-Мобайла,
+		# тогда как главная карточка показывала верно.
+		rm -f "/tmp/netpri_op_$I"
+		# Чтобы имя было и верным, и свежим (после смены SIM), просим основной
+		# опрос перечитать модем - он и обновит свой кэш. Только для АКТИВНОГО
+		# модема: 5gmodem.sh опрашивает именно его, и для другого интерфейса это
+		# записало бы чужого оператора. ~0.6 c, но страница открывается редко.
+		if [ "$I" = "$(uci -q get 5gmodem.@5gmodem[0].network)" ]; then
+			rm -f "/tmp/5gmodem_op_$I"
+			/usr/share/5gmodem/5gmodem.sh json >/dev/null 2>&1
+		fi
 	fi
 	OP=$(operator_cached "$I")
 	[ -n "$OP" ] || { operator_probe "$I" 2>/dev/null; OP=$(operator_cached "$I"); }

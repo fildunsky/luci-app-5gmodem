@@ -90,8 +90,14 @@ for n in $NODES; do
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
 	eval "ttys=\$TTYS_$i"
 	eval "wdms=\$WDMS_$i"
+	# model - имя, разобранное основным опросом по AT+CGMM (пишется в секцию
+	# модема). Дескриптор product часто бесполезен: "Android" у Quectel EC21,
+	# "SimTech, Incorporated" у SimCom. Читаем из uci (это дёшево), AT здесь не
+	# трогаем - скрипт зовётся часто и должен оставаться быстрым.
+	_sec="m_$(echo "$path" | sed 's/[^A-Za-z0-9]/_/g')"
+	model=$(esc "$(uci -q get "5gmodem.$_sec.model" 2>/dev/null)")
 	[ -n "$OUT" ] && OUT="$OUT,"
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"tty\":[$ttys],\"wdm\":[$wdms]}"
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"tty\":[$ttys],\"wdm\":[$wdms]}"
 done
 OUT="[$OUT]"
 

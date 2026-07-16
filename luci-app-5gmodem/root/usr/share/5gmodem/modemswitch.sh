@@ -21,7 +21,28 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 
+[ -r "$RES/quirks.sh" ] && . "$RES/quirks.sh"
+
 secname() { echo "m_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"; }
+
+# Галка «слать USSD обычным текстом» (sms_tool -R) - ОДНА на весь sms_tool_js, а
+# модемы переключаются, и правильное значение у каждого своё. Поэтому при смене
+# активного модема выставляем её по нему:
+#   1) ручная настройка пользователя для ЭТОГО модема (5gmodem.m_X.ussd_raw) -
+#      она главнее базы: человек мог проверить руками то, чего мы не знаем;
+#   2) иначе - проверенная база (quirks.sh);
+#   3) если модем в базе неизвестен - НЕ ТРОГАЕМ: у пользователя может быть
+#      рабочая настройка, и молча ломать её нельзя.
+apply_ussd_quirk() {   # $1 = секция модема
+	command -v ussd_raw_for >/dev/null 2>&1 || return 0
+	_v=$(uci -q get "$CFG.$1.ussd_raw")
+	if [ -z "$_v" ]; then
+		_v=$(ussd_raw_for "$(uci -q get "$CFG.$1.model")" "$(uci -q get "$CFG.$1.vidpid")")
+	fi
+	case "$_v" in
+		0|1) uci -q set "sms_tool_js.@sms_tool_js[0].ussd=$_v" ;;
+	esac
+}
 active_path() { uci -q get "$CFG.@5gmodem[0].active_modem"; }
 
 # ports (tty) of the modem at a given usb path, from listmodems.sh
@@ -30,6 +51,38 @@ modem_ttys() {
 }
 modem_product() {
 	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].product" 2>/dev/null | head -1
+}
+modem_vidpid() {
+	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].vidpid" 2>/dev/null | head -1
+}
+
+# Модем на этом USB-пути ПОДМЕНИЛИ на другой?
+# Секция помнит vidpid; если на шине по тому же пути другой - всё, что мы про
+# него запомнили (at_port, network, iface_proto, тип слотов), относится к
+# ПРЕЖНЕМУ модему и заведомо неверно. Это НЕ то же самое, что временное
+# отсутствие: модем регулярно пропадает на минуту при AT+CFUN=1,1 (в т.ч. по
+# нашей команде - после добавления eSIM-профиля), и удалять настройки в такой
+# момент нельзя. Поэтому чистим ТОЛЬКО по факту подмены.
+swap_cleanup() {   # $1 = usb path, $2 = section
+	_new=$(modem_vidpid "$1")
+	[ -n "$_new" ] || return 0                  # модема нет на шине - не трогаем
+	_old=$(uci -q get "$CFG.$2.vidpid")
+	if [ -z "$_old" ]; then                     # старая секция без vidpid - просто запомним
+		uci -q set "$CFG.$2.vidpid=$_new"
+		uci -q set "$CFG.$2.product=$(modem_product "$1")"
+		uci -q commit "$CFG"
+		return 0
+	fi
+	[ "$_old" = "$_new" ] && return 0
+	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
+	for o in at_port data_at_port network iface_proto slot_type_0 slot_type_1 slot_type_2; do
+		uci -q delete "$CFG.$2.$o" 2>/dev/null
+	done
+	uci -q set "$CFG.$2.vidpid=$_new"
+	uci -q set "$CFG.$2.product=$(modem_product "$1")"
+	uci -q set "$CFG.$2.model="                 # имя модели переопределится опросом
+	uci -q delete "$CFG.$2.model" 2>/dev/null
+	uci -q commit "$CFG"
 }
 
 # AT probe of ONE port, time-bounded to ~4s. sms_tool has no timeout option and
@@ -160,6 +213,9 @@ ensure_section() {
 		uci -q set "$CFG.$SEC=modem"
 		uci -q set "$CFG.$SEC.path=$1"
 		uci -q set "$CFG.$SEC.product=$(modem_product "$1")"
+		uci -q set "$CFG.$SEC.vidpid=$(modem_vidpid "$1")"
+	else
+		swap_cleanup "$1" "$SEC"
 	fi
 	echo "$SEC"
 }
@@ -256,8 +312,17 @@ switch)
 		uci -q delete "$CFG.@5gmodem[0].at_port" 2>/dev/null
 		uci -q delete "$CFG.@5gmodem[0].device" 2>/dev/null
 	fi
+	# Тот же инвариант, что и для at_port: network обязан описывать АКТИВНЫЙ модем.
+	# У свежевоткнутого модема интерфейса ещё нет - и раньше network оставался от
+	# ПРЕДЫДУЩЕГО модема. Основной опрос читает IP/статистику именно по network,
+	# поэтому в карточке нового модема показывался IP соседа. Пусто честнее чужого:
+	# метрики просто не покажут IP, пока интерфейс не создан.
 	NET=$(uci -q get "$CFG.$SEC.network")
-	[ -n "$NET" ] && uci -q set "$CFG.@5gmodem[0].network=$NET"
+	if [ -n "$NET" ]; then
+		uci -q set "$CFG.@5gmodem[0].network=$NET"
+	else
+		uci -q delete "$CFG.@5gmodem[0].network" 2>/dev/null
+	fi
 	PRO=$(uci -q get "$CFG.$SEC.iface_proto")
 	[ -n "$PRO" ] && uci -q set "$CFG.@5gmodem[0].iface_proto=$PRO"
 	uci -q commit "$CFG"
@@ -267,6 +332,7 @@ switch)
 		for k in readport sendport ussdport atport; do
 			uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"
 		done
+		apply_ussd_quirk "$SEC"
 		uci -q commit sms_tool_js
 		set_sms_storage "$ATP"
 	fi
@@ -290,6 +356,9 @@ resolve)
 		P=$(uci -q get "$CFG.$SEC.path")
 		[ -n "$P" ] || continue
 		echo " $PRESENT " | grep -q " $P " || continue
+		# модем на этом пути мог смениться на другой - тогда всё запомненное о
+		# прежнем недействительно (см. swap_cleanup)
+		swap_cleanup "$P" "$SEC"
 		# Порты появляются НЕ мгновенно: после hotplug-add ядро заводит ttyUSB*
 		# ещё несколько секунд (FM350 отдаёт 7 штук), а hotplug ждёт всего 5с.
 		# Ждём порт, но не бесконечно (resolve всегда вызывается из фона).
@@ -360,7 +429,6 @@ resolve)
 	# 0) refresh the ModemManager ignore rules from the current per-modem protos,
 	#    so MM keeps its hands off modems we drive via a kernel proto (qmi/mbim/
 	#    atc/fibocom/...). Runs on boot (coldplug) and every hotplug.
-	"$RES/mm-filter.sh" >/dev/null 2>&1
 	# 1) put ModemManager in the state the modem mix needs (creating an atc/mbim
 	#    interface had disabled MM and taken the modemmanager modems down).
 	apply_mm_state
@@ -393,8 +461,51 @@ wdm)
 	wdm_for_path "$(active_path)"
 	;;
 
+forget)
+	# «Забыть отключённые модемы»: удалить секции модемов, которых нет на шине.
+	# ЯВНОЕ действие пользователя - автоматически по отключению так делать нельзя:
+	# модем штатно пропадает на минуту при AT+CFUN=1,1 (в т.ч. по нашей команде),
+	# и настройки бы терялись на ровном месте.
+	# Секцию АКТИВНОГО модема не трогаем: он может как раз перезагружаться.
+	# --refresh ОБЯЗАТЕЛЕН: обычный вызов может отдать кэш (до 8 c), а мы по этому
+	# списку УДАЛЯЕМ настройки. Устаревший кэш = присутствующий модем сочтётся
+	# отсутствующим, и его секция будет стёрта вместе с network/iface_proto/
+	# mm_exclude. Цена ошибки несимметрична: лишний раз не забыть - безобидно,
+	# забыть работающий модем - потеря настроек.
+	PRESENT=" $("$RES/listmodems.sh" --refresh | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ') "
+	# Пустой список - это почти наверняка сбой перечисления, а не «модемов нет».
+	# Ничего не удаляем: иначе одна осечка стёрла бы настройки ВСЕХ модемов.
+	case "$PRESENT" in
+		*[!\ ]*) ;;
+		*) printf '{"result":"ok","forgotten":0,"note":"no modems enumerated - nothing removed"}\n'; exit 0 ;;
+	esac
+	AMP=$(active_path)
+	N=0
+	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		P=$(uci -q get "$CFG.$SEC.path")
+		[ -n "$P" ] || continue
+		echo "$PRESENT" | grep -q " $P " && continue
+		[ "$P" = "$AMP" ] && continue
+		# Страховка: интерфейс этого модема сейчас ПОДНЯТ - значит модем живой, а
+		# в перечислении его нет по случайности (переэнумерация/сбой). Забывать
+		# рабочий модем нельзя: вместе с секцией уйдут network/iface_proto/
+		# mm_exclude, и он потеряется в UI. Именно так эта кнопка однажды стёрла
+		# настройки присутствующего модема.
+		_if=$(uci -q get "$CFG.$SEC.network")
+		if [ -n "$_if" ] && ifstatus "$_if" 2>/dev/null | grep -q '"up": true'; then
+			continue
+		fi
+		# интерфейс модема оставляем в network/firewall: он мог быть настроен
+		# вручную, а модем ещё вернётся. Забываем только НАШУ привязку.
+		uci -q delete "$CFG.$SEC"
+		N=$((N + 1))
+	done
+	[ "$N" -gt 0 ] && uci -q commit "$CFG"
+	printf '{"result":"ok","forgotten":%s}\n' "$N"
+	;;
+
 *)
-	echo "usage: $0 active|switch <path>|save <path>|resolve|mmindex|wdm" >&2
+	echo "usage: $0 active|switch <path>|save <path>|resolve|forget|mmindex|wdm" >&2
 	exit 1
 	;;
 esac

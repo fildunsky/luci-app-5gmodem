@@ -2,8 +2,8 @@
 #
 # SimCom modems on USB id 1e0e:9001. This id is shared by several models, so we
 # branch on the model reported by AT+CGMM:
-#   - SIM7100E  : LTE Cat3, 4G only. Bands via AT+CNBP (GSM,UMTS,LTE hex masks),
-#                 mode (2G/3G/4G) via AT+CNMP. No 5G.
+#   - SIM7100E / SIM7600 : LTE, 4G only. Bands via AT+CNBP (GSM,UMTS,LTE hex
+#                 masks), mode (2G/3G/4G) via AT+CNMP. No 5G.
 #   - SIM8200 / SIM7906 and similar: 5G, bands via AT+CSYSSEL.
 #
 # _DEVICE is a sane default; bands.sh overrides it with the app's detected AT
@@ -14,18 +14,62 @@ _DEVICE=/dev/ttyUSB2
 # SIM7100E hardware band capability (LTE FDD B1/B3/B7/B8/B20, TDD B38/B40).
 _SIM7100_LTE_BANDS="1 3 7 8 20 38 40"
 
+# SIM7600E-H. Диапазоны взяты не из маски AT+CNBP (там стоит «разрешено всё»,
+# 40 бит - это ПРЕДПОЧТЕНИЕ, а не возможности железа) и не из даташита, а у
+# самого модема по QMI:
+#   qmicli --dms-get-band-capabilities -> LTE bands: '1, 3, 5, 7, 8, 20, 38, 40, 41'
+# Проверено на живом SIMCOM_SIM7600E-H (ревизия LE11B11SIM7600M22).
+_SIM7600_LTE_BANDS="1 3 5 7 8 20 38 40 41"
+
+# Модель модема (AT+CGMM), КЭШИРОВАННАЯ в /tmp.
+# Кэш обязателен: определение модели зовётся из каждой функции, а getbands - ещё
+# и в цикле по бендам. Без кэша это десятки AT-запросов на одно чтение, причём по
+# порту, за который конкурируют метрики. Модель у устройства не меняется, а /tmp
+# чистится при перезагрузке - инвалидация не нужна. Ключ - имя порта: у второго
+# модема он свой.
+_model() {
+	_mf="/tmp/5gmodem_simcom_model_$(basename "$_DEVICE" 2>/dev/null)"
+	if [ -s "$_mf" ]; then cat "$_mf"; return; fi
+	sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+		| grep -o "SIM[0-9][0-9A-Za-z_-]*" | head -1 | tee "$_mf"
+}
+
+# Семейство SIM7600 (7600E/7600E-H/7600G и т.п.): командный набор тот же, что у
+# SIM7100 - CNBP для бендов, CNMP для режима. Команд SIM8200 (AT+CSYSSEL) у него
+# НЕТ: проверено на живом модеме, ответ пустой. Раньше 7600 не подходил ни под
+# одну ветку и сваливался в 8200-ветку - слал CSYSSEL в никуда, показывал пустые
+# бенды и назывался «SIM8200EA-M2».
+_is_7600() {
+	case "$(_model)" in *7600*) return 0 ;; esac
+	return 1
+}
+
+# ветка «команды как у 7100»: сам 7100 или любой 7600
+_is_cnbp_family() {
+	_is_7100 || _is_7600
+}
+
+# набор бендов активной модели
+_lte_bands_for_model() {
+	if _is_7600; then echo "$_SIM7600_LTE_BANDS"; else echo "$_SIM7100_LTE_BANDS"; fi
+}
+
 # 8200-family defaults (only used on the non-7100 branch)
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
 _DEFAULT_5GSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
 
 _is_7100() {
-	sms_tool -d $_DEVICE at "AT+CGMM" | grep -q "7100"
+	case "$(_model)" in *7100*) return 0 ;; esac
+	return 1
 }
 
 getinfo() {
 	if _is_7100; then
 		echo "SIMCOM SIM7100E"
+	elif _is_7600; then
+		# точное имя из кэша: SIMCOM_SIM7600E-H -> "SIMCOM SIM7600E-H"
+		echo "SIMCOM $(_model | sed 's/^SIMCOM_//')"
 	else
 		echo "SIMCOM SIM8200EA-M2"
 	fi
@@ -34,15 +78,15 @@ getinfo() {
 # ---- 4G bands ----
 
 getsupportedbands() {
-	if _is_7100; then
-		echo "$_SIM7100_LTE_BANDS"
+	if _is_cnbp_family; then
+		_lte_bands_for_model
 	else
 		echo "$_DEFAULT_LTE_BANDS"
 	fi
 }
 
 getbands() {
-	if _is_7100; then
+	if _is_cnbp_family; then
 		# AT+CNBP? -> <mode>,<lte_mask>,<extra> ; the 2nd field is the LTE band
 		# bitmask (bit N-1 = band N) - the writable/effective LTE selection.
 		# (The 3rd field is not the band selection; writing it has no effect.)
@@ -53,9 +97,10 @@ getbands() {
 		HEX=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}')
 		[ -n "$HEX" ] || { echo ""; return; }
 		ALL=$(hextobands "$HEX")
+		SUP=$(_lte_bands_for_model)
 		OUT=""
 		for b in $ALL; do
-			for s in $_SIM7100_LTE_BANDS; do
+			for s in $SUP; do
 				[ "$b" = "$s" ] && OUT="$OUT $b"
 			done
 		done
@@ -69,8 +114,8 @@ getbands() {
 setbands() {
 	BANDS="$1"
 
-	if _is_7100; then
-		[ "$BANDS" = "default" ] && BANDS="$_SIM7100_LTE_BANDS"
+	if _is_cnbp_family; then
+		[ "$BANDS" = "default" ] && BANDS=$(_lte_bands_for_model)
 
 		# build the 64-bit LTE hex mask (bit N-1 = band N) with the dispatcher's
 		# helper - replaces the old hand-rolled nibble math, which miscomputed
@@ -109,17 +154,17 @@ setbands() {
 # 38=LTE only. Reported as "id:label" pairs so the UI can render buttons.
 
 getsupportedmodes() {
-	_is_7100 || { echo "Unsupported"; return; }
+	_is_cnbp_family || { echo "Unsupported"; return; }
 	echo "2:Auto 13:2G 14:3G 38:4G 19:2G+3G"
 }
 
 getmode() {
-	_is_7100 || { echo "Unsupported"; return; }
+	_is_cnbp_family || { echo "Unsupported"; return; }
 	sms_tool -d $_DEVICE at "AT+CNMP?" | awk -F: '/^\+CNMP:/{gsub(/[^0-9]/,"",$2);print $2}' | head -1
 }
 
 setmode() {
-	_is_7100 || return
+	_is_cnbp_family || return
 	M="$1"
 	case "$M" in
 		''|*[!0-9]*) return 1 ;;
@@ -131,18 +176,18 @@ setmode() {
 # dispatcher/UI hides the 5G sections entirely) ----
 
 getsupportedbands5gnsa() {
-	_is_7100 && { echo "Unsupported"; return; }
+	_is_cnbp_family && { echo "Unsupported"; return; }
 	echo "$_DEFAULT_5GNSA_BANDS"
 }
 
 getbands5gnsa() {
-	_is_7100 && { echo "Unsupported"; return; }
+	_is_cnbp_family && { echo "Unsupported"; return; }
 	O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nsa_nr5g_band\"")
 	echo "$O" | awk -F, '/^\+CSYSSEL: "nsa_nr5g_band",/{gsub(":"," ");print $2}' | xargs
 }
 
 setbands5gnsa() {
-	_is_7100 && return
+	_is_cnbp_family && return
 	BANDS="$1"
 	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_5GNSA_BANDS"
 	T=""
@@ -157,18 +202,18 @@ setbands5gnsa() {
 }
 
 getsupportedbands5gsa() {
-	_is_7100 && { echo "Unsupported"; return; }
+	_is_cnbp_family && { echo "Unsupported"; return; }
 	echo "$_DEFAULT_5GSA_BANDS"
 }
 
 getbands5gsa() {
-	_is_7100 && { echo "Unsupported"; return; }
+	_is_cnbp_family && { echo "Unsupported"; return; }
 	O=$(sms_tool -d $_DEVICE at "AT+CSYSSEL=\"nr5g_band\"")
 	echo "$O" | awk -F, '/^\+CSYSSEL: "nr5g_band",/{gsub(":"," ");print $2}' | xargs
 }
 
 setbands5gsa() {
-	_is_7100 && return
+	_is_cnbp_family && return
 	BANDS="$1"
 	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_5GSA_BANDS"
 	T=""

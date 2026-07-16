@@ -2284,3 +2284,42 @@ msgstr "Обновление установлено. Обновляю ресур
 
 msgid "Update installed. Signing out to apply it…"
 msgstr "Обновление установлено. Выхожу из сессии, чтобы оно применилось…"
+
+msgid "IP type"
+msgstr "Тип IP"
+
+msgid "IP type for the modem interface. IPv4 is the safe default: dual-stack (IPv4/IPv6) prevents some modems from connecting at all, and mobile operators rarely provide usable IPv6."
+msgstr "Тип IP для интерфейса модема. IPv4 — безопасный вариант по умолчанию: двойной стек (IPv4/IPv6) на части модемов вообще не даёт подключиться, а рабочий IPv6 сотовые операторы выдают редко."
+
+msgid "IPv4 only (recommended)"
+msgstr "Только IPv4 (рекомендуется)"
+
+msgid "IPv4 and IPv6"
+msgstr "IPv4 и IPv6"
+
+msgid "Disconnected modems"
+msgstr "Отключённые модемы"
+
+msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
+msgstr "Убрать настройки, запомненные для модемов, которых больше нет (AT-порт, интерфейс, типы SIM-слотов). Устаревшая запись может скрыть рабочий модем из «Приоритета интернета», если оба претендуют на одно имя интерфейса."
+
+msgid "Forget disconnected modems"
+msgstr "Забыть отключённые модемы"
+
+msgid "Removing…"
+msgstr "Удаляю…"
+
+msgid "Forgotten modems: %d"
+msgstr "Забыто модемов: %d"
+
+msgid "Nothing to forget: every remembered modem is connected."
+msgstr "Забывать нечего: все запомненные модемы подключены."
+
+msgid "Failed to forget disconnected modems"
+msgstr "Не удалось забыть отключённые модемы"
+
+msgid "Hide from ModemManager"
+msgstr "Скрыть от ModemManager"
+
+msgid "ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it."
+msgstr "ModemManager и протокол ядра (QMI/MBIM) не могут делить один модем: MM забирает управляющий канал, и интерфейс остаётся без IP. Для таких протоколов включено по умолчанию. Снимите галку, чтобы отдать модем ModemManager (у него на части модемов богаче управление диапазонами и режимами) — и выберите для модема протокол ModemManager."
