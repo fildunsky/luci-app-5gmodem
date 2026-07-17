@@ -1405,21 +1405,42 @@ function fillAntPorts(raw) {
 	rows.forEach(function(l) {
 		var p = l.split(':');
 		var rsrp = parseInt(p[1], 10);
-		/* Оценка по RSRP. Шкала LTE: -44 (отлично) … -140 (ничего). Около -130 и
-		   ниже антенны фактически нет - так выглядит неподключённый пигтейл
-		   (проверено на LM960: порт без антенны давал -134). */
-		var st, cls;
-		if (isNaN(rsrp))       { st = '-';                       cls = ''; }
-		else if (rsrp <= -130) { st = _('antenna: none');        cls = 'color:#c00;font-weight:600'; }
-		else if (rsrp <= -110) { st = _('antenna: weak signal'); cls = 'color:#c80'; }
-		else                   { st = _('antenna: normal');      cls = 'color:#080'; }
+		/* Цвета и пороги - ОБЩИЕ с «Агрегацией несущих» (CA_COLOR/caQuality),
+		   чтобы -100 dBm означало одно и то же в обеих таблицах. Свои цифры тут
+		   были бы отдельной правдой: пользователь видит две таблицы рядом. */
+		var st, col;
+		if (isNaN(rsrp)) {
+			st = '-'; col = null;
+		} else if (rsrp <= -130) {
+			/* Шкала LTE: -44 (отлично) … -140 (ничего). Около -130 и ниже антенны
+			   фактически нет - так выглядит неподключённый пигтейл (проверено на
+			   LM960: порт без антенны давал -134). Это НЕ «плохой сигнал», а
+			   отсутствие антенны - отдельный случай, порогов caQuality тут мало. */
+			st = _('antenna: none'); col = 'red';
+		} else {
+			/* Подпись СЛЕДУЕТ за цветом: зелёный - норма, жёлтый - слабо,
+			   красный - плохо. Иначе -102 dBm красился бы красным, а
+			   подписывался «слабый сигнал» - две правды в одной строке. */
+			col = caQuality('rsrp', rsrp);
+			st = (col === 'green') ? _('antenna: normal')
+			   : (col === 'orange') ? _('antenna: weak signal')
+			   : _('antenna: poor signal');
+		}
+		var paint = function(td, key, v) {
+			var c = caQuality(key, v);
+			if (c) { td.style.color = CA_COLOR[c]; td.style.fontWeight = '600'; }
+			return td;
+		};
 		tbl.appendChild(E('tr', { 'class': 'tr' }, [
 			/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV) у
 			   каждой платы свои, соответствие не выдумываем. */
 			E('td', { 'class': 'td left' }, _('Port %d').format(parseInt(p[0], 10))),
-			E('td', { 'class': 'td left' }, p[1] + ' dBm'),
-			E('td', { 'class': 'td left' }, p[2] + ' dB'),
-			E('td', { 'class': 'td left', 'style': cls }, st)
+			paint(E('td', { 'class': 'td left' }, p[1] + ' dBm'), 'rsrp', p[1]),
+			paint(E('td', { 'class': 'td left' }, p[2] + ' dB'), 'rsrq', p[2]),
+			E('td', {
+				'class': 'td left',
+				'style': col ? ('color:' + CA_COLOR[col] + ';font-weight:600') : ''
+			}, st)
 		]));
 	});
 }

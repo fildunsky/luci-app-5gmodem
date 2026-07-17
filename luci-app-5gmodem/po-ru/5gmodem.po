@@ -2398,3 +2398,6 @@ msgstr "Обновить"
 
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem."
 msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM."
+
+msgid "antenna: poor signal"
+msgstr "плохой сигнал"
