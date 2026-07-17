@@ -104,8 +104,17 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 		echo "$CP"
 		exit 0
 	fi
-	for T in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null); do
-		if /usr/share/5gmodem/atprobe.sh "$T"; then
+	# TWO-PASS. Сначала ищем НАСТОЯЩИЙ MODEM-порт (отвечает на AT+CGMM моделью) -
+	# у многопортовых модемов (FM350 = 7 ttyUSB) на голый "AT" отвечает и часть
+	# вспомогательных/DIAG-портов, а метрик они не отдают. Раньше брали первый
+	# ответивший на "AT" - и на части прошивок это был не тот порт: IP есть,
+	# метрики/логи пусты. Если MODEM-порт не нашёлся (у некоторых модемов CGMM
+	# не на дозвонном порту) - второй проход берёт любой отвечающий на "AT".
+	TTYS=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null)
+	for MODE in model at; do
+		for T in $TTYS; do
+			[ "$MODE" = model ] && { /usr/share/5gmodem/atprobe.sh "$T" model || continue; } \
+			                    || { /usr/share/5gmodem/atprobe.sh "$T" || continue; }
 			echo "$T" > "$ATCACHE"
 			# ПИННИМ порт в uci: переживает ребут, и следующий detect берёт
 			# быстрый путь (at_port pinned) вместо перебора DIAG-портов через
@@ -118,7 +127,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 			}
 			echo "$T"
 			exit 0
-		fi
+		done
 	done
 fi
 
