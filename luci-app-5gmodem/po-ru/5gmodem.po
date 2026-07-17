@@ -2401,3 +2401,18 @@ msgstr "Галка «Скрыть от ModemManager» снята: протоко
 
 msgid "antenna: poor signal"
 msgstr "плохой сигнал"
+
+msgid "enabled"
+msgstr "включён"
+
+msgid "disabled"
+msgstr "отключён"
+
+msgid "Profile %s. Rebooting the modem to apply it - this takes up to a minute, please wait..."
+msgstr "Профиль %s. Перезагружаем модем для применения — это займёт до минуты, подождите…"
+
+msgid "Profile added. Rebooting the modem to apply it - this takes up to a minute, please wait..."
+msgstr "Профиль добавлен. Перезагружаем модем для применения — это займёт до минуты, подождите…"
+
+msgid "eSIM profile added and applied."
+msgstr "Профиль eSIM добавлен и применён."

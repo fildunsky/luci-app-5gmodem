@@ -38,10 +38,6 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
 	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
 	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
-	# usbnet-драйверы для модемов, которые их требуют: FM350 в RNDIS-композиции
-	# (GTUSBMODE 41) не создаёт сетевое устройство без rndis_host. На части
-	# прошивок он не загружен - грузим сразу после установки, чтобы уже воткнутый
-	# модем привязался без перезагрузки (пакеты подтягиваются как зависимости).
 	modprobe rndis_host 2>/dev/null
 	modprobe cdc_ether 2>/dev/null
 }

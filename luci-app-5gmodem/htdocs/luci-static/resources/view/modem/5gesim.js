@@ -32,6 +32,27 @@ function slotExec(args) {
 		try { return JSON.parse(out) || {}; } catch (e) { return {}; }
 	});
 }
+/* Ответ lpac - НЕ один JSON, а НЕСКОЛЬКО объектов построчно: поток
+   {"type":"progress",...} и в конце итоговый {"type":"lpa",...}. Раньше код
+   делал JSON.parse(res.stdout) на всём выводе - многострочный JSON невалиден,
+   parse падал в catch, объект оставался {}, и lpaOk давал false. Отсюда ложный
+   попап «Невозможно добавить профиль» при успешном добавлении и «операция не
+   удалась» при успешной активации. Берём ПОСЛЕДНИЙ объект type:lpa (итог), а
+   если его нет - последнюю валидную JSON-строку. */
+function parseLpa(out) {
+	var lines = String(out || '').split('\n');
+	var lpa = null, anyJson = null, i, s, o;
+	for (i = 0; i < lines.length; i++) {
+		s = lines[i].trim();
+		if (!s) { continue; }
+		try { o = JSON.parse(s); } catch (e) { continue; }
+		if (o && typeof o === 'object') {
+			anyJson = o;
+			if (o.type === 'lpa') { lpa = o; }
+		}
+	}
+	return lpa || anyJson || {};
+}
 function lpaOk(j) { return !!(j && j.payload && j.payload.code === 0); }
 function lpaMsg(j) { return (j && j.payload && j.payload.message) || '?'; }
 
@@ -187,10 +208,10 @@ return view.extend({
 		]);
 		var self = this;
 		fs.exec(ESIM, [ 'download', code ]).then(function(res) {
-			ui.hideModal();
-			var j = {}; try { j = JSON.parse(res.stdout || '') || {}; } catch (e) {}
+			var j = parseLpa(res.stdout);
 			var ok = lpaOk(j);
 			if (!ok) {
+				ui.hideModal();
 				notify(false, null, _('Download failed: %s').format(lpaMsg(j)));
 				self.reload();
 				return;
@@ -198,11 +219,18 @@ return view.extend({
 			if (inp) { inp.value = ''; }
 			// Новый профиль модем видит только после полной перезагрузки (AT+CFUN=1,1),
 			// а не после перезапуска радио: eUICC перечитывается при инициализации.
-			// Модем при этом переэнумерируется на USB, поэтому список перечитываем с
-			// запасом по времени - раньше порта просто ещё нет.
-			notify(true, _('eSIM profile downloaded. Rebooting the modem to apply it...'), null);
+			// Модем при этом переэнумерируется на USB (десятки секунд), поэтому
+			// ДЕРЖИМ модал с понятным текстом до конца ребута: иначе пользователь,
+			// не зная, что модем перезагружается, жмёт Refresh и получает пугающее
+			// «eUICC не отвечает» (см. #6). Список перечитываем с запасом (25 c).
+			ui.showModal(_('Add eSIM profile'), [ E('p', { 'class': 'spinning' },
+				_('Profile added. Rebooting the modem to apply it - this takes up to a minute, please wait...')) ]);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
-			window.setTimeout(function() { self.reload(); }, 25000);
+			window.setTimeout(function() {
+				ui.hideModal();
+				notify(true, _('eSIM profile added and applied.'), null);
+				self.reload();
+			}, 25000);
 		}).catch(function() { ui.hideModal(); });
 	},
 });
@@ -258,14 +286,30 @@ function renderProfiles(list) {
 function esimOp(verb, iccid, name) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying eSIM operation...')));
 	fs.exec(ESIM, [ verb, iccid ]).then(function(res) {
-		ui.hideModal();
-		var j = {}; try { j = JSON.parse(res.stdout || '') || {}; } catch (e) {}
+		var j = parseLpa(res.stdout);
 		var ok = lpaOk(j);
-		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));
 		if (ok && (verb == 'enable' || verb == 'disable')) {
-			// смена активного профиля = смена SIM: перезапуск радио модема
-			fs.exec('/usr/share/5gmodem/reboot_modem.sh');
+			/* Смена активного профиля применяется ТОЛЬКО после полной
+			   перезагрузки модема (AT+CFUN=1,1): eUICC перечитывает профили при
+			   инициализации, перезапуска одного радио (soft) не хватает - раньше
+			   профиль визуально «не переключался». Модем при этом
+			   переэнумерируется на USB (десятки секунд), поэтому:
+			   - держим модал с понятным текстом (а не пугающей ошибкой, если
+			     пользователь сам жмёт Refresh во время ребута - см. #6);
+			   - список перечитываем с запасом (25 c), как при добавлении. */
+			ui.showModal(_('eSIM'), [ E('p', { 'class': 'spinning' },
+				_('Profile %s. Rebooting the modem to apply it - this takes up to a minute, please wait...')
+					.format(verb == 'enable' ? _('enabled') : _('disabled'))) ]);
+			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			window.setTimeout(function() {
+				ui.hideModal();
+				notify(true, _('eSIM operation done'), null);
+				_viewReload();
+			}, 25000);
+			return;
 		}
+		ui.hideModal();
+		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));
 		window.setTimeout(_viewReload, 2500);
 	}).catch(function() { ui.hideModal(); });
 }
