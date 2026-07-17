@@ -149,6 +149,17 @@ proto_fibocom_setup() {
 	# interface down until netifd happens to retry.
 	if [ -z "$ip" ]; then
 		sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
+		# RELEASE FIRST: a bare AT+CGACT=1,1 HANGS when the PDP context is wedged in
+		# a half-active state - the exact state a band change (AT+GTACT) leaves it in
+		# on the FM350: the old bearer is gone but the context engine keeps answering
+		# nothing to a plain re-activate, so the IP never comes back (user report:
+		# disable B3 -> IP vanishes for good). Deactivating the context first
+		# (AT+CGACT=0,1) clears that wedge; the following re-activate then succeeds
+		# and CGPADDR returns a fresh address. On a cold (already-down) context the
+		# release is a harmless no-op/ERROR. Verified live on FM350-GL: GTACT drop of
+		# a band + CGACT=0,1 -> CGACT=1,1 restored data (new IP) with no CFUN reset.
+		sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
+		sleep 2
 		for try in 1 2 3 4 5 6; do
 			sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
 			sleep 2

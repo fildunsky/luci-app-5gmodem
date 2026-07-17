@@ -265,15 +265,25 @@ return view.extend({
 
 /* --- вспомогательные (вне view, работают с DOM) ------------------------- */
 var _viewReload = function(tries) {
-	// найти активный view-инстанс сложно; проще перечитать напрямую
+	// найти активный view-инстанс сложно; проще перечитать напрямую.
+	// Возвращает Promise<bool>: true - список перечитан и отрисован, false -
+	// eUICC так и не ответил за все попытки (тогда зовущий просит нажать Refresh).
 	tries = (typeof tries === 'number') ? tries : 0;
 	return esimExec([ 'dump' ]).then(function(d) {
-		if (lpaOk(d.profiles || {})) { renderProfiles(d.profiles.payload.data || []); return; }
+		if (lpaOk(d.profiles || {})) { renderProfiles(d.profiles.payload.data || []); return true; }
 		/* eUICC ещё занят сразу после операции (у lpac перед каждой командой идёт
-		   чистка логических каналов, но модем отвечает не мгновенно). Раньше
-		   попытка была ОДНА: если она не проходила, список молча оставался
-		   старым - удалённый профиль продолжал висеть в таблице до ручного F5. */
-		if (tries < 3) { window.setTimeout(function() { _viewReload(tries + 1); }, 4000); }
+		   чистка логических каналов, но модем отвечает не мгновенно; после delete
+		   добавляется отправка нотификации на SM-DP+). Раньше попытка была ОДНА:
+		   если она не проходила, список молча оставался старым - удалённый профиль
+		   продолжал висеть в таблице до ручного F5. Теперь настойчиво повторяем и
+		   резолвим Promise только по факту (успех/исчерпание попыток), чтобы вызов
+		   мог держать спиннер и не гасить его раньше времени. */
+		if (tries < 4) {
+			return new Promise(function(resolve) {
+				window.setTimeout(function() { _viewReload(tries + 1).then(resolve); }, 3000);
+			});
+		}
+		return false;
 	});
 };
 
@@ -336,9 +346,25 @@ function esimOp(verb, iccid, name) {
 			}, 25000);
 			return;
 		}
-		ui.hideModal();
 		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));
-		window.setTimeout(_viewReload, 2500);
+		if (ok) {
+			// Удаление (и любая успешная не-enable/disable операция) не перезагружает
+			// модем, но eUICC ещё занят: сразу после delete идёт отправка нотификации
+			// на SM-DP+. Держим спиннер и НАСТОЙЧИВО перечитываем список - иначе он
+			// оставался старым (удалённый профиль висел в таблице) до ручного Refresh.
+			ui.showModal(_('eSIM'), [ E('p', { 'class': 'spinning' },
+				_('Updating the profile list...')) ]);
+			window.setTimeout(function() {
+				_viewReload().then(function(done) {
+					ui.hideModal();
+					if (!done) { notify(false, null,
+						_('Could not refresh the list automatically. Press Refresh in a few seconds.')); }
+				});
+			}, 1500);
+		} else {
+			ui.hideModal();
+			window.setTimeout(_viewReload, 2500);
+		}
 	}).catch(function() { ui.hideModal(); });
 }
 

@@ -669,6 +669,11 @@ case $1 in
 			fi
 			json_close_array
 		fi
+		# Профиль может попросить показать в UI предупреждение, что смена диапазонов
+		# кратко разорвёт соединение (у FM350 GTACT рвёт PDP, re-dial поднимает
+		# заново - IP на ~15-20 c пропадает). Флаг задаётся в самом профиле
+		# (_BAND_RECONNECT_WARN=1), чтобы не хардкодить модель в вебе.
+		[ -n "$_BAND_RECONNECT_WARN" ] && json_add_boolean bandwarn 1
 		json_dump
 		;;
 	"help")

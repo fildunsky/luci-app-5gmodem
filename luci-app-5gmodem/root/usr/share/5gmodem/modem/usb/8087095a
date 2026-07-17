@@ -416,13 +416,35 @@ MODE=$(echo $MODE | sed 's,/,+,')
 FWA=$(sms_tool -d $DEVICE at "AT+GTPKGVER?" | xargs)
 FW=$(echo "$FWA" | cut -d ":" -f2 | xargs)
 
-MDL=$(sms_tool -d $DEVICE at "AT+GMM?" | xargs)
-MODELM=$(echo "$MDL" | cut -d ':' -f2 | cut -d ',' -f1 | awk -F'"' '{print $1}')
-MODELF=$(sms_tool -d $DEVICE at "AT+CGMI" | xargs)
-
-MODELMCUT=$(echo $MODELM)
-MODELFCUT=$(echo $MODELF | sed s/"AT+CGMI "//)
-MODEL="$MODELFCUT "$MODELMCUT
+# Имя модели. У L850 ВКЛЮЧЕНО эхо команд (ATE1) и нестандартные форматы ответов:
+#   AT+CGMI -> "+CGMI: Fibocom L850 LTE Module"
+#   AT+CGMM -> '+CGMM: "L850 LTE Module","L850"'
+# Старый cut/sed тащил в имя эхо команды и префикс: в UI имя модема показывалось
+# как "+CGMI: Fibocom L850 LTE Module", а при коллизии на общем AT-порту - как
+# "AT+GTDUALSIM?"; в конфиг оседало "AT  4". _atval берёт СОДЕРЖАТЕЛЬНУЮ строку
+# ответа: пропускает эхо (строки AT...), OK/ERROR и пустые, снимает префикс
+# "+CMD:" и кавычки.
+_atval() {
+	printf '%s\n' "$1" | tr -d '\r' | awk '
+		{ sub(/^[ \t]+/,""); sub(/[ \t]+$/,"") }
+		/^$/ || /^AT/ || /^OK$/ || /ERROR/ { next }
+		{ sub(/^\+[A-Za-z0-9]+:[ \t]*/,""); gsub(/"/,""); print; exit }'
+}
+MANUF=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMI')")
+# CGMM после снятия кавычек: 'L850 LTE Module,L850' -> берём последний (короткий) токен.
+CGMM_V=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMM')")
+SHORT=$(echo "$CGMM_V" | awk -F',' '{print $NF}' | xargs)
+[ -n "$SHORT" ] || SHORT="$CGMM_V"
+if [ -n "$MANUF" ]; then
+	# не дублируем модель, если она уже входит в строку производителя
+	case "$MANUF" in
+		*"$SHORT"*) MODEL="$MANUF" ;;
+		*)          MODEL="$MANUF $SHORT" ;;
+	esac
+else
+	MODEL="$SHORT"
+fi
+MODEL=$(echo "$MODEL" | xargs)
 
 # International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)

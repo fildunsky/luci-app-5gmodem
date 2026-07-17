@@ -262,27 +262,33 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && FPROTO=xmm
 		[ "$REQ" = atc ] && [ -f /lib/netifd/proto/atc.sh ] && FPROTO=atc
 
-		if [ "$FPROTO" = atc ]; then
-			# atc dials over an AT port and derives the usbnet device itself. It
-			# keeps that port open for URC monitoring, so hand it a DIFFERENT AT
-			# port than the app's metrics/SMS port to avoid clashing reads.
+		if [ "$FPROTO" = atc ] || [ "$FPROTO" = xmm ]; then
+			# atc И xmm дозваниваются ПО AT-ПОРТУ (ttyACM/ttyUSB), а сетевое
+			# устройство (wwan*/eth*) выводят сами. Поэтому device = AT-порт, НЕ
+			# net-устройство. Раньше xmm валился в общую fibocom-ветку и получал
+			# device=<net> (wwan2) - протокол xmm делает basename $device и ищет его
+			# в /sys/class/tty: net-нода там отсутствует => "AT port not valid!" и
+			# "Device path not found!" в цикле (живой баг на L850 после FM350 в том
+			# же USB-разъёме). Даём отдельный от метрик AT-порт, чтобы дозвон и
+			# периодический опрос не сталкивались на одном tty.
 			METRIC_AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
-			ATCPORT=""
+			DIALPORT=""
 			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/ttyACM*; do
 				[ -e "$t" ] || continue
 				tt="/dev/$(basename "$t")"
 				[ "$tt" = "$METRIC_AT" ] && continue
-				sms_tool -d "$tt" at "AT" >/dev/null 2>&1 && { ATCPORT="$tt"; break; }
+				sms_tool -d "$tt" at "AT" >/dev/null 2>&1 && { DIALPORT="$tt"; break; }
 			done
-			[ -n "$ATCPORT" ] || ATCPORT="$METRIC_AT"
-			uci set "network.$IF.proto=atc"
-			uci set "network.$IF.device=$ATCPORT"
+			[ -n "$DIALPORT" ] || DIALPORT="$METRIC_AT"
+			uci set "network.$IF.proto=$FPROTO"
+			uci set "network.$IF.device=$DIALPORT"
 			set_apn_opt "$IF" "$OLDAPN"
+			# имя опции у протоколов разное: atc читает 'pdp', xmm тоже 'pdp'.
 			set_pdp_opt "$IF" pdp upper
 			uci set "network.$IF.metric=20"
-			FDEV="$ATCPORT"
-			# remember the atc data port so resolve can re-pin it after renumbering
-			[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.data_at_port=$ATCPORT"
+			FDEV="$DIALPORT"
+			# remember the dial AT port so resolve can re-pin it after renumbering
+			[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.data_at_port=$DIALPORT"
 		else
 			uci set "network.$IF.proto=$FPROTO"
 			uci set "network.$IF.usbpath=$AMP"
@@ -408,12 +414,13 @@ case "$PROTO" in
 		done
 		[ -f "$IDEV/idVendor" ] || IDEV=""
 		;;
-	mbim|qmi|xmm)
+	mbim|qmi)
 		# control channel over the cdc-wdm node
 		IDEV="$DEV"
 		;;
-	ncm|atc|3g|wwan|ppp)
-		# serial-controlled protos talk AT on a ttyUSB/ttyACM port
+	xmm|ncm|atc|3g|wwan|ppp)
+		# serial-controlled protos talk AT on a ttyUSB/ttyACM port. xmm тоже
+		# дозванивается по AT-порту (Intel/Fibocom L850/FM350 NCM), НЕ по cdc-wdm.
 		IDEV="$ATP"
 		;;
 	*)
@@ -436,8 +443,12 @@ case "$PROTO" in
 	modemmanager)
 		set_pdp_opt "$IF" iptype   # у прото modemmanager опция называется iptype
 		;;
-	qmi|mbim|xmm)
+	qmi|mbim)
 		set_pdp_opt "$IF" pdptype
+		uci set "network.$IF.auth=none"
+		;;
+	xmm)
+		set_pdp_opt "$IF" pdp        # прото xmm читает опцию 'pdp', не 'pdptype'
 		uci set "network.$IF.auth=none"
 		;;
 	ncm|atc|3g|wwan)

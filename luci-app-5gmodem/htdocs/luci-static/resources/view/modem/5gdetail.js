@@ -959,7 +959,7 @@ function loadBandsModemband() {
 			// опрос (и re-reveal их снова показывает).
 			if (bandSource == 'modemband') { return; }
 			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
-			[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
+			[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn', 'bandwarnn' ].forEach(function(id) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
 			});
 			// Пояснение «переключите на ModemManager» показываем ТОЛЬКО если
@@ -1016,6 +1016,10 @@ function loadBandsModemband() {
 		[ 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 			var e = document.getElementById(id); if (e) { e.style.display = ''; }
 		});
+		// Постоянная подсказка о кратком обрыве при смене диапазонов - только для
+		// модемов, чей профиль выставил bandwarn (FM350: GTACT рвёт PDP).
+		var warnRow = document.getElementById('bandwarnn');
+		if (warnRow) { warnRow.style.display = j.bandwarn ? '' : 'none'; }
 
 		var lteC = document.getElementById('bands-lte');
 		if (lteC && !sameRender(lteC, supLte.join(',') + '|' + enLte.join(','))) {
@@ -2515,6 +2519,20 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G bands')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-nr' },
 						mmHasModem ? buildBandButtons(mmSup, mmCur, 'ngran-') : [ '-' ]),
+					]),
+				/* Постоянная подсказка над «Применить» для модемов, у которых смена
+				   диапазонов кратко разрывает соединение (FM350: GTACT рвёт PDP,
+				   proto переподнимает - IP пропадает на ~15-20 c). Флаг bandwarn
+				   приходит из bands.sh (задан в профиле _fibocom_fm350_common);
+				   строку показывает loadBandsModemband(). */
+				E('tr', { 'class': 'tr', 'id': 'bandwarnn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
+					E('td', { 'class': 'td left tginfo-modesw' }, [
+						E('div', { 'style': 'display:flex;align-items:flex-start;gap:.5em;opacity:.85;font-size:.95em;padding:.2em 0' }, [
+							E('span', { 'style': 'font-size:1.1em;line-height:1.2' }, '⚠️'),
+							E('span', {}, _('Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem.'))
+						])
+					]),
 					]),
 				E('tr', { 'class': 'tr', 'id': 'bandsactn', 'style': msStyle }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),

@@ -75,6 +75,20 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	fi
 	[ "$_old" = "$_new" ] && return 0
 	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
+	# Интерфейс, созданный НАМИ для прежнего модема (штамп modem_path == этот путь),
+	# теперь заведомо неверен: у другого модема другой прото/устройство. netifd
+	# поднимает его по кругу со стухшим device - живой баг: FM350 -> L850 в тот же
+	# USB-разъём, xmm-прото циклит "AT port not valid! / Device path not found!"
+	# каждые 5 c. Гасим интерфейс и снимаем автозапуск, чтобы цикл прекратился; при
+	# повторной настройке mkiface.sh пересоздаст его с нуля (delete+recreate).
+	# ЧУЖИЕ (настроенные вручную) интерфейсы НЕ трогаем - только со своим штампом.
+	_oif=$(uci -q get "$CFG.$2.network")
+	if [ -n "$_oif" ] && [ "$(uci -q get "network.$_oif.modem_path" 2>/dev/null)" = "$1" ]; then
+		ifdown "$_oif" >/dev/null 2>&1
+		uci -q set "network.$_oif.auto=0"
+		uci -q commit network
+		logger -t 5gmodem "swap: stopped stale owned interface '$_oif' (rerun setup to rebuild)"
+	fi
 	for o in at_port data_at_port network iface_proto slot_type_0 slot_type_1 slot_type_2; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
