@@ -196,6 +196,9 @@ return view.extend({
 					(mem != null ? '   ·   ' + _('Free memory') + ': ' + Math.round(mem / 1024) + ' KiB' : '');
 			}
 			if (lpaOk(profs)) { renderProfiles(profs.payload.data || []); }
+			// eUICC ответил - значит eSIM-слот активен. Обновляем видимость
+			// вкладки eSIM без F5 (напр. сразу после переключения на eSIM-слот).
+			if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
 		});
 	},
 
