@@ -106,6 +106,9 @@ report() {
 
 	collect "SIM и eSIM"
 	run 20 "Слоты SIM" "$RES/simslot.sh" status
+	# Сигнал по антенным портам: сразу видно неподключённый пигтейл (RSRP около
+	# -140). Есть не у всех модемов - у кого нет, профиль отдаст "Unsupported".
+	run 15 "Антенные порты (RSRP/RSRQ)" "$RES/bands.sh" getantports
 	run 5  "lpac установлен?" sh -c "ls -l /usr/bin/lpac /usr/lib/lpac 2>/dev/null; echo '--- зависимости ---'; ldd /usr/lib/lpac 2>/dev/null"
 	# HTTPS к SM-DP+ - самая частая причина, почему СПИСОК профилей обновляется
 	# (это чистый APDU), а ЗАГРУЗКА профиля молча не идёт: нет ca-bundle, кривое

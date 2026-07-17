@@ -40,6 +40,24 @@ document.head.append(E('style', {'type': 'text/css'},
   box-sizing: border-box;
 }
 
+/* ЗАЩИТА ОТ ЗАМЕРА ТАБЛИЦ ТЕМОЙ proton2025.
+   Тема (custom-pages.js, measureNaturalTableWidth) на каждое изменение DOM
+   замеряет «натуральную» ширину таблиц: временно ставит ячейкам
+   white-space:nowrap, дёргает void table.offsetWidth (принудительный reflow),
+   меряет и возвращает стили назад.
+   Наши ряды кнопок в этот миг схлопываются с нескольких строк в одну, высота
+   документа проваливается на ~200px, и БРАУЗЕР ОБРЕЗАЕТ scrollTop до нового
+   максимума. Стили тема вернёт, высоту тоже - а прокрутка останется обрезанной.
+   Итог: страница уезжала вверх на каждый тик опроса (только на этой теме и
+   только при раскрытом блоке частот - именно там кнопки переносятся).
+   !important бьёт инлайновый стиль темы, поэтому её nowrap на наши контейнеры
+   не действует: высота при замере не меняется - обрезать нечего.
+   Чинить тему мы не можем, а страница должна работать в любой. */
+#bands-3g, #bands-lte, #bands-nr, #modesw-btns,
+#antports-table td {
+  white-space: normal !important;
+}
+
 /* Комбинации 3G - ИСКЛЮЧЕНИЕ из фиксированной ширины выше: та рассчитана на
    короткие номера диапазонов ("B1"), а у комбинаций подписи длинные
    ("2100 + 1900 + 850") - в 3.4em их бы расплющило. */
@@ -744,9 +762,29 @@ function buildBandButtons(supported, current, prefix) {
 	});
 }
 
+/* Перерисовывать контейнер ТОЛЬКО при реальном изменении данных.
+   ЗАЧЕМ. Блок частот перестраивался на КАЖДОМ тике опроса, даже когда диапазоны
+   не менялись: renderBandToggles делал innerHTML='' и набивал контейнер заново.
+   На долю мгновения контейнер пуст -> высота документа проваливается -> браузер
+   ОБРЕЗАЕТ scrollTop до нового максимума -> кнопки возвращаются, высота тоже, а
+   прокрутка остаётся обрезанной. Страница уезжала вверх ровно на высоту этих
+   контейнеров, на каждый тик.
+   Почему это так долго не находилось: замер высоты видит её неизменной (провал
+   живёт доли миллисекунды), перехват scrollTop молчит (двигает не JS, а сам
+   браузер), а overflow-anchor:none не помогает - это не анкоринг, а клампинг.
+   На bootstrap не проявлялось: другая вёрстка скроллера.
+   Возвращает true, если данные те же и трогать DOM не нужно. */
+function sameRender(el, sig) {
+	if (!el) { return false; }
+	if (el.getAttribute('data-sig') === sig) { return true; }
+	el.setAttribute('data-sig', sig);
+	return false;
+}
+
 function renderBandToggles(contId, bands, current, prefix) {
 	var cont = document.getElementById(contId);
 	if (!cont) { return; }
+	if (sameRender(cont, prefix + '|' + bands.join(',') + '|' + current.join(','))) { return; }
 	cont.innerHTML = '';
 	buildBandButtons(bands, current, prefix).forEach(function(btn) {
 		cont.appendChild(btn);
@@ -942,6 +980,9 @@ function loadBandsModemband() {
 		var c3g = document.getElementById('bands-3g');
 		if (c3g && j.combos3g && j.combos3g.length) {
 			if (row3g) { row3g.style.display = ''; }
+			/* Пересобираем ТОЛЬКО при изменении (см. sameRender). Строку при этом
+			   показываем всегда - видимость и перерисовка это разные вещи. */
+			if (!sameRender(c3g, String(j.current3g) + '|' + j.combos3g.map(function(o){ return o.id; }).join(','))) {
 			c3g.innerHTML = '';
 			/* Кнопки как у «Режима сети», а НЕ как у LTE: там переключатели (можно
 			   отметить любой набор), а комбинация 3G выбирается РОВНО ОДНА - клик
@@ -955,6 +996,7 @@ function loadBandsModemband() {
 					'click': function(ev) { ev.preventDefault(); setBands3gAT(o.id, o.label); }
 				}, o.label));
 			});
+			}
 		} else if (row3g) {
 			row3g.style.display = 'none';
 		}
@@ -969,7 +1011,7 @@ function loadBandsModemband() {
 		});
 
 		var lteC = document.getElementById('bands-lte');
-		if (lteC) {
+		if (lteC && !sameRender(lteC, supLte.join(',') + '|' + enLte.join(','))) {
 			lteC.innerHTML = '';
 			if (supLte.length) { buildBandButtonsNum(supLte, enLte, 'lte').forEach(function(b) { lteC.appendChild(b); }); }
 			else { lteC.textContent = '-'; }
@@ -977,9 +1019,13 @@ function loadBandsModemband() {
 		var nrRow = document.getElementById('bands5gn');
 		var nrC = document.getElementById('bands-nr');
 		if (nrC) {
-			nrC.innerHTML = '';
-			if (supNsa.length) { buildBandButtonsNum(supNsa, enNsa, 'nsa').forEach(function(b) { nrC.appendChild(b); }); }
-			else if (nrRow) { nrRow.style.display = 'none'; }   // нет 5G - прячем строку
+			// перерисовка - только при изменении (см. sameRender)
+			if (!sameRender(nrC, supNsa.join(',') + '|' + enNsa.join(','))) {
+				nrC.innerHTML = '';
+				if (supNsa.length) { buildBandButtonsNum(supNsa, enNsa, 'nsa').forEach(function(b) { nrC.appendChild(b); }); }
+			}
+			// видимость - отдельно от перерисовки: нет 5G, значит строки нет
+			if (!supNsa.length && nrRow) { nrRow.style.display = 'none'; }
 		}
 
 		// Режим сети (2G/3G/4G) через AT+CNMP (bands.sh getmode/setmode) - для
@@ -987,15 +1033,21 @@ function loadBandsModemband() {
 		var modeRow = document.getElementById('modeswn');
 		var modeC = document.getElementById('modesw-btns');
 		if (modeC && j.modes && j.modes.length) {
-			modeC.innerHTML = '';
-			sortNetModes(j.modes).forEach(function(m) {
-				var on = (String(j.currentmode) === String(m.id));
-				modeC.appendChild(E('button', {
-					'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
-					'data-mode': String(m.id),
-					'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
-				}, m.label));
-			});
+			/* Видимость строки и перерисовка кнопок - РАЗНЫЕ вещи: строку
+			   показываем всегда, когда режимы есть, а кнопки пересобираем только
+			   при изменении (иначе контейнер пустеет каждый тик и браузер
+			   обрезает scrollTop - см. sameRender). */
+			if (!sameRender(modeC, String(j.currentmode) + '|' + j.modes.map(function(m){ return m.id; }).join(','))) {
+				modeC.innerHTML = '';
+				sortNetModes(j.modes).forEach(function(m) {
+					var on = (String(j.currentmode) === String(m.id));
+					modeC.appendChild(E('button', {
+						'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+						'data-mode': String(m.id),
+						'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
+					}, m.label));
+				});
+			}
 			if (modeRow) { modeRow.style.display = ''; }
 		} else if (modeRow) {
 			modeRow.style.display = 'none';
@@ -1325,66 +1377,52 @@ function setNetModeAT(id, label) {
 	});
 }
 
-/* Таблица «Антенные порты» (bands.sh getantports -> строки "порт:rsrp:rsrq").
-   Показываем блок ТОЛЬКО если модем реально ответил: команда вендорная (у Telit
-   это AT#LAPS), у большинства модемов её нет.
-   Практический смысл: воткнул антенну - нажал «Обновить» - увидел, ожил ли порт.
-   Поэтому значения не только при загрузке, но и по кнопке. */
-function fillAntPorts() {
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'getantports' ]), '')
-		.then(function(out) {
-			var rows = String(out || '').trim().split('\n').filter(function(l) {
-				return /^\d+:-?\d+:-?\d+$/.test(l.trim());
-			});
-			var block = document.getElementById('antports-block');
-			var tbl = document.getElementById('antports-table');
-			if (!block || !tbl) { return; }
-			if (!rows.length) { block.style.display = 'none'; return; }
-			block.style.display = '';
-			tbl.innerHTML = '';
-			tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
-				E('th', { 'class': 'th left' }, _('Antenna port')),
-				E('th', { 'class': 'th left' }, _('RSRP')),
-				E('th', { 'class': 'th left' }, _('RSRQ')),
-				E('th', { 'class': 'th left' }, _('State'))
-			]));
-			rows.forEach(function(l) {
-				var p = l.trim().split(':');
-				var rsrp = parseInt(p[1], 10);
-				/* Оценка по RSRP. Шкала LTE: -44 (отлично) … -140 (ничего). Около
-				   -134 и ниже антенны фактически нет - именно так выглядит
-				   неподключённый пигтейл (проверено на LM960). */
-				var st, cls;
-				/* msgid'ы намеренно НЕ общие ("OK", "Good"): базовый каталог LuCI
-				   перебивает их своими значениями - "OK" там кнопка диалога и
-				   переводится как «Принять», что и вылезало в этой таблице. */
-				if (isNaN(rsrp))        { st = '-';                        cls = ''; }
-				else if (rsrp <= -130)  { st = _('antenna: none');         cls = 'color:#c00;font-weight:600'; }
-				else if (rsrp <= -110)  { st = _('antenna: weak signal');  cls = 'color:#c80'; }
-				else                    { st = _('antenna: normal');       cls = 'color:#080'; }
-				tbl.appendChild(E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left' }, [
-						/* Порты нумеруются с 0, как в ответе модема. Подписи
-						   пигтейлов (PRI/DIV) у каждой платы свои - не выдумываем
-						   соответствие, показываем номер, который дал модем. */
-						_('Port %d').format(parseInt(p[0], 10))
-					]),
-					E('td', { 'class': 'td left' }, p[1] + ' dBm'),
-					E('td', { 'class': 'td left' }, p[2] + ' dB'),
-					E('td', { 'class': 'td left', 'style': cls }, st)
-				]));
-			});
-			tbl.appendChild(E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td left', 'colspan': '4' }, [
-					E('button', {
-						'class': 'btn cbi-button',
-						'click': function(ev) { ev.preventDefault(); fillAntPorts(); }
-					}, _('Refresh'))
-				])
-			]));
-		});
+/* Таблица «Антенные порты». Данные приходят ОБЫЧНЫМ опросом метрик (поле
+   antports: "порт:rsrp:rsrq ..."), потому что профиль добирает #LAPS той же
+   AT-цепочкой, что и всё остальное - лишних запросов к порту ноль. Раньше здесь
+   был отдельный вызов bands.sh + кнопка «Обновить»: и порт дёргали зря (даже
+   когда блок свёрнут), и антенну крутить было неудобно - значения не живые.
+   Блок показываем только если модем реально ответил: команда вендорная. */
+function fillAntPorts(raw) {
+	var block = document.getElementById('antports-block');
+	var tbl = document.getElementById('antports-table');
+	if (!block || !tbl) { return; }
+	var rows = String(raw || '').trim().split(/\s+/).filter(function(l) {
+		return /^\d+:-?\d+:-?\d+$/.test(l);
+	});
+	if (!rows.length) { block.style.display = 'none'; return; }
+	block.style.display = '';
+	/* Пересобираем только при изменении: пустеющий контейнер провоцирует у темы
+	   пересчёт таблиц и обрезание скролла (см. sameRender). */
+	if (sameRender(tbl, rows.join(' '))) { return; }
+	tbl.innerHTML = '';
+	tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
+		E('th', { 'class': 'th left' }, _('Antenna port')),
+		E('th', { 'class': 'th left' }, _('RSRP')),
+		E('th', { 'class': 'th left' }, _('RSRQ')),
+		E('th', { 'class': 'th left' }, _('State'))
+	]));
+	rows.forEach(function(l) {
+		var p = l.split(':');
+		var rsrp = parseInt(p[1], 10);
+		/* Оценка по RSRP. Шкала LTE: -44 (отлично) … -140 (ничего). Около -130 и
+		   ниже антенны фактически нет - так выглядит неподключённый пигтейл
+		   (проверено на LM960: порт без антенны давал -134). */
+		var st, cls;
+		if (isNaN(rsrp))       { st = '-';                       cls = ''; }
+		else if (rsrp <= -130) { st = _('antenna: none');        cls = 'color:#c00;font-weight:600'; }
+		else if (rsrp <= -110) { st = _('antenna: weak signal'); cls = 'color:#c80'; }
+		else                   { st = _('antenna: normal');      cls = 'color:#080'; }
+		tbl.appendChild(E('tr', { 'class': 'tr' }, [
+			/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV) у
+			   каждой платы свои, соответствие не выдумываем. */
+			E('td', { 'class': 'td left' }, _('Port %d').format(parseInt(p[0], 10))),
+			E('td', { 'class': 'td left' }, p[1] + ' dBm'),
+			E('td', { 'class': 'td left' }, p[2] + ' dB'),
+			E('td', { 'class': 'td left', 'style': cls }, st)
+		]));
+	});
 }
-function initAntPorts() { fillAntPorts(); }
 
 /* Выбор комбинации диапазонов 3G (одна из; см. combos3g в bands.sh).
    Как и смена режима сети, требует перезапуска модема - #BND у Telit
@@ -1833,28 +1871,26 @@ simDialog: baseclass.extend({
 					.then(function(res) {
 					var json = JSON.parse(res);
 
-				// Анти-скачок скролла (proton2025). Опрос метрик может схлопнуть
-				// строки (напр. "MCC MNC"/локация при "-") - высота страницы
-				// уменьшается, и если пользователь домотал до самого низа, вьюпорт
-				// «прыгает» вверх на высоту строки. На bootstrap это гасит
-				// браузерный scroll-anchoring, а на proton (root-скроллер +
-				// flex-body) он не срабатывает. Если были у низа - после всех
-				// правок DOM (rAF, до отрисовки) вернём к низу. Отмотал вверх хоть
-				// на пару пикселей - не трогаем.
-				var _scrollEl = document.scrollingElement || document.documentElement;
-				var _wasBottom = (_scrollEl.scrollTop + _scrollEl.clientHeight) >= (_scrollEl.scrollHeight - 3);
-				if (_wasBottom) {
-					requestAnimationFrame(function() {
-						var e = document.scrollingElement || document.documentElement;
-						e.scrollTop = e.scrollHeight;
-					});
-				}
+				/* ЗДЕСЬ БЫЛ «анти-скачок скролла»: если пользователь у низа страницы,
+				   после правок DOM вернуть его к низу (scrollTop = scrollHeight).
+				   УДАЛЁН - он и был причиной бага на proton2025, а не лекарством.
+				   Замер в браузере (MutationObserver + перехват scrollTop) показал:
+				     страница 2538→2538 | блок частот 638→638 | скролл 1228→1786
+				   то есть высота НЕ менялась вообще, а прокрутку двигал ровно этот
+				   код - определение «был у низа» на proton срабатывало ложно, он
+				   швырял страницу вниз, и дальше она уезжала рывками.
+				   Причину, ради которой он писался (схлопывание строк при пустом
+				   опросе), убрали honestly в setRowVisible: строка, у которой данные
+				   уже были, больше не прячется, и высота не скачет. Трогать скролл
+				   пользователя нам теперь незачем - пусть этим занимается браузер. */
 
 				// Раньше при signal==0 показывался модал и страница сама
 				// перезагружалась каждые 5 c - на модемах, медленно поднимающих
 				// сеть, это давало бесконечные перезагрузки. Страница и так
 				// открывается с пустыми полями и обновляется по опросу.
 				revealMgmtWhenReady();
+				// Антенные порты: данные уже в json, лишних запросов нет.
+				fillAntPorts(json.antports);
 
 					var icon, wicon, ticon, t;
 					var wicon = L.resource('icons/cloading.svg');
@@ -2662,9 +2698,9 @@ simDialog: baseclass.extend({
 				])
 			]),
 
-			/* Сигнал по антенным портам (AT#LAPS). Есть не у всех модемов -
-			   блок скрыт и показывается из initAntPorts() только когда команда
-			   реально ответила. Заполняется там же. */
+			/* Сигнал по антенным портам (AT#LAPS у Telit). Есть не у всех модемов:
+			   блок скрыт и показывается из fillAntPorts() только когда модем
+			   реально отдал данные (поле antports в опросе метрик). */
 			E('div', { 'id': 'antports-block', 'style': 'display:none' }, [
 				collapsibleSection('ant', _('Antenna ports'), [
 					E('table', { 'class': 'table', 'id': 'antports-table' }, []),
@@ -2679,8 +2715,6 @@ simDialog: baseclass.extend({
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);
-			// и таблицу антенных портов - если модем отвечает на AT#LAPS
-			window.setTimeout(initAntPorts, 0);
 			return node;
 		});
 	},

@@ -774,6 +774,7 @@ cat <<EOF
 "modem":"$(sanitize_string "$MODEL")",
 "mtemp":"$(sanitize_string "$TEMP")",
 "mtherm":"$(sanitize_number "$THERM")",
+"antports":"$(sanitize_string "$ANTPORTS")",
 "firmware":"$(sanitize_string "$FW")",
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",
