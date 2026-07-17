@@ -1,0 +1,15 @@
+{
+	"luci-app-5gmodem-api": {
+		"description": "Read-only modem metrics for widgets (themes, status pages, other apps)",
+		"read": {
+			"file": {
+				"/usr/share/5gmodem/5gmodem.sh cached": [ "exec" ],
+				"/usr/share/5gmodem/listmodems.sh": [ "exec" ],
+				"/usr/share/5gmodem/modemswitch.sh active": [ "exec" ],
+				"/usr/share/5gmodem/netpri.sh list": [ "exec" ],
+				"/tmp/5gmodem_metrics.json": [ "read" ]
+			},
+			"uci": [ "5gmodem" ]
+		}
+	}
+}

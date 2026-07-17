@@ -67,7 +67,10 @@ at_bounded() {
 	_ao="/tmp/5gmodem_esim_at.$$"
 	sms_tool -d "$1" at "$2" > "$_ao" 2>/dev/null &
 	_ap=$!
-	( sleep "${3:-6}"; kill "$_ap" 2>/dev/null ) & _aw=$!
+	# fd отвязаны ОТ ПОДОБОЛОЧКИ: иначе осиротевший `sleep` держит stdout
+	# вызывающего, и читатель (rpcd/cgi-io) ждёт EOF лишние ${3:-6} c уже после
+	# того, как ответ готов (см. atprobe.sh - там это стоило 1.4 c на опрос).
+	( sleep "${3:-6}"; kill "$_ap" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _aw=$!
 	wait "$_ap" 2>/dev/null; kill "$_aw" 2>/dev/null; wait "$_aw" 2>/dev/null
 	tr -d '\r' < "$_ao"; rm -f "$_ao"
 }

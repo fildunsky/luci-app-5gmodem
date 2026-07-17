@@ -182,6 +182,41 @@ getdevicevendorproduct() {
 
 RES="/usr/share/5gmodem"
 
+# --- Кэш метрик: снимок для тех, кому не нужен свежий опрос -------------------
+#
+# Полный опрос стоит ~0.6 c, и ЛЮБОЙ его вызов лезет в AT-порт, за который и так
+# дерутся SMS, слоты и профили (при коллизии ответы перепутываются). Виджету на
+# странице статуса свежесть до секунды не нужна - ему хватит последнего снимка.
+#
+#   5gmodem.sh json          - полный опрос (как раньше) + запись снимка
+#   5gmodem.sh cached [сек]  - отдать снимок, если он свежее <сек> (по умолчанию
+#                              15); иначе сделать полный опрос. Модем не трогаем
+#                              вовсе, пока снимок свежий.
+#
+# Снимок пишется АТОМАРНО (tmp + mv): читатель никогда не увидит полфайла.
+# Возраст считаем по /proc/uptime, а не date: у busybox `find -mmin` умеет
+# только минуты, а /proc/uptime не врёт при скачках системного времени
+# (тот же приём, что в listmodems.sh).
+CACHE="/tmp/5gmodem_metrics.json"
+STAMP="/tmp/5gmodem_metrics.stamp"
+
+uptime_s() { cut -d. -f1 /proc/uptime; }
+
+if [ "$1" = "cached" ]; then
+	_ttl="${2:-15}"
+	case "$_ttl" in ''|*[!0-9]*) _ttl=15 ;; esac
+	if [ -s "$CACHE" ]; then
+		_now=$(uptime_s)
+		_then=$(cat "$STAMP" 2>/dev/null)
+		case "$_then" in ''|*[!0-9]*) _then="" ;; esac
+		if [ -n "$_then" ] && [ "$((_now - _then))" -ge 0 ] && [ "$((_now - _then))" -lt "$_ttl" ]; then
+			cat "$CACHE"
+			exit 0
+		fi
+	fi
+	# снимка нет или протух - проваливаемся в полный опрос ниже
+fi
+
 DEVICE=$($RES/detect.sh)
 # Bounded probe: sms_tool has no timeout and blocks ~35s on a silent/DIAG port,
 # so a wrong pinned port froze this whole page on every metrics poll (only
@@ -767,7 +802,8 @@ if [ -n "$SEC" ] && [ -n "$COPS" ] && ! echo "$COPS" | grep -qE '^[0-9 ]*$'; the
 	[ -n "$OPIF" ] && printf '%s' "$COPS" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
 fi
 
-cat <<EOF
+_TMP="$CACHE.$$"
+cat > "$_TMP" <<EOF
 {
 "ipaddr":"$(sanitize_string "$IPADDR")",
 "ipaddr6":"$(sanitize_string "$IPADDR6")",
@@ -840,5 +876,22 @@ cat <<EOF
 "sinr":"$(sanitize_string "$SINR")"
 }
 EOF
+
+# БЕЗ ПАЙПЛАЙНА. Первая версия писала снимок через `( cat <<EOF ) | tee файл` -
+# и вызов через rpcd намертво упирался в его 30-секундный таймаут (проверено:
+# 4 из 4), хотя напрямую в консоли отрабатывал за 0.64 c. rpcd ждёт EOF на
+# stdout, а лишний процесс в пайплайне держал дескриптор. Пишем в файл, потом
+# отдаём его - ни подоболочки, ни tee.
+#
+# Снимок публикуем, только если он ВАЛИДЕН: полуживой ответ (модем отвалился на
+# середине опроса) не должен затирать последний хороший - виджеты читают кэш.
+if [ -s "$_TMP" ] && jsonfilter -i "$_TMP" -e '@.modem' >/dev/null 2>&1; then
+	cat "$_TMP"
+	mv "$_TMP" "$CACHE"      # атомарно: читатель видит либо старый снимок, либо новый
+	uptime_s > "$STAMP"
+else
+	cat "$_TMP" 2>/dev/null  # ответ отдаём в любом случае, но в кэш не кладём
+	rm -f "$_TMP"
+fi
 exit 0
 

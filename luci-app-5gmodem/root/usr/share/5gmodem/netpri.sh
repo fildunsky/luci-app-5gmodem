@@ -69,7 +69,9 @@ iface_type() {
 at_query() {
 	D="$1"; C="$2"; tmp="/tmp/netpri_at.$$"
 	sms_tool -d "$D" at "$C" >"$tmp" 2>/dev/null &
-	p=$!; ( sleep 5; kill "$p" 2>/dev/null ) & k=$!
+	# fd отвязаны ОТ ПОДОБОЛОЧКИ (см. atprobe.sh): осиротевший `sleep` иначе
+	# держит stdout и добавляет 5 c к ответу «Приоритета интернета».
+	p=$!; ( sleep 5; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & k=$!
 	wait "$p" 2>/dev/null; kill "$k" 2>/dev/null; wait "$k" 2>/dev/null
 	cat "$tmp" 2>/dev/null; rm -f "$tmp"
 }

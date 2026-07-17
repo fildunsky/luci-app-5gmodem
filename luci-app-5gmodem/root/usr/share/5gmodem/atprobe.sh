@@ -19,11 +19,18 @@ D="$1"
 # run sms_tool in the background; a killer terminates it after 4s if it hangs.
 # 'wait' returns the instant sms_tool finishes, so a good port answers in well
 # under a second while a silent one is capped at 4s.
-sms_tool -d "$D" at "AT" >/dev/null 2>&1 &
+sms_tool -d "$D" at "AT" >/dev/null 2>&1 </dev/null &
 p=$!
 # 2 c достаточно: реальный AT-порт отвечает <0.3 c, а раньше 4 c на каждом
 # молчащем DIAG-порту складывались в ~8 c холодного детекта.
-( sleep 2; kill "$p" 2>/dev/null ) &
+#
+# ДЕСКРИПТОРЫ ОТВЯЗЫВАЕМ ОТ ПОДОБОЛОЧКИ (>/dev/null на ней самой, а не внутри).
+# Без этого сторож наследует stdout вызывающего. Ниже мы убиваем ПОДОБОЛОЧКУ,
+# но её ребёнок `sleep` при этом ОСИРОТЕВАЕТ и живёт свои 2 c, продолжая держать
+# пайп. Кто читает наш вывод (rpcd/cgi-io), ждёт EOF - и получает его лишь через
+# 2 c после того, как всё давно посчитано. Замерено: 5gmodem.sh json в консоли
+# 0.64 c, а через пайп 2.03 c - ровно эта разница, на КАЖДЫЙ опрос страницы.
+( sleep 2; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 k=$!
 
 wait "$p" 2>/dev/null
