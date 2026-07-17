@@ -17,11 +17,13 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 
 <img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-43-48" src="https://github.com/user-attachments/assets/5f9f9a63-a3c9-44a1-8f0f-4625b20c90a5" />
 
-## Supported modems
-- Fibocom FM350GL has new features and fixes here!
+## These are modems I personally have:
+I've added new features to them (compared to 3ginfo and modemband)
+- Fibocom FM350GL
 - Compal RXM-G1
 - Telit LM960A18
 - SIMCOM SIM7100E
+- SIMCOM SIM7600E-H
 - Quectel EC21-E
 - Many more untested, but should support all the modems handled by the upstream forks.
 
