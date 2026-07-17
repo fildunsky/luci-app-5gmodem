@@ -82,6 +82,23 @@ proto_fibocom_setup() {
 	local netdev=""
 	if [ -n "$usbpath" ]; then
 		netdev=$(_fibocom_netdev "$usbpath")
+		# Сетевого устройства нет - вероятно, usbnet-драйвер не загружен. FM350 в
+		# RNDIS-композиции (GTUSBMODE 41: IAD Cls=e0 Sub=01 Prot=03) требует
+		# rndis_host; на части прошивок (напр. Cudy WBR3000UAX, ядро 6.12) он не
+		# загружен, пока его явно не подтянуть, и интерфейсы модема остаются с
+		# Driver=(none). Грузим драйверы и ждём, пока ядро привяжет их к уже
+		# воткнутому модему (при загрузке usbnet-модуль сканирует существующие
+		# устройства). modprobe идемпотентен: если уже загружен - no-op.
+		if [ -z "$netdev" ]; then
+			modprobe rndis_host 2>/dev/null
+			modprobe cdc_ether 2>/dev/null
+			local _n=0
+			while [ "$_n" -lt 5 ]; do
+				netdev=$(_fibocom_netdev "$usbpath")
+				[ -n "$netdev" ] && break
+				sleep 1; _n=$((_n + 1))
+			done
+		fi
 	fi
 	[ -n "$netdev" ] || netdev="$device"
 	if [ -z "$netdev" ]; then
