@@ -89,6 +89,18 @@ proto_fibocom_setup() {
 		proto_set_available "$interface" 0
 		return 1
 	fi
+	# Устройство из uci (fallback) может НЕ СУЩЕСТВОВАТЬ в системе. Так бывает,
+	# когда драйвер usbnet не привязался к FM350: на части прошивок (напр. Cudy
+	# WBR3000UAX, OpenWrt 25.12.5 / ядро 6.12) сетевые интерфейсы модема остаются
+	# с Driver=(none), и /sys/class/net/wwanN не создаётся. Раньше мы всё равно
+	# слали netifd proto_send_update на несуществующий wwanN -> netifd отвечал
+	# "Unknown error", интерфейс падал, netifd тут же поднимал его заново - и так
+	# по кругу каждые 5 c, забивая лог. Честная ошибка лучше бесконечного цикла.
+	if [ ! -d "/sys/class/net/$netdev" ]; then
+		proto_notify_error "$interface" NETDEV_MISSING
+		proto_block_restart "$interface"
+		return 1
+	fi
 
 	local dial="$atport"
 	if [ -z "$dial" ] && [ -n "$usbpath" ]; then

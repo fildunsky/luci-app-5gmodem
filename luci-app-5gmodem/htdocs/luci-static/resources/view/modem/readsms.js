@@ -787,7 +787,13 @@ return view.extend({
 								if (res2) {
 
  									var table = document.getElementById('smsTable');
-									while (table.rows.length > 1) { table.deleteRow(1); }					
+									// Таблицы может НЕ БЫТЬ: панель настроек SMS
+									// (чужой smssettings.js) иногда падает на apk-прошивке
+									// раньше, чем отрисуется #smsTable, а poll уже
+									// запущен. Без этой проверки doRefresh падал на
+									// table.rows и рушил весь тик (readsms.js:790).
+									if (!table) { hideLoading(); return; }
+									while (table.rows.length > 1) { table.deleteRow(1); }
 
 									/* Баг sms_tool 2025.08.x (-j): кодпойнты, у которых МЛАДШИЙ
 									   байт >= 0x80 (U+00A0 nbsp, «» U+00AB/BB, …), в JSON-кодере
