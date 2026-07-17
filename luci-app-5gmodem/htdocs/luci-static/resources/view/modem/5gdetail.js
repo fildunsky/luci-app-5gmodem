@@ -611,7 +611,25 @@ var bandsOther = [];
 function setRowVisible(view, hasData) {
 	var tr = view && view.parentNode;
 	if (!tr) { return; }
-	if (hasData) { tr.style.display = ''; tr.removeAttribute('data-empty'); return; }
+	if (hasData) {
+		tr.style.display = '';
+		tr.removeAttribute('data-empty');
+		tr.setAttribute('data-hadata', '1');   // данные у строки БЫЛИ
+		return;
+	}
+	/* СТРОКУ, У КОТОРОЙ ДАННЫЕ УЖЕ БЫЛИ, НЕ ПРЯЧЕМ НИКОГДА.
+	   Пустой ответ почти всегда означает не «параметра нет», а коллизию на
+	   AT-порту: опрос метрик делит tty с SMS, слотами и профилями, и при
+	   наложении двух опросчиков поля разом становятся пустыми (замерено).
+	   Раньше строка пряталась после 3 пустых подряд - высота страницы
+	   уменьшалась, и если пользователь домотал до низа, вьюпорт полз вверх
+	   на строку за тик (баг на proton2025: страница «уезжала» до блока
+	   «Информация о соте»). Дебаунс тут не спасал: разные строки достигали
+	   порога на разных тиках, отсюда и движение по одной строке.
+	   Значение при этом сохраняется прежнее (см. вызывающий код) - показать
+	   последнее известное честнее, чем мигать прочерком. */
+	if (tr.getAttribute('data-hadata') === '1') { return; }
+	/* Данных не было НИ РАЗУ - строку можно спрятать: параметра у модема нет. */
 	var n = (parseInt(tr.getAttribute('data-empty'), 10) || 0) + 1;
 	tr.setAttribute('data-empty', String(n));
 	if (n >= 3) { tr.style.display = 'none'; }
@@ -669,8 +687,12 @@ function renderCaTable(json) {
 	// поэтому высота на опрос не меняется. Прячем только при реальном обрыве
 	// (pband пуст несколько опросов подряд - дебаунс).
 	if (sec) {
-		if (hasPcc) { sec.style.display = ''; sec.removeAttribute('data-empty'); }
-		else {
+		if (hasPcc) {
+			sec.style.display = '';
+			sec.removeAttribute('data-empty');
+			sec.setAttribute('data-hadata', '1');
+		} else if (sec.getAttribute('data-hadata') !== '1') {
+			// блок ни разу не наполнялся - можно прятать (см. setRowVisible)
 			var n = (parseInt(sec.getAttribute('data-empty'), 10) || 0) + 1;
 			sec.setAttribute('data-empty', String(n));
 			if (n >= 3) { sec.style.display = 'none'; }
@@ -2062,15 +2084,19 @@ simDialog: baseclass.extend({
 						var lv = parseInt(json.mtherm, 10);
 						if (!isNaN(lv) && lv >= 0 && lv <= 3) {
 							var lbl = [ _('Normal'), _('Warm'), _('Hot'), _('Critical') ][lv];
-							viewn.style.display = '';
 							view.textContent = lbl;
 							view.title = _('Modem thermal throttling level: %d of 3').format(lv);
+							setRowVisible(view, true);
 						} else {
-							viewn.style.display = 'none';
+							/* Через setRowVisible, а НЕ display='none' напрямую: при
+							   коллизии на AT-порту mtemp и mtherm пустеют разом, строка
+							   исчезала и высота страницы прыгала (см. setRowVisible).
+							   Строку, где температура уже была, он больше не прячет. */
+							setRowVisible(view, false);
 						}
 						}
 						else {
-						viewn.style.display = '';
+						setRowVisible(view, true);
 						/* Значение приходит как "32 &deg;C". Нормализуем к
 						   ровно одному градусу: раньше два .replace давали
 						   "32 °°C" (первый ставил °, второй добавлял ещё один
@@ -2195,11 +2221,15 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('lac')) {
 						var view = document.getElementById("lac");
-						var viewn = document.getElementById("lacn");
-						if (json.lac_dec.length < 2 || json.lac_hex.length < 2) { 
-						viewn.style.display = "none";
+						if (json.lac_dec.length < 2 || json.lac_hex.length < 2) {
+						/* Через setRowVisible: LAC есть не у всех сетей (в LTE вместо
+						   него TAC), но пустой ОДИН опрос - это коллизия на AT-порту,
+						   а не пропажа параметра. Раньше строка пряталась сразу и
+						   высота страницы прыгала. */
+						setRowVisible(view, false);
 						}
 						else {
+							setRowVisible(view, true);
 							if (json.lac_dec == '' || json.lac_hex == '') { 
 							var lc = json.lac_dec   + ' ' + json.lac_hex;
 							var ld = lc.split(' ').join('');
