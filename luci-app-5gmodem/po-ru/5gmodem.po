@@ -2323,3 +2323,24 @@ msgstr "Скрыть от ModemManager"
 
 msgid "ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it."
 msgstr "ModemManager и протокол ядра (QMI/MBIM) не могут делить один модем: MM забирает управляющий канал, и интерфейс остаётся без IP. Для таких протоколов включено по умолчанию. Снимите галку, чтобы отдать модем ModemManager (у него на части модемов богаче управление диапазонами и режимами) — и выберите для модема протокол ModemManager."
+
+msgid "Diagnostic report"
+msgstr "Диагностический отчёт"
+
+msgid "Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys."
+msgstr "Собирает настройки, порты модема, вывод AT-команд, состояние ModemManager и eSIM, а также системные логи в один текстовый файл и скачивает его. Приложите файл к сообщению об ошибке. В файле есть идентификаторы модема и SIM (IMEI, IMSI, ICCID, EID) и имя оператора; паролей и ключей Wi-Fi в нём нет."
+
+msgid "Collect logs"
+msgstr "Собрать логи"
+
+msgid "Collecting logs…"
+msgstr "Собираем логи…"
+
+msgid "Collecting logs failed"
+msgstr "Не удалось собрать логи"
+
+msgid "Timed out"
+msgstr "Истекло время ожидания"
+
+msgid "The report has been downloaded. Attach it to your bug report."
+msgstr "Отчёт скачан. Приложите его к сообщению об ошибке."

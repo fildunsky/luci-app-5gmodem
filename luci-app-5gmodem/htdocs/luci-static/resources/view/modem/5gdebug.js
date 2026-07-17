@@ -543,6 +543,58 @@ return view.extend({
 			});
 		};
 
+		/* Отчёт для разработчиков. Сбор идёт в фоне (collect.sh start) и занимает
+		   от секунд до пары минут - синхронный вызов не пережил бы 30-секундный
+		   таймаут rpcd. Поэтому опрашиваем collect.sh status и показываем шаг,
+		   а готовый файл отдаём браузеру как обычное скачивание (Blob). */
+		o = s.option(form.Button, '_collect');
+		o.title = _('Diagnostic report');
+		o.description = _('Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys.');
+		o.inputtitle = _('Collect logs');
+		o.inputstyle = 'apply';
+		o.onclick = function() {
+			var msg = E('p', { 'class': 'spinning' }, _('Collecting logs…'));
+			ui.showModal(_('Diagnostic report'), [ msg ]);
+
+			var poll = function(tries) {
+				return fs.exec('/usr/share/5gmodem/collect.sh', [ 'status' ]).then(function(res) {
+					var st = {}; try { st = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+					if (st.state === 'running') {
+						// сбор не бесконечен: 180 попыток по 2 c = 6 минут потолок
+						if (tries > 180) { throw new Error(_('Timed out')); }
+						msg.textContent = _('Collecting logs…') + ' ' + (st.progress || '');
+						return new Promise(function(resolve) {
+							window.setTimeout(function() { resolve(poll(tries + 1)); }, 2000);
+						});
+					}
+					if (st.state !== 'done') { throw new Error(_('Collecting logs failed')); }
+					return fs.read_direct('/tmp/5gmodem-diag.txt', 'blob');
+				});
+			};
+
+			return fs.exec('/usr/share/5gmodem/collect.sh', [ 'start' ]).then(function() {
+				return poll(0);
+			}).then(function(blob) {
+				var d = new Date();
+				var stamp = d.getFullYear()
+					+ ('0' + (d.getMonth() + 1)).slice(-2)
+					+ ('0' + d.getDate()).slice(-2)
+					+ '-' + ('0' + d.getHours()).slice(-2)
+					+ ('0' + d.getMinutes()).slice(-2);
+				var url = window.URL.createObjectURL(blob);
+				var a = E('a', { 'href': url, 'download': '5gmodem-diag-' + stamp + '.txt' });
+				document.body.appendChild(a);
+				a.click();
+				document.body.removeChild(a);
+				window.setTimeout(function() { window.URL.revokeObjectURL(url); }, 5000);
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('The report has been downloaded. Attach it to your bug report.')), 'info');
+			}).catch(function(err) {
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('Collecting logs failed') + ': ' + (err.message || err)), 'error');
+			});
+		};
+
 		/* ---------------- Информация о модеме (перенесена со страницы Сеть) -- */
 		function infoVal(v) {
 			return (v != null && String(v).length > 0 && String(v) != '-') ? String(v) : '-';
