@@ -22,6 +22,13 @@
 
 document.head.append(E('style', {'type': 'text/css'},
 `
+/* Плавный рост/убывание полосок метрик (CSQ/RSRP/RSRQ/SINR/RSSI): их ширину
+   мы пересчитываем на каждый опрос, и без перехода она скакала рывком. Анимируем
+   только ширину - цвет/подпись меняем мгновенно, чтобы оценка не «догоняла».
+   0.4 с ease-out достаточно, чтобы движение читалось, но не тормозило. */
+.cbi-progressbar > div {
+  transition: width 0.4s ease-out;
+}
 .tginfo-modesw .cbi-button {
   margin: 2px 6px 2px 0;
   padding: 2px 10px;
