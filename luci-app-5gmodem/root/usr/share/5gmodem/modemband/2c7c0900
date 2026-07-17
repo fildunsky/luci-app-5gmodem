@@ -1,4 +1,4 @@
-_DEVICE=/dev/ttyUSB2
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 _DEFAULT_LTE_BANDS="1 2 3 5 8 34 38 39 40 41"
 _DEFAULT_5GNSA_BANDS="41 78 79"
 _DEFAULT_5GSA_BANDS="1 2 3 5 8 28 41 77 78 79"

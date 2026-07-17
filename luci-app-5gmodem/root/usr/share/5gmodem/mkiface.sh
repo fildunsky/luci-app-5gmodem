@@ -77,7 +77,12 @@ set_pdp_opt() {
 	_opt="$2"; _up="$3"
 	_v="$PDPARG"
 	[ -n "$_v" ] || _v=$(uci -q get "network.$1.$_opt")   # не из UI - оставить как есть
-	[ -n "$_v" ] || _v="ipv4"                             # новый интерфейс - по умолчанию ipv4
+	[ -n "$_v" ] || _v="$OLDPDP"                           # значение до пересоздания интерфейса
+	# По умолчанию IPV4V6, а НЕ IPV4: часть сетей/модемов (Tele2 + FM350) на
+	# IPV4-only вообще не активируют контекст (CGACT виснет), а IPV4V6 безопасен -
+	# на IPv4-only сети модем сам договаривается только на IPv4. Совпадает с
+	# дефолтом самого fibocom.sh (там тоже IPV4V6).
+	[ -n "$_v" ] || _v="ipv4v6"
 	case "$_v" in
 		ipv4v6|IPV4V6) _v=ipv4v6 ;;
 		*)             _v=ipv4 ;;
@@ -249,6 +254,12 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 	done
 	if [ -n "$FNET" ]; then
 		OLDAPN=$(uci -q get "network.$IF.apn")
+		# Сохраняем ТИП PDP через пересоздание: интерфейс удаляется ниже, а
+		# set_pdp_opt читает uci ПОСЛЕ удаления - без этого выбор пользователя
+		# (напр. IPV4V6, нужный Tele2/FM350) терялся и сбрасывался на дефолт.
+		OLDPDP=$(uci -q get "network.$IF.pdptype")
+		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
+		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -434,6 +445,10 @@ esac
 # --- (re)write the interface ---
 # keep the existing APN if the interface already exists, else a generic default
 OLDAPN=$(uci -q get "network.$IF.apn")
+# сохраняем тип PDP через пересоздание (см. коммент в ветке fibocom выше)
+OLDPDP=$(uci -q get "network.$IF.pdptype")
+[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
+[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"

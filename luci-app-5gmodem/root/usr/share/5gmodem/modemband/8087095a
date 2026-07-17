@@ -1,4 +1,4 @@
-_DEVICE=/dev/ttyACM2
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 
 getinfo() {
 	O=$(sms_tool -d $_DEVICE at "at+gmm")

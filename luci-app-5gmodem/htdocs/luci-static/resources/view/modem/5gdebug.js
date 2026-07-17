@@ -380,6 +380,7 @@ return view.extend({
 		   кнопки (создать/пересоздать) и для встроенной вьюхи ниже. */
 		var mIfName = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
 		var mIfExists = !!uci.get('network', mIfName);
+
 		/* Секция АКТИВНОГО модема (m_<usb-путь> с заменой не-буквенно-цифровых на
 		   '_') - в ней живут пер-модемные настройки, напр. mm_exclude. */
 		var mSec = (function() {
@@ -476,9 +477,9 @@ return view.extend({
 		};
 
 		o = s.option(form.ListValue, '_pdptype', _('IP type'),
-			_('IP type for the modem interface. IPv4 is the safe default: dual-stack (IPv4/IPv6) prevents some modems from connecting at all, and mobile operators rarely provide usable IPv6.'));
-		o.value('ipv4', _('IPv4 only (recommended)'));
-		o.value('ipv4v6', _('IPv4 and IPv6'));
+			_('IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to "IPv4 only" only if a modem has trouble with dual-stack.'));
+		o.value('ipv4v6', _('IPv4 and IPv6 (recommended)'));
+		o.value('ipv4', _('IPv4 only'));
 		o.write = function() {};
 		o.remove = function() {};
 		o.load = function(section_id) {
@@ -487,7 +488,7 @@ return view.extend({
 			var v = uci.get('network', mIfName, 'pdptype')
 				|| uci.get('network', mIfName, 'iptype')
 				|| uci.get('network', mIfName, 'pdp') || '';
-			return (String(v).toLowerCase() === 'ipv4v6') ? 'ipv4v6' : 'ipv4';
+			return (String(v).toLowerCase() === 'ipv4') ? 'ipv4' : 'ipv4v6';
 		};
 
 		o = s.option(form.Button, '_mkiface');
@@ -514,10 +515,10 @@ return view.extend({
 			// отличит это от «аргумент не передан» и молча сохранит ПРЕЖНИЙ APN -
 			// стереть его было бы невозможно.
 			var apnArg = apn || '-';
-			var pdp = 'ipv4';
+			var pdp = 'ipv4v6';
 			try {
 				var popt = this.map.lookupOption('_pdptype', sid);
-				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4'; } }
+				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4v6'; } }
 			} catch (e) {}
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
@@ -623,6 +624,38 @@ return view.extend({
 				ui.addNotification(null, E('p', _('Collecting logs failed') + ': ' + (err.message || err)), 'error');
 			});
 		};
+
+		/* --- Тест скорости - ОТДЕЛЬНОЙ секцией (стандартный разделитель-заголовок),
+		   ниже «Забыть модемы»/«Собрать логи» и выше блока «Обновление». Секция
+		   маппится на ту же анонимную секцию 5gmodem, что и выше, - LuCI рисует её
+		   отдельной плашкой с заголовком. Кнопка теста - в блоке «Приоритет
+		   интернета» на странице «Сеть»; тут только настройки эндпойнтов. */
+		var st = m.section(form.TypedSection, '5gmodem', _('Speed test'),
+			_('Settings for the speed-test button in the "Internet priority" block on the Network page. The test runs from the router over the active uplink.'));
+		st.anonymous = true;
+
+		o = st.option(form.Value, 'speedtest_url', _('Download source'),
+			_('Large-file URL for the download test. Pick a preset or enter your own. The default uses ~16 MB per run.'));
+		o.value('http://mirror.yandex.ru/debian/ls-lR.gz', 'Yandex (mirror.yandex.ru)');
+		o.value('https://speed.cloudflare.com/__down?bytes=100000000', 'Cloudflare');
+		o.placeholder = 'http://mirror.yandex.ru/debian/ls-lR.gz';
+		o.rmempty = true;
+
+		o = st.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
+			_('Endpoint that accepts and discards a POST body, for the upload test. In Russia the default (Cloudflare) is often unreachable over cellular - set a reachable one or leave upload unused.'));
+		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
+		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (public demo)');
+		o.rmempty = true;
+
+		o = st.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
+			_('Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead.'));
+		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
+		o.value('https://ip.wtf', 'ip.wtf');
+		o.value('http://ifconfig.me/ip', 'ifconfig.me');
+		o.value('https://icanhazip.com', 'icanhazip.com');
+		o.value('https://2ip.ru', '2ip.ru');
+		o.value('https://whoer.net', 'whoer.net');
+		o.rmempty = true;
 
 		/* ---------------- Информация о модеме (перенесена со страницы Сеть) -- */
 		function infoVal(v) {

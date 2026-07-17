@@ -1,4 +1,4 @@
 # +GTUSBMODE: 41
-_DEVICE=/dev/ttyUSB4
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 
 . $RES/_fibocom_fm350_common

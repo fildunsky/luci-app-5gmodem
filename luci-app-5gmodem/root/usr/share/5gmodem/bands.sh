@@ -201,6 +201,12 @@ bandtxt5g() {
 }
 
 _DEVICE=""
+# Признак «профиль модема реально подключён» (заменяет прежнюю проверку по
+# непустому _DEVICE). Профили больше НЕ прибивают _DEVICE=/dev/ttyXXX (это была
+# ловушка: на мультимодеме «запасной» порт - порт ДРУГОГО модема). Реальный порт
+# профилю задаёт этот скрипт ниже из автодетекта приложения; флаг нужен, чтобы
+# отличить «профиль загружен, порт назначим» от «профиля нет -> unsupported».
+_PROFILE_LOADED=""
 _DEFAULT_LTE_BANDS=""
 _DEFAULT_5GNSA_BANDS=""
 _DEFAULT_5GSA_BANDS=""
@@ -421,7 +427,7 @@ if [ -n "$_AMP" ]; then
 		fi
 	fi
 
-	[ -n "$_found" ] && . "$RES/$_found"
+	[ -n "$_found" ] && { . "$RES/$_found"; _PROFILE_LOADED=1; }
 else
 	# no active modem configured (single-modem legacy): scan for any profile.
 	_DEVS=$(awk '{gsub("="," ");
@@ -432,14 +438,19 @@ else
 	for _DEV in $_DEVS; do
 		if [ -e "$RES/$_DEV" ]; then
 			. "$RES/$_DEV"
+			_PROFILE_LOADED=1
 			break
 		fi
 	done
 fi
 
-if [ -n "$_DEVICE" ]; then
-	# prefer the AT port configured/detected by luci-app-5gmodem, fall back
-	# to the profile's default _DEVICE
+if [ -n "$_PROFILE_LOADED" ]; then
+	# Профиль подключён - назначаем ему AT-порт приложения (uci at_port, иначе
+	# detect.sh). Профили больше не содержат прибитого _DEVICE, поэтому источник
+	# порта тут ЕДИНСТВЕННЫЙ. Если порт недоступен, _DEVICE останется пустым ->
+	# _PORT_OK=0 -> статические списки без живых запросов (см. ниже). Это лучше
+	# «запасного» порта из профиля, который на мультимодеме принадлежал бы другому
+	# модему.
 	_ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 	[ -n "$_ATP" ] || _ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 	case "$_ATP" in

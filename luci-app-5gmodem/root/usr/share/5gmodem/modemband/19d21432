@@ -1,4 +1,4 @@
-_DEVICE=/dev/ttyUSB1
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 _DEFAULT_LTE_BANDS="1 3 7 8 20 28"
 _NAME="ZTE MF286"
 

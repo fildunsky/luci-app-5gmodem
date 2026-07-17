@@ -2425,3 +2425,63 @@ msgstr "Нет доступа в интернет. Для загрузки пр�
 
 msgid "The operator server did not respond to a test request, but the internet is up. Trying to download anyway..."
 msgstr "Сервер оператора не ответил на проверочный запрос, но интернет есть. Пробуем загрузить всё равно…"
+
+msgid "Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem."
+msgstr "Смена диапазонов ненадолго разрывает соединение: IP пропадает на ~15–20 секунд и возвращается автоматически. Для этого модема это нормально."
+
+msgid "Updating the profile list..."
+msgstr "Обновляем список профилей…"
+
+msgid "Could not refresh the list automatically. Press Refresh in a few seconds."
+msgstr "Не удалось обновить список автоматически. Нажмите «Обновить» через несколько секунд."
+
+msgid "Speed test"
+msgstr "Тест скорости"
+
+msgid "Testing speed…"
+msgstr "Проверка скорости…"
+
+msgid "Mbps"
+msgstr "Мбит/с"
+
+msgid "Test failed"
+msgstr "Ошибка теста"
+
+msgid "Measure the real download speed over the modem - a quick way to see whether carrier aggregation is actually working"
+msgstr "Замерить реальную скорость загрузки через модем — быстрый способ проверить, работает ли агрегация несущих на самом деле"
+
+msgid "Measure the real download/upload speed over the modem - a quick way to see whether carrier aggregation is actually working"
+msgstr "Замерить реальную скорость загрузки/отдачи через модем — быстрый способ проверить, работает ли агрегация несущих на самом деле"
+
+msgid "Speed test: download source"
+msgstr "Тест скорости: источник загрузки"
+
+msgid "Large-file URL for the download test, fetched over the modem. Pick a preset or enter your own. The default uses ~16 MB per run."
+msgstr "URL большого файла для теста загрузки (качается через модем). Выберите пресет или впишите свой. По умолчанию тратится ~16 МБ за запуск."
+
+msgid "Speed test: upload endpoint"
+msgstr "Тест скорости: эндпойнт отдачи"
+
+msgid "Endpoint that accepts and discards a POST body, for the upload test. In Russia the default (Cloudflare) is often unreachable over cellular - set a reachable one or leave upload unused."
+msgstr "Эндпойнт, принимающий и отбрасывающий тело POST, для теста отдачи. В РФ дефолт (Cloudflare) часто недоступен через сотовую сеть — укажите доступный или не пользуйтесь отдачей."
+
+msgid "Public IP service"
+msgstr "Сервис определения публичного IP"
+
+msgid "Service that returns your public IP, checked over the modem. Pick a preset or enter your own; if it fails, the modem WAN IP is shown instead."
+msgstr "Сервис, возвращающий ваш публичный IP (проверяется через модем). Выберите пресет или впишите свой; если не сработает, покажем WAN-IP модема."
+
+msgid "Settings for the speed-test button in the \"Internet priority\" block on the Network page. The test runs from the router over the active uplink."
+msgstr "Настройки кнопки теста скорости в блоке «Приоритет интернета» на странице «Сеть». Замер идёт с роутера через активный аплинк."
+
+msgid "Download source"
+msgstr "Источник загрузки"
+
+msgid "Large-file URL for the download test. Pick a preset or enter your own. The default uses ~16 MB per run."
+msgstr "URL большого файла для теста загрузки. Выберите пресет или впишите свой. По умолчанию тратится ~16 МБ за запуск."
+
+msgid "Upload endpoint"
+msgstr "Эндпойнт отдачи"
+
+msgid "Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead."
+msgstr "Сервис, возвращающий ваш публичный IP. Выберите пресет или впишите свой; если не сработает, покажем WAN-IP активного аплинка."

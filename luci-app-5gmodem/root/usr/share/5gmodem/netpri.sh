@@ -341,13 +341,57 @@ set)
 		CHANGED=1
 	done
 	[ "$CHANGED" = 1 ] || { echo '{"result":"ok","active":"'"$CH"'","changed":false}'; exit 0; }
-	# Apply exactly like LuCI "Save & Apply" on an interface's gateway-metric field:
-	# commit the new metrics and reload the network. netifd re-installs the default
-	# routes with the new priorities; a metric-only change does not tear down the
-	# link, so the internet just starts going through the chosen uplink.
+	# Персистентность: сохраняем метрики в конфиг (netifd возьмёт их на будущих
+	# событиях - передозвон, hotplug).
 	uci -q commit network
-	/etc/init.d/network reload >/dev/null 2>&1
-	echo '{"result":"ok","active":"'"$CH"'","changed":true}'
+	# ЖИВОЕ переключение БЕЗ `network reload`: приоритет аплинка - это МЕТРИКА
+	# default-маршрута, чистая операция таблицы маршрутизации. Меняем её напрямую
+	# через `ip route`, не трогая netifd и, главное, PDP-сессию модема - никакого
+	# передозвона и моргания IP. Метрика входит в идентичность маршрута, поэтому
+	# «сменить метрику» = удалить старый default через этот dev и добавить с новой
+	# (via сохраняем, если шлюз есть; у сотовых он часто on-link). Делаем и для
+	# IPv4, и для IPv6. netifd при своём следующем событии переустановит маршруты
+	# уже из обновлённого uci - итог совпадёт.
+	# Переустановить default-маршрут интерфейса $1 с метрикой $2 (v4 и v6). Шлюз
+	# берём у netifd (авторитетно), а НЕ из живой таблицы: у не-primary интерфейса
+	# default-маршрута может не быть. 0.0.0.0/:: = честный on-link (у сотовых
+	# point-to-point шлюза нет). У интерфейса с адресом /32 (Wi-Fi client, сотовый)
+	# шлюз не on-link - сперва добавляем прямой маршрут до самого шлюза (как netifd).
+	# Добавить default-маршрут интерфейса $1 с метрикой $2 (v4+v6). БЕЗ удаления -
+	# удаляем всё заранее (см. ниже). Шлюз берём у netifd; 0.0.0.0/:: = on-link.
+	_add_default_route() {
+		_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
+		_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
+		if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
+			# у адреса /32 (Wi-Fi client, сотовый) шлюз не on-link - сперва прямой
+			# маршрут до шлюза (как netifd), потом default через него.
+			ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
+			ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
+		else
+			# on-link default (сотовый point-to-point) - обязателен scope link.
+			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
+		fi
+		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
+			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
+	}
+	# СНОСИМ все default-маршруты управляемых интерфейсов, ПОТОМ добавляем с
+	# УНИКАЛЬНЫМИ метриками. Иначе два default с ОДИНАКОВОЙ метрикой конфликтуют в
+	# ядре ("RTNETLINK: File exists") - именно поэтому «переставить метрику» в лоб
+	# не срабатывало. chosen=1, остальные 20,21,22... (метрика default-маршрута
+	# должна быть уникальной).
+	for n in $(wan_nets); do
+		[ -n "$n" ] || continue
+		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
+		ip -4 route del default dev "$_d" 2>/dev/null
+		ip -6 route del default dev "$_d" 2>/dev/null
+	done
+	_add_default_route "$CH" 1
+	_m=20
+	for n in $(wan_nets); do
+		[ -n "$n" ] && [ "$n" != "$CH" ] && { _add_default_route "$n" "$_m"; _m=$((_m + 1)); }
+	done
+	echo '{"result":"ok","active":"'"$CH"'","changed":true,"mode":"live-route"}'
 	;;
 
 *)

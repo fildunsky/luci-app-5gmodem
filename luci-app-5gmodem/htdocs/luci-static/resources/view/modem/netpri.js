@@ -50,7 +50,164 @@ var CSS = `
 	box-shadow: inset 0 0 0 1px var(--proton-accent, #0095ff);
 	pointer-events: none;
 }
+/* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому
+   краю (сервис сверху, скорость по центру, публичный IP снизу). */
+.netpribar .netpri-btn.netpri-st { margin-left: auto; align-items: flex-end; text-align: right; }
+.netpribar .netpri-st .netpri-st-speed { display: flex; align-items: center; gap: .15em; }
+.netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
+.netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
+/* фаза теста подсвечивает карточку: загрузка - зелёным, отдача - синим. Плавный
+   переход цвета + тянущиеся цифры (анимируются в JS). */
+.netpribar .netpri-st { transition: border-color .3s ease, box-shadow .3s ease; }
+.netpribar .netpri-st.st-dl { border-color: #2ea043; box-shadow: inset 0 0 0 1px #2ea043; }
+.netpribar .netpri-st.st-ul { border-color: #0095ff; box-shadow: inset 0 0 0 1px #0095ff; }
+.netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
 `;
+
+var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
+
+/* Состояние карточки теста скорости - модульное, чтобы переживать перерисовку
+   бара 5-секундным поллом. phase: idle|running|done|fail. */
+var _st = { phase: 'idle', service: '', down: null, up: null, ip: '' };
+
+function stArrow(name) {
+	return E('img', { 'class': 'netpri-st-arrow', 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
+}
+
+/* содержимое средней строки (скорость) по фазе. Во время загрузки показываем
+   ЖИВОЕ число (растёт в реальном времени), во время отдачи - готовый download и
+   «…» у upload, по готовности - оба числа. */
+function stSpeedContent() {
+	var sep = function() { return E('span', { 'style': 'opacity:.4; margin:0 .35em;' }, '|'); };
+	var unit = function() { return E('span', { 'class': 'netpri-st-unit' }, _('Mbps')); };
+	if (_st.phase === 'running') {
+		/* показываем ТЕКУЩЕЕ анимированное число (_liveDisplay), чтобы 5-секундная
+		   перерисовка бара не сбрасывала его в 0 посреди теста. */
+		if (_st.upPhase) {
+			var d = (_st.down != null) ? String(_st.down) : '0';
+			return [ stArrow('cdown'), E('span', {}, ' ' + d), sep(),
+				stArrow('cup'), E('span', { 'class': 'netpri-st-live' }, ' 0'), unit() ];
+		}
+		var lv = (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1);
+		return [ stArrow('cdown'), E('span', { 'class': 'netpri-st-live' }, ' ' + lv), unit() ];
+	}
+	if (_st.phase === 'fail') { return [ E('span', {}, _('Test failed')) ]; }
+	if (_st.phase === 'done') {
+		var dn = (_st.down != null) ? String(_st.down) : '—';
+		var up = (_st.up != null) ? String(_st.up) : '—';
+		return [ stArrow('cdown'), E('span', {}, ' ' + dn), sep(),
+			stArrow('cup'), E('span', {}, ' ' + up), unit() ];
+	}
+	return [ E('span', {}, '⚡ ' + _('Speed test')) ];
+}
+
+/* три строки карточки: сервис (сверху), скорость (центр), публичный IP (снизу) */
+function stCardInner() {
+	return [
+		E('span', { 'class': 'netpri-sub' }, _st.service || _('Speed test')),
+		E('span', { 'class': 'netpri-name netpri-st-speed' }, stSpeedContent()),
+		_st.ip ? E('span', { 'class': 'netpri-ip' }, _st.ip)
+		       : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
+	];
+}
+
+function stCard() {
+	return E('button', {
+		'class': 'btn cbi-button netpri-btn netpri-st',
+		'data-tooltip': _('Measure the real download/upload speed over the modem - a quick way to see whether carrier aggregation is actually working'),
+		'click': function() { runSpeedtest(); }
+	}, stCardInner());
+}
+
+/* перерисовать ТОЛЬКО внутренности карточки (её саму мог пересоздать поллинг
+   бара - поэтому ищем актуальную в DOM каждый раз). */
+function patchStCard() {
+	var card = document.querySelector('.netpri-st');
+	if (!card) { return; }
+	while (card.firstChild) { card.removeChild(card.firstChild); }
+	stCardInner().forEach(function(n) { card.appendChild(n); });
+}
+
+/* Плавно «докручиваем» показанное число до target (за ~0.9 c, к следующему тику
+   поллинга) - чтобы цифры росли, а не прыгали. */
+var _liveDisplay = 0;
+var _liveRaf = null;
+function animateLive(target) {
+	var el = document.querySelector('.netpri-st .netpri-st-live');
+	if (!el) { _liveDisplay = target; return; }
+	var from = _liveDisplay, to = (target != null ? target : 0), t0 = null, dur = 900;
+	if (_liveRaf) { window.cancelAnimationFrame(_liveRaf); }
+	var step = function(ts) {
+		if (t0 === null) { t0 = ts; }
+		var p = Math.min((ts - t0) / dur, 1);
+		var v = from + (to - from) * p;
+		el.textContent = ' ' + v.toFixed(1);
+		_liveDisplay = v;
+		if (p < 1) { _liveRaf = window.requestAnimationFrame(step); }
+		else { _liveDisplay = to; _liveRaf = null; }
+	};
+	_liveRaf = window.requestAnimationFrame(step);
+}
+
+/* перерисовать карточку с учётом фазы: полный ребилд только при СМЕНЕ фазы
+   (иначе анимация числа сбрасывалась бы каждый тик); подсветка зелёным (загрузка)
+   / синим (отдача); во время загрузки - тянем живое число. */
+var _renderedKey = '';
+function refreshStCard() {
+	var key = _st.phase + (_st.upPhase ? ':up' : '');
+	if (key !== _renderedKey) {
+		patchStCard();
+		_renderedKey = key;
+		if (_st.phase === 'running' && !_st.upPhase) { _liveDisplay = 0; }
+	}
+	var card = document.querySelector('.netpri-st');
+	if (card) {
+		card.classList.toggle('st-dl', _st.phase === 'running' && !_st.upPhase);
+		card.classList.toggle('st-ul', _st.phase === 'running' && !!_st.upPhase);
+	}
+	if (_st.phase === 'running' && !_st.upPhase) { animateLive(_st.live || 0); }
+}
+
+function runSpeedtest() {
+	if (_st.phase === 'running') { return; }
+	_st.phase = 'running'; _st.live = 0; _st.upPhase = false;
+	_st.down = null; _st.up = null; _st.ip = '';
+	_renderedKey = ''; _liveDisplay = 0;
+	refreshStCard();
+	fs.exec(SPEEDBIN, [ 'start' ]).then(function() {
+		var tries = 0;
+		var poll = function() {
+			return L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
+				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+				if (j.service) { _st.service = j.service; }
+				if (j.running) {
+					_st.phase = 'running';
+					_st.upPhase = (j.phase === 'up');
+					if (j.live_down != null) { _st.live = j.live_down; }
+					if (j.down_mbps != null) { _st.down = j.down_mbps; }
+					refreshStCard();
+					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
+						return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
+					}
+				}
+				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; }
+				else { _st.phase = 'fail'; }
+				_renderedKey = ''; refreshStCard();
+			});
+		};
+		return poll();
+	}).catch(function() { _st.phase = 'fail'; _renderedKey = ''; refreshStCard(); });
+}
+
+/* подтянуть начальную подпись сервиса и последний результат (если был) */
+function stInit() {
+	L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
+		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		if (j.service) { _st.service = j.service; }
+		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; }
+		patchStCard();
+	});
+}
 
 function ensureCss() {
 	if (!document.getElementById('netpri-css')) {
@@ -139,16 +296,15 @@ function buildBar(list, redraw) {
 			'click': function(ev) {
 				var ifc = ev.currentTarget.getAttribute('data-iface');
 				if (ifc === active) { return; }
-				ui.showModal(null, E('p', { 'class': 'spinning' },
-					_('Switching the primary uplink…')));
+				/* Переключение МГНОВЕННОЕ (живой ip route, без передозвона модема),
+				   поэтому попап-спиннер не нужен. Оптимистично подсвечиваем выбранную
+				   карточку сразу, затем применяем и перечитываем реальное состояние
+				   (метрики уже в uci -> activeIface подсветит верную карточку). */
+				var card = ev.currentTarget, row = card.parentNode;
+				if (row) { row.querySelectorAll('.netpri-btn.active').forEach(function(b) { b.classList.remove('active'); }); }
+				card.classList.add('active');
 				L.resolveDefault(fs.exec(BIN, [ 'set', ifc ]), {}).then(function() {
-					/* Выбранный интерфейс уже выделен (metric=1). Модем может пере-
-					   набирать соединение и вернуть IP позже — это подхватит постоянный
-					   поллинг бара, без перезагрузки страницы. Здесь только быстро
-					   убираем модалку и перерисовываем актуальное состояние. */
-					window.setTimeout(function() {
-						loadList().then(function(l2) { ui.hideModal(); redraw(l2); });
-					}, 1200);
+					loadList().then(function(l2) { redraw(l2); });
 				});
 			}
 		}, [
@@ -160,6 +316,9 @@ function buildBar(list, redraw) {
 			     : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
 		]);
 	});
+	/* Карточка теста скорости - последним элементом ряда, прижата вправо (CSS
+	   margin-left:auto). Строится из модульного _st, поэтому переживает перерисовку. */
+	btns.push(stCard());
 	var collapsed = true;
 	try { collapsed = (localStorage.getItem('netpri-collapsed') !== '0'); } catch (e) {}
 	return E('div', { 'class': 'netpribar' + (collapsed ? ' collapsed' : '') }, [
@@ -196,6 +355,7 @@ return baseclass.extend({
 			if (list && list.length) { redraw(list); }
 		};
 		L.resolveDefault(loadList()).then(apply);
+		stInit();   /* подпись сервиса + последний результат теста скорости */
 		/* wrap возвращается СИНХРОННО, а в DOM его вставляет вьюха ПОЗЖЕ. Поэтому
 		   «нет в DOM» на первых тиках - это ещё не «блок убрали»: раньше поллер в
 		   такой момент снимал сам себя НАВСЕГДА, и блок оставался пустым div'ом -
@@ -223,6 +383,7 @@ return baseclass.extend({
 				else { wrap.appendChild(fresh); }
 			};
 			redraw(list);
+			stInit();   /* подпись сервиса + последний результат теста скорости */
 			/* Keep the bar live with a steady poll: the operator name (bounded
 			   AT+COPS in the background) resolves after a few seconds, and — the
 			   point here — a modem's IP that comes back AFTER re-dialing (which can
