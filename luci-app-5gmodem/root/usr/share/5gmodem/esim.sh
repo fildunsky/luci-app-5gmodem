@@ -248,6 +248,24 @@ nickname)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
 	do_lpac 45 profile nickname "$2" "$3"
 	;;
+netcheck)
+	# Есть ли у роутера доступ в интернет для загрузки профиля? Загрузка идёт с
+	# SM-DP+ оператора по HTTPS, и без сети lpac просто молча висит до таймаута.
+	# Проверяем ИМЕННО SM-DP+ из activation code (LPA:1$HOST$ID -> 2-е поле $),
+	# а не абстрактный хост: у него может быть доступ, а до SM-DP+ - фаервол.
+	# Возврат: {"net":1} - всё ок; {"net":1,"smdp":0} - интернет есть, но SM-DP+
+	# не ответил; {"net":0} - интернета нет вовсе.
+	_host=$(echo "$2" | awk -F'[$]' '{print $2}')
+	if [ -n "$_host" ] && curl -sS -m 15 -o /dev/null "https://$_host/" 2>/dev/null; then
+		echo '{"net":1,"smdp":1}'
+	elif curl -sS -m 10 -o /dev/null https://www.gstatic.com/generate_204 2>/dev/null; then
+		# интернет есть; SM-DP+ мог не ответить на GET корня - это не всегда
+		# ошибка (часть серверов отвечает только на RSP-эндпоинты), но флажок даём
+		[ -n "$_host" ] && echo '{"net":1,"smdp":0}' || echo '{"net":1,"smdp":1}'
+	else
+		echo '{"net":0}'
+	fi
+	;;
 download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
 	O=$(do_lpac 240 profile download -a "$2"); flush_notifications; echo "$O"

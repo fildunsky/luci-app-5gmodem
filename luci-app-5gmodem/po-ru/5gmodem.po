@@ -2416,3 +2416,12 @@ msgstr "Профиль добавлен. Перезагружаем модем �
 
 msgid "eSIM profile added and applied."
 msgstr "Профиль eSIM добавлен и применён."
+
+msgid "Checking internet access..."
+msgstr "Проверяем доступ в интернет…"
+
+msgid "No internet access. The router must be online to download an eSIM profile from the operator."
+msgstr "Нет доступа в интернет. Для загрузки профиля eSIM с сервера оператора роутер должен быть онлайн."
+
+msgid "The operator server did not respond to a test request, but the internet is up. Trying to download anyway..."
+msgstr "Сервер оператора не ответил на проверочный запрос, но интернет есть. Пробуем загрузить всё равно…"

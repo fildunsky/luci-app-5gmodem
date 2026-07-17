@@ -203,6 +203,31 @@ return view.extend({
 		var inp = document.getElementById('esim-code');
 		var code = inp ? String(inp.value || '').trim() : '';
 		if (!code) { return; }
+		var self = this;
+		// Профиль качается с сервера оператора (SM-DP+) по HTTPS. Без интернета
+		// lpac молча висит до таймаута, а пользователь не понимает, почему. Сначала
+		// проверяем доступ - и к SM-DP+ из кода, и к сети вообще.
+		ui.showModal(_('Add eSIM profile'), [
+			E('p', { 'class': 'spinning' }, _('Checking internet access...')),
+		]);
+		L.resolveDefault(fs.exec_direct(ESIM, [ 'netcheck', code ]), '').then(function(out) {
+			var nc = {}; try { nc = JSON.parse(out || '{}'); } catch (e) {}
+			if (!nc.net) {
+				ui.hideModal();
+				notify(false, null, _('No internet access. The router must be online to download an eSIM profile from the operator.'));
+				return;
+			}
+			if (nc.smdp === 0) {
+				// сеть есть, но SM-DP+ не ответил - не блокируем (мог не отвечать
+				// на GET корня), но честно предупреждаем
+				ui.addNotification(null, E('p',
+					_('The operator server did not respond to a test request, but the internet is up. Trying to download anyway...')), 'warning');
+			}
+			self._doDownload(code, inp);
+		});
+	},
+
+	_doDownload: function(code, inp) {
 		ui.showModal(_('Add eSIM profile'), [
 			E('p', { 'class': 'spinning' }, _('Downloading eSIM profile... This can take a minute, do not leave the page.')),
 		]);
