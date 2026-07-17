@@ -40,6 +40,27 @@ document.head.append(E('style', {'type': 'text/css'},
   box-sizing: border-box;
 }
 
+/* Комбинации 3G - ИСКЛЮЧЕНИЕ из фиксированной ширины выше: та рассчитана на
+   короткие номера диапазонов ("B1"), а у комбинаций подписи длинные
+   ("2100 + 1900 + 850") - в 3.4em их бы расплющило. */
+#bands-3g .cbi-button.combo3g {
+  width: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-variant-numeric: normal;
+}
+
+/* Подсказки (data-tooltip): длинный текст в одну строку растягивал страницу и
+   давал горизонтальный скролл. Разрешаем перенос и ограничиваем ширину.
+   Селекторы оба: LuCI рисует подсказку либо элементом .cbi-tooltip, либо
+   псевдоэлементом ::after - в зависимости от версии/темы. */
+.cbi-tooltip,
+[data-tooltip]::after {
+  white-space: normal !important;
+  max-width: min(90vw, 32em) !important;
+  overflow-wrap: anywhere;
+}
+
 /* Анти-джиттер: фиксируем раскладку таблиц и размеры иконок, чтобы при
    обновлении данных строки не пересчитывали размер и страница не прыгала.
    Ключевое: иконка сигнала пересоздаётся каждый опрос через innerHTML -
@@ -882,9 +903,33 @@ function loadBandsModemband() {
 		if (note) { note.style.display = 'none'; }
 		bandsGated = false;
 		bandSource = 'modemband';
-		// modemband (вендорные AT) не управляет 3G/UTRAN - прячем строку «Диапазоны
-		// 3G», чтобы она не висела пустой и не моргала с re-reveal.
-		var row3g = document.getElementById('bands3gn'); if (row3g) { row3g.style.display = 'none'; }
+		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
+		   У LTE прошивка принимает битовую маску (любой набор), а у 3G - номер
+		   ГОТОВОЙ КОМБИНАЦИИ из таблицы модема (Telit: 2-е поле #BND). Набрать
+		   произвольный набор нельзя, поэтому галочки тут врали бы: пользователь
+		   снял бы одну, а модем применил бы совсем другой набор. Бэкенд отдаёт
+		   combos3g=[{id,label}] + current3g; профиль без 3G их не отдаёт вовсе -
+		   тогда строку прячем, как раньше. */
+		var row3g = document.getElementById('bands3gn');
+		var c3g = document.getElementById('bands-3g');
+		if (c3g && j.combos3g && j.combos3g.length) {
+			if (row3g) { row3g.style.display = ''; }
+			c3g.innerHTML = '';
+			/* Кнопки как у «Режима сети», а НЕ как у LTE: там переключатели (можно
+			   отметить любой набор), а комбинация 3G выбирается РОВНО ОДНА - клик
+			   сразу применяет её. Подписи длинные («2100 + 1900 + 850») - это
+			   нормально, ряд переносится. */
+			j.combos3g.forEach(function(o) {
+				var on = (String(j.current3g) === String(o.id));
+				c3g.appendChild(E('button', {
+					'class': 'btn cbi-button combo3g' + (on ? ' cbi-button-action important' : ''),
+					'data-combo3g': String(o.id),
+					'click': function(ev) { ev.preventDefault(); setBands3gAT(o.id, o.label); }
+				}, o.label));
+			});
+		} else if (row3g) {
+			row3g.style.display = 'none';
+		}
 
 		var supLte = (j.supported || []).map(function(o) { return o.band; });
 		var supNsa = (j.supported5gnsa || []).map(function(o) { return o.band; });
@@ -1249,6 +1294,85 @@ function setNetModeAT(id, label) {
 	}).catch(function(err) {
 		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + err.message), 'error');
+	});
+}
+
+/* Таблица «Антенные порты» (bands.sh getantports -> строки "порт:rsrp:rsrq").
+   Показываем блок ТОЛЬКО если модем реально ответил: команда вендорная (у Telit
+   это AT#LAPS), у большинства модемов её нет.
+   Практический смысл: воткнул антенну - нажал «Обновить» - увидел, ожил ли порт.
+   Поэтому значения не только при загрузке, но и по кнопке. */
+function fillAntPorts() {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'getantports' ]), '')
+		.then(function(out) {
+			var rows = String(out || '').trim().split('\n').filter(function(l) {
+				return /^\d+:-?\d+:-?\d+$/.test(l.trim());
+			});
+			var block = document.getElementById('antports-block');
+			var tbl = document.getElementById('antports-table');
+			if (!block || !tbl) { return; }
+			if (!rows.length) { block.style.display = 'none'; return; }
+			block.style.display = '';
+			tbl.innerHTML = '';
+			tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
+				E('th', { 'class': 'th left' }, _('Antenna port')),
+				E('th', { 'class': 'th left' }, _('RSRP')),
+				E('th', { 'class': 'th left' }, _('RSRQ')),
+				E('th', { 'class': 'th left' }, _('State'))
+			]));
+			rows.forEach(function(l) {
+				var p = l.trim().split(':');
+				var rsrp = parseInt(p[1], 10);
+				/* Оценка по RSRP. Шкала LTE: -44 (отлично) … -140 (ничего). Около
+				   -134 и ниже антенны фактически нет - именно так выглядит
+				   неподключённый пигтейл (проверено на LM960). */
+				var st, cls;
+				if (isNaN(rsrp))        { st = '-';                 cls = ''; }
+				else if (rsrp <= -130)  { st = _('no antenna');     cls = 'color:#c00;font-weight:600'; }
+				else if (rsrp <= -110)  { st = _('weak');           cls = 'color:#c80'; }
+				else                    { st = _('OK');             cls = 'color:#080'; }
+				tbl.appendChild(E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td left' }, [
+						/* Порты нумеруются с 0, как в ответе модема. Подписи
+						   пигтейлов (PRI/DIV) у каждой платы свои - не выдумываем
+						   соответствие, показываем номер, который дал модем. */
+						_('Port %d').format(parseInt(p[0], 10))
+					]),
+					E('td', { 'class': 'td left' }, p[1] + ' dBm'),
+					E('td', { 'class': 'td left' }, p[2] + ' dB'),
+					E('td', { 'class': 'td left', 'style': cls }, st)
+				]));
+			});
+			tbl.appendChild(E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td left', 'colspan': '4' }, [
+					E('button', {
+						'class': 'btn cbi-button',
+						'click': function(ev) { ev.preventDefault(); fillAntPorts(); }
+					}, _('Refresh'))
+				])
+			]));
+		});
+}
+function initAntPorts() { fillAntPorts(); }
+
+/* Выбор комбинации диапазонов 3G (одна из; см. combos3g в bands.sh).
+   Как и смена режима сети, требует перезапуска модема - #BND у Telit
+   сохраняется в NVRAM и подхватывается при старте. */
+function setBands3gAT(id, label) {
+	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function() {
+		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
+	}).then(function() {
+		ui.hideModal();
+		if (ui.addTimeLimitedNotification) {
+			ui.addTimeLimitedNotification(null, E('p', _('3G bands set: %s').format(label)), 5000, 'info');
+		} else {
+			ui.addNotification(null, E('p', _('3G bands set: %s').format(label)), 'info');
+		}
+		window.setTimeout(loadBandsModemband, 4000);
+	}).catch(function(err) {
+		ui.hideModal();
+		ui.addNotification(null, E('p', _('Failed to set 3G bands') + ': ' + err.message), 'error');
 	});
 }
 
@@ -1944,7 +2068,17 @@ simDialog: baseclass.extend({
 						   перед C). Берём число и приписываем " °C". */
 						var raw = String(t).replace('&deg;', '°');
 						var m = raw.match(/-?\d+(?:\.\d+)?/);
-						view.textContent = m ? (m[0] + ' °C') : raw;
+						var txt = m ? (m[0] + ' °C') : raw;
+						/* Есть И градусы, И уровень троттлинга (Telit LM960 отдаёт оба:
+						   #TEMPSENS=2 -> °C, #TMLVL? -> 0..3) - показываем через запятую.
+						   Уровень 0 («норма») не пишем: строка «28 °C, норма» только
+						   шумит, а вот «28 °C, перегрев» - важное предупреждение. */
+						var lv2 = parseInt(json.mtherm, 10);
+						if (!isNaN(lv2) && lv2 >= 1 && lv2 <= 3) {
+							txt += ', ' + [ _('Normal'), _('Warm'), _('Hot'), _('Critical') ][lv2];
+							view.title = _('Modem thermal throttling level: %d of 3').format(lv2);
+						}
+						view.textContent = txt;
 						}
 					}
 
@@ -2328,7 +2462,7 @@ simDialog: baseclass.extend({
 							'id': 'btn-power-reboot',
 							'class': 'btn cbi-button cbi-button-negative',
 							'style': 'display:none',
-							'data-tooltip': _('Hardware power-cycle via the board power line (GPIO). Cuts power to the modem slot for a few seconds; it re-appears in ~1 min. Use when a full restart is not enough. On some boards affects only the M.2 slot.'),
+							'data-tooltip': _('Cuts power to the modem slot for a few seconds - as if you unplugged it. The modem comes back in ~1 min. Use when a full restart did not help.'),
 							'click': ui.createHandlerFn(this, function() { return rebootModemPower(); })
 						}, _('Power restart'))
 					]),
@@ -2487,6 +2621,17 @@ simDialog: baseclass.extend({
 					]);
 				})))
 				])
+			]),
+
+			/* Сигнал по антенным портам (AT#LAPS). Есть не у всех модемов -
+			   блок скрыт и показывается из initAntPorts() только когда команда
+			   реально ответила. Заполняется там же. */
+			E('div', { 'id': 'antports-block', 'style': 'display:none' }, [
+				collapsibleSection('ant', _('Antenna ports'), [
+					E('table', { 'class': 'table', 'id': 'antports-table' }, []),
+					E('div', { 'style': 'font-size:85%;opacity:.75;padding:.4em 0 0 0' },
+						_('RSRP/RSRQ measured separately on each LTE antenna port. A port with RSRP near -140 dBm has no antenna connected (or the cable is bad). LTE only: in 3G the table stays empty.'))
+				])
 			])
 		]);
 		}, o, this);
@@ -2495,6 +2640,8 @@ simDialog: baseclass.extend({
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);
+			// и таблицу антенных портов - если модем отвечает на AT#LAPS
+			window.setTimeout(initAntPorts, 0);
 			return node;
 		});
 	},

@@ -313,7 +313,7 @@ return view.extend({
 		return uci.save().then(function() {
 			return uci.apply();
 		}).then(function() {
-			if (typeof self._doRefresh == 'function') { self._doRefresh(false); }
+			if (typeof self._doRefresh == 'function') { self._doRefresh(false, true); }
 		});
 	},
 
@@ -636,7 +636,7 @@ return view.extend({
 	handleRefresh: function(ev) {
 		// Обновляем только список сообщений, без перезагрузки всей страницы.
 		// Фолбэк на reload, если doRefresh ещё не готов (ранний клик).
-		if (typeof this._doRefresh == 'function') { return this._doRefresh(false); }
+		if (typeof this._doRefresh == 'function') { return this._doRefresh(false, true); }
 		window.location.reload();
 	},
 
@@ -720,12 +720,46 @@ return view.extend({
 					}
 			}
 
-		/* doRefresh(updateCount): читает статус + входящие и перерисовывает
+		/* Индикатор загрузки списка. Чтение входящих (sms_tool recv) на части
+		   модемов идёт до ~10 c, а счётчик из status приходит сразу - выглядело
+		   так, будто сообщений нет, и обратной связи не было никакой.
+		   Строку ДОБАВЛЯЕМ, а не перерисовываем таблицу: если обновление не
+		   удастся, уже показанный список должен остаться на месте. */
+		function showLoading() {
+			var table = document.getElementById('smsTable');
+			if (!table || document.getElementById('smsLoadingRow')) { return; }
+			var row = table.insertRow(1);
+			row.id = 'smsLoadingRow';
+			var cell = row.insertCell(0);
+			cell.colSpan = 12;
+			cell.appendChild(E('span', { 'class': 'spinning' }, _('Loading messages…')));
+		}
+		function hideLoading() {
+			var r = document.getElementById('smsLoadingRow');
+			if (r && r.parentNode) { r.parentNode.removeChild(r); }
+		}
+
+		/* doRefresh(updateCount, busy): читает статус + входящие и перерисовывает
 		   таблицу. Вызывается один раз при заходе и затем по таймеру
 		   (poll.add) - новые SMS появляются сами, без ручного «Обновить».
 		   updateCount=true только на первом вызове: обновление счётчика
-		   sms_count дёргает uci.apply(), которое нельзя гонять каждые N сек. */
-		function doRefresh(updateCount) {
+		   sms_count дёргает uci.apply(), которое нельзя гонять каждые N сек.
+		   busy=true - показать индикатор: только при заходе на страницу и по
+		   кнопке «Обновить». На тиках автополлинга индикатор не нужен - он бы
+		   мигал каждые 15 секунд. */
+		/* Индикатор снимаем ТОЛЬКО когда цепочка доработала и список отрисован.
+		   Раньше hideLoading() стоял в начале обработчика ответа: индикатор гас в
+		   момент получения данных, а сообщения появлялись через пару секунд - и
+		   выглядело, будто всё загрузилось, но пусто. */
+		function doRefresh(updateCount, busy) {
+			if (busy) { showLoading(); }
+			var p = doRefreshInner(updateCount);
+			if (!p || typeof p.then != 'function') { hideLoading(); return Promise.resolve(); }
+			return p.then(function(r) { hideLoading(); return r; },
+			              function(e) { hideLoading(); throw e; });
+		}
+
+		function doRefreshInner(updateCount) {
 		// Re-read the storage and port FRESH on every tick (not the values
 		// captured once at render): otherwise switching SIM<->Modem storage has
 		// no effect until a full page reload, and an empty storage value read at
@@ -746,8 +780,10 @@ return view.extend({
 							var used = res.substring(17, res.indexOf("total"));
 							var u = used.replace ( /[^\d.]/g, '' );
 
-						L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , '-f' , '%Y-%m-%d %H:%M' , '-j' , 'recv' , '2>/dev/null' ]))
+						return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , '-f' , '%Y-%m-%d %H:%M' , '-j' , 'recv' , '2>/dev/null' ]))
 							.then(function(res2) {
+								// список пришёл (или не пришёл) - индикатор снимаем в любом
+								// случае, иначе он висел бы вечно при пустом/сбойном ответе
 								if (res2) {
 
  									var table = document.getElementById('smsTable');
@@ -939,6 +975,7 @@ return view.extend({
 					// «укажите порт» (это ввод в заблуждение и мигало бы каждые
 					// 15 c) и НЕ трогаем уже показанный список - ждём следующий
 					// тик. t/u не определены - к ним не обращаемся.
+					// Индикатор снимаем: до чтения списка дело не дошло.
 				}
 
 			if (document.getElementById('msg') && typeof u !== 'undefined') {
@@ -946,7 +983,7 @@ return view.extend({
 			    }
     		});
 		}
-		doRefresh(true);
+		doRefresh(true, true);
 		/* Автообновление входящих: новые SMS появляются сами, без ручного
 		   «Обновить». poll снимается автоматически при уходе со страницы. */
 		poll.add(function() { return doRefresh(false); }, 15);

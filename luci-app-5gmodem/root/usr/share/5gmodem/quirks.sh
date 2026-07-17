@@ -40,6 +40,17 @@ ussd_raw_for() {
 		# AT-портов. Причина не в кодировании: модем data-only, SS в прошивке
 		# отсутствует. Настройку не трогаем - менять её здесь бессмысленно.
 		0e8d:7127) return ;;
+		# Telit LM960A18 (1bc7:1040): USSD не работает, как и у FM350. Проверено
+		# на всех трёх AT-портах (ttyUSB2/3/4), модем при этом ЗАРЕГИСТРИРОВАН во
+		# всех доменах, включая CS (+CREG: 2,1):
+		#   AT+CUSD=? -> (0-2)                    - прошивка заявляет поддержку
+		#   AT+CUSD=1,"*100#",15 -> НИЧЕГО: ни OK, ни ERROR, ни +CUSD URC
+		#                                           (ждали 60 с), порт на время
+		#                                           запроса залипает
+		#   AT+CLCC -> ERROR                      - голосовых вызовов нет вовсе
+		# Модуль по даташиту Telit - "Advanced LTE data card", SS/voice в нём
+		# отсутствуют. Настройку не трогаем: менять её бессмысленно.
+		1bc7:1040) return ;;
 	esac
 
 	# неизвестный модем - ничего не навязываем
@@ -55,12 +66,21 @@ ussd_raw_for() {
 #
 #   gtdualsim - Fibocom: AT+SIMTYPE? (тип SIM) + AT+GTDUALSIM (слоты 0/1)
 #   ceiswitchsim - Compal/SG500M2-X: AT+CEISWITCHSIM (физ. слоты 1/2 + CD-пин)
+#   qmi - слоты живут в QMI UIM (qmicli --uim-get-slot-status/--uim-switch-slot),
+#         а по AT прошивка их не отдаёт
 #   none - слотов нет/не умеет: не спрашивать НИЧЕГО
 #   "" - не знаем: прежнее поведение (пробуем по очереди)
 #
 # $1 = модель (AT+CGMM), $2 = vidpid
 sim_slots_via() {
 	case "$2" in
+		# Telit LM960A18 (1bc7:1040) - Dual SIM Single Standby по даташиту.
+		# AT-путь ТУПИКОВЫЙ, проверено живьём: #SIMSELECT/#DUALSIM/#SIMSWITCH -
+		# ERROR, а #SIMINCFG (отдаёт "1,0" и "2,0") - это конфигурация пина SIMIN
+		# через GPIO, а не выбор слота. Зато QMI UIM отдаёт правду:
+		#   qmicli --uim-get-slot-status -> "2 physical slots found",
+		#   слот 1 present/active (ICCID виден), слот 2 absent/inactive.
+		1bc7:1040) echo qmi; return ;;
 		# Fibocom FM350-GL: проверено - AT+GTDUALSIM отдаёт (0-1), AT+SIMTYPE?
 		# различает USIM/eSIM. Именно на нём это и писалось.
 		0e8d:7127) echo gtdualsim; return ;;

@@ -246,11 +246,18 @@ list)
 			_mp=""; [ -n "$_ms" ] && _mp=$(uci -q get "5gmodem.$_ms.path")
 			if [ -n "$_mp" ] && ! echo "$PRESENT_PATHS" | grep -q " $_mp "; then continue; fi
 		fi
-		# NOTE: no IP filter - keep every uplink visible even without an address, so
-		# a modem that briefly drops its IP while re-dialing after a switch does not
-		# vanish from the bar (which used to leave only Wi-Fi looking "selected").
+		# NOTE: no IP filter for modems/Wi-Fi - keep them visible even without an
+		# address, so a modem that briefly drops its IP while re-dialing after a
+		# switch does not vanish from the bar (which used to leave only Wi-Fi
+		# looking "selected").
 		ip=$(iface_ip "$n")
 		t=$(iface_type "$n")
+		# ИСКЛЮЧЕНИЕ - проводной WAN-порт. У него нет фазы «переподнимается»: нет
+		# адреса = в порт ничего не воткнуто (или линк мёртв), и назначать его
+		# приоритетом бессмысленно - трафика через него не будет. У пользователей
+		# без провода он висел в панели постоянно и только мешал. Модемов и Wi-Fi
+		# это НЕ касается: там пустой IP - нормальное временное состояние.
+		[ "$t" = wan ] && [ -z "$ip" ] && continue
 		[ "$t" = modem ] && [ -z "$(operator_cached "$n")" ] && NEEDREFRESH=1
 		# small top line: modem model / Wi-Fi interface name / device for the rest
 		# (never empty, so every button keeps the same three-line height)

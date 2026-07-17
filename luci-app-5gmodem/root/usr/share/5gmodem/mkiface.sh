@@ -34,6 +34,23 @@ REQ="${2:-auto}"
 # молча возвращал прежнее значение.
 APNARG="$3"
 
+# ШТАМП ВЛАДЕЛЬЦА: запомнить В САМОМ ИНТЕРФЕЙСЕ, для какого модема он создан
+# (стабильный USB-путь, а не номер устройства). $1 = имя интерфейса, $2 = путь.
+#
+# ЗАЧЕМ. Связь «модем -> интерфейс» была ОДНОСТОРОННЕЙ: 5gmodem.m_<путь>.network.
+# Стоило секции модема исчезнуть (кнопка «Забыть», подмена модема), и интерфейс
+# оставался сиротой, привязанной к device-ноде (/dev/cdc-wdm0). Ноды не
+# стабильны: следующий модем в тот же разъём получал ту же ноду и МОЛЧА
+# наследовал чужие настройки. Живой случай: SIM7600 сменили на Telit LM960 -
+# новый модем подхватил интерфейс с APN internet.beeline.ru, хотя в нём стоит
+# симка Т-Мобайл. Штамп даёт обратную ссылку и позволяет отличить свой
+# интерфейс от чужого наследства.
+stamp_iface() {
+	[ -n "$1" ] && [ -n "$2" ] || return 0
+	uci -q set "network.$1.modem_path=$2"
+	uci -q commit network
+}
+
 # Записать APN интерфейса $1 по правилам выше ($2 = прежний APN)
 set_apn_opt() {
 	case "$APNARG" in
@@ -300,7 +317,13 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
 			uci -q set "5gmodem.$MSEC.network=$IF"
 			uci -q set "5gmodem.$MSEC.iface_proto=$FPROTO"
+			# интерфейс только что создан ДЛЯ ЭТОГО модема и проштампован - метка
+			# «настройки от прежнего модема» больше не про него. Снимаем СРАЗУ:
+			# ставит её resolve, и без этого предупреждение висело в UI до
+			# следующего hotplug/перезагрузки, хотя пользователь всё уже исправил.
+			uci -q delete "5gmodem.$MSEC.foreign_iface" 2>/dev/null
 		fi
+		stamp_iface "$IF" "$AMP"
 		uci -q commit 5gmodem
 
 		# SMS/USSD via the AT port - ModemManager cannot manage this modem
@@ -448,7 +471,10 @@ if [ -n "$MSEC" ]; then
 	uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
 	uci -q set "5gmodem.$MSEC.network=$IF"
 	uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+	# см. ту же ветку выше: интерфейс пересоздан для этого модема - метка снята.
+	uci -q delete "5gmodem.$MSEC.foreign_iface" 2>/dev/null
 fi
+stamp_iface "$IF" "$AMP"
 uci -q commit 5gmodem
 
 # SMS/USSD routing must follow the modem's owner:

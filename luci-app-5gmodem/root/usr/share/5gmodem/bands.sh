@@ -321,6 +321,43 @@ setmode() {
 	echo "Unsupported"
 }
 
+# --- Диапазоны 3G (UMTS) -----------------------------------------------------
+#
+# ВНИМАНИЕ: модель НЕ такая, как у LTE. У LTE - битовая маска, и пользователь
+# свободно набирает любой список диапазонов галочками. У 3G (по крайней мере у
+# Telit) прошивка принимает не маску, а ОДНУ ИЗ ГОТОВЫХ КОМБИНАЦИЙ по её номеру:
+#   AT#BND=? -> #BND: (0),(0-11,17,18),(A7E0BB0F38DF),(42)
+#                         ^^^^^^^^^^^ допустимые номера комбинаций UMTS
+# Произвольный набор («850 + 2100») задать НЕЛЬЗЯ, если такой комбинации нет в
+# таблице модема. Поэтому здесь список вариантов, а в UI - выпадающий список, а
+# не галочки: иначе пользователь снимал бы галочку, а модем применял совсем
+# другой набор.
+#
+# Формат getsupportedbands3g: ПО ОДНОЙ паре "id:подпись" НА СТРОКУ (не через
+# пробел, как у getsupportedmodes: подписи содержат пробелы - "2100 + 1900").
+# "Unsupported" (или пусто) - скрыть секцию 3G целиком.
+getsupportedbands3g() {
+	echo "Unsupported"
+}
+
+# id текущей комбинации 3G
+getbands3g() {
+	echo "Unsupported"
+}
+
+# выбрать комбинацию 3G по id
+setbands3g() {
+	echo "Unsupported"
+}
+
+# --- Сигнал по антенным портам -----------------------------------------------
+# Формат: по одной строке "порт:rsrp:rsrq" (dBm/dB). "Unsupported" - модем не
+# умеет, блок в UI не показывается. Живая диагностика антенн: порт с RSRP около
+# -140 = антенна не подключена.
+getantports() {
+	echo "Unsupported"
+}
+
 
 RES="/usr/share/5gmodem/modemband"
 
@@ -520,6 +557,18 @@ case $1 in
 	"setmode")
 		[ -n "$2" ] && setmode "$2"
 		;;
+	"getsupportedbands3g")
+		getsupportedbands3g
+		;;
+	"getbands3g")
+		getbands3g
+		;;
+	"setbands3g")
+		[ -n "$2" ] && setbands3g "$2"
+		;;
+	"getantports")
+		getantports
+		;;
 	"json")
 		. /usr/share/libubox/jshn.sh
 		json_init
@@ -558,6 +607,27 @@ case $1 in
 			done
 		fi
 		json_close_array
+
+		# --- 3G: список готовых комбинаций (выпадающий список, не галочки) ---
+		T3=$(getsupportedbands3g)
+		if [ -n "$T3" ] && [ "x$T3" != "xUnsupported" ]; then
+			json_add_array combos3g
+			# По одной паре "id:подпись" на строку (подписи содержат пробелы).
+			# БЕЗ пайпа: `echo | while read` крутится в ПОДОБОЛОЧКЕ, и вызовы
+			# json_add_* не долетели бы до JSON родителя - массив вышел бы пустым.
+			_OIFS="$IFS"; IFS='
+'
+			for LINE in $T3; do
+				[ -n "$LINE" ] || continue
+				json_add_object ""
+				json_add_string id "${LINE%%:*}"
+				json_add_string label "${LINE#*:}"
+				json_close_object
+			done
+			IFS="$_OIFS"
+			json_close_array
+			[ "$_PORT_OK" = "1" ] && json_add_string current3g "$(getbands3g)"
+		fi
 
 		T=$(getsupportedbands5gnsa)
 		if [ "x$T" != "xUnsupported" ]; then

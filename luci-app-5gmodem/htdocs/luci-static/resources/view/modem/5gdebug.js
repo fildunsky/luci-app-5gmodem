@@ -370,6 +370,18 @@ return view.extend({
 			return p ? ('m_' + String(p).replace(/[^A-Za-z0-9]/g, '_')) : '';
 		})();
 
+		/* Чужой интерфейс, прилипший к этому модему через переиспользованную
+		   device-ноду (нашёл modemswitch.sh resolve, см. orphan_iface_for).
+		   Показываем предупреждение: сам конфиг мы не правим - интерфейс мог быть
+		   настроен вручную, решение за пользователем. */
+		var mForeignIf = mSec ? (uci.get('5gmodem', mSec, 'foreign_iface') || '') : '';
+		if (mForeignIf) {
+			ui.addNotification(null, E('p', {}, [
+				E('strong', {}, _('Interface “%s” was created for a different modem.').format(mForeignIf)), ' ',
+				_('It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now.')
+			]), 'warning');
+		}
+
 		/* Оператор -> APN российских операторов (и MVNO). Пусто = неизвестен. */
 		function apnForOperator(name) {
 			var n = (name || '').toLowerCase();

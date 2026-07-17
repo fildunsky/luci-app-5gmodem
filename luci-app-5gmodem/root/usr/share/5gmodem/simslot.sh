@@ -116,6 +116,75 @@ if [ "$_VIA" = none ] && [ "$1" != set ]; then
 	echo '{"type":"","slots":[],"active":""}'; exit 0
 fi
 
+# ---- QMI-модем: слоты через UIM ---------------------------------------------
+# Третий путь помимо mmcli и AT. Нужен там, где прошивка НЕ отдаёт слоты по AT,
+# а QMI отдаёт: Telit LM960A18 - dual SIM single standby, но #SIMSELECT у него
+# нет вовсе (см. quirks.sh). qmicli --uim-get-slot-status печатает:
+#   2 physical slots found:
+#     Physical slot 1:
+#        Card status: present
+#        Slot status: active
+#             ICCID: 89701620...
+#          Is eUICC: no
+# id слота = ФИЗИЧЕСКИЙ номер (1..N), активен тот, у кого "Slot status: active".
+if [ "$_VIA" = qmi ]; then
+	_WDM=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].wdm[0]" 2>/dev/null)
+	[ -n "$_WDM" ] && [ -e "$_WDM" ] || { echo '{"error":"no qmi device"}'; exit 0; }
+	# qmicli без ограничения по времени виснет на занятом/мёртвом канале, а нас
+	# зовёт rpcd со своим 30-секундным таймаутом.
+	_q() {
+		_qo="/tmp/5gmodem_uim.$$"
+		qmicli -d "$_WDM" "$@" > "$_qo" 2>&1 &
+		_qp=$!
+		( sleep 20; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
+		_qw=$!
+		wait "$_qp" 2>/dev/null; kill "$_qw" 2>/dev/null; wait "$_qw" 2>/dev/null
+		cat "$_qo"; rm -f "$_qo"
+	}
+	case "$1" in
+	set)
+		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+		if _q --uim-switch-slot="$2" 2>/dev/null | grep -qi "success"; then
+			rm -f "/tmp/5gmodem_slots_$_AP"
+			# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
+			( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+			  _IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+			  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
+			) >/dev/null 2>&1 </dev/null &
+			echo '{"result":"ok"}'
+		else
+			echo '{"error":"switch failed"}'
+		fi
+		;;
+	*)
+		_S=$(_q --uim-get-slot-status 2>/dev/null)
+		_OUT=""; _ACT=""
+		_N=$(echo "$_S" | sed -n 's/^ *Physical slot \([0-9]*\):.*/\1/p')
+		for _i in $_N; do
+			# блок слота: от его заголовка до следующего "Physical slot"
+			_B=$(echo "$_S" | sed -n "/^ *Physical slot $_i:/,/^ *Physical slot [0-9]*:/p" \
+				| grep -v "^ *Physical slot $((_i + 1)):")
+			echo "$_B" | grep -qi "Card status: *present" && _P=1 || _P=0
+			echo "$_B" | grep -qi "Slot status: *active" && _ACT="$_i"
+			# eUICC-слот подписываем как eSIM - у нас для него отдельная вкладка
+			if echo "$_B" | grep -qi "Is eUICC: *yes"; then _L="eSIM"; else _L="SIM$_i"; fi
+			[ -n "$_OUT" ] && _OUT="$_OUT,"
+			_OUT="$_OUT{\"id\":\"$_i\",\"label\":\"$_L\",\"present\":\"$_P\"}"
+		done
+		_CACHE="/tmp/5gmodem_slots_$_AP"
+		if [ -n "$_OUT" ] && [ -n "$_ACT" ]; then
+			printf '{"type":"","slots":[%s],"active":"%s"}\n' "$_OUT" "$_ACT" > "$_CACHE"
+			cat "$_CACHE"
+		elif [ -s "$_CACHE" ]; then
+			cat "$_CACHE"
+		else
+			echo '{"type":"","slots":[],"active":""}'
+		fi
+		;;
+	esac
+	exit 0
+fi
+
 # Живой AT-порт: сразу после USB-переперечисления detect.sh может отдавать
 # устаревший tty (команда уходит в никуда, а «успех без ответа» ложно
 # засчитывался). Проверяем порт bounded-пробой; при провале берём первый

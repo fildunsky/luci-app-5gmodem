@@ -155,10 +155,23 @@ ensure_iface() {
 	# строка "point the app at the active modem's interface" прописывала в
 	# @5gmodem[0].network интерфейс ЧУЖОГО модема (at_port/active_modem при этом
 	# оставались от активного). Так секция и разъезжалась на каждой загрузке.
-	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt
+	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
+
+	# ШТАМП ВЛАДЕЛЬЦА (network.<if>.modem_path, ставит mkiface.sh). Если интерфейс
+	# создан для ДРУГОГО модема - не трогаем его. Иначе мы бы своими руками
+	# перенаправили device чужого интерфейса на этот модем и подняли его с чужими
+	# настройками (APN прежнего оператора) - ровно та беда, от которой штамп и
+	# заведён. Пустой штамп = интерфейс из старых версий: считаем своим (миграция
+	# в uci-defaults проставит штампы существующим).
+	OWNER=$(uci -q get "network.$IF.modem_path")
+	if [ -n "$OWNER" ] && [ "$OWNER" != "$P" ]; then
+		logger -t 5gmodem-resolve "iface $IF belongs to modem $OWNER, not $P - not touching it"
+		return 0
+	fi
+
 	PROTO=$(uci -q get "network.$IF.proto")
 	CUR=$(uci -q get "network.$IF.device")
 	NEW=""
@@ -194,6 +207,39 @@ ensure_iface() {
 	if [ "$CHG" = 1 ] || ! ifstatus "$IF" 2>/dev/null | grep -q '"up": true'; then
 		ifup "$IF" >/dev/null 2>&1
 	fi
+}
+
+# ИНТЕРФЕЙС-СИРОТА для модема $1: указывает на устройство ЭТОГО модема, но создан
+# НЕ для него и не принадлежит ни одной секции модема.
+#
+# Так выглядит подмена модема, которую swap_cleanup не ловит: он срабатывает на
+# смену vid:pid по ТОМУ ЖЕ пути, а если модем воткнули в другой разъём (1-1.3.3 ->
+# 1-1.3), для программы это просто новый модем. Интерфейс же старого остаётся и
+# висит на device-ноде (/dev/cdc-wdm0), которую ядро отдаёт новому модему - и тот
+# молча дозванивается с APN прежнего оператора.
+# Сам конфиг НЕ ПРАВИМ: интерфейс мог быть настроен пользователем вручную.
+# Только помечаем находку, чтобы показать её в интерфейсе.
+orphan_iface_for() {
+	local P="$1" IF OWNER DEV NODES n claimed
+	NODES=" $(wdm_for_path "$P") "
+	for n in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
+		[ -e "$n" ] && NODES="$NODES /dev/$(basename "$n") "
+	done
+	for n in /sys/bus/usb/devices/$P:*/net/*; do
+		[ -e "$n" ] && NODES="$NODES $(basename "$n") "
+	done
+	for IF in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
+		DEV=$(uci -q get "network.$IF.device")
+		[ -n "$DEV" ] || continue
+		echo "$NODES" | grep -q " $DEV " || continue
+		OWNER=$(uci -q get "network.$IF.modem_path")
+		[ "$OWNER" = "$P" ] && continue     # штамп наш - всё честно
+		# держит ли этот интерфейс какая-нибудь секция модема?
+		claimed=$(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.]*\)\.network='$IF'\$/\1/p" | head -1)
+		[ -n "$claimed" ] && continue
+		echo "$IF"; return 0
+	done
+	return 1
 }
 
 # AT port of the modem at a usb path: fast via ModemManager, else probe its ttys
@@ -439,13 +485,34 @@ resolve)
 		[ -n "$p" ] || continue
 		echo " $PRESENT " | grep -q " $p " || continue
 		ensure_iface "$p" "$s"
+		# Пометить чужой интерфейс, прилипший к этому модему через
+		# переиспользованную device-ноду (см. orphan_iface_for). Метку читает
+		# страница настроек модема и предупреждает пользователя.
+		fi_=$(orphan_iface_for "$p")
+		if [ -n "$fi_" ]; then
+			uci -q set "$CFG.$s.foreign_iface=$fi_"
+			logger -t 5gmodem-resolve "modem $p: iface '$fi_' was made for another modem (stale APN/settings)"
+		else
+			uci -q delete "$CFG.$s.foreign_iface" 2>/dev/null
+		fi
 	done
 
 	# point the app at the active modem's interface. SEC пересчитываем от $AMP
 	# заново (а не полагаемся на значение до цикла ensure_iface выше) - страховка
 	# на случай, если какой-нибудь хелпер снова начнёт трогать глобальные имена.
 	SEC=$(secname "$AMP")
-	IF=$(uci -q get "$CFG.$SEC.network"); [ -n "$IF" ] && uci -q set "$CFG.@5gmodem[0].network=$IF"
+	# ТОТ ЖЕ ИНВАРИАНТ, ЧТО И В switch (см. выше): network обязан описывать
+	# АКТИВНЫЙ модем. Раньше здесь стоял `[ -n "$IF" ] && set`, и у только что
+	# воткнутого модема (интерфейса у него ещё нет) network ОСТАВАЛСЯ ОТ ПРЕДЫДУЩЕГО.
+	# Живой случай: active_modem=1-1.3 (Telit), а network=modem2 - интерфейс Compal.
+	# Основной опрос читает по network IP и статистику, и страница показывала бы
+	# сигнал Telit вперемешку с адресом и трафиком Compal. Пусто безопаснее чужого.
+	IF=$(uci -q get "$CFG.$SEC.network")
+	if [ -n "$IF" ]; then
+		uci -q set "$CFG.@5gmodem[0].network=$IF"
+	else
+		uci -q delete "$CFG.@5gmodem[0].network" 2>/dev/null
+	fi
 	uci -q commit "$CFG"
 	rm -f /tmp/modem
 	printf '{"result":"resolved","active":"%s","at_port":"%s"}\n' "$AMP" "$ATP"

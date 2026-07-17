@@ -2344,3 +2344,54 @@ msgstr "Истекло время ожидания"
 
 msgid "The report has been downloaded. Attach it to your bug report."
 msgstr "Отчёт скачан. Приложите его к сообщению об ошибке."
+
+msgid "Interface “%s” was created for a different modem."
+msgstr "Интерфейс «%s» создан для другого модема."
+
+msgid "It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now."
+msgstr "К этому модему он привязался лишь потому, что ядро переиспользовало имя устройства, поэтому его настройки (в первую очередь APN) могут быть от прежнего модема и SIM. Создайте интерфейс заново кнопкой ниже — APN подставится по оператору, определённому прямо сейчас."
+
+msgid "Loading messages…"
+msgstr "Загрузка сообщений…"
+
+msgid "Antenna ports"
+msgstr "Антенные порты"
+
+msgid "RSRP/RSRQ measured separately on each LTE antenna port. A port with RSRP near -140 dBm has no antenna connected (or the cable is bad). LTE only: in 3G the table stays empty."
+msgstr "RSRP/RSRQ, измеренные отдельно по каждому антенному порту LTE. Порт с RSRP около −140 дБм — антенна не подключена (или плохой кабель). Только для LTE: в 3G таблица остаётся пустой."
+
+msgid "Antenna port"
+msgstr "Антенный порт"
+
+msgid "State"
+msgstr "Состояние"
+
+msgid "Port %d"
+msgstr "Порт %d"
+
+msgid "no antenna"
+msgstr "нет антенны"
+
+msgid "weak"
+msgstr "слабо"
+
+msgid "OK"
+msgstr "норма"
+
+msgid "Applying 3G bands..."
+msgstr "Применяем диапазоны 3G…"
+
+msgid "3G bands set: %s"
+msgstr "Диапазоны 3G заданы: %s"
+
+msgid "Failed to set 3G bands"
+msgstr "Не удалось задать диапазоны 3G"
+
+msgid "Power restart"
+msgstr "Перезагрузка по питанию"
+
+msgid "Cuts power to the modem slot for a few seconds - as if you unplugged it. The modem comes back in ~1 min. Use when a full restart did not help."
+msgstr "Снимает питание со слота модема на несколько секунд — как если бы вы его переткнули. Модем вернётся примерно через минуту. Пригодится, когда полная перезагрузка не помогла."
+
+msgid "Refresh"
+msgstr "Обновить"

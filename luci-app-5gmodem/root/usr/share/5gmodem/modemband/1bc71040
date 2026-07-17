@@ -1,17 +1,49 @@
 _DEVICE=/dev/ttyUSB2
+
+# Режимы сети через +WS46 (3GPP 27.007). На LM960A18 проверено живьём:
+#   AT+WS46=? -> +WS46: (22,28,31)
+#   22 = только UTRAN (3G), 28 = только E-UTRAN (4G), 31 = GERAN/UTRAN/E-UTRAN.
+# 2G у модуля нет, поэтому 31 подписан «Авто». Идентификаторы общие для всех
+# профилей (см. 05c690d6): 1:Auto 2:3G 4:4G.
+_MODES="1:Auto 2:3G 4:4G"
+
+# Запасной список - только если AT#BND=? не ответил (порт занят/модем в ребуте).
+# Реальные возможности берём у самого модема, см. getsupportedbands.
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 17 20 25 26 28 29 30 38 40 41"
 
-getinfo() {
-	echo "Telit LM940"
+# Модель кэшируем: каждый лишний AT-запрос конкурирует с опросом метрик на общем
+# порту, а при коллизии ответы перепутываются.
+_model() {
+	_mf="/tmp/5gmodem_telit_model_$(basename "$_DEVICE" 2>/dev/null)"
+	if [ -s "$_mf" ]; then cat "$_mf"; return; fi
+	# ATI на LM960 отдаёт "332" (код продукта Telit) - бесполезен, имя даёт CGMM.
+	sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+		| grep -oE "LM[0-9]+[A-Za-z0-9-]*" | head -1 | tee "$_mf"
 }
 
+getinfo() {
+	_m=$(_model)
+	echo "Telit ${_m:-LM960}"
+}
+
+# Маска ВОЗМОЖНОСТЕЙ модема - 3-я группа AT#BND=?:
+#   #BND: (0),(0-11,17,18),(A7E0BB0F38DF),(42)
+#          GSM   UMTS        LTE (hex)     ext
+# Раньше тут стоял статический список из 19 диапазонов, и он расходился с
+# реальностью: getbands возвращал 28 (в т.ч. 14,18,19,32,39,42,43,46,48),
+# которых в «поддерживаемых» не было - UI не мог показать выбранные диапазоны.
 getsupportedbands() {
-	echo "$_DEFAULT_LTE_BANDS"
+	O=$(sms_tool -d $_DEVICE at "at#bnd=?" 2>/dev/null | tr -d '\r')
+	HEX=$(echo "$O" | sed -n 's/^#BND: *([^)]*),([^)]*),(\([0-9A-Fa-f]*\)).*/\1/p' | head -1)
+	if [ -n "$HEX" ]; then
+		hextobands "0x$HEX"
+	else
+		echo "$_DEFAULT_LTE_BANDS"
+	fi
 }
 
 getbands() {
-# #BND: 0,11,1A03B0918DF
-
+# #BND: 0,18,A7E0BB0F38DF,42
 	O=$(sms_tool -d $_DEVICE at "at#bnd?")
 	HEX="0x"$(echo "$O" | awk -F[:,] '{print $4}' | xargs)
 	hextobands "$HEX"
@@ -19,13 +51,137 @@ getbands() {
 
 setbands() {
 	BANDS="$1"
-	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+	[ "$BANDS" = "default" ] && BANDS="$(getsupportedbands)"
 
 	HEX=$(bandstohex "$BANDS")
 	if [ "$HEX" != "0" ]; then
-		O=$(sms_tool -d $_DEVICE at "at#bnd?")
-		GSM=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
-		UMTS=$(echo "$O" | awk -F[:,] '{print $3}' | xargs)
-		sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX}"
+		O=$(sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r')
+		GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
+		UMTS=$(echo "$O" | awk -F[:,] '/^#BND/ {print $3}' | xargs)
+		# 4-й параметр прошивка ОТДАЁТ и ЖДЁТ обратно (AT#BND=? -> ...,(42)).
+		# Раньше писали тремя параметрами, теряя его.
+		EXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+		if [ -n "$EXT" ]; then
+			sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX},${EXT}"
+		else
+			sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX}"
+		fi
 	fi
+}
+
+# --- Диапазоны 3G (UMTS) ------------------------------------------------------
+#
+# У 3G прошивка принимает НЕ маску, а номер ГОТОВОЙ КОМБИНАЦИИ - 2-е поле #BND:
+#   AT#BND?  -> #BND: 0,18,A7E0BB0F38DF,42
+#   AT#BND=? -> #BND: (0),(0-11,17,18),(A7E0BB0F38DF),(42)
+# Таблица из официального руководства Telit LM960 Series, 80568ST10869A Rev.7,
+# стр. 218-219 (лежит в docs/datasheets/). Наш модем разрешает 0-11,17,18.
+# Значения 12-16 и 19 в таблице есть, но модем их не принимает - не показываем.
+_UMTS_TABLE="0:2100 (FDD I)
+1:1900 (FDD II)
+2:850 (FDD V)
+3:2100 + 1900 + 850
+4:1900 + 850
+5:900 (FDD VIII)
+6:2100 + 900
+7:1700 (FDD IV)
+8:2100 + 850
+9:2100 + 900 + 850
+10:1900 + 1700 + 850
+11:2100 + 1900 + 1700 + 850 + 900
+12:2100 + 1800 + 850 + 900
+13:1800 (FDD III)
+14:2100 + 1800 + 850
+15:1800 + 850
+16:2100 + 1900 + 1800 + 1700 + 850 + 900
+17:2100 + 1900 + 900
+18:2100 + 1900 + 1700 + 850 + 900 + Japan
+19:2100 + 1900 + 1700 + 850 + 900 + Japan (+ FDD VI)"
+
+# Разворачивает диапазоны AT#BND=? вида "0-11,17,18" в список "0 1 2 ... 17 18"
+_expand_range() {
+	for _p in $(echo "$1" | tr ',' ' '); do
+		case "$_p" in
+			*-*)
+				_a=${_p%-*}; _b=${_p#*-}
+				while [ "$_a" -le "$_b" ] 2>/dev/null; do echo "$_a"; _a=$((_a + 1)); done
+				;;
+			*) echo "$_p" ;;
+		esac
+	done
+}
+
+getsupportedbands3g() {
+	O=$(sms_tool -d $_DEVICE at "at#bnd=?" 2>/dev/null | tr -d '\r')
+	# 2-я группа в скобках: #BND: (0),(0-11,17,18),(...),(...)
+	R=$(echo "$O" | sed -n 's/^#BND: *([^)]*),(\([^)]*\)).*/\1/p' | head -1)
+	[ -n "$R" ] || { echo "Unsupported"; return; }
+	for _i in $(_expand_range "$R"); do
+		_l=$(echo "$_UMTS_TABLE" | sed -n "s/^$_i:\(.*\)$/\1/p" | head -1)
+		[ -n "$_l" ] && echo "$_i:$_l"
+	done
+}
+
+getbands3g() {
+	sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r' \
+		| awk -F[:,] '/^#BND/ {print $3}' | xargs
+}
+
+setbands3g() {
+	[ -n "$1" ] || return 1
+	O=$(sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r')
+	GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
+	LTE=$(echo "$O" | awk -F[:,] '/^#BND/ {print $4}' | xargs)
+	EXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+	# Остальные поля СОХРАНЯЕМ как есть: #BND задаёт все диапазоны разом, и
+	# передать только UMTS нельзя - иначе затрём выбор LTE.
+	if [ -n "$EXT" ]; then
+		sms_tool -d $_DEVICE at "at#bnd=${GSM},${1},${LTE},${EXT}"
+	else
+		sms_tool -d $_DEVICE at "at#bnd=${GSM},${1},${LTE}"
+	fi
+}
+
+# --- Сигнал по антенным портам (#LAPS) ---------------------------------------
+# Ответ: #LAPS: <rsrp_0>,<rsrq_0>,<rsrp_1>,<rsrq_1>[,<rsrp_2>,<rsrq_2>,<rsrp_3>,
+# <rsrq_3>] - пары на порт, портов 2 или 4. Живой пример: "-111,-11,-134,-19"
+# (порт 0 работает, у порта 1 антенны нет: -134 при шкале -44…-140).
+# ТОЛЬКО LTE: в 3G команда отдаёт пусто - это не ошибка.
+getantports() {
+	O=$(sms_tool -d $_DEVICE at "AT#LAPS" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^#LAPS: *//p' | head -1)
+	[ -n "$O" ] || { echo "Unsupported"; return; }
+	_i=0
+	# Значения идут парами; разбираем по две штуки за раз.
+	set -- $(echo "$O" | tr ',' ' ')
+	while [ $# -ge 2 ]; do
+		echo "$_i:$1:$2"
+		shift 2
+		_i=$((_i + 1))
+	done
+}
+
+getsupportedmodes() {
+	echo "$_MODES"
+}
+
+getmode() {
+	M=$(sms_tool -d $_DEVICE at "AT+WS46?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+WS46: *\([0-9]*\).*/\1/p' | head -1)
+	case "$M" in
+		31) echo 1 ;;   # GERAN/UTRAN/E-UTRAN -> Авто
+		22) echo 2 ;;   # только UTRAN -> 3G
+		28) echo 4 ;;   # только E-UTRAN -> 4G
+		*)  echo "" ;;
+	esac
+}
+
+setmode() {
+	case "$1" in
+		1) W=31 ;;
+		2) W=22 ;;
+		4) W=28 ;;
+		*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT+WS46=$W"
 }
