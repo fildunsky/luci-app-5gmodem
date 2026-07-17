@@ -2369,13 +2369,13 @@ msgstr "Состояние"
 msgid "Port %d"
 msgstr "Порт %d"
 
-msgid "no antenna"
+msgid "antenna: none"
 msgstr "нет антенны"
 
-msgid "weak"
-msgstr "слабо"
+msgid "antenna: weak signal"
+msgstr "слабый сигнал"
 
-msgid "OK"
+msgid "antenna: normal"
 msgstr "норма"
 
 msgid "Applying 3G bands..."

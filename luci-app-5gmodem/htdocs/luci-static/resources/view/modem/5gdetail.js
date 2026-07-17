@@ -1327,10 +1327,13 @@ function fillAntPorts() {
 				   -134 и ниже антенны фактически нет - именно так выглядит
 				   неподключённый пигтейл (проверено на LM960). */
 				var st, cls;
-				if (isNaN(rsrp))        { st = '-';                 cls = ''; }
-				else if (rsrp <= -130)  { st = _('no antenna');     cls = 'color:#c00;font-weight:600'; }
-				else if (rsrp <= -110)  { st = _('weak');           cls = 'color:#c80'; }
-				else                    { st = _('OK');             cls = 'color:#080'; }
+				/* msgid'ы намеренно НЕ общие ("OK", "Good"): базовый каталог LuCI
+				   перебивает их своими значениями - "OK" там кнопка диалога и
+				   переводится как «Принять», что и вылезало в этой таблице. */
+				if (isNaN(rsrp))        { st = '-';                        cls = ''; }
+				else if (rsrp <= -130)  { st = _('antenna: none');         cls = 'color:#c00;font-weight:600'; }
+				else if (rsrp <= -110)  { st = _('antenna: weak signal');  cls = 'color:#c80'; }
+				else                    { st = _('antenna: normal');       cls = 'color:#080'; }
 				tbl.appendChild(E('tr', { 'class': 'tr' }, [
 					E('td', { 'class': 'td left' }, [
 						/* Порты нумеруются с 0, как в ответе модема. Подписи

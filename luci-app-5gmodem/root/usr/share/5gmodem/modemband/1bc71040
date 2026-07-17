@@ -11,6 +11,49 @@ _MODES="1:Auto 2:3G 4:4G"
 # Реальные возможности берём у самого модема, см. getsupportedbands.
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 17 20 25 26 28 29 30 38 40 41"
 
+# --- 4-е поле #BND: "LTE band ext" -------------------------------------------
+#
+# B66 и B71 - ОБЫЧНЫЙ LTE, отдельная технология тут ни при чём. Дело в
+# кодировании: в 3-м поле бит N = диапазон BN, и маска кончается на 48-м бите
+# (A7E0BB0F38DF - ровно 48 бит, B48 последний, кто влезает). Для B66/B71
+# понадобились бы биты 66 и 71, поэтому Telit завёл ВТОРУЮ маску - со СВОЕЙ,
+# произвольной нумерацией (не бит=диапазон!), поэтому общий hextobands тут не
+# годится и нужна таблица. Из руководства (80568ST10869A Rev.7, стр. 219):
+#   <LTE band ext>: 0 disable, 2 B66, 40 B71
+# Живой пример: #BND: 0,18,A7E0BB0F38DF,42 -> 0x42 = 0x2|0x40 = B66 + B71.
+# Формат: "<hex-значение>:<номер диапазона>".
+_LTE_EXT_TABLE="2:66 40:71"
+
+# hex ext -> список диапазонов
+_ext_to_bands() {
+	_v=$((0x${1:-0}))
+	for _p in $_LTE_EXT_TABLE; do
+		[ $((_v & 0x${_p%%:*})) -ne 0 ] && echo "${_p#*:}"
+	done
+}
+
+# список диапазонов -> hex ext (диапазоны не из таблицы игнорируются)
+_bands_to_ext() {
+	_s=0
+	for _b in $1; do
+		for _p in $_LTE_EXT_TABLE; do
+			[ "${_p#*:}" = "$_b" ] && _s=$((_s | 0x${_p%%:*}))
+		done
+	done
+	printf '%x' "$_s"
+}
+
+# отбросить из списка диапазоны, которые живут в ext-маске
+_strip_ext_bands() {
+	for _b in $1; do
+		_skip=0
+		for _p in $_LTE_EXT_TABLE; do
+			[ "${_p#*:}" = "$_b" ] && _skip=1
+		done
+		[ "$_skip" = 0 ] && printf '%s ' "$_b"
+	done
+}
+
 # Модель кэшируем: каждый лишний AT-запрос конкурирует с опросом метрик на общем
 # порту, а при коллизии ответы перепутываются.
 _model() {
@@ -36,36 +79,55 @@ getsupportedbands() {
 	O=$(sms_tool -d $_DEVICE at "at#bnd=?" 2>/dev/null | tr -d '\r')
 	HEX=$(echo "$O" | sed -n 's/^#BND: *([^)]*),([^)]*),(\([0-9A-Fa-f]*\)).*/\1/p' | head -1)
 	if [ -n "$HEX" ]; then
-		hextobands "0x$HEX"
+		_B=$(hextobands "0x$HEX")
 	else
-		echo "$_DEFAULT_LTE_BANDS"
+		_B="$_DEFAULT_LTE_BANDS"
 	fi
+	# 4-я группа: возможности ext-маски (B66/B71) - это тот же LTE, показываем в
+	# общем списке, а не отдельно.
+	_E=$(echo "$O" | sed -n 's/^#BND: *([^)]*),([^)]*),([^)]*),(\([0-9A-Fa-f]*\)).*/\1/p' | head -1)
+	[ -n "$_E" ] && _B="$_B $(_ext_to_bands "$_E" | tr '\n' ' ')"
+	echo "$_B" | xargs -n1 2>/dev/null | sort -n | uniq | xargs
 }
 
 getbands() {
 # #BND: 0,18,A7E0BB0F38DF,42
-	O=$(sms_tool -d $_DEVICE at "at#bnd?")
-	HEX="0x"$(echo "$O" | awk -F[:,] '{print $4}' | xargs)
-	hextobands "$HEX"
+	O=$(sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r')
+	HEX="0x"$(echo "$O" | awk -F[:,] '/^#BND/ {print $4}' | xargs)
+	_B=$(hextobands "$HEX")
+	# включённые B66/B71 живут в 4-м поле - без него они молча пропадали из списка
+	_E=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+	[ -n "$_E" ] && _B="$_B $(_ext_to_bands "$_E" | tr '\n' ' ')"
+	echo "$_B" | xargs -n1 2>/dev/null | sort -n | uniq | xargs
 }
 
 setbands() {
 	BANDS="$1"
 	[ "$BANDS" = "default" ] && BANDS="$(getsupportedbands)"
 
-	HEX=$(bandstohex "$BANDS")
-	if [ "$HEX" != "0" ]; then
-		O=$(sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r')
-		GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
-		UMTS=$(echo "$O" | awk -F[:,] '/^#BND/ {print $3}' | xargs)
-		# 4-й параметр прошивка ОТДАЁТ и ЖДЁТ обратно (AT#BND=? -> ...,(42)).
-		# Раньше писали тремя параметрами, теряя его.
-		EXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
-		if [ -n "$EXT" ]; then
-			sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX},${EXT}"
-		else
-			sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX}"
-		fi
+	# Выбор пользователя РАЗДЕЛЯЕМ на две маски. B66/B71 в общий bandstohex
+	# отдавать НЕЛЬЗЯ: там бит = номер диапазона, и B66 запросил бы 66-й бит -
+	# получилась бы мусорная маска вместо ext-поля.
+	HEX=$(bandstohex "$(_strip_ext_bands "$BANDS")")
+	NEWEXT=$(_bands_to_ext "$BANDS")
+
+	O=$(sms_tool -d $_DEVICE at "at#bnd?" 2>/dev/null | tr -d '\r')
+	GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
+	UMTS=$(echo "$O" | awk -F[:,] '/^#BND/ {print $3}' | xargs)
+	CUREXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+
+	# Руководство: "The <LTE band> and <LTE band ext> cannot be 0 at the same
+	# time" - модем отвергнет такую запись. Молча ничего не делаем: снятие ВСЕХ
+	# диапазонов и так не имеет смысла (UI это тоже не даст).
+	[ "$HEX" = "0" ] && [ "$NEWEXT" = "0" ] && return 1
+
+	if [ -n "$CUREXT" ]; then
+		# 4-е поле у прошивки ЕСТЬ - пишем ровно то, что выбрал пользователь.
+		# Раньше сюда уходило старое значение: снять B66/B71 было невозможно.
+		sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX},${NEWEXT}"
+	else
+		# прошивка без 4-го поля - старая трёхпараметрическая форма
+		sms_tool -d $_DEVICE at "at#bnd=${GSM},${UMTS},${HEX}"
 	fi
 }
 
