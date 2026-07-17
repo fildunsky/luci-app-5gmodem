@@ -1,5 +1,44 @@
 # Unified for NSA/SA
 _DEFAULT_5G_BANDS="1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79"
+# Запасной LTE-список - только если AT+GTACT=? не ответил. Реальные возможности
+# берём у самого модема (см. _fm350_caps): у разных ревизий/прошивок FM350 набор
+# диапазонов отличается, и захардкоженный список у кого-то показывал бы лишние
+# кнопки (или прятал существующие).
+_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
+
+# Возможности модема из AT+GTACT=? - ТЕСТ-команда, отдаёт допустимые значения.
+# Формат: +GTACT: (rat),(pref),(pref),(),(UMTS),(LTE),(),(),(NR)
+#   6-я группа в скобках = LTE, значения с префиксом 1xx (101=B1 … 171=B71)
+#   9-я группа           = NR,  префикс 5xx/5xxx (501=n1, 5071=n71, 5079=n79)
+# Кэшируем в /tmp: за один опрос страницы функции supported зовутся трижды
+# (LTE + 5G SA + 5G NSA), а лишний AT-запрос конкурирует за общий порт.
+_fm350_caps() {   # $1 = lte | nr ; печатает список диапазонов или пусто
+    _cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    if [ ! -s "$_cf" ]; then
+        sms_tool -d $_DEVICE at "AT+GTACT=?" 2>/dev/null | tr -d '\r' \
+            | grep -o '([^)]*)' > "$_cf.$$" 2>/dev/null
+        # только если реально пришли группы (иначе не кэшируем пустое - вдруг
+        # был транзитный сбой порта, в следующий раз попробуем снова)
+        [ -s "$_cf.$$" ] && [ "$(wc -l < "$_cf.$$")" -ge 6 ] \
+            && mv "$_cf.$$" "$_cf" || rm -f "$_cf.$$"
+    fi
+    [ -s "$_cf" ] || return 1
+    case "$1" in
+        lte)
+            for v in $(sed -n '6p' "$_cf" | tr -d '()' | tr ',' ' '); do
+                case "$v" in 1[0-9][0-9]) echo "$((v - 100))" ;; esac
+            done | sort -n | xargs
+            ;;
+        nr)
+            for v in $(sed -n '9p' "$_cf" | tr -d '()' | tr ',' ' '); do
+                case "$v" in
+                    5[0-9][0-9][0-9]) echo "$((v - 5000))" ;;
+                    5[0-9][0-9])      echo "$((v - 500))" ;;
+                esac
+            done | sort -n | xargs
+            ;;
+    esac
+}
 
 # --- Режим сети через AT+GTACT (первый параметр <rat>) --------------------
 # По мануалу FM350 (AT Commands V2.10, 11.1.14): 1=UMTS, 2=LTE, 4=LTE/UMTS,
@@ -41,8 +80,8 @@ getinfo() {
 }
 
 getsupportedbands() {
-    _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
-    echo "$_DEFAULT_LTE_BANDS"
+    _b=$(_fm350_caps lte)
+    [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_LTE_BANDS"
 }
 
 getbands() {
@@ -82,11 +121,13 @@ setbands() {
 }
 
 getsupportedbands5gsa() {
-    echo "$_DEFAULT_5G_BANDS"
+    _b=$(_fm350_caps nr)
+    [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
 }
 
 getsupportedbands5gnsa() {
-    echo "$_DEFAULT_5G_BANDS"
+    _b=$(_fm350_caps nr)
+    [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
 }
 
 getbands5gsa() {
