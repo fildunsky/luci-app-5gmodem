@@ -2395,3 +2395,6 @@ msgstr "Снимает питание со слота модема на неск
 
 msgid "Refresh"
 msgstr "Обновить"
+
+msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem."
+msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM."

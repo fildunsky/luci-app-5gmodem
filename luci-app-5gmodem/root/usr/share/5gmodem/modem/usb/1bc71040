@@ -10,6 +10,20 @@
 #                 (80568ST10869A Rev.7). Шкала совпадает с полем mtherm.
 O=$(sms_tool -d $DEVICE at "at#servinfo;#cainfo?;#tempsens=2;#tmlvl?")
 
+# SINR в #CAINFO - НЕ децибелы, а ИНДЕКС 0..250 (руководство 80568ST10869A
+# Rev.7, стр. 264: "<sinr>: Measured SINR. This value is mapped to dB.
+# Range: 0 to 250", где 0 = -20dB, 1 = -19.8dB … 250 = 30dB, шаг 0.2 дБ).
+# Мы подставляли индекс как есть: модем отдавал 143, интерфейс показывал "143 dB"
+# и рисовал полосу в разы длиннее шкалы (реальное значение - 8.6 дБ).
+#   дБ = индекс * 0.2 - 20
+# Через awk: в busybox нет дробной арифметики в $(( )).
+sinr_db() {
+	case "$1" in
+		''|*[!0-9]*) return ;;          # пусто/не число - молчим
+	esac
+	awk -v n="$1" 'BEGIN { printf "%.1f", n * 0.2 - 20 }'
+}
+
 # EARFCN -> LTE band (3GPP 36.101 Table 5.7.3-1). Покрываем распространённые
 # в РФ/Европе диапазоны, включая TDD B38/B40/B41 (раньше их не было, поэтому
 # вторичная несущая B40 определялась как "?").
@@ -100,76 +114,89 @@ case "$MODE_NUM" in
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $9}' | xargs)
 		if [ -n "$T" ]; then
-			SINR=$T
+			SINR=$(sinr_db "$T")
 #			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"SINR":"'$T'"}'
 		fi
 
+		# ВТОРИЧНАЯ НЕСУЩАЯ ЕСТЬ, ТОЛЬКО ЕСЛИ ЕЁ EARFCN НЕ НОЛЬ. Руководство:
+		# "If the LTE information of SCC is not valid, it always returns 0".
+		# Проверка [ -n "$T" ] строку "0" ПРОПУСКАЛА, а channeltoband(0) отдаёт
+		# "1" - и неактивная несущая показывалась как фантомный B1 ("LTE-A |
+		# B3 + B1 + B1" при одной реальной несущей).
+		_S1OK=0
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $15}' | xargs)
-		if [ -n "$T" ]; then
+		if [ -n "$T" ] && [ "$T" != "0" ]; then
+			_S1OK=1
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
 			S1BAND="$(band4g $T1)"
+			S1EARFCN="$T"
 			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $17}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
 			S1PCI=$T
 #			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"(S1) PCI":"'$T'"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $19}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S1) RSSI":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $18}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S1) RSRP":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $20}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S1) RSRQ":"'$T' dB"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $21}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
+			T=$(sinr_db "$T")        # индекс 0..250 -> дБ, как и у первичной
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S1) SINR":"'$T' dB"}'
 		fi
 
+		_S2OK=0
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $26}' | xargs)
-		if [ -n "$T" ]; then
+		if [ -n "$T" ] && [ "$T" != "0" ]; then
+			_S2OK=1
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
 			S2BAND="$(band4g $T1)"
+			S2EARFCN="$T"
 			ADDON="$ADDON"'{"(S2) band":"'$(band4g $T1 "")'"}'
 			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $28}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			S2PCI="$T"
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S2) PCI":"'$T'"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $30}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S2) RSSI":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $29}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S2) RSRP":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $31}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S2) RSRQ":"'$T' dB"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $32}' | xargs)
-		if [ -n "$T" ]; then
+		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
+			T=$(sinr_db "$T")
 			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			ADDON="$ADDON"'{"(S2) SINR":"'$T' dB"}'
 		fi

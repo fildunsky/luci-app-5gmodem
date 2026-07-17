@@ -358,6 +358,23 @@ return view.extend({
 		}
 		o.default = 'auto';
 		o.rmempty = false;
+		/* Выбрали ModemManager - сразу снимаем «Скрыть от ModemManager»: держать
+		   обе настройки одновременно бессмысленно (инхибиция прячет модем от MM,
+		   а протокол требует, чтобы MM им управлял - интерфейс останется без IP).
+		   mkiface.sh выставляет mm_exclude=0 и сам, но уже ПОСЛЕ применения, и
+		   галка до перезагрузки страницы показывала неправду. Обратного действия
+		   НЕ делаем: возврат на kernel-прото не обязан включать инхибицию молча -
+		   у пользователя может быть причина оставить модем видимым для MM. */
+		o.onchange = function(ev, section_id, value) {
+			if (value !== 'modemmanager') { return; }
+			var f = this.map.lookupOption('_mm_exclude', section_id);
+			var el = f && f[0] && f[0].getUIElement(section_id);
+			if (el && el.getValue() === '1') {
+				el.setValue('0');
+				ui.addNotification(null, E('p',
+					_('“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem.')), 'info');
+			}
+		};
 
 		/* Имя интерфейса модема и признак его существования - для подписи
 		   кнопки (создать/пересоздать) и для встроенной вьюхи ниже. */
