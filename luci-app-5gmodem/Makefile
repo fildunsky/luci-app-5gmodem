@@ -89,4 +89,46 @@ define Build/Prepare/luci-app-5gmodem
 		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
 endef
 
+# --- ОБЛЕГЧЁННЫЙ ВАРИАНТ -----------------------------------------------------
+#
+# Тот же набор файлов, но БЕЗ тяжёлых зависимостей: для роутеров с 8 МБ флеша,
+# куда полный набор (modemmanager, qmi-utils, kmod'ы, протоколы) физически не
+# помещается. Собирается тем же CI и прикладывается к релизу, а не руками -
+# ручная сборка через apk mkpkg однажды уже потеряла зависимости.
+#
+# Файлы, conffiles, postinst и prerm ПЕРЕИСПОЛЬЗУЕМ у основного пакета: копия
+# разошлась бы с оригиналом при первой же правке. Это обычное присваивание
+# make - макросы уже определены выше и в luci.mk.
+#
+# CONFLICTS обязателен: пакеты кладут одни и те же файлы, и одновременная
+# установка сломала бы учёт файлов в менеджере пакетов.
+define Package/luci-app-5gmodem-lite
+  SECTION:=luci
+  CATEGORY:=LuCI
+  SUBMENU:=3. Applications
+  TITLE:=$(LUCI_TITLE) (lite)
+  URL:=$(LUCI_URL)
+  MAINTAINER:=$(MAINTAINER)
+  DEPENDS:=+sms-tool +coreutils-stty
+  PKGARCH:=all
+  CONFLICTS:=luci-app-5gmodem
+endef
+
+define Package/luci-app-5gmodem-lite/description
+  $(LUCI_DESCRIPTION)
+
+  Lite build for low-flash devices: requires only sms-tool. Metrics, SMS, USSD,
+  band control and the AT console work; the QMI/MBIM interface protocols and the
+  phone number read through mmcli are not available. Do not install it over a
+  router that runs a QMI or MBIM modem - the package manager would drop those
+  packages as orphans.
+endef
+
+Package/luci-app-5gmodem-lite/conffiles = $(Package/luci-app-5gmodem/conffiles)
+Package/luci-app-5gmodem-lite/install = $(Package/luci-app-5gmodem/install)
+Package/luci-app-5gmodem-lite/postinst = $(Package/luci-app-5gmodem/postinst)
+Package/luci-app-5gmodem-lite/prerm = $(Package/luci-app-5gmodem/prerm)
+
+$(eval $(call BuildPackage,luci-app-5gmodem-lite))
+
 # call BuildPackage - OpenWrt buildroot signature

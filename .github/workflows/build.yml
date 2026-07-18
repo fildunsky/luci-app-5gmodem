@@ -38,7 +38,10 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           FEEDNAME: modem
-          PACKAGES: luci-app-5gmodem
+          # Оба варианта одной сборкой: полный и облегчённый (см. Makefile).
+          # Раньше lite собирался вручную через apk mkpkg и однажды уехал в
+          # релиз без зависимостей - собираем его тем же путём, что основной.
+          PACKAGES: luci-app-5gmodem luci-app-5gmodem-lite
           NO_REFRESH_CHECK: 1
           # write per-package build logs to logs/ so a failure is diagnosable,
           # and keep memory in check while heavy deps compile on the runner

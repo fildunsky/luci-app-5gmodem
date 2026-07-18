@@ -12,7 +12,11 @@
 REPO="fildunsky/luci-app-5gmodem"
 API="https://api.github.com/repos/$REPO/releases/latest"
 PAGE="https://github.com/$REPO/releases/latest"
-PKG="luci-app-5gmodem"
+PKG_FULL="luci-app-5gmodem"
+PKG_LITE="luci-app-5gmodem-lite"
+# Имя выбирается по факту установки (см. detect_pkg). Значение по умолчанию
+# нужно на случай, когда пакет не установлен вовсе.
+PKG="$PKG_FULL"
 I18N="luci-i18n-5gmodem-ru"
 TMP=/tmp
 STATUS=/tmp/5gmodem_update.json
@@ -23,6 +27,27 @@ pkgman() {
 	command -v apk >/dev/null 2>&1 && { echo apk; return; }
 	command -v opkg >/dev/null 2>&1 && { echo opkg; return; }
 	echo ""
+}
+
+# КАКОЙ ВАРИАНТ УСТАНОВЛЕН.
+#
+# Пакетов два: полный и облегчённый (см. Makefile). Обновлять нужно ТЕМ ЖЕ
+# вариантом, и это не косметика:
+#   - полный на роутер с 8 МБ флеша просто не поместится;
+#   - облегчённый на роутер с работающим QMI/MBIM-модемом снесёт qmi-utils и
+#     modemmanager как осиротевшие, и связь пропадёт.
+# Поэтому имя пакета определяем, а не предполагаем.
+detect_pkg() {
+	case "$1" in
+	apk)
+		# apk info печатает ЧИСТЫЕ имена, по одному на строку
+		apk info 2>/dev/null | grep -qx "$PKG_LITE" && { echo "$PKG_LITE"; return; }
+		;;
+	opkg)
+		opkg list-installed 2>/dev/null | grep -q "^$PKG_LITE " && { echo "$PKG_LITE"; return; }
+		;;
+	esac
+	echo "$PKG_FULL"
 }
 
 installed_version() {
@@ -64,6 +89,7 @@ version_gt() {
 case "$1" in
 check)
 	PM=$(pkgman)
+	PKG=$(detect_pkg "$PM")
 	CUR=$(installed_version "$PM")
 	LAT=$(latest_tag)
 	LATV=${LAT#v}
@@ -77,8 +103,11 @@ check)
 		printf '{"success":false,"error":"Could not reach GitHub","pm":"%s","current":"%s"}\n' "$PM" "$(json_esc "$CUR")"
 		exit 0
 	fi
-	printf '{"success":true,"pm":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s"}\n' \
-		"$PM" "$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE"
+	# variant отдаём наружу: интерфейс показывает, какой пакет стоит, и человек
+	# видит, ЧЕМ именно он обновится.
+	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s"}\n' \
+		"$PM" "$PKG" "$([ "$PKG" = "$PKG_LITE" ] && echo lite || echo full)" \
+		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE"
 	;;
 
 install)
@@ -91,6 +120,9 @@ install)
 		do_install() {
 			PM=$(pkgman)
 			[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; return; }
+			# Тот же вариант, что уже стоит: подмена полного на облегчённый (и
+			# наоборот) сломала бы роутер - см. detect_pkg.
+			PKG=$(detect_pkg "$PM")
 			case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
 
 			PREV=$(installed_version "$PM")
