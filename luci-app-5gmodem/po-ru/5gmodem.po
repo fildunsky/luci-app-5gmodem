@@ -2650,3 +2650,18 @@ msgstr "USSD на этом модеме не работает: это модул
 
 msgid "No messages"
 msgstr "Нет сообщений"
+
+msgid "Signal level indicator"
+msgstr "Индикатор уровня сигнала"
+
+msgid "Show signal level on the case LEDs"
+msgstr "Показывать уровень сигнала на светодиодах корпуса"
+
+msgid "Three LEDs show the signal level. Reads the same data as this page - the modem is not polled separately."
+msgstr "Три светодиода показывают уровень сигнала. Берутся те же данные, что на этой странице, — модем отдельно не опрашивается."
+
+msgid "Signal LEDs enabled"
+msgstr "Индикатор сигнала включён"
+
+msgid "Signal LEDs disabled"
+msgstr "Индикатор сигнала выключен"

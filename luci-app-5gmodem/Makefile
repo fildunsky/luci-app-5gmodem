@@ -40,6 +40,7 @@ chmod +x "$${IPKG_INSTROOT}"/lib/netifd/proto/fibocom.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/uci-defaults/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-leds 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
 	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
 	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
@@ -67,6 +68,12 @@ fi
 	# будет. Пробуем настроить его сразу: если интерфейс уже есть, команда
 	# сама ничего не сделает.
 	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+	# Индикатор на светодиодах корпуса: поднимаем, только если он включён в
+	# конфиге И светодиоды на устройстве есть (см. signal-leds.sh detect).
+	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" = "1" ]; then
+		/etc/init.d/5gmodem-leds enable 2>/dev/null
+		/etc/init.d/5gmodem-leds restart 2>/dev/null
+	fi
 	}
 	find /www/luci-static/resources/view/modem \
 		/www/luci-static/resources/protocol/fibocom.js \

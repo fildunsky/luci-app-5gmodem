@@ -71,7 +71,7 @@ T_COLLECTING="collecting data...";  T_MBPS="Mbps"
 T_DL_LC="download";         T_UL_LC="upload"
 T_ONLINE="online";          T_ROAM="(roam.)"
 T_NOREG="no reg.";          T_RUNNING="running"
-T_PRESS_S="press s";        T_PRESS_S_LONG="press s to start"
+T_PRESS_S="press t";        T_PRESS_S_LONG="press t to start"
 T_AGO_H="h ago";            T_AGO_M="m ago";      T_AGO_S="s ago"
 T_D="d"
 T_K_QUIT="quit";            T_K_REFRESH="refresh"
@@ -113,7 +113,7 @@ case "$_lang" in
 		T_DL_LC="приём";            T_UL_LC="отдача"
 		T_ONLINE="в сети";          T_ROAM="(роум.)"
 		T_NOREG="нет рег.";         T_RUNNING="идёт"
-		T_PRESS_S="нажмите s";      T_PRESS_S_LONG="нажмите s для запуска"
+		T_PRESS_S="нажмите t";      T_PRESS_S_LONG="нажмите t для запуска"
 		T_AGO_H="ч назад";          T_AGO_M="м назад";    T_AGO_S="с назад"
 		T_D="д"
 		T_K_QUIT="выход";           T_K_REFRESH="обновить"
@@ -819,7 +819,7 @@ draw_narrow() {
 			_l 24 "$T_UL" "$(pad "${C_BLU}$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
 		fi
 	else
-		_l 23 "$T_TEST" "$(pad "${C_DIM}${T_PRESS_S}${C_RST}" $((W - 12)))"
+		_l 23 "$T_TEST" "$(pad "$(hl_name "$T_PRESS_S" t "$C_DIM")" $((W - 12)))"
 	fi
 
 	# агрегация: в узком режиме только диапазоны, PCI и EARFCN не влезают
@@ -964,7 +964,7 @@ draw() {
 		lab 20 48 "$T_EXTIP" 12 "${C_DIM}${_ip:--}${C_RST}" 16
 		lab 21 48 "$T_COUNTRY"     12 "${C_DIM}${_cc:--}${C_RST}" 16
 	else
-		lab 20 4 "$T_TEST" 12 "${C_DIM}${T_PRESS_S_LONG}${C_RST}" 40
+		lab 20 4 "$T_TEST" 12 "$(hl_name "$T_PRESS_S_LONG" t "$C_DIM")" 40
 		lab 21 4 ''     12 "$(pad '' 40)" 40
 	fi
 
