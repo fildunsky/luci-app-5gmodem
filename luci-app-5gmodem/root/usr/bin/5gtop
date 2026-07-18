@@ -84,7 +84,7 @@ T_ESIM_LOAD="reading profiles...";  T_ESIM_ON="active"
 T_ESIM_HINT="digit - switch profile"
 T_NOSMS="no messages";      T_SMSLOAD="reading messages..."
 T_PORTS="Ports";            T_STORAGE="Storage"
-T_K_TAB="tab";              T_SIM="SIM"
+T_K_TAB="next tab";         T_SIM="SIM"
 T_K_WIDTH="width"
 T_IMEI="IMEI";              T_IMSI="IMSI";        T_ICCID="ICCID"
 T_FW="Firmware";            T_PROTO="Protocol";   T_LOC="Location"
@@ -142,6 +142,8 @@ SRC="/usr/share/5gmodem/5gmodem.sh"
 command -v jsonfilter >/dev/null 2>&1 || { echo "$T_ERR_NOJF" >&2; exit 1; }
 
 ESC=$(printf '\033')
+TABCH=$(printf '\t')
+BSCH=$(printf '\010')
 C_RST="${ESC}[0m";  C_DIM="${ESC}[2m";   C_B="${ESC}[1m"
 C_GRN="${ESC}[32m"; C_YEL="${ESC}[33m";  C_RED="${ESC}[31m"
 C_CYA="${ESC}[36m"; C_BLU="${ESC}[34m"
@@ -161,7 +163,7 @@ STTY_SAVE=$(stty -g 2>/dev/null)
 cleanup() {
 	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp" \
 		"$SMSFILE" "$SMSFILE.tmp" "$SMSFILE.raw" "$SMSBUSY" \
-		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap"
+		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap" "$DATA.hint"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -326,6 +328,27 @@ box_top()  { printf '%s+- %s ' "$C_DIM" "$1"; rep '-' "$((W - 5 - $(clen "$1")))
 box_mid()  { printf '%s|%s[%dC|%s\n' "$C_DIM" "$ESC" "$((W-2))" "$C_RST"; }
 box_end()  { printf '%s+' "$C_DIM"; rep '-' "$((W-2))"; printf '+%s\n' "$C_RST"; }
 
+# Подсказка клавиш - ОДНОЙ функцией на все разделы. Раньше строка была
+# продублирована в каждой рамке: при смене привязок их пришлось бы править
+# поштучно, и подсказка неизбежно разошлась бы с действительностью.
+# Клавиши подсвечены, подписи приглушены.
+# Аргумент: строки "клавиша<TAB>подпись", по паре на строку.
+keyhint() {
+	_kh() { printf '%s%s%s %s%s%s   ' "$C_B$C_YEL" "$1" "$C_RST" "$C_DIM" "$2" "$C_RST"; }
+	printf '\n '
+	_kh "q" "$T_K_QUIT"
+	_kh "r" "$T_K_REFRESH"
+	if [ -n "$1" ]; then
+		printf '%s\n' "$1" | while IFS="$(printf '\t')" read -r _kk _kl; do
+			[ -n "$_kk" ] || continue
+			printf '%s%s%s %s%s%s   ' "$C_B$C_YEL" "$_kk" "$C_RST" "$C_DIM" "$_kl" "$C_RST"
+		done
+	fi
+	# Переключение модема показываем, только если модемов больше одного.
+	[ "$MCOUNT" -gt 1 ] && _kh "Tab" "$T_K_MODEM"
+	printf '%sBkSp%s %s%s%s\n' "$C_B$C_YEL" "$C_RST" "$C_DIM" "$T_K_TAB" "$C_RST"
+}
+
 frame() {
 	printf '%s[2J%s[H' "$ESC" "$ESC"
 	[ "$NARROW" = 1 ] && { frame_narrow; return; }
@@ -355,7 +378,9 @@ frame() {
 	# только после Enter. Честно предупреждаем, а не оставляем гадать.
 	_ent=""
 	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}(+Enter)${C_RST}"
-	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   s $T_K_TEST   1-3 $T_K_PRI   t $T_K_TAB   +/- $T_K_WIDTH%s%s%s\n" "$C_DIM" "$MKEY" "$C_RST" "$_ent"
+	keyhint "t	$T_K_TEST
+1-3	$T_K_PRI
++/-	$T_K_WIDTH"
 }
 
 # ── ВКЛАДКИ ──────────────────────────────────────────────────────────────────
@@ -387,15 +412,16 @@ tab_name() {
 	esac
 }
 
-# Клавиша прямого перехода на вкладку. Буквы подобраны так, чтобы не пересекаться
-# с занятыми (q выход, r обновить, s тест, m модем, t по кругу): d - device,
-# i - inbox. Цифры не берём: на вкладке «Сеть» они переключают приоритет.
+# Клавиша прямого перехода на вкладку - БУКВА ИЗ САМОГО НАЗВАНИЯ, она же
+# подсвечивается в полосе (Network, Cell, Modem, SMS, eSIM). Ради этого
+# переехали занятые ранее: модемы теперь на Tab, тест скорости - на t.
+# Цифры не берём: они контекстные (приоритет на «Сети», профиль на eSIM).
 tab_key() {
 	case "$1" in
 		net)   printf 'n' ;;
 		cell)  printf 'c' ;;
-		modem) printf 'd' ;;
-		sms)   printf 'i' ;;
+		modem) printf 'm' ;;
+		sms)   printf 's' ;;
 		esim)  printf 'e' ;;
 	esac
 }
@@ -419,19 +445,28 @@ tab_id() {   # id раздела по номеру
 
 tab_count() { printf '%s' "$(printf '%s\n' $TAB_IDS | grep -c .)"; }
 
-# Полоса разделов: активный - ярко и в скобках, остальные приглушены.
+# Подсветить в названии ту букву, которой раздел открывается. Ищем без учёта
+# регистра; если буквы в названии нет (русские «Сеть»/«Сота» против латинских
+# n/c), показываем клавишу ПЕРЕД названием - иначе её негде было бы увидеть.
+hl_name() {   # $1 название, $2 клавиша, $3 цвет названия
+	awk -v s="$1" -v k="$2" -v cn="$3" -v ck="$C_B$C_YEL" -v cr="$C_RST" 'BEGIN {
+		p = index(s, toupper(k)); if (p == 0) p = index(s, tolower(k))
+		if (p == 0) { printf "%s%s%s %s%s%s", ck, k, cr, cn, s, cr; exit }
+		printf "%s%s%s%s%s%s%s%s", cn, substr(s, 1, p-1), cr, ck, substr(s, p, 1), cr, cn, substr(s, p+1)
+		printf "%s", cr
+	}'
+}
+
+# Полоса разделов: активный - ярко, остальные приглушены.
 bar_tabs() {
 	printf ' '
 	_i=0
 	for _t in $TAB_IDS; do
 		_i=$((_i + 1))
-		# Клавиша перехода видна всегда и подсвечена - её не нужно угадывать.
 		if [ "$_i" = "$TAB" ]; then
-			printf '%s%s%s %s%s%s  ' "$C_B$C_YEL" "$(tab_key "$_t")" "$C_RST" \
-				"$C_CYA$C_B" "$(tab_name "$_t")" "$C_RST"
+			printf '%s  ' "$(hl_name "$(tab_name "$_t")" "$(tab_key "$_t")" "$C_CYA$C_B")"
 		else
-			printf '%s%s%s %s%s%s  ' "$C_YEL" "$(tab_key "$_t")" "$C_RST" \
-				"$C_DIM" "$(tab_name "$_t")" "$C_RST"
+			printf '%s  ' "$(hl_name "$(tab_name "$_t")" "$(tab_key "$_t")" "$C_DIM")"
 		fi
 	done
 	printf '\n'
@@ -513,7 +548,8 @@ frame_cell() {
 	box_top "$T_ANT"
 	box_mid; box_mid; box_mid; box_mid
 	box_end
-	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB%s%s\n" "$C_DIM" "$MKEY" "$C_RST"
+	keyhint "t	$T_K_TEST
++/-	$T_K_WIDTH"
 }
 
 draw_cell() {
@@ -592,7 +628,7 @@ frame_modem() {
 	box_top "$T_PORTS"
 	box_mid; box_mid; box_mid
 	box_end
-	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   +/- $T_K_WIDTH%s%s\n" "$C_DIM" "$MKEY" "$C_RST"
+	keyhint "+/-	$T_K_WIDTH"
 }
 
 draw_modem() {
@@ -628,7 +664,7 @@ frame_sms() {
 	_i=0
 	while [ "$_i" -lt "$SMS_ROWS" ]; do box_mid; _i=$((_i + 1)); done
 	box_end
-	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   +/- $T_K_WIDTH%s%s\n" "$C_DIM" "$MKEY" "$C_RST"
+	keyhint "+/-	$T_K_WIDTH"
 }
 
 draw_sms() {
@@ -686,8 +722,8 @@ frame_esim() {
 	_i=0
 	while [ "$_i" -lt "$ESIM_ROWS" ]; do box_mid; _i=$((_i + 1)); done
 	box_end
-	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   %s%s%s\n" \
-		"$C_DIM" "$C_YEL" "$T_ESIM_HINT" "$C_RST"
+	keyhint "1-6	$T_ESIM_HINT
++/-	$T_K_WIDTH"
 }
 
 draw_esim() {
@@ -1251,7 +1287,9 @@ while :; do
 		# итерация уложилась в ту же секунду, досыпаем сами.
 		_t0=$(date +%s)
 		_k=""
-		read -t 1 -n 1 _k 2>/dev/null
+		# IFS= обязателен: без него read СЪЕДАЕТ табуляцию как разделитель,
+		# и клавиша Tab приходила бы пустой.
+		IFS= read -t 1 -n 1 _k 2>/dev/null
 		case "$_k" in
 			q|Q) cleanup ;;
 			r|R)
@@ -1262,17 +1300,17 @@ while :; do
 				esac
 				_since=0
 				;;
-			s|S) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
-			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ. Клавиши показаны в полосе вкладок, поэтому
-			# их не нужно помнить: n сеть, c сота, d модем, i входящие, e eSIM.
-			n|N|c|C|d|D|i|I|e|E)
+			t|T) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
+			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ буквой из её названия - она подсвечена в
+			# полосе, поэтому запоминать нечего.
+			n|N|c|C|m|M|s|S|e|E)
 				_want=""
 				for _t in $TAB_IDS; do
 					case "$_k" in
 						[Nn]) [ "$(tab_key "$_t")" = 'n' ] && _want="$_t" ;;
 						[Cc]) [ "$(tab_key "$_t")" = 'c' ] && _want="$_t" ;;
-						[Dd]) [ "$(tab_key "$_t")" = 'd' ] && _want="$_t" ;;
-						[Ii]) [ "$(tab_key "$_t")" = 'i' ] && _want="$_t" ;;
+						[Mm]) [ "$(tab_key "$_t")" = 'm' ] && _want="$_t" ;;
+						[Ss]) [ "$(tab_key "$_t")" = 's' ] && _want="$_t" ;;
 						[Ee]) [ "$(tab_key "$_t")" = 'e' ] && _want="$_t" ;;
 					esac
 				done
@@ -1287,9 +1325,12 @@ while :; do
 					net)  case "$_k" in 1|2|3) set_pri "$_k" ;; esac ;;
 				esac
 				;;
-			m|M) switch_modem; render_frame; _since=0 ;;
-			t|T)
-				# по кругу: последний -> первый
+			# Tab - следующий МОДЕМ. Прежняя m ушла под вкладку «Modem»; Tab по
+			# смыслу подходит - переключение между равноправными объектами.
+			"$TABCH") switch_modem; render_frame; _since=0 ;;
+			# Backspace - следующая ВКЛАДКА по кругу. Терминалы шлют на этой клавише
+			# то 0x08, то 0x7f (DEL), в зависимости от настройки erase - принимаем оба.
+			"$BSCH"|$(printf '\177'))
 				TAB=$((TAB + 1))
 				[ "$TAB" -gt "$(tab_count)" ] && TAB=1
 				render_frame
