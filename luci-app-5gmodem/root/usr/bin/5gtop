@@ -79,6 +79,9 @@ T_K_TEST="test";            T_K_PRI="priority";   T_K_MODEM="modem"
 T_ERR_NOSRC="not found";    T_ERR_NOJF="jsonfilter required"
 T_TAB_NET="Network";        T_TAB_CELL="Cell info"
 T_TAB_MODEM="Modem";        T_TAB_SMS="SMS"
+T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM not available on this modem"
+T_ESIM_LOAD="reading profiles...";  T_ESIM_ON="active"
+T_ESIM_HINT="digit - switch profile"
 T_NOSMS="no messages";      T_SMSLOAD="reading messages..."
 T_PORTS="Ports";            T_STORAGE="Storage"
 T_K_TAB="tab";              T_SIM="SIM"
@@ -118,6 +121,9 @@ case "$_lang" in
 		T_ERR_NOSRC="не найден";    T_ERR_NOJF="нужен jsonfilter"
 		T_TAB_NET="Сеть";           T_TAB_CELL="Сота"
 		T_TAB_MODEM="Модем";        T_TAB_SMS="SMS"
+		T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM на этом модеме недоступна"
+		T_ESIM_LOAD="читаю профили...";    T_ESIM_ON="активен"
+		T_ESIM_HINT="цифра - переключить профиль"
 		T_NOSMS="нет сообщений";    T_SMSLOAD="читаю сообщения..."
 		T_PORTS="Порты";            T_STORAGE="Хранилище"
 		T_K_TAB="вкладка";          T_SIM="SIM"
@@ -145,6 +151,8 @@ DATA="/tmp/5gtop.$$"
 STFILE="/tmp/5gmodem_speedtest.json"
 NPFILE="$DATA.np"
 SMSFILE="$DATA.sms"
+ESFILE="$DATA.esim"
+ESBUSY="$DATA.esbusy"
 SMSBUSY="$DATA.smsbusy"
 FETCHING="$DATA.busy"
 W=78            # ширина рамок
@@ -152,7 +160,8 @@ ROW_END=39
 STTY_SAVE=$(stty -g 2>/dev/null)
 cleanup() {
 	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp" \
-		"$SMSFILE" "$SMSFILE.tmp" "$SMSBUSY"
+		"$SMSFILE" "$SMSFILE.tmp" "$SMSFILE.raw" "$SMSBUSY" \
+		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -192,6 +201,31 @@ rep() { _i=0; while [ "$_i" -lt "$2" ]; do printf '%s' "$1"; _i=$((_i+1)); done;
 # Нужно там, где значение стало короче прежнего: пробелы закрашивали бы фон
 # (см. box_mid), а ECH стирает "прозрачно" - ячейка получает фон терминала.
 clr() { [ "$1" -gt 0 ] 2>/dev/null && printf '%s[%dX' "$ESC" "$1"; }
+
+# wrap <строка> <ширина> - разбить ПО СЛОВАМ, по строке на выход.
+# fit() обрезает и ставит "~" - для подписи это правильно, колонка не должна
+# разъезжаться. Но текст сообщения обрезать нельзя: на узком экране от него
+# оставался огрызок. Слово шире строки рвём принудительно, иначе разбор зациклится.
+wrap() {
+	printf '%s' "$1" | awk -v w="$2" '
+	{
+		line = ""
+		n = split($0, word, " ")
+		for (i = 1; i <= n; i++) {
+			t = word[i]
+			if (t == "") continue
+			while (length(t) > w) {
+				if (line != "") { print line; line = "" }
+				print substr(t, 1, w)
+				t = substr(t, w + 1)
+			}
+			if (line == "") { line = t }
+			else if (length(line) + 1 + length(t) <= w) { line = line " " t }
+			else { print line; line = t }
+		}
+		if (line != "") print line
+	}'
+}
 
 # fit <строка> <ширина> - ОБРЕЗАТЬ до ширины и добить пробелами.
 # pad умеет только добивать, поэтому длинное значение вылезало за рамку: при
@@ -334,7 +368,7 @@ frame() {
 # Раздел хранится в TAB (индекс в TAB_IDS). Отрисовка разведена по функциям
 # frame_<id> / draw_<id>, поэтому добавить новый раздел - это добавить id в
 # список и написать две функции; ни цикл, ни обработка клавиш не меняются.
-TAB_IDS="net cell modem sms"
+TAB_IDS="net cell modem sms esim"
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
 # вёрстки без нажатий, и просто чтобы открывать сразу нужный экран.
 case "${TAB:-1}" in
@@ -348,8 +382,31 @@ tab_name() {
 		cell)  printf '%s' "$T_TAB_CELL" ;;
 		modem) printf '%s' "$T_TAB_MODEM" ;;
 		sms)   printf '%s' "$T_TAB_SMS" ;;
+		esim)  printf '%s' "$T_TAB_ESIM" ;;
 		*)    printf '%s' "$1" ;;
 	esac
+}
+
+# Клавиша прямого перехода на вкладку. Буквы подобраны так, чтобы не пересекаться
+# с занятыми (q выход, r обновить, s тест, m модем, t по кругу): d - device,
+# i - inbox. Цифры не берём: на вкладке «Сеть» они переключают приоритет.
+tab_key() {
+	case "$1" in
+		net)   printf 'n' ;;
+		cell)  printf 'c' ;;
+		modem) printf 'd' ;;
+		sms)   printf 'i' ;;
+		esim)  printf 'e' ;;
+	esac
+}
+
+# Номер вкладки по её id - для прямого перехода клавишей.
+tab_num() {
+	_i=0
+	for _t in $TAB_IDS; do
+		_i=$((_i + 1))
+		[ "$_t" = "$1" ] && { printf '%s' "$_i"; return; }
+	done
 }
 
 tab_id() {   # id раздела по номеру
@@ -368,10 +425,13 @@ bar_tabs() {
 	_i=0
 	for _t in $TAB_IDS; do
 		_i=$((_i + 1))
+		# Клавиша перехода видна всегда и подсвечена - её не нужно угадывать.
 		if [ "$_i" = "$TAB" ]; then
-			printf '%s[%s]%s ' "$C_CYA$C_B" "$(tab_name "$_t")" "$C_RST"
+			printf '%s%s%s %s%s%s  ' "$C_B$C_YEL" "$(tab_key "$_t")" "$C_RST" \
+				"$C_CYA$C_B" "$(tab_name "$_t")" "$C_RST"
 		else
-			printf '%s %s %s' "$C_DIM" "$(tab_name "$_t")" "$C_RST"
+			printf '%s%s%s %s%s%s  ' "$C_YEL" "$(tab_key "$_t")" "$C_RST" \
+				"$C_DIM" "$(tab_name "$_t")" "$C_RST"
 		fi
 	done
 	printf '\n'
@@ -578,20 +638,31 @@ draw_sms() {
 		_r=$((_r + 1))
 	else
 		_n=0
-		# по два сообщения на четыре строки: шапка + текст + пустая
-		while [ "$_n" -lt 4 ]; do
-			_sn=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].sender" 2>/dev/null)
-			[ -n "$_sn" ] || break
-			_ts=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].timestamp" 2>/dev/null)
-			_tx=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].content" 2>/dev/null | tr '\n' ' ')
+		# Готовые строки "отправитель<TAB>время<TAB>текст" от sms_merge.
+		# IFS задаём ПРЕФИКСОМ команды - он действует только на этот read и не
+		# протекает в остальной скрипт.
+		while IFS="$(printf '\t')" read -r _sn _ts _tx; do
+			[ -n "$_sn" ] || continue
 			[ "$_r" -gt $((4 + SMS_ROWS - 1)) ] && break
 			at $_r 4 "${C_B}$(fit "$_sn" 24)${C_RST}${C_DIM}$(fit "$_ts" $((W - 32)))${C_RST}"
 			_r=$((_r + 1))
-			[ "$_r" -gt $((4 + SMS_ROWS)) ] && break
-			at $_r 4 "$(fit "$_tx" $((W - 6)))"
-			_r=$((_r + 2))
+			# ТЕКСТ ПЕРЕНОСИМ, а не обрезаем: на узком экране от сообщения
+			# оставался огрызок с "~". Строк на сообщение не больше трёх, иначе
+			# одна длинная SMS вытеснила бы все остальные.
+			_ln=0
+			wrap "$_tx" $((W - 6)) | while read -r _wl; do
+				[ "$_ln" -ge 3 ] && break
+				printf '%s\n' "$_wl"
+				_ln=$((_ln + 1))
+			done > "$DATA.wrap"
+			while read -r _wl; do
+				[ "$_r" -gt $((4 + SMS_ROWS)) ] && break
+				at $_r 4 "$(fit "$_wl" $((W - 6)))"
+				_r=$((_r + 1))
+			done < "$DATA.wrap"
+			_r=$((_r + 1))
 			_n=$((_n + 1))
-		done
+		done < "$SMSFILE"
 		[ "$_n" = 0 ] && { at 5 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
 	fi
 	# гасим остаток блока, иначе от прошлого кадра останутся хвосты
@@ -599,6 +670,74 @@ draw_sms() {
 		at $_r 4 "$(fit '' $((W - 6)))"
 		_r=$((_r + 1))
 	done
+}
+
+# ── РАЗДЕЛ «eSIM». Список профилей eUICC и переключение активного цифрой.
+#    Загрузка новых профилей сюда не вынесена: она требует ввода кода
+#    активации, а в этом цикле ввода строки нет - для неё есть веб-страница.
+ESIM_ROWS=8
+
+frame_esim() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	bar_modems
+	bar_tabs
+	box_top "$T_TAB_ESIM"
+	_i=0
+	while [ "$_i" -lt "$ESIM_ROWS" ]; do box_mid; _i=$((_i + 1)); done
+	box_end
+	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   %s%s%s\n" \
+		"$C_DIM" "$C_YEL" "$T_ESIM_HINT" "$C_RST"
+}
+
+draw_esim() {
+	_r=5
+	if [ ! -s "$ESFILE" ]; then
+		at $_r 4 "${C_DIM}$(fit "$T_ESIM_LOAD" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+	elif [ "$(jsonfilter -i "$ESFILE" -e '@.unavailable' 2>/dev/null)" = "1" ]; then
+		at $_r 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+	else
+		_n=0
+		while [ "$_n" -lt 6 ]; do
+			_ic=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_n].iccid" 2>/dev/null)
+			[ -n "$_ic" ] || break
+			_st=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_n].profileState" 2>/dev/null)
+			_nk=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_n].profileNickname" 2>/dev/null)
+			[ -n "$_nk" ] && [ "$_nk" != "null" ] || \
+				_nk=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_n].serviceProviderName" 2>/dev/null)
+			[ -n "$_nk" ] && [ "$_nk" != "null" ] || _nk="$_ic"
+			[ "$_r" -gt $((4 + ESIM_ROWS)) ] && break
+			if [ "$_st" = "enabled" ]; then
+				_mk="${C_GRN}*${C_RST}"; _nm="${C_B}${_nk}${C_RST}"; _sf="${C_GRN}${T_ESIM_ON}${C_RST}"
+			else
+				_mk="${C_DIM} ${C_RST}"; _nm="${C_DIM}${_nk}${C_RST}"; _sf=""
+			fi
+			at $_r 4 "$_mk ${C_YEL}$((_n + 1))${C_RST} $(pad "$_nm" 28)${C_DIM}$(pad "$_ic" $((W - 46)))${C_RST}$_sf"
+			_r=$((_r + 1)); _n=$((_n + 1))
+		done
+		[ "$_n" = 0 ] && { at 5 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"; _r=6; }
+	fi
+	while [ "$_r" -le $((4 + ESIM_ROWS)) ]; do
+		at $_r 4 "$(fit '' $((W - 6)))"
+		_r=$((_r + 1))
+	done
+}
+
+# Переключение профиля цифрой. Действие ДОЛГОЕ (lpac + переподнятие
+# интерфейса), поэтому в фоне и с пометкой на экране.
+esim_switch() {
+	[ -s "$ESFILE" ] || return
+	_i=$(( $1 - 1 ))
+	_ic=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_i].iccid" 2>/dev/null)
+	[ -n "$_ic" ] || return
+	_st=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_i].profileState" 2>/dev/null)
+	[ "$_st" = "enabled" ] && return
+	at 4 4 "${C_YEL}$(fit "$T_ESIM_LOAD" $((W - 6)))${C_RST}"
+	( /usr/share/5gmodem/esim.sh enable "$_ic" >/dev/null 2>&1
+	  /usr/share/5gmodem/esim.sh reapply >/dev/null 2>&1
+	  rm -f "$ESFILE" ) >/dev/null 2>&1 </dev/null &
 }
 
 draw_narrow() {
@@ -931,6 +1070,73 @@ apply_width() {
 apply_width
 [ "$W" -lt 28 ] && W=28
 
+# СКЛЕЙКА МНОГОЧАСТНЫХ SMS. Длинное сообщение приходит кусками, и по
+# отдельности они бесполезны. Части одного сообщения несут ОДИН И ТОТ ЖЕ
+# UDH-reference, но приходят с чуть разными метками времени (расходятся на
+# секунды), поэтому группировать по времени нельзя - именно так сообщение и
+# рассыпалось на вкладке. Группируем по reference, склеиваем по номеру части.
+# Та же логика, что на веб-странице.
+#
+# Делаем это в ФОНОВОМ проходе и отдаём отрисовке готовые строки
+# "отправитель<TAB>время<TAB>текст": в цикле отрисовки разбирать JSON заново
+# было бы дорого, а jsonfilter - это форк на каждое поле.
+sms_merge() {
+	_raw="$1"
+	_n=0
+	# 40 сообщений с запасом: в SIM их обычно 15-30
+	while [ "$_n" -lt 40 ]; do
+		_sn=$(jsonfilter -i "$_raw" -e "@.msg[$_n].sender" 2>/dev/null)
+		[ -n "$_sn" ] || break
+		_ts=$(jsonfilter -i "$_raw" -e "@.msg[$_n].timestamp" 2>/dev/null)
+		_rf=$(jsonfilter -i "$_raw" -e "@.msg[$_n].reference" 2>/dev/null)
+		_pt=$(jsonfilter -i "$_raw" -e "@.msg[$_n].part" 2>/dev/null)
+		_tt=$(jsonfilter -i "$_raw" -e "@.msg[$_n].total" 2>/dev/null)
+		# перевод строки внутри текста сломал бы построчный формат
+		_tx=$(jsonfilter -i "$_raw" -e "@.msg[$_n].content" 2>/dev/null | tr '\n\t' '  ')
+		case "$_tt" in ''|*[!0-9]*) _tt=1 ;; esac
+		case "$_pt" in ''|*[!0-9]*) _pt=1 ;; esac
+		# одиночные держим порознь по индексу, иначе два разных сообщения от
+		# одного отправителя слиплись бы в одно
+		if [ "$_tt" -gt 1 ] && [ -n "$_rf" ]; then
+			_key="r|$_sn|$_rf|$_tt"
+		else
+			_key="s|$_n"
+		fi
+		printf '%s\t%s\t%s\t%s\t%s\n' "$_key" "$_pt" "$_sn" "$_ts" "$_tx"
+		_n=$((_n + 1))
+	done | awk -F'\t' '
+		{
+			key = $1; part = $2 + 0
+			if (!(key in seen)) { seen[key] = 1; order[++cnt] = key; snd[key] = $3; tim[key] = $4 }
+			txt[key SUBSEP part] = $5
+			if (part > maxp[key]) maxp[key] = part
+		}
+		END {
+			# порядок сообщений сохраняем ПО ПЕРВОМУ ПОЯВЛЕНИЮ: sms_tool отдаёт
+			# их в нужном порядке, и пересортировка сломала бы его
+			for (i = 1; i <= cnt; i++) {
+				k = order[i]; out = ""
+				for (p = 1; p <= maxp[k]; p++) out = out txt[k SUBSEP p]
+				printf "%s\t%s\t%s\n", snd[k], tim[k], out
+			}
+		}'
+}
+
+# Чтение профилей eSIM. Как и SMS - в фоне и только при открытой вкладке:
+# lpac держит логический канал eUICC и отвечает секунды.
+fetch_esim() {
+	[ -f "$ESBUSY" ] && return
+	( : > "$ESBUSY"
+	  _st=$(/usr/share/5gmodem/esim.sh status 2>/dev/null)
+	  if [ "$(printf '%s' "$_st" | jsonfilter -e '@.available' 2>/dev/null)" = "1" ]; then
+	  	/usr/share/5gmodem/esim.sh dump > "$ESFILE.tmp" 2>/dev/null
+	  	[ -s "$ESFILE.tmp" ] && mv "$ESFILE.tmp" "$ESFILE"
+	  else
+	  	printf '{"unavailable":1}\n' > "$ESFILE"
+	  fi
+	  rm -f "$ESBUSY" ) >/dev/null 2>&1 </dev/null &
+}
+
 # Чтение входящих. ОТДЕЛЬНО от fetch(): sms_tool на части модемов отвечает
 # секунды, и держать этим секундный цикл отрисовки нельзя. Зовём только когда
 # открыта вкладка SMS - на других она не стоит ни одного обращения к порту.
@@ -941,8 +1147,10 @@ fetch_sms() {
 	  _s=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
 	  if [ -n "$_p" ] && [ -e "$_p" ]; then
 	  	# -j даёт JSON, тот же формат, что читает веб-страница
-	  	sms_tool -s "${_s:-ME}" -d "$_p" -f '%Y-%m-%d %H:%M' -j recv > "$SMSFILE.tmp" 2>/dev/null
+	  	sms_tool -s "${_s:-ME}" -d "$_p" -f '%Y-%m-%d %H:%M' -j recv > "$SMSFILE.raw" 2>/dev/null
+	  	[ -s "$SMSFILE.raw" ] && sms_merge "$SMSFILE.raw" > "$SMSFILE.tmp" 2>/dev/null
 	  	[ -s "$SMSFILE.tmp" ] && mv "$SMSFILE.tmp" "$SMSFILE"
+	  	rm -f "$SMSFILE.raw"
 	  fi
 	  rm -f "$SMSBUSY" ) >/dev/null 2>&1 </dev/null &
 }
@@ -1012,6 +1220,7 @@ render_frame() {
 		cell)  [ "$NARROW" = 1 ] && frame || frame_cell ;;
 		modem) frame_modem ;;
 		sms)   frame_sms; fetch_sms ;;
+		esim)  frame_esim; fetch_esim ;;
 		*)     frame ;;
 	esac
 }
@@ -1020,6 +1229,7 @@ render_draw() {
 		cell)  [ "$NARROW" = 1 ] && draw || draw_cell ;;
 		modem) draw_modem ;;
 		sms)   draw_sms ;;
+		esim)  draw_esim ;;
 		*)     draw ;;
 	esac
 }
@@ -1044,9 +1254,39 @@ while :; do
 		read -t 1 -n 1 _k 2>/dev/null
 		case "$_k" in
 			q|Q) cleanup ;;
-			r|R) fetch; [ "$(tab_id "$TAB")" = "sms" ] && fetch_sms; _since=0 ;;
+			r|R)
+				fetch
+				case "$(tab_id "$TAB")" in
+					sms)  fetch_sms ;;
+					esim) rm -f "$ESFILE"; fetch_esim ;;
+				esac
+				_since=0
+				;;
 			s|S) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
-			1|2|3) set_pri "$_k" ;;
+			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ. Клавиши показаны в полосе вкладок, поэтому
+			# их не нужно помнить: n сеть, c сота, d модем, i входящие, e eSIM.
+			n|N|c|C|d|D|i|I|e|E)
+				_want=""
+				for _t in $TAB_IDS; do
+					case "$_k" in
+						[Nn]) [ "$(tab_key "$_t")" = 'n' ] && _want="$_t" ;;
+						[Cc]) [ "$(tab_key "$_t")" = 'c' ] && _want="$_t" ;;
+						[Dd]) [ "$(tab_key "$_t")" = 'd' ] && _want="$_t" ;;
+						[Ii]) [ "$(tab_key "$_t")" = 'i' ] && _want="$_t" ;;
+						[Ee]) [ "$(tab_key "$_t")" = 'e' ] && _want="$_t" ;;
+					esac
+				done
+				[ -n "$_want" ] && { TAB=$(tab_num "$_want"); render_frame; }
+				;;
+			# ЦИФРЫ КОНТЕКСТНЫЕ: на «Сети» это приоритет интернета, на eSIM - выбор
+			# профиля. Так один и тот же ряд клавиш обслуживает оба экрана, и ничего
+			# не пришлось переназначать.
+			1|2|3|4|5|6)
+				case "$(tab_id "$TAB")" in
+					esim) esim_switch "$_k" ;;
+					net)  case "$_k" in 1|2|3) set_pri "$_k" ;; esac ;;
+				esac
+				;;
 			m|M) switch_modem; render_frame; _since=0 ;;
 			t|T)
 				# по кругу: последний -> первый
@@ -1070,6 +1310,7 @@ while :; do
 		# SMS перечитываем реже: чтение дороже опроса метрик и новые сообщения
 		# приходят не каждую секунду.
 		[ "$(tab_id "$TAB")" = "sms" ] && [ "$((_tick % 6))" = 0 ] && fetch_sms
+		[ "$(tab_id "$TAB")" = "esim" ] && [ "$((_tick % 12))" = 0 ] && fetch_esim
 		_since=0
 	fi
 	_tick=$((_tick + 1))
