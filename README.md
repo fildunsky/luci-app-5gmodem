@@ -66,7 +66,9 @@ opkg update
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
-Only `sms-tool` is strictly required. ModemManager, QMI/MBIM tools and the USB-serial kmods are optional (build option `LUCI_APP_5GMODEM_FULL`, on by default) — turn them off for low-flash devices such as MT7628 boards with 8 MB of storage.
+The regular package pulls in the full set (`sms-tool`, `comgt`, `qmi-utils`, `modemmanager`, QMI/MBIM protocols, USB-serial kmods) — upgrade it over any earlier version and nothing gets removed.
+
+For low-flash devices (MT7628 boards with 8 MB, where the full set will not install at all) there is a separate **`-lite.apk`** in the release: it requires only `sms-tool`. Metrics, SMS, USSD, band control and the AT console all work; you lose the QMI/MBIM interface protocols and the phone number read through `mmcli`. Do not use the lite build as an upgrade on a router that runs a QMI or MBIM modem — the package manager would drop those packages as orphans.
 
 ## Build from source
 
