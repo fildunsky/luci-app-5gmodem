@@ -190,6 +190,8 @@ return view.extend({
 				'.esim-actions{margin-top:10px}' +
 				'#esim-profiles .btn{padding:1px 8px;font-size:85%;margin-left:4px}' +
 				'#esim-profiles td,#esim-profiles th{white-space:nowrap}' +
+				'.esim-steps{margin-top:8px;font-size:88%;opacity:.8;min-height:1.3em}' +
+				'.esim-step{padding:1px 0;font-family:ui-monospace,Menlo,Consolas,monospace}' +
 				'.esim-set{margin-top:18px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px}' +
 				'.esim-set>summary{cursor:pointer;font-size:92%;opacity:.75;user-select:none}' +
 				'.esim-set>summary:hover{opacity:1}' +
@@ -269,7 +271,8 @@ return view.extend({
 				// логическими каналами после предыдущей сессии (esim.sh чистит их
 				// через AT+CCHC перед каждой операцией) или модем ещё поднимается
 				// после CFUN. Не пугаем ошибкой сразу - молча повторяем.
-				if (tries < 2) {
+				// потолок с запасом: после жёсткого ребута модема eUICC отвечает не сразу
+				if (tries < 5) {
 					window.setTimeout(function() { self.reload(tries + 1); }, 4000);
 					return;
 				}
@@ -312,28 +315,113 @@ return view.extend({
 				notify(false, null, _('No internet access. The router must be online to download an eSIM profile from the operator.'));
 				return;
 			}
-			if (nc.smdp === 0) {
-				// сеть есть, но SM-DP+ не ответил - не блокируем (мог не отвечать
-				// на GET корня), но честно предупреждаем
-				ui.addNotification(null, E('p',
-					_('The operator server did not respond to a test request, but the internet is up. Trying to download anyway...')), 'warning');
-			}
+			// Предупреждение про "SM-DP+ не ответил" УБРАНО намеренно. Проверка шла
+			// встроенным curl, а он на серверах с сертификатами GSMA CI всегда даёт
+			// 000 - то есть предупреждение срабатывало не на недоступность оператора,
+			// а на несовпадение TLS-стека с тем, которым мы реально качаем (мост).
+			// Ложная тревога, да ещё и под модалкой, где её не видно. Отсутствие
+			// доступа в интернет (nc.net) проверяем по-прежнему - это осмысленно.
 			self._doDownload(code, inp);
 		});
 	},
 
+	// Человекочитаемые названия шагов SGP.22. Коды приходят от lpac как есть
+	// (es9p_* - обмен с сервером оператора, es10b_* - работа с самой картой);
+	// пользователю они ничего не говорят, а порядок шагов - говорит.
+	_stepName: function(m) {
+		var map = {
+			'es10b_get_euicc_challenge_and_info': _('Reading the eUICC'),
+			'es9p_initiate_authentication':       _('Contacting the operator server'),
+			'es10b_authenticate_server':          _('Verifying the server'),
+			'es9p_authenticate_client':           _('Authenticating the card'),
+			'es8p_meatadata_parse':               _('Receiving profile details'),
+			'es10b_prepare_download':             _('Preparing the download'),
+			'es9p_get_bound_profile_package':     _('Downloading the profile'),
+			'es10b_load_bound_profile_package':   _('Installing onto the card'),
+			'es10b_cancel_session':               _('Closing the session'),
+			'es9p_cancel_session':                _('Closing the server session'),
+		};
+		return map[m] || m;
+	},
+
+	// Опрос живого лога, пока крутится спиннер. Мост дописывает строки прогресса
+	// по мере их прихода, поэтому ход операции виден сразу, а не вместе с итогом.
+	_pollProgress: function(box) {
+		var self = this;
+		if (!self._dlActive) { return; }
+		L.resolveDefault(fs.exec_direct(ESIM, [ 'progress' ]), '').then(function(out) {
+			// Никогда не затираем накопленный лог служебным ответом: если бэкенд
+			// ответил однострочным {"type":"lpa"...} (напр. "busy"), это НЕ лог
+			// операции - именно так сохранённый файл однажды свёлся к одной строке.
+			var s = out || '';
+			if (s.indexOf('"type":"progress"') >= 0 || !self._dlLog) {
+				if (s.indexOf('"message":"busy"') < 0) { self._dlLog = s; }
+			}
+			if (box && self._dlActive) {
+				// ОДНА строка, сменяющая саму себя: шаги идут строго последовательно,
+				// и список из них только растит модалку и уводит взгляд. Показываем
+				// текущий шаг, предыдущие уже не важны - они есть в сохраняемом логе.
+				var lines = self._dlLog.split('\n').filter(function(l) { return l.indexOf('"progress"') > 0; });
+				var last = lines[lines.length - 1];
+				if (last) {
+					var m = last.match(/"message":"([^"]+)"/);
+					var d = last.match(/"serviceProviderName":"([^"]+)"/);
+					var t = m ? self._stepName(m[1]) : '';
+					if (t) { box.textContent = (d ? (t + ' — ' + d[1]) : t) + '…'; }
+				}
+			}
+			if (self._dlActive) { window.setTimeout(function() { self._pollProgress(box); }, 1200); }
+		});
+	},
+
+	// Выгрузка лога файлом - чтобы пользователь мог прислать его для разбора.
+	_saveLog: function() {
+		var blob = new Blob([ this._dlLog || '' ], { type: 'text/plain' });
+		var a = E('a', {
+			'href': URL.createObjectURL(blob),
+			'download': 'esim-download-' + Math.floor(Date.now() / 1000) + '.log'
+		});
+		document.body.appendChild(a); a.click();
+		window.setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+	},
+
 	_doDownload: function(code, inp) {
+		var self = this;
+		var box = E('div', { 'class': 'esim-steps' });
 		ui.showModal(_('Add eSIM profile'), [
 			E('p', { 'class': 'spinning' }, _('Downloading eSIM profile... This can take a minute, do not leave the page.')),
+			box,
 		]);
-		var self = this;
-		fs.exec(ESIM, [ 'download', code ]).then(function(res) {
+		self._dlActive = true; self._dlLog = '';
+		// Сначала гасим лог прошлого запуска на бэкенде, и только потом стартуем:
+		// иначе первый же опрос покажет чужие шаги целиком.
+		var dl = L.resolveDefault(fs.exec_direct(ESIM, [ 'progress', 'reset' ]), '')
+			.then(function() {
+				self._pollProgress(box);
+				return fs.exec(ESIM, [ 'download', code ]);
+			});
+		dl.then(function(res) {
+			self._dlActive = false;
 			var j = parseLpa(res.stdout);
 			var ok = lpaOk(j);
 			if (!ok) {
-				ui.hideModal();
-				notify(false, null, _('Download failed: %s').format(lpaMsg(j)));
-				self.reload();
+				// Лог оставляем на экране: он показывает, НА КАКОМ шаге отвалилось,
+				// и его можно выгрузить файлом для удалённого разбора.
+				ui.showModal(_('Add eSIM profile'), [
+					E('p', {}, _('Download failed: %s').format(lpaMsg(j))),
+					box,
+					E('div', { 'class': 'right' }, [
+						E('button', {
+							'class': 'btn cbi-button',
+							'click': ui.createHandlerFn(self, function() { self._saveLog(); })
+						}, [ _('Save log') ]),
+						' ',
+						E('button', {
+							'class': 'btn cbi-button cbi-button-neutral',
+							'click': function() { ui.hideModal(); self.reload(); }
+						}, [ _('Close') ]),
+					]),
+				]);
 				return;
 			}
 			if (inp) { inp.value = ''; }
@@ -343,14 +431,22 @@ return view.extend({
 			// ДЕРЖИМ модал с понятным текстом до конца ребута: иначе пользователь,
 			// не зная, что модем перезагружается, жмёт Refresh и получает пугающее
 			// «eUICC не отвечает» (см. #6). Список перечитываем с запасом (25 c).
-			ui.showModal(_('Add eSIM profile'), [ E('p', { 'class': 'spinning' },
-				_('Profile added. Rebooting the modem to apply it - this takes up to a minute, please wait...')) ]);
+			// Не модалка, а оверлей поверх всего блока eSIM: модалка перекрывает
+			// страницу целиком и выглядит как «всё сломалось», хотя идёт штатный
+			// ребут. Оверлей показывает, что занят именно этот блок.
+			ui.hideModal();
+			modemtabs.setBusy('.cbi-section',
+				_('Profile added. The modem is restarting to apply it - up to a minute…'), 90000);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			// 25 c не хватало: модем перезагружается ЖЁСТКО и переэнумерируется
+			// на USB 30-60 c (столько же ждёт переключение слота). Список
+			// перечитывался, пока eUICC ещё не поднялся, попытки заканчивались,
+			// и пользователю приходилось жать Refresh руками.
 			window.setTimeout(function() {
-				ui.hideModal();
+				modemtabs.clearBusy();
 				notify(true, _('eSIM profile added and applied.'), null);
-				self.reload();
-			}, 25000);
+				self.reload(-3);   // запас попыток: модем мог ещё не вернуться
+			}, 45000);
 		}).catch(function() { ui.hideModal(); });
 	},
 });
@@ -427,18 +523,20 @@ function esimOp(verb, iccid, name) {
 			   - держим модал с понятным текстом (а не пугающей ошибкой, если
 			     пользователь сам жмёт Refresh во время ребута - см. #6);
 			   - список перечитываем с запасом (25 c), как при добавлении. */
-			ui.showModal(_('eSIM'), [ E('p', { 'class': 'spinning' },
-				_('Profile %s. Rebooting the modem to apply it - this takes up to a minute, please wait...')
-					.format(verb == 'enable' ? _('enabled') : _('disabled'))) ]);
+			// Оверлей поверх блока вместо модалки - идёт штатный ребут, а не сбой.
+			ui.hideModal();
+			modemtabs.setBusy('.cbi-section',
+				_('Profile %s. The modem is restarting to apply it - up to a minute…')
+					.format(verb == 'enable' ? _('enabled') : _('disabled')), 90000);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
 			window.setTimeout(function() {
-				ui.hideModal();
+				modemtabs.clearBusy();
 				notify(true, _('eSIM operation done'), null);
 				_viewReload();
 				/* Включили другой профиль -> мог смениться оператор: предложим
 				   проверить APN (не меняем молча). Для disable не делаем. */
 				if (verb == 'enable') { proposeApnAfterEnable(); }
-			}, 25000);
+			}, 45000);
 			return;
 		}
 		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));

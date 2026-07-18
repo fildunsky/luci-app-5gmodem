@@ -38,6 +38,7 @@
 PORT="$1"
 RESULT="$2"
 CABUNDLE="$3"
+LIVELOG="$4"
 : > "$RESULT"
 CH=""
 
@@ -78,6 +79,18 @@ while IFS= read -r line; do
 			wget -q -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
 				"$@" "$url" 2>"$_rh"
 			rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
+			# ОТКАТ НА НЕПРОВЕРЯЕМОЕ СОЕДИНЕНИЕ, если сорвалась именно проверка
+			# сертификата. Так ходит сам lpac (его curl-бэкенд ставит
+			# CURLOPT_SSL_VERIFYPEER=0), поэтому мы тут НЕ слабее базового
+			# поведения - но без этого отката мы СТРОЖЕ и ломаем то, что раньше
+			# работало: тестовые SM-DP+ (sysmocom TS.48) предъявляют сертификаты
+			# GSMA *Test* CI, которого в публичных бандлах нет и быть не может.
+			# Профиль защищён криптографией на уровне eUICC, а не этим TLS.
+			if [ -z "$rcode" ] && grep -qi "certificate\|issuer" "$_rh" 2>/dev/null; then
+				wget -q -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+					--no-check-certificate "$@" "$url" 2>"$_rh"
+				rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
+			fi
 			# Транспорт не состоялся (DNS/TLS/таймаут) - ответа нет вообще.
 			# Отдаём 500: lpac трактует как ошибку ES9+ и не виснет в ожидании.
 			[ -n "$rcode" ] || rcode=500
@@ -85,8 +98,12 @@ while IFS= read -r line; do
 				"$rcode" "$(bin2hex "$_rb")"
 			rm -f "$_rq" "$_rb" "$_rh"
 			continue ;;
-		*)  # не apdu/http -> это финальный результат ("lpa"): пишем и выходим
+		*)  # не apdu/http -> прогресс или финальный результат ("lpa")
 			printf '%s\n' "$line" >> "$RESULT"
+			# Дублируем в стабильный файл: $RESULT именован по PID и наружу не
+			# виден, а UI должен показывать ход операции ПОКА она идёт (иначе
+			# прогресс доезжает до пользователя только вместе с итогом).
+			[ -n "$LIVELOG" ] && printf '%s %s\n' "$(date '+%H:%M:%S' 2>/dev/null)" "$line" >> "$LIVELOG"
 			case "$line" in *'"type":"lpa"'*) exit 0 ;; esac
 			continue ;;
 	esac

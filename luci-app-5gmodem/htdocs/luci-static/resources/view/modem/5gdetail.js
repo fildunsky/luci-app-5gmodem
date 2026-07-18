@@ -116,8 +116,8 @@ document.head.append(E('style', {'type': 'text/css'},
 
 /* Иконка-индикатор роуминга (croaming.svg), перед статусом «В сети». */
 .tginfo-roam {
-  display: inline-block; width: 1.2em; height: 1.2em; margin-right: .35em;
-  vertical-align: -0.2em; flex: 0 0 auto;
+  display: inline-block; width: .75em; height: .75em; margin-right: .3em;
+  vertical-align: 0; flex: 0 0 auto;
 }
 
 /* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц

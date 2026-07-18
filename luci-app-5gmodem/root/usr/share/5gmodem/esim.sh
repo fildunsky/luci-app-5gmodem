@@ -26,6 +26,9 @@ RES="/usr/share/5gmodem"
 LPAC="/usr/lib/lpac"
 BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
 PORTCACHE="/tmp/5gmodem_esim_port"
+# Живой лог операции: мост дописывает сюда строки прогресса ПО МЕРЕ их прихода,
+# UI читает его во время спиннера. Переживает неудачу - нужен для диагностики.
+LIVELOG="/tmp/5gmodem_esim_progress.log"
 GSMACERT="/usr/share/5gmodem/certs/gsma-ci.pem"
 CACACHE="/tmp/5gmodem_esim_ca.pem"
 
@@ -89,7 +92,7 @@ run_lpac() {
 	else
 		_CA=""; _HTTPDRV="curl"
 	fi
-	sh "$BRIDGE" "$PORT" "$_RES" "$_CA" < "$_LOOP" \
+	sh "$BRIDGE" "$PORT" "$_RES" "$_CA" "$LIVELOG" < "$_LOOP" \
 		| LPAC_APDU=stdio LPAC_HTTP="$_HTTPDRV" "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
 	_PID=$!
 	# Опрос вместо wait+сторож: busybox плохо реапит сабшелл пайплайна через wait
@@ -207,6 +210,17 @@ do_lpac() {
 
 # ---- дешёвый статус: без lpac и без замка -----------------------------------
 case "$1" in
+# progress ДО блокировки: это чтение файла, порт не трогает. Под блокировкой
+# он возвращал бы "busy" во время самой операции - то есть ровно тогда, когда
+# прогресс и нужен, а UI затирал бы этим ответом накопленный лог.
+progress)
+	# progress reset - обнулить лог ПЕРЕД стартом. Без явного сброса UI успевает
+	# прочитать лог прошлого запуска раньше, чем его обнулит ветка download, и
+	# показывает пользователю чужие шаги целиком.
+	if [ "$2" = "reset" ]; then : > "$LIVELOG"; echo "{}"; exit 0; fi
+	[ -f "$LIVELOG" ] && cat "$LIVELOG"
+	exit 0
+	;;
 status)
 	AVAIL=0; ACTIVE=0
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
@@ -310,6 +324,7 @@ netcheck)
 	;;
 download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
+	: > "$LIVELOG"
 	O=$(do_lpac 240 profile download -a "$2"); flush_notifications; echo "$O"
 	;;
 notifications)
@@ -320,7 +335,7 @@ flush)
 	echo '{"type":"lpa","payload":{"code":0,"message":"success","data":""}}'
 	;;
 *)
-	err "usage: esim.sh status|dump|enable|disable|delete|nickname|download|notifications|flush"
+	err "usage: esim.sh status|dump|enable|disable|delete|nickname|download|notifications|flush|progress"
 	;;
 esac
 exit 0

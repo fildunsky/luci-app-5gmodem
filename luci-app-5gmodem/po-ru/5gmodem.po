@@ -2524,3 +2524,48 @@ msgstr "Используется, только если сервис выше в
 
 msgid "Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
 msgstr "Сервис, возвращающий публичный IP. По умолчанию ip-api.com — он отдаёт и страну, которая показывается флагом рядом с адресом. Выберите готовый или укажите свой; при отказе опрашивается резервный сервис, и лишь затем показывается локальный адрес аплинка (без флага)."
+
+msgid "Profile added. The modem is restarting to apply it - up to a minute…"
+msgstr "Профиль добавлен. Модем перезагружается, чтобы применить его — до минуты…"
+
+msgid "Profile %s. The modem is restarting to apply it - up to a minute…"
+msgstr "Профиль %s. Модем перезагружается, чтобы применить его — до минуты…"
+
+msgid "Save log"
+msgstr "Сохранить лог"
+
+msgid "Reading the eUICC"
+msgstr "Чтение eUICC"
+
+msgid "Contacting the operator server"
+msgstr "Обращение к серверу оператора"
+
+msgid "Verifying the server"
+msgstr "Проверка сервера"
+
+msgid "Authenticating the card"
+msgstr "Аутентификация карты"
+
+msgid "Receiving profile details"
+msgstr "Получение данных профиля"
+
+msgid "Preparing the download"
+msgstr "Подготовка загрузки"
+
+msgid "Downloading the profile"
+msgstr "Загрузка профиля"
+
+msgid "Installing onto the card"
+msgstr "Установка на карту"
+
+msgid "Closing the session"
+msgstr "Закрытие сессии"
+
+msgid "Closing the server session"
+msgstr "Закрытие сессии с сервером"
+
+msgid "Roaming"
+msgstr "Роуминг"
+
+msgid "Online"
+msgstr "В сети"

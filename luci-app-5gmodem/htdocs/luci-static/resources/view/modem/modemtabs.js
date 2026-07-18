@@ -220,5 +220,55 @@ return baseclass.extend({
 				if (c) { c.insertBefore(bar, c.firstChild); }
 			})();
 		});
-	}
+	},
+
+	/* --- Оверлей «модем перезагружается» -----------------------------------
+	   Накрывает блок целиком, пока модем недоступен (жёсткий ребут = переэнумерация
+	   USB на 30-60 c). Живёт здесь, а не в конкретной странице: нужен и на «Сети»
+	   (блок Модем), и на вкладке eSIM (после включения/добавления профиля).
+	   Оформление подстраивается под тему: в bootstrap непрозрачная плашка со
+	   скруглением как у кнопок, в proton2025 - полупрозрачная с блюром, как попапы
+	   меню (тему различаем по data-theme на <html>: proton его ставит, bootstrap нет). */
+	_busyCss: function() {
+		if (document.getElementById('modem-busy-css')) { return; }
+		var css =
+			'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
+			'display:flex;align-items:center;justify-content:center;text-align:center;' +
+			'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
+			'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
+			':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
+			'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
+			':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
+			':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}';
+		document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
+	},
+
+	/* setBusy(selector, msg[, safetyMs]) - накрыть блок; clearBusy() - снять. */
+	setBusy: function(sel, msg, safetyMs) {
+		var block = document.querySelector(sel);
+		if (!block) { return; }
+		this._busyCss();
+		var txt = msg || _('The modem is restarting…');
+		var ov = document.getElementById('modem-busy-ov');
+		if (!ov) {
+			block.style.position = 'relative';
+			ov = E('div', { 'id': 'modem-busy-ov' }, [
+				E('span', { 'class': 'spinning', 'style': 'font-weight:600;' }, txt)
+			]);
+			block.appendChild(ov);
+		} else {
+			ov.style.display = 'flex';
+			var sp = ov.querySelector('.spinning'); if (sp) { sp.textContent = txt; }
+		}
+		if (this._busyTimer) { window.clearTimeout(this._busyTimer); }
+		// страховка: снять оверлей, даже если снимающий код не отработал
+		var self = this;
+		this._busyTimer = window.setTimeout(function() { self.clearBusy(); }, safetyMs || 120000);
+	},
+
+	clearBusy: function() {
+		if (this._busyTimer) { window.clearTimeout(this._busyTimer); this._busyTimer = null; }
+		var ov = document.getElementById('modem-busy-ov');
+		if (ov) { ov.remove(); }
+	},
 });
