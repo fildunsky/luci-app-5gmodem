@@ -44,10 +44,11 @@ var CSS = `
 .netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
 .netpribar .netpri-btn .netpri-ip.empty { opacity: .4; }
 .netpribar .netpri-btn.active {
-	/* keep the normal button look, just mark the active one with the theme's
-	   accent outline (not a full fill) */
+	/* Активную помечаем ровно тем же, что тема даёт кнопке на hover
+	   (.cbi-button:hover -> border-color: accent, box-shadow: none).
+	   Внутренней обводки inset 0 0 0 1px здесь была - она удваивала рамку,
+	   и выделение выглядело жирным. */
 	border-color: var(--proton-accent, #0095ff);
-	box-shadow: inset 0 0 0 1px var(--proton-accent, #0095ff);
 	pointer-events: none;
 }
 /* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому

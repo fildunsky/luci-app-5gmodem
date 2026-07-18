@@ -48,6 +48,7 @@
 				"/sys/kernel/debug/usb/devices": [ "read" ],
 				"/tmp/mysms.txt": [ "read" ],
 				"/tmp/5gmodem_update.json": [ "read" ],
+				"/tmp/5gmodem_listmodems.cache": [ "read" ],
 				"/tmp/5gmodem-diag.txt": [ "read" ],
 				"/etc/modem/atcmmds.user": [ "read" ],
 				"/etc/modem/atcmmds": [ "list" ],

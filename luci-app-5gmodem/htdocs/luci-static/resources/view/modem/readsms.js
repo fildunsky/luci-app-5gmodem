@@ -24,11 +24,6 @@ var callForwardSMS = rpc.declare({
 
 document.head.append(E('style', {'type': 'text/css'},
 `
-#smsTable {
-  width: 100%;
-  border: 1px solid var(--border-color-medium) !important;
-}
-
 /* Инфо-таблица над списком (модем, хранилище, ёмкость): без линий между строками */
 #sms-info-table td,
 #sms-info-table th,
@@ -37,72 +32,182 @@ document.head.append(E('style', {'type': 'text/css'},
   border: none !important;
 }
 
-th, td {
-  padding: 10px;
-  text-align: justify !important;
-  vertical-align: top !important;
+/* СПИСОК СООБЩЕНИЙ - карточки, а не таблица.
+   Карточка должна выглядеть В ТОЧНОСТИ как кнопки приоритета интернета и
+   спидтеста на вкладке «Сеть», поэтому:
+   1) на элементе те же классы темы - btn cbi-button. Именно они дают фон,
+      рамку и базовую типографику; без них <button> выглядит по-другому, и
+      никакой своей палитрой это не повторить;
+   2) геометрия ниже покомпонентно скопирована с .netpri-btn (netpri.js).
+      Не переиспользуем те правила напрямую: они заскоплены под .netpribar и
+      на этой странице просто не применятся. При правке netpri-кнопок эти
+      значения нужно править парой. */
+#smsList {
+  display: flex;
+  flex-direction: column;
+  gap: .4em;
 }
 
-td input[type="checkbox"] {
-  float: left !important;
-  margin: 0 auto !important;
-  width: 17px !important;
+.sms-card {
+  /* значения 1:1 из .netpribar .netpri-btn */
+  padding: .35em 1em;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.15;
+  /* proton2025 задаёт button,.btn{gap:8px} - на flex-column это даёт большие
+     вертикальные дыры между строками (та же нейтрализация, что в netpri.js) */
+  gap: 0;
+  /* В отличие от ряда netpri, карточки идут столбцом во всю ширину. */
+  width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
 }
 
-td .sms-row-icon {
-  display: inline-block;
-  vertical-align: middle;
-  margin-left: 10px;
+/* СДВИГ КАРТОЧЕК (был виден только в proton2025 и только на широком экране).
+   Тема задаёт:  button+button, .btn+.btn, .cbi-button+.cbi-button { margin-left: 8px }
+   Рассчитано это на кнопки В РЯД, а у нас они столбцом: каждой следующей
+   карточке добавлялось 8px слева, и она на столько же вылезала за правый край.
+   Просто margin:0 в .sms-card не помогал - у .btn+.btn специфичность (0,2,0)
+   против (0,1,0), тема выигрывала. Добавляем #smsList -> (1,1,0).
+   ВНИМАНИЕ: этот блок - шаблонная строка, обратные кавычки в комментариях
+   закрывают её и ломают файл. */
+#smsList .sms-card {
+  margin: 0;
 }
 
-td .sms-row-icon img {
-  vertical-align: middle;
+/* Выделено - как .netpri-btn.active, то есть как кнопка на hover у темы: одна
+   акцентная рамка, без заливки и без внутренней обводки.
+   pointer-events:none из netpri НЕ берём: активную кнопку там нельзя нажать
+   повторно, а выделение сообщения снимается тем же кликом. */
+.sms-card.selected {
+  border-color: var(--proton-accent, #0095ff);
 }
 
-/* Первая ячейка строки = чекбокс + иконка сообщения. Колонка .checker
-   узкая (7%), поэтому чекбокс с иконкой не влезали в одну строку и иконку
-   переносило вниз («невидимый перенос строки»). Запрещаем перенос и даём
-   ячейке минимальную ширину. !important - тема proton2025 задаёт свои
-   правила для td. */
-#smsTable td:first-child {
-  white-space: nowrap !important;
-  min-width: 64px;
+/* Шапка тянется во всю ширину карточки, иначе align-items:flex-start прижмёт
+   её по содержимому и время не уедет вправо. */
+.sms-card .sms-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: .6em;
+  width: 100%;
+  margin-bottom: .2em;
 }
 
-#smsTable tr:nth-child(odd) td{
-  background: var(--background-color-medium) !important;
-  border-bottom: 1px solid var(--border-color-medium) !important;
-  border-top: 1px solid var(--border-color-medium) !important;
+/* отправитель - как .netpri-name (вес 600 наследуется от кнопки) */
+.sms-card .sms-card-from {
+  display: flex;
+  align-items: center;
+  gap: .35em;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
-#smsTable tr:nth-child(even) td{
-  border-bottom: 1px solid var(--border-color-medium) !important;
-  border-top: 1px solid var(--border-color-medium) !important;
+/* дата и время - как .netpri-sub, плюс ровные цифры от .netpri-ip */
+.sms-card .sms-card-time {
+  flex: 0 0 auto;
+  font-size: .72em;
+  font-weight: 400;
+  opacity: .7;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-#smsTable .checker {
-  width: 7% !important;
+/* Текст сообщения - обычный вес, как .netpri-sub/.netpri-ip, но БЕЗ их
+   уменьшения до .72em: там это подпись, здесь - основное содержимое. */
+.sms-card .sms-card-text {
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
-#smsTable .from {
-  width: 11% !important;
-}
-
-#smsTable .received {
-  width: 15% !important;
-}
-
-#smsTable .message {
-  width: 88% !important;
-}
-
+/* иконка - размеры .netpri-ic */
 .sms-row-icon {
-  position: relative;
-  display: inline-block;
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.sms-row-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 :root[data-darkmode="true"] .sms-row-icon {
   opacity: 0.5;
+}
+
+/* Хранилище и заполненность - одной строкой, без подписи слева. На узком
+   экране полоска переносится под переключатели (flex-wrap). */
+.sms-storage-row {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  flex-wrap: wrap;
+}
+
+.sms-storage-opts {
+  display: flex;
+  align-items: center;
+  gap: 1.2em;
+  flex: 0 0 auto;
+}
+
+/* Полоска резиновая: занимает остаток строки, но не ужимается до нечитаемой -
+   при нехватке места уходит на вторую строку целиком. */
+.sms-storage-row .cbi-progressbar {
+  flex: 1 1 14em;
+  min-width: 14em;
+  margin: 0;
+}
+
+/* Ряд действий: «Обновить» и «Переслать» слева, «Удалить» прижата вправо -
+   как ряд приоритетов интернета со спидтестом на вкладке «Сеть». */
+.sms-actions {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  flex-wrap: wrap;
+  margin: .5em 0;
+}
+
+/* Тема добавляет соседним кнопкам margin-left: 8px - вместе с gap получался
+   двойной зазор. Гасим тем же приёмом, что и сдвиг карточек: селектор из трёх
+   классов (0,3,0) перебивает .cbi-button+.cbi-button (0,2,0). */
+.sms-actions .cbi-button + .cbi-button {
+  margin-left: 0;
+}
+
+/* Вправо уезжает СЧЁТЧИК, а «Удалить» встаёт следом - у самого края.
+   margin-left:auto на первом из прижимаемых элементов съедает весь свободный
+   зазор, поэтому auto стоит на счётчике, а не на кнопке. */
+.sms-actions .sms-selcount {
+  margin-left: auto;
+}
+
+/* Плейсхолдер на месте списка: держит его высоту, пока сообщений нет или они
+   ещё грузятся. Раньше пустой список схлопывался в ничто, и страница выглядела
+   сломанной - особенно при заходе, когда чтение занимает несколько секунд. */
+.sms-empty {
+  border: 1px dashed var(--border-color-medium);
+  border-radius: 6px;
+  padding: 1.2em .85em;
+  text-align: center;
+  opacity: .6;
+}
+
+.sms-selcount {
+  margin-left: .5em;
+  opacity: .65;
 }
 `));
 
@@ -113,7 +218,119 @@ var mn = parseInt(m) || 100;
 var pc = Math.floor((100 / mn) * vn);
 
 pg.firstElementChild.style.width = pc + '%';
-pg.setAttribute('title', '%s'.format(v) + ' / ' + '%s'.format(m) + ' ('+ pc + '%)');
+/* Текст внутри полоски рисует тема из атрибута title. Показываем счёт
+   сообщений, а не проценты: «Память: 2/15». */
+pg.setAttribute('title', _('Memory: %s/%s').format(v, m));
+}
+
+/* ВЫДЕЛЕНИЕ СООБЩЕНИЙ.
+   Галочек в списке больше нет: сообщение выделяется кликом по карточке, а
+   состояние живёт в классе .selected. Чекбоксы не сохраняем даже скрытыми -
+   <input> внутри <button> невалиден. Индексы сообщения (у склеенного
+   многочастного - все части через дефис) лежат в data-index; удаление берёт
+   их оттуда. */
+/* Плейсхолдер вместо списка. state: 'loading' - идёт чтение, 'empty' - прочитали,
+   сообщений нет. */
+function sms_placeholder(state) {
+	var list = document.getElementById('smsList');
+	if (!list) { return; }
+	list.innerHTML = '';
+	list.appendChild(E('div', { 'class': 'sms-empty', 'id': 'smsEmpty' }, [
+		state === 'loading'
+			? E('span', { 'class': 'spinning' }, _('Loading messages…'))
+			: E('span', {}, _('No messages'))
+	]));
+}
+
+function sms_selected_cards() {
+	return document.querySelectorAll('.sms-card.selected');
+}
+
+function sms_set_selected(card, on) {
+	if (on) { card.classList.add('selected'); } else { card.classList.remove('selected'); }
+	card.setAttribute('aria-pressed', on ? 'true' : 'false');
+}
+
+/* Счётчик выделенных + видимость действий над выделением. «Переслать» и
+   «Удалить» без выделенных сообщений не делают ничего осмысленного (раньше
+   они лишь ругались попапом «выберите сообщения»), поэтому показываем их
+   только когда есть что пересылать и удалять. «Обновить» видна всегда. */
+function sms_update_selcount() {
+	var n = sms_selected_cards().length;
+
+	var el = document.getElementById('sms-selcount');
+	if (el) { el.textContent = n ? _('selected: %d').format(n) : ''; }
+
+	['forward', 'execute'].forEach(function(id) {
+		var b = document.getElementById(id);
+		if (b) { b.style.display = n ? '' : 'none'; }
+	});
+}
+
+/* Карточка одного сообщения: сверху слева жирным отправитель, справа мелко
+   дата и время, ниже текст. Отправитель и текст кладём ТЕКСТОМ (E() ставит
+   textContent), а не innerHTML: содержимое SMS приходит от оператора и может
+   содержать разметку. */
+function sms_make_card(item, iconSrc, hide) {
+	var sender = String(item.sender || '');
+	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
+	var text = String(item.content || '').replace(/\s+/g, ' ').trim();
+
+	var card = E('button', {
+		'type': 'button',
+		/* btn cbi-button - те же классы темы, что у кнопок netpri: весь базовый
+		   вид карточки приходит отсюда, .sms-card только раскладывает содержимое. */
+		'class': 'btn cbi-button sms-card',
+		'aria-pressed': 'false',
+		/* Удаление берёт индексы отсюда, пересылка - отправителя, время и текст.
+		   Раньше и то и другое читалось из ячеек строки (cells[1..3]); с уходом
+		   от таблицы такой способ отвалился бы молча - пустым письмом. */
+		'data-index': String(item.index),
+		'data-sender': sender,
+		'data-timestamp': item.timestamp,
+		'data-message': text
+	}, [
+		E('div', { 'class': 'sms-card-head' }, [
+			E('span', { 'class': 'sms-card-from' }, [
+				E('span', { 'class': 'sms-row-icon' }, [
+					E('img', { 'src': iconSrc })
+				]),
+				E('span', {}, sender)
+			]),
+			E('span', { 'class': 'sms-card-time' }, item.timestamp)
+		]),
+		E('div', { 'class': 'sms-card-text' }, text)
+	]);
+
+	card.addEventListener('click', function() {
+		sms_set_selected(card, !card.classList.contains('selected'));
+		sms_update_selcount();
+	});
+	return card;
+}
+
+/* Запись фоновых значений в sms_tool_js (счётчик сообщений, выбранный порт).
+   Отсюда шла ошибка в консоли «RPC call to uci/apply failed with ubus code 5:
+   Данные не получены» (5 = NO_DATA). Две причины, обе воспроизводятся:
+   1) uci.save() АСИНХРОННА, а вызванный сразу за ней uci.apply() уходил раньше,
+      чем изменения попадали в стейджинг - применять было нечего;
+   2) apply без изменений тоже отвечает NO_DATA, а счётчик сообщений чаще всего
+      совпадает с уже записанным (список не менялся).
+   Поэтому пишем только реально изменившиеся ключи и применяем, лишь если
+   что-то записали. */
+function sms_persist(values) {
+	var args = [ 'smsopt' ];
+	for (var k in values) {
+		var cur = uci.get('sms_tool_js', '@sms_tool_js[0]', k);
+		var val = (values[k] == null) ? '' : String(values[k]);
+		if (String(cur == null ? '' : cur) === val) { continue; }
+		/* держим в кэше страницы то же значение, что записали на роутере -
+		   иначе следующий тик снова сочтёт его изменившимся */
+		uci.set('sms_tool_js', '@sms_tool_js[0]', k, val);
+		args.push(k + '=' + val);
+	}
+	if (args.length < 2) { return Promise.resolve(); }
+	return fs.exec('/usr/share/5gmodem/modemswitch.sh', args);
 }
 
 function popTimeout(a, message, timeout, severity) {
@@ -240,9 +457,7 @@ function save_count() {
 								var u = used.replace ( /[^\d.]/g, '' );
 								
 								update_sms_count_for_modem(u).then(function(updatedValue) {
-									uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedValue);
-									uci.save();
-									uci.apply();
+									sms_persist({ 'sms_count': updatedValue });
 								});
 							}
 			});
@@ -289,9 +504,7 @@ return view.extend({
 		var newModem = serialModems[newIndex];
 		
 		if (newModem && newModem.comm_port) {
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'readport', newModem.comm_port);
-			uci.save();
-			uci.apply().then(function() {
+			sms_persist({ 'readport': newModem.comm_port }).then(function() {
 				var modemText = document.querySelector('.modem-display-text');
 				if (modemText) {
 					var label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');
@@ -305,20 +518,15 @@ return view.extend({
 		var self = this;
 		var val = document.querySelector('input[name="filter_area"]:checked').value;
 		var stg = (val === 'sim') ? 'SM' : 'ME';
-		uci.set('sms_tool_js', '@sms_tool_js[0]', 'storage', stg);
-		// save() must resolve BEFORE apply(): the previous code fired both without
-		// chaining, so apply() ran before the change was staged and the value
-		// stayed in "unsaved changes" (the user had to apply manually). Chain
-		// them, then re-read the inbox from the newly selected storage.
-		return uci.save().then(function() {
-			return uci.apply();
-		}).then(function() {
+		/* Пишем сразу в конфиг (см. sms_persist): через uci.save правка ложилась
+		   в стейджинг LuCI, и наверху появлялись «непринятые изменения». */
+		return sms_persist({ 'storage': stg }).then(function() {
 			if (typeof self._doRefresh == 'function') { self._doRefresh(false, true); }
 		});
 	},
 
     handleForward: function(ev) {
-	    var checked = document.querySelectorAll('input[name="smsn"]:checked');
+	    var checked = sms_selected_cards();
 	    
 	    if (checked.length === 0) {
 		    ui.addNotification(null, E('p', _('Please select the message(s) to be forwarded')), 'info');
@@ -339,13 +547,12 @@ return view.extend({
 		    var emailBody = '';
 
 		    if (checked.length === 1) {
-			    var row = checked[0].closest('tr');
-			    var cells = row.cells;
-			    
-			    var sender = cells[1].textContent.trim();
-			    var timestamp = cells[2].textContent.trim();
-			    var message = cells[3].textContent.trim();
-			    
+			    var d = checked[0].dataset;
+
+			    var sender = (d.sender || '').trim();
+			    var timestamp = (d.timestamp || '').trim();
+			    var message = (d.message || '').trim();
+
 			    emailSubject = 'SMS ' + timestamp + ' - ' + sender;
 			    emailBody = message;
 			    
@@ -356,14 +563,13 @@ return view.extend({
 				    var hostname = uci.get('system', '@system[0]', 'hostname') || _('My Router');
 				    
 				    var messages = [];
-				    checked.forEach(function(checkbox) {
-					    var row = checkbox.closest('tr');
-					    var cells = row.cells;
-					    
-					    var timestamp = cells[2].textContent.trim();
-					    var sender = cells[1].textContent.trim();
-					    var message = cells[3].textContent.trim();
-					    
+				    checked.forEach(function(card) {
+					    var d = card.dataset;
+
+					    var timestamp = (d.timestamp || '').trim();
+					    var sender = (d.sender || '').trim();
+					    var message = (d.message || '').trim();
+
 					    messages.push(timestamp + ' - ' + sender + '\n' + message);
 				    });
 				    
@@ -451,11 +657,11 @@ return view.extend({
     },
 
 	handleDelete: function(ev) {
-		if (document.querySelectorAll('input[name="smsn"]:checked').length == 0){
+		if (sms_selected_cards().length == 0){
 		ui.addNotification(null, E('p', _('Please select the message(s) to be deleted')), 'info');   
 		}
 		else {
-			if (document.querySelectorAll('input[name="smsn"]:checked').length === document.querySelectorAll('input[name="smsn"]').length) {
+			if (sms_selected_cards().length === document.querySelectorAll('.sms-card').length) {
 					if (confirm(_('Delete all the messages?')))
 						{
 							var sections = uci.sections('sms_tool_js');
@@ -463,11 +669,9 @@ return view.extend({
 							var storeDA = sections[0].storage;
 
 							fs.exec_direct(smsToolBin(), [ '-d' , portDA , 'delete' , 'all' ]);
-							document.getElementById("ch-all").checked = false;
-
-							var rowCount = smsTable.rows.length;
-							for (var i = rowCount - 1; i > 0; i--) {
-            					smsTable.deleteRow(i);}
+							var smsList = document.getElementById("smsList");
+							if (smsList) { smsList.innerHTML = ''; }
+							sms_update_selcount();
     							setTimeout(function() {
 								L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeDA , '-d' , portDA , 'status' ]))
 									.then(function(res) {
@@ -492,11 +696,16 @@ return view.extend({
 							var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
 
 							var array = [];
-							var checkb = document.querySelectorAll('input[type=checkbox]:checked');
+							var checkb = sms_selected_cards();
 
+							/* Индексы берём из data-index карточки. Прежний код читал
+							   .id чекбокса и отсеивал галку «выделить все» сравнением
+							   с необъявленной переменной source - в strict-режиме это
+							   ReferenceError, то есть удаление выбранных падало здесь
+							   же. Отсеивать больше нечего: выборка и так только из
+							   карточек сообщений. */
 							for (var i = 0; i < checkb.length; i++) {
-								if (checkb[i] != source)
-  								array.push(checkb[i].id)
+								array.push(checkb[i].dataset.index + ',');
 							}
 
 							if (array) {
@@ -588,9 +797,7 @@ return view.extend({
 														var savedNum = savedMatch ? savedMatch[1] : savedCount.replace(/[^\d]/g, '');
 														if (savedNum !== verifyU) {
 															update_sms_count_for_modem(verifyU).then(function(correctedValue) {
-																uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', correctedValue);
-																uci.save();
-																uci.apply();
+																sms_persist({ 'sms_count': correctedValue });
 															});
 														}
 													}
@@ -615,17 +822,10 @@ return view.extend({
 										}
 										});
 								}
-								var table = document.getElementById("smsTable");
-  								var index = 1;
-  									while (index < table.rows.length) {
-   										var input = table.rows[index].cells[0].children[0];
-    										if (input && input.checked) {
-      											table.deleteRow(index);
-   										}
-    										else {
-      											index++;
-   										}
-  									}
+								sms_selected_cards().forEach(function(card) {
+									if (card.parentNode) { card.parentNode.removeChild(card); }
+								});
+								sms_update_selcount();
 								}
 							});
 						}
@@ -640,18 +840,6 @@ return view.extend({
 		window.location.reload();
 	},
 
-	handleSelect: function(ev) {
-		var checkBox = document.getElementById("ch-all");
-		var checkBoxes = document.querySelectorAll('input[name="smsn"]');
-
-  		if (checkBox.checked == true){
-			for (var i = 0; i < checkBoxes.length; i++)
-				checkBoxes[i].checked = true;
-  		} else {
-			for (var i = 0; i < checkBoxes.length; i++)
-				checkBoxes[i].checked = false;
-  		}
-	},
 
 	render: function(data) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
@@ -725,18 +913,21 @@ return view.extend({
 		   так, будто сообщений нет, и обратной связи не было никакой.
 		   Строку ДОБАВЛЯЕМ, а не перерисовываем таблицу: если обновление не
 		   удастся, уже показанный список должен остаться на месте. */
+		/* Пока сообщений на экране нет - показываем плейсхолдер НА МЕСТЕ списка
+		   (он же держит его высоту). Если сообщения уже показаны, при обновлении
+		   ничего не трогаем: мигать готовым списком ради индикатора не нужно. */
 		function showLoading() {
-			var table = document.getElementById('smsTable');
-			if (!table || document.getElementById('smsLoadingRow')) { return; }
-			var row = table.insertRow(1);
-			row.id = 'smsLoadingRow';
-			var cell = row.insertCell(0);
-			cell.colSpan = 12;
-			cell.appendChild(E('span', { 'class': 'spinning' }, _('Loading messages…')));
+			var list = document.getElementById('smsList');
+			if (!list) { return; }
+			if (list.querySelector('.sms-card')) { return; }
+			sms_placeholder('loading');
 		}
+		/* Снимать индикатор отдельно не требуется: список либо перерисуется
+		   карточками, либо получит плейсхолдер «нет сообщений». Функция
+		   оставлена, чтобы не переписывать все точки выхода из doRefresh. */
 		function hideLoading() {
-			var r = document.getElementById('smsLoadingRow');
-			if (r && r.parentNode) { r.parentNode.removeChild(r); }
+			var l = document.getElementById('smsList');
+			if (l && !l.firstChild) { sms_placeholder('empty'); }
 		}
 
 		/* doRefresh(updateCount, busy): читает статус + входящие и перерисовывает
@@ -780,20 +971,27 @@ return view.extend({
 							var used = res.substring(17, res.indexOf("total"));
 							var u = used.replace ( /[^\d.]/g, '' );
 
+							/* Полоску заполняем ЗДЕСЬ. Ниже по коду есть такой же
+							   вызов в конце колбэка, но до него не доходит
+							   исполнение: следующая строка делает return, и
+							   счётчик не обновлялся никогда - в полоске всегда
+							   висел прочерк из атрибута title. */
+							if (document.getElementById('msg')) { msg_bar(Math.floor(u), t); }
+
 						return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , '-f' , '%Y-%m-%d %H:%M' , '-j' , 'recv' , '2>/dev/null' ]))
 							.then(function(res2) {
 								// список пришёл (или не пришёл) - индикатор снимаем в любом
 								// случае, иначе он висел бы вечно при пустом/сбойном ответе
 								if (res2) {
 
- 									var table = document.getElementById('smsTable');
-									// Таблицы может НЕ БЫТЬ: панель настроек SMS
+ 									var table = document.getElementById('smsList');
+									// Списка может НЕ БЫТЬ: панель настроек SMS
 									// (чужой smssettings.js) иногда падает на apk-прошивке
-									// раньше, чем отрисуется #smsTable, а poll уже
+									// раньше, чем отрисуется #smsList, а poll уже
 									// запущен. Без этой проверки doRefresh падал на
-									// table.rows и рушил весь тик (readsms.js:790).
+									// разборе списка и рушил весь тик.
 									if (!table) { hideLoading(); return; }
-									while (table.rows.length > 1) { table.deleteRow(1); }
+									table.innerHTML = '';
 
 									/* Баг sms_tool 2025.08.x (-j): кодпойнты, у которых МЛАДШИЙ
 									   байт >= 0x80 (U+00A0 nbsp, «» U+00AB/BB, …), в JSON-кодере
@@ -835,9 +1033,7 @@ return view.extend({
 									    uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms_auto') != '1' &&
 									    json.some(function(o) { return (o.total || 0) > 1; })) {
 										smsM = "1";
-										uci.set('sms_tool_js', '@sms_tool_js[0]', 'mergesms', '1');
-										uci.set('sms_tool_js', '@sms_tool_js[0]', 'mergesms_auto', '1');
-										uci.save().then(function() { return uci.apply(); });
+										sms_persist({ 'mergesms': '1', 'mergesms_auto': '1' });
 										ui.addNotification(null, E('p',
 											_('Multipart messages found - merging enabled automatically. You can turn it off in SMS settings.')), 'info');
 									}
@@ -874,36 +1070,10 @@ return view.extend({
 															var Lres = L.resource('icons/cmessage.svg');
 
 															for (var i = 0; i < result.length; i++) {
-            													var row = table.insertRow(-1);
-  																var cell1 = row.insertCell(0);
-  																var cell2 = row.insertCell(0);
-  																var cell3 = row.insertCell(0);
-  																var cell4 = row.insertCell(0);
-																
-																var checkbox = E('input', {
-																	'type': 'checkbox',
-																	'name': 'smsn',
-																	'id': result[i].index + ','
-																});
-																var icon = E('span', { 'class': 'sms-row-icon' }, [
-																	E('img', {
-																		'src': Lres,
-																		'style': 'width: 24px; height: 24px;'
-																	})
-																]);
-																cell4.appendChild(checkbox);
-																cell4.appendChild(icon);
-																	if (result[i].sender.includes(hide)) {
-																		var removeLast5 = result[i].sender.slice(0, -5);
-																		cell3.innerHTML = removeLast5 + '#####';
-																	} else {
- 				 													cell3.innerHTML = result[i].sender;
-																	}
-																	
-  																cell2.innerHTML = result[i].timestamp;
-    															cell1.innerHTML = result[i].content.replace(/\s+/g, ' ').trim();
+																table.appendChild(sms_make_card(result[i], Lres, hide));
 																aidx.push(result[i].index+'-');
 															}
+															sms_update_selcount();
 
 															var axx = aidx.toString();
 															axx = axx.replace(/,/g, ' ');
@@ -915,10 +1085,7 @@ return view.extend({
 
 															if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
 																update_sms_count_for_modem(u).then(function(updatedCount) {
-																	uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count_index', formattedIndex);
-																	uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedCount);
-																	uci.save();
-																	uci.apply();
+																	sms_persist({ 'sms_count_index': formattedIndex, 'sms_count': updatedCount });
 																});
 															});
 											}
@@ -946,36 +1113,10 @@ return view.extend({
 											var Lres = L.resource('icons/cmessage.svg');
 
 											for (var i = 0; i < sortedData.length; i++) {
-                                            var row = table.insertRow(-1);
-  											var cell1 = row.insertCell(0);
-  											var cell2 = row.insertCell(0);
-  											var cell3 = row.insertCell(0);
-  											var cell4 = row.insertCell(0);
-											
-											var checkbox = E('input', {
-												'type': 'checkbox',
-												'name': 'smsn',
-												'id': sortedData[i].index + ','
-											});
-											var icon = E('span', { 'class': 'sms-row-icon' }, [
-												E('img', {
-													'src': Lres,
-													'style': 'width: 24px; height: 24px;'
-												})
-											]);
-											cell4.appendChild(checkbox);
-											cell4.appendChild(icon);
-												if (sortedData[i].sender.includes(hide)) {
-													var removeLast5 = sortedData[i].sender.slice(0, -5);
-													cell3.innerHTML = removeLast5 + '#####';
-												} else {
- 				 									cell3.innerHTML = sortedData[i].sender;
-												}
-  											cell2.innerHTML = sortedData[i].timestamp;
-    										cell1.innerHTML = sortedData[i].content.replace(/\s+/g, ' ').trim();
-											aidx.push(sortedData[i].index+'-');
-										
+												table.appendChild(sms_make_card(sortedData[i], Lres, hide));
+												aidx.push(sortedData[i].index+'-');
 											}
+											sms_update_selcount();
 											
 											var axx = aidx.toString();
 											axx = axx.replace(/,/g, ' ');
@@ -983,10 +1124,7 @@ return view.extend({
 
 											if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
 												update_sms_count_for_modem(u).then(function(updatedCount) {
-													uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count_index', formattedIndex);
-													uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedCount);
-													uci.save();
-													uci.apply();
+													sms_persist({ 'sms_count_index': formattedIndex, 'sms_count': updatedCount });
 												});
 											});
 									}
@@ -1004,12 +1142,48 @@ return view.extend({
 					// Индикатор снимаем: до чтения списка дело не дошло.
 				}
 
+			/* Достижимо только когда status вернул пусто: в успешной ветке выше
+			   стоит return. Тогда u не определена и вызова не будет - полоску
+			   заполняет вызов внутри той ветки. Оставлено как страховка. */
+			/* Список мог остаться пустым: сообщений нет вовсе. Тогда вместо
+			   схлопнутой пустоты показываем плейсхолдер. */
+			(function() {
+				var l = document.getElementById('smsList');
+				if (l && !l.querySelector('.sms-card') && !l.querySelector('.sms-empty')) {
+					sms_placeholder('empty');
+				}
+			}());
+
 			if (document.getElementById('msg') && typeof u !== 'undefined') {
 				msg_bar(Math.floor(u), t);
 			    }
     		});
 		}
-		doRefresh(true, true);
+		/* ПЕРВОЕ ЧТЕНИЕ ОТКЛАДЫВАЕМ ДО ОТРИСОВКИ.
+		   Вызов здесь был и раньше, но выполнялся ЗРЯ: этот код идёт по ходу
+		   render(), а разметку render возвращает НИЖЕ - на момент вызова таблицы
+		   на странице ещё нет, и рисовать прочитанное некуда. Сообщения молча
+		   пропадали, а появлялись только с первым тиком автообновления, то есть
+		   через 15 секунд - отсюда и привычка жать «Обновить».
+		   setTimeout(0) отдаёт управление обратно: render успевает вернуть
+		   разметку и LuCI прикрепляет её к странице, и только потом читаем.
+		   updateCount=true только здесь - обновление счётчика дёргает uci.apply(),
+		   гонять его на каждом тике нельзя. busy=true - показать индикатор,
+		   чтобы пустой список не выглядел так, будто сообщений нет. */
+		/* ЖДЁМ ПОЯВЛЕНИЯ ТАБЛИЦЫ, а не угадываем момент таймером.
+		   Этот блок живёт внутри uci.load(...).then(...) - отдельного промиса,
+		   никак не связанного с отрисовкой. Список smsList создаётся ниже, в
+		   разметке, которую render возвращает в самом конце. Кто из них успеет
+		   раньше - гонка, и на практике чтение выигрывало: элемента ещё нет,
+		   рисовать прочитанное некуда, сообщения молча терялись и появлялись
+		   только с первым тиком автообновления через 15 секунд.
+		   setTimeout(0) это не лечил - он откладывал на шаг от РАЗРЕШЕНИЯ uci.load,
+		   а не от появления разметки. Поэтому ждём сам элемент. */
+		(function waitTable(n) {
+			if (document.getElementById('smsList')) { doRefresh(true, true); return; }
+			if (n > 50) { return; }   // ~5 c и сдаёмся: дальше подхватит автообновление
+			window.setTimeout(function() { waitTable(n + 1); }, 100);
+		}(0));
 		/* Автообновление входящих: новые SMS появляются сами, без ручного
 		   «Обновить». poll снимается автоматически при уходе со страницы. */
 		poll.add(function() { return doRefresh(false); }, 15);
@@ -1074,114 +1248,91 @@ return view.extend({
 					}
 				}.bind(this))(),
     				(function() {
-					/* In the ModemManager mode (sms_via_mm) the storage
-					   selection takes no part in reading - messages live in
-					   ModemManager, not in SM/ME. Hide the switch (but keep
-					   the radios in the DOM: the refresh logic reads the
-					   checked one unconditionally). */
+					/* Хранилище и заполненность - ОДНОЙ строкой, без подписи слева.
+					   Строка всегда видима: в режиме ModemManager (sms_via_mm)
+					   выбор SM/ME в чтении не участвует (сообщения живут в
+					   ModemManager), поэтому прячем только переключатели, а
+					   полоску памяти оставляем. Радиокнопки остаются в DOM:
+					   логика обновления безусловно читает отмеченную. */
 					var cfg = uci.sections('sms_tool_js');
 					var viaMM = (cfg && cfg[0] && cfg[0].sms_via_mm == '1');
-					return E('tr', { 'class': 'tr', 'style': viaMM ? 'display: none;' : null }, [
-        				E('td', { 'class': 'td left', 'width': '33%' }, [ _('Message storage area') ]),
-        					E('td', { 'class': 'td' }, [
-							E('div', [
-							E('label', {
-								'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
-								'data-tooltip': _('Any change in the area from which SMS messages will be read requires refreshing the messages')
-							}, [
+					var areaTip = _('Any change in the area from which SMS messages will be read requires refreshing the messages');
+					var areaOpt = (function(value, label, checked) {
+						return E('label', {
+							'style': 'display:inline-flex;align-items:center;gap:6px;',
+							'data-tooltip': areaTip
+						}, [
 							E('input', {
 								'type': 'radio',
 								'name': 'filter_area',
-								'value': 'sim',
+								'value': value,
 								'change': ui.createHandlerFn(this, 'handleSWarea'),
-								'checked': true
+								'checked': checked ? true : null
 							}),
 							' ',
-							_('SIM card')
-						]),
-						' \u00a0 ',
-							E('label', {
-								'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
-								'data-tooltip': _('Any change in the area from which SMS messages will be read requires refreshing the messages')
-							}, [
-							E('input', {
-								'type': 'radio',
-								'name': 'filter_area',
-								'value': 'memory',
-								'change': ui.createHandlerFn(this, 'handleSWarea')
-							}),
-							' ',
-							_('Modem memory')
-							])
+							label
+						]);
+					}).bind(this);
+
+					return E('tr', { 'class': 'tr' }, [
+						E('td', { 'class': 'td', 'colspan': '2' }, [
+							E('div', { 'class': 'sms-storage-row' }, [
+								E('div', {
+									'class': 'sms-storage-opts',
+									'style': viaMM ? 'display: none;' : null
+								}, [
+									areaOpt('sim', _('SIM card'), true),
+									areaOpt('memory', _('Modem memory'), false)
+								]),
+								E('div', {
+									'id': 'msg',
+									'class': 'cbi-progressbar',
+									'title': '-'
+								}, E('div'))
+							]),
+							E('div', {
+								'style': 'text-align:center;font-size:90%',
+								'id': 'deleteinfo'
+							}, [ '' ])
 						])
-						])
-    					]);
+					]);
 				}.bind(this))(),
-    					E('tr', { 'class': 'tr' }, [
-        					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Storage used / Total capacity') ]),
-        					E('td', { 'class': 'td' }, [
-            				E('div', { 'class': 'right' }, [
-		                	E('div', {
-                    				'id': 'msg',
-                    				'class': 'cbi-progressbar',
-                    				'title': '-'
-                			}, E('div')),
-				            E('div', { 'class': 'right' }, [
-                			E('div', {
-                    				'style': 'text-align:center;font-size:90%',
-                    				'id': 'deleteinfo'
-                			}, [ '' ]),
-				        ]),
-            		]),
-        		]),
-    		]),
 		]),
 
 				E('div', {'id': 'forward-status', 'style': 'margin: 10px 0; display: none;'}),
 
-				E('div', { 'class': 'right' }, [
+			/* Список сообщений, под ним - действия (как на вкладке «Исходящие»).
+			   Кнопки внизу потому, что читают сверху вниз: сперва сообщения, потом
+			   что с ними сделать. «Выделить все» убрана - выделение кликом по
+			   карточкам, а массовое удаление доступно и так: отмечаешь нужные. */
+			E('div', { 'id': 'smsList' }),
+		]);
+
+		/* Кнопки ЗА пределами cbi-section - как на вкладке «Исходящие»: ряд
+		   действий стоит ПОД плашкой, а не внутри неё. Поэтому возвращаем не
+		   один блок, а два соседних элемента (E([], [...]) - фрагмент). */
+		var actions = E('div', { 'class': 'sms-actions' }, [
 					E('button', {
-						'class': 'cbi-button cbi-button-apply',
-						'id': 'forward',
-						'click': ui.createHandlerFn(this, 'handleForward')
-					}, [ _('Forward SMS') ]),
-					'\xa0\xa0\xa0',
-					E('button', {
-						'class': 'cbi-button cbi-button-remove',
-						'id': 'execute',
-						'click': ui.createHandlerFn(this, 'handleDelete')
-					}, [ _('Delete') ]),
-					'\xa0\xa0\xa0',
-					E('button', {
-						'class': 'cbi-button cbi-button-add',
+						'class': 'cbi-button cbi-button-neutral',
 						'id': 'clr',
 						'click': ui.createHandlerFn(this, 'handleRefresh')
 					}, [ _('Refresh') ]),
-
-			]),
-
-			E('p'),
-
-			E('table', { 'class': 'table' , 'id' : 'smsTable' }, [
-				E('tr', { 'class': 'tr table-titles' }, [
-					E('th', { 'class': 'th checker' }, 
-					E('input', {
-						'id': 'ch-all',
-						'type': 'checkbox',
-						'name': 'checkall',
-						'disabled': null,
-						'checked': null,
-						'click': ui.createHandlerFn(this, 'handleSelect')
-					}), '',
-					),
-					E('th', { 'class': 'th from' }, _('Sender')),
-					E('th', { 'class': 'th received' }, _('Received')),
-					E('th', { 'class': 'th center message' }, _('Message'))
-				])
-			]),
+					E('button', {
+						'class': 'cbi-button cbi-button-neutral',
+						'id': 'forward',
+						'style': 'display: none;',
+						'click': ui.createHandlerFn(this, 'handleForward')
+					}, [ _('Forward SMS') ]),
+					E('span', { 'id': 'sms-selcount', 'class': 'sms-selcount' }, ''),
+					E('button', {
+						'class': 'cbi-button cbi-button-remove sms-act-del',
+						'id': 'execute',
+						'style': 'display: none;',
+						'click': ui.createHandlerFn(this, 'handleDelete')
+					}, [ _('Delete') ])
 		]);
-		
-		return v;
+
+		return E([], [ v, actions ]);
 	},
 
 	popTimeout: function(a, message, timeout, severity) {

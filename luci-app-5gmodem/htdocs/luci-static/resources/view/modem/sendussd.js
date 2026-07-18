@@ -489,7 +489,11 @@ return view.extend({
 			L.resolveDefault(fs.read_direct('/etc/modem/ussdcodes.user'), null),
 			L.resolveDefault(fs.list('/etc/modem/ussdcodes'), []),
 			uci.load('sms_tool_js'),
-			L.resolveDefault(uci.load('defmodems'))
+			L.resolveDefault(uci.load('defmodems')),
+			/* Знаем ли мы наверняка, что USSD на этом модеме не работает.
+			   Ответ идёт из базы проверенных модемов (quirks.sh), сам модем при
+			   этом не опрашивается - см. комментарий у ветки ussdsupport. */
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ussdsupport' ]), null)
 		]);
 	},
 
@@ -523,7 +527,24 @@ return view.extend({
 		
 		if (!currentModem && serialModems.length > 0) currentModem = serialModems[0];
 
+		/* ПОДТВЕРЖДЁННО НЕ РАБОТАЕТ - говорим прямо.
+		   У части модулей (data-only) прошивка заявляет +CUSD, но на запрос не
+		   отвечает ничем: страница просто висит до таймаута, и человек считает
+		   виноватым приложение. Показываем предупреждение, но НЕ блокируем форму:
+		   база может отставать от новой прошивки, и запретить попытку - хуже,
+		   чем предупредить. */
+		let ussdNotSupported = (function() {
+			try {
+				let r = loadResults && loadResults[4];
+				let j = JSON.parse((r && (r.stdout || r)) || '{}');
+				return (String(j.supported) === '0');
+			} catch (e) { return false; }
+		})();
+
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
+				ussdNotSupported ? E('div', { 'class': 'alert-message warning' }, [
+					E('p', {}, _('USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all.'))
+				]) : '',
 				E('div', { 'class': 'cbi-section' }, [
 					E('div', { 'class': 'cbi-section-node' }, [
 						(function() {

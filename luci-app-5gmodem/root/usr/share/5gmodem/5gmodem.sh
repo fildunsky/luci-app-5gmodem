@@ -199,22 +199,108 @@ RES="/usr/share/5gmodem"
 # (тот же приём, что в listmodems.sh).
 CACHE="/tmp/5gmodem_metrics.json"
 STAMP="/tmp/5gmodem_metrics.stamp"
+# ЧЕЙ снимок. Файл один на всю систему, а модемов может быть несколько, и
+# активный меняется - вручную (switch) и сам (hotplug/resolve при втыкании или
+# пропаже модема). Без пометки читатели получали ЧУЖИЕ данные: страница и 5gtop
+# несколько секунд показывали прежний модем, а основной опрос успевал записать
+# чужую модель в секцию нового - на вкладке появлялось "Telit Fibocom FM350-GL"
+# (вендор от одного модема, модель от другого).
+OWNER="/tmp/5gmodem_metrics.owner"
+
+# Путь активного модема: им помечаем снимок и по нему же его проверяем.
+_active_path() { uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null; }
 
 uptime_s() { cut -d. -f1 /proc/uptime; }
+
+# ОДИН ПИШУЩИЙ, МНОГО ЧИТАЮЩИХ.
+#
+# Опрос модема стоит ~3.8 c, и это почти вся задержка: обвязка rpcd добавляет
+# 0.01 c (замерено). Но КОНКУРЕНЦИЯ дорога по-настоящему: когда в порт лезут
+# двое, тот же опрос занимает 13.4 c вместо 3.8 - в три с половиной раза дольше.
+# Поэтому в порт ходит РОВНО ОДИН процесс, а остальные читают снимок.
+#
+# Блокировка на каталоге - mkdir атомарен на любой ФС, в отличие от проверки
+# существования файла. Протухшую (процесс убит) снимаем по возрасту.
+LOCKDIR="/tmp/5gmodem_poll.lock"
+
+# Отдать снимок, подставив в него реальный возраст.
+# В сам файл поле "age" пишется нулём (в момент записи он и есть ноль), а здесь
+# подменяется на фактический. Потребители читают ОБЩИЙ снимок, и без возраста
+# застрявший опрос выглядел бы как живые, но неверные показания.
+#
+# ВАЖНО: пояснения держим ЗДЕСЬ, а не рядом с полем - блок вывода JSON печатается
+# как есть, и любая строка с "#" внутри него уезжает прямо в ответ и ломает
+# разбор. Я допустил это дважды: оба раза симптом был один - "quoted object
+# property name expected" и разом опустевшие метрики на странице.
+serve_cache() {
+	_a="${1:-0}"
+	sed "s/\"age\":\"[0-9]*\"/\"age\":\"$_a\"/" "$CACHE" 2>/dev/null || cat "$CACHE"
+}
+
+_snapshot_age() {   # возраст снимка в секундах, либо пусто
+	[ -s "$CACHE" ] || return 1
+	# Снимок ЧУЖОГО модема не годится ни на что: пусть считается отсутствующим,
+	# тогда все ветки ниже сами уйдут в свежий опрос.
+	_own=$(cat "$OWNER" 2>/dev/null)
+	[ "$_own" = "$(_active_path)" ] || return 1
+	_n=$(uptime_s); _t=$(cat "$STAMP" 2>/dev/null)
+	case "$_t" in ''|*[!0-9]*) return 1 ;; esac
+	_a=$((_n - _t)); [ "$_a" -ge 0 ] || return 1
+	printf '%s' "$_a"
+}
+
+_take_lock() {
+	if mkdir "$LOCKDIR" 2>/dev/null; then return 0; fi
+	# Протухшая блокировка: опрос дольше 40 c означает, что писавший процесс умер
+	# (сам опрос укладывается в 4-14 c даже на медленном железе).
+	_lt=$(cat "$LOCKDIR/stamp" 2>/dev/null)
+	case "$_lt" in ''|*[!0-9]*) _lt="" ;; esac
+	if [ -n "$_lt" ] && [ "$(( $(uptime_s) - _lt ))" -gt 40 ]; then
+		rm -rf "$LOCKDIR" 2>/dev/null
+		mkdir "$LOCKDIR" 2>/dev/null && return 0
+	fi
+	return 1
+}
 
 if [ "$1" = "cached" ]; then
 	_ttl="${2:-15}"
 	case "$_ttl" in ''|*[!0-9]*) _ttl=15 ;; esac
-	if [ -s "$CACHE" ]; then
-		_now=$(uptime_s)
-		_then=$(cat "$STAMP" 2>/dev/null)
-		case "$_then" in ''|*[!0-9]*) _then="" ;; esac
-		if [ -n "$_then" ] && [ "$((_now - _then))" -ge 0 ] && [ "$((_now - _then))" -lt "$_ttl" ]; then
-			cat "$CACHE"
-			exit 0
-		fi
+	_age=$(_snapshot_age)
+	if [ -n "$_age" ] && [ "$_age" -lt "$_ttl" ]; then
+		serve_cache "$_age"
+		exit 0
 	fi
-	# снимка нет или протух - проваливаемся в полный опрос ниже
+	# Снимок протух. Пробуем стать ТЕМ САМЫМ единственным опрашивающим.
+	if ! _take_lock; then
+		# Кто-то уже опрашивает. Ждать его бессмысленно: отдаём что есть - чуть
+		# устаревшие данные лучше, чем секунды ожидания и вторая ходка в порт.
+		# Возраст виден потребителю по stamp, он сам решит, показывать ли пометку.
+		_a=$(_snapshot_age) && { serve_cache "$_a"; exit 0; }
+		# снимка нет вовсе (первый запуск) - ждём чужой опрос, но недолго
+		_w=0
+		while [ "$_w" -lt 20 ]; do
+			sleep 1; _w=$((_w + 1))
+			_a=$(_snapshot_age) && { serve_cache "$_a"; exit 0; }
+			[ -d "$LOCKDIR" ] || break
+		done
+		echo '{"error":"busy"}'
+		exit 0
+	fi
+	uptime_s > "$LOCKDIR/stamp" 2>/dev/null
+	trap 'rm -rf "$LOCKDIR" 2>/dev/null' EXIT INT TERM HUP
+	# блокировка наша - проваливаемся в полный опрос ниже
+else
+	# Полный опрос по явному запросу тоже под блокировкой: иначе два таких
+	# вызова столкнутся в порту ровно так же, как раньше страница с терминалом.
+	if _take_lock; then
+		uptime_s > "$LOCKDIR/stamp" 2>/dev/null
+		trap 'rm -rf "$LOCKDIR" 2>/dev/null' EXIT INT TERM HUP
+	else
+		# Порт занят. Свежий снимок (моложе 3 c) - это ровно то, что сейчас
+		# дописывает другой процесс; отдаём его вместо второй ходки в модем.
+		_age=$(_snapshot_age)
+		[ -n "$_age" ] && [ "$_age" -lt 3 ] && { serve_cache "$_age"; exit 0; }
+	fi
 fi
 
 DEVICE=$($RES/detect.sh)
@@ -656,13 +742,13 @@ fi
 CONF_DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
 if echo "x$CONF_DEVICE" | grep -q "192.168."; then
 	if grep -q "Vendor=1bbb" /sys/kernel/debug/usb/devices; then
-		. $RES/modem/hilink/alcatel_hilink.sh $DEVICE
+		_SAVED_IFS="$IFS"; . $RES/modem/hilink/alcatel_hilink.sh $DEVICE; IFS="$_SAVED_IFS"
 	fi
 	if grep -q "Vendor=12d1" /sys/kernel/debug/usb/devices; then
-		. $RES/modem/hilink/huawei_hilink.sh $DEVICE
+		_SAVED_IFS="$IFS"; . $RES/modem/hilink/huawei_hilink.sh $DEVICE; IFS="$_SAVED_IFS"
 	fi
 	if grep -q "Vendor=19d2" /sys/kernel/debug/usb/devices; then
-		. $RES/modem/hilink/zte.sh $DEVICE
+		_SAVED_IFS="$IFS"; . $RES/modem/hilink/zte.sh $DEVICE; IFS="$_SAVED_IFS"
 	fi
 	SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
 	SEC=${SEC:-wan}
@@ -704,6 +790,15 @@ if [ -e /usr/bin/sms_tool ]; then
 	[ "x$REG" == "x1" ] || [ "x$REG" == "x5" ] || [ "x$REG" == "x6" ] || [ "x$REG" == "x7" ] && REGOK=1
 	VIDPID=$(getdevicevendorproduct $DEVICE)
 	if [ -e "$RES/modem/$VIDPID" ]; then
+		# IFS СОХРАНЯЕМ И ВОССТАНАВЛИВАЕМ ВОКРУГ ПРОФИЛЯ.
+		# Шестнадцать профилей переводят IFS в перевод строки для разбора сот и
+		# НЕ возвращают обратно, а профиль подключается через "." - то есть в
+		# нашем же окружении. Дальше пробел перестаёт быть разделителем, и любой
+		# код ниже, полагающийся на разбиение по пробелам, тихо ломается: именно
+		# так у FM350 отключился фильтр выбросов температуры (read клал всю
+		# строку в первую переменную), и заметить это удалось только по журналу.
+		# Чиним в ОДНОМ месте, а не в шестнадцати: так защищены и будущие профили.
+		_SAVED_IFS="$IFS"
 		case $(cat /tmp/sysinfo/board_name) in
 			"zte,mf289f")
 				. "$RES/modem/usb/19d21485"
@@ -712,6 +807,7 @@ if [ -e /usr/bin/sms_tool ]; then
 				. "$RES/modem/$VIDPID"
 				;;
 		esac
+		IFS="$_SAVED_IFS"
 	fi
 fi
 
@@ -921,6 +1017,7 @@ cat > "$_TMP" <<EOF
 "s3mod":"$(sanitize_string "$S3MOD")",
 "s4mimo":"$(sanitize_string "$S4MIMO")",
 "s4mod":"$(sanitize_string "$S4MOD")",
+"age":"0",
 "bandwidth":"$(sanitize_string "$BANDWIDTH")",
 "enbid":"$(sanitize_string "$ENBID")",
 "pathloss":"$(sanitize_string "$PATHLOSS")",
@@ -949,6 +1046,9 @@ if [ -s "$_TMP" ] && jsonfilter -i "$_TMP" -e '@.modem' >/dev/null 2>&1; then
 	cat "$_TMP"
 	mv "$_TMP" "$CACHE"      # атомарно: читатель видит либо старый снимок, либо новый
 	uptime_s > "$STAMP"
+	# Помечаем, ЧЕЙ это снимок (см. OWNER выше). Пишем ПОСЛЕ mv: пока метки нет,
+	# читатель считает снимок чужим и просто опросит сам - это безопасно.
+	printf '%s' "$(_active_path)" > "$OWNER" 2>/dev/null
 else
 	cat "$_TMP" 2>/dev/null  # ответ отдаём в любом случае, но в кэш не кладём
 	rm -f "$_TMP"

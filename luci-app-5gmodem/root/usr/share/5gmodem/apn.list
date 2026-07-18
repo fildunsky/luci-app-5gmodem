@@ -1,0 +1,53 @@
+# Таблица APN: по коду сети (PLMN) и по имени оператора.
+#
+# Формат:  <тип>:<образец>:<apn>
+#   plmn:250-01:internet.mts.ru     - по коду MCC-MNC (надёжнее всего)
+#   name:beeline:internet.beeline.ru - по подстроке в имени, в нижнем регистре
+#
+# ПОЧЕМУ ДВА СПОСОБА. Код сети точен, но у MVNO он принадлежит хосту: SIM Сбера
+# или Т-Мобайла работает на сети Tele2 и отдаёт её PLMN, а APN нужен свой.
+# Поэтому сперва ищем по ИМЕНИ (оно у MVNO собственное), и только потом по коду.
+#
+# Используется автонастройкой (modemswitch.sh autoapn) - и ТОЛЬКО когда связь не
+# поднялась сама. Если интерфейс уже получил адрес, APN не трогаем: у многих
+# операторов пустой APN работает, и менять рабочую настройку вслепую нельзя.
+#
+# В РОУМИНГЕ таблица НЕ ПРИМЕНЯЕТСЯ вовсе. Там модем зарегистрирован в чужой
+# сети, и оба ключа - имя и код - принадлежат ей, а не симке; нужен домашний APN,
+# который отсюда не узнать. Для travel-eSIM и роуминговых профилей правильное
+# значение пустое: оператор выдаёт настройки сам.
+
+# --- MVNO и операторы со своим APN (ищутся по имени) ---
+name:sber:sberbank
+name:сбер:sberbank
+name:t-mobile:tt
+name:т-мобайл:tt
+name:tinkoff:m.tinkoff
+name:тинькоф:m.tinkoff
+name:yota:internet.yota
+name:danycom:danycom.mts
+name:talkme:internet.mts.ru
+name:газпром:internet.tele2.ru
+
+# --- основные сети РФ ---
+name:beeline:internet.beeline.ru
+name:билайн:internet.beeline.ru
+name:vimpel:internet.beeline.ru
+name:mts:internet.mts.ru
+name:мтс:internet.mts.ru
+name:megafon:internet
+name:мегафон:internet
+name:tele2:internet.tele2.ru
+name:теле2:internet.tele2.ru
+
+plmn:250-01:internet.mts.ru
+plmn:250-02:internet
+plmn:250-99:internet.beeline.ru
+plmn:250-20:internet.tele2.ru
+plmn:250-11:internet.yota
+plmn:250-62:internet.tinkoff
+
+# --- зарубежные, которых чаще всего встречают в роуминге/travel-eSIM ---
+plmn:255-01:internet
+plmn:257-02:internet
+plmn:401-77:internet

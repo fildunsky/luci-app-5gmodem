@@ -442,7 +442,9 @@ if [ -n "$_AMP" ]; then
 		fi
 	fi
 
-	[ -n "$_found" ] && { . "$RES/$_found"; _PROFILE_LOADED=1; }
+	# IFS вокруг профиля - см. пояснение в 5gmodem.sh: профили переводят его в
+	# перевод строки и не возвращают, а подключаются в нашем окружении.
+	[ -n "$_found" ] && { _SIFS="$IFS"; . "$RES/$_found"; IFS="$_SIFS"; _PROFILE_LOADED=1; }
 else
 	# no active modem configured (single-modem legacy): scan for any profile.
 	_DEVS=$(awk '{gsub("="," ");
@@ -452,7 +454,7 @@ else
 	END {for (idx in idvendor) {printf "%s%s\n%s%s%s\n", idvendor[idx], idproduct[idx], idvendor[idx], idproduct[idx], product[idx]}}' /sys/kernel/debug/usb/devices)
 	for _DEV in $_DEVS; do
 		if [ -e "$RES/$_DEV" ]; then
-			. "$RES/$_DEV"
+			_SIFS="$IFS"; . "$RES/$_DEV"; IFS="$_SIFS"
 			_PROFILE_LOADED=1
 			break
 		fi

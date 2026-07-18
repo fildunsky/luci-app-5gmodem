@@ -432,7 +432,7 @@ msgid "Please enter a USSD code"
 msgstr "Пожалуйста, введите код для отправки"
 
 msgid "Send to"
-msgstr "Отправить на"
+msgstr "Кому"
 
 msgid "Message text"
 msgstr "Текст сообщения"
@@ -607,7 +607,7 @@ msgid "Select one of the available ttyUSBX ports."
 msgstr "Выберите один из доступных портов ttyUSBX."
 
 msgid "User contacts"
-msgstr "Контакты пользователя"
+msgstr "Контакты"
 
 msgid "Enable group messaging"
 msgstr "Включить групповые сообщения"
@@ -2626,3 +2626,27 @@ msgstr "(с какой силой передаёт модем)"
 
 msgid "UE category"
 msgstr "Категория устройства"
+
+msgid "Data not refreshed for: %s"
+msgstr "Данные не обновлялись: %s"
+
+msgid "%d s"
+msgstr "%d с"
+
+msgid "%d min"
+msgstr "%d мин"
+
+msgid "Select all"
+msgstr "Выделить все"
+
+msgid "selected: %d"
+msgstr "выделено: %d"
+
+msgid "Memory: %s/%s"
+msgstr "Память: %s/%s"
+
+msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
+msgstr "USSD на этом модеме не работает: это модуль только для передачи данных, поддержки SS в прошивке нет. Проверено на живом железе — модем не отвечает на USSD-запросы вовсе."
+
+msgid "No messages"
+msgstr "Нет сообщений"

@@ -86,6 +86,12 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	if [ -n "$_oif" ] && [ "$(uci -q get "network.$_oif.modem_path" 2>/dev/null)" = "$1" ]; then
 		ifdown "$_oif" >/dev/null 2>&1
 		uci -q set "network.$_oif.auto=0"
+		# ЯВНАЯ МЕТКА «пересоздать, а не подхватывать». Без неё autosetup находил
+		# этот интерфейс по USB-пути и брал его СЕБЕ вместе с настройками прежнего
+		# модема: у Telit LM960A18 на месте Compal оставались proto=mbim,
+		# device=/dev/cdc-wdm0 и auto=0 - соединение не поднималось никогда, а в
+		# журнале всё выглядело благополучно ("подхвачен существующий modem").
+		uci -q set "network.$_oif.modem_stale=1"
 		uci -q commit network
 		logger -t 5gmodem "swap: stopped stale owned interface '$_oif' (rerun setup to rebuild)"
 	fi
@@ -266,6 +272,70 @@ at_for_path() {
 	detect_at $(modem_ttys "$1")
 }
 
+# Подобрать APN по оператору. $1 - имя оператора, $2 - код сети (MCC-MNC).
+# Сперва по ИМЕНИ: у MVNO оно своё, а код принадлежит хосту сети (SIM Сбера
+# работает на Tele2 и отдаёт её PLMN, но APN нужен сберовский).
+apn_lookup() {
+	_n=$(printf '%s' "$1" | tr 'A-ZА-Я' 'a-zа-я')
+	_p="$2"
+	[ -f "$RES/apn.list" ] || return 1
+	if [ -n "$_n" ]; then
+		while IFS=: read -r _t _pat _apn; do
+			case "$_t" in name) : ;; *) continue ;; esac
+			[ -n "$_pat" ] || continue
+			case "$_n" in *"$_pat"*) echo "$_apn"; return 0 ;; esac
+		done < "$RES/apn.list"
+	fi
+	if [ -n "$_p" ]; then
+		while IFS=: read -r _t _pat _apn; do
+			case "$_t" in plmn) : ;; *) continue ;; esac
+			[ "$_pat" = "$_p" ] && { echo "$_apn"; return 0; }
+		done < "$RES/apn.list"
+	fi
+	return 1
+}
+
+# Найти интерфейс, который УЖЕ смотрит на этот модем ($1 = USB-путь).
+# Нужен, чтобы не плодить дубли: на роутерах, где модем настроен вендором или
+# самим пользователем до установки пакета, интерфейс уже есть и работает
+# (у Cudy LT300 это "wwan" на usb0). Создав рядом второй, мы получили бы два
+# интерфейса на одном устройстве и войну за маршрут по умолчанию.
+#
+# Ищем по ФАКТИЧЕСКОМУ устройству, а не по имени: network.<iface>.device может
+# быть и сетевым узлом (eth2, usb0), и управляющим (/dev/cdc-wdm0), а у части
+# протоколов его нет вовсе - тогда смотрим на поднятый l3_device.
+iface_for_path() {
+	_want="$1"; [ -n "$_want" ] || return 1
+	for _if in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
+		case "$_if" in loopback|lan|wan6) continue ;; esac
+		_dev=$(uci -q get "network.$_if.device")
+		[ -n "$_dev" ] || _dev=$(ifup_state_dev "$_if")
+		[ -n "$_dev" ] || continue
+		_p=""
+		case "$_dev" in
+			/dev/cdc-wdm*)
+				_p=$(readlink -f "/sys/class/usbmisc/$(basename "$_dev")/device" 2>/dev/null)
+				_p=$(echo "$_p" | sed 's|/[0-9]*-[0-9.]*:[0-9.]*$||;s|.*/||') ;;
+			/dev/tty*)
+				_p=$(readlink -f "/sys/class/tty/$(basename "$_dev")/device" 2>/dev/null)
+				_p=$(echo "$_p" | sed 's|/ttyUSB[0-9]*$||;s|.*/||;s|:.*||') ;;
+			*)
+				[ -e "/sys/class/net/$_dev" ] || continue
+				_p=$(readlink -f "/sys/class/net/$_dev/device" 2>/dev/null)
+				_p=$(echo "$_p" | sed 's|/[0-9]*-[0-9.]*:[0-9.]*$||;s|.*/||') ;;
+		esac
+		[ "$_p" = "$_want" ] && { echo "$_if"; return 0; }
+	done
+	return 1
+}
+
+# l3_device поднятого интерфейса (для тех, у кого device в конфиге не задан)
+ifup_state_dev() {
+	ubus call network.interface."$1" status 2>/dev/null \
+		| jsonfilter -e '@["l3_device"]' 2>/dev/null
+}
+
+
 # make sure a 'modem' section exists for a path; echo its name
 ensure_section() {
 	SEC=$(secname "$1")
@@ -320,6 +390,60 @@ active)
 	active_path
 	;;
 
+# Поддерживает ли АКТИВНЫЙ модем USSD. Отвечает по базе проверенных модемов
+# (quirks.sh), сам модем не трогает: запрос к data-only модулю как раз и
+# подвешивает порт на минуту - ровно то, от чего мы хотим избавить пользователя.
+#   {"supported":0} - проверено, что не работает
+#   {"supported":1} - про этот модем ничего плохого не знаем (не гарантия)
+# Записать опции sms_tool_js СРАЗУ в конфиг (set + commit), в обход стейджинга.
+#
+# Страницы SMS пишут служебные значения сами: счётчик сообщений, порт при смене
+# модема, автовключение склейки. Если делать это через uci.set/uci.save в
+# браузере, правка ложится в СЕССИОННЫЙ стейджинг LuCI и наверху появляется
+# «непринятые изменения» с кнопкой «Применить» - при том, что пользователь
+# ничего не настраивал, а просто открыл вкладку и пришло новое сообщение.
+# Пишем только известные ключи: команда доступна из веб-интерфейса.
+#
+# Usage: modemswitch.sh smsopt key=value [key=value ...]
+smsopt)
+	shift
+	_ch=0
+	for _kv in "$@"; do
+		_k=${_kv%%=*}; _v=${_kv#*=}
+		case "$_k" in
+			sms_count|sms_count_index|readport|sendport|ussdport|atport|\
+			information|mergesms|mergesms_auto|storage) ;;
+			*) continue ;;
+		esac
+		_cur=$(uci -q get "sms_tool_js.@sms_tool_js[0].$_k")
+		[ "$_cur" = "$_v" ] && continue
+		uci -q set "sms_tool_js.@sms_tool_js[0].$_k=$_v"
+		_ch=1
+	done
+	[ "$_ch" = 1 ] && uci -q commit sms_tool_js
+	printf '{"changed":%s}\n' "$_ch"
+	;;
+
+# Спрятать подсказку о формате номера на вкладке «Исходящие» (кнопка «Закрыть»).
+# Пишем и КОММИТИМ здесь, а не через uci.set/uci.save в браузере: тот кладёт
+# правку в сессионный стейджинг LuCI, и наверху появляется «непринятые
+# изменения», которые пользователь должен применять руками. Для нажатия
+# «Закрыть» это неуместно - человек закрыл подсказку, а не менял настройки сети.
+hidenumberhint)
+	uci -q set "sms_tool_js.@sms_tool_js[0].information=0"
+	uci -q commit sms_tool_js
+	echo '{"result":"ok"}'
+	;;
+
+ussdsupport)
+	_p=$(active_path)
+	_s=$(secname "$_p")
+	_v=""
+	command -v ussd_supported_for >/dev/null 2>&1 && _v=$(ussd_supported_for \
+		"$(uci -q get "$CFG.$_s.model")" "$(uci -q get "$CFG.$_s.vidpid")")
+	printf '{"supported":%s,"model":"%s"}\n' "${_v:-1}" "$(uci -q get "$CFG.$_s.model")"
+	;;
+
 save)
 	[ -n "$2" ] || { echo '{"error":"no path"}'; exit 1; }
 	save_to "$2"
@@ -365,6 +489,12 @@ switch)
 	# Явный выбор пользователя: resolve вернёт активность сюда, когда модем
 	# переживёт переперечисление USB (напр. после AT+CFUN=1,1) - см. ветку resolve.
 	uci -q set "$CFG.@5gmodem[0].preferred_modem=$P"
+
+	# Снимок метрик остался от ПРЕЖНЕГО модема. Снимаем метку владельца -
+	# 5gmodem.sh считает такой снимок чужим и сам уходит в свежий опрос
+	# (сам файл не трогаем: пусть доживёт как последнее известное значение,
+	# если опрос нового модема не удастся).
+	rm -f /tmp/5gmodem_metrics.owner 2>/dev/null
 	if [ -n "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"
@@ -403,6 +533,154 @@ switch)
 	printf '{"result":"ok","path":"%s","at_port":"%s","network":"%s"}\n' "$P" "$ATP" "$NET"
 	;;
 
+# ПОДБОР APN, если связь не поднялась сама.
+#
+# Порядок именно такой: сперва пробуем подняться БЕЗ APN (у многих операторов
+# так и работает), и только если адреса нет - читаем оператора и подставляем APN
+# из таблицы. Наоборот нельзя: чтобы узнать оператора, модем должен
+# зарегистрироваться в сети, а до регистрации мы не знаем, чей APN ставить.
+#
+# Рабочую настройку НЕ ТРОГАЕМ никогда: есть адрес - выходим сразу.
+autoapn)
+	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
+	[ -n "$IFACE" ] || exit 0
+	# Ждём: регистрация и первый дозвон занимают десятки секунд.
+	_w=0
+	while [ "$_w" -lt 60 ]; do
+		_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
+			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		[ -n "$_ip" ] && { logger -t 5gmodem "autoapn: $IFACE уже с адресом $_ip, APN не трогаем"; exit 0; }
+		sleep 5; _w=$((_w + 5))
+	done
+
+	# Адреса нет. Узнаём, в чьей мы сети.
+	_j=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
+	_op=$(printf '%s' "$_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
+	_mcc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
+	_mnc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
+	_plmn=""
+	[ -n "$_mcc" ] && [ -n "$_mnc" ] && _plmn="$_mcc-$_mnc"
+	[ -n "$_op$_plmn" ] || { logger -t 5gmodem "autoapn: оператор неизвестен, пропускаем"; exit 0; }
+
+	# РОУМИНГ: APN из таблицы НЕ ПОДХОДИТ. В роуминге модем зарегистрирован в
+	# ЧУЖОЙ сети, и её APN симке не годится - нужен домашний, которого мы знать
+	# не можем: и имя, и код сети принадлежат гостевой стороне. Для travel-eSIM
+	# и большинства роуминговых профилей правильное значение - ПУСТО: оператор
+	# выдаёт настройки сам. Подставив APN гостевой сети, мы бы сломали связь,
+	# которая иначе поднялась бы без нашего участия.
+	# Признак роуминга - код регистрации 5 (registered, roaming) против 1 (home).
+	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
+	if [ "$_reg" = "5" ]; then
+		logger -t 5gmodem "autoapn: роуминг (сеть «$_op», $_plmn) - APN оставляем пустым"
+		exit 0
+	fi
+
+	_apn=$(apn_lookup "$_op" "$_plmn") || {
+		logger -t 5gmodem "autoapn: APN для «$_op» ($_plmn) не найден"
+		exit 0
+	}
+	_cur=$(uci -q get "network.$IFACE.apn")
+	[ "$_cur" = "$_apn" ] && { logger -t 5gmodem "autoapn: APN уже $_apn"; exit 0; }
+
+	uci -q set "network.$IFACE.apn=$_apn"
+	uci -q commit network
+	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (оператор «$_op», $_plmn)"
+	ifdown "$IFACE" >/dev/null 2>&1
+	sleep 3
+	ifup "$IFACE" >/dev/null 2>&1
+	;;
+
+# АВТОНАСТРОЙКА НОВОГО МОДЕМА (plug-and-play).
+#
+# Задача: воткнул модем - получил интернет, без хождения по вкладкам. Но делать
+# это безоглядно нельзя: mkiface настраивает АКТИВНЫЙ модем, и на роутере с уже
+# работающим модемом второй воткнутый перехватил бы конфигурацию. Поэтому
+# автонастройка срабатывает ТОЛЬКО когда рабочего интерфейса ещё нет - то есть
+# ровно в том случае, ради которого затевалась: первый запуск или первый модем.
+#
+# Выключается: uci set 5gmodem.@5gmodem[0].auto_setup=0
+autosetup)
+	[ "$(uci -q get "$CFG.@5gmodem[0].auto_setup")" = "0" ] && exit 0
+
+	# ЦЕЛЬ - ПРИСУТСТВУЮЩИЙ МОДЕМ БЕЗ РАБОЧЕГО ИНТЕРФЕЙСА.
+	#
+	# Раньше здесь стоял ГЛОБАЛЬНЫЙ гард: если хоть у одного модема есть живая
+	# сеть, autosetup выходил целиком. На роутере с одним настроенным модемом это
+	# означало, что второй, только что воткнутый, не настраивался НИКОГДА. Ровно
+	# этот случай и наблюдался: ветка обработки замены модема на том же USB-пути
+	# пишет в лог "rerun setup to rebuild", гасит устаревший интерфейс и ждёт,
+	# что setup отработает заново, - а он выходил на первом же гарде.
+	# Проверяем теперь ПОМОДЕМНО: модем с живой сетью пропускаем (его не трогаем,
+	# ради чего гард и был), берём первый без неё.
+	P="$2"
+	if [ -z "$P" ]; then
+		for _p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
+			_s=$(secname "$_p")
+			_n=$(uci -q get "$CFG.$_s.network")
+			[ -n "$_n" ] && uci -q get "network.$_n" >/dev/null 2>&1 && continue
+			P="$_p"; break
+		done
+	fi
+	[ -n "$P" ] || exit 0
+
+	SEC=$(ensure_section "$P")
+
+	# АКТИВНОСТЬ НЕ ОТБИРАЕМ. Свежевоткнутый модем настраиваем, но активным
+	# делаем только если действующего активного нет или он пропал с шины:
+	# иначе установка второго модема молча переключала бы на него и рабочую
+	# страницу первого, и глобальные порты sms_tool_js.
+	_am=$(active_path)
+	if [ -z "$_am" ] || ! "$RES/listmodems.sh" 2>/dev/null | grep -q "\"path\":\"$_am\""; then
+		uci -q set "$CFG.@5gmodem[0].active_modem=$P"
+	fi
+	A=$(at_for_path "$P")
+	[ -n "$A" ] && {
+		uci -q set "$CFG.$SEC.at_port=$A"
+		uci -q set "$CFG.@5gmodem[0].at_port=$A"
+	}
+	uci -q commit "$CFG"
+
+	# СНАЧАЛА ПОДХВАТ. Если интерфейс для этого модема уже существует - берём
+	# его себе, а не создаём второй. Так пакет, установленный на роутер с уже
+	# настроенным модемом, просто начинает им управлять.
+	_ex=$(iface_for_path "$P")
+	# Интерфейс, помеченный swap_cleanup как устаревший, НЕ подхватываем: его
+	# настройки относятся к прежнему модему на этом же USB-разъёме. Пропускаем
+	# подхват - ниже mkiface пересоздаст интерфейс с нуля под текущий модем.
+	if [ -n "$_ex" ] && [ "$(uci -q get "network.$_ex.modem_stale")" = "1" ]; then
+		logger -t 5gmodem "autosetup: $_ex помечен устаревшим - пересоздаём"
+		_ex=""
+	fi
+	if [ -n "$_ex" ]; then
+		uci -q set "$CFG.$SEC.network=$_ex"
+		uci -q set "$CFG.@5gmodem[0].network=$_ex"
+		_pr=$(uci -q get "network.$_ex.proto")
+		[ -n "$_pr" ] && uci -q set "$CFG.$SEC.iface_proto=$_pr"
+		uci -q commit "$CFG"
+		"$RES/ensureports.sh" >/dev/null 2>&1
+		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
+		exit 0
+	fi
+
+	# ИМЯ ИНТЕРФЕЙСА ВЫБИРАЕТ mkiface, а не мы. У него для этого есть готовая и
+	# более правильная логика: имя закрепляется ЗА СЕКЦИЕЙ МОДЕМА и увеличивается
+	# только если занято ДРУГИМ модемом - так два модема гарантированно не делят
+	# один интерфейс. Я сперва подбирал имя сам, проверяя network.<имя> в конфиге
+	# сети, - это другой вопрос: осиротевший интерфейс от снятого модема выглядел
+	# занятым, и в журнал уходило одно имя, а создавалось другое.
+	# proto=auto: mkiface определит его по драйверу управляющего узла - надёжнее,
+	# чем гадать по vid:pid, и не создаёт нерабочий qmi поверх MBIM.
+	"$RES/mkiface.sh" "" auto >/dev/null 2>&1
+	"$RES/ensureports.sh" >/dev/null 2>&1
+	# В журнал пишем то, что получилось НА САМОМ ДЕЛЕ.
+	_made=$(uci -q get "$CFG.$SEC.network")
+	logger -t 5gmodem "autosetup: $P -> ${_made:-не удалось}"
+	# APN подбираем В ФОНЕ: команда ждёт до минуты, а hotplug столько держать
+	# нельзя. Дескрипторы отвязываем на подоболочке - иначе вызвавший нас
+	# процесс будет ждать EOF.
+	[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
+	;;
+
 resolve)
 	# Re-resolve ports/devices for all PRESENT modems by their STABLE USB path.
 	# ttyUSB numbering shifts when a modem is added/removed or on reboot, so a
@@ -422,8 +700,20 @@ resolve)
 		# Порты появляются НЕ мгновенно: после hotplug-add ядро заводит ttyUSB*
 		# ещё несколько секунд (FM350 отдаёт 7 штук), а hotplug ждёт всего 5с.
 		# Ждём порт, но не бесконечно (resolve всегда вызывается из фона).
-		A=""; _try=0
-		while [ "$_try" -lt 6 ]; do
+		# ПРИВЯЗКА К СЛОТУ. Найденный ранее порт закреплён за секцией модема, а
+		# секция - за стабильным USB-путём. Если порт всё ещё принадлежит ЭТОМУ
+		# пути и отвечает на AT, перебирать заново незачем.
+		# Замерено: resolve занимал 4.4 c и выполняется на КАЖДОМ событии USB и при
+		# загрузке, а проверка закреплённого порта укладывается в сотые доли.
+		# Перебор остаётся запасным путём - нумерация tty после переподключения
+		# сдвигается, и тогда закрепление протухает.
+		A=""
+		_pin=$(uci -q get "$CFG.$SEC.at_port")
+		if [ -n "$_pin" ] && [ -e "$_pin" ] && modem_ttys "$P" | grep -qxF "$_pin"; then
+			"$RES/atprobe.sh" "$_pin" >/dev/null 2>&1 && A="$_pin"
+		fi
+		_try=0
+		while [ -z "$A" ] && [ "$_try" -lt 6 ]; do
 			A=$(at_for_path "$P")
 			[ -n "$A" ] && break
 			_try=$((_try + 1)); sleep 2
@@ -462,7 +752,22 @@ resolve)
 		uci -q set "$CFG.@5gmodem[0].active_modem=$AMP"
 		uci -q commit "$CFG"
 	elif [ -z "$AMP" ] || ! echo " $PRESENT " | grep -q " $AMP "; then
-		AMP=$(echo "$PRESENT" | awk '{print $1}')
+		# Активный пропал с шины. Кого брать вместо него - НЕ «первого в списке».
+		# У FM350 есть штатный флап переэнумерации (см. quirks), и ровно в эту
+		# секунду рядом может оказаться только что воткнутый НЕНАСТРОЕННЫЙ модем.
+		# Тогда активность уезжала на него, а следом - и ГЛОБАЛЬНЫЕ порты
+		# sms_tool_js (ниже по ветке): открытая страница прежнего модема начинала
+		# показывать чужой сигнал, чужую SIM и чужой номер, ничего не сообщая.
+		# Предпочитаем модем с РАБОЧИМ интерфейсом: он почти наверняка и есть тот,
+		# что работал до сих пор.
+		_cand=""
+		for _p in $PRESENT; do
+			_s=$(secname "$_p")
+			_n=$(uci -q get "$CFG.$_s.network")
+			[ -n "$_n" ] && uci -q get "network.$_n" >/dev/null 2>&1 && { _cand="$_p"; break; }
+		done
+		[ -n "$_cand" ] || _cand=$(echo "$PRESENT" | awk '{print $1}')
+		AMP="$_cand"
 		[ -n "$AMP" ] && uci -q set "$CFG.@5gmodem[0].active_modem=$AMP" && uci -q commit "$CFG"
 	fi
 	[ -n "$AMP" ] || { echo '{"result":"no-modems"}'; exit 0; }

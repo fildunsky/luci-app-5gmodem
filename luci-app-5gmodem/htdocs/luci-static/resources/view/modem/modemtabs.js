@@ -1,6 +1,7 @@
 'use strict';
 'require baseclass';
 'require fs';
+'require poll';
 'require ui';
 
 /*
@@ -31,7 +32,28 @@ var CSS = `
 .modembar .modemtabs-bar .modemtab .modemtab-ic {
 	width: 16px; height: 16px; flex: 0 0 auto; display: block;
 }
-.modembar .modemtabs-bar .modemtab.active { pointer-events: none; }
+/* Имя модема - моноширинным, как строка с полным именем в шапке (.modembar-name):
+   это идентификатор железа, а не обычный текст, и одинаковая ширина знаков
+   помогает сравнивать похожие названия соседних модемов. */
+.modembar .modemtabs-bar .modemtab span {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+/* Активный модем помечаем как активную кнопку приоритета интернета - то есть
+   тем же, чем тема помечает кнопку на hover: одна акцентная рамка, без заливки
+   и без внутренней обводки (та удваивала линию и смотрелась жирно). */
+.modembar .modemtabs-bar .modemtab.active {
+	border-color: var(--proton-accent, #0095ff);
+	pointer-events: none;
+}
+/* Кнопка-заготовка: та же геометрия и то же содержимое, что у настоящей
+   вкладки, поэтому ряд занимает свою итоговую высоту с первого кадра.
+   Клики глушим классом, а НЕ атрибутом disabled: тема даёт [disabled]
+   opacity .5, и заготовка с именем из кеша была бы заметно блёклой -
+   подмена настоящими данными бросалась бы в глаза. */
+.modembar .modemtabs-bar .modemtab-ghost { pointer-events: none; }
+/* Имени в кеше нет (первый заход): нейтральная подпись и приглушённый вид,
+   чтобы было видно, что данные ещё едут. */
+.modembar .modemtabs-bar .modemtab-blank { min-width: 9em; opacity: .45; }
 `;
 
 /* Бренд по VID (или по характерному имени продукта). USB-дескриптор часто даёт
@@ -135,11 +157,115 @@ function applyEsimTabVisibility(tries) {
 	});
 }
 
+/* Ряд-заготовка. Модем всегда есть минимум один, поэтому рисуем его место
+   сразу, не дожидаясь данных: иконка на своём месте, подпись - из кеша
+   прошлого захода, а если кеша нет, нейтральное «Модем». Если модемов
+   окажется больше, остальные кнопки встанут в ту же строку и высота ряда не
+   изменится. */
+function ghostBar() {
+	var items = tabsCacheLoad() || [ { label: null, active: true } ];
+
+	return E('div', { 'class': 'modemtabs-bar' }, items.map(function(it) {
+		return E('button', {
+			'class': 'btn cbi-button modemtab modemtab-ghost'
+				+ (it.label ? '' : ' modemtab-blank')
+				+ (it.active ? ' active' : '')
+		}, [
+			E('img', {
+				'class': 'modemtab-ic', 'src': L.resource('icons/cmodem.svg'),
+				'width': 16, 'height': 16, 'alt': ''
+			}),
+			E('span', {}, it.label || _('Modem'))
+		]);
+	}));
+}
+
+/* Вставка полосы над меню под-вкладок. Под-вкладок на момент render() может
+   ещё не быть, поэтому опрашиваем DOM; при неудаче кладём в начало контента. */
+function placeBar(el) {
+	var tries = 0;
+	(function place() {
+		if (el.parentNode) { return; }
+		var anchor = document.querySelector('#tabmenu')
+			|| document.querySelector('ul.cbi-tabmenu')
+			|| document.querySelector('.cbi-tabmenu');
+		if (anchor && anchor.parentNode) { anchor.parentNode.insertBefore(el, anchor); return; }
+		if (tries++ < 20) { window.setTimeout(place, 150); return; }
+		var c = document.querySelector('#maincontent') || document.querySelector('#view') || document.body;
+		if (c) { c.insertBefore(el, c.firstChild); }
+	})();
+}
+
+/* КЕШ ПОДПИСЕЙ ВКЛАДОК.
+   Заготовка рисуется до всяких запросов, а имя модема известно только после
+   listmodems.sh. Берём его из прошлого захода: тогда заготовка совпадает с
+   итогом вплоть до текста, и подмена данными визуально не видна вовсе.
+   Кеш может устареть (модем поменяли) - это безопасно: он живёт доли секунды
+   до прихода настоящего списка, который его тут же и перезапишет. */
+var TABS_CACHE = '5gmodem.modemtabs';
+
+function tabsCacheSave(modems, active) {
+	try {
+		window.localStorage.setItem(TABS_CACHE, JSON.stringify(modems.map(function(m, i) {
+			return { label: label(m, i), active: (m.path === active) };
+		})));
+	} catch (e) {}
+}
+
+function tabsCacheLoad() {
+	try {
+		var a = JSON.parse(window.localStorage.getItem(TABS_CACHE) || 'null');
+		return (Array.isArray(a) && a.length) ? a : null;
+	} catch (e) { return null; }
+}
+
+/* СЛЕЖЕНИЕ ЗА ПОЯВЛЕНИЕМ/ИСЧЕЗНОВЕНИЕМ МОДЕМА - БЕЗ ЗАПУСКА СКРИПТОВ.
+   listmodems.sh держит готовый JSON в /tmp/5gmodem_listmodems.cache, а
+   hotplug-хук (etc/hotplug.d/usb/71-5gmodem-resolve) при add/remove модема
+   сбрасывает этот кэш сразу и пересобирает через 5 секунд, когда порты
+   устоялись. Значит браузеру не нужно ничего исполнять: достаточно ЧИТАТЬ
+   файл - один дешёвый вызов без форков, - и только когда набор путей реально
+   изменился, перечитать состояние целиком (listmodems + active) и перерисовать
+   ряд. В покое опрос не стоит почти ничего, а вставленный модем появляется
+   сам, без перезагрузки страницы. */
+var LIST_CACHE = '/tmp/5gmodem_listmodems.cache';
+
+function pathsSig(list) {
+	return list.map(function(m) { return m.path; }).sort().join(',');
+}
+
+function watchModems(bar, sig) {
+	poll.add(function() {
+		return L.resolveDefault(fs.read(LIST_CACHE), '').then(function(txt) {
+			var list = [];
+			try { list = JSON.parse(txt || '[]') || []; } catch (e) { return; }
+			/* Пустой ответ - это НЕ «модемов нет»: hotplug удаляет кэш до того,
+			   как соберёт новый, и в эту щель мы бы стёрли живой ряд. Ждём
+			   следующего тика. */
+			if (!Array.isArray(list) || !list.length) { return; }
+
+			var now = pathsSig(list);
+			if (now === sig) { return; }
+			sig = now;
+
+			/* Набор изменился - только теперь платим за полный опрос. */
+			return loadModems().then(function(st) {
+				var fresh = tabsBar(st.modems, st.active);
+				if (bar.firstChild) { bar.replaceChild(fresh, bar.firstChild); }
+				else { bar.appendChild(fresh); }
+			});
+		});
+	}, 10);
+}
+
 function tabsBar(modems, active) {
+	tabsCacheSave(modems, active);
 	var tabs = modems.map(function(m, i) {
 		var isActive = (m.path === active);
 		return E('button', {
-			'class': 'btn cbi-button modemtab' + (isActive ? ' cbi-button-action active' : ''),
+			/* без cbi-button-action: заливка темы конфликтовала бы с акцентной
+			   рамкой, которой мы помечаем активный элемент (как в netpri) */
+			'class': 'btn cbi-button modemtab' + (isActive ? ' active' : ''),
 			'data-path': m.path,
 			'data-tooltip': (m.vidpid || '') + ' @ ' + (m.path || ''),
 			'click': function(ev) {
@@ -167,7 +293,10 @@ return baseclass.extend({
 	   Возвращает Promise<DOM|null>. null - если модем один/нет. */
 	renderBar: function() {
 		return loadModems().then(function(st) {
-			if (st.modems.length <= 1) { return null; }
+			/* Раньше при одном модеме возвращали null - полосы не было вовсе.
+			   Теперь рисуем всегда: одна кнопка показывает, о каком модеме
+			   страница, и, главное, высота полосы известна заранее, поэтому
+			   её место резервируется заготовкой ещё до прихода данных. */
 			ensureCss();
 			return E('div', { 'class': 'modembar' }, [ tabsBar(st.modems, st.active) ]);
 		});
@@ -196,29 +325,36 @@ return baseclass.extend({
 	   отрабатывает лишь при загрузке страницы). */
 	refreshEsimTab: function() { applyEsimTabVisibility(0); },
 
+	/* ПОЛОСУ СТАВИМ СРАЗУ, ДАННЫЕ ПОДКЛАДЫВАЕМ ПОТОМ.
+	   Раньше вся полоса появлялась только после двух вызовов shell
+	   (listmodems.sh + modemswitch.sh active) и вставлялась НАД под-вкладками -
+	   в этот момент вся страница уезжала вниз. Теперь в DOM сразу уходит полоса
+	   с одной кнопкой-заготовкой: высота ряда занята с первого кадра, а приход
+	   данных лишь меняет содержимое строки (второй модем встаёт рядом, в ту же
+	   строку). Вертикального рывка больше нет. */
 	attach: function() {
 		// Вкладку eSIM показываем ТОЛЬКО когда включена eSIM (активен eSIM-слот):
 		// меню LuCI статично и кэшируется, поэтому прячем ссылку на лету - modemtabs
-		// выполняется на КАЖДОЙ странице модема. Запускаем независимо от числа
-		// модемов (renderBar ниже возвращает null при одном модеме).
+		// выполняется на КАЖДОЙ странице модема.
 		applyEsimTabVisibility(0);
-		if (document.querySelector('.modembar')) { return Promise.resolve(); }
-		return this.renderBar().then(function(bar) {
-			if (!bar || document.querySelector('.modembar')) { return; }
-			var tries = 0;
-			(function place() {
-				if (document.querySelector('.modembar')) { return; }
-				var anchor = document.querySelector('#tabmenu')
-					|| document.querySelector('ul.cbi-tabmenu')
-					|| document.querySelector('.cbi-tabmenu');
-				if (anchor && anchor.parentNode) {
-					anchor.parentNode.insertBefore(bar, anchor);
-					return;
-				}
-				if (tries++ < 20) { window.setTimeout(place, 150); return; }
-				var c = document.querySelector('#maincontent') || document.querySelector('#view') || document.body;
-				if (c) { c.insertBefore(bar, c.firstChild); }
-			})();
+
+		var bar = document.querySelector('.modembar');
+		/* полоса уже наполнена данными - второй раз не работаем */
+		if (bar && !bar.classList.contains('modembar-loading')) { return Promise.resolve(); }
+
+		ensureCss();
+
+		if (!bar) {
+			bar = E('div', { 'class': 'modembar modembar-loading' }, [ ghostBar() ]);
+			placeBar(bar);
+		}
+
+		return loadModems().then(function(st) {
+			bar.classList.remove('modembar-loading');
+			var fresh = tabsBar(st.modems, st.active);
+			if (bar.firstChild) { bar.replaceChild(fresh, bar.firstChild); }
+			else { bar.appendChild(fresh); }
+			watchModems(bar, pathsSig(st.modems));
 		});
 	},
 

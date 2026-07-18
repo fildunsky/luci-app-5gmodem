@@ -15,6 +15,39 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
+document.head.append(E('style', { 'type': 'text/css' },
+`
+/* Плашка-подсказка о формате номера. Кнопка «Закрыть» убирает её НАСОВСЕМ
+   (пишет information=0), поэтому отдельной галки в настройках больше нет:
+   подсказка нужна один раз, и управлять ею проще там же, где она видна. */
+.sms-hint { position: relative; }
+.sms-hint .sms-hint-actions { margin-top: .6em; }
+
+/* Обёртка поля ввода: точка отсчёта для счётчика символов. */
+.smstext-wrap { position: relative; display: block; }
+
+/* display:block у самого поля - иначе как inline-элемент оно оставляет под
+   собой несколько пикселей под "хвосты" букв, и счётчик, привязанный к низу
+   обёртки, оказывался чуть ниже рамки. */
+.smstext-wrap textarea { display: block; }
+
+/* Счётчик оставшихся символов - в правом нижнем углу поля.
+   pointer-events:none обязателен: без него клик в правый нижний угол поля
+   попадал бы в счётчик и НЕ ставил курсор в текст.
+   user-select:none - чтобы число не попадало в выделение при копировании
+   набранного сообщения. */
+.smstext-wrap .smstext-counter {
+  position: absolute;
+  right: .7em;
+  bottom: .5em;
+  font-size: .78em;
+  opacity: .45;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+`));
+
 
 /* Binary used for SMS operations: on modems managed by ModemManager
    (MBIM/QMI, e.g. Compal RXM-G1) sms_tool on the AT port never sees
@@ -499,9 +532,14 @@ return view.extend({
 	if ( sections[0].prefix == '1' ) {	
 		prefixnum = sections[0].pnumber;
 	}
-	if ( sections[0].information == '1' ) {
-		ui.addNotification(null, E('p', _("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix.") ), 'info');
-	}
+	/* Подсказка о формате номера - ВНУТРИ страницы, а не через
+	   ui.addNotification. Тот рисует ГЛОБАЛЬНЫЙ баннер поверх всего документа:
+	   он перекрывал вкладки модемов и меню приложения и висел там, пока его не
+	   закроют. Для постоянной справки по полю это неверный инструмент -
+	   уведомления существуют для событий («сообщение отправлено»), а не для
+	   текста, который должен просто быть на странице. Показываем так же, как
+	   предупреждение о USSD: обычной плашкой в потоке. */
+	let showNumberHint = (sections[0].information == '1');
 	
 		let info = _('User interface for sending messages using sms-tool.').format('');
 		
@@ -522,6 +560,29 @@ return view.extend({
 		if (!currentModem && serialModems.length > 0) currentModem = serialModems[0];
 	
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
+				showNumberHint ? E('div', { 'class': 'alert-message info sms-hint' }, [
+					E('p', {}, _("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix.")),
+					E('div', { 'class': 'sms-hint-actions' }, [
+						E('button', {
+							'class': 'cbi-button cbi-button-neutral',
+							'type': 'button',
+							'click': function(ev) {
+								/* Закрыли - значит подсказка больше не нужна: гасим её
+								   НАВСЕГДА. Плашку убираем сразу, не дожидаясь записи в
+								   конфиг: ответ на клик должен быть мгновенным, а если
+								   запись почему-то не удастся, подсказка вернётся при
+								   следующем заходе - это безопаснее, чем наоборот. */
+								let b = ev.currentTarget.closest('.sms-hint');
+								if (b && b.parentNode) { b.parentNode.removeChild(b); }
+								/* Пишем через скрипт, а НЕ uci.set/uci.save: последний кладёт
+								   правку в сессионный стейджинг LuCI, и наверху повисает
+								   «непринятые изменения» с кнопкой «Применить». Для закрытия
+								   подсказки это неуместно - пользователь ничего не настраивал. */
+								fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'hidenumberhint' ]);
+							}
+						}, [ _('Close') ])
+					])
+				]) : '',
 				E('div', { 'class': 'cbi-section' }, [
 					E('div', { 'class': 'cbi-section-node' }, [
 						(function() {
@@ -646,9 +707,16 @@ return view.extend({
 						E('div', { 'class': 'cbi-value' }, [
 							E('label', { 'class': 'cbi-value-title' }, [ _('Message text') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
+							/* Счётчик лежит ВНУТРИ поля ввода (правый нижний угол), а не строкой
+							   под ним: подпись «Осталось символов: 160» занимала целую строку ради
+							   числа, которое нужно лишь боковым зрением. Обёртка нужна для
+							   позиционирования: внутрь textarea вложить ничего нельзя, поэтому
+							   счётчик кладём ПОВЕРХ, а место под него освобождаем нижним отступом
+							   самого поля. */
+							E('div', { 'class': 'smstext-wrap' }, [
 							E('textarea', {
 								'id': 'smstext',
-								'style': 'width: 100%; resize: vertical; height:80px; max-height:80px; min-height:80px; min-width:100%;',
+								'style': 'width: 100%; resize: vertical; height:80px; max-height:80px; min-height:80px; min-width:100%; padding-bottom: 1.5em;',
 								'wrap': 'on',
 								'rows': '3',
 								'placeholder': _(''),
@@ -675,11 +743,12 @@ return view.extend({
 									self.updateMessageCounter();
 								}
 							}),
-								E('div', { 'class': 'left' }, [
-								E('br'),
-								E('label', {}, [ _('Characters remaining:')+' ' ]),
-								E('label', { 'id': 'counter' }, [ _('160') ])
-								])
+							E('span', {
+								'id': 'counter',
+								'class': 'smstext-counter',
+								'title': _('Characters remaining:')
+							}, [ '160' ])
+							])
 							]),
 						]),
 

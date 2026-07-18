@@ -32,6 +32,18 @@ I've added new features to them (compared to 3ginfo and modemband)
 
 ## What's new
 
+### 1.5.0
+- **Inbox rebuilt as message cards.** The table is gone: each SMS is a rounded card styled exactly like the Internet-priority and speed-test buttons — sender in bold on the left, date and time small on the right, text below. Selection is a click on the card; the checkboxes are gone. Actions sit under the list, and *Forward* / *Delete* appear only when something is selected.
+- **Two modems no longer step on each other.** The metrics snapshot in `/tmp` was shared by every reader and not tied to any modem, so right after a switch (or a hotplug event) the page could show the *previous* modem — and the poll could write its model into the new modem's config, producing names like "Telit Fibocom FM350-GL". The snapshot now carries the owning modem's USB path and a foreign snapshot is treated as absent.
+- **SMS reads no longer fail at random.** The inbox and the metrics poll shared one AT port; `sms_tool` opens the port per call, so a read that landed during a poll came back empty (measured: 2 of 5 consecutive reads). Modems that expose several AT ports now get a dedicated one for SMS/USSD.
+- **A newly plugged modem is set up on its own.** The auto-setup guard was global — if *any* modem had a working interface, a second one was never configured. It is per-modem now, and an interface left over from a different modem in the same USB port is rebuilt instead of adopted with the old modem's protocol and device.
+- **Modem tabs.** Always visible (a single modem gets a tab too), drawn from the first frame using cached labels so the page no longer jumps while the list loads, and a hotplugged modem shows up **without a page reload** — the bar watches the list cache that the hotplug hook already maintains, so idle cost is a file read rather than two shell calls.
+- **No more phantom "unsaved changes".** Pages wrote the message counter, ports and storage choice through LuCI's session staging, so simply opening the inbox when a new SMS had arrived raised the *Apply* banner. These writes go straight to the config now.
+- **`5gtop` v2** — **English by default** (Russian only when the language is explicitly set, so it works on a bare router without LuCI), a tab bar and a modem bar mirroring the web UI, a new **Cell** tab with the full web metric set (LAC/TAC/CID, eNB, path loss, TX power, CQI, UE category, carrier aggregation table, antenna ports), live width adjustment with `+`/`-`, and terminal-theme backgrounds no longer painted over with black rectangles. The `m` key actually switches modems now — it called a command that did not exist.
+- **USSD** — modems verified not to support it (Fibocom FM350-GL, Telit LM960A18: data-only modules whose firmware advertises `+CUSD` but never answers) now say so on the tab instead of leaving the user with a hung page.
+- **Telit 3G bands** — the combination list is ordered by band count and frequency, and each label reads low-to-high (`850 + 1900 + 2100`) instead of the vendor's inconsistent order. `AT#CQI` is read as a metric.
+- **Fixes**: deleting selected messages threw a `ReferenceError` and never ran; the phone-format hint was a global banner covering the modem tabs and app menu; the character counter moved inside the message box; the settings panel no longer floods the browser console with 404s on apk-based firmware; the character counter and prefix hint lost their separate settings toggle.
+
 ### 1.4.8
 - **MeigLink SLM770A-R support** — metrics via `AT+SGCELLINFOEX` (named fields, more robust than positional CSV), temperature, band control via `^SYSCFGEX`, and cell lock via `^CELLLOCK`. Field layout verified against the vendor AT manual.
 - **Cell lock** — a generic `getcelllock`/`setcelllock` contract in `bands.sh` plus a row under the band buttons. "Lock to current cell" reads EARFCN and PCI at click time, so it always pins the cell you are actually on. The modem is cycled through flight mode automatically, as the vendor manual requires.
@@ -52,7 +64,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 
 # .apk (OpenWrt 25.12.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.4.8/luci-app-5gmodem-1.4.8-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.0/luci-app-5gmodem-1.5.0-r1.apk > /tmp/luci-app-5gmodem.apk
 curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/refs/heads/master/dist/lpac-2.1.0-r1.apk > /tmp/lpac.apk
 apk update
 apk add /tmp/lpac.apk --allow-untrusted
@@ -61,7 +73,7 @@ apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 
 # .ipk (OpenWrt 24.10.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.4.8/luci-app-5gmodem_1.4.8-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.0/luci-app-5gmodem_1.5.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg update
 opkg install /tmp/luci-app-5gmodem.ipk
 ```

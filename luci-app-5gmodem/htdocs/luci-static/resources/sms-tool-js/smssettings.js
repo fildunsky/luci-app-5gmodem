@@ -80,19 +80,34 @@ var pkg = {
 			window.open(L.url(uri) + q, '_blank', 'noopener');
 		});
 	},
+	/* Менеджер пакетов ищем ПРОВЕРКОЙ НАЛИЧИЯ файла, а не попыткой запуска.
+	   Прежний вариант дёргал три пути подряд, полагаясь на .catch. На прошивках
+	   с apk первых двух нет, и каждый заход на страницу писал в консоль браузера
+	   по два «POST /cgi-bin/cgi-exec 404 (Executable not found)». Работать это не
+	   мешало (срабатывал третий путь), но пугало и маскировало настоящие ошибки:
+	   отменить уже отправленный XHR из JS нельзя, консоль пишет их сама.
+	   fs.stat отвечает обычным RPC-ответом и следа в консоли не оставляет. */
 	checkPackages: function() {
-		return fs.exec_direct('/usr/bin/opkg', ['list-installed'], 'text')
-			.catch(function () {
-				return fs.exec_direct('/usr/libexec/opkg-call', ['list-installed'], 'text')
-					.catch(function () {
-						return fs.exec_direct('/usr/libexec/package-manager-call', ['list-installed'], 'text')
-							.catch(function () { return ''; });
-					});
-			})
-			.then(function (data) {
-				data = (data || '').trim();
-				return data ? data.split('\n') : [];
+		var candidates = [
+			'/usr/libexec/package-manager-call',  /* apk и свежие сборки */
+			'/usr/bin/opkg',                      /* классический opkg */
+			'/usr/libexec/opkg-call'
+		];
+
+		function findBin(i) {
+			if (i >= candidates.length) { return Promise.resolve(null); }
+			return L.resolveDefault(fs.stat(candidates[i]), null).then(function(st) {
+				return st ? candidates[i] : findBin(i + 1);
 			});
+		}
+
+		return findBin(0).then(function(bin) {
+			if (!bin) { return ''; }
+			return fs.exec_direct(bin, ['list-installed'], 'text').catch(function() { return ''; });
+		}).then(function (data) {
+			data = (data || '').trim();
+			return data ? data.split('\n') : [];
+		});
 	},
 	_isPackageInstalled: function(pkgName) {
 		return this.checkPackages().then(function(installedPackages) {
@@ -465,9 +480,11 @@ function addSendOptions(s) {
 	o.depends('sendingroup', '1');
 	o.datatype = 'range(3, 59)';
 
-	o = s.option(form.Flag, 'information', _('Show number and prefix hints'),
-		_('On the Send tab, show a hint about the prefix and the correct phone-number format.'));
-	o.rmempty = false;
+	/* Галка «показывать подсказку о формате номера» убрана: подсказка нужна
+	   один раз, и отдельная настройка ради неё - лишняя сущность. Теперь ею
+	   управляет кнопка «Закрыть» на самой подсказке (см. sendsms.js): закрыл -
+	   больше не появляется. Опция information в конфиге остаётся тем же
+	   признаком, просто выставляется кнопкой, а не здесь. */
 }
 
 function addUssdOptions(s) {

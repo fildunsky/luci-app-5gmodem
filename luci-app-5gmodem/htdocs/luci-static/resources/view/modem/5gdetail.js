@@ -1855,7 +1855,10 @@ simDialog: baseclass.extend({
 		},
 
 		load: function() {
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]));
+			/* При открытии берём снимок: страница отрисуется сразу, а не через
+			   несколько секунд ожидания модема. Если снимок протух, cached сам
+			   сделает полный опрос. */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '10' ]));
 		},
 
 		render: function(content) {
@@ -2084,7 +2087,14 @@ simDialog: baseclass.extend({
 
 
 			pollData: poll.add(function() {
-				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', 'json'))
+				/* ЧИТАЕМ СНИМОК, а не опрашиваем модем. В порт ходит ровно один
+				   процесс (блокировка в 5gmodem.sh), остальные берут готовые
+				   данные - иначе открытая страница, второй браузер и 5gtop
+				   конкурируют за AT-порт, и опрос вместо 3.8 c занимает 13.4 c
+				   (замерено). Свежесть 4 c при опросе раз в 5 c означает, что
+				   обновление всё равно делаем мы, но без второй ходки, если
+				   кто-то уже опрашивает. */
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]))
 					.then(function(res) {
 					var json = JSON.parse(res);
 
@@ -2340,6 +2350,49 @@ simDialog: baseclass.extend({
 						document.getElementById('bandnote-text').textContent =
 							_('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
 					}
+
+					/* ИНДИКАТОР УСТАРЕВШИХ ДАННЫХ - в правом углу заголовка блока.
+					   Метрики читаются из общего снимка (в модем ходит один процесс),
+					   поэтому страница может показывать данные чуть старше своего
+					   интервала: когда опрос затянулся или его ведёт другой
+					   потребитель. Молча показывать старые цифры нельзя - выглядят
+					   как живые. Порог 10 c при опросе раз в 5: иначе значок мигал
+					   бы на каждом обновлении.
+					   В заголовке он ничего не сдвигает: строка существует всегда,
+					   а сам значок уходит вправо - высота страницы не меняется и
+					   скролл не уезжает. */
+					(function() {
+						var head = document.getElementById('modemname');
+						if (!head) { return; }
+						var age = parseInt(json.age, 10);
+						var mark = document.getElementById('stale-mark');
+						if (isNaN(age) || age <= 10) { if (mark) { mark.remove(); } return; }
+						/* Пишем словами, а не голым числом: "2 мин" рядом с названием
+						   модема читается как что угодно - от времени работы до
+						   интервала опроса. Подпись объясняет, что именно устарело. */
+						var span = (age < 60) ? _('%d s').format(age)
+						                      : _('%d min').format(Math.round(age / 60));
+						var txt = _('Data not refreshed for: %s').format(span);
+						if (mark) {
+							mark.title = txt;
+							var lbl = mark.querySelector('span');
+							if (lbl) { lbl.textContent = txt; }
+							var im = mark.querySelector('img');
+							if (im) { im.title = txt; }
+							return;
+						}
+						head.appendChild(E('span', {
+							'id': 'stale-mark', 'title': txt,
+							'style': 'float:right;opacity:.55;font-weight:400;font-size:.7em;' +
+							         'display:inline-flex;align-items:center;gap:.3em'
+						}, [
+							E('img', {
+								'src': L.resource('icons/cloading.svg'), 'title': txt, 'alt': '',
+								'style': 'width:12px;height:12px'
+							}),
+							E('span', {}, txt)
+						]));
+					}());
 
 					if (document.getElementById('temp')) {
 						var view = document.getElementById("temp");

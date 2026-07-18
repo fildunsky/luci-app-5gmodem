@@ -12,11 +12,16 @@ LUCI_TITLE:=LuCI support for 5G modems (info, SMS, USSD, AT)
 MAINTAINER:=Fil Dunsky <filipp.dunsky@gmail.com>
 LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands. \
 	Optional eSIM (eUICC) profile management when the lpac package is installed.
+# coreutils-stty нужен ТЕРМИНАЛЬНОЙ утилите 5gtop: без него нельзя ни выключить
+# построчный режим (клавиши срабатывают только после Enter), ни узнать ширину
+# окна - раскладка падает в узкую даже на широком экране. Это termios, обойти
+# из шелла нечем: busybox stty на части сборок отсутствует вовсе.
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager \
-	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan
+	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
+	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.4.8
+PKG_VERSION:=1.5.0
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -58,6 +63,10 @@ fi
 	# Порты вкладок SMS/USSD/AT живут в ОТДЕЛЬНОМ конфиге и тоже заполняются
 	# hotplug'ом, которого при установке на уже подключённый модем не будет.
 	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+	# Модем мог быть воткнут ДО установки пакета - тогда hotplug-события не
+	# будет. Пробуем настроить его сразу: если интерфейс уже есть, команда
+	# сама ничего не сделает.
+	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
 	}
 	find /www/luci-static/resources/view/modem \
 		/www/luci-static/resources/protocol/fibocom.js \
