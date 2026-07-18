@@ -258,7 +258,7 @@ document.head.append(E('style', {'type': 'text/css'},
   font-weight: 600;
 }
 .tginfo-status .tginfo-phone {
-  font-size: 85%;
+  font-size: 0.8em;
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
@@ -272,9 +272,11 @@ document.head.append(E('style', {'type': 'text/css'},
   opacity: 1;
   overflow-wrap: anywhere;
 }
-/* частоты в скобках - без жирного */
+/* частоты в скобках - без жирного, мельче и на 30% серее основного текста */
 .tginfo-info .tginfo-freq {
   font-weight: normal;
+  font-size: 0.8em;
+  opacity: 0.7;
 }
 .tginfo-info .tginfo-ip {
   font-variant-numeric: tabular-nums;
@@ -1509,18 +1511,33 @@ function active_select() {
 	});
 }
 
+/* Телефон в вид «+7 (901) 901-84-79» для 11-значных РФ-номеров (7… или 8…).
+   Иностранные/непонятные форматы отдаём как есть. */
+function formatPhone(raw) {
+    var s = String(raw || '').trim();
+    if (!s) { return s; }
+    var d = s.replace(/[^\d]/g, '');
+    if (d.length === 11 && d.charAt(0) === '8') { d = '7' + d.slice(1); }
+    if (d.length === 11 && d.charAt(0) === '7') {
+        return '+7 (' + d.slice(1, 4) + ') ' + d.slice(4, 7) + '-' + d.slice(7, 9) + '-' + d.slice(9, 11);
+    }
+    return s;
+}
+
 function formatDuration(sec) {
-    if (sec === '-') { return '-'; }
-    if (sec === '') { return '-'; }
+    if (sec === '-' || sec === '') { return '-'; }
+    sec = parseInt(sec, 10);
+    if (isNaN(sec)) { return '-'; }
     var d = Math.floor(sec / 86400),
         h = Math.floor(sec / 3600) % 24,
         m = Math.floor(sec / 60) % 60,
         s = sec % 60;
-    var time = d > 0 ? d + 'd ' : '';
-    if (time !== '') { time += h + 'h '; } else { time = h > 0 ? h + 'h ' : ''; }
-    if (time !== '') { time += m + 'm '; } else { time = m > 0 ? m + 'm ' : ''; }
-    time += s + 's';
-    return time;
+    var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+    // Часы:минуты:секунды в формате «24:59» (мин:сек) или «1:24:59» (час:мин:сек);
+    // дни выносим отдельно: «2d 1:05:09».
+    var out = (h > 0 || d > 0) ? (h + ':' + pad(m) + ':' + pad(s)) : (m + ':' + pad(s));
+    if (d > 0) { out = d + 'd ' + out; }
+    return out;
 }
 
 function formatDateTime(s) {
@@ -1965,7 +1982,7 @@ simDialog: baseclass.extend({
 						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' +_('Waiting for connection data...'), wicon, p);
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + formatDuration(json.conn_time_sec) + ' | ' + '<img style="width:15px;height:15px;vertical-align:-2px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:15px;height:15px;vertical-align:-2px" src="' + uicon + '"/>\u202f' + json.tx;
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + formatDuration(json.conn_time_sec) + ' | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + json.tx;
 						}
 					}
 
@@ -1986,7 +2003,7 @@ simDialog: baseclass.extend({
 					if (document.getElementById('phone')) {
 						var pv = document.getElementById('phone');
 						if (_hasPhone) {
-							pv.textContent = json.phone;
+							pv.textContent = formatPhone(json.phone);
 							pv.style.display = '';
 						} else {
 							pv.style.display = 'none';
@@ -2528,10 +2545,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'class': 'tr', 'id': 'bandwarnn', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
 					E('td', { 'class': 'td left tginfo-modesw' }, [
-						E('div', { 'style': 'display:flex;align-items:flex-start;gap:.5em;opacity:.85;font-size:.95em;padding:.2em 0' }, [
-							E('span', { 'style': 'font-size:1.1em;line-height:1.2' }, '⚠️'),
-							E('span', {}, _('Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem.'))
-						])
+						E('div', { 'class': 'cbi-value-description' }, _('Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem.'))
 					]),
 					]),
 				E('tr', { 'class': 'tr', 'id': 'bandsactn', 'style': msStyle }, [

@@ -2,6 +2,7 @@
 'require view';
 'require fs';
 'require ui';
+'require uci';
 'require view.modem.modemtabs as modemtabs';
 
 /*
@@ -63,6 +64,50 @@ function notify(ok, msgOk, msgFail) {
 	} else {
 		ui.addNotification(null, E('p', m), ok ? 'info' : 'error');
 	}
+}
+
+/* APN по имени оператора - та же таблица, что в «Настройках модема» (5gdebug). */
+function apnForOperator(name) {
+	var n = (name || '').toLowerCase();
+	if (n.indexOf('t-mobile') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('t-mob') >= 0) { return 'tt'; }
+	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'sberbank'; }
+	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'internet.beeline.ru'; }
+	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'internet.mts.ru'; }
+	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'internet'; }
+	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'internet.tele2.ru'; }
+	if (n.indexOf('yota') >= 0) { return 'internet.yota'; }
+	return '';
+}
+
+/* После включения eSIM-профиля оператор мог смениться. ПРЕДЛАГАЕМ проверить APN
+   (не меняем молча - на MVNO/неверном определении это рискованно). Показываем
+   подсказку со ссылкой в «Настройки модема» ТОЛЬКО если рекомендованный по
+   оператору APN отличается от текущего на интерфейсе. */
+function proposeApnAfterEnable() {
+	return Promise.all([
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '5' ]), '{}'),
+		L.resolveDefault(uci.load('5gmodem')),
+		L.resolveDefault(uci.load('network'))
+	]).then(function(res) {
+		var j = {}; try { j = JSON.parse(res[0] || '{}'); } catch (e) {}
+		var op = String(j.operator || '').trim();
+		var want = apnForOperator(op);
+		if (!want) { return; }
+		var iface = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
+		var cur = String(uci.get('network', iface, 'apn') || '').trim();
+		// Пустой uci-APN = интерфейс на дефолте прото (напр. fibocom → «internet»),
+		// который обычно работает; менять его вслепую опаснее, чем оставить. Поэтому
+		// предлагаем ТОЛЬКО при ЯВНО заданном APN, который расходится с оператором.
+		if (!cur || cur.toLowerCase() === want.toLowerCase()) { return; }
+		ui.addNotification(null, E('p', {}, [
+			_('Operator changed to "%s" after switching the eSIM profile. The recommended APN is "%s" (current: "%s"). Open Modem Settings to apply it.')
+				.format(op, want, cur || '—'), ' ',
+			E('a', {
+				'class': 'btn cbi-button cbi-button-action',
+				'href': L.url('admin', 'modem', '5gmodem', 'diagnostics')
+			}, _('Open Modem Settings'))
+		]), 'warning');
+	});
 }
 
 return view.extend({
@@ -343,6 +388,9 @@ function esimOp(verb, iccid, name) {
 				ui.hideModal();
 				notify(true, _('eSIM operation done'), null);
 				_viewReload();
+				/* Включили другой профиль -> мог смениться оператор: предложим
+				   проверить APN (не меняем молча). Для disable не делаем. */
+				if (verb == 'enable') { proposeApnAfterEnable(); }
 			}, 25000);
 			return;
 		}

@@ -62,16 +62,25 @@ var CSS = `
 .netpribar .netpri-st.st-dl { border-color: #2ea043; box-shadow: inset 0 0 0 1px #2ea043; }
 .netpribar .netpri-st.st-ul { border-color: #0095ff; box-shadow: inset 0 0 0 1px #0095ff; }
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
+.netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
 `;
 
 var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
 
 /* Состояние карточки теста скорости - модульное, чтобы переживать перерисовку
    бара 5-секундным поллом. phase: idle|running|done|fail. */
-var _st = { phase: 'idle', service: '', down: null, up: null, ip: '' };
+var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', live: 0, liveUp: 0 };
 
 function stArrow(name) {
 	return E('img', { 'class': 'netpri-st-arrow', 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
+}
+
+/* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
+   буквы. Пусто, если код не 2 латинские буквы. */
+function flagEmoji(cc) {
+	cc = String(cc || '').toUpperCase();
+	if (!/^[A-Z]{2}$/.test(cc)) { return ''; }
+	return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
 }
 
 /* содержимое средней строки (скорость) по фазе. Во время загрузки показываем
@@ -85,8 +94,9 @@ function stSpeedContent() {
 		   перерисовка бара не сбрасывала его в 0 посреди теста. */
 		if (_st.upPhase) {
 			var d = (_st.down != null) ? String(_st.down) : '0';
+			var lu = (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1);
 			return [ stArrow('cdown'), E('span', {}, ' ' + d), sep(),
-				stArrow('cup'), E('span', { 'class': 'netpri-st-live' }, ' 0'), unit() ];
+				stArrow('cup'), E('span', { 'class': 'netpri-st-live' }, ' ' + lu), unit() ];
 		}
 		var lv = (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1);
 		return [ stArrow('cdown'), E('span', { 'class': 'netpri-st-live' }, ' ' + lv), unit() ];
@@ -98,7 +108,10 @@ function stSpeedContent() {
 		return [ stArrow('cdown'), E('span', {}, ' ' + dn), sep(),
 			stArrow('cup'), E('span', {}, ' ' + up), unit() ];
 	}
-	return [ E('span', {}, '⚡ ' + _('Speed test')) ];
+	return [
+		E('img', { 'class': 'netpri-st-icon', 'src': L.resource('icons/cspeedtest.svg'), 'width': 14, 'height': 14, 'alt': '' }),
+		E('span', {}, ' ' + _('Speed test'))
+	];
 }
 
 /* три строки карточки: сервис (сверху), скорость (центр), публичный IP (снизу) */
@@ -106,7 +119,10 @@ function stCardInner() {
 	return [
 		E('span', { 'class': 'netpri-sub' }, _st.service || _('Speed test')),
 		E('span', { 'class': 'netpri-name netpri-st-speed' }, stSpeedContent()),
-		_st.ip ? E('span', { 'class': 'netpri-ip' }, _st.ip)
+		_st.ip ? E('span', { 'class': 'netpri-ip' }, (function() {
+			var fl = flagEmoji(_st.cc);
+			return fl ? (fl + ' ' + _st.ip) : _st.ip;   // флаг + тонкий пробел + IP
+		})())
 		       : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
 	];
 }
@@ -158,19 +174,20 @@ function refreshStCard() {
 	if (key !== _renderedKey) {
 		patchStCard();
 		_renderedKey = key;
-		if (_st.phase === 'running' && !_st.upPhase) { _liveDisplay = 0; }
+		if (_st.phase === 'running') { _liveDisplay = 0; }   // новую фазу начинаем с 0
 	}
 	var card = document.querySelector('.netpri-st');
 	if (card) {
 		card.classList.toggle('st-dl', _st.phase === 'running' && !_st.upPhase);
 		card.classList.toggle('st-ul', _st.phase === 'running' && !!_st.upPhase);
 	}
-	if (_st.phase === 'running' && !_st.upPhase) { animateLive(_st.live || 0); }
+	// анимируем текущее живое число: при отдаче - upload, иначе - download
+	if (_st.phase === 'running') { animateLive(_st.upPhase ? (_st.liveUp || 0) : (_st.live || 0)); }
 }
 
 function runSpeedtest() {
 	if (_st.phase === 'running') { return; }
-	_st.phase = 'running'; _st.live = 0; _st.upPhase = false;
+	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
 	_st.down = null; _st.up = null; _st.ip = '';
 	_renderedKey = ''; _liveDisplay = 0;
 	refreshStCard();
@@ -184,13 +201,14 @@ function runSpeedtest() {
 					_st.phase = 'running';
 					_st.upPhase = (j.phase === 'up');
 					if (j.live_down != null) { _st.live = j.live_down; }
+					if (j.live_up != null) { _st.liveUp = j.live_up; }
 					if (j.down_mbps != null) { _st.down = j.down_mbps; }
 					refreshStCard();
 					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
 						return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
 					}
 				}
-				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; }
+				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
 				else { _st.phase = 'fail'; }
 				_renderedKey = ''; refreshStCard();
 			});
@@ -204,7 +222,7 @@ function stInit() {
 	L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j.service) { _st.service = j.service; }
-		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; }
+		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
 		patchStCard();
 	});
 }

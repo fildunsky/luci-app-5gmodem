@@ -642,13 +642,16 @@ return view.extend({
 		o.rmempty = true;
 
 		o = st.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
-			_('Endpoint that accepts and discards a POST body, for the upload test. In Russia the default (Cloudflare) is often unreachable over cellular - set a reachable one or leave upload unused.'));
+			_('Endpoint that accepts a POST body, for the upload test. The default (Yandex) is the one reachable over Russian cellular both directly and via a proxy - it answers 404/403 but reads the body, so the speed is still measured. Cloudflare/Rostelecom work on unrestricted networks.'));
+		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex (RU, works over cellular)');
+		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
 		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
 		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (public demo)');
 		o.rmempty = true;
 
 		o = st.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
-			_('Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead.'));
+			_('Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead.'));
+		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + country flag)');
 		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
 		o.value('https://ip.wtf', 'ip.wtf');
 		o.value('http://ifconfig.me/ip', 'ifconfig.me');

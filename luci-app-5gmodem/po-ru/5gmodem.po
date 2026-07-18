@@ -2485,3 +2485,9 @@ msgstr "Эндпойнт отдачи"
 
 msgid "Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead."
 msgstr "Сервис, возвращающий ваш публичный IP. Выберите пресет или впишите свой; если не сработает, покажем WAN-IP активного аплинка."
+
+msgid "Operator changed to \"%s\" after switching the eSIM profile. The recommended APN is \"%s\" (current: \"%s\"). Open Modem Settings to apply it."
+msgstr "После смены eSIM-профиля оператор изменился на «%s». Рекомендуемый APN — «%s» (сейчас: «%s»). Откройте «Настройки модема», чтобы применить."
+
+msgid "Open Modem Settings"
+msgstr "Открыть настройки модема"

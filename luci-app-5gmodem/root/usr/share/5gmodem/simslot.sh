@@ -304,6 +304,18 @@ set)
 	if echo "$R" | grep -qE '\(0[-,]1\)'; then
 		L0=$(slot_label 0 SIM1)
 		L1=$(slot_label 1 SIM2)
+		# СВЕЖИЙ eSIM: SIMTYPE читается только у активного слота, поэтому тип
+		# ни разу не активированного eSIM неизвестен -> он подписывался «SIM2».
+		# Доопределяем: если eUICC доступен (esim.sh закэшировал available=1), а
+		# ОДИН слот - известная физическая USIM («SIM»), то ДРУГОЙ (с числовым
+		# фолбэком) и есть eSIM (eUICC на нём). Ключ кэша - как в esim.sh (сырой
+		# active_modem).
+		_ESAV=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
+			"/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null)
+		if [ "$_ESAV" = 1 ]; then
+			[ "$L0" = SIM ] && case "$L1" in SIM1|SIM2) L1="eSIM";; esac
+			[ "$L1" = SIM ] && case "$L0" in SIM1|SIM2) L0="eSIM";; esac
+		fi
 		# оба слота одного типа (две физические SIM) - вернуть номерные метки
 		[ "$L0" = "$L1" ] && { L0="SIM1"; L1="SIM2"; }
 		OUT='{"id":"0","label":"'$L0'"},{"id":"1","label":"'$L1'"}'

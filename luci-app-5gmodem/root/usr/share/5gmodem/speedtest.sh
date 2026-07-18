@@ -65,9 +65,14 @@ start)
 	SECS=$(uci -q get 5gmodem.@5gmodem[0].speedtest_secs)
 	case "$SECS" in ''|*[!0-9]*) SECS=15 ;; esac
 	UPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_up_url)
-	[ -n "$UPURL" ] || UPURL="https://speed.cloudflare.com/__up"
+	# по умолчанию Yandex - единственный, кто доступен и напрямую через сотовую в
+	# РФ, и через прокси. Отвечает 404/403, но ЧИТАЕТ тело -> скорость отдачи
+	# измеряется (наш код берёт speed_upload независимо от HTTP-кода).
+	[ -n "$UPURL" ] || UPURL="https://yandex.ru/internet/api/v1/upload"
 	IPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ip_url)
-	[ -n "$IPURL" ] || IPURL="http://api.ipify.org"
+	# по умолчанию ip-api.com/line - отдаёт СТРАНУ и IP простым текстом
+	# ("RU\n<ip>"), чтобы рядом с IP показать флаг страны. Сервис можно сменить.
+	[ -n "$IPURL" ] || IPURL="http://ip-api.com/line/?fields=countryCode,query"
 	SERVICE=$(_service_name)
 
 	_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0}"
@@ -79,41 +84,68 @@ start)
 		RESF="/tmp/5gmodem_st_res.$$"
 		: > "$PROG"; : > "$RESF"
 
-		# --- DOWNLOAD с живым семплированием прогресса ---
-		# stderr (прогресс-метр) -> PROG, stdout (итоговый -w) -> RESF.
+		# --- DOWNLOAD: живое семплирование, ИТОГ = МАКС по секундным семплам ---
+		# stderr (прогресс-метр) -> PROG, stdout (итоговый -w) -> RESF. Заголовком
+		# берём максимум устойчивой скорости из посекундных семплов (это «скорость
+		# канала»), а НЕ среднее от curl: короткая загрузка = среднее занижено
+		# разгоном TCP. Среднее оставляем фолбэком, если семплов не было.
 		curl -o /dev/null --max-time "$SECS" --connect-timeout 8 \
 			-w '%{speed_download} %{http_code}' "$URL" 2>"$PROG" >"$RESF" &
 		CPID=$!
+		MAXD=0
 		while kill -0 "$CPID" 2>/dev/null; do
 			sleep 1
 			CUR=$(tr '\r' '\n' < "$PROG" 2>/dev/null | grep -E '^[ ]*[0-9]' | tail -1 | awk '{print $NF}')
 			[ -n "$CUR" ] || CUR=0
 			LIVE=$(_tombps "$CUR")
+			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0}}"
 		done
 		wait "$CPID" 2>/dev/null
 		SPD=$(awk '{print $1+0}' "$RESF")
 		HTTP=$(awk '{print $2}' "$RESF")
-		DMBPS=$(awk "BEGIN{printf \"%.1f\", ($SPD*8)/1000000}")
+		AVGD=$(awk "BEGIN{printf \"%.1f\", ($SPD*8)/1000000}")
+		DMBPS=$(awk "BEGIN{printf \"%.1f\", ($MAXD>0)?$MAXD:$AVGD}")
 		rm -f "$PROG" "$RESF"
 
-		# --- UPLOAD (по умолчанию Cloudflare; итоговое число, без лайва) ---
-		_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS}"
+		# --- UPLOAD: то же - живое семплирование + макс по секундным семплам ---
+		UPROG="/tmp/5gmodem_st_uprog.$$"; URES="/tmp/5gmodem_st_ures.$$"
+		: > "$UPROG"; : > "$URES"
+		head -c 8388608 /dev/zero 2>/dev/null | curl -o /dev/null --max-time "$SECS" --connect-timeout 6 \
+			--data-binary @- -w '%{speed_upload}' "$UPURL" 2>"$UPROG" >"$URES" &
+		UPID=$!
+		MAXU=0
+		while kill -0 "$UPID" 2>/dev/null; do
+			sleep 1
+			CUR=$(tr '\r' '\n' < "$UPROG" 2>/dev/null | grep -E '^[ ]*[0-9]' | tail -1 | awk '{print $NF}')
+			[ -n "$CUR" ] || CUR=0
+			LIVEU=$(_tombps "$CUR")
+			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0}}"
+		done
+		wait "$UPID" 2>/dev/null
+		USPD=$(awk '{print $1+0}' "$URES")
+		rm -f "$UPROG" "$URES"
+		AVGU=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
+		UBEST=$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")
 		UMBPS=""
-		USPD=$(head -c 8388608 /dev/zero 2>/dev/null | curl -o /dev/null --max-time "$SECS" --connect-timeout 6 -s \
-			--data-binary @- -w '%{speed_upload}' "$UPURL" 2>/dev/null | awk '{print $1+0}')
-		[ -n "$USPD" ] && [ "${USPD%.*}" -gt 0 ] 2>/dev/null && \
-			UMBPS=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
+		[ "$(awk "BEGIN{print ($UBEST>0)?1:0}")" = 1 ] && UMBPS="$UBEST"
 
-		# --- ПУБЛИЧНЫЙ IP (echo-сервис по маршруту по умолчанию), иначе src ---
-		PUB=$(curl --max-time 6 -s "$IPURL" 2>/dev/null \
-			| grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага). ip-api /line отдаёт "RU\n<ip>";
+		# у плоских сервисов (ipify) страны нет - тогда просто IP без флага. Из
+		# ответа тащим первый IPv4 и, если есть, 2-буквенный код страны (строкой
+		# ровно из 2 букв или из JSON "country_code":"XX"). Фолбэк IP - src маршрута.
+		GEO=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
+		PUB=$(echo "$GEO" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
 		[ -n "$PUB" ] || PUB=$(ip route get 77.88.8.8 2>/dev/null \
 			| grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
+		CC=$(echo "$GEO" | grep -oE '^[A-Za-z][A-Za-z]$' | head -1)
+		[ -n "$CC" ] || CC=$(echo "$GEO" | grep -oiE '"country_code"[ :]*"[A-Za-z]{2}"' | grep -oE '[A-Za-z]{2}"$' | tr -d '"' | head -1)
+		CC=$(echo "$CC" | tr 'a-z' 'A-Z')
 
 		case "$HTTP" in
 			200|206)
-				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"ts\":$(date +%s 2>/dev/null)}"
+				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 			*)
 				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\"}"
