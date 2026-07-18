@@ -16,7 +16,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager \
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.4.6
+PKG_VERSION:=1.4.7
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -50,6 +50,15 @@ fi
 	rm -f /tmp/luci-indexcache.*
 	rm -rf /tmp/luci-modulecache/
 	/etc/init.d/rpcd reload 2>/dev/null
+	# Зарегистрировать УЖЕ подключённый модем. Обычно это делает hotplug
+	# (71-5gmodem-resolve), но если модем был воткнут ДО установки пакета,
+	# события не случится и конфиг останется пустым: без active_modem не
+	# находится ни порт, ни интерфейс, и страница показывает только прочерки.
+	/usr/share/5gmodem/modemswitch.sh resolve 2>/dev/null
+	# Порты вкладок SMS/USSD/AT живут в ОТДЕЛЬНОМ конфиге и тоже заполняются
+	# hotplug'ом, которого при установке на уже подключённый модем не будет.
+	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+	}
 	find /www/luci-static/resources/view/modem \
 		/www/luci-static/resources/protocol/fibocom.js \
 		/www/luci-static/resources/icons -exec touch {} + 2>/dev/null

@@ -30,6 +30,9 @@ rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
 	# порты уже переустановились - пересобрать кэш заново, а не отдать протухший
 	/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
 	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+	# Порты вкладок SMS/USSD/AT: заполняем пустые и чиним протухшие после
+	# переподключения (номера tty сдвигаются, старое значение указывает в никуда).
+	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
 ) 9>/tmp/5gmodem/resolve.lock &
 
 exit 0

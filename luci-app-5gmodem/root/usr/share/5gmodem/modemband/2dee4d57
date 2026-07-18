@@ -1,0 +1,116 @@
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+
+# MeigLink SLM770A-R (2dee:4d57)
+#
+# Диалект Huawei-подобный: управление диапазонами через ^SYSCFGEX, маска LTE -
+# ШЕСТОЕ поле при разборе через -F[:,] (та же позиция, что у Huawei E3372).
+# Живой ответ модуля:
+#   ^SYSCFGEX: "03",2000004400000,3,2,1A0080800D5,0,,,0
+#              $2      $3         $4 $5     $6     $7
+# 0x1A0080800D5 -> B1 B3 B5 B7 B8 B20 B28 B38 B40 B41; модуль в момент проверки
+# работал на B7, и он в маске присутствует - раскладка подтверждена.
+
+getinfo() {
+	echo "MeigLink SLM770A-R"
+}
+
+getsupportedbands() {
+	echo "1 3 5 7 8 20 28 38 40 41"
+}
+
+getbands() {
+	O=$(sms_tool -d $_DEVICE at "at^syscfgex?")
+	HEX="0x"$(echo "$O" | awk -F[:,] '/^\^SYSCFGEX:/{print $6}' | xargs)
+	# «Всё включено» у Huawei-подобных - маска из одних единиц; показываем полный
+	# список, а не расшифровку 63 несуществующих диапазонов.
+	if [ "$HEX" = "0x7FFFFFFFFFFFFFFF" ]; then
+		getsupportedbands
+	else
+		[ "$HEX" = "0x" ] || hextobands "$HEX"
+	fi
+}
+
+setbands() {
+	BANDS="$1"
+
+	if [ "$BANDS" = "default" ]; then
+		HEX="7FFFFFFFFFFFFFFF"
+	else
+		HEX=$(bandstohex "$BANDS")
+	fi
+	[ "$HEX" = "0" ] && return
+
+	# ЧИТАЕМ ТЕКУЩИЕ ЗНАЧЕНИЯ и подменяем ТОЛЬКО маску LTE. Huawei-профиль
+	# подставляет свои константы (3FFFFFFF,2,4) - для чужого модуля это опасно:
+	# в этих полях лежат режим доступа, маска WCDMA/GSM, роуминг и домен услуг,
+	# и неверная комбинация оставит модем без сети. Сохраняем всё как есть.
+	O=$(sms_tool -d $_DEVICE at "at^syscfgex?" | tr -d '\r')
+	_L=$(echo "$O" | sed -n 's/^\^SYSCFGEX: *//p' | head -1)
+	_ACQ=$(echo "$_L" | awk -F, '{print $1}')          # "03" - вместе с кавычками
+	_WB=$(echo "$_L"  | awk -F, '{print $2}')          # маска WCDMA/GSM
+	_ROAM=$(echo "$_L" | awk -F, '{print $3}')
+	_SRV=$(echo "$_L" | awk -F, '{print $4}')
+	_LB2=$(echo "$_L" | awk -F, '{print $6}')         # маска LTE 65-128 бит
+	# запасные значения - ровно те, что модуль отдавал на заводских настройках
+	[ -n "$_ACQ" ]  || _ACQ='"03"'
+	[ -n "$_WB" ]   || _WB="2000004400000"
+	[ -n "$_ROAM" ] || _ROAM="3"
+	[ -n "$_SRV" ]  || _SRV="2"
+	[ -n "$_LB2" ]  || _LB2="0"
+
+	# Маска LTE в этом диалекте - ДВА поля: биты 1-64 и 65-128 (мануал, гл. 8.10:
+	# <lteband 1-64bit>,<lteband 65-128bit>). Второе обязательно передавать, иначе
+	# команда неполная. Наши диапазоны укладываются в первое; второе возвращаем
+	# модему тем же, каким оно было.
+	sms_tool -d $_DEVICE at "at^syscfgex=${_ACQ},${_WB},${_ROAM},${_SRV},${HEX},${_LB2},,"
+}
+
+# --- Привязка к соте ----------------------------------------------------------
+# AT^CELLLOCK=<enable>[,<rat>,<lock_type>,<arfcn>[,<pci>]]
+#   rat: "02" WCDMA, "03" LTE;  lock_type: 0 - к частоте, 1 - к соте
+#   AT^CELLLOCK=0  снимает привязку на всех RAT
+# Чтение: ^CELLLOCK: <enable>[,<rat>,<lock_type>,<arfcn>]
+#
+# ВАЖНО (мануал, гл. 8.12): привязку LTE полагается включать в режиме полёта -
+# at+cfun=0, команда, at+cfun=1 - иначе возможны сбои; снятие вступает в силу
+# после перезапуска модема. Поэтому setcelllock сам делает цикл CFUN, а не
+# оставляет это пользователю.
+getcelllock() {
+	O=$(sms_tool -d $_DEVICE at "AT^CELLLOCK?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^CELLLOCK: *//p' | head -1)
+	[ -n "$O" ] || { echo "Unsupported"; return; }
+	_EN=$(echo "$O" | awk -F, '{print $1}')
+	[ "$_EN" = "1" ] || { echo "off"; return; }
+	_LT=$(echo "$O" | awk -F, '{gsub(/"/,"",$3); print $3}')
+	_AR=$(echo "$O" | awk -F, '{print $4}')
+	_PC=$(echo "$O" | awk -F, '{print $5}')
+	if [ "$_LT" = "1" ] && [ -n "$_PC" ]; then
+		echo "cell $_AR $_PC"
+	else
+		echo "arfcn $_AR"
+	fi
+}
+
+setcelllock() {
+	case "$1" in
+		off)
+			sms_tool -d $_DEVICE at "AT^CELLLOCK=0" >/dev/null 2>&1
+			# снятие вступает в силу только после перезапуска модема
+			sms_tool -d $_DEVICE at "AT+CFUN=1,1" >/dev/null 2>&1
+			;;
+		arfcn|cell)
+			_AR="$2"; _PC="$3"
+			[ -n "$_AR" ] || return
+			# режим полёта -> привязка -> обратно (требование мануала)
+			sms_tool -d $_DEVICE at "AT+CFUN=0" >/dev/null 2>&1
+			sleep 2
+			if [ "$1" = "cell" ] && [ -n "$_PC" ]; then
+				sms_tool -d $_DEVICE at "AT^CELLLOCK=1,\"03\",1,$_AR,$_PC" >/dev/null 2>&1
+			else
+				sms_tool -d $_DEVICE at "AT^CELLLOCK=1,\"03\",0,$_AR" >/dev/null 2>&1
+			fi
+			sleep 1
+			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+			;;
+	esac
+}

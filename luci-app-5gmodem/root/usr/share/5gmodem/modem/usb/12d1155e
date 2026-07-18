@@ -121,7 +121,6 @@ T_DEC=$LAC_DEC
 # Temperature
 T=$(echo "$O" | awk -F[,:] '/^\^CHIPTEMP/ {gsub(/[ \r]/,"");t=0;for(i=2;i<=NF;i++)if($i!=65535){if($i>100){$i=$i/10};if($i>t){t=$i}};printf "%.1f", t}')
 if [ "x$T" != "x0.0" ]; then
-	[ -n "$ADDON" ] && ADDON="$ADDON,"
 	TEMP="$T &deg;C"
 	#ADDON="$ADDON"'{"Temperatura":"'$T' &deg;C"}'
 fi

@@ -59,35 +59,29 @@ case "$MODE_NUM" in
 		[ -n "$COPS" ] && COPS="$T"
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $7}' | xargs)
 		if [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T_DEC=$(printf "%d" "0x$T")
 #			ADDON="$ADDON"'{"TAC":"'$T_DEC' ('$T')"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $3}' | xargs)
 		if [ -n "$T" ]; then
 			RSSI=$T
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"RSSI":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $10}' | xargs)
 		if [ -n "$T" ]; then
 			RSRP=$T
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"RSRP":"'$T' dBm"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $2}' | xargs)
 		if [ -n "$T" ]; then
 			EARFCN=$T
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"EARFCN":"'$T'"}'
 		fi
 
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $3}' | xargs)
 		if [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
 			PBAND="$(band4g $T1 "")"
-			ADDON="$ADDON"'{"Primary band":"'$(band4g $T1 "")'"}'
 			# band4g игнорирует 2-й аргумент, поэтому префикс "LTE" ставим сами
 			MODE="LTE | $(band4g $T1)"
 		fi
@@ -131,7 +125,6 @@ case "$MODE_NUM" in
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $15}' | xargs)
 		if [ -n "$T" ] && [ "$T" != "0" ]; then
 			_S1OK=1
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
 			S1BAND="$(band4g $T1)"
 			S1EARFCN="$T"
@@ -145,63 +138,49 @@ case "$MODE_NUM" in
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $19}' | xargs)
 		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S1) RSSI":"'$T' dBm"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $18}' | xargs)
 		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S1) RSRP":"'$T' dBm"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $20}' | xargs)
 		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S1) RSRQ":"'$T' dB"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $21}' | xargs)
 		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
 			T=$(sinr_db "$T")        # индекс 0..250 -> дБ, как и у первичной
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S1) SINR":"'$T' dB"}'
 		fi
 
 		_S2OK=0
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $26}' | xargs)
 		if [ -n "$T" ] && [ "$T" != "0" ]; then
 			_S2OK=1
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T1=$(channeltoband $T)
 			S2BAND="$(band4g $T1)"
 			S2EARFCN="$T"
-			ADDON="$ADDON"'{"(S2) band":"'$(band4g $T1 "")'"}'
 			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $28}' | xargs)
 		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			S2PCI="$T"
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S2) PCI":"'$T'"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $30}' | xargs)
 		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S2) RSSI":"'$T' dBm"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $29}' | xargs)
 		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S2) RSRP":"'$T' dBm"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $31}' | xargs)
 		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S2) RSRQ":"'$T' dB"}'
+		:
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $32}' | xargs)
 		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
 			T=$(sinr_db "$T")
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
-			ADDON="$ADDON"'{"(S2) SINR":"'$T' dB"}'
 		fi
 		;;
 esac

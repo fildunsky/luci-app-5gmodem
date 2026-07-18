@@ -176,6 +176,7 @@ model_for() {
 		2c7c:0800) echo "Quectel RM500Q"; return ;;
 		2c7c:0801) echo "Quectel RM520N"; return ;;
 		2c7c:0900) echo "Quectel RG500Q"; return ;;
+		2dee:4d57) echo "MeigLink SLM770A"; return ;;
 	esac
 	case "$prod" in
 		VOS_5G|RXMG1|RXM-G1) echo "Compal RXM-G1"; return ;;
@@ -184,7 +185,7 @@ model_for() {
 
 	# Дескриптор бесполезен (Android/USB Modem/пусто) - подставляем бренд по VID.
 	case "$prod" in
-		''|[Aa]ndroid|USB*|[Mm]odem)
+		''|[Aa]ndroid|USB*|[Mm]odem|*Composite*|*[Dd]evice\ [Bb]us*)
 			case "${vidpid%%:*}" in
 				2c7c) echo "Quectel"; return ;;
 				1bc7) echo "Telit"; return ;;
@@ -192,7 +193,8 @@ model_for() {
 				1e2d) echo "Cinterion"; return ;;
 				12d1) echo "Huawei"; return ;;
 				19d2) echo "ZTE"; return ;;
-				2dee|0489) echo "Foxconn"; return ;;
+				2dee) echo "MeigLink"; return ;;
+				0489) echo "Foxconn"; return ;;
 				05c6) echo "Compal"; return ;;
 			esac
 			;;
@@ -236,7 +238,14 @@ list)
 	for n in $(wan_nets | tr ' ' '\n' | sort | uniq); do
 		[ -n "$n" ] || continue
 		uci -q get "network.$n" >/dev/null 2>&1 || continue
-		[ "$n" = wan6 ] && continue                                   # ipv6 twin of wan
+		# IPv6-спутник прячем: в OpenWrt он заводится отдельной сетью с именем
+		# "<имя>6" поверх ТОГО ЖЕ устройства (wan/wan6, wwan/wwan6, modem/modem6).
+		# Раньше отсекался только "wan6" по имени, поэтому на роутере с модемом
+		# на usb0 в списке висели ДВА аплинка: wwan с адресом и wwan6 без него.
+		# Приоритет задаётся маршруту устройства, так что спутник тут не нужен.
+		case "$n" in
+			*6) uci -q get "network.${n%6}" >/dev/null 2>&1 && continue ;;
+		esac
 		[ "$(uci -q get "network.$n.disabled")" = "1" ] && continue
 		# Отсутствующий модем в списке приоритетов не нужен: его интерфейс остаётся
 		# в firewall-зоне (мы его не удаляем - модем ещё вернётся), но выбирать его

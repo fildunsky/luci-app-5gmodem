@@ -236,6 +236,27 @@ if [ -e /usr/bin/sms_tool ]; then
 	# Раньше COPS?, CEREG и CIMI дёргались ещё и отдельными вызовами - каждый
 	# лишний AT-сеанс добавлял ~0.5-1 c к загрузке страницы.
 	O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?;+CEREG=2;+CEREG?;+CNUM;+CIMI")
+	# ФОЛБЭК ДЛЯ МОДЕМОВ, НЕ ПЕРЕВАРИВАЮЩИХ ДЛИННУЮ СКЛЕЙКУ.
+	# Двенадцать команд через ";" - это оптимизация на один round-trip, и на
+	# Qualcomm/Fibocom она работает. Но встречаются модули (MeigLink SLM770A-R,
+	# проверено вживую), которые на такую цепочку возвращают ТОЛЬКО ЭХО, без
+	# единого ответа: страница показывала прочерки вместо сигнала, оператора и
+	# режима, хотя те же команды поодиночке отвечают исправно.
+	# Признак провала - в ответе нет "+CSQ:". Тогда добираем короткими группами
+	# (по 2-3 команды - столько принимают и слабые модули), сохраняя формат $O.
+	case "$O" in
+		*"+CSQ:"*) : ;;
+		*)
+			O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ")
+			O="$O
+$(sms_tool -D -d $DEVICE at "AT+COPS=3,0;+COPS?")
+$(sms_tool -D -d $DEVICE at "AT+COPS=3,2;+COPS?")
+$(sms_tool -D -d $DEVICE at "AT+CREG=2;+CREG?")
+$(sms_tool -D -d $DEVICE at "AT+CEREG=2;+CEREG?")
+$(sms_tool -D -d $DEVICE at "AT+CNUM")
+$(sms_tool -D -d $DEVICE at "AT+CIMI")"
+			;;
+	esac
 else
 	O=$(gcom -d $DEVICE -s $RES/info.gcom 2>/dev/null)
 fi
@@ -273,6 +294,18 @@ if [[ $MODEMZ -eq 0 ]]; then
 fi
 if [[ $MODEMZ -eq 1 ]]; then
 	SEC=$(uci -q get modemdefine.@modemdefine[0].network)
+fi
+
+# Интерфейс АКТИВНОГО модема из его собственной секции. Глобальная
+# 5gmodem.@5gmodem[0].network часто пуста, и без этого шага управление доходило
+# до фолбэка «первый интерфейс с модемным прото» - а он на роутере с ДВУМЯ
+# модемами отдавал чужой: метрики и модель брались с активного модема, а iface и
+# IP - с соседнего (наблюдалось: модель FM350, но iface=modem и адрес wwan0
+# второго модема). Имя секции - USB-путь, где всё кроме букв и цифр заменено
+# на "_": 2-1.4 -> m_2_1_4.
+if [ -z "$SEC" ]; then
+	_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
+	[ -n "$_AMP" ] && SEC=$(uci -q get "5gmodem.m_${_AMP%_}.network" 2>/dev/null)
 fi
 
 if [ -z "$SEC" ]; then
@@ -888,6 +921,9 @@ cat > "$_TMP" <<EOF
 "s3mod":"$(sanitize_string "$S3MOD")",
 "s4mimo":"$(sanitize_string "$S4MIMO")",
 "s4mod":"$(sanitize_string "$S4MOD")",
+"bandwidth":"$(sanitize_string "$BANDWIDTH")",
+"rscp":"$(sanitize_string "$RSCP")",
+"ecio":"$(sanitize_string "$ECIO")",
 "rsrp":"$(sanitize_string "$RSRP")",
 "rsrq":"$(sanitize_string "$RSRQ")",
 "rssi":"$(sanitize_string "$RSSI")",

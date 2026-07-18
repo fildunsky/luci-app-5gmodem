@@ -49,8 +49,7 @@ if [ "$MODE" != "LTE" ]; then
 				LAC|PLMN|BEARER) IGNORE=1;;
 			esac
 			if [ "$IGNORE" -eq 0 ]; then
-				[ -n "$ADDON" ] && ADDON="$ADDON,"
-				ADDON="$ADDON"'{"'$F1'":"'$F2''$UNIT'"}'
+			:
 			fi
 		fi
 		if echo "$T1" | grep -q ","; then
@@ -91,8 +90,6 @@ if [ -n "$T" ]; then
 	if [ -n "$T" ]; then
 		RSRP="$RSRP / "${T##*:}" dBm"
 	fi
-	[ -n "$ADDON" ] && ADDON="$ADDON,"
-	ADDON="$ADDON"'{"RSRP":"'$RSRP'"}'
 fi
 T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $4}')
 if [ -n "$T" ]; then
@@ -101,8 +98,6 @@ if [ -n "$T" ]; then
 	if [ -n "$T" ]; then
 		RSRQ="$RSRQ / "${T##*:}" dB"
 	fi
-	[ -n "$ADDON" ] && ADDON="$ADDON,"
-	ADDON="$ADDON"'{"RSRQ":"'$RSRQ'"}'
 fi
 T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $5}')
 if [ -n "$T" ]; then
@@ -111,8 +106,6 @@ if [ -n "$T" ]; then
 	if [ -n "$T" ]; then
 		RSSI="$RSSI / "${T##*:}" dBm"
 	fi
-	[ -n "$ADDON" ] && ADDON="$ADDON,"
-	ADDON="$ADDON"'{"RSSI":"'$RSSI'"}'
 fi
 #T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $6}')
 #if [ -n "$T" ]; then
@@ -138,8 +131,6 @@ fi
 T=$(echo "$O" | awk -F[:] '/^\+CCPUTEMP/ {print $2}' | xargs)
 if [ -n "$T" ]; then
 	TEMP="$T &deg;C"
-	[ -n "$ADDON" ] && ADDON="$ADDON,"
-	ADDON="$ADDON"'{"Temperatura":"'$T' &deg;C"}'
 fi
 
 T=$(echo "$O" | awk -F[,] '/^\+CGNWS/ {print $9}' | xargs)

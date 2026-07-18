@@ -356,6 +356,21 @@ setbands3g() {
 	echo "Unsupported"
 }
 
+# --- Привязка к соте (cell lock) ---------------------------------------------
+# Формат getcelllock:
+#   "Unsupported" - модем не умеет (секция скрыта)
+#   "off"         - привязки нет
+#   "arfcn <n>"   - привязка к частоте
+#   "cell <n> <pci>" - привязка к конкретной соте
+getcelllock() {
+	echo "Unsupported"
+}
+
+# setcelllock off | arfcn <n> | cell <n> <pci>
+setcelllock() {
+	echo "Unsupported"
+}
+
 # --- Сигнал по антенным портам -----------------------------------------------
 # Формат: по одной строке "порт:rsrp:rsrq" (dBm/dB). "Unsupported" - модем не
 # умеет, блок в UI не показывается. Живая диагностика антенн: порт с RSRP около
@@ -527,7 +542,13 @@ case $1 in
 		getbandsext
 		;;
 	"setbands")
-		[ -n "$2" ] && setbands "$2"
+		# Запись выполняется В ФОНЕ с отвязкой дескрипторов ИМЕННО НА ПОДОБОЛОЧКЕ.
+		# Синхронно это не работает на медленном железе: перезапись маски плюс
+		# перерегистрация модема укладываются в 30-секундный таймаут rpcd далеко
+		# не всегда, и пользователь видит "Failed to set bands: XHR", хотя команда
+		# отработала и диапазоны применились (наблюдалось на MT7628 + SLM770A).
+		# Результат UI всё равно перечитывает отдельным запросом.
+		[ -n "$2" ] && { ( setbands "$2" ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -577,6 +598,14 @@ case $1 in
 	"setbands3g")
 		[ -n "$2" ] && setbands3g "$2"
 		;;
+	"getcelllock")
+		getcelllock
+		;;
+	"setcelllock")
+		# Как и setbands - в фоне с отвязкой дескрипторов: привязка делается через
+		# цикл режима полёта и в 30-секундный таймаут rpcd не укладывается.
+		[ -n "$2" ] && { ( setcelllock "$2" "$3" "$4" ) >/dev/null 2>&1 </dev/null & }
+		;;
 	"getantports")
 		getantports
 		;;
@@ -597,6 +626,10 @@ case $1 in
 				json_close_object
 			done
 			json_close_array
+		fi
+		CL=$(getcelllock)
+		if [ "x$CL" != "xUnsupported" ]; then
+			json_add_string celllock "$CL"
 		fi
 		json_add_array supported
 		T=$(getsupportedbands)

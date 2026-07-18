@@ -822,6 +822,26 @@ return view.extend({
 
 									var aidx = [];
 
+									/* АВТООПРЕДЕЛЕНИЕ СКЛЕЙКИ.
+									   В поставляемом конфиге mergesms='0', то есть значение ЗАДАНО
+									   нулём, и умолчание «включено» (оно срабатывает только когда
+									   опция не задана вовсе) до пользователя не доходит: длинные SMS
+									   показываются кусками, пока он сам не найдёт галку.
+									   Смотрим на факты: часть сообщения помечена total>1. Если такие
+									   есть, а склейка выключена - включаем и запоминаем, что это
+									   сделали МЫ (mergesms_auto). Флаг нужен, чтобы уважать обратный
+									   выбор: если пользователь потом снимет галку, мы её не вернём. */
+									if (smsM != "1" &&
+									    uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms_auto') != '1' &&
+									    json.some(function(o) { return (o.total || 0) > 1; })) {
+										smsM = "1";
+										uci.set('sms_tool_js', '@sms_tool_js[0]', 'mergesms', '1');
+										uci.set('sms_tool_js', '@sms_tool_js[0]', 'mergesms_auto', '1');
+										uci.save().then(function() { return uci.apply(); });
+										ui.addNotification(null, E('p',
+											_('Multipart messages found - merging enabled automatically. You can turn it off in SMS settings.')), 'info');
+									}
+
 									/* Merging messages */
 									if (smsM == "1") {
 

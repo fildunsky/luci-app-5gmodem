@@ -754,7 +754,12 @@ function renderCaTable(json) {
 	var hasPcc = json.pband && json.pband != '-';
 	if (hasPcc) {
 		var p = caSplitBand(json.pband);
-		data['PCC'] = { band: p.band, bw: p.bw, pci: json.pci, earfcn: json.earfcn,
+		/* Полосу большинство модемов пишет прямо в строку диапазона, и caSplitBand
+		   её оттуда достаёт. Но часть модулей отдаёт её ОТДЕЛЬНОЙ метрикой
+		   (json.bandwidth) - раньше это значение вычислялось профилем и молча
+		   выбрасывалось вместе с мёртвой переменной ADDON. Используем как запасной
+		   источник, когда в строке диапазона полосы нет. */
+		data['PCC'] = { band: p.band, bw: p.bw || json.bandwidth, pci: json.pci, earfcn: json.earfcn,
 			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr,
 			mimo: json.pmimo, mod: json.pmod };
 	}
@@ -799,9 +804,27 @@ function renderCaTable(json) {
 	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
 	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr', 'mimo', 'mod' ];
 	tbl.querySelectorAll('tr.ca-row').forEach(function(row) {
-		var c = data[row.getAttribute('data-cc')] || {};
+		var cc = row.getAttribute('data-cc');
+		var c = data[cc] || {};
 		var tds = row.querySelectorAll('td');
 		cols.forEach(function(k, j) { if (tds[j + 1]) { paintCell(tds[j + 1], k, c); } });
+
+		/* Скрываем строки SCC, по которым данных НЕ БЫЛО НИ РАЗУ - иначе таблица
+		   состоит в основном из прочерков. Правило то же, что в setRowVisible, и
+		   оно же решает проблему прыгающей вёрстки: строку, у которой данные
+		   когда-либо появлялись, НЕ ПРЯЧЕМ БОЛЬШЕ НИКОГДА. Агрегация приходит и
+		   уходит (и метрики иногда пустеют из-за коллизий на AT-порту), поэтому
+		   прятать по факту текущей пустоты - значит менять высоту на каждом
+		   опросе; при этом появление НОВОГО компонента показывается сразу, без
+		   задержки. PCC не трогаем: это первичный компонент, он всегда на месте. */
+		if (cc === 'PCC') { return; }
+		var has = !!data[cc];
+		if (has) {
+			row.style.display = '';
+			row.setAttribute('data-hadata', '1');
+		} else if (row.getAttribute('data-hadata') !== '1') {
+			row.style.display = 'none';
+		}
 	});
 }
 
@@ -1000,6 +1023,76 @@ function sortNetModes(modes) {
 
 /* Показать блок частот и заполнить кнопки из bands.sh (без mmcli). Режим сети
    (Auto/2G/…) остаётся скрытым - он управляется только через mmcli. */
+/* Привязка к соте. Показываем состояние и две операции: привязать к ТЕКУЩЕЙ соте
+   (EARFCN и PCI у нас уже есть из метрик - вручную их переписывать никто не станет)
+   и снять привязку. Модем при этом уходит в режим полёта и обратно - иначе, по
+   мануалу, привязка LTE может не примениться; снятие вступает в силу после
+   перезапуска модема, поэтому предупреждаем об обрыве связи. */
+function renderCellLock(state) {
+	var row = document.getElementById('celllockn');
+	var cell = document.getElementById('celllock-cell');
+	if (!row || !cell) { return; }
+	if (!state) { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+
+	var parts = String(state).split(' ');
+	var locked = (parts[0] === 'cell' || parts[0] === 'arfcn');
+	var txt;
+	if (!locked) {
+		txt = _('Not locked');
+	} else if (parts[0] === 'cell') {
+		txt = _('Locked to cell: EARFCN %s, PCI %s').format(parts[1], parts[2]);
+	} else {
+		txt = _('Locked to frequency: EARFCN %s').format(parts[1]);
+	}
+	cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, txt));
+
+	var run = function(args, msg) {
+		ui.showModal(_('Cell lock'), [ E('p', { 'class': 'spinning' }, msg) ]);
+		fs.exec('/usr/share/5gmodem/bands.sh', args);
+		// команда уходит в фон (цикл режима полёта дольше таймаута rpcd),
+		// поэтому просто ждём и перечитываем состояние
+		window.setTimeout(function() {
+			ui.hideModal();
+			loadBandsModemband();
+		}, 20000);
+	};
+
+	if (locked) {
+		cell.appendChild(E('button', {
+			'class': 'btn cbi-button cbi-button-reset',
+			'click': ui.createHandlerFn(this, function() {
+				return run([ 'setcelllock', 'off' ],
+					_('Removing the lock - the modem restarts, connection drops for a while...'));
+			})
+		}, [ _('Unlock') ]));
+	} else {
+		/* Соту берём В МОМЕНТ НАЖАТИЯ, а не при отрисовке. Раньше кнопка читала
+		   последний снимок метрик, но эта строка рисуется при раскрытии блока
+		   диапазонов - опрос метрик к тому времени мог ещё не пройти, и кнопка
+		   оставалась заблокированной без объяснений. Свежий запрос заодно
+		   гарантирует, что привязываемся к ТЕКУЩЕЙ соте, а не к устаревшей. */
+		cell.appendChild(E('button', {
+			'class': 'btn cbi-button cbi-button-action',
+			'click': ui.createHandlerFn(this, function() {
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]), '')
+					.then(function(out) {
+						var m = {}; try { m = JSON.parse(out) || {}; } catch (e) {}
+						var ear = m.earfcn, pci = m.pci;
+						if (!ear || ear === '-' || !pci || pci === '-') {
+							ui.addNotification(null, E('p',
+								_('Serving cell is unknown yet - try again in a few seconds.')), 'warning');
+							return;
+						}
+						return run([ 'setcelllock', 'cell', String(ear), String(pci) ],
+							_('Locking to cell EARFCN %s, PCI %s - the modem re-registers...').format(ear, pci));
+					});
+			})
+		}, [ _('Lock to current cell') ]));
+	}
+}
+
 function loadBandsModemband() {
 	if (!blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
@@ -1010,6 +1103,7 @@ function loadBandsModemband() {
 		// НЕПУСТ. Раньше проверяли !j.supported, но bands.sh отдаёт пустой массив
 		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
 		// рисовать строки бендов с прочерком вместо пояснения.
+		renderCellLock(j.celllock);
 		var hasBands = (j.supported && j.supported.length) ||
 		               (j.supported5gnsa && j.supported5gnsa.length) ||
 		               (j.supported5gsa && j.supported5gsa.length);
@@ -1583,6 +1677,17 @@ function formatPhone(raw) {
     return s;
 }
 
+/* Плавное время соединения: база с модема + локальный досчёт раз в секунду. */
+var _connBase = null;
+function connTick() {
+	if (!_connBase) { return; }
+	var el = document.getElementById('conndur');
+	if (!el) { return; }
+	var sec = _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000);
+	el.textContent = formatDuration(sec);
+}
+window.setInterval(connTick, 1000);
+
 function formatDuration(sec) {
     if (sec === '-' || sec === '') { return '-'; }
     sec = parseInt(sec, 10);
@@ -1930,6 +2035,10 @@ simDialog: baseclass.extend({
 		try {
 
 		var json = JSON.parse(data);
+		/* Последний снимок метрик держим глобально: из него берутся EARFCN и PCI
+		   для кнопки «привязать к текущей соте» - переписывать их руками никто
+		   не станет, а другого источника этих значений в UI нет. */
+		window._lastJson = json;
 
 			if(!json.hasOwnProperty('error')){
 				
@@ -2046,11 +2155,18 @@ simDialog: baseclass.extend({
 
 					if (document.getElementById('connst')) {
 						var view = document.getElementById("connst");
+						/* Опрос идёт раз в 5 c, поэтому счётчик прыгал через 5 секунд.
+						   Запоминаем точку отсчёта, а между опросами досчитываем время
+						   локально - раз в секунду (см. connTick ниже). Значение с
+						   модема остаётся источником истины: каждый опрос переустанавливает
+						   базу, так что локальный счёт не может «уехать». */
+						_connBase = { sec: parseInt(json.conn_time_sec, 10) || 0, at: Date.now() };
 						if (json.conn_time == '' || json.conn_time == '-') {
+							_connBase = null;
 						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' +_('Waiting for connection data...'), wicon, p);
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + formatDuration(json.conn_time_sec) + ' | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + json.tx;
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur">' + formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + json.tx;
 						}
 					}
 
@@ -2276,6 +2392,11 @@ simDialog: baseclass.extend({
 						view.style.visibility = 'hidden';
 						}
 						else {
+						/* Видимость ОБЯЗАТЕЛЬНО возвращаем: раньше её только снимали,
+						   и один-единственный опрос с пустым signal (транзиентный
+						   провал при занятом AT-порту) прятал шкалу CSQ НАВСЕГДА -
+						   до перезагрузки страницы. Выглядело как "было и пропало". */
+						view.style.visibility = 'visible';
 						if (json.csq == '') { 
 						view.textContent = '-';
 						}
@@ -2604,6 +2725,14 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G bands')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-nr' },
 						mmHasModem ? buildBandButtons(mmSup, mmCur, 'ngran-') : [ '-' ]),
+					]),
+				/* Привязка к соте - ниже диапазонов намеренно: тот же механизм
+				   чтения-записи через профиль, и порядок получается от общего к
+				   частному (сначала диапазон, потом конкретная сота внутри него).
+				   Строка скрыта, пока bands.sh не сообщит, что модем это умеет. */
+				E('tr', { 'class': 'tr', 'id': 'celllockn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell lock')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'celllock-cell' }, [ '-' ]),
 					]),
 				/* Постоянная подсказка над «Применить» для модемов, у которых смена
 				   диапазонов кратко разрывает соединение (FM350: GTACT рвёт PDP,

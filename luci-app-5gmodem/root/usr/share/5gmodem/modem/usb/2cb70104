@@ -38,13 +38,11 @@ if [ "x$MODE" = "xLTE" ]; then
 		fi
 		T=$(echo "$T1" | awk -F, '{print $11}')
 		if [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T2=$(echo "$T" | awk '{printf "%0.1f", $1/4+5 }')
 			SINR=$T2
 		fi
 		T=$(echo "$T1" | awk -F, '{print $14}')
 		if [ -n "$T" ]; then
-			[ -n "$ADDON" ] && ADDON="$ADDON,"
 			T2=$(echo "$T" | awk '{printf "%0.1f", $1-110 }')
 			RSSI=$T2
 		fi

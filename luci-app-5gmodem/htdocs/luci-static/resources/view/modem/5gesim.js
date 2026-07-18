@@ -438,6 +438,10 @@ return view.extend({
 			modemtabs.setBusy('.cbi-section',
 				_('Profile added. The modem is restarting to apply it - up to a minute…'), 90000);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			// Дождаться модема и передёрнуть интерфейс: иначе netifd держит
+			// аренду и маршрут от старого профиля (интерфейс up со старым IP,
+			// данные не идут). Скрипт сам ждёт готовности, здесь не блокируемся.
+			fs.exec(ESIM, [ 'reapply' ]);
 			// 25 c не хватало: модем перезагружается ЖЁСТКО и переэнумерируется
 			// на USB 30-60 c (столько же ждёт переключение слота). Список
 			// перечитывался, пока eUICC ещё не поднялся, попытки заканчивались,
@@ -529,6 +533,7 @@ function esimOp(verb, iccid, name) {
 				_('Profile %s. The modem is restarting to apply it - up to a minute…')
 					.format(verb == 'enable' ? _('enabled') : _('disabled')), 90000);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			fs.exec(ESIM, [ 'reapply' ]);   // см. выше: без этого остаётся старый IP
 			window.setTimeout(function() {
 				modemtabs.clearBusy();
 				notify(true, _('eSIM operation done'), null);

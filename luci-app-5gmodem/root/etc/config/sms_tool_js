@@ -1,7 +1,7 @@
 
 config sms_tool_js
 	option storage 'SM'
-	option mergesms '0'
+	option mergesms '1'
 	option pnumber '7'
 	option prefix '1'
 	option lednotify '0'

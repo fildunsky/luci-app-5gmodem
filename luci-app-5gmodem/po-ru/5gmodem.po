@@ -2569,3 +2569,39 @@ msgstr "Роуминг"
 
 msgid "Online"
 msgstr "В сети"
+
+msgid "Cell lock"
+msgstr "Привязка к соте"
+
+msgid "Not locked"
+msgstr "Не привязан"
+
+msgid "Locked to cell: EARFCN %s, PCI %s"
+msgstr "Привязан к соте: EARFCN %s, PCI %s"
+
+msgid "Locked to frequency: EARFCN %s"
+msgstr "Привязан к частоте: EARFCN %s"
+
+msgid "Lock to current cell"
+msgstr "Привязать к текущей соте"
+
+msgid "Unlock"
+msgstr "Снять привязку"
+
+msgid "Serving cell is unknown yet"
+msgstr "Обслуживающая сота ещё не определена"
+
+msgid "Locking to the current cell - the modem re-registers..."
+msgstr "Привязка к текущей соте — модем перерегистрируется…"
+
+msgid "Removing the lock - the modem restarts, connection drops for a while..."
+msgstr "Снятие привязки — модем перезагружается, связь ненадолго пропадёт…"
+
+msgid "Multipart messages found - merging enabled automatically. You can turn it off in SMS settings."
+msgstr "Найдены многочастные сообщения — склейка включена автоматически. Отключить можно в настройках SMS."
+
+msgid "Serving cell is unknown yet - try again in a few seconds."
+msgstr "Обслуживающая сота ещё не определена — попробуйте через несколько секунд."
+
+msgid "Locking to cell EARFCN %s, PCI %s - the modem re-registers..."
+msgstr "Привязка к соте EARFCN %s, PCI %s — модем перерегистрируется…"

@@ -1,0 +1,153 @@
+#!/bin/sh
+#
+# 5gmodem-top - метрики модема прямо в терминале, в духе htop.
+#
+# Зачем: на слабых роутерах (MT7628 и подобные) LuCI подтормаживает, а иногда и
+# вовсе не влезает по памяти. Здесь нет ни HTTP, ни rpcd, ни браузера - только
+# тот же 5gmodem.sh json, что питает веб-интерфейс, и отрисовка ANSI-кодами.
+# Новых AT-команд не добавляем: данные ровно те же, что видит страница «Сеть».
+#
+# Зависимости: busybox ash + jsonfilter (оба уже есть в системе).
+#
+# Usage: 5gmodem-top [интервал_сек]     (по умолчанию 3, выход - q или Ctrl-C)
+
+INTERVAL="${1:-3}"
+case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=3 ;; esac
+[ "$INTERVAL" -lt 1 ] && INTERVAL=1
+
+SRC="/usr/share/5gmodem/5gmodem.sh"
+[ -x "$SRC" ] || { echo "не найден $SRC" >&2; exit 1; }
+command -v jsonfilter >/dev/null 2>&1 || { echo "нужен jsonfilter" >&2; exit 1; }
+
+ESC=$(printf '\033')
+C_RST="${ESC}[0m";  C_DIM="${ESC}[2m";   C_B="${ESC}[1m"
+C_GRN="${ESC}[32m"; C_YEL="${ESC}[33m";  C_RED="${ESC}[31m"
+C_CYA="${ESC}[36m"; C_BLU="${ESC}[34m"
+
+cleanup() { printf '%s[?25h%s\n' "$ESC" "$C_RST"; stty "$STTY_SAVE" 2>/dev/null; exit 0; }
+STTY_SAVE=$(stty -g 2>/dev/null)
+trap cleanup INT TERM HUP
+
+J=""
+g() { printf '%s' "$J" | jsonfilter -e "@.$1" 2>/dev/null; }
+# значение или прочерк
+v() { _x=$(g "$1"); [ -n "$_x" ] && [ "$_x" != "-" ] && printf '%s' "$_x" || printf '%s' "-"; }
+
+# Цвет по качеству метрики - те же пороги, что в веб-интерфейсе, чтобы человек
+# не переучивался, переходя из браузера в терминал.
+qcolor() {
+	_k="$1"; _n=$(printf '%s' "$2" | tr -d '+' | cut -d. -f1)
+	# Отбрасываем всё, что не является числом. Прежняя проверка пропускала голый
+	# "-": он состоит только из разрешённых символов [0-9-], проходил фильтр и
+	# уходил в арифметику - shell ругался "out of range" прямо поверх интерфейса.
+	# Требуем наличие ХОТЯ БЫ ОДНОЙ цифры и минус только в начале.
+	case "$_n" in
+		''|*[!0-9-]*|-) printf '%s' "$C_DIM"; return ;;
+		*[0-9]*) : ;;
+		*) printf '%s' "$C_DIM"; return ;;
+	esac
+	case "$_k" in
+		rsrp) [ "$_n" -ge -90 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -105 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		rsrq) [ "$_n" -ge -10 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -15 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		sinr) [ "$_n" -ge 13 ]  && printf '%s' "$C_GRN" || { [ "$_n" -ge 0 ]   && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		*) printf '%s' "$C_RST" ;;
+	esac
+}
+
+# Полоска уровня: [########----] с цветом по проценту
+bar() {
+	_p=$(printf '%s' "$1" | tr -cd '0-9'); [ -n "$_p" ] || _p=0
+	[ "$_p" -gt 100 ] && _p=100
+	_w=20; _f=$((_p * _w / 100))
+	if   [ "$_p" -ge 60 ]; then _c="$C_GRN"
+	elif [ "$_p" -ge 30 ]; then _c="$C_YEL"
+	else _c="$C_RED"; fi
+	printf '%s[' "$_c"
+	_i=0; while [ "$_i" -lt "$_f" ]; do printf '#'; _i=$((_i+1)); done
+	while [ "$_i" -lt "$_w" ]; do printf '.'; _i=$((_i+1)); done
+	printf ']%s %3s%%' "$C_RST" "$_p"
+}
+
+# Выравнивание подписей. printf '%-14s' в busybox считает БАЙТЫ, а кириллица в
+# UTF-8 занимает по два - из-за этого колонка значений разъезжалась тем сильнее,
+# чем длиннее подпись. Добиваем пробелами по числу СИМВОЛОВ (wc -m).
+pad() {
+	_s="$1"; _w="$2"
+	# wc -m в busybox тоже считает БАЙТЫ (без locale), поэтому длину получаем
+	# иначе: выбрасываем продолжающие байты UTF-8 (0x80-0xBF, восьмеричн. 200-277)
+	# и считаем оставшееся - это и есть число символов.
+	_l=$(printf '%s' "$_s" | tr -d '\200-\277' | wc -c)
+	printf '%s' "$_s"
+	while [ "$_l" -lt "$_w" ]; do printf ' '; _l=$((_l + 1)); done
+}
+row() { printf '  %s%s%s %s\n' "$C_DIM" "$(pad "$1" 13)" "$C_RST" "$2"; }
+
+draw() {
+	printf '%s[H%s[2J' "$ESC" "$ESC"          # курсор в начало + очистка
+	printf '%s%s 5gmodem-top %s %s%s\n' "$C_B" "$C_CYA" "$(v modem)" "$C_RST" ""
+	printf '%s  %s | обновление %sс | q - выход%s\n\n' "$C_DIM" "$(date '+%H:%M:%S')" "$INTERVAL" "$C_RST"
+
+	printf '%s  СЕТЬ%s\n' "$C_B" "$C_RST"
+	row "Оператор"   "$(v operator_name)  $(printf '%s%s%s' "$C_DIM" "$(v operator_mcc)$(v operator_mnc)" "$C_RST")"
+	row "Режим"      "$(printf '%s%s%s' "$C_CYA" "$(v mode)" "$C_RST")"
+	row "Сигнал"     "$(bar "$(v signal)")  $(printf '%sCSQ %s%s' "$C_DIM" "$(v csq)" "$C_RST")"
+
+	_rsrp=$(v rsrp); _rsrq=$(v rsrq); _sinr=$(v sinr)
+	row "Качество"   "$(printf 'RSRP %s%s%s  RSRQ %s%s%s  SINR %s%s%s' \
+		"$(qcolor rsrp "$_rsrp")" "$_rsrp" "$C_RST" \
+		"$(qcolor rsrq "$_rsrq")" "$_rsrq" "$C_RST" \
+		"$(qcolor sinr "$_sinr")" "$_sinr" "$C_RST")"
+	row "Сота"       "PCI $(v pci)  EARFCN $(v earfcn)  $(printf '%s%s%s' "$C_DIM" "$(v bandwidth)" "$C_RST")"
+
+	printf '\n%s  СОЕДИНЕНИЕ%s\n' "$C_B" "$C_RST"
+	row "IP"         "$(printf '%s%s%s' "$C_GRN" "$(v ipaddr)" "$C_RST")   $(printf '%s%s%s' "$C_DIM" "$(v iface)" "$C_RST")"
+	row "Время"      "$(v conn_time)"
+	row "Трафик"     "$(printf '%s↓%s %s   %s↑%s %s' "$C_GRN" "$C_RST" "$(v rx)" "$C_BLU" "$C_RST" "$(v tx)")"
+
+	printf '\n%s  МОДЕМ%s\n' "$C_B" "$C_RST"
+	row "Температура" "$(v mtemp)$(printf '%s' "$([ "$(v mtemp)" != "-" ] && printf ' °C')")"
+	row "Порт"        "$(printf '%s%s%s' "$C_DIM" "$(v cport)" "$C_RST")"
+	row "Прошивка"    "$(printf '%s%s%s' "$C_DIM" "$(v firmware)" "$C_RST")"
+
+	# Вторичные компоненты показываем ТОЛЬКО когда они есть - в терминале
+	# прыжки высоты безобидны, а прочерки только зашумляют.
+	_sc=""
+	for _i in 1 2 3 4; do
+		_b=$(g "s${_i}band")
+		[ -n "$_b" ] && [ "$_b" != "-" ] && \
+			_sc="$_sc  $(printf '%sSCC%s%s %s  PCI %s  EARFCN %s\n' "$C_DIM" "$_i" "$C_RST" "$_b" "$(v s${_i}pci)" "$(v s${_i}earfcn)")"
+	done
+	[ -n "$_sc" ] && { printf '\n%s  АГРЕГАЦИЯ%s\n' "$C_B" "$C_RST"; printf '%s' "$_sc"; }
+}
+
+# Интерактивный режим только при НАСТОЯЩЕМ терминале. Без него (пайп, cron,
+# ssh без -t) stty и неблокирующее чтение не работают, и цикл ожидания крутился
+# бы вхолостую, съедая процессор - на слабом роутере это заметно.
+TTY=0
+[ -t 0 ] && [ -t 1 ] && TTY=1
+
+# Дробный sleep есть не везде: busybox на части сборок понимает только целые
+# секунды. Проверяем ОДИН раз, а не на каждой итерации.
+if sleep 0.2 2>/dev/null; then TICK="0.2"; PER=5; else TICK="1"; PER=1; fi
+
+if [ "$TTY" = 1 ]; then
+	printf '%s[?25l' "$ESC"                        # спрятать курсор
+	stty -echo -icanon time 0 min 0 2>/dev/null    # неблокирующее чтение клавиш
+fi
+
+while :; do
+	J=$($SRC json 2>/dev/null)
+	draw
+	if [ "$TTY" = 1 ]; then
+		# ждём интервал, но выходим сразу по 'q'
+		_t=0
+		while [ "$_t" -lt "$((INTERVAL * PER))" ]; do
+			_k=$(dd bs=1 count=1 2>/dev/null)
+			case "$_k" in q|Q) cleanup ;; esac
+			sleep "$TICK"
+			_t=$((_t + 1))
+		done
+	else
+		sleep "$INTERVAL"
+	fi
+done
