@@ -2605,3 +2605,24 @@ msgstr "Обслуживающая сота ещё не определена —
 
 msgid "Locking to cell EARFCN %s, PCI %s - the modem re-registers..."
 msgstr "Привязка к соте EARFCN %s, PCI %s — модем перерегистрируется…"
+
+msgid "eNB ID"
+msgstr "ID базовой станции"
+
+msgid "(base station)"
+msgstr "(вышка, а не сектор)"
+
+msgid "Path loss"
+msgstr "Потери на трассе"
+
+msgid "(signal attenuation)"
+msgstr "(затухание сигнала)"
+
+msgid "TX power"
+msgstr "Мощность передатчика"
+
+msgid "(modem transmit level)"
+msgstr "(с какой силой передаёт модем)"
+
+msgid "UE category"
+msgstr "Категория устройства"

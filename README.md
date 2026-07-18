@@ -25,16 +25,34 @@ I've added new features to them (compared to 3ginfo and modemband)
 - SIMCOM SIM7100E
 - SIMCOM SIM7600E-H
 - Quectel EC21-E
+- MeigLink SLM770A-R
 - Many more untested, but should support all the modems handled by the upstream forks.
 
 <img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-44-54" src="https://github.com/user-attachments/assets/f14f264f-ef81-47b0-8f79-bb7c6982ac55" />
+
+## What's new
+
+### 1.4.8
+- **MeigLink SLM770A-R support** — metrics via `AT+SGCELLINFOEX` (named fields, more robust than positional CSV), temperature, band control via `^SYSCFGEX`, and cell lock via `^CELLLOCK`. Field layout verified against the vendor AT manual.
+- **Cell lock** — a generic `getcelllock`/`setcelllock` contract in `bands.sh` plus a row under the band buttons. "Lock to current cell" reads EARFCN and PCI at click time, so it always pins the cell you are actually on. The modem is cycled through flight mode automatically, as the vendor manual requires.
+- **`5gtop`** — the Network page in a terminal, for routers where LuCI is slow or does not fit. Same data source as the web UI, no extra AT commands. Live clock, per-metric bars, speed test (`s`), uplink priority (`1`-`3`), modem switch (`m`), and a layout that collapses to a single column on phone-width terminals (`5gtop 5 60`).
+- **Extended cell info in the web UI** — eNB ID (the base station, not just the sector), path loss, TX power, CQI, UE category and VoLTE state. Rows stay hidden on modems that do not report them.
+- **Lite install** — only `sms-tool` is strictly required now; ModemManager, QMI/MBIM and the USB kmods moved behind a build option. Fits routers with 8 MB flash where the full dependency set would not install at all.
+
+### 1.4.7
+- **eSIM downloads fixed** for SM-DP+ servers that present GSMA CI certificates. OpenWrt's libcurl is usually built against mbedTLS, which rejects the critical `Certificate Policies` extension in the GSMA root — such servers failed on the very first step. ES9+ now goes through a stdio bridge over wget/OpenSSL, selectable in the eSIM settings.
+- **Live download progress** — the current step is shown in plain words while the spinner runs, and on failure the log stays on screen with a "Save log" button for remote diagnosis.
+- **Metrics on modems that reject long AT chains** — the core poll sent twelve commands joined by `;`; some modules (MeigLink among them) answer such a chain with echo only. There is now a fallback to short groups.
+- **CSQ no longer disappears forever** after a single empty signal reading — the bar was hidden but never shown again.
+- **Band writes no longer report a false error** — the write outlived the 30-second rpcd timeout and surfaced as "Failed to set bands: XHR" even though it had applied.
+- **Fixes**: the IPv6 companion interface no longer duplicates an uplink in Internet priority; duplicate default routes no longer pile up when switching priority; `2dee` is MeigLink, not Foxconn; SMS/USSD/AT port fields are filled in on install; multipart SMS merging is on by default.
 
 ## Installation
 Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](../../releases) page then issue a command:
 
 # .apk (OpenWrt 25.12.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.3.0/luci-app-5gmodem-1.3.0-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.4.8/luci-app-5gmodem-1.4.8-r1.apk > /tmp/luci-app-5gmodem.apk
 curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/refs/heads/master/dist/lpac-2.1.0-r1.apk > /tmp/lpac.apk
 apk update
 apk add /tmp/lpac.apk --allow-untrusted
@@ -43,12 +61,12 @@ apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 
 # .ipk (OpenWrt 24.10.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.3.0/luci-app-5gmodem_1.3.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.4.8/luci-app-5gmodem_1.4.8-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg update
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
-Dependencies (`sms-tool`, `comgt`, `qmi-utils`, `modemmanager`, USB-serial kmods) are pulled in automatically when installing from a feed; with a local file install them first if missing.
+Only `sms-tool` is strictly required. ModemManager, QMI/MBIM tools and the USB-serial kmods are optional (build option `LUCI_APP_5GMODEM_FULL`, on by default) — turn them off for low-flash devices such as MT7628 boards with 8 MB of storage.
 
 ## Build from source
 

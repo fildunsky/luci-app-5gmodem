@@ -1664,7 +1664,7 @@ function active_select() {
 	});
 }
 
-/* Телефон в вид «+7 (901) 901-84-79» для 11-значных РФ-номеров (7… или 8…).
+/* Телефон в вид «+7 (900) 000-00-00» для 11-значных РФ-номеров (7… или 8…).
    Иностранные/непонятные форматы отдаём как есть. */
 function formatPhone(raw) {
     var s = String(raw || '').trim();
@@ -2536,6 +2536,18 @@ simDialog: baseclass.extend({
 							}
 					}
 
+					/* Расширенные поля соты. setRowVisible прячет строку, пока
+					   значения не было НИ РАЗУ, и больше не прячет после того, как
+					   оно появилось - иначе высота таблицы прыгала бы на опросе. */
+					[ 'enbid', 'pathloss', 'txpower', 'cqi', 'uecat', 'volte' ].forEach(function(k) {
+						var el = document.getElementById(k);
+						if (!el) { return; }
+						var val = json[k];
+						var has = (val != null && val !== '' && val !== '-');
+						el.textContent = has ? String(val) : '-';
+						setRowVisible(el, has);
+					});
+
 					if (document.getElementById('cid')) {
 						var view = document.getElementById("cid");
 						var cidText;
@@ -2842,6 +2854,44 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'lacn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('LAC')]),
 					E('td', { 'class': 'td left', 'id': 'lac' }, [ '-' ]),
+					]),
+				/* Расширенные поля соты. Приходят не от всех модемов (у Meig - из
+				   AT+SGCELLINFOEX), поэтому строки скрыты, пока значения пустые:
+				   на модеме, который их не отдаёт, таблица не обрастает прочерками.
+				   Прячем по тому же правилу, что и остальные - строка, у которой
+				   данные когда-либо были, больше не скрывается (см. setRowVisible). */
+				E('tr', { 'id': 'enbidn', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+						_('eNB ID'),
+						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(base station)') ]),
+					]),
+					E('td', { 'class': 'td left', 'id': 'enbid' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'pathlossn', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+						_('Path loss'),
+						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(signal attenuation)') ]),
+					]),
+					E('td', { 'class': 'td left', 'id': 'pathloss' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'txpowern', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+						_('TX power'),
+						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(modem transmit level)') ]),
+					]),
+					E('td', { 'class': 'td left', 'id': 'txpower' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'cqin', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CQI')]),
+					E('td', { 'class': 'td left', 'id': 'cqi' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'uecatn', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('UE category')]),
+					E('td', { 'class': 'td left', 'id': 'uecat' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'volten', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('VoLTE')]),
+					E('td', { 'class': 'td left', 'id': 'volte' }, [ '-' ]),
 					]),
 
 				E('tr', { 'id': 'csqn', 'class': 'tr' }, [

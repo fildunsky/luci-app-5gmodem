@@ -59,51 +59,55 @@ if [ -z "$RSSI" ]; then
 	fi
 fi
 
-# --- ^CELLINFO: сота, диапазон, полоса и метрики одной командой ---------------
-# Диалект Meig - Huawei-подобный (те же ^-команды, что в vendor/meig.sh у QModem).
-# Живой ответ SLM770A-R:
-#   ^CELLINFO:LTE,FDD LTE,250,20,92355861,366,360765,21,29613,7,50,3400,21400,
-#             -73,-101,-11.0,110,2,4,121,0:-,0,4,9,0,0
-# Позиции (после "^CELLINFO:"):
-#   1 RAT   2 дуплекс   3 MCC   4 MNC   5 Cell ID   6 PCI
-#   10 номер диапазона   11 полоса (÷5 = МГц)   12 EARFCN   13 EARFCN uplink
-#   14 RSSI дБм   15 RSRP дБм   16 RSRQ дБ (уже со знаком и десятой)   17 SINR ×0.1
-# Раскладка ПРОВЕРЕНА перекрёстно: EARFCN 3400 и uplink 21400 оба лежат внутри
-# Band 7, что совпадает с полем 10 - то есть индексы не подогнаны на глаз.
-# SINR: 110 читаем как 11.0 дБ. Как «дБ напрямую» это невозможное значение, а
-# соседнее поле RSRQ уже отформатировано с десятой - шкала ×0.1 согласуется.
-C=$(sms_tool -d $DEVICE at "AT^CELLINFO=1" 2>/dev/null | tr -d '\r' | sed -n 's/^\^CELLINFO://p' | head -1)
+# --- +SGCELLINFOEX: сота, диапазон и расширенные метрики одной командой -------
+# Берём ЕЁ, а не ^CELLINFO: содержит всё то же плюс eNBID, TM, PATHLOSS,
+# TX_POWER, UE_category, CQI, VOLTE - и отдаёт ИМЕНОВАННЫМИ полями "КЛЮЧ:значение"
+# вместо позиционного CSV. Разбор по имени не сломается, если производитель
+# вставит поле в середину, а лишней AT-команды это не стоит: одна вместо одной.
+#
+# Живой ответ (сокращённо):
+#   CURR_MODE:LTE / BAND:40 / LTE_BANDWIDTH:100 / DL CHANNEL:38750
+#   RSSI:-66 / RSRP:-103 / RSRQ:-16.0 / SINR:110 / SNR:2 / TM:4 / VOLTE:0
+# SINR приходит в десятых (110 = 11.0 дБ) - рядом лежащий SNR:2 это подтверждает.
+C=$(sms_tool -d $DEVICE at "AT+SGCELLINFOEX?" 2>/dev/null | tr -d '\r')
 if [ -n "$C" ]; then
-	_f() { echo "$C" | awk -F, -v n="$1" '{gsub(/^ +| +$/,"",$n); print $n}'; }
+	# _sg <ИМЯ> - значение поля по имени
+	_sg() { echo "$C" | sed -n "s/^$1:\(.*\)$/\1/p" | head -1 | tr -d ' '; }
 
-	# Переменная называется именно PBAND (primary band) - её читает вывод JSON;
-	# band4g добавляет частоту в скобках, как у остальных профилей: "B7 (2600 MHz)".
-	T=$(_f 10)
+	T=$(_sg "BAND")
 	if [ -n "$T" ] && [ "$T" != "0" ]; then
 		PBAND="$(band4g $T)"
-		# В блоке «Модем» показывается MODE, а диапазон туда профиль дописывает
-		# САМ (как у остальных: MODE="$MODE | $PBAND") - иначе видно голое "LTE".
 		case "$MODE" in
 			*"$PBAND"*) : ;;
 			*) [ -n "$MODE" ] && MODE="$MODE | $PBAND" || MODE="$PBAND" ;;
 		esac
 	fi
-	T=$(_f 12); [ -n "$T" ] && EARFCN="$T"
-	# полоса приходит в блоках по 5 (50 -> 10 МГц), как и у других Huawei-подобных
-	T=$(_f 11)
-	if [ -n "$T" ] && [ "$T" -gt 0 ] 2>/dev/null; then
-		BANDWIDTH="$((T / 5)) MHz"
-	fi
-	T=$(_f 6);  [ -n "$T" ] && PCI="$T"
-	T=$(_f 5);  [ -n "$T" ] && CELLID="$T"
-	# RSSI/RSRP/RSRQ здесь уже в дБ - точнее индексов из CESQ, поэтому перекрываем
-	T=$(_f 14); case "$T" in -*) RSSI="$T" ;; esac
-	T=$(_f 15); case "$T" in -*) RSRP="$T" ;; esac
-	T=$(_f 16); case "$T" in -*) RSRQ="$T" ;; esac
-	T=$(_f 17)
-	if [ -n "$T" ] && [ "$T" != "0" ]; then
-		SINR=$(awk -v v="$T" 'BEGIN{printf "%.1f", v/10}')
-	fi
+	T=$(_sg "DL CHANNEL"); [ -n "$T" ] && EARFCN="$T"
+	# полоса приходит блоками по 5 (100 -> 20 МГц)
+	T=$(_sg "LTE_BANDWIDTH")
+	[ -n "$T" ] && [ "$T" -gt 0 ] 2>/dev/null && BANDWIDTH="$((T / 5)) MHz"
+	T=$(_sg "PHYSICAL_CELL_ID"); [ -n "$T" ] && PCI="$T"
+	T=$(_sg "GLOBAL CELL ID");   [ -n "$T" ] && CELLID="$T"
+	T=$(_sg "TAC_ID");           [ -n "$T" ] && TAC_DEC="$T"
+	# Идентификатор БАЗОВОЙ СТАНЦИИ отдельно от сектора - именно он опознаёт вышку
+	T=$(_sg "eNBID");            [ -n "$T" ] && ENBID="$T"
+	# Уровни здесь уже в дБ, а не индексами - точнее, чем из CESQ
+	T=$(_sg "RSSI"); case "$T" in -*) RSSI="$T" ;; esac
+	T=$(_sg "RSRP"); case "$T" in -*) RSRP="$T" ;; esac
+	T=$(_sg "RSRQ"); case "$T" in -*) RSRQ="$T" ;; esac
+	T=$(_sg "SINR")
+	[ -n "$T" ] && [ "$T" != "0" ] && SINR=$(awk -v v="$T" 'BEGIN{printf "%.1f", v/10}')
+	# TM - режим передачи. TM4 и выше означают пространственное мультиплексирование,
+	# то есть работающий MIMO; в вебе это поле называется pmimo.
+	T=$(_sg "TM"); [ -n "$T" ] && [ "$T" != "0" ] && PMIMO="TM$T"
+	T=$(_sg "PATHLOSS");    [ -n "$T" ] && PATHLOSS="$T dB"
+	T=$(_sg "TX_POWER");    [ -n "$T" ] && TXPOWER="$T"
+	T=$(_sg "UE_category"); [ -n "$T" ] && UECAT="$T"
+	# CQI приходит как "0:-" при отсутствии измерения - берём только число до ":"
+	T=$(_sg "CQI"); T=${T%%:*}
+	[ -n "$T" ] && [ "$T" != "0" ] && CQI="$T"
+	T=$(_sg "VOLTE")
+	case "$T" in 1) VOLTE="вкл" ;; 0) VOLTE="выкл" ;; esac
 fi
 
 # --- Температура --------------------------------------------------------------

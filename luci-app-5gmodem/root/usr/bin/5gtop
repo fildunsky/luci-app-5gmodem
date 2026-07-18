@@ -1,0 +1,535 @@
+#!/bin/sh
+#
+# 5gtop - страница «Сеть» из LuCI, но в терминале.
+#
+# Зачем: на слабых роутерах (MT7628 и подобные) LuCI подтормаживает, а иногда и
+# вовсе не влезает по памяти. Здесь нет ни HTTP, ни rpcd, ни браузера - только
+# тот же 5gmodem.sh json, что питает веб-интерфейс. Новых AT-команд не добавляем.
+#
+# Usage: 5gtop [интервал_сек] [ширина]   (по умолчанию 5, ширина - автоопределение)
+#   q - выход, r - обновить сейчас, m - переключить активный модем
+#
+# ТРИ ВЕЩИ, ОПРЕДЕЛЯЮЩИЕ УСТРОЙСТВО ЭТОГО СКРИПТА:
+#
+# 1. Опрос МЕДЛЕННЫЙ. На слабом роутере с модемом, не понимающим длинную
+#    AT-цепочку, 5gmodem.sh json занимает 10-13 секунд (замерено). Звать его в
+#    цикле отрисовки нельзя - экран замирает. Опрос вынесен в фоновый процесс.
+#
+# 2. Экран НЕ ПЕРЕРИСОВЫВАЕТСЯ ЦЕЛИКОМ. Очистка и повторная печать всех строк
+#    раз в секунду дают мерцание, за которое цепляется глаз. Как в htop: рамки
+#    печатаются ОДИН раз, дальше курсор ставится в позицию и переписывается
+#    только значение. Никакого [2J в цикле.
+#
+# 3. РАСКЛАДКА ПОВТОРЯЕТ ВЕБ-СТРАНИЦУ. В LuCI шапка «Модем» горизонтальная:
+#    слева уровень сигнала, рядом колонка статуса (оператор, регистрация,
+#    телефон), рядом колонка соединения (режим, IP, время). Ниже - сворачиваемый
+#    блок «Информация о соте». Здесь ровно то же расположение, только рамками
+#    псевдографики. Переходя из браузера в терминал, глаз ищет данные там же.
+
+INTERVAL="${1:-5}"
+case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=5 ;; esac
+[ "$INTERVAL" -lt 1 ] && INTERVAL=1
+
+SRC="/usr/share/5gmodem/5gmodem.sh"
+[ -x "$SRC" ] || { echo "не найден $SRC" >&2; exit 1; }
+command -v jsonfilter >/dev/null 2>&1 || { echo "нужен jsonfilter" >&2; exit 1; }
+
+ESC=$(printf '\033')
+C_RST="${ESC}[0m";  C_DIM="${ESC}[2m";   C_B="${ESC}[1m"
+C_GRN="${ESC}[32m"; C_YEL="${ESC}[33m";  C_RED="${ESC}[31m"
+C_CYA="${ESC}[36m"; C_BLU="${ESC}[34m"
+
+DATA="/tmp/5gtop.$$"
+# файл, куда пишет ход теста speedtest.sh (тот же, что читает веб-страница)
+STFILE="/tmp/5gmodem_speedtest.json"
+NPFILE="$DATA.np"
+FETCHING="$DATA.busy"
+W=78            # ширина рамок
+ROW_END=33
+STTY_SAVE=$(stty -g 2>/dev/null)
+cleanup() {
+	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp"
+	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
+	stty "$STTY_SAVE" 2>/dev/null
+	exit 0
+}
+trap cleanup INT TERM HUP
+
+_spin=0
+J=""
+g() { printf '%s' "$J" | jsonfilter -e "@.$1" 2>/dev/null; }
+v() { _x=$(g "$1"); [ -n "$_x" ] && [ "$_x" != "-" ] && printf '%s' "$_x" || printf '%s' "-"; }
+
+# Длина в СИМВОЛАХ: wc -m в busybox считает байты (без locale), а кириллица и
+# псевдографика в UTF-8 занимают по 2-3 байта - подписи и рамки разъезжались.
+clen() { printf '%s' "$1" | tr -d '\200-\277' | wc -c; }
+pad() { _l=$(clen "$1"); printf '%s' "$1"; while [ "$_l" -lt "$2" ]; do printf ' '; _l=$((_l+1)); done; }
+rep() { _i=0; while [ "$_i" -lt "$2" ]; do printf '%s' "$1"; _i=$((_i+1)); done; }
+
+qcolor() {
+	_n=$(printf '%s' "$2" | tr -d '+' | cut -d. -f1)
+	case "$_n" in ''|*[!0-9-]*|-) printf '%s' "$C_DIM"; return ;; esac
+	case "$_n" in *[0-9]*) : ;; *) printf '%s' "$C_DIM"; return ;; esac
+	case "$1" in
+		rsrp) [ "$_n" -ge -90 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -105 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		rsrq) [ "$_n" -ge -10 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -15 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		sinr) [ "$_n" -ge 13 ]  && printf '%s' "$C_GRN" || { [ "$_n" -ge 0 ]   && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		rssi) [ "$_n" -ge -65 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -85 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		*) printf '%s' "$C_RST" ;;
+	esac
+}
+
+# Полоска уровня - аналог цветной шкалы под процентами в вебе.
+bar() {
+	_p=$(printf '%s' "$1" | tr -cd '0-9'); [ -n "$_p" ] || _p=0
+	[ "$_p" -gt 100 ] && _p=100
+	_w=${2:-14}; _f=$((_p * _w / 100))
+	if   [ "$_p" -ge 60 ]; then _c="$C_GRN"
+	elif [ "$_p" -ge 30 ]; then _c="$C_YEL"
+	else _c="$C_RED"; fi
+	printf '%s' "$_c"; rep '#' "$_f"
+	printf '%s' "$C_DIM"; rep '.' "$((_w - _f))"
+	printf '%s' "$C_RST"
+}
+
+# Мини-шкала метрики: где значение лежит внутри рабочего диапазона.
+mbar() {
+	_n=$(printf '%s' "$2" | tr -d '+' | cut -d. -f1)
+	case "$_n" in ''|*[!0-9-]*|-) printf '%s' "$C_DIM"; rep '.' 8; printf '%s' "$C_RST"; return ;; esac
+	case "$_n" in *[0-9]*) : ;; *) printf '%s' "$C_DIM"; rep '.' 8; printf '%s' "$C_RST"; return ;; esac
+	case "$1" in
+		rsrp) _lo=-125; _hi=-70 ;;
+		rsrq) _lo=-20;  _hi=-3  ;;
+		sinr) _lo=-10;  _hi=30  ;;
+		rssi) _lo=-110; _hi=-50 ;;
+		*) return ;;
+	esac
+	_p=$(( (_n - _lo) * 100 / (_hi - _lo) ))
+	[ "$_p" -lt 0 ] && _p=0; [ "$_p" -gt 100 ] && _p=100
+	_f=$((_p * 8 / 100))
+	printf '%s' "$(qcolor "$1" "$2")"; rep '#' "$_f"
+	printf '%s' "$C_DIM"; rep '.' "$((8 - _f))"
+	printf '%s' "$C_RST"
+}
+
+# ВРЕМЯ СОЕДИНЕНИЯ, ИДУЩЕЕ ЖИВО. Опрос приходит раз в несколько секунд (на слабом
+# роутере и вовсе раз в 10-15), поэтому значение из JSON прыгало бы рывками.
+# Берём conn_time_sec как основу и досчитываем по возрасту файла с данными -
+# секунды бегут ровно, а каждый опрос переустанавливает базу, так что расхождение
+# не накапливается. Тот же приём, что на странице в LuCI.
+uptime_str() {
+	_b=$(g conn_time_sec)
+	case "$_b" in ''|*[!0-9]*) printf '%s' "$(v conn_time)"; return ;; esac
+	_age=0
+	if [ -f "$DATA" ]; then
+		_now=$(date +%s); _mt=$(date -r "$DATA" +%s 2>/dev/null || echo "$_now")
+		_age=$((_now - _mt)); [ "$_age" -lt 0 ] && _age=0
+	fi
+	_s=$((_b + _age))
+	_d=$((_s / 86400)); _h=$(((_s % 86400) / 3600))
+	_m=$(((_s % 3600) / 60)); _x=$((_s % 60))
+	if   [ "$_d" -gt 0 ]; then printf '%dд %d:%02d:%02d' "$_d" "$_h" "$_m" "$_x"
+	elif [ "$_h" -gt 0 ]; then printf '%d:%02d:%02d' "$_h" "$_m" "$_x"
+	else printf '%d:%02d' "$_m" "$_x"; fi
+}
+
+# ── Рамки. Три блока в том же порядке, что секции веб-страницы.
+box_top()  { printf '%s+- %s ' "$C_DIM" "$1"; rep '-' "$((W - 5 - $(clen "$1")))"; printf '+%s\n' "$C_RST"; }
+box_mid()  { printf '%s|%s|%s\n' "$C_DIM" "$(pad '' $((W-2)))" "$C_RST"; }
+box_end()  { printf '%s+' "$C_DIM"; rep '-' "$((W-2))"; printf '+%s\n' "$C_RST"; }
+
+frame() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	[ "$NARROW" = 1 ] && { frame_narrow; return; }
+	printf ' %s%s5gtop%s  %s%s\n' "$C_B" "$C_CYA" "$C_RST" "$C_DIM" "$C_RST"
+	# --- блок «Модем»: горизонтальный, как шапка в вебе ---
+	box_top 'Модем'
+	box_mid; box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	# --- блок «Сота / Сигнал»: как одноимённая секция страницы ---
+	box_top 'Сота / Сигнал'
+	box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top 'Скорость'
+	box_mid; box_mid
+	box_end
+	box_top 'Приоритет интернета'
+	box_mid; box_mid; box_mid
+	box_end
+	# Без stty терминал остаётся в каноническом режиме: клавиша срабатывает
+	# только после Enter. Честно предупреждаем, а не оставляем гадать.
+	_ent=""
+	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}(+Enter)${C_RST}"
+	printf '\n %sq выход   r обновить   s тест   1-3 приоритет%s%s%s\n' "$C_DIM" "$MKEY" "$C_RST" "$_ent"
+}
+
+# at <строка> <колонка> <текст> - переписать только значение. [K не используем:
+# в строке несколько колонок, и стирание до конца снесло бы соседние.
+at() { printf '%s[%d;%dH%s' "$ESC" "$1" "$2" "$3"; }
+# lab <строка> <колонка> <подпись> <ширина_подписи> <значение> <ширина_значения>
+lab() { at "$1" "$2" "${C_DIM}$(pad "$3" "$4")${C_RST}$(pad "$5" "$6")"; }
+
+# ── УЗКИЙ РЕЖИМ. На мобильном терминале три колонки не помещаются, поэтому
+#    складываем всё в один столбец, сохраняя тот же порядок блоков.
+frame_narrow() {
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	box_top 'Модем'
+	box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top 'Сигнал'
+	box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top 'Сота'
+	box_mid; box_mid; box_mid
+	box_end
+	box_top 'Скорость'
+	box_mid; box_mid
+	box_end
+	box_top 'Аплинк'
+	box_mid; box_mid
+	box_end
+	_ent=""
+	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}+Enter${C_RST}"
+	printf '\n %sq r s 1-3%s%s%s\n' "$C_DIM" "$MKEY" "$C_RST" "$_ent"
+}
+
+draw_narrow() {
+	_vc=13
+	_l() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 10)" "$C_RST" "$3"; }
+	_l 3  'Модель'   "$(pad "$(v modem)" $((W - 12)))"
+	_l 4  'Оператор' "$(pad "$(v operator_name)" $((W - 12)))"
+	_sg=$(v signal)
+	_l 5  'Уровень'  "$(bar "$_sg" 10) ${C_B}${_sg}%${C_RST}  "
+	_l 6  'Телефон'  "$(pad "${C_DIM}$(v phone)${C_RST}" $((W - 12)))"
+	_t=$(v mtemp); [ "$_t" != "-" ] && _t="$_t C"
+	_l 7  'Темп.'    "$(pad "$_t" $((W - 12)))"
+
+	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
+	_l 10 'RSRP'     "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
+	_l 11 'RSRQ'     "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
+	_l 12 'SINR'     "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
+	_l 13 'RSSI'     "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
+
+	_md=$(v mode); _md=${_md%% | *}
+	_l 16 'Режим'    "$(pad "${C_CYA}${_md}${C_RST}  $(v pband)" $((W - 12)))"
+	_l 17 'PCI/EARF' "$(pad "$(v pci) / $(v earfcn)" $((W - 12)))"
+	_l 18 'IP'       "$(pad "${C_GRN}$(v ipaddr)${C_RST}  $(uptime_str)" $((W - 12)))"
+
+	if [ -f "$STFILE" ]; then
+		_sj=$(cat "$STFILE" 2>/dev/null)
+		_run=$(printf '%s' "$_sj" | jsonfilter -e '@.running' 2>/dev/null)
+		if [ "$_run" = "1" ]; then
+			_fr=$((_spin % 8)); _anim=""; _i=0
+			while [ "$_i" -lt 8 ]; do
+				[ "$_i" = "$_fr" ] && _anim="$_anim#" || _anim="$_anim."
+				_i=$((_i + 1))
+			done
+			_l 21 'Тест'  "$(pad "${C_YEL}${_anim}${C_RST} идёт" $((W - 12)))"
+			_l 22 ''      "$(pad '' $((W - 12)))"
+		else
+			_l 21 'Приём' "$(pad "${C_GRN}$(printf '%s' "$_sj" | jsonfilter -e '@.down_mbps' 2>/dev/null)${C_RST} Мбит/с" $((W - 12)))"
+			_l 22 'Отдача' "$(pad "${C_BLU}$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)${C_RST} Мбит/с" $((W - 12)))"
+		fi
+	else
+		_l 21 'Тест' "$(pad "${C_DIM}нажмите s${C_RST}" $((W - 12)))"
+	fi
+
+	if [ -s "$NPFILE" ]; then
+		_np=$(cat "$NPFILE" 2>/dev/null); _n=0; _rw=25
+		while [ "$_n" -lt 2 ]; do
+			_if=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].iface" 2>/dev/null)
+			[ -n "$_if" ] || break
+			_lb=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].label" 2>/dev/null)
+			_mt=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].metric" 2>/dev/null)
+			[ "$_mt" = "1" ] && _mk="${C_GRN}>${C_RST}" || _mk=" "
+			printf '%s[%d;2H%s %s%d%s %s' "$ESC" "$_rw" "$_mk" "$C_DIM" "$((_n + 1))" "$C_RST" "$(pad "$_lb" $((W - 8)))"
+			_rw=$((_rw + 1)); _n=$((_n + 1))
+		done
+	fi
+	printf '%s[%d;1H' "$ESC" "$ROW_END"
+}
+
+draw() {
+	_spin=$((_spin + 1))
+	if [ "$NARROW" = 1 ]; then
+		_st=" "; [ -f "$FETCHING" ] && _st="${C_YEL}*${C_RST}"
+		printf '%s[1;%dH%s%s%s' "$ESC" "$((W - 8))" "$C_DIM" "$(date '+%H:%M')" "$C_RST$_st"
+		draw_narrow
+		return
+	fi
+	_st=" "
+	[ -f "$FETCHING" ] && _st="${C_YEL}*${C_RST}"
+	at 1 62 "${C_DIM}$(date '+%H:%M:%S')${C_RST} $_st"
+
+	# ── Блок «Модем» (строки 3-8). Три колонки, как горизонтальная шапка в вебе.
+	_sg=$(v signal)
+	at 3  4  "$(bar "$_sg" 14)"
+	at 4  4  "$(pad "${C_B}${_sg}%${C_RST}" 22)"
+	at 5  4  "${C_DIM}$(pad "$(v modem)" 22)${C_RST}"
+
+	lab 3  28 'Оператор' 11 "$(v operator_name)" 16
+	_r=$(v registration)
+	case "$_r" in
+		1) _rs="${C_GRN}в сети${C_RST}" ;;
+		5) _rs="${C_GRN}в сети${C_RST} ${C_DIM}(роум.)${C_RST}" ;;
+		-) _rs="${C_DIM}-${C_RST}" ;;
+		*) _rs="${C_YEL}нет рег.${C_RST}" ;;
+	esac
+	lab 4  28 'Статус'   11 "$_rs" 16
+	lab 5  28 'Телефон'  11 "${C_DIM}$(v phone)${C_RST}" 16
+	lab 6  28 'SIM'      11 "$(v simslot)" 16
+
+	# Режим БЕЗ диапазона: профиль дописывает его в MODE ради веба, где отдельной
+	# строки нет, а здесь она есть - иначе значение вылезает за рамку.
+	_md=$(v mode); _md=${_md%% | *}
+	lab 3  56 'Режим'    9 "${C_CYA}${_md}${C_RST}" 12
+	lab 4  56 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
+	lab 5  56 'Время'    9 "$(uptime_str)" 12
+	_t=$(v mtemp); [ "$_t" != "-" ] && _t="$_t C"
+	lab 6  56 'Темп.'    9 "$_t" 12
+	lab 7  56 'Трафик'   9 "${C_DIM}v $(v rx)${C_RST}" 12
+	at 8  56 "${C_DIM}$(pad "  ^ $(v tx)" 20)${C_RST}"
+
+	# ── Блок «Сота / Сигнал» (строки 10-14). Тоже три колонки.
+	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr)
+	at 12 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 7)${C_RST}$(mbar rsrp "$_a")"
+	at 13 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 7)${C_RST}$(mbar rsrq "$_b")"
+	at 14 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 7)${C_RST}$(mbar sinr "$_c")"
+	_e=$(v rssi)
+	at 15 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 7)${C_RST}$(mbar rssi "$_e")"
+
+	lab 12 28 'Диапазон' 11 "$(v pband)" 16
+	lab 13 28 'Полоса'   11 "$(v bandwidth)" 16
+	lab 14 28 'PCI'      11 "$(v pci)" 16
+	lab 15 28 'EARFCN'   11 "$(v earfcn)" 16
+
+	lab 12 56 'Баз.ст.'  10 "$(v enbid)" 11
+	lab 13 56 'TAC'      10 "$(v tac_dec)" 11
+	lab 14 56 'MIMO'     10 "$(v pmimo)" 11
+	lab 15 56 'VoLTE'    10 "$(v volte)" 11
+
+	# ── Блок «Скорость». Тот же speedtest.sh, что и кнопка в вебе: он пишет ход
+	#    теста в JSON-файл, а мы его читаем - своего замера нет, значит и цифры
+	#    совпадут со страницей. Сам тест НЕ запускается: только по клавише s.
+	if [ -f "$STFILE" ]; then
+		_sj=$(cat "$STFILE" 2>/dev/null)
+		_srv=$(printf '%s' "$_sj" | jsonfilter -e '@.service' 2>/dev/null)
+		_run=$(printf '%s' "$_sj" | jsonfilter -e '@.running' 2>/dev/null)
+		_dn=$(printf '%s' "$_sj" | jsonfilter -e '@.down_mbps' 2>/dev/null)
+		_up=$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)
+		_ld=$(printf '%s' "$_sj" | jsonfilter -e '@.live_down' 2>/dev/null)
+		_lu=$(printf '%s' "$_sj" | jsonfilter -e '@.live_up' 2>/dev/null)
+		_ip=$(printf '%s' "$_sj" | jsonfilter -e '@.pub_ip' 2>/dev/null)
+		_cc=$(printf '%s' "$_sj" | jsonfilter -e '@.cc' 2>/dev/null)
+
+		if [ "$_run" = "1" ]; then
+			# АНИМАЦИЯ. draw() вызывается раз в секунду, поэтому кадр можно просто
+			# брать по счётчику: бегущий блок показывает, что процесс жив, даже
+			# когда цифра live не меняется (а она подолгу стоит на месте, пока
+			# curl разгоняет TCP).
+			_fr=$((_spin % 8))
+			_anim=""
+			_i=0
+			while [ "$_i" -lt 8 ]; do
+				if [ "$_i" = "$_fr" ]; then _anim="$_anim#"; else _anim="$_anim."; fi
+				_i=$((_i + 1))
+			done
+			if [ -n "$_lu" ] && [ "$_lu" != "0" ]; then
+				_ph="${C_BLU}отдача${C_RST}"; _val="$_lu"; _c="$C_BLU"
+			else
+				_ph="${C_GRN}приём${C_RST}";  _val="${_ld:-0}"; _c="$C_GRN"
+			fi
+			lab 18 4 'Идёт тест' 12 "${_c}${_anim}${C_RST}  $_ph ${C_B}${_val}${C_RST} ${C_DIM}Мбит/с${C_RST}" 34
+			lab 19 4 'Сервис'    12 "${C_DIM}${_srv}${C_RST}" 34
+		else
+			# Возраст результата: без него прошлый тест выглядит так, будто он
+			# только что прошёл - именно это сбивало с толку при запуске.
+			_ago=""
+			_now=$(date +%s); _mt=$(date -r "$STFILE" +%s 2>/dev/null || echo "$_now")
+			_sec=$((_now - _mt)); [ "$_sec" -lt 0 ] && _sec=0
+			if   [ "$_sec" -lt 60 ];   then _ago="${_sec}с назад"
+			elif [ "$_sec" -lt 3600 ]; then _ago="$((_sec / 60))м назад"
+			else _ago="$((_sec / 3600))ч назад"; fi
+			lab 18 4 'Приём'  12 "${C_GRN}$(pad "${_dn:--}" 8)${C_RST}${C_DIM}Мбит/с   ${_ago}${C_RST}" 34
+			lab 19 4 'Отдача' 12 "${C_BLU}$(pad "${_up:--}" 8)${C_RST}${C_DIM}Мбит/с   ${_srv}${C_RST}" 34
+		fi
+		lab 18 48 'Внешний IP' 12 "${C_DIM}${_ip:--}${C_RST}" 16
+		lab 19 48 'Страна'     12 "${C_DIM}${_cc:--}${C_RST}" 16
+	else
+		lab 18 4 'Тест' 12 "${C_DIM}нажмите s для запуска${C_RST}" 40
+		lab 19 4 ''     12 "$(pad '' 40)" 40
+	fi
+
+	# ── Приоритет интернета. Тот же netpri.sh, что и полоса кнопок в вебе:
+	#    метрика 1 = активный аплинк, остальные 20+. Переключение - цифрой.
+	_row=22; _idx=0
+	if [ -s "$NPFILE" ]; then
+		_np=$(cat "$NPFILE" 2>/dev/null)
+		_n=0
+		while [ "$_n" -lt 3 ]; do
+			_if=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].iface" 2>/dev/null)
+			[ -n "$_if" ] || break
+			_lb=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].label" 2>/dev/null)
+			_sb=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].sub" 2>/dev/null)
+			_ipa=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].ip" 2>/dev/null)
+			_mt=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].metric" 2>/dev/null)
+			_idx=$((_n + 1))
+			if [ "$_mt" = "1" ]; then
+				_mk="${C_GRN}>${C_RST}"; _nm="${C_B}${_lb}${C_RST}"
+			else
+				_mk="${C_DIM} ${C_RST}"; _nm="${C_DIM}${_lb}${C_RST}"
+			fi
+			at "$_row" 4 "$_mk ${C_DIM}${_idx}${C_RST} $(pad "$_nm" 22)${C_DIM}$(pad "$_sb" 22)${C_RST}$(pad "${_ipa:--}" 18)"
+			_row=$((_row + 1)); _n=$((_n + 1))
+		done
+	else
+		at 22 4 "${C_DIM}$(pad 'сбор данных...' 60)${C_RST}"
+	fi
+
+	printf '%s[%d;1H' "$ESC" "$ROW_END"
+}
+
+TTY=0
+[ -t 0 ] && [ -t 1 ] && TTY=1
+
+# ШИРИНА ТЕРМИНАЛА. Ни stty size, ни tput cols, ни $COLUMNS на этом busybox не
+# работают (проверено), поэтому спрашиваем у САМОГО ТЕРМИНАЛА: ставим курсор в
+# заведомо дальний угол и запрашиваем его позицию (ESC[6n). Терминал отвечает
+# "ESC[строка;колонкаR" - колонка и есть ширина. Приём универсальный и не
+# требует ни terminfo, ни расширений shell.
+# Есть ли stty. На части сборок OpenWrt его НЕТ ВООБЩЕ (проверено: busybox на
+# MT7628 отвечает "stty: not found"). Без него нельзя ни выключить эхо, ни снять
+# канонический режим - а значит запрос ширины у терминала не сработает: ответ
+# уйдёт на экран, а в переменную не попадёт. Все прошлые странности - висящий
+# dd, блокирующийся read, "^[[42;147R" поверх интерфейса - следствия ровно этого.
+HAS_STTY=0
+command -v stty >/dev/null 2>&1 && HAS_STTY=1
+
+term_width() {
+	_w=""
+	# Без stty спрашивать бессмысленно - сразу отдаём безопасное умолчание.
+	if [ "$TTY" = 1 ] && [ "$HAS_STTY" = 1 ]; then
+		stty -echo -icanon min 0 time 1 2>/dev/null
+		printf '%s[999;999H%s[6n' "$ESC" "$ESC"
+		_r=""; _i=0
+		while [ "$_i" -lt 12 ]; do
+			_ch=""
+			# -t обязателен: read без таймаута виснет навсегда. В этом файле такое
+			# случалось трижды, правило простое - никакого чтения без таймаута.
+			read -t 1 -r -n 1 _ch 2>/dev/null
+			[ -n "$_ch" ] || break
+			case "$_ch" in R) break ;; esac
+			_r="$_r$_ch"
+			_i=$((_i + 1))
+		done
+		_w=${_r##*;}
+	fi
+	# УМОЛЧАНИЕ 60, А НЕ 80. Когда ширину узнать нельзя, выбираем то, что влезает
+	# и на телефон, и на десктоп: широкая раскладка требует 78 колонок и на
+	# мобильном экране разъезжается, а узкая на большом экране просто не
+	# растягивается на всю ширину - это не мешает.
+	case "$_w" in ''|*[!0-9]*) _w=60 ;; esac
+	[ "$_w" -lt 30 ] 2>/dev/null && _w=30
+	printf '%s' "$_w"
+}
+
+# Ширину можно задать явно: 5gtop 5 46  или  COLS=46 5gtop
+# Нужно и для узких терминалов, где автоопределение не срабатывает (не всякий
+# терминал отвечает на запрос позиции курсора), и просто чтобы посмотреть, как
+# всё ляжет на мобильном экране, не подключаясь с телефона.
+TW="$2"
+[ -n "$TW" ] || TW="$COLS"
+case "$TW" in ''|*[!0-9]*) TW=$(term_width) ;; esac
+# term_width всегда возвращает число, но подстрахуемся: любое НЕ-число здесь
+# уронило бы арифметику ниже (именно так скрипт и падал на живом терминале).
+case "$TW" in ''|*[!0-9]*) TW=80 ;; esac
+[ "$TW" -lt 30 ] && TW=30
+# Узкий режим - когда три колонки уже не помещаются. Тогда всё в один столбец.
+if [ "$TW" -ge 80 ]; then NARROW=0; W=78; else NARROW=1; W=$((TW - 2)); fi
+[ "$W" -lt 28 ] && W=28
+[ "$NARROW" = 1 ] && ROW_END=29
+
+fetch() {
+	[ -f "$FETCHING" ] && return
+	( : > "$FETCHING"
+	  $SRC json > "$DATA.tmp" 2>/dev/null
+	  [ -s "$DATA.tmp" ] && mv "$DATA.tmp" "$DATA"
+	  # Приоритеты тянем ТЕМ ЖЕ фоновым проходом: netpri.sh list стоит ~1.7 c,
+	  # в секундном цикле отрисовки это заметно подвесило бы экран.
+	  /usr/share/5gmodem/netpri.sh list > "$NPFILE.tmp" 2>/dev/null
+	  [ -s "$NPFILE.tmp" ] && mv "$NPFILE.tmp" "$NPFILE"
+	  rm -f "$FETCHING" ) >/dev/null 2>&1 </dev/null &
+}
+
+MODEMS=$(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.]*\)\.path=.*/\1/p')
+MCOUNT=$(printf '%s\n' "$MODEMS" | grep -c . 2>/dev/null)
+[ -n "$MCOUNT" ] || MCOUNT=0
+MKEY=""
+[ "$MCOUNT" -gt 1 ] && MKEY="   m модем"
+
+# Переключение приоритета цифрой. netpri.sh set меняет метрику маршрута НА ЛЕТУ,
+# без переподнятия интерфейса - модем не передоговаривается и IP не теряется.
+set_pri() {
+	[ -s "$NPFILE" ] || return
+	_i=$(( $1 - 1 ))
+	_if=$(jsonfilter -i "$NPFILE" -e "@[$_i].iface" 2>/dev/null)
+	[ -n "$_if" ] || return
+	/usr/share/5gmodem/netpri.sh set "$_if" >/dev/null 2>&1
+	rm -f "$NPFILE"; fetch
+}
+
+switch_modem() {
+	[ "$MCOUNT" -gt 1 ] || return
+	_cur=$(uci -q get 5gmodem.@5gmodem[0].active_modem | tr -c 'A-Za-z0-9' '_')
+	_cur="m_${_cur%_}"
+	_next=""; _first=""; _take=0
+	for _m in $MODEMS; do
+		[ -z "$_first" ] && _first="$_m"
+		[ "$_take" = 1 ] && { _next="$_m"; _take=0; }
+		[ "$_m" = "$_cur" ] && _take=1
+	done
+	[ -n "$_next" ] || _next="$_first"
+	_path=$(uci -q get "5gmodem.$_next.path")
+	[ -n "$_path" ] || return
+	# Переключение системное - его видит и LuCI, поэтому идём штатным путём.
+	/usr/share/5gmodem/modemswitch.sh set "$_path" >/dev/null 2>&1
+	rm -f "$DATA"; J=""; fetch
+}
+
+if [ "$TTY" = 1 ]; then
+	printf '%s[?25l' "$ESC"
+	stty -echo 2>/dev/null
+fi
+
+frame
+fetch
+_since=0
+while :; do
+	[ -f "$DATA" ] && J=$(cat "$DATA" 2>/dev/null)
+	draw
+
+	if [ "$TTY" = 1 ]; then
+		# ЗАЩИТА ОТ ХОЛОСТОГО ЦИКЛА. read -t 1 задуман и как пауза, и как чтение
+		# клавиши. Но если ввод закрыт или stty не применился, read возвращается
+		# МГНОВЕННО и всегда - цикл начинает крутиться на полной скорости, съедая
+		# процессор. На слабом роутере это вешает и сессию, и сам роутер (у
+		# пользователя терминал просто закрывался). Поэтому засекаем время: если
+		# итерация уложилась в ту же секунду, досыпаем сами.
+		_t0=$(date +%s)
+		_k=""
+		read -t 1 -n 1 _k 2>/dev/null
+		case "$_k" in
+			q|Q) cleanup ;;
+			r|R) fetch; _since=0 ;;
+			s|S) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
+			1|2|3) set_pri "$_k" ;;
+			m|M) switch_modem; frame; _since=0 ;;
+		esac
+		[ "$(date +%s)" = "$_t0" ] && sleep 1
+	else
+		sleep 1
+	fi
+
+	_since=$((_since + 1))
+	[ "$_since" -ge "$INTERVAL" ] && { fetch; _since=0; }
+done
