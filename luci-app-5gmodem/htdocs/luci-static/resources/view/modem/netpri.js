@@ -57,12 +57,58 @@ var CSS = `
 .netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
 .netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
 /* фаза теста подсвечивает карточку: загрузка - зелёным, отдача - синим. Плавный
-   переход цвета + тянущиеся цифры (анимируются в JS). */
+   переход цвета + тянущиеся цифры (анимируются в JS). Поверх рамки бежит светлая
+   полоска - визуальный «идёт тест».
+
+   Как сделана полоска: отдельный слой ::after с коническим градиентом, обрезанным
+   маской в кольцо толщиной с рамку (два слоя маски, xor/exclude - вырезаем середину).
+   Крутим не сам элемент, а УГОЛ градиента: transform: rotate() на неквадратной
+   кнопке провернул бы и кольцо, и оно перестало бы совпадать с рамкой.
+   Угол анимируем через @property - обычную custom property браузер
+   интерполировать не станет, ей нужен объявленный тип <angle>. Где @property не
+   поддержан, слой останется статичным, а сплошная цветная рамка под ним никуда
+   не денется - это ровно сегодняшнее поведение. */
+@property --st-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 .netpribar .netpri-st { transition: border-color .3s ease, box-shadow .3s ease; }
-.netpribar .netpri-st.st-dl { border-color: #2ea043; box-shadow: inset 0 0 0 1px #2ea043; }
-.netpribar .netpri-st.st-ul { border-color: #0095ff; box-shadow: inset 0 0 0 1px #0095ff; }
+.netpribar .netpri-st.st-dl { --st-c: #2ea043; }
+.netpribar .netpri-st.st-ul { --st-c: #0095ff; }
+.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul {
+	position: relative;
+	border-color: var(--st-c);
+	box-shadow: inset 0 0 0 1px var(--st-c);
+}
+.netpribar .netpri-st.st-dl::after, .netpribar .netpri-st.st-ul::after {
+	content: ''; position: absolute; inset: 0; border-radius: inherit;
+	padding: 2px;   /* = толщина бегущей полоски */
+	background: conic-gradient(from var(--st-a),
+		transparent 0 58%, var(--st-c) 78%, #fff 92%, transparent 97% 100%);
+	-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+	        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	        mask-composite: exclude;
+	animation: st-crawl 1.4s linear infinite;
+	pointer-events: none;
+}
+@keyframes st-crawl { to { --st-a: 360deg; } }
+/* стрелка направления пульсирует, пока идёт тест */
+.netpribar .netpri-st.st-dl .netpri-st-arrow,
+.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: st-blink 1s ease-in-out infinite; }
+@keyframes st-blink { 0%, 100% { opacity: .85; } 50% { opacity: .18; } }
+/* уважаем системную настройку «меньше движения» */
+@media (prefers-reduced-motion: reduce) {
+	.netpribar .netpri-st.st-dl::after, .netpribar .netpri-st.st-ul::after,
+	.netpribar .netpri-st.st-dl .netpri-st-arrow,
+	.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: none; }
+}
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
 .netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
+/* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
+   растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
+   ширину. Тянутся ТОЛЬКО сами кнопки - контейнер и заголовок не трогаем. */
+@media (max-width: 680px) {
+	.netpribar .netpri-row > .netpri-btn { flex: 1 1 42%; }
+	.netpribar .netpri-row > .netpri-btn.netpri-st { flex: 1 1 100%; margin-left: 0; }
+}
 `;
 
 var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
@@ -169,12 +215,21 @@ function animateLive(target) {
    (иначе анимация числа сбрасывалась бы каждый тик); подсветка зелёным (загрузка)
    / синим (отдача); во время загрузки - тянем живое число. */
 var _renderedKey = '';
+var _renderedPhase = '';
 function refreshStCard() {
 	var key = _st.phase + (_st.upPhase ? ':up' : '');
-	if (key !== _renderedKey) {
+	// IP приходит ДО замеров и появляется посреди фазы running - значит ключ
+	// перерисовки должен его учитывать, иначе карточка не обновится до конца теста.
+	var full = key + '|' + (_st.ip || '');
+	if (full !== _renderedKey) {
 		patchStCard();
-		_renderedKey = key;
-		if (_st.phase === 'running') { _liveDisplay = 0; }   // новую фазу начинаем с 0
+		_renderedKey = full;
+		// счётчик сбрасываем в 0 только на СМЕНЕ ФАЗЫ: приезд IP - не повод
+		// ронять уже тикающее живое число обратно к нулю.
+		if (key !== _renderedPhase) {
+			if (_st.phase === 'running') { _liveDisplay = 0; }
+			_renderedPhase = key;
+		}
 	}
 	var card = document.querySelector('.netpri-st');
 	if (card) {
@@ -203,13 +258,16 @@ function runSpeedtest() {
 					if (j.live_down != null) { _st.live = j.live_down; }
 					if (j.live_up != null) { _st.liveUp = j.live_up; }
 					if (j.down_mbps != null) { _st.down = j.down_mbps; }
+					// IP теперь определяется первым - показываем сразу, не дожидаясь цифр
+					if (j.pub_ip) { _st.ip = j.pub_ip; }
+					if (j.cc) { _st.cc = j.cc; }
 					refreshStCard();
 					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
 						return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
 					}
 				}
 				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
-				else { _st.phase = 'fail'; }
+				else { _st.phase = 'fail'; if (j.pub_ip) { _st.ip = j.pub_ip; _st.cc = j.cc || ''; } }
 				_renderedKey = ''; refreshStCard();
 			});
 		};

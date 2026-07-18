@@ -26,6 +26,40 @@ RES="/usr/share/5gmodem"
 LPAC="/usr/lib/lpac"
 BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
 PORTCACHE="/tmp/5gmodem_esim_port"
+GSMACERT="/usr/share/5gmodem/certs/gsma-ci.pem"
+CACACHE="/tmp/5gmodem_esim_ca.pem"
+
+# HTTP-бэкенд lpac: auto|curl|bridge (см. шапку esim-apdu-bridge.sh).
+#   curl   - встроенный в lpac. С mbedTLS не берёт SM-DP+ с сертификатами GSMA CI.
+#   bridge - наш stdio-мост поверх wget/OpenSSL, берёт и обычные, и GSMA CI.
+#   auto   - bridge, если есть wget и наш корень; иначе curl.
+# Возвращает "bridge" или "curl".
+http_backend() {
+	_hb=$(uci -q get 5gmodem.@5gmodem[0].esim_http)
+	[ -n "$_hb" ] || _hb="auto"
+	case "$_hb" in
+		curl)   echo curl ;;
+		bridge) echo bridge ;;
+		*)      if command -v wget >/dev/null 2>&1 && [ -f "$GSMACERT" ]; then
+				echo bridge
+			else
+				echo curl
+			fi ;;
+	esac
+}
+
+# Системный бандл + корень GSMA в один файл (wget принимает только один
+# --ca-certificate). Пересобираем, если исходники новее кэша: бандл обновляется
+# пакетом ca-certificates.
+ca_bundle() {
+	_sys="/etc/ssl/certs/ca-certificates.crt"
+	[ -f "$GSMACERT" ] || { echo ""; return; }
+	if [ ! -f "$CACACHE" ] || [ "$GSMACERT" -nt "$CACACHE" ] || \
+	   { [ -f "$_sys" ] && [ "$_sys" -nt "$CACACHE" ]; }; then
+		{ [ -f "$_sys" ] && cat "$_sys"; cat "$GSMACERT"; } > "$CACACHE" 2>/dev/null
+	fi
+	echo "$CACACHE"
+}
 
 err() { echo "{\"type\":\"lpa\",\"payload\":{\"code\":-1,\"message\":\"$1\",\"data\":\"\"}}"; }
 
@@ -48,7 +82,15 @@ run_lpac() {
 	# Зеркальный пайплайн: мост читает запросы lpac из FIFO (loop), пишет ответы в
 	# pipe -> stdin lpac; stdout lpac -> loop -> stdin моста. Мост выходит на "lpa"
 	# результате -> lpac ловит SIGPIPE и завершается -> пайплайн закрывается сразу.
-	sh "$BRIDGE" "$PORT" "$_RES" < "$_LOOP" | LPAC_APDU=stdio "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
+	# HTTP: либо отдаём lpac его curl, либо заворачиваем ES9+ в тот же stdio-поток
+	# к мосту (бэкенды различаются полем "type", поток один).
+	if [ "$(http_backend)" = "bridge" ]; then
+		_CA=$(ca_bundle); _HTTPDRV="stdio"
+	else
+		_CA=""; _HTTPDRV="curl"
+	fi
+	sh "$BRIDGE" "$PORT" "$_RES" "$_CA" < "$_LOOP" \
+		| LPAC_APDU=stdio LPAC_HTTP="$_HTTPDRV" "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
 	_PID=$!
 	# Опрос вместо wait+сторож: busybox плохо реапит сабшелл пайплайна через wait
 	# (зомби + зависание на 40 c). kill -0 ловит завершение мгновенно. Мост выходит

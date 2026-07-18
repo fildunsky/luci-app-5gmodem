@@ -85,11 +85,11 @@ BWDL=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r","",$4); print $4}')
 		
 CSQ=$(echo $RSRP $NP | awk '{printf "%.0f\n", (($1+10*log(12*$2)/log(10))+113)/2}')
 [ "x$CSQ" = "x" ] && CSQ=-1                                                                    
-if [ $CSQ -ge 0 -a $CSQ -le 31 ]; then                                                         
+if [ "$CSQ" -ge 0 -a "$CSQ" -le 31 ]; then                                                         
 	CSQ_PER=$(($CSQ * 100/31))                                                                                            
 	RSSI=$((2 * CSQ - 113))                                                
 	# Fibocom RSSI up -51dBm. Thanks to TSA74 at 4pda.to                       
-elif [ $CSQ -ge 32 -a $CSQ -le 50 ]; then                                                                              
+elif [ "$CSQ" -ge 32 -a "$CSQ" -le 50 ]; then                                                                              
 	RSSI=$((2 * CSQ - 113))
 	CSQ_PER="100"
 	CSQ="31"

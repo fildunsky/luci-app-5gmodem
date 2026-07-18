@@ -45,6 +45,27 @@ _service_name() {
 	esac
 }
 
+# Код страны (2 буквы, в верхнем регистре) из ответа гео-сервиса. Понимаем оба
+# распространённых формата: строку ровно из двух букв (ip-api /line) и JSON с
+# полем "countryCode"/"country_code". Пусто - значит сервис страну не отдал.
+# Первый IPv4 из ответа, С ПРОВЕРКОЙ октетов (<=255). Голый grep на четыре
+# группы цифр цепляет мусор из HTML-страниц ошибок - так в тест уже попадал
+# несуществующий адрес, а по нему потом резолвился неверный флаг.
+_parse_ip() {
+	echo "$1" | grep -oE '(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)' \
+		| grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' \
+		| awk -F. '$1<=255&&$2<=255&&$3<=255&&$4<=255{print; exit}'
+}
+
+_parse_cc() {
+	_g="$1"
+	_c=$(echo "$_g" | grep -oE '^[A-Za-z][A-Za-z]$' | head -1)
+	[ -n "$_c" ] || _c=$(echo "$_g" \
+		| grep -oiE '"country_?code"[ :]*"[A-Za-z][A-Za-z]"' \
+		| grep -oE '[A-Za-z][A-Za-z]"$' | tr -d '"' | head -1)
+	echo "$_c" | tr 'a-z' 'A-Z'
+}
+
 # "3.92M"/"512k"/"1.2G"/"0" (bytes/s из прогресса curl, 1024-я система) -> Mbps.
 _tombps() {
 	echo "$1" | awk '{
@@ -73,6 +94,13 @@ start)
 	# по умолчанию ip-api.com/line - отдаёт СТРАНУ и IP простым текстом
 	# ("RU\n<ip>"), чтобы рядом с IP показать флаг страны. Сервис можно сменить.
 	[ -n "$IPURL" ] || IPURL="http://ip-api.com/line/?fields=countryCode,query"
+	# Сервис для ДОЗАПРОСА страны по IP (когда основной её не отдаёт).
+	# {ip} подставляется. По умолчанию ip-api /line - возвращает голое "RU".
+	CCURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_cc_url)
+	[ -n "$CCURL" ] || CCURL="http://ip-api.com/line/{ip}?fields=countryCode"
+	# Резервный гео-сервис: отдаёт адрес И страну разом. Используется, когда
+	# основной (speedtest_ip_url) не ответил.
+	CCFALLBACK="http://ip-api.com/line/?fields=countryCode,query"
 	SERVICE=$(_service_name)
 
 	_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0}"
@@ -83,6 +111,51 @@ start)
 		PROG="/tmp/5gmodem_st_prog.$$"
 		RESF="/tmp/5gmodem_st_res.$$"
 		: > "$PROG"; : > "$RESF"
+
+		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага) - ДО замеров ---
+		# Раньше стояло в конце, и IP появлялся последним. Спрашиваем первым:
+		# ответ короткий (обычно доли секунды при --max-time 6), зато карточка
+		# сразу показывает, откуда мы выходим, ещё до первых цифр скорости.
+		# Побочно так честнее: запрос идёт по НЕзагруженному каналу, а не рядом
+		# с качающимся на всю полосу curl.
+		# ip-api /line отдаёт "RU\n<ip>"; у плоских сервисов (ipify) страны нет -
+		# тогда просто IP без флага. Тащим первый IPv4 и, если есть, 2-буквенный
+		# код страны (строкой ровно из 2 букв или из JSON "country_code":"XX").
+		# Фолбэк IP - src маршрута.
+		GEO=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
+		PUB=$(_parse_ip "$GEO")
+		CC=$(_parse_cc "$GEO")
+
+		# Основной сервис молчит (ip.wtf, например, с сотовой в РФ недоступен -
+		# curl 28). Идём к резервному: он отдаёт адрес И страну разом, то есть
+		# лучше любого фолбэка по локальным данным.
+		if [ -z "$PUB" ]; then
+			GEO2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
+			PUB=$(_parse_ip "$GEO2")
+			[ -n "$CC" ] || CC=$(_parse_cc "$GEO2")
+		fi
+
+		# Совсем ничего - берём src маршрута. ЭТО НЕ ПУБЛИЧНЫЙ АДРЕС (обычно
+		# приватный или CGNAT), поэтому страну по нему НЕ спрашиваем: именно так
+		# локальный 26.57.136.47 на eth2 однажды превратился во флаг США.
+		LOCALIP=0
+		if [ -z "$PUB" ]; then
+			PUB=$(ip route get 77.88.8.8 2>/dev/null \
+				| grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
+			LOCALIP=1
+		fi
+
+		# IP уже есть - отдаём его в UI, не дожидаясь замеров
+		_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+
+		# ДОЗАПРОС СТРАНЫ - только для реально публичного адреса и только если
+		# страну ещё не знаем («плоские» сервисы вроде ipify отдают лишь IP).
+		# Таймаут короткий: это время украдено у старта замера.
+		if [ -z "$CC" ] && [ -n "$PUB" ] && [ "$LOCALIP" = 0 ]; then
+			CCU=$(echo "$CCURL" | sed "s|{ip}|$PUB|g")
+			CC=$(_parse_cc "$(curl --max-time 4 -s "$CCU" 2>/dev/null)")
+			[ -n "$CC" ] && _write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+		fi
 
 		# --- DOWNLOAD: живое семплирование, ИТОГ = МАКС по секундным семплам ---
 		# stderr (прогресс-метр) -> PROG, stdout (итоговый -w) -> RESF. Заголовком
@@ -99,7 +172,7 @@ start)
 			[ -n "$CUR" ] || CUR=0
 			LIVE=$(_tombps "$CUR")
 			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0}}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
 		SPD=$(awk '{print $1+0}' "$RESF")
@@ -121,7 +194,7 @@ start)
 			[ -n "$CUR" ] || CUR=0
 			LIVEU=$(_tombps "$CUR")
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0}}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
 		USPD=$(awk '{print $1+0}' "$URES")
@@ -131,24 +204,12 @@ start)
 		UMBPS=""
 		[ "$(awk "BEGIN{print ($UBEST>0)?1:0}")" = 1 ] && UMBPS="$UBEST"
 
-		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага). ip-api /line отдаёт "RU\n<ip>";
-		# у плоских сервисов (ipify) страны нет - тогда просто IP без флага. Из
-		# ответа тащим первый IPv4 и, если есть, 2-буквенный код страны (строкой
-		# ровно из 2 букв или из JSON "country_code":"XX"). Фолбэк IP - src маршрута.
-		GEO=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
-		PUB=$(echo "$GEO" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-		[ -n "$PUB" ] || PUB=$(ip route get 77.88.8.8 2>/dev/null \
-			| grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
-		CC=$(echo "$GEO" | grep -oE '^[A-Za-z][A-Za-z]$' | head -1)
-		[ -n "$CC" ] || CC=$(echo "$GEO" | grep -oiE '"country_code"[ :]*"[A-Za-z]{2}"' | grep -oE '[A-Za-z]{2}"$' | tr -d '"' | head -1)
-		CC=$(echo "$CC" | tr 'a-z' 'A-Z')
-
 		case "$HTTP" in
 			200|206)
 				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 			*)
-				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\"}"
+				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 				;;
 		esac
 	) >/dev/null 2>&1 </dev/null &

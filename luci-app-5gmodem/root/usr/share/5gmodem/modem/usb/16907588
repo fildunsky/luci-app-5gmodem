@@ -32,7 +32,7 @@ case "$T" in
 	MODE="DC-HSDPA+";;
 esac
 
-if [ $MODE != "LTE" ]; then
+if [ "$MODE" != "LTE" ]; then
 	O1=$(echo "$O" | grep CGCELLI | sed 's/+CGCELLI://')
 	T1="$O1"
 	while true; do
@@ -48,7 +48,7 @@ if [ $MODE != "LTE" ]; then
 				ECIO|SINR|RSRQ) UNIT=" dB";;
 				LAC|PLMN|BEARER) IGNORE=1;;
 			esac
-			if [ $IGNORE -eq 0 ]; then
+			if [ "$IGNORE" -eq 0 ]; then
 				[ -n "$ADDON" ] && ADDON="$ADDON,"
 				ADDON="$ADDON"'{"'$F1'":"'$F2''$UNIT'"}'
 			fi

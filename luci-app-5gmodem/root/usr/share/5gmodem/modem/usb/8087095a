@@ -301,8 +301,8 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			if [ -n "$N" ]; then
 				RSSI=$(echo "$((-141 + T)) $N" | awk '{printf "%d\n", $1 + 10*log(12*$2)/log(10)}')
 				if [ -n "$RSSI" ]; then
-					[ $RSSI -lt -113 ] && RSSI="-113"
-					[ $RSSI -gt -51 ] && RSSI="-51"
+					[ "$RSSI" -lt -113 ] && RSSI="-113"
+					[ "$RSSI" -gt -51 ] && RSSI="-51"
 					RSSI="$RSSI"
 					CSQ_PER=$(((RSSI + 113) * 100 / 62))
 				fi
@@ -402,7 +402,7 @@ IFS="
 #			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 4/{print $13}')
 #			[ "$T" != "255" ] && addon $((POS + 8)) "(S${IDX}) SNR" "$T dB"
 			IDX=$((IDX + 1))
-			[ $IDX -ge $CELLS ] && break
+			[ "$IDX" -ge "$CELLS" ] && break
 			POS=$((POS + 10))
 		fi
 	done

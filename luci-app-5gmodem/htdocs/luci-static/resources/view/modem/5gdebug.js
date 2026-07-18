@@ -650,7 +650,7 @@ return view.extend({
 		o.rmempty = true;
 
 		o = st.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
-			_('Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead.'));
+			_('Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, a backup service is queried, and only then the local uplink address is shown (without a flag).'));
 		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + country flag)');
 		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
 		o.value('https://ip.wtf', 'ip.wtf');
@@ -658,6 +658,13 @@ return view.extend({
 		o.value('https://icanhazip.com', 'icanhazip.com');
 		o.value('https://2ip.ru', '2ip.ru');
 		o.value('https://whoer.net', 'whoer.net');
+		o.rmempty = true;
+
+		o = st.option(form.Value, 'speedtest_cc_url', _('Country lookup'),
+			_('Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder.'));
+		o.value('http://ip-api.com/line/{ip}?fields=countryCode', 'ip-api.com');
+		o.value('https://ipapi.co/{ip}/country/', 'ipapi.co');
+		o.placeholder = 'http://ip-api.com/line/{ip}?fields=countryCode';
 		o.rmempty = true;
 
 		/* ---------------- Информация о модеме (перенесена со страницы Сеть) -- */

@@ -1,6 +1,19 @@
 #!/bin/sh
 #
-# lpac stdio APDU backend -> eUICC via AT (+CCHO/+CGLA/+CCHC), using sms_tool.
+# lpac stdio backend: APDU -> eUICC по AT (+CCHO/+CGLA/+CCHC) через sms_tool,
+# и (опционально) HTTP -> ES9+ через wget/OpenSSL.
+#
+# ЗАЧЕМ HTTP-ветка: libcurl в OpenWrt по умолчанию собран с mbedTLS, а mbedTLS
+# отвергает ЛЮБОЕ незнакомое critical-расширение X.509 (-0x2080 "X509 -
+# Unavailable feature"). Корень "GSM Association - RSP2 Root CI1" несёт
+# "Certificate Policies: critical" (OID 2.23.146.1.2.1.0), поэтому SM-DP+,
+# предъявляющие сертификаты GSMA CI (rsp.truphone.com, rsp-eu.redteamobile.com
+# и др.), недостижимы: добавить корень в бандл НЕ помогает - mbedTLS не может
+# его даже загрузить. SM-DP+ с обычными веб-сертификатами при этом работают,
+# отсюда "у одних профилей качается, у других нет". wget слинкован с OpenSSL,
+# который такие расширения переносит, и с корнем из certs/gsma-ci.pem проходит
+# ES9+ насквозь. Оба stdio-бэкенда мультиплексируют ОДИН поток и различаются
+# полем "type", поэтому обслуживаются здесь же.
 #
 # Почему так: пропатченный lpac 2.3.0 (AT-драйвер) ВИСНЕТ на FM350-GL (persistent-
 # буфер at_expect рассинхронизируется, 20 c/команда), а его stdio-бэкенд в нашей
@@ -10,26 +23,69 @@
 # (CCHO отдаёт голый номер канала "1"; CGLA - стандартный "+CGLA: len,\"hex\"").
 # Это порт того, что делает обёртка prusa (EasyLPAC) на Windows.
 #
-# Протокол (одна JSON-строка на сообщение):
+# Протокол (одна JSON-строка на сообщение, ndJSON):
 #   lpac -> нам (stdin):  {"type":"apdu","payload":{"func":"...","param":"hex|null"}}
+#                         {"type":"http","payload":{"url":"...","tx":"hex","headers":[...]}}
 #                         {"type":"lpa","payload":{...}}   <- финальный результат
 #   мы -> lpac (stdout):  {"type":"apdu","payload":{"ecode":<n>[, "data":"hex"]}}
+#                         {"type":"http","payload":{"rcode":<n>,"rx":"hex"}}
+#   Тела HTTP в обе стороны - hex (см. driver/http/stdio.c в lpac).
 #
-# Usage: esim-apdu-bridge.sh <at_port> <result_file>
+# Usage: esim-apdu-bridge.sh <at_port> <result_file> [ca_bundle]
 #   Читает запросы lpac со stdin, пишет ответы в stdout, финальный "lpa" - в
-#   <result_file> (и завершается).
+#   <result_file> (и завершается). <ca_bundle> нужен только для HTTP-ветки.
 
 PORT="$1"
 RESULT="$2"
+CABUNDLE="$3"
 : > "$RESULT"
 CH=""
+
+# hex -> бинарный файл. Через printf с \xNN: бинарно-безопасно, od/xxd в образе
+# может не быть, а hexdump есть всегда.
+hex2bin() { printf "$(printf '%s' "$1" | sed 's/../\\x&/g')" > "$2"; }
+# бинарный файл -> hex одной строкой
+bin2hex() { hexdump -v -e '/1 "%02x"' "$1" 2>/dev/null; }
 
 while IFS= read -r line; do
 	[ -n "$line" ] || continue
 	# Быстрый разбор типа без jsonfilter (на каждую строку - дорого).
 	case "$line" in
 		*'"type":"apdu"'*) : ;;
-		*)  # не apdu -> это финальный результат ("lpa"): пишем и выходим
+		*'"type":"http"'*)
+			# --- ES9+ через wget/OpenSSL (см. шапку: mbedTLS не тянет GSMA CI) ---
+			url=$(printf '%s' "$line" | jsonfilter -e '@.payload.url' 2>/dev/null)
+			tx=$(printf '%s' "$line" | jsonfilter -e '@.payload.tx' 2>/dev/null)
+			_rq="/tmp/5gmodem_esim_hreq.$$"
+			_rb="/tmp/5gmodem_esim_hbody.$$"
+			_rh="/tmp/5gmodem_esim_hhdr.$$"
+			# Заголовки -> позиционные параметры: в них есть пробелы, склеивать
+			# в строку нельзя. IFS сохраняем - снаружи крутится read с IFS=''.
+			set --
+			_oldifs="$IFS"; IFS='
+'
+			for _h in $(printf '%s' "$line" | jsonfilter -e '@.payload.headers[*]' 2>/dev/null); do
+				[ -n "$_h" ] && set -- "$@" "--header=$_h"
+			done
+			IFS="$_oldifs"
+			[ -n "$CABUNDLE" ] && set -- "$@" "--ca-certificate=$CABUNDLE"
+			# tx пустой -> GET, иначе POST телом. --content-on-error обязателен:
+			# ES9+ кладёт осмысленный JSON и в 4xx/5xx, его нельзя терять.
+			if [ -n "$tx" ]; then
+				hex2bin "$tx" "$_rq"
+				set -- "$@" --method=POST "--body-file=$_rq"
+			fi
+			wget -q -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+				"$@" "$url" 2>"$_rh"
+			rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
+			# Транспорт не состоялся (DNS/TLS/таймаут) - ответа нет вообще.
+			# Отдаём 500: lpac трактует как ошибку ES9+ и не виснет в ожидании.
+			[ -n "$rcode" ] || rcode=500
+			printf '{"type":"http","payload":{"rcode":%s,"rx":"%s"}}\n' \
+				"$rcode" "$(bin2hex "$_rb")"
+			rm -f "$_rq" "$_rb" "$_rh"
+			continue ;;
+		*)  # не apdu/http -> это финальный результат ("lpa"): пишем и выходим
 			printf '%s\n' "$line" >> "$RESULT"
 			case "$line" in *'"type":"lpa"'*) exit 0 ;; esac
 			continue ;;

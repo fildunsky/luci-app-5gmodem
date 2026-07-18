@@ -514,6 +514,60 @@ pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
 
+/* «Модем перезагружается…» - оверлей со спиннером ПОВЕРХ блока информации модема.
+   Смена SIM-слота = полный ребут FM350 с переэнумерацией USB (десятки секунд); без
+   этого блок показывал устаревшие/пустые данные, будто всё сломалось. Снимаем, как
+   только модем вернулся (pollData видит регистрацию/сигнал) или по таймауту. */
+var _modemBusyTimer = null;
+/* Плотный НЕПРОЗРАЧНЫЙ фон оверлея, зависящий от темы: иначе текст под ним
+   просвечивал (proton2025), а на bootstrap полупрозрачной плашки не было видно
+   вовсе. Тёмную/светлую тему ловим и по prefers-color-scheme, и по data-theme
+   (proton2025 штампует его на <html> и должен побеждать). */
+function _ensureModemBusyCss() {
+	if (document.getElementById('modem-busy-css')) { return; }
+	var css =
+		/* база / bootstrap: непрозрачный фон + скругление как у кнопок */
+		'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
+		'display:flex;align-items:center;justify-content:center;text-align:center;' +
+		'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
+		'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
+		/* proton2025 (ставит data-theme на <html>): как попапы меню - полупрозрачный
+		   + блюр, скругление наследуем от карточки блока */
+		':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
+		'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
+		':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
+		':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}';
+	document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
+}
+function setModemBusy(msg) {
+	var block = document.querySelector('.cbi-section.tginfo');
+	if (!block) { return; }
+	_ensureModemBusyCss();
+	var txt = msg || _('The modem is restarting…');
+	var ov = document.getElementById('modem-busy-ov');
+	if (!ov) {
+		block.style.position = 'relative';
+		ov = E('div', { 'id': 'modem-busy-ov' }, [
+			E('span', { 'class': 'spinning', 'style': 'font-weight:600;' }, txt)
+		]);
+		block.appendChild(ov);
+	} else {
+		ov.style.display = 'flex';
+		var s = ov.querySelector('.spinning'); if (s) { s.textContent = txt; }
+	}
+	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); }
+	_modemBusyTimer = window.setTimeout(clearModemBusy, 120000);   // страховка
+}
+function clearModemBusy() {
+	var ov = document.getElementById('modem-busy-ov');
+	if (ov) { ov.style.display = 'none'; }
+	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); _modemBusyTimer = null; }
+}
+function modemBusyActive() {
+	var ov = document.getElementById('modem-busy-ov');
+	return !!(ov && ov.style.display !== 'none');
+}
+
 /* Переключатель SIM-слотов в шапке (над температурой). Кнопки появляются,
    только если у активного модема >= 2 слотов: AT+GTDUALSIM (Fibocom) или
    mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
@@ -568,6 +622,11 @@ function loadSimSlots() {
 					fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
 						ui.hideModal();
 						var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
+						/* Слот переключён -> модем в ребут (переэнумерация USB, десятки
+						   секунд). Накрываем блок «Модем» спиннером, чтобы старые данные
+						   не выглядели как поломка; снимется, когда модем вернётся
+						   (pollData) или по таймауту. */
+						if (ok) { setModemBusy(_('The modem is restarting after the SIM switch…')); }
 						if (ui.addTimeLimitedNotification) {
 							ui.addTimeLimitedNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), 6000, ok ? 'info' : 'error');
 						} else {
@@ -1919,6 +1978,15 @@ simDialog: baseclass.extend({
 				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', 'json'))
 					.then(function(res) {
 					var json = JSON.parse(res);
+
+					// Модем вернулся после ребута (смена слота) -> снимаем оверлей
+					// «Модем перезагружается»: признак живого модема - регистрация в
+					// сети или ненулевой сигнал.
+					if (modemBusyActive()) {
+						var _reg = String(json.registration || '');
+						var _sig = parseInt(json.signal, 10);
+						if (_reg === '1' || (!isNaN(_sig) && _sig > 0)) { clearModemBusy(); }
+					}
 
 				/* ЗДЕСЬ БЫЛ «анти-скачок скролла»: если пользователь у низа страницы,
 				   после правок DOM вернуть его к низу (scrollTop = scrollHeight).

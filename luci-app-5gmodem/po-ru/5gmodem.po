@@ -2491,3 +2491,36 @@ msgstr "После смены eSIM-профиля оператор измени�
 
 msgid "Open Modem Settings"
 msgstr "Открыть настройки модема"
+
+msgid "The modem is restarting…"
+msgstr "Модем перезагружается…"
+
+msgid "The modem is restarting after the SIM switch…"
+msgstr "Модем перезагружается после смены SIM…"
+
+msgid "Download transport (ES9+)"
+msgstr "Транспорт загрузки (ES9+)"
+
+msgid "Auto (recommended)"
+msgstr "Автоматически (рекомендуется)"
+
+msgid "wget / OpenSSL bridge"
+msgstr "Мост wget / OpenSSL"
+
+msgid "lpac built-in curl"
+msgstr "Встроенный curl из lpac"
+
+msgid "Download transport saved."
+msgstr "Транспорт загрузки сохранён."
+
+msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
+msgstr "Как lpac обращается к серверу оператора (SM-DP+). «Автоматически» использует мост, если он доступен. Мост открывает доступ к серверам SM-DP+ с сертификатами GSMA CI, которые встроенный curl в сборках с mbedTLS не осиливает, и вдобавок проверяет сертификат."
+
+msgid "Country lookup"
+msgstr "Определение страны"
+
+msgid "Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder."
+msgstr "Используется, только если сервис выше вернул IP без страны: тогда флаг определяется вторым запросом. Подставляйте адрес через {ip}."
+
+msgid "Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
+msgstr "Сервис, возвращающий публичный IP. По умолчанию ip-api.com — он отдаёт и страну, которая показывается флагом рядом с адресом. Выберите готовый или укажите свой; при отказе опрашивается резервный сервис, и лишь затем показывается локальный адрес аплинка (без флага)."

@@ -189,13 +189,60 @@ return view.extend({
 				'.esim-dl input{flex:1 1 22em;min-width:14em}' +
 				'.esim-actions{margin-top:10px}' +
 				'#esim-profiles .btn{padding:1px 8px;font-size:85%;margin-left:4px}' +
-				'#esim-profiles td,#esim-profiles th{white-space:nowrap}'
+				'#esim-profiles td,#esim-profiles th{white-space:nowrap}' +
+				'.esim-set{margin-top:18px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px}' +
+				'.esim-set>summary{cursor:pointer;font-size:92%;opacity:.75;user-select:none}' +
+				'.esim-set>summary:hover{opacity:1}' +
+				'.esim-set .cbi-value{margin-top:10px}'
 			]),
 			E('div', { 'class': 'cbi-section' }, [
 				E('h3', [ 'eSIM' ]),
 				E('div', { 'class': 'cbi-section-descr' },
 					_('Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete.')),
 				body,
+				this.renderSettings(),
+			]),
+		]);
+	},
+
+	// Свёрнутые настройки: выбор транспорта ES9+.
+	// Зачем выбор: lpac ходит к SM-DP+ своим curl, а libcurl в OpenWrt обычно
+	// собран с mbedTLS, который спотыкается о critical-расширения в сертификатах
+	// GSMA CI - часть SM-DP+ (напр. rsp-eu.redteamobile.com) тогда недоступна
+	// вовсе ("HTTP transport failed" на первом же шаге). Мост гоняет ES9+ через
+	// wget/OpenSSL, которому такие цепочки по зубам, и вдобавок реально проверяет
+	// сертификат (штатный curl-бэкенд lpac проверку отключает).
+	renderSettings: function() {
+		var cur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_http') || 'auto');
+		var sel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-http-sel' }, [
+			E('option', { 'value': 'auto'   }, [ _('Auto (recommended)') ]),
+			E('option', { 'value': 'bridge' }, [ _('wget / OpenSSL bridge') ]),
+			E('option', { 'value': 'curl'   }, [ _('lpac built-in curl') ]),
+		]);
+		sel.value = cur;
+
+		return E('details', { 'class': 'esim-set' }, [
+			E('summary', {}, [ _('Settings') ]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('Download transport (ES9+)') ]),
+				E('div', { 'class': 'cbi-value-field' }, [
+					sel,
+					E('button', {
+						'class': 'btn cbi-button cbi-button-save',
+						'style': 'margin-left:8px',
+						'click': ui.createHandlerFn(this, function() {
+							uci.set('5gmodem', '@5gmodem[0]', 'esim_http', sel.value);
+							return uci.save().then(function() {
+								return uci.apply();
+							}).then(function() {
+								ui.addNotification(null,
+									E('p', _('Download transport saved.')), 'info');
+							});
+						})
+					}, [ _('Save') ]),
+					E('div', { 'class': 'cbi-value-description' },
+						_('How lpac talks to the operator server (SM-DP+). "Auto" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate.')),
+				]),
 			]),
 		]);
 	},

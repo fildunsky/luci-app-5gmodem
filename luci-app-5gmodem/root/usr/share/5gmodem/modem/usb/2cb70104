@@ -23,8 +23,8 @@ if [ "x$MODE" = "xLTE" ]; then
 		fi
 		T=$(echo "$T1" | awk -F, '{print $11}')
 		if [ -n "$T" ]; then
-			if [ $T -ge -100 ] || [ $T -le 100 ]; then
-				T=$(echo "$T" | awk -F, '{printf "%0.1f", $T/2}')
+			if [ "$T" -ge -100 ] && [ "$T" -le 100 ]; then
+				T=$(echo "$T" | awk '{printf "%0.1f", $1/2}')
 			fi
 		fi
 		T=$(echo "$T1" | awk -F, '{print $13}')
