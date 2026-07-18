@@ -26,21 +26,32 @@
 #    блок «Информация о соте». Здесь ровно то же расположение, только рамками
 #    псевдографики. Переходя из браузера в терминал, глаз ищет данные там же.
 
-INTERVAL="${1:-5}"
-case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=5 ;; esac
+# Числовые аргументы: первый - интервал опроса, второй - ширина. Нечисловые
+# (например ru) пропускаем, поэтому порядок значения не имеет.
+INTERVAL=""; TWARG=""
+for _a in "$@"; do
+	case "$_a" in
+		''|*[!0-9]*) continue ;;
+	esac
+	if [ -z "$INTERVAL" ]; then INTERVAL="$_a"; else [ -z "$TWARG" ] && TWARG="$_a"; fi
+done
+[ -n "$INTERVAL" ] || INTERVAL=5
 [ "$INTERVAL" -lt 1 ] && INTERVAL=1
 
 # --- ЯЗЫК --------------------------------------------------------------------
 #
-# По умолчанию АНГЛИЙСКИЙ: 5gtop работает и там, где ни LuCI, ни языковых
-# пакетов нет вовсе (голый роутер, ssh). Русский включается, только когда язык
-# задан явно - в настройках LuCI (luci.main.lang) или переменными окружения
-# LANG/LC_ALL. Своего каталога переводов у терминальной утилиты нет и не нужно:
-# строк меньше полусотни, и таблица ниже дешевле любого gettext.
-_lang=$(uci -q get luci.main.lang 2>/dev/null)
-case "$_lang" in
-	''|auto) _lang="${LC_ALL:-${LANG:-en}}" ;;
-esac
+# АНГЛИЙСКИЙ ПО УМОЛЧАНИЮ, всегда. Русский - только явным аргументом:
+#     5gtop ru        5gtop ru 3        5gtop 3 100 ru
+# Ни LuCI, ни LANG не спрашиваем: утилита работает и на голом роутере, где
+# ничего этого нет, а угадывание давало разный язык на разных машинах при
+# одинаковой команде. Аргумент ищем среди ВСЕХ, чтобы не зависеть от порядка.
+_lang="en"
+for _a in "$@"; do
+	case "$_a" in
+		ru|RU) _lang="ru" ;;
+		en|EN) _lang="en" ;;
+	esac
+done
 
 T_MODEM="Modem";            T_MODEL="Model"
 T_OPERATOR="Operator";      T_LEVEL="Level"
@@ -67,6 +78,9 @@ T_K_QUIT="quit";            T_K_REFRESH="refresh"
 T_K_TEST="test";            T_K_PRI="priority";   T_K_MODEM="modem"
 T_ERR_NOSRC="not found";    T_ERR_NOJF="jsonfilter required"
 T_TAB_NET="Network";        T_TAB_CELL="Cell info"
+T_TAB_MODEM="Modem";        T_TAB_SMS="SMS"
+T_NOSMS="no messages";      T_SMSLOAD="reading messages..."
+T_PORTS="Ports";            T_STORAGE="Storage"
 T_K_TAB="tab";              T_SIM="SIM"
 T_K_WIDTH="width"
 T_IMEI="IMEI";              T_IMSI="IMSI";        T_ICCID="ICCID"
@@ -77,7 +91,7 @@ T_CQI="CQI";                T_UECAT="UE cat.";    T_VOLTE="VoLTE"
 T_CSQ="CSQ";                T_ANT="Antenna ports";  T_PORT="Port"
 
 case "$_lang" in
-	ru*|RU*)
+	ru)
 		T_MODEM="Модем";            T_MODEL="Модель"
 		T_OPERATOR="Оператор";      T_LEVEL="Уровень"
 		T_PHONE="Телефон";          T_TEMP="Темп."
@@ -103,6 +117,9 @@ case "$_lang" in
 		T_K_TEST="тест";            T_K_PRI="приоритет";  T_K_MODEM="модем"
 		T_ERR_NOSRC="не найден";    T_ERR_NOJF="нужен jsonfilter"
 		T_TAB_NET="Сеть";           T_TAB_CELL="Сота"
+		T_TAB_MODEM="Модем";        T_TAB_SMS="SMS"
+		T_NOSMS="нет сообщений";    T_SMSLOAD="читаю сообщения..."
+		T_PORTS="Порты";            T_STORAGE="Хранилище"
 		T_K_TAB="вкладка";          T_SIM="SIM"
 		T_K_WIDTH="ширина"
 		T_IMEI="IMEI";              T_IMSI="IMSI";        T_ICCID="ICCID"
@@ -127,12 +144,15 @@ DATA="/tmp/5gtop.$$"
 # файл, куда пишет ход теста speedtest.sh (тот же, что читает веб-страница)
 STFILE="/tmp/5gmodem_speedtest.json"
 NPFILE="$DATA.np"
+SMSFILE="$DATA.sms"
+SMSBUSY="$DATA.smsbusy"
 FETCHING="$DATA.busy"
 W=78            # ширина рамок
 ROW_END=39
 STTY_SAVE=$(stty -g 2>/dev/null)
 cleanup() {
-	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp"
+	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp" \
+		"$SMSFILE" "$SMSFILE.tmp" "$SMSBUSY"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -314,7 +334,7 @@ frame() {
 # Раздел хранится в TAB (индекс в TAB_IDS). Отрисовка разведена по функциям
 # frame_<id> / draw_<id>, поэтому добавить новый раздел - это добавить id в
 # список и написать две функции; ни цикл, ни обработка клавиш не меняются.
-TAB_IDS="net cell"
+TAB_IDS="net cell modem sms"
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
 # вёрстки без нажатий, и просто чтобы открывать сразу нужный экран.
 case "${TAB:-1}" in
@@ -324,8 +344,10 @@ esac
 
 tab_name() {
 	case "$1" in
-		net)  printf '%s' "$T_TAB_NET" ;;
-		cell) printf '%s' "$T_TAB_CELL" ;;
+		net)   printf '%s' "$T_TAB_NET" ;;
+		cell)  printf '%s' "$T_TAB_CELL" ;;
+		modem) printf '%s' "$T_TAB_MODEM" ;;
+		sms)   printf '%s' "$T_TAB_SMS" ;;
 		*)    printf '%s' "$1" ;;
 	esac
 }
@@ -490,6 +512,92 @@ draw_cell() {
 	while [ "$_i" -lt 3 ]; do
 		at $((_row+1+_i)) 2 "$(pad '' 40)"
 		_i=$((_i + 1))
+	done
+}
+
+# ── РАЗДЕЛ «МОДЕМ». Всё, что описывает САМ модуль и его подключение: то, что в
+#    вебе разбросано по шапке и подсказкам. Данные берём из того же снимка, что
+#    и остальные вкладки, - лишних обращений к порту нет.
+frame_modem() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	bar_modems
+	bar_tabs
+	box_top "$T_MODEM"
+	box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top "$T_SIM"
+	box_mid; box_mid; box_mid
+	box_end
+	box_top "$T_PORTS"
+	box_mid; box_mid; box_mid
+	box_end
+	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   +/- $T_K_WIDTH%s%s\n" "$C_DIM" "$MKEY" "$C_RST"
+}
+
+draw_modem() {
+	_w=$((W - 26))
+	lab 5  2 "$T_MODEL"  14 "$(fit "$(v modem)" $_w)" $_w
+	lab 6  2 "$T_FW"     14 "$(fit "$(v firmware)" $_w)" $_w
+	lab 7  2 "$T_IMEI"   14 "$(fit "$(v imei)" $_w)" $_w
+	lab 8  2 "$T_TEMP"   14 "$(fit "$(v mtemp)" $_w)" $_w
+	lab 9  2 "$T_PROTO"  14 "$(fit "$(v protocol)" $_w)" $_w
+
+	lab 12 2 "$T_SIM"    14 "$(fit "$(v simslot)" $_w)" $_w
+	lab 13 2 "$T_IMSI"   14 "$(fit "$(v imsi)" $_w)" $_w
+	lab 14 2 "$T_ICCID"  14 "$(fit "$(v iccid)" $_w)" $_w
+
+	# Порты и хранилище живут в конфиге, а не в снимке: читаем uci напрямую -
+	# это дёшево и не трогает модем.
+	lab 17 2 'AT'          14 "$(fit "$(v cport)" $_w)" $_w
+	lab 18 2 'SMS'         14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].readport)" $_w)" $_w
+	lab 19 2 "$T_STORAGE"  14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" $_w)" $_w
+}
+
+# ── РАЗДЕЛ «SMS». Список входящих, как на вкладке «Входящие» в вебе: отправитель
+#    и время в строке-заголовке, текст под ней. Только чтение - ввод текста в
+#    этом цикле сделать нельзя, для отправки есть веб-страница.
+SMS_ROWS=9
+
+frame_sms() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	bar_modems
+	bar_tabs
+	box_top "$T_TAB_SMS"
+	_i=0
+	while [ "$_i" -lt "$SMS_ROWS" ]; do box_mid; _i=$((_i + 1)); done
+	box_end
+	printf "\n %sq $T_K_QUIT   r $T_K_REFRESH   t $T_K_TAB   +/- $T_K_WIDTH%s%s\n" "$C_DIM" "$MKEY" "$C_RST"
+}
+
+draw_sms() {
+	_r=5
+	if [ ! -s "$SMSFILE" ]; then
+		at $_r 4 "${C_DIM}$(fit "$T_SMSLOAD" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+	else
+		_n=0
+		# по два сообщения на четыре строки: шапка + текст + пустая
+		while [ "$_n" -lt 4 ]; do
+			_sn=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].sender" 2>/dev/null)
+			[ -n "$_sn" ] || break
+			_ts=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].timestamp" 2>/dev/null)
+			_tx=$(jsonfilter -i "$SMSFILE" -e "@.msg[$_n].content" 2>/dev/null | tr '\n' ' ')
+			[ "$_r" -gt $((4 + SMS_ROWS - 1)) ] && break
+			at $_r 4 "${C_B}$(fit "$_sn" 24)${C_RST}${C_DIM}$(fit "$_ts" $((W - 32)))${C_RST}"
+			_r=$((_r + 1))
+			[ "$_r" -gt $((4 + SMS_ROWS)) ] && break
+			at $_r 4 "$(fit "$_tx" $((W - 6)))"
+			_r=$((_r + 2))
+			_n=$((_n + 1))
+		done
+		[ "$_n" = 0 ] && { at 5 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
+	fi
+	# гасим остаток блока, иначе от прошлого кадра останутся хвосты
+	while [ "$_r" -le $((4 + SMS_ROWS)) ]; do
+		at $_r 4 "$(fit '' $((W - 6)))"
+		_r=$((_r + 1))
 	done
 }
 
@@ -799,7 +907,7 @@ term_width() {
 # Нужно и для узких терминалов, где автоопределение не срабатывает (не всякий
 # терминал отвечает на запрос позиции курсора), и просто чтобы посмотреть, как
 # всё ляжет на мобильном экране, не подключаясь с телефона.
-TW="$2"
+TW="$TWARG"
 [ -n "$TW" ] || TW="$COLS"
 case "$TW" in ''|*[!0-9]*) TW=$(term_width) ;; esac
 # term_width всегда возвращает число, но подстрахуемся: любое НЕ-число здесь
@@ -822,6 +930,22 @@ apply_width() {
 }
 apply_width
 [ "$W" -lt 28 ] && W=28
+
+# Чтение входящих. ОТДЕЛЬНО от fetch(): sms_tool на части модемов отвечает
+# секунды, и держать этим секундный цикл отрисовки нельзя. Зовём только когда
+# открыта вкладка SMS - на других она не стоит ни одного обращения к порту.
+fetch_sms() {
+	[ -f "$SMSBUSY" ] && return
+	( : > "$SMSBUSY"
+	  _p=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
+	  _s=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
+	  if [ -n "$_p" ] && [ -e "$_p" ]; then
+	  	# -j даёт JSON, тот же формат, что читает веб-страница
+	  	sms_tool -s "${_s:-ME}" -d "$_p" -f '%Y-%m-%d %H:%M' -j recv > "$SMSFILE.tmp" 2>/dev/null
+	  	[ -s "$SMSFILE.tmp" ] && mv "$SMSFILE.tmp" "$SMSFILE"
+	  fi
+	  rm -f "$SMSBUSY" ) >/dev/null 2>&1 </dev/null &
+}
 
 fetch() {
 	[ -f "$FETCHING" ] && return
@@ -885,20 +1009,25 @@ fi
 # раздел добавляется без правки цикла.
 render_frame() {
 	case "$(tab_id "$TAB")" in
-		cell) [ "$NARROW" = 1 ] && frame || frame_cell ;;
-		*)    frame ;;
+		cell)  [ "$NARROW" = 1 ] && frame || frame_cell ;;
+		modem) frame_modem ;;
+		sms)   frame_sms; fetch_sms ;;
+		*)     frame ;;
 	esac
 }
 render_draw() {
 	case "$(tab_id "$TAB")" in
-		cell) [ "$NARROW" = 1 ] && draw || draw_cell ;;
-		*)    draw ;;
+		cell)  [ "$NARROW" = 1 ] && draw || draw_cell ;;
+		modem) draw_modem ;;
+		sms)   draw_sms ;;
+		*)     draw ;;
 	esac
 }
 
 render_frame
 fetch
 _since=0
+_tick=0
 while :; do
 	[ -f "$DATA" ] && J=$(cat "$DATA" 2>/dev/null)
 	render_draw
@@ -915,7 +1044,7 @@ while :; do
 		read -t 1 -n 1 _k 2>/dev/null
 		case "$_k" in
 			q|Q) cleanup ;;
-			r|R) fetch; _since=0 ;;
+			r|R) fetch; [ "$(tab_id "$TAB")" = "sms" ] && fetch_sms; _since=0 ;;
 			s|S) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
 			1|2|3) set_pri "$_k" ;;
 			m|M) switch_modem; render_frame; _since=0 ;;
@@ -936,5 +1065,12 @@ while :; do
 	fi
 
 	_since=$((_since + 1))
-	[ "$_since" -ge "$INTERVAL" ] && { fetch; _since=0; }
+	if [ "$_since" -ge "$INTERVAL" ]; then
+		fetch
+		# SMS перечитываем реже: чтение дороже опроса метрик и новые сообщения
+		# приходят не каждую секунду.
+		[ "$(tab_id "$TAB")" = "sms" ] && [ "$((_tick % 6))" = 0 ] && fetch_sms
+		_since=0
+	fi
+	_tick=$((_tick + 1))
 done
