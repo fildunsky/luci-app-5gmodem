@@ -38,10 +38,13 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           FEEDNAME: modem
-          # Оба варианта одной сборкой: полный и облегчённый (см. Makefile).
-          # Раньше lite собирался вручную через apk mkpkg и однажды уехал в
-          # релиз без зависимостей - собираем его тем же путём, что основной.
-          PACKAGES: luci-app-5gmodem luci-app-5gmodem-lite
+          # ТОЛЬКО исходный пакет. Облегчённый вариант (luci-app-5gmodem-lite)
+          # объявлен в том же Makefile и собирается вместе с основным сам -
+          # отдельно его сюда писать НЕЛЬЗЯ: SDK принимает здесь имена каталогов
+          # исходников и на "…-lite" отвечает
+          #   No rule to make target 'package/luci-app-5gmodem-lite/download'.
+          # Готовые файлы обоих вариантов забирает шаг Collect по маске *5gmodem*.
+          PACKAGES: luci-app-5gmodem
           NO_REFRESH_CHECK: 1
           # write per-package build logs to logs/ so a failure is diagnosable,
           # and keep memory in check while heavy deps compile on the runner
