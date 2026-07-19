@@ -542,16 +542,25 @@ return view.extend({
 			card.appendChild(E('div', { 'class': 'mprof-foot' }, [
 				/* Без заголовка: "IMEI 3506…" и USB-путь и так читаются как
 				   опознание железа, а лишняя строка только съедала место. */
-				E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, [
-					p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
-					p.path,
+				/* ЗДЕСЬ БЫЛ БАГ: вложенный массив в списке детей E() не
+				   разворачивается, а приводится к строке - в карточке значилось
+				   "1-1.3[object HTMLBRElement],http://...". Собираем плоско. */
+				(function() {
+					var kids = [
+						p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
+						p.path
+					];
 					/* Такой модем настраивается в своём веб-интерфейсе - даём туда
 					   прямую ссылку, иначе адрес пришлось бы искать вручную. */
-					(isHilink && p.webaddr) ? [ E('br'), E('a', {
-						'href': 'http://' + p.webaddr, 'target': '_blank',
-						'rel': 'noreferrer'
-					}, p.webaddr) ] : ''
-				]),
+					if (isHilink && p.webaddr) {
+						kids.push(E('br'));
+						kids.push(E('a', {
+							'href': 'http://' + p.webaddr, 'target': '_blank',
+							'rel': 'noreferrer'
+						}, p.webaddr));
+					}
+					return E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, kids);
+				})(),
 				E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
 					'style': 'margin-left:0; flex:0 0 auto',

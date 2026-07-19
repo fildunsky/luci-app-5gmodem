@@ -153,6 +153,22 @@ nettype_name() {
 	esac
 }
 
+# Байты в человекочитаемый вид - теми же единицами, что показывает ifconfig
+# (MiB/GiB), чтобы у двух классов модемов трафик выглядел одинаково.
+_human() {
+	_b="$1"
+	case "$_b" in ''|*[!0-9]*) echo "-"; return ;; esac
+	if   [ "$_b" -ge 1073741824 ]; then
+		printf '%d.%d GiB\n' $(( _b / 1073741824 )) $(( _b % 1073741824 * 10 / 1073741824 ))
+	elif [ "$_b" -ge 1048576 ]; then
+		printf '%d.%d MiB\n' $(( _b / 1048576 )) $(( _b % 1048576 * 10 / 1048576 ))
+	elif [ "$_b" -ge 1024 ]; then
+		printf '%d.%d KiB\n' $(( _b / 1024 )) $(( _b % 1024 * 10 / 1024 ))
+	else
+		printf '%d B\n' "$_b"
+	fi
+}
+
 # ConnectionStatus -> есть ли соединение. 901 = подключено.
 conn_up() { [ "$1" = "901" ]; }
 
@@ -254,7 +270,28 @@ metrics_json() {
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
 	printf '"pci":"%s","cid_hex":"%s",' "$_pci" "$_cid"
 	printf '"ipaddr":"%s",' "$_wanip"
-	printf '"conn_time":"%s","rx":"%s","tx":"%s",' "$_ctime" "$_down" "$_up"
+	# ФОРМАТ КАК У ОСНОВНОГО ПУТИ, иначе страница показывает сырые числа.
+	# Он отдаёт conn_time строкой "0d, 00:02:59", conn_time_sec - секундами,
+	# а трафик - человекочитаемым "112.9 MiB" (берёт готовую строку у ifconfig).
+	# Наблюдалось: у HiLink стояли "3462" и "4254912" - время не читалось, а
+	# байты выглядели как случайное число.
+	_ct_str="-"
+	if [ -n "$_ctime" ] && [ "$_ctime" -ge 0 ] 2>/dev/null; then
+		_ct_str=$(printf "%dd, %02d:%02d:%02d" \
+			$(( _ctime / 86400 )) $(( _ctime / 3600 % 24 )) \
+			$(( _ctime / 60 % 60 )) $(( _ctime % 60 )))
+	fi
+	printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "${_ctime:-0}"
+	printf '"rx":"%s","tx":"%s",' "$(_human "$_down")" "$(_human "$_up")"
+	# CSQ у API нет, но он однозначно выводится из RSSI по таблице 3GPP 27.007:
+	# 0 = -113 dBm, шаг 2 dBm, 31 = -51 dBm. Это пересчёт, а не выдуманное число.
+	_csq=""
+	if [ -n "$_rssi" ]; then
+		_csq=$(( ( _rssi + 113 ) / 2 ))
+		[ "$_csq" -lt 0 ] && _csq=0
+		[ "$_csq" -gt 31 ] && _csq=31
+	fi
+	printf '"csq":"%s",' "$_csq"
 	printf '"sim_status":"%s","conn_status":"%s"' "$_sim" "$_cs"
 	printf '}\n'
 }
@@ -329,6 +366,106 @@ sms_delete() {   # $1 - индекс, $2 - usb-путь
 	esac
 }
 
+# --- USSD --------------------------------------------------------------------
+#
+# У этого класса модемов USSD работает через API, а не AT: в /api/global/
+# module-switch у проверенного E3372h стоит ussd_enabled=1.
+#
+# Порядок такой: отправить запрос, дождаться готовности ответа (модем отвечает
+# не мгновенно - сеть думает секунды), забрать ответ, закрыть сессию. Без
+# закрытия следующий запрос упрётся в «сессия занята».
+hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
+	_code="$1"
+	[ -n "$_code" ] || { echo '{"error":"no code"}'; return 1; }
+
+	# Незакрытая сессия с прошлого раза - закрываем, иначе отправка не пройдёт.
+	api_post /api/ussd/release "" "$2" >/dev/null 2>&1
+
+	_r=$(api_post /api/ussd/send \
+		"<content>$_code</content><codeType>CodeType</codeType><timeout></timeout>" "$2")
+	case "$_r" in
+		*'<response>OK</response>'*) ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)"; return 1 ;;
+	esac
+
+	# Ждём ответа. Пока он не готов, API отвечает кодом 111019 - это НЕ ошибка,
+	# а «ещё обрабатывается». 30 секунд: на живом МегаФоне ответ не пришёл и за
+	# это время, так что таймаут тут - штатный исход, а не поломка.
+	_n=0
+	while [ "$_n" -lt 30 ]; do
+		sleep 1
+		_g=$(api_get /api/ussd/get "$2")
+		_c=$(printf '%s' "$_g" | xval content)
+		if [ -n "$_c" ]; then
+			api_post /api/ussd/release "" "$2" >/dev/null 2>&1
+			# Экранируем то, что сломало бы JSON, и склеиваем строки: ответ
+			# оператора бывает многострочным.
+			_c=$(printf '%s' "$_c" | tr -d '\r' | tr '\n' ' ' \
+				| sed 's/\\/\\\\/g; s/"/\\"/g')
+			printf '{"success":true,"content":"%s"}\n' "$_c"
+			return 0
+		fi
+		_n=$(( _n + 1 ))
+	done
+	api_post /api/ussd/release "" "$2" >/dev/null 2>&1
+	echo '{"success":false,"error":"timeout"}'
+	return 1
+}
+
+# --- диапазоны ---------------------------------------------------------------
+#
+# Читаются и МЕНЯЮТСЯ через /api/net/net-mode. LTEBand - шестнадцатеричная
+# битовая маска: бит 0 = B1, бит 1 = B2 и так далее. Проверено на живом модеме:
+# 800C5 = B1, B3, B7, B8, B20 (1 + 4 + 64 + 128 + 524288 = 0x800C5).
+#
+# Маска 3FFFFFFF в NetworkBand означает «все» - её и ставим, когда пользователь
+# снимает ограничение, а не перечисляем диапазоны поимённо.
+_mask_to_bands() {   # $1 - hex-маска; печатает номера диапазонов через пробел
+	_m=$(printf '%d' "0x$1" 2>/dev/null) || return 1
+	_i=0; _out=""
+	while [ "$_i" -lt 32 ]; do
+		if [ $(( (_m >> _i) & 1 )) -eq 1 ]; then _out="$_out $(( _i + 1 ))"; fi
+		_i=$(( _i + 1 ))
+	done
+	echo "$_out" | xargs
+}
+
+_bands_to_mask() {   # $1 - номера через пробел; печатает hex-маску
+	_m=0
+	for _b in $1; do
+		case "$_b" in ''|*[!0-9]*) continue ;; esac
+		[ "$_b" -ge 1 ] && [ "$_b" -le 32 ] || continue
+		_m=$(( _m | (1 << (_b - 1)) ))
+	done
+	printf '%X\n' "$_m"
+}
+
+hl_getbands() {
+	_r=$(api_get /api/net/net-mode "$1")
+	_lte=$(printf '%s' "$_r" | xval LTEBand)
+	[ -n "$_lte" ] || return 1
+	# 3FFFFFFF (и подобные «все биты») - ограничения нет.
+	_mask_to_bands "$_lte"
+}
+
+hl_setbands() {   # $1 - номера диапазонов или "default", $2 - usb-путь
+	_cur=$(api_get /api/net/net-mode "$2")
+	_nm=$(printf '%s' "$_cur" | xval NetworkMode)
+	[ -n "$_nm" ] || _nm="03"
+	if [ "$1" = "default" ] || [ -z "$1" ]; then
+		_lte="7FFFFFFFFFFFFFFF"; _nb="3FFFFFFF"
+	else
+		_lte=$(_bands_to_mask "$1"); _nb="3FFFFFFF"
+		[ "$_lte" = "0" ] && return 1
+	fi
+	_r=$(api_post /api/net/net-mode \
+		"<NetworkMode>$_nm</NetworkMode><NetworkBand>$_nb</NetworkBand><LTEBand>$_lte</LTEBand>" "$2")
+	case "$_r" in
+		*'<response>OK</response>'*) echo '{"success":true}' ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
+	esac
+}
+
 # --- команды -----------------------------------------------------------------
 
 case "$1" in
@@ -353,6 +490,9 @@ case "$1" in
 	smscount)    api_get /api/sms/sms-count "$2" ;;
 	smssend)     sms_send "$2" "$3" "$4" ;;
 	smsdel)      sms_delete "$2" "$3" ;;
+	ussd)        hl_ussd "$2" "$3" ;;
+	getbands)    hl_getbands "$2" ;;
+	setbands)    hl_setbands "$2" "$3" ;;
 	*)
 		echo "usage: hilink.sh {probe|json|addr|get <ep>|connect|disconnect|reboot} [usb-path]" >&2
 		exit 1

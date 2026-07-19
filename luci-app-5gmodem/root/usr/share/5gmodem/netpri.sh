@@ -80,6 +80,19 @@ at_query() {
 # 'list' uses this so it never blocks; the cache is filled by 'refresh' in the
 # background. Cache is valid for 30 min.
 operator_cached() {
+	# HiLink-модем: имя оператора и настоящий адрес в сети берём у его API.
+	# Через AT его не спросить, а интерфейсный адрес - это адрес ЛОКАЛЬНОЙ
+	# сетевой карты модема (192.168.43.2), а не выданный оператором.
+	_np_sec=$(uci -q show 5gmodem 2>/dev/null \
+		| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$1'\?\$/\1/p" | head -1)
+	if [ -n "$_np_sec" ] && [ "$(uci -q get "5gmodem.$_np_sec.kind")" = "hilink" ]; then
+		_np_p=$(uci -q get "5gmodem.$_np_sec.path")
+		_np_j=$(/usr/share/5gmodem/hilink.sh json "$_np_p" 2>/dev/null)
+		_np_op=$(printf '%s' "$_np_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
+		[ -n "$_np_op" ] && { echo "$_np_op"; return; }
+		uci -q get "5gmodem.$_np_sec.model"
+		return
+	fi
 	# ПРИОРИТЕТ у имени от ОСНОВНОГО опроса (5gmodem.sh пишет /tmp/5gmodem_op_<iface>):
 	# только он разбирает UCS2, mccmnc.dat и MVNO. Наш operator_probe знает лишь
 	# имя СЕТИ, поэтому раньше в «Приоритете интернета» появлялся «Tele2 RU» там,
@@ -279,6 +292,16 @@ list)
 			       [ -n "$sub" ] || sub=$(uci -q get "network.$n.device")
 			       [ -n "$sub" ] || sub="$n" ;;
 		esac
+		# У HiLink адрес интерфейса - это адрес ЛОКАЛЬНОЙ сети модема
+		# (192.168.43.2), а не выданный оператором. Показываем настоящий, из API:
+		# иначе в списке у всех таких модемов стоял бы адрес их внутренней сети.
+		_np_s=$(uci -q show 5gmodem 2>/dev/null \
+			| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$n'\?\$/\1/p" | head -1)
+		if [ -n "$_np_s" ] && [ "$(uci -q get "5gmodem.$_np_s.kind")" = "hilink" ]; then
+			_np_wan=$(/usr/share/5gmodem/hilink.sh json "$(uci -q get "5gmodem.$_np_s.path")" 2>/dev/null \
+				| jsonfilter -e '@.ipaddr' 2>/dev/null)
+			[ -n "$_np_wan" ] && ip="$_np_wan"
+		fi
 		m=$(uci -q get "network.$n.metric"); [ -n "$m" ] || m=0
 		[ "$first" = 1 ] || printf ','
 		first=0

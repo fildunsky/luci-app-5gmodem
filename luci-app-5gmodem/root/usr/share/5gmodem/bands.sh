@@ -434,6 +434,36 @@ getantports() {
 }
 
 
+# --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
+# У HiLink-модема диапазоны читаются и меняются его же API (маска LTEBand в
+# /api/net/net-mode), а не AT-командами. Профилей modemband для него нет и быть
+# не может - перехватываем здесь, до выбора профиля.
+_bs_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g').kind")" = "hilink" ]; then
+	_HL=/usr/share/5gmodem/hilink.sh
+	case "$1" in
+		json)
+			_en=$("$_HL" getbands "$_bs_am" 2>/dev/null)
+			printf '{ "modem": "%s", "supported": [' \
+				"$(uci -q get "5gmodem.m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g').model")"
+			# Список поддерживаемых у этого API не спросить, поэтому показываем
+			# те, что реально включены: врать про «поддерживается» нельзя.
+			_f=1
+			for _b in $_en; do
+				[ "$_f" = 1 ] || printf ','
+				_f=0
+				printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
+			done
+			printf '], "enabled": [%s] }\n' "$(echo $_en | tr ' ' ',')"
+			exit 0 ;;
+		getbands)          "$_HL" getbands "$_bs_am"; exit 0 ;;
+		setbands)          "$_HL" setbands "$2" "$_bs_am"; exit 0 ;;
+		getsupportedbands) "$_HL" getbands "$_bs_am"; exit 0 ;;
+		# Всё остальное этот класс модемов не умеет - отвечаем честно.
+		*) echo "Unsupported"; exit 0 ;;
+	esac
+fi
+
 RES="/usr/share/5gmodem/modemband"
 
 # Multi-modem: load the band profile of the ACTIVE modem (by USB path), not of

@@ -448,7 +448,10 @@ function save_count() {
 		var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
 		var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
 
-			L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+			/* Счётчик и список берём через smsbridge.sh: у модемов без AT-портов
+			   (HiLink) они лежат в самом модеме и достаются его API. Мост решает
+			   это сам, формат на выходе прежний - разбор ниже не менялся. */
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 					.then(function(res) {
 							if (res) {
 								var total = res.substring(res.indexOf("total"));
@@ -756,7 +759,7 @@ return view.extend({
 										{
 										fs.exec_direct(smsToolBin(), [ '-d' , portDEL , 'delete' , smsnr[i] ]);
                 						smsdeleted++;
-										L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 										.then(function(res) {
 										if (res) {
 											var total = res.substring(res.indexOf("total"));
@@ -770,7 +773,7 @@ return view.extend({
 										});
 				
 										}
-										L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 										.then(function(res) {
 										if (res) {
 											var total = res.substring(res.indexOf("total"));
@@ -788,7 +791,7 @@ return view.extend({
 											var hidecount = document.getElementById('deleteinfo');
 											uci.load('sms_tool_js').then(function() {
 												var savedCount = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_count') || '';
-												L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+												L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 												.then(function(verifyRes) {
 													if (verifyRes) {
 														var verifyUsed = verifyRes.substring(17, verifyRes.indexOf("total"));
@@ -809,7 +812,7 @@ return view.extend({
 										}
 									}, 1500 * i);
 								})(i);
-										L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 										.then(function(res) {
 										if (res) {
 											var total = res.substring(res.indexOf("total"));
@@ -962,7 +965,7 @@ return view.extend({
 			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
 			return Promise.resolve();
 		}
-		return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , 'status' ]))
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 				.then(function(res) {
 					if (res) {
 							var total = res.substring(res.indexOf("total"));
@@ -978,7 +981,13 @@ return view.extend({
 							   висел прочерк из атрибута title. */
 							if (document.getElementById('msg')) { msg_bar(Math.floor(u), t); }
 
-						return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeL , '-d' , portR , '-f' , '%Y-%m-%d %H:%M' , '-j' , 'recv' , '2>/dev/null' ]))
+						/* Список берём через smsbridge.sh, а не напрямую у sms_tool:
+						   у модемов без AT-портов (HiLink) сообщения лежат в самом
+						   модеме и достаются его API. Мост решает это сам и отдаёт
+						   ТОТ ЖЕ формат {"msg":[...]}, поэтому разбор ниже не
+						   менялся. Для обычных модемов вызов уходит в sms_tool с
+						   прежними аргументами - их путь не тронут. */
+						return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'recv' , storeL , portR ]))
 							.then(function(res2) {
 								// список пришёл (или не пришёл) - индикатор снимаем в любом
 								// случае, иначе он висел бы вечно при пустом/сбойном ответе

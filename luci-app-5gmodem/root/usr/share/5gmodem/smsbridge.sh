@@ -34,6 +34,17 @@ PORT="$3"
 if [ "$(_active_kind)" = "hilink" ]; then
 	case "$BOX" in
 		sent) "$RES/hilink.sh" smsread out ;;
+		status)
+			# Страница разбирает СТРОКУ формата sms_tool: "Storage type: ME,
+			# used: N, total: M" - позиции подстрок в ней зашиты в разборе.
+			# Поэтому отдаём ровно её, а не JSON.
+			_c=$("$RES/hilink.sh" smscount 2>/dev/null | tr -d '\r')
+			_u=$(printf '%s' "$_c" | sed -n 's|.*<LocalInbox>\(.*\)</LocalInbox>.*|\1|p')
+			_m=$(printf '%s' "$_c" | sed -n 's|.*<LocalMaxInbox>\(.*\)</LocalMaxInbox>.*|\1|p')
+			[ -n "$_u" ] || _u=0
+			[ -n "$_m" ] || _m=100
+			echo "Storage type: ME, used: $_u, total: $_m"
+			;;
 		*)    "$RES/hilink.sh" smsread in ;;
 	esac
 	exit 0
@@ -49,6 +60,7 @@ fi
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$STORE" ] && set -- -s "$STORE" "$@"
 case "$BOX" in
-	sent) exec $(_smstool) "$@" recv SR 2>/dev/null ;;
-	*)    exec $(_smstool) "$@" recv 2>/dev/null ;;
+	status) exec $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status 2>/dev/null ;;
+	sent)   exec $(_smstool) "$@" recv SR 2>/dev/null ;;
+	*)      exec $(_smstool) "$@" recv 2>/dev/null ;;
 esac

@@ -1,4 +1,13 @@
 #!/bin/sh
+
+# У модема без AT-портов слотами управлять нечем: команды переключения - AT.
+# Без этой проверки страница показывала «SIM / eSIM» у односимочного Huawei,
+# потому что в секции оставались slot_type_* от прежнего модема на том же порту.
+_ss_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+if [ -n "$_ss_am" ] && [ "$(uci -q get "5gmodem.m_$(echo "$_ss_am" | sed 's/[^A-Za-z0-9]/_/g').kind")" = "hilink" ]; then
+	echo '{"slots":[],"active":""}'
+	exit 0
+fi
 #
 # Тип SIM и слоты активного модема (для окна «Меню SIM-карты»).
 #

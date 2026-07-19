@@ -506,6 +506,18 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 	uci -q set "network.$_hif.proto=dhcp"
 	uci -q set "network.$_hif.device=$_hd"
 	uci -q commit network
+	# ЗОНА ФАЕРВОЛА. Без неё интерфейс остаётся «серым»: не в wan, значит нет ни
+	# NAT, ни разрешающих правил - клиенты в интернет не выходят, хотя у самого
+	# роутера связь есть. Добавляем в ту же зону, где остальные модемы.
+	_hz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	if [ -n "$_hz" ]; then
+		case " $(uci -q get "firewall.$_hz.network") " in
+			*" $_hif "*) ;;
+			*) uci -q add_list "firewall.$_hz.network=$_hif"
+			   uci -q commit firewall
+			   logger -t 5gmodem "hilink: $_hif добавлен в зону wan" ;;
+		esac
+	fi
 	uci -q set "$CFG.$_hsec.network=$_hif"
 	uci -q set "$CFG.$_hsec.iface_proto=dhcp"
 	uci -q commit "$CFG"
