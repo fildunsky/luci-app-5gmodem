@@ -75,60 +75,6 @@ highlighted letter in each tab name switches to it, `Tab` cycles modems in dual
 modem setups, `t` runs the speed test, `r` refreshes, `q` quits. The layout
 follows the terminal width and falls back to a narrow mode on small screens.
 
-## What's new
-
-### 1.5.3
-- **USB sticks with no AT ports** (Huawei E3372 and relatives) are supported — metrics, SMS, bands and network mode over the stick's own HTTP API, plus automatic switching into the mode where it does expose serial ports. See *USB sticks with no AT ports* above.
-- **Network mode buttons** (Auto / 2G / 3G / 4G) for Huawei, alongside the band toggles.
-- **Saved modem profiles** — a card per modem the app has ever seen: interface, protocol, APN, IMEI, USB path. Deleting one removes its network interface too, unless another profile still uses it. A stale interface left behind by an unplugged modem is not harmless: one of them kept claiming a device from the modem that was actually in use.
-- **ModemManager is stopped when no *connected* modem needs it.** It used to run for a modem that had been unplugged, and on startup it grabs every modem it can see — including ones explicitly hidden from it, which is how a working FM350 got switched off mid-session.
-- **A modem short of power is named as such.** Such a modem still answers AT commands while its data interface never comes up, which looks like a software fault; the page now says what it is and suggests a powered hub.
-
-### 1.5.2
-- **Cell lock for FM350** (`AT+EMMCHLCK`) and **5G on/off** (`AT+E5GOPT`). The lock survives a modem reboot but the modem reports it as absent — the app remembers your choice and says so, instead of showing "not locked" while the modem sits on the locked cell.
-- **Connection is restored after a radio restart.** Changing bands or the cell lock takes the modem through airplane mode, after which it re-registers on its own but the PDP context stays empty and the interface stays down — with no hint as to why.
-- **USB driver table in one place.** `05c6:90d6` was being bound in two handlers with different drivers, and Compal ended up with no working AT port at all. `option1` is now used only for `05c6:9025`.
-- **APN for MVNOs is picked by the code in the SIM**, not by the code of the network it registered on: T-Mobile RU reports Tele2's 250-20 while its own is 250-62, so it got Tele2's APN. Name matching never worked for Cyrillic at all — busybox `tr` walks bytes, not characters.
-- **Interface protocol is checked against the driver** of its control node: Compal inherited `proto=qmi` from a Telit that used to sit in that slot, and never came up.
-- **Fixes**: LED services were shipped without the execute bit and so never started; `autosetup` configures every connected modem instead of the first one; `5gtop` lists only modems that are actually on the bus.
-
-### 1.5.1
-- **Signal level on the case LEDs** (Cudy LT300 and any router exposing `white:signal1..3`). Enabled by default there, with a choice of which value drives them — RSRP, RSRQ, SINR or percent. Thresholds match the colours on the Network page, so three LEDs and a green reading mean the same thing. The modem is never polled for this: the LEDs read the same snapshot the pages do.
-- **Saving Modem Settings no longer wipes the ports.** `network`, `device` and `at_port` are hidden while auto-detect is on, and LuCI drops config options whose dependencies are unmet — so one Save could erase values that the *backend* had written, leaving the app pointing at a dead port with no metrics at all. Those fields, and eleven more in the SMS settings (SMTP credentials among them), now survive.
-- **Modem Settings opens immediately.** It used to wait for a full AT poll — eight seconds on an LT300 — before drawing anything. The page now renders at once and fills the modem details from the cached snapshot.
-- **Two identical modems** (same VID:PID, same model) get distinguishable tabs — the USB path is appended only where names collide. Swapping them between ports is now detected by IMEI and reported, instead of silently leaving the previous modem's interface and APN bound to that slot. Nothing is deleted automatically: the page explains what happened and leaves the decision to you.
-- **USSD tells you why it is unavailable.** Besides modems whose firmware has no SS support, there is now a live check for a network that registered the SIM for *SMS only* (`CREG 6/7`) — the modem supports USSD, the network simply does not provide it right now.
-- **Speed test says what is missing** instead of failing silently: it needs `curl`, which is not bundled (libcurl is noticeable on 8 MB routers).
-- **`5gtop`**: USSD and AT console tabs with line input, eSIM profile list and download, a SIM slot switcher, a Cell tab that no longer falls back to the Network view on narrow terminals, and per-tab hotkeys highlighted inside their own names. Multipart SMS are merged correctly (a trailing newline used to be turned into a space, splitting words across parts), incomplete messages are marked `[3/5]` — a full SIM simply cannot store the tail — and the reader is six times faster: one `jsonfilter` call per message instead of six.
-- **Fixes**: the eSIM menu tab no longer flickers on every page load; the `wwan6` IPv6 twin is no longer mistaken for another modem's interface; `resolve` no longer collapses the SMS/USSD ports back onto the metrics port; a stray brace in the package postinst aborted it halfway, so the cache-busting `touch` it ends with had never actually run.
-
-### 1.5.0
-- **Inbox rebuilt as message cards.** The table is gone: each SMS is a rounded card styled exactly like the Internet-priority and speed-test buttons — sender in bold on the left, date and time small on the right, text below. Selection is a click on the card; the checkboxes are gone. Actions sit under the list, and *Forward* / *Delete* appear only when something is selected.
-- **Two modems no longer step on each other.** The metrics snapshot in `/tmp` was shared by every reader and not tied to any modem, so right after a switch (or a hotplug event) the page could show the *previous* modem — and the poll could write its model into the new modem's config, producing names like "Telit Fibocom FM350-GL". The snapshot now carries the owning modem's USB path and a foreign snapshot is treated as absent.
-- **SMS reads no longer fail at random.** The inbox and the metrics poll shared one AT port; `sms_tool` opens the port per call, so a read that landed during a poll came back empty (measured: 2 of 5 consecutive reads). Modems that expose several AT ports now get a dedicated one for SMS/USSD.
-- **A newly plugged modem is set up on its own.** The auto-setup guard was global — if *any* modem had a working interface, a second one was never configured. It is per-modem now, and an interface left over from a different modem in the same USB port is rebuilt instead of adopted with the old modem's protocol and device.
-- **Modem tabs.** Always visible (a single modem gets a tab too), drawn from the first frame using cached labels so the page no longer jumps while the list loads, and a hotplugged modem shows up **without a page reload** — the bar watches the list cache that the hotplug hook already maintains, so idle cost is a file read rather than two shell calls.
-- **No more phantom "unsaved changes".** Pages wrote the message counter, ports and storage choice through LuCI's session staging, so simply opening the inbox when a new SMS had arrived raised the *Apply* banner. These writes go straight to the config now.
-- **`5gtop` v2** — **English by default** (Russian only when the language is explicitly set, so it works on a bare router without LuCI), a tab bar and a modem bar mirroring the web UI, a new **Cell** tab with the full web metric set (LAC/TAC/CID, eNB, path loss, TX power, CQI, UE category, carrier aggregation table, antenna ports), live width adjustment with `+`/`-`, and terminal-theme backgrounds no longer painted over with black rectangles. The `m` key actually switches modems now — it called a command that did not exist.
-- **USSD** — modems verified not to support it (Fibocom FM350-GL, Telit LM960A18: data-only modules whose firmware advertises `+CUSD` but never answers) now say so on the tab instead of leaving the user with a hung page.
-- **Telit 3G bands** — the combination list is ordered by band count and frequency, and each label reads low-to-high (`850 + 1900 + 2100`) instead of the vendor's inconsistent order. `AT#CQI` is read as a metric.
-- **Fixes**: deleting selected messages threw a `ReferenceError` and never ran; the phone-format hint was a global banner covering the modem tabs and app menu; the character counter moved inside the message box; the settings panel no longer floods the browser console with 404s on apk-based firmware; the character counter and prefix hint lost their separate settings toggle.
-
-### 1.4.8
-- **MeigLink SLM770A-R support** — metrics via `AT+SGCELLINFOEX` (named fields, more robust than positional CSV), temperature, band control via `^SYSCFGEX`, and cell lock via `^CELLLOCK`. Field layout verified against the vendor AT manual.
-- **Cell lock** — a generic `getcelllock`/`setcelllock` contract in `bands.sh` plus a row under the band buttons. "Lock to current cell" reads EARFCN and PCI at click time, so it always pins the cell you are actually on. The modem is cycled through flight mode automatically, as the vendor manual requires.
-- **`5gtop`** — the Network page in a terminal, for routers where LuCI is slow or does not fit. Same data source as the web UI, no extra AT commands. Live clock, per-metric bars, speed test (`s`), uplink priority (`1`-`3`), modem switch (`m`), and a layout that collapses to a single column on phone-width terminals (`5gtop 5 60`).
-- **Extended cell info in the web UI** — eNB ID (the base station, not just the sector), path loss, TX power, CQI, UE category and VoLTE state. Rows stay hidden on modems that do not report them.
-- **Lite install** — only `sms-tool` is strictly required now; ModemManager, QMI/MBIM and the USB kmods moved behind a build option. Fits routers with 8 MB flash where the full dependency set would not install at all.
-
-### 1.4.7
-- **eSIM downloads fixed** for SM-DP+ servers that present GSMA CI certificates. OpenWrt's libcurl is usually built against mbedTLS, which rejects the critical `Certificate Policies` extension in the GSMA root — such servers failed on the very first step. ES9+ now goes through a stdio bridge over wget/OpenSSL, selectable in the eSIM settings.
-- **Live download progress** — the current step is shown in plain words while the spinner runs, and on failure the log stays on screen with a "Save log" button for remote diagnosis.
-- **Metrics on modems that reject long AT chains** — the core poll sent twelve commands joined by `;`; some modules (MeigLink among them) answer such a chain with echo only. There is now a fallback to short groups.
-- **CSQ no longer disappears forever** after a single empty signal reading — the bar was hidden but never shown again.
-- **Band writes no longer report a false error** — the write outlived the 30-second rpcd timeout and surfaced as "Failed to set bands: XHR" even though it had applied.
-- **Fixes**: the IPv6 companion interface no longer duplicates an uplink in Internet priority; duplicate default routes no longer pile up when switching priority; `2dee` is MeigLink, not Foxconn; SMS/USSD/AT port fields are filled in on install; multipart SMS merging is on by default.
-
 ## Installation
 Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](../../releases) page then issue a command:
 
