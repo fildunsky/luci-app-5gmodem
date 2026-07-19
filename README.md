@@ -16,8 +16,9 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 - **Port auto-detect** — the AT port and network interface are detected automatically; can be set manually.
 - **USB sticks that have no AT ports** (Huawei HiLink and relatives) are supported too — see below.
 - **`5gtop`** — a terminal dashboard with the same data, for when you are on SSH and not in a browser.
-
-<img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-43-48" src="https://github.com/user-attachments/assets/5f9f9a63-a3c9-44a1-8f0f-4625b20c90a5" />
+- 
+<img width="1954" height="1460" alt="Screenshot From 2026-07-19 23-06-52" src="https://github.com/user-attachments/assets/22828d57-805d-4cae-9ec0-7a24cfa884e2" />
+<img width="1958" height="1426" alt="Screenshot From 2026-07-19 23-07-23" src="https://github.com/user-attachments/assets/df8e2a52-63d0-45c5-9313-67ffe1ecb872" />
 
 ## These are modems I personally have:
 I've added new features to them (compared to 3ginfo and modemband)
@@ -30,6 +31,8 @@ I've added new features to them (compared to 3ginfo and modemband)
 - MeigLink SLM770A-R
 - Huawei E3372 (HiLink)
 - Many more untested, but should support all the modems handled by the upstream forks.
+
+<img width="1956" height="1458" alt="Screenshot From 2026-07-19 23-07-44" src="https://github.com/user-attachments/assets/5eed741c-787a-4bf0-947d-4ebc934c7590" />
 
 ### USB sticks with no AT ports (HiLink)
 
@@ -62,14 +65,15 @@ data as the web pages, same backend — no extra polling of the modem.
 5gtop        # English
 5gtop ru     # Russian
 ```
+<img width="1656" height="1226" alt="Screenshot From 2026-07-19 23-36-52" src="https://github.com/user-attachments/assets/9fa44f0c-7eb9-4ca3-a2a3-9de962e94ee7" />
+
+<img width="1658" height="640" alt="Screenshot From 2026-07-19 23-37-41" src="https://github.com/user-attachments/assets/f7cb2f47-384c-4767-accd-c87ad61e1dc1" />
 
 Tabs: **Network**, **Cell info**, **Modem**, **SMS**, **USSD**, **AT console**,
 and **eSIM** when an eUICC is present. Keys are single-press (no Enter): the
 highlighted letter in each tab name switches to it, `Tab` cycles modems in dual
 modem setups, `t` runs the speed test, `r` refreshes, `q` quits. The layout
 follows the terminal width and falls back to a narrow mode on small screens.
-
-<img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-44-54" src="https://github.com/user-attachments/assets/f14f264f-ef81-47b0-8f79-bb7c6982ac55" />
 
 ## What's new
 
