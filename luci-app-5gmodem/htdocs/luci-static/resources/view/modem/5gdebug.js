@@ -143,6 +143,14 @@ function installUpdate() {
    лежат вне их области видимости (кнопка «создать интерфейс»). */
 var profilesView = null;
 
+/* Пометка режима в имени модема. (HiLink) - ведётся своим веб-API; (Debug) -
+   переведён в режим с AT-портами и ведётся обычным путём. */
+function modeSuffix(j) {
+	if (j.backend === 'hilink') { return ' (HiLink)'; }
+	if (j.at_debug === '1') { return ' (Debug)'; }
+	return '';
+}
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -672,7 +680,13 @@ return view.extend({
 					var el = document.getElementById(id);
 					if (el && v != null && String(v) !== '') { el.textContent = String(v); }
 				};
-				put('dbg-modem', j.modem);
+				/* Класс дописываем ТОЛЬКО здесь и в заголовке блока «Модем» на
+				   странице Сеть: в имени модели он расходился бы по вкладкам и
+				   карточкам, где только мешает. */
+				/* (HiLink) - модем ведётся веб-API. (Debug) - он переведён в
+				   режим с AT-портами и ведётся обычным путём: у него другая
+				   композиция USB и полный набор возможностей. */
+				put('dbg-modem', j.modem + modeSuffix(j));
 				put('dbg-firmware', j.firmware);
 				put('dbg-cport', j.cport);
 				put('dbg-protocol', j.protocol);
@@ -949,6 +963,29 @@ return view.extend({
 		/* Прятать ЭТОТ модем от ModemManager (mm-inhibit.sh держит инхибицию).
 		   Пишем в секцию модема, а не в общую: у каждого модема свой режим.
 		   Значение читается/пишется вручную - form.Map тут привязан к @5gmodem[0]. */
+		/* Галка ТОЛЬКО для модемов, которые это умеют (HiLink с поддержкой смены
+		   режима). Показываем её всегда, но пояснение объясняет, что даёт режим и
+		   что он слетает при перезагрузке модема - иначе поведение выглядело бы
+		   необъяснимым. */
+		o = s.option(form.Flag, '_at_debug', _('AT ports (debug mode)'),
+			_('Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears.'));
+		o.default = '1';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			uci.set('5gmodem', sec, 'at_debug', value === '1' ? '1' : '0');
+		};
+		o.load = function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return '1'; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			var v = uci.get('5gmodem', sec, 'at_debug');
+			return (v === '0') ? '0' : '1';
+		};
+		o.remove = function() {};
+
 		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
 			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));
 		o.default = '1';

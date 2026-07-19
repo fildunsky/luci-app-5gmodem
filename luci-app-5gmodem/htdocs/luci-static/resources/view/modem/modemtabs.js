@@ -1,6 +1,7 @@
 'use strict';
 'require baseclass';
 'require fs';
+'require uci';
 'require poll';
 'require ui';
 
@@ -154,7 +155,16 @@ function loadModems() {
    применяется до отрисовки, поэтому вспышки нет вовсе.
    Состояние помним между заходами: на модеме С eSIM иначе мигало бы наоборот -
    вкладка пряталась бы на секунду при каждом открытии страницы. */
-var ESIM_SEEN = '5gmodem.esim.active';
+/* Ключ памяти - СВОЙ У КАЖДОГО МОДЕМА. Раньше он был общий, и при переходе с
+   модема с eSIM на модем без неё вкладка успевала показаться: применялось
+   запомненное «была», а опрос отвечал только через секунду. У модемов без
+   AT-портов eSIM невозможна в принципе, и мелькать ей незачем. */
+var ESIM_SEEN_BASE = '5gmodem.esim.active';
+function esimSeenKey() {
+	var p = '';
+	try { p = (uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''); } catch (e) {}
+	return p ? (ESIM_SEEN_BASE + '.' + p) : ESIM_SEEN_BASE;
+}
 
 function esimHideRule(on) {
 	var st = document.getElementById('esim-tab-hide');
@@ -172,7 +182,7 @@ function esimHideRule(on) {
 /* Применяем ЗАПОМНЕННОЕ состояние немедленно, ещё до всякого опроса. */
 (function() {
 	var was = '0';
-	try { was = localStorage.getItem(ESIM_SEEN) || '0'; } catch (e) {}
+	try { was = localStorage.getItem(esimSeenKey()) || '0'; } catch (e) {}
 	esimHideRule(was !== '1');
 })();
 
@@ -180,13 +190,18 @@ function applyEsimTabVisibility(tries) {
 	/* fs.exec, а не fs.exec_direct: последний ходит через /cgi-bin/cgi-exec -
 	   отдельный хелпер, который в этом приложении уже отвечал "404 Executable
 	   not found". fs.exec идёт через ubus file.exec. */
-	return L.resolveDefault(fs.exec('/usr/share/5gmodem/esim.sh', [ 'status' ]), {})
+	/* Конфиг нужен, чтобы ключ памяти был привязан к АКТИВНОМУ модему. Этот файл
+	   uci сам не грузит, а страницы делают это по-разному - грузим явно. */
+	return L.resolveDefault(uci.load('5gmodem'))
+		.then(function() {
+			return L.resolveDefault(fs.exec('/usr/share/5gmodem/esim.sh', [ 'status' ]), {});
+		})
 		.then(function(r) {
 			var st = {};
 			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
 			var active = !!(st && st.active);
 			esimHideRule(!active);
-			try { localStorage.setItem(ESIM_SEEN, active ? '1' : '0'); } catch (e) {}
+			try { localStorage.setItem(esimSeenKey(), active ? '1' : '0'); } catch (e) {}
 		});
 }
 

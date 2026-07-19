@@ -889,7 +889,10 @@ return view.extend({
 		var ledt = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'ledtype'));
 		var direct = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'direction'));
 
-		if (!portR) {
+		/* Та же оговорка, что и у проверки ниже: у модема без AT-портов (HiLink)
+		   портов нет и настроить их невозможно. Требовать этого - посылать
+		   пользователя чинить несуществующее. */
+		if (!portR && !isHilinkModem()) {
  			ui.addNotification(null, E('p', _('The package requires user configuration. \
 					<br /><br /><b>The following need to be set:</b> \
 					<ul><li>1. All ports for communication with the modem.</li><li>2. Additional options specific to the given modem (for handling USSD codes).</li><li> \

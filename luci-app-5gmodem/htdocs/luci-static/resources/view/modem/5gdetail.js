@@ -107,6 +107,11 @@ document.head.append(E('style', {'type': 'text/css'},
 #signal medium {
   display: block;
   line-height: 1.2;
+  /* Процент сигнала - вдвое меньше, жирным моноширинным: это подпись под
+     иконкой, а не заголовок, и в моноширинном цифры не пляшут при смене. */
+  font-size: 70%;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 #simicon {
   width: 36px !important;
@@ -343,6 +348,13 @@ document.head.append(E('style', {'type': 'text/css'},
   opacity: 0.85;
   white-space: nowrap;
 }
+#temp {
+  /* Цифры температуры - жирным моноширинным, чуть меньше окружающего текста:
+     в моноширинном значение не дёргается при смене (45.2 -> 45.9). */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 90%;
+}
 .tginfo-temp .tginfo-thermo {
   display: inline-flex;
   align-items: center;
@@ -519,7 +531,8 @@ pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
    этого блок показывал устаревшие/пустые данные, будто всё сломалось. Снимаем, как
    только модем вернулся (pollData видит регистрацию/сигнал) или по таймауту. */
 var _modemBusyTimer = null;
-var _bandsAfterBusy = false;   // после снятия плашки перечитать блок диапазонов
+var _bandsAfterBusy = false;
+var _bandsRetry = 0;   // попытки дочитать enabled, если модем ответил не сразу   // после снятия плашки перечитать блок диапазонов
 var _modemBusySince = 0;
 /* Сколько плашка держится в любом случае. Признак «модем вернулся» - регистрация
    или сигнал, но сразу после нажатия модем ЕЩЁ НЕ УСПЕЛ уйти в перезагрузку и
@@ -1188,6 +1201,13 @@ function renderCellLock(state) {
 	}
 }
 
+/* Есть ли у модема ХОТЬ ОДИН включённый диапазон в любой из полос. Нужно, чтобы
+   перезапрос из-за пустого LTE-enabled не молотил вечно у модема, где LTE и нет
+   вовсе, а есть только 5G. */
+function nrC_hasEnabled(j) {
+	return ((j.enabled5gnsa || []).length > 0) || ((j.enabled5gsa || []).length > 0);
+}
+
 function loadBandsModemband() {
 	if (!blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
@@ -1272,6 +1292,22 @@ function loadBandsModemband() {
 		// модемов, чей профиль выставил bandwarn (FM350: GTACT рвёт PDP).
 		var warnRow = document.getElementById('bandwarnn');
 		if (warnRow) { warnRow.style.display = j.bandwarn ? '' : 'none'; }
+
+		/* ГОНКА НА ТОРМОЗНОМ МОДЕМЕ. loadBandsModemband вызывается по раскрытию
+		   блока ОДИН раз. Если модем не успел отдать enabled (старый E3372 отвечает
+		   на at^syscfgex? не сразу), supported приходит, а enabled пуст - кнопки
+		   рисуются невыделенными и застревают, пока блок не свернуть-развернуть.
+		   Есть поддерживаемые, но ни одного включённого - почти наверняка неполный
+		   ответ: перечитываем через 1.5 с. Настоящий "все выключено" редок, а
+		   лишний перезапрос дёшев. */
+		if (supLte.length && !enLte.length && !nrC_hasEnabled(j)) {
+			// Не вечно: у модема, где ВСЕ LTE-диапазоны реально выключены, пустой
+			// enabled - это правда, а не гонка. Три попытки покрывают тормозной
+			// ответ и на этом останавливаются.
+			if ((_bandsRetry = (_bandsRetry || 0) + 1) <= 3) {
+				window.setTimeout(loadBandsModemband, 1500);
+			}
+		} else { _bandsRetry = 0; }
 
 		var lteC = document.getElementById('bands-lte');
 		if (lteC && !sameRender(lteC, supLte.join(',') + '|' + enLte.join(','))) {
@@ -2160,6 +2196,7 @@ simDialog: baseclass.extend({
 		try {
 
 		var json = JSON.parse(data);
+
 		/* Последний снимок метрик держим глобально: из него берутся EARFCN и PCI
 		   для кнопки «привязать к текущей соте» - переписывать их руками никто
 		   не станет, а другого источника этих значений в UI нет. */
@@ -2219,6 +2256,21 @@ simDialog: baseclass.extend({
 				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]))
 					.then(function(res) {
 					var json = JSON.parse(res);
+
+					/* Строки, которых у ЭТОГО КЛАССА МОДЕМОВ не бывает, убираем
+					   совсем. У модемов без AT-портов (HiLink) веб-API не отдаёт
+					   ни TAC/LAC, ни состав несущих - это не «данные ещё не
+					   пришли», а их отсутствие навсегда, и прочерк заставляет
+					   ждать впустую.
+					   ДЕЛАТЬ ЭТО НАДО ЗДЕСЬ, а не в render: строки заполняет и
+					   показывает именно этот цикл, и однократное скрытие при
+					   отрисовке он тут же отменял. */
+					if (json.backend === 'hilink') {
+						[ 'tacn', 'lacn', 'ca-comp' ].forEach(function(id) {
+							var el = document.getElementById(id);
+							if (el) { el.style.display = 'none'; }
+						});
+					}
 
 					// Модем вернулся после ребута (смена слота) -> снимаем оверлей
 					// «Модем перезагружается»: признак живого модема - регистрация в
@@ -2429,10 +2481,14 @@ simDialog: baseclass.extend({
 						}
 					}
 
-					// Заголовок блока = полное имя активного модема (моноширинный)
+					// Заголовок блока = полное имя активного модема (моноширинный).
+					// Класс дописываем ЗДЕСЬ, а не в само имя: имя расходится по
+					// вкладкам и карточкам профилей, где пометка была бы шумом.
 					if (document.getElementById('modemname')) {
-						document.getElementById('modemname').textContent =
-							(json.modem && json.modem.length > 1) ? json.modem : _('Modem');
+						var _nm = (json.modem && json.modem.length > 1) ? json.modem : _('Modem');
+						if (json.backend === 'hilink') { _nm += ' (HiLink)'; }
+						else if (json.at_debug === '1') { _nm += ' (Debug)'; }
+						document.getElementById('modemname').textContent = _nm;
 					}
 
 					if (document.getElementById('fw')) {
@@ -3031,11 +3087,11 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('MCC MNC')]),
 					E('td', { 'class': 'td left', 'id': 'mccmnc' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'id': 'cidn' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell ID')]),
 					E('td', { 'class': 'td left', 'id': 'cid' }, [ '-' ]),
 					]),
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'id': 'tacn' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('TAC')]),
 					E('td', { 'class': 'td left', 'id': 'tac' }, [ '-' ]),
 					]),
