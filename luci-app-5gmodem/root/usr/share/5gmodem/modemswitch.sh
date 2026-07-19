@@ -74,6 +74,37 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 		return 0
 	fi
 	[ "$_old" = "$_new" ] && return 0
+
+	# СМЕНА РЕЖИМА - НЕ СМЕНА МОДЕМА.
+	#
+	# Один и тот же модем может менять USB-композицию: переключение режима в его
+	# веб-интерфейсе, usb-modeswitch, смена CUSTOMER. Наблюдалось вживую: Huawei
+	# E3372 перешёл с 12d1:14dc на 12d1:1566, и мы стёрли ему kind/netdev/network,
+	# после чего профиль потерял признак HiLink и подхватил чужой AT-порт от
+	# соседнего модема.
+	# IMEI - настоящая личность железа. Совпал - это тот же модем, и настройки
+	# его. Обновляем только идентификаторы композиции.
+	# ТОТ ЖЕ ВЕНДОР НА ТОМ ЖЕ USB-ПУТИ = смена композиции, а не модема. USB-путь
+	# стабилен (это физический разъём), и если вендор не сменился, а поменялся
+	# только PID - это тот же модем в другом режиме (E3372: 14dc <-> 1566 <-> 1442).
+	# IMEI тут ненадёжен: в переходных композициях он не читается ни по AT, ни по
+	# веб-API, и раньше проверка по нему проваливалась - настройки стирались.
+	# Свойства САМОГО ЖЕЛЕЗА (kind, netdev, at_debug) при смене режима сохраняем,
+	# обновляя лишь идентификаторы композиции.
+	_vid_old=${_old%%:*}
+	_vid_new=${_new%%:*}
+	if [ "$_vid_old" = "$_vid_new" ]; then
+		logger -t 5gmodem "modem mode change on $1: $_old -> $_new (тот же вендор, свойства железа сохраняем)"
+		uci -q set "$CFG.$2.vidpid=$_new"
+		uci -q set "$CFG.$2.product=$(modem_product "$1")"
+		# at_port сбрасываем - в новой композиции нумерация портов другая, его
+		# заново найдёт resolve. Остальное (kind/netdev/at_debug/network) - нет.
+		uci -q delete "$CFG.$2.at_port" 2>/dev/null
+		uci -q delete "$CFG.$2.data_at_port" 2>/dev/null
+		uci -q commit "$CFG"
+		return 0
+	fi
+
 	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
 	# Интерфейс, созданный НАМИ для прежнего модема (штамп modem_path == этот путь),
 	# теперь заведомо неверен: у другого модема другой прото/устройство. netifd
@@ -474,6 +505,26 @@ set_sms_storage() {
 
 # Настроить ОДИН модем по usb-пути. Вынесено из autosetup ради цикла по всем
 # найденным: тело одинаковое, разница только в том, чей это модем.
+# Это HiLink-модем (управляется своим IP-стеком, интерфейс DHCP)? Свойство
+# ЖЕЛЕЗА, а не текущей композиции: в режиме debug у него появляются AT-порты, но
+# интернет он всё равно держит сам. Смотрим на запомненный kind ИЛИ на наличие
+# сетевой карты - НЕ на отсутствие портов.
+is_hilink() {   # $1 - usb-путь
+	_ih_sec=$(secname "$1")
+	[ "$(uci -q get "$CFG.$_ih_sec.kind")" = "hilink" ] && return 0
+	[ -n "$(hilink_netdev "$1")" ] && return 0
+	return 1
+}
+
+# Сетевая карта HiLink-модема (eth*/usb* через cdc_ether), если есть.
+hilink_netdev() {   # $1 - usb-путь
+	for _hd in /sys/bus/usb/devices/"$1":*/net/*; do
+		[ -e "$_hd" ] || continue
+		basename "$_hd"; return 0
+	done
+	return 1
+}
+
 # Сетевое имя модема, если он БЕЗ ПОРТОВ (HiLink). Пусто - обычный модем.
 # Признак строгий: есть net[], и при этом нет ни tty, ни wdm.
 hilink_net() {   # $1 - usb-путь
@@ -526,10 +577,72 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 	echo "$_hif"
 }
 
+# Перевести HiLink-модем в режим с AT-портами (у Huawei это «debug mode»).
+#
+# ЗАЧЕМ. В обычном режиме такой модем отдаёт только веб-API, где нет ни TAC, ни
+# диапазона, ни EARFCN, ни USSD. В режиме debug он показывает ещё и шесть
+# последовательных портов, СОХРАНЯЯ при этом сетевую карту и рабочий интернет
+# (проверено на E3372: ping и HTTP через него проходят, счётчики трафика растут).
+# Тогда модем ведётся обычным путём, наравне с остальными.
+#
+# Режим НЕ переживает перезагрузку модема, поэтому переключаем при каждом его
+# появлении на шине. Управляется галкой at_debug в настройках модема; по
+# умолчанию включено, но выключить можно - у кого-то модем настроен под свой
+# веб-интерфейс, и менять поведение железа молча нельзя.
+try_at_debug() {   # $1 - usb-путь
+	_ad_sec=$(secname "$1")
+	[ "$(uci -q get "$CFG.$_ad_sec.at_debug")" = "0" ] && return 1
+	# Уже с портами - ничего не делаем.
+	[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && return 1
+	# ЖДЁМ ГОТОВНОСТИ ВЕБ-API. Сразу после подключения (cdrom -> HiLink) веб-сервер
+	# модема поднимается не мгновенно - секунд 30-40, и вызванный раньше времени
+	# mode debug молча не срабатывает. Именно это и ловил хотплаг: модем оставался
+	# в HiLink. Ждём, пока probe вернёт hilink:1, и только тогда переключаем.
+	_ad_w=0
+	while [ "$_ad_w" -lt 25 ]; do
+		"$RES/hilink.sh" probe "$1" 2>/dev/null | grep -q '"hilink":1' && break
+		sleep 3
+		_ad_w=$((_ad_w + 1))
+	done
+	# Пробуем переключить, до трёх раз: первая команда иногда теряется, пока
+	# прошивка достартовывает свои службы.
+	_ad_ok=""
+	_ad_t=0
+	while [ "$_ad_t" -lt 3 ]; do
+		"$RES/hilink.sh" mode debug "$1" 2>/dev/null | grep -q '"success":true' && { _ad_ok=1; break; }
+		sleep 4
+		_ad_t=$((_ad_t + 1))
+	done
+	[ -n "$_ad_ok" ] || return 1
+	logger -t 5gmodem "hilink: $1 переведён в режим с AT-портами"
+	# Порты появляются не мгновенно.
+	_ad_n=0
+	while [ "$_ad_n" -lt 20 ]; do
+		sleep 2
+		rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+		[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && break
+		_ad_n=$((_ad_n + 1))
+	done
+	# После смены режима передача данных сама не поднимается - включаем.
+	"$RES/hilink.sh" connect "$1" >/dev/null 2>&1
+	return 0
+}
+
 setup_one_modem() {
 	P="$1"
-	# Модем без портов настраивается иначе - см. setup_hilink.
-	_hnet=$(hilink_net "$P") && { setup_hilink "$P" "$_hnet" >/dev/null; return 0; }
+	# HiLink-модем ведём ОСОБО: интернет у него всегда через собственную сетевую
+	# карту (интерфейс DHCP), а AT-порты - лишь источник метрик/SMS/USSD, когда
+	# модем в debug. Сначала пробуем открыть порты, затем ВСЕГДА создаём/подхватываем
+	# DHCP-интерфейс. Обычный путь (mkiface) создал бы второй, лишний интерфейс.
+	if is_hilink "$P"; then
+		uci -q set "$CFG.$(secname "$P").kind=hilink"
+		uci -q commit "$CFG"
+		try_at_debug "$P" && rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+		_hnet=$(hilink_netdev "$P")
+		[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
+		"$RES/ensureports.sh" >/dev/null 2>&1
+		return 0
+	fi
 
 	SEC=$(ensure_section "$P")
 
@@ -660,7 +773,9 @@ ussdsupport)
 	_s=$(secname "$_p")
 	# Модем без AT-порта: USSD - услуга AT-канала, отправлять её некуда.
 	# Отвечаем ДО опроса базы: иначе страница предлагала бы то, чего нет.
-	if [ "$(uci -q get "$CFG.$_s.kind")" = "hilink" ]; then
+	_us_at=$(uci -q get "$CFG.$_s.at_port")
+	if [ "$(uci -q get "$CFG.$_s.kind")" = "hilink" ] \
+	   && ! { [ -n "$_us_at" ] && [ -c "$_us_at" ]; }; then
 		printf '{"supported":0,"reason":"no_at_port","model":"%s"}\n' \
 			"$(uci -q get "$CFG.$_s.model")"
 		exit 0

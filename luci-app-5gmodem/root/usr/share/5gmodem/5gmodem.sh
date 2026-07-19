@@ -270,8 +270,13 @@ _take_lock() {
 #
 # Проверка ДО всего остального и делается по конфигу (kind=hilink), а не опросом:
 # это одна строка uci, она не стоит ничего и не трогает порты.
+# ВАЖНО: признака kind=hilink МАЛО. Такой модем может быть переведён в режим с
+# AT-портами (debug), и тогда он обычный - у него есть всё, чего веб-API не даёт
+# (TAC, диапазон, USSD). Через API идём, только если AT-порта нет.
 _hl_sec="m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')"
-if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ]; then
+_hl_at=$(uci -q get "5gmodem.$_hl_sec.at_port")
+[ -n "$_hl_at" ] && [ -c "$_hl_at" ] && _hl_at="yes" || _hl_at=""
+if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
 	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
 	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
 	_hl_cache="/tmp/5gmodem_hilink_metrics"
@@ -912,6 +917,16 @@ fi
 [ -z "$IPADDR6" ] && IPADDR6=$(echo "$IFSTAT" | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
 [ -z "$IPADDR6" ] && IPADDR6=$(ifstatus "${SEC}_6" 2>/dev/null | grep -A4 '"ipv6-address"' | sed -n 's/.*"address": *"\([^"]*\)".*/\1/p' | head -1)
 
+# У HiLink-модема адрес интерфейса - это ЛОКАЛЬНАЯ сеть модема (192.168.43.2):
+# модем сам держит IP-стек и NAT-ит, а роутер сидит за ним. Настоящий WAN-адрес
+# оператора знает только модем - берём его AT-командой AT+CGPADDR (в debug-режиме
+# порт есть). Иначе в карточке светился бы 192.168.43.x, а не адрес в сети.
+if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -n "$DEVICE" ]; then
+	_wan=$(sms_tool -d "$DEVICE" at "AT+CGPADDR" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CGPADDR: *[0-9]*, *"\([0-9.]*\)".*/\1/p' | grep -v '^0\.0\.0\.0$' | head -1)
+	[ -n "$_wan" ] && IPADDR="$_wan"
+fi
+
 # Реальный протокол интерфейса модема (modemmanager/mbim/qmi/ncm/...). Раньше
 # в JSON шла случайная переменная цикла $PROTO, из-за чего при modemmanager
 # показывался mbim. Берём напрямую из uci выбранного интерфейса $SEC.
@@ -1076,6 +1091,7 @@ cat > "$_TMP" <<EOF
 "imei":"$(sanitize_string "$NR_IMEI")",
 "imsi":"$(sanitize_string "$NR_IMSI")",
 "iccid":"$(sanitize_string "$NR_ICCID")",
+"at_debug":"$([ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && echo 1 || echo 0)",
 "lac_dec":"$(sanitize_number "$LAC_DEC")",
 "lac_hex":"$(sanitize_string "$LAC_HEX")",
 "tac_dec":"$(sanitize_number "$TAC_DEC")",

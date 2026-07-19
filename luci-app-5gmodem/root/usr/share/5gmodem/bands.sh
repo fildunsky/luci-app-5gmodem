@@ -439,27 +439,62 @@ getantports() {
 # /api/net/net-mode), а не AT-командами. Профилей modemband для него нет и быть
 # не может - перехватываем здесь, до выбора профиля.
 _bs_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g').kind")" = "hilink" ]; then
+_bs_sec="m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
+_bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
+# ДИАПАЗОНЫ HiLink-МОДЕМА - ВСЕГДА ЧЕРЕЗ ЕГО API, даже в режиме debug.
+#
+# Почему НЕ через AT-профиль: у Huawei смена диапазонов по AT (at^syscfgex)
+# сбрасывает USB-композицию - модем ВЫВАЛИВАЕТСЯ из debug обратно в чистый
+# HiLink, теряет AT-порты, а вместе с ними метрики, и на секунды пропадает с
+# шины (страница успевает переключиться на соседний модем). Проверено вживую.
+# API же (net-mode) меняет диапазоны, НЕ трогая композицию - debug сохраняется.
+#
+# Метрики/SMS/USSD этой ветки не касаются: они идут своим путём (AT в debug).
+if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; then
 	_HL=/usr/share/5gmodem/hilink.sh
+	# Полный список поддерживаемых диапазонов API не отдаёт - только текущую
+	# маску. Но когда модем в debug, его знает AT-профиль. Читаем оттуда ОДИН РАЗ
+	# и запоминаем: иначе выключенный диапазон пропадал бы из списка кнопок и его
+	# нельзя было бы включить обратно.
+	_bs_full=$(uci -q get "5gmodem.$_bs_sec.band_full")
+	if [ -z "$_bs_full" ] && [ -n "$_bs_at" ] && [ -c "$_bs_at" ]; then
+		_bs_full=$(RES="/usr/share/5gmodem/modemband"; . "$RES/$(uci -q get "5gmodem.$_bs_sec.vidpid" | tr -d ':')" 2>/dev/null; _DEVICE="$_bs_at"; getsupportedbands 2>/dev/null)
+		[ -n "$_bs_full" ] && { uci -q set "5gmodem.$_bs_sec.band_full=$_bs_full"; uci -q commit 5gmodem; }
+	fi
+	_en=$("$_HL" getbands "$_bs_am" 2>/dev/null)
+	# supported = запомненный полный список; если ещё не знаем - хотя бы включённые.
+	_sup="$_bs_full"; [ -n "$_sup" ] || _sup="$_en"
 	case "$1" in
 		json)
-			_en=$("$_HL" getbands "$_bs_am" 2>/dev/null)
-			printf '{ "modem": "%s", "supported": [' \
-				"$(uci -q get "5gmodem.m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g').model")"
-			# Список поддерживаемых у этого API не спросить, поэтому показываем
-			# те, что реально включены: врать про «поддерживается» нельзя.
+			_cm=$("$_HL" getmode "$_bs_am" 2>/dev/null)
+			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
+				"$(uci -q get "5gmodem.$_bs_sec.model")" "$_cm"
+			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			printf '], "supported": ['
 			_f=1
-			for _b in $_en; do
+			for _b in $_sup; do
 				[ "$_f" = 1 ] || printf ','
 				_f=0
 				printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
 			done
 			printf '], "enabled": [%s] }\n' "$(echo $_en | tr ' ' ',')"
 			exit 0 ;;
-		getbands)          "$_HL" getbands "$_bs_am"; exit 0 ;;
-		setbands)          "$_HL" setbands "$2" "$_bs_am"; exit 0 ;;
-		getsupportedbands) "$_HL" getbands "$_bs_am"; exit 0 ;;
-		# Всё остальное этот класс модемов не умеет - отвечаем честно.
+		getbands)          echo "$_en"; exit 0 ;;
+		getsupportedbands) echo "$_sup"; exit 0 ;;
+		getmode)           "$_HL" getmode "$_bs_am"; exit 0 ;;
+		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		setbands)
+			"$_HL" setbands "$2" "$_bs_am"
+			# СТОРОЖ debug. Даже через API смена диапазонов иногда заставляет
+			# модем перерегистрироваться в сети и при этом сбросить USB-композицию
+			# (наблюдалось на B20): он вываливается из debug в чистый HiLink,
+			# теряет AT-порты. В фоне проверяем и возвращаем debug + интерфейс.
+			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			exit 0 ;;
+		setmode)
+			"$_HL" setmode "$2" "$_bs_am"
+			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			exit 0 ;;
 		*) echo "Unsupported"; exit 0 ;;
 	esac
 fi
@@ -683,6 +718,54 @@ case $1 in
 		;;
 	"setbands3g")
 		[ -n "$2" ] && setbands3g "$2"
+		;;
+	# Сканирование окружающих сот 2G/3G. Уникальная фича Huawei E3372: он ищет
+	# ВСЕ базовые станции всех операторов вокруг, не только своего. LTE искать не
+	# умеет - только 2G и 3G. Команда идёт ТОЛЬКО через управляющий порт (PCUI),
+	# на остальных даёт пустой ответ.
+	#
+	# Долгая (десятки секунд) и требует, чтобы модем не висел на LTE - иначе она
+	# отвечает пусто. Поэтому запускается ЯВНО пользователем, в фоне; результат
+	# кладём в файл, который потом читает интерфейс.
+	"netscan")
+		_ns_am=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+		_ns_sec="m_$(echo "$_ns_am" | sed 's/[^A-Za-z0-9]/_/g')"
+		_ns_port=$(uci -q get "$CFG.$_ns_sec.at_port")
+		[ -n "$_ns_port" ] || _ns_port=$("$RES/../detect.sh" 2>/dev/null)
+		_ns_out="/tmp/5gmodem_netscan"
+		# Тип: 0 - 2G, 1 - 3G (по умолчанию 3G - у нас чаще именно он).
+		_ns_mode="${2:-1}"
+		case "$_ns_mode" in 0|1) ;; *) _ns_mode=1 ;; esac
+		# В фоне с отвязкой дескрипторов - сканирование дольше таймаута rpcd.
+		(
+			echo '{"state":"scanning"}' > "$_ns_out"
+			# Перед сканом отключаем данные и уводим с LTE в 2G/3G, иначе пусто.
+			# Возвращаем режим обратно после - список диапазонов запоминаем.
+			_ns_cfg=$(sms_tool -d "$_ns_port" at "at^syscfgex?" 2>/dev/null | tr -d "\r" | sed -n "s/^^SYSCFGEX://p" | head -1)
+			sms_tool -d "$_ns_port" at "at^syscfgex=\"0201\",3FFFFFFF,1,2,800C5,," >/dev/null 2>&1
+			sleep 3
+			_ns_raw=$(sms_tool -t 90 -d "$_ns_port" at "at^netscan=20,-110,$_ns_mode" 2>/dev/null | tr -d "\r")
+			# Возвращаем прежний режим сети.
+			[ -n "$_ns_cfg" ] && sms_tool -d "$_ns_port" at "at^syscfgex=$_ns_cfg,," >/dev/null 2>&1
+			# Разбираем строки ^NETSCAN: <arfcn>,,,<lac>,<mcc>,<mnc>,<x>,<rssi>,<cid>,<band>
+			{
+				printf '{"state":"done","mode":"%s","cells":[' "$_ns_mode"
+				_ns_first=1
+				printf '%s\n' "$_ns_raw" | sed -n 's/^\^NETSCAN: *//p' | while IFS=, read -r _arfcn _b1 _b2 _lac _mcc _mnc _x _rssi _cid _band; do
+					[ -n "$_arfcn" ] || continue
+					[ "$_ns_first" = 1 ] || printf ','
+					_ns_first=0
+					printf '{"arfcn":"%s","lac":"%s","mcc":"%s","mnc":"%s","rssi":"%s","cid":"%s","band":"%s"}' \
+						"$_arfcn" "$_lac" "$_mcc" "$_mnc" "$_rssi" "$_cid" "$_band"
+				done
+				printf ']}\n'
+			} > "$_ns_out.tmp" && mv "$_ns_out.tmp" "$_ns_out"
+		) >/dev/null 2>&1 </dev/null &
+		echo '{"started":true}'
+		;;
+	# Прочитать результат последнего сканирования (или его состояние).
+	"netscanresult")
+		[ -s /tmp/5gmodem_netscan ] && cat /tmp/5gmodem_netscan || echo '{"state":"none"}'
 		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом

@@ -58,3 +58,44 @@ setbands() {
 		sms_tool -d $_DEVICE at "at^syscfgex=\"${MODE:-030201}\",3FFFFFFF,2,4,$HEX,,"
 	fi
 }
+
+# --- Режим сети (Auto / 2G / 3G / 4G) ----------------------------------------
+#
+# У Huawei тип сети - это ПЕРВОЕ поле syscfgex (net_order): "00" все, "01" 2G,
+# "02" 3G, "03" 4G; коды комбинируются в порядке предпочтения ("0302" - LTE, при
+# отсутствии 3G).
+_MODES="1:Авто 8:2G 2:3G 4:4G"
+
+getsupportedmodes() {
+	echo "$_MODES"
+}
+
+# id режима из первого поля syscfgex.
+getmode() {
+	_no=$(sms_tool -d $_DEVICE at "at^syscfgex?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^SYSCFGEX: *"\([0-9]*\)".*/\1/p' | head -1)
+	case "$_no" in
+		00|*0300*|03) echo 4 ;;   # чистый 4G или предпочтение 4G
+		02) echo 2 ;;             # только 3G
+		01) echo 8 ;;             # только 2G
+		"") echo "" ;;
+		*)  echo 1 ;;             # смешанные -> Авто
+	esac
+}
+
+setmode() {
+	# Диапазоны и роуминг сохраняем как есть - меняем только порядок сетей.
+	O=$(sms_tool -d $_DEVICE at "at^syscfgex?" 2>/dev/null | tr -d '\r')
+	_band=$(echo "$O" | awk -F, '/SYSCFGEX/{print $2}' | xargs)
+	_lte=$(echo "$O" | awk -F, '/SYSCFGEX/{print $5}' | xargs)
+	[ -n "$_band" ] || _band="3FFFFFFF"
+	[ -n "$_lte" ] || _lte="7FFFFFFFFFFFFFFF"
+	case "$1" in
+		1) _no="00" ;;     # Авто (все сети)
+		8) _no="01" ;;     # только 2G
+		2) _no="02" ;;     # только 3G
+		4) _no="03" ;;     # только 4G
+		*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "at^syscfgex=\"$_no\",$_band,1,2,$_lte,,"
+}

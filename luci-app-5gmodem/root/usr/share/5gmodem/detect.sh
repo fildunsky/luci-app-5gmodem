@@ -21,7 +21,13 @@
 _dt_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 if [ -n "$_dt_am" ]; then
 	_dt_sec="m_$(echo "$_dt_am" | sed 's/[^A-Za-z0-9]/_/g')"
-	[ "$(uci -q get "5gmodem.$_dt_sec.kind")" = "hilink" ] && exit 0
+	# Порт может ПОЯВИТЬСЯ: модем переведён в режим с AT-портами (debug).
+	# Молчим только когда порта действительно нет.
+	_dt_p=$(uci -q get "5gmodem.$_dt_sec.at_port")
+	if [ "$(uci -q get "5gmodem.$_dt_sec.kind")" = "hilink" ]; then
+		[ -n "$_dt_p" ] && [ -c "$_dt_p" ] && { echo "$_dt_p"; exit 0; }
+		exit 0
+	fi
 fi
 
 CONFIG=modemdefine

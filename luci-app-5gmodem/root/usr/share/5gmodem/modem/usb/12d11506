@@ -39,7 +39,10 @@ OF=$(sms_tool -d $DEVICE at "ati")
 DEV2=$(echo $OF | tr -s "\n"  | xargs)
 MODELB=$(echo $DEV2 | awk -F 'Manufacturer:|Revision:' '{print $2}'| xargs)
 MODELC=$(echo $MODELB | sed 's/Model://' | xargs)
-MODEL=$(echo $MODELC | awk '{print toupper(substr($0,0,1))tolower(substr($0,2))}')
+# Заглавной делаем только ПЕРВОЕ СЛОВО (производителя), остальное оставляем как
+# есть: раньше tolower() на хвосте портил саму модель - "huawei E3372"
+# превращалось в "Huawei e3372".
+MODEL=$(echo $MODELC | awk '{ $1 = toupper(substr($1,1,1)) tolower(substr($1,2)); print }')
 FW=$(echo $DEV2 | awk -F 'Revision:|IMEI' '{print $2}'| xargs)
 
 # Protocol

@@ -1,0 +1,2 @@
+# Huawei E3372 в режиме с AT-портами (debug mode, 12d1:1566) - см. modemband/12d11566.
+. "$RES/modem/usb/12d11506"
