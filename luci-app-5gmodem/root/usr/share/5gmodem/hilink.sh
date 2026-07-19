@@ -252,7 +252,9 @@ metrics_json() {
 #
 # У этих модемов SMS живут в самом модеме и достаются тем же API. Формат вывода
 # делаем как у sms_tool -j: страницы разбирают его одинаково независимо от того,
-# добыты сообщения по AT или по HTTP.
+# добыты сообщения по AT или по HTTP. Объект {"msg":[...]}, ключи те же.
+# reference/part/total у API нет - многочастные сообщения прошивка склеивает
+# сама, поэтому ставим 1/1: для страницы это одно цельное сообщение.
 # BoxType: 1 - входящие, 2 - исходящие.
 sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 	case "$1" in out) _box=2 ;; *) _box=1 ;; esac
@@ -261,7 +263,7 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 <SortType>0</SortType><Ascending>0</Ascending><UnreadPreferred>0</UnreadPreferred>" "$2")
 	# Разбираем построчно: у прошивки один тег на строку, вложенность плоская.
 	printf '%s' "$_r" | tr -d '\r' | awk '
-		BEGIN { printf "["; first = 1 }
+		BEGIN { printf "{\"msg\":["; first = 1 }
 		/<Index>/    { gsub(/.*<Index>|<\/Index>.*/, ""); idx = $0 }
 		/<Phone>/    { gsub(/.*<Phone>|<\/Phone>.*/, ""); ph = $0 }
 		/<Content>/  { gsub(/.*<Content>|<\/Content>.*/, ""); txt = $0 }
@@ -272,10 +274,10 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 			gsub(/\\/, "\\\\", txt); gsub(/"/, "\\\"", txt)
 			gsub(/\t/, " ", txt)
 			if (!first) printf ",\n"; first = 0
-			printf "{\"index\":\"%s\",\"sender\":\"%s\",\"timestamp\":\"%s\",\"unread\":\"%s\",\"content\":\"%s\"}", idx, ph, dt, st, txt
+			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", (idx == "" ? 0 : idx), ph, dt, txt
 			idx=""; ph=""; txt=""; dt=""
 		}
-		END { print "]" }'
+		END { print "]}" }'
 }
 
 sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь

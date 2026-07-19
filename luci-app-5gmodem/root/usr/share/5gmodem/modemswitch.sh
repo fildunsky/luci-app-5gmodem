@@ -646,6 +646,13 @@ hidenumberhint)
 ussdsupport)
 	_p=$(active_path)
 	_s=$(secname "$_p")
+	# Модем без AT-порта: USSD - услуга AT-канала, отправлять её некуда.
+	# Отвечаем ДО опроса базы: иначе страница предлагала бы то, чего нет.
+	if [ "$(uci -q get "$CFG.$_s.kind")" = "hilink" ]; then
+		printf '{"supported":0,"reason":"no_at_port","model":"%s"}\n' \
+			"$(uci -q get "$CFG.$_s.model")"
+		exit 0
+	fi
 	_v=""
 	command -v ussd_supported_for >/dev/null 2>&1 && _v=$(ussd_supported_for \
 		"$(uci -q get "$CFG.$_s.model")" "$(uci -q get "$CFG.$_s.vidpid")")
@@ -782,6 +789,15 @@ switch)
 		apply_ussd_quirk "$SEC"
 		uci -q commit sms_tool_js
 		set_sms_storage "$ATP"
+	elif [ -z "$ATP" ] && uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+		# У модема НЕТ AT-порта (HiLink). Раньше порты просто оставались от
+		# предыдущего модема - и страница SMS показывала ЕГО сообщения, выдавая
+		# их за сообщения выбранного модема. Чужая переписка под чужим именем
+		# хуже пустого экрана, поэтому чистим.
+		for k in readport sendport ussdport atport; do
+			uci -q delete "sms_tool_js.@sms_tool_js[0].$k" 2>/dev/null
+		done
+		uci -q commit sms_tool_js
 	fi
 
 	# drop the cached AT port so detect.sh re-resolves for the new modem
