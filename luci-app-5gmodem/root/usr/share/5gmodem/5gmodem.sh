@@ -409,7 +409,14 @@ if [[ $MODEMZ -gt 1 ]]; then
 	SEC=$(uci -q get modemdefine.@general[0].main_network)
 fi
 if [[ $MODEMZ -eq 0 ]]; then
-	SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
+	# Интерфейс берём У СЕКЦИИ АКТИВНОГО МОДЕМА, а глобальный ключ - только
+	# запасной путь. Эти два значения могут разойтись (глобальный обновляет
+	# switch, но не всякий, кто трогает active_modem), и тогда метрики показывали
+	# IP ЧУЖОГО модема: наблюдалось - активен FM350, а в карточке его адрес
+	# 192.168.43.2 от соседнего Huawei.
+	SEC=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem \
+		| sed 's/[^A-Za-z0-9]/_/g').network")
+	[ -n "$SEC" ] || SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
 fi
 if [[ $MODEMZ -eq 1 ]]; then
 	SEC=$(uci -q get modemdefine.@modemdefine[0].network)
@@ -790,7 +797,14 @@ if echo "x$CONF_DEVICE" | grep -q "192.168."; then
 	if grep -q "Vendor=19d2" /sys/kernel/debug/usb/devices; then
 		_SAVED_IFS="$IFS"; . $RES/modem/hilink/zte.sh $DEVICE; IFS="$_SAVED_IFS"
 	fi
-	SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
+	# Интерфейс берём У СЕКЦИИ АКТИВНОГО МОДЕМА, а глобальный ключ - только
+	# запасной путь. Эти два значения могут разойтись (глобальный обновляет
+	# switch, но не всякий, кто трогает active_modem), и тогда метрики показывали
+	# IP ЧУЖОГО модема: наблюдалось - активен FM350, а в карточке его адрес
+	# 192.168.43.2 от соседнего Huawei.
+	SEC=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem \
+		| sed 's/[^A-Za-z0-9]/_/g').network")
+	[ -n "$SEC" ] || SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
 	SEC=${SEC:-wan}
 else
 

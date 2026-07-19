@@ -174,7 +174,11 @@ metrics_json() {
 	_fw=$(printf '%s' "$_inf" | xval SoftwareVersion)
 
 	_cs=$(printf '%s' "$_st" | xval ConnectionStatus)
+	# «Палочки» лежат то в SignalStrength, то в SignalIcon - зависит от прошивки.
+	# На проверенном E3372h (22.300.09) первое ПУСТОЕ, а второе заполнено, из-за
+	# чего процент сигнала не считался вовсе. Берём то, что есть.
 	_sigbars=$(printf '%s' "$_st" | xval SignalStrength)
+	[ -n "$_sigbars" ] || _sigbars=$(printf '%s' "$_st" | xval SignalIcon)
 	_maxbars=$(printf '%s' "$_st" | xval maxsignal)
 	_ntype=$(printf '%s' "$_st" | xval CurrentNetworkType)
 	_wanip=$(printf '%s' "$_st" | xval WanIPAddress)
@@ -203,6 +207,13 @@ metrics_json() {
 	_pct=""
 	if [ -n "$_sigbars" ] && [ -n "$_maxbars" ] && [ "$_maxbars" -gt 0 ] 2>/dev/null; then
 		_pct=$(( _sigbars * 100 / _maxbars ))
+	elif [ -n "$_rsrp" ]; then
+		# Палочек нет ни там, ни там - считаем из RSRP по той же шкале, что и
+		# основной путь опроса (-140 дно, -75 потолок), иначе у одного модема
+		# процент был бы по одной шкале, у другого по другой.
+		_pct=$(( ( _rsrp + 140 ) * 100 / 65 ))
+		[ "$_pct" -gt 100 ] && _pct=100
+		[ "$_pct" -lt 0 ] && _pct=0
 	fi
 
 	# ЗАПОМИНАЕМ модель и IMEI в профиле. У обычных модемов это делает AT-опрос,
@@ -261,21 +272,38 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 	_r=$(api_post /api/sms/sms-list \
 		"<PageIndex>1</PageIndex><ReadCount>50</ReadCount><BoxType>$_box</BoxType>\
 <SortType>0</SortType><Ascending>0</Ascending><UnreadPreferred>0</UnreadPreferred>" "$2")
-	# Разбираем построчно: у прошивки один тег на строку, вложенность плоская.
+	# Разбор. Две ловушки, обе поймались на живом модеме:
+	#   1. Запись выдавать надо по </Message>, а НЕ по <Smstat>: этот тег идёт
+	#      ПЕРВЫМ в блоке, и выдача по нему давала пустую первую запись и сдвиг
+	#      всех остальных на одну.
+	#   2. Текст бывает МНОГОСТРОЧНЫМ (перевод строки внутри SMS - обычное дело),
+	#      поэтому Content собираем до закрывающего тега, а не берём одной строкой.
 	printf '%s' "$_r" | tr -d '\r' | awk '
-		BEGIN { printf "{\"msg\":["; first = 1 }
-		/<Index>/    { gsub(/.*<Index>|<\/Index>.*/, ""); idx = $0 }
-		/<Phone>/    { gsub(/.*<Phone>|<\/Phone>.*/, ""); ph = $0 }
-		/<Content>/  { gsub(/.*<Content>|<\/Content>.*/, ""); txt = $0 }
-		/<Date>/     { gsub(/.*<Date>|<\/Date>.*/, ""); dt = $0 }
-		/<Smstat>/   {
-			gsub(/.*<Smstat>|<\/Smstat>.*/, ""); st = $0
-			# экранируем то, что сломало бы JSON
-			gsub(/\\/, "\\\\", txt); gsub(/"/, "\\\"", txt)
-			gsub(/\t/, " ", txt)
+		BEGIN { printf "{\"msg\":["; first = 1; inc = 0 }
+		function esc(v) {
+			gsub(/\\/, "\\\\", v); gsub(/"/, "\\\"", v)
+			gsub(/\t/, " ", v); gsub(/\n/, " ", v)
+			return v
+		}
+		/<Message>/  { idx=""; ph=""; txt=""; dt=""; inc=0 }
+		/<Index>/    { v=$0; sub(/.*<Index>/, "", v); sub(/<\/Index>.*/, "", v); idx=v }
+		/<Phone>/    { v=$0; sub(/.*<Phone>/, "", v); sub(/<\/Phone>.*/, "", v); ph=v }
+		/<Date>/     { v=$0; sub(/.*<Date>/, "", v); sub(/<\/Date>.*/, "", v); dt=v }
+		/<Content>/  {
+			v=$0; sub(/.*<Content>/, "", v)
+			if (v ~ /<\/Content>/) { sub(/<\/Content>.*/, "", v); txt=v }
+			else { txt=v; inc=1 }
+			next
+		}
+		inc == 1 {
+			if ($0 ~ /<\/Content>/) { v=$0; sub(/<\/Content>.*/, "", v); txt=txt " " v; inc=0 }
+			else { txt=txt " " $0 }
+			next
+		}
+		/<\/Message>/ {
+			if (idx == "") next
 			if (!first) printf ",\n"; first = 0
-			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", (idx == "" ? 0 : idx), ph, dt, txt
-			idx=""; ph=""; txt=""; dt=""
+			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", idx, esc(ph), esc(dt), esc(txt)
 		}
 		END { print "]}" }'
 }

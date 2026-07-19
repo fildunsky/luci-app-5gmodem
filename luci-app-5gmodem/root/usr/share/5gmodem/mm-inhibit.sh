@@ -153,12 +153,20 @@ _restore_stolen() {
 			fi
 		fi
 		if [ -z "$_dead" ]; then
-			# Порт промолчал. Проверяем связь через сам интерфейс: 77.88.8.8
-			# (8.8.8.8 недоступен в РФ и дал бы ложный разрыв).
+			# Порт промолчал. Проверяем связь через сам интерфейс.
 			L3=$(ubus call "network.interface.$IF" status 2>/dev/null \
 				| jsonfilter -e '@.l3_device' 2>/dev/null)
 			[ -n "$L3" ] || continue
+			# 77.88.8.8 (Яндекс), а не 8.8.8.8 - последний недоступен в РФ.
 			ping -c 2 -W 4 -I "$L3" 77.88.8.8 >/dev/null 2>&1 && continue
+			# ПИНГА МАЛО. У части операторов ICMP закрыт наглухо, и молчание на
+			# пинг не значит отсутствия связи: проверено на живом МегаФоне -
+			# 100% потерь пакетов, при этом HTTP отвечает за 0.4 с. Полагаться
+			# на один пинг значило бы регулярно рвать рабочее соединение.
+			if command -v curl >/dev/null 2>&1; then
+				curl -s --max-time 8 --interface "$L3" -o /dev/null \
+					http://ip-api.com/line/?fields=query 2>/dev/null && continue
+			fi
 			_dead="нет связи через $L3"
 		fi
 		logger -t 5gmodem "MM забрал $PATHID и оставил без сессии данных ($_dead) - поднимаем $IF"
