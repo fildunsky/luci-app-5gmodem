@@ -14,6 +14,8 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 - **Modem restart** — one-click soft radio restart `AT+CFUN=4,1` and modem reset `AT+CFUN=1,1`.
 - **SMS Inbox / Send**, **USSD** and **AT** tabs, each with a collapsible per-tab settings panel. Optional e-mail forwarding of incoming SMS and LED/notification support.
 - **Port auto-detect** — the AT port and network interface are detected automatically; can be set manually.
+- **USB sticks that have no AT ports** (Huawei HiLink and relatives) are supported too — see below.
+- **`5gtop`** — a terminal dashboard with the same data, for when you are on SSH and not in a browser.
 
 <img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-43-48" src="https://github.com/user-attachments/assets/5f9f9a63-a3c9-44a1-8f0f-4625b20c90a5" />
 
@@ -26,11 +28,65 @@ I've added new features to them (compared to 3ginfo and modemband)
 - SIMCOM SIM7600E-H
 - Quectel EC21-E
 - MeigLink SLM770A-R
+- Huawei E3372 (HiLink)
 - Many more untested, but should support all the modems handled by the upstream forks.
+
+### USB sticks with no AT ports (HiLink)
+
+Sticks like the Huawei E3372 keep the IP stack themselves: the router only sees
+an Ethernet card, and everything else lives behind the stick's own web
+interface. There are no AT ports at all, so the usual polling has nothing to
+talk to.
+
+The app handles them anyway:
+
+- the modem is recognised by its USB descriptor (a stick that simply has no
+  driver bound yet is *not* mistaken for one) and gets a DHCP interface;
+- metrics, SMS and the operator name are read over the stick's HTTP API;
+- if the stick can expose serial ports (Huawei calls it *debug mode*), the app
+  switches it there automatically and then drives it like any other modem —
+  which is where TAC, band, EARFCN, USSD and the AT console come from. The mode
+  is reset whenever the modem reboots, so it is re-applied on every appearance.
+  There is a checkbox in Modem Settings if you would rather it did not.
+
+Bands and network mode for such a stick are changed through its API rather than
+`AT^SYSCFGEX`: the AT route makes the modem drop its USB composition and fall
+out of debug mode.
+
+## 5gtop
+
+A terminal dashboard, for when you are on SSH rather than in a browser. Same
+data as the web pages, same backend — no extra polling of the modem.
+
+```sh
+5gtop        # English
+5gtop ru     # Russian
+```
+
+Tabs: **Network**, **Cell info**, **Modem**, **SMS**, **USSD**, **AT console**,
+and **eSIM** when an eUICC is present. Keys are single-press (no Enter): the
+highlighted letter in each tab name switches to it, `Tab` cycles modems in dual
+modem setups, `t` runs the speed test, `r` refreshes, `q` quits. The layout
+follows the terminal width and falls back to a narrow mode on small screens.
 
 <img width="1978" height="1506" alt="Screenshot From 2026-07-14 08-44-54" src="https://github.com/user-attachments/assets/f14f264f-ef81-47b0-8f79-bb7c6982ac55" />
 
 ## What's new
+
+### 1.5.3
+- **USB sticks with no AT ports** (Huawei E3372 and relatives) are supported — metrics, SMS, bands and network mode over the stick's own HTTP API, plus automatic switching into the mode where it does expose serial ports. See *USB sticks with no AT ports* above.
+- **Network mode buttons** (Auto / 2G / 3G / 4G) for Huawei, alongside the band toggles.
+- **Saved modem profiles** — a card per modem the app has ever seen: interface, protocol, APN, IMEI, USB path. Deleting one removes its network interface too, unless another profile still uses it. A stale interface left behind by an unplugged modem is not harmless: one of them kept claiming a device from the modem that was actually in use.
+- **ModemManager is stopped when no *connected* modem needs it.** It used to run for a modem that had been unplugged, and on startup it grabs every modem it can see — including ones explicitly hidden from it, which is how a working FM350 got switched off mid-session.
+- **A modem short of power is named as such.** Such a modem still answers AT commands while its data interface never comes up, which looks like a software fault; the page now says what it is and suggests a powered hub.
+
+### 1.5.2
+- **Cell lock for FM350** (`AT+EMMCHLCK`) and **5G on/off** (`AT+E5GOPT`). The lock survives a modem reboot but the modem reports it as absent — the app remembers your choice and says so, instead of showing "not locked" while the modem sits on the locked cell.
+- **Connection is restored after a radio restart.** Changing bands or the cell lock takes the modem through airplane mode, after which it re-registers on its own but the PDP context stays empty and the interface stays down — with no hint as to why.
+- **USB driver table in one place.** `05c6:90d6` was being bound in two handlers with different drivers, and Compal ended up with no working AT port at all. `option1` is now used only for `05c6:9025`.
+- **APN for MVNOs is picked by the code in the SIM**, not by the code of the network it registered on: T-Mobile RU reports Tele2's 250-20 while its own is 250-62, so it got Tele2's APN. Name matching never worked for Cyrillic at all — busybox `tr` walks bytes, not characters.
+- **Interface protocol is checked against the driver** of its control node: Compal inherited `proto=qmi` from a Telit that used to sit in that slot, and never came up.
+- **Fixes**: LED services were shipped without the execute bit and so never started; `autosetup` configures every connected modem instead of the first one; `5gtop` lists only modems that are actually on the bus.
 
 ### 1.5.1
 - **Signal level on the case LEDs** (Cudy LT300 and any router exposing `white:signal1..3`). Enabled by default there, with a choice of which value drives them — RSRP, RSRQ, SINR or percent. Thresholds match the colours on the Network page, so three LEDs and a green reading mean the same thing. The modem is never polled for this: the LEDs read the same snapshot the pages do.
