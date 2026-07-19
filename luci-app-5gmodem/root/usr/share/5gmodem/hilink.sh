@@ -127,6 +127,11 @@ api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
 # все поля молча выходили пустыми, хотя ответ приходил правильный.
 xval() { tr -d '\r' | sed -n "s|^<$1>\(.*\)</$1>\$|\1|p" | head -1; }
 
+# Значение, безопасное для вставки в JSON: убираем управляющие символы и
+# экранируем кавычки со слэшем. Один сбойный байт ломает разбор ВСЕГО ответа на
+# странице, а выглядит это как «данных нет» - искать потом долго.
+jsafe() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
 # --- расшифровка кодов -------------------------------------------------------
 
 # CurrentNetworkType. Коды взяты из ответов прошивки и общеизвестного списка
@@ -237,7 +242,11 @@ metrics_json() {
 	# mccmnc.dat, получался разнобой: в одном месте "Megafon", в другом
 	# "MegaFon RUS". База - единый источник написания.
 	if [ -n "$_num" ]; then
-		_dbop=$(awk -F';' -v k="$_num" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null | head -1)
+		# tr -d '\r' ОБЯЗАТЕЛЕН: строки mccmnc.dat в формате CRLF, и возврат
+		# каретки попадал ПРЯМО В JSON ("Megafon\r"). jsonfilter такое глотает,
+		# а JSON.parse в браузере - нет: обе страницы молча оставались пустыми.
+		_dbop=$(awk -F';' -v k="$_num" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null \
+			| head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')
 		[ -n "$_dbop" ] && _op="$_dbop"
 	fi
 
@@ -292,12 +301,12 @@ metrics_json() {
 	# стояли прочерки.
 	printf '"cport":"%s",' "$(_addr_for "$_p" 2>/dev/null)"
 	printf '"protocol":"HiLink (web API)",'
-	printf '"modem":"%s",' "$_model"
+	printf '"modem":"%s",' "$(jsafe "$_model")"
 	printf '"imei":"%s",' "$_imei"
 	printf '"imsi":"%s",' "$_imsi"
 	printf '"iccid":"%s",' "$_iccid"
-	printf '"firmware":"%s",' "$_fw"
-	printf '"operator_name":"%s",' "$_op"
+	printf '"firmware":"%s",' "$(jsafe "$_fw")"
+	printf '"operator_name":"%s",' "$(jsafe "$_op")"
 	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
 	printf '"registration":"%s",' "$_reg"
 	printf '"mode":"%s",' "$(nettype_name "$_ntype")"
