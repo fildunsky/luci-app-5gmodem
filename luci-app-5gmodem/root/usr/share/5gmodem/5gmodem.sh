@@ -705,6 +705,13 @@ esac
 # the connection works fine - showing "registered, SMS only" then just confuses
 # the user. So when CS says SMS-only but CEREG says registered (1=home, 5=roam),
 # report the data status instead.
+# CS-статус СОХРАНЯЕМ ОТДЕЛЬНО, прежде чем подменить. Он не нужен для показа
+# связи, но по нему видно, доступен ли голосовой домен: USSD - услуга именно
+# этого домена, и при "SMS only" сеть её не даёт (проверено на MeigLink
+# SLM770A-R: AT+CUSD=? отвечает "(0-2)", а любой запрос молчит при CREG 2,6).
+# Без этого поля подсказка на вкладке USSD не смогла бы отличить «модем не
+# умеет» от «сеть сейчас не даёт».
+REG_CS="$REG"
 if [ "$REG" = "6" ] || [ "$REG" = "7" ]; then
 	CEREG_STAT=$(echo "$O" | busybox awk -F[,] '/^\+CEREG/{gsub(/[[:space:]"]+/,"");print $2;exit}')
 	case "$CEREG_STAT" in
@@ -928,6 +935,47 @@ if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
 	}
 fi
 
+# ПОДМЕНА МОДЕМА, КОТОРУЮ НЕ ВИДНО ПО vid:pid.
+#
+# modemswitch.sh ловит замену сравнением vid:pid на USB-пути. Но два ОДИНАКОВЫХ
+# модема (один вид, одна модель) при перестановке между разъёмами так не
+# различаются: vid:pid совпадает, и секция продолжает считать, что железо то же.
+# В итоге интерфейс и APN остаются привязаны к разъёму и достаются ЧУЖОЙ SIM.
+#
+# IMEI уникален для каждого устройства и уже прочитан этим опросом - значит
+# различить их можно без единой лишней AT-команды. Запоминаем его в секции и
+# сверяем: разошёлся - настройки относятся к прежнему модему и заведомо неверны.
+#
+# Сами НИЧЕГО НЕ УДАЛЯЕМ: опрос идёт в фоне, а тихо снести чужой APN и интерфейс -
+# именно тот неочевидный сюрприз, которого быть не должно. Ставим метку и пишем
+# в журнал; страница настроек модема покажет её и предложит пересоздать.
+# IMEI читаем сами, если профиль модема его не дал (у части профилей запроса
+# нет вовсе - например у MeigLink). Идём через кэш статики: команда уходит в
+# порт ОДИН раз на модем, дальше берётся из файла, поэтому на стоимость опроса
+# это не влияет.
+if [ -z "$NR_IMEI" ] || [ "$NR_IMEI" = "-" ]; then
+	NR_IMEI=$(at_static imei "AT+CGSN" 2>/dev/null | tr -d '\r' \
+		| grep -oE '^[0-9]{14,16}$' | head -1)
+fi
+
+if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ]; then
+	case "$NR_IMEI" in
+		*[!0-9]*|'') : ;;                      # не IMEI - молчим
+		*)
+			_old_imei=$(uci -q get "5gmodem.$AMP_SEC.imei")
+			if [ -z "$_old_imei" ]; then
+				uci -q set "5gmodem.$AMP_SEC.imei=$NR_IMEI"
+				uci -q commit 5gmodem
+			elif [ "$_old_imei" != "$NR_IMEI" ]; then
+				logger -t 5gmodem "modem swap on $(uci -q get 5gmodem.@5gmodem[0].active_modem): IMEI $_old_imei -> $NR_IMEI, settings may belong to the previous modem"
+				uci -q set "5gmodem.$AMP_SEC.imei=$NR_IMEI"
+				uci -q set "5gmodem.$AMP_SEC.imei_changed=1"
+				uci -q commit 5gmodem
+			fi
+			;;
+	esac
+fi
+
 # ЗАЩИТА ОТ ОТРАВЛЕНИЯ КЭША: $SEC берётся из 5gmodem.network, а $DEVICE - из
 # 5gmodem.device/at_port. Если эти два поля разъехались по модемам (см. инвариант
 # в modemswitch.sh), COPS прочитан с порта СОСЕДА, и запись в кэш этого
@@ -976,6 +1024,7 @@ cat > "$_TMP" <<EOF
 "location":"$(sanitize_string "$LOC")",
 "mode":"$(sanitize_string "$MODE")",
 "registration":"$(sanitize_string "$REG")",
+"registration_cs":"$(sanitize_string "$REG_CS")",
 "simslot":"$(sanitize_string "$SSIM")",
 "imei":"$(sanitize_string "$NR_IMEI")",
 "imsi":"$(sanitize_string "$NR_IMSI")",

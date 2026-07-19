@@ -32,6 +32,16 @@ I've added new features to them (compared to 3ginfo and modemband)
 
 ## What's new
 
+### 1.5.1
+- **Signal level on the case LEDs** (Cudy LT300 and any router exposing `white:signal1..3`). Enabled by default there, with a choice of which value drives them — RSRP, RSRQ, SINR or percent. Thresholds match the colours on the Network page, so three LEDs and a green reading mean the same thing. The modem is never polled for this: the LEDs read the same snapshot the pages do.
+- **Saving Modem Settings no longer wipes the ports.** `network`, `device` and `at_port` are hidden while auto-detect is on, and LuCI drops config options whose dependencies are unmet — so one Save could erase values that the *backend* had written, leaving the app pointing at a dead port with no metrics at all. Those fields, and eleven more in the SMS settings (SMTP credentials among them), now survive.
+- **Modem Settings opens immediately.** It used to wait for a full AT poll — eight seconds on an LT300 — before drawing anything. The page now renders at once and fills the modem details from the cached snapshot.
+- **Two identical modems** (same VID:PID, same model) get distinguishable tabs — the USB path is appended only where names collide. Swapping them between ports is now detected by IMEI and reported, instead of silently leaving the previous modem's interface and APN bound to that slot. Nothing is deleted automatically: the page explains what happened and leaves the decision to you.
+- **USSD tells you why it is unavailable.** Besides modems whose firmware has no SS support, there is now a live check for a network that registered the SIM for *SMS only* (`CREG 6/7`) — the modem supports USSD, the network simply does not provide it right now.
+- **Speed test says what is missing** instead of failing silently: it needs `curl`, which is not bundled (libcurl is noticeable on 8 MB routers).
+- **`5gtop`**: USSD and AT console tabs with line input, eSIM profile list and download, a SIM slot switcher, a Cell tab that no longer falls back to the Network view on narrow terminals, and per-tab hotkeys highlighted inside their own names. Multipart SMS are merged correctly (a trailing newline used to be turned into a space, splitting words across parts), incomplete messages are marked `[3/5]` — a full SIM simply cannot store the tail — and the reader is six times faster: one `jsonfilter` call per message instead of six.
+- **Fixes**: the eSIM menu tab no longer flickers on every page load; the `wwan6` IPv6 twin is no longer mistaken for another modem's interface; `resolve` no longer collapses the SMS/USSD ports back onto the metrics port; a stray brace in the package postinst aborted it halfway, so the cache-busting `touch` it ends with had never actually run.
+
 ### 1.5.0
 - **Inbox rebuilt as message cards.** The table is gone: each SMS is a rounded card styled exactly like the Internet-priority and speed-test buttons — sender in bold on the left, date and time small on the right, text below. Selection is a click on the card; the checkboxes are gone. Actions sit under the list, and *Forward* / *Delete* appear only when something is selected.
 - **Two modems no longer step on each other.** The metrics snapshot in `/tmp` was shared by every reader and not tied to any modem, so right after a switch (or a hotplug event) the page could show the *previous* modem — and the poll could write its model into the new modem's config, producing names like "Telit Fibocom FM350-GL". The snapshot now carries the owning modem's USB path and a foreign snapshot is treated as absent.
@@ -64,7 +74,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 
 # .apk (OpenWrt 25.12.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.0/luci-app-5gmodem-1.5.0-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.1/luci-app-5gmodem-1.5.1-r1.apk > /tmp/luci-app-5gmodem.apk
 curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/refs/heads/master/dist/lpac-2.1.0-r1.apk > /tmp/lpac.apk
 apk update
 apk add /tmp/lpac.apk --allow-untrusted
@@ -73,7 +83,7 @@ apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 
 # .ipk (OpenWrt 24.10.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.0/luci-app-5gmodem_1.5.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.1/luci-app-5gmodem_1.5.1-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg update
 opkg install /tmp/luci-app-5gmodem.ipk
 ```

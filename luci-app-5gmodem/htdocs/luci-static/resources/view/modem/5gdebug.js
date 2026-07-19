@@ -215,7 +215,12 @@ return view.extend({
 
 	load: function() {
 		return Promise.all([
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]), ''),
+			/* НЕ ЖДЁМ ОПРОС МОДЕМА. Раньше здесь стоял '5gmodem.sh json' -
+			   полный проход по AT-командам, 8 секунд на живом LT300, и всё это
+			   время страница не отрисовывалась вовсе. Информацию о модеме
+			   заполняем ПОСЛЕ отрисовки (см. fillModemInfo), как это давно
+			   сделано на странице «Сеть». */
+			Promise.resolve(''),
 			fs.list('/dev').then(function(devs) {
 				return devs.filter(function(dev) {
 					return dev.name.match(/^ttyUSB/) || dev.name.match(/^cdc-wdm/) || dev.name.match(/^ttyACM/) || dev.name.match(/^mhi_/) || dev.name.match(/^wwan/);
@@ -229,8 +234,92 @@ return view.extend({
 			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), []),
 			// карта портов -> модем (vid:pid, модель), чтобы подписать выпадашки
 			// портов: какой /dev/ttyUSB* какому модему принадлежит
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listports.sh'), '{}')
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listports.sh'), '{}'),
+			/* Светодиоды уровня сигнала: есть ли они на этом устройстве.
+			   Читаем каталог, а не запускаем скрипт - путь /sys/class/leds
+			   разрешён в ACL, и лишнего процесса на открытие страницы нет. */
+			L.resolveDefault(fs.list('/sys/class/leds'), [])
 		]);
+	},
+
+	/* ИНДИКАТОР НА СВЕТОДИОДАХ - ОТДЕЛЬНЫМ БЛОКОМ, ВНЕ form.Map.
+	   Внутри формы он требовал бы нажать «Сохранить», а сохранение ЭТОЙ страницы
+	   переписывает поля портов (они скрыты при автоопределении) - именно так
+	   однажды и пропали метрики. Настройка светодиодов не должна тянуть за собой
+	   такой риск, поэтому применяем её сразу, своим вызовом. */
+	renderLeds: function(ledsAvail) {
+		if (!ledsAvail) { return ''; }
+
+		var cur = uci.get('5gmodem', '@5gmodem[0]', 'signal_leds');
+		var metric = uci.get('5gmodem', '@5gmodem[0]', 'signal_leds_metric') || 'rsrp';
+		var metrics = [
+			[ 'rsrp',   _('RSRP (signal level, default)') ],
+			[ 'rsrq',   _('RSRQ (signal quality)') ],
+			[ 'sinr',   _('SINR (signal to noise)') ],
+			[ 'signal', _('Percent (modem scale)') ]
+		];
+
+		var sel = E('select', { 'class': 'cbi-input-select', 'id': 'leds-metric' },
+			metrics.map(function(m) {
+				return E('option', { 'value': m[0], 'selected': (m[0] === metric) ? '' : null }, m[1]);
+			}));
+		sel.addEventListener('change', function(ev) {
+			fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', ev.currentTarget.value ]);
+		});
+
+		return E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Signal level indicator')),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Show on the case LEDs')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'checkbox',
+						'checked': (cur == '0') ? null : '',
+						'change': function(ev) {
+							fs.exec('/usr/share/5gmodem/signal-leds.sh',
+								[ ev.currentTarget.checked ? 'enable' : 'disable' ]);
+						}
+					}),
+					E('div', { 'class': 'cbi-value-description' },
+						_('Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed.'))
+				])
+			]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('LED metric')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					sel,
+					E('div', { 'class': 'cbi-value-description' },
+						_('Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing.'))
+				])
+			])
+		]);
+	},
+
+	/* Заполнить «Информацию о модеме» из СНИМКА метрик.
+	   cached, а не полный опрос: снимок поддерживают страница «Сеть» и 5gtop, и
+	   если он свежий, обращения к модему не будет вовсе. Зовём после отрисовки,
+	   поэтому страница открывается мгновенно. */
+	fillModemInfo: function() {
+		return L.resolveDefault(fs.exec('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '20' ]), {})
+			.then(function(r) {
+				var j = {};
+				try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) { return; }
+				var put = function(id, v) {
+					var el = document.getElementById(id);
+					if (el && v != null && String(v) !== '') { el.textContent = String(v); }
+				};
+				put('dbg-modem', j.modem);
+				put('dbg-firmware', j.firmware);
+				put('dbg-cport', j.cport);
+				put('dbg-protocol', j.protocol);
+
+				var t = j.mtemp;
+				if (t != null && String(t).length > 1 && String(t).indexOf(' ') < 0 && String(t) != '-') {
+					put('dbg-mtemp', String(t).replace('&deg;', '°'));
+					var row = document.getElementById('dbg-temp-row');
+					if (row) { row.style.display = ''; }
+				}
+			});
 	},
 
 	render: function(res) {
@@ -239,6 +328,14 @@ return view.extend({
 		try { json = JSON.parse(res[0] || '{}'); } catch (e) {}
 		if (!json || typeof json != 'object') json = {};
 		var devs = res[1] || [];
+		/* Есть ли на корпусе все три светодиода уровня (Cudy LT300 и совместимые).
+		   Индекс 7 - последний элемент списка в load(). При одном индикаторе
+		   настройка «уровень тремя лампочками» бессмысленна, поэтому нужны все. */
+		var ledsAvail = (function() {
+			var names = (res[7] || []).map(function(e) { return e.name; });
+			return [ 'white:signal1', 'white:signal2', 'white:signal3' ]
+				.every(function(n) { return names.indexOf(n) >= 0; });
+		})();
 
 		/* карта порт -> {vidpid, product} для подписи выпадашек портов */
 		var portInfo = {};
@@ -284,6 +381,13 @@ return view.extend({
 			_('Network interface for Internet access.'));
 		o.depends('auto_port', '0');
 		o.rmempty = true;
+		/* НЕ УДАЛЯТЬ ПРИ СОХРАНЕНИИ - та же ловушка, что у device и at_port.
+		   Поле скрыто, пока включено автоопределение, а LuCI выбрасывает из
+		   конфига опции с невыполненными зависимостями. Здесь цена выше: в
+		   network лежит ИМЯ ИНТЕРФЕЙСА, которым управляет приложение, и без него
+		   теряется связь модема с его подключением (проверено на живом роутере -
+		   после сохранения страницы ключ исчезал вместе с device). */
+		o.remove = function() { return Promise.resolve(); };
 		(uci.sections('network', 'interface') || []).forEach(function(iface) {
 			var nm = iface['.name'];
 			if (nm && nm != 'loopback') { o.value(nm, nm + (iface.proto ? ' (' + iface.proto + ')' : '')); }
@@ -299,6 +403,13 @@ return view.extend({
 		o.placeholder = _('Please select a port');
 		o.rmempty = true;
 		o.depends('auto_port', '0');
+		/* НЕ УДАЛЯТЬ ПРИ СОХРАНЕНИИ. Поле скрыто, пока включено
+		   автоопределение, а LuCI удаляет из конфига опции, чьи зависимости не
+		   выполнены. Живой случай: сохранение этой страницы с включённым
+		   автоопределением стёрло device и переписало at_port на первый порт из
+		   списка (ttyUSB0, он не отвечает на AT) - метрики пропали полностью.
+		   Значение проставляет resolve по факту опроса, и терять его нельзя. */
+		o.remove = function() { return Promise.resolve(); };
 
 		o = s.option(form.Value, 'at_port',
 			_('Port for AT / SMS / USSD'),
@@ -307,6 +418,9 @@ return view.extend({
 		o.placeholder = _('Please select a port');
 		o.rmempty = true;
 		o.depends('auto_port', '0');
+		/* То же, что у device: при автоопределении поле скрыто, и сохранение
+		   формы не должно его трогать. */
+		o.remove = function() { return Promise.resolve(); };
 		/* Синхронизируем единый AT-порт в 4 отдельных поля sms_tool_js,
 		   которые читают вьюхи приёма/отправки SMS, USSD и AT (их код не
 		   меняем). uci.save() формы сбрасывает и sms_tool_js. */
@@ -398,6 +512,22 @@ return view.extend({
 				E('strong', {}, _('Interface “%s” was created for a different modem.').format(mForeignIf)), ' ',
 				_('It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now.')
 			]), 'warning');
+		}
+
+		/* ПЕРЕСТАВИЛИ ОДИНАКОВЫЕ МОДЕМЫ МЕСТАМИ.
+		   Замену обычно ловит сравнение vid:pid на USB-пути, но два одинаковых
+		   модуля так не различить. Опрос сверяет IMEI (он уникален) и ставит эту
+		   метку. Сам он ничего не удаляет намеренно: тихо снести чужой APN и
+		   интерфейс - именно тот неочевидный сюрприз, которого быть не должно.
+		   Поэтому решение за пользователем: показываем, что произошло, и чем это
+		   грозит. Метку снимаем сразу, чтобы предупреждение не повторялось. */
+		var mImeiChanged = mSec ? (uci.get('5gmodem', mSec, 'imei_changed') || '') : '';
+		if (mImeiChanged === '1') {
+			ui.addNotification(null, E('p', {}, [
+				E('strong', {}, _('A different modem is now in this USB port.')), ' ',
+				_('Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed.')
+			]), 'warning');
+			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]);
 		}
 
 		/* Оператор -> APN российских операторов (и MVNO). Пусто = неизвестен. */
@@ -677,16 +807,22 @@ return view.extend({
 				E('td', { 'class': 'td left tg-info-val' }, [ value ]),
 			]);
 		}
+		/* Значения приходят позже - ставим прочерки и метим ячейки, чтобы было
+		   куда их положить. Строку температуры держим скрытой: у части модемов
+		   её нет вовсе, и пустая строка в таблице только мешает. */
+		var infoCell = function(id, inner) {
+			return E('span', { 'id': id }, inner !== undefined ? inner : '-');
+		};
 		var infoRows = [
-			inforow(_('Modem type'), infoVal(json.modem)),
-			inforow(_('Revision / Firmware'), infoVal(json.firmware)),
-			inforow(_('IP adress / Communication Port'), infoVal(json.cport)),
-			inforow(_('Protocol'), E('span', { 'class': 'tg-proto-badge' }, infoVal(json.protocol))),
+			inforow(_('Modem type'), infoCell('dbg-modem')),
+			inforow(_('Revision / Firmware'), infoCell('dbg-firmware')),
+			inforow(_('IP adress / Communication Port'), infoCell('dbg-cport')),
+			inforow(_('Protocol'), E('span', { 'class': 'tg-proto-badge' }, infoCell('dbg-protocol'))),
 		];
-		var t = json.mtemp;
-		if (t != null && String(t).length > 1 && String(t).indexOf(' ') < 0 && String(t) != '-') {
-			infoRows.push(inforow(_('Chip Temperature'), String(t).replace('&deg;', '°')));
-		}
+		var tempRow = inforow(_('Chip Temperature'), infoCell('dbg-mtemp'));
+		tempRow.style.display = 'none';
+		tempRow.id = 'dbg-temp-row';
+		infoRows.push(tempRow);
 
 		var modemInfo = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Modem Information') ]),
@@ -916,13 +1052,24 @@ return view.extend({
 		/* Форма настроек рендерится асинхронно; собираем страницу целиком:
 		   Информация о модеме -> Настройки -> Диагностика. Save/Apply внизу
 		   применяется к form.Map (единственный .cbi-map на странице). */
+		var ledsBlock = this.renderLeds(ledsAvail);
+		var self = this;
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
 				modemInfo,
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ]),
+				/* Блок светодиодов ПОСЛЕ формы, но вне её: он применяется сразу
+				   и не должен подписываться под Save/Apply формы. */
+				ledsBlock,
 				updateBlock,
 				diag
 			]);
+		}).then(function(node) {
+			/* Значения подставляем ПОСЛЕ того, как узел готов: до вставки в
+			   документ getElementById их не найдёт. Промис не возвращаем -
+			   страница не должна ждать эти данные, ради чего всё и делалось. */
+			window.setTimeout(function() { self.fillModemInfo(); }, 0);
+			return node;
 		});
 	}
 });

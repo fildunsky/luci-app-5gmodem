@@ -1057,12 +1057,21 @@ return view.extend({
 											var result = Object.keys(groups).map(function(k) {
 												var parts = groups[k].sort(function(a, b) { return (a.part || 0) - (b.part || 0); });
 												var first = parts[0];
+												var text = parts.map(function(p) { return p.content; }).join('');
+												/* ЧАСТЕЙ МЕНЬШЕ, ЧЕМ ЗАЯВЛЕНО - и это не наша обрезка:
+												   на ПЕРЕПОЛНЕННОЙ SIM хвост длинного сообщения просто не
+												   помещается (наблюдалось: 3 части из 5 при 15/15).
+												   Показать обрывок молча нельзя - его принимают за our баг. */
+												var want = first.total || 0;
+												if (want > 1 && parts.length < want) {
+													text += ' [' + parts.length + '/' + want + ']';
+												}
 												return {
 													sender: first.sender,
 													timestamp: first.timestamp,
 													total: first.total,
 													index: parts.map(function(p) { return p.index; }).join('-'),
-													content: parts.map(function(p) { return p.content; }).join('')
+													content: text
 												};
 											});
 											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });

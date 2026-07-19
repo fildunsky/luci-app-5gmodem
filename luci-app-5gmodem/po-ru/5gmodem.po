@@ -2665,3 +2665,45 @@ msgstr "Индикатор сигнала включён"
 
 msgid "Signal LEDs disabled"
 msgstr "Индикатор сигнала выключен"
+
+msgid "The network registered this SIM for SMS only, so USSD is unavailable right now: it is a voice-domain service. The modem itself supports USSD - requests will simply stay unanswered until the registration changes."
+msgstr "Сеть зарегистрировала эту SIM только для SMS, поэтому USSD сейчас недоступен: это услуга голосового домена. Сам модем USSD поддерживает — запросы просто останутся без ответа, пока регистрация не изменится."
+
+msgid "Show the signal level on the three case LEDs. Reads the same snapshot as the pages - the modem is not polled separately."
+msgstr "Показывать уровень сигнала на трёх светодиодах корпуса. Берётся тот же снимок, что и на страницах, — модем отдельно не опрашивается."
+
+msgid "LED metric"
+msgstr "Метрика для светодиодов"
+
+msgid "Which value the LEDs show. Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing."
+msgstr "Какое значение показывают светодиоды. Пороги совпадают с раскраской на странице «Сеть»: три лампочки и зелёный цвет значат одно и то же."
+
+msgid "RSRP (signal level, default)"
+msgstr "RSRP (уровень сигнала, по умолчанию)"
+
+msgid "RSRQ (signal quality)"
+msgstr "RSRQ (качество сигнала)"
+
+msgid "SINR (signal to noise)"
+msgstr "SINR (сигнал/шум)"
+
+msgid "Percent (modem scale)"
+msgstr "Проценты (шкала модема)"
+
+msgid "Show on the case LEDs"
+msgstr "Показывать на светодиодах корпуса"
+
+msgid "Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed."
+msgstr "Берётся тот же снимок, что и на страницах, — модем отдельно не опрашивается. Применяется сразу, «Сохранить» не нужно."
+
+msgid "Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing."
+msgstr "Пороги совпадают с раскраской на странице «Сеть»: три лампочки и зелёный цвет значат одно и то же."
+
+msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
+msgstr "Для теста скорости нужен пакет curl: установите его командой «apk add curl» (или «opkg install curl»). В комплект он не входит — libcurl заметен на роутерах с 8 МБ флеша."
+
+msgid "A different modem is now in this USB port."
+msgstr "В этом USB-разъёме теперь другой модем."
+
+msgid "Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed."
+msgstr "Его IMEI не совпадает с тем, что был здесь раньше, — похоже, модемы поменяли местами. Настройки этого разъёма (в первую очередь интерфейс и его APN) относятся к прежнему модему и его SIM. Проверьте их ниже и при необходимости создайте интерфейс заново."

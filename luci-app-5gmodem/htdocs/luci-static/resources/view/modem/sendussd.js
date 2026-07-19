@@ -533,17 +533,27 @@ return view.extend({
 		   виноватым приложение. Показываем предупреждение, но НЕ блокируем форму:
 		   база может отставать от новой прошивки, и запретить попытку - хуже,
 		   чем предупредить. */
-		let ussdNotSupported = (function() {
+		/* ДВЕ РАЗНЫЕ ПРИЧИНЫ, и путать их нельзя.
+		   supported=0 - модем не умеет в принципе (свойство прошивки, из базы
+		   проверенных). sms_only=1 - модем умеет, но СЕТЬ СЕЙЧАС не даёт: она
+		   зарегистрировала абонента как "SMS only" (CREG 6/7), а USSD - услуга
+		   голосового домена. Первое не изменится, второе может пройти само при
+		   смене сети или тарифа, поэтому и формулировки разные. */
+		let ussdState = (function() {
 			try {
 				let r = loadResults && loadResults[4];
-				let j = JSON.parse((r && (r.stdout || r)) || '{}');
-				return (String(j.supported) === '0');
-			} catch (e) { return false; }
+				return JSON.parse((r && (r.stdout || r)) || '{}');
+			} catch (e) { return {}; }
 		})();
+		let ussdNotSupported = (String(ussdState.supported) === '0');
+		let ussdSmsOnly = !ussdNotSupported && (String(ussdState.sms_only) === '1');
 
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
 				ussdNotSupported ? E('div', { 'class': 'alert-message warning' }, [
 					E('p', {}, _('USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all.'))
+				]) : '',
+				ussdSmsOnly ? E('div', { 'class': 'alert-message warning' }, [
+					E('p', {}, _('The network registered this SIM for SMS only, so USSD is unavailable right now: it is a voice-domain service. The modem itself supports USSD - requests will simply stay unanswered until the registration changes.'))
 				]) : '',
 				E('div', { 'class': 'cbi-section' }, [
 					E('div', { 'class': 'cbi-section-node' }, [

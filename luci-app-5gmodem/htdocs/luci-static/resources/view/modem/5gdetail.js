@@ -1616,21 +1616,6 @@ function fillAntPorts(raw) {
 /* Выбор комбинации диапазонов 3G (одна из; см. combos3g в bands.sh).
    Как и смена режима сети, требует перезапуска модема - #BND у Telit
    сохраняется в NVRAM и подхватывается при старте. */
-/* Индикатор уровня сигнала на светодиодах корпуса.
-   Пишем СКРИПТОМ с немедленным commit, а не через uci.save: та правка легла бы
-   в сессионный стейджинг LuCI, и наверху повисли бы «непринятые изменения» -
-   при том что человек просто щёлкнул галочку. */
-function toggleSignalLeds(on) {
-	return fs.exec('/usr/share/5gmodem/signal-leds.sh', [ on ? 'enable' : 'disable' ])
-		.then(function() {
-			if (ui.addTimeLimitedNotification) {
-				ui.addTimeLimitedNotification(null, E('p', on
-					? _('Signal LEDs enabled')
-					: _('Signal LEDs disabled')), 4000, 'info');
-			}
-		});
-}
-
 function setBands3gAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function() {
@@ -1974,13 +1959,30 @@ simDialog: baseclass.extend({
 		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не
 		   сверяем имя платы: у совместимых устройств те же светодиоды бывают под
 		   другим board_name, а на LT300 иной ревизии их может не быть - и тогда
-		   галочка только вводила бы в заблуждение. */
-		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/signal-leds.sh', [ 'detect' ]), '')
-			.then(function(r) {
-				try { ledsAvail = (JSON.parse(r || '{}').available == 1); } catch (e) {}
-			});
-		// uci грузим синхронно: из него render() читает настройки TTL.
-		return L.resolveDefault(uci.load('5gmodem')).then(function() {
+		   галочка только вводила бы в заблуждение.
+		   ЖДЁМ ответа, а не пускаем запрос «на отвал»: ledsAvail читается прямо
+		   в render(), и без ожидания он всегда оказывался ещё false - блок с
+		   галочкой не появлялся вообще никогда. (Запрос mmindex выше ждать не
+		   нужно: его результат используется позже, на тиках опроса.) */
+		return Promise.all([
+			L.resolveDefault(uci.load('5gmodem')),
+			/* ЧИТАЕМ КАТАЛОГ, А НЕ ЗАПУСКАЕМ СКРИПТ.
+			   Через запуск это не заработало дважды: fs.exec_direct ходит в
+			   /cgi-bin/cgi-exec (тот самый хелпер, что уже отвечал "404
+			   Executable not found" в checkPackages), а fs.exec упирается в то,
+			   что разрешение на запуск может не примениться. fs.list идёт через
+			   ubus file.list, и путь /sys/class/leds разрешён в нашем ACL
+			   отдельной строкой ("list") - это самый короткий и надёжный путь.
+			   Заодно исчезает запуск процесса на каждое открытие страницы. */
+			L.resolveDefault(fs.list('/sys/class/leds'), [])
+		]).then(function(res) {
+			try {
+				var names = (res[1] || []).map(function(e) { return e.name; });
+				/* Нужны все три: на устройстве с одним индикатором показывать
+				   настройку «уровень тремя лампочками» бессмысленно. */
+				ledsAvail = [ 'white:signal1', 'white:signal2', 'white:signal3' ]
+					.every(function(n) { return names.indexOf(n) >= 0; });
+			} catch (e) {}
 			return [ '{}', '', null, '{}' ];
 		});
 	},
@@ -2914,24 +2916,6 @@ simDialog: baseclass.extend({
 					]);
 				}).call(this)
 			]),
-
-			/* Показываем ТОЛЬКО если светодиоды на устройстве есть (LT300 и
-			   совместимые): на остальных роутерах управлять нечем. */
-			ledsAvail ? collapsibleSection('leds', _('Signal level indicator'), [
-				E('div', { 'style': 'display:flex;align-items:center;gap:.6em;padding:.2em 0;flex-wrap:wrap' }, [
-					E('label', { 'style': 'display:inline-flex;align-items:center;gap:.5em;cursor:pointer' }, [
-						E('input', {
-							'id': 'signal-leds-on',
-							'type': 'checkbox',
-							'checked': (uci.get('5gmodem', '@5gmodem[0]', 'signal_leds') == '1') ? true : null,
-							'change': function(ev) { toggleSignalLeds(ev.currentTarget.checked); }
-						}),
-						E('span', {}, _('Show signal level on the case LEDs'))
-					]),
-					E('span', { 'style': 'opacity:.6;font-size:.9em' },
-						_('Three LEDs show the signal level. Reads the same data as this page - the modem is not polled separately.'))
-				])
-			]) : '',
 
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [

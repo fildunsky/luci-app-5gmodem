@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.5.0
+PKG_VERSION:=1.5.1
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -70,11 +70,18 @@ fi
 	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
 	# Индикатор на светодиодах корпуса: поднимаем, только если он включён в
 	# конфиге И светодиоды на устройстве есть (см. signal-leds.sh detect).
-	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" = "1" ]; then
+	# Служба сама проверит и наличие светодиодов, и явное выключение; здесь
+	# просто даём ей стартовать - на устройствах без светодиодов она молча
+	# завершится.
+	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" != "0" ]; then
 		/etc/init.d/5gmodem-leds enable 2>/dev/null
 		/etc/init.d/5gmodem-leds restart 2>/dev/null
 	fi
-	}
+	# ЛИШНЯЯ '}' СТОЯЛА ЗДЕСЬ и закрывала группу раньше времени: shell падал с
+	# "syntax error: unexpected }", и ВСЁ, что ниже, не выполнялось - в том
+	# числе touch, который сбрасывает кэш браузера. Отсюда же тянулась старая
+	# беда «браузер отдаёт JS годовой давности»: лекарство в пакете было, но
+	# из-за этой скобки ни разу не срабатывало.
 	find /www/luci-static/resources/view/modem \
 		/www/luci-static/resources/protocol/fibocom.js \
 		/www/luci-static/resources/icons -exec touch {} + 2>/dev/null

@@ -97,6 +97,20 @@ function modelName(m) {
 	return p;
 }
 
+/* Развести ОДИНАКОВЫЕ подписи.
+   Модемы различаются USB-путём, а вот имя у двух одинаковых модулей совпадает -
+   и во вкладках получались два неотличимых ярлыка. К повторяющимся дописываем
+   путь: он привязан к физическому разъёму, поэтому "тот, что в верхнем порту"
+   остаётся тем же и после перезагрузки. Уникальные подписи не трогаем - лишний
+   технический хвост там ни к чему. */
+function dedupLabels(modems) {
+	var seen = {}, out = modems.map(function(m, i) { return label(m, i); });
+	out.forEach(function(l) { seen[l] = (seen[l] || 0) + 1; });
+	return out.map(function(l, i) {
+		return (seen[l] > 1) ? (l + ' (' + (modems[i].path || (i + 1)) + ')') : l;
+	});
+}
+
 function label(m, i) {
 	var p = modelName(m);
 	var v = vendor(m);
@@ -134,27 +148,46 @@ function loadModems() {
    управление профилями имеет смысл, см. форум prusa: нужен AT+GTDUALSIM=1).
    Ссылку вкладки ищем в меню под-вкладок (href .../5gmodem/esim); прячем её <li>.
    Ретраим, т.к. тема может отрисовать под-вкладки позже нашего вызова. */
-function applyEsimTabVisibility(tries) {
-	tries = tries || 0;
-	var links = document.querySelectorAll('a[href*="5gmodem/esim"]');
-	if (!links.length) {
-		if (tries < 25) { window.setTimeout(function() { applyEsimTabVisibility(tries + 1); }, 150); }
-		return;
+/* ВКЛАДКА eSIM: прячем ПРАВИЛОМ CSS, а не перебором ссылок.
+   Мигание было потому, что вкладку рисует сама LuCI, а мы убирали её лишь
+   после ответа esim.sh (~1 c) - всё это время она была видна. Правило стиля
+   применяется до отрисовки, поэтому вспышки нет вовсе.
+   Состояние помним между заходами: на модеме С eSIM иначе мигало бы наоборот -
+   вкладка пряталась бы на секунду при каждом открытии страницы. */
+var ESIM_SEEN = '5gmodem.esim.active';
+
+function esimHideRule(on) {
+	var st = document.getElementById('esim-tab-hide');
+	if (on) {
+		if (!st) {
+			st = E('style', { 'id': 'esim-tab-hide', 'type': 'text/css' },
+				'a[href*="5gmodem/esim"], li:has(> a[href*="5gmodem/esim"]) { display: none !important; }');
+			document.head.appendChild(st);
+		}
+	} else if (st && st.parentNode) {
+		st.parentNode.removeChild(st);
 	}
-	var setVis = function(show) {
-		document.querySelectorAll('a[href*="5gmodem/esim"]').forEach(function(a) {
-			var li = (a.closest && a.closest('li')) || a.parentNode;
-			if (li) { li.style.display = show ? '' : 'none'; }
+}
+
+/* Применяем ЗАПОМНЕННОЕ состояние немедленно, ещё до всякого опроса. */
+(function() {
+	var was = '0';
+	try { was = localStorage.getItem(ESIM_SEEN) || '0'; } catch (e) {}
+	esimHideRule(was !== '1');
+})();
+
+function applyEsimTabVisibility(tries) {
+	/* fs.exec, а не fs.exec_direct: последний ходит через /cgi-bin/cgi-exec -
+	   отдельный хелпер, который в этом приложении уже отвечал "404 Executable
+	   not found". fs.exec идёт через ubus file.exec. */
+	return L.resolveDefault(fs.exec('/usr/share/5gmodem/esim.sh', [ 'status' ]), {})
+		.then(function(r) {
+			var st = {};
+			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+			var active = !!(st && st.active);
+			esimHideRule(!active);
+			try { localStorage.setItem(ESIM_SEEN, active ? '1' : '0'); } catch (e) {}
 		});
-	};
-	// ИНВЕРСИЯ: прячем СРАЗУ, показываем только после подтверждения, что eSIM-слот
-	// активен. Раньше было наоборот (LuCI рисует вкладку всегда, а мы прятали её
-	// лишь после ответа esim.sh ~1 c) - на модемах без eSIM вкладка мигала.
-	setVis(false);
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/esim.sh', [ 'status' ]), '').then(function(out) {
-		var st = {}; try { st = JSON.parse(out || '{}'); } catch (e) {}
-		if (st && st.active) { setVis(true); }
-	});
 }
 
 /* Ряд-заготовка. Модем всегда есть минимум один, поэтому рисуем его место
@@ -206,8 +239,9 @@ var TABS_CACHE = '5gmodem.modemtabs';
 
 function tabsCacheSave(modems, active) {
 	try {
+		var lbl = dedupLabels(modems);
 		window.localStorage.setItem(TABS_CACHE, JSON.stringify(modems.map(function(m, i) {
-			return { label: label(m, i), active: (m.path === active) };
+			return { label: lbl[i], active: (m.path === active) };
 		})));
 	} catch (e) {}
 }
@@ -260,6 +294,7 @@ function watchModems(bar, sig) {
 
 function tabsBar(modems, active) {
 	tabsCacheSave(modems, active);
+	var labels = dedupLabels(modems);
 	var tabs = modems.map(function(m, i) {
 		var isActive = (m.path === active);
 		return E('button', {
@@ -281,7 +316,7 @@ function tabsBar(modems, active) {
 				'class': 'modemtab-ic', 'src': L.resource('icons/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
-			E('span', {}, label(m, i))
+			E('span', {}, labels[i])
 		]);
 	});
 	return E('div', { 'class': 'modemtabs-bar' }, tabs);

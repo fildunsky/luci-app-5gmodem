@@ -274,6 +274,13 @@ function runSpeedtest() {
 					}
 				}
 				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
+				/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
+				   отказ («нажал, ничего не произошло») хуже любой ошибки: человек
+				   не знает, чинить ему что-то или ждать. */
+				else if (j.error === 'no-curl') {
+					_st.phase = 'idle';
+					ui.addNotification(null, E('p', _('Speed test needs the curl package: install it with "apk add curl" (or "opkg install curl"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash.')), 'warning');
+				}
 				else { _st.phase = 'fail'; if (j.pub_ip) { _st.ip = j.pub_ip; _st.cc = j.cc || ''; } }
 				_renderedKey = ''; refreshStCard();
 			});

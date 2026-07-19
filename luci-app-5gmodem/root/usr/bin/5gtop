@@ -81,11 +81,15 @@ T_TAB_NET="Network";        T_TAB_CELL="Cell info"
 T_TAB_MODEM="Modem";        T_TAB_SMS="SMS"
 T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM not available on this modem"
 T_TAB_USSD="USSD";          T_TAB_AT="AT console"
+T_SLOT="SIM slot";          T_K_SLOT="SIM slot"
+T_SLOT_SW="switching SIM slot..."
 T_ENTER_USSD="USSD code";   T_ENTER_AT="AT command"
 T_SENDING="sending...";     T_K_INPUT="enter"
 T_NOPORT="port not set";    T_USSD_NA="USSD does not work on this modem (verified)"
 T_ESIM_LOAD="reading profiles...";  T_ESIM_ON="active"
 T_ESIM_HINT="digit - switch profile"
+T_ESIM_ADD="activation code (LPA:1$...)"
+T_ESIM_DL="downloading profile..."
 T_NOSMS="no messages";      T_SMSLOAD="reading messages..."
 T_PORTS="Ports";            T_STORAGE="Storage"
 T_K_TAB="next tab";         T_SIM="SIM"
@@ -127,11 +131,15 @@ case "$_lang" in
 		T_TAB_MODEM="Модем";        T_TAB_SMS="SMS"
 		T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM на этом модеме недоступна"
 		T_TAB_USSD="USSD";          T_TAB_AT="AT-консоль"
+		T_SLOT="Слот SIM";          T_K_SLOT="слот SIM"
+		T_SLOT_SW="переключаю слот SIM..."
 		T_ENTER_USSD="USSD-код";    T_ENTER_AT="AT-команда"
 		T_SENDING="отправляю...";   T_K_INPUT="ввод"
 		T_NOPORT="порт не задан";   T_USSD_NA="USSD на этом модеме не работает (проверено)"
 		T_ESIM_LOAD="читаю профили...";    T_ESIM_ON="активен"
 		T_ESIM_HINT="цифра - переключить профиль"
+		T_ESIM_ADD="код активации (LPA:1$...)"
+		T_ESIM_DL="загружаю профиль..."
 		T_NOSMS="нет сообщений";    T_SMSLOAD="читаю сообщения..."
 		T_PORTS="Порты";            T_STORAGE="Хранилище"
 		T_K_TAB="вкладка";          T_SIM="SIM"
@@ -162,7 +170,10 @@ STFILE="/tmp/5gmodem_speedtest.json"
 NPFILE="$DATA.np"
 SMSFILE="$DATA.sms"
 ESFILE="$DATA.esim"
+# Вывод у КАЖДОЙ консоли свой. Общий файл давал живую путаницу: ответ на
+# AT-команду показывался и на вкладке USSD.
 OUTFILE="$DATA.out"
+DLBUSY="$DATA.dlbusy"
 OUTBUSY="$DATA.outbusy"
 ESBUSY="$DATA.esbusy"
 SMSBUSY="$DATA.smsbusy"
@@ -174,7 +185,8 @@ cleanup() {
 	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp" \
 		"$SMSFILE" "$SMSFILE.tmp" "$SMSFILE.raw" "$SMSBUSY" \
 		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap" "$DATA.hint" \
-		"$OUTFILE" "$OUTBUSY" "$DATA.owrap"
+		"$DATA.out.ussd" "$DATA.out.at" "$DATA.outbusy.ussd" "$DATA.outbusy.at" \
+		"$DATA.owrap" "$DLBUSY" "$DATA.dlog"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -345,19 +357,23 @@ box_end()  { printf '%s+' "$C_DIM"; rep '-' "$((W-2))"; printf '+%s\n' "$C_RST";
 # Клавиши подсвечены, подписи приглушены.
 # Аргумент: строки "клавиша<TAB>подпись", по паре на строку.
 keyhint() {
-	_kh() { printf '%s%s%s %s%s%s   ' "$C_B$C_YEL" "$1" "$C_RST" "$C_DIM" "$2" "$C_RST"; }
+	# Клавиша подсвечивается ВНУТРИ слова - тем же приёмом, что в полосе вкладок:
+	# "quit" с ярким q вместо "q quit". Если буквы в слове нет (русские подписи
+	# против латинских клавиш, а также Tab/BkSp/Enter/1-3/+/-), hl_name сама
+	# покажет клавишу перед словом - иначе её негде было бы увидеть.
+	_kh() { printf '%s   ' "$(hl_name "$2" "$1" "$C_DIM")"; }
 	printf '\n '
 	_kh "q" "$T_K_QUIT"
 	_kh "r" "$T_K_REFRESH"
 	if [ -n "$1" ]; then
 		printf '%s\n' "$1" | while IFS="$(printf '\t')" read -r _kk _kl; do
 			[ -n "$_kk" ] || continue
-			printf '%s%s%s %s%s%s   ' "$C_B$C_YEL" "$_kk" "$C_RST" "$C_DIM" "$_kl" "$C_RST"
+			printf '%s   ' "$(hl_name "$_kl" "$_kk" "$C_DIM")"
 		done
 	fi
 	# Переключение модема показываем, только если модемов больше одного.
 	[ "$MCOUNT" -gt 1 ] && _kh "Tab" "$T_K_MODEM"
-	printf '%sBkSp%s %s%s%s\n' "$C_B$C_YEL" "$C_RST" "$C_DIM" "$T_K_TAB" "$C_RST"
+	printf '%s\n' "$(hl_name "$T_K_TAB" "BkSp" "$C_DIM")"
 }
 
 frame() {
@@ -389,9 +405,14 @@ frame() {
 	# только после Enter. Честно предупреждаем, а не оставляем гадать.
 	_ent=""
 	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}(+Enter)${C_RST}"
+	_kslot=""
+	[ "$SLOT_CNT" -gt 1 ] && _kslot="\nk	$T_K_SLOT"
 	keyhint "t	$T_K_TEST
-1-3	$T_K_PRI
+1-3	$T_K_PRI$_kslot
 +/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=35
 }
 
 # ── ВКЛАДКИ ──────────────────────────────────────────────────────────────────
@@ -404,7 +425,31 @@ frame() {
 # Раздел хранится в TAB (индекс в TAB_IDS). Отрисовка разведена по функциям
 # frame_<id> / draw_<id>, поэтому добавить новый раздел - это добавить id в
 # список и написать две функции; ни цикл, ни обработка клавиш не меняются.
-TAB_IDS="net cell modem sms esim ussd at"
+# СОСТАВ ВКЛАДОК ЗАВИСИТ ОТ МОДЕМА. eSIM показываем только там, где eUICC
+# действительно есть: на модеме без неё вкладка вела бы на пустой экран и
+# только путала. Проверяем ОДИН раз при запуске - esim.sh status кэширует
+# ответ, но сам вызов может уйти в порт, а делать это на каждом кадре нельзя.
+TAB_IDS="net cell modem sms ussd at"
+if [ -x /usr/share/5gmodem/esim.sh ]; then
+	# СНАЧАЛА ГОТОВЫЙ ОТВЕТ. esim.sh сам кэширует состояние по USB-пути модема;
+	# если файл есть, читаем его мгновенно. Опрос лезет в порт и занимает
+	# секунды - платить их на КАЖДОМ запуске утилиты только ради состава
+	# вкладок неправильно, это было заметно на глаз.
+	_esc="/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)"
+	if [ -s "$_esc" ]; then
+		grep -q '"available":1' "$_esc" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at"
+	else
+		( /usr/share/5gmodem/esim.sh status > /tmp/5gtop.es.$$ 2>/dev/null ) &
+		_esp=$!; _esn=0
+		while kill -0 "$_esp" 2>/dev/null; do
+			_esn=$((_esn + 1))
+			[ "$_esn" -ge 3 ] && { kill "$_esp" 2>/dev/null; break; }
+			sleep 1
+		done
+		grep -q '"available":1' "/tmp/5gtop.es.$$" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at"
+		rm -f "/tmp/5gtop.es.$$"
+	fi
+fi
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
 # вёрстки без нажатий, и просто чтобы открывать сразу нужный экран.
 case "${TAB:-1}" in
@@ -493,11 +538,19 @@ bar_modems() {
 	[ "$MCOUNT" -gt 0 ] || return
 	_cur=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	printf ' '
+	# Два ОДИНАКОВЫХ модема дают одинаковое имя модели, и в полосе получались
+	# два неотличимых ярлыка. К повторяющимся дописываем USB-путь: он привязан к
+	# физическому разъёму и не меняется при перезагрузке.
+	_dups=$(for _m in $MODEMS; do uci -q get "5gmodem.$_m.model"; done | sort | uniq -d)
+
 	for _m in $MODEMS; do
 		_p=$(uci -q get "5gmodem.$_m.path")
 		_n=$(uci -q get "5gmodem.$_m.model")
 		[ -n "$_n" ] || _n=$(uci -q get "5gmodem.$_m.product")
 		[ -n "$_n" ] || _n="$_p"
+		if [ -n "$_n" ] && [ -n "$_dups" ] && printf '%s\n' "$_dups" | grep -qxF "$_n"; then
+			_n="$_n ($_p)"
+		fi
 		if [ "$_p" = "$_cur" ]; then
 			printf '%s* %s%s  ' "$C_GRN$C_B" "$_n" "$C_RST"
 		else
@@ -542,6 +595,9 @@ frame_narrow() {
 	_ent=""
 	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}+Enter${C_RST}"
 	printf '\n %sq r s 1-3%s%s%s\n' "$C_DIM" "$MKEY" "$C_RST" "$_ent"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=34
 }
 
 # ── РАЗДЕЛ «СОТА». Полный набор строк, как в блоке «Информация о соте» веба,
@@ -565,6 +621,9 @@ frame_cell() {
 	box_end
 	keyhint "t	$T_K_TEST
 +/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=32
 }
 
 draw_cell() {
@@ -629,6 +688,63 @@ draw_cell() {
 # ── РАЗДЕЛ «МОДЕМ». Всё, что описывает САМ модуль и его подключение: то, что в
 #    вебе разбросано по шапке и подсказкам. Данные берём из того же снимка, что
 #    и остальные вкладки, - лишних обращений к порту нет.
+# ── «СОТА» В УЗКОМ РЕЖИМЕ. Широкий вид кладёт значения в две колонки (вторая с
+#    40-й позиции) и на телефоне разъезжается. Раньше вкладка в этом случае
+#    ОТКАТЫВАЛАСЬ на «Сеть» - то есть по клавише c показывался не тот раздел.
+#    Здесь тот же набор данных, но одним столбцом.
+frame_cell_narrow() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	bar_modems
+	bar_tabs
+	box_top "$T_CELL"
+	box_mid; box_mid; box_mid; box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top "$T_SIGNAL"
+	box_mid; box_mid; box_mid; box_mid; box_mid
+	box_end
+	box_top "$T_CA"
+	box_mid; box_mid; box_mid
+	box_end
+	keyhint "+/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=28
+}
+
+draw_cell_narrow() {
+	_w=$((W - 14))
+	_n() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 11)" "$C_RST" "$3"; }
+	_n 5  "$T_LAC"      "$(fit "$(v lac_hex) / $(v lac_dec)" $_w)"
+	_n 6  "$T_CID"      "$(fit "$(v cid_hex) / $(v cid_dec)" $_w)"
+	_n 7  "$T_TAC"      "$(fit "$(v tac_hex) / $(v tac_dec)" $_w)"
+	_n 8  "$T_ENB"      "$(fit "$(v enbid)" $_w)"
+	_n 9  'PCI/EARFCN'  "$(fit "$(v pci) / $(v earfcn)" $_w)"
+	_n 10 "$T_BAND"     "$(fit "$(v pband)" $_w)"
+	_n 11 "$T_BW"       "$(fit "$(v bandwidth)" $_w)"
+	_n 12 "$T_CQI"      "$(fit "$(v cqi)  $T_UECAT $(v uecat)" $_w)"
+
+	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
+	_n 15 'RSRP' "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
+	_n 16 'RSRQ' "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
+	_n 17 'SINR' "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
+	_n 18 'RSSI' "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
+	_n 19 "$T_TXPOWER" "$(fit "$(v txpower)" $_w)"
+
+	# Агрегация: в узком режиме только диапазоны, без PCI/EARFCN - иначе строка
+	# не помещается, а сам факт агрегации важнее её подробностей.
+	_r=22; _any=0
+	for _i in 1 2 3; do
+		_sb=$(v "s${_i}band")
+		[ "$_sb" = "-" ] && continue
+		[ "$_r" -gt 24 ] && break
+		_n "$_r" "SCC$_i" "$(fit "$_sb" $_w)"
+		_r=$((_r + 1)); _any=1
+	done
+	[ "$_any" = 0 ] && { _n 22 '' "${C_DIM}$(fit "$T_NOCA" $_w)${C_RST}"; _r=23; }
+	while [ "$_r" -le 24 ]; do _n "$_r" '' "$(fit '' $_w)"; _r=$((_r + 1)); done
+}
+
 frame_modem() {
 	printf '%s[2J%s[H' "$ESC" "$ESC"
 	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
@@ -644,6 +760,9 @@ frame_modem() {
 	box_mid; box_mid; box_mid
 	box_end
 	keyhint "+/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=23
 }
 
 draw_modem() {
@@ -668,7 +787,12 @@ draw_modem() {
 # ── РАЗДЕЛ «SMS». Список входящих, как на вкладке «Входящие» в вебе: отправитель
 #    и время в строке-заголовке, текст под ней. Только чтение - ввод текста в
 #    этом цикле сделать нельзя, для отправки есть веб-страница.
-SMS_ROWS=9
+# Высота блока и сколько строк отводим тексту. При 9 строках и трёх строках на
+# сообщение на экран влезало ВСЕГО ДВА сообщения, хотя в вебе их было четыре.
+# Теперь блок выше, а тексту - две строки: список остаётся списком, а не
+# читалкой, зато сообщений видно вчетверо больше.
+SMS_ROWS=24
+SMS_TEXT_LINES=2
 
 frame_sms() {
 	printf '%s[2J%s[H' "$ESC" "$ESC"
@@ -680,6 +804,9 @@ frame_sms() {
 	while [ "$_i" -lt "$SMS_ROWS" ]; do box_mid; _i=$((_i + 1)); done
 	box_end
 	keyhint "+/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=32
 }
 
 draw_sms() {
@@ -702,7 +829,7 @@ draw_sms() {
 			# одна длинная SMS вытеснила бы все остальные.
 			_ln=0
 			wrap "$_tx" $((W - 6)) | while read -r _wl; do
-				[ "$_ln" -ge 3 ] && break
+				[ "$_ln" -ge "$SMS_TEXT_LINES" ] && break
 				printf '%s\n' "$_wl"
 				_ln=$((_ln + 1))
 			done > "$DATA.wrap"
@@ -738,11 +865,35 @@ frame_esim() {
 	while [ "$_i" -lt "$ESIM_ROWS" ]; do box_mid; _i=$((_i + 1)); done
 	box_end
 	keyhint "1-6	$T_ESIM_HINT
+Enter	$T_ESIM_ADD
 +/-	$T_K_WIDTH"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=16
 }
 
 draw_esim() {
 	_r=5
+	# Идёт загрузка - показываем ход вместо списка: список сейчас всё равно
+	# неактуален, а человеку важно видеть, что процесс не завис.
+	if [ -f "$DLBUSY" ]; then
+		at $_r 4 "${C_YEL}$(fit "$T_ESIM_DL" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+		# последние шаги из живого лога lpac (тот же, что показывает веб)
+		/usr/share/5gmodem/esim.sh progress 2>/dev/null \
+			| sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+			| tail -6 > "$DATA.dlog" 2>/dev/null
+		while read -r _dl; do
+			[ "$_r" -gt $((4 + ESIM_ROWS)) ] && break
+			at $_r 4 "${C_DIM}$(fit "$_dl" $((W - 6)))${C_RST}"
+			_r=$((_r + 1))
+		done < "$DATA.dlog"
+		while [ "$_r" -le $((4 + ESIM_ROWS)) ]; do
+			at $_r 4 "$(fit '' $((W - 6)))"
+			_r=$((_r + 1))
+		done
+		return
+	fi
 	if [ ! -s "$ESFILE" ]; then
 		at $_r 4 "${C_DIM}$(fit "$T_ESIM_LOAD" $((W - 6)))${C_RST}"
 		_r=$((_r + 1))
@@ -776,6 +927,19 @@ draw_esim() {
 	done
 }
 
+# Загрузка нового профиля по коду активации. Долгая (обмен с сервером
+# оператора занимает до нескольких минут), поэтому в фоне; ход показываем из
+# того же живого лога, что читает веб-страница - esim.sh progress.
+esim_download() {
+	[ -n "$1" ] || return
+	: > "$DLBUSY"
+	( /usr/share/5gmodem/esim.sh progress reset >/dev/null 2>&1
+	  /usr/share/5gmodem/esim.sh download "$1" > "$OUTFILE" 2>&1
+	  # список профилей заведомо устарел - заставляем перечитать
+	  rm -f "$ESFILE"
+	  rm -f "$DLBUSY" ) >/dev/null 2>&1 </dev/null &
+}
+
 # Переключение профиля цифрой. Действие ДОЛГОЕ (lpac + переподнятие
 # интерфейса), поэтому в фоне и с пометкой на экране.
 esim_switch() {
@@ -806,6 +970,9 @@ frame_console() {   # $1 - заголовок, $2 - подсказка ввод�
 	while [ "$_i" -lt "$CON_ROWS" ]; do box_mid; _i=$((_i + 1)); done
 	box_end
 	keyhint "Enter	$2"
+	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
+	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	ROW_END=20
 }
 
 frame_ussd() { frame_console "$T_TAB_USSD" "$T_ENTER_USSD"; }
@@ -836,14 +1003,21 @@ draw_console() {
 	done
 }
 
-draw_ussd() { draw_console; }
-draw_at()   { draw_console; }
+draw_ussd() { OUTFILE="$DATA.out.ussd"; OUTBUSY="$DATA.outbusy.ussd"; draw_console; }
+draw_at()   { OUTFILE="$DATA.out.at";   OUTBUSY="$DATA.outbusy.at";   draw_console; }
 
 # ВВОД СТРОКИ. Единственное место, где чтение БЕЗ таймаута допустимо и нужно:
 # оно происходит по явному нажатию Enter, человек в этот момент набирает текст,
 # и ждать его - правильно. Во всех остальных местах файла таймаут обязателен
 # (цикл отрисовки уже трижды из-за этого зависал).
-read_line() {   # $1 - подсказка; печатает введённое
+# Результат кладём в ГЛОБАЛЬНУЮ _RL, а не печатаем.
+# Раньше функция печатала введённое, и вызывали её через $( ) - а подстановка
+# захватывает stdout ЦЕЛИКОМ, включая приглашение и управление курсором. Из-за
+# этого: приглашение не доходило до экрана (курсор не переезжал на строку
+# ввода, а сами коды попадали в результат и уходили модему как часть команды),
+# и на экране потом виднелось "[20;1H[K...AT command:" текстом.
+read_line() {   # $1 - подсказка; результат в $_RL
+	_RL=""
 	[ "$TTY" = 1 ] || return 1
 	# Возврат в НОРМАЛЬНЫЙ режим: нужны эхо, забой и построчная сборка - всё то,
 	# что raw-режим как раз выключает.
@@ -853,13 +1027,14 @@ read_line() {   # $1 - подсказка; печатает введённое
 	IFS= read -r _rl
 	printf '%s[?25l' "$ESC"
 	[ "$HAS_STTY" = 1 ] && stty -echo -icanon min 0 time 1 2>/dev/null
-	printf '%s' "$_rl"
+	_RL="$_rl"
 }
 
 # Отправка в модем - в ФОНЕ: USSD ждёт ответа сети до полуминуты, и держать
 # этим цикл отрисовки нельзя.
 send_console() {   # $1 - тип (ussd|at), $2 - текст
 	[ -n "$2" ] || return
+	OUTFILE="$DATA.out.$1"; OUTBUSY="$DATA.outbusy.$1"
 	: > "$OUTBUSY"
 	( _p=""
 	  case "$1" in
@@ -992,7 +1167,11 @@ draw() {
 	esac
 	lab 6  28 "$T_STATUS"   11 "$_rs" 16
 	lab 7  28 "$T_PHONE"  11 "${C_DIM}$(v phone)${C_RST}" 16
-	lab 8  28 'SIM'      11 "$(v simslot)" 16
+	# Слот SIM: у модемов с двумя слотами показываем ещё и то, что переключение
+	# доступно клавишей - иначе о нём никак не догадаться.
+	_sl=$(v simslot)
+	[ "$SLOT_CNT" -gt 1 ] && _sl="$_sl ${C_DIM}(k)${C_RST}"
+	lab 8  28 'SIM'      11 "$_sl" 16
 
 	# Режим БЕЗ диапазона: профиль дописывает его в MODE ради веба, где отдельной
 	# строки нет, а здесь она есть - иначе значение вылезает за рамку.
@@ -1208,9 +1387,9 @@ apply_width() {
 	[ "$TW" -lt 30 ]  && TW=30
 	[ "$TW" -gt 220 ] && TW=220
 	if [ "$TW" -ge 80 ]; then
-		NARROW=0; W=$((TW - 2)); ROW_END=34
+		NARROW=0; W=$((TW - 2)); ROW_END=35
 	else
-		NARROW=1; W=$((TW - 2)); ROW_END=31
+		NARROW=1; W=$((TW - 2)); ROW_END=34
 	fi
 }
 apply_width
@@ -1228,17 +1407,46 @@ apply_width
 # было бы дорого, а jsonfilter - это форк на каждое поле.
 sms_merge() {
 	_raw="$1"
+
+	# ЧИНИМ КОДИРОВЩИК sms_tool ПЕРЕД РАЗБОРОМ.
+	# У sms_tool 2025.08.x в JSON-выводе (-j) кодпойнты с МЛАДШИМ байтом >= 0x80
+	# (U+00A0 неразрывный пробел, кавычки «» U+00AB/BB и прочие) знакорасширяются:
+	# вместо "\u00a0" печатается "\u00ffffffa0". Дальше это доходит до экрана как
+	# "сÿffffa0симки" вместо "с симки". Веб-страница чинит это тем же шаблоном
+	# (см. readsms.js) - переносим сюда, иначе один и тот же текст выглядит
+	# по-разному в браузере и в терминале.
+	# Настоящее место исправления - сам sms_tool.
+	_fix="$_raw.fix"
+	sed 's/\\u\([0-9a-fA-F]\{2\}\)f\{6\}\([0-9a-fA-F]\{2\}\)/\\u\1\2/g' \
+		"$_raw" > "$_fix" 2>/dev/null && [ -s "$_fix" ] && _raw="$_fix"
+
 	_n=0
 	# 40 сообщений с запасом: в SIM их обычно 15-30
 	while [ "$_n" -lt 40 ]; do
-		_sn=$(jsonfilter -i "$_raw" -e "@.msg[$_n].sender" 2>/dev/null)
+		# ОДИН ВЫЗОВ НА СООБЩЕНИЕ, А НЕ ШЕСТЬ. jsonfilter принимает несколько -e
+		# и печатает значения по порядку, по строке на каждое. Раньше на каждое
+		# поле шёл свой запуск: 6 форков x 15 сообщений = 90, и на MT7628 под
+		# нагрузкой это растягивалось на десятки секунд - список сообщений
+		# появлялся почти через минуту. Текст запрашиваем ПОСЛЕДНИМ: если внутри
+		# него есть переводы строк, они просто добавятся в хвост, и мы соберём
+		# всё, что после пятой строки.
+		_all=$(jsonfilter -i "$_raw" \
+			-e "@.msg[$_n].sender" -e "@.msg[$_n].timestamp" \
+			-e "@.msg[$_n].reference" -e "@.msg[$_n].part" \
+			-e "@.msg[$_n].total" -e "@.msg[$_n].content" 2>/dev/null)
+		_sn=$(printf '%s\n' "$_all" | sed -n 1p)
 		[ -n "$_sn" ] || break
-		_ts=$(jsonfilter -i "$_raw" -e "@.msg[$_n].timestamp" 2>/dev/null)
-		_rf=$(jsonfilter -i "$_raw" -e "@.msg[$_n].reference" 2>/dev/null)
-		_pt=$(jsonfilter -i "$_raw" -e "@.msg[$_n].part" 2>/dev/null)
-		_tt=$(jsonfilter -i "$_raw" -e "@.msg[$_n].total" 2>/dev/null)
-		# перевод строки внутри текста сломал бы построчный формат
-		_tx=$(jsonfilter -i "$_raw" -e "@.msg[$_n].content" 2>/dev/null | tr '\n\t' '  ')
+		_ts=$(printf '%s\n' "$_all" | sed -n 2p)
+		_rf=$(printf '%s\n' "$_all" | sed -n 3p)
+		_pt=$(printf '%s\n' "$_all" | sed -n 4p)
+		_tt=$(printf '%s\n' "$_all" | sed -n 5p)
+		# Хвост (6-я строка и дальше) - текст. Переводы строк внутри него
+		# заменяем пробелами; завершающий уже снят подстановкой $( ).
+		_tx=$(printf '%s\n' "$_all" | sed -n '6,$p' | tr '\n\t' '  ')
+		# Декодер sms_tool заменяет U+0080..U+00FF на «замещающий символ» (U+FFFD).
+		# Операторы ставят там в основном пробелы, поэтому меняем на пробел -
+		# ровно как веб-страница, чтобы текст читался одинаково.
+		_tx=$(printf '%s' "$_tx" | sed 's/\xef\xbf\xbd/ /g; s/[[:space:]]*$//')
 		case "$_tt" in ''|*[!0-9]*) _tt=1 ;; esac
 		case "$_pt" in ''|*[!0-9]*) _pt=1 ;; esac
 		# одиночные держим порознь по индексу, иначе два разных сообщения от
@@ -1248,7 +1456,7 @@ sms_merge() {
 		else
 			_key="s|$_n"
 		fi
-		printf '%s\t%s\t%s\t%s\t%s\n' "$_key" "$_pt" "$_sn" "$_ts" "$_tx"
+		printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$_key" "$_pt" "$_sn" "$_ts" "$_tx" "$_tt"
 		_n=$((_n + 1))
 	done | awk -F'\t' '
 		{
@@ -1256,13 +1464,21 @@ sms_merge() {
 			if (!(key in seen)) { seen[key] = 1; order[++cnt] = key; snd[key] = $3; tim[key] = $4 }
 			txt[key SUBSEP part] = $5
 			if (part > maxp[key]) maxp[key] = part
+			if ($6 + 0 > tot[key]) tot[key] = $6 + 0
 		}
 		END {
 			# порядок сообщений сохраняем ПО ПЕРВОМУ ПОЯВЛЕНИЮ: sms_tool отдаёт
 			# их в нужном порядке, и пересортировка сломала бы его
 			for (i = 1; i <= cnt; i++) {
-				k = order[i]; out = ""
-				for (p = 1; p <= maxp[k]; p++) out = out txt[k SUBSEP p]
+				k = order[i]; out = ""; have = 0
+				for (p = 1; p <= maxp[k]; p++) {
+					if ((k SUBSEP p) in txt) { out = out txt[k SUBSEP p]; have++ }
+				}
+				# ЧАСТЕЙ МЕНЬШЕ, ЧЕМ ЗАЯВЛЕНО. Такое бывает не по нашей вине:
+				# на ПЕРЕПОЛНЕННОЙ SIM хвост длинного сообщения просто не
+				# помещается (наблюдалось: 3 части из 5 при 15/15). Молча
+				# показать обрывок нельзя - человек решит, что это мы обрезали.
+				if (tot[k] > 0 && have < tot[k]) out = out sprintf(" [%d/%d]", have, tot[k])
 				printf "%s\t%s\t%s\n", snd[k], tim[k], out
 			}
 		}'
@@ -1316,6 +1532,33 @@ fetch() {
 	  rm -f "$FETCHING" ) >/dev/null 2>&1 </dev/null &
 }
 
+# СЛОТЫ SIM. Есть не у всех модемов: simslot.sh отдаёт пустой список там, где
+# слот один или переключение не поддерживается. Читаем при запуске - список
+# слотов не меняется, пока модем тот же.
+# ОДИН вызов, а не два: simslot.sh может обращаться к модему, и делать это
+# дважды подряд ради двух полей - лишняя задержка при запуске.
+_slj=$(/usr/share/5gmodem/simslot.sh status 2>/dev/null)
+SLOTS=$(printf '%s' "$_slj" | jsonfilter -e '@.slots[*].id' 2>/dev/null | tr '\n' ' ')
+SLOT_ACTIVE=$(printf '%s' "$_slj" | jsonfilter -e '@.active' 2>/dev/null)
+SLOT_CNT=$(printf '%s' "$SLOTS" | wc -w)
+
+# Переключить на СЛЕДУЮЩИЙ слот. Действие долгое (модем перезапускается), поэтому
+# в фоне и с пометкой на экране.
+switch_slot() {
+	[ "$SLOT_CNT" -gt 1 ] || return
+	_next=""; _first=""; _take=0
+	for _s in $SLOTS; do
+		[ -z "$_first" ] && _first="$_s"
+		[ "$_take" = 1 ] && { _next="$_s"; _take=0; }
+		[ "$_s" = "$SLOT_ACTIVE" ] && _take=1
+	done
+	[ -n "$_next" ] || _next="$_first"
+	at 4 4 "${C_YEL}$(fit "$T_SLOT_SW" $((W - 6)))${C_RST}"
+	( /usr/share/5gmodem/simslot.sh set "$_next" >/dev/null 2>&1
+	  rm -f "$DATA" ) >/dev/null 2>&1 </dev/null &
+	SLOT_ACTIVE="$_next"
+}
+
 MODEMS=$(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.]*\)\.path=.*/\1/p')
 MCOUNT=$(printf '%s\n' "$MODEMS" | grep -c . 2>/dev/null)
 [ -n "$MCOUNT" ] || MCOUNT=0
@@ -1363,7 +1606,7 @@ fi
 # раздел добавляется без правки цикла.
 render_frame() {
 	case "$(tab_id "$TAB")" in
-		cell)  [ "$NARROW" = 1 ] && frame || frame_cell ;;
+		cell)  [ "$NARROW" = 1 ] && frame_cell_narrow || frame_cell ;;
 		modem) frame_modem ;;
 		sms)   frame_sms; fetch_sms ;;
 		esim)  frame_esim; fetch_esim ;;
@@ -1374,7 +1617,7 @@ render_frame() {
 }
 render_draw() {
 	case "$(tab_id "$TAB")" in
-		cell)  [ "$NARROW" = 1 ] && draw || draw_cell ;;
+		cell)  [ "$NARROW" = 1 ] && draw_cell_narrow || draw_cell ;;
 		modem) draw_modem ;;
 		sms)   draw_sms ;;
 		esim)  draw_esim ;;
@@ -1386,6 +1629,13 @@ render_draw() {
 
 render_frame
 fetch
+# Если стартовали сразу на вкладке с фоновым чтением - запускаем его немедленно,
+# не дожидаясь первого тика: иначе на экране висело "читаю сообщения..." дольше,
+# чем нужно.
+case "$(tab_id "$TAB")" in
+	sms)  fetch_sms ;;
+	esim) fetch_esim ;;
+esac
 _since=0
 _tick=0
 while :; do
@@ -1420,6 +1670,8 @@ while :; do
 				_since=0
 				;;
 			t|T) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
+			# Слот SIM - только там, где их больше одного (см. switch_slot).
+			k|K) switch_slot ;;
 			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ буквой из её названия - она подсвечена в
 			# полосе, поэтому запоминать нечего.
 			n|N|c|C|m|M|s|S|e|E|u|U|a|A)
@@ -1454,12 +1706,16 @@ while :; do
 			"" | "$(printf '\015')")
 				case "$(tab_id "$TAB")" in
 				ussd)
-					_cmd=$(read_line "$T_ENTER_USSD")
-					render_frame; send_console ussd "$_cmd"
+					read_line "$T_ENTER_USSD"
+					render_frame; send_console ussd "$_RL"
+					;;
+				esim)
+					read_line "$T_ESIM_ADD"
+					render_frame; esim_download "$_RL"
 					;;
 				at)
-					_cmd=$(read_line "$T_ENTER_AT")
-					render_frame; send_console at "$_cmd"
+					read_line "$T_ENTER_AT"
+					render_frame; send_console at "$_RL"
 					;;
 				esac
 				;;

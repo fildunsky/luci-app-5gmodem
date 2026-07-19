@@ -81,6 +81,19 @@ _tombps() {
 
 case "$1" in
 start)
+	# БЕЗ curl ТЕСТ НЕВОЗМОЖЕН - и об этом надо сказать, а не молчать.
+	# Весь замер построен на нём: скорость берётся из его же счётчика прогресса,
+	# отдача - из speed_upload, маршрут задаётся --interface. wget этого не умеет
+	# (в busybox нет ни разбираемого прогресса, ни выгрузки тела), поэтому подмена
+	# была бы не «запасным путём», а другим, менее точным измерением.
+	# curl не заявлен в зависимостях пакета: он тянет libcurl и на роутерах с 8 МБ
+	# флеша это заметно. Поэтому вместо тихого отказа объясняем, чего не хватает -
+	# пользователь сам решит, ставить ли (apk add curl).
+	if ! command -v curl >/dev/null 2>&1; then
+		printf '{"running":0,"ok":0,"error":"no-curl"}\n' > "$CACHE" 2>/dev/null
+		printf '{"running":0,"ok":0,"error":"no-curl"}\n'
+		exit 0
+	fi
 	URL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_url)
 	[ -n "$URL" ] || URL="$URL_DEFAULT"
 	SECS=$(uci -q get 5gmodem.@5gmodem[0].speedtest_secs)
