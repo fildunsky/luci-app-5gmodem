@@ -41,6 +41,21 @@ _netdev_for() {
 	"$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_p\"].net[0]" 2>/dev/null
 }
 
+# НАШ адрес в подсети модема. Нужен, чтобы явно привязывать запросы к нему.
+#
+# ЗАЧЕМ. На карте модема может быть НЕСКОЛЬКО адресов: часть прошивок отдаёт
+# роутеру ещё и настоящий WAN-адрес (наблюдалось: eth3 = 100.81.31.131 и
+# 192.168.43.2 одновременно). Тогда ядро выбирает источником первый попавшийся,
+# модем видит чужую сеть и не отвечает - API молча замолкает. Поэтому источник
+# задаём сами, из той же подсети, где живёт модем.
+_srcip_for() {   # $1 - usb-путь, $2 - адрес модема
+	_dev=$(_netdev_for "$1") || return 1
+	_net="${2%.*}."
+	ip -4 addr show dev "$_dev" 2>/dev/null \
+		| sed -n 's|.*inet \([0-9.]*\)/.*|\1|p' \
+		| grep "^$_net" | head -1
+}
+
 # Адрес модема = шлюз на его сетевой карте.
 _addr_for() {
 	_dev=$(_netdev_for "$1") || return 1
@@ -66,7 +81,8 @@ _sess_file() { echo "$CACHE_DIR/5gmodem_hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '
 # Обновить пару сессия/токен. Печатает "SID<TAB>TOK".
 _sess_new() {
 	_a="$1"; _d="$2"
-	_r=$(curl -s --max-time 6 --interface "$_d" -A "$UA" \
+	_src=$(_srcip_for "" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_r=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 		"http://$_a/api/webserver/SesTokInfo" 2>/dev/null)
 	_sid=$(echo "$_r" | sed -n 's|.*<SesInfo>\(.*\)</SesInfo>.*|\1|p')
 	_tok=$(echo "$_r" | sed -n 's|.*<TokInfo>\(.*\)</TokInfo>.*|\1|p')
@@ -93,14 +109,15 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	_d=$(_netdev_for "$2") || return 1
 	_s=$(_sess_get "$_a" "$_d") || return 1
 	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
-	_out=$(curl -s --max-time 6 --interface "$_d" -A "$UA" \
+	_src=$(_srcip_for "$2" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
 		"http://$_a$_ep" 2>/dev/null)
 	case "$_out" in
 		*'<code>125002</code>'*|*'<code>125003</code>'*|*'<code>125001</code>'*)
 			_s=$(_sess_new "$_a" "$_d") || return 1
 			_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
-			_out=$(curl -s --max-time 6 --interface "$_d" -A "$UA" \
+			_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 				-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
 				"http://$_a$_ep" 2>/dev/null)
 			;;
@@ -115,7 +132,8 @@ api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
 	_d=$(_netdev_for "$3") || return 1
 	_s=$(_sess_new "$_a" "$_d") || return 1
 	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
-	curl -s --max-time 10 --interface "$_d" -A "$UA" \
+	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
+	curl -s --max-time 10 --interface "$_src" -A "$UA" \
 		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		--data "<?xml version=\"1.0\" encoding=\"UTF-8\"?><request>$_body</request>" \
@@ -204,10 +222,16 @@ metrics_json() {
 		"$_vend"*|"") ;;
 		*) [ -n "$_vend" ] && _model="$_vend $_model" ;;
 	esac
+	# Пометку класса в САМО ИМЯ не добавляем: имя расходится по вкладкам, кнопкам
+	# и карточкам профилей, где она была бы шумом. Класс отдаём отдельным полем
+	# (backend), а показываем его только там, где он к месту.
 	_imei=$(printf '%s' "$_inf" | xval Imei)
 	_imsi=$(printf '%s' "$_inf" | xval Imsi)
 	_iccid=$(printf '%s' "$_inf" | xval Iccid)
 	_fw=$(printf '%s' "$_inf" | xval SoftwareVersion)
+	# Номер SIM у этого API ЕСТЬ - поле Msisdn. Основной путь берёт его из
+	# AT+CNUM и кладёт в "phone"; кладём туда же, чтобы страница не различала.
+	_phone=$(printf '%s' "$_inf" | xval Msisdn)
 
 	_cs=$(printf '%s' "$_st" | xval ConnectionStatus)
 	# «Палочки» лежат то в SignalStrength, то в SignalIcon - зависит от прошивки.
@@ -226,7 +250,18 @@ metrics_json() {
 	_sinr=$(printf '%s' "$_sig" | xval sinr | tr -cd '0-9.-')
 	_rssi=$(printf '%s' "$_sig" | xval rssi | tr -cd '0-9-')
 	_pci=$(printf '%s' "$_sig" | xval pci)
-	_cid=$(printf '%s' "$_sig" | xval cell_id)
+	# cell_id у этого API - ДЕСЯТИЧНЫЙ. Проверено арифметикой: 93540375 < 2^28,
+	# то есть укладывается в 28-битный LTE Cell Identity, а как шестнадцатеричное
+	# то же число дало бы 2471756661 - вдвое больше допустимого. Раньше я клал
+	# его в cid_hex, и страница, ожидающая пару dec+hex, показывала прочерк.
+	_cid=$(printf '%s' "$_sig" | xval cell_id | tr -cd '0-9')
+	_cid_hex=""; _enb=""; _sect=""
+	if [ -n "$_cid" ]; then
+		_cid_hex=$(printf '%X' "$_cid" 2>/dev/null)
+		# Разложение LTE ECI: старшие 20 бит - базовая станция, младшие 8 - сектор.
+		_enb=$(( _cid >> 8 ))
+		_sect=$(( _cid & 255 ))
+	fi
 
 	_up=$(printf '%s' "$_tr" | xval CurrentUpload)
 	_down=$(printf '%s' "$_tr" | xval CurrentDownload)
@@ -306,6 +341,7 @@ metrics_json() {
 	printf '"imsi":"%s",' "$_imsi"
 	printf '"iccid":"%s",' "$_iccid"
 	printf '"firmware":"%s",' "$(jsafe "$_fw")"
+	printf '"phone":"%s",' "$(jsafe "$_phone")"
 	printf '"operator_name":"%s",' "$(jsafe "$_op")"
 	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
 	printf '"registration":"%s",' "$_reg"
@@ -313,7 +349,9 @@ metrics_json() {
 	printf '"signal":"%s",' "$_pct"
 	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
-	printf '"pci":"%s","cid_hex":"%s",' "$_pci" "$_cid"
+	printf '"pci":"%s",' "$_pci"
+	printf '"cid_dec":"%s","cid_hex":"%s",' "$_cid" "$_cid_hex"
+	printf '"enbid":"%s","sector":"%s",' "$_enb" "$_sect"
 	printf '"ipaddr":"%s",' "$_wanip"
 	# ФОРМАТ КАК У ОСНОВНОГО ПУТИ, иначе страница показывает сырые числа.
 	# Он отдаёт conn_time строкой "0d, 00:02:59", conn_time_sec - секундами,
@@ -511,6 +549,39 @@ hl_setbands() {   # $1 - номера диапазонов или "default", $2 
 	esac
 }
 
+# Режим сети (Auto/3G/4G) через API - как и диапазоны, НЕ роняет debug, в отличие
+# от AT^SYSCFGEX. NetworkMode: 00 авто, 02 только 3G, 03 только 4G.
+hl_getmode() {   # $1 - usb-путь; печатает id режима нашего формата (1/8/2/4)
+	_nm=$(api_get /api/net/net-mode "$1" | xval NetworkMode)
+	case "$_nm" in
+		03) echo 4 ;;
+		02) echo 2 ;;
+		01) echo 8 ;;
+		00|"") echo 1 ;;
+		*) echo 1 ;;
+	esac
+}
+
+hl_setmode() {   # $1 - id (1/8/2/4), $2 - usb-путь
+	case "$1" in
+		1) _nm="00" ;;
+		8) _nm="01" ;;
+		2) _nm="02" ;;
+		4) _nm="03" ;;
+		*) echo '{"error":"bad mode"}'; return 1 ;;
+	esac
+	# Диапазоны сохраняем как есть - меняем только тип сети.
+	_cur=$(api_get /api/net/net-mode "$2")
+	_nb=$(printf '%s' "$_cur" | xval NetworkBand); [ -n "$_nb" ] || _nb="3FFFFFFF"
+	_lte=$(printf '%s' "$_cur" | xval LTEBand); [ -n "$_lte" ] || _lte="7FFFFFFFFFFFFFFF"
+	_r=$(api_post /api/net/net-mode \
+		"<NetworkMode>$_nm</NetworkMode><NetworkBand>$_nb</NetworkBand><LTEBand>$_lte</LTEBand>" "$2")
+	case "$_r" in
+		*'<response>OK</response>'*) echo '{"success":true}' ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
+	esac
+}
+
 # --- команды -----------------------------------------------------------------
 
 case "$1" in
@@ -531,6 +602,28 @@ case "$1" in
 	connect)     api_post /api/dialup/mobile-dataswitch "<dataswitch>1</dataswitch>" "$2" ;;
 	disconnect)  api_post /api/dialup/mobile-dataswitch "<dataswitch>0</dataswitch>" "$2" ;;
 	reboot)      api_post /api/device/control "<Control>1</Control>" "$2" ;;
+	# Переключить композицию USB.
+	#
+	# ЗАЧЕМ. Часть HiLink-модемов умеет отдавать последовательные AT-порты - в
+	# их админке это называется debug mode. После переключения модем перестаёт
+	# быть «только веб-интерфейс» и становится обычным: появляются TAC, диапазон,
+	# EARFCN, USSD и AT-консоль, то есть всё, чего у веб-API нет.
+	# Проверено на E3372: 12d1:14dc -> 12d1:1566, шесть портов за 10 секунд.
+	#
+	# АВТОМАТИЧЕСКИ ЭТОГО НЕ ДЕЛАЕМ: смена композиции меняет поведение модема и
+	# может отключить его веб-интерфейс. Решение за пользователем.
+	mode)
+		case "$2" in
+			debug|1) _m=1 ;;
+			normal|0) _m=0 ;;
+			*) echo '{"error":"mode must be debug or normal"}'; exit 0 ;;
+		esac
+		_r=$(api_post /api/device/mode "<mode>$_m</mode>" "$3")
+		case "$_r" in
+			*'<response>OK</response>'*) printf '{"success":true,"mode":"%s"}\n' "$2" ;;
+			*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
+		esac
+		;;
 	smsread)     sms_list "${2:-in}" "$3" ;;
 	smscount)    api_get /api/sms/sms-count "$2" ;;
 	smssend)     sms_send "$2" "$3" "$4" ;;
@@ -538,6 +631,8 @@ case "$1" in
 	ussd)        hl_ussd "$2" "$3" ;;
 	getbands)    hl_getbands "$2" ;;
 	setbands)    hl_setbands "$2" "$3" ;;
+	getmode)     hl_getmode "$2" ;;
+	setmode)     hl_setmode "$2" "$3" ;;
 	*)
 		echo "usage: hilink.sh {probe|json|addr|get <ep>|connect|disconnect|reboot} [usb-path]" >&2
 		exit 1

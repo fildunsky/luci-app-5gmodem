@@ -31,7 +31,9 @@ BOX="${1:-recv}"
 STORE="$2"
 PORT="$3"
 
-if [ "$(_active_kind)" = "hilink" ]; then
+# Есть AT-порт (режим debug) - обычный путь: sms_tool умеет больше, чем API.
+_sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
+if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }; then
 	case "$BOX" in
 		sent) "$RES/hilink.sh" smsread out ;;
 		status)
