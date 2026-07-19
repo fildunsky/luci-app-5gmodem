@@ -80,6 +80,10 @@ T_ERR_NOSRC="not found";    T_ERR_NOJF="jsonfilter required"
 T_TAB_NET="Network";        T_TAB_CELL="Cell info"
 T_TAB_MODEM="Modem";        T_TAB_SMS="SMS"
 T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM not available on this modem"
+T_TAB_USSD="USSD";          T_TAB_AT="AT console"
+T_ENTER_USSD="USSD code";   T_ENTER_AT="AT command"
+T_SENDING="sending...";     T_K_INPUT="enter"
+T_NOPORT="port not set";    T_USSD_NA="USSD does not work on this modem (verified)"
 T_ESIM_LOAD="reading profiles...";  T_ESIM_ON="active"
 T_ESIM_HINT="digit - switch profile"
 T_NOSMS="no messages";      T_SMSLOAD="reading messages..."
@@ -122,6 +126,10 @@ case "$_lang" in
 		T_TAB_NET="Сеть";           T_TAB_CELL="Сота"
 		T_TAB_MODEM="Модем";        T_TAB_SMS="SMS"
 		T_TAB_ESIM="eSIM";          T_ESIM_NA="eSIM на этом модеме недоступна"
+		T_TAB_USSD="USSD";          T_TAB_AT="AT-консоль"
+		T_ENTER_USSD="USSD-код";    T_ENTER_AT="AT-команда"
+		T_SENDING="отправляю...";   T_K_INPUT="ввод"
+		T_NOPORT="порт не задан";   T_USSD_NA="USSD на этом модеме не работает (проверено)"
 		T_ESIM_LOAD="читаю профили...";    T_ESIM_ON="активен"
 		T_ESIM_HINT="цифра - переключить профиль"
 		T_NOSMS="нет сообщений";    T_SMSLOAD="читаю сообщения..."
@@ -154,6 +162,8 @@ STFILE="/tmp/5gmodem_speedtest.json"
 NPFILE="$DATA.np"
 SMSFILE="$DATA.sms"
 ESFILE="$DATA.esim"
+OUTFILE="$DATA.out"
+OUTBUSY="$DATA.outbusy"
 ESBUSY="$DATA.esbusy"
 SMSBUSY="$DATA.smsbusy"
 FETCHING="$DATA.busy"
@@ -163,7 +173,8 @@ STTY_SAVE=$(stty -g 2>/dev/null)
 cleanup() {
 	rm -f "$DATA" "$FETCHING" "$DATA.tmp" "$NPFILE" "$NPFILE.tmp" \
 		"$SMSFILE" "$SMSFILE.tmp" "$SMSFILE.raw" "$SMSBUSY" \
-		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap" "$DATA.hint"
+		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap" "$DATA.hint" \
+		"$OUTFILE" "$OUTBUSY" "$DATA.owrap"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -393,7 +404,7 @@ frame() {
 # Раздел хранится в TAB (индекс в TAB_IDS). Отрисовка разведена по функциям
 # frame_<id> / draw_<id>, поэтому добавить новый раздел - это добавить id в
 # список и написать две функции; ни цикл, ни обработка клавиш не меняются.
-TAB_IDS="net cell modem sms esim"
+TAB_IDS="net cell modem sms esim ussd at"
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
 # вёрстки без нажатий, и просто чтобы открывать сразу нужный экран.
 case "${TAB:-1}" in
@@ -408,6 +419,8 @@ tab_name() {
 		modem) printf '%s' "$T_TAB_MODEM" ;;
 		sms)   printf '%s' "$T_TAB_SMS" ;;
 		esim)  printf '%s' "$T_TAB_ESIM" ;;
+		ussd)  printf '%s' "$T_TAB_USSD" ;;
+		at)    printf '%s' "$T_TAB_AT" ;;
 		*)    printf '%s' "$1" ;;
 	esac
 }
@@ -423,6 +436,8 @@ tab_key() {
 		modem) printf 'm' ;;
 		sms)   printf 's' ;;
 		esim)  printf 'e' ;;
+		ussd)  printf 'u' ;;
+		at)    printf 'a' ;;
 	esac
 }
 
@@ -774,6 +789,101 @@ esim_switch() {
 	( /usr/share/5gmodem/esim.sh enable "$_ic" >/dev/null 2>&1
 	  /usr/share/5gmodem/esim.sh reapply >/dev/null 2>&1
 	  rm -f "$ESFILE" ) >/dev/null 2>&1 </dev/null &
+}
+
+# ── РАЗДЕЛЫ «USSD» и «AT-КОНСОЛЬ». Единственные, где нужен ВВОД СТРОКИ, а не
+#    одиночная клавиша. Ради них цикл на время набора выходит из raw-режима
+#    (см. read_line) - иначе набранное не отображалось бы и не работал бы забой.
+CON_ROWS=12
+
+frame_console() {   # $1 - заголовок, $2 - подсказка ввода
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	bar_modems
+	bar_tabs
+	box_top "$1"
+	_i=0
+	while [ "$_i" -lt "$CON_ROWS" ]; do box_mid; _i=$((_i + 1)); done
+	box_end
+	keyhint "Enter	$2"
+}
+
+frame_ussd() { frame_console "$T_TAB_USSD" "$T_ENTER_USSD"; }
+frame_at()   { frame_console "$T_TAB_AT"   "$T_ENTER_AT"; }
+
+# Показать ответ модема из OUTFILE, перенося длинные строки.
+draw_console() {
+	_r=5
+	if [ -f "$OUTBUSY" ]; then
+		at $_r 4 "${C_YEL}$(fit "$T_SENDING" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+	elif [ -s "$OUTFILE" ]; then
+		# tr - убираем \r от модема: без этого курсор прыгает в начало строки
+		tr -d '\r' < "$OUTFILE" | while read -r _ol; do
+			printf '%s\n' "$_ol"
+		done | while read -r _ol; do
+			wrap "$_ol" $((W - 6))
+		done > "$DATA.owrap"
+		while read -r _ol; do
+			[ "$_r" -gt $((4 + CON_ROWS)) ] && break
+			at $_r 4 "$(fit "$_ol" $((W - 6)))"
+			_r=$((_r + 1))
+		done < "$DATA.owrap"
+	fi
+	while [ "$_r" -le $((4 + CON_ROWS)) ]; do
+		at $_r 4 "$(fit '' $((W - 6)))"
+		_r=$((_r + 1))
+	done
+}
+
+draw_ussd() { draw_console; }
+draw_at()   { draw_console; }
+
+# ВВОД СТРОКИ. Единственное место, где чтение БЕЗ таймаута допустимо и нужно:
+# оно происходит по явному нажатию Enter, человек в этот момент набирает текст,
+# и ждать его - правильно. Во всех остальных местах файла таймаут обязателен
+# (цикл отрисовки уже трижды из-за этого зависал).
+read_line() {   # $1 - подсказка; печатает введённое
+	[ "$TTY" = 1 ] || return 1
+	# Возврат в НОРМАЛЬНЫЙ режим: нужны эхо, забой и построчная сборка - всё то,
+	# что raw-режим как раз выключает.
+	[ "$HAS_STTY" = 1 ] && stty "$STTY_SAVE" 2>/dev/null
+	printf '%s[%d;1H%s[K%s%s:%s ' "$ESC" "$ROW_END" "$ESC" "$C_B$C_YEL" "$1" "$C_RST"
+	printf '%s[?25h' "$ESC"          # курсор на время набора виден
+	IFS= read -r _rl
+	printf '%s[?25l' "$ESC"
+	[ "$HAS_STTY" = 1 ] && stty -echo -icanon min 0 time 1 2>/dev/null
+	printf '%s' "$_rl"
+}
+
+# Отправка в модем - в ФОНЕ: USSD ждёт ответа сети до полуминуты, и держать
+# этим цикл отрисовки нельзя.
+send_console() {   # $1 - тип (ussd|at), $2 - текст
+	[ -n "$2" ] || return
+	: > "$OUTBUSY"
+	( _p=""
+	  case "$1" in
+	  	ussd) _p=$(uci -q get sms_tool_js.@sms_tool_js[0].ussdport) ;;
+	  	at)   _p=$(uci -q get sms_tool_js.@sms_tool_js[0].atport) ;;
+	  esac
+	  [ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+	  if [ -z "$_p" ] || [ ! -e "$_p" ]; then
+	  	printf '%s\n' "$T_NOPORT" > "$OUTFILE"
+	  else
+	  	case "$1" in
+	  	ussd)
+	  		# Ключи -R (сырой текст) и -r (PDU) берём из того же конфига, что
+	  		# и веб-страница: у модемов это различается, и подбирать их заново
+	  		# здесь значило бы разойтись с ней в поведении.
+	  		set -- -d "$_p"
+	  		[ "$(uci -q get sms_tool_js.@sms_tool_js[0].ussd)" = "1" ] && set -- "$@" -R
+	  		[ "$(uci -q get sms_tool_js.@sms_tool_js[0].pdu)" = "1" ] && set -- "$@" -r
+	  		sms_tool "$@" ussd "$2" > "$OUTFILE" 2>&1
+	  		;;
+	  	at) sms_tool -d "$_p" at "$2" > "$OUTFILE" 2>&1 ;;
+	  	esac
+	  fi
+	  rm -f "$OUTBUSY" ) >/dev/null 2>&1 </dev/null &
 }
 
 draw_narrow() {
@@ -1257,6 +1367,8 @@ render_frame() {
 		modem) frame_modem ;;
 		sms)   frame_sms; fetch_sms ;;
 		esim)  frame_esim; fetch_esim ;;
+		ussd)  frame_ussd ;;
+		at)    frame_at ;;
 		*)     frame ;;
 	esac
 }
@@ -1266,6 +1378,8 @@ render_draw() {
 		modem) draw_modem ;;
 		sms)   draw_sms ;;
 		esim)  draw_esim ;;
+		ussd)  draw_ussd ;;
+		at)    draw_at ;;
 		*)     draw ;;
 	esac
 }
@@ -1289,7 +1403,12 @@ while :; do
 		_k=""
 		# IFS= обязателен: без него read СЪЕДАЕТ табуляцию как разделитель,
 		# и клавиша Tab приходила бы пустой.
-		IFS= read -t 1 -n 1 _k 2>/dev/null
+		# КОД ВОЗВРАТА ОБЯЗАТЕЛЕН. Пустая строка в _k означает ДВА разных
+		# события: нажат Enter (read вернул 0) и истёк таймаут (read вернул
+		# не 0). Без этой проверки ввод команды открывался бы сам каждую
+		# секунду простоя.
+		if IFS= read -t 1 -r -n 1 _k 2>/dev/null; then _got=1; else _got=0; fi
+		[ "$_got" = 1 ] || _k="__timeout__"
 		case "$_k" in
 			q|Q) cleanup ;;
 			r|R)
@@ -1303,7 +1422,7 @@ while :; do
 			t|T) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
 			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ буквой из её названия - она подсвечена в
 			# полосе, поэтому запоминать нечего.
-			n|N|c|C|m|M|s|S|e|E)
+			n|N|c|C|m|M|s|S|e|E|u|U|a|A)
 				_want=""
 				for _t in $TAB_IDS; do
 					case "$_k" in
@@ -1312,6 +1431,8 @@ while :; do
 						[Mm]) [ "$(tab_key "$_t")" = 'm' ] && _want="$_t" ;;
 						[Ss]) [ "$(tab_key "$_t")" = 's' ] && _want="$_t" ;;
 						[Ee]) [ "$(tab_key "$_t")" = 'e' ] && _want="$_t" ;;
+						[Uu]) [ "$(tab_key "$_t")" = 'u' ] && _want="$_t" ;;
+						[Aa]) [ "$(tab_key "$_t")" = 'a' ] && _want="$_t" ;;
 					esac
 				done
 				[ -n "$_want" ] && { TAB=$(tab_num "$_want"); render_frame; }
@@ -1328,6 +1449,20 @@ while :; do
 			# Tab - следующий МОДЕМ. Прежняя m ушла под вкладку «Modem»; Tab по
 			# смыслу подходит - переключение между равноправными объектами.
 			"$TABCH") switch_modem; render_frame; _since=0 ;;
+			# Enter - ввод строки, но ТОЛЬКО на консольных вкладках: на остальных
+			# вводить нечего, и перехват Enter там только сбивал бы с толку.
+			"" | "$(printf '\015')")
+				case "$(tab_id "$TAB")" in
+				ussd)
+					_cmd=$(read_line "$T_ENTER_USSD")
+					render_frame; send_console ussd "$_cmd"
+					;;
+				at)
+					_cmd=$(read_line "$T_ENTER_AT")
+					render_frame; send_console at "$_cmd"
+					;;
+				esac
+				;;
 			# Backspace - следующая ВКЛАДКА по кругу. Терминалы шлют на этой клавише
 			# то 0x08, то 0x7f (DEL), в зависимости от настройки erase - принимаем оба.
 			"$BSCH"|$(printf '\177'))
