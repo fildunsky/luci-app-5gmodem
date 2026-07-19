@@ -220,7 +220,8 @@ function ghostBar() {
 				+ (it.active ? ' active' : '')
 		}, [
 			E('img', {
-				'class': 'modemtab-ic', 'src': L.resource('icons/cmodem.svg'),
+				'class': 'modemtab-ic',
+				'src': L.resource(it.usb ? 'icons/cusb.svg' : 'icons/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
 			E('span', {}, it.label || _('Modem'))
@@ -252,11 +253,20 @@ function placeBar(el) {
    до прихода настоящего списка, который его тут же и перезапишет. */
 var TABS_CACHE = '5gmodem.modemtabs';
 
+/* USB-свисток (Huawei E3372 и родня) - рисуем значок USB вместо чипа.
+   Признак - вендор 12d1: по наличию сетевой карты это НЕ определить, у
+   M.2-модулей с ECM-дозвоном (FM350) она тоже есть, и значок уезжал им тоже. */
+function isUsbStick(m) {
+	return /^12d1:/i.test((m && m.vidpid) || '');
+}
+
 function tabsCacheSave(modems, active) {
 	try {
 		var lbl = dedupLabels(modems);
 		window.localStorage.setItem(TABS_CACHE, JSON.stringify(modems.map(function(m, i) {
-			return { label: lbl[i], active: (m.path === active) };
+			/* usb сохраняем, чтобы в заготовке (до ответа listmodems) значок был
+			   сразу правильным и не подменялся на глазах. */
+			return { label: lbl[i], active: (m.path === active), usb: isUsbStick(m) };
 		})));
 	} catch (e) {}
 }
@@ -326,9 +336,13 @@ function tabsBar(modems, active) {
 					.then(function() { window.location.reload(); });
 			}
 		}, [
-			/* иконка модема перед именем */
+			/* Иконка перед именем: у модема с собственной сетевой картой (USB-
+			   свисток вроде Huawei E3372, который сам держит IP-стек) - значок
+			   USB, у встроенных модулей - чип. Признак берём из net[]: он есть
+			   только у таких свистков, у обычных модемов пуст. */
 			E('img', {
-				'class': 'modemtab-ic', 'src': L.resource('icons/cmodem.svg'),
+				'class': 'modemtab-ic',
+				'src': L.resource(isUsbStick(m) ? 'icons/cusb.svg' : 'icons/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
 			E('span', {}, labels[i])

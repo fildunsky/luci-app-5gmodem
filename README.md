@@ -80,7 +80,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 
 # .apk (OpenWrt 25.12.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.1/luci-app-5gmodem-1.5.1-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.3/luci-app-5gmodem-1.5.3-r1.apk > /tmp/luci-app-5gmodem.apk
 curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/refs/heads/master/dist/lpac-2.1.0-r1.apk > /tmp/lpac.apk
 apk update
 apk add /tmp/lpac.apk --allow-untrusted
@@ -89,7 +89,7 @@ apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 
 # .ipk (OpenWrt 24.10.x)
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.1/luci-app-5gmodem_1.5.1-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.5.3/luci-app-5gmodem_1.5.3-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg update
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
