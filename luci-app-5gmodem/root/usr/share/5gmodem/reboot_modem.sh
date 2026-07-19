@@ -147,6 +147,22 @@ if [ "$MODE" = power ]; then
 	exit 0
 fi
 
+# --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
+# У HiLink-модема перезагрузка делается его же API: AT-канала, куда послать
+# CFUN, попросту нет. Без этой ветки кнопка возвращала бы "AT port not found",
+# хотя перезагрузить модем вполне возможно.
+_rb_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+if [ -n "$_rb_am" ]; then
+	_rb_sec="m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g')"
+	if [ "$(uci -q get "5gmodem.$_rb_sec.kind")" = "hilink" ]; then
+		# В фоне с отвязкой дескрипторов: модем уходит с шины, и синхронный
+		# вызов досидел бы до таймаута rpcd (та же грабля, что и в ветке power).
+		( /usr/share/5gmodem/hilink.sh reboot "$_rb_am" ) >/dev/null 2>&1 </dev/null &
+		echo '{"success":true,"mode":"hilink-api"}'
+		exit 0
+	fi
+fi
+
 [ -n "$PORT" ] || PORT=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 [ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }
 
