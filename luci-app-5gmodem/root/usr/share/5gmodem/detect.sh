@@ -10,6 +10,20 @@
 #
 # from config modemdefine
 #
+# --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
+#
+# У HiLink-модемов (Huawei E3372h и родня) AT-порта нет вовсе. Молчать об этом
+# НЕЛЬЗЯ: без явного выхода поиск ниже доходил до перебора всех ttyUSB и отдавал
+# порт ДРУГОГО модема - на живом стенде при активном Huawei возвращался
+# /dev/ttyUSB3 от FM350. AT-консоль, SMS и USSD в таком случае молча говорили бы
+# не с тем модемом, а пользователь видел бы ответы «своего».
+# Пустой ответ честнее: вызывающие уже умеют его обрабатывать.
+_dt_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+if [ -n "$_dt_am" ]; then
+	_dt_sec="m_$(echo "$_dt_am" | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$(uci -q get "5gmodem.$_dt_sec.kind")" = "hilink" ] && exit 0
+fi
+
 CONFIG=modemdefine
 MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
 if [ -n "$MODEMZ" ]; then

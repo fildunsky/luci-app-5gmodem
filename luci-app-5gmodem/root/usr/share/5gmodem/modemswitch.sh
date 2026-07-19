@@ -852,7 +852,7 @@ profiles)
 		fi
 		[ "$_first" = 1 ] || printf ','
 		_first=0
-		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s"}' \
+		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s"}' \
 			"$_sec" "$_p" \
 			"$(uci -q get "$CFG.$_sec.model")" \
 			"$(uci -q get "$CFG.$_sec.imei")" \
@@ -862,7 +862,8 @@ profiles)
 			"$(uci -q get "$CFG.$_sec.mm_exclude")" \
 			"$(uci -q get "$CFG.$_sec.vidpid")" \
 			"$(uci -q get "$CFG.$_sec.kind")" \
-			"$(uci -q get "$CFG.$_sec.netdev")"
+			"$(uci -q get "$CFG.$_sec.netdev")" \
+			"$([ "$(uci -q get "$CFG.$_sec.kind")" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)"
 	done
 	printf ']\n'
 	exit 0

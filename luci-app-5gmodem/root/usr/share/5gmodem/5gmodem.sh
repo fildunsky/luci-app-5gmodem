@@ -262,6 +262,39 @@ _take_lock() {
 	return 1
 }
 
+# --- МОДЕМ БЕЗ AT-ПОРТОВ ------------------------------------------------------
+#
+# HiLink-модемы (Huawei E3372h и родня) не имеют ни AT-порта, ни cdc-wdm: весь
+# код ниже к ним неприменим - опрашивать нечего и нечем. Их метрики берутся из
+# HTTP-API самого модема; формат JSON тот же, поэтому страницы разницы не видят.
+#
+# Проверка ДО всего остального и делается по конфигу (kind=hilink), а не опросом:
+# это одна строка uci, она не стоит ничего и не трогает порты.
+_hl_sec="m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ]; then
+	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
+	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
+	_hl_cache="/tmp/5gmodem_hilink_metrics"
+	_hl_ttl="${2:-5}"
+	case "$_hl_ttl" in ''|*[!0-9]*) _hl_ttl=5 ;; esac
+	if [ -s "$_hl_cache" ] && [ -z "$(find "$_hl_cache" -mmin +1 2>/dev/null)" ] 	   && [ "$(( $(cut -d. -f1 /proc/uptime) - $(cat "$_hl_cache.t" 2>/dev/null || echo 0) ))" -lt "$_hl_ttl" ]; then
+		cat "$_hl_cache"
+		exit 0
+	fi
+	_hl_out=$("$RES/hilink.sh" json 2>/dev/null)
+	case "$_hl_out" in
+		'{'*)
+			printf '%s\n' "$_hl_out" > "$_hl_cache.tmp" && mv "$_hl_cache.tmp" "$_hl_cache"
+			cut -d. -f1 /proc/uptime > "$_hl_cache.t"
+			printf '%s\n' "$_hl_out"
+			;;
+		# Модем не ответил - отдаём прошлый снимок, если он есть: пустой экран
+		# хуже слегка устаревших цифр.
+		*) [ -s "$_hl_cache" ] && cat "$_hl_cache" || echo '{"backend":"hilink"}' ;;
+	esac
+	exit 0
+fi
+
 if [ "$1" = "cached" ]; then
 	_ttl="${2:-15}"
 	case "$_ttl" in ''|*[!0-9]*) _ttl=15 ;; esac

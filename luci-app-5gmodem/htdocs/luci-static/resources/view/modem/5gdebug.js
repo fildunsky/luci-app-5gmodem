@@ -445,8 +445,6 @@ return view.extend({
 					E('span', { 'style': 'font-size:85%; opacity:.8; white-space:nowrap' },
 						p.present ? _('connected') : _('not connected'))
 				]),
-				/* VID:PID прямо под именем - это продолжение опознания модели,
-				   а не часть нижнего блока с IMEI и путём. */
 				p.vidpid ? E('div', {
 					'class': 'mprof-name',
 					'style': 'font-size:78%; opacity:.55; margin-top:-.25em'
@@ -467,6 +465,11 @@ return view.extend({
 				'qmi': 'QMI', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM',
 				'atc': 'ATC', 'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G'
 			})[String(p.proto || '').toLowerCase()] || (p.proto || '—');
+			/* У модема без AT-портов протокол интерфейса всегда dhcp, и писать это
+			   в карточке бесполезно: важно не как поднят интерфейс, а что модемом
+			   правит его собственный веб-интерфейс, а не мы. */
+			var isHilink = (p.kind === 'hilink');
+			if (isHilink) { protoNice = 'HiLink'; }
 			var pdpNice = '';
 			if (p.pdptype) {
 				pdpNice = ({
@@ -541,7 +544,13 @@ return view.extend({
 				   опознание железа, а лишняя строка только съедала место. */
 				E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, [
 					p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
-					p.path
+					p.path,
+					/* Такой модем настраивается в своём веб-интерфейсе - даём туда
+					   прямую ссылку, иначе адрес пришлось бы искать вручную. */
+					(isHilink && p.webaddr) ? [ E('br'), E('a', {
+						'href': 'http://' + p.webaddr, 'target': '_blank',
+						'rel': 'noreferrer'
+					}, p.webaddr) ] : ''
 				]),
 				E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
