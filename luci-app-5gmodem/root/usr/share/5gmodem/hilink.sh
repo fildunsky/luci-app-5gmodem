@@ -184,6 +184,21 @@ metrics_json() {
 	_plmn=$(api_get /api/net/current-plmn "$_p")
 
 	_model=$(printf '%s' "$_inf" | xval DeviceName)
+	# API отдаёт только модель ("E3372") без производителя. Дописываем его по
+	# VID устройства - в заголовке "Huawei E3372" читается однозначно.
+	_vid=$(uci -q get "$CFG.m_$(echo "${_p:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+		| sed 's/[^A-Za-z0-9]/_/g').vidpid" | cut -d: -f1)
+	case "$_vid" in
+		12d1) _vend="Huawei" ;;
+		19d2) _vend="ZTE" ;;
+		1bbb) _vend="Alcatel" ;;
+		2001) _vend="D-Link" ;;
+		*)    _vend="" ;;
+	esac
+	case "$_model" in
+		"$_vend"*|"") ;;
+		*) [ -n "$_vend" ] && _model="$_vend $_model" ;;
+	esac
 	_imei=$(printf '%s' "$_inf" | xval Imei)
 	_imsi=$(printf '%s' "$_inf" | xval Imsi)
 	_iccid=$(printf '%s' "$_inf" | xval Iccid)
@@ -217,11 +232,26 @@ metrics_json() {
 	_mcc=""; _mnc=""
 	_num=$(printf '%s' "$_plmn" | xval Numeric | tr -cd '0-9')
 	if [ ${#_num} -ge 5 ]; then _mcc=${_num%${_num#???}}; _mnc=${_num#???}; fi
+	# ИМЯ ИЗ НАШЕЙ БАЗЫ, если код сети известен. Прошивки пишут его кто во что
+	# горазд ("MegaFon RUS", "MTS RUS"), и рядом с AT-путём, который берёт имя из
+	# mccmnc.dat, получался разнобой: в одном месте "Megafon", в другом
+	# "MegaFon RUS". База - единый источник написания.
+	if [ -n "$_num" ]; then
+		_dbop=$(awk -F';' -v k="$_num" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null | head -1)
+		[ -n "$_dbop" ] && _op="$_dbop"
+	fi
 
 	# Процент сигнала. У этих модемов есть готовые «палочки» (0..maxsignal) -
 	# берём их, а не пересчитываем из RSRP: прошивка знает свою антенну лучше.
+	# ПО RSSI, а не по «палочкам». Палочек всего пять - шаг 20%, и показания
+	# скачут грубо; RSSI даёт непрерывную шкалу. Переводим по той же таблице
+	# 3GPP, что и CSQ: -113 dBm = 0%, -51 dBm = 100%.
 	_pct=""
-	if [ -n "$_sigbars" ] && [ -n "$_maxbars" ] && [ "$_maxbars" -gt 0 ] 2>/dev/null; then
+	if [ -n "$_rssi" ]; then
+		_pct=$(( ( _rssi + 113 ) * 100 / 62 ))
+		[ "$_pct" -gt 100 ] && _pct=100
+		[ "$_pct" -lt 0 ] && _pct=0
+	elif [ -n "$_sigbars" ] && [ -n "$_maxbars" ] && [ "$_maxbars" -gt 0 ] 2>/dev/null; then
 		_pct=$(( _sigbars * 100 / _maxbars ))
 	elif [ -n "$_rsrp" ]; then
 		# Палочек нет ни там, ни там - считаем из RSRP по той же шкале, что и
@@ -256,6 +286,12 @@ metrics_json() {
 
 	printf '{'
 	printf '"backend":"hilink",'
+	# Поля блока «Информация о модеме»: у обычного модема это AT-порт и протокол
+	# интерфейса. У HiLink «порт связи» - это адрес его веб-API, а протокол -
+	# сам факт того, что модемом правит его прошивка, а не мы. Без них в блоке
+	# стояли прочерки.
+	printf '"cport":"%s",' "$(_addr_for "$_p" 2>/dev/null)"
+	printf '"protocol":"HiLink (web API)",'
 	printf '"modem":"%s",' "$_model"
 	printf '"imei":"%s",' "$_imei"
 	printf '"imsi":"%s",' "$_imsi"

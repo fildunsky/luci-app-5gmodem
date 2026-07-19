@@ -554,9 +554,13 @@ return view.extend({
 					   прямую ссылку, иначе адрес пришлось бы искать вручную. */
 					if (isHilink && p.webaddr) {
 						kids.push(E('br'));
+						/* Ведём СРАЗУ на страницу веб-интерфейса, а не на корень:
+						   корень отвечает перенаправлением (307), и оно у части
+						   браузеров не проходит - открывалась пустая вкладка.
+						   /html/home.html отдаёт 200 напрямую (проверено). */
 						kids.push(E('a', {
-							'href': 'http://' + p.webaddr, 'target': '_blank',
-							'rel': 'noreferrer'
+							'href': 'http://' + p.webaddr + '/html/home.html',
+							'target': '_blank', 'rel': 'noreferrer'
 						}, p.webaddr));
 					}
 					return E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, kids);

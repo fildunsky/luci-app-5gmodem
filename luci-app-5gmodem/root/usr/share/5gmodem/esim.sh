@@ -268,6 +268,13 @@ progress)
 status)
 	AVAIL=0; ACTIVE=0
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	# У модема без AT-портов eSIM недоступна в принципе: lpac говорит с eUICC
+	# через AT или APDU по порту, которого нет. Отвечаем сразу, иначе вкладка
+	# eSIM оставалась видимой (по запомненному состоянию прежнего модема).
+	if [ -n "$_AP" ] && [ "$(uci -q get "5gmodem.m_$(echo "$_AP" | sed 's/[^A-Za-z0-9]/_/g').kind")" = "hilink" ]; then
+		echo '{"available":0,"active":0}'
+		exit 0
+	fi
 	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
 	if [ -x "$LPAC" ]; then
 		_NET=$(uci -q show 5gmodem 2>/dev/null | sed -n \

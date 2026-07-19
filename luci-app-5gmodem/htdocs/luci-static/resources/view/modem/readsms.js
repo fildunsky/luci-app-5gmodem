@@ -473,6 +473,15 @@ function save_count() {
    incoming messages and cannot send - use the mmcli wrapper instead.
    The sms_via_mm option is set by the hotplug script (by VID:PID) or
    by the user. */
+/* Активный модем - из тех, что управляются своим веб-интерфейсом? Тогда
+   AT-порты ему не нужны, и требовать их нельзя. */
+function isHilinkModem() {
+	var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+	if (!p) { return false; }
+	var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+	return uci.get('5gmodem', sec, 'kind') === 'hilink';
+}
+
 function smsToolBin() {
 	return uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_via_mm') == '1' ? '/usr/bin/sms_tool_mm' : '/usr/bin/sms_tool';
 }
@@ -481,6 +490,9 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			uci.load('sms_tool_js'),
+			/* 5gmodem нужен, чтобы понять класс активного модема: у HiLink
+			   AT-портов нет, и требовать их настройки нельзя. */
+			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(uci.load('defmodems'))
 		]);
 	},
@@ -961,7 +973,11 @@ return view.extend({
 		// incoming SMS to modem memory, and reading with an empty '-s ' fails.
 		var storeL = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
 		var portR = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
-		if (!portR) {
+		/* Порт нужен НЕ ВСЕГДА. У модемов без AT-портов (HiLink) сообщения лежат
+		   в самом модеме и достаются его API - порта у них нет и быть не может.
+		   Раньше страница упиралась в эту проверку и требовала настроить то,
+		   чего не существует. Признак берём из профиля активного модема. */
+		if (!portR && !isHilinkModem()) {
 			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
 			return Promise.resolve();
 		}
