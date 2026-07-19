@@ -519,6 +519,14 @@ pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
    этого блок показывал устаревшие/пустые данные, будто всё сломалось. Снимаем, как
    только модем вернулся (pollData видит регистрацию/сигнал) или по таймауту. */
 var _modemBusyTimer = null;
+var _bandsAfterBusy = false;   // после снятия плашки перечитать блок диапазонов
+var _modemBusySince = 0;
+/* Сколько плашка держится в любом случае. Признак «модем вернулся» - регистрация
+   или сигнал, но сразу после нажатия модем ЕЩЁ НЕ УСПЕЛ уйти в перезагрузку и
+   выглядит живым: ближайший опрос снял бы плашку через секунду, пользователь
+   решил бы, что всё готово, и увидел старое состояние. Выдержка покрывает
+   провал между командой и реальным падением радио. */
+var MODEM_BUSY_MIN_MS = 8000;
 /* Плотный НЕПРОЗРАЧНЫЙ фон оверлея, зависящий от темы: иначе текст под ним
    просвечивал (proton2025), а на bootstrap полупрозрачной плашки не было видно
    вовсе. Тёмную/светлую тему ловим и по prefers-color-scheme, и по data-theme
@@ -555,13 +563,22 @@ function setModemBusy(msg) {
 		ov.style.display = 'flex';
 		var s = ov.querySelector('.spinning'); if (s) { s.textContent = txt; }
 	}
+	_modemBusySince = Date.now();
 	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); }
-	_modemBusyTimer = window.setTimeout(clearModemBusy, 120000);   // страховка
+	// страховка: снимаем принудительно, даже если модем так и не отозвался
+	_modemBusyTimer = window.setTimeout(function() { clearModemBusy(true); }, 120000);
 }
-function clearModemBusy() {
+function clearModemBusy(force) {
+	if (!force && _modemBusySince && (Date.now() - _modemBusySince) < MODEM_BUSY_MIN_MS) { return; }
 	var ov = document.getElementById('modem-busy-ov');
 	if (ov) { ov.style.display = 'none'; }
+	_modemBusySince = 0;
 	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); _modemBusyTimer = null; }
+	// Операции над радио (привязка к соте, включение 5G) меняют то, что
+	// показывает блок диапазонов. Перечитываем ЗДЕСЬ, а не по таймеру у кнопки:
+	// момент «модем вернулся» известен только тут, и это единственная точка,
+	// где новое состояние уже можно прочитать.
+	if (_bandsAfterBusy) { _bandsAfterBusy = false; loadBandsModemband(); }
 }
 function modemBusyActive() {
 	var ov = document.getElementById('modem-busy-ov');
@@ -1030,6 +1047,60 @@ function sortNetModes(modes) {
    и снять привязку. Модем при этом уходит в режим полёта и обратно - иначе, по
    мануалу, привязка LTE может не примениться; снятие вступает в силу после
    перезапуска модема, поэтому предупреждаем об обрыве связи. */
+/* Агрегация, выключенная в самом модеме: он работает как cat4, и никакая
+   настройка диапазонов этого не объясняет. Строку показываем ТОЛЬКО когда
+   выключено - когда всё в порядке, лишний ряд ничего не добавляет. */
+function renderCaEnabled(state) {
+	var row = document.getElementById('caenn');
+	var cell = document.getElementById('caen-cell');
+	if (!row || !cell) { return; }
+	if (state !== 'off') { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+	cell.appendChild(E('span', { 'style': 'color:#e58a00; margin-right:.6em' },
+		_('Disabled in modem')));
+	cell.appendChild(E('span', { 'style': 'opacity:.65; font-size:90%' },
+		_('The modem works without carrier aggregation, as if it were cat4.')));
+}
+
+function render5gMode(state) {
+	var row = document.getElementById('mode5gn');
+	var cell = document.getElementById('mode5g-cell');
+	if (!row || !cell) { return; }
+	if (!state) { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+
+	// Норма - SA и NSA вместе. Тогда строка просто отвечает на вопрос «а 5G-то
+	// включён?» и ничего не предлагает: кнопку показываем только когда есть что
+	// чинить, иначе она превращается в способ случайно себе навредить.
+	var full = (state === 'sa+nsa');
+	var txt = ({
+		'sa+nsa': _('Enabled (SA + NSA)'),
+		'sa':     _('Only SA enabled'),
+		'nsa':    _('Only NSA enabled'),
+		'off':    _('Disabled in modem')
+	})[state] || state;
+
+	cell.appendChild(E('span', {
+		'style': full ? 'margin-right:.6em' : 'margin-right:.6em; color:#e58a00'
+	}, txt));
+	if (full) { return; }
+
+	cell.appendChild(E('span', {
+		'style': 'opacity:.65; font-size:90%; margin-right:.6em'
+	}, _('5G bands and cell lock have no effect until this is enabled.')));
+
+	cell.appendChild(E('button', {
+		'class': 'btn cbi-button cbi-button-apply',
+		'click': ui.createHandlerFn(this, function() {
+			setModemBusy(_('Enabling 5G — the modem is restarting its radio…'));
+			_bandsAfterBusy = true;
+			fs.exec('/usr/share/5gmodem/bands.sh', [ 'set5gmode', 'full' ]);
+		})
+	}, _('Enable 5G')));
+}
+
 function renderCellLock(state) {
 	var row = document.getElementById('celllockn');
 	var cell = document.getElementById('celllock-cell');
@@ -1050,15 +1121,37 @@ function renderCellLock(state) {
 	}
 	cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, txt));
 
+	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после
+	// перезагрузки. Показываем запомненное значение и сразу объясняем расхождение,
+	// иначе пользователь увидит «привязана», проверит модем и решит, что мы врём.
+	if (parts[parts.length - 1] === 'remembered') {
+		cell.appendChild(E('span', {
+			'style': 'opacity:.65; font-size:90%; margin-right:.6em'
+		}, _('(after modem restart the lock stays in effect, but the modem reports it as off)')));
+	}
+
+	// Профиль умеет ЧИТАТЬ привязку, но не менять её (T99W175: запись через
+	// AT^LTE_LOCK переживает перезагрузку и снимается только вручную, поэтому
+	// без проверки на живом модеме мы её не даём). Показываем состояние и прямо
+	// говорим почему нет кнопок - молчаливо неработающая кнопка хуже её отсутствия.
+	if (parts[parts.length - 1] === 'readonly') {
+		if (locked) {
+			cell.appendChild(E('span', {
+				'style': 'opacity:.65; font-size:90%'
+			}, _('Read-only for this modem: the lock can be removed with an AT command only.')));
+		}
+		return;
+	}
+
 	var run = function(args, msg) {
-		ui.showModal(_('Cell lock'), [ E('p', { 'class': 'spinning' }, msg) ]);
+		// Плашка поверх блока модема, а не модалка: команда уходит в фон (цикл
+		// режима полёта дольше таймаута rpcd), и сколько модем будет возвращаться -
+		// заранее неизвестно. Плашка снимается по ФАКТУ возвращения (см.
+		// clearModemBusy), тогда как модалка закрывалась по угаданным 20 секундам:
+		// вернулся раньше - зря ждали, позже - показывали старое состояние.
+		setModemBusy(msg);
+		_bandsAfterBusy = true;
 		fs.exec('/usr/share/5gmodem/bands.sh', args);
-		// команда уходит в фон (цикл режима полёта дольше таймаута rpcd),
-		// поэтому просто ждём и перечитываем состояние
-		window.setTimeout(function() {
-			ui.hideModal();
-			loadBandsModemband();
-		}, 20000);
 	};
 
 	if (locked) {
@@ -1105,6 +1198,8 @@ function loadBandsModemband() {
 		// НЕПУСТ. Раньше проверяли !j.supported, но bands.sh отдаёт пустой массив
 		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
 		// рисовать строки бендов с прочерком вместо пояснения.
+		render5gMode(j.mode5g);
+		renderCaEnabled(j.ca_enabled);
 		renderCellLock(j.celllock);
 		var hasBands = (j.supported && j.supported.length) ||
 		               (j.supported5gnsa && j.supported5gnsa.length) ||
@@ -2822,6 +2917,19 @@ simDialog: baseclass.extend({
 				   чтения-записи через профиль, и порядок получается от общего к
 				   частному (сначала диапазон, потом конкретная сота внутри него).
 				   Строка скрыта, пока bands.sh не сообщит, что модем это умеет. */
+				/* Режим 5G в модеме - ВЫШЕ диапазонов и привязки намеренно: это
+				   предусловие для них. Если 5G выключен в прошивке, выбор
+				   диапазонов n-й и привязка к соте бесполезны, а причина ничем
+				   себя не выдаёт. Строка скрыта, пока профиль не сообщит, что
+				   модем умеет этим управлять. */
+				E('tr', { 'class': 'tr', 'id': 'caenn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Carrier aggregation')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'caen-cell' }, [ '-' ]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'mode5gn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G in modem')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'mode5g-cell' }, [ '-' ]),
+					]),
 				E('tr', { 'class': 'tr', 'id': 'celllockn', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell lock')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'celllock-cell' }, [ '-' ]),

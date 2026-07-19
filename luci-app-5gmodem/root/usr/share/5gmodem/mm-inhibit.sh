@@ -98,11 +98,73 @@ inhibit_pass() {
 		# следующего рестарта MM.
 		setsid mmcli --inhibit-device="$DEV" >/dev/null 2>&1 &
 		echo $! > "$pf"
+		# Модем был ВИДЕН в MM - значит MM успел его забрать. Помечаем: на
+		# следующем проходе проверим, не остался ли он без сессии данных.
+		: > "$RUN/$PATHID.stolen"
 	done
 	# reap inhibitors whose process has exited (modem gone / MM restarted)
 	for pf in "$RUN"/*.pid; do
 		[ -f "$pf" ] || continue
 		kill -0 "$(cat "$pf" 2>/dev/null)" 2>/dev/null || rm -f "$pf"
+	done
+	_restore_stolen
+	# Держать MM запущенным ради ОТСУТСТВУЮЩЕГО модема незачем - именно он
+	# при старте и хватает чужие модемы. Решение принимает mmneed.sh.
+	"$RES/mmneed.sh" apply >/dev/null 2>&1
+}
+
+# Поднять модем, у которого MM отобрал и разорвал сессию данных.
+#
+# ЗАЧЕМ. Захватив чужой модем, MM снимает регистрацию и выключает его
+# ("state changed (registered -> disabling)" -> "disabled modem"). Запрет,
+# наложенный следом, возвращает нам модем, но НЕ восстанавливает соединение, и
+# поднять его некому. Наблюдалось вживую на FM350: netifd держал up=true со
+# СТАРЫМ адресом и маршрутом "default dev eth2 scope link" в никуда, интернета
+# не было, метрики показывали один диапазон - и ничто в интерфейсе не намекало
+# на причину.
+_restore_stolen() {
+	for mf in "$RUN"/*.stolen; do
+		[ -f "$mf" ] || continue
+		# Даём запрету время лечь: сразу после mmcli модем ещё возвращается в
+		# наши руки, и спрашивать его рано.
+		[ -z "$(find "$mf" -mmin +1 2>/dev/null)" ] && continue
+		PATHID=$(basename "$mf" .stolen)
+		rm -f "$mf"
+		SEC="m_$(echo "$PATHID" | sed 's/[^A-Za-z0-9]/_/g')"
+		IF=$(uci -q get "$CFG.$SEC.network")
+		[ -n "$IF" ] || continue
+		# Правду о сессии знает МОДЕМ, а не netifd - см. пояснение выше.
+		# Спрашиваем ДВУМЯ независимыми способами, потому что ни один не
+		# самодостаточен:
+		#   AT+CGACT? - точен, но порт может молчать (он занят нашим же опросом
+		#     метрик, а после встряски со стороны MM ещё и перенумеровывается);
+		#     именно это и наблюдалось - в момент разрыва порт не отвечал вовсе.
+		#   ping через интерфейс - не зависит от AT-портов, но отвечает на вопрос
+		#     "есть ли связь", а не "жив ли контекст".
+		# Действуем, только если ЕСТЬ положительное доказательство разрыва.
+		_dead=""
+		ATP=$(uci -q get "$CFG.$SEC.at_port")
+		if [ -n "$ATP" ] && [ -c "$ATP" ] && command -v sms_tool >/dev/null 2>&1; then
+			RAW=$(sms_tool -d "$ATP" at "AT+CGACT?" 2>/dev/null | tr -d '\r')
+			if echo "$RAW" | grep -q "OK"; then
+				# Порт ответил - верим ему.
+				echo "$RAW" | grep -qE '\+CGACT: *[0-9]+, *1' && continue
+				_dead="контекст не активен"
+			fi
+		fi
+		if [ -z "$_dead" ]; then
+			# Порт промолчал. Проверяем связь через сам интерфейс: 77.88.8.8
+			# (8.8.8.8 недоступен в РФ и дал бы ложный разрыв).
+			L3=$(ubus call "network.interface.$IF" status 2>/dev/null \
+				| jsonfilter -e '@.l3_device' 2>/dev/null)
+			[ -n "$L3" ] || continue
+			ping -c 2 -W 4 -I "$L3" 77.88.8.8 >/dev/null 2>&1 && continue
+			_dead="нет связи через $L3"
+		fi
+		logger -t 5gmodem "MM забрал $PATHID и оставил без сессии данных ($_dead) - поднимаем $IF"
+		ifdown "$IF" >/dev/null 2>&1
+		sleep 3
+		ifup "$IF" >/dev/null 2>&1
 	done
 }
 
@@ -124,5 +186,24 @@ set-exclude)
 	;;
 once)  inhibit_pass ;;
 stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null; rm -f "$pf"; done ;;
-*)     while :; do inhibit_pass; sleep 15; done ;;   # daemon (procd)
+*)
+	# Реагируем на СТАРТ MM сразу, а не по общему таймеру. Пока запрет не лёг,
+	# MM успевает захватить и выключить чужой модем - при 15-секундном цикле это
+	# окно почти гарантированно ловится (проверено: MM поднялся ради соседнего
+	# модема на proto=modemmanager и по дороге выключил FM350).
+	# Дорогой проход (mmcli -L, по процессу на модем) делаем по-прежнему раз в
+	# ~15 с, а между ними только дешёвый pgrep.
+	_last_pid=""
+	_n=99                       # первый проход - сразу
+	while :; do
+		_pid=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null | head -1)
+		if [ "$_pid" != "$_last_pid" ] || [ "$_n" -ge 5 ]; then
+			_last_pid="$_pid"
+			_n=0
+			inhibit_pass
+		fi
+		_n=$((_n + 1))
+		sleep 3
+	done
+	;;
 esac

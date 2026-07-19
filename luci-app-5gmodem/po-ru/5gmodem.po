@@ -2393,8 +2393,6 @@ msgstr "Перезагрузка по питанию"
 msgid "Cuts power to the modem slot for a few seconds - as if you unplugged it. The modem comes back in ~1 min. Use when a full restart did not help."
 msgstr "Снимает питание со слота модема на несколько секунд — как если бы вы его переткнули. Модем вернётся примерно через минуту. Пригодится, когда полная перезагрузка не помогла."
 
-msgid "Refresh"
-msgstr "Обновить"
 
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem."
 msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM."
@@ -2707,3 +2705,123 @@ msgstr "В этом USB-разъёме теперь другой модем."
 
 msgid "Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed."
 msgstr "Его IMEI не совпадает с тем, что был здесь раньше, — похоже, модемы поменяли местами. Настройки этого разъёма (в первую очередь интерфейс и его APN) относятся к прежнему модему и его SIM. Проверьте их ниже и при необходимости создайте интерфейс заново."
+
+msgid "Saved modem profiles"
+msgstr "Сохранённые профили модемов"
+
+msgid "No modems seen yet."
+msgstr "Модемов пока не было."
+
+msgid "Device ID"
+msgstr "ID устройства"
+
+msgid "IMEI unknown"
+msgstr "IMEI неизвестен"
+
+msgid "active"
+msgstr "активен"
+
+msgid "connected"
+msgstr "подключён"
+
+msgid "not connected"
+msgstr "не подключён"
+
+msgid "no interface"
+msgstr "без интерфейса"
+
+msgid "shares interface %s with another profile"
+msgstr "делит интерфейс %s с другим профилем"
+
+msgid "Delete profile"
+msgstr "Удаление профиля"
+
+msgid "Delete the profile of %s?"
+msgstr "Удалить профиль «%s»?"
+
+msgid "Its network interface \"%s\" will be removed too."
+msgstr "Его сетевой интерфейс «%s» будет удалён вместе с ним."
+
+msgid "The interface \"%s\" stays: another profile uses it."
+msgstr "Интерфейс «%s» останется: им пользуется другой профиль."
+
+msgid "This modem is connected right now. It will be set up again from scratch."
+msgstr "Этот модем сейчас подключён. Он будет настроен заново с нуля."
+
+msgid "Not enough power?"
+msgstr "Не хватает питания?"
+
+msgid "%d modems request %d mA. Such a modem answers AT commands, but its interface stays down — a powered USB hub helps."
+msgstr "%d модема запрашивают %d мА. Такой модем отвечает на AT-команды, но интерфейс не поднимается — помогает USB-хаб с питанием."
+
+msgid "5G in modem"
+msgstr "5G в модеме"
+
+msgid "Enabled (SA + NSA)"
+msgstr "Включён (SA + NSA)"
+
+msgid "Only SA enabled"
+msgstr "Включён только SA"
+
+msgid "Only NSA enabled"
+msgstr "Включён только NSA"
+
+msgid "Disabled in modem"
+msgstr "Выключен в модеме"
+
+msgid "5G bands and cell lock have no effect until this is enabled."
+msgstr "Диапазоны 5G и привязка к соте не действуют, пока это не включено."
+
+msgid "Enable 5G"
+msgstr "Включить 5G"
+
+msgid "Enabling 5G — the modem is restarting its radio…"
+msgstr "Включаем 5G — модем перезапускает радио…"
+
+msgid "Carrier aggregation"
+msgstr "Агрегация несущих"
+
+msgid "The modem works without carrier aggregation, as if it were cat4."
+msgstr "Модем работает без агрегации несущих, как cat4."
+
+msgid "(after modem restart the lock stays in effect, but the modem reports it as off)"
+msgstr "(после перезапуска модема привязка действует, но модем сообщает, что её нет)"
+
+msgid "Read-only for this modem: the lock can be removed with an AT command only."
+msgstr "У этого модема только чтение: снять привязку можно лишь AT-командой."
+
+msgid "default APN"
+msgstr "APN по умолчанию"
+
+msgid "default"
+msgstr "по умолчанию"
+
+msgid "The app saves the settings of every modem you connect. Plug a known modem back in and it is detected automatically and picks up its profile. Profiles that are no longer relevant are worth deleting — their network interfaces can cause confusion."
+msgstr "Программа сохраняет настройки всех подключаемых модемов, при повторном подключении, модем определится автоматически и подхватит настройки из профиля. Не актуальные профили стоит удалять, так как их сетевые интерфейсы могут вносить путаницу."
+
+msgid "locked to cell %s/%s"
+msgstr "привязан к соте %s/%s"
+
+msgid "locked to frequency %s"
+msgstr "привязан к частоте %s"
+
+msgid "visible to ModemManager"
+msgstr "виден ModemManager"
+
+msgid "hidden from ModemManager"
+msgstr "скрыт от ModemManager"
+
+msgid "ModemManager is running"
+msgstr "ModemManager запущен"
+
+msgid "ModemManager is stopped — no connected modem needs it"
+msgstr "ModemManager остановлен — ни одному подключённому модему он не нужен"
+
+msgid "visible"
+msgstr "виден"
+
+msgid "hidden"
+msgstr "скрыт"
+
+msgid "the data interface did not come up — not enough power?"
+msgstr "интерфейс данных не поднялся — возможно, не хватает питания"

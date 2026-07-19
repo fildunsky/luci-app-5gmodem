@@ -80,6 +80,47 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	esac
 done
 
+# --- Модемы БЕЗ портов (HiLink) ------------------------------------------
+#
+# Часть модемов не отдаёт роутеру ни AT-порта, ни cdc-wdm: они держат IP-стек
+# сами и выглядят как обычная сетевая карта (cdc_ether/NCM), а управляются своим
+# веб-интерфейсом. Пример - Huawei E3372h: после переключения режима у него три
+# USB-интерфейса, из них ни одного последовательного, и цикл выше его не видел
+# ВОВСЕ. Устройство воткнуто, а в программе пусто - и понять, почему, нельзя.
+#
+# Ищем ОСТОРОЖНО: только у известных сотовых вендоров и только когда у устройства
+# нет ни tty, ни wdm. Иначе в список модемов попала бы любая USB-сетевая карта.
+# Вендоры: 12d1 Huawei, 19d2 ZTE, 1bbb Alcatel, 2001 D-Link, 0421 Nokia,
+# 1546 U-Blox, 2020 Olicard.
+_HILINK_VENDORS="12d1 19d2 1bbb 2001 0421 1546 2020"
+for _nd in /sys/class/net/*; do
+	[ -e "$_nd/device" ] || continue
+	_dev=$(readlink -f "$_nd/device" 2>/dev/null)
+	while [ -n "$_dev" ] && [ "$_dev" != "/" ] && [ ! -f "$_dev/idVendor" ]; do _dev="${_dev%/*}"; done
+	[ -f "$_dev/idVendor" ] || continue
+	_v=$(cat "$_dev/idVendor" 2>/dev/null)
+	case " $_HILINK_VENDORS " in *" $_v "*) ;; *) continue ;; esac
+	# уже найден по портам - значит это обычный модем, не HiLink
+	case " $NODES " in *" $_dev "*) continue ;; esac
+	# ГЛАВНАЯ ПРОВЕРКА: есть ли у устройства последовательные интерфейсы.
+	#
+	# «Нет портов» само по себе НЕ означает HiLink: у обычного стика порты не
+	# появятся, пока драйверу не прописан его VID:PID через new_id, - и до этого
+	# момента он выглядит так же. Но в ДЕСКРИПТОРЕ разница есть: у стика
+	# интерфейсы класса ff (vendor-specific, из них и делаются ttyUSB), у HiLink
+	# их нет вовсе - только 02/0a (CDC Ethernet) и 08 (остаток «диска»).
+	# Проверено на живых: E3372h - 02,0a,08; FM350 - 02,0a,ff,ff.
+	_hasff=0
+	for _if in "$_dev":*; do
+		[ -f "$_if/bInterfaceClass" ] || continue
+		[ "$(cat "$_if/bInterfaceClass" 2>/dev/null)" = "ff" ] && { _hasff=1; break; }
+	done
+	[ "$_hasff" = "1" ] && continue
+	NCNT=$((NCNT + 1))
+	NODES="$NODES $_dev"
+	eval "NETS_$NCNT=\"\\\"$(basename "$_nd")\\\"\""
+done
+
 OUT=""
 i=0
 for n in $NODES; do
@@ -90,6 +131,7 @@ for n in $NODES; do
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
 	eval "ttys=\$TTYS_$i"
 	eval "wdms=\$WDMS_$i"
+	eval "nets=\$NETS_$i"
 	# model - имя, разобранное основным опросом по AT+CGMM (пишется в секцию
 	# модема). Дескриптор product часто бесполезен: "Android" у Quectel EC21,
 	# "SimTech, Incorporated" у SimCom. Читаем из uci (это дёшево), AT здесь не
@@ -97,7 +139,9 @@ for n in $NODES; do
 	_sec="m_$(echo "$path" | sed 's/[^A-Za-z0-9]/_/g')"
 	model=$(esc "$(uci -q get "5gmodem.$_sec.model" 2>/dev/null)")
 	[ -n "$OUT" ] && OUT="$OUT,"
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"tty\":[$ttys],\"wdm\":[$wdms]}"
+	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
+	# HiLink от обычного и не предлагает для него AT-возможности.
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
 done
 OUT="[$OUT]"
 

@@ -27,7 +27,9 @@ if [ -z "$ACTION" ]; then
 		[ -f "$d/idVendor" ] || continue
 		[ "$(cat "$d/idVendor")" = "05c6" ] || continue
 		_pid=$(cat "$d/idProduct")
-		case "$_pid" in 90d5|90d6) ;; *) continue ;; esac
+		# 9025 здесь тоже: при установке пакета модем уже воткнут, и без него
+		# порты появились бы только после перезагрузки.
+		case "$_pid" in 9025|90d5|90d6) ;; *) continue ;; esac
 		ACTION="add"; DEVTYPE="usb_device"
 		# hotplug's $PRODUCT strips the vendor's leading zero (5c6, not 05c6)
 		PRODUCT="5c6/$_pid/0"
@@ -48,6 +50,13 @@ case "$PRODUCT" in
 	5c6/90d6/*)
 		WANTID="05c6:90d6"
 		;;
+	5c6/9025/*)
+		# T99W175 в режиме QMI. Сам порты НЕ отдаёт: без привязки ttyUSB*
+		# не появляются вовсе, а значит нет ни метрик, ни SMS, ни USSD.
+		# Драйвер здесь option1, а НЕ generic (как у 90d5): нумерация портов в
+		# этой композиции другая, и generic даёт урезанные порты.
+		WANTID="05c6:9025"
+		;;
 	5c6/90d5/*)
 		_p=$(cat "/sys$DEVPATH/product" 2>/dev/null)
 		_m=$(cat "/sys$DEVPATH/manufacturer" 2>/dev/null)
@@ -66,7 +75,9 @@ esac
 	# by VID:PID so ttyUSB* appear, which the AT metrics / SMS / USSD paths
 	# need. Idempotent (new_id can be written repeatedly). This removes the
 	# usual rc.local "echo ... > .../generic/new_id" hack.
-	echo "${WANTID%%:*} ${WANTID##*:}" > /sys/bus/usb-serial/drivers/generic/new_id 2>/dev/null
+	# Драйвер выбирает общая таблица (usbports.sh) - раньше он был вписан здесь
+	# и разошёлся с 20-compal-t99w175.
+	/usr/share/5gmodem/usbports.sh bind "${WANTID%%:*}" "${WANTID##*:}"
 
 	# The package config may not exist yet on the very first boot (the
 	# uci-defaults script may run after coldplug) - create the section

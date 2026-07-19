@@ -139,6 +139,10 @@ function installUpdate() {
 	});
 }
 
+/* Экземпляр вьюхи - чтобы обновлять карточки профилей из обработчиков, которые
+   лежат вне их области видимости (кнопка «создать интерфейс»). */
+var profilesView = null;
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -247,6 +251,344 @@ return view.extend({
 	   переписывает поля портов (они скрыты при автоопределении) - именно так
 	   однажды и пропали метрики. Настройка светодиодов не должна тянуть за собой
 	   такой риск, поэтому применяем её сразу, своим вызовом. */
+	/* Карточки профилей + предупреждение о питании. Ставится НАВЕРХ страницы:
+	   это состояние, от которого зависит всё остальное на ней.
+
+	   Профили - это секции 5gmodem.m_*, которые и раньше переживали отключение
+	   модема, но были невидимы. Их невидимость дорого обошлась: секция вынутого
+	   Telit продолжала claim'ить имя интерфейса, из-за чего Compal подхватил
+	   чужой proto=qmi к своему MBIM-железу и не поднимался. Пользователь находил
+	   такое глазами в uci, а не в интерфейсе. */
+	renderProfiles: function() {
+		/* СВОИ стили обязательны. Карточка носит класс .btn ради вида кнопки, но
+		   в теме .btn - это flex-контейнер со строчным направлением: внутренние
+		   блоки выстраивались В РЯД, и карточка расползалась (наблюдалось:
+		   модель, статус, интерфейс и IMEI встали четырьмя колонками, кнопка
+		   «Удалить» уехала на соседнюю карточку). Тем же лечим и плашку -
+		   alert-message в теме тоже flex. */
+		if (!document.getElementById('mprof-css')) {
+			document.head.appendChild(E('style', { 'id': 'mprof-css', 'type': 'text/css' },
+				'#mprof-list .mprof-card{display:block!important;text-align:left;' +
+				'white-space:normal;align-items:stretch;line-height:1.35;height:auto;}' +
+				'#mprof-list .mprof-card>div{display:block;width:auto;}' +
+				'#mprof-list .mprof-head{display:flex!important;justify-content:space-between;' +
+				'align-items:baseline;gap:.5em;margin-bottom:.15em;}' +
+
+				'#mprof-list .mprof-card .btn{display:inline-block;margin-left:0;}' +
+				/* Низ карточки: идентификатор слева, кнопка справа, по нижнему краю */
+				'#mprof-list .mprof-foot{display:flex!important;justify-content:space-between;' +
+				'align-items:flex-end;gap:.6em;margin-top:.5em;}' +
+				/* Имя модема и имя интерфейса - моноширинным: это идентификаторы,
+				   а не проза, и в моноширинном их проще сверять глазами. */
+				'#mprof-list .mprof-name{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
+				'#mprof-list .mprof-if{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
+				/* Тот же красный, что у кнопки «Удалить» в теме - чтобы «плохо»
+				   выглядело одинаково во всей карточке. Оба варианта темы. */
+				'#mprof-list .mprof-lowpower{background:rgba(255,107,107,.1)!important;' +
+				'border-color:rgba(255,107,107,.3)!important;}' +
+				':root[data-theme="light"] #mprof-list .mprof-lowpower{' +
+				'background:rgba(245,101,101,.15)!important;' +
+				'border-color:rgba(245,101,101,.4)!important;}' +
+				/* Рамка - у ПРОТОКОЛА: это выбор, который делает пользователь, и
+				   именно его сверяют глазами между профилями. Имя интерфейса
+				   рядом - просто моноширинным. */
+				'#mprof-list .mprof-line{display:flex!important;justify-content:space-between;' +
+				'align-items:baseline;gap:.6em;font-size:88%;opacity:.85;margin-top:.2em;}' +
+				/* Вертикальные поля нужны из-за значка-призрака: он выше строчной
+				   буквы и без них упирался макушкой в верхнюю границу рамки.
+				   inline-flex с центрированием держит значок и текст на одной
+				   линии независимо от их высоты. */
+				'#mprof-list .mprof-proto{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;' +
+				'border:1px solid currentColor;border-radius:5px;padding:.12em .35em;' +
+				'display:inline-flex;align-items:center;' +
+				'opacity:.85;white-space:nowrap;}'));
+		}
+		var box = E('div', { 'id': 'mprof-box' }, [
+			E('div', { 'id': 'mprof-warn' }),
+			E('div', {
+				'id': 'mprof-list',
+				'style': 'display:flex; flex-wrap:wrap; gap:.6em; margin-bottom:.4em'
+			}, [ E('span', { 'style': 'opacity:.6' }, _('Loading…')) ]),
+			/* Состояние службы - ПОД карточками: это сноска ко всему списку, а не
+			   заголовок. Сверху она отвлекала от самих профилей. */
+			E('div', { 'id': 'mprof-mm', 'style': 'margin-top:.5em' })
+		]);
+		profilesView = this;
+		this.loadProfiles();
+		return E('div', { 'class': 'cbi-section' }, [
+			E('h3', {}, _('Saved modem profiles')),
+			box
+		]);
+	},
+
+	/* Перечитать карточки. Отдельным методом, чтобы звать и после пересоздания
+	   интерфейса: блок рисуется один раз и сам не опрашивается, поэтому раньше
+	   карточка показывала старый интерфейс и протокол до перезагрузки страницы
+	   (ровно как значок протокола выше - там это чинят тем же приёмом). */
+	loadProfiles: function() {
+		var self = this;
+		return Promise.all([
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'profiles' ]), '[]'),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/powercheck.sh'), '{}'),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/mmneed.sh', [ 'check' ]), '{}')
+		]).then(function(res) {
+			var list = [], pw = {}, mm = {};
+			try { list = JSON.parse(res[0]) || []; } catch (e) {}
+			try { pw = JSON.parse(res[1]) || {}; } catch (e) {}
+			try { mm = JSON.parse(res[2]) || {}; } catch (e) {}
+			self.fillProfiles(list, pw, mm);
+		});
+	},
+
+	fillProfiles: function(list, pw, mm) {
+		/* Состояние ModemManager - ОДНОЙ строкой на раздел, а не точкой на каждой
+		   карточке: служба одна на роутер, и повторять её у трёх модемов значило
+		   бы показывать одно и то же трижды. Тем более теперь она сама
+		   останавливается - строка объясняет, куда она делась. */
+		var mmrow = document.getElementById('mprof-mm');
+		if (mmrow) {
+			var run = mm && mm.running == 1;
+			mmrow.innerHTML = '';
+			mmrow.appendChild(E('span', {
+				'style': 'display:inline-block;width:.6em;height:.6em;border-radius:50%;' +
+					'margin-right:.45em;vertical-align:middle;background:' +
+					(run ? '#5cb85c' : '#d9534f')
+			}));
+			mmrow.appendChild(E('span', { 'style': 'opacity:.75; font-size:88%' },
+				run ? _('ModemManager is running')
+				    : _('ModemManager is stopped — no connected modem needs it')));
+		}
+		var warn = document.getElementById('mprof-warn');
+		var box = document.getElementById('mprof-list');
+		if (!box) { return; }
+
+		/* Нехватка питания. Модем при этом не пропадает, а поднимается ЧАСТИЧНО -
+		   выглядит как программная поломка, и без подсказки причина не видна
+		   (на поиск однажды ушло полдня). */
+		if (warn && pw && pw.suspect) {
+			warn.innerHTML = '';
+			var mA = parseInt(pw.total_ma, 10) || 0;
+			/* Содержимое - ОДНИМ дочерним узлом. Плашка в теме flex-контейнер:
+			   несколько детей вставали колонками, а переопределять ей display
+			   нельзя - на нём держится цветная полоса слева. */
+			warn.appendChild(E('div', {
+				'class': 'alert-message warning',
+				'style': 'margin-bottom:.6em'
+			}, [
+				E('div', {}, [
+					E('strong', {}, _('Not enough power?') + ' '),
+					_('%d modems request %d mA. Such a modem answers AT commands, but its interface stays down — a powered USB hub helps.')
+						.format(parseInt(pw.modems, 10) || 0, mA)
+				])
+			]));
+		} else if (warn) { warn.innerHTML = ''; }
+
+		box.innerHTML = '';
+		if (!list.length) {
+			box.appendChild(E('span', { 'style': 'opacity:.6' }, _('No modems seen yet.')));
+			return;
+		}
+		var self = this;
+
+		/* Пометки считаем ДО отрисовки: если они есть хоть у одной карточки,
+		   остальным отдаём такую же строку-пустышку. Иначе карточки в ряду
+		   получаются разной высоты и низ (идентификатор, кнопка) не совпадает. */
+		var marksOf = function(p) {
+			var out = [];
+			if (p.celllock) {
+				var cl = String(p.celllock).split(' ');
+				out.push({ txt: cl[0] === 'cell'
+					? _('locked to cell %s/%s').format(cl[1], cl[2])
+					: _('locked to frequency %s').format(cl[1]), color: '#d9534f' });
+			}
+			/* Видимость для MM отмечаем, только когда она РАСХОДИТСЯ с протоколом:
+			   совпадение - норма, а расхождение рвёт связь (MM отбирает канал). */
+			var isMM = (String(p.proto).toLowerCase() === 'modemmanager');
+			if (p.mm_exclude === '0' && !isMM && p.proto) {
+				out.push({ txt: _('visible to ModemManager'), color: '#e58a00' });
+			} else if (p.mm_exclude === '1' && isMM) {
+				out.push({ txt: _('hidden from ModemManager'), color: '#e58a00' });
+			}
+			return out;
+		};
+		var anyMarks = list.some(function(p) { return marksOf(p).length > 0; });
+		var mmRunning = !!(mm && mm.running == 1);
+		/* Модемы, у которых не поднялся управляющий интерфейс - вероятная
+		   нехватка питания (см. powercheck.sh). Их отмечаем прямо на карточке:
+		   общая плашка сверху говорит, ЧТО случилось, а метка - С КЕМ. */
+		var lowPower = ' ' + String((pw && pw.paths) || '') + ' ';
+		list.forEach(function(p) {
+			/* Стиль карточки - как у кнопок приоритета интернета: активный
+			   выделяем рамкой, отключённый приглушаем, но НЕ прячем - именно
+			   невидимость мёртвых профилей нас и подводила. */
+			var st = 'flex:1 1 18em; min-width:16em; text-align:left; padding:.6em .8em; ' +
+				'border-radius:8px; cursor:default;';
+			if (p.active) { st += 'border-color:var(--proton-accent,#3a7bd5);'; }
+			if (!p.present) { st += 'opacity:.6;'; }
+			/* Модему не хватило питания - красим КАРТОЧКУ ЦЕЛИКОМ. Метка на одном
+			   имени интерфейса терялась: беда тут не с именем, а со всем модемом. */
+			var isLow = lowPower.indexOf(' ' + p.path + ' ') >= 0;
+
+			/* Волосяная линия под именем и VID:PID. Граница смысловая: выше -
+			   что это за железо, ниже - как оно настроено. currentColor, чтобы
+			   линия жила в обеих темах и гасла вместе с карточкой отключённого
+			   модема, а не спорила с ней своим цветом. */
+			var head = E('div', {
+				'style': 'border-bottom:1px solid currentColor; padding-bottom:.4em;'
+			}, [
+				E('div', { 'class': 'mprof-head' }, [
+					E('strong', { 'class': 'mprof-name' }, p.model || p.path),
+					/* Только присутствие. Активность показывает голубая рамка -
+					   держим один визуальный канал на один смысл: слово «активен»
+					   рядом с рамкой дублировало её, а у неподключённого профиля
+					   вытесняло единственную нужную здесь мысль - что модема нет. */
+					E('span', { 'style': 'font-size:85%; opacity:.8; white-space:nowrap' },
+						p.present ? _('connected') : _('not connected'))
+				]),
+				/* VID:PID прямо под именем - это продолжение опознания модели,
+				   а не часть нижнего блока с IMEI и путём. */
+				p.vidpid ? E('div', {
+					'class': 'mprof-name',
+					'style': 'font-size:78%; opacity:.55; margin-top:-.25em'
+				}, p.vidpid) : ''
+			]);
+			/* Линию делаем едва заметной ОТДЕЛЬНО от текста: opacity на всём блоке
+			   притушил бы и название модема. */
+			head.style.borderBottomColor = 'rgba(128,128,128,.35)';
+
+			/* Тип PDP показываем В ЕДИНОМ виде. В конфиге он хранится по-разному
+			   намеренно: fibocom/atc требуют IPV4V6, qmi/mbim - ipv4v6 (см.
+			   mkiface.sh). Это деталь протокола, и выносить её в карточку значит
+			   заставлять пользователя гадать, отчего у двух модемов разный
+			   регистр. Храним как надо протоколу, показываем читаемо: IPv4v6. */
+			/* Общепринятые сокращения - заглавными, собственные имена прото
+			   (fibocom, modemmanager) - как есть. */
+			var protoNice = ({
+				'qmi': 'QMI', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM',
+				'atc': 'ATC', 'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G'
+			})[String(p.proto || '').toLowerCase()] || (p.proto || '—');
+			var pdpNice = '';
+			if (p.pdptype) {
+				pdpNice = ({
+					'ipv4v6': 'IPv4v6', 'ipv4': 'IPv4', 'ipv6': 'IPv6'
+				})[String(p.pdptype).toLowerCase()] || p.pdptype;
+			}
+
+			var card = E('div', {
+				'class': 'btn cbi-button mprof-card' + (isLow ? ' mprof-lowpower' : ''),
+				'title': isLow ? _('the data interface did not come up — not enough power?') : '',
+				'style': st
+			}, [
+				head,
+				/* Два столбца: слева чем модем поднимается (интерфейс, протокол),
+				   справа чем он ходит в сеть (APN, тип адреса). Правый столбец
+				   выровнен по краю - так значения удобно сверять между карточками. */
+				E('div', { 'class': 'mprof-line', 'style': 'margin-top:.45em' }, [
+					E('span', { 'class': 'mprof-if' }, p.iface || _('no interface')),
+					E('span', {}, [
+						E('strong', {}, 'APN:'), ' ',
+						/* Пустой APN не «неизвестен», а провайдерский по умолчанию. */
+						p.apn || _('default')
+					])
+				]),
+				E('div', { 'class': 'mprof-line' }, [
+					E('span', { 'class': 'mprof-proto' }, [
+						/* Призрак = «этот модем спрятан от ModemManager». Показываем
+						   ТОЛЬКО когда MM работает: при остановленной службе прятаться
+						   не от кого, и значок был бы про несуществующее. */
+						mmRunning && p.mm_exclude !== '0' ? E('img', {
+							'src': L.resource('icons/cghost.svg'),
+							'width': 12, 'height': 12, 'alt': '',
+							'title': _('hidden from ModemManager'),
+							'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'
+						}) : '',
+						protoNice
+					]),
+					E('span', { 'style': 'opacity:.8' }, pdpNice)
+				])
+			]);
+
+			/* Особые настройки профиля. Показываем НЕ ВСЁ, что храним: порт,
+			   модель, тип слотов определяются сами и были бы шумом. Здесь только
+			   то, что задано осознанно и меняет поведение модема. */
+			var marks = marksOf(p);
+			if (marks.length) {
+				var mrow = E('div', { 'style': 'font-size:80%; margin-top:.3em' }, []);
+				marks.forEach(function(m, i) {
+					if (i) { mrow.appendChild(document.createTextNode(' · ')); }
+					mrow.appendChild(E('span', { 'style': 'color:' + m.color }, m.txt));
+				});
+				card.appendChild(mrow);
+			} else if (anyMarks) {
+				/* Пустышка той же высоты - чтобы низ карточек в ряду совпадал. */
+				card.appendChild(E('div', {
+					'style': 'font-size:80%; margin-top:.3em; visibility:hidden'
+				}, '\u00a0'));
+			}
+
+			if (p.iface_shared) {
+				card.appendChild(E('div', {
+					'style': 'font-size:80%; color:#e58a00; margin-top:.3em'
+				}, _('shares interface %s with another profile').format(p.iface)));
+			}
+
+			/* Низ карточки: слева опознание железа, справа удаление. Разносим
+			   flex-строкой с выравниванием по нижнему краю - тогда кнопка стоит
+			   вровень с последней строкой идентификатора независимо от того,
+			   известен IMEI или нет. */
+			card.appendChild(E('div', { 'class': 'mprof-foot' }, [
+				/* Без заголовка: "IMEI 3506…" и USB-путь и так читаются как
+				   опознание железа, а лишняя строка только съедала место. */
+				E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, [
+					p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
+					p.path
+				]),
+				E('button', {
+					'class': 'btn cbi-button cbi-button-remove',
+					'style': 'margin-left:0; flex:0 0 auto',
+					'click': ui.createHandlerFn(this, function() {
+						return self.confirmDelete(p);
+					})
+				}, _('Delete'))
+			]));
+			box.appendChild(card);
+		});
+	},
+
+	/* Удаление спрашивает ЯВНО и перечисляет, что именно исчезнет: вместе с
+	   профилем уходит его сетевой интерфейс. Осиротевший интерфейс - не
+	   безобидный мусор (такой от Telit дрался с Compal за /dev/cdc-wdm0), но и
+	   молча резать сеть нельзя. */
+	confirmDelete: function(p) {
+		var self = this;
+		var lines = [ E('p', {}, _('Delete the profile of %s?').format(p.model || p.path)) ];
+		if (p.iface && !p.iface_shared) {
+			lines.push(E('p', {}, _('Its network interface "%s" will be removed too.').format(p.iface)));
+		} else if (p.iface_shared) {
+			lines.push(E('p', {}, _('The interface "%s" stays: another profile uses it.').format(p.iface)));
+		}
+		if (p.present) {
+			lines.push(E('p', { 'style': 'color:#e58a00' },
+				_('This modem is connected right now. It will be set up again from scratch.')));
+		}
+		ui.showModal(_('Delete profile'), lines.concat([
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', {
+					'class': 'btn cbi-button-negative',
+					'click': ui.createHandlerFn(this, function() {
+						return fs.exec('/usr/share/5gmodem/modemswitch.sh',
+								[ 'delprofile', p.sec ]).then(function() {
+							ui.hideModal();
+							window.location.reload();
+						});
+					})
+				}, _('Delete'))
+			])
+		]));
+	},
+
 	renderLeds: function(ledsAvail) {
 		if (!ledsAvail) { return ''; }
 
@@ -530,18 +872,13 @@ return view.extend({
 			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]);
 		}
 
-		/* Оператор -> APN российских операторов (и MVNO). Пусто = неизвестен. */
-		function apnForOperator(name) {
-			var n = (name || '').toLowerCase();
-			if (n.indexOf('t-mobile') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('t-mob') >= 0) { return 'tt'; }
-			if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'sberbank'; }
-			if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'internet.beeline.ru'; }
-			if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'internet.mts.ru'; }
-			if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'internet'; }
-			if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'internet.tele2.ru'; }
-			if (n.indexOf('yota') >= 0) { return 'internet.yota'; }
-			return '';
-		}
+		/* ЗДЕСЬ БЫЛА СВОЯ ТАБЛИЦА APN (функция apnForOperator) - вторая копия
+		   /usr/share/5gmodem/apn.list, знавшая только имена операторов. Она и
+		   разошлась с оригиналом: для MVNO имя приходит от ХОСТ-СЕТИ (Т-Мобайл
+		   работает на Tele2), поэтому поле показывало APN Tele2, а при неудачном
+		   опросе - значение из интерфейса, и значение прыгало между заходами на
+		   страницу. Теперь APN подбирает сервер (modemswitch.sh apnfor) - тем же
+		   кодом, что и автонастройка, с приоритетом кода из SIM. */
 
 		/* Поле APN над кнопкой создания. Если интерфейс уже есть - берём его
 		   текущий APN; иначе автоподстановка по оператору (можно исправить,
@@ -572,9 +909,12 @@ return view.extend({
 						   стереть рабочий APN из-за неудачной пробы нельзя. */
 						return uci.get('network', mIfName, 'apn') || '';
 					}
-					/* Оператор известен: его APN, либо пусто - если в базе его нет
-					   (тогда кнопка применит «без APN», см. sentinel '-' ниже). */
-					return apnForOperator(op);
+					/* Оператор известен: спрашиваем APN у сервера - подбор общий с
+					   автонастройкой. Пусто - оператора нет в базе (тогда кнопка
+					   применит «без APN», см. sentinel '-' ниже). */
+					return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh',
+							[ 'apnfor' ]), '')
+						.then(function(a) { return (a || '').trim(); });
 				});
 		};
 
@@ -665,6 +1005,10 @@ return view.extend({
 					// until a manual page reload. Update it to the new protocol now.
 					var pb = document.querySelector('.tg-proto-badge');
 					if (pb && out.proto) { pb.textContent = out.proto; }
+					/* И карточки профилей - у них поменялись интерфейс, протокол
+					   и APN. uci-кэш вьюхи при этом устарел, но карточки читают
+					   состояние с роутера, поэтому показывают уже новое. */
+					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
 					ui.addNotification(null, E('p', _('No modem found to create an interface for.')), 'error');
 				}
@@ -1057,6 +1401,9 @@ return view.extend({
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
 				modemInfo,
+				/* Профили ПОД информацией о модеме: сверху - что происходит с
+				   текущим модемом, ниже - список всех, что программа видела. */
+				self.renderProfiles(),
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ]),
 				/* Блок светодиодов ПОСЛЕ формы, но вне её: он применяется сразу
 				   и не должен подписываться под Save/Apply формы. */

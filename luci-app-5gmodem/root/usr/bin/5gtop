@@ -1559,7 +1559,35 @@ switch_slot() {
 	SLOT_ACTIVE="$_next"
 }
 
-MODEMS=$(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.]*\)\.path=.*/\1/p')
+# Модемы, КОТОРЫЕ СЕЙЧАС НА ШИНЕ, а не все, что когда-либо подключались.
+#
+# Секции 5gmodem.m_* переживают отключение модема НАМЕРЕННО: в них хранятся его
+# настройки (порт, интерфейс, привязка, выбор диодов), и терять их при каждом
+# вынимании нельзя. Но список вкладок строился прямо по секциям - и показывал
+# давно вынутые модемы наравне с подключённым (наблюдалось: три вкладки при
+# одном модеме). Веб-интерфейс такого не делает, он берёт список у listmodems.sh.
+#
+# Сверяемся с тем же источником: он уже кэширован в /tmp, лишней работы нет.
+# Разбираем ИМЕННО jsonfilter'ом. sed здесь не годится: listmodems.sh отдаёт
+# весь массив ОДНОЙ строкой, и жадный шаблон вытаскивал только ПОСЛЕДНИЙ путь -
+# при двух модемах в полосе оставался один (наблюдалось: подключены FM350 и
+# Compal, показывался только Compal).
+_present=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+	| jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+[ -n "$_present" ] || _present=$(jsonfilter -i /tmp/5gmodem_listmodems.cache -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+MODEMS=""
+for _sec in $(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.]*\)\.path=.*/\1/p'); do
+	_sp=$(uci -q get "5gmodem.$_sec.path")
+	[ -n "$_sp" ] || continue
+	# Список путей пустой (listmodems не отработал) - НЕ прячем ничего: пустая
+	# полоса вкладок хуже лишней, пользователь решил бы, что модемов нет вовсе.
+	if [ -z "$_present" ]; then
+		MODEMS="$MODEMS $_sec"
+		continue
+	fi
+	case " $_present " in *" $_sp "*) MODEMS="$MODEMS $_sec" ;; esac
+done
+MODEMS=$(printf '%s\n' $MODEMS)
 MCOUNT=$(printf '%s\n' "$MODEMS" | grep -c . 2>/dev/null)
 [ -n "$MCOUNT" ] || MCOUNT=0
 MKEY=""

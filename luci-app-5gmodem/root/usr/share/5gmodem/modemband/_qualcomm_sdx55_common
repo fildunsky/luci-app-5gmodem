@@ -1,0 +1,136 @@
+# Общая часть модемов на Qualcomm SDX55 (Foxconn T99W175 / Thales MV31-W).
+#
+# ВЫНЕСЕНО В ОТДЕЛЬНЫЙ ФАЙЛ НАМЕРЕННО. Раньше это были шесть одинаковых
+# копий по числу USB-композиций (05c6:9025, 05c6:90d5, 1e2d:00b3, 00b7,
+# 00b8, 00b9), и они уже разошлись: правку для T99W175 внесли в 90d5, а в
+# остальные пять - нет. Один и тот же модем в разных режимах вёл бы себя
+# по-разному. Композиция меняет нумерацию портов и драйвер, но НЕ набор
+# AT-команд, поэтому общей должна быть вся логика.
+
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
+_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"
+
+getinfo() {
+	echo "Thales/Cinterion MV31-W"
+}
+
+getsupportedbands() {
+	echo "$_DEFAULT_LTE_BANDS"
+}
+
+getbands() {
+	O=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?")
+	echo "$O" | awk -F: '/LTE,Enable.*Bands.*:/{gsub(",", " ");print $2}' | xargs
+}
+
+setbands() {
+	BANDS="$1"
+
+	if [ "$BANDS" = "default" ]; then
+		sms_tool -d $_DEVICE at "AT^BAND_PREF"
+		return
+	fi
+
+	T=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		[ -n "$T" ] && T="${T},"
+		T="${T}${BAND}"
+	done
+
+	[ -z "$T" ] && return 1
+
+	sms_tool -d $_DEVICE at "AT^BAND_PREF" || return 1
+	sleep 0.3
+
+	sms_tool -d $_DEVICE at "AT^BAND_PREF=LTE,2,$T"
+}
+
+getsupportedbands5gnsa() {
+	echo "$_DEFAULT_5GNSA_BANDS"
+}
+
+getbands5gnsa() {
+	O=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?")
+	echo "$O" | awk -F: '/NR5G,Enable.*Bands.*:/{gsub(",", " ");print $2}' | xargs
+}
+
+setbands5gnsa() {
+	BANDS="$1"
+
+	if [ "$BANDS" = "default" ]; then
+		sms_tool -d $_DEVICE at "AT^BAND_PREF"
+		return
+	fi
+
+	T=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		[ -n "$T" ] && T="${T},"
+		T="${T}${BAND}"
+	done
+
+	[ -z "$T" ] && return 1
+
+	sms_tool -d $_DEVICE at "AT^BAND_PREF" || return 1
+	sleep 0.3
+
+	sms_tool -d $_DEVICE at "AT^BAND_PREF=NR5G,2,$T"
+}
+# --- Привязка к соте и агрегация (Qualcomm SDX55) ----------------------------
+#
+# НАПИСАНО БЕЗ МОДЕМА В РУКАХ - только чтение, поэтому состояние радио изменить
+# не может. Если команда не ответит или ответ не разберётся, вернём "Unsupported"
+# и строка в интерфейсе просто не появится.
+#
+# Форматы взяты из инструкции к T99W175 и подтверждены там примером для 3G:
+#   AT^WCDMA_LOCK?  ->  ^WCDMA_LOCK:(10663,143)     т.е. (uarfcn,psc)
+#   AT^LTE_LOCK=PCI,EARFCN,...                      т.е. ПОРЯДОК ОБРАТНЫЙ нашему
+# Наш контракт - "cell <arfcn> <pci>", поэтому пару меняем местами. Это главная
+# ловушка этого модема: у FM350 сначала ARFCN, здесь - сначала PCI.
+#
+# Запись (AT^LTE_LOCK=...) НЕ РЕАЛИЗОВАНА СОЗНАТЕЛЬНО. По инструкции она
+# применяется через AT+CFUN=1,1, переживает перезагрузку и снимается только
+# вручную - ошибка в порядке аргументов оставила бы модем привязанным к
+# несуществующей соте, и чинить пришлось бы AT-командами. Поэтому отдаём признак
+# readonly: интерфейс покажет привязку, но не даст кнопку, которая не работает.
+getcelllock() {
+	O=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^*LTE_LOCK: *//p' | head -1 | tr -d '() ')
+	if [ -n "$O" ]; then
+		_PC=$(echo "$O" | cut -d, -f1)
+		_AR=$(echo "$O" | cut -d, -f2)
+		case "$_AR" in ''|*[!0-9]*) _AR="" ;; esac
+		case "$_PC" in ''|*[!0-9]*) _PC="" ;; esac
+		if [ -n "$_AR" ] && [ -n "$_PC" ]; then
+			echo "cell $_AR $_PC readonly"; return
+		fi
+	fi
+	# 3G-привязка - отдельная команда; сообщаем о ней так же, как об LTE.
+	O=$(sms_tool -d $_DEVICE at "AT^WCDMA_LOCK?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^*WCDMA_LOCK: *//p' | head -1 | tr -d '() ')
+	if [ -n "$O" ]; then
+		_AR=$(echo "$O" | cut -d, -f1)
+		case "$_AR" in ''|*[!0-9]*) _AR="" ;; esac
+		[ -n "$_AR" ] && { echo "arfcn $_AR readonly"; return; }
+	fi
+	# Команда есть, но привязки нет - это тоже полезный ответ.
+	sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | grep -q "LTE_LOCK" \
+		&& { echo "off"; return; }
+	echo "Unsupported"
+}
+
+# Агрегация может быть выключена в самом модеме - тогда он работает как cat4, а
+# причина ниоткуда не видна. Ровно тот же класс диагностики, что и режим 5G у
+# FM350: показываем, когда выключено, и молчим, когда всё в порядке.
+getcaenabled() {
+	O=$(sms_tool -d $_DEVICE at "AT^CA_ENABLE?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^*CA_ENABLE: *//p' | head -1 | tr -cd '0-9')
+	[ -n "$O" ] || { echo "Unsupported"; return; }
+	[ "$O" = "0" ] && echo "off" || echo "on"
+}

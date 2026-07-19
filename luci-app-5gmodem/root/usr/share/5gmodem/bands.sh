@@ -362,12 +362,66 @@ setbands3g() {
 #   "off"         - привязки нет
 #   "arfcn <n>"   - привязка к частоте
 #   "cell <n> <pci>" - привязка к конкретной соте
+# К привязке может добавляться последним словом признак:
+#   "... readonly"  - состояние читается, но менять его профиль не умеет.
+#     Нужен, чтобы интерфейс показал привязку БЕЗ кнопки «Снять»: кнопка,
+#     которая молча ничего не делает, хуже её отсутствия.
+#   "... remembered" - модем о привязке молчит, значение взято из нашей записи
+#     (см. ветку getcelllock ниже).
 getcelllock() {
 	echo "Unsupported"
 }
 
 # setcelllock off | arfcn <n> | cell <n> <pci>
 setcelllock() {
+	echo "Unsupported"
+}
+
+# --- Режим 5G в самом модеме -------------------------------------------------
+# Отдельная от диапазонов настройка: модем умеет 5G, но 5G ВЫКЛЮЧЕН в прошивке -
+# тогда ни выбор диапазонов, ни привязка к соте ничего не дадут, а причина
+# никак не видна. Формат get5gmode:
+#   "Unsupported" - модем не умеет управлять этим (строка скрыта)
+#   "sa+nsa"      - обе схемы включены (нормальное состояние)
+#   "sa" | "nsa"  - включена только одна
+#   "off"         - 5G выключен в модеме
+get5gmode() {
+	echo "Unsupported"
+}
+
+# set5gmode full - включить и SA, и NSA
+set5gmode() {
+	echo "Unsupported"
+}
+
+# --- Возврат связи после цикла режима полёта ---------------------------------
+# Привязка к соте и включение 5G проводят модем через AT+CFUN=4. После возврата
+# модем РЕГИСТРИРУЕТСЯ САМ, но PDP-контекст остаётся пустым, а интерфейс -
+# опущенным: проверено на живом FM350 (CEREG: 2,1 и оператор есть, при этом
+# CGACT пуст, up=false, интернета нет). Без этого пользователь после привязки
+# остаётся без связи и должен чинить руками.
+_reconnect_iface() {
+	_ri_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+	[ -n "$_ri_sec" ] || return
+	_ri_if=$(uci -q get "5gmodem.m_$_ri_sec.network")
+	[ -n "$_ri_if" ] || return
+	# Ждём именно РЕГИСТРАЦИИ: поднять интерфейс раньше - значит получить отказ
+	# и уйти в паузу netifd, то есть сделать хуже, чем ничего.
+	_ri_n=0
+	while [ "$_ri_n" -lt 40 ]; do
+		case "$(sms_tool -d $_DEVICE at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+CEREG: *//p' | cut -d, -f2)" in
+			1|5) break ;;
+		esac
+		sleep 2
+		_ri_n=$((_ri_n + 1))
+	done
+	ifup "$_ri_if" >/dev/null 2>&1
+}
+
+# --- Агрегация включена в модеме? --------------------------------------------
+# "Unsupported" - не умеем спросить (строка скрыта) | "on" | "off"
+getcaenabled() {
 	echo "Unsupported"
 }
 
@@ -601,12 +655,53 @@ case $1 in
 		[ -n "$2" ] && setbands3g "$2"
 		;;
 	"getcelllock")
-		getcelllock
+		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
+		# FM350-GL: после перезагрузки модема привязка ПРОДОЛЖАЕТ ДЕЙСТВОВАТЬ, но
+		# AT+EMMCHLCK? отвечает "0". Доказано так: модем остался на закреплённой
+		# соте (EARFCN 1450, PCI 359), а стоило снять привязку явной командой -
+		# ушёл на 100/480, свой обычный выбор. Показывать в такой момент «лока
+		# нет» - врать пользователю: он видит одно, а модем делает другое.
+		_cl_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+		[ -n "$_cl_sec" ] && _cl_sec="m_$_cl_sec"
+		_cl_now=$(getcelllock)
+		if [ "$_cl_now" = "off" ] && [ -n "$_cl_sec" ]; then
+			_cl_saved=$(uci -q get "5gmodem.$_cl_sec.celllock")
+			# Отдаём запомненное, помечая источник: интерфейс объяснит, что модем
+			# о привязке молчит, но она в силе.
+			case "$_cl_saved" in
+				arfcn\ *|cell\ *) printf '%s remembered\n' "$_cl_saved"; exit 0 ;;
+			esac
+		fi
+		printf '%s\n' "$_cl_now"
+		;;
+	"get5gmode")
+		get5gmode
+		;;
+	"getcaenabled")
+		getcaenabled
+		;;
+	"set5gmode")
+		# Как и привязка к соте: применяется через цикл режима полёта, дольше
+		# 30-секундного таймаута rpcd - поэтому в фон с отвязкой дескрипторов.
+		[ -n "$2" ] && { ( set5gmode "$2"; _reconnect_iface ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"setcelllock")
 		# Как и setbands - в фоне с отвязкой дескрипторов: привязка делается через
 		# цикл режима полёта и в 30-секундный таймаут rpcd не укладывается.
-		[ -n "$2" ] && { ( setcelllock "$2" "$3" "$4" ) >/dev/null 2>&1 </dev/null & }
+		if [ -n "$2" ]; then
+			# Запоминаем СВОЙ выбор до запуска: по нему потом отличим «модем
+			# забыл сообщить» от «привязки действительно нет».
+			_cl_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+			if [ -n "$_cl_sec" ]; then
+				_cl_sec="m_$_cl_sec"
+				case "$2" in
+					off) uci -q delete "5gmodem.$_cl_sec.celllock" 2>/dev/null ;;
+					*)   uci -q set "5gmodem.$_cl_sec.celllock=$2 $3 $4" ;;
+				esac
+				uci -q commit 5gmodem
+			fi
+			( setcelllock "$2" "$3" "$4"; _reconnect_iface ) >/dev/null 2>&1 </dev/null &
+		fi
 		;;
 	"getantports")
 		getantports
@@ -632,6 +727,14 @@ case $1 in
 		CL=$(getcelllock)
 		if [ "x$CL" != "xUnsupported" ]; then
 			json_add_string celllock "$CL"
+		fi
+		G5=$(get5gmode)
+		if [ "x$G5" != "xUnsupported" ]; then
+			json_add_string mode5g "$G5"
+		fi
+		CAE=$(getcaenabled)
+		if [ "x$CAE" != "xUnsupported" ]; then
+			json_add_string ca_enabled "$CAE"
 		fi
 		json_add_array supported
 		T=$(getsupportedbands)

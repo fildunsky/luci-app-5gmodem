@@ -2,3 +2,106 @@
 _DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 
 . $RES/_fibocom_fm350_common
+
+# --- Привязка к соте (cell lock) ---------------------------------------------
+#
+# Fibocom FM350-GL: AT+EMMCHLCK. Проверено на живом модеме -
+#   AT+EMMCHLCK=? -> +EMMCHLCK: (0-1),(0,2,7),(0,1),(0-46589),(0-511)
+# то есть допустимы 2G(0), 3G(2) и 4G(7); ПЯТОГО поколения в списке нет, хотя
+# документация упоминает rat=11 - на этой прошивке его не принять, поэтому
+# лочим только LTE (7). Диапазон ARFCN 0-46589, PCI 0-511.
+#
+# Формат: AT+EMMCHLCK=<on>,<rat>,<gsm1900>,<arfcn>[,<pci>,<lock_mode>]
+# lock_mode: 0 - только в простое, 3 - и в простое, и на соединении. Берём 3:
+# привязка «только в простое» отпускает соту, как только пойдёт трафик, то есть
+# ровно тогда, когда она и нужна.
+#
+# ВАЖНО: смена привязки на активном соединении не срабатывает - модем нужно
+# провести через режим полёта (AT+CFUN=4), и связь при этом рвётся. Это не наш
+# выбор, а требование модема; интерфейс предупреждает об этом заранее.
+
+getcelllock() {
+	O=$(sms_tool -d $_DEVICE at "AT+EMMCHLCK?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+EMMCHLCK: *//p' | head -1)
+	# пусто = команды нет вовсе (другая прошивка) -> секцию не показываем
+	[ -n "$O" ] || { echo "Unsupported"; return; }
+
+	_EN=$(echo "$O" | awk -F, '{print $1}' | tr -d ' ')
+	[ "$_EN" = "1" ] || { echo "off"; return; }
+
+	# +EMMCHLCK: 1,<rat>,<gsm1900>,<arfcn>[,<pci>,<lock_mode>]
+	_AR=$(echo "$O" | awk -F, '{print $4}' | tr -d ' ')
+	_PC=$(echo "$O" | awk -F, '{print $5}' | tr -d ' ')
+	[ -n "$_AR" ] || { echo "off"; return; }
+	if [ -n "$_PC" ] && [ "$_PC" != "0" ]; then
+		echo "cell $_AR $_PC"
+	else
+		echo "arfcn $_AR"
+	fi
+}
+
+# Маска +E5GOPT: бит 1 (значение 2) - SA, бит 2 (значение 4) - NSA, бит 0 всегда
+# взведён. Отсюда 7 = SA+NSA, 3 = только SA, 5 = только NSA, 1 = 5G выключен.
+get5gmode() {
+	O=$(sms_tool -d $_DEVICE at "AT+E5GOPT?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+E5GOPT: *//p' | head -1 | tr -cd '0-9')
+	[ -n "$O" ] || { echo "Unsupported"; return; }
+	_SA=$((O & 2)); _NSA=$((O & 4))
+	if [ "$_SA" -gt 0 ] && [ "$_NSA" -gt 0 ]; then echo "sa+nsa"
+	elif [ "$_SA" -gt 0 ]; then echo "sa"
+	elif [ "$_NSA" -gt 0 ]; then echo "nsa"
+	else echo "off"; fi
+}
+
+set5gmode() {
+	[ "$1" = "full" ] || return
+	# Одной команды мало: модем принимает её, но в работу 5G берёт только после
+	# переустановки соединения - поэтому тот же цикл режима полёта, что и у
+	# привязки к соте.
+	sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+	sleep 2
+	sms_tool -d $_DEVICE at "AT+E5GOPT=7" >/dev/null 2>&1
+	sleep 1
+	sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+	sleep 8
+	_fm350_reapply_bands
+}
+
+setcelllock() {
+	case "$1" in
+		off)
+			# Снятие тоже требует режима полёта: на активном соединении модем
+			# команду принимает, но привязку не отпускает.
+			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+			sleep 2
+			sms_tool -d $_DEVICE at "AT+EMMCHLCK=0" >/dev/null 2>&1
+			sleep 1
+			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+			# Без этого модем остаётся на одном диапазоне и без агрегации -
+			# см. _fm350_reapply_bands.
+			sleep 8
+			_fm350_reapply_bands
+			;;
+		arfcn|cell)
+			_AR="$2"; _PC="$3"
+			[ -n "$_AR" ] || return
+			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1
+			sleep 2
+			# Старую привязку сбрасываем ЯВНО: без этого модем может оставить
+			# прежнюю частоту (порядок из инструкции к модему).
+			sms_tool -d $_DEVICE at "AT+EMMCHLCK=0" >/dev/null 2>&1
+			sleep 1
+			if [ "$1" = "cell" ] && [ -n "$_PC" ]; then
+				sms_tool -d $_DEVICE at "AT+EMMCHLCK=1,7,0,$_AR,$_PC,3" >/dev/null 2>&1
+			else
+				# PCI пропускаем, но lock_mode остаётся шестым полем - отсюда
+				# двойная запятая. Так же в инструкции: =1,7,0,1802,,3
+				sms_tool -d $_DEVICE at "AT+EMMCHLCK=1,7,0,$_AR,,3" >/dev/null 2>&1
+			fi
+			sleep 1
+			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1
+			sleep 8
+			_fm350_reapply_bands
+			;;
+	esac
+}

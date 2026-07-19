@@ -20,7 +20,7 @@
 MODE="$1"
 PORT="$2"
 case "$MODE" in
-	soft|hard|power|haspower) ;;
+	soft|hard|power|haspower|usbpower|hasusbpower) ;;
 	/dev/*)    PORT="$MODE"; MODE="soft" ;;   # старый вызов: reboot_modem.sh <port>
 	*)         MODE="soft" ;;
 esac
@@ -39,6 +39,89 @@ first_power_gpio() {
 	done
 	return 1
 }
+
+# --- Снятие питания с USB-порта модема ---------------------------------------
+#
+# Последний рубеж, когда не помогает НИЧЕГО из AT. Наблюдалось вживую на FM350:
+# после AT+CFUN=1,1 модем ушёл в переподключение USB и завис - CSQ 99,99 (сигнала
+# нет), регистрации нет, порт то отвечает, то молчит. Ни CFUN=4/1, ни COPS=0,
+# ни повторный CFUN=1,1 его не вернули: AT-канал жив, а радио мертво.
+#
+# GPIO-режим power сюда не годится: на многих платах (в т.ч. Huasifei WH3000) он
+# питает ТОЛЬКО M.2-слот и USB-модема не касается.
+#
+# Три способа по убыванию силы - берём первый доступный:
+#   1. <хаб>/<порт>/disable - отключение порта хабом. Самый жёсткий: на хабах с
+#      управлением питанием снимает VBUS, то есть настоящее обесточивание.
+#   2. authorized - деавторизация устройства. Питание остаётся, но ядро
+#      полностью переустанавливает устройство.
+#   3. unbind/bind драйвера usb - самый мягкий, на зависшем модеме помогает реже.
+_usb_port_dir() {   # $1 - usb-путь модема (напр. 2-1.4)
+	case "$1" in
+		*.*)
+			_hub="${1%.*}"                     # 2-1.4 -> 2-1
+			_pn="${1##*.}"                     # -> 4
+			echo "/sys/bus/usb/devices/$_hub/$_hub:1.0/$_hub-port$_pn"
+			;;
+		*-*)
+			# Модем воткнут прямо в корневой хаб: 2-1 -> usb2, порт 1
+			_bus="${1%%-*}"; _pn="${1##*-}"
+			echo "/sys/bus/usb/devices/usb$_bus/$_bus-0:1.0/usb$_bus-port$_pn"
+			;;
+	esac
+}
+
+usb_power_method() {   # $1 - usb-путь; печатает доступный способ или пусто
+	_pd=$(_usb_port_dir "$1")
+	[ -n "$_pd" ] && [ -w "$_pd/disable" ] && { echo "disable"; return 0; }
+	[ -w "/sys/bus/usb/devices/$1/authorized" ] && { echo "authorized"; return 0; }
+	[ -w /sys/bus/usb/drivers/usb/unbind ] && [ -e "/sys/bus/usb/devices/$1" ] \
+		&& { echo "rebind"; return 0; }
+	return 1
+}
+
+if [ "$MODE" = hasusbpower ]; then
+	# наличие кнопки: путь берём из активного модема, если не задан явно
+	_p="$PORT"
+	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	echo "{\"path\":\"$_p\",\"method\":\"$(usb_power_method "$_p" 2>/dev/null)\"}"
+	exit 0
+fi
+
+if [ "$MODE" = usbpower ]; then
+	_p="$PORT"
+	[ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_p" ] || { echo '{"success":false,"error":"no modem path"}'; exit 0; }
+	_m=$(usb_power_method "$_p") || { echo '{"success":false,"error":"no usb power control"}'; exit 0; }
+	_pd=$(_usb_port_dir "$_p")
+	# В фоне с отвязкой дескрипторов НА ПОДОБОЛОЧКЕ - иначе rpcd ждёт EOF и
+	# упирается в свой 30-секундный таймаут (та же грабля, что в ветке power).
+	(
+		case "$_m" in
+			disable)
+				echo 1 > "$_pd/disable" 2>/dev/null
+				sleep 6
+				echo 0 > "$_pd/disable" 2>/dev/null
+				;;
+			authorized)
+				echo 0 > "/sys/bus/usb/devices/$_p/authorized" 2>/dev/null
+				sleep 6
+				echo 1 > "/sys/bus/usb/devices/$_p/authorized" 2>/dev/null
+				;;
+			rebind)
+				echo "$_p" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+				sleep 6
+				echo "$_p" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+				;;
+		esac
+		logger -t 5gmodem "usbpower: $_p перезапущен по питанию ($_m)"
+		# Порты после переподключения переименовываются - закрепляем заново.
+		sleep 20
+		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
+	echo "{\"success\":true,\"mode\":\"usbpower\",\"method\":\"$_m\",\"path\":\"$_p\"}"
+	exit 0
+fi
 
 if [ "$MODE" = haspower ]; then
 	# наличие кнопки: отдаём имя первого доступного GPIO питания (или пусто)

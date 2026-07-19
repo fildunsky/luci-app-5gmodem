@@ -10,14 +10,10 @@ if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
         # Небольшая пауза, чтобы USB-стек ядра успел распознать устройство
         sleep 5
 
-        if [ "$PID" = "90d5" ]; then
-            logger -t hotplug-compal "Modem 90d5 found. Activating via generic..."
-            echo "05c6 90d5" > /sys/bus/usb-serial/drivers/generic/new_id
-        
-        elif [ "$PID" = "90d6" ]; then
-            logger -t hotplug-compal "Modem 90d6 found. Activating via option1..."
-            echo "05c6 90d6" > /sys/bus/usb-serial/drivers/option1/new_id
-        fi
+        # Драйвер берём из общей таблицы (usbports.sh), а не вписываем здесь:
+        # раньше 90d6 привязывался тут через option1, а в 70-sms-tool-js-modems -
+        # через generic, и отрабатывали оба обработчика.
+        /usr/share/5gmodem/usbports.sh bind "05c6" "$PID"
 
         logger -t hotplug-compal "Ports activated for PID $PID. Waiting for ModemManager to pick the modem up..."
 

@@ -216,7 +216,15 @@ mm_restart_safe() {
 # --- multi-modem: build the interface for the ACTIVE modem (by USB path), so
 # two modems get SEPARATE interfaces + separate cdc-wdm nodes instead of both
 # clobbering a single "modem" interface (which made the IP look shared). ---
-AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+# Обычно работаем с АКТИВНЫМ модемом. Но autosetup при установке настраивает и
+# неактивные тоже (иначе второй воткнутый модем остаётся без интерфейса), и для
+# этого задаёт MODEM_PATH. Тогда все глобальные ключи @5gmodem[0] - трогать
+# НЕЛЬЗЯ: они описывают активный модем, и запись в них увела бы страницу и порты
+# sms_tool_js на чужой модем.
+AMP=${MODEM_PATH:-$(uci -q get 5gmodem.@5gmodem[0].active_modem)}
+_ACTPATH=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_IS_ACTIVE=1
+[ -n "$MODEM_PATH" ] && [ -n "$_ACTPATH" ] && [ "$MODEM_PATH" != "$_ACTPATH" ] && _IS_ACTIVE=0
 MSEC=""
 WANTWDM=""
 if [ -n "$AMP" ]; then
@@ -282,7 +290,8 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# "Device path not found!" в цикле (живой баг на L850 после FM350 в том
 			# же USB-разъёме). Даём отдельный от метрик AT-порт, чтобы дозвон и
 			# периодический опрос не сталкивались на одном tty.
-			METRIC_AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+			METRIC_AT=$(uci -q get "5gmodem.$MSEC.at_port")
+			[ -n "$METRIC_AT" ] || METRIC_AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 			DIALPORT=""
 			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/ttyACM*; do
 				[ -e "$t" ] || continue
@@ -328,8 +337,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		fi
 
 		# point the app at this interface and remember it for this modem
-		uci -q set "5gmodem.@5gmodem[0].network=$IF"
-		uci -q set "5gmodem.@5gmodem[0].iface_proto=$FPROTO"
+		if [ "$_IS_ACTIVE" = 1 ]; then
+			uci -q set "5gmodem.@5gmodem[0].network=$IF"
+			uci -q set "5gmodem.@5gmodem[0].iface_proto=$FPROTO"
+		fi
 		if [ -n "$MSEC" ]; then
 			uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
 			uci -q set "5gmodem.$MSEC.network=$IF"
@@ -399,9 +410,11 @@ esac
 # control channel free. Previously this blindly disabled MM for any non-MM proto
 # (e.g. creating an atc interface), which took the OTHER modemmanager modems
 # down. A restart (when MM must run) also clears a wedged MM. ---
+# ПРИСУТСТВИЕ, а не только конфиг: интерфейс отсутствующего модема больше не
+# держит MM запущенным (см. mmneed.sh - там же объяснение, чем это вредно).
 _MM_WANT=0
 [ "$PROTO" = "modemmanager" ] && _MM_WANT=1
-uci show network 2>/dev/null | grep -q "\.proto='modemmanager'" && _MM_WANT=1
+[ "$_MM_WANT" = "1" ] || /usr/share/5gmodem/mmneed.sh check 2>/dev/null | grep -q '"needed":1' && _MM_WANT=1
 if [ "$_MM_WANT" = "1" ]; then
 	/etc/init.d/modemmanager enable >/dev/null 2>&1
 	mm_restart_safe
@@ -411,7 +424,8 @@ elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/nu
 fi
 
 # --- AT / serial control port (for serial-based protos) ---
-ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+ATP=$(uci -q get "5gmodem.$MSEC.at_port")
+[ -n "$ATP" ] || ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 [ -n "$ATP" ] || ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 
 # --- device path for the interface, by proto family ---
@@ -489,8 +503,10 @@ fi
 # point the app at the interface, and remember the user's protocol choice
 # (auto/mbim/modemmanager/qmi) so the settings page shows it on return - done
 # here, on the router, so LuCI does not raise an "unsaved changes" banner.
-uci -q set "5gmodem.@5gmodem[0].network=$IF"
-uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
+if [ "$_IS_ACTIVE" = 1 ]; then
+	uci -q set "5gmodem.@5gmodem[0].network=$IF"
+	uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
+fi
 # remember the interface+proto for THIS modem so switching back restores it and
 # the other modem keeps its own separate interface (no clobbering, distinct IP).
 if [ -n "$MSEC" ]; then
