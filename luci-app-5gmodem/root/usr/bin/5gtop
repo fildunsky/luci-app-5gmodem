@@ -100,6 +100,10 @@ T_LAC="LAC";                T_TAC="TAC";          T_CID="CID"
 T_PATHLOSS="Path loss";     T_TXPOWER="TX power"
 T_CQI="CQI";                T_UECAT="UE cat.";    T_VOLTE="VoLTE"
 T_CSQ="CSQ";                T_ANT="Antenna ports";  T_PORT="Port"
+T_RXDIV="RX diversity";     T_THROTTLE="Throttling";
+T_REGCS="CS reg.";
+T_KIB="KiB"; T_MIB="MiB"; T_GIB="GiB"; T_TIB="TiB"
+T_RXDIV_4="on, 4RX";        T_RXDIV_2="on (2RX)";   T_RXDIV_OFF="off"
 
 case "$_lang" in
 	ru)
@@ -150,6 +154,10 @@ case "$_lang" in
 		T_PATHLOSS="Потери";        T_TXPOWER="Мощн. TX"
 		T_CQI="CQI";                T_UECAT="Кат. UE";    T_VOLTE="VoLTE"
 		T_CSQ="CSQ";                T_ANT="Антенны";      T_PORT="Порт"
+		T_RXDIV="Разнесение";       T_THROTTLE="Троттлинг";
+		T_REGCS="Рег. CS"
+		T_KIB="КиБ"; T_MIB="МиБ"; T_GIB="ГиБ"; T_TIB="ТиБ"
+		T_RXDIV_4="вкл, 4RX";       T_RXDIV_2="вкл (2RX)";  T_RXDIV_OFF="выкл"
 		;;
 esac
 
@@ -168,6 +176,32 @@ DATA="/tmp/5gtop.$$"
 # файл, куда пишет ход теста speedtest.sh (тот же, что читает веб-страница)
 STFILE="/tmp/5gmodem_speedtest.json"
 NPFILE="$DATA.np"
+
+# Индекс АКТИВНОГО аплинка в списке приоритетов.
+#
+# Здесь сравнивали метрику с единицей - а единицу интерфейс получает только
+# после того, как пользователь САМ нажал выбор. На свежем роутере метрика у всех
+# нулевая, и маркер не показывался ни у кого: список выглядел так, будто
+# приоритета нет вовсе. Правило берём то же, что в веб-версии: наименьшая
+# метрика, при равной - тот, у кого есть IP (поднятый Wi-Fi с адресом важнее
+# неподнятого wan с той же метрикой).
+np_active_idx() {   # $1 - JSON списка; печатает индекс (0..) или пусто
+	_ai_best=""; _ai_bm=""; _ai_bip=0; _ai_n=0
+	while [ "$_ai_n" -lt 8 ]; do
+		_ai_if=$(printf '%s' "$1" | jsonfilter -e "@[$_ai_n].iface" 2>/dev/null)
+		[ -n "$_ai_if" ] || break
+		_ai_m=$(printf '%s' "$1" | jsonfilter -e "@[$_ai_n].metric" 2>/dev/null)
+		case "$_ai_m" in ''|*[!0-9]*) _ai_m=0 ;; esac
+		_ai_ip=$(printf '%s' "$1" | jsonfilter -e "@[$_ai_n].ip" 2>/dev/null)
+		_ai_hip=0; [ -n "$_ai_ip" ] && _ai_hip=1
+		if [ -z "$_ai_bm" ] || [ "$_ai_m" -lt "$_ai_bm" ] \
+		   || { [ "$_ai_m" -eq "$_ai_bm" ] && [ "$_ai_hip" = 1 ] && [ "$_ai_bip" = 0 ]; }; then
+			_ai_bm="$_ai_m"; _ai_best="$_ai_n"; _ai_bip="$_ai_hip"
+		fi
+		_ai_n=$((_ai_n + 1))
+	done
+	printf '%s' "$_ai_best"
+}
 SMSFILE="$DATA.sms"
 ESFILE="$DATA.esim"
 # Вывод у КАЖДОЙ консоли свой. Общий файл давал живую путаницу: ответ на
@@ -201,7 +235,51 @@ g() { printf '%s' "$J" | jsonfilter -e "@.$1" 2>/dev/null; }
 v() {
 	_x=$(g "$1")
 	[ -n "$_x" ] && [ "$_x" != "-" ] || { printf '%s' "-"; return; }
-	printf '%s' "$_x" | sed -e 's/&deg;/°/g' -e 's/&nbsp;/ /g' -e 's/&amp;/\&/g' -e 's/&lt;/</g' -e 's/&gt;/>/g'
+	# Пробел ПЕРЕД знаком градуса убираем: "56°C" вместо "56 °C" - так плотнее и
+	# не разрывается при обрезке строки по ширине терминала.
+	printf '%s' "$_x" | sed -e 's/ *&deg;/°/g' -e 's/&deg;/°/g' -e 's/&nbsp;/ /g' -e 's/&amp;/\&/g' -e 's/&lt;/</g' -e 's/&gt;/>/g'
+}
+
+# УРОВЕНЬ ТЕПЛОВОГО ТРОТТЛИНГА - приписка к температуре, а не отдельная строка:
+# сам по себе он ничего не значит, а рядом с градусами сразу отвечает на вопрос
+# «модем греется - он уже режет скорость или ещё нет». Ноль (ограничения нет) НЕ
+# показываем: это норма, и строка про норму только отвлекает.
+_therm_suffix() {
+	_th=$(g mtherm)
+	case "$_th" in
+		''|0|-) return ;;
+	esac
+	printf ' %s' "[$T_THROTTLE $_th]"
+}
+
+# Номер абонента, а если его нет - страна сети. Правило то же, что в вебе:
+# показывать «-» там, где место можно занять осмысленным значением, незачем.
+_phone_or_loc() {
+	_ph=$(g phone)
+	if [ -n "$_ph" ] && [ "$_ph" != "-" ]; then v phone; return; fi
+	_lc=$(g location)
+	if [ -n "$_lc" ] && [ "$_lc" != "-" ]; then v location; return; fi
+	printf '%s' "-"
+}
+
+# Оператор + КОД СЕТИ (MCC-MNC). Код нужен рядом с именем: у MVNO имя своё, а
+# сеть чужая (Т-Мобайл работает на Tele2), и без кода непонятно, в чьей сети
+# модем на самом деле.
+_operator_plmn() {
+	_op=$(v operator_name)
+	_mc=$(g operator_mcc); _mn=$(g operator_mnc)
+	case "$_mc$_mn" in
+		''|*-*) printf '%s' "$_op"; return ;;
+	esac
+	printf '%s (%s-%s)' "$_op" "$_mc" "$_mn"
+}
+
+# ЕДИНИЦЫ ОБЪЁМА - НА ЯЗЫК ИНТЕРФЕЙСА. Значение приходит готовой строкой
+# ("96.5 MiB") от ifconfig или hilink.sh, поэтому меняем только суффикс.
+# Двоичные приставки по ГОСТ 8.417: КиБ, МиБ, ГиБ.
+_bytes_l10n() {
+	printf '%s' "$1" | sed -e "s/\bKiB\b/$T_KIB/" -e "s/\bMiB\b/$T_MIB/" \
+		-e "s/\bGiB\b/$T_GIB/" -e "s/\bTiB\b/$T_TIB/"
 }
 
 # Длина в СИМВОЛАХ: wc -m в busybox считает байты (без locale), а кириллица и
@@ -651,16 +729,30 @@ draw_cell() {
 	lab $((_row+1)) 40 'RSSI' 8 "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")" 28
 	lab $((_row+2)) 2  "$T_CSQ"   8 "$(fit "$(v csq)" 20)" 20
 	lab $((_row+2)) 40 "$T_VOLTE" 8 "$(fit "$(v volte)" 20)" 20
+	# МЕТРИКИ 3G. Показываем ТОЛЬКО когда модем реально на 3G: на LTE они пусты,
+	# и строка с прочерком занимала бы место, ничего не сообщая. RSCP - уровень
+	# принимаемого кода, EcIo - отношение сигнал/помеха, аналоги RSRP и RSRQ.
+	_rc=$(g rscp); _ei=$(g ecio)
+	if { [ -n "$_rc" ] && [ "$_rc" != "-" ]; } || { [ -n "$_ei" ] && [ "$_ei" != "-" ]; }; then
+		lab $((_row+3)) 2  'RSCP' 8 "$(fit "$(v rscp)" 20)" 20
+		lab $((_row+3)) 40 'EcIo' 8 "$(fit "$(v ecio)" 20)" 20
+	fi
+	# Регистрация в голосовой сети - отдельно от пакетной: они расходятся, и
+	# именно расхождение объясняет «звонки идут, интернета нет».
+	_rg=$(g registration_cs)
+	if [ -n "$_rg" ] && [ "$_rg" != "-" ]; then
+		lab $((_row+4)) 2 "$T_REGCS" 8 "$(fit "$(v registration_cs)" 20)" 20
+	fi
 
 	# --- агрегация: PCC + до четырёх SCC, столбцами как в таблице веба ---
 	_row=$((_row + 5))
-	lab $((_row)) 2 '' 0 "${C_DIM}$(pad 'CC' 6)$(pad "$T_BAND" 20)$(pad 'PCI' 8)$(pad 'EARFCN' 10)$(pad 'RSRP' 8)$(pad 'MIMO' 8)${C_RST}" 68
-	at $((_row+1)) 2 "$(pad 'PCC' 6)$(pad "$(v pband)" 20)$(pad "$(v pci)" 8)$(pad "$(v earfcn)" 10)$(pad "$(v rsrp)" 8)$(pad "$(v pmimo)" 8)"
+	lab $((_row)) 2 '' 0 "${C_DIM}$(pad 'CC' 6)$(pad "$T_BAND" 20)$(pad 'PCI' 8)$(pad 'EARFCN' 10)$(pad 'RSRP' 8)$(pad 'MIMO' 6)$(pad 'MOD' 8)${C_RST}" 68
+	at $((_row+1)) 2 "$(pad 'PCC' 6)$(pad "$(v pband)" 20)$(pad "$(v pci)" 8)$(pad "$(v earfcn)" 10)$(pad "$(v rsrp)" 8)$(pad "$(v pmimo)" 6)$(pad "$(v pmod)" 8)"
 	_i=1
 	while [ "$_i" -le 3 ]; do
 		_b=$(v "s${_i}band")
 		if [ -n "$_b" ] && [ "$_b" != "-" ]; then
-			at $((_row+1+_i)) 2 "$(pad "SCC$_i" 6)$(pad "$_b" 20)$(pad "$(v "s${_i}pci")" 8)$(pad "$(v "s${_i}earfcn")" 10)$(pad "$(v "s${_i}rsrp")" 8)$(pad "$(v "s${_i}mimo")" 8)"
+			at $((_row+1+_i)) 2 "$(pad "SCC$_i" 6)$(pad "$_b" 20)$(pad "$(v "s${_i}pci")" 8)$(pad "$(v "s${_i}earfcn")" 10)$(pad "$(v "s${_i}rsrp")" 8)$(pad "$(v "s${_i}mimo")" 6)$(pad "$(v "s${_i}mod")" 8)"
 		else
 			at $((_row+1+_i)) 2 "$(pad '' 68)"
 		fi
@@ -679,6 +771,20 @@ draw_cell() {
 		at $((_row+1+_i)) 2 "$(pad "$_pn" 8)$(pad "$_pr" 10)$(pad "$_pq" 10)"
 		_i=$((_i + 1))
 	done
+	# РАЗНЕСЁННЫЙ ПРИЁМ - прямо под таблицей портов, как в вебе. Без него
+	# таблица выше неполна: одинаковые уровни на портах означают «обе антенны
+	# работают» ТОЛЬКО если разнесение включено, иначе второй приёмник просто
+	# не задействован, и отличить одно от другого по уровням нельзя.
+	_rd=$(g rxdiv)
+	if [ -n "$_rd" ]; then
+		case "$_rd" in
+			4rx) _rdt="$T_RXDIV_4"; _rdc="$C_GRN" ;;
+			2rx) _rdt="$T_RXDIV_2"; _rdc="$C_GRN" ;;
+			off) _rdt="$T_RXDIV_OFF"; _rdc="$C_RED" ;;
+			*)   _rdt="$_rd"; _rdc="" ;;
+		esac
+		lab $((_row + 4)) 2 "$T_RXDIV" 14 "${_rdc}$(fit "$_rdt" 20)${C_RST}" 20
+	fi
 	while [ "$_i" -lt 3 ]; do
 		at $((_row+1+_i)) 2 "$(pad '' 40)"
 		_i=$((_i + 1))
@@ -770,7 +876,7 @@ draw_modem() {
 	lab 5  2 "$T_MODEL"  14 "$(fit "$(v modem)" $_w)" $_w
 	lab 6  2 "$T_FW"     14 "$(fit "$(v firmware)" $_w)" $_w
 	lab 7  2 "$T_IMEI"   14 "$(fit "$(v imei)" $_w)" $_w
-	lab 8  2 "$T_TEMP"   14 "$(fit "$(v mtemp)" $_w)" $_w
+	lab 8  2 "$T_TEMP"   14 "$(fit "$(v mtemp)$(_therm_suffix)" $_w)" $_w
 	lab 9  2 "$T_PROTO"  14 "$(fit "$(v protocol)" $_w)" $_w
 
 	lab 12 2 "$T_SIM"    14 "$(fit "$(v simslot)" $_w)" $_w
@@ -811,8 +917,14 @@ frame_sms() {
 
 draw_sms() {
 	_r=5
-	if [ ! -s "$SMSFILE" ]; then
+	# СУЩЕСТВОВАНИЕ файла, а не его размер: пустой файл означает «прочитали,
+	# сообщений нет», и раньше он был неотличим от «ещё не читали» - обе ветки
+	# давали -s = ложь, и надпись «читаю сообщения…» не сменялась никогда.
+	if [ ! -e "$SMSFILE" ]; then
 		at $_r 4 "${C_DIM}$(fit "$T_SMSLOAD" $((W - 6)))${C_RST}"
+		_r=$((_r + 1))
+	elif [ ! -s "$SMSFILE" ]; then
+		at $_r 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"
 		_r=$((_r + 1))
 	else
 		_n=0
@@ -1065,13 +1177,13 @@ draw_narrow() {
 	_vc=13
 	_l() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 10)" "$C_RST" "$3"; }
 	_l 5  "$T_MODEL"   "$(fit "$(v modem)" $((W - 12)))"
-	_l 6  "$T_OPERATOR" "$(fit "$(v operator_name)" $((W - 12)))"
+	_l 6  "$T_OPERATOR" "$(fit "$(_operator_plmn)" $((W - 12)))"
 	_sg=$(v signal)
 	_l 7  "$T_LEVEL"  "$(bar "$_sg" 10) ${C_B}${_sg}%${C_RST}  "
-	_l 8  "$T_PHONE"  "$(pad "${C_DIM}$(v phone)${C_RST}" $((W - 12)))"
+	_l 8  "$T_PHONE"  "$(pad "${C_DIM}$(_phone_or_loc)${C_RST}" $((W - 12)))"
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	_l 9  "$T_TEMP"    "$(pad "$_t" $((W - 12)))"
+	_l 9  "$T_TEMP"    "$(pad "$_t$(_therm_suffix)" $((W - 12)))"
 
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
 	_l 12 'RSRP'     "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
@@ -1124,12 +1236,13 @@ draw_narrow() {
 
 	if [ -s "$NPFILE" ]; then
 		_np=$(cat "$NPFILE" 2>/dev/null); _n=0; _rw=25
+		_act=$(np_active_idx "$_np")
 		while [ "$_n" -lt 2 ]; do
 			_if=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].iface" 2>/dev/null)
 			[ -n "$_if" ] || break
 			_lb=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].label" 2>/dev/null)
 			_mt=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].metric" 2>/dev/null)
-			[ "$_mt" = "1" ] && _mk="${C_GRN}>${C_RST}" || _mk=" "
+			[ "$_n" = "$_act" ] && _mk="${C_GRN}>${C_RST}" || _mk=" "
 			printf '%s[%d;2H%s %s%d%s %s' "$ESC" "$_rw" "$_mk" "$C_DIM" "$((_n + 1))" "$C_RST" "$(pad "$_lb" $((W - 8)))"
 			_rw=$((_rw + 1)); _n=$((_n + 1))
 		done
@@ -1157,7 +1270,7 @@ draw() {
 	at 6  4  "$(pad "${C_B}${_sg}%${C_RST}" 22)"
 	at 7  4  "${C_DIM}$(pad "$(v modem)" 22)${C_RST}"
 
-	lab 5  28 "$T_OPERATOR" 11 "$(v operator_name)" 16
+	lab 5  28 "$T_OPERATOR" 11 "$(fit "$(_operator_plmn)" 16)" 16
 	_r=$(v registration)
 	case "$_r" in
 		1) _rs="${C_GRN}${T_ONLINE}${C_RST}" ;;
@@ -1166,7 +1279,7 @@ draw() {
 		*) _rs="${C_YEL}${T_NOREG}${C_RST}" ;;
 	esac
 	lab 6  28 "$T_STATUS"   11 "$_rs" 16
-	lab 7  28 "$T_PHONE"  11 "${C_DIM}$(v phone)${C_RST}" 16
+	lab 7  28 "$T_PHONE"  11 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
 	# Слот SIM: у модемов с двумя слотами показываем ещё и то, что переключение
 	# доступно клавишей - иначе о нём никак не догадаться.
 	_sl=$(v simslot)
@@ -1178,14 +1291,18 @@ draw() {
 	_md=$(v mode); _md=${_md%% | *}
 	lab 5  56 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
 	lab 6  56 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
+	# IPv6 - только если оператор его выдал: у большинства российских сетей его
+	# нет, и пустая строка была бы про отсутствующее.
+	_v6=$(g ipaddr6)
+	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 7 56 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
 	lab 7  56 "$T_TIME"    9 "$(uptime_str)" 12
 	# Единицу дописываем ТОЛЬКО если её нет: часть профилей уже отдаёт "56.0 °C",
 	# и без этой проверки получалось "56.0 °C C".
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
 	lab 8  56 "$T_TEMP"    9 "$_t" 12
-	lab 9  56 "$T_TRAFFIC"   9 "${C_DIM}v $(v rx)${C_RST}" 12
-	at 10  56 "${C_DIM}$(pad "  ^ $(v tx)" 20)${C_RST}"
+	lab 9  56 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
+	at 10  56 "${C_DIM}$(pad "  ^ $(_bytes_l10n "$(v tx)")" 20)${C_RST}"
 
 	# ── Блок «Сота / Сигнал» (строки 10-14). Тоже три колонки.
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr)
@@ -1273,6 +1390,7 @@ draw() {
 	if [ -s "$NPFILE" ]; then
 		_np=$(cat "$NPFILE" 2>/dev/null)
 		_n=0
+		_act=$(np_active_idx "$_np")
 		while [ "$_n" -lt 3 ]; do
 			_if=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].iface" 2>/dev/null)
 			[ -n "$_if" ] || break
@@ -1281,7 +1399,7 @@ draw() {
 			_ipa=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].ip" 2>/dev/null)
 			_mt=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].metric" 2>/dev/null)
 			_idx=$((_n + 1))
-			if [ "$_mt" = "1" ]; then
+			if [ "$_n" = "$_act" ]; then
 				_mk="${C_GRN}>${C_RST}"; _nm="${C_B}${_lb}${C_RST}"
 			else
 				_mk="${C_DIM} ${C_RST}"; _nm="${C_DIM}${_lb}${C_RST}"
@@ -1508,10 +1626,18 @@ fetch_sms() {
 	  _p=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
 	  _s=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
 	  if [ -n "$_p" ] && [ -e "$_p" ]; then
-	  	# -j даёт JSON, тот же формат, что читает веб-страница
-	  	sms_tool -s "${_s:-ME}" -d "$_p" -f '%Y-%m-%d %H:%M' -j recv > "$SMSFILE.raw" 2>/dev/null
+	  	# ЧЕРЕЗ smsbridge.sh, а не напрямую sms_tool: мост встаёт в общую очередь
+	  	# к AT-порту (atlock.sh) и умеет HiLink-модемы, у которых SMS читаются по
+	  	# HTTP. Прямой вызов лез в порт мимо очереди и сталкивался с опросом
+	  	# метрик - чтение подвисало.
+	  	/usr/share/5gmodem/smsbridge.sh recv "${_s:-ME}" "$_p" > "$SMSFILE.raw" 2>/dev/null
 	  	[ -s "$SMSFILE.raw" ] && sms_merge "$SMSFILE.raw" > "$SMSFILE.tmp" 2>/dev/null
-	  	[ -s "$SMSFILE.tmp" ] && mv "$SMSFILE.tmp" "$SMSFILE"
+	  	# ФАЙЛ ПУБЛИКУЕМ ВСЕГДА, в том числе ПУСТОЙ. Раньше mv стоял под
+	  	# проверкой -s, и при отсутствии сообщений файл не создавался вовсе - а
+	  	# отрисовка считает несуществующий файл признаком «ещё читаю» и вечно
+	  	# показывала «читаю сообщения…». Пустой файл = «прочитали, сообщений нет».
+	  	[ -f "$SMSFILE.tmp" ] || : > "$SMSFILE.tmp"
+	  	mv "$SMSFILE.tmp" "$SMSFILE"
 	  	rm -f "$SMSFILE.raw"
 	  fi
 	  rm -f "$SMSBUSY" ) >/dev/null 2>&1 </dev/null &

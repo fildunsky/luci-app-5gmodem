@@ -65,6 +65,22 @@ document.head.append(E('style', {'type': 'text/css'},
   white-space: normal !important;
 }
 
+/* ЕДИНИЦА ГРАДУСОВ: "56°C" вплотную к числу, без пробела.
+   Уменьшаем и поднимаем ТОЛЬКО букву C. Сам знак ° уже надстрочный по своему
+   рисунку - он сидит у верхней линии и мельче цифр; уменьшать его вдобавок
+   значит делать из него точку. А вот C рядом с ним остаётся полноразмерной и
+   выбивается, поэтому подтягиваем её к градусу.
+   line-height:0 обязателен - иначе подъём буквы растягивает высоту строки.
+   ВНИМАНИЕ: правило стоит ПОСЛЕ закрывающей скобки соседнего. Однажды оно было
+   вставлено внутрь списка селекторов выше - и защита от замера таблиц темой
+   (white-space:normal !important) перестала действовать на ряды кнопок, а те
+   получили font-size:.72em и line-height:0. Прокрутка снова начала уезжать. */
+.deg-unit {
+  font-size: .72em;
+  vertical-align: .32em;
+  line-height: 0;
+}
+
 /* Комбинации 3G - ИСКЛЮЧЕНИЕ из фиксированной ширины выше: та рассчитана на
    короткие номера диапазонов ("B1"), а у комбинаций подписи длинные
    ("2100 + 1900 + 850") - в 3.4em их бы расплющило. */
@@ -630,6 +646,10 @@ function loadSimSlots() {
 			return;
 		}
 		simSlotsSeen = true;
+		/* Тоже через sameRender: слоты опрашиваются по таймеру, а меняются лишь
+		   при переключении SIM. Безусловный innerHTML='' ронял высоту блока на
+		   каждом опросе (см. подробности у sameRender). */
+		if (sameRender(box, JSON.stringify(st))) { return; }
 		box.innerHTML = '';
 		if (st.type) {
 			box.appendChild(E('span', { 'class': 'tginfo-simslot-type', 'title': _('SIM type') }, [ st.type ]));
@@ -684,7 +704,11 @@ function loadSimSlots() {
 
 function SIMdata(data) {
 	var sdata = {};
-	try { sdata = JSON.parse(data) || {}; } catch (e) {}
+	/* Принимаем И строку (первая отрисовка), И готовый объект (обновление из
+	   опроса): подсказка перерисовывается на каждом тике, а разбирать JSON
+	   заново только ради неё незачем. */
+	if (data && typeof data === 'object') { sdata = data; }
+	else { try { sdata = JSON.parse(data) || {}; } catch (e) {} }
 
 	var rows = [];
 	// «-» значит «слот неизвестен» - строку в подсказке не показываем вовсе
@@ -1650,6 +1674,17 @@ function operatorIcon(name) {
 	return null;
 }
 
+/* ЕДИНИЦЫ ОБЪЁМА ТРАФИКА - НА ЯЗЫК ИНТЕРФЕЙСА.
+   Значение приходит УЖЕ СТРОКОЙ ("96.5 MiB"): у обычных модемов её печатает
+   ifconfig, у HiLink - hilink.sh. Разбирать и пересобирать число незачем -
+   подменяем только суффикс. Двоичные приставки по ГОСТ 8.417: КиБ, МиБ, ГиБ. */
+function localizeBytes(v) {
+	var t = String(v == null ? '' : v);
+	return t.replace(/\b(KiB|MiB|GiB|TiB)\b/g, function(u) {
+		return { 'KiB': _('KiB'), 'MiB': _('MiB'), 'GiB': _('GiB'), 'TiB': _('TiB') }[u] || u;
+	});
+}
+
 function updateSimIcon(name) {
 	var si = document.getElementById('simicon');
 	if (!si) { return; }
@@ -1712,31 +1747,84 @@ function setNetModeAT(id, label) {
    был отдельный вызов bands.sh + кнопка «Обновить»: и порт дёргали зря (даже
    когда блок свёрнут), и антенну крутить было неудобно - значения не живые.
    Блок показываем только если модем реально ответил: команда вендорная. */
-function fillAntPorts(raw) {
+function fillAntPorts(raw, rxdiv) {
 	var block = document.getElementById('antports-block');
 	var tbl = document.getElementById('antports-table');
 	if (!block || !tbl) { return; }
+
+	/* Разнесённый приём: 4rx | 2rx | off. Поле вендорное (Telit #LRXDIV/#4RXDIS),
+	   у большинства модемов его нет - тогда строку просто не показываем, а не
+	   пишем «неизвестно»: пустое место честнее ложной определённости. */
+	var rxl = document.getElementById('rxdiv-line');
+	if (rxl) {
+		var txt = null, red = false;
+		if (rxdiv === '4rx')      { txt = _('Receive diversity: on, 4 receivers (4RX)'); }
+		else if (rxdiv === '2rx') { txt = _('Receive diversity: on (2RX)'); }
+		else if (rxdiv === 'off') { txt = _('Receive diversity: off - the second antenna is not used'); red = true; }
+		if (txt) {
+			rxl.style.display = '';
+			/* Именно color, а не cssText: опрос идёт раз в несколько секунд, и
+			   дописывание в cssText разрасталось бы с каждым тиком. */
+			rxl.style.color = red ? '#c00' : '';
+			rxl.textContent = txt;
+		} else if (rxl.getAttribute('data-hadata') !== '1') {
+			/* Показанную строку не убираем: поле вендорное и при коллизии на
+			   порту приходит пустым, а исчезающая строка меняет высоту блока. */
+			rxl.style.display = 'none';
+		}
+		if (txt) { rxl.setAttribute('data-hadata', '1'); }
+	}
 	var rows = String(raw || '').trim().split(/\s+/).filter(function(l) {
 		return /^\d+:-?\d+:-?\d+$/.test(l);
 	});
-	if (!rows.length) { block.style.display = 'none'; return; }
+	/* Блок, который УЖЕ показывали, не прячем: пустой antports почти всегда
+	   означает коллизию на порту, а не исчезновение антенн. Правило то же, что
+	   в setRowVisible - иначе целая секция схлопывается и уводит прокрутку. */
+	if (!rows.length) {
+		if (block.getAttribute('data-hadata') !== '1') { block.style.display = 'none'; }
+		return;
+	}
 	block.style.display = '';
-	/* Пересобираем только при изменении: пустеющий контейнер провоцирует у темы
-	   пересчёт таблиц и обрезание скролла (см. sameRender). */
-	if (sameRender(tbl, rows.join(' '))) { return; }
-	tbl.innerHTML = '';
-	tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
-		E('th', { 'class': 'th left' }, _('Antenna port')),
-		E('th', { 'class': 'th left' }, _('RSRP')),
-		E('th', { 'class': 'th left' }, _('RSRQ')),
-		E('th', { 'class': 'th left' }, _('State'))
-	]));
-	rows.forEach(function(l) {
+	block.setAttribute('data-hadata', '1');
+
+	/* КАРКАС СТРОИМ ОДИН РАЗ, ДАЛЬШЕ ТОЛЬКО ОБНОВЛЯЕМ ЯЧЕЙКИ.
+	   Здесь стояло sameRender по строке значений - и не срабатывало НИКОГДА:
+	   в подпись входили сами уровни, а они живые и меняются на каждом опросе
+	   (-114 -> -115). Таблица пересобиралась каждый тик через innerHTML='', на
+	   долю мгновения становясь пустой: высота документа проваливалась, браузер
+	   обрезал scrollTop, и страница уезжала вверх (proton2025, домотано до низа).
+	   Подпись каркаса - только НОМЕРА ПОРТОВ: они постоянны, поэтому DOM
+	   перестраивается лишь когда портов реально стало больше или меньше. */
+	var ports = rows.map(function(l) { return l.split(':')[0]; }).join(',');
+	if (!sameRender(tbl, ports)) {
+		tbl.innerHTML = '';
+		tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
+			E('th', { 'class': 'th left' }, _('Antenna port')),
+			E('th', { 'class': 'th left' }, _('RSRP')),
+			E('th', { 'class': 'th left' }, _('RSRQ')),
+			E('th', { 'class': 'th left' }, _('State'))
+		]));
+		rows.forEach(function(l) {
+			tbl.appendChild(E('tr', { 'class': 'tr ant-row' }, [
+				/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV)
+				   у каждой платы свои, соответствие не выдумываем. */
+				E('td', { 'class': 'td left' }, _('Port %d').format(parseInt(l.split(':')[0], 10))),
+				E('td', { 'class': 'td left' }, '-'),
+				E('td', { 'class': 'td left' }, '-'),
+				E('td', { 'class': 'td left' }, '-')
+			]));
+		});
+	}
+
+	var trs = tbl.querySelectorAll('tr.ant-row');
+	rows.forEach(function(l, i) {
+		var tr = trs[i];
+		if (!tr) { return; }
+		var td = tr.querySelectorAll('td');
 		var p = l.split(':');
 		var rsrp = parseInt(p[1], 10);
 		/* Цвета и пороги - ОБЩИЕ с «Агрегацией несущих» (CA_COLOR/caQuality),
-		   чтобы -100 dBm означало одно и то же в обеих таблицах. Свои цифры тут
-		   были бы отдельной правдой: пользователь видит две таблицы рядом. */
+		   чтобы -100 dBm означало одно и то же в обеих таблицах. */
 		var st, col;
 		if (isNaN(rsrp)) {
 			st = '-'; col = null;
@@ -1755,22 +1843,19 @@ function fillAntPorts(raw) {
 			   : (col === 'orange') ? _('antenna: weak signal')
 			   : _('antenna: poor signal');
 		}
-		var paint = function(td, key, v) {
+		var paint = function(cell, key, v, text) {
+			cell.textContent = text;
 			var c = caQuality(key, v);
-			if (c) { td.style.color = CA_COLOR[c]; td.style.fontWeight = '600'; }
-			return td;
+			cell.style.color = c ? CA_COLOR[c] : '';
+			cell.style.fontWeight = c ? '600' : '';
 		};
-		tbl.appendChild(E('tr', { 'class': 'tr' }, [
-			/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV) у
-			   каждой платы свои, соответствие не выдумываем. */
-			E('td', { 'class': 'td left' }, _('Port %d').format(parseInt(p[0], 10))),
-			paint(E('td', { 'class': 'td left' }, p[1] + ' dBm'), 'rsrp', p[1]),
-			paint(E('td', { 'class': 'td left' }, p[2] + ' dB'), 'rsrq', p[2]),
-			E('td', {
-				'class': 'td left',
-				'style': col ? ('color:' + CA_COLOR[col] + ';font-weight:600') : ''
-			}, st)
-		]));
+		if (td[1]) { paint(td[1], 'rsrp', p[1], p[1] + ' dBm'); }
+		if (td[2]) { paint(td[2], 'rsrq', p[2], p[2] + ' dB'); }
+		if (td[3]) {
+			td[3].textContent = st;
+			td[3].style.color = col ? CA_COLOR[col] : '';
+			td[3].style.fontWeight = col ? '600' : '';
+		}
 	});
 }
 
@@ -2330,7 +2415,7 @@ simDialog: baseclass.extend({
 				// открывается с пустыми полями и обновляется по опросу.
 				revealMgmtWhenReady();
 				// Антенные порты: данные уже в json, лишних запросов нет.
-				fillAntPorts(json.antports);
+				fillAntPorts(json.antports, json.rxdiv);
 
 					var icon, wicon, ticon, t;
 					var wicon = L.resource('icons/cloading.svg');
@@ -2380,7 +2465,7 @@ simDialog: baseclass.extend({
 						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' +_('Waiting for connection data...'), wicon, p);
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur">' + formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + json.rx + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + json.tx;
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur">' + formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + localizeBytes(json.tx);
 						}
 					}
 
@@ -2393,6 +2478,16 @@ simDialog: baseclass.extend({
 						view.textContent = checkOperatorName(json.operator_name);
 						}
 						updateSimIcon(json.operator_name);
+						/* Подсказка на иконке симки - вместе с самой иконкой, но
+						   ТОЛЬКО при изменении: пересборка на каждом тике роняла
+						   высоту и уводила прокрутку (см. sameRender). Значения
+						   тут меняются раз в жизни модема. */
+						var _st = document.getElementById('simtip');
+						if (_st && !sameRender(_st, [ json.simslot, json.imsi,
+						                             json.iccid, json.imei ].join('|'))) {
+							_st.innerHTML = '';
+							_st.appendChild(SIMdata(json));
+						}
 					}
 
 					// Номер приоритетнее: если он есть - показываем номер и прячем
@@ -2403,9 +2498,16 @@ simDialog: baseclass.extend({
 						if (_hasPhone) {
 							pv.textContent = formatPhone(json.phone);
 							pv.style.display = '';
-						} else {
+							pv.setAttribute('data-hadata', '1');
+						} else if (pv.getAttribute('data-hadata') !== '1') {
 							pv.style.display = 'none';
 						}
+						/* Номер, КОТОРЫЙ УЖЕ ПОКАЗЫВАЛИ, не убираем: он берётся с
+						   SIM и сам по себе не пропадает, а пустой ответ - это
+						   почти всегда коллизия на порту. Иначе номер подменялся
+						   «Страной» и обратно на каждом таком опросе (то же
+						   правило, что в setRowVisible). */
+						_hasPhone = _hasPhone || pv.getAttribute('data-hadata') === '1';
 					}
 
 					if (document.getElementById('location')) {
@@ -2634,17 +2736,31 @@ simDialog: baseclass.extend({
 						   перед C). Берём число и приписываем " °C". */
 						var raw = String(t).replace('&deg;', '°');
 						var m = raw.match(/-?\d+(?:\.\d+)?/);
-						var txt = m ? (m[0] + ' °C') : raw;
+						var num = m ? m[0] : raw.replace(/\s*°?\s*C\s*$/, '');
+						var txt = m ? (m[0] + ' °C') : raw;   /* для title */
 						/* Есть И градусы, И уровень троттлинга (Telit LM960 отдаёт оба:
 						   #TEMPSENS=2 -> °C, #TMLVL? -> 0..3) - показываем через запятую.
 						   Уровень 0 («норма») не пишем: строка «28 °C, норма» только
 						   шумит, а вот «28 °C, перегрев» - важное предупреждение. */
 						var lv2 = parseInt(json.mtherm, 10);
+						var thermSuffix = '';
 						if (!isNaN(lv2) && lv2 >= 1 && lv2 <= 3) {
-							txt += ', ' + [ _('Normal'), _('Warm'), _('Hot'), _('Critical') ][lv2];
+							thermSuffix = ', ' + [ _('Normal'), _('Warm'), _('Hot'), _('Critical') ][lv2];
 							view.title = _('Modem thermal throttling level: %d of 3').format(lv2);
 						}
-						view.textContent = txt;
+						/* Собираем узлами, а не строкой: букву C надо поднять и
+						   уменьшить отдельным элементом.
+						   ЧЕРЕЗ sameRender - ОБЯЗАТЕЛЬНО. innerHTML='' на каждом
+						   тике опроса обваливает высоту контейнера на доли
+						   мгновения, браузер обрезает scrollTop до нового максимума
+						   и страница уезжает вверх (proton2025, домотано до низа).
+						   Ровно этот баг уже чинили для блока частот - см. sameRender. */
+						if (!sameRender(view, num + '|' + thermSuffix)) {
+							view.innerHTML = '';
+							view.appendChild(document.createTextNode(num + '°'));
+							view.appendChild(E('span', { 'class': 'deg-unit' }, 'C'));
+							if (thermSuffix) { view.appendChild(document.createTextNode(thermSuffix)); }
+						}
 						}
 					}
 
@@ -2823,7 +2939,14 @@ simDialog: baseclass.extend({
 						// Cell ID -> стандартная кнопка с пином и номером соты,
 						// по клику открывает карту вышек 4cells.ru
 						var url4 = cell4cellsUrl(json);
-						if (url4 && json.cid_dec && json.cid_dec != '-') {
+						/* ЧЕРЕЗ sameRender. Кнопка пересобиралась на КАЖДОМ тике
+						   опроса, хотя номер соты меняется хорошо если раз в час:
+						   innerHTML='' на мгновение опустошал ячейку, высота
+						   документа проваливалась, браузер обрезал scrollTop - и
+						   страница, домотанная до низа, уезжала вверх на строку за
+						   тик (proton2025). Тот же баг, что чинили в блоке частот. */
+						if (url4 && json.cid_dec && json.cid_dec != '-'
+						    && !sameRender(view, 'cid|' + json.cid_dec + '|' + url4)) {
 							view.innerHTML = '';
 							view.appendChild(E('button', {
 								'class': 'cbi-button',
@@ -2832,7 +2955,11 @@ simDialog: baseclass.extend({
 								'click': function() { window.open(url4, '_blank', 'noopener'); }
 							}, '\u{1F4CD}' + json.cid_dec));
 						}
-						else {
+						else if (!(url4 && json.cid_dec && json.cid_dec != '-')) {
+							/* Кнопки нет - обычный текст. Условие продублировано:
+							   ветка выше теперь может НИЧЕГО НЕ ДЕЛАТЬ (данные не
+							   изменились), и простой else затирал бы готовую
+							   кнопку текстом на следующем же тике. */
 							view.textContent = cidText;
 						}
 					}
@@ -2919,7 +3046,11 @@ simDialog: baseclass.extend({
 							'title': _(''),
 							'class': 'middle',
 						}),
-						E('span', { 'class': 'cbi-tooltip', 'style': 'text-align:left;font-size:80%' }, SIMdata(data)),
+						/* id ОБЯЗАТЕЛЕН: раньше подсказка строилась ровно один раз,
+						   при отрисовке страницы, и навсегда оставалась с теми
+						   значениями, что были известны в тот момент - то есть с
+						   прочерками, ведь IMEI/IMSI/ICCID приходят позже. */
+						E('span', { 'id': 'simtip', 'class': 'cbi-tooltip', 'style': 'text-align:left;font-size:80%' }, SIMdata(data)),
 					]),
 				]),
 
@@ -3286,6 +3417,13 @@ simDialog: baseclass.extend({
 			E('div', { 'id': 'antports-block', 'style': 'display:none' }, [
 				collapsibleSection('ant', _('Antenna ports'), [
 					E('table', { 'class': 'table', 'id': 'antports-table' }, []),
+					/* Состояние разнесённого приёма. Стоит ИМЕННО ЗДЕСЬ, потому
+					   что без него таблица выше неполна: одинаковые уровни на
+					   портах означают «обе антенны работают» только если
+					   разнесение включено, иначе второй приёмник просто не
+					   задействован. */
+					E('div', { 'id': 'rxdiv-line',
+						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, ''),
 					E('div', { 'style': 'font-size:85%;opacity:.75;padding:.4em 0 0 0' },
 						_('RSRP/RSRQ measured separately on each LTE antenna port. A port with RSRP near -140 dBm has no antenna connected (or the cable is bad). LTE only: in 3G the table stays empty.'))
 				])

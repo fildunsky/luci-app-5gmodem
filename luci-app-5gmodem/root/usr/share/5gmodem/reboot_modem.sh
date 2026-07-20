@@ -166,6 +166,12 @@ fi
 [ -n "$PORT" ] || PORT=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 [ -n "$PORT" ] || { echo '{"success":false,"error":"AT port not found"}'; exit 0; }
 
+# Перезагрузка модема должна попасть в порт ЦЕЛИКОМ: команда, перехваченная
+# посреди чужого обмена, молча не сработает, а пользователь увидит "перезагружаю"
+# и ничего больше.
+. /usr/share/5gmodem/atlock.sh
+at_lock "$PORT" 15
+
 if [ "$MODE" = "hard" ]; then
 	# Full reset (AT+CFUN=1,1): the modem reboots and RE-ENUMERATES on USB, so
 	# the AT port vanishes mid-command - a synchronous sms_tool would block ~35s

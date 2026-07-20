@@ -16,6 +16,9 @@ wan_nets() {
 	[ -n "$z" ] && uci -q get "firewall.$z.network"
 }
 
+. /usr/share/5gmodem/atlock.sh
+. /usr/share/5gmodem/lib.sh
+
 ifup_state()  { ifstatus "$1" 2>/dev/null | jsonfilter -e "$2" 2>/dev/null; }
 json_esc()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -35,9 +38,7 @@ iface_ip() {
 
 # uplink kind: wan | modem | wifi | other. Modem interfaces are checked BEFORE the
 # Wi-Fi guess, because a modem's l3_device can be wwanN (must not read as Wi-Fi).
-modem_section() {  # -> "m_<path>" whose network== $1, or empty
-	uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='$1'\$/\1/p" | head -1
-}
+modem_section() { sec_for_iface "$1"; }   # см. lib.sh
 # Является ли $1 модем-интерфейсом? Мульти-модем -> m_*-секция; одиночный
 # (legacy) конфиг -> @5gmodem[0].network указывает на этот интерфейс.
 is_modem() {
@@ -73,6 +74,16 @@ iface_type() {
 # bounded AT query (~5s cap) so a wedged port can't freeze the caller
 at_query() {
 	D="$1"; C="$2"; tmp="/tmp/netpri_at.$$"
+	# Очередь к порту: имя оператора спрашивается на КАЖДОЙ загрузке страницы
+	# «Приоритет интернета», одновременно с опросом метрик. Ждём НЕДОЛГО -
+	# задерживать страницу ради фоновой справки нельзя.
+	#
+	# НЕ ДОЖДАЛИСЬ - УХОДИМ СОВСЕМ, а не лезем в порт без очереди. Иначе смысл
+	# очереди терялся ровно там, где она нужнее всего: под нагрузкой этот вызов
+	# чаще прочих не успевал взять блокировку и шёл поверх чужого обмена, портя
+	# данные ТОМУ, кто дождался. Потерять одно обновление имени оператора дёшево -
+	# оно кэшируется, и его же пишет основной опрос метрик.
+	at_lock "$D" 3 || { logger -t 5gmodem "netpri: порт занят, имя оператора берём из кэша"; return 0; }
 	sms_tool -d "$D" at "$C" >"$tmp" 2>/dev/null &
 	# fd отвязаны ОТ ПОДОБОЛОЧКИ (см. atprobe.sh): осиротевший `sleep` иначе
 	# держит stdout и добавляет 5 c к ответу «Приоритета интернета».
@@ -88,8 +99,7 @@ operator_cached() {
 	# HiLink-модем: имя оператора и настоящий адрес в сети берём у его API.
 	# Через AT его не спросить, а интерфейсный адрес - это адрес ЛОКАЛЬНОЙ
 	# сетевой карты модема (192.168.43.2), а не выданный оператором.
-	_np_sec=$(uci -q show 5gmodem 2>/dev/null \
-		| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$1'\?\$/\1/p" | head -1)
+	_np_sec=$(sec_for_iface "$1")
 	if [ -n "$_np_sec" ] && [ "$(uci -q get "5gmodem.$_np_sec.kind")" = "hilink" ]; then
 		_np_p=$(uci -q get "5gmodem.$_np_sec.path")
 		_np_j=$(/usr/share/5gmodem/hilink.sh json "$_np_p" 2>/dev/null)
@@ -300,8 +310,7 @@ list)
 		# У HiLink адрес интерфейса - это адрес ЛОКАЛЬНОЙ сети модема
 		# (192.168.43.2), а не выданный оператором. Показываем настоящий, из API:
 		# иначе в списке у всех таких модемов стоял бы адрес их внутренней сети.
-		_np_s=$(uci -q show 5gmodem 2>/dev/null \
-			| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$n'\?\$/\1/p" | head -1)
+		_np_s=$(sec_for_iface "$n")
 		if [ -n "$_np_s" ] && [ "$(uci -q get "5gmodem.$_np_s.kind")" = "hilink" ]; then
 			_np_wan=$(/usr/share/5gmodem/hilink.sh json "$(uci -q get "5gmodem.$_np_s.path")" 2>/dev/null \
 				| jsonfilter -e '@.ipaddr' 2>/dev/null)

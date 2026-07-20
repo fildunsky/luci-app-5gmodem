@@ -2846,3 +2846,51 @@ msgstr "Автоматически (по оператору)"
 
 msgid "Manual"
 msgstr "Вручную"
+
+msgid "Receive diversity: on, 4 receivers (4RX)"
+msgstr "Разнесённый приём: включён, 4 приёмника (4RX)"
+
+msgid "Receive diversity: on (2RX)"
+msgstr "Разнесённый приём: включён (2RX)"
+
+msgid "Receive diversity: off - the second antenna is not used"
+msgstr "Разнесённый приём выключен — вторая антенна не используется"
+
+msgid "eSIM tab"
+msgstr "Вкладка eSIM"
+
+msgid "Detected automatically by probing the modem for an eUICC. If the probe is wrong, force the tab on or off here."
+msgstr "Определяется автоматически — модем опрашивается на наличие eUICC. Если определение ошиблось, включите или скройте вкладку вручную."
+
+msgid "Automatically"
+msgstr "Автоматически"
+
+msgid "Always show"
+msgstr "Всегда показывать"
+
+msgid "Always hide"
+msgstr "Всегда скрывать"
+
+msgid "set manually in the modem settings"
+msgstr "задано вручную в настройках модема"
+
+msgid "detected by probing the modem"
+msgstr "определено опросом модема"
+
+msgid "yes (manually)"
+msgstr "да (вручную)"
+
+msgid "no (manually)"
+msgstr "нет (вручную)"
+
+msgid "KiB"
+msgstr "КиБ"
+
+msgid "MiB"
+msgstr "МиБ"
+
+msgid "GiB"
+msgstr "ГиБ"
+
+msgid "TiB"
+msgstr "ТиБ"

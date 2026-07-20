@@ -23,11 +23,12 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 
+. /usr/share/5gmodem/lib.sh
+
 # Путь модема, которому принадлежит интерфейс $1 (по профилям). Пусто - неизвестно.
 _path_for_iface() {
-	uci -q show "$CFG" 2>/dev/null \
-		| sed -n "s/^$CFG\.\(m_[^.]*\)\.network='\?$1'\?\$/\1/p" \
-		| while read -r _s; do uci -q get "$CFG.$_s.path"; done | head -1
+	_s=$(sec_for_iface "$1")
+	[ -n "$_s" ] && uci -q get "$CFG.$_s.path"
 }
 
 # 0 - MM нужен, 1 - не нужен.

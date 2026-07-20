@@ -235,7 +235,12 @@ function sms_placeholder(state) {
 	var list = document.getElementById('smsList');
 	if (!list) { return; }
 	list.innerHTML = '';
-	list.appendChild(E('div', { 'class': 'sms-empty', 'id': 'smsEmpty' }, [
+	/* data-state ОБЯЗАТЕЛЕН: у обоих состояний один класс sms-empty, и проверка
+	   «плейсхолдер уже есть» видела собственный спиннер - «читаю сообщения…»
+	   никогда не сменялось на «нет сообщений», а пользователь не мог отличить
+	   пустую память от зависшего чтения. */
+	list.appendChild(E('div', { 'class': 'sms-empty', 'id': 'smsEmpty',
+		'data-state': state === 'loading' ? 'loading' : 'empty' }, [
 		state === 'loading'
 			? E('span', { 'class': 'spinning' }, _('Loading messages…'))
 			: E('span', {}, _('No messages'))
@@ -945,7 +950,14 @@ return view.extend({
 		   оставлена, чтобы не переписывать все точки выхода из doRefresh. */
 		function hideLoading() {
 			var l = document.getElementById('smsList');
-			if (l && !l.firstChild) { sms_placeholder('empty'); }
+			if (!l) { return; }
+			var ph = l.querySelector('.sms-empty');
+			/* Пусто ИЛИ остался спиннер - показываем «нет сообщений». Проверка
+			   !l.firstChild не срабатывала: первым потомком был сам спиннер. */
+			if (!l.firstChild || (ph && ph.getAttribute('data-state') === 'loading'
+			                      && !l.querySelector('.sms-card'))) {
+				sms_placeholder('empty');
+			}
 		}
 
 		/* doRefresh(updateCount, busy): читает статус + входящие и перерисовывает
@@ -1186,7 +1198,12 @@ return view.extend({
 			   схлопнутой пустоты показываем плейсхолдер. */
 			(function() {
 				var l = document.getElementById('smsList');
-				if (l && !l.querySelector('.sms-card') && !l.querySelector('.sms-empty')) {
+				/* Заменяем и ЗАВИСШИЙ СПИННЕР: раньше условие смотрело на класс
+				   .sms-empty, который есть и у него, поэтому при пустой памяти
+				   чтение «длилось» вечно. Ориентируемся на data-state. */
+				var ph = l && l.querySelector('.sms-empty');
+				if (l && !l.querySelector('.sms-card')
+				    && (!ph || ph.getAttribute('data-state') === 'loading')) {
 					sms_placeholder('empty');
 				}
 			}());

@@ -342,6 +342,23 @@ else
 fi
 
 DEVICE=$($RES/detect.sh)
+
+# СЕРИАЛИЗАЦИЯ ДОСТУПА К ПОРТУ. Блокировка выше (LOCKDIR) разводит только опрос
+# с опросом, но в тот же tty ходят bands.sh, simslot.sh, esim.sh, smsbridge.sh,
+# collect.sh и консоль - именно на ЭТОМ наложении ответы перепутывались (на
+# AT#MONI приходил +COPS чужой команды, ATI возвращал +CPIN/+CSQ).
+#
+# Берём ДО atprobe.sh: он тоже ходит в порт. Не дождались - отдаём снимок:
+# устаревшие данные честнее перемешанных, а отличить перепутанный ответ от
+# «модем молчит» потом невозможно.
+. "$RES/atlock.sh"
+if [ -n "$DEVICE" ] && ! at_lock "$DEVICE" 10; then
+	_age=$(_snapshot_age)
+	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
+	# Снимка нет вовсе (первый запуск) - опрашиваем без блокировки: пустая
+	# страница хуже, чем данные с риском смешения.
+fi
+
 # Bounded probe: sms_tool has no timeout and blocks ~35s on a silent/DIAG port,
 # so a wrong pinned port froze this whole page on every metrics poll (only
 # fixable by editing the config by hand). If the port does not answer AT within
@@ -852,11 +869,26 @@ if [ -n "$SIMID" ] && [ "$_PREV_IMSI" != "$SIMID" ]; then
 		fi
 	fi
 fi
-# at_static <key> <atcmd> : сырой ответ из кэша, иначе запрос + кэш.
+# at_static <key> <atcmd> [шаблон проверки] : сырой ответ из кэша, иначе запрос.
+#
+# ПРОВЕРЯЕМ ПЕРЕД ЗАПИСЬЮ В КЭШ. Раньше сохранялось что угодно, и один-
+# единственный столкнувшийся обмен портил значение НАВСЕГДА: кэш статики не
+# протухает, а в файл IMEI живьём попал ответ чужой команды -
+#   5gmodem_static_1_1__imei: «at#bnd=? #BND: (0),(0-11,17,18),...»
+# после чего IMEI показывался прочерком, сколько ни перезапрашивай.
+# Очередь к порту (atlock.sh) делает такие столкновения редкими, но «редко» для
+# вечного кэша недостаточно: одного раза хватает, чтобы сломать поле навсегда.
 at_static() {
 	_cf="${STATIC_CACHE}_$1"
 	[ -s "$_cf" ] && { cat "$_cf"; return; }
-	sms_tool -d "$DEVICE" at "$2" 2>/dev/null | tee "$_cf"
+	_out=$(sms_tool -d "$DEVICE" at "$2" 2>/dev/null)
+	printf '%s' "$_out"
+	# Шаблон не задан - поведение прежнее (кэшируем непустой ответ).
+	if [ -n "$3" ]; then
+		printf '%s' "$_out" | tr -d '\r' | grep -qE "$3" || return 0
+	fi
+	[ -n "$_out" ] && printf '%s' "$_out" > "$_cf"
+	return 0
 }
 
 if [ -e /usr/bin/sms_tool ]; then
@@ -1031,8 +1063,32 @@ fi
 # порт ОДИН раз на модем, дальше берётся из файла, поэтому на стоимость опроса
 # это не влияет.
 if [ -z "$NR_IMEI" ] || [ "$NR_IMEI" = "-" ]; then
-	NR_IMEI=$(at_static imei "AT+CGSN" 2>/dev/null | tr -d '\r' \
+	# Шаблон обязателен: IMEI - это 14-16 цифр отдельной строкой, и всё, что на
+	# него не похоже, в кэш попасть не должно (см. at_static).
+	NR_IMEI=$(at_static imei "AT+CGSN" '^[0-9]{14,16}$' 2>/dev/null | tr -d '\r' \
 		| grep -oE '^[0-9]{14,16}$' | head -1)
+fi
+
+# IMSI - БЕСПЛАТНО, из общего батча. Присваивать его должен профиль модема, но
+# делают это не все (у Telit LM960 запроса нет вовсе), и в карточке SIM стоял
+# прочерк при том, что +CIMI в батче честно отвечал. Ни одной лишней команды:
+# SIMID уже разобран выше из того же ответа.
+if [ -z "$NR_IMSI" ] || [ "$NR_IMSI" = "-" ]; then
+	case "$SIMID" in
+		''|*[!0-9]*) : ;;
+		*) NR_IMSI="$SIMID" ;;
+	esac
+fi
+
+# ICCID - через кэш статики, одна команда на модем. Команда РАЗНАЯ у вендоров:
+# Telit отвечает только на AT+ICCID (на AT+CCID и AT#CCID молчит), большинство
+# остальных - на AT+CCID. Пробуем по очереди; шаблон не пускает в кэш чужой
+# ответ (см. at_static).
+if [ -z "$NR_ICCID" ] || [ "$NR_ICCID" = "-" ]; then
+	NR_ICCID=$(at_static iccid "AT+ICCID" '[0-9]{18,22}' 2>/dev/null | tr -d '\r' \
+		| grep -oE '[0-9]{18,22}' | head -1)
+	[ -n "$NR_ICCID" ] || NR_ICCID=$(at_static ccid "AT+CCID" '[0-9]{18,22}' 2>/dev/null \
+		| tr -d '\r' | grep -oE '[0-9]{18,22}' | head -1)
 fi
 
 if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ]; then
@@ -1089,6 +1145,7 @@ cat > "$_TMP" <<EOF
 "mtemp":"$(sanitize_string "$TEMP")",
 "mtherm":"$(sanitize_number "$THERM")",
 "antports":"$(sanitize_string "$ANTPORTS")",
+"rxdiv":"$(sanitize_string "$RXDIV")",
 "firmware":"$(sanitize_string "$FW")",
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",

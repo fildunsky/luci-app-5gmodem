@@ -515,7 +515,24 @@ return view.extend({
 						}) : '',
 						protoNice
 					]),
-					E('span', { 'style': 'opacity:.8' }, pdpNice)
+					E('span', { 'style': 'opacity:.8' }, pdpNice),
+					/* Как решилась судьба вкладки eSIM у ЭТОГО модема. Показываем
+					   только когда есть что сказать: у модема, который ещё не
+					   проверяли, поле пустое, и «неизвестно» было бы шумом.
+					   Ручное решение помечаем особо - иначе непонятно, это мы так
+					   определили или пользователь так велел. */
+					p.esim ? E('span', {
+						'style': 'opacity:.8; margin-left:.6em',
+						'title': (p.esim === 'forced-yes' || p.esim === 'forced-no')
+							? _('set manually in the modem settings')
+							: _('detected by probing the modem')
+					}, [
+						'eSIM: ',
+						p.esim === 'yes'        ? _('yes') :
+						p.esim === 'no'         ? _('no')  :
+						p.esim === 'forced-yes' ? _('yes (manually)') :
+						                          _('no (manually)')
+					]) : ''
 				])
 			]);
 
@@ -1026,6 +1043,43 @@ return view.extend({
 		};
 		o.remove = function() {};
 		}
+
+		/* ВКЛАДКА eSIM: автоопределение + ручное переопределение.
+		   Определяем наличие eUICC пробой CCHO, но проба не непогрешима, а
+		   ошибка в сторону «нет» тупиковая - вкладка исчезает, и вернуть её
+		   пользователю нечем. Поэтому показываем, ЧТО ИМЕННО определилось, и
+		   даём переопределить. Три состояния, а не галка: галка не отличает
+		   «мы так определили» от «пользователь так велел». */
+		o = s.option(form.ListValue, '_esim_show', _('eSIM tab'),
+			_('Detected automatically by probing the modem for an eUICC. If the probe is wrong, force the tab on or off here.'));
+		o.value('auto', _('Automatically'));
+		o.value('1', _('Always show'));
+		o.value('0', _('Always hide'));
+		o.default = 'auto';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			if (uci.get('5gmodem', sec) == null) { uci.add('5gmodem', 'modem', sec); }
+			if (value === '1' || value === '0') {
+				uci.set('5gmodem', sec, 'esim_show', value);
+			} else {
+				uci.unset('5gmodem', sec, 'esim_show');
+			}
+			/* Возврат в «автоматически» обязан ПЕРЕСПРОСИТЬ модем: отрицательный
+			   ответ закэширован, и без сброса пользователь остался бы с прежним
+			   решением, что выглядело бы как «переключатель не работает». */
+			return fs.exec('/usr/share/5gmodem/esim.sh', [ 'recheck' ]).catch(function() {});
+		};
+		o.load = function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return 'auto'; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			var v = uci.get('5gmodem', sec, 'esim_show');
+			return (v === '1' || v === '0') ? v : 'auto';
+		};
+		o.remove = function() {};
 
 		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
 			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));

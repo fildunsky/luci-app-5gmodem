@@ -23,7 +23,7 @@ CFG=5gmodem
 
 [ -r "$RES/quirks.sh" ] && . "$RES/quirks.sh"
 
-secname() { echo "m_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"; }
+. /usr/share/5gmodem/lib.sh   # secname / sec_for_iface / active_path
 
 # Галка «слать USSD обычным текстом» (sms_tool -R) - ОДНА на весь sms_tool_js, а
 # модемы переключаются, и правильное значение у каждого своё. Поэтому при смене
@@ -331,7 +331,7 @@ orphan_iface_for() {
 		OWNER=$(uci -q get "network.$IF.modem_path")
 		[ "$OWNER" = "$P" ] && continue     # штамп наш - всё честно
 		# держит ли этот интерфейс какая-нибудь секция модема?
-		claimed=$(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.]*\)\.network='$IF'\$/\1/p" | head -1)
+		claimed=$(sec_for_iface "$IF")
 		[ -n "$claimed" ] && continue
 		# IPv6-БЛИЗНЕЦ НЕ ЧУЖОЙ. Прошивки заводят пару "wwan" (dhcp) и "wwan6"
 		# (dhcpv6) НА ОДНОМ И ТОМ ЖЕ устройстве. Секция модема держит только
@@ -729,6 +729,24 @@ setup_one_modem() {
 	[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
 }
 
+# Как определилась eSIM у профиля - ДЛЯ ПОКАЗА В КАРТОЧКЕ. Читаем только УЖЕ
+# ГОТОВЫЕ данные: uci (ручное переопределение) и кэш автоопределения. В порт не
+# ходим ни при каких условиях - список профилей рисуется на каждом открытии
+# страницы, и проба CCHO по каждому модему стоила бы секунд.
+#   yes/no       - определили сами;
+#   forced-yes/no - пользователь переопределил;
+#   ""            - ещё не проверяли.
+_esim_state() {   # $1 - секция, $2 - USB-путь
+	_ee=$(uci -q get "$CFG.$1.esim_show")
+	case "$_ee" in
+		1) echo "forced-yes"; return ;;
+		0) echo "forced-no";  return ;;
+	esac
+	_ec="/tmp/5gmodem_esimstat_$2"
+	[ -s "$_ec" ] || return 0
+	if grep -q '"available":1' "$_ec" 2>/dev/null; then echo "yes"; else echo "no"; fi
+}
+
 case "$1" in
 active)
 	active_path
@@ -1016,7 +1034,7 @@ profiles)
 		fi
 		[ "$_first" = 1 ] || printf ','
 		_first=0
-		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s"}' \
+		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s","esim":"%s"}' \
 			"$_sec" "$_p" \
 			"$(uci -q get "$CFG.$_sec.model")" \
 			"$(uci -q get "$CFG.$_sec.imei")" \
@@ -1027,7 +1045,8 @@ profiles)
 			"$(uci -q get "$CFG.$_sec.vidpid")" \
 			"$(uci -q get "$CFG.$_sec.kind")" \
 			"$(uci -q get "$CFG.$_sec.netdev")" \
-			"$([ "$(uci -q get "$CFG.$_sec.kind")" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)"
+			"$([ "$(uci -q get "$CFG.$_sec.kind")" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)" \
+			"$(_esim_state "$_sec" "$_p")"
 	done
 	printf ']\n'
 	exit 0
@@ -1100,8 +1119,7 @@ autoapn)
 	# РУЧНОЙ РЕЖИМ: APN распоряжается пользователь. Он его уже выбрал, и его
 	# выбор хранится в самом интерфейсе - переписать значит потерять. Подсказку
 	# с найденным APN страница показывает и так, применить её - одна кнопка.
-	_am_sec=$(uci -q show "$CFG" 2>/dev/null \
-		| sed -n "s/^$CFG\.\(m_[A-Za-z0-9_]*\)\.network='$IFACE'\$/\1/p" | head -1)
+	_am_sec=$(sec_for_iface "$IFACE")
 	if [ "$(uci -q get "$CFG.$_am_sec.apn_mode")" = "manual" ]; then
 		logger -t 5gmodem "autoapn: $IFACE в ручном режиме, APN не трогаем"
 		exit 0
@@ -1207,8 +1225,7 @@ autopdp)
 	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
 	[ -n "$IFACE" ] || exit 0
 
-	_pd_sec=$(uci -q show "$CFG" 2>/dev/null \
-		| sed -n "s/^$CFG\.\(m_[A-Za-z0-9_]*\)\.network='$IFACE'\$/\1/p" | head -1)
+	_pd_sec=$(sec_for_iface "$IFACE")
 	if [ "$(uci -q get "$CFG.$_pd_sec.pdp_mode")" = "manual" ]; then
 		logger -t 5gmodem "autopdp: $IFACE в ручном режиме, тип PDP не трогаем"
 		exit 0
