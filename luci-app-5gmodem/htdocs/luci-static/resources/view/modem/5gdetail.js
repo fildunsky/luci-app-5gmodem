@@ -1168,6 +1168,68 @@ function renderDebugBtn(json) {
 	}, _('debug')));
 }
 
+/* ЧИП ТЕКУЩЕГО ПРОТОКОЛА в правом краю заголовка «Модем». Нужен для тестов:
+   с одного взгляда видно, в каком режиме сейчас поднят интерфейс (qmi/mbim/
+   modemmanager/fibocom/…), не открывая настройки. Тот же вид «в рамочке», что у
+   протокола в карточках профилей. */
+function protoLabel(v) {
+	return ({
+		'qmi': 'QMI', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
+		'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G', 'modemmanager': 'ModemManager',
+		'fibocom': 'Fibocom', 'dhcp': 'DHCP'
+	})[String(v || '').toLowerCase()] || (v || '');
+}
+function pdpLabel(v) {
+	return ({ 'ipv4v6': 'IPv4v6', 'ipv4': 'IPv4', 'ipv6': 'IPv6' })[String(v || '').toLowerCase()] || (v || '');
+}
+function renderProtoChip(json) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var chip = document.getElementById('proto-chip');
+	/* У HiLink интерфейс всегда dhcp - показываем «HiLink», как в карточке:
+	   важно не КАК поднят интерфейс, а что модемом правит его веб-API. */
+	var txt = (json.backend === 'hilink') ? 'HiLink'
+		: protoLabel(json.iface_proto || json.protocol);
+	if (!txt) { if (chip) { chip.remove(); } return; }
+	if (!chip) {
+		chip = E('span', {
+			'id': 'proto-chip',
+			'style': 'float:right; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
+				+ 'font-size:70%; border:1px solid currentColor; border-radius:5px;'
+				+ 'padding:.12em .5em; margin-left:.8em; opacity:.75; white-space:nowrap;'
+				+ 'font-weight:normal;',
+			'title': _('Current interface protocol')
+		}, '');
+		head.appendChild(chip);
+	}
+	if (chip.textContent !== txt) { chip.textContent = txt; }
+}
+
+/* APN и тип адреса в правом НИЖНЕМ углу блока «Модем» - тоже для тестов:
+   видно, с каким APN и в каком режиме (IPv4/IPv4v6) поднят интерфейс. */
+function renderApnLine(json) {
+	var el = document.getElementById('apnline');
+	if (!el) { return; }
+	var apn = String(json.iface_apn || '').trim();
+	var pdp = pdpLabel(json.iface_pdptype);
+	/* У HiLink APN/тип живут в самом модеме, а не в конфиге интерфейса -
+	   этих полей у нас нет, строку не показываем, чтобы не вводить в заблуждение. */
+	if (json.backend === 'hilink' || (!apn && !pdp)) { el.style.display = 'none'; return; }
+	el.style.display = '';
+	el.innerHTML = '';
+	var mono = 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
+	var row = [
+		E('strong', {}, 'APN: '),
+		E('span', { 'style': mono }, apn || _('default'))
+	];
+	/* APN и тип адреса - в ОДНУ строку через разделитель. */
+	if (pdp) {
+		row.push(E('span', { 'style': 'opacity:.6; margin:0 .4em;' }, '|'));
+		row.push(E('span', { 'style': mono }, pdp));
+	}
+	el.appendChild(E('div', {}, row));
+}
+
 function renderCellLock(state) {
 	var row = document.getElementById('celllockn');
 	var cell = document.getElementById('celllock-cell');
@@ -1425,17 +1487,20 @@ function applyBandsModemband(reset) {
 	var p = Promise.resolve();
 	if (hasLte) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands', reset ? 'default' : lte.join(' ') ]); }); }
 	if (hasNsa) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', reset ? 'default' : nsa.join(' ') ]); }); }
-	// После смены бендов перезапускаем радио модема (CFUN=4->1): без этого
-	// модем не начинает использовать новый набор частот / агрегацию до
-	// переподключения, и скорость остаётся низкой. Мягкий рестарт, без
-	// переэнумерации USB.
-	p = p.then(function() { return fs.exec('/usr/share/5gmodem/reboot_modem.sh'); });
+	// Перезапуск радио модема (CFUN=4->1) ТЕПЕРЬ ДЕЛАЕТ САМ bands.sh - внутри той
+	// же фоновой подоболочки, СТРОГО ПОСЛЕ записи маски. Раньше reboot дёргали
+	// отсюда, но setbands фоновая и возвращается мгновенно: перезапуск обгонял
+	// запись, модем поднимался на старом наборе, и отключённый диапазон
+	// оставался активным (воспроизведено на SIM7600: снятый B7 не отключался).
 	return p.then(function() {
 		ui.hideModal();
+		/* НЕ обещаем перезапуск: на модемах с живым применением (SIM7600) его
+		   не будет вовсе, а где нужен - bands.sh делает мягкий CFUN-цикл сам,
+		   в фоне, и связь возвращается за секунды. Сообщение нейтральное. */
 		if (ui.addTimeLimitedNotification) {
-			ui.addTimeLimitedNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 6000, 'info');
+			ui.addTimeLimitedNotification(null, E('p', _('Bands applied, refreshing…')), 6000, 'info');
 		} else {
-			ui.addNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 'info');
+			ui.addNotification(null, E('p', _('Bands applied, refreshing…')), 'info');
 		}
 		window.setTimeout(loadBandsModemband, 4000);
 	}).catch(function(err) {
@@ -1725,9 +1790,11 @@ function setNetMode(allowed, preferred, label) {
    рестарт радио, чтобы модем перерегистрировался в выбранном режиме. */
 function setNetModeAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
+	/* Перезапуск радио (если он вообще нужен этому модему) теперь делает сам
+	   bands.sh setmode - после записи и только когда профиль его требует. На
+	   SIM7600 AT+CNMP применяется вживую, а CFUN его откатывает, поэтому UI
+	   больше не дёргает reboot_modem.sh. */
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function() {
-		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
-	}).then(function() {
 		ui.hideModal();
 		if (ui.addTimeLimitedNotification) {
 			ui.addTimeLimitedNotification(null, E('p', _('Network mode set: %s').format(label)), 5000, 'info');
@@ -2620,8 +2687,13 @@ simDialog: baseclass.extend({
 						var _nm = (json.modem && json.modem.length > 1) ? json.modem : _('Modem');
 						if (json.backend === 'hilink') { _nm += ' (HiLink)'; }
 						else if (json.at_debug === '1') { _nm += ' (Debug)'; }
-						document.getElementById('modemname').textContent = _nm;
+						/* Обновляем ТОЛЬКО текстовый span - правые элементы
+						   (чип, кнопка debug) при этом не трогаются. */
+						var _nt = document.getElementById('modemname-text');
+						if (_nt && _nt.textContent !== _nm) { _nt.textContent = _nm; }
 						renderDebugBtn(json);
+						renderProtoChip(json);
+						renderApnLine(json);
 					}
 
 					if (document.getElementById('fw')) {
@@ -3023,7 +3095,11 @@ simDialog: baseclass.extend({
 				}, _('☰')),
 			]),
 
-			E('h3', { 'id': 'modemname', 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;' }, [ _('Modem') ]),
+			E('h3', { 'id': 'modemname', 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;' }, [
+				/* Имя - в ОТДЕЛЬНОМ span, чтобы обновление текста не стирало
+				   правые элементы заголовка (чип протокола, кнопка debug). */
+				E('span', { 'id': 'modemname-text' }, _('Modem'))
+			]),
 
 			/* Компактная строка состояния: слева иконка уровня сигнала с
 			   процентами, затем иконка SIM, три строки статуса (регистрация /
@@ -3087,6 +3163,11 @@ simDialog: baseclass.extend({
 					]),
 				]),
 			]),
+
+			/* Правый нижний угол блока: APN и тип адреса интерфейса. Заполняется
+			   опросом (renderApnLine), скрыто пока данных нет. */
+			E('div', { 'id': 'apnline',
+				'style': 'text-align:right; font-size:85%; opacity:.8; margin-top:.35em; display:none;' }, []),
 			]),
 
 			/* Второй блок - управление частотами (сворачиваемый) */

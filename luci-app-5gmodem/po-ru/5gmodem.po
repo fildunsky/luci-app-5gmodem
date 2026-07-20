@@ -2894,3 +2894,156 @@ msgstr "ГиБ"
 
 msgid "TiB"
 msgstr "ТиБ"
+
+msgid "Allow data roaming"
+msgstr "Разрешить передачу данных в роуминге"
+
+msgid "When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected."
+msgstr "Когда выключено, модем регистрируется в сети, но соединение для передачи данных в роуминге не поднимается — трафик по роуминговым тарифам не расходуется. На SMS и звонки не влияет."
+
+msgid "Bands applied, refreshing…"
+msgstr "Диапазоны применены, обновляю…"
+
+msgid "Current interface protocol"
+msgstr "Текущий протокол интерфейса"
+
+msgid "APN"
+msgstr "APN"
+
+msgid "APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default."
+msgstr "APN интерфейса модема. Подставляется автоматически по определённому оператору; можно изменить. Пусто — APN оператора по умолчанию."
+
+msgid "APN for the new operator may differ. Recommended: \"%s\" (current: \"%s\"). You are in manual APN mode - open Modem Settings to apply it."
+msgstr "У нового оператора APN может отличаться. Рекомендуется «%s» (сейчас «%s»). Включён ручной режим APN — откройте «Управление модемом», чтобы применить."
+
+msgid "AT command port used for dialing; auto-selected when empty"
+msgstr "AT-порт для дозвона; при пустом значении определяется автоматически"
+
+msgid "AT port"
+msgstr "AT-порт"
+
+msgid "CQI"
+msgstr "CQI"
+
+msgid "Create interface (HiLink DHCP)"
+msgstr "Создать интерфейс (HiLink DHCP)"
+
+msgid "Endpoint that accepts a POST body, for the upload test. The default (Yandex) is the one reachable over Russian cellular both directly and via a proxy - it answers 404/403 but reads the body, so the speed is still measured. Cloudflare/Rostelecom work on unrestricted networks."
+msgstr "Адрес, принимающий POST-тело, для теста отдачи. По умолчанию Yandex — он доступен в российских сотовых сетях и напрямую, и через прокси: отвечает 404/403, но читает тело, поэтому скорость всё равно измеряется. Cloudflare/Ростелеком работают в сетях без ограничений."
+
+msgid "Failed to power-cycle the modem"
+msgstr "Не удалось перезапустить питание модема"
+
+msgid "Fibocom (AT-dial)"
+msgstr "Fibocom (AT-дозвон)"
+
+msgid "IP Protocol"
+msgstr "IP-протокол"
+
+msgid "IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to \"IPv4 only\" only if a modem has trouble with dual-stack."
+msgstr "Тип IP для интерфейса модема. IPv4/IPv6 — безопасный вариант по умолчанию: в сети только с IPv4 модем просто согласует IPv4, тогда как некоторые сети (например, Tele2 на FM350) вообще не активируют контекст данных только под IPv4. Переключайте на «Только IPv4» лишь если у модема проблемы с dual-stack."
+
+msgid "IPv4"
+msgstr "IPv4"
+
+msgid "IPv4 and IPv6 (recommended)"
+msgstr "IPv4 и IPv6 (рекомендуется)"
+
+msgid "IPv4 only"
+msgstr "Только IPv4"
+
+msgid "IPv4+IPv6"
+msgstr "IPv4+IPv6"
+
+msgid "IPv6"
+msgstr "IPv6"
+
+msgid "Interface \"%s\" created (DHCP on %s), bringing it up…"
+msgstr "Интерфейс «%s» создан (DHCP на %s), поднимаю…"
+
+msgid "Invalid APN provided"
+msgstr "Указан недопустимый APN"
+
+msgid "Loading…"
+msgstr "Загрузка…"
+
+msgid "Metric"
+msgstr "Метрика"
+
+msgid "Modem did not provide an IP address"
+msgstr "Модем не выдал IP-адрес"
+
+msgid "Network device"
+msgstr "Сетевое устройство"
+
+msgid "No AT control port found"
+msgstr "AT-порт управления не найден"
+
+msgid "No HiLink network card found to create an interface for."
+msgstr "Не найдена сетевая карта HiLink, для которой можно создать интерфейс."
+
+msgid "No modem power GPIO on this board"
+msgstr "На этой плате нет GPIO питания модема"
+
+msgid "No usbnet device found for the modem"
+msgstr "Для модема не найдено usbnet-устройство"
+
+msgid "Online, only SMS"
+msgstr "В сети, только SMS"
+
+msgid "Power-cycle the modem via the board power line? Power is cut for a few seconds and the modem re-appears in about a minute. On some boards this affects only the M.2 slot."
+msgstr "Перезапустить питание модема по линии питания платы? Питание снимается на несколько секунд, и модем снова появляется примерно через минуту. На некоторых платах это затрагивает только слот M.2."
+
+msgid "Power-cycling the modem..."
+msgstr "Перезапуск питания модема..."
+
+msgid "Profile %s…"
+msgstr "Профиль %s…"
+
+msgid "Profile disabled. The modem is restarting to apply it - up to a minute…"
+msgstr "Профиль отключён. Модем перезапускается для применения — до минуты…"
+
+msgid "Profile enabled. The modem is restarting to apply it - up to a minute…"
+msgstr "Профиль включён. Модем перезапускается для применения — до минуты…"
+
+msgid "Recreate interface (HiLink DHCP)"
+msgstr "Пересоздать интерфейс (HiLink DHCP)"
+
+msgid "Route metric - higher value means lower priority"
+msgstr "Метрика маршрута — большее значение означает меньший приоритет"
+
+msgid "Stable USB topology path of the modem (managed by the 5G Modem app)"
+msgstr "Стабильный путь модема в топологии USB (управляется приложением 5G Modem)"
+
+msgid "The modem is power-cycling. This can take a minute."
+msgstr "Питание модема перезапускается. Это может занять минуту."
+
+msgid "This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose."
+msgstr "Этот модем держит соединение сам и раздаёт адрес по DHCP на своей сетевой карте. Кнопка создаёт (или пересоздаёт) этот DHCP-интерфейс — протокол дозвона выбирать не нужно."
+
+msgid "USB path"
+msgstr "Путь USB"
+
+msgid "VoLTE"
+msgstr "VoLTE"
+
+msgid "debug"
+msgstr "отладка"
+
+msgid "eSIM"
+msgstr "eSIM"
+
+msgid "eSIM profile switched - checking and updating the APN automatically."
+msgstr "Профиль eSIM переключён — проверяю и обновляю APN автоматически."
+
+msgid "luci-app-5gmodem"
+msgstr "luci-app-5gmodem"
+
+msgid "no"
+msgstr "нет"
+
+msgid "usbnet device, auto-resolved from the USB path"
+msgstr "usbnet-устройство, определяется автоматически по пути USB"
+
+msgid "yes"
+msgstr "да"

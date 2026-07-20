@@ -674,7 +674,18 @@ case $1 in
 		# не всегда, и пользователь видит "Failed to set bands: XHR", хотя команда
 		# отработала и диапазоны применились (наблюдалось на MT7628 + SLM770A).
 		# Результат UI всё равно перечитывает отдельным запросом.
-		[ -n "$2" ] && { ( setbands "$2" ) >/dev/null 2>&1 </dev/null & }
+		#
+		# ПРИМЕНЕНИЕ - ЗДЕСЬ ЖЕ, СТРОГО ПОСЛЕ ЗАПИСИ, а не отдельным вызовом из UI.
+		# Раньше UI дёргал reboot_modem.sh сразу после этой команды - но она
+		# фоновая и возвращается МГНОВЕННО, до записи маски: радио перезапускалось
+		# на СТАРОМ наборе.
+		#
+		# ПЕРЕЗАПУСК НУЖЕН НЕ ВСЕМ. На SIM7600 (CNBP) маска применяется ВЖИВУЮ -
+		# модем сам пере-камплю за секунды, - а CFUN=4->1 её, наоборот, ОТКАТЫВАЕТ
+		# (проверено: снятый B7 возвращался после перезапуска, а без него модем
+		# уходил с B7 на B3 сам). Такой профиль ставит _BANDS_APPLY_LIVE=1, и
+		# перезапуск пропускается. Остальным (по умолчанию) радио перезапускаем.
+		[ -n "$2" ] && { ( setbands "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -689,7 +700,8 @@ case $1 in
 		getbandsext5gnsa
 		;;
 	"setbands5gnsa")
-		[ -n "$2" ] && setbands5gnsa "$2"
+		# Перезапуск радио - в той же подоболочке после записи (см. setbands).
+		[ -n "$2" ] && { ( setbands5gnsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gsa")
 		getsupportedbands5gsa
@@ -704,7 +716,7 @@ case $1 in
 		getbandsext5gsa
 		;;
 	"setbands5gsa")
-		[ -n "$2" ] && setbands5gsa "$2"
+		[ -n "$2" ] && { ( setbands5gsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedmodes")
 		getsupportedmodes
@@ -713,7 +725,11 @@ case $1 in
 		getmode
 		;;
 	"setmode")
-		[ -n "$2" ] && setmode "$2"
+		# Как и смена диапазонов: применяется у части модемов ВЖИВУЮ (SIM7600 -
+		# AT+CNMP берёт эффект сразу, а CFUN=4->1 его ОТКАТЫВАЕТ, проверено). Флаг
+		# _BANDS_APPLY_LIVE из профиля решает, перезапускать ли радио. В фоне -
+		# перерегистрация модема может не уложиться в таймаут rpcd.
+		[ -n "$2" ] && { ( setmode "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands3g")
 		getsupportedbands3g

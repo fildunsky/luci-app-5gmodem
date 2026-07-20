@@ -1,0 +1,3264 @@
+# apn-autoconfig generated provider database v2
+# Contains modified data derived from AOSP and GNOME MBPI.
+# AOSP portion: Copyright 2006, The Android Open Source Project; Apache-2.0.
+# MBPI portion: Creative Commons Public Domain Dedication and Certification (CC-PDDC).
+# Changes: filtered, normalized, deduplicated, merged, prioritized and converted to TSV.
+# License texts and attribution: /usr/share/licenses/apn-autoconfig-providers/
+# database-version: 2026.07.18
+# database-format: 2
+# sources: mbpi, aosp, local overrides
+# revisions: mbpi@052f1e6999f205ba88cc3557627f260b9ae0840e, aosp@73f904fbeb872f5675cb5f18cd9dfb15856425a6
+# TAB-separated columns:
+# mccmnc  imsi_pattern  iccid_pattern  gid1  spn  provider  apn  priority  username  password  auth  ip_type
+# '-' means unspecified; x in IMSI/ICCID patterns matches one decimal digit.
+20201	-	-	-	-	Cosmote (postpaid)	internet	200	-	-	-	-
+20201	-	-	-	-	Cosmote Internet	internet	512	-	-	-	ipv4v6
+20205	-	-	-	-	Vodafone (postpaid)	internet	200	-	-	-	-
+20205	-	-	-	-	Vodafone (postpaid)	web.session	201	-	-	-	-
+20205	-	-	-	-	Vf Mobile Internet	internet.vodafone.gr	517	user	pass	-	-
+20209	-	-	-	-	Wind (postpaid)	gint.b-online.gr	200	web	web	-	-
+20209	-	-	-	Q-Telcom	Q Internet	myq	519	-	-	-	-
+20210	-	-	-	-	Wind (postpaid)	gint.b-online.gr	200	web	web	-	-
+20210	-	-	-	-	Wind Internet	gint.b-online.gr	521	-	-	-	-
+20402	-	-	-	-	Tele2 (postpaid)	data.tele2.nl	200	-	-	-	-
+20402	-	-	4E4C	-	Tele2 Internet	internet.tele2.nl	523	-	-	pap	ipv4v6
+20403	20403	-	-	-	MVNO NL	internet.mvno.mobi	525	mvno	mvno	pap	-
+20404	-	-	-	-	Vodafone (postpaid)	live.vodafone.com	200	vodafone	vodafone	-	-
+20404	-	-	-	-	Vodafone (postpaid)	office.vodafone.nl	201	vodafone	vodafone	-	-
+20404	-	-	-	-	Vodafone	m2m.global.vodafone.nl	202	web	web	pap	-
+20404	-	-	547275554B3030656E	-	Truphone	truphone.com	528	-	-	-	-
+20404	-	-	-	-	Vodafone Internet	live.vodafone.com	530	vodafone	vodafone	pap	ipv4v6
+20404	-	-	BAE0000000000000	-	LTE - VZW Roaming Internet	vzwinternet	532	-	-	-	ipv4v6
+20404	-	-	-	C Spire	CSpire international	internet.cs4glte.com	536	Uniroam@inet.cs.com	cs3g	pap-or-chap	ipv4v6
+20404	-	-	5A	-	SaskTel Internet	pda.stm.sk.ca	539	-	-	-	ipv4v6
+20404	-	-	-	HOT mobile	HOT mobile Internet	net.hotm	540	-	-	-	-
+20404	-	-	-	中国电信	CTNET	ctnet	542	-	-	none	ipv4
+20404	2040439909	-	-	-	ice.net	ice.net	543	-	-	-	ipv4v6
+20404	2040438005	-	-	-	ice.net	ice.net	545	-	-	-	ipv4v6
+20404	2040438006	-	-	-	ice.net	ice.net	547	-	-	-	ipv4v6
+20404	-	-	-	Jump	Jump Roam	mobiledata	547	-	-	none	-
+20404	2040438007	-	-	-	ice.net	ice.net	549	-	-	-	ipv4v6
+20404	2040438008	-	-	-	ice.net	ice.net	551	-	-	-	ipv4v6
+20404	2040438009	-	-	-	ice.net	ice.net	553	-	-	-	ipv4v6
+20404	2040439904	-	-	-	ice.net	ice.net	555	-	-	-	ipv4v6
+20404	2040439905	-	-	-	ice.net	ice.net	557	-	-	-	ipv4v6
+20404	2040439505	-	-	-	ice.net	ice.net	559	-	-	-	ipv4v6
+20404	2040439506	-	-	-	ice.net	ice.net	561	-	-	-	ipv4v6
+20407	-	-	-	-	Tata Move	move.dataxs.mobi	563	-	-	-	-
+20408	-	-	-	-	KPN NL (postpaid/prepaid)	internet	100	-	-	-	-
+20408	-	-	-	-	Hi (postpaid)	portalmmm.nl	200	-	-	-	-
+20408	-	-	-	-	KPN Mobiel Internet	internet	565	-	-	-	ipv4v6
+20408	204080950	-	-	-	MVNO NL	internet.mvno.mobi	568	mvno	mvno	pap	-
+20408	-	-	-	Rabo Mobiel	Rabo Mobiel Int.	rabo	569	-	-	-	-
+20408	-	-	547275554B3030656E	-	Truphone	truphone.com	570	-	-	-	-
+20409	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.nl	200	lmnl	plus	-	-
+20409	-	-	-	Lycamobile	Lycamobile	data.lycamobile.nl	572	-	-	pap	-
+20410	-	-	-	-	MEDIONmobile (prepaid)	portalmmm.nl	200	-	-	-	-
+20412	-	-	-	-	Lebara (prepaid)	multimedia.lebara.nl	200	-	-	-	-
+20412	-	-	-	-	Telfort (postpaid)	internet	200	telfortnl	-	-	-
+20412	-	-	-	-	Telfort Mobiel Internet	internet	573	-	-	-	ipv4v6
+20416	-	-	-	-	T-Mobile (postpaid/prepaid)	internet	100	-	-	-	-
+20416	-	-	-	-	T-Mobile (postpaid/prepaid)	smartsites.t-mobile	101	-	-	-	-
+20416	-	-	-	-	Ben (prepaid)	basic.internet.ben.data	200	-	-	-	-
+20416	-	-	-	-	Simpel (postpaid)	internet.access.nl	200	-	-	-	-
+20416	-	-	-	-	Ben (postpaid)	internet.ben	201	-	-	-	-
+20416	-	-	-	-	T-Mobile Internet	smartsites.t-mobile	574	-	-	pap	ipv4v6
+20416	-	-	-	BEN NL	Ben Internet	internet.ben	577	-	-	pap	-
+20416	-	-	8F	-	Tele2 Internet	smartsites.t-mobile	578	-	-	pap	ipv4v6
+20416	-	-	4E4C	-	Tele2 Internet	smartsites.t-mobile	579	-	-	pap	ipv4v6
+20417	-	-	-	-	Lebara NL	internet.lebara.nl	584	-	-	-	ipv4v6
+20418	-	-	7A696731	-	Ziggo mobiel internet	internet.ziggo.nl	587	-	-	-	-
+20420	-	-	-	-	Orange (postpaid)	internet	200	orange	orange	-	-
+20420	-	-	-	-	T-Mobile Internet	smartsites.t-mobile	588	-	-	pap	ipv4v6
+20433	-	-	547275554B3030656E	-	Truphone	truphone.com	591	-	-	-	-
+20465	-	-	-	-	agms	agms	593	-	-	-	-
+20469	-	-	-	-	KPN Lab Internet	internet	594	-	-	-	ipv4v6
+20601	-	-	-	-	Proximus (postpaid)	internet.proximus.be	200	-	-	-	-
+20601	-	-	-	-	Telenet	telenetwap.be	200	-	-	-	-
+20601	-	-	-	-	Proximus (postpaid)	intraprox.be	201	-	-	-	-
+20601	206018	-	-	-	EMnify	em	597	-	-	-	-
+20601	-	-	-	-	Proximus Internet	internet.proximus.be	600	-	-	pap	ipv4v6
+20601	20601889	-	-	-	Telenet Internet	telenetwap.be	603	-	-	-	-
+20601	-	-	28	-	Virgin Mobile	goto.virginmobile.uk	605	-	-	pap	ipv4v6
+20601	-	-	75636831	-	upcnet	internet.ch.upcmobile.com	606	-	-	-	-
+20601	-	-	7A696731	-	Ziggo mobiel internet	internet.ziggo.nl	608	-	-	-	-
+20601	-	-	75696531	-	Virgin Media IE	internet	609	-	-	-	-
+20601	-	-	0A	-	Tesco Mobile Internet	tescomobile.liffeytelecom.com	610	-	-	-	-
+20605	-	-	-	-	Telenet	telenetwap.be	200	-	-	-	-
+20606	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.be	200	lmbe	plus	-	-
+20606	-	-	-	Lycamobile	Lycamobile	data.lycamobile.be	613	-	-	pap	-
+20610	-	-	-	-	Mobistar (postpaid)	web.pro.be	200	mobistar	mobistar	-	-
+20610	-	-	-	-	Neibo	mworld.be	200	-	-	-	-
+20610	-	-	-	-	Orange (postpaid)	orangeinternet	200	-	-	-	-
+20610	-	-	-	-	Mobistar (postpaid)	internet.be	201	mobistar	mobistar	-	-
+20610	-	-	-	-	Mobistar (postpaid)	iew.be	202	mobistar	mobistar	-	-
+20610	-	-	-	-	Mobistar (postpaid)	mworld.be	203	mobistar	mobistar	-	-
+20610	-	-	-	BE-Transatel	netgprs.com	netgprs.com	617	tsl	tsl	-	-
+20610	-	-	BB00	-	netgprs.com	netgprs.com	618	tsl	tsl	-	-
+20614	-	-	-	-	Telavox (postpaid)	internet	200	-	-	-	-
+20620	-	-	-	-	Base (postpaid)	gprs.base.be	200	base	base	-	-
+20620	-	-	-	-	Mobile Vikings (prepaid)	web.be	200	web	web	-	-
+20620	-	-	-	-	BASE Internet	gprs.base.be	619	base	base	pap	-
+20620	-	-	28	-	Virgin Mobile	goto.virginmobile.uk	621	-	-	-	ipv4v6
+20628	-	-	-	-	BICS Internet	bicsapn	622	-	-	-	-
+20630	-	-	-	-	Unleashed	web.be	623	-	-	-	-
+20800	-	-	-	-	Orange (postpaid)	orange.fr	200	-	-	-	-
+20800	-	-	-	-	Orange (postpaid)	internet-entreprise	201	-	-	-	-
+20800	-	-	-	-	Orange (postpaid)	orange	202	orange	orange	-	-
+20800	-	-	-	-	Orange (postpaid)	orange-mib	203	mportail	mib	-	-
+20800	-	-	-	-	Orange (postpaid)	orange.ie	205	-	-	-	-
+20801	-	-	-	-	AIF (postpaid)	datapro	200	-	-	-	-
+20801	-	-	-	-	Orange (postpaid)	orange.fr	200	-	-	-	-
+20801	-	-	-	-	Prixtel (postpaid)	orange	200	orange	orange	-	-
+20801	-	-	-	-	TEN (postpaid)	ao.fr	200	orange	orange	-	-
+20801	-	-	-	-	Orange (postpaid)	internet-entreprise	201	-	-	-	-
+20801	-	-	-	-	TEN (postpaid)	ofnew.fr	201	orange	orange	-	-
+20801	-	-	-	-	Prixtel (postpaid)	sl2sfr	202	-	-	-	-
+20801	-	-	-	-	Orange (postpaid)	orange-mib	203	mportail	mib	-	-
+20801	-	-	-	-	Orange (postpaid)	orange.ie	205	-	-	-	-
+20801	-	-	-	-	Orange World	orange	625	-	-	-	ipv6
+20801	-	-	33	-	Carrefour	ofnew.fr	629	orange	orange	pap	-
+20801	-	-	4E	-	RSO WEB	ofnew.fr	631	orange	orange	none	-
+20801	-	-	-	Digimium	Orange World	orange	633	orange	orange	pap	-
+20801	-	-	-	Coriolis	Coriolis	coriolis	634	-	-	pap	-
+20801	-	-	4D433032	-	Monaco Telecom	internet	636	-	-	-	-
+20801	-	8981090	-	-	楽天(rakuten.jp)	rakuten.jp	637	-	-	-	ipv4v6
+20809	-	-	-	-	SFR webphone	sl2sfr	639	-	-	-	ipv4v6
+20809	208090021	-	-	-	Be Aliv	pda.newcomobile.com	642	-	-	-	-
+20809	-	-	547275554B3030656E	-	Truphone	truphone.com	643	-	-	-	-
+20809	208090036	-	-	-	Coriolis	coriolis	645	-	-	pap	-
+20810	-	-	-	-	Lebara	fr.lebara.mobi	200	-	-	-	-
+20810	-	-	-	-	Prixtel (postpaid)	orange	200	orange	orange	-	-
+20810	-	-	-	-	SFR (postpaid)	websfr	200	-	-	-	-
+20810	-	-	-	-	Prixtel (postpaid)	sl2sfr	202	-	-	-	-
+20810	-	-	-	-	SFR (postpaid)	internetpro	202	-	-	-	-
+20810	-	-	-	-	SFR (postpaid)	ipnet	203	-	-	-	-
+20810	-	-	-	-	SFR (postpaid)	slsfr	204	-	-	-	-
+20810	-	-	-	-	SFR (postpaid)	internetneuf	206	-	-	-	-
+20810	-	-	-	-	SFR webphone	sl2sfr	648	-	-	-	ipv4v6
+20810	-	-	-	A MOBILE	Auchan WAP	wap65	651	-	-	-	-
+20810	-	-	-	LeclercMobile	WAP LeclercMobile	wap66	653	-	-	-	-
+20810	-	-	12	-	Coriolis	coriolis	655	-	-	pap	-
+20810	-	-	-	Coriolis	Coriolis	coriolis	657	-	-	pap	-
+20810	-	-	4C	-	Web La Poste Mobile	sl2sfr	660	-	-	-	-
+20810	-	-	44	-	Darty Surf&Mails	wap68	661	-	-	-	-
+20810	-	-	-	Keyyo Mobile	Keyyo Mobile Internet	internet68	663	-	-	none	-
+20810	-	-	-	Keyyo Mobile	Keyyo Mobile Wap	wap68	665	-	-	none	-
+20810	-	-	-	ZERO FORFAIT	Zero forfait	internet68	666	-	-	none	-
+20810	-	-	-	RegloMobile	WAP RegloMobile	wap66	668	-	-	none	-
+20811	-	-	-	-	SFR (postpaid)	websfr	200	-	-	-	-
+20811	-	-	-	-	SFR (postpaid)	internetpro	202	-	-	-	-
+20811	-	-	-	-	SFR (postpaid)	ipnet	203	-	-	-	-
+20811	-	-	-	-	SFR (postpaid)	slsfr	204	-	-	-	-
+20811	-	-	-	-	SFR (postpaid)	sl2sfr	205	-	-	-	-
+20811	-	-	-	-	SFR (postpaid)	internetneuf	206	-	-	-	-
+20812	-	-	547275554B3030656E	-	Truphone	truphone.com	670	-	-	-	-
+20815	-	-	-	-	Free Mobile (postpaid)	free	200	-	-	-	-
+20815	-	-	-	-	Free	free	672	-	-	none	ipv4v6
+20815	-	-	F2330002	-	Free Re Int	free.re	673	-	-	-	-
+20815	-	-	F005	-	Free Pro	jn	674	-	-	-	ipv4v6
+20815	-	-	F006	-	Telco OI Re	internet.telco.re	676	-	-	-	-
+20815	-	-	F007	-	Free Caraibes Guadeloupe	free.gp	677	-	-	-	-
+20815	-	-	F008	-	Free Caraibes Martinique Guyanne	free.mq	678	-	-	-	-
+20815	-	-	F003	-	Iliad Int	iliad	679	-	-	-	-
+20817	-	-	-	-	Legos	bornsip	680	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom (postpaid)	a2bouygtel.com	200	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom (postpaid)	b2bouygtel.com	201	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom (postpaid)	ebouygtel.com	202	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom (postpaid)	mmsbouygtel.com	203	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom (postpaid)	pcebouygtel.com	204	-	-	-	-
+20820	-	-	-	-	Bouygues Telecom	mmsbouygtel.com	682	-	-	pap	ipv6
+20821	-	-	-	-	Bouygues Telecom (postpaid)	a2bouygtel.com	200	-	-	-	-
+20821	-	-	-	-	Bouygues Telecom (postpaid)	b2bouygtel.com	201	-	-	-	-
+20821	-	-	-	-	Bouygues Telecom (postpaid)	ebouygtel.com	202	-	-	-	-
+20821	-	-	-	-	Bouygues Telecom (postpaid)	mmsbouygtel.com	203	-	-	-	-
+20821	-	-	-	-	Bouygues Telecom (postpaid)	pcebouygtel.com	204	-	-	-	-
+20822	-	-	-	-	Transatel Telecom (postpaid)	netgprs.com	200	-	-	-	-
+20822	-	-	-	-	mobiledata	mobiledata	685	-	-	-	-
+20822	-	-	-	FR-Transatel	netgprs.com	netgprs.com	686	tsl	tsl	-	-
+20823	-	-	-	-	Virgin mobile	virgin-mobile.fr	687	-	-	-	-
+20825	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.fr	200	-	-	-	-
+20825	-	-	-	Lycamobile	Lycamobile	data.lycamobile.fr	689	-	-	pap	-
+20826	-	-	-	-	Simplus (postpaid)	fnetnrj	200	-	-	-	-
+20826	-	-	4E	-	NRJWEB	fnetnrj	690	-	-	-	ipv4v6
+208260	-	-	-	-	Simplus (postpaid)	fnetnrj	200	-	-	-	-
+20827	-	-	-	Coriolis	Coriolis	coriolis	692	-	-	pap	-
+20828	-	-	-	-	AIF (postpaid)	datapro	200	-	-	-	-
+20838	-	-	-	-	Lebara	fr.lebara.mobi	200	-	-	-	-
+20838	-	-	-	-	Lebara France	fr.lebara.mobi	696	-	-	-	ipv4v6
+21210	-	-	4D433032	-	Monaco Telecom	internet	699	-	-	-	-
+21303	-	-	-	-	Andorra Telecom (Mobiland) (postpaid)	internetand	200	-	-	-	-
+21303	-	-	-	-	Andorra Telecom (Mobiland) (prepaid)	internetclic	201	-	-	-	-
+21303	-	-	-	-	Mobiland	internet	700	-	-	-	-
+21401	-	-	-	-	Vodafone (postpaid)	ac.vodafone.es	200	vodafone	vodafone	-	-
+21401	-	-	-	-	Vodafone (postpaid)	airtelnet.es	201	vodafone	vodafone	-	-
+21401	-	-	-	-	Internet móvil	airtelwap.es	701	wap@wap	wap125	pap	-
+21402	-	-	-	-	ALTECOM	altecom.net	705	-	-	-	-
+21402	-	-	-	FIBRACAT	FIBRACAT	fibracat.cat	706	-	-	-	-
+21403	-	-	-	-	Amena (postpaid)	orangeworld	200	orange	orange	-	-
+21403	-	-	-	-	Happy Móvil/moviData (postpaid)	internettph	200	-	-	-	-
+21403	-	-	-	-	LlamaYa móvil (postpaid)	moreinternet	200	-	-	-	-
+21403	-	-	-	-	Másmovil (postpaid)	internetmas	200	-	-	-	-
+21403	-	-	-	-	Orange (postpaid)	internet	200	ORANGE	ORANGE	-	-
+21403	-	-	-	Orange	Orange Internet Móvil	orangeworld	708	orange	orange	pap	-
+21403	-	-	-	X	X by Orange Internet	x	712	-	-	pap	-
+21403	-	-	-	EUSKALTEL	Euskaltel Internet	internet.euskaltel.mobi	714	CLIENTE	EUSKALTEL	pap	-
+21403	2140352xxxxxxxx	-	-	-	Carrefour	carrefourinternet	715	-	-	pap	-
+21403	-	-	-	Happy	Happy Internet	internettph	717	-	-	-	-
+21403	-	-	-	RACC	RACC INTERNET	internet.racc.net	718	CLIENTERACC	RACC	-	-
+21403	-	-	-	CABLE movil	CABLE movil Internet	internettph	720	-	-	-	-
+21403	-	-	-	MASMovil	MASMovil Internet	internetmas	721	-	-	-	-
+21403	-	-	-	Ibercom	Ibercom Internet	ibercominternet	722	-	-	-	-
+21403	-	-	-	JAZZTEL	JAZZTEL internet	jazzinternet	724	-	-	-	-
+21403	-	-	-	simyo	internet simyo	orangeworld	728	orange	orange	pap	-
+21403	-	-	-	MovilDIA	diainternet	diainternet	731	-	-	-	-
+21403	-	-	-	LCR	LCR	lcrinternet	735	-	-	-	-
+21403	-	-	-	LlamaYA	Llamaya Internet	moreinternet	736	-	-	-	-
+21403	-	-	-	YOU Mobile	youmobile	youinternet	737	-	-	-	-
+21403	-	-	-	Virgin telco	Virgin TELCO Internet	i.virgintelco.es	738	-	-	-	-
+21403	-	-	-	mobilR	Internet R	internet.mundo-r.com	739	-	-	-	-
+21403	-	-	-	Mobil R	Internet R	internet.mundo-r.com	740	-	-	-	-
+21404	-	-	-	-	Yoigo (postpaid)	internet	200	-	-	-	-
+21405	-	-	-	-	Movistar (Telefónica) (postpaid)	telefonica.es	200	telefonica	telefonica	-	-
+21405	-	-	-	-	Tuenti Móvil (postpaid)	tuenti.com	200	tuenti	tuenti	-	-
+21405	-	-	-	-	Movistar (Telefónica) (postpaid)	movistar.es	201	movistar	movistar	-	-
+21405	-	-	-	Tuenti	Tuenti	tuenti.com	742	tuenti	tuenti	pap	-
+21405	214050104xxxxxx	-	-	-	INET Roaming	inet.es	743	-	-	-	-
+21405	-	-	44474553	-	DIGI Spain	internet.digimobil.es	744	-	-	-	-
+21405	-	-	44474954	-	DIGI Italy	digi.mobile	745	-	-	-	-
+21405	-	-	-	-	Movistar	telefonica.es	746	telefonica	telefonica	pap	-
+21405	-	-	-	TeleCable	TeleCable Internet	internet.telecable.es	749	telecable	telecable	-	-
+21406	-	-	-	-	Pepephone (postpaid)	gprs.pepephone.com	200	-	-	-	-
+21406	-	-	-	-	Vodafone (postpaid)	ac.vodafone.es	200	vodafone	vodafone	-	-
+21406	-	-	-	-	Pepephone (postpaid)	gprsmov.pepephone.com	201	-	-	-	-
+21406	-	-	-	-	Vodafone (postpaid)	airtelnet.es	201	vodafone	vodafone	-	-
+21406	2140612	-	-	-	Internet R	internet.mundo-r.com	751	-	-	pap	-
+21406	-	-	-	Eroski Movil	LOWI_data	lowi.private.omv.es	752	-	-	-	-
+21406	-	-	-	Lowi	LOWI_data	lowi.private.omv.es	754	-	-	-	-
+21406	-	-	-	pepephone	Internet	gprsmov.pepephone.com	757	-	-	none	-
+21406	-	-	-	Hits	Hits	tel.hitsmobile.es	759	-	-	-	-
+21406	-	-	-	Lebara	Lebara Internet	gprsmov.lebaramobile.es	761	-	-	-	-
+21406	-	-	-	PTV	PTV Telecom V	datos	763	-	-	-	ipv4v6
+21407	-	-	-	-	Movistar (Telefónica) (postpaid)	telefonica.es	200	telefonica	telefonica	-	-
+21407	-	-	-	-	Movistar (Telefónica) (postpaid)	movistar.es	201	movistar	movistar	-	-
+21407	-	-	-	-	Movistar	telefonica.es	765	telefonica	telefonica	pap	-
+21408	-	-	-	-	Euskaltel (postpaid)	internet.euskaltel.mobi	200	CLIENTE	EUSKALTEL	-	-
+21408	-	-	-	-	Euskaltel Internet	internet.euskaltel.mobi	768	CLIENTE	EUSKALTEL	pap	-
+21409	-	-	-	-	Orange (postpaid)	internet	200	ORANGE	ORANGE	-	-
+21415	-	-	-	-	PTV Telecom	datos	769	-	-	-	ipv4v6
+21416	-	-	-	-	Telecable (postpaid)	internet.telecable.es	200	telecable	telecable	-	-
+21417	-	-	-	-	móbil R (Mundo-R) (postpaid)	internet.mundo-r.com	200	-	-	-	-
+21418	-	-	-	-	ONO (postpaid)	internet.ono.com	200	-	-	-	-
+21419	-	-	-	-	Simyo (postpaid)	gprs-service.com	200	-	-	-	-
+21419	-	-	-	simyo	internet simyo	orangeworld	775	orange	orange	pap	-
+21421	-	-	-	-	Jazztel (prepaid)	jazzinternet	200	-	-	-	-
+21422	-	-	-	-	DIGI Internet	internet.digimobil.es	779	-	-	-	-
+21424	-	-	-	-	Eroski Móvil	gprs.eroskimovil.es	220	wap@wap	wap125	-	-
+21425	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.es	200	lmes	plus	-	-
+21425	-	-	-	Lycamobile	Lycamobile	data.lycamobile.es	781	-	-	pap	-
+21427	-	-	547275554B3030656E	-	Truphone	truphone.com	782	-	-	-	-
+21434	-	-	-	-	INET Internet	inet.es	784	-	-	-	ipv4v6
+21601	-	-	-	-	DIGI (postpaid)	digi	200	-	-	-	-
+21601	-	-	-	-	Telenor (postpaid)	net	200	-	-	-	-
+21601	-	-	-	-	Telenor Online	online	786	-	-	-	-
+21601	-	-	-	Djuice	Djuice NET	net	788	-	-	none	-
+21601	-	-	-	Djuice	Djuice WAP	wap	789	-	-	none	-
+21603	-	-	-	-	DIGI HU internet	internet	790	-	-	-	ipv4v6
+21630	-	-	-	-	T-Mobile (postpaid)	internet	200	-	-	-	-
+21630	-	-	-	-	Telekom HU NET	internet.telekom	793	-	-	pap	ipv4v6
+21670	-	-	-	-	Vodafone (postpaid)	standardnet.vodafone.net	200	vodawap	vodawap	-	-
+21670	-	-	-	-	Vodafone (postpaid)	internet.vodafone.net	201	-	-	-	-
+21670	-	-	-	-	Vodafone (postpaid)	vitamax.snet.vodafone.net	202	-	-	-	-
+21670	-	-	-	-	Vodafone (postpaid)	vitamax.internet.vodafone.net	203	-	-	-	-
+21670	-	-	-	-	Vodafone Internet	internet.vodafone.net	796	-	-	-	ipv4v6
+21670	21670xx1xxx	-	-	-	Vodafone Internet VitaMAX	vitamax.internet.vodafone.net	798	-	-	-	-
+21671	-	-	75687531	-	UPC Mobil Internet	internet.hu.upcmobile.com	800	-	-	-	-
+21803	-	-	-	-	HT-ERONET (postpaid)	gprs.eronet.ba	200	-	-	-	-
+21803	-	-	-	-	HT Eronet WEB	web.eronet.ba	802	-	-	-	-
+21805	-	-	-	-	m:tel (postpaid)	mtelgprs1	200	-	-	-	-
+21805	-	-	-	-	m:tel (postpaid)	mtelgprs2	201	-	-	-	-
+21805	-	-	-	-	m:tel (postpaid)	mtelgprs3	202	-	-	-	-
+21805	-	-	-	-	m:tel (postpaid)	mtelgprs4	203	-	-	-	-
+21805	-	-	-	-	m:tel (prepaid)	mtelfun	204	-	-	-	-
+21805	-	-	-	-	mtel	mtelsmart	804	-	-	-	-
+21890	-	-	-	-	BHMobileInternet	active.bhmobile.ba	806	-	-	-	ipv4v6
+21901	-	-	-	-	T-Mobile (postpaid)	web.htgprs	200	-	-	-	-
+21901	-	-	-	-	Internet	internet.ht.hr	810	-	-	pap	ipv4v6
+21901	-	-	-	bonbon	bonbon Internet	web.htgprs	812	-	-	pap	-
+21902	-	-	-	-	CARNet Tele2 (postpaid)	carnet.tele2.hr	200	AAIEDU	-	-	-
+21902	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.hr	200	-	-	-	-
+21902	-	-	-	-	Tele2	internet.tele2.hr	814	-	-	-	-
+21910	-	-	-	-	CARNet VIPNET (postpaid)	carnet.vip.hr	200	AAIEDU	-	-	-
+21910	-	-	-	-	VIPNET (postpaid)	data.vip.hr	200	-	-	-	-
+21910	-	-	-	-	VIPNET (postpaid)	gprs5.vipnet.hr	201	38591	38591	-	-
+21910	-	-	-	-	VIPNET (postpaid)	gprs0.vipnet.hr	202	38591	38591	-	-
+21910	-	-	-	-	VIPNET (postpaid)	3g.vip.hr	203	38591	38591	-	-
+21910	-	-	-	-	A1 internet	internet	815	-	-	-	-
+22001	-	-	-	-	Telenor (postpaid)	internet	200	telenor	gprs	-	-
+22001	-	-	-	-	Telenor internet	internet	818	telenor	gprs	pap	-
+22002	-	-	-	-	Telenor MNE internet	internet	820	gprs	gprs	-	-
+22003	-	-	-	-	Telekom Srbija (postpaid)	gprsinternet	200	mts	064	-	-
+22003	-	-	-	-	MTS WAP	gprswap	822	mts	064	pap	-
+22004	-	-	-	-	T-Mobile Internet	tmcg-wnw	825	38267	38267	-	-
+22005	-	-	-	-	VIP Mobile (postpaid)	vipmobile	200	vipmobile	vipmobile	-	-
+22101	-	-	-	-	Vala	vala-int	828	-	-	-	-
+22102	-	-	-	-	IPKO (prepaid)	ipko	200	-	-	-	-
+22201	-	-	-	-	CoopVoce (postpaid)	web.coopvoce.it	200	-	-	-	-
+22201	-	-	-	-	TIM (postpaid)	ibox.tim.it	200	-	-	-	-
+22201	-	-	-	-	Tiscali (prepaid)	tiscalimobileinternet	200	-	-	-	-
+22201	-	-	-	-	TIM WAP	wap.tim.it	830	-	-	-	-
+22201	-	-	-	IUSACELL	Internet	web.iusacellgsm.mx	837	-	-	-	-
+22201	-	-	-	UNEFON	Internet	web.iusacellgsm.mx	840	-	-	-	-
+22201	-	-	-	GigSky	GigSky	gigsky	841	-	-	-	-
+22201	-	-	-	Coop Mobile	CoopVoce	web.coopvoce.it	843	-	-	-	ipv4v6
+22201	-	-	-	Kena Mobile R	Kenamobile web	web.kenamobile.it	844	-	-	-	-
+22207	-	-	-	-	Nòverca (prepaid)	web.noverca.it	100	-	-	-	-
+22207	-	-	-	-	Kena Mobile Web	web.kenamobile.it	846	-	-	-	-
+22208	-	-	-	-	FW WEB	apn.fastweb.it	848	-	-	-	ipv4v6
+22210	-	-	-	-	PosteMobile (postpaid)	internet.postemobile.it	200	-	-	-	-
+22210	-	-	-	-	Vodafone (postpaid)	mobile.vodafone.it	200	-	-	-	-
+22210	-	-	-	-	WEB CoopVoce	internet.coopvoce.it	200	-	-	-	-
+22210	-	-	-	-	Vodafone (postpaid)	web.omnitel.it	201	-	-	-	-
+22210	-	-	-	ho.	ho.	web.ho-mobile.it	854	-	-	-	-
+22210	-	-	-	PosteMobile	PosteMobile	wap.postemobile.it	856	-	-	-	-
+22210	-	-	-	ERG	ErgMobile WAP	mobile.erg.it	859	-	-	-	-
+22210	-	-	-	Daily Telecom	DailyTelecomWAP	wap.dtm.it	860	-	-	-	-
+22233	-	-	-	PosteMobile	PosteMobile	wap.postemobile.it	861	-	-	-	-
+22235	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.it	200	lmit	plus	-	-
+22235	-	-	-	Lycamobile	Lycamobile	data.lycamobile.it	863	-	-	pap	-
+22236	-	-	-	-	DIGI Italy	digi.mobile	864	-	-	-	-
+22250	-	-	-	-	Iliad (prepaid)	iliad	200	-	-	-	-
+22250	-	-	F003	-	Iliad	iliad	866	-	-	-	-
+22253	-	-	-	-	WEB CoopVoce	internet.coopvoce.it	200	-	-	-	-
+22254	-	-	-	-	Rabona Mobile (postpaid)	rabona.it	200	-	-	-	-
+22254	-	-	-	Italia Power	Italia Power	italiapower.it	869	-	-	pap	-
+22254	-	-	-	Plintron	Plintron	data.plintron.it	890	-	-	pap	-
+22288	-	-	-	-	Wind (postpaid)	internet.wind	200	Wind	Wind	-	-
+22288	-	-	-	-	Wind (postpaid)	internet.wind.biz	201	Wind	Wind	-	-
+22288	-	-	-	-	INTERNET	internet.it	871	-	-	-	-
+22299	-	-	-	-	3 (postpaid)	tre.it	100	-	-	-	-
+22299	-	-	-	-	3 (postpaid)	datacard.tre.it	101	-	-	-	-
+22299	-	-	-	-	Bip (prepaid)	internet.vistream.it	200	-	-	-	-
+22299	-	-	-	-	Fastweb (postpaid)	apn.fastweb.it	200	-	-	-	-
+22299	-	-	-	-	Fastweb (postpaid)	datacard.fastweb.it	201	-	-	-	-
+22299	-	-	-	-	INTERNET	internet.it	873	-	-	-	-
+22299	-	-	-	FASTWEB	Fastweb WEB	apn.fastweb.it	875	-	-	-	-
+22601	-	-	-	-	Vodafone RO	live.vodafone.com	200	live	vodafone	-	-
+22601	-	-	-	-	Vodafone live!	live.vodafone.com	876	live	vodafone	pap	ipv4v6
+22603	-	-	-	-	Telekom Romania Mobil	broadband	879	-	-	-	-
+22605	-	-	-	-	Digi.Net Mobil (postpaid)	internet	200	-	-	-	-
+22605	-	-	-	-	Digi.Net Mobil (postpaid)	static	201	-	-	-	-
+22605	-	-	-	-	Digi.Mobil	internet	882	-	-	pap	ipv4v6
+22605	-	-	44474553	-	DIGI Spain	internet.digimobil.es	884	-	-	-	-
+22605	-	-	44474954	-	DIGI Italy	digi.mobile	885	-	-	-	-
+22606	-	-	-	-	Telekom Romania Mobil	broadband	887	-	-	-	-
+22610	-	-	-	-	Orange (postpaid)	net	200	-	-	-	-
+22616	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.ro	200	lmro	plus	-	-
+22616	-	-	-	Lycamobile	Lycamobile	data.lycamobile.ro	893	-	-	pap	-
+22801	-	-	-	-	Swisscom (postpaid)	gprs.swisscom.ch	200	-	-	-	-
+22801	-	-	-	-	Swisscom (postpaid)	corporate.swisscom.ch	201	testprofil	temporary	-	-
+22801	-	-	-	-	Swisscom (postpaid)	event.swisscom.ch	202	-	-	-	-
+22802	-	-	-	-	Sunrise (postpaid)	internet	200	internet	internet	-	-
+22802	-	-	-	-	Sunrise	wap.sunrise.ch	221	wap	wap	-	-
+22802	-	-	-	-	Sunrise	mms.sunrise.ch	222	mms	mms	-	-
+22802	-	-	-	-	Sunrise live	internet	894	-	-	-	-
+22803	-	-	-	-	Salt (prepaid)	internet	200	-	-	-	-
+22803	-	-	-	-	Salt Internet	internet	897	-	-	pap	ipv4v6
+22803	-	-	-	CH-Transatel	netgprs.com	netgprs.com	900	tsl	tsl	-	-
+22803	-	-	BB00	-	netgprs.com	netgprs.com	901	tsl	tsl	-	-
+22853	-	-	75636831	-	upcnet	internet.ch.upcmobile.com	902	-	-	-	-
+22854	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.ch	200	lmch	plus	-	-
+22854	-	-	-	Lycamobile	Lycamobile	data.lycamobile.ch	903	-	-	pap	-
+23001	-	-	-	-	MOBIL.CZ (prepaid)	internet.t-mobile.cz	200	gprs	gprs	-	-
+23001	-	-	-	-	T-Mobile (postpaid)	internet.t-mobile.cz	200	-	-	-	-
+23001	-	-	-	-	T-Mobile CZ	internet.t-mobile.cz	905	wap	wap	pap	-
+23002	-	-	-	-	O2 (postpaid)	internet	200	-	-	-	-
+23002	-	-	-	-	O2 (postpaid)	internet.open	201	-	-	-	-
+23002	-	-	-	-	O2 internet	internet	909	-	-	none	ipv4v6
+23003	-	-	-	-	Vodafone (postpaid)	internet	200	-	-	-	-
+23003	-	-	-	-	Internet	internet	913	-	-	-	ipv4v6
+23101	-	-	-	-	Orange (postpaid)	internet	200	-	-	-	-
+23102	-	-	-	-	Slovak Telekom (postpaid)	internet	200	-	-	-	-
+23102	-	-	-	-	T-Mobile internet	internet	921	-	-	pap	ipv4v6
+23103	-	-	-	4KA SK	4ka Internet	internet	924	-	-	-	-
+23104	-	-	-	-	Slovak Telekom (postpaid)	internet	200	-	-	-	-
+23106	-	-	-	-	O2 (postpaid)	o2internet	200	-	-	-	-
+23201	-	-	-	-	A1/Telekom Austria (postpaid)	a1.net	200	ppp@a1plus.at	ppp	-	-
+23201	-	-	-	-	ABroadband (prepaid)	mdata.com	200	mdata@mdata.com	ppp	-	-
+23201	-	-	-	-	A1/Telekom Austria (postpaid)	aon.data	201	mobile@aon.at	ppp	-	-
+23201	-	-	-	-	A1/Telekom Austria (postpaid)	aon.at	202	mobile@aon.at	ppp	-	-
+23201	-	-	-	-	live!	a1.net	927	ppp@a1plus.at	ppp	pap	ipv4v6
+23203	-	-	-	-	VOLmobil (prepaid)	volmobil	200	-	-	-	-
+23203	-	-	-	-	T-Mobile (postpaid)	gprsinternet	201	t-mobile	tm	-	-
+23203	-	-	-	-	T-Mobile (postpaid)	business.gprsinternet	202	t-mobile	tm	-	-
+23203	-	-	-	-	T-Mobile A Internet	internet.t-mobile.at	931	T	tm	pap	ipv4v6
+23203	-	-	C5	-	Goodspeed	uros.iot	934	-	-	-	-
+23204	-	-	-	-	T-Mobile A Internet	internet.t-mobile.at	935	t-mobile	tm	pap	ipv4v6
+23205	-	-	0303	-	Drei (3) (postpaid)	drei.at	200	-	-	-	-
+23205	-	-	-	-	Planet 3	drei.at	938	-	-	-	-
+23207	-	-	-	-	HoT (prepaid)	webaut	200	-	-	-	-
+23207	-	-	-	-	tele.ring (postpaid)	web	200	web@telering.at	web	-	-
+23207	-	-	-	-	T-Mobile A Internet	internet.t-mobile.at	942	T	tm	pap	ipv4v6
+23207	23207761	-	-	-	HoT Internet	webaut	943	-	-	pap	-
+23207	23207718	-	-	-	0677 web	webaut	945	-	-	pap	-
+23207	23207799	-	-	-	0677 web	webaut	947	-	-	pap	-
+23208	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.at	200	-	-	-	-
+23208	-	-	-	Lycamobile	Lycamobile	data.lycamobile.at	949	-	-	pap	-
+23210	-	-	0303	-	Drei (3) (postpaid)	drei.at	200	-	-	-	-
+23210	-	-	-	-	Planet 3	drei.at	950	-	-	-	-
+23211	-	-	-	-	Bob (prepaid)	bob.at	200	data@bob.at	ppp	-	-
+23211	-	-	-	-	Bob (prepaid)	bob.at	201	ppp@bob.at	ppp	-	-
+23211	-	-	-	-	Bob (postpaid)	mms.bob.at	202	data@bob.at	ppp	-	-
+23211	-	-	-	-	data.bob	bob.at	952	data@bob.at	ppp	pap	ipv4v6
+23212	-	-	-	-	Yesss (postpaid)	web.yesss.at	200	-	-	-	-
+23212	-	-	-	-	WEBAPN.AT	webapn.at	954	-	-	-	ipv4v6
+23213	-	-	75617431	-	UPC mobiles Internet	internet.at.upcmobile.com	955	-	-	-	-
+23214	-	-	-	-	Planet 3	drei.at	956	-	-	-	-
+23217	-	-	-	-	Spusu (postpaid)	web	200	-	-	-	-
+23219	-	-	-	-	Tele2 Web	internet.tele2.at	958	-	-	-	-
+23222	-	-	-	Plintron	Plintron	data.plintron.at	979	-	-	pap	-
+23400	-	-	-	-	BT Mobile (postpaid)	btmobile.bt.com	200	bt	bt	-	-
+23401	-	-	-	-	UBIQUISYS	internet	960	-	-	-	-
+23402	-	-	-	-	giffgaff (prepaid)	giffgaff.com	200	giffgaff	password	-	-
+23402	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	200	o2web	password	-	-
+23402	-	-	-	-	Tesco Mobile (prepaid)	prepay.tesco-mobile.com	200	tescowap	password	-	-
+23402	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	201	faster	password	-	-
+23402	-	-	-	-	O2 (prepaid)	payandgo.o2.co.uk	202	payandgo	payandgo	-	-
+23402	-	-	-	-	O2 (postpaid)	idata.o2.co.uk	203	vertigo	password	-	-
+23402	-	-	-	-	O2 (postpaid)	m-bb.o2.co.uk	204	o2bb	password	-	-
+23402	-	-	-	-	O2 MOBILE WEB	mobile.o2.co.uk	961	O2web	O2web	-	-
+23403	-	-	-	-	Airtel-Vodaphone (postpaid)	airtel-ci-gprs.com	200	-	-	-	-
+23405	-	-	-	-	Spitfire Data	spitfire1	964	-	-	-	-
+23408	-	-	B2	-	BT One Phone Internet	internet.btonephone.com	967	-	-	-	ipv4v6
+23410	-	-	-	-	giffgaff (prepaid)	giffgaff.com	200	giffgaff	password	-	-
+23410	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	200	o2web	password	-	-
+23410	-	-	-	-	Tesco Mobile (prepaid)	prepay.tesco-mobile.com	200	tescowap	password	-	-
+23410	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	201	faster	password	-	-
+23410	-	-	-	-	O2 (prepaid)	payandgo.o2.co.uk	202	payandgo	payandgo	-	-
+23410	-	-	-	-	O2 (postpaid)	idata.o2.co.uk	203	vertigo	password	-	-
+23410	-	-	-	-	O2 (postpaid)	m-bb.o2.co.uk	204	o2bb	password	-	-
+23410	-	-	-	-	o2 Pay Monthly	mobile.o2.co.uk	969	o2	p	pap	ipv4v6
+23410	-	-	61	-	o2 Pay As You Go	payandgo.o2.co.uk	971	o2	p	-	ipv4v6
+23410	-	-	67	-	o2 Pay As You Go	payandgo.o2.co.uk	972	o2	p	-	ipv4v6
+23410	-	-	85	-	o2 Pay As You Go	payandgo.o2.co.uk	973	o2	p	-	ipv4v6
+23410	-	-	99	-	o2 Pay As You Go	payandgo.o2.co.uk	974	o2	p	-	ipv4v6
+23410	-	-	0A	-	TESCO	prepay.tesco-mobile.com	975	tm	p	pap	ipv4v6
+23410	-	-	-	giffgaff	giffgaff	giffgaff.com	976	gg	p	pap	ipv4v6
+23410	-	-	-	Jump	Jump	mobiledata	977	-	-	-	-
+23411	-	-	-	-	giffgaff (prepaid)	giffgaff.com	200	giffgaff	password	-	-
+23411	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	200	o2web	password	-	-
+23411	-	-	-	-	Tesco Mobile (prepaid)	prepay.tesco-mobile.com	200	tescowap	password	-	-
+23411	-	-	-	-	O2 (postpaid)	mobile.o2.co.uk	201	faster	password	-	-
+23411	-	-	-	-	O2 (prepaid)	payandgo.o2.co.uk	202	payandgo	payandgo	-	-
+23411	-	-	-	-	O2 (postpaid)	idata.o2.co.uk	203	vertigo	password	-	-
+23411	-	-	-	-	O2 (postpaid)	m-bb.o2.co.uk	204	o2bb	password	-	-
+23411	-	-	-	-	o2 Mobile Web	mobile.o2.co.uk	978	O2web	O2web	-	-
+23415	-	-	-	-	Asda Mobile (prepaid)	asdamobiles.co.uk	200	web	web	-	-
+23415	-	-	-	-	Lebara UK (prepaid)	uk.lebara.mobi	200	wap	wap	-	-
+23415	-	-	-	-	Vodafone (postpaid)	internet	200	web	web	-	-
+23415	-	-	-	-	Vodafone (prepaid)	pp.vodafone.co.uk	201	web	web	-	-
+23415	-	-	-	-	Vodafone (postpaid)	ppbundle.internet	202	web	web	-	-
+23415	-	-	-	-	Vodafone (postpaid)	pp.internet	203	-	-	-	-
+23415	-	-	-	-	Vodafone UK Data	wap.vodafone.co.uk	981	wap	*wap	pap	ipv4v6
+23415	-	-	C1	-	Talkmobile Data	talkmobile.co.uk	984	wap	wap	pap	ipv4v6
+23415	-	-	A1	-	ASDA Mobile Data	my.internet	985	wap	wap	pap	ipv4v6
+23415	-	-	90	-	Lebara Data	uk.lebara.mobi	986	wap	wap	pap	ipv4v6
+23420	-	-	-	-	3 (postpaid)	3internet	200	-	-	-	-
+23420	-	-	-	-	Superdrug	superdrug.net	200	-	-	-	-
+23420	-	-	-	-	3 (postpaid)	three.co.uk	201	-	-	-	-
+23420	-	-	0305	-	iD Mobile	id	991	-	-	-	-
+23420	-	-	030B	-	GAMMA	gamma	993	-	-	-	-
+23420	-	-	0309	-	SMARTY	mob.asm.net	995	-	-	-	-
+23420	-	-	0310	-	Superdrug	superdrug.net	998	-	-	-	-
+23425	-	-	547275554B3030656E	-	Truphone	truphone.com	1000	-	-	-	-
+23426	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.co.uk	200	lmuk	plus	-	-
+23426	-	-	-	Lycamobile	Lycamobile	data.lycamobile.co.uk	1002	lmuk	plus	pap	-
+23427	-	-	-	-	Tata Move UK	move.dataxs.mobi	1003	-	-	-	-
+23430	-	-	-	-	1pMobile (prepaid)	data.uk	200	user	one2one	-	-
+23430	-	-	-	-	EE	everywhere	200	eesecure	secure	-	-
+23430	-	-	-	-	EE Internet	everywhere	1005	eesecure	secure	pap	ipv4v6
+23430	-	-	EE	-	EE Internet	everywhere	1010	eesecure	secure	pap	ipv4v6
+23430	-	-	B2	-	BT OnePhone Internet	internet.btonephone.com	1013	-	-	-	ipv4v6
+23430	-	-	B3	-	BT Internet	everywhere	1015	eesecure	secure	pap	ipv4v6
+23430	-	-	C3	-	BT Internet	everywhere	1019	eesecure	secure	pap	ipv4v6
+23431	-	-	-	-	Virgin Mobile (postpaid)	vdata	200	-	-	-	-
+23431	-	-	-	-	Virgin Mobile (postpaid)	goto.virginmobile.uk	201	user	-	-	-
+23432	-	-	-	-	Virgin Mobile (postpaid)	vdata	200	-	-	-	-
+23432	-	-	-	-	Virgin Mobile (postpaid)	goto.virginmobile.uk	201	user	-	-	-
+23433	-	-	-	-	EE	everywhere	200	eesecure	secure	-	-
+23433	-	-	-	-	EE Internet	everywhere	1023	eesecure	secure	pap	ipv4v6
+23433	-	-	EE	-	EE Internet	everywhere	1027	eesecure	secure	pap	ipv4v6
+23433	-	-	B3	-	BT Internet	everywhere	1031	eesecure	secure	pap	ipv4v6
+23434	-	-	-	-	EE	everywhere	200	eesecure	secure	-	-
+23436	-	-	-	-	Sure (Cable & Wireless) (postpaid)	internet	201	-	-	-	-
+23438	-	-	-	-	Virgin Mobile	goto.virginmobile.uk	1037	-	-	pap	ipv4v6
+23439	-	-	-	Jump	Jump	jump	1058	-	-	-	ipv4
+23439	-	-	-	-	Gamma Data	gamma.co.uk	1059	-	-	-	ipv4
+23450	-	-	-	-	Jersey Telecom (postpaid)	pepper	200	abc	abc	-	-
+23450	-	-	-	-	Wave Telecom (postpaid)	pepper	200	-	-	-	-
+23450	234500022	-	-	-	EMnify	em	1040	-	-	-	-
+23453	-	-	-	-	MobileUC	globaldata	1045	-	-	-	-
+23454	-	-	-	-	iD Mobile	id	220	-	-	-	-
+23455	-	-	-	-	Sure (Cable & Wireless) (postpaid)	internet	201	-	-	-	-
+23457	-	-	-	-	Internet	mobile.sky	1048	-	-	none	ipv4v6
+23458	-	-	-	-	Manx Telecom (postpaid)	3gpronto	200	-	-	-	-
+23458	-	-	-	-	Manx Telecom Contract	internet	1054	-	-	-	-
+23458	-	-	-	-	Manx Telecom Prepay	web.prontogo.net	1056	webgo	webgo	-	-
+23486	-	-	-	-	EE	everywhere	200	eesecure	secure	-	-
+23486	-	-	-	-	EE Internet	everywhere	1058	eesecure	secure	pap	-
+23487	-	-	-	-	Lebara UK	uk.lebara.mobi	1060	-	-	-	ipv4v6
+23594	-	-	-	-	3	three.co.uk	1064	-	-	-	-
+23801	-	-	-	-	TDC (postpaid)	internet	200	-	-	-	-
+23801	-	-	-	-	TDC (postpaid)	internet.no	201	-	-	-	-
+23801	-	-	-	-	TDC (postpaid)	internet.se	202	-	-	-	-
+23801	-	-	-	-	TDC Internet	internet	1065	-	-	-	ipv4v6
+23802	-	-	-	-	BiBoB (postpaid)	internet.bibob.dk	200	-	-	-	-
+23802	-	-	-	-	Telenor (postpaid)	internet	200	-	-	-	-
+23806	-	-	-	-	3 (postpaid)	bredband.tre.dk	100	-	-	-	-
+23806	-	-	-	-	3 (prepaid)	net.tre.dk	101	-	-	-	-
+23806	-	-	-	-	3 (postpaid)	data.tre.dk	102	-	-	-	-
+23806	-	-	-	-	3 (postpaid)	static.tre.dk	103	-	-	-	-
+23806	-	-	-	-	OiSTER (postpaid)	bredband.oister.dk	200	-	-	-	-
+23806	-	-	-	-	OiSTER (postpaid)	data.dk	201	-	-	-	-
+23806	-	-	-	-	3	data.tre.dk	1074	-	-	-	ipv4v6
+23812	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.dk	200	lmdk	plus	-	-
+23812	-	-	-	Lycamobile	Lycamobile	data.lycamobile.dk	1078	-	-	pap	-
+23820	-	-	-	-	Telia IOT (postpaid)	www.internet.mtelia.dk	200	-	-	-	-
+23820	-	-	-	-	Internet	www.internet.mtelia.dk	1079	-	-	-	ipv4v6
+23830	-	-	-	-	Telia (postpaid)	www.internet.mtelia.dk	200	-	-	-	-
+23830	-	-	-	-	Internet	www.internet.mtelia.dk	1083	-	-	-	ipv4v6
+23877	-	-	-	-	Telenor (postpaid)	internet	200	-	-	-	-
+24001	-	-	-	-	Halebop (postpaid)	halebop.telia.se	200	-	-	-	-
+24001	-	-	-	-	Multicom Security (postpaid)	mobiflex.telia.se	200	-	-	-	-
+24001	-	-	-	-	Telia (postpaid)	online.telia.se	200	-	-	-	-
+24001	-	-	-	halebop	Halebop Internet	halebop.telia.se	1089	-	-	-	ipv4v6
+24002	-	-	-	-	3 (postpaid)	data.tre.se	100	-	-	-	-
+24002	-	-	-	-	3 (postpaid)	bredband.tre.se	101	-	-	-	-
+24002	-	-	-	-	3 (postpaid)	net.tre.se	102	-	-	-	-
+24002	-	-	-	-	Com Hem (postpaid)	bredband.comhem.se	200	-	-	-	-
+24002	-	-	-	-	3	data.tre.se	1093	-	-	-	ipv4v6
+24004	-	-	-	-	3 (postpaid)	data.tre.se	100	-	-	-	-
+24004	-	-	-	-	3 (postpaid)	bredband.tre.se	101	-	-	-	-
+24004	-	-	-	-	3 (postpaid)	net.tre.se	102	-	-	-	-
+24004	-	-	-	-	Com Hem (postpaid)	bredband.comhem.se	200	-	-	-	-
+24004	-	-	-	-	Telenor (postpaid)	internet.telenor.se	200	-	-	-	-
+24004	-	-	-	-	Telenor (postpaid)	services.telenor.se	201	-	-	-	-
+24004	-	-	-	-	Telenor (postpaid)	bredband.telenor.se	202	-	-	-	-
+24004	-	-	-	-	3	data.tre.se	1097	-	-	-	ipv4v6
+24005	-	-	-	-	Comviq (prepaid)	data.comviq.se	200	-	-	-	-
+24005	-	-	-	-	Multicom Security (postpaid)	mobiflex.telia.se	200	-	-	-	-
+24005	-	-	-	-	Tele2 (postpaid)	internet.tele2.se	200	-	-	-	-
+24005	-	-	-	-	Telia (postpaid)	online.telia.se	200	-	-	-	-
+24005	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.se	201	-	-	-	-
+24005	-	-	-	Tele2	Tele2 Internet	4g.tele2.se	1098	-	-	-	ipv4v6
+24006	-	-	-	-	Telenor (postpaid)	internet.telenor.se	200	-	-	-	-
+24006	-	-	-	-	Telenor (postpaid)	services.telenor.se	201	-	-	-	-
+24006	-	-	-	-	Telenor (postpaid)	bredband.telenor.se	202	-	-	-	-
+24006	-	-	-	-	Internet	internet	1099	-	-	-	ipv4v6
+24007	-	-	-	-	Comviq (prepaid)	data.comviq.se	200	-	-	-	-
+24007	-	-	-	-	Tele2 (postpaid)	internet.tele2.se	200	-	-	-	-
+24007	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.se	201	-	-	-	-
+24007	-	-	-	-	Tele2 Internet	internet.tele2.se	1103	-	-	-	ipv4v6
+24007	2400768xxxxxxxx	-	-	-	Tele2 Internet	internet.tele2.no	1107	wap	wap	pap	-
+24007	2400764xxxxxxxx	-	-	-	Tele2 Web	internet.tele2.at	1108	-	-	-	-
+24007	2400765xxxxxxxx	-	-	-	Tele2 Web	internet.tele2.at	1109	-	-	-	-
+24007	-	-	4E4C	-	Tele2 Internet	internet.tele2.nl	1110	-	-	-	-
+24007	-	-	0C	-	Sky Internet	mobile.sky	1116	-	-	-	ipv4v6
+24007	-	-	FA3207FF	-	Sberbank-Telecom Internet	internet.sberbank-tele.com	1118	-	-	-	-
+24007	-	-	-	Jump	Jump	jump	1131	-	-	-	ipv4
+24007	240075610	-	-	-	Gamma Data	gamma.co.uk	1132	-	-	-	ipv4
+24008	-	-	-	-	Telenor (postpaid)	internet.telenor.se	200	-	-	-	-
+24008	-	-	-	-	Telenor (postpaid)	services.telenor.se	201	-	-	-	-
+24008	-	-	-	-	Telenor (postpaid)	bredband.telenor.se	202	-	-	-	-
+24008	-	-	-	-	Telenor Mobilsurf	services.telenor.se	1119	-	-	-	ipv4v6
+24009	-	-	-	-	djuice (postpaid)	internet.djuice.se	200	-	-	-	-
+24009	-	-	-	-	Com4	com4	1123	-	-	-	-
+24010	-	-	-	-	Spring data	data.springmobil.se	1124	-	-	-	-
+24012	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.se	200	lmse	plus	-	-
+24012	-	-	-	Lycamobile	Lycamobile	data.lycamobile.se	1126	-	-	pap	-
+24014	-	-	-	-	TDC (postpaid)	internet.se	200	-	-	-	-
+24024	-	-	-	Tele2	Tele2 Internet	4g.tele2.se	1127	-	-	-	ipv4v6
+24040	-	-	-	-	netmore	data.rewicom.net	1128	-	-	-	-
+24042	-	-	C5	-	Goodspeed	uros.iot	1129	-	-	-	-
+24050	-	-	-	-	Telavox (postpaid)	internet	200	-	-	-	-
+24201	-	-	-	-	Phonero (postpaid)	internet.phonero.no	200	-	-	-	-
+24201	-	-	-	-	Telenor (postpaid)	telenor.smart	200	-	-	-	-
+24201	-	-	-	-	Telenor Smart	telenor.smart	1131	-	-	-	ipv4v6
+24202	-	-	-	-	Chess (postpaid)	netcom	200	chess	chess	-	-
+24202	-	-	-	-	Netcom (postpaid)	internet.netcom.no	200	netcom	netcom	-	-
+24202	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.no	201	-	-	-	-
+24202	-	-	-	-	Telia	telia	1135	-	-	-	ipv4v6
+24204	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.no	201	-	-	-	-
+24204	-	-	-	-	Tele2 Internet	internet.tele2.no	1139	-	-	-	-
+24205	-	-	-	-	Network Norway	internet	200	-	-	-	-
+24205	-	-	-	-	OneCall Internet	internet	1140	-	-	pap	ipv4v6
+24207	-	-	-	-	Ventelo (postpaid)	internet.ventelo.no	200	-	-	-	-
+24208	-	-	-	-	TDC (postpaid)	internet.no	200	-	-	-	-
+24209	-	-	-	-	Com4	com4	1144	-	-	-	-
+24213	-	-	-	-	IXT	ixt	1145	-	-	-	ipv4v6
+24214	-	-	-	-	ice.net	ice.net	1147	-	-	-	ipv4v6
+24215	-	-	-	-	Telavox (postpaid)	internet	200	-	-	-	-
+24215	-	-	0E	-	eRate Internet	internet	1150	-	-	-	-
+24223	-	-	-	-	Lycamobile (prepaid)	data.lyca-mobile.no	200	lmno	plus	-	-
+24223	-	-	-	Lycamobile	Lycamobile	data.lyca-mobile.no	1152	-	-	pap	-
+24403	-	-	-	-	DNA Internet	internet	1153	-	-	-	ipv4v6
+24405	-	-	-	-	Elisa (postpaid)	internet	200	-	-	-	-
+24405	-	-	-	-	Elisa Internet	internet	1155	-	-	-	ipv4v6
+24405	2440541	-	-	-	Saunalahti Internet	internet.saunalahti	1159	-	-	-	-
+24410	-	-	-	-	TDC Internet	internet.song.fi	1161	song@internet	songnet	-	-
+24412	-	-	-	-	DNA (postpaid)	internet	200	-	-	-	-
+24412	-	-	-	-	DNA (postpaid)	julkinen.dna.fi	201	-	-	-	-
+24412	-	-	-	-	DNA (postpaid)	data.dna.fi	202	-	-	-	-
+24412	-	-	-	-	DNA (postpaid)	data.moimobile.fi	203	-	-	-	-
+24412	-	-	-	-	DNA Internet	internet	1163	-	-	-	ipv4v6
+24413	-	-	-	-	DNA Internet	internet	1167	-	-	-	ipv4v6
+24414	-	-	-	-	Alcom	internet	1171	-	-	pap	-
+24421	-	-	-	-	Saunalahti (postpaid)	internet.saunalahti	200	-	-	-	-
+24421	-	-	-	-	Saunalahti (postpaid)	internet4	201	-	-	-	-
+24421	-	-	-	-	Saunalahti (prepaid)	internet	202	-	-	-	-
+24421	-	-	-	-	Saunalahti Internet	internet.saunalahti	1172	-	-	-	ipv4v6
+24431	-	-	-	-	Kuiri	kuirinet	200	-	-	-	-
+24491	-	-	-	-	Telia (postpaid)	internet	200	-	-	-	-
+24491	-	-	-	-	Telia (postpaid)	opengate	201	-	-	-	-
+24491	-	-	-	-	Telia (postpaid)	prointernet	202	-	-	-	-
+24491	-	-	-	-	Telia Internet	internet	1174	-	-	-	ipv4v6
+24601	-	-	-	-	Telia LT	omnitel	200	omni	omni	-	-
+24601	-	-	-	-	Omnitel Internet	omnitel	1179	omni	omni	pap	ipv4v6
+24602	-	-	-	-	Bite (postpaid)	banga	200	-	-	-	-
+24602	-	-	-	-	Bite Internet	internet	1182	-	-	-	-
+24603	-	-	-	-	TELE2 GPRS (postpaid)	internet.tele2.lt	200	-	-	-	-
+24701	-	-	-	-	LMT (postpaid)	internet.lmt.lv	200	-	-	-	-
+24701	-	-	-	-	LMT (postpaid)	open.lmt.lv	201	-	-	-	-
+24701	-	-	-	-	LMT (postpaid)	okarte.lmt.lv	202	-	-	-	-
+24701	-	-	-	-	LMT Internet	internet.lmt.lv	1185	-	-	-	ipv4v6
+24702	-	-	-	-	Tele2 (postpaid)	internet.tele2.lv	200	gprs	internet	-	-
+24702	-	-	-	-	Tele2 (postpaid)	mobileinternet.tele2.lv	201	wap	wap	-	-
+24702	-	-	-	-	Tele2 (postpaid)	data.tele2.lv	202	wap	wap	-	-
+24702	-	-	-	-	Tele2 LV Internet	internet.tele2.lv	1188	-	-	-	-
+24705	-	-	-	-	Bite (postpaid)	wap	200	-	-	-	-
+24705	-	-	-	-	Bite (postpaid)	internet	201	-	-	-	-
+24710	-	-	-	-	LMT Internet	internet.lmt.lv	1192	-	-	-	ipv4v6
+24801	-	-	-	-	EMT (postpaid)	internet.emt.ee	200	-	-	-	-
+24801	-	-	-	-	EMT Internet	internet.emt.ee	1195	-	-	-	ipv4v6
+24801	248010x2	-	-	-	Send	send.ee	1199	-	-	-	ipv4v6
+24801	248010x3	-	-	-	Send	send.ee	1200	-	-	-	ipv4v6
+24801	2480101601	-	-	-	Send	send.ee	1201	-	-	-	ipv4v6
+24801	248010241	-	-	-	Send	send.ee	1202	-	-	-	ipv4v6
+24801	2480104	-	-	-	Send	send.ee	1203	-	-	-	ipv4v6
+24802	-	-	-	-	Elisa (postpaid)	internet	200	-	-	-	-
+24802	-	-	-	-	Elisa Internet	internet	1204	-	-	-	ipv4v6
+24803	-	-	-	-	Tele2 (postpaid)	internet.tele2.ee	200	wap	wap	-	-
+24803	-	-	-	-	Tele2 Internet	internet.tele2.ee	1208	-	-	-	-
+25001	-	-	-	-	MTS (postpaid)	internet.mts.ru	200	mts	mts	-	-
+25001	-	-	-	-	MTS Internet	internet.mts.ru	1210	mts	mts	pap	ipv4v6
+25002	-	-	-	-	Megafon (postpaid)	internet	200	gdata	gdata	-	-
+25002	-	-	-	-	Megafon Internet	internet	1213	-	-	-	-
+25008	-	-	-	-	Vainah Telecom	vtk	200	-	-	-	-
+25011	-	-	-	-	Yota (prepaid)	internet.yota	200	-	-	-	-
+25011	-	-	-	-	Yota (prepaid)	yota.ru	201	-	-	-	-
+25011	-	-	-	-	YOTA Internet	internet.yota	1216	-	-	pap	-
+25016	-	-	-	-	NTC (postpaid)	internet.ntc	200	-	-	-	-
+25020	-	-	-	-	Tele2 (postpaid)	internet.tele2.ru	200	-	-	-	-
+25020	-	-	-	-	Tele2 Internet	internet.tele2.ru	1218	-	-	-	ipv4v6
+25020	-	-	FA3207FF	-	Sberbank-Telecom Internet	internet.sberbank-tele.com	1222	-	-	-	-
+25026	-	-	-	-	VTB Mobile	vtb	200	-	-	-	-
+25027	-	-	-	-	Letai	internet.letai.ru	200	-	-	-	-
+25027	-	-	-	-	Letai Internet	internet.letai.ru	1224	-	-	pap	-
+25028	-	-	-	-	Beeline	internet.beeline.ru	200	beeline	beeline	-	-
+25028	-	-	-	-	VODA internet	vodalte.ru	1226	-	-	-	-
+25032	-	-	-	-	Win Mobile	internet	200	internet	internet	-	-
+25033	-	-	-	-	STS	internet.sts.ru	200	-	-	-	-
+25034	-	-	-	-	Krymtelekom	internet.ktkru.ru	200	-	-	-	-
+25035	-	-	-	-	Motiv (postpaid)	inet.ycc.ru	200	motiv	motiv	-	-
+25045	-	-	-	-	Gazprombank Mobile	gpb	200	-	-	-	-
+25047	-	-	-	-	Next Mobile	next	1227	-	-	-	-
+25050	-	-	-	-	SberMobile	internet.sberbank-tele.com	200	-	-	-	-
+25050	-	-	FA3207FF	-	Sberbank-Telecom Internet	internet.sberbank-tele.com	1228	-	-	-	-
+25060	-	-	-	-	Volna mobile	internet	200	internet	internet	-	-
+25062	-	-	-	-	Tinkoff Mobile	m.tinkoff	200	-	-	-	-
+25096	-	-	-	-	+7Telecom	internet	200	internet	internet	-	-
+25097	-	-	-	-	Phoenix	internet	200	-	-	-	-
+25099	-	-	-	-	Beeline	internet.beeline.ru	200	beeline	beeline	-	-
+25099	-	-	-	-	Beeline Internet	internet.beeline.ru	1232	beeline	beeline	pap	-
+25501	-	-	-	-	Jeans (postpaid)	www.jeans.ua	200	-	-	-	-
+25501	-	-	-	-	MTS (postpaid)	internet	200	internet	-	-	-
+25501	-	-	-	-	Jeans (postpaid)	hyper.net	201	-	-	-	-
+25501	-	-	-	-	MTS (postpaid)	active	202	-	-	-	-
+25501	-	-	-	-	MTS (postpaid)	www.umc.ua	203	-	-	-	-
+25502	-	-	-	-	Beeline (postpaid)	internet.beeline.ua	200	-	-	-	-
+25503	-	-	-	-	Djuice (postpaid)	www.djuice.com.ua	200	-	-	-	-
+25503	-	-	-	-	kyivstar (postpaid)	www.ab.kyivstar.net	200	igprs	internet	-	-
+25503	-	-	-	-	Djuice (postpaid)	xl.kyivstar.net	201	-	-	-	-
+25503	-	-	-	-	kyivstar (postpaid)	www.kyivstar.net	201	-	-	-	-
+25503	-	-	-	-	kyivstar (postpaid)	3g.kyivstar.net	202	-	-	-	-
+25503	-	-	-	-	Kyivstar Internet Prepaid	www.ab.kyivstar.net	1241	-	-	-	-
+25503	-	-	-	DJUICE	Djuice Internet	www.djuice.com.ua	1245	-	-	-	-
+25506	-	-	-	-	lifecell (Ukraine)	internet	10	-	-	-	-
+25506	-	-	-	-	life:) (postpaid)	speed	201	-	-	-	-
+25507	-	-	-	-	Utel (postpaid)	3g.utel.ua	200	-	-	-	-
+25701	-	-	-	-	velcom (postpaid)	web.velcom.by	201	web	web	-	-
+25701	-	-	-	-	velcom (postpaid)	plus.velcom.by	202	plus	plus	-	-
+25701	-	-	-	-	velcom (postpaid)	privet.velcom.by	203	privet	privet	-	-
+25701	-	-	-	-	velcom (postpaid)	web1.velcom.by	204	web1	web1	-	-
+25701	-	-	-	-	velcom (postpaid)	web2.velcom.by	205	web2	web2	-	-
+25701	-	-	-	-	velcom (postpaid)	web3.velcom.by	206	web3	web3	-	-
+25701	-	-	-	-	velcom (postpaid)	vmi.velcom.by	207	vmi	vmi	-	-
+25701	-	-	-	-	Velcom Internet	vmi.velcom.by	1250	-	-	-	-
+25701	-	-	-	-	Velcom Internet Privet	wap.privet.by	1251	-	-	-	-
+25702	-	-	-	-	MTS (postpaid)	internet.mts.by	200	mts	mts	-	-
+25702	-	-	-	-	MTS Internet	mts	1253	mts	mts	pap	-
+25704	-	-	-	-	life:) (postpaid)	internet.life.com.by	200	-	-	-	-
+25704	-	-	-	-	life:) Internet	internet.life.com.by	1255	-	-	pap	-
+25901	-	-	-	-	Orange (postpaid)	internet	200	gprs	gprs	-	-
+25901	-	-	-	-	Orange Internet	wap.orange.md	1257	-	-	-	-
+25902	-	-	-	-	Moldcell (postpaid)	internet	200	gprs	gprs	-	-
+25902	-	-	-	-	Moldcell Internet	internet	1258	-	-	-	-
+25905	-	-	-	-	Unité (postpaid)	internet.unite.md	200	gprs	gprs	-	-
+25905	-	-	-	-	Unité (prepaid)	internet3g.unite.md	201	gprs	gprs	-	-
+25905	-	-	-	-	Unite Internet PrePay	internet3g.unite.md	1260	-	-	-	-
+25905	-	-	-	-	Unite Internet PostPay	internet.unite.md	1261	-	-	-	-
+25915	-	-	-	-	IDC Internet	internet	1263	-	-	-	ipv4v6
+26001	-	-	-	-	Plus (postpaid/prepaid)	internet	100	internet	internet	-	-
+26001	-	-	-	-	Plus (postpaid)	pro	101	plusgsm	plusgsm	-	-
+26001	-	-	-	-	Plus (postpaid)	m2m	102	plusgsm	plusgsm	-	-
+26001	-	-	-	-	Plus (postpaid/prepaid)	optimizer	103	-	-	-	-
+26001	-	-	-	-	Plus Internet	plus	1265	-	-	-	ipv4v6
+26002	-	-	-	-	T-Mobile (postpaid/prepaid)	internet	100	-	-	-	-
+26002	-	-	-	-	Heyah (prepaid)	heyah.pl	200	-	-	-	-
+26002	-	-	-	-	Virgin Mobile (postpaid/prepaid)	virgin-internet	200	-	-	-	-
+26002	-	-	-	-	T-Mobile Internet	internet	1268	-	-	pap	ipv4v6
+26003	-	-	-	-	Orange (postpaid/prepaid)	internet	100	internet	internet	-	-
+26003	-	-	-	-	Orange (postpaid/prepaid)	internetipv6	101	internetipv6	internetipv6	-	-
+26003	-	-	-	-	Orange (postpaid)	vpn	102	-	-	-	-
+26003	-	-	-	-	Orange (postpaid)	vpn.static.pl	103	-	-	-	-
+26003	-	-	-	-	INEA (postpaid)	telogic.internet	200	internet	-	-	-
+26003	-	-	-	-	Multimo (postpaid)	mni.internet	201	mni.internet	-	-	-
+26003	-	-	-	-	Multimo (postpaid)	telogic.internet	202	telogic.internet	-	-	-
+26003	-	-	-	-	Orange Internet	internetipv6	1271	internet	internet	none	ipv6
+26006	-	-	-	-	Play (postpaid/prepaid)	internet	100	-	-	-	-
+26006	-	-	-	-	Virgin Mobile (postpaid/prepaid)	virgin-internet	200	-	-	-	-
+26006	-	-	-	-	Play Internet	internet	1275	-	-	-	ipv4v6
+26009	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.pl	200	lmpl	plus	-	-
+26009	-	-	-	-	Lycamobile	data.lycamobile.pl	1279	lmpl	plus	pap	-
+26012	-	-	-	-	Cyfrowy Polsat (postpaid)	multi.internet	100	-	-	-	-
+26017	-	-	-	-	aero2 (prepaid)	darmowy	100	-	-	-	-
+26033	-	-	547275554B3030656E	-	Truphone	truphone.com	1280	-	-	-	-
+26044	-	-	-	-	Rebtel	rebtel	1282	-	-	-	-
+26201	-	-	01	Kaufland Mobil	Kaufland Mobil (Telekom DE)	internet.telekom	10	-	-	-	-
+26201	-	-	-	-	Telekom Germany	internet.telekom	20	-	-	-	-
+26201	-	-	-	-	Congstar (prepaid)	internet.telekom	200	telekom	telekom	-	-
+26201	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.t-d1.de	200	-	t-d1	-	-
+26201	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.t-mobile	201	t-mobile	tm	-	-
+26201	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.v6.telekom	202	-	-	-	-
+26201	-	-	-	-	T-Mobile(Telekom) (prepaid)	iot.telekom.net	204	-	-	-	-
+26201	-	-	-	-	Telekom Internet	internet.v6.telekom	1283	telekom	telekom	pap	ipv4v6
+26201	-	-	44	-	Congstar Internet	internet.v6.telekom	1287	congstar	cs	pap	ipv4v6
+26201	-	-	-	debitel	Telekom Internet	internet.telekom	1306	telekom	telekom	pap	-
+26202	-	-	-	-	Vodafone Germany	web.vodafone.de	10	-	-	-	-
+26202	-	-	-	-	1&1 (postpaid)	mail.partner.de	201	D2	Web	-	-
+26202	-	-	-	-	Vodafone (postpaid)	event.vodafone.de	201	vodafone	vodafone	-	-
+26202	-	-	-	-	Bild Mobil (prepaid)	event.vodafone.de	202	-	-	-	-
+26202	-	-	-	-	VF DE Web	web.vodafone.de	1291	-	-	pap-or-chap	ipv4v6
+26202	-	-	-	VNR mode	Vodafone Internet	live.vodafone.com	1293	vodafone	vodafone	pap	-
+26202	-	-	-	1&1	1&1 Internet (Vodafone)	web.vodafone.de	1294	-	-	-	-
+26202	-	-	-	atg Mobile	atg Mobile	web.vodafone.de	1296	-	-	-	-
+26202	-	-	-	ROSSMANN mobil	ROSSMANN mobil	web.vodafone.de	1297	-	-	-	-
+26202	-	-	-	Willkommen	Willkommen	web.vodafone.de	1298	-	-	-	-
+26202	-	-	-	ewe.de	ewe.de	web.vodafone.de	1300	-	-	-	-
+26202	-	-	-	TomTom	TomTom	web.vodafone.de	1301	-	-	-	-
+26202	-	-	-	EDEKA mobil	EDEKA mobil	web.vodafone.de	1302	-	-	-	-
+26202	-	-	-	M2M	M2M	web.vodafone.de	1303	-	-	-	-
+26202	-	-	-	otelo	otelo	web.vodafone.de	1304	-	-	-	-
+26202	-	-	-	mobilcom-debitel	mobilcom-debitel	web.vodafone.de	1305	-	-	-	-
+26202	-	-	-	Talkline	Talkline	web.vodafone.de	1306	-	-	-	-
+26202	-	-	-	callmobile.de	callmobile.de	web.vodafone.de	1307	-	-	-	-
+26202	-	-	-	D3 Mobile	D3 Mobile	web.vodafone.de	1308	-	-	-	-
+26202	-	-	-	mobi	mobi	web.vodafone.de	1309	-	-	-	-
+26202	-	-	-	klarmobil	klarmobil	web.vodafone.de	1310	-	-	-	-
+26202	-	-	-	Tele2	Tele2	web.vodafone.de	1311	-	-	-	-
+26202	-	-	-	KabelDeutschland	KabelDeutschland	web.vodafone.de	1312	-	-	-	-
+26203	-	-	-	-	E-Plus (postpaid)	internet.eplus.de	100	eplus	gprs	-	-
+26203	-	-	-	-	blau.de (postpaid)	internet.eplus.de	200	blau	blau	-	-
+26203	-	-	-	-	simyo Internet (postpaid)	internet.eplus.de	200	simyo	simyo	-	-
+26203	-	-	-	-	sipgate (postpaid)	sipgate	200	sipgate	sipgate	-	-
+26203	-	-	-	-	blau.de (postpaid)	tagesflat.eplus.de	201	blau	blau	-	-
+26203	-	-	-	-	o2 Internet	internet	1314	-	-	-	ipv4v6
+26203	26203483	-	-	-	MVNO DE	internet.mvno.mobi	1316	mvno	mvno	pap	-
+26203	26203293	-	-	-	1and1 Internet	internet	1317	-	-	-	ipv4v6
+26203	26203330	-	-	-	1and1 Internet	internet	1319	-	-	-	ipv4v6
+26204	-	-	-	-	Vodafone (postpaid)	web.vodafone.de	200	-	-	-	-
+26204	-	-	-	-	1&1 (postpaid)	mail.partner.de	201	D2	Web	-	-
+26204	-	-	-	-	Vodafone (postpaid)	event.vodafone.de	201	vodafone	vodafone	-	-
+26205	-	-	-	-	E-Plus (postpaid)	internet.eplus.de	100	eplus	gprs	-	-
+26205	-	-	-	-	blau.de (postpaid)	internet.eplus.de	200	blau	blau	-	-
+26205	-	-	-	-	simyo Internet (postpaid)	internet.eplus.de	200	simyo	simyo	-	-
+26205	-	-	-	-	blau.de (postpaid)	tagesflat.eplus.de	201	blau	blau	-	-
+26206	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.t-d1.de	200	-	t-d1	-	-
+26206	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.t-mobile	201	t-mobile	tm	-	-
+26206	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.v6.telekom	202	-	-	-	-
+26206	-	-	-	-	T-Mobile(Telekom) (postpaid)	internet.telekom	203	-	-	-	-
+26206	-	-	-	-	T-Mobile(Telekom) (prepaid)	iot.telekom.net	204	-	-	-	-
+26206	-	-	-	-	Telekom Internet	internet.v6.telekom	1321	telekom	telekom	pap	ipv4v6
+26207	-	-	-	-	Alice (postpaid)	internet.partner1	200	-	-	-	-
+26207	-	-	-	-	FONIC (postpaid)	pinternet.interkom.de	200	fonic	fonic	-	-
+26207	-	-	-	-	O2 (postpaid)	pinternet.interkom.de	200	-	-	-	-
+26207	-	-	-	-	Tchibo-Mobil (postpaid)	webmobil1	200	-	-	-	-
+26207	-	-	-	-	O2 (postpaid)	internet	201	-	-	-	-
+26207	-	-	-	-	O2 (postpaid)	surfo2	202	-	-	-	-
+26207	-	-	-	-	o2 Internet	internet	1325	-	-	-	ipv4v6
+26207	2620749	-	-	-	o2 Internet Prepaid	pinternet.interkom.de	1327	-	-	-	-
+26207	262074030000516	-	-	-	Drillisch	internet	1328	-	-	-	ipv4v6
+26207	-	-	420602	-	Fonic Prepaid	internet	1329	-	-	-	ipv4v6
+26207	-	-	450605	-	Fonic Mobile	internet	1330	-	-	-	ipv4v6
+26207	-	-	030903	-	Tchibo Internet	internet	1331	-	-	-	ipv4v6
+26207	-	-	118004	-	1and1 Internet	internet	1332	-	-	-	ipv4v6
+26207	-	-	118006	-	1and1 Internet	internet	1334	-	-	-	ipv4v6
+26207	-	-	250109	-	1and1 Internet	internet	1336	-	-	-	ipv4v6
+26208	-	-	-	-	FONIC (postpaid)	pinternet.interkom.de	200	fonic	fonic	-	-
+26208	-	-	-	-	O2 (postpaid)	pinternet.interkom.de	200	-	-	-	-
+26208	-	-	-	-	Tchibo-Mobil (postpaid)	webmobil1	200	-	-	-	-
+26208	-	-	-	-	O2 (postpaid)	internet	201	-	-	-	-
+26208	-	-	-	-	O2 (postpaid)	surfo2	202	-	-	-	-
+26209	-	-	-	-	Vodafone (postpaid)	web.vodafone.de	200	-	-	-	-
+26209	-	-	-	-	1&1 (postpaid)	mail.partner.de	201	D2	Web	-	-
+26209	-	-	-	-	Vodafone (postpaid)	event.vodafone.de	201	vodafone	vodafone	-	-
+26209	-	-	-	-	Vodafone DE Web	web32.testnetz-vd2.de	1340	-	-	pap-or-chap	ipv4v6
+26211	-	-	-	-	FONIC (postpaid)	pinternet.interkom.de	200	fonic	fonic	-	-
+26211	-	-	-	-	O2 (postpaid)	pinternet.interkom.de	200	-	-	-	-
+26211	-	-	-	-	Tchibo-Mobil (postpaid)	webmobil1	200	-	-	-	-
+26211	-	-	-	-	O2 (postpaid)	internet	201	-	-	-	-
+26211	-	-	-	-	O2 (postpaid)	surfo2	202	-	-	-	-
+26214	-	-	-	-	Lebara Germany	internet.lebara.de	1342	-	-	-	ipv4v6
+26220	26220	-	-	-	MVNO DE	internet.mvno.mobi	1345	mvno	mvno	pap	-
+26223	-	-	-	-	Willkommen (postpaid)	web.vodafone.de	200	-	-	-	-
+26223	-	-	D3E35801FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF	-	winSIM (postpaid)	internet	200	-	-	-	-
+26223	-	-	-	-	1and1 Internet	internet	1346	-	-	-	ipv4v6
+26233	-	-	-	-	sipgate (postpaid)	sipgate	200	sipgate	sipgate	-	-
+26242	-	-	547275554B3030656E	-	Truphone	truphone.com	1350	-	-	-	-
+26243	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.de	200	lmde	plus	-	-
+26243	-	-	-	Lycamobile	Lycamobile	data.lycamobile.de	1352	-	-	pap	-
+26277	-	-	-	-	E-Plus (postpaid)	internet.eplus.de	100	eplus	gprs	-	-
+26277	-	-	-	-	blau.de (postpaid)	internet.eplus.de	200	blau	blau	-	-
+26277	-	-	-	-	simyo Internet (postpaid)	internet.eplus.de	200	simyo	simyo	-	-
+26277	-	-	-	-	blau.de (postpaid)	tagesflat.eplus.de	201	blau	blau	-	-
+26601	-	-	-	-	Gibtel	www.gibtele.com	1353	-	-	-	-
+26801	-	-	-	-	Vodafone (postpaid/prepaid)	internet.vodafone.pt	200	vodafone	vodafone	-	-
+26801	-	-	-	-	Vodafone (prepaid/postpaid)	net2.vodafone.pt	201	vodafone	vodafone	-	-
+26801	-	-	-	-	Vodafone Net2	net2.vodafone.pt	1355	vodafone	vodafone	pap	ipv4v6
+26802	-	-	-	-	Digi PT (postpaid)	internet	200	-	-	pap	-
+26803	-	-	-	-	NOS (postpaid)	utms	200	-	-	-	-
+26803	-	-	-	-	NOS (postpaid)	myconnection	202	-	-	-	-
+26803	-	-	-	-	Internet	umts	1358	-	-	-	-
+26804	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.pt	200	lmpt	plus	-	-
+26804	-	-	-	Lycamobile	Lycamobile	data.lycamobile.pt	1359	-	-	pap	-
+26806	-	-	-	-	MEO (prepaid/postpaid)	internet	200	-	-	-	-
+26807	-	-	-	-	LigaT (postpaid)	inet	200	-	-	-	-
+26889	-	-	-	-	Vodafone Net2	net2.vodafone.pt	1363	vodafone	vodafone	pap	ipv4v6
+27001	-	-	-	-	LUXGSM (postpaid)	web.pt.lu	200	-	-	-	-
+27002	-	-	-	-	MTXC	internet	1369	-	-	-	-
+27077	-	-	-	-	Tango (postpaid)	internet	200	-	-	-	-
+27077	-	-	BB00	-	netgprs.com	netgprs.com	1372	tsl	tsl	-	-
+27077	-	-	-	LU-Transatel	netgprs.com	netgprs.com	1373	tsl	tsl	-	-
+27099	-	-	-	-	Orange (postpaid)	orange.lu	200	-	-	-	-
+27099	-	-	-	-	VOXmobile (postpaid)	vox.lu	200	-	-	-	-
+27201	-	-	-	-	Vodafone (postpaid)	hs.vodafone.ie	200	vodafone	vodafone	-	-
+27201	-	-	-	-	Vodafone (postpaid)	isp.vodafone.ie	201	vodafone	vodafone	-	-
+27201	-	-	-	-	Vodafone (prepaid)	live.vodafone.com	202	vodafone	vodafone	-	-
+27201	-	-	-	-	Vodafone IE	live.vodafone.com	1375	-	-	none	-
+27201	-	-	-	Postmobile	Postmobile Internet	isp.postfone.ie	1379	-	-	-	-
+27202	-	-	-	-	O2 (postpaid)	open.internet	200	gprs	gprs	-	-
+27202	-	-	-	-	O2 (prepaid)	pp.internet	201	faster	web	-	-
+27202	-	-	-	-	O2 (prepaid)	internet	202	-	-	-	-
+27203	-	-	-	-	E-Mobile (postpaid)	broadband.eircommbb.ie	200	-	-	-	-
+27203	-	-	-	-	Meteor (postpaid)	data.mymeteor.ie	200	my	meteor	-	-
+27203	-	-	-	-	Meteor (postpaid)	broadband.mymeteor.ie	201	-	-	-	-
+27203	-	-	-	-	Meteor (postpaid)	isp.mymeteor.ie	202	my	isp	-	-
+27203	-	-	-	-	eir Mobile data	data.myeirmobile.ie	1381	-	-	-	ipv4v6
+27205	-	-	-	-	Three Ireland (postpaid)	3ireland.ie	200	-	-	-	-
+27211	-	-	0A	-	Tesco Mobile Internet	tescomobile.liffeytelecom.com	1385	-	-	pap	-
+27213	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.ie	200	lmie	plus	-	-
+27213	-	-	-	Lycamobile	Lycamobile	data.lycamobile.ie	1386	-	-	pap	-
+27215	-	-	75696531	-	Virgin Media IE	internet	1387	-	-	-	-
+27401	-	-	-	-	Síminn (postpaid)	internet	200	-	-	-	-
+27402	-	-	-	-	Vodafone (postpaid)	vmc.gprs.is	200	-	-	-	-
+27402	-	-	-	-	Vodafone Internet	gprs.is	1390	-	-	-	-
+27403	-	-	-	-	Vodafone (postpaid)	vmc.gprs.is	200	-	-	-	-
+27403	-	-	-	-	Vodafone Internet	gprs.is	1392	-	-	none	-
+27411	-	-	-	-	Nova (postpaid)	internet.nova.is	200	-	-	-	-
+27411	-	-	-	-	Net Nova	net.nova.is	1395	-	-	-	-
+27601	-	-	-	-	Albania Mobile Communications (AMC) (postpaid)	internet	200	internet	-	-	-
+27601	-	-	-	-	One Telecommunications	internet.t	1396	-	-	-	-
+27602	-	-	-	-	Vodafone (postpaid)	twa	200	-	-	-	-
+27602	-	-	-	-	Vodafone (postpaid)	vodafoneweb	201	-	-	-	-
+27603	-	-	-	-	ALBTelecom	internet	1398	-	-	-	-
+27801	-	-	-	-	Vodafone (postpaid)	internet	200	internet	internet	-	-
+27821	-	-	-	-	GO Mobile (postpaid)	gosurfing	200	-	-	-	-
+27821	-	-	-	-	GO Mobile (prepaid)	rtgsurfing	201	-	-	-	-
+27821	-	-	-	-	GO prepaid	gointernet	1402	-	-	-	-
+27877	-	-	-	-	Melita (postpaid)	web.melita	200	-	-	-	-
+28001	-	-	-	-	Cytamobile-Vodafone (postpaid)	internet	200	-	-	-	-
+28001	-	-	-	-	Cytamobile-Vodafone (prepaid)	pp.internet	201	-	-	-	-
+28001	-	-	-	-	Cyta	cytamobile	1403	-	-	-	-
+28010	-	-	-	-	MTN (postpaid)	internet	200	wap	wap	-	-
+28010	-	-	-	-	epic Internet	internet	1405	-	-	-	-
+28020	-	-	-	-	PrimeTel	ip.primetel	1406	-	-	-	-
+28201	-	-	-	-	Geocell (postpaid)	internet	200	-	-	-	-
+28301	-	-	-	-	Beeline (postpaid)	internet.beeline.am	200	internet	internet	-	-
+28304	-	-	-	-	Karabakh Telecom (postpaid)	connect.kt.am	200	-	-	-	-
+28305	-	-	-	-	VivaCell/MTS (postpaid)	connect.vivacell.am	200	-	-	-	-
+28305	-	-	-	-	VivaCell/MTS (postpaid)	inet.vivacell.am	201	-	-	-	-
+28310	-	-	-	-	Orange (postpaid)	internet.orange	200	-	-	-	-
+28310	-	-	-	-	Orange (postpaid)	internet	201	-	-	-	-
+28310	-	-	-	-	Orange Armenia Internet	internet	1408	-	-	pap	-
+28401	-	-	-	-	M-Tel (postpaid)	inet-gprs.mtel.bg	200	-	-	-	-
+28401	-	-	-	-	A1	internet.a1.bg	1409	-	-	none	-
+28403	-	-	-	-	Vivacom (postpaid)	internet.vivacom.bg	200	vivacom	vivacom	-	-
+28403	-	-	-	-	Vivacom (postpaid)	internet.vivatel.bg	201	vivatel	vivatel	-	-
+28403	-	-	-	-	VIVACOM Internet	internet.vivacom.bg	1411	vivacom	vivacom	none	ipv4v6
+28405	-	-	-	-	GloBul (postpaid)	internet.globul.bg	200	globul	-	-	-
+28405	-	-	-	Yettel BG	Yettel Internet	internet	1415	-	-	-	-
+28411	-	-	-	-	bulsatcom	bulsat.com	1419	-	-	-	-
+28413	-	-	-	-	MAX TELECOM	apn.maxtelecom.bg	1420	-	-	-	-
+28601	-	-	-	-	Turkcell (postpaid)	internet	200	-	-	-	-
+28601	-	-	-	-	Turkcell (postpaid)	mgb	201	-	-	-	-
+28601	-	-	-	-	TURKCELL INTERNET	internet	1421	-	-	-	ipv4v6
+28602	-	-	-	-	Vodafone	internet	200	vodafone	vodafone	-	-
+28602	-	-	-	-	Vodafone (postpaid)	edge.kktctelsim.com	201	-	-	-	-
+28602	-	-	-	-	Vodafone internet	internet	1424	-	-	pap	ipv4v6
+28603	-	-	-	-	Avea (postpaid)	internet	200	-	-	-	-
+28603	-	-	-	-	Avea (postpaid)	aycell	201	-	-	-	-
+28603	-	-	-	-	Turk Telekom Internet	internet	1428	-	-	pap	ipv4v6
+28604	-	-	-	-	Avea (postpaid)	internet	200	-	-	-	-
+28604	-	-	-	-	Avea (postpaid)	aycell	201	-	-	-	-
+28613	-	-	-	-	Netgsm Internet	internet	1431	-	-	-	ipv4v6
+28801	-	-	-	-	FT	internet	1432	-	-	-	-
+28802	-	-	-	-	Vodafone FO (postpaid)	vmc.vodafone.fo	200	-	-	-	-
+28802	-	-	-	-	Hey	gprs.fo	1433	-	-	-	-
+28803	-	-	-	-	Tosa	chili	1434	-	-	-	-
+29001	-	-	-	-	Tele Internet	internet	1435	-	-	-	-
+29003	-	-	-	-	Tuullik Internet	internet	1438	-	-	-	-
+29340	-	-	-	-	Vodafone / Simobil (postpaid)	internet.simobil.si	200	simobil	internet	-	-
+29340	-	-	-	-	Si.mobil GPRS	internet.simobil.si	1440	simobil	internet	pap	-
+29340	293400130	-	-	-	069 web	websi	1442	-	-	-	-
+29341	-	-	-	-	Mobitel (postpaid)	internet	200	mobitel	internet	-	-
+29341	-	-	-	-	Mobitel (postpaid)	internetpro	201	mobitel	internet	-	-
+29341	-	-	-	-	Mobilni Internet	internet	1444	mobitel	internet	pap	-
+29364	-	-	-	-	T-2 (postpaid)	internet.t-2.net	200	-	-	-	-
+29370	-	-	-	-	Telemach (prepaid)	internet	200	-	-	-	-
+29401	-	-	-	-	T-Mobile (postpaid)	internet	200	internet	internet	-	-
+29401	-	-	-	-	T-Mobile MK Internet	internet	1447	internet	t-mobile	pap	-
+29402	-	-	-	-	One (postpaid)	datacard	200	-	-	-	-
+29403	-	-	-	-	Vodafone (postpaid)	vipoperator	200	vipoperator	vipoperator	-	-
+29404	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.mk	200	lmde	plus	-	-
+29404	-	-	-	Lycamobile	Lycamobile	data.lycamobile.mk	1451	-	-	pap	-
+29501	-	-	-	-	Swisscom Services	gprs.swisscom.ch	1452	-	-	-	-
+29502	-	-	-	-	Internet	internet-ofl	1453	-	-	-	-
+29505	-	-	-	-	Datamobile (postpaid)	datamobile.ag	200	-	-	-	-
+29505	-	-	-	-	FL1	fl1	1455	gprs@a1plus.at	fl1	-	-
+29505	2950509	-	-	-	EMnify	em	1456	-	-	-	-
+29509	-	-	-	-	EMnify	em	1457	-	-	-	-
+29509	-	-	-	BICS	BICS	bicsapn	1458	-	-	-	-
+29701	-	-	-	-	ProMonte GSM (postpaid)	gprs.promonte.com	200	-	-	-	-
+29701	-	-	-	-	Telenor Internet	internet	1460	gprs	gprs	-	-
+29702	-	-	-	-	T-Mobile (postpaid)	tmcg-data	200	38267	38267	-	-
+29702	-	-	-	-	T-Mobile (postpaid)	tmcg-nw	201	38267	38267	-	-
+29702	-	-	-	-	T-Mobile (postpaid)	internet-postpaid	202	-	-	-	-
+29702	-	-	-	-	T-Mobile (prepaid)	internet-prepaid	203	-	-	-	-
+29702	-	-	-	-	T-Mobile Internet	tmcg-4g	1461	38267	38267	pap	-
+29703	-	-	-	-	m:tel (postpaid)	gprsinternet	200	-	-	-	-
+29703	-	-	-	-	m:tel	mtelinternet	1462	-	-	-	-
+302220	-	-	-	-	Public Mobile (postpaid)	sp.mb.com	200	-	-	-	-
+302220	-	-	-	-	Telus Mobility (postpaid)	isp.telus.com	200	-	-	-	-
+302220	-	-	-	-	Telus Mobility (postpaid)	vpn.telus.com	201	-	-	-	-
+302220	-	-	-	-	Telus Mobility (postpaid)	bb.telus.com	202	-	-	-	-
+302220	-	-	-	-	Telus Mobility (postpaid)	sp.telus.com	203	-	-	-	-
+302220	-	-	5455	-	TELUS	sp.telus.com	1463	-	-	-	ipv4v6
+302220	-	-	4B4F	-	KOODO SP	sp.koodo.com	1466	-	-	-	ipv4v6
+302220	-	-	5043	-	Mobile Internet	sp.mb.com	1468	-	-	-	-
+302220	-	-	4D4F	-	Mobile Internet	sp.mb.com	1470	-	-	-	ipv4v6
+302270	-	-	-	-	Eastlink Internet	wisp.mobi.eastlink.ca	1477	-	-	-	ipv4v6
+302320	-	-	-	-	Mobilicity (postpaid)	wap.davewireless.com	200	-	-	-	-
+302320	-	-	-	-	Mobilicity (postpaid)	internet.davewireless.com	201	-	-	-	-
+302320	-	-	-	-	Chatr Internet	chatrweb.apn	1478	-	-	-	ipv4v6
+302370	-	-	-	-	Fido (postpaid)	ltemobile.apn	200	-	-	-	-
+302370	-	-	DD	-	Fido Internet	ltemobile.apn	1481	-	-	-	ipv4v6
+302490	-	-	-	-	Freedom Mobile (postpaid)	internet.freedommobile.ca	200	-	-	-	-
+302490	-	-	-	-	Internet	internet.freedommobile.ca	1483	-	-	-	ipv4v6
+302500	-	-	-	-	Vidéotron (postpaid)	media.videotron	200	-	-	-	-
+302500	-	-	-	-	Vidéotron (postpaid)	ihvm.videotron	201	-	-	-	-
+302500	-	-	-	-	Media	media.ng	1485	-	-	pap	-
+302510	-	-	-	-	Vidéotron (postpaid)	media.videotron	200	-	-	-	-
+302510	-	-	-	-	Vidéotron (postpaid)	ihvm.videotron	201	-	-	-	-
+302610	-	-	-	-	Bell Mobility (postpaid)	inet.bell.ca	200	-	-	-	-
+302610	-	-	-	-	Bell Mobility (postpaid)	pda.bell.ca	201	-	-	-	-
+302610	-	-	-	-	Bell Mobility (postpaid)	pda2.bell.ca	202	-	-	-	-
+302610	-	-	-	-	Bell Internet	pda.bell.ca	1486	-	-	chap	ipv4v6
+302610	-	-	42	-	Lucky Internet	pda.bell.ca	1488	-	-	chap	ipv4v6
+302640	-	-	-	-	Bell Mobility (postpaid)	inet.bell.ca	200	-	-	-	-
+302640	-	-	-	-	Bell Mobility (postpaid)	pda.bell.ca	201	-	-	-	-
+302640	-	-	-	-	Bell Mobility (postpaid)	pda2.bell.ca	202	-	-	-	-
+302651	-	-	-	-	Bell Mobility (postpaid)	inet.bell.ca	200	-	-	-	-
+302651	-	-	-	-	Bell Mobility (postpaid)	pda.bell.ca	201	-	-	-	-
+302651	-	-	-	-	Bell Mobility (postpaid)	pda2.bell.ca	202	-	-	-	-
+302660	-	-	-	-	MTS	sp.mts	1489	-	-	-	ipv4v6
+302680	-	-	-	-	SaskTel Mobility (postpaid)	inet.stm.sk.ca	200	-	-	-	-
+302690	-	-	41	-	Bell IoT CC	mnet.bell.ca.ioe	1491	-	-	chap	ipv4v6
+302690	-	-	43	-	Bell IoT MC	inet.bell.ca.m2m	1492	-	-	chap	ipv4v6
+302720	-	-	-	-	Rogers (postpaid)	ltemobile.apn	200	-	-	-	-
+302720	-	-	-	-	Rogers (postpaid)	ltedata.apn	201	-	-	-	-
+302720	-	-	-	-	Rogers LTE	ltemobile.apn	1493	-	-	-	ipv4v6
+302720	302720x94	-	-	-	Chatr Internet	chatrweb.apn	1495	-	-	-	ipv4v6
+302720	-	-	D2	-	Chatr Internet	chatrweb.apn	1496	-	-	-	ipv4v6
+302720	302720x92	-	-	-	Tbaytel Internet	ltemobile.apn	1499	-	-	-	ipv4v6
+302720	-	-	BA	-	Tbaytel Internet	ltemobile.apn	1500	-	-	-	ipv4v6
+302720	302720x97	-	-	-	Cityfone Internet	ltemobile.apn	1502	-	-	-	ipv4v6
+302720	-	-	CC	-	Cityfone Internet	ltemobile.apn	1503	-	-	-	ipv4v6
+302720	302720x98	-	-	-	Ztar Internet	rogers-core-appl1.apn	1504	-	-	-	-
+302720	-	-	D4	-	Ztar Internet	rogers-core-appl1.apn	1505	-	-	-	-
+302750	-	-	-	-	SaskTel Mobility (postpaid)	inet.stm.sk.ca	200	-	-	-	-
+302780	-	-	-	-	SaskTel Mobility (postpaid)	inet.stm.sk.ca	200	-	-	-	-
+302780	-	-	-	-	SaskTel Internet	pda.stm.sk.ca	1506	-	-	-	ipv4v6
+302780	3027805	-	-	-	Lüm Mobile	lum	1507	-	-	-	ipv4v6
+302860	-	-	-	-	Telus Mobility (postpaid)	isp.telus.com	200	-	-	-	-
+302860	-	-	-	-	Telus Mobility (postpaid)	vpn.telus.com	201	-	-	-	-
+302860	-	-	-	-	Telus Mobility (postpaid)	bb.telus.com	202	-	-	-	-
+302860	-	-	-	-	Telus Mobility (postpaid)	sp.telus.com	203	-	-	-	-
+302880	-	-	-	-	Bell Mobility (postpaid)	inet.bell.ca	200	-	-	-	-
+302880	-	-	-	-	SaskTel Mobility (postpaid)	inet.stm.sk.ca	200	-	-	-	-
+302880	-	-	-	-	Telus Mobility (postpaid)	isp.telus.com	200	-	-	-	-
+302880	-	-	-	-	Bell Mobility (postpaid)	pda.bell.ca	201	-	-	-	-
+302880	-	-	-	-	Telus Mobility (postpaid)	vpn.telus.com	201	-	-	-	-
+302880	-	-	-	-	Bell Mobility (postpaid)	pda2.bell.ca	202	-	-	-	-
+302880	-	-	-	-	Telus Mobility (postpaid)	bb.telus.com	202	-	-	-	-
+302880	-	-	-	-	Telus Mobility (postpaid)	sp.telus.com	203	-	-	-	-
+310000	-	-	-	bluewire	Bluewire	vzwinternet	1514	-	-	-	ipv4v6
+310000	-	-	-	flatwire	Flatwire	vzwinternet	1521	-	-	-	ipv4v6
+310000	-	-	-	mobipcs	Mobipcs	vzwinternet	1528	-	-	-	ipv4v6
+310000	-	-	-	mobilenation	Mobilenation	vzwinternet	1535	-	-	-	ipv4v6
+310000	-	-	-	mohave	Mohave	vzwinternet	1542	-	-	-	ipv4v6
+310000	-	-	-	Peopleswire	Peopleswire	vzwinternet	1549	-	-	-	ipv4v6
+310000	-	-	-	revol	Revol	vzwinternet	1556	-	-	-	ipv4v6
+310000	-	-	-	distribution	Distribution	vzwinternet	1564	-	-	-	ipv4v6
+310004	-	-	-	-	Verizon	internet	1566	-	-	pap-or-chap	ipv4v6
+310004	-	-	-	-	Verizon Internet	vzwinternet	1568	-	-	-	ipv4v6
+310010	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+310011	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+310012	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+310016	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310016	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310016	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310016	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310016	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310020	-	-	-	-	Union Wireless Data	smart.com	1572	-	-	-	ipv4v6
+310026	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310026	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310026	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310026	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310026	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310026	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310028	-	-	-	-	ALU Test-SIM Internet	vzwinternet	1574	-	-	-	ipv4v6
+310032	-	-	-	itewire	Itewire	vzwinternet	1582	-	-	-	ipv4v6
+310035	-	-	-	etex	Etex	vzwinternet	1589	-	-	-	ipv4v6
+310038	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310038	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310038	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310038	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310038	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310040	-	-	-	-	Mta	vzwinternet	1596	-	-	-	ipv4v6
+310050	-	-	-	alaskacomm	Alaskacomm	vzwinternet	1603	-	-	-	ipv4v6
+310066	-	-	-	-	U.S.Cellular	internet	1625	*	*	-	-
+310070	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310070	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310070	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310070	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310070	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310080	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310080	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310080	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310080	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310080	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310080	-	-	-	-	Corr Wap	corrgprs	1606	-	-	-	-
+310090	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310090	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310090	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310090	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310090	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310100	-	-	-	-	PLATWEB	isp.plateau	1609	-	-	-	-
+310120	-	-	-	-	Sprint	sprint	1610	-	-	-	-
+310120	-	-	-	-	SPCS Global	cinet.spcs	1613	-	-	-	-
+310120	-	-	-	-	OTA	otasn	1632	null	null	-	ipv4v6
+310130	-	-	-	-	Carolina West Internet	home.cww.com	1614	-	-	-	-
+310150	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310150	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310150	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310150	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310150	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310160	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310160	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310160	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310160	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310160	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310160	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310160	-	-	6D	-	MetroPCS 160	fast.metropcs.com	1616	-	-	-	ipv6
+310180	-	-	-	-	WCW-INTERNET	internet.wcc.net	1617	13257630000	mmsc	-	-
+310200	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310200	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310200	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310200	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310200	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310200	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310200	-	-	6D	-	MetroPCS 200	fast.metropcs.com	1619	-	-	-	ipv6
+310210	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310210	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310210	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310210	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310210	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310210	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310210	-	-	6D	-	MetroPCS 210	fast.metropcs.com	1620	-	-	-	ipv6
+310220	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310220	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310220	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310220	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310220	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310220	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310220	-	-	6D	-	MetroPCS 220	fast.metropcs.com	1621	-	-	-	ipv6
+310230	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310230	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310230	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310230	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310230	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310230	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310230	-	-	6D	-	MetroPCS 230	fast.metropcs.com	1622	-	-	-	ipv6
+310240	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310240	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310240	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310240	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310240	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310240	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310240	-	-	-	-	Ting (postpaid)	wireless.dish.com	200	-	-	-	-
+310240	-	-	-	-	Ting (postpaid)	tethering.dish.com	202	-	-	-	-
+310240	-	-	514C	-	Qlink	qlink	1623	-	-	-	-
+310240	-	-	6941	-	Tello	tello	1624	-	-	-	-
+310240	-	-	6957	-	iWireless	iwireless	1625	-	-	-	-
+310240	-	-	6D	-	MetroPCS 240	fast.metropcs.com	1626	-	-	-	ipv6
+310240	-	-	4276	-	Google Fi - Tm	h2g2	1627	none	none	-	ipv6
+310240	-	-	2AC9	-	Consumer Cellular	wholesale	1629	-	-	-	-
+310250	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310250	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310250	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310250	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310250	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310250	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310250	-	-	6D	-	MetroPCS 250	fast.metropcs.com	1630	-	-	-	ipv6
+310260	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310260	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310260	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310260	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310260	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310260	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310260	-	-	-	-	Mint Mobile (prepaid)	wholesale	200	-	-	-	-
+310260	-	-	-	-	US Mobile	pwg	200	-	-	-	-
+310260	-	-	514C	-	Qlink	qlink	1631	-	-	-	-
+310260	-	-	6941	-	Tello	tello	1632	-	-	-	-
+310260	-	-	6957	-	iWireless	iwireless	1633	-	-	-	-
+310260	31026097	-	-	-	Google Fi - Tm	h2g2	1634	none	none	-	ipv6
+310260	-	-	6D38	-	MetroPCS 260	fast.metropcs.com	1636	-	-	-	ipv6
+310260	-	-	534D	-	SIMPLE	simple	1637	-	-	-	ipv4
+310260	-	-	DEFF	-	TFWAP	wap.tracfone	1638	-	-	-	ipv4
+310260	-	-	DDFF	-	TFWAP	wap.tracfone	1639	-	-	-	ipv4
+310260	-	-	2AC9	-	Consumer Cellular	wholesale	1640	-	-	-	-
+310270	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310270	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310270	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310270	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310270	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310270	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310270	-	-	6D	-	MetroPCS 270	fast.metropcs.com	1641	-	-	-	ipv6
+310280	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310280	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310280	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310280	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310280	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310280	-	-	DDFF	-	internet	ereseller	1642	-	-	-	ipv4v6
+310280	-	-	DEFF	-	internet	ereseller	1645	-	-	-	ipv4v6
+310300	-	-	6D	-	MetroPCS 300	fast.metropcs.com	1648	-	-	-	ipv6
+310300	-	-	547275554B3030656E	-	Truphone	truphone.com	1649	-	-	-	-
+310310	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310310	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310310	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310310	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310310	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310310	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310310	-	-	6D	-	MetroPCS 310	fast.metropcs.com	1651	-	-	-	ipv6
+310320	-	-	-	-	Cellular One NEAZ ISP	isp.cellularoneaz.net	1652	-	-	-	-
+310330	-	-	-	alltel2	Alltel2	vzwinternet	1659	-	-	-	ipv4v6
+310360	-	-	-	-	Pioneer	vzwinternet	1666	-	-	-	ipv4v6
+310380	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310380	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310380	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310380	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310380	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310380	-	-	50FF	-	AGMS Global	agms.nl.gmm	1668	-	-	-	-
+310380	-	-	-	GigSky	GigSky	gigsky	1669	-	-	-	-
+310410	-	-	-	-	AweSIM (prepaid)	nxtgenphone	200	-	-	-	-
+310410	-	-	-	-	Straight Talk (prepaid)	att.mvno	200	-	-	-	-
+310410	-	-	-	-	Straight Talk (prepaid)	tfdata	201	-	-	-	-
+310410	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310410	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310410	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310410	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310410	-	-	3442	-	Dish-ATT internet	ereseller	1671	-	-	-	ipv4v6
+310410	-	-	3444	-	Dish-ATT internet	ereseller	1674	-	-	-	ipv4v6
+310410	-	-	3446	-	Dish-ATT internet	ereseller	1677	-	-	-	ipv4v6
+310410	-	-	3448	-	Dish-ATT internet	ereseller	1680	-	-	-	ipv4v6
+310420	-	-	-	-	Cincinnati Bell Wireless (postpaid)	wap.gocbw.com	200	cbw	-	-	-
+310420	-	-	-	-	CBW Data	wap.gocbw.com	1683	-	-	-	-
+310430	-	-	-	gci	Gci	vzwinternet	1689	-	-	-	ipv4v6
+310450	-	-	-	-	Viaero Connect	internet.vedge.com	1691	-	-	-	-
+310470	-	-	-	-	nTelos Wireless	internet.4g.ntelos.com	1695	-	-	-	ipv4v6
+310490	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310490	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310490	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310490	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310490	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310490	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310490	-	-	6D	-	MetroPCS 490	fast.metropcs.com	1699	-	-	-	ipv6
+310530	-	-	6D	-	MetroPCS 530	fast.metropcs.com	1700	-	-	-	ipv6
+310560	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310560	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310560	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310560	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310560	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310570	-	-	-	-	MTPCS (Cellular One) (postpaid)	wapgw.chinookwireless.net	200	-	-	-	-
+310570	-	-	-	-	Cellular One Smartphone	internet	1701	-	-	-	-
+310580	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310580	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310580	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310580	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310580	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310580	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310580	-	-	-	-	Inland	vzwinternet	1708	-	-	-	ipv4v6
+310590	-	-	6D	-	MetroPCS 590	fast.metropcs.com	1710	-	-	-	ipv6
+310600	-	-	-	-	Cellcom	vzwinternet	1716	-	-	-	ipv4v6
+310610	-	-	-	-	EpicINT	internet.epictouch	1718	-	-	-	-
+310640	-	-	6D	-	MetroPCS 640	fast.metropcs.com	1720	-	-	-	ipv6
+310660	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310660	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310660	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310660	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310660	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310660	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310660	-	-	6D	-	MetroPCS 660	fast.metropcs.com	1721	-	-	-	ipv6
+310670	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310670	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310670	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310670	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310670	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310680	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310680	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310680	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310680	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310680	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310690	-	-	547275554B3030656E	-	Truphone	truphone.com	1722	-	-	-	-
+310690	-	-	-	-	Limitless	limitless.us4g.com	1744	-	-	-	-
+310750	-	-	-	-	Appalachian	vzwinternet	1730	-	-	-	ipv4v6
+310770	-	-	-	-	Web 2	i2.iwireless.com	1732	-	-	-	-
+310770	-	-	-	-	Web 1	wap1.iwireless.com	1733	-	-	-	-
+310800	-	-	-	-	T-Mobile (postpaid)	fast.t-mobile.com	100	-	-	-	-
+310800	-	-	-	-	T-Mobile (postpaid)	epc.tmobile.com	101	-	-	-	-
+310800	-	-	-	-	T-Mobile (postpaid)	wap.voicestream.com	102	-	-	-	-
+310800	-	-	-	-	T-Mobile (postpaid)	internet2.voicestream.com	103	-	-	-	-
+310800	-	-	-	-	T-Mobile (postpaid)	internet3.voicestream.com	104	-	-	-	-
+310800	-	-	-	-	T-Mobile (prepaid)	mobilenet	105	-	-	-	-
+310800	-	-	6D	-	MetroPCS 800	fast.metropcs.com	1735	-	-	-	ipv6
+310820	-	-	-	nepa	Nepa	vzwinternet	1741	-	-	-	ipv4v6
+310840	-	-	-	-	Internet	isp	1743	-	-	-	-
+310880	-	-	-	-	DTC dtcwap	wapdtcw.com	1746	-	-	-	-
+310900	-	-	-	-	Midrivers	vzwinternet	1753	-	-	-	ipv4v6
+310920	-	-	-	-	Jamesvalley	vzwinternet	1760	-	-	-	ipv4v6
+310930	-	-	-	-	Copper Valley	vzwinternet	1767	-	-	-	ipv4v6
+310950	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+310950	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+310950	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+310950	-	-	-	-	AT&T	broadband	243	-	-	-	-
+310950	-	-	-	-	AT&T	reseller	244	-	-	-	-
+310950	-	-	DEFF	-	Tracfone AT&T	ereseller	1769	-	-	-	ipv4v6
+310960	-	-	-	nntcwire	Nntcwire	vzwinternet	1777	-	-	-	ipv4v6
+310960	-	-	-	silverstar	Silverstar	vzwinternet	1784	-	-	-	ipv4v6
+310960	-	-	-	snakeriver	Snakeriver	vzwinternet	1791	-	-	-	ipv4v6
+310960	-	-	-	southcentral	Southcentral	vzwinternet	1798	-	-	-	ipv4v6
+310960	-	-	-	strata	strata	vzwinternet	1805	-	-	-	ipv4v6
+310960	-	-	-	syringa	Syringa	vzwinternet	1812	-	-	-	ipv4v6
+311050	-	-	-	-	Thumbcellular	vzwinternet	1819	-	-	-	ipv4v6
+311070	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+311070	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+311070	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+311070	-	-	-	-	AT&T	broadband	243	-	-	-	-
+311070	-	-	-	-	AT&T	reseller	244	-	-	-	-
+311070	-	-	-	elementmobile	Elementmobile	vzwinternet	1826	-	-	-	ipv4v6
+311080	-	-	-	-	PINE WAP	pine	1828	-	-	-	-
+311090	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+311090	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+311090	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+311090	-	-	-	-	AT&T	broadband	243	-	-	-	-
+311090	-	-	-	-	AT&T	reseller	244	-	-	-	-
+311140	-	-	-	sprocket	Sprocket	vzwinternet	1835	-	-	-	ipv4v6
+311180	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+311180	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+311180	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+311180	-	-	-	-	AT&T	broadband	243	-	-	-	-
+311180	-	-	-	-	AT&T	reseller	244	-	-	-	-
+311180	-	-	3442	-	Dish-ATT internet	ereseller	1837	-	-	-	ipv4v6
+311180	-	-	3444	-	Dish-ATT internet	ereseller	1840	-	-	-	ipv4v6
+311180	-	-	3446	-	Dish-ATT internet	ereseller	1843	-	-	-	ipv4v6
+311180	-	-	3448	-	Dish-ATT internet	ereseller	1846	-	-	-	ipv4v6
+311190	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+311190	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+311190	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+311190	-	-	-	-	AT&T	broadband	243	-	-	-	-
+311190	-	-	-	-	AT&T	reseller	244	-	-	-	-
+311190	-	-	-	-	ISP	isp.cellular1.net	1849	-	-	-	-
+311220	-	-	-	-	U.S. Cellular	usccinternet	1852	-	-	-	ipv4v6
+311221	-	-	-	-	U.S. Cellular	usccinternet	1855	-	-	-	ipv4v6
+311222	-	-	-	-	U.S. Cellular	usccinternet	1860	-	-	-	ipv4v6
+311223	-	-	-	-	U.S. Cellular	usccinternet	1863	-	-	-	ipv4v6
+311224	-	-	-	-	U.S. Cellular	usccinternet	1866	-	-	-	ipv4v6
+311225	-	-	-	-	U.S. Cellular	usccinternet	1870	-	-	-	ipv4v6
+311226	-	-	-	-	U.S. Cellular	usccinternet	1872	-	-	-	ipv4v6
+311227	-	-	-	-	U.S. Cellular	usccinternet	1875	-	-	-	ipv4v6
+311228	-	-	-	-	U.S. Cellular	usccinternet	1878	-	-	-	ipv4v6
+311229	-	-	-	-	U.S. Cellular	usccinternet	1881	-	-	-	ipv4v6
+311230	-	-	-	-	CSpire internet	internet.cs4glte.com	1886	-	-	-	ipv4v6
+311310	-	-	-	-	Leaco	vzwinternet	1895	-	-	-	ipv4v6
+311340	-	-	-	-	Illinois valley	vzwinternet	1902	-	-	-	ipv4v6
+311350	-	-	-	nemont	Nemont	vzwinternet	1909	-	-	-	ipv4v6
+311370	-	-	-	-	GCI WEB	web.gci	1911	-	-	-	-
+311390	-	-	-	-	Ericsson Test-SIM Internet	vzwinternet	1913	-	-	-	ipv4v6
+311410	-	-	-	-	Chatmobrsa2	vzwinternet	1926	-	-	-	ipv4v6
+311420	-	-	-	-	Northwestcell	vzwinternet	1933	-	-	-	ipv4v6
+311430	-	-	-	chatmobrsa1	Chatmobrsa1	vzwinternet	1940	-	-	-	ipv4v6
+311440	-	-	-	-	Bluegrass	vzwinternet	1947	-	-	-	ipv4v6
+311450	-	-	-	-	Ptci	vzwinternet	1954	-	-	-	ipv4v6
+311480	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311480	-	-	-	-	LTE - Verizon Internet	vzwinternet	1956	-	-	-	ipv4v6
+311481	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311482	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311483	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311484	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311485	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311486	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311487	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311488	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311489	-	-	-	-	Verizon (postpaid)	vzwinternet	201	-	-	-	-
+311500	-	-	-	Mosaic Mobile	Mosaic WAP	wap	1962	-	-	-	-
+311500	-	-	-	Mosaic RPA	Mosaic WAP AT&T	wap	1963	-	-	-	-
+311500	-	-	-	Mosaic RPT	Mosaic WAP T-Mobile	wap	1964	-	-	-	-
+311500	-	-	-	Mosaic RPO	Mosaic WAP Other networks	wap	1965	-	-	-	-
+311500	-	-	-	Norvado Wireless	Norvado	wap	1966	-	-	-	-
+311500	-	-	-	Norvado Wireless RPA	Norvado AT&T	wap	1967	-	-	-	-
+311500	-	-	-	Norvado Wireless RPT	Norvado T-Mobile	wap	1968	-	-	-	-
+311500	-	-	-	Norvado Wireless RPO	Norvado Other networks	wap	1969	-	-	-	-
+311500	-	-	-	-	24-7 WAP	wap	1981	-	-	-	-
+311530	-	-	-	-	Blaze	mms.mymobiletxt.com	1970	-	-	-	-
+311530	-	-	-	-	Duet Internet	wap.mymobiletxt.com	1971	-	-	-	ipv4
+311570	-	-	-	-	BendBroadband (postpaid)	isp	200	-	-	-	-
+311580	-	-	-	-	U.S. Cellular	usccinternet	1973	-	-	-	ipv4v6
+311581	-	-	-	-	U.S. Cellular	usccinternet	1975	-	-	-	ipv4v6
+311582	-	-	-	-	U.S. Cellular	usccinternet	1978	-	-	-	ipv4v6
+311583	-	-	-	-	U.S. Cellular	usccinternet	1981	-	-	-	ipv4v6
+311584	-	-	-	-	U.S. Cellular	usccinternet	1984	-	-	-	ipv4v6
+311585	-	-	-	-	U.S. Cellular	usccinternet	1987	-	-	-	ipv4v6
+311586	-	-	-	-	U.S. Cellular	usccinternet	1990	-	-	-	ipv4v6
+311587	-	-	-	-	U.S. Cellular	usccinternet	1993	-	-	-	ipv4v6
+311588	-	-	-	-	U.S. Cellular	usccinternet	1996	-	-	-	ipv4v6
+311589	-	-	-	-	U.S. Cellular	usccinternet	1999	-	-	-	ipv4v6
+311590	-	-	-	gsc	Gsc	vzwinternet	2007	-	-	-	ipv4v6
+311600	-	-	-	-	Cox	vzwinternet	2014	-	-	-	ipv4v6
+311610	-	-	-	srtcomm	Srtcomm	vzwinternet	2021	-	-	-	ipv4v6
+311650	-	-	-	unitedwireless	Unitedwireless	vzwinternet	2028	-	-	-	ipv4v6
+311670	-	-	-	-	Pine Belt	lte.internet.pinebelt.net	2032	-	-	-	ipv4v6
+311740	-	-	-	-	TelAlaska Cellular	akcell.mobi	2034	-	-	-	ipv4
+311750	-	-	-	-	Cleartalk	cdmanai	2035	-	-	pap-or-chap	ipv4v6
+311750	-	-	-	-	ClearTalk LTE	home.netamerica.com	2036	-	-	-	ipv4v6
+311882	-	-	-	-	Sprint	internet.curiosity.sprint.com	2037	-	-	-	ipv4v6
+311910	-	-	-	-	MobileNation	mymn4g.net	2038	-	-	-	ipv4v6
+311920	-	-	-	charitonvalley	Chariton valley	vzwinternet	2044	-	-	-	ipv4v6
+311930	-	-	-	-	Syringa Wireless	internet.syringawireless.com	2046	-	-	-	ipv4v6
+311960	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.com	200	-	-	-	-
+311960	-	-	-	Lycamobile	Lycamobile	data.lycamobile.com	2047	-	-	pap	-
+312040	-	-	-	custer	Custer	vzwinternet	2053	-	-	-	ipv4v6
+312090	-	-	-	-	AT&T	nxtgenphone	240	-	-	-	-
+312090	-	-	-	-	AT&T	enhancedphone	241	-	-	-	-
+312090	-	-	-	-	AT&T	nrphone	242	-	-	-	-
+312090	-	-	-	-	AT&T	broadband	243	-	-	-	-
+312090	-	-	-	-	AT&T	reseller	244	-	-	-	-
+312160	-	-	-	chatmobility	chatmobility	vzwinternet	2060	-	-	-	ipv4v6
+312420	-	-	-	-	NexTech Wireless	internet.lte.ntwls.com	2064	-	-	-	ipv4v6
+312630	-	-	-	-	NetGenuity Internet	data	2068	-	-	-	ipv4v6
+312670	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+312670	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+312870	-	-	-	-	GigSky	gigsky	2069	-	-	-	-
+313100	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313100	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313110	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313110	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313120	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313120	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313130	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313130	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313140	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313140	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313150	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313150	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313160	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313160	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313170	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313170	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313180	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313180	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313190	-	-	-	-	FirstNet	firstnet-phone	240	-	-	-	-
+313190	-	-	-	-	FirstNet	firstnet-broadband	241	-	-	-	-
+313770	-	-	-	-	MobileUC	globaldata	2072	-	-	-	-
+314720	-	-	-	-	Internet USA	internet	2073	-	-	-	ipv4v6
+330000	-	-	-	openmobile	Openmobile	vzwinternet	2080	-	-	-	ipv4v6
+330110	-	-	-	-	Puerto Rico:Claro:LTE	lte.claropr.com	2082	-	-	pap	-
+33402	-	-	-	-	Telcel (postpaid)	internet.itelcel.com	200	webgprs	webgprs2002	-	-
+334020	-	-	-	-	Internet	internet.itelcel.com	2084	webgprs	webgprs2002	pap	ipv4v6
+33403	-	-	-	-	Movistar (postpaid)	internet.movistar.mx	200	movistar	movistar	-	-
+334030	-	-	-	Movistar	Movistar INTERNET	internet.movistar.mx	2087	movistar	movistar	pap	ipv4v6
+334050	334050x	-	-	-	Internet	web.iusacellgsm.mx	2090	-	-	none	ipv4v6
+334090	334090x	-	-	-	Internet	wap.attmex.mx	2097	-	-	none	ipv4v6
+334140	-	-	-	-	Altan	internet.altan	2098	-	-	-	-
+334140	-	-	-	IENTC	IENTC	internet.ientc.com	2100	-	-	-	-
+334140	-	-	-	NeWWW	NeWWW	internet.newww.com	2101	-	-	-	-
+334140	-	-	-	Mega4.5 G	Megacable	mega45g.com	2103	-	-	-	-
+334140	-	-	-	NETWEY	Netwey	internet.netwey.com.mx	2105	-	-	-	-
+334140	-	-	-	RETEMEX	Retemex	internet.retemex.com	2107	-	-	-	-
+334140	-	-	-	BAIT	Walmart MX	internet.wm.com	2109	-	-	-	-
+334140	-	-	-	IUSATEL	Iusacomm	internet.iusacomm.com	2111	-	-	-	-
+334140	-	-	-	CFE TEIPT	CFE	internet.cfe.com	2113	-	-	-	-
+334140	-	-	-	INTEN	Inten	internet.inten.com	2115	-	-	-	-
+334140	-	-	-	NEMI	Diveracy	internet.diveracy.com	2117	-	-	-	-
+334140	-	-	-	DIRI	Diri	internet.diri.com	2119	-	-	-	-
+334140	-	-	-	TURBORED	Topos	internet.turbored.com	2121	-	-	-	-
+334140	-	-	-	Gurucomm	Guruweb	internet.gugacom.com	2123	-	-	-	-
+334140	-	-	-	Ubix	Ubix	internet.ubix.com	2125	-	-	-	-
+334140	-	-	-	PagaPhone	Rocketel	internet.rocketel.com	2127	-	-	-	-
+334140	-	-	-	Redpotencia	Redpotencia	internet.edilar.com	2129	-	-	-	-
+334140	-	-	-	CHAMO-MOVIL	Adinteli 1	internet.plus.com	2131	-	-	-	-
+334140	-	-	-	BYPLUS	Adinteli 2	internet.plus.com	2133	-	-	-	-
+334140	-	-	-	izzi	Izzi	internet.izzi.mx	2135	-	-	-	-
+334140	-	-	-	MISTRAL	Adm	internet.adm.com	2137	-	-	-	-
+334140	-	-	-	MEXFON	Ads	internet.mexfon.com	2139	-	-	-	-
+334140	-	-	-	YO	Yonder	internet.yotelco.com	2141	-	-	-	-
+334140	-	-	-	Arlonet	Arlonet	internet.arloesinet.com	2143	-	-	-	-
+334140	-	-	-	VALOR	Tridex	internet.valor.com	2145	-	-	-	-
+334140	-	-	-	WiMO	Wimo	internet.wimo.com	2147	-	-	-	-
+334140	-	-	-	OUI	Oui	internet.oui.com	2149	-	-	-	-
+334140	-	-	-	FreedomPop	Freedompop	internet.mvne1.com	2151	-	-	-	-
+334160	-	-	-	izzi	Izzi	mvne.izzi.mx	2154	-	-	-	ipv4v6
+334170	-	-	-	-	Internet Mexico	internet	2156	-	-	-	ipv4v6
+338020	-	-	-	-	Cable & Wireless (postpaid)	wap	200	-	-	-	-
+33805	-	-	-	-	INTERNET Digicel	web	2158	-	-	-	-
+338050	-	-	-	-	Digicel (postpaid)	web.digiceljamaica.com	200	wapuser	wap03jam	-	-
+338050	-	-	-	-	INTERNET Digicel	web	2164	-	-	-	-
+338070	-	-	-	-	Claro Web	internet.ideasclaro.com.jm	2166	-	-	pap	-
+33818	-	-	-	-	Lime Internet Postpaid	internet	2160	-	-	-	-
+33818	-	-	-	-	Lime Internet Prepaid	ppinternet	2162	-	-	-	-
+338180	-	-	-	-	Lime Internet Postpaid	internet	2168	-	-	-	-
+338180	-	-	-	-	Lime Internet Prepaid	ppinternet	2170	-	-	-	-
+338180	-	-	-	-	Lime Internet Postpaid	internet	2172	-	-	pap	-
+34001	-	-	-	-	Orange World	orangeweb	2174	orange	orange	pap	-
+34002	-	-	-	-	SFR Internet	internet.sfr	2179	-	-	-	-
+34004	-	-	F008	-	Free Caraibes Martinique Guyanne	free.mq	2181	-	-	-	-
+34009	-	-	F007	-	Free Caraibes Guadeloupe	free.gp	2182	-	-	-	-
+34020	-	-	-	-	Digicel	digicel	2183	-	-	pap	ipv4v6
+342600	-	-	-	-	Barbados:Lime:Internet	internet	2184	-	-	pap	-
+342750	-	-	-	-	Digicel (postpaid)	isp.digicelbarbados.com	200	-	-	-	-
+344920	-	-	-	-	Antigua:Lime:Internet	internet	2186	-	-	pap	-
+346140	-	-	-	-	Cayman Islands:Lime:Internet	internet	2188	-	-	pap	-
+34817	-	-	-	-	Lime Internet Postpaid	internet	2190	-	-	-	-
+348170	-	-	-	-	Bvi:Lime:Internet	internet	2194	-	-	pap	-
+34877	-	-	-	-	Bvi:Digicel:Internet	wap.digicelbvi.com	2192	-	-	pap	-
+35000	-	-	-	-	CellOne	web.c1.bm	200	-	-	-	-
+352110	-	-	-	-	Grenada:Lime:Internet	internet	2196	-	-	pap	-
+354860	-	-	-	-	Monserrat:Lime:Internet	internet	2198	-	-	pap	-
+356110	-	-	-	-	St Kitts And Nevis:Lime:Internet	internet	2200	-	-	pap	-
+358110	-	-	-	-	Cable & Wireless (postpaid)	internet	200	-	-	-	-
+358110	-	-	-	-	St Lucia:Lime:Internet	internet	2202	-	-	pap	-
+360070	-	-	-	-	Digicel (postpaid)	wap.digiceloecs.com	200	wapoecs	wap03oecs	-	-
+360110	-	-	-	-	St Vincent:Lime:Internet	internet	2204	-	-	pap	-
+36269	-	-	-	-	Curacao:Digicel:Internet	web.digicelcuracao.com	2206	-	-	pap	-
+36301	-	-	-	-	SETAR Internet	internet.setar.aw	2208	-	-	-	ipv4v6
+36302	-	-	-	-	INTERNET Aruba	web.digicelaruba.com	2211	-	-	pap	-
+364390	-	-	-	-	Batelco (postpaid)	internet.btcbahamas.com	200	-	-	-	-
+36449	-	-	-	-	Aliv	pda.newcomobile.com	200	-	-	-	-
+365840	-	-	-	-	Anguilla:Lime:Internet	internet	2215	-	-	pap	-
+366110	-	-	-	-	Dominica:Lime:Internet	internet	2217	-	-	pap	-
+36801	-	-	-	-	Internet	internet	2219	-	-	-	-
+37001	-	-	-	-	Orange (postpaid)	orangenet.com.do	200	-	-	-	-
+37001	-	-	-	-	Altice	altice	2221	-	-	-	-
+37002	-	-	-	-	Claro (postpaid)	internet.ideasclaro.com.do	200	-	-	-	-
+37002	-	-	-	-	Internet Móvil Claro	internet.ideasclaro.com.do	2222	-	-	pap	ipv4v6
+37004	-	-	-	-	Viva (postpaid)	edge.viva.net.do	200	viva	viva	-	-
+37004	-	-	-	-	Viva Edge (GSM)	edge.viva.net.do	2224	viva	viva	pap	-
+37005	-	-	-	-	Wind Telecom	smart.wind4g.com.do	2226	-	-	-	ipv4v6
+37202	-	-	-	-	Haiti:Digicel:Internet	wap.digicelha.com	2227	-	-	pap	-
+37203	-	-	-	-	NATCOM INTERNET	natcom	2229	-	-	-	-
+37412	-	-	-	-	bmobile / TSTT (postpaid)	internet	200	wap	wap	-	-
+37412	-	-	-	-	Bmobile internet	internet	2230	-	-	pap	-
+374120	-	-	-	-	Bmobile internet	internet	2234	-	-	pap	-
+374121	-	-	-	-	Bmobile internet	internet	2236	-	-	pap	-
+374122	-	-	-	-	Bmobile internet	internet	2238	-	-	pap	-
+374123	-	-	-	-	Bmobile internet	internet	2240	-	-	pap	-
+374124	-	-	-	-	Bmobile internet	internet	2242	-	-	pap	-
+374125	-	-	-	-	Bmobile internet	internet	2244	-	-	pap	-
+374126	-	-	-	-	Bmobile internet	internet	2246	-	-	pap	-
+374127	-	-	-	-	Bmobile internet	internet	2248	-	-	pap	-
+374128	-	-	-	-	Bmobile internet	internet	2250	-	-	pap	-
+374129	-	-	-	-	Bmobile internet	internet	2252	-	-	pap	-
+37413	-	-	-	-	Digicel (postpaid)	wap.digiceltt.com	200	wap	wap	-	-
+37413	-	-	-	-	INTERNET Trinidad	web.digiceltt.com	2232	-	-	pap	-
+374130	-	-	-	-	INTERNET Trinidad	web.digiceltt.com	2254	-	-	pap	-
+376350	-	-	-	-	Turks And Caicos:Lime:Internet	internet	2256	-	-	pap	-
+40001	-	-	-	-	Azercell (postpaid)	internet	200	-	-	-	-
+40001	-	-	-	-	Azercell	default	2258	-	-	-	-
+40002	-	-	-	-	Bakcell (postpaid)	mms	200	-	-	-	-
+40002	-	-	-	-	Bakcell	default	2259	-	-	-	-
+40003	-	-	-	-	FONEX	default	2260	-	-	-	-
+40004	-	-	-	-	Azerfon (postpaid)	azerfon	200	-	-	-	-
+40004	-	-	-	-	Nar Mobile	default	2261	-	-	-	-
+40101	-	-	-	-	Beeline (postpaid)	internet.beeline.kz	200	@internet.beeline	-	-	-
+40101	-	-	-	-	Beeline Internet	internet.beeline.kz	2262	@internet.beeline	beeline	pap	-
+40101	-	-	-	-	DOS Internet	internet.dos.kz	2264	-	-	-	-
+40101	40101568	-	-	-	izi	izi.me	2265	-	-	-	-
+40102	-	-	-	-	K'CELL (postpaid)	internet	200	-	-	-	-
+40107	-	-	-	-	ALTEL INTERNET	internet	2268	-	-	-	-
+40177	-	-	-	-	Tele2 (postpaid)	internet	200	-	-	-	-
+40211	-	-	-	-	B-Mobile	default	2271	-	-	-	ipv4v6
+40277	-	-	-	-	TashiCell	ticlnet	2272	-	-	-	ipv4v6
+40401	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40401	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40401	-	-	-	-	Vodafone live	portalnmms	2273	-	-	-	ipv4v6
+40401	-	-	-	-	Vodafonemobileconnect	www	2274	-	-	-	ipv4v6
+40402	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40402	-	-	-	-	AIRTEL LIVE	airtelfun.com	2276	-	-	-	ipv4v6
+40402	-	-	-	-	Mobile Office	airtelgprs.com	2277	-	-	-	ipv4v6
+40403	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40403	-	-	-	-	Mobile Office	airtelgprs.com	2280	-	-	-	ipv4v6
+40403	-	-	-	-	AIRTEL LIVE	airtelfun.com	2281	-	-	-	ipv4v6
+40404	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40404	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40404	-	-	-	-	Idea_Internet	internet	2284	-	-	-	ipv4v6
+40404	-	-	-	-	IDEA GPRS	imis	2285	-	-	-	ipv4v6
+40405	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40405	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40405	-	-	-	-	Vodafonemobileconnect	www	2288	-	-	-	ipv4v6
+40405	-	-	-	-	Vodafone live	portalnmms	2289	-	-	-	ipv4v6
+40406	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40407	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40407	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40407	-	-	-	-	Idea_Internet	internet	2290	-	-	-	ipv4v6
+40407	-	-	-	-	IDEA GPRS	imis	2291	-	-	-	ipv4v6
+40409	-	-	-	-	Reliance Net	smartnet	2294	-	-	-	ipv4v6
+40409	-	-	-	-	Reliance WAP	smartwap	2295	-	-	pap	ipv4v6
+40410	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40410	-	-	-	-	Mobile Office	airtelgprs.com	2296	-	-	-	ipv4v6
+40410	-	-	-	-	AIRTEL LIVE	airtelfun.com	2297	-	-	-	ipv4v6
+40411	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40411	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40411	-	-	-	-	Vodafonemobileconnect	www	2301	-	-	-	ipv4v6
+40411	-	-	-	-	Vodafone live	portalnmms	2302	-	-	-	ipv4v6
+40412	-	-	-	-	Idea_Internet	internet	2303	-	-	-	ipv4v6
+40412	-	-	-	-	IDEA GPRS	imis	2304	-	-	-	ipv4v6
+40413	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40413	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40413	-	-	-	-	Vodafonemobileconnect	www	2307	-	-	-	ipv4v6
+40413	-	-	-	-	Vodafone live	portalnmms	2308	-	-	-	ipv4v6
+40414	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40414	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40414	-	-	-	-	Idea_Internet	internet	2310	-	-	-	ipv4v6
+40414	-	-	-	-	IDEA GPRS	imis	2311	-	-	-	ipv4v6
+40415	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40415	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40415	-	-	-	-	Vodafonemobileconnect	www	2313	-	-	-	ipv4v6
+40415	-	-	-	-	Vodafone live	portalnmms	2314	-	-	-	ipv4v6
+40416	-	-	-	-	Mobile Office	airtelgprs.com	2315	-	-	-	ipv4v6
+40416	-	-	-	-	AIRTEL LIVE	airtelfun.com	2316	-	-	-	ipv4v6
+40417	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2319	-	-	-	ipv4v6
+40417	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2320	-	-	-	ipv4v6
+40417	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2321	-	-	-	ipv4v6
+40417	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2322	-	-	-	ipv4v6
+40417	-	-	-	-	Aircel Internet (40417)	aircelgprs	2323	-	-	-	ipv4v6
+40418	-	-	-	-	Reliance Net	smartnet	2326	-	-	-	ipv4v6
+40418	-	-	-	-	Reliance WAP	smartwap	2327	-	-	pap	ipv4v6
+40418	-	-	-	-	Reliance Internet (40418)	rcomnet	2328	-	-	-	ipv4v6
+40419	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40419	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40419	-	-	-	-	Idea_Internet	internet	2329	-	-	-	ipv4v6
+40419	-	-	-	-	IDEA GPRS	imis	2330	-	-	-	ipv4v6
+40420	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40420	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40420	-	-	-	-	Vodafonemobileconnect	www	2333	-	-	-	ipv4v6
+40420	-	-	-	-	Vodafone live	portalnmms	2334	-	-	-	ipv4v6
+40422	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40422	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40422	-	-	-	-	Idea_Internet	internet	2335	-	-	-	ipv4v6
+40422	-	-	-	-	IDEA GPRS	imis	2336	-	-	-	ipv4v6
+40424	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40424	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40424	-	-	-	-	Idea_Internet	internet	2338	-	-	-	ipv4v6
+40424	-	-	-	-	IDEA GPRS	imis	2339	-	-	-	ipv4v6
+40425	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2341	-	-	-	ipv4v6
+40425	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2342	-	-	-	ipv4v6
+40425	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2343	-	-	-	ipv4v6
+40425	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2344	-	-	-	ipv4v6
+40425	-	-	-	-	Aircel Internet (40425)	aircelgprs	2345	-	-	-	ipv4v6
+40427	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40427	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40427	-	-	-	-	Vodafonemobileconnect	www	2348	-	-	-	ipv4v6
+40427	-	-	-	-	Vodafone live	portalnmms	2349	-	-	-	ipv4v6
+40428	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40428	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2350	-	-	-	ipv4v6
+40428	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2351	-	-	-	ipv4v6
+40428	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2352	-	-	-	ipv4v6
+40428	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2353	-	-	-	ipv4v6
+40428	-	-	-	-	Aircel Internet (40428)	aircelgprs	2354	-	-	-	ipv4v6
+40429	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2356	-	-	-	ipv4v6
+40429	-	-	-	-	Pocket Internet-Postpaid	myaircelpost	2357	-	-	-	ipv4v6
+40429	-	-	-	-	Pocket Internet-Prepaid	myaircel	2358	-	-	-	ipv4v6
+40429	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2359	-	-	-	ipv4v6
+40429	-	-	-	-	Aircel Internet (40429)	aircelgprs	2360	-	-	-	ipv4v6
+40429	-	-	-	-	Aircel WAP (40429)	aircelwap	2361	-	-	-	ipv4v6
+40430	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40430	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40430	-	-	-	-	Vodafonemobileconnect	www	2364	-	-	-	ipv4v6
+40430	-	-	-	-	Vodafone live	portalnmms	2365	-	-	-	ipv4v6
+40431	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40431	-	-	-	-	Mobile Office	airtelgprs.com	2366	-	-	-	ipv4v6
+40431	-	-	-	-	AIRTEL LIVE	airtelfun.com	2367	-	-	-	ipv4v6
+40433	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2370	-	-	-	ipv4v6
+40433	-	-	-	-	Pocket Internet-Postpaid	myaircelpost	2371	-	-	-	ipv4v6
+40433	-	-	-	-	Pocket Internet-Prepaid	myaircel	2372	-	-	-	ipv4v6
+40433	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2373	-	-	-	ipv4v6
+40433	-	-	-	-	Aircel Internet (40433)	aircelgprs	2374	-	-	-	ipv4v6
+40433	-	-	-	-	Aircel WAP (40433)	aircelwap	2375	-	-	-	ipv4v6
+40434	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40434	-	-	-	-	bsnlnet	bsnlnet	2377	-	-	pap	ipv4v6
+40434	-	-	-	-	bsnllive	bsnllive	2378	-	-	-	ipv4v6
+40435	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2380	-	-	-	ipv4v6
+40435	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2381	-	-	-	ipv4v6
+40435	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2382	-	-	-	ipv4v6
+40435	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2383	-	-	-	ipv4v6
+40435	-	-	-	-	Aircel Internet (40435)	aircelgprs	2384	-	-	-	ipv4v6
+40436	-	-	-	-	Reliance Net	smartnet	2387	-	-	-	ipv4v6
+40436	-	-	-	-	Reliance WAP	smartwap	2388	-	-	pap	ipv4v6
+40436	-	-	-	-	Reliance Internet (40436)	rcomnet	2389	-	-	-	ipv4v6
+40437	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40437	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2390	-	-	-	ipv4v6
+40437	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2391	-	-	-	ipv4v6
+40437	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2392	-	-	-	ipv4v6
+40437	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2393	-	-	-	ipv4v6
+40437	-	-	-	-	Aircel Internet (40437)	aircelgprs	2394	-	-	-	ipv4v6
+40438	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40438	-	-	-	-	bsnlnet	bsnlnet	2397	-	-	-	ipv4v6
+40438	-	-	-	-	bsnllive	bsnllive	2398	-	-	-	ipv4v6
+40440	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40440	-	-	-	-	Mobile Office	airtelgprs.com	2399	-	-	-	ipv4v6
+40440	-	-	-	-	AIRTEL LIVE	airtelfun.com	2400	-	-	-	ipv4v6
+40441	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40441	-	-	-	-	Aircel-GPRS-Postpaid	aircelgprs.po	2403	-	-	-	ipv4v6
+40441	-	-	-	-	Aircel-GPRS-Prepaid	aircelgprs.pr	2404	-	-	-	ipv4v6
+40441	-	-	-	-	Pocket Internet-Postpaid	aircelwap.po	2405	-	-	-	ipv4v6
+40441	-	-	-	-	Pocket Internet-Prepaid	aircelwap.pr	2406	-	-	-	ipv4v6
+40441	-	-	-	-	Aircel Internet (40441)	aircelgprs	2407	-	-	-	ipv4v6
+40441	-	-	-	-	Aircel WAP (40441)	aircelwap	2408	-	-	-	ipv4v6
+40442	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40442	-	-	-	-	Aircel-GPRS-Postpaid	aircelgprs.po	2412	-	-	-	ipv4v6
+40442	-	-	-	-	Aircel-GPRS-Prepaid	aircelgprs.pr	2413	-	-	-	ipv4v6
+40442	-	-	-	-	Pocket Internet-Postpaid	aircelwap.po	2414	-	-	-	ipv4v6
+40442	-	-	-	-	Pocket Internet-Prepaid	aircelwap.pr	2415	-	-	-	ipv4v6
+40442	-	-	-	-	Aircel Internet (40442)	aircelgprs	2416	-	-	-	ipv4v6
+40443	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40443	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40443	-	-	-	-	Vodafonemobileconnect	www	2420	-	-	-	ipv4v6
+40443	-	-	-	-	Vodafone live	portalnmms	2421	-	-	-	ipv4v6
+40444	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40444	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40444	-	-	-	-	Idea_Internet	internet	2422	-	-	-	ipv4v6
+40444	-	-	-	-	IDEA GPRS	imis	2423	-	-	-	ipv4v6
+40445	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40445	-	-	-	-	Mobile Office	airtelgprs.com	2425	-	-	-	ipv4v6
+40445	-	-	-	-	AIRTEL LIVE	airtelfun.com	2426	-	-	-	ipv4v6
+40446	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40446	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40446	-	-	-	-	Vodafonemobileconnect	www	2430	-	-	-	ipv4v6
+40446	-	-	-	-	Vodafone live	portalnmms	2431	-	-	-	ipv4v6
+40449	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40449	-	-	-	-	Mobile Office	airtelgprs.com	2432	-	-	-	ipv4v6
+40449	-	-	-	-	AIRTEL LIVE	airtelfun.com	2433	-	-	-	ipv4v6
+40450	-	-	-	-	Reliance Net	smartnet	2437	-	-	-	ipv4v6
+40450	-	-	-	-	Reliance WAP	smartwap	2438	-	-	pap	ipv4v6
+40451	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40451	-	-	-	-	bsnlnet	bsnlnet	2440	-	-	-	ipv4v6
+40451	-	-	-	-	bsnllive	bsnllive	2441	-	-	-	ipv4v6
+40452	-	-	-	-	Reliance Net	smartnet	2443	-	-	-	ipv4v6
+40452	-	-	-	-	Reliance WAP	smartwap	2444	-	-	pap	ipv4v6
+40453	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40453	-	-	-	-	bsnlnet	bsnlnet	2446	-	-	-	ipv4v6
+40453	-	-	-	-	bsnllive	bsnllive	2447	-	-	-	ipv4v6
+40454	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40454	-	-	-	-	bsnlnet	bsnlnet	2449	-	-	-	ipv4v6
+40454	-	-	-	-	bsnllive	bsnllive	2450	-	-	-	ipv4v6
+40455	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40455	-	-	-	-	bsnlnet	bsnlnet	2452	-	-	-	ipv4v6
+40455	-	-	-	-	bsnllive	bsnllive	2453	-	-	-	ipv4v6
+40456	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40456	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40456	-	-	-	-	Idea_Internet	internet	2454	-	-	-	ipv4v6
+40456	-	-	-	-	IDEA GPRS	imis	2455	-	-	-	ipv4v6
+40457	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40457	-	-	-	-	bsnlnet	bsnlnet	2458	-	-	-	ipv4v6
+40457	-	-	-	-	bsnllive	bsnllive	2459	-	-	-	ipv4v6
+40458	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40458	-	-	-	-	bsnlnet	bsnlnet	2461	-	-	-	ipv4v6
+40458	-	-	-	-	bsnllive	bsnllive	2462	-	-	-	ipv4v6
+40459	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40459	-	-	-	-	bsnlnet	bsnlnet	2464	-	-	-	ipv4v6
+40459	-	-	-	-	bsnllive	bsnllive	2465	-	-	-	ipv4v6
+40460	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40460	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40460	-	-	-	-	Vodafonemobileconnect	www	2467	-	-	-	ipv4v6
+40460	-	-	-	-	Vodafone live	portalnmms	2468	-	-	-	ipv4v6
+40462	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40462	-	-	-	-	bsnlnet	bsnlnet	2470	-	-	-	ipv4v6
+40462	-	-	-	-	bsnllive	bsnllive	2471	-	-	-	ipv4v6
+40464	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40464	-	-	-	-	bsnlnet	bsnlnet	2473	-	-	-	ipv4v6
+40464	-	-	-	-	bsnllive	bsnllive	2474	-	-	-	ipv4v6
+40466	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40466	-	-	-	-	bsnlnet	bsnlnet	2476	-	-	-	ipv4v6
+40466	-	-	-	-	bsnllive	bsnllive	2477	-	-	-	ipv4v6
+40467	-	-	-	-	Reliance Net	smartnet	2479	-	-	-	ipv4v6
+40467	-	-	-	-	Reliance WAP	smartwap	2480	-	-	pap	ipv4v6
+40468	-	-	-	-	MTNL	mtnl.net	200	mtnl	mtnl123	-	-
+40468	-	-	-	-	MTNL	mtnl.net	201	-	-	-	-
+40468	-	-	-	-	MTNL (postpaid)	gprsmtnldel	202	mtnl	mtnl123	-	-
+40468	-	-	-	-	MTNL (prepaid)	gprsppsmum	203	mtnl	mtnl123	-	-
+40468	-	-	-	-	MTNL (postpaid)	gprsmtnlmum	204	mtnl	mtnl123	-	-
+40468	-	-	-	-	MTNL	mtnl.net	2481	mtnl	mtnl123	none	ipv4v6
+40469	-	-	-	-	MTNL	mtnl.net	200	mtnl	mtnl123	-	-
+40469	-	-	-	-	MTNL	mtnl.net	201	-	-	-	-
+40469	-	-	-	-	MTNL (postpaid)	gprsmtnldel	202	mtnl	mtnl123	-	-
+40469	-	-	-	-	MTNL (prepaid)	gprsppsmum	203	mtnl	mtnl123	-	-
+40469	-	-	-	-	MTNL (postpaid)	gprsmtnlmum	204	mtnl	mtnl123	-	-
+40469	-	-	-	-	MTNL	mtnl.net	2482	mtnl	mtnl123	none	ipv4v6
+40470	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40470	-	-	-	-	Mobile Office	airtelgprs.com	2483	-	-	-	ipv4v6
+40470	-	-	-	-	AIRTEL LIVE	airtelfun.com	2484	-	-	-	ipv4v6
+40471	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40471	-	-	-	-	bsnlnet	bsnlnet	2488	-	-	-	ipv4v6
+40471	-	-	-	-	bsnllive	bsnllive	2489	-	-	-	ipv4v6
+40472	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40472	-	-	-	-	bsnlnet	bsnlnet	2491	-	-	-	ipv4v6
+40472	-	-	-	-	bsnllive	bsnllive	2492	-	-	-	ipv4v6
+40473	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40473	-	-	-	-	bsnlnet	bsnlnet	2494	-	-	-	ipv4v6
+40473	-	-	-	-	bsnllive	bsnllive	2495	-	-	-	ipv4v6
+40474	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40474	-	-	-	-	bsnlnet	bsnlnet	2497	-	-	-	ipv4v6
+40474	-	-	-	-	bsnllive	bsnllive	2498	-	-	-	ipv4v6
+40475	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40475	-	-	-	-	bsnlnet	bsnlnet	2500	-	-	-	ipv4v6
+40475	-	-	-	-	bsnllive	bsnllive	2501	-	-	-	ipv4v6
+40476	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40476	-	-	-	-	bsnlnet	bsnlnet	2503	-	-	-	ipv4v6
+40476	-	-	-	-	bsnllive	bsnllive	2504	-	-	-	ipv4v6
+40477	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40477	-	-	-	-	bsnlnet	bsnlnet	2506	-	-	-	ipv4v6
+40477	-	-	-	-	bsnllive	bsnllive	2507	-	-	-	ipv4v6
+40478	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40478	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40478	-	-	-	-	Idea_Internet	internet	2508	-	-	-	ipv4v6
+40478	-	-	-	-	IDEA GPRS	imis	2509	-	-	-	ipv4v6
+40479	-	-	-	-	bsnlnet	bsnlnet	2512	-	-	-	ipv4v6
+40479	-	-	-	-	bsnllive	bsnllive	2513	-	-	-	ipv4v6
+40480	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40480	-	-	-	-	bsnlnet	bsnlnet	2515	-	-	-	ipv4v6
+40480	-	-	-	-	bsnllive	bsnllive	2516	-	-	-	ipv4v6
+40481	-	-	-	-	BSNL/CellOne (prepaid)	bsnlnet	200	-	-	pap	-
+40481	-	-	-	-	bsnlnet	bsnlnet	2518	-	-	-	ipv4v6
+40481	-	-	-	-	bsnllive	bsnllive	2519	-	-	-	ipv4v6
+40482	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40482	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40482	-	-	-	-	Idea_Internet	internet	2520	-	-	-	ipv4v6
+40482	-	-	-	-	IDEA GPRS	imis	2521	-	-	-	ipv4v6
+40483	-	-	-	-	Reliance Net	smartnet	2524	-	-	-	ipv4v6
+40483	-	-	-	-	Reliance WAP	smartwap	2525	-	-	pap	ipv4v6
+40484	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40484	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40484	-	-	-	-	Vodafonemobileconnect	www	2527	-	-	-	ipv4v6
+40484	-	-	-	-	Vodafone live	portalnmms	2528	-	-	-	ipv4v6
+40485	-	-	-	-	Reliance Net	smartnet	2530	-	-	-	ipv4v6
+40485	-	-	-	-	Reliance WAP	smartwap	2531	-	-	pap	ipv4v6
+40486	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40486	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40486	-	-	-	-	Vodafonemobileconnect	www	2533	-	-	-	ipv4v6
+40486	-	-	-	-	Vodafone live	portalnmms	2534	-	-	-	ipv4v6
+40487	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40487	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40487	-	-	-	-	Idea_Internet	internet	2535	-	-	-	ipv4v6
+40487	-	-	-	-	IDEA GPRS	imis	2536	-	-	-	ipv4v6
+40488	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40488	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40488	-	-	-	-	Vodafonemobileconnect	www	2539	-	-	-	ipv4v6
+40488	-	-	-	-	Vodafone live	portalnmms	2540	-	-	-	ipv4v6
+40489	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40489	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40489	-	-	-	-	Idea_Internet	internet	2541	-	-	-	ipv4v6
+40489	-	-	-	-	IDEA GPRS	imis	2542	-	-	-	ipv4v6
+40490	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40490	-	-	-	-	Mobile Office	airtelgprs.com	2544	-	-	-	ipv4v6
+40490	-	-	-	-	AIRTEL LIVE	airtelfun.com	2545	-	-	-	ipv4v6
+40491	-	-	-	-	Aircel-GPRS-Postpaid	aircelwebpost	2548	-	-	-	ipv4v6
+40491	-	-	-	-	Pocket Internet-Postpaid	aircelwappost	2549	-	-	-	ipv4v6
+40491	-	-	-	-	Pocket Internet-Prepaid	aircelwap	2550	-	-	-	ipv4v6
+40491	-	-	-	-	Aircel-GPRS-Prepaid	aircelweb	2551	-	-	-	ipv4v6
+40492	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40492	-	-	-	-	Mobile Office	airtelgprs.com	2553	-	-	-	ipv4v6
+40492	-	-	-	-	AIRTEL LIVE	airtelfun.com	2554	-	-	-	ipv4v6
+40493	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40493	-	-	-	-	Mobile Office	airtelgprs.com	2557	-	-	-	ipv4v6
+40493	-	-	-	-	AIRTEL LIVE	airtelfun.com	2558	-	-	-	ipv4v6
+40494	-	-	-	-	Mobile Office	airtelgprs.com	2561	-	-	-	ipv4v6
+40494	-	-	-	-	AIRTEL LIVE	airtelfun.com	2562	-	-	-	ipv4v6
+40495	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40495	-	-	-	-	Mobile Office	airtelgprs.com	2565	-	-	-	ipv4v6
+40495	-	-	-	-	AIRTEL LIVE	airtelfun.com	2566	-	-	-	ipv4v6
+40496	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40496	-	-	-	-	Mobile Office	airtelgprs.com	2569	-	-	-	ipv4v6
+40496	-	-	-	-	AIRTEL LIVE	airtelfun.com	2570	-	-	-	ipv4v6
+40497	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40497	-	-	-	-	Mobile Office	airtelgprs.com	2573	-	-	-	ipv4v6
+40497	-	-	-	-	AIRTEL LIVE	airtelfun.com	2574	-	-	-	ipv4v6
+40498	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40498	-	-	-	-	Mobile Office	airtelgprs.com	2577	-	-	-	ipv4v6
+40498	-	-	-	-	AIRTEL LIVE	airtelfun.com	2578	-	-	-	ipv4v6
+40501	-	-	-	-	Netconnect	rcomnet	2582	-	-	-	ipv4v6
+40501	-	-	-	-	RelianceMbWorld	rcomwap	2583	-	-	-	ipv4v6
+405025	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2644	-	-	-	ipv4v6
+405025	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2645	-	-	-	ipv4v6
+405026	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2647	-	-	-	ipv4v6
+405026	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2648	-	-	-	ipv4v6
+405027	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2650	-	-	-	ipv4v6
+405027	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2651	-	-	-	ipv4v6
+405028	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2653	-	-	-	ipv4v6
+405028	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2654	-	-	-	ipv4v6
+405029	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2656	-	-	-	ipv4v6
+405029	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2657	-	-	-	ipv4v6
+40503	-	-	-	-	Netconnect	rcomnet	2585	-	-	-	ipv4v6
+40503	-	-	-	-	RelianceMbWorld	rcomwap	2586	-	-	-	ipv4v6
+405030	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2659	-	-	-	ipv4v6
+405030	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2660	-	-	-	ipv4v6
+405031	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2662	-	-	-	ipv4v6
+405031	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2663	-	-	-	ipv4v6
+405032	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2665	-	-	-	ipv4v6
+405032	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2666	-	-	-	ipv4v6
+405033	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2668	-	-	-	ipv4v6
+405033	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2669	-	-	-	ipv4v6
+405034	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2671	-	-	-	ipv4v6
+405034	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2672	-	-	-	ipv4v6
+405035	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2674	-	-	-	ipv4v6
+405035	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2675	-	-	-	ipv4v6
+405036	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2677	-	-	-	ipv4v6
+405036	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2678	-	-	-	ipv4v6
+405037	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2680	-	-	-	ipv4v6
+405037	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2681	-	-	-	ipv4v6
+405038	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2683	-	-	-	ipv4v6
+405038	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2684	-	-	-	ipv4v6
+405039	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2686	-	-	-	ipv4v6
+405039	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2687	-	-	-	ipv4v6
+40504	-	-	-	-	Netconnect	rcomnet	2588	-	-	-	ipv4v6
+40504	-	-	-	-	RelianceMbWorld	rcomwap	2589	-	-	-	ipv4v6
+405040	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2689	-	-	-	ipv4v6
+405040	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2690	-	-	-	ipv4v6
+405041	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2692	-	-	-	ipv4v6
+405041	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2693	-	-	-	ipv4v6
+405042	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2695	-	-	-	ipv4v6
+405042	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2696	-	-	-	ipv4v6
+405043	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2698	-	-	-	ipv4v6
+405043	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2699	-	-	-	ipv4v6
+405044	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2701	-	-	-	ipv4v6
+405044	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2702	-	-	-	ipv4v6
+405045	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2704	-	-	-	ipv4v6
+405045	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2705	-	-	-	ipv4v6
+405046	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2707	-	-	-	ipv4v6
+405046	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2708	-	-	-	ipv4v6
+405047	-	-	-	-	TATA DOCOMO INTERNET	tata.docomo.internet	2710	-	-	-	ipv4v6
+405047	-	-	-	-	TATA DOCOMO DIVE-IN	tata.docomo.dive.in	2711	-	-	-	ipv4v6
+40505	-	-	-	-	Netconnect	rcomnet	2591	-	-	-	ipv4v6
+40505	-	-	-	-	RelianceMbWorld	rcomwap	2592	-	-	-	ipv4v6
+40506	-	-	-	-	Netconnect	rcomnet	2594	-	-	-	ipv4v6
+40506	-	-	-	-	RelianceMbWorld	rcomwap	2595	-	-	-	ipv4v6
+40507	-	-	-	-	Netconnect	rcomnet	2597	-	-	-	ipv4v6
+40507	-	-	-	-	RelianceMbWorld	rcomwap	2598	-	-	-	ipv4v6
+40508	-	-	-	-	Netconnect	rcomnet	2600	-	-	-	ipv4v6
+40508	-	-	-	-	RelianceMbWorld	rcomwap	2601	-	-	-	ipv4v6
+40509	-	-	-	-	Netconnect	rcomnet	2603	-	-	-	ipv4v6
+40509	-	-	-	-	RelianceMbWorld	rcomwap	2604	-	-	-	ipv4v6
+40510	-	-	-	-	Netconnect	rcomnet	2606	-	-	-	ipv4v6
+40510	-	-	-	-	RelianceMbWorld	rcomwap	2607	-	-	-	ipv4v6
+40511	-	-	-	-	Netconnect	rcomnet	2609	-	-	-	ipv4v6
+40511	-	-	-	-	RelianceMbWorld	rcomwap	2610	-	-	-	ipv4v6
+40512	-	-	-	-	Netconnect	rcomnet	2612	-	-	-	ipv4v6
+40512	-	-	-	-	RelianceMbWorld	rcomwap	2613	-	-	-	ipv4v6
+40513	-	-	-	-	Netconnect	rcomnet	2615	-	-	-	ipv4v6
+40513	-	-	-	-	RelianceMbWorld	rcomwap	2616	-	-	-	ipv4v6
+40514	-	-	-	-	Netconnect	rcomnet	2618	-	-	-	ipv4v6
+40514	-	-	-	-	RelianceMbWorld	rcomwap	2619	-	-	-	ipv4v6
+40515	-	-	-	-	Netconnect	rcomnet	2621	-	-	-	ipv4v6
+40515	-	-	-	-	RelianceMbWorld	rcomwap	2622	-	-	-	ipv4v6
+40517	-	-	-	-	Netconnect	rcomnet	2624	-	-	-	ipv4v6
+40517	-	-	-	-	RelianceMbWorld	rcomwap	2625	-	-	-	ipv4v6
+40518	-	-	-	-	Netconnect	rcomnet	2627	-	-	-	ipv4v6
+40518	-	-	-	-	RelianceMbWorld	rcomwap	2628	-	-	-	ipv4v6
+40519	-	-	-	-	Netconnect	rcomnet	2630	-	-	-	ipv4v6
+40519	-	-	-	-	RelianceMbWorld	rcomwap	2631	-	-	-	ipv4v6
+40520	-	-	-	-	Netconnect	rcomnet	2633	-	-	-	ipv4v6
+40520	-	-	-	-	RelianceMbWorld	rcomwap	2634	-	-	-	ipv4v6
+40521	-	-	-	-	Netconnect	rcomnet	2636	-	-	-	ipv4v6
+40521	-	-	-	-	RelianceMbWorld	rcomwap	2637	-	-	-	ipv4v6
+40522	-	-	-	-	Netconnect	rcomnet	2639	-	-	-	ipv4v6
+40522	-	-	-	-	RelianceMbWorld	rcomwap	2640	-	-	-	ipv4v6
+40523	-	-	-	-	Netconnect	rcomnet	2642	-	-	-	ipv4v6
+40523	-	-	-	-	RelianceMbWorld	rcomwap	2643	-	-	-	ipv4v6
+40551	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40551	-	-	-	-	Mobile Office	airtelgprs.com	2713	-	-	-	ipv4v6
+40551	-	-	-	-	AIRTEL LIVE	airtelfun.com	2714	-	-	-	ipv4v6
+40552	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40552	-	-	-	-	Mobile Office	airtelgprs.com	2717	-	-	-	ipv4v6
+40552	-	-	-	-	AIRTEL LIVE	airtelfun.com	2718	-	-	-	ipv4v6
+40553	-	-	-	-	Mobile Office	airtelgprs.com	2721	-	-	-	ipv4v6
+40553	-	-	-	-	AIRTEL LIVE	airtelfun.com	2722	-	-	-	ipv4v6
+40554	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40554	-	-	-	-	Mobile Office	airtelgprs.com	2725	-	-	-	ipv4v6
+40554	-	-	-	-	AIRTEL LIVE	airtelfun.com	2726	-	-	-	ipv4v6
+40555	-	-	-	-	Mobile Office	airtelgprs.com	2729	-	-	-	ipv4v6
+40555	-	-	-	-	AIRTEL LIVE	airtelfun.com	2730	-	-	-	ipv4v6
+40556	-	-	-	-	Airtel (postpaid)	airtelgprs.com	200	-	-	-	-
+40556	-	-	-	-	Mobile Office	airtelgprs.com	2733	-	-	-	ipv4v6
+40556	-	-	-	-	AIRTEL LIVE	airtelfun.com	2734	-	-	-	ipv4v6
+40566	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40566	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40566	-	-	-	-	Vodafonemobileconnect	www	2738	-	-	-	ipv4v6
+40566	-	-	-	-	Vodafone live	portalnmms	2739	-	-	-	ipv4v6
+40567	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40567	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40567	-	-	-	-	Vodafonemobileconnect	www	2741	-	-	-	ipv4v6
+40567	-	-	-	-	Vodafone live	portalnmms	2742	-	-	-	ipv4v6
+40570	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+40570	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+40570	-	-	-	-	Idea_Internet	internet	2743	-	-	-	ipv4v6
+40570	-	-	-	-	IDEA GPRS	imis	2744	-	-	-	ipv4v6
+405750	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405750	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405750	-	-	-	-	Vodafonemobileconnect	www	2747	-	-	-	ipv4v6
+405750	-	-	-	-	Vodafone live	portalnmms	2748	-	-	-	ipv4v6
+405751	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405751	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405751	-	-	-	-	Vodafonemobileconnect	www	2750	-	-	-	ipv4v6
+405751	-	-	-	-	Vodafone live	portalnmms	2751	-	-	-	ipv4v6
+405752	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405752	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405752	-	-	-	-	Vodafonemobileconnect	www	2753	-	-	-	ipv4v6
+405752	-	-	-	-	Vodafone live	portalnmms	2754	-	-	-	ipv4v6
+405753	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405753	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405753	-	-	-	-	Vodafonemobileconnect	www	2756	-	-	-	ipv4v6
+405753	-	-	-	-	Vodafone live	portalnmms	2757	-	-	-	ipv4v6
+405754	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405754	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405754	-	-	-	-	Vodafonemobileconnect	www	2759	-	-	-	ipv4v6
+405754	-	-	-	-	Vodafone live	portalnmms	2760	-	-	-	ipv4v6
+405755	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405755	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405755	-	-	-	-	Vodafonemobileconnect	www	2762	-	-	-	ipv4v6
+405755	-	-	-	-	Vodafone live	portalnmms	2763	-	-	-	ipv4v6
+405756	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405756	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405756	-	-	-	-	Vodafonemobileconnect	www	2765	-	-	-	ipv4v6
+405756	-	-	-	-	Vodafone live	portalnmms	2766	-	-	-	ipv4v6
+405799	-	-	-	-	V! (Vodafone Idea) (prepaid)	internet	200	-	-	-	-
+405799	-	-	-	-	V! (Vodafone Idea) (prepaid)	www	201	-	-	-	-
+405799	-	-	-	-	Idea_Internet	internet	2767	-	-	-	ipv4v6
+405799	-	-	-	-	IDEA GPRS	imis	2768	-	-	-	ipv4v6
+405800	-	-	-	-	Aircel-GPRS	aircelgprs	2770	-	-	-	ipv4v6
+405800	-	-	-	-	Pocket Internet	aircelwap	2771	-	-	-	ipv4v6
+405801	-	-	-	-	Aircel-GPRS	aircelgprs	2773	-	-	-	ipv4v6
+405801	-	-	-	-	Pocket Internet	aircelwap	2774	-	-	-	ipv4v6
+405802	-	-	-	-	Aircel-GPRS	aircelgprs	2776	-	-	-	ipv4v6
+405802	-	-	-	-	Pocket Internet	aircelwap	2777	-	-	-	ipv4v6
+405803	-	-	-	-	Aircel-GPRS	aircelgprs	2779	-	-	-	ipv4v6
+405803	-	-	-	-	Pocket Internet	aircelwap	2780	-	-	-	ipv4v6
+405804	-	-	-	-	Aircel-GPRS	aircelgprs	2782	-	-	-	ipv4v6
+405804	-	-	-	-	Pocket Internet	aircelwap	2783	-	-	-	ipv4v6
+405805	-	-	-	-	Aircel-GPRS	aircelgprs	2785	-	-	-	ipv4v6
+405805	-	-	-	-	Pocket Internet	aircelwap	2786	-	-	-	ipv4v6
+405806	-	-	-	-	Aircel-GPRS	aircelgprs	2788	-	-	-	ipv4v6
+405806	-	-	-	-	Pocket Internet	aircelwap	2789	-	-	-	ipv4v6
+405807	-	-	-	-	Aircel-GPRS	aircelgprs	2791	-	-	-	ipv4v6
+405807	-	-	-	-	Pocket Internet	aircelwap	2792	-	-	-	ipv4v6
+405808	-	-	-	-	Aircel-GPRS	aircelgprs	2794	-	-	-	ipv4v6
+405808	-	-	-	-	Pocket Internet	aircelwap	2795	-	-	-	ipv4v6
+405809	-	-	-	-	Aircel-GPRS	aircelgprs	2797	-	-	-	ipv4v6
+405809	-	-	-	-	Pocket Internet	aircelwap	2798	-	-	-	ipv4v6
+405810	-	-	-	-	Aircel-GPRS	aircelgprs	2800	-	-	-	ipv4v6
+405810	-	-	-	-	Pocket Internet	aircelwap	2801	-	-	-	ipv4v6
+405811	-	-	-	-	Aircel-GPRS	aircelgprs	2803	-	-	-	ipv4v6
+405811	-	-	-	-	Pocket Internet	aircelwap	2804	-	-	-	ipv4v6
+405812	-	-	-	-	Aircel-GPRS	aircelgprs	2806	-	-	-	ipv4v6
+405812	-	-	-	-	Pocket Internet	aircelwap	2807	-	-	-	ipv4v6
+405813	-	-	-	-	Uninor Internet	uninor	2809	-	-	pap	ipv4v6
+405813	-	-	-	-	Uninor Wap	uninor	2810	-	-	-	ipv4v6
+405814	-	-	-	-	Uninor Internet	uninor	2812	-	-	pap	ipv4v6
+405814	-	-	-	-	Uninor Wap	uninor	2813	-	-	-	ipv4v6
+405815	-	-	-	-	Uninor Internet	uninor	2815	-	-	pap	ipv4v6
+405815	-	-	-	-	Uninor Wap	uninor	2816	-	-	-	ipv4v6
+405816	-	-	-	-	Uninor Internet	uninor	2818	-	-	pap	ipv4v6
+405816	-	-	-	-	Uninor Wap	uninor	2819	-	-	-	ipv4v6
+405817	-	-	-	-	Uninor Internet	uninor	2821	-	-	pap	ipv4v6
+405817	-	-	-	-	Uninor Wap	uninor	2822	-	-	-	ipv4v6
+405818	-	-	-	-	Uninor Internet	uninor	2824	-	-	pap	ipv4v6
+405818	-	-	-	-	Uninor Wap	uninor	2825	-	-	-	ipv4v6
+405819	-	-	-	-	Uninor Internet	uninor	2827	-	-	pap	ipv4v6
+405819	-	-	-	-	Uninor Wap	uninor	2828	-	-	-	ipv4v6
+405820	-	-	-	-	Uninor Internet	uninor	2830	-	-	pap	ipv4v6
+405820	-	-	-	-	Uninor Wap	uninor	2831	-	-	-	ipv4v6
+405821	-	-	-	-	Uninor Internet	uninor	2833	-	-	pap	ipv4v6
+405821	-	-	-	-	Uninor Wap	uninor	2834	-	-	-	ipv4v6
+405822	-	-	-	-	Uninor Internet	uninor	2836	-	-	pap	ipv4v6
+405822	-	-	-	-	Uninor Wap	uninor	2837	-	-	-	ipv4v6
+405823	-	-	-	-	Videocon	vinternet.com	2840	-	-	-	ipv4v6
+405824	-	-	-	-	Videocon	vinternet.com	2842	-	-	-	ipv4v6
+405825	-	-	-	-	Videocon	vinternet.com	2844	-	-	-	ipv4v6
+405826	-	-	-	-	Videocon	vinternet.com	2846	-	-	-	ipv4v6
+405827	-	-	-	-	Videocon	vinternet.com	2848	-	-	-	ipv4v6
+405828	-	-	-	-	Videocon	vinternet.com	2850	-	-	-	ipv4v6
+405829	-	-	-	-	Videocon	vinternet.com	2852	-	-	-	ipv4v6
+405830	-	-	-	-	Videocon	vinternet.com	2854	-	-	-	ipv4v6
+405831	-	-	-	-	Videocon	vinternet.com	2856	-	-	-	ipv4v6
+405832	-	-	-	-	Videocon	vinternet.com	2858	-	-	-	ipv4v6
+405833	-	-	-	-	Videocon	vinternet.com	2860	-	-	-	ipv4v6
+405834	-	-	-	-	Videocon	vinternet.com	2862	-	-	-	ipv4v6
+405835	-	-	-	-	Videocon	vinternet.com	2864	-	-	-	ipv4v6
+405836	-	-	-	-	Videocon	vinternet.com	2866	-	-	-	ipv4v6
+405837	-	-	-	-	Videocon	vinternet.com	2868	-	-	-	ipv4v6
+405838	-	-	-	-	Videocon	vinternet.com	2870	-	-	-	ipv4v6
+405839	-	-	-	-	Videocon	vinternet.com	2872	-	-	-	ipv4v6
+405840	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405840	-	-	-	-	Reliance Jio	jionet	2873	-	-	-	ipv4v6
+405841	-	-	-	-	Videocon	vinternet.com	2876	-	-	-	ipv4v6
+405842	-	-	-	-	Videocon	vinternet.com	2878	-	-	-	ipv4v6
+405843	-	-	-	-	Videocon	vinternet.com	2880	-	-	-	ipv4v6
+405844	-	-	-	-	Uninor Internet	uninor	2881	-	-	pap	ipv4v6
+405844	-	-	-	-	Uninor Wap	uninor	2882	-	-	-	ipv4v6
+405845	-	-	-	-	Idea_Internet	internet	2884	-	-	-	ipv4v6
+405845	-	-	-	-	IDEA GPRS	imis	2885	-	-	-	ipv4v6
+405846	-	-	-	-	Idea_Internet	internet	2887	-	-	-	ipv4v6
+405846	-	-	-	-	IDEA GPRS	imis	2888	-	-	-	ipv4v6
+405847	-	-	-	-	Idea_Internet	internet	2890	-	-	-	ipv4v6
+405847	-	-	-	-	IDEA GPRS	imis	2891	-	-	-	ipv4v6
+405848	-	-	-	-	Idea_Internet	internet	2893	-	-	-	ipv4v6
+405848	-	-	-	-	IDEA GPRS	imis	2894	-	-	-	ipv4v6
+405849	-	-	-	-	Idea_Internet	internet	2896	-	-	-	ipv4v6
+405849	-	-	-	-	IDEA GPRS	imis	2897	-	-	-	ipv4v6
+405850	-	-	-	-	Idea_Internet	internet	2899	-	-	-	ipv4v6
+405850	-	-	-	-	IDEA GPRS	imis	2900	-	-	-	ipv4v6
+405851	-	-	-	-	Idea_Internet	internet	2902	-	-	-	ipv4v6
+405851	-	-	-	-	IDEA GPRS	imis	2903	-	-	-	ipv4v6
+405852	-	-	-	-	Idea_Internet	internet	2905	-	-	-	ipv4v6
+405852	-	-	-	-	IDEA GPRS	imis	2906	-	-	-	ipv4v6
+405853	-	-	-	-	Idea_Internet	internet	2908	-	-	-	ipv4v6
+405853	-	-	-	-	IDEA GPRS	imis	2909	-	-	-	ipv4v6
+405854	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405854	-	-	-	-	Reliance Jio	jionet	2911	-	-	-	ipv4v6
+405855	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405855	-	-	-	-	Reliance Jio	jionet	2913	-	-	-	ipv4v6
+405856	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405856	-	-	-	-	Reliance Jio	jionet	2915	-	-	-	ipv4v6
+405857	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405857	-	-	-	-	Reliance Jio	jionet	2917	-	-	-	ipv4v6
+405858	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405858	-	-	-	-	Reliance Jio	jionet	2919	-	-	-	ipv4v6
+405859	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405859	-	-	-	-	Reliance Jio	jionet	2921	-	-	-	ipv4v6
+405860	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405860	-	-	-	-	Reliance Jio	jionet	2923	-	-	-	ipv4v6
+405861	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405861	-	-	-	-	Reliance Jio	jionet	2925	-	-	-	ipv4v6
+405862	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405862	-	-	-	-	Reliance Jio	jionet	2927	-	-	-	ipv4v6
+405863	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405863	-	-	-	-	Reliance Jio	jionet	2929	-	-	-	ipv4v6
+405864	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405864	-	-	-	-	Reliance Jio	jionet	2931	-	-	-	ipv4v6
+405865	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405865	-	-	-	-	Reliance Jio	jionet	2933	-	-	-	ipv4v6
+405866	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405866	-	-	-	-	Reliance Jio	jionet	2935	-	-	-	ipv4v6
+405867	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405867	-	-	-	-	Reliance Jio	jionet	2937	-	-	-	ipv4v6
+405868	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405868	-	-	-	-	Reliance Jio	jionet	2939	-	-	-	ipv4v6
+405869	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405869	-	-	-	-	Reliance Jio	jionet	2941	-	-	-	ipv4v6
+405870	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405870	-	-	-	-	Reliance Jio	jionet	2943	-	-	-	ipv4v6
+405871	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405871	-	-	-	-	Reliance Jio	jionet	2945	-	-	-	ipv4v6
+405872	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405872	-	-	-	-	Reliance Jio	jionet	2947	-	-	-	ipv4v6
+405873	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405873	-	-	-	-	Reliance Jio	jionet	2949	-	-	-	ipv4v6
+405874	-	-	-	-	Reliance Jio (prepaid)	jionet	200	-	-	-	-
+405874	-	-	-	-	Reliance Jio	jionet	2951	-	-	-	ipv4v6
+405875	-	-	-	-	Uninor Internet	uninor	2953	-	-	pap	ipv4v6
+405875	-	-	-	-	Uninor Wap	uninor	2954	-	-	-	ipv4v6
+405876	-	-	-	-	Uninor Internet	uninor	2956	-	-	pap	ipv4v6
+405876	-	-	-	-	Uninor Wap	uninor	2957	-	-	-	ipv4v6
+405877	-	-	-	-	Uninor Internet	uninor	2959	-	-	pap	ipv4v6
+405877	-	-	-	-	Uninor Wap	uninor	2960	-	-	-	ipv4v6
+405878	-	-	-	-	Uninor Internet	uninor	2962	-	-	pap	ipv4v6
+405878	-	-	-	-	Uninor Wap	uninor	2963	-	-	-	ipv4v6
+405879	-	-	-	-	Uninor Internet	uninor	2965	-	-	pap	ipv4v6
+405879	-	-	-	-	Uninor Wap	uninor	2966	-	-	-	ipv4v6
+405880	-	-	-	-	Uninor Internet	uninor	2968	-	-	pap	ipv4v6
+405880	-	-	-	-	Uninor Wap	uninor	2969	-	-	-	ipv4v6
+405881	-	-	-	-	STEL	gprs.stel.in	2971	-	-	-	ipv4v6
+405882	-	-	-	-	STEL	gprs.stel.in	2972	-	-	-	ipv4v6
+405883	-	-	-	-	STEL	gprs.stel.in	2973	-	-	-	ipv4v6
+405884	-	-	-	-	STEL	gprs.stel.in	2974	-	-	-	ipv4v6
+405885	-	-	-	-	STEL	gprs.stel.in	2975	-	-	-	ipv4v6
+405886	-	-	-	-	STEL	gprs.stel.in	2976	-	-	-	ipv4v6
+405908	-	-	-	-	IDEA	internet	2977	-	-	-	ipv4v6
+405909	-	-	-	-	IDEA	internet	2979	-	-	-	ipv4v6
+405910	-	-	-	-	IDEA	internet	2981	-	-	-	ipv4v6
+405911	-	-	-	-	IDEA	internet	2983	-	-	-	ipv4v6
+405912	-	-	-	-	Cheers	internet	2985	-	-	-	ipv4v6
+405913	-	-	-	-	Cheers	internet	2986	-	-	-	ipv4v6
+405914	-	-	-	-	Cheers	internet	2987	-	-	-	ipv4v6
+405915	-	-	-	-	Cheers	internet	2988	-	-	-	ipv4v6
+405916	-	-	-	-	Cheers	internet	2989	-	-	-	ipv4v6
+405917	-	-	-	-	Cheers	internet	2990	-	-	-	ipv4v6
+405918	-	-	-	-	Cheers	internet	2991	-	-	-	ipv4v6
+405919	-	-	-	-	Cheers	internet	2992	-	-	-	ipv4v6
+405920	-	-	-	-	Cheers	internet	2993	-	-	-	ipv4v6
+405921	-	-	-	-	Cheers	internet	2994	-	-	-	ipv4v6
+405922	-	-	-	-	Cheers	internet	2995	-	-	-	ipv4v6
+405923	-	-	-	-	Cheers	internet	2996	-	-	-	ipv4v6
+405924	-	-	-	-	Cheers	internet	2997	-	-	-	ipv4v6
+405925	-	-	-	-	Uninor Internet	uninor	2998	-	-	pap	ipv4v6
+405925	-	-	-	-	Uninor Wap	uninor	2999	-	-	-	ipv4v6
+405926	-	-	-	-	Uninor Internet	uninor	3001	-	-	pap	ipv4v6
+405926	-	-	-	-	Uninor Wap	uninor	3002	-	-	-	ipv4v6
+405927	-	-	-	-	Uninor Internet	uninor	3004	-	-	pap	ipv4v6
+405927	-	-	-	-	Uninor Wap	uninor	3005	-	-	-	ipv4v6
+405928	-	-	-	-	Uninor Internet	uninor	3007	-	-	pap	ipv4v6
+405928	-	-	-	-	Uninor Wap	uninor	3008	-	-	-	ipv4v6
+405929	-	-	-	-	Uninor Internet	uninor	3010	-	-	pap	ipv4v6
+405929	-	-	-	-	Uninor Wap	uninor	3011	-	-	-	ipv4v6
+405930	-	-	-	-	Cheers	internet	3013	-	-	-	ipv4v6
+405931	-	-	-	-	Cheers	internet	3014	-	-	-	ipv4v6
+405932	-	-	-	-	Videocon	vinternet.com	3016	-	-	-	ipv4v6
+41001	-	-	-	-	Mobilink (postpaid)	connect.mobilinkworld.com	200	-	-	-	-
+41001	-	-	-	-	Mobilink (postpaid)	jazzconnect.mobilinkworld.com	201	-	-	-	-
+41001	-	-	-	-	Mobilink WAP GPRS	connect.mobilinkworld.com	3017	Mobilink	Mobilink	-	-
+41003	-	-	-	-	Ufone (postpaid)	ufone.internet	200	ufone	ufone	-	-
+41003	-	-	-	-	Ufone WAP	ufone.internet	3019	-	-	-	-
+41004	-	-	-	-	ZONG (postpaid)	zonginternet	200	-	-	-	-
+41006	-	-	-	-	Telenor (postpaid)	internet	200	telenor	telenor	-	-
+41006	-	-	-	-	Telenor WAP	internet	3023	-	-	-	-
+41007	-	-	-	-	Warid (postpaid)	warid	200	-	-	-	-
+41007	-	-	-	-	Warid WAP	wap.warid	3025	-	-	-	-
+41201	-	-	-	-	AWCC (postpaid)	internet	200	awcc	1111	-	-
+41201	-	-	-	-	AWCC	default	3027	-	-	-	-
+41220	-	-	-	-	Roshan	default	3028	-	-	-	-
+41240	-	-	-	-	MTN	default	3029	-	-	-	-
+41250	-	-	-	-	Etisalat	default	3030	-	-	-	-
+41301	-	-	-	-	Mobitel (postpaid)	isp	200	-	-	-	-
+41301	-	-	-	-	Mobitel	default	3031	-	-	-	-
+41302	-	-	-	-	Dialog GSM (postpaid)	www.dialogsl.com	200	-	-	-	-
+41302	-	-	-	-	Dialog GSM (prepaid)	ppinternet	201	-	-	-	-
+41302	-	-	-	-	Dialog GSM (postpaid)	dialogbb	202	-	-	-	-
+41302	-	-	-	-	Dialog GSM (prepaid)	kitbb.com	203	-	-	-	-
+41302	-	-	-	-	Dialog	default	3032	-	-	-	-
+41303	-	-	-	-	Tigo (postpaid)	wap	200	-	-	-	-
+41303	-	-	-	-	Etisalat	default	3033	-	-	-	-
+41305	-	-	-	-	Airtel (postpaid)	www.wap.airtel.lk	200	-	-	-	-
+41305	-	-	-	-	Airtel	default	3034	-	-	-	-
+41308	-	-	-	-	Hutch (postpaid)	htwap	200	-	-	-	-
+41308	-	-	-	-	Hutch	default	3035	-	-	-	-
+41401	-	-	-	-	MPT (postpaid)	mptnet	200	mptnet	mptnet	-	-
+41401	-	-	-	-	MPT	mptnet	3036	-	-	-	-
+41405	-	-	-	-	Ooredoo (postpaid)	internet	200	internet	internet	-	-
+41405	-	-	-	-	Ooredoo Internet	internet	3037	-	-	-	-
+41406	-	-	-	-	Telenor (postpaid)	internet	200	internet	internet	-	-
+41406	-	-	-	-	Telenor INTERNET	internet	3038	-	-	-	-
+41501	-	-	-	-	Alfa Internet	internet.mic1.com.lb	3039	mic1	mic1	-	-
+41501	-	-	-	-	Alfawap	wap.mic1.com.lb	3040	mic1	mic1	-	-
+41503	-	-	-	-	MTC Touch (postpaid)	gprs.mtctouch.com.lb	200	-	-	-	-
+41503	-	-	-	-	touch	touch	3042	-	-	-	-
+41503	-	-	-	-	touch_WAP	wap	3043	-	-	-	-
+41601	-	-	-	-	Zain (postpaid)	zain	200	Zain	Zain	-	-
+41601	-	-	-	-	Zain JO Internet	zain	3045	zain	zain	pap	-
+41603	-	-	-	-	Umniah internet	net	3049	-	-	-	-
+41603	-	-	-	-	Umniah WAP	wap	3050	-	-	-	-
+41677	-	-	-	-	Orange (postpaid)	net.orange.jo	200	net	net	-	-
+41677	-	-	-	-	Orange Internet	net.orange.jo	3053	net	net	pap	-
+41677	-	-	-	-	Orange WAP	wap.orange.jo	3054	wap	wap	pap	-
+41701	-	-	-	-	Syriatel Net	net.syriatel.com	3055	-	-	-	-
+41702	-	-	-	-	MTN WAP	internet	3057	-	-	-	-
+41750	-	-	-	-	Rcell Internet	internet	3060	-	-	-	-
+41805	-	-	-	-	Asiacell Internet	net.asiacell.com	3061	-	-	-	-
+41808	-	-	-	-	SanaTel	default	3063	-	-	-	-
+41820	-	-	-	-	ZAIN-GPRS	internet	3064	atheer	atheer	pap	-
+41830	-	-	-	-	ZAIN-GPRS	internet	3066	atheer	atheer	pap	-
+41840	-	-	-	-	Korek (postpaid)	net.korek.com	200	korek	korek	-	-
+41840	-	-	-	-	Korek 9595	internet.korek.com	3068	-	-	-	-
+41845	-	-	-	-	Mobitel	default	3072	-	-	-	-
+41850	-	-	-	-	Asia Cell (postpaid)	net.asiacell.com	200	-	-	-	-
+41862	-	-	-	-	Itisaluna	default	3073	-	-	-	-
+41892	-	-	-	-	Omnnea	default	3074	-	-	-	-
+41902	-	-	-	-	Zain (postpaid)	pps	200	pps	pps	-	-
+41902	-	-	-	-	Zain (postpaid)	apn01	201	-	-	-	-
+41902	-	-	-	-	Zain WAP	pps	3076	pps	pps	pap-or-chap	-
+41903	-	-	-	-	Wataniya (postpaid)	action.wataniya.com	200	-	-	-	-
+41903	-	-	-	-	Ooredoo Action	action.ooredoo.com	3078	-	-	pap	-
+41904	-	-	-	-	Viva (postpaid)	viva	200	-	-	-	-
+41904	-	-	-	-	VIVA - KW	viva	3080	-	-	none	-
+42001	-	-	-	-	STC (postpaid)	jawalnet.com.sa	200	-	-	-	-
+42003	-	-	-	-	Mobily (postpaid)	web1	200	-	-	-	-
+42003	-	-	-	-	Mobily (prepaid)	web2	201	-	-	-	-
+42004	-	-	-	-	Zain (postpaid)	zain	200	-	-	-	-
+42004	-	-	-	-	Zain Internet	zain	3089	-	-	none	-
+42101	-	-	-	-	SabaFon	default	3091	-	-	-	-
+42102	-	-	-	-	MTN	default	3093	-	-	-	-
+42104	-	-	-	-	HiTS-UNITEL	default	3095	-	-	-	-
+42111	-	-	-	-	YemenMobile	ymdata	3096	-	-	none	ipv4v6
+42202	-	-	-	-	Oman Mobile (postpaid)	taif	200	taif	taif	-	-
+42202	-	-	-	-	Oman Mobile (postpaid)	internet	201	-	-	-	-
+42202	-	-	-	-	Oman Mobile Internet	taif	3099	taif	taif	pap	-
+42203	-	-	-	-	Nawras (postpaid)	isp.nawras.com.om	200	-	-	-	-
+42203	-	-	-	-	Nawras Internet	isp.nawras.com.om	3101	test	test	pap	-
+42402	-	-	-	-	Etisalat (postpaid)	mnet	200	mnet	mnet	-	-
+42402	-	-	-	-	Etisalat (postpaid)	etisalat.ae	201	etisalat.ae	etisalat.ae	-	-
+42402	-	-	-	-	Etisalat Data Package	etisalat.ae	3102	-	-	pap	-
+42403	-	-	-	-	du (postpaid)	du	200	-	-	-	-
+42501	-	-	-	-	Partner (postpaid)	uinternet	200	-	-	-	-
+42501	-	-	-	-	3G Portal	uwap.orange.co.il	3109	-	-	-	-
+42502	-	-	-	-	CellCom (postpaid)	internetg	200	-	-	-	-
+42502	-	-	-	-	Cellcom Internet	sphone	3110	-	-	-	-
+42503	-	-	-	-	Pelephone (postpaid)	internet.pelephone.net.il	200	pcl@3g	pcl	-	-
+42503	-	-	-	-	Sphone Pelephone	sphone.pelephone.net.il	3113	pcl@3g	pcl	chap	-
+42505	-	-	-	-	Jawwal internet	internet	3114	-	-	-	-
+42506	-	-	-	-	Internet	internet	3116	-	-	-	-
+42507	-	-	-	-	Hot Mobile (postpaid)	net.hotm	200	-	-	-	-
+42508	-	-	-	-	GolanTelecom (postpaid)	internet.golantelecom.net.il	200	-	-	-	-
+42509	-	-	-	-	We4G (postpaid)	we	200	-	-	-	-
+42509	-	-	-	-	we	we	3123	-	-	-	ipv4v6
+42510	-	-	-	-	3G Portal	uwap.orange.co.il	3124	-	-	-	-
+42514	-	-	-	-	YouPhone 3G (postpaid)	data.youphone.co.il	200	-	-	-	-
+42515	-	-	-	-	Home Cellular (postpaid)	hcminternet	200	-	-	-	-
+42516	-	-	-	-	Rami Levi (postpaid)	internet.rl	200	rl@3g	rl	-	-
+42516	-	-	-	-	Rami Levi 3G	internet.rl	3128	-	-	-	-
+42519	-	-	-	-	019	019	3130	-	-	-	ipv4v6
+42526	-	-	-	-	Annatel	annatel	3131	-	-	-	-
+42601	-	-	-	-	Batelco (postpaid)	internet.batelco.com	200	wap	wap	-	-
+42601	-	-	-	-	Batelco Internet	internet.batelco.com	3132	-	-	-	-
+42601	-	-	-	-	Batelco WAP	wap.batelco.com	3133	wap	wap	none	-
+42602	-	-	-	-	Zain BH (postpaid)	internet	200	internet	internet	-	-
+42602	-	-	-	-	Zain BH (postpaid)	hsdpa	201	hsdpa	hsdpa	-	-
+42602	-	-	-	-	Zain BH Internet	internet	3135	internet	internet	none	-
+42602	-	-	-	-	Zain BH WAP	wap	3136	wap	wap	none	-
+42604	-	-	-	-	STC (postpaid)	viva.bh	200	-	-	-	-
+42604	-	-	-	-	VIVAWAP	vivawap.bh	3139	-	-	-	-
+42701	-	-	-	-	Q-Tel (postpaid)	gprs.qtel	200	gprs	gprs	-	-
+42701	-	-	-	-	Internet	data	3141	-	-	pap	-
+42702	-	-	-	-	Vodafone (postpaid)	web.vodafone.com.qa	200	-	-	-	-
+42702	-	-	-	-	Vodafone (postpaid)	vodafone.com.qa	201	-	-	-	-
+42888	-	-	-	-	Unitel	default	3145	-	-	-	-
+42891	-	-	-	-	Skytel	default	3146	-	-	-	-
+42898	-	-	-	-	G.Mobile	default	3147	-	-	-	-
+42899	-	-	-	-	MobiCom (postpaid)	internet	200	-	-	-	-
+42899	-	-	-	-	MobiCom	internet	3148	-	-	none	-
+42901	-	-	-	-	Nepal Telecom (postpaid)	ntnet	200	-	-	-	-
+42901	-	-	-	-	Namaste / NT Mobile	default	3149	-	-	-	-
+42902	-	-	-	-	Mero Mobile (postpaid)	mero	200	-	-	-	-
+42902	-	-	-	-	Ncell	default	3150	-	-	-	-
+42903	-	-	-	-	Sky/C-Phone	default	3151	-	-	-	-
+42904	-	-	-	-	SmartCell	default	3152	-	-	-	-
+43208	-	-	-	-	shatelmobile	shatelmobile	3153	-	-	-	ipv4v6
+43211	-	-	-	-	همراه اول (postpaid)	mcinet	200	-	-	-	-
+43214	-	-	-	-	MCI-GPRS	mcinet	3157	-	-	-	-
+43219	-	-	-	-	MCI-GPRS	mcinet	3159	-	-	-	-
+43220	-	-	-	-	rightel	rightel	3161	-	-	-	-
+43235	-	-	-	-	ایرانسل (postpaid)	mtnirancell	200	-	-	-	-
+43270	-	-	-	-	MCI-GPRS	mcinet	3165	-	-	-	-
+43293	-	-	-	-	MCI-GPRS	mcinet	3167	-	-	-	-
+43404	-	-	-	-	Beeline (postpaid)	internet.beeline.uz	200	beeline	beeline	-	-
+43404	-	-	-	-	Beeline-UZB Internet	internet.beeline.uz	3169	beeline	beeline	pap	-
+43405	-	-	-	-	Ucell	internet	220	-	-	-	-
+43406	-	-	-	-	Perfectum Mobile	default	3173	-	-	-	-
+43407	-	-	-	-	UMS (postpaid)	net.ums.uz	200	-	-	-	-
+43407	-	-	-	-	MTS-UZB Internet	net.mts.uz	3174	mts	mts	pap	-
+43601	-	-	-	-	Tcell	default	3176	-	-	-	-
+43602	-	-	-	-	Tcell	default	3177	-	-	-	-
+43603	-	-	-	-	Megafon	default	3178	-	-	-	-
+43604	-	-	-	-	Babilon-M	default	3179	-	-	-	-
+43605	-	-	-	-	Tacom	default	3181	-	-	-	-
+43612	-	-	-	-	Tcell	default	3182	-	-	-	-
+43701	-	-	-	-	Beeline (postpaid)	internet.beeline.kg	200	-	-	-	-
+43701	-	-	-	-	Beeline	default	3183	-	-	-	-
+43703	-	-	-	-	Fonex	default	3184	-	-	-	-
+43705	-	-	-	-	MegaCom (postpaid)	internet	200	-	-	-	-
+43705	-	-	-	-	MegaCom	default	3185	-	-	-	-
+43709	-	-	-	-	O! (postpaid)	internet	200	-	-	-	-
+43709	-	-	-	-	O!	default	3186	-	-	-	-
+43801	-	-	-	-	MTS (BARASH Communication)	default	3187	-	-	-	-
+43802	-	-	-	-	TM-Cell	default	3188	-	-	-	-
+44000	-	-	-	-	e-mobile (postpaid)	emb.ne.jp	200	em	em	-	-
+44001	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44001	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44002	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44002	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44003	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44003	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44003	-	-	-	-	IIJmio (TypeI)	iijmio.jp	3189	mio@iij	iij	pap-or-chap	ipv4v6
+44003	-	-	-	-	vmobile.jp	vmobile.jp	3190	vmobile@jp	vmobile	pap-or-chap	ipv4v6
+44004	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44006	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44009	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44009	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44010	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44010	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44010	-	-	-	-	b-mobile (postpaid)	dm.jplat.net	200	bmobile@u300	bmobile	-	-
+44010	-	-	-	-	Excite	vmobile.jp	200	bb@excite.co.jp	excite	-	-
+44010	-	-	-	-	Mineo	mineo-d.jp	200	mineo@k-opti.com	mineo	chap	-
+44010	-	-	-	-	OCN (postpaid)	3g-d-2.ocn.ne.jp	200	mobileid@ocn	mobile	chap	-
+44010	-	-	-	-	b-mobile (prepaid)	bmobile.ne.jp	201	bmobile@4g	bmobile	-	-
+44010	-	-	-	-	OCN (postpaid)	lte-d.ocn.ne.jp	201	mobileid@ocn	mobile	chap	-
+44010	-	-	-	-	OCN (postpaid)	lte.ocn.ne.jp	202	mobileid@ocn	mobile	chap	-
+44010	-	-	-	-	docomo	spmode.ne.jp	3191	-	-	none	ipv4v6
+44010	-	-	-	-	OCN モバイル ONE	ocn.ne.jp	3194	mobileid@ocn	mobile	chap	ipv4
+44010	-	-	-	-	OCN モバイル ONE (LTE)	lte-d.ocn.ne.jp	3195	mobileid@ocn	mobile	chap	ipv4
+44010	-	-	-	-	TONE mobile	tone.ne.jp	3196	tone	tone	chap	-
+44011	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44011	-	-	-	-	楽天モバイル	rakuten.jp	100	-	-	-	-
+44011	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44011	-	-	-	-	楽天(rakuten.jp)	rakuten.jp	3197	-	-	-	ipv4v6
+44012	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44012	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44013	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44013	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44013	-	-	-	-	OCN (postpaid)	3g-d-2.ocn.ne.jp	200	mobileid@ocn	mobile	chap	-
+44013	-	-	-	-	OCN (postpaid)	lte-d.ocn.ne.jp	201	mobileid@ocn	mobile	chap	-
+44013	-	-	-	-	OCN (postpaid)	lte.ocn.ne.jp	202	mobileid@ocn	mobile	chap	-
+44013	-	-	-	-	OCN モバイル ONE	ocn.ne.jp	3199	mobileid@ocn	mobile	chap	ipv4
+44013	-	-	-	-	OCN モバイル ONE (LTE)	lte-d.ocn.ne.jp	3200	mobileid@ocn	mobile	chap	ipv4
+44014	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44014	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44015	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44015	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44016	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44016	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44017	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44017	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44018	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44018	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44019	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44019	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44020	-	-	-	-	Mineo	mineo-s.jp	200	mineo@k-opti.com	mineo	chap	-
+44020	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44020	-	-	-	-	Application	plus.acs.jp	3203	ym	ym	chap	-
+44021	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44021	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44022	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44022	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44023	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44023	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44024	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44024	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44025	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44025	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44026	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44026	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44027	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44027	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44028	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44028	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44029	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44029	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44030	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44030	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44031	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44031	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44032	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44032	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44033	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44033	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44034	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44034	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44035	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44035	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44036	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44036	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44037	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44037	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44038	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44038	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44039	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44039	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44040	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44041	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44042	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44043	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44044	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44045	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44046	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44047	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44048	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44049	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44049	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44051	-	-	-	-	Excite	vmobile.jp	200	bb@excite.co.jp	excite	-	-
+44051	-	-	-	-	Mineo	mineo.jp	200	mineo@k-opti.com	mineo	chap	-
+44051	-	-	-	-	povo	povo.jp	200	-	-	-	-
+44051	-	-	-	-	Rakuten	a.rmobile.jp	3204	rakuten@vdm	0000	pap-or-chap	-
+44053	-	-	-	-	楽天モバイル	rakuten.jp	100	-	-	-	-
+44058	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44058	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44060	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44060	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44061	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44061	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44062	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44062	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44063	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44063	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44064	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44064	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44065	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44065	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44066	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44066	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44067	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44067	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44068	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44068	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44069	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44069	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44087	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44087	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+44090	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44092	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44093	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44094	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44095	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44096	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44097	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44098	-	-	-	-	Softbank Mobile (postpaid)	softbank	200	ai@softbank	softbank	-	-
+44099	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
+44099	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
+45005	-	-	-	-	SK Telecom	web.sktelecom.com	200	-	-	-	-
+45005	-	-	-	-	SK Telecom	lte.sktelecom.com	201	-	-	-	-
+45005	-	-	-	-	SKT LTE INTERNET	lte.sktelecom.com	3206	-	-	-	ipv4v6
+45006	-	-	-	-	LG U+	internet.lguplus.co.kr	200	-	-	-	-
+45006	-	-	-	-	LG uplus	internet.lguplus.co.kr	3208	-	-	-	ipv4v6
+45008	-	-	-	-	KT	alwayson.ktfwing.com	200	-	-	-	-
+45008	-	-	-	-	KT	lte.ktfwing.com	201	-	-	-	-
+45008	-	-	-	-	KT	lte.ktfwing.com	3210	-	-	-	ipv4v6
+45201	-	-	-	-	MobiFone (postpaid)	m-wap	200	mms	mms	-	-
+45201	-	-	-	-	Mobi-wap-gprs 2	m-wap	3211	mms	mms	pap	-
+45202	-	-	-	-	Vinaphone (postpaid)	m3-world	200	mms	mms	-	-
+45202	-	-	-	-	Vinaphone (postpaid)	m3-card	201	mms	mms	-	-
+45202	-	-	-	-	Vina-wap-gprs	m3-world	3214	mms	mms	pap	-
+45204	-	-	-	-	Viettel Mobile (postpaid)	v-internet	200	-	-	-	-
+45204	-	-	-	-	Viettel Mobile (postpaid)	e-connect	201	-	-	-	-
+45205	-	-	-	-	Vietnamobile (postpaid)	internet	200	-	-	-	-
+45205	-	-	-	-	Vietnamobile_GPRS1	wap	3221	-	-	-	-
+45207	-	-	-	-	Beeline VN (postpaid)	internet	200	-	-	-	-
+45208	-	-	-	-	EVNTelecom/E-Mobile (postpaid)	e-internet	200	-	-	-	-
+45208	-	-	-	-	e-wap	e-wap	3229	-	-	-	-
+45400	-	-	-	-	CSL (postpaid)	internet	200	-	-	-	-
+45400	-	-	-	-	csl	mobile	3231	-	-	pap-or-chap	ipv4v6
+45400	-	-	01010000FFFFFFFF	-	1O1O	mobile	3234	-	-	pap-or-chap	ipv4v6
+45400	-	-	01020000FFFFFFFF	-	csl	mobile	3236	-	-	pap-or-chap	ipv4v6
+45400	-	-	01030000FFFFFFFF	-	SUN Mobile	sunmobile	3238	-	-	pap-or-chap	ipv4v6
+45400	-	-	01040000FFFFFFFF	-	Global Call	globalcall	3240	-	-	pap-or-chap	ipv4v6
+45400	-	-	02020001FFFFFFFF	-	HK Prepaid	mobile	3242	-	-	pap-or-chap	ipv4v6
+45400	-	-	02030001FFFFFFFF	-	HK Prepaid	mobile	3244	-	-	pap-or-chap	ipv4v6
+45400	-	-	02020002FFFFFFFF	-	HK Prepaid	mobile	3246	-	-	pap-or-chap	ipv4v6
+45400	-	-	547275554B3030656E	-	Truphone	truphone.com	3248	-	-	-	-
+45402	-	-	-	-	CSL (postpaid)	internet	200	-	-	-	-
+45402	-	-	-	-	csl	mobile	3250	-	-	pap-or-chap	ipv4v6
+45402	-	-	01010000FFFFFFFF	-	1O1O	mobile	3253	-	-	pap-or-chap	ipv4v6
+45402	-	-	01020000FFFFFFFF	-	csl	mobile	3255	-	-	pap-or-chap	ipv4v6
+45402	-	-	01030000FFFFFFFF	-	SUN Mobile	sunmobile	3257	-	-	pap-or-chap	ipv4v6
+45402	-	-	01040000FFFFFFFF	-	Global Call	globalcall	3259	-	-	pap-or-chap	ipv4v6
+45402	-	-	02020001FFFFFFFF	-	HK Prepaid	mobile	3261	-	-	pap-or-chap	ipv4v6
+45402	-	-	02030001FFFFFFFF	-	HK Prepaid	mobile	3263	-	-	pap-or-chap	ipv4v6
+45402	-	-	02020002FFFFFFFF	-	HK Prepaid	mobile	3265	-	-	pap-or-chap	ipv4v6
+45403	-	-	-	-	3 (postpaid)	mobile.three.com.hk	200	-	-	-	-
+45403	-	-	-	-	3 (postpaid)	mobile.lte.three.com.hk	201	-	-	-	-
+45403	-	-	-	-	Hutchison HK	mobile.three.com.hk	3267	-	-	pap	ipv4v6
+45403	-	-	0404	-	Hutchison HK	mobile.three.com.hk	3271	-	-	pap	ipv4v6
+45403	-	-	0405	-	Mo	mobile.three.com.hk	3274	-	-	pap	ipv4v6
+45403	-	-	0009	-	HKBN	mobile.three.com.hk	3277	-	-	pap	ipv4v6
+45404	-	-	-	-	3 (postpaid)	mobile.three.com.hk	200	-	-	-	-
+45404	-	-	-	-	Orange (postpaid)	web.orangehk.com	200	-	-	-	-
+45404	-	-	-	-	3 (postpaid)	mobile.lte.three.com.hk	201	-	-	-	-
+45404	-	-	-	-	Hutchison HK	mobile.three.com.hk	3280	-	-	pap	ipv4v6
+45405	-	-	-	-	Hutchison HK	mobile.three.com.hk	3284	-	-	pap	ipv4v6
+45406	-	-	-	-	SmarTone (postpaid)	internet	200	-	-	-	-
+45406	-	-	-	-	SmarTone	smartone	3288	-	-	pap-or-chap	ipv4v6
+45408	-	-	547275554B3030656E	-	Truphone	truphone.com	3291	-	-	-	-
+45410	-	-	-	-	New World (postpaid)	internet	200	-	-	-	-
+45410	-	-	-	-	csl	hkcsl	3293	-	-	pap-or-chap	ipv4v6
+45412	-	-	-	-	China Mobile (postpaid)	peoples.net	200	-	-	-	-
+45412	-	-	-	-	CMHK Data	cmhk	3298	-	-	pap	ipv4v6
+45413	-	-	-	-	CMHK Data	cmhk	3301	-	-	-	ipv4v6
+45414	-	-	-	-	Hutchison HK	mobile.three.com.hk	3303	-	-	pap	ipv4v6
+45415	-	-	-	-	SmarTone	smartone	3307	-	-	pap-or-chap	ipv4v6
+45416	-	-	-	-	PCCW (Sunday) (postpaid)	internet	200	-	-	-	-
+45416	-	-	-	-	PCCW (Sunday) (postpaid)	pccwdata	201	-	-	-	-
+45416	-	-	-	-	PCCW (Sunday) (postpaid)	pccw	202	-	-	-	-
+45416	-	-	-	-	csl	mobile	3311	-	-	pap-or-chap	ipv4v6
+45417	-	-	-	-	SmarTone	smartone	3312	-	-	pap-or-chap	ipv4v6
+45418	-	-	-	-	csl	mobile	3314	-	-	pap-or-chap	ipv4v6
+45418	-	-	01010000FFFFFFFF	-	1O1O	mobile	3317	-	-	pap-or-chap	ipv4v6
+45418	-	-	01020000FFFFFFFF	-	csl	mobile	3319	-	-	pap-or-chap	ipv4v6
+45418	-	-	01030000FFFFFFFF	-	SUN Mobile	sunmobile	3321	-	-	pap-or-chap	ipv4v6
+45418	-	-	01040000FFFFFFFF	-	Global Call	globalcall	3323	-	-	pap-or-chap	ipv4v6
+45418	-	-	02020001FFFFFFFF	-	HK Prepaid	mobile	3325	-	-	pap-or-chap	ipv4v6
+45418	-	-	02030001FFFFFFFF	-	HK Prepaid	mobile	3327	-	-	pap-or-chap	ipv4v6
+45418	-	-	02020002FFFFFFFF	-	HK Prepaid	mobile	3329	-	-	pap-or-chap	ipv4v6
+45419	-	-	-	-	PCCW (Sunday) (postpaid)	internet	200	-	-	-	-
+45419	-	-	-	-	PCCW (Sunday) (postpaid)	pccwdata	201	-	-	-	-
+45419	-	-	-	-	PCCW (Sunday) (postpaid)	pccw	202	-	-	-	-
+45419	-	-	-	-	csl	mobile	3331	-	-	pap-or-chap	ipv4v6
+45423	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.hk	200	lmhk	plus	-	-
+45430	-	-	-	-	HKIA-5G Data	hkia-5g	3338	-	-	-	ipv4v6
+45500	-	-	-	-	SmarTone Macau	smartgprs	3339	-	-	pap-or-chap	ipv4v6
+45501	-	-	-	-	CTM (postpaid)	ctm-mobile	200	-	-	-	-
+45501	-	-	-	-	CTM Data	ctm-mobile	3340	-	-	none	ipv4v6
+45501	-	-	-	-	CTM (Prepaid)	ctmprepaid	3342	-	-	none	ipv4v6
+45502	-	-	-	-	CTNET	ctnet	3345	-	-	pap-or-chap	ipv4v6
+45503	-	-	-	-	3 / Hutchison (postpaid)	web.hutchisonmacau.com	200	hutchison	1234	-	-
+45503	-	-	-	-	3 Macau	mobile.three.com.mo	3348	-	-	pap	ipv4v6
+45504	-	-	-	-	CTM (postpaid)	ctm-mobile	200	-	-	-	-
+45504	-	-	-	-	CTM Data	ctm-mobile	3349	-	-	-	ipv4v6
+45504	-	-	-	-	CTM (Prepaid)	ctmprepaid	3351	-	-	-	ipv4v6
+45505	-	-	-	-	3 / Hutchison (postpaid)	web.hutchisonmacau.com	200	hutchison	1234	-	-
+45505	-	-	-	-	3 Macau	mobile.three.com.mo	3354	-	-	pap	ipv4v6
+45507	-	-	-	-	CTNET	ctnet	3356	-	-	pap-or-chap	ipv4v6
+45601	-	-	-	-	Cellcard	cellcard	200	mobitel	mobitel	-	-
+45601	-	-	-	-	Cellcard	default	3359	-	-	-	-
+45602	-	-	-	-	Hello	hellowww	200	-	-	-	-
+45602	-	-	-	-	Smart	default	3360	-	-	-	-
+45604	-	-	-	-	qb	wap	200	-	-	-	-
+45604	-	-	-	-	qb	default	3361	-	-	-	-
+45605	-	-	-	-	Star-Cell	default	3362	-	-	-	-
+45606	-	-	-	-	Smart Mobile	smart	200	-	-	-	-
+45606	-	-	-	-	Smart	default	3363	-	-	-	-
+45608	-	-	-	-	Metfone	metfone	200	-	-	-	-
+45608	-	-	-	-	Metfone	default	3364	-	-	-	-
+45609	-	-	-	-	Beeline	gprs.beeline.com.kh	200	-	-	-	-
+45609	-	-	-	-	Beeline	default	3365	-	-	-	-
+45611	-	-	-	-	Excell	default	3366	-	-	-	-
+45618	-	-	-	-	Mfone	mfone	200	-	-	-	-
+45618	-	-	-	-	Cellcard	default	3367	-	-	-	-
+45701	-	-	-	-	Lao Telecom (prepaid)	ltcnet	200	-	-	-	-
+45701	-	-	-	-	LTC	default	3368	-	-	-	-
+45702	-	-	-	-	ETL (postpaid)	etlnet	200	-	-	-	-
+45702	-	-	-	-	ETL	default	3369	-	-	-	-
+45703	-	-	-	-	Unitel (prepaid)	startelecom	200	-	-	-	-
+45703	-	-	-	-	Unitel (prepaid)	unitel3g	201	-	-	-	-
+45703	-	-	-	-	Unitel	default	3370	-	-	-	-
+45708	-	-	-	-	Beeline (Tigo) (prepaid)	beelinenet	200	-	-	-	-
+45708	-	-	-	-	Beeline	default	3371	-	-	-	-
+46000	-	-	-	-	China Mobile (postpaid)	cmnet	201	guest	guest	-	-
+46000	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3372	-	-	-	ipv4v6
+46001	-	-	-	-	China Unicom (postpaid)	3gnet	200	uninet	-	-	-
+46001	-	-	-	-	中国联通 (China Unicom) NET	3gnet	3375	-	-	-	ipv4v6
+46002	-	-	-	-	China Mobile (postpaid)	cmnet	201	guest	guest	-	-
+46002	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3378	-	-	-	ipv4v6
+46003	-	-	-	-	中国电信 (China Telecom) NET	ctnet	3382	-	-	-	ipv4v6
+46004	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3385	-	-	-	ipv4v6
+46007	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3388	-	-	-	ipv4v6
+46008	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3391	-	-	-	ipv4v6
+46009	-	-	-	-	中国联通 (China Unicom) NET	3gnet	3394	-	-	-	ipv4v6
+46011	-	-	-	-	China Telecom (postpaid)	ctnet	200	ctnet@mycdma.cn	vnet.mobi	-	-
+46011	-	-	-	-	China Telecom (postpaid)	ctlte	201	ctlte@mycdma.cn	vnet.mobi	-	-
+46011	-	-	-	-	中国电信 (China Telecom) NET	ctnet	3397	-	-	-	ipv4v6
+46013	-	-	-	-	中国移动 (China Mobile) NET	cmnet	3401	-	-	-	ipv4v6
+46015	-	-	-	-	中国广电 (CBN) NET	cbnet	3404	-	-	-	ipv4v6
+46060	-	-	-	-	中国广电 (CBN) NET	cmnet	3407	-	-	-	ipv4v6
+46601	-	-	-	-	Far EasTone / KGT (postpaid)	internet	200	-	-	-	-
+46601	-	-	-	-	遠傳電信(Far EasTone) (Internet)	internet	3411	-	-	-	ipv4v6
+46602	-	-	-	-	遠傳電信(Far EasTone) (Internet)	internet	3415	-	-	-	ipv4v6
+46605	-	-	-	-	亞太電信(APT) (Internet)	gtnet	3419	-	-	-	ipv4v6
+46689	-	-	-	-	Vibo Telecom / Aurora (postpaid)	vibo	200	-	-	-	-
+46689	-	-	-	-	台灣大哥大TS (Internet)	internet	3421	-	-	-	ipv4v6
+46692	-	-	-	-	Chunghwa Telecom (emome) (postpaid)	emome	200	web	web	-	-
+46692	-	-	-	-	Chunghwa Telecom (emome) (postpaid)	internet	201	-	-	-	-
+46692	-	-	-	-	中華電信(Chunghwa) (Internet)	internet	3424	-	-	-	ipv4v6
+46697	-	-	-	-	TransAsia (postpaid)	internet	200	-	-	-	-
+46697	-	-	-	-	台灣大哥大(TW Mobile) (Internet)	internet	3428	-	-	-	ipv4v6
+46699	-	-	-	-	TW Mobile (postpaid)	internet	200	-	-	-	-
+46699	-	-	-	-	台灣大哥大(TW Mobile) (Internet)	internet	3432	-	-	-	ipv4v6
+47001	-	-	-	-	GrameenPhone (postpaid)	gpinternet	200	gp	gp	-	-
+47001	-	-	-	-	GrameenPhone (prepaid)	gpinternet	201	-	-	-	-
+47001	-	-	-	-	GP-INTERNET	gpinternet	3436	-	-	none	-
+47002	-	-	-	-	Robi (AKTel) (postpaid)	internet	200	-	-	-	-
+47003	-	-	-	-	Banglalink (postpaid)	blweb	200	-	-	-	-
+47004	-	-	-	-	Teletalk (prepaid)	wap	200	-	-	-	-
+47007	-	-	-	-	Airtel (Warid) (postpaid)	internet	200	-	-	-	-
+47201	-	-	-	-	Dhiraagu (postpaid)	internet.dhimobile	200	-	-	-	-
+47201	-	-	-	-	Dhiraagu	default	3438	-	-	-	-
+47202	-	-	-	-	Wataniya (postpaid)	wataniyanet	200	-	-	-	-
+47202	-	-	-	-	OoredooData	ooredoodata	3439	-	-	-	-
+50210	-	-	-	-	DiGi Internet	diginet	3441	-	-	-	-
+50211	-	-	-	-	Unifi	unifi	3443	-	-	-	ipv4v6
+50212	-	-	-	-	Maxis (postpaid)	maxisbb	200	maxis	wap	-	-
+50212	-	-	-	-	Maxis (postpaid)	net	201	maxis	net	-	-
+50212	-	-	-	-	Maxis (postpaid)	unet	202	maxis	wap	-	-
+50212	-	-	-	-	Maxis Internet & MMS	unet	3444	-	-	pap	ipv4v6
+50213	-	-	-	-	Celcom (postpaid)	celcom.net.my	200	-	-	-	-
+50213	-	-	-	-	Celcom (postpaid)	celcom3g	201	-	-	-	-
+502142	-	-	-	-	Maxis Internet & MMS	unet	3453	-	-	pap	ipv4v6
+502143	-	-	-	-	DiGi Internet	diginet	3454	-	-	-	-
+502145	-	-	-	-	Celcom Internet & MMS	celcom3g	3456	-	-	-	-
+502146	-	-	-	-	DiGi Internet	diginet	3457	-	-	-	-
+502147	-	-	-	-	Maxis Internet & MMS	unet	3459	-	-	pap	ipv4v6
+502148	-	-	-	-	Celcom Internet & MMS	celcom3g	3460	-	-	-	-
+502152	-	-	-	-	Yes Internet	yesnet	3461	-	-	-	-
+502153	-	-	-	-	Unifi	unifi	3463	-	-	-	ipv4v6
+50216	-	-	-	-	DiGi (postpaid)	diginet	200	-	-	-	-
+50216	-	-	-	-	DiGi (postpaid)	3gdgnet	201	-	-	-	-
+50216	-	-	-	-	DiGi Internet	diginet	3449	-	-	pap	-
+50217	-	-	-	-	Maxis (postpaid)	maxisbb	200	maxis	wap	-	-
+50217	-	-	-	-	Maxis (postpaid)	net	201	maxis	net	-	-
+50217	-	-	-	-	Maxis (postpaid)	unet	202	maxis	wap	-	-
+50217	-	-	-	-	Maxis Internet & MMS	unet	3450	-	-	pap	ipv4v6
+50218	-	-	-	-	U Mobile Internet & MMS	my3g	3451	-	-	pap	-
+50219	-	-	-	-	Celcom (postpaid)	celcom.net.my	200	-	-	-	-
+50219	-	-	-	-	Celcom (postpaid)	celcom3g	201	-	-	-	-
+50219	-	-	-	-	Celcom Internet & MMS	celcom3g	3452	-	-	none	-
+50501	-	-	-	-	Telstra (postpaid)	telstra.wap	200	-	-	-	-
+50501	-	-	-	-	Telstra (postpaid)	telstra.datapack	201	-	Telstra	-	-
+50501	-	-	-	-	Telstra (postpaid)	telstra.internet	202	-	-	-	-
+50501	-	-	-	-	Telstra (postpaid)	telstra.pcpack	203	-	Telstra	-	-
+50501	-	-	-	-	Telstra (postpaid)	telstra.bigpond	205	-	-	-	-
+50502	-	-	-	-	iiNet (postpaid)	iinet	200	-	-	-	-
+50502	-	-	-	-	Internode (postpaid)	internode	200	-	-	-	-
+50502	-	-	-	-	Optus (postpaid)	internet	200	-	-	-	-
+50502	-	-	-	-	Virgin Mobile (postpaid)	virgininternet	200	guest	guest	-	-
+50502	-	-	-	-	Internode (postpaid)	splns333a1	201	-	-	-	-
+50502	-	-	-	-	Optus (prepaid)	yesinternet	201	-	-	-	-
+50502	-	-	-	-	Virgin Mobile (postpaid)	virginbroadband	201	-	-	-	-
+50502	-	-	-	-	Optus (postpaid)	connect	202	-	-	-	-
+50502	-	-	-	-	Optus (postpaid)	connectcap	203	-	-	-	-
+50502	-	-	-	-	Optus (postpaid)	preconnect	204	-	-	-	-
+50502	-	-	-	-	Apex Telecom	splns357	220	-	-	-	-
+50502	-	-	-	-	BLiNK	splns888a1	220	-	-	-	-
+50502	-	-	-	-	Dodo	wirelessbroadband	220	-	-	-	-
+50502	-	-	-	-	Exetel	exetel1	220	-	-	-	-
+50502	-	-	-	-	iPrimus	primuslns1	220	-	-	-	-
+50502	-	-	-	-	Dodo	dodolns1	221	-	-	-	-
+50502	-	-	-	-	Exetel	optuswap	222	-	-	-	-
+50502	505029	-	-	-	Virgin Internet	yesinternet	3471	-	-	-	-
+50503	-	-	-	-	Crazy John's (postpaid)	purtona.net	200	-	-	-	-
+50503	-	-	-	-	Vodafone (postpaid)	vfinternet.au	200	-	-	-	-
+50503	-	-	-	-	Vodafone (prepaid)	vfprepaymbb	201	-	-	-	-
+50503	-	-	-	-	Vodafone (postpaid)	live.vodafone.com	202	-	-	-	-
+50503	-	-	01	-	Lebara Internet	live.vodafone.com	3475	-	-	-	ipv4v6
+50506	-	-	-	-	Three (postpaid)	3netaccess	200	a	a	-	-
+50506	-	-	-	-	Three (prepaid)	3services	201	a	a	-	-
+50507	-	-	-	-	VF Internet	vfinternet.au	3479	-	-	-	-
+50512	-	-	-	-	3Internet	3netaccess	3480	-	-	-	-
+50512	-	-	-	-	3	3services	3481	-	-	-	-
+50519	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.com.au	200	lmau	plus	-	-
+50519	-	-	-	Lycamobile	Lycamobile	data.lycamobile.com.au	3482	-	-	pap	-
+50538	-	-	-	-	Crazy John's (postpaid)	purtona.net	200	-	-	-	-
+50538	-	-	547275554B3030656E	-	Truphone	truphone.com	3483	-	-	-	-
+50552	-	-	-	-	OptiTel	optitel	3485	-	-	-	ipv4v6
+50571	-	-	-	-	Telstra Internet	telstra.wap	3490	-	-	-	ipv4
+50571	-	-	-	-	Telstra HOS	hos	3513	-	-	-	ipv4
+50572	-	-	-	-	Telstra Internet	telstra.wap	3495	-	-	-	ipv4
+50572	-	-	-	-	Telstra HOS	hos	3518	-	-	-	ipv4
+50588	-	-	-	-	Pivotel Internet	internet	3500	-	-	-	ipv4v6
+50590	-	-	-	-	Optus Internet	internet	3502	-	-	-	-
+51001	-	-	-	-	Indosat (postpaid)	indosatgprs	200	indosat@durasi	indosat@durasi	-	-
+51001	-	-	-	-	Indosat (postpaid)	indosatgprs	201	indosat	indosat	-	-
+51001	-	-	-	-	Internet	indosatgprs	3504	-	-	pap	-
+51008	-	-	-	-	AXIS (postpaid)	axis	200	axis	123456	-	-
+51008	-	-	-	-	AXIS	axis	3506	axis	123456	pap	-
+51009	-	-	-	-	Smartfren4G	smartfren4g	3508	smartfren	smartfren	pap-or-chap	-
+51010	-	-	-	-	Telkomsel (postpaid)	telkomsel	200	wap	wap123	-	-
+51010	-	-	-	-	Telkomsel (postpaid)	flash	201	foo	bar	-	-
+51010	-	-	-	-	Telkomsel (postpaid)	internet	202	foo	bar	-	-
+51010	-	-	-	-	Internet	internet	3509	-	-	-	-
+51011	-	-	-	-	Excelcomindo (XL) (postpaid)	www.xlgprs.net	200	xlgprs	proxl	-	-
+51011	-	-	-	-	Internet	internet	3511	-	-	pap	-
+51020	-	-	-	-	Telkomsel (postpaid)	telkomsel	200	wap	wap123	-	-
+51020	-	-	-	-	Telkomsel (postpaid)	flash	201	foo	bar	-	-
+51020	-	-	-	-	Telkomsel (postpaid)	internet	202	foo	bar	-	-
+51021	-	-	-	-	Indosat (postpaid)	indosatgprs	200	indosat@durasi	indosat@durasi	-	-
+51021	-	-	-	-	Indosat (postpaid)	indosatgprs	201	indosat	indosat	-	-
+51021	-	-	-	-	Internet	indosatgprs	3513	-	-	pap	-
+51028	-	-	-	-	Smartfren4G	smartfren4g	3515	smartfren	smartfren	pap-or-chap	-
+51089	-	-	-	-	3 (postpaid)	3gprs	200	3gprs	3gprs	-	-
+51089	-	-	-	-	3 (postpaid)	3data	201	3data	3data	-	-
+51089	-	-	-	-	3GPRS	3gprs	3516	3gprs	3gprs	pap	-
+51401	-	-	-	-	Telin	default	3518	-	-	-	-
+51402	-	-	-	-	Timor Telecom	default	3519	-	-	-	-
+51403	-	-	-	-	Viettel Timor-Leste	default	3520	-	-	-	-
+51502	-	-	-	-	Globe Telecom (postpaid)	internet.globe.com.ph	200	globe	globe	-	-
+51502	-	-	-	-	Globe Telecom (prepaid)	http.globe.com.ph	201	globe	globe	-	-
+51502	-	-	-	-	Globe Telecom (postpaid)	www.globe.com.ph	202	globe	globe	-	-
+51502	-	-	-	-	myGlobe Internet	internet.globe.com.ph	3521	-	-	-	-
+51502	-	-	-	-	myGlobe INET	http.globe.com.ph	3522	-	-	-	-
+51503	-	-	-	-	Smart (postpaid)	internet	200	witsductoor	banonoy	-	-
+51503	-	-	-	-	SMART INTERNET	internet	3524	-	-	-	-
+51505	-	-	-	-	Digitel (Sun Cellular) (postpaid)	minternet	200	-	-	-	-
+51518	-	-	-	-	Redinternet	redinternet	3528	-	-	-	-
+52000	-	-	-	-	TRUE-H INTERNET	internet	3530	true	true	pap	-
+52001	-	-	-	-	AIS (postpaid)	internet	200	-	-	-	-
+52001	-	-	-	-	AIS Internet	internet	3534	-	-	none	-
+52003	-	-	-	-	AIS (AWN)	internet	200	-	-	chap	-
+52003	-	-	-	-	AIS Internet	internet	3538	-	-	none	ipv4v6
+52004	-	-	-	-	TRUE-H INTERNET	internet	3542	true	true	pap	-
+52005	-	-	-	-	dtac Internet	www.dtac.co.th	3546	-	-	-	-
+52015	-	-	-	-	TOT 3G (postpaid)	internet	200	-	-	-	-
+52018	-	-	-	-	DTAC (postpaid)	www.dtac.co.th	200	-	-	-	-
+52047	-	-	-	-	dtac Internet	www.dtac.co.th	3558	-	-	-	-
+52099	-	-	-	-	True Move (postpaid)	internet	200	true	true	-	-
+52099	-	-	-	-	TRUE INTERNET	internet	3562	true	true	pap	-
+52501	-	-	-	-	SingTel (postpaid)	internet	200	-	-	-	-
+52501	-	-	-	-	Singtel (Postpaid)	e-ideas	3564	-	-	-	ipv4v6
+52501	-	-	-	-	Singtel (Prepaid)	hicard	3565	-	-	-	ipv4v6
+52502	-	-	-	-	SingTel (postpaid)	internet	200	-	-	-	-
+52503	-	-	-	-	M1 (postpaid)	sunsurf	200	65	-	-	-
+52503	-	-	-	-	M1 (postpaid)	miworld	201	65(mobilenumber)	user123	-	-
+52503	-	-	-	-	M1 (prepaid)	miworldcard	202	65(mobilenumber)	user123	-	-
+52503	-	-	-	-	M1 (prepaid)	prepaidbb	203	-	-	-	-
+52503	-	-	-	-	M1 (prepaid)	sunsurfmcard	204	-	-	-	-
+52503	-	-	-	-	Sunsurf Mobile	sunsurf	3568	-	-	-	ipv4v6
+52505	-	-	-	-	Starhub (prepaid)	shppd	201	-	-	-	-
+52505	-	-	-	-	Starhub (postpaid)	shinternet	202	-	-	-	-
+52505	-	-	-	giga	giga	giga	3573	-	-	-	ipv4v6
+52505	-	-	-	-	SH Data Postpaid	shwap	3574	-	-	-	ipv4v6
+52505	-	-	-	-	SH Data Prepaid	shppd	3575	-	-	-	ipv4v6
+52505	-	-	0A	-	亞太電信(APT) (Internet)	gtnet	3578	-	-	-	ipv4v6
+52510	-	-	-	-	SIMBA	tpg	3579	-	-	-	ipv4v6
+52802	-	-	-	-	B-Mobile (postpaid)	bmobilewap	200	-	-	-	-
+52802	-	-	-	-	B-Mobile	default	3580	-	-	-	-
+52811	-	-	-	-	DSTCOM (postpaid)	dst.wap	200	wap	wap	-	-
+52811	-	-	-	-	DSTCom	default	3581	-	-	-	-
+53000	-	-	-	-	Telecom New Zealand (postpaid)	internet.telecom.co.nz	201	-	-	-	-
+53000	-	-	-	-	Telecom New Zealand (postpaid)	direct.telecom.co.nz	202	-	-	-	-
+53000	-	-	-	-	Telecom New Zealand (postpaid)	oa.telecom.co.nz	203	-	-	-	-
+53001	-	-	-	-	Vodafone (postpaid)	live.vodafone.com	200	-	-	-	-
+53001	-	-	-	-	Vodafone (postpaid)	www.vodafone.net.nz	201	-	-	-	-
+53001	-	-	-	-	Vodafone (postpaid)	internet	202	-	-	-	-
+53001	-	-	-	-	VFNZ Internet	vodafone	3583	-	-	-	-
+53005	-	-	-	-	Telecom New Zealand (postpaid)	internet.telecom.co.nz	201	-	-	-	-
+53005	-	-	-	-	Telecom New Zealand (postpaid)	direct.telecom.co.nz	202	-	-	-	-
+53005	-	-	-	-	Telecom New Zealand (postpaid)	oa.telecom.co.nz	203	-	-	-	-
+53005	-	-	-	-	Spark Internet	internet	3584	-	-	-	-
+53005	-	-	-	Skinny	Default	wapaccess.co.nz	3585	-	-	-	-
+53024	-	-	-	-	2-Degrees (prepaid)	internet	201	-	-	-	-
+53602	-	-	-	-	Digicel	default	3591	-	-	-	-
+53701	-	-	-	-	BeMobile	default	3592	-	-	-	-
+53703	-	-	-	-	Digicel (prepaid)	internet.digicelpng.com	200	-	-	-	-
+53703	-	-	-	-	Digicel PNG LTE	lte	3593	-	-	-	-
+53703	5370309	-	-	-	EMnify	em	3596	-	-	-	-
+53901	-	-	-	-	U-Call	default	3597	-	-	-	-
+53943	-	-	-	-	Shoreline Communication	default	3598	-	-	-	-
+53988	-	-	-	-	Digicel	web.digicelpacific.com	3599	-	-	-	-
+54001	-	-	-	-	BREEZE	default	3601	-	-	-	-
+54002	-	-	-	-	BeMobile	default	3602	-	-	-	-
+54100	-	-	-	-	AIL	default	3603	-	-	-	-
+54101	-	-	-	-	SMILE	default	3604	-	-	-	-
+54105	-	-	-	-	Digicel	web.digicelpacific.com	3605	-	-	-	-
+54201	-	-	-	-	Vodafone / Kidanet (postpaid)	vfinternet.fj	200	-	-	-	-
+54201	-	-	-	-	Vodafone / Kidanet (postpaid)	kidanet.fj	201	-	-	-	-
+54201	-	-	-	-	Vodafone / Kidanet (prepaid)	prepay.vfinternet.fj	202	-	-	-	-
+54201	-	-	-	-	Vodafone	default	3607	-	-	-	-
+54202	-	-	-	-	Digicel	web.digicelpacific.com	3608	-	-	-	-
+54411	-	-	-	-	Bluesky	default	3610	-	-	-	-
+54501	-	-	-	-	Kiribati - TSKL	default	3611	-	-	-	-
+54509	-	-	-	-	Kiribati - Frigate Net	default	3612	-	-	-	-
+54601	-	-	-	-	Mobilis	default	3613	-	-	-	-
+54720	-	-	-	-	Vini (postpaid)	internet	200	-	-	-	-
+54720	-	-	-	-	Vini	default	3614	-	-	-	-
+54801	-	-	-	-	Telecom Cook	default	3615	-	-	-	-
+54901	-	-	-	-	Digicel	default	3616	-	-	-	-
+54927	-	-	-	-	Bluesky	default	3617	-	-	-	-
+55001	-	-	-	-	FSMTC	default	3618	-	-	-	-
+55101	-	-	-	-	MINTA	default	3619	-	-	-	-
+55201	-	-	-	-	PNCC	default	3620	-	-	-	-
+55280	-	-	-	-	Palau Mobile	default	3621	-	-	-	-
+60201	-	-	-	-	MobiNil (postpaid)	mobinilweb	200	-	-	-	-
+60202	-	-	-	-	Vodafone (postpaid)	internet.vodafone.net	200	internet	internet	-	-
+60202	-	-	-	-	vodafone internet	internet.vodafone.net	3624	internet	internet	pap-or-chap	-
+60203	-	-	-	-	Etisalat (postpaid)	etisalat	200	-	-	-	-
+60203	-	-	-	-	Etisalat Internet	etisalat	3626	-	-	-	ipv4v6
+60301	-	-	-	-	Mobilis (postpaid)	internet	200	internet	internet	-	-
+60301	-	-	-	-	mobilis wap	wap	3628	wap	wap	pap	-
+60301	-	-	-	-	Mobilis internet	internet	3629	internet	internet	pap	-
+60302	-	-	-	-	Djezzy (postpaid)	djezzy.internet	200	-	-	-	-
+60303	-	-	-	-	Nedjma (postpaid)	internet	200	nedjma	nedjma	-	-
+60303	-	-	-	-	Ooredoo internet	internet	3633	-	-	pap	-
+60400	-	-	-	-	Medi Telecom (postpaid)	internet1.meditel.ma	200	MEDINET	MEDINET	-	-
+60400	-	-	-	-	Medi Telecom (prepaid)	internet2.meditel.ma	201	MEDINET	MEDINET	-	-
+60400	-	-	-	-	Internet	internet.orange.ma	3635	-	-	pap	-
+60401	-	-	-	-	Ittissalat Al Maghrib (IAM) (postpaid)	www.iamgprs1.ma	200	-	-	-	-
+60401	-	-	-	-	Ittissalat Al Maghrib (IAM) (prepaid)	www.iamgprs2.ma	201	-	-	-	-
+60401	-	-	-	-	MobileZone	wap.iamgprs.ma	3636	-	-	-	-
+60402	-	-	-	-	WANA (postpaid)	www.wana.ma	200	-	-	-	-
+60501	-	-	-	-	Orange (postpaid)	weborange	200	-	-	-	-
+60501	-	-	-	-	Orange (prepaid)	keygp	202	-	-	-	-
+60501	-	-	-	-	Orange (postpaid)	keypro	203	-	-	-	-
+60502	-	-	-	-	Lycamobile (prepaid)	data.lycamobile.tn	200	lmtn	plus	-	-
+60502	-	-	-	-	Tunisie Télécom / TUNTEL (postpaid)	gprs.tn	201	gprs	gprs	-	-
+60502	-	-	-	-	Tunisie Télécom / TUNTEL (postpaid)	internet.tn	202	-	-	-	-
+60502	-	-	-	-	Internet Portail	gprs.tn	3645	gprs	gprs	pap	-
+60503	-	-	-	-	Tunisiana	internet.tunisiana.com	220	internet	internet	-	-
+60503	-	-	-	-	Ooredoo TN Internet	internet.ooredoo.tn	3647	-	-	-	-
+60600	-	-	-	-	Libyana	default	3649	-	-	-	-
+60601	-	-	-	-	Madar	default	3651	-	-	-	-
+60602	-	-	-	-	Al-Jeel Phone	default	3654	-	-	-	-
+60603	-	-	-	-	Libya Phone	default	3655	-	-	-	-
+60606	-	-	-	-	Hatef Libya	default	3656	-	-	-	-
+60701	-	-	-	-	Gamcel	default	3657	-	-	-	-
+60702	-	-	-	-	Africel	default	3658	-	-	-	-
+60703	-	-	-	-	Comium	default	3659	-	-	-	-
+60704	-	-	-	-	QCell	default	3660	-	-	-	-
+60801	-	-	-	-	Orange Wap SN	wap	3662	wap	wap	-	-
+60801	-	-	-	-	Orange Web SN	internet	3663	internet	internet	-	-
+60802	-	-	-	-	Tigo (postpaid)	wap.sentelgsm.com	200	-	-	-	-
+60802	-	-	-	-	Tigo Internet SN	web.sentel.com	3664	-	-	-	-
+60803	-	-	-	-	Expresso Internet SN	expresso	3665	wap	wap	-	-
+60901	-	-	-	-	Mattel	default	3666	-	-	-	-
+60902	-	-	-	-	Chinguitel	default	3667	-	-	-	-
+60910	-	-	-	-	Mauritel	default	3668	-	-	-	-
+61001	-	-	-	-	Malitel (prepaid)	web.malitel3.ml	200	internet	internet	-	-
+61002	-	-	-	-	Orange (prepaid)	iew	200	iew	iew	-	-
+61002	-	-	-	-	Orange (prepaid)	internet	201	internet	internet	-	-
+61002	-	-	-	-	Orange 3G/4G	internet	3669	internet	internet	pap	-
+61002	-	-	-	-	Orange Wap ML	wap	3671	wap	wap	-	-
+61101	-	-	-	-	Orange (postpaid)	internetogn	200	-	-	-	-
+61101	-	-	-	-	Orange S.A.	default	3672	-	-	-	-
+61102	-	-	-	-	Sotelgui	default	3673	-	-	-	-
+61103	-	-	-	-	Telecel Guinee	default	3674	-	-	-	-
+61104	-	-	-	-	MTN	default	3675	-	-	-	-
+61105	-	-	-	-	Cellcom (postpaid)	internet.cellcom.com	200	internet	cellcom	-	-
+61105	-	-	-	-	Cellcom	default	3676	-	-	-	-
+61202	-	-	-	-	Moov Internet CI	moov	3677	web	web	-	-
+61203	-	-	-	-	Oweb	orangeciweb	3678	web	web	pap	-
+61203	-	-	-	-	OWORLD CI	orangeciwap	3679	wap	wap	-	-
+61204	-	-	-	-	Koz Internet CI	gprs.koz.ci	3681	web	web	-	-
+61205	-	-	-	-	MTN (postpaid)	internet	200	-	-	-	-
+61205	-	-	-	-	MTN Internet CI	web.mtn.ci	3682	vide	vide	-	-
+61301	-	-	-	-	Telmob	default	3683	-	-	-	-
+61302	-	-	-	-	Airtel 3G (prepaid)	internet	200	-	-	-	-
+61302	-	-	-	-	Airtel	default	3684	-	-	-	-
+61303	-	-	-	-	Telecel Faso	default	3685	-	-	-	-
+61404	-	-	-	-	Orange Internet	orange.ne	3687	-	-	-	-
+61501	-	-	-	-	Togo Cell	default	3688	-	-	-	-
+61503	-	-	-	-	Moov	default	3689	-	-	-	-
+61601	-	-	-	-	Libercom	default	3690	-	-	-	-
+61602	-	-	-	-	Moov	default	3691	-	-	-	-
+61603	-	-	-	-	MTN	default	3692	-	-	-	-
+61604	-	-	-	-	BBCOM	default	3693	-	-	-	-
+61605	-	-	-	-	Glo	default	3694	-	-	-	-
+61701	-	-	-	-	Orange Internet	orange	3696	-	-	-	-
+61710	-	-	-	-	Emtel (postpaid)	web	200	-	-	-	-
+61801	-	-	-	-	Lonestar Cell	default	3697	-	-	-	-
+61802	-	-	-	-	Libercell	default	3698	-	-	-	-
+61804	-	-	-	-	Comium	default	3699	-	-	-	-
+61807	-	-	-	-	Orange	orange	3700	-	-	-	-
+61820	-	-	-	-	LIBTELCO	default	3701	-	-	-	-
+61901	-	-	-	-	Airtel	default	3702	-	-	-	-
+61902	-	-	-	-	Tigo	default	3703	-	-	-	-
+61903	-	-	-	-	Africell	default	3704	-	-	-	-
+61904	-	-	-	-	Comium	default	3705	-	-	-	-
+61905	-	-	-	-	Africell	default	3706	-	-	-	-
+61925	-	-	-	-	Mobitel	default	3707	-	-	-	-
+62001	-	-	-	-	MTN (postpaid)	internet	200	-	-	-	-
+62002	-	-	-	-	Vodafone (postpaid)	browse	200	-	-	-	-
+62003	-	-	-	-	Tigo (postpaid)	web.tigo.com.gh	200	web	-	-	-
+62003	-	-	-	-	Tigo Internet GH	web.tigo.com.gh	3712	-	-	-	-
+62006	-	-	-	-	Airtel (postpaid)	internet	200	-	-	-	-
+62006	-	-	-	-	Airtel Internet GH	wap	3714	-	-	-	-
+62007	-	-	-	-	GloGhana (postpaid)	internet	200	-	-	-	-
+62007	-	-	-	-	Glo Internet GH	glowap	3716	glo	glo	pap	-
+62120	-	-	-	-	Airtel NG (prepaid)	internet.ng.airtel.com.ng	200	internet	internet	-	-
+62120	-	-	-	-	Airtel Internet	internet.ng.zain.com	3717	internet	internet	pap	-
+62120	-	-	-	-	Airtel WAP	wap.ng.zain.com	3719	wap	wap	pap	-
+62130	-	-	-	-	MTN (prepaid)	web.gprs.mtnnigeria.net	200	web	web	-	-
+62130	-	-	-	-	MTN-WEB	internet	3720	web	web	pap	-
+62130	-	-	-	-	MTN ACESS	web.gprs.mtnnigeria.net	3721	web	web	pap	-
+62150	-	-	-	-	Glo Mobile (postpaid)	glosecure	200	gprs	gprs	-	-
+62150	-	-	-	-	Glo Mobile (postpaid)	gloflat	201	flat	flat	-	-
+62150	-	-	-	-	Glo Direct	glosecure	3723	gprs	gprs	pap	-
+62160	-	-	-	-	MTN (prepaid)	web.gprs.mtnnigeria.net	200	web	web	-	-
+62160	-	-	-	-	etisalat WAP	etisalat	3725	-	-	-	-
+62170	-	-	-	-	Glo Mobile (postpaid)	glosecure	200	gprs	gprs	-	-
+62170	-	-	-	-	Glo Mobile (postpaid)	gloflat	201	flat	flat	-	-
+62180	-	-	-	-	Airtel NG (prepaid)	internet.ng.airtel.com.ng	200	internet	internet	-	-
+62190	-	-	-	-	Etisalat (postpaid)	etisalat	200	-	-	-	-
+62201	-	-	-	-	Airtel	default	3727	-	-	-	-
+62202	-	-	-	-	Tawali	default	3728	-	-	-	-
+62203	-	-	-	-	Tigo	default	3729	-	-	-	-
+62204	-	-	-	-	Salam	default	3730	-	-	-	-
+62301	-	-	-	-	CTP	default	3731	-	-	-	-
+62302	-	-	-	-	TC	default	3732	-	-	-	-
+62303	-	-	-	-	Internet browsing	orangeca3g	3733	-	-	-	-
+62304	-	-	-	-	Nationlink	default	3734	-	-	-	-
+62401	-	-	-	-	MTN (postpaid)	internet	200	guest	guest	-	-
+62402	-	-	-	-	Orange (postpaid)	orangecmgprs	200	orange	orange	-	-
+62501	-	-	-	-	CVMOVEL	default	3736	-	-	-	-
+62502	-	-	-	-	T+	default	3737	-	-	-	-
+62601	-	-	-	-	CSTmovel	default	3738	-	-	-	-
+62701	-	-	-	-	Orange GQ	default	3739	-	-	-	-
+62703	-	-	-	-	Hits GQ	default	3741	-	-	-	-
+62801	-	-	-	-	Libertis	default	3742	-	-	-	-
+62802	-	-	-	-	Moov	default	3743	-	-	-	-
+62803	-	-	-	-	Airtel	default	3744	-	-	-	-
+62804	-	-	-	-	Azur	default	3745	-	-	-	-
+62901	-	-	-	-	Airtel	default	3746	-	-	-	-
+62910	-	-	-	-	Libertis Telecom	default	3747	-	-	-	-
+63001	-	-	-	-	Vodacom (postpaid)	vodanet	200	vodalive	-	-	-
+63001	-	-	-	-	Vodacom Internet CD	vodanet	3748	-	-	-	-
+63089	-	-	-	-	Tigo Internet CD	tigo.web	3750	-	-	-	-
+63102	-	-	-	-	Unitel (postpaid)	internet.unitel.co.ao	200	-	-	-	-
+63102	-	-	-	-	UNITEL	default	3751	-	-	-	-
+63104	-	-	-	-	MOVICEL	default	3752	-	-	-	-
+63202	-	-	-	-	Areeba	default	3753	-	-	-	-
+63203	-	-	-	-	Orange Bissau	4gogb	3754	-	-	-	-
+63207	-	-	-	-	Guinetel	default	3755	-	-	-	-
+63301	-	-	-	-	Cable & Wireless	default	3756	-	-	-	-
+63302	-	-	-	-	Mediatech International	default	3757	-	-	-	-
+63310	-	-	-	-	Airtel	default	3758	-	-	-	-
+63401	-	-	-	-	Zain (postpaid)	internet	200	-	-	-	-
+63401	-	-	-	-	Zain SD	default	3759	-	-	-	-
+63402	-	-	-	-	MTN (postpaid)	internet	200	-	-	-	-
+63402	-	-	-	-	MTN	default	3760	-	-	-	-
+63407	-	-	-	-	Sudani (postpaid)	sudaninet	200	sudani	sudani	-	-
+63407	-	-	-	-	Sudani One	default	3761	-	-	-	-
+63409	-	-	-	-	Privet Network	default	3762	-	-	-	-
+63510	-	-	-	-	MTN (postpaid)	internet.mtn	200	-	-	-	-
+63510	-	-	-	-	MTN	default	3763	-	-	-	-
+63512	-	-	-	-	Rwandatel	default	3764	-	-	-	-
+63513	-	-	-	-	Tigo (postpaid)	web.tigo.rw	200	-	-	-	-
+63513	-	-	-	-	Tigo	default	3765	-	-	-	-
+63514	-	-	-	-	Airtel	default	3766	-	-	-	-
+63601	-	-	-	-	Ethio Telecom (postpaid)	etc.com	200	-	-	-	-
+63601	-	-	-	-	ETH-MTN	default	3767	-	-	-	-
+63701	-	-	-	-	Telesom	default	3768	-	-	-	-
+63704	-	-	-	-	Somafone	default	3769	-	-	-	-
+63710	-	-	-	-	Nationlink	default	3770	-	-	-	-
+63725	-	-	-	-	Hormuud	default	3771	-	-	-	-
+63730	-	-	-	-	Golis	default	3772	-	-	-	-
+63757	-	-	-	-	Unittel	default	3773	-	-	-	-
+63760	-	-	-	-	Nationlink Telecom	default	3774	-	-	-	-
+63771	-	-	-	-	Somtel	default	3775	-	-	-	-
+63782	-	-	-	-	Telcom	default	3776	-	-	-	-
+63801	-	-	-	-	Evatis	default	3777	-	-	-	-
+63902	-	-	-	-	Safaricom (prepaid)	safaricom	200	saf	data	-	-
+63902	-	-	-	-	Safaricom (postpaid)	safaricom	201	web	web	-	-
+63902	-	-	-	-	safaricom GPRS	safaricom	3778	saf	data	pap	-
+63903	-	-	-	-	Airtel (postpaid)	ke.celtel.com	200	-	-	-	-
+63903	-	-	-	-	Airtel Internet	internet	3780	-	-	-	-
+63905	-	-	-	-	yu (Econet) (postpaid)	internet.econet.co.ke	200	-	-	-	-
+63905	-	-	-	-	Yu Internet	internet	3784	-	-	-	-
+63907	-	-	-	-	Orange (postpaid)	bew.orange.co.ke	200	-	-	-	-
+64002	-	-	-	-	tiGO (postpaid)	internet	200	-	-	-	-
+64003	-	-	-	-	Zantel (postpaid)	znet	200	-	-	-	-
+64004	-	-	-	-	Vodacom (postpaid)	internet	200	-	-	-	-
+64004	-	-	-	VodaCom Tanzania	Vodacom WAP	wap	3789	-	-	-	-
+64005	-	-	-	-	Airtel Tanzania (postpaid)	internet	200	-	-	-	-
+64101	-	-	-	-	Zain (postpaid)	web.ug.zain.com	200	-	-	-	-
+64101	-	-	-	-	Airtel Internet UG	internet	3791	-	-	-	-
+64110	-	-	-	-	MTN (postpaid)	yellopix.mtn.co.ug	200	-	-	-	-
+64110	-	-	-	-	MTN-WEB	internet	3792	-	-	-	-
+64111	-	-	-	-	UTL (postpaid)	utbroadband	200	-	-	-	-
+64111	-	-	-	-	UTL (postpaid)	utweb	201	-	-	-	-
+64114	-	-	-	-	Orange (postpaid)	orange.ug	200	-	-	-	-
+64122	-	-	-	-	Warid (postpaid)	web.waridtel.co.ug	200	-	-	-	-
+64126	-	-	-	Lycamobile	Lycamobile	data.lycamobile.ug	3797	-	-	pap	-
+64201	-	-	-	-	Spacetel	default	3798	-	-	-	-
+64202	-	-	-	-	Tempo/Africell (postpaid)	internet	200	-	-	-	-
+64202	-	-	-	-	Tempo	default	3799	-	-	-	-
+64203	-	-	-	-	Leo/UCom (postpaid)	ucnet	200	-	-	-	-
+64203	-	-	-	-	Onatel	default	3800	-	-	-	-
+64207	-	-	-	-	Smart Mobile	default	3801	-	-	-	-
+64208	-	-	-	-	HiTs Telecom	default	3802	-	-	-	-
+64282	-	-	-	-	Leo	default	3803	-	-	-	-
+64301	-	-	-	-	MCel (postpaid)	isp.mcel.mz	200	guest	guest	-	-
+64301	-	-	-	-	mCel	default	3804	-	-	-	-
+64303	-	-	-	-	Movitel (postpaid)	default	200	-	-	-	-
+64304	-	-	-	-	Vodacom (postpaid)	internet	200	-	-	-	-
+64304	-	-	-	-	Vodacom	default	3806	-	-	-	-
+64501	-	-	-	-	Airtel	default	3807	-	-	-	-
+64502	-	-	-	-	MTN	default	3808	-	-	-	-
+64503	-	-	-	-	ZAMTEL	default	3809	-	-	-	-
+64601	-	-	-	-	Airtel (prepaid)	internet	200	-	-	-	-
+64602	-	-	-	-	Orange (prepaid)	orangeworld	200	world	orange	-	-
+64602	-	-	-	-	Orange MG Internet	orangenet	3810	-	-	none	-
+64604	-	-	-	-	Telma (prepaid)	internet	200	-	-	-	-
+64700	-	-	-	-	Orange RE	orangerun	3813	orange	orange	-	ipv6
+64702	-	-	F004	-	Only Internet	internet	3816	-	-	-	-
+64703	-	-	-	-	Free Re	free.re	3818	-	-	-	-
+64703	-	-	F006	-	Telco OI Re	internet.telco.re	3819	-	-	-	-
+64710	-	-	-	-	SFR Réunion (postpaid)	websfr	200	-	-	-	-
+64710	-	-	-	-	SFR Réunion (postpaid)	slsfr	201	-	-	-	-
+64710	-	-	-	-	SFR Réunion (postpaid)	internetpro	202	-	-	-	-
+64710	-	-	-	-	SFR Réunion (postpaid)	ipnet	203	-	-	-	-
+64710	-	-	-	-	SFR webphone	sl2sfr	3821	-	-	-	-
+64710	-	-	12	-	Coriolis WAP	fnetcoriolis	3824	-	-	-	-
+64803	-	-	-	-	Telecel	default	3826	-	-	-	-
+64804	-	-	-	-	Econet	default	3827	-	-	-	-
+64901	-	-	-	-	MTC (postpaid)	ppsinternet	200	ppsuser	ppsuser	-	-
+64901	-	-	-	-	MTC (postpaid)	internet	201	-	-	-	-
+64901	-	-	-	-	MTC	default	3828	-	-	-	-
+64902	-	-	-	-	switch	default	3829	-	-	-	-
+64903	-	-	-	-	Leo (postpaid)	internet	200	-	-	-	-
+64903	-	-	-	-	Leo	default	3830	-	-	-	-
+65001	-	-	-	-	TNM (postpaid)	internet	200	-	-	-	-
+65001	-	-	-	-	TNM	default	3831	-	-	-	-
+65010	-	-	-	-	Airtel MW (prepaid/postpaid)	internet	200	-	-	-	-
+65010	-	-	-	-	Airtel	default	3832	-	-	-	-
+65101	-	-	-	-	Vodacom Lesotho (postpaid)	internet	200	-	-	-	-
+65201	-	-	-	-	Mascom Wireless (postpaid)	internet.mascom	200	-	-	-	-
+65202	-	-	-	-	Orange (postpaid)	internet.orange.co.bw	200	-	-	-	-
+65302	-	-	-	-	Eswatini Mobile (prepaid)	internet	200	-	-	-	-
+65310	-	-	-	-	MTN Eswatini (prepaid)	mymtn.co.sz	200	-	-	-	-
+65310	-	-	-	-	Swazi MTN	default	3837	-	-	-	-
+65401	-	-	-	-	HURI - SNPT	default	3838	-	-	-	-
+65501	-	-	-	-	Vodacom (postpaid)	internet	200	-	-	-	-
+65501	-	-	-	-	Vodacom (postpaid)	unrestricted	201	-	-	-	-
+65501	-	-	-	-	LTE.Vodacom	lte.vodacom.za	3839	-	-	-	-
+65502	-	-	-	-	8.ta (postpaid)	internet	200	-	-	-	-
+65507	-	-	-	-	Cell-c (postpaid)	internet	200	-	-	-	-
+65507	-	-	-	-	Virgin Mobile (postpaid)	vdata	200	-	-	-	-
+65507	6550710	-	-	-	VIRGIN_INTERNET_1	vdata	3848	-	-	-	-
+65510	-	-	-	-	MTN (postpaid)	internet	200	-	-	-	-
+65510	-	-	-	-	myMTN	mymtn	3852	-	-	-	-
+65553	-	-	-	Lycamobile	Lycamobile	data.lycamobile.co.za	3856	-	-	pap	-
+65701	-	-	-	-	Eritel	default	3857	-	-	-	-
+70267	-	-	-	-	DigiCell	default	3858	-	-	-	-
+70299	-	-	-	-	Smart	default	3859	-	-	-	-
+70401	-	-	-	-	Claro (postpaid)	internet.ideasclaro	200	-	-	-	-
+70401	-	-	-	-	Internet CLARO	ba.amx	3860	-	-	-	-
+70402	-	-	-	-	Comcel / Tigo (postpaid)	wap.tigo.gt	200	Wap	Wap	-	-
+70402	-	-	-	-	Broadband TIGO	broadband.tigo.gt	3862	-	-	-	ipv4v6
+70403	-	-	-	-	Movistar (postpaid)	internet.movistar.gt	200	movistargt	movistargt	-	-
+70403	-	-	-	-	Movistar INTERNET	internet.movistar.gt	3864	movistargt	movistargt	pap	ipv4v6
+70601	-	-	-	-	Claro (postpaid)	internet.ideasclaro	200	-	-	-	-
+70602	-	-	-	-	digicel (postpaid)	wap.digicelsv.com	200	-	-	-	-
+70602	-	-	-	-	Digicel Internet	web.digicelsv.com	3867	-	-	-	-
+70603	-	-	-	-	Tigo (postpaid)	internet.tigo.sv	200	-	-	-	-
+70604	-	-	-	-	Movistar (postpaid)	internet.movistar.sv	200	movistarsv	movistarsv	-	-
+70604	-	-	-	-	Movistar INTERNET	internet.movistar.sv	3871	movistarsv	movistarsv	none	ipv4v6
+708001	-	-	-	-	Internet Claro	internet.ideasclaro	3872	-	-	-	-
+70802	-	-	-	-	Tigo (postpaid)	internet.tigo.hn	200	-	-	-	-
+708020	-	-	-	-	INTERNET TIGO	internet.tigo.hn	3878	-	-	-	-
+70804	-	-	-	-	Honduras:Digicel:Internet	web.digicelhn.com	3876	-	-	pap	-
+708040	-	-	-	-	Honduras:Digicel:Internet:2	web.digicelhn.com	3880	-	-	pap	-
+71021	-	-	-	-	Claro (postpaid)	web.emovil	201	webemovil	webemovil	-	-
+71021	-	-	-	-	Claro (postpaid)	internet.ideasalo.ni	202	internet	internet	-	-
+71021	-	-	-	-	Internet CLARO	internet.ideasclaro	3882	-	-	-	-
+71030	-	-	-	-	Movistar (postpaid)	internet.movistar.ni	200	internet	internet	-	-
+71030	-	-	-	-	Movistar INTERNET	internet.movistar.ni	3884	movistarni	movistarni	none	ipv4v6
+71070	-	-	-	-	Yota Nicaragua Internet	internet	3885	-	-	-	-
+71073	-	-	-	-	Claro (postpaid)	web.emovil	201	webemovil	webemovil	-	-
+71073	-	-	-	-	Claro (postpaid)	internet.ideasalo.ni	202	internet	internet	-	-
+71073	-	-	-	-	Internet CLARO	internet.ideasclaro	3886	-	-	-	-
+71201	-	-	-	-	IceCelular (postpaid)	icecelular	200	guest	guest	-	-
+71201	-	-	-	-	KOLBI 3G	kolbi3g	3888	-	-	-	-
+71202	-	-	-	-	IceCelular (postpaid)	icecelular	200	guest	guest	-	-
+71202	-	-	-	-	Kolbi Internet	kolbi3g	3890	-	-	-	-
+71203	-	-	-	-	Kolbi (postpaid)	kolbi3g	200	-	-	-	-
+71203	-	-	-	-	Internet CLARO	internet.ideasclaro	3892	-	-	none	-
+71204	-	-	-	-	Movistar INTERNET	internet.movistar.cr	3894	movistarcr	movistarcr	none	ipv4v6
+71401	-	-	-	-	Cable and Wireless (postpaid)	apn01.cwpanama.com.pa	200	-	-	-	-
+71402	-	-	-	-	Movistar (postpaid)	internet.movistar.pa	200	movistarpa	movistarpa	-	-
+71402	-	-	-	-	Movistar INTERNET	internet.movistar.pa	3897	movistarpa	movistarpa	none	ipv4v6
+71403	-	-	-	-	WEB Claro	web.claro.com.pa	3898	CLAROWEB	CLAROWEB	none	-
+71404	-	-	-	-	Digicel Internet	web.digicelpanama.com	3899	-	-	-	-
+71606	-	-	-	-	Movistar (postpaid)	movistar.pe	200	movistar@datos	movistar	-	-
+71606	-	-	-	-	Movistar INTERNET	movistar.pe	3901	movistar@datos	movistar	pap	ipv4v6
+71607	-	-	-	-	Nextel (postpaid)	datacard.nextel.com.pe	200	-	-	-	-
+71610	-	-	-	-	Claro (postpaid)	tim.pe	200	tim	tulibertad	-	-
+71610	-	-	-	-	Claro (prepaid)	ba.amx	201	amx	amx	-	-
+71610	-	-	-	-	CLARO DATOS	claro.pe	3903	claro	claro	pap	ipv4v6
+71615	-	-	-	-	Bitel - Internet	bitel	3906	-	-	pap	ipv4
+71617	-	-	-	-	Entel PE	entel.pe	3908	-	-	none	ipv4
+72201	-	-	02	-	Servicio_WEB	internet.movil	3910	internet	internet	pap	ipv4v6
+722010	-	-	-	-	Movistar (postpaid)	internet.gprs.unifon.com.ar	200	wap	wap	-	-
+722010	-	-	-	-	Movistar (postpaid)	internet.gprs.unifon.com.ar	201	Internet	Internet	-	-
+722010	-	-	01	-	Servicio_WEB	internet.movil	3914	internet	internet	pap	ipv4v6
+72207	-	-	-	-	Movistar INTERNET	wap.gprs.unifon.com.ar	3911	wap	wap	pap	ipv4v6
+722070	-	-	-	-	Movistar (postpaid)	internet.gprs.unifon.com.ar	200	wap	wap	-	-
+722070	-	-	-	-	Movistar (postpaid)	internet.gprs.unifon.com.ar	201	Internet	Internet	-	-
+722310	-	-	-	-	Claro (postpaid)	igprs.claro.com.ar	200	-	-	-	-
+722310	-	-	-	-	Claro (postpaid)	internet.ctimovil.com.ar	201	clarogprs	clarogprs999	-	-
+722310	-	-	-	-	Claro AR	igprs.claro.com.ar	3918	-	-	-	ipv4v6
+722320	-	-	-	-	Claro (postpaid)	igprs.claro.com.ar	200	-	-	-	-
+722320	-	-	-	-	Claro (postpaid)	internet.ctimovil.com.ar	201	clarogprs	clarogprs999	-	-
+722330	-	-	-	-	Claro (postpaid)	igprs.claro.com.ar	200	-	-	-	-
+722330	-	-	-	-	Claro (postpaid)	internet.ctimovil.com.ar	201	clarogprs	clarogprs999	-	-
+72234	-	-	-	-	Personal (postpaid)	gprs.personal.com	200	gprs	adgj	-	-
+72234	-	-	-	-	Personal (postpaid)	datos.personal.com	201	datos	datos	-	-
+72234	-	-	-	-	Personal Datos	datos.personal.com	3915	datos	datos	none	-
+722340	-	-	-	-	Arnet (postpaid)	arnet.personal.com	200	-	-	-	-
+722341	-	-	-	-	Personal (postpaid)	gprs.personal.com	200	gprs	adgj	-	-
+722341	-	-	-	-	Personal (postpaid)	datos.personal.com	201	datos	datos	-	-
+722341	-	-	-	-	Personal Datos	datos.personal.com	3920	datos	datos	none	-
+72402	-	-	-	-	TIM (postpaid)	tim.br	200	tim	tim	-	-
+72402	-	-	-	-	TIM Connect	timbrasil.br	3923	tim	tim	pap	ipv4v6
+72403	-	-	-	-	TIM (postpaid)	tim.br	200	tim	tim	-	-
+72403	-	-	-	-	TIM Connect	timbrasil.br	3925	tim	tim	pap	ipv4v6
+72404	-	-	-	-	TIM (postpaid)	tim.br	200	tim	tim	-	-
+72404	-	-	-	-	TIM Connect	timbrasil.br	3927	tim	tim	pap	ipv4v6
+72405	-	-	-	-	Claro (postpaid)	claro.com.br	200	claro	claro	-	-
+72405	-	-	-	-	Claro (postpaid)	bandalarga.claro.com.br	201	claro	claro	-	-
+72405	-	-	-	-	Java Session	java.claro.com.br	3929	claro	claro	none	-
+72406	-	-	-	-	Vivo (postpaid)	zap.vivo.com.br	200	vivo	vivo	-	-
+72406	-	-	-	-	Vivo Internet	zap.vivo.com.br	3932	vivo	vivo	pap	ipv4v6
+72407	-	-	-	-	CTBC (postpaid)	ctbc.br	200	ctbc	1212	-	-
+72407	-	-	-	-	SCTL GPRS	sercomtel.com.br	3936	sercomtel	sercomtel	-	-
+72408	-	-	-	-	TIM (postpaid)	tim.br	200	tim	tim	-	-
+72410	-	-	-	-	Vivo (postpaid)	zap.vivo.com.br	200	vivo	vivo	-	-
+72410	-	-	-	-	Vivo Internet	zap.vivo.com.br	3937	vivo	vivo	pap	ipv4v6
+72411	-	-	-	-	Vivo (postpaid)	zap.vivo.com.br	200	vivo	vivo	-	-
+72411	-	-	-	-	Vivo Internet	zap.vivo.com.br	3942	vivo	vivo	pap	ipv4v6
+72415	-	-	-	-	Sercomtel:Dados	sercomtel.com.br	3945	sercomtel	sercomtel	pap	-
+72416	-	-	-	-	Brasil Telecom (postpaid)	brt.br	200	BrT	BrT	-	-
+72416	-	-	-	-	Oi (postpaid)	gprs.oi.com.br	200	-	oioioi	-	-
+72416	-	-	-	-	Oi Internet	gprs.oi.com.br	3947	-	-	none	ipv4v6
+72417	-	-	-	Surf	Surf	internet.br	3969	-	-	pap	-
+72418	-	-	-	LIGUE	LIGUE 4G Internet	iot4u.br	3951	arqia	arqia	pap	ipv4v6
+72419	-	-	-	-	TelemigC GPRS	gprs.telemigcelular.com.br	3953	celular	celular	-	-
+72421	-	-	-	-	LIGUE Internet	internet.ligue.vc	3955	-	-	-	ipv4v6
+72423	-	-	-	-	Vivo (postpaid)	zap.vivo.com.br	200	vivo	vivo	-	-
+72423	-	-	-	-	Vivo Internet	zap.vivo.com.br	3957	vivo	vivo	pap	ipv4v6
+72424	-	-	-	-	Oi (postpaid)	gprs.oi.com.br	200	-	oioioi	-	-
+72424	-	-	-	-	Oi Internet	gprs.oi.com.br	3961	-	-	none	ipv4v6
+72429	-	-	-	-	Unifique	unifique.br	3963	-	-	-	ipv4v6
+72431	-	-	-	-	Oi (postpaid)	gprs.oi.com.br	200	-	oioioi	-	-
+72431	-	-	-	-	Oi Internet	gprs.oi.com.br	3964	-	-	none	ipv4v6
+72432	-	-	-	-	CTBC (postpaid)	ctbc.br	200	ctbc	1212	-	-
+72432	-	-	-	-	Algar Telecom Internet	algar.br	3966	algar	1212	-	-
+72433	-	-	-	-	CTBC (postpaid)	ctbc.br	200	ctbc	1212	-	-
+72433	-	-	-	-	Algar Telecom Internet	algar.br	3968	algar	1212	-	-
+72434	-	-	-	-	CTBC (postpaid)	ctbc.br	200	ctbc	1212	-	-
+72434	-	-	-	-	Algar Telecom Internet	algar.br	3970	algar	1212	-	-
+72454	-	-	-	-	Porto Seguro Conecta	portoconecta.br	3972	-	-	none	-
+72454	-	-	-	-	TIM Connect	timbrasil.br	3973	tim	tim	pap	ipv4v6
+73001	-	-	-	-	Entel PCS (postpaid)	imovil.entelpcs.cl	200	entelpcs	entelpcs	-	-
+73001	-	-	-	-	Entel PCS (postpaid)	bam.entelpcs.cl	201	entelpcs	entelpcs	-	-
+73001	-	-	-	-	Internet Movil	bam.entelpcs.cl	3975	entelpcs	entelpcs	none	-
+73002	-	-	-	-	Movistar (postpaid)	web.tmovil.cl	200	web	web	-	-
+73002	-	-	-	-	Movistar (postpaid)	wap.tmovil.cl	201	wap	wap	-	-
+73002	-	-	-	-	Movistar INTERNET	wap.tmovil.cl	3976	wap	wap	none	ipv4v6
+73003	-	-	-	-	Claro Chile (postpaid)	bam.clarochile.cl	200	clarochile	clarochile	-	-
+73003	-	-	-	-	Claro Chile (prepaid)	bap.clarochile.cl	201	clarochile	clarochile	-	-
+73003	-	-	-	-	Claro Chile	bam.clarochile.cl	3978	clarochile	clarochile	pap	-
+73007	-	-	-	-	GTD Movil (postpaid)	web.gtdmovil.cl	200	webgtd	webgtd	-	-
+73007	-	-	-	-	Virgin Mobile (postpaid)	imovil.virginmobile.cl	200	-	-	-	-
+73008	-	-	-	-	VTR Movil (postpaid)	movil.vtr.com	200	vtrmovil	vtrmovil	-	-
+73008	-	-	-	-	Internet	movil.vtr.com	3982	vtrmovil	vtrmovil	chap	-
+73009	-	-	-	-	Wom (postpaid)	internet	200	-	-	-	-
+73009	-	-	-	-	Internet WOM	internet	3984	-	-	-	ipv4v6
+73010	-	-	-	-	Internet Movil	bam.entelpcs.cl	3986	entelpcs	entelpcs	pap	-
+732101	-	-	-	-	Claro (postpaid)	internet.comcel.com.co	200	COMCELWEB	COMCELWEB	-	-
+732101	-	-	-	-	Web Claro CO	internet.comcel.com.co	3989	COMCELWEB	COMCELWEB	pap	ipv4v6
+732102	-	-	-	-	Movistar (postpaid)	internet.movistar.com.co	200	movistar	movistar	-	-
+732103	-	-	-	-	Tigo (postpaid)	web.colombiamovil.com.co	200	-	-	-	-
+732103	-	-	-	-	UNE (postpaid)	www.une.net.co	200	une	une	-	-
+732103	-	-	-	-	UNE (postpaid)	une4glte.net.co	201	-	-	-	-
+732103	-	-	-	-	Tigo Web	web.colombiamovil.com.co	3992	-	-	-	ipv4v6
+732103	-	-	-	ETB MOVI	Internet ETB	moviletb.net.co	3994	etb	etb	none	-
+732103	-	-	-	movil exito	Internet Éxito	movilexito.net.co	3995	-	-	pap	-
+732103	-	-	-	UNE	UNE	www.une.net.co	3996	une	une	none	-
+732111	-	-	-	-	Tigo (postpaid)	web.colombiamovil.com.co	200	-	-	-	-
+732111	-	-	-	-	UNE (postpaid)	www.une.net.co	200	une	une	-	-
+732111	-	-	-	-	UNE (postpaid)	une4glte.net.co	201	-	-	-	-
+732111	-	-	-	-	Tigo Web	web.colombiamovil.com.co	3997	-	-	-	ipv4v6
+732111	-	-	-	ETB MOVIL	Internet ETB	moviletb.net.co	3999	etb	etb	none	-
+732111	-	-	-	movil exito	Internet Éxito	movilexito.net.co	4000	-	-	pap	-
+732111	-	-	-	UNE	UNE	www.une.net.co	4001	une	une	none	-
+73212	-	-	-	-	Movistar INTERNET	internet.movistar.com.co	3987	movistar	movistar	pap	ipv4v6
+732123	-	-	-	-	Movistar (postpaid)	internet.movistar.com.co	200	movistar	movistar	-	-
+732123	-	-	-	-	Virgin Mobile (postpaid)	web.vmc.net.co	200	-	-	-	-
+732123	-	-	-	-	Movistar INTERNET	internet.movistar.com.co	4002	movistar	movistar	pap	ipv4v6
+732123	-	-	-	Virgin Mobile	Virgin Mobile	web.vmc.net.co	4006	-	-	pap	-
+732130	-	-	-	-	Avantel	lte.avantel.com.co	4007	-	-	none	-
+732187	-	-	-	-	ETB 4G	internetmovil.etb.net.co	4008	-	-	none	-
+732360	-	-	-	-	Internet WOM	internet.wom.co	4009	-	-	-	ipv4v6
+73401	-	-	-	-	Digitel TIM (postpaid)	gprsweb.digitel.ve	200	-	-	-	-
+73401	-	-	-	-	Digitel 412	internet.digitel.ve	4012	-	-	-	-
+73402	-	-	-	-	Digitel TIM (postpaid)	gprsweb.digitel.ve	200	-	-	-	-
+73402	-	-	-	-	Digitel 412	internet.digitel.ve	4014	-	-	-	-
+73403	-	-	-	-	Digitel TIM (postpaid)	gprsweb.digitel.ve	200	-	-	-	-
+73403	-	-	-	-	Digitel 412	internet.digitel.ve	4016	-	-	-	-
+73404	-	-	-	-	Movistar (postpaid)	internet.movistar.ve	200	-	-	-	-
+73404	-	-	-	-	Movistar INTERNET	internet.movistar.ve	4018	-	-	-	ipv4v6
+73406	-	-	-	-	Movilnet (postpaid)	int.movilnet.com.ve	200	-	-	-	-
+73601	-	-	-	-	VIVA3G	internet.nuevatel.com	4021	-	-	pap	-
+73602	-	-	-	-	Entel Bolivia 4G	4g.entel	4023	-	-	none	-
+73603	-	-	-	-	Tigo Internet	internet.tigo.bo	4025	-	-	none	-
+73801	-	-	-	-	DigiCel (postpaid)	internet	200	web	web	-	-
+73801	-	-	-	-	Digicel	web.digicelgy.com	4027	-	-	-	-
+73802	-	-	-	-	GT&T Cellink Plus (postpaid)	wap.cellinkgy.com	200	test	test	-	-
+73802	-	-	-	-	GT&T Cellink Plus	default	4029	-	-	-	-
+74000	-	-	-	-	Movistar UMTS (postpaid)	navega.movistar.ec	200	movistar	movistar	-	-
+74000	-	-	-	-	Movistar INTERNET	internet.movistar.com.ec	4030	movistar	movistar	none	ipv4v6
+74001	-	-	-	-	Porta 3G (postpaid)	internet.porta.com.ec	200	-	-	-	-
+74001	-	-	-	-	Internet Claro	internet.claro.com.ec	4033	-	-	-	-
+74002	-	-	-	-	CNT Internet	internet.cnt.net.ec	4035	-	-	pap-or-chap	-
+74401	-	-	-	-	VOX (postpaid)	vox.wap	200	-	-	-	-
+74401	-	-	-	-	VOX INTERNET	vox.internet	4036	-	-	pap	-
+74402	-	-	-	-	Claro (postpaid)	gprs.claro.com.py	200	-	-	-	-
+74402	-	-	-	-	Claro PY	igprs.claro.com.py	4038	-	-	none	-
+74404	-	-	-	-	Tigo (postpaid)	internet.tigo.py	200	-	-	-	-
+74404	-	-	-	-	Tigo (postpaid)	broadband.tigo.py	201	tigo	tigo	-	-
+74404	-	-	-	-	TIGO PY	internet.tigo.py	4039	-	-	pap	-
+74405	-	-	-	-	Personal (postpaid)	internet	200	-	-	-	-
+74405	-	-	-	-	Personal Datos Py	internet	4041	personal	personal	pap	-
+74602	-	-	-	-	Telesur	default	4043	-	-	-	-
+74603	-	-	-	-	Suriname:Digicel:Internet	web.digicelsr.com	4044	-	-	pap	-
+74800	-	-	-	-	Ancel (postpaid)	adslmovil	200	-	-	-	-
+74800	-	-	-	-	Ancel (prepaid)	prepago.ancel	201	BAM	BAM	-	-
+74800	-	-	-	-	Ancel (postpaid)	gprs.ancel	202	-	-	-	-
+74801	-	-	-	-	Ancel (postpaid)	adslmovil	200	-	-	-	-
+74801	-	-	-	-	Ancel (prepaid)	prepago.ancel	201	BAM	BAM	-	-
+74801	-	-	-	-	Ancel (postpaid)	gprs.ancel	202	-	-	-	-
+74801	-	-	-	-	Vera 1	antel.lte	4047	-	-	pap	ipv4v6
+74807	-	-	-	-	Movistar (postpaid)	apnumt.movistar.com.uy	200	movistar	movistar	-	-
+74807	-	-	-	-	Movistar (postpaid)	webapn.movistar.com.uy	201	movistar	movistar	-	-
+74807	-	-	-	-	Movistar INTERNET	webapn.movistar.com.uy	4048	movistar	movistar	pap	ipv4v6
+74810	-	-	-	-	Claro (postpaid)	gprs.claro.com.uy	200	ctigprs	ctigprs999	-	-
+74810	-	-	-	-	Claro (postpaid)	internet.ctimovil.com.uy	201	ctiweb	ctiweb999	-	-
+74810	-	-	-	-	Claro UY	igprs.claro.com.uy	4050	-	-	none	-
+90128	-	-	-	-	CIOT Vodafone	ciot.vodafone.com	4051	vodafone	vodafone	-	-
+90137	-	-	-	-	mobiledata	mobiledata	4052	-	-	-	-
+90140	-	-	-	-	Telekom	internet.m2mportal.de	4053	-	-	-	-
+90143	-	-	-	-	EMnify	em	4054	-	-	-	-
+90154	-	-	-	-	Tata Move IOT	move.dataxs.mobi	4055	-	-	-	-
+90158	-	-	-	-	BICS Internet	bicsapn	4057	-	-	-	-
+90178	-	-	-	-	Sparkle	ep05.tis.com	4058	-	-	-	-
+999480	-	-	-	-	LTE - Verizon Internet	vzwinternet	4060	-	-	-	ipv4v6

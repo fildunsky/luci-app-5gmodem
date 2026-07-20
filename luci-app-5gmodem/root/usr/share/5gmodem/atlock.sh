@@ -40,7 +40,9 @@ at_lock() {
 	_al_n=0
 	_al_max="${2:-10}"
 	while [ "$_al_n" -lt "$_al_max" ]; do
-		flock -n "$AT_LOCK_FD" 2>/dev/null && return 0
+		if flock -n "$AT_LOCK_FD" 2>/dev/null; then
+			return 0
+		fi
 		sleep 1
 		_al_n=$((_al_n + 1))
 	done

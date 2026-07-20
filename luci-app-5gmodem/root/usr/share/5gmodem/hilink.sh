@@ -140,15 +140,59 @@ api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
 		"http://$_a$_ep" 2>/dev/null
 }
 
-# Значение одного тега из ответа. XML у этих прошивок - тег на строку.
-# tr -d '\r' ОБЯЗАТЕЛЕН: прошивка отдаёт CRLF, и без него якорь $ не совпадал -
-# все поля молча выходили пустыми, хотя ответ приходил правильный.
-xval() { tr -d '\r' | sed -n "s|^<$1>\(.*\)</$1>\$|\1|p" | head -1; }
+# Значение одного тега из ответа.
+#
+# ФОРМАТИРОВАНИЕ ОТВЕТА У РАЗНЫХ ЭНДПОИНТОВ РАЗНОЕ. monitoring/status приходит
+# «тег на строку», а dialup/connection - ВСЕ ТЕГИ В ОДНУ СТРОКУ. Прежняя версия
+# требовала тег на отдельной строке и на однострочном XML молча возвращала
+# пустоту: настройка роуминга читалась как «выключено» при включённой в модеме.
+# Поэтому сначала САМИ расставляем переводы строк перед каждым тегом, и разбор
+# перестаёт зависеть от того, как прошивка отформатировала ответ.
+#
+# tr -d '\r' ОБЯЗАТЕЛЕН: прошивка отдаёт CRLF, и без него якорь $ не совпадал.
+xval() {
+	# Разбиваем по тегам ЛИТЕРАЛЬНЫМ переводом строки: в busybox sed
+	# последовательность \n в ПРАВОЙ части не разворачивается в перевод строки
+	# (проверено - разбор молча ломался, все поля выходили пустыми).
+	tr -d '\r' | sed 's|<|\
+<|g' | sed -n "s|^<$1>\(.*\)\$|\1|p" | head -1
+}
 
 # Значение, безопасное для вставки в JSON: убираем управляющие символы и
 # экранируем кавычки со слэшем. Один сбойный байт ломает разбор ВСЕГО ответа на
 # странице, а выглядит это как «данных нет» - искать потом долго.
 jsafe() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+# ДАННЫЕ В РОУМИНГЕ у HiLink-модема.
+#
+# Настройка живёт в /api/dialup/connection, поле RoamAutoConnectEnable - это
+# ровно тот тумблер, что есть в веб-админке модема. Отдельного «состояния» тут
+# нет: прошивка сама решает, дозваниваться ли, зарегистрировавшись в роуминге.
+#
+# ВАЖНО про запись: прошивка принимает ТОЛЬКО ПОЛНЫЙ набор полей. Пошлёшь одно
+# RoamAutoConnectEnable - остальные обнулятся (MTU станет 0, автодозвон
+# выключится). Поэтому сперва читаем текущие, потом переписываем одно поле.
+hl_getroaming() {   # $1 - usb-путь
+	_gr=$(api_get /api/dialup/connection "$1" 2>/dev/null | xval RoamAutoConnectEnable)
+	case "$_gr" in 1) echo 1 ;; *) echo 0 ;; esac
+}
+
+hl_setroaming() {   # $1 - usb-путь, $2 - 0|1
+	case "$2" in 0|1) : ;; *) echo '{"error":"value must be 0 or 1"}'; return 0 ;; esac
+	_sr_cur=$(api_get /api/dialup/connection "$1" 2>/dev/null)
+	_sr_idle=$(printf '%s' "$_sr_cur" | xval MaxIdelTime);   [ -n "$_sr_idle" ] || _sr_idle=0
+	_sr_cm=$(printf '%s' "$_sr_cur"   | xval ConnectMode);   [ -n "$_sr_cm" ]   || _sr_cm=0
+	_sr_mtu=$(printf '%s' "$_sr_cur"  | xval MTU);           [ -n "$_sr_mtu" ]  || _sr_mtu=1500
+	_sr_ads=$(printf '%s' "$_sr_cur"  | xval auto_dial_switch); [ -n "$_sr_ads" ] || _sr_ads=1
+	_sr_pao=$(printf '%s' "$_sr_cur"  | xval pdp_always_on);    [ -n "$_sr_pao" ] || _sr_pao=1
+	_sr_r=$(api_post /api/dialup/connection \
+		"<RoamAutoConnectEnable>$2</RoamAutoConnectEnable><MaxIdelTime>$_sr_idle</MaxIdelTime><ConnectMode>$_sr_cm</ConnectMode><MTU>$_sr_mtu</MTU><auto_dial_switch>$_sr_ads</auto_dial_switch><pdp_always_on>$_sr_pao</pdp_always_on>" \
+		"$1")
+	case "$_sr_r" in
+		*'<response>OK</response>'*) printf '{"success":true,"allow_roaming":"%s"}\n' "$2" ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_sr_r" | xval code)" ;;
+	esac
+}
 
 # --- расшифровка кодов -------------------------------------------------------
 
@@ -243,7 +287,18 @@ metrics_json() {
 	_ntype=$(printf '%s' "$_st" | xval CurrentNetworkType)
 	_wanip=$(printf '%s' "$_st" | xval WanIPAddress)
 	_sim=$(printf '%s' "$_st" | xval SimStatus)
-	_roam=$(printf '%s' "$_st" | xval RoamingStatus)
+	# РОУМИНГ: СОСТОЯНИЕ, А НЕ НАСТРОЙКА.
+	#
+	# Здесь читался RoamingStatus - и это оказалось поле НЕ ПРО ТО. У Huawei в
+	# monitoring/status RoamingStatus - это НАСТРОЙКА «разрешён ли роуминг» (тот
+	# самый тумблер из веб-админки), а фактическое состояние лежит в cellroam.
+	# Живьём на стенде: RoamingStatus=1 (роуминг разрешён), cellroam=0 (модем
+	# дома, Tele2 на симке Tele2) - и страница рисовала значок роуминга при
+	# домашней сети.
+	_roam=$(printf '%s' "$_st" | xval cellroam)
+	# Настройку отдаём отдельным полем - на ней строится тумблер «данные в
+	# роуминге» для этого класса модемов.
+	_roamset=$(printf '%s' "$_st" | xval RoamingStatus)
 
 	_rsrp=$(printf '%s' "$_sig" | xval rsrp | tr -cd '0-9-')
 	_rsrq=$(printf '%s' "$_sig" | xval rsrq | tr -cd '0-9.-')
@@ -345,6 +400,7 @@ metrics_json() {
 	printf '"operator_name":"%s",' "$(jsafe "$_op")"
 	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
 	printf '"registration":"%s",' "$_reg"
+	printf '"allow_roaming":"%s",' "$([ "$_roamset" = "1" ] && echo 1 || echo 0)"
 	printf '"mode":"%s",' "$(nettype_name "$_ntype")"
 	printf '"signal":"%s",' "$_pct"
 	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
@@ -633,6 +689,8 @@ case "$1" in
 	setbands)    hl_setbands "$2" "$3" ;;
 	getmode)     hl_getmode "$2" ;;
 	setmode)     hl_setmode "$2" "$3" ;;
+	getroaming)  hl_getroaming "$2" ;;
+	setroaming)  hl_setroaming "$2" "$3" ;;
 	*)
 		echo "usage: hilink.sh {probe|json|addr|get <ep>|connect|disconnect|reboot} [usb-path]" >&2
 		exit 1

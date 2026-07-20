@@ -67,13 +67,14 @@ proto_fibocom_init_config() {
 	proto_config_add_string "apn"
 	proto_config_add_string "pdptype"
 	proto_config_add_int "metric"
+	proto_config_add_boolean "allow_roaming"
 	proto_config_add_defaults
 }
 
 proto_fibocom_setup() {
 	local interface="$1"
 	local usbpath device atport apn pdptype metric
-	json_get_vars usbpath device atport apn pdptype metric
+	json_get_vars usbpath device atport apn pdptype metric allow_roaming
 
 	[ -n "$apn" ] || apn="internet"
 	[ -n "$pdptype" ] || pdptype="IPV4V6"
@@ -127,6 +128,34 @@ proto_fibocom_setup() {
 		proto_notify_error "$interface" NO_AT_PORT
 		proto_set_available "$interface" 0
 		return 1
+	fi
+
+	# ДАННЫЕ В РОУМИНГЕ. У FM350 переключателя роуминга В МОДЕМЕ НЕТ - в
+	# руководстве по AT-командам (v2.2) такой команды не существует вовсе,
+	# единственное упоминание роуминга - тип PDP в +EIAAPN. Поэтому поступаем
+	# как mbim.sh: НЕ ПОДНИМАЕМ соединение, увидев роуминговую регистрацию.
+	# Это и есть то, чего ждёт пользователь от тумблера - счёт за трафик
+	# приходит за переданные байты, а не за факт регистрации.
+	#
+	# Коды +CEREG/+CREG: 5 - registered, roaming; 7 и 10 - роуминговые
+	# разновидности (SMS only / CSFB not preferred). Дом - 1.
+	if [ "$allow_roaming" != "1" ]; then
+		local _reg
+		_reg=$(sms_tool -d "$dial" at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		[ -n "$_reg" ] || _reg=$(sms_tool -d "$dial" at "AT+CREG?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		case "$_reg" in
+			5|7|10)
+				echo "fibocom[$$] roaming registration ($_reg) and roaming is not allowed"
+				proto_notify_error "$interface" ROAMING_NOT_ALLOWED
+				# БЛОКИРУЕМ перезапуск: без этого netifd поднимал бы интерфейс
+				# заново каждые 5 c, и лог забивался бы одним и тем же отказом.
+				# Пользователь включит роуминг тумблером - интерфейс поднимут явно.
+				proto_block_restart "$interface"
+				return 1
+				;;
+		esac
 	fi
 
 	# FAST PATH: if the PDP context is ALREADY active with a valid address, reuse

@@ -3,6 +3,13 @@
 # У модема без AT-портов слотами управлять нечем: команды переключения - AT.
 # Без этой проверки страница показывала «SIM / eSIM» у односимочного Huawei,
 # потому что в секции оставались slot_type_* от прежнего модема на том же порту.
+# Переключаем слот - СБРАСЫВАЕМ КЭШ активного слота у опроса метрик
+# (5gmodem.sh держит ответ минуту, чтобы не звать qmicli на каждом тике).
+# Делаем это ДО всех развилок: веток "set" в скрипте три - по одной на транспорт
+# (AT, QMI/UIM и путь для модемов без слотов), и вставка в одну из них покрывала
+# бы только часть модемов. Проверено: правка только в AT-ветке кэш не сбрасывала.
+[ "$1" = "set" ] && rm -f /tmp/5gmodem_slot_* 2>/dev/null
+
 _ss_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 # У модемов этого класса слот ФИЗИЧЕСКИ ОДИН - независимо от того, открыты у
 # него AT-порты или нет. Ответ на AT-пробу у них при этом бывает вводящим в
@@ -32,6 +39,28 @@ MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
 # заново зарегистрировать после каждого USB-переперечисления (пока mm-inhibit
 # его не отпустит), и слепой mmindex уводил запрос к полумёртвому MM-объекту.
 _AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+
+# СВЕЖИЙ ОТВЕТ ОТДАЁМ ИЗ КЭША.
+#
+# Кэш тут был, но служил только запасным вариантом при неудачном опросе -
+# успешный путь каждый раз шёл в порт. А стоит он дорого: замер на стенде -
+# 5 секунд, из них 2 с только ожидание очереди к AT-порту, занятому опросом
+# метрик.
+#
+# Состав слотов и активный слот меняются лишь когда их переключает пользователь
+# (ветка set сама чистит кэш) или когда меняется модем (ключ кэша - его
+# USB-путь). Держать ответ полминуты безопасно, а страница перестаёт ждать.
+if [ "$1" != "set" ] && [ -n "$_AP" ] && [ -s "/tmp/5gmodem_slots_$_AP" ]; then
+	_sc_t=$(cat "/tmp/5gmodem_slots_$_AP.t" 2>/dev/null)
+	case "$_sc_t" in
+		''|*[!0-9]*) : ;;
+		*) _sc_age=$(( $(cut -d. -f1 /proc/uptime) - _sc_t ))
+		   if [ "$_sc_age" -ge 0 ] && [ "$_sc_age" -lt 30 ]; then
+			cat "/tmp/5gmodem_slots_$_AP"; exit 0
+		   fi ;;
+	esac
+fi
+
 _SEC=$(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.path='$_AP'\$/\1/p" | head -1)
 _NET=$(uci -q get "5gmodem.$_SEC.network")
 _PROTO=$(uci -q get "network.$_NET.proto")
@@ -51,6 +80,19 @@ if [ -n "$_AP" ]; then
 	_AJ=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
 	_AVIDPID=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].vidpid" 2>/dev/null)
 	_APROD=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].product" 2>/dev/null)
+fi
+
+# ОДНОСИМОЧНЫЙ МОДЕМ - НЕТ КНОПОК СЛОТОВ НИ ПРИ КАКОМ ПРОТОКОЛЕ.
+#
+# Проверка sim_slots_via=none стояла ТОЛЬКО в QMI-ветке, а под ModemManager
+# показывались слоты, которые рапортует сам MM. Прошивка SIM7600E-H отдаёт в
+# QMI/MM ДВА физических слота, хотя рабочий один - и пользователь, переключившись
+# на пустой слот 2, терял сеть. Гейт должен быть общим: если модель заведомо
+# односимочная, слотов нет и под MM.
+. /usr/share/5gmodem/quirks.sh
+if [ "$1" != "set" ] \
+   && [ "$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")" = none ]; then
+	echo '{"type":"","slots":[],"active":""}'; exit 0
 fi
 case "$_AVIDPID" in
 	05c6:90d6) MI="" ;;
@@ -122,7 +164,6 @@ fi
 # Способ чтения слотов берём из базы проверенных модемов, а не перебором: лишние
 # команды в общий AT-порт конкурируют с опросом метрик, и ответы перепутываются
 # (эхо "AT+SIMTYPE?" однажды прилетело на чтение AT+CGMM и осело в имени модема).
-. /usr/share/5gmodem/quirks.sh
 _VIA=$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model")" "$_AVIDPID")
 if [ "$_VIA" = none ] && [ "$1" != set ]; then
 	# Модем с единственным слотом (SIM7600E-H): спрашивать нечего, кнопок нет.
@@ -158,7 +199,7 @@ if [ "$_VIA" = qmi ]; then
 	set)
 		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
 		if _q --uim-switch-slot="$2" 2>/dev/null | grep -qi "success"; then
-			rm -f "/tmp/5gmodem_slots_$_AP"
+			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 			# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
 			( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 			  _IF=$(uci -q get 5gmodem.@5gmodem[0].network)
@@ -278,7 +319,7 @@ set)
 	if echo "$O" | grep -q "ERROR"; then
 		echo '{"error":"switch failed"}'
 	else
-		rm -f "/tmp/5gmodem_slots_$_AP"   # активный слот изменился - кэш недействителен
+		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"   # активный слот изменился - кэш недействителен
 		# fds отвязаны ОТ ПОДОБОЛОЧКИ: иначе она держит пайпы rpcd все ~120 с
 		# ожидания модема, и XHR из UI упадёт по таймауту (см. reboot_modem.sh).
 		( slot_redial ) >/dev/null 2>&1 </dev/null &
@@ -368,6 +409,7 @@ set)
 	_CACHE="/tmp/5gmodem_slots_$_AP"
 	if [ -n "$OUT" ] && [ -n "$ACT" ]; then
 		printf '{"type":"%s","slots":[%s],"active":"%s"}\n' "$TYPE" "$OUT" "$ACT" > "$_CACHE"
+		cut -d. -f1 /proc/uptime > "$_CACHE.t"
 		cat "$_CACHE"
 	elif [ -s "$_CACHE" ]; then
 		cat "$_CACHE"

@@ -833,9 +833,21 @@ return view.extend({
 			uci.unset('5gmodem', section_id, 'at_port');
 		};
 
+		/* HiLink-модем не дозванивается через netifd: он держит соединение сам
+		   и раздаёт IP по DHCP на своей сетевой карте. AT-протоколы (mbim/qmi/…)
+		   к нему неприменимы, поэтому выпадашку протокола и кнопку mkiface ему НЕ
+		   показываем - вместо них ниже отдельная кнопка «HiLink DHCP» (mkhilink). */
+		var activeIsHilink = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return false; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sc, 'kind') === 'hilink';
+		})();
+
 		/* Выбор протокола + кнопка создания интерфейса модема. Список типов
 		   строится по установленным на роутере обработчикам протоколов, так
 		   что для Fibocom с luci-proto-xmm/atc появятся XMM/ATC и т.д. */
+		if (!activeIsHilink) {
 		o = s.option(form.ListValue, 'iface_proto', _('Interface protocol'),
 			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem).'));
 		o.value('auto', _('Auto (detect)'));
@@ -884,6 +896,7 @@ return view.extend({
 					_('“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem.')), 'info');
 			}
 		};
+		} /* if (!activeIsHilink) - выпадашка протокола */
 
 		/* Имя интерфейса модема и признак его существования - для подписи
 		   кнопки (создать/пересоздать) и для встроенной вьюхи ниже. */
@@ -969,32 +982,35 @@ return view.extend({
 		o.write = function() {};
 		o.remove = function() {};
 		o.load = function(section_id) {
-			/* APN определяем по ОПЕРАТОРУ при каждом открытии страницы, СВЕЖИМ
-			   опросом. Раньше здесь было два слоя устаревания, и после смены SIM
-			   поле показывало APN прежнего оператора:
-			     1) если APN уже прописан в интерфейсе - оператора не спрашивали
-			        вовсе и возвращали старое значение;
-			     2) netpri.sh op отдавал operator_cached - файл в /tmp, живущий
-			        30 минут.
-			   Теперь: 'fresh' сбрасывает кэш и опрашивает модем заново. */
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh',
-					[ 'op', mIfName, 'fresh' ]), '')
-				.then(function(op) {
-					op = (op || '').trim();
-					if (!op) {
-						/* Оператора прочитать НЕ УДАЛОСЬ (порт занят, модем ещё
-						   поднимается) - это НЕ то же самое, что «оператора нет в
-						   базе». Показываем текущий APN интерфейса: предложить
-						   стереть рабочий APN из-за неудачной пробы нельзя. */
-						return uci.get('network', mIfName, 'apn') || '';
-					}
-					/* Оператор известен: спрашиваем APN у сервера - подбор общий с
-					   автонастройкой. Пусто - оператора нет в базе (тогда кнопка
-					   применит «без APN», см. sentinel '-' ниже). */
-					return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh',
-							[ 'apnfor' ]), '')
-						.then(function(a) { return (a || '').trim(); });
-				});
+			/* СТРАНИЦА НЕ ЖДЁТ ОПРОС МОДЕМА. Раньше здесь форсировался свежий
+			   AT-опрос оператора ('fresh'), и форма НЕ РИСОВАЛАСЬ, пока он не
+			   завершится - а с очередью к порту это секунды. Теперь мгновенно
+			   отдаём текущий APN интерфейса, а подсказку по оператору
+			   дозаполняем В ФОНЕ (см. ниже) и подставляем в поле, когда придёт.
+			   Ровно то, о чём просил пользователь: открыть сразу, заполнить
+			   потом. */
+			var self = this;
+			window.setTimeout(function() {
+				L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/netpri.sh',
+						[ 'op', mIfName, 'fresh' ]), '')
+					.then(function(op) {
+						op = (op || '').trim();
+						if (!op) { return ''; }
+						return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh',
+								[ 'apnfor' ]), '').then(function(a) { return (a || '').trim(); });
+					})
+					.then(function(want) {
+						if (!want) { return; }
+						var el = self.getUIElement(section_id);
+						/* Не перетираем то, что пользователь УЖЕ начал править. */
+						if (!el || el.isChanged && el.isChanged()) { return; }
+						var cur = (el.getValue() || '').trim();
+						if (cur === want) { return; }
+						el.setValue(want);
+					});
+			}, 0);
+			/* Мгновенное значение - текущий APN интерфейса. */
+			return uci.get('network', mIfName, 'apn') || '';
 		};
 
 		/* Тип PDP для создаваемого интерфейса. Чистое UI-поле (в uci не пишется):
@@ -1081,6 +1097,87 @@ return view.extend({
 		};
 		o.remove = function() {};
 
+		/* ДАННЫЕ В РОУМИНГЕ.
+		   Пишем в САМ ИНТЕРФЕЙС (network.<iface>.allow_roaming) - это
+		   стандартная опция netifd, её читают mbim и modemmanager, и её же
+		   теперь понимает наш fibocom. Своего ключа не заводим: он бы
+		   расходился с тем, что реально смотрит протокол при дозвоне.
+
+		   Показываем ТОЛЬКО для протоколов, где механизм есть. У qmi его нет
+		   вовсе, и тумблер там был бы обманом - выглядел бы работающим и не
+		   делал ничего. У FM350 переключателя нет и в самом модеме: в
+		   руководстве по AT-командам такой команды не существует, поэтому наш
+		   протокол просто не поднимает соединение в роуминге - как mbim. */
+		var roamProto = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return ''; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			var ifn = uci.get('5gmodem', sc, 'network')
+			       || uci.get('5gmodem', '@5gmodem[0]', 'network');
+			return ifn ? (uci.get('network', ifn, 'proto') || '') : '';
+		})();
+		/* HiLink-модем управляется своим веб-API, а не netifd: у него роуминг
+		   переключается полем RoamAutoConnectEnable в /api/dialup/connection -
+		   тот же тумблер, что в веб-админке модема. Интерфейс у него обычный
+		   dhcp, поэтому по протоколу его не опознать - смотрим на kind. */
+		var roamHilink = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return false; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sc, 'kind') === 'hilink';
+		})();
+		if (roamHilink || roamProto === 'mbim' || roamProto === 'modemmanager' || roamProto === 'fibocom') {
+		o = s.option(form.Flag, '_roaming', _('Allow data roaming'),
+			_('When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var v = (value === '1') ? '1' : '0';
+			/* HiLink: настройка живёт В МОДЕМЕ, а не в конфиге роутера -
+			   пишем через его API. Интерфейс не трогаем: дозвоном правит сама
+			   прошивка модема, и перезапуск dhcp-клиента ничего не решает. */
+			if (roamHilink) {
+				return fs.exec('/usr/share/5gmodem/hilink.sh',
+					[ 'setroaming', String(p), v ]).catch(function() {});
+			}
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			var ifn = uci.get('5gmodem', sc, 'network')
+			       || uci.get('5gmodem', '@5gmodem[0]', 'network');
+			if (!ifn) { return; }
+			uci.set('network', ifn, 'allow_roaming', v);
+			/* Интерфейс перезапускаем: решение принимается ПРИ ДОЗВОНЕ, и без
+			   перезапуска изменение вступило бы в силу неизвестно когда - а
+			   при выключении роуминга ещё и продолжал бы капать трафик. */
+			return fs.exec('/sbin/ifup', [ ifn ]).catch(function() {});
+		};
+		o.load = function(section_id) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return '0'; }
+			if (roamHilink) {
+				/* Спрашиваем сам модем - но В ФОНЕ, HTTP-запрос не должен
+				   держать отрисовку формы. Пока не ответил, показываем 0. */
+				var self = this;
+				window.setTimeout(function() {
+					L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/hilink.sh',
+							[ 'getroaming', String(p) ]), '0')
+						.then(function(out) {
+							var v = String(out).trim() === '1' ? '1' : '0';
+							var el = self.getUIElement(section_id);
+							if (el && !(el.isChanged && el.isChanged())) { el.setValue(v); }
+						});
+				}, 0);
+				return '0';
+			}
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			var ifn = uci.get('5gmodem', sc, 'network')
+			       || uci.get('5gmodem', '@5gmodem[0]', 'network');
+			return (ifn && uci.get('network', ifn, 'allow_roaming') === '1') ? '1' : '0';
+		};
+		o.remove = function() {};
+		}
+
 		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
 			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));
 		o.default = '1';
@@ -1100,6 +1197,9 @@ return view.extend({
 			return (p && p !== 'modemmanager') ? '1' : '0';
 		};
 
+		/* Тип PDP - аргумент дозвона (mkiface). У HiLink дозвона нет, тип IP
+		   согласует сам модем, поэтому поле ему не показываем. */
+		if (!activeIsHilink) {
 		o = s.option(form.ListValue, '_pdptype', _('IP type'),
 			_('IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to "IPv4 only" only if a modem has trouble with dual-stack.'));
 		o.value('ipv4v6', _('IPv4 and IPv6 (recommended)'));
@@ -1114,7 +1214,35 @@ return view.extend({
 				|| uci.get('network', mIfName, 'pdp') || '';
 			return (String(v).toLowerCase() === 'ipv4') ? 'ipv4' : 'ipv4v6';
 		};
+		} /* if (!activeIsHilink) - тип PDP */
 
+		if (activeIsHilink) {
+		/* HiLink: DHCP-интерфейс на сетевой карте модема. Протокол не выбираем -
+		   дозвона нет, модем держит соединение сам. Бэкенд mkhilink находит карту
+		   (hilink_net) и заводит proto=dhcp (setup_hilink). */
+		o = s.option(form.Button, '_mkhilink');
+		o.title = _('Modem interface');
+		o.description = _('This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose.');
+		o.inputtitle = mIfExists ? _('Recreate interface (HiLink DHCP)') : _('Create interface (HiLink DHCP)');
+		o.inputstyle = 'apply';
+		o.onclick = function() {
+			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
+			return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mkhilink' ]).then(function(res) {
+				ui.hideModal();
+				var out = {};
+				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+				if (out.success) {
+					ui.addNotification(null, E('p', _('Interface "%s" created (DHCP on %s), bringing it up…').format(out.iface, out.netdev)), 'info');
+					if (profilesView) { profilesView.loadProfiles(); }
+				} else {
+					ui.addNotification(null, E('p', _('No HiLink network card found to create an interface for.')), 'error');
+				}
+			}).catch(function(err) {
+				ui.hideModal();
+				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
+			});
+		};
+		} else {
 		o = s.option(form.Button, '_mkiface');
 		o.title = _('Modem interface');
 		o.description = _('Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem).');
@@ -1171,6 +1299,7 @@ return view.extend({
 				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
 			});
 		};
+		} /* if activeIsHilink … else - кнопка создания интерфейса */
 
 		/* Забыть модемы, которых больше нет на шине.
 		   ЯВНОЕ действие: автоматически по отключению так делать нельзя - модем

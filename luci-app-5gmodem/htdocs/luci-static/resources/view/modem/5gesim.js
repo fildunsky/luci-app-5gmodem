@@ -66,47 +66,55 @@ function notify(ok, msgOk, msgFail) {
 	}
 }
 
-/* APN по имени оператора - та же таблица, что в «Настройках модема» (5gdebug). */
-function apnForOperator(name) {
-	var n = (name || '').toLowerCase();
-	if (n.indexOf('t-mobile') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('t-mob') >= 0) { return 'tt'; }
-	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'sberbank'; }
-	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'internet.beeline.ru'; }
-	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'internet.mts.ru'; }
-	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'internet'; }
-	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'internet.tele2.ru'; }
-	if (n.indexOf('yota') >= 0) { return 'internet.yota'; }
-	return '';
-}
+/* После включения eSIM-профиля симка фактически сменилась - значит и APN мог
+   стать другим. Ведём себя ТАК ЖЕ, как при смене физической SIM, и через ТОТ ЖЕ
+   серверный код (modemswitch.sh), а не через локальную копию таблицы APN:
+   она уже однажды разошлась с оригиналом (см. 5gdebug.js) и не знала про MVNO.
 
-/* После включения eSIM-профиля оператор мог смениться. ПРЕДЛАГАЕМ проверить APN
-   (не меняем молча - на MVNO/неверном определении это рискованно). Показываем
-   подсказку со ссылкой в «Настройки модема» ТОЛЬКО если рекомендованный по
-   оператору APN отличается от текущего на интерфейсе. */
+   Режим APN у модема решает всё:
+     - автоматически -> autoapn подберёт и ПРИМЕНИТ сам (учтёт код из IMSI для
+       MVNO и роуминг), нам остаётся показать короткое уведомление;
+     - вручную -> ничего не трогаем, только подсказываем найденный APN со
+       ссылкой в «Настройки модема». */
 function proposeApnAfterEnable() {
-	return Promise.all([
-		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '5' ]), '{}'),
-		L.resolveDefault(uci.load('5gmodem')),
-		L.resolveDefault(uci.load('network'))
-	]).then(function(res) {
-		var j = {}; try { j = JSON.parse(res[0] || '{}'); } catch (e) {}
-		var op = String(j.operator || '').trim();
-		var want = apnForOperator(op);
-		if (!want) { return; }
-		var iface = uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
-		var cur = String(uci.get('network', iface, 'apn') || '').trim();
-		// Пустой uci-APN = интерфейс на дефолте прото (напр. fibocom → «internet»),
-		// который обычно работает; менять его вслепую опаснее, чем оставить. Поэтому
-		// предлагаем ТОЛЬКО при ЯВНО заданном APN, который расходится с оператором.
-		if (!cur || cur.toLowerCase() === want.toLowerCase()) { return; }
-		ui.addNotification(null, E('p', {}, [
-			_('Operator changed to "%s" after switching the eSIM profile. The recommended APN is "%s" (current: "%s"). Open Modem Settings to apply it.')
-				.format(op, want, cur || '—'), ' ',
-			E('a', {
-				'class': 'btn cbi-button cbi-button-action',
-				'href': L.url('admin', 'modem', '5gmodem', 'diagnostics')
-			}, _('Open Modem Settings'))
-		]), 'warning');
+	return L.resolveDefault(uci.load('5gmodem')).then(function() {
+		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+		var sec = p ? ('m_' + String(p).replace(/[^A-Za-z0-9]/g, '_')) : '';
+		var iface = (sec && uci.get('5gmodem', sec, 'network'))
+			|| uci.get('5gmodem', '@5gmodem[0]', 'network') || 'modem';
+		var manual = sec && uci.get('5gmodem', sec, 'apn_mode') === 'manual';
+
+		if (!manual) {
+			/* Автоматический режим: применяем сразу. autoapn сам ничего не
+			   сделает в роуминге и на неизвестном операторе - молчит, значит
+			   безопасно. */
+			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autoapn', iface ]);
+			ui.addNotification(null, E('p', {},
+				_('eSIM profile switched - checking and updating the APN automatically.')),
+				'info');
+			return;
+		}
+
+		/* Ручной режим: подбор берём у сервера (тот же код, что автонастройка),
+		   а не из локальной таблицы. Предлагаем, только если найденный APN
+		   отличается от того, что стоит в интерфейсе. */
+		return Promise.all([
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'apnfor' ]), ''),
+			L.resolveDefault(uci.load('network'))
+		]).then(function(r) {
+			var want = String(r[0] || '').trim();
+			if (!want) { return; }
+			var cur = String(uci.get('network', iface, 'apn') || '').trim();
+			if (cur.toLowerCase() === want.toLowerCase()) { return; }
+			ui.addNotification(null, E('p', {}, [
+				_('APN for the new operator may differ. Recommended: "%s" (current: "%s"). You are in manual APN mode - open Modem Settings to apply it.')
+					.format(want, cur || '\u2014'), ' ',
+				E('a', {
+					'class': 'btn cbi-button cbi-button-action',
+					'href': L.url('admin', 'modem', '5gmodem', 'diagnostics')
+				}, _('Open Modem Settings'))
+			]), 'warning');
+		});
 	});
 }
 
@@ -116,7 +124,10 @@ return view.extend({
 	handleReset: null,
 
 	load: function() {
-		return Promise.all([ esimExec([ 'status' ]), slotExec([ 'status' ]) ]);
+		/* status-probe (синхронная проба): пользователь ОСОЗНАННО открыл вкладку
+		   eSIM и готов подождать пробу; на горячем пути видимости вкладки
+		   используется мгновенный 'status'. */
+		return Promise.all([ esimExec([ 'status-probe' ]), slotExec([ 'status' ]) ]);
 	},
 
 	render: function(res) {
@@ -456,7 +467,7 @@ return view.extend({
 });
 
 /* --- вспомогательные (вне view, работают с DOM) ------------------------- */
-var _viewReload = function(tries) {
+var _viewReload = function(tries, maxTries) {
 	// найти активный view-инстанс сложно; проще перечитать напрямую.
 	// Возвращает Promise<bool>: true - список перечитан и отрисован, false -
 	// eUICC так и не ответил за все попытки (тогда зовущий просит нажать Refresh).
@@ -470,9 +481,14 @@ var _viewReload = function(tries) {
 		   продолжал висеть в таблице до ручного F5. Теперь настойчиво повторяем и
 		   резолвим Promise только по факту (успех/исчерпание попыток), чтобы вызов
 		   мог держать спиннер и не гасить его раньше времени. */
-		if (tries < 4) {
+		/* Сколько раз повторять - зависит от повода. После обычной операции
+		   eUICC освобождается за секунды, а после ПЕРЕЗАГРУЗКИ модема (смена
+		   профиля) он переэнумерируется на USB и отвечает far позже - там
+		   вызывающий просит больший запас. */
+		var lim = (typeof maxTries === 'number') ? maxTries : 4;
+		if (tries < lim) {
 			return new Promise(function(resolve) {
-				window.setTimeout(function() { _viewReload(tries + 1).then(resolve); }, 3000);
+				window.setTimeout(function() { _viewReload(tries + 1, lim).then(resolve); }, 3000);
 			});
 		}
 		return false;
@@ -529,18 +545,41 @@ function esimOp(verb, iccid, name) {
 			   - список перечитываем с запасом (25 c), как при добавлении. */
 			// Оверлей поверх блока вместо модалки - идёт штатный ребут, а не сбой.
 			ui.hideModal();
-			modemtabs.setBusy('.cbi-section',
-				_('Profile %s. The modem is restarting to apply it - up to a minute…')
-					.format(verb == 'enable' ? _('enabled') : _('disabled')), 90000);
+			/* ДВЕ ЦЕЛЬНЫЕ ФРАЗЫ, А НЕ ПОДСТАНОВКА СЛОВА.
+			   Здесь было _('Profile %s…').format(_('enabled')) - и по-русски
+			   выходило «Профиль включено»: прилагательное не согласуется с
+			   существительным. Собирать предложения из кусков нельзя в принципе -
+			   в каждом языке своё согласование, и переводчик не может это
+			   исправить, у него на руках только обрывки. */
+			modemtabs.setBusy('.cbi-section', verb == 'enable'
+				? _('Profile enabled. The modem is restarting to apply it - up to a minute…')
+				: _('Profile disabled. The modem is restarting to apply it - up to a minute…'),
+				120000);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
 			fs.exec(ESIM, [ 'reapply' ]);   // см. выше: без этого остаётся старый IP
 			window.setTimeout(function() {
-				modemtabs.clearBusy();
-				notify(true, _('eSIM operation done'), null);
-				_viewReload();
-				/* Включили другой профиль -> мог смениться оператор: предложим
-				   проверить APN (не меняем молча). Для disable не делаем. */
-				if (verb == 'enable') { proposeApnAfterEnable(); }
+				/* Порт eUICC после AT+CFUN=1,1 МОГ СМЕНИТЬСЯ: модем
+				   переэнумерируется на USB, и запомненный номер tty уже чужой.
+				   recheck сбрасывает и кэш порта, и кэш наличия eSIM. */
+				L.resolveDefault(fs.exec_direct(ESIM, [ 'recheck' ]), '')
+					/* 15 попыток по 3 c - модем после AT+CFUN=1,1 поднимается
+					   десятки секунд, и четырёх попыток (12 c) не хватало:
+					   список молча оставался прежним. */
+					.then(function() { return _viewReload(0, 15); })
+					.then(function(done) {
+						modemtabs.clearBusy();
+						notify(true, _('eSIM operation done'), null);
+						/* РЕЗУЛЬТАТ ПРОВЕРЯЕМ. Раньше он игнорировался: если eUICC
+						   не успевал ответить (а после жёсткой перезагрузки это
+						   обычное дело), список молча оставался прежним, и
+						   пользователю приходилось обновлять страницу руками. */
+						if (!done) {
+							notify(false, null, _('Could not refresh the list automatically. Press Refresh in a few seconds.'));
+						}
+						/* Включили другой профиль -> мог смениться оператор:
+						   предложим проверить APN (не меняем молча). */
+						if (verb == 'enable') { proposeApnAfterEnable(); }
+					});
 			}, 45000);
 			return;
 		}

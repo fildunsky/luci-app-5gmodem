@@ -179,11 +179,22 @@ function esimHideRule(on) {
 	}
 }
 
-/* Применяем ЗАПОМНЕННОЕ состояние немедленно, ещё до всякого опроса. */
+/* Применяем ЗАПОМНЕННОЕ состояние немедленно, ещё до всякого опроса.
+   ТОЛЬКО ЕСЛИ ЗНАЕМ, О КАКОМ МОДЕМЕ РЕЧЬ. Ключ памяти привязан к активному
+   модему, но uci на этот момент может быть ещё не загружен - тогда
+   esimSeenKey() возвращает общий ключ, и от ПРЕЖНЕГО модема наследовалась
+   чужая память: при переходе на Huawei (eUICC нет) вкладка оставалась видимой
+   всё время пробы, а она у модема без eUICC занимает секунды.
+   Не знаем модема - ПРЯЧЕМ: лишняя вкладка на двадцать секунд раздражает
+   сильнее, чем нужная, появившаяся секундой позже. */
 (function() {
-	var was = '0';
-	try { was = localStorage.getItem(esimSeenKey()) || '0'; } catch (e) {}
-	esimHideRule(was !== '1');
+	var was = '0', keyed = false;
+	try {
+		var k = esimSeenKey();
+		keyed = (k !== ESIM_SEEN_BASE);
+		was = localStorage.getItem(k) || '0';
+	} catch (e) {}
+	esimHideRule(!(keyed && was === '1'));
 })();
 
 function applyEsimTabVisibility(tries) {
@@ -199,9 +210,20 @@ function applyEsimTabVisibility(tries) {
 		.then(function(r) {
 			var st = {};
 			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
-			var active = !!(st && st.active);
-			esimHideRule(!active);
-			try { localStorage.setItem(esimSeenKey(), active ? '1' : '0'); } catch (e) {}
+			/* PENDING: проба eUICC ещё не готова (status кинул её в фон, чтобы не
+			   тормозить загрузку). Не трогаем видимость, а ПЕРЕПРАШИВАЕМ через
+			   пару секунд - к тому моменту фоновая проба допишет кэш, и вкладка
+			   появится/скроется без задержки открытия страницы. */
+			if (st && st.pending) {
+				var t = (typeof tries === 'number') ? tries : 0;
+				if (t < 8) { window.setTimeout(function() { applyEsimTabVisibility(t + 1); }, 2000); }
+				return;
+			}
+			/* ВИДИМОСТЬ - ПО НАЛИЧИЮ eUICC, А НЕ ПО ВКЛЮЧЁННОМУ ПРОФИЛЮ.
+			   Правильный признак - available: есть ли на модеме eUICC вообще. */
+			var have = !!(st && st.available);
+			esimHideRule(!have);
+			try { localStorage.setItem(esimSeenKey(), have ? '1' : '0'); } catch (e) {}
 		});
 }
 

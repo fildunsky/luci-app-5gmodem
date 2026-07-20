@@ -116,7 +116,29 @@ report() {
 	run 5  "CA-сертификаты (нужны для загрузки профиля)" sh -c "ls -l /etc/ssl/certs/ca-certificates.crt 2>/dev/null || echo 'ca-bundle НЕ УСТАНОВЛЕН -> загрузка профиля eSIM работать не будет'"
 	run 5  "HTTP-бэкенд в lpac" sh -c "strings /usr/lib/lpac 2>/dev/null | grep -qi curl_easy_perform && echo 'curl: есть' || echo 'curl: НЕТ -> lpac не сможет скачать профиль'"
 	run 30 "Проверка HTTPS наружу" sh -c "curl -sS -o /dev/null -w 'код=%{http_code} tls=%{ssl_verify_result} время=%{time_total}s\n' https://www.google.com 2>&1 | head -3"
-	run 60 "eSIM: статус" "$RES/esim.sh" status
+	run 5  "eSIM: конфиг lpac (порт AT/uqmi)" sh -c "uci -q show lpac 2>/dev/null; echo '--- custom AID ---'; uci -q get lpac.global.custom_isd_r_aid 2>/dev/null || echo '(по умолчанию A0000005591010FFFFFFFF8900000100)'"
+	# КАКОЙ ПОРТ РЕАЛЬНО ОТВЕЧАЕТ eUICC. Главная неочевидная причина «профиль не
+	# читается»: eUICC-порт плавает при переперечислении (FM350 виден то на
+	# ttyUSB1, то на ttyUSB3), а в lpac.at.device прибит один конкретный. Здесь
+	# перебираем ВСЕ tty активного модема пробой CCHO (открытие канала к ISD-R):
+	# порт, где канал открывается (ответ "+CCHO: N" или голый номер), и есть
+	# eUICC-порт. Плюс печатаем АКТИВНЫЙ слот: lpac видит eUICC только когда
+	# активен слот eSIM, а не физической SIM (у человека было active=0 - SIM).
+	run 60 "eSIM: поиск eUICC-порта (CCHO по всем tty)" sh -c '
+		AID=$(uci -q get lpac.global.custom_isd_r_aid 2>/dev/null)
+		[ -n "$AID" ] || AID=A0000005591010FFFFFFFF8900000100
+		P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+		echo "активный слот SIM: $(/usr/share/5gmodem/simslot.sh status 2>/dev/null | grep -o "\"active\":\"[^\"]*\"")"
+		echo "порты модема $P:"
+		for t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null); do
+			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done
+			R=$(sms_tool -d "$t" at "AT+CCHO=\"$AID\"" 2>/dev/null | tr -d "\r" | grep -v "^$" | grep -vi "^at+ccho" | head -1)
+			case "$R" in
+				*CCHO:*|[0-9]*) echo "  $t -> ОТКРЫЛСЯ КАНАЛ [$R]  <= это eUICC-порт" ;;
+				*) echo "  $t -> нет ([$R])" ;;
+			esac
+		done'
+	run 60 "eSIM: статус" "$RES/esim.sh" status-probe
 	run 90 "eSIM: профили и чип" "$RES/esim.sh" dump
 	run 60 "eSIM: уведомления" "$RES/esim.sh" notifications
 

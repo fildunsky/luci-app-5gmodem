@@ -342,7 +342,18 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			uci -q set "5gmodem.@5gmodem[0].iface_proto=$FPROTO"
 		fi
 		if [ -n "$MSEC" ]; then
-			uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
+			if ! uci -q get "5gmodem.$MSEC" >/dev/null 2>&1; then
+				# Заводим секцию ПОЛНОЙ (path + vidpid + product из listmodems), а
+				# не голой: пересозданный после delprofile профиль иначе оставался
+				# без vid:pid и «безымянным». Модель дольёт опрос метрик (AT+CGMM).
+				uci -q set "5gmodem.$MSEC=modem"
+				uci -q set "5gmodem.$MSEC.path=$AMP"
+				_mk_lm=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+				_mk_vp=$(echo "$_mk_lm" | jsonfilter -e "@[@.path=\"$AMP\"].vidpid" 2>/dev/null | head -1)
+				_mk_pr=$(echo "$_mk_lm" | jsonfilter -e "@[@.path=\"$AMP\"].product" 2>/dev/null | head -1)
+				[ -n "$_mk_vp" ] && uci -q set "5gmodem.$MSEC.vidpid=$_mk_vp"
+				[ -n "$_mk_pr" ] && uci -q set "5gmodem.$MSEC.product=$_mk_pr"
+			fi
 			uci -q set "5gmodem.$MSEC.network=$IF"
 			uci -q set "5gmodem.$MSEC.iface_proto=$FPROTO"
 			# интерфейс только что создан ДЛЯ ЭТОГО модема и проштампован - метка
@@ -510,7 +521,18 @@ fi
 # remember the interface+proto for THIS modem so switching back restores it and
 # the other modem keeps its own separate interface (no clobbering, distinct IP).
 if [ -n "$MSEC" ]; then
-	uci -q get "5gmodem.$MSEC" >/dev/null 2>&1 || { uci -q set "5gmodem.$MSEC=modem"; uci -q set "5gmodem.$MSEC.path=$AMP"; }
+	if ! uci -q get "5gmodem.$MSEC" >/dev/null 2>&1; then
+				# Заводим секцию ПОЛНОЙ (path + vidpid + product из listmodems), а
+				# не голой: пересозданный после delprofile профиль иначе оставался
+				# без vid:pid и «безымянным». Модель дольёт опрос метрик (AT+CGMM).
+				uci -q set "5gmodem.$MSEC=modem"
+				uci -q set "5gmodem.$MSEC.path=$AMP"
+				_mk_lm=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+				_mk_vp=$(echo "$_mk_lm" | jsonfilter -e "@[@.path=\"$AMP\"].vidpid" 2>/dev/null | head -1)
+				_mk_pr=$(echo "$_mk_lm" | jsonfilter -e "@[@.path=\"$AMP\"].product" 2>/dev/null | head -1)
+				[ -n "$_mk_vp" ] && uci -q set "5gmodem.$MSEC.vidpid=$_mk_vp"
+				[ -n "$_mk_pr" ] && uci -q set "5gmodem.$MSEC.product=$_mk_pr"
+			fi
 	uci -q set "5gmodem.$MSEC.network=$IF"
 	uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
 	# см. ту же ветку выше: интерфейс пересоздан для этого модема - метка снята.

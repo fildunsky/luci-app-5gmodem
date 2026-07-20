@@ -197,18 +197,22 @@ RES="/usr/share/5gmodem"
 # Возраст считаем по /proc/uptime, а не date: у busybox `find -mmin` умеет
 # только минуты, а /proc/uptime не врёт при скачках системного времени
 # (тот же приём, что в listmodems.sh).
-CACHE="/tmp/5gmodem_metrics.json"
-STAMP="/tmp/5gmodem_metrics.stamp"
-# ЧЕЙ снимок. Файл один на всю систему, а модемов может быть несколько, и
-# активный меняется - вручную (switch) и сам (hotplug/resolve при втыкании или
-# пропаже модема). Без пометки читатели получали ЧУЖИЕ данные: страница и 5gtop
-# несколько секунд показывали прежний модем, а основной опрос успевал записать
-# чужую модель в секцию нового - на вкладке появлялось "Telit Fibocom FM350-GL"
-# (вендор от одного модема, модель от другого).
-OWNER="/tmp/5gmodem_metrics.owner"
-
-# Путь активного модема: им помечаем снимок и по нему же его проверяем.
+# Путь активного модема: он же КЛЮЧ всех файлов снимка/замка.
 _active_path() { uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null; }
+
+# СНИМОК И ЗАМОК - ПО МОДЕМУ, А НЕ ОДИН НА ВСЕХ.
+#
+# Раньше был ОДИН файл-снимок и ОДИН замок-опросчик на всю систему. На двух
+# модемах это ломало переключение: опрос модема B ждал глобальный замок за
+# опросом A (хотя порты разные), а в единственном снимке несколько секунд лежали
+# данные A - страница показывала ЧУЖОЙ модем и мешала IP/протоколы. Ключ по пути
+# развязывает: у каждого модема свой снимок и своя очередь, опросы идут
+# параллельно (AT ждёт serial, не CPU), переключение читает СВОЙ снимок мгновенно.
+_MKEY=$(_active_path | tr -c 'A-Za-z0-9' '_')
+[ -n "$_MKEY" ] || _MKEY="none"
+CACHE="/tmp/5gmodem_metrics_$_MKEY.json"
+STAMP="/tmp/5gmodem_metrics_$_MKEY.stamp"
+LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
 
 uptime_s() { cut -d. -f1 /proc/uptime; }
 
@@ -220,8 +224,8 @@ uptime_s() { cut -d. -f1 /proc/uptime; }
 # Поэтому в порт ходит РОВНО ОДИН процесс, а остальные читают снимок.
 #
 # Блокировка на каталоге - mkdir атомарен на любой ФС, в отличие от проверки
-# существования файла. Протухшую (процесс убит) снимаем по возрасту.
-LOCKDIR="/tmp/5gmodem_poll.lock"
+# существования файла. Протухшую (процесс убит) снимаем по возрасту. Ключ - тот
+# же путь модема (см. _MKEY выше): замок у каждого модема свой.
 
 # Отдать снимок, подставив в него реальный возраст.
 # В сам файл поле "age" пишется нулём (в момент записи он и есть ноль), а здесь
@@ -239,10 +243,8 @@ serve_cache() {
 
 _snapshot_age() {   # возраст снимка в секундах, либо пусто
 	[ -s "$CACHE" ] || return 1
-	# Снимок ЧУЖОГО модема не годится ни на что: пусть считается отсутствующим,
-	# тогда все ветки ниже сами уйдут в свежий опрос.
-	_own=$(cat "$OWNER" 2>/dev/null)
-	[ "$_own" = "$(_active_path)" ] || return 1
+	# Владельца проверять НЕ НУЖНО: файл снимка назван по пути активного модема
+	# (_MKEY), значит это по определению снимок ИМЕННО текущего модема.
 	_n=$(uptime_s); _t=$(cat "$STAMP" 2>/dev/null)
 	case "$_t" in ''|*[!0-9]*) return 1 ;; esac
 	_a=$((_n - _t)); [ "$_a" -ge 0 ] || return 1
@@ -359,6 +361,33 @@ if [ -n "$DEVICE" ] && ! at_lock "$DEVICE" 10; then
 	# страница хуже, чем данные с риском смешения.
 fi
 
+# ПОРТ ДОЛЖЕН ПРИНАДЛЕЖАТЬ ЭТОМУ МОДЕМУ.
+#
+# detect.sh при неудаче отдаёт ЛЮБОЙ отвечающий tty, а на роутере с двумя
+# модемами это порт ЧУЖОГО. Живой случай: воткнули Huawei в режиме HiLink (своих
+# AT-портов у него нет), active_modem уже переключился на него, а kind=hilink
+# секция получить не успела - опрос пошёл в порт FM350, прочитал его модель и
+# записал «Fibocom FM350-GL» в секцию Huawei. Дальше страница показывала чушь.
+#
+# Проверяем по списку портов ЭТОГО USB-пути. Осторожно: если модема нет в
+# listmodems (нестандартная композиция, старый конфиг), НЕ судим - иначе
+# сломаем метрики там, где раньше работало.
+if [ -n "$DEVICE" ]; then
+	_own_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
+	if [ -n "$_own_path" ]; then
+		_own_json=$("$RES/listmodems.sh" 2>/dev/null)
+		if printf '%s' "$_own_json" | jsonfilter -e "@[@.path=\"$_own_path\"].path" >/dev/null 2>&1; then
+			_own_ttys=$(printf '%s' "$_own_json" \
+				| jsonfilter -e "@[@.path=\"$_own_path\"].tty[*]" 2>/dev/null | tr '\n' ' ')
+			case " $_own_ttys " in
+				*" $DEVICE "*) : ;;
+				*) logger -t 5gmodem "порт $DEVICE не принадлежит модему $_own_path - опрос пропускаем"
+				   DEVICE="" ;;
+			esac
+		fi
+	fi
+fi
+
 # Bounded probe: sms_tool has no timeout and blocks ~35s on a silent/DIAG port,
 # so a wrong pinned port froze this whole page on every metrics poll (only
 # fixable by editing the config by hand). If the port does not answer AT within
@@ -369,6 +398,26 @@ if [ -z "$DEVICE" ]; then
 	echo '{"error":"Device not found"}'
 	exit 0
 fi
+
+# СТОРОЖ НА ВСЕ ВЫЗОВЫ sms_tool. У sms_tool нет таймаута: на подвисшем (или
+# занятом чужим опросом) порту он блокирует ~35 c. Под сериализатором это держит
+# at_lock, и ВСЯ страница ждёт за одним зависшим опросом - пользователь видел
+# «данные не обновлялись 33/56 c, потом пошло». atprobe ограничивал только
+# НАЧАЛЬНУЮ пробу, а сам опрос и вызовы из профиля были без предела.
+#
+# Переопределяем sms_tool ФУНКЦИЕЙ: любой вызов (и здесь, и в profile-файлах,
+# что подключаются через "." ниже) идёт со сторожем. Не ответил за 8 c - убиваем,
+# отдаём что успело. Реальный бинарь - по абсолютному пути. Счётчик в имени
+# temp-файла: вызовы последовательны, но так надёжнее при вложенности.
+_st_n=0
+sms_tool() {
+	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem_st.$$.$_st_n"
+	/usr/bin/sms_tool "$@" > "$_stf" 2>/dev/null &
+	_stp=$!
+	( sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
+	wait "$_stp" 2>/dev/null; kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
+	cat "$_stf" 2>/dev/null; rm -f "$_stf"
+}
 
 O=""
 if [ -e /usr/bin/sms_tool ]; then
@@ -385,8 +434,12 @@ if [ -e /usr/bin/sms_tool ]; then
 	# режима, хотя те же команды поодиночке отвечают исправно.
 	# Признак провала - в ответе нет "+CSQ:". Тогда добираем короткими группами
 	# (по 2-3 команды - столько принимают и слабые модули), сохраняя формат $O.
+	# Фолбэк ТОЛЬКО для эхо-модемов (ответ есть, но без +CSQ). При ПУСТОМ $O
+	# порт подвис и опрос вылетел по сторожу - гонять ещё 7 команд по 8 c
+	# бессмысленно и вредно (те самые «минуты ожидания»). Пусто -> пропускаем.
 	case "$O" in
 		*"+CSQ:"*) : ;;
+		"") : ;;
 		*)
 			O=$(sms_tool -D -d $DEVICE at "AT+CPIN?;+CSQ")
 			O="$O
@@ -398,6 +451,18 @@ $(sms_tool -D -d $DEVICE at "AT+CNUM")
 $(sms_tool -D -d $DEVICE at "AT+CIMI")"
 			;;
 	esac
+	# ПОРТ ПОДВИС ПОСРЕДИ ОПРОСА (ядро вылетело по сторожу, ответ пуст, хотя
+	# atprobe вначале прошёл). Дальше идёт профиль - ещё несколько вызовов
+	# sms_tool по 8 c: на мёртвом порту это сложится в те самые «десятки секунд».
+	# Не продолжаем: отдаём ПРОШЛЫЙ снимок этого же модема (владелец совпадает) и
+	# выходим, освобождая at_lock. Свежего снимка нет (первый заход) - идём
+	# дальше как есть, покажем что успели.
+	if [ -z "$O" ]; then
+		_wg=$(_snapshot_age) && {
+			logger -t 5gmodem "опрос $DEVICE подвис - отдаю прошлый снимок (${_wg}c)"
+			serve_cache "$_wg"; exit 0
+		}
+	fi
 else
 	O=$(gcom -d $DEVICE -s $RES/info.gcom 2>/dev/null)
 fi
@@ -850,20 +915,74 @@ esac
 _STKEY=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
 STATIC_CACHE="/tmp/5gmodem_static_$_STKEY"
+# РОУМИНГ ВНУТРИ СТРАНЫ - НЕ РОУМИНГ.
+#
+# Модем считает роумингом любую сеть, чей код не совпадает с домашним кодом
+# симки. Для MVNO это ЛОЖНАЯ тревога: T-Mobile (250-62) работает НА СЕТИ Tele2
+# (250-20), и модем рапортует "+CREG: 2,5" при том, что абонент дома и платит
+# по домашнему тарифу. Прошивка самого Huawei это понимает - в её API cellroam=0
+# при том же состоянии; а вот AT-статус врёт.
+#
+# Правило: совпал MCC (страна) - показываем как дом. Роуминг для пользователя -
+# это про другой тариф, а MVNO на своей хост-сети тарифицируется как дом;
+# национальный роуминг в РФ отменён с 2017 года. Заодно это выравнивает
+# поведение разных модемов с одной и той же симкой: Telit рапортовал "дом",
+# Huawei - "роуминг".
+#
+# Коды роуминга: 5 (registered, roaming), 7 (SMS only, roaming),
+# 10 (CSFB not preferred, roaming). Домашние аналоги: 1, 6, 9.
+case "$REG" in
+	5|7|10)
+		_sim_mcc=$(printf '%s' "$SIMID" | cut -c1-3)
+		case "$_sim_mcc" in
+			''|*[!0-9]*) : ;;
+			*)
+				if [ -n "$COPS_MCC" ] && [ "$COPS_MCC" = "$_sim_mcc" ]; then
+					case "$REG" in
+						5)  REG=1 ;;
+						7)  REG=6 ;;
+						10) REG=9 ;;
+					esac
+					logger -t 5gmodem "сеть $COPS_NUM той же страны, что и SIM ($_sim_mcc) - роуминг не показываем"
+				fi
+				;;
+		esac
+		;;
+esac
+
 _PREV_IMSI=$(cat "${STATIC_CACHE}.imsi" 2>/dev/null)
 if [ -n "$SIMID" ] && [ "$_PREV_IMSI" != "$SIMID" ]; then
 	rm -f "${STATIC_CACHE}"_* 2>/dev/null
 	printf '%s' "$SIMID" > "${STATIC_CACHE}.imsi"
-	# СМЕНИЛИ СИМКУ - переподбираем APN. Своего события у этого нет: модем с
-	# шины не уходил, hotplug молчит, autosetup не запускается, и в интерфейсе
-	# оставался APN ПРЕЖНЕГО оператора - именно так у симки Beeline держался
-	# "tt" от T-Mobile. Пустой $_PREV_IMSI - это ПЕРВЫЙ опрос после загрузки, а
-	# не смена: там подбирать нечего и дёргать интерфейс незачем.
-	if [ -n "$_PREV_IMSI" ]; then
-		_SIM_IF=$(uci -q get "5gmodem.$_hl_sec.network" 2>/dev/null)
+fi
+
+# ПЕРЕПОДБОР APN ПРИ СМЕНЕ СИМКИ - ПО ПЕРСИСТЕНТНОМУ КЛЮЧУ (IMSI в секции).
+#
+# Своего hotplug-события у смены SIM нет: модем с шины не уходит. Раньше триггер
+# сравнивал IMSI с файлом в /tmp - но смена eSIM-профиля гонит модем через
+# жёсткий ребут (CFUN=1,1), resolve чистит /tmp-кэш, и ПЕРВЫЙ опрос видел пустой
+# prev-IMSI, принимал смену за «первый опрос после загрузки» и APN не трогал.
+# Живой случай: включили eSIM Tele2, а в интерфейсе осталось "tt" от прежней
+# T-Mobile. Причём сеть у обеих одна (Tele2 - хост MVNO), по коду сети смены не
+# видно - видно только по IMSI самой симки.
+#
+# Ключ храним В СЕКЦИИ модема: переживает и ребут модема, и очистку /tmp. Пустой
+# apn_imsi у уже настроенного модема - это ПЕРВАЯ встреча с симкой (обновились со
+# старой версии или свежая установка): один раз подберём и запомним.
+if [ -n "$SIMID" ]; then
+	_apn_sec="$_hl_sec"
+	[ -n "$(uci -q get "5gmodem.$_apn_sec" 2>/dev/null)" ] || _apn_sec=""
+	if [ -n "$_apn_sec" ] \
+	   && [ "$(uci -q get "5gmodem.$_apn_sec.apn_mode")" != "manual" ] \
+	   && [ "$(uci -q get "5gmodem.$_apn_sec.apn_imsi")" != "$SIMID" ]; then
+		_SIM_IF=$(uci -q get "5gmodem.$_apn_sec.network" 2>/dev/null)
 		[ -n "$_SIM_IF" ] || _SIM_IF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
-		if [ -n "$_SIM_IF" ]; then
-			logger -t 5gmodem "смена SIM на $_SIM_IF - переподбираем APN"
+		# Дебаунс: опрос идёт раз в пару секунд, а autoapn — секунды. Без метки
+		# он запускался бы пачкой, пока первый не допишет apn_imsi.
+		_apn_stamp="/tmp/5gmodem_autoapn_$_apn_sec"
+		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +1 2>/dev/null)" ]; }; then
+			: > "$_apn_stamp"
+			logger -t 5gmodem "смена SIM (IMSI) на $_SIM_IF - переподбираем APN"
 			( /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" ) \
 				>/dev/null 2>&1 </dev/null &
 		fi
@@ -1037,6 +1156,46 @@ _model_sane() {
 	case "$1" in *[A-Za-z]*) return 0 ;; esac   # хоть одна буква
 	return 1
 }
+# ВЕНДОР В МОДЕЛИ ДОЛЖЕН СОВПАДАТЬ С ВЕНДОРОМ ПО vid:pid.
+#
+# _model_sane проверяет, ПОХОЖА ли строка на модель, но не ЧЬЯ она - и этого
+# оказалось мало. Живой случай: воткнули Huawei, опрос по чужому порту прочитал
+# "Fibocom FM350-GL" и записал в секцию Huawei (12d1). Строка была совершенно
+# правдоподобной, поэтому проверка на «похоже на модель» её пропустила.
+#
+# Судим ТОЛЬКО когда уверены: у vid есть однозначный вендор И в строке назван
+# ДРУГОЙ известный вендор. Qualcomm-овый 05c6 не трогаем - под ним ходят модемы
+# разных производителей, и там расхождение имени с vid нормально.
+_vendor_by_vid() {
+	case "$1" in
+		0e8d:*|2cb7:*) echo fibocom ;;
+		12d1:*)        echo huawei ;;
+		1bc7:*)        echo telit ;;
+		2c7c:*)        echo quectel ;;
+		19d2:*)        echo zte ;;
+		1e2d:*)        echo cinterion ;;
+		2dee:*)        echo meiglink ;;
+		1e0e:*)        echo simcom ;;
+	esac
+}
+_model_vendor_ok() {   # $1 - модель, $2 - vidpid
+	_mv_want=$(_vendor_by_vid "$2")
+	[ -n "$_mv_want" ] || return 0            # вендор по vid неизвестен - не судим
+	_mv_low=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+	case "$_mv_low" in *"$_mv_want"*) return 0 ;; esac
+	# Имя вендора в строке вообще не названо - тоже не судим: многие модемы
+	# отдают голую модель ("RM520N-GL", "E3372"), и это нормально.
+	for _mv_other in fibocom huawei telit quectel zte cinterion meiglink simcom; do
+		[ "$_mv_other" = "$_mv_want" ] && continue
+		case "$_mv_low" in *"$_mv_other"*) return 1 ;; esac
+	done
+	return 0
+}
+if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] \
+   && ! _model_vendor_ok "$MODEL" "$(uci -q get "5gmodem.$AMP_SEC.vidpid")"; then
+	logger -t 5gmodem "модель «$MODEL» не от вендора $(uci -q get "5gmodem.$AMP_SEC.vidpid") - в профиль не пишем"
+	MODEL=""
+fi
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
 	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] || {
 		uci -q set "5gmodem.$AMP_SEC.model=$MODEL"
@@ -1091,6 +1250,40 @@ if [ -z "$NR_ICCID" ] || [ "$NR_ICCID" = "-" ]; then
 		| tr -d '\r' | grep -oE '[0-9]{18,22}' | head -1)
 fi
 
+# АКТИВНЫЙ SIM-СЛОТ, если профиль модема его не дал. Заполняют это поле только
+# профили Quectel (AT+QUIMSLOT?), а слоты есть и у других: у Telit LM960 их два,
+# simslot.sh их видит, но в метрики значение не попадало - в карточке стоял
+# прочерк при двух живых слотах.
+#
+# ЧЕРЕЗ КЭШ. simslot.sh спрашивает QMI (qmicli --uim-get-slot-status) и стоит
+# ~1 c - при опросе в 2 c это половина сверху на каждом тике. Слот же меняется
+# только когда его переключает пользователь, поэтому держим ответ минуту, а
+# simslot.sh при переключении сбрасывает кэш сам - иначе UI минуту показывал бы
+# старый слот сразу после переключения.
+if [ -z "$SSIM" ] || [ "$SSIM" = "-" ]; then
+	_slot_c="/tmp/5gmodem_slot_$_STKEY"
+	_slot_age=""
+	if [ -s "$_slot_c" ]; then
+		_slot_t=$(cat "${_slot_c}.t" 2>/dev/null)
+		case "$_slot_t" in
+			''|*[!0-9]*) : ;;
+			*) _slot_age=$(( $(uptime_s) - _slot_t )) ;;
+		esac
+	fi
+	if [ -n "$_slot_age" ] && [ "$_slot_age" -ge 0 ] && [ "$_slot_age" -lt 60 ]; then
+		SSIM=$(cat "$_slot_c" 2>/dev/null)
+	else
+		_slot_v=$("$RES/simslot.sh" status 2>/dev/null \
+			| jsonfilter -e '@.active' 2>/dev/null)
+		case "$_slot_v" in
+			''|*[!0-9]*) : ;;
+			*) SSIM="$_slot_v"
+			   printf '%s' "$_slot_v" > "$_slot_c" 2>/dev/null
+			   uptime_s > "${_slot_c}.t" 2>/dev/null ;;
+		esac
+	fi
+fi
+
 if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ]; then
 	case "$NR_IMEI" in
 		*[!0-9]*|'') : ;;                      # не IMEI - молчим
@@ -1130,6 +1323,29 @@ if [ -n "$SEC" ] && [ -n "$COPS" ] && ! echo "$COPS" | grep -qE '^[0-9 ]*$'; the
 	[ -n "$OPIF" ] && printf '%s' "$COPS" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
 fi
 
+# ПРОЦЕНТ СИГНАЛА ИЗ RSRP, КОГДА +CSQ БЕСПОЛЕЗЕН.
+#
+# На LTE ряд модемов (SIMCOM SIM7600E - по отчёту) отдаёт "+CSQ: 99,99" -
+# «неизвестно», и процент выходил пустым: шкала CSQ рассчитана на 0..31.
+# Но RSRP профиль к этому моменту уже прочитал, а это честный уровень LTE.
+# Пересчитываем по стандартной шкале -140..-44 дБм -> 0..100 %.
+#
+# НЕ ПРОВЕРЕНО НА ЖИВОМ SIM7600E (модема нет): формула стандартная, значение
+# лишь ЗАПАСНОЕ - при валидном CSQ (0..31) используется он, тут ничего не
+# меняется. Считаем через awk: в busybox $(( )) не умеет дробное/отрицательное
+# надёжно, а RSRP приходит со знаком.
+if [ -z "$CSQ_PER" ] && [ -n "$RSRP" ]; then
+	case "$RSRP" in
+		-[0-9]*|[0-9]*)
+			CSQ_PER=$(awk -v r="$RSRP" 'BEGIN {
+				p = (r + 140) * 100 / 96;      # -140 -> 0, -44 -> 100
+				if (p < 0) p = 0; if (p > 100) p = 100;
+				printf "%d", p + 0.5;
+			}' 2>/dev/null)
+			;;
+	esac
+fi
+
 _TMP="$CACHE.$$"
 cat > "$_TMP" <<EOF
 {
@@ -1149,6 +1365,9 @@ cat > "$_TMP" <<EOF
 "firmware":"$(sanitize_string "$FW")",
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",
+"iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
+"iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
+"iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",
 "csq":"$(sanitize_number "$CSQ")",
 "signal":"$(sanitize_number "$CSQ_PER")",
 "operator_name":"$(sanitize_string "$COPS")",
@@ -1160,6 +1379,7 @@ cat > "$_TMP" <<EOF
 "registration":"$(sanitize_string "$REG")",
 "registration_cs":"$(sanitize_string "$REG_CS")",
 "simslot":"$(sanitize_string "$SSIM")",
+"allow_roaming":"$([ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && echo 1 || echo 0)",
 "imei":"$(sanitize_string "$NR_IMEI")",
 "imsi":"$(sanitize_string "$NR_IMSI")",
 "iccid":"$(sanitize_string "$NR_ICCID")",
@@ -1230,9 +1450,8 @@ if [ -s "$_TMP" ] && jsonfilter -i "$_TMP" -e '@.modem' >/dev/null 2>&1; then
 	cat "$_TMP"
 	mv "$_TMP" "$CACHE"      # атомарно: читатель видит либо старый снимок, либо новый
 	uptime_s > "$STAMP"
-	# Помечаем, ЧЕЙ это снимок (см. OWNER выше). Пишем ПОСЛЕ mv: пока метки нет,
-	# читатель считает снимок чужим и просто опросит сам - это безопасно.
-	printf '%s' "$(_active_path)" > "$OWNER" 2>/dev/null
+	# OWNER не нужен: имя $CACHE закодировано путём модема (_MKEY), снимок по
+	# определению принадлежит текущему модему - чужого не прочитаешь.
 else
 	cat "$_TMP" 2>/dev/null  # ответ отдаём в любом случае, но в кэш не кладём
 	rm -f "$_TMP"
