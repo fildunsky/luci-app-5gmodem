@@ -916,6 +916,32 @@ return view.extend({
 		   страницу. Теперь APN подбирает сервер (modemswitch.sh apnfor) - тем же
 		   кодом, что и автонастройка, с приоритетом кода из SIM. */
 
+		/* Кто распоряжается APN интерфейса. В автоматическом режиме найденный по
+		   оператору APN подставляется сам - при первой настройке И при смене
+		   симки: раньше подбор срабатывал только на новом интерфейсе, и в
+		   унаследованном оставался APN прежнего оператора. В ручном мы не трогаем
+		   ничего: значение пользователя хранится в самом интерфейсе, а найденный
+		   APN остаётся подсказкой в поле ниже. */
+		o = s.option(form.ListValue, '_apn_mode', _('APN selection'));
+		o.value('auto', _('Automatic (by operator)'));
+		o.value('manual', _('Manual'));
+		o.default = 'auto';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			if (uci.get('5gmodem', sec) == null) { uci.add('5gmodem', 'modem', sec); }
+			uci.set('5gmodem', sec, 'apn_mode', value === 'manual' ? 'manual' : 'auto');
+		};
+		o.load = function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return 'auto'; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return (uci.get('5gmodem', sec, 'apn_mode') === 'manual') ? 'manual' : 'auto';
+		};
+		o.remove = function() {};
+
 		/* Поле APN над кнопкой создания. Если интерфейс уже есть - берём его
 		   текущий APN; иначе автоподстановка по оператору (можно исправить,
 		   пусто = провайдерский по умолчанию). Чистое UI-поле, в uci не пишется. */
@@ -963,10 +989,17 @@ return view.extend({
 		/* Прятать ЭТОТ модем от ModemManager (mm-inhibit.sh держит инхибицию).
 		   Пишем в секцию модема, а не в общую: у каждого модема свой режим.
 		   Значение читается/пишется вручную - form.Map тут привязан к @5gmodem[0]. */
-		/* Галка ТОЛЬКО для модемов, которые это умеют (HiLink с поддержкой смены
-		   режима). Показываем её всегда, но пояснение объясняет, что даёт режим и
-		   что он слетает при перезагрузке модема - иначе поведение выглядело бы
-		   необъяснимым. */
+		/* Галка ТОЛЬКО для модемов, которые это умеют (HiLink со сменой режима).
+		   Раньше показывали её всем подряд, и у обычного QMI-модема она стояла
+		   включённой, ничего не делая - пользователь справедливо принимал это за
+		   баг. Обычному модему AT-порты и так доступны, режим ему не нужен. */
+		var atDebugHl = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return false; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sc, 'kind') === 'hilink';
+		})();
+		if (atDebugHl) {
 		o = s.option(form.Flag, '_at_debug', _('AT ports (debug mode)'),
 			_('Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears.'));
 		o.default = '1';
@@ -975,6 +1008,13 @@ return view.extend({
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return; }
 			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			/* Секции может НЕ БЫТЬ - её заводит resolve, а он мог ещё не
+			   отработать. uci.set по несуществующей секции молча ничего не
+			   делает, и галка возвращалась в исходное состояние при каждом
+			   сохранении: снять её было невозможно. Заводим секцию сами. */
+			if (uci.get('5gmodem', sec) == null) {
+				uci.add('5gmodem', 'modem', sec);
+			}
 			uci.set('5gmodem', sec, 'at_debug', value === '1' ? '1' : '0');
 		};
 		o.load = function() {
@@ -985,6 +1025,7 @@ return view.extend({
 			return (v === '0') ? '0' : '1';
 		};
 		o.remove = function() {};
+		}
 
 		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),
 			_('ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it.'));

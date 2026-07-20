@@ -58,10 +58,15 @@ modem_atport_for() {
 }
 iface_type() {
 	i="$1"
-	case "$i" in wan|wan6) echo wan; return;; esac
 	is_modem "$i" && { echo modem; return; }
+	# ИМЯ ИНТЕРФЕЙСА - НЕ ПРИЗНАК ТИПА. Проверка на "wan" стояла первой и
+	# обрывала разбор: у роутера с аплинком по Wi-Fi клиентский интерфейс тоже
+	# называется "wan", и беспроводное подключение показывалось проводным WAN -
+	# с чужим значком и без имени сети. Решает УСТРОЙСТВО, имя лишь запасной
+	# вариант для тех, у кого l3_device ещё не поднят.
 	dev=$(ifup_state "$i" '@["l3_device"]')
 	case "$dev" in phy*-sta*|wlan*) echo wifi; return;; esac
+	case "$i" in wan|wan6) echo wan; return;; esac
 	echo other
 }
 

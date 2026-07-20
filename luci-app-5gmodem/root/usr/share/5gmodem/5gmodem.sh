@@ -833,9 +833,24 @@ esac
 _STKEY=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
 STATIC_CACHE="/tmp/5gmodem_static_$_STKEY"
-if [ -n "$SIMID" ] && [ "$(cat "${STATIC_CACHE}.imsi" 2>/dev/null)" != "$SIMID" ]; then
+_PREV_IMSI=$(cat "${STATIC_CACHE}.imsi" 2>/dev/null)
+if [ -n "$SIMID" ] && [ "$_PREV_IMSI" != "$SIMID" ]; then
 	rm -f "${STATIC_CACHE}"_* 2>/dev/null
 	printf '%s' "$SIMID" > "${STATIC_CACHE}.imsi"
+	# СМЕНИЛИ СИМКУ - переподбираем APN. Своего события у этого нет: модем с
+	# шины не уходил, hotplug молчит, autosetup не запускается, и в интерфейсе
+	# оставался APN ПРЕЖНЕГО оператора - именно так у симки Beeline держался
+	# "tt" от T-Mobile. Пустой $_PREV_IMSI - это ПЕРВЫЙ опрос после загрузки, а
+	# не смена: там подбирать нечего и дёргать интерфейс незачем.
+	if [ -n "$_PREV_IMSI" ]; then
+		_SIM_IF=$(uci -q get "5gmodem.$_hl_sec.network" 2>/dev/null)
+		[ -n "$_SIM_IF" ] || _SIM_IF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+		if [ -n "$_SIM_IF" ]; then
+			logger -t 5gmodem "смена SIM на $_SIM_IF - переподбираем APN"
+			( /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" ) \
+				>/dev/null 2>&1 </dev/null &
+		fi
+	fi
 fi
 # at_static <key> <atcmd> : сырой ответ из кэша, иначе запрос + кэш.
 at_static() {

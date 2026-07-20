@@ -719,54 +719,6 @@ case $1 in
 	"setbands3g")
 		[ -n "$2" ] && setbands3g "$2"
 		;;
-	# Сканирование окружающих сот 2G/3G. Уникальная фича Huawei E3372: он ищет
-	# ВСЕ базовые станции всех операторов вокруг, не только своего. LTE искать не
-	# умеет - только 2G и 3G. Команда идёт ТОЛЬКО через управляющий порт (PCUI),
-	# на остальных даёт пустой ответ.
-	#
-	# Долгая (десятки секунд) и требует, чтобы модем не висел на LTE - иначе она
-	# отвечает пусто. Поэтому запускается ЯВНО пользователем, в фоне; результат
-	# кладём в файл, который потом читает интерфейс.
-	"netscan")
-		_ns_am=$(uci -q get "$CFG.@5gmodem[0].active_modem")
-		_ns_sec="m_$(echo "$_ns_am" | sed 's/[^A-Za-z0-9]/_/g')"
-		_ns_port=$(uci -q get "$CFG.$_ns_sec.at_port")
-		[ -n "$_ns_port" ] || _ns_port=$("$RES/../detect.sh" 2>/dev/null)
-		_ns_out="/tmp/5gmodem_netscan"
-		# Тип: 0 - 2G, 1 - 3G (по умолчанию 3G - у нас чаще именно он).
-		_ns_mode="${2:-1}"
-		case "$_ns_mode" in 0|1) ;; *) _ns_mode=1 ;; esac
-		# В фоне с отвязкой дескрипторов - сканирование дольше таймаута rpcd.
-		(
-			echo '{"state":"scanning"}' > "$_ns_out"
-			# Перед сканом отключаем данные и уводим с LTE в 2G/3G, иначе пусто.
-			# Возвращаем режим обратно после - список диапазонов запоминаем.
-			_ns_cfg=$(sms_tool -d "$_ns_port" at "at^syscfgex?" 2>/dev/null | tr -d "\r" | sed -n "s/^^SYSCFGEX://p" | head -1)
-			sms_tool -d "$_ns_port" at "at^syscfgex=\"0201\",3FFFFFFF,1,2,800C5,," >/dev/null 2>&1
-			sleep 3
-			_ns_raw=$(sms_tool -t 90 -d "$_ns_port" at "at^netscan=20,-110,$_ns_mode" 2>/dev/null | tr -d "\r")
-			# Возвращаем прежний режим сети.
-			[ -n "$_ns_cfg" ] && sms_tool -d "$_ns_port" at "at^syscfgex=$_ns_cfg,," >/dev/null 2>&1
-			# Разбираем строки ^NETSCAN: <arfcn>,,,<lac>,<mcc>,<mnc>,<x>,<rssi>,<cid>,<band>
-			{
-				printf '{"state":"done","mode":"%s","cells":[' "$_ns_mode"
-				_ns_first=1
-				printf '%s\n' "$_ns_raw" | sed -n 's/^\^NETSCAN: *//p' | while IFS=, read -r _arfcn _b1 _b2 _lac _mcc _mnc _x _rssi _cid _band; do
-					[ -n "$_arfcn" ] || continue
-					[ "$_ns_first" = 1 ] || printf ','
-					_ns_first=0
-					printf '{"arfcn":"%s","lac":"%s","mcc":"%s","mnc":"%s","rssi":"%s","cid":"%s","band":"%s"}' \
-						"$_arfcn" "$_lac" "$_mcc" "$_mnc" "$_rssi" "$_cid" "$_band"
-				done
-				printf ']}\n'
-			} > "$_ns_out.tmp" && mv "$_ns_out.tmp" "$_ns_out"
-		) >/dev/null 2>&1 </dev/null &
-		echo '{"started":true}'
-		;;
-	# Прочитать результат последнего сканирования (или его состояние).
-	"netscanresult")
-		[ -s /tmp/5gmodem_netscan ] && cat /tmp/5gmodem_netscan || echo '{"state":"none"}'
-		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
 		# FM350-GL: после перезагрузки модема привязка ПРОДОЛЖАЕТ ДЕЙСТВОВАТЬ, но

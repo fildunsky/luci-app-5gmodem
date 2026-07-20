@@ -509,10 +509,27 @@ set_sms_storage() {
 # ЖЕЛЕЗА, а не текущей композиции: в режиме debug у него появляются AT-порты, но
 # интернет он всё равно держит сам. Смотрим на запомненный kind ИЛИ на наличие
 # сетевой карты - НЕ на отсутствие портов.
+# Известные HiLink-модемы - ПОШТУЧНО, по vid:pid.
+#
+# Эвристики тут были ошибкой. Сначала признаком считалась сетевая карта, но она
+# есть и у обычного модема: qmi_wwan создаёт wwan0. Telit LM960 (1bc7:1040)
+# из-за этого объявлялся HiLink и переставал настраиваться вовсе - подпись
+# "(Debug)", настройка через несуществующий веб-API, модем "не определяется".
+# Цена ошибки несимметрична: лишний модем в списке ломает ему всю настройку, а
+# недостающий - всего лишь не даст автопереключения в debug.
+#
+# 12d1:14dc - Huawei E3372 в режиме "только веб-интерфейс". В 12d1:1566 он уже
+# с AT-портами, и там срабатывает запомненный kind из секции.
+HILINK_IDS="12d1:14dc"
+
 is_hilink() {   # $1 - usb-путь
 	_ih_sec=$(secname "$1")
 	[ "$(uci -q get "$CFG.$_ih_sec.kind")" = "hilink" ] && return 0
-	[ -n "$(hilink_netdev "$1")" ] && return 0
+	_ih_id=$(modem_vidpid "$1")
+	[ -n "$_ih_id" ] || return 1
+	for _ih_k in $HILINK_IDS; do
+		[ "$_ih_id" = "$_ih_k" ] && return 0
+	done
 	return 1
 }
 
@@ -683,6 +700,10 @@ setup_one_modem() {
 		uci -q commit "$CFG"
 		"$RES/ensureports.sh" >/dev/null 2>&1
 		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
+		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался
+		# только при создании нового, и унаследованный интерфейс навсегда
+		# оставался с APN прежней симки - именно так Beeline работал с "tt".
+		( "$RES/modemswitch.sh" autoapn "$_ex" ) >/dev/null 2>&1 </dev/null &
 		return 0
 	fi
 
@@ -1052,6 +1073,11 @@ apnfor)
 	_op=$(printf '%s' "$_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
 	_mcc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
 	_mnc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
+	# Метрики отдают ПРОЧЕРК, а не пустоту, когда код сети неизвестен. Без этой
+	# нормализации в apn_plmn попадало "---", а сравнение с настоящим PLMN
+	# никогда не совпадало.
+	[ "$_mcc" = "-" ] && _mcc=""
+	[ "$_mnc" = "-" ] && _mnc=""
 	_plmn=""
 	[ -n "$_mcc" ] && [ -n "$_mnc" ] && _plmn="$_mcc-$_mnc"
 	_imsi=$(printf '%s' "$_j" | jsonfilter -e '@.imsi' 2>/dev/null | tr -cd '0-9')
@@ -1070,20 +1096,41 @@ apnfor)
 autoapn)
 	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
 	[ -n "$IFACE" ] || exit 0
-	# Ждём: регистрация и первый дозвон занимают десятки секунд.
-	_w=0
+
+	# РУЧНОЙ РЕЖИМ: APN распоряжается пользователь. Он его уже выбрал, и его
+	# выбор хранится в самом интерфейсе - переписать значит потерять. Подсказку
+	# с найденным APN страница показывает и так, применить её - одна кнопка.
+	_am_sec=$(uci -q show "$CFG" 2>/dev/null \
+		| sed -n "s/^$CFG\.\(m_[A-Za-z0-9_]*\)\.network='$IFACE'\$/\1/p" | head -1)
+	if [ "$(uci -q get "$CFG.$_am_sec.apn_mode")" = "manual" ]; then
+		logger -t 5gmodem "autoapn: $IFACE в ручном режиме, APN не трогаем"
+		exit 0
+	fi
+
+	# Ждём адрес: регистрация и первый дозвон занимают десятки секунд. РАНЬШЕ
+	# появление адреса было поводом выйти совсем - APN считался «раз связь есть,
+	# значит подходящий». На деле оператор нередко пускает с любым APN, и в
+	# интерфейсе годами оставался чужой: у Beeline-симки стоял "tt" от прежней
+	# T-Mobile. Поэтому адрес больше не повод молчать - решает СРАВНЕНИЕ APN
+	# ниже, а сам факт связи лишь избавляет от ожидания.
+	_w=0; _ip=""
 	while [ "$_w" -lt 60 ]; do
 		_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
 			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
-		[ -n "$_ip" ] && { logger -t 5gmodem "autoapn: $IFACE уже с адресом $_ip, APN не трогаем"; exit 0; }
+		[ -n "$_ip" ] && break
 		sleep 5; _w=$((_w + 5))
 	done
 
-	# Адреса нет. Узнаём, в чьей мы сети.
+	# Узнаём, в чьей мы сети.
 	_j=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
 	_op=$(printf '%s' "$_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
 	_mcc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
 	_mnc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
+	# Метрики отдают ПРОЧЕРК, а не пустоту, когда код сети неизвестен. Без этой
+	# нормализации в apn_plmn попадало "---", а сравнение с настоящим PLMN
+	# никогда не совпадало.
+	[ "$_mcc" = "-" ] && _mcc=""
+	[ "$_mnc" = "-" ] && _mnc=""
 	_plmn=""
 	[ -n "$_mcc" ] && [ -n "$_mnc" ] && _plmn="$_mcc-$_mnc"
 
@@ -1123,14 +1170,116 @@ autoapn)
 		exit 0
 	}
 	_cur=$(uci -q get "network.$IFACE.apn")
-	[ "$_cur" = "$_apn" ] && { logger -t 5gmodem "autoapn: APN уже $_apn"; exit 0; }
+	if [ "$_cur" = "$_apn" ]; then
+		logger -t 5gmodem "autoapn: APN уже $_apn"
+		[ -n "$_am_sec" ] && { uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"; uci -q commit "$CFG"; }
+		exit 0
+	fi
 
 	uci -q set "network.$IFACE.apn=$_apn"
 	uci -q commit network
-	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (оператор «$_op», $_plmn)"
+	# Помним, ДЛЯ КАКОЙ сети подобран APN: по этой записи видно в отладке, что
+	# значение относится к нынешней симке, а не осталось от прежней.
+	[ -n "$_am_sec" ] && { uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"; uci -q commit "$CFG"; }
+	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (было «${_cur:-пусто}», оператор «$_op», $_plmn)"
 	ifdown "$IFACE" >/dev/null 2>&1
 	sleep 3
 	ifup "$IFACE" >/dev/null 2>&1
+	# APN исправлен, а адреса всё нет - тогда дело может быть в типе PDP.
+	( "$RES/modemswitch.sh" autopdp "$IFACE" ) >/dev/null 2>&1 </dev/null &
+	;;
+
+# ПОДБОР ТИПА PDP (IPv4 / IPv4v6).
+#
+# ЗАЧЕМ. Симптом неотличим от «нет сети»: модем зарегистрирован, сигнал есть, а
+# адреса нет - и по одному этому виду не понять, при чём тут тип контекста.
+# Причём случаи ПРОТИВОПОЛОЖНЫ друг другу, так что «правильного» значения на все
+# модемы не существует:
+#   - FM350 на Tele2: с IPV4-only контекст вообще не активируется, CGACT виснет;
+#   - Quectel EC21: на dual-stack не дозванивается, поднимается только с IPV4.
+# Определять это по журналу бесполезно - у qmi, mbim, atc и modemmanager тексты
+# ошибок разные, и мы бы гадали. Поэтому не гадаем, а ПРОБУЕМ и запоминаем.
+#
+# ПОРЯДОК: сперва ipv4v6, потом ipv4. Не по вкусу, а потому что при неудаче
+# ipv4v6 отваливается быстро, а неверный ipv4 именно ЗАВИСАЕТ - начав с него, мы
+# бы ждали таймаута вместо честного отказа.
+autopdp)
+	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
+	[ -n "$IFACE" ] || exit 0
+
+	_pd_sec=$(uci -q show "$CFG" 2>/dev/null \
+		| sed -n "s/^$CFG\.\(m_[A-Za-z0-9_]*\)\.network='$IFACE'\$/\1/p" | head -1)
+	if [ "$(uci -q get "$CFG.$_pd_sec.pdp_mode")" = "manual" ]; then
+		logger -t 5gmodem "autopdp: $IFACE в ручном режиме, тип PDP не трогаем"
+		exit 0
+	fi
+
+	# Уже с адресом - чинить нечего. Это РЕМОНТНАЯ операция, а не регулярная:
+	# перебор типов рвёт связь, и делать это на работающем интерфейсе нельзя.
+	_pd_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
+		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	[ -n "$_pd_ip" ] && { logger -t 5gmodem "autopdp: $IFACE уже с адресом $_pd_ip"; exit 0; }
+
+	# Имя опции и регистр значения у протоколов разные - то же соответствие,
+	# что в mkiface.sh (set_pdp_opt).
+	case "$(uci -q get "network.$IFACE.proto")" in
+		modemmanager) _pd_opt=iptype;  _pd_up=0 ;;
+		qmi|mbim)     _pd_opt=pdptype; _pd_up=0 ;;
+		fibocom)      _pd_opt=pdptype; _pd_up=1 ;;
+		atc)          _pd_opt=pdp;     _pd_up=1 ;;
+		xmm)          _pd_opt=pdp;     _pd_up=0 ;;
+		*)            logger -t 5gmodem "autopdp: протокол $IFACE типа PDP не имеет"; exit 0 ;;
+	esac
+
+	_pd_was=$(uci -q get "network.$IFACE.$_pd_opt")
+	_pd_plmn=""
+	_pd_j=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
+	_pd_mcc=$(printf '%s' "$_pd_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
+	_pd_mnc=$(printf '%s' "$_pd_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
+	[ "$_pd_mcc" = "-" ] && _pd_mcc=""
+	[ "$_pd_mnc" = "-" ] && _pd_mnc=""
+	[ -n "$_pd_mcc" ] && [ -n "$_pd_mnc" ] && _pd_plmn="$_pd_mcc-$_pd_mnc"
+
+	for _pd_try in ipv4v6 ipv4; do
+		_pd_val="$_pd_try"
+		[ "$_pd_up" = "1" ] && _pd_val=$(echo "$_pd_try" | tr a-z A-Z)
+		uci -q set "network.$IFACE.$_pd_opt=$_pd_val"
+		uci -q commit network
+		ifdown "$IFACE" >/dev/null 2>&1
+		sleep 3
+		ifup "$IFACE" >/dev/null 2>&1
+
+		_pd_w=0
+		while [ "$_pd_w" -lt 45 ]; do
+			sleep 5; _pd_w=$((_pd_w + 5))
+			_pd_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
+				| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+			[ -n "$_pd_ip" ] && break
+		done
+
+		if [ -n "$_pd_ip" ]; then
+			[ -n "$_pd_sec" ] && {
+				uci -q set "$CFG.$_pd_sec.pdp_ok=$_pd_try"
+				uci -q set "$CFG.$_pd_sec.pdp_plmn=$_pd_plmn"
+				uci -q commit "$CFG"
+			}
+			logger -t 5gmodem "autopdp: $IFACE поднялся на $_pd_val (адрес $_pd_ip, сеть $_pd_plmn)"
+			exit 0
+		fi
+		logger -t 5gmodem "autopdp: $IFACE на $_pd_val адрес не получил"
+	done
+
+	# Не помогло ни то, ни другое - причина не в типе PDP. ВОЗВРАЩАЕМ как было:
+	# оставить свой последний перебор значит подменить осознанный выбор
+	# пользователя результатом неудачной пробы.
+	if [ -n "$_pd_was" ]; then
+		uci -q set "network.$IFACE.$_pd_opt=$_pd_was"
+	else
+		uci -q delete "network.$IFACE.$_pd_opt"
+	fi
+	uci -q commit network
+	ifup "$IFACE" >/dev/null 2>&1
+	logger -t 5gmodem "autopdp: ни ipv4v6, ни ipv4 не дали адреса - дело не в типе PDP, вернул «${_pd_was:-пусто}»"
 	;;
 
 # АВТОНАСТРОЙКА НОВОГО МОДЕМА (plug-and-play).
@@ -1166,6 +1315,17 @@ autosetup)
 		for _p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 			_s=$(secname "$_p")
 			_n=$(uci -q get "$CFG.$_s.network")
+			# HiLink-модем без AT-портов - ЦЕЛЬ, даже если интерфейс уже есть.
+			# Режим debug слетает при каждом переподключении модема, а интерфейс
+			# при этом остаётся на месте - и проверка «интерфейс есть, значит
+			# настроен» пропускала модем, оставляя его в чистом HiLink: ни TAC, ни
+			# диапазонов, ни USSD. Наблюдалось ровно так после перетыкания.
+			if [ "$(uci -q get "$CFG.$_s.kind")" = "hilink" ] \
+			   && [ "$(uci -q get "$CFG.$_s.at_debug")" != "0" ] \
+			   && [ -z "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_p\"].tty[0]" 2>/dev/null)" ]; then
+				TARGETS="$TARGETS $_p"
+				continue
+			fi
 			[ -n "$_n" ] && uci -q get "network.$_n" >/dev/null 2>&1 && continue
 			TARGETS="$TARGETS $_p"
 		done

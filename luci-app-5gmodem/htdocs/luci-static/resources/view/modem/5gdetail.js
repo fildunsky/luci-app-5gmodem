@@ -1114,6 +1114,36 @@ function render5gMode(state) {
 	}, _('Enable 5G')));
 }
 
+/* Кнопка «debug» справа в заголовке модема.
+ *
+ * Нужна только модему, который СЕЙЧАС ведётся своим веб-API (backend=hilink):
+ * у него нет AT-портов, а значит нет ни TAC, ни диапазонов, ни USSD. Одно
+ * нажатие переводит его в режим с портами. Как только это случилось, кнопка
+ * пропадает сама - нажимать её больше не на что, а висящая кнопка «сделай то,
+ * что уже сделано» только сбивает с толку.
+ */
+function renderDebugBtn(json) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var btn = document.getElementById('dbgmode-btn');
+	if (json.backend !== 'hilink') { if (btn) { btn.remove(); } return; }
+	if (btn) { return; }
+	head.appendChild(E('button', {
+		'id': 'dbgmode-btn',
+		'class': 'btn cbi-button',
+		'style': 'float:right; font-size:70%; padding:.15em .6em; margin-left:.8em;',
+		'title': _('Switch the modem into the mode with AT ports: TAC, bands, EARFCN, USSD and the AT console become available. The mode resets when the modem reboots.'),
+		'click': ui.createHandlerFn(this, function() {
+			setModemBusy(_('Switching the modem into the mode with AT ports…'));
+			/* Через autosetup, а не напрямую: он и переключит, и дождётся портов,
+			   и восстановит интерфейс - тот же путь, что при подключении модема. */
+			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
+				(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]);
+			window.setTimeout(function() { window.location.reload(); }, 25000);
+		})
+	}, _('debug')));
+}
+
 function renderCellLock(state) {
 	var row = document.getElementById('celllockn');
 	var cell = document.getElementById('celllock-cell');
@@ -2489,6 +2519,7 @@ simDialog: baseclass.extend({
 						if (json.backend === 'hilink') { _nm += ' (HiLink)'; }
 						else if (json.at_debug === '1') { _nm += ' (Debug)'; }
 						document.getElementById('modemname').textContent = _nm;
+						renderDebugBtn(json);
 					}
 
 					if (document.getElementById('fw')) {

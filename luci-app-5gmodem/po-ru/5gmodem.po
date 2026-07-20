@@ -2831,3 +2831,18 @@ msgstr "AT-порты (режим debug)"
 
 msgid "Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears."
 msgstr "Обычно такой модем показывает только свой веб-интерфейс: нет ни TAC, ни диапазона, ни EARFCN, ни USSD. В этом режиме у него появляются последовательные порты, и он ведётся как обычный модем, сохраняя сетевую карту и интернет. Режим сбрасывается при перезагрузке модема, поэтому применяется заново при каждом его появлении."
+
+msgid "Switch the modem into the mode with AT ports: TAC, bands, EARFCN, USSD and the AT console become available. The mode resets when the modem reboots."
+msgstr "Перевести модем в режим с AT-портами: станут доступны TAC, диапазоны, EARFCN, USSD и AT-консоль. Режим сбрасывается при перезагрузке модема."
+
+msgid "Switching the modem into the mode with AT ports…"
+msgstr "Переводим модем в режим с AT-портами…"
+
+msgid "APN selection"
+msgstr "Выбор APN"
+
+msgid "Automatic (by operator)"
+msgstr "Автоматически (по оператору)"
+
+msgid "Manual"
+msgstr "Вручную"

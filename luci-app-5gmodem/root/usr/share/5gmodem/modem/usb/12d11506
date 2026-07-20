@@ -8,8 +8,11 @@ if [ -n "$T" ]; then
 
 	case "$MODE" in
 		WCDMA*)
+			# ^HCSQ:"WCDMA",<rssi>,<rscp>,<ecio> - RSSI тоже в поле 3.
+			PARAM1=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $3}' | xargs)
 			PARAM2=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $4}' | xargs)
 			PARAM3=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $5}' | xargs)
+			case "$PARAM1" in ''|*[!0-9]*) ;; *) RSSI=$(awk 'BEGIN {print -121 + '$PARAM1'}') ;; esac
 			RSCP=$(awk 'BEGIN {print -121 + '$PARAM2'}')
 #			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"RSCP":"'$RSCP' dBm"}'
@@ -18,9 +21,14 @@ if [ -n "$T" ]; then
 #			ADDON="$ADDON"'{"ECIO":"'$ECIO' dB"}'
 			;;
 		LTE*)
+			# ^HCSQ:"LTE",<rssi>,<rsrp>,<sinr>,<rsrq> - при -F[,:] это поля 3..6.
+			# Поле 3 (RSSI) раньше не разбиралось вовсе, и в карточке на его месте
+			# стоял прочерк, хотя модем его отдаёт. Шкала Huawei: RSSI = v - 121.
+			PARAM1=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $3}' | xargs)
 			PARAM2=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $4}' | xargs)
 			PARAM3=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $5}' | xargs)
 			PARAM4=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $6}' | xargs)
+			case "$PARAM1" in ''|*[!0-9]*) ;; *) RSSI=$(awk 'BEGIN {print -121 + '$PARAM1'}') ;; esac
 			RSRP=$(awk 'BEGIN {print -141 + '$PARAM2'}')
 #			[ -n "$ADDON" ] && ADDON="$ADDON,"
 #			ADDON="$ADDON"'{"RSRP":"'$RSRP' dBm"}'
