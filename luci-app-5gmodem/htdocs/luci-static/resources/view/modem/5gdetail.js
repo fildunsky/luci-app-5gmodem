@@ -282,7 +282,7 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 /* Ячейки БЕЗ полоски (Band/PCI/EARFCN) иначе повисли бы по центру выросшей
    строки, и числа перестали бы читаться в один ряд с теми, что с полосками. */
-#ca-table .td, #nb-table .td { vertical-align: top; }
+#ca-table .td, #nb-table .td, #antports-table .td { vertical-align: top; }
 
 /* На proton2025 в ячейки попадает ШТАТНЫЙ .cbi-progressbar - и тема задаёт ему
    min-width:200px и внешние поля, рассчитанные на полноразмерные метрики. В
@@ -290,6 +290,7 @@ document.head.append(E('style', {'type': 'text/css'},
    ограничения снимаем ТОЧЕЧНО - только внутри наших двух таблиц.
    Подпись внутри полоски (::after) НЕ трогаем: ради неё всё и затевалось. */
 #ca-table .cbi-progressbar,
+#antports-table .cbi-progressbar,
 #nb-table .cbi-progressbar {
   min-width: 0 !important;
   height: 20px;
@@ -918,42 +919,68 @@ var IS_PROTON = (function() {
 	return !!document.querySelector('link[href*="proton2025"]');
 })();
 
-function metricBar(key, v, text) {
+/* Доля шкалы для ДЛИНЫ полоски (0..100), или null, если значения/оценки нет. */
+function metricPct(key, v) {
 	var r = METRIC_RANGE[key];
-	var col = (v != null && v !== '' && v !== '-') ? caQuality(key, v) : null;
 	var n = parseFloat(v);
-	if (!r || !col || isNaN(n)) { return null; }
+	if (!r || isNaN(n)) { return null; }
 	var pc = Math.round(100 * (n - r[0]) / (r[1] - r[0]));
 	if (pc < 4) { pc = 4; }       /* нулевую полоску не видно вовсе */
 	if (pc > 100) { pc = 100; }
-	if (IS_PROTON) {
-		/* title - это и есть подпись внутри полоски: её рисует сама тема.
-		   box-shadow гасим точечно: у темы это свечение цветом акцента, и под
-		   красной/зелёной заливкой оно смотрелось бы чужеродно. */
-		return E('div', { 'class': 'cbi-progressbar', 'title': text }, [
-			E('div', { 'style': 'width:' + pc + '%;background:' + CA_COLOR[col] + ';box-shadow:none' })
-		]);
-	}
-	return E('div', { 'class': 'metric-bar' }, [
-		E('div', { 'style': 'width:' + pc + '%;background:' + CA_COLOR[col] })
-	]);
+	return pc;
 }
 
-/* Заполнить ячейку метрики числом и полоской. Общая точка для обеих таблиц,
-   чтобы поведение по темам не разъехалось между ними. */
-function paintMetricCell(td, key, v) {
-	td.textContent = '';
-	td.style.color = '';
-	td.style.fontWeight = '';
-	var txt = (v != null && v !== '' && v !== '-') ? String(v) : '-';
-	var bar = metricBar(key, v, txt);
-	/* На proton2025 число уже нарисовано ВНУТРИ полоски - отдельный текст в
-	   ячейке был бы дублем. */
-	if (IS_PROTON && bar) { td.appendChild(bar); return; }
-	td.appendChild(document.createTextNode(txt));
-	var col = (txt !== '-') ? caQuality(key, v) : null;
-	if (col) { td.style.color = CA_COLOR[col]; td.style.fontWeight = '600'; }
-	if (bar) { td.appendChild(bar); }
+/* Заполнить ячейку метрики числом и полоской. КЛЮЧЕВОЕ: обновляем СУЩЕСТВУЮЩИЕ
+   узлы, а не пересоздаём. Только так CSS transition на ширине полоски плавно
+   доводит её до нового значения - как у основных метрик. Пересоздание (прежний
+   вариант) рисовало новый элемент сразу в финальной ширине, и анимации не было:
+   ровно поэтому доп. таблицы «прыгали».
+   $4 (text) - необязательная подпись: у антенных портов значение с единицами
+   ("-114 dBm"), у CA и соседей - голое число. Оценку и длину считаем по САМОМУ
+   значению ($3), не по подписи. IS_PROTON постоянен в сессии, режим не мешаем. */
+function paintMetricCell(td, key, v, text) {
+	var has = (v != null && v !== '' && v !== '-');
+	var txt = has ? String(text != null ? text : v) : '-';
+	var col = has ? caQuality(key, v) : null;
+	var pc  = col ? metricPct(key, v) : null;
+
+	if (IS_PROTON) {
+		/* proton: число ВНУТРИ толстой полоски (тема рисует его из title). */
+		if (pc != null) {
+			var pb = td.querySelector('.cbi-progressbar');
+			if (!pb) {
+				td.textContent = '';
+				/* box-shadow темы - свечение цветом акцента, под красной/зелёной
+				   заливкой чужеродно; гасим точечно. */
+				pb = E('div', { 'class': 'cbi-progressbar' }, [ E('div', { 'style': 'box-shadow:none' }) ]);
+				td.appendChild(pb);
+			}
+			pb.setAttribute('title', txt);
+			var pf = pb.firstElementChild;
+			pf.style.width = pc + '%';
+			pf.style.background = CA_COLOR[col];
+			return;
+		}
+		td.textContent = txt;   /* нет значения - просто «-» */
+		return;
+	}
+
+	/* остальные темы: число текстом + тонкая полоска под ним. */
+	var tn = td.firstChild;
+	if (!tn || tn.nodeType !== 3) { td.textContent = ''; tn = document.createTextNode(''); td.appendChild(tn); }
+	tn.nodeValue = txt;
+	td.style.color = col ? CA_COLOR[col] : '';
+	td.style.fontWeight = col ? '600' : '';
+
+	var bar = td.querySelector('.metric-bar');
+	if (pc != null) {
+		if (!bar) { bar = E('div', { 'class': 'metric-bar' }, [ E('div', {}) ]); td.appendChild(bar); }
+		var bf = bar.firstElementChild;
+		bf.style.width = pc + '%';
+		bf.style.background = CA_COLOR[col];
+	} else if (bar) {
+		bar.parentNode.removeChild(bar);
+	}
 }
 
 /* Разбить строку диапазона "B7 (2600 MHz) @20 MHz" на {band, bw}. */
@@ -980,34 +1007,45 @@ function renderNeighbors(json) {
 	   нет вовсе, и пустая таблица только занимала бы место. */
 	if (!list.length) { wrap.style.display = 'none'; return; }
 	wrap.style.display = '';
-	/* Пересобираем ТОЛЬКО при изменении: иначе тело таблицы пустеет на каждом
-	   тике опроса, и браузер обрезает scrollTop - страница дёргается под курсором. */
-	var sig = list.map(function(c) {
-		return [ c.pci, c.band, c.earfcn, c.rsrp, c.rsrq, c.rssi, c.serving ].join('/');
-	}).join('|');
-	if (tbl.getAttribute('data-sig') === sig) { return; }
-	tbl.setAttribute('data-sig', sig);
-	Array.prototype.slice.call(tbl.querySelectorAll('.nb-row')).forEach(function(r) { r.remove(); });
 	var dash = function(v) { return (v === undefined || v === null || v === '') ? '-' : String(v); };
-	/* Оценка уровней - ТЕМИ ЖЕ порогами и цветами, что в «Агрегации несущих» и
-	   таблице антенных портов (caQuality/CA_COLOR). Своя шкала здесь означала бы,
-	   что одинаковый RSRP на соседних блоках одной страницы окрашен по-разному. */
-	var metricTd = function(key, label, v) {
-		var td = E('td', { 'class': 'td', 'data-l': label }, []);
-		paintMetricCell(td, key, v);
-		return td;
-	};
-	list.forEach(function(c) {
-		var serving = (String(c.serving) === '1' || c.serving === true);
-		tbl.appendChild(E('tr', { 'class': 'tr nb-row' + (serving ? ' nb-serving' : '') }, [
-			E('td', { 'class': 'td left' }, [ serving ? _('serving') : _('neighbour') ]),
-			E('td', { 'class': 'td left', 'data-l': 'Band' }, [ c.band ? ('B' + c.band) : '-' ]),
-			E('td', { 'class': 'td', 'data-l': 'PCI' }, [ dash(c.pci) ]),
-			E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ dash(c.earfcn) ]),
-			metricTd('rsrp', 'RSRP', c.rsrp),
-			metricTd('rsrq', 'RSRQ', c.rsrq),
-			metricTd('rssi', 'RSSI', c.rssi),
-		]));
+
+	/* СТРУКТУРНАЯ сигнатура - идентичность строк (сота/бенд/частота/служебная), БЕЗ
+	   живых уровней. Строки пересобираем ТОЛЬКО когда меняется сам НАБОР сот. Иначе
+	   (при каждом сдвиге RSRP) тело таблицы пересоздавалось бы - и полоски не
+	   успевали бы анимироваться, и страницу дёргало бы обрезанием scrollTop. */
+	var structSig = list.map(function(c) {
+		return [ c.pci, c.band, c.earfcn, (String(c.serving) === '1' || c.serving === true) ? 1 : 0 ].join('/');
+	}).join('|');
+	if (tbl.getAttribute('data-struct') !== structSig) {
+		tbl.setAttribute('data-struct', structSig);
+		Array.prototype.slice.call(tbl.querySelectorAll('.nb-row')).forEach(function(r) { r.remove(); });
+		list.forEach(function(c) {
+			var serving = (String(c.serving) === '1' || c.serving === true);
+			/* Метрические ячейки помечаем data-m - по ним ниже обновляем уровни
+			   в месте. Оценка/цвет - ТЕ ЖЕ пороги, что в CA и антенных портах. */
+			tbl.appendChild(E('tr', { 'class': 'tr nb-row' + (serving ? ' nb-serving' : '') }, [
+				E('td', { 'class': 'td left' }, [ serving ? _('serving') : _('neighbour') ]),
+				E('td', { 'class': 'td left', 'data-l': 'Band' }, [ c.band ? ('B' + c.band) : '-' ]),
+				E('td', { 'class': 'td', 'data-l': 'PCI' }, [ dash(c.pci) ]),
+				E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ dash(c.earfcn) ]),
+				E('td', { 'class': 'td', 'data-l': 'RSRP', 'data-m': 'rsrp' }, []),
+				E('td', { 'class': 'td', 'data-l': 'RSRQ', 'data-m': 'rsrq' }, []),
+				E('td', { 'class': 'td', 'data-l': 'RSSI', 'data-m': 'rssi' }, [])
+			]));
+		});
+	}
+
+	/* Каждый опрос: обновляем уровни В МЕСТЕ (paintMetricCell переиспользует узлы)
+	   - полоски плавно доезжают до новых значений. */
+	var rows = tbl.querySelectorAll('.nb-row');
+	list.forEach(function(c, i) {
+		var row = rows[i];
+		if (!row) { return; }
+		var val = { rsrp: c.rsrp, rsrq: c.rsrq, rssi: c.rssi };
+		Array.prototype.slice.call(row.querySelectorAll('td[data-m]')).forEach(function(td) {
+			var k = td.getAttribute('data-m');
+			paintMetricCell(td, k, val[k]);
+		});
 	});
 }
 
@@ -1812,6 +1850,16 @@ function cell4cellsUrl(json) {
 		return null;                                        // NR SA - формула неизвестна
 	} else {                                                // LTE / 5G NSA
 		tech = 3; num = Math.floor(cid / 256);
+		/* LAC для LTE НЕ передаём. num (eNB) + plmn и так центрируют карту в
+		   нужном месте, а точную подсветку даёт lac - но подобрать его нельзя:
+		   в базе 4cells он у вышек непоследователен (сота 362058 требует 13600,
+		   соседняя 368577 - 136, при одном TAC=136 у сети), а часть модемов
+		   (SIMCOM SIM7600) вместо LAC отдаёт сентинель 0xFFFE = «недоступно».
+		   Любой lac, что мы пошлём, для многих вышек будет неверным и подсветку
+		   не даст - зато верный отсутствующий lac карту не сместит. Поэтому
+		   отдаём только num: вышка оказывается на экране, рядом, кликом.
+		   У 3G/2G LAC осмысленный и остаётся (см. ветки выше). */
+		needLac = false;
 	}
 
 	var p3 = function(x) { x = String(x); while (x.length < 3) { x = '0' + x; } return x; };
@@ -1820,7 +1868,22 @@ function cell4cellsUrl(json) {
 		if (isNaN(lac)) { return null; }
 		url += '&lac=' + lac;
 	}
-	return url;
+	/* Возвращаем НЕ только ссылку, но и tech с num: кнопку надо повесить на ту
+	   строку, чей номер реально уходит в ссылку. На LTE это eNB (cid/256), на
+	   3G/2G - сам Cell ID. Иначе кнопка подписана одним числом, а открывает
+	   страницу про другое - ровно так и было, пока eNB нигде не показывался. */
+	return { url: url, tech: tech, num: num };
+}
+
+/* Кнопка с пином на карту вышек. Подпись - ТО ЖЕ число, что уходит в ссылку,
+   поэтому её ставит на свою строку тот, чей номер использован (см. cell4cellsUrl). */
+function mapPinButton(c4, label) {
+	return E('button', {
+		'class': 'cbi-button',
+		'style': 'margin:0;',
+		'title': _('View the tower on the 4cells.ru map'),
+		'click': function() { window.open(c4.url, '_blank', 'noopener'); }
+	}, '\u{1F4CD}' + label);
 }
 
 /* Подсветить активную кнопку режима сети по выводу mmcli -K */
@@ -2186,11 +2249,12 @@ function fillAntPorts(raw, rxdiv) {
 			   : (col === 'orange') ? _('antenna: weak signal')
 			   : _('antenna: poor signal');
 		}
+		/* Через ОБЩУЮ точку (paintMetricCell) - ту же, что у CA и соседних сот:
+		   к цвету добавляется полоска, а на proton2025 значение уезжает внутрь
+		   неё. Иначе три таблицы с одинаковыми по смыслу уровнями выглядели бы
+		   по-разному на одной странице. */
 		var paint = function(cell, key, v, text) {
-			cell.textContent = text;
-			var c = caQuality(key, v);
-			cell.style.color = c ? CA_COLOR[c] : '';
-			cell.style.fontWeight = c ? '600' : '';
+			paintMetricCell(cell, key, v, text);
 		};
 		if (td[1]) { paint(td[1], 'rsrp', p[1], p[1] + ' dBm'); }
 		if (td[2]) { paint(td[2], 'rsrq', p[2], p[2] + ' dB'); }
@@ -2581,6 +2645,10 @@ simDialog: baseclass.extend({
 		/* «Приоритет интернета» рисуется ВНУТРИ контента (netpri.mount() ниже),
 		   а не вставкой над вкладками - см. mount(). */
 		var m, s, o;
+
+		/* Настройка «Отображать Фиксацию TTL» (вкладка «Настройки» - блок «Сеть»).
+		   Включена по умолчанию: показываем блок, ПОКА значение явно не '0'. */
+		var showTtl = (uci.get('5gmodem', '@5gmodem[0]', 'show_ttl') !== '0');
 
 		var data = Array.isArray(res) ? res[0] : res;
 		var mmK  = Array.isArray(res) ? (res[1] || '') : '';
@@ -3299,7 +3367,8 @@ simDialog: baseclass.extend({
 					/* Расширенные поля соты. setRowVisible прячет строку, пока
 					   значения не было НИ РАЗУ, и больше не прячет после того, как
 					   оно появилось - иначе высота таблицы прыгала бы на опросе. */
-					[ 'enbid', 'pathloss', 'txpower', 'cqi', 'uecat', 'volte' ].forEach(function(k) {
+					var c4 = cell4cellsUrl(json);
+					[ 'pathloss', 'txpower', 'cqi', 'uecat', 'volte' ].forEach(function(k) {
 						var el = document.getElementById(k);
 						if (!el) { return; }
 						var val = json[k];
@@ -3307,6 +3376,29 @@ simDialog: baseclass.extend({
 						el.textContent = has ? String(val) : '-';
 						setRowVisible(el, has);
 					});
+
+					/* enbid - ОТДЕЛЬНО от общего цикла: на LTE/5G-NSA на нём висит
+					   кнопка карты вышек, а цикл затирал бы её textContent'ом на
+					   каждом тике опроса. */
+					(function() {
+						var el = document.getElementById('enbid');
+						if (!el) { return; }
+						var val = json.enbid;
+						var has = (val != null && val !== '' && val !== '-');
+						setRowVisible(el, has);
+						if (!has) { el.textContent = '-'; return; }
+						/* tech 3 = LTE/5G NSA: в ссылку уходит именно eNB, значит
+						   кнопке место здесь. На 3G/2G ссылка строится по Cell ID,
+						   и кнопка остаётся на его строке (см. ниже). */
+						if (c4 && c4.tech === 3) {
+							if (!sameRender(el, 'enb|' + val + '|' + c4.url)) {
+								el.innerHTML = '';
+								el.appendChild(mapPinButton(c4, val));
+							}
+						} else {
+							el.textContent = String(val);
+						}
+					})();
 
 					if (document.getElementById('cid')) {
 						var view = document.getElementById("cid");
@@ -3320,7 +3412,13 @@ simDialog: baseclass.extend({
 						setRowVisible(view, !(cidText === '' || cidText === '-'));
 						// Cell ID -> стандартная кнопка с пином и номером соты,
 						// по клику открывает карту вышек 4cells.ru
-						var url4 = cell4cellsUrl(json);
+						/* На LTE/5G-NSA кнопка переехала на строку «ID базовой
+						   станции»: в ссылку уходит eNB, и подпись там совпадает с
+						   тем, что откроется. Здесь она остаётся ТОЛЬКО для 3G/2G,
+						   где ссылка строится по самому Cell ID.
+						   Побочно строка снова показывает hex: раньше его вытесняла
+						   кнопка. */
+						var url4 = (c4 && c4.tech !== 3) ? c4.url : null;
 						/* ЧЕРЕЗ sameRender. Кнопка пересобиралась на КАЖДОМ тике
 						   опроса, хотя номер соты меняется хорошо если раз в час:
 						   innerHTML='' на мгновение опустошал ячейку, высота
@@ -3330,12 +3428,7 @@ simDialog: baseclass.extend({
 						if (url4 && json.cid_dec && json.cid_dec != '-'
 						    && !sameRender(view, 'cid|' + json.cid_dec + '|' + url4)) {
 							view.innerHTML = '';
-							view.appendChild(E('button', {
-								'class': 'cbi-button',
-								'style': 'margin:0;',
-								'title': _('View the tower on the 4cells.ru map'),
-								'click': function() { window.open(url4, '_blank', 'noopener'); }
-							}, '\u{1F4CD}' + json.cid_dec));
+							view.appendChild(mapPinButton(c4, json.cid_dec));
 						}
 						else if (!(url4 && json.cid_dec && json.cid_dec != '-')) {
 							/* Кнопки нет - обычный текст. Условие продублировано:
@@ -3638,8 +3731,9 @@ simDialog: baseclass.extend({
 			]),
 
 			/* Блок фиксации TTL / hop-limit - на такой же плашке (collapsibleSection),
-			   как остальные блоки страницы; по умолчанию свёрнут. */
-			collapsibleSection('ttl', _('TTL fixing'), [
+			   как остальные блоки страницы; по умолчанию свёрнут. Скрывается
+			   настройкой «Отображать Фиксацию TTL» (см. showTtl). */
+			showTtl ? collapsibleSection('ttl', _('TTL fixing'), [
 				(function() {
 					var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
 					return E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.2em 0' }, [
@@ -3658,7 +3752,7 @@ simDialog: baseclass.extend({
 						}, _('Apply'))
 					]);
 				}).call(this)
-			]),
+			]) : '',
 
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [

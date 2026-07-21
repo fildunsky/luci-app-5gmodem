@@ -199,7 +199,7 @@ start)
 			[ -n "$CUR" ] || CUR=0
 			LIVE=$(_tombps "$CUR")
 			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
 		SPD=$(awk '{print $1+0}' "$RESF")
@@ -221,7 +221,7 @@ start)
 			[ -n "$CUR" ] || CUR=0
 			LIVEU=$(_tombps "$CUR")
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
 		USPD=$(awk '{print $1+0}' "$URES")

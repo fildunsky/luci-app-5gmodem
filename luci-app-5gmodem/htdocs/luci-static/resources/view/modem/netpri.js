@@ -57,40 +57,42 @@ var CSS = `
 .netpribar .netpri-st .netpri-st-speed { display: flex; align-items: center; gap: .15em; }
 .netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
 .netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
-/* фаза теста подсвечивает карточку: загрузка - зелёным, отдача - синим. Плавный
-   переход цвета + тянущиеся цифры (анимируются в JS), а «идёт тест» показывает
-   пульсирующая рамка самой кнопки (см. st-pulse ниже). */
-.netpribar .netpri-st { transition: border-color .3s ease, box-shadow .3s ease; }
+/* Фаза теста ЗАЛИВАЕТ ФОН кнопки как прогресс-бар: загрузка - полупрозрачным
+   зелёным, отдача - синим. Ширина заливки = доля прошедшего времени фазы
+   (--st-p ставит JS по elapsed/secs). Заменило пульсирующую рамку: прогресс
+   честнее и не зависит от box-model. Заливку кладёт ::before ПОД контентом,
+   overflow:hidden обрезает её по скруглению кнопки. */
+.netpribar .netpri-st { position: relative; overflow: hidden; transition: border-color .3s ease; }
 .netpribar .netpri-st.st-dl { --st-c: #2ea043; }
 .netpribar .netpri-st.st-ul { --st-c: #0095ff; }
-.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul {
-	/* «Идёт тест» = ПУЛЬСИРУЮЩАЯ рамка ПРЯМО на кнопке, без отдельного слоя.
-	   Раньше подсветку рисовал ::after (конич. градиент + маска в кольцо), но он
-	   позиционировался относительно бокса кнопки и из-за flex-резиновости/box-model
-	   не совпадал с её рамкой (тот самый «первый баг»), а правки inset давали то
-	   прыжок, то зазор. Тут обводку даёт INSET box-shadow ПО границе самой кнопки -
-	   он совпадает с ней по определению, наружу не вылезает, ширину бордюра не
-	   трогает (без прыжка) и не зависит ни от темы, ни от раскладки. Толщина
-	   плавно ходит 1px<->3px - визуальный «пульс». Цвет рамки красим фазой. */
-	border-color: var(--st-c);
-	animation: st-pulse 1.1s ease-in-out infinite;
+.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul { border-color: var(--st-c); }
+.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before {
+	content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+	width: var(--st-p, 0%);
+	background: var(--st-c); opacity: .16;
+	transition: width .25s linear;   /* сглаживаем дискретные тики JS */
+	pointer-events: none; z-index: 0;
 }
-@keyframes st-pulse {
-	0%, 100% { box-shadow: inset 0 0 0 1px var(--st-c); }
-	50%      { box-shadow: inset 0 0 0 3px var(--st-c); }
-}
+/* Отдача заполняется В ДРУГУЮ СТОРОНУ - справа налево: якорим заливку к правому
+   краю (это симметрично «стрелке вверх» и визуально отличает фазу от загрузки). */
+.netpribar .netpri-st.st-ul::before { left: auto; right: 0; }
+/* контент - НАД заливкой (::before позиционирован, поэтому детей поднимаем) */
+.netpribar .netpri-st > * { position: relative; z-index: 1; }
 /* стрелка направления пульсирует, пока идёт тест */
 .netpribar .netpri-st.st-dl .netpri-st-arrow,
 .netpribar .netpri-st.st-ul .netpri-st-arrow { animation: st-blink 1s ease-in-out infinite; }
 @keyframes st-blink { 0%, 100% { opacity: .85; } 50% { opacity: .18; } }
 /* уважаем системную настройку «меньше движения» */
 @media (prefers-reduced-motion: reduce) {
-	.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul,
 	.netpribar .netpri-st.st-dl .netpri-st-arrow,
 	.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: none; }
-	.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul { box-shadow: inset 0 0 0 2px var(--st-c); }
+	.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before { transition: none; }
 }
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
+/* Ширину НЕ фиксируем: кнопка растёт под большое число, текст не вылезает.
+   tabular-nums держит цифры ровными при живом счёте; dim - плейсхолдер «0.0». */
+.netpribar .netpri-st .netpri-st-num { font-variant-numeric: tabular-nums; }
+.netpribar .netpri-st .netpri-st-num.dim { opacity: .35; }
 .netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
 /* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
    растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
@@ -111,7 +113,22 @@ var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
 
 /* Состояние карточки теста скорости - модульное, чтобы переживать перерисовку
    бара 5-секундным поллом. phase: idle|running|done|fail. */
-var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', live: 0, liveUp: 0 };
+var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', live: 0, liveUp: 0, secs: 15, phaseStart: 0 };
+
+/* Заливка-прогресс: доля прошедшего времени ФАЗЫ (elapsed/secs) -> --st-p.
+   secs = потолок фазы (curl --max-time), приходит из speedtest.sh. Тикаем чаще
+   поллинга (200 мс) - CSS transition на ::before доводит плавно. */
+var _stProgTimer = null;
+function setStProgress() {
+	var card = document.querySelector('.netpri-st');
+	if (!card) { return; }
+	if (_st.phase !== 'running' || !_st.phaseStart || !_st.secs) { card.style.removeProperty('--st-p'); return; }
+	var pct = (Date.now() - _st.phaseStart) / (_st.secs * 1000) * 100;
+	if (pct < 0) { pct = 0; } if (pct > 100) { pct = 100; }
+	card.style.setProperty('--st-p', pct.toFixed(1) + '%');
+}
+function stProgStart() { if (!_stProgTimer) { _stProgTimer = window.setInterval(setStProgress, 200); } }
+function stProgStop() { if (_stProgTimer) { window.clearInterval(_stProgTimer); _stProgTimer = null; } setStProgress(); }
 
 function stArrow(name) {
 	return E('img', { 'class': 'netpri-st-arrow', 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
@@ -131,29 +148,44 @@ function flagEmoji(cc) {
 function stSpeedContent() {
 	var sep = function() { return E('span', { 'style': 'opacity:.4; margin:0 .35em;' }, '|'); };
 	var unit = function() { return E('span', { 'class': 'netpri-st-unit' }, _('Mbps')); };
-	if (_st.phase === 'running') {
-		/* показываем ТЕКУЩЕЕ анимированное число (_liveDisplay), чтобы 5-секундная
-		   перерисовка бара не сбрасывала его в 0 посреди теста. */
-		if (_st.upPhase) {
-			var d = (_st.down != null) ? String(_st.down) : '0';
-			var lu = (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1);
-			return [ stArrow('cdown'), E('span', {}, ' ' + d), sep(),
-				stArrow('cup'), E('span', { 'class': 'netpri-st-live' }, ' ' + lu), unit() ];
-		}
-		var lv = (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1);
-		return [ stArrow('cdown'), E('span', { 'class': 'netpri-st-live' }, ' ' + lv), unit() ];
-	}
+	/* Число в ФИКСИРОВАННОМ слоте. dim=true - плейсхолдер (значение ещё не
+	   измерено): показываем «000.0» приглушённым, чтобы ширина кнопки была той
+	   же, что и с реальными числами, и старт теста её не расширял. live=true -
+	   слот живого числа (его докручивает animateLive по .netpri-st-live). */
+	var num = function(v, dim, live) {
+		var cls = 'netpri-st-num' + (dim ? ' dim' : '') + (live ? ' netpri-st-live' : '');
+		var txt = live ? (typeof _liveDisplay === 'number' ? _liveDisplay : 0).toFixed(1)
+		               : (v != null ? String(v) : '0.0');
+		return E('span', { 'class': cls }, txt);
+	};
+	/* Число + стрелка ВПЛОТНУЮ: стрелку ставим ПОСЛЕ цифры и группируем в
+	   inline-flex с gap:0 - иначе flex-gap строки скорости (.15em) дал бы зазор
+	   между ними (как было, когда стрелка стояла перед числом). */
+	var pair = function(node, arrow) {
+		return E('span', { 'style': 'display:inline-flex; align-items:center; gap:.15em' }, [ node, stArrow(arrow) ]);
+	};
+
 	if (_st.phase === 'fail') { return [ E('span', {}, _('Test failed')) ]; }
-	if (_st.phase === 'done') {
-		var dn = (_st.down != null) ? String(_st.down) : '—';
-		var up = (_st.up != null) ? String(_st.up) : '—';
-		return [ stArrow('cdown'), E('span', {}, ' ' + dn), sep(),
-			stArrow('cup'), E('span', {}, ' ' + up), unit() ];
+
+	/* Единая двухчисловая раскладка ВЕЗДЕ (покой/загрузка/отдача/готово) - ширина
+	   кнопки постоянна. Живое число - в текущей фазе, второе - последнее
+	   известное или плейсхолдер. */
+	var running = (_st.phase === 'running');
+	var dlDim, dlNode, ulDim, ulNode;
+	if (running && !_st.upPhase) {          // фаза загрузки: DL живой, UL плейсхолдер
+		dlNode = num(null, false, true);
+		ulNode = num(_st.up, true, false);
+	} else if (running && _st.upPhase) {    // фаза отдачи: DL готов, UL живой
+		dlNode = num(_st.down, _st.down == null, false);
+		ulNode = num(null, false, true);
+	} else if (_st.phase === 'done') {      // готово: оба реальные
+		dlNode = num(_st.down, _st.down == null, false);
+		ulNode = num(_st.up, _st.up == null, false);
+	} else {                                 // покой: оба плейсхолдеры
+		dlNode = num(null, true, false);
+		ulNode = num(null, true, false);
 	}
-	return [
-		E('img', { 'class': 'netpri-st-icon', 'src': L.resource('icons/cspeedtest.svg'), 'width': 14, 'height': 14, 'alt': '' }),
-		E('span', {}, ' ' + _('Speed test'))
-	];
+	return [ pair(dlNode, 'cdown'), sep(), pair(ulNode, 'cup'), unit() ];
 }
 
 /* три строки карточки: сервис (сверху), скорость (центр), публичный IP (снизу) */
@@ -199,7 +231,7 @@ function animateLive(target) {
 		if (t0 === null) { t0 = ts; }
 		var p = Math.min((ts - t0) / dur, 1);
 		var v = from + (to - from) * p;
-		el.textContent = ' ' + v.toFixed(1);
+		el.textContent = v.toFixed(1);
 		_liveDisplay = v;
 		if (p < 1) { _liveRaf = window.requestAnimationFrame(step); }
 		else { _liveDisplay = to; _liveRaf = null; }
@@ -223,7 +255,7 @@ function refreshStCard() {
 		// счётчик сбрасываем в 0 только на СМЕНЕ ФАЗЫ: приезд IP - не повод
 		// ронять уже тикающее живое число обратно к нулю.
 		if (key !== _renderedPhase) {
-			if (_st.phase === 'running') { _liveDisplay = 0; }
+			if (_st.phase === 'running') { _liveDisplay = 0; _st.phaseStart = Date.now(); }
 			_renderedPhase = key;
 		}
 	}
@@ -234,14 +266,17 @@ function refreshStCard() {
 	}
 	// анимируем текущее живое число: при отдаче - upload, иначе - download
 	if (_st.phase === 'running') { animateLive(_st.upPhase ? (_st.liveUp || 0) : (_st.live || 0)); }
+	setStProgress();
 }
 
 function runSpeedtest() {
 	if (_st.phase === 'running') { return; }
 	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
 	_st.down = null; _st.up = null; _st.ip = '';
+	_st.phaseStart = Date.now();
 	_renderedKey = ''; _liveDisplay = 0;
 	refreshStCard();
+	stProgStart();
 	fs.exec(SPEEDBIN, [ 'start' ]).then(function() {
 		var tries = 0;
 		var poll = function() {
@@ -253,6 +288,7 @@ function runSpeedtest() {
 					_st.upPhase = (j.phase === 'up');
 					if (j.live_down != null) { _st.live = j.live_down; }
 					if (j.live_up != null) { _st.liveUp = j.live_up; }
+						if (j.secs != null) { _st.secs = j.secs; }
 					if (j.down_mbps != null) { _st.down = j.down_mbps; }
 					// IP теперь определяется первым - показываем сразу, не дожидаясь цифр
 					if (j.pub_ip) { _st.ip = j.pub_ip; }
@@ -271,11 +307,11 @@ function runSpeedtest() {
 					ui.addNotification(null, E('p', _('Speed test needs the curl package: install it with "apk add curl" (or "opkg install curl"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash.')), 'warning');
 				}
 				else { _st.phase = 'fail'; if (j.pub_ip) { _st.ip = j.pub_ip; _st.cc = j.cc || ''; } }
-				_renderedKey = ''; refreshStCard();
+				_renderedKey = ''; stProgStop(); refreshStCard();
 			});
 		};
 		return poll();
-	}).catch(function() { _st.phase = 'fail'; _renderedKey = ''; refreshStCard(); });
+	}).catch(function() { _st.phase = 'fail'; _renderedKey = ''; stProgStop(); refreshStCard(); });
 }
 
 /* подтянуть начальную подпись сервиса и последний результат (если был) */
@@ -426,6 +462,10 @@ return baseclass.extend({
 			var fresh = buildBar(l2, redraw);
 			if (wrap.firstChild) { wrap.replaceChild(fresh, wrap.firstChild); }
 			else { wrap.appendChild(fresh); }
+			/* Ряд пересоздан - карточка теста НОВАЯ и без класса фазы/--st-p.
+			   Возвращаем визуал теста сразу, иначе заливка мигала бы на каждый
+			   5-секундный тик поллинга (класс/переменная терялись до след. тика). */
+			refreshStCard();
 		};
 		var apply = function(list) {
 			// НЕ убираем блок на пустом ответе: при переключении модема (перезагрузка
@@ -460,6 +500,9 @@ return baseclass.extend({
 				var fresh = buildBar(l2, redraw);
 				if (wrap.firstChild) { wrap.replaceChild(fresh, wrap.firstChild); }
 				else { wrap.appendChild(fresh); }
+				/* см. mount(): возвращаем визуал теста после пересоздания ряда,
+				   иначе заливка мигает на каждый тик поллинга. */
+				refreshStCard();
 			};
 			redraw(list);
 			stInit();   /* подпись сервиса + последний результат теста скорости */

@@ -1956,7 +1956,7 @@ msgid "Hop Limit IPv6 (in / out)"
 msgstr "Hop Limit IPv6 (вход / исход)"
 
 msgid "Inbox"
-msgstr "Входящие СМС"
+msgstr "Входящие"
 
 msgid "Send SMS"
 msgstr "Отправить СМС"
@@ -3112,3 +3112,12 @@ msgstr "Сота"
 
 msgid "Applying bands…"
 msgstr "Применяю диапазоны…"
+
+msgid "Choose which blocks are shown on the Network page."
+msgstr "Выберите, какие блоки показывать на странице «Сеть»."
+
+msgid "Show TTL fixing"
+msgstr "Отображать Фиксацию TTL"
+
+msgid "Show the \"TTL fixing\" block on the Network page."
+msgstr "Показывать блок «Фиксация TTL» на странице «Сеть»."

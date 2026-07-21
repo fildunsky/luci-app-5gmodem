@@ -250,64 +250,11 @@ if [ "$REGOK" = "1" ]; then
 	ORF=""
 	if [ "$_QMICLI_OK" = "1" ]; then
 		ORF=$(qmicli -d "$_WDM" -p --nas-get-rf-band-info 2>/dev/null)
-
-		# --- Ширина канала: секция Bandwidth того же ответа, уже в МГц ---
-		T=$(echo "$ORF" | sed -n "s/.*Bandwidth: *'\([0-9]*\)'.*/\1/p" | head -1)
-		[ -n "$T" ] && BANDWIDTH="$T MHz"
-
-		# --- Мощность передатчика: только из tx-rx-info (секция TX) ---
-		# Ни serving-system, ни rf-band-info её не содержат. Значение вида
-		# "Power: '23.0 dBm'" - берём первое после заголовка TX:.
-		_TRX=$(qmicli -d "$_WDM" -p --nas-get-tx-rx-info=lte 2>/dev/null)
-		T=$(echo "$_TRX" | awk '/^TX:/{f=1} f && /Power:/ {gsub(/[^0-9.-]/,"",$2); print $2; exit}')
-		[ -n "$T" ] && TXPOWER="$T dBm"
-
-		# --- eNB ID: отдельного поля QMI не даёт ---
-		# У LTE Global Cell ID склеен из идентификатора базовой станции (старшие
-		# биты) и номера сектора (младшие 8 бит), поэтому eNB ID = CID / 256.
-		_CLI=$(qmicli -d "$_WDM" -p --nas-get-cell-location-info 2>/dev/null)
-		T=$(echo "$_CLI" | sed -n "s/.*Global Cell ID: *'\([0-9]*\)'.*/\1/p" | head -1)
-		[ -n "$T" ] && ENBID=$((T / 256))
-
-		# --- Соседние соты (плоский список для таблицы в UI) ---
-		# qmicli отдаёт их двумя секциями: "Intrafrequency LTE Info" - соты на ТОЙ ЖЕ
-		# частоте (там же Serving Cell ID, поэтому служебную соту помечаем флагом
-		# serving, иначе она выглядела бы просто самым сильным соседом), и
-		# "Interfrequency LTE Info" - соты на ДРУГИХ частотах, сгруппированные по
-		# "Frequency [N]", у каждой группы свой EARFCN и бенд. Внутри - "Cell [N]".
-		# Кавычки в awk не разбираем намеренно: значения достаём по цифрам, иначе
-		# программу пришлось бы утыкать '\'' - в busybox awk это ломается молча.
-		NEIGHBORS=$(echo "$_CLI" | awk '
-			function emit() {
-				if (pci == "") return
-				printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"%s\",\"serving\":%s}",
-					(n++ ? "," : ""), band, earfcn, pci, rsrp, rsrq, rssi,
-					((sec == "intra" && pci == serv) ? "1" : "0")
-				pci = ""
-			}
-			/^Intrafrequency LTE Info/ { emit(); sec = "intra"; next }
-			/^Interfrequency LTE Info/ { emit(); sec = "inter"; next }
-			/^[^ \t]/               { emit(); sec = "" }
-			sec == ""               { next }
-			/EUTRA Absolute RF Channel Number/ {
-				emit()
-				if (match($0, /[0-9]+/)) earfcn = substr($0, RSTART, RLENGTH)
-				band = ""
-				if (match($0, /E-UTRA band [0-9]+/)) band = substr($0, RSTART + 12, RLENGTH - 12)
-				next
-			}
-			/Serving Cell ID/  { if (match($0, /[0-9]+/)) serv = substr($0, RSTART, RLENGTH); next }
-			/Physical Cell ID/ {
-				emit()
-				if (match($0, /[0-9]+/)) pci = substr($0, RSTART, RLENGTH)
-				rsrp = ""; rsrq = ""; rssi = ""
-				next
-			}
-			/RSRQ:/ { if (match($0, /-?[0-9.]+/)) rsrq = substr($0, RSTART, RLENGTH); next }
-			/RSRP:/ { if (match($0, /-?[0-9.]+/)) rsrp = substr($0, RSTART, RLENGTH); next }
-			/RSSI:/ { if (match($0, /-?[0-9.]+/)) rssi = substr($0, RSTART, RLENGTH); next }
-			END { emit() }
-		')
+		# Ширину канала, мощность передатчика, eNB ID и соседние соты здесь
+		# больше НЕ собираем: запросы generic (QMI NAS), отвечают одинаково у
+		# любого вендора - проверено на Compal и Telit, - поэтому переехали во
+		# фреймворк (_qmi_supplement в 5gmodem.sh) и достаются всем профилям.
+		# Копия здесь однажды уже разошлась с оригиналом, повторять не будем.
 	fi
 
 	if [ "$_QMICLI_OK" = "1" ] && { [ "x$MODE_NUM" = "x13" ] || [ "x$MODE_NUM" = "x11" ] \

@@ -166,6 +166,18 @@ return view.extend({
 		   странице «Сеть»; тут только эндпойнты). */
 		var m = new form.Map('5gmodem');
 		var o;
+
+		/* Отображение блоков на странице «Сеть». Тумблеры включены по умолчанию;
+		   страница «Сеть» скрывает блок, только когда значение явно '0'. */
+		var disp = m.section(form.TypedSection, '5gmodem', _('Network'),
+			_('Choose which blocks are shown on the Network page.'));
+		disp.anonymous = true;
+
+		o = disp.option(form.Flag, 'show_ttl', _('Show TTL fixing'),
+			_('Show the "TTL fixing" block on the Network page.'));
+		o.default = '1';
+		o.rmempty = false;
+
 		var st = m.section(form.TypedSection, '5gmodem', _('Speed test'),
 			_('Settings for the speed-test button in the "Internet priority" block on the Network page. The test runs from the router over the active uplink.'));
 		st.anonymous = true;
