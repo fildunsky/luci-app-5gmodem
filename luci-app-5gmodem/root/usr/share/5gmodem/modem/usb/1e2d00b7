@@ -6,46 +6,17 @@
 # Operator / registration / TAC / CID / firmware still come from the framework
 # over AT (AT+COPS / +CREG / +CGMR work on this modem).
 # ==========================================================================
-_CGMM=$(sms_tool -d "$DEVICE" at "AT+CGMM" | tr -d '\r' | grep -viE '^AT|^OK$|^ERROR|^$' | head -1 | xargs)
-if [ "$_CGMM" = "SG500M2-X" ]; then
-	MODEL="Compal RXM-G1 (SG500M2-X)"
-
-	# cdc-wdm control node of the ACTIVE (this) modem
-	WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
-	[ -n "$WDM" ] && [ -c "$WDM" ] || WDM=/dev/cdc-wdm0
-
-	# --- signal (RSSI / RSRP / RSRQ / SNR) ---
-	_SIG=$(qmicli -d "$WDM" --nas-get-signal-info 2>/dev/null)
-	T=$(echo "$_SIG" | grep -m1 'RSRP:' | grep -oE -- '-?[0-9]+' | head -1); [ -n "$T" ] && RSRP="$T"
-	T=$(echo "$_SIG" | grep -m1 'RSRQ:' | grep -oE -- '-?[0-9]+' | head -1); [ -n "$T" ] && RSRQ="$T"
-	T=$(echo "$_SIG" | grep -m1 'RSSI:' | grep -oE -- '-?[0-9]+' | head -1); [ -n "$T" ] && RSSI="$T"
-	T=$(echo "$_SIG" | grep -m1 'SNR:'  | grep -oE -- '-?[0-9]+(\.[0-9]+)?' | head -1); [ -n "$T" ] && SINR="$T"
-
-	# --- band + EARFCN + mode (rf-band-info: 'eutran-N' / channel) ---
-	_RF=$(qmicli -d "$WDM" --nas-get-rf-band-info 2>/dev/null)
-	_B=$(echo "$_RF" | grep -m1 'Active Band Class' | grep -oE 'eutran-[0-9]+' | grep -oE '[0-9]+')
-	_C=$(echo "$_RF" | grep -m1 'Active Channel' | grep -oE "[0-9]+" | head -1)
-	[ -n "$_C" ] && EARFCN="$_C"
-	if [ -n "$_B" ]; then
-		MODE="LTE | $(band4g $_B)"
-		PBAND="$(band4g $_B)"
-	fi
-
-	# TAC: reuse the value the framework already parsed from AT+CREG ($3), which
-	# it stores as LAC_HEX/LAC_DEC (for LTE that field IS the TAC). CID_HEX is
-	# set by the framework too. This avoids an extra qmicli round-trip.
-	[ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; }
-
-	# --- signal % from RSRP (this modem gives no AT+CSQ) ---
-	if [ -n "$RSRP" ]; then
-		CSQ_PER=$(awk -v r="$RSRP" 'BEGIN{p=(r+150)*5/3; if(p<0)p=0; if(p>100)p=100; printf "%d", p}')
-		CSQ=$(( 31 * CSQ_PER / 100 ))
-	fi
-
-	# --- firmware (AT) + IMEI (qmicli) ---
-	T=$(sms_tool -d "$DEVICE" at "AT+CGMR" | tr -d '\r' | grep -viE '^AT|^OK$|^ERROR|^$' | head -1 | xargs); [ -n "$T" ] && FW="$T"
-	T=$(qmicli -d "$WDM" --dms-get-ids 2>/dev/null | grep -m1 'IMEI:' | grep -oE '[0-9]{10,}' | head -1); [ -n "$T" ] && NR_IMEI="$T"
-
+# ЕДИНАЯ реализация метрик Compal живёт в 05c690d6 - здесь только развод по
+# модели и делегирование. Раньше тут лежала УРЕЗАННАЯ копия той же логики, и она
+# успела разойтись с оригиналом: в ней не было ни уровня троттлинга (+CEITHERM),
+# ни агрегации несущих, ни 5G-полей. Именно этим и объяснялось, почему в
+# композиции QMI пропадало «тепловое состояние», исправно работавшее в MBIM.
+# Копия по определению отстаёт от оригинала - поэтому её тут больше нет.
+# _IS_COMPAL=1 выставляем заранее: 05c690d6 его уважает и не детектит повторно.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal "" "" "$DEVICE"; then
+	_IS_COMPAL=1
+	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0
 fi
 

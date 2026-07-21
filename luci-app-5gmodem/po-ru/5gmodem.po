@@ -3080,3 +3080,35 @@ msgstr "Эндпойнт, принимающий POST-тело, для тест�
 
 msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
 msgstr "Сервис, возвращающий ваш публичный IP. Если он отдаёт и страну (как ip-api.com), рядом с IP показывается флаг. Если не ответил, спрашивается запасной сервис, и лишь потом показывается локальный адрес аплинка (без флага)."
+
+msgid "Switch to ModemManager"
+msgstr "Переключить на ModemManager"
+
+msgid ""
+"Bands and network mode are shown read-only: in %s mode they can be read but "
+"not changed. Switch the interface to ModemManager to manage them."
+msgstr ""
+"Диапазоны и режим сети показаны только для чтения: в режиме %s их можно "
+"читать, но не изменять. Чтобы управлять ими, переключите интерфейс на "
+"ModemManager."
+
+msgid "Interface switched to ModemManager."
+msgstr "Интерфейс переключён на ModemManager."
+
+msgid "Could not switch the interface to ModemManager."
+msgstr "Не удалось переключить интерфейс на ModemManager."
+
+msgid "Neighbour cells"
+msgstr "Соседние соты"
+
+msgid "serving"
+msgstr "служебная"
+
+msgid "neighbour"
+msgstr "соседняя"
+
+msgid "Cell"
+msgstr "Сота"
+
+msgid "Applying bands…"
+msgstr "Применяю диапазоны…"

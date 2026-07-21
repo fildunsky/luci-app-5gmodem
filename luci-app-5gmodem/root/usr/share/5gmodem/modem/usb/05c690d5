@@ -3,9 +3,13 @@
 # The 05c6:90d5 id is shared with an early Compal RXM-G1 prototype that
 # still reports the old id (later moved to the unique 05c6:90d6). They
 # need completely different handling, so when the attached device is
-# actually the Compal (USB descriptor "Tri Cascade" / "VOS_5G"), hand
-# over to the 90d6 profile and skip the T99W175 logic below.
-if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
+# actually the Compal, hand over to the 90d6 profile and skip the T99W175
+# logic below. Опознание - через ОБЩИЙ помощник (iscompal.sh): раньше здесь
+# стояла своя проверка только по debugfs, которая молча проваливалась на
+# сборках без смонтированной debugfs.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal "" "" "$DEVICE"; then
+	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0
 fi

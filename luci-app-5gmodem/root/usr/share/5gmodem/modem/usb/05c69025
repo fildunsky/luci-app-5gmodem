@@ -1,4 +1,22 @@
 # Foxconn T99W175 (FW 6.0.0.6)
+#
+# 05c6:9025 - QMI-композиция этого семейства. Идентификатор делят Foxconn
+# T99W175 и Compal RXM-G1 (новая прошивка), переведённый в QMI командой
+# AT+USBCOMP=debug. Прошивки НЕ совместимы: Compal не отвечает ни на ^TEMP?,
+# ни на ^DEBUG? (проверено на железе - пустой ответ), метрики и диапазоны у
+# него читаются через qmicli, см. 05c690d6.
+#
+# ВАЖНО: здесь, в отличие от 05c690d5 и 1e2d00b7, разводить по USB-дескриптору
+# НЕЛЬЗЯ - в этой композиции модем представляется generic-идентификатором
+# Qualcomm ("HSUSB Device"), без строк VOS_5G / Tri Cascade. Помощник это
+# учитывает: он проверяет ещё и МОДЕЛЬ (SG500M2-X) через QMI/MM/AT.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal "" "" "$DEVICE"; then
+	# _IS_COMPAL=1 выставляем заранее - 05c690d6 его уважает и не детектит заново
+	_IS_COMPAL=1
+	. "$RES/modem/usb/05c690d6"
+	return 0 2>/dev/null || exit 0
+fi
 
 O=$(sms_tool -d $DEVICE at "AT^TEMP?")
 

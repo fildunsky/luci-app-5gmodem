@@ -10,8 +10,11 @@
 # и sysfs (есть всегда). Если Compal не опознан, мы уходим в Thales-ветку - а это
 # AT-профиль БЕЗ _BAND_VIA=mmcli, т.е. гейт в bands.sh не сработает и UI покажет
 # нерабочие кнопки бендов/режимов вместо честной надписи (см. 05c690d6).
-if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null \
-	|| grep -qiE "VOS_5G|RXMG1" /sys/bus/usb/devices/*/product 2>/dev/null; then
+# Опознание - через ОБЩИЙ помощник (см. iscompal.sh). AT-порт ему не передаём:
+# bands.sh выставляет _DEVICE ПОСЛЕ подключения профиля, т.е. здесь его ещё нет.
+# Помощнику хватит дескриптора, а где тот generic - модели через QMI/mmcli.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal; then
 	. "$RES/05c690d6"
 	return 0 2>/dev/null || exit 0
 fi

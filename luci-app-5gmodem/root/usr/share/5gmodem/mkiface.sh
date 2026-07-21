@@ -401,6 +401,11 @@ else
 	done
 fi
 
+# Опознание Compal - через ОБЩИЙ помощник (см. iscompal.sh): у этого модема свой
+# VID:PID в каждой композиции, и держать копию проверки в каждом файле - ровно
+# тот путь, которым уже сломалось определение SIM-слотов в новой композиции.
+. /usr/share/5gmodem/iscompal.sh
+
 # --- decide the proto ---
 # auto: pick from the cdc-wdm driver. Any other value is passed through as-is,
 # so any installed netifd/luci proto handler (mbim, qmi, ncm, xmm, atc, wwan,
@@ -411,7 +416,20 @@ case "$REQ" in
 			cdc_mbim) PROTO="mbim" ;;
 			qmi_wwan) PROTO="qmi" ;;
 			*)        PROTO="mbim" ;;
-		esac ;;
+		esac
+		# Compal RXM-G1 в QMI-композиции - ИСКЛЮЧЕНИЕ в пользу ModemManager.
+		# У этой прошивки нет своих AT-команд бенд-лока, а в CLI libqmi нет TLV
+		# для ИХ ЗАПИСИ (только чтение), поэтому управлять диапазонами и режимом
+		# сети можно ИСКЛЮЧИТЕЛЬНО через mmcli. На kernel-протоколе mm-inhibit.sh
+		# прячет модем от MM (иначе MM и uqmi дерутся за cdc-wdm), и остаётся
+		# только чтение - т.е. auto=qmi осознанно лишал бы пользователя управления.
+		# Проверено: в этой композиции MM поднимает модем сразу и отдаёт всё.
+		# Условие СТРОГО на qmi_wwan: в MBIM-композиции наоборот - там MM неверно
+		# классифицирует порт и строит нерабочий модем (см. шапку файла).
+		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && is_compal "" "$DEV"; then
+			PROTO="modemmanager"
+		fi
+		;;
 	*) PROTO="$REQ" ;;
 esac
 

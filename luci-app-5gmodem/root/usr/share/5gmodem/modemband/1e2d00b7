@@ -1,5 +1,23 @@
 # 1e2d:00b7 - QMI (Thales/Cinterion)
 #
+# Идентификатор 1e2d:00b7 делят Thales MV31-W / Foxconn T99W175 / Dell DW5930e
+# и Compal RXM-G1, переведённый в QMI (AT+USBCOMP=debug). Это РАЗНЫЕ прошивки:
+# у Compal нет AT-команд бенд-лока (AT^BAND_PREF не отвечает, как и ^DEBUG?/^TEMP?),
+# бенды доступны только через mmcli/qmicli. Поэтому, если по USB-дескриптору это
+# Compal (Tri Cascade / VOS_5G), передаём управление профилю 05c690d6 (mmcli) -
+# точно так же, как это делает modemband/05c690d5 для MBIM-композиции.
+# Без этого мы уходили бы в Thales-ветку (AT-профиль БЕЗ _BAND_VIA=mmcli), гейт в
+# bands.sh не срабатывал бы, и UI показывал нерабочие кнопки бендов вместо
+# честного «управление через ModemManager».
+# Проверяем ДВА источника: debugfs (может быть не смонтирована) и sysfs (есть всегда).
+# Опознание - через ОБЩИЙ помощник (см. iscompal.sh). AT-порт ему не передаём:
+# bands.sh выставляет _DEVICE ПОСЛЕ подключения профиля, т.е. здесь его ещё нет.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal; then
+	. "$RES/05c690d6"
+	return 0 2>/dev/null || exit 0
+fi
+
 # Логика общая для всех композиций этого модема, см. _qualcomm_sdx55_common:
 # режим USB меняет нумерацию портов и драйвер, но не набор AT-команд.
 . $RES/_qualcomm_sdx55_common

@@ -209,6 +209,93 @@ document.head.append(E('style', {'type': 'text/css'},
   }
 }
 
+/* --- Таблица соседних сот ------------------------------------------------- */
+/* Колонок всего 7 и все узкие, поэтому фиксированной раскладки достаточно. */
+#nb-table {
+  table-layout: fixed;
+  width: 100%;
+}
+#nb-table .td, #nb-table .th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 8px 2px 0;
+}
+#nb-table .td:nth-child(1), #nb-table .th:nth-child(1) { width: 16%; }
+#nb-table .td:nth-child(2), #nb-table .th:nth-child(2) { width: 12%; }
+#nb-table .td:nth-child(n+3), #nb-table .th:nth-child(n+3) { width: 14.4%; }
+/* Служебная сота выделена, иначе она неотличима от самого сильного соседа. */
+#nb-table .nb-serving { font-weight: 600; }
+#nb-table .nb-serving .td:first-child { opacity: .85; }
+
+/* Мобильная раскладка - тем же приёмом, что у CA-таблицы (см. подробности там):
+   ниже 800px строка превращается в карточку с подписями через data-l.
+   Высоту здесь мы НЕ стабилизируем сознательно: число соседей меняется по
+   радиообстановке, фиксированного набора строк тут не существует. */
+@media (max-width: 800px) {
+  #nb-table, #nb-table .tr { display: block; width: 100%; }
+  #nb-table .nb-head { display: none; }
+  #nb-table .nb-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 1em;
+    border: 1px solid rgba(128,128,128,.25);
+    border-radius: 6px;
+    padding: .35em .6em;
+    margin: 0 0 .45em 0;
+  }
+  #nb-table .nb-row .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    padding: 1px 0;
+  }
+  #nb-table .nb-row .td:first-child {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(128,128,128,.2);
+    margin-bottom: .15em;
+  }
+  #nb-table .nb-row .td[data-l]::before {
+    content: attr(data-l) ": ";
+    opacity: .6;
+  }
+}
+
+/* --- Короткая полоска метрики в таблицах ---------------------------------- */
+/* Высота ФИКСИРОВАННАЯ и одинаковая во всех строках - поэтому таблица не
+   «дышит» между опросами и страницу не дёргает. Ширину анимируем тем же
+   переходом, что у больших полосок метрик, иначе она скакала бы рывком. */
+.metric-bar {
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: rgba(128,128,128,.18);
+  overflow: hidden;
+}
+.metric-bar > div {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .4s ease-out;
+}
+/* Ячейки БЕЗ полоски (Band/PCI/EARFCN) иначе повисли бы по центру выросшей
+   строки, и числа перестали бы читаться в один ряд с теми, что с полосками. */
+#ca-table .td, #nb-table .td { vertical-align: top; }
+
+/* На proton2025 в ячейки попадает ШТАТНЫЙ .cbi-progressbar - и тема задаёт ему
+   min-width:200px и внешние поля, рассчитанные на полноразмерные метрики. В
+   колонку таблицы (~9% ширины) такое не влезает и разорвало бы вёрстку, поэтому
+   ограничения снимаем ТОЧЕЧНО - только внутри наших двух таблиц.
+   Подпись внутри полоски (::after) НЕ трогаем: ради неё всё и затевалось. */
+#ca-table .cbi-progressbar,
+#nb-table .cbi-progressbar {
+  min-width: 0 !important;
+  height: 20px;
+  margin: 0;
+}
+
 /* Значение диапазона (pband/SCC) меняет длину при переселении соты
    (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
    раскладкой длинное значение переносилось на 2 строки -> высота строки
@@ -607,7 +694,16 @@ function clearModemBusy(force) {
 	// показывает блок диапазонов. Перечитываем ЗДЕСЬ, а не по таймеру у кнопки:
 	// момент «модем вернулся» известен только тут, и это единственная точка,
 	// где новое состояние уже можно прочитать.
-	if (_bandsAfterBusy) { _bandsAfterBusy = false; loadBandsModemband(); }
+	if (_bandsAfterBusy) {
+		_bandsAfterBusy = false;
+		/* Источник диапазонов у модемов разный (см. bandSource): профиль
+		   modemband или mmcli. Перечитываем ТЕМ ЖЕ путём, которым блок был
+		   заполнен - иначе на mmcli-модеме обновление ушло бы в чужую ветку и
+		   таблица осталась бы со старыми значениями. */
+		/* Мимо кэша: сюда попадают после операций, менявших состояние радио
+		   (перезапуск, привязка к соте), и кэшированный снимок был бы снят ДО них. */
+		if (bandSource === 'modemband') { loadBandsModemband(true); } else { loadBands(); }
+	}
 }
 function modemBusyActive() {
 	var ov = document.getElementById('modem-busy-ov');
@@ -789,6 +885,77 @@ function caQuality(key, v) {
 	return null;
 }
 
+/* Границы шкалы для ДЛИНЫ полоски. Взяты по краям реально встречающихся
+   значений, а не по теоретически возможным: с теоретическими полоска почти
+   всегда стояла бы у одного края и ничего бы не показывала. */
+var METRIC_RANGE = {
+	rsrp: [ -125, -70 ],
+	rsrq: [ -20, -5 ],
+	rssi: [ -100, -60 ],
+	sinr: [ -5, 25 ]
+};
+
+/* Короткая полоска под значением метрики в таблицах (CA и соседние соты).
+   Цвет берёт из caQuality - ТОЙ ЖЕ функции, что красит само число, поэтому в
+   ячейке всегда одна оценка, а не две слегка разные. Полоска добавляет то, чего
+   у числа нет: насколько значение близко к границе диапазона.
+   Большие полоски основных метрик (rsrp_bar и родня) сюда не годятся - они
+   привязаны к элементу по id, т.е. синглтоны, а не компонент; и шкала у них
+   четырёхуровневая, что разошлось бы с трёхуровневым цветом числа.
+   Полоска - БЛОК на всю ширину ячейки: при table-layout:fixed она физически не
+   может расширить колонку, поэтому ширина таблицы не едет, а высота прибавляется
+   одинаково у всех строк - тех самых прыжков вёрстки не будет. */
+/* proton2025 стилизует ШТАТНЫЙ компонент .cbi-progressbar: толстая пилюля 24px
+   с подписью ВНУТРИ (::after { content: attr(title) }) - ровно так там выглядят
+   основные метрики. В bootstrap тот же класс выглядит иначе: полоска 8px, а
+   подпись ::before ВЫШЕ неё с отступом 1.4em - в плотной таблице это разъезжается.
+   Поэтому компонент темы берём только на proton2025, а на остальных остаётся
+   своя тонкая полоска под числом. */
+var IS_PROTON = (function() {
+	var base = String((window.L && L.env && L.env.mediaurlbase) || '');
+	if (/proton2025/.test(base)) { return true; }
+	/* Фолбэк, если mediaurlbase недоступен: ищем подключённую таблицу стилей. */
+	return !!document.querySelector('link[href*="proton2025"]');
+})();
+
+function metricBar(key, v, text) {
+	var r = METRIC_RANGE[key];
+	var col = (v != null && v !== '' && v !== '-') ? caQuality(key, v) : null;
+	var n = parseFloat(v);
+	if (!r || !col || isNaN(n)) { return null; }
+	var pc = Math.round(100 * (n - r[0]) / (r[1] - r[0]));
+	if (pc < 4) { pc = 4; }       /* нулевую полоску не видно вовсе */
+	if (pc > 100) { pc = 100; }
+	if (IS_PROTON) {
+		/* title - это и есть подпись внутри полоски: её рисует сама тема.
+		   box-shadow гасим точечно: у темы это свечение цветом акцента, и под
+		   красной/зелёной заливкой оно смотрелось бы чужеродно. */
+		return E('div', { 'class': 'cbi-progressbar', 'title': text }, [
+			E('div', { 'style': 'width:' + pc + '%;background:' + CA_COLOR[col] + ';box-shadow:none' })
+		]);
+	}
+	return E('div', { 'class': 'metric-bar' }, [
+		E('div', { 'style': 'width:' + pc + '%;background:' + CA_COLOR[col] })
+	]);
+}
+
+/* Заполнить ячейку метрики числом и полоской. Общая точка для обеих таблиц,
+   чтобы поведение по темам не разъехалось между ними. */
+function paintMetricCell(td, key, v) {
+	td.textContent = '';
+	td.style.color = '';
+	td.style.fontWeight = '';
+	var txt = (v != null && v !== '' && v !== '-') ? String(v) : '-';
+	var bar = metricBar(key, v, txt);
+	/* На proton2025 число уже нарисовано ВНУТРИ полоски - отдельный текст в
+	   ячейке был бы дублем. */
+	if (IS_PROTON && bar) { td.appendChild(bar); return; }
+	td.appendChild(document.createTextNode(txt));
+	var col = (txt !== '-') ? caQuality(key, v) : null;
+	if (col) { td.style.color = CA_COLOR[col]; td.style.fontWeight = '600'; }
+	if (bar) { td.appendChild(bar); }
+}
+
 /* Разбить строку диапазона "B7 (2600 MHz) @20 MHz" на {band, bw}. */
 function caSplitBand(s) {
 	s = String(s || '');
@@ -799,6 +966,51 @@ function caSplitBand(s) {
 /* Построить таблицу «CA по компонентам» из уже имеющихся полей json (pband/sNband
    + метрики serving для PCC). Пер-SCC RSRP/RSRQ/SINR появятся, когда бэкенд начнёт
    их отдавать (jsonполя sNrsrp/...). Блок прячется, если компонентов нет. */
+/* Таблица соседних сот. Массив neighbors приходит из опроса метрик - профиль
+   собирает его из QMI cell-location-info (intra- и inter-частотные соседи).
+   Служебную соту показываем В ТОМ ЖЕ списке, но помечаем: иначе она выглядела бы
+   просто самым сильным соседом, и понять, на какой соте мы сидим, было бы нельзя.
+   Число соседей меняется само по себе, поэтому строки создаются динамически. */
+function renderNeighbors(json) {
+	var wrap = document.getElementById('nb-comp');
+	var tbl = document.getElementById('nb-table');
+	if (!wrap || !tbl) { return; }
+	var list = (json && Array.isArray(json.neighbors)) ? json.neighbors : [];
+	/* Нет данных - прячем блок целиком: у большинства модемов таких сведений
+	   нет вовсе, и пустая таблица только занимала бы место. */
+	if (!list.length) { wrap.style.display = 'none'; return; }
+	wrap.style.display = '';
+	/* Пересобираем ТОЛЬКО при изменении: иначе тело таблицы пустеет на каждом
+	   тике опроса, и браузер обрезает scrollTop - страница дёргается под курсором. */
+	var sig = list.map(function(c) {
+		return [ c.pci, c.band, c.earfcn, c.rsrp, c.rsrq, c.rssi, c.serving ].join('/');
+	}).join('|');
+	if (tbl.getAttribute('data-sig') === sig) { return; }
+	tbl.setAttribute('data-sig', sig);
+	Array.prototype.slice.call(tbl.querySelectorAll('.nb-row')).forEach(function(r) { r.remove(); });
+	var dash = function(v) { return (v === undefined || v === null || v === '') ? '-' : String(v); };
+	/* Оценка уровней - ТЕМИ ЖЕ порогами и цветами, что в «Агрегации несущих» и
+	   таблице антенных портов (caQuality/CA_COLOR). Своя шкала здесь означала бы,
+	   что одинаковый RSRP на соседних блоках одной страницы окрашен по-разному. */
+	var metricTd = function(key, label, v) {
+		var td = E('td', { 'class': 'td', 'data-l': label }, []);
+		paintMetricCell(td, key, v);
+		return td;
+	};
+	list.forEach(function(c) {
+		var serving = (String(c.serving) === '1' || c.serving === true);
+		tbl.appendChild(E('tr', { 'class': 'tr nb-row' + (serving ? ' nb-serving' : '') }, [
+			E('td', { 'class': 'td left' }, [ serving ? _('serving') : _('neighbour') ]),
+			E('td', { 'class': 'td left', 'data-l': 'Band' }, [ c.band ? ('B' + c.band) : '-' ]),
+			E('td', { 'class': 'td', 'data-l': 'PCI' }, [ dash(c.pci) ]),
+			E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ dash(c.earfcn) ]),
+			metricTd('rsrp', 'RSRP', c.rsrp),
+			metricTd('rsrq', 'RSRQ', c.rsrq),
+			metricTd('rssi', 'RSSI', c.rssi),
+		]));
+	});
+}
+
 function renderCaTable(json) {
 	var tbl = document.getElementById('ca-table');
 	var sec = document.getElementById('ca-comp');
@@ -846,13 +1058,12 @@ function renderCaTable(json) {
 	var txt = function(v) { return (v != null && v !== '' && v !== '-') ? String(v) : '-'; };
 	var isMetric = { rsrp: 1, rsrq: 1, sinr: 1 };
 	function paintCell(td, key, c) {
+		/* Метрики - через общую точку: там же решается, как их показывать в
+		   текущей теме (см. paintMetricCell). */
+		if (isMetric[key]) { paintMetricCell(td, key, c[key]); return; }
 		td.textContent = txt(c[key]);
 		td.style.color = '';
 		td.style.fontWeight = '';
-		if (isMetric[key]) {
-			var col = (c[key] != null && c[key] !== '' && c[key] !== '-') ? caQuality(key, c[key]) : null;
-			if (col) { td.style.color = CA_COLOR[col]; td.style.fontWeight = '600'; }
-		}
 	}
 	// Заполняем ЗАРАНЕЕ нарисованные строки (см. разметку). Строки не создаются
 	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
@@ -1002,6 +1213,10 @@ var mmIdx = 'any';
    показываем - если mmcli временно не готов (напр. модем пересоздают), это
    транзитное состояние, а не «нельзя управлять». */
 var ifaceProtoIsMM = false;
+/* READ-ONLY диапазоны: bands.sh отдаёт readonly=1, когда состояние ПРОЧИТАТЬ
+   можно (профиль умеет qmicli напрямую по QMI), а ПРИМЕНИТЬ нельзя - для записи
+   нужен ModemManager, а на kernel-протоколе его прячет mm-inhibit.sh. */
+var bandsReadOnly = false;
 /* Есть ли на устройстве светодиоды уровня сигнала (см. load). */
 var ledsAvail = false;
 
@@ -1331,9 +1546,12 @@ function nrC_hasEnabled(j) {
 	return ((j.enabled5gnsa || []).length > 0) || ((j.enabled5gsa || []).length > 0);
 }
 
-function loadBandsModemband() {
+/* force=true - читать МИМО кэша (режим jsonrefresh в bands.sh). Нужен сразу
+   после применения маски: обычный json отдаёт кэш со сроком 300 c, и таблица
+   ещё десятки секунд показывала бы прежний набор диапазонов. */
+function loadBandsModemband(force) {
 	if (!blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'json' ]), '').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ]), '').then(function(out) {
 		var j = {};
 		var note = document.getElementById('bandnote');
 		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }
@@ -1368,7 +1586,13 @@ function loadBandsModemband() {
 			if (ifaceProtoIsMM) { window.setTimeout(revealMgmtWhenReady, 1500); }
 			return;
 		}
-		if (note) { note.style.display = 'none'; }
+		/* READ-ONLY: состояние читается, но применить его нельзя без ModemManager.
+		   Показываем ПРИВЫЧНЫЕ кнопки с подсветкой текущих диапазонов, только
+		   неактивными, и оставляем подсказку с кнопкой переключения. Раньше в
+		   этом случае bands.sh отдавал пустые списки и блок подменялся текстом -
+		   пользователь не видел даже того, что реально включено в модеме. */
+		bandsReadOnly = !!j.readonly;
+		if (note) { note.style.display = bandsReadOnly ? '' : 'none'; }
 		bandsGated = false;
 		bandSource = 'modemband';
 		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
@@ -1474,7 +1698,56 @@ function loadBandsModemband() {
 		} else if (modeRow) {
 			modeRow.style.display = 'none';
 		}
+		applyBandsReadOnly();
 	});
+}
+
+/* Переключить интерфейс на ModemManager ПРЯМО из подсказки.
+   APN сознательно НЕ передаём: пустой аргумент у mkiface.sh означает «сохранить
+   прежний» (см. шапку скрипта), а передать его мимо - значит молча затереть
+   настройки. Протокол меняется пересозданием интерфейса, поэтому после успеха
+   перечитываем диапазоны: readonly зависит именно от протокола. */
+function switchToModemManager(btn) {
+	if (btn) { btn.disabled = true; }
+	return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', 'modemmanager' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (String(d.proto) === 'modemmanager') {
+			ui.addNotification(null, E('p', _('Interface switched to ModemManager.')), 'info');
+			ifaceProtoIsMM = true;
+			bandsReadOnly = false;
+			/* MM поднимается не мгновенно (перезапуск службы + регистрация
+			   модема), поэтому не дёргаем bands.sh в ту же секунду - иначе
+			   получим пустой список и блок мигнёт «нет диапазонов». */
+			window.setTimeout(loadBandsModemband, 3000);
+		} else {
+			ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager.')), 'error');
+		}
+	}).catch(function(err) {
+		ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager.') + ' ' + (err.message || err)), 'error');
+	}).finally(function() {
+		if (btn) { btn.disabled = false; }
+	});
+}
+
+/* Гасим управление в read-only режиме. Вариант «просто disabled»: кнопка,
+   которая молча ничего не делает, хуже её отсутствия, но видеть ТЕКУЩИЙ выбор
+   всё равно нужно - поэтому кнопки остаются на месте с подсветкой активных.
+   Строку «Применить/Сбросить» прячем целиком: применять нечего.
+   Вызывается после каждой перерисовки - sameRender пересобирает кнопки только
+   при изменении, а видимость/активность надо восстанавливать всегда. */
+function applyBandsReadOnly() {
+	var ro = bandsReadOnly;
+	[ 'bands-lte', 'bands-nr', 'bands-3g', 'modesw-btns' ].forEach(function(id) {
+		var c = document.getElementById(id);
+		if (!c) { return; }
+		c.querySelectorAll('button').forEach(function(b) {
+			b.disabled = ro;
+			b.style.opacity = ro ? '.55' : '';
+			b.style.cursor = ro ? 'not-allowed' : '';
+		});
+	});
+	var act = document.getElementById('bandsactn');
+	if (act && ro) { act.style.display = 'none'; }
 }
 
 /* Применить/сбросить диапазоны через modemband */
@@ -1488,7 +1761,12 @@ function applyBandsModemband(reset) {
 			return Promise.resolve();
 		}
 	}
-	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying bands...')));
+	/* Индикатор ожидания здесь НЕ показываем. Правило общее для всего блока:
+	   ждать показываем только там, где перезапуск модема ДЕЙСТВИТЕЛЬНО
+	   происходит и его вызываем мы сами (см. applyBands - там reboot_modem.sh).
+	   На этих модемах маска применяется живьём, радио не уходит, и плашка просто
+	   висела бы положенный минимум в 8 секунд на пустом месте - ровно это и
+	   наблюдалось. Модалка была тем же злом, только ещё и блокирующим. */
 	var hasLte = document.querySelector('#bands-lte .cbi-button') != null;
 	var hasNsa = document.querySelector('#bands-nr .cbi-button') != null;
 	var p = Promise.resolve();
@@ -1500,18 +1778,11 @@ function applyBandsModemband(reset) {
 	// запись, модем поднимался на старом наборе, и отключённый диапазон
 	// оставался активным (воспроизведено на SIM7600: снятый B7 не отключался).
 	return p.then(function() {
-		ui.hideModal();
-		/* НЕ обещаем перезапуск: на модемах с живым применением (SIM7600) его
-		   не будет вовсе, а где нужен - bands.sh делает мягкий CFUN-цикл сам,
-		   в фоне, и связь возвращается за секунды. Сообщение нейтральное. */
-		if (ui.addTimeLimitedNotification) {
-			ui.addTimeLimitedNotification(null, E('p', _('Bands applied, refreshing…')), 6000, 'info');
-		} else {
-			ui.addNotification(null, E('p', _('Bands applied, refreshing…')), 'info');
-		}
-		window.setTimeout(loadBandsModemband, 4000);
+		/* Читаем МИМО кэша: setbands только что сменил маску, а обычный json
+		   отдал бы прежний снимок (кэш живёт 300 c) - именно так таблица и
+		   показывала старый набор диапазонов ещё десятки секунд. */
+		return loadBandsModemband(true);
 	}).catch(function(err) {
-		ui.hideModal();
 		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
 	});
 }
@@ -1610,27 +1881,25 @@ function applyBands() {
 		ui.addNotification(null, E('p', _('Select at least one band')), 'error');
 		return Promise.resolve();
 	}
-	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying bands...')));
+	/* Плашка вместо модалки - то же поведение, что у modemband-ветки выше и у
+	   привязки к соте: страница остаётся рабочей, а ожидание заканчивается по
+	   ФАКТУ возвращения модема, а не по угаданным секундам. */
+	setModemBusy(_('Applying bands…'));
+	_bandsAfterBusy = true;
 	return fs.exec('/usr/bin/mmcli', [ '-m', mmIdx, '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
 		if (res.code !== 0) {
-			ui.hideModal();
+			clearModemBusy(true);
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
 			return;
 		}
 		// Мягкий рестарт радио (CFUN=4->1), чтобы модем начал использовать
 		// новый набор частот сразу, а не после следующего переподключения.
-		return fs.exec('/usr/share/5gmodem/reboot_modem.sh').then(function() {
-			ui.hideModal();
-			if (ui.addTimeLimitedNotification) {
-				ui.addTimeLimitedNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 6000, 'info');
-			} else {
-				ui.addNotification(null, E('p', _('Bands set, restarting the modem radio to apply them...')), 'info');
-			}
-			window.setTimeout(loadBands, 4000);
-		});
+		// Результата НЕ ждём: радио уходит в перезапуск, и момент возвращения
+		// поймает опрос - он же снимет плашку и перечитает диапазоны.
+		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
 	}).catch(function(err) {
-		ui.hideModal();
-		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + err.message), 'error');
+		clearModemBusy(true);
+		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
 	});
 }
 
@@ -2765,8 +3034,14 @@ simDialog: baseclass.extend({
 					   протокол интерфейса (mbim/qmi), чтобы было «Управление
 					   невозможно в режиме mbim», а не абстрактный текст. */
 					if (document.getElementById('bandnote-text') && json.protocol && json.protocol != '-') {
-						document.getElementById('bandnote-text').textContent =
-							_('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
+						/* Два разных случая, и путать их нельзя. Если списки
+						   прочитаны (readonly) - честно говорим «показаны, но не
+						   меняются»: кнопки на экране есть, и текст «недоступно»
+						   противоречил бы им. Если не прочитаны вовсе - прежняя
+						   формулировка про недоступность. */
+						document.getElementById('bandnote-text').textContent = bandsReadOnly
+							? _('Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them.').format(json.protocol)
+							: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
 					}
 
 					/* ИНДИКАТОР УСТАРЕВШИХ ДАННЫХ - в правом углу заголовка блока.
@@ -3090,6 +3365,7 @@ simDialog: baseclass.extend({
 					   отдельная CA-таблица ниже (стабильнее, без скачков высоты). */
 					/* CA-таблица по компонентам (PCC + активные SCC) */
 					renderCaTable(json);
+					renderNeighbors(json);
 					});
 				});	
 
@@ -3304,8 +3580,29 @@ simDialog: baseclass.extend({
 				   loadBandsModemband(), когда ни mmcli, ни modemband не дали
 				   списка бендов. */
 				E('tr', { 'class': 'tr', 'id': 'bandnote', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'colspan': '2' }, [
-						E('em', { 'id': 'bandnote-text', 'style': 'opacity:.8' }, _('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.'))
+					/* Первая колонка пустая: подсказка относится ко всему блоку, а
+					   не к отдельному параметру, но вёрстку таблицы ломать нельзя -
+					   плашка должна стоять во ВТОРОЙ колонке, как значения строк. */
+					E('td', { 'class': 'td left', 'width': '33%' }, ' '),
+					E('td', { 'class': 'td left' }, [
+						/* Стандартная информационная плашка LuCI, а не курсивный
+						   текст: это статусное сообщение, и выглядеть оно должно
+						   так же, как остальные сообщения интерфейса. */
+						E('div', { 'class': 'alert-message info' }, [
+							E('p', { 'id': 'bandnote-text', 'style': 'margin:0' },
+								_('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.')),
+							/* Кнопка ПЕРЕКЛЮЧАЕТ САМА, а не ведёт на вкладку «Модем»:
+							   отправлять человека делать это руками - лишний шаг. */
+							E('div', { 'style': 'margin-top:.6em' }, [
+								E('button', {
+									'class': 'btn cbi-button cbi-button-action',
+									'click': function(ev) {
+										ev.preventDefault();
+										switchToModemManager(ev.target);
+									}
+								}, _('Switch to ModemManager'))
+							])
+						])
 					]),
 					]),
 				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
@@ -3528,6 +3825,27 @@ simDialog: baseclass.extend({
 						E('td', { 'class': 'td', 'data-l': 'Mod' }, [ '-' ]),
 					]);
 				})))
+				]),
+				/* Соседние соты - в ТОМ ЖЕ сворачиваемом блоке, что метрики и CA.
+				   Обёртка скрыта, пока модем не отдал ни одной соты (см.
+				   renderNeighbors): такие данные есть далеко не у каждого модема,
+				   и пустая таблица только занимала бы место.
+				   В отличие от CA-таблицы строки здесь НЕ создаются заранее:
+				   число соседей меняется по обстановке, фиксированного набора
+				   (PCC/SCC1..4) тут просто нет. */
+				E('div', { 'id': 'nb-comp', 'style': 'display:none;margin-top:.6em' }, [
+					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Neighbour cells')),
+					E('table', { 'class': 'table', 'id': 'nb-table' }, [
+						E('tr', { 'class': 'tr table-titles nb-head' }, [
+							E('th', { 'class': 'th left' }, [ _('Cell') ]),
+							E('th', { 'class': 'th left' }, [ 'Band' ]),
+							E('th', { 'class': 'th' }, [ 'PCI' ]),
+							E('th', { 'class': 'th' }, [ 'EARFCN' ]),
+							E('th', { 'class': 'th' }, [ 'RSRP' ]),
+							E('th', { 'class': 'th' }, [ 'RSRQ' ]),
+							E('th', { 'class': 'th' }, [ 'RSSI' ]),
+						])
+					])
 				])
 			]),
 

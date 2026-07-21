@@ -122,15 +122,15 @@ if [ "$1" != "set" ] \
    && [ "$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")" = none ]; then
 	echo '{"type":"","slots":[],"active":""}'; exit 0
 fi
-case "$_AVIDPID" in
-	05c6:90d6) MI="" ;;
-	# 05c6:90d5 делят Compal и Foxconn T99W175 / Thales MV31-W - у последних
-	# слоты через MM работают штатно, поэтому здесь смотрим на дескриптор
-	# (как это делает modemband/05c690d5), а не на один VID:PID.
-	05c6:90d5)
-		case "$_APROD" in VOS_5G*|RXMG1*|*Tri\ Cascade*) MI="" ;; esac
-		;;
-esac
+# Раньше здесь стоял СПИСОК VID:PID (только 05c6:90d6 и 05c6:90d5). Этого не
+# хватало: тот же модем в композиции QMI приходит как 1e2d:00b7 или 05c6:9025,
+# в списке их не было - и слоты снова читались из MM, т.е. неверно. Плюс для
+# 05c6:9025 проверка по дескриптору бесполезна (там generic "HSUSB Device").
+# Теперь признак один на все композиции - см. iscompal.sh.
+. /usr/share/5gmodem/iscompal.sh
+if is_compal "$_AP" "" "$(uci -q get "5gmodem.$_SEC.at_port")"; then
+	MI=""
+fi
 
 # ---- ModemManager-модем -----------------------------------------------------
 if [ -n "$MI" ]; then

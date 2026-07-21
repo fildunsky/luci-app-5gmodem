@@ -881,7 +881,12 @@ esac
 # возвращал "+CEREG: 0,1" без TAC, т.е. tac_hex всегда был пустым.
 TAC=$(echo "$O" | awk -F[,] '/^\+CEREG/ {printf "%s", toupper($3)}' | sed 's/[^A-F0-9]//g')
 if [ "x$TAC" != "x" ]; then
-	TAC_HEX=$(printf %d 0x$TAC)
+	# $TAC из +CEREG - уже ШЕСТНАДЦАТЕРИЧНЫЙ. Раньше здесь стояло
+	# TAC_HEX=$(printf %d 0x$TAC), т.е. в поле *_HEX клался ДЕСЯТИЧНЫЙ результат,
+	# а TAC_DEC не заполнялся вовсе - в снимке выходило tac_hex="136" (на самом
+	# деле десятичное от 0x88) при пустом tac_dec="-". Раскладываем по местам.
+	TAC_HEX="$TAC"
+	TAC_DEC=$(printf %d 0x$TAC 2>/dev/null)
 else
 	TAC="-"
 	TAC_HEX="-"
@@ -1457,7 +1462,8 @@ cat > "$_TMP" <<EOF
 "rsrp":"$(sanitize_string "$RSRP")",
 "rsrq":"$(sanitize_string "$RSRQ")",
 "rssi":"$(sanitize_string "$RSSI")",
-"sinr":"$(sanitize_string "$SINR")"
+"sinr":"$(sanitize_string "$SINR")",
+"neighbors":[$NEIGHBORS]
 }
 EOF
 

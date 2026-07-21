@@ -101,6 +101,8 @@ T_PATHLOSS="Path loss";     T_TXPOWER="TX power"
 T_CQI="CQI";                T_UECAT="UE cat.";    T_VOLTE="VoLTE"
 T_CSQ="CSQ";                T_ANT="Antenna ports";  T_PORT="Port"
 T_RXDIV="RX diversity";     T_THROTTLE="Throttling";
+# Уровни теплового троттлинга словом (см. _therm_word) - подписи как в вебе
+T_TH0="Normal"; T_TH1="Warm"; T_TH2="Hot"; T_TH3="Critical"
 T_REGCS="CS reg.";
 T_KIB="KiB"; T_MIB="MiB"; T_GIB="GiB"; T_TIB="TiB"
 T_RXDIV_4="on, 4RX";        T_RXDIV_2="on (2RX)";   T_RXDIV_OFF="off"
@@ -155,6 +157,7 @@ case "$_lang" in
 		T_CQI="CQI";                T_UECAT="Кат. UE";    T_VOLTE="VoLTE"
 		T_CSQ="CSQ";                T_ANT="Антенны";      T_PORT="Порт"
 		T_RXDIV="Разнесение";       T_THROTTLE="Троттлинг";
+		T_TH0="В норме"; T_TH1="Тёплый"; T_TH2="Горячий"; T_TH3="Критично"
 		T_REGCS="Рег. CS"
 		T_KIB="КиБ"; T_MIB="МиБ"; T_GIB="ГиБ"; T_TIB="ТиБ"
 		T_RXDIV_4="вкл, 4RX";       T_RXDIV_2="вкл (2RX)";  T_RXDIV_OFF="выкл"
@@ -250,6 +253,41 @@ _therm_suffix() {
 		''|0|-) return ;;
 	esac
 	printf ' %s' "[$T_THROTTLE $_th]"
+}
+
+# Уровень троттлинга СЛОВОМ. Нужен там, где градусов нет вовсе: у части прошивок
+# (Compal RXM-G1) их не отдаёт ни одна AT-команда - единственная тепловая
+# +CEITHERM даёт только уровень 0-3. Раньше в графе стоял голый прочерк, хотя
+# тепловое состояние модем сообщает. Слова те же, что в вебе, чтобы CLI и
+# страница не расходились в формулировках.
+_therm_word() {
+	case "$(g mtherm)" in
+		0) printf '%s' "$T_TH0" ;;
+		1) printf '%s' "$T_TH1" ;;
+		2) printf '%s' "$T_TH2" ;;
+		3) printf '%s' "$T_TH3" ;;
+		*) printf '%s' "-" ;;
+	esac
+}
+
+# Содержимое графы «Темп.»: градусы, если прошивка их отдаёт, иначе - уровень
+# троттлинга словом. $1 - уже собранное значение температуры.
+# Вариант с припиской [Троттлинг N] - для широких раскладок; когда вместо
+# градусов подставлено слово, приписка НЕ добавляется, иначе выходило бы
+# «Горячий [Троттлинг 2]», то есть одно и то же дважды.
+_temp_cell() {
+	case "$1" in
+		''|-) _therm_word ;;
+		*)    printf '%s%s' "$1" "$(_therm_suffix)" ;;
+	esac
+}
+
+# То же, но без приписки - для узкой колонки, где она не помещается.
+_temp_cell_plain() {
+	case "$1" in
+		''|-) _therm_word ;;
+		*)    printf '%s' "$1" ;;
+	esac
 }
 
 # Номер абонента, а если его нет - страна сети. Правило то же, что в вебе:
@@ -876,7 +914,7 @@ draw_modem() {
 	lab 5  2 "$T_MODEL"  14 "$(fit "$(v modem)" $_w)" $_w
 	lab 6  2 "$T_FW"     14 "$(fit "$(v firmware)" $_w)" $_w
 	lab 7  2 "$T_IMEI"   14 "$(fit "$(v imei)" $_w)" $_w
-	lab 8  2 "$T_TEMP"   14 "$(fit "$(v mtemp)$(_therm_suffix)" $_w)" $_w
+	lab 8  2 "$T_TEMP"   14 "$(fit "$(_temp_cell "$(v mtemp)")" $_w)" $_w
 	lab 9  2 "$T_PROTO"  14 "$(fit "$(v protocol)" $_w)" $_w
 
 	lab 12 2 "$T_SIM"    14 "$(fit "$(v simslot)" $_w)" $_w
@@ -1183,7 +1221,7 @@ draw_narrow() {
 	_l 8  "$T_PHONE"  "$(pad "${C_DIM}$(_phone_or_loc)${C_RST}" $((W - 12)))"
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	_l 9  "$T_TEMP"    "$(pad "$_t$(_therm_suffix)" $((W - 12)))"
+	_l 9  "$T_TEMP"    "$(pad "$(_temp_cell "$_t")" $((W - 12)))"
 
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
 	_l 12 'RSRP'     "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
@@ -1300,7 +1338,7 @@ draw() {
 	# и без этой проверки получалось "56.0 °C C".
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	lab 8  56 "$T_TEMP"    9 "$_t" 12
+	lab 8  56 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
 	lab 9  56 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
 	at 10  56 "${C_DIM}$(pad "  ^ $(_bytes_l10n "$(v tx)")" 20)${C_RST}"
 

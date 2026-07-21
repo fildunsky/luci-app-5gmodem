@@ -43,8 +43,50 @@ getinfo() {
 	echo "Compal RXM-G1"
 }
 
+# --- Фолбэк ЧТЕНИЯ через qmicli (без ModemManager) ---------------------------
+# Когда интерфейс на kernel-протоколе (proto=qmi/mbim), mm-inhibit.sh намеренно
+# прячет модем от ModemManager - иначе MM и uqmi дерутся за канал cdc-wdm.
+# mmcli тогда пуст, но ЧИТАТЬ диапазоны при этом можно напрямую по QMI:
+# --nas-get-system-selection-preference отдаёт и LTE-, и NR-предпочтения
+# (проверено на живом Compal в композиции QMI).
+# ЗАПИСЬ так не сделать: в этой сборке libqmi у --nas-set-system-selection-preference
+# нет TLV предпочтения диапазонов (только режимы и выбор сети), а отдельной
+# опции установки бендов в CLI нет вовсе. Поэтому setbands*/setmode остаются на
+# mmcli, а bands.sh в этом случае помечает состояние readonly - UI показывает
+# кнопки неактивными вместо тех, что молча ничего не делают.
+_QWDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
+[ -c "$_QWDM" ] || _QWDM=/dev/cdc-wdm0
+
+_qmi_ssp() {
+	[ -c "$_QWDM" ] || return 0
+	command -v qmicli >/dev/null 2>&1 || return 0
+	qmicli -d "$_QWDM" -p --nas-get-system-selection-preference 2>/dev/null
+}
+
+# $1 - метка строки в выводе qmicli, $2 - префикс в формате mmcli
+_qmi_bands_of() {
+	echo "$_SSP" | sed -n "s/^[[:space:]]*$1: *'\([^']*\)'.*/\1/p" | head -1 \
+		| tr ',' ' ' | tr ' ' '\n' | while read -r _b; do
+			[ -n "$_b" ] && printf '%s%s ' "$2" "$_b"
+		done
+}
+
+_qmi_current_bands() {
+	_SSP=$(_qmi_ssp)
+	[ -n "$_SSP" ] || return 0
+	# extended - надмножество обычного LTE-списка (в нём есть B46/48/66/71)
+	_l=$(_qmi_bands_of "LTE band preference (extended)" "eutran-")
+	[ -n "$_l" ] || _l=$(_qmi_bands_of "LTE band preference" "eutran-")
+	_n=$(_qmi_bands_of "NR5G NSA band preference" "ngran-")
+	echo "$_l $_n" | xargs
+}
+
+# Единая точка чтения текущих диапазонов: через неё идут getbands,
+# getbands5gnsa и _mm_other_bands, поэтому фолбэк достаточно вписать здесь.
 _mm_current_bands() {
-	mmcli -m "$_MMIDX" -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs
+	_r=$(mmcli -m "$_MMIDX" -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs)
+	[ -n "$_r" ] || _r=$(_qmi_current_bands)
+	echo "$_r"
 }
 
 # returns the modem's full current band list, MINUS any band matching
@@ -140,6 +182,19 @@ getmode() {
 	AL=$(mmcli -m "$_MMIDX" -K 2>/dev/null \
 		| sed -n 's/^modem\.generic\.current-modes *: *//p' | head -1 \
 		| sed -n 's/.*allowed: *\([^;]*\).*/\1/p' | tr -d ' ')
+	# Нет mmcli (интерфейс на uqmi/umbim) - читаем режим по QMI и приводим к
+	# тому же виду "2g,3g,4g,5g", который разбирает case ниже.
+	if [ -z "$AL" ]; then
+		_MP=$(_qmi_ssp | sed -n "s/^[[:space:]]*Mode preference: *'\([^']*\)'.*/\1/p" | head -1)
+		if [ -n "$_MP" ]; then
+			_a=""
+			case "$_MP" in *gsm*)  _a="${_a}2g,";; esac
+			case "$_MP" in *umts*) _a="${_a}3g,";; esac
+			case "$_MP" in *lte*)  _a="${_a}4g,";; esac
+			case "$_MP" in *5gnr*) _a="${_a}5g,";; esac
+			AL="${_a%,}"
+		fi
+	fi
 	case "$AL" in
 		*2g*3g*4g*5g*) echo 1 ;;
 		3g,4g)         echo 3 ;;

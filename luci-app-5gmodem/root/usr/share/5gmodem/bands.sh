@@ -455,7 +455,15 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	_BJF="/tmp/5gmodem_bands_$_BJAM"
 	_BJT=$(cat "$_BJF.t" 2>/dev/null)
 	case "$_BJT" in ''|*[!0-9]*) _BJT="" ;; esac
+	# ПРОТОКОЛ ИНТЕРФЕЙСА - часть валидности кэша, а не только время. От него
+	# зависит признак readonly (см. гейт _BAND_VIA ниже): на kernel-протоколе
+	# управление запрещено, под modemmanager - разрешено. Без этой проверки после
+	# переключения qmi -> modemmanager до 5 минут отдавался старый снимок с
+	# readonly=1, и UI продолжал советовать «переключитесь на ModemManager», хотя
+	# пользователь уже переключился. Ровно это и наблюдалось.
+	_BJP=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null).proto" 2>/dev/null)
 	if [ -s "$_BJF" ] && [ -n "$_BJT" ] \
+	   && [ "$_BJP" = "$(cat "$_BJF.p" 2>/dev/null)" ] \
 	   && [ "$(( $(cut -d. -f1 /proc/uptime) - _BJT ))" -lt 300 ]; then
 		# Фонового обновления НЕ делаем: маска меняется только через setbands (она
 		# чистит кэш), поэтому «протухнуть» сама не может, а refresh на каждый показ
@@ -468,6 +476,8 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	case "$_o" in
 		'{'*) printf '%s\n' "$_o" > "$_BJF.tmp" && mv "$_BJF.tmp" "$_BJF"
 		      cut -d. -f1 /proc/uptime > "$_BJF.t"
+		      # запоминаем протокол, при котором снят снимок (см. проверку выше)
+		      printf '%s\n' "$_BJP" > "$_BJF.p"
 		      printf '%s\n' "$_o" ;;
 		*)    printf '%s\n' "$_o" ;;
 	esac
@@ -653,19 +663,24 @@ _PORT_OK=0
 #   _BAND_VIA=at    (по умолчанию) - вендорные AT-команды, работают всегда;
 #   _BAND_VIA=mmcli - только через ModemManager (у прошивки нет AT бенд-лока,
 #                     напр. Compal RXM-G1).
-# mmcli-профиль на KERNEL-протоколе (mbim/qmi/ncm/...) неуправляем: такой модем
-# прячет от ModemManager инхибитор (mm-inhibit.sh), mmcli его не видит - ни
-# считать, ни применить бенды/режим нельзя. Тогда глушим ВСЕ статичные списки, и UI покажет
-# подсказку «управление диапазонами доступно только через ModemManager» вместо
-# кнопок, которые всё равно не сработали бы.
+# mmcli-профиль на KERNEL-протоколе (mbim/qmi/ncm/...) НЕ УПРАВЛЯЕМ, но ЧИТАЕМ.
+# Такой модем прячет от ModemManager инхибитор (mm-inhibit.sh) - иначе MM и
+# uqmi/umbim дерутся за канал cdc-wdm. Применить бенды/режим без mmcli нельзя:
+# в CLI libqmi у --nas-set-system-selection-preference нет TLV предпочтения
+# диапазонов. А вот ПРОЧИТАТЬ можно напрямую по QMI - профиль умеет это через
+# qmicli (см. _qmi_current_bands в modemband/05c690d6).
+# Поэтому здесь НЕ глушим списки (статичные и так не зависят от mmcli), а
+# помечаем состояние readonly: UI покажет привычные кнопки с подсветкой текущих
+# диапазонов, но неактивными, и предложит переключить интерфейс на ModemManager.
+# Раньше тут всё отдавалось как Unsupported - на тот момент qmicli-пути чтения
+# ещё не существовало, и показывать было нечего.
 if [ "$_BAND_VIA" = "mmcli" ]; then
 	_IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
 	if [ "$(uci -q get "network.$_IFACE.proto" 2>/dev/null)" != "modemmanager" ]; then
-		getsupportedbands()      { echo "Unsupported"; }
-		getsupportedbands5gnsa() { echo "Unsupported"; }
-		getsupportedbands5gsa()  { echo "Unsupported"; }
-		getsupportedmodes()      { echo "Unsupported"; }
+		_BAND_READONLY=1
+		# Живые чтения гейтим по доступности qmicli: он тут единственный источник.
 		_PORT_OK=0
+		[ -c "${_QWDM:-/dev/cdc-wdm0}" ] && command -v qmicli >/dev/null 2>&1 && _PORT_OK=1
 	else
 		# Для mmcli-профиля наличие tty НИЧЕГО не значит в обе стороны: управление
 		# идёт через ModemManager (у такой прошивки рабочего AT-порта может не быть
@@ -675,6 +690,25 @@ if [ "$_BAND_VIA" = "mmcli" ]; then
 		_PORT_OK=0
 		mmcli -m "$_MMIDX" -K >/dev/null 2>&1 && _PORT_OK=1
 	fi
+fi
+
+# ОТПУСКАЕМ AT-ЗАМОК РАНЬШЕ, если профиль работает через ModemManager.
+#
+# Замок берётся в начале скрипта безусловно, и это правильно: выбор профиля выше
+# в последнюю очередь спрашивает модель у самого модема (AT+CGMM), т.е. МОЖЕТ
+# сходить в порт. Но дальше mmcli-профиль в AT-порт не ходит вовсе - диапазоны и
+# режим он читает и пишет через mmcli/qmicli.
+#
+# Пока замок держался до конца, любая операция с диапазонами на таком модеме
+# (напр. «Применить все диапазоны» у Compal) на всё своё время монополизировала
+# порт, которого не касалась. Опрос метрик при этом не висит - он видит занятый
+# замок и мгновенно отдаёт УСТАРЕВШИЙ снимок, поэтому со стороны это выглядело
+# как замершие цифры: наблюдалось устаревание до ~18 секунд.
+#
+# Порядок захвата НЕ меняем (это трогало бы сериализатор целиком) - только
+# освобождаем, как только стало известно, что порт больше не понадобится.
+if [ "$_BAND_VIA" = "mmcli" ] && [ -n "$_bs_at" ]; then
+	at_unlock
 fi
 
 # Non-json (single-value) callers still expect the classic port guard: a live
@@ -836,6 +870,10 @@ case $1 in
 		. /usr/share/libubox/jshn.sh
 		json_init
 		json_add_string modem "$(getinfo)"
+		# Состояние читается, но применить его нельзя (см. гейт _BAND_VIA выше).
+		# UI по этому признаку рисует кнопки неактивными и показывает подсказку
+		# с предложением переключить интерфейс на ModemManager.
+		[ "$_BAND_READONLY" = "1" ] && json_add_int readonly 1
 		MODES=$(getsupportedmodes)
 		if [ "x$MODES" != "xUnsupported" ]; then
 			# currentmode is a LIVE query - only when the port is reachable.

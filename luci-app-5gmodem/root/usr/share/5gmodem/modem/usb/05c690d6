@@ -12,7 +12,10 @@
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
 _WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null); [ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
 
-_IS_COMPAL=0
+# _IS_COMPAL может быть выставлен ВЫЗЫВАЮЩИМ профилем (см. 05c69025): в тех
+# композициях модем представляется generic-идентификатором Qualcomm, и там
+# вызывающий уже опознал его сам. Своё детектирование тогда не нужно.
+[ "$_IS_COMPAL" = "1" ] || _IS_COMPAL=0
 _MM_OK=0
 if command -v mmcli >/dev/null 2>&1; then
 	_MM_K=$(mmcli -m "$_MMIDX" -K 2>/dev/null)
@@ -24,15 +27,16 @@ if command -v mmcli >/dev/null 2>&1; then
 	esac
 fi
 # umbim/uqmi mode: ModemManager is disabled, so mmcli returns nothing and
-# _MM_OK stays 0. Still recognise the Compal by its USB descriptor so the
-# rich qmicli/AT path below runs instead of falling through to the T99W175
-# "at^debug?" branch (which this firmware does not answer -> empty bands).
-# The band aggregation itself uses qmicli, which works over QMI-in-MBIM
-# even while umbim owns the cdc-wdm control channel.
+# _MM_OK stays 0. Still recognise the Compal so the rich qmicli/AT path below
+# runs instead of falling through to the T99W175 "at^debug?" branch (which this
+# firmware does not answer -> empty bands). Опознание - через ОБЩИЙ помощник
+# (iscompal.sh): он сам переберёт дескриптор (в двух местах - debugfs может быть
+# не смонтирована) и модель через QMI/mmcli/AT для композиций, где дескриптор
+# generic. Блок mmcli выше оставлен как есть: _MM_K и _MM_OK нужны и сами по
+# себе - это признак того, что через mmcli вообще можно работать.
 if [ "$_IS_COMPAL" = "0" ]; then
-	if grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" /sys/kernel/debug/usb/devices 2>/dev/null; then
-		_IS_COMPAL=1
-	fi
+	. /usr/share/5gmodem/iscompal.sh
+	is_compal "" "$_WDM" "$DEVICE" && _IS_COMPAL=1
 fi
 
 if [ "$_IS_COMPAL" = "1" ]; then
@@ -46,16 +50,23 @@ command -v qmicli >/dev/null 2>&1 && _QMICLI_OK=1
 # --- General modem info, TAC, Cell ID, MCC/MNC ---
 if [ "$_MM_OK" = "1" ]; then
 	# ModemManager running: pull it all from one mmcli call
-	TAC_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
-	CID_HEX=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
-	if [ -n "$TAC_HEX" ] && [ "x$TAC_HEX" != "x--" ]; then
-		TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
-		TAC_HEX=$(echo "$TAC_HEX" | tr 'a-f' 'A-F')
-	fi
-	if [ -n "$CID_HEX" ] && [ "x$CID_HEX" != "x--" ]; then
-		CID_DEC=$(printf "%d" "0x$CID_HEX" 2>/dev/null)
-		CID_HEX=$(echo "$CID_HEX" | tr 'a-f' 'A-F')
-	fi
+	# TAC/CID берём из mmcli ТОЛЬКО если он их реально отдал. Раньше присваивание
+	# шло безусловно: когда сбор локации в MM выключен (modem.location.3gpp.tac
+	# пуст или "--"), значения, уже разобранные фреймворком из AT+CREG,
+	# ЗАТИРАЛИСЬ пустышкой - в снимке появлялось tac_dec="-" при живом lac_dec=136.
+	# Для LTE поле LAC из +CREG И ЕСТЬ TAC, поэтому оно же служит фолбэком.
+	_MM_TAC=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
+	_MM_CID=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
+	case "$_MM_TAC" in
+		''|--) [ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; } ;;
+		*)     TAC_DEC=$(printf "%d" "0x$_MM_TAC" 2>/dev/null)
+		       TAC_HEX=$(echo "$_MM_TAC" | tr 'a-f' 'A-F') ;;
+	esac
+	case "$_MM_CID" in
+		''|--) : ;;   # оставляем то, что разобрал фреймворк
+		*)     CID_DEC=$(printf "%d" "0x$_MM_CID" 2>/dev/null)
+		       CID_HEX=$(echo "$_MM_CID" | tr 'a-f' 'A-F') ;;
+	esac
 
 	NR_IMEI=$(echo "$_MM_K" | awk -F': *' '/^modem\.3gpp\.imei/{print $2}' | xargs)
 	[ "x$NR_IMEI" = "x--" ] && NR_IMEI=""
@@ -231,14 +242,80 @@ if [ "$REGOK" = "1" ]; then
 	# (отдаёт 'eutran-N'/'ngran-N' + Active Channel), поэтому пробуем его всегда,
 	# когда qmicli жив, а диапазонов в MODE ещё нет. HAS_LTE/HAS_NR ниже ставятся
 	# по самим band class'ам, так что пустой ATECH (MM выключен) не мешает.
+	# rf-band-info нужен ДВУМ потребителям: агрегации диапазонов ниже (она под
+	# условием на MODE_NUM) и метрикам канала/передатчика, которые актуальны
+	# ВСЕГДА. Поэтому сам запрос вынесен из условия - иначе на обычном LTE, где
+	# диапазоны в MODE уже проставлены, блок пропускался целиком и ширина канала,
+	# мощность передатчика и eNB ID молча оставались пустыми (так и было).
+	ORF=""
+	if [ "$_QMICLI_OK" = "1" ]; then
+		ORF=$(qmicli -d "$_WDM" -p --nas-get-rf-band-info 2>/dev/null)
+
+		# --- Ширина канала: секция Bandwidth того же ответа, уже в МГц ---
+		T=$(echo "$ORF" | sed -n "s/.*Bandwidth: *'\([0-9]*\)'.*/\1/p" | head -1)
+		[ -n "$T" ] && BANDWIDTH="$T MHz"
+
+		# --- Мощность передатчика: только из tx-rx-info (секция TX) ---
+		# Ни serving-system, ни rf-band-info её не содержат. Значение вида
+		# "Power: '23.0 dBm'" - берём первое после заголовка TX:.
+		_TRX=$(qmicli -d "$_WDM" -p --nas-get-tx-rx-info=lte 2>/dev/null)
+		T=$(echo "$_TRX" | awk '/^TX:/{f=1} f && /Power:/ {gsub(/[^0-9.-]/,"",$2); print $2; exit}')
+		[ -n "$T" ] && TXPOWER="$T dBm"
+
+		# --- eNB ID: отдельного поля QMI не даёт ---
+		# У LTE Global Cell ID склеен из идентификатора базовой станции (старшие
+		# биты) и номера сектора (младшие 8 бит), поэтому eNB ID = CID / 256.
+		_CLI=$(qmicli -d "$_WDM" -p --nas-get-cell-location-info 2>/dev/null)
+		T=$(echo "$_CLI" | sed -n "s/.*Global Cell ID: *'\([0-9]*\)'.*/\1/p" | head -1)
+		[ -n "$T" ] && ENBID=$((T / 256))
+
+		# --- Соседние соты (плоский список для таблицы в UI) ---
+		# qmicli отдаёт их двумя секциями: "Intrafrequency LTE Info" - соты на ТОЙ ЖЕ
+		# частоте (там же Serving Cell ID, поэтому служебную соту помечаем флагом
+		# serving, иначе она выглядела бы просто самым сильным соседом), и
+		# "Interfrequency LTE Info" - соты на ДРУГИХ частотах, сгруппированные по
+		# "Frequency [N]", у каждой группы свой EARFCN и бенд. Внутри - "Cell [N]".
+		# Кавычки в awk не разбираем намеренно: значения достаём по цифрам, иначе
+		# программу пришлось бы утыкать '\'' - в busybox awk это ломается молча.
+		NEIGHBORS=$(echo "$_CLI" | awk '
+			function emit() {
+				if (pci == "") return
+				printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"%s\",\"serving\":%s}",
+					(n++ ? "," : ""), band, earfcn, pci, rsrp, rsrq, rssi,
+					((sec == "intra" && pci == serv) ? "1" : "0")
+				pci = ""
+			}
+			/^Intrafrequency LTE Info/ { emit(); sec = "intra"; next }
+			/^Interfrequency LTE Info/ { emit(); sec = "inter"; next }
+			/^[^ \t]/               { emit(); sec = "" }
+			sec == ""               { next }
+			/EUTRA Absolute RF Channel Number/ {
+				emit()
+				if (match($0, /[0-9]+/)) earfcn = substr($0, RSTART, RLENGTH)
+				band = ""
+				if (match($0, /E-UTRA band [0-9]+/)) band = substr($0, RSTART + 12, RLENGTH - 12)
+				next
+			}
+			/Serving Cell ID/  { if (match($0, /[0-9]+/)) serv = substr($0, RSTART, RLENGTH); next }
+			/Physical Cell ID/ {
+				emit()
+				if (match($0, /[0-9]+/)) pci = substr($0, RSTART, RLENGTH)
+				rsrp = ""; rsrq = ""; rssi = ""
+				next
+			}
+			/RSRQ:/ { if (match($0, /-?[0-9.]+/)) rsrq = substr($0, RSTART, RLENGTH); next }
+			/RSRP:/ { if (match($0, /-?[0-9.]+/)) rsrp = substr($0, RSTART, RLENGTH); next }
+			/RSSI:/ { if (match($0, /-?[0-9.]+/)) rssi = substr($0, RSTART, RLENGTH); next }
+			END { emit() }
+		')
+	fi
+
 	if [ "$_QMICLI_OK" = "1" ] && { [ "x$MODE_NUM" = "x13" ] || [ "x$MODE_NUM" = "x11" ] \
 		|| ! echo "$MODE" | grep -q "B[0-9]"; }; then
 		ATECH=$(echo "$_MM_K" | awk -F': *' '/access-technologies\.value/{print $2}' | xargs)
 		HAS_LTE=0; HAS_NR=0
 		echo " $ATECH " | grep -q " lte "  && HAS_LTE=1
 		echo " $ATECH " | grep -q " 5gnr " && HAS_NR=1
-
-		ORF=$(qmicli -d "$_WDM" -p --nas-get-rf-band-info 2>/dev/null)
 		# all aggregated LTE bands (unique, keep order)
 		LSTR=""
 		for NUM in $(echo "$ORF" | sed -n "s/.*Active Band Class: *'eutran-\([0-9]*\)'.*/\1/p" | awk '!s[$0]++'); do

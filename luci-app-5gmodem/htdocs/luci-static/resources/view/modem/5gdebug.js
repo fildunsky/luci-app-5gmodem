@@ -160,8 +160,14 @@ return view.extend({
 				   IMEI/путь/«Удалить» висели по центру, а не по нижнему краю. */
 				/* padding с !important: у proton2025 .btn/.cbi-button свой БОЛЬШОЙ
 				   паддинг (с !important), он перебивал наш inline .6em .8em -
-				   карточки распухали изнутри. Id-scoped правило + !important бьёт. */
+				   карточки распухали изнутри. Id-scoped правило + !important бьёт.
+				   align-items/justify-content ТОЖЕ перебиваем: тема задаёт .btn
+				   {align-items:center;justify-content:center} - в нашей flex-КОЛОНКЕ
+				   это центрировало детей по горизонтали (они сжимались по контенту,
+				   а по бокам зияли огромные пустые поля). stretch тянет строки на
+				   всю ширину, flex-start ставит их от верха. */
 				'#mprof-list .mprof-card{display:flex!important;flex-direction:column;text-align:left;' +
+				'align-items:stretch!important;justify-content:flex-start!important;' +
 				'white-space:normal;line-height:1.35;height:auto;padding:.6em .8em!important;}' +
 				'#mprof-list .mprof-card>div{display:block;width:auto;}' +
 				'#mprof-list .mprof-head{display:flex!important;justify-content:space-between;' +
