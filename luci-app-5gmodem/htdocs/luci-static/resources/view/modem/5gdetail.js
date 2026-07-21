@@ -1194,10 +1194,17 @@ function renderProtoChip(json) {
 	if (!chip) {
 		chip = E('span', {
 			'id': 'proto-chip',
-			'style': 'float:right; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
-				+ 'font-size:70%; border:1px solid currentColor; border-radius:5px;'
-				+ 'padding:.12em .5em; margin-left:.8em; opacity:.75; white-space:nowrap;'
-				+ 'font-weight:normal;',
+			/* Приглушённый: тонкая серая рамка вместо currentColor (та давала
+			   жирный тёмный бокс), лёгкий фон, мельче. Это метка, а не кнопка. */
+			/* КОМПАКТНЫЙ. float наследовал большой line-height заголовка и бокс
+			   растягивался на всю строку - задаём СВОЙ маленький line-height и
+			   фикс-размер (.72rem), как у чипа в «Сохранённых профилях». */
+			'style': 'float:right; display:inline-block; line-height:1.4;'
+				+ 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
+				+ 'font-size:.72rem; border:1px solid rgba(128,128,128,.35); border-radius:5px;'
+				+ 'background:rgba(128,128,128,.1); padding:.05em .45em; margin-left:.8em;'
+				+ 'opacity:.7; white-space:nowrap; font-weight:normal;'
+				+ 'position:relative; top:.25em;',
 			'title': _('Current interface protocol')
 		}, '');
 		head.appendChild(chip);
@@ -2439,6 +2446,34 @@ simDialog: baseclass.extend({
 					.then(function(res) {
 					var json = JSON.parse(res);
 
+					/* МОДЕМА НА ШИНЕ НЕТ ВОВСЕ. Метрики отдают error "Device not
+					   found" (при хотя бы одном модеме скрипт сам его находит,
+					   поэтому пустой active_modem сюда НЕ ведёт). Прячем весь блок
+					   «Модем» со всеми метриками и вместо него показываем осмысленную
+					   надпись - таблица прочерков смысла не несёт. Ошибку "busy" не
+					   трогаем: она преходящая (порт занят другим опросом), мигать
+					   «модема нет» на ней нельзя. */
+					var _noModem = (json.error && json.error !== 'busy' && !json.modem);
+					var _mib = document.getElementById('modem-info-block');
+					var _none = document.getElementById('modem-none-block');
+					if (_noModem) {
+						if (_mib) {
+							_mib.style.display = 'none';
+							if (!_none && _mib.parentNode) {
+								_none = E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-none-block' }, [
+									E('h3', {}, _('Modem')),
+									E('p', { 'style': 'opacity:.65;font-style:italic;margin:6px 0;' },
+										_('No modem detected. Insert a modem, then reload the page.'))
+								]);
+								_mib.parentNode.insertBefore(_none, _mib);
+							}
+						}
+						if (_none) { _none.style.display = ''; }
+						return;   /* метрики не заполняем - заполнять нечем */
+					}
+					if (_none) { _none.style.display = 'none'; }
+					if (_mib) { _mib.style.display = ''; }
+
 					/* Строки, которых у ЭТОГО КЛАССА МОДЕМОВ не бывает, убираем
 					   совсем. У модемов без AT-портов (HiLink) веб-API не отдаёт
 					   ни TAC/LAC, ни состав несущих - это не «данные ещё не
@@ -3080,7 +3115,7 @@ simDialog: baseclass.extend({
 			   виден на всех темах и на мобильном. */
 			netpri.mount(),
 
-			E('div', { 'class': 'cbi-section tginfo' }, [
+			E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-info-block' }, [
 
 			E('div', { 'class': 'right' }, [
 				E('button', {
@@ -3095,7 +3130,11 @@ simDialog: baseclass.extend({
 				}, _('☰')),
 			]),
 
-			E('h3', { 'id': 'modemname', 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;' }, [
+			/* display:flow-root СОДЕРЖИТ float:right чип протокола ВНУТРИ заголовка.
+			   Без него незакрытый float «протекал» в строку состояния ниже, и
+			   правый блок (SIM1/eSIM + температура) обтекал его, уезжая влево на
+			   ширину чипа. На proton2025 это не проявлялось, на bootstrap - да. */
+			E('h3', { 'id': 'modemname', 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flow-root;' }, [
 				/* Имя - в ОТДЕЛЬНОМ span, чтобы обновление текста не стирало
 				   правые элементы заголовка (чип протокола, кнопка debug). */
 				E('span', { 'id': 'modemname-text' }, _('Modem'))

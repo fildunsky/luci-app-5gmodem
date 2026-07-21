@@ -354,6 +354,7 @@ DEVICE=$($RES/detect.sh)
 # устаревшие данные честнее перемешанных, а отличить перепутанный ответ от
 # «модем молчит» потом невозможно.
 . "$RES/atlock.sh"
+. "$RES/lib.sh"   # opname_brand - бренд MVNO по IMSI
 if [ -n "$DEVICE" ] && ! at_lock "$DEVICE" 10; then
 	_age=$(_snapshot_age)
 	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
@@ -412,9 +413,14 @@ fi
 _st_n=0
 sms_tool() {
 	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem_st.$$.$_st_n"
-	/usr/bin/sms_tool "$@" > "$_stf" 2>/dev/null &
+	# ЗАКРЫВАЕМ fd лока (8) и хотплаг-лока (9) и у sms_tool, и у сторожа: обоим
+	# нужен только сам serial-порт (-d), а НЕ файл блокировки. Иначе они держат
+	# его OFD, и осиротевший `sleep` сторожа продолжает держать лок ещё до 8 c
+	# ПОСЛЕ выхода опроса - следующий опрос упирался в него на ~8 c (наблюдалось:
+	# первый холодный опрос 1 c, каждый следующий 8-9 c).
+	/usr/bin/sms_tool "$@" > "$_stf" 2>/dev/null 8>&- 9>&- &
 	_stp=$!
-	( sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
+	( exec 8>&- 9>&-; sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
 	wait "$_stp" 2>/dev/null; kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
 	cat "$_stf" 2>/dev/null; rm -f "$_stf"
 }
@@ -983,7 +989,11 @@ if [ -n "$SIMID" ]; then
 		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +1 2>/dev/null)" ]; }; then
 			: > "$_apn_stamp"
 			logger -t 5gmodem "смена SIM (IMSI) на $_SIM_IF - переподбираем APN"
-			( /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" ) \
+			# unset _AT_LOCK_HELD + закрыть fd лока: этот фон ОТДЕЛЯЕТСЯ и может
+			# взять at_lock уже ПОСЛЕ нашего выхода - он должен захватывать лок
+			# сам, а не думать, что его держит (уже мёртвый) предок.
+			( unset _AT_LOCK_HELD; eval "exec $AT_LOCK_FD>&-" 2>/dev/null
+			  /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" ) \
 				>/dev/null 2>&1 </dev/null &
 		fi
 	fi
@@ -1103,6 +1113,11 @@ IFPROTO=$(uci -q get "network.$SEC.proto")
 # которые могли перезаписать COPS именем хост-сети (напр. Telit ставит "Tele2
 # RU", тогда как на SIM записан бренд MVNO "T-Mobile").
 [ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
+
+# Выверенный вручную бренд MVNO из apn.list по IMSI - последним словом. SPN есть
+# не у всех (и бывает мусором "T0"), а сеть отдаёт хост-оператора (Tele2); наш
+# список знает, что за кодом 250-62 стоит T-Mobile. Пусто - оставляем как есть.
+_ob=$(opname_brand "$SIMID") && COPS="$_ob"
 
 # MSISDN (номер телефона) - универсальный фолбэк для ВСЕХ модемов. AT+CNUM выше
 # отдаёт номер на AT-модемах; если он пуст, а модем управляется ModemManager

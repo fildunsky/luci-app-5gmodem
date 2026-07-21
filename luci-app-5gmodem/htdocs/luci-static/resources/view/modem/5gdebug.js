@@ -276,16 +276,21 @@ return view.extend({
 		   alert-message в теме тоже flex. */
 		if (!document.getElementById('mprof-css')) {
 			document.head.appendChild(E('style', { 'id': 'mprof-css', 'type': 'text/css' },
-				'#mprof-list .mprof-card{display:block!important;text-align:left;' +
-				'white-space:normal;align-items:stretch;line-height:1.35;height:auto;}' +
+				/* Колонка, а НЕ block: карточки в ряду равновысоки (flex:1 у box),
+				   и подвал (mprof-foot) с margin-top:auto прижимается к низу. Иначе
+				   у карточки с меньшим числом строк (напр. без pdp/веб-адреса)
+				   IMEI/путь/«Удалить» висели по центру, а не по нижнему краю. */
+				'#mprof-list .mprof-card{display:flex!important;flex-direction:column;text-align:left;' +
+				'white-space:normal;line-height:1.35;height:auto;}' +
 				'#mprof-list .mprof-card>div{display:block;width:auto;}' +
 				'#mprof-list .mprof-head{display:flex!important;justify-content:space-between;' +
-				'align-items:baseline;gap:.5em;margin-bottom:.15em;}' +
+				'align-items:flex-start;gap:.5em;margin-bottom:.15em;}' +
 
 				'#mprof-list .mprof-card .btn{display:inline-block;margin-left:0;}' +
-				/* Низ карточки: идентификатор слева, кнопка справа, по нижнему краю */
+				/* Низ карточки: идентификатор слева, кнопка справа, ПРИЖАТ К НИЗУ
+				   (margin-top:auto в flex-колонке съедает лишнюю высоту сверху). */
 				'#mprof-list .mprof-foot{display:flex!important;justify-content:space-between;' +
-				'align-items:flex-end;gap:.6em;margin-top:.5em;}' +
+				'align-items:flex-end;gap:.6em;margin-top:auto;padding-top:.5em;}' +
 				/* Имя модема и имя интерфейса - моноширинным: это идентификаторы,
 				   а не проза, и в моноширинном их проще сверять глазами. */
 				'#mprof-list .mprof-name{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}' +
@@ -445,18 +450,30 @@ return view.extend({
 				'style': 'border-bottom:1px solid currentColor; padding-bottom:.4em;'
 			}, [
 				E('div', { 'class': 'mprof-head' }, [
-					E('strong', { 'class': 'mprof-name' }, p.model || p.path),
-					/* Только присутствие. Активность показывает голубая рамка -
-					   держим один визуальный канал на один смысл: слово «активен»
-					   рядом с рамкой дублировало её, а у неподключённого профиля
-					   вытесняло единственную нужную здесь мысль - что модема нет. */
-					E('span', { 'style': 'font-size:85%; opacity:.8; white-space:nowrap' },
-						p.present ? _('connected') : _('not connected'))
-				]),
-				p.vidpid ? E('div', {
-					'class': 'mprof-name',
-					'style': 'font-size:78%; opacity:.55; margin-top:-.25em'
-				}, p.vidpid) : ''
+					/* СЛЕВА колонкой: имя и под ним vid:pid - вместе, чтобы vid:pid
+					   был вплотную к имени. Раньше vid:pid шёл ПОСЛЕ всей строки
+					   head, и когда справа было две строки (статус + веб-адрес
+					   HiLink), он проваливался вниз - под именем зиял отступ. */
+					E('div', { 'style': 'min-width:0' }, [
+						E('strong', { 'class': 'mprof-name' }, p.model || p.path),
+						p.vidpid ? E('div', {
+							'class': 'mprof-name',
+							'style': 'font-size:78%; opacity:.55; margin-top:-.15em'
+						}, p.vidpid) : ''
+					]),
+					/* СПРАВА колонкой: статус, под ним - адрес веб-админки HiLink
+					   (у такого модема настройки делаются там), это тоже «где модем».
+					   Только присутствие: активность показывает рамка. */
+					E('div', { 'style': 'display:flex; flex-direction:column; align-items:flex-end; gap:.1em; white-space:nowrap' }, [
+						E('span', { 'style': 'font-size:85%; opacity:.8' },
+							p.present ? _('connected') : _('not connected')),
+						(p.kind === 'hilink' && p.webaddr) ? E('a', {
+							'href': 'http://' + p.webaddr + '/html/home.html',
+							'target': '_blank', 'rel': 'noreferrer',
+							'style': 'font-size:78%; opacity:.7'
+						}, p.webaddr) : ''
+					])
+				])
 			]);
 			/* Линию делаем едва заметной ОТДЕЛЬНО от текста: opacity на всём блоке
 			   притушил бы и название модема. */
@@ -503,36 +520,39 @@ return view.extend({
 					])
 				]),
 				E('div', { 'class': 'mprof-line' }, [
-					E('span', { 'class': 'mprof-proto' }, [
-						/* Призрак = «этот модем спрятан от ModemManager». Показываем
-						   ТОЛЬКО когда MM работает: при остановленной службе прятаться
-						   не от кого, и значок был бы про несуществующее. */
-						mmRunning && p.mm_exclude !== '0' ? E('img', {
-							'src': L.resource('icons/cghost.svg'),
-							'width': 12, 'height': 12, 'alt': '',
-							'title': _('hidden from ModemManager'),
-							'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'
-						}) : '',
-						protoNice
+					/* Слева - протокол и (если есть) метка eSIM, сгруппированы вместе.
+					   Раньше pdpNice был ТРЕТЬИМ ребёнком space-between и оказывался
+					   ПО ЦЕНТРУ; тип адреса должен стоять под APN у правого края. */
+					E('span', { 'style': 'display:flex; align-items:baseline; gap:.6em; min-width:0' }, [
+						E('span', { 'class': 'mprof-proto' }, [
+							/* Призрак = «этот модем спрятан от ModemManager». Показываем
+							   ТОЛЬКО когда MM работает: при остановленной службе прятаться
+							   не от кого, и значок был бы про несуществующее. */
+							mmRunning && p.mm_exclude !== '0' ? E('img', {
+								'src': L.resource('icons/cghost.svg'),
+								'width': 12, 'height': 12, 'alt': '',
+								'title': _('hidden from ModemManager'),
+								'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'
+							}) : '',
+							protoNice
+						]),
+						/* Судьба вкладки eSIM у ЭТОГО модема. Показываем только когда
+						   есть что сказать; ручное решение помечаем особо. */
+						p.esim ? E('span', {
+							'style': 'opacity:.8',
+							'title': (p.esim === 'forced-yes' || p.esim === 'forced-no')
+								? _('set manually in the modem settings')
+								: _('detected by probing the modem')
+						}, [
+							'eSIM: ',
+							p.esim === 'yes'        ? _('yes') :
+							p.esim === 'no'         ? _('no')  :
+							p.esim === 'forced-yes' ? _('yes (manually)') :
+							                          _('no (manually)')
+						]) : ''
 					]),
-					E('span', { 'style': 'opacity:.8' }, pdpNice),
-					/* Как решилась судьба вкладки eSIM у ЭТОГО модема. Показываем
-					   только когда есть что сказать: у модема, который ещё не
-					   проверяли, поле пустое, и «неизвестно» было бы шумом.
-					   Ручное решение помечаем особо - иначе непонятно, это мы так
-					   определили или пользователь так велел. */
-					p.esim ? E('span', {
-						'style': 'opacity:.8; margin-left:.6em',
-						'title': (p.esim === 'forced-yes' || p.esim === 'forced-no')
-							? _('set manually in the modem settings')
-							: _('detected by probing the modem')
-					}, [
-						'eSIM: ',
-						p.esim === 'yes'        ? _('yes') :
-						p.esim === 'no'         ? _('no')  :
-						p.esim === 'forced-yes' ? _('yes (manually)') :
-						                          _('no (manually)')
-					]) : ''
+					/* Тип адреса - у ПРАВОГО края, под APN (см. коммент выше). */
+					E('span', { 'style': 'opacity:.8; flex:0 0 auto' }, pdpNice)
 				])
 			]);
 
@@ -570,26 +590,12 @@ return view.extend({
 				/* ЗДЕСЬ БЫЛ БАГ: вложенный массив в списке детей E() не
 				   разворачивается, а приводится к строке - в карточке значилось
 				   "1-1.3[object HTMLBRElement],http://...". Собираем плоско. */
-				(function() {
-					var kids = [
-						p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
-						p.path
-					];
-					/* Такой модем настраивается в своём веб-интерфейсе - даём туда
-					   прямую ссылку, иначе адрес пришлось бы искать вручную. */
-					if (isHilink && p.webaddr) {
-						kids.push(E('br'));
-						/* Ведём СРАЗУ на страницу веб-интерфейса, а не на корень:
-						   корень отвечает перенаправлением (307), и оно у части
-						   браузеров не проходит - открывалась пустая вкладка.
-						   /html/home.html отдаёт 200 напрямую (проверено). */
-						kids.push(E('a', {
-							'href': 'http://' + p.webaddr + '/html/home.html',
-							'target': '_blank', 'rel': 'noreferrer'
-						}, p.webaddr));
-					}
-					return E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, kids);
-				})(),
+				/* Адрес веб-админки HiLink переехал НАВЕРХ, под статус (см. head) -
+				   в подвале осталось только опознание железа: IMEI и USB-путь. */
+				E('div', { 'style': 'font-size:80%; opacity:.6; line-height:1.5' }, [
+					p.imei ? ('IMEI ' + p.imei) : _('IMEI unknown'), E('br'),
+					p.path
+				]),
 				E('button', {
 					'class': 'btn cbi-button cbi-button-remove',
 					'style': 'margin-left:0; flex:0 0 auto',
@@ -693,6 +699,21 @@ return view.extend({
 			.then(function(r) {
 				var j = {};
 				try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) { return; }
+				/* Модема на шине нет вовсе: метрики отдают error "Device not
+				   found" (при хотя бы одном модеме скрипт сам его находит и
+				   возвращает данные, поэтому пустой active_modem сюда НЕ ведёт).
+				   Вместо таблицы прочерков показываем осмысленную надпись. Ошибку
+				   "busy" не трогаем - она преходящая (порт занят другим опросом),
+				   и мигать «модема нет» на ней нельзя. */
+				var tbl = document.getElementById('dbg-info-table');
+				var msg = document.getElementById('dbg-no-modem');
+				if (j.error && j.error !== 'busy' && !j.modem) {
+					if (tbl) { tbl.style.display = 'none'; }
+					if (msg) { msg.style.display = ''; }
+					return;
+				}
+				if (tbl) { tbl.style.display = ''; }
+				if (msg) { msg.style.display = 'none'; }
 				var put = function(id, v) {
 					var el = document.getElementById(id);
 					if (el && v != null && String(v) !== '') { el.textContent = String(v); }
@@ -1074,19 +1095,15 @@ return view.extend({
 		o.default = 'auto';
 		o.rmempty = false;
 		o.write = function(section_id, value) {
-			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
-			if (!p) { return; }
-			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
-			if (uci.get('5gmodem', sec) == null) { uci.add('5gmodem', 'modem', sec); }
-			if (value === '1' || value === '0') {
-				uci.set('5gmodem', sec, 'esim_show', value);
-			} else {
-				uci.unset('5gmodem', sec, 'esim_show');
-			}
-			/* Возврат в «автоматически» обязан ПЕРЕСПРОСИТЬ модем: отрицательный
-			   ответ закэширован, и без сброса пользователь остался бы с прежним
-			   решением, что выглядело бы как «переключатель не работает». */
-			return fs.exec('/usr/share/5gmodem/esim.sh', [ 'recheck' ]).catch(function() {});
+			/* Пишем ЧЕРЕЗ БЭКЕНД (esim.sh setshow), а не в кэш формы: раньше
+			   uci.add именованной секции m_<путь> не приживалась на модеме, чьей
+			   секции ещё не было, и галка «не сохранялась, пока не пересоздашь
+			   интерфейс». Бэкенд секцию гарантированно заводит и коммитит; он же
+			   сбрасывает кэш статуса, поэтому возврат в «авто» переспрашивает. */
+			var v = (value === '1' || value === '0') ? value : 'auto';
+			return fs.exec('/usr/share/5gmodem/esim.sh', [ 'setshow', v ])
+				.then(function() { return fs.exec('/usr/share/5gmodem/esim.sh', [ 'recheck' ]); })
+				.catch(function() {});
 		};
 		o.load = function() {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
@@ -1334,12 +1351,11 @@ return view.extend({
 		   от секунд до пары минут - синхронный вызов не пережил бы 30-секундный
 		   таймаут rpcd. Поэтому опрашиваем collect.sh status и показываем шаг,
 		   а готовый файл отдаём браузеру как обычное скачивание (Blob). */
-		o = s.option(form.Button, '_collect');
-		o.title = _('Diagnostic report');
-		o.description = _('Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys.');
-		o.inputtitle = _('Collect logs');
-		o.inputstyle = 'apply';
-		o.onclick = function() {
+		/* Диагностический отчёт живёт НЕ в форме настроек, а внизу в секции
+		   «Диагностика» (см. diag ниже): это часть диагностики, а не настройка.
+		   Кнопку и описание собираем там, здесь - только обработчик. */
+		var collectDesc = _('Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys.');
+		var runCollect = function() {
 			var msg = E('p', { 'class': 'spinning' }, _('Collecting logs…'));
 			ui.showModal(_('Diagnostic report'), [ msg ]);
 
@@ -1453,7 +1469,12 @@ return view.extend({
 
 		var modemInfo = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Modem Information') ]),
-			E('table', { 'class': 'table tg-info-table' }, infoRows)
+			E('table', { 'class': 'table tg-info-table', 'id': 'dbg-info-table' }, infoRows),
+			/* Показывается вместо таблицы прочерков, когда модема на шине нет
+			   вовсе (метрики отдают error "Device not found"). Скрыт по
+			   умолчанию: при живом модеме таблица заполняется, надпись молчит. */
+			E('p', { 'id': 'dbg-no-modem', 'class': 'tg-no-modem', 'style': 'display:none' },
+				_('No modem detected. Insert a modem, then reload the page.'))
 		]);
 
 		/* ---------------- Диагностика (как было) ---------------------------- */
@@ -1545,6 +1566,12 @@ return view.extend({
   letter-spacing: 0.06em;
 }
 .tg-code-body {
+  /* Фон и цвет ЗАДАЁМ ЯВНО: этот класс висит и на <pre> (вывод диагностики), а
+     тему бутстрапа <pre> красит светлым фоном - светлые буквы на нём сливались.
+     Класс перебивает элементный селектор темы. Цвета - те же, что у вывода
+     AT-команд (pre.atcommand-output), чтобы блоки выглядели одинаково. */
+  background: #161c26;
+  color: #d6e0ea;
   padding: 9px 12px;
   font-size: 12px;
   line-height: 1.5;
@@ -1591,6 +1618,14 @@ return view.extend({
 /* Вторая колонка «Информация о модеме» - моноширинным, как терминал */
 .tg-info-table .tg-info-val {
   font-family: var(--font-monospace, monospace);
+}
+
+/* Надпись «модема нет» вместо таблицы прочерков. Цвет наследуем, глушим
+   прозрачностью - работает в обеих темах без жёстких значений. */
+.tg-no-modem {
+  opacity: 0.65;
+  margin: 6px 12px 2px 0;
+  font-style: italic;
 }
 
 /* На узких/мобильных экранах три колонки диагностики складываются в
@@ -1650,6 +1685,16 @@ return view.extend({
 
 		var diag = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Diagnostics') ]),
+			/* Диагностический отчёт - здесь, а не в форме настроек. */
+			E('div', { 'style': 'margin-bottom:1em' }, [
+				E('label', { 'class': 'cbi-value-title', 'style': 'display:block; margin-bottom:.3em' },
+					_('Diagnostic report')),
+				E('div', { 'class': 'cbi-value-description', 'style': 'margin:0 0 .5em' }, collectDesc),
+				E('button', {
+					'class': 'cbi-button cbi-button-action',
+					'click': ui.createHandlerFn(this, runCollect)
+				}, [ _('Collect logs') ])
+			]),
 			table,
 			E('div', {}, [
 				E('p'),

@@ -340,6 +340,28 @@ progress)
 	[ -f "$LIVELOG" ] && cat "$LIVELOG"
 	exit 0
 	;;
+setshow)
+	# Записать галку «вкладка eSIM» НАДЁЖНО, из бэкенда. Раньше вьюха писала её
+	# через uci.add именованной секции в кэше формы, и на модеме, чьей секции
+	# m_<путь> ещё не было, запись не приживалась - «не сохранялось, пока не
+	# пересоздал интерфейс». Здесь секцию гарантированно заводим и коммитим.
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_AP" ] || exit 0
+	_sec="m_$(echo "$_AP" | sed 's/[^A-Za-z0-9]/_/g')"
+	uci -q get "5gmodem.$_sec" >/dev/null 2>&1 || {
+		uci -q set "5gmodem.$_sec=modem"
+		uci -q set "5gmodem.$_sec.path=$_AP"
+	}
+	case "$2" in
+		0|1) uci -q set "5gmodem.$_sec.esim_show=$2" ;;
+		*)   uci -q delete "5gmodem.$_sec.esim_show" 2>/dev/null ;;
+	esac
+	uci -q commit 5gmodem
+	# Кэш статуса протух - при возврате в «авто» надо переспросить.
+	rm -f "/tmp/5gmodem_esimstat_$_AP" 2>/dev/null
+	echo '{"result":"ok"}'
+	exit 0
+	;;
 recheck)
 	# ПЕРЕПРОВЕРИТЬ НАЛИЧИЕ eUICC ЗАНОВО. Отрицательный ответ кэшируется (перебор
 	# портов стоит секунд), и без этой команды выйти из него нельзя: модем,

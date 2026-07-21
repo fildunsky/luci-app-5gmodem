@@ -72,6 +72,14 @@ plmn:250-20:internet.tele2.ru
 plmn:250-11:internet.yota
 plmn:250-62:tt
 
+# --- ИМЯ оператора по коду ИЗ SIM (opname:<mcc-mnc>:<бренд>) ---
+# Сеть отдаёт хост-оператора (Т-Мобайл виден как Tele2), а бренд симки - в IMSI.
+# Эти строки читает opname_brand (lib.sh) и подменяет имя в метриках у ОБОИХ
+# путей: AT и HiLink. Для apn_lookup они инертны (тип не name/plmn).
+# Мировая база providers.tsv тут устарела: 250-62 в ней ещё "Tinkoff Mobile",
+# а оператор ребрендился в T-Mobile - показываем наше выверенное имя.
+opname:250-62:T-Mobile
+
 # --- зарубежные, которых чаще всего встречают в роуминге/travel-eSIM ---
 plmn:255-01:internet
 plmn:257-02:internet

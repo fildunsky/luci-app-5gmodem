@@ -3047,3 +3047,6 @@ msgstr "usbnet-устройство, определяется автоматич
 
 msgid "yes"
 msgstr "да"
+
+msgid "No modem detected. Insert a modem, then reload the page."
+msgstr "Модем не обнаружен. Вставьте модем и перезагрузите страницу."

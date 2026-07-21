@@ -219,6 +219,7 @@ model_for() {
 		2c7c:0800) echo "Quectel RM500Q"; return ;;
 		2c7c:0801) echo "Quectel RM520N"; return ;;
 		2c7c:0900) echo "Quectel RG500Q"; return ;;
+		2c7c:6005) echo "Quectel EC200A"; return ;;
 		2dee:4d57) echo "MeigLink SLM770A"; return ;;
 	esac
 	case "$prod" in

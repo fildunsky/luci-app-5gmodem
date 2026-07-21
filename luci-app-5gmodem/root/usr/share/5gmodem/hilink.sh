@@ -26,6 +26,7 @@ RES=/usr/share/5gmodem
 CFG=5gmodem
 CACHE_DIR=/tmp
 UA="5gmodem"
+. "$RES/lib.sh"   # opname_brand - бренд MVNO по IMSI
 
 # --- адрес модема ------------------------------------------------------------
 
@@ -113,8 +114,12 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
 		"http://$_a$_ep" 2>/dev/null)
+	# Повторяем не только на кодах сессии, но и на ПУСТОМ ответе: часть прошивок на
+	# протухшую сессию отдаёт не 125003, а пустоту (или curl оборвался). Раньше
+	# пустой ответ уходил наверх как есть -> все поля бланк -> 5gmodem.sh кэшировал
+	# бланк поверх хорошего снимка. Обновляем сессию и пробуем ещё раз.
 	case "$_out" in
-		*'<code>125002</code>'*|*'<code>125003</code>'*|*'<code>125001</code>'*)
+		''|*'<code>125002</code>'*|*'<code>125003</code>'*|*'<code>125001</code>'*)
 			_s=$(_sess_new "$_a" "$_d") || return 1
 			_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
 			_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
@@ -245,6 +250,13 @@ conn_up() { [ "$1" = "901" ]; }
 metrics_json() {
 	_p="$1"
 	_inf=$(api_get /api/device/information "$_p")
+	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
+	# сессию и повторил на пустой ответ). Если ВСЁ РАВНО пусто - модем недоступен:
+	# НЕ печатаем бланк-JSON (иначе 5gmodem.sh закэшировал бы его поверх хорошего
+	# снимка и страница показала бы прочерки) и не тратим время на остальные 4
+	# запроса по 6-12 c каждый. Возврат без вывода -> вызывающий отдаст прошлый
+	# снимок, как при любом другом сбое json.
+	[ -n "$_inf" ] || return 1
 	_st=$(api_get /api/monitoring/status "$_p")
 	_sig=$(api_get /api/device/signal "$_p")
 	_tr=$(api_get /api/monitoring/traffic-statistics "$_p")
@@ -339,6 +351,10 @@ metrics_json() {
 			| head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')
 		[ -n "$_dbop" ] && _op="$_dbop"
 	fi
+	# Выверенный бренд MVNO из apn.list по IMSI - последним словом. У HiLink нет
+	# доступа к SPN, а web-API отдаёт хост-оператора (Tele2); наш список знает,
+	# что за кодом 250-62 стоит T-Mobile. Пусто - оставляем имя из web-API/базы.
+	_obr=$(opname_brand "$_imsi") && _op="$_obr"
 
 	# Процент сигнала. У этих модемов есть готовые «палочки» (0..maxsignal) -
 	# берём их, а не пересчитываем из RSRP: прошивка знает свою антенну лучше.

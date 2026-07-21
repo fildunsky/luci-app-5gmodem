@@ -40,3 +40,33 @@ active_sec() {
 	[ -n "$_ap" ] || return 1
 	secname "$_ap"
 }
+
+# Брендовое имя оператора для РФ-MVNO по IMSI.
+#
+# ЗАЧЕМ. Сеть (и web-API HiLink) отдаёт имя ХОСТ-оператора: Т-Мобайл виден как
+# Tele2, потому что физически работает на его сети. Настоящий бренд симки прячется
+# в её IMSI (свой MCC-MNC). У AT-модемов это чинит чтение EF_SPN с SIM, но HiLink
+# к SPN доступа не даёт, да и SPN у части симок - мусор ("T0"). Поэтому держим
+# ВЫВЕРЕННЫЕ РУКАМИ соответствия в apn.list строками opname:<mcc-mnc>:<бренд> и
+# применяем их в обоих путях (AT и HiLink) - имя тогда единое.
+#
+# Пусто (return 1) - оверрайда нет, имя оставляем как отдала сеть.
+# opname_brand <imsi>
+opname_brand() {
+	_ob_imsi=$(echo "$1" | tr -cd '0-9')
+	[ "${#_ob_imsi}" -ge 5 ] || return 1
+	_ob_f="/usr/share/5gmodem/apn.list"
+	[ -f "$_ob_f" ] || return 1
+	# Кандидаты PLMN: MNC в 3 и 2 цифры (как в apn_pick). Более специфичный -
+	# 3-значный - пробуем первым.
+	for _ob_len in 6 5; do
+		_ob_p=$(printf '%s' "$_ob_imsi" | cut -c1-"$_ob_len")
+		[ "${#_ob_p}" -eq "$_ob_len" ] || continue
+		_ob_key="${_ob_p%${_ob_p#???}}-${_ob_p#???}"
+		while IFS=: read -r _t _pat _val; do
+			[ "$_t" = "opname" ] || continue
+			[ "$_pat" = "$_ob_key" ] && [ -n "$_val" ] && { echo "$_val"; return 0; }
+		done < "$_ob_f"
+	done
+	return 1
+}

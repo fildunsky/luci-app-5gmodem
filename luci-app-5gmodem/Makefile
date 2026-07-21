@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.5.6
+PKG_VERSION:=1.6.0
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -53,9 +53,15 @@ if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
 		"$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n/5gmodem.ru.lmo"
 fi
 [ -n "$${IPKG_INSTROOT}" ] || {
-	rm -f /tmp/luci-indexcache.*
+	rm -f /tmp/luci-indexcache*
 	rm -rf /tmp/luci-modulecache/
 	/etc/init.d/rpcd reload 2>/dev/null
+	# netifd узнаёт обработчики протоколов (/lib/netifd/proto/fibocom.sh) при
+	# СТАРТЕ; свежепоставленный fibocom он не знает, и интерфейс на нём висит
+	# "unsupported" до перезагрузки. reload заставляет netifd перечитать
+	# обработчики, не роняя уже поднятые интерфейсы.
+	/etc/init.d/network reload 2>/dev/null
+	ubus call network reload 2>/dev/null
 	# Зарегистрировать УЖЕ подключённый модем. Обычно это делает hotplug
 	# (71-5gmodem-resolve), но если модем был воткнут ДО установки пакета,
 	# события не случится и конфиг останется пустым: без active_modem не
