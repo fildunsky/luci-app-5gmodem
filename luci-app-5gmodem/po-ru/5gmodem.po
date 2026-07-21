@@ -3050,3 +3050,33 @@ msgstr "да"
 
 msgid "No modem detected. Insert a modem, then reload the page."
 msgstr "Модем не обнаружен. Вставьте модем и перезагрузите страницу."
+
+msgid "GB"
+msgstr "ГБ"
+
+msgid "MB"
+msgstr "МБ"
+
+msgid "stream, up to ~1 GB"
+msgstr "стрим, до ~1 ГБ"
+
+msgid "economical"
+msgstr "экономно"
+
+msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. Pick a preset (approx. size shown) or enter your own."
+msgstr "URL файла для теста загрузки. БОЛЬШОЙ файл даёт скорости разогнаться за ~15 секунд теста; маленький кончается раньше и занижает результат. Выберите пресет (рядом примерный размер) или впишите свой."
+
+msgid "stream"
+msgstr "стрим"
+
+msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgstr "URL файла для теста загрузки. БОЛЬШОЙ файл даёт скорости разогнаться за ~15 с теста; маленький кончается раньше и занижает результат. РФ-хостинг (Selectel/Yandex/Tele2) работает через сотовую РФ; Cloudflare/Hetzner там могут быть заблокированы. Рядом примерный размер."
+
+msgid "No response from modem."
+msgstr "Модем не ответил."
+
+msgid "Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgstr "Эндпойнт, принимающий POST-тело, для теста отдачи. РФ-хостинг (Rostelecom/Yandex) работает через сотовую РФ; сервер читает тело даже при ответе 404/403, поэтому скорость всё равно измеряется."
+
+msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
+msgstr "Сервис, возвращающий ваш публичный IP. Если он отдаёт и страну (как ip-api.com), рядом с IP показывается флаг. Если не ответил, спрашивается запасной сервис, и лишь потом показывается локальный адрес аплинка (без флага)."

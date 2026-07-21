@@ -58,48 +58,37 @@ var CSS = `
 .netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
 .netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
 /* фаза теста подсвечивает карточку: загрузка - зелёным, отдача - синим. Плавный
-   переход цвета + тянущиеся цифры (анимируются в JS). Поверх рамки бежит светлая
-   полоска - визуальный «идёт тест».
-
-   Как сделана полоска: отдельный слой ::after с коническим градиентом, обрезанным
-   маской в кольцо толщиной с рамку (два слоя маски, xor/exclude - вырезаем середину).
-   Крутим не сам элемент, а УГОЛ градиента: transform: rotate() на неквадратной
-   кнопке провернул бы и кольцо, и оно перестало бы совпадать с рамкой.
-   Угол анимируем через @property - обычную custom property браузер
-   интерполировать не станет, ей нужен объявленный тип <angle>. Где @property не
-   поддержан, слой останется статичным, а сплошная цветная рамка под ним никуда
-   не денется - это ровно сегодняшнее поведение. */
-@property --st-a { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+   переход цвета + тянущиеся цифры (анимируются в JS), а «идёт тест» показывает
+   пульсирующая рамка самой кнопки (см. st-pulse ниже). */
 .netpribar .netpri-st { transition: border-color .3s ease, box-shadow .3s ease; }
 .netpribar .netpri-st.st-dl { --st-c: #2ea043; }
 .netpribar .netpri-st.st-ul { --st-c: #0095ff; }
 .netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul {
-	position: relative;
+	/* «Идёт тест» = ПУЛЬСИРУЮЩАЯ рамка ПРЯМО на кнопке, без отдельного слоя.
+	   Раньше подсветку рисовал ::after (конич. градиент + маска в кольцо), но он
+	   позиционировался относительно бокса кнопки и из-за flex-резиновости/box-model
+	   не совпадал с её рамкой (тот самый «первый баг»), а правки inset давали то
+	   прыжок, то зазор. Тут обводку даёт INSET box-shadow ПО границе самой кнопки -
+	   он совпадает с ней по определению, наружу не вылезает, ширину бордюра не
+	   трогает (без прыжка) и не зависит ни от темы, ни от раскладки. Толщина
+	   плавно ходит 1px<->3px - визуальный «пульс». Цвет рамки красим фазой. */
 	border-color: var(--st-c);
-	box-shadow: inset 0 0 0 1px var(--st-c);
+	animation: st-pulse 1.1s ease-in-out infinite;
 }
-.netpribar .netpri-st.st-dl::after, .netpribar .netpri-st.st-ul::after {
-	content: ''; position: absolute; inset: 0; border-radius: inherit;
-	padding: 2px;   /* = толщина бегущей полоски */
-	background: conic-gradient(from var(--st-a),
-		transparent 0 58%, var(--st-c) 78%, #fff 92%, transparent 97% 100%);
-	-webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-	        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-	-webkit-mask-composite: xor;
-	        mask-composite: exclude;
-	animation: st-crawl 1.4s linear infinite;
-	pointer-events: none;
+@keyframes st-pulse {
+	0%, 100% { box-shadow: inset 0 0 0 1px var(--st-c); }
+	50%      { box-shadow: inset 0 0 0 3px var(--st-c); }
 }
-@keyframes st-crawl { to { --st-a: 360deg; } }
 /* стрелка направления пульсирует, пока идёт тест */
 .netpribar .netpri-st.st-dl .netpri-st-arrow,
 .netpribar .netpri-st.st-ul .netpri-st-arrow { animation: st-blink 1s ease-in-out infinite; }
 @keyframes st-blink { 0%, 100% { opacity: .85; } 50% { opacity: .18; } }
 /* уважаем системную настройку «меньше движения» */
 @media (prefers-reduced-motion: reduce) {
-	.netpribar .netpri-st.st-dl::after, .netpribar .netpri-st.st-ul::after,
+	.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul,
 	.netpribar .netpri-st.st-dl .netpri-st-arrow,
 	.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: none; }
+	.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul { box-shadow: inset 0 0 0 2px var(--st-c); }
 }
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
 .netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }

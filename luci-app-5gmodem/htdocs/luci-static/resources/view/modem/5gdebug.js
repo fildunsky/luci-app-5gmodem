@@ -14,130 +14,8 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
-/* --- Проверка/установка обновления с GitHub (app + перевод) --- */
-function updSet(id, txt) { var e = document.getElementById(id); if (e) { e.textContent = txt; } }
-function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
-
-function checkUpdate() {
-	updSet('upd-status', _('Checking the latest release…'));
-	updShow('upd-install', false);
-	var b = document.getElementById('upd-check'); if (b) { b.disabled = true; }
-	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check' ]).then(function(res) {
-		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-		updSet('upd-current', d.current || '—');
-		updSet('upd-latest', d.latest || '—');
-		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
-		if (!d.success) {
-			updSet('upd-status', d.error || _('Could not check for updates.'));
-		} else if (d.update_available == 1 || d.update_available === true) {
-			updShow('upd-install', true);
-			updSet('upd-status', _('A new version is available.'));
-		} else {
-			updSet('upd-status', _('You have the latest version.'));
-		}
-	}).catch(function(err) {
-		updSet('upd-status', _('Could not check for updates.') + ' ' + (err.message || err));
-	}).finally(function() {
-		var b = document.getElementById('upd-check'); if (b) { b.disabled = false; }
-	});
-}
-
-function updBusy(busy) {
-	var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
-	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
-}
-
-/* Ресурсы приложения, которые браузер кэширует и которые меняются с релизом.
-   Держим списком, а не угадыванием: L.resource() даёт правильный префикс. */
-var CACHED_RES = [
-	'view/modem/5gdetail.js', 'view/modem/5gdebug.js', 'view/modem/5gesim.js',
-	'view/modem/netpri.js', 'view/modem/modemtabs.js', 'view/modem/readsms.js',
-	'view/modem/sendsms.js', 'view/modem/sendussd.js', 'view/modem/sendat.js',
-	'protocol/fibocom.js'
-];
-
-/* Принудительно перетянуть наши ресурсы МИМО кэша браузера.
-   Очистить кэш из JS нельзя (такого API нет ни в одном браузере), но
-   fetch(cache:'reload') обязан сходить в сеть и ПЕРЕЗАПИСАТЬ кэш-запись - это
-   ровно то, что делает ручной hard-refresh, только точечно и в один клик.
-   Зачем это вообще: uhttpd отдаёт статику без Cache-Control/Expires, а пакет
-   до недавнего ставил файлы с датой 1970 -> браузер по эвристике (RFC 9111,
-   ~10% возраста) считал их свежими НА ГОДЫ и не перепроверял. postinst теперь
-   делает touch, но на устройствах со старым кэшем это надо пробить один раз. */
-function refreshResources() {
-	if (typeof window.fetch !== 'function') { return Promise.resolve(); }
-	return Promise.all(CACHED_RES.map(function(r) {
-		return fetch(L.resource(r), { cache: 'reload', credentials: 'same-origin' })
-			.catch(function() { /* нет файла/оффлайн - не мешаем остальным */ });
-	}));
-}
-
-/* Завершение обновления: свежий JS + свежие ACL.
-   Логаут тут НЕ ради красоты: наш acl.d перечисляет пути ПОИМЁННО, а rpcd
-   выдаёт права сессии в момент ЛОГИНА. Новый скрипт в пакете (так появлялись
-   esim.sh/simslot.sh/netpri.sh) для уже залогиненной сессии = молчаливый
-   "Access denied", пока не перезайдёшь; rpcd reload сессии не переоформляет.
-   Сам по себе логаут кэш браузера НЕ трогает - поэтому сначала refreshResources. */
-function finishUpdate() {
-	updSet('upd-status', _('Update installed. Refreshing resources…'));
-	refreshResources().then(function() {
-		updSet('upd-status', _('Update installed. Signing out to apply it…'));
-		window.setTimeout(function() {
-			var u = L.url('admin/logout');
-			if (!u) { window.location.reload(); return; }
-			// Токен добавляем на всякий случай: часть сборок LuCI защищает
-			// действия от CSRF и без него отдаёт 403, а лишний параметр там,
-			// где он не нужен, просто игнорируется.
-			if (L.env && L.env.token) { u += '?token=' + encodeURIComponent(L.env.token); }
-			window.location.href = u;
-		}, 1200);
-	});
-}
-
-/* Установка идёт в фоне (update.sh install), результат пишется в
-   /tmp/5gmodem_update.json. Опрашиваем сам ФАЙЛ, а не update.sh: во время
-   установки update.sh подменяется на версию из нового пакета, и её набор
-   команд может отличаться - чтение файла от этого не зависит. */
-function pollInstall(tries) {
-	tries = tries || 0;
-	if (tries > 75) {   // ~5 минут
-		updSet('upd-status', _('Update is taking too long. Check the connection and try again.'));
-		updBusy(false);
-		return;
-	}
-	window.setTimeout(function() {
-		L.resolveDefault(fs.read_direct('/tmp/5gmodem_update.json'), '').then(function(txt) {
-			txt = String(txt || '').trim();
-			if (!txt) { pollInstall(tries + 1); return; }   // файла ещё нет -> идёт установка
-			var d = {}; try { d = JSON.parse(txt); } catch (e) { pollInstall(tries + 1); return; }
-			if (d.running) { pollInstall(tries + 1); return; }
-			if (d.success) {
-				updSet('upd-current', d.current || '—');
-				updShow('upd-install', false);
-				finishUpdate();
-			} else {
-				updSet('upd-status', d.error || _('Failed to install the update.'));
-			}
-			updBusy(false);
-		});
-	}, 4000);
-}
-
-function installUpdate() {
-	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
-	updSet('upd-status', _('Installing the update…'));
-	updBusy(true);
-	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
-		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-		if (d.started) { pollInstall(0); return; }
-		// synchronous error (no package manager etc.)
-		updSet('upd-status', d.error || _('Failed to install the update.'));
-		updBusy(false);
-	}).catch(function(err) {
-		updSet('upd-status', _('Failed to install the update.') + ' ' + (err.message || err));
-		updBusy(false);
-	});
-}
+/* Проверка/установка обновления переехали на вкладку «Настройки»
+   (view modem/5gsettings) вместе с блоком «Обновление». */
 
 /* Экземпляр вьюхи - чтобы обновлять карточки профилей из обработчиков, которые
    лежат вне их области видимости (кнопка «создать интерфейс»). */
@@ -280,8 +158,11 @@ return view.extend({
 				   и подвал (mprof-foot) с margin-top:auto прижимается к низу. Иначе
 				   у карточки с меньшим числом строк (напр. без pdp/веб-адреса)
 				   IMEI/путь/«Удалить» висели по центру, а не по нижнему краю. */
+				/* padding с !important: у proton2025 .btn/.cbi-button свой БОЛЬШОЙ
+				   паддинг (с !important), он перебивал наш inline .6em .8em -
+				   карточки распухали изнутри. Id-scoped правило + !important бьёт. */
 				'#mprof-list .mprof-card{display:flex!important;flex-direction:column;text-align:left;' +
-				'white-space:normal;line-height:1.35;height:auto;}' +
+				'white-space:normal;line-height:1.35;height:auto;padding:.6em .8em!important;}' +
 				'#mprof-list .mprof-card>div{display:block;width:auto;}' +
 				'#mprof-list .mprof-head{display:flex!important;justify-content:space-between;' +
 				'align-items:flex-start;gap:.5em;margin-bottom:.15em;}' +
@@ -1403,42 +1284,8 @@ return view.extend({
 		   маппится на ту же анонимную секцию 5gmodem, что и выше, - LuCI рисует её
 		   отдельной плашкой с заголовком. Кнопка теста - в блоке «Приоритет
 		   интернета» на странице «Сеть»; тут только настройки эндпойнтов. */
-		var st = m.section(form.TypedSection, '5gmodem', _('Speed test'),
-			_('Settings for the speed-test button in the "Internet priority" block on the Network page. The test runs from the router over the active uplink.'));
-		st.anonymous = true;
-
-		o = st.option(form.Value, 'speedtest_url', _('Download source'),
-			_('Large-file URL for the download test. Pick a preset or enter your own. The default uses ~16 MB per run.'));
-		o.value('http://mirror.yandex.ru/debian/ls-lR.gz', 'Yandex (mirror.yandex.ru)');
-		o.value('https://speed.cloudflare.com/__down?bytes=100000000', 'Cloudflare');
-		o.placeholder = 'http://mirror.yandex.ru/debian/ls-lR.gz';
-		o.rmempty = true;
-
-		o = st.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
-			_('Endpoint that accepts a POST body, for the upload test. The default (Yandex) is the one reachable over Russian cellular both directly and via a proxy - it answers 404/403 but reads the body, so the speed is still measured. Cloudflare/Rostelecom work on unrestricted networks.'));
-		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex (RU, works over cellular)');
-		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
-		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
-		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (public demo)');
-		o.rmempty = true;
-
-		o = st.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
-			_('Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, a backup service is queried, and only then the local uplink address is shown (without a flag).'));
-		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + country flag)');
-		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
-		o.value('https://ip.wtf', 'ip.wtf');
-		o.value('http://ifconfig.me/ip', 'ifconfig.me');
-		o.value('https://icanhazip.com', 'icanhazip.com');
-		o.value('https://2ip.ru', '2ip.ru');
-		o.value('https://whoer.net', 'whoer.net');
-		o.rmempty = true;
-
-		o = st.option(form.Value, 'speedtest_cc_url', _('Country lookup'),
-			_('Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder.'));
-		o.value('http://ip-api.com/line/{ip}?fields=countryCode', 'ip-api.com');
-		o.value('https://ipapi.co/{ip}/country/', 'ipapi.co');
-		o.placeholder = 'http://ip-api.com/line/{ip}?fields=countryCode';
-		o.rmempty = true;
+		/* Настройки «Тест скорости» переехали на вкладку «Настройки»
+		   (view modem/5gsettings). */
 
 		/* ---------------- Информация о модеме (перенесена со страницы Сеть) -- */
 		function infoVal(v) {
@@ -1620,6 +1467,15 @@ return view.extend({
   font-family: var(--font-monospace, monospace);
 }
 
+/* Ячейки таблицы «Информация о модеме»: СВОЙ компактный паддинг. Темы (особенно
+   proton2025) кладут на .td большой отступ, и он складывался с расстоянием между
+   строками в «двойные» отступы. Прибиваем к плотному: вертикаль мелкая, левый
+   край без отступа, между колонками - небольшой зазор. */
+.tg-info-table .td {
+  padding: 2px 12px 2px 0 !important;
+  vertical-align: top;
+}
+
 /* Надпись «модема нет» вместо таблицы прочерков. Цвет наследуем, глушим
    прозрачностью - работает в обеих темах без жёстких значений. */
 .tg-no-modem {
@@ -1649,39 +1505,7 @@ return view.extend({
 `));
 
 		/* Блок проверки/установки обновления (над Диагностикой) */
-		var updateBlock = E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, [ _('Update') ]),
-			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('luci-app-5gmodem')),
-				E('div', { 'class': 'cbi-value-field' }, [
-					E('div', { 'style': 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px' }, [
-						E('button', {
-							'class': 'cbi-button cbi-button-action',
-							'id': 'upd-check',
-							'click': ui.createHandlerFn(this, function() { return checkUpdate(); })
-						}, [ _('Check for updates') ]),
-						E('button', {
-							'class': 'cbi-button cbi-button-positive',
-							'id': 'upd-install',
-							'style': 'display:none',
-							'click': ui.createHandlerFn(this, function() { return installUpdate(); })
-						}, [ _('Install update') ]),
-						E('a', {
-							'class': 'cbi-button',
-							'id': 'upd-release',
-							'href': 'https://github.com/fildunsky/luci-app-5gmodem/releases/latest',
-							'target': '_blank', 'rel': 'noopener',
-							'style': 'display:none'
-						}, [ _('Release page') ]),
-					]),
-					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
-						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
-						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, [ _('It also installs the translation if available.') ]),
-					]),
-				]),
-			]),
-		]);
+		/* Блок «Обновление» переехал на вкладку «Настройки» (view modem/5gsettings). */
 
 		var diag = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Diagnostics') ]),
@@ -1736,7 +1560,6 @@ return view.extend({
 				/* Блок светодиодов ПОСЛЕ формы, но вне её: он применяется сразу
 				   и не должен подписываться под Save/Apply формы. */
 				ledsBlock,
-				updateBlock,
 				diag
 			]);
 		}).then(function(node) {

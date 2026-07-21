@@ -45,7 +45,38 @@ pre.ussdcommand-output::before {
   margin: -9px -12px 9px;
   padding: 4px 12px;
 }
+/* Мигающий блок-курсор в конце вывода - «терминал печатает». */
+pre.ussdcommand-output.has-output::after {
+  content: '▋';
+  color: #d6e0ea;
+  animation: ussd-cursor 1.05s step-end infinite;
+}
+@keyframes ussd-cursor { 0%, 50% { opacity: .75; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  pre.ussdcommand-output.has-output::after { animation: none; opacity: .75; }
+}
 `));
+
+/* «Печатающийся терминал»: ответ USSD выводим посимвольно, с мигающим курсором
+   в конце. reduced-motion - сразу целиком. Применяем к ОДИНОЧНОМУ ответу; в
+   режиме истории (fullhistory) реплики накапливаются - там анимация не нужна. */
+function typewrite(el, text) {
+	el.classList.add('has-output');
+	if (el._twTimer) { clearInterval(el._twTimer); el._twTimer = null; }
+	if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		el.textContent = text;
+		return;
+	}
+	el.textContent = '';
+	var i = 0, n = text.length;
+	var step = Math.max(1, Math.ceil(n / 90));
+	el._twTimer = setInterval(function() {
+		if (i >= n) { clearInterval(el._twTimer); el._twTimer = null; return; }
+		el.textContent += text.slice(i, i + step);
+		i += step;
+		el.scrollTop = el.scrollHeight;
+	}, 28);
+}
 
 return view.extend({
 	viewName: 'sendussd',
@@ -229,7 +260,8 @@ return view.extend({
 						res.stdout = _('Selection failure – emergency calls only (Specific Modem Sierra).');
 					if (cut.includes('error: 772'))
 						res.stdout = _('SIM powered down.');
-					    dom.content(out, [ res.stderr || '', res.stdout ? ' > ' + res.stdout : '' ]);
+					    var _ut1 = (res.stderr || '') + (res.stdout ? ' > ' + res.stdout : '');
+					    typewrite(out, _ut1.trim() ? _ut1 : _('No response from modem.'));
 				    } else {
 						if ( fullhistory ) {
     						    const ussdreply = (res.stdout + res.stderr).replace(/^\s*\n+/g, '');
@@ -243,7 +275,9 @@ return view.extend({
 				            		out.innerText = out.innerText.replace(/^\s*\n+/g, '');
 						        }
 				        } else {
-				            	dom.content(out, [ res.stdout || '', res.stderr || '' ]);
+				            	var _ut2 = (res.stdout || '') +
+				            		((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
+				            	typewrite(out, _ut2.trim() ? _ut2 : _('No response from modem.'));
 				        }
 				    }
 			}

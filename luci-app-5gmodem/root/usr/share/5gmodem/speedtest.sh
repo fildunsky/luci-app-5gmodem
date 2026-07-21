@@ -26,7 +26,7 @@
 #   speedtest_secs    per-phase time cap  (default 15)
 
 CACHE="/tmp/5gmodem_speedtest.json"
-URL_DEFAULT="http://mirror.yandex.ru/debian/ls-lR.gz"   # ~16 МБ, ограниченный трафик
+URL_DEFAULT="http://speedtest.tele2.net/1GB.zip"   # RU-достижимый ~1 ГБ: тест 15 c успевает разогнаться. Cloudflare/Hetzner на РФ-сотовой отдают 403/недоступны, поэтому дефолт RU (мелкий файл кончался раньше и занижал скорость)
 
 _write() {   # atomic write of $1 to CACHE
 	echo "$1" > "$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE" 2>/dev/null
@@ -41,6 +41,10 @@ _service_name() {
 		*yandex*)     echo "Yandex" ;;
 		*cloudflare*) echo "Cloudflare" ;;
 		*librespeed*) echo "LibreSpeed" ;;
+		*selectel*)   echo "Selectel" ;;
+		*hetzner*)    echo "Hetzner" ;;
+		*tele2*)      echo "Tele2" ;;
+		*thinkbroadband*) echo "ThinkBroadband" ;;
 		*)            echo "$_h" ;;
 	esac
 }
@@ -102,7 +106,7 @@ start)
 	# по умолчанию Yandex - единственный, кто доступен и напрямую через сотовую в
 	# РФ, и через прокси. Отвечает 404/403, но ЧИТАЕТ тело -> скорость отдачи
 	# измеряется (наш код берёт speed_upload независимо от HTTP-кода).
-	[ -n "$UPURL" ] || UPURL="https://yandex.ru/internet/api/v1/upload"
+	[ -n "$UPURL" ] || UPURL="https://speedtest.rt.ru/backend/empty.php"
 	IPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ip_url)
 	# по умолчанию ip-api.com/line - отдаёт СТРАНУ и IP простым текстом
 	# ("RU\n<ip>"), чтобы рядом с IP показать флаг страны. Сервис можно сменить.

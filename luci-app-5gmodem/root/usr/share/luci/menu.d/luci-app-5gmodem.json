@@ -40,7 +40,7 @@
 	},
 
 	"admin/modem/5gmodem/diagnostics": {
-		"title": "Modem Settings",
+		"title": "Modem",
 		"order": 20,
 		"action": {
 			"type": "view",
@@ -81,6 +81,15 @@
 		"action": {
 			"type": "view",
 			"path": "modem/sendat"
+		}
+	},
+
+	"admin/modem/5gmodem/settings": {
+		"title": "Settings",
+		"order": 70,
+		"action": {
+			"type": "view",
+			"path": "modem/5gsettings"
 		}
 	}
 }

@@ -61,7 +61,40 @@ pre.atcommand-output::before {
   margin: -9px -12px 9px;
   padding: 4px 12px;
 }
+/* Мигающий блок-курсор в конце вывода - «терминал печатает». Появляется, когда
+   на <pre> есть класс has-output (ставит typewrite). */
+pre.atcommand-output.has-output::after {
+  content: '▋';
+  color: #d6e0ea;
+  animation: at-cursor 1.05s step-end infinite;
+}
+@keyframes at-cursor { 0%, 50% { opacity: .75; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  pre.atcommand-output.has-output::after { animation: none; opacity: .75; }
+}
 `));
+
+/* «Печатающийся терминал»: выводим ответ ПОСИМВОЛЬНО, с мигающим курсором в
+   конце. Уважаем prefers-reduced-motion (там сразу целиком). Скорость подгоняем
+   под длину - длинный дамп не должен печататься минуту. Предыдущую анимацию
+   отменяем, если пришёл новый ответ. */
+function typewrite(el, text) {
+	el.classList.add('has-output');
+	if (el._twTimer) { clearInterval(el._twTimer); el._twTimer = null; }
+	if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+		el.textContent = text;
+		return;
+	}
+	el.textContent = '';
+	var i = 0, n = text.length;
+	var step = Math.max(1, Math.ceil(n / 90));   // весь вывод ~ за 1.3 c
+	el._twTimer = setInterval(function() {
+		if (i >= n) { clearInterval(el._twTimer); el._twTimer = null; return; }
+		el.textContent += text.slice(i, i + step);
+		i += step;
+		el.scrollTop = el.scrollHeight;
+	}, 28);
+}
 
 return view.extend({
 	viewName: 'sendat',
@@ -101,9 +134,13 @@ return view.extend({
 				return;
 			}
 			else {
-				dom.content(out, [ res.stdout || '', res.stderr || '' ]);
+				var _text = (res.stdout || '') +
+					((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
+				/* Модем промолчал (sms_tool отдал пусто - порт занят/подвис/убит по
+				   таймауту): показываем сообщение, а не пустой мигающий курсор. */
+				typewrite(out, _text.trim() ? _text : _('No response from modem.'));
 			}
-			
+
 		}).catch(function(err) {
 			if (res.stdout === undefined || res.stderr === undefined || res.stderr.includes('undefined') || res.stdout.includes('undefined')) {
 				return;
