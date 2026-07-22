@@ -23,6 +23,7 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 ## These are modems I personally have:
 I've added new features to them (compared to 3ginfo and modemband)
 - Fibocom FM350GL
+- Fibocom L850
 - Compal RXM-G1
 - Telit LM960A18
 - SIMCOM SIM7100E
