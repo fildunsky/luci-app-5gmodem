@@ -297,9 +297,19 @@ list)
 		# ТОЛЬКО если модем наш и мы точно знаем его USB-путь: при неизвестной
 		# секции (одномодемный legacy-конфиг) поведение прежнее - показываем.
 		if [ "$(iface_type "$n")" = modem ]; then
-			_ms=$(modem_section "$n")
-			_mp=""; [ -n "$_ms" ] && _mp=$(uci -q get "5gmodem.$_ms.path")
-			if [ -n "$_mp" ] && ! echo "$PRESENT_PATHS" | grep -q " $_mp "; then continue; fi
+			# У одного интерфейса может быть НЕСКОЛЬКО модем-секций: рядом с живой
+			# остаётся устаревшая от прежнего модема на том же разъёме (её путь уже
+			# не present). modem_section вернул бы ЛЮБУЮ, и если это оказалась
+			# stale - живой модем пропадал из приоритетов. Поэтому смотрим ВСЕ
+			# секции этого интерфейса и прячем, ТОЛЬКО если НИ ОДНА не присутствует.
+			# Нет ни одной секции с путём (legacy-конфиг) - поведение прежнее: показываем.
+			_any_path=""; _any_present=""
+			for _ms in $(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='$n'\$/\1/p"); do
+				_mp=$(uci -q get "5gmodem.$_ms.path"); [ -n "$_mp" ] || continue
+				_any_path=1
+				echo "$PRESENT_PATHS" | grep -q " $_mp " && { _any_present=1; break; }
+			done
+			[ -n "$_any_path" ] && [ -z "$_any_present" ] && continue
 		fi
 		# NOTE: no IP filter for modems/Wi-Fi - keep them visible even without an
 		# address, so a modem that briefly drops its IP while re-dialing after a
