@@ -1,0 +1,49 @@
+#!/bin/sh
+# Переподнять модемный интерфейс, когда его СЕТЕВОЕ УСТРОЙСТВО (eth* RNDIS/ECM)
+# ПОЯВЛЯЕТСЯ - у FM350 и подобных оно регистрируется на ~20 c ПОЗЖЕ старта netifd.
+#
+# ЗАЧЕМ. netifd дёргает setup fibocom-интерфейса на раннем старте, когда eth2 ещё
+# нет: прото отдаёт NETDEV_MISSING и делает proto_block_restart - интерфейс встаёт
+# НАМЕРТВО. Когда eth2 наконец появляется, netifd сам его НЕ поднимает (у прото
+# no_device=1, устройство он не отслеживает), и `ubus ... up` блок не снимает.
+# Модем так и висит без IP - а заодно НЕ наступает ifup, на котором висит
+# восстановление сохранённых диапазонов (31-5gmodem-bands). Ловим появление
+# устройства и делаем ifup сами: он снимает блок, повторяет дозвон, и следом
+# отрабатывает restore.
+#
+# В net-hotplug $INTERFACE = имя netdev (eth2), НЕ uci-интерфейс (ср.
+# /etc/hotplug.d/iface, где $INTERFACE - имя сети). $ACTION = add|remove.
+[ "$ACTION" = add ] || exit 0
+[ -n "$INTERFACE" ] || exit 0
+
+# Найти fibocom-интерфейс(ы), которым принадлежит это устройство: по полю device
+# или по usbpath (устройство под тем же USB-путём).
+for _if in $(uci -q show network 2>/dev/null \
+		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
+	_match=0
+	[ "$(uci -q get network."$_if".device)" = "$INTERFACE" ] && _match=1
+	if [ "$_match" = 0 ]; then
+		_up=$(uci -q get network."$_if".usbpath)
+		if [ -n "$_up" ]; then
+			for _n in /sys/bus/usb/devices/"$_up":*/net/*; do
+				[ -e "$_n" ] || continue
+				[ "$(basename "$_n")" = "$INTERFACE" ] && _match=1
+			done
+		fi
+	fi
+	[ "$_match" = 1 ] || continue
+
+	# Уже поднят - не трогаем (устройство могло мигнуть на штатном реконнекте).
+	_st=$(ubus call network.interface."$_if" status 2>/dev/null \
+		| jsonfilter -e '@.up' 2>/dev/null)
+	[ "$_st" = "true" ] && continue
+
+	# ifup (а не `ubus up`): интерфейс мог быть заблокирован proto_block_restart
+	# после NETDEV_MISSING, и только ifup снимает блок и повторяет дозвон. В фоне
+	# с отвязкой дескрипторов: hotplug не должен ждать дозвон.
+	#
+	# Сохранённые диапазоны применяет САМ прото fibocom.sh перед дозвоном (раз за
+	# загрузку, race-free против любого триггера setup) - здесь их НЕ трогаем:
+	# отдельный hotplug гонку с авто-рестартом netifd по появлению eth2 не выигрывал.
+	( ifup "$_if" ) >/dev/null 2>&1 </dev/null &
+done

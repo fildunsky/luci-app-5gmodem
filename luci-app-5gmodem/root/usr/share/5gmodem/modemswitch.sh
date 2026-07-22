@@ -1208,7 +1208,7 @@ profiles)
 		fi
 		[ "$_first" = 1 ] || printf ','
 		_first=0
-		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s","esim":"%s"}' \
+		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s","esim":"%s","save_band":"%s","save_band5gnsa":"%s","save_band5gsa":"%s"}' \
 			"$_sec" "$_p" \
 			"$(uci -q get "$CFG.$_sec.model")" \
 			"$(uci -q get "$CFG.$_sec.imei")" \
@@ -1220,7 +1220,10 @@ profiles)
 			"$(uci -q get "$CFG.$_sec.kind")" \
 			"$(uci -q get "$CFG.$_sec.netdev")" \
 			"$([ "$(uci -q get "$CFG.$_sec.kind")" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)" \
-			"$(_esim_state "$_sec" "$_p")"
+			"$(_esim_state "$_sec" "$_p")" \
+			"$(uci -q get "$CFG.$_sec.save_band")" \
+			"$(uci -q get "$CFG.$_sec.save_band5gnsa")" \
+			"$(uci -q get "$CFG.$_sec.save_band5gsa")"
 	done
 	printf ']\n'
 	exit 0
@@ -1429,8 +1432,11 @@ autoapn)
 	ifdown "$IFACE" >/dev/null 2>&1
 	sleep 3
 	ifup "$IFACE" >/dev/null 2>&1
-	# APN исправлен, а адреса всё нет - тогда дело может быть в типе PDP.
-	( "$RES/modemswitch.sh" autopdp "$IFACE" ) >/dev/null 2>&1 </dev/null &
+	# Авто-подбор типа PDP ОТКЛЮЧЁН намеренно: дефолт теперь IPV4 (на нём модемы
+	# получают адрес сразу; см. set_pdp_opt в mkiface.sh), а перебор ipv4v6/ipv4
+	# рвал связь и на практике ни разу не срабатывал успешно. Ветку autopdp ниже
+	# оставили доступной вручную (modemswitch.sh autopdp <iface>) на всякий, но из
+	# autoapn больше не зовём.
 	;;
 
 # ПОДБОР ТИПА PDP (IPv4 / IPv4v6).

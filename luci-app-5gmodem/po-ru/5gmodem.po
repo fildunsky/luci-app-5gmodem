@@ -3113,11 +3113,46 @@ msgstr "Сота"
 msgid "Applying bands…"
 msgstr "Применяю диапазоны…"
 
-msgid "Choose which blocks are shown on the Network page."
-msgstr "Выберите, какие блоки показывать на странице «Сеть»."
+msgid "Options for the Network page and modem behaviour."
+msgstr "Настройки страницы «Сеть» и поведения модема."
 
 msgid "Show TTL fixing"
-msgstr "Отображать Фиксацию TTL"
+msgstr "Фиксация TTL"
 
 msgid "Show the \"TTL fixing\" block on the Network page."
-msgstr "Показывать блок «Фиксация TTL» на странице «Сеть»."
+msgstr "Показывать управление фиксацией TTL на странице «Сеть»"
+
+msgid "Saved bands"
+msgstr "Сохранённые диапазоны"
+
+msgid "Remember bands after reboot"
+msgstr "Восстанавливать диапазоны после перезагрузки"
+
+msgid ""
+"Re-apply your selected bands when the modem reconnects, so a modem that "
+"resets its band selection on reboot (e.g. FM350) keeps yours. Only modems "
+"that actually lost the selection are touched."
+msgstr ""
+"Переприменять выбранные диапазоны после перезагрузки роутера или при "
+"переподключении модема (актуально для модемов, которые не умеют запоминать "
+"такие настройки, например FM350)."
+
+msgid "IPv4 only (recommended)"
+msgstr "Только IPv4 (рекомендуется)"
+
+msgid "IPv4 and IPv6"
+msgstr "IPv4 и IPv6"
+
+msgid ""
+"IP type for the modem interface. IPv4 is the default: on most networks/modems "
+"a dual-stack (IPv4/IPv6) context registers but never gets an address, while "
+"IPv4 gets one immediately. Switch to \"IPv4 and IPv6\" only if you need IPv6 "
+"and the modem supports it."
+msgstr ""
+"Тип IP для интерфейса модема. По умолчанию IPv4: на большинстве сетей/модемов "
+"dual-stack (IPv4/IPv6) регистрируется, но не получает адрес, а на IPv4 адрес "
+"выдаётся сразу. Переключайте на «IPv4 и IPv6» только если нужен IPv6 и модем "
+"его поддерживает."
+
+msgid "Open the SSClash-Go admin panel in a new tab"
+msgstr "Открыть админку SSClash-Go в новой вкладке"

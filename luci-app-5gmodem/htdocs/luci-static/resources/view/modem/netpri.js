@@ -29,6 +29,13 @@ var CSS = `
 .netpribar:not(.collapsed) .netpri-chevron { transform: rotate(180deg); }
 .netpribar.collapsed .netpri-row { display: none; }
 .netpribar .netpri-row { display: flex; flex-wrap: wrap; gap: .4em; align-items: stretch; }
+/* proton2025 добавляет ".btn+.btn{margin-left:8px}" между соседними кнопками -
+   поверх gap:.4em ряда. Из-за этого промежуток МЕЖДУ интерфейсными кнопками
+   шире (.4em+8px), чем между ssclash и спидтестом (там margin-left переопределён,
+   остаётся только .4em). Снимаем добавку с интерфейсных кнопок, чтобы ВСЕ
+   промежутки были ровно gap ряда. margin-left:auto у ssclash/спидтеста (правое
+   выравнивание) при этом не трогаем - их из правила исключаем. */
+.netpribar .netpri-row > .netpri-btn:not(.netpri-st):not(.netpri-ssclash) { margin-left: 0; }
 .netpribar .netpri-btn {
 	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
 	display: flex; flex-direction: column; align-items: flex-start; text-align: left;
@@ -94,6 +101,36 @@ var CSS = `
 .netpribar .netpri-st .netpri-st-num { font-variant-numeric: tabular-nums; }
 .netpribar .netpri-st .netpri-st-num.dim { opacity: .35; }
 .netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
+/* Кнопка SSClash-Go - 3-строчная КАРТОЧКА как модемные (версия / имя+значок /
+   IP), поэтому спец-раскладку не задаём: наследует .netpri-btn (колонка, слева).
+   Правое выравнивание уходит на неё, спидтест встаёт вплотную справа. */
+/* Содержимое по ПРАВОМУ краю - как у спидтеста рядом (версия и IP справа,
+   пара карточек симметрична). */
+.netpribar .netpri-btn.netpri-ssclash { align-items: flex-end; text-align: right; }
+/* Значок в фирменном «чипе», как .brand-mark на странице SSClash: скруглённый
+   бокс с лёгкой серой плашкой и тонкой рамкой. Фон и рамку вяжем к currentColor
+   (= цвет текста кнопки), поэтому на светлой теме это лёгкий серый, а не тёмное
+   пятно, а на тёмной - светлый полупрозрачный патч, как в оригинале. Значок тоже
+   наследует цвет текста и адаптируется к теме. */
+.netpribar .netpri-ssclash .netpri-ssclash-ic {
+	display: inline-flex; align-items: center; justify-content: center;
+	/* Ровно как плоские иконки блока (.netpri-ic = 16px): вклад в высоту строки
+	   тот же, отрицательные поля не нужны, строки карточки совпадают со всеми. */
+	flex: 0 0 auto; width: 16px; height: 16px;
+	border-radius: 4px;
+	/* Фиксированная серая плашка со светлым значком - точные цвета как под
+	   иконкой на оригинальной странице SSClash (одинаково в обеих темах). */
+	background: #3d4144;
+	border: 1px solid #565a5d;
+	color: #e8eef2;
+}
+.netpribar .netpri-ssclash .netpri-ssclash-ic svg { display: block; width: 11px; height: 11px; }
+.netpribar .netpri-row.has-ssclash .netpri-ssclash { margin-left: auto; }
+.netpribar .netpri-row.has-ssclash .netpri-st { margin-left: 0; }
+@media (max-width: 680px) {
+	/* на узком экране кнопка тянется, как модемные; спидтест уходит на свою строку */
+	.netpribar .netpri-row.has-ssclash .netpri-ssclash { margin-left: 0; }
+}
 /* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
    растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
    ширину. Тянутся ТОЛЬКО сами кнопки - контейнер и заголовок не трогаем. */
@@ -105,7 +142,10 @@ var CSS = `
 	   края. min-width не даёт кнопке схлопнуться до нечитаемой при длинном имени
 	   оператора. */
 	.netpribar .netpri-row > .netpri-btn { flex: 1 1 auto; min-width: 7.5em; }
-	.netpribar .netpri-row > .netpri-btn.netpri-st { flex: 1 1 100%; margin-left: 0; }
+	/* Спидтест на СВОЮ строку (flex-basis 100%) - только когда ssclash-кнопки НЕТ.
+	   С ssclash они пара (flex:1 1 auto каждая): встают на одну строку, когда
+	   влезают, и переносятся вместе, когда нет. */
+	.netpribar .netpri-row:not(.has-ssclash) > .netpri-btn.netpri-st { flex: 1 1 100%; margin-left: 0; }
 }
 `;
 
@@ -315,6 +355,52 @@ function runSpeedtest() {
 }
 
 /* подтянуть начальную подпись сервиса и последний результат (если был) */
+/* SSClash-Go: если сервис есть, слева от спидтеста показываем кнопку на его
+   веб-админку. Детект (наличие/порт/схема) - в ssclash.sh. Пробуем ОДИН раз;
+   при находке дёргаем redraw, чтобы кнопка появилась без ожидания следующего
+   тика поллинга. */
+var _ssclash = { present: false, port: 9091, scheme: 'http', version: '' };
+var _ssclashProbed = false;
+function ssclashInit(redraw) {
+	if (_ssclashProbed) { return; }
+	_ssclashProbed = true;
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'detect' ]), '').then(function(out) {
+		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		if (j && j.present) {
+			_ssclash = { present: true, port: (j.port || 9091), scheme: (j.scheme || 'http'), version: (j.version || '') };
+			if (typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
+		}
+	});
+}
+
+/* Кнопка-ссылка на админку SSClash-Go (новое окно). Хост берём из адресной
+   строки (тот же, на котором открыт LuCI), порт/схему - из детекта. */
+/* Фирменный значок SSClash-Go (brand-mark с его страницы): два связанных узла.
+   На currentColor - подхватит цвет текста кнопки. */
+var SSCLASH_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+	'<path d="M6 7.5c0 3 2.5 4.5 6 4.5s6 1.5 6 4.5M18 16.5c0-3-2.5-4.5-6-4.5S6 10.5 6 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+	'<circle cx="6" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="6" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/></svg>';
+function ssClashBtn() {
+	var host = window.location.hostname;
+	var url = _ssclash.scheme + '://' + host + ':' + _ssclash.port + '/';
+	var ic = E('span', { 'class': 'netpri-ssclash-ic' });
+	ic.innerHTML = SSCLASH_ICON;
+	/* Три строки, как у карточек «Приоритета интернета»: версия сверху, имя с
+	   значком по центру, IP роутера снизу (совпадает с целью ссылки). */
+	return E('button', {
+		'class': 'btn cbi-button netpri-btn netpri-ssclash',
+		'data-tooltip': _('Open the SSClash-Go admin panel in a new tab'),
+		'click': function() { window.open(url, '_blank', 'noopener'); }
+	}, [
+		E('span', { 'class': 'netpri-sub' }, _ssclash.version || 'SSClash-Go'),
+		E('span', { 'class': 'netpri-name' }, [ ic, E('span', {}, 'SSClash') ]),
+		E('span', { 'class': 'netpri-ip' }, host)
+	]);
+}
+
 function stInit() {
 	L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
@@ -431,6 +517,10 @@ function buildBar(list, redraw) {
 			     : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
 		]);
 	});
+	/* Кнопка SSClash-Go (если сервис есть) - СЛЕВА от спидтеста. Правое
+	   выравнивание (margin-left:auto) при этом уходит на неё, а спидтест встаёт
+	   вплотную справа: ряд помечаем классом has-ssclash (см. CSS). */
+	if (_ssclash.present) { btns.push(ssClashBtn()); }
 	/* Карточка теста скорости - последним элементом ряда, прижата вправо (CSS
 	   margin-left:auto). Строится из модульного _st, поэтому переживает перерисовку. */
 	btns.push(stCard());
@@ -445,7 +535,7 @@ function buildBar(list, redraw) {
 				try { localStorage.setItem('netpri-collapsed', c ? '1' : '0'); } catch (e) {}
 			}
 		}, [ chevron(), E('span', {}, _('Internet priority')) ]),
-		E('div', { 'class': 'netpri-row' }, btns)
+		E('div', { 'class': 'netpri-row' + (_ssclash.present ? ' has-ssclash' : '') }, btns)
 	]);
 }
 
@@ -475,6 +565,7 @@ return baseclass.extend({
 		};
 		L.resolveDefault(loadList()).then(apply);
 		stInit();   /* подпись сервиса + последний результат теста скорости */
+		ssclashInit(redraw);
 		/* wrap возвращается СИНХРОННО, а в DOM его вставляет вьюха ПОЗЖЕ. Поэтому
 		   «нет в DOM» на первых тиках - это ещё не «блок убрали»: раньше поллер в
 		   такой момент снимал сам себя НАВСЕГДА, и блок оставался пустым div'ом -
@@ -506,6 +597,7 @@ return baseclass.extend({
 			};
 			redraw(list);
 			stInit();   /* подпись сервиса + последний результат теста скорости */
+			ssclashInit(redraw);
 			/* Keep the bar live with a steady poll: the operator name (bounded
 			   AT+COPS in the background) resolves after a few seconds, and — the
 			   point here — a modem's IP that comes back AFTER re-dialing (which can

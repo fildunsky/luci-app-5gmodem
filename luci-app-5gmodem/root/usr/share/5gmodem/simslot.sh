@@ -11,7 +11,14 @@
 # Смена слота меняет и кэш метрик (5gmodem_slot_*), и наш кэш СПИСКА слотов
 # (5gmodem_slots_* - у него меняется поле active). Глоб slot_* НЕ ловит slots_*
 # (после slot идёт 's', а не '_'), поэтому чистим оба явно.
-[ "$1" = "set" ] && rm -f /tmp/5gmodem_slot_* /tmp/5gmodem_slots_* 2>/dev/null
+#
+# И band-МАРКЕРЫ: смена SIM = переэнумерация модема по USB, а FM350 при этом
+# сбрасывает маску диапазонов на все, как при перезагрузке. Прото применяет
+# сохранённые бенды РАЗ за загрузку (маркер bandsprep), поэтому без сброса он бы
+# пропустил переприменение, и новая SIM поднялась бы на всех диапазонах. Чистим -
+# следующий подъём после переэнумерации применит сохранённый набор (как на ребуте).
+[ "$1" = "set" ] && rm -f /tmp/5gmodem_slot_* /tmp/5gmodem_slots_* \
+	/tmp/5gmodem_bandsprep_* /tmp/5gmodem_bandrestore_* 2>/dev/null
 
 # 'refresh' = 'status', выполненный РАДИ ОБНОВЛЕНИЯ КЭША в фоне (вывод отбрасывает
 # вызвавший). Ремапим в status, чтобы обслужили те же ветки; флаг _REFRESH не даёт
@@ -56,8 +63,11 @@ fi
 # Два источника:
 #  - модем под ModemManager: mmcli primary-sim-slot / sim-slots (слоты 1..N),
 #    переключение mmcli --set-primary-sim-slot;
-#  - AT-модем (напр. Fibocom FM350): AT+GTDUALSIM (слоты 0/1 -> SIM1/SIM2,
-#    мануал FM350 4.3) и AT+SIMTYPE (0 USIM / 1 eSIM, мануал 3.15).
+#  - AT-модем (напр. Fibocom FM350): AT+GTDUALSIM (слоты 0/1) и AT+SIMTYPE
+#    (0 USIM / 1 eSIM, мануал 3.15). Числовые метки берём 0-based (SIM0/SIM1) -
+#    как id слота и как строка «SIM Slot» в метриках (@.active), чтобы кнопки и
+#    попап показывали ОДНУ нумерацию. (Мануал FM350 4.3 зовёт их SIM1/SIM2, но
+#    физически первый слот у прошивки - 0, и рассинхрон путал.)
 # Кнопки показываются, только если слотов >= 2.
 
 MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
@@ -398,8 +408,8 @@ set)
 	OUT=""
 	R=$(sms_tool -d "$D" at "AT+GTDUALSIM=?" 2>/dev/null | tr -d '\r' | grep -i '^+GTDUALSIM' | head -1)
 	if echo "$R" | grep -qE '\(0[-,]1\)'; then
-		L0=$(slot_label 0 SIM1)
-		L1=$(slot_label 1 SIM2)
+		L0=$(slot_label 0 SIM0)
+		L1=$(slot_label 1 SIM1)
 		# СВЕЖИЙ eSIM: SIMTYPE читается только у активного слота, поэтому тип
 		# ни разу не активированного eSIM неизвестен -> он подписывался «SIM2».
 		# Доопределяем: если eUICC доступен (esim.sh закэшировал available=1), а
@@ -409,11 +419,11 @@ set)
 		_ESAV=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
 			"/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null)
 		if [ "$_ESAV" = 1 ]; then
-			[ "$L0" = SIM ] && case "$L1" in SIM1|SIM2) L1="eSIM";; esac
-			[ "$L1" = SIM ] && case "$L0" in SIM1|SIM2) L0="eSIM";; esac
+			[ "$L0" = SIM ] && case "$L1" in SIM0|SIM1) L1="eSIM";; esac
+			[ "$L1" = SIM ] && case "$L0" in SIM0|SIM1) L0="eSIM";; esac
 		fi
 		# оба слота одного типа (две физические SIM) - вернуть номерные метки
-		[ "$L0" = "$L1" ] && { L0="SIM1"; L1="SIM2"; }
+		[ "$L0" = "$L1" ] && { L0="SIM0"; L1="SIM1"; }
 		OUT='{"id":"0","label":"'$L0'"},{"id":"1","label":"'$L1'"}'
 	fi
 

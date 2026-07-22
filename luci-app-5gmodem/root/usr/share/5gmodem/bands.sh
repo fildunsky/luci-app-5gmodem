@@ -6,6 +6,41 @@
 # (c) 2022-2024 modified by Rafał Wabik - IceG - From eko.one.pl forum
 #
 
+# Активный модем. По умолчанию - глобальный выбор из uci. Но восстановление
+# бендов после перезагрузки (restorebands из hotplug) должно бить в КОНКРЕТНЫЙ
+# модем, а не в тот, что сейчас активен на странице: на двухмодемном роутере это
+# разные модемы. Поэтому env BANDS_ACTIVE_MODEM (usb-путь, напр. "2-1.4") имеет
+# приоритет и прокидывает выбор через весь скрипт - профиль, AT-порт, маску,
+# реконнект интерфейса считаем уже для него.
+active_modem() {
+	[ -n "$BANDS_ACTIVE_MODEM" ] && { printf '%s\n' "$BANDS_ACTIVE_MODEM"; return 0; }
+	uci -q get 5gmodem.@5gmodem[0].active_modem
+}
+
+# Запомнить выбор диапазонов в секции ЕГО модема, чтобы восстановить после
+# перезагрузки (FM350 и подобные сбрасывают маску на заводскую). $1 - суффикс
+# домена ("" 4G / "5gnsa" / "5gsa"), $2 - список бендов или "default".
+#   "default"/пусто -> поле удаляем: восстанавливать «все диапазоны» незачем, это
+#   и есть то, к чему модем возвращается сам.
+_persist_bands() {
+	_pb_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$_pb_sec" != "m_" ] || return 0
+	case "$2" in
+		default|'') uci -q delete "5gmodem.$_pb_sec.save_band$1" 2>/dev/null ;;
+		*)          uci -q set "5gmodem.$_pb_sec.save_band$1=$2" ;;
+	esac
+	uci -q commit 5gmodem
+	# Пользователь ЯВНО задал диапазоны сейчас - модем уже встаёт на них (setbands
+	# применит + reboot_modem soft переподнимет). Восстанавливать в ЭТУ загрузку
+	# нечего, поэтому ставим restore-маркер той же формы, что и hotplug. Без него
+	# ifup, который порождает наш же reboot_modem soft, разбудил бы restorebands, и
+	# тот сделал бы ЛИШНИЙ CFUN поверх смены бендов. На FM350 два CFUN подряд
+	# вешают PDP-контекст ("context won't activate"), и модем остаётся без сети -
+	# ровно этот регресс и наблюдался при смене бендов из UI.
+	_pb_if=$(uci -q get "5gmodem.$_pb_sec.network")
+	[ -n "$_pb_if" ] && : > "/tmp/5gmodem_bandrestore_$_pb_if" 2>/dev/null
+}
+
 hextobands() {
 	BANDS=""
 	HEX="$1"
@@ -401,10 +436,14 @@ set5gmode() {
 # CGACT пуст, up=false, интернета нет). Без этого пользователь после привязки
 # остаётся без связи и должен чинить руками.
 _reconnect_iface() {
-	_ri_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+	_ri_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
 	[ -n "$_ri_sec" ] || return
 	_ri_if=$(uci -q get "5gmodem.m_$_ri_sec.network")
 	[ -n "$_ri_if" ] || return
+	# Это НАМЕРЕННЫЙ реконнект (смена 5G-режима/cell-lock/восстановление бендов), а
+	# не холодный boot-attach. Ставим restore-маркер, чтобы порождённый нами ifup не
+	# разбудил restorebands с лишним CFUN поверх (двойной CFUN вешает PDP FM350).
+	: > "/tmp/5gmodem_bandrestore_$_ri_if" 2>/dev/null
 	# Ждём именно РЕГИСТРАЦИИ: поднять интерфейс раньше - значит получить отказ
 	# и уйти в паузу netifd, то есть сделать хуже, чем ничего.
 	_ri_n=0
@@ -451,7 +490,7 @@ getantports() {
 
 # Любая ЗАПИСЬ диапазонов/режима делает json-кэш устаревшим - сбрасываем его,
 # чтобы следующее чтение пошло в порт за новой маской. get*/json - не трогаем.
-case "$1" in set*) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
+case "$1" in set*|restorebands) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
 
 # CACHE-FIRST + фоновое обновление для json.
 #
@@ -466,7 +505,7 @@ case "$1" in set*) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
 _BJ_REFRESH=""
 [ "$1" = "jsonrefresh" ] && { _BJ_REFRESH=1; set -- json; }
 if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
-	_BJAM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_BJAM=$(active_modem)
 	_BJF="/tmp/5gmodem_bands_$_BJAM"
 	_BJT=$(cat "$_BJF.t" 2>/dev/null)
 	case "$_BJT" in ''|*[!0-9]*) _BJT="" ;; esac
@@ -505,7 +544,7 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# ТОЛЬКО если active_modem не сменился за время обновления; иначе отдаём
 	# результат как есть, но в кэш НЕ кладём - следующий показ пересчитает под
 	# актуальный модем.
-	_BJAM2=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_BJAM2=$(active_modem)
 	case "$_o" in
 		'{'*) if [ "$_BJAM2" = "$_BJAM" ]; then
 		          printf '%s\n' "$_o" > "$_BJF.tmp" && mv "$_BJF.tmp" "$_BJF"
@@ -523,7 +562,7 @@ fi
 # У HiLink-модема диапазоны читаются и меняются его же API (маска LTEBand в
 # /api/net/net-mode), а не AT-командами. Профилей modemband для него нет и быть
 # не может - перехватываем здесь, до выбора профиля.
-_bs_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_bs_am=$(active_modem)
 _bs_sec="m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
 _bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
 # Работа с диапазонами - длинная цепочка AT (чтение маски, запись, перезапрос).
@@ -594,7 +633,7 @@ RES="/usr/share/5gmodem/modemband"
 # Multi-modem: load the band profile of the ACTIVE modem (by USB path), not of
 # whichever USB device is enumerated first - otherwise band management operates
 # on the wrong modem (both tabs showed/set the same bands).
-_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_AMP=$(active_modem)
 _AVIDPID=""; _APROD=""
 if [ -n "$_AMP" ]; then
 	_ALM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
@@ -635,7 +674,10 @@ if [ -n "$_AMP" ]; then
 	# AT-запрос делаем только здесь, в последнюю очередь: на большинстве модемов
 	# профиль находится раньше, и лишнего обращения к порту не будет.
 	if [ -z "$_found" ] && [ -n "$_AVIDPID" ]; then
-		_atp=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		# AT-порт берём у ТЕКУЩЕЙ секции ($_bs_at, вычислен из active_modem выше),
+		# а не из глобального at_port: под BANDS_ACTIVE_MODEM глобальный принадлежит
+		# другому модему, и CGMM ушёл бы не туда.
+		_atp="$_bs_at"; [ -n "$_atp" ] || _atp=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 		if [ -n "$_atp" ] && [ -e "$_atp" ]; then
 			_mdl=$(sms_tool -d "$_atp" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
 				| grep -vE '^(AT|OK|ERROR|$)' | head -1 | tr -d ' ')
@@ -677,7 +719,11 @@ if [ -n "$_PROFILE_LOADED" ]; then
 	# _PORT_OK=0 -> статические списки без живых запросов (см. ниже). Это лучше
 	# «запасного» порта из профиля, который на мультимодеме принадлежал бы другому
 	# модему.
-	_ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+	# Порт ТЕКУЩЕЙ секции ($_bs_at из active_modem) в приоритете над глобальным
+	# at_port: под BANDS_ACTIVE_MODEM глобальный - порт другого модема, и _DEVICE
+	# указал бы не на тот. Без override оба совпадают.
+	_ATP="$_bs_at"
+	[ -n "$_ATP" ] || _ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 	[ -n "$_ATP" ] || _ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 	case "$_ATP" in
 		/dev/*) [ -e "$_ATP" ] && _DEVICE="$_ATP" ;;
@@ -710,7 +756,9 @@ _PORT_OK=0
 # Раньше тут всё отдавалось как Unsupported - на тот момент qmicli-пути чтения
 # ещё не существовало, и показывать было нечего.
 if [ "$_BAND_VIA" = "mmcli" ]; then
-	_IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
+	# Интерфейс ТЕКУЩЕЙ секции, не глобальный: под BANDS_ACTIVE_MODEM это разные.
+	_IFACE=$(uci -q get "5gmodem.$_bs_sec.network")
+	[ -n "$_IFACE" ] || _IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
 	if [ "$(uci -q get "network.$_IFACE.proto" 2>/dev/null)" != "modemmanager" ]; then
 		_BAND_READONLY=1
 		# Живые чтения гейтим по доступности qmicli: он тут единственный источник.
@@ -794,7 +842,11 @@ case $1 in
 		# (проверено: снятый B7 возвращался после перезапуска, а без него модем
 		# уходил с B7 на B3 сам). Такой профиль ставит _BANDS_APPLY_LIVE=1, и
 		# перезапуск пропускается. Остальным (по умолчанию) радио перезапускаем.
-		[ -n "$2" ] && { ( setbands "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		#
+		# Выбор ЗАПОМИНАЕМ в секции модема (для восстановления после перезагрузки -
+		# см. restorebands). Делаем до фонового применения: нужно намерение
+		# пользователя ($2), а не то, что реально ляжет в маску.
+		[ -n "$2" ] && { _persist_bands "" "$2"; ( setbands "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -810,7 +862,7 @@ case $1 in
 		;;
 	"setbands5gnsa")
 		# Перезапуск радио - в той же подоболочке после записи (см. setbands).
-		[ -n "$2" ] && { ( setbands5gnsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( setbands5gnsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gsa")
 		getsupportedbands5gsa
@@ -825,7 +877,74 @@ case $1 in
 		getbandsext5gsa
 		;;
 	"setbands5gsa")
-		[ -n "$2" ] && { ( setbands5gsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( setbands5gsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		;;
+	"restorebands")
+		# Восстановить сохранённый выбор диапазонов ПОСЛЕ перезагрузки модема.
+		# Зовётся из hotplug (31-5gmodem-bands) с BANDS_ACTIVE_MODEM=<usb-путь> -
+		# профиль/порт/маска выше уже посчитаны для НУЖНОГО модема. По каждому
+		# домену сравниваем сохранённое с текущим и переписываем ТОЛЬКО то, что
+		# отличается: модемам, которые маску не сбрасывают (NV), делать нечего -
+		# сохранённое совпадёт с текущим, и мы их не трогаем.
+		_rb_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+		_rb_changed=0
+		# нормализация набора: только числа, по возрастанию, без повторов - чтобы
+		# "20 3 7" и "3 7 20" считались одинаковыми, а "Unsupported"/мусор - пустыми.
+		_rb_norm() { echo "$1" | tr ' ,' '\n\n' | grep -E '^[0-9]+$' | sort -n | uniq | tr '\n' ' ' | sed 's/ *$//'; }
+		_rb_one() {  # $1 суффикс домена, $2 функция чтения, $3 функция записи
+			_rb_saved=$(uci -q get "5gmodem.$_rb_sec.save_band$1")
+			_rb_savedn=$(_rb_norm "$_rb_saved")
+			[ -n "$_rb_savedn" ] || return 0
+			# Пустое/нечисловое текущее = порт молчит или домен не поддержан: НЕ
+			# трогаем, иначе пустое сравнение дало бы ложное «отличается» и лишний
+			# CFUN на ровном месте.
+			_rb_curn=$(_rb_norm "$("$2" 2>/dev/null)")
+			[ -n "$_rb_curn" ] || return 0
+			[ "$_rb_savedn" = "$_rb_curn" ] && return 0
+			"$3" "$_rb_saved" && _rb_changed=1
+		}
+		# РЕЖИМ prepare зовётся из net-hotplug СРАЗУ на появление eth2 - а модем в
+		# этот момент часто ещё НЕ отвечает на AT (getbands пуст), и без ожидания
+		# prepare вышел бы вхолостую, а ifup дозвонился бы на всех бендах (ровно этот
+		# баг и наблюдался на живой загрузке). Ждём готовности AT - непустой маски
+		# LTE - до ~30 c. netifd после NETDEV_MISSING заблокирован и сам не дозвонится,
+		# пока мы не сделаем ifup, поэтому ожидание ничего не роняет.
+		if [ "$2" = "prepare" ]; then
+			_pw=0
+			while [ "$_pw" -lt 15 ]; do
+				[ -n "$(_rb_norm "$(getbands 2>/dev/null)")" ] && break
+				sleep 2; _pw=$((_pw + 1))
+			done
+		fi
+		_rb_one ""     getbands       setbands
+		_rb_one 5gnsa  getbands5gnsa  setbands5gnsa
+		_rb_one 5gsa   getbands5gsa   setbands5gsa
+		# РЕЖИМ prepare: только записать маску и выйти, БЕЗ CFUN и реконнекта -
+		# дозвон сделает сам прото следом. Код возврата сообщает вызвавшему прото,
+		# менялась ли маска: 0 = записали новую (прото должен идти ХОЛОДНЫМ дозвоном,
+		# а не переиспользовать старый бирер на сброшенных бендах), 3 = уже совпадало
+		# (можно fast-path). CGACT release в самом прото снимает возможный GTACT-затык.
+		if [ "$2" = "prepare" ]; then
+			if [ "$_rb_changed" = 1 ]; then
+				logger -t 5gmodem "restorebands(prepare): маска записана до дозвона для $(active_modem)"
+				exit 0
+			fi
+			exit 3
+		fi
+		if [ "$_rb_changed" = 1 ]; then
+			logger -t 5gmodem "restorebands: восстановлены сохранённые диапазоны для $(active_modem)"
+			# Применяем ПРИЦЕЛЬНО (вариант A): CFUN на порт нужного модема, затем
+			# down/up ЕГО интерфейса (_reconnect_iface). reboot_modem.sh soft тут не
+			# годится - его реконнект бьёт по глобально активному модему, а под
+			# override это другой. Модемам с живым применением (_BANDS_APPLY_LIVE)
+			# CFUN не делаем: он откатывает маску - им достаточно реконнекта.
+			if [ "$_BANDS_APPLY_LIVE" != 1 ] && [ -n "$_DEVICE" ]; then
+				sms_tool -d "$_DEVICE" at "AT+CFUN=4" >/dev/null 2>&1
+				sleep 3
+				sms_tool -d "$_DEVICE" at "AT+CFUN=1" >/dev/null 2>&1
+			fi
+			_reconnect_iface
+		fi
 		;;
 	"getsupportedmodes")
 		getsupportedmodes
@@ -856,7 +975,7 @@ case $1 in
 		# соте (EARFCN 1450, PCI 359), а стоило снять привязку явной командой -
 		# ушёл на 100/480, свой обычный выбор. Показывать в такой момент «лока
 		# нет» - врать пользователю: он видит одно, а модем делает другое.
-		_cl_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+		_cl_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
 		[ -n "$_cl_sec" ] && _cl_sec="m_$_cl_sec"
 		_cl_now=$(getcelllock)
 		if [ "$_cl_now" = "off" ] && [ -n "$_cl_sec" ]; then
@@ -886,7 +1005,7 @@ case $1 in
 		if [ -n "$2" ]; then
 			# Запоминаем СВОЙ выбор до запуска: по нему потом отличим «модем
 			# забыл сообщить» от «привязки действительно нет».
-			_cl_sec=$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')
+			_cl_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
 			if [ -n "$_cl_sec" ]; then
 				_cl_sec="m_$_cl_sec"
 				case "$2" in

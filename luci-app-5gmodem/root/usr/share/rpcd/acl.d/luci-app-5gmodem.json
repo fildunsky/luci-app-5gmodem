@@ -6,6 +6,7 @@
 			"file": {
 				"/usr/share/5gmodem/5gmodem.sh": [ "exec" ],
 				"/usr/share/5gmodem/detect.sh": [ "exec" ],
+				"/usr/share/5gmodem/ssclash.sh": [ "exec" ],
 				"/usr/share/5gmodem/ttl.sh": [ "exec" ],
 				"/usr/share/5gmodem/update.sh": [ "exec" ],
 				"/usr/share/5gmodem/powercheck.sh": [ "exec" ],

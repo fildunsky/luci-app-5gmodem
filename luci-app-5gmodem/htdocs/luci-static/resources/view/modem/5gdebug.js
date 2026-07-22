@@ -467,6 +467,38 @@ return view.extend({
 				}, _('shares interface %s with another profile').format(p.iface)));
 			}
 
+			/* Сохранённые диапазоны (настройка «Запоминать диапазоны после
+			   перезагрузки»): очень мелкая строка между блоком протокола и подвалом
+			   с IMEI, отделённая отступами. Может быть длинной - показываем ТОЛЬКО
+			   если что-то реально сохранено. LTE как B<n>, 5G как n<n>, по доменам. */
+			var savedBands = (function() {
+				var parts = [];
+				var add = function(list, pfx, label) {
+					if (!list) return;
+					var bs = String(list).trim().split(/\s+/).filter(function(b) {
+						return /^[0-9]+$/.test(b);
+					});
+					if (bs.length) {
+						parts.push({ label: label, bands: bs.map(function(b) { return pfx + b; }).join(' ') });
+					}
+				};
+				add(p.save_band, 'B', '4G');
+				add(p.save_band5gnsa, 'n', '5G NSA');
+				add(p.save_band5gsa, 'n', '5G SA');
+				return parts;
+			})();
+			if (savedBands.length) {
+				/* Заголовок отдельной строкой, затем каждый домен - своей строкой,
+				   метка поколения (4G/5G…) жирным. */
+				var sbWrap = E('div', {
+					'style': 'font-size:72%; opacity:.55; margin:1em 0 .5em; line-height:1.4; word-break:break-word'
+				}, [ E('div', {}, E('strong', {}, _('Saved bands') + ':')) ]);
+				savedBands.forEach(function(part) {
+					sbWrap.appendChild(E('div', {}, [ E('strong', {}, part.label), ' ' + part.bands ]));
+				});
+				card.appendChild(sbWrap);
+			}
+
 			/* Низ карточки: слева опознание железа, справа удаление. Разносим
 			   flex-строкой с выравниванием по нижнему краю - тогда кнопка стоит
 			   вровень с последней строкой идентификатора независимо от того,
@@ -1105,9 +1137,9 @@ return view.extend({
 		   согласует сам модем, поэтому поле ему не показываем. */
 		if (!activeIsHilink) {
 		o = s.option(form.ListValue, '_pdptype', _('IP type'),
-			_('IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to "IPv4 only" only if a modem has trouble with dual-stack.'));
-		o.value('ipv4v6', _('IPv4 and IPv6 (recommended)'));
-		o.value('ipv4', _('IPv4 only'));
+			_('IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to "IPv4 and IPv6" only if you need IPv6 and the modem supports it.'));
+		o.value('ipv4', _('IPv4 only (recommended)'));
+		o.value('ipv4v6', _('IPv4 and IPv6'));
 		o.write = function() {};
 		o.remove = function() {};
 		o.load = function(section_id) {
@@ -1116,7 +1148,9 @@ return view.extend({
 			var v = uci.get('network', mIfName, 'pdptype')
 				|| uci.get('network', mIfName, 'iptype')
 				|| uci.get('network', mIfName, 'pdp') || '';
-			return (String(v).toLowerCase() === 'ipv4') ? 'ipv4' : 'ipv4v6';
+			// dual-stack показываем ТОЛЬКО если он явно стоит; иначе (в т.ч. не
+			// задано) - ipv4, новый дефолт.
+			return (String(v).toLowerCase() === 'ipv4v6') ? 'ipv4v6' : 'ipv4';
 		};
 		} /* if (!activeIsHilink) - тип PDP */
 
@@ -1171,10 +1205,10 @@ return view.extend({
 			// отличит это от «аргумент не передан» и молча сохранит ПРЕЖНИЙ APN -
 			// стереть его было бы невозможно.
 			var apnArg = apn || '-';
-			var pdp = 'ipv4v6';
+			var pdp = 'ipv4';
 			try {
 				var popt = this.map.lookupOption('_pdptype', sid);
-				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4v6'; } }
+				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4'; } }
 			} catch (e) {}
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI

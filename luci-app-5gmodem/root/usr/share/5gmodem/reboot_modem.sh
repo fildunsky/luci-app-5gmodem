@@ -192,6 +192,11 @@ else
 	sleep 3
 	sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
 	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+	# Намеренный soft-reconnect (кнопка «переподключить», применение бендов и т.п.),
+	# не холодный boot-attach: гасим восстановление диапазонов на порождённый нами
+	# ifup, иначе 31-5gmodem-bands сделал бы лишний CFUN поверх (двойной CFUN подряд
+	# вешает PDP-контекст FM350).
+	[ -n "$IF" ] && : > "/tmp/5gmodem_bandrestore_$IF" 2>/dev/null
 	# Прицельно через ubus DOWN+UP, а не `ifup`: на части прошивок ifup вызывает
 	# полную перезагрузку конфигурации ("hostapd: Reload all interfaces") и роняет
 	# ЧУЖИЕ интерфейсы - на двухмодемном роутере от этого падал соседний модем.

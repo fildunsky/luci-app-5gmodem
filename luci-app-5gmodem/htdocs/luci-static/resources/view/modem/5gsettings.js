@@ -170,11 +170,16 @@ return view.extend({
 		/* Отображение блоков на странице «Сеть». Тумблеры включены по умолчанию;
 		   страница «Сеть» скрывает блок, только когда значение явно '0'. */
 		var disp = m.section(form.TypedSection, '5gmodem', _('Network'),
-			_('Choose which blocks are shown on the Network page.'));
+			_('Options for the Network page and modem behaviour.'));
 		disp.anonymous = true;
 
 		o = disp.option(form.Flag, 'show_ttl', _('Show TTL fixing'),
 			_('Show the "TTL fixing" block on the Network page.'));
+		o.default = '1';
+		o.rmempty = false;
+
+		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
+			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
 		o.rmempty = false;
 

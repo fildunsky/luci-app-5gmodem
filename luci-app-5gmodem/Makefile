@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.7.2
+PKG_VERSION:=1.7.3
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -56,11 +56,9 @@ fi
 	rm -f /tmp/luci-indexcache*
 	rm -rf /tmp/luci-modulecache/
 	/etc/init.d/rpcd reload 2>/dev/null
-	# netifd узнаёт обработчики протоколов (/lib/netifd/proto/fibocom.sh) при
-	# СТАРТЕ; свежепоставленный fibocom он не знает, и интерфейс на нём висит
-	# "unsupported" до перезагрузки. reload заставляет netifd перечитать
-	# обработчики, не роняя уже поднятые интерфейсы.
-	/etc/init.d/network reload 2>/dev/null
+	# Перечитать /etc/config/network (новые интерфейсы). Обработчики ПРОТОКОЛОВ
+	# это НЕ регистрирует - для fibocom см. register_proto.sh ниже (после
+	# autosetup, который может только что создать модемный интерфейс).
 	ubus call network reload 2>/dev/null
 	# Зарегистрировать УЖЕ подключённый модем. Обычно это делает hotplug
 	# (71-5gmodem-resolve), но если модем был воткнут ДО установки пакета,
@@ -74,6 +72,12 @@ fi
 	# будет. Пробуем настроить его сразу: если интерфейс уже есть, команда
 	# сама ничего не сделает.
 	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+	# Зарегистрировать/обновить наш proto-обработчик (fibocom): netifd читает их
+	# только при старте и держит в памяти, поэтому свежепоставленный ИЛИ изменённый
+	# апгрейдом fibocom.sh не действует до рестарта netifd. Скрипт рестартует netifd
+	# ТОЛЬКО когда это реально нужно (прото не зарегистрирован ИЛИ содержимое
+	# обработчика изменилось по хешу) - см. register_proto.sh.
+	/usr/share/5gmodem/register_proto.sh >/dev/null 2>&1
 	# Индикатор на светодиодах корпуса: поднимаем, только если он включён в
 	# конфиге И светодиоды на устройстве есть (см. signal-leds.sh detect).
 	# Служба сама проверит и наличие светодиодов, и явное выключение; здесь

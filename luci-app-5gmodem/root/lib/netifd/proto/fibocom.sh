@@ -58,6 +58,28 @@ _fibocom_atport() {
 	return 1
 }
 
+# Define APN with a given PDP type, (re)activate the default PDP context and echo
+# the assigned IPv4 (empty on failure). Retries a few times: right after a modem
+# swap / band change / USB re-enumeration the context needs a moment, and a single
+# try would leave the interface down until netifd happens to retry. RELEASE FIRST
+# (AT+CGACT=0,1): a bare re-activate HANGS when the context is wedged half-active -
+# exactly the state a band change (AT+GTACT) leaves on the FM350 - and CGACT=0,1
+# clears it; on a cold context the release is a harmless no-op.
+_fibocom_activate() {
+	local dial="$1" pdptype="$2" apn="$3" try ip=""
+	sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
+	sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
+	sleep 2
+	for try in 1 2 3 4 5 6; do
+		sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
+		sleep 2
+		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
+		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && { echo "$ip"; return 0; }
+	done
+	return 1
+}
+
 proto_fibocom_init_config() {
 	no_device=1
 	available=1
@@ -77,7 +99,7 @@ proto_fibocom_setup() {
 	json_get_vars usbpath device atport apn pdptype metric allow_roaming
 
 	[ -n "$apn" ] || apn="internet"
-	[ -n "$pdptype" ] || pdptype="IPV4V6"
+	[ -n "$pdptype" ] || pdptype="IPV4"
 
 	# resolve the usbnet device (eth*) and a dial AT port from the stable path
 	local netdev=""
@@ -158,15 +180,51 @@ proto_fibocom_setup() {
 		esac
 	fi
 
+	# APPLY SAVED BANDS ONCE PER BOOT, BEFORE dialing. On reboot the FM350 resets
+	# its band mask to "all" and auto-activates context 1 - so whoever triggers
+	# setup (netifd itself, re-fired when device=eth2 finally appears; our
+	# net-hotplug; a reload) would dial, or the fast path below would reuse, on ALL
+	# bands, and only afterwards the separate band-restore (31-5gmodem-bands) would
+	# re-apply the saved subset - the visible DOUBLE bring-up the user hit. Doing it
+	# HERE, right in the dial path, is race-free against every trigger. The marker
+	# keeps it to the FIRST bring-up of the boot (/tmp clears on reboot); later
+	# reconnects (priority switch, restore's own reconnect) skip it - no extra
+	# latency, no nested bands.sh under the at-lock. restorebands prepare returns 0
+	# if it rewrote the mask (then we MUST cold-dial, the old bearer is on the wrong
+	# bands) or 3 if it already matched (fast path is fine).
+	local bands_changed=0
+	local bmark="/tmp/5gmodem_bandsprep_$interface"
+	if [ ! -e "$bmark" ] && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != "0" ]; then
+		local bsec="" bs bpath
+		for bs in $(uci -q show 5gmodem 2>/dev/null \
+				| sed -n 's/^\(5gmodem\.m_[0-9A-Za-z_]*\)\.network=.*/\1/p'); do
+			[ "$(uci -q get "$bs.network")" = "$interface" ] || continue
+			bsec="$bs"; break
+		done
+		bpath=$(uci -q get "$bsec.path" 2>/dev/null)
+		[ -n "$bpath" ] || bpath="$usbpath"
+		if [ -n "$bpath" ] && [ -n "$(uci -q get "$bsec.save_band")$(uci -q get "$bsec.save_band5gnsa")$(uci -q get "$bsec.save_band5gsa")" ]; then
+			BANDS_ACTIVE_MODEM="$bpath" /usr/share/5gmodem/bands.sh restorebands prepare
+			[ "$?" = "0" ] && bands_changed=1
+			# Мы применили/сверили сохранённые бенды ПРЯМО ЗДЕСЬ, до дозвона. Гасим
+			# восстановление на ifup (31-5gmodem-bands) его же маркером - иначе оно
+			# на поднявшемся интерфейсе сделало бы ВТОРОЙ реконнект (тот самый
+			# двойной подъём). Прото - единственный, кто трогает бенды на дозвоне.
+			: > "/tmp/5gmodem_bandrestore_$interface" 2>/dev/null
+		fi
+		touch "$bmark" 2>/dev/null
+	fi
+
 	# FAST PATH: if the PDP context is ALREADY active with a valid address, reuse
 	# it instead of re-dialing. netifd calls teardown+setup on any reconfigure -
 	# e.g. a route-metric change from the WAN-priority switcher, or a spurious
 	# reload - and a cold re-dial tore the data session for ~30-60 s every time we
 	# switched TO this modem. Together with the teardown that no longer releases
 	# the context, a priority switch becomes instant and lossless (we just
-	# re-publish the IP/route with the new metric).
+	# re-publish the IP/route with the new metric). SKIP it right after we changed
+	# bands: the still-active bearer is on the reset-to-all mask, not the saved one.
 	local ip="" try
-	if sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
+	if [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
 		[ "$ip" = "0.0.0.0" ] && ip=""
@@ -177,26 +235,20 @@ proto_fibocom_setup() {
 	# re-enumeration the context needs a moment, and a single try would leave the
 	# interface down until netifd happens to retry.
 	if [ -z "$ip" ]; then
-		sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
-		# RELEASE FIRST: a bare AT+CGACT=1,1 HANGS when the PDP context is wedged in
-		# a half-active state - the exact state a band change (AT+GTACT) leaves it in
-		# on the FM350: the old bearer is gone but the context engine keeps answering
-		# nothing to a plain re-activate, so the IP never comes back (user report:
-		# disable B3 -> IP vanishes for good). Deactivating the context first
-		# (AT+CGACT=0,1) clears that wedge; the following re-activate then succeeds
-		# and CGPADDR returns a fresh address. On a cold (already-down) context the
-		# release is a harmless no-op/ERROR. Verified live on FM350-GL: GTACT drop of
-		# a band + CGACT=0,1 -> CGACT=1,1 restored data (new IP) with no CFUN reset.
-		sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
-		sleep 2
-		for try in 1 2 3 4 5 6; do
-			sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
-			sleep 2
-			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
-			[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && break
-			ip=""
-		done
+		ip=$(_fibocom_activate "$dial" "$pdptype" "$apn")
+		# PDP-TYPE FALLBACK. Some SIMs bring up the default bearer only under a
+		# specific PDP type. The fleet default IPV4 gets an IP at once, but Tele2 RU
+		# (PLMN 25020) REGISTERS yet CGACT hangs on IPV4 and needs IPV4V6 - verified
+		# live on FM350 (user report: disable a band -> IP gone for minutes). The
+		# vendor initial-attach-APN knob other handlers use (AT+EIAAPN) is ERROR on
+		# this firmware, so we can't align attach that way; instead, when the
+		# configured type yields no IP, retry once with the COMPLEMENTARY type. This
+		# fires ONLY on failure, so the common case (IPV4 works) pays nothing.
+		if [ -z "$ip" ]; then
+			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IPV4"
+			echo "fibocom[$$] no IP with $pdptype, retrying $alt"
+			ip=$(_fibocom_activate "$dial" "$alt" "$apn")
+		fi
 	fi
 	if [ -z "$ip" ]; then
 		proto_notify_error "$interface" NO_IP_ADDRESS

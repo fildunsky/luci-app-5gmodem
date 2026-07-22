@@ -1,0 +1,46 @@
+#!/bin/sh
+# Зарегистрировать/обновить наш netifd-обработчик протокола
+# (/lib/netifd/proto/fibocom.sh) после установки пакета.
+#
+# ПОЧЕМУ ЭТО НУЖНО. netifd сканирует shell-обработчики протоколов ТОЛЬКО при
+# своём старте и держит их в памяти. Ни `/etc/init.d/network reload`, ни
+# `ubus call network reload` их НЕ перечитывают (reload лишь перечитывает
+# /etc/config/network). А `ubus ... down/up` интерфейса гоняет СТАРЫЙ код
+# обработчика. Перечитать обработчик можно ТОЛЬКО рестартом netifd - а он на
+# пару секунд роняет ВСЕ интерфейсы. Поэтому делаем его лишь когда реально нужно.
+#
+# ДВА случая, когда нужен рестарт (оба - только если есть интерфейс на fibocom,
+# иначе рестартовать netifd ради неиспользуемого прото незачем):
+#   1) Прото ещё НЕ ЗАРЕГИСТРИРОВАН: свежая установка, netifd стартовал раньше,
+#      чем появился файл обработчика (ifstatus -> "available": false).
+#   2) СОДЕРЖИМОЕ обработчика ИЗМЕНИЛОСЬ с прошлого применения: апгрейд заменил
+#      fibocom.sh новой логикой (напр. PDP-fallback), а в памяти netifd - старая.
+#      opkg переписывает файл при каждой установке, поэтому «изменилось» ловим не
+#      по mtime, а по ХЕШУ: рестарт только когда прото реально другой, а не на
+#      каждый апдейт (в т.ч. чисто-UI - модем при нём дёргать не за что).
+
+HANDLER=/lib/netifd/proto/fibocom.sh
+STAMP=/etc/5gmodem_proto.md5   # персистентный (не /tmp): переживает перезагрузку
+
+NEED=0
+HAS_FIBO=0
+for _if in $(uci -q show network 2>/dev/null \
+		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
+	HAS_FIBO=1
+	_av=$(ubus call network.interface."$_if" status 2>/dev/null \
+		| jsonfilter -e '@.available' 2>/dev/null)
+	[ "$_av" = "false" ] && NEED=1
+done
+
+CUR=""
+[ -r "$HANDLER" ] && CUR=$(md5sum "$HANDLER" 2>/dev/null | awk '{print $1}')
+if [ "$HAS_FIBO" = 1 ] && [ -n "$CUR" ]; then
+	[ "$CUR" != "$(cat "$STAMP" 2>/dev/null)" ] && NEED=1
+fi
+
+[ "$NEED" = "1" ] && /etc/init.d/network restart >/dev/null 2>&1
+
+# Запоминаем применённый хеш: даже если рестарт не понадобился, netifd уже с этим
+# содержимым, и следующий апгрейд будет сверяться с ним.
+[ -n "$CUR" ] && printf '%s\n' "$CUR" > "$STAMP" 2>/dev/null
+exit 0
