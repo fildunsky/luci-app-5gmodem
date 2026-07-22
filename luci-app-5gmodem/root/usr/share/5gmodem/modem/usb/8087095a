@@ -410,6 +410,28 @@ fi
 
 fi
 
+# --- Антенные порты (Intel errc) ---------------------------------------------
+# ВНИМАНИЕ: CA/SCC этот профиль строит по XLEC + AT+RSRP? (как эталон modemfeed/
+# modeminfo scripts/INTEL: lte_ca=XLEC[3]-1, SCC-бенды из доп. сот RSRP?). Это
+# УСТОЯВШАЯСЯ конвенция для L850/L860, не баг - раньше я ошибочно «чинил» её через
+# XMCI type-4, откатил. Соседей отдельно НЕ строим: доп. соты идут как SCC.
+# Ниже - только антенны (RSRP/RSRQ по RX0/RX1), это независимая добавка.
+
+# Антенные порты (errc): RSRP/RSRQ по RX0/RX1 -> antports (как в 2cb70007). Только
+# целиком (оба порта), иначе таблица на странице скачет по высоте.
+_ANT=$(sms_tool -d $DEVICE at "at@errc:pcell_scell_measurement_info()" 2>/dev/null)
+if echo "$_ANT" | grep -q 'rsrp\['; then
+	_ant_rnd() { [ -n "$1" ] && awk "BEGIN{printf \"%.0f\", $1}" 2>/dev/null; }
+	_r0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[\([^,]*\),.*/\1/p' | head -1)")
+	_r1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
+	_q0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[\([^,]*\),.*/\1/p' | head -1)")
+	_q1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
+	if [ -n "$_r0" ] && [ -n "$_q0" ] && [ -n "$_r1" ] && [ -n "$_q1" ]; then
+		ANTPORTS="0:$_r0:$_q0 1:$_r1:$_q1"
+		if [ "$_r1" -gt -130 ] 2>/dev/null; then RXDIV="2rx"; else RXDIV="off"; fi
+	fi
+fi
+
 # Приводим к единому виду с остальными профилями: внутренний маркер LTE_A ->
 # "LTE-A |" (человекочитаемо, без подчёркивания), а разделитель компонентов
 # агрегации "/" -> "+". Раньше здесь была только замена "/"->"+", и в UI висело

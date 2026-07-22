@@ -219,6 +219,11 @@ if [[ "$MODE" != *"LTE-A"* ]]; then
   fi
 fi
 
+# CA/SCC этот профиль строит по XLEC + AT+RSRP? (доп. соты RSRP? = SCC), как эталон
+# modemfeed/modeminfo scripts/INTEL: это УСТОЯВШАЯСЯ конвенция для L850/L860, не баг.
+# Раньше я ошибочно «чинил» её через XMCI type-4 и уводил доп. соты в neighbors[] -
+# откатил. Соседей отдельно не строим: доп. соты идут как SCC.
+
 MODE=$(echo $MODE | sed 's,/,+,')
 
 OT=$(sms_tool -d $DEVICE at "AT+XCCINFO=1;+XCCINFO?")
@@ -232,6 +237,32 @@ if [ -n "$OT" ]; then
 		fi
 fi
 
+# --- Антенные порты (Intel errc) ---------------------------------------------
+# at@errc:pcell_scell_measurement_info() отдаёт RSRP/RSRQ по ДВУМ приёмникам:
+#   ... rsrp[RX0,RX1] , rsrq[RX0,RX1] , rssnr[RX0,RX1] , imbal[dB]
+# Уникально для XMM (у Qualcomm/Fibocom GT* такого нет). Отдаём той же строкой
+# ANTPORTS ("порт:rsrp:rsrq ..."), что и Telit #LAPS, - страница рисует их одной
+# таблицей «Антенные порты» (полоски/цвета/защита от автоскролла). RSRP/RSRQ
+# округляем до целых: формат antports принимает только целые.
+_ANT=$(sms_tool -d $DEVICE at "at@errc:pcell_scell_measurement_info()" 2>/dev/null)
+if echo "$_ANT" | grep -q 'rsrp\['; then
+	_ant_rnd() { [ -n "$1" ] && awk "BEGIN{printf \"%.0f\", $1}" 2>/dev/null; }
+	_r0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[\([^,]*\),.*/\1/p' | head -1)")
+	_r1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
+	_q0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[\([^,]*\),.*/\1/p' | head -1)")
+	_q1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
+	# ANTPORTS отдаём ТОЛЬКО целиком (оба приёмника распарсились). Половинчатый
+	# ответ (только RX0) заставил бы страницу пересобрать таблицу с 2 до 1 строки -
+	# высота бы прыгнула и увела scrollTop. Неполный опрос = пусто, а data-hadata
+	# на странице удержит прошлые строки.
+	if [ -n "$_r0" ] && [ -n "$_q0" ] && [ -n "$_r1" ] && [ -n "$_q1" ]; then
+		ANTPORTS="0:$_r0:$_q0 1:$_r1:$_q1"
+		# Разнесённый приём: второй приёмник рабочий (RSRP выше «нет антенны» ~ -130)
+		# => 2RX, иначе off. У L850 максимум два приёмника.
+		if [ "$_r1" -gt -130 ] 2>/dev/null; then RXDIV="2rx"; else RXDIV="off"; fi
+	fi
+fi
+
 if [ "$REG" == "6" ]; then
 REG="1"
 fi
@@ -240,13 +271,30 @@ fi
 FWA=$(sms_tool -d $DEVICE at "AT+GTPKGVER?" | xargs)
 FW=$(echo "$FWA" | cut -d ":" -f2 | xargs)
 
-MDL=$(sms_tool -d $DEVICE at "AT+GMM?" | xargs)
-MODELM=$(echo $MDL | awk -F [:] '/^\+GMM: /{print $2}'| awk -F 'LTE Module' '{print $1}' | xargs)
-MODELF=$(sms_tool -d $DEVICE at "AT+CGMI" | xargs)
-
-MODELMCUT=$(echo $MODELM)
-MODELFCUT=$(echo $MODELF | awk -F [:] '/^\+CGMI:/{print $2}' | xargs)
-MODEL="$MODELFCUT "$MODELMCUT
+# Робастный разбор имени, как в XMM-профиле 8087095a: у L850 включено эхо (ATE1) и
+# нестандартные форматы (CGMI в кавычках, CGMM = 'L850 LTE Module,L850'). _atval
+# берёт СОДЕРЖАТЕЛЬНУЮ строку (пропускает эхо AT.../OK/ERROR, снимает "+CMD:" и
+# кавычки). Старый парсер терял "Fibocom" - в MBIM имя выходило просто "L850"
+# вместо "Fibocom L850" (в XMM было правильно).
+_atval() {
+	printf '%s\n' "$1" | tr -d '\r' | awk '
+		{ sub(/^[ \t]+/,""); sub(/[ \t]+$/,"") }
+		/^$/ || /^AT/ || /^OK$/ || /ERROR/ { next }
+		{ sub(/^\+[A-Za-z0-9]+:[ \t]*/,""); gsub(/"/,""); print; exit }'
+}
+MANUF=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMI')")
+CGMM_V=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMM')")
+SHORT=$(echo "$CGMM_V" | awk -F',' '{print $NF}' | xargs)
+[ -n "$SHORT" ] || SHORT="$CGMM_V"
+if [ -n "$MANUF" ]; then
+	case "$MANUF" in
+		*"$SHORT"*) MODEL="$MANUF" ;;
+		*)          MODEL="$MANUF $SHORT" ;;
+	esac
+else
+	MODEL="$SHORT"
+fi
+MODEL=$(echo "$MODEL" | xargs)
 
 # International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)

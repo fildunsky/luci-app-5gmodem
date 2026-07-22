@@ -1006,48 +1006,63 @@ function renderNeighbors(json) {
 	var list = (json && Array.isArray(json.neighbors)) ? json.neighbors : [];
 	/* Нет данных - прячем блок целиком: у большинства модемов таких сведений
 	   нет вовсе, и пустая таблица только занимала бы место. */
-	if (!list.length) { wrap.style.display = 'none'; return; }
+	if (!list.length) {
+		/* Пустой опрос почти всегда - коллизия на AT-порту (или мерцание соседей
+		   по XMCI), а НЕ исчезновение сот: уже показанный блок НЕ прячем и строки
+		   НЕ трогаем, иначе высота документа прыгает и proton2025 (домотанный до
+		   низа) обрезает scrollTop - страницу уводит вверх. Правило то же, что в
+		   fillAntPorts и setRowVisible: показанное раз - больше не прячем. */
+		if (wrap.getAttribute('data-hadata') !== '1') { wrap.style.display = 'none'; }
+		return;
+	}
 	wrap.style.display = '';
+	wrap.setAttribute('data-hadata', '1');
 	var dash = function(v) { return (v === undefined || v === null || v === '') ? '-' : String(v); };
 
-	/* СТРУКТУРНАЯ сигнатура - идентичность строк (сота/бенд/частота/служебная), БЕЗ
-	   живых уровней. Строки пересобираем ТОЛЬКО когда меняется сам НАБОР сот. Иначе
-	   (при каждом сдвиге RSRP) тело таблицы пересоздавалось бы - и полоски не
-	   успевали бы анимироваться, и страницу дёргало бы обрезанием scrollTop. */
-	var structSig = list.map(function(c) {
-		return [ c.pci, c.band, c.earfcn, (String(c.serving) === '1' || c.serving === true) ? 1 : 0 ].join('/');
-	}).join('|');
-	if (tbl.getAttribute('data-struct') !== structSig) {
-		tbl.setAttribute('data-struct', structSig);
-		Array.prototype.slice.call(tbl.querySelectorAll('.nb-row')).forEach(function(r) { r.remove(); });
-		list.forEach(function(c) {
-			var serving = (String(c.serving) === '1' || c.serving === true);
-			/* Метрические ячейки помечаем data-m - по ним ниже обновляем уровни
-			   в месте. Оценка/цвет - ТЕ ЖЕ пороги, что в CA и антенных портах. */
-			tbl.appendChild(E('tr', { 'class': 'tr nb-row' + (serving ? ' nb-serving' : '') }, [
-				E('td', { 'class': 'td left' }, [ serving ? _('serving') : _('neighbour') ]),
-				E('td', { 'class': 'td left', 'data-l': 'Band' }, [ c.band ? ('B' + c.band) : '-' ]),
-				E('td', { 'class': 'td', 'data-l': 'PCI' }, [ dash(c.pci) ]),
-				E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ dash(c.earfcn) ]),
-				E('td', { 'class': 'td', 'data-l': 'RSRP', 'data-m': 'rsrp' }, []),
-				E('td', { 'class': 'td', 'data-l': 'RSRQ', 'data-m': 'rsrq' }, []),
-				E('td', { 'class': 'td', 'data-l': 'RSSI', 'data-m': 'rssi' }, [])
-			]));
-		});
+	/* ЧИСЛО СТРОК НЕ СЖИМАЕМ. У XMM-модемов (L850/L860) XMCI отдаёт то 1, то 2, то
+	   0 соседей в соседних опросах (радиообстановка): если пересобирать таблицу под
+	   текущее число, высота документа скачет и proton2025 (домотанный до низа)
+	   обрезает scrollTop - страницу уводит вверх. Поэтому держим столько строк,
+	   сколько было МАКСИМУМ (растёт монотонно), лишние показываем прочерками, а
+	   идентичность и уровни каждой строки обновляем НА МЕСТЕ - структура DOM не
+	   трогается, высота постоянна. Число соседей мало, «пустых» строк почти нет. */
+	var have = tbl.querySelectorAll('.nb-row').length;
+	var need = Math.max(list.length, have);
+	var k;
+	for (k = have; k < need; k++) {
+		tbl.appendChild(E('tr', { 'class': 'tr nb-row' }, [
+			E('td', { 'class': 'td left' }, []),
+			E('td', { 'class': 'td left', 'data-l': 'Band' }, []),
+			E('td', { 'class': 'td', 'data-l': 'PCI' }, []),
+			E('td', { 'class': 'td', 'data-l': 'EARFCN' }, []),
+			E('td', { 'class': 'td', 'data-l': 'RSRP', 'data-m': 'rsrp' }, []),
+			E('td', { 'class': 'td', 'data-l': 'RSRQ', 'data-m': 'rsrq' }, []),
+			E('td', { 'class': 'td', 'data-l': 'RSSI', 'data-m': 'rssi' }, [])
+		]));
 	}
-
-	/* Каждый опрос: обновляем уровни В МЕСТЕ (paintMetricCell переиспользует узлы)
-	   - полоски плавно доезжают до новых значений. */
+	/* Обновляем ТОЛЬКО реально присутствующих соседей (первые list.length строк).
+	   Лишние слоты (сейчас соседей меньше виденного максимума) НЕ трогаем: они
+	   держат прогресс-бары и последние значения. Заменять их на текстовый прочерк
+	   НЕЛЬЗЯ - ячейка с полоской ВЫШЕ текстовой, строка бы сжималась, а с ней и вся
+	   высота документа, и proton2025 (домотанный вниз) обрезал бы scrollTop, уводя
+	   страницу вверх. Мерцание XMCI (1<->2<->0 соседей) транзиентно - последнее
+	   известное значение честнее скачущей высоты (как при пустом опросе). */
 	var rows = tbl.querySelectorAll('.nb-row');
-	list.forEach(function(c, i) {
-		var row = rows[i];
-		if (!row) { return; }
-		var val = { rsrp: c.rsrp, rsrq: c.rsrq, rssi: c.rssi };
-		Array.prototype.slice.call(row.querySelectorAll('td[data-m]')).forEach(function(td) {
-			var k = td.getAttribute('data-m');
-			paintMetricCell(td, k, val[k]);
-		});
-	});
+	for (k = 0; k < list.length && k < rows.length; k++) {
+		var row = rows[k];
+		var td = row.querySelectorAll('td');
+		var c = list[k];
+		var serving = (String(c.serving) === '1' || c.serving === true);
+		row.className = 'tr nb-row' + (serving ? ' nb-serving' : '');
+		td[0].textContent = serving ? _('serving') : _('neighbour');
+		td[1].textContent = c.band ? ('B' + c.band) : '-';
+		td[2].textContent = dash(c.pci);
+		td[3].textContent = dash(c.earfcn);
+		/* Уровни - через общую точку: полоски/цвета/пороги как в CA и антеннах. */
+		paintMetricCell(td[4], 'rsrp', c.rsrp);
+		paintMetricCell(td[5], 'rsrq', c.rsrq);
+		paintMetricCell(td[6], 'rssi', c.rssi);
+	}
 }
 
 function renderCaTable(json) {
@@ -1509,22 +1524,13 @@ function renderCellLock(state) {
 	} else {
 		txt = _('Locked to frequency: EARFCN %s').format(parts[1]);
 	}
-	cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, txt));
-
-	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после
-	// перезагрузки. Показываем запомненное значение и сразу объясняем расхождение,
-	// иначе пользователь увидит «привязана», проверит модем и решит, что мы врём.
-	if (parts[parts.length - 1] === 'remembered') {
-		cell.appendChild(E('span', {
-			'style': 'opacity:.65; font-size:90%; margin-right:.6em'
-		}, _('(after modem restart the lock stays in effect, but the modem reports it as off)')));
-	}
 
 	// Профиль умеет ЧИТАТЬ привязку, но не менять её (T99W175: запись через
 	// AT^LTE_LOCK переживает перезагрузку и снимается только вручную, поэтому
-	// без проверки на живом модеме мы её не даём). Показываем состояние и прямо
-	// говорим почему нет кнопок - молчаливо неработающая кнопка хуже её отсутствия.
+	// без проверки на живом модеме мы её не даём). Кнопки нет - показываем только
+	// состояние и прямо говорим почему: молчаливо неработающая кнопка хуже её отсутствия.
 	if (parts[parts.length - 1] === 'readonly') {
+		cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, txt));
 		if (locked) {
 			cell.appendChild(E('span', {
 				'style': 'opacity:.65; font-size:90%'
@@ -1544,6 +1550,8 @@ function renderCellLock(state) {
 		fs.exec('/usr/share/5gmodem/bands.sh', args);
 	};
 
+	// СНАЧАЛА КНОПКА (действие), затем состояние («к чему привязан») - единый порядок
+	// для всех модемов.
 	if (locked) {
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-reset',
@@ -1575,6 +1583,21 @@ function renderCellLock(state) {
 					});
 			})
 		}, [ _('Lock to current cell') ]));
+	}
+
+	// Состояние - ПОСЛЕ кнопки и ТОЛЬКО когда привязан: «Не привязан» не пишем,
+	// это и так ясно по кнопке «Привязать к текущей соте».
+	if (locked) {
+		cell.appendChild(E('span', { 'style': 'margin-left:.6em' }, txt));
+	}
+
+	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после
+	// перезагрузки. Показываем запомненное значение и сразу объясняем расхождение,
+	// иначе пользователь увидит «привязана», проверит модем и решит, что мы врём.
+	if (parts[parts.length - 1] === 'remembered') {
+		cell.appendChild(E('span', {
+			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
+		}, _('(after modem restart the lock stays in effect, but the modem reports it as off)')));
 	}
 }
 
@@ -1765,6 +1788,31 @@ function switchToModemManager(btn) {
 		ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager.') + ' ' + (err.message || err)), 'error');
 	}).finally(function() {
 		if (btn) { btn.disabled = false; }
+	});
+}
+
+/* Перевести Fibocom L850/L860 в режим XMM (NCM). Держим на будущее: сейчас у этих
+   модемов бенды управляются нативно и в MBIM (свой modemband-профиль), поэтому
+   подсказка со сменой режима им не показывается (bandnote скрыт, когда бенды
+   читаются). Оставлено для случаев, где родной режим бенды не отдаёт.
+   Модем РЕБУТИТСЯ и переэнумерируется (~40 c): бэкенд (modemswitch.sh xmm) шлёт
+   GTUSBMODE=0 + CFUN=15, autosetup по маркеру поднимает xmm. */
+function switchToXmm(btn) {
+	if (btn) { btn.disabled = true; }
+	setModemBusy(_('Switching the modem to XMM — it is rebooting and re-enumerating (~40 s)…'));
+	return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'xmm' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (d.error) {
+			ui.hideModal();
+			if (btn) { btn.disabled = false; }
+			ui.addNotification(null, E('p', _('Could not switch the modem to XMM.') + ' ' + d.error), 'error');
+			return;
+		}
+		window.setTimeout(function() { window.location.reload(); }, 50000);
+	}).catch(function(err) {
+		ui.hideModal();
+		if (btn) { btn.disabled = false; }
+		ui.addNotification(null, E('p', _('Could not switch the modem to XMM.') + ' ' + (err.message || err)), 'error');
 	});
 }
 
@@ -3112,14 +3160,31 @@ simDialog: baseclass.extend({
 					   протокол интерфейса (mbim/qmi), чтобы было «Управление
 					   невозможно в режиме mbim», а не абстрактный текст. */
 					if (document.getElementById('bandnote-text') && json.protocol && json.protocol != '-') {
-						/* Два разных случая, и путать их нельзя. Если списки
-						   прочитаны (readonly) - честно говорим «показаны, но не
-						   меняются»: кнопки на экране есть, и текст «недоступно»
-						   противоречил бы им. Если не прочитаны вовсе - прежняя
-						   формулировка про недоступность. */
-						document.getElementById('bandnote-text').textContent = bandsReadOnly
-							? _('Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them.').format(json.protocol)
-							: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
+						/* Fibocom L850/L860 (Intel XMM) - на будущее: если родной режим
+						   бенды не отдал, ведём в XMM, а не в ModemManager. У нас сейчас
+						   L850 отдаёт бенды и в MBIM (свой modemband-профиль), так что
+						   этот note им вообще не показывается - ветка тут для запаса. */
+						var xmmCap = (json.xmm_capable === '1');
+						var isXmm = (String(json.iface_proto || '').toLowerCase() === 'xmm');
+						var mmBtn = document.getElementById('bandnote-mm-btn');
+						var xmmBtn = document.getElementById('bandnote-xmm-btn');
+						if (xmmCap && !isXmm) {
+							document.getElementById('bandnote-text').textContent =
+								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(json.protocol);
+							if (mmBtn) { mmBtn.style.display = 'none'; }
+							if (xmmBtn) { xmmBtn.style.display = ''; }
+						} else {
+							/* Два разных случая, и путать их нельзя. Если списки
+							   прочитаны (readonly) - честно говорим «показаны, но не
+							   меняются»: кнопки на экране есть, и текст «недоступно»
+							   противоречил бы им. Если не прочитаны вовсе - прежняя
+							   формулировка про недоступность. */
+							document.getElementById('bandnote-text').textContent = bandsReadOnly
+								? _('Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them.').format(json.protocol)
+								: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
+							if (mmBtn) { mmBtn.style.display = ''; }
+							if (xmmBtn) { xmmBtn.style.display = 'none'; }
+						}
 					}
 
 					/* ИНДИКАТОР УСТАРЕВШИХ ДАННЫХ - в правом углу заголовка блока.
@@ -3698,12 +3763,27 @@ simDialog: baseclass.extend({
 							   отправлять человека делать это руками - лишний шаг. */
 							E('div', { 'style': 'margin-top:.6em' }, [
 								E('button', {
+									'id': 'bandnote-mm-btn',
 									'class': 'btn cbi-button cbi-button-action',
 									'click': function(ev) {
 										ev.preventDefault();
 										switchToModemManager(ev.target);
 									}
-								}, _('Switch to ModemManager'))
+								}, _('Switch to ModemManager')),
+								/* Альтернатива для Fibocom L850/L860 (Intel XMM). Держим на
+								   будущее: у них бенды работают нативно (и в MBIM), поэтому
+								   в норме bandnote вообще не показывается. Кнопка всплывёт
+								   лишь если родной режим бенды не отдал (xmm_capable=1 и
+								   интерфейс не xmm). */
+								E('button', {
+									'id': 'bandnote-xmm-btn',
+									'class': 'btn cbi-button cbi-button-action',
+									'style': 'display:none',
+									'click': function(ev) {
+										ev.preventDefault();
+										switchToXmm(ev.target);
+									}
+								}, _('Switch to XMM'))
 							])
 						])
 					]),

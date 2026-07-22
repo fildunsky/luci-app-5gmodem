@@ -361,7 +361,23 @@ at_for_path() {
 		p=$(mmcli -m "$mi" 2>/dev/null | grep -oE '(ttyUSB[0-9]+|ttyACM[0-9]+) \(at\)' | sed 's/ (at)//' | head -1)
 		[ -n "$p" ] && [ -e "/dev/$p" ] && { echo "/dev/$p"; return 0; }
 	fi
-	detect_at $(modem_ttys "$1")
+	# xmm/atc держат СВОЙ порт (device) под ДАННЫЕ (M-RAW_IP): AT-проба на нём
+	# рвёт data-сессию, и интерфейс флапает. Метрики должны идти по ДРУГОМУ AT-порту,
+	# поэтому dial-порт таких прото исключаем из перебора (у L850/L860 остаётся
+	# ttyACM2). Для прочих прото (mbim/qmi/…) данные идут не по tty - исключать нечего.
+	_afp_skip=""
+	_afp_if=$(iface_for_path "$1")
+	if [ -n "$_afp_if" ]; then
+		case "$(uci -q get "network.$_afp_if.proto")" in
+			xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
+		esac
+	fi
+	_afp_list=""
+	for _afp_t in $(modem_ttys "$1"); do
+		[ "$_afp_t" = "$_afp_skip" ] && continue
+		_afp_list="$_afp_list $_afp_t"
+	done
+	detect_at $_afp_list
 }
 
 # Подобрать APN по оператору. $1 - имя оператора, $2 - код сети (MCC-MNC).
@@ -819,6 +835,33 @@ setup_one_modem() {
 		[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].at_port=$A"
 	}
 	uci -q commit "$CFG"
+
+	# ЗАПРОШЕННЫЙ proto (кнопка «переключиться в XMM» в блоке бендов): ставим ИМЕННО
+	# его, а НЕ подхватываем существующий и не гадаем по драйверу. После смены
+	# USB-композиции (GTUSBMODE=0 + ребут) autosetup иначе поставил бы драйверный
+	# fibocom, и xmm не поднялся бы. Маркер одноразовый - снимаем сразу.
+	_wp=$(uci -q get "$CFG.$SEC.want_proto")
+	if [ -n "$_wp" ]; then
+		uci -q delete "$CFG.$SEC.want_proto"; uci -q commit "$CFG"
+		MODEM_PATH="$P" "$RES/mkiface.sh" "$(uci -q get "$CFG.$SEC.network")" "$_wp" >/dev/null 2>&1
+		_made=$(uci -q get "$CFG.$SEC.network")
+		# КЛЮЧЕВОЕ для xmm: метрики уводим на AT-порт, ОТЛИЧНЫЙ от dial-порта. xmm
+		# держит dial-порт (ttyACM0) под данные (M-RAW_IP), и AT-проба на нём рвёт
+		# сессию - интерфейс флапает. at_for_path теперь исключает dial-порт xmm/atc
+		# и возвращает другой (у L850/L860 - ttyACM2).
+		_mp=$(at_for_path "$P")
+		if [ -n "$_mp" ]; then
+			uci -q set "$CFG.$SEC.at_port=$_mp"
+			[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].at_port=$_mp"
+		fi
+		uci -q commit "$CFG"
+		"$RES/ensureports.sh" >/dev/null 2>&1
+		[ -n "$_made" ] && { ubus call network reload >/dev/null 2>&1; ifup "$_made" >/dev/null 2>&1; }
+		logger -t 5gmodem "autosetup: $P -> want_proto=$_wp port=${_mp:-?} -> ${_made:-fail}"
+		# APN подбираем в фоне (autoapn верно берёт оператора: T-Mobile -> "tt").
+		[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
+		return 0
+	fi
 
 	# СНАЧАЛА ПОДХВАТ. Если интерфейс для этого модема уже существует - берём
 	# его себе, а не создаём второй. Так пакет, установленный на роутер с уже
@@ -1807,8 +1850,33 @@ forget)
 	printf '{"result":"ok","forgotten":%s}\n' "$N"
 	;;
 
+xmm)
+	# Перевести АКТИВНЫЙ модем (Fibocom L850/L860, Intel XMM) в режим XMM/NCM:
+	# сменить USB-композицию (AT+GTUSBMODE=0) и ребутнуть модем (AT+CFUN=15). Модем
+	# переэнумерируется ~40 c в Intel-композицию (8087:095a), после чего поднимаем
+	# xmm-прото. В MBIM управление бендами недоступно, в XMM - работает (XACT).
+	#
+	# proto=xmm помечаем ЗАРАНЕЕ (fix_iface_proto его уважает) - чтобы autosetup при
+	# переэнумерации не поставил драйверный fibocom. Финалайзер в фоне досоздаёт
+	# интерфейс уже в NCM (mkiface сам выберет ttyACM как dial-port) и поднимает.
+	P=$(active_path)
+	A=$(uci -q get "$CFG.@5gmodem[0].at_port")
+	[ -n "$P" ] && [ -n "$A" ] || { echo '{"error":"no active modem"}'; exit 0; }
+	MSEC="m_$(echo "$P" | sed 's/[^A-Za-z0-9]/_/g')"
+	# МАРКЕР для autosetup: после переэнумерации в NCM он должен поставить xmm, а НЕ
+	# драйверный fibocom (см. want_proto в setup_one_modem). Надёжнее фонового
+	# финалайзера: autosetup крутится в procd и не умирает по SIGHUP. Маркер в
+	# секции модема переживает переэнумерацию (usb-путь тот же).
+	uci -q set "$CFG.$MSEC.want_proto=xmm"; uci -q commit "$CFG"
+	# Сменить USB-композицию в NCM и ребутнуть модем. Порт на ребуте отвалится
+	# ("I/O error" на tcsetattr) - это норма, ответа не ждём.
+	sms_tool -d "$A" at "AT+GTUSBMODE=0" >/dev/null 2>&1
+	sms_tool -d "$A" at "AT+CFUN=15" >/dev/null 2>&1
+	printf '{"ok":1}\n'
+	;;
+
 *)
-	echo "usage: $0 active|switch <path>|save <path>|resolve|forget|mmindex|wdm" >&2
+	echo "usage: $0 active|switch <path>|save <path>|resolve|forget|mmindex|wdm|xmm" >&2
 	exit 1
 	;;
 esac

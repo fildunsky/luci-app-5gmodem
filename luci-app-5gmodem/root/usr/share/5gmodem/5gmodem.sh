@@ -1555,6 +1555,7 @@ cat > "$_TMP" <<EOF
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",
 "iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
+"xmm_capable":"$([ -f /lib/netifd/proto/xmm.sh ] && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0" && echo 1 || echo 0)",
 "iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
 "iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",
 "csq":"$(sanitize_number "$CSQ")",

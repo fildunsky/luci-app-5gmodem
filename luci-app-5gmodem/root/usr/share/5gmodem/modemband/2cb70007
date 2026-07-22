@@ -1,0 +1,113 @@
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+
+getinfo() {
+	O=$(sms_tool -d $_DEVICE at "at+gmm")
+	_NAME="Fibocom $(echo "$O" | awk -F, '{print $2}')"
+	echo "$_NAME"
+}
+
+getsupportedbands() {
+	O=$(sms_tool -d $_DEVICE at "at+gmm")
+	if echo "$O" | grep -q "L850"; then
+		_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 11 12 13 17 18 19 20 21 26 28 29 30 38 39 40 41 66"
+	fi
+	if echo "$O" | grep -q "L860"; then
+		_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 38 39 40 41 42 46 66"
+	fi
+	if echo "$O" | grep -q "L860-GL-16"; then
+		_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
+	fi
+	echo "$_DEFAULT_LTE_BANDS"
+}
+
+getbands() {
+# +XACT: 4,2,1,1,2,4,5,8,101,102,103,104,105,107,108,112,113,114,117,118,119,120,125,126,128,129,130,132,138,139,140,141,142,146,166
+
+	O=$(sms_tool -d $_DEVICE at "at+xact?")
+	BANDS=$(echo "$O" | awk -F: '/^\+XACT:/{gsub(","," ");print $2}')
+	for BAND in $BANDS; do
+		if [ $BAND -gt 100 ] && [ $BAND -lt 200 ]; then
+			echo -n "$((BAND - 100)) "
+		fi
+	done
+	echo ""
+}
+
+setbands() {
+	BANDS="$1"
+
+	T=""
+	if [ "$BANDS" = "default" ]; then
+		T="0"
+	else
+		for BAND in $BANDS; do
+			case $BAND in
+				''|*[!0-9]*) continue ;;
+			esac
+			[ -n "$T" ] && T="${T},"
+			T="${T}$((BAND + 100))"
+		done
+	fi
+
+	if [ -n "$T" ]; then
+		O=$(sms_tool -d $_DEVICE at "at+xact?")
+		MODE=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
+		sms_tool -d $_DEVICE at "at+xact=$MODE,,,$T"
+	fi
+}
+
+# EARFCN (DL) -> номер LTE-бенда (для at@sic:freq_lock band=<n>)
+_ch2band() {
+	case "$1" in ''|*[!0-9]*) echo 0; return ;; esac
+	if   [ "$1" -le 599 ];  then echo 1
+	elif [ "$1" -le 1199 ]; then echo 2
+	elif [ "$1" -le 1949 ]; then echo 3
+	elif [ "$1" -le 2399 ]; then echo 4
+	elif [ "$1" -le 2649 ]; then echo 5
+	elif [ "$1" -ge 2750 ] && [ "$1" -le 3449 ]; then echo 7
+	elif [ "$1" -ge 3450 ] && [ "$1" -le 3799 ]; then echo 8
+	elif [ "$1" -ge 5010 ] && [ "$1" -le 5179 ]; then echo 12
+	elif [ "$1" -ge 5180 ] && [ "$1" -le 5279 ]; then echo 13
+	elif [ "$1" -ge 5730 ] && [ "$1" -le 5849 ]; then echo 17
+	elif [ "$1" -ge 5850 ] && [ "$1" -le 5999 ]; then echo 18
+	elif [ "$1" -ge 6000 ] && [ "$1" -le 6149 ]; then echo 19
+	elif [ "$1" -ge 6150 ] && [ "$1" -le 6449 ]; then echo 20
+	elif [ "$1" -ge 6600 ] && [ "$1" -le 7399 ]; then echo 66
+	elif [ "$1" -ge 9210 ] && [ "$1" -le 9659 ]; then echo 28
+	elif [ "$1" -ge 9870 ] && [ "$1" -le 9919 ]; then echo 30
+	elif [ "$1" -ge 37750 ] && [ "$1" -le 38249 ]; then echo 38
+	elif [ "$1" -ge 38250 ] && [ "$1" -le 38649 ]; then echo 39
+	elif [ "$1" -ge 38650 ] && [ "$1" -le 39649 ]; then echo 40
+	elif [ "$1" -ge 39650 ] && [ "$1" -le 41589 ]; then echo 41
+	else echo 0
+	fi
+}
+
+# Привязка к соте (Intel XMM: at@sic:freq_lock). Read-формы у freq_lock нет, поэтому
+# текущую привязку из модема НЕ читаем - отдаём "off", а bands.sh покажет то, что мы
+# сами ставили ("remembered"). Так строка всё равно видна с кнопкой «Привязать».
+getcelllock() {
+	echo "off"
+}
+
+# setcelllock off | arfcn <earfcn> | cell <earfcn> <pci>
+# at@sic:freq_lock($sim=0,$rat=3,$band,$enable,$earfcn,$pci). Применяется ТОЛЬКО через
+# режим полёта (CFUN=4 -> CFUN=1), иначе привязка не встаёт - как у FM350. enable=0
+# снимает (нули в остальных полях годятся, проверено). Реконнект делает bands.sh.
+setcelllock() {
+	case "$1" in
+		off)
+			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
+			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,0,0,0,0)" >/dev/null 2>&1; sleep 1
+			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1; sleep 6
+			;;
+		arfcn|cell)
+			_AR="$2"; _PC="$3"; [ -n "$_AR" ] || return
+			case "$_PC" in ''|*[!0-9]*) _PC=0 ;; esac
+			_B=$(_ch2band "$_AR"); [ "$_B" = 0 ] && return
+			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
+			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,$_B,1,$_AR,$_PC)" >/dev/null 2>&1; sleep 1
+			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1; sleep 6
+			;;
+	esac
+}

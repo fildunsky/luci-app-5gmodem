@@ -3284,3 +3284,15 @@ msgstr ""
 
 msgid "Open the SSClash-Go admin panel in a new tab"
 msgstr "Открыть админку SSClash-Go в новой вкладке"
+
+msgid "Switch to XMM"
+msgstr "Переключить в XMM"
+
+msgid "Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands."
+msgstr "Управление диапазонами и режимом сети недоступно в режиме %s. Чтобы управлять диапазонами, переключите модем в режим XMM (кнопка ниже)."
+
+msgid "Switching the modem to XMM — it is rebooting and re-enumerating (~40 s)…"
+msgstr "Переключаю модем в XMM — он перезагружается и переопределяется (~40 с)…"
+
+msgid "Could not switch the modem to XMM."
+msgstr "Не удалось переключить модем в XMM."
