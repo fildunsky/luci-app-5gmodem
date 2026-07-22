@@ -192,12 +192,21 @@ else
 	sleep 3
 	sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
 	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
-	# Прицельно через ubus, а не `ifup`: на части прошивок ifup вызывает полную
-	# перезагрузку конфигурации ("hostapd: Reload all interfaces") и роняет ЧУЖИЕ
-	# интерфейсы - на двухмодемном роутере от этого падал соседний модем.
-	# Подробности и замеры - в _reconnect_iface (bands.sh). ifup - фолбэк.
-	[ -n "$IF" ] && ( sleep 6; ubus call "network.interface.$IF" up >/dev/null 2>&1 \
-		|| ifup "$IF" >/dev/null 2>&1 ) >/dev/null 2>&1 </dev/null &
+	# Прицельно через ubus DOWN+UP, а не `ifup`: на части прошивок ifup вызывает
+	# полную перезагрузку конфигурации ("hostapd: Reload all interfaces") и роняет
+	# ЧУЖИЕ интерфейсы - на двухмодемном роутере от этого падал соседний модем.
+	# Но ОДНОГО `ubus ... up` мало: после CFUN-цикла netifd считает интерфейс всё
+	# ещё поднятым (у fibocom/xmm RNDIS-устройство не отваливается), и `up` на
+	# up-интерфейсе - no-op, дозвон НЕ повторяется -> IP есть, инета нет
+	# (регресс 1.7.1 на FM350, воспроизведён: ubus up -> 0 пакетов, down+up -> ок).
+	# down форсирует teardown прото, up - заново дозвон; и то и другое прицельно,
+	# глобального reload нет. ifup - фолбэк, если ubus-пути нет.
+	[ -n "$IF" ] && ( sleep 6
+		ubus call "network.interface.$IF" down >/dev/null 2>&1
+		sleep 3
+		ubus call "network.interface.$IF" up >/dev/null 2>&1 \
+			|| ifup "$IF" >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
 fi
 
 echo "{\"success\":true,\"mode\":\"$MODE\"}"
