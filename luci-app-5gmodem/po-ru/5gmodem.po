@@ -3125,6 +3125,134 @@ msgstr "Показывать управление фиксацией TTL на с
 msgid "Saved bands"
 msgstr "Сохранённые диапазоны"
 
+msgid "Buttons"
+msgstr "Кнопки"
+
+msgid "system button"
+msgstr "системная кнопка"
+
+msgid "assignable"
+msgstr "назначаемая"
+
+msgid "Has a built-in system action - reassigning is not offered yet."
+msgstr "Есть встроенное системное действие — переназначение пока не предлагается."
+
+msgid "Command on short press (runs as root):"
+msgstr "Команда на короткое нажатие (выполняется от root):"
+
+msgid "shell command, e.g."
+msgstr "команда shell, напр."
+
+msgid ""
+"Physical buttons detected on this router. Assign a shell command to a free "
+"button; it runs on a short press."
+msgstr ""
+"Найденные на роутере физические кнопки. Назначьте свою команду свободной "
+"кнопке — она выполнится по короткому нажатию."
+
+msgid "No physical buttons were detected on this device."
+msgstr "На этом устройстве физические кнопки не обнаружены."
+
+msgid "No assignable buttons were detected on this device."
+msgstr "На этом устройстве нет свободных кнопок для назначения."
+
+msgid "On press (runs as root):"
+msgstr "При нажатии (от root):"
+
+msgid "On release (optional):"
+msgstr "При отпускании (необязательно):"
+
+msgid "(optional) command on release"
+msgstr "(необязательно) команда при отпускании"
+
+msgid ""
+"Physical buttons detected on this router. Assign a shell command to a free "
+"button; it runs on press (and, optionally, on release)."
+msgstr ""
+"Найденные на роутере физические кнопки. Назначьте свободной кнопке свою "
+"команду — она выполнится при нажатии (и, по желанию, при отпускании)."
+
+msgid "switch"
+msgstr "переключатель"
+
+msgid "button"
+msgstr "кнопка"
+
+msgid "shell command"
+msgstr "команда shell"
+
+msgid "In one position (pressed):"
+msgstr "В одном положении (pressed):"
+
+msgid "In the other position (released):"
+msgstr "В другом положении (released):"
+
+msgid "On press (pressed):"
+msgstr "При нажатии (pressed):"
+
+msgid "On release (released, optional):"
+msgstr "При отпускании (released, необязательно):"
+
+msgid "insert a preset"
+msgstr "вставить готовое"
+
+msgid "Toggle service (on/off)"
+msgstr "Переключить сервис (вкл/выкл)"
+
+msgid "Restart service"
+msgstr "Перезапустить сервис"
+
+msgid "Start service"
+msgstr "Запустить сервис"
+
+msgid "Stop service"
+msgstr "Остановить сервис"
+
+msgid "Reboot the modem"
+msgstr "Перезагрузить модем"
+
+msgid "Switch SIM slot"
+msgstr "Сменить SIM-слот"
+
+msgid "Pressed"
+msgstr "Нажата"
+
+msgid "Released"
+msgstr "Отжата"
+
+msgid "Debounce, s"
+msgstr "Антидребезг, с"
+
+msgid "ignore repeats within N seconds (for slow services)"
+msgstr "игнорировать повторы в течение N секунд (для долгих сервисов)"
+
+msgid "delay between repeats, seconds"
+msgstr "задержка между повторами в секундах"
+
+msgid "one position"
+msgstr "одно положение"
+
+msgid "the other position"
+msgstr "другое положение"
+
+msgid "Show as"
+msgstr "Показывать как"
+
+msgid "Physical buttons of this router model, available for assigning functions"
+msgstr "Физические кнопки этой модели роутера, доступные для назначения функций"
+
+msgid "example"
+msgstr "пример"
+
+msgid "Example of a switch-type button (not present on this device):"
+msgstr "Пример кнопки-переключателя (на этом устройстве такой нет):"
+
+msgid "Saved"
+msgstr "Сохранено"
+
+msgid "Cleared"
+msgstr "Очищено"
+
 msgid "Remember bands after reboot"
 msgstr "Восстанавливать диапазоны после перезагрузки"
 

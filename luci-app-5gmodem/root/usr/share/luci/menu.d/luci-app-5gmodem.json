@@ -84,6 +84,15 @@
 		}
 	},
 
+	"admin/modem/5gmodem/buttons": {
+		"title": "Buttons",
+		"order": 65,
+		"action": {
+			"type": "view",
+			"path": "modem/buttons"
+		}
+	},
+
 	"admin/modem/5gmodem/settings": {
 		"title": "Settings",
 		"order": 70,

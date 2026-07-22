@@ -1,0 +1,15 @@
+#!/bin/sh
+# Выполнить команду, привязанную к железной кнопке (вкладка «Кнопки»).
+# События доставляет kmod-gpio-button-hotplug сюда, в /etc/hotplug.d/button/:
+#   $BUTTON - имя input-кода (BTN_0/reset/wps/...),
+#   $ACTION - pressed | released,
+#   $SEEN   - сколько секунд кнопку держали.
+[ -n "$BUTTON" ] || exit 0
+case "$ACTION" in pressed|released) ;; *) exit 0 ;; esac
+
+# Штатные кнопки (у которых есть заводской /etc/rc.button/<name> - reset/wps/...)
+# не трогаем: у них своё поведение. В UI они и не предлагаются; тут - подстраховка.
+[ -f "/etc/rc.button/$BUTTON" ] && exit 0
+
+# В фоне с отвязкой дескрипторов: hotplug не должен ждать команду пользователя.
+( /usr/share/5gmodem/buttons.sh run "$BUTTON" "$ACTION" "$SEEN" ) >/dev/null 2>&1 </dev/null &
