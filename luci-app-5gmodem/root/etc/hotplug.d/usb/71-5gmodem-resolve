@@ -9,6 +9,15 @@
 #
 # Events come in bursts (a modem exposes several interfaces); we coalesce them
 # with a lock so 'resolve' runs once, a few seconds after things settle.
+#
+# ВАЖНО: лок неблокирующий (flock -n), и раньше событие, пришедшее ПОКА работа
+# уже идёт, просто терялось (busybox flock без -w, ждать нельзя). Больной случай
+# (issue #2): E3372 в debug ребутнулся -> вернулся в HiLink; но событие ребута
+# пришло посреди предыдущего долгого autosetup (переключение в debug ~34с, или
+# переключение вкладок модема) - flock -n не дался, событие потерялось, и модем
+# остался в HiLink без AT-портов. Лечим «грязным флагом»: каждое событие ставит
+# resolve.pending; держатель лока в начале итерации его сбрасывает и, если флаг
+# появился снова во время работы, прогоняет ещё раз. Так событие не теряется.
 
 [ "$ACTION" = "add" ] || [ "$ACTION" = "remove" ] || exit 0
 [ "$DEVTYPE" = "usb_device" ] || exit 0
@@ -23,19 +32,29 @@ mkdir -p /tmp/5gmodem 2>/dev/null
 # и TTL-страховка, но она грубее - см. listmodems.sh).
 rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
 
+# Пометка «нужна пересборка». Ставим ДО попытки взять лок: если работа уже идёт,
+# держатель увидит флаг и повторит - событие не потеряется.
+touch /tmp/5gmodem/resolve.pending
+
 (
 	# first event of a burst grabs the lock and does the work; the rest exit
+	# (но их флаг resolve.pending заставит держателя прогнать ещё раз).
 	flock -n 9 || exit 0
-	sleep 5
-	# порты уже переустановились - пересобрать кэш заново, а не отдать протухший
-	/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
-	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-	# Автонастройка нового модема. Сама проверяет, что рабочего интерфейса
-	# ещё нет, поэтому на настроенном роутере ничего не тронет.
-	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
-	# Порты вкладок SMS/USSD/AT: заполняем пустые и чиним протухшие после
-	# переподключения (номера tty сдвигаются, старое значение указывает в никуда).
-	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+	while [ -f /tmp/5gmodem/resolve.pending ]; do
+		# Сбрасываем В НАЧАЛЕ: если новое событие придёт во время работы ниже,
+		# оно поставит флаг снова, и цикл прогонит повторно.
+		rm -f /tmp/5gmodem/resolve.pending
+		sleep 5
+		# порты уже переустановились - пересобрать кэш заново, а не отдать протухший
+		/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
+		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+		# Автонастройка нового модема. Сама проверяет, что рабочего интерфейса
+		# ещё нет, поэтому на настроенном роутере ничего не тронет.
+		/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+		# Порты вкладок SMS/USSD/AT: заполняем пустые и чиним протухшие после
+		# переподключения (номера tty сдвигаются, старое значение указывает в никуда).
+		/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+	done
 ) 9>/tmp/5gmodem/resolve.lock &
 
 exit 0

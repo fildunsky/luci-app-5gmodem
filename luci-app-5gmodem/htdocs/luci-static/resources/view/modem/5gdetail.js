@@ -1415,7 +1415,9 @@ function renderDebugBtn(json) {
 			   и восстановит интерфейс - тот же путь, что при подключении модема. */
 			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
 				(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]);
-			window.setTimeout(function() { window.location.reload(); }, 25000);
+			/* Перезагрузка, КОГДА debug реально включился (не по слепому таймеру -
+			   иначе ловим ещё HiLink посреди свитча). */
+			reloadWhenDebugReady();
 		})
 	}, _('debug')));
 }
@@ -1470,10 +1472,15 @@ function renderApnLine(json) {
 	var el = document.getElementById('apnline');
 	if (!el) { return; }
 	var apn = String(json.iface_apn || '').trim();
+	if (apn === '-') { apn = ''; }
 	var pdp = pdpLabel(json.iface_pdptype);
-	/* У HiLink APN/тип живут в самом модеме, а не в конфиге интерфейса -
-	   этих полей у нас нет, строку не показываем, чтобы не вводить в заблуждение. */
-	if (json.backend === 'hilink' || (!apn && !pdp)) { el.style.display = 'none'; return; }
+	if (pdp === '-') { pdp = ''; }
+	/* У HiLink APN/тип живут в САМОМ модеме, а не в конфиге dhcp-интерфейса -
+	   показывать «-|-» бессмысленно и вводит в заблуждение. at_debug=1 = это
+	   HiLink-модем (в т.ч. переведённый в debug): одного backend==='hilink' мало,
+	   ведь после закрепления AT-порта backend становится 'dhcp'. Плюс общий
+	   случай «оба поля пусты» (в т.ч. пришли как «-»). */
+	if (json.backend === 'hilink' || json.at_debug === '1' || (!apn && !pdp)) { el.style.display = 'none'; return; }
 	el.style.display = '';
 	el.innerHTML = '';
 	var mono = 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
@@ -1752,6 +1759,36 @@ function loadBandsModemband(force) {
    прежний» (см. шапку скрипта), а передать его мимо - значит молча затереть
    настройки. Протокол меняется пересозданием интерфейса, поэтому после успеха
    перечитываем диапазоны: readonly зависит именно от протокола. */
+/* Перевести HiLink-модем в режим с AT-портами (Debug) прямо из подсказки блока
+   диапазонов. Через autosetup - тот же надёжный путь, что и кнопка «debug» в
+   шапке модема и обработка подключения: поднимет DHCP-интерфейс, дождётся
+   готовности web-API, переключит в debug, дождётся портов, восстановит
+   интерфейс. Соединение при этом сохраняется (сетевая карта та же). */
+function switchToDebug(btn) {
+	if (btn) { btn.disabled = true; }
+	setModemBusy(_('Switching the modem into the mode with AT ports…'));
+	fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
+		(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]);
+	reloadWhenDebugReady();
+}
+
+/* Перезагрузить страницу, КОГДА debug реально включился, а не по слепому таймеру.
+   Раньше стоял фиксированный reload ~25 c, но переключение 14dc->1566 + подъём
+   портов + закрепление at_port занимает ~34 c - reload срабатывал ПОСРЕДИ, ловил
+   ещё backend=hilink, и карточка «застревала» на HiLink до ручного обновления.
+   Опрашиваем cached (тот же путь, что и живой опрос страницы): как только метрики
+   пошли по AT (backend != hilink при at_debug=1) - значит debug готов, грузимся.
+   Крышка ~55 c на случай, если что-то пошло не так. */
+function reloadWhenDebugReady(tries) {
+	tries = tries || 0;
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]), '').then(function(out) {
+		var ready = false;
+		try { var j = JSON.parse(out || '{}'); ready = (String(j.backend || '').toLowerCase() !== 'hilink') && (j.at_debug === '1'); } catch (e) {}
+		if (ready || tries >= 18) { window.location.reload(); }
+		else { window.setTimeout(function() { reloadWhenDebugReady(tries + 1); }, 3000); }
+	});
+}
+
 function switchToModemManager(btn) {
 	if (btn) { btn.disabled = true; }
 	return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', 'modemmanager' ]).then(function(res) {
@@ -2431,6 +2468,75 @@ function checkOperatorName(t) {
    load()) СРАЗУ при открытии: страница появляется уже заполненной, тик
    лишь освежает значения. Идемпотентно - sameRender/setRowVisible внутри
    защищают от лишних перестроек DOM и скачков высоты. */
+/* ============ ЗАГОТОВКА (SKELETON) КАРТОЧКИ «МОДЕМ» БЕЗ МОДЕМА ============
+   Когда модема нет на шине ИЛИ снимок протух (cached отдаёт СТАРЫЙ снимок с
+   честным большим age, а не свежий), вместо застрявших старых метрик и таблицы
+   прочерков рисуем «скелет»: силуэты будущего UI светло-серыми скруглёнными
+   полосками. Сразу видно, что тут будет, и нет ложного ощущения живых данных.
+   Ребут по питанию (GPIO) оставляем рабочим - завис модем можно поднять и без
+   данных на экране. */
+function ensureSkeletonCSS() {
+	if (document.getElementById('tgm-skel-css')) { return; }
+	document.head.appendChild(E('style', { 'id': 'tgm-skel-css' },
+		/* Полоска-плейсхолдер вместо текста. inline-block + фикс. высота, чтобы
+		   строки статуса держали свою высоту, как с реальным текстом. */
+		'.tgm-skel-bar{display:inline-block;height:.82em;border-radius:.5em;vertical-align:middle}' +
+		/* Силуэт значка сигнала - по габаритам реальной иконки .tginfo-signal. */
+		'.tgm-skel-sig{display:inline-block;width:34px;height:26px;border-radius:6px}' +
+		/* Силуэт иконки SIM. */
+		'.tgm-skel-ic{display:inline-block;width:26px;height:26px;border-radius:6px}' +
+		/* Силуэт кнопки SIM/eSIM - без надписи, не цветной. */
+		'.tgm-skel-btn{display:inline-block;width:3.6em;height:1.9em;border-radius:7px;margin:0 .3em .3em 0}' +
+		'.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{' +
+			'background:linear-gradient(100deg,rgba(130,130,140,.13) 30%,rgba(130,130,140,.28) 50%,rgba(130,130,140,.13) 70%);' +
+			'background-size:200% 100%;animation:tgm-skel-sh 1.5s ease-in-out infinite}' +
+		'@keyframes tgm-skel-sh{0%{background-position:180% 0}100%{background-position:-180% 0}}' +
+		'@media (prefers-reduced-motion:reduce){.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{animation:none}}'
+	));
+}
+
+/* Силуэт карточки, ПОВТОРЯЮЩИЙ реальную .tginfo-general (те же классы = те же
+   позиции): значок сигнала | иконка SIM | статус (рег/оператор/страна) | инфо
+   (технология/соединение) | правая колонка с силуэтами кнопок SIM/eSIM. Вместо
+   текстов - скруглённые полоски, иконки/кнопки - серые силуэты без надписей. */
+function buildModemSkeleton() {
+	ensureSkeletonCSS();
+	function bar(w) { return E('span', { 'class': 'tgm-skel-bar', 'style': 'width:' + w }); }
+	return E('div', { 'class': 'tginfo-general' }, [
+		E('div', { 'class': 'tginfo-signal' }, [ E('span', { 'class': 'tgm-skel-sig' }) ]),
+		E('span', { 'style': 'display:inline-flex;align-items:center;vertical-align:middle;' }, [
+			E('span', { 'class': 'tgm-skel-ic' })
+		]),
+		E('div', { 'class': 'tginfo-status' }, [
+			E('div', { 'class': 'tginfo-reg' }, [ bar('7em') ]),
+			E('div', { 'class': 'tginfo-op' }, [ bar('9.5em') ]),
+			E('div', { 'class': 'tginfo-loc' }, [ bar('5.5em') ])
+		]),
+		E('div', { 'class': 'tginfo-info' }, [
+			E('div', { 'class': 'tginfo-tech' }, [ bar('8em') ]),
+			E('div', { 'class': 'tginfo-conn' }, [ bar('6em') ])
+		]),
+		E('div', { 'class': 'tginfo-right' }, [
+			E('div', { 'class': 'tginfo-simslot', 'style': 'display:flex;gap:.3em;flex-wrap:wrap;justify-content:flex-end;' }, [
+				E('span', { 'class': 'tgm-skel-btn' }), E('span', { 'class': 'tgm-skel-btn' })
+			])
+		])
+	]);
+}
+
+/* Блок «нет модема»: заголовок, скелет и подсказка. Кнопок тут НЕТ намеренно -
+   плашка должна быть стабильного размера (никаких асинхронно всплывающих
+   элементов, меняющих высоту). Ребут по питанию живёт во вкладке управления
+   частотами (btn-power-reboot), как и остальные ребуты. Строится ОДИН раз,
+   дальше только показывается/скрывается. */
+function buildNoModemBlock() {
+	return E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-none-block' }, [
+		/* Тот же моноширинный заголовок, что и у реальной карточки (#modemname). */
+		E('h3', { 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flow-root;' }, _('Modem')),
+		buildModemSkeleton()
+	]);
+}
+
 function applyMetrics(json) {
 
 					/* Тик пришёл - порт свободен: запускаем отложенные
@@ -2444,26 +2550,44 @@ function applyMetrics(json) {
 					   надпись - таблица прочерков смысла не несёт. Ошибку "busy" не
 					   трогаем: она преходящая (порт занят другим опросом), мигать
 					   «модема нет» на ней нельзя. */
-					var _noModem = (json.error && json.error !== 'busy' && !json.modem);
+					/* ПРОТУХШИЙ СНИМОК = МОДЕМА НЕТ/НЕ ОТВЕЧАЕТ. При удалении модема
+					   cached отдаёт СТАРЫЙ снимок с честным большим age (свежий взять
+					   неоткуда) - без этой проверки старые метрики висели бы часами как
+					   живые. Порог 30 c безопасен: опрос раз в 5 c со свежестью 4 c
+					   держит age присутствующего модема в пределах ~4 c; большой age
+					   бывает только когда чтение раз за разом не удаётся. */
+					var _age = parseInt(json.age, 10);
+					var _stale = (!isNaN(_age) && _age >= 30);
+					var _noModem = (json.error && json.error !== 'busy' && !json.modem) || _stale;
+					/* onbus=1: модем ЕСТЬ на шине, но не отвечает (залип). onbus=0:
+					   убран совсем. Бэкенд кладёт это в ответ «модема нет». */
+					var _onbus = (String(json.onbus) === '1');
 					var _mib = document.getElementById('modem-info-block');
 					var _none = document.getElementById('modem-none-block');
+					var _cell = document.querySelector('[data-blk="cell"]');
+					var _freq = document.querySelector('[data-blk="freq"]');
+					var _ttl = document.querySelector('[data-blk="ttl"]');
 					if (_noModem) {
-						if (_mib) {
-							_mib.style.display = 'none';
-							if (!_none && _mib.parentNode) {
-								_none = E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-none-block' }, [
-									E('h3', {}, _('Modem')),
-									E('p', { 'style': 'opacity:.65;font-style:italic;margin:6px 0;' },
-										_('No modem detected. Insert a modem, then reload the page.'))
-								]);
-								_mib.parentNode.insertBefore(_none, _mib);
-							}
+						if (_mib) { _mib.style.display = 'none'; }
+						/* Сота и TTL без модема пусты - прячем всегда. */
+						if (_cell) { _cell.style.display = 'none'; }
+						if (_ttl) { _ttl.style.display = 'none'; }
+						/* ЗАЛИП (на шине, не отвечает) - оставляем «Управление частотами»:
+						   там кнопка ребута по питанию, которой его можно оживить. УБРАН
+						   совсем - прячем и его (ребутить нечего), остаётся чистый скелет. */
+						if (_freq) { _freq.style.display = _onbus ? '' : 'none'; }
+						if (!_none && _mib && _mib.parentNode) {
+							_none = buildNoModemBlock();
+							_mib.parentNode.insertBefore(_none, _mib);
 						}
 						if (_none) { _none.style.display = ''; }
 						return;   /* метрики не заполняем - заполнять нечем */
 					}
 					if (_none) { _none.style.display = 'none'; }
 					if (_mib) { _mib.style.display = ''; }
+					if (_cell) { _cell.style.display = ''; }
+					if (_freq) { _freq.style.display = ''; }
+					if (_ttl) { _ttl.style.display = ''; }
 
 					/* Строки, которых у ЭТОГО КЛАССА МОДЕМОВ не бывает, убираем
 					   совсем. У модемов без AT-портов (HiLink) веб-API не отдаёт
@@ -2781,13 +2905,27 @@ function applyMetrics(json) {
 						   этот note им вообще не показывается - ветка тут для запаса. */
 						var xmmCap = (json.xmm_capable === '1');
 						var isXmm = (String(json.iface_proto || '').toLowerCase() === 'xmm');
+						var isHilink = (String(json.backend || '').toLowerCase() === 'hilink');
 						var mmBtn = document.getElementById('bandnote-mm-btn');
 						var xmmBtn = document.getElementById('bandnote-xmm-btn');
-						if (xmmCap && !isXmm) {
+						var dbgBtn = document.getElementById('bandnote-dbg-btn');
+						if (isHilink) {
+							/* HiLink: не «переключите на ModemManager» (это неверно - MM
+							   HiLink-модемом не управляет), а «переключите в Debug». Debug
+							   даёт AT-порты для диапазонов/режима/USSD, сохраняя связь.
+							   Обычно это делает автопереключение при подключении; кнопка -
+							   на случай, когда оно не сработало. */
+							document.getElementById('bandnote-text').textContent =
+								_('Band and network-mode management is not available in HiLink (web API) mode. Switch the modem to Debug mode (button below): it exposes AT ports for bands, network mode and USSD while keeping the connection.');
+							if (mmBtn) { mmBtn.style.display = 'none'; }
+							if (xmmBtn) { xmmBtn.style.display = 'none'; }
+							if (dbgBtn) { dbgBtn.style.display = ''; }
+						} else if (xmmCap && !isXmm) {
 							document.getElementById('bandnote-text').textContent =
 								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(json.protocol);
 							if (mmBtn) { mmBtn.style.display = 'none'; }
 							if (xmmBtn) { xmmBtn.style.display = ''; }
+							if (dbgBtn) { dbgBtn.style.display = 'none'; }
 						} else {
 							/* Два разных случая, и путать их нельзя. Если списки
 							   прочитаны (readonly) - честно говорим «показаны, но не
@@ -2799,6 +2937,7 @@ function applyMetrics(json) {
 								: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
 							if (mmBtn) { mmBtn.style.display = ''; }
 							if (xmmBtn) { xmmBtn.style.display = 'none'; }
+							if (dbgBtn) { dbgBtn.style.display = 'none'; }
 						}
 					}
 
@@ -3806,7 +3945,20 @@ simDialog: baseclass.extend({
 										ev.preventDefault();
 										switchToXmm(ev.target);
 									}
-								}, _('Switch to XMM'))
+								}, _('Switch to XMM')),
+								/* HiLink-модему НЕ нужен ModemManager - ему нужен режим
+								   Debug (AT-порты). Показываем эту кнопку вместо MM, когда
+								   backend=hilink: она через autosetup переключает в debug,
+								   сохраняя соединение. */
+								E('button', {
+									'id': 'bandnote-dbg-btn',
+									'class': 'btn cbi-button cbi-button-action',
+									'style': 'display:none',
+									'click': function(ev) {
+										ev.preventDefault();
+										switchToDebug(ev.target);
+									}
+								}, _('Switch to Debug mode'))
 							])
 						])
 					]),

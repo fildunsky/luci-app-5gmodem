@@ -3566,3 +3566,12 @@ msgstr "Пинг"
 
 msgid "Service monitor"
 msgstr "Сервисы"
+
+msgid "Switch to Debug mode"
+msgstr "Переключить в Debug"
+
+msgid "Band and network-mode management is not available in HiLink (web API) mode. Switch the modem to Debug mode (button below): it exposes AT ports for bands, network mode and USSD while keeping the connection."
+msgstr "Управление диапазонами и режимом сети недоступно в режиме HiLink (web API). Переключите модем в режим Debug (кнопка ниже): он открывает AT-порты для диапазонов, режима сети и USSD, сохраняя соединение."
+
+msgid "No modem on the bus. Insert a modem — the card fills in automatically."
+msgstr "Модема нет на шине. Вставьте модем — карточка заполнится автоматически."

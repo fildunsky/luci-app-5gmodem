@@ -222,6 +222,14 @@ LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
 
 uptime_s() { cut -d. -f1 /proc/uptime; }
 
+# 1 - активный модем сейчас на USB-шине, 0 - нет. Дёшево (sysfs, без AT-хождения).
+# Нужно, чтобы отличить «модем ЗАЛИП на шине» (ребут по питанию поможет - страница
+# показывает блок частот с кнопкой) от «убран СОВСЕМ» (ребутить нечего - чистый
+# скелет). Кладём в ответы «модема нет», по нему решает фронт.
+_active_onbus() {
+	[ -n "$_POLL_AM" ] && [ -e "/sys/bus/usb/devices/$_POLL_AM" ] && echo 1 || echo 0
+}
+
 # ОДИН ПИШУЩИЙ, МНОГО ЧИТАЮЩИХ.
 #
 # Опрос модема стоит ~3.8 c, и это почти вся задержка: обвязка rpcd добавляет
@@ -318,9 +326,18 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; t
 			cut -d. -f1 /proc/uptime > "$_hl_cache.t"
 			printf '%s\n' "$_hl_out"
 			;;
-		# Модем не ответил - отдаём прошлый снимок, если он есть: пустой экран
-		# хуже слегка устаревших цифр.
-		*) [ -s "$_hl_cache" ] && cat "$_hl_cache" || echo '{"backend":"hilink"}' ;;
+		# Web-API не ответил. КРАТКО (снимок свежее 30 c) - отдаём прошлый: пустой
+		# экран хуже слегка устаревших цифр, модем мог на миг подвиснуть. ДОЛЬШЕ -
+		# честно «модема нет» (+ onbus), иначе HiLink-цифры висели живыми ЧАСАМИ,
+		# ведь этот путь всегда отдавал старый кэш (issue #2: stale часами).
+		*)
+			_hl_a=$(( $(uptime_s) - $(cat "$_hl_cache.t" 2>/dev/null || echo 0) ))
+			if [ -s "$_hl_cache" ] && [ "$_hl_a" -lt 30 ] 2>/dev/null; then
+				cat "$_hl_cache"
+			else
+				echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
+			fi
+			;;
 	esac
 	exit 0
 fi
@@ -477,7 +494,7 @@ if [ -z "$DEVICE" ]; then
 	# пропал, тогда честно сообщаем. Свежие снимки (< ttl) уже отдал cached выше.
 	_age=$(_snapshot_age)
 	[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }
-	echo '{"error":"Device not found"}'
+	echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
 	exit 0
 fi
 

@@ -56,6 +56,39 @@ modem_vidpid() {
 	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].vidpid" 2>/dev/null | head -1
 }
 
+# ПАРКОВКА ПРОФИЛЯ ВЫТЕСНЯЕМОГО МОДЕМА.
+#
+# Имя секции завязано на USB-путь, поэтому два РАЗНЫХ модема в одном разъёме
+# делят одну секцию (m_1_1), и swap_cleanup затирал настройки прежнего, оставляя
+# в UI одну карточку. Типичный кейс из issue #2: E3372 (HiLink) и T99W175 (MBIM)
+# в один порт по очереди - каждый раз терялся APN/бэндлок/выбор прежнего.
+#
+# Чтобы качели «туда-обратно» не сбрасывали осознанный выбор, ПЕРЕД затиранием
+# уносим пользовательские ключи вытесняемого модема в холдинг-секцию по его IMEI
+# (m_park_<imei>). Когда этот модем вернётся в ЛЮБОЙ порт, ensure_section по IMEI
+# найдёт парковку и migrate_profile восстановит настройки.
+#
+# НАМЕРЕННО НЕ паркуем path/network/netdev: секция без path невидима для всех
+# циклов по m_* (они требуют path), значит парковка не всплывёт фантом-модемом и
+# её не поднимет автоматика; интерфейс вернувшемуся модему заново назначит
+# mkiface/setup_hilink. Паркуем только осознанный выбор пользователя.
+park_profile() {   # $1 - секция, которую вытесняем
+	_pk_imei=$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')
+	[ -n "$_pk_imei" ] || return 0                  # без IMEI парковать не к чему
+	_pk_dst="m_park_$_pk_imei"
+	uci -q set "$CFG.$_pk_dst=modem"
+	uci -q set "$CFG.$_pk_dst.imei=$_pk_imei"
+	uci -q set "$CFG.$_pk_dst.parked=1"
+	# Тот же список, что восстанавливает migrate_profile (минус network - его не
+	# паркуем), чтобы парковка и восстановление были симметричны.
+	for _pk_k in apn_mode apn_plmn esim_show allow_roaming mm_exclude \
+	             celllock at_debug pdp_mode pdp_ok; do
+		_pk_v=$(uci -q get "$CFG.$1.$_pk_k")
+		[ -n "$_pk_v" ] && uci -q set "$CFG.$_pk_dst.$_pk_k=$_pk_v"
+	done
+	logger -t 5gmodem "профиль модема IMEI $_pk_imei припаркован ($1 -> $_pk_dst) до возврата"
+}
+
 # Модем на этом USB-пути ПОДМЕНИЛИ на другой?
 # Секция помнит vidpid; если на шине по тому же пути другой - всё, что мы про
 # него запомнили (at_port, network, iface_proto, тип слотов), относится к
@@ -106,6 +139,9 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	fi
 
 	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
+	# СНАЧАЛА паркуем профиль вытесняемого модема по его IMEI - иначе осознанный
+	# выбор (APN/бэндлок/mm_exclude) сотрётся ниже и возврат модема начнётся с нуля.
+	park_profile "$2"
 	# Интерфейс, созданный НАМИ для прежнего модема (штамп modem_path == этот путь),
 	# теперь заведомо неверен: у другого модема другой прото/устройство. netifd
 	# поднимает его по кругу со стухшим device - живой баг: FM350 -> L850 в тот же
@@ -578,17 +614,21 @@ ensure_section() {
 		uci -q set "$CFG.$SEC.path=$1"
 		uci -q set "$CFG.$SEC.product=$(modem_product "$1")"
 		uci -q set "$CFG.$SEC.vidpid=$(modem_vidpid "$1")"
-		# ТОТ ЖЕ МОДЕМ В ДРУГОМ РАЗЪЁМЕ? Ищем по IMEI - он не меняется, в
-		# отличие от пути. Нашли - забираем настройки со старой секции, чтобы
-		# перетыкание модема не сбрасывало APN, привязку к соте и прочий выбор.
-		_es_imei=$(modem_imei "$1")
-		if [ -n "$_es_imei" ]; then
-			uci -q set "$CFG.$SEC.imei=$_es_imei"
-			_es_old=$(sec_by_imei "$_es_imei" "$SEC")
-			[ -n "$_es_old" ] && migrate_profile "$_es_old" "$SEC"
-		fi
 	else
 		swap_cleanup "$1" "$SEC"
+	fi
+	# ТОТ ЖЕ МОДЕМ (по IMEI) уже известен под другим именем секции? Два случая:
+	#   - переехал в другой разъём (path сменился - секция под старым path);
+	#   - вернулся после вытеснения из этого порта (профиль в m_park_<imei>).
+	# Забираем его настройки, чтобы перетыкание/качели не сбрасывали APN, соту,
+	# mm_exclude и прочий осознанный выбор. Делаем в ОБЕИХ ветках: возврат в ТОТ
+	# ЖЕ порт идёт через else (секция уже есть после swap_cleanup) и раньше
+	# парковку не поднимал. modem_imei дешёв, если IMEI уже в секции.
+	_es_imei=$(modem_imei "$1")
+	if [ -n "$_es_imei" ]; then
+		uci -q set "$CFG.$SEC.imei=$_es_imei"
+		_es_old=$(sec_by_imei "$_es_imei" "$SEC")
+		[ -n "$_es_old" ] && migrate_profile "$_es_old" "$SEC"
 	fi
 	echo "$SEC"
 }
@@ -810,9 +850,36 @@ setup_one_modem() {
 	if is_hilink "$P"; then
 		uci -q set "$CFG.$(secname "$P").kind=hilink"
 		uci -q commit "$CFG"
-		try_at_debug "$P" && rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+		# СНАЧАЛА поднимаем DHCP-интерфейс, ПОТОМ переключаем в debug.
+		# Порядок критичен: web-API модема (192.168.43.1) доступен ТОЛЬКО когда на
+		# его сетевой карте (eth3) есть IP из его подсети - _sess_new/_addr_for
+		# биндят curl на этот адрес. Раньше try_at_debug звался ПЕРВЫМ: на свежем
+		# подключении eth3 ещё без адреса, сессия к web-API не бралась, mode debug
+		# молча проваливался, и модем оставался в HiLink без AT-портов и метрик
+		# (issue #2: "часто не переключается в debug сам").
 		_hnet=$(hilink_netdev "$P")
 		[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
+		# Теперь связь с модемом есть - переключаем в debug. try_at_debug сам ждёт
+		# готовности web-API (в т.ч. получения DHCP-аренды на eth3). После
+		# переэнумерации 14dc->1566 сетевая карта та же (eth3), но интерфейс
+		# переподхватываем, чтобы аренда восстановилась без задержки.
+		if try_at_debug "$P"; then
+			rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+			_hnet=$(hilink_netdev "$P")
+			[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
+		fi
+		# ЗАКРЕПИТЬ AT-ПОРТ, если модем в debug (есть AT-порты) - ВСЕГДА, а не
+		# только когда переключили сейчас: модем мог быть в debug уже (кнопка
+		# «Отладка» на нём же). Без этого 5gmodem.sh видит «kind=hilink и at_port
+		# пуст» и читает метрики по web-API - страница показывает «HiLink», хотя
+		# AT-порты есть. resolve назначил бы порт, но autosetup выходит раньше него.
+		# at_for_path вернёт пусто для чистого HiLink (портов нет) - тогда не трогаем.
+		_dbg_at=$(at_for_path "$P")
+		if [ -n "$_dbg_at" ]; then
+			uci -q set "$CFG.$(secname "$P").at_port=$_dbg_at"
+			[ "$P" = "$(active_path)" ] && uci -q set "$CFG.@5gmodem[0].at_port=$_dbg_at"
+			uci -q commit "$CFG"
+		fi
 		"$RES/ensureports.sh" >/dev/null 2>&1
 		return 0
 	fi
