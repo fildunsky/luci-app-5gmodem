@@ -28,15 +28,15 @@ function checkUpdate() {
 		updSet('upd-latest', d.latest || '—');
 		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
 		if (!d.success) {
-			updSet('upd-status', d.error || _('Could not check for updates.'));
+			updSet('upd-status', d.error || _('Could not check for updates'));
 		} else if (d.update_available == 1 || d.update_available === true) {
 			updShow('upd-install', true);
-			updSet('upd-status', _('A new version is available.'));
+			updSet('upd-status', _('A new version is available'));
 		} else {
-			updSet('upd-status', _('You have the latest version.'));
+			updSet('upd-status', _('You have the latest version'));
 		}
 	}).catch(function(err) {
-		updSet('upd-status', _('Could not check for updates.') + ' ' + (err.message || err));
+		updSet('upd-status', _('Could not check for updates') + ' ' + (err.message || err));
 	}).finally(function() {
 		var b = document.getElementById('upd-check'); if (b) { b.disabled = false; }
 	});
@@ -97,7 +97,7 @@ function pollInstall(tries) {
 				updShow('upd-install', false);
 				finishUpdate();
 			} else {
-				updSet('upd-status', d.error || _('Failed to install the update.'));
+				updSet('upd-status', d.error || _('Failed to install the update'));
 			}
 			updBusy(false);
 		});
@@ -111,21 +111,26 @@ function installUpdate() {
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.started) { pollInstall(0); return; }
-		updSet('upd-status', d.error || _('Failed to install the update.'));
+		updSet('upd-status', d.error || _('Failed to install the update'));
 		updBusy(false);
 	}).catch(function(err) {
-		updSet('upd-status', _('Failed to install the update.') + ' ' + (err.message || err));
+		updSet('upd-status', _('Failed to install the update') + ' ' + (err.message || err));
 		updBusy(false);
 	});
 }
 
 return view.extend({
 	load: function() {
-		return L.resolveDefault(uci.load('5gmodem'));
+		return Promise.all([
+			L.resolveDefault(uci.load('5gmodem')),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}')
+		]);
 	},
 
-	render: function() {
+	render: function(res) {
 		modemtabs.attach();
+		var services = [];
+		try { services = (JSON.parse((res && res[1]) || '{}').services) || []; } catch (e) {}
 
 		/* Блок обновления (без Save/Apply - действие немедленное). */
 		var updateBlock = E('div', { 'class': 'cbi-section tg5g' }, [
@@ -156,7 +161,7 @@ return view.extend({
 					E('div', { 'class': 'cbi-value-description' }, [
 						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
 						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
-						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, [ _('It also installs the translation if available.') ]),
+						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, [ _('It also installs the translation if available') ]),
 					]),
 				]),
 			]),
@@ -170,7 +175,7 @@ return view.extend({
 		/* Отображение блоков на странице «Сеть». Тумблеры включены по умолчанию;
 		   страница «Сеть» скрывает блок, только когда значение явно '0'. */
 		var disp = m.section(form.TypedSection, '5gmodem', _('Network'),
-			_('Options for the Network page and modem behaviour.'));
+			_('Options for the Network page and modem behaviour'));
 		disp.anonymous = true;
 
 		o = disp.option(form.Flag, 'show_ttl', _('Show TTL fixing'),
@@ -183,11 +188,77 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
-		var st = m.section(form.TypedSection, '5gmodem', _('Speed test'),
-			_('Settings for the speed-test button in the "Internet priority" block on the Network page. The test runs from the router over the active uplink.'));
-		st.anonymous = true;
+		/* ОДНА секция «Виджеты» - всё внутри неё: Приоритет интернета, Пинг,
+		   Службы, Тест скорости. У Пинга/Служб карточки вложены ещё глубже
+		   (form.SectionValue), настройки видны только при включённой галочке. */
+		var wdg = m.section(form.TypedSection, '5gmodem', _('Widgets'),
+			_('Show or hide the cards in the widgets row on the Network page. All are on by default.'));
+		wdg.anonymous = true;
 
-		o = st.option(form.Value, 'speedtest_url', _('Download source'),
+		o = wdg.option(form.Flag, 'widget_netpri', _('Internet priority'),
+			_('Uplink switch — modems / Wi-Fi / WAN'));
+		o.default = '1';
+		o.rmempty = false;
+
+		/* --- Пинг (внутри «Виджеты»): галочка + вложенная таблица карточек. --- */
+		o = wdg.option(form.Flag, 'widget_status', _('Ping monitor'),
+			_('Ping cards (host with a green/red dot and latency)'));
+		o.default = '1';
+		o.rmempty = false;
+
+		/* form.TableSection: карточки строками-таблицей (хост | режим | удалить)
+		   в ОДНУ строку при достаточной ширине; без пояснения-описания. */
+		var psv = wdg.option(form.SectionValue, '__pingcards', form.TableSection, 'pingwidget');
+		psv.depends('widget_status', '1');
+		var pw = psv.subsection;
+		pw.anonymous = true;
+		pw.addremove = true;
+		pw.addbtntitle = _('Add ping card');
+
+		var pho = pw.option(form.Value, 'host', _('Host'));
+		pho.value('youtube.com');
+		pho.value('google.com');
+		pho.value('cloudflare.com');
+		pho.value('yandex.ru');
+		pho.default = 'youtube.com';
+		pho.placeholder = 'youtube.com';
+
+		var pmo = pw.option(form.ListValue, 'mode', _('Ping mode'));
+		pmo.value('click', _('On click only'));
+		pmo.value('10', _('Every 10 s'));
+		pmo.value('30', _('Every 30 s'));
+		pmo.value('60', _('Every 60 s'));
+		pmo.default = 'click';
+
+		/* --- Службы (внутри «Виджеты»): галочка + вложенная таблица сервисов. --- */
+		o = wdg.option(form.Flag, 'widget_services', _('Service monitor'),
+			_('Service status cards (running/stopped)'));
+		o.default = '1';
+		o.rmempty = false;
+
+		var ssv = wdg.option(form.SectionValue, '__svccards', form.TableSection, 'svcwidget');
+		ssv.depends('widget_services', '1');
+		var sw = ssv.subsection;
+		sw.anonymous = true;
+		sw.addremove = true;
+		sw.addbtntitle = _('Add service card');
+
+		var svo = sw.option(form.Value, 'service', _('Service'));
+		services.forEach(function(s) { svo.value(s); });
+		svo.placeholder = 'ssclash';
+
+		/* --- Тест скорости (внутри «Виджеты»): галочка + ВЛОЖЕННЫЙ блок настроек
+		   (form.SectionValue, как у карточек), видимый только при вкл. --- */
+		o = wdg.option(form.Flag, 'widget_speedtest', _('Speed test'), _('Speed-test card'));
+		o.default = '1';
+		o.rmempty = false;
+
+		var stv = wdg.option(form.SectionValue, '__sttings', form.TypedSection, '5gmodem');
+		stv.depends('widget_speedtest', '1');
+		var sts = stv.subsection;
+		sts.anonymous = true;
+
+		o = sts.option(form.Value, 'speedtest_url', _('Download source'),
 			_('URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown.'));
 		o.value('https://speedtest.selectel.ru/1GB', 'Selectel — RU (~1 ' + _('GB') + ')');
 		o.value('http://mirror.yandex.ru/archlinux/iso/latest/archlinux-x86_64.iso', 'Yandex — RU (~1 ' + _('GB') + ')');
@@ -199,7 +270,7 @@ return view.extend({
 		o.placeholder = 'http://speedtest.tele2.net/1GB.zip';
 		o.rmempty = true;
 
-		o = st.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
+		o = sts.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
 			_('Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured.'));
 		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
 		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex (RU, works over cellular)');
@@ -209,7 +280,7 @@ return view.extend({
 		o.placeholder = 'https://speedtest.rt.ru/backend/empty.php';
 		o.rmempty = true;
 
-		o = st.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
+		o = sts.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
 			_('Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag).'));
 		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + country flag)');
 		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
@@ -222,7 +293,7 @@ return view.extend({
 		o.placeholder = 'http://ip-api.com/line/?fields=countryCode,query';
 		o.rmempty = true;
 
-		o = st.option(form.Value, 'speedtest_cc_url', _('Country lookup'),
+		o = sts.option(form.Value, 'speedtest_cc_url', _('Country lookup'),
 			_('Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder.'));
 		o.value('http://ip-api.com/line/{ip}?fields=countryCode', 'ip-api.com');
 		o.value('https://ipapi.co/{ip}/country/', 'ipapi.co');
@@ -232,6 +303,35 @@ return view.extend({
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
 				updateBlock,
+				/* Карточки виджетов (пинг/сервисы): обе темы рендерят настоящую
+				   <table class="cbi-section-table">, но по умолчанию она тянется
+				   на 100% ширины и колонки расползаются по-разному. Сжимаем
+				   таблицу и колонки по содержимому - одинаково в bootstrap и proton. */
+				E('style', {}, [
+					/* Таблица карточек — компактная, по содержимому, слева. */
+					'.tg-modem-form table.cbi-section-table{width:auto}',
+					'.tg-modem-form table.cbi-section-table th,',
+					'.tg-modem-form table.cbi-section-table td{width:1%;white-space:nowrap;text-align:left;vertical-align:middle}',
+					'.tg-modem-form table.cbi-section-table select,',
+					'.tg-modem-form table.cbi-section-table input[type="text"]{width:auto;min-width:10em}',
+					/* Внешняя коробка вложенного блока (SectionValue) — во всю ширину
+					   строки. Иначе на proton .cbi-value=flex сжимает её под таблицу. */
+					'.tg-modem-form .cbi-value[data-name="__pingcards"],',
+					'.tg-modem-form .cbi-value[data-name="__svccards"]{display:block}',
+					'.tg-modem-form .cbi-value[data-name="__pingcards"]>.cbi-value-title:empty,',
+					'.tg-modem-form .cbi-value[data-name="__svccards"]>.cbi-value-title:empty{display:none}',
+					'.tg-modem-form .cbi-value[data-name="__pingcards"]>.cbi-value-field,',
+					'.tg-modem-form .cbi-value[data-name="__svccards"]>.cbi-value-field{width:100%}',
+					/* Коробка = flex-полоса: таблица слева, «Добавить» уезжает вправо
+					   (margin-left:auto). overflow:visible ВАЖЕН — proton вешает на
+					   .cbi-tblsection overflow-x:auto, и LuCI берёт её как scrollParent,
+					   считая высоту combobox-меню ≈ высоте строки (короткий список со
+					   скроллом). Возвращаем visible → скролл-родитель = страница. */
+					'.tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection,',
+					'.tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection{width:100%;box-sizing:border-box;overflow:visible;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.3em .8em}',
+					'.tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection>.cbi-section-create,',
+					'.tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection>.cbi-section-create{margin:0 0 0 auto}'
+				].join('')),
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ])
 			]);
 		});

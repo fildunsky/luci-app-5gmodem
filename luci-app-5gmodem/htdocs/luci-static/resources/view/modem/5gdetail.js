@@ -476,170 +476,72 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 `));
 
-function csq_bar(v, m) {
-var pg = document.querySelector('#csq')
-var vn = parseInt(v) || 0;
-var mn = parseInt(m) || 100;
-var pc = Math.floor((100 / mn) * vn);
-		if (vn >= 20 && vn <= 31 ) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #2fb885, #34d399)';
-			var tip = _('Very good');
-			};
-		if (vn >= 14 && vn <= 19) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #c99a3f, #e6b84c)';
-			var tip = _('Good');
-			};
-		if (vn >= 10 && vn <= 13) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d97a3c, #fb923c)';
-			var tip = _('Weak');
-			};
-		if (vn <= 9 && vn >= 1) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d95c5c, #f87171)';
-			var tip = _('Very weak');
-			};
-pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
-pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
+/* ЕДИНАЯ шкала для всех основных метрик (CSQ/RSSI/RSRP/RSRQ/SINR).
+   Раньше у каждого бара была СВОЯ формула ширины и СВОИ пороги цвета, никак не
+   связанные между собой: RSRQ, например, считал ширину как 115-vn (при -19 это
+   134% - переполнение), а цвет брал по другим порогам - заливка и цвет
+   «разъезжались» (полоса у начала, но оранжевая, хотя должна быть красной).
+   Плюс термины были разные и путали (Very good / Mid cell / Cell edge).
+
+   Теперь И заливка, И цвет, И подпись считаются от ОДНИХ порогов: у каждой
+   метрики четыре уровня качества, каждый занимает свою четверть шкалы. Значит
+   низкая заливка ВСЕГДА красная, высокая ВСЕГДА зелёная - согласованно. Термины
+   общие для всех метрик: Слабый / Средний / Хороший / Отличный.
+
+   edges = [худшее, гр1, гр2, гр3, лучшее] по возрастанию качества; отрезки
+   [худшее..гр1]=Слабый(0-25%), [гр1..гр2]=Средний(25-50%), [гр2..гр3]=Хороший
+   (50-75%), [гр3..лучшее]=Отличный(75-100%). Значение больше = лучше у всех
+   метрик (RSRP/RSRQ/RSSI отрицательные - ближе к нулю лучше). */
+var _QUAL_BG = [
+	'linear-gradient(90deg, #d95c5c, #f87171)',   /* 0 Слабый  - красный */
+	'linear-gradient(90deg, #d97a3c, #fb923c)',   /* 1 Средний - оранжевый */
+	'linear-gradient(90deg, #c99a3f, #e6b84c)',   /* 2 Хороший - жёлтый */
+	'linear-gradient(90deg, #2fb885, #34d399)'    /* 3 Отличный - зелёный */
+];
+function _qualLabel(lvl) {
+	return [ _('Poor'), _('Fair'), _('Good'), _('Excellent') ][lvl];
+}
+/* Единица метрики - в подпись, чтобы «-19.0» читалось однозначно. */
+function metricBar(id, rawVal, unit, edges) {
+	var pg = document.querySelector('#' + id);
+	if (!pg || !pg.firstElementChild) { return; }
+	var pf = pg.firstElementChild;
+	pg.style.width = '100%';   /* длину ограничивает CSS max-width (.tginfo) */
+
+	var vn = parseFloat(rawVal);
+	if (rawVal == null || rawVal === '' || rawVal === '-' || isNaN(vn)) {
+		pf.style.width = '0%';
+		pf.style.background = 'rgba(128,128,128,.35)';
+		pg.setAttribute('title', '—');
+		return;
+	}
+
+	/* Уровень (0..3) и ширина: кусочно-линейно по четвертям. */
+	var pc, lvl;
+	if (vn <= edges[0]) { pc = 0; lvl = 0; }
+	else if (vn >= edges[4]) { pc = 100; lvl = 3; }
+	else {
+		lvl = 0; pc = 100;
+		for (var i = 0; i < 4; i++) {
+			if (vn <= edges[i + 1]) {
+				lvl = i;
+				pc = Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i]));
+				break;
+			}
+		}
+	}
+	pf.style.width = pc + '%';
+	pf.style.background = _QUAL_BG[lvl];
+	pg.setAttribute('title', rawVal + (unit ? (' ' + unit) : '') + ' | ' + _qualLabel(lvl));
 }
 
-function rssi_bar(v, m) {
-var pg = document.querySelector('#rssi')
-var vn = parseInt(v) || 0;
-var mn = parseInt(m) || 100;
-if (vn > -50) { vn = -50 };
-if (vn < -110) { vn = -110 };
-var pc =  Math.floor(100*(1-(-50 - vn)/(-50 - mn)));
-		if (vn > -70) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #2fb885, #34d399)';
-			var tip = _('Very good');
-			};
-		if (vn >= -85 && vn <= -70) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #c99a3f, #e6b84c)';
-			var tip = _('Good');
-			};
-		if (vn >= -100 && vn <= -86) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d97a3c, #fb923c)';
-			var tip = _('Weak');
-			};
-		if (vn < -100) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d95c5c, #f87171)';
-			var tip = _('Very weak');
-			};
-pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
-pg.firstElementChild.style.animationDirection = "reverse";
-pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
-}
-
-function rsrp_bar(v, m) {
-var pg = document.querySelector('#rsrp')
-var vn = parseInt(v) || 0;
-var mn = parseInt(m) || 100;
-if (vn > -50) { vn = -50 };
-if (vn < -140) { vn = -140 };
-var pc =  Math.floor(120*(1-(-50 - vn)/(-70 - mn)));
-		if (vn >= -80 ) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #2fb885, #34d399)';
-			var tip = _('Very good');
-			};
-		if (vn >= -90 && vn <= -79) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #c99a3f, #e6b84c)';
-			var tip = _('Good');
-			};
-		if (vn >= -100 && vn <= -89) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d97a3c, #fb923c)';
-			var tip = _('Weak');
-			};
-		if (vn < -100) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d95c5c, #f87171)';
-			var tip = _('Very weak');
-			};
-pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
-pg.firstElementChild.style.animationDirection = "reverse";
-pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
-}
-
-function sinr_bar(v, m) {
-var pg = document.querySelector('#sinr')
-var vn = parseInt(v) || 0;
-var mn = parseInt(m) || 100;
-/* Ширину ОБЯЗАТЕЛЬНО зажимаем в 0..100. Профиль Telit подставлял в SINR сырой
-   индекс модема (143 вместо 8.6 дБ) - формула давала 268%, полоса вылезала за
-   контейнер, растягивала строку таблицы, а таблица перерисовывается каждый
-   опрос: страница дёргалась. Причину починили в профиле, но данные приходят от
-   железа, и одно кривое значение не должно ломать вёрстку. */
-var pc = Math.floor(100-(100*(1-((mn - vn)/(mn - 40)))));
-pc = Math.max(0, Math.min(100, pc));
-		if (vn > 20 ) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #2fb885, #34d399)';
-			var tip = _('Excellent');
-			};
-		if (vn >= 13 && vn <= 20)
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #c99a3f, #e6b84c)';
-			var tip = _('Good');
-			};
-		if (vn > 0 && vn <= 12) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d97a3c, #fb923c)';
-			var tip = _('Mid cell');
-			};
-		if (vn <= 0) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d95c5c, #f87171)';
-			var tip = _('Cell edge');
-			};
-pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
-pg.firstElementChild.style.animationDirection = "reverse";
-pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
-}
-
-function rsrq_bar(v, m) {
-var pg = document.querySelector('#rsrq')
-var vn = parseInt(v) || 0;
-var mn = parseInt(m) || 100;
-var pc = Math.floor(115-(100/mn)*vn);
-if (vn > 0) { vn = 0; };
-		if (vn >= -10 ) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #2fb885, #34d399)';
-			var tip = _('Excellent');
-			};
-		if (vn >= -15 && vn <= -9) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #c99a3f, #e6b84c)';
-			var tip = _('Good');
-			};
-		if (vn >= -20 && vn <= -14) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d97a3c, #fb923c)';
-			var tip = _('Mid cell');
-			};
-		if (vn < -20) 
-			{
-			pg.firstElementChild.style.background = 'linear-gradient(90deg, #d95c5c, #f87171)';
-			var tip = _('Cell edge');
-			};
-pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
-pg.firstElementChild.style.animationDirection = "reverse";
-pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
-}
+/* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
+   в CA-таблице - см. caQuality). Крайние edges - разумные пределы шкалы. */
+function csq_bar(v, m)  { metricBar('csq',  v, '',    [ 0,   10,  15,  20,  31  ]); }
+function rssi_bar(v, m) { metricBar('rssi', v, 'dBm', [ -113, -100, -85, -70, -55 ]); }
+function rsrp_bar(v, m) { metricBar('rsrp', v, 'dBm', [ -125, -100, -90, -80, -70 ]); }
+function rsrq_bar(v, m) { metricBar('rsrq', v, 'dB',  [ -23,  -20, -15, -10, -3  ]); }
+function sinr_bar(v, m) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30  ]); }
 
 /* «Модем перезагружается…» - оверлей со спиннером ПОВЕРХ блока информации модема.
    Смена SIM-слота = полный ребут FM350 с переэнумерацией USB (десятки секунд); без
@@ -1447,7 +1349,7 @@ function renderCaEnabled(state) {
 	cell.appendChild(E('span', { 'style': 'color:#e58a00; margin-right:.6em' },
 		_('Disabled in modem')));
 	cell.appendChild(E('span', { 'style': 'opacity:.65; font-size:90%' },
-		_('The modem works without carrier aggregation, as if it were cat4.')));
+		_('The modem works without carrier aggregation, as if it were cat4')));
 }
 
 function render5gMode(state) {
@@ -1476,7 +1378,7 @@ function render5gMode(state) {
 
 	cell.appendChild(E('span', {
 		'style': 'opacity:.65; font-size:90%; margin-right:.6em'
-	}, _('5G bands and cell lock have no effect until this is enabled.')));
+	}, _('5G bands and cell lock have no effect until this is enabled')));
 
 	cell.appendChild(E('button', {
 		'class': 'btn cbi-button cbi-button-apply',
@@ -1615,7 +1517,7 @@ function renderCellLock(state) {
 		if (locked) {
 			cell.appendChild(E('span', {
 				'style': 'opacity:.65; font-size:90%'
-			}, _('Read-only for this modem: the lock can be removed with an AT command only.')));
+			}, _('Read-only for this modem: the lock can be removed with an AT command only')));
 		}
 		return;
 	}
@@ -1656,7 +1558,7 @@ function renderCellLock(state) {
 						var ear = m.earfcn, pci = m.pci;
 						if (!ear || ear === '-' || !pci || pci === '-') {
 							ui.addNotification(null, E('p',
-								_('Serving cell is unknown yet - try again in a few seconds.')), 'warning');
+								_('Serving cell is unknown yet - try again in a few seconds')), 'warning');
 							return;
 						}
 						return run([ 'setcelllock', 'cell', String(ear), String(pci) ],
@@ -1855,7 +1757,7 @@ function switchToModemManager(btn) {
 	return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', 'modemmanager' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (String(d.proto) === 'modemmanager') {
-			ui.addNotification(null, E('p', _('Interface switched to ModemManager.')), 'info');
+			ui.addNotification(null, E('p', _('Interface switched to ModemManager')), 'info');
 			ifaceProtoIsMM = true;
 			bandsReadOnly = false;
 			/* MM поднимается не мгновенно (перезапуск службы + регистрация
@@ -1863,10 +1765,10 @@ function switchToModemManager(btn) {
 			   получим пустой список и блок мигнёт «нет диапазонов». */
 			window.setTimeout(loadBandsModemband, 3000);
 		} else {
-			ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager.')), 'error');
+			ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager')), 'error');
 		}
 	}).catch(function(err) {
-		ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager.') + ' ' + (err.message || err)), 'error');
+		ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager') + ' ' + (err.message || err)), 'error');
 	}).finally(function() {
 		if (btn) { btn.disabled = false; }
 	});
@@ -1886,14 +1788,14 @@ function switchToXmm(btn) {
 		if (d.error) {
 			ui.hideModal();
 			if (btn) { btn.disabled = false; }
-			ui.addNotification(null, E('p', _('Could not switch the modem to XMM.') + ' ' + d.error), 'error');
+			ui.addNotification(null, E('p', _('Could not switch the modem to XMM') + ' ' + d.error), 'error');
 			return;
 		}
 		window.setTimeout(function() { window.location.reload(); }, 50000);
 	}).catch(function(err) {
 		ui.hideModal();
 		if (btn) { btn.disabled = false; }
-		ui.addNotification(null, E('p', _('Could not switch the modem to XMM.') + ' ' + (err.message || err)), 'error');
+		ui.addNotification(null, E('p', _('Could not switch the modem to XMM') + ' ' + (err.message || err)), 'error');
 	});
 }
 
@@ -2186,9 +2088,9 @@ function applyTTL(has6) {
 		ui.hideModal();
 		if (res.code === 0) {
 			if (ui.addTimeLimitedNotification) {
-				ui.addTimeLimitedNotification(null, E('p', _('TTL applied.')), 4000, 'info');
+				ui.addTimeLimitedNotification(null, E('p', _('TTL applied')), 4000, 'info');
 			} else {
-				ui.addNotification(null, E('p', _('TTL applied.')), 'info');
+				ui.addNotification(null, E('p', _('TTL applied')), 'info');
 			}
 		} else {
 			ui.addNotification(null, E('p', _('Failed to apply TTL') + ': ' + (res.stderr || res.stdout || '')), 'error');

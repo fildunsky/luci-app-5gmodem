@@ -138,7 +138,7 @@ return view.extend({
 					((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
 				/* Модем промолчал (sms_tool отдал пусто - порт занят/подвис/убит по
 				   таймауту): показываем сообщение, а не пустой мигающий курсор. */
-				typewrite(out, _text.trim() ? _text : _('No response from modem.'));
+				typewrite(out, _text.trim() ? _text : _('No response from modem'));
 			}
 
 		}).catch(function(err) {
@@ -288,7 +288,7 @@ return view.extend({
 	render: function (loadResults) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
 
-	let info = _('User interface for sending AT commands using sms-tool.').format('');
+	let info = _('User interface for sending AT commands using sms-tool').format('');
 	
 		let sections = uci.sections('defmodems', 'defmodems');
 		let serialModems = [];

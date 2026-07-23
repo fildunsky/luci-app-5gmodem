@@ -90,7 +90,7 @@ function proposeApnAfterEnable() {
 			   безопасно. */
 			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autoapn', iface ]);
 			ui.addNotification(null, E('p', {},
-				_('eSIM profile switched - checking and updating the APN automatically.')),
+				_('eSIM profile switched - checking and updating the APN automatically')),
 				'info');
 			return;
 		}
@@ -174,7 +174,7 @@ return view.extend({
 
 		if (!st.available) {
 			body.appendChild(E('p', { 'class': 'cbi-section-descr' },
-				_('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem.')));
+				_('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem')));
 		}
 		else if (!st.active) {
 			// найти id eSIM-слота (по метке) для кнопки перехода
@@ -261,7 +261,7 @@ return view.extend({
 			E('div', { 'class': 'cbi-section', 'id': 'esim-section' }, [
 				E('h3', [ 'eSIM' ]),
 				E('div', { 'class': 'cbi-section-descr' },
-					_('Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete.')),
+					_('Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete')),
 				body,
 				this.renderSettings(),
 			]),
@@ -299,7 +299,7 @@ return view.extend({
 								return uci.apply();
 							}).then(function() {
 								ui.addNotification(null,
-									E('p', _('Download transport saved.')), 'info');
+									E('p', _('Download transport saved')), 'info');
 							});
 						})
 					}, [ _('Save') ]),
@@ -326,7 +326,7 @@ return view.extend({
 		if (meta && !warm) {
 			meta.innerHTML = '';
 			meta.appendChild(E('em', { 'class': 'spinning' },
-				_('Please wait, reading eUICC - updating the profile list can be slow.')));
+				_('Please wait, reading eUICC - updating the profile list can be slow')));
 		}
 		/* Поверх тёплого списка EID не затираем, но обратная связь нужна
 		   (кнопка «Обновить» выглядела немой): МЕЛКАЯ пометка рядом с EID.
@@ -544,7 +544,7 @@ return view.extend({
 			   странице (reload сам показывает пометку у EID). */
 			_waitModemBack(240000).then(function() {
 				modemtabs.clearBusy();
-				notify(true, _('eSIM profile added and applied.'), null);
+				notify(true, _('eSIM profile added and applied'), null);
 				self.reload(-3);
 			});
 		}).catch(function() { ui.hideModal(); });

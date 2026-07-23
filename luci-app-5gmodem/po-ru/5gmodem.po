@@ -317,8 +317,8 @@ msgstr "Модем"
 msgid "Modem IMEI"
 msgstr "IMEI модема"
 
-msgid "Network interface for Internet access."
-msgstr "Сетевой интерфейс для доступа в интернет."
+msgid "Network interface for Internet access"
+msgstr "Сетевой интерфейс для доступа в интернет"
 
 msgid "Please select a port"
 msgstr "Выберите порт"
@@ -940,17 +940,17 @@ msgstr ""
 msgid "Recipient"
 msgstr "Получатель"
 
-msgid "E-mail address of the recipient."
-msgstr "Адрес e-mail получателя."
+msgid "E-mail address of the recipient"
+msgstr "Адрес e-mail получателя"
 
-msgid "E-mail address of the sender."
-msgstr "Адрес e-mail отправителя."
+msgid "E-mail address of the sender"
+msgstr "Адрес e-mail отправителя"
 
 msgid "User"
 msgstr "Пользователь"
 
-msgid "Username for SMTP authentication."
-msgstr "Имя пользователя для аутентификации SMTP."
+msgid "Username for SMTP authentication"
+msgstr "Имя пользователя для аутентификации SMTP"
 
 msgid "Password"
 msgstr "Пароль"
@@ -970,11 +970,11 @@ msgstr "Порт SMTP-сервера"
 msgid "Security"
 msgstr "Безопасность"
 
-msgid "TLS: use STARTTLS if the server supports it."
-msgstr "TLS: использовать STARTTLS, если сервер это поддерживает."
+msgid "TLS: use STARTTLS if the server supports it"
+msgstr "TLS: использовать STARTTLS, если сервер это поддерживает"
 
-msgid "SSL: SMTP over SSL."
-msgstr "SSL: SMTP через SSL."
+msgid "SSL: SMTP over SSL"
+msgstr "SSL: SMTP через SSL"
 
 msgid "Required Package"
 msgstr "Требуемый пакет"
@@ -1349,8 +1349,8 @@ msgstr "Укажите, через сколько минут проверять 
 msgid "Notification LED"
 msgstr "Светодиод уведомлений"
 
-msgid "Select the notification LED."
-msgstr "Выберите светодиод уведомлений."
+msgid "Select the notification LED"
+msgstr "Выберите светодиод уведомлений"
 
 msgid "Notify new messages"
 msgstr "Уведомлять о новых сообщениях"
@@ -1422,20 +1422,20 @@ msgstr "Имя <abbr title=\"светодиод\">LED</abbr>"
 msgid "Advanced (merges with sorting)"
 msgstr "Продвинутый (объединение с сортировкой)"
 
-msgid "Call barred."
-msgstr "Вызов запрещён."
+msgid "Call barred"
+msgstr "Вызов запрещён"
 
-msgid "Corporate personalization PIN required."
-msgstr "Требуется PIN корпоративной персонализации."
+msgid "Corporate personalization PIN required"
+msgstr "Требуется PIN корпоративной персонализации"
 
-msgid "Corporate personalization PUK required."
-msgstr "Требуется PUK корпоративной персонализации."
+msgid "Corporate personalization PUK required"
+msgstr "Требуется PUK корпоративной персонализации"
 
 msgid "Create"
 msgstr "Создать"
 
-msgid "Dial string too long."
-msgstr "Слишком длинная строка набора."
+msgid "Dial string too long"
+msgstr "Слишком длинная строка набора"
 
 msgid "Direction of message merging"
 msgstr "Направление объединения сообщений"
@@ -1472,70 +1472,70 @@ msgstr "С начала в конец"
 msgid "From end to beginning"
 msgstr "С конца в начало"
 
-msgid "GPRS services not allowed."
-msgstr "Услуги GPRS не разрешены."
+msgid "GPRS services not allowed"
+msgstr "Услуги GPRS не разрешены"
 
-msgid "Illegal ME."
-msgstr "Недопустимое оборудование (ME)."
+msgid "Illegal ME"
+msgstr "Недопустимое оборудование (ME)"
 
-msgid "Illegal MS."
-msgstr "Недопустимая мобильная станция (MS)."
+msgid "Illegal MS"
+msgstr "Недопустимая мобильная станция (MS)"
 
-msgid "Incorrect password."
-msgstr "Неверный пароль."
+msgid "Incorrect password"
+msgstr "Неверный пароль"
 
-msgid "Invalid block."
-msgstr "Недопустимый блок."
+msgid "Invalid block"
+msgstr "Недопустимый блок"
 
-msgid "Invalid characters in dial string."
-msgstr "Недопустимые символы в строке набора."
+msgid "Invalid characters in dial string"
+msgstr "Недопустимые символы в строке набора"
 
-msgid "Invalid characters in text string."
-msgstr "Недопустимые символы в тексте."
+msgid "Invalid characters in text string"
+msgstr "Недопустимые символы в тексте"
 
-msgid "Invalid dial string."
-msgstr "Недопустимая строка набора."
+msgid "Invalid dial string"
+msgstr "Недопустимая строка набора"
 
-msgid "Invalid index."
-msgstr "Недопустимый индекс."
+msgid "Invalid index"
+msgstr "Недопустимый индекс"
 
-msgid "Invalid mobile class."
-msgstr "Недопустимый класс мобильного устройства."
+msgid "Invalid mobile class"
+msgstr "Недопустимый класс мобильного устройства"
 
-msgid "Location area not allowed."
-msgstr "Зона расположения не разрешена."
+msgid "Location area not allowed"
+msgstr "Зона расположения не разрешена"
 
-msgid "Location update failure – emergency calls only (Specific Modem Sierra)."
+msgid "Location update failure – emergency calls only (Specific Modem Sierra)"
 msgstr ""
 "Сбой обновления местоположения — только экстренные вызовы (специфично для "
 "модемов Sierra)."
 
-msgid "Memory failure."
-msgstr "Сбой памяти."
+msgid "Memory failure"
+msgstr "Сбой памяти"
 
-msgid "Memory full."
-msgstr "Память заполнена."
+msgid "Memory full"
+msgstr "Память заполнена"
 
 msgid "Merge algorithm"
 msgstr "Алгоритм объединения"
 
-msgid "Network not allowed, emergency calls only."
-msgstr "Сеть не разрешена, только экстренные вызовы."
+msgid "Network not allowed, emergency calls only"
+msgstr "Сеть не разрешена, только экстренные вызовы"
 
-msgid "Network personalization PIN required."
-msgstr "Требуется PIN персонализации сети."
+msgid "Network personalization PIN required"
+msgstr "Требуется PIN персонализации сети"
 
-msgid "Network personalization PUK required."
-msgstr "Требуется PUK персонализации сети."
+msgid "Network personalization PUK required"
+msgstr "Требуется PUK персонализации сети"
 
-msgid "Network subset personalization PIN required."
-msgstr "Требуется PIN персонализации подсети."
+msgid "Network subset personalization PIN required"
+msgstr "Требуется PIN персонализации подсети"
 
-msgid "Network subset personalization PUK required."
-msgstr "Требуется PUK персонализации подсети."
+msgid "Network subset personalization PUK required"
+msgstr "Требуется PUK персонализации подсети"
 
-msgid "Network timeout."
-msgstr "Тайм-аут сети."
+msgid "Network timeout"
+msgstr "Тайм-аут сети"
 
 msgid "Next modem"
 msgstr "Следующий модем"
@@ -1543,65 +1543,65 @@ msgstr "Следующий модем"
 msgid "No"
 msgstr "Нет"
 
-msgid "No connection to phone."
-msgstr "Нет соединения с телефоном."
+msgid "No connection to phone"
+msgstr "Нет соединения с телефоном"
 
-msgid "No modems found by ModemManager (mmcli -L)."
-msgstr "ModemManager не нашёл модемов (mmcli -L)."
+msgid "No modems found by ModemManager (mmcli -L)"
+msgstr "ModemManager не нашёл модемов (mmcli -L)"
 
-msgid "No network service."
-msgstr "Сеть недоступна."
+msgid "No network service"
+msgstr "Сеть недоступна"
 
-msgid "Not found."
-msgstr "Не найдено."
+msgid "Not found"
+msgstr "Не найдено"
 
-msgid "Operation not allowed."
-msgstr "Операция не разрешена."
+msgid "Operation not allowed"
+msgstr "Операция не разрешена"
 
-msgid "Operation not supported."
-msgstr "Операция не поддерживается."
+msgid "Operation not supported"
+msgstr "Операция не поддерживается"
 
-msgid "Operation temporarily not allowed."
-msgstr "Операция временно не разрешена."
+msgid "Operation temporarily not allowed"
+msgstr "Операция временно не разрешена"
 
-msgid "Operation temporary not allowed."
-msgstr "Операция временно не разрешена."
+msgid "Operation temporary not allowed"
+msgstr "Операция временно не разрешена"
 
-msgid "PDP authentication failure."
-msgstr "Сбой аутентификации PDP."
+msgid "PDP authentication failure"
+msgstr "Сбой аутентификации PDP"
 
-msgid "PH-SIM PUK required."
-msgstr "Требуется PUK PH-SIM."
+msgid "PH-SIM PUK required"
+msgstr "Требуется PUK PH-SIM"
 
-msgid "PH_FSIM PIN required."
-msgstr "Требуется PIN PH-FSIM."
+msgid "PH_FSIM PIN required"
+msgstr "Требуется PIN PH-FSIM"
 
-msgid "PH_FSIM PUK required."
-msgstr "Требуется PUK PH-FSIM."
+msgid "PH_FSIM PUK required"
+msgstr "Требуется PUK PH-FSIM"
 
-msgid "PH_SIM PIN required."
-msgstr "Требуется PIN PH-SIM."
+msgid "PH_SIM PIN required"
+msgstr "Требуется PIN PH-SIM"
 
-msgid "PLMN not allowed."
-msgstr "Сеть PLMN не разрешена."
+msgid "PLMN not allowed"
+msgstr "Сеть PLMN не разрешена"
 
 msgid "Phone number to be blurred"
 msgstr "Номер телефона для скрытия"
 
-msgid "Phone/Modem adapter link reserved."
-msgstr "Канал адаптера телефона/модема зарезервирован."
+msgid "Phone/Modem adapter link reserved"
+msgstr "Канал адаптера телефона/модема зарезервирован"
 
-msgid "Phone/Modem failure."
-msgstr "Сбой телефона/модема."
+msgid "Phone/Modem failure"
+msgstr "Сбой телефона/модема"
 
-msgid "Phone/Modem is busy."
-msgstr "Телефон/модем занят."
+msgid "Phone/Modem is busy"
+msgstr "Телефон/модем занят"
 
 msgid "Please configure SMS reading port first"
 msgstr "Сначала настройте порт чтения SMS"
 
-msgid "Please wait, and retry your selection later (Specific Modem Sierra)."
-msgstr "Подождите и повторите выбор позже (специфично для модемов Sierra)."
+msgid "Please wait, and retry your selection later (Specific Modem Sierra)"
+msgstr "Подождите и повторите выбор позже (специфично для модемов Sierra)"
 
 msgid ""
 "Please wait.. Process of saving SMS message to a text file is in progress."
@@ -1625,47 +1625,47 @@ msgstr "Предыдущий модем"
 msgid "Read and send SMS via ModemManager (mmcli)"
 msgstr "Чтение и отправка SMS через ModemManager (mmcli)"
 
-msgid "Requested service option not subscribed."
-msgstr "Запрошенная услуга не подключена."
+msgid "Requested service option not subscribed"
+msgstr "Запрошенная услуга не подключена"
 
-msgid "Roaming not allowed in this location area."
-msgstr "Роуминг в этой зоне не разрешён."
+msgid "Roaming not allowed in this location area"
+msgstr "Роуминг в этой зоне не разрешён"
 
-msgid "SIM Blocked."
-msgstr "SIM-карта заблокирована."
+msgid "SIM Blocked"
+msgstr "SIM-карта заблокирована"
 
-msgid "SIM PIN required."
-msgstr "Требуется PIN SIM-карты."
+msgid "SIM PIN required"
+msgstr "Требуется PIN SIM-карты"
 
-msgid "SIM PIN2 required."
-msgstr "Требуется PIN2 SIM-карты."
+msgid "SIM PIN2 required"
+msgstr "Требуется PIN2 SIM-карты"
 
-msgid "SIM PUK required."
-msgstr "Требуется PUK SIM-карты."
+msgid "SIM PUK required"
+msgstr "Требуется PUK SIM-карты"
 
-msgid "SIM PUK2 required."
-msgstr "Требуется PUK2 SIM-карты."
+msgid "SIM PUK2 required"
+msgstr "Требуется PUK2 SIM-карты"
 
-msgid "SIM busy."
-msgstr "SIM-карта занята."
+msgid "SIM busy"
+msgstr "SIM-карта занята"
 
-msgid "SIM failure."
-msgstr "Сбой SIM-карты."
+msgid "SIM failure"
+msgstr "Сбой SIM-карты"
 
-msgid "SIM not inserted."
-msgstr "SIM-карта не вставлена."
+msgid "SIM not inserted"
+msgstr "SIM-карта не вставлена"
 
-msgid "SIM powered down."
-msgstr "SIM-карта отключена."
+msgid "SIM powered down"
+msgstr "SIM-карта отключена"
 
-msgid "SIM wrong."
-msgstr "Неверная SIM-карта."
+msgid "SIM wrong"
+msgstr "Неверная SIM-карта"
 
 msgid "SMS forwarding function is not enabled"
 msgstr "Функция пересылки SMS не включена"
 
-msgid "SS not executed."
-msgstr "Услуга SS не выполнена."
+msgid "SS not executed"
+msgstr "Услуга SS не выполнена"
 
 msgid "Save as .txt file"
 msgstr "Сохранить как .txt файл"
@@ -1679,24 +1679,24 @@ msgstr "Сохранить SMS в txt-файл?"
 msgid "Saving..."
 msgstr "Сохранение..."
 
-msgid "Selection failure – emergency calls only (Specific Modem Sierra)."
+msgid "Selection failure – emergency calls only (Specific Modem Sierra)"
 msgstr ""
 "Сбой выбора — только экстренные вызовы (специфично для модемов Sierra)."
 
 msgid "Send USSD via ModemManager (mmcli)"
 msgstr "Отправка USSD через ModemManager (mmcli)"
 
-msgid "Service operation not supported."
-msgstr "Операция услуги не поддерживается."
+msgid "Service operation not supported"
+msgstr "Операция услуги не поддерживается"
 
-msgid "Service option temporary out of order."
-msgstr "Услуга временно недоступна."
+msgid "Service option temporary out of order"
+msgstr "Услуга временно недоступна"
 
-msgid "Service provider personalization PIN required."
-msgstr "Требуется PIN персонализации оператора."
+msgid "Service provider personalization PIN required"
+msgstr "Требуется PIN персонализации оператора"
 
-msgid "Service provider personalization PUK required."
-msgstr "Требуется PUK персонализации оператора."
+msgid "Service provider personalization PUK required"
+msgstr "Требуется PUK персонализации оператора"
 
 msgid "Simple (merge without sorting)"
 msgstr "Простой (объединение без сортировки)"
@@ -1704,11 +1704,11 @@ msgstr "Простой (объединение без сортировки)"
 msgid "Status"
 msgstr "Статус"
 
-msgid "Text string too long."
-msgstr "Слишком длинный текст."
+msgid "Text string too long"
+msgstr "Слишком длинный текст"
 
-msgid "The last 5 digits of this number will be blurred."
-msgstr "Последние 5 цифр этого номера будут скрыты."
+msgid "The last 5 digits of this number will be blurred"
+msgstr "Последние 5 цифр этого номера будут скрыты"
 
 msgid "UCS2"
 msgstr "UCS2"
@@ -1719,11 +1719,11 @@ msgstr "Не удалось удалить файлы"
 msgid "Unable to load file"
 msgstr "Не удалось загрузить файл"
 
-msgid "Unknown error."
-msgstr "Неизвестная ошибка."
+msgid "Unknown error"
+msgstr "Неизвестная ошибка"
 
-msgid "Unspecified GPRS error."
-msgstr "Неуточнённая ошибка GPRS."
+msgid "Unspecified GPRS error"
+msgstr "Неуточнённая ошибка GPRS"
 
 msgid ""
 "Use ModemManager instead of sms_tool to send USSD codes. For modems that are "
@@ -1736,17 +1736,17 @@ msgstr ""
 "на AT-порту (например, Compal RXM-G1 / Tri Cascade VOS_5G). Требуется пакет "
 "modemmanager. Настройка USSD-порта в этом режиме не используется."
 
-msgid "User abort."
-msgstr "Прервано пользователем."
+msgid "User abort"
+msgstr "Прервано пользователем"
 
-msgid "User interface for sending AT commands using sms-tool."
-msgstr "Интерфейс отправки AT-команд через sms-tool."
+msgid "User interface for sending AT commands using sms-tool"
+msgstr "Интерфейс отправки AT-команд через sms-tool"
 
-msgid "User interface for sending USSD codes using sms-tool."
-msgstr "Интерфейс отправки USSD-кодов через sms-tool."
+msgid "User interface for sending USSD codes using sms-tool"
+msgstr "Интерфейс отправки USSD-кодов через sms-tool"
 
-msgid "User interface for sending messages using sms-tool."
-msgstr "Интерфейс отправки сообщений через sms-tool."
+msgid "User interface for sending messages using sms-tool"
+msgstr "Интерфейс отправки сообщений через sms-tool"
 
 msgid "Yes"
 msgstr "Да"
@@ -1802,8 +1802,8 @@ msgstr "Применить TTL"
 msgid "Applying TTL..."
 msgstr "Применение TTL…"
 
-msgid "TTL applied."
-msgstr "TTL применён."
+msgid "TTL applied"
+msgstr "TTL применён"
 
 msgid "Failed to apply TTL"
 msgstr "Не удалось применить TTL"
@@ -1817,8 +1817,8 @@ msgstr "Температура модема"
 msgid "Advanced (merge with sorting)"
 msgstr "Расширенный (объединение с сортировкой)"
 
-msgid "Please wait, saving the SMS messages to a text file."
-msgstr "Пожалуйста, подождите: сохранение SMS в текстовый файл."
+msgid "Please wait, saving the SMS messages to a text file"
+msgstr "Пожалуйста, подождите: сохранение SMS в текстовый файл"
 
 msgid "Saving the SMS messages to a file failed. Please try again."
 msgstr "Не удалось сохранить SMS в файл. Попробуйте ещё раз."
@@ -1832,14 +1832,14 @@ msgstr "Светодиод сигнализирует о новом сообще
 msgid "Please configure the SMS reading port first"
 msgstr "Сначала настройте порт чтения SMS"
 
-msgid "Show the new-message notification icon on the status overview page."
-msgstr "Показывать значок уведомления о новом сообщении на странице обзора состояния."
+msgid "Show the new-message notification icon on the status overview page"
+msgstr "Показывать значок уведомления о новом сообщении на странице обзора состояния"
 
 msgid "Check the inbox every, minutes"
 msgstr "Проверять входящие каждые, минут"
 
-msgid "How often (in minutes) the inbox is checked."
-msgstr "Как часто (в минутах) проверять входящие."
+msgid "How often (in minutes) the inbox is checked"
+msgstr "Как часто (в минутах) проверять входящие"
 
 msgid "Enter a number between 5 and 59"
 msgstr "Введите число от 5 до 59"
@@ -1847,8 +1847,8 @@ msgstr "Введите число от 5 до 59"
 msgid "Restart the inbox-checking process every"
 msgstr "Перезапускать процесс проверки входящих каждые"
 
-msgid "The process restarts at the chosen interval, which removes any delay in checking the inbox."
-msgstr "Процесс перезапускается через выбранный интервал, что устраняет задержку проверки входящих."
+msgid "The process restarts at the chosen interval, which removes any delay in checking the inbox"
+msgstr "Процесс перезапускается через выбранный интервал, что устраняет задержку проверки входящих"
 
 msgid "LED is dedicated only to these notifications"
 msgstr "Светодиод предназначен только для этих уведомлений"
@@ -1859,14 +1859,14 @@ msgstr "Название <abbr title=\"Light Emitting Diode\">светодиод
 msgid "The mailsend package is not installed. Install it first using the Install… button below."
 msgstr "Пакет mailsend не установлен. Сначала установите его кнопкой «Установить…» ниже."
 
-msgid "Pick a predefined e-mail provider or enter the settings manually."
-msgstr "Выберите готового почтового провайдера или введите настройки вручную."
+msgid "Pick a predefined e-mail provider or enter the settings manually"
+msgstr "Выберите готового почтового провайдера или введите настройки вручную"
 
-msgid "App password / password for SMTP authentication."
-msgstr "Пароль приложения / пароль для аутентификации SMTP."
+msgid "App password / password for SMTP authentication"
+msgstr "Пароль приложения / пароль для аутентификации SMTP"
 
-msgid "Hostname or IP address of the SMTP server."
-msgstr "Имя хоста или IP-адрес SMTP-сервера."
+msgid "Hostname or IP address of the SMTP server"
+msgstr "Имя хоста или IP-адрес SMTP-сервера"
 
 msgid "Enter a decimal value"
 msgstr "Введите десятичное число"
@@ -1874,11 +1874,11 @@ msgstr "Введите десятичное число"
 msgid "Add prefix to the phone number"
 msgstr "Добавлять префикс к номеру телефона"
 
-msgid "Automatically add the prefix to the phone-number field."
-msgstr "Автоматически добавлять префикс в поле номера телефона."
+msgid "Automatically add the prefix to the phone-number field"
+msgstr "Автоматически добавлять префикс в поле номера телефона"
 
-msgid "Send one message to every contact in the contact list."
-msgstr "Отправить одно сообщение всем контактам из списка."
+msgid "Send one message to every contact in the contact list"
+msgstr "Отправить одно сообщение всем контактам из списка"
 
 msgid "Message-sending delay"
 msgstr "Задержка отправки сообщений"
@@ -1901,14 +1901,14 @@ msgstr "Редактирование контактов"
 msgid "Send the USSD code as plain text"
 msgstr "Отправлять USSD-код открытым текстом"
 
-msgid "Send the USSD code as plain text; the command is not encoded into a PDU."
-msgstr "Отправлять USSD-код открытым текстом; команда не кодируется в PDU."
+msgid "Send the USSD code as plain text; the command is not encoded into a PDU"
+msgstr "Отправлять USSD-код открытым текстом; команда не кодируется в PDU"
 
 msgid "Receive the reply without PDU decoding"
 msgstr "Принимать ответ без декодирования PDU"
 
-msgid "Receive and display the reply without decoding it as a PDU."
-msgstr "Принимать и показывать ответ без декодирования его как PDU."
+msgid "Receive and display the reply without decoding it as a PDU"
+msgstr "Принимать и показывать ответ без декодирования его как PDU"
 
 msgid "7-bit"
 msgstr "7-бит"
@@ -1931,8 +1931,8 @@ msgstr "Настройки USSD"
 msgid "AT settings"
 msgstr "Настройки AT"
 
-msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab."
-msgstr "Удаляет все SMS, в том числе не отображаемые на вкладке «Входящие»."
+msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
+msgstr "Удаляет все SMS, в том числе не отображаемые на вкладке «Входящие»"
 
 msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
 msgstr "Выберите «Нет», если у роутера один светодиод или светодиод выполняет несколько задач. Для надёжной работы при совмещённом светодиоде он должен быть определён в системе."
@@ -2006,8 +2006,8 @@ msgstr "Интерфейс «%s» создан (%s), поднимаю…"
 msgid "Interface \"%s\" already exists — bringing it up."
 msgstr "Интерфейс «%s» уже существует — поднимаю."
 
-msgid "No modem found to create an interface for."
-msgstr "Модем для создания интерфейса не найден."
+msgid "No modem found to create an interface for"
+msgstr "Модем для создания интерфейса не найден"
 
 msgid "Failed to create the modem interface"
 msgstr "Не удалось создать интерфейс модема"
@@ -2030,20 +2030,20 @@ msgstr "Текущая версия"
 msgid "Latest version"
 msgstr "Последняя версия"
 
-msgid "It also installs the translation if available."
-msgstr "Русификация ставится вместе с программой, если доступна."
+msgid "It also installs the translation if available"
+msgstr "Русификация ставится вместе с программой, если доступна"
 
 msgid "Checking the latest release…"
 msgstr "Проверка последнего релиза…"
 
-msgid "Could not check for updates."
-msgstr "Не удалось проверить обновления."
+msgid "Could not check for updates"
+msgstr "Не удалось проверить обновления"
 
-msgid "A new version is available."
-msgstr "Доступна новая версия."
+msgid "A new version is available"
+msgstr "Доступна новая версия"
 
-msgid "You have the latest version."
-msgstr "Установлена последняя версия."
+msgid "You have the latest version"
+msgstr "Установлена последняя версия"
 
 msgid "Download and install the latest version now?"
 msgstr "Скачать и установить последнюю версию сейчас?"
@@ -2051,8 +2051,8 @@ msgstr "Скачать и установить последнюю версию �
 msgid "Installing the update…"
 msgstr "Установка обновления…"
 
-msgid "Failed to install the update."
-msgstr "Не удалось установить обновление."
+msgid "Failed to install the update"
+msgstr "Не удалось установить обновление"
 
 msgid "Update installed. Reload the page to see the changes."
 msgstr "Обновление установлено. Обновите страницу, чтобы увидеть изменения."
@@ -2063,8 +2063,8 @@ msgstr "Перезапустить радио модема (перерегист
 msgid "Update is taking too long. Check the connection and try again."
 msgstr "Обновление идёт слишком долго. Проверьте соединение и попробуйте снова."
 
-msgid "USSD session is active — type your reply and press Send."
-msgstr "USSD-сессия активна — введите ответ и нажмите «Отправить»."
+msgid "USSD session is active — type your reply and press Send"
+msgstr "USSD-сессия активна — введите ответ и нажмите «Отправить»"
 
 msgid "Interface protocol"
 msgstr "Протокол интерфейса"
@@ -2228,8 +2228,8 @@ msgstr "eUICC не отвечает (%s), повтор..."
 msgid "Add eSIM profile"
 msgstr "Добавить профиль eSIM"
 
-msgid "eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem."
-msgstr "Управление eSIM недоступно: не установлен пакет lpac, либо активный модем не AT-типа."
+msgid "eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem"
+msgstr "Управление eSIM недоступно: не установлен пакет lpac, либо активный модем не AT-типа"
 
 msgid "The physical SIM is active now. Switch to the eSIM slot to manage eSIM profiles."
 msgstr "Сейчас активна физическая SIM. Переключитесь на eSIM-слот для управления профилями eSIM."
@@ -2240,8 +2240,8 @@ msgstr "Переключиться на eSIM-слот"
 msgid "Switching to the eSIM slot..."
 msgstr "Переключение на eSIM-слот..."
 
-msgid "Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete."
-msgstr "Управление профилями встроенной SIM (eUICC): добавление по коду активации, включение, выключение, удаление."
+msgid "Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete"
+msgstr "Управление профилями встроенной SIM (eUICC): добавление по коду активации, включение, выключение, удаление"
 
 msgid "eUICC is not responding (%s). Try Refresh in a few seconds."
 msgstr "eUICC не отвечает (%s). Нажмите «Обновить» через несколько секунд."
@@ -2273,8 +2273,8 @@ msgstr "Уровень теплового троттлинга модема: %d 
 msgid "Slot is empty (no SIM inserted)"
 msgstr "Слот пуст (SIM-карта не вставлена)"
 
-msgid "Please wait, reading eUICC - updating the profile list can be slow."
-msgstr "Пожалуйста, подождите, идёт чтение eUICC — обновление списка профилей может быть долгим."
+msgid "Please wait, reading eUICC - updating the profile list can be slow"
+msgstr "Пожалуйста, подождите, идёт чтение eUICC — обновление списка профилей может быть долгим"
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "Профиль eSIM загружен. Перезагружаю модем, чтобы он применился..."
@@ -2312,8 +2312,8 @@ msgstr "Удаляю…"
 msgid "Forgotten modems: %d"
 msgstr "Забыто модемов: %d"
 
-msgid "Nothing to forget: every remembered modem is connected."
-msgstr "Забывать нечего: все запомненные модемы подключены."
+msgid "Nothing to forget: every remembered modem is connected"
+msgstr "Забывать нечего: все запомненные модемы подключены"
 
 msgid "Failed to forget disconnected modems"
 msgstr "Не удалось забыть отключённые модемы"
@@ -2345,8 +2345,8 @@ msgstr "Истекло время ожидания"
 msgid "The report has been downloaded. Attach it to your bug report."
 msgstr "Отчёт скачан. Приложите его к сообщению об ошибке."
 
-msgid "Interface “%s” was created for a different modem."
-msgstr "Интерфейс «%s» создан для другого модема."
+msgid "Interface “%s” was created for a different modem"
+msgstr "Интерфейс «%s» создан для другого модема"
 
 msgid "It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now."
 msgstr "К этому модему он привязался лишь потому, что ядро переиспользовало имя устройства, поэтому его настройки (в первую очередь APN) могут быть от прежнего модема и SIM. Создайте интерфейс заново кнопкой ниже — APN подставится по оператору, определённому прямо сейчас."
@@ -2394,8 +2394,8 @@ msgid "Cuts power to the modem slot for a few seconds - as if you unplugged it. 
 msgstr "Снимает питание со слота модема на несколько секунд — как если бы вы его переткнули. Модем вернётся примерно через минуту. Пригодится, когда полная перезагрузка не помогла."
 
 
-msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem."
-msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM."
+msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
+msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM"
 
 msgid "antenna: poor signal"
 msgstr "плохой сигнал"
@@ -2412,8 +2412,8 @@ msgstr "Профиль %s. Перезагружаем модем для прим
 msgid "Profile added. Rebooting the modem to apply it - this takes up to a minute, please wait..."
 msgstr "Профиль добавлен. Перезагружаем модем для применения — это займёт до минуты, подождите…"
 
-msgid "eSIM profile added and applied."
-msgstr "Профиль eSIM добавлен и применён."
+msgid "eSIM profile added and applied"
+msgstr "Профиль eSIM добавлен и применён"
 
 msgid "Checking internet access..."
 msgstr "Проверяем доступ в интернет…"
@@ -2508,8 +2508,8 @@ msgstr "Мост wget / OpenSSL"
 msgid "lpac built-in curl"
 msgstr "Встроенный curl из lpac"
 
-msgid "Download transport saved."
-msgstr "Транспорт загрузки сохранён."
+msgid "Download transport saved"
+msgstr "Транспорт загрузки сохранён"
 
 msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
 msgstr "Как lpac обращается к серверу оператора (SM-DP+). «Автоматически» использует мост, если он доступен. Мост открывает доступ к серверам SM-DP+ с сертификатами GSMA CI, которые встроенный curl в сборках с mbedTLS не осиливает, и вдобавок проверяет сертификат."
@@ -2598,8 +2598,8 @@ msgstr "Снятие привязки — модем перезагружает�
 msgid "Multipart messages found - merging enabled automatically. You can turn it off in SMS settings."
 msgstr "Найдены многочастные сообщения — склейка включена автоматически. Отключить можно в настройках SMS."
 
-msgid "Serving cell is unknown yet - try again in a few seconds."
-msgstr "Обслуживающая сота ещё не определена — попробуйте через несколько секунд."
+msgid "Serving cell is unknown yet - try again in a few seconds"
+msgstr "Обслуживающая сота ещё не определена — попробуйте через несколько секунд"
 
 msgid "Locking to cell EARFCN %s, PCI %s - the modem re-registers..."
 msgstr "Привязка к соте EARFCN %s, PCI %s — модем перерегистрируется…"
@@ -2694,14 +2694,14 @@ msgstr "Показывать на светодиодах корпуса"
 msgid "Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed."
 msgstr "Берётся тот же снимок, что и на страницах, — модем отдельно не опрашивается. Применяется сразу, «Сохранить» не нужно."
 
-msgid "Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing."
-msgstr "Пороги совпадают с раскраской на странице «Сеть»: три лампочки и зелёный цвет значат одно и то же."
+msgid "Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing"
+msgstr "Пороги совпадают с раскраской на странице «Сеть»: три лампочки и зелёный цвет значат одно и то же"
 
 msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
 msgstr "Для теста скорости нужен пакет curl: установите его командой «apk add curl» (или «opkg install curl»). В комплект он не входит — libcurl заметен на роутерах с 8 МБ флеша."
 
-msgid "A different modem is now in this USB port."
-msgstr "В этом USB-разъёме теперь другой модем."
+msgid "A different modem is now in this USB port"
+msgstr "В этом USB-разъёме теперь другой модем"
 
 msgid "Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed."
 msgstr "Его IMEI не совпадает с тем, что был здесь раньше, — похоже, модемы поменяли местами. Настройки этого разъёма (в первую очередь интерфейс и его APN) относятся к прежнему модему и его SIM. Проверьте их ниже и при необходимости создайте интерфейс заново."
@@ -2709,8 +2709,8 @@ msgstr "Его IMEI не совпадает с тем, что был здесь 
 msgid "Saved modem profiles"
 msgstr "Сохранённые профили модемов"
 
-msgid "No modems seen yet."
-msgstr "Модемов пока не было."
+msgid "No modems seen yet"
+msgstr "Модемов пока не было"
 
 msgid "Device ID"
 msgstr "ID устройства"
@@ -2769,8 +2769,8 @@ msgstr "Включён только NSA"
 msgid "Disabled in modem"
 msgstr "Выключен в модеме"
 
-msgid "5G bands and cell lock have no effect until this is enabled."
-msgstr "Диапазоны 5G и привязка к соте не действуют, пока это не включено."
+msgid "5G bands and cell lock have no effect until this is enabled"
+msgstr "Диапазоны 5G и привязка к соте не действуют, пока это не включено"
 
 msgid "Enable 5G"
 msgstr "Включить 5G"
@@ -2781,14 +2781,14 @@ msgstr "Включаем 5G — модем перезапускает радио
 msgid "Carrier aggregation"
 msgstr "Агрегация несущих"
 
-msgid "The modem works without carrier aggregation, as if it were cat4."
-msgstr "Модем работает без агрегации несущих, как cat4."
+msgid "The modem works without carrier aggregation, as if it were cat4"
+msgstr "Модем работает без агрегации несущих, как cat4"
 
 msgid "(after modem restart the lock stays in effect, but the modem reports it as off)"
 msgstr "(после перезапуска модема привязка действует, но модем сообщает, что её нет)"
 
-msgid "Read-only for this modem: the lock can be removed with an AT command only."
-msgstr "У этого модема только чтение: снять привязку можно лишь AT-командой."
+msgid "Read-only for this modem: the lock can be removed with an AT command only"
+msgstr "У этого модема только чтение: снять привязку можно лишь AT-командой"
 
 msgid "default APN"
 msgstr "APN по умолчанию"
@@ -2979,8 +2979,8 @@ msgstr "Сетевое устройство"
 msgid "No AT control port found"
 msgstr "AT-порт управления не найден"
 
-msgid "No HiLink network card found to create an interface for."
-msgstr "Не найдена сетевая карта HiLink, для которой можно создать интерфейс."
+msgid "No HiLink network card found to create an interface for"
+msgstr "Не найдена сетевая карта HiLink, для которой можно создать интерфейс"
 
 msgid "No modem power GPIO on this board"
 msgstr "На этой плате нет GPIO питания модема"
@@ -3033,8 +3033,8 @@ msgstr "отладка"
 msgid "eSIM"
 msgstr "eSIM"
 
-msgid "eSIM profile switched - checking and updating the APN automatically."
-msgstr "Профиль eSIM переключён — проверяю и обновляю APN автоматически."
+msgid "eSIM profile switched - checking and updating the APN automatically"
+msgstr "Профиль eSIM переключён — проверяю и обновляю APN автоматически"
 
 msgid "luci-app-5gmodem"
 msgstr "luci-app-5gmodem"
@@ -3072,8 +3072,8 @@ msgstr "стрим"
 msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "URL файла для теста загрузки. БОЛЬШОЙ файл даёт скорости разогнаться за ~15 с теста; маленький кончается раньше и занижает результат. РФ-хостинг (Selectel/Yandex/Tele2) работает через сотовую РФ; Cloudflare/Hetzner там могут быть заблокированы. Рядом примерный размер."
 
-msgid "No response from modem."
-msgstr "Модем не ответил."
+msgid "No response from modem"
+msgstr "Модем не ответил"
 
 msgid "Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "Эндпойнт, принимающий POST-тело, для теста отдачи. РФ-хостинг (Rostelecom/Yandex) работает через сотовую РФ; сервер читает тело даже при ответе 404/403, поэтому скорость всё равно измеряется."
@@ -3092,11 +3092,11 @@ msgstr ""
 "читать, но не изменять. Чтобы управлять ими, переключите интерфейс на "
 "ModemManager."
 
-msgid "Interface switched to ModemManager."
-msgstr "Интерфейс переключён на ModemManager."
+msgid "Interface switched to ModemManager"
+msgstr "Интерфейс переключён на ModemManager"
 
-msgid "Could not switch the interface to ModemManager."
-msgstr "Не удалось переключить интерфейс на ModemManager."
+msgid "Could not switch the interface to ModemManager"
+msgstr "Не удалось переключить интерфейс на ModemManager"
 
 msgid "Neighbour cells"
 msgstr "Соседние соты"
@@ -3113,8 +3113,8 @@ msgstr "Сота"
 msgid "Applying bands…"
 msgstr "Применяю диапазоны…"
 
-msgid "Options for the Network page and modem behaviour."
-msgstr "Настройки страницы «Сеть» и поведения модема."
+msgid "Options for the Network page and modem behaviour"
+msgstr "Настройки страницы «Сеть» и поведения модема"
 
 msgid "Show TTL fixing"
 msgstr "Фиксация TTL"
@@ -3153,8 +3153,8 @@ msgstr ""
 msgid "No physical buttons were detected on this device."
 msgstr "На этом устройстве физические кнопки не обнаружены."
 
-msgid "No assignable buttons were detected on this device."
-msgstr "На этом устройстве нет свободных кнопок для назначения."
+msgid "No assignable buttons were detected on this device"
+msgstr "На этом устройстве нет свободных кнопок для назначения"
 
 msgid "On press (runs as root):"
 msgstr "При нажатии (от root):"
@@ -3294,8 +3294,275 @@ msgstr "Управление диапазонами и режимом сети �
 msgid "Switching the modem to XMM — it is rebooting and re-enumerating (~40 s)…"
 msgstr "Переключаю модем в XMM — он перезагружается и переопределяется (~40 с)…"
 
-msgid "Could not switch the modem to XMM."
-msgstr "Не удалось переключить модем в XMM."
+msgid "Could not switch the modem to XMM"
+msgstr "Не удалось переключить модем в XMM"
 
 msgid "Checking eSIM support…"
 msgstr "Проверяем поддержку eSIM…"
+
+msgid "Button pressed"
+msgstr "Кнопка нажата"
+
+msgid "Button released"
+msgstr "Кнопка отжата"
+
+msgid "One position"
+msgstr "Одно положение"
+
+msgid "The other position"
+msgstr "Другое положение"
+
+msgid "LEDs in this state:"
+msgstr "Светодиоды в этом состоянии:"
+
+msgid "Command:"
+msgstr "Команда:"
+
+msgid "test on LEDs"
+msgstr "проверить на светодиодах"
+
+msgid "Apply this LED combination now to check it"
+msgstr "Применить эту комбинацию светодиодов сейчас для проверки"
+
+msgid "No LEDs found on this device"
+msgstr "Светодиоды на этом устройстве не найдены"
+
+msgid "on"
+msgstr "вкл"
+
+msgid "off"
+msgstr "выкл"
+
+msgid "Momentary button: each press flips between the two states below (like a service on/off toggle) - running that state’s command and setting its LEDs."
+msgstr "Моментальная кнопка: каждое нажатие переключает между двумя состояниями ниже (как тумблер сервиса вкл/выкл) — выполняет команду этого состояния и выставляет его светодиоды."
+
+msgid "Command type:"
+msgstr "Тип команды:"
+
+msgid "Simple (runs once, no state check)"
+msgstr "Простая (одно нажатие, без проверки состояния)"
+
+msgid "Conditional (checks a service and reflects it on LEDs)"
+msgstr "Условная (проверяет сервис и отражает его на светодиодах)"
+
+msgid "Each press starts the service if it is stopped, or stops it if it is running. The LEDs below then reflect the resulting state."
+msgstr "Каждое нажатие запускает сервис, если он остановлен, или останавливает, если запущен. Светодиоды ниже отражают итоговое состояние."
+
+msgid "Service name (init.d):"
+msgstr "Имя сервиса (init.d):"
+
+msgid "LEDs when the service is running:"
+msgstr "Светодиоды, когда сервис запущен:"
+
+msgid "LEDs when the service is stopped:"
+msgstr "Светодиоды, когда сервис остановлен:"
+
+msgid "Simple"
+msgstr "Простая"
+
+msgid "Conditional"
+msgstr "Условная"
+
+msgid "Add button"
+msgstr "Добавить кнопку"
+
+msgid "All buttons of this device have been added"
+msgstr "Все кнопки этого устройства уже добавлены"
+
+msgid "Assign actions to this router’s physical buttons. Add a button below to configure it."
+msgstr "Назначьте действия физическим кнопкам роутера. Добавьте кнопку ниже, чтобы настроить её."
+
+msgid "(click the button to switch state)"
+msgstr "(нажмите на кнопку, чтобы переключить состояние)"
+
+msgid "Click the button to switch between its pressed and released state"
+msgstr "Нажмите на кнопку, чтобы переключиться между состояниями «нажата» и «отжата»"
+
+msgid "Each press starts the service if stopped, or stops it if running; the LEDs then reflect the result. The terminal above may hold an extra command."
+msgstr "Каждое нажатие запускает сервис, если он остановлен, или останавливает, если запущен; светодиоды затем отражают результат. В терминале выше можно указать дополнительную команду."
+
+msgid "Poor"
+msgstr "Слабый"
+
+msgid "Fair"
+msgstr "Средний"
+
+msgid "Toggle service"
+msgstr "Переключить сервис"
+
+msgid "Switch ON"
+msgstr "Переключатель ВКЛ"
+
+msgid "Switch OFF"
+msgstr "Переключатель ВЫКЛ"
+
+msgid "Add:"
+msgstr "Добавить:"
+
+msgid "Assign actions to this router’s physical buttons. Click a button below to add and configure it."
+msgstr "Назначьте действия физическим кнопкам роутера. Нажмите на кнопку ниже, чтобы добавить и настроить её."
+
+msgid "Pick a service from the command menu above (▾) - it fills the toggle command. Each press flips it; the LEDs below reflect whether it ends up running or stopped."
+msgstr "Выберите сервис из меню команды выше (▾) — подставится команда переключения. Каждое нажатие переключает его; светодиоды ниже отражают, оказался он запущен или остановлен."
+
+msgid "Dismiss"
+msgstr "Закрыть"
+
+msgid "SSClash is running"
+msgstr "SSClash запущен"
+
+msgid "SSClash is stopped"
+msgstr "SSClash остановлен"
+
+msgid "Widgets"
+msgstr "Виджеты"
+
+msgid "Show or hide the cards in the widgets row on the Network page. All are on by default."
+msgstr "Показать или скрыть карточки в ряду виджетов на странице «Сеть». Все включены по умолчанию."
+
+msgid "The uplink switch - buttons for modem / Wi-Fi / WAN."
+msgstr "Переключатель аплинка — кнопки модем / Wi-Fi / WAN."
+
+msgid "YouTube reachability card with live ping."
+msgstr "Карточка доступности YouTube с живым пингом."
+
+msgid "SSClash-Go card (appears only when the service is installed)"
+msgstr "Карточка SSClash-Go (появляется, только если сервис установлен)"
+
+msgid "Speed-test card"
+msgstr "Карточка теста скорости"
+
+msgid "Ping"
+msgstr "Пинг"
+
+msgid "YouTube is reachable"
+msgstr "YouTube доступен"
+
+msgid "No connection to YouTube"
+msgstr "Нет соединения с YouTube"
+
+msgid "Ping to YouTube over the active uplink"
+msgstr "Пинг до YouTube по активному аплинку"
+
+msgid "ms"
+msgstr "мс"
+
+msgid "click"
+msgstr "клик"
+
+msgid "Click to ping YouTube"
+msgstr "Нажмите, чтобы пропинговать YouTube"
+
+msgid "Click to measure ping to YouTube over the active uplink"
+msgstr "Нажмите, чтобы измерить пинг до YouTube по активному аплинку"
+
+msgid "YouTube ping"
+msgstr "Пинг YouTube"
+
+msgid "When to measure ping to YouTube"
+msgstr "Когда измерять пинг до YouTube"
+
+msgid "On click only"
+msgstr "Только по клику"
+
+msgid "Every 10 s"
+msgstr "Каждые 10 с"
+
+msgid "Every 30 s"
+msgstr "Каждые 30 с"
+
+msgid "Every 60 s"
+msgstr "Каждые 60 с"
+
+msgid "Uplink switch — modems / Wi-Fi / WAN"
+msgstr "Переключатель аплинка — модемы / Wi-Fi / WAN"
+
+msgid "YouTube reachability card with ping"
+msgstr "Карточка доступности YouTube с пингом"
+
+msgid "Service status"
+msgstr "Статус сервиса"
+
+msgid "Card that pings a service and shows a green/red dot with latency"
+msgstr "Карточка, которая пингует сервис и показывает зелёную/красную точку с задержкой"
+
+msgid "Service to ping"
+msgstr "Сервис для пинга"
+
+msgid "Pick a preset or type any host / domain"
+msgstr "Выберите пресет или впишите любой хост / домен"
+
+msgid "Ping mode"
+msgstr "Режим пинга"
+
+msgid "When to measure the ping"
+msgstr "Когда измерять пинг"
+
+msgid "Click to ping %s"
+msgstr "Нажмите, чтобы пропинговать %s"
+
+msgid "%s is reachable"
+msgstr "%s доступен"
+
+msgid "No connection to %s"
+msgstr "Нет соединения с %s"
+
+msgid "Click to measure ping to %s over the active uplink"
+msgstr "Нажмите, чтобы измерить пинг до %s по активному аплинку"
+
+msgid "Service ping"
+msgstr "Пинг сервиса"
+
+msgid "Ping cards (green/red dot with latency). Configure the hosts below"
+msgstr "Карточки пинга (зелёная/красная точка с задержкой). Хосты настраиваются ниже"
+
+msgid "Services"
+msgstr "Сервисы"
+
+msgid "Service status cards (running/stopped). Configure the services below"
+msgstr "Карточки статуса сервисов (запущен/остановлен). Сервисы настраиваются ниже"
+
+msgid "Ping cards"
+msgstr "Карточки пинга"
+
+msgid "Each card pings a host and shows the latency. Add as many as you like; if none, YouTube is shown by default."
+msgstr "Каждая карточка пингует хост и показывает задержку. Добавляйте сколько угодно; если ни одной, по умолчанию показан YouTube."
+
+msgid "Add ping card"
+msgstr "Добавить карточку пинга"
+
+msgid "Host"
+msgstr "Хост"
+
+msgid "Service cards"
+msgstr "Карточки сервисов"
+
+msgid "Each card shows whether a service is running. Add as many as you like; if none, SSClash-Go is shown when installed."
+msgstr "Каждая карточка показывает, запущен ли сервис. Добавляйте сколько угодно; если ни одной, при наличии показывается SSClash-Go."
+
+msgid "Add service card"
+msgstr "Добавить карточку сервиса"
+
+msgid "Service"
+msgstr "Сервис"
+
+msgid "running"
+msgstr "запущен"
+
+msgid "stopped"
+msgstr "остановлен"
+
+msgid "Ping cards (host with a green/red dot and latency)"
+msgstr "Карточки пинга (хост с зелёной/красной точкой и задержкой)"
+
+msgid "Service status cards (running/stopped)"
+msgstr "Карточки статуса сервисов (запущен/остановлен)"
+
+msgid "Speed-test card in the widgets row on the Network page. The test runs from the router over the active uplink."
+msgstr "Карточка теста скорости в ряду виджетов на странице «Сеть». Тест идёт с роутера по активному аплинку."
+
+msgid "Ping monitor"
+msgstr "Пинг"
+
+msgid "Service monitor"
+msgstr "Сервисы"

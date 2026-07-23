@@ -541,7 +541,7 @@ return view.extend({
 	   предупреждение о USSD: обычной плашкой в потоке. */
 	let showNumberHint = (sections[0].information == '1');
 	
-		let info = _('User interface for sending messages using sms-tool.').format('');
+		let info = _('User interface for sending messages using sms-tool').format('');
 		
 		let modemSections = uci.sections('defmodems', 'defmodems');
 		let serialModems = [];

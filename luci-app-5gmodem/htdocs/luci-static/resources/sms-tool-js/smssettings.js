@@ -148,14 +148,14 @@ function addReceiveIncoming(s) {
 	o.rmempty = false;
 
 	o = s.option(form.ListValue, 'storage', _('Message storage area'),
-		_('Messages are stored in a specific location (for example, on the SIM card or modem memory), but other areas may also be available depending on the type of device.'));
+		_('Messages are stored in a specific location (for example, on the SIM card or modem memory), but other areas may also be available depending on the type of device'));
 	o.value('SM', _('SIM card'));
 	o.value('ME', _('Modem memory'));
 	o.default = 'SM';
 	o.rmempty = false;
 
 	o = s.option(form.Flag, 'mergesms', _('Merge split messages'),
-		_('Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received.'));
+		_('Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received'));
 	o.rmempty = false;
 
 	o = s.option(form.ListValue, 'algorithm', _('Merge algorithm'));
@@ -192,12 +192,12 @@ function addReceiveIncoming(s) {
 	o.rmempty = false;
 
 	o = s.option(form.Value, 'bnumber', _('Phone number to be blurred'),
-		_('The last 5 digits of this number will be blurred.'));
+		_('The last 5 digits of this number will be blurred'));
 	o.password = true;
 
 	o = s.option(form.Button, '_fsave');
 	o.title = _('Save messages to a text file');
-	o.description = _('This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool.');
+	o.description = _('This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool');
 	o.inputtitle = _('Save as .txt file');
 	o.onclick = function() {
 		return uci.load('sms_tool_js').then(function() {
@@ -211,7 +211,7 @@ function addReceiveIncoming(s) {
 							L.resolveDefault(fs.read_direct('/tmp/mysms.txt'), null).then(function (restxt) {
 								if (restxt) {
 									L.ui.showModal(_('Saving...'), [
-										E('p', { 'class': 'spinning' }, _('Please wait, saving the SMS messages to a text file.'))
+										E('p', { 'class': 'spinning' }, _('Please wait, saving the SMS messages to a text file'))
 									]);
 									let link = E('a', {
 										'download': 'mysms.txt',
@@ -234,7 +234,7 @@ function addReceiveIncoming(s) {
 
 	o = s.option(form.Button, '_fdelete');
 	o.title = _('Delete all messages');
-	o.description = _("This option deletes all SMS messages, including ones not visible on the Inbox tab.");
+	o.description = _("This option deletes all SMS messages, including ones not visible on the Inbox tab");
 	o.inputtitle = _('Delete all');
 	o.onclick = function() {
 		if (confirm(_('Delete all the messages?'))) {
@@ -327,11 +327,11 @@ function addNotifications(s) {
 	};
 
 	o = s.option(form.Flag, 'ontopsms', _('Show notification icon'),
-		_('Show the new-message notification icon on the status overview page.'));
+		_('Show the new-message notification icon on the status overview page'));
 	o.rmempty = false;
 
 	o = s.option(form.Value, 'checktime', _('Check the inbox every, minutes'),
-		_('How often (in minutes) the inbox is checked.'));
+		_('How often (in minutes) the inbox is checked'));
 	o.default = '10';
 	o.rmempty = false;
 	o.validate = function(section_id, value) {
@@ -342,7 +342,7 @@ function addNotifications(s) {
 	o.datatype = 'range(5, 59)';
 
 	o = s.option(form.ListValue, 'prestart', _('Restart the inbox-checking process every'),
-		_('The process restarts at the chosen interval, which removes any delay in checking the inbox.'));
+		_('The process restarts at the chosen interval, which removes any delay in checking the inbox'));
 	o.value('4', _('4h'));
 	o.value('6', _('6h'));
 	o.value('8', _('8h'));
@@ -359,7 +359,7 @@ function addNotifications(s) {
 	o.rmempty = false;
 
 	o = s.option(form.ListValue, 'smsled', _('<abbr title="Light Emitting Diode">LED</abbr> name'),
-		_('Select the notification LED.'));
+		_('Select the notification LED'));
 	o.load = function(section_id) {
 		return L.resolveDefault(fs.list('/sys/class/leds'), []).then(L.bind(function(leds) {
 			if (leds.length > 0) {
@@ -393,7 +393,7 @@ function addEmailForwarding(s) {
 	};
 
 	o = s.option(form.ListValue, 'emailprovider', _('E-mail settings'),
-		_('Pick a predefined e-mail provider or enter the settings manually.'));
+		_('Pick a predefined e-mail provider or enter the settings manually'));
 	for (var key in emailProviders)
 		o.value(key, emailProviders[key].name);
 	o.default = 'custom';
@@ -418,7 +418,7 @@ function addEmailForwarding(s) {
 	};
 
 	o = s.option(form.Value, 'forward_sms_mail_recipient', _('Recipient'));
-	o.description = _('E-mail address of the recipient.');
+	o.description = _('E-mail address of the recipient');
 	o.depends('forward_sms_enabled', '1');
 	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
 	   переключатель, а LuCI удаляет из конфига опции с невыполненными
@@ -429,7 +429,7 @@ function addEmailForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_sender', _('Sender'));
-	o.description = _('E-mail address of the sender.');
+	o.description = _('E-mail address of the sender');
 	o.depends('forward_sms_enabled', '1');
 	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
 	   переключатель, а LuCI удаляет из конфига опции с невыполненными
@@ -440,7 +440,7 @@ function addEmailForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_user', _('User'));
-	o.description = _('Username for SMTP authentication.');
+	o.description = _('Username for SMTP authentication');
 	o.depends('forward_sms_enabled', '1');
 	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
 	   переключатель, а LuCI удаляет из конфига опции с невыполненными
@@ -451,7 +451,7 @@ function addEmailForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_password', _('Password'));
-	o.description = _('App password / password for SMTP authentication.');
+	o.description = _('App password / password for SMTP authentication');
 	o.password = true;
 	o.depends('forward_sms_enabled', '1');
 	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
@@ -463,7 +463,7 @@ function addEmailForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_smtp', _('SMTP server'));
-	o.description = _('Hostname or IP address of the SMTP server.');
+	o.description = _('Hostname or IP address of the SMTP server');
 	o.datatype = 'host';
 	o.depends('forward_sms_enabled', '1');
 	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
@@ -487,8 +487,8 @@ function addEmailForwarding(s) {
 
 	o = s.option(form.ListValue, 'forward_sms_mail_security', _('Security'));
 	o.description = '%s<br />%s'.format(
-		_('TLS: use STARTTLS if the server supports it.'),
-		_('SSL: SMTP over SSL.'));
+		_('TLS: use STARTTLS if the server supports it'),
+		_('SSL: SMTP over SSL'));
 	o.value('tls', 'TLS');
 	o.value('ssl', 'SSL');
 	o.default = 'tls';
@@ -530,11 +530,11 @@ function addSendOptions(s) {
 	};
 
 	o = s.option(form.Flag, 'prefix', _('Add prefix to the phone number'),
-		_('Automatically add the prefix to the phone-number field.'));
+		_('Automatically add the prefix to the phone-number field'));
 	o.rmempty = false;
 
 	o = s.option(form.Flag, 'sendingroup', _('Enable group messaging'),
-		_('Send one message to every contact in the contact list.'));
+		_('Send one message to every contact in the contact list'));
 	o.rmempty = false;
 	o.default = false;
 
@@ -568,11 +568,11 @@ function addUssdOptions(s) {
 	var o;
 
 	o = s.option(form.Flag, 'ussd', _('Send the USSD code as plain text'),
-		_('Send the USSD code as plain text; the command is not encoded into a PDU.'));
+		_('Send the USSD code as plain text; the command is not encoded into a PDU'));
 	o.rmempty = false;
 
 	o = s.option(form.Flag, 'pdu', _('Receive the reply without PDU decoding'),
-		_('Receive and display the reply without decoding it as a PDU.'));
+		_('Receive and display the reply without decoding it as a PDU'));
 	o.rmempty = false;
 
 	o = s.option(form.ListValue, 'coding', _('PDU decoding scheme'));

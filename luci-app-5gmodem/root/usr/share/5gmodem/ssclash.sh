@@ -36,6 +36,17 @@ detect)
 
 	printf '{"present":1,"port":%s,"scheme":"%s","version":"%s"}\n' "$PORT" "$SCHEME" "$VER"
 	;;
+status)
+	# Запущен ли сервис - для «живой» точки в карточке «Приоритета интернета».
+	# procd (service list running:true) надёжнее текста init.d status.
+	R=0
+	if ubus -S call service list '{"name":"ssclash"}' 2>/dev/null | grep -q '"running": *true'; then
+		R=1
+	elif [ -x /etc/init.d/ssclash ] && /etc/init.d/ssclash status >/dev/null 2>&1; then
+		R=1
+	fi
+	printf '{"running":%s}\n' "$R"
+	;;
 *)
 	echo '{"present":0}'
 	;;

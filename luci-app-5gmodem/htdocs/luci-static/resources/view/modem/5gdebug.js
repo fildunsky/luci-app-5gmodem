@@ -285,7 +285,7 @@ return view.extend({
 
 		box.innerHTML = '';
 		if (!list.length) {
-			box.appendChild(E('span', { 'style': 'opacity:.6' }, _('No modems seen yet.')));
+			box.appendChild(E('span', { 'style': 'opacity:.6' }, _('No modems seen yet')));
 			return;
 		}
 		var self = this;
@@ -603,7 +603,7 @@ return view.extend({
 				E('div', { 'class': 'cbi-value-field' }, [
 					sel,
 					E('div', { 'class': 'cbi-value-description' },
-						_('Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing.'))
+						_('Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing'))
 				])
 			])
 		]);
@@ -713,7 +713,7 @@ return view.extend({
 		   открываться. Заменили на простой список имён интерфейсов из uci -
 		   он самодостаточен и ничего не подгружает. */
 		o = s.option(form.ListValue, 'network', _('Interface'),
-			_('Network interface for Internet access.'));
+			_('Network interface for Internet access'));
 		o.depends('auto_port', '0');
 		o.rmempty = true;
 		/* НЕ УДАЛЯТЬ ПРИ СОХРАНЕНИИ - та же ловушка, что у device и at_port.
@@ -833,7 +833,7 @@ return view.extend({
 			if (el && el.getValue() === '1') {
 				el.setValue('0');
 				ui.addNotification(null, E('p',
-					_('“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem.')), 'info');
+					_('“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem')), 'info');
 			}
 		};
 		} /* if (!activeIsHilink) - выпадашка протокола */
@@ -857,7 +857,7 @@ return view.extend({
 		var mForeignIf = mSec ? (uci.get('5gmodem', mSec, 'foreign_iface') || '') : '';
 		if (mForeignIf) {
 			ui.addNotification(null, E('p', {}, [
-				E('strong', {}, _('Interface “%s” was created for a different modem.').format(mForeignIf)), ' ',
+				E('strong', {}, _('Interface “%s” was created for a different modem').format(mForeignIf)), ' ',
 				_('It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now.')
 			]), 'warning');
 		}
@@ -872,7 +872,7 @@ return view.extend({
 		var mImeiChanged = mSec ? (uci.get('5gmodem', mSec, 'imei_changed') || '') : '';
 		if (mImeiChanged === '1') {
 			ui.addNotification(null, E('p', {}, [
-				E('strong', {}, _('A different modem is now in this USB port.')), ' ',
+				E('strong', {}, _('A different modem is now in this USB port')), ' ',
 				_('Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed.')
 			]), 'warning');
 			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]);
@@ -1173,7 +1173,7 @@ return view.extend({
 					ui.addNotification(null, E('p', _('Interface "%s" created (DHCP on %s), bringing it up…').format(out.iface, out.netdev)), 'info');
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
-					ui.addNotification(null, E('p', _('No HiLink network card found to create an interface for.')), 'error');
+					ui.addNotification(null, E('p', _('No HiLink network card found to create an interface for')), 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();
@@ -1230,7 +1230,7 @@ return view.extend({
 					   состояние с роутера, поэтому показывают уже новое. */
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
-					ui.addNotification(null, E('p', _('No modem found to create an interface for.')), 'error');
+					ui.addNotification(null, E('p', _('No modem found to create an interface for')), 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();
@@ -1260,7 +1260,7 @@ return view.extend({
 				var n = parseInt(d.forgotten, 10) || 0;
 				ui.addNotification(null, E('p', n
 					? _('Forgotten modems: %d').format(n)
-					: _('Nothing to forget: every remembered modem is connected.')), 'info');
+					: _('Nothing to forget: every remembered modem is connected')), 'info');
 				if (n) { window.setTimeout(function() { window.location.reload(); }, 1200); }
 			}).catch(function(err) {
 				ui.hideModal();

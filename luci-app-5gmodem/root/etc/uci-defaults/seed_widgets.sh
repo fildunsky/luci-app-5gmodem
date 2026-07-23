@@ -1,0 +1,34 @@
+#!/bin/sh
+# luci-app-5gmodem: посеять УМОЛЧАНИЯ виджетов страницы «Сеть» РЕАЛЬНЫМИ
+# секциями, чтобы они были видны и редактируемы в настройках (а не «неявно»
+# появлялись только на странице). Один раз: флаг widgets_seeded не даёт
+# повторно вернуть карточки, которые пользователь осознанно удалил.
+#
+#   pingwidget (host=youtube.com, mode=click) - карточка пинга по умолчанию;
+#   svcwidget  (service=ssclash)              - карточка сервиса, ТОЛЬКО если
+#                                               ssclash реально установлен.
+
+CFG=5gmodem
+
+# Нет базовой секции @5gmodem[0] - не наш случай/рановатый запуск, выходим.
+uci -q get "$CFG.@5gmodem[0]" >/dev/null 2>&1 || exit 0
+
+# Уже сеяли - выходим (уважаем удаления пользователя).
+[ "$(uci -q get "$CFG.@5gmodem[0].widgets_seeded")" = "1" ] && exit 0
+
+# Карточка пинга по умолчанию - только если пользователь ещё не завёл своих.
+if ! uci -q show "$CFG" 2>/dev/null | grep -q "=pingwidget$"; then
+	_s=$(uci add "$CFG" pingwidget) && {
+		uci -q set "$CFG.$_s.host=youtube.com"
+		uci -q set "$CFG.$_s.mode=click"
+	}
+fi
+
+# Карточка сервиса по умолчанию - SSClash, но лишь когда он установлен.
+if [ -x /etc/init.d/ssclash ] && ! uci -q show "$CFG" 2>/dev/null | grep -q "=svcwidget$"; then
+	_s=$(uci add "$CFG" svcwidget) && uci -q set "$CFG.$_s.service=ssclash"
+fi
+
+uci -q set "$CFG.@5gmodem[0].widgets_seeded=1"
+uci -q commit "$CFG"
+exit 0

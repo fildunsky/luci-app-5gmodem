@@ -535,6 +535,30 @@ set)
 	echo '{"result":"ok","active":"'"$CH"'","changed":true,"mode":"live-route"}'
 	;;
 
+ping)
+	# Пинг до выбранного хоста для виджета «Статус сервиса»: {"ok":1,"ms":23} либо {"ok":0}.
+	# Идёт по активному аплинку (default route). Один пакет, таймаут 2 c.
+	# ICMP до youtube.com обычно проходит даже там, где TCP шейпится.
+	_h="${2:-youtube.com}"
+	_ms=$(ping -c 1 -W 2 "$_h" 2>/dev/null | sed -n 's/.*time=\([0-9]*\).*/\1/p' | head -1)
+	if [ -n "$_ms" ]; then
+		printf '{"ok":1,"ms":%s}\n' "$_ms"
+	else
+		echo '{"ok":0}'
+	fi
+	;;
+svcstatus)
+	# Запущен ли сервис $2 - для виджета «Сервисы» (точка запущен/остановлен).
+	R=0
+	if [ -n "$2" ] && [ -x "/etc/init.d/$2" ]; then
+		if ubus -S call service list "{\"name\":\"$2\"}" 2>/dev/null | grep -q '"running": *true'; then
+			R=1
+		elif /etc/init.d/"$2" status >/dev/null 2>&1; then
+			R=1
+		fi
+	fi
+	printf '{"running":%s}\n' "$R"
+	;;
 *)
 	echo '{"error":"usage: netpri.sh list|set <iface>"}'
 	exit 1

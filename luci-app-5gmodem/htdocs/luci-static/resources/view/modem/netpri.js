@@ -2,6 +2,7 @@
 'require baseclass';
 'require fs';
 'require ui';
+'require uci';
 'require poll';
 
 /*
@@ -19,15 +20,68 @@
 
 var BIN = '/usr/share/5gmodem/netpri.sh';
 
+/* Видимость виджетов блока (настройки «Виджеты»). Все включены по умолчанию:
+   скрываем, только если значение явно '0'. Флаги подгружаются из uci перед
+   отрисовкой (loadWidgetFlags). */
+/* Мастер-флаги групп (вкл/выкл целиком). Внутри групп сами карточки задаются
+   секциями pingwidget / svcwidget (можно добавить сколько угодно). */
+var _widgets = { netpri: true, status: true, services: true, speedtest: true };
+var _pingWidgets = [];   /* [{host, mode}] */
+var _svcWidgets = [];    /* ['ssclash', ...] - сервисы из секций svcwidget */
+function loadWidgetFlags() {
+	return L.resolveDefault(uci.load('5gmodem')).then(function() {
+		function on(k) { return uci.get('5gmodem', '@5gmodem[0]', k) !== '0'; }
+		_widgets.netpri    = on('widget_netpri');
+		_widgets.status    = on('widget_status');
+		_widgets.services  = on('widget_services');
+		_widgets.speedtest = on('widget_speedtest');
+		/* Карточки берём ТОЛЬКО из секций. Умолчания (YouTube, SSClash) заведены
+		   реальными секциями при установке (uci-defaults/seed_widgets.sh), поэтому
+		   видны и правятся в настройках; удалил все - значит пусто, без «магии». */
+		_pingWidgets = (uci.sections('5gmodem', 'pingwidget') || []).map(function(s) {
+			return { host: String(s.host || '').trim(), mode: s.mode || 'click' };
+		}).filter(function(w) { return w.host; });
+		_svcWidgets = (uci.sections('5gmodem', 'svcwidget') || []).map(function(s) {
+			return String(s.service || '').trim();
+		}).filter(Boolean);
+	});
+}
+function effectiveSvcs() { return _svcWidgets; }
+
+/* Состояние пингов по ХОСТУ (несколько карточек). warm-seed из localStorage. */
+var _pingState = {};
+try { _pingState = JSON.parse(window.localStorage.getItem('netpri-pingstate') || '{}') || {}; } catch (e) {}
+/* Состояние сервисов по ИМЕНИ (running: true/false/undefined). */
+var _svcState = {};
+
+/* Фирменная иконка YouTube (красный «плей») - как было, выглядит аккуратнее
+   плашки с глифом. */
+var YT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+	'<rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#FF0000"/>' +
+	'<path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>';
+/* Пресеты сервисов пинга: имя + иконка. svg - готовая SVG-иконка; иначе цветная
+   плашка с глифом (glyph+color). Свой хост - молния ⚡. */
+var PING_PRESETS = {
+	'youtube.com':    { name: 'YouTube',    svg: YT_ICON },
+	'google.com':     { name: 'Google',     color: '#4285F4', glyph: 'G' },
+	'cloudflare.com': { name: 'Cloudflare', color: '#F38020', glyph: '☁' },
+	'yandex.ru':      { name: 'Yandex',     color: '#FF3B30', glyph: 'Я' }
+};
+function pingInfo(host) {
+	host = String(host || 'youtube.com').trim();
+	var p = PING_PRESETS[host.toLowerCase()];
+	if (p) { return { host: host, name: p.name, color: p.color, glyph: p.glyph, svg: p.svg, custom: false }; }
+	return { host: host, name: host, color: null, glyph: '⚡', custom: true };
+}
+
 var CSS = `
 .netpribar { margin: 0 0 1em 0; }
+/* Небольшой заголовок «Приоритет интернета» - только когда виджет включён
+   (см. buildBar). Пояснение для новых пользователей; сворачивания нет. */
 .netpribar .netpribar-title {
 	font-size: .95em; font-weight: 600; opacity: .8; padding: 0 0 .35em 0;
-	display: inline-flex; align-items: center; gap: .35em; cursor: pointer; user-select: none;
+	display: block; user-select: none;
 }
-.netpribar .netpri-chevron { display: inline-flex; transition: transform .15s ease; }
-.netpribar:not(.collapsed) .netpri-chevron { transform: rotate(180deg); }
-.netpribar.collapsed .netpri-row { display: none; }
 .netpribar .netpri-row { display: flex; flex-wrap: wrap; gap: .4em; align-items: stretch; }
 /* proton2025 добавляет ".btn+.btn{margin-left:8px}" между соседними кнопками -
    поверх gap:.4em ряда. Из-за этого промежуток МЕЖДУ интерфейсными кнопками
@@ -35,7 +89,11 @@ var CSS = `
    остаётся только .4em). Снимаем добавку с интерфейсных кнопок, чтобы ВСЕ
    промежутки были ровно gap ряда. margin-left:auto у ssclash/спидтеста (правое
    выравнивание) при этом не трогаем - их из правила исключаем. */
-.netpribar .netpri-row > .netpri-btn:not(.netpri-st):not(.netpri-ssclash) { margin-left: 0; }
+/* Все кнопки без отступа (гасим proton .btn+.btn), а ПЕРВЫЙ правый виджет
+   (YouTube/SSClash/спидтест - что идёт первым) получает margin-left:auto и
+   уводит всю правую группу к правому краю. */
+.netpribar .netpri-row > .netpri-btn:not(.netpri-rightstart) { margin-left: 0; }
+.netpribar .netpri-row > .netpri-rightstart { margin-left: auto; }
 .netpribar .netpri-btn {
 	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
 	display: flex; flex-direction: column; align-items: flex-start; text-align: left;
@@ -60,7 +118,7 @@ var CSS = `
 }
 /* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому
    краю (сервис сверху, скорость по центру, публичный IP снизу). */
-.netpribar .netpri-btn.netpri-st { margin-left: auto; align-items: flex-end; text-align: right; }
+.netpribar .netpri-btn.netpri-st { align-items: flex-end; text-align: right; }
 .netpribar .netpri-st .netpri-st-speed { display: flex; align-items: center; gap: .15em; }
 .netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
 .netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
@@ -104,9 +162,8 @@ var CSS = `
 /* Кнопка SSClash-Go - 3-строчная КАРТОЧКА как модемные (версия / имя+значок /
    IP), поэтому спец-раскладку не задаём: наследует .netpri-btn (колонка, слева).
    Правое выравнивание уходит на неё, спидтест встаёт вплотную справа. */
-/* Содержимое по ПРАВОМУ краю - как у спидтеста рядом (версия и IP справа,
-   пара карточек симметрична). */
-.netpribar .netpri-btn.netpri-ssclash { align-items: flex-end; text-align: right; }
+/* Содержимое по ЛЕВОМУ краю (версия и IP в левый угол) - по решению владельца. */
+/* (выравнивание ssclash задано общим правилом со статус-карточками ниже) */
 /* Значок в фирменном «чипе», как .brand-mark на странице SSClash: скруглённый
    бокс с лёгкой серой плашкой и тонкой рамкой. Фон и рамку вяжем к currentColor
    (= цвет текста кнопки), поэтому на светлой теме это лёгкий серый, а не тёмное
@@ -125,12 +182,32 @@ var CSS = `
 	color: #e8eef2;
 }
 .netpribar .netpri-ssclash .netpri-ssclash-ic svg { display: block; width: 11px; height: 11px; }
-.netpribar .netpri-row.has-ssclash .netpri-ssclash { margin-left: auto; }
-.netpribar .netpri-row.has-ssclash .netpri-st { margin-left: 0; }
-@media (max-width: 680px) {
-	/* на узком экране кнопка тянется, как модемные; спидтест уходит на свою строку */
-	.netpribar .netpri-row.has-ssclash .netpri-ssclash { margin-left: 0; }
-}
+/* Живая точка состояния сервиса после «SSClash»: зелёная со свечением, если
+   запущен, красная - если остановлен. Обновляется опросом ssclash.sh status. */
+.netpri-svcdot { display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+	margin-left: .4em; flex: 0 0 auto; vertical-align: middle;
+	transition: background .3s, box-shadow .3s; }
+.netpri-svcdot.on  { background: #2ea043; box-shadow: 0 0 5px 1px rgba(46,160,67,.9); }
+.netpri-svcdot.off { background: #e5484d; box-shadow: 0 0 5px 1px rgba(229,72,77,.85); }
+/* Карточка «Статус сервиса»: слева, как ssclash. Иконка - цветная плашка с
+   глифом сервиса (или ⚡ для своего хоста). */
+/* Статус/сервис-карточки: содержимое по ПРАВОМУ краю. Точка статуса при этом
+   остаётся ПЕРВОЙ (слева от иконки), с небольшим зазором от неё. Т.к. точка -
+   слева, а название - правее всех, верх/низ выравниваются по концу названия. */
+.netpribar .netpri-btn.netpri-status,
+.netpribar .netpri-btn.netpri-ssclash { align-items: flex-end; text-align: right; }
+.netpribar .netpri-status .netpri-name .netpri-svcdot,
+.netpribar .netpri-ssclash .netpri-name .netpri-svcdot { margin: 0 .2em 0 0; }
+.netpribar .netpri-status .netpri-pingbadge { display: inline-flex; align-items: center;
+	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px;
+	font-size: 11px; font-weight: 700; line-height: 1; color: #fff; }
+.netpribar .netpri-status .netpri-pingbadge.custom { background: transparent; font-size: 15px; }
+.netpribar .netpri-status .netpri-pingico { display: inline-flex; align-items: center;
+	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; }
+.netpribar .netpri-status .netpri-pingico svg { display: block; width: 16px; height: 16px; }
+/* Неопрошенное состояние (YouTube в режиме «по клику», ещё не пинговали) -
+   нейтральная серая точка без свечения. */
+.netpri-svcdot.unknown { background: rgba(127,127,127,.55); box-shadow: none; }
 /* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
    растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
    ширину. Тянутся ТОЛЬКО сами кнопки - контейнер и заголовок не трогаем. */
@@ -142,10 +219,9 @@ var CSS = `
 	   края. min-width не даёт кнопке схлопнуться до нечитаемой при длинном имени
 	   оператора. */
 	.netpribar .netpri-row > .netpri-btn { flex: 1 1 auto; min-width: 7.5em; }
-	/* Спидтест на СВОЮ строку (flex-basis 100%) - только когда ssclash-кнопки НЕТ.
-	   С ssclash они пара (flex:1 1 auto каждая): встают на одну строку, когда
-	   влезают, и переносятся вместе, когда нет. */
-	.netpribar .netpri-row:not(.has-ssclash) > .netpri-btn.netpri-st { flex: 1 1 100%; margin-left: 0; }
+	/* На мобильном правая группа переносится и margin-left:auto не нужен -
+	   иначе первый правый виджет прижимался бы к краю в одиночку. */
+	.netpribar .netpri-row > .netpri-rightstart { margin-left: 0; }
 }
 `;
 
@@ -369,13 +445,17 @@ try {
 } catch (e) {}
 var _ssclashProbed = false;
 function ssclashInit(redraw) {
+	/* Сервис уже известен из кэша - точку опрашиваем сразу, не дожидаясь detect. */
+	if (_ssclash.present) { ssclashStatusInit(); }
 	if (_ssclashProbed) { return; }
 	_ssclashProbed = true;
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'detect' ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j && j.present) {
-			_ssclash = { present: true, port: (j.port || 9091), scheme: (j.scheme || 'http'), version: (j.version || '') };
+			_ssclash = { present: true, port: (j.port || 9091), scheme: (j.scheme || 'http'),
+				version: (j.version || ''), running: _ssclash.running };
 			try { window.localStorage.setItem('netpri-ssclash', JSON.stringify(_ssclash)); } catch (e) {}
+			ssclashStatusInit();
 			if (typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		} else {
 			var _had = _ssclash.present;
@@ -404,15 +484,159 @@ function ssClashBtn() {
 	ic.innerHTML = SSCLASH_ICON;
 	/* Три строки, как у карточек «Приоритета интернета»: версия сверху, имя с
 	   значком по центру, IP роутера снизу (совпадает с целью ссылки). */
+	/* Точка состояния после «SSClash». Начальный цвет - из последнего известного
+	   (_ssclash.running, переживает в localStorage), опрос ниже освежает. */
+	var dot = E('span', { 'class': 'netpri-svcdot ' + (_ssclash.running ? 'on' : 'off'),
+		'title': _ssclash.running ? _('SSClash is running') : _('SSClash is stopped') });
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-ssclash',
 		'data-tooltip': _('Open the SSClash-Go admin panel in a new tab'),
 		'click': function() { window.open(url, '_blank', 'noopener'); }
 	}, [
 		E('span', { 'class': 'netpri-sub' }, _ssclash.version || 'SSClash-Go'),
-		E('span', { 'class': 'netpri-name' }, [ ic, E('span', {}, 'SSClash') ]),
+		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, 'SSClash') ]),
 		E('span', { 'class': 'netpri-ip' }, host)
 	]);
+}
+
+/* --- Карточки пинга (виджет «Статус сервиса»), по одной на хост ------------- */
+function pingBadge(info) {
+	if (info.svg) {
+		var ic = E('span', { 'class': 'netpri-pingico' });
+		ic.innerHTML = info.svg;
+		return ic;
+	}
+	if (info.custom) { return E('span', { 'class': 'netpri-pingbadge custom' }, info.glyph); }
+	return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:' + info.color }, info.glyph);
+}
+function _pDot(st) { return (st && st.done) ? (st.ok ? 'on' : 'off') : 'unknown'; }
+function _pMs(st) {
+	return (st && st.done && st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : ('— ' + _('ms'));
+}
+function _pTip(st, info) {
+	return !(st && st.done) ? _('Click to ping %s').format(info.name)
+		: (st.ok ? _('%s is reachable').format(info.name) : _('No connection to %s').format(info.name));
+}
+function pingCard(w) {
+	var host = String(w.host || 'youtube.com').trim();
+	var info = pingInfo(host);
+	var st = _pingState[host];
+	var dot = E('span', { 'class': 'netpri-svcdot ' + _pDot(st), 'title': _pTip(st, info) });
+	return E('button', {
+		'class': 'btn cbi-button netpri-btn netpri-status', 'data-host': host,
+		'data-tooltip': _('Click to measure ping to %s over the active uplink').format(info.name),
+		'click': function(ev) { ev.preventDefault(); pingOnce(host); }
+	}, [
+		E('span', { 'class': 'netpri-sub' }, _('Status')),
+		E('span', { 'class': 'netpri-name' }, [ dot, pingBadge(info), E('span', {}, info.name) ]),
+		E('span', { 'class': 'netpri-ip' }, _pMs(st))
+	]);
+}
+function updatePingCard(host) {
+	var st = _pingState[host], info = pingInfo(host);
+	var sel = '.netpri-status[data-host="' + host + '"]';
+	document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
+		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_pDot(st)); d.title = _pTip(st, info);
+	});
+	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _pMs(st); });
+}
+var _pingBusy = {};
+function pingOnce(host) {
+	host = String(host).trim();
+	if (_pingBusy[host]) { return Promise.resolve(); }
+	_pingBusy[host] = true;
+	document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
+	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '').then(function(out) {
+		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null) };
+		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
+		_pingBusy[host] = false;
+		updatePingCard(host);
+	});
+}
+/* Автопинг только у карточек с интервальным режимом; «по клику» ждут клика. */
+var _pingPolls = {};
+function pingInit() {
+	_pingWidgets.forEach(function(w) {
+		var n = parseInt(w.mode, 10);
+		if (isNaN(n) || n <= 0 || _pingPolls[w.host]) { return; }
+		_pingPolls[w.host] = true;
+		pingOnce(w.host);
+		(function(h) { poll.add(function() { return pingOnce(h); }, n); })(w.host);
+	});
+}
+
+/* --- Карточки сервисов (виджет «Сервисы»), кроме SSClash (у него своя) ------ */
+/* Известные сервисы с уникальными иконками добавим позже; пока - гаечный ключ. */
+var SVC_KNOWN = {};
+function svcName(service) { return (SVC_KNOWN[service] && SVC_KNOWN[service].name) || service; }
+function svcIcon(service) {
+	var k = SVC_KNOWN[service];
+	if (k && k.glyph) { return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:' + (k.color || '#888') }, k.glyph); }
+	return E('span', { 'class': 'netpri-pingbadge custom' }, '🔧');
+}
+function _sDot(r) { return (r === undefined) ? 'unknown' : (r ? 'on' : 'off'); }
+function _sBottom(r) { return (r === undefined) ? '—' : (r ? _('running') : _('stopped')); }
+function svcCard(service) {
+	var r = _svcState[service];
+	var dot = E('span', { 'class': 'netpri-svcdot ' + _sDot(r),
+		'title': (r === undefined) ? service : (r ? _('%s is running').format(service) : _('%s is stopped').format(service)) });
+	return E('button', {
+		'class': 'btn cbi-button netpri-btn netpri-status', 'data-svc': service, 'data-tooltip': service
+	}, [
+		E('span', { 'class': 'netpri-sub' }, _('Service')),
+		E('span', { 'class': 'netpri-name' }, [ dot, svcIcon(service), E('span', {}, svcName(service)) ]),
+		E('span', { 'class': 'netpri-ip' }, _sBottom(r))
+	]);
+}
+function updateSvcCard(service) {
+	var r = _svcState[service], sel = '.netpri-status[data-svc="' + service + '"]';
+	document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
+		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_sDot(r));
+	});
+	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _sBottom(r); });
+}
+var _svcGenericPoll = false;
+function svcStatusInit(services) {
+	services = (services || []).filter(function(s) { return s && s !== 'ssclash'; });
+	if (!services.length || _svcGenericPoll) { return; }
+	_svcGenericPoll = true;
+	var tick = function() {
+		return Promise.all(services.map(function(svc) {
+			return L.resolveDefault(fs.exec_direct(BIN, [ 'svcstatus', svc ]), '').then(function(out) {
+				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+				_svcState[svc] = !!j.running;
+				updateSvcCard(svc);
+			});
+		}));
+	};
+	tick();
+	poll.add(tick, 5);
+}
+
+/* Живой опрос состояния сервиса SSClash - красит точку(и) в карточке. */
+var _svcPolling = false;
+function updateSvcDots() {
+	var cls = _ssclash.running ? 'on' : 'off';
+	var tip = _ssclash.running ? _('SSClash is running') : _('SSClash is stopped');
+	document.querySelectorAll('.netpri-svcdot').forEach(function(d) {
+		d.classList.remove('on', 'off'); d.classList.add(cls); d.title = tip;
+	});
+}
+function ssclashStatusInit() {
+	if (_svcPolling) { return; }
+	_svcPolling = true;
+	var tick = function() {
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'status' ]), '')
+			.then(function(out) {
+				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+				_ssclash.running = !!j.running;
+				try { window.localStorage.setItem('netpri-ssclash', JSON.stringify(_ssclash)); } catch (e) {}
+				updateSvcDots();
+			});
+	};
+	tick();
+	poll.add(tick, 5);
 }
 
 function stInit() {
@@ -519,7 +743,8 @@ function nameEl(o) {
 
 function buildBar(list, redraw) {
 	var active = activeIface(list);
-	var btns = list.map(function(o) {
+	/* Приоритет интернета (кнопки интерфейсов) - только если виджет включён. */
+	var btns = (_widgets.netpri ? list : []).map(function(o) {
 		var isA = (o.iface === active);
 		return E('button', {
 			'class': 'btn cbi-button netpri-btn' + (isA ? ' active' : ''),
@@ -548,26 +773,28 @@ function buildBar(list, redraw) {
 			     : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
 		]);
 	});
-	/* Кнопка SSClash-Go (если сервис есть) - СЛЕВА от спидтеста. Правое
-	   выравнивание (margin-left:auto) при этом уходит на неё, а спидтест встаёт
-	   вплотную справа: ряд помечаем классом has-ssclash (см. CSS). */
-	if (_ssclash.present) { btns.push(ssClashBtn()); }
-	/* Карточка теста скорости - последним элементом ряда, прижата вправо (CSS
-	   margin-left:auto). Строится из модульного _st, поэтому переживает перерисовку. */
-	btns.push(stCard());
-	var collapsed = true;
-	try { collapsed = (localStorage.getItem('netpri-collapsed') !== '0'); } catch (e) {}
-	return E('div', { 'class': 'netpribar' + (collapsed ? ' collapsed' : '') }, [
-		E('div', {
-			'class': 'netpribar-title',
-			'click': function(ev) {
-				var b = ev.currentTarget.parentNode;
-				var c = b.classList.toggle('collapsed');
-				try { localStorage.setItem('netpri-collapsed', c ? '1' : '0'); } catch (e) {}
-			}
-		}, [ chevron(), E('span', {}, _('Internet priority')) ]),
-		E('div', { 'class': 'netpri-row' + (_ssclash.present ? ' has-ssclash' : '') }, btns)
-	]);
+	/* Правая группа виджетов: карточки пинга -> сервисы -> спидтест. Первому
+	   вешаем netpri-rightstart -> вся группа уходит вправо (margin-left:auto). */
+	var right = [];
+	if (_widgets.status) { _pingWidgets.forEach(function(w) { right.push(pingCard(w)); }); }
+	if (_widgets.services) {
+		effectiveSvcs().forEach(function(svc) {
+			if (svc === 'ssclash') { if (_ssclash.present) { right.push(ssClashBtn()); } }
+			else { right.push(svcCard(svc)); }
+		});
+	}
+	if (_widgets.speedtest) { right.push(stCard()); }
+	if (right.length) { right[0].classList.add('netpri-rightstart'); }
+	btns = btns.concat(right);
+	/* Сворачивание убрано. Небольшой заголовок «Приоритет интернета» возвращаем
+	   ТОЛЬКО когда включён одноимённый виджет - иначе новому пользователю
+	   непонятно, что за кнопки; при выключенном виджете заголовок не нужен. */
+	var kids = [];
+	if (_widgets.netpri) {
+		kids.push(E('div', { 'class': 'netpribar-title' }, _('Internet priority')));
+	}
+	kids.push(E('div', { 'class': 'netpri-row' }, btns));
+	return E('div', { 'class': 'netpribar' }, kids);
 }
 
 return baseclass.extend({
@@ -594,13 +821,24 @@ return baseclass.extend({
 			// Просто перерисовываем при наличии данных; последнее содержимое «липкое».
 			if (list && list.length) { redraw(list); }
 		};
-		/* WARM-RENDER: последний список из localStorage встаёт в ПЕРВЫЙ КАДР -
-		   блок сразу правильной высоты, кнопки на местах; свежий ответ ниже
-		   лишь обновит содержимое НА МЕСТЕ, без сдвига страницы. */
-		apply(lastList());
-		L.resolveDefault(loadList()).then(apply);
-		stInit();   /* подпись сервиса + последний результат теста скорости */
-		ssclashInit(redraw);
+		/* Сначала флаги видимости виджетов, потом отрисовка - иначе на первый
+		   кадр показали бы отключённые виджеты. uci.load обычно уже в кэше
+		   (страница «Сеть» его грузит), так что это почти синхронно. */
+		loadWidgetFlags().then(function() {
+			/* WARM-RENDER: первый кадр рисуем БЕЗУСЛОВНО (даже пустым списком) -
+			   иначе при отключённом «Приоритете интернета» и пустом списке
+			   карточки YouTube/SSClash/спидтеста не появились бы. Дальше apply
+			   держит содержимое «липким» (пустые ответы не стирают). */
+			redraw(lastList());
+			L.resolveDefault(loadList()).then(apply);
+			if (_widgets.speedtest) { stInit(); }
+			if (_widgets.status) { pingInit(); }
+			if (_widgets.services) {
+				var _svcs = effectiveSvcs();
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit(redraw); }
+				svcStatusInit(_svcs);
+			}
+		});
 		/* wrap возвращается СИНХРОННО, а в DOM его вставляет вьюха ПОЗЖЕ. Поэтому
 		   «нет в DOM» на первых тиках - это ещё не «блок убрали»: раньше поллер в
 		   такой момент снимал сам себя НАВСЕГДА, и блок оставался пустым div'ом -
@@ -630,8 +868,13 @@ return baseclass.extend({
 				refreshStCard();
 			};
 			redraw(list);
-			stInit();   /* подпись сервиса + последний результат теста скорости */
-			ssclashInit(redraw);
+			if (_widgets.speedtest) { stInit(); }
+			if (_widgets.status) { pingInit(); }
+			if (_widgets.services) {
+				var _svcs = effectiveSvcs();
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit(redraw); }
+				svcStatusInit(_svcs);
+			}
 			/* Keep the bar live with a steady poll: the operator name (bounded
 			   AT+COPS in the background) resolves after a few seconds, and — the
 			   point here — a modem's IP that comes back AFTER re-dialing (which can
@@ -644,18 +887,21 @@ return baseclass.extend({
 			poll.add(pollFn, 5);
 			return { wrap: wrap, redraw: redraw };
 		};
-		/* WARM-RENDER: последний список из localStorage - бар отдаётся сразу
-		   (вставка не сдвинет контент позже), свежий ответ обновит его НА
-		   МЕСТЕ. Кэша нет - прежнее поведение (ждём список, null если пусто). */
-		var cached = lastList();
-		if (cached.length) {
-			var b = mk(cached);
-			loadList().then(function(l) { if (l && l.length) { b.redraw(l); } });
-			return Promise.resolve(b.wrap);
-		}
-		return loadList().then(function(list) {
-			if (!list.length) { return null; }
-			return mk(list).wrap;
+		/* Флаги видимости - до сборки; затем warm-render из кэша. Блок рисуем,
+		   если есть интерфейсы ЛИБО включён любой из отдельных виджетов
+		   (youtube/ssclash/speedtest живут без списка интерфейсов). */
+		return loadWidgetFlags().then(function() {
+			var extra = _widgets.status || _widgets.services || _widgets.speedtest;
+			var cached = lastList();
+			if (cached.length || extra) {
+				var b = mk(cached);
+				loadList().then(function(l) { if (l && l.length) { b.redraw(l); } });
+				return b.wrap;
+			}
+			return loadList().then(function(list) {
+				if (!list.length && !extra) { return null; }
+				return mk(list).wrap;
+			});
 		});
 	},
 

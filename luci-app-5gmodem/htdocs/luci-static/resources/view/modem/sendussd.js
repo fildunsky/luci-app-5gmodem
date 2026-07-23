@@ -135,133 +135,133 @@ return view.extend({
 				let cut = res.stderr;
 				if ( cut.length > 2 ) {
 					if (cut.includes('error: 0'))
-						res.stdout = _('Phone/Modem failure.');
+						res.stdout = _('Phone/Modem failure');
 					if (cut.includes('error: 1'))
-						res.stdout = _('No connection to phone.');
+						res.stdout = _('No connection to phone');
 					if (cut.includes('error: 2'))
-						res.stdout = _('Phone/Modem adapter link reserved.');
+						res.stdout = _('Phone/Modem adapter link reserved');
 					if (cut.includes('error: 3'))
-						res.stdout = _('Operation not allowed.');
+						res.stdout = _('Operation not allowed');
 					if (cut.includes('error: 4'))
-						res.stdout = _('Operation not supported.');
+						res.stdout = _('Operation not supported');
 					if (cut.includes('error: 5'))
-						res.stdout = _('PH_SIM PIN required.');
+						res.stdout = _('PH_SIM PIN required');
 					if (cut.includes('error: 6'))
-						res.stdout = _('PH_FSIM PIN required.');
+						res.stdout = _('PH_FSIM PIN required');
 					if (cut.includes('error: 7'))
-						res.stdout = _('PH_FSIM PUK required.');
+						res.stdout = _('PH_FSIM PUK required');
 					if (cut.includes('error: 10'))
-						res.stdout = _('SIM not inserted.');
+						res.stdout = _('SIM not inserted');
 					if (cut.includes('error: 11'))
-						res.stdout = _('SIM PIN required.');
+						res.stdout = _('SIM PIN required');
 					if (cut.includes('error: 12'))
-						res.stdout = _('SIM PUK required.');
+						res.stdout = _('SIM PUK required');
 					if (cut.includes('error: 13'))
-						res.stdout = _('SIM failure.');
+						res.stdout = _('SIM failure');
 					if (cut.includes('error: 14'))
-						res.stdout = _('SIM busy.');
+						res.stdout = _('SIM busy');
 					if (cut.includes('error: 15'))
-						res.stdout = _('SIM wrong.');
+						res.stdout = _('SIM wrong');
 					if (cut.includes('error: 16'))
-						res.stdout = _('Incorrect password.');
+						res.stdout = _('Incorrect password');
 					if (cut.includes('error: 17'))
-						res.stdout = _('SIM PIN2 required.');
+						res.stdout = _('SIM PIN2 required');
 					if (cut.includes('error: 18'))
-						res.stdout = _('SIM PUK2 required.');
+						res.stdout = _('SIM PUK2 required');
 					if (cut.includes('error: 20'))
-						res.stdout = _('Memory full.');
+						res.stdout = _('Memory full');
 					if (cut.includes('error: 21'))
-						res.stdout = _('Invalid index.');
+						res.stdout = _('Invalid index');
 					if (cut.includes('error: 22'))
-						res.stdout = _('Not found.');
+						res.stdout = _('Not found');
 					if (cut.includes('error: 23'))
-						res.stdout = _('Memory failure.');
+						res.stdout = _('Memory failure');
 					if (cut.includes('error: 24'))
-						res.stdout = _('Text string too long.');
+						res.stdout = _('Text string too long');
 					if (cut.includes('error: 25'))
-						res.stdout = _('Invalid characters in text string.');
+						res.stdout = _('Invalid characters in text string');
 					if (cut.includes('error: 26'))
-						res.stdout = _('Dial string too long.');
+						res.stdout = _('Dial string too long');
 					if (cut.includes('error: 27'))
-						res.stdout = _('Invalid characters in dial string.');
+						res.stdout = _('Invalid characters in dial string');
 					if (cut.includes('error: 30'))
-						res.stdout = _('No network service.');
+						res.stdout = _('No network service');
 					if (cut.includes('error: 31'))
-						res.stdout = _('Network timeout.');
+						res.stdout = _('Network timeout');
 					if (cut.includes('error: 32'))
-						res.stdout = _('Network not allowed, emergency calls only.');
+						res.stdout = _('Network not allowed, emergency calls only');
 					if (cut.includes('error: 40'))
-						res.stdout = _('Network personalization PIN required.');
+						res.stdout = _('Network personalization PIN required');
 					if (cut.includes('error: 41'))
-						res.stdout = _('Network personalization PUK required.');
+						res.stdout = _('Network personalization PUK required');
 					if (cut.includes('error: 42'))
-						res.stdout = _('Network subset personalization PIN required.');
+						res.stdout = _('Network subset personalization PIN required');
 					if (cut.includes('error: 43'))
-						res.stdout = _('Network subset personalization PUK required.');
+						res.stdout = _('Network subset personalization PUK required');
 					if (cut.includes('error: 44'))
-						res.stdout = _('Service provider personalization PIN required.');
+						res.stdout = _('Service provider personalization PIN required');
 					if (cut.includes('error: 45'))
-						res.stdout = _('Service provider personalization PUK required.');
+						res.stdout = _('Service provider personalization PUK required');
 					if (cut.includes('error: 46'))
-						res.stdout = _('Corporate personalization PIN required.');
+						res.stdout = _('Corporate personalization PIN required');
 					if (cut.includes('error: 47'))
-						res.stdout = _('Corporate personalization PUK required.');
+						res.stdout = _('Corporate personalization PUK required');
 					if (cut.includes('error: 48'))
-						res.stdout = _('PH-SIM PUK required.');
+						res.stdout = _('PH-SIM PUK required');
 					if (cut.includes('error: 100'))
-						res.stdout = _('Unknown error.');
+						res.stdout = _('Unknown error');
 					if (cut.includes('error: 103'))
-						res.stdout = _('Illegal MS.');
+						res.stdout = _('Illegal MS');
 					if (cut.includes('error: 106'))
-						res.stdout = _('Illegal ME.');
+						res.stdout = _('Illegal ME');
 					if (cut.includes('error: 107'))
-						res.stdout = _('GPRS services not allowed.');
+						res.stdout = _('GPRS services not allowed');
 					if (cut.includes('error: 111'))
-						res.stdout = _('PLMN not allowed.');
+						res.stdout = _('PLMN not allowed');
 					if (cut.includes('error: 112'))
-						res.stdout = _('Location area not allowed.');
+						res.stdout = _('Location area not allowed');
 					if (cut.includes('error: 113'))
-						res.stdout = _('Roaming not allowed in this location area.');
+						res.stdout = _('Roaming not allowed in this location area');
 					if (cut.includes('error: 126'))
-						res.stdout = _('Operation temporary not allowed.');
+						res.stdout = _('Operation temporary not allowed');
 					if (cut.includes('error: 132'))
-						res.stdout = _('Service operation not supported.');
+						res.stdout = _('Service operation not supported');
 					if (cut.includes('error: 133'))
-						res.stdout = _('Requested service option not subscribed.');
+						res.stdout = _('Requested service option not subscribed');
 					if (cut.includes('error: 134'))
-						res.stdout = _('Service option temporary out of order.');
+						res.stdout = _('Service option temporary out of order');
 					if (cut.includes('error: 148'))
-						res.stdout = _('Unspecified GPRS error.');
+						res.stdout = _('Unspecified GPRS error');
 					if (cut.includes('error: 149'))
-						res.stdout = _('PDP authentication failure.');
+						res.stdout = _('PDP authentication failure');
 					if (cut.includes('error: 150'))
-						res.stdout = _('Invalid mobile class.');
+						res.stdout = _('Invalid mobile class');
 					if (cut.includes('error: 256'))
-						res.stdout = _('Operation temporarily not allowed.');
+						res.stdout = _('Operation temporarily not allowed');
 					if (cut.includes('error: 257'))
-						res.stdout = _('Call barred.');
+						res.stdout = _('Call barred');
 					if (cut.includes('error: 258'))
-						res.stdout = _('Phone/Modem is busy.');
+						res.stdout = _('Phone/Modem is busy');
 					if (cut.includes('error: 259'))
-						res.stdout = _('User abort.');
+						res.stdout = _('User abort');
 					if (cut.includes('error: 260'))
-						res.stdout = _('Invalid dial string.');
+						res.stdout = _('Invalid dial string');
 					if (cut.includes('error: 261'))
-						res.stdout = _('SS not executed.');
+						res.stdout = _('SS not executed');
 					if (cut.includes('error: 262'))
-						res.stdout = _('SIM Blocked.');
+						res.stdout = _('SIM Blocked');
 					if (cut.includes('error: 263'))
-						res.stdout = _('Invalid block.');
+						res.stdout = _('Invalid block');
 					if (cut.includes('error: 527'))
-						res.stdout = _('Please wait, and retry your selection later (Specific Modem Sierra).');
+						res.stdout = _('Please wait, and retry your selection later (Specific Modem Sierra)');
 					if (cut.includes('error: 528'))
-						res.stdout = _('Location update failure – emergency calls only (Specific Modem Sierra).');
+						res.stdout = _('Location update failure – emergency calls only (Specific Modem Sierra)');
 					if (cut.includes('error: 529'))
-						res.stdout = _('Selection failure – emergency calls only (Specific Modem Sierra).');
+						res.stdout = _('Selection failure – emergency calls only (Specific Modem Sierra)');
 					if (cut.includes('error: 772'))
-						res.stdout = _('SIM powered down.');
+						res.stdout = _('SIM powered down');
 					    var _ut1 = (res.stderr || '') + (res.stdout ? ' > ' + res.stdout : '');
-					    typewrite(out, _ut1.trim() ? _ut1 : _('No response from modem.'));
+					    typewrite(out, _ut1.trim() ? _ut1 : _('No response from modem'));
 				    } else {
 						if ( fullhistory ) {
     						    const ussdreply = (res.stdout + res.stderr).replace(/^\s*\n+/g, '');
@@ -277,7 +277,7 @@ return view.extend({
 				        } else {
 				            	var _ut2 = (res.stdout || '') +
 				            		((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
-				            	typewrite(out, _ut2.trim() ? _ut2 : _('No response from modem.'));
+				            	typewrite(out, _ut2.trim() ? _ut2 : _('No response from modem'));
 				        }
 				    }
 			}
@@ -339,7 +339,7 @@ return view.extend({
 			let ids = [], re = /\/Modem\/(\d+)/g, mm;
 			while ((mm = re.exec(out)) !== null) { ids.push(mm[1]); }
 			if (!ids.length)
-				return Promise.reject(_('No modems found by ModemManager (mmcli -L).'));
+				return Promise.reject(_('No modems found by ModemManager (mmcli -L)'));
 			if (ids.length === 1)
 				return ids[0];
 			// Несколько модемов (напр. внутренний + USB): раньше брался ПЕРВЫЙ,
@@ -403,7 +403,7 @@ return view.extend({
 							self.ussdModemNum = modemNum;
 							var out = document.querySelector('.ussdcommand-output');
 							if (self.ussdSessionActive && out) {
-								out.innerText = (out.innerText || '') + '\n\n' + _('USSD session is active — type your reply and press Send.');
+								out.innerText = (out.innerText || '') + '\n\n' + _('USSD session is active — type your reply and press Send');
 							}
 						});
 					});
@@ -543,7 +543,7 @@ return view.extend({
 
 	renderMain: function (loadResults) {
 
-	let info = _('User interface for sending USSD codes using sms-tool.').format('');
+	let info = _('User interface for sending USSD codes using sms-tool').format('');
 
 		let sections = uci.sections('defmodems', 'defmodems');
 		let serialModems = [];
