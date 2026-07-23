@@ -284,6 +284,23 @@ _take_lock() {
 _hl_sec="m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 _hl_at=$(uci -q get "5gmodem.$_hl_sec.at_port")
 [ -n "$_hl_at" ] && [ -c "$_hl_at" ] && _hl_at="yes" || _hl_at=""
+
+# peek: отдать последний снимок ЛЮБОГО возраста (честный возраст в "age") или
+# {}, НЕ трогая ни порт, ни замок - ~10 мс. Нужен странице для «тёплого»
+# load(): повторное открытие рисует последние известные цифры вместо прочерков,
+# не дожидаясь опроса. Возраст 9999 - снимок есть, а штамп потерян (ребут):
+# пусть фронт видит, что данные древние.
+if [ "$1" = "peek" ]; then
+	if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
+		[ -s /tmp/5gmodem_hilink_metrics ] && cat /tmp/5gmodem_hilink_metrics || echo '{}'
+		exit 0
+	fi
+	_age=$(_snapshot_age) && { serve_cache "$_age"; exit 0; }
+	[ -s "$CACHE" ] && { serve_cache 9999; exit 0; }
+	echo '{}'
+	exit 0
+fi
+
 if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
 	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
 	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
@@ -315,6 +332,39 @@ if [ "$1" = "cached" ]; then
 	if [ -n "$_age" ] && [ "$_age" -lt "$_ttl" ]; then
 		serve_cache "$_age"
 		exit 0
+	fi
+	# ЗДЕСЬ БЫЛ SERVE-STALE (отдать протухший снимок сразу + опрос фоном).
+	# УБРАН после проверки на живом стенде - он ХУЖЕ синхронного обновления:
+	#   1) данные на странице отставали на целый цикл (агрегации при спидтесте
+	#      появлялись через 3-5 c вместо мгновенно - тик отдавал ВЧЕРАШНИЙ
+	#      снимок, а свежий уезжал следующему);
+	#   2) фоновый опрос берёт LOCKDIR ДО at_lock: занятый порт держит его до
+	#      10 c, все тики это время сыплют стейл, возраст уполз за 20 c -
+	#      наблюдалось «кеш не обновлялся 22 c» при переключении модемов.
+	# Синхронное обновление теперь ДЁШЕВО (~1 c: статика в кэше, atprobe по
+	# маркеру) - тик с честным опросом даёт всегда свежие данные, как раньше.
+	#
+	# ХОЛОДНЫЙ СТАРТ (снимка нет вовсе). Раньше опрашивали синхронно - XHR
+	# первого тика ждал ВЕСЬ опрос (4+ c). Теперь опрос уходит в фон, а мы ждём
+	# ПОЯВЛЕНИЯ снимка: частичная публикация после ядра (см. emit_snapshot)
+	# делает его доступным через ~2 c - сигнал/оператор появляются раньше,
+	# детали доедут следующим тиком. Шаг ожидания 1 c: у busybox нет дробного
+	# sleep. Фон завершился без снимка (модема нет/ошибка) - проваливаемся в
+	# синхронный проход ниже: он покажет настоящую ошибку.
+	if [ -z "$_age" ]; then
+		if [ ! -d "$LOCKDIR" ]; then
+			( exec 8>&- 9>&-; "$RES/5gmodem.sh" json ) >/dev/null 2>&1 </dev/null &
+		fi
+		_w=0
+		while [ "$_w" -lt 20 ]; do
+			sleep 1; _w=$((_w + 1))
+			_a=$(_snapshot_age) && { serve_cache "$_a"; exit 0; }
+			[ "$_w" -ge 2 ] && [ ! -d "$LOCKDIR" ] && break
+		done
+		# Опрос всё ещё идёт, а снимка нет 20 c - порт очень медленный. Отдаём
+		# busy, НЕ проваливаясь вниз: там второе 20-секундное ожидание, а на
+		# 30-й секунде rpcd убил бы вызов («ошибка XHR»).
+		[ "$_w" -ge 20 ] && { echo '{"error":"busy"}'; exit 0; }
 	fi
 	# Снимок протух. Пробуем стать ТЕМ САМЫМ единственным опрашивающим.
 	if ! _take_lock; then
@@ -400,7 +450,24 @@ fi
 # fixable by editing the config by hand). If the port does not answer AT within
 # a few seconds, treat it as not found - every sms_tool call below then fails
 # instantly instead of hanging.
-[ -n "$DEVICE" ] && ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
+#
+# МАРКЕР ЖИВОГО ПОРТА: сама проба - это лишний AT round-trip ПЕРЕД КАЖДЫМ
+# опросом (а на молчащем порту - до 2 c). Порт, только что ответивший на
+# ядровой батч (+CSQ), пробовать заново незачем: маркер пишется после успешного
+# ядра, живёт 30 c и стирается, если ядро вылетело по сторожу - следующий
+# опрос пробует честно. Ключ - тот же _MKEY, порт в маркере сверяем: после
+# переперечисления USB имя tty могло уехать к другому устройству.
+PORTOK="/tmp/5gmodem_portok_$_MKEY"
+_pok=""
+if [ -n "$DEVICE" ]; then
+	read -r _pok_port _pok_t < "$PORTOK" 2>/dev/null
+	case "$_pok_t" in ''|*[!0-9]*) _pok_t="" ;; esac
+	if [ "$_pok_port" = "$DEVICE" ] && [ -n "$_pok_t" ] \
+	   && [ "$(( $(uptime_s) - _pok_t ))" -lt 30 ] 2>/dev/null; then
+		_pok=1
+	fi
+fi
+[ -n "$DEVICE" ] && [ -z "$_pok" ] && ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
 if [ -z "$DEVICE" ]; then
 	# Порт не ответил на atprobe. Это ЧАСТО ЛОЖНО: порт на миг занят/медленный
 	# (особенно на слабом мобильном заходе, где всё грузится разом) или модем
@@ -424,8 +491,52 @@ fi
 # что подключаются через "." ниже) идёт со сторожем. Не ответил за 8 c - убиваем,
 # отдаём что успело. Реальный бинарь - по абсолютному пути. Счётчик в имени
 # temp-файла: вызовы последовательны, но так надёжнее при вложенности.
+#
+# КЭШ СТАТИКИ - ЗДЕСЬ ЖЕ, ОДНОЙ ТОЧКОЙ. at_static используют 3 профиля из 61;
+# остальные на каждом опросе переспрашивают модель/IMEI/IMSI/ICCID/прошивку
+# отдельными round-trip'ами - у L850 это 6 лишних ходок в порт ≈ 0.5-1 c
+# КАЖДЫЕ 5 секунд. Править 49 профилей - разъедется при первой же правке;
+# перехватываем в обёртке: одиночная команда из белого списка отдаётся из
+# кэша сырыми байтами 1:1 - парсеры профилей разницы не видят.
+# Кэш вечный по ключу модема (${STATIC_CACHE}_cmd_*), сбрасывается сменой
+# IMSI (существующий rm ${STATIC_CACHE}_* ниже).
+#
+# Что НЕ перехватываем: составные (';' - ядровой батч), вендорные ('@'),
+# вызовы с -D (их формат вывода отличается: закэшированный -D-ответ пришёл бы
+# потом читателю без -D) и всё до определения STATIC_CACHE.
+_st_static_key() {   # $*: аргументы вызова -> имя файла кэша либо пусто
+	[ -n "$STATIC_CACHE" ] || return 0
+	case " $* " in *" -D "*) return 0 ;; esac
+	case " $* " in *" at "*) : ;; *) return 0 ;; esac
+	eval "_stq=\${$#}"
+	case "$_stq" in *";"*|*"@"*) return 0 ;; esac
+	_stn_c=$(printf '%s' "$_stq" | tr 'a-z' 'A-Z' | sed 's/^AT//; s/^[+#]//; s/[? ]*$//')
+	case "$_stn_c" in
+		CGMI|GMI|CGMM|GMM|CGMR|GMR|CGSN|GSN|CIMI|CCID|ICCID|QCCID|GTPKGVER)
+			printf '%s' "${STATIC_CACHE}_cmd_$_stn_c" ;;
+	esac
+}
+# Кэшируем ТОЛЬКО валидный ответ: один украденный на коллизии ответ портил бы
+# вечный кэш (урок at_static: в файл IMEI однажды въехал ответ чужого #BND).
+# Валидный = нет ERROR, есть содержательная строка (не эхо/OK/пустая); для
+# идентификаторов (IMEI/IMSI/ICCID) - есть >=14 цифр подряд.
+_st_static_ok() {   # $1 - файл ответа
+	[ -s "$1" ] || return 1
+	grep -q "ERROR" "$1" && return 1
+	tr -d '\r' < "$1" | grep -qvE '^AT|^OK$|^$' || return 1
+	case "$_stc" in
+		*_cmd_CGSN|*_cmd_GSN|*_cmd_CIMI|*_cmd_CCID|*_cmd_ICCID|*_cmd_QCCID)
+			grep -qE '[0-9]{14}' "$1" || return 1 ;;
+	esac
+	return 0
+}
 _st_n=0
 sms_tool() {
+	_stc=$(_st_static_key "$@")
+	if [ -n "$_stc" ] && [ -s "$_stc" ]; then
+		cat "$_stc"
+		return 0
+	fi
 	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem_st.$$.$_st_n"
 	# ЗАКРЫВАЕМ fd лока (8) и хотплаг-лока (9) и у sms_tool, и у сторожа: обоим
 	# нужен только сам serial-порт (-d), а НЕ файл блокировки. Иначе они держат
@@ -436,6 +547,10 @@ sms_tool() {
 	_stp=$!
 	( exec 8>&- 9>&-; sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
 	wait "$_stp" 2>/dev/null; kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
+	if [ -n "$_stc" ] && _st_static_ok "$_stf"; then
+		# tmp+mv: конкурирующий читатель кэша не должен увидеть полфайла
+		cp "$_stf" "$_stc.$$" 2>/dev/null && mv "$_stc.$$" "$_stc" 2>/dev/null
+	fi
 	cat "$_stf" 2>/dev/null; rm -f "$_stf"
 }
 
@@ -478,11 +593,17 @@ $(sms_tool -D -d $DEVICE at "AT+CIMI")"
 	# выходим, освобождая at_lock. Свежего снимка нет (первый заход) - идём
 	# дальше как есть, покажем что успели.
 	if [ -z "$O" ]; then
+		rm -f "$PORTOK" 2>/dev/null   # порт подвис - маркер «жив» больше не верен
 		_wg=$(_snapshot_age) && {
 			logger -t 5gmodem "опрос $DEVICE подвис - отдаю прошлый снимок (${_wg}c)"
 			serve_cache "$_wg"; exit 0
 		}
 	fi
+	# Ядро ответило по-настоящему (+CSQ, не эхо) - порт жив, пробу atprobe
+	# следующие 30 c можно пропускать (см. PORTOK выше).
+	case "$O" in
+		*"+CSQ:"*) printf '%s %s\n' "$DEVICE" "$(uptime_s)" > "$PORTOK" 2>/dev/null ;;
+	esac
 else
 	O=$(gcom -d $DEVICE -s $RES/info.gcom 2>/dev/null)
 fi
@@ -1039,6 +1160,149 @@ at_static() {
 	return 0
 }
 
+# Оба хелпера вырезают ВСЕ управляющие символы C0 (0x00-0x1F), а не только
+# \r\n: у некоторых модемов (напр. DW5821e) разбор AT оставлял в значении
+# сигнала «сырой» control-символ, который попадал прямо в JSON-строку и ронял
+# парсер («Bad control character in string literal in JSON»). Числовые поля
+# тоже эмитятся как строки в кавычках, поэтому чистить их безопасно и нужно.
+# Очистка значения перед вставкой в JSON. Управляющие символы (0x00-0x1F) рвут
+# JSON и приходят от модема при коллизии на AT-порту. Раньше КАЖДЫЙ вызов гонял
+# внешний `tr` - а их за один опрос ~71, и это была самая дорогая часть скрипта
+# (замерено: 71x tr ~0.17 c, почти как весь остальной опрос). tr нужен РЕДКО -
+# только когда мусор реально есть; проверяем встроенным `case` (без fork).
+# printf, а не echo: echo проглатывает значения вида "-n"/"-e" как флаги.
+sanitize_string() {
+	case "$1" in
+		'') printf '%s\n' "-" ;;
+		*[[:cntrl:]]*) printf '%s' "$1" | tr -d '\000-\037'; printf '\n' ;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+sanitize_number() {
+	case "$1" in
+		'') printf '%s\n' "-" ;;
+		*[[:cntrl:]]*) printf '%s' "$1" | tr -d '\000-\037'; printf '\n' ;;
+		*) printf '%s\n' "$1" ;;
+	esac
+}
+
+# Снимок метрик одним куском. Вынесен в функцию, потому что печатается ДВАЖДЫ:
+# частично - сразу после ядра (ниже), полностью - в конце опроса. Подстановки
+# раскрываются В МОМЕНТ ВЫЗОВА: у частичного вызова профильные переменные ещё
+# пусты (sanitize превратит их в "-"), финальный печатает всё.
+# ВАЖНО (урок в шапке serve_cache): никаких '#'-комментариев ВНУТРИ heredoc -
+# они уезжают прямо в JSON и ломают разбор.
+emit_snapshot() {
+cat <<EOF
+{
+"ipaddr":"$(sanitize_string "$IPADDR")",
+"ipaddr6":"$(sanitize_string "$IPADDR6")",
+"iface":"$(sanitize_string "$SEC")",
+"conn_time":"$(sanitize_string "$CONN_TIME")",
+"conn_time_sec":"$(sanitize_number "$CT")",
+"conn_time_since":"$(sanitize_string "$CONN_TIME_SINCE")",
+"rx":"$(sanitize_number "$RX")",
+"tx":"$(sanitize_number "$TX")",
+"modem":"$(sanitize_string "$MODEL")",
+"mtemp":"$(sanitize_string "$TEMP")",
+"mtherm":"$(sanitize_number "$THERM")",
+"antports":"$(sanitize_string "$ANTPORTS")",
+"rxdiv":"$(sanitize_string "$RXDIV")",
+"firmware":"$(sanitize_string "$FW")",
+"cport":"$(sanitize_string "$DEVICE")",
+"protocol":"$(sanitize_string "$PROTO")",
+"iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
+"xmm_capable":"$([ -f /lib/netifd/proto/xmm.sh ] && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0" && echo 1 || echo 0)",
+"iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
+"iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",
+"csq":"$(sanitize_number "$CSQ")",
+"signal":"$(sanitize_number "$CSQ_PER")",
+"operator_name":"$(sanitize_string "$COPS")",
+"phone":"$(sanitize_string "$PHONE")",
+"operator_mcc":"$(sanitize_string "$COPS_MCC")",
+"operator_mnc":"$(sanitize_string "$COPS_MNC")",
+"location":"$(sanitize_string "$LOC")",
+"mode":"$(sanitize_string "$MODE")",
+"registration":"$(sanitize_string "$REG")",
+"registration_cs":"$(sanitize_string "$REG_CS")",
+"simslot":"$(sanitize_string "$SSIM")",
+"allow_roaming":"$([ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && echo 1 || echo 0)",
+"imei":"$(sanitize_string "$NR_IMEI")",
+"imsi":"$(sanitize_string "$NR_IMSI")",
+"iccid":"$(sanitize_string "$NR_ICCID")",
+"at_debug":"$([ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && echo 1 || echo 0)",
+"lac_dec":"$(sanitize_number "$LAC_DEC")",
+"lac_hex":"$(sanitize_string "$LAC_HEX")",
+"tac_dec":"$(sanitize_number "$TAC_DEC")",
+"tac_hex":"$(sanitize_string "$TAC_HEX")",
+"tac_h":"$(sanitize_string "$T_HEX")",
+"tac_d":"$(sanitize_number "$T_DEC")",
+"cid_dec":"$(sanitize_number "$CID_DEC")",
+"cid_hex":"$(sanitize_string "$CID_HEX")",
+"pci":"$(sanitize_number "$PCI")",
+"earfcn":"$(sanitize_number "$EARFCN")",
+"pband":"$(sanitize_string "$PBAND")",
+"s1band":"$(sanitize_string "$S1BAND")",
+"s1pci":"$(sanitize_number "$S1PCI")",
+"s1earfcn":"$(sanitize_number "$S1EARFCN")",
+"s2band":"$(sanitize_string "$S2BAND")",
+"s2pci":"$(sanitize_number "$S2PCI")",
+"s2earfcn":"$(sanitize_number "$S2EARFCN")",
+"s3band":"$(sanitize_string "$S3BAND")",
+"s3pci":"$(sanitize_number "$S3PCI")",
+"s3earfcn":"$(sanitize_number "$S3EARFCN")",
+"s4band":"$(sanitize_string "$S4BAND")",
+"s4pci":"$(sanitize_number "$S4PCI")",
+"s4earfcn":"$(sanitize_number "$S4EARFCN")",
+"s1rsrp":"$(sanitize_number "$S1RSRP")",
+"s2rsrp":"$(sanitize_number "$S2RSRP")",
+"s3rsrp":"$(sanitize_number "$S3RSRP")",
+"s4rsrp":"$(sanitize_number "$S4RSRP")",
+"pmimo":"$(sanitize_string "$PMIMO")",
+"pmod":"$(sanitize_string "$PMOD")",
+"s1mimo":"$(sanitize_string "$S1MIMO")",
+"s1mod":"$(sanitize_string "$S1MOD")",
+"s2mimo":"$(sanitize_string "$S2MIMO")",
+"s2mod":"$(sanitize_string "$S2MOD")",
+"s3mimo":"$(sanitize_string "$S3MIMO")",
+"s3mod":"$(sanitize_string "$S3MOD")",
+"s4mimo":"$(sanitize_string "$S4MIMO")",
+"s4mod":"$(sanitize_string "$S4MOD")",
+"age":"0",
+"bandwidth":"$(sanitize_string "$BANDWIDTH")",
+"enbid":"$(sanitize_string "$ENBID")",
+"pathloss":"$(sanitize_string "$PATHLOSS")",
+"txpower":"$(sanitize_string "$TXPOWER")",
+"uecat":"$(sanitize_string "$UECAT")",
+"cqi":"$(sanitize_string "$CQI")",
+"volte":"$(sanitize_string "$VOLTE")",
+"rscp":"$(sanitize_string "$RSCP")",
+"ecio":"$(sanitize_string "$ECIO")",
+"rsrp":"$(sanitize_string "$RSRP")",
+"rsrq":"$(sanitize_string "$RSRQ")",
+"rssi":"$(sanitize_string "$RSSI")",
+"sinr":"$(sanitize_string "$SINR")",
+"neighbors":[$NEIGHBORS]
+}
+EOF
+}
+
+# ЧАСТИЧНЫЙ СНИМОК - ТОЛЬКО НА ХОЛОДЕ. Ядро (сигнал/оператор/регистрация/TAC)
+# уже известно, а профиль впереди - это ещё секунды. Публикуем то, что есть:
+# холодная ветка `cached` (см. выше) ждёт ПОЯВЛЕНИЯ снимка и отдаст его через
+# ~2 c вместо полных 4+. При СУЩЕСТВУЮЩЕМ снимке НЕ публикуем: частичный
+# временно обнулил бы модель/IP у читателей на тёплом опросе. В stdout не
+# печатаем - ответ вызова печатается один раз, в конце.
+if [ ! -s "$CACHE" ] && [ -n "$REG$CSQ" ] && [ -n "$DEVICE" ]; then
+	_PTMP="$CACHE.p$$"
+	emit_snapshot > "$_PTMP" 2>/dev/null
+	if jsonfilter -i "$_PTMP" -e '@.registration' >/dev/null 2>&1; then
+		mv "$_PTMP" "$CACHE" && uptime_s > "$STAMP"
+	else
+		rm -f "$_PTMP"
+	fi
+fi
+
 if [ -e /usr/bin/sms_tool ]; then
 	REGOK=0
 	[ "x$REG" == "x1" ] || [ "x$REG" == "x5" ] || [ "x$REG" == "x6" ] || [ "x$REG" == "x7" ] && REGOK=1
@@ -1217,31 +1481,9 @@ esac
 
 _qmi_supplement
 
-# Оба хелпера вырезают ВСЕ управляющие символы C0 (0x00-0x1F), а не только
-# \r\n: у некоторых модемов (напр. DW5821e) разбор AT оставлял в значении
-# сигнала «сырой» control-символ, который попадал прямо в JSON-строку и ронял
-# парсер («Bad control character in string literal in JSON»). Числовые поля
-# тоже эмитятся как строки в кавычках, поэтому чистить их безопасно и нужно.
-# Очистка значения перед вставкой в JSON. Управляющие символы (0x00-0x1F) рвут
-# JSON и приходят от модема при коллизии на AT-порту. Раньше КАЖДЫЙ вызов гонял
-# внешний `tr` - а их за один опрос ~71, и это была самая дорогая часть скрипта
-# (замерено: 71x tr ~0.17 c, почти как весь остальной опрос). tr нужен РЕДКО -
-# только когда мусор реально есть; проверяем встроенным `case` (без fork).
-# printf, а не echo: echo проглатывает значения вида "-n"/"-e" как флаги.
-sanitize_string() {
-	case "$1" in
-		'') printf '%s\n' "-" ;;
-		*[[:cntrl:]]*) printf '%s' "$1" | tr -d '\000-\037'; printf '\n' ;;
-		*) printf '%s\n' "$1" ;;
-	esac
-}
-sanitize_number() {
-	case "$1" in
-		'') printf '%s\n' "-" ;;
-		*[[:cntrl:]]*) printf '%s' "$1" | tr -d '\000-\037'; printf '\n' ;;
-		*) printf '%s\n' "$1" ;;
-	esac
-}
+# sanitize_string/sanitize_number и emit_snapshot определены ВЫШЕ профилей:
+# частичный снимок публикуется до подключения профиля, а shell требует
+# определения функции до вызова.
 
 # IP addresses of the modem network interface (for the main page).
 # umbim/MBIM puts the address on a virtual <iface>_4 / <iface>_6 child, not on
@@ -1536,98 +1778,7 @@ if [ -z "$CSQ_PER" ] && [ -n "$RSRP" ]; then
 fi
 
 _TMP="$CACHE.$$"
-cat > "$_TMP" <<EOF
-{
-"ipaddr":"$(sanitize_string "$IPADDR")",
-"ipaddr6":"$(sanitize_string "$IPADDR6")",
-"iface":"$(sanitize_string "$SEC")",
-"conn_time":"$(sanitize_string "$CONN_TIME")",
-"conn_time_sec":"$(sanitize_number "$CT")",
-"conn_time_since":"$(sanitize_string "$CONN_TIME_SINCE")",
-"rx":"$(sanitize_number "$RX")",
-"tx":"$(sanitize_number "$TX")",
-"modem":"$(sanitize_string "$MODEL")",
-"mtemp":"$(sanitize_string "$TEMP")",
-"mtherm":"$(sanitize_number "$THERM")",
-"antports":"$(sanitize_string "$ANTPORTS")",
-"rxdiv":"$(sanitize_string "$RXDIV")",
-"firmware":"$(sanitize_string "$FW")",
-"cport":"$(sanitize_string "$DEVICE")",
-"protocol":"$(sanitize_string "$PROTO")",
-"iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
-"xmm_capable":"$([ -f /lib/netifd/proto/xmm.sh ] && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0" && echo 1 || echo 0)",
-"iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
-"iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",
-"csq":"$(sanitize_number "$CSQ")",
-"signal":"$(sanitize_number "$CSQ_PER")",
-"operator_name":"$(sanitize_string "$COPS")",
-"phone":"$(sanitize_string "$PHONE")",
-"operator_mcc":"$(sanitize_string "$COPS_MCC")",
-"operator_mnc":"$(sanitize_string "$COPS_MNC")",
-"location":"$(sanitize_string "$LOC")",
-"mode":"$(sanitize_string "$MODE")",
-"registration":"$(sanitize_string "$REG")",
-"registration_cs":"$(sanitize_string "$REG_CS")",
-"simslot":"$(sanitize_string "$SSIM")",
-"allow_roaming":"$([ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && echo 1 || echo 0)",
-"imei":"$(sanitize_string "$NR_IMEI")",
-"imsi":"$(sanitize_string "$NR_IMSI")",
-"iccid":"$(sanitize_string "$NR_ICCID")",
-"at_debug":"$([ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && echo 1 || echo 0)",
-"lac_dec":"$(sanitize_number "$LAC_DEC")",
-"lac_hex":"$(sanitize_string "$LAC_HEX")",
-"tac_dec":"$(sanitize_number "$TAC_DEC")",
-"tac_hex":"$(sanitize_string "$TAC_HEX")",
-"tac_h":"$(sanitize_string "$T_HEX")",
-"tac_d":"$(sanitize_number "$T_DEC")",
-"cid_dec":"$(sanitize_number "$CID_DEC")",
-"cid_hex":"$(sanitize_string "$CID_HEX")",
-"pci":"$(sanitize_number "$PCI")",
-"earfcn":"$(sanitize_number "$EARFCN")",
-"pband":"$(sanitize_string "$PBAND")",
-"s1band":"$(sanitize_string "$S1BAND")",
-"s1pci":"$(sanitize_number "$S1PCI")",
-"s1earfcn":"$(sanitize_number "$S1EARFCN")",
-"s2band":"$(sanitize_string "$S2BAND")",
-"s2pci":"$(sanitize_number "$S2PCI")",
-"s2earfcn":"$(sanitize_number "$S2EARFCN")",
-"s3band":"$(sanitize_string "$S3BAND")",
-"s3pci":"$(sanitize_number "$S3PCI")",
-"s3earfcn":"$(sanitize_number "$S3EARFCN")",
-"s4band":"$(sanitize_string "$S4BAND")",
-"s4pci":"$(sanitize_number "$S4PCI")",
-"s4earfcn":"$(sanitize_number "$S4EARFCN")",
-"s1rsrp":"$(sanitize_number "$S1RSRP")",
-"s2rsrp":"$(sanitize_number "$S2RSRP")",
-"s3rsrp":"$(sanitize_number "$S3RSRP")",
-"s4rsrp":"$(sanitize_number "$S4RSRP")",
-"pmimo":"$(sanitize_string "$PMIMO")",
-"pmod":"$(sanitize_string "$PMOD")",
-"s1mimo":"$(sanitize_string "$S1MIMO")",
-"s1mod":"$(sanitize_string "$S1MOD")",
-"s2mimo":"$(sanitize_string "$S2MIMO")",
-"s2mod":"$(sanitize_string "$S2MOD")",
-"s3mimo":"$(sanitize_string "$S3MIMO")",
-"s3mod":"$(sanitize_string "$S3MOD")",
-"s4mimo":"$(sanitize_string "$S4MIMO")",
-"s4mod":"$(sanitize_string "$S4MOD")",
-"age":"0",
-"bandwidth":"$(sanitize_string "$BANDWIDTH")",
-"enbid":"$(sanitize_string "$ENBID")",
-"pathloss":"$(sanitize_string "$PATHLOSS")",
-"txpower":"$(sanitize_string "$TXPOWER")",
-"uecat":"$(sanitize_string "$UECAT")",
-"cqi":"$(sanitize_string "$CQI")",
-"volte":"$(sanitize_string "$VOLTE")",
-"rscp":"$(sanitize_string "$RSCP")",
-"ecio":"$(sanitize_string "$ECIO")",
-"rsrp":"$(sanitize_string "$RSRP")",
-"rsrq":"$(sanitize_string "$RSRQ")",
-"rssi":"$(sanitize_string "$RSSI")",
-"sinr":"$(sanitize_string "$SINR")",
-"neighbors":[$NEIGHBORS]
-}
-EOF
+emit_snapshot > "$_TMP"
 
 # БЕЗ ПАЙПЛАЙНА. Первая версия писала снимок через `( cat <<EOF ) | tee файл` -
 # и вызов через rpcd намертво упирался в его 30-секундный таймаут (проверено:

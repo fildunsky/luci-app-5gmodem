@@ -29,6 +29,17 @@ document.head.append(E('style', {'type': 'text/css'},
 .cbi-progressbar > div {
   transition: width 0.4s ease-out;
 }
+
+/* Основные бары «Информации о соте»: во всю ширину ячейки (раньше жёсткие 33%
+   выглядели обрубком и на десктопе, и на мобильном; стандартный отступ от края
+   даёт паддинг самой ячейки). Пустая часть - РОВНАЯ СЕРАЯ ПОЛОСА, как у мелких
+   полосок дополнительных метрик (.metric-bar), вместо обводки темы. */
+#csq, #rssi, #rsrp, #rsrq, #sinr {
+  max-width: none;
+  border: none;
+  box-shadow: none;
+  background: rgba(128,128,128,.18);
+}
 .tginfo-modesw .cbi-button {
   margin: 2px 6px 2px 0;
   padding: 2px 10px;
@@ -491,7 +502,7 @@ var pc = Math.floor((100 / mn) * vn);
 			var tip = _('Very weak');
 			};
 pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '33%';
+pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
 
@@ -523,7 +534,7 @@ var pc =  Math.floor(100*(1-(-50 - vn)/(-50 - mn)));
 			var tip = _('Very weak');
 			};
 pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '33%';
+pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
 pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
@@ -556,7 +567,7 @@ var pc =  Math.floor(120*(1-(-50 - vn)/(-70 - mn)));
 			var tip = _('Very weak');
 			};
 pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '33%';
+pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
 pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
@@ -593,7 +604,7 @@ pc = Math.max(0, Math.min(100, pc));
 			var tip = _('Cell edge');
 			};
 pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '33%';
+pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
 pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
@@ -625,7 +636,7 @@ if (vn > 0) { vn = 0; };
 			var tip = _('Cell edge');
 			};
 pg.firstElementChild.style.width = pc + '%';
-pg.style.width = '33%';
+pg.style.width = '100%';   /* длину ограничивает CSS max-width, см. .tginfo */
 pg.firstElementChild.style.animationDirection = "reverse";
 pg.setAttribute('title', '%s'.format(v) + ' | ' + tip + ' ');
 }
@@ -654,7 +665,7 @@ function _ensureModemBusyCss() {
 	var css =
 		/* база / bootstrap: непрозрачный фон + скругление как у кнопок */
 		'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
-		'display:flex;align-items:center;justify-content:center;text-align:center;' +
+		'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;' +
 		'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
 		'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
 		/* proton2025 (ставит data-theme на <html>): как попапы меню - полупрозрачный
@@ -662,24 +673,54 @@ function _ensureModemBusyCss() {
 		':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
 		'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
 		':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
-		':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}';
+		':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}' +
+		/* прогрессбар плашки - в стиле основных метрик: серый заполненный
+		   трек без обводки (а не пустота с рамкой темы) */
+		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}';
 	document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
 }
-function setModemBusy(msg) {
+/* setModemBusy(msg[, progressSec]) - плашка на блоке «Модем». progressSec
+   включает прогрессбар в стиле полосок метрик (как на eSIM): заполняется по
+   ожидаемому времени, упирается в 97% и ждёт настоящего возвращения модема -
+   pollData снимает плашку, когда регистрация/сигнал снова видны. С
+   прогрессбаром спиннер не показываем - ход видно по полосе. */
+var _modemBusyBarTimer = null;
+function setModemBusy(msg, progressSec) {
 	var block = document.querySelector('.cbi-section.tginfo');
 	if (!block) { return; }
 	_ensureModemBusyCss();
 	var txt = msg || _('The modem is restarting…');
+	var txtCls = progressSec ? '' : 'spinning';
 	var ov = document.getElementById('modem-busy-ov');
 	if (!ov) {
 		block.style.position = 'relative';
 		ov = E('div', { 'id': 'modem-busy-ov' }, [
-			E('span', { 'class': 'spinning', 'style': 'font-weight:600;' }, txt)
+			E('span', { 'id': 'modem-busy-txt', 'class': txtCls, 'style': 'font-weight:600;' }, txt)
 		]);
 		block.appendChild(ov);
 	} else {
 		ov.style.display = 'flex';
-		var s = ov.querySelector('.spinning'); if (s) { s.textContent = txt; }
+		var s = ov.querySelector('#modem-busy-txt') || ov.querySelector('.spinning');
+		if (s) { s.textContent = txt; s.className = txtCls; }
+	}
+	var bar = document.getElementById('modem-busy-bar');
+	if (_modemBusyBarTimer) { window.clearInterval(_modemBusyBarTimer); _modemBusyBarTimer = null; }
+	if (progressSec) {
+		if (!bar) {
+			bar = E('div', { 'id': 'modem-busy-bar', 'class': 'cbi-progressbar',
+				'title': '', 'style': 'width:70%;max-width:24em;margin-top:10px' }, E('div'));
+			ov.appendChild(bar);
+		}
+		var t0 = Date.now(), inner = bar.firstElementChild;
+		if (inner) {
+			inner.style.width = '0%';
+			_modemBusyBarTimer = window.setInterval(function() {
+				var pc = Math.min(97, Math.round((Date.now() - t0) / (progressSec * 10)));
+				inner.style.width = pc + '%';
+			}, 500);
+		}
+	} else if (bar) {
+		bar.remove();
 	}
 	_modemBusySince = Date.now();
 	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); }
@@ -689,7 +730,17 @@ function setModemBusy(msg) {
 function clearModemBusy(force) {
 	if (!force && _modemBusySince && (Date.now() - _modemBusySince) < MODEM_BUSY_MIN_MS) { return; }
 	var ov = document.getElementById('modem-busy-ov');
-	if (ov) { ov.style.display = 'none'; }
+	if (_modemBusyBarTimer) { window.clearInterval(_modemBusyBarTimer); _modemBusyBarTimer = null; }
+	if (ov) {
+		var inner = ov.querySelector('#modem-busy-bar > div');
+		if (inner) {
+			/* полоса добегает до конца - завершение видно глазом */
+			inner.style.width = '100%';
+			window.setTimeout(function() { ov.style.display = 'none'; }, 350);
+		} else {
+			ov.style.display = 'none';
+		}
+	}
 	_modemBusySince = 0;
 	if (_modemBusyTimer) { window.clearTimeout(_modemBusyTimer); _modemBusyTimer = null; }
 	// Операции над радио (привязка к соте, включение 5G) меняют то, что
@@ -710,6 +761,29 @@ function clearModemBusy(force) {
 function modemBusyActive() {
 	var ov = document.getElementById('modem-busy-ov');
 	return !!(ov && ov.style.display !== 'none');
+}
+
+/* ОТЛОЖЕННЫЙ ЗАПУСК ДО ПЕРВОГО ТИКА МЕТРИК. simslot.sh и bands.sh лезут в тот
+   же AT-порт, что и опрос метрик; по старым таймерам (400/600 мс) они попадали
+   ровно в момент, когда первый полный опрос держит at_lock, - выстраивались в
+   очередь и растягивали и себя, и опрос. Теперь стартуют после первого
+   успешного тика pollData (порт свободен). Страховочный таймер - на случай
+   молчащего/отсутствующего модема: поведение прежнее, просто позже. */
+var _afpQueue = [];
+var _afpDone = false;
+function runAfterFirstPoll() {
+	if (_afpDone) { return; }
+	_afpDone = true;
+	_afpQueue.splice(0).forEach(function(fn) { try { fn(); } catch (e) {} });
+}
+function afterFirstPoll(fn) {
+	if (_afpDone) { fn(); return; }
+	_afpQueue.push(fn);
+	/* 1.5 c, не больше: на тёплом роутере первый тик успевает раньше и
+	   запускает очередь сам; страховка нужна лишь молчащему модему, а
+	   слишком поздний запуск выглядел «рывками» - блоки SIM/частот
+	   появлялись заметно позже остальной страницы. */
+	window.setTimeout(runAfterFirstPoll, 1500);
 }
 
 /* Переключатель SIM-слотов в шапке (над температурой). Кнопки появляются,
@@ -873,8 +947,15 @@ function setRowVisible(view, hasData) {
 	if (n >= 3) { tr.style.display = 'none'; }
 }
 
-/* Цвет оценки метрики CA-компонента (пороги как в modemdata). */
+/* Цвет оценки метрики CA-компонента (пороги как в modemdata). CA_COLOR - для
+   ТЕКСТА значения; заливка полосок - градиентом (CA_GRAD), теми же парами
+   цветов, что у основных баров CSQ/RSRP/... - единый вид всех шкал. */
 var CA_COLOR = { green: '#2fb885', orange: '#c99a3f', red: '#d95c5c' };
+var CA_GRAD = {
+	green:  'linear-gradient(90deg, #2fb885, #34d399)',
+	orange: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
+	red:    'linear-gradient(90deg, #d95c5c, #f87171)'
+};
 function caQuality(key, v) {
 	v = parseFloat(v);
 	if (isNaN(v)) { return null; }
@@ -959,7 +1040,7 @@ function paintMetricCell(td, key, v, text) {
 			pb.setAttribute('title', txt);
 			var pf = pb.firstElementChild;
 			pf.style.width = pc + '%';
-			pf.style.background = CA_COLOR[col];
+			pf.style.background = CA_GRAD[col] || CA_COLOR[col];
 			return;
 		}
 		td.textContent = txt;   /* нет значения - просто «-» */
@@ -978,7 +1059,7 @@ function paintMetricCell(td, key, v, text) {
 		if (!bar) { bar = E('div', { 'class': 'metric-bar' }, [ E('div', {}) ]); td.appendChild(bar); }
 		var bf = bar.firstElementChild;
 		bf.style.width = pc + '%';
-		bf.style.background = CA_COLOR[col];
+		bf.style.background = CA_GRAD[col] || CA_COLOR[col];
 	} else if (bar) {
 		bar.parentNode.removeChild(bar);
 	}
@@ -2030,25 +2111,28 @@ function resetBands() {
      Дольше; на MM-модемах порт может кратко переклассифицироваться. Для случаев,
      когда мягкий рестарт не помог. */
 function rebootModem(hard) {
-	var msg = hard
-		? _('Fully restart the modem (CFUN=1,1)? It will reboot and re-enumerate on USB - this takes longer and the connection will drop for about a minute.')
-		: _('Restart the modem radio now? The connection will drop for a while.');
-	if (!confirm(msg))
-		return Promise.resolve();
-	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Restarting the modem...')));
+	/* Без confirm и без попапа (решение владельца). Обратная связь:
+	   - soft: спиннер на самой кнопке (ui.createHandlerFn держит его, пока
+	     команда не ушла) + краткое уведомление;
+	   - hard: модем сейчас ПРОПАДЁТ с шины - сразу накрываем блок «Модем»
+	     плашкой с прогрессбаром (как на eSIM при смене профиля); pollData сам
+	     снимет её, когда модем вернётся в сеть. */
+	if (hard) { setModemBusy(_('The modem is restarting…'), 60); }
 	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ hard ? 'hard' : 'soft' ]).then(function(res) {
-		ui.hideModal();
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
+			if (hard) { clearModemBusy(true); }
 			ui.addNotification(null, E('p', _('Modem AT port not found')), 'error');
 			return;
 		}
-		if (ui.addTimeLimitedNotification)
-			ui.addTimeLimitedNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 8000, 'info');
-		else
-			ui.addNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 'info');
+		if (!hard) {
+			if (ui.addTimeLimitedNotification)
+				ui.addTimeLimitedNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 8000, 'info');
+			else
+				ui.addNotification(null, E('p', _('The modem is restarting. This can take a minute.')), 'info');
+		}
 	}).catch(function(err) {
-		ui.hideModal();
+		if (hard) { clearModemBusy(true); }
 		ui.addNotification(null, E('p', _('Failed to restart the modem') + ': ' + (err.message || err)), 'error');
 	});
 }
@@ -2056,13 +2140,13 @@ function rebootModem(hard) {
 /* Аппаратная перезагрузка модема по питанию (GPIO modem_power и т.п.). Кнопка
    показывается только если у платы есть такой GPIO (см. reboot_modem.sh haspower). */
 function rebootModemPower() {
-	if (!confirm(_('Power-cycle the modem via the board power line? Power is cut for a few seconds and the modem re-appears in about a minute. On some boards this affects only the M.2 slot.')))
-		return Promise.resolve();
-	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Power-cycling the modem...')));
+	/* Без confirm и без попапа - модем сейчас пропадёт по питанию: сразу
+	   плашка с прогрессбаром на блоке «Модем», pollData снимет по возвращении. */
+	setModemBusy(_('The modem is restarting…'), 75);
 	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'power' ]).then(function(res) {
-		ui.hideModal();
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
+			clearModemBusy(true);
 			ui.addNotification(null, E('p', _('No modem power GPIO on this board')), 'error');
 			return;
 		}
@@ -2071,7 +2155,7 @@ function rebootModemPower() {
 		else
 			ui.addNotification(null, E('p', _('The modem is power-cycling. This can take a minute.')), 'info');
 	}).catch(function(err) {
-		ui.hideModal();
+		clearModemBusy(true);
 		ui.addNotification(null, E('p', _('Failed to power-cycle the modem') + ': ' + (err.message || err)), 'error');
 	});
 }
@@ -2440,397 +2524,16 @@ function checkOperatorName(t) {
     return r;
 }
 
-return view.extend({
+/* Заполнение ВСЕХ метрик страницы из ОДНОГО json-снимка. Вынесено из тика
+   опроса, чтобы render мог применить последний известный снимок (peek из
+   load()) СРАЗУ при открытии: страница появляется уже заполненной, тик
+   лишь освежает значения. Идемпотентно - sameRender/setRowVisible внутри
+   защищают от лишних перестроек DOM и скачков высоты. */
+function applyMetrics(json) {
 
-
-modemDialog: baseclass.extend({
-		__init__: function(title, description, callback) {
-			this.title       = title;
-			this.description = description;
-			this.callback    = callback;
-		},
-
-		load: function() {
-			return uci.load('modemdefine');
-		},
-
-		render: function(content) {
-
-			var sections = uci.sections('modemdefine');
-			var portM = sections.length;
-
-    			var result = "";
-    			for (var i = 1; i < portM; i++) {
-       			       	result += sections[i].comm_port + '_' + sections[i].network + '#' + sections[i].comm_port + ' - ' + sections[i].modem + ' (' + sections[i].user_desc + ');';
-    			}
-			var result = result.slice(0, -1);
-			var result = result.replace("(undefined)", "");
-
-			ui.showModal(this.title, [
-				E('div', { 'class': 'cbi-section' }, [
-					E('div', { 'class': 'cbi-section-descr' }, this.description),
-					E('div', { 'class': 'cbi-section' },
-						E('p', {},
-							E('div', { 'class': 'cbi-value' }, [
-							E('p'),
-							E('label', { 'class': 'cbi-value-title' }, [ _('Modem') ]),
-							E('div', { 'class': 'cbi-value-field' }, [
-								E('select', { 'class': 'cbi-input-select',
-										'id': 'mselect',
-										'style': 'margin:0px 0; width:100%;',
-										},
-									(result || "").trim().split(/;/).map(function(cmd) {
-										var fields = cmd.split(/#/);
-										var name = fields[1];
-										var code = fields[0];
-									return E('option', { 'value': code }, name ) })
-
-								)
-							]) 
-						]),
-						)
-					),
-				]),
-				E('div', { 'class': 'right' }, [
-					E('button', {
-						'class': 'btn',
-						'click': ui.createHandlerFn(this, this.handleDissmis),
-					}, _('Cancel')),
-
-					' ',
-					E('button', {
-						'id': 'btn_save',
-						'class': 'btn cbi-button-positive important',
-						'click': ui.createHandlerFn(this, this.handleSave),
-					}, _('Save')),
-
-				]),
-			]);
-		},
-
-		handleSave: function(ev) {
-
-			return uci.load('modemdefine').then(function() {
-
-				var vx = document.getElementById('mselect').value;
-				var marr = vx.split('_');
-
-				uci.set('modemdefine', '@general[0]', 'main_modem', marr[0].toString());
-				uci.set('modemdefine', '@general[0]', 'main_network', marr[1].toString());
-
-
-				uci.save();
-				uci.apply();
-
-				window.setTimeout(function() {
-					if (!poll.active()) poll.start();
-					location.reload();
-					//ev.target.blur();
-				}, 2000).finally();
-			});
-
-		},
-
-		handleDissmis: function(ev) {
-				ui.hideModal();
-				if (!poll.active()) poll.start();
-		},
-
-		show: function() {
-			ui.showModal(null,
-				E('p', { 'class': 'spinning' }, _('Loading'))
-			);
-			poll.stop();
-			this.load().then(content => {
-				ui.hideModal();
-				return this.render(content);
-			}).catch(e => {
-				ui.hideModal();
-				return this.error(e);
-			})
-		},
-	}),
-
-simDialog: baseclass.extend({
-		__init__: function(title, description, callback) {
-			this.title       = title;
-			this.description = description;
-			this.callback    = callback;
-		},
-
-		load: function() {
-			/* При открытии берём снимок: страница отрисуется сразу, а не через
-			   несколько секунд ожидания модема. Если снимок протух, cached сам
-			   сделает полный опрос. */
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '10' ]));
-		},
-
-		render: function(content) {
-
-			var json = JSON.parse(content);
-
-			if (json) {
-				if (!json.imei.length > 2) {
-					return false,
-					       poll.start()
-				}
-			}
-
-
-			// Простая таблица label|значение вместо трёх пар в одном
-			// .cbi-value (proton2025 стилизует .cbi-value как flex-строку и
-			// сжимал поля в кашу). Значения - выделяемый моноширинный текст.
-			var simRow = function(label, val) {
-				return E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ label ]),
-					E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; word-break:break-all; user-select:text;' }, [ (val && String(val).length) ? String(val) : '-' ]),
-				]);
-			};
-
-			// Тип SIM (USIM/eSIM) - строка скрыта и заполняется асинхронно из
-			// simslot.sh. Переключатель СЛОТОВ живёт в шапке страницы (над
-			// температурой, см. loadSimSlots), здесь его не дублируем.
-			var typeRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
-				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM type') ]),
-				E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; user-select:text;', 'id': 'simslot-type' }, [ '-' ]),
-			]);
-
-			ui.showModal(this.title, [
-				E('div', { 'class': 'cbi-section' }, [
-					E('div', { 'class': 'cbi-section-descr' }, this.description),
-					E('table', { 'class': 'table', 'style': 'width:100%; background:transparent; border:none; box-shadow:none;' }, [
-						simRow(_('SIM IMSI'), json.imsi),
-						simRow(_('SIM ICCID'), json.iccid),
-						simRow(_('Modem IMEI'), json.imei),
-						typeRow,
-					]),
-				]),
-				E('div', { 'class': 'right' }, [
-					E('button', {
-						'class': 'btn',
-						'click': ui.createHandlerFn(this, this.handleDissmis),
-					}, _('Close')),
-				]),
-			]);
-
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
-				var st = {};
-				try { st = JSON.parse(out) || {}; } catch (e) { return; }
-				if (st.type) {
-					var tc = document.getElementById('simslot-type');
-					if (tc) { tc.textContent = st.type; typeRow.style.display = ''; }
-				}
-			});
-		},
-
-		handleDissmis: function(ev) {
-				ui.hideModal();
-				if (!poll.active()) poll.start();
-		},
-
-		show: function() {
-			ui.showModal(null,
-				E('p', { 'class': 'spinning' }, _('Loading'))
-			);
-			poll.stop();
-			this.load().then(content => {
-				ui.hideModal();
-				return this.render(content);
-			}).catch(e => {
-				ui.hideModal();
-				return this.error(e);
-			})
-		},
-	}),
-
-
-	formdata: { threeginfo: {} },
-	
-	/* render-first: НИЧЕГО не ждём перед отрисовкой.
-	   Раньше здесь блокировались: modemswitch.sh mmindex (~0.09 c), затем
-	   Promise.all(5gmodem.sh json ~0.58 c, mmcli -K, uci, ttl.sh) - и всё это
-	   время страница была ПУСТОЙ. Теперь отдаём пустые данные: render() рисует
-	   скелет с прочерками сразу, а значения подставляет первый тик poll (он и
-	   так опрашивает всё это каждые 5 c). Тяжёлые вызовы никуда не делись - они
-	   ушли с критического пути.
-	   mmIdx получаем в фоне: он нужен только кнопкам режимов/бендов, а блок
-	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
-	load: function() {
-		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
-			.then(function(idx) { mmIdx = (String(idx || '').trim()) || 'any'; });
-		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не
-		   сверяем имя платы: у совместимых устройств те же светодиоды бывают под
-		   другим board_name, а на LT300 иной ревизии их может не быть - и тогда
-		   галочка только вводила бы в заблуждение.
-		   ЖДЁМ ответа, а не пускаем запрос «на отвал»: ledsAvail читается прямо
-		   в render(), и без ожидания он всегда оказывался ещё false - блок с
-		   галочкой не появлялся вообще никогда. (Запрос mmindex выше ждать не
-		   нужно: его результат используется позже, на тиках опроса.) */
-		return Promise.all([
-			L.resolveDefault(uci.load('5gmodem')),
-			/* ЧИТАЕМ КАТАЛОГ, А НЕ ЗАПУСКАЕМ СКРИПТ.
-			   Через запуск это не заработало дважды: fs.exec_direct ходит в
-			   /cgi-bin/cgi-exec (тот самый хелпер, что уже отвечал "404
-			   Executable not found" в checkPackages), а fs.exec упирается в то,
-			   что разрешение на запуск может не примениться. fs.list идёт через
-			   ubus file.list, и путь /sys/class/leds разрешён в нашем ACL
-			   отдельной строкой ("list") - это самый короткий и надёжный путь.
-			   Заодно исчезает запуск процесса на каждое открытие страницы. */
-			L.resolveDefault(fs.list('/sys/class/leds'), [])
-		]).then(function(res) {
-			try {
-				var names = (res[1] || []).map(function(e) { return e.name; });
-				/* Нужны все три: на устройстве с одним индикатором показывать
-				   настройку «уровень тремя лампочками» бессмысленно. */
-				ledsAvail = [ 'white:signal1', 'white:signal2', 'white:signal3' ]
-					.every(function(n) { return names.indexOf(n) >= 0; });
-			} catch (e) {}
-			return [ '{}', '', null, '{}' ];
-		});
-	},
-
-	render: function(res) {
-		modemtabs.attach();  /* theme-agnostic modem switcher bar */
-		/* «Приоритет интернета» рисуется ВНУТРИ контента (netpri.mount() ниже),
-		   а не вставкой над вкладками - см. mount(). */
-		var m, s, o;
-
-		/* Настройка «Отображать Фиксацию TTL» (вкладка «Настройки» - блок «Сеть»).
-		   Включена по умолчанию: показываем блок, ПОКА значение явно не '0'. */
-		var showTtl = (uci.get('5gmodem', '@5gmodem[0]', 'show_ttl') !== '0');
-
-		var data = Array.isArray(res) ? res[0] : res;
-		var mmK  = Array.isArray(res) ? (res[1] || '') : '';
-
-		// исходный json (для наличия IPv6 и т.п. на этапе построения)
-		var initjson = {};
-		try { initjson = JSON.parse(data) || {}; } catch (e) {}
-		var has6 = (initjson.ipaddr6 != null && String(initjson.ipaddr6).length > 3 && String(initjson.ipaddr6) != '-');
-		var ttlv = function(k) { var v = uci.get('5gmodem', '@5gmodem[0]', k); return (v == null) ? '' : v; };
-
-		// системные TTL/hop-limit по умолчанию - подсказка (placeholder) в пустых полях
-		var ttlget = {};
-		try { ttlget = JSON.parse((Array.isArray(res) ? (res[3] || '') : '') || '{}') || {}; } catch (e) {}
-		var def4 = ttlget.def4 || '64';
-		var def6 = ttlget.def6 || '64';
-
-		// протокол интерфейса (modemmanager/mbim/qmi/...) - для логики
-		// доступности управления бендами
-		ifaceProtoIsMM = (String(initjson.protocol || '').toLowerCase() === 'modemmanager');
-
-		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
-		var mmHasModem = /current-modes/.test(mmK);
-		var mmModes = (function() {
-			var mm = mmK.match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
-			if (!mm) { return null; }
-			return {
-				allowed: mm[1].split(',').map(function(x) { return x.trim(); }).sort().join('|'),
-				pref: (mm[2].trim() == 'none' ? '' : mm[2].trim())
-			};
-		})();
-		var mmSup = [], mmCur = [];
-		mmK.split('\n').forEach(function(ln) {
-			var b = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
-			if (b) { (b[1] == 'supported' ? mmSup : mmCur).push(b[2]); }
-		});
-		// bandsOther: при смене сохраняем только НЕ-управляемые диапазоны (cdma и
-		// т.п.); utran теперь управляется своими тумблерами (см. applyBands/loadBands)
-		bandsOther = mmCur.filter(function(b) { return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0 && b.indexOf('utran-') != 0; });
-		var msStyle = mmHasModem ? null : 'display:none';
-		// 3G (UTRAN) row is shown only when the modem actually exposes utran bands
-		var has3g = mmHasModem && mmSup.some(function(b) { return b.indexOf('utran-') == 0; });
-		var modeActive = function(allowed, preferred) {
-			return mmModes &&
-			       mmModes.allowed == allowed.split('|').sort().join('|') &&
-			       (mmModes.pref || '') == (preferred || '');
-		};
-
-		// Управляем бендами через modemband (вендорные AT-команды), если модем
-		// НЕ под ModemManager, ЛИБО он под MM, но mmcli не отдаёт для него ни
-		// одного бенда (напр. Fibocom FM350 под MM: плагин показывает 0 бендов,
-		// зато GTACT работает). Иначе - путь mmcli.
-		if (!mmHasModem || !mmSup.length) {
-			window.setTimeout(loadBandsModemband, 400);
-		}
-
-		active_select();
-		window.setTimeout(loadSimSlots, 600);
-
-		var upModemDialog = new this.modemDialog(
-			_('Defined modems'),
-			_('Interface for selecting user defined modems'),
-		);
-
-		var upSIMDialog = new this.simDialog(
-			_('SIM card menu'),
-			_('Information read from the SIM card and device'),
-		);
-
-
-		if (data != null){
-		try {
-
-		var json = JSON.parse(data);
-
-		/* Последний снимок метрик держим глобально: из него берутся EARFCN и PCI
-		   для кнопки «привязать к текущей соте» - переписывать их руками никто
-		   не станет, а другого источника этих значений в UI нет. */
-		window._lastJson = json;
-
-			if(!json.hasOwnProperty('error')){
-				
-				if (json.registration == 'SIM not inserted' || json.registration == '-') {
-					if (ui.addTimeLimitedNotification)
-						ui.addTimeLimitedNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 5000, 'info');
-					else
-						ui.addNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 'info');
-				}
-				if (json.registration == 'SIM PIN required') { 
-					ui.addNotification(null, E('p', _('SIM PIN required')), 'info');
-				}
-				if (json.registration == 'SIM PUK required') { 
-					ui.addNotification(null, E('p', _('SIM PUK required')), 'info');
-				}
-				if (json.registration == 'SIM failure') { 
-					ui.addNotification(null, E('p', _('SIM failure')), 'info');
-				}
-				if (json.registration == 'SIM busy') { 
-					ui.addNotification(null, E('p', _('SIM busy')), 'info');
-				}
-				if (json.registration == 'SIM wrong') { 
-					ui.addNotification(null, E('p', _('SIM wrong')), 'info');
-				}
-				if (json.registration == 'SIM PIN2 required') { 
-					ui.addNotification(null, E('p', _('SIM PIN2 required')), 'info');
-				}
-				if (json.registration == 'SIM PUK2 required') { 
-					ui.addNotification(null, E('p', _('SIM PUK2 required')), 'info');
-				}
-				{
-					/* Раньше огромный баннер «модем не найден» + вложенный ниже
-					   poll.add висели в else и запускались только если при
-					   первой отрисовке уже был сигнал. На загрузке без сигнала
-					   опрос вообще не стартовал - страница не обновлялась (не
-					   появлялись кнопки диапазонов), пока её не обновишь руками.
-					   Теперь опрос стартует всегда, а вместо баннера - краткое
-					   самоисчезающее уведомление. */
-					if (json.connt == '' || json.connt == '-') {
-						if (ui.addTimeLimitedNotification)
-							ui.addTimeLimitedNotification(null, E('p', _('Waiting for the modem to connect…')), 4000, 'info');
-					}
-
-
-			pollData: poll.add(function() {
-				/* ЧИТАЕМ СНИМОК, а не опрашиваем модем. В порт ходит ровно один
-				   процесс (блокировка в 5gmodem.sh), остальные берут готовые
-				   данные - иначе открытая страница, второй браузер и 5gtop
-				   конкурируют за AT-порт, и опрос вместо 3.8 c занимает 13.4 c
-				   (замерено). Свежесть 4 c при опросе раз в 5 c означает, что
-				   обновление всё равно делаем мы, но без второй ходки, если
-				   кто-то уже опрашивает. */
-				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]))
-					.then(function(res) {
-					var json = JSON.parse(res);
+					/* Тик пришёл - порт свободен: запускаем отложенные
+					   simslot/bands (см. afterFirstPoll). */
+					runAfterFirstPoll();
 
 					/* МОДЕМА НА ШИНЕ НЕТ ВОВСЕ. Метрики отдают error "Device not
 					   found" (при хотя бы одном модеме скрипт сам его находит,
@@ -2992,6 +2695,16 @@ simDialog: baseclass.extend({
 					var _hasPhone = (json.phone && String(json.phone).length > 3 && json.phone != '-');
 					if (document.getElementById('phone')) {
 						var pv = document.getElementById('phone');
+						/* СМЕНА SIM/eSIM-ПРОФИЛЯ: липкость номера сбрасываем.
+						   Номер «прилипал» намеренно (пустой CNUM - чаще коллизия
+						   порта), но после смены IMSI старый номер уже ЧУЖОЙ: у
+						   нового профиля его может не быть вовсе, и липкость
+						   вечно показывала бы номер прежнего оператора. */
+						var _imsiNow = String(json.imsi || '');
+						if (_imsiNow && _imsiNow !== '-' && pv.getAttribute('data-imsi') !== _imsiNow) {
+							if (pv.getAttribute('data-imsi') != null) { pv.removeAttribute('data-hadata'); }
+							pv.setAttribute('data-imsi', _imsiNow);
+						}
 						if (_hasPhone) {
 							pv.textContent = formatPhone(json.phone);
 							pv.style.display = '';
@@ -3534,7 +3247,404 @@ simDialog: baseclass.extend({
 					/* CA-таблица по компонентам (PCC + активные SCC) */
 					renderCaTable(json);
 					renderNeighbors(json);
-					});
+}
+
+return view.extend({
+
+
+modemDialog: baseclass.extend({
+		__init__: function(title, description, callback) {
+			this.title       = title;
+			this.description = description;
+			this.callback    = callback;
+		},
+
+		load: function() {
+			return uci.load('modemdefine');
+		},
+
+		render: function(content) {
+
+			var sections = uci.sections('modemdefine');
+			var portM = sections.length;
+
+    			var result = "";
+    			for (var i = 1; i < portM; i++) {
+       			       	result += sections[i].comm_port + '_' + sections[i].network + '#' + sections[i].comm_port + ' - ' + sections[i].modem + ' (' + sections[i].user_desc + ');';
+    			}
+			var result = result.slice(0, -1);
+			var result = result.replace("(undefined)", "");
+
+			ui.showModal(this.title, [
+				E('div', { 'class': 'cbi-section' }, [
+					E('div', { 'class': 'cbi-section-descr' }, this.description),
+					E('div', { 'class': 'cbi-section' },
+						E('p', {},
+							E('div', { 'class': 'cbi-value' }, [
+							E('p'),
+							E('label', { 'class': 'cbi-value-title' }, [ _('Modem') ]),
+							E('div', { 'class': 'cbi-value-field' }, [
+								E('select', { 'class': 'cbi-input-select',
+										'id': 'mselect',
+										'style': 'margin:0px 0; width:100%;',
+										},
+									(result || "").trim().split(/;/).map(function(cmd) {
+										var fields = cmd.split(/#/);
+										var name = fields[1];
+										var code = fields[0];
+									return E('option', { 'value': code }, name ) })
+
+								)
+							]) 
+						]),
+						)
+					),
+				]),
+				E('div', { 'class': 'right' }, [
+					E('button', {
+						'class': 'btn',
+						'click': ui.createHandlerFn(this, this.handleDissmis),
+					}, _('Cancel')),
+
+					' ',
+					E('button', {
+						'id': 'btn_save',
+						'class': 'btn cbi-button-positive important',
+						'click': ui.createHandlerFn(this, this.handleSave),
+					}, _('Save')),
+
+				]),
+			]);
+		},
+
+		handleSave: function(ev) {
+
+			return uci.load('modemdefine').then(function() {
+
+				var vx = document.getElementById('mselect').value;
+				var marr = vx.split('_');
+
+				uci.set('modemdefine', '@general[0]', 'main_modem', marr[0].toString());
+				uci.set('modemdefine', '@general[0]', 'main_network', marr[1].toString());
+
+
+				uci.save();
+				uci.apply();
+
+				window.setTimeout(function() {
+					if (!poll.active()) poll.start();
+					location.reload();
+					//ev.target.blur();
+				}, 2000).finally();
+			});
+
+		},
+
+		handleDissmis: function(ev) {
+				ui.hideModal();
+				if (!poll.active()) poll.start();
+		},
+
+		show: function() {
+			ui.showModal(null,
+				E('p', { 'class': 'spinning' }, _('Loading'))
+			);
+			poll.stop();
+			this.load().then(content => {
+				ui.hideModal();
+				return this.render(content);
+			}).catch(e => {
+				ui.hideModal();
+				return this.error(e);
+			})
+		},
+	}),
+
+simDialog: baseclass.extend({
+		__init__: function(title, description, callback) {
+			this.title       = title;
+			this.description = description;
+			this.callback    = callback;
+		},
+
+		load: function() {
+			/* При открытии берём снимок: страница отрисуется сразу, а не через
+			   несколько секунд ожидания модема. Если снимок протух, cached сам
+			   сделает полный опрос. */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '10' ]));
+		},
+
+		render: function(content) {
+
+			var json = JSON.parse(content);
+
+			if (json) {
+				if (!json.imei.length > 2) {
+					return false,
+					       poll.start()
+				}
+			}
+
+
+			// Простая таблица label|значение вместо трёх пар в одном
+			// .cbi-value (proton2025 стилизует .cbi-value как flex-строку и
+			// сжимал поля в кашу). Значения - выделяемый моноширинный текст.
+			var simRow = function(label, val) {
+				return E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ label ]),
+					E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; word-break:break-all; user-select:text;' }, [ (val && String(val).length) ? String(val) : '-' ]),
+				]);
+			};
+
+			// Тип SIM (USIM/eSIM) - строка скрыта и заполняется асинхронно из
+			// simslot.sh. Переключатель СЛОТОВ живёт в шапке страницы (над
+			// температурой, см. loadSimSlots), здесь его не дублируем.
+			var typeRow = E('tr', { 'class': 'tr', 'style': 'display:none' }, [
+				E('td', { 'class': 'td left', 'style': 'width:35%; white-space:nowrap; padding:8px 12px 8px 0; vertical-align:top; font-weight:600;' }, [ _('SIM type') ]),
+				E('td', { 'class': 'td left', 'style': 'padding:8px 0; font-family:monospace; user-select:text;', 'id': 'simslot-type' }, [ '-' ]),
+			]);
+
+			ui.showModal(this.title, [
+				E('div', { 'class': 'cbi-section' }, [
+					E('div', { 'class': 'cbi-section-descr' }, this.description),
+					E('table', { 'class': 'table', 'style': 'width:100%; background:transparent; border:none; box-shadow:none;' }, [
+						simRow(_('SIM IMSI'), json.imsi),
+						simRow(_('SIM ICCID'), json.iccid),
+						simRow(_('Modem IMEI'), json.imei),
+						typeRow,
+					]),
+				]),
+				E('div', { 'class': 'right' }, [
+					E('button', {
+						'class': 'btn',
+						'click': ui.createHandlerFn(this, this.handleDissmis),
+					}, _('Close')),
+				]),
+			]);
+
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+				var st = {};
+				try { st = JSON.parse(out) || {}; } catch (e) { return; }
+				if (st.type) {
+					var tc = document.getElementById('simslot-type');
+					if (tc) { tc.textContent = st.type; typeRow.style.display = ''; }
+				}
+			});
+		},
+
+		handleDissmis: function(ev) {
+				ui.hideModal();
+				if (!poll.active()) poll.start();
+		},
+
+		show: function() {
+			ui.showModal(null,
+				E('p', { 'class': 'spinning' }, _('Loading'))
+			);
+			poll.stop();
+			this.load().then(content => {
+				ui.hideModal();
+				return this.render(content);
+			}).catch(e => {
+				ui.hideModal();
+				return this.error(e);
+			})
+		},
+	}),
+
+
+	formdata: { threeginfo: {} },
+	
+	/* render-first: НИЧЕГО не ждём перед отрисовкой.
+	   Раньше здесь блокировались: modemswitch.sh mmindex (~0.09 c), затем
+	   Promise.all(5gmodem.sh json ~0.58 c, mmcli -K, uci, ttl.sh) - и всё это
+	   время страница была ПУСТОЙ. Теперь отдаём пустые данные: render() рисует
+	   скелет с прочерками сразу, а значения подставляет первый тик poll (он и
+	   так опрашивает всё это каждые 5 c). Тяжёлые вызовы никуда не делись - они
+	   ушли с критического пути.
+	   mmIdx получаем в фоне: он нужен только кнопкам режимов/бендов, а блок
+	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
+	load: function() {
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
+			.then(function(idx) { mmIdx = (String(idx || '').trim()) || 'any'; });
+		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не
+		   сверяем имя платы: у совместимых устройств те же светодиоды бывают под
+		   другим board_name, а на LT300 иной ревизии их может не быть - и тогда
+		   галочка только вводила бы в заблуждение.
+		   ЖДЁМ ответа, а не пускаем запрос «на отвал»: ledsAvail читается прямо
+		   в render(), и без ожидания он всегда оказывался ещё false - блок с
+		   галочкой не появлялся вообще никогда. (Запрос mmindex выше ждать не
+		   нужно: его результат используется позже, на тиках опроса.) */
+		return Promise.all([
+			L.resolveDefault(uci.load('5gmodem')),
+			/* ЧИТАЕМ КАТАЛОГ, А НЕ ЗАПУСКАЕМ СКРИПТ.
+			   Через запуск это не заработало дважды: fs.exec_direct ходит в
+			   /cgi-bin/cgi-exec (тот самый хелпер, что уже отвечал "404
+			   Executable not found" в checkPackages), а fs.exec упирается в то,
+			   что разрешение на запуск может не примениться. fs.list идёт через
+			   ubus file.list, и путь /sys/class/leds разрешён в нашем ACL
+			   отдельной строкой ("list") - это самый короткий и надёжный путь.
+			   Заодно исчезает запуск процесса на каждое открытие страницы. */
+			L.resolveDefault(fs.list('/sys/class/leds'), []),
+			/* ТЁПЛЫЙ СТАРТ: последний снимок метрик ЛЮБОГО возраста (peek не
+			   трогает ни порт, ни замок - ~10 мс). Повторное открытие рисует
+			   последние известные цифры сразу, а не прочерки до первого тика.
+			   Модем/порт не задерживают render ни на миллисекунду. */
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek' ]), '{}')
+		]).then(function(res) {
+			try {
+				var names = (res[1] || []).map(function(e) { return e.name; });
+				/* Нужны все три: на устройстве с одним индикатором показывать
+				   настройку «уровень тремя лампочками» бессмысленно. */
+				ledsAvail = [ 'white:signal1', 'white:signal2', 'white:signal3' ]
+					.every(function(n) { return names.indexOf(n) >= 0; });
+			} catch (e) {}
+			return [ String(res[2] || '{}'), '', null, '{}' ];
+		});
+	},
+
+	render: function(res) {
+		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		/* «Приоритет интернета» рисуется ВНУТРИ контента (netpri.mount() ниже),
+		   а не вставкой над вкладками - см. mount(). */
+		var m, s, o;
+
+		/* Настройка «Отображать Фиксацию TTL» (вкладка «Настройки» - блок «Сеть»).
+		   Включена по умолчанию: показываем блок, ПОКА значение явно не '0'. */
+		var showTtl = (uci.get('5gmodem', '@5gmodem[0]', 'show_ttl') !== '0');
+
+		var data = Array.isArray(res) ? res[0] : res;
+		var mmK  = Array.isArray(res) ? (res[1] || '') : '';
+
+		// исходный json (для наличия IPv6 и т.п. на этапе построения)
+		var initjson = {};
+		try { initjson = JSON.parse(data) || {}; } catch (e) {}
+		var has6 = (initjson.ipaddr6 != null && String(initjson.ipaddr6).length > 3 && String(initjson.ipaddr6) != '-');
+		var ttlv = function(k) { var v = uci.get('5gmodem', '@5gmodem[0]', k); return (v == null) ? '' : v; };
+
+		// системные TTL/hop-limit по умолчанию - подсказка (placeholder) в пустых полях
+		var ttlget = {};
+		try { ttlget = JSON.parse((Array.isArray(res) ? (res[3] || '') : '') || '{}') || {}; } catch (e) {}
+		var def4 = ttlget.def4 || '64';
+		var def6 = ttlget.def6 || '64';
+
+		// протокол интерфейса (modemmanager/mbim/qmi/...) - для логики
+		// доступности управления бендами
+		ifaceProtoIsMM = (String(initjson.protocol || '').toLowerCase() === 'modemmanager');
+
+		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
+		var mmHasModem = /current-modes/.test(mmK);
+		var mmModes = (function() {
+			var mm = mmK.match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
+			if (!mm) { return null; }
+			return {
+				allowed: mm[1].split(',').map(function(x) { return x.trim(); }).sort().join('|'),
+				pref: (mm[2].trim() == 'none' ? '' : mm[2].trim())
+			};
+		})();
+		var mmSup = [], mmCur = [];
+		mmK.split('\n').forEach(function(ln) {
+			var b = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
+			if (b) { (b[1] == 'supported' ? mmSup : mmCur).push(b[2]); }
+		});
+		// bandsOther: при смене сохраняем только НЕ-управляемые диапазоны (cdma и
+		// т.п.); utran теперь управляется своими тумблерами (см. applyBands/loadBands)
+		bandsOther = mmCur.filter(function(b) { return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0 && b.indexOf('utran-') != 0; });
+		var msStyle = mmHasModem ? null : 'display:none';
+		// 3G (UTRAN) row is shown only when the modem actually exposes utran bands
+		var has3g = mmHasModem && mmSup.some(function(b) { return b.indexOf('utran-') == 0; });
+		var modeActive = function(allowed, preferred) {
+			return mmModes &&
+			       mmModes.allowed == allowed.split('|').sort().join('|') &&
+			       (mmModes.pref || '') == (preferred || '');
+		};
+
+		// Управляем бендами через modemband (вендорные AT-команды), если модем
+		// НЕ под ModemManager, ЛИБО он под MM, но mmcli не отдаёт для него ни
+		// одного бенда (напр. Fibocom FM350 под MM: плагин показывает 0 бендов,
+		// зато GTACT работает). Иначе - путь mmcli.
+		if (!mmHasModem || !mmSup.length) {
+			afterFirstPoll(loadBandsModemband);
+		}
+
+		active_select();
+		afterFirstPoll(loadSimSlots);
+
+		var upModemDialog = new this.modemDialog(
+			_('Defined modems'),
+			_('Interface for selecting user defined modems'),
+		);
+
+		var upSIMDialog = new this.simDialog(
+			_('SIM card menu'),
+			_('Information read from the SIM card and device'),
+		);
+
+
+		if (data != null){
+		try {
+
+		var json = JSON.parse(data);
+
+		/* Последний снимок метрик держим глобально: из него берутся EARFCN и PCI
+		   для кнопки «привязать к текущей соте» - переписывать их руками никто
+		   не станет, а другого источника этих значений в UI нет. */
+		window._lastJson = json;
+
+			if(!json.hasOwnProperty('error')){
+				
+				if (json.registration == 'SIM not inserted' || json.registration == '-') {
+					if (ui.addTimeLimitedNotification)
+						ui.addTimeLimitedNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 5000, 'info');
+					else
+						ui.addNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 'info');
+				}
+				if (json.registration == 'SIM PIN required') { 
+					ui.addNotification(null, E('p', _('SIM PIN required')), 'info');
+				}
+				if (json.registration == 'SIM PUK required') { 
+					ui.addNotification(null, E('p', _('SIM PUK required')), 'info');
+				}
+				if (json.registration == 'SIM failure') { 
+					ui.addNotification(null, E('p', _('SIM failure')), 'info');
+				}
+				if (json.registration == 'SIM busy') { 
+					ui.addNotification(null, E('p', _('SIM busy')), 'info');
+				}
+				if (json.registration == 'SIM wrong') { 
+					ui.addNotification(null, E('p', _('SIM wrong')), 'info');
+				}
+				if (json.registration == 'SIM PIN2 required') { 
+					ui.addNotification(null, E('p', _('SIM PIN2 required')), 'info');
+				}
+				if (json.registration == 'SIM PUK2 required') { 
+					ui.addNotification(null, E('p', _('SIM PUK2 required')), 'info');
+				}
+				{
+					/* Раньше огромный баннер «модем не найден» + вложенный ниже
+					   poll.add висели в else и запускались только если при
+					   первой отрисовке уже был сигнал. На загрузке без сигнала
+					   опрос вообще не стартовал - страница не обновлялась (не
+					   появлялись кнопки диапазонов), пока её не обновишь руками.
+					   Теперь опрос стартует всегда, а вместо баннера - краткое
+					   самоисчезающее уведомление. */
+					if (json.connt == '' || json.connt == '-') {
+						if (ui.addTimeLimitedNotification)
+							ui.addTimeLimitedNotification(null, E('p', _('Waiting for the modem to connect…')), 4000, 'info');
+					}
+
+
+			pollData: poll.add(function() {
+				/* ЧИТАЕМ СНИМОК, а не опрашиваем модем. В порт ходит ровно один
+				   процесс (блокировка в 5gmodem.sh), остальные берут готовые
+				   данные - иначе открытая страница, второй браузер и 5gtop
+				   конкурируют за AT-порт, и опрос вместо 3.8 c занимает 13.4 c
+				   (замерено). Свежесть 4 c при опросе раз в 5 c означает, что
+				   обновление всё равно делаем мы, но без второй ходки, если
+				   кто-то уже опрашивает. Заполнение - в applyMetrics: оно ОБЩЕЕ
+				   с мгновенным применением peek-снимка при открытии страницы. */
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]))
+					.then(function(res) { applyMetrics(JSON.parse(res)); });
 				});	
 
 				}
@@ -3543,7 +3653,18 @@ simDialog: baseclass.extend({
 		} catch (err) {
 				ui.addNotification(null, E('p', _('Error: ') + err.message), 'error');
 				}
-		}		
+		}
+
+		/* МГНОВЕННОЕ ЗАПОЛНЕНИЕ последним известным снимком (peek из load()).
+		   render строит DOM, которого ЕЩЁ НЕТ в документе - getElementById в
+		   applyMetrics ничего бы не нашёл, поэтому откладываем на макротаск:
+		   к его выполнению LuCI уже вставил вью. Страница открывается сразу
+		   заполненной (значения, иконки, соты, CA), первый тик лишь освежит.
+		   Пустой peek ({} - модем ни разу не опрашивался) не применяем:
+		   затирать скелет нулями хуже честных прочерков. */
+		if (initjson && (initjson.modem || initjson.signal)) {
+			window.setTimeout(function() { applyMetrics(initjson); }, 0);
+		}
 
 		var info = _('').format('');
 		m = new form.JSONMap(this.formdata, '', '');
@@ -4030,14 +4151,14 @@ simDialog: baseclass.extend({
 							E('th', { 'class': 'th' }, [ 'RSSI' ]),
 						])
 					])
-				])
-			]),
+				]),
 
-			/* Сигнал по антенным портам (AT#LAPS у Telit). Есть не у всех модемов:
-			   блок скрыт и показывается из fillAntPorts() только когда модем
-			   реально отдал данные (поле antports в опросе метрик). */
-			E('div', { 'id': 'antports-block', 'style': 'display:none' }, [
-				collapsibleSection('ant', _('Antenna ports'), [
+				/* Сигнал по антенным портам (AT#LAPS у Telit). Есть не у всех
+				   модемов: скрыт, пока fillAntPorts() не получит данные. Живёт
+				   ВНУТРИ «Информации о соте» тем же под-блоком, что CA и соседи
+				   (решение владельца) - отдельная сворачиваемая секция убрана. */
+				E('div', { 'id': 'antports-block', 'style': 'display:none;margin-top:.6em' }, [
+					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Antenna ports')),
 					E('table', { 'class': 'table', 'id': 'antports-table' }, []),
 					/* Состояние разнесённого приёма. Стоит ИМЕННО ЗДЕСЬ, потому
 					   что без него таблица выше неполна: одинаковые уровни на

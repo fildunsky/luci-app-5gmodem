@@ -360,6 +360,13 @@ function runSpeedtest() {
    при находке дёргаем redraw, чтобы кнопка появилась без ожидания следующего
    тика поллинга. */
 var _ssclash = { present: false, port: 9091, scheme: 'http', version: '' };
+/* Warm-seed из localStorage: с ним кнопка SSClash есть уже В ПЕРВОМ КАДРЕ
+   warm-render'а (см. lastList), а не «выпрыгивает» после детекта. Детект ниже
+   лишь подтверждает: сервис пропал - кнопка уберётся и из кэша, и с экрана. */
+try {
+	var _sscSeed = JSON.parse(window.localStorage.getItem('netpri-ssclash') || 'null');
+	if (_sscSeed && _sscSeed.present) { _ssclash = _sscSeed; }
+} catch (e) {}
 var _ssclashProbed = false;
 function ssclashInit(redraw) {
 	if (_ssclashProbed) { return; }
@@ -368,7 +375,14 @@ function ssclashInit(redraw) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j && j.present) {
 			_ssclash = { present: true, port: (j.port || 9091), scheme: (j.scheme || 'http'), version: (j.version || '') };
+			try { window.localStorage.setItem('netpri-ssclash', JSON.stringify(_ssclash)); } catch (e) {}
 			if (typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
+		} else {
+			var _had = _ssclash.present;
+			_ssclash = { present: false, port: 9091, scheme: 'http', version: '' };
+			try { window.localStorage.removeItem('netpri-ssclash'); } catch (e) {}
+			/* Кнопка была нарисована из кэша, а сервис удалили - перерисовать без неё. */
+			if (_had && typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		}
 	});
 }
@@ -420,8 +434,25 @@ function loadList() {
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'list' ]), '[]').then(function(out) {
 		var arr = [];
 		try { arr = JSON.parse(out || '[]') || []; } catch (e) {}
-		return Array.isArray(arr) ? arr : [];
+		arr = Array.isArray(arr) ? arr : [];
+		/* Последний непустой список - в localStorage: из него блок рисуется
+		   МГНОВЕННО при следующем открытии (warm-render в mount/renderBar),
+		   не дожидаясь этого XHR. Иначе панель появлялась через ~0.4 c НАД
+		   уже нарисованным блоком «Модем» и сдвигала его рывком. */
+		if (arr.length) {
+			try { window.localStorage.setItem('netpri-last', JSON.stringify(arr)); } catch (e) {}
+		}
+		return arr;
 	});
+}
+
+/* Последний сохранённый список (может быть устаревшим - живой опрос его тут же
+   освежит) либо []. */
+function lastList() {
+	try {
+		var a = JSON.parse(window.localStorage.getItem('netpri-last') || '[]');
+		return Array.isArray(a) ? a : [];
+	} catch (e) { return []; }
 }
 
 /* Активным считаем интерфейс с наименьшей метрикой (после set у выбранного это =1,
@@ -563,6 +594,10 @@ return baseclass.extend({
 			// Просто перерисовываем при наличии данных; последнее содержимое «липкое».
 			if (list && list.length) { redraw(list); }
 		};
+		/* WARM-RENDER: последний список из localStorage встаёт в ПЕРВЫЙ КАДР -
+		   блок сразу правильной высоты, кнопки на местах; свежий ответ ниже
+		   лишь обновит содержимое НА МЕСТЕ, без сдвига страницы. */
+		apply(lastList());
 		L.resolveDefault(loadList()).then(apply);
 		stInit();   /* подпись сервиса + последний результат теста скорости */
 		ssclashInit(redraw);
@@ -583,8 +618,7 @@ return baseclass.extend({
 
 	/* Promise<DOM|null>. null — если ни одного WAN-аплинка с IP нет. */
 	renderBar: function() {
-		return loadList().then(function(list) {
-			if (!list.length) { return null; }
+		var mk = function(list) {
 			ensureCss();
 			var wrap = E('div');
 			var redraw = function(l2) {
@@ -608,7 +642,20 @@ return baseclass.extend({
 				return loadList().then(redraw);
 			};
 			poll.add(pollFn, 5);
-			return wrap;
+			return { wrap: wrap, redraw: redraw };
+		};
+		/* WARM-RENDER: последний список из localStorage - бар отдаётся сразу
+		   (вставка не сдвинет контент позже), свежий ответ обновит его НА
+		   МЕСТЕ. Кэша нет - прежнее поведение (ждём список, null если пусто). */
+		var cached = lastList();
+		if (cached.length) {
+			var b = mk(cached);
+			loadList().then(function(l) { if (l && l.length) { b.redraw(l); } });
+			return Promise.resolve(b.wrap);
+		}
+		return loadList().then(function(list) {
+			if (!list.length) { return null; }
+			return mk(list).wrap;
 		});
 	},
 

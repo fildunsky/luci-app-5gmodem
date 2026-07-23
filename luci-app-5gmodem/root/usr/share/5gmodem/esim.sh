@@ -369,8 +369,19 @@ recheck)
 	# Снимаем и кэш статуса, и кэш eUICC-порта - второй мог указывать на порт,
 	# исчезнувший при переперечислении.
 	rm -f "/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
+	      "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
 	      "$PORTCACHE" 2>/dev/null
 	exec "$0" status-probe
+	;;
+dump-cached)
+	# Последний УДАЧНЫЙ дамп eUICC (chip + список профилей) МГНОВЕННО, без
+	# порта и замков: вкладка показывает список сразу при возврате, живой
+	# dump освежает его следом. Кэш пишет сам dump (только валидный результат)
+	# и стирают операции (enable/disable/delete/download) и recheck.
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_AP" ] && [ -s "/tmp/5gmodem_esimdump_$_AP" ] && { cat "/tmp/5gmodem_esimdump_$_AP"; exit 0; }
+	echo '{}'
+	exit 0
 	;;
 status)
 	# ВИДИМОСТЬ ВКЛАДКИ eSIM - СТАТИЧЕСКИ, ПО vid:pid, БЕЗ ОБРАЩЕНИЯ К ПОРТУ.
@@ -403,6 +414,24 @@ status)
 		[ "$_vp" = "$_cap" ] && { echo '{"available":1,"active":0}'; exit 0; }
 	done
 	echo '{"available":0,"active":0}'
+	exit 0
+	;;
+status-cached)
+	# МГНОВЕННЫЙ ответ для открытия вкладки eSIM: последний ХОРОШИЙ вердикт
+	# CCHO-пробы (кэш status-probe, ключ - USB-путь модема), ни порта, ни
+	# замков. Кэша нет - честно отвечаем unknown: страница покажет каркас
+	# сразу и запустит настоящую пробу ФОНОМ, а не заставит пользователя
+	# смотреть на пустой экран со спиннером (наблюдалось на FM350: load()
+	# блокировался на status-probe секундами).
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_es_sec="m_$(echo "$_AP" | sed 's/[^A-Za-z0-9]/_/g')"
+	# Приоритеты как у status: ручная галка перебивает, без lpac делать нечего.
+	_ES_FORCE=$(uci -q get "5gmodem.$_es_sec.esim_show")
+	[ "$_ES_FORCE" = "0" ] && { echo '{"available":0,"active":0,"forced":1}'; exit 0; }
+	[ -x "$LPAC" ] || { echo '{"available":0,"active":0}'; exit 0; }
+	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
+	[ -s "$_SCACHE" ] && { cat "$_SCACHE"; exit 0; }
+	echo '{"unknown":1}'
 	exit 0
 	;;
 status-probe)
@@ -464,10 +493,23 @@ esac
 # ---- всё остальное: под замком (у eUICC один логический канал) ---------------
 LOCK="/tmp/5gmodem_esim.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
-	[ -n "$(find "$LOCK" -mmin +6 2>/dev/null)" ] && rmdir "$LOCK" 2>/dev/null
+	# ЗАМОК-СИРОТА. Страницу закрыли/перезагрузили посреди операции - процесс
+	# умер, а каталог остался, и до 6 минут ВСЁ отвечало busy («eUICC не
+	# отвечает» у пользователя). Пишем PID владельца в замок: владелец жив -
+	# честный busy; мёртв - забираем замок сразу. Замок без pid-файла (от
+	# прежней версии) чистим по старому правилу 6 минут.
+	_lp=$(cat "$LOCK/pid" 2>/dev/null)
+	if [ -n "$_lp" ] && [ -d "/proc/$_lp" ]; then
+		err "busy"; exit 0
+	fi
+	if [ -z "$_lp" ] && [ -z "$(find "$LOCK" -mmin +6 2>/dev/null)" ]; then
+		err "busy"; exit 0
+	fi
+	rm -rf "$LOCK" 2>/dev/null
 	mkdir "$LOCK" 2>/dev/null || { err "busy"; exit 0; }
 fi
-trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM HUP
+echo "$$" > "$LOCK/pid" 2>/dev/null
+trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
 
 # дешёвая проверка слота, чтобы не сканировать все порты на физической SIM
 D=$(live_port)
@@ -494,18 +536,31 @@ case "$1" in
 dump)
 	CHIP=$(do_lpac 45 chip info)
 	LIST=$(do_lpac 45 profile list)
-	echo "{\"chip\":$CHIP,\"profiles\":$LIST}"
+	_OUT="{\"chip\":$CHIP,\"profiles\":$LIST}"
+	# Кэш последнего ХОРОШЕГО дампа - его мгновенно отдаёт dump-cached при
+	# возврате на вкладку. Пишем только валидный результат (код профилей 0)
+	# и атомарно: полудамп в кэше хуже отсутствия кэша.
+	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	if [ -n "$_AP" ] && printf '%s' "$_OUT" \
+	   | jsonfilter -e '@.profiles.payload.code' 2>/dev/null | grep -qx 0; then
+		printf '%s\n' "$_OUT" > "/tmp/5gmodem_esimdump_$_AP.tmp" \
+			&& mv "/tmp/5gmodem_esimdump_$_AP.tmp" "/tmp/5gmodem_esimdump_$_AP"
+	fi
+	echo "$_OUT"
 	;;
 enable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
+	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile enable "$2"); flush_notifications; echo "$O"
 	;;
 disable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
+	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile disable "$2"); flush_notifications; echo "$O"
 	;;
 delete)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
+	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile delete "$2"); flush_notifications; echo "$O"
 	;;
 nickname)
@@ -532,6 +587,7 @@ netcheck)
 	;;
 download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
+	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	: > "$LIVELOG"
 	O=$(do_lpac 240 profile download -a "$2"); flush_notifications; echo "$O"
 	;;

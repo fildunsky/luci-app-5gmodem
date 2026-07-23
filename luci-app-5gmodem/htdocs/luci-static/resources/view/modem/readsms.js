@@ -163,11 +163,24 @@ document.head.append(E('style', {'type': 'text/css'},
 }
 
 /* Полоска резиновая: занимает остаток строки, но не ужимается до нечитаемой -
-   при нехватке места уходит на вторую строку целиком. */
+   при нехватке места уходит на вторую строку целиком. Трек - в стиле основных
+   метрик: серое заполнение без обводки. */
 .sms-storage-row .cbi-progressbar {
   flex: 1 1 14em;
   min-width: 14em;
   margin: 0;
+  border: none;
+  box-shadow: none;
+  background: rgba(128,128,128,.18);
+}
+
+/* Ссылки в тексте сообщения: выглядят ссылками и открываются кликом, не
+   выделяя карточку (см. sms_linkify). */
+.sms-card .sms-link {
+  color: var(--proton-accent, #0095ff);
+  text-decoration: underline;
+  font-weight: 400;
+  cursor: pointer;
 }
 
 /* Ряд действий: «Обновить» и «Переслать» слева, «Удалить» прижата вправо -
@@ -213,6 +226,7 @@ document.head.append(E('style', {'type': 'text/css'},
 
 function msg_bar(v, m) {
 var pg = document.querySelector('#msg')
+if (!pg || !pg.firstElementChild) { return; }
 var vn = parseInt(v) || 0;
 var mn = parseInt(m) || 100;
 var pc = Math.floor((100 / mn) * vn);
@@ -221,6 +235,17 @@ pg.firstElementChild.style.width = pc + '%';
 /* Текст внутри полоски рисует тема из атрибута title. Показываем счёт
    сообщений, а не проценты: «Память: 2/15». */
 pg.setAttribute('title', _('Memory: %s/%s').format(v, m));
+}
+
+/* Разбор строки статуса sms_tool: "Storage type: ME, used: N, total: M".
+   Раньше ВЕЗДЕ стоял позиционный substring(17, indexOf("total")) - он ломается
+   на любом отклонении формата (иная длина префикса, другой инструмент), и
+   тогда u оказывался пустым, а СПИСОК МОЛЧА НЕ ПЕРЕРИСОВЫВАЛСЯ (рендер был
+   огорожен if (u)). Регулярный разбор терпим к формату; чисел нет - null. */
+function sms_parse_status(res) {
+	var u = String(res || '').match(/used:\s*(\d+)/i);
+	var t = String(res || '').match(/total:\s*(\d+)/i);
+	return { u: u ? u[1] : null, t: t ? t[1] : null };
 }
 
 /* ВЫДЕЛЕНИЕ СООБЩЕНИЙ.
@@ -276,10 +301,87 @@ function sms_update_selcount() {
    дата и время, ниже текст. Отправитель и текст кладём ТЕКСТОМ (E() ставит
    textContent), а не innerHTML: содержимое SMS приходит от оператора и может
    содержать разметку. */
+/* --- Кэш последнего ПОКАЗАННОГО списка SMS (после склейки частей) ----------
+   Для мгновенного warm-render при возврате на страницу: чтение с модема
+   занимает секунды, а последний список можно показать сразу - карточки
+   строятся тем же sms_make_card и полностью интерактивны. Ключ включает
+   хранилище и порт: у разных модемов/симок свои сообщения. Свежее чтение
+   перерисовывает список и перезаписывает кэш; после удалений кэш обновится
+   первым же перечитыванием. */
+function sms_cache_key() {
+	var s = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
+	var p = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport') || '';
+	return 'sms-last:' + s + ':' + p;
+}
+function sms_cache_save(list, u, t) {
+	try {
+		window.localStorage.setItem(sms_cache_key(),
+			JSON.stringify({ list: list, u: u, t: t }));
+	} catch (e) {}
+}
+function sms_cache_load() {
+	try { return JSON.parse(window.localStorage.getItem(sms_cache_key()) || 'null'); }
+	catch (e) { return null; }
+}
+
+/* Время SMS: sms_tool печатает его в UTC и ИГНОРИРУЕТ $TZ (проверено на
+   живом порту: и с TZ=MSK-3, и с TZ=UTC0 вывод одинаковый, +0000) - у
+   пользователя SMS показывалось на 3 часа назад. Переводим в местное время
+   ЗДЕСЬ: браузер знает пояс пользователя, а он совпадает с поясом роутера
+   или даже точнее (пользователь мог уехать). Формат сохраняем. */
+function sms_localtime(ts) {
+	var m = String(ts || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+	if (!m) { return ts; }
+	var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+	if (isNaN(d.getTime())) { return ts; }
+	var p = function(n) { return (n < 10 ? '0' : '') + n; };
+	return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
+		' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+/* Ссылки в тексте SMS -> живые <a>. Карточка - <button> (клик выделяет её),
+   поэтому у ссылки свой обработчик: гасим всплытие (не выделять карточку) и
+   открываем сами (браузеры не обязаны обрабатывать <a> внутри <button>).
+
+   Ловим ТРИ вида: полный URL (http/https), www.* и ГОЛЫЙ ДОМЕН без схемы
+   (t.tb.ru/appand, unblock.t2.ru) - операторы шлют именно такие. Домен = хотя
+   бы одна точка и буквенный TLD (2-24 буквы), поэтому «т.д.», «1.5» и IP
+   (192.168.1.1 - последняя часть цифровая) НЕ считаются ссылкой. Домены пишем
+   только латиницей: [a-z] не заденет кириллицу («Т-Банка.»).
+   Хвостовую пунктуацию после ссылки не захватываем. */
+var SMS_URL_RE = /(https?:\/\/[^\s]+|(?:[a-z0-9][a-z0-9-]*\.)+[a-z]{2,24}(?:\/[^\s]*)?)/gi;
+function sms_linkify(text) {
+	var out = [], last = 0, m;
+	SMS_URL_RE.lastIndex = 0;
+	while ((m = SMS_URL_RE.exec(text)) !== null) {
+		var url = m[0].replace(/[).,;:!?\]]+$/, '');
+		/* Голый домен без схемы: пропускаем, если TLD не выглядит доменным
+		   (одна буква) или это часть e-mail (перед совпадением стоит '@'). */
+		if (!/^https?:/i.test(url)) {
+			if (m.index > 0 && text.charAt(m.index - 1) === '@') { continue; }
+		}
+		if (m.index > last) { out.push(document.createTextNode(text.slice(last, m.index))); }
+		var href = /^https?:/i.test(url) ? url : ('http://' + url);
+		out.push(E('a', {
+			'href': href, 'target': '_blank', 'rel': 'noopener',
+			'class': 'sms-link',
+			'click': function(ev) {
+				ev.stopPropagation();
+				ev.preventDefault();
+				window.open(ev.currentTarget.href, '_blank', 'noopener');
+			}
+		}, url));
+		last = m.index + url.length;
+	}
+	if (last < text.length) { out.push(document.createTextNode(text.slice(last))); }
+	return out;
+}
+
 function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
 	var text = String(item.content || '').replace(/\s+/g, ' ').trim();
+	var when = sms_localtime(item.timestamp);
 
 	var card = E('button', {
 		'type': 'button',
@@ -292,7 +394,7 @@ function sms_make_card(item, iconSrc, hide) {
 		   от таблицы такой способ отвалился бы молча - пустым письмом. */
 		'data-index': String(item.index),
 		'data-sender': sender,
-		'data-timestamp': item.timestamp,
+		'data-timestamp': when,
 		'data-message': text
 	}, [
 		E('div', { 'class': 'sms-card-head' }, [
@@ -302,9 +404,9 @@ function sms_make_card(item, iconSrc, hide) {
 				]),
 				E('span', {}, sender)
 			]),
-			E('span', { 'class': 'sms-card-time' }, item.timestamp)
+			E('span', { 'class': 'sms-card-time' }, when)
 		]),
-		E('div', { 'class': 'sms-card-text' }, text)
+		E('div', { 'class': 'sms-card-text' }, sms_linkify(text))
 	]);
 
 	card.addEventListener('click', function() {
@@ -459,12 +561,9 @@ function save_count() {
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 					.then(function(res) {
 							if (res) {
-								var total = res.substring(res.indexOf("total"));
-								var t = total.replace ( /[^\d.]/g, '' );
-								var used = res.substring(17, res.indexOf("total"));
-								var u = used.replace ( /[^\d.]/g, '' );
-								
-								update_sms_count_for_modem(u).then(function(updatedValue) {
+								var _st = sms_parse_status(res);
+								if (_st.u == null) { return; }
+								update_sms_count_for_modem(_st.u).then(function(updatedValue) {
 									sms_persist({ 'sms_count': updatedValue });
 								});
 							}
@@ -682,8 +781,9 @@ return view.extend({
 		}
 		else {
 			if (sms_selected_cards().length === document.querySelectorAll('.sms-card').length) {
-					if (confirm(_('Delete all the messages?')))
-						{
+					/* Без confirm (решение владельца): выделение и есть намерение,
+					   кнопка удаляет сразу. */
+					{
 							var sections = uci.sections('sms_tool_js');
 							var portDA = sections[0].readport;
 							var storeDA = sections[0].storage;
@@ -692,6 +792,7 @@ return view.extend({
 							var smsList = document.getElementById("smsList");
 							if (smsList) { smsList.innerHTML = ''; }
 							sms_update_selcount();
+							try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
     							setTimeout(function() {
 								L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeDA , '-d' , portDA , 'status' ]))
 									.then(function(res) {
@@ -708,145 +809,72 @@ return view.extend({
 			}
 			else {
 
-					if (confirm(_('Delete selected message(s)?')))
+					/* Без confirm - как и при удалении всех (решение владельца). */
 						{
-						uci.load('sms_tool_js').then(function() {
+							uci.load('sms_tool_js').then(function() {
 
-							var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
-							var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
+								var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
+								var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
+								var sections = uci.sections('sms_tool_js');
+								var portDEL = sections[0].readport;
 
-							var array = [];
-							var checkb = sms_selected_cards();
-
-							/* Индексы берём из data-index карточки. Прежний код читал
-							   .id чекбокса и отсеивал галку «выделить все» сравнением
-							   с необъявленной переменной source - в strict-режиме это
-							   ReferenceError, то есть удаление выбранных падало здесь
-							   же. Отсеивать больше нечего: выборка и так только из
-							   карточек сообщений. */
-							for (var i = 0; i < checkb.length; i++) {
-								array.push(checkb[i].dataset.index + ',');
-							}
-
-							if (array) {
-
-							var args = [];
-							var sections = uci.sections('sms_tool_js');
-							var portDEL = sections[0].readport;
-							var storeDS = sections[0].storage;
-
-							args.push(array);
-							var ax = args.toString();
-							ax = ax.replace(/,/g, ' ');
-							ax = ax.replace(/-/g, ' ');
-
-							var smsnr = ax.split(" ");
-
-							var smsallchars = smsnr.toString();
-							var smsdelcount = 0;
-							var smsdeleted = 0;
-
-							var inumber = false;
-
-							for (var i = 0; i < smsallchars.length; i++) {
-    							var ch = smsallchars[i];
-
-    							if (ch >= '0' && ch <= '9') {
-        							if (!inumber) {
-            								smsdelcount++;
-            								inumber = true;
-        							}
-    								} else if (ch === ',') {
-        								inumber = false;
-    								} else {
-        								inumber = false;
-    								}
-							}
-	
-							var deletelabel = document.getElementById("deleteinfo");
-							deletelabel.style.display = 'block';
-
-								for (var i=0; i < smsnr.length + 2; i++)
-									{
-									(function(i) {
-    									setTimeout(function() { 
-    									smsnr[i] = parseInt(smsnr[i], 10);
-
-									if (!Number.isNaN(smsnr[i]))
-										{
-										fs.exec_direct(smsToolBin(), [ '-d' , portDEL , 'delete' , smsnr[i] ]);
-                						smsdeleted++;
-										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
-										.then(function(res) {
-										if (res) {
-											var total = res.substring(res.indexOf("total"));
-											var t = total.replace ( /[^\d.]/g, '' );
-											var used = res.substring(17, res.indexOf("total"));
-											var u = used.replace ( /[^\d.]/g, '' );
-											msg_bar(Math.floor(u), t);
-											deletelabel.innerHTML = '';
-											deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'}, _('Please wait... deleted')+' '+smsdeleted+' '+_('of')+' '+smsdelcount+' '+_('selected messages')));
-										}
-										});
-				
-										}
-										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
-										.then(function(res) {
-										if (res) {
-											var total = res.substring(res.indexOf("total"));
-											var t = total.replace ( /[^\d.]/g, '' );
-											var used = res.substring(17, res.indexOf("total"));
-											var u = used.replace ( /[^\d.]/g, '' );
-											msg_bar(Math.floor(u), t);
-											deletelabel.innerHTML = '';
-											deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'}, _('Please wait... deleted')+' '+smsdeleted+' '+_('of')+' '+smsdelcount+' '+_('selected messages')));
-										}
-										});
-
-										if (smsdelcount == smsdeleted) {
-											setTimeout(function() {
-											var hidecount = document.getElementById('deleteinfo');
-											uci.load('sms_tool_js').then(function() {
-												var savedCount = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_count') || '';
-												L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
-												.then(function(verifyRes) {
-													if (verifyRes) {
-														var verifyUsed = verifyRes.substring(17, verifyRes.indexOf("total"));
-														var verifyU = verifyUsed.replace( /[^\d.]/g, '' );
-														var savedMatch = savedCount.match(/(?:dfm\d+_)?(\d+)(?:\s|$)/);
-														var savedNum = savedMatch ? savedMatch[1] : savedCount.replace(/[^\d]/g, '');
-														if (savedNum !== verifyU) {
-															update_sms_count_for_modem(verifyU).then(function(correctedValue) {
-																sms_persist({ 'sms_count': correctedValue });
-															});
-														}
-													}
-													hidecount.style.display = 'none';
-												});
-											});
-											    save_count();
-											}, 7000);
-										}
-									}, 1500 * i);
-								})(i);
-										L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
-										.then(function(res) {
-										if (res) {
-											var total = res.substring(res.indexOf("total"));
-											var t = total.replace ( /[^\d.]/g, '' );
-											var used = res.substring(17, res.indexOf("total"));
-											var u = used.replace ( /[^\d.]/g, '' );
-											msg_bar(Math.floor(u), t);
-											deletelabel.innerHTML = '';
-											deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'}, _('Please wait... deleted')+' '+smsdeleted+' '+_('of')+' '+smsdelcount+' '+_('selected messages')));
-										}
-										});
-								}
+								/* Индексы из data-index карточек; у склеенного сообщения
+								   там все части через дефис - разворачиваем в плоский
+								   список чисел. */
+								var idx = [];
 								sms_selected_cards().forEach(function(card) {
-									if (card.parentNode) { card.parentNode.removeChild(card); }
+									String(card.dataset.index || '').split(/[^0-9]+/).forEach(function(n) {
+										n = parseInt(n, 10);
+										if (!Number.isNaN(n)) { idx.push(n); }
+									});
 								});
-								sms_update_selcount();
-								}
+								if (!idx.length) { return; }
+
+								var deletelabel = document.getElementById('deleteinfo');
+								if (deletelabel) { deletelabel.style.display = 'block'; }
+								var done = 0;
+								var showProgress = function() {
+									if (!deletelabel) { return; }
+									deletelabel.innerHTML = '';
+									deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'},
+										_('Please wait... deleted')+' '+done+' '+_('of')+' '+idx.length+' '+_('selected messages')));
+								};
+								showProgress();
+
+								/* ПОСЛЕДОВАТЕЛЬНАЯ цепочка промисов: следующее удаление
+								   уходит только после ответа на предыдущее. Прежний код
+								   стрелял залпом setTimeout'ов с шагом 1.5 c: на медленном
+								   порту вызовы наезжали друг на друга, каждый тащил свой
+								   status (плюс немедленный третий на каждой итерации), а
+								   финализатор с проверкой счётчика срабатывал по нескольку
+								   раз. Здесь один проход и один финальный status. */
+								var chain = Promise.resolve();
+								idx.forEach(function(n) {
+									chain = chain.then(function() {
+										return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-d', portDEL, 'delete', String(n) ]), '')
+											.then(function() { done++; showProgress(); });
+									});
+								});
+								chain.then(function() {
+									/* Всё удалено: снимаем карточки, чистим warm-кэш и одним
+									   status сверяем полоску памяти и персист счётчика. */
+									sms_selected_cards().forEach(function(card) {
+										if (card.parentNode) { card.parentNode.removeChild(card); }
+									});
+									sms_update_selcount();
+									try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
+									return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeL, portR ]), '')
+										.then(function(res) {
+											var st = sms_parse_status(res);
+											if (st.u != null) {
+												msg_bar(Math.floor(st.u), st.t);
+												update_sms_count_for_modem(st.u).then(function(v) {
+													sms_persist({ 'sms_count': v });
+												});
+											}
+											if (deletelabel) { deletelabel.style.display = 'none'; deletelabel.innerHTML = ''; }
+										});
+								});
 							});
 						}
 			    }
@@ -942,13 +970,28 @@ return view.extend({
 		function showLoading() {
 			var list = document.getElementById('smsList');
 			if (!list) { return; }
-			if (list.querySelector('.sms-card')) { return; }
+			if (list.querySelector('.sms-card')) {
+				/* Список уже на экране (warm-render из кэша) - НЕ затираем его,
+				   а вешаем мелкую пометку над списком (как на вкладке eSIM):
+				   видно, что идёт живое чтение с модема. */
+				if (!document.getElementById('sms-updating') && list.parentNode) {
+					list.parentNode.insertBefore(E('em', {
+						'id': 'sms-updating', 'class': 'spinning',
+						'style': 'font-size:92%;opacity:.7;margin:2px 0 6px;display:inline-block'
+					}, _('Loading messages…')), list);
+				}
+				return;
+			}
 			sms_placeholder('loading');
 		}
 		/* Снимать индикатор отдельно не требуется: список либо перерисуется
 		   карточками, либо получит плейсхолдер «нет сообщений». Функция
-		   оставлена, чтобы не переписывать все точки выхода из doRefresh. */
+		   оставлена, чтобы не переписывать все точки выхода из doRefresh.
+		   Пометку «обновляется» (warm-путь) СНИМАЕМ явно - её никто не
+		   перерисовывает. */
 		function hideLoading() {
+			var _up = document.getElementById('sms-updating');
+			if (_up) { _up.parentNode.removeChild(_up); }
 			var l = document.getElementById('smsList');
 			if (!l) { return; }
 			var ph = l.querySelector('.sms-empty');
@@ -999,18 +1042,15 @@ return view.extend({
 		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
 				.then(function(res) {
 					if (res) {
-							var total = res.substring(res.indexOf("total"));
-							var t = total.replace ( /[^\d.]/g, '' );
-
-							var used = res.substring(17, res.indexOf("total"));
-							var u = used.replace ( /[^\d.]/g, '' );
+							var _st = sms_parse_status(res);
+							var t = _st.t, u = _st.u;
 
 							/* Полоску заполняем ЗДЕСЬ. Ниже по коду есть такой же
 							   вызов в конце колбэка, но до него не доходит
 							   исполнение: следующая строка делает return, и
 							   счётчик не обновлялся никогда - в полоске всегда
 							   висел прочерк из атрибута title. */
-							if (document.getElementById('msg')) { msg_bar(Math.floor(u), t); }
+							if (u != null) { msg_bar(Math.floor(u), t); }
 
 						/* Список берём через smsbridge.sh, а не напрямую у sms_tool:
 						   у модемов без AT-портов (HiLink) сообщения лежат в самом
@@ -1115,7 +1155,7 @@ return view.extend({
 												};
 											});
 											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
-													if (u){
+													if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
 															var Lres = L.resource('icons/cmessage.svg');
 
 															for (var i = 0; i < result.length; i++) {
@@ -1123,6 +1163,7 @@ return view.extend({
 																aidx.push(result[i].index+'-');
 															}
 															sms_update_selcount();
+															sms_cache_save(result, u, t);
 
 															var axx = aidx.toString();
 															axx = axx.replace(/,/g, ' ');
@@ -1132,7 +1173,7 @@ return view.extend({
 															axx = axx.replace(/,/g, ' ');
 															axx = axx.replace(/-/g, ' ');
 
-															if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
+															if (updateCount && u != null) format_with_modem_index(axx).then(function(formattedIndex) {
 																update_sms_count_for_modem(u).then(function(updatedCount) {
 																	sms_persist({ 'sms_count_index': formattedIndex, 'sms_count': updatedCount });
 																});
@@ -1157,7 +1198,7 @@ return view.extend({
     										}
 										});
 
-										if (u){
+										if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
 
 											var Lres = L.resource('icons/cmessage.svg');
 
@@ -1166,12 +1207,13 @@ return view.extend({
 												aidx.push(sortedData[i].index+'-');
 											}
 											sms_update_selcount();
+											sms_cache_save(sortedData, u, t);
 											
 											var axx = aidx.toString();
 											axx = axx.replace(/,/g, ' ');
 											axx = axx.replace(/-/g, ' ');
 
-											if (updateCount) format_with_modem_index(axx).then(function(formattedIndex) {
+											if (updateCount && u != null) format_with_modem_index(axx).then(function(formattedIndex) {
 												update_sms_count_for_modem(u).then(function(updatedCount) {
 													sms_persist({ 'sms_count_index': formattedIndex, 'sms_count': updatedCount });
 												});
@@ -1233,8 +1275,25 @@ return view.extend({
 		   только с первым тиком автообновления через 15 секунд.
 		   setTimeout(0) это не лечил - он откладывал на шаг от РАЗРЕШЕНИЯ uci.load,
 		   а не от появления разметки. Поэтому ждём сам элемент. */
+		/* WARM-RENDER: последний показанный список из localStorage - мгновенно,
+		   до чтения с модема (оно занимает секунды). Карточки строим тем же
+		   sms_make_card, так что они полностью интерактивны (выделение,
+		   удаление). Живое чтение ниже перерисует список и обновит кэш. */
+		function warmRender() {
+			var c = sms_cache_load();
+			var table = document.getElementById('smsList');
+			if (!c || !c.list || !c.list.length || !table) { return; }
+			if (table.querySelector('.sms-card')) { return; }
+			table.innerHTML = '';
+			var Lres = L.resource('icons/cmessage.svg');
+			for (var i = 0; i < c.list.length; i++) {
+				table.appendChild(sms_make_card(c.list[i], Lres, hide));
+			}
+			sms_update_selcount();
+			if (document.getElementById('msg') && c.u != null) { msg_bar(Math.floor(c.u), c.t); }
+		}
 		(function waitTable(n) {
-			if (document.getElementById('smsList')) { doRefresh(true, true); return; }
+			if (document.getElementById('smsList')) { warmRender(); doRefresh(true, true); return; }
 			if (n > 50) { return; }   // ~5 c и сдаёмся: дальше подхватит автообновление
 			window.setTimeout(function() { waitTable(n + 1); }, 100);
 		}(0));
@@ -1335,8 +1394,16 @@ return view.extend({
 									'class': 'sms-storage-opts',
 									'style': viaMM ? 'display: none;' : null
 								}, [
-									areaOpt('sim', _('SIM card'), true),
-									areaOpt('memory', _('Modem memory'), false)
+									(function() {
+										/* Отмечаем ФАКТИЧЕСКОЕ хранилище из настроек:
+										   радио всегда стартовало с SIM, хотя чтение
+										   шло по uci (обычно ME) - переключатель врал. */
+										var _stg = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
+										return E([], [
+											areaOpt('sim', _('SIM card'), _stg === 'SM'),
+											areaOpt('memory', _('Modem memory'), _stg !== 'SM')
+										]);
+									})()
 								]),
 								E('div', {
 									'id': 'msg',

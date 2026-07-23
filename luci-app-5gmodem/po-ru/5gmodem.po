@@ -2428,7 +2428,7 @@ msgid "Changing bands briefly drops the connection: the IP disappears for ~15–
 msgstr "Смена диапазонов ненадолго разрывает соединение: IP пропадает на ~15–20 секунд и возвращается автоматически. Для этого модема это нормально."
 
 msgid "Updating the profile list..."
-msgstr "Обновляем список профилей…"
+msgstr "Обновление списка профилей…"
 
 msgid "Could not refresh the list automatically. Press Refresh in a few seconds."
 msgstr "Не удалось обновить список автоматически. Нажмите «Обновить» через несколько секунд."
@@ -3001,10 +3001,10 @@ msgid "Profile %s…"
 msgstr "Профиль %s…"
 
 msgid "Profile disabled. The modem is restarting to apply it - up to a minute…"
-msgstr "Профиль отключён. Модем перезапускается для применения — до минуты…"
+msgstr "Профиль деактивирован, перезагрузка модема…"
 
 msgid "Profile enabled. The modem is restarting to apply it - up to a minute…"
-msgstr "Профиль включён. Модем перезапускается для применения — до минуты…"
+msgstr "Профиль активирован, перезагрузка модема…"
 
 msgid "Recreate interface (HiLink DHCP)"
 msgstr "Пересоздать интерфейс (HiLink DHCP)"
@@ -3296,3 +3296,6 @@ msgstr "Переключаю модем в XMM — он перезагружае
 
 msgid "Could not switch the modem to XMM."
 msgstr "Не удалось переключить модем в XMM."
+
+msgid "Checking eSIM support…"
+msgstr "Проверяем поддержку eSIM…"

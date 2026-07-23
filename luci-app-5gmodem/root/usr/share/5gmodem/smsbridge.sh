@@ -17,6 +17,11 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 
+# ЧАСОВОЙ ПОЯС НЕ ЧИНИМ ЗДЕСЬ. sms_tool печатает время SMS в UTC и ИГНОРИРУЕТ
+# $TZ (проверено на живом порту: и TZ=MSK-3, и TZ=UTC0 дают одинаковый +0000).
+# Перевод в местное время делает фронтенд (readsms.js sms_localtime): у него
+# есть пояс пользователя, а он может быть даже точнее пояса роутера.
+
 _active_kind() {
 	_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	[ -n "$_p" ] || return 1

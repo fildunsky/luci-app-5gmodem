@@ -124,10 +124,12 @@ return view.extend({
 	handleReset: null,
 
 	load: function() {
-		/* status-probe (синхронная проба): пользователь ОСОЗНАННО открыл вкладку
-		   eSIM и готов подождать пробу; на горячем пути видимости вкладки
-		   используется мгновенный 'status'. */
-		return Promise.all([ esimExec([ 'status-probe' ]), slotExec([ 'status' ]) ]);
+		/* РАНЬШЕ здесь была СИНХРОННАЯ status-probe: CCHO-проба eUICC занимает
+		   секунды (FM350), и всё это время LuCI крутил спиннер на ПУСТОЙ
+		   странице. Теперь load() мгновенный: status-cached отдаёт последний
+		   вердикт пробы из кэша (или unknown), slot status - липкий кэш.
+		   Настоящая проба, если нужна, идёт ФОНОМ уже на видимой странице. */
+		return Promise.all([ esimExec([ 'status-cached' ]), slotExec([ 'status' ]) ]);
 	},
 
 	render: function(res) {
@@ -136,6 +138,39 @@ return view.extend({
 
 		var body = E('div', { 'id': 'esim-body' });
 		var self = this;
+
+		if (st.available == null) {
+			/* Вердикта в кэше нет (первое открытие для этого модема) - каркас
+			   страницы уже виден, проба крутится ВНУТРИ блока. */
+			body.appendChild(E('p', { 'class': 'spinning', 'id': 'esim-probing' },
+				_('Checking eSIM support…')));
+			esimExec([ 'status-probe' ]).then(function(st2) {
+				self._fillBody(body, st2 || {}, slot);
+			});
+		} else {
+			self._fillBody(body, st, slot);
+			/* Кэш мог устареть (слот переключили в обход этой страницы).
+			   Перепроверяем фоном ТОЛЬКО когда по кэшу работа с eUICC не идёт:
+			   при активном eSIM сразу стартует reload/dump, и параллельная
+			   CCHO-проба дралась бы с ним за логический канал eUICC. */
+			if (!st.available || !st.active) {
+				esimExec([ 'status-probe' ]).then(function(st2) {
+					if (st2 && st2.available != null &&
+					    (!!st2.available !== !!st.available || !!st2.active !== !!st.active)) {
+						self._fillBody(body, st2, slot);
+					}
+				});
+			}
+		}
+
+		return this._shell(body);
+	},
+
+	/* Наполнение тела страницы по вердикту (available/active). Вынесено из
+	   render, чтобы вызываться и сразу (кэш), и после фоновой пробы. */
+	_fillBody: function(body, st, slot) {
+		var self = this;
+		while (body.firstChild) { body.removeChild(body.firstChild); }
 
 		if (!st.available) {
 			body.appendChild(E('p', { 'class': 'cbi-section-descr' },
@@ -186,13 +221,25 @@ return view.extend({
 			body.appendChild(E('div', { 'class': 'esim-actions' }, [
 				E('button', {
 					'class': 'btn cbi-button',
+					/* Без спиннера на кнопке (решение владельца): обратную связь
+					   даёт пометка «обновляется» рядом с EID (см. reload). */
 					'click': function(ev) { ev.preventDefault(); self.reload(); }
 				}, [ _('Refresh') ]),
 			]));
+			/* МГНОВЕННЫЙ показ последнего дампа из кэша роутера (dump-cached,
+			   ~20 мс): список профилей виден и кликабелен сразу при возврате
+			   на вкладку. Живой dump (reload ниже) освежит его следом.
+			   Операции (enable/delete/download) инвалидируют кэш на бэкенде,
+			   так что устаревший список после них сюда не попадёт. */
+			esimExec([ 'dump-cached' ]).then(function(d) { applyDump(d); });
 			// первичная загрузка данных eUICC
-			window.setTimeout(function() { self.reload(); }, 100);
+			window.setTimeout(function() { self.reload(); }, 300);
 		}
+	},
 
+	/* Каркас страницы: стиль, заголовок, описание, тело, настройки. Рисуется
+	   сразу при render - тело (body) наполняется отдельно (_fillBody). */
+	_shell: function(body) {
 		return E('div', { 'class': 'cbi-map' }, [
 			E('style', {}, [
 				'.esim-meta{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:88%;opacity:.85;margin:.4em 0 1em}' +
@@ -208,7 +255,10 @@ return view.extend({
 				'.esim-set>summary:hover{opacity:1}' +
 				'.esim-set .cbi-value{margin-top:10px}'
 			]),
-			E('div', { 'class': 'cbi-section' }, [
+			/* id нужен оверлею операций (modemtabs.setBusy('#esim-section')):
+			   селектор '.cbi-section' брал ПЕРВУЮ секцию документа - на части
+			   тем это не наш блок. */
+			E('div', { 'class': 'cbi-section', 'id': 'esim-section' }, [
 				E('h3', [ 'eSIM' ]),
 				E('div', { 'class': 'cbi-section-descr' },
 					_('Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete.')),
@@ -267,15 +317,30 @@ return view.extend({
 		// прилетит Event - он truthy, и ретраи молча выключились бы.
 		tries = (typeof tries === 'number') ? tries : 0;
 		var meta = document.getElementById('esim-meta');
+		/* Список уже показан из кэша (dump-cached)? Тогда НЕ затираем его
+		   спиннером - обновление идёт фоном поверх рабочего списка. */
+		var warm = !!document.querySelector('#esim-profiles .esim-row');
 		// dump = chip info + список профилей через lpac по APDU-мосту: на FM350 это
 		// ~10 с и дольше. Без явного предупреждения пустая строка выглядит как
 		// «ничего не нашлось», и люди уходят со страницы, не дождавшись.
-		if (meta) {
+		if (meta && !warm) {
 			meta.innerHTML = '';
 			meta.appendChild(E('em', { 'class': 'spinning' },
 				_('Please wait, reading eUICC - updating the profile list can be slow.')));
 		}
-		esimExec([ 'dump' ]).then(function(d) {
+		/* Поверх тёплого списка EID не затираем, но обратная связь нужна
+		   (кнопка «Обновить» выглядела немой): МЕЛКАЯ пометка рядом с EID.
+		   Строка та же, что в модалке пост-операций, - уже переведена.
+		   applyDump при успехе перепишет meta целиком и снимет пометку сам. */
+		if (meta && warm && !document.getElementById('esim-updating')) {
+			meta.appendChild(E('em', {
+				'id': 'esim-updating', 'class': 'spinning',
+				'style': 'margin-left:.7em;font-size:92%;opacity:.7'
+			}, _('Updating the profile list...')));
+		}
+		/* ВОЗВРАЩАЕМ Promise (сквозь ретраи): на нём держится спиннер кнопки
+		   «Обновить» (ui.createHandlerFn). */
+		return esimExec([ 'dump' ]).then(function(d) {
 			var chip = d.chip || {}, profs = d.profiles || {};
 			if (!lpaOk(chip) && !lpaOk(profs)) {
 				// Первая попытка часто не проходит: eUICC мог остаться с занятыми
@@ -283,25 +348,28 @@ return view.extend({
 				// через AT+CCHC перед каждой операцией) или модем ещё поднимается
 				// после CFUN. Не пугаем ошибкой сразу - молча повторяем.
 				// потолок с запасом: после жёсткого ребута модема eUICC отвечает не сразу
-				if (tries < 5) {
-					window.setTimeout(function() { self.reload(tries + 1); }, 4000);
-					return;
+				/* busy - замок esim.sh занят (чужой dump/операция): это не
+				   отказ eUICC, освободится - ждём дольше (до ~минуты). Именно
+				   busy стоял за «eUICC не отвечает» при открытии страницы после
+				   прерванной сессии. */
+				var _isBusy = (lpaMsg(chip) === 'busy' || lpaMsg(profs) === 'busy');
+				if (tries < 5 || (_isBusy && tries < 15)) {
+					return new Promise(function(resolve) {
+						window.setTimeout(function() { resolve(self.reload(tries + 1)); }, 4000);
+					});
 				}
-				if (meta) {
+				var _up = document.getElementById('esim-updating');
+				if (_up) { _up.parentNode.removeChild(_up); }
+				/* Тёплый список на экране рабочий - не пугаем ошибкой, eUICC
+				   часто просто занята; без списка ошибка честно видна. */
+				if (meta && !warm) {
 					meta.innerHTML = '';
 					meta.appendChild(E('span', { 'style': 'color:#d95c5c' },
 						_('eUICC is not responding (%s). Try Refresh in a few seconds.').format(lpaMsg(chip) || lpaMsg(profs))));
 				}
 				return;
 			}
-			if (lpaOk(chip) && meta) {
-				var dd = chip.payload.data || {};
-				var mem = (dd.EUICCInfo2 && dd.EUICCInfo2.extCardResource)
-					? dd.EUICCInfo2.extCardResource.freeNonVolatileMemory : null;
-				meta.textContent = 'EID: ' + (dd.eidValue || '-') +
-					(mem != null ? '   ·   ' + _('Free memory') + ': ' + Math.round(mem / 1024) + ' KiB' : '');
-			}
-			if (lpaOk(profs)) { renderProfiles(profs.payload.data || []); }
+			applyDump(d);
 			// eUICC ответил - значит eSIM-слот активен. Обновляем видимость
 			// вкладки eSIM без F5 (напр. сразу после переключения на eSIM-слот).
 			if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
@@ -404,12 +472,26 @@ return view.extend({
 			box,
 		]);
 		self._dlActive = true; self._dlLog = '';
+		/* При busy (eUICC занята фоновым dump - тёплый список поощряет жать
+		   сразу) НЕ роняем загрузку, а повторяем под тем же спиннером - как в
+		   esimOp. */
+		var runDl = function(tries) {
+			return fs.exec(ESIM, [ 'download', code ]).then(function(res) {
+				var j = parseLpa(res.stdout);
+				if (!lpaOk(j) && lpaMsg(j) === 'busy' && tries < 12) {
+					return new Promise(function(resolve) {
+						window.setTimeout(function() { resolve(runDl(tries + 1)); }, 2000);
+					});
+				}
+				return res;
+			});
+		};
 		// Сначала гасим лог прошлого запуска на бэкенде, и только потом стартуем:
 		// иначе первый же опрос покажет чужие шаги целиком.
 		var dl = L.resolveDefault(fs.exec_direct(ESIM, [ 'progress', 'reset' ]), '')
 			.then(function() {
 				self._pollProgress(box);
-				return fs.exec(ESIM, [ 'download', code ]);
+				return runDl(0);
 			});
 		dl.then(function(res) {
 			self._dlActive = false;
@@ -446,8 +528,8 @@ return view.extend({
 			// страницу целиком и выглядит как «всё сломалось», хотя идёт штатный
 			// ребут. Оверлей показывает, что занят именно этот блок.
 			ui.hideModal();
-			modemtabs.setBusy('.cbi-section',
-				_('Profile added. The modem is restarting to apply it - up to a minute…'), 90000);
+			modemtabs.setBusy('#esim-section',
+				_('Profile added. The modem is restarting to apply it - up to a minute…'), 180000, 90);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
 			// Дождаться модема и передёрнуть интерфейс: иначе netifd держит
 			// аренду и маршрут от старого профиля (интерфейс up со старым IP,
@@ -457,16 +539,55 @@ return view.extend({
 			// на USB 30-60 c (столько же ждёт переключение слота). Список
 			// перечитывался, пока eUICC ещё не поднялся, попытки заканчивались,
 			// и пользователю приходилось жать Refresh руками.
-			window.setTimeout(function() {
+			/* Тот же принцип, что при переключении профиля: ждём возвращения
+			   модема на шину, снимаем плашку и перечитываем уже на живой
+			   странице (reload сам показывает пометку у EID). */
+			_waitModemBack(240000).then(function() {
 				modemtabs.clearBusy();
 				notify(true, _('eSIM profile added and applied.'), null);
-				self.reload(-3);   // запас попыток: модем мог ещё не вернуться
-			}, 45000);
+				self.reload(-3);
+			});
 		}).catch(function() { ui.hideModal(); });
 	},
 });
 
 /* --- вспомогательные (вне view, работают с DOM) ------------------------- */
+/* Дождаться, пока модем ПЕРЕЖИВЁТ ребут: сначала пропадёт с USB, потом
+   вернётся. Сигнал тот же, каким живёт полоса вкладок модемов (она «мигает»
+   при ребуте): listmodems.sh, дёшево - из /tmp-кэша, который сбрасывает
+   hotplug. Раньше вместо этого крутили dump вслепую: каждый вызов на
+   полуподнятом модеме висел до таймаута lpac, и прогрессбар «замерзал».
+   Возврат: Promise<bool> - дождались/нет (потолок maxMs). */
+var _waitModemBack = function(maxMs) {
+	var t0 = Date.now();
+	var gone = false;   // модем уже пропадал с шины?
+	return L.resolveDefault(uci.load('5gmodem')).then(function() {
+		var path = '';
+		try { path = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''; } catch (e) {}
+		var step = function() {
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]').then(function(out) {
+				var present = false;
+				try {
+					var arr = JSON.parse(out || '[]') || [];
+					present = !path || arr.some(function(m) { return m.path === path; });
+				} catch (e) {}
+				if (!present) { gone = true; }
+				var el = Date.now() - t0;
+				/* Возврат засчитываем ТОЛЬКО после наблюдаемой пропажи. Порог
+				   «20 c и на месте» оказался ловушкой: модем иногда уходит в
+				   ребут с задержкой (реально пропадал на ~40-й секунде), мы
+				   считали его «вернувшимся», начинали dump - и втыкались в
+				   умирающий eUICC. Фолбэк 90 c - на случай, если короткую
+				   переэнумерацию проскочили между опросами. */
+				if (present && (gone || el > 90000)) { return true; }
+				if (el > maxMs) { return false; }
+				return new Promise(function(r) { window.setTimeout(function() { r(step()); }, 3000); });
+			});
+		};
+		return step();
+	});
+};
+
 var _viewReload = function(tries, maxTries) {
 	// найти активный view-инстанс сложно; проще перечитать напрямую.
 	// Возвращает Promise<bool>: true - список перечитан и отрисован, false -
@@ -493,6 +614,49 @@ var _viewReload = function(tries, maxTries) {
 		}
 		return false;
 	});
+};
+
+/* Применить дамп eUICC к странице: EID/память в шапку, профили в таблицу.
+   Общий код живого dump (reload) и мгновенного dump-cached (warm-открытие). */
+function applyDump(d) {
+	var chip = (d && d.chip) || {}, profs = (d && d.profiles) || {};
+	var meta = document.getElementById('esim-meta');
+	/* Пометка «обновляется» (reload поверх тёплого списка) своё отработала.
+	   Снимаем явно: перезапись meta.textContent ниже случается только при
+	   удачном chip info, а профили могут прийти и без него. */
+	var _up = document.getElementById('esim-updating');
+	if (_up) { _up.parentNode.removeChild(_up); }
+	if (lpaOk(chip) && meta) {
+		var dd = chip.payload.data || {};
+		var mem = (dd.EUICCInfo2 && dd.EUICCInfo2.extCardResource)
+			? dd.EUICCInfo2.extCardResource.freeNonVolatileMemory : null;
+		meta.textContent = 'EID: ' + (dd.eidValue || '-') +
+			(mem != null ? '   ·   ' + _('Free memory') + ': ' + Math.round(mem / 1024) + ' KiB' : '');
+	}
+	if (lpaOk(profs)) { renderProfiles(profs.payload.data || []); }
+	return lpaOk(profs);
+}
+
+/* Перечитывание с БЮДЖЕТОМ ВРЕМЕНИ, а не числом попыток. Урок живого теста:
+   после AT+CFUN=1,1 tty уже есть, а eUICC ещё не отвечает - каждый dump висит
+   до таймаута do_lpac (до 45 c), и «60 попыток» превращались в десятки минут:
+   прогрессбар замирал у конца, плашка не снималась. Здесь потолок - настенные
+   часы: не успели за budgetMs - честно возвращаем false. */
+var _viewReloadFor = function(budgetMs) {
+	var deadline = Date.now() + budgetMs;
+	var step = function() {
+		return esimExec([ 'dump' ]).then(function(d) {
+			if (lpaOk(d.profiles || {})) {
+				renderProfiles(d.profiles.payload.data || []);
+				return true;
+			}
+			if (Date.now() >= deadline) { return false; }
+			return new Promise(function(resolve) {
+				window.setTimeout(function() { resolve(step()); }, 3000);
+			});
+		});
+	};
+	return step();
 };
 
 function renderProfiles(list) {
@@ -530,49 +694,68 @@ function renderProfiles(list) {
 }
 
 function esimOp(verb, iccid, name) {
-	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying eSIM operation...')));
+	/* УНИФИКАЦИЯ МЕХАНИКИ (решение владельца): никаких попапов. Все состояния
+	   показывает оверлей на блоке eSIM (modemtabs.setBusy) с прогрессбаром в
+	   стиле полосок метрик. Плашка снимается ТОЛЬКО после перечитывания
+	   списка - пользователь сразу видит сменившийся активный профиль. */
+	modemtabs.setBusy('#esim-section', _('Applying eSIM operation...'), 60000, 15);
+	var attempt = function(tries) {
 	fs.exec(ESIM, [ verb, iccid ]).then(function(res) {
 		var j = parseLpa(res.stdout);
 		var ok = lpaOk(j);
+		/* ОЧЕРЕДЬ ВМЕСТО ОШИБКИ. У eUICC один логический канал: пока фоновый
+		   dump (тёплый список ПООЩРЯЕТ кликать сразу) или другая операция
+		   держит замок esim.sh, бэкенд отвечает busy. Раньше это вываливалось
+		   пользователю как «operation failed: busy». Теперь тихо ждём под тем
+		   же спиннером и повторяем: dump на FM350 - ~10 c, 12 попыток по 2 c
+		   покрывают его с запасом. */
+		if (!ok && lpaMsg(j) === 'busy' && tries < 12) {
+			window.setTimeout(function() { attempt(tries + 1); }, 2000);
+			return;
+		}
 		if (ok && (verb == 'enable' || verb == 'disable')) {
 			/* Смена активного профиля применяется ТОЛЬКО после полной
 			   перезагрузки модема (AT+CFUN=1,1): eUICC перечитывает профили при
 			   инициализации, перезапуска одного радио (soft) не хватает - раньше
 			   профиль визуально «не переключался». Модем при этом
 			   переэнумерируется на USB (десятки секунд), поэтому:
-			   - держим модал с понятным текстом (а не пугающей ошибкой, если
+			   - держим оверлей с понятным текстом (а не пугающую ошибку, если
 			     пользователь сам жмёт Refresh во время ребута - см. #6);
 			   - список перечитываем с запасом (25 c), как при добавлении. */
-			// Оверлей поверх блока вместо модалки - идёт штатный ребут, а не сбой.
-			ui.hideModal();
+			// Оверлей уже висит - обновляем текст и растягиваем прогресс на ребут.
 			/* ДВЕ ЦЕЛЬНЫЕ ФРАЗЫ, А НЕ ПОДСТАНОВКА СЛОВА.
 			   Здесь было _('Profile %s…').format(_('enabled')) - и по-русски
 			   выходило «Профиль включено»: прилагательное не согласуется с
 			   существительным. Собирать предложения из кусков нельзя в принципе -
 			   в каждом языке своё согласование, и переводчик не может это
 			   исправить, у него на руках только обрывки. */
-			modemtabs.setBusy('.cbi-section', verb == 'enable'
+			modemtabs.setBusy('#esim-section', verb == 'enable'
 				? _('Profile enabled. The modem is restarting to apply it - up to a minute…')
 				: _('Profile disabled. The modem is restarting to apply it - up to a minute…'),
-				120000);
+				300000, 90);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
 			fs.exec(ESIM, [ 'reapply' ]);   // см. выше: без этого остаётся старый IP
-			window.setTimeout(function() {
-				/* Порт eUICC после AT+CFUN=1,1 МОГ СМЕНИТЬСЯ: модем
-				   переэнумерируется на USB, и запомненный номер tty уже чужой.
-				   recheck сбрасывает и кэш порта, и кэш наличия eSIM. */
+			/* Ждём ВОЗВРАЩЕНИЯ модема (как полоса вкладок: пропал -> появился),
+			   тогда прогрессбар добегает и плашка уходит СРАЗУ - а обновление
+			   списка идёт уже на живой странице с пометкой у EID (решение
+			   владельца: не держать плашку до перечитывания). */
+			_waitModemBack(240000).then(function() {
+				modemtabs.clearBusy();
+				notify(true, _('eSIM operation done'), null);
+				var meta = document.getElementById('esim-meta');
+				if (meta && !document.getElementById('esim-updating')) {
+					meta.appendChild(E('em', {
+						'id': 'esim-updating', 'class': 'spinning',
+						'style': 'margin-left:.7em;font-size:92%;opacity:.7'
+					}, _('Updating the profile list...')));
+				}
+				/* recheck: после AT+CFUN=1,1 tty eUICC мог сменить номер -
+				   сбрасываем кэш порта, потом перечитываем с бюджетом времени. */
 				L.resolveDefault(fs.exec_direct(ESIM, [ 'recheck' ]), '')
-					/* 15 попыток по 3 c - модем после AT+CFUN=1,1 поднимается
-					   десятки секунд, и четырёх попыток (12 c) не хватало:
-					   список молча оставался прежним. */
-					.then(function() { return _viewReload(0, 15); })
+					.then(function() { return _viewReloadFor(120000); })
 					.then(function(done) {
-						modemtabs.clearBusy();
-						notify(true, _('eSIM operation done'), null);
-						/* РЕЗУЛЬТАТ ПРОВЕРЯЕМ. Раньше он игнорировался: если eUICC
-						   не успевал ответить (а после жёсткой перезагрузки это
-						   обычное дело), список молча оставался прежним, и
-						   пользователю приходилось обновлять страницу руками. */
+						var up = document.getElementById('esim-updating');
+						if (up) { up.parentNode.removeChild(up); }
 						if (!done) {
 							notify(false, null, _('Could not refresh the list automatically. Press Refresh in a few seconds.'));
 						}
@@ -580,7 +763,7 @@ function esimOp(verb, iccid, name) {
 						   предложим проверить APN (не меняем молча). */
 						if (verb == 'enable') { proposeApnAfterEnable(); }
 					});
-			}, 45000);
+			});
 			return;
 		}
 		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));
@@ -589,20 +772,21 @@ function esimOp(verb, iccid, name) {
 			// модем, но eUICC ещё занят: сразу после delete идёт отправка нотификации
 			// на SM-DP+. Держим спиннер и НАСТОЙЧИВО перечитываем список - иначе он
 			// оставался старым (удалённый профиль висел в таблице) до ручного Refresh.
-			ui.showModal(_('eSIM'), [ E('p', { 'class': 'spinning' },
-				_('Updating the profile list...')) ]);
+			modemtabs.setBusy('#esim-section', _('Updating the profile list...'), 60000, 12);
 			window.setTimeout(function() {
 				_viewReload().then(function(done) {
-					ui.hideModal();
+					modemtabs.clearBusy();
 					if (!done) { notify(false, null,
 						_('Could not refresh the list automatically. Press Refresh in a few seconds.')); }
 				});
 			}, 1500);
 		} else {
-			ui.hideModal();
+			modemtabs.clearBusy();
 			window.setTimeout(_viewReload, 2500);
 		}
-	}).catch(function() { ui.hideModal(); });
+	}).catch(function() { modemtabs.clearBusy(); });
+	};
+	attempt(0);
 }
 
 function esimDeleteConfirm(iccid, name) {

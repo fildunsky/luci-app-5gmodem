@@ -353,7 +353,18 @@ function tabsBar(modems, active) {
 			'click': function(ev) {
 				var path = ev.currentTarget.getAttribute('data-path');
 				if (path === active) { return; }
-				ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching to the selected modem…')));
+				/* Без попапа (решение владельца): переключение - это быстрые
+				   uci-правки (AT-порт заново не пробуется при обычной смене
+				   вкладки). Мгновенно перекидываем акцентную рамку на выбранную
+				   вкладку - обратная связь есть сразу, а перезагрузку страницы
+				   (нужна, чтобы весь экран перечитал данные нового модема)
+				   запускаем следом. Повторные клики глушим, пока идёт switch. */
+				var card = ev.currentTarget, row = card.parentNode;
+				if (row) {
+					row.querySelectorAll('.modemtab.active').forEach(function(b) { b.classList.remove('active'); });
+					row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = 'none'; });
+				}
+				card.classList.add('active');
 				L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
 					.then(function() { window.location.reload(); });
 			}
@@ -455,32 +466,63 @@ return baseclass.extend({
 		if (document.getElementById('modem-busy-css')) { return; }
 		var css =
 			'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
-			'display:flex;align-items:center;justify-content:center;text-align:center;' +
+			'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;' +
 			'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
 			'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
 			':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
 			'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
 			':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
-			':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}';
+			':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}' +
+		/* прогрессбар плашки - в стиле основных метрик: серый заполненный
+		   трек без обводки (а не пустота с рамкой темы) */
+		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}';
 		document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
 	},
 
-	/* setBusy(selector, msg[, safetyMs]) - накрыть блок; clearBusy() - снять. */
-	setBusy: function(sel, msg, safetyMs) {
+	/* setBusy(selector, msg[, safetyMs[, progressSec]]) - накрыть блок;
+	   clearBusy() - снять. progressSec включает ПРОГРЕССБАР в стиле полосок
+	   метрик (.cbi-progressbar темы): он заполняется по ожидаемому времени
+	   операции, упирается в 97% и дожидается настоящего завершения - на
+	   clearBusy дорисовывается до 100% и плашка снимается. */
+	setBusy: function(sel, msg, safetyMs, progressSec) {
 		var block = document.querySelector(sel);
 		if (!block) { return; }
 		this._busyCss();
 		var txt = msg || _('The modem is restarting…');
 		var ov = document.getElementById('modem-busy-ov');
+		/* Со спиннером - только БЕЗ прогрессбара: когда ход показывает полоса,
+		   крутилка рядом лишняя (решение владельца). */
+		var txtCls = progressSec ? '' : 'spinning';
 		if (!ov) {
 			block.style.position = 'relative';
 			ov = E('div', { 'id': 'modem-busy-ov' }, [
-				E('span', { 'class': 'spinning', 'style': 'font-weight:600;' }, txt)
+				E('span', { 'id': 'modem-busy-txt', 'class': txtCls, 'style': 'font-weight:600;' }, txt)
 			]);
 			block.appendChild(ov);
 		} else {
 			ov.style.display = 'flex';
-			var sp = ov.querySelector('.spinning'); if (sp) { sp.textContent = txt; }
+			var sp = ov.querySelector('#modem-busy-txt');
+			if (sp) { sp.textContent = txt; sp.className = txtCls; }
+		}
+		var bar = document.getElementById('modem-busy-bar');
+		if (this._busyBarTimer) { window.clearInterval(this._busyBarTimer); this._busyBarTimer = null; }
+		if (progressSec) {
+			if (!bar) {
+				bar = E('div', { 'id': 'modem-busy-bar', 'class': 'cbi-progressbar',
+					'title': '', 'style': 'width:70%;max-width:24em;margin-top:10px' }, E('div'));
+				ov.appendChild(bar);
+			}
+			var t0 = Date.now(), inner = bar.firstElementChild;
+			if (inner) {
+				inner.style.width = '0%';
+				this._busyBarTimer = window.setInterval(function() {
+					/* elapsed_ms / (sec*1000) * 100 = elapsed_ms / (sec*10) */
+					var pc = Math.min(97, Math.round((Date.now() - t0) / (progressSec * 10)));
+					inner.style.width = pc + '%';
+				}, 500);
+			}
+		} else if (bar) {
+			bar.remove();
 		}
 		if (this._busyTimer) { window.clearTimeout(this._busyTimer); }
 		// страховка: снять оверлей, даже если снимающий код не отработал
@@ -490,7 +532,16 @@ return baseclass.extend({
 
 	clearBusy: function() {
 		if (this._busyTimer) { window.clearTimeout(this._busyTimer); this._busyTimer = null; }
+		if (this._busyBarTimer) { window.clearInterval(this._busyBarTimer); this._busyBarTimer = null; }
 		var ov = document.getElementById('modem-busy-ov');
-		if (ov) { ov.remove(); }
+		if (!ov) { return; }
+		var inner = ov.querySelector('#modem-busy-bar > div');
+		if (inner) {
+			/* завершение видно глазом: полоска добегает до конца и плашка уходит */
+			inner.style.width = '100%';
+			window.setTimeout(function() { ov.remove(); }, 350);
+		} else {
+			ov.remove();
+		}
 	},
 });
