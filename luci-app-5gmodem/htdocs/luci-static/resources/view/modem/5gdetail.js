@@ -550,6 +550,18 @@ function sinr_bar(v, m) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30 
 var _modemBusyTimer = null;
 var _bandsAfterBusy = false;
 var _bandsRetry = 0;   // попытки дочитать enabled, если модем ответил не сразу   // после снятия плашки перечитать блок диапазонов
+/* Потолок этих попыток. Обычно хватает трёх (тормозной ответ модема), но СРАЗУ
+   ПОСЛЕ перевода интерфейса на ModemManager его поднимают заново, и модем
+   появляется в mmcli только через десятки секунд - за 3 попытки (4.5 с) мы не
+   дожидались и оставляли кнопки диапазонов невыделенными до перезагрузки
+   страницы. Поэтому на время такого переключения потолок поднимается. */
+var _bandsRetryMax = 3;
+/* Модем отдаёт 3G-диапазоны через ModemManager (mmcli: utran-*)? Ставится при
+   отрисовке. Нужен, чтобы modemband-путь (AT-профиль) НЕ гасил строку 3G, которую
+   mmcli уже правомерно наполнил тумблерами: у Huawei E3372 3G-комбинаций в
+   AT-профиле нет (их вообще определяет один Telit), и ветка else прятала рабочую
+   строку - она успевала мелькнуть и исчезала. */
+var _has3gMM = false;
 var _bandsPollN = 0;   // счётчик для редкого авто-освежения блока диапазонов в опросе
 var _modemBusySince = 0;
 /* Сколько плашка держится в любом случае. Признак «модем вернулся» - регистрация
@@ -796,6 +808,7 @@ function SIMdata(data) {
 
 /* Подсветить кнопку текущего режима (читается из mmcli -K current-modes) */
 function updateModeButtons() {
+	if (!mmIdx) { return; }   // MM не ведёт этот модем - читать нечего (см. mmIdx)
 	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
 		var m = (out || '').match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
 		if (!m) { return; }
@@ -1184,19 +1197,45 @@ function renderBandToggles(contId, bands, current, prefix) {
 	});
 }
 
+/* СНЯТЬ строку 3G целиком - и содержимое, и видимость.
+   Чистим ЧЕРЕЗ renderBandToggles с пустым списком, а не innerHTML='': он заодно
+   обновит подпись кэша (data-sig), иначе следующая НАСТОЯЩАЯ перерисовка была бы
+   пропущена как «уже отрисовано». Нужно потому, что путь модема без 3G контейнер
+   вообще не трогает, и там оставались тумблеры ПРЕДЫДУЩЕГО модема: на FM350
+   показывались диапазоны 3G от Huawei E3372. */
+function clear3gRow() {
+	renderBandToggles('bands-3g', [], [], 'utran-');
+	var r3 = document.getElementById('bands3gn');
+	if (r3) { r3.style.display = 'none'; }
+}
+
 function loadBands() {
 	// Модульный опрос: пока блок «Управление частотами» свёрнут, НЕ дёргаем
 	// mmcli/bands.sh (это ускоряет загрузку). Данные подтянутся при раскрытии
 	// (см. onBlockExpand['freq']).
 	if (!blockExpanded('freq')) { return Promise.resolve(); }
 	if (bandsGated) { return Promise.resolve(); }   // управление запрещено бэкендом
+	/* MM не ведёт ЭТОТ модем - его диапазонов у mmcli нет. Раньше сюда попадал
+	   фолбэк mmIdx='any', и мы рисовали диапазоны СОСЕДНЕГО модема: у FM350
+	   показывались 3G/4G от E3372, причём 3G так и оставался чужим, потому что
+	   вендорный путь эту строку не трогает. */
+	if (!mmIdx) { _has3gMM = false; clear3gRow(); return loadBandsModemband(); }
 	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
-		if (!out) { return; }
+		/* Признак «3G даёт mmcli» ОБЯЗАН обновляться на КАЖДОМ выходе, иначе он
+		   протекает между модемами: он модульный, а страница при переключении
+		   вкладки модема может не перезагружаться. Живой случай: после E3372
+		   (у него есть utran) флаг оставался true, и на FM350 - где mmcli вообще
+		   молчит, протокол fibocom - строка 3G продолжала показываться. */
+		if (!out) { _has3gMM = false; clear3gRow(); return; }
 		var supported = [], current = [];
 		out.split('\n').forEach(function(ln) {
 			var m = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
 			if (m) { (m[1] == 'supported' ? supported : current).push(m[2]); }
 		});
+		/* До ранних выходов ниже (пустой supported / mmcliBandsLoaded): иначе на
+		   модеме без mmcli-диапазонов флаг тоже застревал бы от предыдущего. */
+		_has3gMM = supported.some(function(b) { return b.indexOf('utran-') == 0; });
+		if (!_has3gMM) { clear3gRow(); }
 		// No bands from mmcli. Distinguish two cases:
 		//  - modem that NEVER exposes bands via mmcli (e.g. Fibocom FM350 under MM):
 		//    fall back to the vendor AT band path (GTACT via bands.sh);
@@ -1243,8 +1282,14 @@ var bandsGated = false;
    because the view fully reloads. */
 var mmcliBandsLoaded = false;
 /* Индекс ACTIVE модема в ModemManager (для управления бендами/режимом при
-   нескольких модемах). 'any' - фолбэк для одного модема. Ставится в load(). */
-var mmIdx = 'any';
+   нескольких модемах). Ставится в load().
+
+   ПУСТО = ModemManager ЭТОТ модем НЕ ведёт (mm_index_for_path сверяет sysfs-путь,
+   так что пустой ответ авторитетен). Раньше здесь стоял фолбэк 'any', и mmcli
+   молча попадал в ЧУЖОЙ модем: у FM350 (вне MM) рисовались 3G/4G диапазоны от
+   E3372, а запись бэндов/режима ушла бы в соседний модем. Все вызовы mmcli ниже
+   обязаны проверять mmIdx. */
+var mmIdx = '';
 /* Протокол интерфейса модема (из json.protocol). В режиме modemmanager бендами
    управляют через mmcli, поэтому пояснение «переключите на ModemManager» там НЕ
    показываем - если mmcli временно не готов (напр. модем пересоздают), это
@@ -1675,7 +1720,10 @@ function loadBandsModemband(force) {
 				}, o.label));
 			});
 			}
-		} else if (row3g) {
+		} else if (row3g && !_has3gMM) {
+			/* Прячем ТОЛЬКО когда 3G не даёт ни один источник. Если mmcli отдал
+			   utran-диапазоны, строка уже наполнена рабочими тумблерами - гасить
+			   её из-за того, что у AT-профиля нет своих 3G-комбинаций, нельзя. */
 			row3g.style.display = 'none';
 		}
 
@@ -1701,12 +1749,12 @@ function loadBandsModemband(force) {
 		   лишний перезапрос дёшев. */
 		if (supLte.length && !enLte.length && !nrC_hasEnabled(j)) {
 			// Не вечно: у модема, где ВСЕ LTE-диапазоны реально выключены, пустой
-			// enabled - это правда, а не гонка. Три попытки покрывают тормозной
-			// ответ и на этом останавливаются.
-			if ((_bandsRetry = (_bandsRetry || 0) + 1) <= 3) {
+			// enabled - это правда, а не гонка. Обычный потолок - три попытки; после
+			// перевода на ModemManager он временно поднят (см. _bandsRetryMax).
+			if ((_bandsRetry = (_bandsRetry || 0) + 1) <= _bandsRetryMax) {
 				window.setTimeout(loadBandsModemband, 1500);
 			}
-		} else { _bandsRetry = 0; }
+		} else { _bandsRetry = 0; _bandsRetryMax = 3; }
 
 		var lteC = document.getElementById('bands-lte');
 		if (lteC && !sameRender(lteC, supLte.join(',') + '|' + enLte.join(','))) {
@@ -1799,7 +1847,15 @@ function switchToModemManager(btn) {
 			bandsReadOnly = false;
 			/* MM поднимается не мгновенно (перезапуск службы + регистрация
 			   модема), поэтому не дёргаем bands.sh в ту же секунду - иначе
-			   получим пустой список и блок мигнёт «нет диапазонов». */
+			   получим пустой список и блок мигнёт «нет диапазонов».
+			   Одной отложенной попытки МАЛО: модем появляется в mmcli через
+			   десятки секунд, а обычный потолок ретраев (3 x 1.5 c) выходил
+			   раньше - кнопки диапазонов так и оставались невыделенными до
+			   перезагрузки страницы. Поднимаем потолок на это переключение:
+			   20 x 1.5 c ~ 30 c, чего хватает на перечисление модема в MM.
+			   Как только диапазоны прочитаны, потолок сам вернётся к трём. */
+			_bandsRetry = 0;
+			_bandsRetryMax = 20;
 			window.setTimeout(loadBandsModemband, 3000);
 		} else {
 			ui.addNotification(null, E('p', _('Could not switch the interface to ModemManager')), 'error');
@@ -2016,6 +2072,12 @@ function applyBands() {
 	/* Плашка вместо модалки - то же поведение, что у modemband-ветки выше и у
 	   привязки к соте: страница остаётся рабочей, а ожидание заканчивается по
 	   ФАКТУ возвращения модема, а не по угаданным секундам. */
+	/* Без цели в MM запись ушла бы в ЧУЖОЙ модем - это опаснее, чем ничего не
+	   сделать. */
+	if (!mmIdx) {
+		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
+		return Promise.resolve();
+	}
 	setModemBusy(_('Applying bands…'));
 	_bandsAfterBusy = true;
 	return fs.exec('/usr/bin/mmcli', [ '-m', mmIdx, '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
@@ -2175,6 +2237,10 @@ function updateSimIcon(name) {
 }
 
 function setNetMode(allowed, preferred, label) {
+	if (!mmIdx) {   // см. mmIdx: иначе режим уехал бы соседнему модему
+		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
+		return Promise.resolve();
+	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
 	var args = [ '-m', mmIdx, '--set-allowed-modes=' + allowed ];
 	if (preferred) { args.push('--set-preferred-mode=' + preferred); }
@@ -3507,7 +3573,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
-			.then(function(idx) { mmIdx = (String(idx || '').trim()) || 'any'; });
+			.then(function(idx) { mmIdx = String(idx || '').trim(); });
 		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не
 		   сверяем имя платы: у совместимых устройств те же светодиоды бывают под
 		   другим board_name, а на LT300 иной ревизии их может не быть - и тогда

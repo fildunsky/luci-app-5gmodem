@@ -23,10 +23,22 @@ for sec in $(uci show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.=]*\)=mod
 	iface=$(uci -q get "5gmodem.$sec.network")
 	[ -n "$path" ] && [ -n "$iface" ] || continue
 	uci -q get "network.$iface" >/dev/null 2>&1 || continue
-	# уже проставлен (в т.ч. новым mkiface.sh) - не трогаем
-	[ -n "$(uci -q get "network.$iface.modem_path")" ] && continue
-	uci -q set "network.$iface.modem_path=$path"
-	CHANGED=1
+	# ПУТЬ - как раньше, если ещё не стоит (в т.ч. от нового mkiface.sh).
+	if [ -z "$(uci -q get "network.$iface.modem_path")" ]; then
+		uci -q set "network.$iface.modem_path=$path"
+		CHANGED=1
+	fi
+	# IMEI - ПЕРВИЧНЫЙ ключ владения (см. lib.sh). Ставим ОТДЕЛЬНО от пути: у
+	# интерфейсов от прежних версий modem_path уже есть, и общая проверка «штамп
+	# стоит - пропускаем» оставила бы их навсегда без modem_imei, то есть на
+	# старой модели «владение по порту». Секция помнит IMEI, даже когда модема
+	# сейчас нет в роутере, - значит мигрируют и профили отсутствующих модемов
+	# (resolve их не видит, он ходит только по присутствующим).
+	imei=$(uci -q get "5gmodem.$sec.imei")
+	if [ -n "$imei" ] && [ -z "$(uci -q get "network.$iface.modem_imei")" ]; then
+		uci -q set "network.$iface.modem_imei=$imei"
+		CHANGED=1
+	fi
 done
 
 [ "$CHANGED" = 1 ] && uci -q commit network

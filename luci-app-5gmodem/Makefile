@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.8.2
+PKG_VERSION:=1.8.3
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -41,9 +41,14 @@ chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/uci-defaults/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-leds 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
 	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
 	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
+	# Диоды кнопок: приводим их к фактическому состоянию сервиса ОДИН РАЗ при
+	# загрузке (после ребута они оставались тёмными до первого нажатия).
+	/etc/init.d/5gmodem-btnleds enable 2>/dev/null
+	/etc/init.d/5gmodem-btnleds start 2>/dev/null
 	modprobe rndis_host 2>/dev/null
 	modprobe cdc_ether 2>/dev/null
 }

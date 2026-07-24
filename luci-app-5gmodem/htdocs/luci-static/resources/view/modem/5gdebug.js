@@ -249,14 +249,31 @@ return view.extend({
 		if (mmrow) {
 			var run = mm && mm.running == 1;
 			mmrow.innerHTML = '';
+			/* СВЕТЯЩАЯСЯ ЛАМПОЧКА, а не плоский кружок - тот же язык, что у
+			   индикаторов диодов на странице «Кнопки» (.ledchip .leddot):
+			   заливка цветом состояния + ореол box-shadow тем же цветом.
+			   Светятся ОБА состояния: здесь и «запущен», и «остановлен» -
+			   значимые состояния службы, а не «горит/не горит», как у диода. */
+			var mmcol = run ? '#5cb85c' : '#d9534f';
+			/* Точка и подпись - во ФЛЕКС-строке с align-items:center. Через
+			   vertical-align:middle не выходит: для элемента в 5px он считает
+			   выравнивание от базовой линии и половины x-height, и точка садится
+			   к низу строки, а не по центру надписи. */
 			mmrow.appendChild(E('span', {
-				'style': 'display:inline-block;width:.6em;height:.6em;border-radius:50%;' +
-					'margin-right:.45em;vertical-align:middle;background:' +
-					(run ? '#5cb85c' : '#d9534f')
-			}));
-			mmrow.appendChild(E('span', { 'style': 'opacity:.75; font-size:88%' },
-				run ? _('ModemManager is running')
-				    : _('ModemManager is stopped — no connected modem needs it')));
+				'style': 'display:inline-flex;align-items:center;gap:.45em;'
+			}, [
+				E('span', {
+					/* 5px - ровно как у диодов на «Кнопках» (.ledchip .leddot),
+					   чтобы индикаторы читались одинаково на обеих страницах. */
+					'style': 'display:block;width:5px;height:5px;border-radius:50%;' +
+						'flex:0 0 auto;box-sizing:border-box;' +
+						'border:1px solid ' + mmcol + ';background:' + mmcol + ';' +
+						'box-shadow:0 0 4px 1px ' + mmcol + ';'
+				}),
+				E('span', { 'style': 'opacity:.75; font-size:88%' },
+					run ? _('ModemManager is running')
+					    : _('ModemManager is stopped — no connected modem needs it'))
+			]));
 		}
 		var warn = document.getElementById('mprof-warn');
 		var box = document.getElementById('mprof-list');

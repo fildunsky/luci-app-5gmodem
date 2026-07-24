@@ -303,13 +303,25 @@ list)
 			# stale - живой модем пропадал из приоритетов. Поэтому смотрим ВСЕ
 			# секции этого интерфейса и прячем, ТОЛЬКО если НИ ОДНА не присутствует.
 			# Нет ни одной секции с путём (legacy-конфиг) - поведение прежнее: показываем.
-			_any_path=""; _any_present=""
+			_any_path=""; _any_present=""; _any_parked=""
 			for _ms in $(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='$n'\$/\1/p"); do
-				_mp=$(uci -q get "5gmodem.$_ms.path"); [ -n "$_mp" ] || continue
+				_mp=$(uci -q get "5gmodem.$_ms.path")
+				if [ -z "$_mp" ]; then
+					# Секция БЕЗ пути - это ПАРКОВКА вытесненного модема (park_profile
+					# в modemswitch.sh): она держит имя интерфейса за железом, которого
+					# сейчас на шине нет. Раньше такая секция молча пропускалась, и
+					# _any_path оставался пустым - интерфейс считался «legacy без пути»
+					# и продолжал висеть в приоритетах (наблюдалось: modem4 от Compal
+					# после возврата E3372). Парковка - достоверный признак отсутствия.
+					[ "$(uci -q get "5gmodem.$_ms.parked")" = "1" ] && _any_parked=1
+					continue
+				fi
 				_any_path=1
 				echo "$PRESENT_PATHS" | grep -q " $_mp " && { _any_present=1; break; }
 			done
-			[ -n "$_any_path" ] && [ -z "$_any_present" ] && continue
+			if [ -z "$_any_present" ] && { [ -n "$_any_path" ] || [ -n "$_any_parked" ]; }; then
+				continue
+			fi
 		fi
 		# NOTE: no IP filter for modems/Wi-Fi - keep them visible even without an
 		# address, so a modem that briefly drops its IP while re-dialing after a

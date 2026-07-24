@@ -45,10 +45,14 @@ APNARG="$3"
 # новый модем подхватил интерфейс с APN internet.beeline.ru, хотя в нём стоит
 # симка Т-Мобайл. Штамп даёт обратную ссылку и позволяет отличить свой
 # интерфейс от чужого наследства.
+#
+# ВЛАДЕНИЕ ПО ЖЕЛЕЗУ. Кроме пути пишем и IMEI (network.<if>.modem_imei) - он и
+# есть первичный ключ: два РАЗНЫХ модема в одном разъёме имеют один путь, и по
+# пути их не различить (интерфейс прежнего сносился при подмене). Реализация -
+# общая, в lib.sh (её же используют resolve/swap_cleanup).
+. /usr/share/5gmodem/lib.sh
 stamp_iface() {
-	[ -n "$1" ] && [ -n "$2" ] || return 0
-	uci -q set "network.$1.modem_path=$2"
-	uci -q commit network
+	stamp_iface_owner "$1" "$2"
 }
 
 # Записать APN интерфейса $1 по правилам выше ($2 = прежний APN)
@@ -244,7 +248,17 @@ if [ -n "$AMP" ]; then
 	cand=$(uci -q get "5gmodem.$MSEC.network")
 	[ -n "$cand" ] || cand="modem"
 	n=1
-	while echo " $USED " | grep -q " $cand "; do n=$((n + 1)); cand="modem$n"; done
+	# Имя занято, если его держит ДРУГАЯ секция (USED) ИЛИ существующий интерфейс
+	# с таким именем ЗАКРЕПЛЁН ЗА ДРУГИМ ЖЕЛЕЗОМ (штамп modem_imei, см. lib.sh).
+	# Вторая проверка нужна потому, что интерфейс вытесненного модема мы больше не
+	# сносим: он ждёт возвращения своего модема, и отдавать его имя новому нельзя
+	# (наблюдалось: Compal занял modem2, сохранённый за Huawei E3372).
+	MYIMEI=$(imei_for_path "$AMP")
+	while echo " $USED " | grep -q " $cand " \
+	      || { uci -q get "network.$cand" >/dev/null 2>&1 \
+	           && ! iface_owned_by "$cand" "$AMP" "$MYIMEI"; }; do
+		n=$((n + 1)); cand="modem$n"
+	done
 	IF="$cand"
 	# the cdc-wdm control node that belongs to THIS modem
 	WANTWDM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null)

@@ -3575,3 +3575,6 @@ msgstr "Управление диапазонами и режимом сети �
 
 msgid "No modem on the bus. Insert a modem — the card fills in automatically."
 msgstr "Модема нет на шине. Вставьте модем — карточка заполнится автоматически."
+
+msgid "ModemManager does not manage this modem"
+msgstr "ModemManager не управляет этим модемом"
