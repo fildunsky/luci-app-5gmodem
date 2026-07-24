@@ -547,6 +547,65 @@ set)
 	echo '{"result":"ok","active":"'"$CH"'","changed":true,"mode":"live-route"}'
 	;;
 
+order)
+	# order <if1> <if2> ...  - задать ПОРЯДОК аплинков перетаскиванием карточек.
+	# Метрика = РАНГ: первый 1, второй 2, третий 3 ... Это и есть failover: отвалился
+	# первый (нет default-маршрута с метрикой 1) - трафик сам уходит на метрику 2.
+	# В отличие от `set` (выбранный=1, остальные 20,21...), тут пользователь задаёт
+	# ВЕСЬ порядок. Живое применение маршрутов - то же, что у `set`.
+	shift
+	[ -n "$1" ] || { echo '{"error":"no order"}'; exit 1; }
+	_ord="$*"
+	_rank=1
+	# uci-метрики по рангу; интерфейсы вне переданного порядка - в хвост (метрики
+	# должны быть уникальными: два default с одной метрикой конфликтуют в ядре).
+	for n in $_ord $(wan_nets); do
+		[ -n "$n" ] || continue
+		case " $_seen_o " in *" $n "*) continue ;; esac
+		_seen_o="$_seen_o $n"
+		uci -q get "network.$n" >/dev/null 2>&1 || continue
+		uci -q set "network.$n.metric=$_rank"
+		_rank=$((_rank + 1))
+	done
+	uci -q commit network
+	# --- живое переустановление default-маршрутов (копия логики из `set`) ---
+	_add_default_route() {   # $1 - iface, $2 - метрика
+		_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
+		_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
+		if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
+			ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
+			ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
+		else
+			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
+		fi
+		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
+			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
+	}
+	_del_all_default() {   # $1 - l3_device
+		_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
+		_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
+	}
+	for n in $(wan_nets); do
+		[ -n "$n" ] || continue
+		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
+		_del_all_default "$_d"
+	done
+	# Один маршрут на устройство (IPv6-спутник делит l3_device - не дублируем).
+	_seen=""; _rank=1
+	for n in $_ord $(wan_nets); do
+		[ -n "$n" ] || continue
+		case " $_seen_r " in *" $n "*) continue ;; esac
+		_seen_r="$_seen_r $n"
+		_dv=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_dv" ] || continue
+		case " $_seen " in *" $_dv "*) continue ;; esac
+		_seen="$_seen $_dv"
+		_add_default_route "$n" "$_rank"
+		_rank=$((_rank + 1))
+	done
+	echo '{"result":"ok","changed":true,"mode":"order"}'
+	;;
+
 ping)
 	# Пинг до выбранного хоста для виджета «Статус сервиса»: {"ok":1,"ms":23} либо {"ok":0}.
 	# Идёт по активному аплинку (default route). Один пакет, таймаут 2 c.

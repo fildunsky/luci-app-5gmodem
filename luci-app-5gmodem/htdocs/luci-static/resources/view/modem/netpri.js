@@ -114,7 +114,9 @@ var CSS = `
 	   Внутренней обводки inset 0 0 0 1px здесь была - она удваивала рамку,
 	   и выделение выглядело жирным. */
 	border-color: var(--proton-accent, #0095ff);
-	pointer-events: none;
+	/* pointer-events НЕ отключаем: иначе активную карточку нельзя схватить для
+	   перетаскивания. Клик по уже активной и так ничего не делает (обработчик
+	   click рано выходит). */
 }
 /* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому
    краю (сервис сверху, скорость по центру, публичный IP снизу). */
@@ -741,28 +743,232 @@ function nameEl(o) {
 	return E('span', { 'class': 'netpri-name' }, txt);
 }
 
+/* ==== ПЕРЕТАСКИВАНИЕ КАРТОЧЕК: порядок = приоритет (метрика 1,2,3…) ====
+   На pointer-events (НЕ нативный HTML5-drag: тот на <button> не заводится - тема
+   ставит -webkit-user-drag:none, кнопки не «схватываются», и на тач его нет).
+   Тащим карточку по горизонтали, соседи «резиново» съезжают (FLIP), на месте, куда
+   она встанет, - пунктирный слот с иконкой +. Отпустили - бэкенд получает новый
+   порядок (netpri.sh order …): метрики = ранг, отвал первого → трафик на второй. */
+var _npDrag = null;          // активное перетаскивание (или null)
+var _npApplying = false;     // идёт применение нового порядка (пауза poll до подтверждения)
+var _npJustDragged = false;  // подавить click, идущий сразу после drop
+
+function _npEnsureDragCss() {
+	if (document.getElementById('netpri-drag-css')) { return; }
+	document.head.appendChild(E('style', { 'id': 'netpri-drag-css', 'type': 'text/css' },
+		'.netpribar .netpri-btn[data-iface]{cursor:grab;touch-action:none;' +
+			'-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
+		'.netpribar .netpri-btn.netpri-lift{cursor:grabbing;opacity:.97;' +
+			'box-shadow:0 10px 22px rgba(0,0,0,.28);transition:none!important;will-change:transform;z-index:1000}' +
+		'.netpribar .netpri-slot{border:2px dashed rgba(130,130,140,.55);' +
+			'background:rgba(130,130,140,.07);box-shadow:none;flex-direction:row;' +
+			'align-items:center;justify-content:center;color:rgba(130,130,140,.8);cursor:default}' +
+		'.netpribar .netpri-slot svg{opacity:.7}'));
+}
+
+function _npIfaceCards(row) {
+	return Array.prototype.slice.call(row.children).filter(function(c) {
+		return c.nodeType === 1 && c.classList.contains('netpri-btn') && c.hasAttribute('data-iface');
+	});
+}
+
+function _npMakeSlot(w, h) {
+	var s = E('div', { 'class': 'netpri-btn netpri-slot' });
+	s.style.width = w + 'px'; s.style.height = h + 'px';
+	s.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" ' +
+		'stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+		'<path d="M12 5v14M5 12h14"/></svg>';
+	return s;
+}
+
+/* Позиция карточки во вьюпорте БЕЗ учёта её transform (вычитаем translateX/Y из
+   матрицы). Во время FLIP getBoundingClientRect возвращает «едущие» координаты, и
+   хит-тест по ним зацикливался (соседи дёргались). Так меряем стабильную разметку. */
+function _npLayoutPos(c) {
+	var r = c.getBoundingClientRect(), tx = 0, ty = 0;
+	var tr = getComputedStyle(c).transform;
+	if (tr && tr !== 'none') {
+		var m = tr.match(/matrix\(([^)]+)\)/);
+		if (m) { var q = m[1].split(','); tx = parseFloat(q[4]) || 0; ty = parseFloat(q[5]) || 0; }
+		else { var m3 = tr.match(/matrix3d\(([^)]+)\)/); if (m3) { var w = m3[1].split(','); tx = parseFloat(w[12]) || 0; ty = parseFloat(w[13]) || 0; } }
+	}
+	return { left: r.left - tx, top: r.top - ty };
+}
+
+/* FLIP в 2D (X и Y): при переносе строк карточки едут и по вертикали. */
+function _npFlip(cards, before) {
+	cards.forEach(function(c) {
+		var k = c.getAttribute('data-iface'); if (!(k in before)) { return; }
+		var now = _npLayoutPos(c);
+		var dx = before[k].left - now.left, dy = before[k].top - now.top;
+		if (Math.abs(dx) < 1 && Math.abs(dy) < 1) { return; }
+		c.style.transition = 'none';
+		c.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+		requestAnimationFrame(function() {
+			c.style.transition = 'transform .18s ease';
+			c.style.transform = '';
+		});
+	});
+}
+
+/* Индекс вставки в ПОТОКЕ (учитывает перенос строк): первый card, ПЕРЕД которым
+   стоит указатель - выше его строки, либо в его строке и левее центра. */
+function _npReposition(clientX, clientY) {
+	var d = _npDrag; if (!d || !d.slot) { return; }
+	var row = d.row, slot = d.slot;
+	var cards = _npIfaceCards(row).filter(function(c) { return c !== d.card; });
+	var idx = cards.length;
+	for (var i = 0; i < cards.length; i++) {
+		var p = _npLayoutPos(cards[i]), ow = cards[i].offsetWidth, oh = cards[i].offsetHeight;
+		if (clientY < p.top) { idx = i; break; }                               // выше строки карточки
+		if (clientY < p.top + oh && clientX < p.left + ow / 2) { idx = i; break; }  // в строке, левее центра
+	}
+	if (idx === d.lastIndex) { return; }
+	d.lastIndex = idx;
+	var before = {}; cards.forEach(function(c) { before[c.getAttribute('data-iface')] = _npLayoutPos(c); });
+	var refBefore = cards[idx] || null;
+	var rs = row.querySelector('.netpri-rightstart');
+	if (refBefore) { row.insertBefore(slot, refBefore); }
+	else if (rs) { row.insertBefore(slot, rs); }
+	else { row.appendChild(slot); }
+	_npFlip(cards, before);
+}
+
+function _npBeginDrag() {
+	var d = _npDrag, card = d.card;
+	var r = card.getBoundingClientRect();
+	d.slot = _npMakeSlot(r.width, r.height);
+	card.parentNode.insertBefore(d.slot, card);
+	card.style.position = 'fixed';
+	card.style.left = r.left + 'px'; card.style.top = r.top + 'px';
+	card.style.width = r.width + 'px'; card.style.height = r.height + 'px';
+	card.style.margin = '0'; card.style.zIndex = '1000'; card.style.pointerEvents = 'none';
+	card.classList.add('netpri-lift');
+	document.body.style.userSelect = 'none';
+	d.active = true;
+}
+
+function _npMove(ev) {
+	var d = _npDrag; if (!d) { return; }
+	var dx = ev.clientX - d.startX, dy = ev.clientY - d.startY;
+	if (!d.active) {
+		if (Math.abs(dx) < 5 && Math.abs(dy) < 5) { return; }
+		_npBeginDrag();
+	}
+	ev.preventDefault();
+	d.card.style.transform = 'translate(' + dx + 'px,' + dy + 'px) scale(1.03)';
+	_npReposition(ev.clientX, ev.clientY);
+}
+
+/* Полный разбор перетаскивания: снять слушатели, вернуть поднятую карточку в
+   поток, убрать слот, сбросить _npDrag. Идемпотентно; используется и штатным
+   завершением, и восстановлением после подвисшего drag (см. pointerdown). */
+function _npTeardown() {
+	var d = _npDrag; if (!d) { return null; }
+	_npDrag = null;
+	document.removeEventListener('pointermove', _npMove, true);
+	document.removeEventListener('pointerup', _npEnd, true);
+	document.removeEventListener('pointercancel', _npEnd, true);
+	try { d.card.releasePointerCapture(d.pid); } catch (e) {}
+	document.body.style.userSelect = '';
+	if (d.active) {
+		var card = d.card;
+		card.classList.remove('netpri-lift');
+		[ 'position','left','top','width','height','margin','zIndex','pointerEvents','transform' ]
+			.forEach(function(k) { card.style[k] = ''; });
+		if (d.slot && d.slot.parentNode) { d.slot.parentNode.insertBefore(card, d.slot); d.slot.parentNode.removeChild(d.slot); }
+		_npIfaceCards(d.row).forEach(function(c) { c.style.transition = ''; c.style.transform = ''; });
+	}
+	return d;
+}
+
+function _npEnd() {
+	var d = _npDrag; if (!d) { return; }
+	var active = d.active, row = d.row, commit = d.commit;
+	_npTeardown();
+	if (!active) { return; }   // не двигали - это клик, обработчик click сам отработает
+	_npJustDragged = true;
+	/* Рамку активного переносим на новую первую карточку СРАЗУ (оптимистично), не
+	   дожидаясь ответа бэкенда - после teardown DOM уже в новом порядке, метрика 1
+	   будет у левой. Иначе подсветка «догоняла» с задержкой round-trip. */
+	var _cards = _npIfaceCards(row);
+	_cards.forEach(function(c) { c.classList.remove('active'); });
+	if (_cards[0]) { _cards[0].classList.add('active'); }
+	var order = _cards.map(function(c) { return c.getAttribute('data-iface'); });
+	/* ПАУЗА POLL до подтверждения. Иначе параллельный 5-сек. тик успевал прочитать
+	   list ПОКА order ещё пишет метрики, перерисовывал старый порядок, и карточка
+	   «прыгала назад», а на следующем тике вставала верно (особенно на мобильном,
+	   где тиков больше). Держим оптимистичный DOM, пока order не применён и мы сами
+	   не перечитали подтверждённый порядок. Страховка снимает флаг, если order завис. */
+	_npApplying = true;
+	var _npDone = function() { _npApplying = false; };
+	setTimeout(_npDone, 4000);
+	L.resolveDefault(fs.exec(BIN, [ 'order' ].concat(order)), {}).then(function() {
+		loadList().then(function(l2) { if (commit) { commit(l2); } _npDone(); });
+	}, _npDone);
+}
+
+function _npEnableReorder(row, commit) {
+	_npEnsureDragCss();
+	_npIfaceCards(row).forEach(function(card) {
+		card.addEventListener('pointerdown', function(ev) {
+			if (ev.button !== 0) { return; }
+			if (_npDrag) { _npTeardown(); }   // самовосстановление после подвисшего drag
+			_npDrag = { card: card, row: row, startX: ev.clientX, startY: ev.clientY,
+			            active: false, commit: commit, pid: ev.pointerId, lastIndex: -1 };
+			try { card.setPointerCapture(ev.pointerId); } catch (e) {}
+			/* слушатели на DOCUMENT (а не на карточке): ловим pointerup/cancel даже
+			   если указатель ушёл за пределы или capture потерялся - иначе _npDrag
+			   оставался бы висеть и блокировал все следующие перетаскивания. */
+			document.addEventListener('pointermove', _npMove, true);
+			document.addEventListener('pointerup', _npEnd, true);
+			document.addEventListener('pointercancel', _npEnd, true);
+		});
+		card.addEventListener('lostpointercapture', function() {
+			if (_npDrag && _npDrag.card === card) { _npEnd(); }
+		});
+	});
+}
+
 function buildBar(list, redraw) {
 	var active = activeIface(list);
 	/* Приоритет интернета (кнопки интерфейсов) - только если виджет включён. */
-	var btns = (_widgets.netpri ? list : []).map(function(o) {
+	/* КАРТОЧКИ СТОЯТ ПО ПРИОРИТЕТУ: сортируем по метрике по возрастанию, чтобы
+	   левая = приоритет 1, следующая = 2 и т.д. Так порядок виден и без
+	   перетаскивания (и сразу показывает результат, если drag не сработал). */
+	var _sorted = (_widgets.netpri ? list.slice() : []).sort(function(a, b) {
+		var ma = parseInt(a.metric, 10); if (isNaN(ma)) { ma = 999; }
+		var mb = parseInt(b.metric, 10); if (isNaN(mb)) { mb = 999; }
+		if (ma !== mb) { return ma - mb; }
+		return (b.ip ? 1 : 0) - (a.ip ? 1 : 0);   // при равной метрике - у кого есть IP, тот выше
+	});
+	var btns = _sorted.map(function(o, _rank) {
 		var isA = (o.iface === active);
 		return E('button', {
 			'class': 'btn cbi-button netpri-btn' + (isA ? ' active' : ''),
 			'data-iface': o.iface,
 			'data-tooltip': o.iface + (o.metric != null ? (' · metric ' + o.metric) : ''),
 			'click': function(ev) {
+				/* click, сгенерированный сразу после drop, игнорируем. */
+				if (_npJustDragged) { _npJustDragged = false; return; }
 				var ifc = ev.currentTarget.getAttribute('data-iface');
 				if (ifc === active) { return; }
-				/* Переключение МГНОВЕННОЕ (живой ip route, без передозвона модема),
-				   поэтому попап-спиннер не нужен. Оптимистично подсвечиваем выбранную
-				   карточку сразу, затем применяем и перечитываем реальное состояние
-				   (метрики уже в uci -> activeIface подсветит верную карточку). */
+				/* Клик = «сделать первым»: строим НОВЫЙ ПОРЯДОК (кликнутый впереди,
+				   остальные в текущем порядке) и отдаём как order - метрики станут
+				   рангом. Переключение мгновенное (живой ip route), спиннер не нужен;
+				   оптимистично подсвечиваем карточку сразу. */
 				var card = ev.currentTarget, row = card.parentNode;
 				if (row) { row.querySelectorAll('.netpri-btn.active').forEach(function(b) { b.classList.remove('active'); }); }
 				card.classList.add('active');
-				L.resolveDefault(fs.exec(BIN, [ 'set', ifc ]), {}).then(function() {
-					loadList().then(function(l2) { redraw(l2); });
-				});
+				var order = [ ifc ].concat(_sorted.filter(function(o) { return o.iface !== ifc; }).map(function(o) { return o.iface; }));
+				/* пауза poll до подтверждения - как у drop (иначе тик мог перерисовать
+				   старый порядок, пока order пишет метрики). */
+				_npApplying = true;
+				var _done = function() { _npApplying = false; };
+				setTimeout(_done, 4000);
+				L.resolveDefault(fs.exec(BIN, [ 'order' ].concat(order)), {}).then(function() {
+					loadList().then(function(l2) { redraw(l2); _done(); });
+				}, _done);
 			}
 		}, [
 			E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
@@ -793,7 +999,10 @@ function buildBar(list, redraw) {
 	if (_widgets.netpri) {
 		kids.push(E('div', { 'class': 'netpribar-title' }, _('Internet priority')));
 	}
-	kids.push(E('div', { 'class': 'netpri-row' }, btns));
+	var rowEl = E('div', { 'class': 'netpri-row' }, btns);
+	/* перетаскивание карточек-аплинков - только когда виджет приоритета включён */
+	if (_widgets.netpri) { _npEnableReorder(rowEl, redraw); }
+	kids.push(rowEl);
 	return E('div', { 'class': 'netpribar' }, kids);
 }
 
@@ -816,6 +1025,7 @@ return baseclass.extend({
 			refreshStCard();
 		};
 		var apply = function(list) {
+			if (_npDrag || _npApplying) { return; }   // пауза во время перетаскивания и применения порядка
 			// НЕ убираем блок на пустом ответе: при переключении модема (перезагрузка
 			// active_modem) netpri.sh list на миг может вернуть [], и блок мигал/пропадал.
 			// Просто перерисовываем при наличии данных; последнее содержимое «липкое».
@@ -882,6 +1092,7 @@ return baseclass.extend({
 			   no manual page reload. Self-removes once the bar leaves the DOM. */
 			var pollFn = function() {
 				if (!document.body.contains(wrap)) { poll.remove(pollFn); return Promise.resolve(); }
+				if (_npDrag || _npApplying) { return Promise.resolve(); }   // пауза при drag/применении
 				return loadList().then(redraw);
 			};
 			poll.add(pollFn, 5);
