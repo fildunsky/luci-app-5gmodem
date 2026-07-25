@@ -56,6 +56,118 @@ function parseLpa(out) {
 }
 function lpaOk(j) { return !!(j && j.payload && j.payload.code === 0); }
 function lpaMsg(j) { return (j && j.payload && j.payload.message) || '?'; }
+// Текст ошибки для пользователя: payload.data несёт ПРИЧИНУ (для download —
+// коды GSMA "8.1/6.1: Verification Failed", которые esim.sh достаёт из ответа
+// SM-DP+), а payload.message — только ИМЯ упавшего шага (es9p_authenticate_client).
+// Показываем причину первой, шаг в скобках для диагностики. Если причины нет
+// (data пуст/не строка) — отдаём имя шага, как раньше.
+function lpaFail(j) {
+	var p = (j && j.payload) || {};
+	var step = p.message || '?';
+	var reason = (typeof p.data === 'string') ? p.data.trim() : '';
+	return reason ? (reason + ' (' + step + ')') : step;
+}
+
+// --- Оформление модалки добавления профиля (иконка SIM + спиннер + текст) -----
+// Стили инжектим один раз в <head>. Свой спиннер (не .spinning темы: тот жёстко
+// прижат влево через position:absolute+padding). Ширину модалки фиксирует тема
+// (proton: 90%/max 800px), поэтому контент тянем на ВСЮ ширину (.esim-modal
+// width:100%) - одинаково на всех экранах, без пустоты справа. Строка выровнена
+// влево: иконка и спиннер стоят на месте, а меняющийся текст-шаг занимает остаток
+// и переносится внутри своей колонки - иконку ему не сдвинуть.
+function esimUiCss() {
+	if (document.getElementById('esim-ui-css')) { return; }
+	var css =
+		'.esim-modal{width:100%;box-sizing:border-box;}' +
+		'.esim-dlrow{display:flex;align-items:center;gap:14px;text-align:left;padding:6px 0 2px;}' +
+		'.esim-simicon{flex:0 0 auto;width:44px;height:44px;display:block;}' +
+		'.esim-simicon-err{opacity:.85;}' +
+		'.esim-spin{flex:0 0 auto;width:22px;height:22px;border:2.5px solid rgba(128,128,128,.3);' +
+			'border-top-color:var(--proton-accent,#3b82f6);border-radius:50%;' +
+			'animation:esimspin .8s linear infinite;}' +
+		'.esim-txtblk{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;}' +
+		'.esim-h{font-weight:600;font-size:1.03em;flex:1 1 auto;min-width:0;}' +
+		'.esim-d{opacity:.72;font-size:.92em;word-break:break-word;margin-top:8px;}' +
+		'.esim-note{opacity:.6;font-size:.85em;margin:10px 0 0;}' +
+		'.esim-log{margin:14px 0 4px;max-height:9em;overflow:auto;font-family:monospace;' +
+			'font-size:.8em;white-space:pre-wrap;word-break:break-word;' +
+			'background:rgba(128,128,128,.1);border-radius:6px;padding:8px 10px;}' +
+		'@keyframes esimspin{to{transform:rotate(360deg);}}';
+	document.head.appendChild(E('style', { 'id': 'esim-ui-css', 'type': 'text/css' }, css));
+}
+
+// Иконка SIM-карты (наш ассет icons/csim_iface.svg). Через <img> - иконка с
+// фиксированным цветом (#0095FF), тонировать не нужно.
+function esimSimIcon(cls) {
+	return E('img', {
+		'class': cls || 'esim-simicon',
+		'src': L.resource('icons/csim_iface.svg'),
+		'alt': ''
+	});
+}
+
+// --- Перевод кодов ошибок GSMA (SGP.22) на человеческий язык -------------------
+// esim.sh кладёт в payload.data строку вида "8.2.6/3.8 Matching ID: Refused"
+// (subjectCode/reasonCode из ответа SM-DP+). Пользователю коды не говорят ничего;
+// показываем понятное объяснение (как это делает телефон). Известные пары -
+// точным текстом; иначе собираем из частей «что» + «почему»; если код неизвестен
+// или data - локальная ошибка lpac без кодов, отдаём как есть.
+var GSMA_COMBO = {
+	'8.1.1/3.8': _('This eSIM profile has already been downloaded to a device and cannot be downloaded again. Ask your operator for a new activation code.'),
+	'8.2.6/3.8': _('This activation (QR) code has already been used or is no longer valid. Ask your operator for a new one.'),
+	'8.2.5/3.8': _('A confirmation code is required for this profile, or the one entered is wrong.'),
+	'8.2.1/2.2': _('A profile with this ICCID is already installed on the eSIM.'),
+	'8.1/6.1':   _('The operator could not verify this eSIM chip (eUICC verification failed).'),
+	'8.8.5/3.8': _('The operator refused to release this profile.'),
+	'4.8/1.2':   _('Not enough free memory on the eSIM to install the profile. Delete an unused profile and try again.'),
+	'9.4/10.1':  _('The operator has run out of free profiles in this test pool — nothing to hand out. This is on the operator side; try another code or ask them.')
+};
+var GSMA_SUBJECT = {
+	'8.1':   _('eSIM chip'),
+	'8.1.1': _('profile'),
+	'8.2.1': _('ICCID'),
+	'8.2.5': _('confirmation code'),
+	'8.2.6': _('activation code'),
+	'8.8':   _('profile package')
+};
+var GSMA_REASON = {
+	'1.2': _('value not allowed'),
+	'2.1': _('invalid association'),
+	'2.2': _('already exists'),
+	'3.1': _('unavailable'),
+	'3.7': _('certificate expired'),
+	'3.8': _('refused or already used'),
+	'4.2': _('expired (time limit reached)'),
+	'4.8': _('not enough memory'),
+	'6.1': _('verification failed'),
+	'6.3': _('expired'),
+	'6.4': _('invalid signature')
+};
+function gsmaHuman(dataStr) {
+	var s = String(dataStr || '').trim();
+	var m = s.match(/^(\d+(?:\.\d+)*)\/(\d+(?:\.\d+)*)/);
+	if (!m) { return s; }            // без кодов (локальная ошибка lpac) — как есть
+	var key = m[1] + '/' + m[2];
+	if (GSMA_COMBO[key]) { return GSMA_COMBO[key]; }
+	var subj = GSMA_SUBJECT[m[1]], reas = GSMA_REASON[m[2]];
+	if (reas) { return subj ? (subj.charAt(0).toUpperCase() + subj.slice(1) + ': ' + reas) : reas; }
+	return s;                        // код незнаком — оставляем техническую строку
+}
+
+// Человеческий текст ошибки загрузки для модалки. Сначала пробуем коды GSMA
+// (ошибки от SM-DP+). Если их нет - это ЛОКАЛЬНАЯ ошибка eUICC/lpac: чаще всего
+// провал на этапе установки пакета профиля (es10b_load/prepare_*), у ST4SIM это
+// нехватка рабочей (volatile) памяти под конкретный профиль. Даём понятный совет,
+// а не сырое "unknown,unknown". step = payload.message, raw = payload.data.
+function esimFailHuman(step, raw) {
+	var s = String(raw || '').trim();
+	if (/^\d+(?:\.\d+)*\/\d+(?:\.\d+)*/.test(s)) { return gsmaHuman(s); }
+	if (/load_bound_profile_package|prepare_download/.test(String(step || '')) ||
+	    /unknown|memory|not_enough|no_?memory/i.test(s)) {
+		return _('The eSIM chip could not install this profile. It likely does not have enough working memory for it — some profiles are too large for this modem. Try a different profile or ask the operator.');
+	}
+	return s || _('The download did not complete. See the log below for details.');
+}
 
 function notify(ok, msgOk, msgFail) {
 	var m = ok ? msgOk : msgFail;
@@ -198,7 +310,15 @@ return view.extend({
 		}
 		else {
 			// активен eSIM-слот -> полноценное управление
-			body.appendChild(E('div', { 'class': 'esim-meta', 'id': 'esim-meta' }, [ E('em', _('Reading eUICC...')) ]));
+			body.appendChild(E('div', { 'class': 'esim-metarow' }, [
+				E('div', { 'class': 'esim-meta', 'id': 'esim-meta' }, [ E('em', _('Reading eUICC...')) ]),
+				E('button', {
+					'class': 'btn cbi-button esim-refresh',
+					/* Обновить рядом с EID справа. Без спиннера на кнопке (решение
+					   владельца): обратную связь даёт пометка «обновляется» у EID. */
+					'click': function(ev) { ev.preventDefault(); self.reload(); }
+				}, [ _('Refresh') ]),
+			]));
 			body.appendChild(E('table', { 'class': 'table', 'id': 'esim-profiles' }, [
 				E('tr', { 'class': 'tr table-titles' }, [
 					E('th', { 'class': 'th left' }, [ _('Operator') ]),
@@ -208,7 +328,27 @@ return view.extend({
 					E('th', { 'class': 'th' }, [ '' ]),
 				]),
 			]));
+				// Секция «Уведомления» (SGP.22): pending-нотификации о добавлении/включении/
+				// удалении, которые надо дослать на SM-DP+. Обычно пусто (flush шлёт авто);
+				// показывается, только если что-то зависло. Наполняет reload.
+			body.appendChild(E('div', { 'id': 'esim-notif', 'style': 'display:none' }));
 			body.appendChild(E('div', { 'class': 'esim-dl' }, [
+				// Кнопка «загрузить QR»: открывает выбор картинки, распознаёт код прямо
+				// в браузере (jsQR) и вставляет текст в поле ниже.
+				E('button', {
+					'class': 'btn cbi-button esim-qr-btn',
+					'title': _('Load a QR code image and read the activation code from it'),
+					'click': function(ev) {
+						ev.preventDefault();
+						var f = document.getElementById('esim-qr-file');
+						if (f) { f.click(); }
+					}
+				}, [ E('img', { 'src': L.resource('icons/cqr.svg'), 'alt': _('QR') }) ]),
+				E('input', {
+					'type': 'file', 'id': 'esim-qr-file', 'accept': 'image/*',
+					'style': 'display:none',
+					'change': function(ev) { self._decodeQR(ev.target.files && ev.target.files[0]); }
+				}),
 				E('input', {
 					'type': 'text', 'class': 'cbi-input-text', 'id': 'esim-code',
 					'placeholder': 'LPA:1$rsp.example.com$XXXX-XXXX'
@@ -217,14 +357,6 @@ return view.extend({
 					'class': 'btn cbi-button cbi-button-action',
 					'click': function(ev) { ev.preventDefault(); self.download(); }
 				}, [ _('Add eSIM profile') ]),
-			]));
-			body.appendChild(E('div', { 'class': 'esim-actions' }, [
-				E('button', {
-					'class': 'btn cbi-button',
-					/* Без спиннера на кнопке (решение владельца): обратную связь
-					   даёт пометка «обновляется» рядом с EID (см. reload). */
-					'click': function(ev) { ev.preventDefault(); self.reload(); }
-				}, [ _('Refresh') ]),
 			]));
 			/* МГНОВЕННЫЙ показ последнего дампа из кэша роутера (dump-cached,
 			   ~20 мс): список профилей виден и кликабелен сразу при возврате
@@ -242,10 +374,41 @@ return view.extend({
 	_shell: function(body) {
 		return E('div', { 'class': 'cbi-map' }, [
 			E('style', {}, [
-				'.esim-meta{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:88%;opacity:.85;margin:.4em 0 1em}' +
-				'.esim-dl{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap}' +
-				'.esim-dl input{flex:1 1 22em;min-width:14em}' +
+				'.esim-metarow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:.4em 0 1em}' +
+				'.esim-meta{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:88%;opacity:.85;flex:1 1 auto;min-width:0;word-break:break-word}' +
+				'.esim-refresh{flex:0 0 auto}' +
+				'.esim-dl{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:nowrap}' +
+				'.esim-dl input#esim-code{flex:1 1 auto;min-width:6em;max-width:none}' +
+				/* Оператор в таблице - жирный, с иконкой SIM. */
+				'#esim-profiles .esim-op{display:inline-flex;align-items:center;gap:6px;font-weight:600}' +
+				'#esim-profiles .esim-op img{width:15px;height:15px;flex:0 0 auto;display:block}' +
+				/* Узкие экраны: базовый CSS стакает ячейки с двойными отступами и
+				   ломает вид. Свой компактный стек: заголовок прячем, ряд = карточка
+				   с одним разделителем, ячейки без лишнего паддинга, ICCID переносим,
+				   кнопки влево. */
+				'@media (max-width:768px){' +
+					'#esim-profiles .tr.table-titles{display:none}' +
+					'#esim-profiles .tr.esim-row{display:block;padding:10px 2px;' +
+						'border-bottom:1px solid rgba(128,128,128,.18)}' +
+					'#esim-profiles .td{display:block;padding:1px 0;border:none;white-space:normal}' +
+					'#esim-profiles .td.right{text-align:left;margin-top:8px}' +
+					'#esim-profiles .td.right .btn{margin-left:0;margin-right:6px}' +
+				'}' +
+				/* Кнопка загрузки QR - квадратная иконка в стиле кнопок темы, вровень
+				   с полем и кнопкой «Добавить». Фикс-ширина, не сжимается. */
+				'.esim-qr-btn{flex:0 0 auto;display:inline-flex;align-items:center;' +
+					'justify-content:center;padding:0;width:2.35em;height:2.35em}' +
+				'.esim-qr-btn img{width:1.3em;height:1.3em;display:block}' +
+				'.esim-dl>.btn{flex:0 0 auto;white-space:nowrap}' +
 				'.esim-actions{margin-top:10px}' +
+				'.esim-notif{margin-top:14px;border:1px solid rgba(224,72,61,.35);border-radius:8px;padding:10px 12px;background:rgba(224,72,61,.06)}' +
+				'.esim-notif-h{font-weight:600;margin-bottom:2px}' +
+				'.esim-notif-sub{font-size:85%;opacity:.75;margin-bottom:8px}' +
+				'.esim-notif-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid rgba(128,128,128,.15);flex-wrap:wrap}' +
+				'.esim-notif-op{font-weight:600}' +
+				'.esim-notif-host{font-size:82%;opacity:.7}' +
+				'.esim-notif-btns{flex:0 0 auto;white-space:nowrap}' +
+				'.esim-notif-btns .btn{margin-left:6px}' +
 				'#esim-profiles .btn{padding:1px 8px;font-size:85%;margin-left:4px}' +
 				'#esim-profiles td,#esim-profiles th{white-space:nowrap}' +
 				'.esim-steps{margin-top:8px;font-size:88%;opacity:.8;min-height:1.3em}' +
@@ -260,8 +423,6 @@ return view.extend({
 			   тем это не наш блок. */
 			E('div', { 'class': 'cbi-section', 'id': 'esim-section' }, [
 				E('h3', [ 'eSIM' ]),
-				E('div', { 'class': 'cbi-section-descr' },
-					_('Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete')),
 				body,
 				this.renderSettings(),
 			]),
@@ -294,10 +455,12 @@ return view.extend({
 						'class': 'btn cbi-button cbi-button-save',
 						'style': 'margin-left:8px',
 						'click': ui.createHandlerFn(this, function() {
-							uci.set('5gmodem', '@5gmodem[0]', 'esim_http', sel.value);
-							return uci.save().then(function() {
-								return uci.apply();
-							}).then(function() {
+							// Коммит из бэкенда (esim.sh sethttp): uci.save()+uci.apply()
+							// из формы дельту не коммитил - изменение зависало в
+							// «Настройки/Изменения». sethttp делает set+commit сразу.
+							// НЕ трогаем клиентский uci-кэш - иначе появится фантомная
+							// «несохранённая» дельта; sel уже показывает выбранное.
+							return fs.exec_direct(ESIM, [ 'sethttp', sel.value ]).then(function() {
 								ui.addNotification(null,
 									E('p', _('Download transport saved')), 'info');
 							});
@@ -370,6 +533,8 @@ return view.extend({
 				return;
 			}
 			applyDump(d);
+			// Pending-нотификации SGP.22 (обычно пусто; секция появится, если есть).
+			fetchNotifications().then(renderNotifications);
 			// eUICC ответил - значит eSIM-слот активен. Обновляем видимость
 			// вкладки eSIM без F5 (напр. сразу после переключения на eSIM-слот).
 			if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
@@ -464,45 +629,134 @@ return view.extend({
 		window.setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 	},
 
+	// Ленивая загрузка jsQR (256 KB) - тянем ТОЛЬКО когда пользователь реально
+	// жмёт кнопку QR, чтобы не грузить декодер на каждом заходе. jsQR - UMD: если
+	// в глобале есть AMD-define, он зарегистрируется как модуль вместо window.jsQR,
+	// поэтому на время загрузки прячем define и заставляем UMD уйти в глобал-ветку.
+	_loadJsQR: function() {
+		if (window.jsQR) { return Promise.resolve(window.jsQR); }
+		if (this._jsqrPromise) { return this._jsqrPromise; }
+		this._jsqrPromise = new Promise(function(resolve) {
+			var saved = window.define;
+			try { window.define = undefined; } catch (e) {}
+			var restore = function() { try { window.define = saved; } catch (e) {} };
+			var s = document.createElement('script');
+			s.src = L.resource('5gmodem/jsqr.js');
+			s.onload = function() { restore(); resolve(window.jsQR || null); };
+			s.onerror = function() { restore(); resolve(null); };
+			document.head.appendChild(s);
+		});
+		return this._jsqrPromise;
+	},
+
+	// Распознать QR из выбранной картинки ПОЛНОСТЬЮ в браузере (на роутере нет
+	// zbar/quirc) и вставить активационный код в поле ввода. Картинку никуда не
+	// отправляем - только читаем локально в canvas.
+	_decodeQR: function(file) {
+		var self = this;
+		var fin = document.getElementById('esim-qr-file');
+		if (!file) { return; }
+		self._loadJsQR().then(function(jsqr) {
+			// Сбрасываем input, чтобы повторный выбор ТОГО ЖЕ файла снова сработал.
+			if (fin) { fin.value = ''; }
+			if (!jsqr) { notify(false, null, _('Could not load the QR decoder.')); return; }
+			var reader = new FileReader();
+			reader.onload = function(e) {
+				var img = new Image();
+				img.onload = function() {
+					var canvas = document.createElement('canvas');
+					canvas.width = img.naturalWidth || img.width;
+					canvas.height = img.naturalHeight || img.height;
+					var ctx = canvas.getContext('2d');
+					ctx.drawImage(img, 0, 0);
+					var d;
+					try { d = ctx.getImageData(0, 0, canvas.width, canvas.height); }
+					catch (ex) { notify(false, null, _('Could not read the image file.')); return; }
+					var code = jsqr(d.data, d.width, d.height);
+					var txt = (code && code.data) ? String(code.data).trim() : '';
+					if (!txt) {
+						notify(false, null, _('No QR code found in the image. Try a clearer picture.'));
+						return;
+					}
+					// eSIM-код: "LPA:1$smdp$matchingid" (префикс LPA необязателен).
+					if (!/^LPA:/i.test(txt) && txt.indexOf('$') < 0) {
+						notify(false, null, _('This QR code is not an eSIM activation code.'));
+						return;
+					}
+					var inp = document.getElementById('esim-code');
+					if (inp) { inp.value = txt; inp.focus(); }
+					notify(true, _('QR code recognized'), null);
+				};
+				img.onerror = function() { notify(false, null, _('Could not read the image file.')); };
+				img.src = e.target.result;
+			};
+			reader.onerror = function() { notify(false, null, _('Could not read the image file.')); };
+			reader.readAsDataURL(file);
+		});
+	},
+
 	_doDownload: function(code, inp) {
 		var self = this;
-		var box = E('div', { 'class': 'esim-steps' });
+		esimUiCss();
+		// box - меняющаяся строка текущего шага (её обновляет _pollProgress).
+		var box = E('div', { 'class': 'esim-d' }, _('Starting…'));
 		ui.showModal(_('Add eSIM profile'), [
-			E('p', { 'class': 'spinning' }, _('Downloading eSIM profile... This can take a minute, do not leave the page.')),
-			box,
+			E('div', { 'class': 'esim-modal' }, [
+				E('div', { 'class': 'esim-dlrow' }, [
+					esimSimIcon(),
+					E('span', { 'class': 'esim-spin' }),
+					E('div', { 'class': 'esim-h' }, _('Downloading eSIM profile…')),
+				]),
+				box,
+				E('p', { 'class': 'esim-note' }, _('This can take up to a minute — please stay on this page.')),
+			]),
 		]);
 		self._dlActive = true; self._dlLog = '';
 		/* При busy (eUICC занята фоновым dump - тёплый список поощряет жать
 		   сразу) НЕ роняем загрузку, а повторяем под тем же спиннером - как в
 		   esimOp. */
-		var runDl = function(tries) {
-			return fs.exec(ESIM, [ 'download', code ]).then(function(res) {
-				var j = parseLpa(res.stdout);
-				if (!lpaOk(j) && lpaMsg(j) === 'busy' && tries < 12) {
+		// ВАЖНО: exec_direct (через /cgi-exec), НЕ fs.exec. fs.exec идёт по ubus-rpc
+		// с жёстким таймаутом L.env.rpctimeout (20 c) - а загрузка профиля легитимно
+		// длится дольше (обмен с SM-DP+, BPP по AT/CGLA, flush нотификаций), и XHR
+		// обрывался с «XHR request timed out», хотя на бэкенде операция ещё шла.
+		// exec_direct таймаута на клиенте не ставит. Возвращает stdout СТРОКОЙ.
+		// ФОНОВАЯ загрузка: download-bg возвращается сразу (воркер отделён), затем
+		// опрашиваем download-status до итога. Синхронный download резал uhttpd на 60 c
+		// (cgi-exec), а медленный eUICC FM350 отвечает по многу секунд - как EasyLPAC
+		// (cmd.Run() без таймаута), даём загрузке дойти, не упираясь в 60 c.
+		var pollResult = function(tries) {
+			return fs.exec_direct(ESIM, [ 'download-status' ]).then(function(out) {
+				var s = String(out || '');
+				// Ещё идёт (dlstate) или пусто - ждём 2.5 c и опрашиваем снова (потолок ~11 мин).
+				if (s.indexOf('"dlstate"') >= 0 || !s.trim()) {
+					if (tries > 260) { return '{"type":"lpa","payload":{"code":-1,"message":"timeout","data":""}}'; }
 					return new Promise(function(resolve) {
-						window.setTimeout(function() { resolve(runDl(tries + 1)); }, 2000);
+						window.setTimeout(function() { resolve(pollResult(tries + 1)); }, 2500);
 					});
 				}
-				return res;
+				return s;   // итог O (многострочный: progress + финальный lpa)
 			});
 		};
-		// Сначала гасим лог прошлого запуска на бэкенде, и только потом стартуем:
-		// иначе первый же опрос покажет чужие шаги целиком.
+		// Гасим лог прошлого запуска, стартуем фоновый воркер, показываем шаги, опрашиваем.
 		var dl = L.resolveDefault(fs.exec_direct(ESIM, [ 'progress', 'reset' ]), '')
 			.then(function() {
 				self._pollProgress(box);
-				return runDl(0);
-			});
-		dl.then(function(res) {
+				return fs.exec_direct(ESIM, [ 'download-bg', code ]);
+			})
+			.then(function() { return pollResult(0); });
+		// Показать модалку ПРОВАЛА. Вынесено, чтобы одинаково звать и из ветки
+		// «код != 0», и из .catch (иначе исключение прятало попап молча -
+		// пользователь видел «просто исчез», хотя загрузка провалилась).
+		var showFail = function(human, tech) {
 			self._dlActive = false;
-			var j = parseLpa(res.stdout);
-			var ok = lpaOk(j);
-			if (!ok) {
-				// Лог оставляем на экране: он показывает, НА КАКОМ шаге отвалилось,
-				// и его можно выгрузить файлом для удалённого разбора.
-				ui.showModal(_('Add eSIM profile'), [
-					E('p', {}, _('Download failed: %s').format(lpaMsg(j))),
-					box,
+			ui.showModal(_('Add eSIM profile'), [
+				E('div', { 'class': 'esim-modal' }, [
+					E('div', { 'class': 'esim-dlrow' }, [
+						esimSimIcon('esim-simicon esim-simicon-err'),
+						E('div', { 'class': 'esim-h' }, _('Download failed')),
+					]),
+					E('div', { 'class': 'esim-d' }, human || _('The download did not complete.')),
+					tech ? E('div', { 'class': 'esim-log' }, tech) : '',
 					E('div', { 'class': 'right' }, [
 						E('button', {
 							'class': 'btn cbi-button',
@@ -514,7 +768,21 @@ return view.extend({
 							'click': function() { ui.hideModal(); self.reload(); }
 						}, [ _('Close') ]),
 					]),
-				]);
+				]),
+			]);
+		};
+		dl.then(function(out) {
+			self._dlActive = false;
+			var j = parseLpa(out);
+			var ok = lpaOk(j);
+			if (!ok) {
+				// Заголовок - статус, ниже человеческий текст ошибки (перевод кодов
+				// GSMA либо совет при локальной ошибке eUICC), а сырой код + упавший
+				// шаг уходят в лог-строку для диагностики/выгрузки.
+				var p = (j && j.payload) || {};
+				var raw = (typeof p.data === 'string') ? p.data.trim() : '';
+				var tech = (p.message || '?') + (raw ? (' · ' + raw) : '');
+				showFail(esimFailHuman(p.message, raw), tech);
 				return;
 			}
 			if (inp) { inp.value = ''; }
@@ -529,7 +797,7 @@ return view.extend({
 			// ребут. Оверлей показывает, что занят именно этот блок.
 			ui.hideModal();
 			modemtabs.setBusy('#esim-section',
-				_('Profile added. The modem is restarting to apply it - up to a minute…'), 180000, 90);
+				_('Profile added. The modem is restarting to apply it - up to a minute…'), 240000, 90);
 			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
 			// Дождаться модема и передёрнуть интерфейс: иначе netifd держит
 			// аренду и маршрут от старого профиля (интерфейс up со старым IP,
@@ -546,8 +814,20 @@ return view.extend({
 				modemtabs.clearBusy();
 				notify(true, _('eSIM profile added and applied'), null);
 				self.reload(-3);
+			}).catch(function() {
+				// СТРАХОВКА: даже если ожидание модема сорвётся (throw/reject),
+				// снимаем плашку и перечитываем список. Иначе полоска ребута
+				// зависала на ~97% до ручного F5 (наблюдалось живьём).
+				modemtabs.clearBusy(); self.reload(-3);
 			});
-		}).catch(function() { ui.hideModal(); });
+		}).catch(function(e) {
+			// НЕ прячем попап молча: раньше любое исключение/reject (напр. таймаут
+			// fs.exec, пустой res) закрывало окно без слова, и пользователю казалось,
+			// что «всё прошло, но попап исчез», хотя загрузки не было. Показываем
+			// провал с тем, что известно, и полным логом по кнопке.
+			showFail(_('The download did not complete.'),
+				(e && e.message) ? ('error: ' + e.message) : '');
+		});
 	},
 });
 
@@ -558,7 +838,7 @@ return view.extend({
    hotplug. Раньше вместо этого крутили dump вслепую: каждый вызов на
    полуподнятом модеме висел до таймаута lpac, и прогрессбар «замерзал».
    Возврат: Promise<bool> - дождались/нет (потолок maxMs). */
-var _waitModemBack = function(maxMs) {
+function _waitModemBack(maxMs) {
 	var t0 = Date.now();
 	var gone = false;   // модем уже пропадал с шины?
 	return L.resolveDefault(uci.load('5gmodem')).then(function() {
@@ -588,7 +868,7 @@ var _waitModemBack = function(maxMs) {
 	});
 };
 
-var _viewReload = function(tries, maxTries) {
+function _viewReload(tries, maxTries) {
 	// найти активный view-инстанс сложно; проще перечитать напрямую.
 	// Возвращает Promise<bool>: true - список перечитан и отрисован, false -
 	// eUICC так и не ответил за все попытки (тогда зовущий просит нажать Refresh).
@@ -642,7 +922,7 @@ function applyDump(d) {
    до таймаута do_lpac (до 45 c), и «60 попыток» превращались в десятки минут:
    прогрессбар замирал у конца, плашка не снималась. Здесь потолок - настенные
    часы: не успели за budgetMs - честно возвращаем false. */
-var _viewReloadFor = function(budgetMs) {
+function _viewReloadFor(budgetMs) {
 	var deadline = Date.now() + budgetMs;
 	var step = function() {
 		return esimExec([ 'dump' ]).then(function(d) {
@@ -684,7 +964,13 @@ function renderProfiles(list) {
 				'click': function(ev) { ev.preventDefault(); esimDeleteConfirm(p.iccid, name); } }, [ _('Delete') ]));
 		}
 		tbl.appendChild(E('tr', { 'class': 'tr esim-row' }, [
-			E('td', { 'class': 'td left' }, [ p.serviceProviderName || '-' ]),
+			E('td', { 'class': 'td left' }, [
+				E('span', { 'class': 'esim-op' }, [
+					// Активный (enabled) профиль - иконка с «галочкой», остальные - обычная.
+					E('img', { 'src': L.resource(on ? 'icons/csim_active.svg' : 'icons/csim_iface.svg'), 'alt': '' }),
+					p.serviceProviderName || '-'
+				])
+			]),
 			E('td', { 'class': 'td left' }, [ name ]),
 			E('td', { 'class': 'td left', 'style': 'font-family:monospace' }, [ p.iccid || '-' ]),
 			E('td', { 'class': 'td' }, [ on ? _('Enabled') : _('Disabled') ]),
@@ -693,6 +979,57 @@ function renderProfiles(list) {
 	});
 }
 
+// --- Уведомления SGP.22 (отдельная секция, как вкладка Notifications в EasyLPAC) --
+// Забрать список pending-нотификаций (install/enable/disable/delete), которые надо
+// дослать на SM-DP+ оператора. notification list многострочным не бывает, но берём
+// через parseLpa на всякий случай.
+function fetchNotifications() {
+	return fs.exec_direct(ESIM, [ 'notifications' ]).then(function(out) {
+		var j = parseLpa(out);
+		return (lpaOk(j) && j.payload && Array.isArray(j.payload.data)) ? j.payload.data : [];
+	}).catch(function() { return []; });
+}
+// Отрисовать секцию #esim-notif. Пусто -> прячем (обычно так: flush шлёт авто).
+function renderNotifications(list) {
+	var box = document.getElementById('esim-notif');
+	if (!box) { return; }
+	while (box.firstChild) { box.removeChild(box.firstChild); }
+	if (!list || !list.length) { box.style.display = 'none'; return; }
+	box.style.display = '';
+	var opName = { install: _('Added'), enable: _('Enabled'), disable: _('Disabled'), 'delete': _('Deleted') };
+	box.appendChild(E('div', { 'class': 'esim-notif-h' }, _('Pending operator notifications')));
+	box.appendChild(E('div', { 'class': 'esim-notif-sub' },
+		_('The operator (SM-DP+) should be told about these profile changes. Normally sent automatically; send here if one got stuck (e.g. no internet during the operation).')));
+	list.forEach(function(n) {
+		var op = opName[n.profileManagementOperation] || n.profileManagementOperation || '?';
+		var host = String(n.notificationAddress || '').replace(/^https?:\/\//, '');
+		box.appendChild(E('div', { 'class': 'esim-notif-row' }, [
+			E('div', { 'class': 'esim-notif-info' }, [
+				E('span', { 'class': 'esim-notif-op' }, op), ' \u00b7 ',
+				E('span', { 'style': 'font-family:monospace' }, n.iccid || '-'),
+				host ? E('div', { 'class': 'esim-notif-host' }, host) : ''
+			]),
+			E('div', { 'class': 'esim-notif-btns' }, [
+				E('button', { 'class': 'btn cbi-button cbi-button-action',
+					'title': _('Send this notification to the operator, then remove it'),
+					'click': function(ev) { ev.preventDefault(); esimNotifAction('process', n.seqNumber); } }, [ _('Send') ]),
+				E('button', { 'class': 'btn cbi-button cbi-button-remove',
+					'title': _('Discard this notification locally without sending'),
+					'click': function(ev) { ev.preventDefault(); esimNotifAction('remove', n.seqNumber); } }, [ _('Remove') ]),
+			]),
+		]));
+	});
+}
+function esimNotifAction(action, seq) {
+	modemtabs.setBusy('#esim-section',
+		action === 'process' ? _('Sending notification\u2026') : _('Removing notification\u2026'), 60000, 15);
+	fs.exec_direct(ESIM, [ 'notif', action, String(seq) ]).then(function(out) {
+		var j = parseLpa(out);
+		modemtabs.clearBusy();
+		if (!lpaOk(j)) { notify(false, null, _('Notification action failed: %s').format(lpaFail(j))); }
+		fetchNotifications().then(renderNotifications);
+	}).catch(function() { modemtabs.clearBusy(); fetchNotifications().then(renderNotifications); });
+}
 function esimOp(verb, iccid, name) {
 	/* УНИФИКАЦИЯ МЕХАНИКИ (решение владельца): никаких попапов. Все состояния
 	   показывает оверлей на блоке eSIM (modemtabs.setBusy) с прогрессбаром в
@@ -700,8 +1037,11 @@ function esimOp(verb, iccid, name) {
 	   списка - пользователь сразу видит сменившийся активный профиль. */
 	modemtabs.setBusy('#esim-section', _('Applying eSIM operation...'), 60000, 15);
 	var attempt = function(tries) {
-	fs.exec(ESIM, [ verb, iccid ]).then(function(res) {
-		var j = parseLpa(res.stdout);
+	// exec_direct, НЕ fs.exec: enable/disable/delete + flush нотификаций легко
+	// перекрывают 20-c ubus-таймаут fs.exec (был «XHR request timed out»). Через
+	// /cgi-exec клиентского таймаута нет. Возвращает stdout строкой.
+	fs.exec_direct(ESIM, [ verb, iccid ]).then(function(out) {
+		var j = parseLpa(out);
 		var ok = lpaOk(j);
 		/* ОЧЕРЕДЬ ВМЕСТО ОШИБКИ. У eUICC один логический канал: пока фоновый
 		   dump (тёплый список ПООЩРЯЕТ кликать сразу) или другая операция
@@ -763,10 +1103,10 @@ function esimOp(verb, iccid, name) {
 						   предложим проверить APN (не меняем молча). */
 						if (verb == 'enable') { proposeApnAfterEnable(); }
 					});
-			});
+			}).catch(function() { modemtabs.clearBusy(); });
 			return;
 		}
-		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaMsg(j)));
+		notify(ok, _('eSIM operation done'), _('eSIM operation failed: %s').format(lpaFail(j)));
 		if (ok) {
 			// Удаление (и любая успешная не-enable/disable операция) не перезагружает
 			// модем, но eUICC ещё занят: сразу после delete идёт отправка нотификации
