@@ -475,7 +475,16 @@ return baseclass.extend({
 			':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}' +
 		/* прогрессбар плашки - в стиле основных метрик: серый заполненный
 		   трек без обводки (а не пустота с рамкой темы) */
-		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}';
+		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}' +
+		/* Спиннер плашки: .spinning темы прижимает крутилку жёстко влево
+		   (position:absolute;left) с большим padding-left, и в центрированной
+		   колонке текст со спиннером смотрится смещённым. В proton (data-theme)
+		   переводим ::before-спиннер в поток вплотную к тексту - тогда пара
+		   «крутилка+текст» центрируется как единое целое. bootstrap не трогаем. */
+		':root[data-theme] #modem-busy-ov .spinning{padding-left:0!important;' +
+		'display:inline-flex;align-items:center;gap:.55em;}' +
+		':root[data-theme] #modem-busy-ov .spinning::before{position:static;' +
+		'margin:0;top:auto;left:auto;}';
 		document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
 	},
 
