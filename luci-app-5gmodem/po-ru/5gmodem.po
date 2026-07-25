@@ -3578,3 +3578,156 @@ msgstr "Модема нет на шине. Вставьте модем — ка�
 
 msgid "ModemManager does not manage this modem"
 msgstr "ModemManager не управляет этим модемом"
+
+# --- eSIM download error messages (GSMA SGP.22 codes, human-readable) ---
+
+msgid "Downloading eSIM profile…"
+msgstr "Скачивание профиля eSIM…"
+
+msgid "This can take up to a minute — please stay on this page."
+msgstr "Это может занять до минуты — не покидайте страницу."
+
+msgid "Starting…"
+msgstr "Запуск…"
+
+msgid "Download failed"
+msgstr "Не удалось загрузить профиль"
+
+msgid "This eSIM profile has already been downloaded to a device and cannot be downloaded again. Ask your operator for a new activation code."
+msgstr "Этот профиль eSIM уже был загружен на устройство, повторная загрузка невозможна. Запросите у оператора новый код активации."
+
+msgid "This activation (QR) code has already been used or is no longer valid. Ask your operator for a new one."
+msgstr "Этот код активации (QR) уже использован или больше не действителен. Запросите у оператора новый."
+
+msgid "A confirmation code is required for this profile, or the one entered is wrong."
+msgstr "Для этого профиля нужен код подтверждения, либо введённый код неверен."
+
+msgid "A profile with this ICCID is already installed on the eSIM."
+msgstr "Профиль с таким ICCID уже установлен на eSIM."
+
+msgid "The operator could not verify this eSIM chip (eUICC verification failed)."
+msgstr "Оператор не смог проверить этот чип eSIM (проверка eUICC не пройдена)."
+
+msgid "The operator refused to release this profile."
+msgstr "Оператор отказал в выдаче этого профиля."
+
+msgid "Not enough free memory on the eSIM to install the profile. Delete an unused profile and try again."
+msgstr "На eSIM недостаточно свободной памяти для установки профиля. Удалите неиспользуемый профиль и повторите."
+
+msgid "eSIM chip"
+msgstr "чип eSIM"
+
+msgid "profile"
+msgstr "профиль"
+
+msgid "ICCID"
+msgstr "ICCID"
+
+msgid "confirmation code"
+msgstr "код подтверждения"
+
+msgid "activation code"
+msgstr "код активации"
+
+msgid "profile package"
+msgstr "пакет профиля"
+
+msgid "value not allowed"
+msgstr "значение недопустимо"
+
+msgid "invalid association"
+msgstr "неверная привязка"
+
+msgid "already exists"
+msgstr "уже существует"
+
+msgid "unavailable"
+msgstr "недоступно"
+
+msgid "certificate expired"
+msgstr "сертификат просрочен"
+
+msgid "refused or already used"
+msgstr "отклонено или уже использовано"
+
+msgid "expired (time limit reached)"
+msgstr "истёк отведённый срок"
+
+msgid "not enough memory"
+msgstr "недостаточно памяти"
+
+msgid "verification failed"
+msgstr "проверка не пройдена"
+
+msgid "expired"
+msgstr "истёк срок действия"
+
+msgid "invalid signature"
+msgstr "неверная подпись"
+
+msgid "The eSIM chip could not install this profile. It likely does not have enough working memory for it — some profiles are too large for this modem. Try a different profile or ask the operator."
+msgstr "Чип eSIM не смог установить этот профиль. Скорее всего, ему не хватает рабочей памяти под него — некоторые профили слишком велики для этого модема. Попробуйте другой профиль или обратитесь к оператору."
+
+msgid "The download did not complete. See the log below for details."
+msgstr "Загрузка не завершилась. Подробности — в логе ниже."
+
+msgid "The download did not complete."
+msgstr "Загрузка не завершилась."
+
+# --- eSIM QR upload ---
+
+msgid "Load a QR code image and read the activation code from it"
+msgstr "Загрузить фото QR-кода и прочитать из него код активации"
+
+msgid "QR"
+msgstr "QR"
+
+msgid "Could not load the QR decoder."
+msgstr "Не удалось загрузить декодер QR."
+
+msgid "Could not read the image file."
+msgstr "Не удалось прочитать изображение."
+
+msgid "No QR code found in the image. Try a clearer picture."
+msgstr "QR-код на изображении не найден. Попробуйте более чёткое фото."
+
+msgid "This QR code is not an eSIM activation code."
+msgstr "Это не QR-код активации eSIM."
+
+msgid "QR code recognized"
+msgstr "QR-код распознан"
+
+msgid "The operator has run out of free profiles in this test pool — nothing to hand out. This is on the operator side; try another code or ask them."
+msgstr "У оператора закончились свободные профили в этом тестовом пуле — выдавать нечего. Это на стороне оператора; попробуйте другой код или обратитесь к нему."
+
+# --- eSIM notifications section ---
+
+msgid "Added"
+msgstr "Добавлен"
+
+msgid "Deleted"
+msgstr "Удалён"
+
+msgid "Pending operator notifications"
+msgstr "Неотправленные уведомления оператору"
+
+msgid "The operator (SM-DP+) should be told about these profile changes. Normally sent automatically; send here if one got stuck (e.g. no internet during the operation)."
+msgstr "Оператору (SM-DP+) нужно сообщить об этих изменениях профиля. Обычно отправляется автоматически; отправьте вручную, если что-то зависло (например, не было интернета во время операции)."
+
+msgid "Remove"
+msgstr "Удалить"
+
+msgid "Send this notification to the operator, then remove it"
+msgstr "Отправить это уведомление оператору и убрать его"
+
+msgid "Discard this notification locally without sending"
+msgstr "Отбросить уведомление локально без отправки"
+
+msgid "Sending notification…"
+msgstr "Отправка уведомления…"
+
+msgid "Removing notification…"
+msgstr "Удаление уведомления…"
+
+msgid "Notification action failed: %s"
+msgstr "Не удалось выполнить действие с уведомлением: %s"
