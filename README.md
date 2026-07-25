@@ -6,7 +6,7 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 
 - **Easy create modem interface** button (Modem Settings) — sets up a `network` interface for the modem automatically.
 - **Dual modem mode and uplink switcher**
-- **Dual sim and eSIM switch** tested and working with FM350GL (install this `lpac` https://github.com/fildunsky/luci-app-5gmodem/blob/master/dist/lpac-2.1.0-r1.apk)!
+- **Dual sim and eSIM switch** tested and working with FM350GL — install our patched `lpac` for your platform from the [lpac-build releases](https://github.com/fildunsky/lpac-build/releases/latest) (see the [eSIM / lpac](#esim--lpac) section below)!
 - **Network** — advanced signal level, operator, technology with carrier aggregation (e.g. `LTE-A | B1 + B40 / B7 / B3`), interface IPv4/IPv6, connection statistics and modem temperature (if the modem reports it).
 - **Band & mode management** — pick the network mode (Auto / 2G / 3G / 4G / 4G+5G / 5G) and toggle individual LTE/NR bands.
 - **TTL fixing** — force incoming/outgoing IPv4 TTL and IPv6 hop-limit on the modem interface (via an `nftables` include in `fw4`).
@@ -82,22 +82,50 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 # .apk (OpenWrt 25.12.x)
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.8.5/luci-app-5gmodem-1.8.5-r1.apk > /tmp/luci-app-5gmodem.apk
-curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/refs/heads/master/dist/lpac-2.1.0-r1.apk > /tmp/lpac.apk
-apk add /tmp/lpac.apk --allow-untrusted
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.9.0/luci-app-5gmodem-1.9.0-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
+```
+
+For **eSIM** (optional) install our patched `lpac` too — **pick the build for your platform** from the [lpac-build release](https://github.com/fildunsky/lpac-build/releases/latest). Example for MediaTek Filogic (e.g. WH3000):
+```sh
+curl -L https://github.com/fildunsky/lpac-build/releases/download/v2.3.0-fm350/lpac-fm350-mediatek-filogic.apk > /tmp/lpac.apk
+apk add /tmp/lpac.apk --allow-untrusted
 ```
 
 # .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.8.5/luci-app-5gmodem_1.8.5-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v1.9.0/luci-app-5gmodem_1.9.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 The regular package pulls in the full set (`sms-tool`, `comgt`, `qmi-utils`, `modemmanager`, QMI/MBIM protocols, USB-serial kmods) — upgrade it over any earlier version and nothing gets removed.
 
 For low-flash devices (MT7628 boards with 8 MB, where the full set will not install at all) there is a separate **`-lite.apk`** in the release: it requires only `sms-tool`. Metrics, SMS, USSD, band control and the AT console all work; you lose the QMI/MBIM interface protocols and the phone number read through `mmcli`. Do not use the lite build as an upgrade on a router that runs a QMI or MBIM modem — the package manager would drop those packages as orphans.
+
+## eSIM / lpac
+
+The eSIM tab (download / enable / disable / delete profiles, notifications) needs [`lpac`](https://github.com/estkme-group/lpac). The official OpenWrt 25.12 `lpac` (2.3.0) has a broken stdio backend and no FM350 support, so we ship a **patched build** — [`fildunsky/lpac-build`](https://github.com/fildunsky/lpac-build) — with the native AT-driver robustness PRs, Fibocom FM350 bare-CCHO support, and a loader fix for OpenWrt. It talks to the modem over the native AT driver, so eSIM works on USB modems like the **Fibocom FM350-GL**.
+
+Download **your platform's** `.apk` from the [latest lpac-build release](https://github.com/fildunsky/lpac-build/releases/latest):
+
+| File | Arch | Typical devices |
+|------|------|-----------------|
+| `lpac-fm350-mediatek-filogic.apk` | aarch64_cortex-a53 | WH3000 & new WiFi6 routers with USB |
+| `lpac-fm350-rockchip-armv8.apk` | aarch64 | NanoPi R2S/R4S/R5S |
+| `lpac-fm350-bcm27xx-bcm2711.apk` | aarch64_cortex-a72 | Raspberry Pi 4 |
+| `lpac-fm350-armsr-armv8.apk` | aarch64_generic | VMs / containers / generic ARM64 |
+| `lpac-fm350-armsr-armv7.apk` | arm | generic ARM32 |
+| `lpac-fm350-ramips-mt7621.apk` | mipsel_24kc | Xiaomi / GL.iNet / Netgear |
+| `lpac-fm350-ath79-generic.apk` | mips_24kc | older MIPS routers with USB |
+| `lpac-fm350-x86-64.apk` | x86_64 | mini-PC / VM routers |
+
+```sh
+curl -L https://github.com/fildunsky/lpac-build/releases/download/v2.3.0-fm350/lpac-fm350-<your-platform>.apk > /tmp/lpac.apk
+apk add /tmp/lpac.apk --allow-untrusted
+```
+
+`lpac` is an **optional** dependency — the eSIM tab appears only when it is installed and an eUICC is present; the rest of the app works without it.
 
 ## Build from source
 
