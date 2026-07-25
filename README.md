@@ -92,6 +92,13 @@ curl -L https://github.com/fildunsky/lpac-build/releases/download/v2.3.0-fm350/l
 apk add /tmp/lpac.apk --allow-untrusted
 ```
 
+The MediaTek Filogic build (aarch64_cortex-a53, e.g. Huasifei WH3000) is also bundled
+in this repo, so you can install it without the lpac-build release:
+```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/master/dist/lpac-fm350-mediatek-filogic.apk > /tmp/lpac.apk
+apk add /tmp/lpac.apk --allow-untrusted
+```
+
 # .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
