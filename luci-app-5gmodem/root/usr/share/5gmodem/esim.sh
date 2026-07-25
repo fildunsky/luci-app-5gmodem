@@ -23,7 +23,15 @@
 # сбрасываем и переоткрываем порт (модем мог переперечислиться).
 
 RES="/usr/share/5gmodem"
-LPAC="/usr/lib/lpac"
+# lpac бинарь: 2.3.x кладёт его в /usr/lib/lpac/lpac + driver-плагины в
+# /usr/lib/lpac/driver (loader находит их по LPAC_DRIVER_HOME - наш патч, т.к.
+# OpenWrt срезает RUNPATH). 2.1.x был единым файлом /usr/lib/lpac. Поддерживаем оба.
+if [ -x /usr/lib/lpac/lpac ]; then
+	LPAC="/usr/lib/lpac/lpac"
+	export LPAC_DRIVER_HOME="/usr/lib/lpac"
+else
+	LPAC="/usr/lib/lpac"
+fi
 
 # Очередь к AT-порту: проба CCHO и работа lpac идут в тот же tty, что и опрос
 # метрик. Без очереди проба срывалась на коллизии, и мы записывали «eSIM нет»
@@ -75,6 +83,23 @@ http_backend() {
 	esac
 }
 
+# APDU-бэкенд lpac: at|bridge (см. шапку esim-apdu-bridge.sh).
+#   at     - НАТИВНЫЙ AT-драйвер lpac (CCHO/CGLA сам на tty). С патчами #446/#448
+#            (дедлайны + байтовые чтения) он не залипает на большом CGLA - тот самый
+#            транспортный флап, из-за которого падала загрузка через sms_tool-мост.
+#            Требует lpac >= 2.3.x с плагинами (LPAC_DRIVER_HOME) и bare-CCHO (#449).
+#   bridge - наш stdio-мост поверх sms_tool (CCHO/CGLA через AT-команды). Фолбэк.
+# HTTP при этом ВСЕГДА через мост (LPAC_HTTP=stdio), т.к. TLS у GSMA-CI SM-DP+
+# (truphone/redtea) mbedTLS-curl не берёт. Т.е. at = нативный APDU + мостовой HTTP.
+# По умолчанию at, если бинарь lpac лежит в новом layout (/usr/lib/lpac/lpac).
+apdu_backend() {
+	_ab=$(uci -q get 5gmodem.@5gmodem[0].esim_apdu)
+	case "$_ab" in
+		at|bridge) echo "$_ab" ;;
+		*)         [ -x /usr/lib/lpac/lpac ] && echo at || echo bridge ;;
+	esac
+}
+
 # Системный бандл + корень GSMA в один файл (wget принимает только один
 # --ca-certificate). Пересобираем, если исходники новее кэша: бандл обновляется
 # пакетом ca-certificates.
@@ -90,15 +115,26 @@ ca_bundle() {
 
 err() { echo "{\"type\":\"lpa\",\"payload\":{\"code\":-1,\"message\":\"$1\",\"data\":\"\"}}"; }
 
-# lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). На FM350-GL прямой
-# AT-драйвер lpac 2.3.0 виснет, а его stdio в нашей сборке не читает stdin - зато
-# lpac 2.1.x stdio читает корректно, а транспорт APDU (CCHO/CGLA/CCHC) делает мост.
+# lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). Прямой AT-драйвер
+# lpac виснет на FM350-GL (persistent-буфер at_expect рассинхронизируется), зато
+# stdio+bridge работает без залипаний — транспорт APDU (CCHO/CGLA/CCHC) делает мост,
+# lpac только гоняет JSON. Нужен lpac >= 2.3.0-fm350-fix (исправлен json_request в
+# stdio.c) либо lpac 2.1.x (stdio читал корректно из коробки).
 # Пламбинг «зеркальный»: мост читает запросы lpac из FIFO и пишет ответы в pipe ->
 # stdin lpac; stdout lpac -> FIFO -> stdin моста. Финальный "lpa"-результат мост
 # кладёт в файл. Всё под сторожевым таймером.
 # run_lpac <timeout_s> <args...>   (порт = $PORT, установленный вызывающим кодом)
 run_lpac() {
 	_T="$1"; shift
+	# СЕРИАЛИЗУЕМ AT-ПОРТ НА ВСЮ lpac-СЕССИЮ. Нативный AT-драйвер держит tty
+	# непрерывно 10-240 c, а опрос метрик (5gmodem.sh) дёргает ТОТ ЖЕ порт FM350
+	# за RSSI/RSRP. Параллельный доступ рвёт связь драйвера ("read error / Device
+	# not responding to AT commands", CGLA без ответа) - download спотыкался на
+	# большом CGLA prepare_download/load. Мост это переживал (короткие sms_tool-
+	# вызовы), нативный драйвер - нет. Берём at_lock на всё (включая чистку каналов
+	# и сам lpac). _prelock: если лок УЖЕ держит предок - не отпускаем его чужой лок.
+	_prelock="$_AT_LOCK_HELD"
+	at_lock "$PORT" 20
 	# Чистим утёкшие логические каналы ISD-R ПЕРЕД КАЖДОЙ операцией lpac: после
 	# предыдущей операции канал мог остаться открытым (или закрылся не полностью),
 	# и следующий CCHO завис бы -> euicc_init падает. Одна операция = чистый старт.
@@ -116,8 +152,17 @@ run_lpac() {
 	else
 		_CA=""; _HTTPDRV="curl"
 	fi
+	# APDU: нативный AT-драйвер (tty напрямую) ЛИБО stdio-мост. В обоих случаях мост
+	# в пайплайне остаётся - он ловит HTTP (если stdio) и ЗАХВАТЫВАЕТ progress/lpa в
+	# $_RES. При APDU=at мост НЕ трогает tty (его apdu-ветка не срабатывает), так что
+	# конфликта с нативным драйвером за порт нет. $PORT без пробелов (путь к tty).
+	if [ "$(apdu_backend)" = "at" ]; then
+		_APDU_ENV="LPAC_APDU=at LPAC_APDU_AT_DEVICE=$PORT"
+	else
+		_APDU_ENV="LPAC_APDU=stdio"
+	fi
 	sh "$BRIDGE" "$PORT" "$_RES" "$_CA" "$LIVELOG" < "$_LOOP" \
-		| LPAC_APDU=stdio LPAC_HTTP="$_HTTPDRV" "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
+		| env $_APDU_ENV LPAC_HTTP="$_HTTPDRV" "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
 	_PID=$!
 	# Опрос вместо wait+сторож: busybox плохо реапит сабшелл пайплайна через wait
 	# (зомби + зависание на 40 c). kill -0 ловит завершение мгновенно. Мост выходит
@@ -125,6 +170,9 @@ run_lpac() {
 	_n=0
 	while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
 	kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null
+	# Отпускаем порт СРАЗУ после lpac (результат - чтение файла, порт не нужен).
+	# Только если захватывали САМИ (не отбираем лок у предка-опросчика).
+	[ -z "$_prelock" ] && at_unlock
 	rm -f "$_LOOP"
 	if [ -s "$_RES" ]; then cat "$_RES"; else err "timeout"; fi
 	rm -f "$_RES"
@@ -340,6 +388,46 @@ progress)
 	[ -f "$LIVELOG" ] && cat "$LIVELOG"
 	exit 0
 	;;
+download-bg)
+	# ФОНОВАЯ ЗАГРУЗКА: снимаем 60-секундный потолок uhttpd (cgi-exec). Медленный
+	# eUICC FM350 отвечает на крипто-команды (финальный Store Data) по многу секунд,
+	# и синхронный download резался на 60 c -> попап «?». Запускаем реальный
+	# `download` ОТДЕЛЁННЫМ воркером (fd отвязаны, чтобы cgi-io не ждал EOF и вернулся
+	# сразу), итог (многострочный O) пишем в файл; фронт опрашивает download-status.
+	# Так же поступает EasyLPAC: cmd.Run() без таймаута ждёт медленный eUICC.
+	[ -n "$2" ] || { echo '{"started":0,"error":"no code"}'; exit 0; }
+	_DLRES="/tmp/5gmodem_esim_dlresult"
+	if [ -f "$_DLRES.running" ]; then
+		_wp=$(cat "$_DLRES.running" 2>/dev/null)
+		[ -n "$_wp" ] && [ -d "/proc/$_wp" ] && { echo '{"started":0,"busy":1}'; exit 0; }
+	fi
+	rm -f "$_DLRES" "$_DLRES.tmp" "$_DLRES.running"
+	# Воркер: esim.sh download (берёт замок eUICC, делает всё, echo O). fd отвязаны.
+	(
+		"$0" download "$2" > "$_DLRES.tmp" 2>/dev/null
+		mv "$_DLRES.tmp" "$_DLRES"
+		rm -f "$_DLRES.running"
+	) >/dev/null 2>&1 </dev/null &
+	echo "$!" > "$_DLRES.running"
+	echo '{"started":1}'
+	exit 0
+	;;
+download-status)
+	# Идемпотентно: идёт -> {"dlstate":"running"}; готово -> отдаём итог O (многостроч-
+	# ный, НЕ удаляем - почистит следующий download-bg); нет ничего -> {"dlstate":"idle"};
+	# воркер умер без итога -> lpa-ошибка.
+	_DLRES="/tmp/5gmodem_esim_dlresult"
+	[ -f "$_DLRES" ] && { cat "$_DLRES"; exit 0; }
+	if [ -f "$_DLRES.running" ]; then
+		_wp=$(cat "$_DLRES.running" 2>/dev/null)
+		[ -n "$_wp" ] && [ -d "/proc/$_wp" ] && { echo '{"dlstate":"running"}'; exit 0; }
+		rm -f "$_DLRES.running"
+		echo '{"type":"lpa","payload":{"code":-1,"message":"download worker exited without result","data":""}}'
+		exit 0
+	fi
+	echo '{"dlstate":"idle"}'
+	exit 0
+	;;
 setshow)
 	# Записать галку «вкладка eSIM» НАДЁЖНО, из бэкенда. Раньше вьюха писала её
 	# через uci.add именованной секции в кэше формы, и на модеме, чьей секции
@@ -359,6 +447,18 @@ setshow)
 	uci -q commit 5gmodem
 	# Кэш статуса протух - при возврате в «авто» надо переспросить.
 	rm -f "/tmp/5gmodem_esimstat_$_AP" 2>/dev/null
+	echo '{"result":"ok"}'
+	exit 0
+	;;
+sethttp)
+	# Транспорт ES9+ (esim_http) НАДЁЖНО, из бэкенда: запись из формы через
+	# uci.save()+uci.apply() дельту не коммитила (изменение висело в «Настройки/
+	# Изменения»). Тот же приём, что и setshow - set + commit прямо здесь.
+	case "$2" in
+		auto|curl|bridge) uci -q set "5gmodem.@5gmodem[0].esim_http=$2" ;;
+		*)                uci -q delete "5gmodem.@5gmodem[0].esim_http" 2>/dev/null ;;
+	esac
+	uci -q commit 5gmodem
 	echo '{"result":"ok"}'
 	exit 0
 	;;
@@ -589,10 +689,86 @@ download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
 	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	: > "$LIVELOG"
-	O=$(do_lpac 240 profile download -a "$2"); flush_notifications; echo "$O"
+	# es9err (тело ES9+-ошибки с кодами GSMA) чистим ОДИН РАЗ до запуска: bridge
+	# допишет его при неудаче и НЕ трогает на старте, чтобы ошибка пережила retry
+	# внутри do_lpac. Убираем файл прошлой попытки, чтобы не прицепить чужие коды.
+	_ERRFILE="/tmp/5gmodem_esim_res.$$.es9err"
+	rm -f "$_ERRFILE"
+	# Сторож 600 c (не 240): eUICC FM350 медленный на крипто-Store-Data, а фонового
+	# режима 60-секундный потолок uhttpd больше не режет (см. download-bg).
+	O=$(do_lpac 600 profile download -a "$2")
+	# Провал загрузки: SM-DP+ по SGP.22 кладёт коды GSMA в statusCodeData
+	# (subjectCode/reasonCode) - bridge сохранил тело в $RESULT.es9err. Достаём
+	# коды и вписываем в текст ошибки, чтобы пользователь видел то же, что
+	# показывает телефон ("тема X, причина Y: <message>").
+	# $O МНОГОСТРОЧНЫЙ (progress-строки + финальная lpa), и progress НЕСЁТ "code":0.
+	# Поэтому успех/провал определяем ТОЛЬКО по lpa-строке, а не по всему $O -
+	# иначе grep находит code:0 в прогрессе и считает провал успехом.
+	_LPALINE=$(printf '%s\n' "$O" | grep '"type":"lpa"' | tail -1)
+	if ! printf '%s' "$_LPALINE" | grep -q '"code":0' && [ -s "$_ERRFILE" ]; then
+		_SC=$(jsonfilter -i "$_ERRFILE" -e '@.header.functionExecutionStatus.statusCodeData' 2>/dev/null)
+		_SUBJ=""; _RC=""; _MSG=""; _EC=""; _SUBJID=""
+		if [ -n "$_SC" ]; then
+			# v3: subjectCode + reasonCode (+ optional errorCode/message/subjectIdentifier)
+			_SUBJ=$(printf '%s' "$_SC" | jsonfilter -e '@.subjectCode' 2>/dev/null)
+			_RC=$(printf '%s' "$_SC" | jsonfilter -e '@.reasonCode' 2>/dev/null)
+			_MSG=$(printf '%s' "$_SC" | jsonfilter -e '@.message' 2>/dev/null)
+			_EC=$(printf '%s' "$_SC" | jsonfilter -e '@.errorCode' 2>/dev/null)
+			_SUBJID=$(printf '%s' "$_SC" | jsonfilter -e '@.subjectIdentifier' 2>/dev/null)
+		else
+			# v2: плоские errorCode + errorDescription
+			_EC=$(jsonfilter -i "$_ERRFILE" -e '@.errorCode' 2>/dev/null)
+			_MSG=$(jsonfilter -i "$_ERRFILE" -e '@.errorDescription' 2>/dev/null)
+		fi
+		# Код: предпочитаем subjectCode/reasonCode (v3), иначе errorCode (v2).
+		if [ -n "$_SUBJ" ] || [ -n "$_RC" ]; then
+			_CODE="${_SUBJ:-?}/${_RC:-?}"
+		else
+			_CODE="$_EC"
+		fi
+		# Читаемый хвост из кодов SM-DP+ (авторитетнее строки lpac): "код [объект]: текст",
+		# напр. "8.2.6/3.8 Matching ID: Refused" - как коды темы/причины на телефоне.
+		_TAIL="$_CODE"
+		[ -n "$_SUBJID" ] && _TAIL="${_TAIL:+$_TAIL }$_SUBJID"
+		[ -n "$_MSG" ] && _TAIL="${_TAIL:+$_TAIL: }$_MSG"
+		if [ -n "$_TAIL" ]; then
+			# $O МНОГОСТРОЧНЫЙ: bridge дописывает В RESULT каждую строку прогресса,
+			# финальный результат - ПОСЛЕДНЯЯ строка '"type":"lpa"'. Правим ТОЛЬКО её:
+			# иначе sed заменит data первой попавшейся progress-строки ("data":"smdp.io"),
+			# а UI (parseLpa берёт lpa-строку) покажет неизменённый текст. lpac кладёт в
+			# data свой текст ("Refused"/"profile status is error") - оставляем контекстом.
+			# Меняем ЗНАЧЕНИЕ data целиком ([^"]* - кавычек в data lpac нет), но по
+			# АДРЕСУ lpa-строки. sed-разделитель '|' и спецсимволы (&,\) в кодах/сообщении
+			# GSMA не встречаются.
+			_LP=$(printf '%s' "$_LPALINE" | jsonfilter -e '@.payload.data' 2>/dev/null)
+			_NEW="$_TAIL"
+			# lpac нередко кладёт в data ТО ЖЕ сообщение, что уже в _TAIL (message
+			# из statusCodeData) - не дублируем ("...pool is empty — ...pool is empty").
+			case "$_LP" in
+				""|Refused) : ;;
+				*) case "$_TAIL" in *"$_LP") : ;; *) _NEW="$_TAIL — $_LP" ;; esac ;;
+			esac
+			O=$(printf '%s' "$O" | sed '/"type":"lpa"/ s|"data":"[^"]*"|"data":"'"$_NEW"'"|')
+		fi
+	fi
+	rm -f "$_ERRFILE"
+	flush_notifications; echo "$O"
 	;;
 notifications)
 	do_lpac 45 notification list
+	;;
+notif)
+	# Управление ОДНОЙ нотификацией (для UI-списка «Уведомления», как в EasyLPAC):
+	#   notif process <seq> - дослать на SM-DP+ и убрать локально (-r);
+	#   notif remove  <seq> - убрать локально без отправки.
+	# Синтаксис lpac: флаг -r ПЕРЕД seq (см. EasyLPAC LpacNotificationProcess).
+	case "$2" in
+		process) [ -n "$3" ] || { err "no seq"; exit 0; }
+			do_lpac 60 notification process -r "$3" ;;
+		remove)  [ -n "$3" ] || { err "no seq"; exit 0; }
+			do_lpac 30 notification remove "$3" ;;
+		*) err "usage: notif process|remove <seq>" ;;
+	esac
 	;;
 flush)
 	flush_notifications

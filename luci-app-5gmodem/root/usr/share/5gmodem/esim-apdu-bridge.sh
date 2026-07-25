@@ -15,13 +15,14 @@
 # ES9+ насквозь. Оба stdio-бэкенда мультиплексируют ОДИН поток и различаются
 # полем "type", поэтому обслуживаются здесь же.
 #
-# Почему так: пропатченный lpac 2.3.0 (AT-драйвер) ВИСНЕТ на FM350-GL (persistent-
-# буфер at_expect рассинхронизируется, 20 c/команда), а его stdio-бэкенд в нашей
-# сборке НЕ ЧИТАЕТ stdin (euicc_init падает мгновенно). lpac 2.1.x stdio читает
-# stdin корректно. Поэтому eSIM гоняем через lpac 2.1.x c LPAC_APDU=stdio, а
-# транспорт APDU делаем ЗДЕСЬ по AT - ровно те CCHO/CGLA, что рабочи на FM350
-# (CCHO отдаёт голый номер канала "1"; CGLA - стандартный "+CGLA: len,\"hex\"").
-# Это порт того, что делает обёртка prusa (EasyLPAC) на Windows.
+# Почему так: прямой AT-драйвер lpac 2.3.0 ВИСНЕТ на FM350-GL (persistent-буфер
+# at_expect рассинхронизируется, 20 c/команда). stdio-бэкенд lpac 2.3.0-fm350-fix
+# (исправлен json_request в stdio.c) читает stdin корректно — так же как и lpac
+# 2.1.x делал это из коробки. Поэтому eSIM гоняем через lpac >= 2.3.0-fm350-fix
+# (или 2.1.x) c LPAC_APDU=stdio, а транспорт APDU делаем ЗДЕСЬ по AT — ровно те
+# CCHO/CGLA, что работают на FM350 (CCHO отдаёт голый номер канала "1"; CGLA —
+# стандартный "+CGLA: len,\"hex\""). Это порт того, что делает обёртка prusa
+# (EasyLPAC) на Windows.
 #
 # Протокол (одна JSON-строка на сообщение, ndJSON):
 #   lpac -> нам (stdin):  {"type":"apdu","payload":{"func":"...","param":"hex|null"}}
@@ -31,15 +32,21 @@
 #                         {"type":"http","payload":{"rcode":<n>,"rx":"hex"}}
 #   Тела HTTP в обе стороны - hex (см. driver/http/stdio.c в lpac).
 #
-# Usage: esim-apdu-bridge.sh <at_port> <result_file> [ca_bundle]
+# Usage: esim-apdu-bridge.sh <at_port> <result_file> [ca_bundle] [livelog]
 #   Читает запросы lpac со stdin, пишет ответы в stdout, финальный "lpa" - в
 #   <result_file> (и завершается). <ca_bundle> нужен только для HTTP-ветки.
+#   <livelog> — файл для дублирования прогресса и CGLA-трассировки.
 
 PORT="$1"
 RESULT="$2"
 CABUNDLE="$3"
 LIVELOG="$4"
 : > "$RESULT"
+# NB: $RESULT.es9err (тело ES9+-ошибки с кодами GSMA) здесь НЕ трогаем. Его
+# чистит esim.sh ОДИН РАЗ перед do_lpac: do_lpac при неудаче повторяет запуск,
+# и очистка на старте bridge стёрла бы ошибку первой попытки, если ретрай упал
+# раньше ES9+. Пишем сюда только при ошибке (ниже), перезаписывая - последняя
+# ES9+-ошибка за все попытки и побеждает.
 CH=""
 
 # hex -> бинарный файл. Через printf с \xNN: бинарно-безопасно, od/xxd в образе
@@ -94,6 +101,20 @@ while IFS= read -r line; do
 			# Транспорт не состоялся (DNS/TLS/таймаут) - ответа нет вообще.
 			# Отдаём 500: lpac трактует как ошибку ES9+ и не виснет в ожидании.
 			[ -n "$rcode" ] || rcode=500
+			# Сохраняем тело ответа ES9+, когда в нём есть маркеры ошибки: по
+			# SGP.22 SM-DP+ кладёт коды GSMA (errorCode/subjectCode/reasonCode)
+			# в statusCodeData, но HTTP-статус при этом ЧАСТО 200 - ошибка
+			# сидит в functionExecutionStatus.status="Failed". Поэтому ловим не
+			# по rcode, а по содержимому: тело ES9+ - JSON, ищем в нём признаки
+			# отказа. esim.sh потом спарсит и покажет пользователю.
+			# Пишем ТОЛЬКО ПЕРВУЮ ошибку за сессию: провал приходит на authenticateClient
+			# (напр. "8.2.6/3.8 Matching ID: Refused" - точная причина), а следующий за
+			# ним cancelSession нередко возвращает ВТОРИЧНУЮ ошибку ("8.1/6.1 eUICC:
+			# Verification Failed"), которая перетёрла бы первую. Первая - авторитетная.
+			if [ ! -s "$RESULT.es9err" ] && [ -s "$_rb" ] \
+			   && grep -q '"statusCodeData"\|"status" *: *"Failed"\|"reasonCode"' "$_rb" 2>/dev/null; then
+				cat "$_rb" > "$RESULT.es9err"
+			fi
 			printf '{"type":"http","payload":{"rcode":%s,"rx":"%s"}}\n' \
 				"$rcode" "$(bin2hex "$_rb")"
 			rm -f "$_rq" "$_rb" "$_rh"
@@ -116,6 +137,7 @@ while IFS= read -r line; do
 		c=$(printf '%s' "$r" | sed -n 's/^+CCHO: *\([0-9][0-9]*\).*/\1/p' | head -1)
 		[ -n "$c" ] || c=$(printf '%s' "$r" | grep -E '^[0-9]+$' | head -1)
 		CH="$c"
+		[ -n "$LIVELOG" ] && printf 'TRACE CCHO aid=%.40s ch=%s\n' "$param" "${c:--1}" >> "$LIVELOG"
 		printf '{"type":"apdu","payload":{"ecode":%s}}\n' "${c:--1}" ;;
 	logic_channel_close)
 		# param = номер канала (hex-байт, напр. "01")
@@ -123,9 +145,14 @@ while IFS= read -r line; do
 		[ -n "$cc" ] && sms_tool -d "$PORT" at "AT+CCHC=$cc" >/dev/null 2>&1
 		printf '{"type":"apdu","payload":{"ecode":0}}\n' ;;
 	transmit)
-		# param = APDU (hex). AT+CGLA=<канал>,<len_hex_chars>,"<APDU>" -> "+CGLA: n,\"hex\"".
-		out=$(sms_tool -d "$PORT" at "AT+CGLA=$CH,${#param},\"$param\"" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/.*+CGLA: *[0-9]*,"\([0-9A-Fa-f]*\)".*/\1/p' | head -1)
+		# param = APDU (hex). AT+CGLA=<канал>,<len>,"<APDU>"
+		# CGLA на FM350 (SDX55) ожидает длину в hex-СИМВОЛАХ (chars), не в байтах.
+		# При передаче кол-ва байт (chars/2) модем отвергает команду без ответа.
+		_cgla_out=$(sms_tool -d "$PORT" at "AT+CGLA=$CH,${#param},\"$param\"" 2>/dev/null | tr -d '\r')
+		out=$(printf '%s' "$_cgla_out" | sed -n 's/.*+CGLA: *[0-9]*,"\([0-9A-Fa-f]*\)".*/\1/p' | head -1)
+		# DEBUG: последний CGLA-обмен в лог
+		[ -n "$LIVELOG" ] && printf 'TRACE CGLA ch=%s len=%s apdu_head=%.40s raw=%s ret=%.40s\n' \
+			"$CH" "${#param}" "$param" "$_cgla_out" "$out" >> "$LIVELOG"
 		printf '{"type":"apdu","payload":{"ecode":0,"data":"%s"}}\n' "$out" ;;
 	connect|disconnect|*)
 		printf '{"type":"apdu","payload":{"ecode":0}}\n' ;;
