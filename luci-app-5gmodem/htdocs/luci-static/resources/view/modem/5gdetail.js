@@ -532,7 +532,9 @@ function metricBar(id, rawVal, unit, edges) {
 	}
 	pf.style.width = pc + '%';
 	pf.style.background = _QUAL_BG[lvl];
-	pg.setAttribute('title', rawVal + (unit ? (' ' + unit) : '') + ' | ' + _qualLabel(lvl));
+	/* Единицу берём из vn (число), НЕ из rawVal: вызыватели передают значение уже
+	   с единицей ("-97 dBm"), и добавление unit к rawVal давало "-97 dBm dBm". */
+	pg.setAttribute('title', vn + (unit ? (' ' + unit) : '') + ' | ' + _qualLabel(lvl));
 }
 
 /* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
