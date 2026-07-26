@@ -110,7 +110,19 @@ http_backend() {
 apdu_backend() {
 	_ab=$(uci -q get 5gmodem.@5gmodem[0].esim_apdu)
 	case "$_ab" in
-		at|qmi|uqmi|mbim|bridge) echo "$_ab"; return ;;
+		at|uqmi|bridge) echo "$_ab"; return ;;
+		qmi|mbim)
+			# qmi/mbim ходят по cdc-wdm и зависят от ЕГО драйвера. ЗАЛИПШИЙ ручной
+			# выбор ломает eSIM: у форумчанина esim_apdu=qmi остался на модеме в
+			# MBIM-композиции, а qmi-бэкенд lpac на cdc_mbim канал не открывает
+			# (проба отвечала "ни один порт не eSIM"). Сверяем с реальным драйвером
+			# и берём совместимый бэкенд; драйвер неизвестен - доверяем юзеру.
+			case "$(_wdm_driver)" in
+				*cdc_mbim*) echo mbim ;;
+				*qmi_wwan*) echo qmi ;;
+				*)          echo "$_ab" ;;
+			esac
+			return ;;
 	esac
 	[ -x /usr/lib/lpac/lpac ] || { echo bridge; return; }   # старый layout - только мост
 	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
@@ -135,6 +147,13 @@ esim_wdm() {
 	_w=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
 	[ -c "$_w" ] || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
 	[ -c "$_w" ] && echo "$_w" || echo /dev/cdc-wdm0
+}
+
+# Драйвер cdc-wdm активного модема: cdc_mbim | qmi_wwan | пусто. По нему apdu_backend
+# сверяет ручной qmi/mbim-выбор (см. там). Путь берём из /sys самого узла.
+_wdm_driver() {
+	_wd=$(esim_wdm)
+	readlink -f "/sys/class/usbmisc/${_wd##*/}/device/driver" 2>/dev/null | sed 's#.*/##'
 }
 
 # Проба eUICC по cdc-wdm (qmi/mbim/uqmi): lpac chip info. 0 = eUICC ответила (в
