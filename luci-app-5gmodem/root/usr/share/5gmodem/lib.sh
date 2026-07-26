@@ -172,6 +172,11 @@ _vendor_by_vid() {
 		1bc7:*)        echo telit ;;
 		2c7c:*)        echo quectel ;;
 		19d2:*)        echo zte ;;
+		1e2d:00b7) ;;  # НЕ Cinterion: 1e2d:00b7 - это debug/QMI-композиция Qualcomm
+		               # SDX55 (Foxconn T99W175 / Compal RXM-G1 / Dell DW5930e / Thales
+		               # MV31-W), одолжившая vid Cinterion. Вернуть "cinterion" здесь -
+		               # значит отбраковать наше имя «Compal RXM-G1» (в reject-списке есть
+		               # "compal") и оставить сырой SG500M2-X. Пусто = не судим (ID общий).
 		1e2d:*)        echo cinterion ;;
 		2dee:*)        echo meiglink ;;
 		1e0e:*)        echo simcom ;;

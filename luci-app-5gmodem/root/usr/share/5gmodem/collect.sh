@@ -145,6 +145,9 @@ report() {
 	collect "сеть и логи"
 	run 10 "Маршруты" sh -c "ip route; echo '--- ipv6 ---'; ip -6 route"
 	run 10 "Пинг 77.88.8.8" ping -c 3 -W 2 77.88.8.8
+	# IPv6-связность ЛИТЕРАЛОМ (без DNS - его при глушении тоже режут): Яндекс-DNS
+	# 2a02:6b8::feed:0ff - v6-аналог 77.88.8.8. ipv6-internet.yandex.net не резолвится.
+	run 10 "Пинг IPv6 (2a02:6b8::feed:0ff)" sh -c "ping6 -c 3 -W 2 2a02:6b8::feed:0ff 2>/dev/null || ping -6 -c 3 -W 2 2a02:6b8::feed:0ff"
 	run 20 "Лог: ModemManager" sh -c "logread 2>/dev/null | grep -i modemmanager | tail -80"
 	run 20 "Лог: netifd/интерфейсы" sh -c "logread 2>/dev/null | grep -iE 'netifd|wwan|qmi|mbim|fibocom' | tail -80"
 	run 20 "Лог: ядро (USB)" sh -c "dmesg 2>/dev/null | grep -iE 'usb|option|qmi_wwan|cdc_|reset' | tail -60"

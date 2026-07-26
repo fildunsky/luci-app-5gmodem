@@ -152,7 +152,20 @@ for n in $NODES; do
 	   && ! _model_vendor_ok "$model" "$vid:$pid"; then
 		model=""
 	fi
-	[ -n "$model" ] || model="$(cat "$n/product" 2>/dev/null)"
+	# Фолбэк, когда секция ещё без model (свежее пересоздание / неактивный модем):
+	# берём дескриптор product. НО у Compal RXM-G1 сырой product = "VOS_5G" - имя
+	# семейства, а не модели, и вкладка показывала «Compal VOS_5G». Product-строка
+	# VOS_5G/RXMG1 однозначно опознаёт Compal (у T99W175 в тех же 90d5/1e2d:00b7
+	# она иная), поэтому даём единое имя сразу, БЕЗ дорогих AT/QMI-проб (listmodems
+	# зовётся часто - см. perf). Композиция 05c6:9025 с generic-product сюда не
+	# попадёт - там имя приходит из секции по опросу.
+	if [ -z "$model" ]; then
+		_prodraw=$(cat "$n/product" 2>/dev/null)
+		case "$_prodraw" in
+			*VOS_5G*|*RXMG1*|*SG500M2*) model="Compal RXM-G1" ;;
+			*)                          model="$_prodraw" ;;
+		esac
+	fi
 	model=$(esc "$model")
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает

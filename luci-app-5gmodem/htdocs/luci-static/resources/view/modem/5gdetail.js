@@ -71,9 +71,29 @@ document.head.append(E('style', {'type': 'text/css'},
    !important бьёт инлайновый стиль темы, поэтому её nowrap на наши контейнеры
    не действует: высота при замере не меняется - обрезать нечего.
    Чинить тему мы не можем, а страница должна работать в любой. */
-#bands-3g, #bands-lte, #bands-nr, #modesw-btns,
-#antports-table td {
+/* ЗАЩИЩАЕМ ПО КЛАССУ, А НЕ ПО ID. Все ячейки блока «Управление частотами» с рядами
+   кнопок (2G/3G/4G/5G-диапазоны, режим сети, агрегация несущих, привязка/лок соты,
+   5G-переключатель) имеют класс .tginfo-modesw. Раньше список был поимённый
+   (#bands-3g/#bands-lte/#bands-nr/#modesw-btns) и НЕ покрывал #caen-cell/#mode5g-cell/
+   #celllock-cell/#bands-2g: как только у модема появлялась, напр., агрегация несущих
+   (Compal RXM-G1 по QMI), её кнопка при замере темой схлопывалась и автопрокрутка
+   возвращалась. Класс покрывает все ряды кнопок разом - и будущие тоже. */
+.tginfo-modesw, #antports-table td {
   white-space: normal !important;
+}
+/* КОРЕНЬ «медленного расползания страницы вверх» - browser scroll anchoring
+   (overflow-anchor). Наши блоки живо обновляются каждый опрос: прогресс-бары
+   метрик анимируются (transition: width .4s), таблицы (соседи/CA) растут. Когда
+   такой блок оказывается НАД вьюпортом и чуть меняет геометрию, браузер САМ
+   двигает scrollTop, «удерживая якорь» - и это накапливается в непрерывный уход
+   страницы вверх (проверено вживую: docH стабильна, scroll-behavior=auto, НИ ОДНОГО
+   вызова scroll API - чистое нативное поведение; document-level overflow-anchor:none
+   мгновенно останавливает). НЕ трогаем весь документ (это чужие страницы LuCI) -
+   исключаем из выбора якоря ТОЛЬКО наши секции и всё внутри них. Тогда браузер
+   якорит на стабильную обвязку страницы (или ни на что) и не ползёт. */
+.cbi-section.tginfo,
+.cbi-section.tginfo * {
+  overflow-anchor: none;
 }
 
 /* ЕДИНИЦА ГРАДУСОВ: "56°C" вплотную к числу, без пробела.
@@ -397,6 +417,29 @@ document.head.append(E('style', {'type': 'text/css'},
   font-weight: normal;
   font-size: 0.8em;
   opacity: 0.7;
+}
+/* Живой статус дозвона (строка из лога netifd), пока модем не получил IP:
+   помельче и приглушённо - это временное сообщение о ходе подключения, а не
+   постоянное значение. */
+.tginfo-info .tginfo-connstatus { font-size: .92em; opacity: .8; }
+/* Диапазоны в строке режима - «кнопкой», как переключатели бендов (активный
+   вид). Это ПОКАЗ текущих бендов, не переключатель: pointer-events:none.
+   ВАЖНО: display НЕ трогаем - у proton2025 .btn это inline-flex с
+   align-items:center, он центрирует текст ВЕРТИКАЛЬНО. Если сменить на
+   inline-block, вылезает descender-зазор строки снизу (текст «прижат» кверху).
+   Поэтому только ужимаем паддинг/высоту/шрифт !important (тема крупная) и
+   центрируем чип по строке через vertical-align:middle. */
+.tginfo-info .tginfo-band.btn {
+  padding: .06em .45em !important;
+  margin: 0 .12em !important;
+  min-height: 0 !important;
+  height: auto !important;
+  gap: 0 !important;
+  font-size: .8em;
+  line-height: 1.25;
+  vertical-align: middle;
+  cursor: default;
+  pointer-events: none;
 }
 .tginfo-info .tginfo-ip {
   font-variant-numeric: tabular-nums;
@@ -1571,9 +1614,26 @@ function renderProtoChip(json) {
 				+ 'position:relative; top:.25em;',
 			'title': _('Current interface protocol')
 		}, '');
+		/* Призрак «спрятан от ModemManager» - ВНУТРИ рамки чипа, слева от типа, как в
+		   карточках профилей. Держим постоянный узел и лишь переключаем display, а
+		   текст протокола - в отдельном узле (обновляем только его). Фикс-размер под
+		   line-height чипа, чтобы появление иконки не растягивало строку. */
+		chip._ghost = E('img', {
+			'src': L.resource('icons/cghost.svg'), 'alt': '',
+			'title': _('hidden from ModemManager'),
+			'style': 'width:11px; height:11px; margin-right:.3em; opacity:.8;'
+				+ 'vertical-align:-1px; display:none; pointer-events:none;'
+		});
+		chip._label = E('span', {}, '');
+		chip.appendChild(chip._ghost);
+		chip.appendChild(chip._label);
 		head.appendChild(chip);
 	}
-	if (chip.textContent !== txt) { chip.textContent = txt; }
+	if (chip._label.textContent !== txt) { chip._label.textContent = txt; }
+	/* Только когда MM работает (иначе прятаться не от кого) и модем реально скрыт
+	   (mm_hidden=1: kernel-прото с mm_exclude, а не modemmanager). */
+	var hidden = (String(json.mm_running) === '1' && String(json.mm_hidden) === '1');
+	chip._ghost.style.display = hidden ? 'inline-block' : 'none';
 }
 
 /* APN и тип адреса в правом НИЖНЕМ углу блока «Модем» - тоже для тестов:
@@ -2316,6 +2376,16 @@ function operatorIcon(name) {
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
 	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
 	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
+	/* РФ-операторы/MVNO по имени. Мотив (Екатеринбург-2000), Таттелеком (бренд
+	   Летай), Вайнах Телеком (Чечня), СберМобайл (MVNO). Кодов в APN-базе нет -
+	   ловим по собственному имени и русским написаниям. */
+	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0 || n.indexOf('ekaterinburg') >= 0 || n.indexOf('екатеринбург') >= 0) { return 'op-motiv'; }
+	if (n.indexOf('sbermobile') >= 0 || n.indexOf('sber mobile') >= 0 || n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
+	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('letai') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
+	if (n.indexOf('vainah') >= 0 || n.indexOf('vainakh') >= 0 || n.indexOf('вайнах') >= 0) { return 'op-vainah'; }
+	/* KT (Korea Telecom, бренд olleh, MCC 450). Имя приходит коротким «KT» -
+	   матчим как отдельный токен, чтобы не ловить «kt» внутри других слов. */
+	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
 	return null;
 }
 
@@ -2327,7 +2397,29 @@ function localizeBytes(v) {
 	var t = String(v == null ? '' : v);
 	return t.replace(/\b(KiB|MiB|GiB|TiB)\b/g, function(u) {
 		return { 'KiB': _('KiB'), 'MiB': _('MiB'), 'GiB': _('GiB'), 'TiB': _('TiB') }[u] || u;
-	});
+	/* Голый «B» (байты, без приставки) тоже переводим - иначе рядом с «КиБ»
+	   висел непереведённый латинский «B» («322.0 B  2.2 КиБ»). Приставки заменены
+	   выше, поэтому одиночный латинский B здесь - это именно единица «байт». */
+	}).replace(/\bB\b/g, _('B'));
+}
+
+/* Короткая ОСМЫСЛЕННАЯ стадия подключения, пока у модема нет IP - вместо сырых
+   строк лога (они длинные, пугающие и на разных языках). Выбираем по состоянию
+   модема (регистрация/сигнал) + лёгкая подсказка из conn_status (уже очищенного
+   от шума netifd на бэкенде): дозвон -> получение IP. */
+function connStageText(json) {
+	var reg = String(json.registration || '').trim();
+	var sig = String(json.signal || '').trim();
+	var cs  = String(json.conn_status || '').toLowerCase();
+	var hasSig = sig && sig != '-' && sig != '0';
+	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
+	if (reg == '3') { return _('Registration denied'); }
+	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован
+		return hasSig ? _('Searching for network…') : _('Initialising modem…');
+	}
+	// зарегистрирован, но IP ещё нет: дозвон -> получение адреса
+	if (/no ip|retry|connected|cgpaddr|address|адрес/.test(cs)) { return _('Obtaining IP…'); }
+	return _('Establishing connection…');
 }
 
 function updateSimIcon(name) {
@@ -2860,10 +2952,15 @@ function applyMetrics(json) {
 						_connBase = { sec: parseInt(json.conn_time_sec, 10) || 0, at: Date.now() };
 						if (json.conn_time == '' || json.conn_time == '-') {
 							_connBase = null;
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>' + ' ' +_('Waiting for connection data...'), wicon, p);
+						/* Пока нет IP - показываем короткую ОСМЫСЛЕННУЮ стадию (по
+						   состоянию модема), а не сырую строку лога. connStageText
+						   возвращает уже локализованный текст без спецсимволов. */
+						var _msg = connStageText(json);
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/> ', wicon)
+							+ '<span class="tginfo-connstatus">' + _msg + '</span>';
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur">' + formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + localizeBytes(json.tx);
+						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + localizeBytes(json.tx);
 						}
 					}
 
@@ -2985,7 +3082,15 @@ function applyMetrics(json) {
 							var mtext = formatModeDisplay(mv).replace(/[&<>]/g, function(c) {
 								return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
 							});
-							view.innerHTML = mtext.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
+							/* Диапазоны (B3, B40, n78 ...) показываем «кнопкой» - тем же
+							   видом, что и переключатели бендов (активный стиль). Частоты
+							   «(1800 MHz)», разделители «+»/«/» и ярлык «4G |» остаются
+							   ОБЫЧНЫМ текстом СНАРУЖИ кнопки. Оборачиваем бенды ДО частот,
+							   чтобы regex частот не задел сгенерированные span'ы. */
+							view.innerHTML = mtext
+								.replace(/\b([Bn])(\d+)\b/g,
+									'<span class="btn cbi-button cbi-button-action important tginfo-band">$1$2</span>')
+								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
 						}
 						else if (!view.textContent || !view.textContent.trim()) {
 							// ещё не было валидного значения -> стабильный placeholder,

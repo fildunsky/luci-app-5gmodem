@@ -80,6 +80,22 @@ _fibocom_activate() {
 	return 1
 }
 
+# Firewall-зона интерфейса - нужна ДОЧЕРНЕМУ dhcpv6-интерфейсу (IPv6): без зоны
+# его входящие RA/DHCPv6-ответы упрутся в дефолтную политику INPUT и префикс от
+# оператора не придёт. fw3 (firewall3) знает зону напрямую; на fw4 такой команды
+# нет - тогда ищем зону в uci firewall по списку network.
+_fibocom_fwzone() {   # $1 = имя интерфейса
+	local z i=0 nm n
+	z=$(fw3 -q network "$1" 2>/dev/null)
+	[ -n "$z" ] && { echo "$z"; return; }
+	while nm=$(uci -q get "firewall.@zone[$i].name" 2>/dev/null); [ -n "$nm" ]; do
+		for n in $(uci -q get "firewall.@zone[$i].network" 2>/dev/null); do
+			[ "$n" = "$1" ] && { echo "$nm"; return; }
+		done
+		i=$((i + 1))
+	done
+}
+
 proto_fibocom_init_config() {
 	no_device=1
 	available=1
@@ -233,15 +249,22 @@ proto_fibocom_setup() {
 		# ровно баг «остался старый APN от eSIM» после смены на физ. Мегафон.
 		# apn пуст = роуминг / «пусть решает сеть»: там сверять нечего, переиспользуем
 		# что есть (иначе рвали бы lossless-переключение приоритета на каждом ifup).
-		local cur_apn
-		cur_apn=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/^+CGDCONT: *1,"[^"]*","\([^"]*\)".*/\1/p' | head -1)
-		if [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; then
+		local cur_ctx cur_apn cur_pdp
+		cur_ctx=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
+			| grep '^+CGDCONT: *1,' | head -1)
+		cur_pdp=$(echo "$cur_ctx" | sed -n 's/^+CGDCONT: *1,"\([^"]*\)".*/\1/p')
+		cur_apn=$(echo "$cur_ctx" | sed -n 's/^+CGDCONT: *1,"[^"]*","\([^"]*\)".*/\1/p')
+		# Переиспользуем живой контекст, ТОЛЬКО если совпадают И APN, И тип PDP.
+		# По APN - иначе остался бы старый APN (см. выше). По типу PDP - иначе,
+		# подняв IPV4V6 поверх активного IPV4-контекста, fast path переиспользовал бы
+		# IPv4-only bearer и IPv6 не появился бы НИКОГДА (модем сам IPv4->IPv4v6 не
+		# апгрейдит). apn пуст = роуминг: там APN не сверяем, но тип PDP - да.
+		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdptype" ]; then
 			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
 			[ "$ip" = "0.0.0.0" ] && ip=""
 		else
-			echo "fibocom[$$] активный APN «$cur_apn» != настроенного «$apn» - холодный дозвон"
+			echo "fibocom[$$] контекст (APN «$cur_apn», $cur_pdp) != настроенного (APN «$apn», $pdptype) - холодный дозвон"
 		fi
 	fi
 
@@ -279,6 +302,12 @@ proto_fibocom_setup() {
 	dns1=$(echo "$rdp" | awk -F',' '{gsub(/"/,"",$6); print $6}')
 	dns2=$(echo "$rdp" | awk -F',' '{gsub(/"/,"",$7); print $7}')
 
+	# Фактический тип PDP ЖИВОГО контекста: после fallback IPV4V6<->IPV4 (см. выше)
+	# он мог отличаться от настроенного. По нему решаем, поднимать ли IPv6.
+	local ctx_pdp
+	ctx_pdp=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CGDCONT: *1,"\([^"]*\)".*/\1/p' | head -1)
+
 	ip link set "$netdev" up 2>/dev/null
 
 	proto_init_update "$netdev" 1
@@ -290,6 +319,34 @@ proto_fibocom_setup() {
 	[ -n "$dns1" ] && [ "$dns1" != "0.0.0.0" ] && proto_add_dns_server "$dns1"
 	[ -n "$dns2" ] && [ "$dns2" != "0.0.0.0" ] && proto_add_dns_server "$dns2"
 	proto_send_update "$interface"
+
+	# IPv6. У сотовых модемов маршрутизируемый IPv6-префикс приходит НЕ через
+	# CGPADDR (там лишь link-local / interface-id), а по RA / DHCPv6-PD на самом
+	# usbnet-интерфейсе: модем выступает маршрутизатором. Поэтому статикой IPv6 НЕ
+	# прописываем, а поднимаем ДОЧЕРНИЙ dhcpv6-интерфейс (odhcp6c) - он и получает
+	# префикс. Так же делают ATC (mrhaav) и XMM. Только если контекст реально
+	# двухстековый/IPv6: после fallback он мог оказаться чистый IPv4 - тогда IPv6 нет.
+	#
+	# ВНИМАНИЕ по firewall: интерфейс модема (и этот dhcpv6-ребёнок, ему передаём
+	# зону родителя) должен быть в зоне wan, где INPUT принимает ICMPv6 RA. На части
+	# сетей (замечено на FM350) нужно ЯВНО разрешить RA от link-local модема:
+	#   config rule / src 'wan' / proto 'icmp' / src_ip 'fe80::1' / family 'ipv6' / ACCEPT
+	case "$ctx_pdp" in
+		*[vV]6*)
+			local zone6
+			zone6=$(_fibocom_fwzone "$interface")
+			json_init
+			json_add_string name "${interface}_6"
+			json_add_string ifname "@$interface"
+			json_add_string proto "dhcpv6"
+			json_add_string extendprefix 1
+			proto_add_dynamic_defaults
+			[ -n "$zone6" ] && json_add_string zone "$zone6"
+			json_close_object
+			ubus call network add_dynamic "$(json_dump)"
+			echo "fibocom[$$] IPv6 ($ctx_pdp): поднят dhcpv6-интерфейс ${interface}_6 (зона ${zone6:-—})"
+			;;
+	esac
 }
 
 proto_fibocom_teardown() {

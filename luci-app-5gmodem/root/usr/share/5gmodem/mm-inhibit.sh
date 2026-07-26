@@ -120,6 +120,45 @@ inhibit_pass() {
 	"$RES/mmneed.sh" apply >/dev/null 2>&1
 }
 
+# ЗЕРКАЛО inhibit_pass для modemmanager-прото: вернуть MM модем, который он ПОТЕРЯЛ.
+#
+# На системах без рабочего udev (libudev-zero) MM НЕ сканирует уже существующие
+# устройства при старте - он живёт только на hotplug-событиях. При загрузке порты
+# модема (cdc-wdm/ttyUSB/wwan) появляются РАНЬШЕ, чем MM встаёт на D-Bus, и события
+# летят в пустоту ("Couldn't report kernel event: couldn't find the ModemManager
+# process in the bus"). Итог: modemmanager-прото модем НЕ собран в MM, netifd пишет
+# "Device not managed by ModemManager" и кладёт интерфейс - модем registered, но БЕЗ
+# IP. ПРОВЕРЕНО на Compal (Hiveton, MM 1.24): переотправка add-событий портов уже
+# ПОСЛЕ подъёма MM -> модем появляется (Modem/N). Идемпотентно: если MM уже держит
+# модем, повторный report ничего не ломает. Только для активного modemmanager-прото
+# модема (kernel-прото мы, наоборот, инхибируем выше).
+mm_recover_missing() {
+	command -v mmcli >/dev/null 2>&1 || return 0
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0   # демон должен быть жив
+	_rp=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	[ -n "$_rp" ] || return 0
+	case "$_rp" in *-*) ;; *) return 0 ;; esac
+	_is_kernel_proto "$(_proto_for_path "$_rp")" && return 0        # не modemmanager-прото
+	# уже собран в MM? сверяем по СТАБИЛЬНОМУ sysfs-пути (basename == usb path)
+	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
+		_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
+		[ "$(basename "$_d" 2>/dev/null)" = "$_rp" ] && return 0    # MM видит - выходим
+	done
+	# объекта нет -> переотправляем MM add-события всех портов этого USB-устройства
+	for _if in /sys/bus/usb/devices/"$_rp":*; do
+		[ -d "$_if" ] || continue
+		for _t in "$_if"/ttyUSB* "$_if"/tty/ttyUSB* "$_if"/tty/tty*; do
+			[ -e "$_t" ] && mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_t")" >/dev/null 2>&1
+		done
+		for _w in "$_if"/usbmisc/cdc-wdm* "$_if"/usbmisc/wdm*; do
+			[ -e "$_w" ] && mmcli --report-kernel-event="action=add,subsystem=usbmisc,name=$(basename "$_w")" >/dev/null 2>&1
+		done
+		for _n in "$_if"/net/*; do
+			[ -e "$_n" ] && mmcli --report-kernel-event="action=add,subsystem=net,name=$(basename "$_n")" >/dev/null 2>&1
+		done
+	done
+}
+
 # Поднять модем, у которого MM отобрал и разорвал сессию данных.
 #
 # ЗАЧЕМ. Захватив чужой модем, MM снимает регистрацию и выключает его
@@ -199,7 +238,7 @@ set-exclude)
 		inhibit_pass
 	fi
 	;;
-once)  inhibit_pass ;;
+once)  inhibit_pass; mm_recover_missing ;;
 stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null; rm -f "$pf"; done ;;
 *)
 	# Реагируем на СТАРТ MM сразу, а не по общему таймеру. Пока запрет не лёг,
@@ -216,6 +255,7 @@ stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/nul
 			_last_pid="$_pid"
 			_n=0
 			inhibit_pass
+			mm_recover_missing
 		fi
 		_n=$((_n + 1))
 		sleep 3

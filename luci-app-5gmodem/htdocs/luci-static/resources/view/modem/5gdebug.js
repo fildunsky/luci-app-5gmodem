@@ -1002,10 +1002,15 @@ return view.extend({
 			   отработать. uci.set по несуществующей секции молча ничего не
 			   делает, и галка возвращалась в исходное состояние при каждом
 			   сохранении: снять её было невозможно. Заводим секцию сами. */
+			var v = value === '1' ? '1' : '0';
 			if (uci.get('5gmodem', sec) == null) {
 				uci.add('5gmodem', 'modem', sec);
 			}
-			uci.set('5gmodem', sec, 'at_debug', value === '1' ? '1' : '0');
+			uci.set('5gmodem', sec, 'at_debug', v);   // держим LuCI-кэш в согласии
+			/* Коммитим НА РОУТЕРЕ сразу (опция мгновенная) через granted-скрипт:
+			   setopt.sh заводит секцию идемпотентно, пишет значение и commit. */
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'atdebug', String(p), v ]).catch(function() {});
 		};
 		o.load = function() {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
@@ -1099,11 +1104,12 @@ return view.extend({
 			var ifn = uci.get('5gmodem', sc, 'network')
 			       || uci.get('5gmodem', '@5gmodem[0]', 'network');
 			if (!ifn) { return; }
-			uci.set('network', ifn, 'allow_roaming', v);
-			/* Интерфейс перезапускаем: решение принимается ПРИ ДОЗВОНЕ, и без
-			   перезапуска изменение вступило бы в силу неизвестно когда - а
-			   при выключении роуминга ещё и продолжал бы капать трафик. */
-			return fs.exec('/sbin/ifup', [ ifn ]).catch(function() {});
+			uci.set('network', ifn, 'allow_roaming', v);   // держим LuCI-кэш в согласии
+			/* Коммитим значение НА РОУТЕРЕ сразу (опция мгновенная, без общей
+			   кнопки «Применить») и передёргиваем интерфейс - через granted-скрипт
+			   setopt.sh: прямой uci/ifup из веба ACL не разрешает (и не должен). */
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'roaming', String(p), v ]).catch(function() {});
 		};
 		o.load = function(section_id) {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
@@ -1227,11 +1233,20 @@ return view.extend({
 				var popt = this.map.lookupOption('_pdptype', sid);
 				if (popt && popt[0]) { var pel = popt[0].getUIElement(sid); if (pel) { pdp = pel.getValue() || 'ipv4'; } }
 			} catch (e) {}
+			// Явный выбор галки «Скрыть от ModemManager»: передаём в mkiface, чтобы
+			// снятая пользователем галка не затиралась дефолтом «прятать» для QMI/MBIM.
+			// '-' = не смогли прочитать -> mkiface сам решит по прото.
+			var mmArg = '-';
+			try {
+				var mopt = this.map.lookupOption('_mm_exclude', sid);
+				if (mopt && mopt[0]) { var mel = mopt[0].getUIElement(sid);
+					if (mel) { var mv = String(mel.getValue()); if (mv === '0' || mv === '1') { mmArg = mv; } } }
+			} catch (e) {}
 			// Выбор протокола запоминает сам mkiface.sh (uci commit на
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
@@ -1605,6 +1620,32 @@ return view.extend({
 		/* Форма настроек рендерится асинхронно; собираем страницу целиком:
 		   Информация о модеме -> Настройки -> Диагностика. Save/Apply внизу
 		   применяется к form.Map (единственный .cbi-map на странице). */
+		/* МГНОВЕННОЕ СОХРАНЕНИЕ настроек-тумблеров. Раньше, чтобы, напр., разрешить
+		   данные в роуминге, надо было переключить тумблер, промотать страницу
+		   ВНИЗ и нажать «Сохранить/Применить» (без этого uci commit не происходил).
+		   Теперь эти опции сохраняются СРАЗУ при изменении: onchange просто зовёт
+		   write() опции, а write КАЖДОЙ из них коммитит значение на РОУТЕРЕ напрямую
+		   (setopt.sh/esim.sh/mm-inhibit.sh) - как блок светодиодов. Через LuCI
+		   uci.save()/uci.apply() НЕ идём намеренно: apply закоммитил бы ЗАОДНО и
+		   незавершённые правки структурных полей формы (напр. полу-набранный APN)
+		   и пересоздал бы интерфейс не вовремя.
+
+		   ТОЛЬКО простые настройки. Интерфейс/порт/протокол/APN ПЕРЕСОЗДАЮТ
+		   интерфейс (mkiface) - их мгновенно дёргать нельзя, они на общей кнопке. */
+		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_at_debug': 1, '_esim_show': 1 };
+		(s.children || []).forEach(function(o) {
+			if (!o || !_instant[o.option]) { return; }
+			var prev = o.onchange;
+			o.onchange = function(ev, section_id, value) {
+				var opt = this;
+				var chain = prev ? Promise.resolve(prev.call(opt, ev, section_id, value))
+				                 : Promise.resolve();
+				return chain
+					.then(function() { return opt.write(section_id, opt.formvalue(section_id)); })
+					.catch(function() {});
+			};
+		});
+
 		var ledsBlock = this.renderLeds(ledsAvail);
 		var self = this;
 		return Promise.resolve(m.render()).then(function(formNode) {

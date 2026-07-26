@@ -2883,6 +2883,9 @@ msgstr "да (вручную)"
 msgid "no (manually)"
 msgstr "нет (вручную)"
 
+msgid "B"
+msgstr "Б"
+
 msgid "KiB"
 msgstr "КиБ"
 
@@ -3788,3 +3791,21 @@ msgstr "Диапазоны 2G"
 
 msgid "4G bands"
 msgstr "Диапазоны 4G"
+
+msgid "Initialising modem…"
+msgstr "Инициализация модема…"
+
+msgid "Searching for network…"
+msgstr "Поиск сети…"
+
+msgid "Establishing connection…"
+msgstr "Установка соединения…"
+
+msgid "Obtaining IP…"
+msgstr "Получение IP…"
+
+msgid "Registration denied"
+msgstr "Регистрация отклонена"
+
+msgid "Data roaming is off"
+msgstr "Данные в роуминге отключены"

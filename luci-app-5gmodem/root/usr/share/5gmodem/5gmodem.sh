@@ -1207,6 +1207,27 @@ sanitize_number() {
 	esac
 }
 
+# ЖИВОЙ СТАТУС ПОДКЛЮЧЕНИЯ ИЗ ЛОГА. Пока интерфейс не получил IP, UI показывает
+# плашку «Ожидание данных…». Вместо статики отдаём последнюю ОСМЫСЛЕННУЮ строку
+# netifd для этого интерфейса (прото-хендлеры туда пишут ход дозвона: «Register
+# with network», «Attach», «Connected», у нашего fibocom - «холодный дозвон»,
+# «no IP with IPV4, retrying IPV4V6», «IPv6 … поднят», ошибки). Читаем лог ТОЛЬКО
+# когда соединения ещё нет (CONN_TIME="-"): у подключённого модема не тратимся.
+conn_status_line() {   # $1 = имя интерфейса
+	[ "$CONN_TIME" = "-" ] || return 0
+	[ -n "$1" ] || return 0
+	# Отсекаем ШУМ netifd (не статусы дозвона, а его внутренние гонки): строка
+	# «Command failed: ubus call … notify_proto … (Permission denied)» пугает и
+	# бессмысленна. Берём последнюю ОСМЫСЛЕННУЮ прото-строку. Фронтенд по ней (и по
+	# состоянию модема) сам подбирает короткую стадию - сырьё в UI не показываем.
+	logread 2>/dev/null | grep -F "netifd: $1 (" \
+		| grep -vE "notify_proto|Command failed|Permission denied" \
+		| tail -1 \
+		| sed -e 's/.*netifd: '"$1"' ([0-9]*): *//' \
+		      -e 's/^[a-zA-Z]*\[[0-9]*\] *//' \
+		| tr -d '"\\' | head -c 160
+}
+
 # Снимок метрик одним куском. Вынесен в функцию, потому что печатается ДВАЖДЫ:
 # частично - сразу после ядра (ниже), полностью - в конце опроса. Подстановки
 # раскрываются В МОМЕНТ ВЫЗОВА: у частичного вызова профильные переменные ещё
@@ -1222,6 +1243,7 @@ cat <<EOF
 "conn_time":"$(sanitize_string "$CONN_TIME")",
 "conn_time_sec":"$(sanitize_number "$CT")",
 "conn_time_since":"$(sanitize_string "$CONN_TIME_SINCE")",
+"conn_status":"$(sanitize_string "$(conn_status_line "$SEC")")",
 "rx":"$(sanitize_number "$RX")",
 "tx":"$(sanitize_number "$TX")",
 "modem":"$(sanitize_string "$MODEL")",
@@ -1233,6 +1255,8 @@ cat <<EOF
 "cport":"$(sanitize_string "$DEVICE")",
 "protocol":"$(sanitize_string "$PROTO")",
 "iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
+"mm_running":"$(pgrep ModemManager >/dev/null 2>&1 && echo 1 || echo 0)",
+"mm_hidden":"$(_mmx=$(uci -q get "5gmodem.$_hl_sec.mm_exclude"); case "$_mmx" in 0|1) echo "$_mmx";; *) [ "$(uci -q get "network.$SEC.proto")" = modemmanager ] && echo 0 || echo 1;; esac)",
 "xmm_capable":"$([ -f /lib/netifd/proto/xmm.sh ] && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0" && echo 1 || echo 0)",
 "iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
 "iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",

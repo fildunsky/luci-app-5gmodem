@@ -160,14 +160,25 @@ var CSS = `
 .netpribar .netpri-st.st-ul::before { left: auto; right: 0; }
 /* контент - НАД заливкой (::before позиционирован, поэтому детей поднимаем) */
 .netpribar .netpri-st > * { position: relative; z-index: 1; }
-/* стрелка направления пульсирует, пока идёт тест */
-.netpribar .netpri-st.st-dl .netpri-st-arrow,
-.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: st-blink 1s ease-in-out infinite; }
-@keyframes st-blink { 0%, 100% { opacity: .85; } 50% { opacity: .18; } }
-/* уважаем системную настройку «меньше движения» */
+/* Стрелка ТЕКУЩЕЙ фазы ПУЛЬСИРУЕТ свечением - как точки статусов (box-shadow-
+   свечение), только анимированным и цветом фазы (--st-c). Пульсирует ТОЛЬКО
+   активная: в загрузке - стрелка вниз (.st-arrow-dl), в отдаче - вверх
+   (.st-arrow-ul). Раньше селектор цеплял ОБЕ стрелки внутри карточки, поэтому
+   мигали обе. drop-shadow (а не box-shadow) - чтобы свечение шло по контуру
+   SVG-стрелки, а не по её прямоугольнику. */
+.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
+.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul { animation: st-glow 1.1s ease-in-out infinite; }
+@keyframes st-glow {
+	0%, 100% { filter: drop-shadow(0 0 1px var(--st-c)); }
+	50%      { filter: drop-shadow(0 0 4px var(--st-c)); }
+}
+/* уважаем системную настройку «меньше движения»: без пульса, но со статичным
+   свечением - так активная стрелка всё равно выделена. */
 @media (prefers-reduced-motion: reduce) {
-	.netpribar .netpri-st.st-dl .netpri-st-arrow,
-	.netpribar .netpri-st.st-ul .netpri-st-arrow { animation: none; }
+	.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
+	.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul {
+		animation: none; filter: drop-shadow(0 0 3px var(--st-c));
+	}
 	.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before { transition: none; }
 }
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
@@ -264,7 +275,10 @@ function stProgStart() { if (!_stProgTimer) { _stProgTimer = window.setInterval(
 function stProgStop() { if (_stProgTimer) { window.clearInterval(_stProgTimer); _stProgTimer = null; } setStProgress(); }
 
 function stArrow(name) {
-	return E('img', { 'class': 'netpri-st-arrow', 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
+	/* Направление в классе: по нему CSS пульсирует свечением ТОЛЬКО ту стрелку,
+	   чья фаза идёт (cdown = загрузка -> st-arrow-dl, cup = отдача -> st-arrow-ul). */
+	var dir = (name === 'cdown') ? ' st-arrow-dl' : (name === 'cup') ? ' st-arrow-ul' : '';
+	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
 }
 
 /* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
@@ -739,6 +753,13 @@ function operatorIcon(name) {
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
 	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
 	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
+	/* РФ-операторы/MVNO по имени: Мотив, СберМобайл, Таттелеком (Летай), Вайнах. */
+	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0 || n.indexOf('ekaterinburg') >= 0 || n.indexOf('екатеринбург') >= 0) { return 'op-motiv'; }
+	if (n.indexOf('sbermobile') >= 0 || n.indexOf('sber mobile') >= 0 || n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
+	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('letai') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
+	if (n.indexOf('vainah') >= 0 || n.indexOf('vainakh') >= 0 || n.indexOf('вайнах') >= 0) { return 'op-vainah'; }
+	/* KT (Korea Telecom, бренд olleh, MCC 450) - короткое имя «KT» как отдельный токен */
+	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
 	return null;
 }
 

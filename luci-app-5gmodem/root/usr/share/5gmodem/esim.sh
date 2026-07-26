@@ -124,6 +124,11 @@ apdu_backend() {
 	esac
 }
 
+# eUICC достаётся по cdc-wdm (MBIM), а не по AT-tty. Тогда весь AT-only преамбул
+# (живой порт / esim_active по AT+SIMTYPE / чистка ISD-R каналов / find_port) не
+# применим и дал бы ложное "no AT port" - его пропускаем для mbim.
+mbim_backend() { [ "$(apdu_backend)" = "mbim" ]; }
+
 # cdc-wdm управляющего узла активного модема (для qmi/mbim-бэкендов lpac).
 esim_wdm() {
 	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
@@ -137,10 +142,15 @@ esim_wdm() {
 # QMI/MBIM). Через прокси (qmi-proxy/mbim-proxy) канал делится с data-сессией.
 # Нужен lpac >= 2.3.0_p2 (с этими бэкендами). $1 = бэкенд.
 euicc_probe_wdm() {
+	_pwdev=$(esim_wdm)
+	_pwsave=""
 	case "$1" in
-		qmi)  _pw="LPAC_APDU=qmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
-		uqmi) _pw="LPAC_APDU=uqmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
-		mbim) _pw="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$(esim_wdm) LPAC_APDU_MBIM_USE_PROXY=1" ;;
+		qmi)  _pw="LPAC_APDU=qmi LPAC_APDU_QMI_DEVICE=$_pwdev" ;;
+		uqmi) _pw="LPAC_APDU=uqmi LPAC_APDU_QMI_DEVICE=$_pwdev" ;;
+		mbim) # даже простое чтение chip info может увести активный слот на пустую
+		      # eSIM -> запоминаем mapping и просим lpac его не трогать (см. _mbim_slot_*)
+		      _pw="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$_pwdev LPAC_APDU_MBIM_USE_PROXY=1 LPAC_APDU_MBIM_UIM_SLOT=$(_mbim_uim_slot) LPAC_APDU_MBIM_SKIP_SLOT_MAPPING=$(_mbim_skipmap)"
+		      _pwsave=$(_mbim_slot_get "$_pwdev") ;;
 		*)    return 1 ;;
 	esac
 	_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
@@ -150,6 +160,7 @@ euicc_probe_wdm() {
 	_pwn=0
 	while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
 	kill "$_pwp" 2>/dev/null
+	[ "$1" = mbim ] && _mbim_slot_restore "$_pwdev" "$_pwsave"
 	grep -qi '"eidValue"\|"eid"' "$_pwo" 2>/dev/null; _pwr=$?
 	rm -f "$_pwo"
 	return $_pwr
@@ -170,6 +181,30 @@ ca_bundle() {
 
 err() { echo "{\"type\":\"lpa\",\"payload\":{\"code\":-1,\"message\":\"$1\",\"data\":\"\"}}"; }
 
+# --- Защита активного SIM-слота при работе с eUICC по MBIM --------------------
+# У Qualcomm SDX55 (Foxconn T99W175 / Thales MV31-W / Dell DW5930e) eUICC сидит на
+# SIM2. Чтобы дотянуться до него, lpac/модем может ПЕРЕМАПить активный слот на
+# eSIM - а она обычно ПУСТАЯ, и рабочая SIM1 тут же отваливается, wwan падает
+# (это происходит просто от ЧТЕНИЯ eUICC - напр. при открытии вкладки eSIM).
+# Двойная защита: (1) LPAC_APDU_MBIM_SKIP_SLOT_MAPPING=1 просит lpac слот не трогать;
+# (2) эти хелперы запоминают mapping ДО операции и возвращают его, если он ушёл.
+# Нумерация mbim: slot 0 = SIM1, slot 1 = SIM2/eSIM (в LuCI это SIM1/SIM2).
+# Перенесено с рабочей community-сборки MBIM-lpac для T99W175.
+_mbim_slot_get() {   # $1 = cdc-wdm -> номер активного слота executor'а 0
+	command -v mbimcli >/dev/null 2>&1 || return 0
+	mbimcli -d "$1" --ms-query-device-slot-mappings 2>/dev/null \
+		| sed -n "s/.*Executor '0': slot '\([0-9][0-9]*\)'.*/\1/p" | head -1
+}
+_mbim_slot_restore() {   # $1 = cdc-wdm, $2 = сохранённый слот (пусто = ничего не делаем)
+	[ -n "$2" ] || return 0
+	command -v mbimcli >/dev/null 2>&1 || return 0
+	_msr=$(_mbim_slot_get "$1")
+	[ -n "$_msr" ] && [ "$_msr" != "$2" ] \
+		&& mbimcli -d "$1" --ms-set-device-slot-mappings="$2" >/dev/null 2>&1
+}
+_mbim_uim_slot() { _v=$(uci -q get lpac.mbim.slot); [ -n "$_v" ] && echo "$_v" || echo 2; }
+_mbim_skipmap()  { _v=$(uci -q get lpac.mbim.skip_slot_mapping); [ -n "$_v" ] && echo "$_v" || echo 1; }
+
 # lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). Прямой AT-драйвер
 # lpac виснет на FM350-GL (persistent-буфер at_expect рассинхронизируется), зато
 # stdio+bridge работает без залипаний — транспорт APDU (CCHO/CGLA/CCHC) делает мост,
@@ -189,6 +224,31 @@ run_lpac() {
 	# вызовы), нативный драйвер - нет. Берём at_lock на всё (включая чистку каналов
 	# и сам lpac). _prelock: если лок УЖЕ держит предок - не отпускаем его чужой лок.
 	_BE=$(apdu_backend)
+	# --- MBIM: ОТДЕЛЬНАЯ ветка (нативный mbim-драйвер lpac, без AT-моста). --------
+	# У Qualcomm SDX55 (Foxconn T99W175 / Thales MV31-W / Dell DW5930e) eUICC сидит
+	# на SIM2, и чтобы дотянуться до него, lpac/модем может ПЕРЕМАПить активный слот
+	# на eSIM. eSIM обычно пустая -> рабочая SIM1 отваливается, wwan падает (просто
+	# от ОТКРЫТИЯ вкладки eSIM). Двойная защита:
+	#   1) LPAC_APDU_MBIM_SKIP_SLOT_MAPPING=1 - lpac не трогает активный слот;
+	#   2) запоминаем slot mapping ДО lpac и возвращаем, если он всё же ушёл.
+	# Нумерация: в mbim slot 0 = SIM1, slot 1 = SIM2/eSIM (в LuCI это SIM1/SIM2).
+	# Подход перенесён с рабочей community-сборки MBIM-lpac для T99W175.
+	if [ "$_BE" = "mbim" ]; then
+		_MDEV=$(esim_wdm)
+		_MOLD=$(_mbim_slot_get "$_MDEV")
+		_MR="/tmp/5gmodem_esim_mbim.$$"; rm -f "$_MR"
+		env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
+			LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY=1 \
+			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$(_mbim_skipmap)" LPAC_HTTP=curl \
+			"$LPAC" "$@" > "$_MR" 2>/dev/null &
+		_PID=$!; _n=0
+		while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
+		kill -0 "$_PID" 2>/dev/null && { kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null; }
+		_mbim_slot_restore "$_MDEV" "$_MOLD"
+		if [ -s "$_MR" ]; then cat "$_MR"; else err "timeout"; fi
+		rm -f "$_MR"
+		return
+	fi
 	_prelock="$_AT_LOCK_HELD"
 	_locked=0
 	# AT-порт трогают только at (напрямую) и bridge (через мост). qmi/mbim достают
@@ -393,9 +453,18 @@ do_lpac() {
 	_T="$1"; shift
 	R=$(run_lpac "$_T" "$@")
 	if ! echo "$R" | grep -q '"code":0'; then
-		rm -f "$PORTCACHE"
-		PORT=$(find_port)
-		[ -n "$PORT" ] && R=$(run_lpac "$_T" "$@")
+		# Ретрай зависит от бэкенда: AT/bridge держатся за конкретный tty -> сбрасываем
+		# кэш и ищем порт заново. qmi/uqmi/mbim ходят по cdc-wdm и PORT игнорируют, а
+		# find_port гоняет CCHO-пробы по AT-портам (лишнее и может задеть модем) - для
+		# них просто повторяем ту же операцию по cdc-wdm.
+		case "$(apdu_backend)" in
+			at|bridge)
+				rm -f "$PORTCACHE"
+				PORT=$(find_port)
+				[ -n "$PORT" ] && R=$(run_lpac "$_T" "$@") ;;
+			*)
+				R=$(run_lpac "$_T" "$@") ;;
+		esac
 	fi
 	echo "$R"
 }
@@ -721,21 +790,25 @@ fi
 echo "$$" > "$LOCK/pid" 2>/dev/null
 trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
 
-# дешёвая проверка слота, чтобы не сканировать все порты на физической SIM
-D=$(live_port)
-[ -n "$D" ] || { err "no AT port"; exit 0; }
-esim_active "$D" || { err "esim slot not active"; exit 0; }
+# AT-only преамбул: для mbim eUICC достаётся по cdc-wdm, порт/esim_active/каналы
+# не нужны (иначе ложное "no AT port"). run_lpac/do_lpac сами ходят по cdc-wdm.
+if ! mbim_backend; then
+	# дешёвая проверка слота, чтобы не сканировать все порты на физической SIM
+	D=$(live_port)
+	[ -n "$D" ] || { err "no AT port"; exit 0; }
+	esim_active "$D" || { err "esim slot not active"; exit 0; }
 
-# ПЕРЕД поиском порта закрываем ВСЕ возможные УТЕКШИЕ логические каналы ISD-R.
-# Утечка (от прибитого сторожём lpac или прерванной CCHO-пробы) вешает CCHO
-# НАМЕРТВО: find_port не находит eUICC-порт ("no eUICC-capable AT port"), хотя
-# CCHO по факту работает. ПРОВЕРЕНО (FM350): после закрытия всех каналов CCHO
-# снова открывает канал - т.е. клин лечится БЕЗ power-cycle. Каналы общие для
-# eUICC, поэтому чистим на живом AT-порту D до пробы портов.
-for _ch in 1 2 3 4 5 6 7 8 9 10; do at_bounded "$D" "AT+CCHC=$_ch" 2 >/dev/null; done
+	# ПЕРЕД поиском порта закрываем ВСЕ возможные УТЕКШИЕ логические каналы ISD-R.
+	# Утечка (от прибитого сторожём lpac или прерванной CCHO-пробы) вешает CCHO
+	# НАМЕРТВО: find_port не находит eUICC-порт ("no eUICC-capable AT port"), хотя
+	# CCHO по факту работает. ПРОВЕРЕНО (FM350): после закрытия всех каналов CCHO
+	# снова открывает канал - т.е. клин лечится БЕЗ power-cycle. Каналы общие для
+	# eUICC, поэтому чистим на живом AT-порту D до пробы портов.
+	for _ch in 1 2 3 4 5 6 7 8 9 10; do at_bounded "$D" "AT+CCHC=$_ch" 2 >/dev/null; done
 
-PORT=$(find_port)
-[ -n "$PORT" ] || { err "no eUICC-capable AT port"; exit 0; }
+	PORT=$(find_port)
+	[ -n "$PORT" ] || { err "no eUICC-capable AT port"; exit 0; }
+fi
 
 flush_notifications() {
 	R=$(run_lpac 60 notification process -a -r)
