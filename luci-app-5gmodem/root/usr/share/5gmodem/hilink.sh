@@ -621,6 +621,123 @@ hl_setbands() {   # $1 - номера диапазонов или "default", $2 
 	esac
 }
 
+# --- ДИАПАЗОНЫ 2G/3G через NetworkBand ---------------------------------------
+# NetworkBand - hex-маска 2G/3G-бендов (LTE - отдельно в LTEBand). Биты Huawei НЕ
+# последовательны, часть - в расширенном диапазоне (>32 бит). Значения ПРОВЕРЕНЫ
+# на живом E3372: net-mode-list дал комбо-маску 2000000400380 (= B1|B8|GSM900|
+# GSM1800), рекомбинация сошлась точно; проба NetworkBand=400000 увела модем на 3G
+# 2100 (mode=2, HSPA+). ВНИМАНИЕ: B8 - бит 49 (0x2000000000000), а НЕ 0x2000000 из
+# «стандартных» таблиц - потому и выверяли на железе.
+#
+# «БЕЗ ОГРАНИЧЕНИЙ». В Auto прошивка отдаёт NetworkBand=3FFFFFFF (все младшие 30
+# бит), но это НЕ включает расширенные биты (B8=49). Трактуем такой mask как «все
+# поддерживаемые бенды доступны» - в UI все галочки стоят (интуитивно), а не B8
+# внезапно снятый. Реальное ограничение (напр. только B1) 3FFFFFFF никогда не даст.
+_hl_nb_all() { [ $(( ($1 & 0x3FFFFFFF) == 0x3FFFFFFF )) -eq 1 ]; }
+
+_umts_bit() {   # WCDMA номер -> hex-бит NetworkBand
+	case "$1" in
+		1) echo 400000 ;;            # B1 2100 IMT (проверено)
+		2) echo 800000 ;;            # B2 1900 PCS
+		5) echo 4000000 ;;           # B5 850 CLR
+		8) echo 2000000000000 ;;     # B8 900 (расширенный бит 49, проверено)
+		*) echo "" ;;
+	esac
+}
+_gsm_bit() {    # GSM частота (МГц) -> hex-бит NetworkBand
+	case "$1" in
+		900)  echo 300 ;;            # GSM900 (проверено в комбо-маске)
+		1800) echo 80 ;;            # GSM1800 (проверено)
+		850)  echo 80000 ;;         # GSM850
+		1900) echo 200000 ;;        # GSM1900 PCS
+		*) echo "" ;;
+	esac
+}
+# Бит бенда данного RAT (2g|3g).
+_hl_bandbit() { [ "$1" = 3g ] && _umts_bit "$2" || _gsm_bit "$2"; }
+
+_umts_roman() {   # римская часть WCDMA BC<...> -> номер
+	case "$1" in
+		I) echo 1 ;; II) echo 2 ;; IV) echo 4 ;; V) echo 5 ;;
+		VI) echo 6 ;; VIII) echo 8 ;; *) echo "" ;;
+	esac
+}
+
+# Поддерживаемые бенды RAT из net-mode-list. 3g -> номера (1 8), 2g -> частоты (900 1800).
+hl_supbands3g() {
+	api_get /api/net/net-mode-list "$1" 2>/dev/null | grep -oE 'WCDMA BC[IVX]+' | sed 's/WCDMA BC//' \
+		| while read -r _rn; do _n=$(_umts_roman "$_rn"); [ -n "$_n" ] && echo "$_n"; done | sort -nu | xargs
+}
+hl_supbands2g() {
+	api_get /api/net/net-mode-list "$1" 2>/dev/null | grep -oE 'GSM[0-9]+' | sed 's/GSM//' | sort -nu | xargs
+}
+
+# Комбо-маска ВСЕХ поддерживаемых 2G/3G-бит (BandList, БЕЗ LTE) - число. Модем
+# принимает NetworkBand только в пределах набора; строим маску строго из него.
+hl_supmask3g() {
+	_mm=0
+	for _x in $(api_get /api/net/net-mode-list "$1" 2>/dev/null | sed 's/<LTEBandList>.*//' \
+			| grep -oE '<Value>[0-9A-Fa-f]+</Value>' | sed 's/<[^>]*>//g'); do
+		_mm=$(( _mm | $(printf '%d' "0x$_x") ))
+	done
+	echo "$_mm"
+}
+
+# Биты выбранных бендов RAT ($1=2g|3g, далее номера/частоты).
+_hl_ratmask() {
+	_rm=0; _rt="$1"; shift
+	for _b in "$@"; do
+		case "$_b" in ''|*[!0-9]*) continue ;; esac
+		_bit=$(_hl_bandbit "$_rt" "$_b"); [ -n "$_bit" ] && _rm=$(( _rm | $(printf '%d' "0x$_bit") ))
+	done
+	echo "$_rm"
+}
+
+# Включённые бенды RAT ($1=2g|3g, $2=путь). «Без ограничений» -> все поддерживаемые.
+_hl_getbands() {
+	_rt="$1"; _p="$2"
+	_nb=$(api_get /api/net/net-mode "$_p" | xval NetworkBand)
+	[ -n "$_nb" ] || return 1
+	_m=$(printf '%d' "0x$_nb" 2>/dev/null) || return 1
+	[ "$_rt" = 3g ] && _sup=$(hl_supbands3g "$_p") || _sup=$(hl_supbands2g "$_p")
+	_hl_nb_all "$_m" && { echo $_sup | xargs; return; }
+	for _b in $_sup; do
+		_bit=$(_hl_bandbit "$_rt" "$_b"); [ -n "$_bit" ] || continue
+		[ $(( (_m & $(printf '%d' "0x$_bit")) != 0 )) -eq 1 ] && printf '%s ' "$_b"
+	done
+	echo ""
+}
+hl_getbands3g() { _hl_getbands 3g "$1"; }
+hl_getbands2g() { _hl_getbands 2g "$1"; }
+
+# Задать бенды RAT: сохраняем биты ДРУГОГО RAT (при «без ограничений» - ВСЕ его
+# поддерживаемые, иначе только реально включённые), ставим выбранные ЭТОГО RAT;
+# LTEBand/NetworkMode не трогаем. $1=2g|3g, $2=номера|default, $3=путь.
+_hl_setbands() {
+	_rt="$1"; _selarg="$2"; _p="$3"
+	_cur=$(api_get /api/net/net-mode "$_p")
+	_nm=$(printf '%s' "$_cur" | xval NetworkMode); [ -n "$_nm" ] || _nm="00"
+	_lte=$(printf '%s' "$_cur" | xval LTEBand);    [ -n "$_lte" ] || _lte="7FFFFFFFFFFFFFFF"
+	_nb=$(printf '%s' "$_cur" | xval NetworkBand); [ -n "$_nb" ] || _nb="3FFFFFFF"
+	_m=$(printf '%d' "0x$_nb")
+	[ "$_rt" = 3g ] && _sup=$(hl_supbands3g "$_p") || _sup=$(hl_supbands2g "$_p")
+	_allsup=$(hl_supmask3g "$_p")
+	_thismask=$(_hl_ratmask "$_rt" $_sup)
+	_othermask=$(( _allsup & ~_thismask ))
+	if _hl_nb_all "$_m"; then _keep=$_othermask; else _keep=$(( _m & _othermask )); fi
+	[ "$_selarg" = "default" ] || [ -z "$_selarg" ] && _sel="$_sup" || _sel="$_selarg"
+	_new=$(( _keep | $(_hl_ratmask "$_rt" $_sel) ))
+	_newnb=$(printf '%X' "$_new")
+	_r=$(api_post /api/net/net-mode \
+		"<NetworkMode>$_nm</NetworkMode><NetworkBand>$_newnb</NetworkBand><LTEBand>$_lte</LTEBand>" "$_p")
+	case "$_r" in
+		*'<response>OK</response>'*) echo '{"success":true}' ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
+	esac
+}
+hl_setbands3g() { _hl_setbands 3g "$1" "$2"; }
+hl_setbands2g() { _hl_setbands 2g "$1" "$2"; }
+
 # Режим сети (Auto/3G/4G) через API - как и диапазоны, НЕ роняет debug, в отличие
 # от AT^SYSCFGEX. NetworkMode: 00 авто, 02 только 3G, 03 только 4G.
 hl_getmode() {   # $1 - usb-путь; печатает id режима нашего формата (1/8/2/4)
@@ -703,6 +820,12 @@ case "$1" in
 	ussd)        hl_ussd "$2" "$3" ;;
 	getbands)    hl_getbands "$2" ;;
 	setbands)    hl_setbands "$2" "$3" ;;
+	getbands3g)  hl_getbands3g "$2" ;;
+	setbands3g)  hl_setbands3g "$2" "$3" ;;
+	supbands3g)  hl_supbands3g "$2" ;;
+	getbands2g)  hl_getbands2g "$2" ;;
+	setbands2g)  hl_setbands2g "$2" "$3" ;;
+	supbands2g)  hl_supbands2g "$2" ;;
 	getmode)     hl_getmode "$2" ;;
 	setmode)     hl_setmode "$2" "$3" ;;
 	getroaming)  hl_getroaming "$2" ;;

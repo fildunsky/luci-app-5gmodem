@@ -29,8 +29,18 @@ RES="/usr/share/5gmodem"
 if [ -x /usr/lib/lpac/lpac ]; then
 	LPAC="/usr/lib/lpac/lpac"
 	export LPAC_DRIVER_HOME="/usr/lib/lpac"
-else
+elif [ -x /usr/bin/lpac ]; then
+	# Официальный OpenWrt-пакет lpac кладёт бинарь в /usr/bin/lpac; наша сборка
+	# lpac-build - туда же wrapper (сам ставит LPAC_DRIVER_HOME). Без этой ветки
+	# приложение писало «lpac не установлен», хотя он есть (живой случай: T99W175
+	# с официальным lpac 2.3.0 - вкладка eSIM отказывалась работать).
+	LPAC="/usr/bin/lpac"
+elif [ -x /usr/lib/lpac ]; then
 	LPAC="/usr/lib/lpac"
+else
+	# Последний рубеж: вдруг lpac где-то в PATH.
+	LPAC="$(command -v lpac 2>/dev/null)"
+	[ -n "$LPAC" ] || LPAC="/usr/lib/lpac"
 fi
 
 # Очередь к AT-порту: проба CCHO и работа lpac идут в тот же tty, что и опрос
@@ -91,13 +101,58 @@ http_backend() {
 #   bridge - наш stdio-мост поверх sms_tool (CCHO/CGLA через AT-команды). Фолбэк.
 # HTTP при этом ВСЕГДА через мост (LPAC_HTTP=stdio), т.к. TLS у GSMA-CI SM-DP+
 # (truphone/redtea) mbedTLS-curl не берёт. Т.е. at = нативный APDU + мостовой HTTP.
-# По умолчанию at, если бинарь lpac лежит в новом layout (/usr/lib/lpac/lpac).
+# APDU-транспорт к eUICC. Ручной выбор (UCI esim_apdu) в приоритете, иначе auto по
+# протоколу интерфейса активного модема:
+#   серийные (fibocom/atc/xmm/ncm/3g/wwan) умеют AT+CCHO -> at;
+#   mbim / modemmanager -> mbim ; qmi -> qmi (eUICC через cdc-wdm + прокси).
+# Нужен lpac >= 2.3.0_p2 (в нём собраны бэкенды qmi/uqmi/mbim). Старый single-file
+# lpac (2.1) отдаёт только stdio-мост. Юзер может задать явно: at|qmi|uqmi|mbim|bridge.
 apdu_backend() {
 	_ab=$(uci -q get 5gmodem.@5gmodem[0].esim_apdu)
 	case "$_ab" in
-		at|bridge) echo "$_ab" ;;
-		*)         [ -x /usr/lib/lpac/lpac ] && echo at || echo bridge ;;
+		at|qmi|uqmi|mbim|bridge) echo "$_ab"; return ;;
 	esac
+	[ -x /usr/lib/lpac/lpac ] || { echo bridge; return; }   # старый layout - только мост
+	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_sec="m_$(echo "$_ap" | sed 's/[^A-Za-z0-9]/_/g')"
+	_if=$(uci -q get "5gmodem.$_sec.network")
+	[ -n "$_if" ] || _if=$(uci -q get 5gmodem.@5gmodem[0].network)
+	case "$(uci -q get "network.$_if.proto")" in
+		mbim|modemmanager) echo mbim ;;
+		qmi)               echo qmi ;;
+		*)                 echo at ;;
+	esac
+}
+
+# cdc-wdm управляющего узла активного модема (для qmi/mbim-бэкендов lpac).
+esim_wdm() {
+	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_w=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
+	[ -c "$_w" ] || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
+	[ -c "$_w" ] && echo "$_w" || echo /dev/cdc-wdm0
+}
+
+# Проба eUICC по cdc-wdm (qmi/mbim/uqmi): lpac chip info. 0 = eUICC ответила (в
+# выводе есть EID). НЕ трогает AT-порт (Qualcomm SDX55: eUICC доступен только по
+# QMI/MBIM). Через прокси (qmi-proxy/mbim-proxy) канал делится с data-сессией.
+# Нужен lpac >= 2.3.0_p2 (с этими бэкендами). $1 = бэкенд.
+euicc_probe_wdm() {
+	case "$1" in
+		qmi)  _pw="LPAC_APDU=qmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
+		uqmi) _pw="LPAC_APDU=uqmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
+		mbim) _pw="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$(esim_wdm) LPAC_APDU_MBIM_USE_PROXY=1" ;;
+		*)    return 1 ;;
+	esac
+	_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
+	rm -f "$_pwo"
+	( env $_pw LPAC_HTTP=curl "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
+	_pwp=$!
+	_pwn=0
+	while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
+	kill "$_pwp" 2>/dev/null
+	grep -qi '"eidValue"\|"eid"' "$_pwo" 2>/dev/null; _pwr=$?
+	rm -f "$_pwo"
+	return $_pwr
 }
 
 # Системный бандл + корень GSMA в один файл (wget принимает только один
@@ -133,12 +188,21 @@ run_lpac() {
 	# большом CGLA prepare_download/load. Мост это переживал (короткие sms_tool-
 	# вызовы), нативный драйвер - нет. Берём at_lock на всё (включая чистку каналов
 	# и сам lpac). _prelock: если лок УЖЕ держит предок - не отпускаем его чужой лок.
+	_BE=$(apdu_backend)
 	_prelock="$_AT_LOCK_HELD"
-	at_lock "$PORT" 20
-	# Чистим утёкшие логические каналы ISD-R ПЕРЕД КАЖДОЙ операцией lpac: после
-	# предыдущей операции канал мог остаться открытым (или закрылся не полностью),
-	# и следующий CCHO завис бы -> euicc_init падает. Одна операция = чистый старт.
-	for _c in 1 2 3 4 5 6 7 8; do at_bounded "$PORT" "AT+CCHC=$_c" 2 >/dev/null; done
+	_locked=0
+	# AT-порт трогают только at (напрямую) и bridge (через мост). qmi/mbim достают
+	# eUICC по cdc-wdm (+ прокси), метрики его не используют -> ни замок, ни чистка
+	# AT-каналов там не нужны.
+	case "$_BE" in
+	at|bridge)
+		at_lock "$PORT" 20; _locked=1
+		# Чистим утёкшие логические каналы ISD-R ПЕРЕД КАЖДОЙ операцией lpac: после
+		# предыдущей операции канал мог остаться открытым (или закрылся не полностью),
+		# и следующий CCHO завис бы -> euicc_init падает. Одна операция = чистый старт.
+		for _c in 1 2 3 4 5 6 7 8; do at_bounded "$PORT" "AT+CCHC=$_c" 2 >/dev/null; done
+		;;
+	esac
 	_RES="/tmp/5gmodem_esim_res.$$"
 	_LOOP="/tmp/5gmodem_esim_loop.$$"
 	rm -f "$_RES" "$_LOOP"; mkfifo "$_LOOP" 2>/dev/null
@@ -156,11 +220,15 @@ run_lpac() {
 	# в пайплайне остаётся - он ловит HTTP (если stdio) и ЗАХВАТЫВАЕТ progress/lpa в
 	# $_RES. При APDU=at мост НЕ трогает tty (его apdu-ветка не срабатывает), так что
 	# конфликта с нативным драйвером за порт нет. $PORT без пробелов (путь к tty).
-	if [ "$(apdu_backend)" = "at" ]; then
-		_APDU_ENV="LPAC_APDU=at LPAC_APDU_AT_DEVICE=$PORT"
-	else
-		_APDU_ENV="LPAC_APDU=stdio"
-	fi
+	case "$_BE" in
+		at)   _APDU_ENV="LPAC_APDU=at LPAC_APDU_AT_DEVICE=$PORT" ;;
+		# qmi/uqmi берут cdc-wdm через qmi-proxy (делят канал с data-сессией);
+		# mbim - через mbim-proxy (LPAC_APDU_MBIM_USE_PROXY=1). Устройство - esim_wdm.
+		qmi)  _APDU_ENV="LPAC_APDU=qmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
+		uqmi) _APDU_ENV="LPAC_APDU=uqmi LPAC_APDU_QMI_DEVICE=$(esim_wdm)" ;;
+		mbim) _APDU_ENV="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$(esim_wdm) LPAC_APDU_MBIM_USE_PROXY=1" ;;
+		*)    _APDU_ENV="LPAC_APDU=stdio" ;;
+	esac
 	sh "$BRIDGE" "$PORT" "$_RES" "$_CA" "$LIVELOG" < "$_LOOP" \
 		| env $_APDU_ENV LPAC_HTTP="$_HTTPDRV" "$LPAC" "$@" > "$_LOOP" 2>/dev/null &
 	_PID=$!
@@ -171,8 +239,9 @@ run_lpac() {
 	while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
 	kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null
 	# Отпускаем порт СРАЗУ после lpac (результат - чтение файла, порт не нужен).
-	# Только если захватывали САМИ (не отбираем лок у предка-опросчика).
-	[ -z "$_prelock" ] && at_unlock
+	# Только если захватывали САМИ (не отбираем лок у предка-опросчика) и только
+	# для AT-путей (qmi/mbim замок не берут - см. _locked выше).
+	[ "$_locked" = 1 ] && [ -z "$_prelock" ] && at_unlock
 	rm -f "$_LOOP"
 	if [ -s "$_RES" ]; then cat "$_RES"; else err "timeout"; fi
 	rm -f "$_RES"
@@ -462,6 +531,19 @@ sethttp)
 	echo '{"result":"ok"}'
 	exit 0
 	;;
+setapdu)
+	# Транспорт APDU к eUICC (esim_apdu) - тем же приёмом, что sethttp. "auto" и
+	# всё неизвестное -> удаляем ключ (вернуться к автоопределению по прото). Смена
+	# инвалидирует кэш вердикта eUICC (пробовали другим транспортом).
+	case "$2" in
+		at|qmi|uqmi|mbim|bridge) uci -q set "5gmodem.@5gmodem[0].esim_apdu=$2" ;;
+		*)                       uci -q delete "5gmodem.@5gmodem[0].esim_apdu" 2>/dev/null ;;
+	esac
+	uci -q commit 5gmodem
+	rm -f /tmp/5gmodem_esimstat_* 2>/dev/null
+	echo '{"result":"ok"}'
+	exit 0
+	;;
 recheck)
 	# ПЕРЕПРОВЕРИТЬ НАЛИЧИЕ eUICC ЗАНОВО. Отрицательный ответ кэшируется (перебор
 	# портов стоит секунд), и без этой команды выйти из него нельзя: модем,
@@ -528,7 +610,7 @@ status-cached)
 	# Приоритеты как у status: ручная галка перебивает, без lpac делать нечего.
 	_ES_FORCE=$(uci -q get "5gmodem.$_es_sec.esim_show")
 	[ "$_ES_FORCE" = "0" ] && { echo '{"available":0,"active":0,"forced":1}'; exit 0; }
-	[ -x "$LPAC" ] || { echo '{"available":0,"active":0}'; exit 0; }
+	[ -x "$LPAC" ] || { echo '{"available":0,"active":0,"reason":"nolpac"}'; exit 0; }
 	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
 	[ -s "$_SCACHE" ] && { cat "$_SCACHE"; exit 0; }
 	echo '{"unknown":1}'
@@ -543,6 +625,21 @@ status-probe)
 		_NET=$(uci -q show 5gmodem 2>/dev/null | sed -n \
 			"s/^5gmodem\.\(m_[^.]*\)\.path='$_AP'\$/\1/p" | head -1)
 		_PROTO=$(uci -q get "network.$(uci -q get "5gmodem.$_NET.network").proto")
+		_BE=$(apdu_backend)
+		case "$_BE" in
+		qmi|uqmi|mbim)
+			# Qualcomm SDX55 (T99W175/MV31-W/DW5930e) и прочие cdc-wdm-модемы: eUICC
+			# достаётся по QMI/MBIM, а не по AT+CCHO. Пробуем lpac chip info по cdc-wdm.
+			if euicc_probe_wdm "$_BE"; then
+				AVAIL=1; ACTIVE=1
+				printf '{"available":1,"active":1}\n' > "$_SCACHE"
+				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
+			else
+				printf '{"available":0,"active":0,"reason":"noeuicc"}\n' > "$_SCACHE"
+				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
+			fi
+			;;
+		*)
 		if [ "$_PROTO" != "modemmanager" ]; then
 			# НАЛИЧИЕ AT-ПОРТА - НЕ ПРИЗНАК eSIM. Здесь стоял live_port, и
 			# AVAIL=1 выставлялся просто потому, что модем отвечает на AT и в
@@ -571,7 +668,7 @@ status-probe)
 				# eUICC есть, но при загрузке порт был занят опросом, проба
 				# сорвалась, и вкладка eSIM пропадала на 15 минут. Такой ответ НЕ
 				# кэшируем - перепроверим на следующем заходе.
-				printf '{"available":0,"active":0}\n' > "$_SCACHE"
+				printf '{"available":0,"active":0,"reason":"noeuicc"}\n' > "$_SCACHE"
 				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
 			elif [ -s "$_SCACHE" ]; then
 				# Порт не ответил: он общий с метриками и simslot.sh, коллизии
@@ -582,8 +679,21 @@ status-probe)
 				cat "$_SCACHE"; exit 0
 			fi
 		fi
+			;;
+		esac
 	fi
-	echo "{\"available\":$AVAIL,\"active\":$ACTIVE}"
+	# Причина недоступности - чтобы вкладка сказала КОНКРЕТНО, а не «lpac нет ИЛИ
+	# не АТ-модем». Порядок проверок = цена: сперва нет lpac, потом прото под
+	# ModemManager (наш AT-путь к eUICC недоступен), иначе eUICC не отозвалась
+	# (нет порта / чужая композиция / нет чипа) - тут нужен лог от пользователя.
+	if [ "$AVAIL" = 0 ]; then
+		if [ ! -x "$LPAC" ]; then REASON=nolpac
+		elif [ "$_BE" = at ] && [ "$_PROTO" = modemmanager ]; then REASON=modemmanager
+		else REASON=noeuicc; fi
+		echo "{\"available\":0,\"active\":$ACTIVE,\"reason\":\"$REASON\"}"
+	else
+		echo "{\"available\":$AVAIL,\"active\":$ACTIVE}"
+	fi
 	exit 0
 	;;
 esac

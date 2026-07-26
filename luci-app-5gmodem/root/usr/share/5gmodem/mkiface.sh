@@ -129,9 +129,17 @@ run_bounded() {   # $1 = секунды, далее команда
 
 # QMI отвечает? Спрашиваем UIM (а НЕ --get-pin-status: на EC21 он штатно отдаёт
 # "Not supported" даже на здоровом модеме, это не признак поломки).
+#
+# ТОЛЬКО через qmi-proxy (-p) и qmicli, НЕ через прямой uqmi. run_bounded ниже
+# добивает зависший вызов через kill -9, а убитый ПРЯМОЙ QMI-клиент не
+# освобождает свой client-ID на модеме - утечка. Копясь, они исчерпывают пул
+# ('ClientIdsExhausted'), и ModemManager перестаёт инициализировать модем
+# ('unknown-capabilities' -> у Compal пропадали и данные, и управление бендами).
+# С -p убитый qmicli пул не трогает: client-ID держит ПРОКСИ. uqmi прокси не
+# умеет, поэтому спрашиваем UIM через qmicli --uim-get-card-status.
 qmi_alive() {   # $1 = cdc-wdm
-	case "$(run_bounded 8 uqmi -d "$1" -t 5000 --uim-get-sim-state)" in
-		*card_application_state*|*card_slot*) return 0 ;;
+	case "$(run_bounded 8 qmicli -d "$1" -p -t 5 --uim-get-card-status 2>/dev/null)" in
+		*"card status"*|*"Card state"*|*present*) return 0 ;;
 	esac
 	return 1
 }
@@ -283,6 +291,8 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		OLDPDP=$(uci -q get "network.$IF.pdptype")
 		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
 		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
+		# «данные в роуминге» сохраняем через пересоздание, как pdptype (см. ниже)
+		OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -336,6 +346,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# modem's default route; lower the metric in Network > Interfaces to make
 		# it primary.
 		uci set "network.$IF.metric=20"
+		[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 		uci commit network
 
 		# add to the 'wan' firewall zone for NAT/forwarding. Самолечащий:
@@ -507,6 +518,11 @@ OLDAPN=$(uci -q get "network.$IF.apn")
 OLDPDP=$(uci -q get "network.$IF.pdptype")
 [ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
 [ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
+# Сохраняем «данные в роуминге» через пересоздание - как pdptype. Иначе выбор
+# пользователя (галочка Allow data roaming) стирался на каждом пересборе
+# интерфейса (переключение SIM/eSIM, кнопка «создать интерфейс», hotplug), и в
+# роуминге данные не поднимались - выглядело как «галочка не сохраняется».
+OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -531,6 +547,7 @@ case "$PROTO" in
 		uci set "network.$IF.auth=none"
 		;;
 esac
+[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 uci commit network
 
 # add to the 'wan' firewall zone (if one exists) so NAT/forwarding works.

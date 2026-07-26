@@ -19,6 +19,7 @@ LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, 
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager \
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
+	+usb-modeswitch +kmod-usb-acm \
 	+coreutils-stty
 LUCI_PKGARCH:=all
 PKG_VERSION:=1.9.0

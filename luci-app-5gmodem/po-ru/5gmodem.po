@@ -3731,3 +3731,60 @@ msgstr "Удаление уведомления…"
 
 msgid "Notification action failed: %s"
 msgstr "Не удалось выполнить действие с уведомлением: %s"
+
+msgid "(Received Signal Code Power, 3G)"
+msgstr "(мощность принятого кодового сигнала, 3G)"
+
+msgid "(chip energy to noise ratio, 3G)"
+msgstr "(энергия чипа к шуму, 3G)"
+
+msgid "eSIM management needs the lpac package, which is not installed. Install the lpac build for your platform - see the app README."
+msgstr "Для управления eSIM нужен пакет lpac, а он не установлен. Поставьте сборку lpac для вашей платформы — см. README приложения."
+
+msgid "This modem is on the ModemManager protocol, where eSIM over AT commands is not available. Switch the modem interface to the fibocom / MBIM / QMI protocol to manage eSIM."
+msgstr "Этот модем работает по протоколу ModemManager, где eSIM через AT-команды недоступна. Переключите интерфейс модема на протокол fibocom / MBIM / QMI, чтобы управлять eSIM."
+
+msgid "No eSIM chip (eUICC) answered on this modem. If you are sure it has one, it may be in a USB composition this app does not talk to yet - please report your modem model and its USB ID (vid:pid) so we can add support."
+msgstr "Ни один порт модема не ответил как eSIM-чип (eUICC). Если вы уверены, что чип есть, модем может быть в USB-композиции, с которой приложение пока не работает — сообщите модель модема и его USB ID (vid:pid), чтобы добавить поддержку."
+
+msgid "eUICC access (APDU)"
+msgstr "Доступ к eUICC (APDU)"
+
+msgid "AT (serial - FM350 etc.)"
+msgstr "AT (последовательный — FM350 и т.п.)"
+
+msgid "QMI / libqmi (Qualcomm)"
+msgstr "QMI / libqmi (Qualcomm)"
+
+msgid "QMI / uqmi CLI"
+msgstr "QMI / uqmi CLI"
+
+msgid "AT bridge (sms_tool)"
+msgstr "AT-мост (sms_tool)"
+
+msgid "eUICC access saved"
+msgstr "Доступ к eUICC сохранён"
+
+msgid "How lpac reaches the eSIM chip. \"Auto\" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT."
+msgstr "Как lpac обращается к eSIM-чипу. «Авто» выбирает AT для последовательных модемов (FM350) и QMI/MBIM для модемов через cdc-wdm. Для Qualcomm-модемов (T99W175 / MV31-W / DW5930e), чей eUICC недоступен по AT, выберите QMI/MBIM вручную."
+
+msgid "These are status reports the modem sends to your operator (SM-DP+) after a profile is enabled, disabled or deleted. They normally go out on their own. If some are stuck here (e.g. there was no internet at the time), the safe choice is Send — it is harmless and just confirms the change. Remove only discards a report without sending it. If unsure, you can leave them or press Send all."
+msgstr "Это отчёты о статусе, которые модем отправляет вашему оператору (SM-DP+) после включения, отключения или удаления профиля. Обычно они уходят сами. Если какие-то застряли здесь (например, не было интернета в тот момент), безопаснее всего нажать «Отправка» — это безвредно и просто подтверждает изменение. «Удалить» лишь отбрасывает отчёт, не отправляя его. Если не уверены — можно оставить как есть или нажать «Отправить все»."
+
+msgid "Send all"
+msgstr "Отправить все"
+
+msgid "Send all pending notifications to the operator, then clear them"
+msgstr "Отправить все ожидающие уведомления оператору и очистить"
+
+msgid "Sending notifications…"
+msgstr "Отправка уведомлений…"
+
+msgid "Notifications sent to the operator"
+msgstr "Уведомления отправлены оператору"
+
+msgid "2G bands"
+msgstr "Диапазоны 2G"
+
+msgid "4G bands"
+msgstr "Диапазоны 4G"

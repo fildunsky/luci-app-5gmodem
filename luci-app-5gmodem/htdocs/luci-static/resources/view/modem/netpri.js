@@ -38,12 +38,27 @@ function loadWidgetFlags() {
 		/* Карточки берём ТОЛЬКО из секций. Умолчания (YouTube, SSClash) заведены
 		   реальными секциями при установке (uci-defaults/seed_widgets.sh), поэтому
 		   видны и правятся в настройках; удалил все - значит пусто, без «магии». */
+		/* Дедуп по хосту: две pingwidget-секции с одним host (напр. дубль
+		   youtube.com из ручного добавления поверх посеянной) давали ДВЕ
+		   одинаковые карточки. Оставляем первую. */
+		var _seenH = {};
 		_pingWidgets = (uci.sections('5gmodem', 'pingwidget') || []).map(function(s) {
 			return { host: String(s.host || '').trim(), mode: s.mode || 'click' };
-		}).filter(function(w) { return w.host; });
+		}).filter(function(w) {
+			if (!w.host) { return false; }
+			var k = w.host.toLowerCase();
+			if (_seenH[k]) { return false; }
+			_seenH[k] = 1; return true;
+		});
+		/* Аналогично для сервис-карточек (два одинаковых service -> дубль). */
+		var _seenS = {};
 		_svcWidgets = (uci.sections('5gmodem', 'svcwidget') || []).map(function(s) {
 			return String(s.service || '').trim();
-		}).filter(Boolean);
+		}).filter(function(v) {
+			if (!v) { return false; }
+			if (_seenS[v]) { return false; }
+			_seenS[v] = 1; return true;
+		});
 	});
 }
 function effectiveSvcs() { return _svcWidgets; }
@@ -437,33 +452,44 @@ function runSpeedtest() {
    веб-админку. Детект (наличие/порт/схема) - в ssclash.sh. Пробуем ОДИН раз;
    при находке дёргаем redraw, чтобы кнопка появилась без ожидания следующего
    тика поллинга. */
-var _ssclash = { present: false, port: 9091, scheme: 'http', version: '' };
-/* Warm-seed из localStorage: с ним кнопка SSClash есть уже В ПЕРВОМ КАДРЕ
-   warm-render'а (см. lastList), а не «выпрыгивает» после детекта. Детект ниже
-   лишь подтверждает: сервис пропал - кнопка уберётся и из кэша, и с экрана. */
-try {
-	var _sscSeed = JSON.parse(window.localStorage.getItem('netpri-ssclash') || 'null');
-	if (_sscSeed && _sscSeed.present) { _ssclash = _sscSeed; }
-} catch (e) {}
-var _ssclashProbed = false;
-function ssclashInit(redraw) {
-	/* Сервис уже известен из кэша - точку опрашиваем сразу, не дожидаясь detect. */
-	if (_ssclash.present) { ssclashStatusInit(); }
-	if (_ssclashProbed) { return; }
-	_ssclashProbed = true;
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'detect' ]), '').then(function(out) {
+/* ДВЕ НЕЗАВИСИМЫЕ ветки SSClash, каждая - своя карточка (могут стоять обе сразу:
+   5.x нередко ставят поверх 4.7). Свидджет 'ssclash' -> ветка go (SSClash-Go 5.x),
+   свидджет 'clash' -> ветка legacy (luci-app-ssclash 4.7.x). Состояние, кэш и
+   опрос статуса - раздельные по ветке. */
+var _sscDefault = {
+	go:     { present: false, port: 9091, scheme: 'http', version: '', path: '/'   },
+	legacy: { present: false, port: 9090, scheme: 'http', version: '', path: '/ui/' }
+};
+var _ssc = { go: Object.assign({}, _sscDefault.go), legacy: Object.assign({}, _sscDefault.legacy) };
+/* Warm-seed из localStorage (по ветке): карточка есть уже в первом кадре. */
+['go', 'legacy'].forEach(function(k) {
+	try {
+		var s = JSON.parse(window.localStorage.getItem('netpri-ssclash-' + k) || 'null');
+		if (s && s.present) { _ssc[k] = s; }
+	} catch (e) {}
+});
+/* svcwidget -> ветка. 'clash' = старый 4.7 (сервис так и зовётся), 'ssclash' = 5.x. */
+function sscKindForSvc(svc) { return svc === 'clash' ? 'legacy' : (svc === 'ssclash' ? 'go' : null); }
+
+var _sscProbed = { go: false, legacy: false };
+function ssclashInit(kind, redraw) {
+	var st = _ssc[kind];
+	if (st.present) { ssclashStatusInit(kind); }   // из кэша - точку опрашиваем сразу
+	if (_sscProbed[kind]) { return; }
+	_sscProbed[kind] = true;
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'detect', kind ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j && j.present) {
-			_ssclash = { present: true, port: (j.port || 9091), scheme: (j.scheme || 'http'),
-				version: (j.version || ''), running: _ssclash.running };
-			try { window.localStorage.setItem('netpri-ssclash', JSON.stringify(_ssclash)); } catch (e) {}
-			ssclashStatusInit();
+			_ssc[kind] = { present: true, port: (j.port || _sscDefault[kind].port),
+				scheme: (j.scheme || 'http'), version: (j.version || ''),
+				path: (j.path || _sscDefault[kind].path), kind: kind, running: st.running };
+			try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
+			ssclashStatusInit(kind);
 			if (typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		} else {
-			var _had = _ssclash.present;
-			_ssclash = { present: false, port: 9091, scheme: 'http', version: '' };
-			try { window.localStorage.removeItem('netpri-ssclash'); } catch (e) {}
-			/* Кнопка была нарисована из кэша, а сервис удалили - перерисовать без неё. */
+			var _had = st.present;
+			_ssc[kind] = Object.assign({}, _sscDefault[kind]);
+			try { window.localStorage.removeItem('netpri-ssclash-' + kind); } catch (e) {}
 			if (_had && typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		}
 	});
@@ -479,23 +505,28 @@ var SSCLASH_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
 	'<circle cx="18" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
 	'<circle cx="6" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
 	'<circle cx="18" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/></svg>';
-function ssClashBtn() {
+function ssClashBtn(kind) {
+	var st = _ssc[kind];
 	var host = window.location.hostname;
-	var url = _ssclash.scheme + '://' + host + ':' + _ssclash.port + '/';
+	// Путь зависит от ветки: SSClash-Go отдаёт админку в корне ("/"), а legacy
+	// 4.7 - через external-ui самого clash ("/ui/"). См. ssclash.sh detect.
+	var url = st.scheme + '://' + host + ':' + st.port + (st.path || '/');
 	var ic = E('span', { 'class': 'netpri-ssclash-ic' });
 	ic.innerHTML = SSCLASH_ICON;
 	/* Три строки, как у карточек «Приоритета интернета»: версия сверху, имя с
 	   значком по центру, IP роутера снизу (совпадает с целью ссылки). */
 	/* Точка состояния после «SSClash». Начальный цвет - из последнего известного
-	   (_ssclash.running, переживает в localStorage), опрос ниже освежает. */
-	var dot = E('span', { 'class': 'netpri-svcdot ' + (_ssclash.running ? 'on' : 'off'),
-		'title': _ssclash.running ? _('SSClash is running') : _('SSClash is stopped') });
+	   (st.running, переживает в localStorage), опрос ниже освежает. Адресуем точку
+	   по data-ssckind, чтобы опрос красил именно ЭТУ карточку (их может быть две). */
+	var dot = E('span', { 'class': 'netpri-svcdot ' + (st.running ? 'on' : 'off'),
+		'title': st.running ? _('SSClash is running') : _('SSClash is stopped') });
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-ssclash',
-		'data-tooltip': _('Open the SSClash-Go admin panel in a new tab'),
+		'data-ssckind': kind,
+		'data-tooltip': _('Open the SSClash admin panel in a new tab'),
 		'click': function() { window.open(url, '_blank', 'noopener'); }
 	}, [
-		E('span', { 'class': 'netpri-sub' }, _ssclash.version || 'SSClash-Go'),
+		E('span', { 'class': 'netpri-sub' }, st.version || 'SSClash'),
 		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, 'SSClash') ]),
 		E('span', { 'class': 'netpri-ip' }, host)
 	]);
@@ -616,25 +647,27 @@ function svcStatusInit(services) {
 	poll.add(tick, 5);
 }
 
-/* Живой опрос состояния сервиса SSClash - красит точку(и) в карточке. */
-var _svcPolling = false;
-function updateSvcDots() {
-	var cls = _ssclash.running ? 'on' : 'off';
-	var tip = _ssclash.running ? _('SSClash is running') : _('SSClash is stopped');
-	document.querySelectorAll('.netpri-svcdot').forEach(function(d) {
+/* Живой опрос состояния сервиса SSClash - красит точку ИМЕННО этой ветки-карточки
+   (по data-ssckind: карточек может быть две, у каждой свой сервис). */
+function updateSscDot(kind) {
+	var st = _ssc[kind];
+	var cls = st.running ? 'on' : 'off';
+	var tip = st.running ? _('SSClash is running') : _('SSClash is stopped');
+	document.querySelectorAll('.netpri-ssclash[data-ssckind="' + kind + '"] .netpri-svcdot').forEach(function(d) {
 		d.classList.remove('on', 'off'); d.classList.add(cls); d.title = tip;
 	});
 }
-function ssclashStatusInit() {
-	if (_svcPolling) { return; }
-	_svcPolling = true;
+var _sscPolling = { go: false, legacy: false };
+function ssclashStatusInit(kind) {
+	if (_sscPolling[kind]) { return; }
+	_sscPolling[kind] = true;
 	var tick = function() {
-		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'status' ]), '')
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'status', kind ]), '')
 			.then(function(out) {
 				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
-				_ssclash.running = !!j.running;
-				try { window.localStorage.setItem('netpri-ssclash', JSON.stringify(_ssclash)); } catch (e) {}
-				updateSvcDots();
+				_ssc[kind].running = !!j.running;
+				try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
+				updateSscDot(kind);
 			});
 	};
 	tick();
@@ -704,6 +737,8 @@ function operatorIcon(name) {
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
 	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2' || n.indexOf('t2 ') == 0 || n.indexOf(' t2') >= 0) { return 'op-t2'; }
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
+	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
+	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
 	return null;
 }
 
@@ -985,7 +1020,11 @@ function buildBar(list, redraw) {
 	if (_widgets.status) { _pingWidgets.forEach(function(w) { right.push(pingCard(w)); }); }
 	if (_widgets.services) {
 		effectiveSvcs().forEach(function(svc) {
-			if (svc === 'ssclash') { if (_ssclash.present) { right.push(ssClashBtn()); } }
+			// 'ssclash' -> карточка SSClash-Go 5.x, 'clash' -> карточка старого
+			// luci-app-ssclash 4.7.x. Ветки НЕЗАВИСИМЫ (обе могут стоять сразу).
+			// Если нужная ветка не найдена - обычная сервис-карточка.
+			var _sk = sscKindForSvc(svc);
+			if (_sk && _ssc[_sk].present) { right.push(ssClashBtn(_sk)); }
 			else { right.push(svcCard(svc)); }
 		});
 	}
@@ -1045,7 +1084,8 @@ return baseclass.extend({
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit(redraw); }
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); }
+				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); }
 				svcStatusInit(_svcs);
 			}
 		});
@@ -1082,7 +1122,8 @@ return baseclass.extend({
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit(redraw); }
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); }
+				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); }
 				svcStatusInit(_svcs);
 			}
 			/* Keep the bar live with a steady poll: the operator name (bounded

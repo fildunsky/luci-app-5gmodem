@@ -182,7 +182,30 @@ if [ "$MODE" = "hard" ]; then
 	# Редирект нужен НА подоболочке (см. ветку power выше): иначе она наследует
 	# пайпы rpcd и держит их, пока sms_tool ждёт ответа от исчезнувшего порта, -
 	# rpcd досиживает до таймаута, и «фон» не спасает от «ошибки XHR».
+	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+	_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	( sms_tool -d "$PORT" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
+	# ФАНТОМНАЯ СЕССИЯ ПОСЛЕ РЕБУТА. После CFUN=1,1 модем переэнумерируется на USB,
+	# НО у fibocom/xmm/ecm сетевое устройство (RNDIS/CDC) не отваливается -> netifd
+	# считает интерфейс всё ещё поднятым и после возврата модема НЕ передозванивается.
+	# Интерфейс висит со старым IP и мёртвой сессией (проверено вживую: uptime
+	# интерфейса не сбрасывался, IP прежний, CGACT/пинг — Network unreachable), из-за
+	# чего казалось, что модем вовсе не перезагрузился. Сторож ждёт, пока модем реально
+	# исчезнет и вернётся по USB-пути, и форсит down+up: down рвёт прото (teardown),
+	# up запускает НОВЫЙ дозвон. ifup здесь мало — на «поднятом» интерфейсе это no-op.
+	if [ -n "$IF" ] && [ -n "$_AMP" ]; then
+	( eval "exec $AT_LOCK_FD>&-"    # не держим AT-замок весь долгий ожидания
+	  _n=0
+	  while [ "$_n" -lt 40 ] && [ -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
+	  _n=0
+	  while [ "$_n" -lt 100 ] && [ ! -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
+	  [ -e "/sys/bus/usb/devices/$_AMP" ] || exit 0   # модем не вернулся - нечего дозванивать
+	  sleep 8                        # дать resolve-hotplug перепривязать порты после переэнумерации
+	  ubus call "network.interface.$IF" down >/dev/null 2>&1
+	  sleep 3
+	  ubus call "network.interface.$IF" up >/dev/null 2>&1 || ifup "$IF" >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
+	fi
 else
 	# Soft radio restart (CFUN=4 -> CFUN=1): no USB re-enumeration, the port
 	# stays. This drops the data bearer, so nudge the app's interface back up

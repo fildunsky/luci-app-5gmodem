@@ -223,10 +223,16 @@ if [ "$_VIA" = qmi ]; then
 	_WDM=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].wdm[0]" 2>/dev/null)
 	[ -n "$_WDM" ] && [ -e "$_WDM" ] || { echo '{"error":"no qmi device"}'; exit 0; }
 	# qmicli без ограничения по времени виснет на занятом/мёртвом канале, а нас
-	# зовёт rpcd со своим 30-секундным таймаутом.
+	# зовёт rpcd со своим 30-секундным таймаутом. Поэтому ниже ждём его с kill -9.
+	# ВАЖНО: ходим ТОЛЬКО через qmi-proxy (-p). Прямой qmicli, убитый по kill -9,
+	# НЕ освобождает выделенный на модеме QMI client-ID - утечка. Копясь, они
+	# исчерпывают пул ('QMI protocol error (5): ClientIdsExhausted'), и тогда
+	# ModemManager перестаёт инициализировать модем ('unknown-capabilities'):
+	# у Compal это ломало и данные, и управление диапазонами. С -p клиент держит
+	# ПРОКСИ, а не наш процесс: убийство qmicli пул не трогает.
 	_q() {
 		_qo="/tmp/5gmodem_uim.$$"
-		qmicli -d "$_WDM" "$@" > "$_qo" 2>&1 &
+		qmicli -d "$_WDM" -p "$@" > "$_qo" 2>&1 &
 		_qp=$!
 		( sleep 20; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
 		_qw=$!

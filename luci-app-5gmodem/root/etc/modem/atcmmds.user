@@ -7,9 +7,12 @@ CUSTOMER ➜ AT^CUSTOMER?;AT^CUSTOMER?
 Скорость USB ➜ AT^USBTYPE?;AT^USBTYPE?
 Отладка ➜ AT^DEBUG?;AT^DEBUG?
 Перезагрузка ➜ AT+CFUN=1,1;AT+CFUN=1,1
+Прочитать номер SIM ➜ AT+CPBS="ON";AT+CPBS="ON";AT+CNUM
+Записать номер на SIM ➜ AT+CSCS="IRA";+CPBS="ON";+CPBW=1,"+79876543210",145,"Number"
+# Compal RXM-G1
 Аггрегации Compal ➜ AT+LCAINFO;AT+LCAINFO
 Качество сигнала Compal ➜ AT+CESQ;AT+CESQ
 Инфа о БС + Сигнал Compal ➜ AT+BINFO;AT+BINFO;AT+CESQ
-Прочитать номер SIM ➜ AT+CPBS="ON";AT+CPBS="ON";AT+CNUM
-Записать номер на SIM ➜ AT+CSCS="IRA";+CPBS="ON";+CPBW=1,"+79876543210",145,"Number"
-
+Compal MBIM 05c6:90d5 ➜ AT+USBCOMP=USER;AT+USBCOMP=USER
+Compal QMI 05c6:9025 ➜ AT+USBCOMP=RNDIS;AT+USBCOMP=RNDIS
+Compal QMI 1e2d:00b7 ➜ AT+USBCOMP=DEBUG;AT+USBCOMP=DEBUG

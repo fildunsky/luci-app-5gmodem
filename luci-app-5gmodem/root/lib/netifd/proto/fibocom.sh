@@ -225,9 +225,24 @@ proto_fibocom_setup() {
 	# bands: the still-active bearer is on the reset-to-all mask, not the saved one.
 	local ip="" try
 	if [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
-		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
-		[ "$ip" = "0.0.0.0" ] && ip=""
+		# Переиспользуем живой контекст, ТОЛЬКО если он на нашем APN. FM350 сам
+		# активирует контекст 1 при загрузке/смене SIM с ТЕМ APN, что был прошит
+		# последним (напр. "internet.tele2.ru" от прежней eSIM). Если autoapn затем
+		# подобрал новый APN для новой симки, fast path без этой сверки радостно
+		# переиспользовал бы СТАРЫЙ bearer и новый APN не применился бы никогда -
+		# ровно баг «остался старый APN от eSIM» после смены на физ. Мегафон.
+		# apn пуст = роуминг / «пусть решает сеть»: там сверять нечего, переиспользуем
+		# что есть (иначе рвали бы lossless-переключение приоритета на каждом ifup).
+		local cur_apn
+		cur_apn=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+CGDCONT: *1,"[^"]*","\([^"]*\)".*/\1/p' | head -1)
+		if [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; then
+			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
+				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
+			[ "$ip" = "0.0.0.0" ] && ip=""
+		else
+			echo "fibocom[$$] активный APN «$cur_apn» != настроенного «$apn» - холодный дозвон"
+		fi
 	fi
 
 	# COLD DIAL: define the APN, activate the PDP context and read the assigned

@@ -201,6 +201,13 @@ model_for() {
 	sec=$(modem_section "$1")
 	if [ -n "$sec" ]; then
 		_m=$(uci -q get "5gmodem.$sec.model")
+		# Отсекаем ЧУЖУЮ/устаревшую модель, осевшую в секции от ПРЕЖНЕГО модема на
+		# этом же USB-пути (опрос пишет model только активному, у неактивного она
+		# висит вечно). Живой баг: "Compal RXM-G1" осел в секции FM350 (0e8d), и
+		# FM350 показывался вторым «Compal» и в табах, и здесь в приоритетах.
+		if [ -n "$_m" ] && [ -n "$vidpid" ] && ! _model_vendor_ok "$_m" "$vidpid"; then
+			_m=""
+		fi
 		[ -n "$_m" ] && { echo "$_m"; return; }
 	fi
 	if [ -z "$prod" ] && [ -n "$sec" ]; then prod=$(uci -q get "5gmodem.$sec.product"); fi

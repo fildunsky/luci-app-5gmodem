@@ -108,6 +108,13 @@ inhibit_pass() {
 		kill -0 "$(cat "$pf" 2>/dev/null)" 2>/dev/null || rm -f "$pf"
 	done
 	_restore_stolen
+	# QMI-пул client-ID мог исчерпаться (утечки убитых прямых вызовов, повторы MM):
+	# у Compal/SDX55 он ~6, и тогда MM не инициализирует модем ('unknown-capabilities')
+	# - нет ни данных, ни управления бендами. Проверяем активный модем и при
+	# исчерпании сбрасываем его (AT+CFUN=1,1, не чаще раза в 3 мин). Дёшево - один
+	# qmicli -p за проход; для не-QMI модема (FM350) helper молча выходит.
+	_am=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	[ -n "$_am" ] && "$RES/qmi-recover.sh" recover "$_am" >/dev/null 2>&1
 	# Держать MM запущенным ради ОТСУТСТВУЮЩЕГО модема незачем - именно он
 	# при старте и хватает чужие модемы. Решение принимает mmneed.sh.
 	"$RES/mmneed.sh" apply >/dev/null 2>&1

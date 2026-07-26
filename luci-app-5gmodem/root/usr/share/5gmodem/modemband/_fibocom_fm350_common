@@ -30,6 +30,12 @@ _fm350_caps() {   # $1 = lte | nr ; печатает список диапазо
     fi
     [ -s "$_cf" ] || return 1
     case "$1" in
+        umts)
+            # 5-я группа GTACT? = UMTS, значения 1..10 (BAND_UMTS_I..X) БЕЗ префикса.
+            for v in $(sed -n '5p' "$_cf" | tr -d '()' | tr ',' ' '); do
+                case "$v" in [1-9]|10) echo "$v" ;; esac
+            done | sort -n | xargs
+            ;;
         lte)
             for v in $(sed -n '6p' "$_cf" | tr -d '()' | tr ',' ' '); do
                 case "$v" in 1[0-9][0-9]) echo "$((v - 100))" ;; esac
@@ -162,6 +168,72 @@ setbands() {
         MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}'| xargs)
         sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
     fi
+}
+
+# --- Диапазоны 3G (UMTS/WCDMA) через GTACT --------------------------------
+# UMTS-бенды в GTACT кодируются значениями 1..10 (BAND_UMTS_I..X), БЕЗ префикса
+# (LTE=1xx, NR=5xx). FM350 поддерживает B1/2/4/5/8. Note 5 мануала: смена бендов
+# одного RAT не трогает другие. Отдаём МАСКОЙ (галочки, как LTE/NR - GTACT
+# принимает произвольный набор), а НЕ готовыми комбинациями (то для Telit).
+# Показываем ТОЛЬКО когда активный режим включает WCDMA (rat 1/4/16/20; Auto=>20),
+# иначе GTACT отвергнет UMTS-бенды (CME - «чужой для rat бенд», см. setmode).
+
+# Текущая строка GTACT? с кэшем НА ПРОЦЕСС: за одну json-сборку 3G-функции
+# (supported/enabled/rat-check) звались бы по разу каждая, и лишние AT-запросы
+# конкурировали бы за общий порт с остальным опросом (enabled3g терялся). Одна
+# команда на процесс. Set-операции идут ОТДЕЛЬНЫМ вызовом => кэш им не мешает.
+_fm350_act() {
+    if [ -z "$_ACT_CACHE" ]; then
+        _ACT_CACHE=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
+            | sed -n 's/^+GTACT: *//p' | head -1)
+        [ -n "$_ACT_CACHE" ] || _ACT_CACHE="_none_"
+    fi
+    [ "$_ACT_CACHE" = "_none_" ] && return 1
+    echo "$_ACT_CACHE"
+}
+
+_fm350_rat_has_umts() {
+    case "$(_fm350_act | cut -d, -f1)" in 1|4|16|20) return 0 ;; *) return 1 ;; esac
+}
+
+# Стиль 3G: mask = галочки (произвольный набор), combo = готовые комбинации
+# (Telit). json-билдер по этому флагу выбирает поля (supported3g/enabled3g либо
+# combos3g/current3g).
+bands3g_style() { echo "mask"; }
+
+getsupportedbands3g() {
+    _fm350_rat_has_umts || return       # пусто -> строку 3G скрыть
+    _fm350_caps umts
+}
+
+getbands3g() {
+    _fm350_rat_has_umts || return
+    LINE=$(_fm350_act) || return
+    # UMTS-бенды - в ХВОСТЕ (после rat,pref1,pref2); значения 1..10. Первые три
+    # поля пропускаем: там rat/pref могут совпасть по числу с номером бенда.
+    for b in $(echo "$LINE" | cut -d, -f4- | tr ',' ' '); do
+        case "$b" in [1-9]|10) printf '%s ' "$b" ;; esac
+    done
+    echo ""
+}
+
+setbands3g() {
+    _fm350_rat_has_umts || return
+    BANDS="$1"
+    T=""
+    if [ "$BANDS" = "default" ]; then
+        T=$(_fm350_caps umts | tr ' ' ',')     # все поддерживаемые UMTS-бенды
+    else
+        for b in $BANDS; do
+            case "$b" in ''|*[!0-9]*) continue ;; esac
+            [ -n "$T" ] && T="${T},"
+            T="${T}${b}"
+        done
+    fi
+    case "$T" in ''|*[!0-9,]*) return ;; esac
+    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
+    MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | xargs)
+    sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
 }
 
 getsupportedbands5gsa() {

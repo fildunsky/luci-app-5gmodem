@@ -184,7 +184,15 @@ _model_vendor_ok() {   # $1 - модель, $2 - vidpid
 	case "$_mv_low" in *"$_mv_want"*) return 0 ;; esac
 	# Имя вендора в строке вообще не названо - тоже не судим: многие модемы
 	# отдают голую модель ("RM520N-GL", "E3372"), и это нормально.
-	for _mv_other in fibocom huawei telit quectel zte cinterion meiglink simcom; do
+	#
+	# compal/foxconn/thales/dell - НАШИ синтезированные дружелюбные имена (см.
+	# профиль modem/usb/05c690d6: MODEL="Compal RXM-G1"). Сам Qualcomm-модем ходит
+	# под 05c6, который выше (return 0) не судим, так что своё имя он сохранит. Но
+	# если такое имя по ошибке протекло в секцию модема ДРУГОГО вендора (живой
+	# баг: "Compal RXM-G1" осел в секции Fibocom 0e8d после свопа и FM350 стал
+	# показываться вторым «Compal» в табах) - вот это ловим и не пишем/не показываем.
+	for _mv_other in fibocom huawei telit quectel zte cinterion meiglink simcom \
+	                 compal foxconn thales dell; do
 		[ "$_mv_other" = "$_mv_want" ] && continue
 		case "$_mv_low" in *"$_mv_other"*) return 1 ;; esac
 	done

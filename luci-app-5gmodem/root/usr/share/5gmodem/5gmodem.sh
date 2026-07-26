@@ -880,7 +880,11 @@ else
 	# Ответ CRSM у разных модемов: с кавычками ("...") у Compal, БЕЗ кавычек у
 	# Telit LM960 (+CRSM: 144,0,00542D...). Убираем кавычки и берём hex после
 	# двух статус-байтов (sw1,sw2,), чтобы работало в обоих форматах.
-	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r"' \
+	# tr убирает ПРОБЕЛЫ тоже: FM350 отвечает "+CRSM: 144, 0, \"00...\"" с пробелами
+	# после запятых, и sed ниже (hex сразу за третьей запятой) без этого не
+	# матчился - SPN на FM350 всегда выходил пустым, и бренд/имя eSIM-профиля
+	# (напр. "GigSky") подменялся IMSI-фолбэком.
+	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r" ' \
 		| sed -n 's/.*+CRSM:[^,]*,[^,]*,\([0-9A-Fa-f][0-9A-Fa-f]*\).*/\1/p')
 	if [ -n "$SPNHEX" ]; then
 		# первый байт - условие отображения, пропускаем; далее имя (GSM7/ASCII)
@@ -1235,6 +1239,10 @@ cat <<EOF
 "csq":"$(sanitize_number "$CSQ")",
 "signal":"$(sanitize_number "$CSQ_PER")",
 "operator_name":"$(sanitize_string "$COPS")",
+"home_operator":"$(sanitize_string "$HOME_OP")",
+"home_mcc":"$(sanitize_string "$HOME_MCC")",
+"home_mnc":"$(sanitize_string "$HOME_MNC")",
+"roaming":"$([ "$IS_ROAMING" = 1 ] && echo 1 || echo 0)",
 "phone":"$(sanitize_string "$PHONE")",
 "operator_mcc":"$(sanitize_string "$COPS_MCC")",
 "operator_mnc":"$(sanitize_string "$COPS_MNC")",
@@ -1537,15 +1545,44 @@ fi
 IFPROTO=$(uci -q get "network.$SEC.proto")
 [ -n "$IFPROTO" ] && PROTO="$IFPROTO"
 
-# Брендовое имя оператора с SIM (SPN) применяем В КОНЦЕ - после модем-скриптов,
-# которые могли перезаписать COPS именем хост-сети (напр. Telit ставит "Tele2
-# RU", тогда как на SIM записан бренд MVNO "T-Mobile").
-[ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
+# --- Оператор: домашний (SIM/eSIM) и гостевой (сеть) -------------------------
+# COPS сейчас = ГОСТЕВАЯ сеть (напр. Tele2). Домашнее имя: приоритет SPN (EF_SPN
+# - имя провайдера, у eSIM это активный профиль, напр. "GigSky"), фолбэк - IMSI
+# MCC/MNC -> mccmnc.dat. Домашний MCC/MNC берём из IMSI.
+VISITED_COPS="$COPS"
+HOME_MCC=""; HOME_MNC=""; HOME_OP=""
+if [ -n "$SIMID" ] && [ "${#SIMID}" -ge 5 ]; then
+	HOME_MCC=$(printf '%s' "$SIMID" | cut -c1-3)
+	_hm3=$(printf '%s' "$SIMID" | cut -c4-6)
+	_hm2=$(printf '%s' "$SIMID" | cut -c4-5)
+	# MNC 2 или 3 цифры - пробуем 6-значный ключ, затем 5-значный.
+	if grep -q "^${HOME_MCC}${_hm3};" "$RES/mccmnc.dat" 2>/dev/null; then
+		HOME_MNC="$_hm3"
+	else
+		HOME_MNC="$_hm2"
+	fi
+	HOME_OP=$(awk -F';' '$1=="'"${HOME_MCC}${HOME_MNC}"'"{print $3; exit}' "$RES/mccmnc.dat")
+fi
+# Имя из профиля eSIM (SPN) - высший приоритет, перебивает IMSI-фолбэк.
+[ -n "$SPN_NAME" ] && HOME_OP="$SPN_NAME"
 
-# Выверенный вручную бренд MVNO из apn.list по IMSI - последним словом. SPN есть
-# не у всех (и бывает мусором "T0"), а сеть отдаёт хост-оператора (Tele2); наш
-# список знает, что за кодом 250-62 стоит T-Mobile. Пусто - оставляем как есть.
-_ob=$(opname_brand "$SIMID") && COPS="$_ob"
+# Роуминг по коду регистрации (5=registered roaming, 7=SMS-only roaming, 10).
+IS_ROAMING=0
+case "$REG" in 5|7|10) IS_ROAMING=1 ;; esac
+
+if [ "$IS_ROAMING" = "1" ]; then
+	# В роуминге COPS оставляем ГОСТЕВЫМ (не перетираем домашним брендом): UI
+	# покажет "Домашний | Гостевой" и возьмёт иконку от домашнего. Домашнее имя
+	# уходит отдельным полем home_operator.
+	COPS="$VISITED_COPS"
+else
+	# Дома: домашний бренд ПОВЕРХ хост-сети (MVNO: "T-Mobile" вместо "Tele2").
+	# SPN применяем ПОСЛЕ модем-скриптов (Telit ставит "Tele2 RU"), затем
+	# выверенный бренд из apn.list по IMSI. home_operator дома не нужен.
+	[ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
+	_ob=$(opname_brand "$SIMID") && COPS="$_ob"
+	HOME_OP=""
+fi
 
 # MSISDN (номер телефона) - универсальный фолбэк для ВСЕХ модемов. AT+CNUM выше
 # отдаёт номер на AT-модемах; если он пуст, а модем управляется ModemManager
@@ -1705,9 +1742,15 @@ op_cache_iface() {
 	[ -n "$_s" ] || { printf '%s' "$SEC"; return; }
 	uci -q get "5gmodem.$_s.network"
 }
-if [ -n "$SEC" ] && [ -n "$COPS" ] && ! echo "$COPS" | grep -qE '^[0-9 ]*$'; then
+# Имя для «Приоритета интернета»: этот виджет опознаёт УПЛИНК/симку, а не текущую
+# сеть, поэтому в роуминге пишем ДОМАШНЕГО оператора (бренд симки/eSIM-профиля,
+# напр. "GigSky"), а не гостевую сеть (Tele2) - иначе там висели бы «местные»
+# оператор и иконка. Дома HOME_OP пуст -> обычный COPS.
+_OPNAME="$COPS"
+[ "$IS_ROAMING" = "1" ] && [ -n "$HOME_OP" ] && _OPNAME="$HOME_OP"
+if [ -n "$SEC" ] && [ -n "$_OPNAME" ] && ! echo "$_OPNAME" | grep -qE '^[0-9 ]*$'; then
 	OPIF=$(op_cache_iface)
-	[ -n "$OPIF" ] && printf '%s' "$COPS" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
+	[ -n "$OPIF" ] && printf '%s' "$_OPNAME" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
 fi
 
 # ПРОЦЕНТ СИГНАЛА ИЗ RSRP, КОГДА +CSQ БЕСПОЛЕЗЕН.

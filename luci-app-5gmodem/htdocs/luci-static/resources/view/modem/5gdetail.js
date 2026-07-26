@@ -146,10 +146,10 @@ document.head.append(E('style', {'type': 'text/css'},
   flex: 0 0 auto;
 }
 
-/* Иконка-индикатор роуминга (croaming.svg), перед статусом «В сети». */
+/* Индикатор роуминга - символ ® перед статусом «В сети» (как «R» на телефоне). */
 .tginfo-roam {
-  display: inline-block; width: .75em; height: .75em; margin-right: .3em;
-  vertical-align: 0; flex: 0 0 auto;
+  display: inline-block; margin-right: .25em; font-weight: 700;
+  vertical-align: baseline; flex: 0 0 auto; opacity: .85;
 }
 
 /* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц
@@ -544,6 +544,68 @@ function rssi_bar(v, m) { metricBar('rssi', v, 'dBm', [ -113, -100, -85, -70, -5
 function rsrp_bar(v, m) { metricBar('rsrp', v, 'dBm', [ -125, -100, -90, -80, -70 ]); }
 function rsrq_bar(v, m) { metricBar('rsrq', v, 'dB',  [ -23,  -20, -15, -10, -3  ]); }
 function sinr_bar(v, m) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30  ]); }
+/* 3G: RSCP (сила кода, dBm) и Ec/No (качество, dB). Пороги по общепринятым
+   уровням UMTS: RSCP хуже -105 = плохо, лучше -75 = отлично; Ec/No хуже -16 =
+   плохо, лучше -6 = отлично. */
+function rscp_bar(v, m) { metricBar('rscp', v, 'dBm', [ -115, -105, -95, -85, -75 ]); }
+function ecio_bar(v, m) { metricBar('ecio', v, 'dB',  [ -20,  -16, -10, -6,  0  ]); }
+
+/* Телефонный ярлык технологии: LTE->4G, LTE-A->4G+, HSPA->H+, HSDPA/HSUPA->H,
+   UMTS/WCDMA->3G, EDGE->E, GPRS/GSM->2G, 5G остаётся 5G. Меняем ТОЛЬКО ведущий
+   токен, суффикс с диапазонами ("| B1 + B40 / B7") сохраняем как есть. Правим
+   лишь ОТОБРАЖЕНИЕ: сырой json.mode не трогаем - от него зависят и разбор
+   диапазонов, и ссылка на карту вышек (там ищутся 'LTE'/'HSPA'/'UMTS'). */
+function ratLabel(mv) {
+	if (!mv) { return mv; }
+	var reps = [
+		[/^5G[ \-]?SA\b/i,  '5G'],
+		[/^5G[ \-]?NSA\b/i, '5G'],
+		[/^5G\b/i,          '5G'],
+		[/^LTE-A\b/i,       '4G+'],
+		[/^LTE\b/i,         '4G'],
+		[/^HSPA\+/i,        'H+'],
+		[/^HSPA\b/i,        'H+'],
+		[/^HSDPA\b/i,       'H'],
+		[/^HSUPA\b/i,       'H'],
+		[/^UMTS\b/i,        '3G'],
+		[/^WCDMA\b/i,       '3G'],
+		[/^EDGE\b/i,        'E'],
+		[/^GPRS\b/i,        '2G'],
+		[/^GSM\b/i,         '2G']
+	];
+	for (var i = 0; i < reps.length; i++) {
+		if (reps[i][0].test(mv)) { return mv.replace(reps[i][0], reps[i][1]); }
+	}
+	return mv;
+}
+
+/* Частоты диапазонов (МГц). Источник истины - band4g/band5g в 5gmodem.sh (те же
+   данные Wikipedia LTE/NR frequency bands); держим копию здесь, чтобы дописать
+   частоту к диапазону, даже если конкретный модем/путь backend её не проставил.
+   Значения статичны (определения диапазонов не меняются). */
+var BAND_MHZ_4G = {1:2100,2:1900,3:1800,4:1700,5:850,7:2600,8:900,11:1500,12:700,13:700,14:700,17:700,18:850,19:850,20:800,21:1500,24:1600,25:1900,26:850,28:700,29:700,30:2300,31:450,32:1500,34:2000,37:1900,38:2600,39:1900,40:2300,41:2500,42:3500,43:3700,46:5200,47:5900,48:3500,50:1500,51:1500,53:2400,54:1600,65:2100,66:1700,67:700,69:2600,70:1700,71:600,72:450,73:450,74:1500,75:1500,76:1500,85:700,87:410,88:410,103:700,106:900};
+var BAND_MHZ_5G = {1:2100,2:1900,3:1800,5:850,7:2600,8:900,12:700,13:700,14:700,18:850,20:800,24:1600,25:1900,26:850,28:700,29:700,30:2300,34:2100,38:2600,39:1900,40:2300,41:2500,46:5200,47:5900,48:3500,50:1500,51:1500,53:2400,54:1600,65:2100,67:700,70:2000,71:600,74:1500,75:1500,76:1500,77:3700,78:3500,79:4700,80:1800,81:900,82:800,83:700,84:2100,85:700,86:1700,89:850,90:2500,95:2100,96:6000,97:2300,98:1900,99:1600,100:900,101:1900,102:6200,104:6700,105:600,106:900};
+
+/* Как в телефоне: технология телефонным ярлыком, затем " | ", затем диапазоны с
+   частотой - ЕДИНООБРАЗНО и для агрегации, и для одиночной несущей ("4G | B1
+   (2100 MHz)"). Идемпотентна: уже готовые CA-строки ("4G+ | B1 (2100 MHz) + B40
+   (2300 MHz)") не портит. Меняет ТОЛЬКО отображение; сырой json.mode не трогаем. */
+function formatModeDisplay(mv) {
+	if (!mv) { return mv; }
+	var t = ratLabel(mv);
+	var m = t.match(/^(5G|4G\+|4G|H\+|H|3G|2G|E)(\b|\s|$)/);
+	if (!m) { return t; }                       // нераспознанная технология - как есть
+	var label = m[1];
+	var rest = t.slice(m[1].length).replace(/^\s*\|?\s*/, '');   // убрать ведущие пробелы/палку
+	if (!rest) { return label; }                // технология без диапазонов (H+, 3G, ...)
+	// Дописать частоту к «голым» диапазонам (LTE B<n> / NR n<n>), у которых её ещё нет
+	rest = rest.replace(/\bB(\d+)\b(?!\s*\()/g, function(s, n) {
+		return BAND_MHZ_4G[n] ? ('B' + n + ' (' + BAND_MHZ_4G[n] + ' MHz)') : s;
+	}).replace(/\bn(\d+)\b(?!\s*\()/g, function(s, n) {
+		return BAND_MHZ_5G[n] ? ('n' + n + ' (' + BAND_MHZ_5G[n] + ' MHz)') : s;
+	});
+	return label + ' | ' + rest;
+}
 
 /* «Модем перезагружается…» - оверлей со спиннером ПОВЕРХ блока информации модема.
    Смена SIM-слота = полный ребут FM350 с переэнумерацией USB (десятки секунд); без
@@ -1305,7 +1367,8 @@ var bandsReadOnly = false;
 var ledsAvail = false;
 
 function buildBandButtonsNum(supported, enabled, btype) {
-	var pfx = (btype == 'lte') ? 'B' : 'n';
+	// 2G-бенды у Huawei называются по частоте (GSM900/1800), а не "B<n>".
+	var pfx = (btype == '2g') ? 'GSM ' : ((btype == 'lte' || btype == '3g') ? 'B' : 'n');
 	return (supported || []).map(function(n) {
 		n = parseInt(n, 10);
 		return E('button', {
@@ -1671,7 +1734,7 @@ function loadBandsModemband(force) {
 			// опрос (и re-reveal их снова показывает).
 			if (bandSource == 'modemband') { return; }
 			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
-			[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn', 'bandwarnn' ].forEach(function(id) {
+			[ 'modeswn', 'bands2gn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn', 'bandwarnn' ].forEach(function(id) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
 			});
 			// Пояснение «переключите на ModemManager» показываем ТОЛЬКО если
@@ -1703,7 +1766,19 @@ function loadBandsModemband(force) {
 		   тогда строку прячем, как раньше. */
 		var row3g = document.getElementById('bands3gn');
 		var c3g = document.getElementById('bands-3g');
-		if (c3g && j.combos3g && j.combos3g.length) {
+		if (c3g && j.supported3g && j.supported3g.length) {
+			/* MASK-стиль (FM350): галочки произвольного набора, как LTE/NR -
+			   применяются общей кнопкой «Применить», а не по клику. Подписи "B1"
+			   (без частоты, как у LTE), «Авто» не нужна: все галочки = без
+			   ограничения. */
+			if (row3g) { row3g.style.display = ''; }
+			var sup3g = j.supported3g.map(function(o) { return o.band; });
+			var en3g = j.enabled3g || [];
+			if (!sameRender(c3g, sup3g.join(',') + '|' + en3g.join(','))) {
+				c3g.innerHTML = '';
+				if (sup3g.length) { buildBandButtonsNum(sup3g, en3g, '3g').forEach(function(b) { c3g.appendChild(b); }); }
+			}
+		} else if (c3g && j.combos3g && j.combos3g.length) {
 			if (row3g) { row3g.style.display = ''; }
 			/* Пересобираем ТОЛЬКО при изменении (см. sameRender). Строку при этом
 			   показываем всегда - видимость и перерисовка это разные вещи. */
@@ -1727,6 +1802,22 @@ function loadBandsModemband(force) {
 			   utran-диапазоны, строка уже наполнена рабочими тумблерами - гасить
 			   её из-за того, что у AT-профиля нет своих 3G-комбинаций, нельзя. */
 			row3g.style.display = 'none';
+		}
+
+		/* 2G (GSM) диапазоны - галочки (mask-стиль), подписи "GSM 900/1800".
+		   supported2g/enabled2g отдаёт HiLink-ветка bands.sh (Huawei E3372). */
+		var row2g = document.getElementById('bands2gn');
+		var c2g = document.getElementById('bands-2g');
+		if (c2g && j.supported2g && j.supported2g.length) {
+			if (row2g) { row2g.style.display = ''; }
+			var sup2g = j.supported2g.map(function(o) { return o.band; });
+			var en2g = j.enabled2g || [];
+			if (!sameRender(c2g, sup2g.join(',') + '|' + en2g.join(','))) {
+				c2g.innerHTML = '';
+				if (sup2g.length) { buildBandButtonsNum(sup2g, en2g, '2g').forEach(function(b) { c2g.appendChild(b); }); }
+			}
+		} else if (row2g) {
+			row2g.style.display = 'none';
 		}
 
 		var supLte = (j.supported || []).map(function(o) { return o.band; });
@@ -1917,11 +2008,14 @@ function applyBandsReadOnly() {
 
 /* Применить/сбросить диапазоны через modemband */
 function applyBandsModemband(reset) {
-	var lte = [], nsa = [];
+	var lte = [], nsa = [], three = [], two = [];
 	if (!reset) {
 		document.querySelectorAll('#bands-lte .cbi-button-action').forEach(function(b) { lte.push(b.getAttribute('data-band')); });
 		document.querySelectorAll('#bands-nr .cbi-button-action').forEach(function(b) { nsa.push(b.getAttribute('data-band')); });
-		if (!lte.length && !nsa.length) {
+		// 3G/2G только в mask-стиле (data-btype): combos/utran применяются иначе.
+		document.querySelectorAll('#bands-3g .cbi-button-action[data-btype="3g"]').forEach(function(b) { three.push(b.getAttribute('data-band')); });
+		document.querySelectorAll('#bands-2g .cbi-button-action[data-btype="2g"]').forEach(function(b) { two.push(b.getAttribute('data-band')); });
+		if (!lte.length && !nsa.length && !three.length && !two.length) {
 			ui.addNotification(null, E('p', _('Select at least one band')), 'error');
 			return Promise.resolve();
 		}
@@ -1934,9 +2028,16 @@ function applyBandsModemband(reset) {
 	   наблюдалось. Модалка была тем же злом, только ещё и блокирующим. */
 	var hasLte = document.querySelector('#bands-lte .cbi-button') != null;
 	var hasNsa = document.querySelector('#bands-nr .cbi-button') != null;
+	// 3G/2G-маска присутствует только когда есть галочные кнопки (data-btype).
+	var hasThree = document.querySelector('#bands-3g [data-btype="3g"]') != null;
+	var hasTwo = document.querySelector('#bands-2g [data-btype="2g"]') != null;
 	var p = Promise.resolve();
 	if (hasLte) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands', reset ? 'default' : lte.join(' ') ]); }); }
 	if (hasNsa) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', reset ? 'default' : nsa.join(' ') ]); }); }
+	// Снятие ВСЕХ 3G/2G-галочек не применяем (пустой набор = no-op у API/GTACT;
+	// чтобы выключить RAT целиком - режим сети).
+	if (hasThree && (reset || three.length)) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', reset ? 'default' : three.join(' ') ]); }); }
+	if (hasTwo && (reset || two.length)) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands2g', reset ? 'default' : two.join(' ') ]); }); }
 	// Перезапуск радио модема (CFUN=4->1) ТЕПЕРЬ ДЕЛАЕТ САМ bands.sh - внутри той
 	// же фоновой подоболочки, СТРОГО ПОСЛЕ записи маски. Раньше reboot дёргали
 	// отсюда, но setbands фоновая и возвращается мгновенно: перезапуск обгонял
@@ -2120,7 +2221,9 @@ function rebootModem(hard) {
 	   - hard: модем сейчас ПРОПАДЁТ с шины - сразу накрываем блок «Модем»
 	     плашкой с прогрессбаром (как на eSIM при смене профиля); pollData сам
 	     снимет её, когда модем вернётся в сеть. */
-	if (hard) { setModemBusy(_('The modem is restarting…'), 60); }
+	// Полный цикл: ребут+переэнумерация (~40с) + форс down/up передозвона (~30с),
+	// поэтому потолок 90с, иначе прогрессбар «застывал у конца» до передозвона.
+	if (hard) { setModemBusy(_('The modem is restarting…'), 90); }
 	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ hard ? 'hard' : 'soft' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
@@ -2211,6 +2314,8 @@ function operatorIcon(name) {
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
 	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2' || n.indexOf('t2 ') == 0 || n.indexOf(' t2') >= 0) { return 'op-t2'; }
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
+	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
+	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
 	return null;
 }
 
@@ -2411,9 +2516,8 @@ function fillAntPorts(raw, rxdiv) {
    сохраняется в NVRAM и подхватывается при старте. */
 function setBands3gAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
+	// Реконнект (soft) делает САМ bands.sh в фоне после записи - как для setbands.
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function() {
-		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
-	}).then(function() {
 		ui.hideModal();
 		if (ui.addTimeLimitedNotification) {
 			ui.addTimeLimitedNotification(null, E('p', _('3G bands set: %s').format(label)), 5000, 'info');
@@ -2765,13 +2869,23 @@ function applyMetrics(json) {
 
 					if (document.getElementById('operator')) {
 						var view = document.getElementById("operator");
-						if (!json.operator_name.length > 1) { 
-						view.textContent = '-';
+						var _visited = String(json.operator_name || '');
+						var _home = String(json.home_operator || '');
+						// Роуминг: домашний оператор (симки/eSIM-профиля) отличается от
+						// гостевой сети. Показываем "Домашний | Гостевой" (напр.
+						// "GigSky | Tele2"), а иконку рисуем от ДОМАШНЕГО оператора.
+						var _roam = (json.roaming == '1') || json.registration == '5' || json.registration == '7';
+						var _iconName = _visited;
+						if (_visited.length <= 1) {
+							view.textContent = '-';
+						} else if (_roam && _home.length > 1 &&
+						           checkOperatorName(_home).toLowerCase() !== checkOperatorName(_visited).toLowerCase()) {
+							view.textContent = checkOperatorName(_home) + ' | ' + checkOperatorName(_visited);
+							_iconName = _home;
+						} else {
+							view.textContent = checkOperatorName(_visited);
 						}
-						else {
-						view.textContent = checkOperatorName(json.operator_name);
-						}
-						updateSimIcon(json.operator_name);
+						updateSimIcon(_iconName);
 						/* Подсказка на иконке симки - вместе с самой иконкой, но
 						   ТОЛЬКО при изменении: пересборка на каждом тике роняла
 						   высоту и уводила прокрутку (см. sameRender). Значения
@@ -2849,14 +2963,14 @@ function applyMetrics(json) {
 						if (json.registration == '5') {
 							// роуминг: показываем как обычную сеть («В сети»), а факт
 							// роуминга - иконкой croaming.svg перед текстом.
-							view.innerHTML = '<img class="tginfo-roam" src="' + L.resource('icons/croaming.svg') + '" alt="" title="' + _('Roaming') + '">';
+							view.innerHTML = '<span class="tginfo-roam" title="' + _('Roaming') + '">®</span>';
 							view.appendChild(document.createTextNode(_('Online')));
 						}
 						if (json.registration == '6') {
 							view.textContent = _('Registered, only SMS');
 						}
 						if (json.registration == '7') {
-							view.innerHTML = '<img class="tginfo-roam" src="' + L.resource('icons/croaming.svg') + '" alt="" title="' + _('Roaming') + '">';
+							view.innerHTML = '<span class="tginfo-roam" title="' + _('Roaming') + '">®</span>';
 							view.appendChild(document.createTextNode(_('Online, only SMS')));
 						}
 					}
@@ -2866,8 +2980,9 @@ function applyMetrics(json) {
 						var view = document.getElementById("mode");
 						var mv = String(json.mode || '').trim();
 						if (mv && mv != '-') {
-							// валидный режим -> показать (частоты в скобках отдельным span)
-							var mtext = mv.replace(/[&<>]/g, function(c) {
+							// валидный режим -> показать (частоты в скобках отдельным span).
+							// Телефонный ярлык + единый вид "4G | B1 (2100 MHz)".
+							var mtext = formatModeDisplay(mv).replace(/[&<>]/g, function(c) {
 								return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c];
 							});
 							view.innerHTML = mtext.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
@@ -3203,6 +3318,30 @@ function applyMetrics(json) {
 							var rsrq_min = -20;
 							rsrq_bar(json.rsrq + " dB", rsrq_min);
 							}
+						}
+					}
+
+					// 3G-метрики: строки RSCP/Ec-No СПРЯТАНЫ по умолчанию (display:none)
+					// и появляются, только когда модем реально на UMTS/HSPA и отдал
+					// значение. На LTE/5G остаются скрытыми, чтобы не показывать «-».
+					if (document.getElementById('rscpn')) {
+						var row = document.getElementById('rscpn');
+						if (json.rscp && json.rscp != '-' && json.rscp != '') {
+							row.style.display = '';
+							var z = String(json.rscp);
+							rscp_bar(z.includes('dBm') ? z : (z + ' dBm'), -121);
+						} else {
+							row.style.display = 'none';
+						}
+					}
+					if (document.getElementById('ection')) {
+						var row = document.getElementById('ection');
+						if (json.ecio && json.ecio != '-' && json.ecio != '') {
+							row.style.display = '';
+							var z = String(json.ecio);
+							ecio_bar(z.includes('dB') ? z : (z + ' dB'), -24);
+						} else {
+							row.style.display = 'none';
 						}
 					}
 
@@ -3910,13 +4049,17 @@ simDialog: baseclass.extend({
 						}, this))
 					),
 					]),
+				E('tr', { 'class': 'tr', 'id': 'bands2gn', 'style': 'display:none' }, [
+						E('td', { 'class': 'td left', 'width': '33%' }, [ _('2G bands')]),
+						E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-2g' }, [ '-' ]),
+						]),
 				E('tr', { 'class': 'tr', 'id': 'bands3gn', 'style': has3g ? msStyle : 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('3G bands')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-3g' },
 						mmHasModem ? buildBandButtons(mmSup, mmCur, 'utran-') : [ '-' ]),
 					]),
 				E('tr', { 'class': 'tr', 'id': 'bandsn', 'style': msStyle }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('LTE bands')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('4G bands')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-lte' },
 						mmHasModem ? buildBandButtons(mmSup, mmCur, 'eutran-') : [ '-' ]),
 					]),
@@ -4199,6 +4342,32 @@ simDialog: baseclass.extend({
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'rsrq',
+							'class': 'cbi-progressbar',
+							'title': '-'
+							}, E('div')
+						))
+					]),
+				// 3G-метрики. Спрятаны по умолчанию; показываются только на UMTS/HSPA
+				// (строку включает наличие json.rscp / json.ecio в рендере выше).
+				E('tr', { 'id': 'rscpn', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+					_('RSCP'),
+					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Received Signal Code Power, 3G)') ]),
+					]),
+					E('td', { 'class': 'td' }, E('div', {
+							'id': 'rscp',
+							'class': 'cbi-progressbar',
+							'title': '-'
+							}, E('div')
+						))
+					]),
+				E('tr', { 'id': 'ection', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+					_('Ec/No'),
+					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(chip energy to noise ratio, 3G)') ]),
+					]),
+					E('td', { 'class': 'td' }, E('div', {
+							'id': 'ecio',
 							'class': 'cbi-progressbar',
 							'title': '-'
 							}, E('div')

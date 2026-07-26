@@ -44,6 +44,11 @@ fi
 
 esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# Валидаторы модели (_model_vendor_ok): отсекаем чужую/устаревшую модель, осевшую
+# в секции после свопа модема (см. ниже). lib.sh - только определения функций,
+# сорсить дёшево и без побочек.
+[ -r /usr/share/5gmodem/lib.sh ] && . /usr/share/5gmodem/lib.sh
+
 # usb_device sysfs node (has idVendor) that owns a given /dev char device
 owner_node() {
 	b=$(basename "$1")
@@ -137,7 +142,18 @@ for n in $NODES; do
 	# "SimTech, Incorporated" у SimCom. Читаем из uci (это дёшево), AT здесь не
 	# трогаем - скрипт зовётся часто и должен оставаться быстрым.
 	_sec="m_$(echo "$path" | sed 's/[^A-Za-z0-9]/_/g')"
-	model=$(esc "$(uci -q get "5gmodem.$_sec.model" 2>/dev/null)")
+	model=$(uci -q get "5gmodem.$_sec.model" 2>/dev/null)
+	# УСТАРЕВШАЯ/ЧУЖАЯ модель. Опрос пишет model только АКТИВНОМУ модему, поэтому в
+	# секции неактивного она может остаться от ПРЕЖНЕГО модема на этом же USB-пути
+	# (живой баг: "Compal RXM-G1" осел в секции FM350 0e8d, и FM350 показывался
+	# вторым «Compal» в табах и в приоритетах). Если имя называет ДРУГОГО вендора,
+	# чем vid секции - не верим ему и берём дескриптор product (для FM350 = "FM350-GL").
+	if [ -n "$model" ] && command -v _model_vendor_ok >/dev/null 2>&1 \
+	   && ! _model_vendor_ok "$model" "$vid:$pid"; then
+		model=""
+	fi
+	[ -n "$model" ] || model="$(cat "$n/product" 2>/dev/null)"
+	model=$(esc "$model")
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
 	# HiLink от обычного и не предлагает для него AT-возможности.

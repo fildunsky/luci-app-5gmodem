@@ -285,8 +285,19 @@ return view.extend({
 		while (body.firstChild) { body.removeChild(body.firstChild); }
 
 		if (!st.available) {
-			body.appendChild(E('p', { 'class': 'cbi-section-descr' },
-				_('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem')));
+			// Конкретная причина недоступности (backend отдаёт st.reason), чтобы не
+			// гадать «lpac нет ИЛИ не АТ-модем». Для 'noeuicc' сразу просим лог.
+			var msg;
+			if (st.reason === 'nolpac') {
+				msg = _('eSIM management needs the lpac package, which is not installed. Install the lpac build for your platform - see the app README.');
+			} else if (st.reason === 'modemmanager') {
+				msg = _('This modem is on the ModemManager protocol, where eSIM over AT commands is not available. Switch the modem interface to the fibocom / MBIM / QMI protocol to manage eSIM.');
+			} else if (st.reason === 'noeuicc') {
+				msg = _('No eSIM chip (eUICC) answered on this modem. If you are sure it has one, it may be in a USB composition this app does not talk to yet - please report your modem model and its USB ID (vid:pid) so we can add support.');
+			} else {
+				msg = _('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem');
+			}
+			body.appendChild(E('p', { 'class': 'cbi-section-descr' }, msg));
 		}
 		else if (!st.active) {
 			// найти id eSIM-слота (по метке) для кнопки перехода
@@ -445,6 +456,20 @@ return view.extend({
 		]);
 		sel.value = cur;
 
+		// Транспорт APDU к eUICC. Auto: серийные модемы -> AT, mbim/qmi -> тот же
+		// канал cdc-wdm. Для Qualcomm SDX55 (T99W175/MV31-W) eUICC доступен только
+		// по QMI/MBIM, не по AT - там нужен qmi/mbim. Ручной выбор перебивает auto.
+		var apduCur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_apdu') || 'auto');
+		var apduSel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-apdu-sel' }, [
+			E('option', { 'value': 'auto' }, [ _('Auto (recommended)') ]),
+			E('option', { 'value': 'at'   }, [ _('AT (serial - FM350 etc.)') ]),
+			E('option', { 'value': 'qmi'  }, [ _('QMI / libqmi (Qualcomm)') ]),
+			E('option', { 'value': 'uqmi' }, [ _('QMI / uqmi CLI') ]),
+			E('option', { 'value': 'mbim' }, [ _('MBIM') ]),
+			E('option', { 'value': 'bridge' }, [ _('AT bridge (sms_tool)') ]),
+		]);
+		apduSel.value = apduCur;
+
 		return E('details', { 'class': 'esim-set' }, [
 			E('summary', {}, [ _('Settings') ]),
 			E('div', { 'class': 'cbi-value' }, [
@@ -468,6 +493,24 @@ return view.extend({
 					}, [ _('Save') ]),
 					E('div', { 'class': 'cbi-value-description' },
 						_('How lpac talks to the operator server (SM-DP+). "Auto" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate.')),
+				]),
+			]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('eUICC access (APDU)') ]),
+				E('div', { 'class': 'cbi-value-field' }, [
+					apduSel,
+					E('button', {
+						'class': 'btn cbi-button cbi-button-save',
+						'style': 'margin-left:8px',
+						'click': ui.createHandlerFn(this, function() {
+							return fs.exec_direct(ESIM, [ 'setapdu', apduSel.value ]).then(function() {
+								ui.addNotification(null,
+									E('p', _('eUICC access saved')), 'info');
+							});
+						})
+					}, [ _('Save') ]),
+					E('div', { 'class': 'cbi-value-description' },
+						_('How lpac reaches the eSIM chip. "Auto" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT.')),
 				]),
 			]),
 		]);
@@ -999,7 +1042,14 @@ function renderNotifications(list) {
 	var opName = { install: _('Added'), enable: _('Enabled'), disable: _('Disabled'), 'delete': _('Deleted') };
 	box.appendChild(E('div', { 'class': 'esim-notif-h' }, _('Pending operator notifications')));
 	box.appendChild(E('div', { 'class': 'esim-notif-sub' },
-		_('The operator (SM-DP+) should be told about these profile changes. Normally sent automatically; send here if one got stuck (e.g. no internet during the operation).')));
+		_('These are status reports the modem sends to your operator (SM-DP+) after a profile is enabled, disabled or deleted. They normally go out on their own. If some are stuck here (e.g. there was no internet at the time), the safe choice is Send — it is harmless and just confirms the change. Remove only discards a report without sending it. If unsure, you can leave them or press Send all.')));
+	// «Отправить все»: разом дослать и убрать все ожидающие (esim.sh flush =
+	// notification process -a -r). Самое частое действие - выносим наверх.
+	box.appendChild(E('div', { 'style': 'margin-bottom:8px' }, [
+		E('button', { 'class': 'btn cbi-button cbi-button-action',
+			'title': _('Send all pending notifications to the operator, then clear them'),
+			'click': function(ev) { ev.preventDefault(); esimNotifFlush(); } }, [ _('Send all') ])
+	]));
 	list.forEach(function(n) {
 		var op = opName[n.profileManagementOperation] || n.profileManagementOperation || '?';
 		var host = String(n.notificationAddress || '').replace(/^https?:\/\//, '');
@@ -1020,6 +1070,18 @@ function renderNotifications(list) {
 		]));
 	});
 }
+// \u0414\u043e\u0441\u043b\u0430\u0442\u044c \u0438 \u043e\u0447\u0438\u0441\u0442\u0438\u0442\u044c \u0412\u0421\u0415 \u043e\u0436\u0438\u0434\u0430\u044e\u0449\u0438\u0435 \u0443\u0432\u0435\u0434\u043e\u043c\u043b\u0435\u043d\u0438\u044f (esim.sh flush).
+function esimNotifFlush() {
+	modemtabs.setBusy('#esim-section', _('Sending notifications\u2026'), 90000, 15);
+	fs.exec_direct(ESIM, [ 'flush' ]).then(function(out) {
+		var j = parseLpa(out);
+		modemtabs.clearBusy();
+		if (!lpaOk(j)) { notify(false, null, _('Notification action failed: %s').format(lpaFail(j))); }
+		else { notify(true, _('Notifications sent to the operator')); }
+		fetchNotifications().then(renderNotifications);
+	}).catch(function() { modemtabs.clearBusy(); fetchNotifications().then(renderNotifications); });
+}
+
 function esimNotifAction(action, seq) {
 	modemtabs.setBusy('#esim-section',
 		action === 'process' ? _('Sending notification\u2026') : _('Removing notification\u2026'), 60000, 15);

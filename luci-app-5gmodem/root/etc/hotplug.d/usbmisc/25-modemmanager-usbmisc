@@ -1,0 +1,46 @@
+#!/bin/sh
+# Форвард cdc-wdm (MBIM/QMI) КОНТРОЛ-ПОРТОВ, появляющихся под subsystem
+# *usbmisc*, в ModemManager.
+#
+# ЗАЧЕМ. Штатный пакет modemmanager кладёт репортеры только для tty, net и
+# нового char-subsystem "wwan" (/etc/hotplug.d/{tty,net,wwan}/25-modemmanager-*).
+# Но на этом ядре (6.x) управляющий узел cdc-wdm модема оказывается в
+# /sys/class/usbmisc (subsystem=usbmisc), а НЕ в "wwan". Штатный
+# /etc/hotplug.d/usbmisc/00_wwan.sh отдаёт это событие только netifd-протоколам
+# (mbim/qmi/wwan/ncm) и НИЧЕГО не сообщает ModemManager. В итоге MM не узнаёт про
+# MBIM-контрол-порт и собирает модем как AT-only: берёт ttyUSB как primary,
+# игнорит wwanN, дата-беарер поднять не может - модем «в ModemManager без IP».
+# Ровно так ведёт себя Qualcomm SDX55 (Foxconn T99W175 / Thales MV31-W /
+# Dell DW5930e) в MBIM-композиции.
+#
+# Особенно это критично с нашим ПОЗДНИМ new_id-биндом драйвера (см.
+# 20-compal-t99w175): к моменту привязки cdc_mbim стартовый sysfs-скан MM уже
+# отработал, так что hotplug - единственный путь рассказать MM про порт.
+#
+# MM-инхибит активного модема (по USB-пути) остаётся защитой: порт модема,
+# который ведёт НАШ протокол, MM не заберёт, даже получив это событие.
+
+[ "$ACTION" = "add" ] || [ "$ACTION" = "remove" ] || exit 0
+
+# Только узлы cdc-wdm*; прочие usbmisc-устройства нас не касаются.
+case "${DEVNAME}" in
+	cdc-wdm*) ;;
+	*) exit 0 ;;
+esac
+
+# Общие утилиты MM (mm_log, mm_report_event, MODEMMANAGER_RUNDIR). Если пакет MM
+# не установлен - тихо выходим, форвардить некуда.
+[ -r /usr/share/ModemManager/modemmanager.common ] || exit 0
+. /usr/share/ModemManager/modemmanager.common
+
+mkdir -m 0755 -p "${MODEMMANAGER_RUNDIR}"
+
+# Subsystem передаём РЕАЛЬНЫЙ - "usbmisc". Внутри mm_report_event вызывает
+# `mmcli --report-kernel-event=action=...,name=...,subsystem=...` БЕЗ sysfs-пути:
+# MM сам ищет узел как /sys/class/<subsystem>/<name>. Соврав "wwan", мы отправили
+# бы MM в /sys/class/wwan/cdc-wdm0, которого тут нет, и событие ушло бы впустую
+# (ровно это и наблюдалось: порт не появлялся у модема). С "usbmisc" MM находит
+# узел, опознаёт cdc_mbim и берёт cdc-wdm как MBIM-контрол - проверено: модем
+# пересобирается с "primary port: cdc-wdm0 (mbim)", wwan0 становится (net).
+mm_log "info" "${ACTION} usbmisc control port ${DEVNAME}: event processed"
+mm_report_event "${ACTION}" "${DEVNAME}" "usbmisc" "/sys${DEVPATH}"

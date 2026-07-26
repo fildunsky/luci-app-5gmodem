@@ -374,8 +374,17 @@ setmode() {
 # не галочки: иначе пользователь снимал бы галочку, а модем применял совсем
 # другой набор.
 #
-# Формат getsupportedbands3g: ПО ОДНОЙ паре "id:подпись" НА СТРОКУ (не через
-# пробел, как у getsupportedmodes: подписи содержат пробелы - "2100 + 1900").
+# Стиль 3G-диапазонов: "combo" (по умолчанию) - готовые комбинации, id:подпись,
+# одиночный выбор (Telit); "mask" - галочки произвольного набора, как LTE/NR
+# (FM350: getsupportedbands3g отдаёт список бендов "1 2 4 5 8", getbands3g -
+# включённые, setbands3g принимает список через пробел). json-билдер по этому
+# флагу отдаёт combos3g/current3g ЛИБО supported3g/enabled3g.
+bands3g_style() {
+	echo "combo"
+}
+
+# Формат getsupportedbands3g: combo-стиль - ПО ОДНОЙ паре "id:подпись" НА СТРОКУ;
+# mask-стиль - список номеров бендов через пробел (как getsupportedbands).
 # "Unsupported" (или пусто) - скрыть секцию 3G целиком.
 getsupportedbands3g() {
 	echo "Unsupported"
@@ -596,6 +605,12 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 	case "$1" in
 		json)
 			_cm=$("$_HL" getmode "$_bs_am" 2>/dev/null)
+			# 3G (WCDMA) и 2G (GSM) диапазоны Huawei - галочки (mask-стиль).
+			# supported* из net-mode-list, enabled* из текущей NetworkBand.
+			_sup3g=$("$_HL" supbands3g "$_bs_am" 2>/dev/null)
+			_en3g=""; [ -n "$_sup3g" ] && _en3g=$("$_HL" getbands3g "$_bs_am" 2>/dev/null)
+			_sup2g=$("$_HL" supbands2g "$_bs_am" 2>/dev/null)
+			_en2g=""; [ -n "$_sup2g" ] && _en2g=$("$_HL" getbands2g "$_bs_am" 2>/dev/null)
 			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
 				"$(uci -q get "5gmodem.$_bs_sec.model")" "$_cm"
 			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
@@ -606,7 +621,28 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 				_f=0
 				printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
 			done
-			printf '], "enabled": [%s] }\n' "$(echo $_en | tr ' ' ',')"
+			printf '], "enabled": [%s]' "$(echo $_en | tr ' ' ',')"
+			if [ -n "$_sup3g" ]; then
+				printf ', "supported3g": ['
+				_f3=1
+				for _b in $_sup3g; do
+					[ "$_f3" = 1 ] || printf ','
+					_f3=0
+					printf '{"band":%s}' "$_b"
+				done
+				printf '], "enabled3g": [%s]' "$(echo $_en3g | tr ' ' ',')"
+			fi
+			if [ -n "$_sup2g" ]; then
+				printf ', "supported2g": ['
+				_f2=1
+				for _b in $_sup2g; do
+					[ "$_f2" = 1 ] || printf ','
+					_f2=0
+					printf '{"band":%s}' "$_b"
+				done
+				printf '], "enabled2g": [%s]' "$(echo $_en2g | tr ' ' ',')"
+			fi
+			printf ' }\n'
 			exit 0 ;;
 		getbands)          echo "$_en"; exit 0 ;;
 		getsupportedbands) echo "$_sup"; exit 0 ;;
@@ -622,6 +658,16 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 			exit 0 ;;
 		setmode)
 			"$_HL" setmode "$2" "$_bs_am"
+			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			exit 0 ;;
+		setbands3g)
+			"$_HL" setbands3g "$2" "$_bs_am"
+			# Тот же сторож debug, что и у setbands: смена NetworkBand может
+			# заставить модем перерегистрироваться и уронить USB-композицию.
+			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			exit 0 ;;
+		setbands2g)
+			"$_HL" setbands2g "$2" "$_bs_am"
 			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
 			exit 0 ;;
 		*) echo "Unsupported"; exit 0 ;;
@@ -966,7 +1012,10 @@ case $1 in
 		getbands3g
 		;;
 	"setbands3g")
-		[ -n "$2" ] && setbands3g "$2"
+		# Как setbands: в ФОНЕ с отвязкой дескрипторов, и СТРОГО ПОСЛЕ записи -
+		# soft-реконнект (GTACT рвёт PDP на FM350). Раньше реконнект дёргал UI
+		# (setBands3gAT) - для combos Telit; теперь один путь для обоих стилей.
+		[ -n "$2" ] && { ( setbands3g "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
@@ -1075,25 +1124,48 @@ case $1 in
 		fi
 		json_close_array
 
-		# --- 3G: список готовых комбинаций (выпадающий список, не галочки) ---
+		# --- 3G ---
 		T3=$(getsupportedbands3g)
 		if [ -n "$T3" ] && [ "x$T3" != "xUnsupported" ]; then
-			json_add_array combos3g
-			# По одной паре "id:подпись" на строку (подписи содержат пробелы).
-			# БЕЗ пайпа: `echo | while read` крутится в ПОДОБОЛОЧКЕ, и вызовы
-			# json_add_* не долетели бы до JSON родителя - массив вышел бы пустым.
-			_OIFS="$IFS"; IFS='
+			if [ "$(bands3g_style)" = "mask" ]; then
+				# MASK-стиль (FM350): галочки, как LTE/NR. supported3g = список
+				# бендов, enabled3g = включённые. Строку 3G показываем, только если
+				# UMTS-бенды вообще есть в текущем режиме (getsupportedbands3g не пуст).
+				json_add_array supported3g
+				for BAND in $T3; do
+					case "$BAND" in ''|*[!0-9]*) continue ;; esac
+					json_add_object ""
+					json_add_int band "$BAND"
+					json_close_object
+				done
+				json_close_array
+				json_add_array enabled3g
+				if [ "$_PORT_OK" = "1" ]; then
+					for BAND in $(getbands3g); do
+						case "$BAND" in ''|*[!0-9]*) continue ;; esac
+						json_add_int "" "$BAND"
+					done
+				fi
+				json_close_array
+			else
+				# COMBO-стиль (Telit): готовые комбинации, одиночный выбор.
+				json_add_array combos3g
+				# По одной паре "id:подпись" на строку (подписи содержат пробелы).
+				# БЕЗ пайпа: `echo | while read` крутится в ПОДОБОЛОЧКЕ, и вызовы
+				# json_add_* не долетели бы до JSON родителя - массив вышел бы пустым.
+				_OIFS="$IFS"; IFS='
 '
-			for LINE in $T3; do
-				[ -n "$LINE" ] || continue
-				json_add_object ""
-				json_add_string id "${LINE%%:*}"
-				json_add_string label "${LINE#*:}"
-				json_close_object
-			done
-			IFS="$_OIFS"
-			json_close_array
-			[ "$_PORT_OK" = "1" ] && json_add_string current3g "$(getbands3g)"
+				for LINE in $T3; do
+					[ -n "$LINE" ] || continue
+					json_add_object ""
+					json_add_string id "${LINE%%:*}"
+					json_add_string label "${LINE#*:}"
+					json_close_object
+				done
+				IFS="$_OIFS"
+				json_close_array
+				[ "$_PORT_OK" = "1" ] && json_add_string current3g "$(getbands3g)"
+			fi
 		fi
 
 		T=$(getsupportedbands5gnsa)
