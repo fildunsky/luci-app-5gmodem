@@ -63,10 +63,16 @@ function vendor(m) {
 	var pr = String((m && m.product) || '');
 	if (/VOS_5G|RXMG1/i.test(pr)) { return 'Compal'; }
 	var vid = String((m && m.vidpid) || '').split(':')[0].toLowerCase();
+	/* 05c6 НАМЕРЕННО не в карте: это vid Qualcomm, общий для Compal RXM-G1,
+	   Foxconn T99W175, Dell DW5930e и Thales MV31-W. Слепой 05c6->Compal врал
+	   («Compal Generic Mobile Broadband Adapter» на T99W175). Настоящий Compal
+	   опознаётся выше по строке продукта (VOS_5G/RXMG1) и по m.model, который
+	   профиль 05c690d6 выставляет в «Compal RXM-G1»; остальным 05c6 бренд по
+	   vid не присваиваем - показываем голую модель. */
 	var map = {
 		'1bc7': 'Telit', '2c7c': 'Quectel', '2cb7': 'Fibocom',
 		'0e8d': 'Fibocom', '1e2d': 'Cinterion', '12d1': 'Huawei', '19d2': 'ZTE',
-		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell', '05c6': 'Compal',
+		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell',
 		'1e0e': 'SimCom'
 	};
 	return map[vid] || '';

@@ -81,6 +81,14 @@ inhibit_pass() {
 		PATHID=$(basename "$DEV")                 # e.g. 1-1.3
 		case "$PATHID" in *-*) ;; *) continue ;; esac
 		_mm_excluded "$PATHID" || continue        # modemmanager-прото / галка снята
+		# ПАУЗА захвата (bands.sh mmtakeover): смена диапазонов на kernel-прото
+		# временно отдаёт ЭТОТ модем ModemManager'у. Пока флаг есть - держатель
+		# снимаем и модем НЕ инхибируем; остальные модемы инхибируются как обычно.
+		if [ -f "$RUN/$PATHID.pause" ]; then
+			pf="$RUN/$PATHID.pid"
+			[ -f "$pf" ] && { kill "$(cat "$pf" 2>/dev/null)" 2>/dev/null; rm -f "$pf"; }
+			continue
+		fi
 		pf="$RUN/$PATHID.pid"
 		if [ -f "$pf" ] && kill -0 "$(cat "$pf" 2>/dev/null)" 2>/dev/null; then
 			# Держатель жив, но модем всё равно виден -> инхибиция не работает.
@@ -239,6 +247,11 @@ set-exclude)
 	fi
 	;;
 once)  inhibit_pass; mm_recover_missing ;;
+# Пауза/снятие инхибиции ОДНОГО модема (usb-путь $2) на время захвата MM под
+# смену диапазонов. pause снимает держателя сразу, чтобы MM подхватил модем без
+# ожидания; resume убирает флаг - следующий проход инхибирует обратно.
+pause)   [ -n "$2" ] && { mkdir -p "$RUN"; : > "$RUN/$2.pause"; pf="$RUN/$2.pid"; [ -f "$pf" ] && { kill "$(cat "$pf" 2>/dev/null)" 2>/dev/null; rm -f "$pf"; }; } ;;
+resume)  [ -n "$2" ] && rm -f "$RUN/$2.pause" ;;
 stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null; rm -f "$pf"; done ;;
 *)
 	# Реагируем на СТАРТ MM сразу, а не по общему таймеру. Пока запрет не лёг,

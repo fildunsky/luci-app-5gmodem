@@ -35,7 +35,14 @@ roaming)
 atdebug)
 	[ -n "$2" ] || exit 1
 	_sec=$(_sec_for_path "$2")
-	uci -q get "5gmodem.$_sec" >/dev/null 2>&1 || uci -q set "5gmodem.$_sec=modem"
+	# Секцию заводим С path: без него модем выпадает из «Сохранённых профилей»
+	# (modemswitch.sh profiles) и прочих циклов по m_*, которые ищут секции по
+	# ключу path. Раньше atdebug создавал её голой (=modem + at_debug), и если он
+	# успевал раньше resolve, секция навсегда оставалась без пути.
+	uci -q get "5gmodem.$_sec" >/dev/null 2>&1 || {
+		uci -q set "5gmodem.$_sec=modem"
+		uci -q set "5gmodem.$_sec.path=$2"
+	}
 	uci -q set "5gmodem.$_sec.at_debug=$(_norm01 "$3")"
 	uci -q commit 5gmodem
 	;;

@@ -854,6 +854,89 @@ if [ "x$1" != "xjson" ]; then
 	esac
 fi
 
+# Нужен ли захват MM для записи: профиль пишет диапазоны через mmcli, но интерфейс
+# на kernel-прото (mbim/qmi) - MM инхибирован, штатно состояние readonly. Тогда
+# запись оборачиваем во ВРЕМЕННЫЙ захват MM (см. ниже).
+# WIP / за feature-flag (по умолчанию ВЫКЛ). Захват работает (бенды применяются),
+# но teardown недоделан: после смены ModemManager не гасится штатно и держит
+# cdc-wdm, umbim-сессию приходится передёргивать вручную (модем «висит без IP» до
+# чистого ifdown/ifup). Пока не доведён - фичу включает только явный флаг
+# 5gmodem.@5gmodem[0].band_takeover=1; иначе диапазоны остаются readonly (как было).
+_needs_mm_takeover() {
+	[ "$(uci -q get 5gmodem.@5gmodem[0].band_takeover 2>/dev/null)" = "1" ] || return 1
+	[ "$_BAND_VIA" = "mmcli" ] && [ "$_BAND_READONLY" = "1" ]
+}
+
+# Временный захват ModemManager ТОЛЬКО на операцию записи диапазонов/режима, затем
+# возврат данных umbim/uqmi. Нужен для Compal RXM-G1 в MBIM/QMI: дозвон у него
+# идёт мимо MM (прошивка ломает MBIMEx v2.0 -> нет IP), а вот бенды ставит ТОЛЬКО
+# mmcli (qmicli CLI не умеет TLV диапазонов, AT^BAND_PREF модем игнорит). Схема
+# проверена вживую: смена бендов -> кратковременный разрыв связи -> возврат.
+_mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa/setbands5gsa), $2 - список
+	# ВНИМАНИЕ: $RES здесь = .../modemband (каталог профилей), а хелперы лежат в
+	# КОРНЕ /usr/share/5gmodem. Свой путь _R, иначе "$_R/mm-inhibit.sh" молча не
+	# находится (баг: захват «отрабатывал», но флаг паузы не ставился, MM модем не
+	# видел -> "MM не увидел").
+	_R=/usr/share/5gmodem
+	_mt_op="$1"; _mt_list="$2"
+	_mt_path="$_bs_am"
+	_mt_if=$(uci -q get "5gmodem.$_bs_sec.network" 2>/dev/null)
+	[ -n "$_mt_if" ] || _mt_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	logger -t 5gmodem "band-set: временный захват MM для $_mt_path (iface $_mt_if): $_mt_op $_mt_list"
+	# 1) отпускаем канал cdc-wdm у umbim/uqmi
+	[ -n "$_mt_if" ] && ifdown "$_mt_if" 2>/dev/null
+	# 2) пауза инхибиции ЭТОГО модема (остальные остаются закрыты) + поднять MM
+	"$_R/mm-inhibit.sh" pause "$_mt_path" 2>/dev/null
+	"$_R/mmneed.sh" apply >/dev/null 2>&1
+	# 3) ждём, пока MM заново пере-пробит и увидит модем, включаем его. Пере-проба
+	# MBIM после снятия инхибиции идёт ~40 c, а при конкуренции с опросом дольше -
+	# держим запас до ~120 c (опрос на время паузы и так отдаёт кэш, см. 5gmodem.sh).
+	_mt_idx=""; _mt_i=0
+	while [ "$_mt_i" -lt 40 ]; do
+		_mt_idx=$("$_R/modemswitch.sh" mmindex 2>/dev/null)
+		[ -n "$_mt_idx" ] && mmcli -m "$_mt_idx" -K >/dev/null 2>&1 && break
+		sleep 3; _mt_i=$((_mt_i + 1))
+	done
+	if [ -n "$_mt_idx" ]; then
+		mmcli -m "$_mt_idx" --enable >/dev/null 2>&1
+		sleep 2
+		_MMIDX="$_mt_idx"            # профиль setbands ходит через mmcli -m "$_MMIDX"
+		"$_mt_op" "$_mt_list"
+	else
+		logger -t 5gmodem "band-set: MM не увидел $_mt_path за отведённое время - смена отменена"
+	fi
+	# 4) снимаем паузу -> служба инхибирует обратно, mmneed гасит MM
+	"$_R/mm-inhibit.sh" resume "$_mt_path" 2>/dev/null
+	"$_R/mmneed.sh" apply >/dev/null 2>&1
+	_mt_i=0
+	while [ "$_mt_i" -lt 20 ]; do
+		mmcli -L 2>/dev/null | grep -q "/Modem/" || break
+		sleep 3; _mt_i=$((_mt_i + 1))
+	done
+	# 5) возвращаем данные. Модем после смены бендов перерегистрируется, поэтому
+	# после ifup ждём up и один раз передёргиваем, если с первого раза не встал.
+	if [ -n "$_mt_if" ]; then
+		ifup "$_mt_if" 2>/dev/null
+		_mt_i=0
+		while [ "$_mt_i" -lt 9 ]; do
+			sleep 4
+			ubus call "network.interface.$_mt_if" status 2>/dev/null | grep -q '"up": true' && break
+			[ "$_mt_i" = 3 ] && { ifdown "$_mt_if" 2>/dev/null; sleep 2; ifup "$_mt_if" 2>/dev/null; }
+			_mt_i=$((_mt_i + 1))
+		done
+	fi
+	logger -t 5gmodem "band-set: захват MM завершён, $_mt_if поднят"
+}
+
+# Запись диапазонов: через захват MM (kernel-прото mmcli-профиль) либо напрямую.
+_band_write() {  # $1 - функция записи, $2 - список
+	if _needs_mm_takeover; then
+		_mm_takeover_run "$1" "$2"
+	else
+		"$1" "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; }
+	fi
+}
+
 case $1 in
 	"getinfo")
 		getinfo
@@ -892,7 +975,7 @@ case $1 in
 		# Выбор ЗАПОМИНАЕМ в секции модема (для восстановления после перезагрузки -
 		# см. restorebands). Делаем до фонового применения: нужно намерение
 		# пользователя ($2), а не то, что реально ляжет в маску.
-		[ -n "$2" ] && { _persist_bands "" "$2"; ( setbands "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands "" "$2"; ( _band_write setbands "$2" ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -908,7 +991,7 @@ case $1 in
 		;;
 	"setbands5gnsa")
 		# Перезапуск радио - в той же подоболочке после записи (см. setbands).
-		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( setbands5gnsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( _band_write setbands5gnsa "$2" ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gsa")
 		getsupportedbands5gsa
@@ -923,7 +1006,7 @@ case $1 in
 		getbandsext5gsa
 		;;
 	"setbands5gsa")
-		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( setbands5gsa "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( _band_write setbands5gsa "$2" ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"restorebands")
 		# Восстановить сохранённый выбор диапазонов ПОСЛЕ перезагрузки модема.
@@ -1073,10 +1156,13 @@ case $1 in
 		. /usr/share/libubox/jshn.sh
 		json_init
 		json_add_string modem "$(getinfo)"
-		# Состояние читается, но применить его нельзя (см. гейт _BAND_VIA выше).
-		# UI по этому признаку рисует кнопки неактивными и показывает подсказку
-		# с предложением переключить интерфейс на ModemManager.
-		[ "$_BAND_READONLY" = "1" ] && json_add_int readonly 1
+		# Kernel-прото + mmcli-профиль: применить напрямую нельзя (MM инхибирован).
+		# Если включён feature-flag захвата (band_takeover=1) - отдаём "takeover":
+		# UI держит кнопки активными и предупреждает о кратком разрыве. Иначе (по
+		# умолчанию, teardown ещё не доведён) - честный "readonly", как было.
+		if [ "$_BAND_READONLY" = "1" ]; then
+			if _needs_mm_takeover; then json_add_int takeover 1; else json_add_int readonly 1; fi
+		fi
 		MODES=$(getsupportedmodes)
 		if [ "x$MODES" != "xUnsupported" ]; then
 			# currentmode is a LIVE query - only when the port is reachable.

@@ -22,6 +22,7 @@
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
+RUN=/var/run/5gmodem-mm-inhibit
 
 . /usr/share/5gmodem/lib.sh
 
@@ -33,6 +34,10 @@ _path_for_iface() {
 
 # 0 - MM нужен, 1 - не нужен.
 mm_needed() {
+	# Идёт временный захват MM под смену диапазонов kernel-прото модема
+	# (bands.sh mmtakeover, флаг <path>.pause) - MM нужен, пока пауза держится,
+	# иначе служба остановила бы его прямо посреди операции.
+	for _pf in "$RUN"/*.pause; do [ -e "$_pf" ] && return 0; done
 	_present=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
 	for _if in $(uci -q show network 2>/dev/null \
 			| sed -n "s/^network\.\([^.]*\)\.proto='\?modemmanager'\?\$/\1/p"); do

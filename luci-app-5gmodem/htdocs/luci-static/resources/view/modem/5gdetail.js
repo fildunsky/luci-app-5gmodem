@@ -1406,6 +1406,11 @@ var ifaceProtoIsMM = false;
    можно (профиль умеет qmicli напрямую по QMI), а ПРИМЕНИТЬ нельзя - для записи
    нужен ModemManager, а на kernel-протоколе его прячет mm-inhibit.sh. */
 var bandsReadOnly = false;
+/* TAKEOVER: bands.sh отдаёт takeover=1, когда диапазоны можно применить, но для
+   этого приложение ВРЕМЕННО передаёт модем ModemManager'у (kernel-прото + mmcli-
+   профиль, напр. Compal RXM-G1 в MBIM). Кнопки активны, но перед записью
+   предупреждаем: связь на минуту прервётся. */
+var bandsTakeover = false;
 /* Есть ли на устройстве светодиоды уровня сигнала (см. load). */
 var ledsAvail = false;
 
@@ -1814,7 +1819,8 @@ function loadBandsModemband(force) {
 		   этом случае bands.sh отдавал пустые списки и блок подменялся текстом -
 		   пользователь не видел даже того, что реально включено в модеме. */
 		bandsReadOnly = !!j.readonly;
-		if (note) { note.style.display = bandsReadOnly ? '' : 'none'; }
+		bandsTakeover = !!j.takeover;
+		if (note) { note.style.display = (bandsReadOnly || bandsTakeover) ? '' : 'none'; }
 		bandsGated = false;
 		bandSource = 'modemband';
 		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
@@ -1998,6 +2004,7 @@ function switchToModemManager(btn) {
 			ui.addNotification(null, E('p', _('Interface switched to ModemManager')), 'info');
 			ifaceProtoIsMM = true;
 			bandsReadOnly = false;
+			bandsTakeover = false;
 			/* MM поднимается не мгновенно (перезапуск службы + регистрация
 			   модема), поэтому не дёргаем bands.sh в ту же секунду - иначе
 			   получим пустой список и блок мигнёт «нет диапазонов».
@@ -2067,7 +2074,24 @@ function applyBandsReadOnly() {
 }
 
 /* Применить/сбросить диапазоны через modemband */
-function applyBandsModemband(reset) {
+function applyBandsModemband(reset, confirmed) {
+	/* TAKEOVER: запись потребует временно отдать модем ModemManager'у и передёрнуть
+	   интерфейс - связь на ~минуту прервётся. Предупреждаем и ждём подтверждения. */
+	if (bandsTakeover && !confirmed) {
+		ui.showModal(_('Change bands'), [
+			E('p', {}, _('To change bands the app briefly hands this modem to ModemManager, applies the change and reconnects. The connection will drop for up to a minute.')),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
+					ui.hideModal();
+					ui.addNotification(null, E('p', _('Applying bands — the connection will briefly drop, then reconnect.')), 'info');
+					applyBandsModemband(reset, true);
+				} }, _('Apply'))
+			])
+		]);
+		return Promise.resolve();
+	}
 	var lte = [], nsa = [], three = [], two = [];
 	if (!reset) {
 		document.querySelectorAll('#bands-lte .cbi-button-action').forEach(function(b) { lte.push(b.getAttribute('data-band')); });
@@ -3197,7 +3221,16 @@ function applyMetrics(json) {
 						var mmBtn = document.getElementById('bandnote-mm-btn');
 						var xmmBtn = document.getElementById('bandnote-xmm-btn');
 						var dbgBtn = document.getElementById('bandnote-dbg-btn');
-						if (isHilink) {
+						if (bandsTakeover) {
+							/* Kernel-прото + mmcli-профиль (Compal в MBIM): менять
+							   диапазоны МОЖНО - приложение само временно захватит MM.
+							   Кнопки переключения протокола не нужны, только предупреждаем. */
+							document.getElementById('bandnote-text').textContent =
+								_('Changing bands briefly interrupts the connection: the app hands the modem to ModemManager, applies the change and reconnects (up to a minute).');
+							if (mmBtn) { mmBtn.style.display = 'none'; }
+							if (xmmBtn) { xmmBtn.style.display = 'none'; }
+							if (dbgBtn) { dbgBtn.style.display = 'none'; }
+						} else if (isHilink) {
 							/* HiLink: не «переключите на ModemManager» (это неверно - MM
 							   HiLink-модемом не управляет), а «переключите в Debug». Debug
 							   даёт AT-порты для диапазонов/режима/USSD, сохраняя связь.

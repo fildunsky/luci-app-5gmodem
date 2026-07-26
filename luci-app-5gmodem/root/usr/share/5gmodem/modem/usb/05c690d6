@@ -12,6 +12,18 @@
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
 _WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null); [ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
 
+# QMI-over-MBIM: этот профиль обслуживает Compal и в MBIM (05c6:90d6), и в QMI
+# (1e2d:00b7, 05c6:9025 - см. вызывающие профили). На MBIM-устройстве qmicli
+# должен открывать канал в mbim-режиме. Новые libqmi (25.12 = 1.36) это
+# авто-детектят, и всё работает без флага, но на 24.10 (1.34) авто-детект слабее -
+# ставим --device-open-mbim ЯВНО. КРИТИЧНО добавлять его ТОЛЬКО для cdc_mbim: на
+# qmi_wwan (QMI-композиции) этот флаг сломал бы открытие устройства. Драйвер
+# берём из /sys самого cdc-wdm - не зависит от того, жив ли ModemManager.
+_MBIM_OPT=""
+case "$(readlink -f "/sys/class/usbmisc/${_WDM##*/}/device/driver" 2>/dev/null)" in
+	*/cdc_mbim) _MBIM_OPT="--device-open-mbim" ;;
+esac
+
 # _IS_COMPAL может быть выставлен ВЫЗЫВАЮЩИМ профилем (см. 05c69025): в тех
 # композициях модем представляется generic-идентификатором Qualcomm, и там
 # вызывающий уже опознал его сам. Своё детектирование тогда не нужно.
@@ -113,7 +125,7 @@ if [ "$REGOK" = "1" ]; then
 		if [ "$_QMICLI_OK" = "1" ]; then
 			# --- Carrier aggregation via QMI (richer than +LCAINFO: also
 			# gives PCI/EARFCN/bandwidth per carrier, and activation state) ---
-			OCA=$(qmicli -d "$_WDM" -p --nas-get-lte-cphy-ca-info 2>/dev/null)
+			OCA=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-lte-cphy-ca-info 2>/dev/null)
 
 			# more than one cell block present -> CA is at least configured
 			echo "$OCA" | grep -q "^Secondary Cell" && MODE="LTE-A"
@@ -156,7 +168,7 @@ if [ "$REGOK" = "1" ]; then
 			done
 
 			# --- Signal: RSSI/RSRQ/RSRP/SNR via QMI (PCC) ---
-			OSIG=$(qmicli -d "$_WDM" -p --nas-get-signal-info 2>/dev/null)
+			OSIG=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-signal-info 2>/dev/null)
 			LTEBLOCK=$(echo "$OSIG" | awk '/^LTE:/{f=1; next} /^5G:|^$/{f=0} f')
 			T=$(echo "$LTEBLOCK" | sed -n "s/.*RSSI: '\(-\?[0-9.]*\).*/\1/p")
 			[ -n "$T" ] && RSSI="$T"
@@ -249,7 +261,7 @@ if [ "$REGOK" = "1" ]; then
 	# мощность передатчика и eNB ID молча оставались пустыми (так и было).
 	ORF=""
 	if [ "$_QMICLI_OK" = "1" ]; then
-		ORF=$(qmicli -d "$_WDM" -p --nas-get-rf-band-info 2>/dev/null)
+		ORF=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-rf-band-info 2>/dev/null)
 		# Ширину канала, мощность передатчика, eNB ID и соседние соты здесь
 		# больше НЕ собираем: запросы generic (QMI NAS), отвечают одинаково у
 		# любого вендора - проверено на Compal и Telit, - поэтому переехали во
@@ -295,7 +307,7 @@ if [ "$REGOK" = "1" ]; then
 
 		# Signal (LTE block for NSA anchor; guard so existing values win)
 		if [ -z "$RSRP" ]; then
-			OSIG=$(qmicli -d "$_WDM" -p --nas-get-signal-info 2>/dev/null)
+			OSIG=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-signal-info 2>/dev/null)
 			LB=$(echo "$OSIG" | awk '/^LTE:/{f=1;next} /^5G:|^$/{f=0} f')
 			T=$(echo "$LB" | sed -n "s/.*RSSI: '\(-\?[0-9.]*\).*/\1/p"); [ -n "$T" ] && RSSI="$T"
 			T=$(echo "$LB" | sed -n "s/.*RSRQ: '\(-\?[0-9.]*\).*/\1/p"); [ -n "$T" ] && RSRQ="$T"

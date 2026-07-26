@@ -38,27 +38,12 @@ function loadWidgetFlags() {
 		/* Карточки берём ТОЛЬКО из секций. Умолчания (YouTube, SSClash) заведены
 		   реальными секциями при установке (uci-defaults/seed_widgets.sh), поэтому
 		   видны и правятся в настройках; удалил все - значит пусто, без «магии». */
-		/* Дедуп по хосту: две pingwidget-секции с одним host (напр. дубль
-		   youtube.com из ручного добавления поверх посеянной) давали ДВЕ
-		   одинаковые карточки. Оставляем первую. */
-		var _seenH = {};
 		_pingWidgets = (uci.sections('5gmodem', 'pingwidget') || []).map(function(s) {
 			return { host: String(s.host || '').trim(), mode: s.mode || 'click' };
-		}).filter(function(w) {
-			if (!w.host) { return false; }
-			var k = w.host.toLowerCase();
-			if (_seenH[k]) { return false; }
-			_seenH[k] = 1; return true;
-		});
-		/* Аналогично для сервис-карточек (два одинаковых service -> дубль). */
-		var _seenS = {};
+		}).filter(function(w) { return !!w.host; });
 		_svcWidgets = (uci.sections('5gmodem', 'svcwidget') || []).map(function(s) {
 			return String(s.service || '').trim();
-		}).filter(function(v) {
-			if (!v) { return false; }
-			if (_seenS[v]) { return false; }
-			_seenS[v] = 1; return true;
-		});
+		}).filter(function(v) { return !!v; });
 	});
 }
 function effectiveSvcs() { return _svcWidgets; }
@@ -74,10 +59,13 @@ var _svcState = {};
 var YT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
 	'<rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#FF0000"/>' +
 	'<path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>';
-/* Пресеты сервисов пинга: имя + иконка. svg - готовая SVG-иконка; иначе цветная
-   плашка с глифом (glyph+color). Свой хост - молния ⚡. */
+/* Пресеты сервисов пинга: имя + иконка. svg - инлайн-SVG; img - файл из icons/
+   (рисуется на белой плашке, поэтому монохромный тёмный octocat github.svg виден
+   и на светлой, и на тёмной теме); иначе цветная плашка с глифом (glyph+color).
+   Свой хост - молния ⚡. */
 var PING_PRESETS = {
 	'youtube.com':    { name: 'YouTube',    svg: YT_ICON },
+	'github.com':     { name: 'GitHub',     img: 'github.svg' },
 	'google.com':     { name: 'Google',     color: '#4285F4', glyph: 'G' },
 	'cloudflare.com': { name: 'Cloudflare', color: '#F38020', glyph: '☁' },
 	'yandex.ru':      { name: 'Yandex',     color: '#FF3B30', glyph: 'Я' }
@@ -85,7 +73,7 @@ var PING_PRESETS = {
 function pingInfo(host) {
 	host = String(host || 'youtube.com').trim();
 	var p = PING_PRESETS[host.toLowerCase()];
-	if (p) { return { host: host, name: p.name, color: p.color, glyph: p.glyph, svg: p.svg, custom: false }; }
+	if (p) { return { host: host, name: p.name, color: p.color, glyph: p.glyph, svg: p.svg, img: p.img, custom: false }; }
 	return { host: host, name: host, color: null, glyph: '⚡', custom: true };
 }
 
@@ -552,6 +540,14 @@ function pingBadge(info) {
 		var ic = E('span', { 'class': 'netpri-pingico' });
 		ic.innerHTML = info.svg;
 		return ic;
+	}
+	/* Файл-иконка (github.svg): белый octocat на тёмной плашке (бренд GitHub) -
+	   различим в обеих темах. */
+	if (info.img) {
+		return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:#1b1f23' }, [
+			E('img', { 'src': L.resource('icons/' + info.img), 'width': 12, 'height': 12,
+				'alt': '', 'style': 'display:block' })
+		]);
 	}
 	if (info.custom) { return E('span', { 'class': 'netpri-pingbadge custom' }, info.glyph); }
 	return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:' + info.color }, info.glyph);

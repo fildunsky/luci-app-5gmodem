@@ -410,18 +410,28 @@ if [ -z "$RSRP" ]; then
 	fi
 fi
 
-# Signal bar: AT+CSQ (RSSI-based) is pessimistic and inconsistent on the FM350 -
-# it reports a narrowband RSSI, so CSQ reads ~9 (=29%) even with a fine LTE
-# signal and excellent throughput, while other modems in the same spot report a
-# wideband RSSI and show 70%+. Derive the bar from RSRP instead (the
-# standardized, comparable LTE metric): RSRP -108 -> 70%, -102 -> 80%, >=-90 ->
-# 100%. This makes the FM350 reflect real quality instead of looking broken.
-#
-# Cache the last good percentage so that a rare poll where BOTH GTCCINFO and CESQ
-# miss cannot make the bar dip to the pessimistic AT+CSQ value.
+# Signal bar НЕ из сырого AT+CSQ: он RSSI-based и на FM350 узкополосный - читает
+# ~8..9 (=26%) даже при приличном LTE, а другие модемы в той же точке дают 70%+.
+# Но и один RSRP врёт в ОБЕ стороны: сильный RSRP при плохих SINR/RSRQ (шум,
+# загрузка соты) - это ПЛОХОЕ соединение, а бар по RSRP рисовал бы «полно»
+# (живой пример: RSRP -107, но SINR 1 дБ и RSRQ -15 дБ - реально слабо, а прежняя
+# формула (RSRP+150)*5/3 давала 71%). Поэтому считаем ВЗВЕШЕННО из того, что
+# отдаёт +CESQ/GTCCINFO: сила (RSRP) 50% + качество SINR 30% + RSRQ 20%.
+# Отсутствующие метрики исключаем и перенормируем веса (на LTE без SINR - только
+# RSRP+RSRQ и т.д.). Шкалы по 3GPP TS 36.133:
+#   RSRP  -130..-80 дБм -> 0..100  (перцептивно ~2%/дБ в рабочем диапазоне)
+#   SINR   -10..20  дБ  -> 0..100  (>=20 отлично, ~13 хорошо, 0 средне)
+#   RSRQ   -20..-3   дБ  -> 0..100  (>=-10 хорошо)
+# Так бар отражает РЕАЛЬНОЕ качество, а не только силу, и убирает и «занижение»
+# сырого CSQ, и «завышение» чистого RSRP. Кэшируем последний хороший процент,
+# чтобы редкий опрос без GTCCINFO/CESQ не уронил бар к пессимистичному CSQ.
 SIGCACHE="/tmp/5gmodem_fm350_sig_${DEVICE##*/}"
+# FM350 занижает сырой +CSQ, поэтому ПЕРЕКРЫВАЕМ его взвешенной оценкой даже при
+# валидном CSQ (общий хелпер sig_weighted в lib.sh - та же формула, что и в
+# центральном fallback 5gmodem.sh, одна на всех). Кэшируем последний хороший
+# процент: редкий опрос без GTCCINFO/CESQ иначе уронил бы бар к пессимистичному CSQ.
 if [ -n "$RSRP" ]; then
-	CSQ_PER=$(awk -v r="$RSRP" 'BEGIN{p=(r+150)*5/3; if(p<0)p=0; if(p>100)p=100; printf "%d", p}')
+	CSQ_PER=$(sig_weighted "$RSRP" "$SINR" "$RSRQ")
 	CSQ=$(( 31 * CSQ_PER / 100 ))
 	echo "$CSQ_PER" > "$SIGCACHE" 2>/dev/null
 elif [ -f "$SIGCACHE" ] && [ -z "$(find "$SIGCACHE" -mmin +2 2>/dev/null)" ]; then

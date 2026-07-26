@@ -72,6 +72,25 @@ modem_vidpid() {
 # циклов по m_* (они требуют path), значит парковка не всплывёт фантом-модемом и
 # её не поднимет автоматика; интерфейс вернувшемуся модему заново назначит
 # mkiface/setup_hilink. Паркуем только осознанный выбор пользователя.
+# Удалить припаркованные профили старше TTL: модем, ушедший навсегда, иначе копил
+# бы призраков вечно. Парки без метки времени (созданы до этой правки) не удаляем
+# сразу - штампуем текущим временем, пусть стареют: вдруг модем ещё вернётся.
+prune_parks() {
+	_pp_now=$(date +%s 2>/dev/null); [ -n "$_pp_now" ] || return 0
+	_pp_ttl=2592000   # 30 дней
+	for _pp_s in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_park_[^.]*\)=modem$/\1/p'); do
+		_pp_at=$(uci -q get "$CFG.$_pp_s.parked_at")
+		case "$_pp_at" in
+			''|*[!0-9]*) uci -q set "$CFG.$_pp_s.parked_at=$_pp_now"; continue ;;
+		esac
+		[ $((_pp_now - _pp_at)) -gt "$_pp_ttl" ] && {
+			uci -q delete "$CFG.$_pp_s"
+			logger -t 5gmodem "припаркованный профиль $_pp_s удалён (старше 30 дней)"
+		}
+	done
+	uci -q commit "$CFG"
+}
+
 park_profile() {   # $1 - секция, которую вытесняем
 	_pk_imei=$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')
 	[ -n "$_pk_imei" ] || return 0                  # без IMEI парковать не к чему
@@ -79,6 +98,11 @@ park_profile() {   # $1 - секция, которую вытесняем
 	uci -q set "$CFG.$_pk_dst=modem"
 	uci -q set "$CFG.$_pk_dst.imei=$_pk_imei"
 	uci -q set "$CFG.$_pk_dst.parked=1"
+	# Метка времени - для авто-очистки: парковка нужна, чтобы качели «туда-обратно»
+	# не сбрасывали выбор, но модем, ушедший НАВСЕГДА (юзер протестировал десяток
+	# модулей на стенде), копил бы призраков вечно. Держим до 30 дней.
+	uci -q set "$CFG.$_pk_dst.parked_at=$(date +%s 2>/dev/null)"
+	prune_parks
 	# Тот же список, что восстанавливает migrate_profile, чтобы парковка и
 	# восстановление были симметричны.
 	#
@@ -646,6 +670,10 @@ ensure_section() {
 	else
 		swap_cleanup "$1" "$SEC"
 	fi
+	# ГАРАНТИРУЕМ path у реальной секции. Её мог создать голой path-less писатель
+	# (напр. setopt atdebug раньше resolve), и тогда else-ветка выше путь не
+	# добавляла - модем «пропадал» из «Сохранённых профилей» и циклов по m_*.
+	[ -n "$(uci -q get "$CFG.$SEC.path")" ] || uci -q set "$CFG.$SEC.path=$1"
 	# ТОТ ЖЕ МОДЕМ (по IMEI) уже известен под другим именем секции? Два случая:
 	#   - переехал в другой разъём (path сменился - секция под старым path);
 	#   - вернулся после вытеснения из этого порта (профиль в m_park_<imei>).
@@ -1364,8 +1392,22 @@ profiles)
 	_act=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	printf '['
 	_first=1
-	for _sec in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_[^.]*\)\.path=.*/\1/p'); do
+	_bf=""
+	# Перечисляем секции по ЗАГОЛОВКУ (=modem), а не по ключу path: секцию мог
+	# создать path-less писатель, и по .path её было не найти - модем «пропадал».
+	for _sec in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_[^.]*\)=modem$/\1/p'); do
+		# Холдинг-секции припаркованных профилей (m_park_<imei>) - не модемы, у
+		# них намеренно нет пути; карточкой их показывать нельзя.
+		case "$_sec" in m_park_*) continue ;; esac
+		[ "$(uci -q get "$CFG.$_sec.parked")" = "1" ] && continue
 		_p=$(uci -q get "$CFG.$_sec.path")
+		# BACKFILL пути для уже сломанных секций: имя однозначно кодирует путь
+		# (m_1_1_3 -> 1-1.3: первый разделитель - дефис шины, дальше точки хаба).
+		# Закрепляем, чтобы и остальные циклы по m_* снова видели модем.
+		if [ -z "$_p" ]; then
+			_p=$(echo "${_sec#m_}" | sed 's/_/-/;s/_/./g')
+			[ -n "$_p" ] && { uci -q set "$CFG.$_sec.path=$_p"; _bf=1; }
+		fi
 		[ -n "$_p" ] || continue
 		_if=$(uci -q get "$CFG.$_sec.network")
 		_proto=""; _apn=""; _pdp=""
@@ -1407,6 +1449,38 @@ profiles)
 			"$(uci -q get "$CFG.$_sec.save_band5gsa")"
 	done
 	printf ']\n'
+	[ -n "$_bf" ] && uci -q commit "$CFG"
+	exit 0
+	;;
+
+# Немедленно вычистить припаркованные профили модемов, которых сейчас НЕТ на шине
+# (ручная уборка призраков: авто-TTL 30 дней ждать не всегда хочется). Парк
+# модема, который ВЕРНУЛСЯ (его IMEI среди present), не трогаем. Осиротевший
+# интерфейс парка освобождаем, если его не держит ни один живой профиль.
+clearparks)
+	_cp_present=""
+	for _cp_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
+		_cp_i=$(imei_for_path "$_cp_p")
+		[ -n "$_cp_i" ] && _cp_present="$_cp_present $_cp_i"
+	done
+	_cp_n=0
+	for _cp_s in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_park_[^.]*\)=modem$/\1/p'); do
+		_cp_imei=$(uci -q get "$CFG.$_cp_s.imei")
+		case " $_cp_present " in *" $_cp_imei "*) continue ;; esac
+		_cp_if=$(uci -q get "$CFG.$_cp_s.network")
+		uci -q delete "$CFG.$_cp_s"
+		if [ -n "$_cp_if" ]; then
+			_cp_used=$(uci -q show "$CFG" 2>/dev/null | grep -c "^$CFG\.m_[^.]*\.network='\?$_cp_if'\?\$")
+			[ "${_cp_used:-0}" -eq 0 ] && uci -q get "network.$_cp_if" >/dev/null 2>&1 && {
+				ifdown "$_cp_if" >/dev/null 2>&1
+				uci -q delete "network.$_cp_if"
+				uci -q commit network
+			}
+		fi
+		_cp_n=$((_cp_n + 1))
+	done
+	uci -q commit "$CFG"
+	echo "{\"cleared\":$_cp_n}"
 	exit 0
 	;;
 

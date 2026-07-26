@@ -246,7 +246,9 @@ model_for() {
 				19d2) echo "ZTE"; return ;;
 				2dee) echo "MeigLink"; return ;;
 				0489) echo "Foxconn"; return ;;
-				05c6) echo "Compal"; return ;;
+				# 05c6 (Qualcomm) НЕ мапим в Compal: id общий для Compal RXM-G1,
+				# Foxconn T99W175, Dell, Thales. Настоящий Compal ловится выше по
+				# VOS_5G/RXMG1; прочим 05c6 бренд по vid не присваиваем.
 			esac
 			;;
 	esac

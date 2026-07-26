@@ -49,7 +49,27 @@ bind_ports() {   # $1 - vid, $2 - pid
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
 }
 
+# Привязка new_id НЕ переживает перезагрузку, а hotplug-событие 'add' для модема,
+# воткнутого ДО загрузки (coldplug), в procd не приходит - его netlink-слушатель
+# стартует уже после ранней энумерации USB, и ранние uevent'ы теряются. Итог: у
+# композиций, которых нет в статической таблице драйвера (05c6:9025 - option1,
+# 05c6:90d5/90d6 - generic), после ребута не появлялось НИ ОДНОГО ttyUSB - ни
+# метрик, ни SMS, только IP через qmi_wwan (тот привязывается сам). Драйверы с
+# 1e2d в статической таблице от этого не страдали, потому баг всплыл только на
+# 05c6. Скан шины на каждом буте (init.d 5gmodem-usbports) закрывает дыру.
+coldplug() {
+	for _cp_d in /sys/bus/usb/devices/*; do
+		[ -f "$_cp_d/idVendor" ] || continue
+		_cp_v=$(cat "$_cp_d/idVendor" 2>/dev/null)
+		_cp_p=$(cat "$_cp_d/idProduct" 2>/dev/null)
+		case "$_cp_v:$_cp_p" in
+			05c6:9025|05c6:90d5|05c6:90d6) bind_ports "$_cp_v" "$_cp_p" ;;
+		esac
+	done
+}
+
 case "$1" in
-	bind)   bind_ports "$2" "$3" ;;
-	driver) driver_for "$2" "$3" ;;
+	bind)     bind_ports "$2" "$3" ;;
+	driver)   driver_for "$2" "$3" ;;
+	coldplug) coldplug ;;
 esac

@@ -216,12 +216,17 @@ return view.extend({
 		pw.addbtntitle = _('Add ping card');
 
 		var pho = pw.option(form.Value, 'host', _('Host'));
+		/* Пресеты-подсказки для поля host (просто варианты в выпадашке). Дефолтную
+		   карточку (youtube.com) заводит СИД-конфиг (uci-defaults/seed_widgets.sh) -
+		   стандартным путём, а не хардкодом здесь. Раньше тут стояли ещё
+		   pho.default/pho.placeholder='youtube.com': placeholder уходил в
+		   select_placeholder комбобокса и рисовался ОТДЕЛЬНЫМ пунктом сверху -
+		   youtube.com двоился в списке. Убрали - остаётся один вариант. */
 		pho.value('youtube.com');
+		pho.value('github.com');
 		pho.value('google.com');
 		pho.value('cloudflare.com');
 		pho.value('yandex.ru');
-		pho.default = 'youtube.com';
-		pho.placeholder = 'youtube.com';
 
 		var pmo = pw.option(form.ListValue, 'mode', _('Ping mode'));
 		pmo.value('click', _('On click only'));
