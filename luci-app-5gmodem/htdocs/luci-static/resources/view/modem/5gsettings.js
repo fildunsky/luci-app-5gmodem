@@ -17,6 +17,14 @@
 /* --- Проверка/установка обновления с GitHub (app + перевод) --- */
 function updSet(id, txt) { var e = document.getElementById(id); if (e) { e.textContent = txt; } }
 function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
+/* Локализация кодов ошибок обновления. Спец-случай asset_pending: тег релиза уже
+   выпущен, а .apk ещё собирается на сервере (CI) - показываем понятную подсказку
+   вместо технической «Release asset … not found». */
+function updErrText(e, fb) {
+	if (e === 'asset_pending')
+		return _('The update is still building on the server. Please wait about 15-20 minutes and try again.');
+	return e || fb;
+}
 
 function checkUpdate() {
 	updSet('upd-status', _('Checking the latest release…'));
@@ -28,7 +36,7 @@ function checkUpdate() {
 		updSet('upd-latest', d.latest || '—');
 		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
 		if (!d.success) {
-			updSet('upd-status', d.error || _('Could not check for updates'));
+			updSet('upd-status', updErrText(d.error, _('Could not check for updates')));
 		} else if (d.update_available == 1 || d.update_available === true) {
 			updShow('upd-install', true);
 			updSet('upd-status', _('A new version is available'));
@@ -97,7 +105,7 @@ function pollInstall(tries) {
 				updShow('upd-install', false);
 				finishUpdate();
 			} else {
-				updSet('upd-status', d.error || _('Failed to install the update'));
+				updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
 			}
 			updBusy(false);
 		});
@@ -111,7 +119,7 @@ function installUpdate() {
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.started) { pollInstall(0); return; }
-		updSet('upd-status', d.error || _('Failed to install the update'));
+		updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
 		updBusy(false);
 	}).catch(function(err) {
 		updSet('upd-status', _('Failed to install the update') + ' ' + (err.message || err));

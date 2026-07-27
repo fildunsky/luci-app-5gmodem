@@ -28,6 +28,16 @@ if [ -n "$_dt_am" ]; then
 		[ -n "$_dt_p" ] && [ -c "$_dt_p" ] && { echo "$_dt_p"; exit 0; }
 		exit 0
 	fi
+	# --- МОДЕМ ПОД УПРАВЛЕНИЕМ ModemManager ------------------------------------
+	# Его AT-портами (ttyUSB) рулит сам MM. Если наш опрос метрик/SMS откроет тот же
+	# порт через sms_tool, команды MM на нём таймаутят ("port ttyUSBn timed out"), и
+	# MM НЕ может enable/connect модем -> модем registered, но БЕЗ IP. С открытой
+	# страницей опрос идёт каждые секунды, и срыв MM постоянный; AT-сериализатор
+	# (блокирующий flock) держит порт всё время опроса и только расширяет окно
+	# коллизии. Поэтому для modemmanager-прото модема AT-порт НЕ отдаём - молчим, как
+	# для HiLink. Метрики такого модема берём через mmcli (см. 5gmodem.sh), не по AT.
+	_dt_nif=$(uci -q get "5gmodem.$_dt_sec.network")
+	[ "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)" = "modemmanager" ] && exit 0
 fi
 
 CONFIG=modemdefine

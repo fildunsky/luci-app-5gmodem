@@ -504,10 +504,18 @@ if [ -z "$DEVICE" ]; then
 	# отдаём его, а не пугаем «модема нет»: пользователь видел мелькание сообщения
 	# на 2-3 c при заходе на «Сеть». Снимок старше 30 c - модем, вероятно, реально
 	# пропал, тогда честно сообщаем. Свежие снимки (< ttl) уже отдал cached выше.
-	_age=$(_snapshot_age)
-	[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }
-	echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
-	exit 0
+	# ИСКЛЮЧЕНИЕ - modemmanager-модем: AT-порт ему намеренно не отдаётся (им владеет
+	# MM, detect.sh молчит), но метрики есть в mmcli. НЕ пугаем «Device not found»,
+	# а идём дальше: AT-вызовы станут no-op (обёртка sms_tool), а блок mmcli ниже
+	# наполнит карточку. Иначе весь блок Модем висел бы на плейсхолдерах.
+	_amp0=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_amp0_if=$(uci -q get "5gmodem.m_$(echo "$_amp0" | sed 's/[^A-Za-z0-9]/_/g').network")
+	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ]; then
+		_age=$(_snapshot_age)
+		[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }
+		echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
+		exit 0
+	fi
 fi
 
 # СТОРОЖ НА ВСЕ ВЫЗОВЫ sms_tool. У sms_tool нет таймаута: на подвисшем (или
@@ -561,6 +569,10 @@ _st_static_ok() {   # $1 - файл ответа
 }
 _st_n=0
 sms_tool() {
+	# Нет AT-порта (modemmanager-модем: им рулит MM, detect.sh для него молчит) ->
+	# AT-вызовы бессмысленны и опасны (пустой -d ломает разбор аргументов). No-op;
+	# метрики такого модема берутся из mmcli (см. блок ниже по коду).
+	[ -n "$DEVICE" ] || return 0
 	_stc=$(_st_static_key "$@")
 	if [ -n "$_stc" ] && [ -s "$_stc" ]; then
 		cat "$_stc"
@@ -1618,6 +1630,30 @@ else
 	[ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
 	_ob=$(opname_brand "$SIMID") && COPS="$_ob"
 	HOME_OP=""
+fi
+
+# МЕТРИКИ modemmanager-МОДЕМА ИЗ mmcli (а НЕ по AT).
+# У модема под управлением MM его AT-портом рулит сам MM: detect.sh для него молчит
+# (наш AT-опрос ломал MM connect - см. detect.sh/mm-inhibit.sh). Поэтому AT-разбор
+# выше даёт пустые переменные, и без этого блока вся карточка Модем висела бы на
+# плейсхолдерах. Тянем основное из mmcli: оператор, сигнал %, режим (RAT),
+# регистрацию и уровни через --signal-get. Заполняем ТОЛЬКО пустые - у AT-модема
+# приоритет за его же данными. mmcli читает по своему каналу, AT-порт не трогает.
+if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
+	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	if [ -n "$_MI" ]; then
+		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
+		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
+		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
+		[ -z "$CSQ_PER" ] && CSQ_PER=$(_mmv "modem.generic.signal-quality.value")
+		[ -z "$REG" ]     && REG=$(_mmv "modem.3gpp.registration-state")
+		[ -z "$MODE" ]    && MODE=$(_mmv "modem.generic.access-technologies.value[1]" | tr 'a-z' 'A-Z')
+		[ -z "$MODEL" ]   && MODEL=$(_mmv "modem.generic.model")
+		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
+		# RSRP/RSRQ/RSSI/SINR НЕ трогаем: детальный сигнал отдаёт QMI-профиль модема
+		# (modem/usb/*), а mmcli --signal-get дублировал бы ключи. signal-quality (%)
+		# выше - достаточный фолбэк для generic MM-модема без профиля.
+	fi
 fi
 
 # MSISDN (номер телефона) - универсальный фолбэк для ВСЕХ модемов. AT+CNUM выше

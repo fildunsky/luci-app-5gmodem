@@ -134,7 +134,10 @@ install)
 			for BASE in "$PKG"; do
 				URL=$(asset_url "$BASE" "$EXT")
 				if [ -z "$URL" ]; then
-					echo '{"success":false,"error":"Release asset for '"$BASE"' not found"}'; return
+					# Тег релиза уже есть, а .apk-ассета ещё нет: CI не докатил сборку.
+					# Отдаём СТАБИЛЬНЫЙ КОД (UI локализует), а не техническую строку -
+					# для человека это «подождите, пакет ещё собирается».
+					echo '{"success":false,"error":"asset_pending"}'; return
 				fi
 				F="$TMP/$BASE.$EXT"
 				rm -f "$F"
