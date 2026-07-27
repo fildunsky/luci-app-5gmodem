@@ -149,6 +149,25 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	fi
 	# кэш указывает на чужой порт - выбрасываем (см. tty_belongs)
 	[ -n "$CP" ] && rm -f "$ATCACHE" 2>/dev/null
+	# НЕГАТИВНЫЙ КЭШ (короткоживущий). Если порты активного модема только что НЕ
+	# ответили на AT, НЕ перебираем их заново на КАЖДЫЙ вызов: detect.sh зовут
+	# несколько потребителей на каждый опрос (5gmodem.sh, bands.sh, simslot.sh,
+	# esim.sh), и перебор молчащих портов (2c × N tty × 2 прохода) на каждом
+	# упирал rpcd в 30-секундный тайм-аут -> UI жёстко висел, «Сеть» пустела.
+	# Модем без отвечающего AT-порта (часть 05c6:9025 generic) ведём как HiLink:
+	# быстро отдаём пусто, метрики берёт QMI/кэш.
+	NEG="$ATCACHE.neg"
+	_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	if [ -f "$NEG" ] && [ -n "$_now" ]; then
+		_na=$(cat "$NEG" 2>/dev/null); case "$_na" in ''|*[!0-9]*) _na=0 ;; esac
+		[ $((_now - _na)) -ge 0 ] && [ $((_now - _na)) -lt 20 ] && { echo ""; exit 0; }
+	fi
+	# ГАРД ОТ «СТАДА»: при холодном открытии страница шлёт запросы пачкой. Порты
+	# щупает ОДИН; остальные не пилят модем параллельно (это и множило задержку на
+	# два модема) и сразу отдают пусто - следующий цикл опроса возьмёт запиненный
+	# порт. Лок неблокирующий; освобождается при выходе процесса.
+	exec 7>"/tmp/5gmodem_detect.lock" 2>/dev/null
+	flock -n 7 2>/dev/null || { echo ""; exit 0; }
 	# TWO-PASS. Сначала ищем НАСТОЯЩИЙ MODEM-порт (отвечает на AT+CGMM моделью) -
 	# у многопортовых модемов (FM350 = 7 ttyUSB) на голый "AT" отвечает и часть
 	# вспомогательных/DIAG-портов, а метрик они не отдают. Раньше брали первый
@@ -160,6 +179,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 		for T in $TTYS; do
 			[ "$MODE" = model ] && { /usr/share/5gmodem/atprobe.sh "$T" model || continue; } \
 			                    || { /usr/share/5gmodem/atprobe.sh "$T" || continue; }
+			rm -f "$NEG" 2>/dev/null
 			echo "$T" > "$ATCACHE"
 			# ПИННИМ порт в uci: переживает ребут, и следующий detect берёт
 			# быстрый путь (at_port pinned) вместо перебора DIAG-портов через
@@ -174,6 +194,12 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 			exit 0
 		done
 	done
+	# ничего не ответило: помечаем негативным кэшом и НЕ проваливаемся в общий
+	# перебор ниже (он щупал бы порты ОБОИХ модемов - лишняя нагрузка и та же
+	# 30с-стена). Модем без AT ведём как HiLink: быстро отдаём пусто.
+	[ -n "$_now" ] && echo "$_now" > "$NEG" 2>/dev/null
+	echo ""
+	exit 0
 fi
 
 # from temporary config
