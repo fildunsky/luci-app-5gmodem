@@ -263,6 +263,16 @@ wdm_for_path() {
 	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null
 }
 
+# ОБРАТНОЕ к wdm_for_path: чьё это устройство (USB-путь модема) сейчас. Считаем по
+# sysfs (не по кэшу listmodems): поднимаемся от cdc-wdm-узла к usb_device (idVendor)
+# и берём basename пути (1-1.3). Пусто - узла нет или это не USB.
+path_for_wdm() {
+	local d
+	d=$(readlink -f "/sys/class/usbmisc/$(basename "${1:-x}")/device" 2>/dev/null)
+	while [ -n "$d" ] && [ "$d" != "/" ] && [ ! -f "$d/idVendor" ]; do d=$(dirname "$d"); done
+	[ -f "$d/idVendor" ] && basename "$d"
+}
+
 # ModemManager must run if ANY modem interface uses the modemmanager proto (they
 # need MM). Creating an mbim/qmi/atc interface used to blindly disable MM and
 # thereby break the modemmanager modems -> keep MM's state driven by ALL
@@ -290,7 +300,7 @@ ensure_iface() {
 	# строка "point the app at the active modem's interface" прописывала в
 	# @5gmodem[0].network интерфейс ЧУЖОГО модема (at_port/active_modem при этом
 	# оставались от активного). Так секция и разъезжалась на каждой загрузке.
-	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER
+	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER _dp _dpo
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
@@ -349,6 +359,22 @@ ensure_iface() {
 	if [ -n "$NEW" ] && { [ -e "$NEW" ] || [ -d "/sys/class/net/$NEW" ]; } && [ "$NEW" != "$CUR" ]; then
 		uci -q set "network.$IF.device=$NEW"; uci -q commit network; CHG=1
 	fi
+	# ПРИВЯЗКА К ЖЕЛЕЗУ через стабильный путь (см. mkiface.sh ctrl_devpath).
+	# Пиннинг device=/dev/cdc-wdmN нестабилен: после ре-энумерации номер узла
+	# указывает на ДРУГОЙ модем, qmi/mbim.sh резолвит его netdev = чужой wwan,
+	# DHCP-ребёнок садится на wwan соседа и отпускает ЕГО аренду -> у рабочего
+	# модема пропадает инет (отчёт ZBT, два 05c6:9025). devpath = sysfs-путь
+	# интерфейса-контроллера, из него системный прото при КАЖДОМ setup находит
+	# cdc-wdm заново. Досетапливаем/чиним существующим интерфейсам.
+	case "$PROTO" in
+		mbim|qmi)
+			_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
+			_dpo=$(uci -q get "network.$IF.devpath")
+			if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then
+				uci -q set "network.$IF.devpath=$_dp"; uci -q commit network; CHG=1
+			fi
+			;;
+	esac
 	if [ "$CHG" = 1 ] || ! ifstatus "$IF" 2>/dev/null | grep -q '"up": true'; then
 		ifup "$IF" >/dev/null 2>&1
 	fi
@@ -2016,6 +2042,28 @@ resolve)
 	# 1) put ModemManager in the state the modem mix needs (creating an atc/mbim
 	#    interface had disabled MM and taken the modemmanager modems down).
 	apply_mm_state
+	# 1.5) ПАРКОВКА интерфейса ОТСУТСТВУЮЩЕГО модема, чей device перехвачен
+	#      ПРИСУТСТВУЮЩИМ. Пиннинг device=/dev/cdc-wdmN у секции вынутого модема
+	#      протухает: узел теперь принадлежит ДРУГОМУ (present) модему, netifd
+	#      поднимал бы такой интерфейс на ЕГО wwan, и DHCP-ребёнок рвал бы аренду
+	#      рабочего модема - у того пропадал интернет (отчёт ZBT; воспроизведено на
+	#      стенде WH3000: modem2 вынутого SIMCOM сидел на wwan0 Compal). Опускаем
+	#      его и снимаем протухший device, чтобы netifd не мог поднять его на чужом
+	#      устройстве. Вернётся владелец - ensure_iface впишет device+devpath и поднимет.
+	for s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		p=$(uci -q get "$CFG.$s.path")
+		[ -n "$p" ] || continue
+		echo " $PRESENT " | grep -q " $p " && continue   # владелец на месте - им займётся ensure_iface
+		ifa=$(uci -q get "$CFG.$s.network"); [ -n "$ifa" ] || continue
+		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim) ;; *) continue ;; esac
+		deva=$(uci -q get "network.$ifa.device"); [ -n "$deva" ] || continue
+		owp=$(path_for_wdm "$deva")
+		if [ -n "$owp" ] && [ "$owp" != "$p" ]; then
+			ifdown "$ifa" >/dev/null 2>&1
+			uci -q delete "network.$ifa.device"; uci -q delete "network.$ifa.devpath"; uci -q commit network
+			logger -t 5gmodem-resolve "iface $ifa: owner $p absent, device $deva now belongs to $owp - parked to free its wwan"
+		fi
+	done
 	# 2) repair EVERY present modem's interface device (stale after renumbering)
 	#    and bring it up if it is down - so all modems reconnect automatically.
 	for s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do

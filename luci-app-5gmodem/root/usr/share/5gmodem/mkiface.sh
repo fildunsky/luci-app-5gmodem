@@ -517,6 +517,17 @@ esac
 
 [ -n "$IDEV" ] || { json nomodem "$PROTO" ""; exit 1; }
 
+# Стабильный sysfs-путь ИНТЕРФЕЙСА-контроллера (родитель cdc-wdm), напр.
+# /sys/devices/.../1-1.2/1-1.2:1.4. Он привязан к ТОПОЛОГИИ USB (путь + номер
+# интерфейса) и НЕ меняется при ре-энумерации, тогда как номер /dev/cdc-wdmN -
+# меняется. Отдаём его в devpath: системный qmi/mbim.sh по нему при КАЖДОМ setup
+# находит актуальный cdc-wdm заново -> netdev всегда СВОЙ (wwan этого модема).
+# Зачем: без этого после ре-энумерации /dev/cdc-wdmN указывал на ДРУГОЙ модем,
+# qmi.sh резолвил его wwan (соседа), DHCP-ребёнок садился на wwan соседа и при
+# обрыве отпускал ЕГО аренду - у рабочего модема пропадал интернет (два
+# одинаковых 05c6:9025, отчёт ZBT). device оставляем как фолбэк.
+ctrl_devpath() { readlink -f "/sys/class/usbmisc/$(basename "${1:-}")/device" 2>/dev/null; }
+
 # --- (re)write the interface ---
 # keep the existing APN if the interface already exists, else a generic default
 OLDAPN=$(uci -q get "network.$IF.apn")
@@ -541,6 +552,9 @@ case "$PROTO" in
 	qmi|mbim)
 		set_pdp_opt "$IF" pdptype
 		uci set "network.$IF.auth=none"
+		# Привязка к железу через стабильный путь (см. ctrl_devpath выше).
+		_mdp=$(ctrl_devpath "$IDEV")
+		[ -n "$_mdp" ] && [ -d "$_mdp/usbmisc" ] && uci set "network.$IF.devpath=$_mdp"
 		;;
 	xmm)
 		set_pdp_opt "$IF" pdp        # прото xmm читает опцию 'pdp', не 'pdptype'

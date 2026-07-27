@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5G — конструктор метрик</title>
+<style>
+/* --- proton2025-подобные токены (свет/тьма) ------------------------------- */
+:root{
+  --accent:#0095ff; --accent-rgb:0,149,255; --accent-glow:rgba(0,149,255,.14);
+  --ok:#2ea043; --warn:#f5a623; --crit:#e5484d;
+  --radius:14px; --radius-sm:9px; --gap:12px; --cell:150px; --rowh:104px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --font:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+}
+:root[data-theme="dark"]{
+  --bg:#0d1017; --bg2:#141922; --bg3:#1b2230; --card:#151b26; --hover:#1e2634;
+  --fg:#e7ecf3; --fg2:#aeb7c6; --muted:#6b7688; --border:#243040;
+  --shadow:0 8px 30px rgba(0,0,0,.35);
+}
+:root[data-theme="light"]{
+  --bg:#eef1f6; --bg2:#f6f8fb; --bg3:#eaeef4; --card:#ffffff; --hover:#f0f4fa;
+  --fg:#101623; --fg2:#39435a; --muted:#8b93a6; --border:#dce2ec;
+  --shadow:0 8px 24px rgba(20,30,60,.10);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:400 15px/1.4 var(--font);-webkit-font-smoothing:antialiased}
+.top{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:20}
+.top h1{font:700 1.05rem var(--font);margin:0;letter-spacing:-.01em;flex:0 0 auto}
+.top .sub{color:var(--muted);font-size:.8rem;font-family:var(--mono)}
+.top .sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg3);color:var(--fg);font:600 .85rem var(--font);cursor:pointer;transition:.18s}
+.btn:hover{border-color:var(--accent);background:var(--hover)}
+.btn.on{background:var(--accent-glow);color:var(--accent);border-color:rgba(var(--accent-rgb),.45)}
+.modesw{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:var(--bg3);flex:0 0 auto}
+.modesw button{border:0;background:transparent;color:var(--fg2);padding:7px 9px;cursor:pointer;font-size:.95rem;line-height:1;transition:.15s}
+.modesw button+button{border-left:1px solid var(--border)}
+.modesw button:hover{background:var(--hover)}
+.modesw button.on{background:var(--accent-glow);color:var(--accent)}
+.acc-wrap{position:relative;flex:0 0 auto}
+.acc-pop{position:absolute;top:calc(100% + 7px);right:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:9px;display:none;grid-template-columns:repeat(5,1fr);gap:7px;z-index:30}
+.acc-pop.open{display:grid}
+.acc-sw{width:24px;height:24px;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0;transition:transform .12s}
+.acc-sw:hover{transform:scale(1.12)}
+.acc-sw.on{border-color:var(--fg);box-shadow:0 0 0 2px var(--card),0 0 0 3px var(--fg)}
+.studio{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:stretch;max-width:1400px;margin:0 auto;padding:18px 20px;min-height:calc(100vh - 116px)}
+@media(max-width:900px){.studio{grid-template-columns:1fr;min-height:0}}
+/* Дашборд-панель тянется на всю высоту колонки (каталог слева обычно длиннее),
+   канва растёт flex'ом - снизу больше нет мёртвого пустого отступа. */
+.panel.dash{display:flex;flex-direction:column}
+.panel.dash>.pbody{flex:1;display:flex;flex-direction:column;min-height:0}
+.panel.dash .canvas{flex:1}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.phead{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid var(--border);font:600 .95rem var(--font)}
+.phead .badge{margin-left:auto;font:600 .66rem var(--mono);color:var(--accent);background:var(--accent-glow);padding:3px 8px;border-radius:6px}
+.pbody{padding:14px 16px}
+.search{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:9px 12px;color:var(--fg);font:500 .85rem var(--font);margin-bottom:12px}
+.search:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.cat{font:600 .64rem var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:14px 0 7px}
+.cat:first-child{margin-top:0}
+.pick{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg3);margin-bottom:6px;transition:.15s}
+.pick:hover{border-color:rgba(var(--accent-rgb),.4);background:var(--hover)}
+.pick .pi{font-size:1rem;width:20px;text-align:center;flex:0 0 auto}
+.pick .pn{flex:1;min-width:0;font:600 .84rem var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick .pv{font:600 .72rem var(--mono);color:var(--muted);flex:0 0 auto;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pick .padd{flex:0 0 auto;width:26px;height:26px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--fg2);
+  font-size:1.1rem;line-height:1;cursor:pointer;transition:.15s}
+.pick .padd:hover{border-color:var(--accent);color:var(--accent)}
+.pick .padd.in{background:var(--accent);border-color:var(--accent);color:#fff}
+/* --- сетка виджетов ------------------------------------------------------- */
+.canvas{background:radial-gradient(circle at 15% 10%,rgba(var(--accent-rgb),.05),transparent 45%),var(--bg2);
+  border:1px solid var(--border);border-radius:var(--radius);padding:16px;min-height:340px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--cell),1fr));grid-auto-rows:var(--rowh);gap:var(--gap)}
+.grid.empty{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.9rem;min-height:280px}
+.w{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px;
+  display:flex;flex-direction:column;overflow:hidden;transition:transform .18s,box-shadow .18s,border-color .18s;cursor:pointer}
+.w:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.w.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.w[data-size="w"]{grid-column:span 2}
+.w[data-size="t"]{grid-row:span 2}
+.w[data-size="l"]{grid-column:span 2;grid-row:span 2}
+.w .whead{display:flex;align-items:center;gap:7px;color:var(--muted);font:600 .66rem var(--font);letter-spacing:.06em;text-transform:uppercase}
+.w .whead .wic{font-size:.95rem}
+.w .wval{margin-top:auto;font:700 clamp(1.4rem,4vw,2.1rem) var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1.05;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Адаптив под длину: короткое - крупно; средние/длинные тексты (IP, режим,
+   прошивка) - мельче и с переносом, чтобы влезали, а не обрезались троеточием. */
+.w .wval.mid{font-size:clamp(.95rem,2.4vw,1.3rem);white-space:normal;overflow:hidden;text-overflow:clip;overflow-wrap:anywhere;line-height:1.18;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.w .wval.small{font-size:.9rem;font-weight:600;white-space:normal;overflow:hidden;text-overflow:clip;overflow-wrap:anywhere;line-height:1.25;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+.w[data-size="w"] .wval.small,.w[data-size="l"] .wval.small{font-size:1rem}
+.w .wunit{font-size:.55em;font-weight:600;color:var(--fg2);margin-left:3px}
+.w .wsub{margin-top:5px;font:500 .74rem var(--mono);color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w[data-level="warn"] .wval{color:var(--warn)}
+.w[data-level="crit"] .wval{color:var(--crit)}
+.w[data-level="ok"]   .wval{color:var(--ok)}
+.w .bar{margin-top:9px;height:6px;border-radius:99px;background:var(--bg3);overflow:hidden}
+.w .bar>i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .5s ease}
+.w[data-level="warn"] .bar>i{background:var(--warn)}
+.w[data-level="crit"] .bar>i{background:var(--crit)}
+.w[data-level="ok"]   .bar>i{background:var(--ok)}
+.w .wx{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;border:0;background:var(--bg3);color:var(--muted);
+  font-size:.9rem;line-height:1;cursor:pointer;opacity:0;transition:.15s}
+.w:hover .wx{opacity:1}
+.w .wx:hover{background:var(--crit);color:#fff}
+/* --- составная карточка «Модем» ------------------------------------------ */
+.w.modemcard{grid-column:1/-1;overflow:hidden;cursor:default;align-self:start}
+.edit-on .w.modemcard{cursor:grab}
+.w .mc-head{text-transform:none;color:var(--fg);gap:8px}
+.w .mc-head .mc-headic{width:18px;height:18px;flex:0 0 auto}
+.w .mc-head .mc-name{font-family:var(--mono);font-weight:700;font-size:.92rem;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.w.modemcard .mc-grid{margin-top:9px;display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));grid-auto-rows:80px;gap:8px}
+.mc-item{background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:7px 9px;min-width:0;overflow:hidden;display:flex;flex-direction:column;grid-column:span 2}
+.mc-item[data-sz="q"]{grid-column:span 1}
+.mc-item[data-sz="w"]{grid-column:span 3}
+.mc-item[data-sz="b"]{grid-column:span 2;grid-row:span 2}
+.mc-item .mc-lbl{font:600 .56rem var(--font);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-item .mc-val{margin-top:auto;font:700 .95rem var(--font);font-variant-numeric:tabular-nums;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-item[data-sz="q"] .mc-val{font-size:.82rem}
+.mc-item[data-sz="b"] .mc-val{font-size:1.6rem}
+.mc-item .mc-val.mid{font-size:.8rem;font-weight:700}
+.mc-item .mc-val.small{font-size:.68rem;font-weight:600}
+.mc-item .mc-val.mid,.mc-item .mc-val.small{white-space:normal;overflow-wrap:anywhere;line-height:1.16;text-overflow:clip;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mc-item[data-sz="q"] .mc-val.mid,.mc-item[data-sz="q"] .mc-val.small{-webkit-line-clamp:3;font-size:.62rem}
+.mc-item[data-sz="b"] .mc-val.mid,.mc-item[data-sz="b"] .mc-val.small{font-size:1.05rem;-webkit-line-clamp:4}
+.mc-item[data-sz="w"] .mc-val.mid,.mc-item[data-sz="w"] .mc-val.small{font-size:.9rem}
+.mc-item .mc-val .u{font-size:.65em;color:var(--fg2);font-weight:600;margin-left:2px}
+.mc-item .bar{margin-top:6px;height:5px;border-radius:99px;background:var(--card);overflow:hidden}
+.mc-item .bar>i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),#5fb8ff)}
+.mc-item[data-level="ok"] .mc-val{color:var(--ok)} .mc-item[data-level="warn"] .mc-val{color:var(--warn)} .mc-item[data-level="crit"] .mc-val{color:var(--crit)}
+.mc-item[data-level="ok"] .bar>i{background:linear-gradient(90deg,#1f8f3a,var(--ok))} .mc-item[data-level="warn"] .bar>i{background:linear-gradient(90deg,#d98b12,var(--warn))} .mc-item[data-level="crit"] .bar>i{background:linear-gradient(90deg,#c13a3f,var(--crit))}
+.mc-item .mc-badge{align-self:flex-start;margin-top:auto;padding:2px 10px;border-radius:99px;font:700 .82rem var(--font);background:var(--accent-glow);color:var(--accent)}
+.mc-item[data-level="warn"] .mc-badge{background:rgba(245,166,35,.16);color:var(--warn)} .mc-item[data-level="crit"] .mc-badge{background:rgba(229,72,77,.16);color:var(--crit)} .mc-item[data-level="ok"] .mc-badge{background:rgba(46,160,67,.16);color:var(--ok)}
+.mc-item .mc-chip{align-self:flex-start;margin-top:auto;max-width:100%;display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:.74rem;font-weight:600;border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.12);border-radius:6px;padding:2px 8px;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-item .mc-chip img{width:11px;height:11px;opacity:.8;flex:0 0 auto}
+.edit-on .w.modemcard .mc-item{cursor:grab}
+.edit-on .w.modemcard .mc-item:active{cursor:grabbing}
+.mc-item.mc-drag{opacity:.4}
+.mc-item.mc-over{outline:2px dashed var(--accent);outline-offset:-2px;background:var(--hover)}
+.mc-op{display:flex;align-items:center;gap:8px;margin-top:auto;min-width:0}
+.mc-op svg{width:17px;height:22px;flex:0 0 auto;color:var(--accent)}
+.mc-op .opn{font:700 .88rem var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-op .mc-opic{width:22px;height:22px;flex:0 0 auto;border-radius:5px;object-fit:contain}
+.mc-op.only-ic{justify-content:center}
+.mc-op.only-ic .mc-opic{width:30px;height:30px}
+.mc-gc{display:flex;align-items:center;gap:7px;margin-top:auto;min-width:0}
+.mc-gc svg{flex:0 0 auto}
+.mc-gc .mc-gv{font:700 .9rem var(--font);font-variant-numeric:tabular-nums;color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc-gc .mc-sigic{width:28px;height:26px;flex:0 0 auto}
+.mc-item[data-level="ok"] .mc-gc .mc-gv{color:var(--ok)} .mc-item[data-level="warn"] .mc-gc .mc-gv{color:var(--warn)} .mc-item[data-level="crit"] .mc-gc .mc-gv{color:var(--crit)}
+.mc-traf{display:flex;flex-direction:column;gap:2px;margin-top:auto}
+.mc-traf .tr{display:flex;align-items:center;gap:5px;font:700 .8rem var(--mono)}
+.mc-traf .tr svg{width:12px;height:12px;flex:0 0 auto}
+.mc-traf .tr.rx{color:var(--ok)} .mc-traf .tr.tx{color:var(--accent)}
+.mc-traf .tr .tv{color:var(--fg)}
+.mc-gauge{margin-top:auto;display:flex;align-items:center;gap:9px}
+.mc-gauge svg{flex:0 0 auto}
+.mc-gauge .gv{font:700 1.02rem var(--font);font-variant-numeric:tabular-nums}
+.mc-gauge .gv small{font-size:.6em;color:var(--fg2)}
+/* --- большая карточка «Панель сигнала» ------------------------------------ */
+.w.panelcard{grid-column:1/-1;overflow:hidden;cursor:default;align-self:start}
+.edit-on .w.panelcard{cursor:grab}
+.w.panelcard .pn-grid{margin-top:11px;display:flex;flex-wrap:wrap;gap:11px}
+.pn-row.lbar{flex:1 1 100%}
+.pn-lbl{font:600 .7rem var(--font);letter-spacing:.05em;text-transform:uppercase;color:var(--fg2)}
+.pn-v{font:700 1.05rem var(--font);font-variant-numeric:tabular-nums}
+.pn-v .u{font-size:.62em;color:var(--muted);font-weight:600;margin-left:2px}
+.pn-row.lbar .pn-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.pn-bar{height:12px;border-radius:99px;background:var(--bg3);overflow:hidden}
+.pn-bar>i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#0067c0,var(--accent),#7cc4ff);transition:width .5s ease}
+.pn-row[data-level="ok"] .pn-v,.pn-row[data-level="ok"] .pn-num{color:var(--ok)} .pn-row[data-level="warn"] .pn-v,.pn-row[data-level="warn"] .pn-num{color:var(--warn)} .pn-row[data-level="crit"] .pn-v,.pn-row[data-level="crit"] .pn-num{color:var(--crit)}
+.pn-row[data-level="ok"] .pn-bar>i{background:linear-gradient(90deg,#1f8f3a,var(--ok),#7ee0a0)}
+.pn-row[data-level="warn"] .pn-bar>i{background:linear-gradient(90deg,#d98b12,var(--warn),#ffcf7a)}
+.pn-row[data-level="crit"] .pn-bar>i{background:linear-gradient(90deg,#b5323a,var(--crit),#ff9ea1)}
+.pn-row.gauge{flex:1 1 158px;min-width:0;display:flex;align-items:center;gap:12px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:9px 12px}
+.pn-row.gauge .mc-gauge{gap:0} .pn-row.gauge .mc-gauge .gv{display:none}
+.pn-row.gauge .pn-gl{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pn-row.gauge .pn-v{font-size:1.25rem}
+.pn-row.num{flex:1 1 150px;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;padding:9px 12px}
+.pn-row.num .pn-num{font:800 1.5rem var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pn-row.num .pn-num.long{font-size:1.02rem;font-weight:700;white-space:normal;overflow-wrap:anywhere;line-height:1.2}
+.fld .frm{width:20px;height:20px;flex:0 0 auto;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:.8rem;line-height:1;border-radius:5px}
+.fld .frm:hover{background:var(--crit);color:#fff}
+/* редактор полей модема (в панели настроек) */
+.flds{max-height:52vh;overflow:auto;margin-top:4px}
+.fld{display:flex;align-items:center;gap:7px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg3);margin-bottom:6px}
+.fld.off{opacity:.5}
+.fld .fmv{display:flex;flex-direction:column}
+.fld .fmv button{width:18px;height:13px;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:.62rem;line-height:1;padding:0}
+.fld .fmv button:hover{color:var(--accent)}
+.fld .fn{flex:1;min-width:0;font:600 .8rem var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fld select{width:auto;padding:4px 20px 4px 7px;font-size:.72rem;margin:0}
+.edit-on .w{cursor:grab}
+.edit-on .w:active{cursor:grabbing}
+.w.dragging{opacity:.4;transform:scale(.97)}
+.w.dragover{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent),0 0 0 3px var(--accent-glow)}
+.edit-off .w{cursor:default}
+.edit-off .w:hover{transform:none;box-shadow:none}
+.edit-off .wx{display:none}
+.edit-off .w.sel{box-shadow:none;border-color:var(--border)}
+/* --- настройки выбранной карточки ---------------------------------------- */
+.setrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.setrow:last-child{border-bottom:0}
+.setrow label{font:600 .8rem var(--font)}
+.sizes{display:flex;gap:6px}
+.szb{width:34px;height:30px;border-radius:7px;border:1px solid var(--border);background:var(--bg3);color:var(--fg2);cursor:pointer;font:700 .7rem var(--mono)}
+.szb.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.muted{color:var(--muted);font-size:.82rem}
+</style>
+</head>
+<body class="edit-on">
+<div class="top">
+  <h1>5G · конструктор метрик</h1>
+  <span class="sub" id="modemname">—</span>
+  <span class="sp"></span>
+  <span class="sub" id="age"></span>
+  <button class="btn on" id="editBtn">✓ Готово</button>
+  <div class="modesw" id="modesw">
+    <button data-m="light" title="Светлая">☀️</button>
+    <button data-m="dark" title="Тёмная">🌙</button>
+    <button data-m="auto" title="Авто (как в системе)">🖥️</button>
+  </div>
+  <div class="acc-wrap">
+    <button class="btn" id="accBtn" title="Цвет акцента">🎨</button>
+    <div class="acc-pop" id="accPop"></div>
+  </div>
+</div>
+
+<div class="studio">
+  <div>
+    <div class="panel" id="setPanel" style="margin-bottom:16px;display:none">
+      <div class="phead">⚙️ Карточка <span class="badge">настройки</span></div>
+      <div class="pbody" id="setBody"></div>
+    </div>
+    <div class="panel" id="catPanel">
+      <div class="phead">Метрики <span class="badge" id="catCount">0</span></div>
+      <div class="pbody">
+        <input class="search" id="search" placeholder="Поиск метрики…">
+        <div id="catList"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel dash">
+    <div class="phead">Дашборд <span class="badge" id="cardCount">0</span></div>
+    <div class="pbody"><div class="canvas"><div class="grid" id="grid"></div></div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* КАТАЛОГ МЕТРИК. key = поле из /cgi-bin/5g-api?metrics; g=группа; u=единица;
+   ic=иконка; lv(v)=уровень (ok|warn|crit); bar(v)=заполнение 0..100; f(v)=формат. */
+var C = {
+  signal:{n:'Сигнал',g:'Сигнал',u:'%',ic:'📶',bar:function(v){return cl(+v,0,100);},lv:function(v){return v>=60?'ok':v>=30?'warn':'crit';}},
+  rsrp:{n:'RSRP',g:'Сигнал',u:'dBm',ic:'📡',bar:function(v){return cl((+v+130)*100/50,0,100);},lv:function(v){return v>=-90?'ok':v>=-105?'warn':'crit';}},
+  rsrq:{n:'RSRQ',g:'Сигнал',u:'dB',ic:'📡',bar:function(v){return cl((+v+20)*100/17,0,100);},lv:function(v){return v>=-12?'ok':v>=-16?'warn':'crit';}},
+  sinr:{n:'SINR',g:'Сигнал',u:'dB',ic:'📈',bar:function(v){return cl((+v+10)*100/30,0,100);},lv:function(v){return v>=13?'ok':v>=0?'warn':'crit';}},
+  rssi:{n:'RSSI',g:'Сигнал',u:'dBm',ic:'📶',bar:function(v){return cl((+v+110)*100/60,0,100);},lv:function(v){return v>=-65?'ok':v>=-85?'warn':'crit';}},
+  csq:{n:'CSQ',g:'Сигнал',u:'',ic:'📶'},
+  rscp:{n:'RSCP',g:'Сигнал',u:'dBm',ic:'📡'}, ecio:{n:'Ec/Io',g:'Сигнал',u:'dB',ic:'📡'},
+  cqi:{n:'CQI',g:'Сигнал',u:'',ic:'📊'}, pathloss:{n:'Pathloss',g:'Сигнал',u:'dB',ic:'📉'}, txpower:{n:'TX power',g:'Сигнал',u:'dBm',ic:'⚡'},
+  operator_name:{n:'Оператор',g:'Сеть',ic:'🏢'},
+  mode:{n:'Режим',g:'Сеть',ic:'🌐',f:function(v){return String(v).replace(/\s*\(\s*\d+(?:\.\d+)?\s*MHz\s*\)/gi,'');}},
+  pband:{n:'Диапазон',g:'Сеть',ic:'📻'}, bandwidth:{n:'Полоса',g:'Сеть',ic:'↔️'},
+  earfcn:{n:'EARFCN',g:'Сеть',ic:'🔢'}, registration:{n:'Регистрация',g:'Сеть',ic:'✅'},
+  uecat:{n:'UE Cat',g:'Сеть',ic:'🏷️'}, volte:{n:'VoLTE',g:'Сеть',ic:'📞'},
+  pci:{n:'PCI',g:'Сота',ic:'🗼'}, cid_dec:{n:'Cell ID',g:'Сота',ic:'🗼'},
+  enbid:{n:'eNB ID',g:'Сота',ic:'🗼'}, tac_dec:{n:'TAC',g:'Сота',ic:'📍'}, lac_dec:{n:'LAC',g:'Сота',ic:'📍'},
+  ipaddr:{n:'IP',g:'Соединение',ic:'🌍'}, ipaddr6:{n:'IPv6',g:'Соединение',ic:'🌍'},
+  iface_apn:{n:'APN',g:'Соединение',ic:'🔌'}, conn_time:{n:'Время связи',g:'Соединение',ic:'⏱️'},
+  rx:{n:'Принято',g:'Соединение',ic:'⬇️'}, tx:{n:'Отправлено',g:'Соединение',ic:'⬆️'},
+  protocol:{n:'Протокол',g:'Соединение',ic:'🔗'}, roaming:{n:'Роуминг',g:'Соединение',ic:'✈️',f:function(v){return v==='1'?'Да':'Нет';}},
+  modem:{n:'Модем',g:'Устройство',ic:'📟'}, firmware:{n:'Прошивка',g:'Устройство',ic:'💾'},
+  mtemp:{n:'Температура',g:'Устройство',ic:'🌡️'}, mtherm:{n:'Троттлинг',g:'Устройство',ic:'🔥'},
+  imei:{n:'IMEI',g:'Устройство',ic:'🔖'},
+  imsi:{n:'IMSI',g:'SIM',ic:'📇'}, iccid:{n:'ICCID',g:'SIM',ic:'📇'},
+  simslot:{n:'SIM-слот',g:'SIM',ic:'🎴'}, phone:{n:'Номер',g:'SIM',ic:'📱'}
+};
+var SIZE_LABEL={s:'S',w:'W',t:'T',l:'L'};
+function cl(v,a,b){v=Math.round(v);return v<a?a:v>b?b:v;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+/* Иконка оператора из наших ресурсов (та же таблица, что в netpri.js). Нет -
+   вернём null (тогда возьмём op-sim.png - готовая иконка сим-карты). */
+function operatorIcon(name){
+  var n=(name||'').toLowerCase();
+  if(n.indexOf('t-mobile')>=0||n.indexOf('tinkoff')>=0||n.indexOf('t-bank')>=0||n.indexOf('т-мобайл')>=0||n.indexOf('т-банк')>=0||n.indexOf('t-mob')>=0)return 'op-tbank';
+  if(n.indexOf('beeline')>=0||n.indexOf('билайн')>=0||n.indexOf('vimpel')>=0)return 'op-beeline';
+  if(n.indexOf('mts')>=0||n.indexOf('мтс')>=0)return 'op-mts';
+  if(n.indexOf('megafon')>=0||n.indexOf('мегафон')>=0)return 'op-megafon';
+  if(n.indexOf('tele2')>=0||n.indexOf('теле2')>=0||n.trim()==='t2')return 'op-t2';
+  if(n.indexOf('yota')>=0)return 'op-yota';
+  if(n.indexOf('motiv')>=0||n.indexOf('мотив')>=0)return 'op-motiv';
+  if(n.indexOf('sber')>=0||n.indexOf('сбер')>=0)return 'op-sbermobile';
+  if(n.indexOf('tattelecom')>=0||n.indexOf('таттелеком')>=0||n.indexOf('летай')>=0)return 'op-tattelecom';
+  return null;
+}
+function opImg(rawop){var oi=operatorIcon(rawop)||'op-sim';return '<img class="mc-opic" src="/luci-static/resources/icons/'+oi+'.png" alt="">';}
+/* Стандартная иконка уровня сигнала (mobile-signal-*.svg) по проценту. */
+function sigIconSrc(p){p=+p;var f=(p<=0)?'000-000':(p<20)?'000-020':(p<40)?'020-040':(p<60)?'040-060':(p<80)?'060-080':'080-100';
+  return '/luci-static/resources/icons/mobile-signal-'+f+'.svg';}
+/* Компактный круговой индикатор для тайлов карточки Модем: маленькое кольцо +
+   значение рядом (влезает в обычный тайл, не режет заголовок). */
+function mcGauge(p,lv,valHTML){
+  p=Math.max(0,Math.min(100,Math.round(p||0)));var d=30,r=(d/2)-3.5,cc=d/2,circ=2*Math.PI*r,off=circ*(1-p/100);
+  var col=lv==='crit'?'var(--crit)':lv==='warn'?'var(--warn)':lv==='ok'?'var(--ok)':'var(--accent)';
+  return '<div class="mc-gc"><svg width="'+d+'" height="'+d+'" viewBox="0 0 '+d+' '+d+'">'+
+    '<circle cx="'+cc+'" cy="'+cc+'" r="'+r+'" fill="none" stroke="var(--border)" stroke-width="4"/>'+
+    '<circle cx="'+cc+'" cy="'+cc+'" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="4" stroke-linecap="round" stroke-dasharray="'+circ.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+cc+' '+cc+')"/></svg>'+
+    '<span class="mc-gv">'+valHTML+'</span></div>';
+}
+
+var DEFAULT=[{k:'signal',s:'w'},{k:'rsrp',s:'s'},{k:'rsrq',s:'s'},{k:'sinr',s:'s'},
+  {k:'operator_name',s:'w'},{k:'mode',s:'s'},{k:'pband',s:'s'},{k:'mtemp',s:'s'}];
+/* Составная карточка «Модем»: те же поля, что и на странице модема приложения.
+   Внутри - список элементов, каждый можно вкл/выкл, двигать и менять тип показа. */
+var MODEM_FIELDS=['modem','firmware','vidpid','operator_name','mode','signal','rsrp','rsrq','sinr','rssi',
+  'pband','bandwidth','earfcn','pci','cid_dec','enbid','tac_dec','iface_proto','ipaddr','iface_apn','conn_time',
+  'rx','tx','_traffic','mtemp','mtherm','imei','imsi','iccid','phone','simslot','roaming'];
+C._traffic={n:'Трафик (↓↑)',g:'Соединение',ic:'🔄'};   // виртуальное поле (только в карточке Модем)
+C.iface_proto={n:'Интерфейс',g:'Соединение',ic:'🔌',f:function(v){var m={modemmanager:'ModemManager',qmi:'QMI',mbim:'MBIM',fibocom:'Fibocom',ncm:'NCM',xmm:'XMM',atc:'AT',wwan:'WWAN','3g':'3G',ecm:'ECM'};return m[String(v).toLowerCase()]||v;}};
+C.vidpid={n:'VID:PID',g:'Устройство',ic:'🔩'};       // из listmodems (подтягивается в pull)
+C.product={n:'USB-имя',g:'Устройство',ic:'🏭'};      // из listmodems
+function fieldDefault(k){
+  var disp=(k==='_traffic')?'traffic':((k==='iface_proto'||k==='vidpid')?'chip':'text');
+  return {k:k,on:(k!=='_traffic'),disp:disp,sz:'n'};
+}
+function modemDefaults(){return MODEM_FIELDS.map(fieldDefault);}
+/* Миграция: у карточек, сохранённых до добавления новых полей (iface_proto,
+   vidpid…), дописываем недостающие - иначе их «не видно» в старой карточке. */
+function ensureModemFields(item){
+  if(!item.fields)item.fields=modemDefaults();
+  var have={};item.fields.forEach(function(f){have[f.k]=1;});
+  MODEM_FIELDS.forEach(function(k){if(!have[k])item.fields.push(fieldDefault(k));});
+}
+/* Доступные типы отображения для поля (зависят от метрики). */
+function dispOptions(k){
+  if(k==='_traffic')return {traffic:'Стрелки ↓↑'};
+  if(k==='iface_proto'||k==='vidpid')return {chip:'Чип (как в проге)',text:'Текст',badge:'Бейдж'};
+  var o={text:'Текст',badge:'Бейдж'};var c=C[k]||{};
+  if(c.bar){o.bar='Шкала';o.gauge='Круг';}
+  if(k==='signal')o.bars='Иконка сигнала';
+  if(k==='operator_name'){o.simop='Лого + имя';o.simcard='Сим-карта + имя';}
+  if(k==='rx')o.arrow='Стрелка ↓'; if(k==='tx')o.arrow='Стрелка ↑';
+  return o;
+}
+var SIZEOPT=[['q','◻'],['n','▭'],['w','▬'],['b','⬛']];
+var SVG_DN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5 12l7 7 7-7"/></svg>';
+var SVG_UP='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V5M5 12l7-7 7 7"/></svg>';
+function gaugeSVG(p,lv,d){
+  d=d||38;p=Math.max(0,Math.min(100,Math.round(p||0)));
+  var r=(d/2)-4,cc=d/2,circ=2*Math.PI*r,off=circ*(1-p/100),sw=Math.max(4,Math.round(d/9));
+  var col=lv==='crit'?'var(--crit)':lv==='warn'?'var(--warn)':lv==='ok'?'var(--ok)':'var(--accent)';
+  return '<div class="mc-gauge"><svg width="'+d+'" height="'+d+'" viewBox="0 0 '+d+' '+d+'">'+
+    '<circle cx="'+cc+'" cy="'+cc+'" r="'+r+'" fill="none" stroke="var(--border)" stroke-width="'+sw+'"/>'+
+    '<circle cx="'+cc+'" cy="'+cc+'" r="'+r+'" fill="none" stroke="'+col+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-dasharray="'+circ.toFixed(1)+'" stroke-dashoffset="'+off.toFixed(1)+'" transform="rotate(-90 '+cc+' '+cc+')"/></svg>'+
+    '<span class="gv">'+p+'<small>%</small></span></div>';
+}
+var LSKEY='5g_dash_layout_v1';
+var layout=load(); var DATA={}; var sel=null; var editing=true; var dragIdx=null; var mcDrag=null;
+
+function load(){try{var a=JSON.parse(localStorage.getItem(LSKEY));if(Array.isArray(a))return a;}catch(e){}return DEFAULT.slice();}
+function save(){try{localStorage.setItem(LSKEY,JSON.stringify(layout));}catch(e){}}
+function raw(k){var v=DATA[k];return (v==null||v==='-'||v==='')?null:v;}
+function fmt(k){var v=raw(k);if(v==null)return {t:'—',u:'',len:1};var c=C[k]||{};if(c.f)v=c.f(v);v=String(v);return {t:esc(v),u:c.u||'',len:v.length};}
+
+function grid(){
+  var g=document.getElementById('grid');g.innerHTML='';
+  document.getElementById('cardCount').textContent=layout.length;
+  if(!layout.length){g.className='grid empty';g.textContent='Пусто — добавьте метрики слева';return;}
+  g.className='grid';
+  layout.forEach(function(item,idx){
+    var el=document.createElement('div');
+    el.className='w'+(sel===idx?' sel':'')+(item.type==='modem'?' modemcard':item.type==='panel'?' panelcard':'');
+    el.setAttribute('data-size',item.s||'s');
+    if(item.type==='modem'){
+      el.innerHTML=modemHTML(item)+'<button class="wx" title="Убрать">✕</button>';
+    } else if(item.type==='panel'){
+      el.innerHTML=panelHTML(item)+'<button class="wx" title="Убрать">✕</button>';
+    } else {
+      var c=C[item.k]||{n:item.k,ic:'▫️'};var v=fmt(item.k);var rv=raw(item.k);
+      var lv=(c.lv&&rv!=null)?c.lv(parseFloat(rv)):'';
+      if(lv)el.setAttribute('data-level',lv);
+      var barH='';
+      if(c.bar&&rv!=null&&(item.s==='w'||item.s==='l')){var p=c.bar(parseFloat(rv));if(p!=null)barH='<div class="bar"><i style="width:'+p+'%"></i></div>';}
+      var subH=((item.s==='l'||item.s==='t')&&item.sub)?'<div class="wsub">'+esc(item.sub)+'</div>':'';
+      var vc=v.len>12?' small':v.len>6?' mid':'';
+      el.innerHTML='<div class="whead"><span class="wic">'+(c.ic||'▫️')+'</span>'+esc(item.lbl||c.n||item.k)+'</div>'+
+        '<div class="wval'+vc+'">'+v.t+(v.u?'<span class="wunit">'+v.u+'</span>':'')+'</div>'+subH+barH+
+        '<button class="wx" title="Убрать">✕</button>';
+    }
+    el.querySelector('.wx').addEventListener('click',function(e){e.stopPropagation();layout.splice(idx,1);if(sel===idx)sel=null;else if(sel>idx)sel--;save();grid();picker();settings();});
+    el.addEventListener('click',function(){if(!editing)return;sel=(sel===idx?null:idx);grid();settings();});
+    // Перетаскивание для переупорядочивания (только в режиме правки).
+    el.draggable=editing;
+    el.addEventListener('dragstart',function(e){if(!editing){e.preventDefault();return;}dragIdx=idx;el.classList.add('dragging');try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',String(idx));}catch(_){}});
+    el.addEventListener('dragend',function(){dragIdx=null;el.classList.remove('dragging');var q=document.querySelectorAll('.w.dragover');for(var i=0;i<q.length;i++)q[i].classList.remove('dragover');});
+    el.addEventListener('dragover',function(e){if(dragIdx==null||dragIdx===idx)return;e.preventDefault();el.classList.add('dragover');});
+    el.addEventListener('dragleave',function(){el.classList.remove('dragover');});
+    el.addEventListener('drop',function(e){e.preventDefault();el.classList.remove('dragover');if(dragIdx==null||dragIdx===idx)return;var m=layout.splice(dragIdx,1)[0];layout.splice(idx,0,m);sel=idx;dragIdx=null;save();grid();settings();});
+    if(item.type==='modem')wireModemItemsDnD(el,item);
+    g.appendChild(el);
+  });
+  requestAnimationFrame(fitModems);
+}
+
+/* Перетаскивание тайлов ВНУТРИ карточки «Модем». mcDrag хранит индекс поля;
+   stopPropagation - чтобы не сработал DnD самой карточки (она тоже draggable). */
+function wireModemItemsDnD(card,item){
+  if(!editing)return;
+  card.querySelectorAll('.mc-item').forEach(function(it){
+    it.draggable=true;
+    it.addEventListener('dragstart',function(e){e.stopPropagation();mcDrag=+it.dataset.fi;it.classList.add('mc-drag');
+      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain','mc');}catch(_){}});
+    it.addEventListener('dragend',function(e){e.stopPropagation();mcDrag=null;it.classList.remove('mc-drag');
+      card.querySelectorAll('.mc-item.mc-over').forEach(function(x){x.classList.remove('mc-over');});});
+    it.addEventListener('dragover',function(e){if(mcDrag==null)return;e.preventDefault();e.stopPropagation();it.classList.add('mc-over');});
+    it.addEventListener('dragleave',function(e){e.stopPropagation();it.classList.remove('mc-over');});
+    it.addEventListener('drop',function(e){e.preventDefault();e.stopPropagation();it.classList.remove('mc-over');
+      var to=+it.dataset.fi;if(mcDrag==null||mcDrag===to)return;
+      var m=item.fields.splice(mcDrag,1)[0];item.fields.splice(to,0,m);mcDrag=null;save();grid();settings();});
+  });
+}
+
+/* Составная карточка «Модем»: рендер внутренних элементов по их типу показа. */
+function mcField(f,fi){
+  var sz=f.sz||'n';var szAttr=' data-sz="'+sz+'"'+(fi==null?'':' data-fi="'+fi+'"');
+  // Комбинированный трафик: rx (зелёная ↓) + tx (синяя ↑) вместе.
+  if(f.k==='_traffic'){
+    var rrx=raw('rx'),rtx=raw('tx');
+    return '<div class="mc-item"'+szAttr+'><span class="mc-lbl">Трафик</span><div class="mc-traf">'+
+      '<span class="tr rx">'+SVG_DN+'<span class="tv">'+(rrx==null?'—':esc(rrx))+'</span></span>'+
+      '<span class="tr tx">'+SVG_UP+'<span class="tv">'+(rtx==null?'—':esc(rtx))+'</span></span></div></div>';
+  }
+  var c=C[f.k]||{n:f.k};var v=fmt(f.k);var rv=raw(f.k);
+  var lv=(c.lv&&rv!=null)?c.lv(parseFloat(rv)):'';
+  var name=esc(c.n||f.k);var val=v.t+(v.u?'<span class="u">'+v.u+'</span>':'');
+  var lva=lv?' data-level="'+lv+'"':'';var disp=f.disp||'text';if(disp==='big')disp='text';
+  var body;
+  if(disp==='simop'||disp==='simcard'){
+    var img=(disp==='simcard')?'<img class="mc-opic" src="/luci-static/resources/icons/op-sim.png" alt="">':opImg(raw('operator_name'));
+    body=(sz==='q')
+      ? '<span class="mc-lbl">'+name+'</span><div class="mc-op only-ic">'+img+'</div>'
+      : '<span class="mc-lbl">'+name+'</span><div class="mc-op">'+img+'<span class="opn">'+v.t+'</span></div>';
+  }else if(disp==='bars'){
+    body='<span class="mc-lbl">'+name+'</span><div class="mc-gc"><img class="mc-sigic" src="'+sigIconSrc(parseFloat(rv))+'" alt=""><span class="mc-gv">'+val+'</span></div>';
+  }else if(disp==='chip'){
+    // Как proto-chip в основной программе: моно, серая рамка; для интерфейса -
+    // призрак-иконка, когда модем скрыт от ModemManager (mm_running=1 & mm_hidden=1).
+    var ghost=(f.k==='iface_proto'&&String(DATA.mm_running)==='1'&&String(DATA.mm_hidden)==='1')
+      ? '<img src="/luci-static/resources/icons/cghost.svg" alt="" title="скрыт от ModemManager">' : '';
+    body='<span class="mc-lbl">'+name+'</span><span class="mc-chip">'+ghost+v.t+'</span>';
+  }else if(disp==='arrow'){
+    var ar=(f.k==='rx')?SVG_DN:SVG_UP,arc=(f.k==='rx')?'rx':'tx';
+    body='<span class="mc-lbl">'+name+'</span><div class="mc-traf"><span class="tr '+arc+'">'+ar+'<span class="tv">'+val+'</span></span></div>';
+  }else if(disp==='gauge'&&c.bar&&rv!=null){
+    body='<span class="mc-lbl">'+name+'</span>'+mcGauge(c.bar(parseFloat(rv)),lv,val);
+  }else if(disp==='badge'){
+    body='<span class="mc-lbl">'+name+'</span><span class="mc-badge">'+v.t+'</span>';
+  }else if(disp==='bar'&&c.bar&&rv!=null){
+    var p=c.bar(parseFloat(rv));
+    body='<span class="mc-lbl">'+name+'</span><span class="mc-val">'+val+'</span><div class="bar"><i style="width:'+(p==null?0:p)+'%"></i></div>';
+  }else{
+    var vc=v.len>16?' small':v.len>8?' mid':'';   // длинные значения (режим с CA) - мельче и с переносом
+    body='<span class="mc-lbl">'+name+'</span><span class="mc-val'+vc+'">'+val+'</span>';
+  }
+  return '<div class="mc-item"'+szAttr+lva+'>'+body+'</div>';
+}
+function modemHTML(item){
+  ensureModemFields(item);
+  // map с индексом (а не filter) - чтобы у видимого тайла был data-fi = позиция
+  // поля в item.fields, по которому DnD внутри карточки его переставляет.
+  var cells=item.fields.map(function(f,i){return f.on?mcField(f,i):'';}).join('');
+  return '<div class="whead mc-head"><img class="mc-headic" src="/luci-static/resources/icons/cmodem.svg" alt="">'+
+      '<span class="mc-name">'+esc(item.lbl||DATA.modem||'Модем')+'</span></div>'+
+    '<div class="mc-grid">'+(cells||'<span class="muted" style="padding:6px">Все элементы выключены</span>')+'</div>';
+}
+
+/* Большая «Панель сигнала»: крупные визуализации основных метрик. */
+function panelDefaults(){return ['signal','rsrp','rsrq','sinr','rssi'].map(function(k){return {k:k,on:true,viz:'lbar'};});}
+function pnVizOptions(k){var o={};var c=C[k]||{};if(c.bar){o.lbar='Полоса';o.gauge='Круг';}o.num='Число';return o;}
+function pnField(f){
+  var c=C[f.k]||{n:f.k};var v=fmt(f.k);var rv=raw(f.k);
+  var lv=(c.lv&&rv!=null)?c.lv(parseFloat(rv)):'';var lva=lv?' data-level="'+lv+'"':'';
+  var name=esc(c.n||f.k);var val=v.t+(v.u?'<span class="u">'+v.u+'</span>':'');
+  var viz=f.viz;if(!pnVizOptions(f.k)[viz])viz=(c.bar?'lbar':'num');
+  if(viz==='gauge'&&c.bar&&rv!=null){
+    return '<div class="pn-row gauge"'+lva+'>'+gaugeSVG(c.bar(parseFloat(rv)),lv,58)+
+      '<div class="pn-gl"><span class="pn-lbl">'+name+'</span><span class="pn-v">'+val+'</span></div></div>';
+  }
+  if(viz==='lbar'&&c.bar&&rv!=null){
+    var p=c.bar(parseFloat(rv));
+    return '<div class="pn-row lbar"'+lva+'><div class="pn-top"><span class="pn-lbl">'+name+'</span><span class="pn-v">'+val+'</span></div>'+
+      '<div class="pn-bar"><i style="width:'+(p==null?0:p)+'%"></i></div></div>';
+  }
+  return '<div class="pn-row num"'+lva+'><span class="pn-lbl">'+name+'</span><span class="pn-num'+(v.len>10?' long':'')+'">'+val+'</span></div>';
+}
+function panelHTML(item){
+  var rows=(item.fields||[]).filter(function(f){return f.on;}).map(pnField).join('');
+  return '<div class="whead"><span class="wic">📊</span>'+esc(item.lbl||'Панель сигнала')+'</div>'+
+    '<div class="pn-grid">'+(rows||'<span class="muted" style="padding:6px">Нет элементов</span>')+'</div>';
+}
+/* Составная карточка full-width: подгоняем число занимаемых строк сетки под
+   реальную высоту содержимого (иначе фиксированные ряды по 104px обрезали бы её). */
+function fitModems(){
+  document.querySelectorAll('.w.modemcard,.w.panelcard').forEach(function(el){
+    // Квадратные тайлы при адаптивной ширине: колонки 1fr (заполняют всю ширину),
+    // а высоту ряда ставим РАВНОЙ фактической ширине колонки -> тайл 1x1 квадратный.
+    var mg=el.querySelector('.mc-grid');
+    if(mg){var cols=getComputedStyle(mg).gridTemplateColumns.split(/\s+/);var cw=parseFloat(cols[0]);if(cw>0)mg.style.gridAutoRows=cw+'px';}
+    // Меряем реальную высоту карточки (align-self:start -> карточка по контенту),
+    // затем резервируем ТОЧНО минимально достаточное число рядов сетки: ряд=104,
+    // gap=12, N рядов = 116N-12 px. Так под карточкой не остаётся лишних рядов.
+    el.style.gridRow='';
+    var h=el.offsetHeight;
+    el.style.gridRow='span '+Math.max(2,Math.ceil((h+12)/116));
+  });
+}
+
+function picker(){
+  var q=(document.getElementById('search').value||'').toLowerCase();
+  var groups={};Object.keys(C).forEach(function(k){if(k.charAt(0)==='_')return;var c=C[k];if(q&&(k+' '+c.n+' '+c.g).toLowerCase().indexOf(q)<0)return;(groups[c.g]=groups[c.g]||[]).push(k);});
+  var host=document.getElementById('catList');host.innerHTML='';var n=0;
+  // Составные карточки (закреплены сверху): «Модем» и «Панель сигнала».
+  var COMPO=[
+    {t:'modem',ic:'📟',nm:'Модем — все поля',kw:'модем modem составная поля',mk:function(){return {type:'modem',s:'l',lbl:'Модем',fields:modemDefaults()};}},
+    {t:'panel',ic:'📊',nm:'Панель сигнала — крупная',kw:'панель сигнал panel сота крупная',mk:function(){return {type:'panel',s:'l',lbl:'Панель сигнала',fields:panelDefaults()};}}
+  ];
+  var compoShown=COMPO.filter(function(x){return !q||(x.kw+' '+x.nm).toLowerCase().indexOf(q)>=0;});
+  if(compoShown.length){
+    var ch=document.createElement('div');ch.className='cat';ch.textContent='Составные';host.appendChild(ch);
+    compoShown.forEach(function(x){
+      var has=false;for(var mi=0;mi<layout.length;mi++)if(layout[mi].type===x.t){has=true;break;}
+      var r=document.createElement('div');r.className='pick';
+      r.innerHTML='<span class="pi">'+x.ic+'</span><span class="pn">'+esc(x.nm)+'</span><span class="pv"></span>'+
+        '<button class="padd'+(has?' in':'')+'" title="'+(has?'Убрать':'Добавить')+'">'+(has?'✓':'+')+'</button>';
+      r.querySelector('.padd').addEventListener('click',function(){
+        var i=-1;for(var j=0;j<layout.length;j++){if(layout[j].type===x.t){i=j;break;}}
+        if(i>=0){layout.splice(i,1);if(sel===i)sel=null;else if(sel>i)sel--;}
+        else{layout.push(x.mk());}
+        save();grid();picker();settings();
+      });
+      host.appendChild(r);
+    });
+  }
+  Object.keys(groups).forEach(function(gname){
+    var h=document.createElement('div');h.className='cat';h.textContent=gname;host.appendChild(h);
+    groups[gname].forEach(function(k){n++;var c=C[k];var inLayout=layout.some(function(i){return i.k===k;});var v=fmt(k);
+      var row=document.createElement('div');row.className='pick';
+      row.innerHTML='<span class="pi">'+(c.ic||'▫️')+'</span><span class="pn">'+esc(c.n)+'</span>'+
+        '<span class="pv">'+(v.t==='—'?'':v.t+(v.u?' '+v.u:''))+'</span>'+
+        '<button class="padd'+(inLayout?' in':'')+'" title="'+(inLayout?'Убрать':'Добавить')+'">'+(inLayout?'✓':'+')+'</button>';
+      row.querySelector('.padd').addEventListener('click',function(){
+        var i=layout.map(function(x){return x.k;}).indexOf(k);
+        if(i>=0){layout.splice(i,1);if(sel===i)sel=null;}else{layout.push({k:k,s:'s'});}
+        save();grid();picker();settings();
+      });
+      host.appendChild(row);
+    });
+  });
+  document.getElementById('catCount').textContent=n;
+}
+
+function settings(){
+  var p=document.getElementById('setPanel'),b=document.getElementById('setBody');
+  if(sel==null||!layout[sel]||!editing){p.style.display='none';return;}
+  p.style.display='';try{p.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}
+  var item=layout[sel];
+  if(item.type==='modem'){modemSettings(b,item);return;}
+  if(item.type==='panel'){panelSettings(b,item);return;}
+  var c=C[item.k]||{};
+  var sz=['s','w','t','l'].map(function(s){return '<button class="szb'+(item.s===s?' on':'')+'" data-sz="'+s+'">'+SIZE_LABEL[s]+'</button>';}).join('');
+  b.innerHTML='<div class="setrow"><label>'+(c.ic||'')+' '+esc(c.n||item.k)+'</label><span class="muted">'+esc(item.k)+'</span></div>'+
+    '<div class="setrow"><label>Размер</label><div class="sizes">'+sz+'</div></div>'+
+    '<div class="setrow"><label>Заголовок</label><input class="search" style="margin:0;max-width:170px" id="lblInp" value="'+esc(item.lbl||'')+'" placeholder="'+esc(c.n||item.k)+'"></div>'+
+    '<div class="setrow"><label>Доп. подпись</label><input class="search" style="margin:0;max-width:170px" id="subInp" value="'+esc(item.sub||'')+'" placeholder="виден на T/L"></div>'+
+    '<div class="setrow"><button class="btn" id="delCard">Убрать карточку</button></div>';
+  b.querySelectorAll('.szb').forEach(function(x){x.addEventListener('click',function(){item.s=x.dataset.sz;save();grid();settings();});});
+  b.querySelector('#lblInp').addEventListener('input',function(){item.lbl=this.value;save();grid();});
+  b.querySelector('#subInp').addEventListener('input',function(){item.sub=this.value;save();grid();});
+  b.querySelector('#delCard').addEventListener('click',function(){layout.splice(sel,1);sel=null;save();grid();picker();settings();});
+}
+
+/* Настройки составной карточки «Модем»: заголовок + редактор элементов
+   (порядок ▲▼, галка — показывать, выпадашка — тип отображения). */
+function modemSettings(b,item){
+  ensureModemFields(item);
+  var flds=item.fields.map(function(f,i){
+    var c=C[f.k]||{n:f.k,ic:'▫️'};
+    var dop=dispOptions(f.k);var dcur=(f.disp&&dop[f.disp])?f.disp:Object.keys(dop)[0];
+    var opts=Object.keys(dop).map(function(d){return '<option value="'+d+'"'+(dcur===d?' selected':'')+'>'+dop[d]+'</option>';}).join('');
+    var sopts=SIZEOPT.map(function(s){return '<option value="'+s[0]+'"'+((f.sz||'n')===s[0]?' selected':'')+'>'+s[1]+'</option>';}).join('');
+    return '<div class="fld'+(f.on?'':' off')+'" data-i="'+i+'">'+
+      '<span class="fmv"><button data-mv="up" title="Выше">▲</button><button data-mv="down" title="Ниже">▼</button></span>'+
+      '<input type="checkbox" class="fon"'+(f.on?' checked':'')+' title="Показывать">'+
+      '<span class="fn">'+(c.ic||'')+' '+esc(c.n||f.k)+'</span>'+
+      '<select class="fsz" title="Размер">'+sopts+'</select>'+
+      '<select class="fdisp" title="Тип">'+opts+'</select></div>';
+  }).join('');
+  b.innerHTML='<div class="setrow"><label>📟 Модем</label><span class="muted">составная</span></div>'+
+    '<div class="setrow"><label>Заголовок</label><input class="search" style="margin:0;max-width:170px" id="lblInp" value="'+esc(item.lbl||'')+'" placeholder="Модем"></div>'+
+    '<div class="muted" style="margin:10px 0 6px">Элементы · ▲▼ порядок · галка показ · размер · тип</div>'+
+    '<div class="flds">'+flds+'</div>'+
+    '<div class="setrow"><button class="btn" id="delCard">Убрать карточку</button></div>';
+  b.querySelector('#lblInp').addEventListener('input',function(){item.lbl=this.value;save();grid();});
+  b.querySelector('#delCard').addEventListener('click',function(){layout.splice(sel,1);sel=null;save();grid();picker();settings();});
+  b.querySelectorAll('.fld').forEach(function(row){
+    var i=+row.dataset.i;
+    row.querySelector('.fon').addEventListener('change',function(){item.fields[i].on=this.checked;save();grid();modemSettings(b,item);});
+    row.querySelector('.fsz').addEventListener('change',function(){item.fields[i].sz=this.value;save();grid();});
+    row.querySelector('.fdisp').addEventListener('change',function(){item.fields[i].disp=this.value;save();grid();});
+    row.querySelectorAll('.fmv button').forEach(function(btn){btn.addEventListener('click',function(){
+      var j=i+(btn.dataset.mv==='up'?-1:1);if(j<0||j>=item.fields.length)return;
+      var t=item.fields[i];item.fields[i]=item.fields[j];item.fields[j]=t;save();grid();modemSettings(b,item);
+    });});
+  });
+}
+
+/* Настройки большой «Панели сигнала»: порядок ▲▼, показ, вид (Полоса/Круг/Число),
+   + добавить любую метрику, ✕ убрать. */
+function panelSettings(b,item){
+  if(!item.fields)item.fields=panelDefaults();
+  var flds=item.fields.map(function(f,i){
+    var c=C[f.k]||{n:f.k,ic:'▫️'};var vo=pnVizOptions(f.k);var vcur=vo[f.viz]?f.viz:Object.keys(vo)[0];
+    var opts=Object.keys(vo).map(function(d){return '<option value="'+d+'"'+(vcur===d?' selected':'')+'>'+vo[d]+'</option>';}).join('');
+    return '<div class="fld'+(f.on?'':' off')+'" data-i="'+i+'">'+
+      '<span class="fmv"><button data-mv="up">▲</button><button data-mv="down">▼</button></span>'+
+      '<input type="checkbox" class="fon"'+(f.on?' checked':'')+' title="Показывать">'+
+      '<span class="fn">'+(c.ic||'')+' '+esc(c.n||f.k)+'</span>'+
+      '<select class="fviz" title="Вид">'+opts+'</select>'+
+      '<button class="frm" title="Убрать">✕</button></div>';
+  }).join('');
+  var used={};item.fields.forEach(function(f){used[f.k]=1;});
+  var addOpts='<option value="">+ добавить метрику…</option>'+Object.keys(C).filter(function(k){return k.charAt(0)!=='_'&&!used[k];})
+    .map(function(k){return '<option value="'+k+'">'+esc(C[k].n)+'</option>';}).join('');
+  b.innerHTML='<div class="setrow"><label>📊 Панель</label><span class="muted">крупная</span></div>'+
+    '<div class="setrow"><label>Заголовок</label><input class="search" style="margin:0;max-width:170px" id="lblInp" value="'+esc(item.lbl||'')+'" placeholder="Панель сигнала"></div>'+
+    '<div class="muted" style="margin:10px 0 6px">Элементы · ▲▼ порядок · галка показ · вид · ✕ убрать</div>'+
+    '<div class="flds">'+flds+'</div>'+
+    '<div class="setrow"><select class="search" id="pnAdd" style="margin:0">'+addOpts+'</select></div>'+
+    '<div class="setrow"><button class="btn" id="delCard">Убрать карточку</button></div>';
+  b.querySelector('#lblInp').addEventListener('input',function(){item.lbl=this.value;save();grid();});
+  b.querySelector('#delCard').addEventListener('click',function(){layout.splice(sel,1);sel=null;save();grid();picker();settings();});
+  b.querySelector('#pnAdd').addEventListener('change',function(){var k=this.value;if(!k)return;var c=C[k]||{};item.fields.push({k:k,on:true,viz:c.bar?'lbar':'num'});save();grid();panelSettings(b,item);});
+  b.querySelectorAll('.fld').forEach(function(row){
+    var i=+row.dataset.i;
+    row.querySelector('.fon').addEventListener('change',function(){item.fields[i].on=this.checked;save();grid();panelSettings(b,item);});
+    row.querySelector('.fviz').addEventListener('change',function(){item.fields[i].viz=this.value;save();grid();});
+    row.querySelector('.frm').addEventListener('click',function(){item.fields.splice(i,1);save();grid();panelSettings(b,item);});
+    row.querySelectorAll('.fmv button').forEach(function(btn){btn.addEventListener('click',function(){
+      var j=i+(btn.dataset.mv==='up'?-1:1);if(j<0||j>=item.fields.length)return;
+      var t=item.fields[i];item.fields[i]=item.fields[j];item.fields[j]=t;save();grid();panelSettings(b,item);
+    });});
+  });
+}
+
+function pull(){
+  fetch('/cgi-bin/5g-api?metrics',{cache:'no-store',credentials:'same-origin'})
+    .then(function(r){return r.json();}).then(function(j){
+      DATA=j||{};
+      document.getElementById('modemname').textContent=DATA.modem||'—';
+      document.getElementById('age').textContent=(DATA.age!=null&&DATA.age!=='-')?('обновлено '+DATA.age+' c назад'):'';
+      // vid:pid и USB-имя есть только в listmodems - подтягиваем и сливаем.
+      return fetch('/cgi-bin/5g-api?modems',{cache:'no-store'}).then(function(r){return r.json();}).catch(function(){return null;});
+    }).then(function(mods){
+      if(Array.isArray(mods)&&mods.length){
+        var m=null;for(var i=0;i<mods.length;i++){if(mods[i].model&&mods[i].model===DATA.modem){m=mods[i];break;}}
+        if(!m)m=mods[0];
+        DATA.vidpid=m.vidpid||''; DATA.product=m.product||'';
+      }
+      grid();picker();
+    }).catch(function(){grid();picker();});
+}
+
+document.getElementById('search').addEventListener('input',picker);
+document.getElementById('editBtn').addEventListener('click',function(){
+  editing=!editing;this.classList.toggle('on',editing);this.textContent=(editing?'✓ Готово':'✏️ Изменить');
+  document.body.className=editing?'edit-on':'edit-off';if(!editing)sel=null;grid();settings();
+});
+/* Тема как в proton2025: режим (proton-theme-mode: light|dark|auto) + акцент
+   (proton-accent-color / proton-accent-custom). Ключи localStorage ОБЩИЕ с темой,
+   поэтому смена в LuCI и здесь синхронна (плюс слушаем storage-события). */
+function ls(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+function sysDark(){return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;}
+function effTheme(m){return m==='auto'?(sysDark()?'dark':'light'):(m==='light'?'light':'dark');}
+function applyMode(m){
+  document.documentElement.setAttribute('data-theme',effTheme(m));
+  var q=document.querySelectorAll('#modesw button');for(var i=0;i<q.length;i++)q[i].classList.toggle('on',q[i].dataset.m===m);
+}
+function applyAccent(){
+  var col=ls('proton-accent-color'),cus=ls('proton-accent-custom');
+  var hex=(col&&/^#[0-9a-fA-F]{6}$/.test(col))?col:((cus&&/^#[0-9a-fA-F]{6}$/.test(cus))?cus:null);
+  if(!hex)return;
+  var r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16),s=document.documentElement.style;
+  s.setProperty('--accent',hex);s.setProperty('--accent-rgb',r+','+g+','+b);s.setProperty('--accent-glow','rgba('+r+','+g+','+b+',.14)');
+}
+var curMode=ls('proton-theme-mode')||ls('5g_theme')||'auto';
+applyMode(curMode);applyAccent();
+document.querySelectorAll('#modesw button').forEach(function(btn){btn.addEventListener('click',function(){
+  curMode=btn.dataset.m;try{localStorage.setItem('proton-theme-mode',curMode);}catch(e){}applyMode(curMode);
+});});
+if(window.matchMedia){try{window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(curMode==='auto')applyMode('auto');});}catch(e){}}
+window.addEventListener('storage',function(e){
+  if(e.key==='proton-theme-mode'){curMode=e.newValue||'auto';applyMode(curMode);}
+  else if(e.key==='proton-accent-color'||e.key==='proton-accent-custom'){applyAccent();buildAccents();}
+});
+/* Палитра акцентов. Выбор пишем в proton-accent-custom (+ accent-color=custom) -
+   синхронно с proton2025; applyAccent красит --accent на /5g мгновенно. */
+var ACCENTS=['#4458f3','#5e9eff','#0095ff','#3ba55d','#9b59f6','#f5a623','#e5484d','#ec4899','#22c1d6','#f97316'];
+function buildAccents(){
+  var pop=document.getElementById('accPop');if(!pop)return;pop.innerHTML='';
+  var cur=(ls('proton-accent-custom')||ls('proton-accent-color')||'').toLowerCase();
+  ACCENTS.forEach(function(hex){
+    var b=document.createElement('button');b.className='acc-sw'+(cur===hex.toLowerCase()?' on':'');
+    b.style.background=hex;b.title=hex;
+    b.addEventListener('click',function(ev){ev.stopPropagation();
+      try{localStorage.setItem('proton-accent-color','custom');localStorage.setItem('proton-accent-custom',hex);}catch(e){}
+      applyAccent();buildAccents();pop.classList.remove('open');
+    });
+    pop.appendChild(b);
+  });
+}
+document.getElementById('accBtn').addEventListener('click',function(e){e.stopPropagation();buildAccents();document.getElementById('accPop').classList.toggle('open');});
+document.addEventListener('click',function(){var p=document.getElementById('accPop');if(p)p.classList.remove('open');});
+
+grid();picker();settings();pull();setInterval(pull,5000);
+var _rzt;window.addEventListener('resize',function(){clearTimeout(_rzt);_rzt=setTimeout(fitModems,120);});
+</script>
+</body>
+</html>

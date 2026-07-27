@@ -248,9 +248,21 @@ return view.extend({
 		sw.addremove = true;
 		sw.addbtntitle = _('Add service card');
 
-		var svo = sw.option(form.Value, 'service', _('Service'));
-		services.forEach(function(s) { svo.value(s); });
-		svo.placeholder = 'ssclash';
+		/* ВЫПАДАЮЩИЙ СПИСОК, а не свободный ввод. form.Value с placeholder='ssclash'
+		   не имел реального значения: при «Добавить» поле пустое, плейсхолдер лишь
+		   подсказка, и Save записывал секцию svcwidget БЕЗ service - карточка не
+		   появлялась (config-driven, см. netpri.js). ListValue всегда пишет
+		   ВЫБРАННОЕ значение и имеет дефолт, поэтому пустых карточек не бывает. */
+		var svo = sw.option(form.ListValue, 'service', _('Service'));
+		if (services.length) {
+			services.forEach(function(s) { svo.value(s); });
+			svo.default = (services.indexOf('ssclash') >= 0) ? 'ssclash'
+			            : (services.indexOf('clash') >= 0)   ? 'clash'
+			            : services[0];
+		} else {
+			svo.value('ssclash'); svo.default = 'ssclash';
+		}
+		svo.rmempty = false;   // пишем даже значение, равное дефолту
 
 		/* --- Тест скорости (внутри «Виджеты»): галочка + ВЛОЖЕННЫЙ блок настроек
 		   (form.SectionValue, как у карточек), видимый только при вкл. --- */

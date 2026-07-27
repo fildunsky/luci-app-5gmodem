@@ -641,7 +641,7 @@ function updateSvcCard(service) {
 }
 var _svcGenericPoll = false;
 function svcStatusInit(services) {
-	services = (services || []).filter(function(s) { return s && s !== 'ssclash'; });
+	services = (services || []).filter(function(s) { return s && s !== 'ssclash' && s !== 'clash'; });
 	if (!services.length || _svcGenericPoll) { return; }
 	_svcGenericPoll = true;
 	var tick = function() {
@@ -1036,12 +1036,13 @@ function buildBar(list, redraw) {
 	var right = [];
 	if (_widgets.status) { _pingWidgets.forEach(function(w) { right.push(pingCard(w)); }); }
 	if (_widgets.services) {
+		// Карточки ведёт КОНФИГ пользователя (секции svcwidget) - и только он.
+		// Выбран ssclash/clash -> карточку SSClash показываем БЕЗУСЛОВНО; detect
+		// (ssclash.sh) лишь наполняет порт/версию/статус, его провал НЕ прячет
+		// выбранную карточку. Не выбран -> не показываем (и убирается в настройках).
 		effectiveSvcs().forEach(function(svc) {
-			// 'ssclash' -> карточка SSClash-Go 5.x, 'clash' -> карточка старого
-			// luci-app-ssclash 4.7.x. Ветки НЕЗАВИСИМЫ (обе могут стоять сразу).
-			// Если нужная ветка не найдена - обычная сервис-карточка.
 			var _sk = sscKindForSvc(svc);
-			if (_sk && _ssc[_sk].present) { right.push(ssClashBtn(_sk)); }
+			if (_sk) { right.push(ssClashBtn(_sk)); }
 			else { right.push(svcCard(svc)); }
 		});
 	}
@@ -1100,9 +1101,12 @@ return baseclass.extend({
 			if (_widgets.speedtest) { stInit(); }
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {
+				// detect/статус запускаем ТОЛЬКО для выбранных пользователем веток.
+				// Карточка показывается по конфигу (см. buildBar) независимо от
+				// detect; здесь лишь наполняем порт/версию и красим статус-точку.
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); }
-				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); }
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); ssclashStatusInit('go'); }
+				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); ssclashStatusInit('legacy'); }
 				svcStatusInit(_svcs);
 			}
 		});
@@ -1138,9 +1142,12 @@ return baseclass.extend({
 			if (_widgets.speedtest) { stInit(); }
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {
+				// detect/статус запускаем ТОЛЬКО для выбранных пользователем веток.
+				// Карточка показывается по конфигу (см. buildBar) независимо от
+				// detect; здесь лишь наполняем порт/версию и красим статус-точку.
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); }
-				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); }
+				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); ssclashStatusInit('go'); }
+				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); ssclashStatusInit('legacy'); }
 				svcStatusInit(_svcs);
 			}
 			/* Keep the bar live with a steady poll: the operator name (bounded
