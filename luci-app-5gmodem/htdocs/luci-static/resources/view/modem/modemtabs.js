@@ -249,7 +249,8 @@ function ghostBar() {
 		}, [
 			E('img', {
 				'class': 'modemtab-ic',
-				'src': L.resource(it.usb ? 'icons/cusb.svg' : 'icons/cmodem.svg'),
+				'src': it.op ? L.resource('icons/' + it.op + '.png')
+				             : L.resource(it.usb ? 'icons/cusb.svg' : 'icons/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
 			E('span', {}, it.label || _('Modem'))
@@ -288,13 +289,41 @@ function isUsbStick(m) {
 	return /^12d1:/i.test((m && m.vidpid) || '');
 }
 
+/* ЗНАЧОК ОПЕРАТОРА ВМЕСТО ЗНАЧКА ЖЕЛЕЗА.
+   На роутере с несколькими модемами по вкладкам было не понять, какая SIM где
+   стоит: значок чипа/USB одинаков у всех. Имя оператора берём из listmodems
+   (поле operator - кэш основного опроса, модем не трогается), и если оператор
+   узнан - показываем его логотип. Не узнан (модем ещё не опрашивался, нет SIM)
+   - остаётся прежний значок железа, как было. */
+function operatorTabIcon(name) {
+	var n = String(name || '').toLowerCase();
+	if (!n) { return null; }
+	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
+	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
+	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
+	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'op-t2'; }
+	if (n.indexOf('t-mobile') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('тинькофф') >= 0 || n.indexOf('т-банк') >= 0) { return 'op-tbank'; }
+	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
+	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0) { return 'op-motiv'; }
+	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
+	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
+	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
+	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
+	return null;
+}
+function tabIconSrc(m, opIcon) {
+	if (opIcon) { return L.resource('icons/' + opIcon + '.png'); }
+	return L.resource(isUsbStick(m) ? 'icons/cusb.svg' : 'icons/cmodem.svg');
+}
+
 function tabsCacheSave(modems, active) {
 	try {
 		var lbl = dedupLabels(modems);
 		window.localStorage.setItem(TABS_CACHE, JSON.stringify(modems.map(function(m, i) {
 			/* usb сохраняем, чтобы в заготовке (до ответа listmodems) значок был
 			   сразу правильным и не подменялся на глазах. */
-			return { label: lbl[i], active: (m.path === active), usb: isUsbStick(m) };
+			return { label: lbl[i], active: (m.path === active), usb: isUsbStick(m),
+			         op: operatorTabIcon(m.operator) };
 		})));
 	} catch (e) {}
 }
@@ -381,8 +410,9 @@ function tabsBar(modems, active) {
 			   только у таких свистков, у обычных модемов пуст. */
 			E('img', {
 				'class': 'modemtab-ic',
-				'src': L.resource(isUsbStick(m) ? 'icons/cusb.svg' : 'icons/cmodem.svg'),
-				'width': 16, 'height': 16, 'alt': ''
+				'src': tabIconSrc(m, operatorTabIcon(m.operator)),
+				'width': 16, 'height': 16, 'alt': '',
+				'title': m.operator || ''
 			}),
 			E('span', {}, labels[i])
 		]);

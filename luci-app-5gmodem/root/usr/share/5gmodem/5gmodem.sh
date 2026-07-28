@@ -1638,6 +1638,15 @@ _qmi_supplement() {
 
 	# 1) Последнее известное - мгновенно. Профиль главнее: не перебиваем непустое.
 	[ -z "$NEIGHBORS" ] && [ -s "$_QS_P.nb" ] && NEIGHBORS=$(cat "$_QS_P.nb")
+	# PCI обслуживающей соты - из той же выдачи соседей (serving:1). Профиль его
+	# заполняет не на всех путях: в 5G-NSA-ветке Compal источник (lte-cphy-ca-info)
+	# отвечает 'InformationUnavailable', и строка PCI в карточке пустовала, хотя
+	# в списке соседей обслуживающая сота есть.
+	case "$PCI" in ''|-)
+		[ -n "$NEIGHBORS" ] && PCI=$(printf '%s' "$NEIGHBORS" \
+			| sed -n 's/.*"pci":"\([0-9]*\)"[^}]*"serving":1.*/\1/p' | head -1)
+		;;
+	esac
 	case "$BANDWIDTH" in ''|-) [ -s "$_QS_P.bw" ] && BANDWIDTH=$(cat "$_QS_P.bw") ;; esac
 	case "$TXPOWER"  in ''|-) [ -s "$_QS_P.tx" ] && TXPOWER=$(cat "$_QS_P.tx") ;; esac
 	# 3G-диапазон - как у 4G: «UMTS | B1 (2100 MHz)» вместо голого «UMTS».

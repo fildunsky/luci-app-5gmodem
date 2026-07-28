@@ -24,6 +24,8 @@ CFG=5gmodem
 [ -r "$RES/quirks.sh" ] && . "$RES/quirks.sh"
 
 . /usr/share/5gmodem/lib.sh   # secname / sec_for_iface / active_path
+. /usr/share/5gmodem/atlock.sh   # at_lock/at_unlock - чтение IMEI не должно
+                                 # сталкиваться с опросом метрик в том же порту
 
 # Галка «слать USSD обычным текстом» (sms_tool -R) - ОДНА на весь sms_tool_js, а
 # модемы переключаются, и правильное значение у каждого своё. Поэтому при смене
@@ -317,7 +319,34 @@ ensure_iface() {
 		OWNER=$(uci -q get "network.$IF.modem_imei")
 		[ -n "$OWNER" ] || OWNER=$(uci -q get "network.$IF.modem_path")
 		logger -t 5gmodem-resolve "iface $IF belongs to modem $OWNER, not $P - not touching it"
-		return 0
+		# ССЫЛКА НА ЧУЖОЙ ИНТЕРФЕЙС - ОТЦЕПЛЯЕМ, а не живём с ней.
+		#
+		# Секция могла получить чужой network при ошибочной миграции профиля по
+		# неверно прочитанному IMEI (см. ensure_section): у пользователя с
+		# четырьмя модемами секция MV31-W уехала на интерфейс Compal, а
+		# собственный интерфейс MV31-W осиротел - карточка показывала чужой IP,
+		# и починить это можно было только руками. Сам интерфейс не трогаем
+		# (он чужой), правим ТОЛЬКО ссылку в своей секции: сперва ищем
+		# интерфейс, штампованный НАШИМ железом, иначе очищаем поле - mkiface
+		# заведёт/подберёт правильный на следующем шаге.
+		_ei_mine=""
+		_ei_imei=$(imei_for_path "$P")
+		for _ei_c in $(uci -q show network 2>/dev/null \
+				| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
+			[ "$_ei_c" = "$IF" ] && continue
+			if iface_owned_by "$_ei_c" "$P" "$_ei_imei"; then _ei_mine="$_ei_c"; break; fi
+		done
+		if [ -n "$_ei_mine" ]; then
+			uci -q set "$CFG.$SEC.network=$_ei_mine"
+			uci -q commit "$CFG"
+			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - переключил на свой $_ei_mine"
+			IF="$_ei_mine"
+		else
+			uci -q delete "$CFG.$SEC.network"
+			uci -q commit "$CFG"
+			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - ссылку снял, интерфейс будет создан заново"
+			return 0
+		fi
 	fi
 
 	# МИГРАЦИЯ старых конфигов: интерфейс наш, но штампа IMEI на нём ещё нет -
@@ -645,12 +674,20 @@ modem_imei() {   # $1 - usb-путь
 		_mi=$("$RES/hilink.sh" json "$1" 2>/dev/null | jsonfilter -e '@.imei' 2>/dev/null)
 		case "$_mi" in ''|*[!0-9]*) : ;; *) echo "$_mi"; return 0 ;; esac
 	fi
-	# 3) спрашиваем модем: первый его tty, который отвечает
-	for _mt in $("$RES/listmodems.sh" 2>/dev/null \
+	# 3) спрашиваем модем: первый его tty, который отвечает.
+	# Список портов - СВЕЖИЙ (--refresh): у кэша TTL 8 c, а после переэнумерации
+	# номера ttyUSB переезжают между устройствами. Чужой tty из устаревшего
+	# списка = чужой IMEI, а по нему ensure_section сносил секцию соседа.
+	# Ответ читаем ПОД СЕРИАЛИЗАТОРОМ: без него AT+CGSN сталкивается с опросом
+	# метрик в том же порту и получает ответ чужой команды (известный класс
+	# ошибок - см. шапку atlock.sh). Не дождались замка - не гадаем, выходим.
+	for _mt in $("$RES/listmodems.sh" --refresh 2>/dev/null \
 			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null); do
 		[ -e "$_mt" ] || continue
+		at_lock "$_mt" 8 2>/dev/null || continue
 		_mi=$(sms_tool -d "$_mt" at "AT+CGSN" 2>/dev/null | tr -d '\r' \
 			| grep -oE '^[0-9]{14,16}$' | head -1)
+		at_unlock 2>/dev/null
 		[ -n "$_mi" ] && { echo "$_mi"; return 0; }
 	done
 	return 1
@@ -709,9 +746,30 @@ ensure_section() {
 	# парковку не поднимал. modem_imei дешёв, если IMEI уже в секции.
 	_es_imei=$(modem_imei "$1")
 	if [ -n "$_es_imei" ]; then
-		uci -q set "$CFG.$SEC.imei=$_es_imei"
 		_es_old=$(sec_by_imei "$_es_imei" "$SEC")
-		[ -n "$_es_old" ] && migrate_profile "$_es_old" "$SEC"
+		if [ -n "$_es_old" ]; then
+			# ОБА МОДЕМА НА ШИНЕ - ЗНАЧИТ IMEI ПРОЧИТАН НЕВЕРНО.
+			#
+			# Миграция придумана для «модем переставили в другой разъём»: старый
+			# путь при этом ПУСТ. Если же устройство на старом пути присутствует
+			# ПРЯМО СЕЙЧАС, то два разных физических модема не могут иметь один
+			# IMEI - мы просто прочитали чужой (порт занят/ответ перепутан/список
+			# tty устарел). Раньше в этом случае секция живого соседа УДАЛЯЛАСЬ, а
+			# его интерфейс и настройки уезжали чужому модему - у пользователя с
+			# четырьмя модемами (два из них с одинаковым 05c6:90d5) так пропала
+			# секция Compal, а MV31-W унаследовал её IMEI, модель и интерфейс.
+			# Чужой IMEI НЕ пишем и НЕ мигрируем - молчим до следующего опроса.
+			_es_oldpath=$(uci -q get "$CFG.$_es_old.path")
+			if [ -n "$_es_oldpath" ] && [ -e "/sys/bus/usb/devices/$_es_oldpath" ]; then
+				logger -t 5gmodem "IMEI $_es_imei прочитан у $1, но принадлежит присутствующему $_es_oldpath - миграцию профиля отменяю"
+				echo "$SEC"
+				return 0
+			fi
+			uci -q set "$CFG.$SEC.imei=$_es_imei"
+			migrate_profile "$_es_old" "$SEC"
+		else
+			uci -q set "$CFG.$SEC.imei=$_es_imei"
+		fi
 	fi
 	echo "$SEC"
 }

@@ -31,8 +31,13 @@ esac
 _MM_OK=0
 if command -v mmcli >/dev/null 2>&1; then
 	_MM_K=$(mmcli -m "$_MMIDX" -K 2>/dev/null)
+	# И ПО МОДЕЛИ (SG500M2-X), а не только по строке прошивки RXMG1: у ПРОТОТИПА
+	# (1e2d:00b7) revision пуст ("--"), RXMG1 в дампе нет вовсе - _MM_OK оставался
+	# нулём, и весь mmcli-путь ниже (TAC/CID через --location-get, IMEI, модель)
+	# не выполнялся. AT-фолбэк ему не замена: под ModemManager AT-порт нам не
+	# принадлежит, и в карточке «Информация о соте» пустовали TAC/Cell ID.
 	case "$_MM_K" in
-		*RXMG1*)
+		*RXMG1*|*SG500M2-X*)
 			_IS_COMPAL=1
 			_MM_OK=1
 			;;
@@ -95,6 +100,10 @@ if [ "$_MM_OK" = "1" ]; then
 
 	MODELREV=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.revision/{print $2}' | xargs)
 	MODELNAME=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.model/{print $2}' | xargs)
+	# "--" у mmcli означает «поля нет» (у прототипа revision пуст) - в карточку
+	# такое писать нельзя, там появлялась «Прошивка: --».
+	case "$MODELREV" in --|'') MODELREV="" ;; esac
+	case "$MODELNAME" in --) MODELNAME="" ;; esac
 	FW="$MODELREV"
 else
 	# umbim/uqmi mode: ModemManager is off, so use plain AT for the info.
@@ -308,7 +317,26 @@ if [ "$REGOK" = "1" ]; then
 		else TECH=""
 		fi
 
+		# 5G ЗАЯВЛЕН, НО НЕСУЩЕЙ НЕТ (частый случай у Билайна: сеть объявляет
+		# EN-DC, телефон рисует 5G, а трафик целиком идёт по LTE-якорю).
+		# Признак: технология 5G NSA, но NR-диапазона в rf-band-info нет И
+		# 5G-блок signal-info пуст/сентинель (-32768 = «нет данных»). В этом
+		# случае помечаем диапазон явно как 4G - «5G NSA | 4G B3 (1800 MHz)»:
+		# 5G не прячем (сеть его действительно объявила), но видно, что несущая
+		# LTE-шная. Заработает NR - строка сама станет «5G NSA | n78 + B3».
+		NR_LIVE=0
+		[ -n "$NSTR" ] && NR_LIVE=1
+		if [ "$HAS_NR" = "1" ] && [ "$NR_LIVE" = "0" ] && [ "$_QMICLI_OK" = "1" ]; then
+			_nr_rsrp=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-signal-info 2>/dev/null \
+				| awk '/^5G:/{f=1;next} /^[A-Z0-9]+:|^$/{f=0} f' \
+				| sed -n "s/.*RSRP: '\(-\?[0-9.]*\).*/\1/p" | head -1)
+			case "$_nr_rsrp" in
+				''|-32768*|-3276.8*) : ;;
+				*) [ "$(awk "BEGIN{print ($_nr_rsrp < -1 && $_nr_rsrp > -160)?1:0}" 2>/dev/null)" = 1 ] && NR_LIVE=1 ;;
+			esac
+		fi
 		BANDSTR="$LSTR"
+		[ "$HAS_NR" = "1" ] && [ "$NR_LIVE" = "0" ] && [ -n "$LSTR" ] && BANDSTR="4G $LSTR"
 		[ -n "$NSTR" ] && BANDSTR="${BANDSTR}${BANDSTR:+ + }${NSTR}"
 		[ -n "$TECH" ] && MODE="$TECH${BANDSTR:+ | $BANDSTR}"
 

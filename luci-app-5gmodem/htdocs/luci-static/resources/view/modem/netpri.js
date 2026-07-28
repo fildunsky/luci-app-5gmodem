@@ -328,7 +328,15 @@ function stCardInner() {
 	return [
 		E('span', { 'class': 'netpri-sub' }, _st.service || _('Speed test')),
 		E('span', { 'class': 'netpri-name netpri-st-speed' }, stSpeedContent()),
-		_st.ip ? E('span', { 'class': 'netpri-ip' }, (function() {
+		_st.ip ? E('span', {
+			'class': 'netpri-ip',
+			/* Адрес НЕ публичный - показан адрес самого модема (внешний узнать не
+			   удалось: с сотовой в РФ ip-сервисы часто недоступны). Помечаем, иначе
+			   CGNAT-адрес оператора (10.x) читается как настоящий «белый IP». */
+			'style': _st.ipLocal ? 'opacity:.55;font-style:italic' : null,
+			'data-tooltip': _st.ipLocal ? _('Modem address, not external') : null
+		}, (function() {
+			if (_st.ipLocal) { return _st.ip; }
 			var fl = flagEmoji(_st.cc);
 			return fl ? (fl + ' ' + _st.ip) : _st.ip;   // флаг + тонкий пробел + IP
 		})())
@@ -415,7 +423,7 @@ function runSpeedtest() {
 		return;
 	}
 	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
-	_st.down = null; _st.up = null; _st.ip = '';
+	_st.down = null; _st.up = null; _st.ip = ''; _st.ipLocal = false;
 	_st.phaseStart = Date.now();
 	_renderedKey = ''; _liveDisplay = 0;
 	refreshStCard();
@@ -445,6 +453,7 @@ function runSpeedtest() {
 					if (j.down_mbps != null) { _st.down = j.down_mbps; }
 					// IP теперь определяется первым - показываем сразу, не дожидаясь цифр
 					if (j.pub_ip) { _st.ip = j.pub_ip; }
+						if (j.ip_local != null) { _st.ipLocal = (j.ip_local == 1); }
 					if (j.cc) { _st.cc = j.cc; }
 					refreshStCard();
 					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
@@ -461,7 +470,7 @@ function runSpeedtest() {
 					_renderedKey = ''; stProgStop(); refreshStCard();
 					return;
 				}
-				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
+				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; _st.ipLocal = (j.ip_local == 1); }
 				/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
 				   отказ («нажал, ничего не произошло») хуже любой ошибки: человек
 				   не знает, чинить ему что-то или ждать. */

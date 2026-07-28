@@ -118,6 +118,10 @@ start)
 	# Резервный гео-сервис: отдаёт адрес И страну разом. Используется, когда
 	# основной (speedtest_ip_url) не ответил.
 	CCFALLBACK="http://ip-api.com/line/?fields=countryCode,query"
+	# Российский фолбэк адреса (см. ниже): единственный, что отвечает с сотовой
+	# в РФ. Настраивается на случай, если понадобится другой.
+	YAIPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ru_ip_url)
+	[ -n "$YAIPURL" ] || YAIPURL="https://yandex.ru/internet/api/v0/ip"
 	SERVICE=$(_service_name)
 
 	rm -f /tmp/5gmodem_st_stop 2>/dev/null
@@ -139,7 +143,8 @@ start)
 		# их на каждом тике. Ценой небольшой честности запроса (geo делит канал
 		# с замером), но старт цифр важнее.
 		GEOIP="/tmp/5gmodem_st_ip.$$"; GEOCC="/tmp/5gmodem_st_cc.$$"
-		: > "$GEOIP"; : > "$GEOCC"
+		GEOLOC="/tmp/5gmodem_st_loc.$$"
+		: > "$GEOIP"; : > "$GEOCC"; : > "$GEOLOC"
 		(
 			_g=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
 			_pub=$(_parse_ip "$_g"); _cc=$(_parse_cc "$_g")
@@ -147,6 +152,16 @@ start)
 				_g2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
 				_pub=$(_parse_ip "$_g2")
 				[ -n "$_cc" ] || _cc=$(_parse_cc "$_g2")
+			fi
+			# РОССИЙСКИЙ ФОЛБЭК. Зарубежные ip-сервисы (ip-api, ipify, ifconfig.me,
+			# icanhazip, ident.me, cloudflare...) с сотовой в РФ не отвечают ВСЕ -
+			# проверено на Мегафоне: интернет живой (ping/DNS/ya.ru работают), а
+			# каждый из них молчит. Тогда показывался адрес самого модема
+			# (10.78.71.235 - CGNAT оператора), и это выглядело как «белый IP».
+			# Яндекс доступен всегда, отдаёт чистый JSON-строкой "1.2.3.4".
+			# Страну он не даёт - флаг в таком случае просто не покажем.
+			if [ -z "$_pub" ]; then
+				_pub=$(_parse_ip "$(curl --max-time 6 -s "$YAIPURL" 2>/dev/null)")
 			fi
 			_local=0
 			if [ -z "$_pub" ]; then
@@ -162,6 +177,10 @@ start)
 			fi
 			printf '%s' "$_pub" > "$GEOIP" 2>/dev/null
 			printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
+			# Пометка «это НЕ публичный адрес»: показали адрес модема/маршрута,
+			# внешний узнать не удалось. Без неё CGNAT-адрес оператора (10.x)
+			# выглядел как настоящий белый IP.
+			printf '%s' "$_local" > "$GEOLOC" 2>/dev/null
 			# дозапрос страны - только для реально публичного адреса
 			if [ -z "$_cc" ] && [ -n "$_pub" ] && [ "$_local" = 0 ]; then
 				_ccu=$(echo "$CCURL" | sed "s|{ip}|$_pub|g")
@@ -190,6 +209,7 @@ start)
 			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
+			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
@@ -204,7 +224,8 @@ start)
 		if [ -f /tmp/5gmodem_st_stop ]; then
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
-			rm -f "$GEOIP" "$GEOCC" /tmp/5gmodem_st_stop
+			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
+			rm -f "$GEOIP" "$GEOCC" "$GEOLOC" /tmp/5gmodem_st_stop
 			_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 			exit 0
 		fi
@@ -259,6 +280,7 @@ start)
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
+			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
@@ -268,7 +290,8 @@ start)
 		# финальный снимок IP/страны: geo мог доехать позже последнего тика
 		[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 		[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
-		rm -f "$GEOIP" "$GEOCC"
+		[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
+		rm -f "$GEOIP" "$GEOCC" "$GEOLOC"
 		AVGU=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
 		UBEST=$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")
 		UMBPS=""
@@ -276,7 +299,7 @@ start)
 
 		case "$HTTP" in
 			200|206)
-				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
+				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 			*)
 				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"

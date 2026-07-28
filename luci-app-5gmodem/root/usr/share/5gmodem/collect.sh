@@ -67,7 +67,12 @@ report() {
 	run 5  "uci lpac" uci -q show lpac
 	# Пароли/ключи из network не выводим: там PPP/PPPoE-креды и Wi-Fi.
 	run 5  "uci network (без секретов)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret'"
-	run 5  "Интерфейсы модемов" sh -c "for i in \$(uci -q show 5gmodem | sed -n \"s/.*\.network='\(.*\)'/\1/p\" | sort -u); do echo \"### \$i\"; ifstatus \"\$i\" 2>/dev/null | grep -vE '\"(dns-search|route)\"'; done"
+	# Интерфейсы: и СЕКЦИОННЫЕ (из 5gmodem), и ВСЕ модемные из network - секция
+	# может ссылаться на чужой/несуществующий интерфейс, а собственный при этом
+	# осиротеет, и в отчёте его было не видно вовсе. Плюс ДОЧЕРНИЕ интерфейсы
+	# (<iface>_4/_6): у qmi/mbim IPv4 живёт именно в них, и без них нельзя
+	# отличить «поднялся с адресом» от «поднялся, но DHCP не дал IP».
+	run 10 "Интерфейсы модемов" sh -c "for i in \$( { uci -q show 5gmodem | sed -n \"s/.*\.network='\(.*\)'/\1/p\"; uci -q show network | sed -n \"s/^network\.\([^.]*\)\.modem_path=.*/\1/p\"; } | sort -u); do for j in \"\$i\" \"\${i}_4\" \"\${i}_6\"; do s=\$(ifstatus \"\$j\" 2>/dev/null | grep -vE '\"(dns-search|route)\"'); [ -n \"\$s\" ] && { echo \"### \$j\"; echo \"\$s\"; }; done; done"
 
 	collect "USB и порты"
 	run 10 "USB-устройства" sh -c "lsusb 2>/dev/null || cat /sys/kernel/debug/usb/devices 2>/dev/null"

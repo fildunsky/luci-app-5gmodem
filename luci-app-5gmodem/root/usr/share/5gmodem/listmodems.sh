@@ -165,12 +165,36 @@ for n in $NODES; do
 			*VOS_5G*|*RXMG1*|*SG500M2*) model="Compal RXM-G1" ;;
 			*)                          model="$_prodraw" ;;
 		esac
+		# GENERIC-ДЕСКРИПТОР -> КОРОТКОЕ ИМЯ СЕМЕЙСТВА.
+		# Модули на Qualcomm SDX55 (Foxconn T99W175, Dell DW5930e, Thales MV31-W,
+		# прототип Compal) представляются одинаковой строкой «Generic Mobile
+		# Broadband Adapter»: во вкладке она занимала половину ширины и ничего не
+		# говорила. Точную модель без опроса не узнать - показываем компактное имя
+		# семейства, а как только опрос прочитает AT+CGMM, в секции появится
+		# настоящее имя (оно берётся выше и главнее этого фолбэка).
+		case "$_prodraw" in
+			*Generic\ Mobile\ Broadband*|*HSUSB\ Device*|*Mobile\ Broadband\ Adapter*)
+				case "$vid:$pid" in
+					05c6:90d5|05c6:9025|1e2d:00b7|1e2d:00b8) model="T99W175" ;;
+					*) model="$vid:$pid" ;;
+				esac
+				;;
+		esac
 	fi
 	model=$(esc "$model")
+	# ОПЕРАТОР ЭТОГО МОДЕМА - для значка сети на вкладке (у кого какая SIM).
+	# Берём из кэша, который пишет основной опрос (/tmp/5gmodem_op_<iface>, тот же
+	# источник, что у «Приоритета интернета»): модем не трогаем вовсе, а для
+	# НЕАКТИВНЫХ модемов это единственный доступный источник - их AT-порты никто
+	# не опрашивает. Пусто, пока модем ни разу не опрашивался.
+	_opname=""
+	_opif=$(uci -q get "5gmodem.$_sec.network" 2>/dev/null)
+	[ -n "$_opif" ] && [ -s "/tmp/5gmodem_op_$_opif" ] && \
+		_opname=$(esc "$(cat "/tmp/5gmodem_op_$_opif" 2>/dev/null | tr -d '\n')")
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
 	# HiLink от обычного и не предлагает для него AT-возможности.
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
 done
 OUT="[$OUT]"
 

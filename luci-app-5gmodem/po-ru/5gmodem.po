@@ -3812,3 +3812,6 @@ msgstr "Данные в роуминге отключены"
 
 msgid "The update is still building on the server. Please wait about 15-20 minutes and try again."
 msgstr "Обновление ещё собирается на сервере. Подождите примерно 15–20 минут и попробуйте снова."
+
+msgid "Modem address, not external"
+msgstr "Адрес модема, не внешний"

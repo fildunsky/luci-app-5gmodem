@@ -2315,21 +2315,28 @@ function applyBands() {
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
 		return Promise.resolve();
 	}
-	setModemBusy(_('Applying bands…'));
-	_bandsAfterBusy = true;
+	/* БЕЗ ПЛАШКИ И БЕЗ РЕСТАРТА РАДИО.
+	   Здесь ModemManager-путь: mmcli применяет набор ЖИВЬЁМ за ~0.1 c, модем
+	   остаётся connected (замерено на Compal - соединение и интерфейс не
+	   вздрагивают, модем сам перецепляется на разрешённые частоты). Рестарт
+	   радио тут был мёртвым кодом: AT-порт MM-модема нам не принадлежит, и
+	   reboot_modem.sh неизменно отвечал «AT port not found». Плашка же честно
+	   ждала «возвращения модема», которого не происходило, - отсюда чёрный
+	   прямоугольник на полминуты вместо карточки. Просто применяем и
+	   перечитываем блок. */
 	return fs.exec('/usr/bin/mmcli', [ '-m', mmIdx, '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
 		if (res.code !== 0) {
-			clearModemBusy(true);
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
 			return;
 		}
-		// Мягкий рестарт радио (CFUN=4->1), чтобы модем начал использовать
-		// новый набор частот сразу, а не после следующего переподключения.
-		// Результата НЕ ждём: радио уходит в перезапуск, и момент возвращения
-		// поймает опрос - он же снимет плашку и перечитает диапазоны.
-		return fs.exec('/usr/share/5gmodem/reboot_modem.sh');
+		if (ui.addTimeLimitedNotification) {
+			ui.addTimeLimitedNotification(null, E('p', _('Bands applied, refreshing…')), 4000, 'info');
+		}
+		/* Мимо кэша: набор только что изменился. Небольшая пауза - модему нужен
+		   момент, чтобы отдать новый current-bands. */
+		window.setTimeout(loadBands, 1200);
+		window.setTimeout(loadBands, 4000);
 	}).catch(function(err) {
-		clearModemBusy(true);
 		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
 	});
 }
@@ -2986,7 +2993,14 @@ function applyMetrics(json) {
 				   когда блок частот раскрыт; в порт ходит лишь при cache-miss - т.е.
 				   как раз после реальной смены, когда bands.sh сбросил кэш, а между
 				   сменами отдаёт снимок из кэша. */
-				if ((_bandsPollN = (_bandsPollN + 1) % 3) === 0) { loadBandsModemband(); }
+				/* ЧЕРЕЗ ЕДИНЫЙ loadBands, а не напрямую вендорным загрузчиком: на
+			   mmcli-модеме прямой вызов перерисовывал блок ЧУЖИМИ данными -
+			   кнопки режимов пересобирались вендорной веткой (другой набор
+			   атрибутов), и подсветка активного режима слетала «через
+			   несколько тиков», а тумблеры диапазонов моргали пустыми на
+			   первом же обновлении. loadBands сам маршрутизирует
+			   (mgmtinfo: mmcli / vendor / pending). */
+			if ((_bandsPollN = (_bandsPollN + 1) % 3) === 0) { loadBands(); }
 				// Антенные порты: данные уже в json, лишних запросов нет.
 				fillAntPorts(json.antports, json.rxdiv);
 
@@ -3975,17 +3989,9 @@ simDialog: baseclass.extend({
 				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', ifaceProtoIsMM ? '2' : '4' ]))
 					.then(function(res) {
 						applyMetrics(JSON.parse(res));
-						/* Блок частот - самолечение на тике (раз в ~10 c). Раньше
-						   loadBands был одноразовым (afterFirstPoll/раскрытие): если
-						   в тот момент mgmtinfo ответил pending (модем пересобирался
-						   в MM после переключения вкладки), подсветка режимов
-						   оставалась пустой навсегда - «мигнула Авто и ничего не
-						   выбрано». Внутри loadBands свои гейты: свёрнутый блок и
-						   pending выходят сразу, mgmtinfo дёшев (~50 мс). */
-						if (typeof loadBands === 'function') {
-							window.__bandsTick = (window.__bandsTick || 0) + 1;
-							if (window.__bandsTick % 2 === 0) { loadBands(); }
-						}
+						/* Блок частот освежает ОДИН планировщик - _bandsPollN выше
+						   (раз в ~3 опроса). Второй тикающий вызов отсюда только
+						   удваивал запросы и гонки перерисовки. */
 					});
 				});
 
