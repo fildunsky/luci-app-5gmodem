@@ -67,8 +67,18 @@ if [ "$_MM_OK" = "1" ]; then
 	# пуст или "--"), значения, уже разобранные фреймворком из AT+CREG,
 	# ЗАТИРАЛИСЬ пустышкой - в снимке появлялось tac_dec="-" при живом lac_dec=136.
 	# Для LTE поле LAC из +CREG И ЕСТЬ TAC, поэтому оно же служит фолбэком.
-	_MM_TAC=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
-	_MM_CID=$(echo "$_MM_K" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
+	# TAC/CID отдаёт ТОЛЬКО --location-get: в общий дамп -K (modem show) ключи
+	# modem.location.3gpp.* НЕ входят - раньше парсили _MM_K и всегда получали
+	# пусто. Сбор локации к тому же по умолчанию ВЫКЛЮЧЕН: если значений нет -
+	# включаем однократно (фоном, вызов дёшев и идемпотентен), данные появятся
+	# со следующего опроса. Проверено на живом RXM-G1: tac/cid совпадают с тем,
+	# что в MBIM-режиме давал разбор +CREG.
+	_MM_LOC=$(mmcli -m "$_MMIDX" --location-get -K 2>/dev/null)
+	_MM_TAC=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
+	_MM_CID=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
+	if [ -z "$_MM_TAC$_MM_CID" ]; then
+		mmcli -m "$_MMIDX" --location-enable-3gpp >/dev/null 2>&1 &
+	fi
 	case "$_MM_TAC" in
 		''|--) [ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; } ;;
 		*)     TAC_DEC=$(printf "%d" "0x$_MM_TAC" 2>/dev/null)

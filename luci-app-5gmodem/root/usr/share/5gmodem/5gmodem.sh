@@ -633,7 +633,12 @@ $(sms_tool -D -d $DEVICE at "AT+CIMI")"
 	# Не продолжаем: отдаём ПРОШЛЫЙ снимок этого же модема (владелец совпадает) и
 	# выходим, освобождая at_lock. Свежего снимка нет (первый заход) - идём
 	# дальше как есть, покажем что успели.
-	if [ -z "$O" ]; then
+	# ТОЛЬКО при НЕпустом DEVICE: у modemmanager-модема порта нет НАМЕРЕННО
+	# (detect.sh молчит, обёртка sms_tool отдаёт пусто) - это не «подвис», и
+	# выходить нельзя: иначе mmcli-блок и вендорный профиль ниже никогда не
+	# наполнят карточку, а снимок замерзает навечно (лог «опрос  подвис» с
+	# пустым именем порта - сигнатура именно этого бага).
+	if [ -z "$O" ] && [ -n "$DEVICE" ]; then
 		rm -f "$PORTOK" 2>/dev/null   # порт подвис - маркер «жив» больше не верен
 		_wg=$(_snapshot_age) && {
 			logger -t 5gmodem "опрос $DEVICE подвис - отдаю прошлый снимок (${_wg}c)"
@@ -1376,11 +1381,65 @@ if [ ! -s "$CACHE" ] && [ -n "$REG$CSQ" ] && [ -n "$DEVICE" ]; then
 	fi
 fi
 
+# MM-МОДЕМ: ЯДРО ИЗ mmcli ДО ПРОФИЛЯ. AT-разбор выше дал пустые REG/MODE_NUM
+# (порт у MM, батч не ходил), а вендорный профиль ниже гейтится на REGOK и
+# MODE_NUM - без предзаполнения он пропускал ВСЕ serving-cell метрики (pband/
+# rsrp/sinr «-» при живом соединении). Мапим mmcli-значения в те же коды, что
+# даёт AT: registration home->1/roaming->5 (+CREG), access-tech lte->7/5gnr->13
+# (AcT из +COPS). Поздний mmcli-блок заполняет только пустое - дубля нет.
+_pf_proto=$(uci -q get "network.$SEC.proto")
+if [ "$_pf_proto" = modemmanager ] && [ -z "$REG" ] && command -v mmcli >/dev/null 2>&1; then
+	_pf_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	if [ -n "$_pf_mi" ]; then
+		_pf_k=$(mmcli -m "$_pf_mi" -K 2>/dev/null)
+		_pfv() { _v=$(printf '%s\n' "$_pf_k" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
+		case "$(_pfv "modem.3gpp.registration-state")" in
+			home) REG=1 ;;
+			roaming) REG=5 ;;
+		esac
+		[ -z "$COPS" ] && COPS=$(_pfv "modem.3gpp.operator-name")
+		# PLMN: operator-code mmcli = тот же числовой +COPS. Без него страница
+		# прятала кнопку «ID соты» на карту 4cells (ей нужны operator_mcc/mnc).
+		if [ -z "$COPS_NUM" ]; then
+			COPS_NUM=$(_pfv "modem.3gpp.operator-code" | tr -dc '0-9')
+			if [ -n "$COPS_NUM" ]; then
+				COPS_MCC=${COPS_NUM:0:3}
+				COPS_MNC=${COPS_NUM:3:3}
+			fi
+		fi
+		_pf_act=$(_pfv "modem.generic.access-technologies.value[1]")
+		if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" = "x0" ]; then
+			case "$_pf_act" in
+				*5gnr*) MODE_NUM=13 ;;
+				*lte*)  MODE_NUM=7 ;;
+				*umts*|*hsdpa*|*hsupa*|*hspa*) MODE_NUM=2 ;;
+			esac
+		fi
+		if [ "$MODE" = "-" ] || [ -z "$MODE" ]; then
+			case "$MODE_NUM" in
+				13) MODE="5G NR" ;;
+				7)  MODE="LTE" ;;
+				2)  MODE="UMTS" ;;
+			esac
+		fi
+	fi
+fi
+
 if [ -e /usr/bin/sms_tool ]; then
 	REGOK=0
 	[ "x$REG" == "x1" ] || [ "x$REG" == "x5" ] || [ "x$REG" == "x6" ] || [ "x$REG" == "x7" ] && REGOK=1
-	VIDPID=$(getdevicevendorproduct $DEVICE)
-	if [ -e "$RES/modem/$VIDPID" ]; then
+	# VIDPID нужен ДО tty: у modemmanager-модема DEVICE пуст (порт у MM), а
+	# профиль всё равно обязан подключиться - Compal, например, читает метрики
+	# mmcli/qmicli и без AT-порта. Берём vid:pid из sysfs по USB-пути активного
+	# модема; tty-путь - для остальных, как раньше.
+	if [ -n "$DEVICE" ]; then
+		VIDPID=$(getdevicevendorproduct $DEVICE)
+	elif [ -r "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
+		VIDPID="usb/$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor")$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct")"
+	else
+		VIDPID=""
+	fi
+	if [ -n "$VIDPID" ] && [ -f "$RES/modem/$VIDPID" ]; then
 		# IFS СОХРАНЯЕМ И ВОССТАНАВЛИВАЕМ ВОКРУГ ПРОФИЛЯ.
 		# Шестнадцать профилей переводят IFS в перевод строки для разбора сот и
 		# НЕ возвращают обратно, а профиль подключается через "." - то есть в
@@ -1645,9 +1704,16 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
 		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
-		[ -z "$CSQ_PER" ] && CSQ_PER=$(_mmv "modem.generic.signal-quality.value")
+		# Процент из mmcli - ТОЛЬКО когда нет детальных метрик (RSRP): он у многих
+		# прошивок пессимистичен (Compal: 12% при RSRP -106), а при живом RSRP
+		# сигнал считает sig_weighted ниже - как у всех остальных модемов.
+		[ -z "$CSQ_PER" ] && [ -z "$RSRP" ] && CSQ_PER=$(_mmv "modem.generic.signal-quality.value")
 		[ -z "$REG" ]     && REG=$(_mmv "modem.3gpp.registration-state")
 		[ -z "$MODE" ]    && MODE=$(_mmv "modem.generic.access-technologies.value[1]" | tr 'a-z' 'A-Z')
+		# Модель: сперва имя из НАШЕЙ секции (там «Compal RXM-G1» и прочие
+		# нормализованные имена), и только потом generic из mmcli - тот отдаёт
+		# сырое USB-имя («VOS_5G»), и карточка «меняла» модель при переводе в MM.
+		[ -z "$MODEL" ]   && MODEL=$(uci -q get "5gmodem.$_hl_sec.model")
 		[ -z "$MODEL" ]   && MODEL=$(_mmv "modem.generic.model")
 		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
 		# RSRP/RSRQ/RSSI/SINR НЕ трогаем: детальный сигнал отдаёт QMI-профиль модема
@@ -1843,6 +1909,25 @@ fi
 # компоненты выпадают из среднего, поэтому «только RSRP» тоже даёт результат.
 # Считаем через awk: busybox $(( )) не тянет дробное/отрицательное, а метрики
 # приходят со знаком.
+# CSQ ИЗ RSSI, КОГДА AT-БАТЧА НЕ БЫЛО (modemmanager-модем: +CSQ спросить не у
+# кого, а RSSI профиль прочитал по QMI). Обратная формула той же шкалы 3GPP:
+# CSQ = (RSSI + 113) / 2, валидный диапазон RSSI -113..-51 -> CSQ 0..31.
+# Процент из него - тем же путём CSQ*100/31, что и у валидного +CSQ: прошивка
+# в +CSQ кладёт ровно этот RSSI, и один и тот же модем в MBIM (AT жив) и в MM
+# должен показывать ОДИНАКОВЫЙ уровень (проверено на Compal: 22 против 19 при
+# реальной разнице RSSI -70/-74). Дробный RSSI усекаем: busybox $(( )) дробь
+# не переваривает. Взвешенная оценка ниже остаётся фолбэком, когда нет и RSSI.
+if [ -z "$CSQ" ] && [ -n "$RSSI" ]; then
+	_csq_r=${RSSI%%.*}
+	case "$_csq_r" in
+		-[0-9]*)
+			if [ "$_csq_r" -ge -113 ] 2>/dev/null && [ "$_csq_r" -le -51 ] 2>/dev/null; then
+				CSQ=$(( (_csq_r + 113) / 2 ))
+				[ -z "$CSQ_PER" ] && CSQ_PER=$(( CSQ * 100 / 31 ))
+			fi ;;
+	esac
+fi
+
 if [ -z "$CSQ_PER" ] && [ -n "$RSRP" ]; then
 	CSQ_PER=$(sig_weighted "$RSRP" "$SINR" "$RSRQ")
 fi
