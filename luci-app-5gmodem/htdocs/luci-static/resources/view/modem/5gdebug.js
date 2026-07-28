@@ -1308,6 +1308,32 @@ return view.extend({
 		   «Диагностика» (см. diag ниже): это часть диагностики, а не настройка.
 		   Кнопку и описание собираем там, здесь - только обработчик. */
 		var collectDesc = _('Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys.');
+		/* ПОДПИСЬ ЭТАПА СБОРА. Бэкенд шлёт «5/9 sim» - номер шага и КЛЮЧ
+		   латиницей; фразу собираем здесь, чтобы она переводилась (раньше
+		   collect.sh слал готовый русский текст, и в английском интерфейсе в
+		   статусе торчало «SIM и eSIM»). Номер шага показываем всегда: этап
+		   eSIM идёт больше минуты, и без него это выглядит как зависание. */
+		var COLLECT_STEPS = {
+			start:  _('starting'),
+			system: _('system'),
+			config: _('configuration'),
+			usb:    _('USB and ports'),
+			mm:     _('ModemManager'),
+			at:     _('AT query'),
+			sim:    _('SIM'),
+			esim:   _('eSIM (may take a minute)'),
+			net:    _('network and logs'),
+			done:   _('done')
+		};
+		var collectStepText = function(raw) {
+			raw = String(raw || '').trim();
+			if (!raw) { return ''; }
+			var m = raw.match(/^(\d+)\/(\d+)\s+(\S+)$/);
+			if (!m) { return COLLECT_STEPS[raw] || raw; }
+			var name = COLLECT_STEPS[m[3]] || m[3];
+			return '(' + m[1] + '/' + m[2] + ') ' + name;
+		};
+
 		var runCollect = function() {
 			var msg = E('p', { 'class': 'spinning' }, _('Collecting logs…'));
 			ui.showModal(_('Diagnostic report'), [ msg ]);
@@ -1318,7 +1344,7 @@ return view.extend({
 					if (st.state === 'running') {
 						// сбор не бесконечен: 180 попыток по 2 c = 6 минут потолок
 						if (tries > 180) { throw new Error(_('Timed out')); }
-						msg.textContent = _('Collecting logs…') + ' ' + (st.progress || '');
+						msg.textContent = _('Collecting logs…') + ' ' + collectStepText(st.progress);
 						return new Promise(function(resolve) {
 							window.setTimeout(function() { resolve(poll(tries + 1)); }, 2000);
 						});

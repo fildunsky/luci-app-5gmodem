@@ -465,6 +465,23 @@ case "$REQ" in
 		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && is_compal "$AMP" "$DEV"; then
 			PROTO="modemmanager"
 		fi
+		# Dell DW5821e / Foxconn T77W968 (413c:81d7) - ИСКЛЮЧЕНИЕ в пользу
+		# ModemManager. У этого модуля штатный mbim НЕ поднимает сессию: umbim
+		# либо валится на «Failed to attach to network», либо считает блокером
+		# сервисный PIN2 (pintype 3) и выдаёт PIN_FAILED вместе с
+		# proto_block_restart. QMI-путь тоже не годится: quectel-CM выдаёт IP,
+		# но трафик не идёт (RX=0). ModemManager с тем же модемом и той же SIM
+		# работает - подтверждено ПЯТЬЮ независимыми пользователями (Билайн,
+		# YOTA, МТС; OpenWrt 24.10 и 25.12; MediaTek, Radxa, x86).
+		# Раньше auto по драйверу cdc_mbim уводил такого пользователя в путь,
+		# который заведомо не работает, и он неделями искал причину.
+		_mki_vp=""
+		[ -n "$AMP" ] && [ -f "/sys/bus/usb/devices/$AMP/idVendor" ] && \
+			_mki_vp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
+		if [ "$_mki_vp" = "413c:81d7" ] && [ -f /lib/netifd/proto/modemmanager.sh ]; then
+			logger -t 5gmodem "mkiface: $_mki_vp - у него mbim/qmi не поднимают сессию, ведём через ModemManager"
+			PROTO="modemmanager"
+		fi
 		;;
 	*) PROTO="$REQ" ;;
 esac

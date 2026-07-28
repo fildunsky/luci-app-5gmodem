@@ -49,6 +49,35 @@ setbands() {
 	sms_tool -d $_DEVICE at "AT^BAND_PREF=LTE,2,$T"
 }
 
+# РЕЖИМ СЕТИ (RAT) через AT^SLMODE. Раньше режим у этого семейства умел только
+# ModemManager, и на kernel-протоколе (mbim/qmi) кнопки режима не работали вовсе -
+# живая жалоба с форума: «бенды и режим не срабатывают» на T99W175 под MBIM.
+#
+# Второй параметр - БИТОВАЯ МАСКА: 1=WCDMA, 2=LTE, 4=NR5G, 0=Auto. Сверено по
+# фирменному набору команд (YAT, страница T99W175/DW5930/Lenovo SDX55):
+#   1,0 Auto | 1,1 WCDMA | 1,2 LTE | 1,3 WCDMA+LTE
+#   1,4 NR5G | 1,5 WCDMA+NR5G | 1,6 LTE+NR5G | 1,7 WCDMA+LTE+NR5G
+#
+# ОСТОРОЖНО: у T77W968 (Dell DW5821e, Snapdragon X20) та же команда, но ДРУГИЕ
+# значения (Auto=4, WCDMA=14, LTE=30, WCDMA+LTE=35). У него отдельный профиль
+# 413c81d7 - эту кодировку сюда переносить нельзя.
+getsupportedmodes() {
+	echo "0:Auto 1:3G 2:4G 3:3G+4G 6:4G+5G 7:3G+4G+5G"
+}
+
+getmode() {
+	O=$(sms_tool -d $_DEVICE at "AT^SLMODE?" 2>/dev/null | tr -d '\r')
+	echo "$O" | awk -F[:,] '/\^SLMODE:/{gsub(/ /,"",$3); print $3; exit}'
+}
+
+setmode() {
+	M="$1"
+	case "$M" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT^SLMODE=1,$M"
+}
+
 getsupportedbands5gnsa() {
 	echo "$_DEFAULT_5GNSA_BANDS"
 }

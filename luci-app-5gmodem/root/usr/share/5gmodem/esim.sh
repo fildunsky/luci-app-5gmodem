@@ -35,6 +35,13 @@ elif [ -x /usr/bin/lpac ]; then
 	# приложение писало «lpac не установлен», хотя он есть (живой случай: T99W175
 	# с официальным lpac 2.3.0 - вкладка eSIM отказывалась работать).
 	LPAC="/usr/bin/lpac"
+	# ПОЛУДОХЛАЯ УСТАНОВКА. /usr/bin/lpac - обёртка, она запускает /usr/lib/lpac/lpac.
+	# Патченый пакет не встаёт поверх официального (тот кладёт /usr/lib/lpac ФАЙЛОМ,
+	# нашему нужен КАТАЛОГ): apk сыплет «failed to extract ... Not a directory»,
+	# сносит бинарь, а обёртку оставляет - пакет числится установленным, но запускать
+	# нечего. Раньше вкладка молча отвечала «eSIM нет» и пользователь искал причину
+	# в модеме. Воспроизведено на стенде 28.07.2026.
+	[ -e /usr/lib/lpac/lpac ] || LPAC_BROKEN="обёртка /usr/bin/lpac есть, но самого бинаря /usr/lib/lpac/lpac нет: установка lpac испорчена (обычно - патченый пакет ставили поверх официального). Лечится: apk del lpac; rm -rf /usr/lib/lpac /usr/bin/lpac; установить заново"
 elif [ -x /usr/lib/lpac ]; then
 	LPAC="/usr/lib/lpac"
 else
@@ -174,7 +181,7 @@ euicc_probe_wdm() {
 	esac
 	_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
 	rm -f "$_pwo"
-	( env $_pw LPAC_HTTP=curl "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
+	( env $_pw LPAC_HTTP="$(http_local_drv)" "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
 	_pwp=$!
 	_pwn=0
 	while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
@@ -221,7 +228,27 @@ _mbim_slot_restore() {   # $1 = cdc-wdm, $2 = сохранённый слот (�
 	[ -n "$_msr" ] && [ "$_msr" != "$2" ] \
 		&& mbimcli -d "$1" --ms-set-device-slot-mappings="$2" >/dev/null 2>&1
 }
-_mbim_uim_slot() { _v=$(uci -q get lpac.mbim.slot); [ -n "$_v" ] && echo "$_v" || echo 2; }
+# HTTP-ДРАЙВЕР, КОТОРЫЙ РЕАЛЬНО ЕСТЬ В СБОРКЕ. Локальным операциям (проба eUICC,
+# chip info, список профилей) сеть не нужна, но lpac всё равно поднимает HTTP-плечо
+# при старте и падает с «No HTTP driver found», если запрошенного драйвера нет.
+# В сборке lpac-fm350 из HTTP-плагинов лежит только stdio, а здесь был жёстко
+# прописан curl - проба валилась ДО APDU, и вкладка честно писала «eUICC не
+# ответил», хотя чип живой (живой случай: Thales MV31-W / T99W175 на MBIM).
+http_local_drv() {
+	[ -d /usr/lib/lpac/driver ] || { echo curl; return; }   # 2.1.x: единый бинарь, драйверы внутри
+	[ -f /usr/lib/lpac/driver/driver_http_curl.so ] && { echo curl; return; }
+	[ -f /usr/lib/lpac/driver/driver_http_stdio.so ] && { echo stdio; return; }
+	echo curl
+}
+
+# Слот eUICC. Обёртка /usr/bin/lpac из пакета lpac-build читает uim_slot, а мы
+# исторически slot - при ручной настройке легко промахнуться мимо нужного ключа,
+# поэтому принимаем оба.
+_mbim_uim_slot() {
+	_v=$(uci -q get lpac.mbim.slot)
+	[ -n "$_v" ] || _v=$(uci -q get lpac.mbim.uim_slot)
+	[ -n "$_v" ] && echo "$_v" || echo 2
+}
 _mbim_skipmap()  { _v=$(uci -q get lpac.mbim.skip_slot_mapping); [ -n "$_v" ] && echo "$_v" || echo 1; }
 
 # lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). Прямой AT-драйвер
@@ -258,7 +285,7 @@ run_lpac() {
 		_MR="/tmp/5gmodem_esim_mbim.$$"; rm -f "$_MR"
 		env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
 			LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY=1 \
-			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$(_mbim_skipmap)" LPAC_HTTP=curl \
+			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$(_mbim_skipmap)" LPAC_HTTP="$(http_local_drv)" \
 			"$LPAC" "$@" > "$_MR" 2>/dev/null &
 		_PID=$!; _n=0
 		while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
@@ -294,6 +321,11 @@ run_lpac() {
 		_CA=$(ca_bundle); _HTTPDRV="stdio"
 	else
 		_CA=""; _HTTPDRV="curl"
+	fi
+	# curl-драйвера в сборке может не быть вовсе - тогда lpac упал бы с «No HTTP
+	# driver found» уже на старте. Уходим на мост вместе с CA-бандлом.
+	if [ "$_HTTPDRV" = curl ] && [ "$(http_local_drv)" != curl ]; then
+		_HTTPDRV="stdio"; _CA=$(ca_bundle)
 	fi
 	# APDU: нативный AT-драйвер (tty напрямую) ЛИБО stdio-мост. В обоих случаях мост
 	# в пайплайне остаётся - он ловит HTTP (если stdio) и ЗАХВАТЫВАЕТ progress/lpa в
@@ -676,6 +708,9 @@ status)
 	[ "$_ES_FORCE" = "1" ] && { echo '{"available":1,"active":0,"forced":1}'; exit 0; }
 
 	# lpac не установлен - работать с eSIM всё равно нечем, вкладку не показываем.
+	# А вот испорченную установку показываем: молчаливое «eSIM нет» отправляло
+	# искать причину в модеме, хотя чинить надо пакет (см. LPAC_BROKEN выше).
+	[ -n "$LPAC_BROKEN" ] && { echo '{"available":0,"active":0,"broken":1}'; exit 0; }
 	[ -x "$LPAC" ] || { echo '{"available":0,"active":0}'; exit 0; }
 
 	_vp=$(uci -q get "5gmodem.$_es_sec.vidpid")
@@ -786,6 +821,7 @@ status-probe)
 	;;
 esac
 
+[ -n "$LPAC_BROKEN" ] && { err "$LPAC_BROKEN"; exit 0; }
 [ -x "$LPAC" ] || { err "lpac not installed"; exit 0; }
 
 # ---- всё остальное: под замком (у eUICC один логический канал) ---------------

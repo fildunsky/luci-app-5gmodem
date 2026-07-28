@@ -3815,3 +3815,30 @@ msgstr "Обновление ещё собирается на сервере. П
 
 msgid "Modem address, not external"
 msgstr "Адрес модема, не внешний"
+
+msgid "starting"
+msgstr "запуск"
+
+msgid "system"
+msgstr "система"
+
+msgid "configuration"
+msgstr "конфигурация"
+
+msgid "USB and ports"
+msgstr "USB и порты"
+
+msgid "AT query"
+msgstr "AT-опрос"
+
+msgid "SIM"
+msgstr "SIM"
+
+msgid "eSIM (may take a minute)"
+msgstr "eSIM (может занять минуту)"
+
+msgid "network and logs"
+msgstr "сеть и логи"
+
+msgid "done"
+msgstr "готово"

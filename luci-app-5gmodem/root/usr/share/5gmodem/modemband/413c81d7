@@ -5,4 +5,32 @@ getinfo() {
 	echo "Dell DW5821e Snapdragon X20 LTE"
 }
 
+# РЕЖИМ СЕТИ (RAT) через AT^SLMODE. Значения У ЭТОГО МОДУЛЯ СВОИ и с масками
+# T99W175 не совпадают: там 1=WCDMA, 2=LTE, 4=NR5G, а здесь набор произвольный.
+# Сверено по фирменному набору команд (YAT, страница «T77W968/Dell DW5821»):
+#   1,4 Auto | 1,14 WCDMA | 1,30 LTE | 1,35 WCDMA+LTE | 1,6 LTE+NR
+# Перепутать нельзя молча: 1,4 здесь «Авто», а у T99W175 - «только NR5G».
+#
+# LTE+NR (1,6) в список НЕ выносим: Snapdragon X20 - модем LTE Cat.12, 5G у него
+# нет вовсе, и кнопка «4G+5G» вводила бы в заблуждение.
+#
+# Функции объявлены ДО общей части: _foxconn_common1 их не переопределяет
+# (там только бенды), но порядок оставляем очевидным.
+getsupportedmodes() {
+	echo "4:Auto 14:3G 30:4G 35:3G+4G"
+}
+
+getmode() {
+	O=$(sms_tool -d $_DEVICE at "AT^SLMODE?" 2>/dev/null | tr -d '\r')
+	echo "$O" | awk -F[:,] '/\^SLMODE:/{gsub(/ /,"",$3); print $3; exit}'
+}
+
+setmode() {
+	M="$1"
+	case "$M" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT^SLMODE=1,$M"
+}
+
 . $RES/_foxconn_common1

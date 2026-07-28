@@ -1966,6 +1966,9 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 		[ -z "$MODEL" ]   && MODEL=$(uci -q get "5gmodem.$_hl_sec.model")
 		[ -z "$MODEL" ]   && MODEL=$(_mmv "modem.generic.model")
 		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
+		# Прошивка: её обычно читает AT+CGMR, но под ModemManager AT-порт нам не
+		# принадлежит - в карточке стоял прочерк. У MM она есть готовая.
+		[ -z "$FW" ]      && FW=$(_mmv "modem.generic.revision")
 		# IMSI/ICCID - ИЗ SIM-ОБЪЕКТА MM. Обычно их читает AT (AT+CIMI/AT+ICCID),
 		# но у modemmanager-модема AT-порт нам не принадлежит, и обе строки в
 		# карточке стояли прочерками, хотя MM их прекрасно знает. Объект SIM
