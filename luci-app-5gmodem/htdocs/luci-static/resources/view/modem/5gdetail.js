@@ -1537,7 +1537,11 @@ onBlockExpand['freq'] = function() {
    Ранг = min_gen*10 + (max_gen-min_gen). Метки в профилях латиницей ("2G"). */
 function netModeRank(label) {
 	var s = String(label || '');
-	if (/auto/i.test(s)) { return -1; }
+	/* И КИРИЛЛИЦЕЙ ТОЖЕ. Метки режимов приходят от бэкенда уже переведёнными
+	   («Авто»), а латинское /auto/ их не ловило: режим получал ранг «неизвестно»
+	   (999) и уезжал в КОНЕЦ ряда - у HiLink-модемов кнопки шли 2G, 3G, 4G,
+	   Авто. Ожидаемый порядок - Авто первым, затем по поколениям. */
+	if (/auto|авто/i.test(s)) { return -1; }
 	var gens = (s.match(/([0-9])\s*G/gi) || []).map(function(x) { return parseInt(x, 10); });
 	if (!gens.length) { return 999; }
 	var mn = Math.min.apply(null, gens), mx = Math.max.apply(null, gens);
@@ -3279,6 +3283,29 @@ function applyMetrics(json) {
 						view.textContent = json.protocol;
 						}
 					}
+
+					/* МОДЕМ В РАЗЪЁМЕ ПОМЕНЯЛИ - СБРОСИТЬ БЛОК ЧАСТОТ.
+					   Состояние блока (какой путь управления, что уже загружено,
+					   запрещено ли управление) копится за время жизни страницы и
+					   принадлежит КОНКРЕТНОМУ модему. При горячей замене (вынули
+					   Telit, воткнули Huawei в тот же разъём) оно оставалось от
+					   прежнего: сначала показывались его диапазоны, потом - «в
+					   режиме dhcp менять нельзя, переключитесь на ModemManager».
+					   Помогала только перезагрузка страницы. Ключ - железо
+					   (модель+vid:pid), а не путь: путь при замене тот же. */
+					var _hwNow = String(json.modem || '') + '|' + String(json.vidpid || '');
+					if (_hwNow !== '|' && window.__hwSig && window.__hwSig !== _hwNow) {
+						mmcliBandsLoaded = false;
+						bandsGated = false; bandsReadOnly = false; bandsTakeover = false;
+						bandSource = 'mmcli';
+						_bandsRetry = 0; _bandsRetryMax = 3;
+						[ 'bands-3g', 'bands-lte', 'bands-nr', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
+							var c = document.getElementById(id);
+							if (c) { c.innerHTML = ''; c.removeAttribute('data-sig'); }
+						});
+						if (typeof loadBands === 'function') { window.setTimeout(loadBands, 300); }
+					}
+					if (_hwNow !== '|') { window.__hwSig = _hwNow; }
 
 					/* Флаг MM-прото - ЖИВЬЁМ с каждого тика: на загрузке peek мог
 					   не знать iface_proto (или вкладку переключили на другой

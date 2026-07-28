@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+usb-modeswitch +kmod-usb-acm \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=1.9.8.2
+PKG_VERSION:=1.9.8.3
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -58,6 +58,11 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 	/etc/init.d/5gmodem-btnleds start 2>/dev/null
 	modprobe rndis_host 2>/dev/null
 	modprobe cdc_ether 2>/dev/null
+	# Снять вредные правила usb_modeswitch (см. usbmode-fix.sh): у части
+	# модемов база предписывает конфигурацию 0, что сносит канал данных.
+	# Делаем и здесь, а не только в hotplug: при обновлении пакета
+	# usb-modeswitch запись возвращается, а модем уже воткнут - события не будет.
+	/usr/share/5gmodem/usbmode-fix.sh 2>/dev/null
 }
 if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
 	mkdir -p "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n"

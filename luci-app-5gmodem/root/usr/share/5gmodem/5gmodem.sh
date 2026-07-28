@@ -1306,6 +1306,7 @@ cat <<EOF
 "rx":"$(sanitize_number "$RX")",
 "tx":"$(sanitize_number "$TX")",
 "modem":"$(sanitize_string "$MODEL")",
+"vidpid":"$(sanitize_string "$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)")",
 "mtemp":"$(sanitize_string "$TEMP")",
 "mtherm":"$(sanitize_number "$THERM")",
 "antports":"$(sanitize_string "$ANTPORTS")",
@@ -1554,7 +1555,38 @@ _qmi_refresh() {
 	# Кавычки в awk намеренно не разбираем: значения достаём по цифрам, иначе
 	# программу пришлось бы утыкать экранированием, которое в busybox awk
 	# ломается молча.
+	# СИГНАЛ И СОТА ПО QMI - generic, для модема БЕЗ доступного AT-порта.
+	# Под ModemManager AT-порт нам не принадлежит, вендорный профиль (он у
+	# большинства модемов AT-овый) молчит, и в карточке оставались прочерки:
+	# RSRP/RSRQ/SINR/RSSI, диапазон, EARFCN, TAC, Cell ID. Всё это QMI отдаёт
+	# теми же запросами, что мы и так делаем для соседей - через прокси (-p),
+	# то есть канал у MM не отбираем. Заполняем ТОЛЬКО пустое (см. _qmi_supplement):
+	# вендорный профиль знает про свой модем больше и остаётся главнее.
+	_qr_si=$(qmicli -d "$_qr_w" -p --nas-get-signal-info 2>/dev/null)
+	_qr_sig=$(printf '%s\n' "$_qr_si" | awk '
+		/^LTE:/ { f=1; next }
+		/^[A-Z0-9]+:/ { f=0 }
+		f && /RSSI:/ { if (match($0, /-?[0-9.]+/)) rssi = substr($0, RSTART, RLENGTH) }
+		f && /RSRQ:/ { if (match($0, /-?[0-9.]+/)) rsrq = substr($0, RSTART, RLENGTH) }
+		f && /RSRP:/ { if (match($0, /-?[0-9.]+/)) rsrp = substr($0, RSTART, RLENGTH) }
+		f && /SNR:/  { if (match($0, /-?[0-9.]+/)) snr  = substr($0, RSTART, RLENGTH) }
+		END { if (rsrp != "" || rssi != "") printf "%s|%s|%s|%s", rssi, rsrq, rsrp, snr }
+	')
+	# LTE-диапазон и канал из той же rf-band-info (3G-ветка выше берёт wcdma-*)
+	_qr_lte=$(printf '%s\n' "$_qr_rf" | awk "
+		/Active Band Class: *'eutran-/ { if (match(\$0, /eutran-[0-9]+/)) b = substr(\$0, RSTART + 7, RLENGTH - 7) }
+		/Active Channel:/ { if (b != \"\" && c == \"\") { if (match(\$0, /[0-9]+/)) c = substr(\$0, RSTART, RLENGTH) } }
+		END { if (b != \"\") printf \"%s|%s\", b, c }
+	")
 	_qr_cl=$(qmicli -d "$_qr_w" -p --nas-get-cell-location-info 2>/dev/null)
+	# TAC и Cell ID обслуживающей соты (секция Intrafrequency LTE Info)
+	_qr_cell=$(printf '%s\n' "$_qr_cl" | awk '
+		/^Intrafrequency LTE Info/ { f=1; next }
+		/^[^ \t]/ { f=0 }
+		f && /Tracking Area Code:/ { if (match($0, /[0-9]+/)) tac = substr($0, RSTART, RLENGTH) }
+		f && /Global Cell ID:/     { if (match($0, /[0-9]+/)) cid = substr($0, RSTART, RLENGTH) }
+		END { if (tac != "" || cid != "") printf "%s|%s", tac, cid }
+	')
 	# 3G serving cell из той же выдачи (секция "UMTS Info"): RSCP/ECIO/PSC/LAC.
 	# В LTE секции нет - файл пустеет сам, стейл не живёт дольше цикла.
 	_qr_3g=$(printf '%s\n' "$_qr_cl" | awk '
@@ -1605,6 +1637,9 @@ _qmi_refresh() {
 	printf '%s' "$_qr_b3" > "$_qr_p.b3g.tmp" && mv "$_qr_p.b3g.tmp" "$_qr_p.b3g"
 	printf '%s' "$_qr_u3" > "$_qr_p.u3g.tmp" && mv "$_qr_p.u3g.tmp" "$_qr_p.u3g"
 	printf '%s' "$_qr_3g" > "$_qr_p.c3g.tmp" && mv "$_qr_p.c3g.tmp" "$_qr_p.c3g"
+	printf '%s' "$_qr_sig" > "$_qr_p.sig.tmp" && mv "$_qr_p.sig.tmp" "$_qr_p.sig"
+	printf '%s' "$_qr_lte" > "$_qr_p.lte.tmp" && mv "$_qr_p.lte.tmp" "$_qr_p.lte"
+	printf '%s' "$_qr_cell" > "$_qr_p.cell.tmp" && mv "$_qr_p.cell.tmp" "$_qr_p.cell"
 	cut -d. -f1 /proc/uptime > "$_qr_p.t"
 }
 
@@ -1647,6 +1682,48 @@ _qmi_supplement() {
 			| sed -n 's/.*"pci":"\([0-9]*\)"[^}]*"serving":1.*/\1/p' | head -1)
 		;;
 	esac
+	# СИГНАЛ/ДИАПАЗОН/СОТА ИЗ QMI - только то, что осталось пустым.
+	# Нужно модему под ModemManager: его AT-порт занят, вендорный AT-профиль
+	# ничего не заполнил (Telit LM960 под MM показывал одни прочерки), а QMI
+	# те же цифры отдаёт через прокси. У AT-модемов эти поля уже заполнены
+	# профилем, и сюда просто не доходит.
+	if [ -s "$_QS_P.sig" ]; then
+		_QS_S=$(cat "$_QS_P.sig")
+		_s_rssi=${_QS_S%%|*}; _s_r=${_QS_S#*|}
+		_s_rsrq=${_s_r%%|*};  _s_r=${_s_r#*|}
+		_s_rsrp=${_s_r%%|*};  _s_snr=${_s_r##*|}
+		case "$RSSI" in ''|-) [ -n "$_s_rssi" ] && RSSI="$_s_rssi" ;; esac
+		case "$RSRQ" in ''|-) [ -n "$_s_rsrq" ] && RSRQ="$_s_rsrq" ;; esac
+		case "$RSRP" in ''|-) [ -n "$_s_rsrp" ] && RSRP="$_s_rsrp" ;; esac
+		case "$SINR" in ''|-) [ -n "$_s_snr" ] && SINR="$_s_snr" ;; esac
+	fi
+	if [ -s "$_QS_P.lte" ]; then
+		_QS_L=$(cat "$_QS_P.lte")
+		_l_band=${_QS_L%%|*}; _l_earfcn=${_QS_L##*|}
+		case "$PBAND" in ''|-)
+			[ -n "$_l_band" ] && PBAND=$(band4g "$_l_band")
+			;;
+		esac
+		case "$EARFCN" in ''|-) [ -n "$_l_earfcn" ] && EARFCN="$_l_earfcn" ;; esac
+		# Строка режима у generic-модема - голое «LTE» без диапазона; дополняем.
+		case "$MODE" in
+			LTE|LTE-A|4G) [ -n "$PBAND" ] && MODE="$MODE | $PBAND" ;;
+		esac
+	fi
+	if [ -s "$_QS_P.cell" ]; then
+		_QS_C=$(cat "$_QS_P.cell")
+		_c_tac=${_QS_C%%|*}; _c_cid=${_QS_C##*|}
+		case "$TAC_DEC" in ''|-)
+			if [ -n "$_c_tac" ]; then
+				TAC_DEC="$_c_tac"; TAC_HEX=$(printf '%X' "$_c_tac" 2>/dev/null)
+			fi ;;
+		esac
+		case "$CID_DEC" in ''|-)
+			if [ -n "$_c_cid" ]; then
+				CID_DEC="$_c_cid"; CID_HEX=$(printf '%X' "$_c_cid" 2>/dev/null)
+			fi ;;
+		esac
+	fi
 	case "$BANDWIDTH" in ''|-) [ -s "$_QS_P.bw" ] && BANDWIDTH=$(cat "$_QS_P.bw") ;; esac
 	case "$TXPOWER"  in ''|-) [ -s "$_QS_P.tx" ] && TXPOWER=$(cat "$_QS_P.tx") ;; esac
 	# 3G-диапазон - как у 4G: «UMTS | B1 (2100 MHz)» вместо голого «UMTS».
@@ -1767,6 +1844,24 @@ case "$ENBID" in
 esac
 
 _qmi_supplement
+
+# ПОВТОРНЫЙ РАСЧЁТ eNB ID. Блок выше считает его ДО QMI (чтобы поле было и у
+# модемов без cdc-wdm), но у модема под ModemManager сам Cell ID к тому моменту
+# ещё не известен - его приносит _qmi_supplement. Без повтора «ID базовой
+# станции» оставался прочерком именно там, где всё остальное уже заполнено.
+# Условия те же: только LTE/5G-NSA и только при пустом значении.
+case "$ENBID" in
+	''|-)
+		case "$MODE" in
+			*LTE*|*5G*)
+				case "$CID_DEC" in
+					''|*[!0-9]*) ;;
+					*) [ "$CID_DEC" -gt 255 ] && ENBID=$((CID_DEC / 256)) ;;
+				esac
+				;;
+		esac
+		;;
+esac
 
 # sanitize_string/sanitize_number и emit_snapshot определены ВЫШЕ профилей:
 # частичный снимок публикуется до подключения профиля, а shell требует
@@ -1889,6 +1984,15 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 					[ "$NR_ICCID" = "--" ] && NR_ICCID=""
 				fi
 			fi
+		fi
+		# БРЕНД MVNO - ПОВТОРНО, уже с известным IMSI.
+		# Блок «домашний бренд поверх хост-сети» отработал ВЫШЕ, когда IMSI ещё
+		# не был известен: под ModemManager он приходит только отсюда (AT-батча
+		# не было). Из-за этого SIM Т-Мобайл показывалась хост-сетью оператора -
+		# «Tele2 RU» вместо «T-Mobile», и иконка бралась чужая. В роуминге НЕ
+		# трогаем: там гостевое имя показывается намеренно (см. блок выше).
+		if [ "$IS_ROAMING" != "1" ]; then
+			_ob_mm=$(opname_brand "${SIMID:-$NR_IMSI}") && COPS="$_ob_mm"
 		fi
 		# RSRP/RSRQ/RSSI/SINR НЕ трогаем: детальный сигнал отдаёт QMI-профиль модема
 		# (modem/usb/*), а mmcli --signal-get дублировал бы ключи. signal-quality (%)

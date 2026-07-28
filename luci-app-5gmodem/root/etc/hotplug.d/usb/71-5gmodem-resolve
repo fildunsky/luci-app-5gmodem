@@ -45,6 +45,12 @@ touch /tmp/5gmodem/resolve.pending
 		# оно поставит флаг снова, и цикл прогонит повторно.
 		rm -f /tmp/5gmodem/resolve.pending
 		sleep 5
+		# ВРЕДНЫЕ ПРАВИЛА usb_modeswitch. Для части модемов база предписывает
+		# «переключить в конфигурацию 0», хотя они и так приходят в рабочей: у
+		# Dell DW5821e это сносило cdc_mbim, и модем оставался без канала данных
+		# (см. usbmode-fix.sh). Снимаем правило при появлении такого модема -
+		# скрипт идемпотентен и молчит, когда чинить нечего.
+		/usr/share/5gmodem/usbmode-fix.sh >/dev/null 2>&1
 		# порты уже переустановились - пересобрать кэш заново, а не отдать протухший
 		/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
 		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1

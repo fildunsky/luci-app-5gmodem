@@ -346,8 +346,15 @@ function tabsCacheLoad() {
    сам, без перезагрузки страницы. */
 var LIST_CACHE = '/tmp/5gmodem_listmodems.cache';
 
+/* Сигнатура состава модемов. Кроме пути включает ЖЕЛЕЗО (vid:pid + модель +
+   оператор): модем меняют в ТОТ ЖЕ разъём, и по одному лишь пути такая замена
+   неотличима - вкладка продолжала показывать имя прежнего модема (Telit вместо
+   воткнутого Huawei) до ручной перезагрузки страницы. Оператор здесь же, чтобы
+   логотип на вкладке менялся при смене SIM. */
 function pathsSig(list) {
-	return list.map(function(m) { return m.path; }).sort().join(',');
+	return list.map(function(m) {
+		return [ m.path, m.vidpid || '', m.model || '', m.operator || '' ].join('|');
+	}).sort().join(',');
 }
 
 function watchModems(bar, sig) {
