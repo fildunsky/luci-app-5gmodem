@@ -120,6 +120,7 @@ start)
 	CCFALLBACK="http://ip-api.com/line/?fields=countryCode,query"
 	SERVICE=$(_service_name)
 
+	rm -f /tmp/5gmodem_st_stop 2>/dev/null
 	_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0}"
 
 	# ФОН с отвязкой дескрипторов - редирект ИМЕННО на подоболочке, иначе rpcd
@@ -129,67 +130,55 @@ start)
 		RESF="/tmp/5gmodem_st_res.$$"
 		: > "$PROG"; : > "$RESF"
 
-		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага) - ДО замеров ---
-		# Раньше стояло в конце, и IP появлялся последним. Спрашиваем первым:
-		# ответ короткий (обычно доли секунды при --max-time 6), зато карточка
-		# сразу показывает, откуда мы выходим, ещё до первых цифр скорости.
-		# Побочно так честнее: запрос идёт по НЕзагруженному каналу, а не рядом
-		# с качающимся на всю полосу curl.
-		# ip-api /line отдаёт "RU\n<ip>"; у плоских сервисов (ipify) страны нет -
-		# тогда просто IP без флага. Тащим первый IPv4 и, если есть, 2-буквенный
-		# код страны (строкой ровно из 2 букв или из JSON "country_code":"XX").
-		# Фолбэк IP - src маршрута.
-		GEO=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
-		PUB=$(_parse_ip "$GEO")
-		CC=$(_parse_cc "$GEO")
-
-		# Основной сервис молчит (ip.wtf, например, с сотовой в РФ недоступен -
-		# curl 28). Идём к резервному: он отдаёт адрес И страну разом, то есть
-		# лучше любого фолбэка по локальным данным.
-		if [ -z "$PUB" ]; then
-			GEO2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
-			PUB=$(_parse_ip "$GEO2")
-			[ -n "$CC" ] || CC=$(_parse_cc "$GEO2")
-		fi
-
-		# Совсем ничего - берём адрес у САМОГО МОДЕМА (снимок метрик), и лишь
-		# потом src маршрута. Порядок важен для модемов, что держат IP-стек сами
-		# (HiLink): у них src маршрута - это адрес ВНУТРЕННЕЙ сети модема
-		# (192.168.43.2), а в метриках лежит настоящий адрес от оператора,
-		# добытый AT+CGPADDR. Раньше в карточке светился именно 192.168.43.x.
-		# ЭТО ВСЁ РАВНО НЕ ПУБЛИЧНЫЙ АДРЕС (обычно CGNAT), поэтому страну по нему
-		# НЕ спрашиваем: именно так локальный 26.57.136.47 на eth2 однажды
-		# превратился во флаг США.
-		LOCALIP=0
-		if [ -z "$PUB" ]; then
-			PUB=$(/usr/share/5gmodem/5gmodem.sh cached 30 2>/dev/null \
-				| jsonfilter -e '@.ipaddr' 2>/dev/null | grep -E '^[0-9.]+$')
-			LOCALIP=1
-		fi
-		if [ -z "$PUB" ]; then
-			PUB=$(ip route get 77.88.8.8 2>/dev/null \
-				| grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
-			LOCALIP=1
-		fi
-
-		# IP уже есть - отдаём его в UI, не дожидаясь замеров
-		_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
-
-		# ДОЗАПРОС СТРАНЫ - только для реально публичного адреса и только если
-		# страну ещё не знаем («плоские» сервисы вроде ipify отдают лишь IP).
-		# Таймаут короткий: это время украдено у старта замера.
-		if [ -z "$CC" ] && [ -n "$PUB" ] && [ "$LOCALIP" = 0 ]; then
-			CCU=$(echo "$CCURL" | sed "s|{ip}|$PUB|g")
-			CC=$(_parse_cc "$(curl --max-time 4 -s "$CCU" 2>/dev/null)")
-			[ -n "$CC" ] && _write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
-		fi
+		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага) - ПАРАЛЛЕЛЬНО замеру ---
+		# Раньше 2-3 geo-запроса шли ПОСЛЕДОВАТЕЛЬНО ДО закачки (6+5+4 c
+		# max-time): на сотовой это съедало до ~15 c, и пользователь видел
+		# «полоска ползёт, а цифра 0» - фаза загрузки уже шла, а curl закачки
+		# ещё даже не стартовал. Теперь geo-подоболочка работает рядом с
+		# замером, результат кладёт в файлы - циклы семплирования подхватывают
+		# их на каждом тике. Ценой небольшой честности запроса (geo делит канал
+		# с замером), но старт цифр важнее.
+		GEOIP="/tmp/5gmodem_st_ip.$$"; GEOCC="/tmp/5gmodem_st_cc.$$"
+		: > "$GEOIP"; : > "$GEOCC"
+		(
+			_g=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
+			_pub=$(_parse_ip "$_g"); _cc=$(_parse_cc "$_g")
+			if [ -z "$_pub" ]; then
+				_g2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
+				_pub=$(_parse_ip "$_g2")
+				[ -n "$_cc" ] || _cc=$(_parse_cc "$_g2")
+			fi
+			_local=0
+			if [ -z "$_pub" ]; then
+				# адрес самого модема (HiLink: src маршрута - внутренний 192.168.43.x)
+				_pub=$(/usr/share/5gmodem/5gmodem.sh cached 30 2>/dev/null \
+					| jsonfilter -e '@.ipaddr' 2>/dev/null | grep -E '^[0-9.]+$')
+				_local=1
+			fi
+			if [ -z "$_pub" ]; then
+				_pub=$(ip route get 77.88.8.8 2>/dev/null \
+					| grep -oE 'src [0-9.]+' | awk '{print $2}' | head -1)
+				_local=1
+			fi
+			printf '%s' "$_pub" > "$GEOIP" 2>/dev/null
+			printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
+			# дозапрос страны - только для реально публичного адреса
+			if [ -z "$_cc" ] && [ -n "$_pub" ] && [ "$_local" = 0 ]; then
+				_ccu=$(echo "$CCURL" | sed "s|{ip}|$_pub|g")
+				_cc=$(_parse_cc "$(curl --max-time 4 -s "$_ccu" 2>/dev/null)")
+				[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
+			fi
+		) >/dev/null 2>&1 </dev/null &
+		PUB=""; CC=""
 
 		# --- DOWNLOAD: живое семплирование, ИТОГ = МАКС по секундным семплам ---
 		# stderr (прогресс-метр) -> PROG, stdout (итоговый -w) -> RESF. Заголовком
 		# берём максимум устойчивой скорости из посекундных семплов (это «скорость
 		# канала»), а НЕ среднее от curl: короткая загрузка = среднее занижено
 		# разгоном TCP. Среднее оставляем фолбэком, если семплов не было.
-		curl -o /dev/null --max-time "$SECS" --connect-timeout 8 \
+		# -A маркер: по нему stop убивает ИМЕННО замерные curl'ы (busybox без pkill
+		# по имени+аргументам, pgrep -f по маркеру - точечно, чужие curl не трогаем)
+		curl -A 5gmodem-speedtest -o /dev/null --max-time "$SECS" --connect-timeout 8 \
 			-w '%{speed_download} %{http_code}' "$URL" 2>"$PROG" >"$RESF" &
 		CPID=$!
 		MAXD=0
@@ -199,6 +188,8 @@ start)
 			[ -n "$CUR" ] || CUR=0
 			LIVE=$(_tombps "$CUR")
 			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
+			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
+			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
@@ -208,24 +199,76 @@ start)
 		DMBPS=$(awk "BEGIN{printf \"%.1f\", ($MAXD>0)?$MAXD:$AVGD}")
 		rm -f "$PROG" "$RESF"
 
-		# --- UPLOAD: то же - живое семплирование + макс по секундным семплам ---
+		# Пользователь остановил тест (повторный клик по карточке): выходим тихо,
+		# показав, что успели намерить.
+		if [ -f /tmp/5gmodem_st_stop ]; then
+			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
+			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
+			rm -f "$GEOIP" "$GEOCC" /tmp/5gmodem_st_stop
+			_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			exit 0
+		fi
+
+		# --- UPLOAD: живое семплирование + макс по секундным семплам ---
+		# ЦИКЛ буферизованных 8-МБ POST'ов НА ВСЮ ФАЗУ, а не один буфер:
+		# одиночные 8 МБ быстрый аплинк (5+ МБ/с) выливал за 1-2 c - фаза
+		# кончалась на разгоне TCP, и «макс по семплам» ловил только первые
+		# заниженные тики («аплоад срывается и показывает мало»). Потоковые
+		# альтернативы проверены и НЕ работают: chunked -T (PUT и POST) rt.ru
+		# режет 403 на ~10 МБ, явный Content-Length - 403 сразу, FTP tele2 с
+		# сотовой (CGNAT) молчит. Поэтому шлём подряд, пока не истечёт $SECS;
+		# провалы на передоговоре TCP между POST'ами съедает макс-семплинг,
+		# в итог идёт максимум из (семплы, лучшая среди POST'ов средняя).
 		UPROG="/tmp/5gmodem_st_uprog.$$"; URES="/tmp/5gmodem_st_ures.$$"
 		: > "$UPROG"; : > "$URES"
-		head -c 8388608 /dev/zero 2>/dev/null | curl -o /dev/null --max-time "$SECS" --connect-timeout 6 \
-			--data-binary @- -w '%{speed_upload}' "$UPURL" 2>"$UPROG" >"$URES" &
+		(
+			_up_t0=$(cut -d. -f1 /proc/uptime)
+			# ПЕРВЫЙ POST маленький (2 МБ), дальше по 8 МБ. Живая цифра берётся
+			# из ЗАВЕРШЁННЫХ POST'ов (у HTTPS-выгрузки прогресса внутри передачи
+			# нет), и с 8 МБ на медленном аплинке (1-2 МБ/с) первый отсчёт
+			# приходил только через 4-8 c - карточка висела на нуле при ползущей
+			# полоске. 2 МБ дают цифру через ~1-2 c; лёгкое занижение первого
+			# отсчёта (короткий разгон TCP) гасится макс-агрегацией остальных.
+			_up_sz=2097152
+			while :; do
+				[ -f /tmp/5gmodem_st_stop ] && break
+				_up_now=$(cut -d. -f1 /proc/uptime)
+				_up_left=$(( SECS - (_up_now - _up_t0) ))
+				[ "$_up_left" -ge 2 ] || break
+				head -c "$_up_sz" /dev/zero 2>/dev/null | curl -A 5gmodem-speedtest -o /dev/null \
+					--max-time "$_up_left" --connect-timeout 6 \
+					--data-binary @- -w '%{speed_upload}\n' "$UPURL" \
+					2>>"$UPROG" >>"$URES"
+				_up_sz=8388608
+			done
+		) </dev/null &
 		UPID=$!
 		MAXU=0
+		LIVEU=0
 		while kill -0 "$UPID" 2>/dev/null; do
 			sleep 1
-			CUR=$(tr '\r' '\n' < "$UPROG" 2>/dev/null | grep -E '^[ ]*[0-9]' | tail -1 | awk '{print $NF}')
-			[ -n "$CUR" ] || CUR=0
-			LIVEU=$(_tombps "$CUR")
+			# Живая цифра - средняя ПОСЛЕДНЕГО ЗАВЕРШЁННОГО POST'а (строки URES):
+			# на HTTPS-выгрузке прогресс-метр curl держит «Current Speed» нулём
+			# до конца передачи, поэтому семплить его бесполезно (наблюдалось:
+			# live_up почти всегда 0.0 с редким проскоком средней). Обновление
+			# ступенчатое (раз в ~3-4 c на POST), зато честное; между POST'ами
+			# держим последнее значение, а не мигаем нулём.
+			_upb=$(awk 'END{print $1+0}' "$URES" 2>/dev/null)
+			_upn=$(awk "BEGIN{printf \"%.1f\", (${_upb:-0}*8)/1000000}")
+			[ "$(awk "BEGIN{print ($_upn>0)?1:0}")" = 1 ] && LIVEU="$_upn"
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
+			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
+			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
-		USPD=$(awk '{print $1+0}' "$URES")
+		# лучшая средняя среди POST'ов цикла (каждый пишет свою строку)
+		USPD=$(awk '{v=$1+0; if (v>m) m=v} END{print m+0}' "$URES")
 		rm -f "$UPROG" "$URES"
+		# финальный снимок IP/страны: geo мог доехать позже последнего тика
+		[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
+		[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
+		rm -f "$GEOIP" "$GEOCC"
 		AVGU=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
 		UBEST=$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")
 		UMBPS=""
@@ -250,8 +293,20 @@ status)
 		echo "{\"running\":0,\"ok\":0,\"service\":\"$(_service_name)\"}"
 	fi
 	;;
+stop)
+	# Повторный клик по карточке. Флаг останавливает фазы теста (циклы его
+	# проверяют), а замерные curl'ы убиваем сразу по маркеру в User-Agent -
+	# точечно, чужие curl процессы не трогаем. Итоговый JSON пишет сам тест
+	# («показать, что успели»), либо, если он уже мёртв, чистим running здесь.
+	touch /tmp/5gmodem_st_stop 2>/dev/null
+	kill $(pgrep -f 5gmodem-speedtest) 2>/dev/null
+	sleep 1
+	grep -q '"running":1' "$CACHE" 2>/dev/null && \
+		_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$(_service_name)\"}"
+	echo '{"running":0,"cancelled":1}'
+	;;
 *)
-	echo '{"error":"usage: speedtest.sh start|status"}'
+	echo '{"error":"usage: speedtest.sh start|status|stop"}'
 	;;
 esac
 exit 0

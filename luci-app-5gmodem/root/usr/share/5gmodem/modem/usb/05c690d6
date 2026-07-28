@@ -80,7 +80,7 @@ if [ "$_MM_OK" = "1" ]; then
 		mmcli -m "$_MMIDX" --location-enable-3gpp >/dev/null 2>&1 &
 	fi
 	case "$_MM_TAC" in
-		''|--) [ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; } ;;
+		''|--|0|000000) [ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; } ;;
 		*)     TAC_DEC=$(printf "%d" "0x$_MM_TAC" 2>/dev/null)
 		       TAC_HEX=$(echo "$_MM_TAC" | tr 'a-f' 'A-F') ;;
 	esac

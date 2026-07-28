@@ -8,7 +8,7 @@
 # стояла своя проверка только по debugfs, которая молча проваливалась на
 # сборках без смонтированной debugfs.
 . /usr/share/5gmodem/iscompal.sh
-if is_compal "" "" "$DEVICE"; then
+if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)" "$DEVICE"; then
 	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0

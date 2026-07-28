@@ -7,6 +7,36 @@
 #
 
 
+# 3G-диапазон в том же формате «B1 (2100 MHz)», что band4g. Вход - либо класс
+# из qmicli --nas-get-rf-band-info (wcdma-2100, wcdma-900, ...; живой пример
+# Compal в CS-fallback: 'wcdma-2100' + Active Channel 10563), либо числовой
+# UARFCN (фолбэк по таблице DL-каналов - для вендорных AT-профилей).
+band3g() {
+	case "${1}" in
+		wcdma-2100)        echo "B1 (2100 MHz)";;
+		wcdma-pcs-1900)    echo "B2 (1900 MHz)";;
+		wcdma-dcs-1800)    echo "B3 (1800 MHz)";;
+		wcdma-1700-us)     echo "B4 (1700 MHz)";;
+		wcdma-850)         echo "B5 (850 MHz)";;
+		wcdma-800)         echo "B6 (800 MHz)";;
+		wcdma-2600)        echo "B7 (2600 MHz)";;
+		wcdma-900)         echo "B8 (900 MHz)";;
+		wcdma-1700-japan)  echo "B9 (1700 MHz)";;
+		wcdma-1500-japan)  echo "B11 (1500 MHz)";;
+		wcdma-850-japan)   echo "B19 (850 MHz)";;
+		[0-9]*)
+			case "${1}" in
+				1056[2-9]|10[6-7][0-9][0-9]|108[0-3][0-9]) echo "B1 (2100 MHz)";;
+				96[6-9][0-9]|99[0-3][0-9])                 echo "B2 (1900 MHz)";;
+				116[2-9]|1[2-4][0-9][0-9]|150[0-9]|151[0-3]) echo "B3 (1800 MHz)";;
+				15[4-9][0-9]|16[0-9][0-9]|17[0-3][0-9])    echo "B4 (1700 MHz)";;
+				43[5-9][0-9]|44[0-5][0-9])                 echo "B5 (850 MHz)";;
+				22[4-9][0-9]|2[3-4][0-9][0-9]|25[0-5][0-9]|256[0-3]) echo "B7 (2600 MHz)";;
+				29[4-9][0-9]|30[0-8][0-9])                 echo "B8 (900 MHz)";;
+			esac;;
+	esac
+}
+
 band4g() {
 # see https://en.wikipedia.org/wiki/LTE_frequency_bands
 	echo -n "B${1}"
@@ -1281,7 +1311,7 @@ cat <<EOF
 "antports":"$(sanitize_string "$ANTPORTS")",
 "rxdiv":"$(sanitize_string "$RXDIV")",
 "firmware":"$(sanitize_string "$FW")",
-"cport":"$(sanitize_string "$DEVICE")",
+"cport":"$(sanitize_string "${DEVICE:-$_CPORT_MM}")",
 "protocol":"$(sanitize_string "$PROTO")",
 "iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
 "mm_running":"$(pgrep ModemManager >/dev/null 2>&1 && echo 1 || echo 0)",
@@ -1398,6 +1428,16 @@ if [ "$_pf_proto" = modemmanager ] && [ -z "$REG" ] && command -v mmcli >/dev/nu
 			roaming) REG=5 ;;
 		esac
 		[ -z "$COPS" ] && COPS=$(_pfv "modem.3gpp.operator-name")
+		# «Порт связи» в карточке: AT-порта у MM-модема нет (DEVICE пуст,
+		# detect молчит - порт у MM), в снимке был прочерк. Честный канал
+		# управления - primary-port самого MM (cdc-wdm0 и т.п.). ТОЛЬКО для
+		# отображения (_CPORT_MM в эмиттере): сам DEVICE трогать НЕЛЬЗЯ, иначе
+		# обёртка sms_tool начнёт слать AT в канал, которым владеет MM, - тот
+		# самый контеншен, из-за которого MM не мог поднять модем.
+		if [ -z "$DEVICE" ] && [ -z "$_CPORT_MM" ]; then
+			_pf_pp=$(_pfv "modem.generic.primary-port")
+			[ -n "$_pf_pp" ] && _CPORT_MM="/dev/$_pf_pp"
+		fi
 		# PLMN: operator-code mmcli = тот же числовой +COPS. Без него страница
 		# прятала кнопку «ID соты» на карту 4cells (ей нужны operator_mcc/mnc).
 		if [ -z "$COPS_NUM" ]; then
@@ -1491,9 +1531,16 @@ _qmi_refresh() {
 	_qr_p="/tmp/5gmodem_qmi_$_qr_k"
 	[ -c "$_qr_w" ] || return 0
 
-	_qr_bw=$(qmicli -d "$_qr_w" -p --nas-get-rf-band-info 2>/dev/null \
-		| sed -n "s/.*Bandwidth: *'\([0-9]*\)'.*/\1/p" | head -1)
+	# Один вызов rf-band-info на всё: полоса, а в 3G ещё и активный диапазон
+	# (класс wcdma-*) с каналом (UARFCN). В 3G полоса приходит НЕ числом, а
+	# классом 'wcdma-5' (= 5 МГц) - разбираем оба формата.
+	_qr_rf=$(qmicli -d "$_qr_w" -p --nas-get-rf-band-info 2>/dev/null)
+	_qr_bw=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Bandwidth: *'\([0-9]*\)'.*/\1/p" | head -1)
+	[ -z "$_qr_bw" ] && _qr_bw=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Bandwidth: *'wcdma-\([0-9]*\)'.*/\1/p" | head -1)
 	[ -n "$_qr_bw" ] && _qr_bw="$_qr_bw MHz"
+	_qr_b3=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Active Band Class: *'\(wcdma-[a-z0-9-]*\)'.*/\1/p" | head -1)
+	_qr_u3=""
+	[ -n "$_qr_b3" ] && _qr_u3=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
 	# Мощность передатчика есть ТОЛЬКО пока модем передаёт ("In traffic: 'no'" в
 	# покое), поэтому в простое поле законно пустует.
 	_qr_tx=$(qmicli -d "$_qr_w" -p --nas-get-tx-rx-info=lte 2>/dev/null \
@@ -1507,7 +1554,19 @@ _qmi_refresh() {
 	# Кавычки в awk намеренно не разбираем: значения достаём по цифрам, иначе
 	# программу пришлось бы утыкать экранированием, которое в busybox awk
 	# ломается молча.
-	_qr_nb=$(qmicli -d "$_qr_w" -p --nas-get-cell-location-info 2>/dev/null | awk '
+	_qr_cl=$(qmicli -d "$_qr_w" -p --nas-get-cell-location-info 2>/dev/null)
+	# 3G serving cell из той же выдачи (секция "UMTS Info"): RSCP/ECIO/PSC/LAC.
+	# В LTE секции нет - файл пустеет сам, стейл не живёт дольше цикла.
+	_qr_3g=$(printf '%s\n' "$_qr_cl" | awk '
+		/^UMTS Info/ { f=1; next }
+		/^[^ \t]/    { f=0 }
+		f && /Location Area Code:/    { if (match($0, /[0-9]+/)) lac = substr($0, RSTART, RLENGTH) }
+		f && /Primary Scrambling Code:/ { if (match($0, /[0-9]+/)) psc = substr($0, RSTART, RLENGTH) }
+		f && /RSCP:/ { if (match($0, /-?[0-9.]+/)) rscp = substr($0, RSTART, RLENGTH) }
+		f && /ECIO:/ { if (match($0, /-?[0-9.]+/)) ecio = substr($0, RSTART, RLENGTH) }
+		END { if (rscp != "" || psc != "") printf "%s|%s|%s|%s", rscp, ecio, psc, lac }
+	')
+	_qr_nb=$(printf '%s\n' "$_qr_cl" | awk '
 		function emit() {
 			if (pci == "") return
 			printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"%s\",\"serving\":%s}",
@@ -1543,6 +1602,9 @@ _qmi_refresh() {
 	printf '%s' "$_qr_nb" > "$_qr_p.nb.tmp" && mv "$_qr_p.nb.tmp" "$_qr_p.nb"
 	printf '%s' "$_qr_bw" > "$_qr_p.bw.tmp" && mv "$_qr_p.bw.tmp" "$_qr_p.bw"
 	printf '%s' "$_qr_tx" > "$_qr_p.tx.tmp" && mv "$_qr_p.tx.tmp" "$_qr_p.tx"
+	printf '%s' "$_qr_b3" > "$_qr_p.b3g.tmp" && mv "$_qr_p.b3g.tmp" "$_qr_p.b3g"
+	printf '%s' "$_qr_u3" > "$_qr_p.u3g.tmp" && mv "$_qr_p.u3g.tmp" "$_qr_p.u3g"
+	printf '%s' "$_qr_3g" > "$_qr_p.c3g.tmp" && mv "$_qr_p.c3g.tmp" "$_qr_p.c3g"
 	cut -d. -f1 /proc/uptime > "$_qr_p.t"
 }
 
@@ -1561,10 +1623,94 @@ _qmi_supplement() {
 	[ -c "$_QS_WDM" ] || return 0
 	_QS_P="/tmp/5gmodem_qmi_$_MKEY"
 
+	# 0) Кэш ЧУЖОЙ RAT-эры. Модем вернулся из 3G в LTE, а файлы ещё 3G (TTL до
+	#    25 c): непустой .b3g при не-3G режиме = стейл. Гасим 3G-файлы, полосу
+	#    «5 MHz» не даём протечь в LTE-строку и сбрасываем штамп - фон обновит
+	#    данные уже к следующему тику.
+	case "$MODE" in
+		UMTS*|WCDMA*|HSDPA*|HSUPA*|HSPA*|3G*) : ;;
+		*)
+			if [ -s "$_QS_P.b3g" ]; then
+				: > "$_QS_P.b3g"; : > "$_QS_P.u3g"; : > "$_QS_P.bw"; : > "$_QS_P.c3g"
+				rm -f "$_QS_P.t" 2>/dev/null
+			fi ;;
+	esac
+
 	# 1) Последнее известное - мгновенно. Профиль главнее: не перебиваем непустое.
 	[ -z "$NEIGHBORS" ] && [ -s "$_QS_P.nb" ] && NEIGHBORS=$(cat "$_QS_P.nb")
 	case "$BANDWIDTH" in ''|-) [ -s "$_QS_P.bw" ] && BANDWIDTH=$(cat "$_QS_P.bw") ;; esac
 	case "$TXPOWER"  in ''|-) [ -s "$_QS_P.tx" ] && TXPOWER=$(cat "$_QS_P.tx") ;; esac
+	# 3G-диапазон - как у 4G: «UMTS | B1 (2100 MHz)» вместо голого «UMTS».
+	# Применяем ТОЛЬКО когда режим сейчас 3G: файлы обновляются раз в TTL, и
+	# после возврата в LTE в них ещё до 25 c лежит 3G-запись - гейт по MODE
+	# не даёт ей протечь в LTE-строку (и наоборот, в 3G старый LTE-бенд
+	# профиля не трогаем: PBAND заполняем только пустой).
+	case "$MODE" in
+		UMTS*|WCDMA*|HSDPA*|HSUPA*|HSPA*|3G*)
+			_QS_B3C=$(cat "$_QS_P.b3g" 2>/dev/null)
+			_QS_U3C=$(cat "$_QS_P.u3g" 2>/dev/null)
+			# Окно 3G бывает КОРОЧЕ TTL кэша (CS-fallback на USSD ~10 c): фоновое
+			# обновление не успевает, файл ещё LTE-эры (пустой) - и строка
+			# оставалась голым «UMTS». При таком рассинхроне делаем ОДИН
+			# синхронный rf-band-info (~0.2 c) прямо здесь: только в момент
+			# смены RAT, устоявшийся LTE/3G этот вызов не платит. Результат
+			# кладём в кэш-файлы - соседние тики qmicli не дёргают.
+			if [ -z "$_QS_B3C" ]; then
+				_QS_RF=$(qmicli -d "$_QS_WDM" -p --nas-get-rf-band-info 2>/dev/null)
+				_QS_B3C=$(printf '%s\n' "$_QS_RF" | sed -n "s/.*Active Band Class: *'\(wcdma-[a-z0-9-]*\)'.*/\1/p" | head -1)
+				if [ -n "$_QS_B3C" ]; then
+					_QS_U3C=$(printf '%s\n' "$_QS_RF" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
+					_QS_BW3=$(printf '%s\n' "$_QS_RF" | sed -n "s/.*Bandwidth: *'wcdma-\([0-9]*\)'.*/\1 MHz/p" | head -1)
+					[ -n "$_QS_BW3" ] && BANDWIDTH="$_QS_BW3"
+					printf '%s' "$_QS_B3C" > "$_QS_P.b3g" 2>/dev/null
+					printf '%s' "$_QS_U3C" > "$_QS_P.u3g" 2>/dev/null
+					[ -n "$_QS_BW3" ] && printf '%s' "$_QS_BW3" > "$_QS_P.bw" 2>/dev/null
+				fi
+			fi
+			if [ -n "$_QS_B3C" ]; then
+				_QS_B3=$(band3g "$_QS_B3C")
+				if [ -n "$_QS_B3" ]; then
+					case "$PBAND" in ''|-) PBAND="$_QS_B3" ;; esac
+					case "$MODE" in *"|"*) : ;; *) MODE="$MODE | $_QS_B3" ;; esac
+				fi
+			fi
+			case "$EARFCN" in ''|-) [ -n "$_QS_U3C" ] && EARFCN="$_QS_U3C" ;; esac
+			# 3G serving cell (RSCP/ECIO/PSC/LAC) - «Информация о соте» в 3G
+			# раньше пустовала: AT-разбора нет, а LTE-поля в UMTS не приходят.
+			# Файл пишет фон (_qmi_refresh из той же cell-location-выдачи);
+			# в короткое окно CS-fallback догоняем синхронно - только в момент
+			# смены RAT, как и диапазон выше.
+			_QS_C3=$(cat "$_QS_P.c3g" 2>/dev/null)
+			if [ -z "$_QS_C3" ] && [ -n "$_QS_B3C" ]; then
+				_QS_C3=$(qmicli -d "$_QS_WDM" -p --nas-get-cell-location-info 2>/dev/null | awk '
+					/^UMTS Info/ { f=1; next }
+					/^[^ \t]/    { f=0 }
+					f && /Location Area Code:/      { if (match($0, /[0-9]+/)) lac = substr($0, RSTART, RLENGTH) }
+					f && /Primary Scrambling Code:/ { if (match($0, /[0-9]+/)) psc = substr($0, RSTART, RLENGTH) }
+					f && /RSCP:/ { if (match($0, /-?[0-9.]+/)) rscp = substr($0, RSTART, RLENGTH) }
+					f && /ECIO:/ { if (match($0, /-?[0-9.]+/)) ecio = substr($0, RSTART, RLENGTH) }
+					END { if (rscp != "" || psc != "") printf "%s|%s|%s|%s", rscp, ecio, psc, lac }
+				')
+				[ -n "$_QS_C3" ] && printf '%s' "$_QS_C3" > "$_QS_P.c3g" 2>/dev/null
+			fi
+			if [ -n "$_QS_C3" ]; then
+				_c3_rscp=${_QS_C3%%|*}; _c3_r=${_QS_C3#*|}
+				_c3_ecio=${_c3_r%%|*};  _c3_r=${_c3_r#*|}
+				_c3_psc=${_c3_r%%|*};   _c3_lac=${_c3_r##*|}
+				case "$RSCP" in ''|-) [ -n "$_c3_rscp" ] && RSCP="$_c3_rscp" ;; esac
+				case "$ECIO" in ''|-) [ -n "$_c3_ecio" ] && ECIO="$_c3_ecio" ;; esac
+				case "$PCI"  in ''|-) [ -n "$_c3_psc" ] && PCI="$_c3_psc" ;; esac
+				case "$LAC_DEC" in ''|-)
+					if [ -n "$_c3_lac" ]; then
+						LAC_DEC="$_c3_lac"
+						LAC_HEX=$(printf '%X' "$_c3_lac" 2>/dev/null)
+					fi ;;
+				esac
+				# в 3G «RSSI» из LTE-блока не приходит - честный уровень это RSCP
+				case "$RSSI" in ''|-) [ -n "$_c3_rscp" ] && RSSI="$_c3_rscp" ;; esac
+			fi
+			;;
+	esac
 
 	# 2) Свежо (< TTL) - обновлять не нужно.
 	_QS_MT=$(cat "$_QS_P.t" 2>/dev/null)

@@ -458,7 +458,11 @@ case "$REQ" in
 		# Проверено: в этой композиции MM поднимает модем сразу и отдаёт всё.
 		# Условие СТРОГО на qmi_wwan: в MBIM-композиции наоборот - там MM неверно
 		# классифицирует порт и строит нерабочий модем (см. шапку файла).
-		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && is_compal "" "$DEV"; then
+		# Путь модема (AMP) передаём ЯВНО: без него is_compal падал в глобальный
+		# grep по ВСЕЙ шине, и на двухмодемном роутере СОСЕДНИЙ Compal превращал
+		# чужой QMI-модем (T99W175) в proto=modemmanager - «программа затёрла
+		# мой тип интерфейса».
+		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && is_compal "$AMP" "$DEV"; then
 			PROTO="modemmanager"
 		fi
 		;;

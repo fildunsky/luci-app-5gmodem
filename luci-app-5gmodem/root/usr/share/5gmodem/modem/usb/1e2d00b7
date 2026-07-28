@@ -14,7 +14,7 @@
 # Копия по определению отстаёт от оригинала - поэтому её тут больше нет.
 # _IS_COMPAL=1 выставляем заранее: 05c690d6 его уважает и не детектит повторно.
 . /usr/share/5gmodem/iscompal.sh
-if is_compal "" "" "$DEVICE"; then
+if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)" "$DEVICE"; then
 	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0

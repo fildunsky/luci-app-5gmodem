@@ -913,21 +913,86 @@ function SIMdata(data) {
 	return ui.itemlist(E('span'), rows);
 }
 
-/* Подсветить кнопку текущего режима (читается из mmcli -K current-modes) */
+/* Подсветить кнопку текущего режима. Единый путь loadBands (mgmtinfo): режим
+   берётся из КОНФИГА интерфейса, а не из живых current-modes, которые модем
+   сбрасывает на каждом передозвоне - от них подсветка мигала «Авто». */
 function updateModeButtons() {
-	if (!mmIdx) { return; }   // MM не ведёт этот модем - читать нечего (см. mmIdx)
-	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
-		var m = (out || '').match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
-		if (!m) { return; }
-		var allowed = m[1].split(',').map(function(x) { return x.trim(); }).sort().join('|');
-		var pref = m[2].trim();
-		if (pref == 'none') { pref = ''; }
-		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
-			var ba = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
-			var act = (ba == allowed && (b.getAttribute('data-preferred') || '') == pref);
-			b.classList.toggle('cbi-button-action', act);
-			b.classList.toggle('important', act);
-		});
+	return loadBands();
+}
+
+/* ==== «Информация о соте»: ДЕКЛАРАТИВНЫЙ РЕЕСТР СТРОК =======================
+   Одно правило вместо россыпи стилей. Раньше у каждой строки был свой механизм
+   (setRowVisible / голый display / visibility:hidden / безусловный показ) и
+   свои проверки: `json.lac_dec.length` падал, когда поля нет в снимке (HiLink
+   часть полей не отдаёт), а в mccmnc стояло побитовое `&` вместо `&&`. Теперь:
+   строка = {id, text(json)} либо {id, render(json, el, c4)} для спец-случаев
+   (кнопки 4cells), видимость - единым правилом setRowVisible («показанное не
+   прячем» - защита от прыжков высоты, см. комментарий там). */
+function cellVal(v) {
+	v = (v == null) ? '' : String(v);
+	return (v === '' || v === '-') ? '' : v;
+}
+function decHexPair(d, h) {
+	d = cellVal(d); h = cellVal(h);
+	return (d && h) ? (d + ' (' + h + ')') : (d || h);
+}
+var CELL_ROWS = [
+	{ id: 'mccmnc', text: function(j) {
+		var m = cellVal(j.operator_mcc), n = cellVal(j.operator_mnc);
+		return (m && n) ? (m + ' ' + n) : ''; } },
+	{ id: 'lac', text: function(j) { return decHexPair(j.lac_dec, j.lac_hex); } },
+	/* TAC: пара из atdebug-профиля (tac_d/tac_h) главнее общего разбора. */
+	{ id: 'tac', text: function(j) {
+		return decHexPair(j.tac_d, j.tac_h) || decHexPair(j.tac_dec, j.tac_hex); } },
+	{ id: 'pathloss', text: function(j) { return cellVal(j.pathloss); } },
+	{ id: 'txpower',  text: function(j) { return cellVal(j.txpower); } },
+	{ id: 'cqi',      text: function(j) { return cellVal(j.cqi); } },
+	{ id: 'uecat',    text: function(j) { return cellVal(j.uecat); } },
+	{ id: 'volte',    text: function(j) { return cellVal(j.volte); } },
+	/* pband всегда видим (базовая строка таблицы): только текст. */
+	{ id: 'pband', always: true, text: function(j) {
+		var b = cellVal(j.pband);
+		if (!b) { return '-'; }
+		var p = cellVal(j.pci), e = cellVal(j.earfcn);
+		return (p && e) ? (b + ' | ' + p + ' ' + e) : b; } },
+	/* eNB ID: на LTE/5G-NSA здесь кнопка 4cells (в ссылку уходит именно eNB).
+	   sameRender - чтобы не пересобирать кнопку на каждом тике (скролл-баг). */
+	{ id: 'enbid', render: function(j, el, c4) {
+		var val = cellVal(j.enbid);
+		setRowVisible(el, !!val);
+		if (!val) { el.textContent = '-'; return; }
+		if (c4 && c4.tech === 3) {
+			if (!sameRender(el, 'enb|' + val + '|' + c4.url)) {
+				el.innerHTML = '';
+				el.appendChild(mapPinButton(c4, val));
+			}
+		} else {
+			el.textContent = val;
+		} } },
+	/* Cell ID: кнопка 4cells только на 3G/2G (там ссылка строится по CID). */
+	{ id: 'cid', render: function(j, el, c4) {
+		var t = decHexPair(j.cid_dec, j.cid_hex);
+		setRowVisible(el, !!t);
+		var url4 = (c4 && c4.tech !== 3 && cellVal(j.cid_dec)) ? c4.url : null;
+		if (url4) {
+			if (!sameRender(el, 'cid|' + j.cid_dec + '|' + url4)) {
+				el.innerHTML = '';
+				el.appendChild(mapPinButton(c4, j.cid_dec));
+			}
+		} else {
+			el.textContent = t || '-';
+		} } }
+];
+function renderCellRows(json) {
+	var c4 = cell4cellsUrl(json);
+	CELL_ROWS.forEach(function(r) {
+		var el = document.getElementById(r.id);
+		if (!el) { return; }
+		if (r.render) { r.render(json, el, c4); return; }
+		var t = '';
+		try { t = r.text(json) || ''; } catch (e) { t = ''; }
+		el.textContent = t || '-';
+		if (!r.always) { setRowVisible(el, !!t); }
 	});
 }
 
@@ -1318,55 +1383,49 @@ function clear3gRow() {
 
 function loadBands() {
 	// Модульный опрос: пока блок «Управление частотами» свёрнут, НЕ дёргаем
-	// mmcli/bands.sh (это ускоряет загрузку). Данные подтянутся при раскрытии
+	// бэкенд (это ускоряет загрузку). Данные подтянутся при раскрытии
 	// (см. onBlockExpand['freq']).
 	if (!blockExpanded('freq')) { return Promise.resolve(); }
-	if (bandsGated) { return Promise.resolve(); }   // управление запрещено бэкендом
-	/* MM не ведёт ЭТОТ модем - его диапазонов у mmcli нет. Раньше сюда попадал
-	   фолбэк mmIdx='any', и мы рисовали диапазоны СОСЕДНЕГО модема: у FM350
-	   показывались 3G/4G от E3372, причём 3G так и оставался чужим, потому что
-	   вендорный путь эту строку не трогает. */
-	if (!mmIdx) { _has3gMM = false; clear3gRow(); return loadBandsModemband(); }
-	return L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(out) {
-		/* Признак «3G даёт mmcli» ОБЯЗАН обновляться на КАЖДОМ выходе, иначе он
-		   протекает между модемами: он модульный, а страница при переключении
-		   вкладки модема может не перезагружаться. Живой случай: после E3372
-		   (у него есть utran) флаг оставался true, и на FM350 - где mmcli вообще
-		   молчит, протокол fibocom - строка 3G продолжала показываться. */
-		if (!out) { _has3gMM = false; clear3gRow(); return; }
-		var supported = [], current = [];
-		out.split('\n').forEach(function(ln) {
-			var m = ln.match(/^modem\.generic\.(supported|current)-bands\.value\[\d+\]\s*:\s*(\S+)/);
-			if (m) { (m[1] == 'supported' ? supported : current).push(m[2]); }
-		});
-		/* До ранних выходов ниже (пустой supported / mmcliBandsLoaded): иначе на
-		   модеме без mmcli-диапазонов флаг тоже застревал бы от предыдущего. */
-		_has3gMM = supported.some(function(b) { return b.indexOf('utran-') == 0; });
-		if (!_has3gMM) { clear3gRow(); }
-		// No bands from mmcli. Distinguish two cases:
-		//  - modem that NEVER exposes bands via mmcli (e.g. Fibocom FM350 under MM):
-		//    fall back to the vendor AT band path (GTACT via bands.sh);
-		//  - modem that normally HAS mmcli bands but is momentarily empty (e.g. the
-		//    Compal while it re-registers after a SIM swap): keep the last-good view,
-		//    do NOT switch to the AT path - otherwise the band block flickers.
-		if (!supported.length) {
-			if (mmcliBandsLoaded) { return; }
-			return loadBandsModemband();
-		}
+	/* ЕДИНАЯ ТОЧКА ИСТИНЫ - bands.sh mgmtinfo. Бэкенд сам решает, каким путём
+	   управляется модем (mmcli или вендорный), фронт только рисует ответ.
+	   Раньше решение принималось здесь: страница парсила mmcli, жонглировала
+	   bandSource/bandsGated/reveal-циклами - и любая проверка, промахнувшаяся
+	   на переходном состоянии (модем пересоздаётся в MM, mmcli пуст секунду),
+	   прятала блок «то есть, то нет» до перезагрузки страницы. Ответы:
+	     source=mmcli + списки  - рисуем тумблеры, режим из КОНФИГА;
+	     source=mmcli + pending - MM ещё собирает модем: держим последнее
+	                              известное, следующий опрос дорисует;
+	     source=vendor          - вендорный путь (bands.sh json). */
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ]), '{}').then(function(out) {
+		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
+		if (j.source != 'mmcli') { return loadBandsModemband(); }
+		if (j.pending) { return; }
+		bandSource = 'mmcli';
+		bandsGated = false; bandsReadOnly = false; bandsTakeover = false;
+		var note = document.getElementById('bandnote');
+		if (note) { note.style.display = 'none'; }
+		var sup3 = j.sup3g || [], sup4 = j.sup4g || [], sup5 = j.sup5g || [];
+		var cur = (j.cur3g || []).concat(j.cur4g || [], j.cur5g || []);
+		bandsOther = j.other || [];
 		mmcliBandsLoaded = true;
-		// utran (3G) is now managed by its own toggles, so it's NOT part of the
-		// preserved "other" set anymore (only cdma and the like stay untouched).
-		bandsOther = current.filter(function(b) {
-			return b.indexOf('eutran-') != 0 && b.indexOf('ngran-') != 0 && b.indexOf('utran-') != 0;
+		_has3gMM = sup3.length > 0;
+		renderBandToggles('bands-3g', sup3, cur, 'utran-');
+		renderBandToggles('bands-lte', sup4, cur, 'eutran-');
+		renderBandToggles('bands-nr', sup5, cur, 'ngran-');
+		var show = function(id, on) { var e = document.getElementById(id); if (e) { e.style.display = on ? '' : 'none'; } };
+		show('modeswn', true); show('bands3gn', sup3.length); show('bandsn', sup4.length);
+		show('bands5gn', sup5.length); show('bandsactn', true);
+		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
+		   а не из живых current-modes: конфиг не мигает на передозвоне и
+		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */
+		var am = (j.allowedmode || '').split('|').filter(function(x) { return x; }).sort().join('|') || '2g|3g|4g|5g';
+		var pm = j.allowedmode ? (j.preferredmode || '') : '5g';
+		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
+			var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
+			var on = (a == am && (b.getAttribute('data-preferred') || '') == pm);
+			b.classList.toggle('cbi-button-action', on);
+			b.classList.toggle('important', on);
 		});
-		var numsort = function(a, b) { return parseInt(a.replace(/\D+/g, ''), 10) - parseInt(b.replace(/\D+/g, ''), 10); };
-		var utran = supported.filter(function(b) { return b.indexOf('utran-') == 0; }).sort(numsort);
-		renderBandToggles('bands-3g', utran, current, 'utran-');
-		renderBandToggles('bands-lte', supported.filter(function(b) { return b.indexOf('eutran-') == 0; }).sort(numsort), current, 'eutran-');
-		renderBandToggles('bands-nr', supported.filter(function(b) { return b.indexOf('ngran-') == 0; }).sort(numsort), current, 'ngran-');
-		// show the 3G row only if the modem actually exposes UTRAN bands
-		var row3g = document.getElementById('bands3gn');
-		if (row3g) { row3g.style.display = utran.length ? '' : 'none'; }
 	});
 }
 
@@ -1465,7 +1524,10 @@ function collapsibleSection(key, titleText, content, extraAttrs) {
 // band-функции возвращают сразу, mmcli/bands.sh не дёргаются). loadBands/
 // loadBandsModemband - function declarations, поэтому доступны здесь.
 onBlockExpand['freq'] = function() {
-	if (typeof loadBandsModemband === 'function') { loadBandsModemband(); }
+	/* Один вход: loadBands (mgmtinfo) сам решит, mmcli это или вендорный путь.
+	   Раньше дёргались ОБА загрузчика сразу - на MM-модеме вендорный забегал в
+	   пустую ветку и прятал ряды, которые mmcli-путь тут же показывал: мигание
+	   и «то есть, то нет». */
 	if (typeof loadBands === 'function') { loadBands(); }
 };
 
@@ -2157,7 +2219,17 @@ function cell4cellsUrl(json) {
 	if (mode.indexOf('GSM') >= 0 || mode.indexOf('EDGE') >= 0 || mode.indexOf('GPRS') >= 0 || mode.indexOf('2G') >= 0) {
 		tech = 1; num = cid; needLac = false;               // GSM - без lac
 	} else if (mode.indexOf('WCDMA') >= 0 || mode.indexOf('UMTS') >= 0 || mode.indexOf('HSPA') >= 0 || mode.indexOf('3G') >= 0) {
-		tech = 2; num = cid;                                // UMTS
+		/* UMTS: короткий CID (младшие 16 бит полного 28-битного) + живой LAC из
+		   lac_dec (tac_dec в 3G нулевой и давал lac=0). Идеальной формулы для
+		   3G НЕТ, два варианта проверены на живой базе и ОТКЛОНЕНЫ (28.07):
+		   - «номер площадки» (short без цифры сектора, num=3765): запись в базе
+		     есть, но ТОЛЬКО с ЕЁ lac=29600, а живой LAC модема был 29613
+		     (граница LA) - совпадение не гарантировано;
+		   - без lac вовсе (как у LTE): для tech=2 карта не ищет совсем.
+		   Оставлено short-CID + живой lac: хотя бы честные данные модема. */
+		tech = 2; num = (cid % 65536);
+		var lac3 = parseInt(json.lac_dec, 10);
+		if (!isNaN(lac3) && lac3 > 0) { lac = lac3; }
 	} else if (mode.indexOf('5G SA') >= 0) {
 		return null;                                        // NR SA - формула неизвестна
 	} else {                                                // LTE / 5G NSA
@@ -2218,32 +2290,10 @@ function refreshModeButtons(mmK) {
    кнопки без ручного обновления страницы. Тяжёлый mmcli -K дёргаем только
    пока блок ещё скрыт. */
 function revealMgmtWhenReady(tries) {
-	var row = document.getElementById('modeswn');
-	if (!row || row.style.display != 'none') { return; }
-	// Блок частот уже инициализирован вендорным путём (bands.sh/GTACT) - строка
-	// «Режим сети» скрыта ОСОЗНАННО (модем не отдаёт CNMP-режимы). Не лезем в
-	// mmcli: у модема вне MM (напр. инхибированный FM350) mmIdx='any' попадает в
-	// ЧУЖОЙ модем (Compal), и выходил цикл на каждый опрос: reveal показывал
-	// строку с чужими кнопками -> loadBandsModemband прятал -> высота страницы
-	// прыгала (тот самый скролл-баг).
-	if (bandSource == 'modemband') { return; }
-	// Бэкенд уже сказал «управлять нельзя» и показал надпись - не лезем в mmcli.
-	if (bandsGated) { return; }
-	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-m', mmIdx, '-K' ]), '').then(function(mmK) {
-		if (!/current-modes/.test(mmK)) {
-			// mmcli ещё не готов (модем под MM поднимается): повторяем
-			// несколько раз, чтобы блок частот появился сам после пересоздания.
-			var n = (tries || 0);
-			if (ifaceProtoIsMM && n < 8) { window.setTimeout(function() { revealMgmtWhenReady(n + 1); }, 2000); }
-			return;
-		}
-		[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
-			var e = document.getElementById(id);
-			if (e) { e.style.display = ''; }
-		});
-		refreshModeButtons(mmK);
-		loadBands();
-	});
+	/* Оставлен как совместимая обёртка: единый loadBands (mgmtinfo) сам решает,
+	   показывать ли ряды и каким путём. Прежний reveal-цикл с собственным
+	   парсингом mmcli конфликтовал с загрузчиками (показывал/прятал наперегонки). */
+	return loadBands();
 }
 
 function applyBands() {
@@ -2465,9 +2515,15 @@ function setNetMode(allowed, preferred, label) {
 		return Promise.resolve();
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
-	var args = [ '-m', mmIdx, '--set-allowed-modes=' + allowed ];
-	if (preferred) { args.push('--set-preferred-mode=' + preferred); }
-	return fs.exec('/usr/bin/mmcli', args).then(function(res) {
+	/* Через bands.sh setmodemm, а НЕ голый mmcli: смена режима рвёт регистрацию,
+	   netifd передозванивается и сбрасывал бы режимы в «авто» (выбранный 3G
+	   слетал через 10 секунд). setmodemm пишет allowedmode/preferredmode в
+	   конфиг интерфейса - прото передаёт их при каждом дозвоне, выбор держится.
+	   «Авто» = default: опции удаляются, модем возвращается к полному набору. */
+	var isAuto = (allowed == '2g|3g|4g|5g' && preferred == '5g');
+	var args = isAuto ? [ 'setmodemm', 'default' ]
+		: (preferred ? [ 'setmodemm', allowed, preferred ] : [ 'setmodemm', allowed ]);
+	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
 		ui.hideModal();
 		if (res.code === 0) {
 			if (ui.addTimeLimitedNotification) {
@@ -2475,7 +2531,10 @@ function setNetMode(allowed, preferred, label) {
 			} else {
 				ui.addNotification(null, E('p', _('Network mode set: %s').format(label)), 'info');
 			}
-			window.setTimeout(updateModeButtons, 1200);
+			/* Смена режима = передёргивание интерфейса (~10-20 c): одного
+			   раннего обновления не хватало - mgmtinfo отвечал pending, и
+			   подсветка оставалась пустой. Несколько заходов покрывают всё окно. */
+			[ 2000, 8000, 16000, 25000 ].forEach(function(t) { window.setTimeout(updateModeButtons, t); });
 		} else {
 			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '')), 'error');
 		}
@@ -3207,6 +3266,21 @@ function applyMetrics(json) {
 						}
 					}
 
+					/* Флаг MM-прото - ЖИВЬЁМ с каждого тика: на загрузке peek мог
+					   не знать iface_proto (или вкладку переключили на другой
+					   модем), и false намертво гасил блок частот. Переход
+					   false->true снимает гейт и будит reveal mmcli-пути. */
+					if (json.iface_proto && json.iface_proto != '-') {
+						var _liveMM = (String(json.iface_proto).toLowerCase() === 'modemmanager');
+						if (_liveMM && !ifaceProtoIsMM) {
+							ifaceProtoIsMM = true;
+							bandsGated = false;
+							window.setTimeout(revealMgmtWhenReady, 500);
+						} else if (!_liveMM) {
+							ifaceProtoIsMM = false;
+						}
+					}
+
 					/* Пояснение в «Управление частотами»: показываем реальный
 					   протокол интерфейса (mbim/qmi), чтобы было «Управление
 					   невозможно в режиме mbim», а не абстрактный текст. */
@@ -3483,150 +3557,10 @@ function applyMetrics(json) {
 						}
 					}
 
-					if (document.getElementById('mccmnc')) {
-						var view = document.getElementById("mccmnc");
-						if (json.operator_mcc == '-' & json.operator_mnc == '-') {
-						view.textContent = '-';
-						setRowVisible(view, false);
-						}
-						else {
-						setRowVisible(view, true);
-						view.textContent = json.operator_mcc + " " + json.operator_mnc;
-						}
-					}
-
-					if (document.getElementById('lac')) {
-						var view = document.getElementById("lac");
-						if (json.lac_dec.length < 2 || json.lac_hex.length < 2) {
-						/* Через setRowVisible: LAC есть не у всех сетей (в LTE вместо
-						   него TAC), но пустой ОДИН опрос - это коллизия на AT-порту,
-						   а не пропажа параметра. Раньше строка пряталась сразу и
-						   высота страницы прыгала. */
-						setRowVisible(view, false);
-						}
-						else {
-							setRowVisible(view, true);
-							if (json.lac_dec == '' || json.lac_hex == '') { 
-							var lc = json.lac_dec   + ' ' + json.lac_hex;
-							var ld = lc.split(' ').join('');
-							view.textContent = ld;
-							}
-							else {
-							view.innerHTML = json.lac_dec + ' (' + json.lac_hex + ')';
-							}
-						}
-					}
-
-					if (document.getElementById('tac')) {
-						var view = document.getElementById("tac");
-						var tac_dh, tac_dec_hex, lac_dec_hex;
-							if (json.tac_d.length > 1 || json.tac_h.length > 1) {
-							var tac_dh =  json.tac_d + ' (' + json.tac_h + ')';
-									view.textContent = tac_dh;
-									setRowVisible(view, true);
-							}
-							else {
-								if (json.tac_dec.length > 1 || json.tac_hex.length > 1) {
-									var tac_dh =  json.tac_dec + ' (' + json.tac_hex + ')';
-									view.textContent = tac_dh;
-									setRowVisible(view, true);
-								}
-								else {
-									view.textContent = '-';
-									setRowVisible(view, false);
-								}
-							}
-					}
-
-					/* Расширенные поля соты. setRowVisible прячет строку, пока
-					   значения не было НИ РАЗУ, и больше не прячет после того, как
-					   оно появилось - иначе высота таблицы прыгала бы на опросе. */
-					var c4 = cell4cellsUrl(json);
-					[ 'pathloss', 'txpower', 'cqi', 'uecat', 'volte' ].forEach(function(k) {
-						var el = document.getElementById(k);
-						if (!el) { return; }
-						var val = json[k];
-						var has = (val != null && val !== '' && val !== '-');
-						el.textContent = has ? String(val) : '-';
-						setRowVisible(el, has);
-					});
-
-					/* enbid - ОТДЕЛЬНО от общего цикла: на LTE/5G-NSA на нём висит
-					   кнопка карты вышек, а цикл затирал бы её textContent'ом на
-					   каждом тике опроса. */
-					(function() {
-						var el = document.getElementById('enbid');
-						if (!el) { return; }
-						var val = json.enbid;
-						var has = (val != null && val !== '' && val !== '-');
-						setRowVisible(el, has);
-						if (!has) { el.textContent = '-'; return; }
-						/* tech 3 = LTE/5G NSA: в ссылку уходит именно eNB, значит
-						   кнопке место здесь. На 3G/2G ссылка строится по Cell ID,
-						   и кнопка остаётся на его строке (см. ниже). */
-						if (c4 && c4.tech === 3) {
-							if (!sameRender(el, 'enb|' + val + '|' + c4.url)) {
-								el.innerHTML = '';
-								el.appendChild(mapPinButton(c4, val));
-							}
-						} else {
-							el.textContent = String(val);
-						}
-					})();
-
-					if (document.getElementById('cid')) {
-						var view = document.getElementById("cid");
-						var cidText;
-						if (json.cid_dec == '' || json.cid_hex == '') {
-						cidText = (json.cid_hex + ' ' + json.cid_dec).split(' ').join('');
-						}
-						else {
-						cidText = json.cid_dec + ' (' + json.cid_hex + ')';
-						}
-						setRowVisible(view, !(cidText === '' || cidText === '-'));
-						// Cell ID -> стандартная кнопка с пином и номером соты,
-						// по клику открывает карту вышек 4cells.ru
-						/* На LTE/5G-NSA кнопка переехала на строку «ID базовой
-						   станции»: в ссылку уходит eNB, и подпись там совпадает с
-						   тем, что откроется. Здесь она остаётся ТОЛЬКО для 3G/2G,
-						   где ссылка строится по самому Cell ID.
-						   Побочно строка снова показывает hex: раньше его вытесняла
-						   кнопка. */
-						var url4 = (c4 && c4.tech !== 3) ? c4.url : null;
-						/* ЧЕРЕЗ sameRender. Кнопка пересобиралась на КАЖДОМ тике
-						   опроса, хотя номер соты меняется хорошо если раз в час:
-						   innerHTML='' на мгновение опустошал ячейку, высота
-						   документа проваливалась, браузер обрезал scrollTop - и
-						   страница, домотанная до низа, уезжала вверх на строку за
-						   тик (proton2025). Тот же баг, что чинили в блоке частот. */
-						if (url4 && json.cid_dec && json.cid_dec != '-'
-						    && !sameRender(view, 'cid|' + json.cid_dec + '|' + url4)) {
-							view.innerHTML = '';
-							view.appendChild(mapPinButton(c4, json.cid_dec));
-						}
-						else if (!(url4 && json.cid_dec && json.cid_dec != '-')) {
-							/* Кнопки нет - обычный текст. Условие продублировано:
-							   ветка выше теперь может НИЧЕГО НЕ ДЕЛАТЬ (данные не
-							   изменились), и простой else затирал бы готовую
-							   кнопку текстом на следующем же тике. */
-							view.textContent = cidText;
-						}
-					}
-
-					if (document.getElementById('pband')) {
-						var view = document.getElementById("pband");
-						if (json.pband == '-') { 
-						view.textContent = '-';
-						}
-						else {
-							if (json.pci.length > 0 && json.pci != '-' && json.earfcn.length > 0 && json.earfcn != '-') { 
-								view.textContent = json.pband + ' | ' + json.pci + ' ' + json.earfcn;
-							}
-							else {
-								view.textContent = json.pband;
-							}
-						}
-					}
+					/* Строки соты - декларативным реестром CELL_ROWS (см. его
+					   определение): единое правило видимости и форматов вместо
+					   индивидуальных блоков с разными механизмами. */
+					renderCellRows(json);
 
 					/* Строки SCC1..4 в «Информации о соте» убраны — их показывает
 					   отдельная CA-таблица ниже (стабильнее, без скачков высоты). */
@@ -3916,7 +3850,11 @@ simDialog: baseclass.extend({
 
 		// протокол интерфейса (modemmanager/mbim/qmi/...) - для логики
 		// доступности управления бендами
-		ifaceProtoIsMM = (String(initjson.protocol || '').toLowerCase() === 'modemmanager');
+		/* Именно iface_proto (протокол ИНТЕРФЕЙСА): в protocol лежит канальный
+		   протокол данных, и у Compal под ModemManager там 'mbim' - флаг ложно
+		   оставался false, и блок частот прятался навсегда с подсказкой
+		   «переключите на MM» (хотя интерфейс уже на MM). */
+		ifaceProtoIsMM = (String(initjson.iface_proto || initjson.protocol || '').toLowerCase() === 'modemmanager');
 
 		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
 		var mmHasModem = /current-modes/.test(mmK);
@@ -3945,13 +3883,11 @@ simDialog: baseclass.extend({
 			       (mmModes.pref || '') == (preferred || '');
 		};
 
-		// Управляем бендами через modemband (вендорные AT-команды), если модем
-		// НЕ под ModemManager, ЛИБО он под MM, но mmcli не отдаёт для него ни
-		// одного бенда (напр. Fibocom FM350 под MM: плагин показывает 0 бендов,
-		// зато GTACT работает). Иначе - путь mmcli.
-		if (!mmHasModem || !mmSup.length) {
-			afterFirstPoll(loadBandsModemband);
-		}
+		// Наполнение блока частот - ЕДИНЫМ путём loadBands (bands.sh mgmtinfo):
+		// бэкенд сам решает mmcli/вендор. Прежний выбор здесь (по mmK рендера,
+		// который при render-first всегда пуст) уводил MM-модем в вендорную
+		// ветку с «переключите на MM» и прятал блок навсегда.
+		afterFirstPoll(loadBands);
 
 		active_select();
 		afterFirstPoll(loadSimSlots);
@@ -4029,9 +3965,29 @@ simDialog: baseclass.extend({
 				   обновление всё равно делаем мы, но без второй ходки, если
 				   кто-то уже опрашивает. Заполнение - в applyMetrics: оно ОБЩЕЕ
 				   с мгновенным применением peek-снимка при открытии страницы. */
-				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]))
-					.then(function(res) { applyMetrics(JSON.parse(res)); });
-				});	
+				/* TTL по типу модема. У modemmanager-модема опрос дешёвый (mmcli/
+				   qmicli, AT-порта нет вовсе) и занимает ~2 c: с ttl=4 тик (раз в
+				   5 c) через раз попадал в «снимку 3 c, ещё свежий» - строка
+				   агрегации (LTE -> LTE-A под нагрузкой) обновлялась раз в ~10 c
+				   вместо каждого тика. ttl=2 даёт честный полный опрос каждый тик.
+				   AT-модемам оставляем 4: их опрос ходит в порт, чаще - вреднее
+				   (сериализатор и так узкое место). */
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', ifaceProtoIsMM ? '2' : '4' ]))
+					.then(function(res) {
+						applyMetrics(JSON.parse(res));
+						/* Блок частот - самолечение на тике (раз в ~10 c). Раньше
+						   loadBands был одноразовым (afterFirstPoll/раскрытие): если
+						   в тот момент mgmtinfo ответил pending (модем пересобирался
+						   в MM после переключения вкладки), подсветка режимов
+						   оставалась пустой навсегда - «мигнула Авто и ничего не
+						   выбрано». Внутри loadBands свои гейты: свёрнутый блок и
+						   pending выходят сразу, mgmtinfo дёшев (~50 мс). */
+						if (typeof loadBands === 'function') {
+							window.__bandsTick = (window.__bandsTick || 0) + 1;
+							if (window.__bandsTick % 2 === 0) { loadBands(); }
+						}
+					});
+				});
 
 				}
 			}	

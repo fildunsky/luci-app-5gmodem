@@ -11,7 +11,7 @@
 # Qualcomm ("HSUSB Device"), без строк VOS_5G / Tri Cascade. Помощник это
 # учитывает: он проверяет ещё и МОДЕЛЬ (SG500M2-X) через QMI/MM/AT.
 . /usr/share/5gmodem/iscompal.sh
-if is_compal "" "" "$DEVICE"; then
+if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)" "$DEVICE"; then
 	# _IS_COMPAL=1 выставляем заранее - 05c690d6 его уважает и не детектит заново
 	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"

@@ -1008,6 +1008,91 @@ case $1 in
 	"setbands5gsa")
 		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( _band_write setbands5gsa "$2" ) >/dev/null 2>&1 </dev/null & }
 		;;
+	"mgmtinfo")
+		# ЕДИНАЯ точка истины для блока «Управление частотами». Раньше фронт сам
+		# решал, каким путём управляется модем (парсил mmcli, жонглировал
+		# bandSource/gated/reveal-циклами), и любая проверка, промахнувшаяся на
+		# переходном состоянии, прятала блок до перезагрузки страницы. Теперь
+		# решает бэкенд, фронт только рисует ответ:
+		#   {"source":"mmcli", ...списки бендов + режим из КОНФИГА}
+		#   {"source":"mmcli","pending":1}  - модем ещё поднимается в MM, ждать
+		#   {"source":"vendor"}             - вести вендорным путём (bands.sh getinfo)
+		_mi_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+		_mi_if=$(uci -q get "5gmodem.$_mi_sec.network")
+		_mi_proto=$(uci -q get "network.$_mi_if.proto")
+		if [ "$_mi_proto" != "modemmanager" ] || ! command -v mmcli >/dev/null 2>&1; then
+			echo '{"source":"vendor"}'
+			exit 0
+		fi
+		_mi_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+		_mi_k=""
+		[ -n "$_mi_idx" ] && _mi_k=$(mmcli -m "$_mi_idx" -K 2>/dev/null)
+		if [ -z "$_mi_k" ]; then
+			# MM ещё не собрал модем (ре-энумерация/бут): «подожди», НЕ vendor -
+			# иначе блок мигал бы чужим путём и снова прятался.
+			echo '{"source":"mmcli","pending":1}'
+			exit 0
+		fi
+		if ! printf '%s' "$_mi_k" | grep -q "supported-bands\.value"; then
+			# Модем в MM, но бендов не отдаёт вовсе (напр. FM350 под MM) -
+			# честный вендорный путь (GTACT и т.п.).
+			echo '{"source":"vendor"}'
+			exit 0
+		fi
+		_mi_sup=$(printf '%s\n' "$_mi_k" | sed -n 's/^modem\.generic\.supported-bands\.value\[[0-9]*\][[:space:]]*:[[:space:]]*//p' | sort -u)
+		_mi_cur=$(printf '%s\n' "$_mi_k" | sed -n 's/^modem\.generic\.current-bands\.value\[[0-9]*\][[:space:]]*:[[:space:]]*//p' | sort -u)
+		_mi_arr() {   # $1 - список, $2 - префикс: JSON-массив полных имён, сорт по номеру
+			printf '%s\n' "$1" | grep "^$2" | sed "s/^$2//" | sort -n | sed "s/^/$2/" \
+				| sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//'
+		}
+		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
+			"$(uci -q get "network.$_mi_if.allowedmode")" \
+			"$(uci -q get "network.$_mi_if.preferredmode")" \
+			"$(_mi_arr "$_mi_sup" utran-)"  "$(_mi_arr "$_mi_cur" utran-)" \
+			"$(_mi_arr "$_mi_sup" eutran-)" "$(_mi_arr "$_mi_cur" eutran-)" \
+			"$(_mi_arr "$_mi_sup" ngran-)"  "$(_mi_arr "$_mi_cur" ngran-)" \
+			"$(printf '%s\n' "$_mi_cur" | grep -vE '^(utran-|eutran-|ngran-)' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
+		;;
+	"setmodemm")
+		# Режим сети для modemmanager-модема - СТОЙКО. Голый mmcli
+		# --set-allowed-modes применялся, но смена режима рвёт регистрацию,
+		# netifd передозванивается, и прото сбрасывает режимы заново (наблюдалось:
+		# выбрал 3G - через 10 c снова «авто»/LTE). Штатный механизм прото -
+		# опции allowedmode/preferredmode интерфейса: он передаёт их при КАЖДОМ
+		# дозвоне. Пишем в конфиг + применяем живьём; передозвон теперь
+		# закрепляет выбор, а не стирает его. $2 - allowed ('3g', '2g|3g', ...
+		# или 'default' = авто), $3 - preferred (может быть пуст).
+		_smm_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+		_smm_if=$(uci -q get "5gmodem.$_smm_sec.network")
+		logger -t 5gmodem "setmodemm: allowed='$2' preferred='$3' iface='$_smm_if'"
+		[ -n "$_smm_if" ] || { echo '{"error":"no iface"}'; exit 0; }
+		if [ -z "$2" ] || [ "$2" = "default" ]; then
+			uci -q delete "network.$_smm_if.allowedmode"
+			uci -q delete "network.$_smm_if.preferredmode"
+		else
+			uci -q set "network.$_smm_if.allowedmode=$2"
+			if [ -n "$3" ]; then
+				uci -q set "network.$_smm_if.preferredmode=$3"
+			else
+				uci -q delete "network.$_smm_if.preferredmode"
+			fi
+		fi
+		uci -q commit network
+		# ПРИМЕНЯЕТ ПРОТО, НЕ МЫ. Живой mmcli отсюда убран: он дублировал прото
+		# и врал в обе стороны - сужение (3g) применялось, но передозвон netifd
+		# затирал; расширение (Авто) фоновым `--set-allowed-modes=any` молча НЕ
+		# применялось (модем оставался запертым в 3G: регистрация не рвётся,
+		# передозвона нет, прото конфиг не переприменяет). Теперь один механизм:
+		# конфиг + передёргивание интерфейса; при подъёме прото сам выставляет
+		# allowedmode/preferredmode из конфига (пусто = any) и дозванивается.
+		# network reload, НЕ ручной down/up: netifd кэширует конфиг интерфейса и
+		# при простом передёргивании применяет СТАРЫЕ allowedmode/preferredmode
+		# (наблюдалось: Авто записан в uci, а модем остался заперт в 3g). reload
+		# заставляет netifd перечитать конфиг и сам перезапустить интерфейс с
+		# изменёнными опциями - тот же механизм, что «Сохранить и применить».
+		( ubus call network reload ) >/dev/null 2>&1 </dev/null &
+		echo '{"result":"ok"}'
+		;;
 	"restorebands")
 		# Восстановить сохранённый выбор диапазонов ПОСЛЕ перезагрузки модема.
 		# Зовётся из hotplug (31-5gmodem-bands) с BANDS_ACTIVE_MODEM=<usb-путь> -

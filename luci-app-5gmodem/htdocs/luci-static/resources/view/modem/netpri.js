@@ -405,7 +405,15 @@ function refreshStCard() {
 }
 
 function runSpeedtest() {
-	if (_st.phase === 'running') { return; }
+	if (_st.phase === 'running') {
+		/* Повторный клик по карточке во время теста = ОСТАНОВИТЬ и вернуть
+		   карточку в исходный вид. Флаг stopping читает идущий poll: какой бы
+		   финальный JSON ни пришёл (cancelled, ok с частичным результатом,
+		   ошибка от убитого curl) - показываем ДЕФОЛТ, а не «Ошибка теста». */
+		_st.stopping = true;
+		fs.exec(SPEEDBIN, [ 'stop' ]);
+		return;
+	}
 	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
 	_st.down = null; _st.up = null; _st.ip = '';
 	_st.phaseStart = Date.now();
@@ -416,6 +424,16 @@ function runSpeedtest() {
 		var tries = 0;
 		var poll = function() {
 			return L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
+				/* Стоп нажат: не ждём финального JSON бэкенда (1-3 c) - сбрасываем
+				   карточку в дефолт на ПЕРВОМ же тике и прекращаем опрос. */
+				if (_st.stopping) {
+					_st.stopping = false;
+					_st.phase = 'idle';
+					_st.down = null; _st.up = null;
+					_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
+					_renderedKey = ''; stProgStop(); refreshStCard();
+					return;
+				}
 				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 				if (j.service) { _st.service = j.service; }
 				if (j.running) {
@@ -432,6 +450,16 @@ function runSpeedtest() {
 					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
 						return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
 					}
+				}
+				/* Пользователь остановил тест: полный сброс к дефолтному виду,
+				   что бы ни пришло в финальном JSON (решение владельца). */
+				if (_st.stopping || j.cancelled) {
+					_st.stopping = false;
+					_st.phase = 'idle';
+					_st.down = null; _st.up = null;
+					_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
+					_renderedKey = ''; stProgStop(); refreshStCard();
+					return;
 				}
 				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
 				/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
