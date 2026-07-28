@@ -193,6 +193,88 @@ _mm_ifup_if_down() {
 # без IP на буте оставался каждый (в multi-modem раньше чинился лишь active_modem).
 # И обязательно ДЕЛАЕМ ifup: без него модем появлялся в MM, но интерфейс, снесённый
 # netifd, так и лежал.
+# МОДЕМ СОБРАН БЕЗ КОНТРОЛ-ПОРТА (AT-only) - ПЕРЕСОБРАТЬ.
+#
+# ЗАЧЕМ. События портов приходят раньше, чем ModemManager готов их принять
+# (libudev-zero не отдаёт coldplug, а наш new_id-бинд добавляет порты ещё
+# позже). Если к моменту сборки модема MM не знал про cdc-wdm, он собирает его
+# AT-only: primary становится ttyUSB, сетевой интерфейс числится ignored, и
+# дата-беарер не поднимается НИКОГДА - connect падает с MobileEquipment.Unknown
+# «No cause information available». Ребут не лечит: на следующем буте та же
+# гонка. Воспроизведено на Compal RXM-G1 (05c6:90d6) после подключения второго
+# модема - и повторяется после каждой перезагрузки.
+#
+# mm_recover_missing этот случай НЕ покрывал: он репортит порты, только когда
+# модема в MM нет вовсе, а тут объект есть - просто неполный.
+#
+# Досыл события мало: MM не добавляет контрол-порт к УЖЕ собранному модему.
+# Нужно, чтобы он забыл объект - поэтому передёргиваем само USB-устройство
+# (unbind/bind), а затем объявляем порты в правильном порядке: сперва
+# контрол-порт, потом сеть, потом tty. Проверено на живом модеме: primary
+# становится cdc-wdm0 (mbim), wwan0 - (net), модем сразу connected.
+_mm_fix_atonly() {   # $1 - usb-путь
+	local _fp="$1" _fw _fwdm _fi I _d _fk _fstate _fmark _fnow _flast _fwait
+	command -v mmcli >/dev/null 2>&1 || return 0
+	# контрол-порт есть в СИСТЕМЕ? (иначе модем честно AT-only, чинить нечего)
+	_fwdm=""
+	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
+		[ -e "$_fw" ] && { _fwdm="$_fw"; break; }
+	done
+	[ -n "$_fwdm" ] || return 0
+	# найти объект модема в MM по стабильному sysfs-пути
+	_fi=""
+	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
+		_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
+		[ "$(basename "$_d" 2>/dev/null)" = "$_fp" ] && { _fi="$I"; break; }
+	done
+	[ -n "$_fi" ] || return 0
+	_fk=$(mmcli -m "$_fi" -K 2>/dev/null)
+	# контрол-порт уже у модема - всё в порядке
+	printf '%s\n' "$_fk" | grep -qE '^modem\.generic\.ports\.value\[[0-9]+\] *: *[A-Za-z0-9-]+ \((mbim|qmi)\)' && return 0
+	# рабочее соединение НЕ рвём (на всякий случай - у AT-only его быть не может)
+	_fstate=$(printf '%s\n' "$_fk" | sed -n 's/^modem\.generic\.state *: *//p')
+	case "$_fstate" in connected|connecting|disconnecting) return 0 ;; esac
+	# анти-цикл: не чаще раза в 5 минут на модем
+	_fmark="/tmp/5gmodem_mmfix_$(printf '%s' "$_fp" | tr -c 'A-Za-z0-9' '_')"
+	_fnow=$(cut -d. -f1 /proc/uptime)
+	# Маркера НЕТ - чинить можно. Раньше здесь стоял _flast=0, и сразу после
+	# загрузки (uptime < 300) разница uptime-0 оказывалась меньше порога, то есть
+	# анти-цикл глушил фикс ровно в то окно, ради которого он и написан.
+	_flast=$(cat "$_fmark" 2>/dev/null); case "$_flast" in ''|*[!0-9]*) _flast="" ;; esac
+	[ -n "$_flast" ] && [ "$((_fnow - _flast))" -lt 300 ] && return 0
+	printf '%s' "$_fnow" > "$_fmark" 2>/dev/null
+	logger -t 5gmodem "MM собрал $_fp без контрол-порта (есть $(basename "$_fwdm")) - пересобираю модем"
+	printf '%s' "$_fp" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+	sleep 4
+	printf '%s' "$_fp" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+	# ЖДЁМ ФАКТА, А НЕ СЕКУНД. Переэнумерация этого модуля занимает ~20-30 c
+	# (у него ещё и наш new_id-бинд ttyUSB следом), а фиксированный sleep 8
+	# уходил вперёд: события уходили в MM до появления узлов, и модем пропадал
+	# из MM совсем. Ждём сам контрол-порт, максимум 40 c.
+	_fw=""; _fwait=0
+	while [ "$_fwait" -lt 40 ]; do
+		for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
+			[ -e "$_fw" ] && break 2
+		done
+		_fw=""; sleep 2; _fwait=$((_fwait + 2))
+	done
+	[ -n "$_fw" ] || { logger -t 5gmodem "пересборка $_fp: контрол-порт не вернулся за ${_fwait}c"; return 0; }
+	sleep 3
+	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
+		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=usbmisc,name=$(basename "$_fw")" >/dev/null 2>&1
+	done
+	sleep 2
+	for _fw in /sys/bus/usb/devices/"$_fp":*/net/*; do
+		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=net,name=$(basename "$_fw")" >/dev/null 2>&1
+	done
+	sleep 1
+	for _fw in /sys/bus/usb/devices/"$_fp":*/ttyUSB* /sys/bus/usb/devices/"$_fp":*/tty/ttyUSB*; do
+		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_fw")" >/dev/null 2>&1
+	done
+	sleep 10
+	_mm_ifup_if_down "$_fp"
+}
+
 mm_recover_missing() {
 	# local ОБЯЗАТЕЛЕН: цикл `for _n in .../net/*` ниже делит имя _n со счётчиком
 	# главного цикла сервиса - без local он утекал и ронял шелл на арифметике
@@ -224,6 +306,8 @@ mm_recover_missing() {
 				done
 			done
 		fi
+		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
+		[ "$_seen" = 1 ] && _mm_fix_atonly "$_rp"
 		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.
 		_mm_ifup_if_down "$_rp"
 	done

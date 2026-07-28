@@ -1871,6 +1871,25 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 		[ -z "$MODEL" ]   && MODEL=$(uci -q get "5gmodem.$_hl_sec.model")
 		[ -z "$MODEL" ]   && MODEL=$(_mmv "modem.generic.model")
 		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
+		# IMSI/ICCID - ИЗ SIM-ОБЪЕКТА MM. Обычно их читает AT (AT+CIMI/AT+ICCID),
+		# но у modemmanager-модема AT-порт нам не принадлежит, и обе строки в
+		# карточке стояли прочерками, хотя MM их прекрасно знает. Объект SIM
+		# отдельный (modem.generic.sim -> /org/.../SIM/N), поэтому спрашиваем его
+		# по индексу и только когда что-то из полей пусто - лишний вызов ни к чему.
+		if [ -z "$NR_IMSI" ] || [ -z "$NR_ICCID" ]; then
+			_mm_simp=$(_mmv "modem.generic.sim")
+			if [ -n "$_mm_simp" ]; then
+				_mm_simk=$(mmcli -i "${_mm_simp##*/}" -K 2>/dev/null)
+				if [ -z "$NR_IMSI" ]; then
+					NR_IMSI=$(printf '%s\n' "$_mm_simk" | sed -n 's/^sim\.properties\.imsi *: *//p' | head -1)
+					[ "$NR_IMSI" = "--" ] && NR_IMSI=""
+				fi
+				if [ -z "$NR_ICCID" ]; then
+					NR_ICCID=$(printf '%s\n' "$_mm_simk" | sed -n 's/^sim\.properties\.iccid *: *//p' | head -1)
+					[ "$NR_ICCID" = "--" ] && NR_ICCID=""
+				fi
+			fi
+		fi
 		# RSRP/RSRQ/RSSI/SINR НЕ трогаем: детальный сигнал отдаёт QMI-профиль модема
 		# (modem/usb/*), а mmcli --signal-get дублировал бы ключи. signal-quality (%)
 		# выше - достаточный фолбэк для generic MM-модема без профиля.

@@ -826,7 +826,12 @@ set_sms_storage() {
 #
 # 12d1:14dc - Huawei E3372 в режиме "только веб-интерфейс". В 12d1:1566 он уже
 # с AT-портами, и там срабатывает запомненный kind из секции.
-HILINK_IDS="12d1:14dc"
+# Проверенные HiLink-композиции. Список НЕ исчерпывающий: у Huawei их много и
+# ребренды операторов (МТС 8211F, Мегафон) добавляют свои - остальные ловит
+# структурный признак в is_hilink (сетевая карта без AT-порта и cdc-wdm).
+# 1f01 сюда НЕ входит намеренно: это режим CD-ROM до usb_modeswitch, сети у него
+# ещё нет.
+HILINK_IDS="12d1:14dc 12d1:14db"
 
 # Убрать НАШИ ЖЕ интерфейсы, оставшиеся от прежних подключений этого модема.
 #
@@ -866,6 +871,22 @@ is_hilink() {   # $1 - usb-путь
 	for _ih_k in $HILINK_IDS; do
 		[ "$_ih_id" = "$_ih_k" ] && return 0
 	done
+	# СТРУКТУРНЫЙ ПРИЗНАК (только Huawei): модем отдаёт СЕТЕВУЮ КАРТУ, но ни
+	# одного AT-порта и ни одного cdc-wdm - управлять им нечем, значит он держит
+	# IP-стек сам, т.е. HiLink. Список ID за всеми композициями не поспевает: у
+	# 12d1:14db (E8372 / МТС 8211F) его не было, и модем уезжал в обычную ветку -
+	# получал proto=fibocom на eth2 и падал с NO_DEVICE, вместо dhcp.
+	# Ограничено вендором 12d1: у других вендоров «сеть без портов» означает
+	# другое (напр. модуль в RNDIS, которым мы всё же управляем по AT).
+	case "$_ih_id" in
+		12d1:*)
+			_ih_j=$("$RES/listmodems.sh" 2>/dev/null)
+			_ih_tty=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)
+			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
+			_ih_net=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].net[*]" 2>/dev/null)
+			[ -z "$_ih_tty" ] && [ -z "$_ih_wdm" ] && [ -n "$_ih_net" ] && return 0
+			;;
+	esac
 	return 1
 }
 
@@ -914,6 +935,14 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 	uci -q set "network.$_hif=interface"
 	uci -q set "network.$_hif.proto=dhcp"
 	uci -q set "network.$_hif.device=$_hd"
+	# ОСТАТКИ ЧУЖОГО ПРОТОКОЛА. Интерфейс мог быть создан обычной веткой, пока
+	# модем не опознавался как HiLink (см. is_hilink): там лежали apn/pdptype/
+	# usbpath от fibocom/qmi. Для dhcp они бессмысленны, а в UI показывались как
+	# настройки соединения, которых у HiLink нет - APN задаётся в веб-морде
+	# самого модема.
+	for _hk in apn pdptype usbpath auth username password devpath allow_roaming; do
+		uci -q delete "network.$_hif.$_hk" 2>/dev/null
+	done
 	# ВТОРИЧНЫЙ АПЛИНК ПО УМОЛЧАНИЮ. Без метрики DHCP-интерфейс получает metric 0 и
 	# конкурирует с WAN/WiFi за маршрут по умолчанию (наблюдалось на E3372: интерфейс
 	# поднялся с metric 0, трафик не шёл, пока не переключили приоритеты). Ставим 20,
