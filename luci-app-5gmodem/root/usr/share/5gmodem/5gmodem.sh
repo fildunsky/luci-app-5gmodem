@@ -1559,7 +1559,7 @@ _qmi_refresh() {
 	# Один вызов rf-band-info на всё: полоса, а в 3G ещё и активный диапазон
 	# (класс wcdma-*) с каналом (UARFCN). В 3G полоса приходит НЕ числом, а
 	# классом 'wcdma-5' (= 5 МГц) - разбираем оба формата.
-	_qr_rf=$(qmicli -d "$_qr_w" -p --nas-get-rf-band-info 2>/dev/null)
+	_qr_rf=$(qmicli_p "$_qr_w" --nas-get-rf-band-info 2>/dev/null)
 	_qr_bw=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Bandwidth: *'\([0-9]*\)'.*/\1/p" | head -1)
 	[ -z "$_qr_bw" ] && _qr_bw=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Bandwidth: *'wcdma-\([0-9]*\)'.*/\1/p" | head -1)
 	[ -n "$_qr_bw" ] && _qr_bw="$_qr_bw MHz"
@@ -1568,7 +1568,7 @@ _qmi_refresh() {
 	[ -n "$_qr_b3" ] && _qr_u3=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
 	# Мощность передатчика есть ТОЛЬКО пока модем передаёт ("In traffic: 'no'" в
 	# покое), поэтому в простое поле законно пустует.
-	_qr_tx=$(qmicli -d "$_qr_w" -p --nas-get-tx-rx-info=lte 2>/dev/null \
+	_qr_tx=$(qmicli_p "$_qr_w" --nas-get-tx-rx-info=lte 2>/dev/null \
 		| awk '/^TX:/{f=1} f && /Power:/ {gsub(/[^0-9.-]/,"",$2); print $2; exit}')
 	[ -n "$_qr_tx" ] && _qr_tx="$_qr_tx dBm"
 
@@ -1586,7 +1586,7 @@ _qmi_refresh() {
 	# теми же запросами, что мы и так делаем для соседей - через прокси (-p),
 	# то есть канал у MM не отбираем. Заполняем ТОЛЬКО пустое (см. _qmi_supplement):
 	# вендорный профиль знает про свой модем больше и остаётся главнее.
-	_qr_si=$(qmicli -d "$_qr_w" -p --nas-get-signal-info 2>/dev/null)
+	_qr_si=$(qmicli_p "$_qr_w" --nas-get-signal-info 2>/dev/null)
 	_qr_sig=$(printf '%s\n' "$_qr_si" | awk '
 		/^LTE:/ { f=1; next }
 		/^[A-Z0-9]+:/ { f=0 }
@@ -1602,7 +1602,7 @@ _qmi_refresh() {
 		/Active Channel:/ { if (b != \"\" && c == \"\") { if (match(\$0, /[0-9]+/)) c = substr(\$0, RSTART, RLENGTH) } }
 		END { if (b != \"\") printf \"%s|%s\", b, c }
 	")
-	_qr_cl=$(qmicli -d "$_qr_w" -p --nas-get-cell-location-info 2>/dev/null)
+	_qr_cl=$(qmicli_p "$_qr_w" --nas-get-cell-location-info 2>/dev/null)
 	# TAC и Cell ID обслуживающей соты (секция Intrafrequency LTE Info)
 	_qr_cell=$(printf '%s\n' "$_qr_cl" | awk '
 		/^Intrafrequency LTE Info/ { f=1; next }
@@ -1680,6 +1680,23 @@ _qmi_supplement() {
 	# и так отдаёт пусто для такого модема - нет своего wdm, QMI-дополнений нет.
 	_QS_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 	[ -c "$_QS_WDM" ] || return 0
+
+	# КАНАЛ cdc-wdm ЧУЖОЙ, ЕСЛИ ИНТЕРФЕЙС НА proto=qmi.
+	#
+	# Дополнения (полоса, соседние соты, мощность передатчика) мы читаем через
+	# `qmicli -p`, а он поднимает qmi-proxy - тот открывает /dev/cdc-wdm и держит
+	# его. Штатный протокол qmi у netifd ходит в то же устройство НАПРЯМУЮ, через
+	# uqmi, прокси он не знает. Два владельца на одном канале путают ответы: у
+	# пользователя netifd вис на «Waiting for network registration» с «Failed to
+	# parse message data», интерфейс оставался pending, а в ядре сыпался
+	# NETDEV WATCHDOG с ресетом устройства. Симптом со стороны: после установки
+	# всё работает, а после первой ПЕРЕЗАГРУЗКИ соединение больше не поднимается,
+	# и лечится только удалением пакета - то есть исчезновением нашего опроса.
+	#
+	# Отказываемся от дополнений: связь дороже пары полей в карточке. Под
+	# ModemManager этого гейта НЕТ и он не нужен - там прокси общий, MM сам через
+	# него и работает.
+	qmi_channel_free || return 0
 	_QS_P="/tmp/5gmodem_qmi_$_MKEY"
 
 	# 0) Кэш ЧУЖОЙ RAT-эры. Модем вернулся из 3G в LTE, а файлы ещё 3G (TTL до
@@ -1765,8 +1782,8 @@ _qmi_supplement() {
 			# синхронный rf-band-info (~0.2 c) прямо здесь: только в момент
 			# смены RAT, устоявшийся LTE/3G этот вызов не платит. Результат
 			# кладём в кэш-файлы - соседние тики qmicli не дёргают.
-			if [ -z "$_QS_B3C" ]; then
-				_QS_RF=$(qmicli -d "$_QS_WDM" -p --nas-get-rf-band-info 2>/dev/null)
+			if [ -z "$_QS_B3C" ] && qmi_channel_free; then
+				_QS_RF=$(qmicli_p "$_QS_WDM" --nas-get-rf-band-info 2>/dev/null)
 				_QS_B3C=$(printf '%s\n' "$_QS_RF" | sed -n "s/.*Active Band Class: *'\(wcdma-[a-z0-9-]*\)'.*/\1/p" | head -1)
 				if [ -n "$_QS_B3C" ]; then
 					_QS_U3C=$(printf '%s\n' "$_QS_RF" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
@@ -1792,7 +1809,7 @@ _qmi_supplement() {
 			# смены RAT, как и диапазон выше.
 			_QS_C3=$(cat "$_QS_P.c3g" 2>/dev/null)
 			if [ -z "$_QS_C3" ] && [ -n "$_QS_B3C" ]; then
-				_QS_C3=$(qmicli -d "$_QS_WDM" -p --nas-get-cell-location-info 2>/dev/null | awk '
+				_QS_C3=$(qmicli_p "$_QS_WDM" --nas-get-cell-location-info 2>/dev/null | awk '
 					/^UMTS Info/ { f=1; next }
 					/^[^ \t]/    { f=0 }
 					f && /Location Area Code:/      { if (match($0, /[0-9]+/)) lac = substr($0, RSTART, RLENGTH) }
@@ -1982,13 +1999,32 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 		# прошивок пессимистичен (Compal: 12% при RSRP -106), а при живом RSRP
 		# сигнал считает sig_weighted ниже - как у всех остальных модемов.
 		[ -z "$CSQ_PER" ] && [ -z "$RSRP" ] && CSQ_PER=$(_mmv "modem.generic.signal-quality.value")
-		[ -z "$REG" ]     && REG=$(_mmv "modem.3gpp.registration-state")
+		# РЕГИСТРАЦИЮ ПЕРЕВОДИМ В КОД, а не кладём словом. Поле registration в
+		# нашем JSON - число по 3GPP (0 нет сети, 1 дома, 2 поиск, 3 отказ,
+		# 5 роуминг, 6/7 только SMS), и страница по нему выбирает подпись. mmcli
+		# отдаёт то же самое СЛОВОМ («home», «roaming»), и раньше оно уходило
+		# наружу как есть: ни одно сравнение не срабатывало, и в карточке
+		# оставалось сырое значение вместо короткого «В сети». Тот же перевод уже
+		# делается для профильной ветки выше - здесь его просто забыли.
+		if [ -z "$REG" ]; then
+			case "$(_mmv "modem.3gpp.registration-state")" in
+				home)             REG=1 ;;
+				searching)        REG=2 ;;
+				denied)           REG=3 ;;
+				roaming)          REG=5 ;;
+				home-sms-only)    REG=6 ;;
+				roaming-sms-only) REG=7 ;;
+				idle)             REG=0 ;;
+			esac
+		fi
 		[ -z "$MODE" ]    && MODE=$(_mmv "modem.generic.access-technologies.value[1]" | tr 'a-z' 'A-Z')
 		# Модель: сперва имя из НАШЕЙ секции (там «Compal RXM-G1» и прочие
 		# нормализованные имена), и только потом generic из mmcli - тот отдаёт
 		# сырое USB-имя («VOS_5G»), и карточка «меняла» модель при переводе в MM.
 		[ -z "$MODEL" ]   && MODEL=$(uci -q get "5gmodem.$_hl_sec.model")
-		[ -z "$MODEL" ]   && MODEL=$(_mmv "modem.generic.model")
+		# Нормализуем: mmcli отдаёт сырое имя («VOS_5G»), и оно оседало в секции,
+		# перебивая человеческое название в карточке и вкладке (см. model_alias).
+		[ -z "$MODEL" ]   && MODEL=$(model_alias "$(_mmv "modem.generic.model")")
 		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
 		# Прошивка: её обычно читает AT+CGMR, но под ModemManager AT-порт нам не
 		# принадлежит - в карточке стоял прочерк. У MM она есть готовая.

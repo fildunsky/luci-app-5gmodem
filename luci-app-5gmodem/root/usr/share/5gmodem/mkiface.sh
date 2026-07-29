@@ -503,10 +503,24 @@ case "$REQ" in
 		_mki_vp=""
 		[ -n "$AMP" ] && [ -f "/sys/bus/usb/devices/$AMP/idVendor" ] && \
 			_mki_vp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
-		if [ "$_mki_vp" = "413c:81d7" ] && [ -f /lib/netifd/proto/modemmanager.sh ]; then
-			logger -t 5gmodem "mkiface: $_mki_vp - у него mbim/qmi не поднимают сессию, ведём через ModemManager"
-			PROTO="modemmanager"
-		fi
+		# 05c6:9025 - модули на Qualcomm SDX55 (Foxconn T99W175 / Dell, Compal в
+		# debug-композиции). Здесь причина другая, чем у 81d7: сессию qmi поднимает,
+		# но КАНАЛ cdc-wdm у него один, а нам он нужен постоянно - диапазоны и режим
+		# сети у SDX55 управляются ТОЛЬКО через ModemManager, метрики полнее по
+		# QMI-generic. При proto=qmi каналом владеет netifd через uqmi, наши
+		# запросы туда запрещены (см. qmicli_p), то есть половина возможностей
+		# приложения выключена, а при попытке читать - соединение срывалось:
+		# «Failed to parse message data», интерфейс навсегда pending, лечилось
+		# только удалением пакета (отчёт 29.07, Banana Pi R4).
+		# Под ModemManager канал общий через qmi-proxy, и конфликта нет вовсе.
+		case "$_mki_vp" in
+			413c:81d7|05c6:9025)
+				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
+					logger -t 5gmodem "mkiface: $_mki_vp - ведём через ModemManager (общий канал, иначе конфликт за cdc-wdm)"
+					PROTO="modemmanager"
+				fi
+				;;
+		esac
 		;;
 	*) PROTO="$REQ" ;;
 esac

@@ -133,6 +133,8 @@ fi
 # QMI/MM ДВА физических слота, хотя рабочий один - и пользователь, переключившись
 # на пустой слот 2, терял сеть. Гейт должен быть общим: если модель заведомо
 # односимочная, слотов нет и под MM.
+# qmi_channel_free - см. lib.sh (канал cdc-wdm может принадлежать netifd).
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 . /usr/share/5gmodem/quirks.sh
 if [ "$1" != "set" ] \
    && [ "$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")" = none ]; then
@@ -226,6 +228,13 @@ fi
 #          Is eUICC: no
 # id слота = ФИЗИЧЕСКИЙ номер (1..N), активен тот, у кого "Slot status: active".
 if [ "$_VIA" = qmi ]; then
+	# КАНАЛ МОЖЕТ БЫТЬ ЗАНЯТ netifd. При proto=qmi устройством владеет uqmi, и
+	# наш qmicli -p (через qmi-proxy) становится вторым хозяином того же канала -
+	# ответы путаются, подъём соединения виснет (см. qmi_channel_free в lib.sh).
+	# Слоты подождут: связь дороже.
+	if command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free; then
+		echo '{"error":"qmi busy"}'; exit 0
+	fi
 	_WDM=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].wdm[0]" 2>/dev/null)
 	[ -n "$_WDM" ] && [ -e "$_WDM" ] || { echo '{"error":"no qmi device"}'; exit 0; }
 	# qmicli без ограничения по времени виснет на занятом/мёртвом канале, а нас
@@ -238,7 +247,7 @@ if [ "$_VIA" = qmi ]; then
 	# ПРОКСИ, а не наш процесс: убийство qmicli пул не трогает.
 	_q() {
 		_qo="/tmp/5gmodem_uim.$$"
-		qmicli -d "$_WDM" -p "$@" > "$_qo" 2>&1 &
+		qmicli_p "$_WDM" "$@" > "$_qo" 2>&1 &
 		_qp=$!
 		( sleep 20; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
 		_qw=$!

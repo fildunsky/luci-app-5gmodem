@@ -67,8 +67,10 @@ is_compal() {
 		_ic_wdm=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 		[ -c "$_ic_wdm" ] || _ic_wdm=/dev/cdc-wdm0
 	fi
+	# Занятость канала проверяет сама обёртка qmicli_p (lib.sh): при proto=qmi
+	# устройством владеет netifd, и лезть туда нельзя.
 	if [ -c "$_ic_wdm" ] && command -v qmicli >/dev/null 2>&1; then
-		_ic_model=$(qmicli -d "$_ic_wdm" -p --dms-get-model 2>/dev/null \
+		_ic_model=$(qmicli_p "$_ic_wdm" --dms-get-model 2>/dev/null \
 			| sed -n "s/.*Model: '\{0,1\}\([^']*\)'\{0,1\}.*/\1/p" | head -1)
 		case "$_ic_model" in *SG500M2-X*) return 0 ;; esac
 		[ -n "$_ic_wdm_explicit" ] && [ -n "$_ic_model" ] && return 1
