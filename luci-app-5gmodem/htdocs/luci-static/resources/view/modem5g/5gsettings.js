@@ -1,6 +1,6 @@
 'use strict';
 'require view';
-'require view.modem.modemtabs as modemtabs';
+'require view.modem5g.modemtabs as modemtabs';
 'require fs';
 'require ui';
 'require uci';
@@ -57,10 +57,10 @@ function updBusy(busy) {
 
 /* Ресурсы приложения, которые браузер кэширует и которые меняются с релизом. */
 var CACHED_RES = [
-	'view/modem/5gdetail.js', 'view/modem/5gdebug.js', 'view/modem/5gesim.js',
-	'view/modem/5gsettings.js', 'view/modem/netpri.js', 'view/modem/modemtabs.js',
-	'view/modem/readsms.js', 'view/modem/sendsms.js', 'view/modem/sendussd.js',
-	'view/modem/sendat.js', 'protocol/fibocom.js'
+	'view/modem5g/5gdetail.js', 'view/modem5g/5gdebug.js', 'view/modem5g/5gesim.js',
+	'view/modem5g/5gsettings.js', 'view/modem5g/netpri.js', 'view/modem5g/modemtabs.js',
+	'view/modem5g/readsms.js', 'view/modem5g/sendsms.js', 'view/modem5g/sendussd.js',
+	'view/modem5g/sendat.js', 'protocol/fibocom.js'
 ];
 
 /* Принудительно перетянуть наши ресурсы МИМО кэша браузера (fetch cache:reload). */

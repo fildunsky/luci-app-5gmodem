@@ -931,8 +931,8 @@ draw_modem() {
 	# Порты и хранилище живут в конфиге, а не в снимке: читаем uci напрямую -
 	# это дёшево и не трогает модем.
 	lab 19 2 'AT'          14 "$(fit "$(v cport)" $_w)" $_w
-	lab 20 2 'SMS'         14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].readport)" $_w)" $_w
-	lab 21 2 "$T_STORAGE"  14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" $_w)" $_w
+	lab 20 2 'SMS'         14 "$(fit "$(uci -q get 5gmodem.sms.readport)" $_w)" $_w
+	lab 21 2 "$T_STORAGE"  14 "$(fit "$(uci -q get 5gmodem.sms.storage)" $_w)" $_w
 }
 
 # ── РАЗДЕЛ «SMS». Список входящих, как на вкладке «Входящие» в вебе: отправитель
@@ -1195,8 +1195,8 @@ send_console() {   # $1 - тип (ussd|at), $2 - текст
 	: > "$OUTBUSY"
 	( _p=""
 	  case "$1" in
-	  	ussd) _p=$(uci -q get sms_tool_js.@sms_tool_js[0].ussdport) ;;
-	  	at)   _p=$(uci -q get sms_tool_js.@sms_tool_js[0].atport) ;;
+	  	ussd) _p=$(uci -q get 5gmodem.sms.ussdport) ;;
+	  	at)   _p=$(uci -q get 5gmodem.sms.atport) ;;
 	  esac
 	  [ -n "$_p" ] || _p=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 	  if [ -z "$_p" ] || [ ! -e "$_p" ]; then
@@ -1208,8 +1208,8 @@ send_console() {   # $1 - тип (ussd|at), $2 - текст
 	  		# и веб-страница: у модемов это различается, и подбирать их заново
 	  		# здесь значило бы разойтись с ней в поведении.
 	  		set -- -d "$_p"
-	  		[ "$(uci -q get sms_tool_js.@sms_tool_js[0].ussd)" = "1" ] && set -- "$@" -R
-	  		[ "$(uci -q get sms_tool_js.@sms_tool_js[0].pdu)" = "1" ] && set -- "$@" -r
+	  		[ "$(uci -q get 5gmodem.sms.ussd)" = "1" ] && set -- "$@" -R
+	  		[ "$(uci -q get 5gmodem.sms.pdu)" = "1" ] && set -- "$@" -r
 	  		sms_tool "$@" ussd "$2" > "$OUTFILE" 2>&1
 	  		;;
 	  	at) sms_tool -d "$_p" at "$2" > "$OUTFILE" 2>&1 ;;
@@ -1674,8 +1674,8 @@ fetch_esim() {
 fetch_sms() {
 	[ -f "$SMSBUSY" ] && return
 	( : > "$SMSBUSY"
-	  _p=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
-	  _s=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
+	  _p=$(uci -q get 5gmodem.sms.readport)
+	  _s=$(uci -q get 5gmodem.sms.storage)
 	  if [ -n "$_p" ] && [ -e "$_p" ]; then
 	  	# ЧЕРЕЗ smsbridge.sh, а не напрямую sms_tool: мост встаёт в общую очередь
 	  	# к AT-порту (atlock.sh) и умеет HiLink-модемы, у которых SMS читаются по

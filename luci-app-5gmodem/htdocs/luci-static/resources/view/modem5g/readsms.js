@@ -5,10 +5,10 @@
 'require ui';
 'require uci';
 'require view';
-'require view.modem.modemtabs as modemtabs';
+'require view.modem5g.modemtabs as modemtabs';
 'require rpc';
 'require poll';
-'require sms-tool-js.smssettings as smssettings';
+'require sms-tool-5gm.smssettings as smssettings';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -17,7 +17,7 @@
 */
 
 var callForwardSMS = rpc.declare({
-    object: 'sms_forward',
+    object: '5gmodem_sms_forward',
     method: 'forward',
     params: ['subject', 'message']
 });
@@ -190,8 +190,8 @@ function sms_update_selcount() {
    перерисовывает список и перезаписывает кэш; после удалений кэш обновится
    первым же перечитыванием. */
 function sms_cache_key() {
-	var s = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
-	var p = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport') || '';
+	var s = uci.get('5gmodem', 'sms', 'storage') || 'ME';
+	var p = uci.get('5gmodem', 'sms', 'readport') || '';
 	return 'sms-last:' + s + ':' + p;
 }
 function sms_cache_save(list, u, t) {
@@ -403,12 +403,12 @@ function sms_make_card(item, iconSrc, hide) {
 function sms_persist(values) {
 	var args = [ 'smsopt' ];
 	for (var k in values) {
-		var cur = uci.get('sms_tool_js', '@sms_tool_js[0]', k);
+		var cur = uci.get('5gmodem', 'sms', k);
 		var val = (values[k] == null) ? '' : String(values[k]);
 		if (String(cur == null ? '' : cur) === val) { continue; }
 		/* держим в кэше страницы то же значение, что записали на роутере -
 		   иначе следующий тик снова сочтёт его изменившимся */
-		uci.set('sms_tool_js', '@sms_tool_js[0]', k, val);
+		uci.set('5gmodem', 'sms', k, val);
 		args.push(k + '=' + val);
 	}
 	if (args.length < 2) { return Promise.resolve(); }
@@ -438,7 +438,7 @@ function format_with_modem_index(value) {
 			return value;
 		}
 		
-		var currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		var currentPort = uci.get('5gmodem', 'sms', 'readport');
 		
 		var modemIndex = -1;
 		for (var i = 0; i < serialModems.length; i++) {
@@ -479,7 +479,7 @@ function update_sms_count_for_modem(newValue) {
 			return newValue;
 		}
 		
-		var currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		var currentPort = uci.get('5gmodem', 'sms', 'readport');
 		var currentModemIndex = -1;
 		
 		for (var i = 0; i < serialModems.length; i++) {
@@ -494,7 +494,7 @@ function update_sms_count_for_modem(newValue) {
 			return newValue;
 		}
 		
-		var existingSmsCount = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_count') || '';
+		var existingSmsCount = uci.get('5gmodem', 'sms', 'sms_count') || '';
 		var parts = existingSmsCount.split(' ').filter(function(p) { return p.trim() !== ''; });
 		
 		var updated = {};
@@ -525,10 +525,10 @@ function update_sms_count_for_modem(newValue) {
 }
 
 function save_count() {
-	uci.load('sms_tool_js').then(function() {
+	uci.load('5gmodem').then(function() {
 
-		var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
-		var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
+		var storeL = (uci.get('5gmodem', 'sms', 'storage'));
+		var portR = (uci.get('5gmodem', 'sms', 'readport'));
 
 			/* Счётчик и список берём через smsbridge.sh: у модемов без AT-портов
 			   (HiLink) они лежат в самом модеме и достаются его API. Мост решает
@@ -566,7 +566,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		return Promise.all([
-			uci.load('sms_tool_js'),
+			uci.load('5gmodem'),
 			/* 5gmodem нужен, чтобы понять класс активного модема: у HiLink
 			   AT-портов нет, и требовать их настройки нельзя. */
 			L.resolveDefault(uci.load('5gmodem')),
@@ -588,7 +588,7 @@ return view.extend({
 		
 		if (serialModems.length === 0) return;
 		
-		var currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		var currentPort = uci.get('5gmodem', 'sms', 'readport');
 		var currentIndex = serialModems.findIndex(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -631,8 +631,8 @@ return view.extend({
 	    
 	    var self = this;
 	    
-	    uci.load('sms_tool_js').then(function() {
-		    var fwdEnabled = uci.get('sms_tool_js', '@sms_tool_js[0]', 'forward_sms_enabled');
+	    uci.load('5gmodem').then(function() {
+		    var fwdEnabled = uci.get('5gmodem', 'sms', 'forward_sms_enabled');
 		    
 		    if (fwdEnabled !== '1') {
 			    ui.addNotification(null, E('p', _('SMS forwarding function is not enabled')), 'info');
@@ -761,7 +761,7 @@ return view.extend({
 					/* Без confirm (решение владельца): выделение и есть намерение,
 					   кнопка удаляет сразу. */
 					{
-							var sections = uci.sections('sms_tool_js');
+							var sections = uci.sections('5gmodem');
 							var portDA = sections[0].readport;
 							var storeDA = sections[0].storage;
 
@@ -790,11 +790,11 @@ return view.extend({
 
 					/* Без confirm - как и при удалении всех (решение владельца). */
 						{
-							uci.load('sms_tool_js').then(function() {
+							uci.load('5gmodem').then(function() {
 
-								var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
-								var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
-								var sections = uci.sections('sms_tool_js');
+								var storeL = (uci.get('5gmodem', 'sms', 'storage'));
+								var portR = (uci.get('5gmodem', 'sms', 'readport'));
+								var sections = uci.sections('5gmodem');
 								var portDEL = sections[0].readport;
 
 								/* Индексы из data-index карточек; у склеенного сообщения
@@ -885,21 +885,21 @@ return view.extend({
 		var view = document.getElementById("smssarea");
 		store = '-';
 
-		uci.load('sms_tool_js').then(function() {
-		var storeL = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage'));
-		var portR = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport'));
+		uci.load('5gmodem').then(function() {
+		var storeL = (uci.get('5gmodem', 'sms', 'storage'));
+		var portR = (uci.get('5gmodem', 'sms', 'readport'));
 		// mergesms может быть не задан в uci (свежая конфигурация): тогда
 		// ни ветка smsM=="1" (склейка), ни smsM=="0" не выполнялись, и
 		// сообщения не рендерились (обновлялся только счётчик). Нормализуем
 		// к "1"/"0". По умолчанию (значение НЕ задано) - "1" (склейка вкл.):
 		// многочастные SMS показываются целиком. Явный "0" уважается.
-		var _mv = uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms');
+		var _mv = uci.get('5gmodem', 'sms', 'mergesms');
 		var smsM = (_mv == null || _mv === '') ? '1' : (_mv == '1' ? '1' : '0');
-		var algo = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'algorithm'));
-		var hide = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'bnumber'));
-		var ledn = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'lednotify'));
-		var ledt = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'ledtype'));
-		var direct = (uci.get('sms_tool_js', '@sms_tool_js[0]', 'direction'));
+		var algo = (uci.get('5gmodem', 'sms', 'algorithm'));
+		var hide = (uci.get('5gmodem', 'sms', 'bnumber'));
+		var ledn = (uci.get('5gmodem', 'sms', 'lednotify'));
+		var ledt = (uci.get('5gmodem', 'sms', 'ledtype'));
+		var direct = (uci.get('5gmodem', 'sms', 'direction'));
 
 		/* Та же оговорка, что и у проверки ниже: у модема без AT-портов (HiLink)
 		   портов нет и настроить их невозможно. Требовать этого - посылать
@@ -911,7 +911,7 @@ return view.extend({
 					3. Notification LED (optional).</li><li><ul>')), 'info');
 		}
 		
-		var sections = uci.sections('sms_tool_js');
+		var sections = uci.sections('5gmodem');
 		var led = sections[0].smsled;
 
 		/* Эти radio живут в DOM, который renderMain ещё не вернул и не
@@ -990,8 +990,8 @@ return view.extend({
 		// no effect until a full page reload, and an empty storage value read at
 		// load time keeps failing. Default to ME - most USB modems deliver
 		// incoming SMS to modem memory, and reading with an empty '-s ' fails.
-		var storeL = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
-		var portR = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
+		var portR = uci.get('5gmodem', 'sms', 'readport');
 		/* Порт нужен НЕ ВСЕГДА. У модемов без AT-портов (HiLink) сообщения лежат
 		   в самом модеме и достаются его API - порта у них нет и быть не может.
 		   Раньше страница упиралась в эту проверку и требовала настроить то,
@@ -1092,7 +1092,7 @@ return view.extend({
 									   сделали МЫ (mergesms_auto). Флаг нужен, чтобы уважать обратный
 									   выбор: если пользователь потом снимет галку, мы её не вернём. */
 									if (smsM != "1" &&
-									    uci.get('sms_tool_js', '@sms_tool_js[0]', 'mergesms_auto') != '1' &&
+									    uci.get('5gmodem', 'sms', 'mergesms_auto') != '1' &&
 									    json.some(function(o) { return (o.total || 0) > 1; })) {
 										smsM = "1";
 										sms_persist({ 'mergesms': '1', 'mergesms_auto': '1' });
@@ -1331,7 +1331,7 @@ return view.extend({
 					}
 					
 					if (serialModems.length > 0) {
-						var currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+						var currentPort = uci.get('5gmodem', 'sms', 'readport');
 						var currentModem = serialModems.find(function(s) {
 							return s.comm_port === currentPort;
 						});
@@ -1379,7 +1379,7 @@ return view.extend({
 					   ModemManager), поэтому прячем только переключатели, а
 					   полоску памяти оставляем. Радиокнопки остаются в DOM:
 					   логика обновления безусловно читает отмеченную. */
-					var cfg = uci.sections('sms_tool_js');
+					var cfg = uci.sections('5gmodem');
 					var viaMM = (cfg && cfg[0] && cfg[0].sms_via_mm == '1');
 					var areaTip = _('Any change in the area from which SMS messages will be read requires refreshing the messages');
 					var areaOpt = (function(value, label, checked) {
@@ -1411,7 +1411,7 @@ return view.extend({
 										/* Отмечаем ФАКТИЧЕСКОЕ хранилище из настроек:
 										   радио всегда стартовало с SIM, хотя чтение
 										   шло по uci (обычно ME) - переключатель врал. */
-										var _stg = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'ME';
+										var _stg = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 										return E([], [
 											areaOpt('sim', _('SIM card'), _stg === 'SM'),
 											areaOpt('memory', _('Modem memory'), _stg !== 'SM')

@@ -3,7 +3,7 @@
 'require fs';
 'require ui';
 'require uci';
-'require view.modem.modemtabs as modemtabs';
+'require view.modem5g.modemtabs as modemtabs';
 
 /*
 	Отдельная вкладка «eSIM» — управление профилями eUICC активного модема

@@ -16,7 +16,7 @@
 
 /* See readsms.js: SMS via the mmcli wrapper for ModemManager-managed modems */
 function smsToolBin() {
-	return uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_via_mm') == '1' ? '/usr/bin/sms_tool_mm' : '/usr/bin/sms_tool';
+	return uci.get('5gmodem', 'sms', 'sms_via_mm') == '1' ? '/usr/share/5gmodem/sms_tool_mm' : '/usr/bin/sms_tool';
 }
 
 return baseclass.extend({
@@ -469,10 +469,10 @@ return baseclass.extend({
 
 	load: function() {
 		return Promise.all([
-			L.resolveDefault(uci.load('sms_tool_js')),
+			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(uci.load('defmodems'))
 		]).then(L.bind(function() {
-			let onTopSms = uci.get('sms_tool_js', '@sms_tool_js[0]', 'ontopsms');
+			let onTopSms = uci.get('5gmodem', 'sms', 'ontopsms');
 
 			if (onTopSms !== '1') {
 				return null;
@@ -493,9 +493,9 @@ return baseclass.extend({
 			window.modemDetectorCache = {};
 
 			let defmodemSections = uci.sections('defmodems', 'defmodems') || [];
-			let smsCountString = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_count') || '';
-			let storage = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage') || 'MS';
-			let readport = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport') || '/dev/ttyUSB2';
+			let smsCountString = uci.get('5gmodem', 'sms', 'sms_count') || '';
+			let storage = uci.get('5gmodem', 'sms', 'storage') || 'MS';
+			let readport = uci.get('5gmodem', 'sms', 'readport') || '/dev/ttyUSB2';
 
 			let serialModems = defmodemSections.filter(function(s) {
 				return s.modemdata === 'serial';

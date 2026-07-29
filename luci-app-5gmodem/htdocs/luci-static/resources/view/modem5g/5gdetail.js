@@ -3,8 +3,8 @@
 'require form';
 'require fs';
 'require view';
-'require view.modem.modemtabs as modemtabs';
-'require view.modem.netpri as netpri';
+'require view.modem5g.modemtabs as modemtabs';
+'require view.modem5g.netpri as netpri';
 'require ui';
 'require uci';
 'require poll';

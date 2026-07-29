@@ -13,7 +13,7 @@ debug_log() {
 
 echo "=== START DEBUG $(date '+%Y-%m-%d %H:%M:%S') ===" > "$DEBUG_FILE"
 
-LEDX=$(uci -q get sms_tool_js.@sms_tool_js[0].smsled)
+LEDX=$(uci -q get 5gmodem.sms.smsled)
 debug_log "LEDX: $LEDX"
 
 LEDT="/sys/class/leds/$LEDX/trigger"
@@ -40,10 +40,10 @@ is_new_format() {
 handle_old_format() {
     debug_log "=== OLD FORMAT ==="
     
-    DEV=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
+    DEV=$(uci -q get 5gmodem.sms.readport)
     debug_log "DEV (readport): $DEV"
     
-    MEM=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
+    MEM=$(uci -q get 5gmodem.sms.storage)
     debug_log "MEM (storage): $MEM"
     
     STX=$(sms_tool -s $MEM -d $DEV status | cut -c23-27)
@@ -52,7 +52,7 @@ handle_old_format() {
     SMS=$(echo $STX | tr -dc '0-9')
     debug_log "SMS (current count): $SMS"
     
-    SMSC=$(uci -q get sms_tool_js.@sms_tool_js[0].sms_count)
+    SMSC=$(uci -q get 5gmodem.sms.sms_count)
     debug_log "SMSC (saved raw): '$SMSC'"
     
     SMSD=$(echo $SMSC | tr -dc '0-9')
@@ -89,7 +89,7 @@ handle_new_format() {
     
     debug_log "File /etc/config/defmodems exists"
     
-    SMSC=$(uci -q get sms_tool_js.@sms_tool_js[0].sms_count)
+    SMSC=$(uci -q get 5gmodem.sms.sms_count)
     debug_log "Full sms_count from config: '$SMSC'"
     
     debug_log "Scanning for serial modems..."
@@ -116,7 +116,7 @@ handle_new_format() {
         
         debug_log "Modem #$modem_num: comm_port='$DEV'"
         
-        MEM=$(uci -q get sms_tool_js.@sms_tool_js[0].storage)
+        MEM=$(uci -q get 5gmodem.sms.storage)
         [ -z "$MEM" ] && MEM="MS"
         debug_log "Modem #$modem_num: storage='$MEM'"
         
@@ -166,7 +166,7 @@ handle_new_format() {
     return 0
 }
 
-SMSC=$(uci -q get sms_tool_js.@sms_tool_js[0].sms_count)
+SMSC=$(uci -q get 5gmodem.sms.sms_count)
 debug_log "=== MAIN LOGIC ==="
 debug_log "sms_count value: '$SMSC'"
 

@@ -71,7 +71,7 @@ let phonebookEditorDialog = baseclass.extend({
 										let reader = new FileReader();
 										reader.onload = function(event) {
 											let content = event.target.result;
-											let targetPath = '/etc/modem/phonebook.user';
+											let targetPath = '/etc/5gmodem/modem/phonebook.user';
 											fs.write(targetPath, content)
 												.then(function() {
 													popTimeout(null, E('p', {}, _('File uploaded and saved to') + ' ' + targetPath), 5000, 'info');
@@ -114,7 +114,7 @@ let phonebookEditorDialog = baseclass.extend({
 							let textarea = document.getElementById('phonebook_modal_editor');
 							let newContent = textarea.value.trim().replace(/\r\n/g, '\n') + '\n';
 							
-							fs.write('/etc/modem/phonebook.user', newContent)
+							fs.write('/etc/5gmodem/modem/phonebook.user', newContent)
 								.then(function() {
 									popTimeout(null, E('p', {}, _('Phonebook saved successfully')), 5000, 'info');
 									ui.hideModal();
@@ -137,8 +137,8 @@ let phonebookEditorDialog = baseclass.extend({
 let ussdCodesManagerDialog = baseclass.extend({
 	__init__: function(title) {
 		this.title = title;
-		this.baseDir = '/etc/modem/ussdcodes';
-		this.fallbackFile = '/etc/modem/ussdcodes.user';
+		this.baseDir = '/etc/5gmodem/modem/ussdcodes';
+		this.fallbackFile = '/etc/5gmodem/modem/ussdcodes.user';
 		this.currentFile = null;
 	},
 
@@ -554,8 +554,8 @@ let ussdCodesManagerDialog = baseclass.extend({
 let atCommandsManagerDialog = baseclass.extend({
 	__init__: function(title) {
 		this.title = title;
-		this.baseDir = '/etc/modem/atcmmds';
-		this.fallbackFile = '/etc/modem/atcmmds.user';
+		this.baseDir = '/etc/5gmodem/modem/atcmmds';
+		this.fallbackFile = '/etc/5gmodem/modem/atcmmds.user';
 		this.currentFile = null;
 	},
 

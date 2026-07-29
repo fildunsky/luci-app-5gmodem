@@ -5,9 +5,9 @@
 'require ui';
 'require uci';
 'require view';
-'require view.modem.modemtabs as modemtabs';
-'require sms-tool-js.editors as editors';
-'require sms-tool-js.smssettings as smssettings';
+'require view.modem5g.modemtabs as modemtabs';
+'require sms-tool-5gm.editors as editors';
+'require sms-tool-5gm.smssettings as smssettings';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -310,7 +310,7 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let phn = document.getElementById('phonenumber').value;
-		let sections = uci.sections('sms_tool_js');
+		let sections = uci.sections('5gmodem');
 		let port = sections[0].sendport;
 		let dx = sections[0].delay * 1000;
 		let get_smstxt = document.getElementById('smstext').value;
@@ -405,7 +405,7 @@ return view.extend({
 		let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 		if (gsm7Radio) gsm7Radio.checked = true;
 
-		let prefixnum, sections = uci.sections('sms_tool_js');
+		let prefixnum, sections = uci.sections('5gmodem');
 		let addprefix = sections[0].prefix;
 		if ( addprefix == '1' )
 			{
@@ -439,7 +439,7 @@ return view.extend({
 		
 		if (serialModems.length === 0) return;
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sendport');
+		let currentPort = uci.get('5gmodem', 'sms', 'sendport');
 		let currentIndex = serialModems.findIndex(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -451,7 +451,7 @@ return view.extend({
 		let newModem = serialModems[newIndex];
 		
 		if (newModem && newModem.comm_port) {
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'sendport', newModem.comm_port);
+			uci.set('5gmodem', 'sms', 'sendport', newModem.comm_port);
 			uci.save();
 			uci.apply().then(function() {
 				let modemText = document.querySelector('.modem-display-text');
@@ -465,8 +465,8 @@ return view.extend({
 
 	load: function() {
 		return Promise.all([
-			L.resolveDefault(fs.read_direct('/etc/modem/phonebook.user'), null),
-			uci.load('sms_tool_js'),
+			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/phonebook.user'), null),
+			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems'))
 		]);
 	},
@@ -483,7 +483,7 @@ return view.extend({
 
 	renderMain: function (loadResults) {
 
-	let group, prefixnum, sections = uci.sections('sms_tool_js');
+	let group, prefixnum, sections = uci.sections('5gmodem');
 	let self = this;
 
 	if ( sections[0].sendingroup == '1' )
@@ -517,7 +517,7 @@ return view.extend({
 			});
 		}
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sendport');
+		let currentPort = uci.get('5gmodem', 'sms', 'sendport');
 		let currentModem = serialModems.find(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -617,7 +617,7 @@ return view.extend({
 										let del = document.getElementById('phonenumber');
 											if (del) {
 												let ovc = document.getElementById('phonenumber');
-												let prefixnum, sections = uci.sections('sms_tool_js');
+												let prefixnum, sections = uci.sections('5gmodem');
 												let addprefix = sections[0].prefix;
 												if ( addprefix == '1' )
 													{
@@ -725,7 +725,7 @@ return view.extend({
 					E('button', {
 						'class': 'cbi-button',
 						'click': ui.createHandlerFn(this, function() {
-							return fs.trimmed('/etc/modem/phonebook.user').then(function(content) {
+							return fs.trimmed('/etc/5gmodem/modem/phonebook.user').then(function(content) {
 								new editors.phonebookEditorDialog(_('Edit User Contacts'), content || '').show();
 							}).catch(function() {
 								new editors.phonebookEditorDialog(_('Edit User Contacts'), '').show();

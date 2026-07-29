@@ -12,12 +12,12 @@ send_email() {
     local body="$3"
     local error_msg=""
     
-    local from=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_sender)
-    local user=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_user)
-    local password=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_password)
-    local smtp=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_smtp)
-    local port=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_smtp_port)
-    local security=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_security)
+    local from=$(uci -q get 5gmodem.sms.forward_sms_mail_sender)
+    local user=$(uci -q get 5gmodem.sms.forward_sms_mail_user)
+    local password=$(uci -q get 5gmodem.sms.forward_sms_mail_password)
+    local smtp=$(uci -q get 5gmodem.sms.forward_sms_mail_smtp)
+    local port=$(uci -q get 5gmodem.sms.forward_sms_mail_smtp_port)
+    local security=$(uci -q get 5gmodem.sms.forward_sms_mail_security)
 
     if [ -z "$to" ]; then
         echo "Recipient email address is not configured"
@@ -88,7 +88,7 @@ case "$1" in
                 json_get_var subject subject
                 json_get_var message message
 
-                recipient=$(uci -q get sms_tool_js.@sms_tool_js[0].forward_sms_mail_recipient)
+                recipient=$(uci -q get 5gmodem.sms.forward_sms_mail_recipient)
                 
                 error_output=$(send_email "$recipient" "$subject" "$message")
                 result_code=$?

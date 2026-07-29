@@ -82,14 +82,14 @@ esac
 	# The package config may not exist yet on the very first boot (the
 	# uci-defaults script may run after coldplug) - create the section
 	# instead of bailing out.
-	if ! uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null; then
-		touch /etc/config/sms_tool_js
-		uci -q add sms_tool_js sms_tool_js >/dev/null || exit 0
+	if ! uci -q get 5gmodem.sms >/dev/null; then
+		touch /etc/config/5gmodem
+		uci -q set 5gmodem.sms=sms >/dev/null || exit 0
 	fi
 
 	set_if_empty() {
-		[ -z "$(uci -q get "sms_tool_js.@sms_tool_js[0].$1")" ] && \
-			uci set "sms_tool_js.@sms_tool_js[0].$1=$2"
+		[ -z "$(uci -q get "5gmodem.sms.$1")" ] && \
+			uci set "5gmodem.sms.$1=$2"
 	}
 
 	# --- Stage 1: SMS and USSD via ModemManager (no port needed) ---
@@ -97,7 +97,7 @@ esac
 		set_if_empty ussd_via_mm '1'
 		set_if_empty sms_via_mm '1'
 	fi
-	uci commit sms_tool_js
+	uci commit 5gmodem
 
 	# --- Stage 2: WMS route fix (no AT port needed either) ---
 	# The factory WMS routes of this firmware store incoming messages in
@@ -168,7 +168,7 @@ esac
 	set_if_empty ussdport "$ATPORT"
 	set_if_empty atport "$ATPORT"
 
-	uci commit sms_tool_js
+	uci commit 5gmodem
 ) >/dev/null 2>&1 &
 
 exit 0

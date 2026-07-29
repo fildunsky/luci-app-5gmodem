@@ -280,11 +280,11 @@ msgstr "Uživatelské USSD kódy"
 
 msgid ""
 "Each line must have the following format: 'Contact name;phone number'. For "
-"user convenience, the file is saved to the location <code>/etc/modem/"
+"user convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
 "phonebook.user</code>."
 msgstr ""
 "Každý řádek musí mít následující formát: 'Jméno kontaktu;telefonní číslo'. "
-"Pro usnadnění se soubor ukládá do umístění <code>/etc/modem/phonebook.user</"
+"Pro usnadnění se soubor ukládá do umístění <code>/etc/5gmodem/modem/phonebook.user</"
 "code>."
 
 msgid "Press [Enter] to send the command, press [Delete] to delete the command"
@@ -795,11 +795,11 @@ msgstr "Upravit uživatelské kontakty"
 
 msgid ""
 "Each line must have the following format: 'Code description;code'. For user "
-"convenience, the file is saved to the location <code>/etc/modem/ussdcodes/</"
+"convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes/</"
 "code>."
 msgstr ""
 "Každý řádek musí mít následující formát: 'Popis kódu;kód'. Pro usnadnění se "
-"soubor ukládá do umístění <code>/etc/modem/ussdcodes/</code>."
+"soubor ukládá do umístění <code>/etc/5gmodem/modem/ussdcodes/</code>."
 
 msgid ""
 "Each line must have the following format: 'AT command description;AT "
@@ -807,7 +807,7 @@ msgid ""
 "modem/atcmmds/</code>."
 msgstr ""
 "Každý řádek musí mít následující formát: 'Popis AT příkazu;AT příkaz'. Pro "
-"usnadnění se soubor ukládá do umístění <code>/etc/modem/atcmmds/</code>."
+"usnadnění se soubor ukládá do umístění <code>/etc/5gmodem/modem/atcmmds/</code>."
 
 
 

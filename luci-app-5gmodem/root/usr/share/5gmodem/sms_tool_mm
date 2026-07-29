@@ -10,7 +10,7 @@
 # arguments as sms_tool (subset: recv/status/send/delete, flags
 # -s/-d/-f/-j) and prints output in the same format, so
 # luci-app-sms-tool-js works with it without markup changes. The binary
-# is selected via the uci option sms_tool_js.@sms_tool_js[0].sms_via_mm
+# is selected via the uci option 5gmodem.sms.sms_via_mm
 # (set by the hotplug script or by the user).
 #
 . /usr/share/libubox/jshn.sh

@@ -13,39 +13,39 @@ msgstr ""
 msgid "Configuration"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:110
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:110
 msgid "Status:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:111
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:111
 msgid "Connection time:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:112
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:112
 msgid "Downloaded:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:113
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:113
 msgid "Uploaded:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:114
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:114
 msgid "Mode:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:115
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:115
 msgid "Operator:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:117
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:117
 msgid "Signal strength:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:119
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:119
 msgid "Modem type:"
 msgstr ""
 
-#: applications/luci-app-5gmodem/luasrc/view/modem/3gdetail.lua:124
+#: applications/luci-app-5gmodem/luasrc/view/modem5g/3gdetail.lua:124
 msgid "Additional information"
 msgstr ""
 

@@ -36,6 +36,15 @@ pick_sms_port() {
 	_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	[ -n "$_path" ] || return 1
 
+	# ПОД ModemManager ПОРТЫ НЕ НАШИ. Перебор ниже пробует AT на каждом tty
+	# модема, а у MM-модема среди них есть отведённые под GPS и служебные - наш
+	# зонд им только мешает (см. пояснение в netpri.sh operator_probe). SMS у
+	# такого модема и так идут через MM (sms_via_mm), отдельный порт не нужен.
+	_ep_sec="m_$(printf '%s' "$_path" | sed 's/[^A-Za-z0-9]/_/g')"
+	_ep_if=$(uci -q get "5gmodem.$_ep_sec.network")
+	[ -n "$_ep_if" ] || _ep_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ "$(uci -q get "network.$_ep_if.proto" 2>/dev/null)" = "modemmanager" ] && return 1
+
 	for _t in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_path\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		[ "$_t" = "$_at" ] && continue
@@ -56,7 +65,7 @@ _ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 
 CHANGED=0
 for _opt in readport sendport ussdport atport; do
-	_cur=$(uci -q get "sms_tool_js.@sms_tool_js[0].$_opt")
+	_cur=$(uci -q get "5gmodem.sms.$_opt")
 	# Перезаписываем в трёх случаях:
 	#   - пусто (модем подключили до установки пакета);
 	#   - порт УЖЕ НЕ СУЩЕСТВУЕТ: после переподключения номера tty сдвигаются, и
@@ -66,11 +75,11 @@ for _opt in readport sendport ussdport atport; do
 	#     самая конкуренция (см. pick_sms_port выше).
 	if [ -z "$_cur" ] || [ ! -e "$_cur" ] || \
 	   { [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; }; then
-		uci -q set "sms_tool_js.@sms_tool_js[0].$_opt=$PORT"
+		uci -q set "5gmodem.sms.$_opt=$PORT"
 		CHANGED=1
 	fi
 done
 
-[ "$CHANGED" = 1 ] && uci -q commit sms_tool_js
+[ "$CHANGED" = 1 ] && uci -q commit 5gmodem
 
 printf '{"ok":1,"port":"%s","changed":%s}\n' "$PORT" "$CHANGED"

@@ -26,7 +26,7 @@
 		"order": 10,
 		"action": {
 			"type": "view",
-			"path": "modem/5gdetail"
+			"path": "modem5g/5gdetail"
 		}
 	},
 
@@ -35,7 +35,7 @@
 		"order": 15,
 		"action": {
 			"type": "view",
-			"path": "modem/5gesim"
+			"path": "modem5g/5gesim"
 		}
 	},
 
@@ -44,7 +44,7 @@
 		"order": 20,
 		"action": {
 			"type": "view",
-			"path": "modem/5gdebug"
+			"path": "modem5g/5gdebug"
 		}
 	},
 
@@ -53,7 +53,7 @@
 		"order": 30,
 		"action": {
 			"type": "view",
-			"path": "modem/readsms"
+			"path": "modem5g/readsms"
 		}
 	},
 
@@ -62,7 +62,7 @@
 		"order": 40,
 		"action": {
 			"type": "view",
-			"path": "modem/sendsms"
+			"path": "modem5g/sendsms"
 		}
 	},
 
@@ -71,7 +71,7 @@
 		"order": 50,
 		"action": {
 			"type": "view",
-			"path": "modem/sendussd"
+			"path": "modem5g/sendussd"
 		}
 	},
 
@@ -80,7 +80,7 @@
 		"order": 60,
 		"action": {
 			"type": "view",
-			"path": "modem/sendat"
+			"path": "modem5g/sendat"
 		}
 	},
 
@@ -89,7 +89,7 @@
 		"order": 65,
 		"action": {
 			"type": "view",
-			"path": "modem/buttons"
+			"path": "modem5g/buttons"
 		}
 	},
 
@@ -98,7 +98,7 @@
 		"order": 70,
 		"action": {
 			"type": "view",
-			"path": "modem/5gsettings"
+			"path": "modem5g/5gsettings"
 		}
 	}
 }

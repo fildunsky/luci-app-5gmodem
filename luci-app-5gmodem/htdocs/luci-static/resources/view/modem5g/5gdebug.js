@@ -1,6 +1,6 @@
 'use strict';
 'require view';
-'require view.modem.modemtabs as modemtabs';
+'require view.modem5g.modemtabs as modemtabs';
 'require dom';
 'require fs';
 'require ui';
@@ -134,7 +134,7 @@ return view.extend({
 				});
 			}),
 			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(uci.load('sms_tool_js')),
+			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(uci.load('network')),
 			// установленные обработчики протоколов (luci-proto-*): по ним строим
 			// список доступных типов интерфейса для кнопки создания
@@ -744,7 +744,7 @@ return view.extend({
 		   меняем). uci.save() формы сбрасывает и sms_tool_js. */
 		o.write = function(section_id, value) {
 			uci.set('5gmodem', section_id, 'at_port', value);
-			var ss = uci.sections('sms_tool_js', 'sms_tool_js');
+			var ss = uci.sections('5gmodem', 'sms');
 			var sid = (ss && ss[0]) ? ss[0]['.name'] : null;
 			if (sid) {
 				[ 'readport', 'sendport', 'ussdport', 'atport' ].forEach(function(k) {

@@ -5,15 +5,15 @@
 #
 
 sleep 2
-CT=$(uci -q get sms_tool_js.@sms_tool_js[0].checktime)
+CT=$(uci -q get 5gmodem.sms.checktime)
 TX=$(echo $CT | tr -dc '0-9')
 TM=$(($TX * 60))
 
 while [ 1 ]; do 
-	LED=$(uci -q get sms_tool_js.@sms_tool_js[0].lednotify)
+	LED=$(uci -q get 5gmodem.sms.lednotify)
 	if [ $LED == "1" ]; then
     	sleep $TM
-		/sbin/smstool_led.sh >/dev/null 2>&1 &
+		/usr/share/5gmodem/smstool_led.sh >/dev/null 2>&1 &
 		continue
 	fi
 	sleep 1

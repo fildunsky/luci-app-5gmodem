@@ -37,7 +37,7 @@ function update_sms_count_for_modem_sync(newValue, currentPort) {
 		if (currentModemIndex === -1)
 			return newValue;
 
-		let existingSmsCount = uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_count') || '';
+		let existingSmsCount = uci.get('5gmodem', 'sms', 'sms_count') || '';
 		let parts = existingSmsCount.split(' ').filter(function(p) { return p.trim() !== ''; });
 
 		let updated = {};
@@ -200,8 +200,8 @@ function addReceiveIncoming(s) {
 	o.description = _('This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool');
 	o.inputtitle = _('Save as .txt file');
 	o.onclick = function() {
-		return uci.load('sms_tool_js').then(function() {
-			let portES = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+		return uci.load('5gmodem').then(function() {
+			let portES = uci.get('5gmodem', 'sms', 'readport');
 			L.resolveDefault(fs.exec_direct('/usr/bin/sms_tool', [ '-d', portES, '-f', '%Y-%m-%d %H:%M', 'recv', '2>/dev/null']))
 				.then(function(res) {
 					if (!res) return;
@@ -238,8 +238,8 @@ function addReceiveIncoming(s) {
 	o.inputtitle = _('Delete all');
 	o.onclick = function() {
 		if (confirm(_('Delete all the messages?'))) {
-			return uci.load('sms_tool_js').then(function() {
-				let portFD = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
+			return uci.load('5gmodem').then(function() {
+				let portFD = uci.get('5gmodem', 'sms', 'readport');
 				fs.exec_direct('/usr/bin/sms_tool', [ '-d', portFD, 'delete', 'all' ]);
 			});
 		}
@@ -254,10 +254,10 @@ function addNotifications(s) {
 	o.rmempty = false;
 	o.default = true;
 	o.write = function(section_id, value) {
-		return uci.load('sms_tool_js').then(function() {
-			let storeL = uci.get('sms_tool_js', '@sms_tool_js[0]', 'storage');
-			let portR  = uci.get('sms_tool_js', '@sms_tool_js[0]', 'readport');
-			let dsled  = uci.get('sms_tool_js', '@sms_tool_js[0]', 'ledtype');
+		return uci.load('5gmodem').then(function() {
+			let storeL = uci.get('5gmodem', 'sms', 'storage');
+			let portR  = uci.get('5gmodem', 'sms', 'readport');
+			let dsled  = uci.get('5gmodem', 'sms', 'ledtype');
 
 			if (!portR) {
 				ui.addNotification(null, E('p', {}, _('Please configure the SMS reading port first')), 'info');
@@ -274,47 +274,47 @@ function addNotifications(s) {
 
 					if (value == '1') {
 						return update_sms_count_for_modem_sync(u, portR).then(function(updatedValue) {
-							uci.set('sms_tool_js', '@sms_tool_js[0]', 'sms_count', updatedValue);
-							uci.set('sms_tool_js', '@sms_tool_js[0]', 'lednotify', '1');
-							let PTR = uci.get('sms_tool_js', '@sms_tool_js[0]', 'prestart');
+							uci.set('5gmodem', 'sms', 'sms_count', updatedValue);
+							uci.set('5gmodem', 'sms', 'lednotify', '1');
+							let PTR = uci.get('5gmodem', 'sms', 'prestart');
 							return uci.save().then(function() {
 								return L.resolveDefault(fs.read('/etc/crontabs/root'), '');
 							}).then(function(crontab) {
 								let lines = (crontab || '').trim().replace(/\r\n/g, '\n').split('\n');
 								let filteredLines = lines.filter(function(line) {
-									return line.trim() !== '' && !line.includes('my_new_sms');
+									return line.trim() !== '' && !line.includes('5gmodem-sms-notify');
 								});
-								filteredLines.push('1 */' + PTR + ' * * * /etc/init.d/my_new_sms enable && /etc/init.d/my_new_sms restart');
+								filteredLines.push('1 */' + PTR + ' * * * /etc/init.d/5gmodem-sms-notify enable && /etc/init.d/5gmodem-sms-notify restart');
 								return fs.write('/etc/crontabs/root', filteredLines.join('\n') + '\n');
 							}).then(function() {
 								return fs.exec_direct('/etc/init.d/cron', ['restart']);
 							}).then(function() {
-								return fs.exec_direct('/etc/init.d/my_new_sms', ['enable']);
+								return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['enable']);
 							}).then(function() {
-								return fs.exec_direct('/etc/init.d/my_new_sms', ['start']);
+								return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['start']);
 							});
 						});
 					}
 
 					if (value == '0') {
-						uci.set('sms_tool_js', '@sms_tool_js[0]', 'lednotify', '0');
+						uci.set('5gmodem', 'sms', 'lednotify', '0');
 						return uci.save().then(function() {
 							return L.resolveDefault(fs.read('/etc/crontabs/root'), '');
 						}).then(function(crontab) {
 							let lines = (crontab || '').trim().replace(/\r\n/g, '\n').split('\n');
 							let filteredLines = lines.filter(function(line) {
-								return line.trim() !== '' && !line.includes('my_new_sms');
+								return line.trim() !== '' && !line.includes('5gmodem-sms-notify');
 							});
 							return fs.write('/etc/crontabs/root', filteredLines.join('\n') + '\n');
 						}).then(function() {
 							return fs.exec_direct('/etc/init.d/cron', ['restart']);
 						}).then(function() {
-							return fs.exec_direct('/etc/init.d/my_new_sms', ['stop']);
+							return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['stop']);
 						}).then(function() {
-							return fs.exec_direct('/etc/init.d/my_new_sms', ['disable']);
+							return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['disable']);
 						}).then(function() {
 							if (dsled == 'D') {
-								let led = uci.get('sms_tool_js', '@sms_tool_js[0]', 'smsled');
+								let led = uci.get('5gmodem', 'sms', 'smsled');
 								if (led)
 									return fs.write('/sys/class/leds/' + led + '/brightness', '0');
 							}

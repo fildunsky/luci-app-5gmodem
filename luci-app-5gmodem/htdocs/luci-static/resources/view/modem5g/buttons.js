@@ -14,7 +14,7 @@
 	l.id = 'tg-modem-css';
 	l.rel = 'stylesheet';
 	l.type = 'text/css';
-	l.href = L.resource('view/modem/modem.css');
+	l.href = L.resource('view/modem5g/modem.css');
 	document.head.appendChild(l);
 })();
 

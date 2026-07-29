@@ -23,7 +23,7 @@
 	l.id = 'tg-modem-css';
 	l.rel = 'stylesheet';
 	l.type = 'text/css';
-	l.href = L.resource('view/modem/modem.css');
+	l.href = L.resource('view/modem5g/modem.css');
 	document.head.appendChild(l);
 })();
 
@@ -35,7 +35,7 @@
 	Клик по вкладке -> modemswitch.sh switch <usb-path> + перезагрузка страницы.
 
 	Используется темой proton2025 (вставляет шапку НАД под-вкладками) через
-	L.require('view.modem.modemtabs').renderBar().
+	L.require('view.modem5g.modemtabs').renderBar().
 */
 
 /* Бренд по VID (или по характерному имени продукта). USB-дескриптор часто даёт

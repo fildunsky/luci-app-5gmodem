@@ -188,6 +188,34 @@ fastboot_verdict() {
 	echo "Приложение само в загрузчик не лезет: прошивочные режимы - не наша зона."
 }
 
+# МОДЕМ СПИТ (power-state: low).
+# Причина неочевидная: интерфейс бесконечно пересоздаётся, в журнале сыплется
+# «couldn't enable the modem: Invalid transition», и выглядит это как поломка
+# протокола. На деле у модема выключено радио: ModemManager пытается поднять
+# питание, модем отвечает OperationNotAllowed, включение падает, netifd повторяет
+# попытку каждые пару секунд. Единственный признак - одна строка в mmcli, которую
+# в длинном выводе легко пропустить (живой отчёт: Dell DW5821e на Radxa ROCK 5T).
+power_state_verdict() {
+	command -v mmcli >/dev/null 2>&1 || { echo "mmcli нет - проверить нечем"; return; }
+	_ps_i=$("$RES/modemswitch.sh" mmindex 2>/dev/null)
+	[ -n "$_ps_i" ] || { echo "модем не зарегистрирован в ModemManager - проверка не нужна"; return; }
+	_ps_k=$(mmcli -m "$_ps_i" -K 2>/dev/null)
+	_ps_p=$(printf '%s\n' "$_ps_k" | sed -n 's/^modem\.generic\.power-state *: *//p' | head -1)
+	_ps_s=$(printf '%s\n' "$_ps_k" | sed -n 's/^modem\.generic\.state *: *//p' | head -1)
+	echo "power-state: ${_ps_p:-?}   state: ${_ps_s:-?}"
+	case "$_ps_p" in
+		low|off)
+			echo "ПРОБЛЕМА: радио модема выключено. Пока он в этом состоянии, соединение"
+			echo "не поднимется НИКАКИМ протоколом, а в журнале будет бесконечное"
+			echo "«couldn't enable the modem: Invalid transition» - это следствие, а не причина."
+			echo "Лечится по возрастанию усилий:"
+			echo "  mmcli -m $_ps_i --set-power-state-on   (и затем ifup нужного интерфейса)"
+			echo "  либо по AT на его порту:  sms_tool -d <порт> at \"AT+CFUN=1\""
+			echo "  либо снять питание с модема - часть прошивок выходит из сна только так."
+			;;
+	esac
+}
+
 proxy_verdict() {
 	echo ""
 	echo "----- Конфликт за канал управления (итог) -----"
@@ -309,7 +337,7 @@ report() {
 
 	collect "config"
 	run 5  "uci 5gmodem" uci -q show 5gmodem
-	run 5  "uci sms_tool_js" uci -q show sms_tool_js
+	run 5  "uci 5gmodem (SMS-раздел)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' || echo '(секция sms пуста)'"
 	run 5  "uci lpac" uci -q show lpac
 	# Пароли/ключи из network не выводим: там PPP/PPPoE-креды и Wi-Fi.
 	run 5  "uci network (без секретов)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret'"
@@ -424,6 +452,7 @@ report() {
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
 	run 10 "Питание и стабильность USB (итог)" usb_flap_verdict
 	run 10 "Модем в режиме загрузчика? (итог)" fastboot_verdict
+	run 20 "Питание радио модема (итог)" power_state_verdict
 	run 10 "Пинг 77.88.8.8" ping -c 3 -W 2 77.88.8.8
 	# IPv6-связность ЛИТЕРАЛОМ (без DNS - его при глушении тоже режут): Яндекс-DNS
 	# 2a02:6b8::feed:0ff - v6-аналог 77.88.8.8. ipv6-internet.yandex.net не резолвится.

@@ -22,17 +22,16 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+usb-modeswitch +kmod-usb-acm \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.0.7
+PKG_VERSION:=2.1.0
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
 /etc/config/5gmodem
-/etc/config/sms_tool_js
-/etc/modem/atcmmds.user
-/etc/modem/atcmmds/*.user
-/etc/modem/phonebook.user
-/etc/modem/ussdcodes.user
-/etc/modem/ussdcodes/*.user
+/etc/5gmodem/modem/atcmmds.user
+/etc/5gmodem/modem/atcmmds/*.user
+/etc/5gmodem/modem/phonebook.user
+/etc/5gmodem/modem/ussdcodes.user
+/etc/5gmodem/modem/ussdcodes/*.user
 endef
 
 define Package/luci-app-5gmodem/postinst

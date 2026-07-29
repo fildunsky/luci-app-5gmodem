@@ -5,8 +5,8 @@
 'require ui';
 'require uci';
 'require view';
-'require view.modem.modemtabs as modemtabs';
-'require sms-tool-js.editors as editors';
+'require view.modem5g.modemtabs as modemtabs';
+'require sms-tool-5gm.editors as editors';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -119,7 +119,7 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let atcmd = document.getElementById('cmdvalue').value;
-		let sections = uci.sections('sms_tool_js');
+		let sections = uci.sections('5gmodem');
 		let port = sections[0].atport;
 
 		if ( atcmd.length < 2 )
@@ -173,7 +173,7 @@ return view.extend({
 		
 		this.saveSettingsToLocalStorage(selectedFile);
 		
-		return fs.read_direct('/etc/modem/atcmmds/' + selectedFile).then(function(content) {
+		return fs.read_direct('/etc/5gmodem/modem/atcmmds/' + selectedFile).then(function(content) {
 			selectElement.innerHTML = '';
 			// Плейсхолдер первым пунктом: иначе первая реальная команда (AT)
 			// уже "выбрана" и повторный клик по ней не даёт события change,
@@ -214,7 +214,7 @@ return view.extend({
 		
 		if (serialModems.length === 0) return;
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'atport');
+		let currentPort = uci.get('5gmodem', 'sms', 'atport');
 		let currentIndex = serialModems.findIndex(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -226,7 +226,7 @@ return view.extend({
 		let newModem = serialModems[newIndex];
 		
 		if (newModem && newModem.comm_port) {
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'atport', newModem.comm_port);
+			uci.set('5gmodem', 'sms', 'atport', newModem.comm_port);
 			uci.save();
 			uci.apply().then(function() {
 				let modemText = document.querySelector('.modem-display-text');
@@ -240,9 +240,9 @@ return view.extend({
 
 	load: function() {
 		return Promise.all([
-			L.resolveDefault(fs.read_direct('/etc/modem/atcmmds.user'), null),
-			L.resolveDefault(fs.list('/etc/modem/atcmmds'), []),
-			uci.load('sms_tool_js'),
+			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds.user'), null),
+			L.resolveDefault(fs.list('/etc/5gmodem/modem/atcmmds'), []),
+			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems'))
 		]);
 	},
@@ -261,7 +261,7 @@ return view.extend({
 			});
 		}
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'atport');
+		let currentPort = uci.get('5gmodem', 'sms', 'atport');
 		let currentModem = serialModems.find(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -326,7 +326,7 @@ return view.extend({
 								}
 								
 								setTimeout(function() {
-									L.resolveDefault(fs.read_direct('/etc/modem/atcmmds/' + fileToLoad), '').then(function(content) {
+									L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds/' + fileToLoad), '').then(function(content) {
 										let selectElement = document.getElementById('tk');
 										if (!selectElement) return;
 

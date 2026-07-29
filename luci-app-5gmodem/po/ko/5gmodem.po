@@ -274,11 +274,11 @@ msgstr "사용자 USSD 코드"
 
 msgid ""
 "Each line must have the following format: 'Contact name;phone number'. For "
-"user convenience, the file is saved to the location <code>/etc/modem/"
+"user convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
 "phonebook.user</code>."
 msgstr ""
 "각 줄의 형식은 다음과 같아야 합니다: '연락처 이름;전화번호'. 사용자의 편의를 "
-"위해 파일은 <code>/etc/modem/phonebook.user</code>에 저장됩니다."
+"위해 파일은 <code>/etc/5gmodem/modem/phonebook.user</code>에 저장됩니다."
 
 msgid "Press [Enter] to send the command, press [Delete] to delete the command"
 msgstr "[Enter] 키를 눌러 명령을 보내고, [Delete] 키를 눌러 명령을 삭제합니다"
@@ -401,11 +401,11 @@ msgstr "사용자 연락처 편집"
 
 msgid ""
 "Each line must have the following format: 'Code description;code'. For user "
-"convenience, the file is saved to the location <code>/etc/modem/ussdcodes/</"
+"convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes/</"
 "code>."
 msgstr ""
 "각 줄의 형식은 다음과 같아야 합니다: '코드 설명;코드'. 사용자의 편의를 위해 "
-"파일은 <code>/etc/modem/ussdcodes/</code>에 저장됩니다."
+"파일은 <code>/etc/5gmodem/modem/ussdcodes/</code>에 저장됩니다."
 
 msgid ""
 "Each line must have the following format: 'AT command description;AT "
@@ -413,7 +413,7 @@ msgid ""
 "modem/atcmmds/</code>."
 msgstr ""
 "각 줄의 형식은 다음과 같아야 합니다: 'AT 명령 설명;AT 명령'. 사용자의 편의를 "
-"위해 파일은 <code>/etc/modem/atcmmds/</code>에 저장됩니다."
+"위해 파일은 <code>/etc/5gmodem/modem/atcmmds/</code>에 저장됩니다."
 
 
 

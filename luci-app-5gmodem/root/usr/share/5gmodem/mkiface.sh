@@ -423,10 +423,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		uci -q commit 5gmodem
 
 		# SMS/USSD via the AT port - ModemManager cannot manage this modem
-		if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
-			uci -q set "sms_tool_js.@sms_tool_js[0].sms_via_mm=0"
-			uci -q set "sms_tool_js.@sms_tool_js[0].ussd_via_mm=0"
-			uci -q commit sms_tool_js
+		if uci -q get 5gmodem.sms >/dev/null 2>&1; then
+			uci -q set "5gmodem.sms.sms_via_mm=0"
+			uci -q set "5gmodem.sms.ussd_via_mm=0"
+			uci -q commit 5gmodem
 		fi
 
 		# NOTE: deliberately leave ModemManager as-is (another modem may need it);
@@ -669,19 +669,19 @@ uci -q commit 5gmodem
 #    which needs the WMS routes on the SIM (set below) to receive SMS.
 # This keeps the SMS/USSD pages working whichever interface is active,
 # instead of silently talking to a daemon that is no longer running.
-if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+if uci -q get 5gmodem.sms >/dev/null 2>&1; then
 	case "$PROTO" in
 		modemmanager)
-			uci -q set "sms_tool_js.@sms_tool_js[0].sms_via_mm=1"
-			uci -q set "sms_tool_js.@sms_tool_js[0].ussd_via_mm=1"
+			uci -q set "5gmodem.sms.sms_via_mm=1"
+			uci -q set "5gmodem.sms.ussd_via_mm=1"
 			;;
 		*)
 			# любой не-MM протокол: MM выключен -> SMS/USSD через AT-порт
-			uci -q set "sms_tool_js.@sms_tool_js[0].sms_via_mm=0"
-			uci -q set "sms_tool_js.@sms_tool_js[0].ussd_via_mm=0"
+			uci -q set "5gmodem.sms.sms_via_mm=0"
+			uci -q set "5gmodem.sms.ussd_via_mm=0"
 			;;
 	esac
-	uci -q commit sms_tool_js
+	uci -q commit 5gmodem
 fi
 
 # WMS SMS routes: this modem's factory default stores incoming messages in NV,

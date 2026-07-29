@@ -42,7 +42,7 @@ apply_ussd_quirk() {   # $1 = секция модема
 		_v=$(ussd_raw_for "$(uci -q get "$CFG.$1.model")" "$(uci -q get "$CFG.$1.vidpid")")
 	fi
 	case "$_v" in
-		0|1) uci -q set "sms_tool_js.@sms_tool_js[0].ussd=$_v" ;;
+		0|1) uci -q set "5gmodem.sms.ussd=$_v" ;;
 	esac
 }
 active_path() { uci -q get "$CFG.@5gmodem[0].active_modem"; }
@@ -795,8 +795,8 @@ set_sms_storage() {
 	AT="$1"
 	[ -n "$AT" ] && [ -e "$AT" ] || return 0
 	command -v sms_tool >/dev/null 2>&1 || return 0
-	uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1 || return 0
-	[ -z "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" ] || return 0
+	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
+	[ -z "$(uci -q get 5gmodem.sms.storage)" ] || return 0
 	me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 	sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 	if   [ "${me:-0}" -gt 0 ] 2>/dev/null; then STG=ME
@@ -805,8 +805,8 @@ set_sms_storage() {
 	elif [ -n "$sm" ]; then STG=SM          # only SM answered
 	else STG=ME
 	fi
-	uci -q set "sms_tool_js.@sms_tool_js[0].storage=$STG"
-	uci -q commit sms_tool_js
+	uci -q set "5gmodem.sms.storage=$STG"
+	uci -q commit 5gmodem
 }
 
 # Настроить ОДИН модем по usb-пути. Вынесено из autosetup ради цикла по всем
@@ -1241,12 +1241,12 @@ smsopt)
 			information|mergesms|mergesms_auto|storage) ;;
 			*) continue ;;
 		esac
-		_cur=$(uci -q get "sms_tool_js.@sms_tool_js[0].$_k")
+		_cur=$(uci -q get "5gmodem.sms.$_k")
 		[ "$_cur" = "$_v" ] && continue
-		uci -q set "sms_tool_js.@sms_tool_js[0].$_k=$_v"
+		uci -q set "5gmodem.sms.$_k=$_v"
 		_ch=1
 	done
-	[ "$_ch" = 1 ] && uci -q commit sms_tool_js
+	[ "$_ch" = 1 ] && uci -q commit 5gmodem
 	printf '{"changed":%s}\n' "$_ch"
 	;;
 
@@ -1266,8 +1266,8 @@ ackswap)
 	;;
 
 hidenumberhint)
-	uci -q set "sms_tool_js.@sms_tool_js[0].information=0"
-	uci -q commit sms_tool_js
+	uci -q set "5gmodem.sms.information=0"
+	uci -q commit 5gmodem
 	echo '{"result":"ok"}'
 	;;
 
@@ -1411,22 +1411,22 @@ switch)
 	uci -q commit "$CFG"
 
 	# SMS/USSD ports follow the AT port
-	if [ -n "$ATP" ] && uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+	if [ -n "$ATP" ] && uci -q get 5gmodem.sms >/dev/null 2>&1; then
 		for k in readport sendport ussdport atport; do
-			uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"
+			uci -q set "5gmodem.sms.$k=$ATP"
 		done
 		apply_ussd_quirk "$SEC"
-		uci -q commit sms_tool_js
+		uci -q commit 5gmodem
 		set_sms_storage "$ATP"
-	elif [ -z "$ATP" ] && uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
+	elif [ -z "$ATP" ] && uci -q get 5gmodem.sms >/dev/null 2>&1; then
 		# У модема НЕТ AT-порта (HiLink). Раньше порты просто оставались от
 		# предыдущего модема - и страница SMS показывала ЕГО сообщения, выдавая
 		# их за сообщения выбранного модема. Чужая переписка под чужим именем
 		# хуже пустого экрана, поэтому чистим.
 		for k in readport sendport ussdport atport; do
-			uci -q delete "sms_tool_js.@sms_tool_js[0].$k" 2>/dev/null
+			uci -q delete "5gmodem.sms.$k" 2>/dev/null
 		done
-		uci -q commit sms_tool_js
+		uci -q commit 5gmodem
 	fi
 
 	# drop the cached AT port so detect.sh re-resolves for the new modem
@@ -2144,9 +2144,9 @@ resolve)
 	if [ -n "$ATP" ] && [ -e "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"
-		if uci -q get sms_tool_js.@sms_tool_js[0] >/dev/null 2>&1; then
-			for k in readport sendport ussdport atport; do uci -q set "sms_tool_js.@sms_tool_js[0].$k=$ATP"; done
-			uci -q commit sms_tool_js
+		if uci -q get 5gmodem.sms >/dev/null 2>&1; then
+			for k in readport sendport ussdport atport; do uci -q set "5gmodem.sms.$k=$ATP"; done
+			uci -q commit 5gmodem
 			set_sms_storage "$ATP"
 			# ...и СРАЗУ развести обратно. Строкой выше все порты SMS/USSD/AT
 			# приравнены к порту метрик - это правильная отправная точка (порт

@@ -39,9 +39,9 @@ _active_kind() {
 # подменяла путь к бинарю, из-за чего КАЖДАЯ операция (чтение, удаление,
 # отправка) знала про транспорт и повторяла эту логику по-своему.
 _smstool() {
-	if [ "$(uci -q get sms_tool_js.@sms_tool_js[0].sms_via_mm)" = "1" ] \
-	   && [ -x /usr/bin/sms_tool_mm ]; then
-		echo /usr/bin/sms_tool_mm
+	if [ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
+	   && [ -x /usr/share/5gmodem/sms_tool_mm ]; then
+		echo /usr/share/5gmodem/sms_tool_mm
 		return
 	fi
 	command -v sms_tool >/dev/null 2>&1 && echo /usr/bin/sms_tool || echo sms_tool
@@ -163,7 +163,7 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 fi
 
 # Обычный модем - прежний путь. Порт берём из аргумента, иначе из настроек.
-[ -n "$PORT" ] || PORT=$(uci -q get sms_tool_js.@sms_tool_js[0].readport)
+[ -n "$PORT" ] || PORT=$(uci -q get 5gmodem.sms.readport)
 [ -n "$PORT" ] || PORT=$("$RES/detect.sh" 2>/dev/null)
 # Порта нет вовсе - отдаём пустой список, а не ошибку: страница покажет
 # «сообщений нет», и это честнее, чем красный текст про несуществующий /dev.

@@ -10,7 +10,7 @@ STOP=01
 
 start_service() {
     procd_open_instance
-    procd_set_param command /bin/sh "/sbin/sms_led.sh"
+    procd_set_param command /bin/sh "/usr/share/5gmodem/sms_led.sh"
     procd_close_instance
 }
 
@@ -22,7 +22,7 @@ service_triggers()
 
 
 stop_service() {
-	for KILLPID in `ps | grep 'my_new_sms' | awk ' { print $1;}'`; do 
+	for KILLPID in `ps | grep '5gmodem-sms-notify' | awk ' { print $1;}'`; do 
   	kill -9 $KILLPID >/dev/null 2>&1 &
 	done
 	sleep 1

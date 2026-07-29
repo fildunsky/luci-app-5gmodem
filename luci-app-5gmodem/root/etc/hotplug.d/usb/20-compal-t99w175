@@ -23,7 +23,7 @@ if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
         sleep 5
 
         # Драйвер берём из общей таблицы (usbports.sh), а не вписываем здесь:
-        # раньше 90d6 привязывался тут через option1, а в 70-sms-tool-js-modems -
+        # раньше 90d6 привязывался тут через option1, а в 70-5gmodem-sms-modems -
         # через generic, и отрабатывали оба обработчика.
         /usr/share/5gmodem/usbports.sh bind "05c6" "$PID"
 

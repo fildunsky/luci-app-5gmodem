@@ -5,9 +5,9 @@
 'require ui';
 'require uci';
 'require view';
-'require view.modem.modemtabs as modemtabs';
-'require sms-tool-js.editors as editors';
-'require sms-tool-js.smssettings as smssettings';
+'require view.modem5g.modemtabs as modemtabs';
+'require sms-tool-5gm.editors as editors';
+'require sms-tool-5gm.smssettings as smssettings';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -264,7 +264,7 @@ return view.extend({
 		
 		this.saveSettingsToLocalStorage(selectedFile);
 		
-		return fs.read_direct('/etc/modem/ussdcodes/' + selectedFile).then(function(content) {
+		return fs.read_direct('/etc/5gmodem/modem/ussdcodes/' + selectedFile).then(function(content) {
 			selectElement.innerHTML = '';
 			// плейсхолдер первым пунктом: иначе первый реальный USSD-код уже
 			// "выбран" и повторный клик по нему не даёт события change.
@@ -324,7 +324,7 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let ussd = document.getElementById('cmdvalue').value;
-		let sections = uci.sections('sms_tool_js');
+		let sections = uci.sections('5gmodem');
 		let port = sections[0].ussdport;
 		let get_ussd = sections[0].ussd;
 		let get_pdu = sections[0].pdu;
@@ -456,7 +456,7 @@ return view.extend({
 		
 		if (serialModems.length === 0) return;
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'ussdport');
+		let currentPort = uci.get('5gmodem', 'sms', 'ussdport');
 		let currentIndex = serialModems.findIndex(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -468,7 +468,7 @@ return view.extend({
 		let newModem = serialModems[newIndex];
 		
 		if (newModem && newModem.comm_port) {
-			uci.set('sms_tool_js', '@sms_tool_js[0]', 'ussdport', newModem.comm_port);
+			uci.set('5gmodem', 'sms', 'ussdport', newModem.comm_port);
 			uci.save();
 			uci.apply().then(function() {
 				let modemText = document.querySelector('.modem-display-text');
@@ -483,9 +483,9 @@ return view.extend({
 	load: function() {
 
 		return Promise.all([
-			L.resolveDefault(fs.read_direct('/etc/modem/ussdcodes.user'), null),
-			L.resolveDefault(fs.list('/etc/modem/ussdcodes'), []),
-			uci.load('sms_tool_js'),
+			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/ussdcodes.user'), null),
+			L.resolveDefault(fs.list('/etc/5gmodem/modem/ussdcodes'), []),
+			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems')),
 			/* Знаем ли мы наверняка, что USSD на этом модеме не работает.
 			   Ответ идёт из базы проверенных модемов (quirks.sh), сам модем при
@@ -517,7 +517,7 @@ return view.extend({
 			});
 		}
 		
-		let currentPort = uci.get('sms_tool_js', '@sms_tool_js[0]', 'ussdport');
+		let currentPort = uci.get('5gmodem', 'sms', 'ussdport');
 		let currentModem = serialModems.find(function(s) {
 			return s.comm_port === currentPort;
 		});
@@ -609,7 +609,7 @@ return view.extend({
 								}
 								
 								setTimeout(function() {
-									L.resolveDefault(fs.read_direct('/etc/modem/ussdcodes/' + fileToLoad), '').then(function(content) {
+									L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/ussdcodes/' + fileToLoad), '').then(function(content) {
 										let selectElement = document.getElementById('tk');
 										if (!selectElement) return;
 
