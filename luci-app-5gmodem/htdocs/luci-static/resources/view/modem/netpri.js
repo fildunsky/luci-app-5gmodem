@@ -77,170 +77,6 @@ function pingInfo(host) {
 	return { host: host, name: host, color: null, glyph: '⚡', custom: true };
 }
 
-var CSS = `
-.netpribar { margin: 0 0 1em 0; }
-/* Небольшой заголовок «Приоритет интернета» - только когда виджет включён
-   (см. buildBar). Пояснение для новых пользователей; сворачивания нет. */
-.netpribar .netpribar-title {
-	font-size: .95em; font-weight: 600; opacity: .8; padding: 0 0 .35em 0;
-	display: block; user-select: none;
-}
-.netpribar .netpri-row { display: flex; flex-wrap: wrap; gap: .4em; align-items: stretch; }
-/* proton2025 добавляет ".btn+.btn{margin-left:8px}" между соседними кнопками -
-   поверх gap:.4em ряда. Из-за этого промежуток МЕЖДУ интерфейсными кнопками
-   шире (.4em+8px), чем между ssclash и спидтестом (там margin-left переопределён,
-   остаётся только .4em). Снимаем добавку с интерфейсных кнопок, чтобы ВСЕ
-   промежутки были ровно gap ряда. margin-left:auto у ssclash/спидтеста (правое
-   выравнивание) при этом не трогаем - их из правила исключаем. */
-/* Все кнопки без отступа (гасим proton .btn+.btn), а ПЕРВЫЙ правый виджет
-   (YouTube/SSClash/спидтест - что идёт первым) получает margin-left:auto и
-   уводит всю правую группу к правому краю. */
-.netpribar .netpri-row > .netpri-btn:not(.netpri-rightstart) { margin-left: 0; }
-.netpribar .netpri-row > .netpri-rightstart { margin-left: auto; }
-.netpribar .netpri-btn {
-	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
-	display: flex; flex-direction: column; align-items: flex-start; text-align: left;
-	line-height: 1.15;
-	/* proton2025 sets "button,.btn{gap:8px}", which on our flex-COLUMN buttons turns
-	   into big vertical gaps between the three lines; neutralise it (bootstrap has
-	   no such rule, so it already looks tight there). */
-	gap: 0;
-}
-.netpribar .netpri-btn .netpri-sub { font-size: .72em; font-weight: 400; opacity: .7; }
-.netpribar .netpri-btn .netpri-name { display: flex; align-items: center; gap: .35em; }
-.netpribar .netpri-btn .netpri-ic { display: block; width: 16px; height: 16px; flex: 0 0 auto; }
-.netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
-.netpribar .netpri-btn .netpri-ip.empty { opacity: .4; }
-.netpribar .netpri-btn.active {
-	/* Активную помечаем ровно тем же, что тема даёт кнопке на hover
-	   (.cbi-button:hover -> border-color: accent, box-shadow: none).
-	   Внутренней обводки inset 0 0 0 1px здесь была - она удваивала рамку,
-	   и выделение выглядело жирным. */
-	border-color: var(--proton-accent, #0095ff);
-	/* pointer-events НЕ отключаем: иначе активную карточку нельзя схватить для
-	   перетаскивания. Клик по уже активной и так ничего не делает (обработчик
-	   click рано выходит). */
-}
-/* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому
-   краю (сервис сверху, скорость по центру, публичный IP снизу). */
-.netpribar .netpri-btn.netpri-st { align-items: flex-end; text-align: right; }
-.netpribar .netpri-st .netpri-st-speed { display: flex; align-items: center; gap: .15em; }
-.netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
-.netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
-/* Фаза теста ЗАЛИВАЕТ ФОН кнопки как прогресс-бар: загрузка - полупрозрачным
-   зелёным, отдача - синим. Ширина заливки = доля прошедшего времени фазы
-   (--st-p ставит JS по elapsed/secs). Заменило пульсирующую рамку: прогресс
-   честнее и не зависит от box-model. Заливку кладёт ::before ПОД контентом,
-   overflow:hidden обрезает её по скруглению кнопки. */
-.netpribar .netpri-st { position: relative; overflow: hidden; transition: border-color .3s ease; }
-.netpribar .netpri-st.st-dl { --st-c: #2ea043; }
-.netpribar .netpri-st.st-ul { --st-c: #0095ff; }
-.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul { border-color: var(--st-c); }
-.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before {
-	content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-	width: var(--st-p, 0%);
-	background: var(--st-c); opacity: .16;
-	transition: width .25s linear;   /* сглаживаем дискретные тики JS */
-	pointer-events: none; z-index: 0;
-}
-/* Отдача заполняется В ДРУГУЮ СТОРОНУ - справа налево: якорим заливку к правому
-   краю (это симметрично «стрелке вверх» и визуально отличает фазу от загрузки). */
-.netpribar .netpri-st.st-ul::before { left: auto; right: 0; }
-/* контент - НАД заливкой (::before позиционирован, поэтому детей поднимаем) */
-.netpribar .netpri-st > * { position: relative; z-index: 1; }
-/* Стрелка ТЕКУЩЕЙ фазы ПУЛЬСИРУЕТ свечением - как точки статусов (box-shadow-
-   свечение), только анимированным и цветом фазы (--st-c). Пульсирует ТОЛЬКО
-   активная: в загрузке - стрелка вниз (.st-arrow-dl), в отдаче - вверх
-   (.st-arrow-ul). Раньше селектор цеплял ОБЕ стрелки внутри карточки, поэтому
-   мигали обе. drop-shadow (а не box-shadow) - чтобы свечение шло по контуру
-   SVG-стрелки, а не по её прямоугольнику. */
-.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
-.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul { animation: st-glow 1.1s ease-in-out infinite; }
-@keyframes st-glow {
-	0%, 100% { filter: drop-shadow(0 0 1px var(--st-c)); }
-	50%      { filter: drop-shadow(0 0 4px var(--st-c)); }
-}
-/* уважаем системную настройку «меньше движения»: без пульса, но со статичным
-   свечением - так активная стрелка всё равно выделена. */
-@media (prefers-reduced-motion: reduce) {
-	.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
-	.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul {
-		animation: none; filter: drop-shadow(0 0 3px var(--st-c));
-	}
-	.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before { transition: none; }
-}
-.netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
-/* Ширину НЕ фиксируем: кнопка растёт под большое число, текст не вылезает.
-   tabular-nums держит цифры ровными при живом счёте; dim - плейсхолдер «0.0». */
-.netpribar .netpri-st .netpri-st-num { font-variant-numeric: tabular-nums; }
-.netpribar .netpri-st .netpri-st-num.dim { opacity: .35; }
-.netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
-/* Кнопка SSClash-Go - 3-строчная КАРТОЧКА как модемные (версия / имя+значок /
-   IP), поэтому спец-раскладку не задаём: наследует .netpri-btn (колонка, слева).
-   Правое выравнивание уходит на неё, спидтест встаёт вплотную справа. */
-/* Содержимое по ЛЕВОМУ краю (версия и IP в левый угол) - по решению владельца. */
-/* (выравнивание ssclash задано общим правилом со статус-карточками ниже) */
-/* Значок в фирменном «чипе», как .brand-mark на странице SSClash: скруглённый
-   бокс с лёгкой серой плашкой и тонкой рамкой. Фон и рамку вяжем к currentColor
-   (= цвет текста кнопки), поэтому на светлой теме это лёгкий серый, а не тёмное
-   пятно, а на тёмной - светлый полупрозрачный патч, как в оригинале. Значок тоже
-   наследует цвет текста и адаптируется к теме. */
-.netpribar .netpri-ssclash .netpri-ssclash-ic {
-	display: inline-flex; align-items: center; justify-content: center;
-	/* Ровно как плоские иконки блока (.netpri-ic = 16px): вклад в высоту строки
-	   тот же, отрицательные поля не нужны, строки карточки совпадают со всеми. */
-	flex: 0 0 auto; width: 16px; height: 16px;
-	border-radius: 4px;
-	/* Фиксированная серая плашка со светлым значком - точные цвета как под
-	   иконкой на оригинальной странице SSClash (одинаково в обеих темах). */
-	background: #3d4144;
-	border: 1px solid #565a5d;
-	color: #e8eef2;
-}
-.netpribar .netpri-ssclash .netpri-ssclash-ic svg { display: block; width: 11px; height: 11px; }
-/* Живая точка состояния сервиса после «SSClash»: зелёная со свечением, если
-   запущен, красная - если остановлен. Обновляется опросом ssclash.sh status. */
-.netpri-svcdot { display: inline-block; width: 5px; height: 5px; border-radius: 50%;
-	margin-left: .4em; flex: 0 0 auto; vertical-align: middle;
-	transition: background .3s, box-shadow .3s; }
-.netpri-svcdot.on  { background: #2ea043; box-shadow: 0 0 5px 1px rgba(46,160,67,.9); }
-.netpri-svcdot.off { background: #e5484d; box-shadow: 0 0 5px 1px rgba(229,72,77,.85); }
-/* Карточка «Статус сервиса»: слева, как ssclash. Иконка - цветная плашка с
-   глифом сервиса (или ⚡ для своего хоста). */
-/* Статус/сервис-карточки: содержимое по ПРАВОМУ краю. Точка статуса при этом
-   остаётся ПЕРВОЙ (слева от иконки), с небольшим зазором от неё. Т.к. точка -
-   слева, а название - правее всех, верх/низ выравниваются по концу названия. */
-.netpribar .netpri-btn.netpri-status,
-.netpribar .netpri-btn.netpri-ssclash { align-items: flex-end; text-align: right; }
-.netpribar .netpri-status .netpri-name .netpri-svcdot,
-.netpribar .netpri-ssclash .netpri-name .netpri-svcdot { margin: 0 .2em 0 0; }
-.netpribar .netpri-status .netpri-pingbadge { display: inline-flex; align-items: center;
-	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px;
-	font-size: 11px; font-weight: 700; line-height: 1; color: #fff; }
-.netpribar .netpri-status .netpri-pingbadge.custom { background: transparent; font-size: 15px; }
-.netpribar .netpri-status .netpri-pingico { display: inline-flex; align-items: center;
-	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; }
-.netpribar .netpri-status .netpri-pingico svg { display: block; width: 16px; height: 16px; }
-/* Неопрошенное состояние (YouTube в режиме «по клику», ещё не пинговали) -
-   нейтральная серая точка без свечения. */
-.netpri-svcdot.unknown { background: rgba(127,127,127,.55); box-shadow: none; }
-/* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
-   растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
-   ширину. Тянутся ТОЛЬКО сами кнопки - контейнер и заголовок не трогаем. */
-@media (max-width: 680px) {
-	/* Базу берём ПО СОДЕРЖИМОМУ (auto), а не фиксированные 42%: с фиксированной
-	   базой три кнопки давали 126% и третья переносилась ВСЕГДА, даже когда по
-	   ширине все три помещались (два модема + wifi). С auto в строку встаёт
-	   столько, сколько реально влезает, а дальше flex-grow растягивает их до
-	   края. min-width не даёт кнопке схлопнуться до нечитаемой при длинном имени
-	   оператора. */
-	.netpribar .netpri-row > .netpri-btn { flex: 1 1 auto; min-width: 7.5em; }
-	/* На мобильном правая группа переносится и margin-left:auto не нужен -
-	   иначе первый правый виджет прижимался бы к краю в одиночку. */
-	.netpribar .netpri-row > .netpri-rightstart { margin-left: 0; }
-}
-`;
-
 var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
 
 /* Состояние карточки теста скорости - модульное, чтобы переживать перерисовку
@@ -732,7 +568,6 @@ function stInit() {
 
 function ensureCss() {
 	if (!document.getElementById('netpri-css')) {
-		document.head.appendChild(E('style', { 'id': 'netpri-css', 'type': 'text/css' }, CSS));
 	}
 }
 
@@ -843,17 +678,7 @@ var _npApplying = false;     // идёт применение нового по�
 var _npJustDragged = false;  // подавить click, идущий сразу после drop
 
 function _npEnsureDragCss() {
-	if (document.getElementById('netpri-drag-css')) { return; }
-	document.head.appendChild(E('style', { 'id': 'netpri-drag-css', 'type': 'text/css' },
-		'.netpribar .netpri-btn[data-iface]{cursor:grab;touch-action:none;' +
-			'-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
-		'.netpribar .netpri-btn.netpri-lift{cursor:grabbing;opacity:.97;' +
-			'box-shadow:0 10px 22px rgba(0,0,0,.28);transition:none!important;will-change:transform;z-index:1000}' +
-		'.netpribar .netpri-slot{border:2px dashed rgba(130,130,140,.55);' +
-			'background:rgba(130,130,140,.07);box-shadow:none;flex-direction:row;' +
-			'align-items:center;justify-content:center;color:rgba(130,130,140,.8);cursor:default}' +
-		'.netpribar .netpri-slot svg{opacity:.7}'));
-}
+	}
 
 function _npIfaceCards(row) {
 	return Array.prototype.slice.call(row.children).filter(function(c) {

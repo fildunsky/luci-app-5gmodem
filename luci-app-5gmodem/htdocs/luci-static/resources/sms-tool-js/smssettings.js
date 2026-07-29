@@ -646,7 +646,7 @@ return baseclass.extend({
 		try { open = localStorage.getItem(storeKey) === '1'; } catch (e) {}
 
 		return m.render().then(function(mapNode) {
-			var attrs = { 'class': 'cbi-section sms-settings-panel' };
+			var attrs = { 'class': 'cbi-section tgpage sms-settings-panel' };
 			if (open) attrs.open = '';
 			var det = E('details', attrs, [
 				E('summary', {}, _('Settings')),

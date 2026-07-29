@@ -3,118 +3,26 @@
 'require fs';
 'require ui';
 
+/* ОБЩИЙ CSS ПРИЛОЖЕНИЯ. Дублируется из modemtabs.js НАМЕРЕННО: эта страница
+   вкладки модемов не показывает и modemtabs не требует, а без загрузчика
+   осталась бы вообще без оформления (проверено - страница «Кнопки» так и
+   поехала). Тянуть сюда целый модуль ради одного link'а было бы хуже.
+   Ставится ПОСЛЕ директив require: код между ними обрывает их разбор. */
+(function() {
+	if (document.getElementById('tg-modem-css')) { return; }
+	var l = document.createElement('link');
+	l.id = 'tg-modem-css';
+	l.rel = 'stylesheet';
+	l.type = 'text/css';
+	l.href = L.resource('view/modem/modem.css');
+	document.head.appendChild(l);
+})();
+
 /* Вкладка «Кнопки»: автоопределение железных кнопок (имя из linux,code, тип из
    linux,input-type: EV_SW=переключатель, EV_KEY=кнопка) и привязка команды.
    Кнопка - имя-плашка в тема-стиле; переключатель - тумблер. Команда в
    терминальном поле (стиль AT/USSD) с выпадашкой шаблонов и анимацией печати.
    Debounce гасит дребезг у долгих сервисов. Бэкенд - buttons.sh. */
-
-document.head.append(E('style', { 'type': 'text/css' }, `
-.btncard { border:1px solid rgba(127,127,127,.28); border-radius:12px;
-  padding:1em 1.1em 1.1em; margin-bottom:1.3em; background:rgba(127,127,127,.03); }
-/* Заголовок-карточка в рамке, как кнопки «Приоритета интернета» (класс
-   btn cbi-button даёт тема-рамку/фон/скругление; column-раскладку возвращаем
-   явно - на proton2025 .btn центрирует детей). */
-.btnhead-card { display:flex !important; flex-direction:column !important;
-  align-items:flex-start !important; justify-content:center !important;
-  flex:1 1 auto; gap:.15em; cursor:default; text-align:left; line-height:1.25; padding:.5em .95em; }
-/* Как заголовок+подпись в карточках сохранённых профилей модемов (mprof-name):
-   моноширинные, имя жирным, код мельче и приглушён, без плашки, слева. */
-.btnhead-card .hname { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-weight:700; font-size:1em; display:flex; align-items:center; gap:.5em; }
-.btnhead-card .hsub { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  font-size:78%; opacity:.55; margin-top:-.1em; }
-/* display:inline-block ОБЯЗАТЕЛЕН: у inline-span ширина/высота игнорируются,
-   и от переключателя оставался только круглый knob (::after) - «большая точка».
-   Вкл - акцентный цвет темы, выкл - нейтральный серый. */
-.btnsw { display:inline-block; width:42px; height:23px; border-radius:12px;
-  background:rgba(127,127,127,.4); position:relative; flex:0 0 auto; vertical-align:middle; }
-.btnsw::after { content:''; position:absolute; top:2px; left:2px; width:19px; height:19px;
-  border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.35); transition:left .2s; }
-.btnsw.on { background:var(--proton-accent, #0095ff); } .btnsw.on::after { left:21px; }
-.btnsw-sm { width:34px; height:19px; border-radius:10px; }
-.btnsw-sm::after { width:15px; height:15px; }
-.btnsw-sm.on::after { left:17px; }
-.btnfields { display:flex; gap:1.2em; flex-wrap:wrap; margin-top:.5em; align-items:stretch; }
-.btnfield { min-width:0; display:flex; flex-direction:column; }
-.btnfield-head { flex:0 1 auto; }
-.btnfield-cmd { flex-shrink:1; flex-basis:0; min-width:12em; }  /* flex-grow задаёт JS по длине команды */
-.btncmd-label { display:flex; align-items:center; gap:.5em; min-height:1.7em;
-  font-size:.88em; opacity:.85; margin-bottom:.25em; }
-.btncmd { position:relative; }
-.btnterm { background:#161c26; border:1px solid rgba(255,255,255,.08); border-radius:8px; }
-.btnterm-hd { font-size:10px; color:#8b95a7; letter-spacing:.06em; padding:4px 12px;
-  border-bottom:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04);
-  border-radius:8px 8px 0 0; }
-.btnterm-body { position:relative; }
-.btnterm input { width:100%; box-sizing:border-box; background:transparent; border:0;
-  outline:none; color:#d6e0ea; font-family:monospace; font-size:12px; line-height:1.5;
-  padding:9px 36px 9px 12px; }
-.btnterm input::placeholder { color:#5b6675; }
-.btncaret { position:absolute; right:5px; top:50%; transform:translateY(-50%); width:26px;
-  height:24px; display:flex; align-items:center; justify-content:center; cursor:pointer;
-  color:#8b95a7; border-radius:5px; user-select:none; font-size:11px; }
-.btncaret:hover { background:rgba(255,255,255,.08); color:#d6e0ea; }
-.btnmenu { position:absolute; right:0; top:calc(100% + 4px); z-index:20; min-width:17em;
-  max-width:100%; background:#1c2430; border:1px solid rgba(255,255,255,.12);
-  border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.45); overflow:hidden; display:none; }
-.btnmenu.open { display:block; }
-.btnmenu div { padding:.5em .85em; font-size:.86em; color:#d6e0ea; cursor:pointer; }
-.btnmenu div:hover { background:rgba(255,255,255,.09); }
-.btncursor::after { content:'▋'; color:#d6e0ea; animation:btncur 1.05s step-end infinite; }
-@keyframes btncur { 0%,50%{opacity:.75;} 50.01%,100%{opacity:0;} }
-.btndbc { margin-top:1em; display:flex; align-items:center; gap:.5em; flex-wrap:wrap; font-size:.9em; }
-.btndbc input { width:5em; }
-.btndemo .btnnamebtn, .btndemo .btnname-sw { opacity:.9; }
-@media (prefers-reduced-motion: reduce){ .btncursor::after{ animation:none; opacity:.75; } }
-
-/* Два блока-состояния (нажата / отжата) в ряд. */
-.btnstates { display:flex; gap:1em; flex-wrap:wrap; margin-top:.4em; }
-.btnstate { flex:1 1 20em; min-width:16em; border:1px solid rgba(127,127,127,.28);
-  border-radius:12px; padding:.85em .95em 1em; }
-.btnstate-ttl { display:flex; align-items:center; gap:.5em; font-weight:700; font-size:.92em;
-  margin-bottom:.7em; }
-.btnstate-ttl .dotmark { width:.55em; height:.55em; border-radius:50%; flex:0 0 auto; }
-/* Нажатый/отжатый вид - на самом виджете кнопки (mode/BTN-0), внутри блока. */
-.btnhead-card { width:100%; box-sizing:border-box; transition:box-shadow .12s, transform .12s; }
-/* «Нажата» - вдавленная клавиша: внутренняя тень, темнее, сдвинута вниз. */
-.btnhead-card.hpressed { box-shadow:inset 0 3px 8px rgba(0,0,0,.32); transform:translateY(2px);
-  background:rgba(127,127,127,.14); border-color:rgba(127,127,127,.45); }
-/* «Отжата» - приподнятая: светлее сверху, тень-«бортик» снизу. */
-.btnhead-card.hreleased { box-shadow:0 3px 0 rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.14);
-  background:linear-gradient(180deg, rgba(127,127,127,.06), rgba(127,127,127,.01)); }
-@media (prefers-reduced-motion: reduce){ .btnhead-card.hpressed { transform:none; } }
-/* Подсказка о тумблерном поведении моментальной кнопки. */
-.btnhint { font-size:.85em; opacity:.8; margin:.1em 0 .9em; padding:.5em .75em;
-  border-left:3px solid rgba(127,127,127,.45); background:rgba(127,127,127,.05);
-  border-radius:0 6px 6px 0; }
-
-/* Сетка светодиодов: точки-чипы с именем, кликом меняется состояние. */
-.ledgrid-lbl { font-size:.84em; opacity:.8; margin:.2em 0 .45em; display:flex;
-  align-items:center; gap:.5em; flex-wrap:wrap; }
-.ledgrid { display:flex; flex-wrap:wrap; gap:.4em .5em; margin-bottom:.7em; }
-.ledchip { display:inline-flex; align-items:center; gap:.45em; padding:.28em .6em .28em .5em;
-  border:1px solid rgba(127,127,127,.3); border-radius:999px; cursor:pointer; font-size:.82em;
-  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; user-select:none;
-  transition:border-color .15s, background .15s; }
-.ledchip:hover { border-color:rgba(127,127,127,.6); }
-.ledchip.on { border-color:rgba(127,127,127,.55); background:rgba(127,127,127,.08); }
-.ledchip .leddot { width:5px; height:5px; border-radius:50%; flex:0 0 auto;
-  border:1px solid var(--ledc, #8a8a8a); box-sizing:border-box; transition:box-shadow .15s, background .15s; }
-/* Не задействован: только контур (кнопка этот диод не трогает). */
-.ledchip[data-st="none"] .leddot { background:transparent; opacity:.5; }
-.ledchip[data-st="none"] { opacity:.72; }
-/* Выключить: залитая тусклым серым (диод погаснет). */
-.ledchip[data-st="0"] .leddot { background:rgba(127,127,127,.5); border-color:rgba(127,127,127,.5); }
-/* Включить: залита цветом диода со свечением (диод зажжётся). */
-.ledchip[data-st="1"] .leddot { background:var(--ledc, #cfcf5a);
-  box-shadow:0 0 4px 1px var(--ledc, #cfcf5a); }
-.ledchip .ledst { font-size:.78em; opacity:.6; min-width:2.6em; }
-.ledgrid-empty { font-size:.84em; opacity:.6; margin-bottom:.7em; }
-.ledprev { font-size:.8em; opacity:.75; cursor:pointer; text-decoration:underline dotted;
-  user-select:none; }
-.ledprev:hover { opacity:1; }
-`));
 
 function detect() {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'detect' ]).then(function(res) {
@@ -292,36 +200,6 @@ function cmdField(value, presetList) {
 function toggleWidget(on, small) {
 	return E('span', { 'class': 'btnsw' + (small ? ' btnsw-sm' : '') + (on ? ' on' : '') });
 }
-
-document.head.append(E('style', { 'type': 'text/css' }, `
-/* Компактный виджет-кнопка: НЕ на всю ширину, кликом переключает состояние. */
-.btnwidget { display:inline-block; cursor:pointer; }
-.btnwidget .btnhead-card { width:auto; min-width:9em; max-width:16em; }
-.btnstate-lbl { font-weight:700; font-size:.95em; margin:.2em 0 .45em; }
-.btnstate-lbl .hint { font-weight:400; opacity:.6; font-size:.85em; margin-left:.5em; }
-/* Сегментированный переключатель типа команды (кнопки, не выпадашка). */
-.btnseg { display:inline-flex; border:1px solid rgba(127,127,127,.4); border-radius:8px;
-  overflow:hidden; margin:.1em 0 .3em; }
-/* !important гасит стиль темы: proton2025 задаёт <button> своё скругление, поля
-   и тень - от этого рамка сегмента и кнопки внутри не совпадали по радиусу.
-   Внутренние кнопки делаем прямоугольными без полей/теней, а скругление даёт
-   контейнер (overflow:hidden обрезает фон активной кнопки по его радиусу). */
-.btnseg button { border:0 !important; border-radius:0 !important; margin:0 !important;
-  box-shadow:none !important; min-width:0 !important; background:transparent;
-  padding:.45em 1.1em; cursor:pointer; font:inherit; color:inherit; opacity:.6; }
-.btnseg button.active { background:rgba(127,127,127,.20); opacity:1; font-weight:600; }
-.btnseg button + button { border-left:1px solid rgba(127,127,127,.3) !important; }
-/* Закрываемый информер (условная команда). */
-.btninfo { position:relative; padding:.7em 2.3em .7em .85em; margin:.2em 0 .9em;
-  border-radius:8px; font-size:.86em; line-height:1.4;
-  background:rgba(90,150,255,.10); border:1px solid rgba(90,150,255,.28); }
-.btninfo-x { position:absolute; top:.3em; right:.4em; width:1.5em; height:1.5em;
-  border:0; background:transparent; color:inherit; opacity:.55; cursor:pointer;
-  font-size:1.15em; line-height:1; border-radius:5px; }
-.btninfo-x:hover { opacity:1; background:rgba(127,127,127,.15); }
-.btnadd { margin:.6em 0 1em; }
-.btncard-del { float:right; }
-`));
 
 /* Компактный виджет кнопки (mode + код). state - нажата/отжата (вид из CSS
    .hpressed/.hreleased). Кликабельность вешает вызывающий (buttonCard). */

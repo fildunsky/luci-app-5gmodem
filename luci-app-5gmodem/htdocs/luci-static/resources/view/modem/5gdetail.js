@@ -20,592 +20,6 @@
 */
 
 
-document.head.append(E('style', {'type': 'text/css'},
-`
-/* Плавный рост/убывание полосок метрик (CSQ/RSRP/RSRQ/SINR/RSSI): их ширину
-   мы пересчитываем на каждый опрос, и без перехода она скакала рывком. Анимируем
-   только ширину - цвет/подпись меняем мгновенно, чтобы оценка не «догоняла».
-   0.4 с ease-out достаточно, чтобы движение читалось, но не тормозило. */
-.cbi-progressbar > div {
-  transition: width 0.4s ease-out;
-}
-
-/* Основные бары «Информации о соте»: во всю ширину ячейки (раньше жёсткие 33%
-   выглядели обрубком и на десктопе, и на мобильном; стандартный отступ от края
-   даёт паддинг самой ячейки). Пустая часть - РОВНАЯ СЕРАЯ ПОЛОСА, как у мелких
-   полосок дополнительных метрик (.metric-bar), вместо обводки темы. */
-#csq, #rssi, #rsrp, #rsrq, #sinr {
-  max-width: none;
-  border: none;
-  box-shadow: none;
-  background: rgba(128,128,128,.18);
-}
-.tginfo-modesw .cbi-button {
-  margin: 2px 6px 2px 0;
-  padding: 2px 10px;
-}
-
-/* Кнопки диапазонов - строго одинаковой ширины (фиксированная, а не
-   min-width, иначе 3-символьные шире 2-символьных), стандартной высоты */
-#bands-3g .cbi-button,
-#bands-lte .cbi-button,
-#bands-nr .cbi-button {
-  /* Ширина: НЕ фиксированная, а минимальная + собственные боковые отступы.
-     Раньше стояло width:3.4em с обнулёнными padding-left/right - подписи
-     упирались в края кнопки, и на темах с другим шрифтом ряд выглядел сжатым.
-     min-width держит короткие «B1» и «B5» одного размера с остальными, а
-     трёхсимвольные («B12», «B71») спокойно разъезжаются на нужную ширину
-     вместо того, чтобы прижимать текст к рамке. */
-  min-width: 3.4em;
-  width: auto;
-  /* Вертикальный отступ и высоту задаём САМИ. Раньше обнулялись только боковые
-     padding, а вертикальные доставались от темы - и там, где тема их не даёт
-     (или зажимает кнопку фиксированной высотой), ряды диапазонов выходили
-     сплющенными, в отличие от соседних кнопок режима. */
-  /* Размер задаём САМИ и с !important. Без него тема перебивала нас каскадом:
-     высоту навязывает сразу пара свойств (height и min-height), они приходят из
-     РАЗНЫХ правил темы, и достаточно упустить одно, чтобы ряд остался вытянутым.
-     Ровно так уже сделано для чипов диапазонов в строке режима (.tginfo-band) -
-     единственный способ не переписывать это при каждой новой теме. */
-  padding: 0.35em 0.55em !important;
-  line-height: 1.4 !important;
-  min-height: 0 !important;
-  height: auto !important;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  box-sizing: border-box;
-}
-
-/* ЗАЩИТА ОТ ЗАМЕРА ТАБЛИЦ ТЕМОЙ proton2025.
-   Тема (custom-pages.js, measureNaturalTableWidth) на каждое изменение DOM
-   замеряет «натуральную» ширину таблиц: временно ставит ячейкам
-   white-space:nowrap, дёргает void table.offsetWidth (принудительный reflow),
-   меряет и возвращает стили назад.
-   Наши ряды кнопок в этот миг схлопываются с нескольких строк в одну, высота
-   документа проваливается на ~200px, и БРАУЗЕР ОБРЕЗАЕТ scrollTop до нового
-   максимума. Стили тема вернёт, высоту тоже - а прокрутка останется обрезанной.
-   Итог: страница уезжала вверх на каждый тик опроса (только на этой теме и
-   только при раскрытом блоке частот - именно там кнопки переносятся).
-   !important бьёт инлайновый стиль темы, поэтому её nowrap на наши контейнеры
-   не действует: высота при замере не меняется - обрезать нечего.
-   Чинить тему мы не можем, а страница должна работать в любой. */
-/* ЗАЩИЩАЕМ ПО КЛАССУ, А НЕ ПО ID. Все ячейки блока «Управление частотами» с рядами
-   кнопок (2G/3G/4G/5G-диапазоны, режим сети, агрегация несущих, привязка/лок соты,
-   5G-переключатель) имеют класс .tginfo-modesw. Раньше список был поимённый
-   (#bands-3g/#bands-lte/#bands-nr/#modesw-btns) и НЕ покрывал #caen-cell/#mode5g-cell/
-   #celllock-cell/#bands-2g: как только у модема появлялась, напр., агрегация несущих
-   (Compal RXM-G1 по QMI), её кнопка при замере темой схлопывалась и автопрокрутка
-   возвращалась. Класс покрывает все ряды кнопок разом - и будущие тоже. */
-.tginfo-modesw, #antports-table td {
-  white-space: normal !important;
-}
-/* КОРЕНЬ «медленного расползания страницы вверх» - browser scroll anchoring
-   (overflow-anchor). Наши блоки живо обновляются каждый опрос: прогресс-бары
-   метрик анимируются (transition: width .4s), таблицы (соседи/CA) растут. Когда
-   такой блок оказывается НАД вьюпортом и чуть меняет геометрию, браузер САМ
-   двигает scrollTop, «удерживая якорь» - и это накапливается в непрерывный уход
-   страницы вверх (проверено вживую: docH стабильна, scroll-behavior=auto, НИ ОДНОГО
-   вызова scroll API - чистое нативное поведение; document-level overflow-anchor:none
-   мгновенно останавливает). НЕ трогаем весь документ (это чужие страницы LuCI) -
-   исключаем из выбора якоря ТОЛЬКО наши секции и всё внутри них. Тогда браузер
-   якорит на стабильную обвязку страницы (или ни на что) и не ползёт. */
-.cbi-section.tginfo,
-.cbi-section.tginfo * {
-  overflow-anchor: none;
-}
-
-/* ===== СОВМЕСТИМОСТЬ С ТЕМАМИ ==============================================
-   Своего CSS-файла у приложения нет - вид держится на классах темы. Пока темы
-   давали похожие значения, это работало; argon показал, чем это кончается:
-
-     .cbi-section { padding: 0 }        -> содержимое блоков прилипает к краям
-     .btn, button { height: 2.5rem }    -> ФИКСИРОВАННАЯ высота ЛЮБОЙ кнопки
-
-   Второе особенно грубо: наши карточки в «Приоритете интернета» - это кнопки с
-   тремя строками внутри (модем, оператор, IP), и жёсткая высота обрезала их -
-   IP вылезал наружу. Ряды диапазонов той же высотой, наоборот, сплющивало.
-
-   Поэтому ниже - не «подгонка под argon», а СОБСТВЕННЫЕ гарантии наших блоков:
-   отступ секции и высота по содержимому. Значения совпадают с тем, что уже дают
-   proton2025/bootstrap, так что там ничего не меняется, а темы без этих правил
-   (или с чужеродными) перестают ломать раскладку. Область действия - только
-   наши секции .tginfo и наши кнопки, чужие страницы LuCI не затрагиваются. */
-.cbi-section.tginfo {
-  padding: 20px;
-}
-/* ЗАГОЛОВОК-«ШАПКА»: выравниваем ТОЛЬКО там, где тема его так рисует.
-   Одни темы делают из h3 шапку карточки с фоном и своими боковыми отступами
-   (argon), другие - обычный заголовок с линией снизу (proton2025, bootstrap).
-   Мы задаём секции свой отступ, и в первом случае они складываются: заголовок
-   уезжает вдвое дальше содержимого.
-   Признак «шапки» определяем ОДИН РАЗ до отрисовки (см. detectBoxedHeading) и
-   вешаем класс на <html>. Тогда правка статична - никаких пересчётов после
-   рендера, из-за которых страница дёргалась.
-   Компенсируем отступ секции отрицательным margin: плашка растягивается на всю
-   её ширину, а текст внутри встаёт ровно под содержимое. width:auto обязателен -
-   тема задаёт шапке width:100%, и с отрицательными margin она вылезла бы за
-   границы блока. */
-.tg-boxed-h3 .cbi-section.tginfo > h3 {
-  width: auto;
-  margin-left: -20px;
-  margin-right: -20px;
-}
-
-
-
-
-/* Высота - ПО СОДЕРЖИМОМУ. min-height сохраняет привычный размер обычных
-   кнопок, а многострочные карточки растут, вместо того чтобы обрезаться. */
-.cbi-section.tginfo .cbi-button,
-.cbi-section.tginfo .btn,
-.netpri-btn {
-  /* ТОЛЬКО height:auto, без min-height. Задать общий минимум - соблазнительно,
-     но он растягивает наши НАМЕРЕННО компактные кнопки: переключатели SIM1/SIM2
-     (padding 1px, шрифт 80%) и ряды диапазонов. Обычные кнопки и так набирают
-     привычную высоту из своего padding и line-height. */
-  height: auto;
-}
-/* Таблицы внутри наших блоков: у ряда тем .td { padding: 0 } либо padding
-   задан только для колонок с width - крайние ячейки прилипали к границе. */
-.cbi-section.tginfo .table > .tr > .td,
-.cbi-section.tginfo .table > .tr > .th {
-  padding: 0.4em 0.6em;
-}
-/* Нижний отступ последней таблицы: без него «Соседние соты» упирались в край. */
-.cbi-section.tginfo > .table:last-child {
-  margin-bottom: 0.5em;
-}
-
-/* ЕДИНИЦА ГРАДУСОВ: "56°C" вплотную к числу, без пробела.
-   Уменьшаем и поднимаем ТОЛЬКО букву C. Сам знак ° уже надстрочный по своему
-   рисунку - он сидит у верхней линии и мельче цифр; уменьшать его вдобавок
-   значит делать из него точку. А вот C рядом с ним остаётся полноразмерной и
-   выбивается, поэтому подтягиваем её к градусу.
-   line-height:0 обязателен - иначе подъём буквы растягивает высоту строки.
-   ВНИМАНИЕ: правило стоит ПОСЛЕ закрывающей скобки соседнего. Однажды оно было
-   вставлено внутрь списка селекторов выше - и защита от замера таблиц темой
-   (white-space:normal !important) перестала действовать на ряды кнопок, а те
-   получили font-size:.72em и line-height:0. Прокрутка снова начала уезжать. */
-.deg-unit {
-  font-size: .72em;
-  vertical-align: .32em;
-  line-height: 0;
-}
-
-/* Комбинации 3G - ИСКЛЮЧЕНИЕ из фиксированной ширины выше: та рассчитана на
-   короткие номера диапазонов ("B1"), а у комбинаций подписи длинные
-   ("2100 + 1900 + 850") - в 3.4em их бы расплющило. */
-#bands-3g .cbi-button.combo3g {
-  width: auto;
-  padding-left: 10px;
-  padding-right: 10px;
-  font-variant-numeric: normal;
-}
-
-/* Подсказки (data-tooltip): длинный текст в одну строку растягивал страницу и
-   давал горизонтальный скролл. Разрешаем перенос и ограничиваем ширину.
-   Селекторы оба: LuCI рисует подсказку либо элементом .cbi-tooltip, либо
-   псевдоэлементом ::after - в зависимости от версии/темы. */
-.cbi-tooltip,
-[data-tooltip]::after {
-  white-space: normal !important;
-  max-width: min(90vw, 32em) !important;
-  overflow-wrap: anywhere;
-}
-
-/* Анти-джиттер: фиксируем раскладку таблиц и размеры иконок, чтобы при
-   обновлении данных строки не пересчитывали размер и страница не прыгала.
-   Ключевое: иконка сигнала пересоздаётся каждый опрос через innerHTML -
-   без явных размеров браузер делал reflow при каждой перерисовке. */
-.tginfo .table {
-  table-layout: fixed;
-  width: 100%;
-}
-.tginfo .table .td:first-child {
-  width: 33%;
-}
-.tginfo .table .td {
-  overflow-wrap: anywhere;
-}
-#signal img {
-  width: 36px;
-  height: 36px;
-}
-#signal medium {
-  display: block;
-  line-height: 1.2;
-  /* Процент сигнала - вдвое меньше, жирным моноширинным: это подпись под
-     иконкой, а не заголовок, и в моноширинном цифры не пляшут при смене. */
-  font-size: 70%;
-  font-weight: 700;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-#simicon {
-  width: 36px !important;
-  height: 36px !important;
-  flex: 0 0 auto;
-}
-
-/* Индикатор роуминга - символ ® перед статусом «В сети» (как «R» на телефоне). */
-.tginfo-roam {
-  display: inline-block; margin-right: .25em; font-weight: 700;
-  vertical-align: baseline; flex: 0 0 auto; opacity: .85;
-}
-
-/* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц
-   (fixed + 33% на первую колонку + overflow-wrap:anywhere), иначе ячейки
-   переносятся, высота строки скачет и страница дёргается при обновлении.
-   Одна строка на ячейку -> высота постоянна. */
-#ca-table {
-  table-layout: fixed;
-  width: 100%;
-}
-#ca-table .td, #ca-table .th {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  overflow-wrap: normal;
-  padding: 2px 8px 2px 0;
-}
-/* фиксированные пропорции колонок -> таблица всегда ровно 100% ширины, без
-   горизонтального переполнения (и без появляющегося/пропадающего скролла,
-   который менял высоту на proton2025) */
-#ca-table .td:nth-child(1), #ca-table .th:nth-child(1) { width: 7%; }
-#ca-table .td:nth-child(2), #ca-table .th:nth-child(2) { width: 19%; }
-#ca-table .td:nth-child(3), #ca-table .th:nth-child(3) { width: 10%; }
-#ca-table .td:nth-child(4), #ca-table .th:nth-child(4) { width: 8%; }
-#ca-table .td:nth-child(5), #ca-table .th:nth-child(5) { width: 10%; }
-#ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 9%; }
-#ca-table .td:nth-child(10), #ca-table .th:nth-child(10) { width: 10%; }
-
-/* Мобильная раскладка: 10 колонок не влезают на узкий экран (значения
-   обрезались многоточием). Ниже 800px превращаем каждую строку-компонент
-   (PCC/SCC) в компактную «карточку» с подписями (data-l через ::before).
-   Всё видно и помещается; высота стабильна - карточек всегда 5, как строк в
-   таблице (см. renderCaTable), поэтому (де)агрегация не меняет высоту блока.
-   ВАЖНО: брейкпоинт 800px = как у proton2025. Тема на <=800px вешает на
-   таблицы 'overflow-x:auto !important'; при (де)агрегации ширина CA-контента
-   менялась -> горизонтальный скролл появлялся/исчезал -> высота элемента
-   прыгала -> страницу дёргало. display:block (карточки) убирает широкую
-   таблицу и сам скролл, поэтому прыжок пропадает. */
-@media (max-width: 800px) {
-  #ca-table, #ca-table .tr { display: block; width: 100%; }
-  #ca-table .ca-head { display: none; }
-  #ca-table .ca-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px 1em;
-    border: 1px solid rgba(128,128,128,.25);
-    border-radius: 6px;
-    padding: .35em .6em;
-    margin: 0 0 .45em 0;
-  }
-  #ca-table .ca-row .td {
-    display: block;
-    width: auto !important;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    padding: 1px 0;
-  }
-  #ca-table .ca-row .ca-cc {
-    grid-column: 1 / -1;
-    font-weight: 600;
-    border-bottom: 1px solid rgba(128,128,128,.2);
-    margin-bottom: .15em;
-  }
-  #ca-table .ca-row .td[data-l]::before {
-    content: attr(data-l) ": ";
-    opacity: .6;
-  }
-}
-
-/* --- Таблица соседних сот ------------------------------------------------- */
-/* Колонок всего 7 и все узкие, поэтому фиксированной раскладки достаточно. */
-#nb-table {
-  table-layout: fixed;
-  width: 100%;
-}
-#nb-table .td, #nb-table .th {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 2px 8px 2px 0;
-}
-#nb-table .td:nth-child(1), #nb-table .th:nth-child(1) { width: 16%; }
-#nb-table .td:nth-child(2), #nb-table .th:nth-child(2) { width: 12%; }
-#nb-table .td:nth-child(n+3), #nb-table .th:nth-child(n+3) { width: 14.4%; }
-/* Служебная сота выделена, иначе она неотличима от самого сильного соседа. */
-#nb-table .nb-serving { font-weight: 600; }
-#nb-table .nb-serving .td:first-child { opacity: .85; }
-
-/* Мобильная раскладка - тем же приёмом, что у CA-таблицы (см. подробности там):
-   ниже 800px строка превращается в карточку с подписями через data-l.
-   Высоту здесь мы НЕ стабилизируем сознательно: число соседей меняется по
-   радиообстановке, фиксированного набора строк тут не существует. */
-@media (max-width: 800px) {
-  #nb-table, #nb-table .tr { display: block; width: 100%; }
-  #nb-table .nb-head { display: none; }
-  #nb-table .nb-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px 1em;
-    border: 1px solid rgba(128,128,128,.25);
-    border-radius: 6px;
-    padding: .35em .6em;
-    margin: 0 0 .45em 0;
-  }
-  #nb-table .nb-row .td {
-    display: block;
-    width: auto !important;
-    white-space: normal;
-    overflow: visible;
-    text-overflow: clip;
-    padding: 1px 0;
-  }
-  #nb-table .nb-row .td:first-child {
-    grid-column: 1 / -1;
-    font-weight: 600;
-    border-bottom: 1px solid rgba(128,128,128,.2);
-    margin-bottom: .15em;
-  }
-  #nb-table .nb-row .td[data-l]::before {
-    content: attr(data-l) ": ";
-    opacity: .6;
-  }
-}
-
-/* --- Короткая полоска метрики в таблицах ---------------------------------- */
-/* Высота ФИКСИРОВАННАЯ и одинаковая во всех строках - поэтому таблица не
-   «дышит» между опросами и страницу не дёргает. Ширину анимируем тем же
-   переходом, что у больших полосок метрик, иначе она скакала бы рывком. */
-.metric-bar {
-  height: 3px;
-  margin-top: 2px;
-  border-radius: 2px;
-  background: rgba(128,128,128,.18);
-  overflow: hidden;
-}
-.metric-bar > div {
-  height: 100%;
-  border-radius: 2px;
-  transition: width .4s ease-out;
-}
-/* Ячейки БЕЗ полоски (Band/PCI/EARFCN) иначе повисли бы по центру выросшей
-   строки, и числа перестали бы читаться в один ряд с теми, что с полосками. */
-#ca-table .td, #nb-table .td, #antports-table .td { vertical-align: top; }
-
-/* На proton2025 в ячейки попадает ШТАТНЫЙ .cbi-progressbar - и тема задаёт ему
-   min-width:200px и внешние поля, рассчитанные на полноразмерные метрики. В
-   колонку таблицы (~9% ширины) такое не влезает и разорвало бы вёрстку, поэтому
-   ограничения снимаем ТОЧЕЧНО - только внутри наших двух таблиц.
-   Подпись внутри полоски (::after) НЕ трогаем: ради неё всё и затевалось. */
-#ca-table .cbi-progressbar,
-#antports-table .cbi-progressbar,
-#nb-table .cbi-progressbar {
-  min-width: 0 !important;
-  height: 20px;
-  margin: 0;
-}
-
-/* Значение диапазона (pband/SCC) меняет длину при переселении соты
-   (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
-   раскладкой длинное значение переносилось на 2 строки -> высота строки
-   скакала -> страница дёргалась при опросе. Держим значение в одну строку. */
-#pband {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Секции без табличных полос и рамок - как на странице статуса LuCI */
-.tginfo .table,
-.tginfo .table .tr,
-.tginfo .table .td {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-.tginfo .table .tr:nth-child(odd) .td,
-.tginfo .table .tr:nth-child(even) .td {
-  background: transparent !important;
-}
-.tginfo h3 {
-  margin-top: 0;
-}
-
-/* Компактная строка состояния: сигнал | SIM | статус | инфо | температура */
-.tginfo-general {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.4em;
-  flex-wrap: wrap;
-  padding: 4px 0 2px;
-}
-.tginfo-signal {
-  text-align: center;
-  min-width: 44px;
-  line-height: 1.15;
-}
-.tginfo-signal medium {
-  display: block;
-  font-size: 90%;
-}
-/* Две параллельные колонки с одинаковой межстрочкой -> строки выровнены */
-.tginfo-status,
-.tginfo-info {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.tginfo-status {
-  min-width: 8em;
-}
-.tginfo-status > *,
-.tginfo-info > * {
-  line-height: 1.5;
-}
-/* короткие строки статуса не переносим, длинные - можно */
-.tginfo-status > * {
-  white-space: nowrap;
-}
-.tginfo-status .tginfo-reg,
-.tginfo-status .tginfo-loc {
-  font-size: 88%;
-  opacity: 0.75;
-}
-.tginfo-status .tginfo-op {
-  font-weight: 600;
-}
-.tginfo-status .tginfo-phone {
-  font-size: 0.8em;
-  opacity: 0.7;
-  font-variant-numeric: tabular-nums;
-}
-.tginfo-info {
-  font-size: 92%;
-  opacity: 0.9;
-  flex: 1 1 16em;
-}
-.tginfo-info .tginfo-tech {
-  font-weight: 600;
-  opacity: 1;
-  overflow-wrap: anywhere;
-}
-/* частоты в скобках - без жирного, мельче и на 30% серее основного текста */
-.tginfo-info .tginfo-freq {
-  font-weight: normal;
-  font-size: 0.8em;
-  opacity: 0.7;
-}
-/* Живой статус дозвона (строка из лога netifd), пока модем не получил IP:
-   помельче и приглушённо - это временное сообщение о ходе подключения, а не
-   постоянное значение. */
-.tginfo-info .tginfo-connstatus { font-size: .92em; opacity: .8; }
-/* Диапазоны в строке режима - «кнопкой», как переключатели бендов (активный
-   вид). Это ПОКАЗ текущих бендов, не переключатель: pointer-events:none.
-   ВАЖНО: display НЕ трогаем - у proton2025 .btn это inline-flex с
-   align-items:center, он центрирует текст ВЕРТИКАЛЬНО. Если сменить на
-   inline-block, вылезает descender-зазор строки снизу (текст «прижат» кверху).
-   Поэтому только ужимаем паддинг/высоту/шрифт !important (тема крупная) и
-   центрируем чип по строке через vertical-align:middle. */
-.tginfo-info .tginfo-band.btn {
-  padding: .06em .45em !important;
-  margin: 0 .12em !important;
-  min-height: 0 !important;
-  height: auto !important;
-  gap: 0 !important;
-  font-size: .8em;
-  line-height: 1.25;
-  vertical-align: middle;
-  cursor: default;
-  pointer-events: none;
-}
-.tginfo-info .tginfo-ip {
-  font-variant-numeric: tabular-nums;
-}
-/* подписи IPv4:/IPv6: - жирным */
-.tginfo-info .tginfo-iplabel {
-  font-weight: 600;
-  margin-right: 0.35em;
-}
-/* IPv6 длинный (до 39 символов) - уменьшаем шрифт, чтобы строка влезала на
-   мобильном в ОДИН ряд и не вылезала за край экрана. */
-#modemip6 {
-  font-size: 0.78em;
-  letter-spacing: -0.2px;
-  word-break: break-all;
-}
-@media (max-width: 800px) {
-  #modemip6 { font-size: 0.7em; }
-}
-/* правая колонка шапки: SIM-слоты над температурой, прижаты вправо */
-.tginfo-right {
-  margin-left: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-}
-/* маленькие кнопки переключения SIM-слота */
-/* Переключатели SIM - маленькие чипы, а не полноразмерные кнопки. Размер
-   задаём В ПИКСЕЛЯХ, а не в процентах: font-size:80% считается от шрифта
-   КНОПКИ ТЕМЫ, а он у всех разный (bootstrap 13px, proton2025 13px, argon
-   14px) - и одни и те же чипы выходили то мельче, то крупнее. Явные значения
-   дают одинаковый вид везде. */
-.tginfo-simslot .cbi-button {
-  padding: 2px 8px !important;
-  font-size: 11px !important;
-  line-height: 15px !important;
-  min-height: 0 !important;
-  height: auto !important;
-  margin-left: 4px;
-}
-/* подпись типа SIM (USIM/eSIM) слева от кнопок */
-.tginfo-simslot .tginfo-simslot-type {
-  font-size: 80%;
-  opacity: 0.7;
-  margin-right: 4px;
-}
-/* секция eSIM */
-.esim-meta {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 88%;
-  opacity: 0.8;
-  margin-bottom: 8px;
-}
-.esim-dl {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  align-items: center;
-}
-#esim-profiles .btn {
-  padding: 1px 8px;
-  font-size: 85%;
-  margin-left: 4px;
-}
-.tginfo-temp {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25em;
-  margin-left: auto;
-  opacity: 0.85;
-  white-space: nowrap;
-}
-#temp {
-  /* Цифры температуры - жирным моноширинным, чуть меньше окружающего текста:
-     в моноширинном значение не дёргается при смене (45.2 -> 45.9). */
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-weight: 700;
-  font-size: 90%;
-}
-.tginfo-temp .tginfo-thermo {
-  display: inline-flex;
-  align-items: center;
-}
-`));
-
 /* ЕДИНАЯ шкала для всех основных метрик (CSQ/RSSI/RSRP/RSRQ/SINR).
    Раньше у каждого бара была СВОЯ формула ширины и СВОИ пороги цвета, никак не
    связанные между собой: RSRQ, например, считал ширину как 115-vn (при -19 это
@@ -768,25 +182,6 @@ var MODEM_BUSY_MIN_MS = 8000;
    просвечивал (proton2025), а на bootstrap полупрозрачной плашки не было видно
    вовсе. Тёмную/светлую тему ловим и по prefers-color-scheme, и по data-theme
    (proton2025 штампует его на <html> и должен побеждать). */
-function _ensureModemBusyCss() {
-	if (document.getElementById('modem-busy-css')) { return; }
-	var css =
-		/* база / bootstrap: непрозрачный фон + скругление как у кнопок */
-		'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
-		'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;' +
-		'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
-		'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
-		/* proton2025 (ставит data-theme на <html>): как попапы меню - полупрозрачный
-		   + блюр, скругление наследуем от карточки блока */
-		':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
-		'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
-		':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
-		':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}' +
-		/* прогрессбар плашки - в стиле основных метрик: серый заполненный
-		   трек без обводки (а не пустота с рамкой темы) */
-		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}';
-	document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
-}
 /* setModemBusy(msg[, progressSec]) - плашка на блоке «Модем». progressSec
    включает прогрессбар в стиле полосок метрик (как на eSIM): заполняется по
    ожидаемому времени, упирается в 97% и ждёт настоящего возвращения модема -
@@ -796,7 +191,6 @@ var _modemBusyBarTimer = null;
 function setModemBusy(msg, progressSec) {
 	var block = document.querySelector('.cbi-section.tginfo');
 	if (!block) { return; }
-	_ensureModemBusyCss();
 	var txt = msg || _('The modem is restarting…');
 	var txtCls = progressSec ? '' : 'spinning';
 	var ov = document.getElementById('modem-busy-ov');
@@ -2951,24 +2345,7 @@ function checkOperatorName(t) {
    Ребут по питанию (GPIO) оставляем рабочим - завис модем можно поднять и без
    данных на экране. */
 function ensureSkeletonCSS() {
-	if (document.getElementById('tgm-skel-css')) { return; }
-	document.head.appendChild(E('style', { 'id': 'tgm-skel-css' },
-		/* Полоска-плейсхолдер вместо текста. inline-block + фикс. высота, чтобы
-		   строки статуса держали свою высоту, как с реальным текстом. */
-		'.tgm-skel-bar{display:inline-block;height:.82em;border-radius:.5em;vertical-align:middle}' +
-		/* Силуэт значка сигнала - по габаритам реальной иконки .tginfo-signal. */
-		'.tgm-skel-sig{display:inline-block;width:34px;height:26px;border-radius:6px}' +
-		/* Силуэт иконки SIM. */
-		'.tgm-skel-ic{display:inline-block;width:26px;height:26px;border-radius:6px}' +
-		/* Силуэт кнопки SIM/eSIM - без надписи, не цветной. */
-		'.tgm-skel-btn{display:inline-block;width:3.6em;height:1.9em;border-radius:7px;margin:0 .3em .3em 0}' +
-		'.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{' +
-			'background:linear-gradient(100deg,rgba(130,130,140,.13) 30%,rgba(130,130,140,.28) 50%,rgba(130,130,140,.13) 70%);' +
-			'background-size:200% 100%;animation:tgm-skel-sh 1.5s ease-in-out infinite}' +
-		'@keyframes tgm-skel-sh{0%{background-position:180% 0}100%{background-position:-180% 0}}' +
-		'@media (prefers-reduced-motion:reduce){.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{animation:none}}'
-	));
-}
+	}
 
 /* Силуэт карточки, ПОВТОРЯЮЩИЙ реальную .tginfo-general (те же классы = те же
    позиции): значок сигнала | иконка SIM | статус (рег/оператор/страна) | инфо
@@ -4500,21 +3877,21 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'enbidn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 						_('eNB ID'),
-						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(base station)') ]),
+						E('div', { 'class': 'tg-sublabel' }, [ _('(base station)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'enbid' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'pathlossn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 						_('Path loss'),
-						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(signal attenuation)') ]),
+						E('div', { 'class': 'tg-sublabel' }, [ _('(signal attenuation)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'pathloss' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'txpowern', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 						_('TX power'),
-						E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(modem transmit level)') ]),
+						E('div', { 'class': 'tg-sublabel' }, [ _('(modem transmit level)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'txpower' }, [ '-' ]),
 					]),
@@ -4534,7 +3911,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'csqn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('CSQ'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Signal Strength)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal Strength)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'csq',
@@ -4546,7 +3923,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'rssin', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('RSSI'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Received Signal Strength Indicator)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Received Signal Strength Indicator)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'rssi',
@@ -4558,7 +3935,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'rsrpn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('RSRP'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Reference Signal Receive Power)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Receive Power)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'rsrp',
@@ -4570,7 +3947,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'sinrn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('SINR'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Signal to Interference plus Noise Ratio)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal to Interference plus Noise Ratio)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'sinr',
@@ -4582,7 +3959,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'rsrqn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('RSRQ'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Reference Signal Received Quality)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Received Quality)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'rsrq',
@@ -4596,7 +3973,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'rscpn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('RSCP'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(Received Signal Code Power, 3G)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(Received Signal Code Power, 3G)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'rscp',
@@ -4608,7 +3985,7 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'ection', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('Ec/No'),
-					E('div', { 'style': 'text-align:left;font-size:66%' }, [ _('(chip energy to noise ratio, 3G)') ]),
+					E('div', { 'class': 'tg-sublabel' }, [ _('(chip energy to noise ratio, 3G)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
 							'id': 'ecio',

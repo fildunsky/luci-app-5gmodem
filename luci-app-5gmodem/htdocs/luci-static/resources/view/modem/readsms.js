@@ -22,208 +22,6 @@ var callForwardSMS = rpc.declare({
     params: ['subject', 'message']
 });
 
-document.head.append(E('style', {'type': 'text/css'},
-`
-/* Инфо-таблица над списком (модем, хранилище, ёмкость): без линий между строками */
-#sms-info-table td,
-#sms-info-table th,
-#sms-info-table .td,
-#sms-info-table .th {
-  border: none !important;
-}
-
-/* СПИСОК СООБЩЕНИЙ - карточки, а не таблица.
-   Карточка должна выглядеть В ТОЧНОСТИ как кнопки приоритета интернета и
-   спидтеста на вкладке «Сеть», поэтому:
-   1) на элементе те же классы темы - btn cbi-button. Именно они дают фон,
-      рамку и базовую типографику; без них <button> выглядит по-другому, и
-      никакой своей палитрой это не повторить;
-   2) геометрия ниже покомпонентно скопирована с .netpri-btn (netpri.js).
-      Не переиспользуем те правила напрямую: они заскоплены под .netpribar и
-      на этой странице просто не применятся. При правке netpri-кнопок эти
-      значения нужно править парой. */
-#smsList {
-  display: flex;
-  flex-direction: column;
-  gap: .4em;
-}
-
-.sms-card {
-  /* значения 1:1 из .netpribar .netpri-btn */
-  padding: .35em 1em;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  line-height: 1.15;
-  /* proton2025 задаёт button,.btn{gap:8px} - на flex-column это даёт большие
-     вертикальные дыры между строками (та же нейтрализация, что в netpri.js) */
-  gap: 0;
-  /* В отличие от ряда netpri, карточки идут столбцом во всю ширину. */
-  width: 100%;
-  box-sizing: border-box;
-  align-self: stretch;
-}
-
-/* СДВИГ КАРТОЧЕК (был виден только в proton2025 и только на широком экране).
-   Тема задаёт:  button+button, .btn+.btn, .cbi-button+.cbi-button { margin-left: 8px }
-   Рассчитано это на кнопки В РЯД, а у нас они столбцом: каждой следующей
-   карточке добавлялось 8px слева, и она на столько же вылезала за правый край.
-   Просто margin:0 в .sms-card не помогал - у .btn+.btn специфичность (0,2,0)
-   против (0,1,0), тема выигрывала. Добавляем #smsList -> (1,1,0).
-   ВНИМАНИЕ: этот блок - шаблонная строка, обратные кавычки в комментариях
-   закрывают её и ломают файл. */
-#smsList .sms-card {
-  margin: 0;
-}
-
-/* Выделено - как .netpri-btn.active, то есть как кнопка на hover у темы: одна
-   акцентная рамка, без заливки и без внутренней обводки.
-   pointer-events:none из netpri НЕ берём: активную кнопку там нельзя нажать
-   повторно, а выделение сообщения снимается тем же кликом. */
-.sms-card.selected {
-  border-color: var(--proton-accent, #0095ff);
-}
-
-/* Шапка тянется во всю ширину карточки, иначе align-items:flex-start прижмёт
-   её по содержимому и время не уедет вправо. */
-.sms-card .sms-card-head {
-  display: flex;
-  align-items: baseline;
-  gap: .6em;
-  width: 100%;
-  margin-bottom: .2em;
-}
-
-/* отправитель - как .netpri-name (вес 600 наследуется от кнопки) */
-.sms-card .sms-card-from {
-  display: flex;
-  align-items: center;
-  gap: .35em;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* дата и время - как .netpri-sub, плюс ровные цифры от .netpri-ip */
-.sms-card .sms-card-time {
-  flex: 0 0 auto;
-  font-size: .72em;
-  font-weight: 400;
-  opacity: .7;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Текст сообщения - обычный вес, как .netpri-sub/.netpri-ip, но БЕЗ их
-   уменьшения до .72em: там это подпись, здесь - основное содержимое. */
-.sms-card .sms-card-text {
-  font-weight: 400;
-  line-height: 1.35;
-  text-align: left;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-/* иконка - размеры .netpri-ic */
-.sms-row-icon {
-  display: block;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-.sms-row-icon img {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-:root[data-darkmode="true"] .sms-row-icon {
-  opacity: 0.5;
-}
-
-/* Хранилище и заполненность - одной строкой, без подписи слева. На узком
-   экране полоска переносится под переключатели (flex-wrap). */
-.sms-storage-row {
-  display: flex;
-  align-items: center;
-  gap: 1em;
-  flex-wrap: wrap;
-}
-
-.sms-storage-opts {
-  display: flex;
-  align-items: center;
-  gap: 1.2em;
-  flex: 0 0 auto;
-}
-
-/* Полоска резиновая: занимает остаток строки, но не ужимается до нечитаемой -
-   при нехватке места уходит на вторую строку целиком. Трек - в стиле основных
-   метрик: серое заполнение без обводки. */
-.sms-storage-row .cbi-progressbar {
-  flex: 1 1 14em;
-  min-width: 14em;
-  margin: 0;
-  border: none;
-  box-shadow: none;
-  background: rgba(128,128,128,.18);
-}
-
-/* Ссылки в тексте сообщения: выглядят ссылками и открываются кликом, не
-   выделяя карточку (см. sms_linkify). */
-.sms-card .sms-link {
-  color: var(--proton-accent, #0095ff);
-  text-decoration: underline;
-  font-weight: 400;
-  cursor: pointer;
-}
-
-/* Ряд действий: «Обновить» и «Переслать» слева, «Удалить» прижата вправо -
-   как ряд приоритетов интернета со спидтестом на вкладке «Сеть». */
-.sms-actions {
-  display: flex;
-  align-items: center;
-  gap: .5em;
-  flex-wrap: wrap;
-  margin: .5em 0;
-}
-
-/* Тема добавляет соседним кнопкам margin-left: 8px - вместе с gap получался
-   двойной зазор. Гасим тем же приёмом, что и сдвиг карточек: селектор из трёх
-   классов (0,3,0) перебивает .cbi-button+.cbi-button (0,2,0). */
-.sms-actions .cbi-button + .cbi-button {
-  margin-left: 0;
-}
-
-/* Вправо уезжает СЧЁТЧИК, а «Удалить» встаёт следом - у самого края.
-   margin-left:auto на первом из прижимаемых элементов съедает весь свободный
-   зазор, поэтому auto стоит на счётчике, а не на кнопке. */
-.sms-actions .sms-selcount {
-  margin-left: auto;
-}
-
-/* Плейсхолдер на месте списка: держит его высоту, пока сообщений нет или они
-   ещё грузятся. Раньше пустой список схлопывался в ничто, и страница выглядела
-   сломанной - особенно при заходе, когда чтение занимает несколько секунд. */
-.sms-empty {
-  border: 1px dashed var(--border-color-medium);
-  border-radius: 6px;
-  padding: 1.2em .85em;
-  text-align: center;
-  opacity: .6;
-}
-
-.sms-selcount {
-  margin-left: .5em;
-  opacity: .65;
-}
-`));
-
 function msg_bar(v, m) {
 var pg = document.querySelector('#msg')
 if (!pg || !pg.firstElementChild) { return; }
@@ -1071,7 +869,15 @@ return view.extend({
 									// запущен. Без этой проверки doRefresh падал на
 									// разборе списка и рушил весь тик.
 									if (!table) { hideLoading(); return; }
-									table.innerHTML = '';
+									/* СПИСОК ЧИСТИМ ТОЛЬКО ПОСЛЕ УСПЕШНОГО РАЗБОРА - см. try
+									   ниже. Раньше очистка стояла здесь, ДО JSON.parse: если
+									   ответ приходил обрезанным (AT-порт занят опросом метрик
+									   и дозвоном - на FM350 это регулярно), разбор падал
+									   исключением, и список оставался ПУСТЫМ, хотя сообщения
+									   никуда не делись. Симптом: сообщения показались, через
+									   пару секунд исчезли, счётчик остался, «Обновить» уже не
+									   помогал. На модеме под ModemManager порт свободнее,
+									   поэтому там баг и не проявлялся. */
 
 									/* Баг sms_tool 2025.08.x (-j): кодпойнты, у которых МЛАДШИЙ
 									   байт >= 0x80 (U+00A0 nbsp, «» U+00AB/BB, …), в JSON-кодере
@@ -1086,7 +892,17 @@ return view.extend({
 									   of sms_tool ({"msg":[...]}) and broke on any
 									   other valid JSON (e.g. from sms_tool_mm/jshn,
 									   which prints spaces). */
-									var json = JSON.parse(res2).msg || [];
+									var json;
+									try {
+										json = JSON.parse(res2).msg || [];
+									} catch (e) {
+										/* Битый/обрезанный ответ. Показанное НЕ трогаем -
+										   лучше слегка устаревший список, чем пустой экран.
+										   Следующий тик перечитает. */
+										hideLoading();
+										return;
+									}
+									table.innerHTML = '';
 
 									/* sms_tool's UCS2 decoder replaces code points U+0080..U+00FF
 									   (non-breaking space, guillemets «», …) with U+FFFD (�).
@@ -1305,7 +1121,7 @@ return view.extend({
 		self._doRefresh = doRefresh;
 		});
 
-		var v = E('div', { 'class': 'cbi-section' }, [
+		var v = E('div', { 'class': 'cbi-section tgpage' }, [
 
 			E('table', { 'class': 'table', 'id': 'sms-info-table' }, [
 				(function() {
@@ -1334,22 +1150,22 @@ return view.extend({
 							E('td', { 'class': 'td left', 'width': '33%' }, [ _('Select modem') ]),
 							E('td', { 'class': 'td' }, [
 								E('div', { 'class': 'controls' }, [
-									E('div', { 'class': 'pager center', 'style': 'display: flex; align-items: center; gap: 10px;' }, [
+									E('div', { 'class': 'pager center tg-row' }, [
 										E('button', { 
 											'class': 'btn cbi-button-neutral prev', 
 											'aria-label': _('Previous modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),
-											'style': 'min-width: 40px;',
+											'class': 'tg-col-narrow',
 											'disabled': buttonsDisabled
 										}, [ ' ◄ ' ]),
-										E('div', { 'class': 'text modem-display-text', 'style': 'flex: 1; text-align: center;' }, [ label ]),
+										E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 										E('button', { 
 											'class': 'btn cbi-button-neutral next', 
 											'aria-label': _('Next modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),
-											'style': 'min-width: 40px;',
+											'class': 'tg-col-narrow',
 											'disabled': buttonsDisabled
 										}, [ ' ► ' ])
 									])
@@ -1372,11 +1188,12 @@ return view.extend({
 					var areaTip = _('Any change in the area from which SMS messages will be read requires refreshing the messages');
 					var areaOpt = (function(value, label, checked) {
 						return E('label', {
-							'style': 'display:inline-flex;align-items:center;gap:6px;',
+							'style': 'display:inline-flex !important;align-items:center !important;gap:6px;height:auto !important;min-height:0 !important;line-height:1.4;',
 							'data-tooltip': areaTip
 						}, [
 							E('input', {
 								'type': 'radio',
+								'style': 'margin:0;flex:none;vertical-align:middle;position:relative;top:-1px',
 								'name': 'filter_area',
 								'value': value,
 								'change': ui.createHandlerFn(this, 'handleSWarea'),

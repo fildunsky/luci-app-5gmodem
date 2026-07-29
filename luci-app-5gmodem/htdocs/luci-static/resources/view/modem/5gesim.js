@@ -75,26 +75,7 @@ function lpaFail(j) {
 // width:100%) - одинаково на всех экранах, без пустоты справа. Строка выровнена
 // влево: иконка и спиннер стоят на месте, а меняющийся текст-шаг занимает остаток
 // и переносится внутри своей колонки - иконку ему не сдвинуть.
-function esimUiCss() {
-	if (document.getElementById('esim-ui-css')) { return; }
-	var css =
-		'.esim-modal{width:100%;box-sizing:border-box;}' +
-		'.esim-dlrow{display:flex;align-items:center;gap:14px;text-align:left;padding:6px 0 2px;}' +
-		'.esim-simicon{flex:0 0 auto;width:44px;height:44px;display:block;}' +
-		'.esim-simicon-err{opacity:.85;}' +
-		'.esim-spin{flex:0 0 auto;width:22px;height:22px;border:2.5px solid rgba(128,128,128,.3);' +
-			'border-top-color:var(--proton-accent,#3b82f6);border-radius:50%;' +
-			'animation:esimspin .8s linear infinite;}' +
-		'.esim-txtblk{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;}' +
-		'.esim-h{font-weight:600;font-size:1.03em;flex:1 1 auto;min-width:0;}' +
-		'.esim-d{opacity:.72;font-size:.92em;word-break:break-word;margin-top:8px;}' +
-		'.esim-note{opacity:.6;font-size:.85em;margin:10px 0 0;}' +
-		'.esim-log{margin:14px 0 4px;max-height:9em;overflow:auto;font-family:monospace;' +
-			'font-size:.8em;white-space:pre-wrap;word-break:break-word;' +
-			'background:rgba(128,128,128,.1);border-radius:6px;padding:8px 10px;}' +
-		'@keyframes esimspin{to{transform:rotate(360deg);}}';
-	document.head.appendChild(E('style', { 'id': 'esim-ui-css', 'type': 'text/css' }, css));
-}
+function esimUiCss() {}   /* стили в modem.css */
 
 // Иконка SIM-карты (наш ассет icons/csim_iface.svg). Через <img> - иконка с
 // фиксированным цветом (#0095FF), тонировать не нужно.
@@ -432,7 +413,7 @@ return view.extend({
 			/* id нужен оверлею операций (modemtabs.setBusy('#esim-section')):
 			   селектор '.cbi-section' брал ПЕРВУЮ секцию документа - на части
 			   тем это не наш блок. */
-			E('div', { 'class': 'cbi-section', 'id': 'esim-section' }, [
+			E('div', { 'class': 'cbi-section tgesim', 'id': 'esim-section' }, [
 				E('h3', [ 'eSIM' ]),
 				body,
 				this.renderSettings(),

@@ -1,0 +1,1668 @@
+/*
+ * luci-app-5gmodem - оформление приложения.
+ *
+ * ЕДИНЫЙ файл на все страницы. Раньше стили жили внутри JS: девятнадцать блоков
+ * <style> в одиннадцати файлах плюс инлайновые атрибуты в разметке. Из-за этого
+ * одна и та же правка расползалась по нескольким местам, а новая секция молча
+ * оставалась без общих отступов - так и случилось с «Сохранёнными профилями».
+ *
+ * ПОРЯДОК ВАЖЕН: сначала общие блоки (вкладки, приоритет интернета), затем
+ * страницы. Внутри страницы правила идут так же, как раньше шли в её файле,
+ * чтобы переопределения сохранили прежний смысл.
+ *
+ * ПРИНЦИП: размеры и отступы СВОИХ компонентов задаём здесь сами и не
+ * рассчитываем на значения темы - темы дают разное, и приложение от этого
+ * разъезжалось (см. историю с luci-theme-argon). Относительные единицы в
+ * размерах чипов не использовать: font-size в процентах считается от шрифта
+ * кнопки ТЕМЫ, а он у каждой свой.
+ */
+
+/* ===== ОБЩИЕ ЗНАЧЕНИЯ ОФОРМЛЕНИЯ =====
+   Одни и те же цвета и радиусы повторялись по файлу десятками раз - поменять
+   «акцент приложения» значило пройтись поиском по всему CSS. Собрано здесь.
+   Акцент и текст берём У ТЕМЫ, а свои значения оставляем ЗАПАСНЫМИ: приложение
+   должно выглядеть частью текущей темы, а не спорить с ней. Где тема переменных
+   не даёт (bootstrap), сработает запасное - ровно то, что стояло раньше. */
+:root {
+  --tg-accent:      var(--proton-accent, #0095ff);   /* акцент: активные кнопки, ссылки */
+  --tg-term-fg:     #d6e0ea;                          /* текст терминальных врезок */
+  --tg-term-bg:     #161c26;                          /* фон терминальных врезок */
+  --tg-muted:       #8b95a7;                          /* подписи и второстепенный текст */
+  --tg-track:       rgba(128,128,128,.18);            /* трек прогрессбаров */
+  --tg-radius:      6px;                              /* скругление карточек и кнопок */
+  --tg-radius-lg:   8px;                              /* скругление крупных блоков */
+}
+
+/* ===== ВКЛАДКИ МОДЕМОВ (modemtabs.js) ===== */
+.modembar { margin: 0 0 1em 0; }
+.modembar .modembar-name {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 1.15em; font-weight: 700; letter-spacing: .3px;
+	padding: .2em 0 .5em 0;
+}
+.modembar .modemtabs-bar {
+	display: flex; flex-wrap: wrap; gap: .4em; padding-bottom: .2em;
+}
+.modembar .modemtabs-bar .modemtab {
+	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
+	display: inline-flex; align-items: center; gap: .4em;
+}
+.modembar .modemtabs-bar .modemtab .modemtab-ic {
+	width: 16px; height: 16px; flex: 0 0 auto; display: block;
+}
+/* Имя модема - моноширинным, как строка с полным именем в шапке (.modembar-name):
+   это идентификатор железа, а не обычный текст, и одинаковая ширина знаков
+   помогает сравнивать похожие названия соседних модемов. */
+.modembar .modemtabs-bar .modemtab span {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+/* Активный модем помечаем как активную кнопку приоритета интернета - то есть
+   тем же, чем тема помечает кнопку на hover: одна акцентная рамка, без заливки
+   и без внутренней обводки (та удваивала линию и смотрелась жирно). */
+.modembar .modemtabs-bar .modemtab.active {
+	border-color: var(--tg-accent);
+	pointer-events: none;
+}
+/* Кнопка-заготовка: та же геометрия и то же содержимое, что у настоящей
+   вкладки, поэтому ряд занимает свою итоговую высоту с первого кадра.
+   Клики глушим классом, а НЕ атрибутом disabled: тема даёт [disabled]
+   opacity .5, и заготовка с именем из кеша была бы заметно блёклой -
+   подмена настоящими данными бросалась бы в глаза. */
+.modembar .modemtabs-bar .modemtab-ghost { pointer-events: none; }
+/* Имени в кеше нет (первый заход): нейтральная подпись и приглушённый вид,
+   чтобы было видно, что данные ещё едут. */
+.modembar .modemtabs-bar .modemtab-blank { min-width: 9em; opacity: .45; }
+
+/* ===== ПРИОРИТЕТ ИНТЕРНЕТА (netpri.js) ===== */
+.netpribar { margin: 0 0 1em 0; }
+/* Небольшой заголовок «Приоритет интернета» - только когда виджет включён
+   (см. buildBar). Пояснение для новых пользователей; сворачивания нет. */
+.netpribar .netpribar-title {
+	font-size: .95em; font-weight: 600; opacity: .8; padding: 0 0 .35em 0;
+	display: block; user-select: none;
+}
+.netpribar .netpri-row { display: flex; flex-wrap: wrap; gap: .4em; align-items: stretch; }
+/* proton2025 добавляет ".btn+.btn{margin-left:8px}" между соседними кнопками -
+   поверх gap:.4em ряда. Из-за этого промежуток МЕЖДУ интерфейсными кнопками
+   шире (.4em+8px), чем между ssclash и спидтестом (там margin-left переопределён,
+   остаётся только .4em). Снимаем добавку с интерфейсных кнопок, чтобы ВСЕ
+   промежутки были ровно gap ряда. margin-left:auto у ssclash/спидтеста (правое
+   выравнивание) при этом не трогаем - их из правила исключаем. */
+/* Все кнопки без отступа (гасим proton .btn+.btn), а ПЕРВЫЙ правый виджет
+   (YouTube/SSClash/спидтест - что идёт первым) получает margin-left:auto и
+   уводит всю правую группу к правому краю. */
+.netpribar .netpri-row > .netpri-btn:not(.netpri-rightstart) { margin-left: 0; }
+.netpribar .netpri-row > .netpri-rightstart { margin-left: auto; }
+.netpribar .netpri-btn {
+	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
+	display: flex; flex-direction: column; align-items: flex-start; text-align: left;
+	line-height: 1.15;
+	/* proton2025 sets "button,.btn{gap:8px}", which on our flex-COLUMN buttons turns
+	   into big vertical gaps between the three lines; neutralise it (bootstrap has
+	   no such rule, so it already looks tight there). */
+	gap: 0;
+}
+.netpribar .netpri-btn .netpri-sub { font-size: .72em; font-weight: 400; opacity: .7; }
+.netpribar .netpri-btn .netpri-name { display: flex; align-items: center; gap: .35em; }
+.netpribar .netpri-btn .netpri-ic { display: block; width: 16px; height: 16px; flex: 0 0 auto; }
+.netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
+.netpribar .netpri-btn .netpri-ip.empty { opacity: .4; }
+.netpribar .netpri-btn.active {
+	/* Активную помечаем ровно тем же, что тема даёт кнопке на hover
+	   (.cbi-button:hover -> border-color: accent, box-shadow: none).
+	   Внутренней обводки inset 0 0 0 1px здесь была - она удваивала рамку,
+	   и выделение выглядело жирным. */
+	border-color: var(--tg-accent);
+	/* pointer-events НЕ отключаем: иначе активную карточку нельзя схватить для
+	   перетаскивания. Клик по уже активной и так ничего не делает (обработчик
+	   click рано выходит). */
+}
+/* Карточка теста скорости: та же плитка, но прижата вправо и выровнена по правому
+   краю (сервис сверху, скорость по центру, публичный IP снизу). */
+.netpribar .netpri-btn.netpri-st { align-items: flex-end; text-align: right; }
+.netpribar .netpri-st .netpri-st-speed { display: flex; align-items: center; gap: .15em; }
+.netpribar .netpri-st .netpri-st-arrow { display: block; width: 11px; height: 11px; flex: 0 0 auto; opacity: .85; }
+.netpribar .netpri-st .netpri-st-unit { font-size: .72em; font-weight: 400; opacity: .7; margin-left: .3em; }
+/* Фаза теста ЗАЛИВАЕТ ФОН кнопки как прогресс-бар: загрузка - полупрозрачным
+   зелёным, отдача - синим. Ширина заливки = доля прошедшего времени фазы
+   (--st-p ставит JS по elapsed/secs). Заменило пульсирующую рамку: прогресс
+   честнее и не зависит от box-model. Заливку кладёт ::before ПОД контентом,
+   overflow:hidden обрезает её по скруглению кнопки. */
+.netpribar .netpri-st { position: relative; overflow: hidden; transition: border-color .3s ease; }
+.netpribar .netpri-st.st-dl { --st-c: #2ea043; }
+.netpribar .netpri-st.st-ul { --st-c: #0095ff; }
+.netpribar .netpri-st.st-dl, .netpribar .netpri-st.st-ul { border-color: var(--st-c); }
+.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before {
+	content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+	width: var(--st-p, 0%);
+	background: var(--st-c); opacity: .16;
+	transition: width .25s linear;   /* сглаживаем дискретные тики JS */
+	pointer-events: none; z-index: 0;
+}
+/* Отдача заполняется В ДРУГУЮ СТОРОНУ - справа налево: якорим заливку к правому
+   краю (это симметрично «стрелке вверх» и визуально отличает фазу от загрузки). */
+.netpribar .netpri-st.st-ul::before { left: auto; right: 0; }
+/* контент - НАД заливкой (::before позиционирован, поэтому детей поднимаем) */
+.netpribar .netpri-st > * { position: relative; z-index: 1; }
+/* Стрелка ТЕКУЩЕЙ фазы ПУЛЬСИРУЕТ свечением - как точки статусов (box-shadow-
+   свечение), только анимированным и цветом фазы (--st-c). Пульсирует ТОЛЬКО
+   активная: в загрузке - стрелка вниз (.st-arrow-dl), в отдаче - вверх
+   (.st-arrow-ul). Раньше селектор цеплял ОБЕ стрелки внутри карточки, поэтому
+   мигали обе. drop-shadow (а не box-shadow) - чтобы свечение шло по контуру
+   SVG-стрелки, а не по её прямоугольнику. */
+.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
+.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul { animation: st-glow 1.1s ease-in-out infinite; }
+@keyframes st-glow {
+	0%, 100% { filter: drop-shadow(0 0 1px var(--st-c)); }
+	50%      { filter: drop-shadow(0 0 4px var(--st-c)); }
+}
+/* уважаем системную настройку «меньше движения»: без пульса, но со статичным
+   свечением - так активная стрелка всё равно выделена. */
+@media (prefers-reduced-motion: reduce) {
+	.netpribar .netpri-st.st-dl .netpri-st-arrow.st-arrow-dl,
+	.netpribar .netpri-st.st-ul .netpri-st-arrow.st-arrow-ul {
+		animation: none; filter: drop-shadow(0 0 3px var(--st-c));
+	}
+	.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before { transition: none; }
+}
+.netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
+/* Ширину НЕ фиксируем: кнопка растёт под большое число, текст не вылезает.
+   tabular-nums держит цифры ровными при живом счёте; dim - плейсхолдер «0.0». */
+.netpribar .netpri-st .netpri-st-num { font-variant-numeric: tabular-nums; }
+.netpribar .netpri-st .netpri-st-num.dim { opacity: .35; }
+.netpribar .netpri-st .netpri-st-icon { display: block; width: 14px; height: 14px; flex: 0 0 auto; }
+/* Кнопка SSClash-Go - 3-строчная КАРТОЧКА как модемные (версия / имя+значок /
+   IP), поэтому спец-раскладку не задаём: наследует .netpri-btn (колонка, слева).
+   Правое выравнивание уходит на неё, спидтест встаёт вплотную справа. */
+/* Содержимое по ЛЕВОМУ краю (версия и IP в левый угол) - по решению владельца. */
+/* (выравнивание ssclash задано общим правилом со статус-карточками ниже) */
+/* Значок в фирменном «чипе», как .brand-mark на странице SSClash: скруглённый
+   бокс с лёгкой серой плашкой и тонкой рамкой. Фон и рамку вяжем к currentColor
+   (= цвет текста кнопки), поэтому на светлой теме это лёгкий серый, а не тёмное
+   пятно, а на тёмной - светлый полупрозрачный патч, как в оригинале. Значок тоже
+   наследует цвет текста и адаптируется к теме. */
+.netpribar .netpri-ssclash .netpri-ssclash-ic {
+	display: inline-flex; align-items: center; justify-content: center;
+	/* Ровно как плоские иконки блока (.netpri-ic = 16px): вклад в высоту строки
+	   тот же, отрицательные поля не нужны, строки карточки совпадают со всеми. */
+	flex: 0 0 auto; width: 16px; height: 16px;
+	border-radius: 4px;
+	/* Фиксированная серая плашка со светлым значком - точные цвета как под
+	   иконкой на оригинальной странице SSClash (одинаково в обеих темах). */
+	background: #3d4144;
+	border: 1px solid #565a5d;
+	color: #e8eef2;
+}
+.netpribar .netpri-ssclash .netpri-ssclash-ic svg { display: block; width: 11px; height: 11px; }
+/* Живая точка состояния сервиса после «SSClash»: зелёная со свечением, если
+   запущен, красная - если остановлен. Обновляется опросом ssclash.sh status. */
+.netpri-svcdot { display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+	margin-left: .4em; flex: 0 0 auto; vertical-align: middle;
+	transition: background .3s, box-shadow .3s; }
+.netpri-svcdot.on  { background: #2ea043; box-shadow: 0 0 5px 1px rgba(46,160,67,.9); }
+.netpri-svcdot.off { background: #e5484d; box-shadow: 0 0 5px 1px rgba(229,72,77,.85); }
+/* Карточка «Статус сервиса»: слева, как ssclash. Иконка - цветная плашка с
+   глифом сервиса (или ⚡ для своего хоста). */
+/* Статус/сервис-карточки: содержимое по ПРАВОМУ краю. Точка статуса при этом
+   остаётся ПЕРВОЙ (слева от иконки), с небольшим зазором от неё. Т.к. точка -
+   слева, а название - правее всех, верх/низ выравниваются по концу названия. */
+.netpribar .netpri-btn.netpri-status,
+.netpribar .netpri-btn.netpri-ssclash { align-items: flex-end; text-align: right; }
+.netpribar .netpri-status .netpri-name .netpri-svcdot,
+.netpribar .netpri-ssclash .netpri-name .netpri-svcdot { margin: 0 .2em 0 0; }
+.netpribar .netpri-status .netpri-pingbadge { display: inline-flex; align-items: center;
+	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; border-radius: 4px;
+	font-size: 11px; font-weight: 700; line-height: 1; color: #fff; }
+.netpribar .netpri-status .netpri-pingbadge.custom { background: transparent; font-size: 15px; }
+.netpribar .netpri-status .netpri-pingico { display: inline-flex; align-items: center;
+	justify-content: center; flex: 0 0 auto; width: 16px; height: 16px; }
+.netpribar .netpri-status .netpri-pingico svg { display: block; width: 16px; height: 16px; }
+/* Неопрошенное состояние (YouTube в режиме «по клику», ещё не пинговали) -
+   нейтральная серая точка без свечения. */
+.netpri-svcdot.unknown { background: rgba(127,127,127,.55); box-shadow: none; }
+/* Мобильная вёрстка: тянущиеся кнопки. Интерфейсы заполняют строку (≈2 в ряд,
+   растягиваясь до края блока), а карточка спидтеста уходит на свою строку во всю
+   ширину. Тянутся ТОЛЬКО сами кнопки - контейнер и заголовок не трогаем. */
+@media (max-width: 680px) {
+	/* Базу берём ПО СОДЕРЖИМОМУ (auto), а не фиксированные 42%: с фиксированной
+	   базой три кнопки давали 126% и третья переносилась ВСЕГДА, даже когда по
+	   ширине все три помещались (два модема + wifi). С auto в строку встаёт
+	   столько, сколько реально влезает, а дальше flex-grow растягивает их до
+	   края. min-width не даёт кнопке схлопнуться до нечитаемой при длинном имени
+	   оператора. */
+	.netpribar .netpri-row > .netpri-btn { flex: 1 1 auto; min-width: 7.5em; }
+	/* На мобильном правая группа переносится и margin-left:auto не нужен -
+	   иначе первый правый виджет прижимался бы к краю в одиночку. */
+	.netpribar .netpri-row > .netpri-rightstart { margin-left: 0; }
+}
+
+/* ===== СТРАНИЦА «СЕТЬ» (5gdetail.js) ===== */
+/* Плавный рост/убывание полосок метрик (CSQ/RSRP/RSRQ/SINR/RSSI): их ширину
+   мы пересчитываем на каждый опрос, и без перехода она скакала рывком. Анимируем
+   только ширину - цвет/подпись меняем мгновенно, чтобы оценка не «догоняла».
+   0.4 с ease-out достаточно, чтобы движение читалось, но не тормозило. */
+.cbi-progressbar > div {
+  transition: width 0.4s ease-out;
+}
+
+/* Основные бары «Информации о соте»: во всю ширину ячейки (раньше жёсткие 33%
+   выглядели обрубком и на десктопе, и на мобильном; стандартный отступ от края
+   даёт паддинг самой ячейки). Пустая часть - РОВНАЯ СЕРАЯ ПОЛОСА, как у мелких
+   полосок дополнительных метрик (.metric-bar), вместо обводки темы. */
+#csq, #rssi, #rsrp, #rsrq, #sinr {
+  max-width: none;
+  border: none;
+  box-shadow: none;
+  background: var(--tg-track);
+}
+.tginfo-modesw .cbi-button {
+  margin: 2px 6px 2px 0;
+  padding: 2px 10px;
+}
+
+/* Кнопки диапазонов - строго одинаковой ширины (фиксированная, а не
+   min-width, иначе 3-символьные шире 2-символьных), стандартной высоты */
+#bands-3g .cbi-button,
+#bands-lte .cbi-button,
+#bands-nr .cbi-button {
+  /* Ширина: НЕ фиксированная, а минимальная + собственные боковые отступы.
+     Раньше стояло width:3.4em с обнулёнными padding-left/right - подписи
+     упирались в края кнопки, и на темах с другим шрифтом ряд выглядел сжатым.
+     min-width держит короткие «B1» и «B5» одного размера с остальными, а
+     трёхсимвольные («B12», «B71») спокойно разъезжаются на нужную ширину
+     вместо того, чтобы прижимать текст к рамке. */
+  min-width: 3.4em;
+  width: auto;
+  /* Вертикальный отступ и высоту задаём САМИ. Раньше обнулялись только боковые
+     padding, а вертикальные доставались от темы - и там, где тема их не даёт
+     (или зажимает кнопку фиксированной высотой), ряды диапазонов выходили
+     сплющенными, в отличие от соседних кнопок режима. */
+  /* Размер задаём САМИ и с !important. Без него тема перебивала нас каскадом:
+     высоту навязывает сразу пара свойств (height и min-height), они приходят из
+     РАЗНЫХ правил темы, и достаточно упустить одно, чтобы ряд остался вытянутым.
+     Ровно так уже сделано для чипов диапазонов в строке режима (.tginfo-band) -
+     единственный способ не переписывать это при каждой новой теме. */
+  padding: 0.35em 0.55em !important;
+  line-height: 1.4 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+/* ЗАЩИТА ОТ ЗАМЕРА ТАБЛИЦ ТЕМОЙ proton2025.
+   Тема (custom-pages.js, measureNaturalTableWidth) на каждое изменение DOM
+   замеряет «натуральную» ширину таблиц: временно ставит ячейкам
+   white-space:nowrap, дёргает void table.offsetWidth (принудительный reflow),
+   меряет и возвращает стили назад.
+   Наши ряды кнопок в этот миг схлопываются с нескольких строк в одну, высота
+   документа проваливается на ~200px, и БРАУЗЕР ОБРЕЗАЕТ scrollTop до нового
+   максимума. Стили тема вернёт, высоту тоже - а прокрутка останется обрезанной.
+   Итог: страница уезжала вверх на каждый тик опроса (только на этой теме и
+   только при раскрытом блоке частот - именно там кнопки переносятся).
+   !important бьёт инлайновый стиль темы, поэтому её nowrap на наши контейнеры
+   не действует: высота при замере не меняется - обрезать нечего.
+   Чинить тему мы не можем, а страница должна работать в любой. */
+/* ЗАЩИЩАЕМ ПО КЛАССУ, А НЕ ПО ID. Все ячейки блока «Управление частотами» с рядами
+   кнопок (2G/3G/4G/5G-диапазоны, режим сети, агрегация несущих, привязка/лок соты,
+   5G-переключатель) имеют класс .tginfo-modesw. Раньше список был поимённый
+   (#bands-3g/#bands-lte/#bands-nr/#modesw-btns) и НЕ покрывал #caen-cell/#mode5g-cell/
+   #celllock-cell/#bands-2g: как только у модема появлялась, напр., агрегация несущих
+   (Compal RXM-G1 по QMI), её кнопка при замере темой схлопывалась и автопрокрутка
+   возвращалась. Класс покрывает все ряды кнопок разом - и будущие тоже. */
+.tginfo-modesw, #antports-table td {
+  white-space: normal !important;
+}
+/* КОРЕНЬ «медленного расползания страницы вверх» - browser scroll anchoring
+   (overflow-anchor). Наши блоки живо обновляются каждый опрос: прогресс-бары
+   метрик анимируются (transition: width .4s), таблицы (соседи/CA) растут. Когда
+   такой блок оказывается НАД вьюпортом и чуть меняет геометрию, браузер САМ
+   двигает scrollTop, «удерживая якорь» - и это накапливается в непрерывный уход
+   страницы вверх (проверено вживую: docH стабильна, scroll-behavior=auto, НИ ОДНОГО
+   вызова scroll API - чистое нативное поведение; document-level overflow-anchor:none
+   мгновенно останавливает). НЕ трогаем весь документ (это чужие страницы LuCI) -
+   исключаем из выбора якоря ТОЛЬКО наши секции и всё внутри них. Тогда браузер
+   якорит на стабильную обвязку страницы (или ни на что) и не ползёт. */
+.cbi-section.tginfo,
+.cbi-section.tginfo * {
+  overflow-anchor: none;
+}
+
+/* ===== СОВМЕСТИМОСТЬ С ТЕМАМИ ==============================================
+   Своего CSS-файла у приложения нет - вид держится на классах темы. Пока темы
+   давали похожие значения, это работало; argon показал, чем это кончается:
+
+     .cbi-section { padding: 0 }        -> содержимое блоков прилипает к краям
+     .btn, button { height: 2.5rem }    -> ФИКСИРОВАННАЯ высота ЛЮБОЙ кнопки
+
+   Второе особенно грубо: наши карточки в «Приоритете интернета» - это кнопки с
+   тремя строками внутри (модем, оператор, IP), и жёсткая высота обрезала их -
+   IP вылезал наружу. Ряды диапазонов той же высотой, наоборот, сплющивало.
+
+   Поэтому ниже - не «подгонка под argon», а СОБСТВЕННЫЕ гарантии наших блоков:
+   отступ секции и высота по содержимому. Значения совпадают с тем, что уже дают
+   proton2025/bootstrap, так что там ничего не меняется, а темы без этих правил
+   (или с чужеродными) перестают ломать раскладку. Область действия - только
+   наши секции .tginfo и наши кнопки, чужие страницы LuCI не затрагиваются. */
+/* Отступ получают ВСЕ секции наших страниц - привязка по адресу страницы, а не
+   по классу на каждом блоке. Раньше правило висело на маркерах (tginfo/tgesim/
+   tgpage), и каждая НОВАЯ секция молча оставалась без оформления: так по очереди
+   всплыли «Сохранённые профили», «Индикатор сигнала», eSIM и панель настроек
+   вкладок. Теперь достаточно, чтобы блок просто находился на странице модема.
+   Маркеры в разметке оставлены - на них завязаны другие правила. */
+[data-page^="admin-modem-5gmodem"] .cbi-section {
+  padding: 20px;
+}
+/* Вложенная секция своего отступа НЕ получает - иначе он удваивается. */
+[data-page^="admin-modem-5gmodem"] .cbi-section .cbi-section {
+  padding: 0;
+}
+/* ЗАГОЛОВОК-«ШАПКА»: выравниваем ТОЛЬКО там, где тема его так рисует.
+   Одни темы делают из h3 шапку карточки с фоном и своими боковыми отступами
+   (argon), другие - обычный заголовок с линией снизу (proton2025, bootstrap).
+   Мы задаём секции свой отступ, и в первом случае они складываются: заголовок
+   уезжает вдвое дальше содержимого.
+   Признак «шапки» определяем ОДИН РАЗ до отрисовки (см. detectBoxedHeading) и
+   вешаем класс на <html>. Тогда правка статична - никаких пересчётов после
+   рендера, из-за которых страница дёргалась.
+   Компенсируем отступ секции отрицательным margin: плашка растягивается на всю
+   её ширину, а текст внутри встаёт ровно под содержимое. width:auto обязателен -
+   тема задаёт шапке width:100%, и с отрицательными margin она вылезла бы за
+   границы блока. */
+.tg-boxed-h3 [data-page^="admin-modem-5gmodem"] .cbi-section > h3 {
+  width: auto;
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+
+
+
+/* Высота - ПО СОДЕРЖИМОМУ. min-height сохраняет привычный размер обычных
+   кнопок, а многострочные карточки растут, вместо того чтобы обрезаться. */
+.cbi-section.tginfo .cbi-button,
+.cbi-section.tginfo .btn,
+.netpri-btn {
+  /* ТОЛЬКО height:auto, без min-height. Задать общий минимум - соблазнительно,
+     но он растягивает наши НАМЕРЕННО компактные кнопки: переключатели SIM1/SIM2
+     (padding 1px, шрифт 80%) и ряды диапазонов. Обычные кнопки и так набирают
+     привычную высоту из своего padding и line-height. */
+  height: auto;
+}
+/* Таблицы внутри наших блоков: у ряда тем .td { padding: 0 } либо padding
+   задан только для колонок с width - крайние ячейки прилипали к границе. */
+.cbi-section.tginfo .table > .tr > .td,
+.cbi-section.tginfo .table > .tr > .th {
+  padding: 0.4em 0.6em;
+}
+/* Нижний отступ последней таблицы: без него «Соседние соты» упирались в край. */
+.cbi-section.tginfo > .table:last-child {
+  margin-bottom: 0.5em;
+}
+
+/* ЕДИНИЦА ГРАДУСОВ: "56°C" вплотную к числу, без пробела.
+   Уменьшаем и поднимаем ТОЛЬКО букву C. Сам знак ° уже надстрочный по своему
+   рисунку - он сидит у верхней линии и мельче цифр; уменьшать его вдобавок
+   значит делать из него точку. А вот C рядом с ним остаётся полноразмерной и
+   выбивается, поэтому подтягиваем её к градусу.
+   line-height:0 обязателен - иначе подъём буквы растягивает высоту строки.
+   ВНИМАНИЕ: правило стоит ПОСЛЕ закрывающей скобки соседнего. Однажды оно было
+   вставлено внутрь списка селекторов выше - и защита от замера таблиц темой
+   (white-space:normal !important) перестала действовать на ряды кнопок, а те
+   получили font-size:.72em и line-height:0. Прокрутка снова начала уезжать. */
+.deg-unit {
+  font-size: .72em;
+  vertical-align: .32em;
+  line-height: 0;
+}
+
+/* Комбинации 3G - ИСКЛЮЧЕНИЕ из фиксированной ширины выше: та рассчитана на
+   короткие номера диапазонов ("B1"), а у комбинаций подписи длинные
+   ("2100 + 1900 + 850") - в 3.4em их бы расплющило. */
+#bands-3g .cbi-button.combo3g {
+  width: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+  font-variant-numeric: normal;
+}
+
+/* Подсказки (data-tooltip): длинный текст в одну строку растягивал страницу и
+   давал горизонтальный скролл. Разрешаем перенос и ограничиваем ширину.
+   Селекторы оба: LuCI рисует подсказку либо элементом .cbi-tooltip, либо
+   псевдоэлементом ::after - в зависимости от версии/темы. */
+.cbi-tooltip,
+[data-tooltip]::after {
+  white-space: normal !important;
+  max-width: min(90vw, 32em) !important;
+  overflow-wrap: anywhere;
+}
+
+/* Анти-джиттер: фиксируем раскладку таблиц и размеры иконок, чтобы при
+   обновлении данных строки не пересчитывали размер и страница не прыгала.
+   Ключевое: иконка сигнала пересоздаётся каждый опрос через innerHTML -
+   без явных размеров браузер делал reflow при каждой перерисовке. */
+.tginfo .table {
+  table-layout: fixed;
+  width: 100%;
+}
+.tginfo .table .td:first-child {
+  width: 33%;
+}
+.tginfo .table .td {
+  overflow-wrap: anywhere;
+}
+#signal img {
+  width: 36px;
+  height: 36px;
+}
+#signal medium {
+  display: block;
+  line-height: 1.2;
+  /* Процент сигнала - вдвое меньше, жирным моноширинным: это подпись под
+     иконкой, а не заголовок, и в моноширинном цифры не пляшут при смене. */
+  font-size: 70%;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#simicon {
+  width: 36px !important;
+  height: 36px !important;
+  flex: 0 0 auto;
+}
+
+/* Индикатор роуминга - символ ® перед статусом «В сети» (как «R» на телефоне). */
+.tginfo-roam {
+  display: inline-block; margin-right: .25em; font-weight: 700;
+  vertical-align: baseline; flex: 0 0 auto; opacity: .85;
+}
+
+/* CA-таблица многоколоночная - НЕ наследуем раскладку 2-колоночных таблиц
+   (fixed + 33% на первую колонку + overflow-wrap:anywhere), иначе ячейки
+   переносятся, высота строки скачет и страница дёргается при обновлении.
+   Одна строка на ячейку -> высота постоянна. */
+#ca-table {
+  table-layout: fixed;
+  width: 100%;
+}
+#ca-table .td, #ca-table .th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+  padding: 2px 8px 2px 0;
+}
+/* фиксированные пропорции колонок -> таблица всегда ровно 100% ширины, без
+   горизонтального переполнения (и без появляющегося/пропадающего скролла,
+   который менял высоту на proton2025) */
+#ca-table .td:nth-child(1), #ca-table .th:nth-child(1) { width: 7%; }
+#ca-table .td:nth-child(2), #ca-table .th:nth-child(2) { width: 19%; }
+#ca-table .td:nth-child(3), #ca-table .th:nth-child(3) { width: 10%; }
+#ca-table .td:nth-child(4), #ca-table .th:nth-child(4) { width: 8%; }
+#ca-table .td:nth-child(5), #ca-table .th:nth-child(5) { width: 10%; }
+#ca-table .td:nth-child(n+6), #ca-table .th:nth-child(n+6) { width: 9%; }
+#ca-table .td:nth-child(10), #ca-table .th:nth-child(10) { width: 10%; }
+
+/* Мобильная раскладка: 10 колонок не влезают на узкий экран (значения
+   обрезались многоточием). Ниже 800px превращаем каждую строку-компонент
+   (PCC/SCC) в компактную «карточку» с подписями (data-l через ::before).
+   Всё видно и помещается; высота стабильна - карточек всегда 5, как строк в
+   таблице (см. renderCaTable), поэтому (де)агрегация не меняет высоту блока.
+   ВАЖНО: брейкпоинт 800px = как у proton2025. Тема на <=800px вешает на
+   таблицы 'overflow-x:auto !important'; при (де)агрегации ширина CA-контента
+   менялась -> горизонтальный скролл появлялся/исчезал -> высота элемента
+   прыгала -> страницу дёргало. display:block (карточки) убирает широкую
+   таблицу и сам скролл, поэтому прыжок пропадает. */
+@media (max-width: 800px) {
+  #ca-table, #ca-table .tr { display: block; width: 100%; }
+  #ca-table .ca-head { display: none; }
+  #ca-table .ca-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 1em;
+    border: 1px solid rgba(128,128,128,.25);
+    border-radius: 6px;
+    padding: .35em .6em;
+    margin: 0 0 .45em 0;
+  }
+  #ca-table .ca-row .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    padding: 1px 0;
+  }
+  #ca-table .ca-row .ca-cc {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(128,128,128,.2);
+    margin-bottom: .15em;
+  }
+  #ca-table .ca-row .td[data-l]::before {
+    content: attr(data-l) ": ";
+    opacity: .6;
+  }
+}
+
+/* --- Таблица соседних сот ------------------------------------------------- */
+/* Колонок всего 7 и все узкие, поэтому фиксированной раскладки достаточно. */
+#nb-table {
+  table-layout: fixed;
+  width: 100%;
+}
+#nb-table .td, #nb-table .th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 8px 2px 0;
+}
+#nb-table .td:nth-child(1), #nb-table .th:nth-child(1) { width: 16%; }
+#nb-table .td:nth-child(2), #nb-table .th:nth-child(2) { width: 12%; }
+#nb-table .td:nth-child(n+3), #nb-table .th:nth-child(n+3) { width: 14.4%; }
+/* Служебная сота выделена, иначе она неотличима от самого сильного соседа. */
+#nb-table .nb-serving { font-weight: 600; }
+#nb-table .nb-serving .td:first-child { opacity: .85; }
+
+/* Мобильная раскладка - тем же приёмом, что у CA-таблицы (см. подробности там):
+   ниже 800px строка превращается в карточку с подписями через data-l.
+   Высоту здесь мы НЕ стабилизируем сознательно: число соседей меняется по
+   радиообстановке, фиксированного набора строк тут не существует. */
+@media (max-width: 800px) {
+  #nb-table, #nb-table .tr { display: block; width: 100%; }
+  #nb-table .nb-head { display: none; }
+  #nb-table .nb-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 1em;
+    border: 1px solid rgba(128,128,128,.25);
+    border-radius: 6px;
+    padding: .35em .6em;
+    margin: 0 0 .45em 0;
+  }
+  #nb-table .nb-row .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    padding: 1px 0;
+  }
+  #nb-table .nb-row .td:first-child {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(128,128,128,.2);
+    margin-bottom: .15em;
+  }
+  #nb-table .nb-row .td[data-l]::before {
+    content: attr(data-l) ": ";
+    opacity: .6;
+  }
+}
+
+/* --- Короткая полоска метрики в таблицах ---------------------------------- */
+/* Высота ФИКСИРОВАННАЯ и одинаковая во всех строках - поэтому таблица не
+   «дышит» между опросами и страницу не дёргает. Ширину анимируем тем же
+   переходом, что у больших полосок метрик, иначе она скакала бы рывком. */
+.metric-bar {
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--tg-track);
+  overflow: hidden;
+}
+.metric-bar > div {
+  height: 100%;
+  border-radius: 2px;
+  transition: width .4s ease-out;
+}
+/* Ячейки БЕЗ полоски (Band/PCI/EARFCN) иначе повисли бы по центру выросшей
+   строки, и числа перестали бы читаться в один ряд с теми, что с полосками. */
+#ca-table .td, #nb-table .td, #antports-table .td { vertical-align: top; }
+
+/* На proton2025 в ячейки попадает ШТАТНЫЙ .cbi-progressbar - и тема задаёт ему
+   min-width:200px и внешние поля, рассчитанные на полноразмерные метрики. В
+   колонку таблицы (~9% ширины) такое не влезает и разорвало бы вёрстку, поэтому
+   ограничения снимаем ТОЧЕЧНО - только внутри наших двух таблиц.
+   Подпись внутри полоски (::after) НЕ трогаем: ради неё всё и затевалось. */
+#ca-table .cbi-progressbar,
+#antports-table .cbi-progressbar,
+#nb-table .cbi-progressbar {
+  min-width: 0 !important;
+  height: 20px;
+  margin: 0;
+}
+
+/* Значение диапазона (pband/SCC) меняет длину при переселении соты
+   (напр. "B1 (2100 MHz)" <-> "B3 (1800 MHz) @15 MHz"). В таблице с фикс.
+   раскладкой длинное значение переносилось на 2 строки -> высота строки
+   скакала -> страница дёргалась при опросе. Держим значение в одну строку. */
+#pband {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Секции без табличных полос и рамок - как на странице статуса LuCI */
+.tginfo .table,
+.tginfo .table .tr,
+.tginfo .table .td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.tginfo .table .tr:nth-child(odd) .td,
+.tginfo .table .tr:nth-child(even) .td {
+  background: transparent !important;
+}
+.tginfo h3 {
+  margin-top: 0;
+}
+
+/* Компактная строка состояния: сигнал | SIM | статус | инфо | температура */
+.tginfo-general {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.4em;
+  flex-wrap: wrap;
+  padding: 4px 0 2px;
+}
+.tginfo-signal {
+  text-align: center;
+  min-width: 44px;
+  line-height: 1.15;
+}
+.tginfo-signal medium {
+  display: block;
+  font-size: 90%;
+}
+/* Две параллельные колонки с одинаковой межстрочкой -> строки выровнены */
+.tginfo-status,
+.tginfo-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tginfo-status {
+  min-width: 8em;
+}
+.tginfo-status > *,
+.tginfo-info > * {
+  line-height: 1.5;
+}
+/* короткие строки статуса не переносим, длинные - можно */
+.tginfo-status > * {
+  white-space: nowrap;
+}
+.tginfo-status .tginfo-reg,
+.tginfo-status .tginfo-loc {
+  font-size: 88%;
+  opacity: 0.75;
+}
+.tginfo-status .tginfo-op {
+  font-weight: 600;
+}
+.tginfo-status .tginfo-phone {
+  font-size: 0.8em;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.tginfo-info {
+  font-size: 92%;
+  opacity: 0.9;
+  flex: 1 1 16em;
+}
+.tginfo-info .tginfo-tech {
+  font-weight: 600;
+  opacity: 1;
+  overflow-wrap: anywhere;
+}
+/* частоты в скобках - без жирного, мельче и на 30% серее основного текста */
+.tginfo-info .tginfo-freq {
+  font-weight: normal;
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+/* Живой статус дозвона (строка из лога netifd), пока модем не получил IP:
+   помельче и приглушённо - это временное сообщение о ходе подключения, а не
+   постоянное значение. */
+.tginfo-info .tginfo-connstatus { font-size: .92em; opacity: .8; }
+/* Диапазоны в строке режима - «кнопкой», как переключатели бендов (активный
+   вид). Это ПОКАЗ текущих бендов, не переключатель: pointer-events:none.
+   ВАЖНО: display НЕ трогаем - у proton2025 .btn это inline-flex с
+   align-items:center, он центрирует текст ВЕРТИКАЛЬНО. Если сменить на
+   inline-block, вылезает descender-зазор строки снизу (текст «прижат» кверху).
+   Поэтому только ужимаем паддинг/высоту/шрифт !important (тема крупная) и
+   центрируем чип по строке через vertical-align:middle. */
+.tginfo-info .tginfo-band.btn {
+  padding: .06em .45em !important;
+  margin: 0 .12em !important;
+  min-height: 0 !important;
+  height: auto !important;
+  gap: 0 !important;
+  font-size: .8em;
+  line-height: 1.25;
+  vertical-align: middle;
+  cursor: default;
+  pointer-events: none;
+}
+.tginfo-info .tginfo-ip {
+  font-variant-numeric: tabular-nums;
+}
+/* подписи IPv4:/IPv6: - жирным */
+.tginfo-info .tginfo-iplabel {
+  font-weight: 600;
+  margin-right: 0.35em;
+}
+/* IPv6 длинный (до 39 символов) - уменьшаем шрифт, чтобы строка влезала на
+   мобильном в ОДИН ряд и не вылезала за край экрана. */
+#modemip6 {
+  font-size: 0.78em;
+  letter-spacing: -0.2px;
+  word-break: break-all;
+}
+@media (max-width: 800px) {
+  #modemip6 { font-size: 0.7em; }
+}
+/* правая колонка шапки: SIM-слоты над температурой, прижаты вправо */
+.tginfo-right {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+/* маленькие кнопки переключения SIM-слота */
+/* Переключатели SIM - маленькие чипы, а не полноразмерные кнопки. Размер
+   задаём В ПИКСЕЛЯХ, а не в процентах: font-size:80% считается от шрифта
+   КНОПКИ ТЕМЫ, а он у всех разный (bootstrap 13px, proton2025 13px, argon
+   14px) - и одни и те же чипы выходили то мельче, то крупнее. Явные значения
+   дают одинаковый вид везде. */
+.tginfo-simslot .cbi-button {
+  padding: 2px 8px !important;
+  font-size: 11px !important;
+  line-height: 15px !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin-left: 4px;
+}
+/* подпись типа SIM (USIM/eSIM) слева от кнопок */
+.tginfo-simslot .tginfo-simslot-type {
+  font-size: 80%;
+  opacity: 0.7;
+  margin-right: 4px;
+}
+/* секция eSIM */
+.esim-meta {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 88%;
+  opacity: 0.8;
+  margin-bottom: 8px;
+}
+/* Кнопка «загрузить QR» - квадратная, с иконкой вместо подписи. Размер задаём
+   САМИ: тема считает её обычной кнопкой и даёт свои отступы (а argon - ещё и
+   фиксированную высоту), из-за чего квадрат превращался в узкий вертикальный
+   прямоугольник. Ровно та же правка, что понадобилась рядам диапазонов. */
+.esim-qr-btn {
+  padding: .45em .55em !important;
+  min-height: 0 !important;
+  height: auto !important;
+  line-height: 1 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.esim-qr-btn img {
+  display: block;
+  width: 1.35em;
+  height: 1.35em;
+}
+
+.esim-dl {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  align-items: center;
+}
+#esim-profiles .btn {
+  padding: 1px 8px;
+  font-size: 85%;
+  margin-left: 4px;
+}
+.tginfo-temp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  margin-left: auto;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+#temp {
+  /* Цифры температуры - жирным моноширинным, чуть меньше окружающего текста:
+     в моноширинном значение не дёргается при смене (45.2 -> 45.9). */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 90%;
+}
+.tginfo-temp .tginfo-thermo {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ===== СТРАНИЦА «МОДЕМ» И ДИАГНОСТИКА (5gdebug.js) ===== */
+.tg-proto-badge {
+  display: inline-block;
+  padding: 1px 9px;
+  border: 1px solid rgba(127, 127, 127, 0.4);
+  border-radius: 6px;
+  background: rgba(127, 127, 127, 0.12);
+  font-weight: 600;
+  font-size: 0.9em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.tg-code {
+  background: var(--tg-term-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin: 10px 12px 12px 0;
+  overflow: hidden;
+  font-family: monospace;
+  max-width: 420px;
+}
+.tg-code-lang {
+  font-size: 10px;
+  color: var(--tg-muted);
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  letter-spacing: 0.06em;
+}
+.tg-code-body {
+  /* Фон и цвет ЗАДАЁМ ЯВНО: этот класс висит и на <pre> (вывод диагностики), а
+     тему бутстрапа <pre> красит светлым фоном - светлые буквы на нём сливались.
+     Класс перебивает элементный селектор темы. Цвета - те же, что у вывода
+     AT-команд (pre.atcommand-output), чтобы блоки выглядели одинаково. */
+  background: var(--tg-term-bg);
+  color: var(--tg-term-fg);
+  padding: 9px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* Заголовки колонок: резервируем две строки, чтобы блоки кода и
+   кнопки во всех трёх колонках были на одном уровне независимо от
+   того, переносится заголовок или нет (в proton2025 русские
+   заголовки длиннее и переносятся). */
+.tg-diag-table .td {
+  vertical-align: top;
+}
+.tg-diag-table .td > .cbi-value-title {
+  display: block;
+  min-height: 2.9em;
+  line-height: 1.4;
+}
+
+/* Таблицы-раскладки без линий и фонов тем */
+.tg-diag-table,
+.tg-diag-table .tr,
+.tg-diag-table .td,
+.tg-info-table,
+.tg-info-table .tr,
+.tg-info-table .td {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.tg5g h3 {
+  margin-top: 0;
+}
+
+/* ===== СОВМЕСТИМОСТЬ С ТЕМАМИ (то же, что на вкладке «Сеть») ================
+   Тема может не дать секции внутреннего отступа вовсе (argon: .cbi-section
+   { padding: 0 }) - тогда «Информация о модеме», «Сохранённые профили» и блок
+   диагностики прилипают к краям экрана. И может навязать кнопкам жёсткую
+   высоту (argon: .btn { height: 2.5rem }) - тогда всё, что выше одной строки,
+   обрезается. Задаём это сами, только для СВОИХ секций. */
+.cbi-section.tg5g {
+  padding: 20px;
+}
+/* См. пояснение в 5gdetail.js: выравниваем заголовок-«шапку» только на темах,
+   которые его так рисуют. Класс на <html> ставит detectBoxedHeading оттуда же -
+   вкладки одного приложения, скрипт грузится в обоих случаях. */
+.tg-boxed-h3 .cbi-section.tg5g > h3 {
+  width: auto;
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+
+
+
+.cbi-section.tg5g .cbi-button,
+.cbi-section.tg5g .btn {
+  height: auto;   /* без min-height - см. пояснение в 5gdetail.js */
+}
+/* Блок диагностики: подписи, врезки с командами и кнопки должны стоять
+   столбиком слева, а не разъезжаться по ширине ячейки, если тема центрирует
+   содержимое таблиц (argon: .td { text-align: center }). */
+.tg-diag-table .td,
+.tg-info-table .td {
+  text-align: left;
+  vertical-align: top;
+}
+/* ПОДПИСИ ВНЕ СТАНДАРТНОЙ ФОРМЫ. Тема вправе считать, что .cbi-value-title -
+   это левая колонка формы «настройка : поле», и задать ей фиксированную
+   ширину с выравниванием вправо (argon: float:left, width:23rem,
+   text-align:right). У нас же такие подписи стоят НАД своим блоком - внутри
+   ячеек таблицы диагностики и над кнопкой отчёта. С чужими правилами подпись
+   занимала 23rem, уезжала вправо и выдавливала соседний блок: заголовки
+   разъезжались, а врезки с командами сжимались до случайной ширины.
+   Возвращаем им обычное поведение блочного заголовка - но ТОЛЬКО там, где они
+   не часть формы (.tg-modem-form с её парами «поле - значение» не трогаем). */
+.tg-diag-table .cbi-value-title,
+.tg-info-table .cbi-value-title,
+.cbi-section.tg5g > div > .cbi-value-title {
+  display: block;
+  float: none;
+  width: auto;
+  padding-right: 0;
+  text-align: left;
+}
+
+/* Лишняя разделительная полоса под флагом «Автоопределение …»: когда
+   ручные поля скрыты (depends), в proton2025 они остаются в DOM как
+   display:none и не дают флагу стать :last-child, из-за чего видна его
+   нижняя граница. Убираем границу у последнего ВИДИМОГО ряда формы. */
+.tg-modem-form .cbi-value:not([style*="none"]):not(:has(~ .cbi-value:not([style*="none"]))) {
+  border-bottom: none;
+}
+
+/* Вторая колонка «Информация о модеме» - моноширинным, как терминал */
+.tg-info-table .tg-info-val {
+  font-family: var(--font-monospace, monospace);
+}
+
+/* Ячейки таблицы «Информация о модеме»: СВОЙ компактный паддинг. Темы (особенно
+   proton2025) кладут на .td большой отступ, и он складывался с расстоянием между
+   строками в «двойные» отступы. Прибиваем к плотному: вертикаль мелкая, левый
+   край без отступа, между колонками - небольшой зазор. */
+.tg-info-table .td {
+  padding: 2px 12px 2px 0 !important;
+  vertical-align: top;
+}
+
+/* Надпись «модема нет» вместо таблицы прочерков. Цвет наследуем, глушим
+   прозрачностью - работает в обеих темах без жёстких значений. */
+.tg-no-modem {
+  opacity: 0.65;
+  margin: 6px 12px 2px 0;
+  font-style: italic;
+}
+
+/* На узких/мобильных экранах три колонки диагностики складываются в
+   столбик, иначе третья («Проверка данных скриптами 5gmodem») уезжает
+   за край и не переносится. */
+@media (max-width: 640px) {
+  .tg-diag-table,
+  .tg-diag-table .tr,
+  .tg-diag-table .td {
+    display: block;
+    width: 100% !important;
+  }
+  .tg-diag-table .td {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .tg-diag-table .td > .cbi-value-title {
+    min-height: 0;
+  }
+}
+
+/* ===== КНОПКИ КОРПУСА (buttons.js) ===== */
+.btncard { border:1px solid rgba(127,127,127,.28); border-radius:12px;
+  padding:1em 1.1em 1.1em; margin-bottom:1.3em; background:rgba(127,127,127,.03); }
+/* Заголовок-карточка в рамке, как кнопки «Приоритета интернета» (класс
+   btn cbi-button даёт тема-рамку/фон/скругление; column-раскладку возвращаем
+   явно - на proton2025 .btn центрирует детей). */
+.btnhead-card { display:flex !important; flex-direction:column !important;
+  align-items:flex-start !important; justify-content:center !important;
+  flex:1 1 auto; gap:.15em; cursor:default; text-align:left; line-height:1.25; padding:.5em .95em; }
+/* Как заголовок+подпись в карточках сохранённых профилей модемов (mprof-name):
+   моноширинные, имя жирным, код мельче и приглушён, без плашки, слева. */
+.btnhead-card .hname { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-weight:700; font-size:1em; display:flex; align-items:center; gap:.5em; }
+.btnhead-card .hsub { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:78%; opacity:.55; margin-top:-.1em; }
+/* display:inline-block ОБЯЗАТЕЛЕН: у inline-span ширина/высота игнорируются,
+   и от переключателя оставался только круглый knob (::after) - «большая точка».
+   Вкл - акцентный цвет темы, выкл - нейтральный серый. */
+.btnsw { display:inline-block; width:42px; height:23px; border-radius:12px;
+  background:rgba(127,127,127,.4); position:relative; flex:0 0 auto; vertical-align:middle; }
+.btnsw::after { content:''; position:absolute; top:2px; left:2px; width:19px; height:19px;
+  border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.35); transition:left .2s; }
+.btnsw.on { background:var(--tg-accent); } .btnsw.on::after { left:21px; }
+.btnsw-sm { width:34px; height:19px; border-radius:10px; }
+.btnsw-sm::after { width:15px; height:15px; }
+.btnsw-sm.on::after { left:17px; }
+.btnfields { display:flex; gap:1.2em; flex-wrap:wrap; margin-top:.5em; align-items:stretch; }
+.btnfield { min-width:0; display:flex; flex-direction:column; }
+.btnfield-head { flex:0 1 auto; }
+.btnfield-cmd { flex-shrink:1; flex-basis:0; min-width:12em; }  /* flex-grow задаёт JS по длине команды */
+.btncmd-label { display:flex; align-items:center; gap:.5em; min-height:1.7em;
+  font-size:.88em; opacity:.85; margin-bottom:.25em; }
+.btncmd { position:relative; }
+.btnterm { background:var(--tg-term-bg); border:1px solid rgba(255,255,255,.08); border-radius:8px; }
+.btnterm-hd { font-size:10px; color:var(--tg-muted); letter-spacing:.06em; padding:4px 12px;
+  border-bottom:1px solid rgba(255,255,255,.06); background:rgba(255,255,255,.04);
+  border-radius:8px 8px 0 0; }
+.btnterm-body { position:relative; }
+.btnterm input { width:100%; box-sizing:border-box; background:transparent; border:0;
+  outline:none; color:var(--tg-term-fg); font-family:monospace; font-size:12px; line-height:1.5;
+  padding:9px 36px 9px 12px; }
+.btnterm input::placeholder { color:#5b6675; }
+.btncaret { position:absolute; right:5px; top:50%; transform:translateY(-50%); width:26px;
+  height:24px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+  color:var(--tg-muted); border-radius:5px; user-select:none; font-size:11px; }
+.btncaret:hover { background:rgba(255,255,255,.08); color:var(--tg-term-fg); }
+.btnmenu { position:absolute; right:0; top:calc(100% + 4px); z-index:20; min-width:17em;
+  max-width:100%; background:#1c2430; border:1px solid rgba(255,255,255,.12);
+  border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.45); overflow:hidden; display:none; }
+.btnmenu.open { display:block; }
+.btnmenu div { padding:.5em .85em; font-size:.86em; color:var(--tg-term-fg); cursor:pointer; }
+.btnmenu div:hover { background:rgba(255,255,255,.09); }
+.btncursor::after { content:'▋'; color:var(--tg-term-fg); animation:btncur 1.05s step-end infinite; }
+@keyframes btncur { 0%,50%{opacity:.75;} 50.01%,100%{opacity:0;} }
+.btndbc { margin-top:1em; display:flex; align-items:center; gap:.5em; flex-wrap:wrap; font-size:.9em; }
+.btndbc input { width:5em; }
+.btndemo .btnnamebtn, .btndemo .btnname-sw { opacity:.9; }
+@media (prefers-reduced-motion: reduce){ .btncursor::after{ animation:none; opacity:.75; } }
+
+/* Два блока-состояния (нажата / отжата) в ряд. */
+.btnstates { display:flex; gap:1em; flex-wrap:wrap; margin-top:.4em; }
+.btnstate { flex:1 1 20em; min-width:16em; border:1px solid rgba(127,127,127,.28);
+  border-radius:12px; padding:.85em .95em 1em; }
+.btnstate-ttl { display:flex; align-items:center; gap:.5em; font-weight:700; font-size:.92em;
+  margin-bottom:.7em; }
+.btnstate-ttl .dotmark { width:.55em; height:.55em; border-radius:50%; flex:0 0 auto; }
+/* Нажатый/отжатый вид - на самом виджете кнопки (mode/BTN-0), внутри блока. */
+.btnhead-card { width:100%; box-sizing:border-box; transition:box-shadow .12s, transform .12s; }
+/* «Нажата» - вдавленная клавиша: внутренняя тень, темнее, сдвинута вниз. */
+.btnhead-card.hpressed { box-shadow:inset 0 3px 8px rgba(0,0,0,.32); transform:translateY(2px);
+  background:rgba(127,127,127,.14); border-color:rgba(127,127,127,.45); }
+/* «Отжата» - приподнятая: светлее сверху, тень-«бортик» снизу. */
+.btnhead-card.hreleased { box-shadow:0 3px 0 rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.14);
+  background:linear-gradient(180deg, rgba(127,127,127,.06), rgba(127,127,127,.01)); }
+@media (prefers-reduced-motion: reduce){ .btnhead-card.hpressed { transform:none; } }
+/* Подсказка о тумблерном поведении моментальной кнопки. */
+.btnhint { font-size:.85em; opacity:.8; margin:.1em 0 .9em; padding:.5em .75em;
+  border-left:3px solid rgba(127,127,127,.45); background:rgba(127,127,127,.05);
+  border-radius:0 6px 6px 0; }
+
+/* Сетка светодиодов: точки-чипы с именем, кликом меняется состояние. */
+.ledgrid-lbl { font-size:.84em; opacity:.8; margin:.2em 0 .45em; display:flex;
+  align-items:center; gap:.5em; flex-wrap:wrap; }
+.ledgrid { display:flex; flex-wrap:wrap; gap:.4em .5em; margin-bottom:.7em; }
+.ledchip { display:inline-flex; align-items:center; gap:.45em; padding:.28em .6em .28em .5em;
+  border:1px solid rgba(127,127,127,.3); border-radius:999px; cursor:pointer; font-size:.82em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; user-select:none;
+  transition:border-color .15s, background .15s; }
+.ledchip:hover { border-color:rgba(127,127,127,.6); }
+.ledchip.on { border-color:rgba(127,127,127,.55); background:rgba(127,127,127,.08); }
+.ledchip .leddot { width:5px; height:5px; border-radius:50%; flex:0 0 auto;
+  border:1px solid var(--ledc, #8a8a8a); box-sizing:border-box; transition:box-shadow .15s, background .15s; }
+/* Не задействован: только контур (кнопка этот диод не трогает). */
+.ledchip[data-st="none"] .leddot { background:transparent; opacity:.5; }
+.ledchip[data-st="none"] { opacity:.72; }
+/* Выключить: залитая тусклым серым (диод погаснет). */
+.ledchip[data-st="0"] .leddot { background:rgba(127,127,127,.5); border-color:rgba(127,127,127,.5); }
+/* Включить: залита цветом диода со свечением (диод зажжётся). */
+.ledchip[data-st="1"] .leddot { background:var(--ledc, #cfcf5a);
+  box-shadow:0 0 4px 1px var(--ledc, #cfcf5a); }
+.ledchip .ledst { font-size:.78em; opacity:.6; min-width:2.6em; }
+.ledgrid-empty { font-size:.84em; opacity:.6; margin-bottom:.7em; }
+.ledprev { font-size:.8em; opacity:.75; cursor:pointer; text-decoration:underline dotted;
+  user-select:none; }
+.ledprev:hover { opacity:1; }
+
+/* ===== ВХОДЯЩИЕ SMS (readsms.js) ===== */
+/* Инфо-таблица над списком (модем, хранилище, ёмкость): без линий между строками */
+#sms-info-table td,
+#sms-info-table th,
+#sms-info-table .td,
+#sms-info-table .th {
+  border: none !important;
+}
+
+/* СПИСОК СООБЩЕНИЙ - карточки, а не таблица.
+   Карточка должна выглядеть В ТОЧНОСТИ как кнопки приоритета интернета и
+   спидтеста на вкладке «Сеть», поэтому:
+   1) на элементе те же классы темы - btn cbi-button. Именно они дают фон,
+      рамку и базовую типографику; без них <button> выглядит по-другому, и
+      никакой своей палитрой это не повторить;
+   2) геометрия ниже покомпонентно скопирована с .netpri-btn (netpri.js).
+      Не переиспользуем те правила напрямую: они заскоплены под .netpribar и
+      на этой странице просто не применятся. При правке netpri-кнопок эти
+      значения нужно править парой. */
+#smsList {
+  display: flex;
+  flex-direction: column;
+  gap: .4em;
+}
+
+.sms-card {
+  /* значения 1:1 из .netpribar .netpri-btn */
+  padding: .35em 1em;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.15;
+  /* proton2025 задаёт button,.btn{gap:8px} - на flex-column это даёт большие
+     вертикальные дыры между строками (та же нейтрализация, что в netpri.js) */
+  gap: 0;
+  /* В отличие от ряда netpri, карточки идут столбцом во всю ширину. */
+  width: 100%;
+  box-sizing: border-box;
+  align-self: stretch;
+}
+
+/* СДВИГ КАРТОЧЕК (был виден только в proton2025 и только на широком экране).
+   Тема задаёт:  button+button, .btn+.btn, .cbi-button+.cbi-button { margin-left: 8px }
+   Рассчитано это на кнопки В РЯД, а у нас они столбцом: каждой следующей
+   карточке добавлялось 8px слева, и она на столько же вылезала за правый край.
+   Просто margin:0 в .sms-card не помогал - у .btn+.btn специфичность (0,2,0)
+   против (0,1,0), тема выигрывала. Добавляем #smsList -> (1,1,0).
+   ВНИМАНИЕ: этот блок - шаблонная строка, обратные кавычки в комментариях
+   закрывают её и ломают файл. */
+#smsList .sms-card {
+  margin: 0;
+}
+
+/* Выделено - как .netpri-btn.active, то есть как кнопка на hover у темы: одна
+   акцентная рамка, без заливки и без внутренней обводки.
+   pointer-events:none из netpri НЕ берём: активную кнопку там нельзя нажать
+   повторно, а выделение сообщения снимается тем же кликом. */
+.sms-card.selected {
+  border-color: var(--tg-accent);
+}
+
+/* Шапка тянется во всю ширину карточки, иначе align-items:flex-start прижмёт
+   её по содержимому и время не уедет вправо. */
+.sms-card .sms-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: .6em;
+  width: 100%;
+  margin-bottom: .2em;
+}
+
+/* отправитель - как .netpri-name (вес 600 наследуется от кнопки) */
+.sms-card .sms-card-from {
+  display: flex;
+  align-items: center;
+  gap: .35em;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* дата и время - как .netpri-sub, плюс ровные цифры от .netpri-ip */
+.sms-card .sms-card-time {
+  flex: 0 0 auto;
+  font-size: .72em;
+  font-weight: 400;
+  opacity: .7;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Текст сообщения - обычный вес, как .netpri-sub/.netpri-ip, но БЕЗ их
+   уменьшения до .72em: там это подпись, здесь - основное содержимое. */
+.sms-card .sms-card-text {
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* иконка - размеры .netpri-ic */
+.sms-row-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.sms-row-icon img {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-darkmode="true"] .sms-row-icon {
+  opacity: 0.5;
+}
+
+/* Хранилище и заполненность - одной строкой, без подписи слева. На узком
+   экране полоска переносится под переключатели (flex-wrap). */
+.sms-storage-row {
+  display: flex;
+  align-items: center;
+  gap: 1em;
+  flex-wrap: wrap;
+}
+
+.sms-storage-opts {
+  display: flex;
+  align-items: center;
+  gap: 1.2em;
+  flex: 0 0 auto;
+}
+
+/* Полоска резиновая: занимает остаток строки, но не ужимается до нечитаемой -
+   при нехватке места уходит на вторую строку целиком. Трек - в стиле основных
+   метрик: серое заполнение без обводки. */
+.sms-storage-row .cbi-progressbar {
+  flex: 1 1 14em;
+  min-width: 14em;
+  margin: 0;
+  border: none;
+  box-shadow: none;
+  background: var(--tg-track);
+}
+
+/* Ссылки в тексте сообщения: выглядят ссылками и открываются кликом, не
+   выделяя карточку (см. sms_linkify). */
+.sms-card .sms-link {
+  color: var(--tg-accent);
+  text-decoration: underline;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+/* Ряд действий: «Обновить» и «Переслать» слева, «Удалить» прижата вправо -
+   как ряд приоритетов интернета со спидтестом на вкладке «Сеть». */
+.sms-actions {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  flex-wrap: wrap;
+  margin: .5em 0;
+  /* Действия прижаты ВПРАВО - как «Обновить» на вкладке eSIM и как ряд кнопок
+     на «Исходящих»: взгляд идёт по списку сверху вниз и заканчивается там же,
+     где кнопки на других вкладках.
+     width:100% ОБЯЗАТЕЛЕН: без него flex-контейнер сжимается по содержимому,
+     и прижимать кнопки внутри него просто некуда - justify-content ничего не
+     меняет. Именно на этом правка не срабатывала дважды. */
+  width: 100%;
+  justify-content: flex-end;
+}
+
+/* Тема добавляет соседним кнопкам margin-left: 8px - вместе с gap получался
+   двойной зазор. Гасим тем же приёмом, что и сдвиг карточек: селектор из трёх
+   классов (0,3,0) перебивает .cbi-button+.cbi-button (0,2,0). */
+.sms-actions .cbi-button + .cbi-button {
+  margin-left: 0;
+}
+
+/* margin-left:auto у счётчика УБРАН. Он съедал весь свободный зазор, и всё,
+   что стояло ДО него (в том числе «Обновить»), оставалось прижатым влево -
+   из-за этого justify-content:flex-end у контейнера не давал никакого эффекта.
+   Теперь весь ряд действий уходит вправо целиком, как на eSIM и «Исходящих». */
+
+/* Плейсхолдер на месте списка: держит его высоту, пока сообщений нет или они
+   ещё грузятся. Раньше пустой список схлопывался в ничто, и страница выглядела
+   сломанной - особенно при заходе, когда чтение занимает несколько секунд. */
+.sms-empty {
+  border: 1px dashed var(--border-color-medium);
+  border-radius: 6px;
+  padding: 1.2em .85em;
+  text-align: center;
+  opacity: .6;
+}
+
+.sms-selcount {
+  margin-left: .5em;
+  opacity: .65;
+}
+
+/* ===== ОТПРАВКА SMS (sendsms.js) ===== */
+/* Плашка-подсказка о формате номера. Кнопка «Закрыть» убирает её НАСОВСЕМ
+   (пишет information=0), поэтому отдельной галки в настройках больше нет:
+   подсказка нужна один раз, и управлять ею проще там же, где она видна. */
+.sms-hint { position: relative; }
+.sms-hint .sms-hint-actions { margin-top: .6em; }
+
+/* Обёртка поля ввода: точка отсчёта для счётчика символов. */
+/* Ширина поля. Тема может положить контейнер поля в table-cell (argon), а его
+   ширину диктует содержимое - textarea с width:100% получал 100% от узкой
+   ячейки и выходил в треть экрана. Минимальная ширина заставляет ячейку
+   растянуться; min() не даёт вылезти за экран на узких устройствах, а там, где
+   контейнер и так во всю ширину (proton2025), правило ничего не меняет. */
+.smstext-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  /* отступ снизу: без него поле упиралось в край блока формы */
+  margin-bottom: .8em;
+}
+
+/* КОНТЕЙНЕР ПОЛЯ должен занимать ОСТАТОК строки. Тема вправе сделать подпись
+   плавающей колонкой фиксированной ширины, а контейнер поля - table-cell
+   (argon: .cbi-value-title { float:left; width:23rem }, .cbi-value-field
+   { display:table-cell }). Такая ячейка не тянется за оставшимся местом, и
+   textarea со своими 100% схлопывался в треть экрана - сколько ни задавай
+   ширину самому полю.
+   overflow:hidden создаёт отдельный контекст форматирования: блок встаёт
+   РЯДОМ с плавающей подписью и забирает всю оставшуюся ширину. Там, где тема
+   и так раскладывает форму флексом (proton2025), правило безвредно. */
+.cbi-value-field:has(> .smstext-wrap) {
+  display: block;
+  width: auto;
+  overflow: hidden;
+}
+
+/* display:block у самого поля - иначе как inline-элемент оно оставляет под
+   собой несколько пикселей под "хвосты" букв, и счётчик, привязанный к низу
+   обёртки, оказывался чуть ниже рамки. */
+.smstext-wrap textarea {
+  display: block;
+  /* Ширину задаём ЗДЕСЬ, а не в разметке: инлайновый width:100% бил любое
+     правило файла, а сто процентов от узкой ячейки (argon кладёт контейнер
+     поля в table-cell) и давали поле в треть экрана. */
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Счётчик оставшихся символов - в правом нижнем углу поля.
+   pointer-events:none обязателен: без него клик в правый нижний угол поля
+   попадал бы в счётчик и НЕ ставил курсор в текст.
+   user-select:none - чтобы число не попадало в выделение при копировании
+   набранного сообщения. */
+.smstext-wrap .smstext-counter {
+  position: absolute;
+  right: .7em;
+  bottom: .5em;
+  font-size: .78em;
+  opacity: .45;
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== USSD (sendussd.js) ===== */
+pre.ussdcommand-output {
+  background: var(--tg-term-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--tg-term-fg);
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 9px 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+pre.ussdcommand-output::before {
+  content: 'ussd';
+  display: block;
+  font-size: 10px;
+  color: var(--tg-muted);
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin: -9px -12px 9px;
+  padding: 4px 12px;
+}
+/* Мигающий блок-курсор в конце вывода - «терминал печатает». */
+pre.ussdcommand-output.has-output::after {
+  content: '▋';
+  color: var(--tg-term-fg);
+  animation: ussd-cursor 1.05s step-end infinite;
+}
+@keyframes ussd-cursor { 0%, 50% { opacity: .75; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  pre.ussdcommand-output.has-output::after { animation: none; opacity: .75; }
+}
+
+/* ===== AT-КОНСОЛЬ (sendat.js) ===== */
+pre.atcommand-output {
+  background: var(--tg-term-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: var(--tg-term-fg);
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 9px 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+pre.atcommand-output::before {
+  content: 'at';
+  display: block;
+  font-size: 10px;
+  color: var(--tg-muted);
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin: -9px -12px 9px;
+  padding: 4px 12px;
+}
+/* Мигающий блок-курсор в конце вывода - «терминал печатает». Появляется, когда
+   на <pre> есть класс has-output (ставит typewrite). */
+pre.atcommand-output.has-output::after {
+  content: '▋';
+  color: var(--tg-term-fg);
+  animation: at-cursor 1.05s step-end infinite;
+}
+@keyframes at-cursor { 0%, 50% { opacity: .75; } 50.01%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  pre.atcommand-output.has-output::after { animation: none; opacity: .75; }
+}
+
+/* ===== КНОПКИ КОРПУСА, часть 2 (buttons.js) ===== */
+/* Компактный виджет-кнопка: НЕ на всю ширину, кликом переключает состояние. */
+.btnwidget { display:inline-block; cursor:pointer; }
+.btnwidget .btnhead-card { width:auto; min-width:9em; max-width:16em; }
+.btnstate-lbl { font-weight:700; font-size:.95em; margin:.2em 0 .45em; }
+.btnstate-lbl .hint { font-weight:400; opacity:.6; font-size:.85em; margin-left:.5em; }
+/* Сегментированный переключатель типа команды (кнопки, не выпадашка). */
+.btnseg { display:inline-flex; border:1px solid rgba(127,127,127,.4); border-radius:8px;
+  overflow:hidden; margin:.1em 0 .3em; }
+/* !important гасит стиль темы: proton2025 задаёт <button> своё скругление, поля
+   и тень - от этого рамка сегмента и кнопки внутри не совпадали по радиусу.
+   Внутренние кнопки делаем прямоугольными без полей/теней, а скругление даёт
+   контейнер (overflow:hidden обрезает фон активной кнопки по его радиусу). */
+.btnseg button { border:0 !important; border-radius:0 !important; margin:0 !important;
+  box-shadow:none !important; min-width:0 !important; background:transparent;
+  padding:.45em 1.1em; cursor:pointer; font:inherit; color:inherit; opacity:.6; }
+.btnseg button.active { background:rgba(127,127,127,.20); opacity:1; font-weight:600; }
+.btnseg button + button { border-left:1px solid rgba(127,127,127,.3) !important; }
+/* Закрываемый информер (условная команда). */
+.btninfo { position:relative; padding:.7em 2.3em .7em .85em; margin:.2em 0 .9em;
+  border-radius:8px; font-size:.86em; line-height:1.4;
+  background:rgba(90,150,255,.10); border:1px solid rgba(90,150,255,.28); }
+.btninfo-x { position:absolute; top:.3em; right:.4em; width:1.5em; height:1.5em;
+  border:0; background:transparent; color:inherit; opacity:.55; cursor:pointer;
+  font-size:1.15em; line-height:1; border-radius:5px; }
+.btninfo-x:hover { opacity:1; background:rgba(127,127,127,.15); }
+.btnadd { margin:.6em 0 1em; }
+.btncard-del { float:right; }
+
+/* ===== ПЛАШКА «МОДЕМ ЗАНЯТ» (была в modemtabs.js и 5gdetail.js -
+   ОДИН И ТОТ ЖЕ id, две копии, которые успели разойтись) ===== */
+#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:1em;color:inherit;background:#fff;border-radius:6px;}
+@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}
+}
+:root[data-theme] #modem-busy-ov{border-radius:inherit;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}
+:root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}
+:root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}
+#modem-busy-bar{border:none;box-shadow:none;background:var(--tg-track);}
+:root[data-theme] #modem-busy-ov .spinning{padding-left:0!important;display:inline-flex;align-items:center;gap:.55em;}
+:root[data-theme] #modem-busy-ov .spinning::before{position:static;margin:0;top:auto;left:auto;}
+
+/* ===== КАРТОЧКИ СОХРАНЁННЫХ ПРОФИЛЕЙ (5gdebug.js) ===== */
+#mprof-list .mprof-card{display:flex!important;flex-direction:column;text-align:left;align-items:stretch!important;justify-content:flex-start!important;white-space:normal;line-height:1.35;height:auto;padding:.6em .8em!important;}
+#mprof-list .mprof-card>div{display:block;width:auto;}
+#mprof-list .mprof-head{display:flex!important;justify-content:space-between;align-items:flex-start;gap:.5em;margin-bottom:.15em;}
+#mprof-list .mprof-card .btn{display:inline-block;margin-left:0;}
+#mprof-list .mprof-foot{display:flex!important;justify-content:space-between;align-items:flex-end;gap:.6em;margin-top:auto;padding-top:.5em;}
+#mprof-list .mprof-name{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+#mprof-list .mprof-if{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
+#mprof-list .mprof-lowpower{background:rgba(255,107,107,.1)!important;border-color:rgba(255,107,107,.3)!important;}
+:root[data-theme="light"] #mprof-list .mprof-lowpower{background:rgba(245,101,101,.15)!important;border-color:rgba(245,101,101,.4)!important;}
+#mprof-list .mprof-line{display:flex!important;justify-content:space-between;align-items:baseline;gap:.6em;font-size:88%;opacity:.85;margin-top:.2em;}
+#mprof-list .mprof-proto{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;border:1px solid currentColor;border-radius:5px;padding:.12em .35em;display:inline-flex;align-items:center;opacity:.85;white-space:nowrap;}
+
+/* ===== ПЕРЕТАСКИВАНИЕ КАРТОЧЕК (netpri.js) ===== */
+.netpribar .netpri-btn[data-iface]{cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.netpribar .netpri-btn.netpri-lift{cursor:grabbing;opacity:.97;box-shadow:0 10px 22px rgba(0,0,0,.28);transition:none!important;will-change:transform;z-index:1000}
+.netpribar .netpri-slot{border:2px dashed rgba(130,130,140,.55);background:rgba(130,130,140,.07);box-shadow:none;flex-direction:row;align-items:center;justify-content:center;color:rgba(130,130,140,.8);cursor:default}
+.netpribar .netpri-slot svg{opacity:.7}
+
+/* ===== ДИАЛОГИ eSIM (5gesim.js) ===== */
+.esim-modal{width:100%;box-sizing:border-box;}
+.esim-dlrow{display:flex;align-items:center;gap:14px;text-align:left;padding:6px 0 2px;}
+.esim-simicon{flex:0 0 auto;width:44px;height:44px;display:block;}
+.esim-simicon-err{opacity:.85;}
+.esim-spin{flex:0 0 auto;width:22px;height:22px;border:2.5px solid rgba(128,128,128,.3);border-top-color:var(--proton-accent,#3b82f6);border-radius:50%;animation:esimspin .8s linear infinite;}
+.esim-txtblk{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px;}
+.esim-h{font-weight:600;font-size:1.03em;flex:1 1 auto;min-width:0;}
+.esim-d{opacity:.72;font-size:.92em;word-break:break-word;margin-top:8px;}
+.esim-note{opacity:.6;font-size:.85em;margin:10px 0 0;}
+.esim-log{margin:14px 0 4px;max-height:9em;overflow:auto;font-family:monospace;font-size:.8em;white-space:pre-wrap;word-break:break-word;background:rgba(128,128,128,.1);border-radius:6px;padding:8px 10px;}
+@keyframes esimspin{to{transform:rotate(360deg);}
+}
+
+/* ===== СКЕЛЕТОНЫ ЗАГРУЗКИ (5gdetail.js) ===== */
+.tgm-skel-bar{display:inline-block;height:.82em;border-radius:.5em;vertical-align:middle}
+.tgm-skel-sig{display:inline-block;width:34px;height:26px;border-radius:6px}
+.tgm-skel-ic{display:inline-block;width:26px;height:26px;border-radius:6px}
+.tgm-skel-btn{display:inline-block;width:3.6em;height:1.9em;border-radius:7px;margin:0 .3em .3em 0}
+.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{background:linear-gradient(100deg,rgba(130,130,140,.13) 30%,rgba(130,130,140,.28) 50%,rgba(130,130,140,.13) 70%);background-size:200% 100%;animation:tgm-skel-sh 1.5s ease-in-out infinite}
+@keyframes tgm-skel-sh{0%{background-position:180% 0}
+100%{background-position:-180% 0}
+}
+@media (prefers-reduced-motion:reduce){.tgm-skel-bar,.tgm-skel-sig,.tgm-skel-ic,.tgm-skel-btn{animation:none}
+}
+
+/* КАРТОЧКИ СООБЩЕНИЙ. Тема считает .sms-card обычной кнопкой и даёт ей свои
+   отступы (а то и фиксированную высоту) - текст письма упирался в рамку
+   сверху и снизу, а сами карточки прилипали к краям списка. Задаём сами. */
+.sms-card {
+  padding: .7em .9em !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin-bottom: .6em;
+  text-align: left;
+}
+.sms-card-head { margin-bottom: .35em; }
+.sms-card-text { padding: .15em 0; }
+/* нижний отступ у последней карточки - чтобы список не упирался в край блока */
+.sms-card:last-child { margin-bottom: .2em; }
+
+/* ===== ПОВТОРЯЮЩИЕСЯ НАБОРЫ ИЗ РАЗМЕТКИ =====
+   Раньше эти же объявления стояли инлайном в десятке мест, и правка
+   означала обход всех файлов. Уникальное позиционирование отдельных
+   элементов намеренно оставлено в разметке - там класс только мешал бы. */
+/* мелкая пояснительная подпись под названием метрики */
+.tg-sublabel { text-align:left; font-size:66% }
+/* строка формы: подпись и поле в один ряд */
+.tg-row { display: flex;  align-items: center;  gap: 10px }
+/* поле ввода во всю ширину строки формы */
+.tg-field { margin:5px 0;  width:100% }
+/* узкая колонка таблицы (номер, флаг) */
+.tg-col-narrow { min-width: 40px }
+/* растянутая колонка с центровкой */
+.tg-col-center { flex: 1;  text-align: center }
+
+/* ===== ТОЧЕЧНЫЕ ПРАВКИ ДЛЯ ТЕМЫ ARGON =====
+   Только то, что в этой теме объективно теряется. На bootstrap и proton2025
+   карточки выглядят правильно, поэтому правила закрыты классом .tg-theme-argon
+   (ставится в modemtabs.js по адресу стилей темы) и их не касаются. */
+
+/* Заливка карточек. У argon кнопки почти сливаются с фоном блока: на светлой
+   теме карточка терялась, на тёмной - выглядела бледным пятном. Берём
+   полупрозрачный серый: он темнее фона на светлой теме и светлее на тёмной,
+   то есть работает в обеих схемах без отдельных цветов. */
+
+/* Обводка активной карточки. border-color в argon перебивался правилами темы -
+   поэтому и рамку задаём принудительно, и добавляем контур той же краской,
+   чтобы выделение читалось на любой заливке. */
+.tg-theme-argon .netpribar .netpri-btn.active {
+  border-color: var(--tg-accent) !important;
+  box-shadow: 0 0 0 1px var(--tg-accent) !important;
+}
+
+/* Подсветка во время теста скорости: карточка меняет --st-c на зелёный при
+   загрузке и синий при отдаче. В argon рамка не проявлялась вовсе. */
+.tg-theme-argon .netpribar .netpri-st.st-dl,
+.tg-theme-argon .netpribar .netpri-st.st-ul {
+  border-color: var(--st-c) !important;
+  box-shadow: 0 0 0 1px var(--st-c) !important;
+}
+
+/* ТАБЫ ПЕРЕКЛЮЧЕНИЯ МОДЕМОВ - тем же оформлением, что карточки «Приоритета
+   интернета»: в тёмной argon кнопки темы заливаются фиолетовым, и таб активного
+   модема ничем не отличался от остальных. */
+/* Активный таб - той же акцентной обводкой, что активная карточка. */
+.tg-theme-argon .modemtabs-bar .modemtab.cbi-button-action,
+.tg-theme-argon .modemtabs-bar .modemtab.important,
+.tg-theme-argon .modemtabs-bar .modemtab.active {
+  border-color: var(--tg-accent) !important;
+  box-shadow: 0 0 0 1px var(--tg-accent) !important;
+}
+
+/* Тёмная схема. argon встраивает свои тёмные стили внутрь
+   @media (prefers-color-scheme: dark) - опираемся на тот же признак,
+   а не на отдельный файл: его в разметке нет. В светлой схеме карточки
+   и табы темы выглядят правильно, поэтому там не трогаем ничего. */
+@media (prefers-color-scheme: dark) {
+  .tg-theme-argon .netpribar .netpri-btn {
+  background: rgba(128, 128, 128, .12) !important;
+  border: 1px solid rgba(128, 128, 128, .26) !important;
+}
+  .tg-theme-argon .netpribar .netpri-btn:hover {
+  background: rgba(128, 128, 128, .18) !important;
+}
+  .tg-theme-argon .modemtabs-bar .modemtab {
+  background: rgba(128, 128, 128, .12) !important;
+  border: 1px solid rgba(128, 128, 128, .26) !important;
+}
+  .tg-theme-argon .modemtabs-bar .modemtab:hover {
+  background: rgba(128, 128, 128, .18) !important;
+}
+  /* Карточки сообщений - той же заливкой, что карточки «Приоритета интернета»:
+     в тёмной схеме они иначе сливаются с фоном списка. */
+  .tg-theme-argon .sms-card {
+  background: rgba(128, 128, 128, .12) !important;
+  border: 1px solid rgba(128, 128, 128, .26) !important;
+}
+  .tg-theme-argon .sms-card:hover {
+  background: rgba(128, 128, 128, .18) !important;
+}
+}
+
+/* ПАНЕЛЬ НАСТРОЕК ВКЛАДКИ (sms-tool-js/smssettings.js) - раскрывается внизу
+   страниц «Входящие», «Исходящие», USSD и AT. Живёт в ОТДЕЛЬНОМ модуле, вне
+   каталога страниц, поэтому и осталась без общих отступов дольше всех.
+   Заголовок панели - не h3, а собственный элемент, поэтому правило для «шапки»
+   его не касалось: задаём отступ отдельно. */
+.sms-settings-panel > legend,
+.sms-settings-panel > h3,
+.sms-settings-panel > .cbi-section-descr:first-child {
+  padding-left: 0;
+  padding-right: 0;
+}
+.sms-settings-panel .cbi-value:last-child {
+  margin-bottom: 0;
+}

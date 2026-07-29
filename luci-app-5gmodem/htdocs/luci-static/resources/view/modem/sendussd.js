@@ -20,43 +20,6 @@
    диагностики 5gmodem. Цвета фиксированные, одинаковы в любой теме.
    Шапка с меткой делается через ::before, чтобы не менять логику
    показа/скрытия самого <pre>. */
-document.head.append(E('style', {'type': 'text/css'},
-`
-pre.ussdcommand-output {
-  background: #161c26;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  color: #d6e0ea;
-  font-family: monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  padding: 9px 12px;
-  overflow: auto;
-  white-space: pre-wrap;
-}
-pre.ussdcommand-output::before {
-  content: 'ussd';
-  display: block;
-  font-size: 10px;
-  color: #8b95a7;
-  letter-spacing: 0.06em;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  margin: -9px -12px 9px;
-  padding: 4px 12px;
-}
-/* Мигающий блок-курсор в конце вывода - «терминал печатает». */
-pre.ussdcommand-output.has-output::after {
-  content: '▋';
-  color: #d6e0ea;
-  animation: ussd-cursor 1.05s step-end infinite;
-}
-@keyframes ussd-cursor { 0%, 50% { opacity: .75; } 50.01%, 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  pre.ussdcommand-output.has-output::after { animation: none; opacity: .75; }
-}
-`));
-
 /* «Печатающийся терминал»: ответ USSD выводим посимвольно, с мигающим курсором
    в конце. reduced-motion - сразу целиком. Применяем к ОДИНОЧНОМУ ответу; в
    режиме истории (fullhistory) реплики накапливаются - там анимация не нужна. */
@@ -589,7 +552,7 @@ return view.extend({
 				ussdSmsOnly ? E('div', { 'class': 'alert-message warning' }, [
 					E('p', {}, _('The network registered this SIM for SMS only, so USSD is unavailable right now: it is a voice-domain service. The modem itself supports USSD - requests will simply stay unanswered until the registration changes.'))
 				]) : '',
-				E('div', { 'class': 'cbi-section' }, [
+				E('div', { 'class': 'cbi-section tgpage' }, [
 					E('div', { 'class': 'cbi-section-node' }, [
 						(function() {
 							if (serialModems.length > 0) {
@@ -600,20 +563,20 @@ return view.extend({
 									E('label', { 'class': 'cbi-value-title' }, [ _('Select modem') ]),
 									E('div', { 'class': 'cbi-value-field' }, [
 										E('div', { 'class': 'controls' }, [
-											E('div', { 'class': 'pager center', 'style': 'display: flex; align-items: center; gap: 10px;' }, [
+											E('div', { 'class': 'pager center tg-row' }, [
 												E('button', { 
 													'class': 'btn cbi-button-neutral prev', 
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'style': 'min-width: 40px;',
+													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ◄ ' ]),
-												E('div', { 'class': 'text modem-display-text', 'style': 'flex: 1; text-align: center;' }, [ label ]),
+												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 												E('button', { 
 													'class': 'btn cbi-button-neutral next', 
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'style': 'min-width: 40px;',
+													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ► ' ])
 											])
@@ -708,7 +671,7 @@ return view.extend({
 							E('div', { 'class': 'cbi-value-field' }, [
 									E('select', { 'class': 'cbi-input-select',
 										'id': 'tk',
-										'style': 'margin:5px 0; width:100%;',
+										'class': 'tg-field',
 										'change': ui.createHandlerFn(this, 'handleCopy'),
 										'mousedown': ui.createHandlerFn(this, 'handleCopy')
 									},
@@ -742,7 +705,7 @@ return view.extend({
 							E('label', { 'class': 'cbi-value-title' }, [ _('Code to send') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
 							E('input', {
-								'style': 'margin:5px 0; width:100%;',
+								'class': 'tg-field',
 								'type': 'text',
 								'id': 'cmdvalue',
 								'data-tooltip': _('Press [Enter] to send the code, press [Delete] to delete the code'),

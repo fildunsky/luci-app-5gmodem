@@ -5,6 +5,28 @@
 'require poll';
 'require ui';
 
+/* ОБЩИЙ CSS ПРИЛОЖЕНИЯ - подключаем ОДИН РАЗ отсюда: этот модуль требуют все
+   страницы приложения, поэтому отдельного загрузчика не нужно. Файл кэшируется
+   браузером как обычная статика, в отличие от прежних <style>, которые
+   пересоздавались на каждой загрузке страницы. */
+(function() {
+	/* Признак темы argon. Нужен ТОЧЕЧНО: у неё кнопки почти без рамки и со
+	   светлой заливкой, из-за чего наши карточки «Приоритета интернета»
+	   теряли и обводку активной, и подсветку во время теста скорости. В
+	   остальных темах карточки выглядят правильно, поэтому правки вешаем
+	   только под этим классом и ничего им не ломаем. */
+	if (/\/argon\//.test(document.querySelector('link[href*="cascade.css"]') ? document.querySelector('link[href*="cascade.css"]').href : '')) {
+		document.documentElement.classList.add('tg-theme-argon');
+	}
+	if (document.getElementById('tg-modem-css')) { return; }
+	var l = document.createElement('link');
+	l.id = 'tg-modem-css';
+	l.rel = 'stylesheet';
+	l.type = 'text/css';
+	l.href = L.resource('view/modem/modem.css');
+	document.head.appendChild(l);
+})();
+
 /*
 	Общий компонент «шапки модема» для страниц luci-app-5gmodem:
 	  - постоянный блок с ПОЛНЫМ именем активного модема (моноширинный);
@@ -15,47 +37,6 @@
 	Используется темой proton2025 (вставляет шапку НАД под-вкладками) через
 	L.require('view.modem.modemtabs').renderBar().
 */
-
-var CSS = `
-.modembar { margin: 0 0 1em 0; }
-.modembar .modembar-name {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-	font-size: 1.15em; font-weight: 700; letter-spacing: .3px;
-	padding: .2em 0 .5em 0;
-}
-.modembar .modemtabs-bar {
-	display: flex; flex-wrap: wrap; gap: .4em; padding-bottom: .2em;
-}
-.modembar .modemtabs-bar .modemtab {
-	padding: .35em 1em; border-radius: 6px; cursor: pointer; font-weight: 600;
-	display: inline-flex; align-items: center; gap: .4em;
-}
-.modembar .modemtabs-bar .modemtab .modemtab-ic {
-	width: 16px; height: 16px; flex: 0 0 auto; display: block;
-}
-/* Имя модема - моноширинным, как строка с полным именем в шапке (.modembar-name):
-   это идентификатор железа, а не обычный текст, и одинаковая ширина знаков
-   помогает сравнивать похожие названия соседних модемов. */
-.modembar .modemtabs-bar .modemtab span {
-	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-}
-/* Активный модем помечаем как активную кнопку приоритета интернета - то есть
-   тем же, чем тема помечает кнопку на hover: одна акцентная рамка, без заливки
-   и без внутренней обводки (та удваивала линию и смотрелась жирно). */
-.modembar .modemtabs-bar .modemtab.active {
-	border-color: var(--proton-accent, #0095ff);
-	pointer-events: none;
-}
-/* Кнопка-заготовка: та же геометрия и то же содержимое, что у настоящей
-   вкладки, поэтому ряд занимает свою итоговую высоту с первого кадра.
-   Клики глушим классом, а НЕ атрибутом disabled: тема даёт [disabled]
-   opacity .5, и заготовка с именем из кеша была бы заметно блёклой -
-   подмена настоящими данными бросалась бы в глаза. */
-.modembar .modemtabs-bar .modemtab-ghost { pointer-events: none; }
-/* Имени в кеше нет (первый заход): нейтральная подпись и приглушённый вид,
-   чтобы было видно, что данные ещё едут. */
-.modembar .modemtabs-bar .modemtab-blank { min-width: 9em; opacity: .45; }
-`;
 
 /* Бренд по VID (или по характерному имени продукта). USB-дескриптор часто даёт
    только платформу ("VOS_5G", "Android"), поэтому добавляем читаемый бренд. */
@@ -130,7 +111,6 @@ function label(m, i) {
 
 function ensureCss() {
 	if (!document.getElementById('modemtabs-css')) {
-		document.head.appendChild(E('style', { 'id': 'modemtabs-css', 'type': 'text/css' }, CSS));
 	}
 }
 
@@ -505,31 +485,9 @@ return baseclass.extend({
 	   Оформление подстраивается под тему: в bootstrap непрозрачная плашка со
 	   скруглением как у кнопок, в proton2025 - полупрозрачная с блюром, как попапы
 	   меню (тему различаем по data-theme на <html>: proton его ставит, bootstrap нет). */
-	_busyCss: function() {
-		if (document.getElementById('modem-busy-css')) { return; }
-		var css =
-			'#modem-busy-ov{position:absolute;top:0;left:0;right:0;bottom:0;z-index:20;' +
-			'display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;' +
-			'padding:1em;color:inherit;background:#fff;border-radius:6px;}' +
-			'@media (prefers-color-scheme:dark){#modem-busy-ov{background:#1b1b1b;}}' +
-			':root[data-theme] #modem-busy-ov{border-radius:inherit;' +
-			'backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);}' +
-			':root[data-theme="light"] #modem-busy-ov{background:rgba(255,255,255,0.92);}' +
-			':root[data-theme="dark"] #modem-busy-ov{background:rgba(15,20,25,0.95);}' +
-		/* прогрессбар плашки - в стиле основных метрик: серый заполненный
-		   трек без обводки (а не пустота с рамкой темы) */
-		'#modem-busy-bar{border:none;box-shadow:none;background:rgba(128,128,128,.18);}' +
-		/* Спиннер плашки: .spinning темы прижимает крутилку жёстко влево
-		   (position:absolute;left) с большим padding-left, и в центрированной
-		   колонке текст со спиннером смотрится смещённым. В proton (data-theme)
-		   переводим ::before-спиннер в поток вплотную к тексту - тогда пара
-		   «крутилка+текст» центрируется как единое целое. bootstrap не трогаем. */
-		':root[data-theme] #modem-busy-ov .spinning{padding-left:0!important;' +
-		'display:inline-flex;align-items:center;gap:.55em;}' +
-		':root[data-theme] #modem-busy-ov .spinning::before{position:static;' +
-		'margin:0;top:auto;left:auto;}';
-		document.head.appendChild(E('style', { 'id': 'modem-busy-css', 'type': 'text/css' }, css));
-	},
+	/* Стили плашки теперь в modem.css - метод оставлен пустым, чтобы не
+	   править два десятка мест вызова. */
+	_busyCss: function() {},
 
 	/* setBusy(selector, msg[, safetyMs[, progressSec]]) - накрыть блок;
 	   clearBusy() - снять. progressSec включает ПРОГРЕССБАР в стиле полосок

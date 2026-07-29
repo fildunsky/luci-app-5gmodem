@@ -15,40 +15,6 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
-document.head.append(E('style', { 'type': 'text/css' },
-`
-/* Плашка-подсказка о формате номера. Кнопка «Закрыть» убирает её НАСОВСЕМ
-   (пишет information=0), поэтому отдельной галки в настройках больше нет:
-   подсказка нужна один раз, и управлять ею проще там же, где она видна. */
-.sms-hint { position: relative; }
-.sms-hint .sms-hint-actions { margin-top: .6em; }
-
-/* Обёртка поля ввода: точка отсчёта для счётчика символов. */
-.smstext-wrap { position: relative; display: block; }
-
-/* display:block у самого поля - иначе как inline-элемент оно оставляет под
-   собой несколько пикселей под "хвосты" букв, и счётчик, привязанный к низу
-   обёртки, оказывался чуть ниже рамки. */
-.smstext-wrap textarea { display: block; }
-
-/* Счётчик оставшихся символов - в правом нижнем углу поля.
-   pointer-events:none обязателен: без него клик в правый нижний угол поля
-   попадал бы в счётчик и НЕ ставил курсор в текст.
-   user-select:none - чтобы число не попадало в выделение при копировании
-   набранного сообщения. */
-.smstext-wrap .smstext-counter {
-  position: absolute;
-  right: .7em;
-  bottom: .5em;
-  font-size: .78em;
-  opacity: .45;
-  pointer-events: none;
-  user-select: none;
-  font-variant-numeric: tabular-nums;
-}
-`));
-
-
 /* Binary used for SMS operations: on modems managed by ModemManager
    (MBIM/QMI, e.g. Compal RXM-G1) sms_tool on the AT port never sees
    incoming messages and cannot send - use the mmcli wrapper instead.
@@ -583,7 +549,7 @@ return view.extend({
 						}, [ _('Close') ])
 					])
 				]) : '',
-				E('div', { 'class': 'cbi-section' }, [
+				E('div', { 'class': 'cbi-section tgpage' }, [
 					E('div', { 'class': 'cbi-section-node' }, [
 						(function() {
 							if (serialModems.length > 0) {
@@ -594,20 +560,20 @@ return view.extend({
 									E('label', { 'class': 'cbi-value-title' }, [ _('Select modem') ]),
 									E('div', { 'class': 'cbi-value-field' }, [
 										E('div', { 'class': 'controls' }, [
-											E('div', { 'class': 'pager center', 'style': 'display: flex; align-items: center; gap: 10px;' }, [
+											E('div', { 'class': 'pager center tg-row' }, [
 												E('button', { 
 													'class': 'btn cbi-button-neutral prev', 
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'style': 'min-width: 40px;',
+													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ◄ ' ]),
-												E('div', { 'class': 'text modem-display-text', 'style': 'flex: 1; text-align: center;' }, [ label ]),
+												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 												E('button', { 
 													'class': 'btn cbi-button-neutral next', 
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'style': 'min-width: 40px;',
+													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ► ' ])
 											])
@@ -623,7 +589,7 @@ return view.extend({
 							E('div', { 'class': 'cbi-value-field' }, [
 								E('select', { 'class': 'cbi-input-select',
 										'id': 'pb',
-										'style': 'margin:5px 0; width:100%;',
+										'class': 'tg-field',
 										'change': ui.createHandlerFn(this, 'handleCopy'),
 										'mousedown': ui.createHandlerFn(this, 'handleCopy')
 									    },
@@ -640,7 +606,7 @@ return view.extend({
 							E('label', { 'class': 'cbi-value-title' }, [ _('Send to') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
 							E('input', {
-								'style': 'margin:5px 0; width:100%;',
+								'class': 'tg-field',
 								'type': 'text',
 								'id': 'phonenumber',
 								'value': prefixnum,
@@ -674,11 +640,12 @@ return view.extend({
 							E('div', { 'class': 'cbi-value-field', 'style': 'text-align: left;' }, [
 								E('div', { 'style': 'margin: 1px 0; display: inline-block;' }, [
 									E('label', {
-										'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
+										'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;',
 										'data-tooltip': _('GSM-7 encoding (160 characters)')
 									}, [
 										E('input', {
 											'type': 'radio',
+											'style': 'margin:0;flex:none;vertical-align:middle;position:relative;top:-1px',
 											'name': 'encoding_type',
 											'value': 'gsm7',
 											'change': ui.createHandlerFn(this, 'handleEncodingChange'),
@@ -689,11 +656,12 @@ return view.extend({
 									]),
 									' \u00a0\u00a0\u00a0 ',
 									E('label', {
-										'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
+										'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;',
 										'data-tooltip': _('Unicode encoding (70 characters), does not support sending national characters (in utf8) - only ascii')
 									}, [
 										E('input', {
 											'type': 'radio',
+											'style': 'margin:0;flex:none;vertical-align:middle;position:relative;top:-1px',
 											'name': 'encoding_type',
 											'value': 'unicode',
 											'change': ui.createHandlerFn(this, 'handleEncodingChange')
@@ -716,7 +684,7 @@ return view.extend({
 							E('div', { 'class': 'smstext-wrap' }, [
 							E('textarea', {
 								'id': 'smstext',
-								'style': 'width: 100%; resize: vertical; height:80px; max-height:80px; min-height:80px; min-width:100%; padding-bottom: 1.5em;',
+								'style': 'resize: vertical; height:80px; max-height:80px; min-height:80px; padding-bottom: 1.5em;',
 								'wrap': 'on',
 								'rows': '3',
 								'placeholder': _(''),
