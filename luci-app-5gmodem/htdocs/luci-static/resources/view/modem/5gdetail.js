@@ -1171,6 +1171,32 @@ function protoLabel(v) {
 function pdpLabel(v) {
 	return ({ 'ipv4v6': 'IPv4v6', 'ipv4': 'IPv4', 'ipv6': 'IPv6' })[String(v || '').toLowerCase()] || (v || '');
 }
+/* vid:pid В ЗАГОЛОВКЕ, СЛЕВА ОТ ЧИПА ПРОТОКОЛА.
+   Скромным видом, как в карточках «Сохранённых профилей»: мелко и приглушённо -
+   это опознание железа, а не заголовок.
+   ПОРЯДОК ВСТАВКИ ВАЖЕН: элементы справа - float:right, а они укладываются
+   справа налево В ПОРЯДКЕ следования в DOM. Значит наш span нужно добавлять
+   ПОСЛЕ чипа - тогда он встанет левее него. Поэтому функция и вызывается
+   последней, после renderDebugBtn/renderProtoChip.
+   Вертикальную поправку берём ту же, что у чипа: у заголовка большой
+   line-height, и без неё строка висела бы выше. */
+function renderVidPid(json) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var el = document.getElementById('modemvidpid');
+	var vp = String(json.vidpid || '').trim();
+	if (!vp || vp === ':') { if (el) { el.remove(); } return; }
+	if (!el) {
+		el = E('span', {
+			'id': 'modemvidpid',
+			'class': 'tginfo-vidpid',
+			'title': _('USB vendor and product ID')
+		}, '');
+		head.appendChild(el);
+	}
+	if (el.textContent !== vp) { el.textContent = vp; }
+}
+
 function renderProtoChip(json) {
 	var head = document.getElementById('modemname');
 	if (!head) { return; }
@@ -2745,6 +2771,8 @@ function applyMetrics(json) {
 						if (_nt && _nt.textContent !== _nm) { _nt.textContent = _nm; }
 						renderDebugBtn(json);
 						renderProtoChip(json);
+						/* ПОСЛЕ чипа - иначе окажется правее него (см. renderVidPid). */
+						renderVidPid(json);
 						renderApnLine(json);
 					}
 
@@ -3573,6 +3601,7 @@ simDialog: baseclass.extend({
 				   правые элементы заголовка (чип протокола, кнопка debug). */
 				E('span', { 'id': 'modemname-text' }, _('Modem'))
 			]),
+
 
 			/* Компактная строка состояния: слева иконка уровня сигнала с
 			   процентами, затем иконка SIM, три строки статуса (регистрация /
