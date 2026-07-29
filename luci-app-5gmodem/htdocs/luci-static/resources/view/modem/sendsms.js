@@ -20,9 +20,8 @@
    incoming messages and cannot send - use the mmcli wrapper instead.
    The sms_via_mm option is set by the hotplug script (by VID:PID) or
    by the user. */
-function smsToolBin() {
-	return uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_via_mm') == '1' ? '/usr/bin/sms_tool_mm' : '/usr/bin/sms_tool';
-}
+/* Выбор бинаря (sms_tool / sms_tool_mm) переехал в smsbridge.sh: транспорт -
+   забота моста, страница про него больше не знает. */
 
 return view.extend({
 
@@ -339,7 +338,7 @@ return view.extend({
 						    return false;
 						}
 						else {
-						    return this.handleCommand(smsToolBin(), [ '-d' , port , 'send' , phn , get_smstxt ]);
+						    return this.handleCommand('/usr/share/5gmodem/smsbridge.sh', [ 'send', phn, get_smstxt, port ]);
 						}
 					}
 		        }
@@ -376,7 +375,7 @@ return view.extend({
 									let out = document.querySelector('.smscommand-output');
 									out.style.display = '';
 
-									fs.exec_direct(smsToolBin(), [ '-d' , port , 'send' , phone , get_smstxt ]);
+									fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'send', phone, get_smstxt, port ]);
 
 									res.stdout += (i+1)+_('/')+xs.length+' * '+_('[Bot] Message sent to number:') + ' ' + phone +'\n';
 									res.stdout = res.stdout.replace(/undefined/g, "");
@@ -684,7 +683,7 @@ return view.extend({
 							E('div', { 'class': 'smstext-wrap' }, [
 							E('textarea', {
 								'id': 'smstext',
-								'style': 'resize: vertical; height:80px; max-height:80px; min-height:80px; padding-bottom: 1.5em;',
+								'class': 'cbi-input-textarea',
 								'wrap': 'on',
 								'rows': '3',
 								'placeholder': _(''),

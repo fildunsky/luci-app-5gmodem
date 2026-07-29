@@ -54,7 +54,87 @@ function sms_parse_status(res) {
    их оттуда. */
 /* Плейсхолдер вместо списка. state: 'loading' - идёт чтение, 'empty' - прочитали,
    сообщений нет. */
-function sms_placeholder(state) {
+/* ЕДИНАЯ МОДЕЛЬ СОСТОЯНИЯ СПИСКА.
+   Раньше состоянием списка распоряжались ЧЕТЫРЕ независимых места: плейсхолдер,
+   showLoading, hideLoading и два блока в хвосте doRefresh - каждое со своим
+   условием. Они спорили друг с другом, и одно и то же состояние («список уже
+   есть», «идёт чтение», «пусто») определялось по-разному. Отсюда и класс багов
+   «сообщения показались и исчезли»: очистка успевала произойти до того, как
+   выяснялось, есть ли чем её заполнить.
+   Теперь #smsList трогает ТОЛЬКО smsSetState. Состояния:
+     loading - чтение идёт, показанного ещё нет;
+     list    - есть сообщения (карточки строит вызывающий);
+     empty   - прочитали, сообщений нет;
+     error   - прочитать не удалось. Показанное НЕ трогаем: устаревший список
+               честнее пустого экрана, а следующий тик перечитает. */
+function smsSetState(state, opts) {
+	var list = document.getElementById('smsList');
+	if (!list) { return null; }
+	opts = opts || {};
+	var hasCards = !!list.querySelector('.sms-card');
+
+	if (state === 'error') {
+		smsNote(hasCards ? (opts.note || _('Could not read messages')) : null);
+		if (!hasCards) { smsPlaceholder('empty'); }
+		return null;
+	}
+	if (state === 'loading') {
+		/* Список уже на экране - не мигаем им ради индикатора, а вешаем
+		   пометку сверху (как на вкладке eSIM). */
+		if (hasCards) { smsNote(_('Loading messages…')); return null; }
+		smsPlaceholder('loading');
+		return null;
+	}
+	smsNote(null);
+	if (state === 'empty') { smsPlaceholder('empty'); return null; }
+	/* list: отдаём очищенный контейнер - карточки в него добавит вызывающий.
+	   Очистка происходит ЗДЕСЬ и только когда данные уже разобраны.
+	   ВЫДЕЛЕНИЕ ЗАПОМИНАЕМ: список пересоздаётся на каждом тике опроса, и
+	   отмеченные сообщения теряли выделение через несколько секунд - прямо
+	   под руками у пользователя, который собирался их удалить. */
+	smsKeepSelection(list);
+	list.innerHTML = '';
+	return list;
+}
+
+/* Индексы выделенных сообщений - между перерисовками списка. */
+var _smsSel = [];
+function smsKeepSelection(list) {
+	_smsSel = [];
+	(list || document).querySelectorAll('.sms-card.selected').forEach(function(c) {
+		var i = c.getAttribute('data-index');
+		if (i) { _smsSel.push(i); }
+	});
+}
+/* Вернуть выделение после перерисовки. Вызывать ПОСЛЕ добавления карточек. */
+function smsRestoreSelection() {
+	if (!_smsSel.length) { return; }
+	var alive = [];
+	_smsSel.forEach(function(i) {
+		var c = document.querySelector('.sms-card[data-index="' + i + '"]');
+		if (c) { sms_set_selected(c, true); alive.push(i); }
+	});
+	/* Сообщения, которых больше нет (удалили, модем перенумеровал), из памяти
+	   выбрасываем - иначе они «оживали» бы на чужих карточках с тем же
+	   индексом. */
+	_smsSel = alive;
+	sms_update_selcount();
+}
+
+/* Пометка над списком: живое чтение или сбой. null - снять. */
+function smsNote(text) {
+	var old = document.getElementById('sms-updating');
+	if (old && old.parentNode) { old.parentNode.removeChild(old); }
+	if (!text) { return; }
+	var list = document.getElementById('smsList');
+	if (!list || !list.parentNode) { return; }
+	list.parentNode.insertBefore(E('em', {
+		'id': 'sms-updating', 'class': 'spinning',
+		'style': 'font-size:92%;opacity:.7;margin:2px 0 6px;display:inline-block'
+	}, text), list);
+}
+
+function smsPlaceholder(state) {
 	var list = document.getElementById('smsList');
 	if (!list) { return; }
 	list.innerHTML = '';
@@ -69,6 +149,9 @@ function sms_placeholder(state) {
 			: E('span', {}, _('No messages'))
 	]));
 }
+
+/* Прежнее имя - используется в нескольких местах; оставлено обёрткой. */
+function sms_placeholder(state) { return smsPlaceholder(state); }
 
 function sms_selected_cards() {
 	return document.querySelectorAll('.sms-card.selected');
@@ -384,9 +467,7 @@ function isHilinkModem() {
 	return uci.get('5gmodem', sec, 'kind') === 'hilink';
 }
 
-function smsToolBin() {
-	return uci.get('sms_tool_js', '@sms_tool_js[0]', 'sms_via_mm') == '1' ? '/usr/bin/sms_tool_mm' : '/usr/bin/sms_tool';
-}
+/* Выбор бинаря переехал в smsbridge.sh - см. пояснение там. */
 
 return view.extend({
 	load: function() {
@@ -586,13 +667,15 @@ return view.extend({
 							var portDA = sections[0].readport;
 							var storeDA = sections[0].storage;
 
-							fs.exec_direct(smsToolBin(), [ '-d' , portDA , 'delete' , 'all' ]);
-							var smsList = document.getElementById("smsList");
-							if (smsList) { smsList.innerHTML = ''; }
+							fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', storeDA, portDA ]);
+							/* Через модель, а не innerHTML напрямую: после удаления
+							   всех сообщений экран должен показать «нет сообщений», а не
+							   схлопнуться в пустоту. */
+							smsSetState('empty');
 							sms_update_selcount();
 							try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
     							setTimeout(function() {
-								L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-s' , storeDA , '-d' , portDA , 'status' ]))
+								L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeDA, portDA ]))
 									.then(function(res) {
 										if (res) {
 											var total = res.substring(res.indexOf("total"));
@@ -649,7 +732,7 @@ return view.extend({
 								var chain = Promise.resolve();
 								idx.forEach(function(n) {
 									chain = chain.then(function() {
-										return L.resolveDefault(fs.exec_direct(smsToolBin(), [ '-d', portDEL, 'delete', String(n) ]), '')
+										return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', String(n), '', portDEL ]), '')
 											.then(function() { done++; showProgress(); });
 									});
 								});
@@ -765,40 +848,22 @@ return view.extend({
 		/* Пока сообщений на экране нет - показываем плейсхолдер НА МЕСТЕ списка
 		   (он же держит его высоту). Если сообщения уже показаны, при обновлении
 		   ничего не трогаем: мигать готовым списком ради индикатора не нужно. */
-		function showLoading() {
-			var list = document.getElementById('smsList');
-			if (!list) { return; }
-			if (list.querySelector('.sms-card')) {
-				/* Список уже на экране (warm-render из кэша) - НЕ затираем его,
-				   а вешаем мелкую пометку над списком (как на вкладке eSIM):
-				   видно, что идёт живое чтение с модема. */
-				if (!document.getElementById('sms-updating') && list.parentNode) {
-					list.parentNode.insertBefore(E('em', {
-						'id': 'sms-updating', 'class': 'spinning',
-						'style': 'font-size:92%;opacity:.7;margin:2px 0 6px;display:inline-block'
-					}, _('Loading messages…')), list);
-				}
-				return;
-			}
-			sms_placeholder('loading');
-		}
+		/* Обёртки над единой моделью - оставлены, чтобы не переписывать все
+		   точки вызова внутри doRefresh. */
+		function showLoading() { smsSetState('loading'); }
+
 		/* Снимать индикатор отдельно не требуется: список либо перерисуется
 		   карточками, либо получит плейсхолдер «нет сообщений». Функция
 		   оставлена, чтобы не переписывать все точки выхода из doRefresh.
 		   Пометку «обновляется» (warm-путь) СНИМАЕМ явно - её никто не
 		   перерисовывает. */
 		function hideLoading() {
-			var _up = document.getElementById('sms-updating');
-			if (_up) { _up.parentNode.removeChild(_up); }
+			/* Снимаем ТОЛЬКО пометку. Решение «пусто или нет» принимает модель
+			   в момент отрисовки: раньше hideLoading сам ставил «нет сообщений»
+			   и успевал сделать это при ещё не разобранном ответе. */
+			smsNote(null);
 			var l = document.getElementById('smsList');
-			if (!l) { return; }
-			var ph = l.querySelector('.sms-empty');
-			/* Пусто ИЛИ остался спиннер - показываем «нет сообщений». Проверка
-			   !l.firstChild не срабатывала: первым потомком был сам спиннер. */
-			if (!l.firstChild || (ph && ph.getAttribute('data-state') === 'loading'
-			                      && !l.querySelector('.sms-card'))) {
-				sms_placeholder('empty');
-			}
+			if (l && !l.firstChild) { smsSetState('empty'); }
 		}
 
 		/* doRefresh(updateCount, busy): читает статус + входящие и перерисовывает
@@ -896,13 +961,16 @@ return view.extend({
 									try {
 										json = JSON.parse(res2).msg || [];
 									} catch (e) {
-										/* Битый/обрезанный ответ. Показанное НЕ трогаем -
-										   лучше слегка устаревший список, чем пустой экран.
-										   Следующий тик перечитает. */
-										hideLoading();
+										/* Битый/обрезанный ответ - состояние error: модель
+										   сама решит, оставить показанное или показать
+										   «нет сообщений», если экран пуст. */
+										smsSetState('error');
 										return;
 									}
-									table.innerHTML = '';
+									/* Контейнер под карточки берём У МОДЕЛИ - она же его и
+									   очищает, ровно здесь и только когда данные разобраны. */
+									table = smsSetState('list');
+									if (!table) { return; }
 
 									/* sms_tool's UCS2 decoder replaces code points U+0080..U+00FF
 									   (non-breaking space, guillemets «», …) with U+FFFD (�).
@@ -978,6 +1046,7 @@ return view.extend({
 																table.appendChild(sms_make_card(result[i], Lres, hide));
 																aidx.push(result[i].index+'-');
 															}
+															smsRestoreSelection();
 															sms_update_selcount();
 															sms_cache_save(result, u, t);
 
@@ -1022,6 +1091,7 @@ return view.extend({
 												table.appendChild(sms_make_card(sortedData[i], Lres, hide));
 												aidx.push(sortedData[i].index+'-');
 											}
+											smsRestoreSelection();
 											sms_update_selcount();
 											sms_cache_save(sortedData, u, t);
 											
@@ -1052,19 +1122,10 @@ return view.extend({
 			/* Достижимо только когда status вернул пусто: в успешной ветке выше
 			   стоит return. Тогда u не определена и вызова не будет - полоску
 			   заполняет вызов внутри той ветки. Оставлено как страховка. */
-			/* Список мог остаться пустым: сообщений нет вовсе. Тогда вместо
-			   схлопнутой пустоты показываем плейсхолдер. */
-			(function() {
-				var l = document.getElementById('smsList');
-				/* Заменяем и ЗАВИСШИЙ СПИННЕР: раньше условие смотрело на класс
-				   .sms-empty, который есть и у него, поэтому при пустой памяти
-				   чтение «длилось» вечно. Ориентируемся на data-state. */
-				var ph = l && l.querySelector('.sms-empty');
-				if (l && !l.querySelector('.sms-card')
-				    && (!ph || ph.getAttribute('data-state') === 'loading')) {
-					sms_placeholder('empty');
-				}
-			}());
+			/* Проверка «список пуст» УБРАНА: этим занимается модель (smsSetState).
+			   Раньше здесь стояло собственное условие, и оно срабатывало даже
+			   тогда, когда ответ ещё не был разобран - именно так пустой экран
+			   появлялся при живых сообщениях. */
 
 			if (document.getElementById('msg') && typeof u !== 'undefined') {
 				msg_bar(Math.floor(u), t);
@@ -1100,11 +1161,14 @@ return view.extend({
 			var table = document.getElementById('smsList');
 			if (!c || !c.list || !c.list.length || !table) { return; }
 			if (table.querySelector('.sms-card')) { return; }
-			table.innerHTML = '';
+			/* Через модель: она запомнит выделение перед очисткой (важно, когда
+			   тёплый рендер приходит поверх уже показанного списка). */
+			table = smsSetState('list') || table;
 			var Lres = L.resource('icons/cmessage.svg');
 			for (var i = 0; i < c.list.length; i++) {
 				table.appendChild(sms_make_card(c.list[i], Lres, hide));
 			}
+			smsRestoreSelection();
 			sms_update_selcount();
 			if (document.getElementById('msg') && c.u != null) { msg_bar(Math.floor(c.u), c.t); }
 		}
@@ -1120,6 +1184,27 @@ return view.extend({
 		   (см. handleRefresh), а не перезагружает всю страницу. */
 		self._doRefresh = doRefresh;
 		});
+
+		var actions = E('div', { 'class': 'sms-actions' }, [
+					E('button', {
+						'class': 'cbi-button cbi-button-neutral',
+						'id': 'clr',
+						'click': ui.createHandlerFn(this, 'handleRefresh')
+					}, [ _('Refresh') ]),
+					E('button', {
+						'class': 'cbi-button cbi-button-neutral',
+						'id': 'forward',
+						'style': 'display: none;',
+						'click': ui.createHandlerFn(this, 'handleForward')
+					}, [ _('Forward SMS') ]),
+					E('span', { 'id': 'sms-selcount', 'class': 'sms-selcount' }, ''),
+					E('button', {
+						'class': 'cbi-button cbi-button-remove sms-act-del',
+						'id': 'execute',
+						'style': 'display: none;',
+						'click': ui.createHandlerFn(this, 'handleDelete')
+					}, [ _('Delete') ])
+		]);
 
 		var v = E('div', { 'class': 'cbi-section tgpage' }, [
 
@@ -1226,7 +1311,11 @@ return view.extend({
 									'id': 'msg',
 									'class': 'cbi-progressbar',
 									'title': '-'
-								}, E('div'))
+								}, E('div')),
+								/* Кнопки - в ТОМ ЖЕ ряду, что выбор хранилища и полоса
+								   занятости: одна строка управления вместо двух, а список
+								   начинается сразу под ней. */
+								actions
 							]),
 							E('div', {
 								'style': 'text-align:center;font-size:90%',
@@ -1239,38 +1328,22 @@ return view.extend({
 
 				E('div', {'id': 'forward-status', 'style': 'margin: 10px 0; display: none;'}),
 
-			/* Список сообщений, под ним - действия (как на вкладке «Исходящие»).
-			   Кнопки внизу потому, что читают сверху вниз: сперва сообщения, потом
-			   что с ними сделать. «Выделить все» убрана - выделение кликом по
-			   карточкам, а массовое удаление доступно и так: отмечаешь нужные. */
+			/* Список сообщений. Ряд действий - НАД ним (см. return ниже):
+			   «Обновить» доступен сразу, без прокрутки всей переписки.
+			   «Выделить все» убрана - выделение кликом по карточкам, а массовое
+			   удаление доступно и так: отмечаешь нужные. */
+			/* Ряд действий - НАД списком, но ПОД шапкой вкладки (выбор
+			   хранилища и полоса занятости): «Обновить» под рукой без прокрутки
+			   всей переписки, а настройки хранилища остаются наверху. */
 			E('div', { 'id': 'smsList' }),
 		]);
 
 		/* Кнопки ЗА пределами cbi-section - как на вкладке «Исходящие»: ряд
 		   действий стоит ПОД плашкой, а не внутри неё. Поэтому возвращаем не
 		   один блок, а два соседних элемента (E([], [...]) - фрагмент). */
-		var actions = E('div', { 'class': 'sms-actions' }, [
-					E('button', {
-						'class': 'cbi-button cbi-button-neutral',
-						'id': 'clr',
-						'click': ui.createHandlerFn(this, 'handleRefresh')
-					}, [ _('Refresh') ]),
-					E('button', {
-						'class': 'cbi-button cbi-button-neutral',
-						'id': 'forward',
-						'style': 'display: none;',
-						'click': ui.createHandlerFn(this, 'handleForward')
-					}, [ _('Forward SMS') ]),
-					E('span', { 'id': 'sms-selcount', 'class': 'sms-selcount' }, ''),
-					E('button', {
-						'class': 'cbi-button cbi-button-remove sms-act-del',
-						'id': 'execute',
-						'style': 'display: none;',
-						'click': ui.createHandlerFn(this, 'handleDelete')
-					}, [ _('Delete') ])
-		]);
 
-		return E([], [ v, actions ]);
+
+		return E([], [ v ]);
 	},
 
 	popTimeout: function(a, message, timeout, severity) {

@@ -165,6 +165,14 @@ for n in $NODES; do
 			*VOS_5G*|*RXMG1*|*SG500M2*) model="Compal RXM-G1" ;;
 			*)                          model="$_prodraw" ;;
 		esac
+		# ДЛИННЫЕ ДЕСКРИПТОРЫ -> КОРОТКОЕ ИМЯ. Производитель пишет в USB-строку
+		# всё сразу: «DW5821e-eSIM Snapdragon X20 LTE» - это название чипсета, а
+		# не модели, и в узкой вкладке модема оно занимает всю ширину, вытесняя
+		# оператора и IP. Режем хвост с чипсетом, модель остаётся.
+		case "$model" in
+			*\ Snapdragon\ *) model=$(printf '%s' "$model" | sed 's/ Snapdragon .*$//') ;;
+		esac
+
 		# GENERIC-ДЕСКРИПТОР -> КОРОТКОЕ ИМЯ СЕМЕЙСТВА.
 		# Модули на Qualcomm SDX55 (Foxconn T99W175, Dell DW5930e, Thales MV31-W,
 		# прототип Compal) представляются одинаковой строкой «Generic Mobile

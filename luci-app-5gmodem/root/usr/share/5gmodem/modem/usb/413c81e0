@@ -105,10 +105,23 @@ fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
 
-LAC_HEX=$(printf "%X" $LAC_DEC)
-[ -n "$LAC_DEC" ] && TAC_HEX=$LAC_HEX
-CID_HEX=$(printf "%X" $CID_DEC)
-[ -z "$TAC_DEC" ] && [ -n "$TAC_HEX" ] && TAC_DEC=$(echo $((0x$TAC_HEX)))
+LAC_HEX=$(printf "%X" $LAC_DEC 2>/dev/null)
+# TAC берём ОТ LAC только если своего нет. Раньше присваивание шло всегда, когда
+# известен LAC, и затирало уже посчитанный TAC: в снимок попадала несходящаяся
+# пара (tac_dec=33901 при tac_hex=FFFE, где FFFE - это LAC-сентинель «нет
+# данных», а вовсе не 33901). В интерфейсе это не бросалось в глаза лишь
+# потому, что рядом есть вторая пара tac_h/tac_d, которую UI берёт первой.
+[ -z "$TAC_HEX" ] && [ -n "$LAC_HEX" ] && TAC_HEX=$LAC_HEX
+CID_HEX=$(printf "%X" $CID_DEC 2>/dev/null)
+# Арифметика ТОЛЬКО над настоящим hex: сюда долетал плейсхолдер «-» от внешнего
+# скрипта, и $((0x-)) сыпал «arithmetic syntax error». Скрипт при этом выживал
+# (ошибка внутри подстановки), но TAC_DEC оставался пустым, а в лог шёл мусор.
+if [ -z "$TAC_DEC" ] && [ -n "$TAC_HEX" ]; then
+	case "$TAC_HEX" in
+		*[!0-9A-Fa-f]*|'') : ;;
+		*) TAC_DEC=$((0x$TAC_HEX)) ;;
+	esac
+fi
 
 PV=$(cat /sys/kernel/debug/usb/devices)
 PVCUT=$(echo $PV | awk -F 'Vendor=413c ProdID=81e0' '{print $2}' | cut -c-1520)
@@ -127,12 +140,27 @@ MODELACUT=$(echo $PVMODEL | awk -F 'Product=| S: SerialNumber' '{print $2}' | xa
 MODEL="$MODELBCUT $MODELACUT"
 fi
 
-# FW
-OF=$(sms_tool -d $DEVICE at "ati")
-FW=$(echo $OF | tr -s "\n" | xargs | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)
+# FW. AT^VERSION? ПЕРВЫМ: у DW5821e полная версия выглядит как
+# T77W968.F1.0.0.5.2.GC.013.050, но ATI и mmcli отдают её РАЗОРВАННОЙ - хвост
+# «.050» уходит на следующую строку («...GC.013\n050  1  [May 31 2021...]»),
+# и при разборе по первой строке он терялся. ^VERSION? даёт строку целиком.
+OV=$(sms_tool -d $DEVICE at "AT^VERSION?" 2>/dev/null | tr -d '\r')
+FW=$(echo "$OV" | sed -n 's/^\^VERSION: *//p' | head -1 | xargs)
+if [ -z "$FW" ]; then
+	OF=$(sms_tool -d $DEVICE at "ati")
+	FW=$(echo $OF | tr -s "\n" | xargs | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)
+fi
 
 NR_IMEI=$(sms_tool -d $DEVICE at "AT+GSN" | grep -oE '[0-9]{15}' | head -1)
 
 NR_IMSI=$(sms_tool -d $DEVICE at "AT+CIMI" | grep -oE '[0-9]{10,15}' | head -1)
 
-NR_ICCID=$(sms_tool -d $DEVICE at "AT+ICCID" | grep -oE '[0-9A-Fa-f]{18,22}' | head -1)
+# ICCID: хвостовые F - это ЗАПОЛНИТЕЛЬ, а не часть номера. В SIM поле занимает
+# 10 байт, и короткий ICCID добивается до конца символами F; общий шаблон
+# «18-22 hex-символа» цеплял их вместе с номером, и наружу уходило
+# 897011102564896603FF вместо 897011102564896603. Значение используется для
+# опознания SIM, поэтому лишние символы там недопустимы.
+NR_ICCID=$(sms_tool -d $DEVICE at "AT+ICCID" 2>/dev/null | tr -d '\r' \
+	| sed -n 's/.*+ICCID: *\([0-9A-Fa-f]*\).*/\1/p' | head -1 | sed 's/[Ff]*$//')
+[ -n "$NR_ICCID" ] || NR_ICCID=$(sms_tool -d $DEVICE at "AT+ICCID" 2>/dev/null \
+	| grep -oE '[0-9]{18,20}' | head -1)

@@ -151,15 +151,22 @@ fi
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
 
 # Cell ID & LAC & TAC
-LAC_HEX=$(printf "%X" $LAC_DEC)
-if [ -n "$LAC_DEC" ]; then
+LAC_HEX=$(printf "%X" $LAC_DEC 2>/dev/null)
+# TAC от LAC - ТОЛЬКО когда своего нет. Безусловное присваивание затирало уже
+# посчитанный TAC значением LAC (это другая, GSM-доменная величина), и в снимок
+# уходила несходящаяся пара tac_dec/tac_hex.
+if [ -z "$TAC_HEX" ] && [ -n "$LAC_HEX" ]; then
 	TAC_HEX=$LAC_HEX
 fi
-CID_HEX=$(printf "%X" $CID_DEC)
+CID_HEX=$(printf "%X" $CID_DEC 2>/dev/null)
 
-if [ -z "$TAC_DEC" ]
-then
-	[ -n "$TAC_HEX" ] && TAC_DEC=$(echo $((0x$TAC_HEX)))
+# Считаем ТОЛЬКО настоящий hex: сюда долетал плейсхолдер «-», и $((0x-)) сыпал
+# «arithmetic syntax error» (скрипт выживал, но TAC_DEC оставался пустым).
+if [ -z "$TAC_DEC" ] && [ -n "$TAC_HEX" ]; then
+	case "$TAC_HEX" in
+		*[!0-9A-Fa-f]*|'') : ;;
+		*) TAC_DEC=$((0x$TAC_HEX)) ;;
+	esac
 fi
 
 # Protocol
@@ -192,7 +199,12 @@ fi
 # FW
 OF=$(sms_tool -d $DEVICE at "ati")
 DEV2=$(echo $OF | tr -s "\n"  | xargs)
-FW=$(echo $DEV2 | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)
+# AT^VERSION? ПЕРВЫМ: полная версия у этого модуля -
+# T77W968.F1.0.0.5.2.GC.013.050, но ATI отдаёт её разорванной, и хвост «.050»
+# уходил на следующую строку - при разборе терялся.
+OV=$(sms_tool -d $DEVICE at "AT^VERSION?" 2>/dev/null | tr -d '\r')
+FW=$(echo "$OV" | sed -n 's/^\^VERSION: *//p' | head -1 | xargs)
+[ -n "$FW" ] || FW=$(echo $DEV2 | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)
 
 T=$(echo "$O" | awk -F ': ' '/ICCID:/ {print $2}')
 if [ -n "$T" ]; then
@@ -215,7 +227,7 @@ fi
 
 # Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID" | xargs)
-NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
+NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs | sed 's/[Ff]*$//')
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi

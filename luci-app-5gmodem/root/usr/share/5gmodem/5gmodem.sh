@@ -1976,7 +1976,17 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 		[ -z "$IMEI" ]    && IMEI=$(_mmv "modem.3gpp.imei")
 		# Прошивка: её обычно читает AT+CGMR, но под ModemManager AT-порт нам не
 		# принадлежит - в карточке стоял прочерк. У MM она есть готовая.
-		[ -z "$FW" ]      && FW=$(_mmv "modem.generic.revision")
+		# Прошивка из mmcli: у части модулей (Dell DW5821e) она приходит
+		# РАЗОРВАННОЙ - «T77W968...GC.013\n050  1  [May 31 2021...]», где «050»
+		# это ХВОСТ ВЕРСИИ, а не отдельная строка. Берём первую строку, а если
+		# следующая начинается с цифр - приклеиваем её через точку.
+		if [ -z "$FW" ]; then
+			_fwraw=$(_mmv "modem.generic.revision")
+			FW=$(printf '%s' "$_fwraw" | sed 's/\\n/\n/g' | head -1 | xargs)
+			_fwtail=$(printf '%s' "$_fwraw" | sed 's/\\n/\n/g' | sed -n '2p' \
+				| awk '{print $1}' | grep -xE '[0-9]+' || true)
+			[ -n "$_fwtail" ] && FW="$FW.$_fwtail"
+		fi
 		# IMSI/ICCID - ИЗ SIM-ОБЪЕКТА MM. Обычно их читает AT (AT+CIMI/AT+ICCID),
 		# но у modemmanager-модема AT-порт нам не принадлежит, и обе строки в
 		# карточке стояли прочерками, хотя MM их прекрасно знает. Объект SIM

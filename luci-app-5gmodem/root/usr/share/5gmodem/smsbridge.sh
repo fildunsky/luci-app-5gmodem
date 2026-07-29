@@ -12,7 +12,9 @@
 # аргументами, что раньше слал интерфейс. Так рабочий путь остаётся ровно тем
 # же, а новая ветка добавляется рядом, а не поверх.
 #
-# Usage: smsbridge.sh recv|sent [store] [port]
+# Usage: smsbridge.sh recv|sent|status [store] [port]
+#        smsbridge.sh delete <index|all> [store] [port]
+#        smsbridge.sh send <number> <text> [port]
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -28,13 +30,26 @@ _active_kind() {
 	uci -q get "$CFG.m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g').kind"
 }
 
+# ВЫБОР БИНАРЯ - ЗДЕСЬ, а не на странице. У модема под ModemManager (MBIM/QMI,
+# напр. Compal RXM-G1) входящие перехватывает MM, и в AT-хранилищах их нет -
+# sms_tool их не видит, нужен sms_tool_mm поверх mmcli. Раньше страница сама
+# подменяла путь к бинарю, из-за чего КАЖДАЯ операция (чтение, удаление,
+# отправка) знала про транспорт и повторяла эту логику по-своему.
 _smstool() {
+	if [ "$(uci -q get sms_tool_js.@sms_tool_js[0].sms_via_mm)" = "1" ] \
+	   && [ -x /usr/bin/sms_tool_mm ]; then
+		echo /usr/bin/sms_tool_mm
+		return
+	fi
 	command -v sms_tool >/dev/null 2>&1 && echo /usr/bin/sms_tool || echo sms_tool
 }
 
 BOX="${1:-recv}"
-STORE="$2"
-PORT="$3"
+case "$BOX" in
+	delete) DEL="$2"; STORE="$3"; PORT="$4" ;;
+	send)   SND_TO="$2"; SND_TXT="$3"; PORT="$4" ;;
+	*)      STORE="$2"; PORT="$3" ;;
+esac
 
 # Есть AT-порт (режим debug) - обычный путь: sms_tool умеет больше, чем API.
 _sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
@@ -52,6 +67,20 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 			[ -n "$_m" ] || _m=100
 			echo "Storage type: ME, used: $_u, total: $_m"
 			;;
+		delete)
+			# У API свистка нет «удалить всё» - только по одному индексу.
+			# Для all перебираем то, что реально лежит во входящих.
+			if [ "$DEL" = all ]; then
+				"$RES/hilink.sh" smsread in 2>/dev/null \
+					| jsonfilter -e '@.msg[*].index' 2>/dev/null \
+					| while read -r _i; do
+						[ -n "$_i" ] && "$RES/hilink.sh" smsdel "$_i" >/dev/null 2>&1
+					done
+				echo '{"success":true}'
+			else
+				"$RES/hilink.sh" smsdel "$DEL"
+			fi ;;
+		send)   "$RES/hilink.sh" smssend "$SND_TO" "$SND_TXT" ;;
 		*)    "$RES/hilink.sh" smsread in ;;
 	esac
 	exit 0
@@ -76,5 +105,22 @@ set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 case "$BOX" in
 	status) exec $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status 2>/dev/null ;;
 	sent)   exec $(_smstool) "$@" recv SR 2>/dev/null ;;
+	# delete <index|all> - индекс проверяем здесь: наружу уходит уже
+	# безопасное значение, а страница не решает, что можно слать в модем.
+	delete)
+		case "$DEL" in
+			all) exec $(_smstool) -d "$PORT" delete all 2>/dev/null ;;
+			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
+			*)   exec $(_smstool) -d "$PORT" delete "$DEL" 2>/dev/null ;;
+		esac ;;
+	send)
+		[ -n "$SND_TO" ] || { echo "no number" >&2; exit 2; }
+		# КОДИРОВКА - ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ sms_tool. Модем в PDU-режиме
+		# (AT+CMGF=0), кодировку выбирает сам sms_tool и на кириллице ставит
+		# GSM-7, где её нет - до адресата доходят «?????». Проверено: баг
+		# воспроизводится и прямым вызовом из консоли, БЕЗ нашего приложения,
+		# и флаг «-c 2» его не лечит (для send он не действует).
+		# Лечится только своим PDU-кодером (UCS2 + AT+CMGS) - см. роадмап.
+		exec $(_smstool) -d "$PORT" send "$SND_TO" "$SND_TXT" 2>/dev/null ;;
 	*)      exec $(_smstool) "$@" recv 2>/dev/null ;;
 esac

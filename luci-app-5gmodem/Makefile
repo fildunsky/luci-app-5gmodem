@@ -22,7 +22,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+usb-modeswitch +kmod-usb-acm \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.0.2
+PKG_VERSION:=2.0.3
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -44,6 +44,7 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-leds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
 	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
 	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
@@ -52,6 +53,10 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 	# воткнутый при установке модем. См. 05c6:9025/90d5/90d6.
 	/etc/init.d/5gmodem-usbports enable 2>/dev/null
 	/etc/init.d/5gmodem-usbports start 2>/dev/null
+	# Сторож сессии данных: сеть может пересоздать её с новым адресом (смена
+	# макрорегиона в поездке), а netifd за этим не следит - см. sessionwatch.sh.
+	/etc/init.d/5gmodem-sessionwatch enable 2>/dev/null
+	/etc/init.d/5gmodem-sessionwatch restart 2>/dev/null
 	# Диоды кнопок: приводим их к фактическому состоянию сервиса ОДИН РАЗ при
 	# загрузке (после ребута они оставались тёмными до первого нажатия).
 	/etc/init.d/5gmodem-btnleds enable 2>/dev/null
