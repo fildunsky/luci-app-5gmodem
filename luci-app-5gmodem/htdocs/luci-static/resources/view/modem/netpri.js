@@ -59,7 +59,7 @@ var _svcState = {};
 var YT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
 	'<rect x="2" y="4.5" width="20" height="15" rx="4.2" fill="#FF0000"/>' +
 	'<path d="M10 8.5l6 3.5-6 3.5z" fill="#fff"/></svg>';
-/* Пресеты сервисов пинга: имя + иконка. svg - инлайн-SVG; img - файл из icons/
+/* Пресеты сервисов пинга: имя + иконка. svg - инлайн-SVG; img - файл из icons/5gmodem/
    (рисуется на белой плашке, поэтому монохромный тёмный octocat github.svg виден
    и на светлой, и на тёмной теме); иначе цветная плашка с глифом (glyph+color).
    Свой хост - молния ⚡. */
@@ -102,7 +102,7 @@ function stArrow(name) {
 	/* Направление в классе: по нему CSS пульсирует свечением ТОЛЬКО ту стрелку,
 	   чья фаза идёт (cdown = загрузка -> st-arrow-dl, cup = отдача -> st-arrow-ul). */
 	var dir = (name === 'cdown') ? ' st-arrow-dl' : (name === 'cup') ? ' st-arrow-ul' : '';
-	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': L.resource('icons/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
+	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': L.resource('icons/5gmodem/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
 }
 
 /* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
@@ -418,7 +418,7 @@ function pingBadge(info) {
 	   различим в обеих темах. */
 	if (info.img) {
 		return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:#1b1f23' }, [
-			E('img', { 'src': L.resource('icons/' + info.img), 'width': 12, 'height': 12,
+			E('img', { 'src': L.resource('icons/5gmodem/' + info.img), 'width': 12, 'height': 12,
 				'alt': '', 'style': 'display:block' })
 		]);
 	}
@@ -638,7 +638,7 @@ function typeIcon(o) {
 	if (o.type === 'modem') {
 		var oi = operatorIcon(o.label);
 		return E('img', {
-			'class': 'netpri-ic', 'src': L.resource('icons/' + (oi ? oi : 'op-sim') + '.png'),
+			'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.png'),
 			'width': 16, 'height': 16, 'alt': ''
 		});
 	}
@@ -647,7 +647,7 @@ function typeIcon(o) {
 	      : null;
 	if (!f) { return null; }
 	return E('img', {
-		'class': 'netpri-ic', 'src': L.resource('icons/' + f),
+		'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + f),
 		'width': 16, 'height': 16, 'alt': ''
 	});
 }

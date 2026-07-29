@@ -1735,6 +1735,49 @@ autoapn)
 	done
 	_mcc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
 	_mnc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
+
+	# ЗАПАСНОЙ ПУТЬ - СПРОСИТЬ ModemManager НАПРЯМУЮ.
+	#
+	# Ключ подбора APN - IMSI, а читаем мы его по AT. У модема под управлением MM
+	# AT-порта может не быть ВОВСЕ (живой случай: Compal RXM-G1 в заводской
+	# композиции 05c6:9063 - только cdc-wdm и wwan). Тогда цикл выше уходил
+	# впустую: ни оператора, ни IMSI, autoapn сдавался, и в интерфейсе оставался
+	# APN от ПРЕДЫДУЩЕЙ симки. У пользователя после замены Tele2 на Мегафон так и
+	# остался чужой APN, а сессия данных не поднималась.
+	#
+	# ModemManager знает и IMSI (объект SIM), и код сети - берём у него. Только
+	# когда своих данных нет: у AT-модема наш разбор точнее (UCS2, mccmnc.dat,
+	# бренд MVNO поверх хост-сети).
+	if [ ${#_imsi} -lt 6 ] || [ -z "$_mcc" ] || [ "$_mcc" = "-" ]; then
+		if command -v mmcli >/dev/null 2>&1; then
+			_aa_p=$(uci -q get "$CFG.$(sec_for_iface "$IFACE" 2>/dev/null).path" 2>/dev/null)
+			[ -n "$_aa_p" ] || _aa_p=$(active_path)
+			_aa_i=$(mm_index_for_path "$_aa_p" 2>/dev/null)
+			if [ -n "$_aa_i" ]; then
+				_aa_k=$(mmcli -m "$_aa_i" -K 2>/dev/null)
+				# Код сети MM отдаёт слитно (25002), таблице APN нужны MCC и MNC
+				# порознь: первые три цифры - страна, остальное - сеть.
+				if [ -z "$_mcc" ] || [ "$_mcc" = "-" ]; then
+					_aa_oc=$(printf '%s\n' "$_aa_k" | sed -n 's/^modem\.3gpp\.operator-code *: *//p' | tr -cd '0-9')
+					case "${#_aa_oc}" in
+						5|6) _mcc=$(printf '%s' "$_aa_oc" | cut -c1-3)
+						     _mnc=$(printf '%s' "$_aa_oc" | cut -c4-) ;;
+					esac
+				fi
+				if [ -z "$_op" ] || [ "$_op" = "-" ]; then
+					_op=$(printf '%s\n' "$_aa_k" | sed -n 's/^modem\.3gpp\.operator-name *: *//p' | head -1)
+				fi
+				if [ ${#_imsi} -lt 6 ]; then
+					_aa_sim=$(printf '%s\n' "$_aa_k" | sed -n 's/^modem\.generic\.sim *: *//p' | head -1)
+					case "$_aa_sim" in
+						*/SIM/*) _imsi=$(mmcli -i "${_aa_sim##*/}" -K 2>/dev/null \
+							| sed -n 's/^sim\.properties\.imsi *: *//p' | tr -cd '0-9') ;;
+					esac
+				fi
+				logger -t 5gmodem "autoapn: добрал из ModemManager - оператор «${_op:--}», сеть ${_mcc:--}-${_mnc:--}, IMSI ${#_imsi} цифр"
+			fi
+		fi
+	fi
 	# Метрики отдают ПРОЧЕРК, а не пустоту, когда код сети неизвестен. Без этой
 	# нормализации в apn_plmn попадало "---", а сравнение с настоящим PLMN
 	# никогда не совпадало.

@@ -77,12 +77,12 @@ function lpaFail(j) {
 // и переносится внутри своей колонки - иконку ему не сдвинуть.
 function esimUiCss() {}   /* стили в modem.css */
 
-// Иконка SIM-карты (наш ассет icons/csim_iface.svg). Через <img> - иконка с
+// Иконка SIM-карты (наш ассет icons/5gmodem/csim_iface.svg). Через <img> - иконка с
 // фиксированным цветом (#0095FF), тонировать не нужно.
 function esimSimIcon(cls) {
 	return E('img', {
 		'class': cls || 'esim-simicon',
-		'src': L.resource('icons/csim_iface.svg'),
+		'src': L.resource('icons/5gmodem/csim_iface.svg'),
 		'alt': ''
 	});
 }
@@ -335,7 +335,7 @@ return view.extend({
 						var f = document.getElementById('esim-qr-file');
 						if (f) { f.click(); }
 					}
-				}, [ E('img', { 'src': L.resource('icons/cqr.svg'), 'alt': _('QR') }) ]),
+				}, [ E('img', { 'src': L.resource('icons/5gmodem/cqr.svg'), 'alt': _('QR') }) ]),
 				E('input', {
 					'type': 'file', 'id': 'esim-qr-file', 'accept': 'image/*',
 					'style': 'display:none',
@@ -991,7 +991,7 @@ function renderProfiles(list) {
 			E('td', { 'class': 'td left' }, [
 				E('span', { 'class': 'esim-op' }, [
 					// Активный (enabled) профиль - иконка с «галочкой», остальные - обычная.
-					E('img', { 'src': L.resource(on ? 'icons/csim_active.svg' : 'icons/csim_iface.svg'), 'alt': '' }),
+					E('img', { 'src': L.resource(on ? 'icons/5gmodem/csim_active.svg' : 'icons/5gmodem/csim_iface.svg'), 'alt': '' }),
 					p.serviceProviderName || '-'
 				])
 			]),

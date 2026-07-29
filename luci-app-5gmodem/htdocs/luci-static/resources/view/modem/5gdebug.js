@@ -399,7 +399,7 @@ return view.extend({
 							   ТОЛЬКО когда MM работает: при остановленной службе прятаться
 							   не от кого, и значок был бы про несуществующее. */
 							mmRunning && p.mm_exclude !== '0' ? E('img', {
-								'src': L.resource('icons/cghost.svg'),
+								'src': L.resource('icons/5gmodem/cghost.svg'),
 								'width': 12, 'height': 12, 'alt': '',
 								'title': _('hidden from ModemManager'),
 								'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'

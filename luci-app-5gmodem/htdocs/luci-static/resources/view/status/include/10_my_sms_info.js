@@ -276,17 +276,17 @@ return baseclass.extend({
 	getSignalIcon: function(quality) {
 		let icon;
 		if (quality <= 0)
-			icon = L.resource('icons/mobile-signal-000-000.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-000-000.svg');
 		else if (quality < 20)
-			icon = L.resource('icons/mobile-signal-000-020.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-000-020.svg');
 		else if (quality < 40)
-			icon = L.resource('icons/mobile-signal-020-040.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-020-040.svg');
 		else if (quality < 60)
-			icon = L.resource('icons/mobile-signal-040-060.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-040-060.svg');
 		else if (quality < 80)
-			icon = L.resource('icons/mobile-signal-060-080.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-060-080.svg');
 		else
-			icon = L.resource('icons/mobile-signal-080-100.svg');
+			icon = L.resource('icons/5gmodem/mobile-signal-080-100.svg');
 		return icon;
 	},
 
@@ -333,7 +333,7 @@ return baseclass.extend({
 		}
 		
 		let signalIcon = this.getSignalIcon(signalQuality);
-		let smsIconUrl = L.resource('icons/newdelsms.png');
+		let smsIconUrl = L.resource('icons/5gmodem/newdelsms.png');
 		
 		if (!hasFullData) {
 			return E('div', { 

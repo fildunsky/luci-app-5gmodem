@@ -170,12 +170,15 @@ _wdm_driver() {
 euicc_probe_wdm() {
 	_pwdev=$(esim_wdm)
 	_pwsave=""
+	_pwskip=1
 	case "$1" in
 		qmi)  _pw="LPAC_APDU=qmi LPAC_APDU_QMI_DEVICE=$_pwdev" ;;
 		uqmi) _pw="LPAC_APDU=uqmi LPAC_APDU_QMI_DEVICE=$_pwdev" ;;
 		mbim) # даже простое чтение chip info может увести активный слот на пустую
-		      # eSIM -> запоминаем mapping и просим lpac его не трогать (см. _mbim_slot_*)
-		      _pw="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$_pwdev LPAC_APDU_MBIM_USE_PROXY=1 LPAC_APDU_MBIM_UIM_SLOT=$(_mbim_uim_slot) LPAC_APDU_MBIM_SKIP_SLOT_MAPPING=$(_mbim_skipmap)"
+		      # eSIM -> запоминаем mapping (см. _mbim_slot_*). Разрешаем переключение
+		      # только там, где целевой слот уже активная eSIM (см. _mbim_skipmap).
+		      _pwskip=$(_mbim_skipmap "$_pwdev")
+		      _pw="LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE=$_pwdev LPAC_APDU_MBIM_USE_PROXY=1 LPAC_APDU_MBIM_UIM_SLOT=$(_mbim_uim_slot) LPAC_APDU_MBIM_SKIP_SLOT_MAPPING=$_pwskip"
 		      _pwsave=$(_mbim_slot_get "$_pwdev") ;;
 		*)    return 1 ;;
 	esac
@@ -186,6 +189,18 @@ euicc_probe_wdm() {
 	_pwn=0
 	while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
 	kill "$_pwp" 2>/dev/null
+	# ВОЗВРАЩАЕМ MAPPING ВСЕГДА, а не только когда запрещали переключение.
+	#
+	# active-esim в ответе модема описывает СОСТОЯНИЕ КАРТЫ в слоте («там eSIM с
+	# профилями»), а НЕ то, что исполнитель уже привязан к этому слоту. То есть
+	# у модема с рабочей SIM1 и eSIM в SIM2 проверка честно скажет «да», мы
+	# разрешим переключение - и модем уйдёт на SIM2. Ровно это пользователи и
+	# видят: «захожу на вкладку eSIM, а модем сам переключается на SIM2» и связь
+	# по основной симке пропадает.
+	#
+	# Поэтому разрешение и откат решают РАЗНЫЕ задачи: разрешение даёт lpac
+	# добраться до eUICC (иначе профили не прочитать вовсе), а откат возвращает
+	# рабочую SIM после того, как чтение закончено.
 	[ "$1" = mbim ] && _mbim_slot_restore "$_pwdev" "$_pwsave"
 	grep -qi '"eidValue"\|"eid"' "$_pwo" 2>/dev/null; _pwr=$?
 	rm -f "$_pwo"
@@ -218,7 +233,7 @@ err() { echo "{\"type\":\"lpa\",\"payload\":{\"code\":-1,\"message\":\"$1\",\"da
 # Перенесено с рабочей community-сборки MBIM-lpac для T99W175.
 _mbim_slot_get() {   # $1 = cdc-wdm -> номер активного слота executor'а 0
 	command -v mbimcli >/dev/null 2>&1 || return 0
-	mbimcli -d "$1" --ms-query-device-slot-mappings 2>/dev/null \
+	mbimcli -d "$1" -p --ms-query-device-slot-mappings 2>/dev/null \
 		| sed -n "s/.*Executor '0': slot '\([0-9][0-9]*\)'.*/\1/p" | head -1
 }
 _mbim_slot_restore() {   # $1 = cdc-wdm, $2 = сохранённый слот (пусто = ничего не делаем)
@@ -226,7 +241,7 @@ _mbim_slot_restore() {   # $1 = cdc-wdm, $2 = сохранённый слот (�
 	command -v mbimcli >/dev/null 2>&1 || return 0
 	_msr=$(_mbim_slot_get "$1")
 	[ -n "$_msr" ] && [ "$_msr" != "$2" ] \
-		&& mbimcli -d "$1" --ms-set-device-slot-mappings="$2" >/dev/null 2>&1
+		&& mbimcli -d "$1" -p --ms-set-device-slot-mappings="$2" >/dev/null 2>&1
 }
 # HTTP-ДРАЙВЕР, КОТОРЫЙ РЕАЛЬНО ЕСТЬ В СБОРКЕ. Локальным операциям (проба eUICC,
 # chip info, список профилей) сеть не нужна, но lpac всё равно поднимает HTTP-плечо
@@ -249,7 +264,45 @@ _mbim_uim_slot() {
 	[ -n "$_v" ] || _v=$(uci -q get lpac.mbim.uim_slot)
 	[ -n "$_v" ] && echo "$_v" || echo 2
 }
-_mbim_skipmap()  { _v=$(uci -q get lpac.mbim.skip_slot_mapping); [ -n "$_v" ] && echo "$_v" || echo 1; }
+# ИНДЕКС ЦЕЛЕВОГО СЛОТА ДЛЯ mbimcli: у него нумерация с НУЛЯ, а у нас, как и у
+# lpac, слоты считаются с единицы.
+_mbim_target_index() {
+	_mti=$(_mbim_uim_slot)
+	case "$_mti" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$_mti" -gt 0 ] || return 1
+	echo $((_mti - 1))
+}
+
+# В ЦЕЛЕВОМ СЛОТЕ УЖЕ АКТИВНАЯ eSIM? Спрашиваем сам модем.
+# Через прокси (-p) - канал общий с ModemManager и с самим lpac.
+_mbim_target_is_active_esim() {
+	command -v mbimcli >/dev/null 2>&1 || return 1
+	_tie=$(_mbim_target_index) || return 1
+	mbimcli -d "$1" -p --ms-query-slot-info-status="$_tie" 2>/dev/null \
+		| grep -qi "active-esim"
+}
+
+# РАЗРЕШАТЬ ЛИ lpac ПЕРЕКЛЮЧАТЬ СЛОТ.
+#
+# Раньше здесь стояло жёсткое «1» - не трогать никогда. Это спасало рабочую
+# физическую SIM (см. пояснение у _mbim_slot_*), но у модемов, где eUICC сидит
+# ВО ВТОРОМ слоте, оборачивалось другой бедой: после перезагрузки MBIM-исполнитель
+# остаётся привязан к SIM1, добраться до eUICC lpac не может, и вкладка честно
+# сообщает «eSIM недоступна». Живой случай - T99W175 / Thales MV31-W (правку
+# прислал пользователь, проверив на своём модеме).
+#
+# Теперь решаем по состоянию ЦЕЛЕВОГО слота: если модем уже помечает его как
+# active-esim, переключение туда физическую симку увести не может - разрешаем.
+# Во всех остальных случаях запрет остаётся, как и был.
+#
+# Отказ безопасный: нет mbimcli, модем не понимает запроса, слот не задан - всё
+# это даёт «1», то есть прежнее поведение.
+# Явная настройка пользователя всегда важнее автоматики.
+_mbim_skipmap() {
+	_v=$(uci -q get lpac.mbim.skip_slot_mapping)
+	[ -n "$_v" ] && { echo "$_v"; return; }
+	_mbim_target_is_active_esim "$1" && echo 0 || echo 1
+}
 
 # lpac через STDIO-бэкенд + наш AT-мост (esim-apdu-bridge.sh). Прямой AT-драйвер
 # lpac виснет на FM350-GL (persistent-буфер at_expect рассинхронизируется), зато
@@ -282,14 +335,19 @@ run_lpac() {
 	if [ "$_BE" = "mbim" ]; then
 		_MDEV=$(esim_wdm)
 		_MOLD=$(_mbim_slot_get "$_MDEV")
+		# Решение о переключении слота принимаем ОДИН раз и запоминаем: ниже по
+		# нему же решаем, откатывать ли mapping (см. _mbim_skipmap).
+		_MSKIP=$(_mbim_skipmap "$_MDEV")
 		_MR="/tmp/5gmodem_esim_mbim.$$"; rm -f "$_MR"
 		env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
 			LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY=1 \
-			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$(_mbim_skipmap)" LPAC_HTTP="$(http_local_drv)" \
+			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$_MSKIP" LPAC_HTTP="$(http_local_drv)" \
 			"$LPAC" "$@" > "$_MR" 2>/dev/null &
 		_PID=$!; _n=0
 		while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
 		kill -0 "$_PID" 2>/dev/null && { kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null; }
+		# Откат безусловный - см. пояснение в euicc_probe_wdm: разрешение нужно,
+		# чтобы дотянуться до eUICC, а вернуть рабочую SIM надо в любом случае.
 		_mbim_slot_restore "$_MDEV" "$_MOLD"
 		if [ -s "$_MR" ]; then cat "$_MR"; else err "timeout"; fi
 		rm -f "$_MR"

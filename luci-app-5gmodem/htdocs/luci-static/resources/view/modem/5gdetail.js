@@ -1227,7 +1227,7 @@ function renderProtoChip(json) {
 		   текст протокола - в отдельном узле (обновляем только его). Фикс-размер под
 		   line-height чипа, чтобы появление иконки не растягивало строку. */
 		chip._ghost = E('img', {
-			'src': L.resource('icons/cghost.svg'), 'alt': '',
+			'src': L.resource('icons/5gmodem/cghost.svg'), 'alt': '',
 			'title': _('hidden from ModemManager'),
 			'style': 'width:11px; height:11px; margin-right:.3em; opacity:.8;'
 				+ 'vertical-align:-1px; display:none; pointer-events:none;'
@@ -2049,10 +2049,10 @@ function updateSimIcon(name) {
 	if (!si) { return; }
 	var want;
 	if (name == null || String(name).length < 1 || String(name) == '-') {
-		want = L.resource('icons/op-nosim.png');   // модем ещё грузится / нет SIM
+		want = L.resource('icons/5gmodem/op-nosim.png');   // модем ещё грузится / нет SIM
 	} else {
 		var ic = operatorIcon(name);
-		want = ic ? L.resource('icons/' + ic + '.png') : L.resource('icons/op-sim.png');
+		want = ic ? L.resource('icons/5gmodem/' + ic + '.png') : L.resource('icons/5gmodem/op-sim.png');
 	}
 	if (si.getAttribute('src') != want) { si.setAttribute('src', want); }
 }
@@ -2529,10 +2529,10 @@ function applyMetrics(json) {
 				fillAntPorts(json.antports, json.rxdiv);
 
 					var icon, wicon, ticon, t;
-					var wicon = L.resource('icons/cloading.svg');
-					var ticon = L.resource('icons/ctime.svg');
-					var dicon = L.resource('icons/cdown.svg');   // скачивание (rx)
-					var uicon = L.resource('icons/cup.svg');     // загрузка (tx)
+					var wicon = L.resource('icons/5gmodem/cloading.svg');
+					var ticon = L.resource('icons/5gmodem/ctime.svg');
+					var dicon = L.resource('icons/5gmodem/cdown.svg');   // скачивание (rx)
+					var uicon = L.resource('icons/5gmodem/cup.svg');     // загрузка (tx)
 
 					// Мобильные иконки уровня сигнала (цветные "палочки":
 					// красный слабый -> зелёный сильный). Иконки luci
@@ -2545,17 +2545,17 @@ function applyMetrics(json) {
 					if (isNaN(p) || p < 0)
 						p = 0;
 					if (p == 0)
-						icon = L.resource('icons/mobile-signal-000-000.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-000-000.svg');
 					else if (p < 20)
-						icon = L.resource('icons/mobile-signal-000-020.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-000-020.svg');
 					else if (p < 40)
-						icon = L.resource('icons/mobile-signal-020-040.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-020-040.svg');
 					else if (p < 60)
-						icon = L.resource('icons/mobile-signal-040-060.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-040-060.svg');
 					else if (p < 80)
-						icon = L.resource('icons/mobile-signal-060-080.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-060-080.svg');
 					else
-						icon = L.resource('icons/mobile-signal-080-100.svg');
+						icon = L.resource('icons/5gmodem/mobile-signal-080-100.svg');
 
 					if (document.getElementById('signal')) {
 						var view = document.getElementById("signal");
@@ -2935,7 +2935,7 @@ function applyMetrics(json) {
 							         'display:inline-flex;align-items:center;gap:.3em'
 						}, [
 							E('img', {
-								'src': L.resource('icons/cloading.svg'), 'title': txt, 'alt': '',
+								'src': L.resource('icons/5gmodem/cloading.svg'), 'title': txt, 'alt': '',
 								'style': 'width:12px;height:12px'
 							}),
 							E('span', {}, txt)
@@ -3620,7 +3620,7 @@ simDialog: baseclass.extend({
 					E('div', { 'class': 'cbi-tooltip-container' }, [
 						E('img', {
 							'id': 'simicon',
-							'src': L.resource('icons/op-nosim.png'),
+							'src': L.resource('icons/5gmodem/op-nosim.png'),
 							'title': _(''),
 							'class': 'middle',
 						}),
@@ -3659,7 +3659,7 @@ simDialog: baseclass.extend({
 					E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
 					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
-							E('img', { 'src': L.resource('icons/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+							E('img', { 'src': L.resource('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
 						]),
 						E('span', { 'id': 'temp' }, [ '-' ]),
 					]),
