@@ -882,7 +882,15 @@ case "$COPS" in
 	# Non-numeric characters or is blank
         ;;
     *) 
-        if [ "$COPS" = "$isp_num" ] || [ "$COPS" = "$isp_numws" ]; then
+        # Часть модемов отдаёт числовое имя в ОБРАТНОМ порядке - "11 250"
+        # вместо "250 11" (живой случай: Dell DW5821e на Yota, MNC впереди MCC).
+        # Сравнивали только с прямым порядком, подстановка имени не срабатывала,
+        # и в карточке висели голые цифры вместо «Yota» - вместе с ними терялась
+        # и иконка оператора, которую UI выбирает по имени.
+        isp_rev="$COPS_MNC $COPS_MCC"
+        isp_revws="$COPS_MNC$COPS_MCC"
+        if [ "$COPS" = "$isp_num" ] || [ "$COPS" = "$isp_numws" ] || \
+           [ "$COPS" = "$isp_rev" ] || [ "$COPS" = "$isp_revws" ]; then
             if [ -n "$isp" ]; then
                 COPS=$(awk -F[\;] '/^'"$isp"';/ {print $3}' $RES/mccmnc.dat | xargs)
                 LOC=$(awk -F[\;] '/^'"$isp"';/ {print $2}' $RES/mccmnc.dat)

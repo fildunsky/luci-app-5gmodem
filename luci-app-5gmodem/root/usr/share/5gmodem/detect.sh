@@ -36,8 +36,24 @@ if [ -n "$_dt_am" ]; then
 	# (блокирующий flock) держит порт всё время опроса и только расширяет окно
 	# коллизии. Поэтому для modemmanager-прото модема AT-порт НЕ отдаём - молчим, как
 	# для HiLink. Метрики такого модема берём через mmcli (см. 5gmodem.sh), не по AT.
+	# ИСКЛЮЧЕНИЕ: модем УЖЕ ПОДКЛЮЧЁН. Срывался именно enable/connect - пока MM
+	# поднимает модем, чужой sms_tool на его ttyUSB роняет ему команды в таймаут.
+	# Когда сессия УЖЕ установлена, этого этапа нет, а без AT-порта пропадают
+	# метрики, которых у mmcli просто нет: температура, агрегация несущих,
+	# управление диапазонами и режимом (живой случай: Dell DW5821e под MM -
+	# после перехода на ModemManager карточка осталась без температуры и CA).
+	# Поэтому молчим только пока модем НЕ connected.
 	_dt_nif=$(uci -q get "5gmodem.$_dt_sec.network")
-	[ "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)" = "modemmanager" ] && exit 0
+	if [ "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)" = "modemmanager" ]; then
+		_dt_mmi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+		_dt_st=""
+		[ -n "$_dt_mmi" ] && _dt_st=$(mmcli -m "$_dt_mmi" -K 2>/dev/null \
+			| sed -n 's/^modem\.generic\.state *: *//p' | head -1)
+		case "$_dt_st" in
+			connected) : ;;          # сессия поднята - AT-порт свободен, отдаём
+			*) exit 0 ;;             # поднимается или лежит - не мешаем MM
+		esac
+	fi
 fi
 
 CONFIG=modemdefine

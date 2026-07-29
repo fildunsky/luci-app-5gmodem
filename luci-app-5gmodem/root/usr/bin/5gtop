@@ -457,15 +457,20 @@ uptime_str() {
 }
 
 # ── Рамки. Три блока в том же порядке, что секции веб-страницы.
-box_top()  { printf '%s+- %s ' "$C_DIM" "$1"; rep '-' "$((W - 5 - $(clen "$1")))"; printf '+%s\n' "$C_RST"; }
-# ВНУТРЬ РАМКИ НЕ ПИШЕМ ПРОБЕЛЫ, а перепрыгиваем курсором (ESC[<n>C).
-# Записанный пробел - это ЗАКРАШЕННАЯ ячейка: терминал заливает её текущим фоном.
-# В терминалах со своей темой (или с прозрачностью/картинкой) фон по умолчанию -
-# не тема, а чёрный, и внутренности рамок превращались в чёрные прямоугольники,
-# хотя вокруг них видна тема. Пропуск курсором ячеек НЕ ТРОГАЕТ - под ними
-# остаётся фон терминала.
-box_mid()  { printf '%s|%s[%dC|%s\n' "$C_DIM" "$ESC" "$((W-2))" "$C_RST"; }
-box_end()  { printf '%s+' "$C_DIM"; rep '-' "$((W-2))"; printf '+%s\n' "$C_RST"; }
+# БЕЗ РАМОК. Раньше блоки обводились +---+ и боковыми |. Каждый такой символ -
+# ЗАКРАШЕННАЯ ячейка: терминал заливает её фоном по умолчанию, а он совпадает с
+# фоном окна далеко не всегда (тема со своим фоном, прозрачность, фоновая
+# картинка). В Tabby на сером фоне рамки и их заливка лезли чёрными полосами
+# поверх темы. Теперь заголовок блока - просто подпись, а «рамка» - воздух:
+# ячеек не трогаем вовсе, под ними остаётся фон терминала.
+#
+# ЧИСЛО СТРОК СОХРАНЕНО НАМЕРЕННО (по одной на вызов): draw_* пишет значения по
+# АБСОЛЮТНЫМ координатам строк, и убери мы хоть одну - разъехался бы весь экран.
+# Цвет заголовка - ТОТ ЖЕ, которым подсвечены буквы клавиш (см. hl_name):
+# жёлтый жирный. Одна акцентная краска на весь экран, а не своя у каждого блока.
+box_top()  { printf '%s- %s -%s\n' "$C_B$C_YEL" "$1" "$C_RST"; }
+box_mid()  { printf '\n'; }
+box_end()  { printf '\n'; }
 
 # Подсказка клавиш - ОДНОЙ функцией на все разделы. Раньше строка была
 # продублирована в каждой рамке: при смене привязок их пришлось бы править
@@ -528,7 +533,7 @@ frame() {
 +/-	$T_K_WIDTH"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
-	ROW_END=35
+	ROW_END=37
 }
 
 # ── ВКЛАДКИ ──────────────────────────────────────────────────────────────────
@@ -646,12 +651,13 @@ bar_tabs() {
 		fi
 	done
 	printf '\n'
+	printf '\n'   # воздух между полосой вкладок и первым блоком
 }
 
 # Полоса модемов: активный отмечен маркером. Список берём из конфига (он же
 # источник для веб-вкладок), поэтому порядок и имена совпадают с браузером.
 bar_modems() {
-	[ "$MCOUNT" -gt 0 ] || return
+	[ "$MCOUNT" -gt 0 ] || { printf '\n'; return; }
 	_cur=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	printf ' '
 	# Два ОДИНАКОВЫХ модема дают одинаковое имя модели, и в полосе получались
@@ -674,6 +680,7 @@ bar_modems() {
 		fi
 	done
 	printf '\n'
+	printf '\n'   # воздух под полосой модемов
 }
 
 # at <строка> <колонка> <текст> - переписать только значение. [K не используем:
@@ -713,7 +720,7 @@ frame_narrow() {
 	printf '\n %sq r s 1-3%s%s%s\n' "$C_DIM" "$MKEY" "$C_RST" "$_ent"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
-	ROW_END=34
+	ROW_END=36
 }
 
 # ── РАЗДЕЛ «СОТА». Полный набор строк, как в блоке «Информация о соте» веба,
@@ -743,8 +750,8 @@ frame_cell() {
 }
 
 draw_cell() {
-	_r=$(( 4 + $(bar_modems >/dev/null; echo 0) ))   # строки шапки фиксированы
-	_row=5
+	_r=$(( 6 + $(bar_modems >/dev/null; echo 0) ))   # строки шапки фиксированы
+	_row=7
 	# две колонки, как в вебе: слева идентификаторы соты, справа - её параметры
 	lab $((_row))   2  "$T_LAC"      10 "$(fit "$(v lac_hex) / $(v lac_dec)" 26)" 26
 	lab $((_row))   40 "$T_CID"      10 "$(fit "$(v cid_hex) / $(v cid_dec)" 26)" 26
@@ -911,21 +918,21 @@ frame_modem() {
 
 draw_modem() {
 	_w=$((W - 26))
-	lab 5  2 "$T_MODEL"  14 "$(fit "$(v modem)" $_w)" $_w
-	lab 6  2 "$T_FW"     14 "$(fit "$(v firmware)" $_w)" $_w
-	lab 7  2 "$T_IMEI"   14 "$(fit "$(v imei)" $_w)" $_w
-	lab 8  2 "$T_TEMP"   14 "$(fit "$(_temp_cell "$(v mtemp)")" $_w)" $_w
-	lab 9  2 "$T_PROTO"  14 "$(fit "$(v protocol)" $_w)" $_w
+	lab 7  2 "$T_MODEL"  14 "$(fit "$(v modem)" $_w)" $_w
+	lab 8  2 "$T_FW"     14 "$(fit "$(v firmware)" $_w)" $_w
+	lab 9  2 "$T_IMEI"   14 "$(fit "$(v imei)" $_w)" $_w
+	lab 10  2 "$T_TEMP"   14 "$(fit "$(_temp_cell "$(v mtemp)")" $_w)" $_w
+	lab 11  2 "$T_PROTO"  14 "$(fit "$(v protocol)" $_w)" $_w
 
-	lab 12 2 "$T_SIM"    14 "$(fit "$(v simslot)" $_w)" $_w
-	lab 13 2 "$T_IMSI"   14 "$(fit "$(v imsi)" $_w)" $_w
-	lab 14 2 "$T_ICCID"  14 "$(fit "$(v iccid)" $_w)" $_w
+	lab 14 2 "$T_SIM"    14 "$(fit "$(v simslot)" $_w)" $_w
+	lab 15 2 "$T_IMSI"   14 "$(fit "$(v imsi)" $_w)" $_w
+	lab 16 2 "$T_ICCID"  14 "$(fit "$(v iccid)" $_w)" $_w
 
 	# Порты и хранилище живут в конфиге, а не в снимке: читаем uci напрямую -
 	# это дёшево и не трогает модем.
-	lab 17 2 'AT'          14 "$(fit "$(v cport)" $_w)" $_w
-	lab 18 2 'SMS'         14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].readport)" $_w)" $_w
-	lab 19 2 "$T_STORAGE"  14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" $_w)" $_w
+	lab 19 2 'AT'          14 "$(fit "$(v cport)" $_w)" $_w
+	lab 20 2 'SMS'         14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].readport)" $_w)" $_w
+	lab 21 2 "$T_STORAGE"  14 "$(fit "$(uci -q get sms_tool_js.@sms_tool_js[0].storage)" $_w)" $_w
 }
 
 # ── РАЗДЕЛ «SMS». Список входящих, как на вкладке «Входящие» в вебе: отправитель
@@ -991,7 +998,7 @@ draw_sms() {
 			_r=$((_r + 1))
 			_n=$((_n + 1))
 		done < "$SMSFILE"
-		[ "$_n" = 0 ] && { at 5 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
+		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
 	fi
 	# гасим остаток блока, иначе от прошлого кадра останутся хвосты
 	while [ "$_r" -le $((4 + SMS_ROWS)) ]; do
@@ -1069,7 +1076,7 @@ draw_esim() {
 			at $_r 4 "$_mk ${C_YEL}$((_n + 1))${C_RST} $(pad "$_nm" 28)${C_DIM}$(pad "$_ic" $((W - 46)))${C_RST}$_sf"
 			_r=$((_r + 1)); _n=$((_n + 1))
 		done
-		[ "$_n" = 0 ] && { at 5 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"; _r=6; }
+		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"; _r=6; }
 	fi
 	while [ "$_r" -le $((4 + ESIM_ROWS)) ]; do
 		at $_r 4 "$(fit '' $((W - 6)))"
@@ -1099,7 +1106,7 @@ esim_switch() {
 	[ -n "$_ic" ] || return
 	_st=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_i].profileState" 2>/dev/null)
 	[ "$_st" = "enabled" ] && return
-	at 4 4 "${C_YEL}$(fit "$T_ESIM_LOAD" $((W - 6)))${C_RST}"
+	at 6 4 "${C_YEL}$(fit "$T_ESIM_LOAD" $((W - 6)))${C_RST}"
 	( /usr/share/5gmodem/esim.sh enable "$_ic" >/dev/null 2>&1
 	  /usr/share/5gmodem/esim.sh reapply >/dev/null 2>&1
 	  rm -f "$ESFILE" ) >/dev/null 2>&1 </dev/null &
@@ -1304,11 +1311,11 @@ draw() {
 	#    Номера строк учитывают ДВЕ полосы навигации над рамками (модемы и
 	#    разделы): всё сдвинуто на 2 относительно старой раскладки.
 	_sg=$(v signal)
-	at 5  4  "$(bar "$_sg" 14)"
-	at 6  4  "$(pad "${C_B}${_sg}%${C_RST}" 22)"
-	at 7  4  "${C_DIM}$(pad "$(v modem)" 22)${C_RST}"
+	at 7  4  "$(bar "$_sg" 14)"
+	at 8  4  "$(pad "${C_B}${_sg}%${C_RST}" 22)"
+	at 9  4  "${C_DIM}$(pad "$(v modem)" 22)${C_RST}"
 
-	lab 5  28 "$T_OPERATOR" 11 "$(fit "$(_operator_plmn)" 16)" 16
+	lab 7  28 "$T_OPERATOR" 11 "$(fit "$(_operator_plmn)" 16)" 16
 	_r=$(v registration)
 	case "$_r" in
 		1) _rs="${C_GRN}${T_ONLINE}${C_RST}" ;;
@@ -1316,49 +1323,49 @@ draw() {
 		-) _rs="${C_DIM}-${C_RST}" ;;
 		*) _rs="${C_YEL}${T_NOREG}${C_RST}" ;;
 	esac
-	lab 6  28 "$T_STATUS"   11 "$_rs" 16
-	lab 7  28 "$T_PHONE"  11 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
+	lab 8  28 "$T_STATUS"   11 "$_rs" 16
+	lab 9  28 "$T_PHONE"  11 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
 	# Слот SIM: у модемов с двумя слотами показываем ещё и то, что переключение
 	# доступно клавишей - иначе о нём никак не догадаться.
 	_sl=$(v simslot)
 	[ "$SLOT_CNT" -gt 1 ] && _sl="$_sl ${C_DIM}(k)${C_RST}"
-	lab 8  28 'SIM'      11 "$_sl" 16
+	lab 10  28 'SIM'      11 "$_sl" 16
 
 	# Режим БЕЗ диапазона: профиль дописывает его в MODE ради веба, где отдельной
 	# строки нет, а здесь она есть - иначе значение вылезает за рамку.
 	_md=$(v mode); _md=${_md%% | *}
-	lab 5  56 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
-	lab 6  56 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
+	lab 7  56 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
+	lab 8  56 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
 	# IPv6 - только если оператор его выдал: у большинства российских сетей его
 	# нет, и пустая строка была бы про отсутствующее.
 	_v6=$(g ipaddr6)
-	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 7 56 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
-	lab 7  56 "$T_TIME"    9 "$(uptime_str)" 12
+	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 9 56 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
+	lab 9  56 "$T_TIME"    9 "$(uptime_str)" 12
 	# Единицу дописываем ТОЛЬКО если её нет: часть профилей уже отдаёт "56.0 °C",
 	# и без этой проверки получалось "56.0 °C C".
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	lab 8  56 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
-	lab 9  56 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
-	at 10  56 "${C_DIM}$(pad "  ^ $(_bytes_l10n "$(v tx)")" 20)${C_RST}"
+	lab 10  56 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
+	lab 11  56 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
+	at 12  56 "${C_DIM}$(pad "  ^ $(_bytes_l10n "$(v tx)")" 20)${C_RST}"
 
 	# ── Блок «Сота / Сигнал» (строки 10-14). Тоже три колонки.
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr)
-	at 14 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 7)${C_RST}$(mbar rsrp "$_a")"
-	at 15 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 7)${C_RST}$(mbar rsrq "$_b")"
-	at 16 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 7)${C_RST}$(mbar sinr "$_c")"
+	at 16 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 7)${C_RST}$(mbar rsrp "$_a")"
+	at 17 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 7)${C_RST}$(mbar rsrq "$_b")"
+	at 18 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 7)${C_RST}$(mbar sinr "$_c")"
 	_e=$(v rssi)
-	at 17 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 7)${C_RST}$(mbar rssi "$_e")"
+	at 19 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 7)${C_RST}$(mbar rssi "$_e")"
 
-	lab 14 28 "$T_BAND" 11 "$(v pband)" 16
-	lab 15 28 "$T_BW"   11 "$(v bandwidth)" 16
-	lab 16 28 'PCI'      11 "$(v pci)" 16
-	lab 17 28 'EARFCN'   11 "$(v earfcn)" 16
+	lab 16 28 "$T_BAND" 11 "$(v pband)" 16
+	lab 17 28 "$T_BW"   11 "$(v bandwidth)" 16
+	lab 18 28 'PCI'      11 "$(v pci)" 16
+	lab 19 28 'EARFCN'   11 "$(v earfcn)" 16
 
-	lab 14 56 "$T_ENB"  10 "$(v enbid)" 11
-	lab 15 56 'TAC'      10 "$(v tac_dec)" 11
-	lab 16 56 'MIMO'     10 "$(v pmimo)" 11
-	lab 17 56 'VoLTE'    10 "$(v volte)" 11
+	lab 16 56 "$T_ENB"  10 "$(v enbid)" 11
+	lab 17 56 'TAC'      10 "$(v tac_dec)" 11
+	lab 18 56 'MIMO'     10 "$(v pmimo)" 11
+	lab 19 56 'VoLTE'    10 "$(v volte)" 11
 
 	# ── Блок «Скорость». Тот же speedtest.sh, что и кнопка в вебе: он пишет ход
 	#    теста в JSON-файл, а мы его читаем - своего замера нет, значит и цифры
@@ -1391,8 +1398,8 @@ draw() {
 			else
 				_ph="${C_GRN}${T_DL_LC}${C_RST}";  _val="${_ld:-0}"; _c="$C_GRN"
 			fi
-			lab 20 4 "$T_TESTING" 12 "${_c}${_anim}${C_RST}  $_ph ${C_B}${_val}${C_RST} ${C_DIM}${T_MBPS}${C_RST}" 34
-			lab 21 4 "$T_SERVICE"    12 "${C_DIM}${_srv}${C_RST}" 34
+			lab 22 4 "$T_TESTING" 12 "${_c}${_anim}${C_RST}  $_ph ${C_B}${_val}${C_RST} ${C_DIM}${T_MBPS}${C_RST}" 34
+			lab 23 4 "$T_SERVICE"    12 "${C_DIM}${_srv}${C_RST}" 34
 		else
 			# Возраст результата: без него прошлый тест выглядит так, будто он
 			# только что прошёл - именно это сбивало с толку при запуске.
@@ -1402,14 +1409,14 @@ draw() {
 			if   [ "$_sec" -lt 60 ];   then _ago="${_sec}$T_AGO_S"
 			elif [ "$_sec" -lt 3600 ]; then _ago="$((_sec / 60))$T_AGO_M"
 			else _ago="$((_sec / 3600))$T_AGO_H"; fi
-			lab 20 4 "$T_DL"  12 "${C_GRN}$(pad "${_dn:--}" 8)${C_RST}${C_DIM}${T_MBPS}   ${_ago}${C_RST}" 34
-			lab 21 4 "$T_UL" 12 "${C_BLU}$(pad "${_up:--}" 8)${C_RST}${C_DIM}${T_MBPS}   ${_srv}${C_RST}" 34
+			lab 22 4 "$T_DL"  12 "${C_GRN}$(pad "${_dn:--}" 8)${C_RST}${C_DIM}${T_MBPS}   ${_ago}${C_RST}" 34
+			lab 23 4 "$T_UL" 12 "${C_BLU}$(pad "${_up:--}" 8)${C_RST}${C_DIM}${T_MBPS}   ${_srv}${C_RST}" 34
 		fi
-		lab 20 48 "$T_EXTIP" 12 "${C_DIM}${_ip:--}${C_RST}" 16
-		lab 21 48 "$T_COUNTRY"     12 "${C_DIM}${_cc:--}${C_RST}" 16
+		lab 22 48 "$T_EXTIP" 12 "${C_DIM}${_ip:--}${C_RST}" 16
+		lab 23 48 "$T_COUNTRY"     12 "${C_DIM}${_cc:--}${C_RST}" 16
 	else
-		lab 20 4 "$T_TEST" 12 "$(hl_name "$T_PRESS_S_LONG" t "$C_DIM")" 40
-		lab 21 4 ''     12 "$(pad '' 40)" 40
+		lab 22 4 "$T_TEST" 12 "$(hl_name "$T_PRESS_S_LONG" t "$C_DIM")" 40
+		lab 23 4 ''     12 "$(pad '' 40)" 40
 	fi
 
 	# ── Приоритет интернета. Тот же netpri.sh, что и полоса кнопок в вебе:
@@ -1424,7 +1431,7 @@ draw() {
 	#   23 рамка Аплинк       · 24-26          · 27 низ
 	#   28 рамка Агрегация    · 29-30          · 31 низ
 	#   33 подсказка клавиш
-	_row=24; _idx=0
+	_row=26; _idx=0
 	if [ -s "$NPFILE" ]; then
 		_np=$(cat "$NPFILE" 2>/dev/null)
 		_n=0
@@ -1446,7 +1453,7 @@ draw() {
 			_row=$((_row + 1)); _n=$((_n + 1))
 		done
 	else
-		at 24 4 "${C_DIM}$(pad "$T_COLLECTING" 60)${C_RST}"
+		at 26 4 "${C_DIM}$(pad "$T_COLLECTING" 60)${C_RST}"
 	fi
 
 	# ── Агрегация. Компоненты SCC1..4 отдаются теми же ключами, что читает
@@ -1464,7 +1471,7 @@ draw() {
 		at "$_ar" 4 "$(pad '' 60)"
 		_ar=$((_ar + 1))
 	done
-	[ "$_any" = 0 ] && at 29 4 "${C_DIM}$(pad "$T_NOCA" 60)${C_RST}"
+	[ "$_any" = 0 ] && at 31 4 "${C_DIM}$(pad "$T_NOCA" 60)${C_RST}"
 
 	printf '%s[%d;1H' "$ESC" "$ROW_END"
 }
@@ -1527,6 +1534,12 @@ term_width() {
 # Нужно и для узких терминалов, где автоопределение не срабатывает (не всякий
 # терминал отвечает на запрос позиции курсора), и просто чтобы посмотреть, как
 # всё ляжет на мобильном экране, не подключаясь с телефона.
+# Ширина, ЗАДАННАЯ ЯВНО (аргументом или COLS), - осознанный выбор пользователя:
+# на изменение окна такую не пересчитываем (см. _on_winch).
+TW_FIXED=0
+case "$TWARG" in ''|*[!0-9]*) ;; *) TW_FIXED=1 ;; esac
+[ "$TW_FIXED" = 1 ] || case "$COLS" in ''|*[!0-9]*) ;; *) TW_FIXED=1 ;; esac
+
 TW="$TWARG"
 [ -n "$TW" ] || TW="$COLS"
 case "$TW" in ''|*[!0-9]*) TW=$(term_width) ;; esac
@@ -1543,9 +1556,9 @@ apply_width() {
 	[ "$TW" -lt 30 ]  && TW=30
 	[ "$TW" -gt 220 ] && TW=220
 	if [ "$TW" -ge 80 ]; then
-		NARROW=0; W=$((TW - 2)); ROW_END=35
+		NARROW=0; W=$((TW - 2)); ROW_END=37
 	else
-		NARROW=1; W=$((TW - 2)); ROW_END=34
+		NARROW=1; W=$((TW - 2)); ROW_END=36
 	fi
 }
 apply_width
@@ -1717,7 +1730,7 @@ switch_slot() {
 		[ "$_s" = "$SLOT_ACTIVE" ] && _take=1
 	done
 	[ -n "$_next" ] || _next="$_first"
-	at 4 4 "${C_YEL}$(fit "$T_SLOT_SW" $((W - 6)))${C_RST}"
+	at 6 4 "${C_YEL}$(fit "$T_SLOT_SW" $((W - 6)))${C_RST}"
 	( /usr/share/5gmodem/simslot.sh set "$_next" >/dev/null 2>&1
 	  rm -f "$DATA" ) >/dev/null 2>&1 </dev/null &
 	SLOT_ACTIVE="$_next"
@@ -1818,6 +1831,26 @@ render_draw() {
 		*)     draw ;;
 	esac
 }
+
+# ИЗМЕНЕНИЕ РАЗМЕРА ОКНА. Ширину брали ОДИН РАЗ при старте, а SIGWINCH не ловили
+# вовсе. Растянул окно - раскладка осталась узкой и половина экрана пустует;
+# сузил - справа висят обрывки прежнего кадра: терминал их не стирает, а мы туда
+# больше не пишем. Плюс подключение, когда окно ещё не приняло финальный размер:
+# 5gtop запоминал промежуточную ширину и жил с ней до перезапуска.
+# Перерисовываем ЦЕЛИКОМ и с явной очисткой: не все каркасы чистят экран сами
+# (frame_ussd/frame_at рисуют поверх), а после сужения мусор остаётся именно там.
+_on_winch() {
+	[ "$TW_FIXED" = 1 ] && return 0
+	_ww=$(term_width)
+	case "$_ww" in ''|*[!0-9]*) return 0 ;; esac
+	[ "$_ww" = "$TW" ] && return 0
+	TW="$_ww"; apply_width
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	render_frame
+	render_draw
+	return 0
+}
+trap _on_winch WINCH
 
 render_frame
 fetch

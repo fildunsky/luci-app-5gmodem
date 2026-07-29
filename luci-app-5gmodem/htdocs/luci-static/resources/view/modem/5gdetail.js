@@ -50,9 +50,27 @@ document.head.append(E('style', {'type': 'text/css'},
 #bands-3g .cbi-button,
 #bands-lte .cbi-button,
 #bands-nr .cbi-button {
-  width: 3.4em;
-  padding-left: 0;
-  padding-right: 0;
+  /* Ширина: НЕ фиксированная, а минимальная + собственные боковые отступы.
+     Раньше стояло width:3.4em с обнулёнными padding-left/right - подписи
+     упирались в края кнопки, и на темах с другим шрифтом ряд выглядел сжатым.
+     min-width держит короткие «B1» и «B5» одного размера с остальными, а
+     трёхсимвольные («B12», «B71») спокойно разъезжаются на нужную ширину
+     вместо того, чтобы прижимать текст к рамке. */
+  min-width: 3.4em;
+  width: auto;
+  /* Вертикальный отступ и высоту задаём САМИ. Раньше обнулялись только боковые
+     padding, а вертикальные доставались от темы - и там, где тема их не даёт
+     (или зажимает кнопку фиксированной высотой), ряды диапазонов выходили
+     сплющенными, в отличие от соседних кнопок режима. */
+  /* Размер задаём САМИ и с !important. Без него тема перебивала нас каскадом:
+     высоту навязывает сразу пара свойств (height и min-height), они приходят из
+     РАЗНЫХ правил темы, и достаточно упустить одно, чтобы ряд остался вытянутым.
+     Ровно так уже сделано для чипов диапазонов в строке режима (.tginfo-band) -
+     единственный способ не переписывать это при каждой новой теме. */
+  padding: 0.35em 0.55em !important;
+  line-height: 1.4 !important;
+  min-height: 0 !important;
+  height: auto !important;
   text-align: center;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
@@ -94,6 +112,68 @@ document.head.append(E('style', {'type': 'text/css'},
 .cbi-section.tginfo,
 .cbi-section.tginfo * {
   overflow-anchor: none;
+}
+
+/* ===== СОВМЕСТИМОСТЬ С ТЕМАМИ ==============================================
+   Своего CSS-файла у приложения нет - вид держится на классах темы. Пока темы
+   давали похожие значения, это работало; argon показал, чем это кончается:
+
+     .cbi-section { padding: 0 }        -> содержимое блоков прилипает к краям
+     .btn, button { height: 2.5rem }    -> ФИКСИРОВАННАЯ высота ЛЮБОЙ кнопки
+
+   Второе особенно грубо: наши карточки в «Приоритете интернета» - это кнопки с
+   тремя строками внутри (модем, оператор, IP), и жёсткая высота обрезала их -
+   IP вылезал наружу. Ряды диапазонов той же высотой, наоборот, сплющивало.
+
+   Поэтому ниже - не «подгонка под argon», а СОБСТВЕННЫЕ гарантии наших блоков:
+   отступ секции и высота по содержимому. Значения совпадают с тем, что уже дают
+   proton2025/bootstrap, так что там ничего не меняется, а темы без этих правил
+   (или с чужеродными) перестают ломать раскладку. Область действия - только
+   наши секции .tginfo и наши кнопки, чужие страницы LuCI не затрагиваются. */
+.cbi-section.tginfo {
+  padding: 20px;
+}
+/* ЗАГОЛОВОК-«ШАПКА»: выравниваем ТОЛЬКО там, где тема его так рисует.
+   Одни темы делают из h3 шапку карточки с фоном и своими боковыми отступами
+   (argon), другие - обычный заголовок с линией снизу (proton2025, bootstrap).
+   Мы задаём секции свой отступ, и в первом случае они складываются: заголовок
+   уезжает вдвое дальше содержимого.
+   Признак «шапки» определяем ОДИН РАЗ до отрисовки (см. detectBoxedHeading) и
+   вешаем класс на <html>. Тогда правка статична - никаких пересчётов после
+   рендера, из-за которых страница дёргалась.
+   Компенсируем отступ секции отрицательным margin: плашка растягивается на всю
+   её ширину, а текст внутри встаёт ровно под содержимое. width:auto обязателен -
+   тема задаёт шапке width:100%, и с отрицательными margin она вылезла бы за
+   границы блока. */
+.tg-boxed-h3 .cbi-section.tginfo > h3 {
+  width: auto;
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+
+
+
+/* Высота - ПО СОДЕРЖИМОМУ. min-height сохраняет привычный размер обычных
+   кнопок, а многострочные карточки растут, вместо того чтобы обрезаться. */
+.cbi-section.tginfo .cbi-button,
+.cbi-section.tginfo .btn,
+.netpri-btn {
+  /* ТОЛЬКО height:auto, без min-height. Задать общий минимум - соблазнительно,
+     но он растягивает наши НАМЕРЕННО компактные кнопки: переключатели SIM1/SIM2
+     (padding 1px, шрифт 80%) и ряды диапазонов. Обычные кнопки и так набирают
+     привычную высоту из своего padding и line-height. */
+  height: auto;
+}
+/* Таблицы внутри наших блоков: у ряда тем .td { padding: 0 } либо padding
+   задан только для колонок с width - крайние ячейки прилипали к границе. */
+.cbi-section.tginfo .table > .tr > .td,
+.cbi-section.tginfo .table > .tr > .th {
+  padding: 0.4em 0.6em;
+}
+/* Нижний отступ последней таблицы: без него «Соседние соты» упирались в край. */
+.cbi-section.tginfo > .table:last-child {
+  margin-bottom: 0.5em;
 }
 
 /* ЕДИНИЦА ГРАДУСОВ: "56°C" вплотную к числу, без пробела.
@@ -468,10 +548,17 @@ document.head.append(E('style', {'type': 'text/css'},
   gap: 4px;
 }
 /* маленькие кнопки переключения SIM-слота */
+/* Переключатели SIM - маленькие чипы, а не полноразмерные кнопки. Размер
+   задаём В ПИКСЕЛЯХ, а не в процентах: font-size:80% считается от шрифта
+   КНОПКИ ТЕМЫ, а он у всех разный (bootstrap 13px, proton2025 13px, argon
+   14px) - и одни и те же чипы выходили то мельче, то крупнее. Явные значения
+   дают одинаковый вид везде. */
 .tginfo-simslot .cbi-button {
-  padding: 1px 8px;
-  font-size: 80%;
-  line-height: 1.5;
+  padding: 2px 8px !important;
+  font-size: 11px !important;
+  line-height: 15px !important;
+  min-height: 0 !important;
+  height: auto !important;
   margin-left: 4px;
 }
 /* подпись типа SIM (USIM/eSIM) слева от кнопок */
@@ -966,7 +1053,13 @@ var CELL_ROWS = [
 				el.innerHTML = '';
 				el.appendChild(mapPinButton(c4, val));
 			}
-		} else {
+		} else if (!sameRender(el, 'plain|' + val)) {
+			/* ЧЕРЕЗ sameRender, а НЕ голым textContent. data-sig живёт на самом
+			   элементе: если уйти отсюда текстом, старая подпись кнопки на нём
+			   останется, и при возврате тех же данных sameRender скажет «то же
+			   самое» - кнопку не пересоберут, останутся голые цифры до F5.
+			   Так и было: mcc/mnc на тик пропадают (порт занят - оператор из
+			   кэша), c4 становится null, кнопка гаснет НАВСЕГДА. */
 			el.textContent = val;
 		} } },
 	/* Cell ID: кнопка 4cells только на 3G/2G (там ссылка строится по CID). */
@@ -979,8 +1072,8 @@ var CELL_ROWS = [
 				el.innerHTML = '';
 				el.appendChild(mapPinButton(c4, j.cid_dec));
 			}
-		} else {
-			el.textContent = t || '-';
+		} else if (!sameRender(el, 'plain|' + (t || '-'))) {
+			el.textContent = t || '-';   /* см. пояснение в строке enbid */
 		} } }
 ];
 function renderCellRows(json) {
@@ -1352,6 +1445,22 @@ function buildBandButtons(supported, current, prefix) {
    браузер), а overflow-anchor:none не помогает - это не анкоринг, а клампинг.
    На bootstrap не проявлялось: другая вёрстка скроллера.
    Возвращает true, если данные те же и трогать DOM не нужно. */
+/* Рисует ли тема из h3 «шапку» со своими боковыми отступами? Проверяем НАСТОЯЩИМ
+   элементом (значения у тем разные, гадать по имени темы - хрупко), один раз и
+   до отрисовки страницы, поэтому ничего не мигает. */
+function detectBoxedHeading() {
+	if (document.documentElement.hasAttribute('data-tg-h3')) { return; }
+	document.documentElement.setAttribute('data-tg-h3', '1');
+	var probe = E('div', { 'class': 'cbi-section tginfo',
+		'style': 'position:absolute;left:-9999px;top:0;visibility:hidden' }, [ E('h3', {}, 'x') ]);
+	document.body.appendChild(probe);
+	var pad = parseFloat(getComputedStyle(probe.firstChild).paddingLeft) || 0;
+	document.body.removeChild(probe);
+	if (pad >= 8) { document.documentElement.classList.add('tg-boxed-h3'); }
+}
+if (document.body) { detectBoxedHeading(); }
+else { document.addEventListener('DOMContentLoaded', detectBoxedHeading); }
+
 function sameRender(el, sig) {
 	if (!el) { return false; }
 	if (el.getAttribute('data-sig') === sig) { return true; }
@@ -1398,6 +1507,14 @@ function loadBands() {
 	     source=vendor          - вендорный путь (bands.sh json). */
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ]), '{}').then(function(out) {
 		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
+		/* ОТВЕТА НЕТ - НИЧЕГО НЕ ТРОГАЕМ. fs.exec_direct отдаёт пустую строку,
+		   когда вызов не успел (rpcd занят, mmcli подтормаживает под опросом
+		   метрик). Раньше пустой ответ означал "source не mmcli" и страница
+		   уходила на ВЕНДОРНЫЙ путь: тот перерисовывал тумблеры своими данными,
+		   а на следующем тике mmcli отвечал - и всё возвращалось. Отсюда
+		   мигание всего ряда 4G/5G («то все выбраны, то ни одного») и слетающая
+		   подсветка режима: до неё в вендорной ветке дело просто не доходило. */
+		if (!j.source) { return; }
 		if (j.source != 'mmcli') { return loadBandsModemband(); }
 		if (j.pending) { return; }
 		bandSource = 'mmcli';

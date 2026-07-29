@@ -29,6 +29,23 @@ function modeSuffix(j) {
 	return '';
 }
 
+/* Тот же признак «шапки», что и на вкладке «Сеть» (см. detectBoxedHeading в
+   5gdetail.js). Дублируется намеренно: вкладки - разные точки входа, и файл
+   соседа при открытии «Модема» может не грузиться вовсе. Флаг data-tg-h3
+   защищает от повторной работы, если загрузились оба. */
+function detectBoxedHeading() {
+	if (document.documentElement.hasAttribute('data-tg-h3')) { return; }
+	document.documentElement.setAttribute('data-tg-h3', '1');
+	var probe = E('div', { 'class': 'cbi-section tg5g',
+		'style': 'position:absolute;left:-9999px;top:0;visibility:hidden' }, [ E('h3', {}, 'x') ]);
+	document.body.appendChild(probe);
+	var pad = parseFloat(getComputedStyle(probe.firstChild).paddingLeft) || 0;
+	document.body.removeChild(probe);
+	if (pad >= 8) { document.documentElement.classList.add('tg-boxed-h3'); }
+}
+if (document.body) { detectBoxedHeading(); }
+else { document.addEventListener('DOMContentLoaded', detectBoxedHeading); }
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -215,7 +232,7 @@ return view.extend({
 		]);
 		profilesView = this;
 		this.loadProfiles();
-		return E('div', { 'class': 'cbi-section' }, [
+		return E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, _('Saved modem profiles')),
 			box
 		]);
@@ -598,7 +615,7 @@ return view.extend({
 			fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', ev.currentTarget.value ]);
 		});
 
-		return E('div', { 'class': 'cbi-section' }, [
+		return E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, _('Signal level indicator')),
 			E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Show on the case LEDs')),
@@ -1550,6 +1567,58 @@ return view.extend({
 }
 .tg5g h3 {
   margin-top: 0;
+}
+
+/* ===== СОВМЕСТИМОСТЬ С ТЕМАМИ (то же, что на вкладке «Сеть») ================
+   Тема может не дать секции внутреннего отступа вовсе (argon: .cbi-section
+   { padding: 0 }) - тогда «Информация о модеме», «Сохранённые профили» и блок
+   диагностики прилипают к краям экрана. И может навязать кнопкам жёсткую
+   высоту (argon: .btn { height: 2.5rem }) - тогда всё, что выше одной строки,
+   обрезается. Задаём это сами, только для СВОИХ секций. */
+.cbi-section.tg5g {
+  padding: 20px;
+}
+/* См. пояснение в 5gdetail.js: выравниваем заголовок-«шапку» только на темах,
+   которые его так рисуют. Класс на <html> ставит detectBoxedHeading оттуда же -
+   вкладки одного приложения, скрипт грузится в обоих случаях. */
+.tg-boxed-h3 .cbi-section.tg5g > h3 {
+  width: auto;
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+
+
+
+.cbi-section.tg5g .cbi-button,
+.cbi-section.tg5g .btn {
+  height: auto;   /* без min-height - см. пояснение в 5gdetail.js */
+}
+/* Блок диагностики: подписи, врезки с командами и кнопки должны стоять
+   столбиком слева, а не разъезжаться по ширине ячейки, если тема центрирует
+   содержимое таблиц (argon: .td { text-align: center }). */
+.tg-diag-table .td,
+.tg-info-table .td {
+  text-align: left;
+  vertical-align: top;
+}
+/* ПОДПИСИ ВНЕ СТАНДАРТНОЙ ФОРМЫ. Тема вправе считать, что .cbi-value-title -
+   это левая колонка формы «настройка : поле», и задать ей фиксированную
+   ширину с выравниванием вправо (argon: float:left, width:23rem,
+   text-align:right). У нас же такие подписи стоят НАД своим блоком - внутри
+   ячеек таблицы диагностики и над кнопкой отчёта. С чужими правилами подпись
+   занимала 23rem, уезжала вправо и выдавливала соседний блок: заголовки
+   разъезжались, а врезки с командами сжимались до случайной ширины.
+   Возвращаем им обычное поведение блочного заголовка - но ТОЛЬКО там, где они
+   не часть формы (.tg-modem-form с её парами «поле - значение» не трогаем). */
+.tg-diag-table .cbi-value-title,
+.tg-info-table .cbi-value-title,
+.cbi-section.tg5g > div > .cbi-value-title {
+  display: block;
+  float: none;
+  width: auto;
+  padding-right: 0;
+  text-align: left;
 }
 
 /* Лишняя разделительная полоса под флагом «Автоопределение …»: когда

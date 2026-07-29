@@ -769,29 +769,29 @@ return view.extend({
 					])
 				]),
 			E('div', { 'class': 'right', 'style': 'margin-bottom: 14px;' }, [
-				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;' }, [
+				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;' }, [
 					E('input', {
 						'id': 'history-full',
 						'click': ui.createHandlerFn(this, 'handleClearOut'),
 						'data-tooltip': _('Check this option if you need to use the menu built on USSD codes'),
 						'type': 'checkbox',
+						'style': 'margin:0;flex:none;vertical-align:middle;position:relative;top:-1px',
 						'name': 'showhistory',
 						'disabled': null
-					}), ' ',
-					E('label', { 'for': 'history-full' }), ' ',
-					_('Keep the previous reply when sending a new USSD')
+					}),
+					E('span', { 'style': 'vertical-align:middle' }, _('Keep the previous reply when sending a new USSD'))
 				]),
-				'\xa0\xa0\xa0',
-				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex;align-items:center;gap:6px;vertical-align:middle;' }, [
+				E('span', { 'style': 'display:inline-block;width:1.5em' }),
+				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;' }, [
 					E('input', {
 						'id': 'reverse-replies',
 						'data-tooltip': _('View new reply from top'),
 						'type': 'checkbox',
+						'style': 'margin:0;flex:none;vertical-align:middle;position:relative;top:-1px',
 						'name': 'reversereplies',
 						'disabled': true
-					}), ' ',
-					E('label', { 'for': 'reverse-replies' }), ' ',
-					_('Newest replies first')
+					}),
+					E('span', { 'style': 'vertical-align:middle' }, _('Newest replies first'))
 				])
 			]),
 				E('div', { 'class': 'right' }, [
