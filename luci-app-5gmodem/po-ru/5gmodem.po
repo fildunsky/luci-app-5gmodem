@@ -3842,3 +3842,9 @@ msgstr "сеть и логи"
 
 msgid "done"
 msgstr "готово"
+
+msgid "Mark read"
+msgstr "Прочитано"
+
+msgid "New"
+msgstr "Новых"

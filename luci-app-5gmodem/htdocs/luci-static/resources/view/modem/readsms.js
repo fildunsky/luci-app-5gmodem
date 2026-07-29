@@ -258,17 +258,104 @@ function sms_linkify(text) {
 	return out;
 }
 
+/* ===== НОВЫЕ (НЕПРОЧИТАННЫЕ) СООБЩЕНИЯ =====
+   Статуса прочтения у модема не спросишь: sms_tool -j его не отдаёт, а
+   AT+CMGL="ALL" помечает всё прочитанным при первом же чтении. Поэтому новизну
+   считаем сами: роутер помнит ключи виденных сообщений (smsbridge.sh seen),
+   страница сравнивает с ними текущий список. Память лежит на роутере, а не в
+   localStorage - иначе телефон не знал бы, что прочитано с ноутбука, и всё
+   пропадало бы с чисткой кеша. */
+var smsSeen = null;      /* Set ключей; null - ещё не загружено */
+var smsSeenFirst = false; /* про эту SIM ещё ничего не знаем */
+
+/* КЛЮЧ - ОТПРАВИТЕЛЬ И ВРЕМЯ, и только они.
+   Порядкового номера в нём нет: модем переиспользует номера удалённых
+   сообщений, и новое письмо молча унаследовало бы чужую отметку «прочитано».
+   Номера склейки и части - тоже нет, хотя они есть в данных: список
+   показывается в двух режимах (части склеены в одно сообщение или показаны
+   порознь, настройка страницы), и ключ с частью менялся бы при переключении -
+   весь ящик разом вспыхнул бы как новый. Заодно это даёт нужное поведение:
+   части одного сообщения делят время и отправителя, то есть прочитываются
+   вместе.
+   Цена: два РАЗНЫХ письма от одного отправителя в одну и ту же минуту считаются
+   одним, и второе не подсветится. Времени точнее минуты модем не сообщает. */
+function sms_msg_key(item) {
+	return [
+		String(item.sender || ''),
+		String(item.timestamp || '')
+	].join('|').replace(/[\x00-\x1f]/g, ' ');
+}
+
+function sms_seen_load() {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'seen' ]), '')
+		.then(function(res) {
+			smsSeen = new Set();
+			smsSeenFirst = false;
+			try {
+				var d = JSON.parse(res || '{}');
+				smsSeenFirst = (d.first == 1);
+				(d.keys || []).forEach(function(k) { smsSeen.add(k); });
+			} catch (e) {}
+		});
+}
+
+/* Отметить прочитанными. Список ключей уходит на роутер, метки снимаются сразу -
+   ждать ответа незачем, промах стоит одной лишней подсветки. */
+function sms_seen_add(keys) {
+	if (!keys || !keys.length) { return Promise.resolve(); }
+	if (smsSeen) { keys.forEach(function(k) { smsSeen.add(k); }); }
+	return L.resolveDefault(
+		fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'seen-add' ].concat(keys)), '');
+}
+
+/* ПЕРВЫЙ ЗАПУСК НЕ ПОДСВЕЧИВАЕМ. Сообщения могли прийти когда угодно, и залить
+   весь список метками «новое» было бы враньём: просто запоминаем то, что есть. */
+function sms_seen_sync(list) {
+	if (!smsSeen || !smsSeenFirst || !list || !list.length) { return; }
+	smsSeenFirst = false;
+	sms_seen_add(list.map(sms_msg_key));
+}
+
+/* Счётчик новых и кнопка «Прочитано» - показываем, только когда есть что
+   отмечать: пустая кнопка в ряду действий только мешает. */
+function sms_update_newcount() {
+	var n = document.querySelectorAll('.sms-card.sms-new').length;
+	var badge = document.getElementById('sms-newcount');
+	var btn = document.getElementById('sms-markread');
+	if (badge) {
+		badge.textContent = n ? (_('New') + ': ' + n) : '';
+		badge.style.display = n ? '' : 'none';
+	}
+	if (btn) { btn.style.display = n ? '' : 'none'; }
+}
+
+function sms_mark_all_read() {
+	var keys = [];
+	document.querySelectorAll('.sms-card.sms-new').forEach(function(c) {
+		if (c.dataset.key) { keys.push(c.dataset.key); }
+		c.classList.remove('sms-new');
+	});
+	sms_update_newcount();
+	return sms_seen_add(keys);
+}
+
 function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
 	var text = String(item.content || '').replace(/\s+/g, ' ').trim();
 	var when = sms_localtime(item.timestamp);
 
+	/* Новизну решаем ЗДЕСЬ, при постройке карточки: список перерисовывается
+	   целиком на каждом обновлении, и класс иначе слетал бы вместе с ней. */
+	var key = sms_msg_key(item);
+	var isNew = !!(smsSeen && !smsSeenFirst && !smsSeen.has(key));
+
 	var card = E('button', {
 		'type': 'button',
 		/* btn cbi-button - те же классы темы, что у кнопок netpri: весь базовый
 		   вид карточки приходит отсюда, .sms-card только раскладывает содержимое. */
-		'class': 'btn cbi-button sms-card',
+		'class': 'btn cbi-button sms-card' + (isNew ? ' sms-new' : ''),
+		'data-key': key,
 		'aria-pressed': 'false',
 		/* Удаление берёт индексы отсюда, пересылка - отправителя, время и текст.
 		   Раньше и то и другое читалось из ячеек строки (cells[1..3]); с уходом
@@ -291,6 +378,13 @@ function sms_make_card(item, iconSrc, hide) {
 	]);
 
 	card.addEventListener('click', function() {
+		/* Открыл - значит прочитал: снимаем метку с этого сообщения. Ждать
+		   отдельного нажатия «Прочитано» ради одного письма незачем. */
+		if (card.classList.contains('sms-new')) {
+			card.classList.remove('sms-new');
+			sms_seen_add([ key ]);
+			sms_update_newcount();
+		}
 		sms_set_selected(card, !card.classList.contains('selected'));
 		sms_update_selcount();
 	});
@@ -476,7 +570,11 @@ return view.extend({
 			/* 5gmodem нужен, чтобы понять класс активного модема: у HiLink
 			   AT-портов нет, и требовать их настройки нельзя. */
 			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(uci.load('defmodems'))
+			L.resolveDefault(uci.load('defmodems')),
+			/* Список прочитанного тянем ВМЕСТЕ с настройками, до первой
+			   отрисовки: карточка решает свою новизну в момент постройки, и
+			   опоздавший список означал бы ящик без единой метки. */
+			sms_seen_load()
 		]);
 	},
 
@@ -1047,6 +1145,8 @@ return view.extend({
 																aidx.push(result[i].index+'-');
 															}
 															smsRestoreSelection();
+															sms_seen_sync(result);
+															sms_update_newcount();
 															sms_update_selcount();
 															sms_cache_save(result, u, t);
 
@@ -1092,6 +1192,8 @@ return view.extend({
 												aidx.push(sortedData[i].index+'-');
 											}
 											smsRestoreSelection();
+											sms_seen_sync(sortedData);
+											sms_update_newcount();
 											sms_update_selcount();
 											sms_cache_save(sortedData, u, t);
 											
@@ -1169,6 +1271,8 @@ return view.extend({
 				table.appendChild(sms_make_card(c.list[i], Lres, hide));
 			}
 			smsRestoreSelection();
+			sms_seen_sync(c.list);
+			sms_update_newcount();
 			sms_update_selcount();
 			if (document.getElementById('msg') && c.u != null) { msg_bar(Math.floor(c.u), c.t); }
 		}
@@ -1197,6 +1301,13 @@ return view.extend({
 						'style': 'display: none;',
 						'click': ui.createHandlerFn(this, 'handleForward')
 					}, [ _('Forward SMS') ]),
+					E('span', { 'id': 'sms-newcount', 'class': 'sms-newcount', 'style': 'display: none;' }, ''),
+					E('button', {
+						'class': 'cbi-button cbi-button-neutral',
+						'id': 'sms-markread',
+						'style': 'display: none;',
+						'click': function() { sms_mark_all_read(); }
+					}, [ _('Mark read') ]),
 					E('span', { 'id': 'sms-selcount', 'class': 'sms-selcount' }, ''),
 					E('button', {
 						'class': 'cbi-button cbi-button-remove sms-act-del',

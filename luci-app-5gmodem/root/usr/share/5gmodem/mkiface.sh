@@ -51,6 +51,40 @@ APNARG="$3"
 # пути их не различить (интерфейс прежнего сносился при подмене). Реализация -
 # общая, в lib.sh (её же используют resolve/swap_cleanup).
 . /usr/share/5gmodem/lib.sh
+# ДОБАВИТЬ ИНТЕРФЕЙС В ЗОНУ wan - ЧЕРЕЗ ПОЛНУЮ ПЕРЕСБОРКУ СПИСКА.
+#
+# ЗАЧЕМ ТАК, А НЕ add_list. Список сетей зоны в /etc/config/firewall бывает ДВУХ
+# видов, и оба законны:
+#     list network 'wan'      list network 'wan6'     <- список
+#     option network 'wan wan6'                       <- одна строка
+# `uci add_list` на ВТОРОЙ вид не разбирает строку, а считает её ОДНИМ элементом:
+# получается список из «wan wan6» (сети с таким именем нет) и нашего модема. То
+# есть настоящий wan ВЫПАДАЕТ из зоны - вместе с ним пропадает NAT, и роутер
+# продолжает работать сам, а вот локалка остаётся без интернета. Ровно этот
+# случай пришёл от пользователя после «настроил и перезагрузил».
+# `uci get` оба вида отдаёт одинаково - словами через пробел, - поэтому читаем,
+# разбираем по пробелам и пересобираем ЯВНЫМ списком. Заодно это чинит уже
+# испорченную зону и убирает дубликаты (старые версии добавляли интерфейс по
+# нескольку раз - он появлялся в «Приоритете интернета» четырежды).
+_fw_zone_add() {
+	_fz=$(uci show firewall 2>/dev/null \
+		| sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+	[ -n "$_fz" ] && [ -n "$1" ] || return 0
+	# КАВЫЧКИ СНИМАЕМ. Если элемент списка содержит пробел (ровно то, что
+	# оставляла прошлая версия: один элемент «wan wan6»), uciget отдаёт его в
+	# одинарных кавычках - и разбор по пробелам дал бы «'wan» и «wan6'». Убрав
+	# кавычки, мы заодно РАСКЛЕИВАЕМ такой элемент обратно в две сети, то есть
+	# чиним уже испорченную зону.
+	_fcur=$(uci -q get "firewall.$_fz.network" | tr -d "'\"")
+	uci -q delete "firewall.$_fz.network"
+	for _fe in $_fcur; do
+		[ "$_fe" = "$1" ] && continue
+		uci add_list "firewall.$_fz.network=$_fe"
+	done
+	uci add_list "firewall.$_fz.network=$1"
+	uci commit firewall
+}
+
 stamp_iface() {
 	stamp_iface_owner "$1" "$2"
 }
@@ -355,18 +389,9 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 		uci commit network
 
-		# add to the 'wan' firewall zone for NAT/forwarding. Самолечащий:
-		# сперва убираем ВСЕ вхождения $IF (старые версии приложения могли
-		# накопить дубликаты - интерфейс появлялся в зоне по 4 раза и столько же
-		# раз в «Приоритете интернета»), потом добавляем РОВНО один.
-		Z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
-		if [ -n "$Z" ]; then
-			while uci -q get "firewall.$Z.network" | grep -qw "$IF"; do
-				uci del_list "firewall.$Z.network=$IF"
-			done
-			uci add_list "firewall.$Z.network=$IF"
-			uci commit firewall
-		fi
+
+		# в зону wan - для NAT/forwarding (см. _fw_zone_add выше)
+		_fw_zone_add "$IF"
 
 		# point the app at this interface and remember it for this modem
 		if [ "$_IS_ACTIVE" = 1 ]; then
@@ -591,16 +616,8 @@ esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 uci commit network
 
-# add to the 'wan' firewall zone (if one exists) so NAT/forwarding works.
-# Самолечащий (см. выше): убрать все дубликаты $IF, добавить ровно один.
-Z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
-if [ -n "$Z" ]; then
-	while uci -q get "firewall.$Z.network" | grep -qw "$IF"; do
-		uci del_list "firewall.$Z.network=$IF"
-	done
-	uci add_list "firewall.$Z.network=$IF"
-	uci commit firewall
-fi
+# в зону wan - для NAT/forwarding (см. _fw_zone_add выше)
+_fw_zone_add "$IF"
 
 # point the app at the interface, and remember the user's protocol choice
 # (auto/mbim/modemmanager/qmi) so the settings page shows it on return - done

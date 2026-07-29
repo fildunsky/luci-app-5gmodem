@@ -10,6 +10,9 @@
 #
 # from config modemdefine
 #
+
+# tty_usbpath (сверка «чей это порт») - общая, см. lib.sh.
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 # --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
 #
 # У HiLink-модемов (Huawei E3372h и родня) AT-порта нет вовсе. Молчать об этом
@@ -133,13 +136,7 @@ AUTO=$(uci -q get 5gmodem.@5gmodem[0].auto_port)
 # из sysfs (дёшево, без единой AT-команды).
 #   /sys/class/tty/ttyUSB1/device -> .../usb2/2-1/2-1.4/2-1.4:1.3/ttyUSB1
 #   нас интересует "2-1.4" - каталог интерфейса без суффикса ":1.N".
-tty_usbpath() {
-	_tp=$(readlink -f "/sys/class/tty/$(basename "$1")/device" 2>/dev/null) || return 1
-	[ -n "$_tp" ] || return 1
-	_tp=${_tp%/*}          # отбросить сам ttyUSBn
-	_tp=${_tp##*/}         # взять каталог интерфейса, напр. 2-1.4:1.3
-	echo "${_tp%%:*}"      # -> 2-1.4
-}
+# tty_usbpath переехала в lib.sh - её же использует опрос метрик.
 tty_belongs() {   # tty_belongs <tty> <usb_path>
 	[ -n "$2" ] || return 0          # путь неизвестен - не мешаем работать
 	[ "$(tty_usbpath "$1")" = "$2" ]

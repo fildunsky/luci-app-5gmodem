@@ -241,3 +241,14 @@ sig_weighted() {
 		if (w > 0) printf "%d", acc / w + 0.5;
 	}' 2>/dev/null
 }
+
+# USB-путь модема, которому принадлежит tty-порт: /dev/ttyUSB5 -> 1-1.3.
+# Жила в detect.sh; понадобилась и опросу метрик, чтобы сверять, ЧЕЙ порт он
+# держит в руках, - поэтому переехала сюда. Пусто = определить не удалось.
+tty_usbpath() {
+	_tp=$(readlink -f "/sys/class/tty/$(basename "$1")/device" 2>/dev/null) || return 1
+	[ -n "$_tp" ] || return 1
+	_tp=${_tp%/*}
+	_tp=${_tp##*/}
+	echo "${_tp%%:*}"
+}
