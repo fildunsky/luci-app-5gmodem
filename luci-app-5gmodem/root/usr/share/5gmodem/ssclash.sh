@@ -46,6 +46,10 @@ detect)
 		VER=""
 		[ -x /opt/clash/bin/ssclash ] && VER=$(/opt/clash/bin/ssclash version 2>/dev/null \
 			| grep -oE 'v?[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+		# «v» ставим САМИ, а не надеемся на вывод бинаря: 5.2.4 печатает
+		# «ssclash v5.2.4», а 5.3.0 - уже без буквы, и карточка теряла её вместе
+		# с ним. Здесь же нормализуем legacy (см. ниже) - вид у обеих один.
+		case "$VER" in v*) ;; ?*) VER="v$VER" ;; esac
 	else
 		# legacy: порт дашборда = external-controller самого clash (config.yaml).
 		PORT=$(sed -n "s/^[[:space:]]*external-controller:[[:space:]]*['\"]*[^:]*:\([0-9]*\).*/\1/p" \

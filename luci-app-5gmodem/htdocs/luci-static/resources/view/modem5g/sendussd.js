@@ -20,6 +20,116 @@
    диагностики 5gmodem. Цвета фиксированные, одинаковы в любой теме.
    Шапка с меткой делается через ::before, чтобы не менять логику
    показа/скрытия самого <pre>. */
+/* --- Разбор ответа сети ------------------------------------------------------
+ *
+ * ЗАЧЕМ РАСШИФРОВЫВАЕМ САМИ, а не силами sms_tool. Telit LM960 отдаёт UCS2 с
+ * ПЕРЕСТАВЛЕННЫМИ байтами: «54.76 р.» приходит как 350034002E00…, тогда как
+ * 3GPP TS 27.007 требует старший октет первым (и мануал FM350 это повторяет
+ * дословно). sms_tool разбирает по спецификации и печатает «㔀㐀⸀㜀㘀» - проверено
+ * на живом модеме с балансом МегаФона. Поэтому просим у него сырую строку (-r)
+ * и раскодируем здесь, определяя порядок байт по самим данным.
+ *
+ * Схему кодирования у модема НЕ спрашиваем: по мануалу при UCS2 он обязан отдать
+ * строку хексом, а при 7-битном алфавите сам переводит её в набор символов TE,
+ * то есть присылает готовый текст. Значит хекс = UCS2, не хекс = уже текст.
+ * Разбор строки «+CUSD: <m>,"<str>",<dcs>» ниже оставлен на случай, когда она
+ * всё же попадает в вывод: если <dcs> известен, он точнее любой догадки.
+ */
+function ussdCtrlScore(s) {
+	var n = 0;
+	for (var i = 0; i < s.length; i++) {
+		var c = s.charCodeAt(i);
+		if (c === 0xFFFD || (c < 0x20 && c !== 0x0A && c !== 0x0D && c !== 0x09)) { n++; }
+	}
+	return n;
+}
+
+function ussdUcs2(bytes, little) {
+	var s = '';
+	for (var i = 0; i + 1 < bytes.length; i += 2) {
+		s += String.fromCharCode(little ? (bytes[i] | (bytes[i + 1] << 8))
+		                                : ((bytes[i] << 8) | bytes[i + 1]));
+	}
+	return s;
+}
+
+/* Распаковка 7-битного алфавита. Нужна для ответов с <dcs>, указывающим GSM7:
+   там сеть присылает СЖАТЫЕ септеты, и побайтовое чтение даёт мусор. */
+function ussdGsm7(bytes) {
+	var s = '', carry = 0, bits = 0;
+	for (var i = 0; i < bytes.length; i++) {
+		carry |= bytes[i] << bits;
+		bits += 8;
+		while (bits >= 7) {
+			var c = carry & 0x7F;
+			carry >>= 7; bits -= 7;
+			/* 0x00 в середине - это @, но хвостовой ноль от выравнивания
+			   отбрасываем: иначе в конце появляется лишний символ. */
+			if (!(c === 0 && bits < 7 && i === bytes.length - 1)) { s += String.fromCharCode(c); }
+		}
+	}
+	return s;
+}
+
+function ussdDecodeHex(hex, dcs) {
+	hex = String(hex || '').replace(/\s+/g, '');
+	if (!hex.length || (hex.length % 2) || !/^[0-9A-Fa-f]+$/.test(hex)) { return null; }
+	var b = [];
+	for (var i = 0; i < hex.length; i += 2) { b.push(parseInt(hex.substr(i, 2), 16)); }
+
+	/* ПОРЯДОК БАЙТ ОПРЕДЕЛЯЕМ ПО СТАРШЕЙ ПОЛОВИНЕ ПАРЫ. Считать «нули через
+	   один» недостаточно: в русском ответе старший байт равен 00 у латиницы и
+	   цифр, но 04 у кириллицы, поэтому нулевой не вся половина (на этом первая
+	   версия разбора и ошиблась). Зато старшая половина всегда МЕЛКАЯ - вся
+	   письменность, которую можно встретить в USSD, живёт в первых страницах
+	   Юникода, - а младшая разбросана по всему диапазону. По этому и выбираем.
+	   Сравнение строгое: при равенстве остаётся порядок из спецификации (BE). */
+	var evenLen = (b.length % 2) === 0;
+	var hiEven = 0, hiOdd = 0;
+	for (var i = 0; i < b.length; i++) {
+		if (b[i] <= 0x07) { if (i % 2) { hiOdd++; } else { hiEven++; } }
+	}
+	var half = b.length / 2;
+	var little = hiOdd > hiEven;
+	/* 3GPP TS 23.038: биты 3-2 схемы = 10 -> UCS2 (напр. 0x48 = 72). */
+	var ucs2ByDcs = (dcs != null) && ((dcs & 0x0C) === 0x08);
+	var gsm7ByDcs = (dcs != null) && ((dcs & 0x0C) !== 0x08);
+	/* Схемы нет (у -r её не печатают) - опознаём UCS2 по структуре: одна из
+	   половин почти целиком мелкая. Порог не 100%, иначе эмодзи или одна
+	   «широкая» буква ломали бы опознание. */
+	var ucs2ByShape = evenLen && (Math.max(hiEven, hiOdd) >= Math.ceil(half * 0.8));
+
+	if (evenLen && (ucs2ByDcs || (dcs == null && ucs2ByShape))) {
+		return ussdUcs2(b, little);
+	}
+	if (gsm7ByDcs) {
+		var g = ussdGsm7(b);
+		/* Часть модемов при <dcs>=15 присылает НЕупакованный текст - тогда
+		   распаковка даёт мусор, а прямое чтение байт читаемо. */
+		var a = String.fromCharCode.apply(null, b);
+		return (ussdCtrlScore(g) <= ussdCtrlScore(a)) ? g : a;
+	}
+	return String.fromCharCode.apply(null, b);
+}
+
+/* Из вывода sms_tool достаём текст ответа. Возвращаем null, если это не похоже
+   на ответ сети - тогда показываем как есть и ничего не теряем. */
+function ussdReadReply(stdout) {
+	var txt = String(stdout || '');
+	/* Полная строка +CUSD - самый надёжный источник: в ней есть и <dcs>. */
+	var m = txt.match(/\+CUSD:\s*(\d+)\s*,\s*"([^"]*)"\s*,\s*(\d+)/);
+	if (m) {
+		var d = ussdDecodeHex(m[2], parseInt(m[3], 10));
+		return (d != null) ? d : m[2];
+	}
+	/* Отладки нет - остаётся сырой хекс из -r, схему определим по данным. */
+	var only = txt.replace(/^\s*debug:.*$/gm, '').replace(/\s+/g, '');
+	if (only.length >= 4 && !(only.length % 2) && /^[0-9A-Fa-f]+$/.test(only)) {
+		return ussdDecodeHex(only, null);
+	}
+	return null;
+}
+
 /* «Печатающийся терминал»: ответ USSD выводим посимвольно, с мигающим курсором
    в конце. reduced-motion - сразу целиком. Применяем к ОДИНОЧНОМУ ответу; в
    режиме истории (fullhistory) реплики накапливаются - там анимация не нужна. */
@@ -62,13 +172,18 @@ return view.extend({
 		}
 	},
 	
-	handleCommand: function(exec, args) {
+	handleCommand: function(exec, args, prefetched) {
 		let buttons = document.querySelectorAll('.cbi-button');
 
 		for (let i = 0; i < buttons.length; i++)
 			buttons[i].setAttribute('disabled', 'true');
 
-		return fs.exec(exec, args).then(function(res) {
+		/* prefetched - уже готовый {stdout, stderr}. Нужен пути через ussd.sh:
+		   тот работает в фоне и опрашивается, а результат должен попасть в ТУ ЖЕ
+		   отрисовку - вместе с таблицей расшифровки кодов ошибок ниже. Своя
+		   копия этой таблицы была бы верным способом получить два расходящихся
+		   списка сообщений. */
+		return (prefetched ? Promise.resolve(prefetched) : fs.exec(exec, args)).then(function(res) {
 			let out = document.querySelector('.ussdcommand-output');
 			let fullhistory = document.getElementById('history-full')?.checked;
 			let reversereplies = document.getElementById('reverse-replies')?.checked;
@@ -90,6 +205,18 @@ return view.extend({
 					res.stdout = mm[1];
 					res.stderr = '';
 				}
+			}
+
+			/* Ответ от sms_tool приходит сырым (-r) плюс отладочные строки (-D) -
+			   показывать это пользователю нельзя. Расшифровываем и оставляем
+			   только текст сети. Галку «показать ответ без расшифровки»
+			   уважаем: она для случая, когда наш разбор мешает разбираться. */
+			if (exec == 'sms_tool' && uci.get('5gmodem', 'sms', 'pdu') != '1') {
+				let dec = ussdReadReply(res.stdout);
+				if (dec != null && dec.trim())
+					res.stdout = dec;
+				else
+					res.stdout = (res.stdout || '').replace(/^\s*debug:.*$/gm, '').trim();
 			}
 
 			if (res.stdout === undefined || res.stderr === undefined || res.stderr.includes('undefined') || res.stdout.includes('undefined')) {
@@ -147,8 +274,14 @@ return view.extend({
 						res.stdout = _('Dial string too long');
 					if (cut.includes('error: 27'))
 						res.stdout = _('Invalid characters in dial string');
+					/* «Нет сервиса сети» при живом интернете почти всегда значит
+					   одно: USSD идёт по каналу CS, а модем зарегистрирован
+					   только в LTE. Проверено на Telit LM960 - в LTE ровно эта
+					   ошибка, после перевода в 3G тот же код отдаёт баланс.
+					   Поэтому подсказываем, а не оставляем человека в тупике. */
 					if (cut.includes('error: 30'))
-						res.stdout = _('No network service');
+						res.stdout = _('No network service') + '\n' +
+							_('USSD works over the circuit-switched channel. If the modem is registered in LTE only, switch it to 3G on the frequency-management page and repeat the request.');
 					if (cut.includes('error: 31'))
 						res.stdout = _('Network timeout');
 					if (cut.includes('error: 32'))
@@ -256,6 +389,97 @@ return view.extend({
 		});
 	},
 
+	/* Запрос через ussd.sh: запустить и опрашивать состояние.
+	   Показываем стадию, а не безликий спиннер: уход в 3G и возврат режима - это
+	   секунды, в которые пропадает связь, и человек должен понимать, почему. */
+	handleUssdScript: function(code) {
+		var self = this;
+		var out = document.querySelector('.ussdcommand-output');
+		var buttons = document.querySelectorAll('.cbi-button');
+		var STAGES = {
+			switching: _('Switching the modem to 3G - USSD needs the circuit-switched channel'),
+			sending:   _('Sending the request'),
+			restoring: _('Restoring the previous network mode')
+		};
+
+		for (var i = 0; i < buttons.length; i++)
+			buttons[i].setAttribute('disabled', 'true');
+		/* Стадии печатаем ТОЙ ЖЕ анимацией, что и ответ: иначе они возникают
+		   рывком, и переход к ответу выглядит как другая программа.
+		   Перепечатываем только при СМЕНЕ стадии - опрос идёт раз в две секунды,
+		   и запуск анимации на каждый тик сбрасывал бы её в начало. */
+		var lastStage = null;
+		var say = function(text) {
+			if (out) { out.style.display = ''; typewrite(out, text); }
+		};
+		if (out) { out.style.display = ''; }
+		say(_('Sending the request') + '…');
+
+		var done = function() {
+			for (var i = 0; i < buttons.length; i++)
+				buttons[i].removeAttribute('disabled');
+		};
+
+		return fs.exec('/usr/share/5gmodem/ussd.sh', [ 'send', code ]).then(function() {
+			return new Promise(function(resolve) {
+				/* Предел с запасом к замеренным 18 с: сюда же попадает случай,
+				   когда сота 3G ищется дольше обычного. Дальше сдаёмся сами -
+				   висеть без объяснений хуже, чем сказать «нет ответа». */
+				var left = 60, timer = null;
+				var tick = function() {
+					L.resolveDefault(fs.exec('/usr/share/5gmodem/ussd.sh', [ 'status' ]), {}).then(function(r) {
+						var st = {};
+						try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+						if (st.status === 'running') {
+							if (STAGES[st.stage] && st.stage !== lastStage) {
+								lastStage = st.stage;
+								say(STAGES[st.stage] + '…');
+							}
+							if (--left > 0) { return; }
+						}
+						if (timer) { clearInterval(timer); timer = null; }
+						resolve(st);
+					});
+				};
+				timer = setInterval(tick, 2000);
+				tick();
+			});
+		}).then(function(st) {
+			done();
+			if (st.status === 'done') {
+				var dec = function(b) { try { return b ? atob(b) : ''; } catch (e) { return ''; } };
+				var body = dec(st.out);
+				/* ПУСТОЙ ОТВЕТ ОБЪЯСНЯЕМ, а не отделываемся «нет ответа от
+				   модема». Скрипт присылает причину, когда она известна:
+				   unsupported - у этого модуля USSD не работает в прошивке;
+				   noswitch - запрос ушёл модему, который не выбран активным,
+				   поэтому уводить его в 3G мы не стали. Именно в это упирался
+				   живой прогон, и «нет ответа» там не объясняло ничего. */
+				if (!body.trim()) {
+					if (st.unsupported) {
+						say(_('This modem does not answer USSD requests: its firmware has no SS support. Verified on real hardware.'));
+						return;
+					}
+					if (st.noswitch === 'not_active') {
+						say(_('No reply. The request went to a modem that is not the active one, so it was not switched to 3G - and USSD needs the circuit-switched channel. Select this modem and repeat.'));
+						return;
+					}
+				}
+				/* Скрипт отдаёт вывод sms_tool в base64 - в нём кавычки и
+				   переводы строк, собирать JSON из такого напрямую нельзя.
+				   Дальше - та же отрисовка, что у остальных путей. */
+				return self.handleCommand('sms_tool', null,
+					{ stdout: body, stderr: dec(st.err) });
+			}
+			say((st.status === 'error' && st.reason === 'no_3g')
+				? _('Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel.')
+				: _('No response from modem'));
+		}).catch(function(err) {
+			done();
+			ui.addNotification(null, E('p', [ err ]));
+		});
+	},
+
 	handleFileChange: function(ev) {
 		let selectedFile = ev.target.value;
 		let selectElement = document.getElementById('tk');
@@ -324,13 +548,11 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let ussd = document.getElementById('cmdvalue').value;
-		let sections = uci.sections('5gmodem');
-		let port = sections[0].ussdport;
-		let get_ussd = sections[0].ussd;
-		let get_pdu = sections[0].pdu;
-		let get_coding = sections[0].coding;
-		let get_via_mm = sections[0].ussd_via_mm;
-		let tool_args = [];
+		let port = uci.get('5gmodem', 'sms', 'ussdport');
+		/* Как слать (-R/-c) и как показывать (галка «без расшифровки») читает
+		   тот, кто этим занимается: ussd.sh и handleCommand соответственно.
+		   Здесь нужен лишь выбор транспорта. */
+		let get_via_mm = uci.get('5gmodem', 'sms', 'ussd_via_mm');
 
 		if ( ussd.length < 1 ) {
 			ui.addNotification(null, E('p', _('Please specify the code to send')), 'info');
@@ -381,16 +603,14 @@ return view.extend({
 			return false;
 		}
 
-		tool_args.push('-d', port);
-		if (get_ussd == '1')
-			tool_args.push('-R');
-		if (get_pdu == '1')
-			tool_args.push('-r');
-		if (get_coding && get_coding != 'auto')
-			tool_args.push('-c', get_coding);
-		tool_args.push('ussd', ussd);
-
-		return this.handleCommand('sms_tool', tool_args);
+		/* ЗАПРОС ИДЁТ ЧЕРЕЗ ussd.sh, а не напрямую в sms_tool. Он сам уводит
+		   модем в 3G, если тот в LTE, и возвращает режим обратно - иначе на LTE
+		   ответа не будет вовсе (USSD - услуга канала CS; см. пояснение в самом
+		   скрипте). Аргументы sms_tool он тоже собирает сам, чтобы политика
+		   «как слать» не разъезжалась между вкладкой и скриптом.
+		   Работа идёт фоном с опросом: полный цикл около 15-20 секунд, а rpcd
+		   рвёт вызов на 30-й, и укладываться в этот зазор было бы игрой с огнём. */
+		return this.handleUssdScript(ussd);
 	},
 
 	handleClear: function(ev) {
@@ -544,6 +764,15 @@ return view.extend({
 		})();
 		let ussdNotSupported = (String(ussdState.supported) === '0');
 		let ussdSmsOnly = !ussdNotSupported && (String(ussdState.sms_only) === '1');
+		/* ТРЕТЬЯ ПРИЧИНА - модем в LTE/5G: USSD пойдёт через CSFB. Замерено на
+		   живом Telit: 30 секунд, потеря регистрации по дороге и отказ
+		   «operation not supported» в конце; в 3G тот же код отвечает сразу.
+		   Предупреждение отдельное от двух верхних: здесь дело не в модеме и не
+		   в сети, а в текущем режиме, и это пользователь может поменять сам. */
+		/* В снимке метрик режим идёт вместе с диапазоном («LTE | B3 (1800 MHz)») -
+		   в предупреждение подставляем только сам режим. */
+		let ussdRat = String(ussdState.rat || '').split('|')[0].trim();
+		let ussdCsfb = !ussdNotSupported && !ussdSmsOnly && /^(LTE|5G)/i.test(ussdRat);
 
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
 				ussdNotSupported ? E('div', { 'class': 'alert-message warning' }, [
@@ -551,6 +780,14 @@ return view.extend({
 				]) : '',
 				ussdSmsOnly ? E('div', { 'class': 'alert-message warning' }, [
 					E('p', {}, _('The network registered this SIM for SMS only, so USSD is unavailable right now: it is a voice-domain service. The modem itself supports USSD - requests will simply stay unanswered until the registration changes.'))
+				]) : '',
+				ussdCsfb ? E('div', { 'class': 'alert-message info' }, [
+					/* Текст зависит от галки: обещать автопереключение, когда оно
+					   выключено, значит врать - а без него человеку надо знать,
+					   где включить, если ответа нет. */
+					E('p', {}, (uci.get('5gmodem', 'sms', 'ussd_3g') == '1')
+						? _('The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds.').format(ussdRat)
+						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings above.').format(ussdRat))
 				]) : '',
 				E('div', { 'class': 'cbi-section tgpage' }, [
 					E('div', { 'class': 'cbi-section-node' }, [

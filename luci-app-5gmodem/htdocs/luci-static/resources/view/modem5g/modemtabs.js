@@ -183,6 +183,70 @@ function esimHideRule(on) {
 	esimHideRule(!(keyed && was === '1'));
 })();
 
+/* --- Вкладка USSD ------------------------------------------------------------
+ *
+ * Прячем её у модемов, где USSD не работает В ПРИНЦИПЕ. Такой есть: Fibocom
+ * FM350-GL - прошивка заявляет +CUSD, отвечает на него OK и не присылает
+ * результат никогда, ни в одном режиме сети и ни в одной кодировке (перебрано
+ * полной матрицей на живом модуле). Оставлять вкладку значит предлагать то,
+ * чего нет: человек вводит код, ждёт и винит приложение.
+ *
+ * Вердикт - из таблицы проверенных (quirks.sh, через modemswitch.sh
+ * ussdsupport), а не из пробы: он зависит только от vid:pid, поэтому ждать
+ * нечего и в порт лезть не надо. Механика та же, что у eSIM: правило в <style>,
+ * потому что меню LuCI статично и кэшируется, плюс память в localStorage по
+ * АКТИВНОМУ модему - чтобы при переключении вкладок ничего не мелькало.
+ *
+ * Отличие от eSIM: по умолчанию НЕ прячем. Незнакомый модем и большинство
+ * знакомых USSD умеют, так что цена ошибки в другую сторону выше - спрятать
+ * рабочую вкладку хуже, чем на миг показать неработающую.
+ */
+var USSD_SEEN_BASE = '5gmodem.ussd.supported';
+function ussdSeenKey() {
+	var p = '';
+	try { p = (uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''); } catch (e) {}
+	return p ? (USSD_SEEN_BASE + '.' + p) : USSD_SEEN_BASE;
+}
+
+function ussdHideRule(on) {
+	var st = document.getElementById('ussd-tab-hide');
+	if (on) {
+		if (!st) {
+			st = E('style', { 'id': 'ussd-tab-hide', 'type': 'text/css' },
+				'a[href*="5gmodem/sendussd"], li:has(> a[href*="5gmodem/sendussd"]) { display: none !important; }');
+			document.head.appendChild(st);
+		}
+	} else if (st && st.parentNode) {
+		st.parentNode.removeChild(st);
+	}
+}
+
+/* Запомненное состояние применяем сразу, до опроса - но только когда знаем, о
+   каком модеме речь: общий ключ наследовал бы вердикт от прежнего модема. */
+(function() {
+	try {
+		var k = ussdSeenKey();
+		if (k !== USSD_SEEN_BASE && localStorage.getItem(k) === '0') { ussdHideRule(true); }
+	} catch (e) {}
+})();
+
+function applyUssdTabVisibility() {
+	return L.resolveDefault(uci.load('5gmodem'))
+		.then(function() {
+			return L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ussdsupport' ]), {});
+		})
+		.then(function(r) {
+			var st = {};
+			try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+			/* Прячем ТОЛЬКО при явном «не работает». Пустой ответ (скрипт не
+			   отработал, модем ещё не опознан) - это «не знаем», и вкладку
+			   трогать нельзя. */
+			var bad = (String(st.supported) === '0');
+			ussdHideRule(bad);
+			try { localStorage.setItem(ussdSeenKey(), bad ? '0' : '1'); } catch (e) {}
+		});
+}
+
 function applyEsimTabVisibility(tries) {
 	/* fs.exec, а не fs.exec_direct: последний ходит через /cgi-bin/cgi-exec -
 	   отдельный хелпер, который в этом приложении уже отвечал "404 Executable
@@ -457,6 +521,8 @@ return baseclass.extend({
 		// меню LuCI статично и кэшируется, поэтому прячем ссылку на лету - modemtabs
 		// выполняется на КАЖДОЙ странице модема.
 		applyEsimTabVisibility(0);
+		// То же и для USSD: есть модемы, у которых он не работает в принципе.
+		applyUssdTabVisibility();
 
 		var bar = document.querySelector('.modembar');
 		/* полоса уже наполнена данными - второй раз не работаем */

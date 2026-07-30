@@ -17,7 +17,7 @@ start_service() {
 
 service_triggers()
 {
-        procd_add_reload_trigger "sms_tool_js"
+        procd_add_reload_trigger "5gmodem"
 }
 
 

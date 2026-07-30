@@ -310,9 +310,11 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let phn = document.getElementById('phonenumber').value;
-		let sections = uci.sections('5gmodem');
-		let port = sections[0].sendport;
-		let dx = sections[0].delay * 1000;
+		let port = uci.get('5gmodem', 'sms', 'sendport');
+		/* Пауза между сообщениями группы. Значения в конфиге может не быть
+		   вовсе - тогда без запасного нуля получилось бы NaN, и setTimeout ниже
+		   молча выродился бы в нулевую задержку. */
+		let dx = (uci.get('5gmodem', 'sms', 'delay') || 0) * 1000;
 		let get_smstxt = document.getElementById('smstext').value;
 
 		let elem = document.getElementById('execute');
@@ -405,11 +407,11 @@ return view.extend({
 		let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 		if (gsm7Radio) gsm7Radio.checked = true;
 
-		let prefixnum, sections = uci.sections('5gmodem');
-		let addprefix = sections[0].prefix;
+		let prefixnum;
+		let addprefix = uci.get('5gmodem', 'sms', 'prefix');
 		if ( addprefix == '1' )
 			{
-			prefixnum = sections[0].pnumber;
+			prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
 			ovc.value = prefixnum;
 			}
 		else {
@@ -483,10 +485,10 @@ return view.extend({
 
 	renderMain: function (loadResults) {
 
-	let group, prefixnum, sections = uci.sections('5gmodem');
+	let group, prefixnum;
 	let self = this;
 
-	if ( sections[0].sendingroup == '1' )
+	if ( uci.get('5gmodem', 'sms', 'sendingroup') == '1' )
 		{
 		group = 1;
 	}
@@ -494,8 +496,8 @@ return view.extend({
 	group = '';
 	}
 	
-	if ( sections[0].prefix == '1' ) {	
-		prefixnum = sections[0].pnumber;
+	if ( uci.get('5gmodem', 'sms', 'prefix') == '1' ) {	
+		prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
 	}
 	/* Подсказка о формате номера - ВНУТРИ страницы, а не через
 	   ui.addNotification. Тот рисует ГЛОБАЛЬНЫЙ баннер поверх всего документа:
@@ -504,7 +506,7 @@ return view.extend({
 	   уведомления существуют для событий («сообщение отправлено»), а не для
 	   текста, который должен просто быть на странице. Показываем так же, как
 	   предупреждение о USSD: обычной плашкой в потоке. */
-	let showNumberHint = (sections[0].information == '1');
+	let showNumberHint = (uci.get('5gmodem', 'sms', 'information') == '1');
 	
 		let info = _('User interface for sending messages using sms-tool').format('');
 		
@@ -617,11 +619,11 @@ return view.extend({
 										let del = document.getElementById('phonenumber');
 											if (del) {
 												let ovc = document.getElementById('phonenumber');
-												let prefixnum, sections = uci.sections('5gmodem');
-												let addprefix = sections[0].prefix;
+												let prefixnum;
+												let addprefix = uci.get('5gmodem', 'sms', 'prefix');
 												if ( addprefix == '1' )
 													{
-													prefixnum = sections[0].pnumber;
+													prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
 													ovc.value = prefixnum;
 													}
 												else {

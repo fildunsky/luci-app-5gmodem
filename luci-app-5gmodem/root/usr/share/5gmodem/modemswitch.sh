@@ -44,6 +44,27 @@ apply_ussd_quirk() {   # $1 = секция модема
 	case "$_v" in
 		0|1) uci -q set "5gmodem.sms.ussd=$_v" ;;
 	esac
+
+	# ТО ЖЕ ПРАВИЛО ДЛЯ «уходить ли в 3G»: галка одна на приложение, а нужна она
+	# не всем, поэтому при смене активного модема выставляем её по нему. Порядок
+	# тот же: ручная настройка этого модема главнее базы, неизвестный модем не
+	# трогаем вовсе - у пользователя может быть рабочая настройка.
+	command -v ussd_needs_3g_for >/dev/null 2>&1 || return 0
+	_g=$(uci -q get "$CFG.$1.ussd_3g")
+	if [ -z "$_g" ]; then
+		_g=$(ussd_needs_3g_for "$(uci -q get "$CFG.$1.model")" "$(uci -q get "$CFG.$1.vidpid")")
+	fi
+	# НЕИЗВЕСТНЫЙ МОДЕМ - ЯВНЫЙ НОЛЬ, а не «не трогаем». Разница принципиальная:
+	# «не трогаем» здесь означало бы, что модем унаследует галку от ПРЕДЫДУЩЕГО
+	# (поймано на стенде: выбрал Telit - включилось, переключился на FM350 -
+	# осталось включённым, и он зря уходил бы в 3G). Своё значение пользователя
+	# не теряется: страница пишет его в секцию модема (m_X.ussd_3g), и оно
+	# главнее базы - см. чтение выше.
+	case "$_g" in
+		0|1) : ;;
+		*)   _g=0 ;;
+	esac
+	uci -q set "5gmodem.sms.ussd_3g=$_g"
 }
 active_path() { uci -q get "$CFG.@5gmodem[0].active_modem"; }
 
@@ -1305,14 +1326,25 @@ ussdsupport)
 	# Берём registration_cs - статус ГОЛОСОВОГО домена. Поле registration для
 	# этого не годится: там "SMS only" НАМЕРЕННО подменён статусом данных,
 	# чтобы не пугать пользователя при живом интернете (см. 5gmodem.sh).
-	_reg=$("$RES/5gmodem.sh" cached 30 2>/dev/null | jsonfilter -e '@.registration_cs' 2>/dev/null)
+	_snap=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
+	_reg=$(printf '%s' "$_snap" | jsonfilter -e '@.registration_cs' 2>/dev/null)
 	_smsonly=0
 	case "$_reg" in
 		6|7) _smsonly=1 ;;
 	esac
 
-	printf '{"supported":%s,"sms_only":%s,"registration":"%s","model":"%s"}\n' \
-		"${_v:-1}" "$_smsonly" "$_reg" "$(uci -q get "$CFG.$_s.model")"
+	# ТРЕТЬЯ ПРИЧИНА: модем умеет, сеть даёт, но модем СЕЙЧАС в LTE/5G.
+	# USSD - услуга канала CS, в LTE её нет, и модем идёт на CSFB: уходит в 3G,
+	# делает транзакцию, возвращается. Замерено на живом Telit LM960 (МегаФон):
+	# CSFB занял 30 с, по дороге регистрация слетала в "denied" и "searching", а
+	# ответ пришёл в виде `+CUSD: 4` - «operation not supported». То есть ждать
+	# дольше нечего, это отказ, а не таймаут. Тот же код в 3G (AT+WS46=22)
+	# отдаёт баланс за несколько секунд. Поэтому предупреждаем ДО отправки:
+	# запрос не только не сработает, но и на полминуты оставит без сети.
+	_rat=$(printf '%s' "$_snap" | jsonfilter -e '@.mode' 2>/dev/null)
+
+	printf '{"supported":%s,"sms_only":%s,"registration":"%s","rat":"%s","model":"%s"}\n' \
+		"${_v:-1}" "$_smsonly" "$_reg" "$_rat" "$(uci -q get "$CFG.$_s.model")"
 	;;
 
 save)

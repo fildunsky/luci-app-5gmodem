@@ -391,7 +391,7 @@ function sms_make_card(item, iconSrc, hide) {
 	return card;
 }
 
-/* Запись фоновых значений в sms_tool_js (счётчик сообщений, выбранный порт).
+/* Запись фоновых значений в секцию sms (счётчик сообщений, выбранный порт).
    Отсюда шла ошибка в консоли «RPC call to uci/apply failed with ubus code 5:
    Данные не получены» (5 = NO_DATA). Две причины, обе воспроизводятся:
    1) uci.save() АСИНХРОННА, а вызванный сразу за ней uci.apply() уходил раньше,
@@ -761,9 +761,8 @@ return view.extend({
 					/* Без confirm (решение владельца): выделение и есть намерение,
 					   кнопка удаляет сразу. */
 					{
-							var sections = uci.sections('5gmodem');
-							var portDA = sections[0].readport;
-							var storeDA = sections[0].storage;
+							var portDA = uci.get('5gmodem', 'sms', 'readport');
+							var storeDA = uci.get('5gmodem', 'sms', 'storage');
 
 							fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', storeDA, portDA ]);
 							/* Через модель, а не innerHTML напрямую: после удаления
@@ -794,8 +793,7 @@ return view.extend({
 
 								var storeL = (uci.get('5gmodem', 'sms', 'storage'));
 								var portR = (uci.get('5gmodem', 'sms', 'readport'));
-								var sections = uci.sections('5gmodem');
-								var portDEL = sections[0].readport;
+								var portDEL = uci.get('5gmodem', 'sms', 'readport');
 
 								/* Индексы из data-index карточек; у склеенного сообщения
 								   там все части через дефис - разворачиваем в плоский
@@ -911,8 +909,7 @@ return view.extend({
 					3. Notification LED (optional).</li><li><ul>')), 'info');
 		}
 		
-		var sections = uci.sections('5gmodem');
-		var led = sections[0].smsled;
+		var led = uci.get('5gmodem', 'sms', 'smsled');
 
 		/* Эти radio живут в DOM, который renderMain ещё не вернул и не
 		   прикрепил к странице: sms_tool_js уже загружен в load(), поэтому
@@ -1379,8 +1376,7 @@ return view.extend({
 					   ModemManager), поэтому прячем только переключатели, а
 					   полоску памяти оставляем. Радиокнопки остаются в DOM:
 					   логика обновления безусловно читает отмеченную. */
-					var cfg = uci.sections('5gmodem');
-					var viaMM = (cfg && cfg[0] && cfg[0].sms_via_mm == '1');
+					var viaMM = (uci.get('5gmodem', 'sms', 'sms_via_mm') == '1');
 					var areaTip = _('Any change in the area from which SMS messages will be read requires refreshing the messages');
 					var areaOpt = (function(value, label, checked) {
 						return E('label', {

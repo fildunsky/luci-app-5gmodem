@@ -104,11 +104,20 @@ check_once() {
 		[ -n "$_iip" ] || _iip=$(_iface_ip "${_if}_4")
 		[ -n "$_iip" ] || _iip=$(_iface_ip "${_if}_6")
 		# И спрашиваем сам канал: для qmi это дешёвая и честная проверка.
+		#
+		# СРАВНИВАЕМ ЦЕЛИКОМ, А НЕ ПОДСТРОКОЙ. uqmi отвечает "connected" или
+		# "disconnected" - и во втором слове первое содержится целиком. Прежний
+		# `grep -q connected` совпадал ВСЕГДА, то есть сторож считал живой любую
+		# мёртвую сессию и не переподнимал её ни разу (поймано на Telit LM960:
+		# аренда DHCP истекла, uqmi честно говорил "disconnected", интерфейс
+		# висел «up» без адреса 20 минут, в логе сторожа - ни строки).
 		if [ -z "$_iip" ] && [ "$_proto" = qmi ]; then
 			_wdm=$(uci -q get "network.$_if.device")
 			case "$_wdm" in
-				/dev/*) uqmi -d "$_wdm" --get-data-status 2>/dev/null \
-					| grep -q connected && _iip="connected" ;;
+				/dev/*)
+					_ds=$(uqmi -d "$_wdm" --get-data-status 2>/dev/null \
+						| tr -d '"' | tr -d '[:space:]')
+					[ "$_ds" = "connected" ] && _iip="connected" ;;
 			esac
 		fi
 		if [ -z "$_iip" ]; then

@@ -739,18 +739,14 @@ return view.extend({
 		/* То же, что у device: при автоопределении поле скрыто, и сохранение
 		   формы не должно его трогать. */
 		o.remove = function() { return Promise.resolve(); };
-		/* Синхронизируем единый AT-порт в 4 отдельных поля sms_tool_js,
+		/* Синхронизируем единый AT-порт в 4 отдельных поля секции sms,
 		   которые читают вьюхи приёма/отправки SMS, USSD и AT (их код не
-		   меняем). uci.save() формы сбрасывает и sms_tool_js. */
+		   меняем). */
 		o.write = function(section_id, value) {
 			uci.set('5gmodem', section_id, 'at_port', value);
-			var ss = uci.sections('5gmodem', 'sms');
-			var sid = (ss && ss[0]) ? ss[0]['.name'] : null;
-			if (sid) {
-				[ 'readport', 'sendport', 'ussdport', 'atport' ].forEach(function(k) {
-					uci.set('sms_tool_js', sid, k, value);
-				});
-			}
+			[ 'readport', 'sendport', 'ussdport', 'atport' ].forEach(function(k) {
+				uci.set('5gmodem', 'sms', k, value);
+			});
 		};
 		o.remove = function(section_id) {
 			uci.unset('5gmodem', section_id, 'at_port');

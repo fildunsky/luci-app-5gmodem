@@ -3848,3 +3848,39 @@ msgstr "Прочитано"
 
 msgid "New"
 msgstr "Новых"
+
+msgid "USSD works over the circuit-switched channel. If the modem is registered in LTE only, switch it to 3G on the frequency-management page and repeat the request."
+msgstr "USSD ходит по каналу CS. Если модем зарегистрирован только в LTE, переведите его в 3G на странице управления частотами и повторите запрос."
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back on its own - the connection drops for about twenty seconds."
+msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS. Поэтому под запрос он сам уйдёт в 3G и вернётся обратно — связь пропадёт примерно на двадцать секунд."
+
+msgid "Switching the modem to 3G - USSD needs the circuit-switched channel"
+msgstr "Перевожу модем в 3G — USSD ходит по каналу CS"
+
+msgid "Sending the request"
+msgstr "Отправляю запрос"
+
+msgid "Restoring the previous network mode"
+msgstr "Возвращаю прежний режим сети"
+
+msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
+msgstr "Не удалось перевести модем в 3G, запрос не отправлен: USSD ходит по каналу CS."
+
+msgid "This modem does not answer USSD requests: its firmware has no SS support. Verified on real hardware."
+msgstr "Этот модем не отвечает на USSD-запросы: в прошивке нет поддержки SS. Проверено на живом железе."
+
+msgid "No reply. The request went to a modem that is not the active one, so it was not switched to 3G - and USSD needs the circuit-switched channel. Select this modem and repeat."
+msgstr "Ответа нет. Запрос ушёл модему, который не выбран активным, поэтому в 3G его не переводили — а USSD ходит по каналу CS. Выберите этот модем и повторите."
+
+msgid "Switch the modem to 3G for USSD"
+msgstr "Переводить модем в 3G для USSD"
+
+msgid "USSD runs over the circuit-switched channel, which LTE does not have. Some modems handle this themselves; others answer nothing until the modem is actually in 3G. With this option the request switches the modem to 3G and switches it back - about twenty seconds without a connection. It is enabled automatically for modems already known to need it."
+msgstr "USSD ходит по каналу CS, которого в LTE нет. Часть модемов справляется сама, другим без настоящего 3G ответа не добиться. С этой галкой запрос сам переведёт модем в 3G и вернёт обратно — это около двадцати секунд без связи. Для модемов, о которых уже известно, что им это нужно, галка включается автоматически."
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds."
+msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS. Поэтому запрос сам переведёт модем в 3G и вернёт обратно — связь пропадёт примерно на двадцать секунд."
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings above."
+msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS, которого в LTE нет. Многие модемы всё равно отвечают; если этот молчит — включите «Переводить модем в 3G для USSD» в настройках выше."

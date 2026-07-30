@@ -575,6 +575,19 @@ function addUssdOptions(s) {
 		_('Receive and display the reply without decoding it as a PDU'));
 	o.rmempty = false;
 
+	o = s.option(form.Flag, 'ussd_3g', _('Switch the modem to 3G for USSD'),
+		_('USSD runs over the circuit-switched channel, which LTE does not have. Some modems handle this themselves; others answer nothing until the modem is actually in 3G. With this option the request switches the modem to 3G and switches it back - about twenty seconds without a connection. It is enabled automatically for modems already known to need it.'));
+	o.rmempty = false;
+	/* ЗАПОМИНАЕМ ВЫБОР У МОДЕМА, а не только в общей настройке. Галка одна на
+	   приложение, а нужна она не всем: при переключении модема modemswitch.sh
+	   выставляет её по базе проверенных, и без этой записи выбор пользователя
+	   терялся бы на первом же переключении. Секция модема главнее базы. */
+	o.write = function(section_id, value) {
+		uci.set('5gmodem', section_id, 'ussd_3g', value);
+		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+		if (p) { uci.set('5gmodem', 'm_' + p.replace(/[^A-Za-z0-9]/g, '_'), 'ussd_3g', value); }
+	};
+
 	o = s.option(form.ListValue, 'coding', _('PDU decoding scheme'));
 	o.value('auto', _('Autodetect'));
 	o.value('0', _('7-bit'));
@@ -635,9 +648,8 @@ return baseclass.extend({
 
 		injectStyle();
 
-		var m = new form.Map('sms_tool_js');
-		var s = m.section(form.TypedSection, 'sms_tool_js', '', null);
-		s.anonymous = true;
+		var m = new form.Map('5gmodem');
+		var s = m.section(form.NamedSection, 'sms', 'sms', '', null);
 		s.addremove = false;
 		build(s);
 

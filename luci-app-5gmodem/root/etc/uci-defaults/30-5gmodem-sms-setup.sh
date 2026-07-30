@@ -17,7 +17,7 @@ mkdir -p /etc/5gmodem/modem/ussdcodes >/dev/null 2>&1 &
 chmod +x /usr/libexec/rpcd/5gmodem_sms_forward >/dev/null 2>&1 &
 
 if ! uci -q get 5gmodem.sms >/dev/null 2>&1; then
-	uci set sms_tool_js.config=sms_tool_js
+	uci set 5gmodem.sms=sms
 fi
 
 [ "$(uci -q get 5gmodem.sms.pnumber)" = "48" ] && {

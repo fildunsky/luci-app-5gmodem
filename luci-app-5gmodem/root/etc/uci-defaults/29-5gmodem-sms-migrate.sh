@@ -15,11 +15,34 @@
 # Старый файл НЕ УДАЛЯЕМ: он может принадлежать форку, который остался в
 # системе. Пусть живёт своей жизнью - мы в него больше не смотрим.
 
+# ТЕЛЕФОННАЯ КНИГА, USSD-КОДЫ И AT-КОМАНДЫ переехали туда же: из общего
+# /etc/modem в /etc/5gmodem/modem. Списки пользователь наполняет руками, и
+# потерять их при обновлении нельзя. Переносим ОДИН РАЗ (по метке), только
+# непустое и только поверх того, чего пользователь на новом месте ещё не
+# трогал - иначе повторный запуск вернул бы старую версию файла.
+_STAMP=/etc/5gmodem/.modemdir-migrated
+if [ ! -f "$_STAMP" ] && [ -d /etc/modem ]; then
+	mkdir -p /etc/5gmodem/modem/atcmmds /etc/5gmodem/modem/ussdcodes 2>/dev/null
+	_files=0
+	for _src in /etc/modem/atcmmds.user /etc/modem/phonebook.user \
+	            /etc/modem/ussdcodes.user \
+	            /etc/modem/atcmmds/*.user /etc/modem/ussdcodes/*.user; do
+		[ -s "$_src" ] || continue
+		_dst="/etc/5gmodem/modem/${_src#/etc/modem/}"
+		cmp -s "$_src" "$_dst" && continue
+		cp "$_src" "$_dst" 2>/dev/null || continue
+		_files=$((_files + 1))
+	done
+	: > "$_STAMP" 2>/dev/null
+	[ "$_files" -gt 0 ] && \
+		logger -t 5gmodem "списки из /etc/modem перенесены в /etc/5gmodem/modem: $_files файлов"
+fi
+
 [ -f /etc/config/sms_tool_js ] || exit 0
 uci -q get 5gmodem.sms >/dev/null 2>&1 || uci -q set 5gmodem.sms=sms
 
 _moved=0
-for _k in storage mergesms pnumber prefix lednotify ussd pdu sendingroup \
+for _k in storage mergesms pnumber prefix lednotify ussd ussd_3g pdu sendingroup delay \
           information readport sendport ussdport atport callport \
           calllog_enabled sms_via_mm ussd_via_mm coding algorithm direction \
           checktime prestart ledtype ontopsms smsled sms_count sms_count_index \

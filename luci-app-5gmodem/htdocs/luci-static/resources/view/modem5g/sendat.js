@@ -119,8 +119,7 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let atcmd = document.getElementById('cmdvalue').value;
-		let sections = uci.sections('5gmodem');
-		let port = sections[0].atport;
+		let port = uci.get('5gmodem', 'sms', 'atport');
 
 		if ( atcmd.length < 2 )
 		{
