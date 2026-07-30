@@ -18,7 +18,6 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 - **Port auto-detect** — the AT port and network interface are detected automatically; can be set manually.
 - **USB sticks that have no AT ports** (Huawei HiLink and relatives) are supported too — see below.
 - **`5gtop`** — a terminal dashboard with the same data, for when you are on SSH and not in a browser.
-- 
 
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-39" src="https://github.com/user-attachments/assets/1adb9ca6-8f38-445c-8cb8-2a0f6b8005c9" />
 
