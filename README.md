@@ -19,10 +19,10 @@ A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github
 - **USB sticks that have no AT ports** (Huawei HiLink and relatives) are supported too — see below.
 - **`5gtop`** — a terminal dashboard with the same data, for when you are on SSH and not in a browser.
 - 
-<img width="1954" height="1460" alt="Screenshot From 2026-07-19 23-06-52" src="https://github.com/user-attachments/assets/22828d57-805d-4cae-9ec0-7a24cfa884e2" />
-<img width="1958" height="1426" alt="Screenshot From 2026-07-19 23-07-23" src="https://github.com/user-attachments/assets/df8e2a52-63d0-45c5-9313-67ffe1ecb872" />
 
-## These are modems I personally have:
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-39" src="https://github.com/user-attachments/assets/1adb9ca6-8f38-445c-8cb8-2a0f6b8005c9" />
+
+## Tested:
 I've added new features to them (compared to 3ginfo and modemband)
 - Fibocom FM350GL
 - Fibocom L850
@@ -35,7 +35,7 @@ I've added new features to them (compared to 3ginfo and modemband)
 - Huawei E3372 (HiLink)
 - Many more untested, but should support all the modems handled by the upstream forks.
 
-<img width="1956" height="1458" alt="Screenshot From 2026-07-19 23-07-44" src="https://github.com/user-attachments/assets/5eed741c-787a-4bf0-947d-4ebc934c7590" />
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### USB sticks with no AT ports (HiLink)
 
@@ -58,6 +58,9 @@ The app handles them anyway:
 Bands and network mode for such a stick are changed through its API rather than
 `AT^SYSCFGEX`: the AT route makes the modem drop its USB composition and fall
 out of debug mode.
+
+## Buttons
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-03-18" src="https://github.com/user-attachments/assets/60a6dce9-6723-45ae-99f0-2c0ae4b7e725" />
 
 ## 5gtop
 
