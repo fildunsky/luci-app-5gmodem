@@ -19,11 +19,9 @@
 - **USB-свистки без AT-портов** (Huawei HiLink и родственники) тоже поддерживаются — см. ниже.
 - **`5gtop`** — те же данные в терминале, когда вы в SSH, а не в браузере.
 
-<img width="1954" height="1460" alt="Screenshot From 2026-07-19 23-06-52" src="https://github.com/user-attachments/assets/22828d57-805d-4cae-9ec0-7a24cfa884e2" />
-<img width="1958" height="1426" alt="Screenshot From 2026-07-19 23-07-23" src="https://github.com/user-attachments/assets/df8e2a52-63d0-45c5-9313-67ffe1ecb872" />
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-39" src="https://github.com/user-attachments/assets/1adb9ca6-8f38-445c-8cb8-2a0f6b8005c9" />
 
 ## Модемы, которые есть у меня лично
-
 Для них добавлены новые возможности (по сравнению с 3ginfo и modemband):
 
 - Fibocom FM350GL
@@ -37,7 +35,7 @@
 - Huawei E3372 (HiLink)
 - Многие другие не проверялись, но должны работать — поддерживаются все модемы из исходных проектов.
 
-<img width="1956" height="1458" alt="Screenshot From 2026-07-19 23-07-44" src="https://github.com/user-attachments/assets/5eed741c-787a-4bf0-947d-4ebc934c7590" />
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### USB-свистки без AT-портов (HiLink)
 
