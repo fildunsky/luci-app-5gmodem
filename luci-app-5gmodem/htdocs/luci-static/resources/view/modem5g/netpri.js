@@ -1,5 +1,6 @@
 'use strict';
 'require baseclass';
+'require view.modem5g.mutil as mutil';
 'require fs';
 'require ui';
 'require uci';
@@ -611,32 +612,15 @@ function activeIface(list) {
 }
 
 /* Оператор -> файл иконки (та же таблица, что в главном блоке 5gdetail). */
-function operatorIcon(name) {
-	var n = (name || '').toLowerCase();
-	if (n.indexOf('t-mobile') >= 0 || n.indexOf('tinkoff') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('т-банк') >= 0 || n.indexOf('t-mob') >= 0) { return 'op-tbank'; }
-	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
-	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
-	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
-	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2' || n.indexOf('t2 ') == 0 || n.indexOf(' t2') >= 0) { return 'op-t2'; }
-	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
-	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
-	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
-	/* РФ-операторы/MVNO по имени: Мотив, СберМобайл, Таттелеком (Летай), Вайнах. */
-	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0 || n.indexOf('ekaterinburg') >= 0 || n.indexOf('екатеринбург') >= 0) { return 'op-motiv'; }
-	if (n.indexOf('sbermobile') >= 0 || n.indexOf('sber mobile') >= 0 || n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
-	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('letai') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
-	if (n.indexOf('vainah') >= 0 || n.indexOf('vainakh') >= 0 || n.indexOf('вайнах') >= 0) { return 'op-vainah'; }
-	/* KT (Korea Telecom, бренд olleh, MCC 450) - короткое имя «KT» как отдельный токен */
-	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
-	return null;
-}
+/* operatorIcon переехал в общий модуль mutil (в 5gdetail и dashboard были свои копии
+   той же таблицы - три экземпляра неизбежно расходились). */
 
 /* per-type icon from the app's icon set (modem / Wi-Fi / WAN); null for the rest.
    Для модема - как в главном блоке SIM: иконка ОПЕРАТОРА, если он определён
    (o.label несёт имя оператора), иначе простая SIM-карта (op-sim.png). */
 function typeIcon(o) {
 	if (o.type === 'modem') {
-		var oi = operatorIcon(o.label);
+		var oi = mutil.operatorIcon(o.label);
 		return E('img', {
 			'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.png'),
 			'width': 16, 'height': 16, 'alt': ''
@@ -983,7 +967,20 @@ return baseclass.extend({
 			else if (seen) { poll.remove(pollFn); return Promise.resolve(); }
 			return loadList().then(apply);
 		};
-		poll.add(pollFn, 5);
+		/* КАДЕНЦИЯ 15 c, А НЕ 5.
+		   Замер на стенде: один `netpri.sh list` - это ~0.58 c работы роутера
+		   (69 подпроцессов даже после того, как состояние интерфейсов, конфиг и
+		   перечисление модемов стали браться одним снимком). При опросе раз в 5 c
+		   это больше десятой части всего процессорного времени, отданной списку
+		   аплинков, - и почти всегда впустую: состав, тип, модель и метрика между
+		   тиками не меняются.
+		   Опрос здесь нужен ТОЛЬКО для пассивных изменений (модем сам получил или
+		   потерял IP): любое действие пользователя - выбор приоритета,
+		   перетаскивание - перечитывает список само, сразу после записи (см.
+		   вызовы loadList после 'order'). Цена решения честная: адрес, появившийся
+		   без нашего участия, доедет до панели за 15 c вместо 5. В карточке модема
+		   он при этом виден с прежней свежестью - там свой опрос. */
+		poll.add(pollFn, 15);
 		return wrap;
 	},
 
@@ -1022,7 +1019,8 @@ return baseclass.extend({
 				if (_npDrag || _npApplying) { return Promise.resolve(); }   // пауза при drag/применении
 				return loadList().then(redraw);
 			};
-			poll.add(pollFn, 5);
+			/* 15 c, а не 5 - обоснование см. у такого же поллера в mount(). */
+			poll.add(pollFn, 15);
 			return { wrap: wrap, redraw: redraw };
 		};
 		/* Флаги видимости - до сборки; затем warm-render из кэша. Блок рисуем,

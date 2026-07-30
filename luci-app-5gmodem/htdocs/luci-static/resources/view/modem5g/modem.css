@@ -56,11 +56,12 @@
 .modembar .modemtabs-bar .modemtab span {
 	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
-/* Активный модем помечаем как активную кнопку приоритета интернета - то есть
-   тем же, чем тема помечает кнопку на hover: одна акцентная рамка, без заливки
-   и без внутренней обводки (та удваивала линию и смотрелась жирно). */
+/* Активный модем - только полосой слева: та же метка, что у непрочитанных
+   сообщений (.sms-new) и активной карточки приоритета, акцентной рамки вокруг
+   нет намеренно. !important - из-за argon: там все табы получают
+   border: 1px !important (тёмная схема), и полоса сплющивалась бы в единицу. */
 .modembar .modemtabs-bar .modemtab.active {
-	border-color: var(--tg-accent);
+	border-left: 3px solid var(--tg-accent) !important;
 	pointer-events: none;
 }
 /* Кнопка-заготовка: та же геометрия и то же содержимое, что у настоящей
@@ -108,11 +109,12 @@
 .netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
 .netpribar .netpri-btn .netpri-ip.empty { opacity: .4; }
 .netpribar .netpri-btn.active {
-	/* Активную помечаем ровно тем же, что тема даёт кнопке на hover
-	   (.cbi-button:hover -> border-color: accent, box-shadow: none).
-	   Внутренней обводки inset 0 0 0 1px здесь была - она удваивала рамку,
-	   и выделение выглядело жирным. */
-	border-color: var(--tg-accent);
+	/* Только полоса слева - тот же знак «текущее», что у активной вкладки
+	   модема (.modemtab.active) и непрочитанных сообщений (.sms-new); рамки
+	   вокруг нет намеренно. !important - из-за argon: там карточкам достаётся
+	   border: 1px !important (тёмная схема), и полоса сплющивалась бы обратно
+	   в единицу. */
+	border-left: 3px solid var(--tg-accent) !important;
 	/* pointer-events НЕ отключаем: иначе активную карточку нельзя схватить для
 	   перетаскивания. Клик по уже активной и так ничего не делает (обработчик
 	   click рано выходит). */
@@ -1673,12 +1675,11 @@ pre.atcommand-output.has-output::after {
    полупрозрачный серый: он темнее фона на светлой теме и светлее на тёмной,
    то есть работает в обеих схемах без отдельных цветов. */
 
-/* Обводка активной карточки. border-color в argon перебивался правилами темы -
-   поэтому и рамку задаём принудительно, и добавляем контур той же краской,
-   чтобы выделение читалось на любой заливке. */
+/* Метка активной карточки. Правило темы .netpri-btn (border !important, тёмная
+   схема ниже) той же специфичности, но стоит ПОЗЖЕ базового - без argon-копии
+   полосы здесь она сплющивалась бы обратно в единицу. */
 .tg-theme-argon .netpribar .netpri-btn.active {
-  border-color: var(--tg-accent) !important;
-  box-shadow: 0 0 0 1px var(--tg-accent) !important;
+  border-left: 3px solid var(--tg-accent) !important;
 }
 
 /* Подсветка во время теста скорости: карточка меняет --st-c на зелёный при
@@ -1692,12 +1693,11 @@ pre.atcommand-output.has-output::after {
 /* ТАБЫ ПЕРЕКЛЮЧЕНИЯ МОДЕМОВ - тем же оформлением, что карточки «Приоритета
    интернета»: в тёмной argon кнопки темы заливаются фиолетовым, и таб активного
    модема ничем не отличался от остальных. */
-/* Активный таб - той же акцентной обводкой, что активная карточка. */
+/* Активный таб - той же полосой слева, что активная карточка. */
 .tg-theme-argon .modemtabs-bar .modemtab.cbi-button-action,
 .tg-theme-argon .modemtabs-bar .modemtab.important,
 .tg-theme-argon .modemtabs-bar .modemtab.active {
-  border-color: var(--tg-accent) !important;
-  box-shadow: 0 0 0 1px var(--tg-accent) !important;
+  border-left: 3px solid var(--tg-accent) !important;
 }
 
 /* Тёмная схема. argon встраивает свои тёмные стили внутрь

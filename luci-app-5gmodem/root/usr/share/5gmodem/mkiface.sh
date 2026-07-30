@@ -189,7 +189,10 @@ at_port_of() {   # $1 = usb path
 	for _t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
 			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
-		case "$(run_bounded 6 sms_tool -d "$_t" at "AT+CGMM")" in
+		# at_query вместо своего run_bounded: он делает то же (таймаут), но ещё и
+		# берёт очередь к порту. Здесь это важнее всего - мы перебираем порты и
+		# запросто пересекаемся с опросом метрик соседнего модема.
+		case "$(at_query "$_t" "AT+CGMM" 6)" in
 			*ERROR*|*"No response"*|"") continue ;;
 			*) echo "$_t"; return 0 ;;
 		esac
@@ -232,7 +235,7 @@ kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
 	_atp=$(at_port_of "$_path")
 	[ -n "$_atp" ] || { echo "prepare: QMI wedged and no AT port to reset the modem" >&2; return 1; }
 	echo "prepare: QMI is wedged - resetting the modem via AT+CFUN=1,1 on $_atp" >&2
-	( sms_tool -d "$_atp" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
+	( at_query "$_atp" "AT+CFUN=1,1" 6 ) >/dev/null 2>&1 </dev/null &
 
 	# ждём возвращения на шину (переэнумерация) + готовности QMI
 	_n=0
@@ -274,14 +277,41 @@ mm_restart_safe() {
 # этого задаёт MODEM_PATH. Тогда все глобальные ключи @5gmodem[0] - трогать
 # НЕЛЬЗЯ: они описывают активный модем, и запись в них увела бы страницу и порты
 # sms_tool_js на чужой модем.
+note_foreign_uci network "mkiface"
+note_foreign_uci firewall "mkiface"
 AMP=${MODEM_PATH:-$(uci -q get 5gmodem.@5gmodem[0].active_modem)}
 _ACTPATH=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 _IS_ACTIVE=1
 [ -n "$MODEM_PATH" ] && [ -n "$_ACTPATH" ] && [ "$MODEM_PATH" != "$_ACTPATH" ] && _IS_ACTIVE=0
 MSEC=""
 WANTWDM=""
+
+# AT-ПОРТ ЦЕЛЕВОГО МОДЕМА - ИЗ РЕЕСТРА, А ГЛОБАЛЬНЫЙ ОТКАТ ТОЛЬКО ДЛЯ АКТИВНОГО.
+#
+# Ниже было дважды (METRIC_AT для atc/xmm и ATP для серийных прото) одно и то же:
+#   порт из секции -> ИНАЧЕ глобальный @5gmodem[0].at_port -> ИНАЧЕ detect.sh
+# Оба отката описывают АКТИВНЫЙ модем. А mkiface вызывается и для НЕАКТИВНЫХ -
+# ровно для этого выше считается _IS_ACTIVE и запрещается запись в глобальные
+# ключи. Но на ЧТЕНИЕ тот же запрет не распространялся, и у модема без своего
+# at_port в секции интерфейс получал `device` = AT-порт СОСЕДА: для atc/xmm это
+# дозвон в чужой модем (у них device и есть порт дозвона). Та же дыра была в
+# bands.sh и закрыта там же тем же правилом.
+#
+# Порт из реестра вдобавок СВЕРЕН со списком портов этого модема - устаревшую
+# настройку (модем переставили, композиция сменилась) реестр гасит сам.
+_mk_atport() {
+	[ -n "$AMP" ] || return 0
+	_ma=$(/usr/share/5gmodem/registry.sh path "$AMP" 2>/dev/null \
+		| jsonfilter -e '@.at_port' 2>/dev/null)
+	[ -n "$_ma" ] && { printf '%s' "$_ma"; return 0; }
+	[ "$_IS_ACTIVE" = "1" ] || return 0
+	_ma=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+	[ -n "$_ma" ] || _ma=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+	printf '%s' "$_ma"
+}
+
 if [ -n "$AMP" ]; then
-	MSEC="m_$(echo "$AMP" | sed 's/[^A-Za-z0-9]/_/g')"
+	MSEC=$(secname "$AMP")
 	# interface name: prefer the one remembered for THIS modem, default "modem".
 	# Then guarantee uniqueness - if that name is already claimed by ANOTHER
 	# modem's section, bump to modem2/modem3/… so two modems never share one
@@ -309,7 +339,8 @@ if [ -n "$AMP" ]; then
 	done
 	IF="$cand"
 	# the cdc-wdm control node that belongs to THIS modem
-	WANTWDM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null)
+	WANTWDM=$(/usr/share/5gmodem/registry.sh path "$AMP" 2>/dev/null \
+		| jsonfilter -e '@.wdm[0]' 2>/dev/null)
 fi
 
 # --- AT-dialed RNDIS/ECM modems (Fibocom FM350-GL 0e8d:7127 and similar): they
@@ -355,14 +386,13 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# "Device path not found!" в цикле (живой баг на L850 после FM350 в том
 			# же USB-разъёме). Даём отдельный от метрик AT-порт, чтобы дозвон и
 			# периодический опрос не сталкивались на одном tty.
-			METRIC_AT=$(uci -q get "5gmodem.$MSEC.at_port")
-			[ -n "$METRIC_AT" ] || METRIC_AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+			METRIC_AT=$(_mk_atport)
 			DIALPORT=""
 			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/ttyACM*; do
 				[ -e "$t" ] || continue
 				tt="/dev/$(basename "$t")"
 				[ "$tt" = "$METRIC_AT" ] && continue
-				sms_tool -d "$tt" at "AT" >/dev/null 2>&1 && { DIALPORT="$tt"; break; }
+				at_query "$tt" "AT" 5 >/dev/null 2>&1 && { DIALPORT="$tt"; break; }
 			done
 			[ -n "$DIALPORT" ] || DIALPORT="$METRIC_AT"
 			uci set "network.$IF.proto=$FPROTO"
@@ -545,9 +575,7 @@ elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/nu
 fi
 
 # --- AT / serial control port (for serial-based protos) ---
-ATP=$(uci -q get "5gmodem.$MSEC.at_port")
-[ -n "$ATP" ] || ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
-[ -n "$ATP" ] || ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+ATP=$(_mk_atport)
 
 # --- device path for the interface, by proto family ---
 case "$PROTO" in
@@ -629,6 +657,18 @@ case "$PROTO" in
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 uci commit network
+
+# ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.
+#
+# Секция интерфейса только что ПЕРЕСОЗДАНА (delete + set + commit), а ifup ниже
+# работает с копией конфига, которую netifd загрузил В ПАМЯТЬ раньше - о новой
+# секции он не знает. Живой случай (DW5821e на Radxa, issue #7): netifd держал
+# интерфейс с proto «none» от прежней загрузки, наш recovery дёргал ifup по
+# кругу, netifd на каждый раз отвечал «Cannot set device name: /sys/... longer
+# than max size 15» (для proto none поле device он разбирает как имя сетевухи
+# и режет по точке) - и модем «не заводился» до ручного вмешательства.
+# reload сам поднимает autostart-интерфейсы; ifup после него безвреден.
+ubus call network reload >/dev/null 2>&1
 
 # в зону wan - для NAT/forwarding (см. _fw_zone_add выше)
 _fw_zone_add "$IF"

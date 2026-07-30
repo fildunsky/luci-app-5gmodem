@@ -17,6 +17,8 @@
 #
 # Runs as a small procd service (see /etc/init.d/5gmodem-mm-inhibit).
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+
 RES=/usr/share/5gmodem
 CFG=5gmodem
 RUN=/var/run/5gmodem-mm-inhibit
@@ -345,7 +347,9 @@ _restore_stolen() {
 		_dead=""
 		ATP=$(uci -q get "$CFG.$SEC.at_port")
 		if [ -n "$ATP" ] && [ -c "$ATP" ] && command -v sms_tool >/dev/null 2>&1; then
-			RAW=$(sms_tool -d "$ATP" at "AT+CGACT?" 2>/dev/null | tr -d '\r')
+			# at_query: очередь к порту и таймаут. Этот вызов идёт из петли, живущей
+			# всё время работы демона, и без очереди он конкурировал с опросом метрик.
+			RAW=$(at_query "$ATP" "AT+CGACT?" 6)
 			if echo "$RAW" | grep -q "OK"; then
 				# Порт ответил - верим ему.
 				echo "$RAW" | grep -qE '\+CGACT: *[0-9]+, *1' && continue

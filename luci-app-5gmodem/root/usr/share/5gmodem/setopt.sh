@@ -11,6 +11,7 @@
 # ACL, а давать вебу право на ПРОИЗВОЛЬНЫЙ `uci` небезопасно. Здесь ровно две
 # фиксированные команды - их и разрешаем в acl.d.
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null   # note_foreign_uci
 RES=/usr/share/5gmodem
 
 _sec_for_path() { echo "m_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"; }
@@ -26,6 +27,7 @@ roaming)
 	_ifn=$(uci -q get "5gmodem.$_sec.network")
 	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
 	[ -n "$_ifn" ] || exit 1
+	note_foreign_uci network "setopt roaming"
 	uci -q set "network.$_ifn.allow_roaming=$(_norm01 "$3")"
 	uci -q commit network
 	ifup "$_ifn" >/dev/null 2>&1

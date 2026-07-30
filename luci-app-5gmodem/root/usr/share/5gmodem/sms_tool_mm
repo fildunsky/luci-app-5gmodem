@@ -41,6 +41,17 @@ done
 
 command -v mmcli >/dev/null 2>&1 || { echo "mmcli not found" >&2; exit 1; }
 
+# КАКОМУ МОДЕМУ АДРЕСОВАТЬ. Раньше здесь всюду стояло «mmcli -m "$MMIDX"» -
+# «какой-нибудь модем». С одним MM-модемом это неотличимо от правильного,
+# а с двумя ломается молча: у человека с парой T99W175 (30.07) «any»
+# попадал в модем БЕЗ SIM - список SMS пуст, отправка в никуда, «SMS не
+# работают» без единой ошибки. Тот же класс бага уже чинили в detect.sh
+# и modemswitch.sh. Индекс берём по активному модему (sysfs-путь ->
+# индекс MM); «any» остаётся только фолбэком, когда резолв не смог -
+# то есть ровно в старом одномодемном случае.
+MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+case "$MMIDX" in ''|*[!0-9]*) MMIDX=any ;; esac
+
 # SMS object path -> index
 sms_index() {
 	echo "${1##*/}"
@@ -55,7 +66,7 @@ fmt_ts() {
 }
 
 list_paths() {
-	LIST=$(mmcli -m any --messaging-list-sms -J 2>/dev/null) || return 1
+	LIST=$(mmcli -m "$MMIDX" --messaging-list-sms -J 2>/dev/null) || return 1
 	jsonfilter -s "$LIST" -e '@["modem.messaging.sms"][*]' 2>/dev/null
 }
 
@@ -81,7 +92,7 @@ cleanup_stale_rx() {
 		BORN=$(date -D '%Y-%m-%dT%H:%M:%S' -d "$TS" +%s 2>/dev/null)
 		if [ -z "$BORN" ] || [ $((NOW - BORN)) -gt "$STALE_RX_SECS" ]; then
 			logger -t sms_tool_mm "dropping stale partial SMS $(sms_index "$P") (stuck in receiving state, blocks reception)"
-			mmcli -m any --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
+			mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
 		fi
 	done
 }
@@ -147,7 +158,7 @@ send)
 		*"'"*) TEXT=$(printf '%s' "$TEXT" | sed "s/'/\xe2\x80\x99/g") ;;
 	esac
 
-	OUT=$(mmcli -m any --messaging-create-sms="text='$TEXT',number='$PHONE'" 2>&1)
+	OUT=$(mmcli -m "$MMIDX" --messaging-create-sms="text='$TEXT',number='$PHONE'" 2>&1)
 	P=$(printf '%s' "$OUT" | grep -o '/org/freedesktop/ModemManager1/SMS/[0-9]*' | head -1)
 	[ -n "$P" ] || { echo "sms not sent, command error" >&2; echo "$OUT" >&2; exit 1; }
 
@@ -155,10 +166,10 @@ send)
 		# same success line as sms_tool (incl. the 'sucessfully' typo)
 		echo "sms sent sucessfully: $(sms_index "$P")"
 		# sms_tool does not keep sent messages - clean up the MM object
-		mmcli -m any --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
+		mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
 	else
 		# do not accumulate drafts
-		mmcli -m any --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
+		mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
 		CODE=$(printf '%s' "$ERR" | sed -n 's/.*Error\.\([^:]*\):.*/\1/p' | head -1)
 		[ -n "$CODE" ] || CODE=$(printf '%s' "$ERR" | head -1)
 		echo "sms not sent, code: $CODE" >&2
@@ -171,11 +182,11 @@ delete)
 	if [ "$A1" = "all" ]; then
 		N=0
 		for P in $(list_paths); do
-			mmcli -m any --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1 && N=$((N + 1))
+			mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1 && N=$((N + 1))
 		done
 		echo "delete msg from 0 to $N"
 	else
-		mmcli -m any --messaging-delete-sms="$A1" >/dev/null 2>&1
+		mmcli -m "$MMIDX" --messaging-delete-sms="$A1" >/dev/null 2>&1
 		echo "delete msg from $A1 to $A1"
 	fi
 	;;

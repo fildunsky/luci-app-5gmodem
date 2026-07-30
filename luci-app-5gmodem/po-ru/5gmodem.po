@@ -3884,3 +3884,9 @@ msgstr "Модем сейчас зарегистрирован в %s, а USSD х
 
 msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings above."
 msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS, которого в LTE нет. Многие модемы всё равно отвечают; если этот молчит — включите «Переводить модем в 3G для USSD» в настройках выше."
+
+msgid "Data is stale (shown from the last snapshot)"
+msgstr "Данные устарели (показан последний снимок)"
+
+msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
+msgstr "Этим модемом управляет ModemManager, и канал управления принадлежит ему. Вторая eSIM-сессия на том же канале может уронить прошивку модема (проверено вживую на T99W175 — модем перезагружается). Для работы с eSIM включите «Скрыть от ModemManager» в настройках модема (или смените протокол интерфейса) и вернитесь сюда."

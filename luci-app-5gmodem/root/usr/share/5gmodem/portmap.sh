@@ -27,10 +27,11 @@
 
 RES=/usr/share/5gmodem
 [ -r "$RES/atlock.sh" ] && . "$RES/atlock.sh"
+[ -r "$RES/lib.sh" ] && . "$RES/lib.sh"   # at_query: очередь + таймаут
 
 _pm_imei() {   # $1 - tty; печатает IMEI либо пусто
 	command -v at_lock >/dev/null 2>&1 && { at_lock "$1" 5 2>/dev/null || return 1; }
-	_pm_i=$(sms_tool -d "$1" at "AT+CGSN" 2>/dev/null | tr -d '\r' \
+	_pm_i=$(at_query "$1" "AT+CGSN" 6 \
 		| grep -xE '[0-9]{14,16}' | head -1)
 	command -v at_unlock >/dev/null 2>&1 && at_unlock 2>/dev/null
 	[ -n "$_pm_i" ] || return 1

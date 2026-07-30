@@ -167,15 +167,29 @@ if [ -n "$MI" ]; then
 		ACT=$(echo "$K" | sed -n 's/^modem\.generic\.primary-sim-slot *: *//p' | tr -dc 0-9)
 		OUT=""
 		if [ -n "$N" ] && [ "$N" -ge 2 ] 2>/dev/null; then
-			L_ALL=""
+			L_ALL=""; P_ALL=""
 			i=1
 			while [ "$i" -le "$N" ]; do
 				# тип слота напрямую из SIM-объекта (MM >= 1.20: sim-type
 				# physical/esim); для пустого слота ("/") тип неизвестен
 				LBL="SIM$i"
 				SP=$(echo "$K" | sed -n "s/^modem\.generic\.sim-slots\.value\[$i\] *: *//p")
+				# ПУСТОЙ СЛОТ MM ОБОЗНАЧАЕТ ПУТЁМ "/" - И ЭТО НАДО ОТДАВАТЬ НАРУЖУ.
+				#
+				# Поле present страница уже умеет читать (гасит кнопку пустого
+				# слота, чтобы переключение не оставило модем без SIM), но
+				# заполняла его только QMI-ветка. Под ModemManager обе кнопки
+				# выглядели одинаково рабочими.
+				#
+				# Живой отчёт (два T99W175 на ZBT, 30.07): у модема без карты MM
+				# отдал sim-slots.length=2, primary-sim-slot=1 и ОБА пути "/",
+				# то есть «два слота, оба пустые». Мы печатали
+				# {"id":"1","label":"SIM1"},{"id":"2","label":"SIM2"} без признака
+				# пустоты, и человек читал это как показ чужой, вставленной SIM.
+				_PR=0
 				case "$SP" in
 					/org/*)
+						_PR=1
 						ST=$(mmcli --sim "$SP" -K 2>/dev/null \
 							| sed -n 's/^sim\.properties\.sim-type *: *//p' | tr -d ' ')
 						case "$ST" in
@@ -185,17 +199,18 @@ if [ -n "$MI" ]; then
 						;;
 				esac
 				L_ALL="$L_ALL $LBL"
+				P_ALL="$P_ALL $_PR"
 				[ -n "$OUT" ] && OUT="$OUT,"
-				OUT="$OUT{\"id\":\"$i\",\"label\":\"$LBL\"}"
+				OUT="$OUT{\"id\":\"$i\",\"label\":\"$LBL\",\"present\":\"$_PR\"}"
 				i=$((i + 1))
 			done
 			# одинаковые метки (напр. две физические SIM) - вернуть номерные
 			if [ "$(echo $L_ALL | tr ' ' '\n' | sort | uniq -d)" != "" ]; then
 				OUT=""
 				i=1
-				while [ "$i" -le "$N" ]; do
+				for _pr in $P_ALL; do
 					[ -n "$OUT" ] && OUT="$OUT,"
-					OUT="$OUT{\"id\":\"$i\",\"label\":\"SIM$i\"}"
+					OUT="$OUT{\"id\":\"$i\",\"label\":\"SIM$i\",\"present\":\"$_pr\"}"
 					i=$((i + 1))
 				done
 			fi
@@ -307,13 +322,23 @@ fi
 # устаревший tty (команда уходит в никуда, а «успех без ответа» ложно
 # засчитывался). Проверяем порт bounded-пробой; при провале берём первый
 # отвечающий tty АКТИВНОГО модема (не всех - иначе можно попасть в другой).
+# ТОЛЬКО ПОРТЫ ЭТОГО МОДЕМА. Оговорка «не всех - иначе можно попасть в другой»
+# стояла здесь и раньше, но защищала лишь ВТОРУЮ ветку: ответ detect.sh
+# принимался сразу, как только отвечал на AT, а он при путанице отдаёт порт
+# чужого модема. Ставка тут выше, чем где-либо: AT+GTDUALSIM=<n> /
+# AT+CEISWITCHSIM=<n> ФИЗИЧЕСКИ переключат слот SIM у соседа, и человек получит
+# не ту карту в не том модеме.
+# Список портов даёт реестр; ответ detect.sh пробуем первым, лишь если он
+# принадлежит этому модему (так дешёвый путь сохраняется).
 live_port() {
+	_LPT=$(/usr/share/5gmodem/registry.sh active 2>/dev/null \
+		| jsonfilter -e '@.tty[*]' 2>/dev/null | tr '\n' ' ')
+	[ -n "$_LPT" ] || return 1
 	_D=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
-	[ -n "$_D" ] && /usr/share/5gmodem/atprobe.sh "$_D" >/dev/null 2>&1 && { echo "$_D"; return 0; }
-	_P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-	[ -n "$_P" ] || return 1
-	for _t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-			| jsonfilter -e "@[@.path=\"$_P\"].tty[*]" 2>/dev/null); do
+	case " $_LPT " in
+		*" $_D "*) _LPT="$_D $_LPT" ;;
+	esac
+	for _t in $_LPT; do
 		[ -e "$_t" ] || continue
 		/usr/share/5gmodem/atprobe.sh "$_t" >/dev/null 2>&1 && { echo "$_t"; return 0; }
 	done
@@ -345,7 +370,7 @@ fi
 # его НЕТ, поэтому AT-ветка отдавала пустой список слотов и в mbim-режиме кнопок
 # переключения не было вовсе. Там слоты живут за +CEISWITCHSIM (см. ниже).
 at_has_gtdualsim() {
-	sms_tool -d "$D" at "AT+GTDUALSIM=?" 2>/dev/null | tr -d '\r' | grep -qE '\(0[-,]1\)'
+	at_query "$D" "AT+GTDUALSIM=?" 6 | grep -qE '\(0[-,]1\)'
 }
 
 # Переподнять интерфейс активного модема ПОСЛЕ смены слота.
@@ -374,13 +399,20 @@ slot_redial() {
 case "$1" in
 set)
 	[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+	# Номер слота уходит прямо в AT-команду (AT+GTDUALSIM=$2 / AT+CEISWITCHSIM=$2),
+	# поэтому проверяем до использования: в AT-канале возврат каретки внутри
+	# значения превращает одну команду в две. Предикат - в lib.sh.
+	if command -v is_num >/dev/null 2>&1 && ! is_num "$2"; then
+		logger -t 5gmodem "simslot: отклонён номер слота"
+		echo '{"error":"bad slot"}'; exit 0
+	fi
 	if at_has_gtdualsim; then
-		O=$(sms_tool -d "$D" at "AT+GTDUALSIM=$2" 2>/dev/null)
+		O=$(at_query "$D" "AT+GTDUALSIM=$2" 8)
 	else
 		# Compal: id - номер ФИЗИЧЕСКОГО слота (1/2). Команда переназначает этот
 		# слот на интерфейс SIM1 модема (AT+CEISWITCHSIM=? -> "1:Set physical SIM
 		# SLOT 1 to SIM1, 2:Set physical SIM SLOT 2 to SIM1").
-		O=$(sms_tool -d "$D" at "AT+CEISWITCHSIM=$2" 2>/dev/null)
+		O=$(at_query "$D" "AT+CEISWITCHSIM=$2" 8)
 	fi
 	# Ошибка - только явный ERROR. Пустой ответ = успех: модем (FM350) после
 	# смены слота мгновенно ресетится/переперечисляется и не успевает ответить
@@ -399,14 +431,14 @@ set)
 	TYPE=""; ACT=""
 	# Fibocom-команды шлём только тем, у кого они есть (или кого ещё не знаем).
 	if [ "$_VIA" != ceiswitchsim ]; then
-		T=$(sms_tool -d "$D" at "AT+SIMTYPE?" 2>/dev/null | tr -d '\r' \
+		T=$(at_query "$D" "AT+SIMTYPE?" 6 \
 			| sed -n 's/^+SIMTYPE: *\([0-9]\).*/\1/p' | head -1)
 		case "$T" in
 			0) TYPE="USIM";;
 			1) TYPE="eSIM";;
 		esac
 		# активный слот: «+GTDUALSIM : 0, "SUB1", "L"» (пробел перед ':' бывает)
-		ACT=$(sms_tool -d "$D" at "AT+GTDUALSIM?" 2>/dev/null | tr -d '\r' \
+		ACT=$(at_query "$D" "AT+GTDUALSIM?" 6 \
 			| sed -n 's/^+GTDUALSIM *: *\([0-9]\).*/\1/p' | head -1)
 	fi
 	# ЗАПОМНИТЬ тип активного слота (SIMTYPE читает только текущий, поэтому
@@ -427,7 +459,7 @@ set)
 	}
 	# «+GTDUALSIM: (0-1)» или «(0,1)» = у прошивки два слота
 	OUT=""
-	R=$(sms_tool -d "$D" at "AT+GTDUALSIM=?" 2>/dev/null | tr -d '\r' | grep -i '^+GTDUALSIM' | head -1)
+	R=$(at_query "$D" "AT+GTDUALSIM=?" 6 | grep -i '^+GTDUALSIM' | head -1)
 	if echo "$R" | grep -qE '\(0[-,]1\)'; then
 		L0=$(slot_label 0 SIM0)
 		L1=$(slot_label 1 SIM1)

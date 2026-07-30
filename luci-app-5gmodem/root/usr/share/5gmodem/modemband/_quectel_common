@@ -15,3 +15,109 @@ setbands() {
 	HEX=$(bandstohex "$BANDS")
 	[ "$HEX" != "0" ] && sms_tool -d $_DEVICE at "at+qcfg=\"band\",0,$HEX,0,1"
 }
+
+# --- РЕЖИМ СЕТИ И ДИАПАЗОНЫ 2G/3G (opt-in) -----------------------------------
+#
+# Включается ПЕРЕМЕННЫМИ ПРОФИЛЯ - у моделей, где ниженаписанное не проверено
+# (5G-семейство RM5xx живёт другими командами), всё остаётся как было:
+#   _QMODES           - "id:подпись ..." для селектора режима (nwscanmode);
+#   _DEFAULT_2G_BANDS - частоты GSM ("900 1800");
+#   _DEFAULT_3G_BANDS - номера бендов WCDMA ("1 5 8").
+#
+# ПРИЧУДА СИНТАКСИСА (проверено на живом EC21-E): ЗАПИСЬ принимает hex только
+# БЕЗ префикса «0x» - `...,93,...` применяется, `...,0x93,...` МОЛЧА игнорируется
+# (модем отвечает как на чтение). Чтение при этом отдаёт с префиксом. Поэтому
+# пишем printf '%x' - ровно как давно делает bandstohex в LTE-пути.
+#
+# МАТЧАСТЬ. Первый аргумент at+qcfg="band" - ОДНА ОБЩАЯ маска GSM+WCDMA
+# (живое чтение EC21-E: 0xd3 = GSM900 0x1 + GSM1800 0x2 + WCDMA B1 0x10 +
+# B5 0x40 + B8 0x80), второй - маска LTE, третий - TDD. Ноль в аргументе
+# означает «не менять» (этим уже пользуется setbands выше: пишет ,0,LTE,0).
+# Но ноль работает ПОАРГУМЕНТНО, а 2G и 3G живут в ОДНОМ аргументе - поэтому
+# запись 2G обязана сохранить биты 3G и наоборот: читаем текущую маску,
+# меняем только свою половину.
+#
+# Карта битов - по руководству Quectel EC2x/EG2x AT Commands (подтверждена
+# живым чтением для GSM900/1800 и WCDMA B1/B5/B8); биты выше 0x80 на живом
+# железе не проверялись - добавлять по мере появления моделей.
+_q2g_bit() {
+	case "$1" in
+		900) echo 1 ;; 1800) echo 2 ;; 850) echo 4 ;; 1900) echo 8 ;;
+		*) echo 0 ;;
+	esac
+}
+_q3g_bit() {
+	case "$1" in
+		1) echo 16 ;; 2) echo 32 ;; 5) echo 64 ;; 8) echo 128 ;;
+		*) echo 0 ;;
+	esac
+}
+_q_gw_mask() {   # текущая GSM+WCDMA маска (десятичным числом)
+	# Сначала отфильтровать строку ответа: sms_tool печатает и ЭХО команды, а у
+	# эха нет ни «:», ни «,» - awk отдавал по нему пустое поле, head -1 брал
+	# именно его, и маска всегда выходила нулевой (enabled3g пустел молча).
+	_qg=$(sms_tool -d $_DEVICE at "at+qcfg=\"band\"" | grep -i '+QCFG:' \
+		| awk -F[:,] '{print $3}' | tr -d '\r ' | head -1)
+	case "$_qg" in 0x*|0X*) echo $((_qg)) ;; *) echo 0 ;; esac
+}
+
+getsupportedbands2g() {
+	echo "${_DEFAULT_2G_BANDS:-Unsupported}"
+}
+getbands2g() {
+	[ -n "$_DEFAULT_2G_BANDS" ] || { echo "Unsupported"; return; }
+	_m=$(_q_gw_mask); _out=""
+	for _b in $_DEFAULT_2G_BANDS; do
+		[ $(( _m & $(_q2g_bit "$_b") )) -ne 0 ] && _out="$_out $_b"
+	done
+	echo $_out
+}
+setbands2g() {
+	[ -n "$_DEFAULT_2G_BANDS" ] || { echo "Unsupported"; return; }
+	_want="$1"
+	[ "$_want" = "default" ] && _want="$_DEFAULT_2G_BANDS"
+	_m=$(_q_gw_mask)
+	# гасим все известные 2G-биты, затем поднимаем выбранные; 3G-половина цела
+	for _b in 900 1800 850 1900; do _m=$(( _m & ~$(_q2g_bit "$_b") )); done
+	for _b in $_want; do _m=$(( _m | $(_q2g_bit "$_b") )); done
+	[ "$_m" = 0 ] && { echo "ERROR: empty band mask"; return; }
+	sms_tool -d $_DEVICE at "at+qcfg=\"band\",$(printf '%x' "$_m"),0,0,1"
+}
+
+bands3g_style() { echo "mask"; }
+getsupportedbands3g() {
+	echo "${_DEFAULT_3G_BANDS:-Unsupported}"
+}
+getbands3g() {
+	[ -n "$_DEFAULT_3G_BANDS" ] || { echo "Unsupported"; return; }
+	_m=$(_q_gw_mask); _out=""
+	for _b in $_DEFAULT_3G_BANDS; do
+		[ $(( _m & $(_q3g_bit "$_b") )) -ne 0 ] && _out="$_out $_b"
+	done
+	echo $_out
+}
+setbands3g() {
+	[ -n "$_DEFAULT_3G_BANDS" ] || { echo "Unsupported"; return; }
+	_want="$1"
+	[ "$_want" = "default" ] && _want="$_DEFAULT_3G_BANDS"
+	_m=$(_q_gw_mask)
+	for _b in 1 2 5 8; do _m=$(( _m & ~$(_q3g_bit "$_b") )); done
+	for _b in $_want; do _m=$(( _m | $(_q3g_bit "$_b") )); done
+	[ "$_m" = 0 ] && { echo "ERROR: empty band mask"; return; }
+	sms_tool -d $_DEVICE at "at+qcfg=\"band\",$(printf '%x' "$_m"),0,0,1"
+}
+
+# Режим сети: nwscanmode 0=Auto 1=GSM 2=WCDMA 3=LTE; ,1 в конце - применить сразу.
+getsupportedmodes() {
+	echo "${_QMODES:-Unsupported}"
+}
+getmode() {
+	[ -n "$_QMODES" ] || { echo "Unsupported"; return; }
+	sms_tool -d $_DEVICE at "at+qcfg=\"nwscanmode\"" \
+		| sed -n 's/.*"nwscanmode",\([0-9]\).*/\1/p' | head -1
+}
+setmode() {
+	[ -n "$_QMODES" ] || { echo "Unsupported"; return; }
+	case "$1" in ''|*[!0-9]*) echo "ERROR: bad mode"; return ;; esac
+	sms_tool -d $_DEVICE at "at+qcfg=\"nwscanmode\",$1,1"
+}

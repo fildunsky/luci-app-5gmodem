@@ -14,6 +14,7 @@
 #   buttons.sh set <name> <pressed|released> [command]   # пусто = снять действие
 #   buttons.sh run <name> <action> <seen>                # из hotplug-диспетчера
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null   # note_foreign_uci
 CFG=5gmodem
 LEDS_DIR="${LEDS_DIR:-/sys/class/leds}"
 
@@ -258,6 +259,7 @@ setleds)
 	# чтобы netdev и пр. не возвращали яркость. Только для реально выбранных
 	# (on/off); «не трогать» в спеку не попадает.
 	if [ -n "$4" ]; then
+		note_foreign_uci system "buttons leds"
 		_any=0
 		for _kv in $4; do
 			_ln="${_kv%=*}"

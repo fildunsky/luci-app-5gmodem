@@ -82,7 +82,9 @@ is_compal() {
 	# роутере сюда попадал СОСЕДНИЙ Compal (Telit с молчащим QMI засчитывался
 	# за Compal - воспроизведено на стенде).
 	if command -v mmcli >/dev/null 2>&1; then
-		_ic_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+		# Путь известен - спрашиваем индекс ИМЕННО ЕГО (mmindex умеет принимать
+		# путь). Сверка device ниже остаётся: она дешёвая и ловит рассинхрон.
+		_ic_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex ${_ic_path:+"$_ic_path"} 2>/dev/null)
 		[ -n "$_ic_mi" ] || _ic_mi=any
 		_ic_mk=$(mmcli -m "$_ic_mi" -K 2>/dev/null)
 		if [ -n "$_ic_path" ]; then
@@ -93,8 +95,10 @@ is_compal() {
 
 	# 4) AT - последний рубеж: дороже всего и порт может быть занят.
 	if [ -n "$_ic_at" ] && [ -c "$_ic_at" ]; then
-		sms_tool -d "$_ic_at" at "AT+CGMM" 2>/dev/null \
-			| grep -q "SG500M2-X" && return 0
+		# at_query, а не sms_tool напрямую: он берёт очередь к порту и ограничивает
+		# время. Раньше запрос шёл без очереди, и параллельный читатель мог забрать
+		# ответ - модем тогда «не опознавался» без всякой причины.
+		at_query "$_ic_at" "AT+CGMM" 6 | grep -q "SG500M2-X" && return 0
 	fi
 
 	return 1

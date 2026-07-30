@@ -14,10 +14,11 @@
 
 
 
-/* See readsms.js: SMS via the mmcli wrapper for ModemManager-managed modems */
-function smsToolBin() {
-	return uci.get('5gmodem', 'sms', 'sms_via_mm') == '1' ? '/usr/share/5gmodem/sms_tool_mm' : '/usr/bin/sms_tool';
-}
+/* ВЫБОР БИНАРЯ ПЕРЕЕХАЛ В smsbridge.sh. Раньше виджет сам решал, звать sms_tool
+   или sms_tool_mm, и исполнял бинарь напрямую - для этого в ACL был разрешён exec
+   на /usr/bin/sms_tool, а через него из браузера уходили любые аргументы. Теперь
+   транспорт выбирает скрипт (он же знает про очередь к порту), а виджету
+   достаточно глагола. Формат ответа тот же - строка «Storage type: …». */
 
 return baseclass.extend({
 	title: _('Modems'),
@@ -208,7 +209,7 @@ return baseclass.extend({
 		let storageType = storage || 'MS';
 		
 		return L.resolveDefault(
-			fs.exec(smsToolBin(), ['-s', storageType, '-d', comm_port, 'status']),
+			fs.exec('/usr/share/5gmodem/smsbridge.sh', [ 'status', storageType, comm_port ]),
 			null
 		).then(function(res) {
 			if (!res || res.code !== 0) return 0;

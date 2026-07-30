@@ -86,7 +86,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 # .apk (OpenWrt 25.12.x)
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.8/luci-app-5gmodem-2.0.8-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.9/luci-app-5gmodem-2.0.9-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -106,7 +106,7 @@ apk add /tmp/lpac.apk --allow-untrusted
 # .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.8/luci-app-5gmodem_2.0.8-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.9/luci-app-5gmodem_2.0.9-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
@@ -162,6 +162,30 @@ make package/luci-app-5gmodem/compile V=s
 ```
 
 CI (`.github/workflows/build.yml`) builds `.ipk`/`.apk` on every tag and attaches them to the release; it can also be triggered manually from the Actions tab.
+
+## Permissions
+
+The app runs as **root** and exposes its capabilities through the ACL group
+`luci-app-5gmodem` (`/usr/share/rpcd/acl.d/`). That group is **root-equivalent**,
+which matters before granting it to anyone but a full administrator:
+
+- it allows sending **any AT command** to the modem (via `atcmd.sh` - the AT
+  console needs that by design). The `sms_tool` binary itself is no longer in the
+  ACL: through it the browser could also run `send`, `delete all` and reach
+  foreign `/dev/*`, with nothing able to check the arguments;
+- ~~writing `/etc/crontabs/root`~~ — **removed**. That right existed only for the
+  SMS-notifier restart schedule; `smscron.sh` now owns it, touching just its own
+  line and validating the interval. Other cron jobs are neither read nor changed. A full administrator still has
+  that capability - through LuCI's own "Scheduled Tasks" page, which is where it
+  belongs;
+- reading the `5gmodem` config exposes the SMTP password for SMS forwarding if
+  one is set (OpenWrt keeps passwords in `/etc/config` in clear text, the same
+  way it keeps the Wi-Fi key).
+
+Do not grant this group to a restricted role such as "an operator who may only
+look at the modems". There is no way around it: argument filtering lives in the
+page, and the page runs in the user's browser. Such a role would need its own set
+of narrow calls, not a subset of this group.
 
 ## Credits
 

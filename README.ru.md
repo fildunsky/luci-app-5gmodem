@@ -89,7 +89,7 @@
 
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.8/luci-app-5gmodem-2.0.8-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.9/luci-app-5gmodem-2.0.9-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -114,7 +114,7 @@ apk add /tmp/lpac.apk --allow-untrusted
 
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.8/luci-app-5gmodem_2.0.8-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.0.9/luci-app-5gmodem_2.0.9-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
@@ -191,6 +191,32 @@ make package/luci-app-5gmodem/compile V=s
 
 CI (`.github/workflows/build.yml`) собирает `.ipk` и `.apk` на каждый тег и
 прикладывает их к релизу; сборку можно запустить и вручную со вкладки Actions.
+
+## Права доступа
+
+Приложение работает от **root** и раздаёт свои возможности через ACL-группу
+`luci-app-5gmodem` (`/usr/share/rpcd/acl.d/`). Эта группа **равносильна root**, и
+это стоит понимать до того, как выдать её кому-то, кроме полного администратора:
+
+- в ней разрешено посылать модему **любую AT-команду** (через `atcmd.sh` —
+  консоли AT это нужно по назначению), включая смену настроек модема и запись в
+  его память. Сам бинарь `sms_tool` из ACL убран: через него уходили и `send`, и
+  `delete all`, и обращения к чужим `/dev/*`, а проверить это было нечем;
+- ~~запись `/etc/crontabs/root`~~ — **убрано**. Право нужно было ровно для
+  расписания перезапуска уведомителя SMS; теперь этим занимается `smscron.sh`,
+  который трогает только свою строку и проверяет интервал. Чужие задания cron
+  приложение не видит и не меняет. Полному администратору эта возможность
+  по-прежнему доступна — но через штатную страницу LuCI «Запланированные
+  задания», и это её законное место, а не наше;
+- чтение конфига `5gmodem` открывает пароль SMTP для пересылки SMS, если он
+  задан (в OpenWrt пароли в `/etc/config` лежат открытым текстом — так же живёт
+  и ключ Wi-Fi).
+
+Ограниченной роли — «оператору, которому можно только смотреть модемы» — эту
+группу выдавать нельзя: обхода тут нет, потому что фильтр значений живёт на
+странице, а страница выполняется у пользователя в браузере. Если такая роль
+понадобится, её надо делать отдельным набором узких вызовов, а не подмножеством
+этой группы.
 
 ## Благодарности
 

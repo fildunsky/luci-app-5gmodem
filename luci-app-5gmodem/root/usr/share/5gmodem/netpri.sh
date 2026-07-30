@@ -19,8 +19,57 @@ wan_nets() {
 . /usr/share/5gmodem/atlock.sh
 . /usr/share/5gmodem/lib.sh
 
-ifup_state()  { ifstatus "$1" 2>/dev/null | jsonfilter -e "$2" 2>/dev/null; }
-json_esc()    { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+# СОСТОЯНИЕ ИНТЕРФЕЙСОВ - ОДНИМ ДАМПОМ НА ВЕСЬ ВЫЗОВ.
+#
+# ifup_state = `ifstatus <if> | jsonfilter` - ДВА процесса на КАЖДОЕ поле, а поля
+# спрашиваются по три-четыре на интерфейс (тип, l3_device, адрес). На стенде это
+# давало 11 ifstatus за один `netpri.sh list` из ~145 подпроцессов и 690 мс, и всё
+# это каждые 5 c при открытой странице.
+#
+# `ubus call network.interface dump` отдаёт ВСЕ интерфейсы сразу, и выборка по
+# нему даёт тот же ответ (сверено на стенде побайтово с ifstatus). Дамп берётся
+# явно - тем, кто читает пачкой; без него поведение прежнее, так что вызывающие
+# вне списка ничего не теряют.
+_IFDUMP=""
+ifdump_snapshot() { _IFDUMP=$(ubus call network.interface dump 2>/dev/null); }
+ifdump_drop() { _IFDUMP=""; }
+ifup_state() {
+	if [ -n "$_IFDUMP" ]; then
+		printf '%s' "$_IFDUMP" \
+			| jsonfilter -e "@.interface[@.interface=\"$1\"]${2#@}" 2>/dev/null | head -1
+		return
+	fi
+	ifstatus "$1" 2>/dev/null | jsonfilter -e "$2" 2>/dev/null
+}
+# Имена интерфейсов из дампа (для поиска детей "<имя>_4"): без дампа - как раньше.
+_ifdump_names() {
+	if [ -n "$_IFDUMP" ]; then
+		printf '%s' "$_IFDUMP" | jsonfilter -e '@.interface[*].interface' 2>/dev/null
+		return
+	fi
+	ubus call network.interface dump 2>/dev/null | jsonfilter -e '@.interface[*].interface' 2>/dev/null
+}
+# Экранирование для JSON. sed зовём ТОЛЬКО когда экранировать реально нечего -
+# то есть почти никогда: в именах интерфейсов, моделях и операторах кавычек и
+# обратных слэшей не бывает, а процесс на каждое поле - это 4 поля на аплинк.
+json_esc() {
+	case "$1" in
+		*\\*|*\"*) printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' ;;
+		*)         printf '%s' "$1" ;;
+	esac
+}
+
+# СНИМОК ПЕРЕЧИСЛЕНИЯ МОДЕМОВ на один вызов. listmodems.sh спрашивался трижды за
+# один `list`: список присутствующих путей и по разу на каждый модем в model_for.
+# У самого listmodems есть кэш (9 мс тёплый), но каждый вызов - это ещё fork+shell,
+# а мы в цикле. Снимок берётся явно, как и остальные (см. ifdump_snapshot).
+_LM_SNAP=""
+lm_snapshot() { _LM_SNAP=$("/usr/share/5gmodem/listmodems.sh" 2>/dev/null); }
+lm_drop() { _LM_SNAP=""; }
+_lm() {
+	[ -n "$_LM_SNAP" ] && { printf '%s' "$_LM_SNAP"; return; }
+	"/usr/share/5gmodem/listmodems.sh" 2>/dev/null
+}
 
 # IPv4 of an uplink. qmi/dhcp modems keep the real address on a dynamically
 # created child interface "<name>_4" (the parent "<name>" stays up but IP-less),
@@ -29,34 +78,57 @@ iface_ip() {
 	p="$1"
 	ip=$(ifup_state "$p" '@["ipv4-address"][0].address')
 	[ -n "$ip" ] && { echo "$ip"; return; }
-	for c in $(ubus call network.interface dump 2>/dev/null \
-		| jsonfilter -e '@.interface[*].interface' 2>/dev/null | grep -E "^${p}_"); do
+	for c in $(_ifdump_names | grep -E "^${p}_"); do
 		ip=$(ifup_state "$c" '@["ipv4-address"][0].address')
 		[ -n "$ip" ] && { echo "$ip"; return; }
 	done
 }
 
-# uplink kind: wan | modem | wifi | other. Modem interfaces are checked BEFORE the
-# Wi-Fi guess, because a modem's l3_device can be wwanN (must not read as Wi-Fi).
-modem_section() { sec_for_iface "$1"; }   # см. lib.sh
+# СЕКЦИЯ МОДЕМА ПО ИНТЕРФЕЙСУ - С ЗАПОМИНАНИЕМ ОТВЕТА.
+#
+# Реализация одна (sec_for_iface в lib.sh), здесь только память на ответ: за один
+# `list` она спрашивается по цепочке is_modem -> iface_type -> modem_path_for ->
+# model_for -> label_for, то есть 4-6 раз НА КАЖДЫЙ интерфейс с одинаковым
+# результатом. Ключ - имя интерфейса; в пределах одного вызова конфиг не меняется
+# (list только читает).
+_MS_KEYS=""; _MS_VALS=""
+modem_section() {
+	[ -n "$1" ] || return 1
+	# Поиск в плоском списке "iface=секция iface=секция ..." - без подпроцессов.
+	case " $_MS_KEYS " in
+		*" $1 "*)
+			for _msp in $_MS_VALS; do
+				case "$_msp" in
+					"$1="*) printf '%s' "${_msp#*=}"; return 0 ;;
+				esac
+			done
+			return 0 ;;
+	esac
+	_msv=$(sec_for_iface "$1")
+	_MS_KEYS="$_MS_KEYS $1"
+	_MS_VALS="$_MS_VALS $1=$_msv"
+	printf '%s' "$_msv"
+}
 # Является ли $1 модем-интерфейсом? Мульти-модем -> m_*-секция; одиночный
 # (legacy) конфиг -> @5gmodem[0].network указывает на этот интерфейс.
 is_modem() {
 	[ -n "$(modem_section "$1")" ] && return 0
-	[ -n "$1" ] && [ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && return 0
+	[ -n "$1" ] && [ "$1" = "$(uci5g_get "@5gmodem[0]" network)" ] && return 0
 	return 1
 }
 # USB-путь и AT-порт модема, обслуживающего $1, независимо от стиля конфига.
 modem_path_for() {
 	s=$(modem_section "$1")
-	if [ -n "$s" ]; then uci -q get "5gmodem.$s.path"; return; fi
-	[ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && uci -q get 5gmodem.@5gmodem[0].active_modem
+	if [ -n "$s" ]; then uci5g_get "$s" path; return; fi
+	[ "$1" = "$(uci5g_get "@5gmodem[0]" network)" ] && uci5g_get "@5gmodem[0]" active_modem
 }
 modem_atport_for() {
 	s=$(modem_section "$1")
-	if [ -n "$s" ]; then uci -q get "5gmodem.$s.at_port"; return; fi
-	[ "$1" = "$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)" ] && uci -q get 5gmodem.@5gmodem[0].at_port
+	if [ -n "$s" ]; then uci5g_get "$s" at_port; return; fi
+	[ "$1" = "$(uci5g_get "@5gmodem[0]" network)" ] && uci5g_get "@5gmodem[0]" at_port
 }
+# uplink kind: wan | modem | wifi | other. Modem interfaces are checked BEFORE the
+# Wi-Fi guess, because a modem's l3_device can be wwanN (must not read as Wi-Fi).
 iface_type() {
 	i="$1"
 	is_modem "$i" && { echo modem; return; }
@@ -71,25 +143,21 @@ iface_type() {
 	echo other
 }
 
-# bounded AT query (~5s cap) so a wedged port can't freeze the caller
-at_query() {
-	D="$1"; C="$2"; tmp="/tmp/netpri_at.$$"
-	# Очередь к порту: имя оператора спрашивается на КАЖДОЙ загрузке страницы
-	# «Приоритет интернета», одновременно с опросом метрик. Ждём НЕДОЛГО -
-	# задерживать страницу ради фоновой справки нельзя.
-	#
-	# НЕ ДОЖДАЛИСЬ - УХОДИМ СОВСЕМ, а не лезем в порт без очереди. Иначе смысл
-	# очереди терялся ровно там, где она нужнее всего: под нагрузкой этот вызов
-	# чаще прочих не успевал взять блокировку и шёл поверх чужого обмена, портя
-	# данные ТОМУ, кто дождался. Потерять одно обновление имени оператора дёшево -
-	# оно кэшируется, и его же пишет основной опрос метрик.
-	at_lock "$D" 3 || { logger -t 5gmodem "netpri: порт занят, имя оператора берём из кэша"; return 0; }
-	sms_tool -d "$D" at "$C" >"$tmp" 2>/dev/null &
-	# fd отвязаны ОТ ПОДОБОЛОЧКИ (см. atprobe.sh): осиротевший `sleep` иначе
-	# держит stdout и добавляет 5 c к ответу «Приоритета интернета».
-	p=$!; ( sleep 5; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & k=$!
-	wait "$p" 2>/dev/null; kill "$k" 2>/dev/null; wait "$k" 2>/dev/null
-	cat "$tmp" 2>/dev/null; rm -f "$tmp"
+# AT-запрос - через общий at_query из lib.sh (очередь к порту, таймаут, проверка
+# команды). Здесь была своя копия; она отличалась только параметрами, и они теперь
+# передаются аргументами: таймаут 5 c, ожидание очереди 3 c.
+#
+# ЖДЁМ НЕДОЛГО И УХОДИМ. Имя оператора спрашивается на КАЖДОЙ загрузке страницы
+# «Приоритет интернета», одновременно с опросом метрик. Задерживать страницу ради
+# фоновой справки нельзя, а лезть в порт без очереди - тем более: под нагрузкой
+# этот вызов чаще прочих не успевал взять блокировку и портил данные ТОМУ, кто
+# дождался. Потерять одно обновление имени дёшево - оно кэшируется, и его же
+# пишет основной опрос метрик. Код 2 от at_query означает ровно «порт занят».
+_npri_at() {   # $1 - порт, $2 - команда
+	at_query "$1" "$2" 5 3
+	_na_rc=$?
+	[ "$_na_rc" = 2 ] && logger -t 5gmodem "netpri: порт занят, имя оператора берём из кэша"
+	return 0
 }
 
 # Cache-ONLY operator name (no AT, always instant). Empty if not cached / stale.
@@ -137,22 +205,39 @@ operator_probe() {
 	# HiLink: имя оператора спрашиваем у его веб-API - AT-порта у такого модема
 	# может не быть вовсе. Делаем это ЗДЕСЬ, в фоне, а не в "list".
 	_op_sec=$(sec_for_iface "$i")
-	if [ -n "$_op_sec" ] && [ "$(uci -q get "5gmodem.$_op_sec.kind")" = "hilink" ]; then
-		_op_p=$(uci -q get "5gmodem.$_op_sec.path")
+	if [ -n "$_op_sec" ] && [ "$(uci5g_get "$_op_sec" kind)" = "hilink" ]; then
+		_op_p=$(uci5g_get "$_op_sec" path)
 		_op_n=$(/usr/share/5gmodem/hilink.sh json "$_op_p" 2>/dev/null \
 			| jsonfilter -e '@.operator_name' 2>/dev/null)
-		[ -n "$_op_n" ] || _op_n=$(uci -q get "5gmodem.$_op_sec.model")
+		[ -n "$_op_n" ] || _op_n=$(uci5g_get "$_op_sec" model)
 		[ -n "$_op_n" ] && printf '%s' "$_op_n" > "/tmp/netpri_op_$i"
 		return
 	fi
 	# MM-модемы: имя оператора берём из mmcli (AT+COPS конфликтует с
 	# ModemManager, который держит порт, и на MBIM/QMI часто пуст).
-	if [ "$(uci -q get "network.$i.proto")" = "modemmanager" ]; then
-		mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	if [ "$(ucinet_get "$i" proto)" = "modemmanager" ]; then
+		# ИНДЕКС ИМЕННО ЭТОГО МОДЕМА, А НЕ АКТИВНОГО.
+		#
+		# Здесь стоял безадресный mmindex, то есть индекс активного модема, а имя
+		# записывалось в кэш опрашиваемого ($i). На двухмодемной машине это прямая
+		# подмена: у человека с двумя T99W175 (30.07) модем БЕЗ SIM показывал
+		# оператора соседа - и держал его 30 минут, пока жив кэш. Путь модема
+		# стабилен, привязка «интерфейс -> путь» уже есть в modem_path_for.
+		# Путь неизвестен - НЕ спрашиваем вовсе: пустой аргумент у mmindex
+		# означает «активный», а это ровно та подмена, от которой уходим.
+		_op_path=$(modem_path_for "$i")
+		mi=""
+		[ -n "$_op_path" ] && mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_op_path" 2>/dev/null)
 		if [ -n "$mi" ]; then
-			nm=$(mmcli -m "$mi" -K 2>/dev/null \
-				| sed -n 's/^modem\.3gpp\.operator-name *: *//p' | head -1)
-			[ -n "$nm" ] && [ "$nm" != "--" ] && { printf '%s' "$nm" > "/tmp/netpri_op_$i"; return; }
+			_mk=$(mmcli -m "$mi" -K 2>/dev/null)
+			nm=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.3gpp\.operator-name *: *//p' | head -1)
+			# Тот же последний шаг, что в AT-ветке: mmcli отдаёт имя СЕТИ
+			# («MegaFon RUS»), а показывать надо выверенное («Megafon»), иначе
+			# список и карточка подписаны по-разному (см. opname_pretty).
+			_mc=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.3gpp\.operator-code *: *//p' | head -1)
+			[ "$_mc" = "--" ] && _mc=""
+			[ -n "$nm" ] && [ "$nm" != "--" ] && {
+				printf '%s' "$(opname_pretty "$_mc" "$nm")" > "/tmp/netpri_op_$i"; return; }
 		fi
 		# ИМЕНИ НЕТ - НА ЭТОМ И ЗАКАНЧИВАЕМ. Раньше отсюда проваливались в перебор
 		# AT-портов ниже, и это било по самому больному: у модема под MM порты
@@ -168,13 +253,12 @@ operator_probe() {
 	path=$(modem_path_for "$i")
 	cands=$(modem_atport_for "$i")
 	if [ -n "$path" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
-		cands="$cands $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-			| jsonfilter -e "@[@.path=\"$path\"].tty[*]" 2>/dev/null)"
+		cands="$cands $(_lm | jsonfilter -e "@[@.path=\"$path\"].tty[*]" 2>/dev/null)"
 	fi
 	for port in $cands; do
 		[ -n "$port" ] && [ -e "$port" ] || continue
 		# "=3,0" selects long alphanumeric format (read-only), then query
-		name=$(at_query "$port" "AT+COPS=3,0;+COPS?" | tr -d '\r' \
+		name=$(_npri_at "$port" "AT+COPS=3,0;+COPS?" | tr -d '\r' \
 			| sed -n 's/.*+COPS[^"]*"\([^"]*\)".*/\1/p' | head -1)
 		# collapse a doubled long name ("T-Mobile T-Mobile" -> "T-Mobile")
 		name=$(printf '%s' "$name" | awk '{
@@ -182,13 +266,24 @@ operator_probe() {
 				for(j=1;j<=h;j++) if($j!=$(j+h)) same=0;
 				if(same){ s=$1; for(j=2;j<=h;j++) s=s" "$j; print s; next } }
 			print }')
-		# Нет буквенного имени (многие MBIM/QMI отдают только числовой код) ->
-		# берём числовой код (формат 2) и имя из mccmnc.dat, как в 5gmodem.sh.
+		# ЧИСЛОВОЙ КОД НУЖЕН ВСЕГДА, а не только когда имени нет.
+		#
+		# Раньше формат 2 спрашивался лишь как фолбэк при пустом/числовом имени.
+		# Но код нужен и при НЕПУСТОМ имени: по нему берётся выверенное написание
+		# из mccmnc.dat, и без этого шага список подписывал модем сырым именем
+		# сети («MegaFon RUS») там, где карточка показывает «Megafon» - см.
+		# opname_pretty в lib.sh. Лишняя AT-команда идёт по той же очереди и
+		# только в ФОНОВОМ refresh (list в порт не ходит вовсе).
+		num=$(_npri_at "$port" "AT+COPS=3,2;+COPS?" | tr -d '\r' \
+			| sed -n 's/.*+COPS[^"]*"\([0-9]\{4,\}\)".*/\1/p' | head -1)
 		if [ -z "$name" ] || echo "$name" | grep -qE '^[0-9 ]*$'; then
-			num=$(at_query "$port" "AT+COPS=3,2;+COPS?" | tr -d '\r' \
-				| sed -n 's/.*+COPS[^"]*"\([0-9]\{4,\}\)".*/\1/p' | head -1)
+			# tr -d '\r': mccmnc.dat в CRLF, иначе имя уезжает в кэш с возвратом
+			# каретки на конце (см. lib.sh/opname_pretty и hilink.sh).
 			[ -n "$num" ] && name=$(awk -F';' '/^'"$num"';/{print $3}' \
-				/usr/share/5gmodem/mccmnc.dat 2>/dev/null | head -1 | sed 's/^ *//;s/ *$//')
+				/usr/share/5gmodem/mccmnc.dat 2>/dev/null | head -1 | tr -d '\r' \
+				| sed 's/^ *//;s/ *$//')
+		else
+			name=$(opname_pretty "$num" "$name")
 		fi
 		[ -n "$name" ] && { printf '%s' "$name" > "/tmp/netpri_op_$i"; return; }
 	done
@@ -199,18 +294,19 @@ operator_probe() {
 model_for() {
 	is_modem "$1" || return
 	path=$(modem_path_for "$1")
-	prod=""; vidpid=""
+	prod=""; vidpid=""; lmmodel=""
 	if [ -n "$path" ]; then
-		_lm=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
+		_lm=$(_lm)
 		prod=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].product" 2>/dev/null | head -1)
 		vidpid=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].vidpid" 2>/dev/null | head -1)
+		lmmodel=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].model" 2>/dev/null | head -1)
 	fi
 	# Имя модели, разобранное основным опросом по AT+CGMM (5gmodem.m_<путь>.model),
 	# ТОЧНЕЕ дескриптора: у SimCom он говорит "SimTech, Incorporated", у Quectel
 	# EC21 - "Android", а VID:PID 1e0e:9001 общий для 7100/7600/8200.
 	sec=$(modem_section "$1")
 	if [ -n "$sec" ]; then
-		_m=$(uci -q get "5gmodem.$sec.model")
+		_m=$(uci5g_get "$sec" model)
 		# Отсекаем ЧУЖУЮ/устаревшую модель, осевшую в секции от ПРЕЖНЕГО модема на
 		# этом же USB-пути (опрос пишет model только активному, у неактивного она
 		# висит вечно). Живой баг: "Compal RXM-G1" осел в секции FM350 (0e8d), и
@@ -220,7 +316,18 @@ model_for() {
 		fi
 		[ -n "$_m" ] && { echo "$_m"; return; }
 	fi
-	if [ -z "$prod" ] && [ -n "$sec" ]; then prod=$(uci -q get "5gmodem.$sec.product"); fi
+	# ГОТОВОЕ НОРМАЛИЗОВАННОЕ ИМЯ ИЗ listmodems - ТО ЖЕ, ЧТО В ТАБАХ.
+	#
+	# Раньше поле model из listmodems здесь не читалось вовсе, хотя именно оно
+	# приводит дескриптор к человеческому виду (model_alias + таблица vid:pid) и
+	# именно его показывают вкладки переключателя модемов. В итоге один модем
+	# назывался по-разному в двух местах одной страницы: вкладка «T99W175», а
+	# приоритеты - «Generic Mobile Broadband Adapter» (05c6:9025 нормализуется в
+	# listmodems, а в локальной таблице ниже его нет). Живой отчёт, 30.07.
+	#
+	# Стоит ПОСЛЕ секции (там имя от AT+CGMM, оно точнее) и ДО дескриптора.
+	if [ -n "$lmmodel" ] && [ "$lmmodel" != "$prod" ]; then echo "$lmmodel"; return; fi
+	if [ -z "$prod" ] && [ -n "$sec" ]; then prod=$(uci5g_get "$sec" product); fi
 
 	# USB-дескриптор часто врёт: Quectel EC21 представляется как "Android",
 	# Compal - как "VOS_5G". Поэтому НЕ доверяем product вслепую: сперва точная
@@ -289,27 +396,55 @@ label_for() {
 
 case "$1" in
 list)
+	# СНИМКИ ПЕРЕД ЦИКЛОМ. `list` только читает и живёт доли секунды, поэтому
+	# состояние интерфейсов, конфиг 5gmodem и перечисление модемов берём по одному
+	# разу, а не по разу на каждое поле каждого интерфейса. Это и есть основная
+	# цена этого глагола: замер на стенде до правки - 690 мс и ~145 подпроцессов
+	# (70 uci, 34 sed, 19 jsonfilter, 11 ifstatus) на КАЖДЫЙ вызов, а страница
+	# метрик зовёт его раз в 5 c.
+	ifdump_snapshot
+	uci5g_snapshot
+	ucinet_snapshot
+	lm_snapshot
 	printf '['
 	first=1
 	NEEDREFRESH=0
 	# USB-пути присутствующих сейчас модемов (один вызов на весь список).
-	PRESENT_PATHS=" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-		| jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ') "
+	PRESENT_PATHS=" $(_lm | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ') "
 	# sort by interface name, like the LuCI "Interfaces" overview (naturalCompare).
 	# uniq: firewall-зона могла накопить дубликаты интерфейса (см. mkiface.sh) -
 	# показываем каждый uplink РОВНО один раз, даже если конфиг ещё не вылечен.
 	for n in $(wan_nets | tr ' ' '\n' | sort | uniq); do
 		[ -n "$n" ] || continue
-		uci -q get "network.$n" >/dev/null 2>&1 || continue
+		ucinet_has "$n" || continue
 		# IPv6-спутник прячем: в OpenWrt он заводится отдельной сетью с именем
-		# "<имя>6" поверх ТОГО ЖЕ устройства (wan/wan6, wwan/wwan6, modem/modem6).
-		# Раньше отсекался только "wan6" по имени, поэтому на роутере с модемом
-		# на usb0 в списке висели ДВА аплинка: wwan с адресом и wwan6 без него.
+		# "<имя>6" поверх ТОГО ЖЕ устройства (wan/wan6, wwan/wwan6). Раньше
+		# отсекался только "wan6" по имени, поэтому на роутере с модемом на usb0
+		# в списке висели ДВА аплинка: wwan с адресом и wwan6 без него.
 		# Приоритет задаётся маршруту устройства, так что спутник тут не нужен.
+		#
+		# НО СУДИТЬ ПО ОДНОМУ ИМЕНИ НЕЛЬЗЯ. Наши модемные интерфейсы нумеруются
+		# (modem2, modem3, ...), и ШЕСТОЙ зовётся «modem6» - имя кончается на «6»,
+		# интерфейс «modem» в конфиге есть (парковка прежнего модема держит имя), и
+		# рабочий аплинк свежевоткнутого модема исчезал из приоритетов. Живой
+		# случай: Quectel EC21 на месте Telit - модем работает, в списке его нет.
+		# Настоящий спутник отличается ПРОТОКОЛОМ (dhcpv6/6in4/6to4/6rd) либо
+		# device-ссылкой на родителя (@wan) - по ним и решаем; наши динамические
+		# дети и вовсе зовутся «<имя>_6», с подчёркиванием.
 		case "$n" in
-			*6) uci -q get "network.${n%6}" >/dev/null 2>&1 && continue ;;
+			*6)
+				if ucinet_has "${n%6}"; then
+					_sat_p=$(ucinet_get "$n" proto)
+					_sat_d=$(ucinet_get "$n" device)
+					case "$_sat_p" in
+						dhcpv6|6in4|6to4|6rd) continue ;;
+					esac
+					case "$_sat_d" in
+						@*) continue ;;
+					esac
+				fi ;;
 		esac
-		[ "$(uci -q get "network.$n.disabled")" = "1" ] && continue
+		[ "$(ucinet_get "$n" disabled)" = "1" ] && continue
 		# Отсутствующий модем в списке приоритетов не нужен: его интерфейс остаётся
 		# в firewall-зоне (мы его не удаляем - модем ещё вернётся), но выбирать его
 		# приоритетом бессмысленно, трафика через него всё равно не будет. Прячем
@@ -323,8 +458,8 @@ list)
 			# секции этого интерфейса и прячем, ТОЛЬКО если НИ ОДНА не присутствует.
 			# Нет ни одной секции с путём (legacy-конфиг) - поведение прежнее: показываем.
 			_any_path=""; _any_present=""; _any_parked=""
-			for _ms in $(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='$n'\$/\1/p"); do
-				_mp=$(uci -q get "5gmodem.$_ms.path")
+			for _ms in $(_uci5g_dump | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$n'\?\$/\1/p"); do
+				_mp=$(uci5g_get "$_ms" path)
 				if [ -z "$_mp" ]; then
 					# Секция БЕЗ пути - это ПАРКОВКА вытесненного модема (park_profile
 					# в modemswitch.sh): она держит имя интерфейса за железом, которого
@@ -332,7 +467,7 @@ list)
 					# _any_path оставался пустым - интерфейс считался «legacy без пути»
 					# и продолжал висеть в приоритетах (наблюдалось: modem4 от Compal
 					# после возврата E3372). Парковка - достоверный признак отсутствия.
-					[ "$(uci -q get "5gmodem.$_ms.parked")" = "1" ] && _any_parked=1
+					[ "$(uci5g_get "$_ms" parked)" = "1" ] && _any_parked=1
 					continue
 				fi
 				_any_path=1
@@ -363,7 +498,7 @@ list)
 		# Судим только по ЯВНО заданному имени устройства. sysfs-путь (proto
 		# modemmanager) и пустое поле не трогаем: там имя вычисляется иначе, и
 		# ошибиться в эту сторону - значит спрятать рабочий аплинк.
-		_np_dev=$(uci -q get "network.$n.device")
+		_np_dev=$(ucinet_get "$n" device)
 		case "$_np_dev" in
 			'') : ;;
 			# Узел модема (/dev/cdc-wdm0) или sysfs-путь: проверяем НАПРЯМУЮ его
@@ -386,7 +521,7 @@ list)
 			modem) sub=$(model_for "$n"); [ -n "$sub" ] || sub="$n" ;;
 			wifi)  sub="$n" ;;
 			*)     sub=$(ifup_state "$n" '@["l3_device"]')
-			       [ -n "$sub" ] || sub=$(uci -q get "network.$n.device")
+			       [ -n "$sub" ] || sub=$(ucinet_get "$n" device)
 			       [ -n "$sub" ] || sub="$n" ;;
 		esac
 		# У HiLink адрес интерфейса - это адрес ЛОКАЛЬНОЙ сети модема
@@ -398,7 +533,7 @@ list)
 				| jsonfilter -e '@.ipaddr' 2>/dev/null)
 			[ -n "$_np_wan" ] && ip="$_np_wan"
 		fi
-		m=$(uci -q get "network.$n.metric"); [ -n "$m" ] || m=0
+		m=$(ucinet_get "$n" metric); [ -n "$m" ] || m=0
 		[ "$first" = 1 ] || printf ','
 		first=0
 		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s}' \
@@ -467,12 +602,24 @@ op)
 set)
 	CH="$2"
 	[ -n "$CH" ] || { echo '{"error":"no interface"}'; exit 1; }
+	# ТОЛЬКО АПЛИНК ИЗ WAN-ЗОНЫ. Аргумент приходит из UI, но скрипт доступен
+	# любому вызывающему, и без проверки `set lan` прошёл бы до живых маршрутов:
+	# метрики пишутся циклом по wan_nets (lan не заденут), а вот
+	# _add_default_route выполнялась для АРГУМЕНТА как есть - и на интерфейсе без
+	# шлюза (lan статический) ветка on-link добавила бы
+	# `default dev br-lan scope link metric 1`: маршрут-ловушку, уводящую весь
+	# интернет-трафик обратно в локалку.
+	case " $(wan_nets) " in
+		*" $CH "*) ;;
+		*) echo '{"error":"not a wan uplink"}'; exit 1 ;;
+	esac
+	note_foreign_uci network "netpri set"
 	CHANGED=0
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
-		uci -q get "network.$n" >/dev/null 2>&1 || continue
+		ucinet_has "$n" || continue
 		if [ "$n" = "$CH" ]; then NEW=1; else NEW=20; fi
-		OLD=$(uci -q get "network.$n.metric")
+		OLD=$(ucinet_get "$n" metric)
 		[ "x$OLD" = "x$NEW" ] && continue
 		uci -q set "network.$n.metric=$NEW"
 		CHANGED=1
@@ -508,7 +655,19 @@ set)
 			# on-link default (сотовый point-to-point) - обязателен scope link.
 			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
 		fi
+		# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
+		# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
+		# сметает с устройства ОБЕ семьи маршрутов, а восстановление читало шлюз
+		# только у самого интерфейса - у родителя его нет, спутник отсекает дедуп
+		# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
+		# до следующего события netifd. Теперь шлюз ищем и у спутников.
 		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+		if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
+			for _sat in "${1}6" "${1}_6"; do
+				_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
+				[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
+			done
+		fi
 		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
 			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
 	}
@@ -574,7 +733,18 @@ order)
 	# ВЕСЬ порядок. Живое применение маршрутов - то же, что у `set`.
 	shift
 	[ -n "$1" ] || { echo '{"error":"no order"}'; exit 1; }
-	_ord="$*"
+	# Чужие имена выбрасываем сразу (та же причина, что у set: реальный не-wan
+	# интерфейс - например lan - получил бы живой default-маршрут в хвосте).
+	_ord=""
+	_wz=" $(wan_nets) "
+	for _oi in "$@"; do
+		case "$_wz" in
+			*" $_oi "*) _ord="$_ord $_oi" ;;
+			*) logger -t 5gmodem "netpri order: '$_oi' не аплинк wan-зоны - пропускаю" ;;
+		esac
+	done
+	[ -n "$_ord" ] || { echo '{"error":"no valid interfaces"}'; exit 1; }
+	note_foreign_uci network "netpri order"
 	_rank=1
 	# uci-метрики по рангу; интерфейсы вне переданного порядка - в хвост (метрики
 	# должны быть уникальными: два default с одной метрикой конфликтуют в ядре).
@@ -582,7 +752,7 @@ order)
 		[ -n "$n" ] || continue
 		case " $_seen_o " in *" $n "*) continue ;; esac
 		_seen_o="$_seen_o $n"
-		uci -q get "network.$n" >/dev/null 2>&1 || continue
+		ucinet_has "$n" || continue
 		uci -q set "network.$n.metric=$_rank"
 		_rank=$((_rank + 1))
 	done
@@ -597,7 +767,19 @@ order)
 		else
 			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
 		fi
+		# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
+		# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
+		# сметает с устройства ОБЕ семьи маршрутов, а восстановление читало шлюз
+		# только у самого интерфейса - у родителя его нет, спутник отсекает дедуп
+		# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
+		# до следующего события netifd. Теперь шлюз ищем и у спутников.
 		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+		if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
+			for _sat in "${1}6" "${1}_6"; do
+				_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
+				[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
+			done
+		fi
 		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
 			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
 	}

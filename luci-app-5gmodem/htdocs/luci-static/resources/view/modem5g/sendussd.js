@@ -378,11 +378,11 @@ return view.extend({
 				    }
 			}
 		}).catch(function(err) {
-			if (res.stdout === undefined || res.stderr === undefined || res.stderr.includes('undefined') || res.stdout.includes('undefined')) {
-				return;
-			} else {
-				ui.addNotification(null, E('p', [ err ]));
-			}
+			/* ЗДЕСЬ НЕТ res - он живёт в области then выше. Прежняя проверка
+			   обращалась к нему, и любое исключение внутри then превращалось в
+			   ReferenceError: настоящая ошибка терялась, а пользователь не
+			   получал даже уведомления. Показываем то, что действительно есть. */
+			ui.addNotification(null, E('p', [ err ]));
 		}).finally(function() {
 			for (let i = 0; i < buttons.length; i++)
 				buttons[i].removeAttribute('disabled');

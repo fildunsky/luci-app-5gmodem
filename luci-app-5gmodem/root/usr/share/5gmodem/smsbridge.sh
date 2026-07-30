@@ -15,6 +15,7 @@
 # Usage: smsbridge.sh recv|sent|status [store] [port]
 #        smsbridge.sh delete <index|all> [store] [port]
 #        smsbridge.sh send <number> <text> [port]
+#        smsbridge.sh dump [store] [port]      - входящие ТЕКСТОМ (для файла)
 #        smsbridge.sh seen                     - список уже виденных сообщений
 #        smsbridge.sh seen-add <ключ>...       - пометить прочитанными
 #        smsbridge.sh seen-reset               - забыть всё (снова «новые»)
@@ -198,5 +199,10 @@ case "$BOX" in
 		# и флаг «-c 2» его не лечит (для send он не действует).
 		# Лечится только своим PDU-кодером (UCS2 + AT+CMGS) - см. роадмап.
 		exec $(_smstool) -d "$PORT" send "$SND_TO" "$SND_TXT" 2>/dev/null ;;
+	# ТЕКСТОМ, а не JSON. Нужно кнопке «сохранить сообщения в файл»: она пишет
+	# человекочитаемый .txt, и JSON там не к месту. Раньше страница ради этого
+	# исполняла БИНАРЬ sms_tool напрямую (в ACL был разрешён exec на него), то есть
+	# из браузера уходили любые аргументы. Теперь формат выбирается здесь.
+	dump)   exec $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv 2>/dev/null ;;
 	*)      exec $(_smstool) "$@" recv 2>/dev/null ;;
 esac

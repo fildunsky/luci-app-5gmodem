@@ -400,6 +400,21 @@ setbands3g() {
 	echo "Unsupported"
 }
 
+# --- Диапазоны 2G (GSM) ------------------------------------------------------
+# Всегда mask-стиль: готовых комбинаций у 2G не встречалось. Подписи - частоты
+# (900/1800/850/1900), фронт сам добавляет префикс «GSM». "Unsupported" - секции
+# 2G нет. До сих пор 2G умела только HiLink-ветка (Huawei) со своим билдером;
+# AT-профилям добраться до UI было не через что - Quectel EC21 стал первым.
+getsupportedbands2g() {
+	echo "Unsupported"
+}
+getbands2g() {
+	echo "Unsupported"
+}
+setbands2g() {
+	echo "Unsupported"
+}
+
 # --- Привязка к соте (cell lock) ---------------------------------------------
 # Формат getcelllock:
 #   "Unsupported" - модем не умеет (секция скрыта)
@@ -480,6 +495,31 @@ _reconnect_iface() {
 	ubus call "network.interface.$_ri_if" down >/dev/null 2>&1
 	sleep 3
 	ubus call "network.interface.$_ri_if" up >/dev/null 2>&1 || ifup "$_ri_if" >/dev/null 2>&1
+}
+
+# КАК ПРИМЕНЯЕТСЯ СМЕНА ДИАПАЗОНОВ/РЕЖИМА - решает профиль модема. Значений три,
+# и разница между ними измерена на живом железе (30.07):
+#
+#   1          - применяется ВЖИВУЮ и контекст данных ВЫЖИВАЕТ. Telit LM960:
+#                setbands 3 -> #BND переписан за 4 c, адрес на wwan0 прежний,
+#                пинг 3/3. Делать после записи не надо ничего.
+#   reconnect  - применяется вживую, но контекст РВЁТСЯ. Fibocom FM350: GTACT
+#                переписан за 4 c, модем зарегистрирован, адрес на eth2 прежний -
+#                а пинг 0/3. То есть у пользователя остаётся интерфейс с адресом,
+#                который никуда не ведёт (самый неприятный вид поломки: всё
+#                «выглядит рабочим»). Нужен реконнект интерфейса - он в разы
+#                дешевле программного ребута модема.
+#   (пусто)    - НЕ ПРОВЕРЯЛИ. Ведём себя как раньше: ребут модема. Осторожно и
+#                медленно, зато предсказуемо.
+_bands_live() {
+	case "$_BANDS_APPLY_LIVE" in 1|reconnect) return 0 ;; *) return 1 ;; esac
+}
+_bands_after_write() {
+	case "$_BANDS_APPLY_LIVE" in
+		1)         return 0 ;;
+		reconnect) _reconnect_iface ;;
+		*)         /usr/share/5gmodem/reboot_modem.sh soft ;;
+	esac
 }
 
 # --- Агрегация включена в модеме? --------------------------------------------
@@ -670,6 +710,14 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 			"$_HL" setbands2g "$2" "$_bs_am"
 			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
 			exit 0 ;;
+		mgmtinfo)
+			# HiLink всегда ведётся вендорным путём (свой API вместо AT/mmcli).
+			# Без этого ответа mgmtinfo проваливался в *) -> «Unsupported», фронт
+			# получал не-JSON и по правилу «ответа нет - ничего не трогаем» вообще
+			# не рисовал блок частот: после ввода mgmtinfo (2.0.9) HiLink-модемы
+			# потеряли диапазоны и режим сети целиком. Живой случай на стенде,
+			# E3372 в debug.
+			echo '{"source":"vendor"}'; exit 0 ;;
 		*) echo "Unsupported"; exit 0 ;;
 	esac
 fi
@@ -682,12 +730,16 @@ RES="/usr/share/5gmodem/modemband"
 _AMP=$(active_modem)
 _AVIDPID=""; _APROD=""
 if [ -n "$_AMP" ]; then
+	# Связку берём из реестра - одно место на всё приложение (registry.sh).
+	# Раньше здесь был свой запрос к listmodems: то же самое, но по-своему, а
+	# именно из таких расхождений и растут ошибки «действие ушло не тому модему».
+	_AREG=$(/usr/share/5gmodem/registry.sh path "$_AMP" 2>/dev/null)
 	_ALM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
-	_AVIDPID=$(echo "$_ALM" | jsonfilter -e "@[@.path=\"$_AMP\"].vidpid" 2>/dev/null | tr -d ':')
+	_AVIDPID=$(printf '%s' "$_AREG" | jsonfilter -e '@.vidpid' 2>/dev/null | tr -d ':')
 	# Модель из USB-дескриптора - ровно то, из чего легаси-путь ниже строит имя
 	# "<vidpid><Product>". Пробелы/слэши в имени файла невозможны, поэтому такие
 	# дескрипторы (напр. "USB Modem") просто не дадут совпадения - это нормально.
-	_APROD=$(echo "$_ALM" | jsonfilter -e "@[@.path=\"$_AMP\"].product" 2>/dev/null | head -1)
+	_APROD=$(printf '%s' "$_AREG" | jsonfilter -e '@.product' 2>/dev/null | head -1)
 	case "$_APROD" in *[!A-Za-z0-9_.-]*) _APROD="" ;; esac
 fi
 
@@ -768,9 +820,19 @@ if [ -n "$_PROFILE_LOADED" ]; then
 	# Порт ТЕКУЩЕЙ секции ($_bs_at из active_modem) в приоритете над глобальным
 	# at_port: под BANDS_ACTIVE_MODEM глобальный - порт другого модема, и _DEVICE
 	# указал бы не на тот. Без override оба совпадают.
-	_ATP="$_bs_at"
-	[ -n "$_ATP" ] || _ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
-	[ -n "$_ATP" ] || _ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+	# ПОРТ ЦЕЛИ, И ТОЛЬКО ЕЁ. Реестр отдаёт at_port, УЖЕ сверенный со списком
+	# портов этого модема, - устаревшая настройка сюда не дойдёт.
+	_ATP=$(printf '%s' "$_AREG" | jsonfilter -e '@.at_port' 2>/dev/null)
+	[ -n "$_ATP" ] || _ATP="$_bs_at"
+	# ОТКАТ НА ГЛОБАЛЬНЫЙ ПОРТ - ТОЛЬКО ЕСЛИ ЦЕЛЬ И ЕСТЬ АКТИВНЫЙ МОДЕМ.
+	# Иначе это порт ДРУГОГО модема, и команды диапазонов ушли бы не туда. Раньше
+	# откат стоял безусловным: опасение было названо в комментарии, а дыра
+	# оставлена. Нет своего порта - остаёмся с пустым _DEVICE, то есть со
+	# статическими списками (_PORT_OK=0); это честнее, чем управлять соседом.
+	if [ -z "$_ATP" ] && [ "$(printf '%s' "$_AREG" | jsonfilter -e '@.active' 2>/dev/null)" = "true" ]; then
+		_ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		[ -n "$_ATP" ] || _ATP=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+	fi
 	case "$_ATP" in
 		/dev/*) [ -e "$_ATP" ] && _DEVICE="$_ATP" ;;
 	esac
@@ -940,9 +1002,78 @@ _band_write() {  # $1 - функция записи, $2 - список
 	if _needs_mm_takeover; then
 		_mm_takeover_run "$1" "$2"
 	else
-		"$1" "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; }
+		"$1" "$2" && _bands_after_write
 	fi
 }
+
+# ЗНАЧЕНИЯ СО СТРАНИЦЫ ПРОВЕРЯЕМ ДО ПЕРВОГО ИСПОЛЬЗОВАНИЯ.
+#
+# Отсюда они уходят прямо в AT-команды («AT+GTACT=$M», маски диапазонов), а для
+# AT-канала инъекция - это возврат каретки: один параметр вида «1<CR>AT+CPIN=…»
+# станет двумя командами. Проверка белым списком, предикаты - в lib.sh.
+#
+# Молчать при отказе нельзя: пользователь увидит «ничего не произошло». Пишем
+# причину и в ответ, и в системный журнал.
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+if command -v is_num >/dev/null 2>&1; then
+	case "$1" in
+		setbands|setbands5gnsa|setbands5gsa|setbands3g|setbands2g)
+			# «default» - штатный сброс к заводскому набору, остальное - список
+			# номеров диапазонов через пробел.
+			if [ "$2" != "default" ] && ! is_numlist "$2"; then
+				logger -t 5gmodem "bands: отклонён набор диапазонов для $1"
+				echo "bad bands"; exit 2
+			fi
+			# И ПРОВЕРЯЕМ САМИ НОМЕРА, а не только форму.
+			#
+			# Недопустимый номер модем отвергает МОЛЧА - команда не применяется, а
+			# пользователь видит «ничего не произошло». Поймано на своём же замере:
+			# профиль FM350 прибавляет к номеру 100, я передал 103, ушло 203, и
+			# GTACT отверг команду целиком.
+			#
+			# Сверяем с тем, что объявил САМ МОДЕМ, а не с зашитым диапазоном: у
+			# LTE это номера (1..71), у 3G Telit - идентификаторы готовых
+			# комбинаций, и общего списка тут быть не может. Формат записи у
+			# профилей двух видов - «3» и «3:B3», поэтому берём часть до двоеточия.
+			# Модем не ответил (Unsupported/пусто) - НЕ выдумываем, пропускаем.
+			if [ "$2" != "default" ] && command -v getsupportedbands >/dev/null 2>&1; then
+				case "$1" in
+					setbands)      _bsup=$(getsupportedbands 2>/dev/null) ;;
+					setbands5gnsa) _bsup=$(getsupportedbands5gnsa 2>/dev/null) ;;
+					setbands5gsa)  _bsup=$(getsupportedbands5gsa 2>/dev/null) ;;
+					setbands3g)    _bsup=$(getsupportedbands3g 2>/dev/null) ;;
+					setbands2g)    _bsup=$(getsupportedbands2g 2>/dev/null) ;;
+				esac
+				case "$_bsup" in
+					''|Unsupported*) : ;;
+					*)
+						for _bwant in $2; do
+							_bok=0
+							for _bhave in $_bsup; do
+								[ "${_bhave%%:*}" = "$_bwant" ] && { _bok=1; break; }
+							done
+							if [ "$_bok" != 1 ]; then
+								logger -t 5gmodem "bands: диапазон $_bwant не поддерживается модемом ($1)"
+								echo "band $_bwant not supported"; exit 2
+							fi
+						done ;;
+				esac
+			fi ;;
+		setmode|setmodelive|set5gmode)
+			if ! is_num "$2"; then
+				logger -t 5gmodem "bands: отклонён номер режима для $1"
+				echo "bad mode"; exit 2
+			fi ;;
+		setcelllock)
+			# off | cell <arfcn> <pci> | arfcn <arfcn> - всё числовое.
+			case "$2" in
+				off) : ;;
+				cell)  is_num "$3" && is_num "$4" || { logger -t 5gmodem "bands: отклонена привязка к соте"; echo "bad cell"; exit 2; } ;;
+				arfcn) is_num "$3" || { logger -t 5gmodem "bands: отклонён arfcn"; echo "bad arfcn"; exit 2; } ;;
+				*) logger -t 5gmodem "bands: неизвестный режим привязки к соте"; echo "bad lock"; exit 2 ;;
+			esac ;;
+	esac
+fi
 
 case $1 in
 	"getinfo")
@@ -1073,6 +1204,7 @@ case $1 in
 		_smm_if=$(uci -q get "5gmodem.$_smm_sec.network")
 		logger -t 5gmodem "setmodemm: allowed='$2' preferred='$3' iface='$_smm_if'"
 		[ -n "$_smm_if" ] || { echo '{"error":"no iface"}'; exit 0; }
+		note_foreign_uci network "bands setmodemm"
 		if [ -z "$2" ] || [ "$2" = "default" ]; then
 			uci -q delete "network.$_smm_if.allowedmode"
 			uci -q delete "network.$_smm_if.preferredmode"
@@ -1159,7 +1291,7 @@ case $1 in
 			# годится - его реконнект бьёт по глобально активному модему, а под
 			# override это другой. Модемам с живым применением (_BANDS_APPLY_LIVE)
 			# CFUN не делаем: он откатывает маску - им достаточно реконнекта.
-			if [ "$_BANDS_APPLY_LIVE" != 1 ] && [ -n "$_DEVICE" ]; then
+			if ! _bands_live && [ -n "$_DEVICE" ]; then
 				sms_tool -d "$_DEVICE" at "AT+CFUN=4" >/dev/null 2>&1
 				sleep 3
 				sms_tool -d "$_DEVICE" at "AT+CFUN=1" >/dev/null 2>&1
@@ -1178,7 +1310,7 @@ case $1 in
 		# AT+CNMP берёт эффект сразу, а CFUN=4->1 его ОТКАТЫВАЕТ, проверено). Флаг
 		# _BANDS_APPLY_LIVE из профиля решает, перезапускать ли радио. В фоне -
 		# перерегистрация модема может не уложиться в таймаут rpcd.
-		[ -n "$2" ] && { ( setmode "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setmode "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
 		;;
 	# СИНХРОННАЯ смена режима БЕЗ перезапуска радио - для короткого ухода в 3G
 	# под запрос USSD (см. ussd.sh). Отличий от "setmode" два, и оба нужны:
@@ -1213,7 +1345,17 @@ case $1 in
 		# Как setbands: в ФОНЕ с отвязкой дескрипторов, и СТРОГО ПОСЛЕ записи -
 		# soft-реконнект (GTACT рвёт PDP на FM350). Раньше реконнект дёргал UI
 		# (setBands3gAT) - для combos Telit; теперь один путь для обоих стилей.
-		[ -n "$2" ] && { ( setbands3g "$2" && { [ "$_BANDS_APPLY_LIVE" = 1 ] || /usr/share/5gmodem/reboot_modem.sh soft; } ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setbands3g "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
+		;;
+	"getsupportedbands2g")
+		getsupportedbands2g
+		;;
+	"getbands2g")
+		getbands2g
+		;;
+	"setbands2g")
+		# Зеркало setbands3g: фон + реконнект после записи.
+		[ -n "$2" ] && { ( setbands2g "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
@@ -1367,6 +1509,27 @@ case $1 in
 				json_close_array
 				[ "$_PORT_OK" = "1" ] && json_add_string current3g "$(getbands3g)"
 			fi
+		fi
+
+		# --- 2G --- (только mask-стиль, см. заглушки выше)
+		T2=$(getsupportedbands2g)
+		if [ -n "$T2" ] && [ "x$T2" != "xUnsupported" ]; then
+			json_add_array supported2g
+			for BAND in $T2; do
+				case "$BAND" in ''|*[!0-9]*) continue ;; esac
+				json_add_object ""
+				json_add_int band "$BAND"
+				json_close_object
+			done
+			json_close_array
+			json_add_array enabled2g
+			if [ "$_PORT_OK" = "1" ]; then
+				for BAND in $(getbands2g); do
+					case "$BAND" in ''|*[!0-9]*) continue ;; esac
+					json_add_int "" "$BAND"
+				done
+			fi
+			json_close_array
 		fi
 
 		T=$(getsupportedbands5gnsa)

@@ -27,221 +27,71 @@ CFG=5gmodem
 . /usr/share/5gmodem/atlock.sh   # at_lock/at_unlock - чтение IMEI не должно
                                  # сталкиваться с опросом метрик в том же порту
 
-# Галка «слать USSD обычным текстом» (sms_tool -R) - ОДНА на весь sms_tool_js, а
-# модемы переключаются, и правильное значение у каждого своё. Поэтому при смене
-# активного модема выставляем её по нему:
-#   1) ручная настройка пользователя для ЭТОГО модема (5gmodem.m_X.ussd_raw) -
-#      она главнее базы: человек мог проверить руками то, чего мы не знаем;
-#   2) иначе - проверенная база (quirks.sh);
-#   3) если модем в базе неизвестен - НЕ ТРОГАЕМ: у пользователя может быть
-#      рабочая настройка, и молча ломать её нельзя.
-apply_ussd_quirk() {   # $1 = секция модема
-	command -v ussd_raw_for >/dev/null 2>&1 || return 0
-	_v=$(uci -q get "$CFG.$1.ussd_raw")
-	if [ -z "$_v" ]; then
-		_v=$(ussd_raw_for "$(uci -q get "$CFG.$1.model")" "$(uci -q get "$CFG.$1.vidpid")")
-	fi
-	case "$_v" in
-		0|1) uci -q set "5gmodem.sms.ussd=$_v" ;;
-	esac
-
-	# ТО ЖЕ ПРАВИЛО ДЛЯ «уходить ли в 3G»: галка одна на приложение, а нужна она
-	# не всем, поэтому при смене активного модема выставляем её по нему. Порядок
-	# тот же: ручная настройка этого модема главнее базы, неизвестный модем не
-	# трогаем вовсе - у пользователя может быть рабочая настройка.
-	command -v ussd_needs_3g_for >/dev/null 2>&1 || return 0
-	_g=$(uci -q get "$CFG.$1.ussd_3g")
-	if [ -z "$_g" ]; then
-		_g=$(ussd_needs_3g_for "$(uci -q get "$CFG.$1.model")" "$(uci -q get "$CFG.$1.vidpid")")
-	fi
-	# НЕИЗВЕСТНЫЙ МОДЕМ - ЯВНЫЙ НОЛЬ, а не «не трогаем». Разница принципиальная:
-	# «не трогаем» здесь означало бы, что модем унаследует галку от ПРЕДЫДУЩЕГО
-	# (поймано на стенде: выбрал Telit - включилось, переключился на FM350 -
-	# осталось включённым, и он зря уходил бы в 3G). Своё значение пользователя
-	# не теряется: страница пишет его в секцию модема (m_X.ussd_3g), и оно
-	# главнее базы - см. чтение выше.
-	case "$_g" in
-		0|1) : ;;
-		*)   _g=0 ;;
-	esac
-	uci -q set "5gmodem.sms.ussd_3g=$_g"
-}
 active_path() { uci -q get "$CFG.@5gmodem[0].active_modem"; }
 
-# ports (tty) of the modem at a given usb path, from listmodems.sh
+# ОДНА ЗАПИСЬ РЕЕСТРА НА МОДЕМ ВМЕСТО ТРЁХ РАЗБОРОВ listmodems.
+#
+# Порты, дескриптор и vidpid спрашивались тремя отдельными вызовами, каждый со
+# своим разбором JSON. Ответ на все три - одна запись реестра, и она вдобавок
+# сверяет сохранённый at_port со списком портов ЭТОГО модема (см. registry.sh).
+#
+# МЕМО САМОИНВАЛИДИРУЕТСЯ ПО ШТАМПУ listmodems, а не живёт до конца процесса.
+# Это не украшение: modemswitch ЖДЁТ появления портов после смены режима
+# (try_at_debug, setup_one_modem) и в цикле сбрасывает кэш перечисления. Мемо,
+# привязанное к процессу, в таком цикле навсегда отдавало бы «портов нет» - то
+# есть ровно тот класс ошибки, от которого мы уходим. Штамп меняется при любом
+# пересборе перечисления, включая ручное удаление файла кэша.
+# Запись одна (не таблица): циклы обрабатывают модемы по одному, и все три поля
+# читаются подряд у одного и того же пути.
+_RR_STAMP=""
+_RR_PATH1=""; _RR_REC1=""
+_RR_PATH2=""; _RR_REC2=""
+_reg_rec() {   # $1 - usb-путь
+	[ -n "$1" ] || return 0
+	_rr_s=$(cat /tmp/5gmodem_listmodems.stamp 2>/dev/null)
+	# Штамп сменился - вся память недействительна.
+	if [ "$_rr_s" != "$_RR_STAMP" ]; then
+		_RR_STAMP="$_rr_s"; _RR_PATH1=""; _RR_REC1=""; _RR_PATH2=""; _RR_REC2=""
+	fi
+	[ "$1" = "$_RR_PATH1" ] && [ -n "$_RR_REC1" ] && { printf '%s' "$_RR_REC1"; return 0; }
+	[ "$1" = "$_RR_PATH2" ] && [ -n "$_RR_REC2" ] && { printf '%s' "$_RR_REC2"; return 0; }
+	# ДВЕ ЗАПИСИ, А НЕ ОДНА. Переключение вкладки работает РОВНО с двумя модемами -
+	# старым и новым (save_to старого, потом ensure_section нового), и на одной
+	# ячейке они вытесняли друг друга: каждый вызов заново платил за реестр.
+	# Вторая ячейка убирает это без всякой сложности; больше двух не нужно, циклы
+	# по всем модемам идут по одному пути за итерацию.
+	_RR_PATH2="$_RR_PATH1"; _RR_REC2="$_RR_REC1"
+	_RR_PATH1="$1"; _RR_REC1=$("$RES/registry.sh" path "$1" 2>/dev/null)
+	printf '%s' "$_RR_REC1"
+}
+
+# ports (tty) of the modem at a given usb path
 modem_ttys() {
-	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null
+	_reg_rec "$1" | jsonfilter -e '@.tty[*]' 2>/dev/null
 }
 modem_product() {
-	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].product" 2>/dev/null | head -1
+	_reg_rec "$1" | jsonfilter -e '@.product' 2>/dev/null | head -1
 }
 modem_vidpid() {
-	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].vidpid" 2>/dev/null | head -1
+	_reg_rec "$1" | jsonfilter -e '@.vidpid' 2>/dev/null | head -1
 }
 
-# ПАРКОВКА ПРОФИЛЯ ВЫТЕСНЯЕМОГО МОДЕМА.
+# --- ТЕМАТИЧЕСКИЕ БИБЛИОТЕКИ ------------------------------------------------
 #
-# Имя секции завязано на USB-путь, поэтому два РАЗНЫХ модема в одном разъёме
-# делят одну секцию (m_1_1), и swap_cleanup затирал настройки прежнего, оставляя
-# в UI одну карточку. Типичный кейс из issue #2: E3372 (HiLink) и T99W175 (MBIM)
-# в один порт по очереди - каждый раз терялся APN/бэндлок/выбор прежнего.
-#
-# Чтобы качели «туда-обратно» не сбрасывали осознанный выбор, ПЕРЕД затиранием
-# уносим пользовательские ключи вытесняемого модема в холдинг-секцию по его IMEI
-# (m_park_<imei>). Когда этот модем вернётся в ЛЮБОЙ порт, ensure_section по IMEI
-# найдёт парковку и migrate_profile восстановит настройки.
-#
-# НАМЕРЕННО НЕ паркуем path/network/netdev: секция без path невидима для всех
-# циклов по m_* (они требуют path), значит парковка не всплывёт фантом-модемом и
-# её не поднимет автоматика; интерфейс вернувшемуся модему заново назначит
-# mkiface/setup_hilink. Паркуем только осознанный выбор пользователя.
-# Удалить припаркованные профили старше TTL: модем, ушедший навсегда, иначе копил
-# бы призраков вечно. Парки без метки времени (созданы до этой правки) не удаляем
-# сразу - штампуем текущим временем, пусть стареют: вдруг модем ещё вернётся.
-prune_parks() {
-	_pp_now=$(date +%s 2>/dev/null); [ -n "$_pp_now" ] || return 0
-	_pp_ttl=2592000   # 30 дней
-	for _pp_s in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_park_[^.]*\)=modem$/\1/p'); do
-		_pp_at=$(uci -q get "$CFG.$_pp_s.parked_at")
-		case "$_pp_at" in
-			''|*[!0-9]*) uci -q set "$CFG.$_pp_s.parked_at=$_pp_now"; continue ;;
-		esac
-		[ $((_pp_now - _pp_at)) -gt "$_pp_ttl" ] && {
-			uci -q delete "$CFG.$_pp_s"
-			logger -t 5gmodem "припаркованный профиль $_pp_s удалён (старше 30 дней)"
-		}
-	done
-	uci -q commit "$CFG"
-}
+# Файл был 2500 строк с 25 вербами и сорока функциями вперемешку - функции
+# разъехались по темам в msw/ (распил из docs/AUDIT-2026-07-30.md, раздел 4.1).
+# Это ЧИСТЫЙ перенос: тела не менялись, всё сорсится в один шелл до исполнения
+# вербов, поэтому перекрёстные вызовы работают как раньше. Диспетчер вербов и
+# мелкие общие помощники (_reg_rec, at_probe, detect_at, mm_index_for_path)
+# остались здесь.
+. "$RES/msw/identity.sh"
+. "$RES/msw/iface.sh"
+. "$RES/msw/apn.sh"
+. "$RES/msw/hilink.sh"
+. "$RES/msw/setup.sh"
 
-park_profile() {   # $1 - секция, которую вытесняем
-	_pk_imei=$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')
-	[ -n "$_pk_imei" ] || return 0                  # без IMEI парковать не к чему
-	_pk_dst="m_park_$_pk_imei"
-	uci -q set "$CFG.$_pk_dst=modem"
-	uci -q set "$CFG.$_pk_dst.imei=$_pk_imei"
-	uci -q set "$CFG.$_pk_dst.parked=1"
-	# Метка времени - для авто-очистки: парковка нужна, чтобы качели «туда-обратно»
-	# не сбрасывали выбор, но модем, ушедший НАВСЕГДА (юзер протестировал десяток
-	# модулей на стенде), копил бы призраков вечно. Держим до 30 дней.
-	uci -q set "$CFG.$_pk_dst.parked_at=$(date +%s 2>/dev/null)"
-	prune_parks
-	# Тот же список, что восстанавливает migrate_profile, чтобы парковка и
-	# восстановление были симметричны.
-	#
-	# network ПАРКУЕМ ОБЯЗАТЕЛЬНО. Интерфейс вытесненного модема мы теперь не
-	# сносим (он закреплён за железом), но секцию под новый модем очищаем - и имя
-	# интерфейса переставало кем-либо числиться. mkiface собирает занятые имена
-	# ИЗ СЕКЦИЙ, видел имя свободным и отдавал его новому модему поверх чужого
-	# интерфейса (наблюдалось: Compal занял modem2, сохранённый за Huawei E3372).
-	# Парковка - тоже секция, поэтому имя остаётся занятым до возвращения модема.
-	for _pk_k in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
-	             celllock at_debug pdp_mode pdp_ok; do
-		_pk_v=$(uci -q get "$CFG.$1.$_pk_k")
-		[ -n "$_pk_v" ] && uci -q set "$CFG.$_pk_dst.$_pk_k=$_pk_v"
-	done
-	logger -t 5gmodem "профиль модема IMEI $_pk_imei припаркован ($1 -> $_pk_dst) до возврата"
-}
 
-# Модем на этом USB-пути ПОДМЕНИЛИ на другой?
-# Секция помнит vidpid; если на шине по тому же пути другой - всё, что мы про
-# него запомнили (at_port, network, iface_proto, тип слотов), относится к
-# ПРЕЖНЕМУ модему и заведомо неверно. Это НЕ то же самое, что временное
-# отсутствие: модем регулярно пропадает на минуту при AT+CFUN=1,1 (в т.ч. по
-# нашей команде - после добавления eSIM-профиля), и удалять настройки в такой
-# момент нельзя. Поэтому чистим ТОЛЬКО по факту подмены.
-swap_cleanup() {   # $1 = usb path, $2 = section
-	_new=$(modem_vidpid "$1")
-	[ -n "$_new" ] || return 0                  # модема нет на шине - не трогаем
-	_old=$(uci -q get "$CFG.$2.vidpid")
-	if [ -z "$_old" ]; then                     # старая секция без vidpid - просто запомним
-		uci -q set "$CFG.$2.vidpid=$_new"
-		uci -q set "$CFG.$2.product=$(modem_product "$1")"
-		uci -q commit "$CFG"
-		return 0
-	fi
-	[ "$_old" = "$_new" ] && return 0
 
-	# СМЕНА РЕЖИМА - НЕ СМЕНА МОДЕМА.
-	#
-	# Один и тот же модем может менять USB-композицию: переключение режима в его
-	# веб-интерфейсе, usb-modeswitch, смена CUSTOMER. Наблюдалось вживую: Huawei
-	# E3372 перешёл с 12d1:14dc на 12d1:1566, и мы стёрли ему kind/netdev/network,
-	# после чего профиль потерял признак HiLink и подхватил чужой AT-порт от
-	# соседнего модема.
-	# IMEI - настоящая личность железа. Совпал - это тот же модем, и настройки
-	# его. Обновляем только идентификаторы композиции.
-	# ТОТ ЖЕ ВЕНДОР НА ТОМ ЖЕ USB-ПУТИ = смена композиции, а не модема. USB-путь
-	# стабилен (это физический разъём), и если вендор не сменился, а поменялся
-	# только PID - это тот же модем в другом режиме (E3372: 14dc <-> 1566 <-> 1442).
-	# IMEI тут ненадёжен: в переходных композициях он не читается ни по AT, ни по
-	# веб-API, и раньше проверка по нему проваливалась - настройки стирались.
-	# Свойства САМОГО ЖЕЛЕЗА (kind, netdev, at_debug) при смене режима сохраняем,
-	# обновляя лишь идентификаторы композиции.
-	_vid_old=${_old%%:*}
-	_vid_new=${_new%%:*}
-	if [ "$_vid_old" = "$_vid_new" ]; then
-		logger -t 5gmodem "modem mode change on $1: $_old -> $_new (тот же вендор, свойства железа сохраняем)"
-		uci -q set "$CFG.$2.vidpid=$_new"
-		uci -q set "$CFG.$2.product=$(modem_product "$1")"
-		# at_port сбрасываем - в новой композиции нумерация портов другая, его
-		# заново найдёт resolve. Остальное (kind/netdev/at_debug/network) - нет.
-		uci -q delete "$CFG.$2.at_port" 2>/dev/null
-		uci -q delete "$CFG.$2.data_at_port" 2>/dev/null
-		uci -q commit "$CFG"
-		return 0
-	fi
-
-	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
-	# СНАЧАЛА паркуем профиль вытесняемого модема по его IMEI - иначе осознанный
-	# выбор (APN/бэндлок/mm_exclude) сотрётся ниже и возврат модема начнётся с нуля.
-	park_profile "$2"
-	# ИНТЕРФЕЙС ВЫТЕСНЯЕМОГО МОДЕМА.
-	#
-	# В любом случае гасим его и снимаем автозапуск: устройство (cdc-wdm/net-нода)
-	# сейчас принадлежит ДРУГОМУ модему, и netifd крутил бы интерфейс по кругу со
-	# стухшим device - живой баг: FM350 -> L850 в тот же разъём, xmm-прото циклит
-	# "AT port not valid! / Device path not found!" каждые 5 c.
-	#
-	# А вот СНОСИТЬ его теперь не надо. Интерфейс закреплён за ЖЕЛЕЗОМ (штамп
-	# modem_imei), а не за портом: вернётся этот модем - в любой разъём - и мы
-	# поднимем его же интерфейс как есть, без пересоздания (issue #2: качели двух
-	# модемов в одном порту каждый раз шли через delete+recreate, отсюда «смена
-	# модемов дольше обычного»). Метку modem_stale ставим ТОЛЬКО старым конфигам
-	# без штампа IMEI - там два модема в одном порту не различить, и прежнее
-	# «пересоздать, а не подхватывать» остаётся единственной защитой от наследования
-	# чужих настроек (Telit LM960A18 на месте Compal подхватывал proto=mbim).
-	# ЧУЖИЕ (настроенные вручную) интерфейсы НЕ трогаем - только со своим штампом.
-	_oif=$(uci -q get "$CFG.$2.network")
-	_oimei=$(uci -q get "$CFG.$2.imei")
-	if [ -n "$_oif" ] && uci -q get "network.$_oif" >/dev/null 2>&1 \
-	   && iface_owned_by "$_oif" "$1" "$_oimei"; then
-		ifdown "$_oif" >/dev/null 2>&1
-		uci -q set "network.$_oif.auto=0"
-		_ostamp=$(uci -q get "network.$_oif.modem_imei")
-		if [ -n "$_ostamp" ]; then
-			logger -t 5gmodem "swap: интерфейс '$_oif' сохранён за модемом IMEI $_ostamp (auto=0 до его возвращения)"
-		else
-			uci -q set "network.$_oif.modem_stale=1"
-			logger -t 5gmodem "swap: stopped stale owned interface '$_oif' (rerun setup to rebuild)"
-		fi
-		uci -q commit network
-	fi
-	# ВСЁ, что относилось к прежнему модему. imei тут обязателен: без него
-	# в секции оставался чужой номер, и сверка подмены при следующей замене
-	# сравнивала бы с ним (наблюдалось: в секции Huawei лежал IMEI от FM350).
-	# celllock/kind/netdev - настройки конкретного железа, другому не годятся.
-	# mm_exclude - осознанный выбор ДЛЯ ТОГО модема, новый его не наследует.
-	for o in at_port data_at_port network iface_proto imei celllock kind netdev \
-	         mm_exclude slot_type_0 slot_type_1 slot_type_2; do
-		uci -q delete "$CFG.$2.$o" 2>/dev/null
-	done
-	uci -q set "$CFG.$2.vidpid=$_new"
-	uci -q set "$CFG.$2.product=$(modem_product "$1")"
-	uci -q set "$CFG.$2.model="                 # имя модели переопределится опросом
-	uci -q delete "$CFG.$2.model" 2>/dev/null
-	uci -q commit "$CFG"
-}
 
 # AT probe of ONE port, time-bounded to ~4s. sms_tool has no timeout option and
 # blocks ~35s on a silent DIAG port with no reply, which made switching modems
@@ -283,7 +133,7 @@ mm_index_for_path() {
 
 # cdc-wdm control node of the modem at a usb path
 wdm_for_path() {
-	"$RES/listmodems.sh" | jsonfilter -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null
+	_reg_rec "$1" | jsonfilter -e '@.wdm[0]' 2>/dev/null
 }
 
 # ОБРАТНОЕ к wdm_for_path: чьё это устройство (USB-путь модема) сейчас. Считаем по
@@ -296,228 +146,9 @@ path_for_wdm() {
 	[ -f "$d/idVendor" ] && basename "$d"
 }
 
-# ModemManager must run if ANY modem interface uses the modemmanager proto (they
-# need MM). Creating an mbim/qmi/atc interface used to blindly disable MM and
-# thereby break the modemmanager modems -> keep MM's state driven by ALL
-# interfaces, not just the one being created.
-apply_mm_state() {
-	command -v mmcli >/dev/null 2>&1 || return 0
-	if uci show network 2>/dev/null | grep -q "\.proto='modemmanager'"; then
-		/etc/init.d/modemmanager enabled >/dev/null 2>&1 || /etc/init.d/modemmanager enable >/dev/null 2>&1
-		pgrep -f ModemManager >/dev/null 2>&1 || /etc/init.d/modemmanager start >/dev/null 2>&1
-	elif uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
-		# kernel owns the control channel -> MM must be off
-		/etc/init.d/modemmanager stop >/dev/null 2>&1
-		/etc/init.d/modemmanager disable >/dev/null 2>&1
-	fi
-}
 
-# repair a modem's interface: re-point its device to the current node for THIS
-# modem's stable USB path (cdc-wdm / ttyUSB numbers are unstable), then bring it
-# up if the device changed or it is not up. This is what auto-recovers the
-# connection after a reboot / modem swap when the pinned device went stale.
-ensure_iface() {
-	# ВСЕ переменные - local. Без этого функция затирала ГЛОБАЛЬНЫЕ SEC/P/IF
-	# вызывающего, а resolve зовёт её в цикле по ВСЕМ присутствующим модемам:
-	# после цикла SEC указывала на ПОСЛЕДНИЙ модем цикла, а не на активный, и
-	# строка "point the app at the active modem's interface" прописывала в
-	# @5gmodem[0].network интерфейс ЧУЖОГО модема (at_port/active_modem при этом
-	# оставались от активного). Так секция и разъезжалась на каждой загрузке.
-	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER _dp _dpo
-	IF=$(uci -q get "$CFG.$SEC.network")
-	[ -n "$IF" ] || return 0
-	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
 
-	# ШТАМП ВЛАДЕЛЬЦА (network.<if>.modem_path, ставит mkiface.sh). Если интерфейс
-	# создан для ДРУГОГО модема - не трогаем его. Иначе мы бы своими руками
-	# перенаправили device чужого интерфейса на этот модем и подняли его с чужими
-	# настройками (APN прежнего оператора) - ровно та беда, от которой штамп и
-	# заведён. Пустой штамп = интерфейс из старых версий: считаем своим (миграция
-	# в uci-defaults проставит штампы существующим).
-	# Владение решается по IMEI (см. lib.sh): два разных модема в одном разъёме
-	# по пути неразличимы, и раньше мы бы забрали чужой интерфейс себе.
-	if ! iface_owned_by "$IF" "$P" "$(imei_for_path "$P")"; then
-		OWNER=$(uci -q get "network.$IF.modem_imei")
-		[ -n "$OWNER" ] || OWNER=$(uci -q get "network.$IF.modem_path")
-		logger -t 5gmodem-resolve "iface $IF belongs to modem $OWNER, not $P - not touching it"
-		# ССЫЛКА НА ЧУЖОЙ ИНТЕРФЕЙС - ОТЦЕПЛЯЕМ, а не живём с ней.
-		#
-		# Секция могла получить чужой network при ошибочной миграции профиля по
-		# неверно прочитанному IMEI (см. ensure_section): у пользователя с
-		# четырьмя модемами секция MV31-W уехала на интерфейс Compal, а
-		# собственный интерфейс MV31-W осиротел - карточка показывала чужой IP,
-		# и починить это можно было только руками. Сам интерфейс не трогаем
-		# (он чужой), правим ТОЛЬКО ссылку в своей секции: сперва ищем
-		# интерфейс, штампованный НАШИМ железом, иначе очищаем поле - mkiface
-		# заведёт/подберёт правильный на следующем шаге.
-		_ei_mine=""
-		_ei_imei=$(imei_for_path "$P")
-		for _ei_c in $(uci -q show network 2>/dev/null \
-				| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
-			[ "$_ei_c" = "$IF" ] && continue
-			if iface_owned_by "$_ei_c" "$P" "$_ei_imei"; then _ei_mine="$_ei_c"; break; fi
-		done
-		if [ -n "$_ei_mine" ]; then
-			uci -q set "$CFG.$SEC.network=$_ei_mine"
-			uci -q commit "$CFG"
-			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - переключил на свой $_ei_mine"
-			IF="$_ei_mine"
-		else
-			uci -q delete "$CFG.$SEC.network"
-			uci -q commit "$CFG"
-			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - ссылку снял, интерфейс будет создан заново"
-			return 0
-		fi
-	fi
 
-	# МИГРАЦИЯ старых конфигов: интерфейс наш, но штампа IMEI на нём ещё нет -
-	# проставим сейчас, раз IMEI известен. С этого момента владение решается по
-	# железу, и подмена модема в этом разъёме его больше не тронет.
-	if [ -z "$(uci -q get "network.$IF.modem_imei")" ]; then
-		stamp_iface_owner "$IF" "$P"
-	fi
-
-	PROTO=$(uci -q get "network.$IF.proto")
-	CUR=$(uci -q get "network.$IF.device")
-	NEW=""
-	case "$PROTO" in
-		mbim|qmi|xmm|ncm) NEW=$(wdm_for_path "$P") ;;
-		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
-		atc)
-			# atc holds its AT port open for URC monitoring, so it must stay on a
-			# tty DISTINCT from the app's metrics/SMS port (data_at_port marks such
-			# a modem). Re-resolve an AT-answering tty under this modem's path that
-			# is not the metrics port, and remember it.
-			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
-				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
-				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
-					[ -e "$t" ] || continue
-					tt="/dev/$(basename "$t")"
-					[ "$tt" = "$MET" ] && continue
-					at_probe "$tt" && { NEW="$tt"; break; }
-				done
-				[ -n "$NEW" ] || NEW=$(uci -q get "$CFG.$SEC.at_port")
-				[ -n "$NEW" ] && uci -q set "$CFG.$SEC.data_at_port=$NEW"
-			else
-				NEW=$(uci -q get "$CFG.$SEC.at_port")
-			fi
-			;;
-		3g|wwan|ppp)      NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
-		fibocom)          NEW=$(for n in /sys/bus/usb/devices/$P:*/net/*; do [ -e "$n" ] && { basename "$n"; break; }; done) ;;
-	esac
-	CHG=0
-	if [ -n "$NEW" ] && { [ -e "$NEW" ] || [ -d "/sys/class/net/$NEW" ]; } && [ "$NEW" != "$CUR" ]; then
-		uci -q set "network.$IF.device=$NEW"; uci -q commit network; CHG=1
-	fi
-	# ПРИВЯЗКА К ЖЕЛЕЗУ через стабильный путь (см. mkiface.sh ctrl_devpath).
-	# Пиннинг device=/dev/cdc-wdmN нестабилен: после ре-энумерации номер узла
-	# указывает на ДРУГОЙ модем, qmi/mbim.sh резолвит его netdev = чужой wwan,
-	# DHCP-ребёнок садится на wwan соседа и отпускает ЕГО аренду -> у рабочего
-	# модема пропадает инет (отчёт ZBT, два 05c6:9025). devpath = sysfs-путь
-	# интерфейса-контроллера, из него системный прото при КАЖДОМ setup находит
-	# cdc-wdm заново. Досетапливаем/чиним существующим интерфейсам.
-	case "$PROTO" in
-		mbim|qmi)
-			_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
-			_dpo=$(uci -q get "network.$IF.devpath")
-			if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then
-				uci -q set "network.$IF.devpath=$_dp"; uci -q commit network; CHG=1
-			fi
-			;;
-	esac
-	if [ "$CHG" = 1 ] || ! ifstatus "$IF" 2>/dev/null | grep -q '"up": true'; then
-		ifup "$IF" >/dev/null 2>&1
-	fi
-}
-
-# ИНТЕРФЕЙС-СИРОТА для модема $1: указывает на устройство ЭТОГО модема, но создан
-# НЕ для него и не принадлежит ни одной секции модема.
-#
-# Так выглядит подмена модема, которую swap_cleanup не ловит: он срабатывает на
-# смену vid:pid по ТОМУ ЖЕ пути, а если модем воткнули в другой разъём (1-1.3.3 ->
-# 1-1.3), для программы это просто новый модем. Интерфейс же старого остаётся и
-# висит на device-ноде (/dev/cdc-wdm0), которую ядро отдаёт новому модему - и тот
-# молча дозванивается с APN прежнего оператора.
-# Сам конфиг НЕ ПРАВИМ: интерфейс мог быть настроен пользователем вручную.
-# Только помечаем находку, чтобы показать её в интерфейсе.
-# Привести proto интерфейса в соответствие ДРАЙВЕРУ его cdc-wdm устройства.
-#
-# Интерфейс может остаться от другого модема - имя одно, железо разное.
-# Наблюдалось вживую: Compal RXM-G1 (cdc_mbim) подхватил интерфейс от Telit
-# LM960A18 (qmi_wwan) вместе с proto=qmi. uqmi на MBIM-устройстве висел
-# минутами, netifd писал "Request timed out" и клал интерфейс - модем не
-# поднимался вообще, а причина ниоткуда не видна.
-#
-# Вызывается и при первичной настройке, и при переключении модемов: проверка
-# только на первой настройке не починила бы уже сломанные конфигурации.
-fix_iface_proto() {   # $1 - имя интерфейса
-	_fp_if="$1"
-	[ -n "$_fp_if" ] || return
-	_fp_pr=$(uci -q get "network.$_fp_if.proto")
-	_fp_dev=$(uci -q get "network.$_fp_if.device")
-	_fp_drv=""
-	case "$_fp_dev" in
-		/dev/cdc-wdm*)
-			_fp_drv=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$_fp_dev")/device/driver" 2>/dev/null)" 2>/dev/null)
-			;;
-	esac
-	case "$_fp_drv" in
-		cdc_mbim) _fp_want="mbim" ;;
-		qmi_wwan) _fp_want="qmi" ;;
-		*)        return ;;
-	esac
-	[ "$_fp_pr" = "$_fp_want" ] && return
-	# Правим ТОЛЬКО заведомо несовместимую пару kernel-протоколов. Всё прочее
-	# (modemmanager, xmm, atc, ncm...) - осознанный выбор пользователя, и
-	# перебивать его мы не вправе, даже если он выглядит непривычно.
-	case "$_fp_pr" in
-		mbim|qmi) ;;
-		*) return ;;
-	esac
-	logger -t 5gmodem "iface $_fp_if: proto=$_fp_pr не подходит драйверу $_fp_drv - ставим $_fp_want"
-	uci -q set "network.$_fp_if.proto=$_fp_want"
-	uci -q commit network
-}
-
-orphan_iface_for() {
-	local P="$1" IF OWNER DEV NODES n claimed
-	NODES=" $(wdm_for_path "$P") "
-	for n in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
-		[ -e "$n" ] && NODES="$NODES /dev/$(basename "$n") "
-	done
-	for n in /sys/bus/usb/devices/$P:*/net/*; do
-		[ -e "$n" ] && NODES="$NODES $(basename "$n") "
-	done
-	for IF in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
-		DEV=$(uci -q get "network.$IF.device")
-		[ -n "$DEV" ] || continue
-		echo "$NODES" | grep -q " $DEV " || continue
-		# Штамп наш - всё честно. Решаем по IMEI (см. lib.sh): интерфейс модема,
-		# вытесненного из этого разъёма, тоже носит наш путь, но чужой IMEI.
-		iface_owned_by "$IF" "$P" "$(imei_for_path "$P")" && continue
-		# держит ли этот интерфейс какая-нибудь секция модема?
-		claimed=$(sec_for_iface "$IF")
-		[ -n "$claimed" ] && continue
-		# IPv6-БЛИЗНЕЦ НЕ ЧУЖОЙ. Прошивки заводят пару "wwan" (dhcp) и "wwan6"
-		# (dhcpv6) НА ОДНОМ И ТОМ ЖЕ устройстве. Секция модема держит только
-		# первый, второй формально ничей - и попадал сюда как «интерфейс от
-		# другого модема», из-за чего на живом LT300 показывалось пугающее
-		# предупреждение о чужих настройках и предложение пересоздать интерфейс.
-		# Признак близнеца: имя оканчивается на 6, а интерфейс без этой цифры
-		# существует и сидит на том же устройстве. Тот же приём уже применён в
-		# netpri.sh, где такая пара удваивала аплинк.
-		case "$IF" in
-			*6)
-				_base=${IF%6}
-				if [ "$(uci -q get "network.$_base.device")" = "$DEV" ]; then
-					continue
-				fi
-				;;
-		esac
-		echo "$IF"; return 0
-	done
-	return 1
-}
 
 # AT port of the modem at a usb path: fast via ModemManager, else probe its ttys
 at_for_path() {
@@ -537,263 +168,37 @@ at_for_path() {
 			xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
 		esac
 	fi
+	# ИЗВЕСТНЫЙ AT-ПОРТ ПРОБУЕМ ПЕРВЫМ.
+	#
+	# Перебор идёт пробой AT с потолком 4 c на порт (см. at_probe), а у модема их
+	# бывает семь - то есть до полуминуты на молчащих DIAG-портах. Реестр отдаёт
+	# сохранённый at_port УЖЕ сверенным со списком портов этого модема (устаревшую
+	# настройку он гасит сам), поэтому поставить его в начало и дёшево, и
+	# безопасно: если он не ответит, перебор пойдёт как раньше. Раньше здесь
+	# сохранённый порт не учитывался вовсе, и каждый вызов начинал с нуля.
+	_afp_at=$(_reg_rec "$1" | jsonfilter -e '@.at_port' 2>/dev/null)
 	_afp_list=""
+	[ -n "$_afp_at" ] && [ "$_afp_at" != "$_afp_skip" ] && _afp_list="$_afp_at"
 	for _afp_t in $(modem_ttys "$1"); do
 		[ "$_afp_t" = "$_afp_skip" ] && continue
+		[ "$_afp_t" = "$_afp_at" ] && continue
 		_afp_list="$_afp_list $_afp_t"
 	done
 	detect_at $_afp_list
 }
 
-# Подобрать APN по оператору. $1 - имя оператора, $2 - код сети (MCC-MNC).
-# Сперва по ИМЕНИ: у MVNO оно своё, а код принадлежит хосту сети (SIM Сбера
-# работает на Tele2 и отдаёт её PLMN, но APN нужен сберовский).
-# Понижение регистра, пригодное для кириллицы.
-#
-# tr 'A-ZА-Я' 'a-zа-я' НЕ РАБОТАЕТ: busybox tr обрабатывает БАЙТЫ, а кириллица в
-# UTF-8 двухбайтовая. Проверено на роутере - "Тинькофф" превращался в
-# "\xd0\xa2инь\xd0\xbaофф"-подобный мусор, и все кириллические образцы в
-# apn.list (т-мобайл, тинькоф, сбер, газпром) не могли совпасть НИКОГДА.
-# sed работает с UTF-8 последовательностями как с литералами, поэтому годится.
-_tolower() {
-	printf '%s' "$1" | tr 'A-Z' 'a-z' | sed \
-		-e 's/А/а/g;s/Б/б/g;s/В/в/g;s/Г/г/g;s/Д/д/g;s/Е/е/g;s/Ё/ё/g' \
-		-e 's/Ж/ж/g;s/З/з/g;s/И/и/g;s/Й/й/g;s/К/к/g;s/Л/л/g;s/М/м/g' \
-		-e 's/Н/н/g;s/О/о/g;s/П/п/g;s/Р/р/g;s/С/с/g;s/Т/т/g;s/У/у/g' \
-		-e 's/Ф/ф/g;s/Х/х/g;s/Ц/ц/g;s/Ч/ч/g;s/Ш/ш/g;s/Щ/щ/g;s/Ъ/ъ/g' \
-		-e 's/Ы/ы/g;s/Ь/ь/g;s/Э/э/g;s/Ю/ю/g;s/Я/я/g'
-}
-
-# Порядок поиска APN. Сперва код ИЗ SIM (у MVNO он собственный), затем имя,
-# затем код зарегистрированной сети. Так MVNO получает свой APN, а обычная
-# симка - прежний результат: её код в IMSI и в сети совпадает.
-# ПОДБОР APN. Три слоя, от точного к широкому:
-#   1) наши переопределения (apn.list) по коду сети из SIM - для РФ-MVNO,
-#      которые мы выверили руками (T-Mobile -> tt и т.п.);
-#   2) МИРОВАЯ база providers.tsv по IMSI/ICCID со скорингом специфичности -
-#      1459 операторов, покрывает почти любую симку, включая MVNO;
-#   3) наши по имени оператора - последний резерв.
-apn_pick() {   # $1 - имя, $2 - PLMN сети, $3 - список PLMN из IMSI, $4 - IMSI, $5 - ICCID
-	for _sp in $3; do
-		_a=$(apn_lookup "" "$_sp") && { echo "$_a"; return 0; }
-	done
-	_a=$(apn_db_lookup "$4" "$5") && { echo "$_a"; return 0; }
-	apn_lookup "$1" "$2"
-}
-
-# Подбор из мировой базы providers.tsv (формат и метод скоринга взяты из проекта
-# apn-autoconfig, данные - GNOME MBPI + AOSP, см. licenses/PROVIDERS-NOTICE.txt).
-# Матч по MCC-MNC (из префикса IMSI), маске IMSI и маске ICCID; выигрывает самая
-# специфичная строка. operator_id пуст - сопоставляем по префиксу IMSI, чтобы у
-# MVNO подобрать APN его ДОМАШНЕГО кода, а не гостевой сети.
-apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
-	_db="$RES/providers.tsv"
-	[ -f "$_db" ] || return 1
-	case "$1" in ''|*[!0-9]*) return 1 ;; esac
-	_dbapn=$(awk -F '\t' -v imsi="$1" -v iccid="$2" '
-		function wildcard(v) { return v == "-" || v == "*" || v == "" }
-		function starts(s, p) { return substr(s, 1, length(p)) == p }
-		# Маска: цифры сверяем, "x" - любой символ.
-		function dmatch(value, pattern,   i, e, a) {
-			if (length(value) < length(pattern)) return 0
-			for (i = 1; i <= length(pattern); i++) {
-				e = substr(pattern, i, 1); a = substr(value, i, 1)
-				if (e != "x" && e != a) return 0
-			}
-			return 1
-		}
-		/^[[:space:]]*#/ || NF < 8 { next }
-		{
-			mccmnc=$1; imsi_p=$2; iccid_p=$3; apn=$7; priority=$8
-			if (!wildcard(mccmnc) && !starts(imsi, mccmnc)) next
-			if (!wildcard(imsi_p) && !dmatch(imsi, imsi_p)) next
-			if (!wildcard(iccid_p) && iccid != "" && !dmatch(iccid, iccid_p)) next
-			s=0
-			if (!wildcard(mccmnc)) s += 100 + length(mccmnc)
-			if (!wildcard(imsi_p)) s += 200 + length(imsi_p)
-			if (!wildcard(iccid_p)) s += 200 + length(iccid_p)
-			if (priority !~ /^[0-9]+$/) priority=100
-			# Инверсный счёт фиксированной ширины: сортировка переносима на любом
-			# busybox, самый специфичный (и с меньшим priority) окажется первым.
-			printf "%06d\t%06d\t%s\n", 999999 - s, priority, apn
-		}
-	' "$_db" | sort | head -1 | cut -f3)
-	[ -n "$_dbapn" ] && { echo "$_dbapn"; return 0; }
-	return 1
-}
-
-apn_lookup() {
-	_n=$(_tolower "$1")
-	_p="$2"
-	[ -f "$RES/apn.list" ] || return 1
-	if [ -n "$_n" ]; then
-		while IFS=: read -r _t _pat _apn; do
-			case "$_t" in name) : ;; *) continue ;; esac
-			[ -n "$_pat" ] || continue
-			case "$_n" in *"$_pat"*) echo "$_apn"; return 0 ;; esac
-		done < "$RES/apn.list"
-	fi
-	if [ -n "$_p" ]; then
-		while IFS=: read -r _t _pat _apn; do
-			case "$_t" in plmn) : ;; *) continue ;; esac
-			[ "$_pat" = "$_p" ] && { echo "$_apn"; return 0; }
-		done < "$RES/apn.list"
-	fi
-	return 1
-}
-
-# Найти интерфейс, который УЖЕ смотрит на этот модем ($1 = USB-путь).
-# Нужен, чтобы не плодить дубли: на роутерах, где модем настроен вендором или
-# самим пользователем до установки пакета, интерфейс уже есть и работает
-# (у Cudy LT300 это "wwan" на usb0). Создав рядом второй, мы получили бы два
-# интерфейса на одном устройстве и войну за маршрут по умолчанию.
-#
-# Ищем по ФАКТИЧЕСКОМУ устройству, а не по имени: network.<iface>.device может
-# быть и сетевым узлом (eth2, usb0), и управляющим (/dev/cdc-wdm0), а у части
-# протоколов его нет вовсе - тогда смотрим на поднятый l3_device.
-iface_for_path() {
-	_want="$1"; [ -n "$_want" ] || return 1
-	for _if in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
-		case "$_if" in loopback|lan|wan6) continue ;; esac
-		_dev=$(uci -q get "network.$_if.device")
-		[ -n "$_dev" ] || _dev=$(ifup_state_dev "$_if")
-		[ -n "$_dev" ] || continue
-		_p=""
-		case "$_dev" in
-			/dev/cdc-wdm*)
-				_p=$(readlink -f "/sys/class/usbmisc/$(basename "$_dev")/device" 2>/dev/null)
-				_p=$(echo "$_p" | sed 's|/[0-9]*-[0-9.]*:[0-9.]*$||;s|.*/||') ;;
-			/dev/tty*)
-				_p=$(readlink -f "/sys/class/tty/$(basename "$_dev")/device" 2>/dev/null)
-				_p=$(echo "$_p" | sed 's|/ttyUSB[0-9]*$||;s|.*/||;s|:.*||') ;;
-			*)
-				[ -e "/sys/class/net/$_dev" ] || continue
-				_p=$(readlink -f "/sys/class/net/$_dev/device" 2>/dev/null)
-				_p=$(echo "$_p" | sed 's|/[0-9]*-[0-9.]*:[0-9.]*$||;s|.*/||') ;;
-		esac
-		[ "$_p" = "$_want" ] && { echo "$_if"; return 0; }
-	done
-	return 1
-}
-
-# l3_device поднятого интерфейса (для тех, у кого device в конфиге не задан)
-ifup_state_dev() {
-	ubus call network.interface."$1" status 2>/dev/null \
-		| jsonfilter -e '@["l3_device"]' 2>/dev/null
-}
 
 
-# make sure a 'modem' section exists for a path; echo its name
-# IMEI модема по USB-пути. Только уже готовые источники плюс ОДНА дешёвая
-# AT-команда: вызывается при подключении, а не в цикле опроса.
-modem_imei() {   # $1 - usb-путь
-	# 1) уже записанный в секции - самый дешёвый источник
-	_mi=$(uci -q get "$CFG.$(secname "$1").imei")
-	case "$_mi" in ''|*[!0-9]*) : ;; *) echo "$_mi"; return 0 ;; esac
-	# 2) HiLink отдаёт IMEI по своему API, AT-порта у него может не быть вовсе
-	if [ "$(uci -q get "$CFG.$(secname "$1").kind")" = "hilink" ]; then
-		_mi=$("$RES/hilink.sh" json "$1" 2>/dev/null | jsonfilter -e '@.imei' 2>/dev/null)
-		case "$_mi" in ''|*[!0-9]*) : ;; *) echo "$_mi"; return 0 ;; esac
-	fi
-	# 3) спрашиваем модем: первый его tty, который отвечает.
-	# Список портов - СВЕЖИЙ (--refresh): у кэша TTL 8 c, а после переэнумерации
-	# номера ttyUSB переезжают между устройствами. Чужой tty из устаревшего
-	# списка = чужой IMEI, а по нему ensure_section сносил секцию соседа.
-	# Ответ читаем ПОД СЕРИАЛИЗАТОРОМ: без него AT+CGSN сталкивается с опросом
-	# метрик в том же порту и получает ответ чужой команды (известный класс
-	# ошибок - см. шапку atlock.sh). Не дождались замка - не гадаем, выходим.
-	for _mt in $("$RES/listmodems.sh" --refresh 2>/dev/null \
-			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null); do
-		[ -e "$_mt" ] || continue
-		at_lock "$_mt" 8 2>/dev/null || continue
-		_mi=$(sms_tool -d "$_mt" at "AT+CGSN" 2>/dev/null | tr -d '\r' \
-			| grep -oE '^[0-9]{14,16}$' | head -1)
-		at_unlock 2>/dev/null
-		[ -n "$_mi" ] && { echo "$_mi"; return 0; }
-	done
-	return 1
-}
 
-# Секция с таким IMEI, отличная от $2. Пусто - такой нет.
-sec_by_imei() {   # $1 - imei, $2 - имя секции, которую пропустить
-	[ -n "$1" ] || return 1
-	uci -q show "$CFG" 2>/dev/null \
-		| sed -n "s/^$CFG\.\(m_[^.]*\)\.imei='\?$1'\?\$/\1/p" \
-		| while read -r _si; do [ "$_si" = "$2" ] || echo "$_si"; done | head -1
-}
 
-# ПЕРЕЕЗД ПРОФИЛЯ НА НОВЫЙ USB-ПУТЬ.
-#
-# Имя секции у нас завязано на путь (m_2_1_4), а путь меняется, стоит переткнуть
-# модем в другой разъём. IMEI при этом остаётся - он и есть настоящий признак
-# железа. Поэтому: увидели тот же IMEI на новом пути - переносим НАСТРОЙКИ
-# ПОЛЬЗОВАТЕЛЯ со старой секции и старую удаляем.
-#
-# Переносим только осознанный выбор. Производное (модель, at_port, vidpid,
-# netdev) не трогаем: оно перечитывается у модема и на новом пути может быть
-# другим - например, номера tty почти наверняка сменятся.
-migrate_profile() {   # $1 - старая секция, $2 - новая секция
-	[ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] || return 0
-	for _mk in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
-	           celllock at_debug pdp_mode pdp_ok imei; do
-		_mv=$(uci -q get "$CFG.$1.$_mk")
-		[ -n "$_mv" ] && uci -q set "$CFG.$2.$_mk=$_mv"
-	done
-	uci -q delete "$CFG.$1"
-	uci -q commit "$CFG"
-	logger -t 5gmodem "профиль перенесён: $1 -> $2 (тот же модем в другом разъёме)"
-}
 
-ensure_section() {
-	SEC=$(secname "$1")
-	if ! uci -q get "$CFG.$SEC" >/dev/null 2>&1; then
-		uci -q set "$CFG.$SEC=modem"
-		uci -q set "$CFG.$SEC.path=$1"
-		uci -q set "$CFG.$SEC.product=$(modem_product "$1")"
-		uci -q set "$CFG.$SEC.vidpid=$(modem_vidpid "$1")"
-	else
-		swap_cleanup "$1" "$SEC"
-	fi
-	# ГАРАНТИРУЕМ path у реальной секции. Её мог создать голой path-less писатель
-	# (напр. setopt atdebug раньше resolve), и тогда else-ветка выше путь не
-	# добавляла - модем «пропадал» из «Сохранённых профилей» и циклов по m_*.
-	[ -n "$(uci -q get "$CFG.$SEC.path")" ] || uci -q set "$CFG.$SEC.path=$1"
-	# ТОТ ЖЕ МОДЕМ (по IMEI) уже известен под другим именем секции? Два случая:
-	#   - переехал в другой разъём (path сменился - секция под старым path);
-	#   - вернулся после вытеснения из этого порта (профиль в m_park_<imei>).
-	# Забираем его настройки, чтобы перетыкание/качели не сбрасывали APN, соту,
-	# mm_exclude и прочий осознанный выбор. Делаем в ОБЕИХ ветках: возврат в ТОТ
-	# ЖЕ порт идёт через else (секция уже есть после swap_cleanup) и раньше
-	# парковку не поднимал. modem_imei дешёв, если IMEI уже в секции.
-	_es_imei=$(modem_imei "$1")
-	if [ -n "$_es_imei" ]; then
-		_es_old=$(sec_by_imei "$_es_imei" "$SEC")
-		if [ -n "$_es_old" ]; then
-			# ОБА МОДЕМА НА ШИНЕ - ЗНАЧИТ IMEI ПРОЧИТАН НЕВЕРНО.
-			#
-			# Миграция придумана для «модем переставили в другой разъём»: старый
-			# путь при этом ПУСТ. Если же устройство на старом пути присутствует
-			# ПРЯМО СЕЙЧАС, то два разных физических модема не могут иметь один
-			# IMEI - мы просто прочитали чужой (порт занят/ответ перепутан/список
-			# tty устарел). Раньше в этом случае секция живого соседа УДАЛЯЛАСЬ, а
-			# его интерфейс и настройки уезжали чужому модему - у пользователя с
-			# четырьмя модемами (два из них с одинаковым 05c6:90d5) так пропала
-			# секция Compal, а MV31-W унаследовал её IMEI, модель и интерфейс.
-			# Чужой IMEI НЕ пишем и НЕ мигрируем - молчим до следующего опроса.
-			_es_oldpath=$(uci -q get "$CFG.$_es_old.path")
-			if [ -n "$_es_oldpath" ] && [ -e "/sys/bus/usb/devices/$_es_oldpath" ]; then
-				logger -t 5gmodem "IMEI $_es_imei прочитан у $1, но принадлежит присутствующему $_es_oldpath - миграцию профиля отменяю"
-				echo "$SEC"
-				return 0
-			fi
-			uci -q set "$CFG.$SEC.imei=$_es_imei"
-			migrate_profile "$_es_old" "$SEC"
-		else
-			uci -q set "$CFG.$SEC.imei=$_es_imei"
-		fi
-	fi
-	echo "$SEC"
-}
+
+
+
+
+
+
+
 
 # snapshot the current AT port into a modem section. NOTE: we deliberately do
 # NOT copy 'network'/'iface_proto' here - those belong to the interface and are
@@ -801,34 +206,23 @@ ensure_section() {
 # working 'network' here used to propagate a shared "modem" into every modem's
 # section, so two modems ended up on one interface (shared IP).
 save_to() {
-	SEC=$(ensure_section "$1")
+	# ИМЯ СЕКЦИИ - ЧИСТАЯ ФУНКЦИЯ ОТ ПУТИ, РАЗБОР ЛИЧНОСТИ ЗДЕСЬ НЕ НУЖЕН.
+	#
+	# Здесь стоял ensure_section - ради одного лишь имени секции. А он делает
+	# полный разбор личности модема: запрос реестра, swap_cleanup, штамп serial,
+	# чтение IMEI, два обхода конфига в sec_by_serial/sec_by_imei. Замер
+	# переключения вкладки (профиль внутри switch): 640 мс из 1260 уходило РОВНО
+	# сюда - на модем, который мы ПОКИДАЕМ и про который всё давно известно.
+	#
+	# save_to зовётся из switch для АКТИВНОГО модема: его секция существует по
+	# определению (он активен - значит был настроен). Страховка на случай
+	# рассинхрона оставлена: нет секции - идём длинным путём, как раньше.
+	SEC=$(secname "$1")
+	uci -q get "$CFG.$SEC" >/dev/null 2>&1 || SEC=$(ensure_section "$1")
 	uci -q set "$CFG.$SEC.at_port=$(uci -q get $CFG.@5gmodem[0].at_port)"
 	uci -q commit "$CFG"
 }
 
-# Pick the SMS read storage for the active modem. Incoming messages land in
-# different places by modem: many USB modems (e.g. SimCom SIM7100) deliver them
-# to ME (modem memory), not SM (SIM) - reading SM then shows an empty inbox and
-# the UI complains there is no port. Probe both and prefer the one that holds
-# messages; default to ME (the common case). Only sets the value when the user
-# has not chosen one, so it never overrides a manual SIM/Memory pick.
-set_sms_storage() {
-	AT="$1"
-	[ -n "$AT" ] && [ -e "$AT" ] || return 0
-	command -v sms_tool >/dev/null 2>&1 || return 0
-	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
-	[ -z "$(uci -q get 5gmodem.sms.storage)" ] || return 0
-	me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-	sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-	if   [ "${me:-0}" -gt 0 ] 2>/dev/null; then STG=ME
-	elif [ "${sm:-0}" -gt 0 ] 2>/dev/null; then STG=SM
-	elif [ -n "$me" ]; then STG=ME          # ME supported, just empty
-	elif [ -n "$sm" ]; then STG=SM          # only SM answered
-	else STG=ME
-	fi
-	uci -q set "5gmodem.sms.storage=$STG"
-	uci -q commit 5gmodem
-}
 
 # Настроить ОДИН модем по usb-пути. Вынесено из autosetup ради цикла по всем
 # найденным: тело одинаковое, разница только в том, чей это модем.
@@ -854,365 +248,12 @@ set_sms_storage() {
 # ещё нет.
 HILINK_IDS="12d1:14dc 12d1:14db"
 
-# Убрать НАШИ ЖЕ интерфейсы, оставшиеся от прежних подключений этого модема.
-#
-# Признак строгий: штамп modem_path совпадает с путём модема, а сам интерфейс
-# больше не тот, которым модем пользуется сейчас. Такой интерфейс завели мы, он
-# указывает на устройство, которого у модема уже нет, и держать его незачем -
-# он лишь висит в firewall-зоне и мозолит глаза в «Приоритете интернета».
-#
-# ЧУЖОЕ НЕ ТРОГАЕМ: без штампа (интерфейс завёл вендор или пользователь) не
-# удаляем ничего - именно поэтому штамп и вводился.
-drop_stale_ifaces() {   # $1 - usb-путь модема, $2 - интерфейс, который оставляем
-	[ -n "$1" ] || return 0
-	_ds_imei=$(imei_for_path "$1")
-	_ds_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
-	for _ds_i in $(uci show network 2>/dev/null \
-			| sed -n "s/^network\.\([^.]*\)\.modem_path='\?$1'\?\$/\1/p"); do
-		[ "$_ds_i" = "$2" ] && continue
-		# НЕ ТРОГАЕМ чужое железо. Путь у интерфейса может совпасть просто потому,
-		# что в этом разъёме РАНЬШЕ стоял другой модем: его интерфейс теперь
-		# сохранён за ним (штамп IMEI) и ждёт возвращения - снести его значило бы
-		# вернуть ровно ту потерю настроек, ради которой всё и затевалось.
-		iface_owned_by "$_ds_i" "$1" "$_ds_imei" || continue
-		ifdown "$_ds_i" >/dev/null 2>&1
-		uci -q delete "network.$_ds_i"
-		[ -n "$_ds_z" ] && uci -q del_list "firewall.$_ds_z.network=$_ds_i"
-		logger -t 5gmodem "убран осиротевший интерфейс $_ds_i (модем $1 теперь на ${2:-?})"
-	done
-	uci -q commit network
-	uci -q commit firewall
-}
 
-is_hilink() {   # $1 - usb-путь
-	_ih_sec=$(secname "$1")
-	[ "$(uci -q get "$CFG.$_ih_sec.kind")" = "hilink" ] && return 0
-	_ih_id=$(modem_vidpid "$1")
-	[ -n "$_ih_id" ] || return 1
-	for _ih_k in $HILINK_IDS; do
-		[ "$_ih_id" = "$_ih_k" ] && return 0
-	done
-	# СТРУКТУРНЫЙ ПРИЗНАК (только Huawei): модем отдаёт СЕТЕВУЮ КАРТУ, но ни
-	# одного AT-порта и ни одного cdc-wdm - управлять им нечем, значит он держит
-	# IP-стек сам, т.е. HiLink. Список ID за всеми композициями не поспевает: у
-	# 12d1:14db (E8372 / МТС 8211F) его не было, и модем уезжал в обычную ветку -
-	# получал proto=fibocom на eth2 и падал с NO_DEVICE, вместо dhcp.
-	# Ограничено вендором 12d1: у других вендоров «сеть без портов» означает
-	# другое (напр. модуль в RNDIS, которым мы всё же управляем по AT).
-	case "$_ih_id" in
-		12d1:*)
-			_ih_j=$("$RES/listmodems.sh" 2>/dev/null)
-			_ih_tty=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)
-			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
-			_ih_net=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].net[*]" 2>/dev/null)
-			[ -z "$_ih_tty" ] && [ -z "$_ih_wdm" ] && [ -n "$_ih_net" ] && return 0
-			;;
-	esac
-	return 1
-}
 
-# Сетевая карта HiLink-модема (eth*/usb* через cdc_ether), если есть.
-hilink_netdev() {   # $1 - usb-путь
-	for _hd in /sys/bus/usb/devices/"$1":*/net/*; do
-		[ -e "$_hd" ] || continue
-		basename "$_hd"; return 0
-	done
-	return 1
-}
 
-# Сетевое имя модема, если он БЕЗ ПОРТОВ (HiLink). Пусто - обычный модем.
-# Признак строгий: есть net[], и при этом нет ни tty, ни wdm.
-hilink_net() {   # $1 - usb-путь
-	_hl=$("$RES/listmodems.sh" 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$1\"].net[0]" 2>/dev/null)
-	[ -n "$_hl" ] || return 1
-	_ht=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)
-	_hw=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null)
-	[ -n "$_ht$_hw" ] && return 1
-	echo "$_hl"
-}
 
-# Интерфейс для модема без портов. Никакого mkiface: у HiLink нет ни AT, ни
-# cdc-wdm, дозваниваться некуда - модем держит соединение сам и раздаёт адрес
-# по DHCP. Роутеру остаётся обычный dhcp-клиент на его сетевой карте.
-setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
-	_hp="$1"; _hd="$2"
-	_hsec=$(ensure_section "$_hp")
-	uci -q set "$CFG.$_hsec.kind=hilink"
-	uci -q set "$CFG.$_hsec.netdev=$_hd"
-	_hif=$(uci -q get "$CFG.$_hsec.network")
-	# ВОЗВРАТ МОДЕМА. Секцию мог очистить swap_cleanup (его вытеснили из порта),
-	# но интерфейс при этом СОХРАНЁН за железом по IMEI. Находим свой - и модем
-	# поднимается на своём же интерфейсе, без пересоздания и без нового имени
-	# (иначе на роутере копились modem/modem2/modem3 от одного и того же модема).
-	[ -n "$_hif" ] || _hif=$(iface_for_imei "$(imei_for_path "$_hp")")
-	if [ -z "$_hif" ]; then
-		# имя по образцу остальных: modem, modem2, ...
-		_hn=1; _hif="modem"
-		while uci -q get "network.$_hif" >/dev/null 2>&1; do
-			_hn=$((_hn + 1)); _hif="modem$_hn"
-		done
-	fi
-	uci -q set "network.$_hif=interface"
-	uci -q set "network.$_hif.proto=dhcp"
-	uci -q set "network.$_hif.device=$_hd"
-	# ОСТАТКИ ЧУЖОГО ПРОТОКОЛА. Интерфейс мог быть создан обычной веткой, пока
-	# модем не опознавался как HiLink (см. is_hilink): там лежали apn/pdptype/
-	# usbpath от fibocom/qmi. Для dhcp они бессмысленны, а в UI показывались как
-	# настройки соединения, которых у HiLink нет - APN задаётся в веб-морде
-	# самого модема.
-	for _hk in apn pdptype usbpath auth username password devpath allow_roaming; do
-		uci -q delete "network.$_hif.$_hk" 2>/dev/null
-	done
-	# ВТОРИЧНЫЙ АПЛИНК ПО УМОЛЧАНИЮ. Без метрики DHCP-интерфейс получает metric 0 и
-	# конкурирует с WAN/WiFi за маршрут по умолчанию (наблюдалось на E3372: интерфейс
-	# поднялся с metric 0, трафик не шёл, пока не переключили приоритеты). Ставим 20,
-	# как mkiface для обычных модемов; но ТОЛЬКО если метрики ещё нет - иначе на каждом
-	# переподключении затирали бы выбор пользователя (см. «Приоритет интернета»).
-	[ -n "$(uci -q get "network.$_hif.metric")" ] || uci -q set "network.$_hif.metric=20"
-	# Модем вернулся: снимаем «спящее» состояние, выставленное при вытеснении
-	# (auto=0), и метку пересоздания от старых конфигов.
-	uci -q delete "network.$_hif.auto" 2>/dev/null
-	uci -q delete "network.$_hif.modem_stale" 2>/dev/null
-	# ШТАМП ВЛАДЕЛЬЦА. mkiface его ставит, а мы идём мимо mkiface (у HiLink нет
-	# ни AT-порта, ни cdc-wdm - дозваниваться некуда), и интерфейс оставался
-	# ничьим. Из-за этого его нельзя было опознать как свой при следующем
-	# подключении, и модем каждый раз получал НОВЫЙ интерфейс: на стенде их
-	# накопилось три (modem, modem4, modem5), и все висели в приоритетах.
-	# Штампуем И IMEI: по одному лишь пути два разных модема в одном разъёме
-	# неразличимы (см. lib.sh). HiLink в переходных композициях IMEI может не
-	# отдать - тогда останется только путь, как раньше.
-	stamp_iface_owner "$_hif" "$_hp"
-	# ЗОНА ФАЕРВОЛА. Без неё интерфейс остаётся «серым»: не в wan, значит нет ни
-	# NAT, ни разрешающих правил - клиенты в интернет не выходят, хотя у самого
-	# роутера связь есть. Добавляем в ту же зону, где остальные модемы.
-	_hz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
-	if [ -n "$_hz" ]; then
-		case " $(uci -q get "firewall.$_hz.network") " in
-			*" $_hif "*) ;;
-			*) uci -q add_list "firewall.$_hz.network=$_hif"
-			   uci -q commit firewall
-			   logger -t 5gmodem "hilink: $_hif добавлен в зону wan" ;;
-		esac
-	fi
-	uci -q set "$CFG.$_hsec.network=$_hif"
-	drop_stale_ifaces "$_hp" "$_hif"
-	uci -q set "$CFG.$_hsec.iface_proto=dhcp"
-	uci -q commit "$CFG"
-	ifup "$_hif" >/dev/null 2>&1
-	logger -t 5gmodem "hilink: $_hp ($_hd) -> интерфейс $_hif (dhcp)"
-	echo "$_hif"
-}
 
-# Перевести HiLink-модем в режим с AT-портами (у Huawei это «debug mode»).
-#
-# ЗАЧЕМ. В обычном режиме такой модем отдаёт только веб-API, где нет ни TAC, ни
-# диапазона, ни EARFCN, ни USSD. В режиме debug он показывает ещё и шесть
-# последовательных портов, СОХРАНЯЯ при этом сетевую карту и рабочий интернет
-# (проверено на E3372: ping и HTTP через него проходят, счётчики трафика растут).
-# Тогда модем ведётся обычным путём, наравне с остальными.
-#
-# Режим НЕ переживает перезагрузку модема, поэтому переключаем при каждом его
-# появлении на шине. Управляется галкой at_debug в настройках модема; по
-# умолчанию включено, но выключить можно - у кого-то модем настроен под свой
-# веб-интерфейс, и менять поведение железа молча нельзя.
-try_at_debug() {   # $1 - usb-путь
-	_ad_sec=$(secname "$1")
-	[ "$(uci -q get "$CFG.$_ad_sec.at_debug")" = "0" ] && return 1
-	# Уже с портами - ничего не делаем.
-	[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && return 1
-	# ЖДЁМ ГОТОВНОСТИ ВЕБ-API. Сразу после подключения (cdrom -> HiLink) веб-сервер
-	# модема поднимается не мгновенно - секунд 30-40, и вызванный раньше времени
-	# mode debug молча не срабатывает. Именно это и ловил хотплаг: модем оставался
-	# в HiLink. Ждём, пока probe вернёт hilink:1, и только тогда переключаем.
-	_ad_w=0
-	while [ "$_ad_w" -lt 25 ]; do
-		"$RES/hilink.sh" probe "$1" 2>/dev/null | grep -q '"hilink":1' && break
-		sleep 3
-		_ad_w=$((_ad_w + 1))
-	done
-	# Пробуем переключить, до трёх раз: первая команда иногда теряется, пока
-	# прошивка достартовывает свои службы.
-	_ad_ok=""
-	_ad_t=0
-	while [ "$_ad_t" -lt 3 ]; do
-		"$RES/hilink.sh" mode debug "$1" 2>/dev/null | grep -q '"success":true' && { _ad_ok=1; break; }
-		sleep 4
-		_ad_t=$((_ad_t + 1))
-	done
-	[ -n "$_ad_ok" ] || return 1
-	logger -t 5gmodem "hilink: $1 переведён в режим с AT-портами"
-	# Порты появляются не мгновенно.
-	_ad_n=0
-	while [ "$_ad_n" -lt 20 ]; do
-		sleep 2
-		rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
-		[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && break
-		_ad_n=$((_ad_n + 1))
-	done
-	# После смены режима передача данных сама не поднимается - включаем.
-	"$RES/hilink.sh" connect "$1" >/dev/null 2>&1
-	return 0
-}
 
-setup_one_modem() {
-	P="$1"
-	# HiLink-модем ведём ОСОБО: интернет у него всегда через собственную сетевую
-	# карту (интерфейс DHCP), а AT-порты - лишь источник метрик/SMS/USSD, когда
-	# модем в debug. Сначала пробуем открыть порты, затем ВСЕГДА создаём/подхватываем
-	# DHCP-интерфейс. Обычный путь (mkiface) создал бы второй, лишний интерфейс.
-	if is_hilink "$P"; then
-		uci -q set "$CFG.$(secname "$P").kind=hilink"
-		uci -q commit "$CFG"
-		# СНАЧАЛА поднимаем DHCP-интерфейс, ПОТОМ переключаем в debug.
-		# Порядок критичен: web-API модема (192.168.43.1) доступен ТОЛЬКО когда на
-		# его сетевой карте (eth3) есть IP из его подсети - _sess_new/_addr_for
-		# биндят curl на этот адрес. Раньше try_at_debug звался ПЕРВЫМ: на свежем
-		# подключении eth3 ещё без адреса, сессия к web-API не бралась, mode debug
-		# молча проваливался, и модем оставался в HiLink без AT-портов и метрик
-		# (issue #2: "часто не переключается в debug сам").
-		_hnet=$(hilink_netdev "$P")
-		[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
-		# Теперь связь с модемом есть - переключаем в debug. try_at_debug сам ждёт
-		# готовности web-API (в т.ч. получения DHCP-аренды на eth3). После
-		# переэнумерации 14dc->1566 сетевая карта та же (eth3), но интерфейс
-		# переподхватываем, чтобы аренда восстановилась без задержки.
-		if try_at_debug "$P"; then
-			rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
-			_hnet=$(hilink_netdev "$P")
-			[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
-		fi
-		# ЗАКРЕПИТЬ AT-ПОРТ, если модем в debug (есть AT-порты) - ВСЕГДА, а не
-		# только когда переключили сейчас: модем мог быть в debug уже (кнопка
-		# «Отладка» на нём же). Без этого 5gmodem.sh видит «kind=hilink и at_port
-		# пуст» и читает метрики по web-API - страница показывает «HiLink», хотя
-		# AT-порты есть. resolve назначил бы порт, но autosetup выходит раньше него.
-		# at_for_path вернёт пусто для чистого HiLink (портов нет) - тогда не трогаем.
-		_dbg_at=$(at_for_path "$P")
-		if [ -n "$_dbg_at" ]; then
-			uci -q set "$CFG.$(secname "$P").at_port=$_dbg_at"
-			[ "$P" = "$(active_path)" ] && uci -q set "$CFG.@5gmodem[0].at_port=$_dbg_at"
-			uci -q commit "$CFG"
-		fi
-		"$RES/ensureports.sh" >/dev/null 2>&1
-		return 0
-	fi
-
-	SEC=$(ensure_section "$P")
-
-	# АКТИВНОСТЬ НЕ ОТБИРАЕМ. Свежевоткнутый модем настраиваем, но активным
-	# делаем только если действующего активного нет или он пропал с шины:
-	# иначе установка второго модема молча переключала бы на него и рабочую
-	# страницу первого, и глобальные порты sms_tool_js.
-	_am=$(active_path)
-	if [ -z "$_am" ] || ! "$RES/listmodems.sh" 2>/dev/null | grep -q "\"path\":\"$_am\""; then
-		uci -q set "$CFG.@5gmodem[0].active_modem=$P"
-	fi
-	A=$(at_for_path "$P")
-	[ -n "$A" ] && {
-		uci -q set "$CFG.$SEC.at_port=$A"
-		# Глобальный порт принадлежит АКТИВНОМУ модему: перезаписав его при
-		# настройке второго, мы увели бы метрики и SMS на чужой порт.
-		[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].at_port=$A"
-	}
-	uci -q commit "$CFG"
-
-	# ЗАПРОШЕННЫЙ proto (кнопка «переключиться в XMM» в блоке бендов): ставим ИМЕННО
-	# его, а НЕ подхватываем существующий и не гадаем по драйверу. После смены
-	# USB-композиции (GTUSBMODE=0 + ребут) autosetup иначе поставил бы драйверный
-	# fibocom, и xmm не поднялся бы. Маркер одноразовый - снимаем сразу.
-	_wp=$(uci -q get "$CFG.$SEC.want_proto")
-	if [ -n "$_wp" ]; then
-		uci -q delete "$CFG.$SEC.want_proto"; uci -q commit "$CFG"
-		MODEM_PATH="$P" "$RES/mkiface.sh" "$(uci -q get "$CFG.$SEC.network")" "$_wp" >/dev/null 2>&1
-		_made=$(uci -q get "$CFG.$SEC.network")
-		# КЛЮЧЕВОЕ для xmm: метрики уводим на AT-порт, ОТЛИЧНЫЙ от dial-порта. xmm
-		# держит dial-порт (ttyACM0) под данные (M-RAW_IP), и AT-проба на нём рвёт
-		# сессию - интерфейс флапает. at_for_path теперь исключает dial-порт xmm/atc
-		# и возвращает другой (у L850/L860 - ttyACM2).
-		_mp=$(at_for_path "$P")
-		if [ -n "$_mp" ]; then
-			uci -q set "$CFG.$SEC.at_port=$_mp"
-			[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].at_port=$_mp"
-		fi
-		uci -q commit "$CFG"
-		"$RES/ensureports.sh" >/dev/null 2>&1
-		[ -n "$_made" ] && { ubus call network reload >/dev/null 2>&1; ifup "$_made" >/dev/null 2>&1; }
-		logger -t 5gmodem "autosetup: $P -> want_proto=$_wp port=${_mp:-?} -> ${_made:-fail}"
-		# APN подбираем в фоне (autoapn верно берёт оператора: T-Mobile -> "tt").
-		[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
-		return 0
-	fi
-
-	# СНАЧАЛА ПОДХВАТ. Если интерфейс для этого модема уже существует - берём
-	# его себе, а не создаём второй. Так пакет, установленный на роутер с уже
-	# настроенным модемом, просто начинает им управлять.
-	# ПОДХВАТ ПО ЖЕЛЕЗУ (IMEI) - первым. Интерфейс мог быть СОХРАНЁН за этим
-	# модемом при вытеснении из порта (swap_cleanup больше его не сносит) либо
-	# модем переехал в другой разъём. В обоих случаях поднимаем ЕГО ЖЕ интерфейс,
-	# а не плодим новый (раньше от одного модема копились modem/modem2/modem3).
-	_ex=$(iface_for_imei "$(imei_for_path "$P")")
-	# Затем прежний признак - по USB-пути (старые конфиги без штампа IMEI).
-	[ -n "$_ex" ] || _ex=$(iface_for_path "$P")
-	# ...но путь-фолбэк может указать на интерфейс, СОХРАНЁННЫЙ за ДРУГИМ железом:
-	# его модем вытеснили из этого же разъёма, штамп пути на нём остался наш, а
-	# modem_stale мы теперь не ставим (в том и смысл - интерфейс ждёт возвращения).
-	# Без этой проверки новый модем забрал бы чужой интерфейс вместе с чужим прото
-	# и настройками - ровно то наследование, от которого штампы и заводились.
-	if [ -n "$_ex" ] && ! iface_owned_by "$_ex" "$P" "$(imei_for_path "$P")"; then
-		logger -t 5gmodem "autosetup: $_ex закреплён за другим модемом - не подхватываем, создадим свой"
-		_ex=""
-	fi
-	# Интерфейс, помеченный swap_cleanup как устаревший, НЕ подхватываем: его
-	# настройки относятся к прежнему модему на этом же USB-разъёме. Пропускаем
-	# подхват - ниже mkiface пересоздаст интерфейс с нуля под текущий модем.
-	if [ -n "$_ex" ] && [ "$(uci -q get "network.$_ex.modem_stale")" = "1" ]; then
-		logger -t 5gmodem "autosetup: $_ex помечен устаревшим - пересоздаём"
-		_ex=""
-	fi
-	if [ -n "$_ex" ]; then
-		uci -q set "$CFG.$SEC.network=$_ex"
-		[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].network=$_ex"
-		# Модем вернулся: снимаем «спящее» auto=0, выставленное при вытеснении, и
-		# переставляем штамп пути на ТЕКУЩИЙ разъём (IMEI остаётся прежним).
-		uci -q delete "network.$_ex.auto" 2>/dev/null
-		stamp_iface_owner "$_ex" "$P"
-		fix_iface_proto "$_ex"
-		_pr=$(uci -q get "network.$_ex.proto")
-		[ -n "$_pr" ] && uci -q set "$CFG.$SEC.iface_proto=$_pr"
-		uci -q commit "$CFG"
-		"$RES/ensureports.sh" >/dev/null 2>&1
-		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
-		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался
-		# только при создании нового, и унаследованный интерфейс навсегда
-		# оставался с APN прежней симки - именно так Beeline работал с "tt".
-		( "$RES/modemswitch.sh" autoapn "$_ex" ) >/dev/null 2>&1 </dev/null &
-		return 0
-	fi
-
-	# ИМЯ ИНТЕРФЕЙСА ВЫБИРАЕТ mkiface, а не мы. У него для этого есть готовая и
-	# более правильная логика: имя закрепляется ЗА СЕКЦИЕЙ МОДЕМА и увеличивается
-	# только если занято ДРУГИМ модемом - так два модема гарантированно не делят
-	# один интерфейс. Я сперва подбирал имя сам, проверяя network.<имя> в конфиге
-	# сети, - это другой вопрос: осиротевший интерфейс от снятого модема выглядел
-	# занятым, и в журнал уходило одно имя, а создавалось другое.
-	# proto=auto: mkiface определит его по драйверу управляющего узла - надёжнее,
-	# чем гадать по vid:pid, и не создаёт нерабочий qmi поверх MBIM.
-	# MODEM_PATH: mkiface по умолчанию берёт АКТИВНЫЙ модем, а мы можем настраивать
-	# и неактивный. С этой переменной он работает с нужным и не трогает глобальные
-	# ключи чужого модема (см. пояснение в mkiface.sh).
-	MODEM_PATH="$P" "$RES/mkiface.sh" "" auto >/dev/null 2>&1
-	"$RES/ensureports.sh" >/dev/null 2>&1
-	# В журнал пишем то, что получилось НА САМОМ ДЕЛЕ.
-	_made=$(uci -q get "$CFG.$SEC.network")
-	logger -t 5gmodem "autosetup: $P -> ${_made:-не удалось}"
-	# Прежние интерфейсы этого же модема больше не нужны - см. drop_stale_ifaces.
-	[ -n "$_made" ] && drop_stale_ifaces "$P" "$_made"
-	# APN подбираем В ФОНЕ: команда ждёт до минуты, а hotplug столько держать
-	# нельзя. Дескрипторы отвязываем на подоболочке - иначе вызвавший нас
-	# процесс будет ждать EOF.
-	[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
-}
 
 # Как определилась eSIM у профиля - ДЛЯ ПОКАЗА В КАРТОЧКЕ. Читаем только УЖЕ
 # ГОТОВЫЕ данные: uci (ручное переопределение) и кэш автоопределения. В порт не
@@ -1354,6 +395,7 @@ save)
 	;;
 
 switch)
+	note_foreign_uci network "modemswitch switch"
 	P="$2"
 	[ -n "$P" ] || { echo '{"error":"no path"}'; exit 1; }
 
@@ -1519,6 +561,8 @@ switch)
 # Здесь только ЧТЕНИЕ. Отдаём JSON-массив.
 # Создать DHCP-интерфейс для модема без портов (кнопка в карточке профиля).
 mkhilink)
+	note_foreign_uci network "modemswitch mkhilink"
+	note_foreign_uci firewall "modemswitch mkhilink"
 	_p="$2"
 	[ -n "$_p" ] || _p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	# Кнопку показывают ТОЛЬКО для модема, уже опознанного как HiLink
@@ -1603,6 +647,7 @@ profiles)
 # модема, который ВЕРНУЛСЯ (его IMEI среди present), не трогаем. Осиротевший
 # интерфейс парка освобождаем, если его не держит ни один живой профиль.
 clearparks)
+	note_foreign_uci network "modemswitch clearparks"
 	_cp_present=""
 	for _cp_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 		_cp_i=$(imei_for_path "$_cp_p")
@@ -1637,6 +682,7 @@ clearparks)
 # ИСКЛЮЧЕНИЕ: если тем же интерфейсом пользуется другой профиль, интерфейс НЕ
 # трогаем - иначе удаление одного модема оборвало бы связь у другого.
 delprofile)
+	note_foreign_uci network "modemswitch delprofile"
 	_sec="$2"
 	[ -n "$_sec" ] || { echo '{"error":"no section"}'; exit 0; }
 	uci -q get "$CFG.$_sec" >/dev/null 2>&1 || { echo '{"error":"not found"}'; exit 0; }
@@ -1719,6 +765,7 @@ apnfor)
 	exit 0
 	;;
 autoapn)
+	note_foreign_uci network "modemswitch autoapn"
 	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
 	[ -n "$IFACE" ] || exit 0
 
@@ -1897,6 +944,7 @@ autoapn)
 # ipv4v6 отваливается быстро, а неверный ipv4 именно ЗАВИСАЕТ - начав с него, мы
 # бы ждали таймаута вместо честного отказа.
 autopdp)
+	note_foreign_uci network "modemswitch autopdp"
 	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
 	[ -n "$IFACE" ] || exit 0
 
@@ -1984,6 +1032,8 @@ autopdp)
 #
 # Выключается: uci set 5gmodem.@5gmodem[0].auto_setup=0
 autosetup)
+	note_foreign_uci network "modemswitch autosetup"
+	note_foreign_uci firewall "modemswitch autosetup"
 	[ "$(uci -q get "$CFG.@5gmodem[0].auto_setup")" = "0" ] && exit 0
 
 	# ЦЕЛЬ - ПРИСУТСТВУЮЩИЙ МОДЕМ БЕЗ РАБОЧЕГО ИНТЕРФЕЙСА.
@@ -2032,6 +1082,8 @@ autosetup)
 
 
 resolve)
+	note_foreign_uci network "modemswitch resolve"
+	note_foreign_uci firewall "modemswitch resolve"
 	# Re-resolve ports/devices for all PRESENT modems by their STABLE USB path.
 	# ttyUSB numbering shifts when a modem is added/removed or on reboot, so a
 	# pinned ttyUSB goes stale ("Bad file descriptor", no data). Run on boot
@@ -2048,6 +1100,16 @@ resolve)
 		# модем на этом пути мог смениться на другой - тогда всё запомненное о
 		# прежнем недействительно (см. swap_cleanup)
 		swap_cleanup "$P" "$SEC"
+		# ШТАМП SERIAL - ЗДЕСЬ, А НЕ ТОЛЬКО В ensure_section.
+		#
+		# resolve выполняется на ЗАГРУЗКЕ и на каждом событии USB, и идёт по уже
+		# настроенным секциям напрямую - ensure_section он не зовёт. Без этой строки
+		# серийник появлялся бы в секции только при переустановке модема, то есть
+		# ровно тогда, когда он уже не нужен. Стоит он ноль: реестр всё равно
+		# запрошен рядом (modem_ttys/at_for_path), а sysfs-чтение AT не трогает.
+		# ВАЖНО: строго ПОСЛЕ swap_cleanup - тот удаляет серийник прежнего аппарата.
+		_rs_ser=$(modem_serial "$P")
+		[ -n "$_rs_ser" ] && uci -q set "$CFG.$SEC.serial=$_rs_ser"
 		# Порты появляются НЕ мгновенно: после hotplug-add ядро заводит ttyUSB*
 		# ещё несколько секунд (FM350 отдаёт 7 штук), а hotplug ждёт всего 5с.
 		# Ждём порт, но не бесконечно (resolve всегда вызывается из фона).
@@ -2267,8 +1329,16 @@ resolve)
 	;;
 
 mmindex)
-	# ModemManager index of the ACTIVE modem (for band/mode targeting)
-	mm_index_for_path "$(active_path)"
+	# ModemManager index. Без аргумента - АКТИВНОГО модема (управление
+	# диапазонами/режимом всегда о нём), с аргументом - модема по USB-пути.
+	#
+	# Аргумент появился не для удобства: без него любой вызывающий, который
+	# работает НЕ с активным модемом, молча получал чужой индекс. Живой случай -
+	# netpri.sh: он опрашивает имя оператора ПОИНТЕРФЕЙСНО, брал индекс активного
+	# и складывал ответ в кэш опрошенного. У человека с двумя T99W175 (30.07)
+	# из-за этого модем БЕЗ SIM показывал в «Приоритете интернета» оператора
+	# соседа - и держал его 30 минут, пока жив кэш.
+	mm_index_for_path "${2:-$(active_path)}"
 	;;
 
 wdm)
@@ -2277,6 +1347,7 @@ wdm)
 	;;
 
 forget)
+	note_foreign_uci network "modemswitch forget"
 	# «Забыть отключённые модемы»: удалить секции модемов, которых нет на шине.
 	# ЯВНОЕ действие пользователя - автоматически по отключению так делать нельзя:
 	# модем штатно пропадает на минуту при AT+CFUN=1,1 (в т.ч. по нашей команде),

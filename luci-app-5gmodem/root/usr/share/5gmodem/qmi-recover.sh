@@ -15,6 +15,8 @@
 # proxy-вызов пул не трогает. Но при 6 слотах исчерпание всё равно возможно (чужой
 # код, повторы MM, подвисший proxy), поэтому держим ещё и это авто-восстановление.
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+
 RES=/usr/share/5gmodem
 
 # Пул исчерпан?  $1 = cdc-wdm.  0 = да (исчерпан).
@@ -57,10 +59,10 @@ qmi_pool_recover() {
 	# Живой AT-порт этого модема для сброса.
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
-		sms_tool -d "$_t" at "AT" 2>/dev/null | grep -q "OK" || continue
+		at_query "$_t" "AT" 5 | grep -q "OK" || continue
 		logger -t 5gmodem "$_trig на $_qp - сбрасываю модем (AT+CFUN=1,1 на $_t)"
 		touch "$_mk" 2>/dev/null
-		sms_tool -d "$_t" at "AT+CFUN=1,1" >/dev/null 2>&1
+		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
 		return 0
 	done
 	logger -t 5gmodem "QMI pool exhausted on $_qp, но живого AT-порта для сброса нет"

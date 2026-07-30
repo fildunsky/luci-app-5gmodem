@@ -202,7 +202,12 @@ function addReceiveIncoming(s) {
 	o.onclick = function() {
 		return uci.load('5gmodem').then(function() {
 			let portES = uci.get('5gmodem', 'sms', 'readport');
-			L.resolveDefault(fs.exec_direct('/usr/bin/sms_tool', [ '-d', portES, '-f', '%Y-%m-%d %H:%M', 'recv', '2>/dev/null']))
+			/* Через smsbridge.sh, а не бинарь sms_tool: в ACL больше нет exec на
+			   /usr/bin/sms_tool, потому что через него из браузера уходили любые
+			   аргументы. Заодно ушёл и мусор - строка '2>/dev/null' раньше
+			   передавалась sms_tool КАК АРГУМЕНТ (это не шелл, перенаправление
+			   тут не работает). */
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'dump', '', portES ]))
 				.then(function(res) {
 					if (!res) return;
 					fs.write('/tmp/mysms.txt', res.trim().replace(/\r\n/g, '\n') + '\n');
@@ -240,7 +245,9 @@ function addReceiveIncoming(s) {
 		if (confirm(_('Delete all the messages?'))) {
 			return uci.load('5gmodem').then(function() {
 				let portFD = uci.get('5gmodem', 'sms', 'readport');
-				fs.exec_direct('/usr/bin/sms_tool', [ '-d', portFD, 'delete', 'all' ]);
+				/* smsbridge.sh знает про транспорт (AT или ModemManager) и берёт
+				   очередь к порту - в отличие от прямого вызова бинаря. */
+				fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', '', portFD ]);
 			});
 		}
 	};
@@ -264,7 +271,9 @@ function addNotifications(s) {
 				return form.Flag.prototype.write.apply(this, [section_id, value]);
 			}
 
-			return L.resolveDefault(fs.exec_direct('/usr/bin/sms_tool', ['-s', storeL, '-d', portR, 'status']))
+			/* Формат вывода тот же (строка «Storage type: …, used: N, total: M»),
+			   её и разбирает код ниже - smsbridge.sh отдаёт её без изменений. */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeL, portR ]))
 				.then(function(res) {
 					if (!res) return;
 					let total = res.substring(res.indexOf('total'));
@@ -277,41 +286,24 @@ function addNotifications(s) {
 							uci.set('5gmodem', 'sms', 'sms_count', updatedValue);
 							uci.set('5gmodem', 'sms', 'lednotify', '1');
 							let PTR = uci.get('5gmodem', 'sms', 'prestart');
+							/* Через smscron.sh. Раньше страница читала /etc/crontabs/root
+							   целиком, фильтровала строки и записывала обратно - для этого
+							   в ACL было право `write` на crontab, то есть возможность
+							   положить туда любую команду от root. Скрипт трогает ТОЛЬКО
+							   нашу строку, проверяет интервал и сам перезапускает cron и
+							   уведомитель. */
 							return uci.save().then(function() {
-								return L.resolveDefault(fs.read('/etc/crontabs/root'), '');
-							}).then(function(crontab) {
-								let lines = (crontab || '').trim().replace(/\r\n/g, '\n').split('\n');
-								let filteredLines = lines.filter(function(line) {
-									return line.trim() !== '' && !line.includes('5gmodem-sms-notify');
-								});
-								filteredLines.push('1 */' + PTR + ' * * * /etc/init.d/5gmodem-sms-notify enable && /etc/init.d/5gmodem-sms-notify restart');
-								return fs.write('/etc/crontabs/root', filteredLines.join('\n') + '\n');
-							}).then(function() {
-								return fs.exec_direct('/etc/init.d/cron', ['restart']);
-							}).then(function() {
-								return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['enable']);
-							}).then(function() {
-								return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['start']);
+								return fs.exec_direct('/usr/share/5gmodem/smscron.sh', [ 'on', String(PTR) ]);
 							});
 						});
 					}
 
 					if (value == '0') {
 						uci.set('5gmodem', 'sms', 'lednotify', '0');
+						/* см. выше: снятие расписания тоже через smscron.sh - он уберёт
+						   только нашу строку и остановит уведомитель. */
 						return uci.save().then(function() {
-							return L.resolveDefault(fs.read('/etc/crontabs/root'), '');
-						}).then(function(crontab) {
-							let lines = (crontab || '').trim().replace(/\r\n/g, '\n').split('\n');
-							let filteredLines = lines.filter(function(line) {
-								return line.trim() !== '' && !line.includes('5gmodem-sms-notify');
-							});
-							return fs.write('/etc/crontabs/root', filteredLines.join('\n') + '\n');
-						}).then(function() {
-							return fs.exec_direct('/etc/init.d/cron', ['restart']);
-						}).then(function() {
-							return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['stop']);
-						}).then(function() {
-							return fs.exec_direct('/etc/init.d/5gmodem-sms-notify', ['disable']);
+							return fs.exec_direct('/usr/share/5gmodem/smscron.sh', [ 'off' ]);
 						}).then(function() {
 							if (dsled == 'D') {
 								let led = uci.get('5gmodem', 'sms', 'smsled');

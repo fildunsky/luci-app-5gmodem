@@ -72,3 +72,9 @@ msgstr ""
 #: applications/luci-app-5gmodem/luasrc/model/cbi/modem/3gconfig.lua:31
 msgid "Language"
 msgstr ""
+
+msgid "Data is stale (shown from the last snapshot)"
+msgstr ""
+
+msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
+msgstr ""

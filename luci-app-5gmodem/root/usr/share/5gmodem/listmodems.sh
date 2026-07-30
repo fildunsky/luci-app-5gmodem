@@ -27,7 +27,10 @@ CACHE=/tmp/5gmodem_listmodems.cache
 STAMP=/tmp/5gmodem_listmodems.stamp
 TTL=8   # секунд; страховка, если hotplug-инвалидация не сработала
 
-uptime_s() { cut -d. -f1 /proc/uptime; }
+uptime_s() {
+	read -r _us _ < /proc/uptime
+	printf '%s\n' "${_us%%.*}"
+}
 
 if [ "$1" = "--refresh" ]; then
 	rm -f "$CACHE" "$STAMP"
@@ -42,7 +45,14 @@ elif [ -s "$CACHE" ]; then
 	fi
 fi
 
-esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+# sed - только когда экранировать реально есть что (в дескрипторах USB кавычки
+# не встречаются почти никогда, а esc зовётся на каждое поле каждого модема).
+esc() {
+	case "$1" in
+		*\\*|*\"*) echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' ;;
+		*) echo "$1" ;;
+	esac
+}
 
 # Валидаторы модели (_model_vendor_ok): отсекаем чужую/устаревшую модель, осевшую
 # в секции после свопа модема (см. ниже). lib.sh - только определения функций,
@@ -63,6 +73,9 @@ owner_node() {
 # NODES хранит порядок первого появления (как и раньше), TTYS_<i>/WDMS_<i> - порты.
 NODES=""
 NCNT=0
+NL='
+'
+PORTREC=""
 for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -e "$t" ] || continue
 	n=$(owner_node "$t")
@@ -79,9 +92,15 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 		NODES="$NODES $n"
 	fi
 
+	# БЕЗ eval. Раньше здесь были самодельные «массивы» TTYS_<i>/WDMS_<i> через
+	# eval - т.е. исполнение строк, куда подставляются имена устройств. Для
+	# /dev-глоба это безопасно, но приём как класс в этом дереве запрещён
+	# (аудит 1.4): один невинный eval прикрывает следующий, уже с чужим вводом.
+	# Вместо этого - плоский список записей «индекс тип путь», по записи на
+	# строку; выборка при сборке JSON идёт чистым read-циклом без подпроцессов.
 	case "$t" in
-		/dev/ttyUSB*|/dev/ttyACM*) eval "TTYS_$idx=\"\${TTYS_$idx}\${TTYS_$idx:+,}\\\"$t\\\"\"" ;;
-		*)                         eval "WDMS_$idx=\"\${WDMS_$idx}\${WDMS_$idx:+,}\\\"$t\\\"\"" ;;
+		/dev/ttyUSB*|/dev/ttyACM*) PORTREC="${PORTREC}${idx} tty ${t}${NL}" ;;
+		*)                         PORTREC="${PORTREC}${idx} wdm ${t}${NL}" ;;
 	esac
 done
 
@@ -132,7 +151,7 @@ for _nd in /sys/class/net/*; do
 	[ "$_hasff" = "1" ] && continue
 	NCNT=$((NCNT + 1))
 	NODES="$NODES $_dev"
-	eval "NETS_$NCNT=\"\\\"$(basename "$_nd")\\\"\""
+	PORTREC="${PORTREC}${NCNT} net $(basename "$_nd")${NL}"
 done
 
 OUT=""
@@ -143,9 +162,20 @@ for n in $NODES; do
 	vid=$(cat "$n/idVendor" 2>/dev/null)
 	pid=$(cat "$n/idProduct" 2>/dev/null)
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
-	eval "ttys=\$TTYS_$i"
-	eval "wdms=\$WDMS_$i"
-	eval "nets=\$NETS_$i"
+	# Порты этого модема - из плоского списка (см. сбор выше). Кавычки для JSON
+	# навешиваются здесь же; в путях /dev и именах сетевых устройств кавычек и
+	# пробелов не бывает (имена даёт ядро).
+	ttys=""; wdms=""; nets=""
+	while read -r _ri _rt _rp; do
+		[ "$_ri" = "$i" ] || continue
+		case "$_rt" in
+			tty) ttys="${ttys}${ttys:+,}\"$_rp\"" ;;
+			wdm) wdms="${wdms}${wdms:+,}\"$_rp\"" ;;
+			net) nets="${nets}${nets:+,}\"$_rp\"" ;;
+		esac
+	done <<PORTREC_EOF
+$PORTREC
+PORTREC_EOF
 	# model - имя, разобранное основным опросом по AT+CGMM (пишется в секцию
 	# модема). Дескриптор product часто бесполезен: "Android" у Quectel EC21,
 	# "SimTech, Incorporated" у SimCom. Читаем из uci (это дёшево), AT здесь не
@@ -221,7 +251,7 @@ for n in $NODES; do
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
 	# HiLink от обычного и не предлагает для него AT-возможности.
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
 done
 OUT="[$OUT]"
 

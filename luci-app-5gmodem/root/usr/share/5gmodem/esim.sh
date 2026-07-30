@@ -136,10 +136,24 @@ apdu_backend() {
 	_sec="m_$(echo "$_ap" | sed 's/[^A-Za-z0-9]/_/g')"
 	_if=$(uci -q get "5gmodem.$_sec.network")
 	[ -n "$_if" ] || _if=$(uci -q get 5gmodem.@5gmodem[0].network)
-	case "$(uci -q get "network.$_if.proto")" in
-		mbim|modemmanager) echo mbim ;;
-		qmi)               echo qmi ;;
-		*)                 echo at ;;
+	_abp=$(uci -q get "network.$_if.proto")
+	case "$_abp" in
+		mbim|modemmanager|qmi)
+			# БЭКЕНД ОПРЕДЕЛЯЕТ ДРАЙВЕР УЗЛА cdc-wdm, А НЕ ИМЯ ПРОТОКОЛА.
+			#
+			# Ручной выбор эту сверку делал (выше), авто - нет, и на
+			# proto=modemmanager безусловно брался mbim. Но modemmanager рулит
+			# модемом в ЛЮБОЙ композиции: у двух T99W175 на ZBT (05c6:9025) узлы
+			# сидят на qmi_wwan, mbim-бэкенд lpac канал на них не открывает, и
+			# eSIM отвечала code -1 "euicc_init" - в отчёте это выглядело как
+			# «eSIM нет», хотя eUICC у SDX55 читается именно по QMI.
+			case "$(_wdm_driver)" in
+				*cdc_mbim*) echo mbim ;;
+				*qmi_wwan*) echo qmi ;;
+				# Драйвер не определился - решаем по прото, как раньше.
+				*) [ "$_abp" = qmi ] && echo qmi || echo mbim ;;
+			esac ;;
+		*) echo at ;;
 	esac
 }
 
@@ -148,12 +162,47 @@ apdu_backend() {
 # применим и дал бы ложное "no AT port" - его пропускаем для mbim.
 mbim_backend() { [ "$(apdu_backend)" = "mbim" ]; }
 
+# ЛЮБОЙ бэкенд, работающий ПО cdc-wdm: mbim, qmi, uqmi. Преамбул надо пропускать
+# всем трём, а не только mbim - иначе qmi-бэкенд (модем на qmi_wwan, у которого
+# AT-портов может не быть вовсе) спотыкался бы на "no AT port" ещё до того, как
+# lpac открыл бы канал по своему узлу.
+wdm_backend() {
+	case "$(apdu_backend)" in
+		mbim|qmi|uqmi) return 0 ;;
+	esac
+	return 1
+}
+
+# КАНАЛ cdc-wdm МОДЕМА ПОД ModemManager - НЕ НАШ, И К eUICC ПО НЕМУ НЕ ХОДИМ.
+#
+# Это то же правило владения, что везде (registry owner=mm), но здесь у него
+# самая высокая цена из виденных: у пользователя с двумя T99W175 под MM заход на
+# вкладку eSIM РОНЯЛ МОДЕМ В РЕБУТ. Механизм: euicc_probe_wdm открывал
+# mbim-proxy на том же cdc-wdm, которым в этот момент живёт ModemManager, - два
+# хозяина на управляющем канале, и прошивка не выдерживает. Диагностика при этом
+# не роняла: она ходит последовательно, а страница - параллельно с опросом.
+# Для работы с eSIM у такого модема надо сперва забрать его у MM (галка
+# «Скрыть от ModemManager» / смена прото) - об этом честно говорит reason.
+_mm_owns_channel() {
+	[ "$("$RES/registry.sh" active 2>/dev/null \
+		| jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ]
+}
+
 # cdc-wdm управляющего узла активного модема (для qmi/mbim-бэкендов lpac).
 esim_wdm() {
 	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	_w=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
 	[ -c "$_w" ] || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
-	[ -c "$_w" ] && echo "$_w" || echo /dev/cdc-wdm0
+	[ -c "$_w" ] && { echo "$_w"; return; }
+	# ЗАПАСНОЙ /dev/cdc-wdm0 - ТОЛЬКО КОГДА УЗЕЛ В СИСТЕМЕ ОДИН.
+	#
+	# Он стоял здесь безусловно и на мультимодеме бил мимо: у модема без своего
+	# cdc-wdm (FM350 в RNDIS) это узел СОСЕДА, то есть APDU к чужой eUICC и чужой
+	# драйвер в определении транспорта. Один узел в системе - промахнуться не обо
+	# что, там фолбэк по-прежнему полезен (listmodems мог сорваться).
+	set -- /dev/cdc-wdm*
+	[ "$#" = 1 ] && [ -c "$1" ] && { echo "$1"; return; }
+	echo ""
 }
 
 # Драйвер cdc-wdm активного модема: cdc_mbim | qmi_wwan | пусто. По нему apdu_backend
@@ -169,6 +218,9 @@ _wdm_driver() {
 # Нужен lpac >= 2.3.0_p2 (с этими бэкендами). $1 = бэкенд.
 euicc_probe_wdm() {
 	_pwdev=$(esim_wdm)
+	# Узел не определился - НЕ пробуем: с пустым LPAC_APDU_*_DEVICE lpac возьмёт
+	# устройство по своему умолчанию, а это опять чужой модем.
+	[ -c "$_pwdev" ] || return 1
 	_pwsave=""
 	_pwskip=1
 	case "$1" in
@@ -475,15 +527,32 @@ port_ok() {
 	return 0
 }
 
-# Живой AT-порт активного модема (дёшево). detect.sh после переперечисления
-# может дать устаревший tty - тогда берём первый отвечающий tty ЭТОГО модема.
+# Живой AT-порт активного модема (дёшево).
+#
+# ТОЛЬКО ПОРТЫ ЭТОГО МОДЕМА - то же правило, что в find_port ниже. Раньше здесь
+# первым стоял detect.sh, и его ответ принимался, как только отвечал на AT. Но
+# detect.sh при путанице отдаёт порт ЧУЖОГО модема, и тогда:
+#   - at_lock (ниже) брался на порт соседа, а проба шла по нашему - то есть
+#     защита от столкновения с опросом метрик просто не работала, давая ложное
+#     «eUICC не отвечает»;
+#   - проверка «модем на связи» проходила по соседу, и ложное «eUICC нет»
+#     попадало в КЭШ как хороший ответ;
+#   - AT+SIMTYPE? читался у соседа, и решение «слот eSIM не активен» принималось
+#     по чужой SIM.
+# Ровно так односимочный SIM7600 однажды получил «eSIM» от стоящего рядом FM350 -
+# в find_port это уже учтено, а здесь оставалось незакрытым.
+#
+# Порядок сохраняем дешёвым: ответ detect.sh пробуем ПЕРВЫМ, но лишь если он
+# принадлежит этому модему. Список портов даёт реестр.
 live_port() {
+	_LPR=$("$RES/registry.sh" active 2>/dev/null)
+	_LPT=$(printf '%s' "$_LPR" | jsonfilter -e '@.tty[*]' 2>/dev/null | tr '\n' ' ')
+	[ -n "$_LPT" ] || return 1
 	_D=$("$RES/detect.sh" 2>/dev/null)
-	[ -n "$_D" ] && "$RES/atprobe.sh" "$_D" >/dev/null 2>&1 && { echo "$_D"; return 0; }
-	_P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-	[ -n "$_P" ] || return 1
-	for _t in $("$RES/listmodems.sh" 2>/dev/null \
-			| jsonfilter -e "@[@.path=\"$_P\"].tty[*]" 2>/dev/null); do
+	case " $_LPT " in
+		*" $_D "*) _LPT="$_D $_LPT" ;;   # свой и выбранный приложением - вперёд
+	esac
+	for _t in $_LPT; do
 		[ -e "$_t" ] || continue
 		"$RES/atprobe.sh" "$_t" >/dev/null 2>&1 && { echo "$_t"; return 0; }
 	done
@@ -722,6 +791,21 @@ setapdu)
 	echo '{"result":"ok"}'
 	exit 0
 	;;
+apduinfo)
+	# ЧЕМ ИМЕННО МЫ ХОДИМ К eUICC - для отчёта диагностики.
+	#
+	# Без этого разбор «eSIM не читается» упирался в стену: наружу видно только
+	# code -1 "euicc_init", а какой транспорт выбран, ручной он или авто и на
+	# каком драйвере сидит узел - не видно ни из чего. Живой случай (два T99W175,
+	# 30.07): авто-выбор дал mbim на узле qmi_wwan, и eSIM молчала «по-честному».
+	printf 'выбранный APDU-бэкенд: %s\n' "$(apdu_backend)"
+	printf 'задан вручную (esim_apdu): %s\n' "$(uci -q get 5gmodem.@5gmodem[0].esim_apdu || echo '(нет, автоопределение)')"
+	printf 'узел cdc-wdm: %s\n' "$(esim_wdm)"
+	printf 'драйвер узла: %s\n' "$(_wdm_driver || echo '(не определён)')"
+	printf 'прото интерфейса: %s\n' "$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto")"
+	printf 'HTTP-драйвер lpac: %s\n' "$(http_local_drv 2>/dev/null || echo '(не определён)')"
+	exit 0
+	;;
 recheck)
 	# ПЕРЕПРОВЕРИТЬ НАЛИЧИЕ eUICC ЗАНОВО. Отрицательный ответ кэшируется (перебор
 	# портов стоит секунд), и без этой команды выйти из него нельзя: модем,
@@ -776,6 +860,16 @@ status)
 	for _cap in $ESIM_CAPABLE_VIDPIDS; do
 		[ "$_vp" = "$_cap" ] && { echo '{"available":1,"active":0}'; exit 0; }
 	done
+	# МОДЕЛЬ, У КОТОРОЙ «eSIM» НАПИСАНО ПРЯМО В ИМЕНИ. Списка vid:pid мало: у
+	# Dell DW5821e-eSIM (0489:e0b5) вкладка не показывалась, хотя eUICC у него
+	# распаян - буквально в названии. Общий признак закрывает и будущие модели
+	# без правки списка. Вариант без eSIM у того же vid:pid ярлыка в имени не
+	# несёт - ложных показов не даёт.
+	_prod=$("$RES/listmodems.sh" 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$_AP\"].product" 2>/dev/null | head -1)
+	case "$_prod" in
+		*eSIM*|*ESIM*) echo '{"available":1,"active":0}'; exit 0 ;;
+	esac
 	echo '{"available":0,"active":0}'
 	exit 0
 	;;
@@ -809,6 +903,13 @@ status-probe)
 		_BE=$(apdu_backend)
 		case "$_BE" in
 		qmi|uqmi|mbim)
+			# Модем под MM - канал занят, проба ЗАПРЕЩЕНА (см. _mm_owns_channel:
+			# на T99W175 второй хозяин канала ронял модем в ребут). Ответ не
+			# кэшируем: состояние меняется галкой mm_exclude.
+			if _mm_owns_channel; then
+				echo '{"available":0,"active":0,"reason":"mm_owns"}'
+				exit 0
+			fi
 			# Qualcomm SDX55 (T99W175/MV31-W/DW5930e) и прочие cdc-wdm-модемы: eUICC
 			# достаётся по QMI/MBIM, а не по AT+CCHO. Пробуем lpac chip info по cdc-wdm.
 			if euicc_probe_wdm "$_BE"; then
@@ -903,9 +1004,18 @@ fi
 echo "$$" > "$LOCK/pid" 2>/dev/null
 trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
 
-# AT-only преамбул: для mbim eUICC достаётся по cdc-wdm, порт/esim_active/каналы
-# не нужны (иначе ложное "no AT port"). run_lpac/do_lpac сами ходят по cdc-wdm.
-if ! mbim_backend; then
+# МОДЕМ ПОД MM: к eUICC не ходим вообще - ни по tty, ни по cdc-wdm (см.
+# _mm_owns_channel; на T99W175 это роняло модем). Все чиповые вербы ниже
+# получают честную ошибку вместо гонки за чужой канал.
+if wdm_backend && _mm_owns_channel; then
+	err "mm_owns"
+	exit 0
+fi
+
+# AT-only преамбул: для бэкендов по cdc-wdm (mbim/qmi/uqmi) eUICC достаётся не по
+# tty, порт/esim_active/каналы не нужны (иначе ложное "no AT port"). run_lpac и
+# do_lpac сами ходят по cdc-wdm.
+if ! wdm_backend; then
 	# дешёвая проверка слота, чтобы не сканировать все порты на физической SIM
 	D=$(live_port)
 	[ -n "$D" ] || { err "no AT port"; exit 0; }

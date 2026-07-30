@@ -104,12 +104,10 @@ return view.extend({
 			}
 
 		}).catch(function(err) {
-			if (res.stdout === undefined || res.stderr === undefined || res.stderr.includes('undefined') || res.stdout.includes('undefined')) {
-				return;
-			}
-			else {
-				ui.addNotification(null, E('p', [ err ]));
-			}
+			/* res здесь недоступен - он в области then выше. Прежняя проверка на
+			   него ссылалась, из-за чего исключение внутри then превращалось в
+			   ReferenceError и настоящая ошибка терялась молча. */
+			ui.addNotification(null, E('p', [ err ]));
 		}).finally(function() {
 			for (let i = 0; i < buttons.length; i++)
 			buttons[i].removeAttribute('disabled');
@@ -133,8 +131,15 @@ return view.extend({
 			return false;
 			}
 			else {
-			//sms_tool -d /dev/ttyUSB1 at "ati"
-			return this.handleCommand('sms_tool', [ '-d' , port , 'at' , atcmd ]);
+			/* Через atcmd.sh, а не бинарь sms_tool напрямую. Раньше в ACL был
+			   разрешён exec на /usr/bin/sms_tool, то есть из браузера уходили
+			   ЛЮБЫЕ аргументы - и `send`, и `delete all`, и чужой /dev/*.
+			   Проверить их на роутере в таком виде нельзя: фильтр был бы в
+			   странице, а страница выполняется у пользователя. Теперь порт,
+			   форма команды и принадлежность порта модему проверяются на
+			   роутере. Произвольная команда при этом остаётся - консоль AT для
+			   этого и нужна. */
+			return this.handleCommand('/usr/share/5gmodem/atcmd.sh', [ port, atcmd ]);
 			}
 		}
 		if ( !port )

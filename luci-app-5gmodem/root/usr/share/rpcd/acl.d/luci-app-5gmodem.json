@@ -1,6 +1,6 @@
 {
 	"luci-app-5gmodem": {
-		"description": "Grant access to LuCI app 5gmodem",
+		"description": "Grant access to LuCI app 5gmodem. WARNING: root-equivalent. This group can send arbitrary AT commands to the modem (atcmd.sh - the AT console needs that by design) and restart the modem / switch its bands. Do NOT grant it to a restricted role - give it only to full administrators.",
 		"read": {
 			"cgi-io": [ "exec", "upload" ],
 			"file": {
@@ -14,6 +14,8 @@
 				"/usr/share/5gmodem/listports.sh": [ "exec" ],
 				"/usr/share/5gmodem/hilink.sh": [ "exec" ],
 				"/usr/share/5gmodem/smsbridge.sh": [ "exec" ],
+				"/usr/share/5gmodem/atcmd.sh": [ "exec" ],
+				"/usr/share/5gmodem/smscron.sh": [ "exec" ],
 				"/usr/share/5gmodem/ussd.sh": [ "exec" ],
 				"/usr/share/5gmodem/listmodems.sh": [ "exec" ],
 				"/usr/share/5gmodem/modemswitch.sh": [ "exec" ],
@@ -30,8 +32,6 @@
 				"/usr/share/5gmodem/check.gcom": [ "exec" ],
 				"/usr/share/5gmodem/info.gcom": [ "exec" ],
 				"/usr/bin/mmcli": [ "exec" ],
-				"/usr/bin/sms_tool": [ "exec" ],
-				"/usr/share/5gmodem/sms_tool_mm": [ "exec" ],
 				"/etc/init.d/5gmodem-sms-notify": [ "exec" ],
 				"/etc/init.d/led": [ "exec" ],
 				"/etc/init.d/cron": [ "exec" ],
@@ -44,7 +44,6 @@
 				"/bin/rm": [ "exec" ],
 				"/sys/class/leds": [ "list" ],
 				"/dev": [ "list" ],
-				"/etc/crontabs/root": [ "read" ],
 				"/usr/bin/opkg list-installed": [ "exec" ],
 				"/usr/libexec/package-manager-call list-installed": [ "exec" ],
 				"/usr/libexec/opkg-list installed": [ "exec" ],
@@ -86,6 +85,8 @@
 				"/usr/share/5gmodem/listports.sh": [ "exec" ],
 				"/usr/share/5gmodem/hilink.sh": [ "exec" ],
 				"/usr/share/5gmodem/smsbridge.sh": [ "exec" ],
+				"/usr/share/5gmodem/atcmd.sh": [ "exec" ],
+				"/usr/share/5gmodem/smscron.sh": [ "exec" ],
 				"/usr/share/5gmodem/ussd.sh": [ "exec" ],
 				"/usr/share/5gmodem/listmodems.sh": [ "exec" ],
 				"/usr/share/5gmodem/modemswitch.sh": [ "exec" ],
@@ -108,7 +109,6 @@
 				"/etc/init.d/cron restart": [ "exec" ],
 				"/etc/modemdefine": [ "write" ],
 				"/etc/5gmodem": [ "write" ],
-				"/etc/crontabs/root": [ "write" ],
 				"/sys/class/leds/*/brightness": [ "write" ],
 				"/tmp/debug_result.txt": [ "write" ],
 				"/tmp/mysms.txt": [ "write" ],

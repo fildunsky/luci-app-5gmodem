@@ -14,6 +14,8 @@
 # UI опрашивает status. fd отвязываем ОТ ПОДОБОЛОЧКИ - иначе она держит пайпы
 # rpcd, и вызов всё равно ждёт EOF (см. reboot_modem.sh, simslot.sh).
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+
 RES="/usr/share/5gmodem"
 OUT="/tmp/5gmodem-diag.txt"
 LOCK="/tmp/5gmodem-diag.lock"
@@ -37,9 +39,15 @@ run() {   # run <timeout> <заголовок> <команда...>
 	rm -f "$_tmp"
 }
 
-at() {   # at <порт> <команда> - одна AT-команда с таймаутом
+at() {   # at <порт> <команда> - одна AT-команда с таймаутом и ОЧЕРЕДЬЮ к порту
 	[ -n "$1" ] || { echo "(нет AT-порта)"; return; }
-	run 8 "AT $2" sms_tool -d "$1" at "$2"
+	# at_query, а не sms_tool напрямую: он берёт at_lock. Без очереди диагностика
+	# конкурировала с опросом метрик, и ответы СЪЕЗЖАЛИ по командам - в живом
+	# отчёте (T99W175, issue #8) ответ на ATI оказался под «AT+CGDCONT?», а ответ
+	# на AT+CGMM - под «AT+CEREG?». Такой отчёт хуже отсутствующего: по нему
+	# ставится неверный диагноз. Свой таймаут run оставляем внешним
+	# предохранителем - at_query ограничивает время сам, но пусть будет запас.
+	run 12 "AT $2" at_query "$1" "$2" 8
 }
 
 # ПОЧЕМУ НЕ ПОДНЯЛСЯ ИНТЕРФЕЙС ПО MBIM. Две живые ловушки, обе выглядят как
@@ -96,6 +104,87 @@ mbim_verdict() {
 # маршрутам, которые тут же рядом, это НЕ ВИДНО. Причина обычно одна: в зоне нет
 # сети wan. Наши прошлые версии сами её оттуда выбивали - `uci add_list` не
 # разбирал `option network 'wan wan6'` и делал из строки ОДИН элемент.
+# ДОСТУП К АДМИНКЕ: ЖИВА ЛИ ОНА И КТО МОГ ЕЁ ОТРЕЗАТЬ.
+#
+# ЗАЧЕМ. Два обращения с одним симптомом - «интернет есть, админка LuCI не
+# отвечает» (мультимодем + mwan3 после ребута; wwGate после мастера настройки).
+# В обоих случаях к моменту сбора отчёта состояние уже было потеряно (сброс/
+# удаление mwan3), и разбор упёрся в отсутствие улик. Эта секция собирает их.
+#
+# ВАЖНО ДЛЯ ТАКИХ СЛУЧАЕВ: отчёт снимается и БЕЗ веб-морды - по SSH:
+#   /usr/share/5gmodem/collect.sh run > /tmp/diag.txt
+#
+# ДВА УРОКА ИЗ ЛОЖНОЙ ДИАГНОСТИКИ (наступил сам, 30.07):
+#   - `timeout` в busybox ОТСУТСТВУЕТ: «timeout N cmd || echo висит» печатает
+#     «висит» на ЛЮБОЙ системе. Ограничение по времени здесь даёт run().
+#   - логин LuCI отдаётся с кодом HTTP 403: «403 + html-тело» - это НОРМА
+#     (страница входа), а не поломка. Поломка - таймаут, пустой ответ или 500.
+webstack_verdict() {
+	echo "--- процессы ---"
+	for _wv_p in uhttpd rpcd ubusd; do
+		if ps w 2>/dev/null | grep -q "[${_wv_p%"${_wv_p#?}"}]${_wv_p#?}"; then
+			echo "$_wv_p: работает"
+		else
+			echo "$_wv_p: НЕ ЗАПУЩЕН - вот и причина мёртвой админки"
+		fi
+	done
+	echo "--- ubus отвечает? ---"
+	_wv_t0=$(cut -d. -f1 /proc/uptime)
+	if ubus call system board >/dev/null 2>&1; then
+		echo "ubus: ok ($(( $(cut -d. -f1 /proc/uptime) - _wv_t0 )) c)"
+	else
+		echo "ubus: ОШИБКА - rpcd/LuCI без него не работают"
+	fi
+	echo "--- страница входа ---"
+	# busybox wget ТЕЛО ошибочного ответа НЕ сохраняет (проверено: rc=8, тело
+	# 0 байт при живом LuCI) - поэтому судим по КОДУ ВОЗВРАТА и скорости:
+	#   rc=0 - HTTP 200; rc=8 - сервер ответил ошибкой, и для /cgi-bin/luci/ это
+	#   ровно 403 страницы входа: диспетчер LuCI отработал, админка ЖИВА.
+	#   Всё прочее (или долгий ответ) - не достучались.
+	_wv_t1=$(cut -d. -f1 /proc/uptime)
+	wget -q -O /dev/null -T 8 http://127.0.0.1/cgi-bin/luci/ 2>/dev/null
+	_wv_c=$?
+	_wv_dt=$(( $(cut -d. -f1 /proc/uptime) - _wv_t1 ))
+	case "$_wv_c" in
+		0) echo "LuCI отвечает (HTTP 200 за ${_wv_dt} c)" ;;
+		8) echo "LuCI отвечает (страница входа, HTTP 403 за ${_wv_dt} c - это норма)" ;;
+		*) echo "LuCI НЕ ОТВЕЧАЕТ (wget rc=$_wv_c за ${_wv_dt} c)" ;;
+	esac
+}
+
+policyrouting_verdict() {
+	echo "--- правила policy routing (ip rule) ---"
+	ip rule show 2>/dev/null
+	_pr_n=$(ip rule show 2>/dev/null | wc -l)
+	# Штатных правил три: 0 lookup local, 32766 main, 32767 default.
+	if [ "$_pr_n" -gt 3 ] 2>/dev/null; then
+		echo "нестандартных правил: $((_pr_n - 3)) - работает policy routing (mwan3?)."
+		echo "Если админка недоступна из локалки при живом интернете - смотреть сюда:"
+		echo "ответы самого роутера могли уйти в таблицу аплинка, где нет маршрута в LAN."
+		for _pr_t in $(ip rule show 2>/dev/null | sed -n 's/.*lookup \([0-9]\{1,\}\).*/\1/p' | sort -u); do
+			echo "  таблица $_pr_t: $(ip route show table "$_pr_t" 2>/dev/null | head -3 | tr '\n' '; ')"
+		done
+	else
+		echo "policy routing не используется (только штатные правила)"
+	fi
+	echo "--- mwan3 ---"
+	if [ -x /etc/init.d/mwan3 ] || [ -f /etc/config/mwan3 ]; then
+		echo "mwan3 УСТАНОВЛЕН; статус: $(mwan3 status 2>/dev/null | head -5 | tr '\n' ' ' || echo 'не отвечает')"
+	else
+		echo "mwan3 не установлен"
+		# Осиротевшие правила от удалённого mwan3 продолжают действовать до ребута.
+		ip rule show 2>/dev/null | grep -q "lookup 25[0-9]" \
+			&& echo "НО остались его таблицы (25x) в ip rule - policy routing ещё жив!"
+	fi
+	echo "--- lan в правильной зоне? ---"
+	_pr_lz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='lan'\$/\1/p" | head -1)
+	_pr_wz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+	echo "input зоны lan: $(uci -q get "firewall.$_pr_lz.input")"
+	case " $(uci -q get "firewall.$_pr_wz.network") " in
+		*" lan "*) echo "ПРОБЛЕМА: интерфейс lan состоит в зоне WAN (input=REJECT) - админка отрезана межсетевым экраном" ;;
+	esac
+}
+
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
@@ -157,6 +246,43 @@ usb_flap_verdict() {
 			echo "  соседнее устройство $_d: $_c переподключений"
 			[ "${_c:-0}" -ge 10 ] && echo "  ЭТО МНОГО: устройство не удерживается на шине - смотреть питание, кабель и режим composition"
 		done
+	# УМЕР САМ КОНТРОЛЛЕР - ЭТО НЕ ПИТАНИЕ, И ГОВОРИТЬ ПРО ПИТАНИЕ ЗДЕСЬ ВРЕДНО.
+	#
+	# Живой отчёт (Banana Pi R4 Lite, FM350 в RNDIS, 30.07): сначала зависла
+	# передача - «rndis_host eth1: NETDEV WATCHDOG: transmit queue 0 timed out
+	# 5280 ms», потом ядро попыталось остановить эндпойнт, а контроллер не ответил:
+	#   xhci-mtk: xHCI host not responding to stop endpoint command
+	#   xhci-mtk: Host halt failed, -110
+	#   xhci-mtk: HC died; cleaning up
+	# И следом ОДНОВРЕМЕННО отвалились ВСЕ устройства шины (usb 1-1, 2-1, 2-1.2).
+	# Признаков просадки при этом НОЛЬ: ни error -71, ни «device descriptor read»,
+	# ни over-current. Просадка роняет ОДНО устройство и оставляет эти следы -
+	# здесь легла вся шина и не вернулась до перезагрузки.
+	#
+	# Наш прежний вердикт в такой ситуации уверенно советовал блок питания и
+	# кабель, то есть отправлял человека не туда. Проверяем это ПЕРВЫМ.
+	if logread 2>/dev/null | grep -qE "HC died|Host halt failed|host controller not responding"; then
+		echo "ПРОБЛЕМА: умер САМ USB-контроллер (xHCI), а не модем."
+		logread 2>/dev/null | grep -oE "(xhci[^:]*): (HC died[^,]*|Host halt failed, -[0-9]+|xHCI host controller not responding[^,]*)" | tail -3
+		echo "Признак: устройства пропали ВСЕ И СРАЗУ, и шина не поднялась до"
+		echo "перезагрузки. Это НЕ нехватка питания - при просадке отваливается одно"
+		echo "устройство и в логе остаются error -71 / device descriptor read."
+		logread 2>/dev/null | grep -qE "NETDEV WATCHDOG.*(rndis|cdc|usb)" && {
+			echo "Перед смертью контроллера зависла ПЕРЕДАЧА в сетевом драйвере"
+			echo "(NETDEV WATCHDOG, transmit queue timed out) - именно попытка ядра"
+			echo "сбросить эндпойнт и добивает контроллер."
+		}
+		echo "Что имеет смысл: (1) снять USB-автосуспенд -"
+		echo "  echo on > /sys/bus/usb/devices/usbN/power/control;"
+		echo "(2) поднимать шину без перезагрузки перезагрузкой модулей"
+		echo "  (rmmod/modprobe xhci-mtk и драйвера модема);"
+		echo "(3) если плата отдаёт все порты одним контроллером (Banana Pi R4 и"
+		echo "  родня), смена ПОРТА не поможет - он тот же; помогает только другой"
+		echo "  контроллер или другая плата."
+		echo "Менять блок питания и кабель тут смысла нет - следов просадки в логе нет."
+		return
+	fi
+
 	[ "${_uf_n:-0}" -ge 1 ] || return
 	echo "ПРОБЛЕМА: устройство пропадало с шины и перечислялось заново."
 	echo "Если это происходит ВСКОРЕ ПОСЛЕ подключения к сети - почти наверняка"
@@ -205,6 +331,27 @@ power_state_verdict() {
 	echo "power-state: ${_ps_p:-?}   state: ${_ps_s:-?}"
 	case "$_ps_p" in
 		low|off)
+			# АППАРАТНЫЙ РУБИЛЬНИК - отдельный вердикт. Прошивка сообщает MM, что
+			# радио выключено пином W_DISABLE# (M.2). Софтом это не лечится ВООБЩЕ:
+			# любые записи отскакивают (MBIM OperationNotAllowed, QMI FwWriteFailed,
+			# MM Invalid transition), при этом ЧТЕНИЯ живы - AT отвечает CFUN=1,
+			# dms-get-operating-mode отдаёт online, и картина выглядит как
+			# «прошивка сошла с ума». Живой случай: DW5821e на Radxa ROCK 5T за
+			# USB-хабом - хаб делил 500 мА EHCI-порта, модем в пике тянет >1 А,
+			# и адаптер прижимал W_DISABLE. Строка в логе MM - единственная улика,
+			# и появляется она только с --log-level=INFO.
+			if logread 2>/dev/null | grep -q "hardware radio switch is OFF"; then
+				echo "ПРОБЛЕМА (АППАРАТНАЯ): прошивка сообщает, что радио выключено"
+				echo "аппаратным рубильником (пин W_DISABLE# на M.2). Программно это"
+				echo "НЕ лечится - не помогут ни AT, ни qmicli, ни перезагрузки."
+				echo "Проверьте:"
+				echo "  - переключатель/джампер отключения радио на M.2-адаптере;"
+				echo "  - питание: модем за USB-хабом делит 500 мА порта, а в пике"
+				echo "    тянет больше ампера - подключите адаптер напрямую или через"
+				echo "    хаб с внешним питанием;"
+				echo "  - после смены питания/порта полностью передёрните модем."
+				return
+			fi
 			echo "ПРОБЛЕМА: радио модема выключено. Пока он в этом состоянии, соединение"
 			echo "не поднимется НИКАКИМ протоколом, а в журнале будет бесконечное"
 			echo "«couldn't enable the modem: Invalid transition» - это следствие, а не причина."
@@ -296,8 +443,38 @@ stick_verdict() {
 radio_verdict() {   # $1 - АТ-порт
 	echo ""
 	echo "----- Состояние радио (итог) -----"
-	if [ -z "$1" ]; then echo "AT-порта нет - проверить нечем"; return; fi
-	_rv=$(sms_tool -d "$1" at "AT+CFUN?" 2>/dev/null | tr -d '\r' \
+	if [ -z "$1" ]; then
+		# AT-ПОРТА НЕТ - ЭТО НЕ «ПРОВЕРИТЬ НЕЧЕМ».
+		#
+		# У целого класса модемов (05c6:9025 и родня в QMI/MBIM-композиции) tty не
+		# бывает вовсе, и раздел молча сдавался, хотя ModemManager знает и питание
+		# радио, и состояние модема. Живой отчёт с двумя T99W175 (30.07) как раз
+		# так и читался: «радио проверить нечем» при полностью рабочем модеме.
+		_rvi=$("$RES/modemswitch.sh" mmindex 2>/dev/null)
+		if [ -n "$_rvi" ]; then
+			_rvk=$(mmcli -m "$_rvi" -K 2>/dev/null)
+			_rvp=$(printf '%s\n' "$_rvk" | sed -n 's/^modem\.generic\.power-state *: *//p' | head -1)
+			_rvs=$(printf '%s\n' "$_rvk" | sed -n 's/^modem\.generic\.state *: *//p' | head -1)
+			_rvf=$(printf '%s\n' "$_rvk" | sed -n 's/^modem\.generic\.state-failed-reason *: *//p' | head -1)
+			echo "AT-порта нет - состояние берём у ModemManager."
+			case "$_rvp" in
+				on)  echo "питание радио: on (норма)" ;;
+				low) echo "питание радио: LOW POWER - эквивалент CFUN=4, соединение не поднимется" ;;
+				off) echo "питание радио: OFF - радио выключено" ;;
+				*)   echo "питание радио: ${_rvp:-неизвестно}" ;;
+			esac
+			echo "состояние модема: ${_rvs:-неизвестно}"
+			case "$_rvf" in
+				''|--) ;;
+				sim-missing) echo "ПРИЧИНА ОТКАЗА: SIM НЕ ОБНАРУЖЕНА - проверить карту и лоток" ;;
+				*) echo "ПРИЧИНА ОТКАЗА: $_rvf" ;;
+			esac
+			return
+		fi
+		echo "AT-порта нет, и в ModemManager модема нет - проверить нечем"
+		return
+	fi
+	_rv=$(at_query "$1" "AT+CFUN?" 6 \
 		| sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' | head -1)
 	case "$_rv" in
 		1)  echo "CFUN=1 - радио включено (норма)" ;;
@@ -306,6 +483,150 @@ radio_verdict() {   # $1 - АТ-порт
 		'') echo "CFUN не прочитан (порт занят или модем молчит)" ;;
 		*)  echo "CFUN=$_rv - НЕ полный режим, ожидается CFUN=1: данные могут не работать" ;;
 	esac
+}
+
+# ПОЧЕМУ МОДЕМ НЕ ПОДКЛЮЧАЕТСЯ - ПО ВСЕМ МОДЕМАМ СРАЗУ.
+#
+# ЗАЧЕМ. ModemManager называет причину отказа одной строкой
+# (state-failed-reason), и она решает разбор: «sim-missing» - это карта и лоток, а
+# не наше приложение. Но лежит она внутри дампа `mmcli -m N -K` на 200 строк, по
+# одному дампу на модем, и найти её удавалось не всегда. Живой случай: у человека
+# с двумя T99W175 (30.07) второй модем не работал ровно из-за sim-missing, а
+# разбор ушёл в приложение, композиции и питание.
+#
+# Раздел про ВСЕ модемы, а не про активный: «работает только один из двух» - самая
+# частая жалоба на мультимодемной машине, и вердикт должен отвечать про оба.
+mm_fail_verdict() {
+	echo ""
+	echo "----- Почему модем не подключается (итог) -----"
+	command -v mmcli >/dev/null 2>&1 || { echo "ModemManager не установлен - раздел не применим"; return; }
+	_mf_l=$(mmcli -L 2>/dev/null | sed -n 's#.*/Modem/\([0-9]*\).*#\1#p')
+	[ -n "$_mf_l" ] || { echo "в ModemManager нет ни одного модема"; return; }
+	for _mf_i in $_mf_l; do
+		_mf_k=$(mmcli -m "$_mf_i" -K 2>/dev/null)
+		_mf_d=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.device *: *//p' | head -1)
+		_mf_s=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.state *: *//p' | head -1)
+		_mf_r=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.state-failed-reason *: *//p' | head -1)
+		_mf_sim=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.sim *: *//p' | head -1)
+		echo "### модем $_mf_i (${_mf_d##*/}): состояние $_mf_s"
+		case "$_mf_s" in
+			connected) echo "    норма - соединение установлено" ;;
+			registered|enabled) echo "    радио готово, но сессии данных нет: смотреть APN и netifd" ;;
+			failed)
+				case "$_mf_r" in
+					sim-missing)
+						echo "    SIM НЕ ОБНАРУЖЕНА. Это железо, а не настройки:"
+						echo "    проверить наличие карты, ориентацию и посадку в лотке,"
+						echo "    а на модулях с двумя слотами - что активен тот слот, где карта." ;;
+					sim-error|sim-wrong) echo "    ОШИБКА SIM ($_mf_r) - карта не читается: контакты, другая карта" ;;
+					unknown-capabilities) echo "    MM не смог определить возможности модема - обычно AT-only сборка модема (см. раздел про cdc-wdm)" ;;
+					''|--) echo "    состояние failed без указанной причины" ;;
+					*) echo "    причина отказа: $_mf_r" ;;
+				esac ;;
+			locked) echo "    модем заблокирован (PIN/PUK) - см. unlock-required в дампе" ;;
+			disabled) echo "    модем выключен: netifd его ещё не включал или отключён вручную" ;;
+			*) echo "    состояние: $_mf_s" ;;
+		esac
+		# FCC LOCK ПОД ModemManager. Подпись однозначная: питание радио «low»,
+		# состояние застряло в enabling/disabled, а netifd крутит «couldn't
+		# enable ... Retry: Invalid transition». Модуль не включит радио, пока
+		# хост не пришлёт разблокировку; у MM скрипты ЕСТЬ, но по умолчанию
+		# ВЫКЛЮЧЕНЫ (лежат в fcc-unlock.available.d, работают из fcc-unlock.d).
+		# Живой случай: DW5821e (413c:81d7) на Radxa ROCK 5T - месяц «модем не
+		# заводится», а это два симлинка. Для Dell/Foxconn (413c:81d7,
+		# 0489:e0b5, 105b:*) годится скрипт «105b»: его фолбэк
+		# dms-foxconn-set-fcc-authentication=0 - штатный метод T77W968/DW5821e.
+		_mf_pw=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.power-state *: *//p' | head -1)
+		if [ "$_mf_pw" = "low" ] && { [ "$_mf_s" = "enabling" ] || [ "$_mf_s" = "disabled" ] || [ "$_mf_s" = "failed" ]; }; then
+			_mf_vp=$(printf '%s\n' "$_mf_k" | sed -n 's#^modem\.generic\.device *: .*/\([0-9.-]*\)$#\1#p' | head -1)
+			_mf_vid=""; _mf_pid=""
+			if [ -n "$_mf_vp" ] && [ -r "/sys/bus/usb/devices/$_mf_vp/idVendor" ]; then
+				_mf_vid=$(cat "/sys/bus/usb/devices/$_mf_vp/idVendor")
+				_mf_pid=$(cat "/sys/bus/usb/devices/$_mf_vp/idProduct")
+			fi
+			echo "    ПОХОЖЕ НА FCC LOCK: питание радио «low», включение не проходит."
+			_mf_av=/usr/share/ModemManager/fcc-unlock.available.d
+			_mf_en=/etc/ModemManager/fcc-unlock.d
+			if [ -d "$_mf_av" ]; then
+				_mf_script=""
+				[ -n "$_mf_vid" ] && [ -e "$_mf_av/$_mf_vid:$_mf_pid" ] && _mf_script="$_mf_vid:$_mf_pid"
+				[ -z "$_mf_script" ] && [ -n "$_mf_vid" ] && [ -e "$_mf_av/$_mf_vid" ] && _mf_script="$_mf_vid"
+				# Dell/Foxconn-родня без своего скрипта - подходит foxconn (105b)
+				case "$_mf_vid:$_mf_pid" in
+					413c:81d7|0489:e0b5) [ -z "$_mf_script" ] && [ -e "$_mf_av/105b" ] && _mf_script=105b ;;
+				esac
+				if [ -e "$_mf_en/$_mf_vid:$_mf_pid" ]; then
+					echo "    скрипт разблокировки УЖЕ включён - причина в другом"
+				elif [ -n "$_mf_script" ]; then
+					echo "    ЧТО СДЕЛАТЬ (нужен пакет qmi-utils):"
+					echo "      mkdir -p $_mf_en"
+					echo "      ln -s $_mf_av/$_mf_script $_mf_en/$_mf_vid:$_mf_pid"
+					echo "      ifdown у интерфейса модема, /etc/init.d/modemmanager restart, подождать минуту, ifup"
+				else
+					echo "    готового скрипта под $_mf_vid:$_mf_pid в $_mf_av нет - смотреть свежий ModemManager"
+				fi
+			fi
+		fi
+		case "$_mf_sim" in
+			''|--) echo "    объект SIM у модема отсутствует - карты нет ни в одном слоте" ;;
+		esac
+	done
+}
+
+# FCC LOCK - модуль не выйдет в эфир, пока его не разблокируют.
+#
+# ЗАЧЕМ ЭТО В ОТЧЁТЕ. Заблокированный модем выглядит просто сломанным: AT+CFUN=1
+# отвечает «+CME ERROR: 0» или «phone failure», по QMI - «Invalid transition», по
+# MBIM - «Operation not allowed», интерфейс не встаёт, лампочка на переходнике не
+# горит. Причина при этом НИОТКУДА НЕ ВИДНА, и человек ищет её в кабеле, питании,
+# прошивке и нашем приложении - то есть везде, кроме нужного места. Три команды
+# дают точный ответ, и место им ровно здесь, рядом с «радио выключено».
+#
+# Блокировка бывает у модулей, предназначенных ноутбукам (Lenovo, Dell, HP); у
+# FM350-GL замечена в версиях для Lenovo. Смысл её - привязать модуль к конкретной
+# модели ноутбука ради сертификации FCC в США, за пределами этого регулирования
+# смысла у неё нет.
+#
+# Команды фибокомовские. У других вендоров их нет, и это НЕ повод для тревоги -
+# тогда просто молчим, а не пишем «проверить не удалось».
+fcclock_verdict() {   # $1 - АТ-порт
+	echo ""
+	echo "----- FCC lock (итог) -----"
+	[ -n "$1" ] || { echo "AT-порта нет - проверить нечем"; return; }
+	_fl=$(at_query "$1" "AT+GTFCCLOCKMODE?;+GTFCCLOCKSTATE?;+GTFCCEFFSTATUS?" 8)
+	_flm=$(printf '%s' "$_fl" | sed -n 's/.*+GTFCCLOCKMODE: *\([0-9]*\).*/\1/p' | head -1)
+	_fls=$(printf '%s' "$_fl" | sed -n 's/.*+GTFCCLOCKSTATE: *\([0-9]*\).*/\1/p' | head -1)
+
+	if [ -z "$_flm" ]; then
+		echo "модем про FCC lock не отвечает - у этого вендора такой блокировки нет"
+		return
+	fi
+	if [ "$_flm" = "0" ]; then
+		echo "FCC lock выключен (mode 0) - модем выходит в эфир свободно"
+		return
+	fi
+
+	# mode 1 - разблокировать нужно ОДИН раз, mode 2 - при каждом включении.
+	case "$_flm" in
+		1) echo "FCC lock ВКЛЮЧЁН (mode 1: разблокировка нужна однократно)" ;;
+		2) echo "FCC lock ВКЛЮЧЁН (mode 2: разблокировка нужна при КАЖДОМ включении)" ;;
+		*) echo "FCC lock ВКЛЮЧЁН (mode $_flm)" ;;
+	esac
+	if [ "$_fls" = "1" ]; then
+		echo "Сейчас модем РАЗБЛОКИРОВАН (state 1) - радио работает."
+		[ "$_flm" = "2" ] && echo "Но при mode 2 после выключения питания блокировка вернётся."
+		return
+	fi
+	echo "И НЕ РАЗБЛОКИРОВАН (state 0) - ЭТО И ЕСТЬ ПРИЧИНА, если модем не выходит"
+	echo "в эфир: AT+CFUN=1 отвечает ошибкой, соединение не поднимается ни одним"
+	echo "протоколом, и выглядит это как неисправность железа. Железо цело."
+	echo "Разблокировка: AT+GTFCCLOCKGEN даёт challenge, из него считается"
+	echo "проверочный код (SHA256 от challenge + vendor hash), затем"
+	echo "AT+GTFCCLOCKVER=<код>. Снять навсегда - AT+GTFCCLOCKMODE=0 и"
+	echo "переподключить модем. Процедура описана в документации ModemManager;"
+	echo "пошаговый вариант - в docs/FM350-reference.md нашего репозитория."
+	echo "Приложение само этого НЕ делает: разблокировка - разовое действие"
+	echo "владельца, и лезть в неё из веб-морды мы не хотим."
 }
 
 # ЭТАП СБОРА -> файл прогресса. Пишем КЛЮЧ (латиницей) и номер шага, а не
@@ -362,6 +683,39 @@ report() {
 	run 5  "tty/cdc-wdm в системе" sh -c "ls -l /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan* 2>/dev/null"
 	run 10 "Кто держит порты" sh -c "for f in /dev/ttyUSB* /dev/cdc-wdm*; do [ -e \"\$f\" ] || continue; u=\$(fuser \"\$f\" 2>/dev/null); [ -n \"\$u\" ] && echo \"\$f: \$u\"; done; echo '--- процессы ---'; ps w 2>/dev/null | grep -iE 'ModemManager|uqmi|mbim|sms_tool|lpac|gcom' | grep -v grep"
 
+	# ПОЧЕМУ У МОДЕМА НЕТ AT-ПОРТОВ.
+	#
+	# У части композиций (05c6:9025/90d5/90d6) ttyUSB появляются только после
+	# ручной привязки через new_id, и мы её НАМЕРЕННО пропускаем, если у модема уже
+	# поднят канал данных (usbserial_generic жадный и способен отобрать интерфейс у
+	# qmi_wwan - см. usbports.sh). Решение верное, но снаружи оно неотличимо от
+	# поломки: «портов нет», радио «проверить нечем», бенды «Port not found». Живой
+	# отчёт с двумя T99W175 на ZBT (30.07) разбирался именно об это.
+	run 10 "Привязка AT-портов (итог)" sh -c '
+		N=0
+		for d in /sys/bus/usb/devices/*; do
+			[ -f "$d/idVendor" ] || continue
+			v=$(cat "$d/idVendor"); p=$(cat "$d/idProduct")
+			case "$v:$p" in
+				05c6:9025|05c6:90d5|05c6:90d6) ;;
+				*) continue ;;
+			esac
+			N=$((N+1))
+			t=""
+			for f in "$d":*/ttyUSB* "$d":*/tty/ttyUSB*; do [ -e "$f" ] && t="$t $(basename "$f")"; done
+			echo "$(basename "$d") [$v:$p] порты:${t:- НЕТ}"
+		done
+		[ "$N" = 0 ] && { echo "модемов с ручной привязкой портов нет - раздел не применим"; exit 0; }
+		echo "--- журнал привязки ---"
+		logread 2>/dev/null | grep "5gmodem-usbports" | tail -10 || echo "(записей нет - скрипт привязки не отработал)"
+		if logread 2>/dev/null | grep -q "канал данных уже поднят"; then
+			echo "ИТОГ: привязка пропущена НАМЕРЕННО - у модема уже поднят cdc-wdm/сеть."
+			echo "Это защита связи: usbserial_generic при переподключении отбирает интерфейс"
+			echo "у qmi_wwan, и модем остаётся без канала данных (issue #8)."
+			echo "Цена: нет AT-порта -> нет подробностей по диапазонам, чтения SIM по AT и eSIM по AT."
+			echo "Для этих модемов данные надо брать по QMI/MBIM - см. разделы QMI-дополнения и eSIM: транспорт APDU."
+		fi'
+
 	collect "mm"
 	run 15 "mmcli -L" mmcli -L
 	# Индексы берём из mmcli -L, а не наугад "-m 0": индекс меняется при каждом
@@ -389,6 +743,8 @@ report() {
 	at "$P" "AT+C5GREG?"
 	at "$P" "AT+CGATT?"
 	radio_verdict "$P"
+	mm_fail_verdict
+	fcclock_verdict "$P"
 	proxy_verdict
 	stick_verdict
 	mbim_verdict
@@ -406,6 +762,23 @@ report() {
 	# делят Thales и прототип Compal, у которых РАЗНЫЕ пути управления.
 	run 20 "Управление бендами: путь" "$RES/bands.sh" mgmtinfo
 	run 25 "Управление бендами: что видит приложение" "$RES/bands.sh" getinfo
+	# QMI-ДОПОЛНЕНИЯ. У модема без AT-порта (или под ModemManager) текущий
+	# диапазон, полоса и RSRP приходят ТОЛЬКО отсюда, и когда в карточке стоит
+	# голое «4G» без подробностей, вопрос ровно один: qmicli вообще есть и что он
+	# отвечает по этому узлу. По отчёту это было не видно - ни бинарника, ни
+	# вывода (живой случай: два T99W175 на ZBT, 30.07).
+	run 20 "QMI-дополнения (диапазон/сигнал)" sh -c '
+		command -v qmicli >/dev/null 2>&1 || { echo "qmicli НЕ УСТАНОВЛЕН (пакет qmi-utils) - диапазон и RSRP брать неоткуда"; exit 0; }
+		W=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
+		[ -c "$W" ] || { echo "у активного модема нет своего cdc-wdm - QMI-дополнений не будет"; exit 0; }
+		echo "узел: $W"
+		. /usr/share/5gmodem/lib.sh 2>/dev/null
+		if command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free; then
+			echo "канал занят netifd (proto=qmi) - опрос намеренно пропущен, связь дороже"
+			exit 0
+		fi
+		echo "--- rf-band-info ---"; qmicli -d "$W" -p --nas-get-rf-band-info 2>&1 | head -20
+		echo "--- signal-info ---";  qmicli -d "$W" -p --nas-get-signal-info 2>&1 | head -20'
 	run 5  "lpac установлен?" sh -c "ls -l /usr/bin/lpac /usr/lib/lpac 2>/dev/null; echo '--- зависимости ---'; ldd /usr/lib/lpac 2>/dev/null"
 	# HTTPS к SM-DP+ - самая частая причина, почему СПИСОК профилей обновляется
 	# (это чистый APDU), а ЗАГРУЗКА профиля молча не идёт: нет ca-bundle, кривое
@@ -415,6 +788,10 @@ report() {
 	run 15 "Проверка HTTPS наружу" sh -c "curl -sS -o /dev/null -w 'код=%{http_code} tls=%{ssl_verify_result} время=%{time_total}s\n' https://ya.ru 2>&1 | head -3"
 	collect "esim"
 	run 5  "eSIM: конфиг lpac (порт AT/uqmi)" sh -c "uci -q show lpac 2>/dev/null; echo '--- custom AID ---'; uci -q get lpac.global.custom_isd_r_aid 2>/dev/null || echo '(по умолчанию A0000005591010FFFFFFFF8900000100)'"
+	# ЧЕМ ХОДИМ К eUICC. Транспорт APDU выбирается автоматически по протоколу и
+	# драйверу узла, и ошибка выбора выглядит снаружи неотличимо от «eSIM нет»:
+	# code -1 "euicc_init" и «модем без eUICC». Печатаем выбор явно.
+	run 10 "eSIM: транспорт APDU" "$RES/esim.sh" apduinfo
 	# КАКОЙ ПОРТ РЕАЛЬНО ОТВЕЧАЕТ eUICC. Главная неочевидная причина «профиль не
 	# читается»: eUICC-порт плавает при переперечислении (FM350 виден то на
 	# ttyUSB1, то на ttyUSB3), а в lpac.at.device прибит один конкретный. Здесь
@@ -442,14 +819,38 @@ report() {
 				*) echo "  $t -> нет ([$R])" ;;
 			esac
 		done'
-	run 60 "eSIM: статус" "$RES/esim.sh" status-probe
-	run 90 "eSIM: профили и чип" "$RES/esim.sh" dump
-	run 60 "eSIM: уведомления" "$RES/esim.sh" notifications
+	# ТРИ САМЫХ ДОРОГИХ ШАГА ОТЧЁТА (60+90+60 c бюджета - треть всего). Гоняем их
+	# только когда у eSIM есть хоть какой-то путь до чипа. Без lpac пути нет
+	# вовсе; при AT-транспорте нужен tty, и на модеме без единого порта все три
+	# шага гарантированно упрутся в "no AT port", отняв минуты. Человек с двумя
+	# T99W175 (30.07) именно на этом месте решил, что диагностика повисла.
+	_ES_SKIP=""
+	if [ ! -x /usr/bin/lpac ]; then
+		_ES_SKIP="lpac не установлен"
+	elif [ "$("$RES/esim.sh" apduinfo 2>/dev/null | sed -n 's/^выбранный APDU-бэкенд: //p')" = "at" ] \
+	     && [ -z "$("$RES/registry.sh" active 2>/dev/null | jsonfilter -e '@.tty[*]' 2>/dev/null)" ]; then
+		_ES_SKIP="транспорт APDU=at, а у активного модема нет ни одного tty"
+	fi
+	if [ -n "$_ES_SKIP" ]; then
+		run 5 "eSIM: статус/профили/уведомления" echo "пропущено: $_ES_SKIP"
+	else
+		run 60 "eSIM: статус" "$RES/esim.sh" status-probe
+		run 90 "eSIM: профили и чип" "$RES/esim.sh" dump
+		run 60 "eSIM: уведомления" "$RES/esim.sh" notifications
+	fi
 
 	collect "net"
 	run 10 "Маршруты" sh -c "ip route; echo '--- ipv6 ---'; ip -6 route"
 	run 10 "uci firewall (зоны)" sh -c "uci show firewall 2>/dev/null | grep -E 'zone|forwarding' | head -40"
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
+	run 15 "Доступ к админке (итог)" webstack_verdict
+	run 15 "Policy routing / mwan3 (итог)" policyrouting_verdict
+	# МИНЫ ЗАМЕДЛЕННОГО ДЕЙСТВИЯ: незакоммиченные правки uci. Дельты лежат в общем
+	# /tmp/.uci и применяются ЧУЖИМ коммитом - спустя часы, из другого кода. Смена
+	# lan.ipaddr, застрявшая здесь, выглядит потом как «роутер сам сломался»
+	# (живой симптом: пинга до роутера нет, инет есть). Если тут что-то есть -
+	# вот оно и есть главная улика.
+	run 10 "Незакоммиченные правки uci (мины)" sh -c 'uci changes 2>/dev/null | head -40; [ -z "$(uci changes 2>/dev/null)" ] && echo "(пусто - мин нет)"'
 	run 10 "Питание и стабильность USB (итог)" usb_flap_verdict
 	run 10 "Модем в режиме загрузчика? (итог)" fastboot_verdict
 	run 20 "Питание радио модема (итог)" power_state_verdict

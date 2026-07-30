@@ -271,6 +271,8 @@ return view.extend({
 			var msg;
 			if (st.reason === 'nolpac') {
 				msg = _('eSIM management needs the lpac package, which is not installed. Install the lpac build for your platform - see the app README.');
+			} else if (st.reason === 'mm_owns') {
+				msg = _('This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable "Hide from ModemManager" in the modem settings (or switch the interface protocol), then come back here.');
 			} else if (st.reason === 'modemmanager') {
 				msg = _('This modem is on the ModemManager protocol, where eSIM over AT commands is not available. Switch the modem interface to the fibocom / MBIM / QMI protocol to manage eSIM.');
 			} else if (st.reason === 'noeuicc') {
