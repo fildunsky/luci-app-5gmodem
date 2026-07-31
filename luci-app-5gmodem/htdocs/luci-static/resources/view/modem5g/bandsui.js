@@ -65,9 +65,28 @@ function clear3gRow() {
    localStorage (ключ - USB-путь) и рисуется мгновенно при первом заходе;
    живой ответ затем подтверждает или молча поправляет - рендеры идемпотентны
    (sameRender), идентичные данные не перерисовываются и не мигают. */
+/* Путь ВЫБРАННОЙ вкладки для читающих вербов bands.sh: блок частот перестаёт
+   зависеть от active_modem, и рассинхрон вкладки с активным модемом больше не
+   показывает чужие диапазоны (31.07.2026). */
+function _bandsFor() {
+	var p = (ctx.pagePath && ctx.pagePath()) || '';
+	return p ? [ p ] : [];
+}
+
 var _bandsWarmed = false;
 function _bandsKey() {
-	return 'bands5g-' + ((ctx.pagePath && ctx.pagePath()) || '');
+	/* КЛЮЧ ВКЛЮЧАЕТ АКТИВНЫЙ МОДЕМ. Без него тёплый кэш был общим на страницу, и
+	   после смены вкладки блок «Управление частотами» рисовал диапазоны ПРЕЖНЕГО
+	   модема, пока не придут свежие (живой случай 31.07.2026: карточка Telit
+	   показывала бенды Compal). uci уже загружен страницей; при отсутствии
+	   значения ведём себя как раньше. */
+	var am = '';
+	try { am = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''; } catch (e) {}
+	/* Суффикс версии обесценивает ОТРАВЛЕННЫЕ записи, сделанные до фикса
+	   адресации mmcli (в них под ключом одного модема лежали данные другого).
+	   Жёсткая перезагрузка страницы localStorage НЕ чистит, поэтому иначе они
+	   продолжали бы рисоваться вечно. */
+	return 'bands5g2-' + ((ctx.pagePath && ctx.pagePath()) || '') + (am ? ('-' + am) : '');
 }
 function warmRenderBands() {
 	if (_bandsWarmed) { return; }
@@ -75,13 +94,30 @@ function warmRenderBands() {
 	var c = null;
 	try { c = JSON.parse(window.localStorage.getItem(_bandsKey()) || 'null'); } catch (e) {}
 	if (!c || !c.j) { return; }
+	/* СВЕРКА ХОЗЯИНА. Ключа с путём модема мало: запись могла быть сделана, когда
+	   бэкенд ещё отдавал чужие данные под этим путём. Модель модема лежит рядом,
+	   и несовпадение - повод выбросить кэш, а не рисовать чужие диапазоны. */
+	var mdl = '';
+	try {
+		var ap = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
+	} catch (e) {}
+	if (mdl && c.m && c.m !== mdl) {
+		try { window.localStorage.removeItem(_bandsKey()); } catch (e) {}
+		return;
+	}
 	try {
 		if (c.t === 'mm') { applyMgmtMM(c.j); }
 		else if (c.t === 'vendor') { applyVendorJson(c.j); }
 	} catch (e) {}
 }
 function _bandsRemember(t, j) {
-	try { window.localStorage.setItem(_bandsKey(), JSON.stringify({ t: t, j: j })); } catch (e) {}
+	var mdl = '';
+	try {
+		var ap = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
+	} catch (e) {}
+	try { window.localStorage.setItem(_bandsKey(), JSON.stringify({ t: t, j: j, m: mdl })); } catch (e) {}
 }
 
 function loadBands() {
@@ -100,7 +136,7 @@ function loadBands() {
 	     source=mmcli + pending - MM ещё собирает модем: держим последнее
 	                              известное, следующий опрос дорисует;
 	     source=vendor          - вендорный путь (bands.sh json). */
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ]), '{}').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ].concat(_bandsFor())), '{}').then(function(out) {
 		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
 		/* ОТВЕТА НЕТ - НИЧЕГО НЕ ТРОГАЕМ. fs.exec_direct отдаёт пустую строку,
 		   когда вызов не успел (rpcd занят, mmcli подтормаживает под опросом
@@ -320,7 +356,7 @@ function nrC_hasEnabled(j) {
 
 function loadBandsModemband(force) {
 	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ]), '').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ].concat(_bandsFor())), '').then(function(out) {
 		var j = {};
 		var note = document.getElementById('bandnote');
 		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }

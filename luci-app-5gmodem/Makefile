@@ -23,7 +23,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+curl \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.1.0
+PKG_VERSION:=2.1.1
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -114,7 +114,17 @@ fi
 	# числе touch, который сбрасывает кэш браузера. Отсюда же тянулась старая
 	# беда «браузер отдаёт JS годовой давности»: лекарство в пакете было, но
 	# из-за этой скобки ни разу не срабатывало.
-	find /www/luci-static/resources/view/modem \
+	# ВСЕ каталоги ресурсов пакета, а не выборочно. Здесь стоял только
+	# 'view/modem' (какого вообще не существует - страницы живут в
+	# view/modem5g), и главные JS после апгрейда оставались с mtime 1970:
+	# браузер с такой датой не перепроверяет файл годами (эвристика кэша) либо
+	# получает 304 на любой If-Modified-Since. Живой случай 31.07.2026: на
+	# свежепоставленной 2.1.0 карточка SSClash горела красным - в браузере
+	# крутился netpri.js недельной давности при здоровом бэкенде.
+	find /www/luci-static/resources/view/modem5g \
+		/www/luci-static/resources/view/status \
+		/www/luci-static/resources/sms-tool-5gm \
+		/www/luci-static/resources/5gmodem \
 		/www/luci-static/resources/protocol/fibocom.js \
 		/www/luci-static/resources/icons -exec touch {} + 2>/dev/null
 }

@@ -58,14 +58,22 @@ bind_ports() {   # $1 - vid, $2 - pid
 	# Правило: если у устройства уже есть cdc-wdm или сетевой интерфейс, значит
 	# канал данных поднят и ttyUSB не стоят того, чтобы им рисковать. Метрики
 	# переживут отсутствие AT-порта, потеря интернета - нет.
+	# Канал поднят - привязываем ОСТОРОЖНО: сам факт wdm/net больше не повод
+	# отказаться (у MBIM-композиций Compal 90d5/90d6 канал есть ВСЕГДА, и гвард
+	# оставлял их без единого tty после каждой переэнумерации - метрики пустые,
+	# «Модем не подключен» при живом IP). Риск гварда реален (жадный serial
+	# может забрать CDC-интерфейс канала), поэтому после new_id делаем ХИРУРГИЮ:
+	# у всех интерфейсов НЕ vendor-класса (ff), доставшихся usb-serial, привязку
+	# снимаем и возвращаем их родным драйверам через drivers_probe.
+	_bp_haswdm=0
 	for _bp_d in /sys/bus/usb/devices/*; do
 		[ -f "$_bp_d/idVendor" ] || continue
 		[ "$(cat "$_bp_d/idVendor" 2>/dev/null)" = "$1" ] || continue
 		[ "$(cat "$_bp_d/idProduct" 2>/dev/null)" = "$2" ] || continue
 		for _bp_w in "$_bp_d":*/usbmisc/cdc-wdm* "$_bp_d":*/net/*; do
 			[ -e "$_bp_w" ] || continue
-			logger -t 5gmodem-usbports "$1:$2 - канал данных уже поднят, привязку портов пропускаю"
-			return 0
+			_bp_haswdm=1
+			break
 		done
 	done
 
@@ -106,6 +114,31 @@ bind_ports() {   # $1 - vid, $2 - pid
 	fi
 	echo "$1 $2" > "$_bp_path" 2>/dev/null
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
+
+	[ "$_bp_haswdm" = 1 ] || return 0
+	# Хирургия после привязки при живом канале: не-ff интерфейсы (CDC comm/data,
+	# сетевые) usb-serial'у не принадлежат - снимаем и отдаём drivers_probe,
+	# родной драйвер (cdc_mbim/qmi_wwan) заберёт их обратно.
+	sleep 2
+	for _bp_d in /sys/bus/usb/devices/*; do
+		[ -f "$_bp_d/idVendor" ] || continue
+		[ "$(cat "$_bp_d/idVendor" 2>/dev/null)" = "$1" ] || continue
+		[ "$(cat "$_bp_d/idProduct" 2>/dev/null)" = "$2" ] || continue
+		for _bp_i in "$_bp_d":*; do
+			[ -f "$_bp_i/bInterfaceClass" ] || continue
+			_bp_cls=$(cat "$_bp_i/bInterfaceClass" 2>/dev/null)
+			[ "$_bp_cls" = "ff" ] && continue
+			_bp_idrv=$(basename "$(readlink -f "$_bp_i/driver" 2>/dev/null)" 2>/dev/null)
+			case "$_bp_idrv" in
+				option1|"usb_serial_generic"|generic)
+					_bp_if=$(basename "$_bp_i")
+					echo "$_bp_if" > "$_bp_i/driver/unbind" 2>/dev/null
+					echo "$_bp_if" > /sys/bus/usb/drivers_probe 2>/dev/null
+					logger -t 5gmodem-usbports "вернул интерфейс $_bp_if (класс $_bp_cls) родному драйверу"
+					;;
+			esac
+		done
+	done
 }
 
 # Привязка new_id НЕ переживает перезагрузку, а hotplug-событие 'add' для модема,

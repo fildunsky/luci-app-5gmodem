@@ -447,6 +447,12 @@ function tabsBar(modems, active) {
 					row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = 'none'; });
 				}
 				card.classList.add('active');
+				/* ЛИЧНОСТЬ СТРАНИЦЫ = КЛИКНУТАЯ ВКЛАДКА. Путь кладём в
+				   sessionStorage ДО switch/reload: новая страница возьмёт его
+				   как свой и будет адресовать запросы ЕМУ, даже если switch
+				   не доехал или active сменился позже. Именно вывод пути из
+				   active (peek) делал обе вкладки близнецами (31.07.2026). */
+				try { window.sessionStorage.setItem('5gm-tab', path); } catch (e) {}
 				/* ПРЕДОХРАНИТЕЛЬ ОТ ЗАЛИПАНИЯ. Вкладки выше выключены до перезагрузки
 				   страницы, а перезагрузку запускает конец цепочки switch->active.
 				   Если switch завис на роутере (занятый rpcd, долгий resolve по

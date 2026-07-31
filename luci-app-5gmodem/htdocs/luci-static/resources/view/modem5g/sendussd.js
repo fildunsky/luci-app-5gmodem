@@ -397,6 +397,7 @@ return view.extend({
 		var out = document.querySelector('.ussdcommand-output');
 		var buttons = document.querySelectorAll('.cbi-button');
 		var STAGES = {
+			starting: _('Preparing the request…'),
 			switching: _('Switching the modem to 3G - USSD needs the circuit-switched channel'),
 			sending:   _('Sending the request'),
 			restoring: _('Restoring the previous network mode')
@@ -591,13 +592,18 @@ return view.extend({
 					// статус "active", и следующие initiate падают с "a session
 					// is already active". Отмена возвращает в idle (ошибку отмены
 					// игнорируем - если отменять нечего).
+					/* ТАЙМАУТЫ ВЕЗДЕ КОРОЧЕ 30 СЕКУНД РПЦД. У cancel таймаута не
+					   было вовсе, а на модеме с заклинившим USSD-автоматом (Compal:
+					   сессия «active», отмена отвечает QMI 'Internal' спустя долгие
+					   секунды) висел уже ОН - XHR умирал до какого-либо ответа, и
+					   пользователь видел вечный спиннер вместо текста ошибки. */
 					return (!self.ussdSessionActive
-							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--3gpp-ussd-cancel' ]), {})
+							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-cancel' ]), {})
 							: Promise.resolve())
-						.then(function() { return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=30', arg ]); })
+						.then(function() { return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=20', arg ]); })
 						.then(function() {
 						// достоверно узнаём состояние сессии из статуса
-						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--3gpp-ussd-status' ]), {}).then(function(r) {
+						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-status' ]), {}).then(function(r) {
 							self.ussdSessionActive = /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');
 							self.ussdModemNum = modemNum;
 							var out = document.querySelector('.ussdcommand-output');

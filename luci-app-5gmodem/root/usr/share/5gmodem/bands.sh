@@ -12,6 +12,18 @@
 # разные модемы. Поэтому env BANDS_ACTIVE_MODEM (usb-путь, напр. "2-1.4") имеет
 # приоритет и прокидывает выбор через весь скрипт - профиль, AT-порт, маску,
 # реконнект интерфейса считаем уже для него.
+# ПУТЬ МОДЕМА АРГУМЕНТОМ - для адресных вербов чтения (страница передаёт путь
+# ВЫБРАННОЙ вкладки, а не полагается на active_modem; см. 5gmodem.sh cached).
+# Только для чтения: у пишущих вербов второй аргумент занят значением.
+case "$1" in
+	json|jsonrefresh|mgmtinfo|getmode|getsupportedmodes|getcelllock)
+		case "$2" in
+			'') : ;;
+			*[!0-9.:_-]*) : ;;
+			*) BANDS_ACTIVE_MODEM="$2" ;;
+		esac ;;
+esac
+
 active_modem() {
 	[ -n "$BANDS_ACTIVE_MODEM" ] && { printf '%s\n' "$BANDS_ACTIVE_MODEM"; return 0; }
 	uci -q get 5gmodem.@5gmodem[0].active_modem
@@ -583,7 +595,9 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 		exit 0
 	fi
 	# кэш-промах (первое открытие/протух) - считаем сейчас, синхронно, и кэшируем
-	_o=$("$0" jsonrefresh 2>/dev/null)
+	# Путь передаём дальше: дочерний jsonrefresh читает active_modem заново, и без
+	# аргумента он собрал бы данные АКТИВНОГО модема под ключом выбранной вкладки.
+	_o=$("$0" jsonrefresh ${BANDS_ACTIVE_MODEM:+"$BANDS_ACTIVE_MODEM"} 2>/dev/null)
 	# ГОНКА АКТИВНОГО МОДЕМА. Имя файла ($_BJF) взято из active_modem ВЫШЕ, а
 	# jsonrefresh - ОТДЕЛЬНЫЙ процесс, читающий active_modem ЗАНОВО. Если между
 	# этими чтениями пользователь переключил вкладку модема (это переписывает
@@ -961,7 +975,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 	# держим запас до ~120 c (опрос на время паузы и так отдаёт кэш, см. 5gmodem.sh).
 	_mt_idx=""; _mt_i=0
 	while [ "$_mt_i" -lt 40 ]; do
-		_mt_idx=$("$_R/modemswitch.sh" mmindex 2>/dev/null)
+		_mt_idx=$("$_R/modemswitch.sh" mmindex "$(active_modem)" 2>/dev/null)
 		[ -n "$_mt_idx" ] && mmcli -m "$_mt_idx" -K >/dev/null 2>&1 && break
 		sleep 3; _mt_i=$((_mt_i + 1))
 	done
@@ -1161,7 +1175,7 @@ case $1 in
 			echo '{"source":"vendor"}'
 			exit 0
 		fi
-		_mi_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+		_mi_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(active_modem)" 2>/dev/null)
 		_mi_k=""
 		[ -n "$_mi_idx" ] && _mi_k=$(mmcli -m "$_mi_idx" -K 2>/dev/null)
 		if [ -z "$_mi_k" ]; then

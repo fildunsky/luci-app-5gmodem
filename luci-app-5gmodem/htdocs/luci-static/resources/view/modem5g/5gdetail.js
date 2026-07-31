@@ -1101,17 +1101,33 @@ function reloadWhenDebugReady(tries) {
      GSM (tech=1): num = CID, без параметра lac
    plmn = MCC + MNC (каждое дополняется до 3 цифр). 5G NSA идёт по LTE-якорю
    (tech=3). Для 5G SA формула пока неизвестна - кнопку не показываем. */
+var _c4Last = null;   /* последний ПОЛНЫЙ расчёт: {cid, res} - от дребезга снимков */
 function cell4cellsUrl(json) {
 	var mcc = parseInt(json.operator_mcc, 10);
 	var mnc = parseInt(json.operator_mnc, 10);
 	var cid = parseInt(json.cid_dec, 10);
+	/* ДРЕБЕЗГ СНИМКОВ: mcc/mnc пропадают на тик (порт занят - оператор из
+	   кэша), и кнопка исчезала/прыгала между строками каждые 5 секунд
+	   (поймано владельцем на Compal). Сота та же - отдаём прошлый расчёт. */
+	if ((isNaN(mcc) || isNaN(mnc)) && _c4Last && _c4Last.cid === cid && cid > 0) {
+		return _c4Last.res;
+	}
 	if (isNaN(mcc) || isNaN(mnc) || isNaN(cid) || cid <= 0) { return null; }
 
 	var lac = parseInt((json.tac_d && String(json.tac_d).length ? json.tac_d : (json.tac_dec || '')), 10);
 	if (isNaN(lac)) { lac = parseInt(json.lac_dec || '', 10); }
 
 	var mode = String(json.mode || '').toUpperCase();
+	/* Технологию решает ФАКТ, а не только строка mode: она у части модемов
+	   моргает («-», пусто, сырой RAT), и кнопка прыгала на строку «ID соты»
+	   как для 3G. Живые LTE-признаки в том же снимке (EARFCN/диапазон/eNB)
+	   надёжнее моргающей подписи. */
+	var lteFact = !!(mutil.cellVal(json.earfcn) || mutil.cellVal(json.pband) || mutil.cellVal(json.enbid));
 	var tech, num, needLac = true;
+	/* Признак сильнее подписи БЕЗУСЛОВНО: честный 3G-снимок EARFCN/eNB не несёт
+	   (профиль чистит их при уходе в 3G), а смешанный «WCDMA + earfcn» - это
+	   всегда дребезг соседних тиков. */
+	if (lteFact) { mode = 'LTE'; }
 	if (mode.indexOf('GSM') >= 0 || mode.indexOf('EDGE') >= 0 || mode.indexOf('GPRS') >= 0 || mode.indexOf('2G') >= 0) {
 		tech = 1; num = cid; needLac = false;               // GSM - без lac
 	} else if (mode.indexOf('WCDMA') >= 0 || mode.indexOf('UMTS') >= 0 || mode.indexOf('HSPA') >= 0 || mode.indexOf('3G') >= 0) {
@@ -1152,7 +1168,9 @@ function cell4cellsUrl(json) {
 	   строку, чей номер реально уходит в ссылку. На LTE это eNB (cid/256), на
 	   3G/2G - сам Cell ID. Иначе кнопка подписана одним числом, а открывает
 	   страницу про другое - ровно так и было, пока eNB нигде не показывался. */
-	return { url: url, tech: tech, num: num };
+	var _c4res = { url: url, tech: tech, num: num };
+	_c4Last = { cid: cid, res: _c4res };
+	return _c4res;
 }
 
 /* Кнопка с пином на карту вышек. Подпись - ТО ЖЕ число, что уходит в ссылку,
@@ -1533,7 +1551,14 @@ function applyMetrics(json) {
 					var foreign = !!(json && (json.error === 'not_active'
 						|| (json.path && pageModemPath && json.path !== pageModemPath)));
 					if (foreign) {
-						if (++foreignTicks >= 3) { foreignTicks = 0; window.location.reload(); }
+						if (++foreignTicks >= 3) {
+							foreignTicks = 0;
+							/* Перед перезагрузкой СБРАСЫВАЕМ запомненную вкладку:
+							   иначе новая страница берёт тот же мёртвый путь и
+							   цикл «not_active -> reload» не кончается никогда. */
+							try { window.sessionStorage.removeItem('5gm-tab'); } catch (e) {}
+							window.location.reload();
+						}
 						return;
 					}
 					foreignTicks = 0;
@@ -1713,7 +1738,7 @@ function applyMetrics(json) {
 							+ '<span class="tginfo-connstatus">' + _msg + '</span>';
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 16px; height: 16px; vertical-align: middle;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + mutil.localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + mutil.localizeBytes(json.tx);
+						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + mutil.localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + mutil.localizeBytes(json.tx);
 						}
 					}
 
@@ -2500,7 +2525,33 @@ simDialog: baseclass.extend({
 			   поэтому путь фиксируем ОДИН раз на жизнь страницы и дальше сверяем
 			   с ним каждый снимок - см. applyMetrics. Без этого страница не могла
 			   даже заметить, что ей ответили данными соседнего модема. */
-			pageModemPath = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+			/* ПУТЬ БЕРЁМ ИЗ ОТВЕТА СЕРВЕРА (peek), а не из uci-кэша страницы.
+			   uci.js держит СВОЙ снимок конфига: после переключения вкладки
+			   (switch меняет active_modem на роутере) он мог остаться прежним, и
+			   страница адресовала запросы ПРЕЖНЕМУ модему - обе вкладки рисовали
+			   один и тот же модем при верных ответах бэкенда (31.07.2026).
+			   peek читает конфиг на роутере и отдаёт path вместе со снимком. */
+			var _pk = {};
+			try { _pk = JSON.parse(res[res.length - 1] || '{}') || {}; } catch (e) {}
+			/* Порядок источников: КЛИКНУТАЯ ВКЛАДКА (sessionStorage, пишет
+			   modemtabs перед reload) -> peek с роутера -> uci-кэш. Вывод пути
+			   из active делал обе вкладки близнецами: каждая страница честно
+			   адресовала запросы активному модему, чей бы таб ни был выбран. */
+			var _tabSel = '';
+			try { _tabSel = window.sessionStorage.getItem('5gm-tab') || ''; } catch (e) {}
+			/* ВКЛАДКА ОБЯЗАНА СУЩЕСТВОВАТЬ. Запомненный путь переживал сам модем:
+			   вытащили Telit - страница продолжала адресовать ему запросы,
+			   получала not_active и перезагружалась по кругу (мигание, прочерки,
+			   обрывки кэша; 31.07.2026). Секция вынутого модема паркуется и
+			   теряет path - по этому и проверяем. */
+			if (_tabSel) {
+				var _tabSec = 'm_' + _tabSel.replace(/[^A-Za-z0-9]/g, '_');
+				if ((uci.get('5gmodem', _tabSec, 'path') || '') !== _tabSel) {
+					_tabSel = '';
+					try { window.sessionStorage.removeItem('5gm-tab'); } catch (e) {}
+				}
+			}
+			pageModemPath = String(_tabSel || _pk.path || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
 			/* Контекст для модуля диапазонов: всё, что ему нужно от страницы,
 			   передаётся явно - см. шапку bandsui.js. */
 			bandsui.init({

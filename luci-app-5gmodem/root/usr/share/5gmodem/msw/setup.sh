@@ -125,17 +125,31 @@ setup_one_modem() {
 		# переставляем штамп пути на ТЕКУЩИЙ разъём (IMEI остаётся прежним).
 		uci -q delete "network.$_ex.auto" 2>/dev/null
 		stamp_iface_owner "$_ex" "$P"
+		# reload нужен, только если у интерфейса меняется существенное для netifd
+		# (proto/device) или netifd секцию вовсе не знает - сравниваем до/после.
+		_fp_was="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")"
 		fix_iface_proto "$_ex"
 		_pr=$(uci -q get "network.$_ex.proto")
 		[ -n "$_pr" ] && uci -q set "$CFG.$SEC.iface_proto=$_pr"
 		uci -q commit "$CFG"
 		"$RES/ensureports.sh" >/dev/null 2>&1
 		# ПОДНЯТЬ ИНТЕРФЕЙС СРАЗУ. Мы только что сняли «спящее» auto=0, но netifd
-		# конфиг сам не перечитывает - без reload интерфейс так и лежал, пока его
+		# конфиг сам не перечитывает - без побудки интерфейс так и лежал, пока его
 		# через минуту не дёргал ifdown/ifup фонового autoapn (живой случай
 		# 31.07.2026: возврат Telit на место SIMCOM = 3-4 минуты без IP, из них
-		# первая - мёртвое ожидание). reload будит netifd, ifup - страховка.
-		ubus call network reload >/dev/null 2>&1
+		# первая - мёртвое ожидание).
+		#
+		# ГЛОБАЛЬНЫЙ reload - ТОЛЬКО КОГДА БЕЗ НЕГО НЕЛЬЗЯ. netifd на reload
+		# перезапускает КАЖДЫЙ интерфейс, чей uci отличается от загруженного, -
+		# у соседей копится «конфиг-долг» (метрики приоритетов пишутся без
+		# reload намеренно), и вставка нового модема роняла работающий соседний
+		# (живой случай 31.07.2026: Telit воткнули - FM350 передёрнулся на 6 с).
+		# Подхваченную секцию netifd уже знает: обычно хватает чистого ifup.
+		_fp_now="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")"
+		if [ "$_fp_was" != "$_fp_now" ] \
+		   || ! ubus -S call "network.interface.$_ex" status >/dev/null 2>&1; then
+			ubus call network reload >/dev/null 2>&1
+		fi
 		ifup "$_ex" >/dev/null 2>&1
 		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
 		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался

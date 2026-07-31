@@ -76,7 +76,7 @@ fi
 #    физически первый слот у прошивки - 0, и рассинхрон путал.)
 # Кнопки показываются, только если слотов >= 2.
 
-MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null)
 
 # mmcli-путь выбираем по ПРОТОКОЛУ интерфейса активного модема, а не по
 # наличию модема в MM: kernel-proto модем (напр. FM350/fibocom) MM успевает

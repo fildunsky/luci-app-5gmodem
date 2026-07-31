@@ -3989,3 +3989,12 @@ msgstr "Лечить Wi-Fi-аплинк, пока он лежит"
 
 msgid "If at least one target responds"
 msgstr "Если доступен хотя бы один адрес"
+
+msgid "Application update"
+msgstr "Обновление приложения"
+
+msgid "5G modem"
+msgstr "5G модем"
+
+msgid "Preparing the request…"
+msgstr "Готовлю запрос…"

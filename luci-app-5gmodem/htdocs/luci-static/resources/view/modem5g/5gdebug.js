@@ -398,7 +398,9 @@ return view.extend({
 							/* Призрак = «этот модем спрятан от ModemManager». Показываем
 							   ТОЛЬКО когда MM работает: при остановленной службе прятаться
 							   не от кого, и значок был бы про несуществующее. */
-							mmRunning && p.mm_exclude !== '0' ? E('img', {
+							mmRunning && p.mm_exclude === '1' ? E('img', {   /* СТРОГО '1': «не ноль»
+							   считал скрытым и модем БЕЗ флага - у чистого MM-модема
+							   висел призрак «MM спрятан сам от себя» (31.07.2026) */
 								'src': L.resource('icons/5gmodem/cghost.svg'),
 								'width': 12, 'height': 12, 'alt': '',
 								'title': _('hidden from ModemManager'),

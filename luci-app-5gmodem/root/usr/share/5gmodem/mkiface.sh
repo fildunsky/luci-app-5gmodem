@@ -516,6 +516,21 @@ fi
 # 3g, modemmanager, ...) can be selected from the UI.
 case "$REQ" in
 	auto|"")
+		# СОХРАНЁННЫЙ ВЫБОР ПОЛЬЗОВАТЕЛЯ ГЛАВНЕЕ АВТО-ДЕТЕКТА. Смена прото из UI
+		# вызывает переэнумерацию модема, hotplug-автонастройка пересоздаёт
+		# интерфейс с auto - и детект по драйверу узла МОЛЧА возвращал прежний
+		# kernel-прото, стирая только что сделанный выбор (живой случай
+		# 31.07.2026: Compal перевели на modemmanager, после переэнумерации
+		# интерфейс снова mbim, MM выключен apply_mm_state, метрики пустые -
+		# «Модем не подключен» при живом IP). iface_proto пишется в секцию при
+		# каждом ЯВНОМ выборе; swap_cleanup чистит его при смене железа в
+		# разъёме, так что чужому модему он не достанется.
+		_mki_saved=$(uci -q get "5gmodem.$MSEC.iface_proto" 2>/dev/null)
+		if [ -n "$_mki_saved" ] && [ "$_mki_saved" != "auto" ] \
+		   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
+			PROTO="$_mki_saved"
+			logger -t 5gmodem "mkiface: auto -> сохранённый выбор пользователя ($_mki_saved)"
+		else
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
 			qmi_wwan) PROTO="qmi" ;;
@@ -568,6 +583,7 @@ case "$REQ" in
 				fi
 				;;
 		esac
+		fi
 		;;
 	*) PROTO="$REQ" ;;
 esac
@@ -775,6 +791,15 @@ if [ -n "$MSEC" ]; then
 		esac
 	fi
 	uci -q commit 5gmodem
+	# ПЕРЕХОД НА modemmanager СНИМАЕТ ДЕРЖАТЕЛЯ ИНХИБИЦИИ ЯВНО. Флаг mm_exclude
+	# выше уже сброшен, но уже ЗАПУЩЕННЫЙ процесс mmcli --inhibit-device живёт,
+	# пока его не убьют - и модем моргал в MM после смены прото QMI -> MM
+	# (живой случай 31.07.2026: Telit то виден, то нет, метрики скакали).
+	# Симметрично ветке set-exclude 0 в mm-inhibit.sh.
+	if [ "$PROTO" = "modemmanager" ] && [ -n "$AMP" ]; then
+		_mki_ipf="/var/run/5gmodem-mm-inhibit/$AMP.pid"
+		[ -f "$_mki_ipf" ] && { kill "$(cat "$_mki_ipf" 2>/dev/null)" 2>/dev/null; rm -f "$_mki_ipf"; }
+	fi
 	# применить немедленно, не дожидаясь 15-секундного прохода демона
 	/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
 fi

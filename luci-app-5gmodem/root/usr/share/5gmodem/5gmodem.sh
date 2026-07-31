@@ -271,12 +271,41 @@ _POLL_AM=$(_active_path)
 # активный модем, и подставить их цели - это ровно та подмена, от которой мы
 # уходим. Записи в конфиг у опроса идут в секцию ОПРАШИВАЕМОГО ($AMP_SEC) и в его
 # интерфейс, глобальных ключей опрос не пишет - проверено.
+# АДРЕСНЫЙ ОПРОС ИЗ БРАУЗЕРА. Страница не может задать переменную окружения
+# (fs.exec её не передаёт), поэтому путь модема принимается аргументом:
+#   5gmodem.sh cached <ttl> <usb-path>   5gmodem.sh peek <usb-path>
+# Так карточка ВЫБРАННОЙ вкладки показывает свой модем, а не «активного» -
+# рассинхрон вкладки и active_modem больше не даёт микса данных (31.07.2026).
+# Шаблон пути строгий: чужое значение просто игнорируем и ведём себя как раньше.
+case "$1" in
+	cached) _pm_arg="$3" ;;
+	peek)   _pm_arg="$2" ;;
+	*)      _pm_arg="" ;;
+esac
+# Страница шлёт его в виде "for=<path>" (контракт был, но бэкенд его НЕ РАЗБИРАЛ
+# и молча отдавал активного - это и был источник «микса данных двух модемов»).
+case "$_pm_arg" in
+	for=*) _pm_arg="${_pm_arg#for=}" ;;
+esac
+case "$_pm_arg" in
+	'' ) : ;;
+	*[!0-9.:_-]*) : ;;
+	*) POLL_MODEM="$_pm_arg" ;;
+esac
+
 _PINNED=""
 if [ -n "$POLL_MODEM" ]; then
 	case "$POLL_MODEM" in
 		*[!A-Za-z0-9.:_-]*) ;;
 		*)
-			if "$RES/registry.sh" paths 2>/dev/null | grep -qx "$POLL_MODEM"; then
+			# Подтверждение присутствия: registry ИЛИ sysfs напрямую. Registry
+			# под нагрузкой (flock, пересборка кэша) отвечает не мгновенно, и
+			# закрепление МОЛЧА падало на активного - а гвард for= ниже, увидев
+			# расхождение, отвечал not_active, страница перезагружалась и
+			# строилась по активному. Так «обе вкладки показывали один модем»
+			# (31.07.2026, Compal+Telit). sysfs детерминирован: воткнут - есть.
+			if "$RES/registry.sh" paths 2>/dev/null | grep -qx "$POLL_MODEM" \
+			   || [ -d "/sys/bus/usb/devices/$POLL_MODEM" ]; then
 				_POLL_AM="$POLL_MODEM"
 				_PINNED=1
 			fi
@@ -1572,7 +1601,7 @@ fi
 # (AcT из +COPS). Поздний mmcli-блок заполняет только пустое - дубля нет.
 _pf_proto=$(uci -q get "network.$SEC.proto")
 if [ "$_pf_proto" = modemmanager ] && [ -z "$REG" ] && command -v mmcli >/dev/null 2>&1; then
-	_pf_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	_pf_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
 	if [ -n "$_pf_mi" ]; then
 		_pf_k=$(mmcli -m "$_pf_mi" -K 2>/dev/null)
 		_pfv() { _v=$(printf '%s\n' "$_pf_k" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
@@ -1696,8 +1725,21 @@ _qmi_refresh() {
 	[ -n "$_qr_b3" ] && _qr_u3=$(printf '%s\n' "$_qr_rf" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
 	# Мощность передатчика есть ТОЛЬКО пока модем передаёт ("In traffic: 'no'" в
 	# покое), поэтому в простое поле законно пустует.
-	_qr_tx=$(qmicli_p "$_qr_w" --nas-get-tx-rx-info=lte 2>/dev/null \
+	_qr_txraw=$(qmicli_p "$_qr_w" --nas-get-tx-rx-info=lte 2>/dev/null)
+	_qr_tx=$(printf '%s\n' "$_qr_txraw" \
 		| awk '/^TX:/{f=1} f && /Power:/ {gsub(/[^0-9.-]/,"",$2); print $2; exit}')
+	# АНТЕННЫЕ ПОРТЫ из той же выдачи (RX Chain 0..3). Формат - как у AT-профиля
+	# (#LAPS): "порт:rsrp:rsrq ...". Под ModemManager AT-профиль молчит, и
+	# таблица антенн у Telit пустовала, хотя QMI цепочки отдаёт (31.07.2026).
+	# Знаки прошивка теряет (RSRP '100.3 dBm', ECIO '9.6') - возвращаем минус.
+	_qr_ant=$(printf '%s\n' "$_qr_txraw" | awk '
+		/^RX Chain/ { if (t == "yes" && r != "") emit(); n = 0 + substr($3, 1, 1); t = ""; r = ""; q = "" }
+		/Radio tuned:/ { t = ($0 ~ /yes/) ? "yes" : "" }
+		/RSRP:/ { gsub(/[^0-9.-]/, "", $2); r = $2; if (r + 0 > 0) r = -r }
+		/ECIO:/ { gsub(/[^0-9.-]/, "", $2); q = $2; if (q + 0 > 0) q = -q }
+		function emit() { out = out (out == "" ? "" : " ") n ":" r ":" q }
+		END { if (t == "yes" && r != "") emit(); printf "%s", out }
+	')
 	[ -n "$_qr_tx" ] && _qr_tx="$_qr_tx dBm"
 
 	# Соседние соты. Две секции: "Intrafrequency" - соты на ТОЙ ЖЕ частоте (там же
@@ -1730,6 +1772,31 @@ _qmi_refresh() {
 		/Active Channel:/ { if (b != \"\" && c == \"\") { if (match(\$0, /[0-9]+/)) c = substr(\$0, RSTART, RLENGTH) } }
 		END { if (b != \"\") printf \"%s|%s\", b, c }
 	")
+	# АГРЕГАЦИЯ ИЗ QMI. У модема под ModemManager AT-порт не наш, поэтому
+	# вендорный профиль (AT^CA_INFO? и родня) не выполняется, и в карточке была
+	# одна PCC (issue #11, Telit LN960A16 под MM/QMI: qmicli агрегацию показывал,
+	# страница - нет). rf-band-info при активной CA перечисляет ВСЕ несущие
+	# отдельными блоками «Band Information»; первая - PCC, остальные - SCC.
+	# Пишем в файл, snapshot подставит их только там, где профиль промолчал.
+	# АГРЕГАЦИЯ - из nas-get-lte-cphy-ca-info (правильный источник: там PCC и
+	# SCC с состоянием). Первый вариант парсил rf-band-info и давал мусор,
+	# который делал карточки разных модемов близнецами - см. гвард формата у
+	# читателя. SCC берём только активные (deactivated = сконфигурирована, но
+	# спит - показывать её как агрегацию значит врать).
+	_qr_cai=$(qmicli_p "$_qr_w" --nas-get-lte-cphy-ca-info 2>/dev/null)
+	_qr_ca=$(printf '%s\n' "$_qr_cai" | awk '
+		function flushs() {
+			if (m == "P" && b != "") out = b "," ch
+			else if (m == "S" && b != "" && st == "a") out = out "|" b "," ch
+			b = ""; ch = ""; st = ""
+		}
+		/^Primary Cell Info/  { flushs(); m = "P"; next }
+		/^Secondary Cell/     { flushs(); m = "S"; next }
+		/RX Channel:/  { if (match($0, /[0-9]+/)) ch = substr($0, RSTART, RLENGTH); next }
+		/LTE Band:/    { if (match($0, /eutran-[0-9]+/)) b = substr($0, RSTART + 7, RLENGTH - 7); next }
+		/State:/       { if ($0 ~ /\047activated/) st = "a"; next }
+		END { flushs(); printf "%s", out }
+	')
 	_qr_cl=$(qmicli_p "$_qr_w" --nas-get-cell-location-info 2>/dev/null)
 	# TAC и Cell ID обслуживающей соты (секция Intrafrequency LTE Info)
 	_qr_cell=$(printf '%s\n' "$_qr_cl" | awk '
@@ -1783,9 +1850,11 @@ _qmi_refresh() {
 	')
 
 	# Атомарно (mv), чтобы читатель не поймал полузапись.
+	printf '%s' "$_qr_ca" > "$_qr_p.ca.tmp" && mv "$_qr_p.ca.tmp" "$_qr_p.ca"
 	printf '%s' "$_qr_nb" > "$_qr_p.nb.tmp" && mv "$_qr_p.nb.tmp" "$_qr_p.nb"
 	printf '%s' "$_qr_bw" > "$_qr_p.bw.tmp" && mv "$_qr_p.bw.tmp" "$_qr_p.bw"
 	printf '%s' "$_qr_tx" > "$_qr_p.tx.tmp" && mv "$_qr_p.tx.tmp" "$_qr_p.tx"
+	printf '%s' "$_qr_ant" > "$_qr_p.ant.tmp" && mv "$_qr_p.ant.tmp" "$_qr_p.ant"
 	printf '%s' "$_qr_b3" > "$_qr_p.b3g.tmp" && mv "$_qr_p.b3g.tmp" "$_qr_p.b3g"
 	printf '%s' "$_qr_u3" > "$_qr_p.u3g.tmp" && mv "$_qr_p.u3g.tmp" "$_qr_p.u3g"
 	printf '%s' "$_qr_3g" > "$_qr_p.c3g.tmp" && mv "$_qr_p.c3g.tmp" "$_qr_p.c3g"
@@ -1806,7 +1875,7 @@ _qmi_supplement() {
 	# мультимодеме: у модема без своего cdc-wdm (напр. FM350 в RNDIS) он подсовывал
 	# канал СОСЕДА, и соседние соты Telit писались в файл FM350. modemswitch.sh wdm
 	# и так отдаёт пусто для такого модема - нет своего wdm, QMI-дополнений нет.
-	_QS_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
+	_QS_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm "$_POLL_AM" 2>/dev/null)
 	[ -c "$_QS_WDM" ] || return 0
 
 	# КАНАЛ cdc-wdm ЧУЖОЙ, ЕСЛИ ИНТЕРФЕЙС НА proto=qmi.
@@ -1842,6 +1911,41 @@ _qmi_supplement() {
 
 	# 1) Последнее известное - мгновенно. Профиль главнее: не перебиваем непустое.
 	[ -z "$NEIGHBORS" ] && [ -s "$_QS_P.nb" ] && NEIGHBORS=$(cat "$_QS_P.nb")
+	# Антенные порты из QMI - когда AT-профиль их не дал (MM-модем).
+	[ -z "$ANTPORTS" ] && [ -s "$_QS_P.ant" ] && ANTPORTS=$(cat "$_QS_P.ant")
+	# АГРЕГАЦИЯ ИЗ QMI (issue #11): у модема под ModemManager вендорный AT-профиль
+	# не выполняется, и SCC оставались пустыми, хотя qmicli их видит. Формат файла:
+	# "band,earfcn|band,earfcn|..." - первая пара PCC, дальше SCC1..4. Заполняем
+	# ТОЛЬКО пустые поля: профиль (там, где он отработал) знает про модем больше.
+	if [ -s "$_QS_P.ca" ]; then
+		_qs_ca=$(cat "$_QS_P.ca")
+		# Только валидный формат «цифры,цифры|...»: кривой разбор (пойман живьём
+		# 31.07: «,|1,100» у ОБОИХ модемов) затирал pband/EARFCN одинаковым
+		# мусором - карточки разных модемов становились близнецами.
+		case "$_qs_ca" in
+			[0-9]*) : ;;
+			*) _qs_ca="" ;;
+		esac
+		_qs_i=0
+		IFS='|'
+		for _qs_cc in $_qs_ca; do
+			_qs_b="${_qs_cc%%,*}"; _qs_c="${_qs_cc#*,}"
+			[ -n "$_qs_b" ] || continue
+			if [ "$_qs_i" = 0 ]; then
+				case "$PBAND" in ''|-) PBAND="B$_qs_b" ;; esac
+				case "$EARFCN" in ''|-) EARFCN="$_qs_c" ;; esac
+			else
+				case "$_qs_i" in
+					1) case "$S1BAND" in ''|-) S1BAND="B$_qs_b"; S1EARFCN="$_qs_c" ;; esac ;;
+					2) case "$S2BAND" in ''|-) S2BAND="B$_qs_b"; S2EARFCN="$_qs_c" ;; esac ;;
+					3) case "$S3BAND" in ''|-) S3BAND="B$_qs_b"; S3EARFCN="$_qs_c" ;; esac ;;
+					4) case "$S4BAND" in ''|-) S4BAND="B$_qs_b"; S4EARFCN="$_qs_c" ;; esac ;;
+				esac
+			fi
+			_qs_i=$((_qs_i + 1))
+		done
+		unset IFS
+	fi
 	# PCI обслуживающей соты - из той же выдачи соседей (serving:1). Профиль его
 	# заполняет не на всех путях: в 5G-NSA-ветке Compal источник (lte-cphy-ca-info)
 	# отвечает 'InformationUnavailable', и строка PCI в карточке пустовала, хотя
@@ -2121,7 +2225,12 @@ fi
 # регистрацию и уровни через --signal-get. Заполняем ТОЛЬКО пустые - у AT-модема
 # приоритет за его же данными. mmcli читает по своему каналу, AT-порт не трогает.
 if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
-	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	# ИНДЕКС ИМЕННО ОПРАШИВАЕМОГО МОДЕМА. Безадресный mmindex отдаёт индекс
+	# АКТИВНОГО, и при опросе соседа (POLL_MODEM: подогрев снимков, карточка
+	# другой вкладки) в его снимок и кэш оператора уезжали данные активного -
+	# «оба модема показывают одного оператора» (issue #10 и живой стенд с
+	# Compal+Telit под MM). Путь опрашиваемого известен всегда - передаём его.
+	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
 	if [ -n "$_MI" ]; then
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
@@ -2180,6 +2289,25 @@ if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
 				| awk '{print $1}' | grep -xE '[0-9]+' || true)
 			[ -n "$_fwtail" ] && FW="$FW.$_fwtail"
 		fi
+		# У части прошивок mmcli-ревизии нет ВОВСЕ (Compal SG500M2-X с
+		# Beeline-конфигом: revision '--', в карточке прочерк), но QMI DMS
+		# версию отдаёт: --dms-get-software-version -> «ZX56_643_0.78-12».
+		# Кэш по IMEI: версия не меняется, а лишний qmicli на каждый опрос -
+		# заметный процесс (см. пояснение у _qmi_refresh).
+		case "$FW" in ''|--) FW="" ;; esac
+		if [ -z "$FW" ] && [ -n "$IMEI" ]; then
+			_fwc="/tmp/5gmodem_fw_$IMEI"
+			if [ -s "$_fwc" ]; then
+				read -r FW < "$_fwc"
+			else
+				_fw_w=$(/usr/share/5gmodem/modemswitch.sh wdm "$_POLL_AM" 2>/dev/null)
+				if [ -c "$_fw_w" ]; then
+					FW=$(qmicli_p "$_fw_w" --dms-get-software-version 2>/dev/null \
+						| sed -n "s/.*Software version: *'\{0,1\}\([^']*\)'\{0,1\}\$/\1/p" | head -1 | xargs)
+					[ -n "$FW" ] && printf '%s\n' "$FW" > "$_fwc"
+				fi
+			fi
+		fi
 		# IMSI/ICCID - ИЗ SIM-ОБЪЕКТА MM. Обычно их читает AT (AT+CIMI/AT+ICCID),
 		# но у modemmanager-модема AT-порт нам не принадлежит, и обе строки в
 		# карточке стояли прочерками, хотя MM их прекрасно знает. Объект SIM
@@ -2219,7 +2347,12 @@ fi
 # (напр. Compal, который на AT+CNUM молчит), берём номер из mmcli own-numbers.
 # Так номер читается везде, где SIM его хранит, независимо от типа модема.
 if [ -z "$PHONE" ] && command -v mmcli >/dev/null 2>&1; then
-	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+	# ИНДЕКС ИМЕННО ОПРАШИВАЕМОГО МОДЕМА. Безадресный mmindex отдаёт индекс
+	# АКТИВНОГО, и при опросе соседа (POLL_MODEM: подогрев снимков, карточка
+	# другой вкладки) в его снимок и кэш оператора уезжали данные активного -
+	# «оба модема показывают одного оператора» (issue #10 и живой стенд с
+	# Compal+Telit под MM). Путь опрашиваемого известен всегда - передаём его.
+	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
 	if [ -n "$_MI" ]; then
 		PHONE=$(mmcli -m "$_MI" -K 2>/dev/null \
 			| sed -n 's/^modem\.generic\.own-numbers[^:]*:[[:space:]]*//p' \
@@ -2431,7 +2564,20 @@ fi
 # действительно принадлежит модему интерфейса $SEC; иначе молчим - netpri.sh
 # сделает собственный probe по стабильному USB-пути.
 op_cache_iface() {
-	[ -n "$DEVICE" ] || { printf '%s' "$SEC"; return; }
+	# БЕЗ AT-ПОРТА (MM-модем) сверка по sysfs невозможна - но и фолбэк на $SEC
+	# ядовит: при адресном опросе СОСЕДА (POLL_MODEM, подогрев снимков) $SEC
+	# указывает на интерфейс АКТИВНОГО, и оператор соседа записывался в чужой
+	# файл. Живой случай (issue #10): два EM7455 под MM - обе карточки
+	# «Приоритета интернета» показывали оператора активной вкладки. Резолвим
+	# интерфейс по ПУТИ опрошенного модема; путь неизвестен - кэш не пишем
+	# вовсе (netpri probe заполнит честно, он адресный).
+	if [ -z "$DEVICE" ]; then
+		_oci_p="${_POLL_AM:-$(uci -q get 5gmodem.@5gmodem[0].active_modem)}"
+		[ -n "$_oci_p" ] || return 0
+		_oci_s="m_$(echo "$_oci_p" | sed 's/[^A-Za-z0-9]/_/g')"
+		uci -q get "5gmodem.$_oci_s.network"
+		return
+	fi
 	_n=$(readlink -f "/sys/class/tty/$(basename "$DEVICE")/device" 2>/dev/null)
 	while [ -n "$_n" ] && [ "$_n" != "/" ] && [ ! -f "$_n/idVendor" ]; do _n="${_n%/*}"; done
 	[ -f "$_n/idVendor" ] || { printf '%s' "$SEC"; return; }

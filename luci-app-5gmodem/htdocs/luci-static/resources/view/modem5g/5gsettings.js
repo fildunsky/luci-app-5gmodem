@@ -142,9 +142,9 @@ return view.extend({
 
 		/* Блок обновления (без Save/Apply - действие немедленное). */
 		var updateBlock = E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, [ _('Update') ]),
+			E('h3', {}, [ _('Application update') ]),
 			E('div', { 'class': 'cbi-value' }, [
-				E('label', { 'class': 'cbi-value-title' }, _('luci-app-5gmodem')),
+				E('label', { 'class': 'cbi-value-title' }, _('5G modem')),
 				E('div', { 'class': 'cbi-value-field' }, [
 					E('div', { 'style': 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px' }, [
 						E('button', {
@@ -169,7 +169,7 @@ return view.extend({
 					E('div', { 'class': 'cbi-value-description' }, [
 						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
 						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
-						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, [ _('It also installs the translation if available') ]),
+						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
 					]),
 				]),
 			]),

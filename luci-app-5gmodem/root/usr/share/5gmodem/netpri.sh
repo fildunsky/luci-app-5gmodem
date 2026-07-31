@@ -471,6 +471,29 @@ _del_all_default() {   # $1 - l3_device
 	_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
 }
 
+# ТРЕТЬЕ МНЕНИЕ - ЧЕРЕЗ ТУННЕЛЬ CLASH. Собственный трафик роутера идёт МИМО
+# clash (tproxy перехватывает только форвард LAN), и на аплинке с блокировками
+# прямые ICMP и TCP с роутера мертвы, хотя у клиентов сервис открывается.
+# Замер делает САМ clash своим delay-API (тем же, каким SSClash меряет свои
+# сервера): группа спрашивается по списку из /proxies, служебные пропускаются.
+_clash_ping() {   # $1 - хост; печатает json и возвращает 0 при успехе
+	command -v curl >/dev/null 2>&1 || return 1
+	_cp_ctl=$(sed -n 's/^external-controller:.*:\([0-9]*\).*/\1/p' \
+		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+	[ -n "$_cp_ctl" ] || _cp_ctl=9090
+	_cp_n=0
+	curl -s -m 2 "http://127.0.0.1:$_cp_ctl/proxies" 2>/dev/null \
+		| grep -o '"name":"[^"]*"' | cut -d'"' -f4 | sort -u | while read -r _cp_g; do
+		case "$_cp_g" in GLOBAL|DIRECT|REJECT*|PASS*|COMPATIBLE|'') continue ;; esac
+		_cp_n=$((_cp_n + 1)); [ "$_cp_n" -gt 4 ] && break
+		_cp_ge=$(printf '%s' "$_cp_g" | sed 's/ /%20/g')
+		_cp_d=$(curl -s -m 6 "http://127.0.0.1:$_cp_ctl/proxies/$_cp_ge/delay?timeout=4000&url=https%3A%2F%2F$1%2Fgenerate_204" 2>/dev/null \
+			| sed -n 's/.*"delay":\([0-9]*\).*/\1/p')
+		[ -n "$_cp_d" ] && { printf '{"ok":1,"ms":%s,"via":"proxy"}\n' "$_cp_d"; exit 0; }
+	done
+}
+
+
 case "$1" in
 list)
 	# СНИМКИ ПЕРЕД ЦИКЛОМ. `list` только читает и живёт доли секунды, поэтому
@@ -903,7 +926,23 @@ ping)
 			if [ -n "$_ms" ]; then
 				printf '{"ok":1,"ms":%s}\n' "$_ms"
 			else
-				echo '{"ok":0}'
+				# ICMP молчит - ВТОРОЕ МНЕНИЕ по TCP, независимо от fake-ip.
+				# ICMP режут не только clash: фильтруют операторы и сами сервисы,
+				# а сайт при этом открывается. Красная точка на живом сервисе -
+				# ложь; HTTPS-проба тем же путём, что у браузера, честнее.
+				if command -v curl >/dev/null 2>&1; then
+					_hw=$(curl -o /dev/null -s -m 4 -w '%{http_code} %{time_starttransfer}' "https://$_h/" 2>/dev/null)
+					_hc="${_hw%% *}"; _ht="${_hw##* }"
+					if [ -n "$_hc" ] && [ "$_hc" != "000" ]; then
+						printf '{"ok":1,"ms":%s,"via":"http"}\n' "$(printf '%s' "$_ht" | awk '{printf "%d", $1 * 1000}')"
+					else
+						_cp_out=$(_clash_ping "$_h"); [ -n "$_cp_out" ] && echo "$_cp_out" || echo '{"ok":0}'
+					fi
+				elif wget -q --spider -T 4 "https://$_h/" 2>/dev/null; then
+					echo '{"ok":1,"ms":0,"via":"http"}'
+				else
+					_cp_out=$(_clash_ping "$_h"); [ -n "$_cp_out" ] && echo "$_cp_out" || echo '{"ok":0}'
+				fi
 			fi
 			;;
 	esac
@@ -918,8 +957,10 @@ svcall)
 	# вызовом ubus/rpcd вместо N параллельных exec_direct (каждый - отдельный
 	# spawn rpcd каждые 5 секунд). $2 = сервисы через запятую, $3 = ветки
 	# ssclash (go/legacy) через запятую.
+	# '-' = пустой список: exec_direct теряет пустые аргументы (см. netpri.js).
 	_sj=""
 	for _s in $(printf '%s' "$2" | tr ',' ' '); do
+		case "$_s" in ''|-) continue ;; esac
 		_sj="$_sj,\"$(json_esc "$_s")\":$(_svc_json "$_s")"
 	done
 	_cj=""

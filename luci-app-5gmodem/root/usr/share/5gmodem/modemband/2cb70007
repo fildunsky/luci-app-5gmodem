@@ -1,4 +1,8 @@
-_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+_DEVICE=""
+# Запись XACT применяется вживую, но РВЁТ PDP-сессию молча (проверено на живом
+# L850 31.07.2026: после цикла режимов/бендов IP остался, трафик умер). reconnect
+# заставляет bands.sh передозвониться после каждой записи.
+_BANDS_APPLY_LIVE="reconnect"
 
 getinfo() {
 	O=$(sms_tool -d $_DEVICE at "at+gmm")
@@ -33,6 +37,62 @@ getbands() {
 	echo ""
 }
 
+# --- Режимы сети и 3G-диапазоны (AT+XACT) ------------------------------------
+# Формат XACT: rat,pref1,pref2,<бенды...>; rat: 1=3G, 2=4G, 4=3G+4G (2G-радио у
+# L850/L860 нет); бенды: 3G - номер как есть (1,2,4,5,8), LTE - 100+N.
+# Живой эталон (L850, 31.07.2026): +XACT: 4,2,1,1,2,4,5,8,101,...,166
+getsupportedmodes() {
+	echo "4:Auto 2:4G 1:3G"
+}
+
+getmode() {
+	O=$(sms_tool -d $_DEVICE at "at+xact?")
+	echo "$O" | awk -F'[:,]' '/^\+XACT:/{gsub(/ /,"",$2); print $2}'
+}
+
+setmode() {
+	_ID="$1"
+	case "$_ID" in 1|2|4) : ;; *) echo "Unsupported"; return 1 ;; esac
+	# Хвост бендов сохраняем: XACT без списка сбрасывает выбор диапазонов.
+	O=$(sms_tool -d $_DEVICE at "at+xact?")
+	T=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="") s=s (s==""?"":",") $i} print s}')
+	_PREF=""
+	[ "$_ID" = 4 ] && _PREF=2
+	sms_tool -d $_DEVICE at "at+xact=$_ID,$_PREF,,$T"
+}
+
+bands3g_style() {
+	echo "mask"
+}
+
+getsupportedbands3g() {
+	O=$(sms_tool -d $_DEVICE at "at+xact=?")
+	_S=$(echo "$O" | awk -F'\),' '/^\+XACT:/{print $NF}' | awk -F, '{s="";for(i=2;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0<100 && $i+0>0) s=s (s==""?"":" ") $i} print s}')
+	[ -n "$_S" ] && echo "$_S" || echo "Unsupported"
+}
+
+getbands3g() {
+	O=$(sms_tool -d $_DEVICE at "at+xact?")
+	echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0<100 && $i+0>0) s=s (s==""?"":" ") $i} print s}'
+}
+
+setbands3g() {
+	_B3="$1"
+	O=$(sms_tool -d $_DEVICE at "at+xact?")
+	_LN=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}')
+	_RAT=$(echo "$_LN" | awk -F, '{gsub(/ /,"",$1); print $1}')
+	_LTE=$(echo "$_LN" | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0>100) s=s (s==""?"":",") $i} print s}')
+	T=""
+	for B in $_B3; do
+		case "$B" in ''|*[!0-9]*) continue ;; esac
+		[ -n "$T" ] && T="${T},"
+		T="${T}${B}"
+	done
+	[ -n "$T" ] && [ -n "$_LTE" ] && T="${T},${_LTE}"
+	[ -n "$T" ] || T="$_LTE"
+	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+xact=$_RAT,,,$T"
+}
+
 setbands() {
 	BANDS="$1"
 
@@ -52,6 +112,8 @@ setbands() {
 	if [ -n "$T" ]; then
 		O=$(sms_tool -d $_DEVICE at "at+xact?")
 		MODE=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
+				_G3=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0<100 && $i+0>0) s=s (s==""?"":",") $i} print s}')
+		[ "$T" = "0" ] || { [ -n "$_G3" ] && T="${_G3},${T}"; }
 		sms_tool -d $_DEVICE at "at+xact=$MODE,,,$T"
 	fi
 }

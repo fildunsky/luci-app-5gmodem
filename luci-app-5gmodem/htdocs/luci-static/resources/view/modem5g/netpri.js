@@ -551,7 +551,11 @@ function updateSvcCard(service) {
 var _svcAgg = { services: [], kinds: [], started: false };
 function _svcAggTick() {
 	if (!_svcAgg.services.length && !_svcAgg.kinds.length) { return Promise.resolve(); }
-	return L.resolveDefault(fs.exec_direct(BIN, [ 'svcall', _svcAgg.services.join(','), _svcAgg.kinds.join(',') ]), '').then(function(out) {
+	/* ПУСТОЙ СПИСОК КОДИРУЕМ КАК '-': exec_direct склеивает аргументы в строку
+	   через пробел, и пустая строка в ней ИСЧЕЗАЕТ - на роутере без generic-
+	   сервисов вызов превращался в `svcall go`, ветка ssclash приезжала в $2
+	   как «сервис go», и точка SSClash горела красным при живом сервисе. */
+	return L.resolveDefault(fs.exec_direct(BIN, [ 'svcall', _svcAgg.services.join(',') || '-', _svcAgg.kinds.join(',') || '-' ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		_svcAgg.services.forEach(function(svc) {
 			var r = (j.svc || {})[svc] || {};

@@ -1255,8 +1255,12 @@ mmindex)
 	;;
 
 wdm)
-	# cdc-wdm control node of the ACTIVE modem (for qmicli targeting)
-	wdm_for_path "$(active_path)"
+	# cdc-wdm узел модема: с аргументом - ПО ПУТИ, без - активного. Безадресный
+	# вызов в адресном опросе метрик писал QMI-дополнения (агрегация, диапазон,
+	# соседи, сигнал) ЧУЖОГО модема в липкие файлы /tmp/5gmodem_qmi_<ключ>
+	# опрашиваемого - и они раздавались каждым снимком («карточка Telit
+	# показывала агрегации Compal», 31.07.2026).
+	wdm_for_path "${2:-$(active_path)}"
 	;;
 
 forget)

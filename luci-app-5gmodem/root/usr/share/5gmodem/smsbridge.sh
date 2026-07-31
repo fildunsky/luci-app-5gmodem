@@ -192,18 +192,45 @@ fi
 . "$RES/atlock.sh"
 at_lock "$PORT" 15
 
+# ОГРАНИЧИТЕЛЬ ВРЕМЕНИ: sms_tool своего таймаута не имеет, и модем, не
+# ответивший на команду, оставлял процесс держать порт НАВСЕГДА (живой случай
+# 31.07.2026: L850/XMM молча виснет на «delete all») - все последующие
+# SMS-операции вставали за ним в очередь навечно, страница крутила
+# «Загрузка сообщений» без конца. Паттерн киллера тот же, что в at_query:
+# фон + сторож, дескрипторы порта у сторожа закрыты.
+_sms_run() {   # $1 - таймаут (с), дальше - команда
+	_sr_t="$1"; shift
+	"$@" 2>/dev/null &
+	_sr_p=$!
+	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_sr_t"; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
+	wait "$_sr_p"; _sr_rc=$?
+	kill "$_sr_w" 2>/dev/null; wait "$_sr_w" 2>/dev/null
+	return $_sr_rc
+}
+
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$STORE" ] && set -- -s "$STORE" "$@"
 case "$BOX" in
-	status) exec $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status 2>/dev/null ;;
-	sent)   exec $(_smstool) "$@" recv SR 2>/dev/null ;;
+	status) _sms_run 20 $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status; exit $? ;;
+	sent)   _sms_run 45 $(_smstool) "$@" recv SR; exit $? ;;
 	# delete <index|all> - индекс проверяем здесь: наружу уходит уже
 	# безопасное значение, а страница не решает, что можно слать в модем.
 	delete)
 		case "$DEL" in
-			all) exec $(_smstool) -d "$PORT" delete all 2>/dev/null ;;
+			all)
+				# У части модемов «delete all» виснет (L850/XMM) - тогда
+				# добиваем ПОШТУЧНО по индексам из списка, каждый шаг с
+				# собственным потолком.
+				if ! _sms_run 40 $(_smstool) -d "$PORT" delete all; then
+					for _dl_i in $(_sms_run 45 $(_smstool) "$@" recv \
+							| jsonfilter -e '@.msg[*].index' 2>/dev/null); do
+						case "$_dl_i" in ''|*[!0-9]*) continue ;; esac
+						_sms_run 12 $(_smstool) -d "$PORT" delete "$_dl_i"
+					done
+				fi
+				exit 0 ;;
 			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
-			*)   exec $(_smstool) -d "$PORT" delete "$DEL" 2>/dev/null ;;
+			*)   _sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; exit $? ;;
 		esac ;;
 	send)
 		[ -n "$SND_TO" ] || { echo "no number" >&2; exit 2; }
@@ -213,11 +240,11 @@ case "$BOX" in
 		# воспроизводится и прямым вызовом из консоли, БЕЗ нашего приложения,
 		# и флаг «-c 2» его не лечит (для send он не действует).
 		# Лечится только своим PDU-кодером (UCS2 + AT+CMGS) - см. роадмап.
-		exec $(_smstool) -d "$PORT" send "$SND_TO" "$SND_TXT" 2>/dev/null ;;
+		_sms_run 45 $(_smstool) -d "$PORT" send "$SND_TO" "$SND_TXT"; exit $? ;;
 	# ТЕКСТОМ, а не JSON. Нужно кнопке «сохранить сообщения в файл»: она пишет
 	# человекочитаемый .txt, и JSON там не к месту. Раньше страница ради этого
 	# исполняла БИНАРЬ sms_tool напрямую (в ACL был разрешён exec на него), то есть
 	# из браузера уходили любые аргументы. Теперь формат выбирается здесь.
-	dump)   exec $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv 2>/dev/null ;;
-	*)      exec $(_smstool) "$@" recv 2>/dev/null ;;
+	dump)   _sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv; exit $? ;;
+	*)      _sms_run 45 $(_smstool) "$@" recv; exit $? ;;
 esac
