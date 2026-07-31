@@ -107,7 +107,6 @@ park_profile() {   # $1 - секция, которую вытесняем
 	# не сбрасывали выбор, но модем, ушедший НАВСЕГДА (юзер протестировал десяток
 	# модулей на стенде), копил бы призраков вечно. Держим до 30 дней.
 	uci -q set "$CFG.$_pk_dst.parked_at=$(date +%s 2>/dev/null)"
-	prune_parks
 	# Тот же список, что восстанавливает migrate_profile, чтобы парковка и
 	# восстановление были симметричны.
 	#
@@ -122,6 +121,11 @@ park_profile() {   # $1 - секция, которую вытесняем
 		_pk_v=$(uci -q get "$CFG.$1.$_pk_k")
 		[ -n "$_pk_v" ] && uci -q set "$CFG.$_pk_dst.$_pk_k=$_pk_v"
 	done
+	# prune_parks - СТРОГО ПОСЛЕ переноса ключей: он делает uci commit, и
+	# коммит недописанной парковки при обрыве оставлял m_park_* без network -
+	# имя интерфейса освобождалось и уходило чужому модему (ревью, баг №1).
+	# Здесь его commit закрывает уже ПОЛНУЮ парковку.
+	prune_parks
 	logger -t 5gmodem "профиль модема ${_pk_imei:+IMEI $_pk_imei}${_pk_imei:+ }${_pk_ser:+serial $_pk_ser} припаркован ($1 -> $_pk_dst) до возврата"
 }
 
@@ -224,8 +228,12 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	# хотя его оператор прекрасно отвечает на USSD в LTE (проверено: баланс
 	# пришёл стандартной схемой). physical-своп через switch не проходит,
 	# поэтому чистим здесь.
+	# heal - РАЗРЕШЕНИЕ НА ЛЕЧЕНИЕ (потолок лестницы сторожа). Давалось оно
+	# конкретному аппарату; наследовать перезагрузки-по-питанию неизвестному
+	# новому железу нельзя - тот же принцип «действия по явному согласию»,
+	# что и mm_exclude.
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
-	         mm_exclude ussd_3g slot_type_0 slot_type_1 slot_type_2; do
+	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
 	uci -q set "$CFG.$2.vidpid=$_new"
@@ -284,8 +292,12 @@ sec_by_imei() {   # $1 - imei, $2 - имя секции, которую проп
 # (заглушки партии и пустые отброшены), поэтому здесь сверяем как есть.
 sec_by_serial() {   # $1 - serial, $2 - имя секции, которую пропустить
 	[ -n "$1" ] || return 1
-	uci -q show "$CFG" 2>/dev/null \
-		| sed -n "s/^$CFG\.\(m_[^.]*\)\.serial='\?$1'\?\$/\1/p" \
+	# ЗНАЧЕНИЕ - ЛИТЕРАЛ (grep -F), а не часть sed-выражения: serial из sysfs
+	# может содержать '/','.','[' - sed на таком молча ломался, и миграция по
+	# serial не срабатывала (ревью, баг №4). Извлечение имени секции идёт уже
+	# по НАШЕЙ строке uci show - она метасимволов не содержит.
+	uci -q show "$CFG" 2>/dev/null | grep -F ".serial='$1'" \
+		| sed -n "s/^$CFG\.\(m_[^.]*\)\.serial=.*/\1/p" \
 		| while read -r _ss; do [ "$_ss" = "$2" ] || echo "$_ss"; done | head -1
 }
 

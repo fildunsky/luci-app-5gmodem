@@ -78,3 +78,102 @@ msgstr ""
 
 msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
 msgstr ""
+
+msgid "Internet is working (%s ms)"
+msgstr ""
+
+msgid "No internet on this link"
+msgstr ""
+
+msgid "Checking…"
+msgstr ""
+
+msgid "Internet watchdog settings"
+msgstr ""
+
+msgid "Internet watchdog"
+msgstr ""
+
+msgid "Pings each uplink through its own device. A link is marked down after several consecutive failures and up again after several successes, so single lost packets do not flip the state. Health lamps are shown on the cards; traffic switching is optional and enabled below."
+msgstr ""
+
+msgid "Enable watching"
+msgstr ""
+
+msgid "Check interval, s"
+msgstr ""
+
+msgid "Ping targets (comma-separated)"
+msgstr ""
+
+msgid "Failures before down"
+msgstr ""
+
+msgid "Successes before up"
+msgstr ""
+
+msgid "Switch traffic to a backup link when one goes down"
+msgstr ""
+
+msgid "Heal a modem while its link is down"
+msgstr ""
+
+msgid "Steps are tried from mild to strong, at most once per 5 minutes, 6 attempts total; the ladder resets when the link recovers."
+msgstr ""
+
+msgid "Do nothing"
+msgstr ""
+
+msgid "Reconnect the interface"
+msgstr ""
+
+msgid "...plus reboot the module"
+msgstr ""
+
+msgid "...plus USB power cycle"
+msgstr ""
+
+msgid "When a link recovers"
+msgstr ""
+
+msgid "Return its priority"
+msgstr ""
+
+msgid "Keep it last"
+msgstr ""
+
+msgid "Reconnecting"
+msgstr ""
+
+msgid "Rebooting the module"
+msgstr ""
+
+msgid "USB power cycle"
+msgstr ""
+
+msgid "Device is gone"
+msgstr ""
+
+msgid "sec"
+msgstr ""
+
+msgid "Rebooting"
+msgstr ""
+
+msgid "Ping targets"
+msgstr ""
+
+msgid "Also heal the Wi-Fi uplink"
+msgstr ""
+
+msgid "Open %s"
+msgstr ""
+
+msgid "No modem connected"
+msgstr ""
+
+msgid "Heal the Wi-Fi uplink while it is down"
+msgstr ""
+
+msgid "If at least one target responds"
+msgstr ""

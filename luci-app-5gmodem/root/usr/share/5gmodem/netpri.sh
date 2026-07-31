@@ -7,12 +7,12 @@
 #
 # Usage:
 #   netpri.sh list          - JSON array of WAN-zone interfaces with an IP
-#   netpri.sh set <iface>   - make <iface> primary (metric 1), others metric 20
+#   netpri.sh set <iface>   - make <iface> primary (metric 10), others 20, 30...
 #
 
 # networks that belong to the firewall 'wan' zone
 wan_nets() {
-	z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+	z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	[ -n "$z" ] && uci -q get "firewall.$z.network"
 }
 
@@ -32,7 +32,6 @@ wan_nets() {
 # вне списка ничего не теряют.
 _IFDUMP=""
 ifdump_snapshot() { _IFDUMP=$(ubus call network.interface dump 2>/dev/null); }
-ifdump_drop() { _IFDUMP=""; }
 ifup_state() {
 	if [ -n "$_IFDUMP" ]; then
 		printf '%s' "$_IFDUMP" \
@@ -59,13 +58,45 @@ json_esc() {
 	esac
 }
 
+# {"running":N,"version":"..."} для одного сервиса (без перевода строки) -
+# общее тело вербов svcstatus и svcall. Версия известных сервисов берётся из
+# пакетного менеджера С КЭШЕМ на загрузку: опрос идёт раз в 5 секунд, а opkg на
+# каждый тик - заметный процесс ради неизменного ответа (версия меняется только
+# апгрейдом пакета, кэш в /tmp это переживёт).
+_svc_json() {
+	_sv_r=0
+	if [ -n "$1" ] && [ -x "/etc/init.d/$1" ]; then
+		if ubus -S call service list "{\"name\":\"$1\"}" 2>/dev/null | grep -q '"running": *true'; then
+			_sv_r=1
+		elif /etc/init.d/"$1" status >/dev/null 2>&1; then
+			_sv_r=1
+		fi
+	fi
+	_sv_ver=""
+	if [ "$1" = "zapret" ]; then
+		_sv_vf="/tmp/5gmodem_svcver_$1"
+		if [ -s "$_sv_vf" ]; then
+			read -r _sv_ver < "$_sv_vf"
+		else
+			if command -v opkg >/dev/null 2>&1; then
+				_sv_ver=$(opkg list-installed zapret 2>/dev/null \
+					| awk '{sub(/-r[0-9]+$/, "", $3); print $3; exit}')
+			else
+				_sv_ver=$(apk info -v 2>/dev/null | grep '^zapret-' | head -1 \
+					| sed 's/^zapret-//; s/-r[0-9]*$//')
+			fi
+			printf '%s\n' "$_sv_ver" > "$_sv_vf"
+		fi
+	fi
+	printf '{"running":%s,"version":"%s"}' "$_sv_r" "$(json_esc "$_sv_ver")"
+}
+
 # СНИМОК ПЕРЕЧИСЛЕНИЯ МОДЕМОВ на один вызов. listmodems.sh спрашивался трижды за
 # один `list`: список присутствующих путей и по разу на каждый модем в model_for.
 # У самого listmodems есть кэш (9 мс тёплый), но каждый вызов - это ещё fork+shell,
 # а мы в цикле. Снимок берётся явно, как и остальные (см. ifdump_snapshot).
 _LM_SNAP=""
 lm_snapshot() { _LM_SNAP=$("/usr/share/5gmodem/listmodems.sh" 2>/dev/null); }
-lm_drop() { _LM_SNAP=""; }
 _lm() {
 	[ -n "$_LM_SNAP" ] && { printf '%s' "$_LM_SNAP"; return; }
 	"/usr/share/5gmodem/listmodems.sh" 2>/dev/null
@@ -185,7 +216,7 @@ operator_cached() {
 	# имя СЕТИ, поэтому раньше в «Приоритете интернета» появлялся «Tele2 RU» там,
 	# где главная карточка честно показывала «T-Mobile»: probe писал свой кэш, а
 	# он проверялся ПЕРВЫМ и затенял точное имя.
-	if [ -f "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; return; fi
+	if [ -s "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; return; fi
 	# Фолбэк - собственный кэш probe: основной опрос ведёт файл только для
 	# АКТИВНОГО модема, а в списке показываются все.
 	cf="/tmp/netpri_op_$1"
@@ -394,6 +425,52 @@ label_for() {
 	esac
 }
 
+# Живое переустановление default-маршрутов - общее для `set` и `order` (раньше
+# в каждом жила своя копия ~50 строк, и правки v6-логики приходилось дублировать).
+#
+# Добавить default-маршрут интерфейса $1 с метрикой $2 (v4+v6). БЕЗ удаления -
+# удаляем всё заранее (_del_all_default). Шлюз берём у netifd (авторитетно), а НЕ
+# из живой таблицы: у не-primary интерфейса default-маршрута может не быть.
+# 0.0.0.0/:: = честный on-link (у сотовых point-to-point шлюза нет). У интерфейса
+# с адресом /32 (Wi-Fi client, сотовый) шлюз не on-link - сперва прямой маршрут
+# до самого шлюза (как netifd).
+_add_default_route() {   # $1 - iface, $2 - метрика
+	_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
+	_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
+	if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
+		ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
+		ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
+	else
+		# on-link default (сотовый point-to-point) - обязателен scope link.
+		ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
+	fi
+	# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
+	# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
+	# сметает с устройства ОБЕ семьи маршрутов, а восстановление читало шлюз
+	# только у самого интерфейса - у родителя его нет, спутник отсекает дедуп
+	# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
+	# до следующего события netifd. Теперь шлюз ищем и у спутников.
+	_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+	if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
+		for _sat in "${1}6" "${1}_6"; do
+			_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
+			[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
+		done
+	fi
+	[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
+		ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
+}
+# `ip route del default dev X` удаляет РОВНО ОДИН маршрут за вызов. Если на
+# устройстве их несколько (разные метрики, формы via и on-link сосуществуют),
+# один вызов сносит первый, а мы тут же добавляем новый - остаток копится с
+# каждым переключением (наблюдалось вживую: шесть default-маршрутов вместо двух).
+# Поэтому удаляем В ЦИКЛЕ, пока есть что удалять; потолок - страховка от вечного
+# цикла.
+_del_all_default() {   # $1 - l3_device
+	_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
+	_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
+}
+
 case "$1" in
 list)
 	# СНИМКИ ПЕРЕД ЦИКЛОМ. `list` только читает и живёт доли секунды, поэтому
@@ -406,6 +483,14 @@ list)
 	uci5g_snapshot
 	ucinet_snapshot
 	lm_snapshot
+	# Секундомер один на весь вызов: uptime_s - это чтение /proc/uptime отдельным
+	# процессом, а нужен он в цикле по разу-два на карточку со сторожем.
+	_NOW_S=$(uptime_s)
+	# УСТРОЙСТВО, ЧЕРЕЗ КОТОРОЕ РЕАЛЬНО ИДЁТ ТРАФИК: default с наименьшей живой
+	# метрикой. Нужно сторожу (health.sh): при штрафном переключении uci-порядок
+	# и реальность расходятся, и подсветка активной карточки обязана следовать
+	# реальности. Одна команда на весь list.
+	_LIVE_DEV=$(ip -4 route show default 2>/dev/null | awk '{m=0; d=""; for(i=1;i<NF;i++){if($i=="dev")d=$(i+1); if($i=="metric")m=$(i+1)+0} if(d!="")print m, d}' | sort -n | head -1 | cut -d' ' -f2)
 	printf '['
 	first=1
 	NEEDREFRESH=0
@@ -450,7 +535,10 @@ list)
 		# приоритетом бессмысленно, трафика через него всё равно не будет. Прячем
 		# ТОЛЬКО если модем наш и мы точно знаем его USB-путь: при неизвестной
 		# секции (одномодемный legacy-конфиг) поведение прежнее - показываем.
-		if [ "$(iface_type "$n")" = modem ]; then
+		# Тип считаем ОДИН раз на интерфейс: iface_type = is_modem + jsonfilter
+		# по снимку, и второй вызов ниже удваивал эти форки на каждый uplink.
+		t=$(iface_type "$n")
+		if [ "$t" = modem ]; then
 			# У одного интерфейса может быть НЕСКОЛЬКО модем-секций: рядом с живой
 			# остаётся устаревшая от прежнего модема на том же разъёме (её путь уже
 			# не present). modem_section вернул бы ЛЮБУЮ, и если это оказалась
@@ -471,7 +559,8 @@ list)
 					continue
 				fi
 				_any_path=1
-				echo "$PRESENT_PATHS" | grep -q " $_mp " && { _any_present=1; break; }
+				case "$PRESENT_PATHS" in *" $_mp "*) _any_present=1 ;; esac
+				[ -n "$_any_present" ] && break
 			done
 			if [ -z "$_any_present" ] && { [ -n "$_any_path" ] || [ -n "$_any_parked" ]; }; then
 				continue
@@ -482,7 +571,6 @@ list)
 		# switch does not vanish from the bar (which used to leave only Wi-Fi
 		# looking "selected").
 		ip=$(iface_ip "$n")
-		t=$(iface_type "$n")
 		# УСТРОЙСТВА НЕТ - МАРШРУТИЗИРОВАТЬ НЕ ЧЕРЕЗ ЧТО.
 		#
 		# Интерфейс вынутого USB-модема остаётся и в конфиге, и в firewall-зоне
@@ -528,17 +616,55 @@ list)
 		# (192.168.43.2), а не выданный оператором. Показываем настоящий, из API:
 		# иначе в списке у всех таких модемов стоял бы адрес их внутренней сети.
 		_np_s=$(sec_for_iface "$n")
-		if [ -n "$_np_s" ] && [ "$(uci -q get "5gmodem.$_np_s.kind")" = "hilink" ]; then
-			_np_wan=$(/usr/share/5gmodem/hilink.sh json "$(uci -q get "5gmodem.$_np_s.path")" 2>/dev/null \
+		if [ -n "$_np_s" ] && [ "$(uci5g_get "$_np_s" kind)" = "hilink" ]; then
+			_np_wan=$(/usr/share/5gmodem/hilink.sh json "$(uci5g_get "$_np_s" path)" 2>/dev/null \
 				| jsonfilter -e '@.ipaddr' 2>/dev/null)
 			[ -n "$_np_wan" ] && ip="$_np_wan"
 		fi
 		m=$(ucinet_get "$n" metric); [ -n "$m" ] || m=0
+		# Здоровье линка от сторожа (health.sh) - чтением файла состояния и
+		# uci-снимка, без подпроцессов: list зовётся каждые 5 c. Нет файла или
+		# слежение выключено - поля нет, страница точку не рисует.
+		_np_h=""
+		if [ "$(uci5g_get health enabled)" = "1" ] && [ -f "/tmp/5gmodem_health/$n" ]; then
+			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs < "/tmp/5gmodem_health/$n" 2>/dev/null; then
+				# Линк без устройства (gone) показываем - карточка обязана
+				# пережить переэнумерацию при лечении; прячем, когда ничего не
+				# поднимается дольше грейс-периода. Грейс зависит от контекста:
+				# идёт лечение - ждём долго (перезагрузка модуля с лестницей -
+				# это минуты), лечения нет - предположение «он перезагружается»
+				# быстро теряет силу, две минуты и хватит.
+				_np_gr=120
+				[ -f "/tmp/5gmodem_health/$n.heal" ] && _np_gr=600
+				if [ "$_np_hst" = "gone" ] && [ $(( _NOW_S - ${_np_hs:-0} )) -gt "$_np_gr" ]; then
+					continue
+				fi
+				_np_h=",\"health\":\"$_np_hst\",\"hms\":${_np_hms:-0}"
+				# идёт лечение - карточка рисует статус реанимации
+				if [ -f "/tmp/5gmodem_health/$n.heal" ] \
+				   && read -r _np_hstep _np_hlast _np_hn < "/tmp/5gmodem_health/$n.heal" 2>/dev/null; then
+					_np_h="$_np_h,\"healstep\":${_np_hstep:-0},\"healn\":${_np_hn:-0},\"healmax\":6,\"healfor\":$(( _NOW_S - ${_np_hlast:-0} ))"
+				fi
+			fi
+		fi
+		if [ -n "$_LIVE_DEV" ]; then
+			_np_ld=$(ifup_state "$n" '@["l3_device"]')
+			[ -n "$_np_ld" ] || _np_ld=$(ifup_state "${n}_4" '@["l3_device"]')
+			[ "$_np_ld" = "$_LIVE_DEV" ] && _np_h="$_np_h,\"live\":1"
+		fi
 		[ "$first" = 1 ] || printf ','
 		first=0
-		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s}' \
-			"$n" "$t" "$(json_esc "$sub")" "$(json_esc "$(label_for "$n")")" "$ip" "$m"
+		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s%s}' \
+			"$n" "$t" "$(json_esc "$sub")" "$(json_esc "$(label_for "$n")")" "$ip" "$m" "$_np_h"
 	done
+	# Последнее событие сторожа - хвостовым элементом ТОГО ЖЕ списка: страница
+	# и так забирает list каждые 5 с, отдельный опрос ради одной строки - лишний
+	# процесс. Фронт вынимает элемент с полем event до отрисовки карточек.
+	if [ "$first" != 1 ] && [ "$(uci5g_get health enabled)" = "1" ] \
+	   && [ -s /tmp/5gmodem_health/.last_event ]; then
+		read -r _np_ev < /tmp/5gmodem_health/.last_event 2>/dev/null
+		[ -n "$_np_ev" ] && printf ',{"event":"%s"}' "$(json_esc "$_np_ev")"
+	fi
 	printf ']\n'
 	# fill the operator cache in the background (bounded AT probes) for next time,
 	# but at most once a minute so page polls don't pile up probes on a modem whose
@@ -615,19 +741,31 @@ set)
 	esac
 	note_foreign_uci network "netpri set"
 	CHANGED=0
+	# Метрики с шагом 10 (10, 20, 30...): остаётся место вставить линк между
+	# существующими без перенумерации остальных, нет столкновения с чужой
+	# metric=1 (её любят дефолтные конфиги), и это соглашение mwan3 - меньше
+	# сюрпризов при сожительстве. Шаг оставляет место и под будущие «штрафные»
+	# промежуточные значения сторожа.
+	_mset=20
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		ucinet_has "$n" || continue
-		if [ "$n" = "$CH" ]; then NEW=1; else NEW=20; fi
+		if [ "$n" = "$CH" ]; then NEW=10; else NEW=$_mset; _mset=$((_mset + 10)); fi
 		OLD=$(ucinet_get "$n" metric)
 		[ "x$OLD" = "x$NEW" ] && continue
 		uci -q set "network.$n.metric=$NEW"
 		CHANGED=1
 	done
-	[ "$CHANGED" = 1 ] || { echo '{"result":"ok","active":"'"$CH"'","changed":false}'; exit 0; }
+	# ручной выбор пользователя снимает метку «оставлен в конце» у ожившего
+	# линка (сторож, политика failback=demote) - порядок теперь снова его
+	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
+	# ДАЖЕ ПРИ CHANGED=0 живые маршруты переустанавливаем: uci мог совпадать,
+	# а реальная таблица - нет (штрафная метрика сторожа). Ранний выход делал
+	# клик по аплинку «несработавшим» до следующего круга сторожа (ревью №12).
+	_np_changed=false; [ "$CHANGED" = 1 ] && _np_changed=true
 	# Персистентность: сохраняем метрики в конфиг (netifd возьмёт их на будущих
 	# событиях - передозвон, hotplug).
-	uci -q commit network
+	[ "$CHANGED" = 1 ] && uci -q commit network
 	# ЖИВОЕ переключение БЕЗ `network reload`: приоритет аплинка - это МЕТРИКА
 	# default-маршрута, чистая операция таблицы маршрутизации. Меняем её напрямую
 	# через `ip route`, не трогая netifd и, главное, PDP-сессию модема - никакого
@@ -636,67 +774,11 @@ set)
 	# (via сохраняем, если шлюз есть; у сотовых он часто on-link). Делаем и для
 	# IPv4, и для IPv6. netifd при своём следующем событии переустановит маршруты
 	# уже из обновлённого uci - итог совпадёт.
-	# Переустановить default-маршрут интерфейса $1 с метрикой $2 (v4 и v6). Шлюз
-	# берём у netifd (авторитетно), а НЕ из живой таблицы: у не-primary интерфейса
-	# default-маршрута может не быть. 0.0.0.0/:: = честный on-link (у сотовых
-	# point-to-point шлюза нет). У интерфейса с адресом /32 (Wi-Fi client, сотовый)
-	# шлюз не on-link - сперва добавляем прямой маршрут до самого шлюза (как netifd).
-	# Добавить default-маршрут интерфейса $1 с метрикой $2 (v4+v6). БЕЗ удаления -
-	# удаляем всё заранее (см. ниже). Шлюз берём у netifd; 0.0.0.0/:: = on-link.
-	_add_default_route() {
-		_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
-		_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
-		if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
-			# у адреса /32 (Wi-Fi client, сотовый) шлюз не on-link - сперва прямой
-			# маршрут до шлюза (как netifd), потом default через него.
-			ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
-			ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
-		else
-			# on-link default (сотовый point-to-point) - обязателен scope link.
-			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
-		fi
-		# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
-		# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
-		# сметает с устройства ОБЕ семьи маршрутов, а восстановление читало шлюз
-		# только у самого интерфейса - у родителя его нет, спутник отсекает дедуп
-		# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
-		# до следующего события netifd. Теперь шлюз ищем и у спутников.
-		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
-		if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
-			for _sat in "${1}6" "${1}_6"; do
-				_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
-				[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
-			done
-		fi
-		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
-			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
-	}
 	# СНОСИМ все default-маршруты управляемых интерфейсов, ПОТОМ добавляем с
 	# УНИКАЛЬНЫМИ метриками. Иначе два default с ОДИНАКОВОЙ метрикой конфликтуют в
 	# ядре ("RTNETLINK: File exists") - именно поэтому «переставить метрику» в лоб
 	# не срабатывало. chosen=1, остальные 20,21,22... (метрика default-маршрута
-	# должна быть уникальной).
-	# `ip route del default dev X` удаляет РОВНО ОДИН маршрут за вызов. Если на
-	# устройстве их несколько (а так и выходит: разные метрики, плюс формы via и
-	# on-link сосуществуют), один вызов сносит первый, а мы тут же добавляем
-	# новый - остаток копится с каждым переключением. Наблюдалось вживую: после
-	# нескольких нажатий в таблице висело шесть default-маршрутов вместо двух,
-	# среди них `default dev usb0 scope link` без шлюза, которые ничего не
-	# маршрутизируют, но при неудачных метриках могут перехватить трафик.
-	# Поэтому удаляем В ЦИКЛЕ, пока есть что удалять. Потолок - страховка от
-	# вечного цикла, если ядро вдруг начнёт возвращать успех на пустом месте.
-	_del_all_default() {
-		_i=0
-		while [ "$_i" -lt 16 ]; do
-			ip -4 route del default dev "$1" 2>/dev/null || break
-			_i=$((_i + 1))
-		done
-		_i=0
-		while [ "$_i" -lt 16 ]; do
-			ip -6 route del default dev "$1" 2>/dev/null || break
-			_i=$((_i + 1))
-		done
-	}
+	# должна быть уникальной). Сами функции - общие с `order`, см. над case.
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
@@ -717,19 +799,20 @@ set)
 		_add_default_route "$1" "$2"
 		return 0
 	}
-	_add_once "$CH" 1
+	_add_once "$CH" 10
 	_m=20
 	for n in $(wan_nets); do
-		[ -n "$n" ] && [ "$n" != "$CH" ] && { _add_once "$n" "$_m" && _m=$((_m + 1)); }
+		[ -n "$n" ] && [ "$n" != "$CH" ] && { _add_once "$n" "$_m" && _m=$((_m + 10)); }
 	done
-	echo '{"result":"ok","active":"'"$CH"'","changed":true,"mode":"live-route"}'
+	echo '{"result":"ok","active":"'"$CH"'","changed":'"$_np_changed"',"mode":"live-route"}'
 	;;
 
 order)
 	# order <if1> <if2> ...  - задать ПОРЯДОК аплинков перетаскиванием карточек.
-	# Метрика = РАНГ: первый 1, второй 2, третий 3 ... Это и есть failover: отвалился
-	# первый (нет default-маршрута с метрикой 1) - трафик сам уходит на метрику 2.
-	# В отличие от `set` (выбранный=1, остальные 20,21...), тут пользователь задаёт
+	# Метрика = РАНГ с шагом 10: первый 10, второй 20, третий 30 ... Это и есть
+	# failover: отвалился первый (нет default-маршрута с метрикой 10) - трафик
+	# сам уходит на метрику 20.
+	# В отличие от `set` (выбранный=10, остальные 20,30...), тут пользователь задаёт
 	# ВЕСЬ порядок. Живое применение маршрутов - то же, что у `set`.
 	shift
 	[ -n "$1" ] || { echo '{"error":"no order"}'; exit 1; }
@@ -744,56 +827,31 @@ order)
 		esac
 	done
 	[ -n "$_ord" ] || { echo '{"error":"no valid interfaces"}'; exit 1; }
+	# перетаскивание = пользователь заново задал порядок: метки «оставлен в
+	# конце» от сторожа (failback=demote) больше не действуют
+	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
 	note_foreign_uci network "netpri order"
-	_rank=1
-	# uci-метрики по рангу; интерфейсы вне переданного порядка - в хвост (метрики
-	# должны быть уникальными: два default с одной метрикой конфликтуют в ядре).
+	_rank=10
+	# uci-метрики по рангу с шагом 10 (см. пояснение в set); интерфейсы вне
+	# переданного порядка - в хвост (метрики должны быть уникальными: два
+	# default с одной метрикой конфликтуют в ядре).
 	for n in $_ord $(wan_nets); do
 		[ -n "$n" ] || continue
 		case " $_seen_o " in *" $n "*) continue ;; esac
 		_seen_o="$_seen_o $n"
 		ucinet_has "$n" || continue
 		uci -q set "network.$n.metric=$_rank"
-		_rank=$((_rank + 1))
+		_rank=$((_rank + 10))
 	done
 	uci -q commit network
-	# --- живое переустановление default-маршрутов (копия логики из `set`) ---
-	_add_default_route() {   # $1 - iface, $2 - метрика
-		_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
-		_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
-		if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
-			ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
-			ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
-		else
-			ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
-		fi
-		# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
-		# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
-		# сметает с устройства ОБЕ семьи маршрутов, а восстановление читало шлюз
-		# только у самого интерфейса - у родителя его нет, спутник отсекает дедуп
-		# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
-		# до следующего события netifd. Теперь шлюз ищем и у спутников.
-		_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
-		if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
-			for _sat in "${1}6" "${1}_6"; do
-				_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
-				[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
-			done
-		fi
-		[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
-			ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
-	}
-	_del_all_default() {   # $1 - l3_device
-		_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
-		_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
-	}
+	# живое переустановление default-маршрутов - общие функции, см. над case
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
 		_del_all_default "$_d"
 	done
 	# Один маршрут на устройство (IPv6-спутник делит l3_device - не дублируем).
-	_seen=""; _rank=1
+	_seen=""; _rank=10
 	for n in $_ord $(wan_nets); do
 		[ -n "$n" ] || continue
 		case " $_seen_r " in *" $n "*) continue ;; esac
@@ -802,7 +860,7 @@ order)
 		case " $_seen " in *" $_dv "*) continue ;; esac
 		_seen="$_seen $_dv"
 		_add_default_route "$n" "$_rank"
-		_rank=$((_rank + 1))
+		_rank=$((_rank + 10))
 	done
 	echo '{"result":"ok","changed":true,"mode":"order"}'
 	;;
@@ -812,24 +870,66 @@ ping)
 	# Идёт по активному аплинку (default route). Один пакет, таймаут 2 c.
 	# ICMP до youtube.com обычно проходит даже там, где TCP шейпится.
 	_h="${2:-youtube.com}"
-	_ms=$(ping -c 1 -W 2 "$_h" 2>/dev/null | sed -n 's/.*time=\([0-9]*\).*/\1/p' | head -1)
-	if [ -n "$_ms" ]; then
-		printf '{"ok":1,"ms":%s}\n' "$_ms"
-	else
-		echo '{"ok":0}'
-	fi
+	_po=$(ping -c 1 -W 2 "$_h" 2>/dev/null)
+	case "$_po" in
+		*"(198.18."*|*"(198.19."*)
+			# FAKE-IP (clash/ssclash): домен разрешился в фиктивный адрес, и
+			# ICMP до него меряет туннель либо локальный ответчик clash - в обе
+			# стороны враньё. Меряем ЧЕСТНО, как браузер клиента: HTTPS-запрос
+			# обычным маршрутом (то есть ЧЕРЕЗ clash) - раз сервис открывается
+			# у людей, откроется и здесь, и время будет настоящим.
+			if command -v curl >/dev/null 2>&1; then
+				_hw=$(curl -o /dev/null -s -m 4 -w '%{http_code} %{time_starttransfer}' "https://$_h/" 2>/dev/null)
+				_hc="${_hw%% *}"; _ht="${_hw##* }"
+				if [ -n "$_hc" ] && [ "$_hc" != "000" ]; then
+					printf '{"ok":1,"ms":%s,"via":"http"}\n' "$(printf '%s' "$_ht" | awk '{printf "%d", $1 * 1000}')"
+				else
+					echo '{"ok":0,"via":"http"}'
+				fi
+			else
+				# без curl - хотя бы факт доступности (wget-spider) и грубое
+				# время по /proc/uptime (шаг 10 мс)
+				_t0=$(awk '{printf "%d", $1 * 100}' /proc/uptime)
+				if wget -q --spider -T 4 "https://$_h/" 2>/dev/null; then
+					_t1=$(awk '{printf "%d", $1 * 100}' /proc/uptime)
+					printf '{"ok":1,"ms":%s,"via":"http"}\n' "$(( (_t1 - _t0) * 10 ))"
+				else
+					echo '{"ok":0,"via":"http"}'
+				fi
+			fi
+			;;
+		*)
+			_ms=$(printf '%s\n' "$_po" | sed -n 's/.*time=\([0-9]*\).*/\1/p' | head -1)
+			if [ -n "$_ms" ]; then
+				printf '{"ok":1,"ms":%s}\n' "$_ms"
+			else
+				echo '{"ok":0}'
+			fi
+			;;
+	esac
 	;;
 svcstatus)
 	# Запущен ли сервис $2 - для виджета «Сервисы» (точка запущен/остановлен).
-	R=0
-	if [ -n "$2" ] && [ -x "/etc/init.d/$2" ]; then
-		if ubus -S call service list "{\"name\":\"$2\"}" 2>/dev/null | grep -q '"running": *true'; then
-			R=1
-		elif /etc/init.d/"$2" status >/dev/null 2>&1; then
-			R=1
-		fi
-	fi
-	printf '{"running":%s}\n' "$R"
+	_svc_json "$2"
+	echo
+	;;
+svcall)
+	# Агрегат для панели виджетов: статусы всех сервисов + веток SSClash ОДНИМ
+	# вызовом ubus/rpcd вместо N параллельных exec_direct (каждый - отдельный
+	# spawn rpcd каждые 5 секунд). $2 = сервисы через запятую, $3 = ветки
+	# ssclash (go/legacy) через запятую.
+	_sj=""
+	for _s in $(printf '%s' "$2" | tr ',' ' '); do
+		_sj="$_sj,\"$(json_esc "$_s")\":$(_svc_json "$_s")"
+	done
+	_cj=""
+	for _k in $(printf '%s' "$3" | tr ',' ' '); do
+		case "$_k" in go|legacy) ;; *) continue ;; esac
+		_ko=$(/usr/share/5gmodem/ssclash.sh status "$_k" 2>/dev/null)
+		[ -n "$_ko" ] || _ko='{}'
+		_cj="$_cj,\"$_k\":$_ko"
+	done
+	printf '{"svc":{%s},"ssc":{%s}}\n' "${_sj#,}" "${_cj#,}"
 	;;
 *)
 	echo '{"error":"usage: netpri.sh list|set <iface>"}'

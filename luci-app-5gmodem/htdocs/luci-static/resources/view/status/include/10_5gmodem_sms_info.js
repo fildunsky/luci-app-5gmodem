@@ -614,9 +614,17 @@ return baseclass.extend({
 
 				let sleepPromise = new Promise(function(resolve) { setTimeout(resolve, 2000); });
 
+				/* Счётчик SMS - под тем же троттлингом, что и AT-опрос модема:
+				   безусловный smsbridge.sh на каждый 5-секундный тик обзорной
+				   страницы конкурировал за AT-порт с опросом «Сети» (ревью №15).
+				   На пропущенных тиках отдаём последний известный счётчик. */
+				let smsCountPromise = skipModemData
+					? Promise.resolve(modem.smsCount || 0)
+					: this.getCurrentSmsCount(modem.comm_port, modem.storage);
+
 				Promise.all([
 					modemDataPromise,
-					this.getCurrentSmsCount(modem.comm_port, modem.storage),
+					smsCountPromise,
 					sleepPromise
 				]).then(L.bind(function(results) {
 					let result = results[0];

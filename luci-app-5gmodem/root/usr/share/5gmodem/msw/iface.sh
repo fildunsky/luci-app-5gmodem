@@ -9,14 +9,18 @@
 # interfaces, not just the one being created.
 apply_mm_state() {
 	command -v mmcli >/dev/null 2>&1 || return 0
-	if uci show network 2>/dev/null | grep -q "\.proto='modemmanager'"; then
+	# Автозапуск сервиса - по КОНФИГУ (есть modemmanager-интерфейсы), а вот
+	# запуск/остановка ДЕМОНА - через mmneed.sh: он смотрит ещё и на ШИНУ.
+	# Раньше здесь MM поднимался ради интерфейса ОТСУТСТВУЮЩЕГО модема, а
+	# mmneed на следующем шаге его гасил - качели на каждом хотплаге (ревью,
+	# баг №2). Теперь решение одно на всех.
+	_ams_net=$(uci show network 2>/dev/null)
+	if printf '%s' "$_ams_net" | grep -q "\.proto='modemmanager'"; then
 		/etc/init.d/modemmanager enabled >/dev/null 2>&1 || /etc/init.d/modemmanager enable >/dev/null 2>&1
-		pgrep -f ModemManager >/dev/null 2>&1 || /etc/init.d/modemmanager start >/dev/null 2>&1
-	elif uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
-		# kernel owns the control channel -> MM must be off
-		/etc/init.d/modemmanager stop >/dev/null 2>&1
+	elif printf '%s' "$_ams_net" | grep -qE "\.proto='(mbim|qmi)'"; then
 		/etc/init.d/modemmanager disable >/dev/null 2>&1
 	fi
+	/usr/share/5gmodem/mmneed.sh apply >/dev/null 2>&1
 }
 
 # repair a modem's interface: re-point its device to the current node for THIS
@@ -303,8 +307,8 @@ drop_stale_ifaces() {   # $1 - usb-путь модема, $2 - интерфей�
 	[ -n "$1" ] || return 0
 	_ds_imei=$(imei_for_path "$1")
 	_ds_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
-	for _ds_i in $(uci show network 2>/dev/null \
-			| sed -n "s/^network\.\([^.]*\)\.modem_path='\?$1'\?\$/\1/p"); do
+	for _ds_i in $(uci show network 2>/dev/null | grep -F ".modem_path='$1'" \
+			| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
 		[ "$_ds_i" = "$2" ] && continue
 		# НЕ ТРОГАЕМ чужое железо. Путь у интерфейса может совпасть просто потому,
 		# что в этом разъёме РАНЬШЕ стоял другой модем: его интерфейс теперь

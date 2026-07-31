@@ -109,11 +109,6 @@ function label(m, i) {
 	return p;
 }
 
-function ensureCss() {
-	if (!document.getElementById('modemtabs-css')) {
-	}
-}
-
 function loadModems() {
 	return Promise.all([
 		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]'),
@@ -266,7 +261,8 @@ function applyEsimTabVisibility(tries) {
 			   появится/скроется без задержки открытия страницы. */
 			if (st && st.pending) {
 				var t = (typeof tries === 'number') ? tries : 0;
-				if (t < 8) { window.setTimeout(function() { applyEsimTabVisibility(t + 1); }, 2000); }
+				/* было 8 ретраев по 2с = до 9 запусков esim.sh на КАЖДОЙ странице (ревью №15) */
+				if (t < 2) { window.setTimeout(function() { applyEsimTabVisibility(t + 1); }, 2000); }
 				return;
 			}
 			/* ВИДИМОСТЬ - ПО НАЛИЧИЮ eUICC, А НЕ ПО ВКЛЮЧЁННОМУ ПРОФИЛЮ.
@@ -451,8 +447,38 @@ function tabsBar(modems, active) {
 					row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = 'none'; });
 				}
 				card.classList.add('active');
+				/* ПРЕДОХРАНИТЕЛЬ ОТ ЗАЛИПАНИЯ. Вкладки выше выключены до перезагрузки
+				   страницы, а перезагрузку запускает конец цепочки switch->active.
+				   Если switch завис на роутере (занятый rpcd, долгий resolve по
+				   hotplug - его 30-секундный таймаут и т.п.), цепочка не доходила до
+				   reload НИКОГДА: рамка уже на новой вкладке, панель мёртвая, назад
+				   не переключиться (поймано владельцем). Таймер перегружает страницу
+				   принудительно - подсветится честный active, панель оживёт. При
+				   нормальном переключении reload случается раньше и таймер умирает
+				   вместе со страницей. */
+				window.setTimeout(function() { window.location.reload(); }, 12000);
 				L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
-					.then(function() { window.location.reload(); });
+					.then(function() {
+						/* ПЕРЕЗАГРУЖАЕМСЯ ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ. resolveDefault
+						   глотает ошибку/таймаут switch, и reload уезжал со СТАРЫМ
+						   active_modem - вкладка подсвечена новая, а вся страница
+						   строится по прежнему модему («висит инфа другого модема»,
+						   поймано владельцем). Ждём, пока active реально станет
+						   выбранным (до ~4 с), иначе перезагружаемся как есть -
+						   хуже прежнего не будет, а честный active подсветится. */
+						var _swTries = 0;
+						var _swChk = function() {
+							L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'active' ]), '')
+								.then(function(out) {
+									if (String(out).trim() === path || ++_swTries >= 10) {
+										window.location.reload();
+									} else {
+										window.setTimeout(_swChk, 400);
+									}
+								});
+						};
+						_swChk();
+					});
 			}
 		}, [
 			/* Иконка перед именем: у модема с собственной сетевой картой (USB-
@@ -481,7 +507,6 @@ return baseclass.extend({
 			   Теперь рисуем всегда: одна кнопка показывает, о каком модеме
 			   страница, и, главное, высота полосы известна заранее, поэтому
 			   её место резервируется заготовкой ещё до прихода данных. */
-			ensureCss();
 			return E('div', { 'class': 'modembar' }, [ tabsBar(st.modems, st.active) ]);
 		});
 	},
@@ -490,7 +515,6 @@ return baseclass.extend({
 	render: function() {
 		return loadModems().then(function(st) {
 			if (st.modems.length <= 1) { return null; }
-			ensureCss();
 			return E('div', { 'class': 'modembar' }, [ tabsBar(st.modems, st.active) ]);
 		});
 	},
@@ -528,7 +552,6 @@ return baseclass.extend({
 		/* полоса уже наполнена данными - второй раз не работаем */
 		if (bar && !bar.classList.contains('modembar-loading')) { return Promise.resolve(); }
 
-		ensureCss();
 
 		if (!bar) {
 			bar = E('div', { 'class': 'modembar modembar-loading' }, [ ghostBar() ]);

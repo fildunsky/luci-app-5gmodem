@@ -98,7 +98,10 @@ modem_vidpid() {
 # take half a minute (the UI "Switching…" spinner hung). Run it in the
 # background and kill it if it does not answer quickly.
 at_probe() {
-	sms_tool -d "$1" at "AT" >/dev/null 2>&1 &
+	# 8>&- 9>&- обязательны: вызывающий может держать at_lock (fd 8) и замок
+	# хотплага (fd 9) - фоновый sms_tool унаследовал бы их OFD и держал локи
+	# дольше владельца (ревью, баг №6; тот же класс, что в atprobe.sh/lib.sh).
+	sms_tool -d "$1" at "AT" >/dev/null 2>&1 8>&- 9>&- &
 	_p=$!
 	_n=0
 	while kill -0 "$_p" 2>/dev/null; do
@@ -161,12 +164,21 @@ at_for_path() {
 	# рвёт data-сессию, и интерфейс флапает. Метрики должны идти по ДРУГОМУ AT-порту,
 	# поэтому dial-порт таких прото исключаем из перебора (у L850/L860 остаётся
 	# ttyACM2). Для прочих прото (mbim/qmi/…) данные идут не по tty - исключать нечего.
-	_afp_skip=""
-	_afp_if=$(iface_for_path "$1")
-	if [ -n "$_afp_if" ]; then
-		case "$(uci -q get "network.$_afp_if.proto")" in
-			xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
-		esac
+	# Мемоизация на процесс: resolve зовёт at_for_path до 6 раз подряд для ОДНОГО
+	# пути (ретраи ожидания порта), а dial-порт прото за это время не меняется -
+	# пересчитывать iface_for_path + 2×uci get на каждый ретрай незачем.
+	if [ "$_AFP_SKIP_P" = "$1" ]; then
+		_afp_skip="$_AFP_SKIP_V"
+	else
+		_afp_skip=""
+		_afp_if=$(iface_for_path "$1")
+		if [ -n "$_afp_if" ]; then
+			case "$(uci -q get "network.$_afp_if.proto")" in
+				xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
+			esac
+		fi
+		_AFP_SKIP_P="$1"
+		_AFP_SKIP_V="$_afp_skip"
 	fi
 	# ИЗВЕСТНЫЙ AT-ПОРТ ПРОБУЕМ ПЕРВЫМ.
 	#
@@ -219,7 +231,7 @@ save_to() {
 	# рассинхрона оставлена: нет секции - идём длинным путём, как раньше.
 	SEC=$(secname "$1")
 	uci -q get "$CFG.$SEC" >/dev/null 2>&1 || SEC=$(ensure_section "$1")
-	uci -q set "$CFG.$SEC.at_port=$(uci -q get $CFG.@5gmodem[0].at_port)"
+	uci -q set "$CFG.$SEC.at_port=$(uci -q get "$CFG.@5gmodem[0].at_port")"
 	uci -q commit "$CFG"
 }
 
@@ -525,14 +537,27 @@ switch)
 	# УБИВАЕМ предыдущий прогрев по ГРУППЕ (kill -- -PID; setsid-потомок - лидер
 	# группы): частые переключения иначе копят фоновые опросы, и они душат порт
 	# (наблюдалось: несколько прогревов разом -> опрос метрик 20+ c).
+	# Три гонки прежней схемы (ревью, баг №5): pid писал РЕБЁНОК (два быстрых
+	# переключения читали пустой файл), завершающийся старый прогрев rm-ил уже
+	# НОВЫЙ pid-файл, а kill по протухшему pid мог попасть в чужую группу.
+	# Теперь: pid пишет РОДИТЕЛЬ сразу ($! = setsid-лидер группы), убийство -
+	# только если группа жива И это наш прогрев (маркер в cmdline), уборку
+	# файла делает ребёнок ТОЛЬКО если файл всё ещё про него.
 	_pw=/tmp/5gmodem_prewarm.pid
-	[ -s "$_pw" ] && kill -- "-$(cat "$_pw" 2>/dev/null)" 2>/dev/null
+	_pwold=$(cat "$_pw" 2>/dev/null)
+	case "$_pwold" in *[!0-9]*|'') ;; *)
+		if kill -0 "$_pwold" 2>/dev/null \
+		   && grep -q 5gmodem_prewarm "/proc/$_pwold/cmdline" 2>/dev/null; then
+			kill -- "-$_pwold" 2>/dev/null
+		fi ;;
+	esac
 	setsid sh -c '
-	  echo $$ > /tmp/5gmodem_prewarm.pid
+	  # 5gmodem_prewarm - маркер для проверки перед kill
 	  /usr/share/5gmodem/simslot.sh status >/dev/null 2>&1
 	  /usr/share/5gmodem/bands.sh   json   >/dev/null 2>&1
-	  rm -f /tmp/5gmodem_prewarm.pid
-	' >/dev/null 2>&1 </dev/null &
+	  [ "$(cat /tmp/5gmodem_prewarm.pid 2>/dev/null)" = "$$" ] && rm -f /tmp/5gmodem_prewarm.pid
+	' 5gmodem_prewarm >/dev/null 2>&1 </dev/null &
+	echo $! > "$_pw" 
 
 	printf '{"result":"ok","path":"%s","at_port":"%s","network":"%s"}\n' "$P" "$ATP" "$NET"
 	;;
@@ -641,39 +666,6 @@ profiles)
 	[ -n "$_bf" ] && uci -q commit "$CFG"
 	exit 0
 	;;
-
-# Немедленно вычистить припаркованные профили модемов, которых сейчас НЕТ на шине
-# (ручная уборка призраков: авто-TTL 30 дней ждать не всегда хочется). Парк
-# модема, который ВЕРНУЛСЯ (его IMEI среди present), не трогаем. Осиротевший
-# интерфейс парка освобождаем, если его не держит ни один живой профиль.
-clearparks)
-	note_foreign_uci network "modemswitch clearparks"
-	_cp_present=""
-	for _cp_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
-		_cp_i=$(imei_for_path "$_cp_p")
-		[ -n "$_cp_i" ] && _cp_present="$_cp_present $_cp_i"
-	done
-	_cp_n=0
-	for _cp_s in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_park_[^.]*\)=modem$/\1/p'); do
-		_cp_imei=$(uci -q get "$CFG.$_cp_s.imei")
-		case " $_cp_present " in *" $_cp_imei "*) continue ;; esac
-		_cp_if=$(uci -q get "$CFG.$_cp_s.network")
-		uci -q delete "$CFG.$_cp_s"
-		if [ -n "$_cp_if" ]; then
-			_cp_used=$(uci -q show "$CFG" 2>/dev/null | grep -c "^$CFG\.m_[^.]*\.network='\?$_cp_if'\?\$")
-			[ "${_cp_used:-0}" -eq 0 ] && uci -q get "network.$_cp_if" >/dev/null 2>&1 && {
-				ifdown "$_cp_if" >/dev/null 2>&1
-				uci -q delete "network.$_cp_if"
-				uci -q commit network
-			}
-		fi
-		_cp_n=$((_cp_n + 1))
-	done
-	uci -q commit "$CFG"
-	echo "{\"cleared\":$_cp_n}"
-	exit 0
-	;;
-
 # Удалить профиль ЦЕЛИКОМ - и секцию, и её сетевой интерфейс.
 #
 # Интерфейс убираем вместе с секцией сознательно: осиротевший интерфейс от
@@ -777,6 +769,12 @@ autoapn)
 		logger -t 5gmodem "autoapn: $IFACE в ручном режиме, APN не трогаем"
 		exit 0
 	fi
+	# ОПРАШИВАЕМ МОДЕМА-ХОЗЯИНА этого интерфейса, а не активного. Без POLL_MODEM
+	# `cached` отдаёт снимок АКТИВНОГО модема: при настройке соседа autoapn
+	# читал ЧУЖУЮ симку и ставил её APN (живой случай 31.07.2026: вернувшийся
+	# Telit с Мегафоном получил «tt» по T-Mobile-симке активного Compal, лишний
+	# передозвон). Пустой путь (legacy-конфиг) = прежнее поведение.
+	_am_path=$(uci -q get "$CFG.$_am_sec.path")
 
 	# Ждём адрес: регистрация и первый дозвон занимают десятки секунд. РАНЬШЕ
 	# появление адреса было поводом выйти совсем - APN считался «раз связь есть,
@@ -805,7 +803,7 @@ autoapn)
 	# дешевле, чем ошибиться с APN.
 	_j=""; _op=""; _mcc=""; _mnc=""; _imsi=""; _apn_w=0
 	while [ "$_apn_w" -lt 40 ]; do
-		_j=$("$RES/5gmodem.sh" cached 5 2>/dev/null)
+		_j=$(POLL_MODEM="$_am_path" "$RES/5gmodem.sh" cached 5 2>/dev/null)
 		_op=$(printf '%s' "$_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
 		_imsi=$(printf '%s' "$_j" | jsonfilter -e '@.imsi' 2>/dev/null | tr -cd '0-9')
 		# Достаточно ЛИБО оператора, ЛИБО IMSI - оба дают ключ к APN.
@@ -872,7 +870,9 @@ autoapn)
 	# ("00540030"), а имя с SIM (EF_SPN) читается только если AT-порт в этот
 	# момент отвечает, чего после перетасовки портов не случилось.
 	# Длину MNC заранее не знаем (2 или 3 цифры), поэтому пробуем оба варианта.
-	_imsi=$(printf '%s' "$_j" | jsonfilter -e '@.imsi' 2>/dev/null | tr -cd '0-9')
+	# НЕ затирать IMSI, добранный выше из ModemManager: в снимке _j его нет
+	# (модем без AT-порта), и безусловное перечтение теряло добытое (ревью).
+	[ ${#_imsi} -ge 6 ] || _imsi=$(printf '%s' "$_j" | jsonfilter -e '@.imsi' 2>/dev/null | tr -cd '0-9')
 	_sim_plmns=""
 	if [ ${#_imsi} -ge 6 ]; then
 		_sim_plmns="${_imsi%${_imsi#??????}} ${_imsi%${_imsi#?????}}"
@@ -924,103 +924,10 @@ autoapn)
 	ifup "$IFACE" >/dev/null 2>&1
 	# Авто-подбор типа PDP ОТКЛЮЧЁН намеренно: дефолт теперь IPV4 (на нём модемы
 	# получают адрес сразу; см. set_pdp_opt в mkiface.sh), а перебор ipv4v6/ipv4
-	# рвал связь и на практике ни разу не срабатывал успешно. Ветку autopdp ниже
-	# оставили доступной вручную (modemswitch.sh autopdp <iface>) на всякий, но из
-	# autoapn больше не зовём.
+	# рвал связь и на практике ни разу не срабатывал успешно (мёртвая ветка
+	# autopdp удалена при чистке 31.07.2026).
 	;;
 
-# ПОДБОР ТИПА PDP (IPv4 / IPv4v6).
-#
-# ЗАЧЕМ. Симптом неотличим от «нет сети»: модем зарегистрирован, сигнал есть, а
-# адреса нет - и по одному этому виду не понять, при чём тут тип контекста.
-# Причём случаи ПРОТИВОПОЛОЖНЫ друг другу, так что «правильного» значения на все
-# модемы не существует:
-#   - FM350 на Tele2: с IPV4-only контекст вообще не активируется, CGACT виснет;
-#   - Quectel EC21: на dual-stack не дозванивается, поднимается только с IPV4.
-# Определять это по журналу бесполезно - у qmi, mbim, atc и modemmanager тексты
-# ошибок разные, и мы бы гадали. Поэтому не гадаем, а ПРОБУЕМ и запоминаем.
-#
-# ПОРЯДОК: сперва ipv4v6, потом ipv4. Не по вкусу, а потому что при неудаче
-# ipv4v6 отваливается быстро, а неверный ipv4 именно ЗАВИСАЕТ - начав с него, мы
-# бы ждали таймаута вместо честного отказа.
-autopdp)
-	note_foreign_uci network "modemswitch autopdp"
-	IFACE="${2:-$(uci -q get "$CFG.@5gmodem[0].network")}"
-	[ -n "$IFACE" ] || exit 0
-
-	_pd_sec=$(sec_for_iface "$IFACE")
-	if [ "$(uci -q get "$CFG.$_pd_sec.pdp_mode")" = "manual" ]; then
-		logger -t 5gmodem "autopdp: $IFACE в ручном режиме, тип PDP не трогаем"
-		exit 0
-	fi
-
-	# Уже с адресом - чинить нечего. Это РЕМОНТНАЯ операция, а не регулярная:
-	# перебор типов рвёт связь, и делать это на работающем интерфейсе нельзя.
-	_pd_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
-		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
-	[ -n "$_pd_ip" ] && { logger -t 5gmodem "autopdp: $IFACE уже с адресом $_pd_ip"; exit 0; }
-
-	# Имя опции и регистр значения у протоколов разные - то же соответствие,
-	# что в mkiface.sh (set_pdp_opt).
-	case "$(uci -q get "network.$IFACE.proto")" in
-		modemmanager) _pd_opt=iptype;  _pd_up=0 ;;
-		qmi|mbim)     _pd_opt=pdptype; _pd_up=0 ;;
-		fibocom)      _pd_opt=pdptype; _pd_up=1 ;;
-		atc)          _pd_opt=pdp;     _pd_up=1 ;;
-		xmm)          _pd_opt=pdp;     _pd_up=0 ;;
-		*)            logger -t 5gmodem "autopdp: протокол $IFACE типа PDP не имеет"; exit 0 ;;
-	esac
-
-	_pd_was=$(uci -q get "network.$IFACE.$_pd_opt")
-	_pd_plmn=""
-	_pd_j=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
-	_pd_mcc=$(printf '%s' "$_pd_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
-	_pd_mnc=$(printf '%s' "$_pd_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
-	[ "$_pd_mcc" = "-" ] && _pd_mcc=""
-	[ "$_pd_mnc" = "-" ] && _pd_mnc=""
-	[ -n "$_pd_mcc" ] && [ -n "$_pd_mnc" ] && _pd_plmn="$_pd_mcc-$_pd_mnc"
-
-	for _pd_try in ipv4v6 ipv4; do
-		_pd_val="$_pd_try"
-		[ "$_pd_up" = "1" ] && _pd_val=$(echo "$_pd_try" | tr a-z A-Z)
-		uci -q set "network.$IFACE.$_pd_opt=$_pd_val"
-		uci -q commit network
-		ifdown "$IFACE" >/dev/null 2>&1
-		sleep 3
-		ifup "$IFACE" >/dev/null 2>&1
-
-		_pd_w=0
-		while [ "$_pd_w" -lt 45 ]; do
-			sleep 5; _pd_w=$((_pd_w + 5))
-			_pd_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
-				| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
-			[ -n "$_pd_ip" ] && break
-		done
-
-		if [ -n "$_pd_ip" ]; then
-			[ -n "$_pd_sec" ] && {
-				uci -q set "$CFG.$_pd_sec.pdp_ok=$_pd_try"
-				uci -q set "$CFG.$_pd_sec.pdp_plmn=$_pd_plmn"
-				uci -q commit "$CFG"
-			}
-			logger -t 5gmodem "autopdp: $IFACE поднялся на $_pd_val (адрес $_pd_ip, сеть $_pd_plmn)"
-			exit 0
-		fi
-		logger -t 5gmodem "autopdp: $IFACE на $_pd_val адрес не получил"
-	done
-
-	# Не помогло ни то, ни другое - причина не в типе PDP. ВОЗВРАЩАЕМ как было:
-	# оставить свой последний перебор значит подменить осознанный выбор
-	# пользователя результатом неудачной пробы.
-	if [ -n "$_pd_was" ]; then
-		uci -q set "network.$IFACE.$_pd_opt=$_pd_was"
-	else
-		uci -q delete "network.$IFACE.$_pd_opt"
-	fi
-	uci -q commit network
-	ifup "$IFACE" >/dev/null 2>&1
-	logger -t 5gmodem "autopdp: ни ipv4v6, ни ipv4 не дали адреса - дело не в типе PDP, вернул «${_pd_was:-пусто}»"
-	;;
 
 # АВТОНАСТРОЙКА НОВОГО МОДЕМА (plug-and-play).
 #
@@ -1082,6 +989,12 @@ autosetup)
 
 
 resolve)
+	# ТРАНЗАКЦИЯ: resolve пишет секции 5gmodem до ~12 с, а detect.sh/switch
+	# коммитят тот же общий стейджинг /tmp/.uci - полусобранное состояние
+	# уезжало в конфиг (ревью, баг №7). Замок сериализует resolve'ы между
+	# собой, а сторонние писатели (detect) при занятом замке пропускают ход.
+	exec 7>/tmp/5gmodem_ucitx.lock
+	flock 7
 	note_foreign_uci network "modemswitch resolve"
 	note_foreign_uci firewall "modemswitch resolve"
 	# Re-resolve ports/devices for all PRESENT modems by their STABLE USB path.

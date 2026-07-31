@@ -485,23 +485,54 @@ function pingInit() {
 
 /* --- Карточки сервисов (виджет «Сервисы»), кроме SSClash (у него своя) ------ */
 /* Известные сервисы с уникальными иконками добавим позже; пока - гаечный ключ. */
-var SVC_KNOWN = {};
+/* Известные сервисы: имя/иконка для карточки и (если есть) порт собственной
+   веб-админки - такая карточка кликабельна и открывает её в новой вкладке.
+   zapret = Zapret Manager: статус даёт init.d/zapret, админка - ttyd на 7681
+   («Активировать доступ из браузера» в его же меню). */
+var SVC_KNOWN = {
+	zapret: { name: 'Zapret', glyph: '☢️', port: 7681 }
+};
 function svcName(service) { return (SVC_KNOWN[service] && SVC_KNOWN[service].name) || service; }
 function svcIcon(service) {
 	var k = SVC_KNOWN[service];
-	if (k && k.glyph) { return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:' + (k.color || '#888') }, k.glyph); }
+	if (k && k.img) {
+		return E('img', { 'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + k.img),
+			'width': 16, 'height': 16, 'alt': '' });
+	}
+	if (k && k.glyph) {
+		/* без color - эмодзи как есть, прозрачным бейджем (класс custom) */
+		return E('span', { 'class': 'netpri-pingbadge' + (k.color ? '' : ' custom'),
+			'style': k.color ? ('background:' + k.color) : null }, k.glyph);
+	}
 	return E('span', { 'class': 'netpri-pingbadge custom' }, '🔧');
 }
-function _sDot(r) { return (r === undefined) ? 'unknown' : (r ? 'on' : 'off'); }
-function _sBottom(r) { return (r === undefined) ? '—' : (r ? _('running') : _('stopped')); }
+/* _svcState[svc] = { running, version }. У известных сервисов верхняя строка -
+   ВЕРСИЯ (вместо слова «Сервис»); нижняя - работает/остановлен. */
+function _sDot(r) { return (r === undefined) ? 'unknown' : (r.running ? 'on' : 'off'); }
+function _sTop(r) { return (r && r.version) ? ('v' + r.version) : _('Service'); }
+function _sBottom(r) {
+	if (r === undefined) { return '—'; }
+	return r.running ? _('running') : _('stopped');
+}
 function svcCard(service) {
 	var r = _svcState[service];
+	var k = SVC_KNOWN[service];
 	var dot = E('span', { 'class': 'netpri-svcdot ' + _sDot(r),
-		'title': (r === undefined) ? service : (r ? _('%s is running').format(service) : _('%s is stopped').format(service)) });
-	return E('button', {
-		'class': 'btn cbi-button netpri-btn netpri-status', 'data-svc': service, 'data-tooltip': service
-	}, [
-		E('span', { 'class': 'netpri-sub' }, _('Service')),
+		'title': (r === undefined) ? service : (r.running ? _('%s is running').format(service) : _('%s is stopped').format(service)) });
+	var attrs = {
+		'class': 'btn cbi-button netpri-btn netpri-status', 'data-svc': service,
+		'data-tooltip': (k && k.port) ? _('Open %s').format(svcName(service)) : service
+	};
+	/* у сервиса есть своя веб-админка - карточка открывает её в новой вкладке
+	   (хост берём текущий: админка живёт на ЭТОМ же роутере, только порт свой) */
+	if (k && k.port) {
+		attrs['click'] = function(ev) {
+			ev.preventDefault();
+			window.open('//' + window.location.hostname + ':' + k.port + '/', '_blank');
+		};
+	}
+	return E('button', attrs, [
+		E('span', { 'class': 'netpri-sub' }, _sTop(r)),
 		E('span', { 'class': 'netpri-name' }, [ dot, svcIcon(service), E('span', {}, svcName(service)) ]),
 		E('span', { 'class': 'netpri-ip' }, _sBottom(r))
 	]);
@@ -511,24 +542,43 @@ function updateSvcCard(service) {
 	document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
 		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_sDot(r));
 	});
+	document.querySelectorAll(sel + ' .netpri-sub').forEach(function(el) { el.textContent = _sTop(r); });
 	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _sBottom(r); });
 }
-var _svcGenericPoll = false;
+/* Все сервисные точки (generic-сервисы + ветки SSClash) опрашиваются ОДНИМ
+   вызовом netpri.sh svcall на тик вместо N параллельных exec_direct: каждый
+   exec - отдельный spawn через rpcd, и панель в покое давала ~1 процесс/сек. */
+var _svcAgg = { services: [], kinds: [], started: false };
+function _svcAggTick() {
+	if (!_svcAgg.services.length && !_svcAgg.kinds.length) { return Promise.resolve(); }
+	return L.resolveDefault(fs.exec_direct(BIN, [ 'svcall', _svcAgg.services.join(','), _svcAgg.kinds.join(',') ]), '').then(function(out) {
+		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		_svcAgg.services.forEach(function(svc) {
+			var r = (j.svc || {})[svc] || {};
+			_svcState[svc] = { running: !!r.running, version: r.version || '' };
+			updateSvcCard(svc);
+		});
+		_svcAgg.kinds.forEach(function(kind) {
+			var r = (j.ssc || {})[kind] || {};
+			_ssc[kind].running = !!r.running;
+			try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
+			updateSscDot(kind);
+		});
+	});
+}
+function _svcAggStart() {
+	if (_svcAgg.started) { return; }
+	_svcAgg.started = true;
+	poll.add(_svcAggTick, 5);
+}
 function svcStatusInit(services) {
-	services = (services || []).filter(function(s) { return s && s !== 'ssclash' && s !== 'clash'; });
-	if (!services.length || _svcGenericPoll) { return; }
-	_svcGenericPoll = true;
-	var tick = function() {
-		return Promise.all(services.map(function(svc) {
-			return L.resolveDefault(fs.exec_direct(BIN, [ 'svcstatus', svc ]), '').then(function(out) {
-				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
-				_svcState[svc] = !!j.running;
-				updateSvcCard(svc);
-			});
-		}));
-	};
-	tick();
-	poll.add(tick, 5);
+	services = (services || []).filter(function(s) {
+		return s && s !== 'ssclash' && s !== 'clash' && _svcAgg.services.indexOf(s) < 0;
+	});
+	if (!services.length) { return; }
+	_svcAgg.services = _svcAgg.services.concat(services);
+	_svcAggTick();
+	_svcAggStart();
 }
 
 /* Живой опрос состояния сервиса SSClash - красит точку ИМЕННО этой ветки-карточки
@@ -541,21 +591,11 @@ function updateSscDot(kind) {
 		d.classList.remove('on', 'off'); d.classList.add(cls); d.title = tip;
 	});
 }
-var _sscPolling = { go: false, legacy: false };
 function ssclashStatusInit(kind) {
-	if (_sscPolling[kind]) { return; }
-	_sscPolling[kind] = true;
-	var tick = function() {
-		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'status', kind ]), '')
-			.then(function(out) {
-				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
-				_ssc[kind].running = !!j.running;
-				try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
-				updateSscDot(kind);
-			});
-	};
-	tick();
-	poll.add(tick, 5);
+	if (_svcAgg.kinds.indexOf(kind) >= 0) { return; }
+	_svcAgg.kinds.push(kind);
+	_svcAggTick();
+	_svcAggStart();
 }
 
 function stInit() {
@@ -567,16 +607,18 @@ function stInit() {
 	});
 }
 
-function ensureCss() {
-	if (!document.getElementById('netpri-css')) {
-	}
-}
+/* Последнее событие сторожа (health.sh) - приезжает хвостовым элементом list,
+   чтобы не плодить отдельный опрос; вынимается здесь до отрисовки карточек. */
 
 function loadList() {
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'list' ]), '[]').then(function(out) {
 		var arr = [];
 		try { arr = JSON.parse(out || '[]') || []; } catch (e) {}
 		arr = Array.isArray(arr) ? arr : [];
+		arr = arr.filter(function(o) {
+			if (o && o.event != null) { return false; }
+			return true;
+		});
 		/* Последний непустой список - в localStorage: из него блок рисуется
 		   МГНОВЕННО при следующем открытии (warm-render в mount/renderBar),
 		   не дожидаясь этого XHR. Иначе панель появлялась через ~0.4 c НАД
@@ -602,6 +644,12 @@ function lastList() {
    предпочитаем тот, у кого есть IP (например Wi-Fi metric 0 с адресом важнее, чем
    неподнятый wan metric 0). */
 function activeIface(list) {
+	/* Сторож (health.sh) при падении уводит трафик штрафным маршрутом, НЕ трогая
+	   uci - порядок и реальность расходятся. Бэкенд отдаёт live:1 тому линку, чьё
+	   устройство реально несёт default с наименьшей метрикой - он и активен. */
+	var lv = null;
+	list.forEach(function(o) { if (o.live) { lv = o.iface; } });
+	if (lv) { return lv; }
 	var best = null, bm = Infinity, bip = false;
 	list.forEach(function(o) {
 		var m = parseInt(o.metric, 10); if (isNaN(m)) { m = 0; }
@@ -828,6 +876,199 @@ function _npEnableReorder(row, commit) {
 	});
 }
 
+/* Настройки сторожа интернета (health.sh). Модалка вместо страницы настроек:
+   слежение принадлежит виджету приоритета, пользователь ищет его здесь.
+   Значения читаем/пишем вербами getconf/setconf - без прямой работы с uci из
+   браузера (бэкенд валидирует ключи белым списком). */
+var HBIN = '/usr/share/5gmodem/health.sh';
+
+function healthModal() {
+	Promise.all([
+		L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),
+		loadList()
+	]).then(function(res) {
+		var out = res[0], uplinks = res[1] || [];
+		var c = {}; try { c = JSON.parse(out) || {}; } catch (e) {}
+		/* Лестница лечения - только для модемов: wan-порту и Wi-Fi-станции
+		   переподключение/перезагрузка модуля не осмысленны. Потолок на модем:
+		   ничего -> переподключить -> + модуль -> + питание USB. */
+		/* Строка формы - как в «Управлении частотами»: ПОДПИСЬ слева (33%),
+		   поле/галка/селект справа. Выравнивание галочек с текстом чинится
+		   вертикальным центрированием ячеек правилом .hw-form (modem.css). */
+		var row = function(ctrl, label) {
+			return E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td left', 'width': '33%' }, [ label ]),
+				E('td', { 'class': 'td left' }, [ ctrl ])
+			]);
+		};
+		var healRows = uplinks.filter(function(o) { return o.type === 'modem'; }).map(function(o) {
+			var cur = (c.heal && c.heal[o.iface]) || '';
+			return row(E('select', { 'id': 'hw-heal-' + o.iface, 'class': 'cbi-input-select', 'data-iface': o.iface }, [
+				E('option', { 'value': '', 'selected': cur === '' ? '' : null }, _('Do nothing')),
+				E('option', { 'value': 'ifup', 'selected': cur === 'ifup' ? '' : null }, _('Reconnect the interface')),
+				E('option', { 'value': 'reboot', 'selected': cur === 'reboot' ? '' : null }, _('...plus reboot the module')),
+				E('option', { 'value': 'power', 'selected': cur === 'power' ? '' : null }, _('...plus USB power cycle'))
+			]), o.sub || o.iface);
+		});
+		var f = function(id, val, size) {
+			return E('input', { 'id': id, 'class': 'cbi-input-text', 'value': String(val == null ? '' : val),
+				'style': 'width:' + (size || '5em') });
+		};
+		var chk = function(id, on) {
+			return E('input', { 'id': id, 'type': 'checkbox', 'checked': on ? '' : null });
+		};
+		/* Адреса проверки - стандартным списком LuCI (ui.DynamicList): строка на
+		   адрес, плюс/крестик, как у DNS-серверов в редактировании интерфейса.
+		   Бэкенд хранит их одной строкой через пробел - конвертируем на краях. */
+		var tgtDl = new ui.DynamicList((c.targets || '77.88.8.8 1.1.1.1').split(/ +/).filter(function(t) { return t; }),
+			null, { id: 'hw-tgt' });
+		/* 'hw-modal' расширяет модалку до ширины карточек страницы: дефолт темы
+		   (90%, максимум 800px у proton) режет двухколоночные строки формы. */
+		/* ТРИ СМЫСЛОВЫХ БЛОКА вместо пояснительных абзацев (решение владельца):
+		   заголовок блока - его же выключатель, содержимое - только параметры.
+		   Иерархия читается структурой: «Слежение» - фундамент (без него блоки
+		   2-3 исчезают), «Переключение» - действие с одной настройкой возврата,
+		   «Лечение» - потолки на каждый модем. */
+		/* Заголовок блока - обычная строка той же таблицы: жирная подпись слева,
+		   его галка-выключатель во ВТОРОЙ колонке, вместе с остальными полями -
+		   одна вертикаль элементов управления на всю форму. */
+		var titleRow = function(id, on, label) {
+			return row(chk(id, on), E('strong', {}, label));
+		};
+		ui.showModal(_('Internet watchdog'), [
+			E('div', { 'class': 'hw-block' }, [
+				E('table', { 'class': 'table hw-form' }, [
+					titleRow('hw-en', String(c.enabled) === '1', _('Enable watching'))
+				]),
+				E('table', { 'id': 'hw-blk-watch', 'class': 'table hw-form' }, [
+					row(f('hw-int', c.interval || 30), _('Check interval, s')),
+					row(tgtDl.render(), _('Ping targets')),
+					/* защита от самострела на операторах с белыми списками:
+					   яндексовский адрес доступен и там, выкидывать его из
+					   целей не стоит */
+					row(E('span', { 'style': 'font-size:.85em;opacity:.7' },
+						_('If at least one target responds')), ''),
+					row(f('hw-fail', c.fail_n || 3), _('Failures before down')),
+					row(f('hw-ok', c.ok_n || 5), _('Successes before up'))
+				])
+			]),
+			E('div', { 'class': 'hw-block', 'id': 'hw-blk-fo' }, [
+				E('table', { 'class': 'table hw-form' }, [
+					titleRow('hw-fo', String(c.failover) === '1', _('Switch traffic to a backup link when one goes down'))
+				]),
+				E('table', { 'id': 'hw-fb-tbl', 'class': 'table hw-form' }, [
+					row(E('select', { 'id': 'hw-fb', 'class': 'cbi-input-select' }, [
+						E('option', { 'value': 'restore', 'selected': c.failback !== 'demote' ? '' : null }, _('Return its priority')),
+						E('option', { 'value': 'demote', 'selected': c.failback === 'demote' ? '' : null }, _('Keep it last'))
+					]), _('When a link recovers'))
+				])
+			]),
+			healRows.length ? E('div', { 'class': 'hw-block', 'id': 'hw-blk-heal' }, [
+				E('table', { 'class': 'table hw-form' }, [
+					titleRow('hw-heal-en', String(c.healing) === '1', _('Heal a modem while its link is down'))
+				]),
+				E('table', { 'id': 'hw-heal-tbl', 'class': 'table hw-form' }, healRows)
+			]) : '',
+			/* Лечение Wi-Fi - НЕЗАВИСИМЫЙ блок (решение владельца): у него своя
+			   фиксированная лестница (переподключить -> network reload), и от
+			   модемного мастера он не зависит ни в UI, ни в бэкенде. */
+			uplinks.some(function(o) { return o.type === 'wifi'; }) ? E('div', { 'class': 'hw-block', 'id': 'hw-blk-wifi' }, [
+				E('table', { 'class': 'table hw-form' }, [
+					titleRow('hw-heal-wifi', String(c.heal_wifi) === '1', _('Heal the Wi-Fi uplink while it is down'))
+				])
+			]) : '',
+		].concat([
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', { 'class': 'btn cbi-button cbi-button-action important', 'click': function() {
+					var v = function(id) { return (document.getElementById(id).value || '').trim(); };
+					var num = function(id, dflt) { var n = parseInt(v(id), 10); return (isNaN(n) || n < 1) ? dflt : n; };
+					/* targets: из DynamicList; только адреса/имена без кавычек и
+					   прочего - строки уйдут в shell-верб одним аргументом */
+					var tgt = (tgtDl.getValue() || []).map(function(t) {
+						return String(t).replace(/[^A-Za-z0-9.:-]/g, '');
+					}).filter(function(t) { return t; }).join(' ');
+					var _heEl = document.getElementById('hw-heal-en');
+					fs.exec(HBIN, [ 'setconf',
+						'enabled=' + (document.getElementById('hw-en').checked ? '1' : '0'),
+						'failover=' + (document.getElementById('hw-fo').checked ? '1' : '0'),
+						/* без модемов галки лечения в форме нет - не затираем
+						   сохранённое значение нулём */
+						'healing=' + (_heEl ? (_heEl.checked ? '1' : '0') : (String(c.healing) === '1' ? '1' : '0')),
+						'heal_wifi=' + (function() {
+							var w = document.getElementById('hw-heal-wifi');
+							return w ? (w.checked ? '1' : '0') : (String(c.heal_wifi) === '1' ? '1' : '0');
+						})(),
+						'failback=' + v('hw-fb'),
+						'interval=' + num('hw-int', 30),
+						'targets=' + (tgt || '77.88.8.8 1.1.1.1'),
+						'fail_n=' + num('hw-fail', 3),
+						'ok_n=' + num('hw-ok', 5)
+					]).then(function() {
+						var heals = [];
+						document.querySelectorAll('select[id^="hw-heal-"]').forEach(function(sel) {
+							heals.push(fs.exec(HBIN, [ 'setheal', sel.getAttribute('data-iface'), sel.value ]));
+						});
+						return Promise.all(heals);
+					}).then(function() {
+						ui.hideModal();
+						/* первый круг - сразу, чтобы точки появились без ожидания
+						   тика sessionwatch (фоном, страницу не держим) */
+						fs.exec(HBIN, [ 'once' ]);
+					});
+				} }, _('Save'))
+			])
+		]), 'hw-modal');
+		/* Ширина - РОВНО как у карточек страницы: берём живую ширину панели
+		   приоритета (она в той же колонке контента, что «Модем» и «Управление
+		   частотами»). Константа в CSS не годится - ширина колонки зависит от
+		   темы и окна; замер в момент открытия попадает всегда. */
+		/* ИЕРАРХИЯ НАСТРОЕК - ГЛАЗАМИ. «Включить слежение» - фундамент: без
+		   него не работает ничего, поэтому выключенное слежение гасит ВСЮ
+		   остальную форму. «Переключать трафик» - действие поверх слежения,
+		   и селект «Когда линк оживает» подчинён уже ему. Вопрос владельца
+		   «а это не одно и то же?» родился из того, что зависимость никак
+		   не показывалась. */
+		var _hwDeps = function() {
+			var en = document.getElementById('hw-en');
+			var fo = document.getElementById('hw-fo');
+			var he = document.getElementById('hw-heal-en');
+			if (!en || !fo) { return; }
+			/* слежение выключено - остаётся ТОЛЬКО его галка: параметры блока
+			   и оба нижних блока исчезают целиком */
+			var show = function(id, on) {
+				var el = document.getElementById(id);
+				if (el) { el.style.display = on ? '' : 'none'; }
+			};
+			show('hw-blk-watch', en.checked);
+			show('hw-blk-fo', en.checked);
+			show('hw-blk-heal', en.checked);
+			show('hw-blk-wifi', en.checked);
+			/* настройка возврата без включённого переключения не имеет смысла */
+			show('hw-fb-tbl', en.checked && fo.checked);
+			/* потолки по модемам - только при включённом лечении */
+			show('hw-heal-tbl', en.checked && !!(he && he.checked));
+		};
+		[ 'hw-en', 'hw-fo', 'hw-heal-en' ].forEach(function(id) {
+			var el = document.getElementById(id);
+			if (el) { el.addEventListener('change', _hwDeps); }
+		});
+		_hwDeps();
+		var _hwSec = document.querySelector('.netpribar') || document.querySelector('.cbi-section');
+		/* Модалка LuCI - синглтон внутри #modal_overlay; ищем её там, а не по
+		   своему классу: не каждая версия ui.showModal принимает доп. классы.
+		   Ширину ставим setProperty с 'important' - темы (proton: 90%/max 800px)
+		   держат свою с !important, и обычный инлайн ей проигрывает. */
+		var _hwMd = document.querySelector('#modal_overlay .modal') || document.querySelector('.modal');
+		if (_hwSec && _hwMd) {
+			var _hwW = Math.round(_hwSec.getBoundingClientRect().width) + 'px';
+			_hwMd.style.setProperty('max-width', _hwW, 'important');
+			_hwMd.style.setProperty('width', _hwW, 'important');
+		}
+	});
+}
+
 function buildBar(list, redraw) {
 	var active = activeIface(list);
 	/* Приоритет интернета (кнопки интерфейсов) - только если виджет включён. */
@@ -835,6 +1076,12 @@ function buildBar(list, redraw) {
 	   левая = приоритет 1, следующая = 2 и т.д. Так порядок виден и без
 	   перетаскивания (и сразу показывает результат, если drag не сработал). */
 	var _sorted = (_widgets.netpri ? list.slice() : []).sort(function(a, b) {
+		/* Упавшие/пропавшие - В КОНЕЦ ряда на время реанимации (решение
+		   владельца): порядок живых читается без мысленных вычетов, а лежащий
+		   виден с краю со своим статусом лечения. Внутри групп - по метрике. */
+		var da = (a.health === 'down' || a.health === 'gone') ? 1 : 0;
+		var db = (b.health === 'down' || b.health === 'gone') ? 1 : 0;
+		if (da !== db) { return da - db; }
 		var ma = parseInt(a.metric, 10); if (isNaN(ma)) { ma = 999; }
 		var mb = parseInt(b.metric, 10); if (isNaN(mb)) { mb = 999; }
 		if (ma !== mb) { return ma - mb; }
@@ -842,8 +1089,14 @@ function buildBar(list, redraw) {
 	});
 	var btns = _sorted.map(function(o, _rank) {
 		var isA = (o.iface === active);
+		/* Интерфейс ПРОПАЛ (устройства нет на шине) - на его месте пустая
+		   карточка с пунктирной обводкой, тем же стилем, что слот при
+		   перетаскивании (netpri-slot). Содержимое остаётся в разметке, но
+		   невидимо - так карточка держит родные размеры. Кликать/таскать
+		   нечего - pointer-events глушатся классом netpri-gone. */
+		var isGone = (o.health === 'gone');
 		return E('button', {
-			'class': 'btn cbi-button netpri-btn' + (isA ? ' active' : ''),
+			'class': 'btn cbi-button netpri-btn' + (isGone ? ' netpri-slot netpri-gone' : (isA ? ' active' : '')),
 			'data-iface': o.iface,
 			'data-tooltip': o.iface + (o.metric != null ? (' · metric ' + o.metric) : ''),
 			'click': function(ev) {
@@ -868,14 +1121,71 @@ function buildBar(list, redraw) {
 					loadList().then(function(l2) { redraw(l2); _done(); });
 				}, _done);
 			}
-		}, [
+		}, (function() {
+			/* Пропавший интерфейс: внутри пунктирного слота - три мерцающих
+			   плейсхолдера (те же tgm-skel-bar, что у карточки «Модем» при
+			   загрузке) вместо невидимых реальных строк: читается как «место
+			   занято, ждём возвращения», а размеры карточки сохраняются. */
+			if (isGone) {
+				/* Размеры держит НЕВИДИМОЕ родное содержимое (те же три строки,
+				   что у обычной карточки - ряд не дёргается ни на пиксель),
+				   а скелетоны лежат ПОВЕРХ отдельным absolute-слоем. */
+				return [
+					E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
+					E('span', { 'class': 'netpri-name' }, o.iface),
+					E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***'),
+					E('span', { 'class': 'netpri-skelov' }, [
+						/* ширины В ПРОЦЕНТАХ от карточки: em-значения на узкой
+						   карточке вылезали за рамку */
+						E('span', { 'class': 'tgm-skel-bar', 'style': 'width:55%' }),
+						E('span', { 'class': 'tgm-skel-bar', 'style': 'width:85%' }),
+						E('span', { 'class': 'tgm-skel-bar', 'style': 'width:65%' })
+					])
+				];
+			}
+			/* КАРТОЧКА РЕАНИМАЦИИ. Пока сторож лечит линк, карточка меняет
+			   смысл строк (решение владельца): сверху - ступень и счёт попыток
+			   («Перезагрузка (2/6)»), жирным - имя интерфейса вместо оператора,
+			   внизу - красная лампочка, секунды с начала попытки и команда
+			   ступени. Карточка НЕ пропадает на время переэнумерации (бэкенд
+			   держит состояние gone) - прячется она только после грейс-периода,
+			   и это решает list, а не мы. */
+			if (o.health === 'down' && o.healstep) {
+				var stepName = (o.healstep === 1) ? _('Reconnecting')
+				             : (o.healstep === 2) ? _('Rebooting') : _('USB power cycle');
+				var stepCmd = (o.healstep === 1) ? 'ifdown/ifup'
+				            : (o.healstep === 2) ? 'AT+CFUN=1,1' : 'USB power';
+				return [
+					E('span', { 'class': 'netpri-sub' }, stepName + ' (' + o.healn + '/' + o.healmax + ')'),
+					E('span', { 'class': 'netpri-name' }, o.iface),
+					E('span', { 'class': 'netpri-ip' }, [
+						E('span', { 'class': 'netpri-svcdot netpri-health off', 'title': _('No internet on this link') }),
+						(o.healfor != null ? o.healfor + ' | ' : '') + stepCmd
+					])
+				];
+			}
+			return [
 			E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
 			nameEl(o),
 			/* keep the IP line present even without an address so the button height
-			   never changes; show a neutral placeholder while there is no IP yet */
-			o.ip ? E('span', { 'class': 'netpri-ip' }, o.ip)
-			     : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
-		]);
+			   never changes; show a neutral placeholder while there is no IP yet.
+			   Лампочка здоровья от сторожа (health.sh) - В СТРОКЕ IP, перед
+			   адресом, тем же стилем, что точки статусов виджетов (netpri-svcdot:
+			   размер и свечение). Поле health есть только при включённом
+			   слежении - без него карточка как раньше. */
+			E('span', { 'class': 'netpri-ip' + (o.ip ? '' : ' empty') }, [
+				o.health ? E('span', {
+					'class': 'netpri-svcdot netpri-health ' +
+						(o.health === 'up' ? 'on' : (o.health === 'down' || o.health === 'gone' ? 'off' : 'unknown')),
+					'title': (o.health === 'up') ? _('Internet is working (%s ms)').format(o.hms)
+					       : (o.health === 'down') ? _('No internet on this link')
+					       : (o.health === 'gone') ? _('Device is gone')
+					       : _('Checking…')
+				}) : '',
+				o.ip || '***.***.***.***'
+			])
+			];
+		})());
 	});
 	/* Правая группа виджетов: карточки пинга -> сервисы -> спидтест. Первому
 	   вешаем netpri-rightstart -> вся группа уходит вправо (margin-left:auto). */
@@ -900,12 +1210,25 @@ function buildBar(list, redraw) {
 	   непонятно, что за кнопки; при выключенном виджете заголовок не нужен. */
 	var kids = [];
 	if (_widgets.netpri) {
-		kids.push(E('div', { 'class': 'netpribar-title' }, _('Internet priority')));
+		/* Шестерёнка настроек сторожа - в заголовке, ПЕРЕД текстом: слежение
+		   общее на все линки, а не свойство одного. */
+		kids.push(E('div', { 'class': 'netpribar-title' }, [
+			E('span', {
+				'class': 'netpri-gear',
+				'title': _('Internet watchdog settings'),
+				'click': function(ev) { ev.stopPropagation(); healthModal(); }
+			}, '⚙'),
+			_('Internet priority')
+		]));
 	}
 	var rowEl = E('div', { 'class': 'netpri-row' }, btns);
 	/* перетаскивание карточек-аплинков - только когда виджет приоритета включён */
 	if (_widgets.netpri) { _npEnableReorder(rowEl, redraw); }
 	kids.push(rowEl);
+	/* Строку последнего события под карточками убрали (решение владельца):
+	   статус лечения теперь живёт В САМОЙ карточке, а полная история - в
+	   logread по тегу 5gmodem. Бэкенд событие по-прежнему шлёт (хвост list),
+	   loadList его вынимает - просто не рисуем. */
 	return E('div', { 'class': 'netpribar' }, kids);
 }
 
@@ -916,7 +1239,6 @@ return baseclass.extend({
 	   от старой вставки над вкладками, которую мобильная вёрстка прятала. Вставляется
 	   самой вьюхой (5gdetail) в начало контента - код проще, без DOM-инъекций. */
 	mount: function() {
-		ensureCss();
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
 			var fresh = buildBar(l2, redraw);
@@ -980,14 +1302,13 @@ return baseclass.extend({
 		   вызовы loadList после 'order'). Цена решения честная: адрес, появившийся
 		   без нашего участия, доедет до панели за 15 c вместо 5. В карточке модема
 		   он при этом виден с прежней свежестью - там свой опрос. */
-		poll.add(pollFn, 15);
+		if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }
 		return wrap;
 	},
 
 	/* Promise<DOM|null>. null — если ни одного WAN-аплинка с IP нет. */
 	renderBar: function() {
 		var mk = function(list) {
-			ensureCss();
 			var wrap = E('div');
 			var redraw = function(l2) {
 				var fresh = buildBar(l2, redraw);
@@ -1020,7 +1341,7 @@ return baseclass.extend({
 				return loadList().then(redraw);
 			};
 			/* 15 c, а не 5 - обоснование см. у такого же поллера в mount(). */
-			poll.add(pollFn, 15);
+			if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }
 			return { wrap: wrap, redraw: redraw };
 		};
 		/* Флаги видимости - до сборки; затем warm-render из кэша. Блок рисуем,

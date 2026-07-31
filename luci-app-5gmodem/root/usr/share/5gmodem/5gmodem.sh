@@ -844,7 +844,9 @@ fi
 # второго модема). Имя секции - USB-путь, где всё кроме букв и цифр заменено
 # на "_": 2-1.4 -> m_2_1_4.
 if [ -z "$SEC" ]; then
-	_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
+	# при адресном опросе (POLL_MODEM) фолбэк - секция ОПРАШИВАЕМОГО, не
+	# активного: иначе снимок соседа получал iface/оператора активного (ревью)
+	_AMP=$(printf '%s' "${_POLL_AM:-$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)}" | tr -c 'A-Za-z0-9' '_')
 	[ -n "$_AMP" ] && SEC=$(uci -q get "5gmodem.m_${_AMP%_}.network" 2>/dev/null)
 fi
 
@@ -885,13 +887,13 @@ NETUP=$(echo "$SECSTATUS" | grep "\"up\": true")
 if [ -n "$NETUP" ]; then
 
 		CT=$(uci -q -P /var/state/ get network.$SEC.connect_time)
-		if [ -z $CT ]; then
+		if [ -z "$CT" ]; then
 			CT=$(echo "$SECSTATUS" | awk -F[:,] '/uptime/ {print $2}' | xargs)
 		else
 			UPTIME=$(uptime_s)
 			CT=$((UPTIME-CT))
 		fi
-		if [ ! -z $CT ]; then
+		if [ -n "$CT" ]; then
 
 			D=$(expr $CT / 60 / 60 / 24)
 			H=$(expr $CT / 60 / 60 % 24)
@@ -1285,7 +1287,9 @@ else
 # показывали один номер. Ключ от реального порта делает подмену невозможной:
 # данные всегда лежат под тем модемом, с которого сняты.
 _STKEY=$(tty_usbpath "$DEVICE" 2>/dev/null | tr -d '\n' | tr -c 'A-Za-z0-9' '_')
-[ -n "$_STKEY" ] || _STKEY=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')
+# при адресном опросе (POLL_MODEM) фолбэк-ключ - ОПРАШИВАЕМЫЙ модем, а не
+# активный: иначе подогрев соседа порол кэш статики активного (ревью)
+[ -n "$_STKEY" ] || _STKEY=$(printf '%s' "${_POLL_AM:-$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)}" | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
 STATIC_CACHE="/tmp/5gmodem_static_$_STKEY"
 # РОУМИНГ ВНУТРИ СТРАНЫ - НЕ РОУМИНГ.

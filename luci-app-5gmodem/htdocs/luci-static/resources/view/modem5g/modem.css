@@ -104,6 +104,70 @@
 	gap: 0;
 }
 .netpribar .netpri-btn .netpri-sub { font-size: .72em; font-weight: 400; opacity: .7; }
+/* Лампочка здоровья от сторожа (health.sh): В СТРОКЕ IP, перед адресом. Размер
+   и свечение наследует от точек статусов виджетов (.netpri-svcdot on/off) -
+   один стиль «лампочки» на весь блок. Здесь только своё место в строке. */
+.netpribar .netpri-ip .netpri-svcdot { margin-right: .4em; }
+/* IP-строка без адреса приглушена (.empty) - лампочку не глушим: она несёт
+   собственный вердикт и на фоне заглушки адреса читается тем же цветом */
+.netpribar .netpri-ip.empty .netpri-svcdot { opacity: 1; }
+/* Модалка сторожа: ТРИ смысловых блока, заголовок блока = его выключатель.
+   Flex в заголовке выравнивает галку с текстом по центру строки. */
+.hw-block { margin-bottom: 1.1em; }
+.hw-block .hw-block-title {
+	display: flex; align-items: center; gap: .5em;
+	font-weight: 600; margin-bottom: .35em; cursor: pointer;
+}
+.hw-block .hw-block-title input[type="checkbox"] { margin: 0; }
+/* Строки параметров как в «Управлении частотами»; вертикальное центрирование
+   обеих ячеек чинит съехавшие по горизонтали элементы. */
+.hw-form .td { vertical-align: middle !important; }
+.hw-form input[type="checkbox"] { vertical-align: middle; margin: 0; }
+/* Без зебры и линеек таблицы: это ФОРМА, а не данные - полосатый фон и рамки
+   ячеек здесь только шумят. Табличная у неё лишь сетка колонок. */
+.hw-form, .hw-form .tr, .hw-form .td {
+	background: none !important;
+	border: none !important;
+	box-shadow: none !important;
+}
+/* Колонки: подпись слева (33%), поле справа - как строки «Управления
+   частотами». Подписи прижаты к ПРАВОМУ краю своей колонки - вплотную к
+   полям, строка читается парой «подпись → поле» без разрыва. */
+.hw-form .td:first-child { text-align: right !important; padding-right: .9em; }
+/* список адресов (ui.DynamicList) - шириной с обычные поля, не во всю колонку */
+.hw-form .cbi-dynlist { max-width: 20em; }
+/* Кнопка «+» списка - ФИКСИРОВАННЫЙ квадрат. У тем она свёрстана по-разному
+   («x» удаления - вообще псевдоэлемент ::after строки, не кнопка): на proton
+   «+» без боковых отступов выходил узкой колонной, на argon его сжимали
+   собственные правила темы с !important. Прибиваем габарит селектором точнее
+   театрального (>.add-item>) и с !important - тогда одинаково везде. */
+.hw-form .cbi-dynlist > .add-item > .cbi-button-add,
+.hw-form .cbi-dynlist > .add-item > button,
+.hw-form .cbi-dynlist > .add-item > .btn {
+	width: 1.7em !important;
+	min-width: 1.7em !important;
+	padding: 0 !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	box-sizing: border-box !important;
+}
+/* Модалка сторожа - шириной и видом как карточки страницы («Модем»,
+   «Управление частотами»): дефолт темы (90%, максимум 800px у proton) резал
+   двухколоночные строки. Фон/рамку/скругление даёт сама тема модалки - они
+   у неё те же, что у карточек-секций. */
+.modal.hw-modal { max-width: 1100px !important; width: calc(100% - 3em) !important; }
+/* строка последнего события сторожа под рядом карточек: приглушённо, мелко -
+   это журнал, а не призыв к действию */
+.netpribar .netpri-event {
+	font-size: .78em; opacity: .6; margin-top: .35em;
+	font-variant-numeric: tabular-nums;
+}
+/* шестерёнка настроек сторожа - в заголовке, перед текстом */
+.netpribar .netpribar-title .netpri-gear {
+	cursor: pointer; opacity: .55; margin-right: .5em; font-weight: 400;
+}
+.netpribar .netpribar-title .netpri-gear:hover { opacity: 1; }
 .netpribar .netpri-btn .netpri-name { display: flex; align-items: center; gap: .35em; }
 .netpribar .netpri-btn .netpri-ic { display: block; width: 16px; height: 16px; flex: 0 0 auto; }
 .netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
@@ -797,6 +861,21 @@
   font-size: 80%;
   opacity: 0.7;
   margin-right: 4px;
+}
+
+/* ===== ЗНАК «ТЕКУЩЕЕ» (tg-current) =====
+   Активный SIM-слот и выбранный режим сети - той же полосой слева, что
+   вкладка активного модема (.modemtab.active), активная карточка приоритета
+   (.netpri-btn.active) и непрочитанные сообщения (.sms-new). Раньше здесь
+   была заливка темы (cbi-button-action important) - выглядело иначе, чем
+   остальные метки «текущего», и в argon сливалось с обычными кнопками.
+   Заливку темы больше не подмешиваем: класс ставит разметка (5gdetail.js,
+   bandsui.js). !important - на случай тем, красящих border кнопок своим
+   !important (argon в тёмной схеме). У диапазонов (мультивыбор) заливка
+   осталась намеренно: там «вкл/выкл набора», а не «текущий из списка». */
+.tginfo-simslot .cbi-button.tg-current,
+#modesw-btns .cbi-button.tg-current {
+  border-left: 3px solid var(--tg-accent) !important;
 }
 /* секция eSIM */
 .esim-meta {
@@ -1543,6 +1622,32 @@ pre.atcommand-output.has-output::after {
 .netpribar .netpri-btn.netpri-lift{cursor:grabbing;opacity:.97;box-shadow:0 10px 22px rgba(0,0,0,.28);transition:none!important;will-change:transform;z-index:1000}
 .netpribar .netpri-slot{border:2px dashed rgba(130,130,140,.55);background:rgba(130,130,140,.07);box-shadow:none;flex-direction:row;align-items:center;justify-content:center;color:rgba(130,130,140,.8);cursor:default}
 .netpribar .netpri-slot svg{opacity:.7}
+/* Пропавший интерфейс (health=gone): пунктирная карточка с мерцающими
+   плейсхолдерами (tgm-skel-bar, как у «Модема» при загрузке). Размеры держит
+   НЕВИДИМОЕ родное содержимое - карточка совпадает с обычной до пикселя и ряд
+   не дёргается; скелетоны лежат поверх absolute-слоем. Рамка 1px (у slot 2px -
+   от неё блок и прыгал), пунктир остаётся. */
+.netpribar .netpri-btn.netpri-gone{flex-direction:column;align-items:flex-start;justify-content:flex-start;pointer-events:none;position:relative;border-width:1px}
+.netpribar .netpri-btn.netpri-gone > :not(.netpri-skelov){visibility:hidden}
+.netpribar .netpri-btn.netpri-gone .netpri-skelov{
+	position:absolute;inset:0;padding:.35em 1em;
+	display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:.4em;
+}
+.netpribar .netpri-btn.netpri-gone .netpri-skelov .tgm-skel-bar{display:block}
+
+/* «Модем не подключен» - статичная карточка с пунктирной рамкой (та же
+   палитра, что у слотов netpri-slot), без анимации: пустой список модемов -
+   это факт, а не ожидание. Высота близка к скелетону - блок не прыгает,
+   если модем всё же появится. */
+.tgm-nomodem {
+	border: 1px dashed rgba(130,130,140,.55);
+	background: rgba(130,130,140,.07);
+	border-radius: 8px;
+	min-height: 72px;
+	display: flex; align-items: center; justify-content: center;
+	color: rgba(130,130,140,.85);
+	font-weight: 600;
+}
 
 /* ===== ДИАЛОГИ eSIM (5gesim.js) ===== */
 .esim-modal{width:100%;box-sizing:border-box;}
@@ -1698,6 +1803,20 @@ pre.atcommand-output.has-output::after {
 .tg-theme-argon .modemtabs-bar .modemtab.important,
 .tg-theme-argon .modemtabs-bar .modemtab.active {
   border-left: 3px solid var(--tg-accent) !important;
+}
+
+/* СВЕТЛАЯ схема argon: тема красит текст кнопок приглушённым серым, и на
+   сероватой заливке карточек приоритета/виджетов/спидтеста всё сливалось
+   (поймано владельцем; в других темах контраст в порядке). Даём карточкам
+   белую подложку и тёмный текст; вложенные подписи берут цвет по наследству,
+   их собственные opacity дают иерархию уже от читаемой базы. */
+@media (prefers-color-scheme: light) {
+  .tg-theme-argon .netpribar .netpri-btn {
+    background: #fff !important;
+    border: 1px solid rgba(0, 0, 0, .18) !important;
+    color: #333 !important;
+  }
+  .tg-theme-argon .netpribar .netpri-btn:hover { background: #f4f4f6 !important; }
 }
 
 /* Тёмная схема. argon встраивает свои тёмные стили внутрь

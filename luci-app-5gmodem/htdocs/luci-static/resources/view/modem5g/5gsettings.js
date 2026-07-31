@@ -263,7 +263,10 @@ return view.extend({
 		   ВЫБРАННОЕ значение и имеет дефолт, поэтому пустых карточек не бывает. */
 		var svo = sw.option(form.ListValue, 'service', _('Service'));
 		if (services.length) {
-			services.forEach(function(s) { svo.value(s); });
+			/* известным сервисам - человеческое имя в списке (карточка тоже
+			   покажет его, см. SVC_KNOWN в netpri.js) */
+			var _svcNice = { zapret: 'Zapret' };
+			services.forEach(function(s) { svo.value(s, _svcNice[s] || s); });
 			svo.default = (services.indexOf('ssclash') >= 0) ? 'ssclash'
 			            : (services.indexOf('clash') >= 0)   ? 'clash'
 			            : services[0];

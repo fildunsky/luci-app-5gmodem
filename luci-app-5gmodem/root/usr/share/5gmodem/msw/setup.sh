@@ -26,7 +26,7 @@ setup_one_modem() {
 		# переэнумерации 14dc->1566 сетевая карта та же (eth3), но интерфейс
 		# переподхватываем, чтобы аренда восстановилась без задержки.
 		if try_at_debug "$P"; then
-			rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+			rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
 			_hnet=$(hilink_netdev "$P")
 			[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
 		fi
@@ -53,7 +53,7 @@ setup_one_modem() {
 	# иначе установка второго модема молча переключала бы на него и рабочую
 	# страницу первого, и глобальные порты sms_tool_js.
 	_am=$(active_path)
-	if [ -z "$_am" ] || ! "$RES/listmodems.sh" 2>/dev/null | grep -q "\"path\":\"$_am\""; then
+	if [ -z "$_am" ] || ! "$RES/listmodems.sh" 2>/dev/null | grep -qF "\"path\":\"$_am\""; then
 		uci -q set "$CFG.@5gmodem[0].active_modem=$P"
 	fi
 	A=$(at_for_path "$P")
@@ -88,7 +88,7 @@ setup_one_modem() {
 		[ -n "$_made" ] && { ubus call network reload >/dev/null 2>&1; ifup "$_made" >/dev/null 2>&1; }
 		logger -t 5gmodem "autosetup: $P -> want_proto=$_wp port=${_mp:-?} -> ${_made:-fail}"
 		# APN подбираем в фоне (autoapn верно берёт оператора: T-Mobile -> "tt").
-		[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
+		[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null 8>&- 9>&- &
 		return 0
 	fi
 
@@ -130,11 +130,18 @@ setup_one_modem() {
 		[ -n "$_pr" ] && uci -q set "$CFG.$SEC.iface_proto=$_pr"
 		uci -q commit "$CFG"
 		"$RES/ensureports.sh" >/dev/null 2>&1
+		# ПОДНЯТЬ ИНТЕРФЕЙС СРАЗУ. Мы только что сняли «спящее» auto=0, но netifd
+		# конфиг сам не перечитывает - без reload интерфейс так и лежал, пока его
+		# через минуту не дёргал ifdown/ifup фонового autoapn (живой случай
+		# 31.07.2026: возврат Telit на место SIMCOM = 3-4 минуты без IP, из них
+		# первая - мёртвое ожидание). reload будит netifd, ifup - страховка.
+		ubus call network reload >/dev/null 2>&1
+		ifup "$_ex" >/dev/null 2>&1
 		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
 		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался
 		# только при создании нового, и унаследованный интерфейс навсегда
 		# оставался с APN прежней симки - именно так Beeline работал с "tt".
-		( "$RES/modemswitch.sh" autoapn "$_ex" ) >/dev/null 2>&1 </dev/null &
+		( "$RES/modemswitch.sh" autoapn "$_ex" ) >/dev/null 2>&1 </dev/null 8>&- 9>&- &
 		return 0
 	fi
 
@@ -159,5 +166,5 @@ setup_one_modem() {
 	# APN подбираем В ФОНЕ: команда ждёт до минуты, а hotplug столько держать
 	# нельзя. Дескрипторы отвязываем на подоболочке - иначе вызвавший нас
 	# процесс будет ждать EOF.
-	[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null &
+	[ -n "$_made" ] && ( "$RES/modemswitch.sh" autoapn "$_made" ) >/dev/null 2>&1 </dev/null 8>&- 9>&- &
 }

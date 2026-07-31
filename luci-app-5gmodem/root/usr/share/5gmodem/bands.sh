@@ -734,7 +734,6 @@ if [ -n "$_AMP" ]; then
 	# Раньше здесь был свой запрос к listmodems: то же самое, но по-своему, а
 	# именно из таких расхождений и растут ошибки «действие ушло не тому модему».
 	_AREG=$(/usr/share/5gmodem/registry.sh path "$_AMP" 2>/dev/null)
-	_ALM=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null)
 	_AVIDPID=$(printf '%s' "$_AREG" | jsonfilter -e '@.vidpid' 2>/dev/null | tr -d ':')
 	# Модель из USB-дескриптора - ровно то, из чего легаси-путь ниже строит имя
 	# "<vidpid><Product>". Пробелы/слэши в имени файла невозможны, поэтому такие

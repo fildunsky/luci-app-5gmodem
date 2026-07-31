@@ -68,7 +68,7 @@ APNARG="$3"
 # нескольку раз - он появлялся в «Приоритете интернета» четырежды).
 _fw_zone_add() {
 	_fz=$(uci show firewall 2>/dev/null \
-		| sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	[ -n "$_fz" ] && [ -n "$1" ] || return 0
 	# КАВЫЧКИ СНИМАЕМ. Если элемент списка содержит пробел (ровно то, что
 	# оставляла прошлая версия: один элемент «wan wan6»), uciget отдаёт его в
@@ -76,6 +76,21 @@ _fw_zone_add() {
 	# кавычки, мы заодно РАСКЛЕИВАЕМ такой элемент обратно в две сети, то есть
 	# чиним уже испорченную зону.
 	_fcur=$(uci -q get "firewall.$_fz.network" | tr -d "'\"")
+	# ЧИСТУЮ ЗОНУ НЕ ПЕРЕСОБИРАЕМ (ревью, баг №9): delete+rebuild оставляет в
+	# общем стейджинге /tmp/.uci окно «зона без сетей», и оборванная операция
+	# детонирует чужим commit'ом - вся локалка без NAT. Полная пересборка
+	# остаётся только для грязного списка (дубликаты/склейка).
+	_fdirty=0; _fseen=" "
+	for _fe in $_fcur; do
+		case "$_fseen" in *" $_fe "*) _fdirty=1 ;; esac
+		_fseen="$_fseen$_fe "
+	done
+	if [ "$_fdirty" = 0 ]; then
+		case " $_fcur " in *" $1 "*) return 0 ;; esac
+		uci add_list "firewall.$_fz.network=$1"
+		uci commit firewall
+		return 0
+	fi
 	uci -q delete "firewall.$_fz.network"
 	for _fe in $_fcur; do
 		[ "$_fe" = "$1" ] && continue
@@ -160,8 +175,10 @@ run_bounded() {   # $1 = секунды, далее команда
 	rm -f "$_out"
 	( "$@" >"$_out" 2>&1 ) &
 	_p=$!
-	_n=0
-	while kill -0 "$_p" 2>/dev/null && [ "$_n" -lt "$_lim" ]; do sleep 1; _n=$((_n + 1)); done
+	# СВОЙ счётчик: _n принадлежит вызывающим циклам (kernel_proto_prepare
+	# крутит while по _n и зовёт нас внутри - общий _n давал вечный цикл, ревью)
+	_rb_n=0
+	while kill -0 "$_p" 2>/dev/null && [ "$_rb_n" -lt "$_lim" ]; do sleep 1; _rb_n=$((_rb_n + 1)); done
 	kill -9 "$_p" 2>/dev/null
 	cat "$_out" 2>/dev/null
 	rm -f "$_out"

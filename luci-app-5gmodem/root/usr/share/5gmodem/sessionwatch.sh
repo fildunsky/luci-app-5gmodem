@@ -207,7 +207,7 @@ check_once() {
 
 	# Сначала собираем список AT-модемов, чтобы знать, чей ход.
 	_atlist=""
-	for _p in $("$RES/registry.sh" paths 2>/dev/null); do
+	for _p in $(printf '%s' "$_reg" | jsonfilter -e '@[*].path' 2>/dev/null); do   # из ТОГО ЖЕ снимка, что _fld (ревью HP#7)
 		_o=$(_fld "$_p" owner);  [ "$_o" = "mm" ] && continue
 		_i=$(_fld "$_p" iface);  [ -n "$_i" ] || continue
 		_pr=$(_fld "$_p" proto); _watched_proto "$_pr" || continue
@@ -226,7 +226,7 @@ check_once() {
 		printf '%s' "$(( (_turn + 1) % 1000 ))" > "$_turnf" 2>/dev/null
 	fi
 
-	for _p in $("$RES/registry.sh" paths 2>/dev/null); do
+	for _p in $(printf '%s' "$_reg" | jsonfilter -e '@[*].path' 2>/dev/null); do   # из ТОГО ЖЕ снимка, что _fld (ревью HP#7)
 		_own=$(_fld "$_p" owner)
 		# Модем под ModemManager - не наша забота (см. правило 1).
 		[ "$_own" = "mm" ] && continue
@@ -298,8 +298,6 @@ warm_snapshots() {
 }
 
 case "$1" in
-	warm) warm_snapshots ;;
-	once) check_once; warm_snapshots ;;
 	*)
 		while :; do
 			sleep "$INTERVAL"
@@ -307,6 +305,10 @@ case "$1" in
 			# Подогрев ПОСЛЕ проверки сессии, а не вместо: восстановление связи
 			# важнее тёплой карточки, и порт (если он один) достанется сначала ей.
 			warm_snapshots
+			# Сторож интернета - последним: он ходит в СЕТЬ (ping), а не в порт,
+			# и с проверкой сессии за AT-порт не конкурирует. Включён ли он и не
+			# рано ли для круга - решает сам (enabled + свой rate-limit).
+			"$RES/health.sh" tick >/dev/null 2>&1
 		done
 		;;
 esac

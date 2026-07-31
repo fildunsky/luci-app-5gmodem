@@ -39,9 +39,24 @@ _active_kind() {
 # sms_tool их не видит, нужен sms_tool_mm поверх mmcli. Раньше страница сама
 # подменяла путь к бинарю, из-за чего КАЖДАЯ операция (чтение, удаление,
 # отправка) знала про транспорт и повторяла эту логику по-своему.
+# АКТИВНЫЙ МОДЕМ ПОД ModemManager? Флаг sms_via_mm - ГЛОБАЛЬНЫЙ, а транспорт
+# у каждого модема свой: с флагом, взведённым ради MM-модема (Compal), смена
+# активного на AT-модем гнала и его СМС в mmcli - Telit «разучился читать»,
+# recv честно отдавал пустой список ЧУЖОГО (отсутствующего в MM) модема.
+# Поэтому флаг теперь значит «MM-путь разрешён», а решает протокол интерфейса
+# АКТИВНОГО модема: только modemmanager-модему СМС читает MM.
+_active_is_mm() {
+	_amp=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	[ -n "$_amp" ] || return 1
+	_ams="m_$(echo "$_amp" | sed 's/[^A-Za-z0-9]/_/g')"
+	_amif=$(uci -q get "$CFG.$_ams.network")
+	[ -n "$_amif" ] || _amif=$(uci -q get "$CFG.@5gmodem[0].network")
+	[ "$(uci -q get "network.$_amif.proto")" = "modemmanager" ]
+}
+
 _smstool() {
 	if [ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
-	   && [ -x /usr/share/5gmodem/sms_tool_mm ]; then
+	   && [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm; then
 		echo /usr/share/5gmodem/sms_tool_mm
 		return
 	fi

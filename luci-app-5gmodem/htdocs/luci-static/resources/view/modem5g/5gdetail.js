@@ -85,16 +85,16 @@ function metricBar(id, rawVal, unit, edges) {
 
 /* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
    в CA-таблице - см. caQuality). Крайние edges - разумные пределы шкалы. */
-function csq_bar(v, m)  { metricBar('csq',  v, '',    [ 0,   10,  15,  20,  31  ]); }
-function rssi_bar(v, m) { metricBar('rssi', v, 'dBm', [ -113, -100, -85, -70, -55 ]); }
-function rsrp_bar(v, m) { metricBar('rsrp', v, 'dBm', [ -125, -100, -90, -80, -70 ]); }
-function rsrq_bar(v, m) { metricBar('rsrq', v, 'dB',  [ -23,  -20, -15, -10, -3  ]); }
-function sinr_bar(v, m) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30  ]); }
+function csq_bar(v)  { metricBar('csq',  v, '',    [ 0,   10,  15,  20,  31  ]); }
+function rssi_bar(v) { metricBar('rssi', v, 'dBm', [ -113, -100, -85, -70, -55 ]); }
+function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', [ -125, -100, -90, -80, -70 ]); }
+function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  [ -23,  -20, -15, -10, -3  ]); }
+function sinr_bar(v) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30  ]); }
 /* 3G: RSCP (сила кода, dBm) и Ec/No (качество, dB). Пороги по общепринятым
    уровням UMTS: RSCP хуже -105 = плохо, лучше -75 = отлично; Ec/No хуже -16 =
    плохо, лучше -6 = отлично. */
-function rscp_bar(v, m) { metricBar('rscp', v, 'dBm', [ -115, -105, -95, -85, -75 ]); }
-function ecio_bar(v, m) { metricBar('ecio', v, 'dB',  [ -20,  -16, -10, -6,  0  ]); }
+function rscp_bar(v) { metricBar('rscp', v, 'dBm', [ -115, -105, -95, -85, -75 ]); }
+function ecio_bar(v) { metricBar('ecio', v, 'dB',  [ -20,  -16, -10, -6,  0  ]); }
 
 /* Телефонный ярлык технологии: LTE->4G, LTE-A->4G+, HSPA->H+, HSDPA/HSUPA->H,
    UMTS/WCDMA->3G, EDGE->E, GPRS/GSM->2G, 5G остаётся 5G. Меняем ТОЛЬКО ведущий
@@ -284,7 +284,7 @@ function loadSimSlots() {
 			var noCard = (s.present !== undefined && String(s.present) === '0');
 			var empty = (noCard && !on);
 			box.appendChild(E('button', {
-				'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : '') + (empty ? ' cbi-button-disabled' : ''),
+				'class': 'btn cbi-button' + (on ? ' tg-current' : '') + (empty ? ' cbi-button-disabled' : ''),
 				'disabled': empty ? '' : null,
 				/* Пустым помечаем и АКТИВНЫЙ слот. Гасить его нельзя (на активный
 				   слот не переключаются), но и молчать нельзя: у модема без карты
@@ -350,10 +350,6 @@ function SIMdata(data) {
 /* Подсветить кнопку текущего режима. Единый путь bandsui.loadBands (mgmtinfo): режим
    берётся из КОНФИГА интерфейса, а не из живых current-modes, которые модем
    сбрасывает на каждом передозвоне - от них подсветка мигала «Авто». */
-function updateModeButtons() {
-	return bandsui.loadBands();
-}
-
 /* ==== «Информация о соте»: ДЕКЛАРАТИВНЫЙ РЕЕСТР СТРОК =======================
    Одно правило вместо россыпи стилей. Раньше у каждой строки был свой механизм
    (setRowVisible / голый display / visibility:hidden / безусловный показ) и
@@ -385,6 +381,10 @@ var CELL_ROWS = [
 	   sameRender - чтобы не пересобирать кнопку на каждом тике (скролл-баг). */
 	{ id: 'enbid', render: function(j, el, c4) {
 		var val = mutil.cellVal(j.enbid);
+		/* На LTE/NSA номер БС выводится из CID (eNB = CID>>8, он уже посчитан в
+		   c4.num) - профиль метрик мог не отдать enbid на этом тике, а кнопка
+		   4cells обязана стабильно жить в ЭТОЙ строке у всех модемов. */
+		if (!val && c4 && c4.tech === 3) { val = String(c4.num); }
 		setRowVisible(el, !!val);
 		if (!val) { el.textContent = '-'; return; }
 		if (c4 && c4.tech === 3) {
@@ -1439,17 +1439,6 @@ function fillAntPorts(raw, rxdiv) {
 
 /* Кнопки режимов сети показываются только когда модемом управляет
    ModemManager (иначе mmcli недоступен или модем не его) */
-function modesw_show() {
-	L.resolveDefault(fs.exec_direct('/usr/bin/mmcli', [ '-L' ]), '').then(function(out) {
-		if (!out || out.indexOf('/Modem/') < 0) { return; }
-		[ 'modeswn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
-			var row = document.getElementById(id);
-			if (row) { row.style.display = ''; }
-		});
-		updateModeButtons();
-		bandsui.loadBands();
-	});
-}
 
 function active_select() {
 	L.resolveDefault(uci.load('modemdefine'), null).then(function() {
@@ -1504,61 +1493,30 @@ function checkOperatorName(t) {
     return r;
 }
 
-/* Заполнение ВСЕХ метрик страницы из ОДНОГО json-снимка. Вынесено из тика
-   опроса, чтобы render мог применить последний известный снимок (peek из
-   load()) СРАЗУ при открытии: страница появляется уже заполненной, тик
-   лишь освежает значения. Идемпотентно - sameRender/setRowVisible внутри
-   защищают от лишних перестроек DOM и скачков высоты. */
-/* ============ ЗАГОТОВКА (SKELETON) КАРТОЧКИ «МОДЕМ» БЕЗ МОДЕМА ============
-   Когда модема нет на шине ИЛИ снимок протух (cached отдаёт СТАРЫЙ снимок с
-   честным большим age, а не свежий), вместо застрявших старых метрик и таблицы
-   прочерков рисуем «скелет»: силуэты будущего UI светло-серыми скруглёнными
-   полосками. Сразу видно, что тут будет, и нет ложного ощущения живых данных.
-   Ребут по питанию (GPIO) оставляем рабочим - завис модем можно поднять и без
-   данных на экране. */
-function ensureSkeletonCSS() {
-	}
-
-/* Силуэт карточки, ПОВТОРЯЮЩИЙ реальную .tginfo-general (те же классы = те же
-   позиции): значок сигнала | иконка SIM | статус (рег/оператор/страна) | инфо
-   (технология/соединение) | правая колонка с силуэтами кнопок SIM/eSIM. Вместо
-   текстов - скруглённые полоски, иконки/кнопки - серые силуэты без надписей. */
-function buildModemSkeleton() {
-	ensureSkeletonCSS();
-	function bar(w) { return E('span', { 'class': 'tgm-skel-bar', 'style': 'width:' + w }); }
-	return E('div', { 'class': 'tginfo-general' }, [
-		E('div', { 'class': 'tginfo-signal' }, [ E('span', { 'class': 'tgm-skel-sig' }) ]),
-		E('span', { 'style': 'display:inline-flex;align-items:center;vertical-align:middle;' }, [
-			E('span', { 'class': 'tgm-skel-ic' })
-		]),
-		E('div', { 'class': 'tginfo-status' }, [
-			E('div', { 'class': 'tginfo-reg' }, [ bar('7em') ]),
-			E('div', { 'class': 'tginfo-op' }, [ bar('9.5em') ]),
-			E('div', { 'class': 'tginfo-loc' }, [ bar('5.5em') ])
-		]),
-		E('div', { 'class': 'tginfo-info' }, [
-			E('div', { 'class': 'tginfo-tech' }, [ bar('8em') ]),
-			E('div', { 'class': 'tginfo-conn' }, [ bar('6em') ])
-		]),
-		E('div', { 'class': 'tginfo-right' }, [
-			E('div', { 'class': 'tginfo-simslot', 'style': 'display:flex;gap:.3em;flex-wrap:wrap;justify-content:flex-end;' }, [
-				E('span', { 'class': 'tgm-skel-btn' }), E('span', { 'class': 'tgm-skel-btn' })
-			])
-		])
-	]);
-}
-
-/* Блок «нет модема»: заголовок, скелет и подсказка. Кнопок тут НЕТ намеренно -
-   плашка должна быть стабильного размера (никаких асинхронно всплывающих
-   элементов, меняющих высоту). Ребут по питанию живёт во вкладке управления
-   частотами (btn-power-reboot), как и остальные ребуты. Строится ОДИН раз,
-   дальше только показывается/скрывается. */
+/* Блок «нет модема»: СТАТИЧНАЯ карточка с пунктирной рамкой и надписью, БЕЗ
+   анимации (решение владельца). Скелетон - обещание «данные едут», а пустой
+   ответ listmodems - ФАКТ: на роутере без модемов анимация врала бы вечно.
+   Кнопок тут НЕТ намеренно - плашка стабильного размера; ребуты живут во
+   вкладке управления частотами. Строится ОДИН раз, дальше показ/скрытие. */
 function buildNoModemBlock() {
 	return E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-none-block' }, [
 		/* Тот же моноширинный заголовок, что и у реальной карточки (#modemname). */
 		E('h3', { 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flow-root;' }, _('Modem')),
-		buildModemSkeleton()
+		E('div', { 'class': 'tgm-nomodem' }, _('No modem connected'))
 	]);
+}
+
+/* Память «модемов нет»: роутер, живущий без модемов, при следующем заходе
+   рисует пунктирную карточку СРАЗУ - без секунды скелетона до первого тика
+   метрик. Появился модем - флаг снимается тем же тиком. */
+function noModemRemember(yes) {
+	try {
+		if (yes) { window.localStorage.setItem('tgm-nomodem', '1'); }
+		else { window.localStorage.removeItem('tgm-nomodem'); }
+	} catch (e) {}
+}
+function noModemRemembered() {
+	try { return window.localStorage.getItem('tgm-nomodem') === '1'; } catch (e) { return false; }
 }
 
 function applyMetrics(json) {
@@ -1599,7 +1557,16 @@ function applyMetrics(json) {
 					   бывает только когда чтение раз за разом не удаётся. */
 					var _age = parseInt(json.age, 10);
 					var _stale = (!isNaN(_age) && _age >= 30);
-					var _noModem = (json.error && json.error !== 'busy' && !json.modem) || _stale;
+					/* «Модем не подключен» - ТОЛЬКО про отсутствующее железо.
+					   Протухший снимок (age>=30) сам по себе - не доказательство:
+					   при двух модемах опрос вкладки может встать из-за очереди к
+					   порту, age растёт, а модем живой - и карточка врала «не
+					   подключен» до ручного обновления (поймано владельцем).
+					   Протухание считается отсутствием только когда в снимке нет
+					   самого модема и шина его не подтверждает; иначе остаётся
+					   живая карточка с песочными часами «данные не обновлялись». */
+					var _present = (String(json.onbus) === '1') || !!json.modem;
+					var _noModem = (json.error && json.error !== 'busy' && !json.modem) || (_stale && !_present);
 					/* onbus=1: модем ЕСТЬ на шине, но не отвечает (залип). onbus=0:
 					   убран совсем. Бэкенд кладёт это в ответ «модема нет». */
 					var _onbus = (String(json.onbus) === '1');
@@ -1608,6 +1575,7 @@ function applyMetrics(json) {
 					var _cell = document.querySelector('[data-blk="cell"]');
 					var _freq = document.querySelector('[data-blk="freq"]');
 					var _ttl = document.querySelector('[data-blk="ttl"]');
+					noModemRemember(_noModem && !_onbus);
 					if (_noModem) {
 						if (_mib) { _mib.style.display = 'none'; }
 						/* Сота и TTL без модема пусты - прячем всегда. */
@@ -1671,7 +1639,8 @@ function applyMetrics(json) {
 				// перезагружалась каждые 5 c - на модемах, медленно поднимающих
 				// сеть, это давало бесконечные перезагрузки. Страница и так
 				// открывается с пустыми полями и обновляется по опросу.
-				bandsui.revealMgmtWhenReady();
+				/* revealMgmtWhenReady из тика убран (ревью FE#5): он дублировал
+				   pollTick и давал два параллельных mgmtinfo с гонкой перерисовки */
 				/* Освежаем блок диапазонов раз в ~3 опроса (≈15 c): смена бендов В
 				   ФОНЕ (восстановление после ребута, автоприменение в прото) НЕ
 				   уведомляет открытую страницу, и подсветка выбранных бендов
@@ -1913,7 +1882,7 @@ function applyMetrics(json) {
 
 					if (document.getElementById('modem')) {
 						var view = document.getElementById("modem");
-						if (!json.modem.length > 1) {
+						if (!json.modem || json.modem.length <= 1) {
 						view.textContent = '-';
 						}
 						else {
@@ -1941,7 +1910,7 @@ function applyMetrics(json) {
 
 					if (document.getElementById('fw')) {
 						var view = document.getElementById("fw");
-						if (!json.firmware.length > 1) { 
+						if (!json.firmware || json.firmware.length <= 1) { 
 						view.textContent = '-';
 						}
 						else {
@@ -1951,7 +1920,7 @@ function applyMetrics(json) {
 
 					if (document.getElementById('cport')) {
 						var view = document.getElementById("cport");
-						if (!json.cport.length > 1) { 
+						if (!json.cport || json.cport.length <= 1) { 
 						view.textContent = '-';
 						}
 						else {
@@ -1961,7 +1930,7 @@ function applyMetrics(json) {
 
 					if (document.getElementById('protocol')) {
 						var view = document.getElementById("protocol");
-						if (!json.protocol.length > 1) {
+						if (!json.protocol || json.protocol.length <= 1) {
 						view.textContent = '-';
 						}
 						else {
@@ -2539,6 +2508,8 @@ simDialog: baseclass.extend({
 				clearModemBusy: clearModemBusy,
 				sameRender: sameRender,
 				blockExpanded: blockExpanded,
+				/* ключ тёплого кэша блока частот - USB-путь модема страницы */
+				pagePath: function() { return pageModemPath; },
 				getMmIdx: function() { return mmIdx; },
 				isMM: function() { return ifaceProtoIsMM; },
 				setMM: function(v) { ifaceProtoIsMM = !!v; }
@@ -2556,6 +2527,30 @@ simDialog: baseclass.extend({
 
 	render: function(res) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		/* Роутер, живущий без модемов (память tgm-nomodem): пунктирную карточку
+		   ставим СРАЗУ, не дожидаясь первого тика метрик - иначе при каждом
+		   заходе секунду-другую мигал бы обычный блок с прочерками. Ждём
+		   появления блока в DOM коротким циклом: render отдаёт дерево, а
+		   вставляет его LuCI чуть позже. Ошиблись (модем всё же есть) - первый
+		   же тик applyMetrics вернёт всё на место и снимет флаг. */
+		if (noModemRemembered()) {
+			var _nmTry = 0;
+			var _nmTick = function() {
+				var _mib = document.getElementById('modem-info-block');
+				if (!_mib) {
+					if (++_nmTry < 40) { window.setTimeout(_nmTick, 50); }
+					return;
+				}
+				if (document.getElementById('modem-none-block')) { return; }
+				_mib.style.display = 'none';
+				[ '[data-blk="cell"]', '[data-blk="freq"]', '[data-blk="ttl"]' ].forEach(function(sel) {
+					var el = document.querySelector(sel);
+					if (el) { el.style.display = 'none'; }
+				});
+				_mib.parentNode.insertBefore(buildNoModemBlock(), _mib);
+			};
+			window.setTimeout(_nmTick, 0);
+		}
 		/* «Приоритет интернета» рисуется ВНУТРИ контента (netpri.mount() ниже),
 		   а не вставкой над вкладками - см. mount(). */
 		var m, s, o;
@@ -2687,7 +2682,14 @@ simDialog: baseclass.extend({
 					}
 
 
-			pollData: poll.add(function() {
+			}
+			} /* конец веток по peek-снимку - опрос ниже регистрируем ВСЕГДА */
+
+			/* ОПРОС РЕГИСТРИРУЕТСЯ БЕЗУСЛОВНО. Раньше poll.add жил ВНУТРИ
+			   if(!json.error) по peek-снимку: модем занят/не найден в момент
+			   открытия страницы - и опрос не регистрировался вовсе, страница
+			   навсегда замирала с прочерками до ручного F5 (находка ревью). */
+			poll.add(function() {
 				/* ЧИТАЕМ СНИМОК, а не опрашиваем модем. В порт ходит ровно один
 				   процесс (блокировка в 5gmodem.sh), остальные берут готовые
 				   данные - иначе открытая страница, второй браузер и 5gtop
@@ -2709,17 +2711,20 @@ simDialog: baseclass.extend({
 				   права показать (см. applyMetrics). */
 				var _mArgs = [ 'cached', ifaceProtoIsMM ? '2' : '4' ];
 				if (pageModemPath) { _mArgs.push('for=' + pageModemPath); }
-				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _mArgs))
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _mArgs), '')
 					.then(function(res) {
-						applyMetrics(JSON.parse(res));
+						/* Пустой ответ (rpcd занят) и битый JSON - штатные
+						   транзиенты: тик пропускаем, следующий догонит. Раньше
+						   JSON.parse без защиты ронял тик с необработанным
+						   исключением (находка ревью). */
+						var _mj = null;
+						try { _mj = JSON.parse(res); } catch (e) {}
+						if (_mj) { applyMetrics(_mj); }
 						/* Блок частот освежает ОДИН планировщик - _bandsPollN выше
 						   (раз в ~3 опроса). Второй тикающий вызов отсюда только
 						   удваивал запросы и гонки перерисовки. */
 					});
 				});
-
-				}
-			}	
 
 		} catch (err) {
 				ui.addNotification(null, E('p', _('Error: ') + err.message), 'error');
@@ -2863,7 +2868,7 @@ simDialog: baseclass.extend({
 							[ '5G', '3g|5g', '5g' ]
 						].map(L.bind(function(mdef) {
 							return E('button', {
-								'class': 'btn cbi-button' + (modeActive(mdef[1], mdef[2]) ? ' cbi-button-action important' : ''),
+								'class': 'btn cbi-button' + (modeActive(mdef[1], mdef[2]) ? ' tg-current' : ''),
 								'data-allowed': mdef[1],
 								'data-preferred': mdef[2],
 								'click': ui.createHandlerFn(this, function() {

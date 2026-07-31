@@ -902,7 +902,9 @@ return view.extend({
 		/* Та же оговорка, что и у проверки ниже: у модема без AT-портов (HiLink)
 		   портов нет и настроить их невозможно. Требовать этого - посылать
 		   пользователя чинить несуществующее. */
-		if (!portR && !isHilinkModem()) {
+		/* ОДИН попап на страницу: напоминание тикало каждый опрос и множилось
+   до бесконечности (поймано владельцем на Compal) */
+		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
  			ui.addNotification(null, E('p', _('The package requires user configuration. \
 					<br /><br /><b>The following need to be set:</b> \
 					<ul><li>1. All ports for communication with the modem.</li><li>2. Additional options specific to the given modem (for handling USSD codes).</li><li> \
@@ -993,7 +995,9 @@ return view.extend({
 		   в самом модеме и достаются его API - порта у них нет и быть не может.
 		   Раньше страница упиралась в эту проверку и требовала настроить то,
 		   чего не существует. Признак берём из профиля активного модема. */
-		if (!portR && !isHilinkModem()) {
+		/* ОДИН попап на страницу: напоминание тикало каждый опрос и множилось
+   до бесконечности (поймано владельцем на Compal) */
+		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
 			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
 			return Promise.resolve();
 		}

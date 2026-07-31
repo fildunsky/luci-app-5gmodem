@@ -118,6 +118,14 @@ return view.extend({
 	handleGo: function(ev) {
 		let atcmd = document.getElementById('cmdvalue').value;
 		let port = uci.get('5gmodem', 'sms', 'atport');
+		/* Фолбэк - AT-порт секции АКТИВНОГО модема: у MM-модема (Compal) легаси
+		   sms.atport пуст, а рабочий порт в его секции есть - консоль писала
+		   «укажите порт» при живом ttyUSB (поймано владельцем). */
+		if (!port) {
+			var _ap = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '').replace(/[^A-Za-z0-9]/g, '_');
+			if (_ap) { port = uci.get('5gmodem', 'm_' + _ap, 'at_port') || ''; }
+		}
+		if (!port) { port = window._sendatLmPort || ''; }
 
 		if ( atcmd.length < 2 )
 		{
@@ -243,12 +251,31 @@ return view.extend({
 	},
 
 	load: function() {
+		/* Фолбэк-порт для MM-модема: его секция БЕЗ at_port намеренно (порт
+		   принадлежит ModemManager), но физические tty есть - берём ВТОРОЙ
+		   AT-порт активного модема из listmodems (первый обычно занят MM).
+		   atcmd.sh на роутере всё равно сверит принадлежность порта модему. */
+		window._sendatLmPort = '';
 		return Promise.all([
 			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds.user'), null),
 			L.resolveDefault(fs.list('/etc/5gmodem/modem/atcmmds'), []),
 			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems'))
-		]);
+		]).then(function(res) {
+			/* СТРОГО ПОСЛЕ uci.load: active_modem иначе читался до загрузки
+			   конфига (undefined) и фолбэк не наполнялся никогда */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh', []), '[]').then(function(out) {
+				try {
+					var act = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+					(JSON.parse(out) || []).forEach(function(m) {
+						if (m.path === act && m.tty && m.tty.length) {
+							window._sendatLmPort = m.tty[0];
+						}
+					});
+				} catch (e) {}
+				return res;
+			});
+		});
 	},
 
 	render: function (loadResults) {

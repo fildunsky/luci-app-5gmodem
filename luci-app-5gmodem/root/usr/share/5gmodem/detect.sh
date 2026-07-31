@@ -63,7 +63,7 @@ CONFIG=modemdefine
 MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
 if [ -n "$MODEMZ" ]; then
 
-	if [[ $MODEMZ = 0 ]]; then
+	if [ "$MODEMZ" -eq 0 ]; then
     		DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
 		if [ -n "$DEVICE" ]; then
 			echo $DEVICE
@@ -71,7 +71,7 @@ if [ -n "$MODEMZ" ]; then
 		fi
     	fi
 
-	if [[ $MODEMZ = 1 ]]; then
+	if [ "$MODEMZ" -eq 1 ]; then
     		DEVICE=$(uci -q get modemdefine.@modemdefine[0].comm_port)
 		if [ -n "$DEVICE" ]; then
 			echo $DEVICE
@@ -79,7 +79,7 @@ if [ -n "$MODEMZ" ]; then
 		fi
 	fi
 
-	if [[ $MODEMZ > 1 ]]; then
+	if [ "$MODEMZ" -gt 1 ]; then
 		DEVICE=$(uci -q get modemdefine.@general[0].main_modem)
 		if [ -n "$DEVICE" ]; then
 			echo $DEVICE
@@ -210,8 +210,13 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 			# дальше сюда не доходим. Если модем переперечислится и tty исчезнет,
 			# быстрый путь провалит [ -e ] и мы снова окажемся здесь.
 			[ "$(uci -q get 5gmodem.@5gmodem[0].at_port)" = "$T" ] || {
-				uci -q set 5gmodem.@5gmodem[0].at_port="$T"
-				uci -q commit 5gmodem 2>/dev/null
+				# идёт resolve-транзакция - НЕ коммитим поверх её стейджинга
+				# (ревью, баг №7); пиннинг повторится следующим вызовом
+				if exec 7>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 7; then
+					uci -q set 5gmodem.@5gmodem[0].at_port="$T"
+					uci -q commit 5gmodem 2>/dev/null
+					flock -u 7
+				fi
 			}
 			echo "$T"
 			exit 0

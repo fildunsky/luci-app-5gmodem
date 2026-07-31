@@ -1,0 +1,11 @@
+#!/bin/sh
+# Страховка ре-биндинга option-портов: на части плат init.d 5gmodem-usbports
+# отрабатывает раньше, чем подгрузится usb-serial-option, и модемы 05c6:90xx
+# остаются без единого tty до ручного вмешательства (живой случай: Compal
+# 90d6 на новом стенде - AT «не работал», порты были чужие). new_id идемпотентен,
+# повторный проход безвреден.
+[ "$ACTION" = add ] || exit 0
+case "$PRODUCT" in
+	5c6/*|05c6/*) /etc/init.d/5gmodem-usbports start >/dev/null 2>&1 & ;;
+esac
+exit 0

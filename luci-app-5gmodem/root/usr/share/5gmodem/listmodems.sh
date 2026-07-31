@@ -257,7 +257,9 @@ OUT="[$OUT]"
 
 # Кэш пишем атомарно (tmp+mv): скрипт зовут несколько процессов разом при
 # открытии страницы, и читатель не должен увидеть обрывок файла.
-printf '%s\n' "$OUT" > "$CACHE.tmp" 2>/dev/null && mv "$CACHE.tmp" "$CACHE" 2>/dev/null
+# tmp УНИКАЛЕН на процесс: общий $CACHE.tmp при параллельных писателях
+# давал перемешанный JSON в кэше до конца TTL (ревью)
+printf '%s\n' "$OUT" > "$CACHE.tmp.$$" 2>/dev/null && mv "$CACHE.tmp.$$" "$CACHE" 2>/dev/null
 uptime_s > "$STAMP" 2>/dev/null
 
 printf '%s\n' "$OUT"

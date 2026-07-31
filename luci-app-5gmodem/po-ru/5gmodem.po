@@ -3882,11 +3882,110 @@ msgstr "USSD ходит по каналу CS, которого в LTE нет. Ч
 msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds."
 msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS. Поэтому запрос сам переведёт модем в 3G и вернёт обратно — связь пропадёт примерно на двадцать секунд."
 
-msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings above."
-msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS, которого в LTE нет. Многие модемы всё равно отвечают; если этот молчит — включите «Переводить модем в 3G для USSD» в настройках выше."
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
+msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS, которого в LTE нет. Многие модемы всё равно отвечают; если этот молчит — включите «Переводить модем в 3G для USSD» в настройках ниже."
 
 msgid "Data is stale (shown from the last snapshot)"
 msgstr "Данные устарели (показан последний снимок)"
 
 msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
 msgstr "Этим модемом управляет ModemManager, и канал управления принадлежит ему. Вторая eSIM-сессия на том же канале может уронить прошивку модема (проверено вживую на T99W175 — модем перезагружается). Для работы с eSIM включите «Скрыть от ModemManager» в настройках модема (или смените протокол интерфейса) и вернитесь сюда."
+
+msgid "Internet is working (%s ms)"
+msgstr "Интернет работает (%s мс)"
+
+msgid "No internet on this link"
+msgstr "На этом линке нет интернета"
+
+msgid "Checking…"
+msgstr "Проверяется…"
+
+msgid "Internet watchdog settings"
+msgstr "Настройки слежения за интернетом"
+
+msgid "Internet watchdog"
+msgstr "Слежение за интернетом"
+
+msgid "Pings each uplink through its own device. A link is marked down after several consecutive failures and up again after several successes, so single lost packets do not flip the state. Health lamps are shown on the cards; traffic switching is optional and enabled below."
+msgstr "Пингует каждый аплинк через его собственное устройство. Линк помечается упавшим после нескольких провалов подряд и ожившим после нескольких успехов, поэтому одиночные потери пакетов состояние не переключают. На карточках горят лампочки здоровья; переключение трафика - по желанию, галкой ниже."
+
+msgid "Enable watching"
+msgstr "Включить слежение"
+
+msgid "Check interval, s"
+msgstr "Интервал проверки, с"
+
+msgid "Ping targets (comma-separated)"
+msgstr "Адреса проверки (через запятую)"
+
+msgid "Failures before down"
+msgstr "Провалов до «упал»"
+
+msgid "Successes before up"
+msgstr "Успехов до «ожил»"
+
+msgid "Switch traffic to a backup link when one goes down"
+msgstr "Переключать трафик на запасной линк при падении"
+
+msgid "Heal a modem while its link is down"
+msgstr "Лечить модем, пока линк лежит"
+
+msgid "Steps are tried from mild to strong, at most once per 5 minutes, 6 attempts total; the ladder resets when the link recovers."
+msgstr "Ступени применяются от мягкой к жёсткой, не чаще раза в 5 минут, всего 6 попыток; когда линк оживает, лестница сбрасывается."
+
+msgid "Do nothing"
+msgstr "Ничего не делать"
+
+msgid "Reconnect the interface"
+msgstr "Переподключать интерфейс"
+
+msgid "...plus reboot the module"
+msgstr "...плюс перезагрузка модуля"
+
+msgid "...plus USB power cycle"
+msgstr "...плюс передёрнуть USB по питанию"
+
+msgid "When a link recovers"
+msgstr "Когда линк оживает"
+
+msgid "Return its priority"
+msgstr "Вернуть его приоритет"
+
+msgid "Keep it last"
+msgstr "Оставить в конце"
+
+msgid "Reconnecting"
+msgstr "Переподключение"
+
+msgid "Rebooting the module"
+msgstr "Перезагрузка модуля"
+
+msgid "USB power cycle"
+msgstr "USB-питание"
+
+msgid "Device is gone"
+msgstr "Устройство пропало с шины"
+
+msgid "sec"
+msgstr "с"
+
+msgid "Rebooting"
+msgstr "Перезагрузка"
+
+msgid "Ping targets"
+msgstr "Адреса проверки"
+
+msgid "Also heal the Wi-Fi uplink"
+msgstr "Лечить и Wi-Fi-аплинк"
+
+msgid "Open %s"
+msgstr "Открыть %s"
+
+msgid "No modem connected"
+msgstr "Модем не подключен"
+
+msgid "Heal the Wi-Fi uplink while it is down"
+msgstr "Лечить Wi-Fi-аплинк, пока он лежит"
+
+msgid "If at least one target responds"
+msgstr "Если доступен хотя бы один адрес"

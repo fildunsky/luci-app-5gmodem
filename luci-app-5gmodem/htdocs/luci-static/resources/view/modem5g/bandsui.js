@@ -58,11 +58,38 @@ function clear3gRow() {
 	if (r3) { r3.style.display = 'none'; }
 }
 
+/* ТЁПЛЫЙ РЕНДЕР БЕЗ ОЖИДАНИЯ БЭКЕНДА. После распила блок частот заполнялся
+   только по цепочке mgmtinfo -> (json) - два последовательных вызова, и при
+   переключении вкладок модемов карточка секунды стояла пустой (поймано
+   владельцем). Последний УСПЕШНЫЙ набор данных каждого модема сохраняется в
+   localStorage (ключ - USB-путь) и рисуется мгновенно при первом заходе;
+   живой ответ затем подтверждает или молча поправляет - рендеры идемпотентны
+   (sameRender), идентичные данные не перерисовываются и не мигают. */
+var _bandsWarmed = false;
+function _bandsKey() {
+	return 'bands5g-' + ((ctx.pagePath && ctx.pagePath()) || '');
+}
+function warmRenderBands() {
+	if (_bandsWarmed) { return; }
+	_bandsWarmed = true;
+	var c = null;
+	try { c = JSON.parse(window.localStorage.getItem(_bandsKey()) || 'null'); } catch (e) {}
+	if (!c || !c.j) { return; }
+	try {
+		if (c.t === 'mm') { applyMgmtMM(c.j); }
+		else if (c.t === 'vendor') { applyVendorJson(c.j); }
+	} catch (e) {}
+}
+function _bandsRemember(t, j) {
+	try { window.localStorage.setItem(_bandsKey(), JSON.stringify({ t: t, j: j })); } catch (e) {}
+}
+
 function loadBands() {
 	// Модульный опрос: пока блок «Управление частотами» свёрнут, НЕ дёргаем
 	// бэкенд (это ускоряет загрузку). Данные подтянутся при раскрытии
 	// (см. onBlockExpand['freq']).
 	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }
+	warmRenderBands();
 	/* ЕДИНАЯ ТОЧКА ИСТИНЫ - bands.sh mgmtinfo. Бэкенд сам решает, каким путём
 	   управляется модем (mmcli или вендорный), фронт только рисует ответ.
 	   Раньше решение принималось здесь: страница парсила mmcli, жонглировала
@@ -85,14 +112,19 @@ function loadBands() {
 		if (!j.source) { return; }
 		if (j.source != 'mmcli') { return loadBandsModemband(); }
 		if (j.pending) { return; }
+		applyMgmtMM(j);
+		_bandsRemember('mm', j);
+	});
+}
+
+function applyMgmtMM(j) {
 		bandSource = 'mmcli';
-		bandsGated = false; bandsReadOnly = false; bandsTakeover = false;
+		bandsReadOnly = false; bandsTakeover = false;
 		var note = document.getElementById('bandnote');
 		if (note) { note.style.display = 'none'; }
 		var sup3 = j.sup3g || [], sup4 = j.sup4g || [], sup5 = j.sup5g || [];
 		var cur = (j.cur3g || []).concat(j.cur4g || [], j.cur5g || []);
 		bandsOther = j.other || [];
-		mmcliBandsLoaded = true;
 		_has3gMM = sup3.length > 0;
 		renderBandToggles('bands-3g', sup3, cur, 'utran-');
 		renderBandToggles('bands-lte', sup4, cur, 'eutran-');
@@ -108,17 +140,11 @@ function loadBands() {
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
 			var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
 			var on = (a == am && (b.getAttribute('data-preferred') || '') == pm);
-			b.classList.toggle('cbi-button-action', on);
-			b.classList.toggle('important', on);
+			b.classList.toggle('tg-current', on);
 		});
-	});
 }
 
 var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
-
-var bandsGated = false;
-
-var mmcliBandsLoaded = false;
 
 var bandsReadOnly = false;
 
@@ -298,6 +324,12 @@ function loadBandsModemband(force) {
 		var j = {};
 		var note = document.getElementById('bandnote');
 		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }
+		applyVendorJson(j);
+	});
+}
+
+function applyVendorJson(j) {
+		var note = document.getElementById('bandnote');
 		// Считаем управление доступным, только если список поддерживаемых бендов
 		// НЕПУСТ. Раньше проверяли !j.supported, но bands.sh отдаёт пустой массив
 		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
@@ -323,9 +355,6 @@ function loadBandsModemband(force) {
 			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
 			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
 			if (note) { note.style.display = ctx.isMM() ? 'none' : ''; }
-			// Надпись показана => управление запрещено: гасим mmcli-путь, иначе он
-			// перерисует блок чужими данными и всё замигает (см. bandsGated).
-			bandsGated = !ctx.isMM();
 			if (ctx.isMM()) { window.setTimeout(revealMgmtWhenReady, 1500); }
 			return;
 		}
@@ -337,7 +366,6 @@ function loadBandsModemband(force) {
 		bandsReadOnly = !!j.readonly;
 		bandsTakeover = !!j.takeover;
 		if (note) { note.style.display = (bandsReadOnly || bandsTakeover) ? '' : 'none'; }
-		bandsGated = false;
 		bandSource = 'modemband';
 		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
 		   У LTE прошивка принимает битовую маску (любой набор), а у 3G - номер
@@ -464,7 +492,7 @@ function loadBandsModemband(force) {
 				mutil.sortNetModes(j.modes).forEach(function(m) {
 					var on = (String(j.currentmode) === String(m.id));
 					modeC.appendChild(E('button', {
-						'class': 'btn cbi-button' + (on ? ' cbi-button-action important' : ''),
+						'class': 'btn cbi-button' + (on ? ' tg-current' : ''),
 						'data-mode': String(m.id),
 						'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
 					}, m.label));
@@ -475,7 +503,7 @@ function loadBandsModemband(force) {
 			modeRow.style.display = 'none';
 		}
 		applyBandsReadOnly();
-	});
+		_bandsRemember('vendor', j);
 }
 
 function switchToModemManager(btn) {
@@ -608,19 +636,6 @@ function applyBandsModemband(reset, confirmed) {
 }
 
 /* Подсветить активную кнопку режима сети по выводу mmcli -K */
-function refreshModeButtons(mmK) {
-	var mm = String(mmK || '').match(/current-modes\s*:\s*allowed:\s*([^;]+);\s*preferred:\s*(\S+)/);
-	if (!mm) { return; }
-	var allowed = mm[1].split(',').map(function(x) { return x.trim(); }).sort().join('|');
-	var pref = (mm[2].trim() == 'none' ? '' : mm[2].trim());
-	document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
-		var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
-		var p = b.getAttribute('data-preferred') || '';
-		var on = (a == allowed && p == pref);
-		b.classList.toggle('cbi-button-action', on);
-		b.classList.toggle('important', on);
-	});
-}
 
 function revealMgmtWhenReady(tries) {
 	/* Оставлен как совместимая обёртка: единый loadBands (mgmtinfo) сам решает,
@@ -707,7 +722,9 @@ function setNetMode(allowed, preferred, label) {
 			/* Смена режима = передёргивание интерфейса (~10-20 c): одного
 			   раннего обновления не хватало - mgmtinfo отвечал pending, и
 			   подсветка оставалась пустой. Несколько заходов покрывают всё окно. */
-			[ 2000, 8000, 16000, 25000 ].forEach(function(t) { window.setTimeout(updateModeButtons, t); });
+			/* updateModeButtons живёт в 5gdetail и здесь не виден (был ReferenceError,
+			   ревью №10) - подсветку освежает наш же loadBands */
+			[ 2000, 8000, 16000, 25000 ].forEach(function(t) { window.setTimeout(loadBands, t); });
 		} else {
 			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '')), 'error');
 		}
@@ -774,8 +791,7 @@ function pollTick() {
 function hwTick(json) {
 	var hw = String(json.modem || '') + '|' + String(json.vidpid || '');
 	if (hw !== '|' && window.__hwSig && window.__hwSig !== hw) {
-		mmcliBandsLoaded = false;
-		bandsGated = false; bandsReadOnly = false; bandsTakeover = false;
+		bandsReadOnly = false; bandsTakeover = false;
 		bandSource = 'mmcli';
 		_bandsRetry = 0; _bandsRetryMax = 3;
 		[ 'bands-3g', 'bands-lte', 'bands-nr', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
@@ -787,10 +803,8 @@ function hwTick(json) {
 	if (hw !== '|') { window.__hwSig = hw; }
 }
 
-/* Переход прото в modemmanager (ловит applyMetrics): снять гейт и разбудить
-   mmcli-путь. */
+/* Переход прото в modemmanager (ловит applyMetrics): разбудить mmcli-путь. */
 function ungate() {
-	bandsGated = false;
 	window.setTimeout(revealMgmtWhenReady, 500);
 }
 

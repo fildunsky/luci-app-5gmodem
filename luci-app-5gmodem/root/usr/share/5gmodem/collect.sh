@@ -178,7 +178,7 @@ policyrouting_verdict() {
 	fi
 	echo "--- lan в правильной зоне? ---"
 	_pr_lz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='lan'\$/\1/p" | head -1)
-	_pr_wz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+	_pr_wz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	echo "input зоны lan: $(uci -q get "firewall.$_pr_lz.input")"
 	case " $(uci -q get "firewall.$_pr_wz.network") " in
 		*" lan "*) echo "ПРОБЛЕМА: интерфейс lan состоит в зоне WAN (input=REJECT) - админка отрезана межсетевым экраном" ;;
@@ -187,7 +187,7 @@ policyrouting_verdict() {
 
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
-		| sed -n "s/^firewall\.\(@zone\[[0-9]*\]\)\.name='wan'\$/\1/p" | head -1)
+		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	if [ -z "$_fz" ]; then
 		echo "зоны wan нет вовсе - NAT настроен как-то иначе, проверять вручную"
 		return

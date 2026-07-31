@@ -179,7 +179,6 @@ _uci_snap_get() {   # $1 - снимок (с ведущим переводом с
 
 _UCI5G_SNAP=""
 uci5g_snapshot() { _UCI5G_SNAP="$_UCI_NL$(uci -q show 5gmodem 2>/dev/null)"; }
-uci5g_snapshot_drop() { _UCI5G_SNAP=""; }
 _uci5g_dump() {
 	[ -n "$_UCI5G_SNAP" ] && { printf '%s\n' "$_UCI5G_SNAP"; return; }
 	uci -q show 5gmodem 2>/dev/null
@@ -195,7 +194,6 @@ uci5g_get() {
 
 _UCINET_SNAP=""
 ucinet_snapshot() { _UCINET_SNAP="$_UCI_NL$(uci -q show network 2>/dev/null)"; }
-ucinet_snapshot_drop() { _UCINET_SNAP=""; }
 # ucinet_get <интерфейс> <опция> - значение из снимка, иначе обычным uci.
 ucinet_get() {
 	if [ -n "$_UCINET_SNAP" ]; then
@@ -243,8 +241,8 @@ imei_for_path() {   # $1 - usb-путь
 # Интерфейс, принадлежащий модему с таким IMEI (пусто - такого нет).
 iface_for_imei() {   # $1 - imei
 	[ -n "$1" ] || return 1
-	uci -q show network 2>/dev/null \
-		| sed -n "s/^network\.\([^.]*\)\.modem_imei='\?$1'\?\$/\1/p" \
+	uci -q show network 2>/dev/null | grep -F ".modem_imei='$1'" \
+		| sed -n "s/^network\.\([^.]*\)\.modem_imei=.*/\1/p" \
 		| head -1
 }
 
@@ -610,14 +608,6 @@ is_devpath() {
 	esac
 }
 
-# USSD-код: цифры и служебные символы набора. Ничего больше в него не входит.
-is_ussd() {
-	case "$1" in
-		''|*[!0-9*#+]*) return 1 ;;
-		*) return 0 ;;
-	esac
-}
-
 # AT-команда целиком - для тех двух мест, где произвольная команда это ФИЧА
 # (консоль AT и сбор диагностики). Здесь белый список шире, но главное: никаких
 # CR/LF, то есть одной командой и останется.
@@ -656,7 +646,6 @@ is_atcmd() {
 #
 # Usage: at_query <порт> <команда> [таймаут=8] [ожидание очереди=10]
 #        Коды: 0 - ответ (может быть пустым), 1 - нельзя спрашивать, 2 - порт занят
-#        at_field <порт> <команда> <префикс>   - первое значение «+ПРЕФИКС: …»
 at_query() {
 	_aq_p="$1"; _aq_c="$2"; _aq_t="${3:-8}"
 	[ -n "$_aq_p" ] && [ -c "$_aq_p" ] || return 1
@@ -703,8 +692,4 @@ at_query() {
 	tr -d '\r' < "$_aq_o" 2>/dev/null
 	rm -f "$_aq_o"
 	return 0
-}
-
-at_field() {
-	at_query "$1" "$2" | sed -n "s/^+$3: *//p" | head -1
 }

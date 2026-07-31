@@ -1,0 +1,632 @@
+#!/bin/sh
+# Сторож интернета для «Приоритета интернета» (этап 1: только наблюдение).
+#
+# Зачем: ядро переключает трафик лишь когда линк ТЕРЯЕТ маршрут (ifdown, отвал
+# USB, конец аренды). Модем с живым IP, которого оператор перестал выпускать в
+# сеть, для ядра здоров - и трафик льётся в дыру. Единственный способ это
+# увидеть - активная проверка через КОНКРЕТНЫЙ интерфейс.
+#
+# Как: раз в interval секунд каждый аплинк wan-зоны пингуется с привязкой к его
+# устройству (ping -I <dev> - так же трекает mwan3: SO_BINDTODEVICE гонит пакет
+# через устройство даже когда default смотрит в другой линк). Вердикт - с
+# гистерезисом: «упал» после fail_n провалов ПОДРЯД, «ожил» после ok_n успехов
+# ПОДРЯД. Без гистерезиса на сотовой связи вердикт флапал бы на каждой потере
+# пакета.
+#
+# Этап 1 намеренно ничего НЕ переключает и НЕ лечит - только копит состояние
+# для точек здоровья на карточках. Переключение штрафным маршрутом и лестница
+# лечения - следующие этапы, поверх этого же состояния.
+#
+# Состояние: /tmp/5gmodem_health/<iface> = "state fails oks ms since"
+#   state - up|down|unknown, since - uptime_s последней СМЕНЫ state,
+#   ms - время последнего успешного пинга. Файлы переживают выключение слежения
+#   (протухшие точки честнее прятать в status, а не терять историю).
+#
+# Вызовы: tick (из цикла sessionwatch), status (JSON для страницы), once
+# (принудительный круг без rate-limit, для отладки), event <iface> (внеочередной
+# круг по hotplug-событию ifup/ifdown аплинка), setconf k=v... (настройки).
+
+RES="/usr/share/5gmodem"
+. "$RES/lib.sh"
+
+HDIR=/tmp/5gmodem_health
+CFG=5gmodem
+
+conf() { uci -q get "$CFG.health.$1" 2>/dev/null; }
+
+H_EN=$(conf enabled)
+# ВЫКЛЮЧЕННЫЙ ВИДЖЕТ «ПРИОРИТЕТ ИНТЕРНЕТА» ВЫКЛЮЧАЕТ И СТОРОЖ ЦЕЛИКОМ.
+# Иначе панель скрыта (widget_netpri=0), а сторож продолжает невидимо пинговать,
+# уводить трафик штрафами и лечить модемы - и шестерёнка, которой его выключить,
+# спрятана вместе с панелью. Правило: нет виджета = нет функции, без остатка.
+[ "$(uci -q get "$CFG.@5gmodem[0].widget_netpri")" = "0" ] && H_EN=0
+H_INT=$(conf interval);  case "$H_INT" in ''|*[!0-9]*) H_INT=30 ;; esac
+H_TGT=$(conf targets);   [ -n "$H_TGT" ] || H_TGT="77.88.8.8 1.1.1.1"
+H_FAILN=$(conf fail_n);  case "$H_FAILN" in ''|*[!0-9]*) H_FAILN=3 ;; esac
+H_OKN=$(conf ok_n);      case "$H_OKN" in ''|*[!0-9]*) H_OKN=5 ;; esac
+H_FO=$(conf failover)
+# Что делать с ожившим линком: restore - вернуть его приоритет (по умолчанию),
+# demote - оставить В КОНЦЕ (упавший считается ненадёжным, пока пользователь
+# сам не вернёт его перетаскиванием/кликом - netpri set/order снимают метку).
+H_FB=$(conf failback); [ "$H_FB" = "demote" ] || H_FB="restore"
+# Мастер-выключатель лечения: потолки на модемах - ЧТО можно делать, эта
+# настройка - можно ли ВООБЩЕ (галка блока «Лечить модем» в модалке).
+H_HEAL=$(conf healing)
+# Лечение Wi-Fi-аплинка (галка под модемами): у него своя короткая лестница -
+# переподключить интерфейс, затем пересобрать сеть (network reload + wifi up).
+# Вторая ступень лечит живой класс отказа: netifd расцепляет интерфейс с
+# радио при шторме энумерации USB (NO_DEVICE при ассоциированном радио) -
+# ifup такое не берёт, только reload.
+H_HEALWIFI=$(conf heal_wifi)
+
+wan_nets() {
+	_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	[ -n "$_z" ] && uci -q get "firewall.$_z.network"
+}
+
+# Событие для строки под панелью приоритета + журнал. Одно текущее событие,
+# а не свой журнал: полная история и так в logread по тегу.
+_ev() {
+	logger -t 5gmodem "сторож: $1"
+	mkdir -p "$HDIR"
+	printf '%s %s\n' "$(date '+%H:%M')" "$1" > "$HDIR/.last_event"
+}
+
+# Секция модема, владеющего интерфейсом: по network= и непустому path (парковки
+# и осиротевшие секции без path не годятся - лечить нечего).
+sec_for_iface_h() {
+	for _sfs in $(uci show "$CFG" 2>/dev/null | sed -n "s/^5gmodem\.\([^.]*\)=modem\$/\1/p"); do
+		[ "$(uci -q get "$CFG.$_sfs.network")" = "$1" ] || continue
+		[ -n "$(uci -q get "$CFG.$_sfs.path")" ] || continue
+		printf '%s\n' "$_sfs"
+		return 0
+	done
+	return 1
+}
+
+# Wi-Fi-аплинк? Судим по КОНФИГУ беспроводки (wifi-iface с network=<имя>),
+# а не по живому устройству: в состоянии gone устройства как раз нет.
+is_wifi_iface() {
+	uci show wireless 2>/dev/null | grep -q "\.network='$1'"
+}
+
+# Устройство аплинка: l3_device родителя, иначе - динамического ребёнка
+# "<имя>_4" (qmi/dhcp-модемы держат адрес на нём, родитель стоит без IP).
+iface_dev() {
+	printf '%s' "$_HDUMP" | jsonfilter -e "@.interface[@.interface=\"$1\"].l3_device" 2>/dev/null | head -1
+}
+
+# Один пинг через устройство. Успех - хотя бы один адрес ответил; время (мс)
+# отдаём в H_MS. Таймауты - средствами самого ping (-W): busybox timeout не
+# имеет, и внешний сторож тут не нужен.
+probe_dev() {
+	_pd_dev="$1"; H_MS=""
+	for _pd_t in $H_TGT; do
+		_pd_o=$(ping -I "$_pd_dev" -c 1 -W 2 "$_pd_t" 2>/dev/null)
+		# FAKE-IP (clash/ssclash, 198.18.0.0/15): доменная цель разрешилась в
+		# фиктивный адрес - такой пинг меряет НЕ линк, а туннель или локальный
+		# ответчик clash, и врёт в ОБЕ стороны (мгновенный «успех» при мёртвом
+		# WAN либо гарантированный провал мимо туннеля). Цель пропускаем;
+		# дефолтные ЦИФРОВЫЕ адреса сюда не попадают никогда.
+		case "$_pd_o" in
+			*"(198.18."*|*"(198.19."*) continue ;;
+		esac
+		case "$_pd_o" in
+			*" 0% packet loss"*|*"1 packets received"*)
+				H_MS=$(printf '%s\n' "$_pd_o" | sed -n 's/.*time=\([0-9.]*\).*/\1/p' | head -1)
+				H_MS="${H_MS%%.*}"
+				return 0 ;;
+		esac
+	done
+	# ВТОРОЕ МНЕНИЕ - TCP-КОННЕКТ. Часть операторов режет ICMP целиком: линк
+	# жив, а пинг молчит - вердикт down был бы ложным, и за ним пошло бы ложное
+	# ЛЕЧЕНИЕ здорового модема. Пробуем TCP на 443 к тем же целям с той же
+	# привязкой к устройству (мимо туннелей, как и ICMP). Только ЦИФРОВЫЕ
+	# адреса: домен под fake-ip разрешится в фикцию, честно через устройство
+	# его не померить. Успех = TCP-рукопожатие (time_connect > 0), ответ
+	# HTTP/TLS не важен - нам нужен факт прохождения пакетов по линку.
+	command -v curl >/dev/null 2>&1 || return 1
+	for _pd_t in $H_TGT; do
+		case "$_pd_t" in *[A-Za-z]*) continue ;; esac
+		_pd_tc=$(curl -s -m 3 --interface "$_pd_dev" -o /dev/null -w '%{time_connect}' "https://$_pd_t/" 2>/dev/null)
+		case "$_pd_tc" in
+			''|0|0.000000) ;;
+			*)
+				H_MS=$(printf '%s' "$_pd_tc" | awk '{printf "%d", $1 * 1000}')
+				return 0 ;;
+		esac
+	done
+	return 1
+}
+
+# Гистерезис одного линка. Читаем прежнее состояние, применяем результат пробы,
+# пишем новое. Смена state логируется - строка событий в UI и доверие к
+# автоматике строятся на этом.
+judge() {
+	_j_if="$1"; _j_ok="$2"; _j_ms="$3"
+	_j_st=unknown; _j_f=0; _j_o=0; _j_lms=""; _j_since=$(uptime_s)
+	[ -f "$HDIR/$_j_if" ] && read -r _j_st _j_f _j_o _j_lms _j_since < "$HDIR/$_j_if"
+	_j_new="$_j_st"
+	if [ "$_j_ok" = 1 ]; then
+		_j_f=0; _j_o=$((_j_o + 1)); _j_lms="$_j_ms"
+		# из unknown/gone поднимаемся с первого же успеха: наказывать свежий
+		# (или вернувшийся на шину) линк полным ok_n незачем, гистерезис нужен
+		# против ФЛАПА, а не старта
+		case "$_j_st" in unknown|gone) _j_new=up ;; esac
+		[ "$_j_st" = down ] && [ "$_j_o" -ge "$H_OKN" ] && _j_new=up
+	else
+		_j_o=0; _j_f=$((_j_f + 1))
+		[ "$_j_st" != down ] && [ "$_j_f" -ge "$H_FAILN" ] && _j_new=down
+	fi
+	if [ "$_j_new" != "$_j_st" ]; then
+		_j_since=$(uptime_s)
+		if [ "$_j_new" = up ]; then
+			# «Ожил после ПАДЕНИЯ» - это и down->up, и gone->up с активной
+			# лестницей (перезагрузка модуля лестницей проходит через gone,
+			# память о падении несёт heal-файл). Свежий линк (unknown->up,
+			# первое подключение) падением не считается - его не понижаем.
+			_j_wasdown=""
+			[ "$_j_st" = down ] && _j_wasdown=1
+			[ "$_j_st" = gone ] && [ -f "$HDIR/$_j_if.heal" ] && _j_wasdown=1
+			# ожил - лестница лечения начинается с нуля при следующем падении
+			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim"
+			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
+				: > "$HDIR/$_j_if.demoted"
+				_ev "линк $_j_if ожил - оставлен в конце (по настройке)"
+			else
+				_ev "линк $_j_if ожил"
+			fi
+		else
+			_ev "линк $_j_if упал (пинг $_j_f/$H_FAILN мимо)"
+		fi
+	fi
+	printf '%s %s %s %s %s\n' "$_j_new" "$_j_f" "$_j_o" "${_j_lms:-0}" "$_j_since" > "$HDIR/$_j_if.tmp" \
+		&& mv "$HDIR/$_j_if.tmp" "$HDIR/$_j_if"
+}
+
+round() {
+	mkdir -p "$HDIR"
+	# штамп круга - здесь, а не только в tick: age в status обязан отражать
+	# ЛЮБОЙ круг (once с страницы - тоже круг), иначе точки выглядят протухшими
+	uptime_s > "$HDIR/.t"
+	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
+	for _r_n in $(wan_nets); do
+		# IPv6-спутники не проверяем: приоритет и здоровье - свойства линка,
+		# а не семейства адресов (правило то же, что в netpri.sh list)
+		case "$_r_n" in
+			*6) _r_p=$(uci -q get "network.$_r_n.proto")
+			    case "$_r_p" in dhcpv6|6in4|6to4|6rd) continue ;; esac ;;
+		esac
+		_r_dev=$(iface_dev "$_r_n")
+		[ -n "$_r_dev" ] || _r_dev=$(iface_dev "${_r_n}_4")
+		if [ -z "$_r_dev" ]; then
+			# Устройства нет - это отдельное состояние «gone», а не удаление
+			# следа: карточка на странице обязана ПЕРЕЖИТЬ переэнумерацию
+			# (перезагрузка модуля лестницей - это десятки секунд без
+			# устройства), прятать её решает list по грейс-периоду от since.
+			#
+			# НО только для линка С ИСТОРИЕЙ в этой загрузке: припаркованный
+			# интерфейс (секция есть, железа нет и не было) файла состояния не
+			# имеет - и не получает, иначе после включения слежения парковки
+			# висели бы пунктирными слотами весь грейс-период.
+			if [ -f "$HDIR/$_r_n" ]; then
+				read -r _r_ost _ _ _ _r_osince < "$HDIR/$_r_n"
+				_r_gs=$(uptime_s)
+				[ "$_r_ost" = gone ] && _r_gs="$_r_osince"
+				printf 'gone 0 0 0 %s\n' "$_r_gs" > "$HDIR/$_r_n.tmp" \
+					&& mv "$HDIR/$_r_n.tmp" "$HDIR/$_r_n"
+			fi
+			continue
+		fi
+		if probe_dev "$_r_dev"; then judge "$_r_n" 1 "$H_MS"; else judge "$_r_n" 0 ""; fi
+	done
+	# ПОДЧИСТКА ПРИЗРАКОВ. Интерфейс мог исчезнуть из wan-зоны насовсем
+	# (hilink при смене композиции пересоздаёт его под ДРУГИМ именем - живой
+	# случай: modem5 -> modem4). Его файл состояния иначе жил бы вечно со
+	# статусом «up» и ломал гварды «легли все»: призрачный anyup разрешал бы
+	# штрафы и лечение при общей аварии.
+	_r_zone=" $(wan_nets | tr '\n' ' ') "
+	for _r_f in "$HDIR"/*; do
+		[ -f "$_r_f" ] || continue
+		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		_r_bn="${_r_f##*/}"
+		case "$_r_zone" in
+			*" $_r_bn "*) ;;
+			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" ;;
+		esac
+	done
+}
+
+# ===== ЭТАП 2: ПЕРЕКЛЮЧЕНИЕ ШТРАФНЫМ МАРШРУТОМ =====
+#
+# Принцип: uci-метрики - это ПОРЯДОК ПОЛЬЗОВАТЕЛЯ, сторож их не трогает никогда
+# (каждый commit network - это ещё и детонация чужих uci-дельт). Мёртвый линк
+# наказывается ТОЛЬКО в живой таблице маршрутов: его default переставляется на
+# метрику base+1000, и трафик сам уходит на следующий по порядку живой линк.
+# Ожил - метрика возвращается, трафик приходит обратно (failback автоматом).
+#
+# Устойчивость к netifd: он в любой момент может переустановить маршрут с
+# родной метрикой (передозвон, аренда). Мы не ловим его события - enforce
+# просто ПЕРЕУТВЕРЖДАЕТ штрафы после каждого круга; окно неправильного
+# маршрута ограничено интервалом проверки.
+#
+# ifdown мёртвого линка не делаем принципиально: проба ходит с привязкой к
+# устройству и default ей не нужен, а вот PDP-сессия модема должна жить,
+# иначе выздоровление нечем увидеть.
+
+PEN=1000
+
+# метрика линка по конфигу пользователя (его порядок); пусто = 0
+base_metric() {
+	_bm=$(uci -q get "network.$1.metric"); case "$_bm" in ''|*[!0-9]*) _bm=0 ;; esac
+	printf '%s' "$_bm"
+}
+
+# Переставить default-маршруты УСТРОЙСТВА на нужную метрику (обе семьи).
+# Повторяем форму исходной строки: via сохраняем, on-link остаётся on-link.
+_move_defaults() {   # $1 - dev, $2 - желаемая метрика
+	for _fam in -4 -6; do
+		ip "$_fam" route show default 2>/dev/null | grep -E " dev $1( |$)" | while read -r _ln; do
+			_cm=$(printf '%s' "$_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p'); _cm="${_cm:-0}"
+			[ "$_cm" = "$2" ] && continue
+			_gw=$(printf '%s' "$_ln" | sed -n 's/.*via \([^ ]*\).*/\1/p')
+			ip "$_fam" route del default dev "$1" metric "$_cm" 2>/dev/null
+			if [ -n "$_gw" ]; then
+				ip "$_fam" route add default via "$_gw" dev "$1" metric "$2" 2>/dev/null
+			else
+				ip "$_fam" route add default dev "$1" metric "$2" scope link 2>/dev/null
+			fi
+		done
+	done
+}
+
+# Применить/снять штрафы по текущим вердиктам. Вызывается после каждого круга.
+enforce() {
+	_e_anyup=""; _e_cnt=0
+	for _e_f in "$HDIR"/*; do
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		read -r _e_st _ _ _ _ < "$_e_f" || continue
+		_e_cnt=$((_e_cnt + 1))
+		[ "$_e_st" = up ] && _e_anyup=1
+	done
+	for _e_f in "$HDIR"/*; do
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		_e_if="${_e_f##*/}"
+		read -r _e_st _ _ _ _ < "$_e_f" || continue
+		_e_dev=$(iface_dev "$_e_if"); [ -n "$_e_dev" ] || _e_dev=$(iface_dev "${_e_if}_4")
+		[ -n "$_e_dev" ] || continue
+		_e_base=$(base_metric "$_e_if")
+		if [ "$_e_st" = down ] && [ -n "$_e_anyup" ] && [ "$H_FO" = "1" ]; then
+			# ШТРАФУЕМ только когда есть живая альтернатива: если легли ВСЕ,
+			# лучший исход - оставить порядок пользователя как есть
+			_e_want=$((_e_base + PEN))
+			if ip -4 route show default 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qv "metric $_e_want\$"; then
+				_ev "$_e_if без интернета - увожу трафик (метрика $_e_base -> $_e_want)"
+			fi
+			_move_defaults "$_e_dev" "$_e_want"
+		elif [ "$_e_st" = up ] && [ -f "$_e_f.demoted" ] && [ "$H_FO" = "1" ] \
+		     && [ "$_e_cnt" -gt 1 ]; then
+			# ожил, но по настройке остаётся В КОНЦЕ: держим штрафную метрику,
+			# пока пользователь сам не вернёт (netpri set/order снимают метку).
+			# С ЕДИНСТВЕННЫМ линком понижать некуда - метка не действует (иначе
+			# его default навсегда висел бы со штрафной метрикой без смысла).
+			_move_defaults "$_e_dev" $((_e_base + PEN))
+		else
+			# живой (или штрафовать нельзя/выключено) - вернуть родную метрику
+			if ip -4 route show default 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -q "metric $((_e_base + PEN))\$"; then
+				_ev "$_e_if - возвращаю приоритет (метрика $_e_base)"
+			fi
+			_move_defaults "$_e_dev" "$_e_base"
+		fi
+	done
+}
+
+# ===== ЭТАП 3: ЛЕСТНИЦА ЛЕЧЕНИЯ МОДЕМА =====
+#
+# Отдельная ось от переключения трафика: увести трафик - секунды и обратимо,
+# лечить модем - минуты и вмешательство в железо. Пользователь на модем задаёт
+# ПОТОЛОК (uci 5gmodem.<sec>.heal): ifup - только переподключить интерфейс;
+# reboot - плюс перезагрузка модуля (AT+CFUN=1,1); power - плюс передёрнуть
+# USB-порт по питанию. Система идёт по ступеням снизу вверх: не помогло за
+# кулдаун - следующая ступень; выше потолка не лезет, верхнюю повторяет.
+#
+# Предохранители (все - выстраданные, см. память проекта):
+#   - кулдаун между попытками: перезагрузка модуля - это десятки секунд
+#     переэнумерации, дёргать чаще - самому создавать флап;
+#   - лимит попыток: после HEAL_MAX лечение останавливается («лежит, ждёт
+#     человека») - бесконечная лестница на мёртвой SIM жгла бы модем зря;
+#   - модема нет на шине - НЕ лечим и попытку НЕ считаем: отсутствие часто
+#     временное (переэнумерация после нашей же перезагрузки);
+#   - ожил - лестница сбрасывается (см. judge), следующее падение с нуля.
+#
+# Состояние: /tmp/5gmodem_health/<iface>.heal = "step last_uptime attempts"
+
+HEAL_COOLDOWN=$(conf heal_cooldown); case "$HEAL_COOLDOWN" in ''|*[!0-9]*) HEAL_COOLDOWN=300 ;; esac
+HEAL_MAX=6
+
+heal_cap() { case "$1" in ifup) echo 1 ;; reboot) echo 2 ;; power) echo 3 ;; *) echo 0 ;; esac }
+
+# SIM ТОЧНО ОТСУТСТВУЕТ? Модем без карты перезагружать бессмысленно - лестница
+# сожгла бы все попытки впустую. Проверяем перед КАЖДОЙ попыткой (раз в
+# кулдаун): вставили карту - лечение само продолжится. Ответ 0 только при
+# УВЕРЕННОМ «карты нет»; молчание/занятый порт лечению не мешают.
+sim_absent() {   # $1 - секция, $2 - usb-путь
+	# HiLink: статус SIM отдаёт его API (SimStatus: 1 - карта на месте,
+	# 255/0 - нет/не читается). AT и MM у него не спрашиваем вовсе.
+	if [ "$(uci -q get "$CFG.$1.kind")" = "hilink" ]; then
+		_sa_ss=$("$RES/hilink.sh" json "$2" 2>/dev/null \
+			| jsonfilter -e '@.sim_status' 2>/dev/null)
+		case "$_sa_ss" in 0|255) return 0 ;; esac
+		return 1
+	fi
+	# MM-модем: причина отказа в паспорте модема, канал MM всегда доступен
+	_sa_idx=$("$RES/modemswitch.sh" mmindex "$2" 2>/dev/null)
+	if [ -n "$_sa_idx" ] && command -v mmcli >/dev/null 2>&1; then
+		mmcli -m "$_sa_idx" -K 2>/dev/null \
+			| grep -q "state-failed-reason *: *sim-missing" && return 0
+		return 1
+	fi
+	# AT-модем: короткий CPIN через общую очередь к порту
+	_sa_at=$(uci -q get "$CFG.$1.at_port")
+	[ -n "$_sa_at" ] && [ -e "$_sa_at" ] || return 1
+	_sa_o=$(at_query "$_sa_at" "AT+CPIN?" 3 2>/dev/null)
+	case "$_sa_o" in
+		*"not inserted"*|*"CME ERROR: 10"*|*"SIM failure"*|*"SIM_ABSENT"*) return 0 ;;
+	esac
+	return 1
+}
+
+heal() {
+	# Модемная лестница (healing) и Wi-Fi (heal_wifi) - НЕЗАВИСИМЫЕ галки:
+	# ниже каждая ветка проверяет свою; сюда не заходим, только если выключены обе.
+	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
+	# ОБЩАЯ ПРИЧИНА - НЕ ЛЕЧИМ ЖЕЛЕЗО. Если наблюдаемых линков несколько и
+	# упали ВСЕ разом, дело почти наверняка не в модемах: умерли адреса
+	# проверки, лёг вышестоящий роутер, оператор региона. Перезагружать каждый
+	# модем в такой ситуации - вредительство. Единственный линк лечим всегда:
+	# сравнивать не с чем, а самовосстановление - главная ценность для
+	# однмодемного роутера.
+	_h_cnt=0; _h_anyup=""
+	for _h_f in "$HDIR"/*; do
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		read -r _h_st _ _ _ _ < "$_h_f" || continue
+		_h_cnt=$((_h_cnt + 1))
+		[ "$_h_st" = up ] && _h_anyup=1
+	done
+	[ "$_h_cnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
+	for _h_f in "$HDIR"/*; do
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		_h_if="${_h_f##*/}"
+		read -r _h_st _ _ _ _ < "$_h_f" || continue
+		# WI-FI-АПЛИНК - своя короткая лестница, и она берёт в работу ещё и
+		# состояние gone: живой класс отказа - netifd расцепил интерфейс с
+		# радио (NO_DEVICE при ассоциированной станции), и лечится он только
+		# пересборкой (network reload), а не ifup. Модемные лестницы gone
+		# по-прежнему пропускают (их железо реально отсутствует на шине).
+		if [ "$H_HEALWIFI" = "1" ] && is_wifi_iface "$_h_if"; then
+			case "$_h_st" in down|gone) ;; *) continue ;; esac
+			# РУЧНОЙ ifdown НЕ ЛЕЧИМ: административно выключенный интерфейс
+			# netifd помечает autostart=false - это выбор человека, а не отказ.
+			# Поймано вживую: тестовый ifdown wwan через кулдаун получил
+			# network reload от лестницы. «Расцепление» (наш целевой случай)
+			# оставляет autostart=true.
+			_h_auto=$(printf '%s' "$_HDUMP" | jsonfilter \
+				-e "@.interface[@.interface=\"$_h_if\"].autostart" 2>/dev/null)
+			[ "$_h_auto" = "false" ] && continue
+			# СТАНЦИЯ С IP, НО БЕЗ ИНТЕРНЕТА - НЕ ЛЕЧИМ: связь с точкой доступа
+			# исправна, интернета нет У НЕЁ (вышестоящий роутер) - переподключение
+			# Wi-Fi тут бессмысленно, трафик уводит failover. Лечим только
+			# технические отказы самого линка: down БЕЗ адреса (ассоциация/DHCP
+			# сломались) и gone (netifd расцепил интерфейс с радио).
+			if [ "$_h_st" = down ]; then
+				_h_wip=$(printf '%s' "$_HDUMP" | jsonfilter \
+					-e "@.interface[@.interface=\"$_h_if\"]['ipv4-address'][0].address" 2>/dev/null)
+				[ -n "$_h_wip" ] && continue
+			fi
+			_h_step=0; _h_last=0; _h_n=0
+			[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
+			[ "$_h_n" -lt "$HEAL_MAX" ] || continue
+			_h_now=$(uptime_s)
+			[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
+			_h_n=$((_h_n + 1))
+			if [ "$_h_step" -lt 1 ] && [ "$_h_st" = down ]; then
+				# радио на месте, адреса нет - сначала мягко
+				_h_next=1
+				_ev "лечу $_h_if: переподключаю Wi-Fi ($_h_n/$HEAL_MAX)"
+				( ifdown "$_h_if"; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+			else
+				# gone либо переподключение не помогло - пересборка привязки
+				_h_next=2
+				_ev "лечу $_h_if: пересобираю сеть, network reload ($_h_n/$HEAL_MAX)"
+				( ubus call network reload; sleep 2; wifi up >/dev/null 2>&1; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+			fi
+			printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
+			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "лечение $_h_if: попытки исчерпаны - нужно вмешательство"
+			continue
+		fi
+		[ "$_h_st" = down ] || continue
+		[ "$H_HEAL" = "1" ] || continue
+		_h_sec=$(sec_for_iface_h "$_h_if") || continue
+		_h_cap=$(heal_cap "$(uci -q get "$CFG.$_h_sec.heal")")
+		[ "$_h_cap" -ge 1 ] || continue
+		_h_path=$(uci -q get "$CFG.$_h_sec.path")
+		[ -n "$_h_path" ] && [ -e "/sys/bus/usb/devices/$_h_path" ] || continue
+		_h_step=0; _h_last=0; _h_n=0
+		[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
+		[ "$_h_n" -lt "$HEAL_MAX" ] || continue
+		_h_now=$(uptime_s)
+		[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
+		if sim_absent "$_h_sec" "$_h_path"; then
+			# карты нет - не лечим и попытку НЕ считаем; событие один раз на
+			# эпизод (маркер стирается при выздоровлении вместе с лестницей)
+			if [ ! -f "$HDIR/$_h_if.nosim" ]; then
+				: > "$HDIR/$_h_if.nosim"
+				_ev "лечу $_h_if: SIM не вставлена - лечение отложено"
+			fi
+			continue
+		fi
+		rm -f "$HDIR/$_h_if.nosim"
+		_h_next=$((_h_step + 1))
+		[ "$_h_next" -gt "$_h_cap" ] && _h_next="$_h_cap"
+		# Ступень 2 у HiLink - ЕГО API (device/control), не AT: AT+CFUN=1,1
+		# выбил бы Huawei из debug-композиции (проверено на диапазонах - см.
+		# bands.sh), а API перезагружает модуль в любой композиции, лишь бы
+		# его адрес отвечал. Без AT-порта у прочих: с разрешением на power
+		# идём сразу на USB, без него - остаёмся на переподключении.
+		_h_hilink=""
+		[ "$(uci -q get "$CFG.$_h_sec.kind")" = "hilink" ] && _h_hilink=1
+		if [ "$_h_next" = 2 ] && [ -z "$_h_hilink" ]; then
+			_h_at=$(uci -q get "$CFG.$_h_sec.at_port")
+			if [ -z "$_h_at" ] || [ ! -e "$_h_at" ]; then
+				if [ "$_h_cap" -ge 3 ]; then _h_next=3; else _h_next=1; fi
+			fi
+		fi
+		_h_n=$((_h_n + 1))
+		case "$_h_next" in
+			1)
+				_ev "лечу $_h_if: переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+				( ifdown "$_h_if"; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				;;
+			2)
+				if [ -n "$_h_hilink" ]; then
+					_ev "лечу $_h_if: перезагружаю модуль через API ($_h_n/$HEAL_MAX)"
+					( "$RES/hilink.sh" reboot "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
+				else
+					_ev "лечу $_h_if: перезагружаю модуль, AT+CFUN=1,1 ($_h_n/$HEAL_MAX)"
+					( "$RES/reboot_modem.sh" hard "$_h_at" ) >/dev/null 2>&1 </dev/null 9>&- &
+				fi
+				;;
+			3)
+				_ev "лечу $_h_if: передёргиваю USB-порт по питанию ($_h_n/$HEAL_MAX)"
+				( "$RES/reboot_modem.sh" usbpower "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
+				;;
+		esac
+		printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
+		[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "лечение $_h_if: попытки исчерпаны - нужно вмешательство"
+	done
+}
+
+# ПОЛНАЯ УБОРКА ЗА СОБОЙ при выключении функции (галкой слежения или виджетом).
+# Раньше выключение просто останавливало тики, а УЖЕ наложенные штрафные метрики
+# (+1000) и файлы состояния оставались висеть - трафик мог навсегда остаться
+# «уведённым» с линка, который давно ожил. Теперь: каждому известному линку
+# возвращается родная метрика из uci (ровно то, что netifd сделал бы сам при
+# следующем событии), состояние удаляется целиком. uci-метрики (10/20/30) НЕ
+# трогаем - это обычный конфиг netifd, пассивный failover по метрикам остаётся.
+# Начатые фоновые шаги лечения атомарны (ifdown; sleep; ifup в одной
+# подоболочке) - они доработают сами, новых не будет. Вызывать ПОД замком.
+_teardown() {
+	# iface_dev читает из снимка _HDUMP - в обычном круге его наполняет round(),
+	# но сюда приходят МИМО round (пролог tick/once). Без снимка каждый линк
+	# давал бы пустое устройство, и штрафные метрики оставались бы висеть.
+	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
+	for _td_f in "$HDIR"/*; do
+		[ -f "$_td_f" ] || continue
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.last_event) continue ;; esac
+		_td_if="${_td_f##*/}"
+		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
+		[ -n "$_td_dev" ] || continue
+		_move_defaults "$_td_dev" "$(base_metric "$_td_if")"
+	done
+	rm -rf "$HDIR"
+	logger -t 5gmodem "сторож выключен: штрафы сняты, метрики возвращены к uci, состояние очищено"
+}
+
+# Общий пролог tick/once: функция выключена, но состояние осталось - прибраться
+# один раз (rm -rf HDIR делает последующие заходы мгновенными no-op).
+_off_cleanup() {
+	[ -d "$HDIR" ] || exit 0
+	exec 9>"/tmp/5gmodem_health.lock"
+	flock 9
+	_teardown
+	exit 0
+}
+
+case "$1" in
+tick)
+	[ "$H_EN" = "1" ] || _off_cleanup
+	# rate-limit внутри: цикл sessionwatch ходит со своим шагом, а интервал
+	# слежения - настройка пользователя; -2с допуска, чтобы не пропускать круг
+	# из-за дрожания шага цикла
+	mkdir -p "$HDIR"
+	_t_last=$(cat "$HDIR/.t" 2>/dev/null); case "$_t_last" in ''|*[!0-9]*) _t_last=0 ;; esac
+	_t_now=$(uptime_s)
+	[ $((_t_now - _t_last)) -ge $((H_INT - 2)) ] || exit 0
+	# ОДИН КРУГ ЗА РАЗ. Фоновый tick и once со страницы могут пересечься, и
+	# тогда штрафы одного круга перетирают восстановление другого (поймано
+	# вживую при обкатке). tick при занятом замке просто пропускает ход.
+	exec 9>"/tmp/5gmodem_health.lock"
+	flock -n 9 || exit 0
+	round
+	enforce
+	heal
+	;;
+once)
+	# страница зовёт once сразу после сохранения настроек модалки: если слежение
+	# только что выключили - немедленно прибраться (штрафы снять), а не ждать тика
+	[ "$H_EN" = "1" ] || _off_cleanup
+	mkdir -p "$HDIR"
+	# once ждёт замок (блокирующе): его зовут руками/со страницы - ответ нужен
+	exec 9>"/tmp/5gmodem_health.lock"
+	flock 9
+	round
+	enforce
+	heal
+	;;
+event)
+	# Внеочередной круг ПО СОБЫТИЮ ifup/ifdown аплинка (hotplug.d/iface).
+	# Без него вердикт живёт только 30-секундными кругами цикла, и карточка
+	# поднявшегося модема до минуты висела пунктирным слотом при уже живом IP.
+	# Только для интерфейсов wan-зоны; лечение НЕ дёргаем: его кулдауны
+	# сами разберутся на штатном круге.
+	[ "$H_EN" = "1" ] || exit 0
+	case " $(wan_nets) " in *" $2 "*) ;; *) exit 0 ;; esac
+	mkdir -p "$HDIR"
+	exec 9>"/tmp/5gmodem_health.lock"
+	flock 9
+	round
+	enforce
+	;;
+getconf)
+	# heal-карта: интерфейс -> потолок лечения, для селектов в модалке
+	_gc_heal=""
+	for _gc_s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^5gmodem\.\([^.]*\)=modem\$/\1/p"); do
+		_gc_n=$(uci -q get "$CFG.$_gc_s.network"); [ -n "$_gc_n" ] || continue
+		[ -n "$(uci -q get "$CFG.$_gc_s.path")" ] || continue
+		_gc_heal="$_gc_heal,\"$_gc_n\":\"$(uci -q get "$CFG.$_gc_s.heal")\""
+	done
+	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"heal":{%s}}\n' \
+		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "${_gc_heal#,}"
+	;;
+setheal)
+	# setheal <iface> <''|ifup|reboot|power> - потолок лечения модема
+	case "$3" in ''|ifup|reboot|power) ;; *) echo '{"error":"bad level"}'; exit 1 ;; esac
+	_sh_sec=$(sec_for_iface_h "$2") || { echo '{"error":"no modem for iface"}'; exit 1; }
+	if [ -n "$3" ]; then
+		uci -q set "$CFG.$_sh_sec.heal=$3"
+	else
+		uci -q delete "$CFG.$_sh_sec.heal"
+	fi
+	uci -q commit "$CFG"
+	echo '{"result":"ok"}'
+	;;
+setconf)
+	# настройки из модалки страницы: setconf enabled=1 interval=30 ...
+	# Ключи - строго из белого списка: строка приходит из браузера.
+	shift
+	uci -q get "$CFG.health" >/dev/null 2>&1 || uci -q set "$CFG.health=health"
+	for _sc in "$@"; do
+		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
+		case "$_sc_k" in
+			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+		esac
+	done
+	uci -q commit "$CFG"
+	# выключили - следующий status сам скажет enabled:0, точки погаснут
+	echo '{"result":"ok"}'
+	;;
+*)
+	echo "usage: $0 tick|once|status|setconf k=v..." >&2
+	exit 1
+	;;
+esac

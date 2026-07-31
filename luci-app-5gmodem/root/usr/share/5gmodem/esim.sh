@@ -234,13 +234,33 @@ euicc_probe_wdm() {
 		      _pwsave=$(_mbim_slot_get "$_pwdev") ;;
 		*)    return 1 ;;
 	esac
-	_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
-	rm -f "$_pwo"
-	( env $_pw LPAC_HTTP="$(http_local_drv)" "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
-	_pwp=$!
-	_pwn=0
-	while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
-	kill "$_pwp" 2>/dev/null
+	_pwr=1
+	_pwtry=0
+	while [ "$_pwtry" -lt 2 ]; do
+		_pwtry=$((_pwtry + 1))
+		_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
+		rm -f "$_pwo"
+		( env $_pw LPAC_HTTP="$(http_local_drv)" "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
+		_pwp=$!
+		_pwn=0
+		while kill -0 "$_pwp" 2>/dev/null && [ "$_pwn" -lt 15 ]; do sleep 1; _pwn=$((_pwn + 1)); done
+		kill "$_pwp" 2>/dev/null
+		grep -qi '"eidValue"\|"eid"' "$_pwo" 2>/dev/null && _pwr=0
+		rm -f "$_pwo"
+		[ "$_pwr" = 0 ] && break
+		# ЗАКЛИНИВШИЙ mbim-proxy = ложное "noeuicc". У Cudy TR3000 (DW5821e,
+		# proto=mbim) висящий прокси одновременно валил data-сессию и пробу eUICC.
+		# Если прокси есть, а канал не наш MM - перезапускаем его и пробуем ещё
+		# раз. У MM-модемов прокси трогать нельзя: это его рабочий канал.
+		if [ "$_pwtry" = 1 ] && [ "$1" = mbim ] \
+			&& pidof mbim-proxy >/dev/null 2>&1 && ! _mm_owns_channel; then
+			logger -t 5gmodem "esim: mbim-проба не ответила, перезапускаю mbim-proxy"
+			killall mbim-proxy 2>/dev/null
+			sleep 2
+		else
+			break
+		fi
+	done
 	# ВОЗВРАЩАЕМ MAPPING ВСЕГДА, а не только когда запрещали переключение.
 	#
 	# active-esim в ответе модема описывает СОСТОЯНИЕ КАРТЫ в слоте («там eSIM с
@@ -254,8 +274,6 @@ euicc_probe_wdm() {
 	# добраться до eUICC (иначе профили не прочитать вовсе), а откат возвращает
 	# рабочую SIM после того, как чтение закончено.
 	[ "$1" = mbim ] && _mbim_slot_restore "$_pwdev" "$_pwsave"
-	grep -qi '"eidValue"\|"eid"' "$_pwo" 2>/dev/null; _pwr=$?
-	rm -f "$_pwo"
 	return $_pwr
 }
 

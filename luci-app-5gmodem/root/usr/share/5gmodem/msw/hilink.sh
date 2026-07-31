@@ -39,18 +39,6 @@ hilink_netdev() {   # $1 - usb-путь
 	return 1
 }
 
-# Сетевое имя модема, если он БЕЗ ПОРТОВ (HiLink). Пусто - обычный модем.
-# Признак строгий: есть net[], и при этом нет ни tty, ни wdm.
-hilink_net() {   # $1 - usb-путь
-	_hl=$("$RES/listmodems.sh" 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$1\"].net[0]" 2>/dev/null)
-	[ -n "$_hl" ] || return 1
-	_ht=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)
-	_hw=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null)
-	[ -n "$_ht$_hw" ] && return 1
-	echo "$_hl"
-}
-
 # Интерфейс для модема без портов. Никакого mkiface: у HiLink нет ни AT, ни
 # cdc-wdm, дозваниваться некуда - модем держит соединение сам и раздаёт адрес
 # по DHCP. Роутеру остаётся обычный dhcp-клиент на его сетевой карте.
@@ -165,7 +153,7 @@ try_at_debug() {   # $1 - usb-путь
 	_ad_n=0
 	while [ "$_ad_n" -lt 20 ]; do
 		sleep 2
-		rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+		rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
 		[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && break
 		_ad_n=$((_ad_n + 1))
 	done

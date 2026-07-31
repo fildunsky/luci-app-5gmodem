@@ -553,6 +553,20 @@ return view.extend({
 		   тот, кто этим занимается: ussd.sh и handleCommand соответственно.
 		   Здесь нужен лишь выбор транспорта. */
 		let get_via_mm = uci.get('5gmodem', 'sms', 'ussd_via_mm');
+		/* Флаг ussd_via_mm - ГЛОБАЛЬНЫЙ, а транспорт у каждого модема свой:
+		   взведённый ради MM-модема (Compal), он гнал в mmcli и USSD AT-модема
+		   после смены активного (Telit «разучился» и USSD). Флаг = «MM-путь
+		   разрешён», решает протокол интерфейса АКТИВНОГО модема - та же
+		   логика, что у SMS в smsbridge.sh (_active_is_mm). */
+		if (get_via_mm == '1') {
+			var _amp = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+			var _ams = 'm_' + _amp.replace(/[^A-Za-z0-9]/g, '_');
+			var _amif = uci.get('5gmodem', _ams, 'network') ||
+				uci.get('5gmodem', '@5gmodem[0]', 'network');
+			if (_amif && uci.get('network', _amif, 'proto') !== 'modemmanager') {
+				get_via_mm = '0';
+			}
+		}
 
 		if ( ussd.length < 1 ) {
 			ui.addNotification(null, E('p', _('Please specify the code to send')), 'info');
@@ -706,6 +720,7 @@ return view.extend({
 			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/ussdcodes.user'), null),
 			L.resolveDefault(fs.list('/etc/5gmodem/modem/ussdcodes'), []),
 			uci.load('5gmodem'),
+			L.resolveDefault(uci.load('network')),
 			L.resolveDefault(uci.load('defmodems')),
 			/* Знаем ли мы наверняка, что USSD на этом модеме не работает.
 			   Ответ идёт из базы проверенных модемов (quirks.sh), сам модем при
@@ -787,7 +802,7 @@ return view.extend({
 					   где включить, если ответа нет. */
 					E('p', {}, (uci.get('5gmodem', 'sms', 'ussd_3g') == '1')
 						? _('The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds.').format(ussdRat)
-						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings above.').format(ussdRat))
+						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings below.').format(ussdRat))
 				]) : '',
 				E('div', { 'class': 'cbi-section tgpage' }, [
 					E('div', { 'class': 'cbi-section-node' }, [
