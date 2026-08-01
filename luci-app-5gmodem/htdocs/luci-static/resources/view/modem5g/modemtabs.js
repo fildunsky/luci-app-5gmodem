@@ -4,6 +4,7 @@
 'require uci';
 'require poll';
 'require ui';
+'require view.modem5g.mutil as mutil';
 
 /* ОБЩИЙ CSS ПРИЛОЖЕНИЯ - подключаем ОДИН РАЗ отсюда: этот модуль требуют все
    страницы приложения, поэтому отдельного загрузчика не нужно. Файл кэшируется
@@ -239,6 +240,7 @@ function applyUssdTabVisibility() {
 			var bad = (String(st.supported) === '0');
 			ussdHideRule(bad);
 			try { localStorage.setItem(ussdSeenKey(), bad ? '0' : '1'); } catch (e) {}
+			mutil.lsTouch(ussdSeenKey());
 		});
 }
 
@@ -270,6 +272,7 @@ function applyEsimTabVisibility(tries) {
 			var have = !!(st && st.available);
 			esimHideRule(!have);
 			try { localStorage.setItem(esimSeenKey(), have ? '1' : '0'); } catch (e) {}
+			mutil.lsTouch(esimSeenKey());
 		});
 }
 

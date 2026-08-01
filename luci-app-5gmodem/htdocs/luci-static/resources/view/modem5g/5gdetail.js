@@ -240,12 +240,28 @@ function afterFirstPoll(fn) {
    mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
 var simSlotsSeen = false;   // список слотов хоть раз пришёл нормальным
 var simSlotsTries = 0;
-function loadSimSlots() {
+/* ЖДЁМ ВОЗВРАЩЕНИЯ МОДЕМА ПОСЛЕ СМЕНЫ СЛОТА - И ПЕРЕСТАЁМ, КАК ТОЛЬКО ОН ВЕРНУЛСЯ.
+   Раньше здесь стояли семь безусловных таймеров (3..90 c), и все семь ходили в
+   AT-порт даже когда слот переключился с первой попытки: до тринадцати заходов
+   в порт вместе с ретраями самого loadSimSlots. Теперь цепочка обрывается на
+   первом ответе, где активен ИМЕННО запрошенный слот. */
+function pollSlotUntilSwitched(wantId, delays) {
+	if (!delays.length) { return; }
+	var ms = delays.shift();
+	window.setTimeout(function() {
+		loadSimSlots(function(st) {
+			if (st && String(st.active) === String(wantId)) { return; }
+			pollSlotUntilSwitched(wantId, delays);
+		});
+	}, ms);
+}
+
+function loadSimSlots(cb) {
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
 		var st = {};
-		try { st = JSON.parse(out) || {}; } catch (e) { return; }
+		try { st = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
 		var box = document.getElementById('simslotn');
-		if (!box) { return; }
+		if (!box) { if (cb) { cb(null); } return; }
 		if (!st.slots || st.slots.length < 2) {
 			/* Транзитная пустота: сразу после смены слота модем ресетится и
 			   переперечисляется на USB (у FM350 - десятки секунд), simslot.sh
@@ -264,9 +280,11 @@ function loadSimSlots() {
 					window.setTimeout(loadSimSlots, 3000);
 				}
 			}
+			if (cb) { cb(null); }
 			return;
 		}
 		simSlotsSeen = true;
+		if (cb) { cb(st); }
 		/* Тоже через sameRender: слоты опрашиваются по таймеру, а меняются лишь
 		   при переключении SIM. Безусловный innerHTML='' ронял высоту блока на
 		   каждом опросе (см. подробности у sameRender). */
@@ -318,9 +336,7 @@ function loadSimSlots() {
 						   Интерфейс переподнимает бэкенд (simslot.sh slot_redial),
 						   чтобы IP не остался от прежней SIM даже если уйти со
 						   страницы. */
-						[ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ].forEach(function(ms) {
-							window.setTimeout(loadSimSlots, ms);
-						});
+						pollSlotUntilSwitched(s.id, [ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ]);
 					}).catch(function() { ui.hideModal(); });
 				}
 			}, [ s.label ]));
@@ -2493,6 +2509,10 @@ simDialog: baseclass.extend({
 	   mmIdx получаем в фоне: он нужен только кнопкам режимов/бендов, а блок
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
+		/* Тёплые кэши в localStorage заводятся под ключ модема и раньше жили
+		   вечно (см. mutil.lsSweep): чистим то, к чему не обращались месяц. */
+		mutil.lsSweep([ 'bands5g2-', 'bands5g-', '5gmodem.esim.active', '5gmodem.ussd.supported',
+		                'netpri-pingstate', 'netpri-ssclash-', 'btninfo:' ], 30);
 		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
 			.then(function(idx) { mmIdx = String(idx || '').trim(); });
 		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не

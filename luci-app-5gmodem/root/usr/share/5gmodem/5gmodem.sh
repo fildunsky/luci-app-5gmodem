@@ -581,7 +581,16 @@ if [ -n "$_PINNED" ]; then
 	# бы в tty, которым владеет MM - это ломает ему enable/connect, то есть модем
 	# остаётся БЕЗ IP (проверенный класс ошибок, см. detect.sh и mm-inhibit.sh).
 	# Метрики такого модема берутся из mmcli - блок ниже по коду.
-	[ "$(printf '%s' "$_pin_rec" | jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ] && DEVICE=""
+	# РЕШЕНИЕ ВЛАДЕЛЬЦА (01.08.2026): AT-порт MM-модема опрашиваем НАРАВНЕ с
+	# остальными. Прежний запрет (owner=mm -> DEVICE="") делал адресный опрос
+	# строже обычного: у Compal под MM троттлинг и температура были видны на
+	# своей вкладке и пропадали в снимке соседа и в статистике. Смысла в такой
+	# асимметрии нет - вендорные профили дают то, чего mmcli не умеет вовсе
+	# (CEITHERM, CA_INFO, антенны), ради этого MBIM/QMI-профили и писались.
+	# ЗАЩИТА ОСТАЁТСЯ ОДНА, но общая: очередь at_lock ниже - в порт ходит по
+	# одному потребителю за раз. Если вернётся класс «MM не может подключиться»
+	# (см. историю правила, 1.9.8.x), лечение - не запрет, а короче таймауты и
+	# реже вендорные запросы.
 else
 	DEVICE=$($RES/detect.sh)
 fi
@@ -924,10 +933,10 @@ if [ -n "$NETUP" ]; then
 		fi
 		if [ -n "$CT" ]; then
 
-			D=$(expr $CT / 60 / 60 / 24)
-			H=$(expr $CT / 60 / 60 % 24)
-			M=$(expr $CT / 60 % 60)
-			S=$(expr $CT % 60)
+			D=$((CT / 60 / 60 / 24))
+			H=$((CT / 60 / 60 % 24))
+			M=$((CT / 60 % 60))
+			S=$((CT % 60))
 			CONN_TIME=$(printf "%dd, %02d:%02d:%02d" $D $H $M $S)
 			CONN_TIME_SINCE=$(date "+%Y%m%d%H%M%S" -d "@$(($(date +%s) - CT))")
 			
@@ -935,8 +944,13 @@ if [ -n "$NETUP" ]; then
 		
 		IFACE=$(echo "$SECSTATUS" | awk -F\" '/l3_device/ {print $4}')
 		if [ -n "$IFACE" ]; then
-			RX=$(ifconfig $IFACE | awk -F[\(\)] '/bytes/ {printf "%s",$2}')
-			TX=$(ifconfig $IFACE | awk -F[\(\)] '/bytes/ {printf "%s",$4}')
+			# Один ifconfig и один awk на ОБА счётчика: было по паре процессов на
+			# каждый, а строка со счётчиками у busybox одна и та же.
+			_RXTX=$(ifconfig "$IFACE" 2>/dev/null | awk -F[\(\)] '/bytes/ {printf "%s|%s",$2,$4}')
+			if [ -n "$_RXTX" ]; then
+				RX="${_RXTX%%|*}"
+				TX="${_RXTX##*|}"
+			fi
 		fi
 fi
 
@@ -1393,7 +1407,7 @@ if [ -n "$SIMID" ]; then
 			# взять at_lock уже ПОСЛЕ нашего выхода - он должен захватывать лок
 			# сам, а не думать, что его держит (уже мёртвый) предок.
 			( unset _AT_LOCK_HELD; eval "exec $AT_LOCK_FD>&-" 2>/dev/null
-			  /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" ) \
+			  /usr/share/5gmodem/modemswitch.sh autoapn "$_SIM_IF" "$SIMID" ) \
 				>/dev/null 2>&1 </dev/null &
 		fi
 	fi
@@ -1473,7 +1487,50 @@ conn_status_line() {   # $1 = имя интерфейса
 # пусты (sanitize превратит их в "-"), финальный печатает всё.
 # ВАЖНО (урок в шапке serve_cache): никаких '#'-комментариев ВНУТРИ heredoc -
 # они уезжают прямо в JSON и ломают разбор.
+# ЧТО МОЖНО ПОСЧИТАТЬ ДО heredoc - СЧИТАЕМ ДО НЕГО, И ОДИН РАЗ.
+#
+# Внутри heredoc каждая подстановка `$(...)` - это подоболочка, а `uci`/`pgrep`/
+# `cat` внутри неё - ещё и процесс. Конфиг за время опроса не меняется, поэтому
+# proto/apn/pdp/kind/mm_exclude/vidpid читаются ровно один раз на процесс - при
+# ХОЛОДНОМ старте снимок печатается ДВАЖДЫ (частичный и полный), и без этого всё
+# перечисленное считалось бы дважды.
+#
+# Файлы sysfs читаем `read`, а не `cat`: значение короткое, процесс не нужен.
+_SNAP_PREPARED=""
+_snap_prepare() {
+	[ -n "$_SNAP_PREPARED" ] && return 0
+	_SNAP_PREPARED=1
+
+	_SN_VID=""; _SN_PID=""
+	read -r _SN_VID < "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null
+	read -r _SN_PID < "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null
+	_SN_VIDPID="$_SN_VID:$_SN_PID"
+
+	_SN_IFPROTO=$(uci -q get "network.$SEC.proto")
+	_SN_APN=$(uci -q get "network.$SEC.apn")
+	_SN_PDP="$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")"
+	[ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && _SN_ROAMOK=1 || _SN_ROAMOK=0
+
+	pgrep ModemManager >/dev/null 2>&1 && _SN_MMRUN=1 || _SN_MMRUN=0
+
+	_SN_KIND=$(uci -q get "5gmodem.$_hl_sec.kind")
+	[ "$_SN_KIND" = "hilink" ] && _SN_ATDBG=1 || _SN_ATDBG=0
+
+	_SN_MMX=$(uci -q get "5gmodem.$_hl_sec.mm_exclude")
+	case "$_SN_MMX" in
+		0|1) _SN_MMHID="$_SN_MMX" ;;
+		*) [ "$_SN_IFPROTO" = modemmanager ] && _SN_MMHID=0 || _SN_MMHID=1 ;;
+	esac
+
+	_SN_XMM=0
+	if [ -f /lib/netifd/proto/xmm.sh ] \
+	   && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0"; then
+		_SN_XMM=1
+	fi
+}
+
 emit_snapshot() {
+_snap_prepare
 cat <<EOF
 {
 "path":"$(sanitize_string "$_POLL_AM")",
@@ -1487,7 +1544,7 @@ cat <<EOF
 "rx":"$(sanitize_number "$RX")",
 "tx":"$(sanitize_number "$TX")",
 "modem":"$(sanitize_string "$MODEL")",
-"vidpid":"$(sanitize_string "$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)")",
+"vidpid":"$(sanitize_string "$_SN_VIDPID")",
 "mtemp":"$(sanitize_string "$TEMP")",
 "mtherm":"$(sanitize_number "$THERM")",
 "antports":"$(sanitize_string "$ANTPORTS")",
@@ -1495,12 +1552,12 @@ cat <<EOF
 "firmware":"$(sanitize_string "$FW")",
 "cport":"$(sanitize_string "${DEVICE:-$_CPORT_MM}")",
 "protocol":"$(sanitize_string "$PROTO")",
-"iface_proto":"$(sanitize_string "$(uci -q get "network.$SEC.proto")")",
-"mm_running":"$(pgrep ModemManager >/dev/null 2>&1 && echo 1 || echo 0)",
-"mm_hidden":"$(_mmx=$(uci -q get "5gmodem.$_hl_sec.mm_exclude"); case "$_mmx" in 0|1) echo "$_mmx";; *) [ "$(uci -q get "network.$SEC.proto")" = modemmanager ] && echo 0 || echo 1;; esac)",
-"xmm_capable":"$([ -f /lib/netifd/proto/xmm.sh ] && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0" && echo 1 || echo 0)",
-"iface_apn":"$(sanitize_string "$(uci -q get "network.$SEC.apn")")",
-"iface_pdptype":"$(sanitize_string "$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")")",
+"iface_proto":"$(sanitize_string "$_SN_IFPROTO")",
+"mm_running":"$_SN_MMRUN",
+"mm_hidden":"$_SN_MMHID",
+"xmm_capable":"$_SN_XMM",
+"iface_apn":"$(sanitize_string "$_SN_APN")",
+"iface_pdptype":"$(sanitize_string "$_SN_PDP")",
 "csq":"$(sanitize_number "$CSQ")",
 "signal":"$(sanitize_number "$CSQ_PER")",
 "operator_name":"$(sanitize_string "$COPS")",
@@ -1516,11 +1573,11 @@ cat <<EOF
 "registration":"$(sanitize_string "$REG")",
 "registration_cs":"$(sanitize_string "$REG_CS")",
 "simslot":"$(sanitize_string "$SSIM")",
-"allow_roaming":"$([ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && echo 1 || echo 0)",
+"allow_roaming":"$_SN_ROAMOK",
 "imei":"$(sanitize_string "$NR_IMEI")",
 "imsi":"$(sanitize_string "$NR_IMSI")",
 "iccid":"$(sanitize_string "$NR_ICCID")",
-"at_debug":"$([ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && echo 1 || echo 0)",
+"at_debug":"$_SN_ATDBG",
 "lac_dec":"$(sanitize_number "$LAC_DEC")",
 "lac_hex":"$(sanitize_string "$LAC_HEX")",
 "tac_dec":"$(sanitize_number "$TAC_DEC")",
@@ -1591,6 +1648,9 @@ if [ ! -s "$CACHE" ] && [ -n "$REG$CSQ" ] && [ -n "$DEVICE" ]; then
 	else
 		rm -f "$_PTMP"
 	fi
+	# Дальше идёт профиль, а он может тронуть конфиг (APN, модель). Финальный
+	# снимок обязан прочитать его заново - сбрасываем предподсчёт.
+	_SNAP_PREPARED=""
 fi
 
 # MM-МОДЕМ: ЯДРО ИЗ mmcli ДО ПРОФИЛЯ. AT-разбор выше дал пустые REG/MODE_NUM

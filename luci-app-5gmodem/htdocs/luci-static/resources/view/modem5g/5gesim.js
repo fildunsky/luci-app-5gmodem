@@ -367,51 +367,6 @@ return view.extend({
 	   сразу при render - тело (body) наполняется отдельно (_fillBody). */
 	_shell: function(body) {
 		return E('div', { 'class': 'cbi-map' }, [
-			E('style', {}, [
-				'.esim-metarow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:.4em 0 1em}' +
-				'.esim-meta{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:88%;opacity:.85;flex:1 1 auto;min-width:0;word-break:break-word}' +
-				'.esim-refresh{flex:0 0 auto}' +
-				'.esim-dl{display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:nowrap}' +
-				'.esim-dl input#esim-code{flex:1 1 auto;min-width:6em;max-width:none}' +
-				/* Оператор в таблице - жирный, с иконкой SIM. */
-				'#esim-profiles .esim-op{display:inline-flex;align-items:center;gap:6px;font-weight:600}' +
-				'#esim-profiles .esim-op img{width:15px;height:15px;flex:0 0 auto;display:block}' +
-				/* Узкие экраны: базовый CSS стакает ячейки с двойными отступами и
-				   ломает вид. Свой компактный стек: заголовок прячем, ряд = карточка
-				   с одним разделителем, ячейки без лишнего паддинга, ICCID переносим,
-				   кнопки влево. */
-				'@media (max-width:768px){' +
-					'#esim-profiles .tr.table-titles{display:none}' +
-					'#esim-profiles .tr.esim-row{display:block;padding:10px 2px;' +
-						'border-bottom:1px solid rgba(128,128,128,.18)}' +
-					'#esim-profiles .td{display:block;padding:1px 0;border:none;white-space:normal}' +
-					'#esim-profiles .td.right{text-align:left;margin-top:8px}' +
-					'#esim-profiles .td.right .btn{margin-left:0;margin-right:6px}' +
-				'}' +
-				/* Кнопка загрузки QR - квадратная иконка в стиле кнопок темы, вровень
-				   с полем и кнопкой «Добавить». Фикс-ширина, не сжимается. */
-				'.esim-qr-btn{flex:0 0 auto;display:inline-flex;align-items:center;' +
-					'justify-content:center;padding:0;width:2.35em;height:2.35em}' +
-				'.esim-qr-btn img{width:1.3em;height:1.3em;display:block}' +
-				'.esim-dl>.btn{flex:0 0 auto;white-space:nowrap}' +
-				'.esim-actions{margin-top:10px}' +
-				'.esim-notif{margin-top:14px;border:1px solid rgba(224,72,61,.35);border-radius:8px;padding:10px 12px;background:rgba(224,72,61,.06)}' +
-				'.esim-notif-h{font-weight:600;margin-bottom:2px}' +
-				'.esim-notif-sub{font-size:85%;opacity:.75;margin-bottom:8px}' +
-				'.esim-notif-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid rgba(128,128,128,.15);flex-wrap:wrap}' +
-				'.esim-notif-op{font-weight:600}' +
-				'.esim-notif-host{font-size:82%;opacity:.7}' +
-				'.esim-notif-btns{flex:0 0 auto;white-space:nowrap}' +
-				'.esim-notif-btns .btn{margin-left:6px}' +
-				'#esim-profiles .btn{padding:1px 8px;font-size:85%;margin-left:4px}' +
-				'#esim-profiles td,#esim-profiles th{white-space:nowrap}' +
-				'.esim-steps{margin-top:8px;font-size:88%;opacity:.8;min-height:1.3em}' +
-				'.esim-step{padding:1px 0;font-family:ui-monospace,Menlo,Consolas,monospace}' +
-				'.esim-set{margin-top:18px;border-top:1px solid rgba(128,128,128,.25);padding-top:10px}' +
-				'.esim-set>summary{cursor:pointer;font-size:92%;opacity:.75;user-select:none}' +
-				'.esim-set>summary:hover{opacity:1}' +
-				'.esim-set .cbi-value{margin-top:10px}'
-			]),
 			/* id нужен оверлею операций (modemtabs.setBusy('#esim-section')):
 			   селектор '.cbi-section' брал ПЕРВУЮ секцию документа - на части
 			   тем это не наш блок. */
@@ -619,6 +574,14 @@ return view.extend({
 	_pollProgress: function(box) {
 		var self = this;
 		if (!self._dlActive) { return; }
+		// НЕ ХОДИМ В БЭКЕНД, КОГДА СТРОКУ ШАГА НИКТО НЕ ВИДИТ: вкладка скрыта или
+		// спиннер уже не в документе. Загрузка профиля живёт до одиннадцати минут,
+		// и всё это время опрос раз в 1.2 c дёргал бы esim.sh в фоновой вкладке
+		// впустую. Цикл не бросаем - вернулись на вкладку, и шаги снова видны.
+		if (document.hidden || (box && box.isConnected === false)) {
+			window.setTimeout(function() { self._pollProgress(box); }, 1200);
+			return;
+		}
 		L.resolveDefault(fs.exec_direct(ESIM, [ 'progress' ]), '').then(function(out) {
 			// Никогда не затираем накопленный лог служебным ответом: если бэкенд
 			// ответил однострочным {"type":"lpa"...} (напр. "busy"), это НЕ лог

@@ -191,6 +191,16 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
+		/* ОДИН ключ на всё: и сбор рядов, и вкладку. Два отдельных выключателя
+		   («собирать» на странице + «показывать» здесь) давали бессмысленное
+		   состояние «вкладка есть, данных нет». Пункт меню появляется/исчезает
+		   по этому же ключу (см. menu.d), поэтому после сохранения нужна
+		   перезагрузка страницы - LuCI перечитает дерево меню. */
+		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
+			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
+		o.default = '1';
+		o.rmempty = false;
+
 		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
 			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
@@ -335,31 +345,6 @@ return view.extend({
 				   <table class="cbi-section-table">, но по умолчанию она тянется
 				   на 100% ширины и колонки расползаются по-разному. Сжимаем
 				   таблицу и колонки по содержимому - одинаково в bootstrap и proton. */
-				E('style', {}, [
-					/* Таблица карточек — компактная, по содержимому, слева. */
-					'.tg-modem-form table.cbi-section-table{width:auto}',
-					'.tg-modem-form table.cbi-section-table th,',
-					'.tg-modem-form table.cbi-section-table td{width:1%;white-space:nowrap;text-align:left;vertical-align:middle}',
-					'.tg-modem-form table.cbi-section-table select,',
-					'.tg-modem-form table.cbi-section-table input[type="text"]{width:auto;min-width:10em}',
-					/* Внешняя коробка вложенного блока (SectionValue) — во всю ширину
-					   строки. Иначе на proton .cbi-value=flex сжимает её под таблицу. */
-					'.tg-modem-form .cbi-value[data-name="__pingcards"],',
-					'.tg-modem-form .cbi-value[data-name="__svccards"]{display:block}',
-					'.tg-modem-form .cbi-value[data-name="__pingcards"]>.cbi-value-title:empty,',
-					'.tg-modem-form .cbi-value[data-name="__svccards"]>.cbi-value-title:empty{display:none}',
-					'.tg-modem-form .cbi-value[data-name="__pingcards"]>.cbi-value-field,',
-					'.tg-modem-form .cbi-value[data-name="__svccards"]>.cbi-value-field{width:100%}',
-					/* Коробка = flex-полоса: таблица слева, «Добавить» уезжает вправо
-					   (margin-left:auto). overflow:visible ВАЖЕН — proton вешает на
-					   .cbi-tblsection overflow-x:auto, и LuCI берёт её как scrollParent,
-					   считая высоту combobox-меню ≈ высоте строки (короткий список со
-					   скроллом). Возвращаем visible → скролл-родитель = страница. */
-					'.tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection,',
-					'.tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection{width:100%;box-sizing:border-box;overflow:visible;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.3em .8em}',
-					'.tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection>.cbi-section-create,',
-					'.tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection>.cbi-section-create{margin:0 0 0 auto}'
-				].join('')),
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ])
 			]);
 		});

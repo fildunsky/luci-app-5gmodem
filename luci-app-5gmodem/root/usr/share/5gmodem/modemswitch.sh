@@ -604,17 +604,27 @@ mkhilink)
 profiles)
 	_present=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
 	_act=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	# ОДИН ДАМП КОНФИГА НА ВЕСЬ ГЛАГОЛ. По нему берутся и список секций, и
+	# перечень занятых интерфейсов: подсчёт «сколько профилей делят интерфейс»
+	# делался отдельным `uci show | grep -c` НА КАЖДУЮ секцию, то есть по два
+	# процесса на карточку.
+	_dump=$(uci -q show "$CFG" 2>/dev/null)
+	_ifaces=" $(printf '%s\n' "$_dump" | sed -n "s/^$CFG\.m_[^.]*\.network='\?\([^']*\)'\?\$/\1/p" | tr '\n' ' ') "
 	printf '['
 	_first=1
 	_bf=""
 	# Перечисляем секции по ЗАГОЛОВКУ (=modem), а не по ключу path: секцию мог
 	# создать path-less писатель, и по .path её было не найти - модем «пропадал».
-	for _sec in $(uci -q show "$CFG" 2>/dev/null | sed -n 's/^'"$CFG"'\.\(m_[^.]*\)=modem$/\1/p'); do
+	for _sec in $(printf '%s\n' "$_dump" | sed -n 's/^'"$CFG"'\.\(m_[^.]*\)=modem$/\1/p'); do
 		# Холдинг-секции припаркованных профилей (m_park_<imei>) - не модемы, у
 		# них намеренно нет пути; карточкой их показывать нельзя.
 		case "$_sec" in m_park_*) continue ;; esac
-		[ "$(uci -q get "$CFG.$_sec.parked")" = "1" ] && continue
-		_p=$(uci -q get "$CFG.$_sec.path")
+		# СНИМОК ОДНОЙ СЕКЦИИ: её четырнадцать ключей ниже читаются подстановками
+		# оболочки (0.8 мс), а не четырнадцатью запусками uci (3 мс каждый).
+		_ss=$(uci_sec_snap "$CFG" "$_sec")
+		_pg() { uci_sec_val "$_ss" "$CFG.$_sec" "$1"; }
+		[ "$(_pg parked)" = "1" ] && continue
+		_p=$(_pg path)
 		# BACKFILL пути для уже сломанных секций: имя однозначно кодирует путь
 		# (m_1_1_3 -> 1-1.3: первый разделитель - дефис шины, дальше точки хаба).
 		# Закрепляем, чтобы и остальные циклы по m_* снова видели модем.
@@ -623,15 +633,16 @@ profiles)
 			[ -n "$_p" ] && { uci -q set "$CFG.$_sec.path=$_p"; _bf=1; }
 		fi
 		[ -n "$_p" ] || continue
-		_if=$(uci -q get "$CFG.$_sec.network")
+		_if=$(_pg network)
 		_proto=""; _apn=""; _pdp=""
 		if [ -n "$_if" ]; then
-			_proto=$(uci -q get "network.$_if.proto")
-			_apn=$(uci -q get "network.$_if.apn")
-			_pdp=$(uci -q get "network.$_if.pdptype")
+			_ns=$(uci_sec_snap network "$_if")
+			_proto=$(uci_sec_val "$_ns" "network.$_if" proto)
+			_apn=$(uci_sec_val "$_ns" "network.$_if" apn)
+			_pdp=$(uci_sec_val "$_ns" "network.$_if" pdptype)
 		fi
 		# Протокол, запомненный в секции, если интерфейса ещё нет.
-		[ -n "$_proto" ] || _proto=$(uci -q get "$CFG.$_sec.iface_proto")
+		[ -n "$_proto" ] || _proto=$(_pg iface_proto)
 		_on=0
 		case " $_present " in *" $_p "*) _on=1 ;; esac
 		# Интерфейс делят несколько профилей - это ровно та беда, что была с
@@ -639,28 +650,33 @@ profiles)
 		_shared=0
 		if [ -n "$_if" ]; then
 			# Только секции m_* : глобальный @5gmodem[0].network - это
-			# указатель на активный интерфейс, а не второй владелец.
-			_n=$(uci -q show "$CFG" 2>/dev/null | grep -c "^$CFG\.m_[^.]*\.network='\?$_if'\?\$")
-			[ "${_n:-0}" -gt 1 ] && _shared=1
+			# указатель на активный интерфейс, а не второй владелец (список
+			# _ifaces собран ровно по ним, одним дампом выше).
+			_n=0
+			for _x in $_ifaces; do
+				[ "$_x" = "$_if" ] && _n=$((_n + 1))
+			done
+			[ "$_n" -gt 1 ] && _shared=1
 		fi
 		[ "$_first" = 1 ] || printf ','
 		_first=0
+		_kind=$(_pg kind)
 		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s","esim":"%s","save_band":"%s","save_band5gnsa":"%s","save_band5gsa":"%s"}' \
 			"$_sec" "$_p" \
-			"$(uci -q get "$CFG.$_sec.model")" \
-			"$(uci -q get "$CFG.$_sec.imei")" \
+			"$(_pg model)" \
+			"$(_pg imei)" \
 			"$_if" "$_proto" "$_apn" "$_pdp" "$_on" \
 			"$([ "$_p" = "$_act" ] && echo 1 || echo 0)" "$_shared" \
-			"$(uci -q get "$CFG.$_sec.celllock")" \
-			"$(uci -q get "$CFG.$_sec.mm_exclude")" \
-			"$(uci -q get "$CFG.$_sec.vidpid")" \
-			"$(uci -q get "$CFG.$_sec.kind")" \
-			"$(uci -q get "$CFG.$_sec.netdev")" \
-			"$([ "$(uci -q get "$CFG.$_sec.kind")" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)" \
+			"$(_pg celllock)" \
+			"$(_pg mm_exclude)" \
+			"$(_pg vidpid)" \
+			"$_kind" \
+			"$(_pg netdev)" \
+			"$([ "$_kind" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)" \
 			"$(_esim_state "$_sec" "$_p")" \
-			"$(uci -q get "$CFG.$_sec.save_band")" \
-			"$(uci -q get "$CFG.$_sec.save_band5gnsa")" \
-			"$(uci -q get "$CFG.$_sec.save_band5gsa")"
+			"$(_pg save_band)" \
+			"$(_pg save_band5gnsa)" \
+			"$(_pg save_band5gsa)"
 	done
 	printf ']\n'
 	[ -n "$_bf" ] && uci -q commit "$CFG"
@@ -776,19 +792,36 @@ autoapn)
 	# передозвон). Пустой путь (legacy-конфиг) = прежнее поведение.
 	_am_path=$(uci -q get "$CFG.$_am_sec.path")
 
+	# IMSI, ПЕРЕДАННЫЙ ВЫЗЫВАЮЩИМ - САМЫЙ БЫСТРЫЙ ПУТЬ.
+	#
+	# Смену симки замечает опрос метрик, СРАВНИВАЯ прочитанный IMSI с
+	# запомненным, - то есть новый IMSI у него уже в руках. Раньше он его не
+	# передавал, и autoapn выяснял то же самое заново: сперва до 60 c ждал
+	# появления адреса, потом до 40 c переспрашивал модем. На горячей замене
+	# симки адреса заведомо нет (модем только регистрируется), поэтому первая
+	# минута сгорала впустую - замерено на живой замене Мегафон -> Билайн:
+	# 15:13:58 «смена SIM», 15:14:59 выбран APN.
+	#
+	# Ключ подбора - код сети из IMSI, больше ничего не нужно.
+	_imsi_hint=$(printf '%s' "$3" | tr -cd '0-9')
+
 	# Ждём адрес: регистрация и первый дозвон занимают десятки секунд. РАНЬШЕ
 	# появление адреса было поводом выйти совсем - APN считался «раз связь есть,
 	# значит подходящий». На деле оператор нередко пускает с любым APN, и в
 	# интерфейсе годами оставался чужой: у Beeline-симки стоял "tt" от прежней
 	# T-Mobile. Поэтому адрес больше не повод молчать - решает СРАВНЕНИЕ APN
 	# ниже, а сам факт связи лишь избавляет от ожидания.
+	#
+	# И ЖДЁМ ТОЛЬКО ЕСЛИ IMSI НЕИЗВЕСТЕН: с ним ожидание адреса не даёт ничего.
 	_w=0; _ip=""
-	while [ "$_w" -lt 60 ]; do
-		_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
-			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
-		[ -n "$_ip" ] && break
-		sleep 5; _w=$((_w + 5))
-	done
+	if [ ${#_imsi_hint} -lt 6 ]; then
+		while [ "$_w" -lt 60 ]; do
+			_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
+				| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+			[ -n "$_ip" ] && break
+			sleep 5; _w=$((_w + 5))
+		done
+	fi
 
 	# Узнаём, в чьей мы сети - С ПОВТОРАМИ, пока не прочитается хоть что-то.
 	#
@@ -802,14 +835,23 @@ autoapn)
 	# Теперь опрашиваем СВЕЖО и повторяем: IMSI появляется быстро, ждать его
 	# дешевле, чем ошибиться с APN.
 	_j=""; _op=""; _mcc=""; _mnc=""; _imsi=""; _apn_w=0
+	if [ ${#_imsi_hint} -ge 6 ]; then
+		# Подсказку берём как есть и в модем не идём вовсе.
+		_imsi="$_imsi_hint"
+	else
+	# ШАГ ОЖИДАНИЯ АДАПТИВНЫЙ. Пять секунд на круг - это до восьми пропущенных
+	# секунд там, где IMSI появляется на второй; тот же урок уже выучен в
+	# _wait_reg (аудит 30.07): часто в начале, редко потом.
 	while [ "$_apn_w" -lt 40 ]; do
 		_j=$(POLL_MODEM="$_am_path" "$RES/5gmodem.sh" cached 5 2>/dev/null)
 		_op=$(printf '%s' "$_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
 		_imsi=$(printf '%s' "$_j" | jsonfilter -e '@.imsi' 2>/dev/null | tr -cd '0-9')
 		# Достаточно ЛИБО оператора, ЛИБО IMSI - оба дают ключ к APN.
 		{ [ -n "$_op" ] && [ "$_op" != "-" ]; } || [ ${#_imsi} -ge 6 ] && break
-		sleep 5; _apn_w=$((_apn_w + 5))
+		if [ "$_apn_w" -lt 6 ]; then sleep 1; _apn_w=$((_apn_w + 1))
+		else sleep 5; _apn_w=$((_apn_w + 5)); fi
 	done
+	fi
 	_mcc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mcc' 2>/dev/null)
 	_mnc=$(printf '%s' "$_j" | jsonfilter -e '@.operator_mnc' 2>/dev/null)
 
@@ -921,6 +963,31 @@ autoapn)
 	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (было «${_cur:-пусто}», оператор «$_op», $_plmn)"
 	ifdown "$IFACE" >/dev/null 2>&1
 	sleep 3
+	# ПЕРЕД ДОЗВОНОМ ЖДЁМ ГОТОВНОСТИ МОДЕМА - НО ПО ФАКТУ, А НЕ ВСЛЕПУЮ.
+	#
+	# Быстрый путь по IMSI ставит APN уже через секунды после того, как симку
+	# вынули и вставили, - а модем в этот момент ещё переинициализируется (у MM
+	# это «SIM hot swap setup», секунд десять-пятнадцать). Дозвон в такую минуту
+	# просто не удаётся, и связь появляется потом, по кругу восстановления -
+	# ровно та пауза, которую видно в журнале живой замены: APN выбран в
+	# 15:14:59, соединение поднялось в 15:15:51.
+	#
+	# Поэтому спрашиваем ModemManager, зарегистрирован ли модем, шагом в секунду
+	# и не дольше 30 c. Модем не под MM или mmcli нет - ждать нечего, идём как
+	# раньше.
+	_aa_mi=""
+	command -v mmcli >/dev/null 2>&1 && _aa_mi=$(mm_index_for_path "$_am_path" 2>/dev/null)
+	if [ -n "$_aa_mi" ]; then
+		_aa_w=0
+		while [ "$_aa_w" -lt 30 ]; do
+			case "$(mmcli -m "$_aa_mi" -K 2>/dev/null \
+				| sed -n 's/^modem\.generic\.state *: *//p')" in
+				registered|connected|connecting|disconnecting) break ;;
+			esac
+			sleep 1; _aa_w=$((_aa_w + 1))
+		done
+		[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: ждал готовности модема $_aa_w c"
+	fi
 	ifup "$IFACE" >/dev/null 2>&1
 	# Авто-подбор типа PDP ОТКЛЮЧЁН намеренно: дефолт теперь IPV4 (на нём модемы
 	# получают адрес сразу; см. set_pdp_opt в mkiface.sh), а перебор ipv4v6/ipv4

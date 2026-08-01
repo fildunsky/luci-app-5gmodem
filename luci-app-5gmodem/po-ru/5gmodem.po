@@ -3998,3 +3998,126 @@ msgstr "5G модем"
 
 msgid "Preparing the request…"
 msgstr "Готовлю запрос…"
+
+msgid "Statistics"
+msgstr "Статистика"
+
+msgid "Collect statistics"
+msgstr "Собирать статистику"
+
+msgid "Series live in RAM and are lost on reboot."
+msgstr "Ряды живут в оперативной памяти и теряются при перезагрузке."
+
+msgid "Keep monthly traffic across reboots"
+msgstr "Хранить месячный трафик между перезагрузками"
+
+msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
+msgstr "Месячные итоги пишутся во флеш-память примерно раз в час. Ряды пингов туда не пишутся никогда."
+
+msgid "Reset statistics"
+msgstr "Сбросить статистику"
+
+msgid "Uplink latency"
+msgstr "Задержка аплинков"
+
+msgid "Signal level"
+msgstr "Уровень сигнала"
+
+msgid "Monthly traffic"
+msgstr "Месячный трафик"
+
+msgid "No data yet"
+msgstr "Данных пока нет"
+
+msgid "%d min ago"
+msgstr "%d мин назад"
+
+msgid "now"
+msgstr "сейчас"
+
+msgid "Received"
+msgstr "Принято"
+
+msgid "Sent"
+msgstr "Отправлено"
+
+msgid "Total"
+msgstr "Всего"
+
+msgid "Month"
+msgstr "Месяц"
+
+msgid "KB"
+msgstr "КБ"
+
+msgid "MB"
+msgstr "МБ"
+
+msgid "GB"
+msgstr "ГБ"
+
+msgid "TB"
+msgstr "ТБ"
+
+msgid "Show statistics"
+msgstr "Отображать статистику"
+
+msgid "Adds the \"Statistics\" tab with charts of uplink latency, signal, temperature and monthly traffic."
+msgstr "Добавляет вкладку «Статистика» с графиками задержки аплинков, сигнала, температуры и месячного трафика."
+
+msgid "Collects uplink latency, signal, temperature and monthly traffic, and shows the \"Statistics\" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself."
+msgstr "Собирает задержку аплинков, уровень сигнала, температуру и месячный трафик и показывает вкладку «Статистика» с графиками. Ряды живут в оперативной памяти; месячный трафик можно сохранять между перезагрузками на самой вкладке."
+
+msgid "Forward incoming messages to Telegram"
+msgstr "Пересылать входящие в Telegram"
+
+msgid "A bot sends every new incoming SMS to the chosen chat. The very first run only remembers the current messages and sends nothing."
+msgstr "Бот отправляет каждое новое входящее SMS в выбранный чат. Самый первый запуск только запоминает текущие сообщения и ничего не шлёт."
+
+msgid "Bot token"
+msgstr "Токен бота"
+
+msgid "Token issued by @BotFather, e.g. 123456789:AA..."
+msgstr "Токен, выданный @BotFather, например 123456789:AA..."
+
+msgid "Chat ID"
+msgstr "ID чата"
+
+msgid "Numeric chat or channel ID. Write to the bot first, then take the ID from https://api.telegram.org/bot<token>/getUpdates"
+msgstr "Числовой идентификатор чата или канала. Сначала напишите боту, затем возьмите ID из https://api.telegram.org/bot<токен>/getUpdates"
+
+msgid "Check for new messages every"
+msgstr "Проверять новые сообщения каждые"
+
+msgid "1 min"
+msgstr "1 мин"
+
+msgid "5 min"
+msgstr "5 мин"
+
+msgid "15 min"
+msgstr "15 мин"
+
+msgid "Test delivery"
+msgstr "Проверка доставки"
+
+msgid "Sends a test message with the SAVED settings - save the form first."
+msgstr "Отправляет пробное сообщение с СОХРАНЁННЫМИ настройками - сначала сохраните форму."
+
+msgid "Send test message"
+msgstr "Отправить пробное сообщение"
+
+msgid "Test message sent"
+msgstr "Пробное сообщение отправлено"
+
+msgid "Failed to send: %s"
+msgstr "Не удалось отправить: %s"
+
+msgid "check the token, chat ID and the router internet connection"
+msgstr "проверьте токен, ID чата и наличие интернета у роутера"
+
+msgid "The phone number should start with the country prefix in international format, with the '+' (for example +7 for Russia). Without the '+' the network treats the number as national and may refuse to send. Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
+msgstr "Номер должен начинаться с кода страны в международном формате, со знаком «+» (например, +7 для России). Без «+» сеть считает номер национальным и может отказать в отправке. Номера из 3, 4 или 5 цифр считаются короткими и префикс не получают."
+
+msgid "Enter a country prefix, for example +7"
+msgstr "Введите код страны, например +7"

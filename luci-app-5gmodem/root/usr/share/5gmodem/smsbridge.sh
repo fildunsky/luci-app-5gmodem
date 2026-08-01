@@ -54,6 +54,15 @@ _active_is_mm() {
 	[ "$(uci -q get "network.$_amif.proto")" = "modemmanager" ]
 }
 
+# ТРАНСПОРТ ВЫБИРАЕТ ФЛАГ, И ЭТО ПРОВЕРЕНО ЖЕЛЕЗОМ.
+#
+# Была попытка решать «по протоколу активного модема» (раз им владеет MM - через
+# MM). На стенде она провалилась: у Compal RXM-G1 отправка через ModemManager
+# ломается в самой прошивке -
+#   MobileEquipment.PhoneFailure: MBIM status error: Couldn't send SMS part
+# - тогда как AT-порт того же модема на sms_tool отвечает нормально. То есть
+# глобальный ноль в конфиге был не наследством от соседнего модема, а верным
+# описанием этого железа. Флаг остаётся решающим.
 _smstool() {
 	if [ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
 	   && [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm; then
@@ -136,10 +145,306 @@ case "$1" in
 		exit 0 ;;
 esac
 
+# ЧЕЙ ЭТОТ ПОРТ - НАШ ИЛИ ModemManager. Ответ даёт реестр (он же отвечает на этот
+# вопрос всем остальным), поэтому здесь только тонкая обёртка с памятью на вызов.
+_PORT_OWNER=""
+_port_is_mm() {   # $1 - порт
+	[ -n "$1" ] || return 1
+	[ -n "$_PORT_OWNER" ] || _PORT_OWNER=$(printf '%s' "$("$RES/registry.sh" port "$1" 2>/dev/null)" \
+		| jsonfilter -e '@.owner' 2>/dev/null)
+	[ "$_PORT_OWNER" = "mm" ] || return 1
+	# ВЛАДЕЕТ ЛИ ОН ИМ ПРЯМО СЕЙЧАС. Реестр отвечает по конфигу (прото
+	# интерфейса), а модем может быть у MM отобран - например, нашей же
+	# инхибицией на время отправки. Тогда порт свободен, и правильный путь -
+	# обычный AT. Признак простой: MM не видит ни одного модема.
+	command -v mmcli >/dev/null 2>&1 || return 1
+	mmcli -L 2>/dev/null | grep -q "/Modem/"
+}
+
+# ОТПРАВКА ОДНОГО СООБЩЕНИЯ - С ВЫБОРОМ ТРАНСПОРТА ПО ВЛАДЕЛЬЦУ ПОРТА.
+#
+# Правило выведено двумя живыми стендами, и оно НЕ про флаг sms_via_mm:
+#   - порт под ModemManager: он держит его открытым и вычитывает ответы, поэтому
+#     свой AT-обмен там ненадёжен - шлём через MM (он же сам кодирует UCS2);
+#   - если MM отказал (прошивка Compal в MBIM однажды вернула PhoneFailure) -
+#     пробуем AT: иногда он выигрывает гонку чтения, и сообщение уходит;
+#   - порт наш: латиница - sms_tool, кириллица - свой PDU (см. smspdu.sh).
+# Возвращает 0 - ушло, 1 - не ушло.
+# БЮДЖЕТ ВРЕМЕНИ РАЗНЫЙ У СТРАНИЦЫ И У ОЧЕРЕДИ.
+#
+# Отправка через MM на Compal в MBIM ведёт себя непредсказуемо: то уходит за
+# секунду, то висит до таймаута (замерено на стенде: одна и та же команда - 6 c
+# и 88 c). Пользователю у экрана ждать полторы минуты нельзя: лучше быстро
+# сказать «поставил в очередь» и дослать фоном, где ожидание никому не мешает.
+_send_one() {   # $1 - порт, $2 - номер, $3 - текст, [$4 - fast|slow]
+	_so_port="$1"; _so_to="$2"; _so_txt="$3"
+	if [ "$4" = slow ]; then _so_tmm=60; _so_tat=45; else _so_tmm=20; _so_tat=15; fi
+	if _port_is_mm "$_so_port" && [ -x "$RES/sms_tool_mm" ]; then
+		if _sms_run "$_so_tmm" "$RES/sms_tool_mm" -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null; then
+			return 0
+		fi
+		logger -t 5gmodem "smsbridge: MM-отправка не удалась за ${_so_tmm}c, пробую AT-порт"
+		# Кириллице и на запасном пути нужен наш PDU: sms_tool закодирует её
+		# GSM-7 и адресат получит «?????».
+		if "$RES/smspdu.sh" needucs2 "$_so_txt"; then
+			_send_pdu "$_so_port" "$_so_to" "$_so_txt" 2>/dev/null
+			return $?
+		fi
+		_sms_run "$_so_tat" $(_smstool_at) -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null
+		return $?
+	fi
+	if "$RES/smspdu.sh" needucs2 "$_so_txt"; then
+		_send_pdu "$_so_port" "$_so_to" "$_so_txt" 2>/dev/null
+		return $?
+	fi
+	_sms_run "$_so_tat" $(_smstool_at) -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null
+}
+
+# Сырой sms_tool, без подмены на MM-мост: нужен там, где мы СОЗНАТЕЛЬНО идём в
+# AT-порт (запасной путь выше и наш PDU).
+_smstool_at() {
+	command -v sms_tool >/dev/null 2>&1 && echo /usr/bin/sms_tool || echo sms_tool
+}
+
+# НОМЕР ПРИВОДИМ К МЕЖДУНАРОДНОМУ ВИДУ - ОДИН РАЗ, ДЛЯ ВСЕХ ТРАНСПОРТОВ.
+#
+# Страница отдаёт номер так, как он лежит в поле или в телефонной книге, и «+»
+# там теряется. Для сети это не мелочь:
+#   - ModemManager на QMI-модеме отвечает «Unhandled QMI protocol error (54):
+#     Couldn't write SMS part ... WmsCauseCode» (проверено на Compal, стенд 88);
+#   - наш PDU-путь помечал такой номер национальным (TOA=81), и SMSC отклонял
+#     его «+CMS ERROR» (проверено на Telit, стенд 11).
+# Оба отказа выглядели как «сообщение не уходит», хотя дело было в одной цифре
+# формата. Правило: «+»/«00» - уже международный; 11 и более цифр, не
+# начинающихся с транковых «8»/«0», - международный без «+»; короткие номера
+# (900, 0500) и настоящие национальные (8XXXXXXXXXX) не трогаем.
+_norm_num() {   # $1 - номер как его дала страница
+	_nn=$(printf '%s' "$1" | tr -cd '0-9+')
+	case "$_nn" in
+		+*) printf '%s' "$_nn"; return ;;
+		00*) printf '+%s' "${_nn#00}"; return ;;
+	esac
+	case "$_nn" in
+		[1-79]*) [ "${#_nn}" -ge 11 ] && { printf '+%s' "$_nn"; return; } ;;
+	esac
+	printf '%s' "$_nn"
+}
+
+# ОЧЕРЕДЬ ИСХОДЯЩИХ - ЧТОБЫ ЗАНЯТЫЙ ПОРТ НЕ ТЕРЯЛ СООБЩЕНИЕ.
+#
+# ЗАЧЕМ. AT-порт делят опрос метрик, приём входящих, SMS и USSD. Если в момент
+# «Отправить» модем как раз принимал двухчастную рассылку, приглашение «>» не
+# приходит вовремя - и пользователь получал «sms sending failed», а сообщение
+# исчезало. Теперь оно не исчезает: кладётся в очередь и уходит следующим кругом
+# сторожа, когда порт освободится.
+#
+# ОЧЕРЕДЬ НА ФЛЕШЕ, а не в /tmp: неотправленное сообщение обязано пережить
+# перезагрузку - иначе «ушло или нет» становится лотереей. Записей мало и они
+# крошечные, износ флеша тут ни при чём.
+SMSQ_DIR=/etc/5gmodem/smsq
+SMSQ_MAX_TRIES=10
+SMSQ_MAX_AGE=86400
+
+_q_enqueue() {   # $1 - номер, $2 - текст, $3 - порт
+	mkdir -p "$SMSQ_DIR" 2>/dev/null || return 1
+	_qe_f="$SMSQ_DIR/$(date +%s 2>/dev/null).$$"
+	{
+		printf 'to=%s\n' "$1"
+		printf 'port=%s\n' "$3"
+		printf 'tries=0\n'
+		printf 'born=%s\n' "$(date +%s 2>/dev/null)"
+		printf 'text:\n'
+		printf '%s' "$2"
+	} > "$_qe_f.tmp" 2>/dev/null && mv "$_qe_f.tmp" "$_qe_f.sms" 2>/dev/null
+}
+
+# Отправка одного файла очереди. Возвращает 0 - ушло (файл удалён),
+# 1 - не вышло (счётчик попыток увеличен), 2 - сдались (файл удалён с записью
+# в журнал: вечно копить нельзя, а молча выбрасывать - тем более).
+_q_send_one() {   # $1 - файл
+	_qs_f="$1"
+	_qs_to=""; _qs_port=""; _qs_tries=0; _qs_born=0; _qs_txt=""; _qs_inbody=0
+	# «|| [ -n "$_qs_l" ]» ОБЯЗАТЕЛЕН: тело письма пишется БЕЗ завершающего
+	# перевода строки, а `read` последнюю такую строку не отдаёт - текст читался
+	# пустым, файл признавался битым и сообщение УДАЛЯЛОСЬ молча (поймано на
+	# первом же прогоне очереди).
+	while IFS= read -r _qs_l || [ -n "$_qs_l" ]; do
+		if [ "$_qs_inbody" = 1 ]; then
+			_qs_txt="${_qs_txt:+$_qs_txt
+}$_qs_l"
+			continue
+		fi
+		case "$_qs_l" in
+			to=*)    _qs_to="${_qs_l#to=}" ;;
+			port=*)  _qs_port="${_qs_l#port=}" ;;
+			tries=*) _qs_tries="${_qs_l#tries=}" ;;
+			born=*)  _qs_born="${_qs_l#born=}" ;;
+			text:)   _qs_inbody=1 ;;
+		esac
+	done < "$_qs_f"
+	case "$_qs_tries" in ''|*[!0-9]*) _qs_tries=0 ;; esac
+	case "$_qs_born" in ''|*[!0-9]*) _qs_born=0 ;; esac
+	if [ -z "$_qs_to" ] || [ -z "$_qs_txt" ]; then
+		logger -t 5gmodem "smsbridge: битая запись очереди $_qs_f (нет номера или текста) - удаляю"
+		rm -f "$_qs_f"
+		return 2
+	fi
+
+	_qs_now=$(date +%s 2>/dev/null); case "$_qs_now" in ''|*[!0-9]*) _qs_now=0 ;; esac
+	if [ "$_qs_tries" -ge "$SMSQ_MAX_TRIES" ] \
+	   || { [ "$_qs_born" -gt 0 ] && [ "$_qs_now" -gt 0 ] && [ $((_qs_now - _qs_born)) -gt "$SMSQ_MAX_AGE" ]; }; then
+		logger -t 5gmodem "smsbridge: сообщение для «$_qs_to» так и не ушло за $_qs_tries попыток - выбрасываю из очереди"
+		rm -f "$_qs_f"
+		return 2
+	fi
+
+	# Записи, попавшие в очередь ДО нормализации, чиним на лету.
+	_qs_to=$(_norm_num "$_qs_to")
+	[ -n "$_qs_port" ] || _qs_port=$(uci -q get "$CFG.sms.sendport")
+	[ -n "$_qs_port" ] && [ -c "$_qs_port" ] || return 1
+
+	_send_one "$_qs_port" "$_qs_to" "$_qs_txt" slow
+	_qs_rc=$?
+
+	# ПОСЛЕДНЕЕ СРЕДСТВО - ЗАБРАТЬ МОДЕМ У ModemManager НА ВРЕМЯ ОТПРАВКИ.
+	#
+	# Замерено на Compal RXM-G1 в MBIM (стенд 11.1, слабый сигнал RSRP -114,
+	# SINR -5): отправка через MM то уходит за секунду, то возвращает «Couldn't
+	# send SMS part: Failure» или висит до таймаута, а наш AT-обмен не проходит,
+	# пока MM держит порт открытым. Стоит его инхибировать - и то же сообщение
+	# уходит своим PDU за 4 c.
+	#
+	# ЦЕНА ВЫСОКА, поэтому по умолчанию ВЫКЛЮЧЕНО: на время инхибиции MM теряет
+	# модем, и после снятия он подхватывает его не сразу - на стенде интерфейс
+	# лежал около минуты. Включается осознанно: 5gmodem.sms.send_inhibit_mm=1.
+	#
+	# И только в ФОНОВОЙ досылке: страница должна отвечать быстро, а не держать
+	# пользователя, пока мы передёргиваем стек.
+	if [ "$_qs_rc" != 0 ] && [ "$(uci -q get "$CFG.sms.send_inhibit_mm")" = "1" ] \
+	   && _port_is_mm "$_qs_port" && command -v mmcli >/dev/null 2>&1; then
+		_qs_uid=$(mmcli -L 2>/dev/null | sed -n "s|.*/Modem/\([0-9]*\).*|\1|p" | head -1)
+		[ -n "$_qs_uid" ] && _qs_uid=$(mmcli -m "$_qs_uid" 2>/dev/null \
+			| sed -n "s|.*device: *||p" | head -1 | tr -d " '")
+		if [ -n "$_qs_uid" ]; then
+			logger -t 5gmodem "smsbridge: последняя попытка - забираю модем у ModemManager на время отправки"
+			( mmcli --inhibit-device="$_qs_uid" >/dev/null 2>&1 & echo $! > /tmp/5gmodem_sms_inhibit.pid ) 
+			_qs_w=0
+			while [ "$_qs_w" -lt 15 ]; do
+				mmcli -L 2>/dev/null | grep -q "/Modem/" || break
+				sleep 1; _qs_w=$((_qs_w + 1))
+			done
+			_send_one "$_qs_port" "$_qs_to" "$_qs_txt" slow
+			_qs_rc=$?
+			kill "$(cat /tmp/5gmodem_sms_inhibit.pid 2>/dev/null)" 2>/dev/null
+			rm -f /tmp/5gmodem_sms_inhibit.pid
+			logger -t 5gmodem "smsbridge: модем возвращён ModemManager (отправка $([ "$_qs_rc" = 0 ] && echo удалась || echo не удалась))"
+		fi
+	fi
+	( exit "$_qs_rc" )
+	if [ $? = 0 ]; then
+		rm -f "$_qs_f"
+		logger -t 5gmodem "smsbridge: отложенное сообщение для «$_qs_to» отправлено (попытка $((_qs_tries + 1)))"
+		return 0
+	fi
+	sed -i "s/^tries=.*/tries=$((_qs_tries + 1))/" "$_qs_f" 2>/dev/null
+	return 1
+}
+
+# ОТПРАВКА СВОИМ PDU - РАДИ КИРИЛЛИЦЫ (см. smspdu.sh).
+#
+# Диалог с модемом здесь НЕ односторонний: на «AT+CMGS=<длина>» он отвечает
+# приглашением «>», и только после него принимает тело PDU, завершённое Ctrl-Z.
+# `sms_tool at` так не умеет (шлёт команду и читает ответ), поэтому обмен ведёт
+# gcom - он для того и создан, и уже лежит в зависимостях пакета.
+#
+# Отправка ПОЧАСТНО: длинный текст smspdu.sh разбивает на части с UDH, и каждая
+# уходит отдельной AT+CMGS. Провал любой части прекращает отправку - лучше
+# честная ошибка, чем половина сообщения у адресата.
+#
+# SMS_PDU_CMD позволяет подменить глагол на CMGW (запись в память модема) -
+# этим путём проверяется кодировщик без реальной отправки и без денег.
+_send_pdu() {   # $1 - порт, $2 - номер, $3 - текст
+	_sp_port="$1"
+	[ -n "$_sp_port" ] && [ -c "$_sp_port" ] || { echo "no port" >&2; return 2; }
+
+	# ПОРТ ПОД ModemManager - НАШ ОБМЕН ТАМ НЕВОЗМОЖЕН, И ПРОБОВАТЬ НЕЛЬЗЯ.
+	#
+	# MM держит управляющий порт ОТКРЫТЫМ и вычитывает из него всё подряд:
+	# приглашение «>» и ответ «+CMGS:» уходят ему, а мы ждём их до таймаута.
+	# Проверено на Compal RXM-G1 - молчат и gcom, и прямой обмен, хотя одиночные
+	# команды через sms_tool на том же порту проходят (там гонка чтения, которую
+	# он иногда выигрывает). Раньше это выглядело как двухминутное зависание
+	# страницы, поэтому отказываем сразу и внятно.
+	if _port_is_mm "$_sp_port"; then
+		_SP_LASTERR="портом владеет ModemManager: кириллица через AT недоступна"
+		logger -t 5gmodem "smsbridge: $_sp_port под ModemManager - PDU-путь пропущен"
+		return 3
+	fi
+	_sp_cmd="${SMS_PDU_CMD:-CMGS}"
+	_sp_parts=$("$RES/smspdu.sh" encode "$2" "$3" 2>/dev/null)
+	[ -n "$_sp_parts" ] || { echo "pdu encode failed" >&2; return 1; }
+	_sp_rc=0
+	# ОБМЕН ВЕДЁМ САМИ, БЕЗ gcom.
+	#
+	# gcom оказался ненадёжным транспортом: на Compal RXM-G1 он не смог даже
+	# «AT+CMGF=0» - таймаут на всех командах, хотя sms_tool с тем же портом
+	# работает. Разбираться в его настройках порта дороже, чем открыть порт
+	# самим: нам нужны ровно три записи и одно чтение ответа.
+	#
+	# Приглашение «>» приходит БЕЗ перевода строки, а `read` ждёт именно его -
+	# поэтому его не вычитываем, а выдерживаем паузу (busybox без дробного
+	# sleep) и шлём тело. Признак успеха - строка «+CMGS:» в ответе.
+	while read -r _sp_len _sp_pdu; do
+		[ -n "$_sp_pdu" ] || continue
+		[ "$_sp_rc" = 0 ] || break
+		stty -F "$_sp_port" 115200 raw -echo 2>/dev/null
+		_sp_ans=""
+		if exec 3<>"$_sp_port" 2>/dev/null; then
+			printf 'AT+CMGF=0\r' >&3
+			sleep 1
+			printf 'AT+%s=%s\r' "$_sp_cmd" "$_sp_len" >&3
+			sleep 2
+			printf '%s\032' "$_sp_pdu" >&3
+			while read -t 25 -r _sp_l <&3; do
+				_sp_l=$(printf '%s' "$_sp_l" | tr -d '\r')
+				[ -n "$_sp_l" ] || continue
+				_sp_ans="$_sp_l"
+				case "$_sp_l" in
+					"+$_sp_cmd:"*) _sp_ans="OK:$_sp_l"; break ;;
+					*"+CMS ERROR"*|*"+CME ERROR"*|ERROR) break ;;
+				esac
+			done
+			exec 3>&-
+		fi
+		case "$_sp_ans" in
+			OK:*) ;;
+			*) _sp_rc=1
+			   # ПРИГЛАШЕНИЕ НАДО ЗАКРЫТЬ. Если модем успел показать «>», он ЖДЁТ
+			   # тело сообщения, и следующая же команда опроса метрик уедет в него
+			   # как текст SMS. ESC отменяет ввод - штатный выход по 3GPP 27.005.
+			   printf '\033' > "$_sp_port" 2>/dev/null
+			   _sp_ceer=$(_sms_run 8 $(_smstool) -d "$_sp_port" at "AT+CEER" 2>/dev/null \
+				| tr -d '\r' | grep -iE "CEER|ERROR" | head -1)
+			   logger -t 5gmodem "smsbridge: часть PDU не ушла ($_sp_cmd, номер «$2», len=$_sp_len): ${_sp_ans:-нет ответа}${_sp_ceer:+ | $_sp_ceer}"
+			   _SP_LASTERR="${_sp_ans:-нет ответа от модема}" ;;
+		esac
+	done <<PARTS_EOF
+$_sp_parts
+PARTS_EOF
+	if [ "$_sp_rc" = 0 ]; then
+		# Строку успеха печатает ВЫЗЫВАЮЩИЙ (ветка send), иначе она уходила
+		# дважды - и пользователь видел её в интерфейсе продублированной.
+		return 0
+	fi
+	echo "sms sending failed: ${_SP_LASTERR:-no answer from modem}" >&2
+	return 1
+}
+
 BOX="${1:-recv}"
 case "$BOX" in
 	delete) DEL="$2"; STORE="$3"; PORT="$4" ;;
 	send)   SND_TO="$2"; SND_TXT="$3"; PORT="$4" ;;
+	queue-run|queue-list) PORT="${2:-$(uci -q get "$CFG.sms.sendport")}" ;;
 	*)      STORE="$2"; PORT="$3" ;;
 esac
 
@@ -234,13 +539,76 @@ case "$BOX" in
 		esac ;;
 	send)
 		[ -n "$SND_TO" ] || { echo "no number" >&2; exit 2; }
+		SND_TO=$(_norm_num "$SND_TO")
+		# ОЧЕРЕДЬ К ПОРТУ ОБЯЗАТЕЛЬНА ИМЕННО ЗДЕСЬ. Общий at_lock выше при
+		# неудаче пропускает вперёд (для чтения это верно: лучше рискнуть
+		# смешением, чем не показать сообщения). Для ОТПРАВКИ наоборот: лезть в
+		# порт поверх чужого обмена - это потерянное приглашение «>» и мусор в
+		# эфире. Не дождались - кладём в очередь, следующий круг отправит.
+		if [ -n "$_AT_LOCK_HELD" ] && [ "$_AT_LOCK_HELD" != "$(basename "$PORT")" ]; then
+			if _q_enqueue "$SND_TO" "$SND_TXT" "$PORT"; then
+				echo "sms queued: порт сейчас занят, отправлю при первой возможности"
+				exit 0
+			fi
+		fi
 		# КОДИРОВКА - ИЗВЕСТНОЕ ОГРАНИЧЕНИЕ sms_tool. Модем в PDU-режиме
-		# (AT+CMGF=0), кодировку выбирает сам sms_tool и на кириллице ставит
-		# GSM-7, где её нет - до адресата доходят «?????». Проверено: баг
-		# воспроизводится и прямым вызовом из консоли, БЕЗ нашего приложения,
-		# и флаг «-c 2» его не лечит (для send он не действует).
-		# Лечится только своим PDU-кодером (UCS2 + AT+CMGS) - см. роадмап.
-		_sms_run 45 $(_smstool) -d "$PORT" send "$SND_TO" "$SND_TXT"; exit $? ;;
+		# (AT+CMGF=0), кодировку выбирает сам инструмент и на кириллице ставит
+		# GSM-7, где её нет - до адресата доходят «?????». Баг воспроизводится и
+		# прямым вызовом из консоли, БЕЗ нашего приложения, и флаг «-c 2» его не
+		# лечит (для send он не действует).
+		# Поэтому текст вне GSM-7 отправляем СВОИМ PDU (UCS2), а латиницу
+		# оставляем инструменту - его путь проверен годами.
+		# МОДЕМ ПОД ModemManager - СВОЙ PDU ЕМУ НЕ ПОДХОДИТ.
+		#
+		# У такого модема AT-портом распоряжается MM, и приглашение «>» после
+		# AT+CMGS перехватывает он: наш обмен просто не состоится (живой отказ
+		# пользователя на Compal - «модем не дал приглашение»). Зато MM сам умеет
+		# выбирать кодировку, в том числе UCS2, - значит кириллицу ему можно
+		# отдавать как есть, через sms_tool_mm. Флаг sms_via_mm тут не спрашиваем:
+		# он про предпочтение пользователя, а это про физическую невозможность.
+		# Строку успеха печатает ТОТ, КТО ОТПРАВИЛ: sms_tool и мост MM выводят
+		# свою («sms sent sucessfully: 14»), наш PDU-путь молчит. Без этой сверки
+		# на странице появлялись ДВЕ строки подряд.
+		_snd_out=$(_send_one "$PORT" "$SND_TO" "$SND_TXT" 2>/dev/null)
+		if [ $? = 0 ]; then
+			case "$_snd_out" in
+				*sucessfully*) printf '%s\n' "$_snd_out" ;;
+				*) echo "sms sent sucessfully" ;;
+			esac
+			exit 0
+		fi
+		# НЕ ТЕРЯЕМ СООБЩЕНИЕ: отказ мог быть от занятого порта или временной
+		# ошибки сети - следующий круг сторожа попробует снова.
+		if _q_enqueue "$SND_TO" "$SND_TXT" "$PORT"; then
+			echo "sms queued: не удалось отправить сейчас, отправлю при первой возможности"
+			exit 0
+		fi
+		echo "sms sending failed"
+		exit 1 ;;
+	queue-run)
+		# Круг досылки: зовётся из цикла sessionwatch. Одно сообщение за круг -
+		# порт нужен и метрикам, а очередь не горит.
+		[ -d "$SMSQ_DIR" ] || exit 0
+		for _qr_f in "$SMSQ_DIR"/*.sms; do
+			[ -f "$_qr_f" ] || continue
+			_q_send_one "$_qr_f"
+			break
+		done
+		exit 0 ;;
+	queue-list)
+		# Для страницы: что ещё не ушло.
+		printf '{"queued":['
+		_ql_n=0
+		for _ql_f in "$SMSQ_DIR"/*.sms; do
+			[ -f "$_ql_f" ] || continue
+			_ql_to=$(sed -n 's/^to=//p' "$_ql_f" | head -1)
+			_ql_tr=$(sed -n 's/^tries=//p' "$_ql_f" | head -1)
+			[ "$_ql_n" = 0 ] || printf ','
+			printf '{"to":"%s","tries":%s}' "$_ql_to" "${_ql_tr:-0}"
+			_ql_n=$((_ql_n + 1))
+		done
+		printf ']}\n'
+		exit 0 ;;
 	# ТЕКСТОМ, а не JSON. Нужно кнопке «сохранить сообщения в файл»: она пишет
 	# человекочитаемый .txt, и JSON там не к месту. Раньше страница ради этого
 	# исполняла БИНАРЬ sms_tool напрямую (в ACL был разрешён exec на него), то есть

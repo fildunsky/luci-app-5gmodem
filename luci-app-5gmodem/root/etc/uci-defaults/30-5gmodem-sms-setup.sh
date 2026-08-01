@@ -20,9 +20,14 @@ if ! uci -q get 5gmodem.sms >/dev/null 2>&1; then
 	uci set 5gmodem.sms=sms
 fi
 
-[ "$(uci -q get 5gmodem.sms.pnumber)" = "48" ] && {
-	uci -q set 5gmodem.sms.pnumber='7'
-}
+# Префикс поля «Кому» - В МЕЖДУНАРОДНОМ ВИДЕ, с «+».
+# Номер без «+» сеть трактует как национальный, и это стоило двух живых отказов:
+# ModemManager на QMI отвечал «QMI protocol error (54) ... WmsCauseCode», а наш
+# PDU-путь получал «+CMS ERROR» от SMSC. Формат в поле - первая подсказка
+# пользователю, поэтому подставляем сразу правильный.
+case "$(uci -q get 5gmodem.sms.pnumber)" in
+	48|7) uci -q set 5gmodem.sms.pnumber='+7' ;;
+esac
 
 uci commit 5gmodem >/dev/null 2>&1
 

@@ -32,7 +32,14 @@ RES="/usr/share/5gmodem"
 HDIR=/tmp/5gmodem_health
 CFG=5gmodem
 
-conf() { uci -q get "$CFG.health.$1" 2>/dev/null; }
+# ОДИННАДЦАТЬ НАСТРОЕК ЧИТАЮТСЯ ИЗ ОДНОЙ СЕКЦИИ - БЕРЁМ ЕЁ ОДНИМ СНИМКОМ.
+# Замер на стенде: `uci get` - 3 мс на ключ (33 мс на все), снимок секции - один
+# спавн 4 мс плюс 0.8 мс на чтение. Полный дамп конфига здесь пробовался и
+# ЗАМЕДЛИЛ вызов на 30 мс - почему, записано в lib.sh над _uci_snap_get.
+# Писатели (setconf/setheal) ходят в uci напрямую и уже после всех чтений.
+uci5g_sec_snapshot health
+
+conf() { uci5g_sec_get "$1"; }
 
 H_EN=$(conf enabled)
 # ВЫКЛЮЧЕННЫЙ ВИДЖЕТ «ПРИОРИТЕТ ИНТЕРНЕТА» ВЫКЛЮЧАЕТ И СТОРОЖ ЦЕЛИКОМ.
@@ -59,9 +66,16 @@ H_HEAL=$(conf healing)
 # ifup такое не берёт, только reload.
 H_HEALWIFI=$(conf heal_wifi)
 
+# Состав wan-зоны за круг не меняется, а спрашивают его трижды (round дважды,
+# event один раз) - и каждый раз это два процесса. Считаем один раз.
+_WANNETS=""; _WANNETS_DONE=""
 wan_nets() {
-	_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
-	[ -n "$_z" ] && uci -q get "firewall.$_z.network"
+	if [ -z "$_WANNETS_DONE" ]; then
+		_WANNETS_DONE=1
+		_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+		[ -n "$_z" ] && _WANNETS=$(uci -q get "firewall.$_z.network")
+	fi
+	printf '%s\n' "$_WANNETS"
 }
 
 # Событие для строки под панелью приоритета + журнал. Одно текущее событие,
@@ -86,8 +100,25 @@ sec_for_iface_h() {
 
 # Wi-Fi-аплинк? Судим по КОНФИГУ беспроводки (wifi-iface с network=<имя>),
 # а не по живому устройству: в состоянии gone устройства как раз нет.
+_WLDUMP=""; _WLDUMP_DONE=""
 is_wifi_iface() {
-	uci show wireless 2>/dev/null | grep -q "\.network='$1'"
+	if [ -z "$_WLDUMP_DONE" ]; then
+		_WLDUMP_DONE=1
+		_WLDUMP=$(uci show wireless 2>/dev/null)
+	fi
+	case "$_WLDUMP" in
+		*".network='$1'"*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# Радио (radio0/radio1), на котором живёт станция этого интерфейса. Нужно, чтобы
+# лечить ТОЧЕЧНО: пересобрать одно радио, а не всю сеть роутера.
+wifi_radio_for() {   # $1 - интерфейс
+	is_wifi_iface "$1" || return 1
+	_wr_s=$(printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.\([^.]*\)\.network='\?$1'\?\$/\1/p" | head -1)
+	[ -n "$_wr_s" ] || return 1
+	printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.$_wr_s\.device='\?\([^']*\)'\?\$/\1/p" | head -1
 }
 
 # Устройство аплинка: l3_device родителя, иначе - динамического ребёнка
@@ -433,11 +464,66 @@ heal() {
 				# радио на месте, адреса нет - сначала мягко
 				_h_next=1
 				_ev "лечу $_h_if: переподключаю Wi-Fi ($_h_n/$HEAL_MAX)"
-				( ifdown "$_h_if"; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
-			else
-				# gone либо переподключение не помогло - пересборка привязки
+				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+			elif [ "$_h_step" -lt 2 ]; then
+				# ПЕРЕПОДКЛЮЧАЕМ ТОЛЬКО СТАНЦИЮ - ТОЧКА ДОСТУПА РАБОТАЕТ ДАЛЬШЕ.
+				#
+				# Станция и AP роутера живут на ОДНОМ радио, поэтому пересборка
+				# радио (не говоря о `network reload`) гасит и точку доступа: у
+				# hostapd «Remove interface», AP-DISABLED, все клиенты роутера
+				# отваливаются. Ради поднятия аплинка это несоразмерно.
+				#
+				# wpa_supplicant умеет ровно нужное: REASSOCIATE по своему
+				# управляющему каналу (ubus-объект wpa_supplicant.<станция>;
+				# отдельный wpa_cli на OpenWrt может быть не установлен - на
+				# стенде его нет). Замерено: цикл deauth -> auth -> assoc ->
+				# CONNECTED занял 1.5 c, hostapd не перезапускался вовсе, у AP
+				# только субсекундный bounce порта моста, клиенты остались.
+				# Запасной путь - `iw dev <станция> disconnect`: wpa_supplicant
+				# сам восстановит соединение по своей конфигурации.
 				_h_next=2
-				_ev "лечу $_h_if: пересобираю сеть, network reload ($_h_n/$HEAL_MAX)"
+				_h_sta=$(printf '%s' "$_HDUMP" | jsonfilter \
+					-e "@.interface[@.interface=\"$_h_if\"].device" 2>/dev/null | head -1)
+				if [ -n "$_h_sta" ]; then
+					_ev "лечу $_h_if: переподключаю станцию $_h_sta ($_h_n/$HEAL_MAX)"
+					( ubus call "wpa_supplicant.$_h_sta" control '{"command":"REASSOCIATE"}' \
+					    || iw dev "$_h_sta" disconnect
+					  sleep 6; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				else
+					_ev "лечу $_h_if: станция не определена, переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				fi
+			elif [ "$_h_step" -lt 3 ] || [ -n "$_h_anyup" ]; then
+				# ПЕРЕСБОРКА СВОЕГО РАДИО - здесь точка доступа на нём ПОГАСНЕТ на
+				# несколько секунд, поэтому ступень идёт только после того, как
+				# мягкое переподключение станции не помогло. Лечит другой класс
+				# отказа: netifd расцепил интерфейс с радио (NO_DEVICE при
+				# ассоциированной станции) - REASSOCIATE такое не берёт.
+				#
+				# `wifi up <radio>` не годится: /sbin/wifi внутри сам зовёт
+				# `ubus call network reload` (см. wifi_updown), то есть тянет за
+				# собой ВСЕ интерфейсы. Ходим напрямую в network.wireless.
+				_h_next=3
+				_h_radio=$(wifi_radio_for "$_h_if")
+				if [ -n "$_h_radio" ]; then
+					_ev "лечу $_h_if: пересобираю радио $_h_radio ($_h_n/$HEAL_MAX)"
+					( ubus call network.wireless down "{\"device\":\"$_h_radio\"}"
+					  sleep 2
+					  ubus call network.wireless up "{\"device\":\"$_h_radio\"}"
+					  sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				else
+					_ev "лечу $_h_if: радио не определено, переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				fi
+			else
+				# ПОСЛЕДНЯЯ СТУПЕНЬ - ГЛОБАЛЬНАЯ ПЕРЕСБОРКА, и только когда терять
+				# нечего: сюда попадаем, если пересборка радио не помогла И ни один
+				# другой аплинк не жив. Пока жив хоть один линк, ронять ради Wi-Fi
+				# всю сеть нельзя - на нём сейчас работает пользователь. Именно эта
+				# строка (в прежней редакции - вторая ступень) роняла работающий
+				# модем при падении Wi-Fi: «modem stopping network» в журнале.
+				_h_next=4
+				_ev "лечу $_h_if: пересобираю сеть целиком, network reload ($_h_n/$HEAL_MAX)"
 				( ubus call network reload; sleep 2; wifi up >/dev/null 2>&1; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 			fi
 			printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
@@ -485,7 +571,7 @@ heal() {
 		case "$_h_next" in
 			1)
 				_ev "лечу $_h_if: переподключаю интерфейс ($_h_n/$HEAL_MAX)"
-				( ifdown "$_h_if"; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
+				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				;;
 			2)
 				if [ -n "$_h_hilink" ]; then

@@ -509,16 +509,67 @@ function addEmailForwarding(s) {
 	};
 }
 
+/* ПЕРЕСЫЛКА ВХОДЯЩИХ В TELEGRAM.
+   Работает поверх той же отметки «виденное», что подсвечивает страницу
+   «Входящие» (smsbridge.sh seen), поэтому бот и страница не спорят о том, что
+   человек уже читал. Доставку делает tgnotify.sh из цикла сторожа. */
+function addTelegramForwarding(s) {
+	var o;
+
+	o = s.option(form.Flag, 'tg_enabled', _('Forward incoming messages to Telegram'),
+		_('A bot sends every new incoming SMS to the chosen chat. The very first run only remembers the current messages and sends nothing.'));
+	o.rmempty = false;
+
+	o = s.option(form.Value, 'tg_token', _('Bot token'),
+		_('Token issued by @BotFather, e.g. 123456789:AA...'));
+	o.password = true;
+	o.depends('tg_enabled', '1');
+	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ - как и в почтовой пересылке: LuCI удаляет
+	   опции со скрытыми зависимостями, и токен пропадал бы при каждом
+	   временном выключении. */
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Value, 'tg_chat', _('Chat ID'),
+		_('Numeric chat or channel ID. Write to the bot first, then take the ID from https://api.telegram.org/bot<token>/getUpdates'));
+	o.depends('tg_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.ListValue, 'tg_interval', _('Check for new messages every'));
+	o.value('60', _('1 min'));
+	o.value('300', _('5 min'));
+	o.value('900', _('15 min'));
+	o.default = '60';
+	o.depends('tg_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Button, '_tgtest', _('Test delivery'),
+		_('Sends a test message with the SAVED settings - save the form first.'));
+	o.inputtitle = _('Send test message');
+	o.inputstyle = 'apply';
+	o.onclick = function() {
+		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'test' ]).then(function(out) {
+			var j = {};
+			try { j = JSON.parse(out || '{}'); } catch (e) {}
+			if (j.ok) {
+				ui.addNotification(null, E('p', {}, _('Test message sent')), 'info');
+			} else {
+				ui.addNotification(null, E('p', {},
+					_('Failed to send: %s').format(j.error || _('check the token, chat ID and the router internet connection'))), 'error');
+			}
+		});
+	};
+}
+
 function addSendOptions(s) {
 	var o;
 
 	o = s.option(form.Value, 'pnumber', _('Prefix number'),
-		_("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."));
-	o.default = '7';
+		_("The phone number should start with the country prefix in international format, with the '+' (for example +7 for Russia). Without the '+' the network treats the number as national and may refuse to send. Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."));
+	o.default = '+7';
 	o.validate = function(section_id, value) {
-		if (value.match(/^[0-9]+(?:\.[0-9]+)?$/))
+		if (value.match(/^\+?[0-9]+$/))
 			return true;
-		return _('Enter a decimal value');
+		return _('Enter a country prefix, for example +7');
 	};
 
 	o = s.option(form.Flag, 'prefix', _('Add prefix to the phone number'),
@@ -592,7 +643,7 @@ function addUssdOptions(s) {
 }
 
 var GROUPS = {
-	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); },
+	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); addTelegramForwarding(s); },
 	send:    addSendOptions,
 	ussd:    addUssdOptions
 };

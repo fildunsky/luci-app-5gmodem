@@ -266,15 +266,42 @@ modem_imei() {   # $1 - usb-путь
 	# Ответ читаем ПОД СЕРИАЛИЗАТОРОМ: без него AT+CGSN сталкивается с опросом
 	# метрик в том же порту и получает ответ чужой команды (известный класс
 	# ошибок - см. шапку atlock.sh). Не дождались замка - не гадаем, выходим.
-	for _mt in $("$RES/listmodems.sh" --refresh 2>/dev/null \
-			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null); do
+	#
+	# НЕГАТИВНЫЙ КЭШ - ИНАЧЕ КАЖДЫЙ ХОТПЛАГ ПЛАТИТ ЗА ЗАВЕДОМО ПУСТОЙ ПЕРЕБОР.
+	# У модема без отвечающего AT-порта (композиция без tty, порт занят MM,
+	# железо ещё не проснулось) эта ветка стоит `listmodems --refresh` плюс до
+	# 8 c ожидания замка и 6 c таймаута НА КАЖДЫЙ порт, и повторяется на каждом
+	# событии шины - при автонастройке это лишние секунды на ровном месте.
+	# Тот же приём уже спасал detect.sh.
+	#
+	# Помним не только время, но и СПИСОК ПОРТОВ: появились новые - пробуем
+	# снова немедленно, не дожидаясь конца TTL (порты у модема как раз и
+	# появляются позже самого устройства).
+	_mi_nc="/tmp/5gmodem_imei_none_$(snap_key "$1")"
+	_mi_now=$(uptime_s)
+	_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')
+	if [ -f "$_mi_nc" ]; then
+		read -r _mi_ot _mi_op < "$_mi_nc" 2>/dev/null
+		case "$_mi_ot" in ''|*[!0-9]*) _mi_ot=0 ;; esac
+		if [ "$_mi_op" = "${_mi_ttys% }" ] \
+		   && [ "$((_mi_now - _mi_ot))" -ge 0 ] \
+		   && [ "$((_mi_now - _mi_ot))" -lt "${IMEI_NEG_TTL:-60}" ]; then
+			return 1
+		fi
+	fi
+
+	_mi_fresh=$("$RES/listmodems.sh" --refresh 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')
+	for _mt in $_mi_fresh; do
 		[ -e "$_mt" ] || continue
 		at_lock "$_mt" 8 2>/dev/null || continue
 		_mi=$(at_query "$_mt" "AT+CGSN" 6 \
 			| grep -oE '^[0-9]{14,16}$' | head -1)
 		at_unlock 2>/dev/null
-		[ -n "$_mi" ] && { echo "$_mi"; return 0; }
+		[ -n "$_mi" ] && { rm -f "$_mi_nc" 2>/dev/null; echo "$_mi"; return 0; }
 	done
+	printf '%s %s\n' "$_mi_now" "${_mi_fresh% }" > "$_mi_nc" 2>/dev/null
 	return 1
 }
 

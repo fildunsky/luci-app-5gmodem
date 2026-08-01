@@ -114,7 +114,7 @@ _revive() {   # $1 - интерфейс, $2 - причина для журнал
 	fi
 	printf '%s' "$_rv_now" > "$_rv_f" 2>/dev/null
 	_log "$1: $2 - перезапускаю"
-	ifup "$1" >/dev/null 2>&1
+	iface_up "$1"
 }
 
 # Проверка ОДНОГО модема. Все данные пришли из реестра, ничего не досчитываем.
@@ -193,10 +193,21 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 	return 0
 }
 
+# СНИМОК РЕЕСТРА НА ВЕСЬ ЦИКЛ - ОДИН, И В ПЛОСКОЙ ФОРМЕ.
+#
+# Было: `registry.sh` (JSON) в check_once + ещё один `registry.sh paths` в
+# подогреве, а каждое поле каждого модема доставалось отдельным jsonfilter - до
+# восьми запусков на модем. На двух модемах это ~20 подпроцессов и две полных
+# сборки реестра за тик, при том что данные одни и те же.
+#
+# Стало: одна `registry.sh flat` на тик, разбор - `while read` без единого
+# подпроцесса. Плоскую форму отдаёт сам реестр (см. глагол flat), поэтому правило
+# «связку собирает одно место» не нарушено.
+_REG_FLAT=""
+_reg_refresh() { _REG_FLAT=$("$RES/registry.sh" flat 2>/dev/null); }
+
 check_once() {
-	_reg=$("$RES/registry.sh" 2>/dev/null)
-	[ -n "$_reg" ] || return 0
-	_fld() { printf '%s' "$_reg" | jsonfilter -e "@[@.path=\"$1\"].$2" 2>/dev/null; }
+	[ -n "$_REG_FLAT" ] || return 0
 
 	# Чей ход делать AT-проверку в этом цикле. Счётчик в /tmp: он должен
 	# переживать отдельные вызовы `once`, но не перезагрузку - после неё порядок
@@ -207,13 +218,16 @@ check_once() {
 
 	# Сначала собираем список AT-модемов, чтобы знать, чей ход.
 	_atlist=""
-	for _p in $(printf '%s' "$_reg" | jsonfilter -e '@[*].path' 2>/dev/null); do   # из ТОГО ЖЕ снимка, что _fld (ревью HP#7)
-		_o=$(_fld "$_p" owner);  [ "$_o" = "mm" ] && continue
-		_i=$(_fld "$_p" iface);  [ -n "$_i" ] || continue
-		_pr=$(_fld "$_p" proto); _watched_proto "$_pr" || continue
+	while read -r _p _sec _i _pr _at _o; do
+		[ -n "$_p" ] || continue
+		[ "$_o" = "mm" ] && continue
+		[ "$_i" = "-" ] && continue
+		_watched_proto "$_pr" || continue
 		_kernel_proto "$_pr" && continue
 		_atlist="$_atlist $_p"
-	done
+	done <<EOF
+$_REG_FLAT
+EOF
 	_atn=0
 	for _x in $_atlist; do _atn=$((_atn + 1)); done
 	_atpick=""
@@ -226,20 +240,21 @@ check_once() {
 		printf '%s' "$(( (_turn + 1) % 1000 ))" > "$_turnf" 2>/dev/null
 	fi
 
-	for _p in $(printf '%s' "$_reg" | jsonfilter -e '@[*].path' 2>/dev/null); do   # из ТОГО ЖЕ снимка, что _fld (ревью HP#7)
-		_own=$(_fld "$_p" owner)
+	while read -r _p _sec _if _proto _at _own; do
+		[ -n "$_p" ] || continue
 		# Модем под ModemManager - не наша забота (см. правило 1).
 		[ "$_own" = "mm" ] && continue
-		_if=$(_fld "$_p" iface)
-		[ -n "$_if" ] || continue
-		_proto=$(_fld "$_p" proto)
+		[ "$_if" = "-" ] && continue
 		_watched_proto "$_proto" || continue
 		# AT-протокол проверяем только если сейчас его ход (правило 2).
 		if ! _kernel_proto "$_proto" && [ "$_p" != "$_atpick" ]; then
 			continue
 		fi
-		check_one "$_p" "$_if" "$_proto" "$(_fld "$_p" at_port)"
-	done
+		[ "$_at" = "-" ] && _at=""
+		check_one "$_p" "$_if" "$_proto" "$_at"
+	done <<EOF
+$_REG_FLAT
+EOF
 }
 
 # ПОДОГРЕВ СНИМКОВ НЕАКТИВНЫХ МОДЕМОВ.
@@ -266,9 +281,15 @@ WARM_MAXAGE="${SESSIONWATCH_WARM_MAXAGE:-45}"
 warm_snapshots() {
 	[ "$WARM_MAXAGE" = "0" ] && return 0          # выключено настройкой
 	_wa=$(active_path)
-	_wnow=$(cut -d. -f1 /proc/uptime)
+	_wnow=$(uptime_s)
+	_wall=""
+	while read -r _wp _wrest; do
+		[ -n "$_wp" ] && _wall="$_wall $_wp"
+	done <<EOF
+$_REG_FLAT
+EOF
 	_wlist=""
-	for _wp in $("$RES/registry.sh" paths 2>/dev/null); do
+	for _wp in $_wall; do
 		[ "$_wp" = "$_wa" ] && continue
 		_wk=$(snap_key "$_wp")
 		[ -s "/tmp/5gmodem_metrics_$_wk.json" ] || { _wlist="$_wlist $_wp"; continue; }
@@ -301,6 +322,9 @@ case "$1" in
 	*)
 		while :; do
 			sleep "$INTERVAL"
+			# Реестр собираем ОДИН раз за круг и отдаём обеим задачам: они смотрят
+			# на одно и то же состояние, а сборка стоит дороже самих проверок.
+			_reg_refresh
 			check_once
 			# Подогрев ПОСЛЕ проверки сессии, а не вместо: восстановление связи
 			# важнее тёплой карточки, и порт (если он один) достанется сначала ей.
@@ -309,6 +333,16 @@ case "$1" in
 			# и с проверкой сессии за AT-порт не конкурирует. Включён ли он и не
 			# рано ли для круга - решает сам (enabled + свой rate-limit).
 			"$RES/health.sh" tick >/dev/null 2>&1
+			# Ряды статистики - следом за сторожем: он только что обновил
+			# состояния линков, из которых берётся RTT. Свои пробы не делаем.
+			"$RES/stats.sh" tick >/dev/null 2>&1
+			# Пересылка новых SMS в Telegram - последней: она ходит в СЕТЬ и в
+			# AT-порт за списком сообщений, поэтому пусть сначала отработают
+			# проверка сессии и метрики. Свой предохранитель по времени внутри.
+			"$RES/tgnotify.sh" tick >/dev/null 2>&1
+			# Досылка отложенных исходящих: одно сообщение за круг, под общей
+			# очередью к порту. Пусто - выходит мгновенно.
+			"$RES/smsbridge.sh" queue-run >/dev/null 2>&1
 		done
 		;;
 esac

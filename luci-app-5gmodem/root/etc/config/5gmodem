@@ -12,7 +12,7 @@ config 5gmodem
 config sms 'sms'
 	option storage 'SM'
 	option mergesms '1'
-	option pnumber '7'
+	option pnumber '+7'
 	option prefix '1'
 	option lednotify '0'
 	option ussd '0'

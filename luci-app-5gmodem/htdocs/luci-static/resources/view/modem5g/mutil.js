@@ -183,6 +183,58 @@ function formatDateTime(s) {
 	return s;
 }
 
+/* ЧИСТКА localStorage ПО ВОЗРАСТУ.
+   Наши тёплые кэши (bands5g2-<путь>, память вкладок eSIM/USSD по модему,
+   состояние пингов) заводятся ПОД КЛЮЧ модема или хоста и никогда не удалялись:
+   каждый новый USB-путь, каждая переставленная симка и каждый удалённый хост
+   оставляли запись навсегда, а bands-кэш - ещё и с килобайтами JSON.
+   Возраста у ключей нет, поэтому ведём отдельный индекс «когда последний раз
+   трогали»: незнакомый ключ получает отсчёт с текущего захода, а тот, к
+   которому никто не обращался дольше срока, удаляется вместе со своей записью
+   в индексе. Скачок часов роутера назад индекс не ломает - отсчёт начинается
+   заново. */
+var LS_IDX = '5gmodem.lsidx';
+
+function lsIdxRead() {
+	try { return JSON.parse(window.localStorage.getItem(LS_IDX) || '{}') || {}; } catch (e) { return {}; }
+}
+function lsIdxWrite(o) {
+	try { window.localStorage.setItem(LS_IDX, JSON.stringify(o)); } catch (e) {}
+}
+function lsTouch(key) {
+	if (!key) { return; }
+	var idx = lsIdxRead();
+	idx[key] = Math.floor(Date.now() / 1000);
+	lsIdxWrite(idx);
+}
+function lsSweep(prefixes, maxAgeDays) {
+	if (!prefixes || !prefixes.length) { return; }
+	var now = Math.floor(Date.now() / 1000);
+	var ttl = (maxAgeDays || 30) * 86400;
+	var keys = [], idx = lsIdxRead(), seen = {}, i, j, k;
+	try {
+		for (i = 0; i < window.localStorage.length; i++) { keys.push(window.localStorage.key(i)); }
+	} catch (e) { return; }
+	for (i = 0; i < keys.length; i++) {
+		k = keys[i];
+		if (!k || k === LS_IDX) { continue; }
+		var mine = false;
+		for (j = 0; j < prefixes.length; j++) {
+			if (k.indexOf(prefixes[j]) === 0) { mine = true; break; }
+		}
+		if (!mine) { continue; }
+		seen[k] = true;
+		if (idx[k] == null || idx[k] > now) { idx[k] = now; continue; }
+		if (now - idx[k] > ttl) {
+			try { window.localStorage.removeItem(k); } catch (e) {}
+			delete idx[k];
+			delete seen[k];
+		}
+	}
+	for (k in idx) { if (!seen[k]) { delete idx[k]; } }
+	lsIdxWrite(idx);
+}
+
 return baseclass.extend({
 	ratLabel: ratLabel,
 	formatModeDisplay: formatModeDisplay,
@@ -199,6 +251,8 @@ return baseclass.extend({
 	formatPhone: formatPhone,
 	formatDuration: formatDuration,
 	formatDateTime: formatDateTime,
+	lsTouch: lsTouch,
+	lsSweep: lsSweep,
 	BAND_MHZ_4G: BAND_MHZ_4G,
 	BAND_MHZ_5G: BAND_MHZ_5G
 });

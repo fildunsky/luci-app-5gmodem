@@ -93,6 +93,18 @@
 		}
 	},
 
+	"admin/modem/5gmodem/stats": {
+		"title": "Statistics",
+		"order": 67,
+		"action": {
+			"type": "view",
+			"path": "modem5g/5gstats"
+		},
+		"depends": {
+			"uci": { "5gmodem": { "@5gmodem[0]": { "show_stats": "1" } } }
+		}
+	},
+
 	"admin/modem/5gmodem/settings": {
 		"title": "Settings",
 		"order": 70,

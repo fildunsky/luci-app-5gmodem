@@ -118,6 +118,7 @@ function _bandsRemember(t, j) {
 		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
 	} catch (e) {}
 	try { window.localStorage.setItem(_bandsKey(), JSON.stringify({ t: t, j: j, m: mdl })); } catch (e) {}
+	mutil.lsTouch(_bandsKey());
 }
 
 function loadBands() {

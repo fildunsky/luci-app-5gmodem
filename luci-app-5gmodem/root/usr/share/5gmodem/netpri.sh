@@ -32,7 +32,44 @@ wan_nets() {
 # вне списка ничего не теряют.
 _IFDUMP=""
 ifdump_snapshot() { _IFDUMP=$(ubus call network.interface dump 2>/dev/null); }
+# РАЗБОР ОДНОГО ИНТЕРФЕЙСА - ОДИН jsonfilter НА ВСЕ ЕГО ПОЛЯ.
+#
+# Раньше каждое поле стоило пары процессов (jsonfilter + head), а list спрашивает
+# у интерфейса адрес, устройство и адрес ребёнка - по замеру на стенде это 25
+# запусков jsonfilter и 40 head на вызов. Теперь объект интерфейса достаётся
+# ОДИН раз, а поля вынимаются подстановками оболочки.
+#
+# ВАЖНО: заполнять только из ОСНОВНОЙ оболочки (в начале тела цикла) - вызов из
+# `$(...)` ушёл бы в подоболочку, и запомненное умерло бы вместе с ней. На этих
+# граблях уже стоял реестр: его «мемоизация» не работала ни разу.
+_IFO_NAME=""; _IFO_DEV=""; _IFO_IP=""
+_if_scan() {   # $1 - интерфейс
+	_IFO_NAME="$1"; _IFO_DEV=""; _IFO_IP=""
+	[ -n "$_IFDUMP" ] && [ -n "$1" ] || return 0
+	_ifo=$(printf '%s' "$_IFDUMP" | jsonfilter -e "@.interface[@.interface=\"$1\"]" 2>/dev/null)
+	[ -n "$_ifo" ] || return 0
+	# Блок "inactive" держит ПРОШЛЫЕ адреса того же интерфейса. Без обрезки у
+	# интерфейса без адреса мы бы вытащили старый и показали его как живой.
+	_ifo="${_ifo%%\"inactive\"*}"
+	case "$_ifo" in
+		*'"l3_device": "'*) _ifx="${_ifo#*\"l3_device\": \"}"; _IFO_DEV="${_ifx%%\"*}" ;;
+	esac
+	case "$_ifo" in
+		*'"ipv4-address": [ { "address": "'*)
+			_ifx="${_ifo#*\"ipv4-address\": [ { \"address\": \"}"
+			_IFO_IP="${_ifx%%\"*}" ;;
+	esac
+	return 0
+}
+
 ifup_state() {
+	# Разобранный интерфейс - отвечаем из памяти, без процессов.
+	if [ -n "$_IFO_NAME" ] && [ "$1" = "$_IFO_NAME" ]; then
+		case "$2" in
+			'@["l3_device"]')              printf '%s\n' "$_IFO_DEV"; return ;;
+			'@["ipv4-address"][0].address') printf '%s\n' "$_IFO_IP"; return ;;
+		esac
+	fi
 	if [ -n "$_IFDUMP" ]; then
 		printf '%s' "$_IFDUMP" \
 			| jsonfilter -e "@.interface[@.interface=\"$1\"]${2#@}" 2>/dev/null | head -1
@@ -122,23 +159,33 @@ iface_ip() {
 # model_for -> label_for, то есть 4-6 раз НА КАЖДЫЙ интерфейс с одинаковым
 # результатом. Ключ - имя интерфейса; в пределах одного вызова конфиг не меняется
 # (list только читает).
-_MS_KEYS=""; _MS_VALS=""
+# КАРТА «ИНТЕРФЕЙС -> СЕКЦИЯ», СОБРАННАЯ ОДНИМ ПРОХОДОМ.
+#
+# Прежняя «память на ответ» не работала НИ РАЗУ: modem_section почти всегда
+# зовут из `$(...)`, а присваивание в подоболочке умирает вместе с ней (та же
+# ловушка, что была в реестре). По замеру это стоило двадцати `sed` и полутора
+# десятков `head` на один `list` - по паре процессов на каждое обращение.
+# Теперь карта строится ЯВНО, один раз, из уже взятого снимка конфига.
+_MS_MAP=""
+ms_map_build() {
+	_MS_MAP=" $(_uci5g_dump \
+		| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?\([^']*\)'\?\$/\2=\1/p" \
+		| tr '\n' ' ') "
+}
 modem_section() {
 	[ -n "$1" ] || return 1
-	# Поиск в плоском списке "iface=секция iface=секция ..." - без подпроцессов.
-	case " $_MS_KEYS " in
-		*" $1 "*)
-			for _msp in $_MS_VALS; do
-				case "$_msp" in
-					"$1="*) printf '%s' "${_msp#*=}"; return 0 ;;
-				esac
-			done
+	# Первое совпадение - как у sec_for_iface (head -1): у интерфейса может быть
+	# несколько секций, и порядок тот же, что в дампе конфига.
+	case "$_MS_MAP" in
+		*" $1="*)
+			_msv="${_MS_MAP#* $1=}"
+			printf '%s' "${_msv%% *}"
 			return 0 ;;
 	esac
-	_msv=$(sec_for_iface "$1")
-	_MS_KEYS="$_MS_KEYS $1"
-	_MS_VALS="$_MS_VALS $1=$_msv"
-	printf '%s' "$_msv"
+	# Карта не построена (глагол не list) или интерфейс в ней не значится -
+	# прежний путь.
+	[ -n "$_MS_MAP" ] && return 0
+	sec_for_iface "$1"
 }
 # Является ли $1 модем-интерфейсом? Мульти-модем -> m_*-секция; одиночный
 # (legacy) конфиг -> @5gmodem[0].network указывает на этот интерфейс.
@@ -160,6 +207,20 @@ modem_atport_for() {
 }
 # uplink kind: wan | modem | wifi | other. Modem interfaces are checked BEFORE the
 # Wi-Fi guess, because a modem's l3_device can be wwanN (must not read as Wi-Fi).
+# Есть ли в конфиге беспроводки wifi-iface, привязанный к этому интерфейсу.
+# Дамп берём один раз на вызов: list проходит по всем аплинкам.
+_WLD=""; _WLD_DONE=""
+_is_wifi_cfg() {
+	if [ -z "$_WLD_DONE" ]; then
+		_WLD_DONE=1
+		_WLD=$(uci -q show wireless 2>/dev/null)
+	fi
+	case "$_WLD" in
+		*".network='$1'"*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
 iface_type() {
 	i="$1"
 	is_modem "$i" && { echo modem; return; }
@@ -170,6 +231,16 @@ iface_type() {
 	# вариант для тех, у кого l3_device ещё не поднят.
 	dev=$(ifup_state "$i" '@["l3_device"]')
 	case "$dev" in phy*-sta*|wlan*) echo wifi; return;; esac
+	# УСТРОЙСТВА МОЖЕТ НЕ БЫТЬ ВОВСЕ - А ИНТЕРФЕЙС ВСЁ РАВНО Wi-Fi.
+	# Пока станция ассоциирована, l3_device есть; стоит линку упасть (или netifd
+	# расцепить интерфейс с радио - живой класс отказа, см. health.sh), устройство
+	# исчезает, и тип становился «other». Последствие видел пользователь: из
+	# модалки «Приоритет интернета» пропадала галка «Лечить Wi-Fi», потому что она
+	# показывается только при наличии аплинка типа wifi, - то есть настройка
+	# исчезала ровно тогда, когда она нужнее всего.
+	# Судим по КОНФИГУ беспроводки, тем же правилом, что и сам сторож (health.sh:
+	# is_wifi_iface), - иначе UI и лечение расходятся во мнении об одном линке.
+	_is_wifi_cfg "$i" && { echo wifi; return; }
 	case "$i" in wan|wan6) echo wan; return;; esac
 	echo other
 }
@@ -327,10 +398,20 @@ model_for() {
 	path=$(modem_path_for "$1")
 	prod=""; vidpid=""; lmmodel=""
 	if [ -n "$path" ]; then
-		_lm=$(_lm)
-		prod=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].product" 2>/dev/null | head -1)
-		vidpid=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].vidpid" 2>/dev/null | head -1)
-		lmmodel=$(echo "$_lm" | jsonfilter -e "@[@.path=\"$path\"].model" 2>/dev/null | head -1)
+		# Три поля - ОДИН вызов jsonfilter в фиксированном порядке: listmodems
+		# печатает эти ключи всегда, пустое значение даёт пустую строку и порядок
+		# не рвёт. Было шесть процессов на каждый модемный аплинк.
+		_mf_i=0
+		while IFS= read -r _mf_l; do
+			_mf_i=$((_mf_i + 1))
+			case "$_mf_i" in
+				1) prod="$_mf_l" ;;
+				2) vidpid="$_mf_l" ;;
+				3) lmmodel="$_mf_l" ;;
+			esac
+		done <<MF_EOF
+$(_lm | jsonfilter -e "@[@.path=\"$path\"].product" -e "@[@.path=\"$path\"].vidpid" -e "@[@.path=\"$path\"].model" 2>/dev/null)
+MF_EOF
 	fi
 	# Имя модели, разобранное основным опросом по AT+CGMM (5gmodem.m_<путь>.model),
 	# ТОЧНЕЕ дескриптора: у SimCom он говорит "SimTech, Incorporated", у Quectel
@@ -509,6 +590,9 @@ list)
 	# Секундомер один на весь вызов: uptime_s - это чтение /proc/uptime отдельным
 	# процессом, а нужен он в цикле по разу-два на карточку со сторожем.
 	_NOW_S=$(uptime_s)
+	# Настройку сторожа спрашиваем один раз на вызов, а не в каждой карточке.
+	_HEALTH_ON=$(uci5g_get health enabled)
+	ms_map_build
 	# УСТРОЙСТВО, ЧЕРЕЗ КОТОРОЕ РЕАЛЬНО ИДЁТ ТРАФИК: default с наименьшей живой
 	# метрикой. Нужно сторожу (health.sh): при штрафном переключении uci-порядок
 	# и реальность расходятся, и подсветка активной карточки обязана следовать
@@ -525,6 +609,8 @@ list)
 	for n in $(wan_nets | tr ' ' '\n' | sort | uniq); do
 		[ -n "$n" ] || continue
 		ucinet_has "$n" || continue
+		# Объект интерфейса - один раз на карточку (см. _if_scan).
+		_if_scan "$n"
 		# IPv6-спутник прячем: в OpenWrt он заводится отдельной сетью с именем
 		# "<имя>6" поверх ТОГО ЖЕ устройства (wan/wan6, wwan/wwan6). Раньше
 		# отсекался только "wan6" по имени, поэтому на роутере с модемом на usb0
@@ -638,7 +724,7 @@ list)
 		# У HiLink адрес интерфейса - это адрес ЛОКАЛЬНОЙ сети модема
 		# (192.168.43.2), а не выданный оператором. Показываем настоящий, из API:
 		# иначе в списке у всех таких модемов стоял бы адрес их внутренней сети.
-		_np_s=$(sec_for_iface "$n")
+		_np_s=$(modem_section "$n")
 		if [ -n "$_np_s" ] && [ "$(uci5g_get "$_np_s" kind)" = "hilink" ]; then
 			_np_wan=$(/usr/share/5gmodem/hilink.sh json "$(uci5g_get "$_np_s" path)" 2>/dev/null \
 				| jsonfilter -e '@.ipaddr' 2>/dev/null)
@@ -649,7 +735,7 @@ list)
 		# uci-снимка, без подпроцессов: list зовётся каждые 5 c. Нет файла или
 		# слежение выключено - поля нет, страница точку не рисует.
 		_np_h=""
-		if [ "$(uci5g_get health enabled)" = "1" ] && [ -f "/tmp/5gmodem_health/$n" ]; then
+		if [ "$_HEALTH_ON" = "1" ] && [ -f "/tmp/5gmodem_health/$n" ]; then
 			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs < "/tmp/5gmodem_health/$n" 2>/dev/null; then
 				# Линк без устройства (gone) показываем - карточка обязана
 				# пережить переэнумерацию при лечении; прячем, когда ничего не
@@ -683,7 +769,7 @@ list)
 	# Последнее событие сторожа - хвостовым элементом ТОГО ЖЕ списка: страница
 	# и так забирает list каждые 5 с, отдельный опрос ради одной строки - лишний
 	# процесс. Фронт вынимает элемент с полем event до отрисовки карточек.
-	if [ "$first" != 1 ] && [ "$(uci5g_get health enabled)" = "1" ] \
+	if [ "$first" != 1 ] && [ "$_HEALTH_ON" = "1" ] \
 	   && [ -s /tmp/5gmodem_health/.last_event ]; then
 		read -r _np_ev < /tmp/5gmodem_health/.last_event 2>/dev/null
 		[ -n "$_np_ev" ] && printf ',{"event":"%s"}' "$(json_esc "$_np_ev")"

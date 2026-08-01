@@ -146,8 +146,16 @@ start)
 		GEOLOC="/tmp/5gmodem_st_loc.$$"
 		: > "$GEOIP"; : > "$GEOCC"; : > "$GEOLOC"
 		(
+			# СНАЧАЛА - БЫСТРЫЙ ИСТОЧНИК, И СРАЗУ В ФАЙЛ. Зарубежные geo-сервисы
+			# на сотовой в РФ молчат ДО ТАЙМАУТА (6+5 c), и всё это время карточка
+			# показывала «***.***.***.***» - почти до конца замера. Яндекс отвечает
+			# за доли секунды и доступен всегда; страну он не даёт, поэтому дальше
+			# идут обычные источники - они лишь уточнят IP и добавят cc.
+			_fast=$(_parse_ip "$(curl --max-time 3 -s "$YAIPURL" 2>/dev/null)")
+			[ -n "$_fast" ] && printf '%s' "$_fast" > "$GEOIP" 2>/dev/null
 			_g=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
 			_pub=$(_parse_ip "$_g"); _cc=$(_parse_cc "$_g")
+			[ -n "$_pub" ] || _pub="$_fast"
 			if [ -z "$_pub" ]; then
 				_g2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
 				_pub=$(_parse_ip "$_g2")
@@ -186,6 +194,21 @@ start)
 				_ccu=$(echo "$CCURL" | sed "s|{ip}|$_pub|g")
 				_cc=$(_parse_cc "$(curl --max-time 4 -s "$_ccu" 2>/dev/null)")
 				[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
+			fi
+			# ФОЛБЭК: ЧЕРЕЗ ПРОКСИ CLASH. Свой трафик роутера идёт МИМО туннеля
+			# (tproxy перехватывает только форвард LAN), поэтому зарубежные
+			# geo-сервисы с роутера молчат, хотя у клиентов открываются. Если у
+			# clash поднят http/mixed-порт - повторяем запрос через него.
+			# ВАЖНО: tproxy-порт для этого НЕ годится (это не HTTP-прокси), его
+			# намеренно не берём - на стенде только он и есть.
+			if [ -z "$_cc" ]; then
+				_pp=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+					/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+				if [ -n "$_pp" ] && [ "$_pp" != "0" ]; then
+					_cc=$(_parse_cc "$(curl --max-time 5 -s -x "http://127.0.0.1:$_pp" \
+						"$CCFALLBACK" 2>/dev/null)")
+					[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
+				fi
 			fi
 		) >/dev/null 2>&1 </dev/null &
 		PUB=""; CC=""

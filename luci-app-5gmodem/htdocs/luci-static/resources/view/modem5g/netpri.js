@@ -467,6 +467,7 @@ function pingOnce(host) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null) };
 		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
+		mutil.lsTouch('netpri-pingstate');
 		_pingBusy[host] = false;
 		updatePingCard(host);
 	});
@@ -976,7 +977,11 @@ function healthModal() {
 			/* Лечение Wi-Fi - НЕЗАВИСИМЫЙ блок (решение владельца): у него своя
 			   фиксированная лестница (переподключить -> network reload), и от
 			   модемного мастера он не зависит ни в UI, ни в бэкенде. */
-			uplinks.some(function(o) { return o.type === 'wifi'; }) ? E('div', { 'class': 'hw-block', 'id': 'hw-blk-wifi' }, [
+			/* Показываем блок и тогда, когда аплинка wifi сейчас нет, но лечение
+			   Wi-Fi УЖЕ включено: иначе включённая настройка становится
+			   невидимой и невыключаемой ровно в тот момент, когда линк лежит
+			   (о ней и был вопрос пользователя). */
+			(uplinks.some(function(o) { return o.type === 'wifi'; }) || String(c.heal_wifi) === '1') ? E('div', { 'class': 'hw-block', 'id': 'hw-blk-wifi' }, [
 				E('table', { 'class': 'table hw-form' }, [
 					titleRow('hw-heal-wifi', String(c.heal_wifi) === '1', _('Heal the Wi-Fi uplink while it is down'))
 				])
