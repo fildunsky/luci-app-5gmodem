@@ -197,6 +197,64 @@ setchat() {   # $1 - идентификатор чата
 	printf '{"ok":true,"chat":"%s"}\n' "$1"
 }
 
+# СОСТОЯНИЕ МОДЕМА ДЛЯ ЧАТА - ТЕМИ ЖЕ ПРАВИЛАМИ, ЧТО И КАРТОЧКА.
+#
+# Пустые поля НЕ печатаем: снимок отдаёт «-» там, где модем промолчал, и строка
+# «Температура: -» в чате бесполезна.
+#
+# ТЕМПЕРАТУРА КАК В КАРТОЧКЕ. Часть модемов градусов не отдаёт вовсе, но
+# сообщает уровень троттлинга 0..3 - тогда карточка пишет словом («В норме»), и
+# бот должен говорить то же самое. Есть градусы - показываем их, а уровень 1..3
+# добавляем через запятую (0 не добавляем: «32 °C, В норме» - шум).
+_st_field() {   # $1 - снимок, $2 - поле
+	_sf_v=$(printf '%s' "$1" | jsonfilter -e "@.$2" 2>/dev/null)
+	case "$_sf_v" in ''|-) return 1 ;; esac
+	printf '%s' "$_sf_v"
+}
+_st_therm() {   # $1 - снимок; печатает готовую строку температуры или ничего
+	_th_t=$(_st_field "$1" mtemp)
+	_th_l=$(_st_field "$1" mtherm)
+	case "$_th_l" in
+		0) _th_w="В норме" ;;
+		1) _th_w="Тёплый" ;;
+		2) _th_w="Горячий" ;;
+		3) _th_w="Критический" ;;
+		*) _th_w="" ;;
+	esac
+	if [ -n "$_th_t" ]; then
+		# Снимок отдаёт «32 &deg;C» - для чата приводим к обычному градусу.
+		_th_t=$(printf '%s' "$_th_t" | sed 's/&deg;/°/g')
+		case "$_th_l" in
+			1|2|3) printf 'Температура: %s, %s' "$_th_t" "$_th_w" ;;
+			*)     printf 'Температура: %s' "$_th_t" ;;
+		esac
+		return 0
+	fi
+	[ -n "$_th_w" ] && printf 'Температура: %s' "$_th_w"
+	return 0
+}
+status_text() {
+	_st_j=$("$RES/5gmodem.sh" peek 2>/dev/null)
+	[ -n "$_st_j" ] || { printf 'Снимка метрик пока нет - модем ещё опрашивается.'; return 0; }
+	_st_out="Модем: $(_st_field "$_st_j" modem)"
+	_st_v=$(_st_field "$_st_j" operator_name) && _st_out="$_st_out
+Оператор: $_st_v"
+	_st_v=$(_st_field "$_st_j" mode) && _st_out="$_st_out
+Сеть: $_st_v"
+	_st_v=$(_st_field "$_st_j" signal) && _st_out="$_st_out
+Сигнал: $_st_v%"
+	_st_v=$(_st_therm "$_st_j"); [ -n "$_st_v" ] && _st_out="$_st_out
+$_st_v"
+	_st_v=$(_st_field "$_st_j" conn_time) && _st_out="$_st_out
+Соединение: $_st_v"
+	_st_rx=$(_st_field "$_st_j" rx); _st_tx=$(_st_field "$_st_j" tx)
+	[ -n "$_st_rx$_st_tx" ] && _st_out="$_st_out
+Трафик: принято ${_st_rx:-?}, передано ${_st_tx:-?}"
+	_st_v=$(_st_field "$_st_j" ipaddr) && _st_out="$_st_out
+Адрес: $_st_v"
+	printf '%s' "$_st_out"
+}
+
 # КОМАНДЫ ИЗ ЧАТА - ОТПРАВКА SMS ИЗ TELEGRAM.
 #
 # КТО МОЖЕТ КОМАНДОВАТЬ. Только тот чат, который записан в настройках
@@ -288,11 +346,7 @@ commands() {
 			/sms|/sms@*)
 				_tg_reply "Формат: /sms <номер> <текст>" ;;
 			/status*)
-				_co_s=$("$RES/5gmodem.sh" peek 2>/dev/null)
-				_tg_reply "Оператор: $(printf '%s' "$_co_s" | jsonfilter -e '@.operator_name' 2>/dev/null)
-Сеть: $(printf '%s' "$_co_s" | jsonfilter -e '@.mode' 2>/dev/null)
-Сигнал: $(printf '%s' "$_co_s" | jsonfilter -e '@.signal' 2>/dev/null)%
-Адрес: $(printf '%s' "$_co_s" | jsonfilter -e '@.ipaddr' 2>/dev/null)" ;;
+				_tg_reply "$(status_text)" ;;
 			/help*|/start*)
 				_tg_reply "Команды:
 /sms <номер> <текст> - отправить SMS
