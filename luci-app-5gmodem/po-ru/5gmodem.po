@@ -4148,3 +4148,9 @@ msgstr "Найден Chat ID: %s (%s). Сохраните форму."
 
 msgid "Pick the chat the messages should go to:"
 msgstr "Выберите чат, куда слать сообщения:"
+
+msgid "Chat ID found and saved: %s (%s)"
+msgstr "Chat ID найден и сохранён: %s (%s)"
+
+msgid "Chat ID found: %s - but saving failed, press Save manually"
+msgstr "Chat ID найден: %s - но сохранить не удалось, нажмите «Сохранить» вручную"

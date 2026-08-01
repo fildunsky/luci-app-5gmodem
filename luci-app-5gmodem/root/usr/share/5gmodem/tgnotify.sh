@@ -168,9 +168,31 @@ chatid() {
 	'
 }
 
+# ЗАПИСЬ НАЙДЕННОГО ID - ОТДЕЛЬНЫМ УЗКИМ ГЛАГОЛОМ.
+#
+# Страница могла бы просто подставить значение в поле, но тогда оно живёт до
+# первого «Сохранить», и человек справедливо недоумевает, почему после «Найти»
+# в конфиге пусто. Пишем сразу - и проверяем значение здесь: оно приходит из
+# браузера, а уходит в конфиг.
+setchat() {   # $1 - идентификатор чата
+	case "$1" in
+		-[0-9]*|[0-9]*)
+			case "${1#-}" in
+				*[!0-9]*) echo '{"ok":false,"error":"bad id"}'; return 0 ;;
+			esac ;;
+		*) echo '{"ok":false,"error":"bad id"}'; return 0 ;;
+	esac
+	[ "${#1}" -le 20 ] || { echo '{"ok":false,"error":"bad id"}'; return 0; }
+	uci -q get "$CFG.sms" >/dev/null 2>&1 || uci -q set "$CFG.sms=sms"
+	uci -q set "$CFG.sms.tg_chat=$1"
+	uci -q commit "$CFG"
+	printf '{"ok":true,"chat":"%s"}\n' "$1"
+}
+
 case "$1" in
 	tick) tick ;;
 	chatid) chatid ;;
+	setchat) setchat "$2" ;;
 	test)
 		if ! _ready; then
 			echo '{"ok":false,"error":"not configured"}'
@@ -187,6 +209,6 @@ case "$1" in
 		printf '{"enabled":%s,"configured":%s,"interval":%s,"last":"%s"}\n' \
 			"${TG_EN:-0}" "$_st_cfg" "$TG_INT" \
 			"$(cat "$LASTLOG" 2>/dev/null | tr -d '"\\' | head -c 180)" ;;
-	*) echo "usage: $0 tick|test|chatid|status" >&2; exit 2 ;;
+	*) echo "usage: $0 tick|test|chatid|setchat <id>|status" >&2; exit 2 ;;
 esac
 exit 0

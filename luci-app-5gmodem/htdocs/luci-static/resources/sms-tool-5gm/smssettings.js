@@ -541,7 +541,12 @@ function addTelegramForwarding(s) {
 	o.depends('tg_enabled', '1');
 	o.onclick = function(ev, section_id) {
 		var self = this;
-		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'chatid' ]).then(function(out) {
+		/* Любой сбой обязан быть ВИДЕН: молчащая кнопка неотличима от сломанной. */
+		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'chatid' ]).catch(function(e) {
+			ui.addNotification(null, E('p', {}, _('Could not query Telegram: %s').format(e && e.message || e)), 'error');
+			return '';
+		}).then(function(out) {
+			if (!out) { return; }
 			var j = {};
 			try { j = JSON.parse(out || '{}'); } catch (e) {}
 			if (!j.ok) {
@@ -549,7 +554,16 @@ function addTelegramForwarding(s) {
 					_('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'))), 'error');
 				return;
 			}
-			var chats = j.chats || [];
+			/* Имена Telegram отдаёт в \uXXXX - без раскодирования в уведомлении
+			   вместо «Фил» показывалось бы «\u0424\u0438\u043b». */
+			var unesc = function(v) {
+				return String(v || '').replace(/\\u([0-9a-fA-F]{4})/g, function(m, h) {
+					return String.fromCharCode(parseInt(h, 16));
+				});
+			};
+			var chats = (j.chats || []).map(function(c) {
+				return { id: c.id, name: unesc(c.name), type: c.type };
+			});
 			if (!chats.length) {
 				ui.addNotification(null, E('p', {},
 					_('Telegram returned no chats. Write any message to the bot and press the button again.')), 'info');
@@ -557,15 +571,24 @@ function addTelegramForwarding(s) {
 			}
 			/* Один чат - подставляем сразу, несколько - даём выбрать: у человека
 			   бывает и личный чат, и канал, и по одному ID их не различить. */
-			var fill = function(id) {
+			/* Подставляем в поле И СРАЗУ ПИШЕМ В КОНФИГ. Одна подстановка живёт
+			   до первого «Сохранить», и после «Найти» конфиг оставался пустым -
+			   ровно то, что сбивает с толку. */
+			var fill = function(id, name) {
 				var f = self.map.lookupOption('tg_chat', section_id);
 				if (f && f[0]) { f[0].getUIElement(section_id).setValue(id); }
+				return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'setchat', String(id) ])
+					.then(function(o) {
+						var r = {};
+						try { r = JSON.parse(o || '{}'); } catch (e) {}
+						ui.addNotification(null, E('p', {}, r.ok
+							? _('Chat ID found and saved: %s (%s)').format(id, name || '')
+							: _('Chat ID found: %s - but saving failed, press Save manually').format(id)),
+							r.ok ? 'info' : 'warning');
+					});
 			};
 			if (chats.length === 1) {
-				fill(chats[0].id);
-				ui.addNotification(null, E('p', {},
-					_('Chat ID found: %s (%s). Save the form.').format(chats[0].id, chats[0].name || chats[0].type)), 'info');
-				return;
+				return fill(chats[0].id, chats[0].name || chats[0].type);
 			}
 			ui.showModal(_('Find Chat ID'), [
 				E('p', {}, _('Pick the chat the messages should go to:')),
@@ -573,7 +596,7 @@ function addTelegramForwarding(s) {
 					return E('div', { 'style': 'margin:.4em 0' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-apply',
-							'click': function() { fill(c.id); ui.hideModal(); }
+							'click': function() { ui.hideModal(); fill(c.id, c.name || c.type); }
 						}, [ '%s — %s (%s)'.format(c.id, c.name || '?', c.type) ])
 					]);
 				})),
