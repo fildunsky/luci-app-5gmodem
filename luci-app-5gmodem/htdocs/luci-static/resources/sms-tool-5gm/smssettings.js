@@ -516,8 +516,8 @@ function addEmailForwarding(s) {
 function addTelegramForwarding(s) {
 	var o;
 
-	o = s.option(form.Flag, 'tg_enabled', _('Forward incoming messages to Telegram'),
-		_('A bot sends every new incoming SMS to the chosen chat. The very first run only remembers the current messages and sends nothing.'));
+	o = s.option(form.Flag, 'tg_enabled', _('Telegram bot'),
+		_('One bot for both directions: it forwards every new incoming SMS to the chosen chat and, if allowed below, sends SMS by the /sms command from that chat. Works with the ACTIVE modem: messages from the SIM of the other modem are not forwarded until you switch to it. The very first run only remembers the current messages and sends nothing. Settings live here only - the outgoing page just points at them.'));
 	o.rmempty = false;
 
 	o = s.option(form.Value, 'tg_token', _('Bot token'),
@@ -640,6 +640,29 @@ function addTelegramForwarding(s) {
 
 function addSendOptions(s) {
 	var o;
+
+	/* ПОДСКАЗКА ПРО БОТА - БЕЗ ДУБЛИРОВАНИЯ НАСТРОЕК.
+	   Бот один, токен один, чат один, поэтому форма живёт только во «Входящих».
+	   Здесь - строка состояния: человек узнаёт о возможности ровно там, где
+	   собрался отправлять сообщение, но настраивает в одном месте. */
+	o = s.option(form.DummyValue, '_tginfo', _('Telegram bot'));
+	o.rawhtml = true;
+	o.cfgvalue = function() {
+		var en = uci.get('5gmodem', 'sms', 'tg_enabled');
+		var tok = uci.get('5gmodem', 'sms', 'tg_token');
+		var chat = uci.get('5gmodem', 'sms', 'tg_chat');
+		var cmd = uci.get('5gmodem', 'sms', 'tg_commands');
+		if (en !== '1' || !tok || !chat) {
+			return '<span style="opacity:.7">%s</span>'.format(
+				_('SMS can also be sent from a Telegram chat - set the bot up on the Inbox settings page.'));
+		}
+		if (cmd !== '1') {
+			return '<span style="opacity:.7">%s</span>'.format(
+				_('The bot is connected for incoming messages. To send SMS from the chat, tick "Allow sending SMS from the chat" on the Inbox settings page.'));
+		}
+		return '%s <code>/sms &lt;%s&gt; &lt;%s&gt;</code>'.format(
+			_('Sending from the chat is on - write to the bot:'), _('number'), _('text'));
+	};
 
 	o = s.option(form.Value, 'pnumber', _('Prefix number'),
 		_("The phone number should start with the country prefix in international format, with the '+' (for example +7 for Russia). Without the '+' the network treats the number as national and may refuse to send. Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."));

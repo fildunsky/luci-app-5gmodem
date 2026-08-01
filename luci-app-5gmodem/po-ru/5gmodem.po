@@ -4160,3 +4160,24 @@ msgstr "Разрешить отправку SMS из чата"
 
 msgid "The bot accepts commands from the chat above: /sms &lt;number&gt; &lt;text&gt; sends an SMS, /status shows the modem state. Commands are accepted ONLY from the configured Chat ID - the bot itself is reachable by anyone who knows its name."
 msgstr "Бот принимает команды из указанного выше чата: /sms &lt;номер&gt; &lt;текст&gt; отправляет SMS, /status показывает состояние модема. Команды принимаются ТОЛЬКО из сохранённого Chat ID - сам бот доступен любому, кто знает его имя."
+
+msgid "Telegram bot"
+msgstr "Telegram-бот"
+
+msgid "One bot for both directions: it forwards every new incoming SMS to the chosen chat and, if allowed below, sends SMS by the /sms command from that chat. Works with the ACTIVE modem: messages from the SIM of the other modem are not forwarded until you switch to it. The very first run only remembers the current messages and sends nothing. Settings live here only - the outgoing page just points at them."
+msgstr "Один бот на оба направления: пересылает каждое новое входящее SMS в выбранный чат и, если разрешено ниже, отправляет SMS по команде /sms из этого чата. Работает с АКТИВНЫМ модемом: сообщения симки второго модема не пересылаются, пока вы на него не переключитесь. Самый первый запуск только запоминает текущие сообщения и ничего не шлёт. Настройки живут только здесь - страница отправки лишь ссылается на них."
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Inbox settings page."
+msgstr "SMS можно отправлять и из чата Telegram - настройте бота в параметрах «Входящих»."
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Inbox settings page."
+msgstr "Бот подключён для входящих. Чтобы отправлять SMS из чата, включите «Разрешить отправку SMS из чата» в параметрах «Входящих»."
+
+msgid "Sending from the chat is on - write to the bot:"
+msgstr "Отправка из чата включена - напишите боту:"
+
+msgid "number"
+msgstr "номер"
+
+msgid "text"
+msgstr "текст"

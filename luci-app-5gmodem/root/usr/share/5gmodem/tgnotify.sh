@@ -43,6 +43,9 @@ STAMP=/tmp/5gmodem_tg_last
 # команды из чата не должны выполниться повторно - «отправь SMS» дважды это не
 # то же самое, что дважды показать страницу.
 OFFSET=/etc/5gmodem/tg_offset
+# Отметка «в чат уже объяснили, как отправлять». На флеше: приглашение должно
+# прийти ОДИН раз за всё время, а не после каждой перезагрузки.
+ANNOUNCED=/etc/5gmodem/tg_announced
 LASTLOG=/tmp/5gmodem_tg_result
 
 _log() { logger -t 5gmodem "telegram: $*"; }
@@ -213,9 +216,30 @@ setchat() {   # $1 - идентификатор чата
 # перезагрузка роутера посреди круга отправила бы то же сообщение второй раз.
 _tg_reply() { _tg_send "$1" >/dev/null 2>&1; }
 
+# «Через что ушло»: модель и оператор активного модема. При двух модемах это
+# первый вопрос, который возникает у человека, увидевшего «отправлено».
+_tg_via() {
+	_tv_j=$("$RES/5gmodem.sh" peek 2>/dev/null)
+	_tv_m=$(printf '%s' "$_tv_j" | jsonfilter -e '@.modem' 2>/dev/null)
+	_tv_o=$(printf '%s' "$_tv_j" | jsonfilter -e '@.operator_name' 2>/dev/null)
+	case "$_tv_m" in ''|-) return 0 ;; esac
+	case "$_tv_o" in ''|-) printf ' через %s' "$_tv_m"; return 0 ;; esac
+	printf ' через %s (%s)' "$_tv_m" "$_tv_o"
+}
+
 commands() {
 	[ "$TG_CMD" = "1" ] || return 0
 	_ready || return 0
+	# ПЕРВОЕ ВКЛЮЧЕНИЕ - ОБЪЯСНЯЕМ В САМОМ ЧАТЕ. Документация, которая приходит
+	# туда, где человек будет работать, стоит десяти строк подсказки в вебе.
+	if [ ! -f "$ANNOUNCED" ]; then
+		if _tg_send "Отправка SMS из чата включена.
+Команда: /sms <номер> <текст>
+Например: /sms +79001234567 Привет
+Ещё есть /status - состояние модема."; then
+			: > "$ANNOUNCED" 2>/dev/null
+		fi
+	fi
 	_co_off=$(cat "$OFFSET" 2>/dev/null)
 	case "$_co_off" in ''|*[!0-9]*) _co_off=0 ;; esac
 	_co_url="https://api.telegram.org/bot$TG_TOKEN/getUpdates?timeout=0&limit=10"
@@ -256,7 +280,7 @@ commands() {
 				_co_port=$(uci -q get "$CFG.sms.sendport")
 				_co_out=$("$RES/smsbridge.sh" send "$_co_to" "$_co_body" "$_co_port" 2>&1)
 				case "$_co_out" in
-					*sucessfully*) _tg_reply "SMS отправлена на $_co_to" ;;
+					*sucessfully*) _tg_reply "SMS отправлена на $_co_to$(_tg_via)" ;;
 					*queued*)      _tg_reply "Порт занят, поставил в очередь - отправлю при первой возможности ($_co_to)" ;;
 					*)             _tg_reply "Не удалось отправить на $_co_to: ${_co_out:-нет ответа}" ;;
 				esac
