@@ -22,6 +22,7 @@
 #
 #   tgnotify.sh tick     - круг проверки (зовётся из sessionwatch)
 #   tgnotify.sh test     - отправить пробное сообщение (кнопка в настройках)
+#   tgnotify.sh chatid   - найти Chat ID по недавним сообщениям боту
 #   tgnotify.sh status   - JSON о состоянии для страницы
 
 RES=/usr/share/5gmodem
@@ -126,8 +127,50 @@ $_tk_txt"; then
 	return 0
 }
 
+# CHAT ID БЕЗ РУЧНОЙ ВОЗНИ.
+#
+# Телеграм не сообщает идентификатор чата ни при создании бота, ни в интерфейсе:
+# его отдаёт только getUpdates, и лишь ПОСЛЕ того, как человек написал боту
+# (бот не может начать переписку первым). Раньше это была инструкция в подсказке
+# поля; теперь то же самое делает кнопка.
+#
+# Отдаём ВСЕ найденные чаты с именами: у человека может быть и личный чат, и
+# канал, и надо понимать, какой из них какой. У каналов и групп id отрицательный
+# - это нормально, так и должно уходить в настройку.
+chatid() {
+	[ -n "$TG_TOKEN" ] || { echo '{"ok":false,"error":"no token"}'; return 0; }
+	command -v curl >/dev/null 2>&1 || { echo '{"ok":false,"error":"no curl"}'; return 0; }
+	_ci_o=$(curl -s -m 20 "https://api.telegram.org/bot$TG_TOKEN/getUpdates" 2>&1)
+	case "$_ci_o" in
+		*'"ok":true'*) ;;
+		*)
+			printf '{"ok":false,"error":"%s"}\n' \
+				"$(printf '%s' "$_ci_o" | tr -d '"\\' | tr '\n' ' ' | head -c 180)"
+			return 0 ;;
+	esac
+	# Разбор без jsonfilter: у getUpdates вложенность разная (message,
+	# channel_post, my_chat_member), а нужны две вещи - id и подпись.
+	printf '%s' "$_ci_o" | awk '
+		BEGIN { RS = "{"; n = 0 }
+		/"id":-?[0-9]+/ && /"type":"(private|group|supergroup|channel)"/ {
+			id = ""; ttl = ""; typ = ""
+			if (match($0, /"id":-?[0-9]+/)) { id = substr($0, RSTART + 5, RLENGTH - 5) }
+			if (match($0, /"type":"[a-z]+"/)) { typ = substr($0, RSTART + 8, RLENGTH - 9) }
+			if (match($0, /"title":"[^"]*"/)) { ttl = substr($0, RSTART + 9, RLENGTH - 10) }
+			else if (match($0, /"first_name":"[^"]*"/)) { ttl = substr($0, RSTART + 14, RLENGTH - 15) }
+			else if (match($0, /"username":"[^"]*"/)) { ttl = substr($0, RSTART + 12, RLENGTH - 13) }
+			if (id != "" && !(id in seen)) {
+				seen[id] = 1
+				out = out (n++ ? "," : "") "{\"id\":\"" id "\",\"name\":\"" ttl "\",\"type\":\"" typ "\"}"
+			}
+		}
+		END { printf "{\"ok\":true,\"chats\":[%s]}\n", out }
+	'
+}
+
 case "$1" in
 	tick) tick ;;
+	chatid) chatid ;;
 	test)
 		if ! _ready; then
 			echo '{"ok":false,"error":"not configured"}'
@@ -144,6 +187,6 @@ case "$1" in
 		printf '{"enabled":%s,"configured":%s,"interval":%s,"last":"%s"}\n' \
 			"${TG_EN:-0}" "$_st_cfg" "$TG_INT" \
 			"$(cat "$LASTLOG" 2>/dev/null | tr -d '"\\' | head -c 180)" ;;
-	*) echo "usage: $0 tick|test|status" >&2; exit 2 ;;
+	*) echo "usage: $0 tick|test|chatid|status" >&2; exit 2 ;;
 esac
 exit 0

@@ -4121,3 +4121,30 @@ msgstr "Номер должен начинаться с кода страны в
 
 msgid "Enter a country prefix, for example +7"
 msgstr "Введите код страны, например +7"
+
+msgid "Numeric chat or channel ID. Write any message to the bot first, then press the button below - it will find the ID for you."
+msgstr "Числовой идентификатор чата или канала. Сначала напишите боту любое сообщение, затем нажмите кнопку ниже - она найдёт ID сама."
+
+msgid "Find Chat ID"
+msgstr "Определить Chat ID"
+
+msgid "Uses the SAVED token: write to the bot first, then save the form and press this."
+msgstr "Использует СОХРАНЁННЫЙ токен: сначала напишите боту, затем сохраните форму и нажмите кнопку."
+
+msgid "Find"
+msgstr "Определить"
+
+msgid "Could not query Telegram: %s"
+msgstr "Не удалось опросить Telegram: %s"
+
+msgid "check the token and the router internet connection"
+msgstr "проверьте токен и наличие интернета у роутера"
+
+msgid "Telegram returned no chats. Write any message to the bot and press the button again."
+msgstr "Telegram не вернул ни одного чата. Напишите боту любое сообщение и нажмите кнопку ещё раз."
+
+msgid "Chat ID found: %s (%s). Save the form."
+msgstr "Найден Chat ID: %s (%s). Сохраните форму."
+
+msgid "Pick the chat the messages should go to:"
+msgstr "Выберите чат, куда слать сообщения:"

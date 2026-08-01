@@ -530,9 +530,59 @@ function addTelegramForwarding(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'tg_chat', _('Chat ID'),
-		_('Numeric chat or channel ID. Write to the bot first, then take the ID from https://api.telegram.org/bot<token>/getUpdates'));
+		_('Numeric chat or channel ID. Write any message to the bot first, then press the button below - it will find the ID for you.'));
 	o.depends('tg_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Button, '_tgchatid', _('Find Chat ID'),
+		_('Uses the SAVED token: write to the bot first, then save the form and press this.'));
+	o.inputtitle = _('Find');
+	o.inputstyle = 'apply';
+	o.depends('tg_enabled', '1');
+	o.onclick = function(ev, section_id) {
+		var self = this;
+		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'chatid' ]).then(function(out) {
+			var j = {};
+			try { j = JSON.parse(out || '{}'); } catch (e) {}
+			if (!j.ok) {
+				ui.addNotification(null, E('p', {},
+					_('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'))), 'error');
+				return;
+			}
+			var chats = j.chats || [];
+			if (!chats.length) {
+				ui.addNotification(null, E('p', {},
+					_('Telegram returned no chats. Write any message to the bot and press the button again.')), 'info');
+				return;
+			}
+			/* Один чат - подставляем сразу, несколько - даём выбрать: у человека
+			   бывает и личный чат, и канал, и по одному ID их не различить. */
+			var fill = function(id) {
+				var f = self.map.lookupOption('tg_chat', section_id);
+				if (f && f[0]) { f[0].getUIElement(section_id).setValue(id); }
+			};
+			if (chats.length === 1) {
+				fill(chats[0].id);
+				ui.addNotification(null, E('p', {},
+					_('Chat ID found: %s (%s). Save the form.').format(chats[0].id, chats[0].name || chats[0].type)), 'info');
+				return;
+			}
+			ui.showModal(_('Find Chat ID'), [
+				E('p', {}, _('Pick the chat the messages should go to:')),
+				E('div', {}, chats.map(function(c) {
+					return E('div', { 'style': 'margin:.4em 0' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-apply',
+							'click': function() { fill(c.id); ui.hideModal(); }
+						}, [ '%s — %s (%s)'.format(c.id, c.name || '?', c.type) ])
+					]);
+				})),
+				E('div', { 'class': 'right' }, [
+					E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ])
+				])
+			]);
+		});
+	};
 
 	o = s.option(form.ListValue, 'tg_interval', _('Check for new messages every'));
 	o.value('60', _('1 min'));
