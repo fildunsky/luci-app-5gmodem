@@ -34,10 +34,15 @@ TG_EN=$(_cfg tg_enabled)
 TG_TOKEN=$(_cfg tg_token)
 TG_CHAT=$(_cfg tg_chat)
 TG_INT=$(_cfg tg_interval); case "$TG_INT" in ''|*[!0-9]*) TG_INT=60 ;; esac
+TG_CMD=$(_cfg tg_commands)
 STORE=$(_cfg storage); [ -n "$STORE" ] || STORE=SM
 PORT=$(_cfg readport)
 
 STAMP=/tmp/5gmodem_tg_last
+# Номер последнего разобранного апдейта. НА ФЛЕШЕ: после перезагрузки роутера
+# команды из чата не должны выполниться повторно - «отправь SMS» дважды это не
+# то же самое, что дважды показать страницу.
+OFFSET=/etc/5gmodem/tg_offset
 LASTLOG=/tmp/5gmodem_tg_result
 
 _log() { logger -t 5gmodem "telegram: $*"; }
@@ -189,8 +194,95 @@ setchat() {   # $1 - идентификатор чата
 	printf '{"ok":true,"chat":"%s"}\n' "$1"
 }
 
+# КОМАНДЫ ИЗ ЧАТА - ОТПРАВКА SMS ИЗ TELEGRAM.
+#
+# КТО МОЖЕТ КОМАНДОВАТЬ. Только тот чат, который записан в настройках
+# (tg_chat). Бот доступен любому, кто узнал его имя, а команда тратит деньги и
+# говорит от имени владельца симки - поэтому проверка авторства здесь не
+# «на будущее», а обязательная часть функции. Всем прочим отвечаем молчанием:
+# сообщать чужому, что он «не хозяин», значит подтверждать, что бот боевой.
+#
+# ЧТО ПОНИМАЕМ:
+#   /sms <номер> <текст>  - отправить SMS (номер в любом виде, приводится к
+#                           международному самим smsbridge)
+#   /status               - оператор, сигнал, адрес
+#   /help                 - подсказка
+#
+# ПОВТОРОВ НЕ ДОПУСКАЕМ. Telegram отдаёт апдейт, пока его не подтвердили
+# смещением; смещение храним на флеше и двигаем ТОЛЬКО после разбора, иначе
+# перезагрузка роутера посреди круга отправила бы то же сообщение второй раз.
+_tg_reply() { _tg_send "$1" >/dev/null 2>&1; }
+
+commands() {
+	[ "$TG_CMD" = "1" ] || return 0
+	_ready || return 0
+	_co_off=$(cat "$OFFSET" 2>/dev/null)
+	case "$_co_off" in ''|*[!0-9]*) _co_off=0 ;; esac
+	_co_url="https://api.telegram.org/bot$TG_TOKEN/getUpdates?timeout=0&limit=10"
+	[ "$_co_off" -gt 0 ] && _co_url="$_co_url&offset=$_co_off"
+	_co_j=$(curl -s -m 20 "$_co_url" 2>/dev/null)
+	case "$_co_j" in *'"ok":true'*) ;; *) return 0 ;; esac
+
+	_co_i=0
+	_co_max="$_co_off"
+	while [ "$_co_i" -lt 10 ]; do
+		_co_u=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$_co_i].update_id" 2>/dev/null)
+		[ -n "$_co_u" ] || break
+		_co_i=$((_co_i + 1))
+		# СВОЯ ЗАЩИТА ОТ ПОВТОРА, а не только серверная. Telegram отдаёт лишь
+		# апдейты новее смещения, но полагаться на это нельзя: сбой сети, чужой
+		# опрос тем же токеном или наш собственный getUpdates из кнопки «найти
+		# Chat ID» могут вернуть старое. Команда тратит деньги - повтор
+		# недопустим, поэтому старое отбрасываем сами.
+		[ "$_co_u" -lt "$_co_off" ] && continue
+		[ "$_co_u" -ge "$_co_max" ] && _co_max=$((_co_u + 1))
+		_co_chat=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$((_co_i - 1))].message.chat.id" 2>/dev/null)
+		_co_txt=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$((_co_i - 1))].message.text" 2>/dev/null)
+		[ -n "$_co_txt" ] || continue
+		# ЧУЖОЙ ЧАТ - МОЛЧА МИМО.
+		[ "$_co_chat" = "$TG_CHAT" ] || {
+			_log "команда из чужого чата $_co_chat пропущена"
+			continue
+		}
+		case "$_co_txt" in
+			/sms\ *)
+				_co_rest=${_co_txt#/sms }
+				_co_to=${_co_rest%% *}
+				_co_body=${_co_rest#* }
+				if [ -z "$_co_to" ] || [ "$_co_body" = "$_co_rest" ] || [ -z "$_co_body" ]; then
+					_tg_reply "Формат: /sms <номер> <текст>"
+					continue
+				fi
+				_co_port=$(uci -q get "$CFG.sms.sendport")
+				_co_out=$("$RES/smsbridge.sh" send "$_co_to" "$_co_body" "$_co_port" 2>&1)
+				case "$_co_out" in
+					*sucessfully*) _tg_reply "SMS отправлена на $_co_to" ;;
+					*queued*)      _tg_reply "Порт занят, поставил в очередь - отправлю при первой возможности ($_co_to)" ;;
+					*)             _tg_reply "Не удалось отправить на $_co_to: ${_co_out:-нет ответа}" ;;
+				esac
+				_log "команда из чата: SMS на $_co_to" ;;
+			/sms|/sms@*)
+				_tg_reply "Формат: /sms <номер> <текст>" ;;
+			/status*)
+				_co_s=$("$RES/5gmodem.sh" peek 2>/dev/null)
+				_tg_reply "Оператор: $(printf '%s' "$_co_s" | jsonfilter -e '@.operator_name' 2>/dev/null)
+Сеть: $(printf '%s' "$_co_s" | jsonfilter -e '@.mode' 2>/dev/null)
+Сигнал: $(printf '%s' "$_co_s" | jsonfilter -e '@.signal' 2>/dev/null)%
+Адрес: $(printf '%s' "$_co_s" | jsonfilter -e '@.ipaddr' 2>/dev/null)" ;;
+			/help*|/start*)
+				_tg_reply "Команды:
+/sms <номер> <текст> - отправить SMS
+/status - состояние модема
+Входящие SMS приходят сюда сами." ;;
+		esac
+	done
+	[ "$_co_max" != "$_co_off" ] && printf '%s' "$_co_max" > "$OFFSET" 2>/dev/null
+	return 0
+}
+
 case "$1" in
-	tick) tick ;;
+	tick) tick; commands ;;
+	commands) commands ;;
 	chatid) chatid ;;
 	setchat) setchat "$2" ;;
 	test)
@@ -209,6 +301,6 @@ case "$1" in
 		printf '{"enabled":%s,"configured":%s,"interval":%s,"last":"%s"}\n' \
 			"${TG_EN:-0}" "$_st_cfg" "$TG_INT" \
 			"$(cat "$LASTLOG" 2>/dev/null | tr -d '"\\' | head -c 180)" ;;
-	*) echo "usage: $0 tick|test|chatid|setchat <id>|status" >&2; exit 2 ;;
+	*) echo "usage: $0 tick|test|chatid|setchat <id>|commands|status" >&2; exit 2 ;;
 esac
 exit 0

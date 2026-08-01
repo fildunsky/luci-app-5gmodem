@@ -615,6 +615,11 @@ function addTelegramForwarding(s) {
 	o.depends('tg_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };
 
+	o = s.option(form.Flag, 'tg_commands', _('Allow sending SMS from the chat'),
+		_('The bot accepts commands from the chat above: /sms &lt;number&gt; &lt;text&gt; sends an SMS, /status shows the modem state. Commands are accepted ONLY from the configured Chat ID - the bot itself is reachable by anyone who knows its name.'));
+	o.depends('tg_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
 	o = s.option(form.Button, '_tgtest', _('Test delivery'),
 		_('Sends a test message with the SAVED settings - save the form first.'));
 	o.inputtitle = _('Send test message');

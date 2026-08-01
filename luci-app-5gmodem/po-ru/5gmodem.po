@@ -4154,3 +4154,9 @@ msgstr "Chat ID найден и сохранён: %s (%s)"
 
 msgid "Chat ID found: %s - but saving failed, press Save manually"
 msgstr "Chat ID найден: %s - но сохранить не удалось, нажмите «Сохранить» вручную"
+
+msgid "Allow sending SMS from the chat"
+msgstr "Разрешить отправку SMS из чата"
+
+msgid "The bot accepts commands from the chat above: /sms &lt;number&gt; &lt;text&gt; sends an SMS, /status shows the modem state. Commands are accepted ONLY from the configured Chat ID - the bot itself is reachable by anyone who knows its name."
+msgstr "Бот принимает команды из указанного выше чата: /sms &lt;номер&gt; &lt;текст&gt; отправляет SMS, /status показывает состояние модема. Команды принимаются ТОЛЬКО из сохранённого Chat ID - сам бот доступен любому, кто знает его имя."
