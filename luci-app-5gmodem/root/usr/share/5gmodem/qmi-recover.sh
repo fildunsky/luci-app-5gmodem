@@ -69,8 +69,32 @@ qmi_pool_recover() {
 	return 1
 }
 
+# СБРОС ПО ВНЕШНЕЙ ПРИЧИНЕ. Тот же приём (AT+CFUN=1,1 с кулдауном), но повод
+# приносит вызывающий. Нужен сторожу сессии: у SIM7100E живьём поймано
+# состояние «QMI говорит connected, адрес выдан по QMI, а канал не несёт ни
+# байта» - ifup его не лечит (сессия-то есть), лечит только переинициализация
+# модема. Проверено дважды на двух стендах: после сброса штатный DHCP-путь
+# поднимается с первой попытки.
+qmi_force_reset() {   # $1 - usb-путь, $2 - причина для журнала
+	_fr_p="$1"; [ -n "$_fr_p" ] || return 1
+	_mk="/tmp/5gmodem_qmirecover_$(printf '%s' "$_fr_p" | tr -c 'A-Za-z0-9' _)"
+	[ -n "$(find "$_mk" -mmin -3 2>/dev/null)" ] && return 1
+	_lm=$("$RES/listmodems.sh" 2>/dev/null)
+	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_fr_p\"].tty[*]" 2>/dev/null); do
+		[ -e "$_t" ] || continue
+		at_query "$_t" "AT" 5 | grep -q "OK" || continue
+		logger -t 5gmodem "${2:-нужен сброс} на $_fr_p - сбрасываю модем (AT+CFUN=1,1 на $_t)"
+		touch "$_mk" 2>/dev/null
+		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
+		return 0
+	done
+	logger -t 5gmodem "${2:-нужен сброс} на $_fr_p, но живого AT-порта для сброса нет"
+	return 1
+}
+
 case "$1" in
 	check)   qmi_pool_exhausted "$2" && echo exhausted || echo ok ;;
 	recover) qmi_pool_recover "$2" ;;
-	*) echo "usage: $0 {check <cdc-wdm>|recover <usb-path>}" >&2; exit 1 ;;
+	reset)   qmi_force_reset "$2" "$3" ;;
+	*) echo "usage: $0 {check <cdc-wdm>|recover <usb-path>|reset <usb-path> [причина]}" >&2; exit 1 ;;
 esac

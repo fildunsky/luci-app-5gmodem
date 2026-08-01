@@ -3844,7 +3844,7 @@ msgid "done"
 msgstr "готово"
 
 msgid "Mark read"
-msgstr "Прочитано"
+msgstr "Отметить прочитанным"
 
 msgid "New"
 msgstr "Новых"
@@ -3926,6 +3926,15 @@ msgstr "Успехов до «ожил»"
 
 msgid "Switch traffic to a backup link when one goes down"
 msgstr "Переключать трафик на запасной линк при падении"
+
+msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
+msgstr "Линк с адресом, но без интернета сам трафик не уступит: маршрут через него уводит сторож и возвращает, когда линк оживает. Метрики в настройках при этом не меняются. По умолчанию включено."
+
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
+msgstr "Трафик идёт через %s, а интернета на нём нет. Переключение выключено - сторож видит провал и ничего не делает."
+
+msgid "Turn switching on"
+msgstr "Включить переключение"
 
 msgid "Heal a modem while its link is down"
 msgstr "Лечить модем, пока линк лежит"
@@ -4181,3 +4190,63 @@ msgstr "номер"
 
 msgid "text"
 msgstr "текст"
+
+msgid "APN database"
+msgstr "База APN"
+
+msgid "Check the APN database"
+msgstr "Проверить базу APN"
+
+msgid "Update the APN database"
+msgstr "Обновить базу APN"
+
+msgid "Checking the APN database…"
+msgstr "Проверяю базу APN…"
+
+msgid "Updating the APN database…"
+msgstr "Обновляю базу APN…"
+
+msgid "A newer database is available"
+msgstr "Есть более свежая база"
+
+msgid "The APN database is up to date"
+msgstr "База APN актуальна"
+
+msgid "The APN database has been updated"
+msgstr "База APN обновлена"
+
+msgid "Could not check the APN database"
+msgstr "Не удалось проверить базу APN"
+
+msgid "Failed to update the APN database"
+msgstr "Не удалось обновить базу APN"
+
+msgid "Operator APNs from GNOME MBPI and AOSP. Used to pick an APN automatically when a SIM changes."
+msgstr "APN операторов из GNOME MBPI и AOSP. По ней подбирается APN при смене SIM."
+
+msgid "operators"
+msgstr "операторов"
+
+msgid "Where to store"
+msgstr "Где хранить"
+
+msgid "Empty - the router's own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals."
+msgstr "Пусто - память роутера (%s). На USB-накопитель пишутся ещё и ряды графиков, а не только месячные итоги."
+
+msgid "Storing is off - data lives in RAM until the next reboot."
+msgstr "Хранение выключено - данные живут в памяти до перезагрузки."
+
+msgid "The drive is not mounted - writing to %s for now, and merging back when it returns."
+msgstr "Накопитель не смонтирован - пока пишу в %s, а когда вернётся, сведу вместе."
+
+msgid "Writing to %s"
+msgstr "Пишу в %s"
+
+msgid "Nowhere to write - check the path."
+msgstr "Писать некуда - проверьте путь."
+
+msgid "Path rejected: %s"
+msgstr "Путь отклонён: %s"
+
+msgid "DNS returns a foreign address for %s (%s) - the resolver substitutes it"
+msgstr "DNS отдаёт для %s чужой адрес (%s) - резолвер подменяет"

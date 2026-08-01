@@ -250,6 +250,10 @@ _active_path() { uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null; }
 # одного в секцию другого - отсюда ложное «модем перепутан». Формат _MKEY НЕ
 # трогаем (по нему именуются файлы-снимки), просто фиксируем значение.
 _POLL_AM=$(_active_path)
+# Кого страница считает активным - ЗАПОМИНАЕМ ОТДЕЛЬНО: ниже _POLL_AM может быть
+# переопределён пиновкой, а помощники, умеющие отвечать только про активного
+# (simslot.sh), должны понимать, что их спрашивать уже не о ком.
+_ACT_AM="$_POLL_AM"
 
 # ОПРОС НЕ ТОЛЬКО АКТИВНОГО: POLL_MODEM=<usb-путь> в окружении.
 #
@@ -1399,8 +1403,15 @@ if [ -n "$SIMID" ]; then
 		[ -n "$_SIM_IF" ] || _SIM_IF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
 		# Дебаунс: опрос идёт раз в пару секунд, а autoapn — секунды. Без метки
 		# он запускался бы пачкой, пока первый не допишет apn_imsi.
+		#
+		# А ЕСЛИ ПРОШЛЫЙ ВЫЗОВ СДАЛСЯ - ЖДЁМ ПОЛЧАСА, А НЕ МИНУТУ. Выходы «не
+		# смог» (роуминг, APN не найден, ни оператора ни IMSI) apn_imsi не пишут,
+		# и с минутным дебаунсом сравнение расходилось ВЕЧНО: в логе zbt «смена
+		# SIM (IMSI) на modem» шла сутками, каждый круг - AT-запросы к модему.
 		_apn_stamp="/tmp/5gmodem_autoapn_$_apn_sec"
-		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +1 2>/dev/null)" ]; }; then
+		_apn_wait=1
+		[ -f "$_apn_stamp.gaveup" ] && _apn_wait=30
+		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +$_apn_wait 2>/dev/null)" ]; }; then
 			: > "$_apn_stamp"
 			logger -t 5gmodem "смена SIM (IMSI) на $_SIM_IF - переподбираем APN"
 			# unset _AT_LOCK_HELD + закрыть fd лока: этот фон ОТДЕЛЯЕТСЯ и может
@@ -2557,6 +2568,20 @@ if [ -z "$SSIM" ] || [ "$SSIM" = "-" ]; then
 	fi
 	if [ -n "$_slot_age" ] && [ "$_slot_age" -ge 0 ] && [ "$_slot_age" -lt 60 ]; then
 		SSIM=$(cat "$_slot_c" 2>/dev/null)
+	elif [ "$_POLL_AM" != "$_ACT_AM" ]; then
+		# ОПРАШИВАЕМ НЕ АКТИВНОГО - СЛОТ НЕ СПРАШИВАЕМ ВОВСЕ.
+		#
+		# simslot.sh знает ровно одного модема - активного (active_modem,
+		# registry active, свой кэш по тому же ключу), POLL_MODEM он не
+		# принимает. При подогреве снимка соседа это давало сразу две беды:
+		#   - в снимок СОСЕДА ложился слот АКТИВНОГО (та самая примесь чужих
+		#     данных в карточке, за которой мы гоняемся);
+		#   - лок: опрос уже держит порт соседа (ttyUSB4), а simslot просит порт
+		#     активного (ttyUSB2) - «at_lock: отказ» на каждом втором круге
+		#     подогрева, ровно как в логе zbt.
+		# Ждать лока тут нечего: ответ был бы про чужой модем. Поле остаётся
+		# пустым до открытия вкладки этого модема - он тогда сам станет активным.
+		:
 	else
 		_slot_v=$("$RES/simslot.sh" status 2>/dev/null \
 			| jsonfilter -e '@.active' 2>/dev/null)
@@ -2580,16 +2605,40 @@ fi
 # считало, что модем подменили: у пользователя с двумя Thales MV31-W оба профиля
 # показывали один номер, а лог сыпал «миграцию профиля отменяю».
 _STAMP_PATH=$(tty_usbpath "$DEVICE" 2>/dev/null)
-if [ -n "$_STAMP_PATH" ] && [ "$_STAMP_PATH" != "$_POLL_AM" ]; then
-	logger -t 5gmodem "порт $DEVICE принадлежит $_STAMP_PATH, а опрашиваем $_POLL_AM - IMEI не штампую"
+if [ -n "$DEVICE" ] && [ "$_STAMP_PATH" != "$_POLL_AM" ]; then
+	# ПУСТОЙ ОТВЕТ - ТОЖЕ ОТКАЗ. Раньше условие требовало НЕПУСТОГО владельца, и
+	# ровно в момент переэнумерации (порт уже исчез, tty_usbpath молчит) гвард
+	# пропускал - а значение к этому моменту могло быть прочитано с ЧУЖОГО tty.
+	# Живой случай 01.08.2026: во время флапа Compal при спидтесте секция 2-1.4
+	# получила IMEI соседа («modem swap on 2-1.4: 016133312319966 ->
+	# 016133311799572»), и следом тот же чужой номер уехал в штамп интерфейса.
+	# Не смогли доказать принадлежность порта - не штампуем: следующий круг
+	# опроса сделает это спокойно.
+	logger -t 5gmodem "порт $DEVICE принадлежит ${_STAMP_PATH:-неизвестно кому}, а опрашиваем $_POLL_AM - IMEI не штампую"
 	NR_IMEI=""
 fi
 if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]; then
 	case "$NR_IMEI" in
 		*[!0-9]*|'') : ;;                      # не IMEI - молчим
 		*)
+			# ЭТОТ IMEI УЖЕ ЧИСЛИТСЯ ЗА ДРУГИМ ПРИСУТСТВУЮЩИМ МОДЕМОМ?
+			# Тогда мы прочитали чужой: один и тот же аппарат не может стоять в
+			# двух портах сразу. Такое же правило уже стоит в ensure_section, а
+			# здесь его не было - и именно этим путём портилась секция.
+			_foreign=""
+			for _fs in $(uci show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.imei='$NR_IMEI'\$/\1/p"); do
+				[ "$_fs" = "$AMP_SEC" ] && continue
+				_fsp=$(uci -q get "5gmodem.$_fs.path")
+				[ -n "$_fsp" ] && [ -e "/sys/bus/usb/devices/$_fsp" ] && { _foreign="$_fsp"; break; }
+			done
+			if [ -n "$_foreign" ]; then
+				logger -t 5gmodem "IMEI $NR_IMEI принадлежит присутствующему модему $_foreign - в секцию $AMP_SEC не пишу"
+				NR_IMEI=""
+			fi
 			_old_imei=$(uci -q get "5gmodem.$AMP_SEC.imei")
-			if [ -z "$_old_imei" ]; then
+			if [ -z "$NR_IMEI" ]; then
+				:
+			elif [ -z "$_old_imei" ]; then
 				uci -q set "5gmodem.$AMP_SEC.imei=$NR_IMEI"
 				uci -q commit 5gmodem
 			elif [ "$_old_imei" != "$NR_IMEI" ]; then
@@ -2604,8 +2653,10 @@ if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]
 			# IMEI, и владение перестало различать модемы. Правим ТОЛЬКО когда
 			# интерфейс сам указывает на наш путь: тогда запись заведомо про нас,
 			# и защита «интерфейс принадлежит другому модему» не задета.
+			# NR_IMEI мог быть обнулён гвардом выше (чужой номер) - тогда чинить
+			# нечем: пустой штамп хуже старого, владение по нему не работает.
 			_own_if=$(uci -q get "5gmodem.$AMP_SEC.network")
-			if [ -n "$_own_if" ] \
+			if [ -n "$NR_IMEI" ] && [ -n "$_own_if" ] \
 			   && [ "$(uci -q get "network.$_own_if.modem_path")" = "$_POLL_AM" ] \
 			   && [ "$(uci -q get "network.$_own_if.modem_imei")" != "$NR_IMEI" ]; then
 				logger -t 5gmodem "интерфейс $_own_if числился за IMEI $(uci -q get "network.$_own_if.modem_imei") - исправляю на $NR_IMEI"

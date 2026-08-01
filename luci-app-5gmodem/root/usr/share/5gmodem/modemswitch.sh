@@ -785,6 +785,18 @@ autoapn)
 		logger -t 5gmodem "autoapn: $IFACE в ручном режиме, APN не трогаем"
 		exit 0
 	fi
+
+	# МЕТКА «СДАЛСЯ» - ТОРМОЗ ДЛЯ ТРИГГЕРА СМЕНЫ SIM.
+	#
+	# Триггер в 5gmodem.sh сравнивает IMSI симки с apn_imsi в секции и зовёт нас,
+	# пока они расходятся. Все выходы «не смог» этот ключ не пишут - и вызов
+	# повторялся раз в минуту ВЕЧНО (живой лог zbt: «смена SIM (IMSI) на modem»
+	# каждые 2.5 минуты сутками, с AT-запросами на каждый круг). Метку ставим при
+	# сдаче, снимаем при успехе; триггер по ней ждёт полчаса вместо минуты.
+	# Файл в /tmp намеренно: после перезагрузки попытка честно повторяется.
+	_am_gv="/tmp/5gmodem_autoapn_${_am_sec}.gaveup"
+	_apn_giveup() { [ -n "$_am_sec" ] && : > "$_am_gv" 2>/dev/null; }
+	_apn_done()   { [ -n "$_am_sec" ] && rm -f "$_am_gv" 2>/dev/null; }
 	# ОПРАШИВАЕМ МОДЕМА-ХОЗЯИНА этого интерфейса, а не активного. Без POLL_MODEM
 	# `cached` отдаёт снимок АКТИВНОГО модема: при настройке соседа autoapn
 	# читал ЧУЖУЮ симку и ставил её APN (живой случай 31.07.2026: вернувшийся
@@ -923,7 +935,19 @@ autoapn)
 		for _c in $_sim_plmns; do _tmp="$_tmp ${_c%${_c#???}}-${_c#???}"; done
 		_sim_plmns="$_tmp"
 	fi
-	[ -n "$_op$_plmn" ] || { logger -t 5gmodem "autoapn: оператор неизвестен, пропускаем"; exit 0; }
+	# ПУСТОЙ ОПЕРАТОР - ЕЩЁ НЕ ПОВОД СДАВАТЬСЯ, ЕСЛИ ЕСТЬ IMSI.
+	#
+	# Быстрый путь (IMSI передал вызывающий) в модем НЕ ХОДИТ вовсе - у него ни
+	# имени сети, ни PLMN нет по определению, и это норма: ключ подбора - код
+	# сети из самого IMSI, apn_pick умеет искать по нему и по мировой базе. А
+	# прежний guard требовал именно оператора и обрывал КАЖДЫЙ такой вызов: у
+	# FM350 (mm_exclude, добрать из MM неоткуда) APN не подбирался никогда, зато
+	# триггер смены SIM крутился по кругу - см. метку «сдался» выше.
+	if [ -z "$_op$_plmn" ] && [ ${#_imsi} -lt 6 ]; then
+		logger -t 5gmodem "autoapn: ни оператора, ни IMSI - пропускаем"
+		_apn_giveup
+		exit 0
+	fi
 
 	# РОУМИНГ: APN из таблицы НЕ ПОДХОДИТ. В роуминге модем зарегистрирован в
 	# ЧУЖОЙ сети, и её APN симке не годится - нужен домашний, которого мы знать
@@ -935,13 +959,23 @@ autoapn)
 	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
 	if [ "$_reg" = "5" ]; then
 		logger -t 5gmodem "autoapn: роуминг (сеть «$_op», $_plmn) - APN оставляем пустым"
+		_apn_giveup
 		exit 0
 	fi
 
 	_iccid=$(printf '%s' "$_j" | jsonfilter -e '@.iccid' 2>/dev/null | tr -cd '0-9')
 	_apn=$(apn_pick "$_op" "$_plmn" "$_sim_plmns" "$_imsi" "$_iccid") || {
 		logger -t 5gmodem "autoapn: APN для «$_op» ($_plmn, SIM$_sim_plmns) не найден"
+		_apn_giveup
 		exit 0
+	}
+	# Пустой PLMN на быстром пути - это НЕ «код сети пропал», а «в модем не
+	# ходили». Записать его поверх сохранённого значило бы стереть верный.
+	_apn_stamp_sec() {
+		[ -n "$_am_sec" ] || return 0
+		[ -n "$_plmn" ] && uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"
+		[ -n "$_imsi" ] && uci -q set "$CFG.$_am_sec.apn_imsi=$_imsi"
+		uci -q commit "$CFG"
 	}
 	_cur=$(uci -q get "network.$IFACE.apn")
 	if [ "$_cur" = "$_apn" ]; then
@@ -949,8 +983,8 @@ autoapn)
 		# Помечаем СИМКУ обработанной (её IMSI) - персистентно, в секции. По этому
 		# ключу опрос метрик понимает, что для ЭТОЙ симки APN уже подобран, и не
 		# дёргает autoapn на каждом опросе. Переживает перезагрузку и очистку /tmp.
-		[ -n "$_am_sec" ] && { uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"; \
-			[ -n "$_imsi" ] && uci -q set "$CFG.$_am_sec.apn_imsi=$_imsi"; uci -q commit "$CFG"; }
+		_apn_stamp_sec
+		_apn_done
 		exit 0
 	fi
 
@@ -958,8 +992,8 @@ autoapn)
 	uci -q commit network
 	# Помним, ДЛЯ КАКОЙ сети подобран APN: по этой записи видно в отладке, что
 	# значение относится к нынешней симке, а не осталось от прежней.
-	[ -n "$_am_sec" ] && { uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"; \
-		[ -n "$_imsi" ] && uci -q set "$CFG.$_am_sec.apn_imsi=$_imsi"; uci -q commit "$CFG"; }
+	_apn_stamp_sec
+	_apn_done
 	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (было «${_cur:-пусто}», оператор «$_op», $_plmn)"
 	ifdown "$IFACE" >/dev/null 2>&1
 	sleep 3
@@ -1305,6 +1339,11 @@ resolve)
 	fi
 	uci -q commit "$CFG"
 	rm -f /tmp/modem
+	# УБОРКА - ФОНОМ И ПОСЛЕ ВСЕГО. Правила у неё строгие (интерфейс без хозяина
+	# либо парковка старше park_ttl_days, по умолчанию 30 дней), но трогает она
+	# конфиг, поэтому идёт последней и не задерживает ответ hotplug'у. Выключается
+	# одним ключом: 5gmodem.@5gmodem[0].park_ttl_days=0.
+	( "$0" cleanup apply >/dev/null 2>&1 & ) >/dev/null 2>&1 </dev/null &
 	printf '{"result":"resolved","active":"%s","at_port":"%s"}\n' "$AMP" "$ATP"
 	;;
 
@@ -1399,8 +1438,111 @@ xmm)
 	printf '{"ok":1}\n'
 	;;
 
+cleanup)
+	# УБОРКА ОСИРОТЕВШИХ ИНТЕРФЕЙСОВ.
+	#
+	#   cleanup        - только показать, что считается мусором (JSON)
+	#   cleanup apply  - снести показанное
+	#
+	# ЧТО СЧИТАЕТСЯ МУСОРОМ. Интерфейс с НАШИМ штампом (modem_path/modem_imei),
+	# у которого НЕТ ХОЗЯИНА: ни одна секция модема - ни живая, ни парковочная -
+	# не числит его своим (network=<имя>). Такие остаются после того, как модем
+	# в разъёме сменили несколько раз подряд: секция каждый раз заводит новый
+	# интерфейс, а прежний повисает в конфиге и в зоне firewall.
+	#
+	# ЧТО МУСОРОМ НЕ СЧИТАЕТСЯ - и почему список ниже такой строгий:
+	#   - интерфейс парковочной секции. Парковка - это «модем вынули, настройки
+	#     ждут его возвращения» (park_profile). Снести его = потерять APN, бэнды
+	#     и mm_exclude ровно того модема, который человек собирается вернуть;
+	#   - интерфейс БЕЗ нашего штампа. Он мог быть создан руками, и трогать чужое
+	#     мы не имеем права;
+	#   - поднятый интерфейс или интерфейс с адресом. Если он работает, значит у
+	#     него есть хозяин, которого мы просто не распознали, - лучше оставить
+	#     мусор, чем оборвать связь.
+	_cl_apply=""; [ "$2" = apply ] && _cl_apply=1
+	_cl_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	# Все интерфейсы, которые числит за собой хоть одна секция (в т.ч. парковка).
+	_cl_owned=" $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.m_[^.]*\.network='\?\([^']*\)'\?\$/\1/p" | tr '\n' ' ') "
+	_cl_first=1
+	printf '{"orphans":['
+	for _cl_i in $(uci show network 2>/dev/null \
+			| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p" | sort -u); do
+		[ -n "$_cl_i" ] || continue
+		case "$_cl_owned" in *" $_cl_i "*) continue ;; esac
+		# Живой интерфейс не трогаем ни при каких условиях.
+		_cl_up=$(ifstatus "$_cl_i" 2>/dev/null | grep -c '"up": true')
+		_cl_ip=$(ifstatus "$_cl_i" 2>/dev/null | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		[ "$_cl_up" != 0 ] && [ -n "$_cl_ip" ] && continue
+		_cl_p=$(uci -q get "network.$_cl_i.modem_path")
+		_cl_m=$(uci -q get "network.$_cl_i.modem_imei")
+		[ "$_cl_first" = 1 ] || printf ','
+		_cl_first=0
+		printf '{"iface":"%s","path":"%s","imei":"%s","proto":"%s"}' \
+			"$_cl_i" "$_cl_p" "$_cl_m" "$(uci -q get "network.$_cl_i.proto")"
+		[ -n "$_cl_apply" ] || continue
+		ifdown "$_cl_i" >/dev/null 2>&1
+		uci -q delete "network.$_cl_i"
+		[ -n "$_cl_z" ] && uci -q del_list "firewall.$_cl_z.network=$_cl_i"
+		logger -t 5gmodem "уборка: снят осиротевший интерфейс $_cl_i (путь ${_cl_p:-?}, IMEI ${_cl_m:-?}) - хозяина нет ни среди модемов, ни в парковках"
+	done
+	printf '],"parked":['
+	# ПАРКОВКИ, КОТОРЫЕ УЖЕ НИКОГО НЕ ЖДУТ.
+	#
+	# Осиротевших интерфейсов в реальной жизни почти не бывает - у каждого есть
+	# хозяин. Копится другое: на каждый модем, побывавший в разъёме, остаётся
+	# парковочный профиль, и он ДЕРЖИТ ЗА СОБОЙ ИНТЕРФЕЙС. Три замены модема в
+	# одном порту - три лишних интерфейса в конфиге и в зоне firewall навсегда.
+	#
+	# Держать их вечно - крайность в одну сторону, чистить сразу - в другую
+	# (человек вынул модем на неделю, вернул - настройки на месте, это и есть
+	# смысл парковки). Поэтому срок: по умолчанию 30 дней с момента парковки
+	# (parked_at пишется при вытеснении), настраивается ключом
+	# 5gmodem.@5gmodem[0].park_ttl_days; 0 - не чистить никогда.
+	_cl_ttl=$(uci -q get "$CFG.@5gmodem[0].park_ttl_days")
+	case "$_cl_ttl" in ''|*[!0-9]*) _cl_ttl=30 ;; esac
+	_cl_now=$(date +%s 2>/dev/null); case "$_cl_now" in ''|*[!0-9]*) _cl_now=0 ;; esac
+	_cl_pfirst=1
+	if [ "$_cl_ttl" != 0 ] && [ "$_cl_now" != 0 ]; then
+		for _cl_s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_park_[^.]*\)=modem\$/\1/p"); do
+			_cl_at=$(uci -q get "$CFG.$_cl_s.parked_at")
+			case "$_cl_at" in ''|*[!0-9]*) continue ;; esac
+			_cl_age=$(( (_cl_now - _cl_at) / 86400 ))
+			[ "$_cl_age" -ge "$_cl_ttl" ] || continue
+			_cl_pif=$(uci -q get "$CFG.$_cl_s.network")
+			_cl_pimei=$(uci -q get "$CFG.$_cl_s.imei")
+			[ "$_cl_pfirst" = 1 ] || printf ','
+			_cl_pfirst=0
+			printf '{"section":"%s","iface":"%s","imei":"%s","days":%s}' \
+				"$_cl_s" "$_cl_pif" "$_cl_pimei" "$_cl_age"
+			[ -n "$_cl_apply" ] || continue
+			# Интерфейс сносим, только если он НАШ и сейчас не работает: за
+			# время простоя человек мог настроить его руками под что-то другое.
+			if [ -n "$_cl_pif" ] && [ -n "$(uci -q get "network.$_cl_pif.modem_imei")" ] \
+			   && [ "$(ifstatus "$_cl_pif" 2>/dev/null | grep -c '"up": true')" = 0 ]; then
+				ifdown "$_cl_pif" >/dev/null 2>&1
+				uci -q delete "network.$_cl_pif"
+				[ -n "$_cl_z" ] && uci -q del_list "firewall.$_cl_z.network=$_cl_pif"
+			fi
+			uci -q delete "$CFG.$_cl_s"
+			# IMEI берём ДО удаления секции - иначе в журнале пустое место.
+			logger -t 5gmodem "уборка: парковка $_cl_s (IMEI ${_cl_pimei:-?}, $_cl_age дн.) и её интерфейс ${_cl_pif:-нет} удалены"
+		done
+	fi
+	printf ']'
+	if [ -n "$_cl_apply" ]; then
+		uci -q commit "$CFG"
+		note_foreign_uci network "modemswitch cleanup"
+		uci -q commit network
+		uci -q commit firewall
+		printf ',"applied":true'
+	else
+		printf ',"applied":false'
+	fi
+	printf '}\n'
+	;;
+
 *)
-	echo "usage: $0 active|switch <path>|save <path>|resolve|forget|mmindex|wdm|xmm" >&2
+	echo "usage: $0 active|switch <path>|save <path>|resolve|forget|cleanup [apply]|mmindex|wdm|xmm" >&2
 	exit 1
 	;;
 esac

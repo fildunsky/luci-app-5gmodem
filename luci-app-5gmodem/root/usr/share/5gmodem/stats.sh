@@ -13,9 +13,24 @@
 #            месячный аккумулятор: <год-месяц> -> rx tx.
 #
 # ГДЕ ХРАНИМ
-#   /tmp/5gmodem_stats/       - кольцевые ряды (RAM, быстро, не жжёт флеш)
-#   /etc/5gmodem/stats/       - только при persist=1: месячные итоги трафика и
-#                               прореженные ряды. Пишем РЕДКО (см. flush).
+#   /tmp/5gmodem_stats/       - кольцевые ряды (RAM, быстро, не жжёт флеш).
+#                               Это ВСЕГДА рабочая копия и единственный источник
+#                               правды на время работы.
+#   при persist=1 - ещё и на диск, раз в час (см. flush):
+#     по умолчанию /etc/5gmodem/stats/ - переживает перезагрузку и апгрейд;
+#     свой путь (stats.path) - например каталог на USB-флешке.
+#
+# ФЛЕШКА МОЖЕТ ОТВАЛИТЬСЯ, И ЭТО НЕ ИСКЛЮЧЕНИЕ, А ШТАТНЫЙ РЕЖИМ. Проверяем не
+# существование каталога, а факт МОНТИРОВАНИЯ: после выдёргивания флешки точка
+# монтирования остаётся обычным каталогом на внутренней памяти, и запись «удаётся»
+# - молча забивая флеш роутера. Пока свой путь недоступен, пишем в запасной
+# (/etc/5gmodem/stats), а когда флешка вернётся - сливаем.
+#
+# СЛИЯНИЕ ТРИВИАЛЬНО И ТОЧНО. Месячные итоги - монотонные счётчики, поэтому
+# «склеить» два источника = взять ПОБОЛЬШЕ по каждому месяцу. Никаких разборов
+# файлов и порядка строк. Ряды графиков в слиянии не участвуют вовсе: их
+# отметка времени - uptime, который обнуляется на ребуте, и склеивать их между
+# загрузками бессмысленно (они и восстанавливаются только внутри одной сессии).
 #
 # ФОРМАТ РЯДА - одна строка на точку: "<uptime_s> <значение>". Ряд обрезается по
 # RING_MAX точкам; при шаге 60 c это ~24 часа на метрику.
@@ -23,7 +38,8 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 DIR=/tmp/5gmodem_stats
-PDIR=/etc/5gmodem/stats
+# Запасной каталог (внутренняя память). Он же основной, пока не задан свой путь.
+PDIR_DEF=/etc/5gmodem/stats
 RING_MAX=1440
 FLUSH_EVERY=3600
 
@@ -34,6 +50,66 @@ _cfg() { uci -q get "$CFG.stats.$1" 2>/dev/null; }
 #только путала - вкладка есть, а данных нет. Ключ один: show_stats (Настройки).
 _enabled() { [ "$(uci -q get "$CFG.@5gmodem[0].show_stats" 2>/dev/null)" != "0" ]; }
 _persist() { [ "$(_cfg persist)" = "1" ]; }
+
+# Куда просили писать (пусто - внутренняя память).
+_pdir_want() { _pw=$(_cfg path); [ -n "$_pw" ] && printf '%s' "${_pw%/}" || printf '%s' "$PDIR_DEF"; }
+
+# КАТАЛОГ ДОСТУПЕН ДЛЯ ЗАПИСИ? Для своего пути этого мало: нужно, чтобы он ЛЕЖАЛ
+# НА СМОНТИРОВАННОМ носителе. Иначе после выдёргивания флешки запись пойдёт в
+# каталог-пустышку на внутренней флеш-памяти, и человек узнает об этом, когда
+# кончится место.
+# Лежит ли каталог на отдельном смонтированном носителе (а не на корне).
+_mounted() {   # $1 - каталог
+	_mp="$1"
+	while [ -n "$_mp" ] && [ "$_mp" != "/" ]; do
+		awk -v p="$_mp" '$2 == p { found = 1 } END { exit(found ? 0 : 1) }' /proc/mounts && return 0
+		_mp="${_mp%/*}"
+	done
+	return 1
+}
+
+_dir_live() {   # $1 - каталог, $2 - 1 если требовать монтирование
+	[ -n "$1" ] || return 1
+	mkdir -p "$1" 2>/dev/null || return 1
+	[ "$2" = 1 ] && { _mounted "$1" || return 1; }
+	# Носитель бывает смонтирован только на чтение - проверяем записью.
+	: > "$1/.wtest" 2>/dev/null || return 1
+	rm -f "$1/.wtest" 2>/dev/null
+	return 0
+}
+
+# Куда пишем ПРЯМО СЕЙЧАС: свой путь, если он жив, иначе запасной.
+_pdir_now() {
+	_pn=$(_pdir_want)
+	if [ "$_pn" = "$PDIR_DEF" ]; then
+		_dir_live "$_pn" 0 && { printf '%s' "$_pn"; return 0; }
+		return 1
+	fi
+	_dir_live "$_pn" 1 && { printf '%s' "$_pn"; return 0; }
+	_dir_live "$PDIR_DEF" 0 && { printf '%s' "$PDIR_DEF"; return 0; }
+	return 1
+}
+
+# Слить месячные итоги из каталога в /tmp по правилу «больше побеждает».
+_merge_from() {   # $1 - каталог
+	[ -d "$1" ] || return 0
+	mkdir -p "$DIR" 2>/dev/null
+	for _mf_f in "$1"/traffic.*; do
+		[ -f "$_mf_f" ] || continue
+		_mf_n="${_mf_f##*/}"
+		_mf_rx=0; _mf_tx=0
+		read -r _mf_rx _mf_tx < "$_mf_f" 2>/dev/null
+		case "$_mf_rx" in ''|*[!0-9]*) _mf_rx=0 ;; esac
+		case "$_mf_tx" in ''|*[!0-9]*) _mf_tx=0 ;; esac
+		_mf_crx=0; _mf_ctx=0
+		[ -f "$DIR/$_mf_n" ] && read -r _mf_crx _mf_ctx < "$DIR/$_mf_n" 2>/dev/null
+		case "$_mf_crx" in ''|*[!0-9]*) _mf_crx=0 ;; esac
+		case "$_mf_ctx" in ''|*[!0-9]*) _mf_ctx=0 ;; esac
+		[ "$_mf_rx" -gt "$_mf_crx" ] || _mf_rx="$_mf_crx"
+		[ "$_mf_tx" -gt "$_mf_ctx" ] || _mf_tx="$_mf_ctx"
+		printf '%s %s\n' "$_mf_rx" "$_mf_tx" > "$DIR/$_mf_n"
+	done
+}
 
 _now() { uptime_s 2>/dev/null || cut -d. -f1 /proc/uptime; }
 json_esc_s() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -150,22 +226,41 @@ _flush() {
 	[ -f "$_fl_st" ] && read -r _fl_last < "$_fl_st" 2>/dev/null
 	case "$_fl_last" in ''|*[!0-9]*) _fl_last=0 ;; esac
 	[ $(( $(_now) - _fl_last )) -ge "$FLUSH_EVERY" ] || return 0
-	mkdir -p "$PDIR" 2>/dev/null
+	_fl_d=$(_pdir_now) || {
+		# Ни свой путь, ни запасной не пишутся - молчать нельзя, иначе
+		# «статистика не сохраняется» выясняется через месяц.
+		logger -t 5gmodem "статистика: некуда сохранять ($(_pdir_want) недоступен)"
+		return 0
+	}
+	# ВЕРНУЛАСЬ ФЛЕШКА - СНАЧАЛА ЗАБИРАЕМ ТО, ЧТО КОПИЛОСЬ В ЗАПАСНОМ. Иначе
+	# первая же запись затёрла бы на носителе итоги, которые он пропустил.
+	[ "$_fl_d" = "$PDIR_DEF" ] || _merge_from "$PDIR_DEF"
+	mkdir -p "$_fl_d" 2>/dev/null
 	for _fl_f in "$DIR"/traffic.*; do
 		[ -f "$_fl_f" ] || continue
-		cp "$_fl_f" "$PDIR/${_fl_f##*/}" 2>/dev/null
+		cp "$_fl_f" "$_fl_d/${_fl_f##*/}" 2>/dev/null
 	done
+	# НА СЪЁМНЫЙ НОСИТЕЛЬ КЛАДЁМ И РЯДЫ ГРАФИКОВ - человек за тем флешку и
+	# указывает. Во внутреннюю память их не пишем никогда: мегабайты в час на
+	# ресурс флеш-памяти роутера того не стоят.
+	if [ "$_fl_d" != "$PDIR_DEF" ]; then
+		for _fl_f in "$DIR"/ping.* "$DIR"/signal.* "$DIR"/temp.*; do
+			[ -f "$_fl_f" ] || continue
+			cp "$_fl_f" "$_fl_d/${_fl_f##*/}" 2>/dev/null
+		done
+	fi
 	_now > "$_fl_st"
 }
 
-# Поднять месячные итоги с флеша после ребута (ряды в /tmp переживать не должны).
+# Поднять месячные итоги с диска после ребута (ряды в /tmp переживать не должны).
+# Берём ОБА источника - свой путь и запасной: пока флешки не было, итоги копились
+# во внутренней памяти, а пока она была - на ней. Правило слияния - «больше
+# побеждает», счётчики монотонные (см. шапку).
 _restore() {
-	[ -d "$PDIR" ] || return 0
-	mkdir -p "$DIR" 2>/dev/null
-	for _rs_f in "$PDIR"/traffic.*; do
-		[ -f "$_rs_f" ] || continue
-		[ -f "$DIR/${_rs_f##*/}" ] || cp "$_rs_f" "$DIR/${_rs_f##*/}" 2>/dev/null
-	done
+	_merge_from "$PDIR_DEF"
+	_rs_w=$(_pdir_want)
+	[ "$_rs_w" = "$PDIR_DEF" ] || { _dir_live "$_rs_w" 1 && _merge_from "$_rs_w"; }
+	return 0
 }
 
 # Ряд в JSON: {"series":[[t,v],...]}. $2 - имя ряда.
@@ -215,8 +310,23 @@ list)
 		read -r _ls_v < "$_ls_f" 2>/dev/null
 		[ -n "$_ls_v" ] && _ls_l="$_ls_l,\"$_ls_k\":\"$(json_esc_s "$_ls_v")\""
 	done
-	printf '{"enabled":%s,"persist":%s,"ping":[%s],"signal":[%s],"traffic":[%s],"temp":[%s],"labels":{%s}}\n' \
+	# Куда пишем и куда просили: страница обязана показать, что данные уходят
+	# не туда, куда человек указал (флешка отвалилась) - молчаливый фоллбек
+	# страшнее самой пропажи.
+	# ПРОБУ ЗАПИСЬЮ ЗДЕСЬ НЕ ДЕЛАЕМ. list зовёт страница при каждом обновлении, а
+	# _pdir_now создаёт и удаляет файл - это цикл записи во флеш-память на каждый
+	# показ графика. Смотрим дёшево: смонтирован ли свой путь; настоящая проверка
+	# остаётся в flush, раз в час.
+	_ls_now=""
+	if _persist; then
+		_ls_now=$(_pdir_want)
+		if [ "$_ls_now" != "$PDIR_DEF" ] && ! _mounted "$_ls_now"; then
+			_ls_now="$PDIR_DEF"
+		fi
+	fi
+	printf '{"enabled":%s,"persist":%s,"path":"%s","path_now":"%s","path_default":"%s","ping":[%s],"signal":[%s],"traffic":[%s],"temp":[%s],"labels":{%s}}\n' \
 		"$(_enabled && echo 1 || echo 0)" "$(_persist && echo 1 || echo 0)" \
+		"$(json_esc_s "$(_cfg path)")" "$(json_esc_s "$_ls_now")" "$PDIR_DEF" \
 		"${_ls_p#,}" "${_ls_s#,}" "${_ls_t#,}" "${_ls_m#,}" "${_ls_l#,}"
 	;;
 series)
@@ -250,15 +360,25 @@ setconf)
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
 			enabled|persist) uci -q set "$CFG.stats.$_sc_k=$_sc_v" ;;
+			# Свой путь: абсолютный, без пробелов и метасимволов - строка
+			# приходит из браузера и уходит в mkdir/cp.
+			path)
+				case "$_sc_v" in
+					'') uci -q delete "$CFG.stats.path" ;;
+					/*[!A-Za-z0-9._/-]*|*' '*) echo '{"error":"bad path"}'; exit 1 ;;
+					/*) uci -q set "$CFG.stats.path=${_sc_v%/}" ;;
+					*)  echo '{"error":"path must be absolute"}'; exit 1 ;;
+				esac ;;
 		esac
 	done
 	uci -q commit "$CFG"
-	# Выключили персист - убираем то, что уже лежит на флеше.
-	_persist || rm -rf "$PDIR" 2>/dev/null
+	# Выключили персист - убираем то, что уже лежит на диске. Чужой каталог
+	# (свой путь) НЕ трогаем: там могут лежать и не наши файлы.
+	_persist || rm -rf "$PDIR_DEF" 2>/dev/null
 	echo '{"result":"ok"}'
 	;;
 reset)
-	rm -rf "$DIR" "$PDIR" 2>/dev/null
+	rm -rf "$DIR" "$PDIR_DEF" 2>/dev/null
 	mkdir -p "$DIR" 2>/dev/null
 	echo '{"result":"ok"}'
 	;;

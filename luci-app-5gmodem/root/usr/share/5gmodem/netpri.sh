@@ -592,6 +592,9 @@ list)
 	_NOW_S=$(uptime_s)
 	# Настройку сторожа спрашиваем один раз на вызов, а не в каждой карточке.
 	_HEALTH_ON=$(uci5g_get health enabled)
+	# Переключение трафика - тем же снимком: страница обязана предупредить, когда
+	# трафик держит линк БЕЗ интернета, а увести его некому (галка снята).
+	_HEALTH_FO=$(uci5g_get health failover)
 	ms_map_build
 	# УСТРОЙСТВО, ЧЕРЕЗ КОТОРОЕ РЕАЛЬНО ИДЁТ ТРАФИК: default с наименьшей живой
 	# метрикой. Нужно сторожу (health.sh): при штрафном переключении uci-порядок
@@ -766,13 +769,16 @@ list)
 		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s%s}' \
 			"$n" "$t" "$(json_esc "$sub")" "$(json_esc "$(label_for "$n")")" "$ip" "$m" "$_np_h"
 	done
-	# Последнее событие сторожа - хвостовым элементом ТОГО ЖЕ списка: страница
-	# и так забирает list каждые 5 с, отдельный опрос ради одной строки - лишний
-	# процесс. Фронт вынимает элемент с полем event до отрисовки карточек.
-	if [ "$first" != 1 ] && [ "$_HEALTH_ON" = "1" ] \
-	   && [ -s /tmp/5gmodem_health/.last_event ]; then
-		read -r _np_ev < /tmp/5gmodem_health/.last_event 2>/dev/null
-		[ -n "$_np_ev" ] && printf ',{"event":"%s"}' "$(json_esc "$_np_ev")"
+	# Последнее событие сторожа и его выключатели - хвостовым элементом ТОГО ЖЕ
+	# списка: страница и так забирает list каждые 5 с, отдельный опрос ради двух
+	# значений - лишний процесс. Фронт вынимает элемент с полем event до
+	# отрисовки карточек (и берёт из него failover для предупреждения).
+	if [ "$first" != 1 ] && [ "$_HEALTH_ON" = "1" ]; then
+		_np_ev=""
+		[ -s /tmp/5gmodem_health/.last_event ] && \
+			read -r _np_ev < /tmp/5gmodem_health/.last_event 2>/dev/null
+		printf ',{"event":"%s","failover":%s}' "$(json_esc "$_np_ev")" \
+			"$([ "$_HEALTH_FO" = "1" ] && echo 1 || echo 0)"
 	fi
 	printf ']\n'
 	# fill the operator cache in the background (bounded AT probes) for next time,
@@ -975,6 +981,116 @@ order)
 	;;
 
 ping)
+	# TELEGRAM ПРОВЕРЯЕТСЯ ОСОБО - ПИНГ ПРО НЕГО ВРЁТ В ОБЕ СТОРОНЫ.
+	#
+	# ICMP до серверов Telegram не ходит вовсе (красная точка на живом сервисе),
+	# а в РФ его домен вдобавок подменяют на операторском резолвере - «зелёный»
+	# ответ мог бы прийти от заглушки провайдера. Поэтому:
+	#   1) резолвим api.telegram.org;
+	#   2) сверяем адрес с ОФИЦИАЛЬНЫМ списком сетей Telegram (cidr.txt лежит в
+	#      пакете) - не совпал, значит это не Telegram, а подмена;
+	#   3) стучимся в 443 по этому адресу с правильным SNI. Любой ответ HTTP -
+	#      сервис доступен (api.telegram.org на корень отвечает 404, и это ОК).
+	# Резолв не удался - берём адрес из того же списка (149.154.167.220, это и
+	# есть api.telegram.org): так карточка работает и при мёртвом DNS.
+	# ГДЕ ЛЕЖИТ СПИСОК СЕТЕЙ. В пакете - снимок на день сборки; свежую копию
+	# кладём В /etc, а не поверх пакетной: /usr/share принадлежит менеджеру
+	# пакетов и переписывается при обновлении приложения (ровно тем же уроком,
+	# что и путь для статистики). Есть свежая - она главнее.
+	_TG_CIDR_PKG=/usr/share/5gmodem/telegram-cidr.txt
+	_TG_CIDR_NEW=/etc/5gmodem/telegram-cidr.txt
+	_tg_cidr_file() {
+		[ -s "$_TG_CIDR_NEW" ] && { printf '%s' "$_TG_CIDR_NEW"; return 0; }
+		[ -s "$_TG_CIDR_PKG" ] && { printf '%s' "$_TG_CIDR_PKG"; return 0; }
+		return 1
+	}
+
+	# ОБНОВЛЕНИЕ СПИСКА - ПОПУТНО И ТОЛЬКО ПОСЛЕ УДАЧНОЙ ПРОБЫ.
+	#
+	# Список у Telegram меняется раз в годы, отдельная кнопка ради этого - шум в
+	# интерфейсе, а расписание - лишняя служба. Зато момент, когда мы ТОЧНО
+	# достучались до Telegram, у нас уже есть: успешная проба карточки. В нём и
+	# обновляемся, не чаще раза в 30 дней, в фоне и молча.
+	#
+	# ПРОВЕРЯЕМ, ЧТО СКАЧАЛОСЬ. За cidr.txt легко получить страницу-заглушку
+	# оператора: берём файл, только если КАЖДАЯ его строка - сеть, и их не
+	# меньше пяти. Подмена списка на «0.0.0.0/0» превратила бы проверку
+	# подмены DNS в решето, поэтому здесь строго.
+	_tg_cidr_refresh() {
+		command -v curl >/dev/null 2>&1 || return 0
+		_tr_f=$(_tg_cidr_file) || _tr_f=""
+		if [ -n "$_tr_f" ] && [ -z "$(find "$_tr_f" -mtime +30 2>/dev/null)" ]; then
+			return 0
+		fi
+		( _tr_t="/tmp/.tgcidr.$$"
+		  curl -fsSL -m 20 https://core.telegram.org/resources/cidr.txt -o "$_tr_t" 2>/dev/null || {
+		  	rm -f "$_tr_t"; exit 0; }
+		  if awk '
+		  		# Слишком широкая сеть (короче /8) - признак подделки: с ней
+		  		# «адрес принадлежит Telegram» становится истиной для всех, и
+		  		# проверка подмены DNS перестаёт что-либо значить.
+		  		/^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\/[0-9]+$/ {
+		  			split($0, c, "/"); if (c[2] + 0 < 8) bad = 1; n++; next }
+		  		/^[0-9a-fA-F:]+\/[0-9]+$/ { n++; next }
+		  		/^[[:space:]]*$/ { next }
+		  		{ bad = 1 }
+		  		END { exit((bad || n < 5) ? 1 : 0) }
+		  	' "$_tr_t"; then
+		  	mkdir -p /etc/5gmodem 2>/dev/null
+		  	mv "$_tr_t" "$_TG_CIDR_NEW" 2>/dev/null \
+		  		&& logger -t 5gmodem "список сетей Telegram обновлён ($(wc -l < "$_TG_CIDR_NEW" | tr -d " ") строк)"
+		  else
+		  	rm -f "$_tr_t"
+		  fi ) >/dev/null 2>&1 </dev/null &
+	}
+
+	_tg_cidr_has() {   # $1 - IPv4
+		_tc_f=$(_tg_cidr_file) || return 1
+		# Побитового И в busybox awk нет, поэтому принадлежность к сети считаем
+		# делением: адреса в одной /N-сети, когда их старшие N бит совпадают,
+		# то есть целые части от деления на 2^(32-N) равны. Строки IPv6
+		# пропускаем - проба всё равно идёт по IPv4.
+		awk -v ip="$1" '
+			function toint(a,   p) { split(a, p, "."); return p[1]*16777216 + p[2]*65536 + p[3]*256 + p[4] }
+			/:/ { next }
+			/^[0-9]/ {
+				split($1, c, "/")
+				bits = c[2] + 0
+				if (bits < 1 || bits > 32) next
+				d = 2 ^ (32 - bits)
+				if (int(toint(ip) / d) == int(toint(c[1]) / d)) { found = 1; exit }
+			}
+			END { exit(found ? 0 : 1) }
+		' "$_tc_f"
+	}
+	_tg_probe() {
+		_tp_ip=$(nslookup api.telegram.org 2>/dev/null \
+			| sed -n 's/^Address: *\([0-9.]*\)$/\1/p' | grep -v '^127\.' | head -1)
+		if [ -n "$_tp_ip" ] && ! _tg_cidr_has "$_tp_ip"; then
+			printf '{"ok":0,"why":"dns","ip":"%s"}\n' "$_tp_ip"
+			return 0
+		fi
+		[ -n "$_tp_ip" ] || _tp_ip=149.154.167.220
+		if command -v curl >/dev/null 2>&1; then
+			_tp_w=$(curl -o /dev/null -s -m 5 \
+				--resolve "api.telegram.org:443:$_tp_ip" \
+				-w '%{http_code} %{time_starttransfer}' \
+				"https://api.telegram.org/" 2>/dev/null)
+			_tp_c="${_tp_w%% *}"; _tp_t="${_tp_w##* }"
+			if [ -n "$_tp_c" ] && [ "$_tp_c" != "000" ]; then
+				# Достучались - самое время освежить список сетей (раз в 30 дней).
+				_tg_cidr_refresh
+				printf '{"ok":1,"ms":%s,"via":"tls"}\n' \
+					"$(printf '%s' "$_tp_t" | awk '{printf "%d", $1 * 1000}')"
+				return 0
+			fi
+		fi
+		echo '{"ok":0,"via":"tls"}'
+	}
+	case "${2:-}" in
+		api.telegram.org|telegram.org|telegram|web.telegram.org)
+			_tg_probe; exit 0 ;;
+	esac
 	# Пинг до выбранного хоста для виджета «Статус сервиса»: {"ok":1,"ms":23} либо {"ok":0}.
 	# Идёт по активному аплинку (default route). Один пакет, таймаут 2 c.
 	# ICMP до youtube.com обычно проходит даже там, где TCP шейпится.

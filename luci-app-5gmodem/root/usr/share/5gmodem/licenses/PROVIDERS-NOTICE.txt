@@ -6,7 +6,7 @@
   * AOSP sample APN database — Apache License 2.0, см. Apache-2.0.txt.
 
 Данные отфильтрованы, нормализованы, объединены и переведены в TSV.
-Метод генерации и первоисточник: https://github.com/Dark-Sky-Ranger/openwrt-apn-autoconfig
+Метод генерации и первоисточник: https://github.com/DarthAnwalt/openwrt-apn-autoconfig
 (проект apn-autoconfig, лицензия основного кода см. в его репозитории).
 
 Изменения в этом пакете: адаптация формата чтения; сам набор данных не изменялся.

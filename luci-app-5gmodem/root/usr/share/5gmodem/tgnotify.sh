@@ -57,13 +57,50 @@ _ready() {
 	return 0
 }
 
+# ПОЧИНКА КОДИРОВКИ ПЕРЕД ОТПРАВКОЙ.
+#
+# Telegram отвергает ВЕСЬ запрос, если в тексте есть хоть один байт, не
+# складывающийся в UTF-8: "Bad Request: strings must be encoded in UTF-8". А
+# такие байты в SMS есть - sms_tool отдаёт неразрывный пробел и кавычки-ёлочки
+# (U+00A0, U+00AB, U+00BB) ОДНИМ байтом, по-latin1, вместо двухбайтовой
+# последовательности UTF-8. Живой случай на стенде: сообщение T-Mobile не
+# доставлялось СУТКАМИ, и вместе с ним стояла вся очередь.
+#
+# Чиним ровно эти байты: всё, что не образует корректной последовательности
+# UTF-8, считаем latin1 и перекодируем. iconv в OpenWrt по умолчанию нет,
+# поэтому awk побайтно (busybox awk работает с байтами, что здесь и нужно).
+_tg_utf8() {
+	awk '
+		BEGIN { for (n = 1; n < 256; n++) o[sprintf("%c", n)] = n }
+		function cont(str, i,   b) { b = o[substr(str, i, 1)]; return (b >= 128 && b < 192) }
+		{
+			out = ""; i = 1; n = length($0)
+			while (i <= n) {
+				b = o[substr($0, i, 1)]
+				if (b < 128)                       { out = out substr($0, i, 1); i += 1 }
+				else if (b >= 194 && b <= 223 && i + 1 <= n && cont($0, i + 1)) { out = out substr($0, i, 2); i += 2 }
+				else if (b >= 224 && b <= 239 && i + 2 <= n && cont($0, i + 1) && cont($0, i + 2)) { out = out substr($0, i, 3); i += 3 }
+				else if (b >= 240 && b <= 244 && i + 3 <= n && cont($0, i + 1) && cont($0, i + 2) && cont($0, i + 3)) { out = out substr($0, i, 4); i += 4 }
+				else { out = out sprintf("%c%c", 192 + int(b / 64), 128 + (b % 64)); i += 1 }
+			}
+			print out
+		}
+	'
+}
+
 # Отправка одного сообщения. Текст уходит через --data-urlencode: в SMS бывает
 # что угодно, включая переводы строк, & и знаки процента, и собирать URL руками
 # здесь значит однажды отправить обрезанный текст.
+#
+# Код возврата: 0 - доставлено, 1 - не дошли (сеть, токен, чат) - надо повторить,
+# 2 - Телеграм ОТКАЗАЛСЯ принимать это сообщение (4xx). Разница принципиальна:
+# при 1 круг надо прервать и повторить позже, а при 2 повторять бессмысленно -
+# одно негодное сообщение иначе держит очередь вечно (так и было с битой SMS).
 _tg_send() {   # $1 - текст
+	_ts_t=$(printf '%s' "$1" | _tg_utf8)
 	_ts_o=$(curl -s -m 20 "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
 		--data-urlencode "chat_id=$TG_CHAT" \
-		--data-urlencode "text=$1" \
+		--data-urlencode "text=$_ts_t" \
 		-d "disable_web_page_preview=true" 2>&1)
 	case "$_ts_o" in
 		*'"ok":true'*) printf 'ok' > "$LASTLOG" 2>/dev/null; return 0 ;;
@@ -71,10 +108,41 @@ _tg_send() {   # $1 - текст
 	# Причину сохраняем для страницы: чаще всего это неверный токен, чужой
 	# chat_id или недоступный api.telegram.org.
 	printf '%s' "$(printf '%s' "$_ts_o" | tr -d '\n' | head -c 200)" > "$LASTLOG" 2>/dev/null
+	case "$_ts_o" in
+		*'"error_code":40'*) return 2 ;;
+	esac
 	return 1
 }
 
-_seen_json() { "$RES/smsbridge.sh" seen 2>/dev/null; }
+_seen_json() { SMS_MODEM="$1" "$RES/smsbridge.sh" seen 2>/dev/null; }
+
+# ===== КОГО ОБХОДИМ =====
+#
+# ВСЕ модемы, а не только активный. Раньше порт брался один - sms.readport, а он
+# описывает модем, чья вкладка открыта: у человека с Compal и Telit входящие
+# Telit не приходили в чат ВООБЩЕ, пока он не переключит вкладку (живой случай
+# 01.08.2026). Список даёт реестр, порт - секция модема; память о прочитанном у
+# каждого модема своя и раньше (smsbridge sms_seen.<путь>), так что дубликатов
+# от этой перемены нет.
+_tg_paths() { "$RES/registry.sh" paths 2>/dev/null; }
+
+_tg_sec() { printf 'm_%s' "$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"; }
+
+# Порт для чтения SMS у модема $1. У АКТИВНОГО - настроенный readport: он выбран
+# так, чтобы не конкурировать с портом метрик. У остальных - AT-порт из их
+# секции. Пусто - модем читается не по tty (HiLink/MM), мост разберётся сам.
+_tg_port() {
+	[ "$1" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ] && { printf '%s' "$PORT"; return; }
+	uci -q get "$CFG.$(_tg_sec "$1").at_port"
+}
+
+# Человеческое имя модема для подписи сообщения: модель, иначе путь.
+_tg_name() {
+	_tn=$(uci -q get "$CFG.$(_tg_sec "$1").model")
+	[ -n "$_tn" ] || _tn=$(uci -q get "$CFG.$(_tg_sec "$1").product")
+	[ -n "$_tn" ] || _tn="$1"
+	printf '%s' "$_tn"
+}
 
 tick() {
 	_ready || return 0
@@ -87,20 +155,44 @@ tick() {
 	[ $((_tk_now - _tk_prev)) -ge "$TG_INT" ] || return 0
 	printf '%s' "$_tk_now" > "$STAMP" 2>/dev/null
 
-	_tk_seen=$(_seen_json)
+	# Модем за модемом. Провал доставки прекращает круг ЦЕЛИКОМ (лежит сеть -
+	# остальным тоже не уйдёт), а провал чтения одного модема - только его:
+	# соседи не должны молчать из-за занятого порта.
+	_tk_any=$(_tg_paths)
+	[ -n "$_tk_any" ] || _tk_any=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	for _tk_p in $_tk_any; do
+		_tk_one "$_tk_p" || return 0
+	done
+	return 0
+}
+
+_tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нельзя (Telegram недоступен)
+	_tk_path="$1"
+	_tk_port=$(_tg_port "$_tk_path")
+	_tk_seen=$(_seen_json "$_tk_path")
 	_tk_first=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.first' 2>/dev/null)
 	_tk_keys=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.keys[*]' 2>/dev/null)
 
-	_tk_msgs=$("$RES/smsbridge.sh" recv "$STORE" "$PORT" 2>/dev/null)
+	_tk_msgs=$(SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" recv "$STORE" "$_tk_port" 2>/dev/null)
 	[ -n "$_tk_msgs" ] || return 0
+	# Подпись модема ставим, только когда их несколько: с одним она лишний шум.
+	_tk_tag=""
+	case "$_tk_any" in
+		*" "*) _tk_tag=" ($(_tg_name "$_tk_path"))" ;;
+	esac
 
+	_tk_idx=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
 	_tk_n=0
-	for _tk_i in $(printf '%s' "$_tk_msgs" | jsonfilter -e '@.msg[*].index' 2>/dev/null); do
+	for _tk_i in $_tk_idx; do
 		_tk_snd=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].sender" 2>/dev/null)
 		_tk_ts=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].timestamp" 2>/dev/null)
 		_tk_txt=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].content" 2>/dev/null)
+		_tk_tot=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].total" 2>/dev/null)
 		_tk_key="$_tk_snd|$_tk_ts"
-		# Уже видели - пропускаем (ключ тот же, что считает страница).
+		# Уже видели - пропускаем (ключ тот же, что считает страница). В список
+		# виденного дописываем и то, что отправили В ЭТОМ круге: у длинной SMS
+		# все части несут ОДИН ключ, а список прочитан до цикла - без этого
+		# сообщение из шести частей улетало в чат шестью кусками.
 		case "
 $_tk_keys
 " in
@@ -108,29 +200,68 @@ $_tk_keys
 $_tk_key
 "*) continue ;;
 		esac
+		_tk_keys="$_tk_keys
+$_tk_key"
+		# ДЛИННАЯ SMS - СОБИРАЕМ ЦЕЛИКОМ. Модем отдаёт её частями (part/total), и
+		# читать в чате «...ерь баланс» без начала невозможно. Порядок берём по
+		# номеру части, а не по индексу в памяти модема: они совпадают не всегда.
+		case "$_tk_tot" in
+			''|0|1) : ;;
+			*[!0-9]*) : ;;
+			*)
+				_tk_full=""
+				_tk_pn=1
+				while [ "$_tk_pn" -le "$_tk_tot" ]; do
+					for _tk_j in $_tk_idx; do
+						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].sender" 2>/dev/null)" = "$_tk_snd" ] || continue
+						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].timestamp" 2>/dev/null)" = "$_tk_ts" ] || continue
+						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].part" 2>/dev/null)" = "$_tk_pn" ] || continue
+						_tk_full="$_tk_full$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].content" 2>/dev/null)"
+						break
+					done
+					_tk_pn=$((_tk_pn + 1))
+				done
+				[ -n "$_tk_full" ] && _tk_txt="$_tk_full" ;;
+		esac
 		if [ "$_tk_first" = "1" ]; then
 			# Первый запуск: только запоминаем, ничего не шлём.
-			"$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+			SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
 			_tk_n=$((_tk_n + 1))
 			continue
 		fi
-		if _tg_send "SMS $_tk_snd
+		_tg_send "SMS $_tk_snd$_tk_tag
 $_tk_ts
 
-$_tk_txt"; then
-			"$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
-			_tk_n=$((_tk_n + 1))
-		else
-			# Не доставили - НЕ помечаем и прекращаем круг: если лежит сеть,
-			# остальные попытки в этом круге тоже впустую.
-			_log "не доставлено ($(cat "$LASTLOG" 2>/dev/null | head -c 120))"
-			return 0
-		fi
+$_tk_txt"
+		case "$?" in
+			0)
+				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+				_tk_n=$((_tk_n + 1)) ;;
+			2)
+				# ТЕЛЕГРАМ ОТКАЗАЛСЯ ИМЕННО ОТ ЭТОГО ТЕКСТА. Повторять нечего, а
+				# держать им очередь нельзя - следом стоят нормальные сообщения.
+				# Человеку шлём хотя бы факт: от кого и когда, чтобы он открыл
+				# «Входящие» и прочитал глазами.
+				_log "Телеграм не принял сообщение от $_tk_snd ($_tk_ts): $(cat "$LASTLOG" 2>/dev/null | head -c 120)"
+				_tg_send "SMS $_tk_snd$_tk_tag
+$_tk_ts
+
+(текст не принят Telegram - откройте «Входящие» на роутере)" >/dev/null 2>&1
+				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1 ;;
+			*)
+				# Не доставили - НЕ помечаем и прекращаем ВЕСЬ круг: если лежит
+				# сеть, остальным модемам в этом круге тоже не уйдёт. Сообщение
+				# остаётся в памяти модема и в «невиденных» - следующий круг
+				# попробует снова. Это и есть очередь недоставленного: терять
+				# нечего, пока сообщение не подтверждено Телеграмом.
+				_log "не доставлено ($(cat "$LASTLOG" 2>/dev/null | head -c 120))"
+				return 1 ;;
+		esac
 	done
 	if [ "$_tk_first" = "1" ] && [ "$_tk_n" -gt 0 ]; then
-		_log "первый запуск: $_tk_n сообщений помечены виденными, слежение начато"
+		_log "первый запуск ($(_tg_name "$_tk_path")): $_tk_n сообщений помечены виденными"
 	elif [ "$_tk_n" -gt 0 ]; then
-		_log "переслано сообщений: $_tk_n"
+		_log "переслано сообщений: $_tk_n ($(_tg_name "$_tk_path"))"
 	fi
 	return 0
 }
@@ -233,8 +364,37 @@ _st_therm() {   # $1 - снимок; печатает готовую строк�
 	[ -n "$_th_w" ] && printf 'Температура: %s' "$_th_w"
 	return 0
 }
-status_text() {
-	_st_j=$("$RES/5gmodem.sh" peek 2>/dev/null)
+# НОМЕРА МОДЕМОВ ДЛЯ ЧАТА. Порядок - как отдаёт реестр (он стабилен: ключ
+# секции = USB-путь). Номер живёт ровно один разговор и нигде не хранится:
+# показывать человеку USB-путь «2-1.4» в команде - издевательство.
+_tg_path_by_num() {   # $1 - номер (с единицы)
+	_pn=0
+	for _pp in $(_tg_paths); do
+		_pn=$((_pn + 1))
+		[ "$_pn" = "$1" ] && { printf '%s' "$_pp"; return 0; }
+	done
+	return 1
+}
+
+_tg_list() {
+	_lact=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	_ln=0
+	for _lp in $(_tg_paths); do
+		_ln=$((_ln + 1))
+		_lop=$(printf '%s' "$("$RES/5gmodem.sh" peek "$_lp" 2>/dev/null)" \
+			| jsonfilter -e '@.operator_name' 2>/dev/null)
+		case "$_lop" in ''|-) _lop="" ;; *) _lop=" - $_lop" ;; esac
+		[ "$_lp" = "$_lact" ] && _lop="$_lop (активный)"
+		printf '%s. %s%s\n' "$_ln" "$(_tg_name "$_lp")" "$_lop"
+	done
+}
+
+status_text() {   # $1 - usb-путь модема (пусто - активный)
+	if [ -n "$1" ]; then
+		_st_j=$("$RES/5gmodem.sh" peek "$1" 2>/dev/null)
+	else
+		_st_j=$("$RES/5gmodem.sh" peek 2>/dev/null)
+	fi
 	[ -n "$_st_j" ] || { printf 'Снимка метрик пока нет - модем ещё опрашивается.'; return 0; }
 	_st_out="Модем: $(_st_field "$_st_j" modem)"
 	_st_v=$(_st_field "$_st_j" operator_name) && _st_out="$_st_out
@@ -266,8 +426,9 @@ $_st_v"
 # ЧТО ПОНИМАЕМ:
 #   /sms <номер> <текст>  - отправить SMS (номер в любом виде, приводится к
 #                           международному самим smsbridge)
-#   /status               - оператор, сигнал, адрес
-#   /help                 - подсказка
+#   /status [<номер>|all] - оператор, сигнал, адрес одного модема или всех
+#   /modem [<номер>]      - список модемов / смена активного
+#   /help                 - подсказка со списком модемов
 #
 # ПОВТОРОВ НЕ ДОПУСКАЕМ. Telegram отдаёт апдейт, пока его не подтвердили
 # смещением; смещение храним на флеше и двигаем ТОЛЬКО после разбора, иначе
@@ -294,7 +455,8 @@ commands() {
 		if _tg_send "Отправка SMS из чата включена.
 Команда: /sms <номер> <текст>
 Например: /sms +79001234567 Привет
-Ещё есть /status - состояние модема."; then
+Ещё есть /status - состояние модема (/status all - все),
+и /modem - список модемов, /modem <номер> - сделать активным."; then
 			: > "$ANNOUNCED" 2>/dev/null
 		fi
 	fi
@@ -345,13 +507,62 @@ commands() {
 				_log "команда из чата: SMS на $_co_to" ;;
 			/sms|/sms@*)
 				_tg_reply "Формат: /sms <номер> <текст>" ;;
+			/status\ *)
+				_co_arg=${_co_txt#/status }
+				_co_arg=${_co_arg%% *}
+				case "$_co_arg" in
+					all)
+						_co_n=0
+						for _co_p in $(_tg_paths); do
+							_co_n=$((_co_n + 1))
+							_tg_reply "[$_co_n] $(_tg_name "$_co_p")
+$(status_text "$_co_p")"
+						done
+						[ "$_co_n" = 0 ] && _tg_reply "Модемов не найдено." ;;
+					[0-9]*)
+						_co_p=$(_tg_path_by_num "$_co_arg") \
+							&& _tg_reply "[$_co_arg] $(_tg_name "$_co_p")
+$(status_text "$_co_p")" \
+							|| _tg_reply "Нет модема с номером $_co_arg. Список:
+$(_tg_list)" ;;
+					*) _tg_reply "Формат: /status, /status <номер> или /status all
+$(_tg_list)" ;;
+				esac ;;
 			/status*)
 				_tg_reply "$(status_text)" ;;
+			/modem\ *)
+				# СМЕНА АКТИВНОГО МОДЕМА ИЗ ЧАТА. Для входящих SMS она больше не
+				# нужна (бот обходит всех), но остаётся управлением: активный
+				# модем - это и вкладка в вебе, и цель /sms, и источник /status
+				# без аргумента.
+				_co_arg=${_co_txt#/modem }
+				_co_arg=${_co_arg%% *}
+				_co_p=$(_tg_path_by_num "$_co_arg") || {
+					_tg_reply "Нет модема с номером $_co_arg. Список:
+$(_tg_list)"
+					continue
+				}
+				if "$RES/modemswitch.sh" switch "$_co_p" >/dev/null 2>&1; then
+					_log "команда из чата: активный модем -> $_co_p"
+					_tg_reply "Активный модем: $(_tg_name "$_co_p")
+$(status_text "$_co_p")"
+				else
+					_tg_reply "Не удалось переключиться на $(_tg_name "$_co_p")"
+				fi ;;
+			/modem*)
+				_tg_reply "Модемы:
+$(_tg_list)
+Переключить: /modem <номер>" ;;
 			/help*|/start*)
 				_tg_reply "Команды:
 /sms <номер> <текст> - отправить SMS
-/status - состояние модема
-Входящие SMS приходят сюда сами." ;;
+/status - состояние активного модема
+/status <номер> | /status all - состояние конкретного или всех
+/modem - список модемов, /modem <номер> - сделать активным
+Входящие SMS приходят сюда сами - со всех модемов.
+
+Модемы:
+$(_tg_list)" ;;
 		esac
 	done
 	[ "$_co_max" != "$_co_off" ] && printf '%s' "$_co_max" > "$OFFSET" 2>/dev/null
@@ -361,6 +572,9 @@ commands() {
 case "$1" in
 	tick) tick; commands ;;
 	commands) commands ;;
+	# То же, что покажет /modem в чате. Отдельным вербом - чтобы проверять
+	# нумерацию, не трогая живой чат.
+	modems) _tg_list ;;
 	chatid) chatid ;;
 	setchat) setchat "$2" ;;
 	test)
@@ -379,6 +593,6 @@ case "$1" in
 		printf '{"enabled":%s,"configured":%s,"interval":%s,"last":"%s"}\n' \
 			"${TG_EN:-0}" "$_st_cfg" "$TG_INT" \
 			"$(cat "$LASTLOG" 2>/dev/null | tr -d '"\\' | head -c 180)" ;;
-	*) echo "usage: $0 tick|test|chatid|setchat <id>|commands|status" >&2; exit 2 ;;
+	*) echo "usage: $0 tick|test|chatid|setchat <id>|commands|modems|status" >&2; exit 2 ;;
 esac
 exit 0

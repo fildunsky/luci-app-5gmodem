@@ -4,10 +4,10 @@
 # MBPI portion: Creative Commons Public Domain Dedication and Certification (CC-PDDC).
 # Changes: filtered, normalized, deduplicated, merged, prioritized and converted to TSV.
 # License texts and attribution: /usr/share/licenses/apn-autoconfig-providers/
-# database-version: 2026.07.18
+# database-version: 2026.07.27
 # database-format: 2
 # sources: mbpi, aosp, local overrides
-# revisions: mbpi@052f1e6999f205ba88cc3557627f260b9ae0840e, aosp@73f904fbeb872f5675cb5f18cd9dfb15856425a6
+# revisions: mbpi@573dd936e6383169608a53d07b44ba1e7d4b7d89, aosp@73f904fbeb872f5675cb5f18cd9dfb15856425a6
 # TAB-separated columns:
 # mccmnc  imsi_pattern  iccid_pattern  gid1  spn  provider  apn  priority  username  password  auth  ip_type
 # '-' means unspecified; x in IMSI/ICCID patterns matches one decimal digit.
@@ -47,6 +47,7 @@
 20407	-	-	-	-	Tata Move	move.dataxs.mobi	563	-	-	-	-
 20408	-	-	-	-	KPN NL (postpaid/prepaid)	internet	100	-	-	-	-
 20408	-	-	-	-	Hi (postpaid)	portalmmm.nl	200	-	-	-	-
+20408	-	-	-	-	Simyo (postpaid)	internet	200	KPN	gprs	-	-
 20408	-	-	-	-	KPN Mobiel Internet	internet	565	-	-	-	ipv4v6
 20408	204080950	-	-	-	MVNO NL	internet.mvno.mobi	568	mvno	mvno	pap	-
 20408	-	-	-	Rabo Mobiel	Rabo Mobiel Int.	rabo	569	-	-	-	-

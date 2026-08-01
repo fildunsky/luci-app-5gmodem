@@ -59,22 +59,103 @@ serial_valid() {
 	return 0
 }
 
+# ПАРТИЙНЫЕ SERIAL - ЗАПОМИНАЕМ НАВСЕГДА, А НЕ ТОЛЬКО В МОМЕНТ ВСТРЕЧИ.
+#
+# Проверка «serial не должен встречаться на шине дважды» мгновенна, и в этом её
+# дыра: два аппарата редко видны одновременно. Один воткнут раньше другого, один
+# переэнумерируется, у одного шторм сбросов - и в эту секунду партийный номер
+# выглядит уникальным. Живой случай 01.08.2026: два Compal (VOS_5G и SG500M2-X,
+# IMEI 016133312319966 и 016133311799572) оба отдают serial 2e6172c9. Пока сосед
+# отваливался, номер записался в секцию, а дальше sec_by_serial посчитал их ОДНИМ
+# аппаратом и migrate_profile перенёс чужой профиль вместе с IMEI и интерфейсом.
+#
+# Поэтому: увидели номер у двух устройств хоть раз - он партийный ВСЕГДА. Список
+# живёт в конфиге (переживает перезагрузку), формат - через пробел.
+stub_serial_known() {   # $1 - serial
+	[ -n "$1" ] || return 1
+	case " $(uci -q get "5gmodem.@5gmodem[0].stub_serials" 2>/dev/null) " in
+		*" $1 "*) return 0 ;;
+	esac
+	return 1
+}
+
+stub_serial_add() {   # $1 - serial
+	[ -n "$1" ] || return 0
+	stub_serial_known "$1" && return 0
+	_ssa_l=$(uci -q get "5gmodem.@5gmodem[0].stub_serials" 2>/dev/null)
+	uci -q set "5gmodem.@5gmodem[0].stub_serials=${_ssa_l:+$_ssa_l }$1"
+	# ВЫЧИЩАЕМ УЖЕ ПОСТАВЛЕННЫЕ ШТАМПЫ. Номер мог разойтись по секциям ДО того,
+	# как мы поняли, что он партийный (соседа не было на шине). Оставить его -
+	# значит оставить заряженным sec_by_serial: на следующем круге он снова
+	# признает два аппарата одним и перенесёт чужой профиль.
+	uci -q show 5gmodem 2>/dev/null | grep -F ".serial='$1'" \
+		| sed -n "s/^5gmodem\.\(m_[^.]*\)\.serial=.*/\1/p" \
+		| while read -r _ssa_s; do
+			[ -n "$_ssa_s" ] && uci -q delete "5gmodem.$_ssa_s.serial"
+		done
+	uci -q commit 5gmodem
+	logger -t 5gmodem "serial $1 партийный (встречен у двух устройств) - как признак модема больше не используется"
+	return 0
+}
+
 # serial_of <путь к usb-устройству в sysfs> -> годный serial или пусто
 #
 # ВТОРАЯ ПРОВЕРКА - РАНТАЙМОВАЯ, И ОНА ВАЖНЕЕ СПИСКА ЗАГЛУШЕК: если тот же serial
 # СЕЙЧАС рапортуют два устройства на шине, он партийный, каким бы правдоподобным
 # ни выглядел. Так мы ловим заглушки, которых нет в списке выше, не заводя
-# картотеку вендоров.
+# картотеку вендоров. Результат ЗАПОМИНАЕМ (stub_serial_add): в следующий раз
+# сосед может быть не виден, а номер от этого уникальным не станет.
 serial_of() {
 	_so_s=$(cat "$1/serial" 2>/dev/null | tr -d '\r\n')
 	serial_valid "$_so_s" || { printf ''; return 1; }
+	stub_serial_known "$_so_s" && { printf ''; return 1; }
 	_so_n=0
 	for _so_d in /sys/bus/usb/devices/*; do
 		[ -f "$_so_d/serial" ] || continue
 		[ "$(cat "$_so_d/serial" 2>/dev/null | tr -d '\r\n')" = "$_so_s" ] && _so_n=$((_so_n + 1))
 	done
-	[ "$_so_n" = 1 ] || { printf ''; return 1; }
+	[ "$_so_n" = 1 ] || { stub_serial_add "$_so_s"; printf ''; return 1; }
 	printf '%s' "$_so_s"
+}
+
+# КЭШИ, ПРИВЯЗАННЫЕ К USB-ПУТИ, ПЕРЕЖИВАЮТ СМЕНУ МОДЕМА В ПОРТУ.
+#
+# Мы кэшируем по пути почти всё: снимок метрик, статику AT (IMEI, модель,
+# ICCID), SIM-слоты, диапазоны, QMI-дополнения. Ключ - физический разъём, а он
+# при замене модема тот же. Итог: в новый модем приезжает чужое. Живой случай
+# 01.08.2026: в порт вместо eSIM-модема воткнули SIM7100E, и карточка показывала
+# у него ДВЕ симки и eSIM - из файла `/tmp/5gmodem_slots_1-1.3`, оставшегося от
+# предшественника (свежий опрос честно отвечал «слотов нет»). Тем же путём
+# приходили чужие диапазоны, пока кэш bands не сбросишь руками.
+#
+# Чистим ВСЁ по этому пути разом - на смене модема (swap_cleanup) и на смене
+# композиции (номера портов там другие, а часть кэшей ключуется портом).
+purge_path_caches() {   # $1 - usb-путь
+	[ -n "$1" ] || return 0
+	# ДВА ФОРМАТА КЛЮЧА, И ОБА ЖИВЫЕ. snap_key даёт "1_1_3_" (с хвостовым
+	# подчёркиванием - см. пояснение над ним), а кэш статики ключуется от
+	# tty_usbpath и даёт "1_1_3". Чистить надо оба, иначе IMEI и ICCID прежнего
+	# модема остаются лежать: файл `5gmodem_static_1_1_3.imsi` под первый glob
+	# не попадает.
+	_ppc_k=$(snap_key "$1" 2>/dev/null)
+	_ppc_k2=$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')
+	rm -f "/tmp/5gmodem_slots_$1" "/tmp/5gmodem_slots_$1.t" \
+	      "/tmp/5gmodem_bands_$1" "/tmp/5gmodem_bands_$1.t" "/tmp/5gmodem_bands_$1.p" \
+	      "/tmp/5gmodem_qmirecover_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)" \
+	      "/tmp/5gmodem_autoapn_m_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)"* \
+	      "/tmp/5gmodem_portok_$(snap_key "$1" 2>/dev/null)" 2>/dev/null
+	[ -n "$_ppc_k" ] && rm -f \
+		"/tmp/5gmodem_metrics_$_ppc_k.json" "/tmp/5gmodem_metrics_$_ppc_k.stamp" \
+		"/tmp/5gmodem_slot_$_ppc_k" "/tmp/5gmodem_slot_$_ppc_k.t" \
+		"/tmp/5gmodem_imei_none_$_ppc_k" \
+		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* 2>/dev/null
+	[ -n "$_ppc_k2" ] && rm -f \
+		"/tmp/5gmodem_metrics_$_ppc_k2.json" "/tmp/5gmodem_metrics_$_ppc_k2.stamp" \
+		"/tmp/5gmodem_slot_$_ppc_k2" "/tmp/5gmodem_slot_$_ppc_k2.t" \
+		"/tmp/5gmodem_imei_none_$_ppc_k2" \
+		"/tmp/5gmodem_static_$_ppc_k2"* "/tmp/5gmodem_qmi_$_ppc_k2".* 2>/dev/null
+	logger -t 5gmodem "кэши пути $1 сброшены (в порту другой модем)"
+	return 0
 }
 
 # ЧУЖИЕ НЕЗАКОММИЧЕННЫЕ ПРАВКИ UCI - ЗАПИСАТЬ В ЖУРНАЛ ДО НАШЕГО КОММИТА.

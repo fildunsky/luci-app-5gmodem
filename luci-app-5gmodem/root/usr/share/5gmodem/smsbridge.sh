@@ -28,10 +28,17 @@ CFG=5gmodem
 # Перевод в местное время делает фронтенд (readsms.js sms_localtime): у него
 # есть пояс пользователя, а он может быть даже точнее пояса роутера.
 
+# КАКОЙ МОДЕМ ОБСЛУЖИВАЕМ. По умолчанию активный - как было. Но бот в Telegram
+# обходит ВСЕ модемы (иначе входящие видны только у того, чья вкладка открыта:
+# у человека с Compal и Telit сообщения Telit не приходили вовсе), поэтому цель
+# можно задать снаружи: SMS_MODEM=<usb-путь>. Отсюда же берётся и файл
+# «виденного» - он и раньше был отдельным на каждый модем.
+_TGT_PATH="${SMS_MODEM:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}"
+_TGT_SEC="m_$(echo "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')"
+
 _active_kind() {
-	_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
-	[ -n "$_p" ] || return 1
-	uci -q get "$CFG.m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g').kind"
+	[ -n "$_TGT_PATH" ] || return 1
+	uci -q get "$CFG.$_TGT_SEC.kind"
 }
 
 # ВЫБОР БИНАРЯ - ЗДЕСЬ, а не на странице. У модема под ModemManager (MBIM/QMI,
@@ -46,9 +53,9 @@ _active_kind() {
 # Поэтому флаг теперь значит «MM-путь разрешён», а решает протокол интерфейса
 # АКТИВНОГО модема: только modemmanager-модему СМС читает MM.
 _active_is_mm() {
-	_amp=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	_amp="$_TGT_PATH"
 	[ -n "$_amp" ] || return 1
-	_ams="m_$(echo "$_amp" | sed 's/[^A-Za-z0-9]/_/g')"
+	_ams="$_TGT_SEC"
 	_amif=$(uci -q get "$CFG.$_ams.network")
 	[ -n "$_amif" ] || _amif=$(uci -q get "$CFG.@5gmodem[0].network")
 	[ "$(uci -q get "network.$_amif.proto")" = "modemmanager" ]
@@ -66,6 +73,10 @@ _active_is_mm() {
 _smstool() {
 	if [ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
 	   && [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm; then
+		# Индекс MM берётся по пути модема: у обёртки нет своего понятия
+		# «активный», а обходу всех модемов нужен именно этот, а не первый
+		# попавшийся (с двумя MM-модемами «any» уже уводил в модем без SIM).
+		MM_MODEM_PATH="$_TGT_PATH"; export MM_MODEM_PATH
 		echo /usr/share/5gmodem/sms_tool_mm
 		return
 	fi
@@ -97,7 +108,7 @@ SEEN_DIR=/etc/5gmodem
 SEEN_MAX=500
 
 _seen_file() {
-	_sp=$(uci -q get "$CFG.@5gmodem[0].active_modem" | sed 's/[^A-Za-z0-9]/_/g')
+	_sp=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
 	[ -n "$_sp" ] && echo "$SEEN_DIR/sms_seen.$_sp" || echo "$SEEN_DIR/sms_seen"
 }
 
@@ -449,10 +460,13 @@ case "$BOX" in
 esac
 
 # Есть AT-порт (режим debug) - обычный путь: sms_tool умеет больше, чем API.
-_sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
+# AT-порт спрашиваем У ЦЕЛЕВОГО модема: при обходе всех модемов глобальный ключ
+# описывает активного, и свисток-сосед пошёл бы по AT-ветке с чужим портом.
+_sb_p=$(uci -q get "5gmodem.$_TGT_SEC.at_port")
+[ -n "$_sb_p" ] || _sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
 if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }; then
 	case "$BOX" in
-		sent) "$RES/hilink.sh" smsread out ;;
+		sent) "$RES/hilink.sh" smsread out "$_TGT_PATH" ;;
 		status)
 			# Страница разбирает СТРОКУ формата sms_tool: "Storage type: ME,
 			# used: N, total: M" - позиции подстрок в ней зашиты в разборе.
@@ -468,7 +482,7 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 			# У API свистка нет «удалить всё» - только по одному индексу.
 			# Для all перебираем то, что реально лежит во входящих.
 			if [ "$DEL" = all ]; then
-				"$RES/hilink.sh" smsread in 2>/dev/null \
+				"$RES/hilink.sh" smsread in "$_TGT_PATH" 2>/dev/null \
 					| jsonfilter -e '@.msg[*].index' 2>/dev/null \
 					| while read -r _i; do
 						[ -n "$_i" ] && "$RES/hilink.sh" smsdel "$_i" >/dev/null 2>&1
@@ -478,7 +492,7 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 				"$RES/hilink.sh" smsdel "$DEL"
 			fi ;;
 		send)   "$RES/hilink.sh" smssend "$SND_TO" "$SND_TXT" ;;
-		*)    "$RES/hilink.sh" smsread in ;;
+		*)    "$RES/hilink.sh" smsread in "$_TGT_PATH" ;;
 	esac
 	exit 0
 fi

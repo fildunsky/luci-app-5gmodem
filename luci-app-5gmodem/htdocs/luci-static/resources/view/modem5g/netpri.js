@@ -66,6 +66,10 @@ var YT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
    Свой хост - молния ⚡. */
 var PING_PRESETS = {
 	'youtube.com':    { name: 'YouTube',    svg: YT_ICON },
+	/* Telegram проверяется НЕ пингом: ICMP до его серверов не ходит, а домен в
+	   РФ ещё и подменяют на резолвере. Бэкенд для этого хоста идёт особым
+	   путём - сверяет адрес с официальным списком сетей и стучится в 443. */
+	'api.telegram.org': { name: 'Telegram', img: 'tg.svg', plain: true },
 	'github.com':     { name: 'GitHub',     img: 'github.svg' },
 	'google.com':     { name: 'Google',     color: '#4285F4', glyph: 'G' },
 	'cloudflare.com': { name: 'Cloudflare', color: '#F38020', glyph: '☁' },
@@ -74,7 +78,7 @@ var PING_PRESETS = {
 function pingInfo(host) {
 	host = String(host || 'youtube.com').trim();
 	var p = PING_PRESETS[host.toLowerCase()];
-	if (p) { return { host: host, name: p.name, color: p.color, glyph: p.glyph, svg: p.svg, img: p.img, custom: false }; }
+	if (p) { return { host: host, name: p.name, color: p.color, glyph: p.glyph, svg: p.svg, img: p.img, plain: p.plain, custom: false }; }
 	return { host: host, name: host, color: null, glyph: '⚡', custom: true };
 }
 
@@ -415,9 +419,17 @@ function pingBadge(info) {
 		ic.innerHTML = info.svg;
 		return ic;
 	}
-	/* Файл-иконка (github.svg): белый octocat на тёмной плашке (бренд GitHub) -
-	   различим в обеих темах. */
+	/* Файл-иконка. github.svg - монохромный octocat, ему нужна тёмная плашка
+	   бренда, иначе он теряется в тёмной теме. А tg.svg уже НЕСЁТ свой фон
+	   (синий скруглённый квадрат): плашка под ним читалась бы как рамка, поэтому
+	   такие иконки рисуем во всю ячейку (plain). */
 	if (info.img) {
+		if (info.plain) {
+			return E('span', { 'class': 'netpri-pingico' }, [
+				E('img', { 'src': L.resource('icons/5gmodem/' + info.img), 'width': 16, 'height': 16,
+					'alt': '', 'style': 'display:block;border-radius:4px' })
+			]);
+		}
 		return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:#1b1f23' }, [
 			E('img', { 'src': L.resource('icons/5gmodem/' + info.img), 'width': 12, 'height': 12,
 				'alt': '', 'style': 'display:block' })
@@ -431,6 +443,12 @@ function _pMs(st) {
 	return (st && st.done && st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : ('— ' + _('ms'));
 }
 function _pTip(st, info) {
+	/* why=dns: адрес сервиса не принадлежит его официальным сетям - резолвер
+	   отдал подмену. Для человека это совсем не то же самое, что «нет связи»,
+	   и лечится оно в другом месте, поэтому говорим прямо. */
+	if (st && st.done && !st.ok && st.why === 'dns') {
+		return _('DNS returns a foreign address for %s (%s) - the resolver substitutes it').format(info.name, st.ip || '?');
+	}
 	return !(st && st.done) ? _('Click to ping %s').format(info.name)
 		: (st.ok ? _('%s is reachable').format(info.name) : _('No connection to %s').format(info.name));
 }
@@ -465,7 +483,8 @@ function pingOnce(host) {
 	document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
-		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null) };
+		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null),
+		                     why: j.why || null, ip: j.ip || null };
 		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
 		mutil.lsTouch('netpri-pingstate');
 		_pingBusy[host] = false;
@@ -613,7 +632,10 @@ function stInit() {
 }
 
 /* Последнее событие сторожа (health.sh) - приезжает хвостовым элементом list,
-   чтобы не плодить отдельный опрос; вынимается здесь до отрисовки карточек. */
+   чтобы не плодить отдельный опрос; вынимается здесь до отрисовки карточек.
+   Там же приезжает состояние галки «переключать трафик»: без неё панель не
+   может отличить «сторож увёл трафик» от «сторож видит дыру и молчит». */
+var _hfo = null;   // null - слежение выключено/ответа ещё не было
 
 function loadList() {
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'list' ]), '[]').then(function(out) {
@@ -621,7 +643,7 @@ function loadList() {
 		try { arr = JSON.parse(out || '[]') || []; } catch (e) {}
 		arr = Array.isArray(arr) ? arr : [];
 		arr = arr.filter(function(o) {
-			if (o && o.event != null) { return false; }
+			if (o && o.event != null) { _hfo = (String(o.failover) === '1'); return false; }
 			return true;
 		});
 		/* Последний непустой список - в localStorage: из него блок рисуется
@@ -959,7 +981,15 @@ function healthModal() {
 			]),
 			E('div', { 'class': 'hw-block', 'id': 'hw-blk-fo' }, [
 				E('table', { 'class': 'table hw-form' }, [
-					titleRow('hw-fo', String(c.failover) === '1', _('Switch traffic to a backup link when one goes down'))
+					titleRow('hw-fo', String(c.failover) === '1', _('Switch traffic to a backup link when one goes down')),
+					/* Что именно делает галка - строкой ПОД НЕЙ, но в таблице
+					   ЗАГОЛОВКА, а не в hw-fb-tbl: та прячется, когда галка
+					   снята, и пояснение исчезало бы ровно в тот момент, когда
+					   человек решает, включать ли. Цена незнания высокая: со
+					   снятой галкой линк без интернета держит трафик, пока
+					   кто-нибудь не вмешается руками. */
+					row(E('span', { 'style': 'font-size:.85em;opacity:.7' },
+						_('A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default.')), '')
 				]),
 				E('table', { 'id': 'hw-fb-tbl', 'class': 'table hw-form' }, [
 					row(E('select', { 'id': 'hw-fb', 'class': 'cbi-input-select' }, [
@@ -1229,6 +1259,26 @@ function buildBar(list, redraw) {
 			}, '⚙'),
 			_('Internet priority')
 		]));
+		/* ТРАФИК ДЕРЖИТ ЛИНК БЕЗ ИНТЕРНЕТА, А УВОДИТЬ ЕГО НЕКОМУ.
+		   Сторож такое видит (красная точка на карточке), но при снятой галке
+		   «переключать трафик» намеренно бездействует - и со стороны это
+		   неотличимо от «приложение сломалось». Живой случай: Wi-Fi-аплинк
+		   первым в приоритете прицепился к точке без интернета и держал весь
+		   трафик поверх четырёх работающих модемов. Пишем прямо, что происходит,
+		   и даём включить одним кликом. */
+		var carrier = null;
+		list.forEach(function(o) { if (o.iface === active) { carrier = o; } });
+		if (_hfo === false && carrier && (carrier.health === 'down' || carrier.health === 'gone')) {
+			kids.push(E('div', { 'class': 'netpri-warn' }, [
+				E('span', { 'class': 'netpri-warn-ic' }, '⚠'),
+				_('Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing.').format(carrier.sub || carrier.iface),
+				' ',
+				E('a', {
+					'href': '#',
+					'click': function(ev) { ev.preventDefault(); ev.stopPropagation(); healthModal(); }
+				}, _('Turn switching on'))
+			]));
+		}
 	}
 	var rowEl = E('div', { 'class': 'netpri-row' }, btns);
 	/* перетаскивание карточек-аплинков - только когда виджет приоритета включён */

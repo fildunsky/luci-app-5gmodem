@@ -82,6 +82,17 @@
 	font-size: .95em; font-weight: 600; opacity: .8; padding: 0 0 .35em 0;
 	display: block; user-select: none;
 }
+/* Предупреждение «трафик идёт в дыру, а переключение выключено» - строкой между
+   заголовком и карточками. Красным по прозрачной подложке, без рамки: это не
+   ошибка приложения, а состояние сети, которое пользователь выбрал сам.
+   Цвета - те же, что у погасшей точки здоровья (.netpri-svcdot.off), чтобы
+   строка и красная точка на карточке читались как одно и то же событие. */
+.netpribar .netpri-warn {
+	font-size: .85em; padding: .35em .5em; margin: 0 0 .4em 0; border-radius: 6px;
+	background: rgba(229,72,77,.12); color: #e5484d; line-height: 1.35;
+}
+.netpribar .netpri-warn .netpri-warn-ic { margin-right: .4em; }
+.netpribar .netpri-warn a { color: inherit; font-weight: 600; text-decoration: underline; }
 .netpribar .netpri-row { display: flex; flex-wrap: wrap; gap: .4em; align-items: stretch; }
 /* proton2025 добавляет ".btn+.btn{margin-left:8px}" между соседними кнопками -
    поверх gap:.4em ряда. Из-за этого промежуток МЕЖДУ интерфейсными кнопками

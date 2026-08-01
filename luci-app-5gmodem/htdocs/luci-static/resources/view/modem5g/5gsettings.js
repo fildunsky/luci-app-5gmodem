@@ -127,6 +127,62 @@ function installUpdate() {
 	});
 }
 
+/* --- База APN (providers.tsv): версия, проверка и обновление из апстрима ---
+   Обновляется ОТДЕЛЬНО от приложения и вручную: данные живут своей жизнью
+   (новые MVNO появляются между релизами), а автопроверка по расписанию тут
+   не нужна - файл лежит в пакете, и к релизу мы подтягиваем свежий сами. */
+var APNBIN = '/usr/share/5gmodem/apn-update.sh';
+
+function apnVersion() {
+	return L.resolveDefault(fs.exec_direct(APNBIN, [ 'version' ]), '{}').then(function(out) {
+		var d = {}; try { d = JSON.parse(out || '{}'); } catch (e) {}
+		updSet('apn-current', d.version ? (d.version + ' · ' + (d.count || 0) + ' ' + _('operators')) : '—');
+	});
+}
+
+function apnCheck() {
+	updSet('apn-status', _('Checking the APN database…'));
+	updShow('apn-update', false);
+	var b = document.getElementById('apn-check'); if (b) { b.disabled = true; }
+	return fs.exec(APNBIN, [ 'check' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (!d.ok) {
+			updSet('apn-status', _('Could not check the APN database') + (d.error ? (': ' + d.error) : ''));
+			return;
+		}
+		updSet('apn-latest', (d.available_version || '—') + ' · ' + (d.available || 0) + ' ' + _('operators'));
+		if (String(d.update_available) === '1') {
+			updShow('apn-update', true);
+			updSet('apn-status', _('A newer database is available'));
+		} else {
+			updSet('apn-status', _('The APN database is up to date'));
+		}
+	}).catch(function(err) {
+		updSet('apn-status', _('Could not check the APN database') + ' ' + (err.message || err));
+	}).finally(function() {
+		var b = document.getElementById('apn-check'); if (b) { b.disabled = false; }
+	});
+}
+
+function apnUpdate() {
+	updSet('apn-status', _('Updating the APN database…'));
+	var b = document.getElementById('apn-update'); if (b) { b.disabled = true; }
+	return fs.exec(APNBIN, [ 'update' ]).then(function(res) {
+		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
+		if (d.ok) {
+			updSet('apn-current', (d.version || '—') + ' · ' + (d.count || 0) + ' ' + _('operators'));
+			updShow('apn-update', false);
+			updSet('apn-status', _('The APN database has been updated'));
+		} else {
+			updSet('apn-status', _('Failed to update the APN database') + (d.error ? (': ' + d.error) : ''));
+		}
+	}).catch(function(err) {
+		updSet('apn-status', _('Failed to update the APN database') + ' ' + (err.message || err));
+	}).finally(function() {
+		var b = document.getElementById('apn-update'); if (b) { b.disabled = false; }
+	});
+}
+
 return view.extend({
 	load: function() {
 		return Promise.all([
@@ -170,6 +226,33 @@ return view.extend({
 						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
 						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
 						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
+					]),
+				]),
+			]),
+			/* База APN - своя строка в том же блоке: обновляется независимо от
+			   приложения, и путать её с версией пакета нельзя. */
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('APN database')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('div', { 'style': 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px' }, [
+						E('button', {
+							'class': 'cbi-button cbi-button-action',
+							'id': 'apn-check',
+							'click': ui.createHandlerFn(this, function() { return apnCheck(); })
+						}, [ _('Check the APN database') ]),
+						E('button', {
+							'class': 'cbi-button cbi-button-positive',
+							'id': 'apn-update',
+							'style': 'display:none',
+							'click': ui.createHandlerFn(this, function() { return apnUpdate(); })
+						}, [ _('Update the APN database') ]),
+					]),
+					E('div', { 'class': 'cbi-value-description' }, [
+						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'apn-current' }, [ '—' ]) ]),
+						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'apn-latest' }, [ '—' ]) ]),
+						E('div', { 'id': 'apn-status', 'style': 'margin-top:4px' }, []),
+						E('div', { 'style': 'margin-top:4px;opacity:.75' },
+							_('Operator APNs from GNOME MBPI and AOSP. Used to pick an APN automatically when a SIM changes.')),
 					]),
 				]),
 			]),
@@ -241,6 +324,9 @@ return view.extend({
 		   select_placeholder комбобокса и рисовался ОТДЕЛЬНЫМ пунктом сверху -
 		   youtube.com двоился в списке. Убрали - остаётся один вариант. */
 		pho.value('youtube.com');
+		/* Telegram проверяется не пингом, а по официальному списку сетей плюс
+		   403/404 от api.telegram.org - см. netpri.sh ping. */
+		pho.value('api.telegram.org', 'Telegram (api.telegram.org)');
 		pho.value('github.com');
 		pho.value('google.com');
 		pho.value('cloudflare.com');
@@ -339,6 +425,9 @@ return view.extend({
 		o.rmempty = true;
 
 		return Promise.resolve(m.render()).then(function(formNode) {
+			/* Версию установленной базы APN показываем СРАЗУ (чтение файла, без
+			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */
+			apnVersion();
 			return E('div', {}, [
 				updateBlock,
 				/* Карточки виджетов (пинг/сервисы): обе темы рендерят настоящую

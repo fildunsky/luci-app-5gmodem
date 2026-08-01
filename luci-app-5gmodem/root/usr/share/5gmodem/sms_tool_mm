@@ -49,7 +49,9 @@ command -v mmcli >/dev/null 2>&1 || { echo "mmcli not found" >&2; exit 1; }
 # и modemswitch.sh. Индекс берём по активному модему (sysfs-путь ->
 # индекс MM); «any» остаётся только фолбэком, когда резолв не смог -
 # то есть ровно в старом одномодемном случае.
-MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
+# MM_MODEM_PATH задаёт цель явно (обход всех модемов ботом Telegram); пусто -
+# прежнее поведение, индекс активного модема.
+MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex ${MM_MODEM_PATH:+"$MM_MODEM_PATH"} 2>/dev/null)
 case "$MMIDX" in ''|*[!0-9]*) MMIDX=any ;; esac
 
 # SMS object path -> index

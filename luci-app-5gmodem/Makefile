@@ -23,7 +23,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-uti
 	+curl \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.2.1
+PKG_VERSION:=2.2.2
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

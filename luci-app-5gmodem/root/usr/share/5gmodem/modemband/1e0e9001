@@ -157,6 +157,133 @@ setbands() {
 	fi
 }
 
+# ---- 2G/3G bands: ПЕРВАЯ маска AT+CNBP ------------------------------------
+#
+# У CNBP две маски: <mode> (GSM+WCDMA) и <lte_mode> (LTE). Мы годами правили
+# только вторую, поэтому в UI у SimCom были одни LTE-диапазоны - 3G и 2G не
+# «потерялись», их просто никогда не было (в git история профиля это видно).
+#
+# БИТЫ ПЕРВОЙ МАСКИ. Позиции GSM даны в руководстве SIMCOM (7 = DCS_1800,
+# 8 = EGSM_900, 9 = PGSM_900), позиции WCDMA - стандартные для band preference
+# Qualcomm. Проверено на живом SIM7100E: его ЗАВОДСКАЯ маска
+# 0x0002000000400180 = биты 7, 8, 22 и 49, то есть ровно паспортный набор
+# аппарата - GSM 1800 + GSM 900 и WCDMA B1 + B8. Это и есть подтверждение
+# соответствия «22 = WCDMA B1, 49 = WCDMA B8».
+#
+# ВНИМАНИЕ: прошивка НЕ фильтрует неподдерживаемые биты - записанную маску она
+# принимает как есть (проверено: записал все биты 7-27 и 48-50, прочитал их же).
+# Значит опираться на «что модем оставил» нельзя, и список возможностей мы
+# держим сами, по паспорту модели.
+_SIM7100_2G_BANDS="900 1800"
+_SIM7100_3G_BANDS="1 8"
+# SIM7600E-H: GSM 900/1800, UMTS B1/B5/B8 (паспорт модуля).
+_SIM7600_2G_BANDS="900 1800"
+_SIM7600_3G_BANDS="1 5 8"
+
+# частота GSM -> номер бита; номер бенда WCDMA -> номер бита
+_cnbp_bit_2g() { case "$1" in 900) echo 8 ;; 1800) echo 7 ;; 850) echo 19 ;; 1900) echo 21 ;; *) echo "" ;; esac; }
+_cnbp_bit_3g() { case "$1" in 1) echo 22 ;; 2) echo 23 ;; 3) echo 24 ;; 4) echo 25 ;; 5) echo 26 ;; 6) echo 27 ;; 7) echo 48 ;; 8) echo 49 ;; 9) echo 50 ;; *) echo "" ;; esac; }
+
+_2g_bands_for_model() { if _is_7600; then echo "$_SIM7600_2G_BANDS"; else echo "$_SIM7100_2G_BANDS"; fi; }
+_3g_bands_for_model() { if _is_7600; then echo "$_SIM7600_3G_BANDS"; else echo "$_SIM7100_3G_BANDS"; fi; }
+
+# Первая маска CNBP как список «номеров» для hextobands/bandstohex диспетчера
+# (там номер = бит + 1, и арифметика 64-битная - своей писать не надо).
+_cnbp_mode_hex() {
+	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' \
+		| sed 's/^+CNBP://' | awk -F, '{print $1}'
+}
+_cnbp_lte_hex() {
+	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}'
+}
+
+# Записать первую маску, сохранив LTE-половину нетронутой.
+_cnbp_write_mode() {   # $1 - список «номеров» (бит+1)
+	_cw_hex=$(bandstohex "$1")
+	[ -n "$_cw_hex" ] && [ "$_cw_hex" != "0" ] || return 1
+	_cw_hex=$(printf "%016s" "$_cw_hex" | tr ' ' 0)
+	_cw_lte=$(_cnbp_lte_hex)
+	[ -n "$_cw_lte" ] || _cw_lte=0x000007FF03DF3FFF
+	sms_tool -d $_DEVICE at "AT+CNBP=0x$_cw_hex,$_cw_lte"
+}
+
+bands3g_style() { echo "mask"; }
+
+getsupportedbands3g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_3g_bands_for_model
+}
+
+getbands3g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_g3_nums=$(hextobands "$(_cnbp_mode_hex)")
+	_g3_out=""
+	for _b in $(_3g_bands_for_model); do
+		_g3_bit=$(_cnbp_bit_3g "$_b"); [ -n "$_g3_bit" ] || continue
+		case " $_g3_nums " in *" $((_g3_bit + 1)) "*) _g3_out="$_g3_out $_b" ;; esac
+	done
+	echo $_g3_out | xargs
+}
+
+setbands3g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_s3_want="$1"
+	[ "$_s3_want" = "default" ] && _s3_want=$(_3g_bands_for_model)
+	_s3_nums=$(hextobands "$(_cnbp_mode_hex)")
+	# гасим ВСЕ известные биты WCDMA, 2G-половину не трогаем
+	_s3_keep=""
+	for _n in $_s3_nums; do
+		_s3_drop=""
+		for _b in 1 2 3 4 5 6 7 8 9; do
+			[ "$((_n - 1))" = "$(_cnbp_bit_3g "$_b")" ] && _s3_drop=1
+		done
+		[ -n "$_s3_drop" ] || _s3_keep="$_s3_keep $_n"
+	done
+	for _b in $_s3_want; do
+		_s3_bit=$(_cnbp_bit_3g "$_b"); [ -n "$_s3_bit" ] || continue
+		_s3_keep="$_s3_keep $((_s3_bit + 1))"
+	done
+	_cnbp_write_mode "$_s3_keep" || echo "ERROR: empty band mask"
+}
+
+getsupportedbands2g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_2g_bands_for_model
+}
+
+getbands2g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_g2_nums=$(hextobands "$(_cnbp_mode_hex)")
+	_g2_out=""
+	for _b in $(_2g_bands_for_model); do
+		_g2_bit=$(_cnbp_bit_2g "$_b"); [ -n "$_g2_bit" ] || continue
+		case " $_g2_nums " in *" $((_g2_bit + 1)) "*) _g2_out="$_g2_out $_b" ;; esac
+	done
+	echo $_g2_out | xargs
+}
+
+setbands2g() {
+	_is_cnbp_family || { echo "Unsupported"; return; }
+	_s2_want="$1"
+	[ "$_s2_want" = "default" ] && _s2_want=$(_2g_bands_for_model)
+	_s2_nums=$(hextobands "$(_cnbp_mode_hex)")
+	_s2_keep=""
+	for _n in $_s2_nums; do
+		_s2_drop=""
+		for _b in 900 1800 850 1900; do
+			[ "$((_n - 1))" = "$(_cnbp_bit_2g "$_b")" ] && _s2_drop=1
+		done
+		# бит 9 (PGSM_900) - подмножество EGSM_900, гасим вместе с 900
+		[ "$((_n - 1))" = 9 ] && _s2_drop=1
+		[ -n "$_s2_drop" ] || _s2_keep="$_s2_keep $_n"
+	done
+	for _b in $_s2_want; do
+		_s2_bit=$(_cnbp_bit_2g "$_b"); [ -n "$_s2_bit" ] || continue
+		_s2_keep="$_s2_keep $((_s2_bit + 1))"
+	done
+	_cnbp_write_mode "$_s2_keep" || echo "ERROR: empty band mask"
+}
+
 # ---- network mode (2G/3G/4G) via AT+CNMP, SIM7100 only ----
 # CNMP values on SIM7100E: 2=Auto, 13=GSM only, 14=WCDMA only, 19=GSM+WCDMA,
 # 38=LTE only. Reported as "id:label" pairs so the UI can render buttons.

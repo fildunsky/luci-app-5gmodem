@@ -168,6 +168,9 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	_vid_new=${_new%%:*}
 	if [ "$_vid_old" = "$_vid_new" ]; then
 		logger -t 5gmodem "modem mode change on $1: $_old -> $_new (тот же вендор, свойства железа сохраняем)"
+		# В новой композиции другие номера портов и другой набор возможностей -
+		# кэши по пути и порту недействительны (см. purge_path_caches).
+		purge_path_caches "$1"
 		uci -q set "$CFG.$2.vidpid=$_new"
 		uci -q set "$CFG.$2.product=$(modem_product "$1")"
 		# at_port сбрасываем - в новой композиции нумерация портов другая, его
@@ -179,6 +182,9 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	fi
 
 	logger -t 5gmodem "modem swap on $1: $_old -> $_new, dropping stale settings"
+	# Кэши по пути принадлежали ПРЕЖНЕМУ модему - иначе новый унаследует его
+	# слоты, диапазоны, IMEI из статики и снимок метрик.
+	purge_path_caches "$1"
 	# СНАЧАЛА паркуем профиль вытесняемого модема по его IMEI - иначе осознанный
 	# выбор (APN/бэндлок/mm_exclude) сотрётся ниже и возврат модема начнётся с нуля.
 	park_profile "$2"
@@ -345,8 +351,41 @@ modem_serial() {   # $1 - usb-путь
 # другим - например, номера tty почти наверняка сменятся.
 migrate_profile() {   # $1 - старая секция, $2 - новая секция
 	[ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] || return 0
+	# ИНТЕРФЕЙС, УЖЕ ЗАКРЕПЛЁННЫЙ ЗА ЭТИМ МОДЕМОМ, ПЕРЕНОС НЕ ОТБИРАЕТ.
+	#
+	# network в списке переносимого - самое ценное и самое опасное поле. Если у
+	# приёмника уже есть интерфейс, ПОДПИСАННЫЙ ЕГО СОБСТВЕННЫМ IMEI, то это
+	# рабочая связка, а перенос уводит модем на чужой интерфейс - с чужим прото и
+	# чужими настройками. Живой случай 01.08.2026: осиротевшая секция m_2_1_3
+	# (модема на пути нет) держала network=modem5 с proto=fibocom, и первый же
+	# resolve живого Compal перевёл бы его туда с рабочего modem.
+	_mp_keepnet=""
+	_mp_dstnet=$(uci -q get "$CFG.$2.network")
+	if [ -n "$_mp_dstnet" ] && [ -n "$(uci -q get "network.$_mp_dstnet")" ]; then
+		_mp_dstimei=$(uci -q get "$CFG.$2.imei")
+		[ -n "$_mp_dstimei" ] \
+			&& [ "$(uci -q get "network.$_mp_dstnet.modem_imei")" = "$_mp_dstimei" ] \
+			&& _mp_keepnet=1
+	fi
+	# ФЛАГИ ТРАНСПОРТА НЕ ПЕРЕЕЗЖАЮТ МЕЖДУ РАЗНЫМИ ПРОТОКОЛАМИ. mm_exclude
+	# описывает НЕ выбор пользователя про эту симку, а способ работы с железом:
+	# «ModemManager к этому модему не подпускать». У секции другой композиции он
+	# свой. Живой случай 01.08.2026: осиротевшая секция 1e2d:00b7 (там
+	# mm_exclude=1) переехала в секцию modemmanager-модема, наш инхибитор увёл
+	# его от MM - и интерфейс proto=modemmanager больше не мог подняться ВООБЩЕ.
+	# Со стороны это выглядело как «модем отвалился и не возвращается».
+	_mp_skipmm=""
+	[ "$(uci -q get "$CFG.$1.iface_proto")" = "$(uci -q get "$CFG.$2.iface_proto")" ] || _mp_skipmm=1
 	for _mk in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
 	           celllock at_debug pdp_mode pdp_ok imei; do
+		[ "$_mk" = mm_exclude ] && [ -n "$_mp_skipmm" ] && {
+			logger -t 5gmodem "перенос профиля $1 -> $2: протоколы разные, mm_exclude не переношу"
+			continue
+		}
+		[ "$_mk" = network ] && [ -n "$_mp_keepnet" ] && {
+			logger -t 5gmodem "перенос профиля $1 -> $2: интерфейс $_mp_dstnet уже закреплён за IMEI $_mp_dstimei, его оставляю"
+			continue
+		}
 		_mv=$(uci -q get "$CFG.$1.$_mk")
 		[ -n "$_mv" ] && uci -q set "$CFG.$2.$_mk=$_mv"
 	done
@@ -382,6 +421,7 @@ ensure_section() {
 	# аппарат» (см. serial_of в lib.sh - там же замер по реальному железу и причины,
 	# почему ключом секции он стать не может).
 	_es_ser=$(modem_serial "$1")
+	stub_serial_known "$_es_ser" && _es_ser=""
 	[ -n "$_es_ser" ] && uci -q set "$CFG.$SEC.serial=$_es_ser"
 
 	# МИГРАЦИЯ ПО SERIAL: «модем переставили в другой разъём» решается ЗДЕСЬ,
@@ -392,11 +432,21 @@ ensure_section() {
 		_es_sold=$(sec_by_serial "$_es_ser" "$SEC")
 		if [ -n "$_es_sold" ]; then
 			_es_soldpath=$(uci -q get "$CFG.$_es_sold.path")
-			# Устройство на СТАРОМ пути присутствует прямо сейчас - значит это не
-			# переезд. Два разных аппарата с одним годным serial отсеяны в lib.sh
-			# (там проверка «serial не должен встречаться дважды на шине»), так что
-			# сюда попадает разве что рассинхрон конфига - и тогда молчим.
-			if [ -z "$_es_soldpath" ] || [ ! -e "/sys/bus/usb/devices/$_es_soldpath" ]; then
+			# ЧУЖАЯ СЕКЦИЯ С ТЕМ ЖЕ SERIAL, А ЕЁ УСТРОЙСТВО НА МЕСТЕ = ДВА
+			# АППАРАТА С ОДНИМ НОМЕРОМ. Одновременно в двух портах модем быть не
+			# может, значит номер партийный - и мгновенная проверка в lib.sh его
+			# проглядела (соседа в ту секунду не было на шине: переэнумерация,
+			# шторм сбросов, воткнули позже). Записываем номер в чёрный список
+			# НАВСЕГДА и снимаем штамп с обеих секций, иначе на следующем круге
+			# migrate_profile перенесёт чужой профиль вместе с IMEI и интерфейсом
+			# (живой случай: VOS_5G и SG500M2-X с serial 2e6172c9).
+			if [ -n "$_es_soldpath" ] && [ -e "/sys/bus/usb/devices/$_es_soldpath" ]; then
+				stub_serial_add "$_es_ser"
+				uci -q delete "$CFG.$SEC.serial"
+				uci -q delete "$CFG.$_es_sold.serial"
+				uci -q commit "$CFG"
+				_es_ser=""
+			else
 				logger -t 5gmodem "модем serial=$_es_ser опознан на $1 (был $_es_soldpath) - переношу профиль"
 				migrate_profile "$_es_sold" "$SEC"
 			fi

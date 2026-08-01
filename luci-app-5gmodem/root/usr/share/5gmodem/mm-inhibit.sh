@@ -258,9 +258,26 @@ _mm_fix_atonly() {   # $1 - usb-путь
 	[ -n "$_flast" ] && [ "$((_fnow - _flast))" -lt 300 ] && return 0
 	printf '%s' "$_fnow" > "$_fmark" 2>/dev/null
 	logger -t 5gmodem "MM собрал $_fp без контрол-порта (есть $(basename "$_fwdm")) - пересобираю модем"
-	printf '%s' "$_fp" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
+	_mm_rebind "$_fp"
+	return 0
+}
+
+# ПЕРЕПРИВЯЗКА USB-УСТРОЙСТВА - НАСТОЯЩИЙ HOTPLUG ВМЕСТО РУЧНОГО РЕПОРТА.
+#
+# mmcli --report-kernel-event сообщает MM ИМЯ узла, но не даёт свойств, которые
+# на нормальной системе приносит udev. С libudev-zero этого не хватает: MM
+# добавляет порты и тут же признаёт их неопознанными -
+#   [plugin/generic] could not grab port cdc-wdm1: unhandled port type
+#   [base-manager] couldn't create modem ...: Failed to find primary AT port
+# - и модем не собирается ВООБЩЕ. unbind/bind рождает честные события ядра, и
+# тот же модем собирается с первого раза (проверено на стенде 01.08.2026:
+# после трёх безуспешных репортов - «modem successfully created»).
+_mm_rebind() {   # $1 - usb-путь
+	local _rb_p="$1" _fw _fwait
+	printf '%s' "$_rb_p" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
 	sleep 4
-	printf '%s' "$_fp" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+	printf '%s' "$_rb_p" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
+	_fp="$_rb_p"
 	# ЖДЁМ ФАКТА, А НЕ СЕКУНД. Переэнумерация этого модуля занимает ~20-30 c
 	# (у него ещё и наш new_id-бинд ttyUSB следом), а фиксированный sleep 8
 	# уходил вперёд: события уходили в MM до появления узлов, и модем пропадал
@@ -293,7 +310,7 @@ mm_recover_missing() {
 	# local ОБЯЗАТЕЛЕН: цикл `for _n in .../net/*` ниже делит имя _n со счётчиком
 	# главного цикла сервиса - без local он утекал и ронял шелл на арифметике
 	# (см. _mm_ifup_if_down).
-	local _rp _seen I _d _if _t _w _n
+	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last
 	command -v mmcli >/dev/null 2>&1 || return 0
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0   # демон должен быть жив
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
@@ -306,6 +323,34 @@ mm_recover_missing() {
 			[ "$(basename "$_d" 2>/dev/null)" = "$_rp" ] && { _seen=1; break; }
 		done
 		if [ "$_seen" = 0 ]; then
+			# ЕСЛИ РЕПОРТ УЖЕ НЕ ПОМОГ - ПЕРЕПРИВЯЗЫВАЕМ УСТРОЙСТВО.
+			#
+			# Ручной --report-kernel-event с libudev-zero часто бесполезен: MM
+			# добавляет порты, но не может их классифицировать («unhandled port
+			# type», «Failed to find primary AT port») и модем не собирает. На
+			# стенде 01.08.2026 три круга репортов подряд не дали ничего, а
+			# unbind/bind собрал модем с первого раза. Поэтому: первый круг -
+			# дешёвый репорт, а если через минуту модема в MM всё ещё нет -
+			# настоящий hotplug. Кулдаун 5 минут на модем, как у пересборки
+			# AT-only: перепривязка это десятки секунд переэнумерации.
+			_rb_mk="$RUN/$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_').missing"
+			_rb_now=$(cut -d. -f1 /proc/uptime)
+			_rb_first=$(cat "$_rb_mk" 2>/dev/null)
+			case "$_rb_first" in ''|*[!0-9]*) _rb_first="" ;; esac
+			if [ -z "$_rb_first" ]; then
+				printf '%s' "$_rb_now" > "$_rb_mk" 2>/dev/null
+			elif [ "$((_rb_now - _rb_first))" -ge 60 ]; then
+				_rb_cd="/tmp/5gmodem_mmrebind_$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')"
+				_rb_last=$(cat "$_rb_cd" 2>/dev/null)
+				case "$_rb_last" in ''|*[!0-9]*) _rb_last="" ;; esac
+				if [ -z "$_rb_last" ] || [ "$((_rb_now - _rb_last))" -ge 300 ]; then
+					printf '%s' "$_rb_now" > "$_rb_cd" 2>/dev/null
+					rm -f "$_rb_mk" 2>/dev/null
+					logger -t 5gmodem "MM не собрал модем $_rp после переотправки событий - перепривязываю устройство"
+					_mm_rebind "$_rp"
+					continue
+				fi
+			fi
 			# объекта нет -> переотправляем MM add-события всех портов USB-устройства
 			for _if in /sys/bus/usb/devices/"$_rp":*; do
 				[ -d "$_if" ] || continue
@@ -321,7 +366,10 @@ mm_recover_missing() {
 			done
 		fi
 		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
-		[ "$_seen" = 1 ] && _mm_fix_atonly "$_rp"
+		[ "$_seen" = 1 ] && {
+			rm -f "$RUN/$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_').missing" 2>/dev/null
+			_mm_fix_atonly "$_rp"
+		}
 		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.
 		_mm_ifup_if_down "$_rp"
 	done

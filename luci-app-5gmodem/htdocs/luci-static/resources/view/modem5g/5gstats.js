@@ -302,6 +302,17 @@ function redraw() {
 
 /* Забрать списки рядов и сами точки. Рядов немного (по одному на аплинк),
    поэтому тянем их параллельно одним заходом. */
+/* Строка «куда реально пишем». Отдельной функцией: её же зовёт обработчик поля
+   пути (общий refresh перерисовывает только графики, но не блок настроек). */
+function pathNowText(lst) {
+	lst = lst || {};
+	if (!lst.persist) { return _('Storing is off - data lives in RAM until the next reboot.'); }
+	if (lst.path && lst.path_now && lst.path_now !== lst.path) {
+		return _('The drive is not mounted - writing to %s for now, and merging back when it returns.').format(lst.path_now);
+	}
+	return lst.path_now ? _('Writing to %s').format(lst.path_now) : _('Nowhere to write - check the path.');
+}
+
 function refresh() {
 	return callStats([ 'list' ]).then(function(lst) {
 		_state.list = lst || {};
@@ -344,11 +355,46 @@ return view.extend({
 					E('input', {
 						'type': 'checkbox', 'id': 'st-persist', 'checked': (lst.persist ? '' : null),
 						'change': function(ev) {
-							callStats([ 'setconf', 'persist=' + (ev.target.checked ? '1' : '0') ]);
+							callStats([ 'setconf', 'persist=' + (ev.target.checked ? '1' : '0') ]).then(function() {
+								return callStats([ 'list' ]).then(function(lst2) {
+									_state.list = lst2 || {};
+									var el = document.getElementById('st-path-now');
+									if (el) { el.textContent = pathNowText(lst2); }
+								});
+							});
 						}
 					}),
 					E('div', { 'class': 'cbi-value-description' },
 						[ _('Monthly totals are written to flash about once an hour. Ping series are never written there.') ])
+				])
+			]),
+			/* КУДА ПИШЕМ. Пустое поле = внутренняя память роутера; свой путь
+			   нужен тем, у кого в роутер воткнута флешка и хочется полный лог,
+			   а не только месячные итоги. Строка ниже показывает РЕАЛЬНЫЙ
+			   каталог: если флешку выдернули, запись идёт в запасной, и
+			   человек должен это видеть, а не узнавать через месяц. */
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('Where to store') ]),
+				E('div', { 'class': 'cbi-value-field' }, [
+					E('input', {
+						'type': 'text', 'class': 'cbi-input-text', 'id': 'st-path',
+						'value': lst.path || '', 'placeholder': lst.path_default || '/etc/5gmodem/stats',
+						'style': 'width:22em;max-width:100%',
+						'change': function(ev) {
+							callStats([ 'setconf', 'path=' + String(ev.target.value || '').trim() ]).then(function(r) {
+								var el = document.getElementById('st-path-now');
+								if (r && r.error) { if (el) { el.textContent = _('Path rejected: %s').format(r.error); } return; }
+								return callStats([ 'list' ]).then(function(lst2) {
+									_state.list = lst2 || {};
+									if (el) { el.textContent = pathNowText(lst2); }
+								});
+							});
+						}
+					}),
+					E('div', { 'class': 'cbi-value-description' }, [
+						E('div', {}, [ _('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats') ]),
+						E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
+					])
 				])
 			]),
 			E('div', { 'class': 'cbi-value' }, [

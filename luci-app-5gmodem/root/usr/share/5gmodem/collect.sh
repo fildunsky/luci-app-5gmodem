@@ -185,6 +185,181 @@ policyrouting_verdict() {
 	esac
 }
 
+# Команда с пределом времени, но БЕЗ заголовка (run печатает свой). Нужна
+# внутри вердиктов, где один блок делает несколько ограниченных проб подряд.
+# busybox timeout в системе нет - только эта пара «фон + kill» (см. память
+# проекта: на ней я дважды «сломал» живой стенд ложными пробами).
+cap() {   # cap <секунды> <команда...>
+	_c_t="$1"; shift
+	_c_f="/tmp/.diagcap.$$"
+	( "$@" ) > "$_c_f" 2>&1 &
+	_c_p=$!
+	( sleep "$_c_t"; kill -9 "$_c_p" 2>/dev/null ) >/dev/null 2>&1 &
+	_c_w=$!
+	wait "$_c_p" 2>/dev/null
+	kill "$_c_w" 2>/dev/null; wait "$_c_w" 2>/dev/null
+	cat "$_c_f" 2>/dev/null; rm -f "$_c_f"
+}
+
+# КТО ДЕРЖИТ ИНТЕРНЕТ - И ЖИВ ЛИ ОН.
+#
+# Главный вопрос отчёта «инета нет», на который до сих пор приходилось отвечать
+# вручную, сводя `ip route` с `uci show network` и логом. Живой случай (4 модема,
+# zbt): Wi-Fi-аплинк стоял первым в «Приоритете интернета» (metric 10), после
+# загрузки прицепился к точке БЕЗ интернета и держал default поверх четырёх
+# работающих модемов - трафик семь минут лился в дыру. В отчёте всё выглядело
+# исправным: модемы connected, ping с роутера проходил (он уходил уже по другому
+# маршруту, после того как пользователь снёс станцию).
+#
+# Поэтому здесь: порядок аплинков по метрикам, КТО реально несёт default,
+# отвечает ли ИМЕННО ОН (ping с привязкой к его устройству), и что об этом
+# думает сторож - вместе с состоянием его выключателей.
+uplink_verdict() {
+	_uv_dump=$(ubus call network.interface dump 2>/dev/null)
+	_uv_wz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	_uv_nets=$(uci -q get "firewall.$_uv_wz.network")
+	_uv_cfg=$("$RES/health.sh" getconf 2>/dev/null)
+	_uv_en=$(printf '%s' "$_uv_cfg" | jsonfilter -e '@.enabled' 2>/dev/null)
+	_uv_fo=$(printf '%s' "$_uv_cfg" | jsonfilter -e '@.failover' 2>/dev/null)
+
+	# Устройство и адрес: у qmi/dhcp-модемов они висят на ДИНАМИЧЕСКОМ ребёнке
+	# "<имя>_4", а родитель стоит пустым - спрашиваем обоих (как iface_dev в
+	# health.sh). И только скобочный синтаксис jsonfilter: "ipv4-address" с
+	# дефисом в точечной записи не разбирается, поле молча выходило пустым.
+	_uv_get() {   # $1 - интерфейс, $2 - выражение после имени
+		_uvg=$(printf '%s' "$_uv_dump" | jsonfilter -e "@.interface[@.interface=\"$1\"]$2" 2>/dev/null | head -1)
+		[ -n "$_uvg" ] || _uvg=$(printf '%s' "$_uv_dump" | jsonfilter -e "@.interface[@.interface=\"${1}_4\"]$2" 2>/dev/null | head -1)
+		printf '%s' "$_uvg"
+	}
+	echo "--- аплинки зоны wan по приоритету ---"
+	for _uv_n in $_uv_nets; do
+		_uv_m=$(uci -q get "network.$_uv_n.metric"); [ -n "$_uv_m" ] || _uv_m=0
+		_uv_d=$(_uv_get "$_uv_n" '.l3_device')
+		_uv_ip=$(_uv_get "$_uv_n" '["ipv4-address"][0].address')
+		_uv_h="-"
+		[ -f "/tmp/5gmodem_health/$_uv_n" ] && read -r _uv_h _ _ _ _ < "/tmp/5gmodem_health/$_uv_n" 2>/dev/null
+		printf 'metric %-5s %-8s %-10s %-16s сторож: %s\n' \
+			"$_uv_m" "$_uv_n" "${_uv_d:--}" "${_uv_ip:-нет адреса}" "$_uv_h"
+	done | sort -n -k2
+
+	# ЖИВОЙ маршрут, а не порядок в uci: сторож штрафует метрику в таблице ядра,
+	# не трогая конфиг, и эти две картины расходятся штатно.
+	echo "--- кто реально несёт default ---"
+	ip -4 route show default 2>/dev/null | sed 's/^/  /'
+	_uv_ldev=$(ip -4 route show default 2>/dev/null \
+		| awk '{m=0; d=""; for(i=1;i<NF;i++){if($i=="dev")d=$(i+1); if($i=="metric")m=$(i+1)+0} if(d!="")print m, d}' \
+		| sort -n | head -1 | cut -d' ' -f2)
+	if [ -z "$_uv_ldev" ]; then
+		echo "default-маршрута НЕТ вовсе - интернета нет ни у кого"
+		return
+	fi
+	_uv_lif=""
+	for _uv_n in $_uv_nets; do
+		[ "$(_uv_get "$_uv_n" '.l3_device')" = "$_uv_ldev" ] && { _uv_lif="$_uv_n"; break; }
+	done
+	echo "трафик идёт через: ${_uv_lif:-?} ($_uv_ldev)"
+
+	# Проба ИМЕННО через это устройство (SO_BINDTODEVICE): обычный ping с
+	# роутера ходит по любому маршруту и на вопрос «жив ли ЭТОТ линк» не
+	# отвечает - именно так поломка и пряталась в прежних отчётах.
+	_uv_ok=""
+	for _uv_t in 77.88.8.8 1.1.1.1; do
+		case "$(cap 6 ping -I "$_uv_ldev" -c 2 -W 2 "$_uv_t")" in
+			*" 0% packet loss"*|*"1 packets received"*|*"2 packets received"*) _uv_ok=1; break ;;
+		esac
+	done
+	if [ -n "$_uv_ok" ]; then
+		echo "проба через $_uv_ldev: интернет ЕСТЬ"
+	else
+		echo "проба через $_uv_ldev: ИНТЕРНЕТА НЕТ - трафик уходит в дыру"
+		echo "  (аплинк с адресом, но без выхода в сеть, для ядра здоров:"
+		echo "   маршрут есть, значит сам он не переключится)"
+		if [ "$_uv_en" != "1" ]; then
+			echo "  сторож интернета ВЫКЛЮЧЕН - некому это заметить"
+		elif [ "$_uv_fo" != "1" ]; then
+			echo "  сторож включён, но «переключать трафик» ВЫКЛЮЧЕНО -"
+			echo "  он видит провал и намеренно ничего не делает"
+		else
+			echo "  переключение включено - смотреть ниже, почему сторож не увёл трафик"
+		fi
+	fi
+
+	echo "--- сторож интернета ---"
+	echo "настройки: ${_uv_cfg:-(нет ответа)}"
+	if [ -d /tmp/5gmodem_health ]; then
+		for _uv_f in /tmp/5gmodem_health/*; do
+			[ -f "$_uv_f" ] || continue
+			case "$_uv_f" in */.t) continue ;; esac
+			printf '  %s: %s\n' "${_uv_f##*/}" "$(cat "$_uv_f" 2>/dev/null | head -1)"
+		done
+	else
+		echo "  состояния нет - сторож ни разу не отработал круг"
+	fi
+}
+
+# DNS: КЛИЕНТ ГОВОРИТ «ИНТЕРНЕТА НЕТ», А РОУТЕР ПИНГУЕТ.
+#
+# Два живых механизма, оба невидимы в маршрутах.
+#   1. Защита от DNS-rebind рубит ответ, если в нём приватный адрес. У этого
+#      пользователя так режется dns.msftncsi.com - проба связности Windows, и
+#      КАЖДЫЙ его компьютер постоянно показывает «Без доступа к Интернету»,
+#      хотя сайты открываются. Три отчёта подряд с жалобой «инета нет» - и во
+#      всех роутер был полностью в сети.
+#   2. У мультимодемного роутера в resolv.conf.auto лежат серверы ВСЕХ
+#      операторов сразу. Запрос к чужому резолверу уходит через default другого
+#      оператора, и тот его молча роняет: резолвинг то работает, то нет.
+dns_verdict() {
+	_dv_auto=/tmp/resolv.conf.d/resolv.conf.auto
+	echo "--- локальный резолвер (как у клиентов) ---"
+	cap 8 nslookup ya.ru 127.0.0.1 2>&1 | head -8
+	echo "--- апстримы: чей и отвечает ли ---"
+	if [ -s "$_dv_auto" ]; then
+		# resolv.conf.auto пишет netifd, комментарием над серверами - чей они
+		# интерфейс. По нему и раскладываем ответственность.
+		_dv_if="?"
+		while read -r _dv_a _dv_b _dv_c; do
+			case "$_dv_a" in
+				'#') [ "$_dv_b" = "Interface" ] && _dv_if="$_dv_c"; continue ;;
+				nameserver) ;;
+				*) continue ;;
+			esac
+			_dv_s="$_dv_b"
+			case "$(cap 6 nslookup ya.ru "$_dv_s" 2>&1)" in
+				*"Address"*[0-9]*) _dv_r="отвечает" ;;
+				*) _dv_r="НЕ ОТВЕЧАЕТ (запрос ушёл не через свой аплинк?)" ;;
+			esac
+			printf '  %-16s от %-8s - %s\n' "$_dv_s" "$_dv_if" "$_dv_r"
+		done < "$_dv_auto"
+	else
+		echo "  $_dv_auto пуст или отсутствует"
+	fi
+	_dv_n=$(grep -c "^nameserver" "$_dv_auto" 2>/dev/null)
+	case "$_dv_n" in ''|*[!0-9]*) _dv_n=0 ;; esac
+	[ "$_dv_n" -gt 3 ] && {
+		echo "  серверов $_dv_n - это резолверы РАЗНЫХ операторов сразу."
+		echo "  Запрос к чужому уходит через default другого аплинка, и тот его"
+		echo "  роняет: у клиентов это выглядит как «сайты открываются через раз»."
+	}
+	echo "--- защита от DNS-rebind ---"
+	_dv_rb=$(logread 2>/dev/null | grep -i "rebind" | tail -20)
+	if [ -n "$_dv_rb" ]; then
+		printf '%s\n' "$_dv_rb" | sed -n 's/.*detected: *//p' | sort | uniq -c | sed 's/^/  /'
+		echo "  Эти имена dnsmasq НЕ отдаёт клиентам: ответ содержал приватный адрес."
+		case "$_dv_rb" in
+			*msftncsi*|*msftconnecttest*)
+				echo "  СРЕДИ НИХ ПРОБА СВЯЗНОСТИ WINDOWS (msftncsi/msftconnecttest):"
+				echo "  все Windows-клиенты будут показывать «Без доступа к Интернету»"
+				echo "  ПОСТОЯННО, даже когда интернет работает. Лечится исключением:"
+				echo "    uci add_list dhcp.@dnsmasq[0].rebind_domain='msftncsi.com'"
+				echo "    uci add_list dhcp.@dnsmasq[0].rebind_domain='msftconnecttest.com'"
+				echo "    uci commit dhcp && /etc/init.d/dnsmasq restart"
+				;;
+		esac
+	else
+		echo "  срабатываний в логе нет"
+	fi
+}
+
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
@@ -841,6 +1016,11 @@ report() {
 
 	collect "net"
 	run 10 "Маршруты" sh -c "ip route; echo '--- ipv6 ---'; ip -6 route"
+	# ПЕРВЫЙ ВОПРОС ЖАЛОБЫ «ИНЕТА НЕТ» - кто держит трафик и жив ли он. Стоит
+	# сразу за маршрутами: дальше по отчёту читателя уносит в модемы, а причина
+	# чаще здесь (аплинк с адресом, но без выхода) и в DNS ниже.
+	run 40 "Кто держит интернет (итог)" uplink_verdict
+	run 60 "DNS: резолвинг и rebind (итог)" dns_verdict
 	run 10 "uci firewall (зоны)" sh -c "uci show firewall 2>/dev/null | grep -E 'zone|forwarding' | head -40"
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
 	run 15 "Доступ к админке (итог)" webstack_verdict

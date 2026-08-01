@@ -45,7 +45,10 @@ apn_pick() {   # $1 - имя, $2 - PLMN сети, $3 - список PLMN из IM
 # специфичная строка. operator_id пуст - сопоставляем по префиксу IMSI, чтобы у
 # MVNO подобрать APN его ДОМАШНЕГО кода, а не гостевой сети.
 apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
-	_db="$RES/providers.tsv"
+	# Скачанная кнопкой база лежит в /etc (переживает обновление приложения),
+	# пакетная - в /usr/share. Свежая главнее; нет её - работаем с пакетной.
+	_db=/etc/5gmodem/providers.tsv
+	[ -s "$_db" ] || _db="$RES/providers.tsv"
 	[ -f "$_db" ] || return 1
 	case "$1" in ''|*[!0-9]*) return 1 ;; esac
 	_dbapn=$(awk -F '\t' -v imsi="$1" -v iccid="$2" '

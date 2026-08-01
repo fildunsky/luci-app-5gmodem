@@ -160,6 +160,90 @@ if [ -n "$T1" ]; then
   fi
 fi
 
+# СОСЕДНИЕ СОТЫ - ИЗ ТОГО ЖЕ ОТВЕТА, БЕЗ ЕДИНОЙ ЛИШНЕЙ КОМАНДЫ.
+#
+# GTCCINFO отдаёт и обслуживающую соту (строка с 1 в начале), и соседей (2) -
+# до десяти на каждый RAT. Раньше строки соседей просто выбрасывались, хотя
+# таблица «Соседние соты» на странице «Сеть» уже есть и ждёт поле neighbors
+# (её заполняет QMI-путь у Qualcomm-модемов, см. _qr_nb в 5gmodem.sh). Формат
+# объекта повторяем оттуда ОДИН В ОДИН: значения строками, serving - 0/1.
+#
+# ПЕРЕСЧЁТ ТОТ ЖЕ, ЧТО У ОБСЛУЖИВАЮЩЕЙ ВЫШЕ: rsrp = idx-141 (LTE) / idx-157
+# (NR), rsrq = -20 + idx/2. Проверено на живом FM350: idx 40 -> -101 dBm,
+# столько же показывает карточка.
+#
+# РАСКЛАДКА ПОЛЕЙ РАЗНАЯ У ОБСЛУЖИВАЮЩЕЙ И СОСЕДА (руководство 11.1.15):
+#   LTE обслуживающая: ...,earfcn,pci,band,bw,sinr,rxlev,rsrp,rsrq   (14)
+#   LTE сосед:         ...,earfcn,pci,bw,rxlev,rsrp,rsrq             (12)
+# Плюс <band> прошивка заполняет ТОЛЬКО в RRC-connected и со смещением +100,
+# поэтому для соседей диапазон считаем из EARFCN - тем же расчётом, что и
+# earfcn2band выше (в awk он свой, иначе пришлось бы звать shell на строку).
+NEIGHBORS=$(echo "$O" | awk -F, '
+	function e2b(e) {
+		if (e == "" || e + 0 != e) return ""
+		e = e + 0
+		if (e <= 599) return 1;  if (e <= 1199) return 2
+		if (e <= 1949) return 3;  if (e <= 2399) return 4
+		if (e <= 2649) return 5
+		if (e >= 2750 && e <= 3449) return 7
+		if (e >= 3450 && e <= 3799) return 8
+		if (e >= 5010 && e <= 5179) return 12
+		if (e >= 5180 && e <= 5279) return 13
+		if (e >= 5730 && e <= 5849) return 17
+		if (e >= 5850 && e <= 5999) return 18
+		if (e >= 6000 && e <= 6149) return 19
+		if (e >= 6150 && e <= 6449) return 20
+		if (e >= 8040 && e <= 8689) return 25
+		if (e >= 8690 && e <= 9039) return 26
+		if (e >= 9210 && e <= 9659) return 28
+		if (e >= 36200 && e <= 36349) return 34
+		if (e >= 37750 && e <= 38249) return 38
+		if (e >= 38250 && e <= 38649) return 39
+		if (e >= 38650 && e <= 39649) return 40
+		if (e >= 39650 && e <= 41589) return 41
+		if (e >= 41590 && e <= 43589) return 42
+		return ""
+	}
+	# «Нет данных» прошивка кодирует 255 (а SINR ещё и мусором при
+	# реинициализации) - такие поля отдаём пустыми, страница покажет прочерк.
+	function lvl(v, base,   x) {
+		if (v == "" || v + 0 != v || v == 255) return ""
+		x = v + 0
+		if (x < 0 || x > 200) return ""
+		return x + base
+	}
+	function half(v, base,   x) {
+		if (v == "" || v + 0 != v || v == 255) return ""
+		x = v + 0
+		if (x < 0 || x > 200) return ""
+		return sprintf("%.1f", base + x / 2)
+	}
+	/^[12],[249],/ {
+		# sms_tool отдаёт строки с CR - без чистки ПОСЛЕДНЕЕ поле (rsrq) уходит
+		# в проверки как "16\r" и молча отбрасывается: в таблице был прочерк.
+		gsub(/\r/, "")
+		srv = ($1 == 1) ? 1 : 0
+		rat = $2 + 0
+		arfcn = $7; pci = $8
+		band = ""; rsrp = ""; rsrq = ""
+		if (rat == 4) {
+			if (srv) { band = $9; rsrp = lvl($13, -141); rsrq = half($14, -20) }
+			else     {            rsrp = lvl($11, -141); rsrq = half($12, -20) }
+			if (band != "" && band + 0 > 100) band = band - 100; else band = e2b(arfcn)
+		} else if (rat == 9) {
+			if (srv) { band = $9; rsrp = lvl($13, -157); rsrq = half($14, -43.5) }
+			else     {            rsrp = lvl($11, -157); rsrq = half($12, -43.5) }
+			sub(/^50/, "", band)
+		} else {
+			# WCDMA: уровень тут RSCP (idx-121), диапазона в строке нет.
+			if (srv) rsrp = lvl($11, -121); else rsrp = lvl($15, -121)
+		}
+		if (pci == "") next
+		printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
+			(n++ ? "," : ""), band, arfcn, pci, rsrp, rsrq, srv
+	}
+')
+
 # 3G (UMTS/HSPA): нет строки GTCCINFO с RAT 4/9, значит T1 пуст. Метрики берём из
 # СТАНДАРТНОГО +CESQ (3GPP TS 27.007 8.69). FM350 расширяет +CESQ полями NR, но
 # первые шесть остаются rxlev,ber,rscp,ecno,rsrq,rsrp. На WCDMA rsrq/rsrp = 255,
