@@ -249,7 +249,7 @@ $_st_v"
 Соединение: $_st_v"
 	_st_rx=$(_st_field "$_st_j" rx); _st_tx=$(_st_field "$_st_j" tx)
 	[ -n "$_st_rx$_st_tx" ] && _st_out="$_st_out
-Трафик: принято ${_st_rx:-?}, передано ${_st_tx:-?}"
+Трафик: ↓ ${_st_rx:-?}  ↑ ${_st_tx:-?}"
 	_st_v=$(_st_field "$_st_j" ipaddr) && _st_out="$_st_out
 Адрес: $_st_v"
 	printf '%s' "$_st_out"
