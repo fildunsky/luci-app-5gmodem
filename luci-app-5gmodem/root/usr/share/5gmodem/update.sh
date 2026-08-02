@@ -115,6 +115,19 @@ install)
 	# than the LuCI RPC/XHR timeout, so we run it in the background, write the
 	# result to a status file, and let the UI poll 'update.sh status'.
 	rm -f "$STATUS" "$STATUS.tmp"
+	# ФАЙЛ ПРОГРЕССА СОЗДАЁМ СРАЗУ, А НЕ В КОНЦЕ.
+	#
+	# Страница опрашивает именно ФАЙЛ (звать update.sh нельзя - он сам
+	# подменяется при обновлении), и пока файла нет, каждый опрос уходит в
+	# cgi-download за несуществующим путём. Ошибки в интерфейсе от этого не
+	# было - L.resolveDefault её гасит, - но браузер честно печатал в консоль
+	# «404 (Failed to stat requested path)» раз в 4 секунды всю установку.
+	# Выглядит как поломка, хотя обновление идёт нормально.
+	#
+	# Признак «идёт установка» при этом не теряется: сейчас его давало
+	# ОТСУТСТВИЕ файла, теперь - его содержимое, а страница уже умеет читать
+	# running (см. pollInstall). Итог перезапишется через tmp+mv, как и раньше.
+	echo '{"running":true}' > "$STATUS"
 	echo '{"started":true}'
 	(
 		do_install() {

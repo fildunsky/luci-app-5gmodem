@@ -411,6 +411,24 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && FPROTO=xmm
 		[ "$REQ" = atc ] && [ -f /lib/netifd/proto/atc.sh ] && FPROTO=atc
 
+		# ИСКЛЮЧЕНИЕ ИЗ ЭТОГО ПРАВИЛА - INTEL XMM (вендор 8087: Fibocom L850,
+		# L860 и родня в NCM-композиции). Им fibocom не подходит В ПРИНЦИПЕ, а не
+		# «хуже работает»: у xmm.sh сверх нашего дозвона есть две обязательные
+		# вещи - `ip link set dev <ncm> arp off` (на NCM-канале XMM модем на ARP не
+		# отвечает, и без этого адрес есть, а трафика нет) и чтение DNS
+		# интеловской XDNS вместо CGCONTRDP. Пользователь с L850+L860 (Cudy
+		# TR3000) поднял связь ровно так: proto=xmm, device=/dev/ttyACM0.
+		#
+		# Регрессии здесь быть не может: до правки глоба ttyACM наш прото у этих
+		# модемов вообще не находил AT-порта, то есть рабочих установок на
+		# fibocom с вендором 8087 не существует. Явный выбор пользователя
+		# (REQ=fibocom) не трогаем - только автоопределение.
+		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } && [ -f /lib/netifd/proto/xmm.sh ] \
+		   && [ "$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null)" = "8087" ]; then
+			FPROTO=xmm
+			logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=xmm: fibocom на NCM-канале не поднимет трафик"
+		fi
+
 		if [ "$FPROTO" = atc ] || [ "$FPROTO" = xmm ]; then
 			# atc И xmm дозваниваются ПО AT-ПОРТУ (ttyACM/ttyUSB), а сетевое
 			# устройство (wwan*/eth*) выводят сами. Поэтому device = AT-порт, НЕ
@@ -437,6 +455,11 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			set_apn_opt "$IF" "$OLDAPN"
 			# имя опции у протоколов разное: atc читает 'pdp', xmm тоже 'pdp'.
 			set_pdp_opt "$IF" pdp upper
+			# И СЛОВАРЬ ЗНАЧЕНИЙ У НИХ СВОЙ: IP / IPV6 / IPV4V6. Нашего «IPV4» в
+			# нём нет - xmm.sh (строка 146) молча заменяет неизвестное на IP, то
+			# есть в конфиге стояло бы одно, а модем набирал бы другое. Пишем
+			# сразу то, что протокол понимает; смысл тот же (IP = IPv4).
+			[ "$(uci -q get "network.$IF.pdp")" = "IPV4" ] && uci set "network.$IF.pdp=IP"
 			uci set "network.$IF.metric=20"
 			FDEV="$DIALPORT"
 			# remember the dial AT port so resolve can re-pin it after renumbering
