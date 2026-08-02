@@ -240,6 +240,33 @@ function afterFirstPoll(fn) {
    mmcli sim-slots (ModemManager). Тип SIM (USIM/eSIM) - подписью слева. */
 var simSlotsSeen = false;   // список слотов хоть раз пришёл нормальным
 var simSlotsTries = 0;
+
+/* СЛОТ МОГ СМЕНИТЬСЯ НЕ ИЗ ЭТОЙ СТРАНИЦЫ.
+   loadSimSlots зовётся ОДИН раз при открытии, а перечитывается только когда
+   слот переключили здешними кнопками (pollSlotUntilSwitched). Слот же меняют и
+   из консоли, и из другой вкладки, и физической пересадкой карты - тогда шапка
+   до ручного F5 показывала прежнее, хотя все остальные данные обновлялись сами
+   (живой случай 02.08.2026: переключили с eSIM на физическую SIM, подпись
+   осталась «eSIM»).
+   Опрашивать слоты каждый тик нельзя - simslot.sh лезет в AT-порт. Но у него
+   ЕСТЬ кэш на роутере (300 c, ветка set его чистит), поэтому дешёвый повтор
+   упирается в чтение файла, а не в порт. Отсюда два повода перечитать: смена
+   IMSI (точный признак, что карта другая) и редкий страховочный тик - на случай
+   смены слота без смены IMSI (переключили на пустой слот). */
+var slotImsiSeen = null;
+var slotIdleTicks = 0;
+var SLOT_IDLE_TICKS = 12;   // тик метрик ~5 c -> проверка примерно раз в минуту
+function refreshSlotsIfChanged(json) {
+	if (!simSlotsSeen) { return; }
+	var imsi = String((json && json.imsi) || '');
+	var fresh = (imsi && imsi !== '-');
+	var changed = (fresh && slotImsiSeen !== null && imsi !== slotImsiSeen);
+	if (fresh) { slotImsiSeen = imsi; }
+	if (changed || ++slotIdleTicks >= SLOT_IDLE_TICKS) {
+		slotIdleTicks = 0;
+		loadSimSlots();
+	}
+}
 /* ЖДЁМ ВОЗВРАЩЕНИЯ МОДЕМА ПОСЛЕ СМЕНЫ СЛОТА - И ПЕРЕСТАЁМ, КАК ТОЛЬКО ОН ВЕРНУЛСЯ.
    Раньше здесь стояли семь безусловных таймеров (3..90 c), и все семь ходили в
    AT-порт даже когда слот переключился с первой попытки: до тринадцати заходов
@@ -1582,6 +1609,7 @@ function applyMetrics(json) {
 					/* Тик пришёл - порт свободен: запускаем отложенные
 					   simslot/bands (см. afterFirstPoll). */
 					runAfterFirstPoll();
+					refreshSlotsIfChanged(json);
 
 					/* МОДЕМА НА ШИНЕ НЕТ ВОВСЕ. Метрики отдают error "Device not
 					   found" (при хотя бы одном модеме скрипт сам его находит,

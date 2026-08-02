@@ -8,9 +8,13 @@
 // page shows the interface as "unsupported" and it flickers out of the list.
 
 network.registerPatternVirtual(/^fibocom-.+$/);
-network.registerErrorCode('NO_NETDEV',     _('No usbnet device found for the modem'));
-network.registerErrorCode('NO_AT_PORT',    _('No AT control port found'));
-network.registerErrorCode('NO_IP_ADDRESS', _('Modem did not provide an IP address'));
+network.registerErrorCode('NO_NETDEV',      _('No usbnet device found for the modem'));
+network.registerErrorCode('NO_AT_PORT',     _('No AT control port found'));
+network.registerErrorCode('NO_IP_ADDRESS',  _('Modem did not provide an IP address'));
+network.registerErrorCode('NETDEV_MISSING', _('The modem network device is missing from the system'));
+network.registerErrorCode('ROAMING_NOT_ALLOWED', _('Registered in roaming, and roaming is disabled'));
+network.registerErrorCode('NOT_REGISTERED', _('The modem is not registered on any network — check the antennas and the signal level'));
+network.registerErrorCode('REGISTRATION_DENIED', _('The network refused registration — check the SIM, the plan and whether the IMEI is blocked'));
 
 return network.registerProtocol('fibocom', {
 	getI18n: function() {

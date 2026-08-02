@@ -23,6 +23,9 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 
+# utf8_fix: чиним latin1-байты sms_tool ОДИН раз, на выходе моста - см. ниже.
+. "$RES/lib.sh" 2>/dev/null
+
 # ЧАСОВОЙ ПОЯС НЕ ЧИНИМ ЗДЕСЬ. sms_tool печатает время SMS в UTC и ИГНОРИРУЕТ
 # $TZ (проверено на живом порту: и TZ=MSK-3, и TZ=UTC0 дают одинаковый +0000).
 # Перевод в местное время делает фронтенд (readsms.js sms_localtime): у него
@@ -70,13 +73,13 @@ _active_is_mm() {
 # - тогда как AT-порт того же модема на sms_tool отвечает нормально. То есть
 # глобальный ноль в конфиге был не наследством от соседнего модема, а верным
 # описанием этого железа. Флаг остаётся решающим.
+_via_mm() {
+	[ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
+		&& [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm
+}
+
 _smstool() {
-	if [ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
-	   && [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm; then
-		# Индекс MM берётся по пути модема: у обёртки нет своего понятия
-		# «активный», а обходу всех модемов нужен именно этот, а не первый
-		# попавшийся (с двумя MM-модемами «any» уже уводил в модем без SIM).
-		MM_MODEM_PATH="$_TGT_PATH"; export MM_MODEM_PATH
+	if _via_mm; then
 		echo /usr/share/5gmodem/sms_tool_mm
 		return
 	fi
@@ -527,16 +530,233 @@ _sms_run() {   # $1 - таймаут (с), дальше - команда
 	return $_sr_rc
 }
 
+# ===== АРХИВ ВХОДЯЩИХ =====
+#
+# ЗАЧЕМ. У модема под ModemManager (Compal RXM-G1 в MBIM) входящие не хранятся
+# НИГДЕ, кроме оперативной памяти MM: при живом непрочитанном сообщении все три
+# AT-хранилища показывают used: 0, а MM после пересоздания объекта модема честно
+# пишет «couldn't load SMS parts from storage 'mt': No SMS PDUs read». Значит
+# любое пересоздание модема в MM стирает переписку насовсем, а пересоздают его
+# рутинно: наше же лечение в mm-inhibit.sh (unbind/bind), наша инхибиция на
+# время отправки, флап USB, перезапуск MM, перезагрузка роутера. Проверено на
+# стенде 02.08.2026: сообщение прожило десять минут в покое и исчезло ровно на
+# unbind/bind, вместе со сменой Modem/3 на Modem/4.
+#
+# Поэтому сообщения храним У СЕБЯ, рядом с памятью о прочитанном. Живой список
+# из MM при каждом чтении ДОЛИВАЕТСЯ в архив, а наружу уходит архив: пропажа
+# сообщения из MM перестаёт что-либо значить.
+#
+# ТОЛЬКО ДЛЯ MM-ПУТИ. У обычного модема сообщения лежат в нём самом, там архив
+# только мешал бы - показывал бы удалённое мимо нас (с телефона, другой утилитой).
+#
+# ФАЙЛ НА СООБЩЕНИЕ, а не общий список: текст SMS содержит и переводы строк, и
+# кавычки, и что угодно ещё, а так его не надо ни экранировать, ни разбирать -
+# первая строка время, вторая отправитель, дальше текст как есть. Имя файла -
+# «<номер>.<ключ>»: ключ (хеш отправителя, времени и текста) даёт дедупликацию,
+# номер - устойчивый индекс для удаления.
+ARCH_MAX=200
+ARCH_BASE=100000
+_LIVE_MAP=" "
+
+_arch_dir() {
+	_ad=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
+	[ -n "$_ad" ] && echo "$SEEN_DIR/sms_arch.$_ad" || echo "$SEEN_DIR/sms_arch"
+}
+
+_arch_key() {   # $1 - отправитель, $2 - время, $3 - текст
+	printf '%s|%s|%s' "$1" "$2" "$3" | md5sum | cut -c1-16
+}
+
+# Номера архива начинаются с ARCH_BASE и с индексами модема не пересекаются:
+# по номеру всегда видно, кому адресовано удаление - модему или только архиву.
+_arch_next() {   # $1 - каталог
+	_an="$ARCH_BASE"
+	for _anf in "$1"/*.*; do
+		[ -f "$_anf" ] || continue
+		_ani=${_anf##*/}; _ani=${_ani%%.*}
+		case "$_ani" in ''|*[!0-9]*) continue ;; esac
+		[ "$_ani" -ge "$_an" ] && _an=$((_ani + 1))
+	done
+	echo "$_an"
+}
+
+_arch_files() {   # $1 - каталог; имена в порядке номеров
+	ls "$1" 2>/dev/null | sort -t. -k1,1n
+}
+
+_arch_read() {   # $1 - файл; заполняет _A_TS _A_FROM _A_TEXT
+	_A_TS=""; _A_FROM=""; _A_TEXT=""
+	{
+		IFS= read -r _A_TS
+		IFS= read -r _A_FROM
+		while IFS= read -r _arl || [ -n "$_arl" ]; do
+			_A_TEXT="${_A_TEXT:+$_A_TEXT
+}$_arl"
+		done
+	} < "$1"
+}
+
+_arch_trim() {   # $1 - каталог
+	_atn=0
+	for _atf in "$1"/*.*; do [ -f "$_atf" ] && _atn=$((_atn + 1)); done
+	[ "$_atn" -gt "$ARCH_MAX" ] || return 0
+	for _atf in $(_arch_files "$1" | head -n "$((_atn - ARCH_MAX))"); do
+		rm -f "$1/$_atf" 2>/dev/null
+	done
+}
+
+# Доливка живого списка в архив. Заодно запоминаем, у каких сообщений СЕЙЧАС
+# есть индекс в модеме: их наружу отдаём с ним, чтобы удаление уходило в модем,
+# а не только в архив.
+_arch_merge() {   # $1 - живой JSON от sms_tool -j
+	_amd=$(_arch_dir)
+	mkdir -p "$_amd" 2>/dev/null || return 0
+	_amj="$1"
+	_LIVE_MAP=" "
+	_AM_SEEN=" "
+	[ -n "$_amj" ] || return 0
+	_amn=$(printf '%s' "$_amj" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	case "$_amn" in ''|*[!0-9]*) return 0 ;; esac
+	[ "$_amn" -gt 0 ] || return 0
+	_amnext=$(_arch_next "$_amd")
+	_ami=0
+	while [ "$_ami" -lt "$_amn" ]; do
+		_amx=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].index" 2>/dev/null)
+		_ams=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].sender" 2>/dev/null)
+		_amt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].timestamp" 2>/dev/null)
+		_amc=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].content" 2>/dev/null)
+		_ami=$((_ami + 1))
+		_amk=$(_arch_key "$_ams" "$_amt" "$_amc")
+		case "$_amx" in ''|*[!0-9]*) ;; *) _LIVE_MAP="$_LIVE_MAP$_amk:$_amx " ;; esac
+		# СЧИТАЕМ КРАТНОСТЬ, а не «есть ли такой ключ». Время у сообщения с
+		# точностью до минуты, поэтому повторная доставка того же текста тем же
+		# отправителем в ту же минуту даёт ТОТ ЖЕ ключ - и второе сообщение
+		# просто исчезло бы. Сверяем, сколько таких в живом списке и сколько уже
+		# лежит в архиве, и дописываем недостающие.
+		_amseen=${_AM_SEEN#* $_amk:}
+		case "$_AM_SEEN" in
+			*" $_amk:"*) _amseen=$((${_amseen%% *} + 1))
+				_AM_SEEN=$(printf '%s' "$_AM_SEEN" | sed "s| $_amk:[0-9]* | |") ;;
+			*) _amseen=1 ;;
+		esac
+		_AM_SEEN="$_AM_SEEN$_amk:$_amseen "
+		_amhave=0
+		for _amf in "$_amd"/*."$_amk"; do [ -f "$_amf" ] && _amhave=$((_amhave + 1)); done
+		[ "$_amseen" -le "$_amhave" ] && continue
+		printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null
+		_amnext=$((_amnext + 1))
+	done
+	_arch_trim "$_amd"
+}
+
+# Индекс сообщения для выдачи: живой, если оно ещё в модеме, иначе архивный.
+# Ответ кладём в _A_IDX, а не печатаем: на выдаче списка это вызов на каждое
+# сообщение, и подстановка $(...) стоила бы форка на каждое.
+_arch_index() {   # $1 - номер файла, $2 - ключ
+	case "$_LIVE_MAP" in
+		*" $2:"*)
+			_A_IDX=${_LIVE_MAP#* $2:}
+			_A_IDX=${_A_IDX%% *}
+			# Живой индекс ОДНОРАЗОВЫЙ: при кратности одинаковых сообщений он
+			# принадлежит только первому, остальные отдаём с архивными.
+			_aipre=${_LIVE_MAP%% $2:*}
+			_airest=${_LIVE_MAP#* $2:}
+			_LIVE_MAP="$_aipre ${_airest#* }" ;;
+		*) _A_IDX="$1" ;;
+	esac
+}
+
+_arch_json() {
+	. /usr/share/libubox/jshn.sh
+	_ajd=$(_arch_dir)
+	json_init
+	json_add_array msg
+	for _ajf in $(_arch_files "$_ajd"); do
+		[ -f "$_ajd/$_ajf" ] || continue
+		_arch_read "$_ajd/$_ajf"
+		_arch_index "${_ajf%%.*}" "${_ajf#*.}"
+		json_add_object ""
+		json_add_int index "$_A_IDX"
+		json_add_string sender "$_A_FROM"
+		json_add_string timestamp "$_A_TS"
+		json_add_string content "$_A_TEXT"
+		json_close_object
+	done
+	json_close_array
+	json_dump
+}
+
+_arch_text() {
+	_axd=$(_arch_dir)
+	for _axf in $(_arch_files "$_axd"); do
+		[ -f "$_axd/$_axf" ] || continue
+		_arch_read "$_axd/$_axf"
+		_arch_index "${_axf%%.*}" "${_axf#*.}"
+		printf 'MSG: %s\nFrom: %s\nDate/Time: %s\n%s\n\n' \
+			"$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT"
+	done
+}
+
+_arch_count() {
+	_acn=0
+	for _acf in "$(_arch_dir)"/*.*; do [ -f "$_acf" ] && _acn=$((_acn + 1)); done
+	echo "$_acn"
+}
+
+_arch_del_index() {   # $1 - архивный номер
+	rm -f "$(_arch_dir)/$1".* 2>/dev/null
+}
+
+# Удаление по ЖИВОМУ индексу: он про модем, а в архиве сообщение лежит под своим
+# номером - находим его по ключу из того же живого списка.
+_arch_del_live() {   # $1 - индекс модема, $2 - живой JSON
+	_adn=$(printf '%s' "$2" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	case "$_adn" in ''|*[!0-9]*) return 0 ;; esac
+	_adi=0
+	while [ "$_adi" -lt "$_adn" ]; do
+		_adx=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].index" 2>/dev/null)
+		if [ "$_adx" = "$1" ]; then
+			_ads=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].sender" 2>/dev/null)
+			_adt=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].timestamp" 2>/dev/null)
+			_adc=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].content" 2>/dev/null)
+			# ОДИН файл, а не все с этим ключом: одинаковые сообщения хранятся
+			# по отдельности, и удаление одного не должно уносить остальные.
+			for _adf in "$(_arch_dir)"/*."$(_arch_key "$_ads" "$_adt" "$_adc")"; do
+				[ -f "$_adf" ] && { rm -f "$_adf" 2>/dev/null; break; }
+			done
+			return 0
+		fi
+		_adi=$((_adi + 1))
+	done
+}
+
+_arch_wipe() {
+	rm -f "$(_arch_dir)"/*.* 2>/dev/null
+}
+
+_arch_live_json() {
+	_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j ${STORE:+-s "$STORE"} recv 2>/dev/null | utf8_fix
+}
+
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$STORE" ] && set -- -s "$STORE" "$@"
 case "$BOX" in
-	status) _sms_run 20 $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status; exit $? ;;
-	sent)   _sms_run 45 $(_smstool) "$@" recv SR; exit $? ;;
+	status)
+		if _via_mm; then
+			_arch_merge "$(_arch_live_json)"
+			# Формат и ширина префикса важны: страница вырезает счётчик как
+			# substring(17, indexOf("total")), а «Storage type: MT,» - ровно 17.
+			printf 'Storage type: MT, used: %d, total: 255\n' "$(_arch_count)"
+			exit 0
+		fi
+		_sms_run 20 $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status; exit $? ;;
+	sent)   _sms_run 45 $(_smstool) "$@" recv SR | utf8_fix; exit $? ;;
 	# delete <index|all> - индекс проверяем здесь: наружу уходит уже
 	# безопасное значение, а страница не решает, что можно слать в модем.
 	delete)
 		case "$DEL" in
 			all)
+				_via_mm && _arch_wipe
 				# У части модемов «delete all» виснет (L850/XMM) - тогда
 				# добиваем ПОШТУЧНО по индексам из списка, каждый шаг с
 				# собственным потолком.
@@ -549,7 +769,18 @@ case "$BOX" in
 				fi
 				exit 0 ;;
 			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
-			*)   _sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; exit $? ;;
+			*)
+				if _via_mm; then
+					# Номер от ARCH_BASE - сообщения в модеме уже нет, удалять
+					# нечего и негде, кроме архива.
+					if [ "$DEL" -ge "$ARCH_BASE" ]; then
+						_arch_del_index "$DEL"
+						echo "delete msg from $DEL to $DEL"
+						exit 0
+					fi
+					_arch_del_live "$DEL" "$(_arch_live_json)"
+				fi
+				_sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; exit $? ;;
 		esac ;;
 	send)
 		[ -n "$SND_TO" ] || { echo "no number" >&2; exit 2; }
@@ -627,6 +858,25 @@ case "$BOX" in
 	# человекочитаемый .txt, и JSON там не к месту. Раньше страница ради этого
 	# исполняла БИНАРЬ sms_tool напрямую (в ACL был разрешён exec на него), то есть
 	# из браузера уходили любые аргументы. Теперь формат выбирается здесь.
-	dump)   _sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv; exit $? ;;
-	*)      _sms_run 45 $(_smstool) "$@" recv; exit $? ;;
+	# ВЫХОД С ТЕКСТОМ СООБЩЕНИЙ ЧИНИМ ПО КОДИРОВКЕ - ОДИН РАЗ, ЗДЕСЬ.
+	#
+	# sms_tool отдаёт U+00A0 и ёлочки одним байтом (latin1). Раньше это чинил
+	# только бот перед отправкой в Telegram, а страница «Входящие» показывала на
+	# их месте ромбы. Мост - единственный вход к сообщениям для ВСЕХ (страница,
+	# бот, выгрузка в файл), поэтому починка живёт тут. utf8_fix идемпотентна:
+	# валидный UTF-8 через неё проходит без изменений.
+	dump)
+		if _via_mm; then
+			_arch_merge "$(_arch_live_json)"
+			_arch_text
+			exit 0
+		fi
+		_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv | utf8_fix; exit $? ;;
+	*)
+		if _via_mm; then
+			_arch_merge "$(_arch_live_json)"
+			_arch_json
+			exit 0
+		fi
+		_sms_run 45 $(_smstool) "$@" recv | utf8_fix; exit $? ;;
 esac

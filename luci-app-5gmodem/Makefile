@@ -16,14 +16,15 @@ LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, 
 # построчный режим (клавиши срабатывают только после Enter), ни узнать ширину
 # окна - раскладка падает в узкую даже на широком экране. Это termios, обойти
 # из шелла нечем: busybox stty на части сборок отсутствует вовсе.
-LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option +qmi-utils +modemmanager \
+LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
+	+kmod-usb-serial-qualcomm +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager \
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+usb-modeswitch +kmod-usb-acm \
 	+curl \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.2.2
+PKG_VERSION:=2.2.3
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

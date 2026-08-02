@@ -358,6 +358,23 @@ if [ -n "$AMP" ]; then
 	# the cdc-wdm control node that belongs to THIS modem
 	WANTWDM=$(/usr/share/5gmodem/registry.sh path "$AMP" 2>/dev/null \
 		| jsonfilter -e '@.wdm[0]' 2>/dev/null)
+	# РЕЕСТР МОЖЕТ ОТСТАВАТЬ - ПЕРЕСПРАШИВАЕМ SYSFS.
+	#
+	# Пустой WANTWDM ниже означает «у модема нет канала управления» и уводит его
+	# в AT-дозвон (proto=fibocom). Но пустым он бывает и просто потому, что
+	# автонастройка началась раньше, чем реестр увидел свежий узел: на хотплаге
+	# это доли секунды. Живой случай 01.08.2026: Compal в композиции 1e2d:00b7
+	# (QMI!) получил proto=fibocom и device=wwan0 - штамп остался в секции
+	# навсегда. sysfs детерминирован: воткнут - есть, и стоит одного взгляда.
+	if [ -z "$WANTWDM" ]; then
+		for _w in /sys/bus/usb/devices/"$AMP":*/usbmisc/cdc-wdm* \
+		          /sys/bus/usb/devices/"$AMP":*/usbmisc/wdm*; do
+			[ -e "$_w" ] || continue
+			WANTWDM="/dev/$(basename "$_w")"
+			logger -t 5gmodem-mkiface "реестр не отдал канал управления для $AMP, нашёл в sysfs: $WANTWDM"
+			break
+		done
+	fi
 fi
 
 # --- AT-dialed RNDIS/ECM modems (Fibocom FM350-GL 0e8d:7127 and similar): they
@@ -405,7 +422,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# периодический опрос не сталкивались на одном tty.
 			METRIC_AT=$(_mk_atport)
 			DIALPORT=""
-			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/ttyACM*; do
+			# Формы глоба - все четыре: у cdc_acm (ttyACM, Intel XMM) узел лежит
+			# под <интерфейс>/tty/, прямого потомка нет. См. portmap.sh.
+			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/tty/ttyUSB* \
+			         /sys/bus/usb/devices/$AMP:*/ttyACM* /sys/bus/usb/devices/$AMP:*/tty/ttyACM*; do
 				[ -e "$t" ] || continue
 				tt="/dev/$(basename "$t")"
 				[ "$tt" = "$METRIC_AT" ] && continue

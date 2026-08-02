@@ -92,7 +92,7 @@
 
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.2/luci-app-5gmodem-2.2.2-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.3/luci-app-5gmodem-2.2.3-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -105,19 +105,16 @@ curl -L https://github.com/fildunsky/lpac-build/releases/latest/download/lpac-25
 apk add /tmp/lpac.apk --allow-untrusted
 ```
 
-Сборка для MediaTek Filogic (aarch64_cortex-a53, например Huasifei WH3000) лежит
-и в этом репозитории — можно поставить, не заходя в релизы lpac-build:
-
-```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/raw/master/dist/lpac-25.12.5-mediatek-filogic.apk > /tmp/lpac.apk
-apk add /tmp/lpac.apk --allow-untrusted
-```
+Эта же сборка для Filogic лежит и в нашем репозитории — если не хочется идти в
+релизы lpac-build, замените ссылку на
+`https://github.com/fildunsky/luci-app-5gmodem/raw/master/dist/lpac-25.12.5-mediatek-filogic.apk`.
+Сборки для остальных платформ есть только в релизе.
 
 ### .ipk (OpenWrt 24.10.x)
 
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.2/luci-app-5gmodem_2.2.2-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.3/luci-app-5gmodem_2.2.3-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 

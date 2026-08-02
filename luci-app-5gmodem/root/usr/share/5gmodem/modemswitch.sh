@@ -1021,6 +1021,33 @@ autoapn)
 			sleep 1; _aa_w=$((_aa_w + 1))
 		done
 		[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: ждал готовности модема $_aa_w c"
+	else
+		# БЕЗ ModemManager ЖДЁМ ПО AT - РАНЬШЕ НЕ ЖДАЛИ ВОВСЕ.
+		#
+		# Ожидание выше спрашивает MM, и на сборке без него (наш fibocom, atc,
+		# xmm) мы поднимали интерфейс ЧЕРЕЗ ТРИ СЕКУНДЫ после ifdown - в модем,
+		# который ещё грузится. Живой отчёт (WH3000 Pro, 02.08.2026): модем
+		# перечислился в 21:55:43, autoapn дёрнул интерфейс в 21:55:46, дальше
+		# три круга «setting up - disconnected» подряд, каждый заново отсчитывал
+		# 30-секундную паузу прото, и первая настоящая попытка дозвона случилась
+		# только в 21:57:14 - через полторы минуты.
+		#
+		# Ждём того же, чего ждала бы MM-ветка: регистрации в сети. Шаг 2 c,
+		# потолок 30 c. Не дождались - всё равно поднимаем: APN уже сменён, и
+		# оставить интерфейс лежать хуже, чем попробовать.
+		_aa_p=$(uci -q get "$CFG.$_am_sec.at_port")
+		[ -n "$_aa_p" ] || _aa_p=$("$RES/detect.sh" 2>/dev/null)
+		if [ -n "$_aa_p" ] && [ -c "$_aa_p" ]; then
+			_aa_w=0
+			while [ "$_aa_w" -lt 30 ]; do
+				case "$(at_query "$_aa_p" "AT+CEREG?" 5 2>/dev/null | tr -d '\r' \
+					| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)" in
+					1|5|6|7|9|10) break ;;
+				esac
+				sleep 2; _aa_w=$((_aa_w + 2))
+			done
+			[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: ждал регистрации модема $_aa_w c (без MM)"
+		fi
 	fi
 	ifup "$IFACE" >/dev/null 2>&1
 	# Авто-подбор типа PDP ОТКЛЮЧЁН намеренно: дефолт теперь IPV4 (на нём модемы
@@ -1207,6 +1234,28 @@ resolve)
 		[ -n "$_sl_p" ] && echo " $PRESENT " | grep -q " $_sl_p " || continue
 		[ "$(uci -q get "network.$_sl_if.auto")" = "0" ] || continue
 		uci -q delete "network.$_sl_if.auto"; _sl_chg=1
+		# ПРИВЯЗКУ К ЖЕЛЕЗУ ОСВЕЖАЕМ ПРИ ПРОБУЖДЕНИИ.
+		#
+		# Интерфейс проснувшегося модема мы намеренно не пересоздаём (в нём
+		# настройки пользователя), но узел /dev/cdc-wdmN за время сна мог
+		# достаться ДРУГОМУ модему - и qmi/mbim пошли бы дозваниваться в чужой
+		# канал. Лечится штампом devpath: он привязан к топологии USB (путь +
+		# номер интерфейса) и переживает переэнумерацию, а qmi.sh при каждом
+		# setup находит по нему актуальный cdc-wdm. Ставим/обновляем ровно тут -
+		# при пересоздании это делает mkiface, а разбуженный интерфейс мимо него
+		# проходит (живой случай: парковка Telit с device=/dev/cdc-wdm0).
+		case "$(uci -q get "network.$_sl_if.proto")" in
+			qmi|mbim)
+				for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \
+				             /sys/bus/usb/devices/"$_sl_p":*/usbmisc/wdm*; do
+					[ -e "$_sl_w" ] || continue
+					_sl_dp=$(dirname "$(dirname "$_sl_w")")
+					uci -q set "network.$_sl_if.device=/dev/$(basename "$_sl_w")"
+					uci -q set "network.$_sl_if.devpath=$_sl_dp"
+					logger -t 5gmodem-resolve "интерфейс $_sl_if: канал управления переподвязан на $_sl_dp"
+					break
+				done ;;
+		esac
 		logger -t 5gmodem-resolve "интерфейс $_sl_if разбужен: модем $_sl_p вернулся"
 	done
 	[ "$_sl_chg" = 1 ] && { uci -q commit network; ubus call network reload >/dev/null 2>&1; }

@@ -189,11 +189,26 @@ _mm_owns_channel() {
 }
 
 # cdc-wdm управляющего узла активного модема (для qmi/mbim-бэкендов lpac).
+# УЗЕЛ ДОЛЖЕН БЫТЬ ИМЕННО КАНАЛОМ УПРАВЛЕНИЯ, А НЕ ЛЮБЫМ СИМВОЛЬНЫМ УСТРОЙСТВОМ.
+#
+# Проверки `-c` мало: ttyUSB - тоже символьное устройство, и запасной вариант
+# «взять network.<iface>.device» ниже спокойно отдавал AT-порт. У протоколов
+# atc/xmm/fibocom там ИМЕННО он и лежит (живой отчёт WH3000, FM350 в RNDIS:
+# «узел cdc-wdm: /dev/ttyUSB1»), а дальше этот путь уходит в LPAC_APDU_*_DEVICE,
+# то есть lpac получает tty вместо канала qmi/mbim. Признак настоящего узла - он
+# зарегистрирован ядром как канал управления: usbmisc (cdc-wdm, оттуда же
+# _wdm_driver читает драйвер) или wwan (узлы /dev/wwanXpYMBIM нового
+# подсистемного интерфейса - listmodems кладёт их в тот же wdm[]).
+_is_wdm_node() {   # $1 - путь к узлу
+	[ -c "$1" ] || return 1
+	[ -e "/sys/class/usbmisc/${1##*/}" ] || [ -e "/sys/class/wwan/${1##*/}" ]
+}
+
 esim_wdm() {
 	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	_w=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
-	[ -c "$_w" ] || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
-	[ -c "$_w" ] && { echo "$_w"; return; }
+	_is_wdm_node "$_w" || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
+	_is_wdm_node "$_w" && { echo "$_w"; return; }
 	# ЗАПАСНОЙ /dev/cdc-wdm0 - ТОЛЬКО КОГДА УЗЕЛ В СИСТЕМЕ ОДИН.
 	#
 	# Он стоял здесь безусловно и на мультимодеме бил мимо: у модема без своего
@@ -809,6 +824,37 @@ setapdu)
 	echo '{"result":"ok"}'
 	exit 0
 	;;
+# ЧЕМ lpac ХОДИТ В СЕТЬ - для отчёта диагностики.
+#
+# Раньше отчёт проверял это сам, одной строкой: strings /usr/lib/lpac | grep curl.
+# Проверка врала дважды. Во-первых, у патченой раскладки /usr/lib/lpac - КАТАЛОГ
+# (бинарь лежит внутри), strings по каталогу молчит, и исправная установка
+# получала вердикт «curl: НЕТ -> lpac не сможет скачать профиль» (живой отчёт
+# WH3000, 02.08.2026, сразу после верной переустановки). Во-вторых, при драйвере
+# stdio запросы делает САМ РОУТЕР, и curl внутри lpac не нужен вовсе - пугать им
+# там нечего. Знание о выборе драйвера живёт в http_local_drv, поэтому спрашиваем
+# её, а не гадаем со стороны.
+httpinfo)
+	_hi=$(http_local_drv)
+	printf 'драйвер HTTP: %s\n' "$_hi"
+	if [ "$_hi" = stdio ]; then
+		echo 'запросы к серверу профилей делает роутер (stdio) - curl внутри lpac НЕ нужен'
+		exit 0
+	fi
+	if [ -f /usr/lib/lpac/driver/driver_http_curl.so ]; then
+		if ldd /usr/lib/lpac/driver/driver_http_curl.so 2>/dev/null | grep -q "not found"; then
+			echo 'ПРОБЛЕМА: плагину curl не хватает библиотек:'
+			ldd /usr/lib/lpac/driver/driver_http_curl.so 2>/dev/null | grep "not found" | sed 's/^/  /'
+		else
+			echo 'плагин curl на месте, библиотеки разрешаются'
+		fi
+	elif [ -f "$LPAC" ] && strings "$LPAC" 2>/dev/null | grep -qi curl_easy_perform; then
+		echo 'curl вшит в бинарь (раскладка 2.1.x без плагинов)'
+	else
+		echo 'ПРОБЛЕМА: драйвер curl выбран, но ни плагина, ни curl в бинаре не видно'
+	fi
+	exit 0
+	;;
 apduinfo)
 	# ЧЕМ ИМЕННО МЫ ХОДИМ К eUICC - для отчёта диагностики.
 	#
@@ -818,8 +864,12 @@ apduinfo)
 	# 30.07): авто-выбор дал mbim на узле qmi_wwan, и eSIM молчала «по-честному».
 	printf 'выбранный APDU-бэкенд: %s\n' "$(apdu_backend)"
 	printf 'задан вручную (esim_apdu): %s\n' "$(uci -q get 5gmodem.@5gmodem[0].esim_apdu || echo '(нет, автоопределение)')"
-	printf 'узел cdc-wdm: %s\n' "$(esim_wdm)"
-	printf 'драйвер узла: %s\n' "$(_wdm_driver || echo '(не определён)')"
+	# Пустые значения подписываем словами: в отчёте пустая строка после двоеточия
+	# читается как обрыв вывода, а не как «узла нет» - а это разные диагнозы.
+	_ai_wdm=$(esim_wdm)
+	_ai_drv=$(_wdm_driver)
+	printf 'узел cdc-wdm: %s\n' "${_ai_wdm:-(нет - у этого модема канала управления нет)}"
+	printf 'драйвер узла: %s\n' "${_ai_drv:-(не определён)}"
 	printf 'прото интерфейса: %s\n' "$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto")"
 	printf 'HTTP-драйвер lpac: %s\n' "$(http_local_drv 2>/dev/null || echo '(не определён)')"
 	exit 0

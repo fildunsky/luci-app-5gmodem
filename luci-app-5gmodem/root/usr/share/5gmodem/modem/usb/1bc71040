@@ -262,3 +262,86 @@ _L=$(echo "$O" | tr -d '\r' | sed -n 's/^#TMLVL: *[A-Za-z0-9_]*,\([0-9]\).*/\1/p
 case "$_L" in
 	[0-3]) THERM="$_L" ;;
 esac
+
+# ===== СОСЕДНИЕ СОТЫ (AT#MONI) ==============================================
+#
+# У Telit соседи достаются иначе, чем у всех: #MONI=<n> ВЫБИРАЕТ набор, а
+# следующий #MONI печатает соты этого набора. Живой LM960A18:
+#   #MONI=0 -> #MONI: Tele2 RU RSRP:-107 RSRQ:-11 TAC:73AD Id:5813D15 EARFCN:3400 PWR:-78dbm DRX:640
+#   #MONI=1 -> #MONI: RSRP:-107 RSRQ:-11 Id:000016E EARFCN:3400 PWR:-78dbm   (та же частота)
+#            -> #MONI: RSRP:-116 RSRQ:-20 Id:00001BF EARFCN:3400 PWR:-87dbm
+#   #MONI=2 -> #MONI: RSRP:-99  RSRQ:-10 Id:00001E0 EARFCN:100  PWR:-81dbm   (другая частота)
+#   #MONI=3 -> пусто (наборы кончились)
+# Id у ОБСЛУЖИВАЮЩЕЙ - это ECI (5813D15 = 92355861, сходится с +CPSI), а у
+# СОСЕДЕЙ - PCI в шестнадцатеричном виде (16E = 366, 1BF = 447, 1E0 = 480;
+# проверено сверкой с соседним модемом на той же площадке).
+#
+# УРОВНИ УЖЕ В ДЕЦИБЕЛАХ - в отличие от FM350, где GTCCINFO отдаёт индексы.
+# PWR - это RSSI, его и кладём в поле rssi (у FM350 оно пустует).
+#
+# ЦЕНА. Набор стоит две команды (#MONI=<n> и #MONI), а опрос метрик идёт раз в
+# пару секунд - гонять шесть команд на каждый круг нельзя. Поэтому соседи
+# обновляются раз в 30 c и лежат в кэше; между обновлениями снимок отдаёт
+# последний известный список. Селектор в конце ВОЗВРАЩАЕМ на 0: иначе следующий
+# #MONI (наш или из AT-консоли) покажет соседей вместо обслуживающей соты.
+_NB_F="/tmp/5gmodem_moni_nb_$(basename "$DEVICE" 2>/dev/null)"
+_NB_AGE=999
+[ -f "$_NB_F.t" ] && {
+	_NB_T=$(cat "$_NB_F.t" 2>/dev/null)
+	case "$_NB_T" in ''|*[!0-9]*) : ;; *) _NB_AGE=$(( $(cut -d. -f1 /proc/uptime) - _NB_T )) ;; esac
+}
+if [ "$_NB_AGE" -ge 30 ] 2>/dev/null; then
+	_NB_OUT=""
+	_NB_N=1
+	while [ "$_NB_N" -le 5 ]; do
+		sms_tool -d $DEVICE at "AT#MONI=$_NB_N" >/dev/null 2>&1
+		_NB_SET=$(sms_tool -d $DEVICE at "AT#MONI" 2>/dev/null | tr -d '\r' | grep "^#MONI: *RSRP")
+		[ -n "$_NB_SET" ] || break
+		_NB_OUT="$_NB_OUT$_NB_SET
+"
+		_NB_N=$((_NB_N + 1))
+	done
+	sms_tool -d $DEVICE at "AT#MONI=0" >/dev/null 2>&1
+	# Строка соседа -> объект в формате поля neighbors (см. _qr_nb в 5gmodem.sh).
+	# РАЗБИРАЕМ В ШЕЛЛЕ, А НЕ В AWK: диапазон считает channeltoband - функция
+	# диспетчера, вторая её копия в профиле однажды разошлась бы с первой. Строк
+	# тут единицы, цена перебора нулевая. (Первая версия собирала JSON в awk и
+	# доклеивала диапазон снаружи - разбор ломался, потому что объекты JSON сами
+	# содержат запятые, по которым шло разделение.)
+	_NB_JSON=""
+	_SIFS_NB="$IFS"; IFS='
+'
+	for _nb_l in $_NB_OUT; do
+		case "$_nb_l" in *RSRP*) ;; *) continue ;; esac
+		_nb_pciH=$(printf '%s' "$_nb_l" | sed -n 's/.*Id:\([0-9A-Fa-f]*\).*/\1/p')
+		[ -n "$_nb_pciH" ] || continue
+		_nb_pci=$(printf '%d' "0x$_nb_pciH" 2>/dev/null) || continue
+		_nb_e=$(printf '%s' "$_nb_l" | sed -n 's/.*EARFCN:\([0-9]*\).*/\1/p')
+		_nb_rp=$(printf '%s' "$_nb_l" | sed -n 's/.*RSRP:\(-\{0,1\}[0-9]*\).*/\1/p')
+		_nb_rq=$(printf '%s' "$_nb_l" | sed -n 's/.*RSRQ:\(-\{0,1\}[0-9]*\).*/\1/p')
+		_nb_rs=$(printf '%s' "$_nb_l" | sed -n 's/.*PWR:\(-\{0,1\}[0-9]*\).*/\1/p')
+		# Набор 1 включает и САМУ обслуживающую соту - в таблице она уже есть
+		# отдельной подсвеченной строкой, второй раз не показываем.
+		[ "$_nb_pci" = "$PCI" ] && [ "$_nb_e" = "$EARFCN" ] && continue
+		_nb_b=""
+		[ -n "$_nb_e" ] && _nb_b=$(channeltoband "$_nb_e" 2>/dev/null)
+		case "$_nb_b" in ''|*[!0-9]*) _nb_b="" ;; esac
+		_NB_JSON="$_NB_JSON${_NB_JSON:+,}$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":0}' \
+			"$_nb_b" "$_nb_e" "$_nb_pci" "$_nb_rp" "$_nb_rq" "$_nb_rs")"
+	done
+	IFS="$_SIFS_NB"
+	printf '%s' "$_NB_JSON" > "$_NB_F" 2>/dev/null
+	cut -d. -f1 /proc/uptime > "$_NB_F.t" 2>/dev/null
+else
+	_NB_JSON=$(cat "$_NB_F" 2>/dev/null)
+fi
+
+# Обслуживающая сота - первой строкой таблицы, из уже разобранных полей профиля
+# (у #MONI=0 нет PCI, он берётся из #CAINFO выше).
+if [ -n "$PCI" ] && [ -n "$EARFCN" ]; then
+	_NB_SRV=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
+		"$(channeltoband "$EARFCN" 2>/dev/null)" "$EARFCN" "$PCI" "$RSRP" "$RSRQ" "$RSSI")
+	NEIGHBORS="$_NB_SRV${_NB_JSON:+,$_NB_JSON}"
+else
+	NEIGHBORS="$_NB_JSON"
+fi

@@ -101,7 +101,8 @@ ensure_iface() {
 			# is not the metrics port, and remember it.
 			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
 				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
-				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
+				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
+				         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
 					[ -e "$t" ] || continue
 					tt="/dev/$(basename "$t")"
 					[ "$tt" = "$MET" ] && continue
@@ -193,7 +194,8 @@ fix_iface_proto() {   # $1 - имя интерфейса
 orphan_iface_for() {
 	local P="$1" IF OWNER DEV NODES n claimed
 	NODES=" $(wdm_for_path "$P") "
-	for n in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/ttyACM*; do
+	for n in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
+	         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
 		[ -e "$n" ] && NODES="$NODES /dev/$(basename "$n") "
 	done
 	for n in /sys/bus/usb/devices/$P:*/net/*; do

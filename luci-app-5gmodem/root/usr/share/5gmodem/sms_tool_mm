@@ -81,21 +81,37 @@ list_paths() {
 # assembles within seconds, so anything in "receiving" older than
 # STALE_RX_SECS is garbage; if the timestamp cannot be parsed, the stub
 # is treated as stale too.
+#
+# "Stale" is measured from when WE first saw the object stuck, not from the
+# message timestamp. The timestamp is when the SENDER sent it: messages that
+# the modem hands over from storage after a reboot are hours or days old, so
+# comparing against it declared them stale on sight and deleted them the
+# moment they blinked through the "receiving" state. First-seen marks live in
+# /tmp and are keyed by MM index - both reset together on reboot - and count
+# uptime, so a clock jump cannot make a fresh object look old.
 STALE_RX_SECS=120
+RX_MARK_DIR=/tmp/5gmodem_smsrx
 cleanup_stale_rx() {
-	NOW=$(date +%s)
+	NOW=$(cut -d. -f1 /proc/uptime)
+	mkdir -p "$RX_MARK_DIR" 2>/dev/null
 	for P in $(list_paths); do
 		SJ=$(mmcli -s "$P" -J 2>/dev/null) || continue
 		STATE=$(jsonfilter -s "$SJ" -e '@.sms.properties.state' 2>/dev/null)
-		[ "$STATE" = "receiving" ] || continue
-		TS=$(jsonfilter -s "$SJ" -e '@.sms.properties.timestamp' 2>/dev/null)
-		TS="${TS%%+*}"
-		TS="${TS%%-[0-9][0-9]:[0-9][0-9]}"
-		BORN=$(date -D '%Y-%m-%dT%H:%M:%S' -d "$TS" +%s 2>/dev/null)
-		if [ -z "$BORN" ] || [ $((NOW - BORN)) -gt "$STALE_RX_SECS" ]; then
-			logger -t sms_tool_mm "dropping stale partial SMS $(sms_index "$P") (stuck in receiving state, blocks reception)"
-			mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
+		IDX=$(sms_index "$P")
+		if [ "$STATE" != "receiving" ]; then
+			rm -f "$RX_MARK_DIR/$IDX" 2>/dev/null
+			continue
 		fi
+		SEEN=$(cat "$RX_MARK_DIR/$IDX" 2>/dev/null)
+		case "$SEEN" in
+			''|*[!0-9]*)
+				printf '%s' "$NOW" > "$RX_MARK_DIR/$IDX" 2>/dev/null
+				continue ;;
+		esac
+		[ "$((NOW - SEEN))" -gt "$STALE_RX_SECS" ] || continue
+		logger -t sms_tool_mm "dropping stale partial SMS $IDX (stuck in receiving state, blocks reception)"
+		mmcli -m "$MMIDX" --messaging-delete-sms="$IDX" >/dev/null 2>&1
+		rm -f "$RX_MARK_DIR/$IDX" 2>/dev/null
 	done
 }
 

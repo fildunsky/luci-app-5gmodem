@@ -41,9 +41,18 @@ _fibocom_netdev() {
 # an AT-capable ttyUSB of this modem, preferring one that is NOT the app's
 # metrics/AT port (so the periodic metrics poll and our dial do not collide on
 # the same tty and cross their replies)
+# ЧЕТЫРЕ ФОРМЫ ГЛОБА, А НЕ ДВЕ. У usb-serial (option, ttyUSB) узел - прямой
+# потомок интерфейса: <путь>:1.2/ttyUSB0. У cdc_acm (ttyACM, это Intel XMM -
+# Fibocom L850/L860) такого потомка НЕТ ВОВСЕ, tty регистрируется через класс:
+# <путь>:1.0/tty/ttyACM0. Здесь искали только прямую форму, поэтому у модема на
+# cdc_acm прото не находил ни одного AT-порта и молча выходил с NO_AT_PORT -
+# интерфейс цикл за циклом падал с «NO_DEVICE» без единого объяснения в логе
+# (живой отчёт: Cudy TR3000, L850 + L860, оба модема). Правильный набор форм уже
+# был в portmap.sh - оттуда и берём.
 _fibocom_atport() {
 	local p="$1" avoid="$2" t tt fallback=""
-	for t in /sys/bus/usb/devices/$p:*/ttyUSB* /sys/bus/usb/devices/$p:*/ttyACM*; do
+	for t in /sys/bus/usb/devices/$p:*/ttyUSB* /sys/bus/usb/devices/$p:*/tty/ttyUSB* \
+	         /sys/bus/usb/devices/$p:*/ttyACM* /sys/bus/usb/devices/$p:*/tty/ttyACM*; do
 		[ -e "$t" ] || continue
 		tt="/dev/$(basename "$t")"
 		sms_tool -d "$tt" at "AT" >/dev/null 2>&1 || continue
@@ -56,6 +65,24 @@ _fibocom_atport() {
 	done
 	[ -n "$fallback" ] && { echo "$fallback"; return 0; }
 	return 1
+}
+
+# Режим выбора оператора из +COPS? : 0 - авто, 1 - вручную, 2 - СНЯТ С РЕГИСТРАЦИИ.
+_fibocom_cops_mode() {
+	sms_tool -d "$1" at "AT+COPS?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+COPS: *\([0-9]\).*/\1/p' | head -1
+}
+
+# Состояние регистрации в сети: печатает <stat> из +CEREG, иначе из +CREG.
+# Пусто - модем не ответил. Коды: 1/6/9 - зарегистрирован дома, 5/7/10 - роуминг,
+# 0/2/3/4/8 - сети нет (2 - ищет, 3 - отказано, 8 - только экстренные).
+_fibocom_reg() {
+	local p="$1" r
+	r=$(sms_tool -d "$p" at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	[ -n "$r" ] || r=$(sms_tool -d "$p" at "AT+CREG?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	echo "$r"
 }
 
 # Define APN with a given PDP type, (re)activate the default PDP context and echo
@@ -100,6 +127,10 @@ proto_fibocom_init_config() {
 	no_device=1
 	available=1
 	proto_config_add_string "usbpath"
+	# modem_path пишет приложение (штамп владения интерфейсом) и обновляет при
+	# переезде модема в другой разъём. Прото читает его как ЗАПАСНОЙ путь - см.
+	# setup: usbpath ставится один раз при создании и способен устареть.
+	proto_config_add_string "modem_path"
 	proto_config_add_string "device"
 	proto_config_add_string "atport"
 	proto_config_add_string "apn"
@@ -111,11 +142,24 @@ proto_fibocom_init_config() {
 
 proto_fibocom_setup() {
 	local interface="$1"
-	local usbpath device atport apn pdptype metric
-	json_get_vars usbpath device atport apn pdptype metric allow_roaming
+	local usbpath modem_path device atport apn pdptype metric
+	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming
 
 	[ -n "$apn" ] || apn="internet"
 	[ -n "$pdptype" ] || pdptype="IPV4"
+
+	# УСТАРЕВШИЙ usbpath. Он пишется ОДИН раз, при создании интерфейса, а модем
+	# может переехать в другой разъём - тогда штамп владения (modem_path)
+	# приложение обновит, а usbpath останется прежним. Живой отчёт (Cudy TR3000,
+	# L850 + L860): usbpath=2-1.3 при модеме на 2-1.2 - ни портов, ни сетевого
+	# устройства по этому пути нет вовсе. Признак протухания однозначный: такого
+	# USB-устройства в системе НЕТ.
+	if [ -n "$modem_path" ] && [ "$modem_path" != "$usbpath" ] \
+	   && [ ! -e "/sys/bus/usb/devices/$usbpath/idVendor" ] \
+	   && [ -e "/sys/bus/usb/devices/$modem_path/idVendor" ]; then
+		echo "fibocom[$$] usbpath «$usbpath» на шине отсутствует, беру modem_path «$modem_path»"
+		usbpath="$modem_path"
+	fi
 
 	# resolve the usbnet device (eth*) and a dial AT port from the stable path
 	local netdev=""
@@ -141,6 +185,10 @@ proto_fibocom_setup() {
 	fi
 	[ -n "$netdev" ] || netdev="$device"
 	if [ -z "$netdev" ]; then
+		# ГОВОРИМ ВСЛУХ. Ветка выходила молча, и в журнале оставался лишь
+		# бесконечный «setting up - is now down» без единого намёка на причину
+		# (живой отчёт Cudy TR3000). Одна строка экономит час разбора.
+		echo "fibocom[$$] сетевого устройства нет: путь «$usbpath», device «$device»"
 		proto_notify_error "$interface" NO_NETDEV
 		proto_set_available "$interface" 0
 		return 1
@@ -163,6 +211,7 @@ proto_fibocom_setup() {
 		dial=$(_fibocom_atport "$usbpath" "$(uci -q get 5gmodem.@5gmodem[0].at_port)")
 	fi
 	if [ -z "$dial" ]; then
+		echo "fibocom[$$] AT-порт не найден по пути «$usbpath» (ни ttyUSB, ни ttyACM не ответили на AT)"
 		proto_notify_error "$interface" NO_AT_PORT
 		proto_set_available "$interface" 0
 		return 1
@@ -177,14 +226,51 @@ proto_fibocom_setup() {
 	#
 	# Коды +CEREG/+CREG: 5 - registered, roaming; 7 и 10 - роуминговые
 	# разновидности (SMS only / CSFB not preferred). Дом - 1.
-	if [ "$allow_roaming" != "1" ]; then
-		local _reg
-		_reg=$(sms_tool -d "$dial" at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
-		[ -n "$_reg" ] || _reg=$(sms_tool -d "$dial" at "AT+CREG?" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
-		case "$_reg" in
-			5|7|10)
+	# СНАЧАЛА ВЫЯСНЯЕМ, ЕСТЬ ЛИ ВООБЩЕ СЕТЬ, И ТОЛЬКО ПОТОМ НАБИРАЕМ.
+	#
+	# Живой отчёт (WH3000 Pro, 02.08.2026): модем искал сеть (+CEREG stat 2,
+	# +CGATT 0, +CSQ 5 - антенны), а мы всё равно набирали, получали закономерный
+	# отказ и объявляли NO_IP_ADDRESS с proto_block_restart. Диагноз врал - дело
+	# было не в контексте, а в отсутствии регистрации, - и блокировка добивала:
+	# интерфейс не поднимался сам ДАЖЕ после возвращения сети, до ручного ifup.
+	#
+	# Поэтому регистрацию читаем ОДИН раз и здесь же решаем всё: и роуминг, и
+	# отсутствие сети. Сразу после включения модем честно ищет сеть десятки
+	# секунд, поэтому с первого ответа не сдаёмся, а ЖДЁМ - это заодно и есть
+	# пауза между попытками netifd, отдельный троттлинг не нужен.
+	local _reg="" _rw=0 _kick=0
+	while :; do
+		_reg=$(_fibocom_reg "$dial")
+		case "$_reg" in 1|5|6|7|9|10) break ;; esac
+		# СНЯТ С РЕГИСТРАЦИИ - САМ ОН НЕ ВЕРНЁТСЯ. Живой отчёт (Cudy TR3000,
+		# L850+L860): +COPS: 2, +CEREG: 2,0, +CSQ: 99,99 - модуль оставили
+		# дерегистрированным (прежний прото, ручная команда), и перезапуски
+		# интерфейса этого не лечили: при режиме 2 модем сеть не ищет вовсе.
+		# Включаем автовыбор оператора ОДИН раз за попытку.
+		#
+		# РЕШАЕТ ИМЕННО РЕЖИМ +COPS, А НЕ КОД stat. Сперва здесь стояло «stat 0»,
+		# и на стенде (FM350) толчок не сработал: после AT+COPS=2 этот модуль
+		# отвечает +CEREG: 2,4 («неизвестно»), а не 0 - у разных модемов код свой.
+		# Режим 2 однозначен у всех. Режим 1 не трогаем: это осознанный ручной
+		# выбор сети пользователем, перебивать его мы не вправе.
+		if [ "$_kick" = 0 ] && [ "$(_fibocom_cops_mode "$dial")" = 2 ]; then
+			_kick=1
+			echo "fibocom[$$] модем снят с регистрации (+COPS: 2) - включаю автопоиск сети"
+			sms_tool -d "$dial" at "AT+COPS=0" >/dev/null 2>&1
+		fi
+		[ "$_rw" -ge 60 ] && break
+		sleep 5; _rw=$((_rw + 5))
+	done
+
+	case "$_reg" in
+		5|7|10)
+			# ДАННЫЕ В РОУМИНГЕ. У FM350 переключателя роуминга В МОДЕМЕ НЕТ - в
+			# руководстве по AT-командам (v2.2) такой команды не существует вовсе,
+			# единственное упоминание роуминга - тип PDP в +EIAAPN. Поэтому
+			# поступаем как mbim.sh: НЕ ПОДНИМАЕМ соединение, увидев роуминговую
+			# регистрацию. Это и есть то, чего ждёт пользователь от тумблера -
+			# счёт за трафик приходит за переданные байты, а не за факт регистрации.
+			if [ "$allow_roaming" != "1" ]; then
 				echo "fibocom[$$] roaming registration ($_reg) and roaming is not allowed"
 				proto_notify_error "$interface" ROAMING_NOT_ALLOWED
 				# БЛОКИРУЕМ перезапуск: без этого netifd поднимал бы интерфейс
@@ -192,9 +278,27 @@ proto_fibocom_setup() {
 				# Пользователь включит роуминг тумблером - интерфейс поднимут явно.
 				proto_block_restart "$interface"
 				return 1
-				;;
-		esac
-	fi
+			fi
+			;;
+		1|6|9) ;;
+		3)
+			# ОТКАЗ СЕТИ - это не «пока не нашёл»: так отвечают на незарегистрированную
+			# SIM, неоплаченный тариф или заблокированный IMEI. Повторять бесполезно,
+			# поэтому здесь перезапуск блокируем - как в роуминге.
+			echo "fibocom[$$] network refused registration (+CEREG stat 3) - SIM/подписка/IMEI"
+			proto_notify_error "$interface" REGISTRATION_DENIED
+			proto_block_restart "$interface"
+			return 1
+			;;
+		*)
+			# Сети нет и за отведённое время не появилась. Перезапуск НЕ блокируем:
+			# сигнал может вернуться сам, и интерфейс обязан подняться без участия
+			# человека. Цикл ожидания выше держит повтор примерно раз в минуту.
+			echo "fibocom[$$] no network registration (+CEREG stat «${_reg:-нет ответа}») after ${_rw}s"
+			proto_notify_error "$interface" NOT_REGISTERED
+			return 1
+			;;
+	esac
 
 	# APPLY SAVED BANDS ONCE PER BOOT, BEFORE dialing. On reboot the FM350 resets
 	# its band mask to "all" and auto-activates context 1 - so whoever triggers
@@ -359,8 +463,16 @@ proto_fibocom_teardown() {
 	# lets setup's fast path reuse it, so switching priority is instant and
 	# lossless. The bearer costs nothing while the interface is down (no route, no
 	# traffic); a true disconnect happens on USB re-enumeration / modem controls.
-	proto_init_update "*" 0
-	proto_send_update "$interface"
+	#
+	# И НИЧЕГО НЕ СООБЩАЕМ NETIFD. Здесь стояла пара proto_init_update "*" 0 +
+	# proto_send_update - как в штатных qmi.sh и mbim.sh. Она НЕ РАБОТАЕТ НИКОГДА:
+	# netifd зовёт teardown, уже переведя машину состояний в S_TEARDOWN, а
+	# proto_ext_update_link (netifd/proto-ext.c) в этом состоянии отвечает
+	# UBUS_STATUS_PERMISSION_DENIED. В журнале это давало строку
+	#   Command failed: ubus call network.interface notify_proto ... (Permission denied)
+	# на КАЖДЫЙ обрыв - её и принимали за поломку прав. Интерфейс netifd гасит
+	# сам, уведомление ему не нужно. Коды ошибок (proto_notify_error, action 3)
+	# идут другим обработчиком и по-прежнему доходят.
 }
 
 add_protocol fibocom

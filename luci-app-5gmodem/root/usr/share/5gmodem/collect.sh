@@ -360,6 +360,53 @@ dns_verdict() {
 	fi
 }
 
+# ФОРМАТ КАДРОВ QMI: RAW-IP ПРОТИВ 802.3.
+#
+# Самый неприятный вид отказа: `uqmi --get-data-status` отвечает "connected",
+# адрес выдан, маршрут стоит - а трафика нет. Снаружи неотличимо от исправной
+# работы, и человек ищет причину в операторе, APN и сигнале. На деле драйвер и
+# прошивка договорились о РАЗНОМ формате кадров: qmi_wwan ждёт raw-ip, модем
+# шлёт 802.3 (или наоборот). Приём молча отбрасывается - TX растёт, RX ноль.
+#
+# Живой случай 01.08.2026 (SIM7100E): raw_ip=Y при '802-3' у модема. Лечится
+# приведением сторон к одному формату; у этого аппарата помог AT+CFUN=1,1, после
+# которого атрибут вернулся в N и совпал с прошивкой. Через `option dhcp 0`
+# «чинить» бесполезно: адрес назначится, канала не будет.
+qmi_format_verdict() {
+	_qf_any=""
+	for _qf_n in /sys/class/net/*/qmi/raw_ip; do
+		[ -f "$_qf_n" ] || continue
+		_qf_any=1
+		_qf_if=$(basename "$(dirname "$(dirname "$_qf_n")")")
+		_qf_raw=$(cat "$_qf_n" 2>/dev/null)
+		# Узел управления этого же USB-устройства.
+		_qf_dev=$(readlink -f "/sys/class/net/$_qf_if/device" 2>/dev/null)
+		_qf_wdm=""
+		for _qf_w in "$(dirname "$_qf_dev")"/*/usbmisc/cdc-wdm*; do
+			[ -e "$_qf_w" ] && { _qf_wdm="/dev/$(basename "$_qf_w")"; break; }
+		done
+		printf '%s: raw_ip=%s' "$_qf_if" "${_qf_raw:-?}"
+		if [ -n "$_qf_wdm" ] && command -v qmicli >/dev/null 2>&1; then
+			_qf_fmt=$(cap 15 qmicli -p -d "$_qf_wdm" --wda-get-data-format 2>/dev/null \
+				| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
+			printf ', модем: %s' "${_qf_fmt:-не ответил}"
+			case "$_qf_raw:$_qf_fmt" in
+				Y:raw-ip|N:802-3|*:) : ;;
+				*) printf ' <- РАССИНХРОН: приём отбрасывается молча' ;;
+			esac
+		fi
+		# Счётчики: RX=0 при растущем TX - тот же симптом с другой стороны.
+		_qf_rx=$(cat "/sys/class/net/$_qf_if/statistics/rx_packets" 2>/dev/null)
+		_qf_tx=$(cat "/sys/class/net/$_qf_if/statistics/tx_packets" 2>/dev/null)
+		printf ' | пакеты rx=%s tx=%s' "${_qf_rx:-?}" "${_qf_tx:-?}"
+		case "$_qf_rx" in
+			0|1|2|3) [ "${_qf_tx:-0}" -gt 50 ] 2>/dev/null && printf ' <- ТРАФИК НЕ ХОДИТ (ушло %s, пришло %s)' "$_qf_tx" "$_qf_rx" ;;
+		esac
+		echo
+	done
+	[ -n "$_qf_any" ] || echo "qmi-интерфейсов нет - проверка не нужна"
+}
+
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
@@ -465,6 +512,73 @@ usb_flap_verdict() {
 	echo "роняет линк. Проверять по порядку: другой USB-порт (лучше USB 3.0),"
 	echo "короткий кабель без удлинителей, переходник/хаб С ВНЕШНИМ ПИТАНИЕМ."
 	[ "$_uf_sp" = "480" ] && echo "Отдельно: линк поднялся как USB 2.0. Если модем умеет USB 3.0, дело в кабеле или переходнике - контакты SuperSpeed не задействованы."
+}
+
+# УСТРОЙСТВО ЕСТЬ НА ШИНЕ, НО КОНТРОЛЛЕР НЕ СМОГ ЕГО НАСТРОИТЬ.
+#
+# Живой случай (ZBT, 02.08.2026): два FM350 и две Sierra EM7565 на одном
+# xhci-mtk. В lsusb видны все четыре, в программе - три, и какой именно исчезнет,
+# решает порядок энумерации: до перезагрузки не было обеих Sierra, после -
+# одного FM350. В журнале ядра:
+#   usb 2-1.1: Not enough host controller resources for new device state.
+#   usb 2-1.1: can't set config #1, error -12
+# Контроллер вернул на команду Configure Endpoint статус RESOURCE_ERROR, то есть
+# у него кончились конечные точки. Без конфигурации у устройства нет ИНТЕРФЕЙСОВ,
+# значит ни один драйвер к нему не цепляется, портов не появляется - и для
+# listmodems.sh (он перечисляет модемы по узлам в /dev) модема просто нет.
+#
+# Отчёт при этом молчал: «переподключений: 0», ни одного признака беды. Человек
+# идёт искать просадку питания, которой нет, и винит программу. Поэтому спрашиваем
+# sysfs прямо: конфигурация не назначена - скажем об этом словами и покажем, кто
+# съел бюджет (число интерфейсов у каждого устройства на шине).
+usb_unconfigured_verdict() {
+	_uu_bad=""
+	for _uu_d in /sys/bus/usb/devices/*; do
+		_uu_b=${_uu_d##*/}
+		# каталоги интерфейсов (1-1.3:1.0) и корневые хабы (usb1) - не устройства
+		case "$_uu_b" in *:*|usb*) continue ;; esac
+		[ -f "$_uu_d/idVendor" ] || continue
+		_uu_cfg=$(cat "$_uu_d/bConfigurationValue" 2>/dev/null)
+		case "$_uu_cfg" in ''|0) ;; *) continue ;; esac
+		_uu_bad="$_uu_bad $_uu_b"
+	done
+	if [ -z "$_uu_bad" ]; then
+		echo "устройств без конфигурации нет - раздел не применим"
+		return
+	fi
+	for _uu_b in $_uu_bad; do
+		_uu_d="/sys/bus/usb/devices/$_uu_b"
+		echo "$_uu_b [$(cat "$_uu_d/idVendor" 2>/dev/null):$(cat "$_uu_d/idProduct" 2>/dev/null)] $(cat "$_uu_d/product" 2>/dev/null)"
+		echo "  конфигурация НЕ назначена - интерфейсов нет, драйверы не подключены"
+	done
+	echo "ПРОБЛЕМА: устройство физически на шине (его видно в lsusb), но ядро не"
+	echo "смогло его настроить. Портов у него нет, поэтому в списке модемов его"
+	echo "тоже нет. Это НЕ ошибка приложения и НЕ питание."
+	_uu_why=$(dmesg 2>/dev/null | grep -E "Not enough host controller resources|Not enough bandwidth|can't set config" | tail -4)
+	[ -n "$_uu_why" ] && { echo "Из журнала ядра:"; printf '%s\n' "$_uu_why" | sed 's/^/  /'; }
+	if dmesg 2>/dev/null | grep -q "Not enough host controller resources"; then
+		echo "Причина названа ядром прямо: у КОНТРОЛЛЕРА кончились ресурсы"
+		echo "(конечные точки). Кто их занял - видно по числу интерфейсов:"
+		for _uu_d in /sys/bus/usb/devices/*; do
+			_uu_b=${_uu_d##*/}
+			case "$_uu_b" in *:*|usb*) continue ;; esac
+			[ -f "$_uu_d/idVendor" ] || continue
+			_uu_n=0
+			for _uu_i in "$_uu_d":*; do [ -d "$_uu_i" ] && _uu_n=$((_uu_n + 1)); done
+			echo "  $_uu_b [$(cat "$_uu_d/idVendor" 2>/dev/null):$(cat "$_uu_d/idProduct" 2>/dev/null)] интерфейсов: $_uu_n"
+		done
+		echo "Модули с RNDIS и россыпью ttyUSB (Fibocom FM350 - 10 интерфейсов,"
+		echo "7 из них последовательные) стоят дороже всех; модем в MBIM - 2."
+		echo "Что имеет смысл: (1) снять с этого контроллера лишнее устройство;"
+		echo "(2) учесть, что РАЗНЫЕ ХАБЫ и даже разные bus одного контроллера"
+		echo "  бюджет НЕ делят - смена разъёма сама по себе не лечит;"
+		echo "(3) сменить композицию на более скромную, если модуль это умеет"
+		echo "  (у FM350 обе композиции, 40 и 41, одинаково прожорливы)."
+	elif dmesg 2>/dev/null | grep -q "Not enough bandwidth"; then
+		echo "Ядро назвало причиной нехватку ПОЛОСЫ шины, а не ресурсов контроллера:"
+		echo "устройству не хватило периодической пропускной способности. Помогает"
+		echo "развести устройства по разным контроллерам или снизить скорость линка."
+	fi
 }
 
 # МОДЕМ ЗАВИС В FASTBOOT (загрузчик вместо рабочей композиции).
@@ -660,6 +774,94 @@ radio_verdict() {   # $1 - АТ-порт
 	esac
 }
 
+# ТО ЖЕ САМОЕ, НО БЕЗ ModemManager - ПО AT-ОТВЕТАМ.
+#
+# Раздел ниже умел спрашивать только MM и на сборке без него писал «не применим»
+# ровно там, где ответ лежит в трёх строчках. Живой отчёт (WH3000 Pro, сборка
+# lite, 02.08.2026): +CEREG stat 2, +CGATT 0, +CSQ 5 - модем искал сеть с
+# отключёнными антеннами, а интерфейс честно не поднимался. Отчёт про это молчал,
+# и разбор ушёл в APN, тип PDP и наш прото - то есть мимо.
+#
+# Команды уже опрошены выше (см. блок at "$P"), здесь только истолкование, но
+# спрашиваем заново: между тем блоком и этим местом проходит вся секция MM, а
+# состояние сети за это время меняется - истолковывать надо то, что есть сейчас.
+at_conn_verdict() {   # $1 - AT-порт
+	[ -n "$1" ] || { echo "    AT-порта нет - спросить модем нечем, причину назвать не можем"; return; }
+	_ac_reg=$(at_query "$1" "AT+CEREG?" 8 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	[ -n "$_ac_reg" ] || _ac_reg=$(at_query "$1" "AT+CREG?" 8 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	_ac_att=$(at_query "$1" "AT+CGATT?" 8 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CGATT: *\([0-9]*\).*/\1/p' | head -1)
+	_ac_csq=$(at_query "$1" "AT+CSQ" 8 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+CSQ: *\([0-9]*\).*/\1/p' | head -1)
+	_ac_ops=$(at_query "$1" "AT+COPS?" 8 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+COPS:.*,"\([^"]*\)".*/\1/p' | head -1)
+
+	# УРОВЕНЬ СИГНАЛА СЧИТАЕМ ПО +CSQ И НЕ УМНИЧАЕМ. 99 - «неизвестно»,
+	# иначе dBm = -113 + 2*rssi. У FM350 именно +CSQ честен (RSRP он занижает).
+	_ac_dbm=""
+	case "$_ac_csq" in
+		''|99) ;;
+		*[!0-9]*) ;;
+		*) _ac_dbm=$((-113 + 2 * _ac_csq)) ;;
+	esac
+	echo "    сигнал: ${_ac_csq:-нет ответа}${_ac_dbm:+ (~${_ac_dbm} dBm)}, оператор: ${_ac_ops:-пусто}, +CGATT: ${_ac_att:-нет ответа}"
+
+	case "$_ac_reg" in
+		1|6|9)
+			if [ "$_ac_att" = "1" ]; then
+				# ИСПРАВНЫЙ СЛУЧАЙ НАЗЫВАЕМ ИСПРАВНЫМ. Раздел спрашивает «почему не
+				# подключается», и на живом соединении он не должен выдумывать
+				# проблему - иначе разбор уходит искать несуществующее.
+				_ac_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+				_ac_up=""
+				[ -n "$_ac_if" ] && _ac_up=$(ubus call "network.interface.$_ac_if" status 2>/dev/null \
+					| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+				if [ -n "$_ac_up" ]; then
+					echo "    подключение работает: адрес $_ac_up на интерфейсе $_ac_if - вопрос снят."
+				else
+					echo "    зарегистрирован и подключён к пакетной сети - радио в норме."
+					echo "    Раз адреса всё равно нет, причина дальше: APN, тип PDP или netifd."
+				fi
+			else
+				echo "    зарегистрирован, но к ПАКЕТНОЙ сети не подключён (+CGATT: 0)."
+				echo "    Это APN или тип PDP, а не антенны: проверить APN у оператора"
+				echo "    и попробовать IPV4V6 - часть модулей на чистом IPV4 не активирует контекст."
+			fi ;;
+		5|7|10)
+			echo "    зарегистрирован В РОУМИНГЕ (stat $_ac_reg). Если тумблер роуминга выключен,"
+			echo "    соединение не поднимется намеренно - это защита от счёта за трафик." ;;
+		2)
+			echo "    СЕТЬ НЕ НАЙДЕНА: модем ищет её (+CEREG stat 2) и не может зарегистрироваться."
+			echo "    Никакие APN и типы PDP этого не обойдут - сперва должна появиться сеть." ;;
+		3)
+			echo "    СЕТЬ ОТКАЗАЛА В РЕГИСТРАЦИИ (+CEREG stat 3). Это не антенны:"
+			echo "    так отвечают на незарегистрированную SIM, неоплаченный тариф"
+			echo "    или заблокированный IMEI. Проверить ту же SIM в телефоне." ;;
+		0|4)
+			echo "    НЕ ЗАРЕГИСТРИРОВАН (+CEREG stat ${_ac_reg}) и поиск не идёт."
+			echo "    Смотреть режим сети (не заперт ли на недоступный RAT), диапазоны и CFUN." ;;
+		8)
+			echo "    только экстренные вызовы (+CEREG stat 8) - обычной сети для данных нет." ;;
+		'')
+			echo "    состояние регистрации прочитать не удалось - порт занят или модем молчит." ;;
+		*)
+			echo "    +CEREG stat $_ac_reg" ;;
+	esac
+
+	# АНТЕННЫ. Говорим про них только когда сети нет - при живой регистрации
+	# слабый сигнал это «медленно», а не «не подключается», и совет уводил бы вбок.
+	case "$_ac_reg" in
+		1|5|6|7|9|10) ;;
+		*)
+			if [ -n "$_ac_dbm" ] && [ "$_ac_dbm" -le -100 ]; then
+				echo "    СИГНАЛ НА ПОЛУ (~${_ac_dbm} dBm). Первым делом антенны: прикручены ли,"
+				echo "    в те ли разъёмы (main/aux, а не GNSS), цел ли пигтейл."
+			fi ;;
+	esac
+}
+
 # ПОЧЕМУ МОДЕМ НЕ ПОДКЛЮЧАЕТСЯ - ПО ВСЕМ МОДЕМАМ СРАЗУ.
 #
 # ЗАЧЕМ. ModemManager называет причину отказа одной строкой
@@ -671,12 +873,18 @@ radio_verdict() {   # $1 - АТ-порт
 #
 # Раздел про ВСЕ модемы, а не про активный: «работает только один из двух» - самая
 # частая жалоба на мультимодемной машине, и вердикт должен отвечать про оба.
-mm_fail_verdict() {
+mm_fail_verdict() {   # $1 - АТ-порт (для модемов вне MM)
 	echo ""
 	echo "----- Почему модем не подключается (итог) -----"
-	command -v mmcli >/dev/null 2>&1 || { echo "ModemManager не установлен - раздел не применим"; return; }
+	if ! command -v mmcli >/dev/null 2>&1; then
+		echo "ModemManager не установлен - разбираем по AT:"
+		at_conn_verdict "$1"
+		return
+	fi
 	_mf_l=$(mmcli -L 2>/dev/null | sed -n 's#.*/Modem/\([0-9]*\).*#\1#p')
-	[ -n "$_mf_l" ] || { echo "в ModemManager нет ни одного модема"; return; }
+	# MM установлен, но модема в нём нет - значит он не под MM (наш fibocom,
+	# atc, xmm). Молчать здесь нельзя: раздел называется «почему не подключается».
+	[ -n "$_mf_l" ] || { echo "в ModemManager нет ни одного модема - разбираем по AT:"; at_conn_verdict "$1"; return; }
 	for _mf_i in $_mf_l; do
 		_mf_k=$(mmcli -m "$_mf_i" -K 2>/dev/null)
 		_mf_d=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.device *: *//p' | head -1)
@@ -918,7 +1126,7 @@ report() {
 	at "$P" "AT+C5GREG?"
 	at "$P" "AT+CGATT?"
 	radio_verdict "$P"
-	mm_fail_verdict
+	mm_fail_verdict "$P"
 	fcclock_verdict "$P"
 	proxy_verdict
 	stick_verdict
@@ -959,7 +1167,7 @@ report() {
 	# (это чистый APDU), а ЗАГРУЗКА профиля молча не идёт: нет ca-bundle, кривое
 	# время или lpac собран без HTTP-бэкенда.
 	run 5  "CA-сертификаты (нужны для загрузки профиля)" sh -c "ls -l /etc/ssl/certs/ca-certificates.crt 2>/dev/null || echo 'ca-bundle НЕ УСТАНОВЛЕН -> загрузка профиля eSIM работать не будет'"
-	run 5  "HTTP-бэкенд в lpac" sh -c "strings /usr/lib/lpac 2>/dev/null | grep -qi curl_easy_perform && echo 'curl: есть' || echo 'curl: НЕТ -> lpac не сможет скачать профиль'"
+	run 5  "HTTP-бэкенд в lpac" "$RES/esim.sh" httpinfo
 	run 15 "Проверка HTTPS наружу" sh -c "curl -sS -o /dev/null -w 'код=%{http_code} tls=%{ssl_verify_result} время=%{time_total}s\n' https://ya.ru 2>&1 | head -3"
 	collect "esim"
 	run 5  "eSIM: конфиг lpac (порт AT/uqmi)" sh -c "uci -q show lpac 2>/dev/null; echo '--- custom AID ---'; uci -q get lpac.global.custom_isd_r_aid 2>/dev/null || echo '(по умолчанию A0000005591010FFFFFFFF8900000100)'"
@@ -1021,6 +1229,7 @@ report() {
 	# чаще здесь (аплинк с адресом, но без выхода) и в DNS ниже.
 	run 40 "Кто держит интернет (итог)" uplink_verdict
 	run 60 "DNS: резолвинг и rebind (итог)" dns_verdict
+	run 40 "QMI: формат кадров и счётчики (итог)" qmi_format_verdict
 	run 10 "uci firewall (зоны)" sh -c "uci show firewall 2>/dev/null | grep -E 'zone|forwarding' | head -40"
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
 	run 15 "Доступ к админке (итог)" webstack_verdict
@@ -1032,6 +1241,7 @@ report() {
 	# вот оно и есть главная улика.
 	run 10 "Незакоммиченные правки uci (мины)" sh -c 'uci changes 2>/dev/null | head -40; [ -z "$(uci changes 2>/dev/null)" ] && echo "(пусто - мин нет)"'
 	run 10 "Питание и стабильность USB (итог)" usb_flap_verdict
+	run 10 "Устройство на шине, но без конфигурации? (итог)" usb_unconfigured_verdict
 	run 10 "Модем в режиме загрузчика? (итог)" fastboot_verdict
 	run 20 "Питание радио модема (итог)" power_state_verdict
 	run 10 "Пинг 77.88.8.8" ping -c 3 -W 2 77.88.8.8

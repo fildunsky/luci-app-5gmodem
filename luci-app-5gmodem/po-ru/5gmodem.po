@@ -2976,6 +2976,25 @@ msgstr "Метрика"
 msgid "Modem did not provide an IP address"
 msgstr "Модем не выдал IP-адрес"
 
+msgid "The modem network device is missing from the system"
+msgstr "Сетевого устройства модема нет в системе"
+
+msgid "Registered in roaming, and roaming is disabled"
+msgstr "Регистрация в роуминге, а роуминг выключен"
+
+msgid ""
+"The modem is not registered on any network — check the antennas and the "
+"signal level"
+msgstr ""
+"Модем не зарегистрирован ни в одной сети — проверьте антенны и уровень "
+"сигнала"
+
+msgid ""
+"The network refused registration — check the SIM, the plan and whether the "
+"IMEI is blocked"
+msgstr ""
+"Сеть отказала в регистрации — проверьте SIM, тариф и не заблокирован ли IMEI"
+
 msgid "Network device"
 msgstr "Сетевое устройство"
 

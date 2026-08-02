@@ -165,6 +165,22 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				_qn=$((_qn + 1)); printf '%s' "$_qn" > "$_qf" 2>/dev/null
 				if [ "$_qn" -ge 3 ]; then
 					rm -f "$_qf" 2>/dev/null
+					# ФОРМАТ КАДРОВ - НАЗЫВАЕМ ПРИЧИНУ, ЕСЛИ ОНА ВИДНА. У этого
+					# отказа есть проверяемый признак: драйвер и прошивка
+					# договорились о разном (raw_ip против 802-3), и приём молча
+					# отбрасывается. Сброс лечит и так, но в журнале должно быть
+					# написано, ЧТО именно было не так - иначе следующий разбор
+					# начнётся с нуля.
+					_qdev=$(ifstatus "$_if" 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
+					_qraw=$(cat "/sys/class/net/$_qdev/qmi/raw_ip" 2>/dev/null)
+					_qfmt=""
+					command -v qmicli >/dev/null 2>&1 && [ -c "$_wdm" ] && \
+						_qfmt=$(qmicli -p -d "$_wdm" --wda-get-data-format 2>/dev/null \
+							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
+					case "$_qraw:$_qfmt" in
+						Y:802-3|N:raw-ip)
+							_log "$_if: формат кадров рассинхронизирован (драйвер raw_ip=$_qraw, модем $_qfmt) - приём отбрасывается" ;;
+					esac
 					_log "$_if: QMI отвечает connected, но адреса нет $_qn круга - переинициализирую модем"
 					"$RES/qmi-recover.sh" reset "$_path" "канал не поднялся ($_if)" >/dev/null 2>&1
 				fi

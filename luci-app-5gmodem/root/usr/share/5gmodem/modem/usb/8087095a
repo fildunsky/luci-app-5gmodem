@@ -52,6 +52,9 @@ T=$(echo "$O" | awk -F: '/^\+MTSM:/ {print $2}' | xargs)
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "AT+XLEC?;+XMCI=1;+XCCINFO=1;+XCCINFO?")
+# Снимок батча для блока соседей в конце файла: $O ниже переиспользуется под
+# CGSN/CIMI/CCID (та же история, что в профиле 2cb70007).
+_XMCI_RAW="$O"
 
 if [ "x$MODE_NUM" = "x7" ]; then
 	T=$(echo "$O" | awk -F[,:] '/^\+XCCINFO:/{print $11}' | xargs)
@@ -533,4 +536,63 @@ if [ -n "$PVCB" ]; then
 		PROTO="ecm"
 	;;
 	esac
+fi
+
+
+# ===== СОСЕДНИЕ СОТЫ (AT+XMCI) ==============================================
+#
+# Тот же разбор, что в профиле MBIM-композиции этого модема (2cb70007), - XMCI
+# у XMM одинаков в обеих композициях. Строки: тип 4 - обслуживающая, тип 5 -
+# соседняя; PCI и EARFCN шестнадцатеричные. Пересчёт уровней сверен с
+# интеловскими счётчиками на живом L850: AT+RSRP? -> -104.00 при XMCI rsrp=37
+# (37-141), AT+RSRQ? -> -14.50 при rsrq=16 ((16-45)/2).
+#
+# Дополнительные несущие (SCC) сюда НЕ попадают: они приходят через XLEC и
+# показываются в таблице агрегации, соседи - отдельные строки типа 5.
+_XN=$(printf '%s' "$_XMCI_RAW" | tr -d '\r' | awk -F, '
+	function hex2dec(h,   i, c, n) {
+		gsub(/^0[xX]/, "", h); h = toupper(h); n = 0
+		if (h == "" || h ~ /[^0-9A-F]/) return -1
+		for (i = 1; i <= length(h); i++) {
+			c = index("0123456789ABCDEF", substr(h, i, 1))
+			n = n * 16 + c - 1
+		}
+		return n
+	}
+	/^\+XMCI: 5,/ {
+		gsub(/"/, ""); gsub(/ /, "")
+		pci = hex2dec($6); earfcn = hex2dec($7)
+		rsrp = $10 + 0; rsrq = $11 + 0
+		if (pci < 0 || pci > 503 || earfcn <= 0 || earfcn > 262143) next
+		if (rsrp <= 0 || rsrp > 200) next
+		printf "%s{\"band\":\"\",\"earfcn\":\"%d\",\"pci\":\"%d\",\"rsrp\":\"%d\",\"rsrq\":\"%.1f\",\"rssi\":\"\",\"serving\":0}",
+			(n++ ? "," : ""), earfcn, pci, rsrp - 141, (rsrq - 45) / 2
+	}
+')
+# Диапазон - через channeltoband диспетчера: в ЭТОМ профиле она есть.
+if [ -n "$_XN" ]; then
+	_XN_FIX=""
+	_SIFS_XN="$IFS"; IFS='
+'
+	for _xn_o in $(printf '%s' "$_XN" | sed 's/},{/}\
+{/g'); do
+		_xn_e=$(printf '%s' "$_xn_o" | sed -n 's/.*"earfcn":"\([0-9]*\)".*/\1/p')
+		_xn_b=""
+		[ -n "$_xn_e" ] && _xn_b=$(channeltoband "$_xn_e" 2>/dev/null)
+		case "$_xn_b" in ''|*[!0-9]*) _xn_b="" ;; esac
+		_XN_FIX="$_XN_FIX${_XN_FIX:+,}$(printf '%s' "$_xn_o" | sed "s/\"band\":\"\"/\"band\":\"$_xn_b\"/")"
+	done
+	IFS="$_SIFS_XN"
+	_XN="$_XN_FIX"
+fi
+
+if [ -n "$PCI" ] && [ -n "$EARFCN" ]; then
+	_xn_e=$(echo $EARFCN | xargs); _xn_p=$(echo $PCI | xargs)
+	_xn_b=$(printf '%s' "$PBAND" | sed -n 's/^B\([0-9]\{1,\}\).*/\1/p')
+	[ -n "$_xn_b" ] || _xn_b=$(channeltoband "$_xn_e" 2>/dev/null)
+	NEIGHBORS=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
+		"$_xn_b" "$_xn_e" "$_xn_p" "$RSRP" "$RSRQ" "$RSSI")
+	NEIGHBORS="$NEIGHBORS${_XN:+,$_XN}"
+else
+	NEIGHBORS="$_XN"
 fi
