@@ -125,7 +125,7 @@ apdu_backend() {
 			# (проба отвечала "ни один порт не eSIM"). Сверяем с реальным драйвером
 			# и берём совместимый бэкенд; драйвер неизвестен - доверяем юзеру.
 			case "$(_wdm_driver)" in
-				*cdc_mbim*) echo mbim ;;
+				*cdc_mbim*) _mbim_or_at ;;
 				*qmi_wwan*) echo qmi ;;
 				*)          echo "$_ab" ;;
 			esac
@@ -148,10 +148,10 @@ apdu_backend() {
 			# eSIM отвечала code -1 "euicc_init" - в отчёте это выглядело как
 			# «eSIM нет», хотя eUICC у SDX55 читается именно по QMI.
 			case "$(_wdm_driver)" in
-				*cdc_mbim*) echo mbim ;;
+				*cdc_mbim*) _mbim_or_at ;;
 				*qmi_wwan*) echo qmi ;;
 				# Драйвер не определился - решаем по прото, как раньше.
-				*) [ "$_abp" = qmi ] && echo qmi || echo mbim ;;
+				*) [ "$_abp" = qmi ] && echo qmi || _mbim_or_at ;;
 			esac ;;
 		*) echo at ;;
 	esac
@@ -220,6 +220,30 @@ esim_wdm() {
 	echo ""
 }
 
+# УЗЕЛ ПОД KERNEL-ПРОТО mbim (umbim) НЕПРИКАСАЕМ. umbim открывает cdc-wdm
+# напрямую и НЕ через прокси; наша mbim-проба поднимает mbim-proxy на тот же
+# узел, и прокси отбирает канал - сессия данных рвётся. Живой случай 03.08.2026
+# (Cudy TR3000 + DW5821e, proto=mbim): «открываю модуль 5gmodem - отваливается
+# инет». qmi НЕ гейтим: QMI мультиплексирует клиентов штатно (наши метрики так
+# и живут), а у SDX55 eUICC читается ТОЛЬКО по QMI.
+_wdm_owned_by_umbim() {   # $1 - узел /dev/cdc-wdmN
+	[ -n "$1" ] || return 1
+	for _wo in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
+		[ "$(uci -q get "network.$_wo.proto")" = "mbim" ] && return 0
+	done
+	return 1
+}
+
+# mbim-бэкенд, если узлом не владеет umbim; иначе честный at (мост).
+_mbim_or_at() {
+	if _wdm_owned_by_umbim "$(esim_wdm)"; then
+		logger -t 5gmodem "esim: узлом $(esim_wdm) владеет umbim (proto=mbim) - mbim-проба запрещена, идём по AT"
+		echo at
+	else
+		echo mbim
+	fi
+}
+
 # Драйвер cdc-wdm активного модема: cdc_mbim | qmi_wwan | пусто. По нему apdu_backend
 # сверяет ручной qmi/mbim-выбор (см. там). Путь берём из /sys самого узла.
 _wdm_driver() {
@@ -236,6 +260,11 @@ euicc_probe_wdm() {
 	# Узел не определился - НЕ пробуем: с пустым LPAC_APDU_*_DEVICE lpac возьмёт
 	# устройство по своему умолчанию, а это опять чужой модем.
 	[ -c "$_pwdev" ] || return 1
+	# Страховка на случай прямого вызова с бэкендом mbim (мимо apdu_backend).
+	if [ "$1" = mbim ] && _wdm_owned_by_umbim "$_pwdev"; then
+		logger -t 5gmodem "esim: mbim-проба на узле umbim запрещена (рвёт сессию данных)"
+		return 1
+	fi
 	_pwsave=""
 	_pwskip=1
 	case "$1" in

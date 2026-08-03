@@ -24,7 +24,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+curl \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.2.5
+PKG_VERSION:=2.2.6
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -69,6 +69,10 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 	# Делаем и здесь, а не только в hotplug: при обновлении пакета
 	# usb-modeswitch запись возвращается, а модем уже воткнут - события не будет.
 	/usr/share/5gmodem/usbmode-fix.sh 2>/dev/null
+	# Пробы связности Windows/Android/Apple - вне rebind-защиты (см. скрипт):
+	# на сотовых аплинках их режет dnsmasq, и клиенты врут «нет интернета».
+	# Запускаем и здесь: uci-defaults отработает только на следующем буте.
+	sh /etc/uci-defaults/5gmodem-rebind-allow.sh 2>/dev/null
 }
 if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
 	mkdir -p "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n"

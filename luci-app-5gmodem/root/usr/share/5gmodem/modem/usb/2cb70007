@@ -104,9 +104,15 @@ RSRQ=$(echo "$O" | awk -F [:,] '/\+RSRQ:/{printf "%.0f\n", $4}')
 SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); printf "%.0f\n", $13/4+5}')
 
 LTE_Cx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{print $3}')
+case "$LTE_Cx" in ''|*[!0-9]*) LTE_Cx=1 ;; esac
 LTE_CA=$(($LTE_Cx -1))
-  
-if [ -n "LTE_CA" ]; then
+
+# LTE-A - ТОЛЬКО ПРИ РЕАЛЬНОЙ АГРЕГАЦИИ (в XLEC больше одной соты). Раньше тут
+# стояло [ -n "LTE_CA" ] - ЛИТЕРАЛ без $, истина всегда, - и ветка с
+# MODE="LTE-A | ..." выполнялась при любом ответе XLEC: одна несущая B3
+# показывалась как «4G+» (живой отчёт L850, 03.08.2026). Одна сота уходит в
+# фолбэк ниже - он честно пишет «LTE | B3» и сам заполняет PBAND/PCI/EARFCN.
+if [ "$LTE_CA" -ge 1 ]; then
 
 case $LTE_CA in
     1*) 

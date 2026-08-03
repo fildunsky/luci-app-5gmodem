@@ -110,6 +110,14 @@ ensure_iface() {
 			# обязан отличаться от порта метрик (его и помечает data_at_port).
 			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
 				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
+				# ПРОБНИК = ИНСТРУМЕНТ ПРОТОКОЛА. Для xmm порт валидируем тем же
+				# gcom probeport.gcom, каким его проверит сам xmm.sh: пробы через
+				# sms_tool с ним РАСХОДЯТСЯ - у L850 ttyACM2 отвечал на CGMM (и
+				# был выбран), а xmm на нём падал «AT port not answer!» по кругу
+				# (Cudy TR3000, 03.08.2026). gcom-а нет - прежний atprobe.
+				_rp_gcom=""
+				[ "$PROTO" = xmm ] && [ -f /etc/gcom/probeport.gcom ] \
+					&& command -v gcom >/dev/null 2>&1 && _rp_gcom=1
 				# ЖИВОЙ ПОРТ ДОЗВОНА НЕ ПЕРЕПИНОВЫВАЕМ. Выбор ниже зависит от
 				# ТЕКУЩЕГО порта метрик, а тот меняется со сменой активного
 				# модема - и порт дозвона флипал между tty при событиях на
@@ -123,7 +131,13 @@ ensure_iface() {
 					for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
 					         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
 						[ -e "$t" ] || continue
-						[ "/dev/$(basename "$t")" = "$_dp_cur" ] && { NEW="$_dp_cur"; break; }
+						[ "/dev/$(basename "$t")" = "$_dp_cur" ] || continue
+						# Для xmm «живость» порта решает gcom: существующий, но
+						# негодный пин (ttyACM2 у L850) иначе оставался навечно.
+						if [ -n "$_rp_gcom" ]; then
+							DEVPORT="$_dp_cur" gcom -s /etc/gcom/probeport.gcom >/dev/null 2>&1 || break
+						fi
+						NEW="$_dp_cur"; break
 					done
 				fi
 				# ДВА ПРОХОДА, КАК В detect.sh: сперва НАСТОЯЩИЙ модемный порт
@@ -137,7 +151,9 @@ ensure_iface() {
 						[ -e "$t" ] || continue
 						tt="/dev/$(basename "$t")"
 						[ "$tt" = "$MET" ] && continue
-						if [ "$DPMODE" = model ]; then
+						if [ -n "$_rp_gcom" ]; then
+							DEVPORT="$tt" gcom -s /etc/gcom/probeport.gcom >/dev/null 2>&1 || continue
+						elif [ "$DPMODE" = model ]; then
 							/usr/share/5gmodem/atprobe.sh "$tt" model >/dev/null 2>&1 || continue
 						else
 							/usr/share/5gmodem/atprobe.sh "$tt" >/dev/null 2>&1 || continue

@@ -398,6 +398,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
 		# «данные в роуминге» сохраняем через пересоздание, как pdptype (см. ниже)
 		OLDROAM=$(uci -q get "network.$IF.allow_roaming")
+		# МЕТРИКА - ЭТО ПРИОРИТЕТ, ВЫСТАВЛЕННЫЙ ПОЛЬЗОВАТЕЛЕМ (netpri пишет её в
+		# uci). Безусловное metric=20 ниже сбрасывало порядок аплинков при каждом
+		# пересоздании интерфейса (смена SIM, hotplug, кнопка) - сохраняем, как APN.
+		OLDMETRIC=$(uci -q get "network.$IF.metric")
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -457,13 +461,19 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			#
 			# Формы глоба - все четыре: у cdc_acm (ttyACM, Intel XMM) узел лежит
 			# под <интерфейс>/tty/, прямого потомка нет. См. portmap.sh.
+			# ПРОБНИК = ИНСТРУМЕНТ ПРОТОКОЛА (для xmm): см. пояснение в msw/iface.sh.
+			_dp_gcom=""
+			[ "$FPROTO" = xmm ] && [ -f /etc/gcom/probeport.gcom ] \
+				&& command -v gcom >/dev/null 2>&1 && _dp_gcom=1
 			for DPMODE in model at; do
 				for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/tty/ttyUSB* \
 				         /sys/bus/usb/devices/$AMP:*/ttyACM* /sys/bus/usb/devices/$AMP:*/tty/ttyACM*; do
 					[ -e "$t" ] || continue
 					tt="/dev/$(basename "$t")"
 					[ "$tt" = "$METRIC_AT" ] && continue
-					if [ "$DPMODE" = model ]; then
+					if [ -n "$_dp_gcom" ]; then
+						DEVPORT="$tt" gcom -s /etc/gcom/probeport.gcom >/dev/null 2>&1 || continue
+					elif [ "$DPMODE" = model ]; then
 						/usr/share/5gmodem/atprobe.sh "$tt" model >/dev/null 2>&1 || continue
 					else
 						/usr/share/5gmodem/atprobe.sh "$tt" >/dev/null 2>&1 || continue
@@ -483,7 +493,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# есть в конфиге стояло бы одно, а модем набирал бы другое. Пишем
 			# сразу то, что протокол понимает; смысл тот же (IP = IPv4).
 			[ "$(uci -q get "network.$IF.pdp")" = "IPV4" ] && uci set "network.$IF.pdp=IP"
-			uci set "network.$IF.metric=20"
+			uci set "network.$IF.metric=${OLDMETRIC:-20}"
 			FDEV="$DIALPORT"
 			# remember the dial AT port so resolve can re-pin it after renumbering
 			[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.data_at_port=$DIALPORT"
@@ -498,7 +508,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# secondary uplink by default so (re)creating it never hijacks another
 		# modem's default route; lower the metric in Network > Interfaces to make
 		# it primary.
-		uci set "network.$IF.metric=20"
+		uci set "network.$IF.metric=${OLDMETRIC:-20}"
 		[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 		uci commit network
 
@@ -641,8 +651,11 @@ case "$REQ" in
 		# «Failed to parse message data», интерфейс навсегда pending, лечилось
 		# только удалением пакета (отчёт 29.07, Banana Pi R4).
 		# Под ModemManager канал общий через qmi-proxy, и конфликта нет вовсе.
+		# 0489:e0b5 - тот же T77W968/DW5821e-eSIM под Foxconn VID: подтверждено на
+		# чистой установке 03.08.2026 (Cudy TR3000): umbim циклически валит подъём
+		# («Subscriber init failed», мусорные PIN-поля), под MM модем стабилен.
 		case "$_mki_vp" in
-			413c:81d7|05c6:9025)
+			413c:81d7|0489:e0b5|05c6:9025)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 					logger -t 5gmodem "mkiface: $_mki_vp - ведём через ModemManager (общий канал, иначе конфликт за cdc-wdm)"
 					PROTO="modemmanager"
@@ -727,6 +740,12 @@ OLDPDP=$(uci -q get "network.$IF.pdptype")
 # интерфейса (переключение SIM/eSIM, кнопка «создать интерфейс», hotplug), и в
 # роуминге данные не поднимались - выглядело как «галочка не сохраняется».
 OLDROAM=$(uci -q get "network.$IF.allow_roaming")
+# Метрика: сохранить пользовательскую, новому интерфейсу дать 20 - как в ветках
+# fibocom/atc/xmm. Раньше qmi/mbim/modemmanager создавались БЕЗ метрики: их
+# default-маршрут получал metric 0 и бил всех, а в «Приоритете интернета» слот
+# нельзя было сдвинуть ниже соседей, пока метрику не выставят руками (живой
+# отчёт Cudy TR3000 + DW5821e, 03.08.2026: MM-интерфейс с metric 0).
+OLDMETRIC=$(uci -q get "network.$IF.metric")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -755,6 +774,7 @@ case "$PROTO" in
 		;;
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
+uci set "network.$IF.metric=${OLDMETRIC:-20}"
 uci commit network
 
 # ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.

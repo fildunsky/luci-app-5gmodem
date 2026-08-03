@@ -343,7 +343,17 @@ dns_verdict() {
 	echo "--- защита от DNS-rebind ---"
 	_dv_rb=$(logread 2>/dev/null | grep -i "rebind" | tail -20)
 	if [ -n "$_dv_rb" ]; then
-		printf '%s\n' "$_dv_rb" | sed -n 's/.*detected: *//p' | sort | uniq -c | sed 's/^/  /'
+		# Имена достаём мягким шаблоном, а если он не совпал - показываем САМИ
+		# строки лога. Жёсткое 's/.*detected: *//' на 25.12.5 перестало
+		# совпадать (dnsmasq сменил формат), и три отчёта подряд печатали
+		# предупреждение БЕЗ имён - по ним нельзя было понять, режется ли проба
+		# связности Windows/Android или что-то безобидное.
+		_dv_names=$(printf '%s\n' "$_dv_rb" | sed -n 's/.*[Dd]etected[:,]* *//p' | sort | uniq -c)
+		if [ -n "$_dv_names" ]; then
+			printf '%s\n' "$_dv_names" | sed 's/^/  /'
+		else
+			printf '%s\n' "$_dv_rb" | tail -5 | sed 's/^/  | /'
+		fi
 		echo "  Эти имена dnsmasq НЕ отдаёт клиентам: ответ содержал приватный адрес."
 		case "$_dv_rb" in
 			*msftncsi*|*msftconnecttest*)
@@ -352,6 +362,15 @@ dns_verdict() {
 				echo "  ПОСТОЯННО, даже когда интернет работает. Лечится исключением:"
 				echo "    uci add_list dhcp.@dnsmasq[0].rebind_domain='msftncsi.com'"
 				echo "    uci add_list dhcp.@dnsmasq[0].rebind_domain='msftconnecttest.com'"
+				echo "    uci commit dhcp && /etc/init.d/dnsmasq restart"
+				;;
+		esac
+		case "$_dv_rb" in
+			*gstatic*|*connectivitycheck*)
+				echo "  СРЕДИ НИХ ПРОБА СВЯЗНОСТИ ANDROID (connectivitycheck.gstatic.com):"
+				echo "  телефоны на Wi-Fi будут показывать «Подключено, без интернета»."
+				echo "  Лечится исключением:"
+				echo "    uci add_list dhcp.@dnsmasq[0].rebind_domain='connectivitycheck.gstatic.com'"
 				echo "    uci commit dhcp && /etc/init.d/dnsmasq restart"
 				;;
 		esac

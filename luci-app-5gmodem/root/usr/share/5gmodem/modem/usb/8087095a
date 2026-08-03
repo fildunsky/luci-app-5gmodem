@@ -424,14 +424,40 @@ fi
 # целиком (оба порта), иначе таблица на странице скачет по высоте.
 _ANT=$(sms_tool -d $DEVICE at "at@errc:pcell_scell_measurement_info()" 2>/dev/null)
 if echo "$_ANT" | grep -q 'rsrp\['; then
+	# ДО ЧЕТЫРЁХ ТРАКТОВ, А НЕ ДВА. Прежний разбор брал rsrp[a,b] - написан с
+	# L850, у которого приёмных цепей две. У L860 в connected-состоянии прошивка
+	# отдаёт ЧЕТЫРЕ значения (живой дамп 03.08.2026, ttyACM3 под нагрузкой:
+	# rsrp[-75.75,-78.50,-75.75,-78.50]), и пользователь с четырьмя антеннами
+	# видел в таблице половину. В idle и у L850 значений два - это норма, не баг.
+	# -32768 - интеловский маркер «нет данных» (виден в imbal того же дампа),
+	# такие тракты пропускаем.
 	_ant_rnd() { [ -n "$1" ] && awk "BEGIN{printf \"%.0f\", $1}" 2>/dev/null; }
-	_r0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[\([^,]*\),.*/\1/p' | head -1)")
-	_r1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrp\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
-	_q0=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[\([^,]*\),.*/\1/p' | head -1)")
-	_q1=$(_ant_rnd "$(echo "$_ANT" | sed -n 's/.*rsrq\[[^,]*,\([^]]*\)\].*/\1/p' | head -1)")
-	if [ -n "$_r0" ] && [ -n "$_q0" ] && [ -n "$_r1" ] && [ -n "$_q1" ]; then
-		ANTPORTS="0:$_r0:$_q0 1:$_r1:$_q1"
-		if [ "$_r1" -gt -130 ] 2>/dev/null; then RXDIV="2rx"; else RXDIV="off"; fi
+	_rl=$(echo "$_ANT" | sed -n 's/.*rsrp\[\([^]]*\)\].*/\1/p' | head -1)
+	_ql=$(echo "$_ANT" | sed -n 's/.*rsrq\[\([^]]*\)\].*/\1/p' | head -1)
+	ANTPORTS=""
+	_an=0
+	_ai=0
+	while [ "$_ai" -lt 4 ]; do
+		_rv=$(echo "$_rl" | awk -F, -v i=$((_ai + 1)) '{print $i}')
+		_qv=$(echo "$_ql" | awk -F, -v i=$((_ai + 1)) '{print $i}')
+		[ -n "$_rv" ] || break
+		case "$_rv" in -32768*) _ai=$((_ai + 1)); continue ;; esac
+		_rr=$(_ant_rnd "$_rv"); _qr=$(_ant_rnd "$_qv")
+		case "$_rr" in ''|*[!0-9-]*) _ai=$((_ai + 1)); continue ;; esac
+		case "$_qr" in ''|*[!0-9-]*) _qr=0 ;; esac
+		ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_ai:$_rr:$_qr"
+		_an=$((_an + 1))
+		_ai=$((_ai + 1))
+	done
+	# Меньше двух трактов - не показываем ничего (прежнее правило «только
+	# целиком»: таблица не должна скакать по высоте от тика к тику).
+	if [ "$_an" -lt 2 ]; then
+		ANTPORTS=""
+	elif [ "$_an" -ge 4 ]; then
+		RXDIV="4rx"
+	else
+		_r1=$(echo "$ANTPORTS" | awk '{split($2,a,":"); print a[2]}')
+		if [ -n "$_r1" ] && [ "$_r1" -gt -130 ] 2>/dev/null; then RXDIV="2rx"; else RXDIV="off"; fi
 	fi
 fi
 

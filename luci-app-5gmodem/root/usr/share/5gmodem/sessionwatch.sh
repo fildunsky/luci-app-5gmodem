@@ -31,6 +31,21 @@ INTERVAL="${SESSIONWATCH_INTERVAL:-30}"
 
 _log() { logger -t 5gmodem "sessionwatch: $*"; }
 
+# ОГРАНИЧИТЕЛЬ ВРЕМЕНИ ДЛЯ uqmi. На заклиненном канале uqmi ВИСНЕТ НАВЕЧНО,
+# игнорируя собственный -t (задокументировано в mkiface, воспроизведено живьём
+# 03.08.2026: два зависших --get-data-status держали cdc-wdm, дозвон netifd
+# встал за ними в очередь). Сторож - демон: один такой вызов без предохранителя
+# повесил бы ВСЕ его проверки разом. Паттерн киллера тот же, что в smsbridge.
+_sw_run() {   # $1 - таймаут (с), дальше - команда
+	_swr_t="$1"; shift
+	"$@" 2>/dev/null &
+	_swr_p=$!
+	( exec >/dev/null 2>&1; sleep "$_swr_t"; kill "$_swr_p" 2>/dev/null ) </dev/null & _swr_w=$!
+	wait "$_swr_p"; _swr_rc=$?
+	kill "$_swr_w" 2>/dev/null; wait "$_swr_w" 2>/dev/null
+	return $_swr_rc
+}
+
 # Протоколы, за которыми следим. ModemManager СОЗНАТЕЛЬНО не трогаем: у него
 # своё слежение, и AT-порт нам не принадлежит.
 #   at-группа  - сессию ведём мы, состояние спрашиваем у модема по AT;
@@ -145,7 +160,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			_wdm=$(uci -q get "network.$_if.device")
 			case "$_wdm" in
 				/dev/*)
-					_ds=$(uqmi -d "$_wdm" --get-data-status 2>/dev/null \
+					_ds=$(_sw_run 10 uqmi -d "$_wdm" --get-data-status \
 						| tr -d '"' | tr -d '[:space:]')
 					[ "$_ds" = "connected" ] && _iip="connected" ;;
 			esac
