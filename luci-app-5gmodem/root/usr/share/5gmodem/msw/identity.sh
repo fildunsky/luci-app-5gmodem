@@ -238,8 +238,14 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	# конкретному аппарату; наследовать перезагрузки-по-питанию неизвестному
 	# новому железу нельзя - тот же принцип «действия по явному согласию»,
 	# что и mm_exclude.
+	# apn_plmn/apn_imsi - метка «для какой СИМки подобран APN», band_full -
+	# перечень диапазонов ЭТОГО железа. Обе к прежнему аппарату и относятся, а в
+	# списке очистки их не было: на живом стенде телефон, вставший в разъём
+	# SIM7100E, унаследовал и сеть 250-02, и его IMSI, и «1 3 7 8 20».
+	# model_vp - штамп железа рядом с именем модели (см. listmodems).
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
-	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2; do
+	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2 \
+	         model_vp apn_plmn apn_imsi band_full; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
 	uci -q set "$CFG.$2.vidpid=$_new"

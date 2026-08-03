@@ -1660,6 +1660,21 @@ pre.atcommand-output.has-output::after {
 	font-weight: 600;
 }
 
+/* ПОЯСНЕНИЕ, А НЕ ЯРЛЫК. Короткое «Модем не подключен» - подпись: жирная и по
+   центру пустой плашки. Но в эту же плашку попадает длинный текст про
+   устройство, которое модемом не отвечает (телефон в режиме USB-модема), и там
+   жирное начертание во всю ширину читается тяжело, а без отступов текст лип к
+   рамке. Модификатор снимает жирность и даёт поля; ширину ограничиваем, чтобы
+   строки не растягивались на весь экран. */
+.tgm-nomodem.tgm-nomodem-note {
+	font-weight: 400;
+	padding: 14px 18px;
+	line-height: 1.45;
+	text-align: center;
+	text-wrap: pretty;
+}
+.tgm-nomodem.tgm-nomodem-note > span { max-width: 68ch; }
+
 /* ===== ДИАЛОГИ eSIM (5gesim.js) ===== */
 .esim-modal{width:100%;box-sizing:border-box;}
 .esim-dlrow{display:flex;align-items:center;gap:14px;text-align:left;padding:6px 0 2px;}

@@ -692,6 +692,24 @@ if [ -z "$DEVICE" ]; then
 	_amp0=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	_amp0_if=$(uci -q get "5gmodem.$(secname "$_amp0").network")
 	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ]; then
+		# САМОЛЕЧЕНИЕ: АКТИВНОГО НЕТ В СПИСКЕ МОДЕМОВ - ЗОВЁМ resolve.
+		#
+		# Переоценку активного делает hotplug, но он срабатывает не всегда: об
+		# исчезновении устройства, которое модемом НЕ является (телефон в режиме
+		# USB-модема), обработчик не узнаёт вовсе. Тогда активным остаётся путь,
+		# которого в списке модемов нет: метрик нет, вкладки нет, переключиться
+		# нечем - страница залипает на пустой карточке (живой случай 03.08.2026).
+		# resolve эту ситуацию разбирает мгновенно, поэтому зовём его сами - но не
+		# чаще раза в минуту, чтобы опрос не превратился в его вызыватель.
+		_sh_mark=/tmp/5gmodem_selfresolve
+		_sh_now=$(cut -d. -f1 /proc/uptime)
+		_sh_last=$(cat "$_sh_mark" 2>/dev/null); case "$_sh_last" in ''|*[!0-9]*) _sh_last=0 ;; esac
+		if [ -n "$_POLL_AM" ] && [ "$((_sh_now - _sh_last))" -ge 60 ] \
+		   && ! "$RES/listmodems.sh" | jsonfilter -e '@[*].path' 2>/dev/null | grep -qxF "$_POLL_AM"; then
+			printf '%s' "$_sh_now" > "$_sh_mark" 2>/dev/null
+			logger -t 5gmodem "активный модем «$_POLL_AM» отсутствует в списке - переоцениваю (resolve)"
+			( "$RES/modemswitch.sh" resolve >/dev/null 2>&1 & ) </dev/null
+		fi
 		_age=$(_snapshot_age)
 		[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }
 		echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
@@ -2471,9 +2489,22 @@ if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] \
 	logger -t 5gmodem "модель «$MODEL» не от вендора $(uci -q get "5gmodem.$AMP_SEC.vidpid") - в профиль не пишем"
 	MODEL=""
 fi
+# УСТРОЙСТВУ БЕЗ AT-КАНАЛОВ МОДЕЛЬ НЕ ПРИПИСЫВАЕМ. У него нечем ответить на
+# CGMM, значит любой «прочитанный» для него ответ - ЧУЖОЙ (пришёл с порта
+# соседа: гонка портов при смене активного). Живой случай 03.08.2026: телефон
+# в режиме USB-модема побыл активным, и опрос записал ему модель FM350.
+if [ -n "$MODEL" ] && [ -n "$AMP" ] \
+   && ! "$RES/listmodems.sh" 2>/dev/null \
+	| jsonfilter -e "@[@.path=\"$AMP\"].tty[0]" -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null \
+	| grep -q .; then
+	MODEL=""
+fi
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
-	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] || {
+	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] \
+	&& [ "$(uci -q get "5gmodem.$AMP_SEC.model_vp")" = "$(uci -q get "5gmodem.$AMP_SEC.vidpid")" ] || {
 		uci -q set "5gmodem.$AMP_SEC.model=$MODEL"
+		# Штамп железа рядом с именем - см. пояснение в modemswitch.sh (resolve).
+		uci -q set "5gmodem.$AMP_SEC.model_vp=$(uci -q get "5gmodem.$AMP_SEC.vidpid")"
 		uci -q commit 5gmodem
 	}
 fi

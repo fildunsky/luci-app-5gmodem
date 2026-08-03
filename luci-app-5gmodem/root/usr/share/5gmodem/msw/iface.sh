@@ -92,21 +92,59 @@ ensure_iface() {
 	CUR=$(uci -q get "network.$IF.device")
 	NEW=""
 	case "$PROTO" in
-		mbim|qmi|xmm|ncm) NEW=$(wdm_for_path "$P") ;;
+		mbim|qmi|ncm)     NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
-		atc)
-			# atc holds its AT port open for URC monitoring, so it must stay on a
-			# tty DISTINCT from the app's metrics/SMS port (data_at_port marks such
-			# a modem). Re-resolve an AT-answering tty under this modem's path that
-			# is not the metrics port, and remember it.
+		atc|xmm)
+			# atc И xmm ДОЗВАНИВАЮТСЯ ПО AT-ПОРТУ, а не по каналу управления.
+			#
+			# xmm стоял выше, в одной строке с mbim/qmi/ncm, и получал сюда
+			# cdc-wdm - устройство, которого его обработчик не понимает вовсе
+			# (он делает basename и ищет узел в /sys/class/tty). На модеме БЕЗ
+			# cdc-wdm это давало пусто, а на модеме С ним (напр. L850-GL в
+			# композиции 2cb7:0007) - рабочий интерфейс молча переставлялся на
+			# /dev/cdc-wdm0 и падал. Переподвязка случается при возвращении
+			# модема и при смене активного, отсюда и «переключил модемы - пропал
+			# интернет».
+			#
+			# atc вдобавок держит свой AT-порт открытым ради URC, поэтому порт
+			# обязан отличаться от порта метрик (его и помечает data_at_port).
 			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
 				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
-				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
-				         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
-					[ -e "$t" ] || continue
-					tt="/dev/$(basename "$t")"
-					[ "$tt" = "$MET" ] && continue
-					at_probe "$tt" && { NEW="$tt"; break; }
+				# ЖИВОЙ ПОРТ ДОЗВОНА НЕ ПЕРЕПИНОВЫВАЕМ. Выбор ниже зависит от
+				# ТЕКУЩЕГО порта метрик, а тот меняется со сменой активного
+				# модема - и порт дозвона флипал между tty при событиях на
+				# ЧУЖОМ устройстве (телефон сменил композицию -> resolve ->
+				# device у FM350 стал другим -> uci commit + network reload ->
+				# рабочий модем передёрнуло; живой лог 03.08.2026 07:40).
+				# Пока прежний порт существует, принадлежит ЭТОМУ модему и не
+				# совпал с портом метрик - оставляем его, и конфиг не меняется.
+				_dp_cur=$(uci -q get "$CFG.$SEC.data_at_port")
+				if [ -n "$_dp_cur" ] && [ -c "$_dp_cur" ] && [ "$_dp_cur" != "$MET" ]; then
+					for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
+					         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
+						[ -e "$t" ] || continue
+						[ "/dev/$(basename "$t")" = "$_dp_cur" ] && { NEW="$_dp_cur"; break; }
+					done
+				fi
+				# ДВА ПРОХОДА, КАК В detect.sh: сперва НАСТОЯЩИЙ модемный порт
+				# (отвечает моделью на AT+CGMM), и только потом любой отвечающий.
+				# Голого AT мало - на многопортовых модемах на него отзываются и
+				# вспомогательные порты: живой FM350 отдавал так ttyUSB0, после
+				# чего дозвон падал с «AT port not answer!» по кругу.
+				[ -n "$NEW" ] || for DPMODE in model at; do
+					for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
+					         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
+						[ -e "$t" ] || continue
+						tt="/dev/$(basename "$t")"
+						[ "$tt" = "$MET" ] && continue
+						if [ "$DPMODE" = model ]; then
+							/usr/share/5gmodem/atprobe.sh "$tt" model >/dev/null 2>&1 || continue
+						else
+							/usr/share/5gmodem/atprobe.sh "$tt" >/dev/null 2>&1 || continue
+						fi
+						NEW="$tt"; break
+					done
+					[ -n "$NEW" ] && break
 				done
 				[ -n "$NEW" ] || NEW=$(uci -q get "$CFG.$SEC.at_port")
 				[ -n "$NEW" ] && uci -q set "$CFG.$SEC.data_at_port=$NEW"

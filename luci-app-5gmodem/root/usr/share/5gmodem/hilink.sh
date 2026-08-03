@@ -387,7 +387,9 @@ metrics_json() {
 			| sed 's/[^A-Za-z0-9]/_/g')"
 		_ch=0
 		[ -n "$_model" ] && [ "$(uci -q get "$CFG.$_hsec.model")" != "$_model" ] && {
-			uci -q set "$CFG.$_hsec.model=$_model"; _ch=1; }
+			uci -q set "$CFG.$_hsec.model=$_model"
+			# Штамп железа - см. пояснение в modemswitch.sh (resolve).
+			uci -q set "$CFG.$_hsec.model_vp=$(uci -q get "$CFG.$_hsec.vidpid")"; _ch=1; }
 		[ -n "$_imei" ] && [ "$(uci -q get "$CFG.$_hsec.imei")" != "$_imei" ] && {
 			uci -q set "$CFG.$_hsec.imei=$_imei"; _ch=1; }
 		[ "$_ch" = "1" ] && uci -q commit "$CFG"

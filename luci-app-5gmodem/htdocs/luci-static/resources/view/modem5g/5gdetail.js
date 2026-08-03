@@ -1563,7 +1563,11 @@ function buildNoModemBlock() {
 	return E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-none-block' }, [
 		/* Тот же моноширинный заголовок, что и у реальной карточки (#modemname). */
 		E('h3', { 'style': 'font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; display:flow-root;' }, _('Modem')),
-		E('div', { 'class': 'tgm-nomodem' }, _('No modem connected'))
+		/* Текст в <span>: на нём ограничиваем ширину длинного пояснения (см. css),
+		   сам блок остаётся flex-контейнером и центрирует его. */
+		E('div', { 'class': 'tgm-nomodem', 'id': 'modem-none-text' }, [
+			E('span', {}, _('No modem connected'))
+		])
 	]);
 }
 
@@ -1657,6 +1661,23 @@ function applyMetrics(json) {
 						if (!_none && _mib && _mib.parentNode) {
 							_none = buildNoModemBlock();
 							_mib.parentNode.insertBefore(_none, _mib);
+						}
+						/* «МОДЕМ НЕ ПОДКЛЮЧЕН» - НЕПРАВДА, КОГДА onbus=1.
+						   Устройство на шине есть, просто модемом не отвечает. Живой
+						   случай: телефон в режиме USB-модема (тетеринг) - у него нет
+						   ни AT-порта, ни канала управления, весь сотовый стек внутри
+						   телефона, наружу торчит одна сетевая карта. Как аплинк он
+						   при этом прекрасно работает и виден в «Приоритете интернета»,
+						   поэтому надпись «модема нет» сбивала с толку. */
+						var _nt = document.getElementById('modem-none-text');
+						if (_nt) {
+							/* Длинное пояснение - обычным начертанием и с полями,
+							   короткая подпись - как была (см. tgm-nomodem-note). */
+							_nt.classList.toggle('tgm-nomodem-note', !!_onbus);
+							var _ns = _nt.firstElementChild || _nt;
+							_ns.textContent = _onbus
+								? _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.')
+								: _('No modem connected');
 						}
 						if (_none) { _none.style.display = ''; }
 						return;   /* метрики не заполняем - заполнять нечем */
@@ -2071,6 +2092,20 @@ function applyMetrics(json) {
 								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(json.protocol);
 							if (mmBtn) { mmBtn.style.display = 'none'; }
 							if (xmmBtn) { xmmBtn.style.display = ''; }
+							if (dbgBtn) { dbgBtn.style.display = 'none'; }
+						} else if (!json.modem && !json.imei && String(json.protocol || '') === 'dhcp') {
+							/* УСТРОЙСТВО ВООБЩЕ НЕ МОДЕМ - например телефон в режиме
+							   USB-модема (тетеринг). У него нет ни AT-порта, ни канала
+							   управления: наружу торчит сетевая карта, весь сотовый
+							   стек остаётся внутри телефона. Советовать тут
+							   «переключите интерфейс на ModemManager» бессмысленно и
+							   сбивает с толку - MM таким устройством не управляет и
+							   диапазонов у нас не появится ни при каком протоколе.
+							   Кнопки переключения прячем все. */
+							document.getElementById('bandnote-text').textContent =
+								_('This is a plain USB network device (phone tethering or similar), not a modem: it has no AT port and no control channel. Bands, network mode and other cellular settings are managed on the device itself.');
+							if (mmBtn) { mmBtn.style.display = 'none'; }
+							if (xmmBtn) { xmmBtn.style.display = 'none'; }
 							if (dbgBtn) { dbgBtn.style.display = 'none'; }
 						} else {
 							/* Два разных случая, и путать их нельзя. Если списки
@@ -2566,8 +2601,16 @@ simDialog: baseclass.extend({
 			   трогает ни порт, ни замок - ~10 мс). Повторное открытие рисует
 			   последние известные цифры сразу, а не прочерки до первого тика.
 			   Модем/порт не задерживают render ни на миллисекунду. */
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek' ]), '{}')
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek' ]), '{}'),
+			/* Список модемов - для проверки закреплённой вкладки (см. ниже).
+			   Дёшево: listmodems держит готовый JSON в /tmp, а ряд вкладок его
+			   всё равно запрашивает. */
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]')
 		]).then(function(res) {
+			var _lmPaths = [];
+			try {
+				_lmPaths = (JSON.parse(res[res.length - 1] || '[]') || []).map(function(m) { return m.path; });
+			} catch (e) {}
 			/* ЧЕЙ МОДЕМ ПОКАЗЫВАЕТ ЭТА СТРАНИЦА. Вкладка модема = активный модем
 			   в конфиге (клик по вкладке делает switch и перезагружает страницу),
 			   поэтому путь фиксируем ОДИН раз на жизнь страницы и дальше сверяем
@@ -2580,7 +2623,7 @@ simDialog: baseclass.extend({
 			   один и тот же модем при верных ответах бэкенда (31.07.2026).
 			   peek читает конфиг на роутере и отдаёт path вместе со снимком. */
 			var _pk = {};
-			try { _pk = JSON.parse(res[res.length - 1] || '{}') || {}; } catch (e) {}
+			try { _pk = JSON.parse(res[res.length - 2] || '{}') || {}; } catch (e) {}
 			/* Порядок источников: КЛИКНУТАЯ ВКЛАДКА (sessionStorage, пишет
 			   modemtabs перед reload) -> peek с роутера -> uci-кэш. Вывод пути
 			   из active делал обе вкладки близнецами: каждая страница честно
@@ -2594,7 +2637,16 @@ simDialog: baseclass.extend({
 			   теряет path - по этому и проверяем. */
 			if (_tabSel) {
 				var _tabSec = 'm_' + _tabSel.replace(/[^A-Za-z0-9]/g, '_');
-				if ((uci.get('5gmodem', _tabSec, 'path') || '') !== _tabSel) {
+				/* ПРОВЕРКИ ДВЕ, И ОДНОЙ МАЛО.
+				   Секция может честно описывать этот путь, а модемом устройство
+				   при этом не быть: у телефона в режиме USB-модема секция есть
+				   (её заводит интерфейс), path совпадает - и страница оставалась
+				   приколотой к нему НАВСЕГДА. Закрепление живёт в sessionStorage,
+				   то есть переживает и F5: человек видел вечную пустую карточку и
+				   не мог вернуться на рабочий модем (живой случай 03.08.2026).
+				   Поэтому вторым условием - путь обязан быть в списке модемов. */
+				if ((uci.get('5gmodem', _tabSec, 'path') || '') !== _tabSel
+				    || (_lmPaths.length && _lmPaths.indexOf(_tabSel) < 0)) {
 					_tabSel = '';
 					try { window.sessionStorage.removeItem('5gm-tab'); } catch (e) {}
 				}

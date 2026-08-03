@@ -440,14 +440,37 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# периодический опрос не сталкивались на одном tty.
 			METRIC_AT=$(_mk_atport)
 			DIALPORT=""
+			# ПОРТ ДОЗВОНА ИЩЕМ ТЕМ ЖЕ АРБИТРОМ, ЧТО И ПОРТ МЕТРИК.
+			#
+			# Здесь стоял голый `at_query "AT"` с выходом на ПЕРВОМ ответившем. У
+			# многопортовых модемов этого мало: на голый AT отзываются и
+			# вспомогательные/DIAG-порты, модемом при этом не являясь. detect.sh
+			# знает это давно и потому ходит двумя проходами через atprobe -
+			# сперва ищет порт, отвечающий моделью на AT+CGMM.
+			#
+			# Живой стенд (FM350, 03.08.2026): настоящие модемные порты - ttyUSB1
+			# и ttyUSB3, а «первым ответившим» оказывался ttyUSB0. Его и получал
+			# xmm/atc, после чего падал с «AT port not answer!» по кругу, а
+			# интерфейс показывал NO_DEVICE. Тот же двухпроходный отбор здесь
+			# закрывает вопрос: сперва настоящий модемный порт, и лишь потом любой
+			# отвечающий.
+			#
 			# Формы глоба - все четыре: у cdc_acm (ttyACM, Intel XMM) узел лежит
 			# под <интерфейс>/tty/, прямого потомка нет. См. portmap.sh.
-			for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/tty/ttyUSB* \
-			         /sys/bus/usb/devices/$AMP:*/ttyACM* /sys/bus/usb/devices/$AMP:*/tty/ttyACM*; do
-				[ -e "$t" ] || continue
-				tt="/dev/$(basename "$t")"
-				[ "$tt" = "$METRIC_AT" ] && continue
-				at_query "$tt" "AT" 5 >/dev/null 2>&1 && { DIALPORT="$tt"; break; }
+			for DPMODE in model at; do
+				for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/tty/ttyUSB* \
+				         /sys/bus/usb/devices/$AMP:*/ttyACM* /sys/bus/usb/devices/$AMP:*/tty/ttyACM*; do
+					[ -e "$t" ] || continue
+					tt="/dev/$(basename "$t")"
+					[ "$tt" = "$METRIC_AT" ] && continue
+					if [ "$DPMODE" = model ]; then
+						/usr/share/5gmodem/atprobe.sh "$tt" model >/dev/null 2>&1 || continue
+					else
+						/usr/share/5gmodem/atprobe.sh "$tt" >/dev/null 2>&1 || continue
+					fi
+					DIALPORT="$tt"; break
+				done
+				[ -n "$DIALPORT" ] && break
 			done
 			[ -n "$DIALPORT" ] || DIALPORT="$METRIC_AT"
 			uci set "network.$IF.proto=$FPROTO"

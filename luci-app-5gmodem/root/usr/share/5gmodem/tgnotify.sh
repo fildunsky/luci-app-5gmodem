@@ -147,8 +147,21 @@ tick() {
 	return 0
 }
 
+# Есть ли у устройства канал SMS вообще: tty или cdc-wdm в списке, либо HiLink.
+# Телефон-тетеринг (в списке ради вкладки) не имеет НИЧЕГО из этого - и его
+# нужно пропустить ДО чтения: у неактивного модема с пустым портом smsbridge
+# падает на глобальный readport, то есть бот читал бы входящие АКТИВНОГО модема
+# под именем телефона - каждое сообщение приходило бы в чат дважды.
+_tg_has_sms() {   # $1 - usb-путь
+	[ "$(uci -q get "$CFG.$(_tg_sec "$1").kind")" = "hilink" ] && return 0
+	"$RES/listmodems.sh" 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$1\"].tty[0]" -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null \
+		| grep -q .
+}
+
 _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нельзя (Telegram недоступен)
 	_tk_path="$1"
+	_tg_has_sms "$_tk_path" || return 0
 	_tk_port=$(_tg_port "$_tk_path")
 	_tk_seen=$(_seen_json "$_tk_path")
 	_tk_first=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.first' 2>/dev/null)
