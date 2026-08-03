@@ -395,6 +395,26 @@ migrate_profile() {   # $1 - старая секция, $2 - новая секц
 		_mv=$(uci -q get "$CFG.$1.$_mk")
 		[ -n "$_mv" ] && uci -q set "$CFG.$2.$_mk=$_mv"
 	done
+	# ИНТЕРФЕЙС-ДВОЙНИК ТОГО ЖЕ МОДЕМА УБИРАЕМ. Приёмник оставил себе свой
+	# интерфейс (keepnet), но у старой секции остался СВОЙ - со штампом того же
+	# IMEI и протухшей абсолютной нодой /dev/tty*. Ноды нумеруются заново, и
+	# netifd продолжал дозваниваться по старой ноде В ТОТ ЖЕ модем через второй
+	# AT-порт: две карточки wwan0 с одним IP и драка интерфейсов за порты
+	# (Эдуард, 03.08.2026: L850 переехал 1-1.4 -> 1-1.2, старый iface modem
+	# с device=/dev/ttyACM0 звонил параллельно с новым modem3). Удаляем ТОЛЬКО
+	# при совпадении штампа IMEI - интерфейс другого модема или созданный
+	# руками не трогаем.
+	if [ -n "$_mp_keepnet" ]; then
+		_mp_oldnet=$(uci -q get "$CFG.$1.network")
+		if [ -n "$_mp_oldnet" ] && [ "$_mp_oldnet" != "$_mp_dstnet" ] \
+		   && [ "$(uci -q get "network.$_mp_oldnet.modem_imei")" = "$_mp_dstimei" ]; then
+			ifdown "$_mp_oldnet" 2>/dev/null
+			uci -q delete "network.$_mp_oldnet"
+			uci -q commit network
+			ubus call network reload >/dev/null 2>&1
+			logger -t 5gmodem "перенос профиля $1 -> $2: интерфейс-двойник $_mp_oldnet удалён (тот же IMEI $_mp_dstimei, модем уже живёт на $_mp_dstnet)"
+		fi
+	fi
 	uci -q delete "$CFG.$1"
 	uci -q commit "$CFG"
 	logger -t 5gmodem "профиль перенесён: $1 -> $2 (тот же модем в другом разъёме)"
@@ -460,6 +480,13 @@ ensure_section() {
 	fi
 
 	_es_imei=$(modem_imei "$1")
+	# ЖИВОЕ ЧТЕНИЕ МОГЛО ПРОВАЛИТЬСЯ, А IMEI УЖЕ ИЗВЕСТЕН. AT-порт бывает занят
+	# надолго - в сценарии дубля его как раз душит интерфейс-двойник, - и
+	# миграция откладывалась вечно: два профиля с одним IMEI жили параллельно.
+	# Поллер к этому времени записал IMEI в секцию - берём его: гварды ниже
+	# (serial-противоречие, присутствие старого пути) работают и для
+	# сохранённого значения.
+	[ -n "$_es_imei" ] || _es_imei=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
 	if [ -n "$_es_imei" ]; then
 		_es_old=$(sec_by_imei "$_es_imei" "$SEC")
 		# SERIAL ОПРОВЕРГАЕТ IMEI - ЗАКРЫВАЕМ ДЫРУ В ГВАРДЕ НИЖЕ.

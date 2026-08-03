@@ -1155,6 +1155,70 @@ resolve)
 	# re-creation needed.
 	PRESENT=$("$RES/listmodems.sh" | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
 
+	# СХЛОПЫВАНИЕ ДУБЛЕЙ ПРОФИЛЕЙ ПО IMEI. ensure_section мигрирует профиль в
+	# момент появления модема, но если тогда IMEI прочитать не удалось (AT-порт
+	# занят - например, интерфейс-двойник как раз душит модем), два профиля с
+	# одним IMEI остаются жить параллельно: старый путь «не подключён» + новый
+	# живой (Эдуард, 03.08.2026: L850 переехал 1-1.4 -> 1-1.2, в UI два
+	# одинаковых модема). Добиваем миграцию здесь по СОХРАНЁННЫМ значениям:
+	# присутствующая секция - приёмник, отсутствующая - источник. Гварды те же,
+	# что в ensure_section: старый путь занят - не трогаем (IMEI прочитан у
+	# чужого); серийники есть у обоих и разные - это разные аппараты.
+	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		case "$SEC" in m_park_*) continue ;; esac
+		P=$(uci -q get "$CFG.$SEC.path")
+		[ -n "$P" ] || continue
+		echo " $PRESENT " | grep -q " $P " || continue
+		_dd_imei=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
+		[ -n "$_dd_imei" ] || continue
+		_dd_old=$(sec_by_imei "$_dd_imei" "$SEC")
+		[ -n "$_dd_old" ] || continue
+		case "$_dd_old" in m_park_*) continue ;; esac
+		_dd_op=$(uci -q get "$CFG.$_dd_old.path")
+		[ -n "$_dd_op" ] && [ -e "/sys/bus/usb/devices/$_dd_op" ] && continue
+		_dd_os=$(uci -q get "$CFG.$_dd_old.serial")
+		_dd_ns=$(uci -q get "$CFG.$SEC.serial")
+		[ -n "$_dd_os" ] && [ -n "$_dd_ns" ] && [ "$_dd_os" != "$_dd_ns" ] && continue
+		logger -t 5gmodem "resolve: дубль профиля по IMEI $_dd_imei ($_dd_old, путь ${_dd_op:-?} отсутствует) - переношу в $SEC"
+		migrate_profile "$_dd_old" "$SEC"
+	done
+
+	# НОДА-КОЛЛИЗИЯ: интерфейс ОТСУТСТВУЮЩЕГО модема, чья абсолютная нода
+	# (/dev/tty*) сейчас принадлежит другому живому модему. Нумерация нод
+	# сдвигается при каждой переэнумерации, и netifd продолжает дозваниваться
+	# по старой ноде В ЧУЖОЙ модем: держит его AT-порт, мешает штатному дозвону
+	# (Эдуард: modem4 пути 2-1 с device=/dev/ttyACM0 живого L850). Интерфейс
+	# НЕ удаляем - отсутствие модема часто временное, настройки ценные, - а
+	# выключаем (auto=0) с нашей меткой; вернулся модем на путь - метку и
+	# запрет снимаем здесь же.
+	_nc_changed=""
+	for _nc_if in $(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
+		_nc_p=$(uci -q get "network.$_nc_if.modem_path")
+		if echo " $PRESENT " | grep -q " $_nc_p "; then
+			if [ "$(uci -q get "network.$_nc_if.modem_parked")" = "1" ]; then
+				uci -q delete "network.$_nc_if.auto"
+				uci -q delete "network.$_nc_if.modem_parked"
+				_nc_changed=1
+				logger -t 5gmodem "resolve: модем $_nc_p вернулся - интерфейс $_nc_if снова включён"
+			fi
+			continue
+		fi
+		[ "$(uci -q get "network.$_nc_if.modem_parked")" = "1" ] && continue
+		_nc_dev=$(uci -q get "network.$_nc_if.device")
+		case "$_nc_dev" in /dev/tty*) : ;; *) continue ;; esac
+		[ -e "$_nc_dev" ] || continue
+		_nc_own=""
+		for _nc_pp in $PRESENT; do
+			modem_ttys "$_nc_pp" 2>/dev/null | grep -qxF "$_nc_dev" && { _nc_own="$_nc_pp"; break; }
+		done
+		[ -n "$_nc_own" ] || continue
+		logger -t 5gmodem "resolve: у интерфейса $_nc_if модема нет (путь $_nc_p), а его нода $_nc_dev принадлежит живому $_nc_own - выключаю до возврата модема"
+		ifdown "$_nc_if" 2>/dev/null
+		uci -q set "network.$_nc_if.auto=0"
+		uci -q set "network.$_nc_if.modem_parked=1"
+		_nc_changed=1
+	done
+	[ -n "$_nc_changed" ] && { uci -q commit network; ubus call network reload >/dev/null 2>&1; }
 
 	# refresh at_port for every present, configured modem
 	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do

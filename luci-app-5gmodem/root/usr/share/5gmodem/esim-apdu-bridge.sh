@@ -83,7 +83,13 @@ while IFS= read -r line; do
 				hex2bin "$tx" "$_rq"
 				set -- "$@" --method=POST "--body-file=$_rq"
 			fi
-			wget -q -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+			# -nv, НЕ -q: GNU wget с -q глушит и ошибки TLS - в stderr не попадало
+			# «Self-signed certificate encountered», и сертификатный откат ниже
+			# НЕ СРАБАТЫВАЛ НИКОГДА: любой SM-DP+ с неверифицируемой цепочкой
+			# кончался синтетическим 500 («HTTP status code error» без цифр).
+			# Живой случай: Yota mno-0b.esimservices.com. С -nv ошибки видны,
+			# заголовки (-S) и тело (-O) - как прежде.
+			wget -nv -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
 				"$@" "$url" 2>"$_rh"
 			rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
 			# ОТКАТ НА НЕПРОВЕРЯЕМОЕ СОЕДИНЕНИЕ, если сорвалась именно проверка
@@ -94,12 +100,29 @@ while IFS= read -r line; do
 			# GSMA *Test* CI, которого в публичных бандлах нет и быть не может.
 			# Профиль защищён криптографией на уровне eUICC, а не этим TLS.
 			if [ -z "$rcode" ] && grep -qi "certificate\|issuer" "$_rh" 2>/dev/null; then
-				wget -q -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+				wget -nv -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
 					--no-check-certificate "$@" "$url" 2>"$_rh"
 				rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
 			fi
 			# Транспорт не состоялся (DNS/TLS/таймаут) - ответа нет вообще.
 			# Отдаём 500: lpac трактует как ошибку ES9+ и не виснет в ожидании.
+			# В лог загрузки - ЧЕСТНАЯ причина: lpac дальше скажет лишь «HTTP
+			# status code error», и по логу пользователя нельзя было отличить
+			# отказ сервера (какой код?) от недостижимости (DNS/TLS/таймаут).
+			# Живой случай: Yota mno-0b.esimservices.com, в отчёте только
+			# es9p_initiate_authentication FAIL без единой цифры.
+			if [ -z "$rcode" ]; then
+				# GNU wget с -q глушит и ошибки; ради причины делаем короткий
+				# повтор без -q. Транспорт уже мёртв - лишний заход дёшев.
+				_why=$(wget -S -O /dev/null --timeout=10 --tries=1 "$@" "$url" 2>&1 \
+					| grep -iE 'failed|error|unable|refused|timed|denied|certificate' \
+					| tail -2 | tr '\n' ' ' | tr -d '\r')
+				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","transport":"failed","why":"%s"}}\n' \
+					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$(printf '%s' "$_why" | tr '"' "'")" >> "$LIVELOG"
+			else
+				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","rcode":%s,"bytes":%s}}\n' \
+					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$rcode" "$(wc -c < "$_rb" 2>/dev/null || echo 0)" >> "$LIVELOG"
+			fi
 			[ -n "$rcode" ] || rcode=500
 			# Сохраняем тело ответа ES9+, когда в нём есть маркеры ошибки: по
 			# SGP.22 SM-DP+ кладёт коды GSMA (errorCode/subjectCode/reasonCode)
