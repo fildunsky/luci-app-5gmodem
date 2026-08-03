@@ -1,0 +1,7 @@
+Агрегация ➜ AT^CA_INFO?;AT^CA_INFO?
+Температура ➜ AT^TEMP?;AT^TEMP?
+Режим сети (чтение) ➜ AT^SLMODE?;AT^SLMODE?
+Диапазоны LTE ➜ AT^BAND_PREF?;AT^BAND_PREF?
+Скорость USB ➜ AT^USBTYPE?;AT^USBTYPE?
+Отладка ➜ AT^DEBUG?;AT^DEBUG?
+Вендор-заказчик ➜ AT^CUSTOMER?;AT^CUSTOMER?

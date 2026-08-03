@@ -146,8 +146,27 @@ if [ "$REGOK" = "1" ]; then
 			# gives PCI/EARFCN/bandwidth per carrier, and activation state) ---
 			OCA=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-lte-cphy-ca-info 2>/dev/null)
 
-			# more than one cell block present -> CA is at least configured
-			echo "$OCA" | grep -q "^Secondary Cell" && MODE="LTE-A"
+			# АГРЕГАЦИЯ ЗАСЧИТЫВАЕТСЯ ТОЛЬКО ПО АКТИВНОЙ НЕСУЩЕЙ.
+			#
+			# Здесь стояло «есть блок Secondary Cell -> LTE-A», но QMI перечисляет
+			# и СКОНФИГУРИРОВАННЫЕ несущие в состоянии deactivated: на стенде
+			# модем в одиночном B3 отдавал три SCC (B40/B7/B1), все deactivated, а
+			# карточка показывала «4G+ | B3 / B40 / B7 / B1» - ровно тот же ложный
+			# 4G+, что чинили у L850. Признак активности - State: activated (у
+			# части прошивок поле отсутствует вовсе: тогда считаем активной, как
+			# было, иначе потеряли бы агрегацию на них).
+			# Активной считается SCC со State: activated; несущие без поля State
+			# вовсе (старые прошивки его не отдают) тоже считаем активными -
+			# иначе потеряли бы агрегацию на них. Решаем ДО сборки строки MODE.
+			_CA_ACTIVE=0
+			if echo "$OCA" | grep -q "^Secondary Cell"; then
+				if echo "$OCA" | grep -q "State:"; then
+					echo "$OCA" | grep -qE "State:[[:space:]]*'activated'" && _CA_ACTIVE=1
+				else
+					_CA_ACTIVE=1
+				fi
+			fi
+			[ "$_CA_ACTIVE" = "1" ] && MODE="LTE-A"
 
 			PBLOCK=$(echo "$OCA" | awk '/^Primary Cell Info/{f=1; next} /^Secondary Cell/{f=0} f')
 			T=$(echo "$PBLOCK" | sed -n "s/.*LTE Band: 'eutran-\([0-9]*\)'.*/\1/p")
@@ -168,19 +187,53 @@ if [ "$REGOK" = "1" ]; then
 					f')
 				[ -z "$SBLOCK" ] && continue
 
+				# СОСТОЯНИЕ НЕСУЩЕЙ. activated - работает; deactivated - только
+				# сконфигурирована (её показываем в таблице компонентов, но за
+				# агрегацию НЕ считаем, см. _CA_ACTIVE). Нет поля - считаем
+				# активной (старые прошивки его не отдают).
+				_SST=$(echo "$SBLOCK" | sed -n "s/.*State: '\([a-z]*\)'.*/\1/p" | head -1)
+				case "$_SST" in
+					deactivated) : ;;
+					*) _CA_ACTIVE=1 ;;
+				esac
+
 				T=$(echo "$SBLOCK" | sed -n "s/.*LTE Band: 'eutran-\([0-9]*\)'.*/\1/p")
 				if [ -n "$T" ]; then
 					B4=$(band4g "$T")
-					MODE="$MODE / $B4"
+					_SBW=$(echo "$SBLOCK" | sed -n "s/.*DL Bandwidth: '\([0-9]*\)'.*/\1/p" | head -1)
+					# ДВА ВИДА ОДНОЙ СТРОКИ.
+					# Для ТАБЛИЦЫ полоса идёт через " @": фронт отделяет её в свою
+					# колонку (mutil.caSplitBand), и на экране "@" не видно.
+					# Для КАРТОЧКИ полосу кладём ВНУТРЬ скобки с частотой -
+					# "B40 (2300 MHz @20)": там строку рисует replace по скобкам,
+					# и всё в них становится мелким серым (.tginfo-freq). Снаружи
+					# скобки "@20" смотрелось чужеродно рядом с частотой.
+					_B4M="$B4"
+					if [ -n "$_SBW" ]; then
+						_B4M=$(echo "$B4" | sed "s/)\$/ @$_SBW)/")
+						[ "$_B4M" = "$B4" ] && _B4M="$B4 (@$_SBW)"
+						B4="$B4 @$_SBW MHz"
+					fi
+					# В заголовок карточки идут ТОЛЬКО активные несущие: иначе
+					# «4G+ | B3 / B40 / B7 / B1» при одиночном B3 (см. выше).
+					[ "$_SST" = "deactivated" ] || MODE="$MODE / $_B4M"
 				else
 					B4=""
 				fi
+				# ПОДРОБНОСТИ ПО КАЖДОЙ SCC (запрос владельца): PCI и EARFCN у
+				# QMI есть для каждой несущей, а мы брали только диапазон - в
+				# таблице «CA по компонентам» у SCC стояли прочерки. Полей для
+				# сигнала по SCC у этого модема нет ни в одной команде (QMI
+				# отдаёт RSRP/RSRQ/SNR только для serving), поэтому там честный
+				# прочерк и остаётся.
+				_SPCI=$(echo "$SBLOCK" | sed -n "s/.*Physical Cell ID: '\([0-9]*\)'.*/\1/p" | head -1)
+				_SEAR=$(echo "$SBLOCK" | sed -n "s/.*RX Channel: '\([0-9]*\)'.*/\1/p" | head -1)
 
 				case $IDX in
-					1) [ -n "$B4" ] && S1BAND="$B4";;
-					2) [ -n "$B4" ] && S2BAND="$B4";;
-					3) [ -n "$B4" ] && S3BAND="$B4";;
-					4) [ -n "$B4" ] && S4BAND="$B4";;
+					1) [ -n "$B4" ] && S1BAND="$B4"; S1PCI="$_SPCI"; S1EARFCN="$_SEAR"; S1STATE="$_SST";;
+					2) [ -n "$B4" ] && S2BAND="$B4"; S2PCI="$_SPCI"; S2EARFCN="$_SEAR"; S2STATE="$_SST";;
+					3) [ -n "$B4" ] && S3BAND="$B4"; S3PCI="$_SPCI"; S3EARFCN="$_SEAR"; S3STATE="$_SST";;
+					4) [ -n "$B4" ] && S4BAND="$B4"; S4PCI="$_SPCI"; S4EARFCN="$_SEAR"; S4STATE="$_SST";;
 					*) ;;
 				esac
 				IDX=$((IDX + 1))

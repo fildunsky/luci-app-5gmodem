@@ -215,7 +215,36 @@ _collect_traffic() {
 		[ "$_ct_prx" = 0 ] && [ "$_ct_ptx" = 0 ] && continue
 		_ct_drx=$((_ct_rx - _ct_prx)); _ct_dtx=$((_ct_tx - _ct_ptx))
 		[ "$_ct_drx" = 0 ] && [ "$_ct_dtx" = 0 ] && continue
-		_ct_acc="$DIR/traffic.$_ct_if.$(_month)"
+		# КЛЮЧ - SIM-КАРТА, А НЕ ИНТЕРФЕЙС (запрос владельца).
+		#
+		# Интерфейс принадлежит МОДЕМУ, а трафик тарифицирует ОПЕРАТОР по SIM.
+		# При смене SIM в том же модеме (или переносе SIM в другой модем) счёт
+		# по интерфейсу смешивал разные симки в одну строку и терял историю при
+		# перестановке. ICCID - постоянный номер самой карты, он и стал ключом.
+		# SIM не опознали (модем молчит, снимка ещё нет) - копим по интерфейсу,
+		# как раньше: терять байты хуже, чем показать их под именем линка.
+		_ct_key="$_ct_if"
+		_ct_sec=$(sec_for_iface "$_ct_if" 2>/dev/null)
+		_ct_path=$(uci -q get "$CFG.$_ct_sec.path" 2>/dev/null)
+		if [ -n "$_ct_path" ]; then
+			_ct_snap=$("$RES/5gmodem.sh" peek "$_ct_path" 2>/dev/null)
+			_ct_icc=$(printf '%s' "$_ct_snap" | jsonfilter -e '@.iccid' 2>/dev/null | tr -cd '0-9')
+			if [ -n "$_ct_icc" ]; then
+				_ct_key="sim-$_ct_icc"
+				# Подпись строки: оператор и номер, если SIM его отдала (AT+CNUM
+				# хранят не все карты). Иначе - хвост ICCID, чтобы карты можно
+				# было различить между собой.
+				_ct_op=$(printf '%s' "$_ct_snap" | jsonfilter -e '@.operator' 2>/dev/null)
+				_ct_ph=$(printf '%s' "$_ct_snap" | jsonfilter -e '@.phone' 2>/dev/null)
+				case "$_ct_ph" in ''|-) _ct_ph="" ;; esac
+				case "$_ct_op" in ''|-) _ct_op="" ;; esac
+				_ct_lbl="$_ct_op"
+				[ -n "$_ct_ph" ] && _ct_lbl="${_ct_lbl:+$_ct_lbl }$_ct_ph"
+				[ -n "$_ct_lbl" ] || _ct_lbl="SIM ...$(printf '%s' "$_ct_icc" | tail -c 5)"
+				_label "$_ct_key" "$_ct_lbl"
+			fi
+		fi
+		_ct_acc="$DIR/traffic.$_ct_key.$(_month)"
 		_ct_arx=0; _ct_atx=0
 		[ -f "$_ct_acc" ] && read -r _ct_arx _ct_atx < "$_ct_acc" 2>/dev/null
 		case "$_ct_arx" in ''|*[!0-9]*) _ct_arx=0 ;; esac

@@ -1,0 +1,4 @@
+Сота и сигнал ➜ AT+CPSI?;AT+CPSI?
+Температура ➜ AT+CPMUTEMP;AT+CPMUTEMP
+Режим сети ➜ AT+CNMP?;AT+CNMP?
+ICCID ➜ AT+CICCID;AT+CICCID

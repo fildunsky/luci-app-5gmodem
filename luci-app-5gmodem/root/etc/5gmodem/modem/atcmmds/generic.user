@@ -1,0 +1,20 @@
+Информация о модеме ➜ ATI;ATI
+Производитель/модель/прошивка ➜ AT+CGMI;AT+CGMI;AT+CGMM;AT+CGMR
+IMEI ➜ AT+CGSN;AT+CGSN
+Качество сигнала ➜ AT+CSQ;AT+CSQ
+Расширенный сигнал ➜ AT+CESQ;AT+CESQ
+Оператор ➜ AT+COPS?;AT+COPS?
+Регистрация LTE ➜ AT+CEREG?;AT+CEREG?
+Регистрация 5G ➜ AT+C5GREG?;AT+C5GREG?
+PDP-контексты ➜ AT+CGDCONT?;AT+CGDCONT?
+Адреса PDP ➜ AT+CGPADDR;AT+CGPADDR
+Attach к сети ➜ AT+CGATT?;AT+CGATT?
+SIM: PIN-статус ➜ AT+CPIN?;AT+CPIN?
+SIM: IMSI ➜ AT+CIMI;AT+CIMI
+Свой номер ➜ AT+CNUM;AT+CPBS="ON";+CNUM
+Часы модема ➜ AT+CCLK?;AT+CCLK?
+Режим радио ➜ AT+CFUN?;AT+CFUN?
+Перезагрузка модема ➜ AT+CFUN=1,1;AT+CFUN=1,1
+Радио выключить ➜ AT+CFUN=4;AT+CFUN=4
+Радио включить ➜ AT+CFUN=1;AT+CFUN=1
+Записать номер на SIM ➜ AT+CPBW;AT+CSCS="IRA";+CPBS="ON";+CPBW=1,"+79876543210",145,"Number"

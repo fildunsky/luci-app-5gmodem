@@ -717,16 +717,25 @@ function renderCaTable(json) {
 		   источник, когда в строке диапазона полосы нет. */
 		data['PCC'] = { band: p.band, bw: p.bw || json.bandwidth, pci: json.pci, earfcn: json.earfcn,
 			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr,
-			mimo: json.pmimo, mod: json.pmod };
+			mimo: json.pmimo, mod: json.pmod,
+			/* Первичный компонент активен по определению - иначе не было бы связи. */
+			state: _('activated') };
 	}
 	[ '1', '2', '3', '4' ].forEach(function(i) {
 		var b = json['s' + i + 'band'];
 		if (b && b != '-') {
 			var sb = mutil.caSplitBand(b);
+			/* Состояние приходит словом протокола (activated/deactivated).
+			   Неактивная несущая - сконфигурированная, но не работающая: она
+			   должна быть видна (сеть её выделила), но не выдаваться за
+			   действующую агрегацию. Модем без этого поля - прочерк. */
+			var st = String(json['s' + i + 'state'] || '');
 			data['SCC' + i] = { band: sb.band, bw: sb.bw,
 				pci: json['s' + i + 'pci'], earfcn: json['s' + i + 'earfcn'],
 				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'], sinr: json['s' + i + 'sinr'],
-				mimo: json['s' + i + 'mimo'], mod: json['s' + i + 'mod'] };
+				mimo: json['s' + i + 'mimo'], mod: json['s' + i + 'mod'],
+				state: (st === 'activated') ? _('activated')
+					: (st === 'deactivated') ? _('deactivated') : '' };
 		}
 	});
 	// Видимость блока привязана к ПОДКЛЮЧЕНИЮ (наличию pband), а НЕ к числу
@@ -757,7 +766,7 @@ function renderCaTable(json) {
 	}
 	// Заполняем ЗАРАНЕЕ нарисованные строки (см. разметку). Строки не создаются
 	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
-	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr', 'mimo', 'mod' ];
+	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr', 'mimo', 'mod', 'state' ];
 	tbl.querySelectorAll('tr.ca-row').forEach(function(row) {
 		var cc = row.getAttribute('data-cc');
 		var c = data[cc] || {};
@@ -1442,10 +1451,12 @@ function fillAntPorts(raw, rxdiv) {
 			tbl.appendChild(E('tr', { 'class': 'tr ant-row' }, [
 				/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV)
 				   у каждой платы свои, соответствие не выдумываем. */
-				E('td', { 'class': 'td left' }, _('Port %d').format(parseInt(l.split(':')[0], 10))),
-				E('td', { 'class': 'td left' }, '-'),
-				E('td', { 'class': 'td left' }, '-'),
-				E('td', { 'class': 'td left' }, '-')
+				/* data-l - подписи для мобильной карточной раскладки (::before),
+				   тем же приёмом, что в таблицах CA и соседних сот. */
+				E('td', { 'class': 'td left ant-port' }, _('Port %d').format(parseInt(l.split(':')[0], 10))),
+				E('td', { 'class': 'td left', 'data-l': _('RSRP') }, '-'),
+				E('td', { 'class': 'td left', 'data-l': _('RSRQ') }, '-'),
+				E('td', { 'class': 'td left', 'data-l': _('State') }, '-')
 			]));
 		});
 	}
@@ -3380,6 +3391,10 @@ simDialog: baseclass.extend({
 						E('th', { 'class': 'th' }, [ 'SINR' ]),
 						E('th', { 'class': 'th' }, [ 'MIMO' ]),
 						E('th', { 'class': 'th' }, [ 'Mod' ]),
+						/* Состояние несущей: сеть держит SCC сконфигурированной,
+						   но неактивной - без этой колонки такая строка выглядит
+						   как работающая агрегация (см. renderCaTable). */
+						E('th', { 'class': 'th' }, [ _('State') ]),
 					]),
 				].concat([ 'PCC', 'SCC1', 'SCC2', 'SCC3', 'SCC4' ].map(function(cc) {
 					// Строки рисуются ЗАРАНЕЕ и с прочерками, а опрос лишь заполняет
@@ -3399,6 +3414,7 @@ simDialog: baseclass.extend({
 						E('td', { 'class': 'td', 'data-l': 'SINR' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'MIMO' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'Mod' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': _('State') }, [ '-' ]),
 					]);
 				})))
 				]),

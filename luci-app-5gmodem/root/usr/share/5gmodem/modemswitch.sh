@@ -1281,6 +1281,29 @@ resolve)
 		# AT+CGMM отвечает "SIMCOM_SIM7600E-H"). Спрашиваем РОВНО ОДИН раз: когда
 		# модели ещё нет, а порт уже найден. Дальше значение лежит в секции, и
 		# лишних AT-хождений на каждом resolve не будет.
+		# АППАРАТ В ПОРТУ МОГЛИ ЗАМЕНИТЬ НА ДРУГОЙ С ТЕМ ЖЕ VID:PID.
+		#
+		# swap_cleanup выше ловит подмену по vidpid и молча выходит, когда тот
+		# не изменился, - а L850 и L860-GL-16 оба 8087:095a (и это не
+		# единственное такое семейство). Производные прежнего аппарата тогда
+		# оставались навсегда: модель перечитывается только когда она пуста, и
+		# в профиле у пользователя значился L850 при физически стоящем L860.
+		# Сверяем IMEI одной командой (порт уже найден и ниже всё равно
+		# опрашивается) и при расхождении обнуляем производное - модель
+		# перечитает блок ниже, порты уже переизбраны выше.
+		if [ -n "$A" ] && [ -n "$(uci -q get "$CFG.$SEC.model")" ]; then
+			_rs_imei=$(sms_tool -d "$A" at "AT+CGSN" 2>/dev/null | tr -d '\r' \
+				| grep -oE '^[0-9]{14,16}$' | head -1)
+			_rs_prev=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
+			if [ -n "$_rs_imei" ] && [ -n "$_rs_prev" ] && [ "$_rs_imei" != "$_rs_prev" ]; then
+				logger -t 5gmodem "resolve: в порту $P другой аппарат при том же vid:pid (IMEI $_rs_prev -> $_rs_imei) - перечитываю модель"
+				uci -q delete "$CFG.$SEC.model" 2>/dev/null
+				uci -q delete "$CFG.$SEC.model_vp" 2>/dev/null
+				uci -q set "$CFG.$SEC.imei=$_rs_imei"
+				uci -q commit "$CFG"
+				purge_path_caches "$P"
+			fi
+		fi
 		if [ -n "$A" ] && [ -z "$(uci -q get "$CFG.$SEC.model")" ]; then
 			_rm=$(sms_tool -d "$A" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
 				| grep -vE '^[[:space:]]*$|^OK$|^AT' | head -1)

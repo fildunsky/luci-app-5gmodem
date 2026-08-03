@@ -1636,10 +1636,18 @@ cat <<EOF
 "s4band":"$(sanitize_string "$S4BAND")",
 "s4pci":"$(sanitize_number "$S4PCI")",
 "s4earfcn":"$(sanitize_number "$S4EARFCN")",
+"s1state":"$(sanitize_string "$S1STATE")",
+"s2state":"$(sanitize_string "$S2STATE")",
+"s3state":"$(sanitize_string "$S3STATE")",
+"s4state":"$(sanitize_string "$S4STATE")",
 "s1rsrp":"$(sanitize_number "$S1RSRP")",
 "s2rsrp":"$(sanitize_number "$S2RSRP")",
 "s3rsrp":"$(sanitize_number "$S3RSRP")",
 "s4rsrp":"$(sanitize_number "$S4RSRP")",
+"s1rsrq":"$(sanitize_number "$S1RSRQ")",
+"s2rsrq":"$(sanitize_number "$S2RSRQ")",
+"s3rsrq":"$(sanitize_number "$S3RSRQ")",
+"s4rsrq":"$(sanitize_number "$S4RSRQ")",
 "pmimo":"$(sanitize_string "$PMIMO")",
 "pmod":"$(sanitize_string "$PMOD")",
 "s1mimo":"$(sanitize_string "$S1MIMO")",
@@ -2050,6 +2058,32 @@ _qmi_supplement() {
 			| sed -n 's/.*"pci":"\([0-9]*\)"[^}]*"serving":1.*/\1/p' | head -1)
 		;;
 	esac
+	# СИГНАЛ ПО ВТОРИЧНЫМ НЕСУЩИМ - ИЗ ТЕХ ЖЕ СОСЕДЕЙ, БЕЗ ЛИШНИХ ЗАПРОСОВ.
+	#
+	# Прямого источника нет: nas-get-lte-cphy-ca-info отдаёт по SCC только
+	# PCI/EARFCN/полосу/состояние, а nas-get-signal-info - лишь serving-соту.
+	# Но вторичная несущая физически ЕСТЬ в выдаче cell-location-info: она
+	# лежит в Interfrequency-секции как сота с тем же PCI и тем же EARFCN
+	# (живой пример: SCC1 B40 PCI 378 EARFCN 38950 -> Cell[0] с RSRP -119.9,
+	# RSRQ -15.6, RSSI -92.1). Эти данные мы уже собрали в NEIGHBORS, поэтому
+	# сопоставление стоит ноль запросов. SINR по SCC не отдаёт никто - остаётся
+	# прочерком честно.
+	if [ -n "$NEIGHBORS" ]; then
+		for _sc_i in 1 2 3 4; do
+			eval _sc_pci=\$S${_sc_i}PCI
+			eval _sc_ear=\$S${_sc_i}EARFCN
+			eval _sc_rsrp=\$S${_sc_i}RSRP
+			[ -n "$_sc_pci" ] && [ -n "$_sc_ear" ] || continue
+			case "$_sc_rsrp" in ''|-) : ;; *) continue ;; esac
+			_sc_rec=$(printf '%s' "$NEIGHBORS" | tr '}' '\n' \
+				| grep "\"earfcn\":\"$_sc_ear\"" | grep "\"pci\":\"$_sc_pci\"" | head -1)
+			[ -n "$_sc_rec" ] || continue
+			_sc_p=$(printf '%s' "$_sc_rec" | sed -n 's/.*"rsrp":"\([^"]*\)".*/\1/p')
+			_sc_q=$(printf '%s' "$_sc_rec" | sed -n 's/.*"rsrq":"\([^"]*\)".*/\1/p')
+			[ -n "$_sc_p" ] && eval S${_sc_i}RSRP=\$_sc_p
+			[ -n "$_sc_q" ] && eval S${_sc_i}RSRQ=\$_sc_q
+		done
+	fi
 	# СИГНАЛ/ДИАПАЗОН/СОТА ИЗ QMI - только то, что осталось пустым.
 	# Нужно модему под ModemManager: его AT-порт занят, вендорный AT-профиль
 	# ничего не заполнил (Telit LM960 под MM показывал одни прочерки), а QMI

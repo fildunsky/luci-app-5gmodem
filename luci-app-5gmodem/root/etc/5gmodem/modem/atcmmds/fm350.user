@@ -1,0 +1,8 @@
+Режим сети и диапазоны ➜ AT+GTACT?;AT+GTACT?
+Поддерживаемые режимы/диапазоны ➜ AT+GTACT=?;AT+GTACT=?
+Текущая сота и соседи ➜ AT+GTCCINFO?;AT+GTCCINFO?
+Версия пакета прошивки ➜ AT+GTPKGVER?;AT+GTPKGVER?
+USB-композиция ➜ AT+GTUSBMODE?;AT+GTUSBMODE?
+Температура ➜ AT+ETHERMAL?;AT+ETHERMAL?
+SIM-слоты ➜ AT+GTDUALSIM?;AT+GTDUALSIM?
+ICCID ➜ AT+ICCID;AT+ICCID

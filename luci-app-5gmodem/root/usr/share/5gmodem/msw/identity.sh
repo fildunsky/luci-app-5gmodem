@@ -487,6 +487,28 @@ ensure_section() {
 	# (serial-противоречие, присутствие старого пути) работают и для
 	# сохранённого значения.
 	[ -n "$_es_imei" ] || _es_imei=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
+	# ДРУГОЙ АППАРАТ В ТОМ ЖЕ ПОРТУ С ТЕМ ЖЕ VID:PID.
+	#
+	# swap_cleanup ловит подмену по vidpid и выходит, когда тот не изменился, -
+	# а у части семейств РАЗНЫЕ модели делят один идентификатор: Fibocom L850 и
+	# L860-GL-16 оба 8087:095a. Тогда производные прежнего аппарата оставались
+	# жить: у пользователя в порту стоял L860, а в профиле (и в списке модемов)
+	# значился L850 - модель resolve перечитывает только когда она пуста.
+	# Признак смены здесь - IMEI: он прочитан живьём и отличается от
+	# записанного. Чистим ТОЛЬКО производное (модель, пины портов, кэши пути);
+	# осознанный выбор пользователя не трогаем - его судьбу решают парковка и
+	# migrate_profile ниже.
+	_es_previmei=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
+	if [ -n "$_es_imei" ] && [ -n "$_es_previmei" ] && [ "$_es_imei" != "$_es_previmei" ]; then
+		logger -t 5gmodem "в порту $1 другой аппарат при том же vid:pid (IMEI $_es_previmei -> $_es_imei) - перечитываю модель и порты"
+		uci -q delete "$CFG.$SEC.model" 2>/dev/null
+		uci -q delete "$CFG.$SEC.model_vp" 2>/dev/null
+		uci -q delete "$CFG.$SEC.at_port" 2>/dev/null
+		uci -q delete "$CFG.$SEC.data_at_port" 2>/dev/null
+		uci -q commit "$CFG"
+		purge_path_caches "$1"
+	fi
+
 	if [ -n "$_es_imei" ]; then
 		_es_old=$(sec_by_imei "$_es_imei" "$SEC")
 		# SERIAL ОПРОВЕРГАЕТ IMEI - ЗАКРЫВАЕМ ДЫРУ В ГВАРДЕ НИЖЕ.

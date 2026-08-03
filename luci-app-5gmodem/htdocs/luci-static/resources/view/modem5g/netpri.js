@@ -522,7 +522,9 @@ function pingCard(w) {
 	var st = _pingState[host];
 	var dot = E('span', { 'class': 'netpri-svcdot ' + _pDot(st), 'title': _pTip(st, info) });
 	return E('button', {
-		'class': 'btn cbi-button netpri-btn netpri-status', 'data-host': host,
+		/* ping-busy возвращаем и при пересоздании карточки поллом бара: замер
+		   мог идти прямо в этот момент, и сияние не должно пропадать. */
+		'class': 'btn cbi-button netpri-btn netpri-status' + (_pingBusy[host] ? ' ping-busy' : ''), 'data-host': host,
 		'data-tooltip': _('Click to measure ping to %s over the active uplink').format(info.name),
 		'click': function(ev) { ev.preventDefault(); pingOnce(host); }
 	}, [
@@ -539,20 +541,66 @@ function updatePingCard(host) {
 	});
 	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _pMs(st); });
 }
+/* ПРОКРУТКА ЦИФРЫ ПИНГА (запрос владельца): значение не прыгает, а быстро
+   «пробегает» от прежнего к новому - тот же приём, что у живого числа
+   спидтеста. ease-out: начало проскакивает быстро, к финалу мягко доезжает.
+   Один rAF на хост; при провале анимировать нечего - прочерк сразу. */
+var _pingAnim = {};
+function animatePingMs(host, from, to) {
+	var sel = '.netpri-status[data-host="' + host + '"] .netpri-ip';
+	if (!document.querySelector(sel)) { return; }
+	if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+	if (_pingAnim[host]) { window.cancelAnimationFrame(_pingAnim[host]); _pingAnim[host] = null; }
+	var t0 = null, dur = 600;
+	var step = function(ts) {
+		if (t0 === null) { t0 = ts; }
+		var p = Math.min((ts - t0) / dur, 1);
+		var e = 1 - (1 - p) * (1 - p);
+		var v = Math.round(from + (to - from) * e);
+		document.querySelectorAll(sel).forEach(function(el) { el.textContent = v + ' ' + _('ms'); });
+		if (p < 1) { _pingAnim[host] = window.requestAnimationFrame(step); }
+		else { _pingAnim[host] = null; }
+	};
+	_pingAnim[host] = window.requestAnimationFrame(step);
+}
 var _pingBusy = {};
 function pingOnce(host) {
 	host = String(host).trim();
 	if (_pingBusy[host]) { return Promise.resolve(); }
 	_pingBusy[host] = true;
-	document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
+	/* ПРЕЖНЯЯ ЦИФРА ОСТАЁТСЯ НА ВРЕМЯ ЗАМЕРА (запрос владельца): замена её на
+	   «…» с последующей прокруткой читалась как мигание. «…» - только когда
+	   показывать нечего (первый замер или прошлый провалился). Что замер идёт,
+	   видно по синему сиянию карточки (класс ping-busy, CSS). */
+	var _hadPrev = (_pingState[host] && _pingState[host].ok && _pingState[host].ms != null);
+	document.querySelectorAll('.netpri-status[data-host="' + host + '"]').forEach(function(c) { c.classList.add('ping-busy'); });
+	if (!_hadPrev) {
+		document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
+	}
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		/* Прежнее значение - старт прокрутки; после провала или первого замера
+		   крутим от нуля, чтобы движение было заметно. */
+		var prev = (_pingState[host] && _pingState[host].ok && _pingState[host].ms != null)
+			? _pingState[host].ms : 0;
 		_pingState[host] = { done: true, ok: !!j.ok, ms: (j.ms != null ? j.ms : null),
 		                     why: j.why || null, ip: j.ip || null };
 		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
 		mutil.lsTouch('netpri-pingstate');
 		_pingBusy[host] = false;
+		document.querySelectorAll('.netpri-status[data-host="' + host + '"]').forEach(function(c) { c.classList.remove('ping-busy'); });
 		updatePingCard(host);
+		/* Вспышка лампочки цветом ИТОГА: updatePingCard уже перекрасил её в
+		   зелёный/красный (смена цвета перетекает transition'ом), вспышка
+		   поверх - масштаб+яркость. Снятие/чтение offsetWidth перезапускает
+		   анимацию, если класс ещё висит с прошлого замера. */
+		document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-svcdot').forEach(function(d) {
+			d.classList.remove('ping-flash');
+			void d.offsetWidth;
+			d.classList.add('ping-flash');
+			window.setTimeout(function() { d.classList.remove('ping-flash'); }, 800);
+		});
+		if (j.ok && j.ms != null) { animatePingMs(host, prev, j.ms); }
 	});
 }
 /* Автопинг только у карточек с интервальным режимом; «по клику» ждут клика. */

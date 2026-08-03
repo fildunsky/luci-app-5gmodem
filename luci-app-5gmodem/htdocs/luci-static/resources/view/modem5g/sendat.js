@@ -31,6 +31,37 @@ function atChain(cmds) {
 	}).join(';');
 }
 
+/* СЕМЕЙНЫЙ ФАЙЛ AT-ШАБЛОНОВ ПО АКТИВНОМУ МОДЕМУ (запрос владельца): раньше
+   один смешанный шаблон предлагал вендорные команды всем подряд - новичок жал
+   команду не своего модема, получал ERROR и думал, что сломана программа.
+   Ключуем как профили modem/usb: точный vid:pid, затем вендор, затем модель.
+   05c6:90d5/9025 двусмысленны (Foxconn T99W175 или прототип Compal - один ID)
+   - различаем по модели, тем же признаком, что iscompal.sh. Нет уверенного
+   совпадения - null, останется generic. */
+function atFamilyFor(vp, model) {
+	vp = String(vp || '').toLowerCase();
+	var m = String(model || '').toLowerCase();
+	if (/compal|vos_5g|rxm|sg500/.test(m)) { return 'compal'; }
+	if (/fm350/.test(m) || vp.indexOf('0e8d:') === 0) { return 'fm350'; }
+	if (/l850|l860/.test(m) || vp === '8087:095a') { return 'xmm'; }
+	if (vp === '1e2d:00b3' || vp === '1e2d:00b7' || vp === '1e2d:00b8'
+		|| vp === '1e2d:00b9' || vp === '05c6:90d6') { return 'compal'; }
+	if (vp.indexOf('1bc7:') === 0 || /telit|lm9/.test(m)) { return 'telit'; }
+	if (vp.indexOf('2c7c:') === 0 || /quectel|^e[gmp]\d|^r[gm]5/.test(m)) { return 'quectel'; }
+	if (vp.indexOf('1e0e:') === 0 || /simcom|sim7/.test(m)) { return 'simcom'; }
+	if (vp.indexOf('12d1:') === 0 || /huawei/.test(m)) { return 'huawei'; }
+	if (vp === '413c:81d7' || vp === '0489:e0b5' || vp === '05c6:9025'
+		|| vp === '05c6:90d5' || /t99w|t77w|dw58|mv31/.test(m)) { return 'qualcomm'; }
+	return null;
+}
+
+/* Путь к файлу шаблона: семейные лежат в atcmmds/, личный («Мои команды») -
+   легаси-файл atcmmds.user в корне, в списке он представлен именем "__user__". */
+function atFilePath(name) {
+	return (name === '__user__') ? '/etc/5gmodem/modem/atcmmds.user'
+	                             : '/etc/5gmodem/modem/atcmmds/' + name;
+}
+
 
 /* Вывод в стиле блока кода современных md-редакторов - как на странице
    диагностики 5gmodem. Цвета фиксированные, одинаковы в любой теме.
@@ -61,19 +92,24 @@ function typewrite(el, text) {
 return view.extend({
 	viewName: 'sendat',
 	
+	/* Выбор файла запоминается ПО МОДЕМУ (vid:pid), а не глобально: иначе выбор
+	   для FM350 «прилипал» бы к L850 после смены вкладки, и автоподбор по
+	   семейству никогда не срабатывал бы. */
 	restoreSettingsFromLocalStorage: function() {
 		try {
-			let selectedFile = localStorage.getItem('luci-app-' + this.viewName + '-selectedFile');
+			let selectedFile = localStorage.getItem('luci-app-' + this.viewName
+				+ '-selectedFile:' + (window._sendatLmVp || ''));
 			return selectedFile;
 		} catch(e) {
 			console.error('localStorage not available:', e);
 			return null;
 		}
 	},
-	
+
 	saveSettingsToLocalStorage: function(fileName) {
 		try {
-			localStorage.setItem('luci-app-' + this.viewName + '-selectedFile', fileName);
+			localStorage.setItem('luci-app-' + this.viewName
+				+ '-selectedFile:' + (window._sendatLmVp || ''), fileName);
 		} catch(e) {
 			console.error('localStorage not available:', e);
 		}
@@ -184,8 +220,8 @@ return view.extend({
 		if (!selectElement || !selectedFile) return;
 		
 		this.saveSettingsToLocalStorage(selectedFile);
-		
-		return fs.read_direct('/etc/5gmodem/modem/atcmmds/' + selectedFile).then(function(content) {
+
+		return fs.read_direct(atFilePath(selectedFile)).then(function(content) {
 			selectElement.innerHTML = '';
 			// Плейсхолдер первым пунктом: иначе первая реальная команда (AT)
 			// уже "выбрана" и повторный клик по ней не даёт события change,
@@ -271,6 +307,12 @@ return view.extend({
 						if (m.path === act && m.tty && m.tty.length) {
 							window._sendatLmPort = m.tty[0];
 						}
+						/* vid:pid и модель активного модема - для автовыбора
+						   семейного файла AT-шаблонов (см. atFamilyFor). */
+						if (m.path === act) {
+							window._sendatLmVp = String(m.vidpid || '').toLowerCase();
+							window._sendatLmModel = String(m.model || '');
+						}
 					});
 				} catch (e) {}
 				return res;
@@ -303,6 +345,14 @@ return view.extend({
 		let userFiles = atFiles.filter(function(file) {
 			return file.type === 'file' && file.name && file.name.match(/\.user$/);
 		});
+		/* Порядок кнопок: GENERIC первым (нужен всем), дальше семейные по
+		   алфавиту, личный «Мои команды» - последним отдельным пунктом. */
+		userFiles.sort(function(a, b) {
+			var ga = (a.name === 'generic.user') ? 0 : 1;
+			var gb = (b.name === 'generic.user') ? 0 : 1;
+			return (ga - gb) || a.name.localeCompare(b.name);
+		});
+		if (loadResults[0]) { userFiles.push({ type: 'file', name: '__user__' }); }
 	
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
 				E('div', { 'class': 'cbi-section tgpage' }, [
@@ -342,22 +392,22 @@ return view.extend({
 						}.bind(this))(),
 						(function() {
 							if (userFiles.length > 0) {
+								/* Приоритет выбора файла: явный выбор пользователя ДЛЯ
+								   ЭТОГО модема (localStorage по vid:pid) -> семейный
+								   файл активного модема -> generic -> первый в списке. */
 								let savedFile = this.restoreSettingsFromLocalStorage();
+								let fam = atFamilyFor(window._sendatLmVp, window._sendatLmModel);
 								let fileToLoad = userFiles[0].name;
 								let checkedIndex = 0;
-								
-								if (savedFile) {
-									let foundIndex = userFiles.findIndex(function(f) {
-										return f.name === savedFile;
-									});
-									if (foundIndex !== -1) {
-										fileToLoad = savedFile;
-										checkedIndex = foundIndex;
-									}
-								}
-								
+								[savedFile, (fam ? fam + '.user' : null), 'generic.user'].some(function(want) {
+									if (!want) { return false; }
+									let idx = userFiles.findIndex(function(f) { return f.name === want; });
+									if (idx !== -1) { fileToLoad = want; checkedIndex = idx; return true; }
+									return false;
+								});
+
 								setTimeout(function() {
-									L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds/' + fileToLoad), '').then(function(content) {
+									L.resolveDefault(fs.read_direct(atFilePath(fileToLoad)), '').then(function(content) {
 										let selectElement = document.getElementById('tk');
 										if (!selectElement) return;
 
@@ -390,7 +440,9 @@ return view.extend({
 										E('div', {}, 
 											userFiles.map(function(file, index) {
 												let fileName = file.name;
-												let displayName = fileName.replace(/\.user$/, '').toUpperCase();
+												let displayName = (fileName === '__user__')
+													? _('My commands')
+													: fileName.replace(/\.user$/, '').toUpperCase();
 												
 												return E('label', {
 													'style': 'margin-right: 15px; display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',

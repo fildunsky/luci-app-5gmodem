@@ -225,15 +225,22 @@ kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
 
 	# 1) MM не должен держать ЭТОТ модем. Прячет его mm-inhibit.sh
 	# (mmcli --inhibit-device), но демон ходит раз в 15 c, а нам порт нужен
-	# СЕЙЧАС. Если MM нужен другому модему, глушить его нельзя: аккуратно
-	# перезапускаем и ждём, пока он отпустит наш модем - инхибитор подхватит.
+	# СЕЙЧАС - делаем синхронный проход инхибиции.
+	# ЗДЕСЬ БЫЛ РЕСТАРТ MM («аккуратно перезапускаем, чтобы отпустил наш») -
+	# и он РВАЛ СОСЕДА: MM на SIGTERM штатно разрывает соединения ВСЕХ своих
+	# модемов (caught signal -> bearer finished), интерфейс соседа падал и
+	# поднимался только через mm-recover. Живой случай 03.08.2026: воткнули
+	# SIM7100E (qmi) - «переподключился» внутренний Compal под MM. Прото уже
+	# закоммичен к этому моменту, поэтому inhibit_pass точечно заберёт у MM
+	# именно наш модем, не трогая остальные.
 	if pgrep -f ModemManager >/dev/null 2>&1; then
 		if mmcli -L 2>/dev/null | grep -q "/Modem/"; then
-			echo "prepare: ModemManager is running - restarting it so it releases $_wdm" >&2
-			mm_restart_safe
+			echo "prepare: инхибирую $_path у ModemManager (соседей не трогаем)" >&2
+			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1
 			_n=0
 			while [ "$_n" -lt 20 ]; do
-				mmcli -L 2>/dev/null | grep -q "$(basename "$_path")" || break
+				_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_path" 2>/dev/null)
+				[ -n "$_mi" ] || break
 				sleep 1; _n=$((_n + 1))
 			done
 		fi
@@ -680,7 +687,22 @@ _MM_WANT=0
 [ "$_MM_WANT" = "1" ] || /usr/share/5gmodem/mmneed.sh check 2>/dev/null | grep -q '"needed":1' && _MM_WANT=1
 if [ "$_MM_WANT" = "1" ]; then
 	/etc/init.d/modemmanager enable >/dev/null 2>&1
-	mm_restart_safe
+	# РАБОТАЮЩИЙ MM НЕ ПЕРЕЗАПУСКАЕМ. Здесь стоял безусловный mm_restart_safe
+	# («заодно лечит клин») - и создание интерфейса ЛЮБОГО модема рестартовало
+	# здоровый MM вместе с СОСЕДОМ: тот штатно рвал его соединение (caught
+	# signal -> bearer finished), интерфейс падал и поднимался только через
+	# mm-recover. Живой случай 03.08.2026: воткнули SIM7100E (qmi) - внутренний
+	# Compal под MM переподключился. Клин MM - забота mm-recover/пересборки,
+	# а не побочный эффект mkiface чужого модема.
+	if ! pgrep -f ModemManager >/dev/null 2>&1; then
+		mm_restart_safe
+	elif [ "$PROTO" = "modemmanager" ] && ! mmcli -L 2>/dev/null | grep -q "/Modem/"; then
+		# MM жив, но не видит НИ ОДНОГО модема, а этому интерфейсу он нужен -
+		# похоже на пропущенные события (libudev-zero, [[mm-boot-race]]).
+		# Единственный случай, когда рестарт уместен: подключённых модемов в
+		# MM нет, значит и рвать ему некого.
+		mm_restart_safe
+	fi
 elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
 	/etc/init.d/modemmanager stop >/dev/null 2>&1
 	/etc/init.d/modemmanager disable >/dev/null 2>&1
@@ -917,6 +939,45 @@ elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ]; then
 	(
 		kernel_proto_prepare "$IDEV" "$AMP" || logger -t 5gmodem-mkiface \
 			"kernel_proto_prepare failed for $IF ($PROTO) - bringing it up anyway"
+		ifup "$IF"
+	) >/dev/null 2>&1 </dev/null &
+elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
+	# ДОЗВОН ТОЛЬКО ПОСЛЕ РЕГИСТРАЦИИ В СЕТИ.
+	#
+	# У xmm/atc дозвон идёт AT-скриптом сразу, а модуль после включения ищет
+	# сеть ещё десятки секунд. Дозвон в незарегистрированный модем ПРОХОДИТ, но
+	# контекст не получает адрес - netifd пишет «Failed to configure interface»
+	# и валится в цикл перезапусков; следующая попытка уже не может открыть
+	# порт («AT port not answer!»), и интерфейс не поднимается вовсе, хотя
+	# модем к этому времени давно в сети. Живой отчёт (L860-GL-16, чистая
+	# прошивка, 03.08.2026): первый заход дошёл до «PDP type is: IP» ->
+	# Failed to configure, дальше только AT port not answer, а рядом снятый
+	# отчёт показывал уже +CEREG: 2,1 (зарегистрирован).
+	#
+	# Ждём CEREG/CGREG 1 (домашняя) или 5 (роуминг) до 90 c; модем, снятый с
+	# регистрации (+COPS: 2), подталкиваем AT+COPS=0 - тем же приёмом, что и
+	# fibocom.sh. Не дождались - поднимаем как есть: сторож переподнимет.
+	(
+		_xr_at=$(_mk_atport)
+		if [ -n "$_xr_at" ] && [ -e "$_xr_at" ]; then
+			_xr_n=0
+			while [ "$_xr_n" -lt 90 ]; do
+				_xr_o=$(sms_tool -d "$_xr_at" at "AT+CEREG?;+CGREG?;+COPS?" 2>/dev/null | tr -d '\r')
+				case "$_xr_o" in
+					*"+CEREG: "*",1"*|*"+CEREG: "*",5"*|*"+CGREG: "*",1"*|*"+CGREG: "*",5"*)
+						logger -t 5gmodem-mkiface "$IF ($PROTO): модем зарегистрирован за ${_xr_n}c - дозваниваюсь"
+						break ;;
+				esac
+				case "$_xr_o" in
+					*"+COPS: 2"*)
+						logger -t 5gmodem-mkiface "$IF ($PROTO): модем снят с регистрации (+COPS: 2) - толкаю AT+COPS=0"
+						sms_tool -d "$_xr_at" at "AT+COPS=0" >/dev/null 2>&1 ;;
+				esac
+				sleep 5; _xr_n=$((_xr_n + 5))
+			done
+			[ "$_xr_n" -ge 90 ] && logger -t 5gmodem-mkiface \
+				"$IF ($PROTO): регистрации нет за 90c - поднимаю интерфейс как есть"
+		fi
 		ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
 else

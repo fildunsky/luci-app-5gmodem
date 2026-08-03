@@ -1088,23 +1088,50 @@ ping)
 	_tg_probe() {
 		_tp_ip=$(nslookup api.telegram.org 2>/dev/null \
 			| sed -n 's/^Address: *\([0-9.]*\)$/\1/p' | grep -v '^127\.' | head -1)
-		if [ -n "$_tp_ip" ] && ! _tg_cidr_has "$_tp_ip"; then
+		# FAKE-IP от clash (198.18.x/198.19.x) - не подмена оператора, а туннель:
+		# так резолвит сам clash. «Подменой» это считать нельзя, а прямая проба
+		# по такому адресу бессмысленна - сразу уходим на пробу через туннель.
+		_tp_fake=""
+		case "$_tp_ip" in 198.18.*|198.19.*) _tp_fake=1 ;; esac
+		if [ -n "$_tp_ip" ] && [ -z "$_tp_fake" ] && ! _tg_cidr_has "$_tp_ip"; then
 			printf '{"ok":0,"why":"dns","ip":"%s"}\n' "$_tp_ip"
 			return 0
 		fi
 		[ -n "$_tp_ip" ] || _tp_ip=149.154.167.220
 		if command -v curl >/dev/null 2>&1; then
-			_tp_w=$(curl -o /dev/null -s -m 5 \
-				--resolve "api.telegram.org:443:$_tp_ip" \
-				-w '%{http_code} %{time_starttransfer}' \
-				"https://api.telegram.org/" 2>/dev/null)
-			_tp_c="${_tp_w%% *}"; _tp_t="${_tp_w##* }"
-			if [ -n "$_tp_c" ] && [ "$_tp_c" != "000" ]; then
-				# Достучались - самое время освежить список сетей (раз в 30 дней).
-				_tg_cidr_refresh
-				printf '{"ok":1,"ms":%s,"via":"tls"}\n' \
-					"$(printf '%s' "$_tp_t" | awk '{printf "%d", $1 * 1000}')"
-				return 0
+			if [ -z "$_tp_fake" ]; then
+				_tp_w=$(curl -o /dev/null -s -m 5 \
+					--resolve "api.telegram.org:443:$_tp_ip" \
+					-w '%{http_code} %{time_starttransfer}' \
+					"https://api.telegram.org/" 2>/dev/null)
+				_tp_c="${_tp_w%% *}"; _tp_t="${_tp_w##* }"
+				if [ -n "$_tp_c" ] && [ "$_tp_c" != "000" ]; then
+					# Достучались - самое время освежить список сетей (раз в 30 дней).
+					_tg_cidr_refresh
+					printf '{"ok":1,"ms":%s,"via":"tls"}\n' \
+						"$(printf '%s' "$_tp_t" | awk '{printf "%d", $1 * 1000}')"
+					return 0
+				fi
+			fi
+			# ПРЯМОГО ПУТИ НЕТ - МЕРЯЕМ КАК КЛИЕНТ, ЧЕРЕЗ ТУННЕЛЬ. Прямой 443 к
+			# Telegram у операторов РФ закрыт, а СВОЙ трафик роутера идёт мимо
+			# clash (tproxy перехватывает только форвард LAN) - точка горела
+			# красным на живом для пользователей сервисе (живой случай
+			# 03.08.2026: DNS честный, прямой 000, через mixed-port 302).
+			# Тот же обход, что у geo-запросов спидтеста: http/mixed-порт clash;
+			# tproxy-порт не годится - это не HTTP-прокси.
+			_tp_pp=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+				/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+			if [ -n "$_tp_pp" ] && [ "$_tp_pp" != "0" ]; then
+				_tp_w=$(curl -o /dev/null -s -m 6 -x "http://127.0.0.1:$_tp_pp" \
+					-w '%{http_code} %{time_starttransfer}' \
+					"https://api.telegram.org/" 2>/dev/null)
+				_tp_c="${_tp_w%% *}"; _tp_t="${_tp_w##* }"
+				if [ -n "$_tp_c" ] && [ "$_tp_c" != "000" ]; then
+					printf '{"ok":1,"ms":%s,"via":"proxy"}\n' \
+						"$(printf '%s' "$_tp_t" | awk '{printf "%d", $1 * 1000}')"
+					return 0
+				fi
 			fi
 		fi
 		echo '{"ok":0,"via":"tls"}'

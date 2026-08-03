@@ -449,10 +449,23 @@ heal() {
 			# Wi-Fi тут бессмысленно, трафик уводит failover. Лечим только
 			# технические отказы самого линка: down БЕЗ адреса (ассоциация/DHCP
 			# сломались) и gone (netifd расцепил интерфейс с радио).
+			# АДРЕС НИЧЕГО НЕ ДОКАЗЫВАЕТ БЕЗ ЖИВОЙ АССОЦИАЦИИ. После потери
+			# маяков (CTRL-EVENT-BEACON-LOSS) netifd держит интерфейс up со
+			# СТАРОЙ DHCP-арендой: адрес на месте, станция давно отвязана.
+			# Живой случай 03.08.2026: STA стенда отвязалась в 21:02, сторож
+			# 25 минут видел красный линк и «не лечил» из-за IP - поднял только
+			# ручной передёрг. Пропускаем лечение лишь когда ассоциация ЖИВА
+			# (iw link Connected) - тогда это действительно беда вышестоящего.
 			if [ "$_h_st" = down ]; then
 				_h_wip=$(printf '%s' "$_HDUMP" | jsonfilter \
 					-e "@.interface[@.interface=\"$_h_if\"]['ipv4-address'][0].address" 2>/dev/null)
-				[ -n "$_h_wip" ] && continue
+				if [ -n "$_h_wip" ]; then
+					_h_wdev=$(printf '%s' "$_HDUMP" | jsonfilter \
+						-e "@.interface[@.interface=\"$_h_if\"].device" 2>/dev/null | head -1)
+					if [ -n "$_h_wdev" ] && iw dev "$_h_wdev" link 2>/dev/null | grep -q "^Connected"; then
+						continue
+					fi
+				fi
 			fi
 			_h_step=0; _h_last=0; _h_n=0
 			[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"

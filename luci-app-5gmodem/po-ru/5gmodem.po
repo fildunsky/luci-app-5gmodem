@@ -4287,3 +4287,12 @@ msgstr "Путь отклонён: %s"
 
 msgid "DNS returns a foreign address for %s (%s) - the resolver substitutes it"
 msgstr "DNS отдаёт для %s чужой адрес (%s) - резолвер подменяет"
+
+msgid "My commands"
+msgstr "Мои команды"
+
+msgid "activated"
+msgstr "активна"
+
+msgid "deactivated"
+msgstr "не активна"

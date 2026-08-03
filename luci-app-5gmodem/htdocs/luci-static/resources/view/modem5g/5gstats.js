@@ -136,7 +136,7 @@ function drawChart(canvas, series, opts) {
 			ctx.fill();
 		}
 		ctx.strokeStyle = col;
-		ctx.lineWidth = 2.6;
+		ctx.lineWidth = 1.6;
 		ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 		ctx.beginPath();
 		tracePath();
@@ -234,10 +234,25 @@ function fmtBytes(n) {
 	return n.toFixed(d) + ' ' + units[i];
 }
 
-/* Таблица помесячного трафика: ключи приходят как "<iface>|<YYYY-MM>". */
+/* Месяц по-человечески: "2026-08" -> "Август, 2026" (запрос владельца).
+   Название берём у самого браузера с его локалью - собственный словарь месяцев
+   пришлось бы переводить и поддерживать, а Intl уже знает все языки. Первую
+   букву поднимаем: в русской локали месяц приходит строчным. */
+function fmtMonth(ym) {
+	var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
+	if (!m) { return String(ym || ''); }
+	var name = ym;
+	try {
+		name = new Date(+m[1], +m[2] - 1, 1).toLocaleString(undefined, { month: 'long' });
+		name = name.charAt(0).toUpperCase() + name.slice(1);
+	} catch (e) { return String(ym); }
+	return name + ', ' + m[1];
+}
+
+/* Таблица помесячного трафика: ключи приходят как "<sim|iface>|<YYYY-MM>". */
 function trafficTable(data, labels) {
 	var rows = [ E('tr', { 'class': 'tr table-titles' }, [
-		E('th', { 'class': 'th' }, [ _('Interface') ]),
+		E('th', { 'class': 'th' }, [ _('SIM card') ]),
 		E('th', { 'class': 'th' }, [ _('Month') ]),
 		E('th', { 'class': 'th' }, [ _('Received') ]),
 		E('th', { 'class': 'th' }, [ _('Sent') ]),
@@ -247,9 +262,14 @@ function trafficTable(data, labels) {
 	keys.forEach(function(k) {
 		var parts = k.split('|'), v = data[k] || {};
 		var rx = parseInt(v.rx, 10) || 0, tx = parseInt(v.tx, 10) || 0;
+		/* Строка озаглавлена SIM-картой (оператор и номер, если карта его
+		   отдала) - трафик тарифицирует оператор, а не модем. Ключи вида
+		   "sim-<iccid>" несут свою подпись; старые записи, накопленные по
+		   интерфейсу, показываем как раньше - по имени линка. */
+		var lab = (labels || {})[parts[0]] || (labels || {})['ping.' + parts[0]] || parts[0];
 		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td' }, [ (labels || {})['ping.' + parts[0]] || parts[0] ]),
-			E('td', { 'class': 'td' }, [ parts[1] ]),
+			E('td', { 'class': 'td' }, [ lab ]),
+			E('td', { 'class': 'td' }, [ fmtMonth(parts[1]) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(rx) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(tx) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(rx + tx) ])

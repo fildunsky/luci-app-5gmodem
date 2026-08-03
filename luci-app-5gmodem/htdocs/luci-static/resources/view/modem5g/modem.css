@@ -244,6 +244,23 @@
 	0%, 100% { box-shadow: 0 0 0 0 transparent; }
 	50%      { box-shadow: 0 0 7px 1px var(--st-c); }
 }
+/* Идёт замер пинга сервиса: сияет НЕ кнопка, а сама лампочка статуса (решение
+   владельца) - дышит своим текущим цветом (масштаб + яркость, цвет не трогаем,
+   чтобы зелёная дышала зелёным, красная - красным). Прежняя цифра остаётся на
+   месте до прихода нового значения (см. pingOnce). */
+.netpribar .ping-busy .netpri-svcdot { animation: dot-breathe 1.1s ease-in-out infinite; }
+@keyframes dot-breathe {
+	0%, 100% { transform: scale(1); filter: none; }
+	50%      { transform: scale(1.1); filter: brightness(1.15); }
+}
+/* Результат пришёл: лампочка ПРОСИЯЛА цветом итога (зелёным/красным) и осела -
+   одноразовая вспышка поверх штатного transition цвета: если статус сменился,
+   цвет перетекает сам (transition .3s на .netpri-svcdot). */
+.netpribar .netpri-svcdot.ping-flash { animation: dot-flash .7s ease-out 1; }
+@keyframes dot-flash {
+	0%   { transform: scale(1.2); filter: brightness(1.25); }
+	100% { transform: scale(1); filter: none; }
+}
 /* уважаем системную настройку «меньше движения»: без пульса, но со статичным
    свечением - так активная стрелка всё равно выделена. */
 @media (prefers-reduced-motion: reduce) {
@@ -253,6 +270,8 @@
 	}
 	.netpribar .netpri-st.st-dl::before, .netpribar .netpri-st.st-ul::before { transition: none; }
 	.netpribar .netpri-st.st-wait { animation: none; box-shadow: 0 0 5px 1px var(--st-c); }
+	.netpribar .ping-busy .netpri-svcdot,
+	.netpribar .netpri-svcdot.ping-flash { animation: none; }
 }
 .netpribar .netpri-st .netpri-st-live { font-variant-numeric: tabular-nums; }
 /* Ширину НЕ фиксируем: кнопка растёт под большое число, текст не вылезает.
@@ -615,8 +634,9 @@
     gap: 1px 1em;
     border: 1px solid rgba(128,128,128,.25);
     border-radius: 6px;
-    padding: .35em .6em;
-    margin: 0 0 .45em 0;
+    padding: .55em .75em;
+    margin: 0 0 .5em 0;
+    background: rgba(128,128,128,.09) !important;
   }
   #ca-table .ca-row .td {
     display: block;
@@ -670,8 +690,9 @@
     gap: 1px 1em;
     border: 1px solid rgba(128,128,128,.25);
     border-radius: 6px;
-    padding: .35em .6em;
-    margin: 0 0 .45em 0;
+    padding: .55em .75em;
+    margin: 0 0 .5em 0;
+    background: rgba(128,128,128,.09) !important;
   }
   #nb-table .nb-row .td {
     display: block;
@@ -2007,3 +2028,164 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 .tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection{width:100%;box-sizing:border-box;overflow:visible;display:flex;flex-wrap:wrap;align-items:flex-end;gap:.3em .8em}
 .tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection>.cbi-section-create,
 .tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection>.cbi-section-create{margin:0 0 0 auto}
+
+/* ==== МОБИЛЬНАЯ РАСКЛАДКА ДВУХКОЛОНОЧНЫХ ТАБЛИЦ (страница «Сеть») ==========
+   ПРОБЛЕМА. Блоки страницы построены на таблице «подпись | значение», где
+   первая колонка жёстко width:33%. На телефоне это ~110 px, и получалось два
+   разных уродства сразу:
+     - длинная подпись рвалась по одному слову в строку («RSSI / (индикатор /
+       уровня / принимаемого / сигнала)» - шесть строк вместо двух);
+     - строки с КНОПКАМИ ДЕЙСТВИЙ («Применить», «Все диапазоны», «Перезапуск
+       радио», «Полная перезагрузка») имеют ПУСТУЮ или короткую первую ячейку,
+       поэтому кнопки жались в остаток ширины и переносили слова внутри себя.
+   РЕШЕНИЕ. Ниже 700 px строка становится парой «подпись сверху - значение
+   снизу» на лёгкой подложке со скруглением, как карточки CA и соседних сот.
+   ВАЖНО ПРО ЯЧЕЙКИ КНОПОК: класс .tginfo-modesw носят И ячейки с кнопками
+   ДИАПАЗОНОВ (id bands-2g/3g/4g/5gnsa/5gsa), И ячейки с кнопками ДЕЙСТВИЙ.
+   Растягивать во всю ширину можно только вторые: диапазонов на строке десятки,
+   и растянутые «B3» выглядели бы нелепо. Поэтому правила разведены, а
+   специфичность поднята до уровня правила .td (иначе display:flex проигрывал
+   ему и не применялся вовсе - так и вышло в первой редакции).
+   ИСКЛЮЧЕНИЯ - таблицы со своей мобильной раскладкой (#ca-table, #nb-table) и
+   многоколоночная таблица антенн (#antports-table). */
+@media (max-width: 700px) {
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table),
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) > tbody {
+    display: block;
+    width: 100%;
+  }
+  /* Пары «подпись - значение» разделяем ЛИНИЕЙ, без подложки (решение
+     владельца): карточки уместны только в нижних таблицах, где строка несёт
+     много полей сразу, а здесь их десятки подряд и страница пестрит. */
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) > tbody > .tr,
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) > .tr {
+    display: block;
+    padding: .4em 0;
+    border-bottom: 1px solid rgba(128,128,128,.16);
+  }
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) > tbody > .tr:last-child,
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) > .tr:last-child {
+    border-bottom: none;
+  }
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    padding: 1px 0;
+  }
+  /* Подпись - мельче и приглушённее значения: пара читается как заголовок и
+     данные, а не как два равнозначных куска текста. */
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) .tr > .td:first-child {
+    font-size: .9em;
+    opacity: .75;
+    margin-bottom: .15em;
+  }
+  /* Расшифровка - СВОЕЙ строкой и мелким шрифтом (решение владельца): «RSSI»,
+     под ним «(индикатор уровня…)», дальше значение. Три строки вместо шести. */
+  .tginfo .tg-sublabel {
+    display: block;
+    font-size: 76%;
+    opacity: .8;
+  }
+  /* Ячейки кнопок - лентой с одинаковыми зазорами. gap заменяет собственные
+     отступы кнопок, поэтому их margin гасим (иначе proton2025 добавляет свой
+     .btn+.btn margin-left и ряд разъезжается неровно). */
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) .td.tginfo-modesw {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45em;
+  }
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) .td.tginfo-modesw > .btn {
+    margin: 0;
+  }
+  /* Кнопки ДЕЙСТВИЙ (не диапазонов) занимают ширину поровну: две в ряд, а
+     длинная («Полная перезагрузка») - на всю строку, без переносов внутри. */
+  /* Кнопки ДЕЙСТВИЙ (не диапазонов) занимают ширину поровну И ИМЕЮТ ТАКУЮ ЖЕ
+     ВЫСОТУ, как кнопки диапазонов. Общее правило .tginfo-modesw .cbi-button
+     даёт им padding 2px по вертикали - рядом с «пухлыми» диапазонами (0.35em с
+     !important, см. выше) они выглядели тонкими полосками. Повторяем ту же
+     тройку !important: высоту навязывают height и min-height из РАЗНЫХ правил
+     темы, и без них тема снова сплющит кнопку. */
+  .tginfo table.table:not(#ca-table):not(#nb-table):not(#antports-table) .td.tginfo-modesw:not([id^="bands-"]):not(#modesw-btns) > .btn {
+    flex: 1 1 42%;
+    padding: .45em .9em !important;
+    line-height: 1.4 !important;
+    min-height: 0 !important;
+    height: auto !important;
+  }
+}
+
+/* Таблица антенных портов - та же мобильная карточка, что у CA и соседних сот
+   (решение владельца: подложка нужна именно в нижних таблицах). Четыре узкие
+   колонки на телефоне читались как каша из чисел; теперь строка - карточка, где
+   номер порта служит заголовком, а уровни подписаны через data-l. */
+@media (max-width: 800px) {
+  #antports-table, #antports-table .tr { display: block; width: 100%; }
+  #antports-table .table-titles { display: none; }
+  #antports-table .ant-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px 1em;
+    border: 1px solid rgba(128,128,128,.25);
+    border-radius: 6px;
+    background: rgba(128,128,128,.09) !important;
+    padding: .55em .75em;
+    margin: 0 0 .5em 0;
+  }
+  #antports-table .ant-row .td {
+    display: block;
+    width: auto !important;
+    white-space: normal;
+    padding: 1px 0;
+  }
+  #antports-table .ant-row .ant-port {
+    grid-column: 1 / -1;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(128,128,128,.2);
+    margin-bottom: .15em;
+  }
+  #antports-table .ant-row .td[data-l]::before {
+    content: attr(data-l) ": ";
+    opacity: .6;
+  }
+}
+
+/* ПЕРЕНОС ПО СМЫСЛУ В МОБИЛЬНЫХ КАРТОЧКАХ (решение владельца).
+   Ячейка карточки - это «Band: B3 (1800 MHz)», где подпись рисует ::before.
+   Инлайновый поток рвал СТРОКУ ЗНАЧЕНИЯ по словам («Band: B3 (1800» / «MHz)»),
+   и число отрывалось от единиц. Делаем ячейку flex-парой: подпись и значение -
+   отдельные элементы, внутри них переносов нет (nowrap), а flex-wrap при
+   нехватке места уносит ЗНАЧЕНИЕ ЦЕЛИКОМ на следующую строку. Короткие пары
+   («PCI: 359») при этом остаются в одну строку - ровно то поведение, которое
+   и просили. */
+@media (max-width: 800px) {
+  #ca-table .ca-row .td,
+  #nb-table .nb-row .td,
+  #antports-table .ant-row .td {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 .35em;
+    white-space: nowrap;
+  }
+  #ca-table .ca-row .td::before,
+  #nb-table .nb-row .td::before,
+  #antports-table .ant-row .td::before {
+    flex: 0 0 auto;
+  }
+  /* Заголовок карточки (CC / порт / роль соты) - обычным блоком: подписи у него
+     нет, а flex сломал бы разделительную линию под ним. */
+  #ca-table .ca-row .ca-cc,
+  #antports-table .ant-row .ant-port {
+    display: block;
+  }
+  /* Полоска уровня (proton рисует метрику прогресс-баром) - на всю ширину
+     ячейки, своей строкой под подписью: как flex-элемент она иначе сжимается
+     до нуля и уровень становится не виден вовсе. */
+  #ca-table .ca-row .td > .cbi-progressbar,
+  #nb-table .nb-row .td > .cbi-progressbar,
+  #antports-table .ant-row .td > .cbi-progressbar {
+    flex: 1 1 100%;
+    min-width: 6em;
+  }
+}
