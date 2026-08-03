@@ -939,14 +939,31 @@ fi
 # Нужен ли захват MM для записи: профиль пишет диапазоны через mmcli, но интерфейс
 # на kernel-прото (mbim/qmi) - MM инхибирован, штатно состояние readonly. Тогда
 # запись оборачиваем во ВРЕМЕННЫЙ захват MM (см. ниже).
-# WIP / за feature-flag (по умолчанию ВЫКЛ). Захват работает (бенды применяются),
-# но teardown недоделан: после смены ModemManager не гасится штатно и держит
-# cdc-wdm, umbim-сессию приходится передёргивать вручную (модем «висит без IP» до
-# чистого ifdown/ifup). Пока не доведён - фичу включает только явный флаг
-# 5gmodem.@5gmodem[0].band_takeover=1; иначе диапазоны остаются readonly (как было).
+# За feature-flag (по умолчанию ВЫКЛ): включает 5gmodem.@5gmodem[0].band_takeover=1,
+# иначе диапазоны остаются readonly. Полный цикл проверен вживую 03.08.2026
+# (Compal RXM-G1 90d6, proto=mbim): захват -> запись -> MM погашен -> umbim
+# поднялся сам, 62 c на круг. Исторический блокер teardown («MM не гасится»)
+# был ложно-отрицательным _running в mmneed.sh (грепали «ModemManager --», а
+# procd запускает без аргументов) - починен там же. Флаг пока не включаем по
+# умолчанию: проверка была на одном стенде, шире накатим после полевых отчётов.
 _needs_mm_takeover() {
 	[ "$(uci -q get 5gmodem.@5gmodem[0].band_takeover 2>/dev/null)" = "1" ] || return 1
 	[ "$_BAND_VIA" = "mmcli" ] && [ "$_BAND_READONLY" = "1" ]
+}
+
+# Жив ли трафик интерфейса $_mt_if: пинг целей сторожа (health.targets) через
+# его устройство, любой ответ = жив. Устройства нет - считаем живым, чтобы не
+# передёргивать вслепую.
+_mt_traffic_ok() {
+	_mtt_dev=$(ubus call "network.interface.$_mt_if" status 2>/dev/null \
+		| jsonfilter -e '@.l3_device' 2>/dev/null)
+	[ -n "$_mtt_dev" ] || return 0
+	_mtt_t=$(uci -q get 5gmodem.health.targets 2>/dev/null)
+	[ -n "$_mtt_t" ] || _mtt_t="77.88.8.8 1.1.1.1"
+	for _mtt_h in $_mtt_t; do
+		ping -I "$_mtt_dev" -c 1 -W 2 "$_mtt_h" >/dev/null 2>&1 && return 0
+	done
+	return 1
 }
 
 # Временный захват ModemManager ТОЛЬКО на операцию записи диапазонов/режима, затем
@@ -1006,6 +1023,26 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 			[ "$_mt_i" = 3 ] && { ifdown "$_mt_if" 2>/dev/null; sleep 2; ifup "$_mt_if" 2>/dev/null; }
 			_mt_i=$((_mt_i + 1))
 		done
+		# «up» ещё не значит «жив». Живой случай (Compal 90d6, 03.08.2026):
+		# второй захват подряд вернул зомби-сессию - WDS connected, адрес на
+		# месте, а пакеты в никуда; лечит один ifdown/ifup. Поэтому меряем
+		# ТРАФИК (цели сторожа через устройство интерфейса) и при тишине
+		# передёргиваем один раз.
+		_mt_i=0; _mt_ok=""
+		while [ "$_mt_i" -lt 4 ]; do
+			_mt_traffic_ok && { _mt_ok=1; break; }
+			sleep 5; _mt_i=$((_mt_i + 1))
+		done
+		if [ -z "$_mt_ok" ]; then
+			logger -t 5gmodem "band-set: $_mt_if поднят, но трафик не идёт (зомби-сессия) - передёргиваю"
+			ifdown "$_mt_if" 2>/dev/null; sleep 2; ifup "$_mt_if" 2>/dev/null
+			_mt_i=0
+			while [ "$_mt_i" -lt 9 ]; do
+				sleep 4
+				_mt_traffic_ok && break
+				_mt_i=$((_mt_i + 1))
+			done
+		fi
 	fi
 	logger -t 5gmodem "band-set: захват MM завершён, $_mt_if поднят"
 }

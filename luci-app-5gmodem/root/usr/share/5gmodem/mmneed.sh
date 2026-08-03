@@ -82,7 +82,13 @@ mm_needed() {
 	return 1
 }
 
-_running() { [ "$(ps w 2>/dev/null | grep -c '[M]odemManager --')" -gt 0 ]; }
+# Жив ли MM. Раньше грепали «ModemManager --» - procd запускает бинарь БЕЗ
+# аргументов, строка не совпадала, и «не работает» выходило у живой службы:
+# stop не вызывался, MM держал модем и после band-takeover (модем «без IP»).
+_running() {
+	/etc/init.d/modemmanager running >/dev/null 2>&1 && return 0
+	ps w 2>/dev/null | grep -q '[M]odemManager'
+}
 
 case "$1" in
 	check)
@@ -104,6 +110,15 @@ case "$1" in
 				/etc/init.d/modemmanager stop >/dev/null 2>&1
 				/etc/init.d/modemmanager disable >/dev/null 2>&1
 				logger -t 5gmodem "ModemManager остановлен: ни один подключённый модем им не управляется"
+				# Сирота mbim-proxy: MM поднимает его под себя, и после
+				# остановки MM тот остаётся жить с открытым cdc-wdm (живьём
+				# 03.08.2026 - висел с бута). Узел нужен umbim'у монопольно -
+				# это тот самый класс отказа «открыл страницу - отвалился инет»
+				# (лечение руками было killall mbim-proxy). Убираем ровно в
+				# момент остановки MM, а не на каждом apply: позже прокси может
+				# законно поднять mbim-проба eSIM. qmi-proxy не трогаем - QMI
+				# мультиплексируется штатно, им пользуются наши же метрики.
+				killall mbim-proxy 2>/dev/null
 			fi
 		fi
 		;;

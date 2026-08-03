@@ -73,6 +73,10 @@ function drawChart(canvas, series, opts) {
 	if (vmax === vmin) { vmax = vmin + 1; }
 	var pad = (vmax - vmin) * 0.12;
 	vmax += pad; if (!opts.zeroBase) { vmin -= pad; }
+	/* Фиксированная шкала (проценты 0..100): рамка не должна дышать от данных,
+	   иначе «полшкалы» перестаёт значить «половину возможного». */
+	if (opts.min != null) { vmin = opts.min; }
+	if (opts.max != null) { vmax = opts.max; }
 
 	var tAll = [];
 	series.forEach(function(s) { (s.points || []).forEach(function(p) { tAll.push(p[0]); }); });
@@ -141,7 +145,7 @@ function drawChart(canvas, series, opts) {
 
 	canvas.__chart = { series: series, tmin: tmin, tmax: tmax, vmin: vmin, vmax: vmax,
 		padL: padL, padT: padT, innerW: innerW, innerH: innerH, W: W, H: H,
-		fmt: opts.fmt, dark: dark };
+		fmt: opts.fmt, opts: opts, dark: dark };
 
 	/* курсор: вертикаль + значения всех рядов в этой точке */
 	if (canvas.__hoverX != null) {
@@ -187,16 +191,19 @@ function drawChart(canvas, series, opts) {
 function chartCard(title, id, legend) {
 	var canvas = E('canvas', { 'id': id,
 		'style': 'width:100%; height:190px; display:block; cursor:crosshair',
+		/* Перерисовка курсора обязана идти С ТЕМИ ЖЕ опциями, что и штатная
+		   отрисовка: раньше здесь собирался урезанный набор (fmt+zeroBase), и
+		   фиксированная шкала процентов слетала бы при первом движении мыши. */
 		'mousemove': function(ev) {
 			var r = ev.target.getBoundingClientRect();
 			ev.target.__hoverX = ev.clientX - r.left;
 			if (ev.target.__chart) { drawChart(ev.target, ev.target.__chart.series,
-				{ fmt: ev.target.__chart.fmt, zeroBase: ev.target.__zeroBase }); }
+				ev.target.__chart.opts); }
 		},
 		'mouseleave': function(ev) {
 			ev.target.__hoverX = null;
 			if (ev.target.__chart) { drawChart(ev.target, ev.target.__chart.series,
-				{ fmt: ev.target.__chart.fmt, zeroBase: ev.target.__zeroBase }); }
+				ev.target.__chart.opts); }
 		}
 	});
 	return E('div', { 'class': 'cbi-section tg5g' }, [
@@ -265,15 +272,18 @@ function redraw() {
 		return { name: lab['ping.' + n] || n, points: (_state.series['ping.' + n] || []) };
 	});
 	var c1 = document.getElementById('chart-ping');
-	if (c1) { c1.__zeroBase = true; drawChart(c1, pingSeries, { zeroBase: true, fmt: function(v) { return Math.round(v) + ' ms'; } }); }
+	if (c1) { drawChart(c1, pingSeries, { zeroBase: true, fmt: function(v) { return Math.round(v) + ' ms'; } }); }
 	var l1 = document.getElementById('chart-ping-legend');
 	if (l1) { l1.innerHTML = ''; pingSeries.forEach(function(s, i) { l1.appendChild(legendItem(s.name, i)); }); }
 
 	var sigSeries = (lst.signal || []).map(function(n) {
 		return { name: lab['signal.' + n] || n.replace(/_/g, ' '), points: (_state.series['signal.' + n] || []) };
 	});
+	/* Сигнал приходит в процентах (поле signal снимка, та же величина, что у
+	   планки на главной) - шкала жёсткая 0..100, чтобы высота линии читалась
+	   как «сколько от максимума», а не плясала от разброса данных. */
 	var c2 = document.getElementById('chart-signal');
-	if (c2) { drawChart(c2, sigSeries, { fmt: function(v) { return Math.round(v) + ' dBm'; } }); }
+	if (c2) { drawChart(c2, sigSeries, { min: 0, max: 100, fmt: function(v) { return Math.round(v) + '%'; } }); }
 	var l2 = document.getElementById('chart-signal-legend');
 	if (l2) { l2.innerHTML = ''; sigSeries.forEach(function(s, i) { l2.appendChild(legendItem(s.name, i)); }); }
 

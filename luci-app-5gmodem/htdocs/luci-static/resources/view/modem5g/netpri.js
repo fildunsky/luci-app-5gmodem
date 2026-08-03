@@ -86,17 +86,26 @@ var SPEEDBIN = '/usr/share/5gmodem/speedtest.sh';
 
 /* Состояние карточки теста скорости - модульное, чтобы переживать перерисовку
    бара 5-секундным поллом. phase: idle|running|done|fail. */
-var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', live: 0, liveUp: 0, secs: 15, phaseStart: 0 };
+var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', live: 0, liveUp: 0, secs: 15, phaseStart: 0, hasData: false, elapsed: null, elapsedAt: 0 };
 
 /* Заливка-прогресс: доля прошедшего времени ФАЗЫ (elapsed/secs) -> --st-p.
-   secs = потолок фазы (curl --max-time), приходит из speedtest.sh. Тикаем чаще
-   поллинга (200 мс) - CSS transition на ::before доводит плавно. */
+   ДВЕ честности сразу (запрос владельца - «полоса ползёт, а цифры 0»):
+   1) полоса появляется ТОЛЬКО когда пошли реальные цифры (hasData) - до того
+      карточка пульсирует рамкой цветом фазы (класс st-wait, CSS);
+   2) отсчёт берём НЕ от клика, а из elapsed БЭКЕНДА (сколько секунд фаза
+      реально идёт от старта curl) + доводка часами между поллами - на
+      медленном коннекте полоса раньше стартовала с клика и «убегала» от
+      замера, кончаясь на середине цифр. secs = потолок фазы (curl --max-time).
+   Тикаем чаще поллинга (200 мс) - CSS transition на ::before доводит плавно. */
 var _stProgTimer = null;
 function setStProgress() {
 	var card = document.querySelector('.netpri-st');
 	if (!card) { return; }
-	if (_st.phase !== 'running' || !_st.phaseStart || !_st.secs) { card.style.removeProperty('--st-p'); return; }
-	var pct = (Date.now() - _st.phaseStart) / (_st.secs * 1000) * 100;
+	if (_st.phase !== 'running' || !_st.secs || !_st.hasData || _st.elapsed == null) {
+		card.style.removeProperty('--st-p'); return;
+	}
+	var ms = _st.elapsed * 1000 + (Date.now() - _st.elapsedAt);
+	var pct = ms / (_st.secs * 1000) * 100;
 	if (pct < 0) { pct = 0; } if (pct > 100) { pct = 100; }
 	card.style.setProperty('--st-p', pct.toFixed(1) + '%');
 }
@@ -247,6 +256,9 @@ function refreshStCard() {
 	if (card) {
 		card.classList.toggle('st-dl', _st.phase === 'running' && !_st.upPhase);
 		card.classList.toggle('st-ul', _st.phase === 'running' && !!_st.upPhase);
+		/* Фаза идёт, но реальных цифр ещё нет (DNS/коннект/разгон TCP) - кнопка
+		   пульсирует рамкой цвета фазы; полосы в этот момент нет вовсе. */
+		card.classList.toggle('st-wait', _st.phase === 'running' && !_st.hasData);
 	}
 	// анимируем текущее живое число: при отдаче - upload, иначе - download
 	if (_st.phase === 'running') { animateLive(_st.upPhase ? (_st.liveUp || 0) : (_st.live || 0)); }
@@ -265,66 +277,118 @@ function runSpeedtest() {
 	}
 	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
 	_st.down = null; _st.up = null; _st.ip = ''; _st.ipLocal = false;
+	_st.hasData = false; _st.elapsed = null;
 	_st.phaseStart = Date.now();
 	_renderedKey = ''; _liveDisplay = 0;
 	refreshStCard();
 	stProgStart();
-	fs.exec(SPEEDBIN, [ 'start' ]).then(function() {
-		var tries = 0;
-		var poll = function() {
-			return L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
-				/* Стоп нажат: не ждём финального JSON бэкенда (1-3 c) - сбрасываем
-				   карточку в дефолт на ПЕРВОМ же тике и прекращаем опрос. */
-				if (_st.stopping) {
-					_st.stopping = false;
-					_st.phase = 'idle';
-					_st.down = null; _st.up = null;
-					_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
-					_renderedKey = ''; stProgStop(); refreshStCard();
-					return;
-				}
-				var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
-				if (j.service) { _st.service = j.service; }
-				if (j.running) {
-					_st.phase = 'running';
-					_st.upPhase = (j.phase === 'up');
-					if (j.live_down != null) { _st.live = j.live_down; }
-					if (j.live_up != null) { _st.liveUp = j.live_up; }
-						if (j.secs != null) { _st.secs = j.secs; }
-					if (j.down_mbps != null) { _st.down = j.down_mbps; }
-					// IP теперь определяется первым - показываем сразу, не дожидаясь цифр
-					if (j.pub_ip) { _st.ip = j.pub_ip; }
-						if (j.ip_local != null) { _st.ipLocal = (j.ip_local == 1); }
-					if (j.cc) { _st.cc = j.cc; }
-					refreshStCard();
-					if (tries++ < 45) {   /* ~1 c * 45 - хватает на download+upload+IP */
-						return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
-					}
-				}
-				/* Пользователь остановил тест: полный сброс к дефолтному виду,
-				   что бы ни пришло в финальном JSON (решение владельца). */
-				if (_st.stopping || j.cancelled) {
-					_st.stopping = false;
-					_st.phase = 'idle';
-					_st.down = null; _st.up = null;
-					_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
-					_renderedKey = ''; stProgStop(); refreshStCard();
-					return;
-				}
-				if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; _st.ipLocal = (j.ip_local == 1); }
-				/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
-				   отказ («нажал, ничего не произошло») хуже любой ошибки: человек
-				   не знает, чинить ему что-то или ждать. */
-				else if (j.error === 'no-curl') {
-					_st.phase = 'idle';
-					ui.addNotification(null, E('p', _('Speed test needs the curl package: install it with "apk add curl" (or "opkg install curl"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash.')), 'warning');
-				}
-				else { _st.phase = 'fail'; if (j.pub_ip) { _st.ip = j.pub_ip; _st.cc = j.cc || ''; } }
+	/* start НЕ сторожим и полл НЕ подвешиваем на его завершение. Живой случай:
+	   rpcd занят другими поллерами страницы, XHR запуска висел ~19 c - карточка
+	   всё это время пульсировала без единой цифры, потом catch показал «Ошибка
+	   теста», хотя скрипт давно отработал и результат лежал в кэше. Поэтому
+	   опрос статуса стартует сразу и сам разбирается, когда бэкенд оживёт;
+	   протухший финал прошлого теста он отличает по снимку staleFinal. Отказ
+	   самого XHR глотаем - о судьбе теста честнее расскажет опрос. */
+	_st.staleFinal = _st.lastStatusRaw || '';
+	fs.exec(SPEEDBIN, [ 'start' ]).catch(function() {});
+	stPoll(true);
+}
+
+/* Опрос идущего теста. Вынесен из runSpeedtest, чтобы stInit мог ПОДХВАТИТЬ
+   тест, запущенный до перехода на другую страницу: раньше вернувшийся
+   пользователь видел карточку в покое, а результат - только после конца. */
+function stPoll(expectStart) {
+	var tries = 0, misses = 0, sawRunning = !expectStart;
+	var poll = function() {
+		return L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
+			/* Стоп нажат: не ждём финального JSON бэкенда (1-3 c) - сбрасываем
+			   карточку в дефолт на ПЕРВОМ же тике и прекращаем опрос. */
+			if (_st.stopping) {
+				_st.stopping = false;
+				_st.phase = 'idle';
+				_st.down = null; _st.up = null;
+				_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
 				_renderedKey = ''; stProgStop(); refreshStCard();
-			});
-		};
-		return poll();
-	}).catch(function() { _st.phase = 'fail'; _renderedKey = ''; stProgStop(); refreshStCard(); });
+				return;
+			}
+			if (out) { _st.lastStatusRaw = out; }
+			var j = null; try { j = JSON.parse(out || ''); } catch (e) { j = null; }
+			/* start ещё НЕ ДОЕХАЛ до роутера (его XHR стоит в очереди rpcd), а в
+			   кэше лежит финал ПРОШЛОГО теста - он побайтово равен снимку на
+			   момент клика (все финалы несут ts, двух одинаковых не бывает).
+			   Это не исход нашего теста - ждём, пока появится свежий статус. */
+			if (!sawRunning && j && !j.running && out === _st.staleFinal) {
+				if (tries++ < 30) {
+					return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
+				}
+				_st.phase = 'fail';
+				_renderedKey = ''; stProgStop(); refreshStCard();
+				return;
+			}
+			/* ТРАНСПОРТНЫЙ СБОЙ ОДНОГО ТИКА - НЕ ПРОВАЛ ТЕСТА. exec_direct ходит
+			   через cgi-io, и занятый rpcd/оборванный XHR изредка возвращает
+			   пусто; бэкенд при этом живёт и пишет статус в файл (проверено:
+			   опрос самого скрипта каждые 0.3 c за весь тест не дал ни одного
+			   пустого ответа). Раньше единственный такой тик показывал «Ошибка
+			   теста», а результат «внезапно» находился при следующем заходе на
+			   страницу. Держим текущий вид и пробуем ещё; сдаёмся после 4 подряд. */
+			if (!j || (j.running == null && j.ok == null && !j.cancelled && !j.error)) {
+				if (++misses <= 4 && tries++ < 70) {
+					return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
+				}
+				_st.phase = 'fail';
+				_renderedKey = ''; stProgStop(); refreshStCard();
+				return;
+			}
+			misses = 0;
+			if (j.service) { _st.service = j.service; }
+			if (j.running) {
+				sawRunning = true;
+				_st.phase = 'running';
+				var wasUp = _st.upPhase;
+				_st.upPhase = (j.phase === 'up');
+				/* Смена фазы (загрузка -> отдача) - ожидание данных начинается
+				   заново: у отдачи свой коннект и свой первый POST. */
+				if (wasUp !== _st.upPhase) { _st.hasData = false; _st.elapsed = null; }
+				if (j.live_down != null) { _st.live = j.live_down; }
+				if (j.live_up != null) { _st.liveUp = j.live_up; }
+					if (j.secs != null) { _st.secs = j.secs; }
+				if (j.elapsed != null) { _st.elapsed = +j.elapsed; _st.elapsedAt = Date.now(); }
+				/* Реальные цифры пошли - с этого тика включается полоса. */
+				if (+(_st.upPhase ? _st.liveUp : _st.live) > 0) { _st.hasData = true; }
+				if (j.down_mbps != null) { _st.down = j.down_mbps; }
+				// IP теперь определяется первым - показываем сразу, не дожидаясь цифр
+				if (j.pub_ip) { _st.ip = j.pub_ip; }
+					if (j.ip_local != null) { _st.ipLocal = (j.ip_local == 1); }
+				if (j.cc) { _st.cc = j.cc; }
+				refreshStCard();
+				if (tries++ < 70) {   /* ~1 c * 70 - download+upload+переходы с запасом */
+					return new Promise(function(r) { window.setTimeout(function() { poll().then(r); }, 1000); });
+				}
+			}
+			/* Пользователь остановил тест: полный сброс к дефолтному виду,
+			   что бы ни пришло в финальном JSON (решение владельца). */
+			if (_st.stopping || j.cancelled) {
+				_st.stopping = false;
+				_st.phase = 'idle';
+				_st.down = null; _st.up = null;
+				_st.live = 0; _st.liveUp = 0; _st.upPhase = false;
+				_renderedKey = ''; stProgStop(); refreshStCard();
+				return;
+			}
+			if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; _st.ipLocal = (j.ip_local == 1); }
+			/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
+			   отказ («нажал, ничего не произошло») хуже любой ошибки: человек
+			   не знает, чинить ему что-то или ждать. */
+			else if (j.error === 'no-curl') {
+				_st.phase = 'idle';
+				ui.addNotification(null, E('p', _('Speed test needs the curl package: install it with "apk add curl" (or "opkg install curl"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash.')), 'warning');
+			}
+			else { _st.phase = 'fail'; if (j.pub_ip) { _st.ip = j.pub_ip; _st.cc = j.cc || ''; } }
+			_renderedKey = ''; stProgStop(); refreshStCard();
+		});
+	};
+	return poll();
 }
 
 /* подтянуть начальную подпись сервиса и последний результат (если был) */
@@ -624,8 +688,20 @@ function ssclashStatusInit(kind) {
 
 function stInit() {
 	L.resolveDefault(fs.exec_direct(SPEEDBIN, [ 'status' ]), '').then(function(out) {
+		if (out) { _st.lastStatusRaw = out; }
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j.service) { _st.service = j.service; }
+		/* Тест уже ИДЁТ (запущен до ухода со страницы) - подхватываем его
+		   наблюдением, а не сидим в покое до финала. Гард на phase: свой
+		   собственный опрос (runSpeedtest) уже работает - второй не нужен. */
+		if (j.running && _st.phase !== 'running') {
+			_st.phase = 'running'; _st.hasData = false; _st.elapsed = null;
+			_st.upPhase = (j.phase === 'up');
+			_renderedKey = ''; _liveDisplay = 0;
+			refreshStCard(); stProgStart();
+			stPoll();
+			return;
+		}
 		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
 		patchStCard();
 	});

@@ -24,7 +24,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+curl \
 	+coreutils-stty
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.2.6
+PKG_VERSION:=2.2.7
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -73,6 +73,10 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 	# на сотовых аплинках их режет dnsmasq, и клиенты врут «нет интернета».
 	# Запускаем и здесь: uci-defaults отработает только на следующем буте.
 	sh /etc/uci-defaults/5gmodem-rebind-allow.sh 2>/dev/null
+	# Убрать инклюд старого TTL-механизма СРАЗУ при обновлении (см. ttl.sh):
+	# он ломает сборку fw4 на холодном старте, ждать следующего бута нельзя -
+	# следующий бут с ним и сломается. Правила пересоздаст hotplug/страница.
+	sh /etc/uci-defaults/5gmodem-ttl-migrate.sh 2>/dev/null
 }
 if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
 	mkdir -p "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n"

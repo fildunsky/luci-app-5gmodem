@@ -109,7 +109,7 @@ start)
 	# флеша это заметно. Поэтому вместо тихого отказа объясняем, чего не хватает -
 	# пользователь сам решит, ставить ли (apk add curl).
 	if ! command -v curl >/dev/null 2>&1; then
-		printf '{"running":0,"ok":0,"error":"no-curl"}\n' > "$CACHE" 2>/dev/null
+		printf '{"running":0,"ok":0,"error":"no-curl","ts":%s}\n' "$(date +%s 2>/dev/null)" > "$CACHE" 2>/dev/null
 		printf '{"running":0,"ok":0,"error":"no-curl"}\n'
 		exit 0
 	fi
@@ -235,6 +235,7 @@ start)
 		# разгоном TCP. Среднее оставляем фолбэком, если семплов не было.
 		# -A маркер: по нему stop убивает ИМЕННО замерные curl'ы (busybox без pkill
 		# по имени+аргументам, pgrep -f по маркеру - точечно, чужие curl не трогаем)
+		_DL_T0=$(cut -d. -f1 /proc/uptime)
 		curl -A 5gmodem-speedtest -o /dev/null --max-time "$SECS" --connect-timeout 8 \
 			-w '%{speed_download} %{http_code}' "$URL" 2>"$PROG" >"$RESF" &
 		CPID=$!
@@ -288,7 +289,10 @@ start)
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			# elapsed - сколько секунд фаза УЖЕ идёт (от старта curl): фронт по
+			# нему строит полосу прогресса, не выдумывая собственного отсчёта -
+			# иначе полоса стартовала с клика и врала на медленном коннекте.
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"elapsed\":$(( _NOWT - _DL_T0 )),\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
 		SPD=$(awk '{print $1+0}' "$RESF")
@@ -304,7 +308,7 @@ start)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
 			rm -f "$GEOIP" "$GEOCC" "$GEOLOC" /tmp/5gmodem_st_stop
-			_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
 			exit 0
 		fi
 
@@ -342,6 +346,7 @@ start)
 			done
 		) </dev/null &
 		UPID=$!
+		UPT0=$(cut -d. -f1 /proc/uptime)
 		MAXU=0
 		LIVEU=0
 		while kill -0 "$UPID" 2>/dev/null; do
@@ -359,7 +364,7 @@ start)
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"elapsed\":$(( $(cut -d. -f1 /proc/uptime) - UPT0 )),\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
 		# лучшая средняя среди POST'ов цикла (каждый пишет свою строку)
@@ -380,7 +385,10 @@ start)
 				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 			*)
-				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+				# ts во ВСЕХ финалах (не только ok): фронт отличает свежий финал от
+			# протухшего кэша прошлого теста побайтовым сравнением - без метки
+			# два одинаковых исхода неразличимы.
+			_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 		esac
 	) >/dev/null 2>&1 </dev/null &
@@ -403,7 +411,7 @@ stop)
 	kill $(pgrep -f 5gmodem-speedtest) 2>/dev/null
 	sleep 1
 	grep -q '"running":1' "$CACHE" 2>/dev/null && \
-		_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$(_service_name)\"}"
+		_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$(_service_name)\",\"ts\":$(date +%s 2>/dev/null)}"
 	echo '{"running":0,"cancelled":1}'
 	;;
 *)

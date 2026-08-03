@@ -6,8 +6,8 @@
 #   ping   - RTT каждого аплинка. Источник бесплатный: сторож (health.sh) и так
 #            меряет его каждый круг и кладёт в /tmp/5gmodem_health/<iface>
 #            (поле ms). Своих проб НЕ делаем - лишний трафик и лишние процессы.
-#   signal - уровень сигнала активного модема из последнего снимка метрик
-#            (rsrp, иначе rssi) - тоже готовое, без похода в порт.
+#   signal - уровень сигнала модемов из последнего снимка метрик (поле signal,
+#            проценты 0-100) - тоже готовое, без похода в порт.
 #   traffic- байты rx/tx по интерфейсам. Сырые счётчики устройства сбрасываются
 #            на ребуте и при пересоздании интерфейса, поэтому копим ДЕЛЬТЫ в
 #            месячный аккумулятор: <год-месяц> -> rx tx.
@@ -165,12 +165,19 @@ _collect_signal() {
 		[ -n "$_cs_p" ] || continue
 		_cs_j=$("$RES/5gmodem.sh" peek "$_cs_p" 2>/dev/null)
 		[ -n "$_cs_j" ] || continue
-		_cs_v=$(printf '%s' "$_cs_j" | jsonfilter -e '@.rsrp' 2>/dev/null)
-		case "$_cs_v" in ''|-) _cs_v=$(printf '%s' "$_cs_j" | jsonfilter -e '@.rssi' 2>/dev/null) ;; esac
-		case "$_cs_v" in ''|-) continue ;; esac
+		# Процент из снимка (поле signal): он уже посчитан модемо-специфично
+		# (у FM350 честен именно CSQ, а не RSSI) и совпадает с планкой на
+		# главной странице. Сырые dBm на графике читались только специалистом.
+		_cs_v=$(printf '%s' "$_cs_j" | jsonfilter -e '@.signal' 2>/dev/null)
+		case "$_cs_v" in ''|*[!0-9]*) continue ;; esac
+		[ "$_cs_v" -le 100 ] || _cs_v=100
 		_cs_n=$(uci -q get "$CFG.m_$(echo "$_cs_p" | sed 's/[^A-Za-z0-9]/_/g').model" 2>/dev/null)
 		[ -n "$_cs_n" ] || _cs_n="$_cs_p"
 		_cs_k=$(printf '%s' "$_cs_n" | sed 's/[^A-Za-z0-9]/_/g')
+		# Ряд, начатый прошлой версией, хранит dBm (отрицательные числа) -
+		# проценты с ними в одной шкале не живут, начинаем ряд заново.
+		_cs_old=$(tail -n1 "$DIR/signal.$_cs_k" 2>/dev/null | cut -d' ' -f2)
+		case "$_cs_old" in -*) : > "$DIR/signal.$_cs_k" ;; esac
 		_push "signal.$_cs_k" "$_cs_v"
 		[ -f "$DIR/signal.$_cs_k.label" ] || _label "signal.$_cs_k" "$_cs_n"
 		# Температура - из того же снимка (поле temp, «45 C» -> 45). Отдают не
