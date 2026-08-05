@@ -1,7 +1,10 @@
-Агрегация ➜ AT^CA_INFO?;AT^CA_INFO?
-Температура ➜ AT^TEMP?;AT^TEMP?
-Режим сети (чтение) ➜ AT^SLMODE?;AT^SLMODE?
-Диапазоны LTE ➜ AT^BAND_PREF?;AT^BAND_PREF?
-Скорость USB ➜ AT^USBTYPE?;AT^USBTYPE?
-Отладка ➜ AT^DEBUG?;AT^DEBUG?
-Вендор-заказчик ➜ AT^CUSTOMER?;AT^CUSTOMER?
+Агрегация ➜ AT^CA_INFO?
+Температура ➜ AT^TEMP?
+Режим сети (чтение) ➜ AT^SLMODE?
+Диапазоны LTE ➜ AT^BAND_PREF?
+Скорость USB ➜ AT^USBTYPE?
+Отладка ➜ AT^DEBUG?
+Вендор-заказчик ➜ AT^CUSTOMER?
+Слот SIM (чтение) ➜ AT^switch_slot?
+Слот: физическая SIM1 ➜ AT^switch_slot=0
+Слот: eSIM (SIM2) ➜ AT^switch_slot=1

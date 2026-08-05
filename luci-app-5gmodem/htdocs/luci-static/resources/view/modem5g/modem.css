@@ -181,6 +181,9 @@
 .netpribar .netpribar-title .netpri-gear:hover { opacity: 1; }
 .netpribar .netpri-btn .netpri-name { display: flex; align-items: center; gap: .35em; }
 .netpribar .netpri-btn .netpri-ic { display: block; width: 16px; height: 16px; flex: 0 0 auto; }
+/* Скругление у растровых значков сервисов - как у плашки SSClash (4px): у
+   квадратной картинки углы иначе торчат рядом с её скруглённой иконкой. */
+.netpribar .netpri-btn .netpri-ic { border-radius: 4px; }
 .netpribar .netpri-btn .netpri-ip { font-size: .78em; font-weight: 400; opacity: .75; font-variant-numeric: tabular-nums; }
 .netpribar .netpri-btn .netpri-ip.empty { opacity: .4; }
 .netpribar .netpri-btn.active {
@@ -1988,6 +1991,22 @@ border-bottom:1px solid rgba(128,128,128,.18)}
 justify-content:center;padding:0;width:2.35em;height:2.35em}
 .esim-qr-btn img{width:1.3em;height:1.3em;display:block}
 .esim-dl>.btn{flex:0 0 auto;white-space:nowrap}
+/* «Добавить профиль eSIM» - В ОДНУ СТРОКУ, ПОКА ЕСТЬ МЕСТО.
+   Правило выше уже просит nowrap, но у темы своя кнопка с более сильным
+   селектором (proton2025 объявляет .btn как inline-flex с переносом), и подпись
+   всё равно ломалась пополам даже на широком экране. Поэтому перебиваем явно и
+   заодно запрещаем разрыв слов. Ограничиваем шириной экрана: на узком перенос -
+   единственный способ уместить кнопку, там пусть переносится как раньше. */
+@media (min-width: 701px) {
+  .esim-dl > .btn,
+  .esim-dl > button.btn {
+    white-space: nowrap !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+    flex: 0 0 auto;
+    max-width: none;
+  }
+}
 .esim-actions{margin-top:10px}
 .esim-notif{margin-top:14px;border:1px solid rgba(224,72,61,.35);border-radius:8px;padding:10px 12px;background:rgba(224,72,61,.06)}
 .esim-notif-h{font-weight:600;margin-bottom:2px}
@@ -2188,4 +2207,56 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
     flex: 1 1 100%;
     min-width: 6em;
   }
+}
+
+/* Пустой SIM-слот: помечаем приглушённо, но кнопка РАБОЧАЯ - ручное
+   переключение безусловно (см. пояснение в 5gdetail.js). Раньше здесь стоял
+   disabled, и на модеме со встроенным eUICC уйти обратно на физический слот
+   было нельзя. */
+.tginfo-simslot .cbi-button.tg-slot-empty {
+  opacity: .55;
+  border-style: dashed;
+}
+.tginfo-simslot .cbi-button.tg-slot-empty:hover { opacity: .85; }
+
+/* Полоса ожидания при чтении eUICC. Длительность операции предсказать нельзя
+   (от секунды до полуминуты), поэтому шкала строится по ПРОШЛЫМ запускам, а при
+   превышении оценки честно замирает на 95% - см. _waitBarStart в 5gesim.js. */
+.esim-wait {
+  /* ЦЕНТРИРУЕМ FLEX'ОМ, А НЕ line-height. Приём «line-height = height» держится
+     на том, что у текста ровно та же высота строки, но тема задаёт свой
+     font-size, и подпись уезжала к верхнему краю. Flex центрирует по факту,
+     какой бы шрифт ни достался. */
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5em;
+  padding: 2px 0;
+  margin-top: 8px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(128, 128, 128, .18);
+}
+.esim-wait-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgba(76, 155, 230, .55);
+  transition: width .25s linear;
+}
+.esim-wait.esim-wait-over .esim-wait-fill { background: rgba(229, 138, 0, .5); }
+/* Подпись ПОД полосой ожидания: полоса объясняет «сколько ещё», строка - «что
+   именно происходит». Спиннера рядом больше нет, он дублировал полосу. */
+.esim-wait-note {
+  margin-top: 5px;
+  font-size: 90%;
+  opacity: .75;
+}
+.esim-wait-txt {
+  position: relative;   /* поверх заливки */
+  font-size: 82%;
+  line-height: 1.2;
+  opacity: .85;
+  white-space: nowrap;
 }

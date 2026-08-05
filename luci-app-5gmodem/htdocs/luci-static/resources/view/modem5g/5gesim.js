@@ -143,9 +143,23 @@ function gsmaHuman(dataStr) {
 function esimFailHuman(step, raw) {
 	var s = String(raw || '').trim();
 	if (/^\d+(?:\.\d+)*\/\d+(?:\.\d+)*/.test(s)) { return gsmaHuman(s); }
+	/* «ICCID уже есть на eUICC» - НЕ нехватка памяти, а признак того, что профиль
+	   уже записан (предыдущая попытка дошла до чипа, а ответ до нас не добрался).
+	   Бэкенд такой ответ теперь считает успехом, но сообщение оставляем: чип мог
+	   ответить так и на профиль, установленный когда-то раньше. */
+	if (/iccid_already_exists/i.test(s)) {
+		return _('This profile is already installed on the eSIM — look for it in the list below.');
+	}
+	/* Отказ ИМЕННО по памяти чип называет прямо. Раньше под «нехватку памяти»
+	   подгонялся любой невнятный сбой установки, включая unknown - человека это
+	   уводило в сторону (он шёл искать «слишком большой профиль», хотя проблема
+	   была в срыве длинного APDU и лечилась повтором). */
+	if (/not_enough_memory|no_?memory|insufficient/i.test(s)) {
+		return _('Not enough memory on the eSIM chip for this profile. Delete an unused profile and try again.');
+	}
 	if (/load_bound_profile_package|prepare_download/.test(String(step || '')) ||
-	    /unknown|memory|not_enough|no_?memory/i.test(s)) {
-		return _('The eSIM chip could not install this profile. It likely does not have enough working memory for it — some profiles are too large for this modem. Try a different profile or ask the operator.');
+	    /unknown/i.test(s)) {
+		return _('The eSIM chip did not confirm the installation. This modem loses long commands from time to time, so a repeat usually helps. Check the profile list first — the profile may already be installed.');
 	}
 	return s || _('The download did not complete. See the log below for details.');
 }
@@ -275,6 +289,11 @@ return view.extend({
 				msg = _('This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable "Hide from ModemManager" in the modem settings (or switch the interface protocol), then come back here.');
 			} else if (st.reason === 'modemmanager') {
 				msg = _('This modem is on the ModemManager protocol, where eSIM over AT commands is not available. Switch the modem interface to the fibocom / MBIM / QMI protocol to manage eSIM.');
+			} else if (st.reason === 'uplink') {
+				/* Канал занят поднятым соединением - чип цел, просто сейчас
+				   недоступен. Отдельная причина нужна, чтобы не пугать человека
+				   советом «сообщите vid:pid»: с модемом всё в порядке. */
+				msg = _('The modem control channel is busy with the active connection, so the eSIM chip cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles.');
 			} else if (st.reason === 'noeuicc') {
 				msg = _('No eSIM chip (eUICC) answered on this modem. If you are sure it has one, it may be in a USB composition this app does not talk to yet - please report your modem model and its USB ID (vid:pid) so we can add support.');
 			} else {
@@ -455,6 +474,69 @@ return view.extend({
 	},
 
 	// перечитать eUICC (chip info + список профилей одним вызовом dump)
+	/* ПОЛОСА ОЖИДАНИЯ ДЛЯ ЧТЕНИЯ eUICC.
+	   Точную длительность предсказать нельзя: она зависит от чипа, транспорта и
+	   от того, занят ли канал - от секунды до полуминуты. Зато можно честно
+	   опереться на ПРОШЛЫЕ запуски: держим в localStorage последнюю удачную
+	   длительность для этого модема и рисуем полосу как «прошло / ожидаемо».
+	   Пока укладываемся в оценку - полоса растёт до 95%; если превысили, дальше
+	   не врём: полоса замирает на 95% и подпись меняется на «дольше обычного».
+	   Оценку сглаживаем пополам со старой, чтобы одиночная заминка не сбивала её. */
+	_etaKey: function() {
+		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || 'x';
+		return '5gm-esim-eta-' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+	},
+	_etaGet: function() {
+		var v = 0;
+		try { v = parseInt(window.localStorage.getItem(this._etaKey()), 10) || 0; } catch (e) {}
+		/* Разумные границы: без истории считаем 12 c (типичное чтение по MBIM),
+		   и не даём выродиться ни в мгновенную, ни в бесконечную. */
+		if (!v || v < 1500) { v = 12000; }
+		if (v > 90000) { v = 90000; }
+		return v;
+	},
+	_etaPut: function(ms) {
+		if (!(ms > 0)) { return; }
+		var old = 0;
+		try { old = parseInt(window.localStorage.getItem(this._etaKey()), 10) || 0; } catch (e) {}
+		var v = old ? Math.round((old + ms) / 2) : ms;
+		try { window.localStorage.setItem(this._etaKey(), String(v)); } catch (e) {}
+	},
+	_waitBarStart: function(host) {
+		var self = this;
+		self._waitBarStop();
+		if (!host) { return; }
+		var eta = self._etaGet(), t0 = Date.now();
+		var bar = E('div', { 'class': 'esim-wait' }, [
+			E('div', { 'class': 'esim-wait-fill' }),
+			E('span', { 'class': 'esim-wait-txt' }, '')
+		]);
+		host.appendChild(bar);
+		var fill = bar.querySelector('.esim-wait-fill');
+		var txt = bar.querySelector('.esim-wait-txt');
+		self._waitT0 = t0;
+		self._waitTimer = window.setInterval(function() {
+			if (!bar.isConnected) { self._waitBarStop(); return; }
+			var el = Date.now() - t0;
+			var pc = Math.min(95, Math.round(el / eta * 100));
+			fill.style.width = pc + '%';
+			if (el > eta) {
+				bar.classList.add('esim-wait-over');
+				txt.textContent = _('Taking longer than usual (%ds)').format(Math.round(el / 1000));
+			} else {
+				txt.textContent = _('Reading the eUICC, about %ds left')
+					.format(Math.max(1, Math.round((eta - el) / 1000)));
+			}
+		}, 250);
+	},
+	_waitBarStop: function(ok) {
+		if (this._waitTimer) { window.clearInterval(this._waitTimer); this._waitTimer = null; }
+		if (ok && this._waitT0) { this._etaPut(Date.now() - this._waitT0); }
+		this._waitT0 = null;
+		var b = document.querySelector('.esim-wait');
+		if (b && b.parentNode) { b.parentNode.removeChild(b); }
+	},
+
 	reload: function(tries) {
 		var self = this;
 		// строго число: если reload когда-нибудь повесят прямо на 'click', сюда
@@ -469,7 +551,11 @@ return view.extend({
 		// «ничего не нашлось», и люди уходят со страницы, не дождавшись.
 		if (meta && !warm) {
 			meta.innerHTML = '';
-			meta.appendChild(E('em', { 'class': 'spinning' },
+			/* ПОЛОСА СВЕРХУ, ПОДПИСЬ ПОД НЕЙ - и без спиннера: он показывал ровно
+			   то же самое («идёт работа»), только менее внятно, а рядом с полосой
+			   с обратным отсчётом стал просто шумом. */
+			self._waitBarStart(meta);
+			meta.appendChild(E('div', { 'class': 'esim-wait-note' },
 				_('Please wait, reading eUICC - updating the profile list can be slow')));
 		}
 		/* Поверх тёплого списка EID не затираем, но обратная связь нужна
@@ -477,9 +563,9 @@ return view.extend({
 		   Строка та же, что в модалке пост-операций, - уже переведена.
 		   applyDump при успехе перепишет meta целиком и снимет пометку сам. */
 		if (meta && warm && !document.getElementById('esim-updating')) {
-			meta.appendChild(E('em', {
-				'id': 'esim-updating', 'class': 'spinning',
-				'style': 'margin-left:.7em;font-size:92%;opacity:.7'
+			self._waitBarStart(meta);
+			meta.appendChild(E('div', {
+				'id': 'esim-updating', 'class': 'esim-wait-note'
 			}, _('Updating the profile list...')));
 		}
 		/* ВОЗВРАЩАЕМ Promise (сквозь ретраи): на нём держится спиннер кнопки
@@ -502,17 +588,29 @@ return view.extend({
 						window.setTimeout(function() { resolve(self.reload(tries + 1)); }, 4000);
 					});
 				}
+				self._waitBarStop();
 				var _up = document.getElementById('esim-updating');
 				if (_up) { _up.parentNode.removeChild(_up); }
 				/* Тёплый список на экране рабочий - не пугаем ошибкой, eUICC
 				   часто просто занята; без списка ошибка честно видна. */
 				if (meta && !warm) {
 					meta.innerHTML = '';
-					meta.appendChild(E('span', { 'style': 'color:#d95c5c' },
-						_('eUICC is not responding (%s). Try Refresh in a few seconds.').format(lpaMsg(chip) || lpaMsg(profs))));
+					var _m = lpaMsg(chip) || lpaMsg(profs);
+					/* «uplink busy» - не поломка, а занятый канал: этой же eSIM
+					   сейчас поднято соединение, и трогать канал управления
+					   нельзя, иначе оборвём интернет. Объясняем словами и НЕ
+					   красим в цвет ошибки. */
+					if (_m === 'uplink busy') {
+						meta.appendChild(E('span', { 'style': 'opacity:.8' },
+							_('The modem control channel is busy with the active connection, so the profile list cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles.')));
+					} else {
+						meta.appendChild(E('span', { 'style': 'color:#d95c5c' },
+							_('eUICC is not responding (%s). Try Refresh in a few seconds.').format(_m)));
+					}
 				}
 				return;
 			}
+			self._waitBarStop(true);
 			applyDump(d);
 			// Pending-нотификации SGP.22 (обычно пусто; секция появится, если есть).
 			fetchNotifications().then(renderNotifications);
@@ -565,6 +663,7 @@ return view.extend({
 			'es10b_load_bound_profile_package':   _('Installing onto the card'),
 			'es10b_cancel_session':               _('Closing the session'),
 			'es9p_cancel_session':                _('Closing the server session'),
+			'retry':                              _('Retrying'),
 		};
 		return map[m] || m;
 	},
@@ -596,11 +695,25 @@ return view.extend({
 				// текущий шаг, предыдущие уже не важны - они есть в сохраняемом логе.
 				var lines = self._dlLog.split('\n').filter(function(l) { return l.indexOf('"progress"') > 0; });
 				var last = lines[lines.length - 1];
+				/* НОМЕР ПОПЫТКИ - ПОСТОЯННЫМ ПРЕФИКСОМ, а не мельком.
+				   На qmi/mbim/uqmi загрузка повторяется до пяти раз (длинные APDU
+				   срываются без внятной причины), и без этого человек видел, как
+				   одни и те же шаги идут по кругу, и не понимал, зависло оно или
+				   так задумано. Считаем retry-строки в логе: их количество и есть
+				   номер текущего круга. */
+				var rt = self._dlLog.split('\n').filter(function(l) {
+					return l.indexOf('"message":"retry"') > 0;
+				});
+				var att = rt.length ? rt[rt.length - 1].match(/"data":"(\d+)\/(\d+)"/) : null;
 				if (last) {
 					var m = last.match(/"message":"([^"]+)"/);
 					var d = last.match(/"serviceProviderName":"([^"]+)"/);
 					var t = m ? self._stepName(m[1]) : '';
-					if (t) { box.textContent = (d ? (t + ' — ' + d[1]) : t) + '…'; }
+					if (t) {
+						var txt = (d ? (t + ' — ' + d[1]) : t) + '…';
+						if (att) { txt = _('Attempt %s of %s').format(att[1], att[2]) + ' · ' + txt; }
+						box.textContent = txt;
+					}
 				}
 			}
 			if (self._dlActive) { window.setTimeout(function() { self._pollProgress(box); }, 1200); }
@@ -771,6 +884,20 @@ return view.extend({
 				var p = (j && j.payload) || {};
 				var raw = (typeof p.data === 'string') ? p.data.trim() : '';
 				var tech = (p.message || '?') + (raw ? (' · ' + raw) : '');
+				/* ТРАНСПОРТ ВАЖНЕЕ КОДА lpac. Когда соединение с сервером вообще
+				   не состоялось, lpac говорит только «HTTP status code error» -
+				   и это сбивает с толку: похоже на отказ сервера, хотя до него
+				   не дошёл ни один байт. Настоящую причину знает наш мост, он
+				   пишет её в лог (transport:failed + why): «Connection refused»,
+				   «Name or service not known», ошибка TLS. Показываем её. */
+				var tr = (self._dlLog || '').split('\n').filter(function(l) {
+					return l.indexOf('"transport":"failed"') > 0;
+				}).pop();
+				var why = tr && tr.match(/"why":"([^"]*)"/);
+				if (why && why[1]) {
+					showFail(_('Could not reach the operator server: %s').format(why[1].trim()), tech);
+					return;
+				}
 				showFail(esimFailHuman(p.message, raw), tech);
 				return;
 			}

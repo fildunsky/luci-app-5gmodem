@@ -12,6 +12,12 @@ LUCI_TITLE:=LuCI support for 5G modems (info, SMS, USSD, AT)
 MAINTAINER:=Fil Dunsky <filipp.dunsky@gmail.com>
 LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, USSD codes and AT commands. \
 	Optional eSIM (eUICC) profile management when the lpac package is installed.
+# mbim-utils (mbimcli) нужен eSIM на MBIM-модемах: только он читает и
+# восстанавливает slot mapping (см. _mbim_slot_* в esim.sh) - без этого у
+# пользователя с рабочей SIM1 и eUICC в SIM2 открытие вкладки eSIM уводит модем
+# на eSIM и рвёт связь, а состояние слота («active-esim» / «no-profiles») по QMI
+# не различить. Вес символический: libmbim и так тянет ModemManager из строки
+# выше, добавляется только сам бинарник (~180 КБ).
 # coreutils-stty нужен ТЕРМИНАЛЬНОЙ утилите 5gtop: без него нельзя ни выключить
 # построчный режим (клавиши срабатывают только после Enter), ни узнать ширину
 # окна - раскладка падает в узкую даже на широком экране. Это termios, обойти
@@ -22,9 +28,10 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+usb-modeswitch +kmod-usb-acm \
 	+curl \
-	+coreutils-stty
+	+coreutils-stty \
+	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.2.9
+PKG_VERSION:=2.3.0
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

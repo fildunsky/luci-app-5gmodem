@@ -1,9 +1,9 @@
-Диапазоны ➜ AT#BND?;AT#BND?
-Поддерживаемые диапазоны ➜ AT#BND=?;AT#BND=?
-RF-статус ➜ AT#RFSTS;AT#RFSTS
-Антенные порты ➜ AT#LAPS;AT#LAPS
-4RX-приём ➜ AT#4RXDIS?;AT#4RXDIS?
-USB-композиция ➜ AT#USBCFG?;AT#USBCFG?
-Образ прошивки ➜ AT#FWSWITCH?;AT#FWSWITCH?
-GNSS: питание ➜ AT$GPSP?;AT$GPSP?
-GNSS: позиция ➜ AT$GPSACP;AT$GPSACP
+Диапазоны ➜ AT#BND?
+Поддерживаемые диапазоны ➜ AT#BND=?
+RF-статус ➜ AT#RFSTS
+Антенные порты ➜ AT#LAPS
+4RX-приём ➜ AT#4RXDIS?
+USB-композиция ➜ AT#USBCFG?
+Образ прошивки ➜ AT#FWSWITCH?
+GNSS: питание ➜ AT$GPSP?
+GNSS: позиция ➜ AT$GPSACP

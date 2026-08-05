@@ -31,6 +31,45 @@ function atChain(cmds) {
 	}).join(';');
 }
 
+/* РАЗБОР СТРОКИ ШАБЛОНА - ОДИН НА ВСЕ ТРИ МЕСТА, ГДЕ ОН БЫЛ СКОПИРОВАН.
+   ФОРМАТ, КОТОРЫЙ ХОЧЕТСЯ ПИСАТЬ:
+       Название ➜ AT-команда
+   Одна строка, одна команда. Цепочку пишем как обычно, через точку с запятой:
+       Оператор ➜ AT+COPS=3,0;+COPS?
+   Стрелка любая: «➜», «→» или «->».
+
+   СТАРЫЙ ФОРМАТ ТОЖЕ ЖИВ, иначе у людей разом перестали бы работать их
+   собственные файлы. Он выглядел так:
+       Название ➜ ATI;ATI
+   то есть слева от точки с запятой была ПОДПИСЬ (в неё для наглядности вписывали
+   команду), а справа - сама команда, из-за чего команду приходилось писать
+   дважды. Отличаем по простому признаку: если первая часть в точности равна
+   второй, это дубль из старого формата - отбрасываем его. Ни одна настоящая
+   цепочка не начинается с двух одинаковых команд подряд.
+
+   Без стрелки строка читается по-старому: «имя;команда;команда». */
+function parseTemplateLine(line) {
+	var s = String(line || '').trim();
+	if (!s) { return null; }
+	var m = s.match(/^(.*?)\s*(?:➜|→|->)\s*(.*)$/);
+	if (m) {
+		var name = m[1].trim();
+		var parts = m[2].split(';');
+		if (parts.length > 1 && parts[0].trim() === parts[1].trim()) { parts.shift(); }
+		var code = atChain(parts);
+		if (!code) { return null; }
+		return { name: (name || code), code: code };
+	}
+	var f = s.split(';');
+	return { name: f[0].trim(), code: atChain(f.slice(1)) || f[0].trim() };
+}
+
+/* Подпись в выпадающем списке: имя и сама команда - чтобы было видно, что
+   именно уйдёт в модем, и при этом не приходилось дублировать её в файле. */
+function templateLabel(t) {
+	return (t.name === t.code) ? t.code : (t.name + ' → ' + t.code);
+}
+
 /* СЕМЕЙНЫЙ ФАЙЛ AT-ШАБЛОНОВ ПО АКТИВНОМУ МОДЕМУ (запрос владельца): раньше
    один смешанный шаблон предлагал вендорные команды всем подряд - новичок жал
    команду не своего модема, получал ERROR и думал, что сломана программа.
@@ -233,13 +272,11 @@ return view.extend({
 
 			let commands = (content || '').trim().split('\n');
 			commands.forEach(function(cmd) {
-				if (cmd.trim()) {
-					let fields = cmd.split(/;/);
-					let name = fields[0];
-					let code = atChain(fields.slice(1)) || fields[0];
+				let t = parseTemplateLine(cmd);
+				if (t) {
 					let option = document.createElement('option');
-					option.value = code;
-					option.textContent = name;
+					option.value = t.code;
+					option.textContent = templateLabel(t);
 					selectElement.appendChild(option);
 				}
 			});
@@ -419,13 +456,11 @@ return view.extend({
 
 										let commands = (content || '').trim().split('\n');
 										commands.forEach(function(cmd) {
-											if (cmd.trim()) {
-												let fields = cmd.split(/;/);
-												let name = fields[0];
-												let code = atChain(fields.slice(1)) || fields[0];
+											let t = parseTemplateLine(cmd);
+											if (t) {
 												let option = document.createElement('option');
-												option.value = code;
-												option.textContent = name;
+												option.value = t.code;
+												option.textContent = templateLabel(t);
 												selectElement.appendChild(option);
 											}
 										});
@@ -486,11 +521,9 @@ return view.extend({
 										}
 										
 										return content.trim().split("\n").map(function(cmd) {
-											if (!cmd.trim()) return null;
-											let fields = cmd.split(/;/);
-											let name = fields[0];
-											let code = atChain(fields.slice(1)) || fields[0];
-											return E('option', { 'value': code }, name );
+											let t = parseTemplateLine(cmd);
+											if (!t) return null;
+											return E('option', { 'value': t.code }, templateLabel(t));
 										}).filter(function(opt) { return opt !== null; });
 									})()
 								)

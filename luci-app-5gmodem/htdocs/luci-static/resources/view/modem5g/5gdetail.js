@@ -257,7 +257,22 @@ var slotImsiSeen = null;
 var slotIdleTicks = 0;
 var SLOT_IDLE_TICKS = 12;   // тик метрик ~5 c -> проверка примерно раз в минуту
 function refreshSlotsIfChanged(json) {
-	if (!simSlotsSeen) { return; }
+	/* ПОКА СЛОТЫ НЕ УВИДЕНЫ - ПРОБУЕМ ДАЛЬШЕ, а не выходим навсегда.
+	   Раньше здесь стоял безусловный return, и вместе с лимитом в шесть стартовых
+	   попыток это давало тупик: если модем был недоступен первые ~18 c (а после
+	   смены слота он именно столько переперечисляется), блок кнопок оставался
+	   скрытым НАВСЕГДА - до ручного F5, который при неудачном тайминге упирался
+	   в ту же гонку. Человек видел «кнопки пропали» и не мог понять, переключился
+	   модем или нет (живой случай 04.08.2026).
+	   ЧЕРЕЗ ТИК, А НЕ КАЖДЫЙ. Опрос на каждом тике (~5 c) сложился с двумя другими
+	   источниками вызовов - стартовыми ретраями и pollSlotUntilSwitched - и на
+	   simslot.sh летели три цепочки разом; на модеме, который отвечает медленно,
+	   это давало заметные подтормаживания страницы. Одного захода в ~10 c хватает,
+	   а лишний вызов теперь отсекает гард в самом loadSimSlots. */
+	if (!simSlotsSeen) {
+		if (++slotIdleTicks >= 2) { slotIdleTicks = 0; loadSimSlots(); }
+		return;
+	}
 	var imsi = String((json && json.imsi) || '');
 	var fresh = (imsi && imsi !== '-');
 	var changed = (fresh && slotImsiSeen !== null && imsi !== slotImsiSeen);
@@ -283,8 +298,18 @@ function pollSlotUntilSwitched(wantId, delays) {
 	}, ms);
 }
 
+/* ОДИН ЗАПРОС ЗА РАЗ. Источников вызова три (тик метрик, pollSlotUntilSwitched
+   после переключения и первая отрисовка), и без гарда они уходили к simslot.sh
+   внахлёст. Скрипт лезет в AT/QMI, ответ занимает секунды, и параллельные заходы
+   не ускоряют его, а выстраиваются в очередь rpcd - страница «залипает», а самый
+   невезучий запрос упирается в потолок и отваливается. Пропущенный вызов ничего
+   не теряет: следующий тик повторит. */
+var slotsInflight = false;
 function loadSimSlots(cb) {
+	if (slotsInflight) { if (cb) { cb(null); } return; }
+	slotsInflight = true;
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+		slotsInflight = false;
 		var st = {};
 		try { st = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
 		var box = document.getElementById('simslotn');
@@ -297,15 +322,10 @@ function loadSimSlots(cb) {
 			   был - оставляем последний хороший и ждём следующего опроса. */
 			if (!simSlotsSeen) {
 				box.style.display = 'none';
-				/* Первое открытие после ПЕРЕЗАГРУЗКИ РОУТЕРА: кэша в /tmp ещё нет
-				   (его чистит загрузка), а первая проба сталкивается за AT-порт с
-				   опросом метрик и возвращает пусто. Липкий кэш тут не спасает -
-				   спасать ещё нечем. Раньше кнопки в этот момент прятались до
-				   ручного F5; теперь просто повторяем, пока порт не освободится. */
-				if (simSlotsTries < 6) {
-					simSlotsTries++;
-					window.setTimeout(loadSimSlots, 3000);
-				}
+				/* ПОВТОРЯЕТ ТИК МЕТРИК, а не свой таймер. Здесь стояли собственные
+				   ретраи каждые 3 c (до шести), и шли они ПАРАЛЛЕЛЬНО опросу из
+				   refreshSlotsIfChanged - две очереди к одному скрипту, который
+				   лезет в AT/QMI. Отсюда подтормаживания и оборванные запросы. */
 			}
 			if (cb) { cb(null); }
 			return;
@@ -323,14 +343,21 @@ function loadSimSlots(cb) {
 		st.slots.forEach(function(s) {
 			var on = (String(st.active) === String(s.id));
 			/* present приходит там, где прошивка умеет сказать, есть ли в слоте
-			   карта (Compal, +CEISWITCHSIM: "SIM inserted 0/1"). Переключение на
-			   ПУСТОЙ слот оставит модем без SIM и уронит связь - гасим кнопку.
-			   Где present не сообщают (FM350), поведение прежнее. */
+			   карта (Compal +CEISWITCHSIM, QMI UIM "Card status"). Пустой слот
+			   ПОМЕЧАЕМ, но кнопку НЕ гасим (решение владельца 04.08.2026):
+			   ручное переключение должно работать безусловно - человек может
+			   вставлять карту после переключения, готовить слот заранее или
+			   уводить модем с eSIM намеренно. Раньше кнопка была disabled, и на
+			   модеме со встроенным eUICC (Thales MV31-W) вернуться на SIM1 было
+			   нельзя вовсе.
+			   ЗАЩИТА ОТ САМОПРОИЗВОЛЬНОЙ СМЕНЫ СЛОТА ЖИВЁТ ОТДЕЛЬНО и не
+			   затронута: при eSIM-операциях по MBIM lpac сам перекидывает слот,
+			   поэтому esim.sh запоминает активный (_mbim_slot_get) и возвращает
+			   его после (_mbim_slot_restore). */
 			var noCard = (s.present !== undefined && String(s.present) === '0');
 			var empty = (noCard && !on);
 			box.appendChild(E('button', {
-				'class': 'btn cbi-button' + (on ? ' tg-current' : '') + (empty ? ' cbi-button-disabled' : ''),
-				'disabled': empty ? '' : null,
+				'class': 'btn cbi-button' + (on ? ' tg-current' : '') + (empty ? ' tg-slot-empty' : ''),
 				/* Пустым помечаем и АКТИВНЫЙ слот. Гасить его нельзя (на активный
 				   слот не переключаются), но и молчать нельзя: у модема без карты
 				   MM отдаёт активным слот 1, и подсвеченная кнопка «SIM1» читается
@@ -339,7 +366,7 @@ function loadSimSlots(cb) {
 				'title': noCard ? _('Slot is empty (no SIM inserted)') : null,
 				'click': function(ev) {
 					ev.preventDefault();
-					if (on || empty) { return; }
+					if (on) { return; }
 					ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
 					fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
 						ui.hideModal();
@@ -369,6 +396,13 @@ function loadSimSlots(cb) {
 			}, [ s.label ]));
 		});
 		box.style.display = '';
+	}).catch(function(e) {
+		/* Сюда попадаем, когда сорвался сам вызов (rpcd занят, страница уходит).
+		   Без catch это был необработанный reject в консоли - «uncaught promise»,
+		   который видно, а понять по нему нечего. Флаг снимаем обязательно, иначе
+		   одна осечка навсегда закрыла бы опрос слотов. */
+		slotsInflight = false;
+		if (cb) { cb(null); }
 	});
 }
 

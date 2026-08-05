@@ -89,7 +89,8 @@ while IFS= read -r line; do
 			# кончался синтетическим 500 («HTTP status code error» без цифр).
 			# Живой случай: Yota mno-0b.esimservices.com. С -nv ошибки видны,
 			# заголовки (-S) и тело (-O) - как прежде.
-			wget -nv -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+			wget -nv -S -O "$_rb" --content-on-error --timeout=60 --tries=1 \
+				--no-http-keep-alive --header="Connection: close" \
 				"$@" "$url" 2>"$_rh"
 			rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
 			# ОТКАТ НА НЕПРОВЕРЯЕМОЕ СОЕДИНЕНИЕ, если сорвалась именно проверка
@@ -100,7 +101,8 @@ while IFS= read -r line; do
 			# GSMA *Test* CI, которого в публичных бандлах нет и быть не может.
 			# Профиль защищён криптографией на уровне eUICC, а не этим TLS.
 			if [ -z "$rcode" ] && grep -qi "certificate\|issuer" "$_rh" 2>/dev/null; then
-				wget -nv -S -O "$_rb" --content-on-error --timeout=30 --tries=1 \
+				wget -nv -S -O "$_rb" --content-on-error --timeout=60 --tries=1 \
+				--no-http-keep-alive --header="Connection: close" \
 					--no-check-certificate "$@" "$url" 2>"$_rh"
 				rcode=$(sed -n 's|^ *HTTP/[0-9.]* \([0-9][0-9]*\).*|\1|p' "$_rh" | tail -1)
 			fi
@@ -120,8 +122,37 @@ while IFS= read -r line; do
 				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","transport":"failed","why":"%s"}}\n' \
 					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$(printf '%s' "$_why" | tr '"' "'")" >> "$LIVELOG"
 			else
-				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","rcode":%s,"bytes":%s}}\n' \
-					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$rcode" "$(wc -c < "$_rb" 2>/dev/null || echo 0)" >> "$LIVELOG"
+				# СЖАТОЕ ТЕЛО РАСПАКОВЫВАЕМ САМИ. wget отдаёт тело КАК ЕСТЬ, а
+				# lpac ждёт чистый JSON: если SM-DP+ ответил gzip, парсер
+				# спотыкается и говорит «Not JSON» при честном HTTP 200 - причём
+				# по логу это неотличимо от битого сервера (живой случай
+				# 04.08.2026: smdpplus.ripsim.com, getBoundProfilePackage,
+				# 16099 байт, пять попыток подряд с одинаковым «Not JSON»).
+				# Узнаём по сигнатуре 1f 8b, а не по заголовку: часть серверов
+				# сжимает, не объявляя Content-Encoding.
+				if [ -s "$_rb" ] && [ "$(hexdump -v -n 2 -e '/1 "%02x"' "$_rb" 2>/dev/null)" = "1f8b" ]; then
+					if gzip -dc "$_rb" > "$_rb.un" 2>/dev/null && [ -s "$_rb.un" ]; then
+						mv "$_rb.un" "$_rb"
+						[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","note":"gzip распакован"}}\n' \
+							"$(date '+%H:%M:%S' 2>/dev/null)" "$url" >> "$LIVELOG"
+					fi
+					rm -f "$_rb.un"
+				fi
+				# В ЛОГ - ПРИЗНАК JSON И НАЧАЛО ТЕЛА. Без этого «Not JSON» от lpac
+				# ничего не объясняет: непонятно, пришёл ли HTML, сжатый поток или
+				# обрезанный ответ. Первые байты в hex стоят даром и сразу
+				# показывают, что именно прислал сервер.
+				_bh=$(hexdump -v -n 16 -e '/1 "%02x"' "$_rb" 2>/dev/null)
+				_bj=0; [ "$(cut -c1 "$_rb" 2>/dev/null)" = "{" ] && _bj=1
+				# ОБРЫВ ВИДНО ПО ХВОСТУ. JSON от SM-DP+ заканчивается на «}»;
+				# если тело начинается правильно, а кончается чем попало - оно
+				# не битое, а НЕДОКАЧАННОЕ (сервер не закрыл соединение, wget
+				# дождался таймаута и сохранил, сколько успел). Без этого признака
+				# lpac говорит только «Not JSON», и обрыв неотличим от мусора.
+				_bt=$(tail -c 1 "$_rb" 2>/dev/null)
+				_btr=0; [ "$_bj" = 1 ] && [ "$_bt" != "}" ] && _btr=1
+				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","rcode":%s,"bytes":%s,"json":%s,"truncated":%s,"head":"%s"}}\n' \
+					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$rcode" "$(wc -c < "$_rb" 2>/dev/null || echo 0)" "$_bj" "$_btr" "$_bh" >> "$LIVELOG"
 			fi
 			[ -n "$rcode" ] || rcode=500
 			# Сохраняем тело ответа ES9+, когда в нём есть маркеры ошибки: по

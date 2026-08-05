@@ -346,6 +346,7 @@ function operatorTabIcon(name) {
 	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
 	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'op-t2'; }
 	if (n.indexOf('t-mobile') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('тинькофф') >= 0 || n.indexOf('т-банк') >= 0) { return 'op-tbank'; }
+	if (n.indexOf('just esim') >= 0 || n.indexOf('justesim') >= 0 || n.indexOf('just-esim') >= 0) { return 'op-justesim'; }
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
 	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0) { return 'op-motiv'; }
 	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }

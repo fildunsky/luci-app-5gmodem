@@ -1,5 +1,5 @@
-Сигнал (HCSQ) ➜ AT^HCSQ?;AT^HCSQ?
-Системная информация ➜ AT^SYSINFOEX;AT^SYSINFOEX
-Режим и диапазоны ➜ AT^SYSCFGEX?;AT^SYSCFGEX?
-Температура ➜ AT^CHIPTEMP?;AT^CHIPTEMP?
-Композиция портов ➜ AT^SETPORT?;AT^SETPORT?
+Сигнал (HCSQ) ➜ AT^HCSQ?
+Системная информация ➜ AT^SYSINFOEX
+Режим и диапазоны ➜ AT^SYSCFGEX?
+Температура ➜ AT^CHIPTEMP?
+Композиция портов ➜ AT^SETPORT?

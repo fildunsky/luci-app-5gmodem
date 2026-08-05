@@ -1,9 +1,9 @@
-Режим сети и диапазоны ➜ AT+XACT?;AT+XACT?
-Агрегация (CA) ➜ AT+XLEC?;AT+XLEC?
-Соты ➜ AT+XMCI=1;AT+XMCI=1
-RSRP по трактам ➜ AT+RSRP?;AT+RSRP?
-RSRQ по трактам ➜ AT+RSRQ?;AT+RSRQ?
-Антенные тракты (только 1-й ACM-порт) ➜ at@errc:pcell_scell_measurement_info();at@errc:pcell_scell_measurement_info()
-Версия пакета прошивки ➜ AT+GTPKGVER?;AT+GTPKGVER?
-SIM-слоты ➜ AT+GTDUALSIM?;AT+GTDUALSIM?
-USB-композиция (NVM) ➜ at@nvm:cal_usbmode.num?;at@nvm:cal_usbmode.num?
+Режим сети и диапазоны ➜ AT+XACT?
+Агрегация (CA) ➜ AT+XLEC?
+Соты ➜ AT+XMCI=1
+RSRP по трактам ➜ AT+RSRP?
+RSRQ по трактам ➜ AT+RSRQ?
+Антенные тракты (только 1-й ACM-порт) ➜ at@errc:pcell_scell_measurement_info()
+Версия пакета прошивки ➜ AT+GTPKGVER?
+SIM-слоты ➜ AT+GTDUALSIM?
+USB-композиция (NVM) ➜ at@nvm:cal_usbmode.num?

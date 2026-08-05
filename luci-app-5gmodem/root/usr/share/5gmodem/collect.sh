@@ -426,6 +426,38 @@ qmi_format_verdict() {
 	[ -n "$_qf_any" ] || echo "qmi-интерфейсов нет - проверка не нужна"
 }
 
+# ПОДМЕНА TTL: НАСТРОЕНА ЛИ И ПРИМЕНЕНА ЛИ.
+#
+# Частый и незаметный класс отказов: у оператора включена блокировка раздачи
+# (у Yota она жёсткая), человек ставит галочку TTL в интерфейсе, а правила по
+# факту не создаются - и картина выглядит как «сессия есть, адрес есть, трафика
+# нет». По конфигу этого не видно вовсе, поэтому смотрим ЖИВЫЕ правила: наша
+# таблица inet modem5g_ttl и счётчики попаданий. Ноль пакетов при включённой
+# подмене - тоже улика (правило есть, но трафик мимо него).
+ttl_verdict() {
+	_t_on=$(uci -q get 5gmodem.@5gmodem[0].show_ttl)
+	_t_in=$(uci -q get 5gmodem.@5gmodem[0].ttl4in)
+	_t_out=$(uci -q get 5gmodem.@5gmodem[0].ttl4out)
+	if [ "$_t_on" != "1" ] || { [ -z "$_t_in" ] && [ -z "$_t_out" ]; }; then
+		echo "подмена TTL выключена в настройках - раздел не применим"
+		echo "  (если оператор режет раздачу, включить её стоит: Сеть -> Модем -> TTL)"
+		return 0
+	fi
+	echo "в настройках: вход=${_t_in:-—} выход=${_t_out:-—}"
+	if ! command -v nft >/dev/null 2>&1; then
+		echo "  nft в образе нет - проверить живые правила нечем"
+		return 0
+	fi
+	if nft list table inet modem5g_ttl >/dev/null 2>&1; then
+		echo "  таблица inet modem5g_ttl СОЗДАНА:"
+		nft -a list table inet modem5g_ttl 2>/dev/null | grep -E "ttl set|packets" | head -8
+	else
+		echo "  таблицы inet modem5g_ttl НЕТ - подмена включена, но НЕ ПРИМЕНЕНА."
+		echo "  Это и есть причина, если оператор блокирует раздачу: правила"
+		echo "  создаёт /usr/share/5gmodem/ttl.sh, посмотрите logread на предмет его ошибок."
+	fi
+}
+
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
@@ -1251,6 +1283,7 @@ report() {
 	run 40 "QMI: формат кадров и счётчики (итог)" qmi_format_verdict
 	run 10 "uci firewall (зоны)" sh -c "uci show firewall 2>/dev/null | grep -E 'zone|forwarding' | head -40"
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
+	run 15 "Подмена TTL (итог)" ttl_verdict
 	run 15 "Доступ к админке (итог)" webstack_verdict
 	run 15 "Policy routing / mwan3 (итог)" policyrouting_verdict
 	# МИНЫ ЗАМЕДЛЕННОГО ДЕЙСТВИЯ: незакоммиченные правки uci. Дельты лежат в общем

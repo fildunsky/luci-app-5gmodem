@@ -1,8 +1,8 @@
-Обслуживающая сота ➜ AT+QENG="servingcell";AT+QENG="servingcell"
-Сеть и диапазон ➜ AT+QNWINFO;AT+QNWINFO
-Температура ➜ AT+QTEMP;AT+QTEMP
-USB-режим ➜ AT+QCFG="usbnet";AT+QCFG="usbnet"
-Диапазоны (маски) ➜ AT+QCFG="band";AT+QCFG="band"
-SIM-слот ➜ AT+QUIMSLOT?;AT+QUIMSLOT?
-Статус SIM ➜ AT+QSIMSTAT?;AT+QSIMSTAT?
-MBN-профили ➜ AT+QMBNCFG="List";AT+QMBNCFG="List"
+Обслуживающая сота ➜ AT+QENG="servingcell"
+Сеть и диапазон ➜ AT+QNWINFO
+Температура ➜ AT+QTEMP
+USB-режим ➜ AT+QCFG="usbnet"
+Диапазоны (маски) ➜ AT+QCFG="band"
+SIM-слот ➜ AT+QUIMSLOT?
+Статус SIM ➜ AT+QSIMSTAT?
+MBN-профили ➜ AT+QMBNCFG="List"

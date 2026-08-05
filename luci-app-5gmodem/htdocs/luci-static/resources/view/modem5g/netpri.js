@@ -622,7 +622,11 @@ function pingInit() {
    zapret = Zapret Manager: статус даёт init.d/zapret, админка - ttyd на 7681
    («Активировать доступ из браузера» в его же меню). */
 var SVC_KNOWN = {
-	zapret: { name: 'Zapret', glyph: '☢️', port: 7681 }
+	zapret: { name: 'Zapret', glyph: '☢️', port: 7681 },
+	/* ZeroTier: свой значок в фирменных цветах и адрес роутера в сети вместо
+	   слова «работает» - ради этого адреса ZeroTier и ставят, а держать его в
+	   голове неудобно. Веб-админки у него нет, порт не задаём. */
+	zerotier: { name: 'ZeroTier', img: 'zt.png' }
 };
 function svcName(service) { return (SVC_KNOWN[service] && SVC_KNOWN[service].name) || service; }
 function svcIcon(service) {
@@ -644,6 +648,10 @@ function _sDot(r) { return (r === undefined) ? 'unknown' : (r.running ? 'on' : '
 function _sTop(r) { return (r && r.version) ? ('v' + r.version) : _('Service'); }
 function _sBottom(r) {
 	if (r === undefined) { return '—'; }
+	/* Адрес важнее статуса: если он есть, значит сервис и так работает, а по
+	   этому адресу человек ходит на роутер извне. Нет адреса (сеть не выдала
+	   или сервис стоит) - показываем обычный статус. */
+	if (r.ip) { return r.ip; }
 	return r.running ? _('running') : _('stopped');
 }
 function svcCard(service) {
@@ -653,7 +661,8 @@ function svcCard(service) {
 		'title': (r === undefined) ? service : (r.running ? _('%s is running').format(service) : _('%s is stopped').format(service)) });
 	var attrs = {
 		'class': 'btn cbi-button netpri-btn netpri-status', 'data-svc': service,
-		'data-tooltip': (k && k.port) ? _('Open %s').format(svcName(service)) : service
+		'data-tooltip': (r && r.ip) ? _('%s address of this router: %s').format(svcName(service), r.ip)
+			: ((k && k.port) ? _('Open %s').format(svcName(service)) : service)
 	};
 	/* у сервиса есть своя веб-админка - карточка открывает её в новой вкладке
 	   (хост берём текущий: админка живёт на ЭТОМ же роутере, только порт свой) */
@@ -662,6 +671,11 @@ function svcCard(service) {
 			ev.preventDefault();
 			window.open('//' + window.location.hostname + ':' + k.port + '/', '_blank');
 		};
+	} else {
+		/* КАРТОЧКА БЕЗ АДМИНКИ - ЧИСТО ИНФОРМАЦИОННАЯ. Запускать и останавливать
+		   сервис по клику НЕ надо: это кнопка в форме, случайное нажатие не
+		   должно ничего менять в системе, а состояние показывает точка. */
+		attrs['click'] = function(ev) { ev.preventDefault(); };
 	}
 	return E('button', attrs, [
 		E('span', { 'class': 'netpri-sub' }, _sTop(r)),
@@ -691,7 +705,11 @@ function _svcAggTick() {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		_svcAgg.services.forEach(function(svc) {
 			var r = (j.svc || {})[svc] || {};
-			_svcState[svc] = { running: !!r.running, version: r.version || '' };
+			/* ip НЕ ЗАБЫВАЕМ: бэкенд отдаёт его для ZeroTier (адрес роутера в
+			   сети), и карточка показывает именно его вместо слова «работает».
+			   Раньше здесь пересобирался объект из двух полей, и адрес молча
+			   терялся по дороге - карточка его не видела никогда. */
+			_svcState[svc] = { running: !!r.running, version: r.version || '', ip: r.ip || '' };
 			updateSvcCard(svc);
 		});
 		_svcAgg.kinds.forEach(function(kind) {

@@ -113,7 +113,7 @@ bandtxt() {
 	"1") echo " $BAND: FDD 2100 MHz";;
 	"2") echo " $BAND: FDD 1900 MHz";;
 	"3") echo " $BAND: FDD 1800 MHz";;
-	"4") echo " $BAND: FDD 1700 MHz";;
+	"4") echo " $BAND: FDD 1700/2100 MHz";;
 	"5") echo " $BAND: FDD  850 MHz";;
 	"7") echo " $BAND: FDD 2600 MHz";;
 	"8") echo " $BAND: FDD  900 MHz";;
@@ -142,7 +142,7 @@ bandtxt() {
 	"41") echo "$BAND: TDD 2500 MHz";;
 	"42") echo "$BAND: TDD 3500 MHz";;
 	"43") echo "$BAND: TDD 3700 MHz";;
-	"46") echo "$BAND: TDD 5200 MHz";;
+	"46") echo "$BAND: LAA 5200 MHz";;
 	"47") echo "$BAND: TDD 5900 MHz";;
 	"48") echo "$BAND: TDD 3500 MHz";;
 	"50") echo "$BAND: TDD 1500 MHz";;
@@ -150,10 +150,10 @@ bandtxt() {
 	"53") echo "$BAND: TDD 2400 MHz";;
 	"54") echo "$BAND: TDD 1600 MHz";;
 	"65") echo "$BAND: FDD 2100 MHz";;
-	"66") echo "$BAND: FDD 1700 MHz";;
+	"66") echo "$BAND: FDD 1700/2100 MHz";;
 	"67") echo "$BAND: SDL  700 MHz";;
 	"69") echo "$BAND: SDL 2600 MHz";;
-	"70") echo "$BAND: FDD 1700 MHz";;
+	"70") echo "$BAND: FDD 1700/2000 MHz";;
 	"71") echo "$BAND: FDD  600 MHz";;
 	"72") echo "$BAND: FDD  450 MHz";;
 	"73") echo "$BAND: FDD  450 MHz";;
@@ -196,7 +196,7 @@ bandtxt5g() {
 	"39") echo "$BAND: TDD 1900 MHz";;
 	"40") echo "$BAND: TDD 2300 MHz";;
 	"41") echo "$BAND: TDD 2500 MHz";;
-	"46") echo "$BAND: TDD 5200 MHz";;
+	"46") echo "$BAND: NR-U 5200 MHz";;
 	"47") echo "$BAND: TDD 5900 MHz";;
 	"48") echo "$BAND: TDD 3500 MHz";;
 	"50") echo "$BAND: TDD 1500 MHz";;

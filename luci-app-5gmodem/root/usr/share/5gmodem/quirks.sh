@@ -141,6 +141,24 @@ sim_slots_via() {
 		# Compal RXM-G1 (SG500M2-X): ни AT+SIMTYPE?, ни AT+GTDUALSIM не отвечают
 		# (проверено); слоты живут за AT+CEISWITCHSIM.
 		05c6:90d6) echo ceiswitchsim; return ;;
+		# СЕМЕЙСТВО SDX55 (Foxconn T99W175, Thales MV31-W, Dell DW5821e и
+		# родня): AT-команд выбора слота у прошивки нет вовсе, а QMI UIM
+		# отдаёт всё - проверено 04.08.2026 на живом MV31-W (WH3000 Pro):
+		#   2 physical slots found
+		#     Physical slot 1: Card status absent,  Slot status active
+		#     Physical slot 2: Card status present, Is eUICC: yes, EID 8903...
+		# Без этой записи _VIA оставался пустым, разбор уходил в AT-ветку и
+		# возвращал пусто: у модема со ВСТРОЕННЫМ eUICC ни слотов, ни кнопки
+		# переключения на eSIM не показывалось вовсе.
+		# 05c6:90d5 делит идентификатор с ранним прототипом Compal - его
+		# отличаем по МОДЕЛИ (тот же признак, что в iscompal.sh) и оставляем
+		# ему проверенный ceiswitchsim.
+		05c6:90d5)
+			case "$1" in
+				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo ceiswitchsim; return ;;
+			esac
+			echo qmi; return ;;
+		05c6:9025|413c:81d7|0489:e0b5) echo qmi; return ;;
 	esac
 	case "$1" in
 		# SIMCOM SIM7600E-H: один SIM-слот. AT+SIMTYPE? молчит (это команда
@@ -148,4 +166,34 @@ sim_slots_via() {
 		*SIM7600*) echo none; return ;;
 	esac
 	return
+}
+
+# НУЖЕН ЛИ СБРОС МОДЕМА ПОСЛЕ ВКЛЮЧЕНИЯ/ВЫКЛЮЧЕНИЯ ПРОФИЛЯ eSIM.
+#
+# По SGP.22 eUICC после смены активного профиля выдаёт проактивную команду
+# REFRESH, и модем обязан перечитать карту сам. Часть прошивок этого не делает:
+# в eUICC профиль уже enabled, а модем продолжает работать со старым - человек
+# видит «переключил, но ничего не изменилось». Лечится полным сбросом
+# (AT+CFUN=1,1), после которого модем перечитывает профиль с нуля.
+#
+# Включаем АДРЕСНО, а не всем подряд: сброс стоит модему переэнумерации на USB и
+# ~минуты без сети, а там, где REFRESH отрабатывает штатно (FM350-GL - проверено,
+# eSIM на нём работает без сброса), это чистый регресс.
+#
+# Семейство SDX55 (Foxconn T99W175, Thales MV31-W, Dell DW5821e): по чужому
+# рабочему стенду на этом же модеме (luci-app-epm) сброс задан ШТАТНЫМ шагом -
+# «Reboot Method: AT Command, AT+CFUN=1,1, /dev/ttyUSB2». Повторяем.
+# Аргументы те же, что у sim_slots_via: $1 - модель, $2 - vid:pid.
+esim_reset_after_switch() {
+	case "$2" in
+		05c6:90d5)
+			# тот же идентификатор носит ранний прототип Compal - его отличаем
+			# по модели, как и в sim_slots_via, и сброс ему не навязываем
+			case "$1" in
+				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo 0; return ;;
+			esac
+			echo 1; return ;;
+		05c6:9025|413c:81d7|0489:e0b5) echo 1; return ;;
+	esac
+	echo 0
 }

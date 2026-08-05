@@ -217,6 +217,33 @@ proto_fibocom_setup() {
 		return 1
 	fi
 
+	# ОЧЕРЕДЬ К AT-ПОРТУ НА ВЕСЬ ДИАЛОГ ПОДЪЁМА.
+	#
+	# Прото разговаривает с модемом четырнадцатью командами и до сих пор делал это
+	# БЕЗ ОЧЕРЕДИ. В тот же порт в это время ходит наш опрос метрик, а у части
+	# людей ещё и посторонние пакеты (3ginfo-lite, sms-tool-js, modemband). Ответы
+	# при этом путаются: спросивший получает ЧУЖОЙ. Для подъёма связи это особенно
+	# дорого - адрес мы берём из ответа на AT+CGPADDR, и в интерфейс уезжал явно не
+	# свой адрес (живой отчёт 04.08.2026: 10.137.124.1 при живой регистрации и
+	# трафик в никуда; после удаления посторонних пакетов ТОТ ЖЕ прото поднял связь
+	# с нормальным 10.9.146.175).
+	# ЖДЁМ ОГРАНИЧЕННО и при неудаче идём БЕЗ замка: не поднять связь хуже, чем
+	# рискнуть перехватом ответа. Снимаем на всех выходах ниже - _fib_unlock.
+	_fib_lock_held=""
+	if [ -r /usr/share/5gmodem/atlock.sh ]; then
+		. /usr/share/5gmodem/atlock.sh 2>/dev/null
+		if command -v at_lock >/dev/null 2>&1 && at_lock "$dial" 20; then
+			_fib_lock_held=1
+		else
+			echo "fibocom[$$] AT-порт $dial занят - продолжаю без очереди"
+		fi
+	fi
+	_fib_unlock() {
+		[ -n "$_fib_lock_held" ] || return 0
+		_fib_lock_held=""
+		command -v at_unlock >/dev/null 2>&1 && at_unlock "$dial"
+	}
+
 	# ДАННЫЕ В РОУМИНГЕ. У FM350 переключателя роуминга В МОДЕМЕ НЕТ - в
 	# руководстве по AT-командам (v2.2) такой команды не существует вовсе,
 	# единственное упоминание роуминга - тип PDP в +EIAAPN. Поэтому поступаем
@@ -272,6 +299,7 @@ proto_fibocom_setup() {
 			# счёт за трафик приходит за переданные байты, а не за факт регистрации.
 			if [ "$allow_roaming" != "1" ]; then
 				echo "fibocom[$$] roaming registration ($_reg) and roaming is not allowed"
+				_fib_unlock
 				proto_notify_error "$interface" ROAMING_NOT_ALLOWED
 				# БЛОКИРУЕМ перезапуск: без этого netifd поднимал бы интерфейс
 				# заново каждые 5 c, и лог забивался бы одним и тем же отказом.
@@ -286,6 +314,7 @@ proto_fibocom_setup() {
 			# SIM, неоплаченный тариф или заблокированный IMEI. Повторять бесполезно,
 			# поэтому здесь перезапуск блокируем - как в роуминге.
 			echo "fibocom[$$] network refused registration (+CEREG stat 3) - SIM/подписка/IMEI"
+			_fib_unlock
 			proto_notify_error "$interface" REGISTRATION_DENIED
 			proto_block_restart "$interface"
 			return 1
@@ -295,6 +324,7 @@ proto_fibocom_setup() {
 			# сигнал может вернуться сам, и интерфейс обязан подняться без участия
 			# человека. Цикл ожидания выше держит повтор примерно раз в минуту.
 			echo "fibocom[$$] no network registration (+CEREG stat «${_reg:-нет ответа}») after ${_rw}s"
+			_fib_unlock
 			proto_notify_error "$interface" NOT_REGISTERED
 			return 1
 			;;
@@ -393,6 +423,7 @@ proto_fibocom_setup() {
 		fi
 	fi
 	if [ -z "$ip" ]; then
+		_fib_unlock
 		proto_notify_error "$interface" NO_IP_ADDRESS
 		proto_block_restart "$interface"
 		return 1
@@ -422,6 +453,9 @@ proto_fibocom_setup() {
 	esac
 	[ -n "$dns1" ] && [ "$dns1" != "0.0.0.0" ] && proto_add_dns_server "$dns1"
 	[ -n "$dns2" ] && [ "$dns2" != "0.0.0.0" ] && proto_add_dns_server "$dns2"
+	# Дальше идут только объявления адресов и дочерний dhcpv6 - AT-порт больше
+	# не нужен, отдаём очередь опросу метрик как можно раньше.
+	_fib_unlock
 	proto_send_update "$interface"
 
 	# IPv6. У сотовых модемов маршрутизируемый IPv6-префикс приходит НЕ через

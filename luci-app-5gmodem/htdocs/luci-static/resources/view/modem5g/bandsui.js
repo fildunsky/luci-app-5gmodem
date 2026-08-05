@@ -33,6 +33,8 @@ function buildBandButtons(supported, current, prefix) {
 		return E('button', {
 			'class': 'btn cbi-button' + (current.indexOf(b) >= 0 ? ' cbi-button-action important' : ''),
 			'data-band': b,
+			'title': (b.indexOf('utran-') == 0) ? ''
+				: mutil.bandTitle(b.replace(/\D+/g, ''), b.indexOf('ngran-') == 0),
 			'click': function(ev) {
 				ev.preventDefault();
 				ev.currentTarget.classList.toggle('cbi-button-action');
@@ -196,6 +198,7 @@ function buildBandButtonsNum(supported, enabled, btype) {
 			'class': 'btn cbi-button' + ((enabled || []).indexOf(n) >= 0 ? ' cbi-button-action important' : ''),
 			'data-band': String(n),
 			'data-btype': btype,
+			'title': (btype == '2g' || btype == '3g') ? '' : mutil.bandTitle(n, btype != 'lte'),
 			'click': function(ev) {
 				ev.preventDefault();
 				ev.currentTarget.classList.toggle('cbi-button-action');

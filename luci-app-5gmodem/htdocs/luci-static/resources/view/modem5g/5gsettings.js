@@ -361,7 +361,7 @@ return view.extend({
 		if (services.length) {
 			/* известным сервисам - человеческое имя в списке (карточка тоже
 			   покажет его, см. SVC_KNOWN в netpri.js) */
-			var _svcNice = { zapret: 'Zapret' };
+			var _svcNice = { zapret: 'Zapret', zerotier: 'ZeroTier' };
 			services.forEach(function(s) { svo.value(s, _svcNice[s] || s); });
 			svo.default = (services.indexOf('ssclash') >= 0) ? 'ssclash'
 			            : (services.indexOf('clash') >= 0)   ? 'clash'

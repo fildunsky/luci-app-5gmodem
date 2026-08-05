@@ -109,23 +109,48 @@ _svc_json() {
 			_sv_r=1
 		fi
 	fi
+	# ВЕРСИЯ - ЛЮБОМУ СЕРВИСУ, А НЕ ТОЛЬКО zapret.
+	#
+	# В карточке верхняя строка показывает версию, и лишь при её отсутствии -
+	# слово «Сервис». Раньше версию доставали ровно для одного сервиса, поэтому
+	# у всех остальных (ZeroTier и прочих) там висело бесполезное «Сервис».
+	# Имя пакета почти всегда совпадает с именем init-скрипта; не совпало -
+	# просто останется пусто, и карточка выглядит как раньше.
+	# Кэш на загрузку обязателен: опрос идёт раз в 5 c, а apk/opkg - заметный
+	# процесс ради значения, которое меняется только апгрейдом пакета.
 	_sv_ver=""
-	if [ "$1" = "zapret" ]; then
+	if [ -n "$1" ]; then
 		_sv_vf="/tmp/5gmodem_svcver_$1"
 		if [ -s "$_sv_vf" ]; then
 			read -r _sv_ver < "$_sv_vf"
 		else
 			if command -v opkg >/dev/null 2>&1; then
-				_sv_ver=$(opkg list-installed zapret 2>/dev/null \
+				_sv_ver=$(opkg list-installed "$1" 2>/dev/null \
 					| awk '{sub(/-r[0-9]+$/, "", $3); print $3; exit}')
 			else
-				_sv_ver=$(apk info -v 2>/dev/null | grep '^zapret-' | head -1 \
-					| sed 's/^zapret-//; s/-r[0-9]*$//')
+				_sv_ver=$(apk info -v 2>/dev/null | grep "^$1-[0-9]" | head -1 \
+					| sed "s/^$1-//; s/-r[0-9]*$//")
 			fi
 			printf '%s\n' "$_sv_ver" > "$_sv_vf"
 		fi
 	fi
-	printf '{"running":%s,"version":"%s"}' "$_sv_r" "$(json_esc "$_sv_ver")"
+	# ZeroTier: КАРТОЧКЕ НУЖЕН АДРЕС В СЕТИ, а не только «работает/нет».
+	#
+	# Смысл ZeroTier для пользователя ровно в этом адресе - по нему он ходит на
+	# роутер издалека, и держать его в голове неудобно. Берём с интерфейса (zt*),
+	# а не из zerotier-cli: cli требует authtoken и заметно дороже, тогда как
+	# адрес уже назначен ядром. Сетей может быть несколько - показываем первый
+	# адрес, этого достаточно для «куда подключаться».
+	_sv_ip=""
+	if [ "$1" = "zerotier" ] && [ "$_sv_r" = 1 ]; then
+		for _sv_if in $(ls /sys/class/net 2>/dev/null | grep '^zt'); do
+			_sv_ip=$(ip -4 -o addr show dev "$_sv_if" 2>/dev/null \
+				| awk '{split($4, a, "/"); print a[1]; exit}')
+			[ -n "$_sv_ip" ] && break
+		done
+	fi
+	printf '{"running":%s,"version":"%s","ip":"%s"}' \
+		"$_sv_r" "$(json_esc "$_sv_ver")" "$(json_esc "$_sv_ip")"
 }
 
 # СНИМОК ПЕРЕЧИСЛЕНИЯ МОДЕМОВ на один вызов. listmodems.sh спрашивался трижды за

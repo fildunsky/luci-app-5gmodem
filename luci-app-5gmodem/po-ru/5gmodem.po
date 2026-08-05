@@ -2562,6 +2562,39 @@ msgstr "Закрытие сессии"
 msgid "Closing the server session"
 msgstr "Закрытие сессии с сервером"
 
+msgid "Retrying"
+msgstr "Повторная попытка"
+
+msgid "%s address of this router: %s"
+msgstr "Адрес роутера в сети %s: %s"
+
+msgid "Could not reach the operator server: %s"
+msgstr "Не удалось соединиться с сервером оператора: %s"
+
+msgid "The modem control channel is busy with the active connection, so the eSIM chip cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles."
+msgstr "Канал управления модемом занят активным соединением, поэтому чип eSIM сейчас не прочитать. Отключите интерфейс модема (или переключитесь на другую SIM), чтобы управлять профилями."
+
+msgid "The modem control channel is busy with the active connection, so the profile list cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles."
+msgstr "Канал управления модемом занят активным соединением, поэтому список профилей сейчас не прочитать. Отключите интерфейс модема (или переключитесь на другую SIM), чтобы управлять профилями."
+
+msgid "Reading the eUICC, about %ds left"
+msgstr "Читаю eUICC, осталось примерно %d с"
+
+msgid "Taking longer than usual (%ds)"
+msgstr "Дольше обычного (%d с)"
+
+msgid "This profile is already installed on the eSIM — look for it in the list below."
+msgstr "Этот профиль уже установлен на eSIM — он есть в списке ниже."
+
+msgid "Not enough memory on the eSIM chip for this profile. Delete an unused profile and try again."
+msgstr "На чипе eSIM не хватает памяти под этот профиль. Удалите неиспользуемый профиль и попробуйте снова."
+
+msgid "The eSIM chip did not confirm the installation. This modem loses long commands from time to time, so a repeat usually helps. Check the profile list first — the profile may already be installed."
+msgstr "Чип eSIM не подтвердил установку. Этот модем время от времени теряет длинные команды, поэтому обычно помогает повтор. Сначала проверьте список профилей — возможно, профиль уже установлен."
+
+msgid "Attempt %s of %s"
+msgstr "Попытка %s из %s"
+
 msgid "Roaming"
 msgstr "Роуминг"
 

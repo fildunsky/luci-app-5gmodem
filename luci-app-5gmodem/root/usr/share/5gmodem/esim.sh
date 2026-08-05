@@ -229,10 +229,19 @@ esim_wdm() {
 _wdm_owned_by_umbim() {   # $1 - узел /dev/cdc-wdmN
 	[ -n "$1" ] || return 1
 	for _wo in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
-		[ "$(uci -q get "network.$_wo.proto")" = "mbim" ] && return 0
+		[ "$(uci -q get "network.$_wo.proto")" = "mbim" ] || continue
+		# ВЛАДЕЕТ - ЗНАЧИТ ПОДНЯТ. Гейт смотрел ТОЛЬКО на proto, и на опущенном
+		# интерфейсе (модем без SIM, ifdown, ещё не дозвонился) запрещал
+		# mbim-пробу впустую: узел свободен, umbim не запущен, а eSIM всё равно
+		# уводило на AT - и у модемов, где eUICC живёт ТОЛЬКО за QMI/MBIM
+		# (Qualcomm SDX55), вкладка отвечала «no eUICC-capable AT port».
+		# Живой случай 04.08.2026: Thales MV31-W, proto=mbim, интерфейс down.
+		ubus call "network.interface.$_wo" status 2>/dev/null \
+			| grep -q '"up": true' && return 0
 	done
 	return 1
 }
+
 
 # mbim-бэкенд, если узлом не владеет umbim; иначе честный at (мост).
 _mbim_or_at() {
@@ -390,11 +399,32 @@ _mbim_target_index() {
 # В ЦЕЛЕВОМ СЛОТЕ УЖЕ АКТИВНАЯ eSIM? Спрашиваем сам модем.
 # Через прокси (-p) - канал общий с ModemManager и с самим lpac.
 _mbim_target_is_active_esim() {
-	command -v mbimcli >/dev/null 2>&1 || return 1
-	_tie=$(_mbim_target_index) || return 1
-	mbimcli -d "$1" -p --ms-query-slot-info-status="$_tie" 2>/dev/null \
-		| grep -qi "active-esim"
+	if command -v mbimcli >/dev/null 2>&1; then
+		_tie=$(_mbim_target_index) || return 1
+		mbimcli -d "$1" -p --ms-query-slot-info-status="$_tie" 2>/dev/null \
+			| grep -qi "active-esim" && return 0
+		return 1
+	fi
+	# mbimcli В ОБРАЗЕ БЫВАЕТ НЕ ВСЕГДА (пакет umbim/mbim-utils не обязателен).
+	# Раньше его отсутствие означало «не активная eSIM» -> политика скатывалась
+	# в skip_slot_mapping=1, lpac не мог перемапить executor на eUICC и отвечал
+	# «euicc_init: -1». Снаружи это выглядело как «eSIM пропала». Живой случай
+	# 04.08.2026: Thales MV31-W на WH3000 Pro - mbimcli не установлен вовсе.
+	# Тот же факт достаём по QMI: активен ли слот, помеченный Is eUICC.
+	command -v qmicli >/dev/null 2>&1 || return 1
+	_tie_mb=""
+	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
+		*/cdc_mbim) _tie_mb="--device-open-mbim" ;;
+	esac
+	qmicli -d "$1" -p $_tie_mb --uim-get-slot-status 2>/dev/null | awk '
+		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; next }
+		/Slot status: *active/     { act = 1 }
+		/Is eUICC: *yes/           { euicc = 1 }
+		act && euicc { found = 1; exit }
+		END { exit(found ? 0 : 1) }
+	'
 }
+
 
 # РАЗРЕШАТЬ ЛИ lpac ПЕРЕКЛЮЧАТЬ СЛОТ.
 #
@@ -412,6 +442,67 @@ _mbim_target_is_active_esim() {
 # Отказ безопасный: нет mbimcli, модем не понимает запроса, слот не задан - всё
 # это даёт «1», то есть прежнее поведение.
 # Явная настройка пользователя всегда важнее автоматики.
+# ЗАКРЫТЬ ЛОГИЧЕСКИЕ КАНАЛЫ К ISD-R НА cdc-wdm-ПУТИ (аналог AT+CCHC).
+#
+# Каналов у карты считанные единицы, и открывает их lpac под каждую операцию.
+# При ШТАТНОМ завершении он закрывает их сам, а вот убитый по таймауту - нет,
+# и утечка копится: через несколько прерванных попыток eUICC начинает отвечать
+# «no channel response received: SelectFailed» вообще на всё, и лечится это
+# только перезагрузкой модема (power-cycle слота этот модуль не поддерживает -
+# QMI отвечает 'NotSupported'). Живой случай 04.08.2026 на Thales MV31-W: два
+# ребута подряд, чтобы вернуть eSIM к жизни.
+# Для AT-пути ту же работу делает free_channels (AT+CCHC=N), а здесь каналы
+# закрываем по QMI - он есть и на MBIM-устройстве (через --device-open-mbim).
+_wdm_free_channels() {   # $1 - узел cdc-wdm, $2 - номер слота (1..N)
+	command -v qmicli >/dev/null 2>&1 || return 0
+	[ -n "$1" ] && [ -e "$1" ] || return 0
+	case "$2" in ''|*[!0-9]*) return 0 ;; esac
+	_fcmb=""
+	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
+		*/cdc_mbim) _fcmb="--device-open-mbim" ;;
+	esac
+	for _fc in 1 2 3 4; do
+		qmicli -d "$1" -p $_fcmb --uim-close-logical-channel="$2,$_fc" >/dev/null 2>&1
+	done
+}
+
+# ЧЕРЕЗ mbim-proxy ИЛИ НАПРЯМУЮ?
+#
+# Прокси нужен, когда канал cdc-wdm делится с кем-то ещё (ModemManager или
+# поднятый mbim-интерфейс): без него lpac и сосед подрались бы за устройство.
+# Но сам прокси бывает МЁРТВЫМ - после ребута модема (AT+CFUN=1,1) он остаётся
+# со старыми дескрипторами, и ЛЮБОЙ запрос через него виснет: «couldn't open
+# the QmiDevice: Transaction timed out», а прямой заход работает. Живой случай
+# 04.08.2026 (Thales MV31-W): eSIM отвечала «euicc_init: -1», хотя чип цел -
+# lpac ходил через сломанный прокси.
+# Поэтому: канал занят -> прокси обязателен; свободен -> проверяем прокси
+# дешёвым запросом и при отказе идём напрямую. Результат кэшируем на 2 минуты,
+# чтобы не платить пробой за каждую операцию.
+_mbim_use_proxy() {   # $1 - узел cdc-wdm
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 && { echo 1; return; }
+	_upi=$(uci -q get 5gmodem.@5gmodem[0].network)
+	if [ -n "$_upi" ] && ubus call "network.interface.$_upi" status 2>/dev/null \
+		| grep -q '"up": true'; then
+		echo 1; return
+	fi
+	_upc="/tmp/5gmodem_esim_proxyok"
+	if [ -s "$_upc" ] && [ -z "$(find "$_upc" -mmin +2 2>/dev/null)" ]; then
+		cat "$_upc"; return
+	fi
+	_upmb=""
+	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
+		*/cdc_mbim) _upmb="--device-open-mbim" ;;
+	esac
+	if qmicli -d "$1" -p $_upmb --uim-get-slot-status >/dev/null 2>&1; then
+		echo 1 > "$_upc"
+	else
+		logger -t 5gmodem "esim: mbim-proxy не отвечает - иду к $1 напрямую (канал свободен)"
+		echo 0 > "$_upc"
+	fi
+	cat "$_upc"
+}
+
+
 _mbim_skipmap() {
 	_v=$(uci -q get lpac.mbim.skip_slot_mapping)
 	[ -n "$_v" ] && { echo "$_v"; return; }
@@ -452,21 +543,62 @@ run_lpac() {
 		# Решение о переключении слота принимаем ОДИН раз и запоминаем: ниже по
 		# нему же решаем, откатывать ли mapping (см. _mbim_skipmap).
 		_MSKIP=$(_mbim_skipmap "$_MDEV")
-		_MR="/tmp/5gmodem_esim_mbim.$$"; rm -f "$_MR"
-		env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
-			LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY=1 \
-			LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$_MSKIP" LPAC_HTTP="$(http_local_drv)" \
-			"$LPAC" "$@" > "$_MR" 2>/dev/null &
+		_MHTTP=$(http_local_drv)
+		_MR="/tmp/5gmodem_esim_res.$$"; rm -f "$_MR"
+		if [ "$_MHTTP" = "stdio" ]; then
+			# HTTP=stdio ЗНАЧИТ «ES9+ делает внешний мост через stdin/stdout».
+			# Здесь lpac запускался НАПРЯМУЮ, без моста: локальным операциям
+			# (chip info, список профилей) сеть не нужна, и они работали, а вот
+			# ЗАГРУЗКА ПРОФИЛЯ упиралась насмерть - lpac писал запрос
+			# {"type":"http",...} в stdout, отвечать было некому, и всё кончалось
+			# «HTTP transport failed»; лог прогресса при этом оставался ПУСТЫМ,
+			# потому что его ведёт как раз мост. Живой случай 04.08.2026: Thales
+			# MV31-W, тестовый профиль LPA:1$rsp.truphone.com$QRF-SPEEDTEST.
+			# Ставим мост в пайплайн - APDU по-прежнему нативный mbim (его ветка
+			# в мосте не срабатывает), мост обслуживает только HTTP и пишет
+			# прогресс/итог.
+			_MLOOP="/tmp/5gmodem_esim_mloop.$$"
+			rm -f "$_MLOOP"; mkfifo "$_MLOOP" 2>/dev/null
+			sh "$BRIDGE" /dev/null "$_MR" "$(ca_bundle)" "$LIVELOG" < "$_MLOOP" \
+				| env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
+					LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY="$(_mbim_use_proxy "$_MDEV")" \
+					LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$_MSKIP" LPAC_HTTP=stdio \
+					"$LPAC" "$@" > "$_MLOOP" 2>/dev/null &
+		else
+			env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
+				LPAC_APDU_MBIM_UIM_SLOT="$(_mbim_uim_slot)" LPAC_APDU_MBIM_USE_PROXY="$(_mbim_use_proxy "$_MDEV")" \
+				LPAC_APDU_MBIM_SKIP_SLOT_MAPPING="$_MSKIP" LPAC_HTTP="$_MHTTP" \
+				"$LPAC" "$@" > "$_MR" 2>/dev/null &
+		fi
 		_PID=$!; _n=0
 		while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt "$_T" ]; do sleep 1; _n=$((_n + 1)); done
-		kill -0 "$_PID" 2>/dev/null && { kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null; }
-		# Откат безусловный - см. пояснение в euicc_probe_wdm: разрешение нужно,
-		# чтобы дотянуться до eUICC, а вернуть рабочую SIM надо в любом случае.
-		_mbim_slot_restore "$_MDEV" "$_MOLD"
+		# СНАЧАЛА МЯГКО. По TERM lpac успевает закрыть канал к ISD-R сам, и
+		# чистить потом нечего; -9 такой возможности не даёт (см. пояснение у
+		# _wdm_free_channels - именно так копилась утечка каналов).
+		_MKILLED=""
+		if kill -0 "$_PID" 2>/dev/null; then
+			_MKILLED=1
+			kill "$_PID" 2>/dev/null; killall lpac 2>/dev/null
+			_n=0
+			while kill -0 "$_PID" 2>/dev/null && [ "$_n" -lt 5 ]; do sleep 1; _n=$((_n + 1)); done
+			kill -9 "$_PID" 2>/dev/null; killall -9 lpac 2>/dev/null
+		fi
+		rm -f "$_MLOOP"
+		# Прибрали за собой только если убивали: штатный выход каналы не оставляет.
+		[ -n "$_MKILLED" ] && _wdm_free_channels "$_MDEV" "$(_mbim_uim_slot)"
+		# ОТКАТ - ТОЛЬКО ЕСЛИ MAPPING БЫЛ ЗАПРЕЩЁН (skip=1), то есть речь о
+		# физической SIM: её нельзя оставить отобранной у соединения. Когда
+		# mapping РАЗРЕШЁН ради активной eSIM (skip=0), возвращать executor
+		# назад НЕ надо - иначе каждая следующая операция начинает с нуля, а
+		# после отката чип отвечает «euicc_init: -1» (проверено на MV31-W).
+		# Так же сделано в community-сборке MBIM-lpac для T99W175.
+		[ "$_MSKIP" = 1 ] && 
+		[ "$_MSKIP" = 1 ] && _mbim_slot_restore "$_MDEV" "$_MOLD"
 		if [ -s "$_MR" ]; then cat "$_MR"; else err "timeout"; fi
 		rm -f "$_MR"
 		return
 	fi
+
 	_prelock="$_AT_LOCK_HELD"
 	_locked=0
 	# AT-порт трогают только at (напрямую) и bridge (через мост). qmi/mbim достают
@@ -624,8 +756,37 @@ live_port() {
 esim_active() {   # AT+SIMTYPE: 1 = ESIM
 	T=$(sms_tool -d "$1" at "AT+SIMTYPE?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+SIMTYPE: *\([0-9]\).*/\1/p' | head -1)
-	[ "$T" = "1" ]
+	case "$T" in
+		1) return 0 ;;
+		0) return 1 ;;
+	esac
+	# AT+SIMTYPE - КОМАНДА FIBOCOM, и у других вендоров её нет вовсе. Молчание
+	# трактовалось как «слот не eSIM», и на модемах со ВСТРОЕННЫМ eUICC вкладка
+	# отвечала «esim slot not active» даже когда слот eSIM физически активен.
+	# Живой случай 04.08.2026: Thales MV31-W (SDX55) - QMI показывает
+	# «Physical slot 2: Is eUICC: yes, Slot status: active», а SIMTYPE молчит.
+	# Спрашиваем QMI UIM: активен ли слот, помеченный как eUICC.
+	_ea_w=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
+	[ -n "$_ea_w" ] && [ -e "$_ea_w" ] || return 1
+	command -v qmicli >/dev/null 2>&1 || return 1
+	# esim.sh НЕ подключает lib.sh (проверено: ни одной строки с ним), поэтому
+	# общего qmicli_p здесь нет - вызов молча уходил в никуда, и ветка всегда
+	# отвечала «слот не активен». Свой минимальный вызов: -p обязателен (общий
+	# канал через прокси), --device-open-mbim нужен на cdc_mbim-устройстве.
+	_ea_mb=""
+	case "$(readlink -f "/sys/class/usbmisc/${_ea_w##*/}/device/driver" 2>/dev/null)" in
+		*/cdc_mbim) _ea_mb="--device-open-mbim" ;;
+	esac
+	qmicli -d "$_ea_w" -p $_ea_mb --uim-get-slot-status 2>/dev/null | awk '
+		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; next }
+		/Slot status: *active/     { act = 1 }
+		/Is eUICC: *yes/           { euicc = 1 }
+		act && euicc { found = 1; exit }
+		END { exit(found ? 0 : 1) }
+	'
 }
+
+
 
 # Найти eUICC-порт. Быстрый путь: кэш жив и отвечает на AT - доверяем без
 # дорогой lpac-пробы. Иначе перебираем tty модема с пробой chip info.
@@ -691,23 +852,145 @@ find_port() {
 # после переперечисления) сбрасываем кэш, ищем порт заново и повторяем один раз.
 do_lpac() {
 	_T="$1"; shift
-	R=$(run_lpac "$_T" "$@")
-	if ! echo "$R" | grep -q '"code":0'; then
-		# Ретрай зависит от бэкенда: AT/bridge держатся за конкретный tty -> сбрасываем
-		# кэш и ищем порт заново. qmi/uqmi/mbim ходят по cdc-wdm и PORT игнорируют, а
-		# find_port гоняет CCHO-пробы по AT-портам (лишнее и может задеть модем) - для
-		# них просто повторяем ту же операцию по cdc-wdm.
-		case "$(apdu_backend)" in
+	_dl_be=$(apdu_backend)
+	# СКОЛЬКО РАЗ ПОВТОРЯТЬ.
+	#
+	# Обычной операции хватает одного ретрая. А вот ЗАГРУЗКА ПРОФИЛЯ на
+	# cdc-wdm-модемах (Qualcomm SDX55: T99W175 / MV31-W) нестабильна сама по
+	# себе: длинные APDU (authenticateServer, loadBoundProfilePackage) срываются
+	# без внятной причины, и в сообществе тот же профиль встаёт «раза с пятого»,
+	# после чего работает без нареканий. Поэтому именно для download на этих
+	# бэкендах даём пять попыток; между ними закрываем оставшиеся логические
+	# каналы (иначе следующая попытка получит SelectFailed) и выдерживаем паузу.
+	# AT/bridge (FM350 и родня) поведения не меняют - там ретрай прежний.
+	_dl_max=2
+	case " $* " in
+		*" download "*)
+			case "$_dl_be" in qmi|mbim|uqmi) _dl_max=5 ;; esac ;;
+	esac
+	_dl_n=1
+	while :; do
+		R=$(run_lpac "$_T" "$@")
+		# УСПЕХ - ТОЛЬКО ПО ФИНАЛЬНОЙ lpa-СТРОКЕ. Вывод многострочный, и КАЖДАЯ
+		# progress-строка несёт "code":0 - проверка по всему выводу считала
+		# успехом даже провалившуюся загрузку, из-за чего ретрай не срабатывал
+		# НИ РАЗУ (проверено 04.08.2026: профиль сорвался на
+		# load_bound_profile_package, а повтора не последовало). Та же ловушка
+		# уже описана в верхе download-ветки - здесь она просто была не учтена.
+		printf '%s\n' "$R" | grep '"type":"lpa"' | tail -1 | grep -q '"code":0' && break
+		# «ICCID УЖЕ НА ЧИПЕ» - ЭТО НАШ ЖЕ УСПЕХ, А НЕ ОШИБКА.
+		#
+		# Установка идёт в два шага: чип принимает пакет профиля и лишь потом
+		# отвечает. Если ответ до нас не дошёл (а на длинных APDU он теряется -
+		# ровно из-за этого здесь и появились пять попыток), профиль УЖЕ записан.
+		# Следующая попытка честно доходит до store_metadata и получает
+		# install_failed_due_to_iccid_already_exists_on_euicc - то есть «такой
+		# профиль тут уже есть». Продолжать после этого бессмысленно: чип не
+		# изменится, а человек ждёт лишние круги и в конце видит «не удалось»,
+		# хотя профиль на месте (живой случай 04.08.2026: установилось с
+		# четвёртой попытки, дальше шли ещё две впустую, и вкладка показала
+		# ошибку - профиль пришлось искать обновлением списка вручную).
+		# ОШИБКУ СЕРВЕРА ПОВТОРЯТЬ БЕСПОЛЕЗНО.
+		#
+		# Пять попыток заведены под срывы длинных APDU (это шаги es10b_*, они у
+		# MBIM-модемов теряются). А когда спотыкается САМ ОБМЕН С SM-DP+ - ответ
+		# не разобрался как JSON, пришёл не тот HTTP-код - повтор даст ровно то же
+		# самое. Живой случай 04.08.2026 (smdpplus.ripsim.com): пять кругов подряд
+		# с одинаковым «Not JSON», шесть минут ожидания, и чип к концу перестал
+		# отвечать вовсе. Выходим сразу - ошибка уже понятная, пусть человек видит
+		# её, а не крутит спиннер.
+		case "$(printf '%s\n' "$R" | grep '"type":"lpa"' | tail -1)" in
+			*'"data":"Not JSON"'*|*'"data":"Not Object"'*|*'"data":"HTTP status code error"'*|*'"data":"HTTP transport failed"'*)
+				# НО ОБРЫВ ЗАКАЧКИ - ДРУГОЕ ДЕЛО. Мост помечает недокачанное тело
+				# (truncated: начинается как JSON, а заканчивается не «}»): это не
+				# «сервер отвечает не по протоколу», а сорванная передача, и её
+				# повторить как раз стоит. Смотрим ПОСЛЕДНЮЮ httpx-строку лога.
+				if [ "$(grep '"type":"httpx"' "$LIVELOG" 2>/dev/null | tail -1 \
+					| grep -c '"truncated":1')" = 1 ]; then
+					logger -t 5gmodem "esim: ответ сервера оборвался на полпути - повторяю"
+				else
+					logger -t 5gmodem "esim: сервер ответил не по протоколу - повторы бессмысленны, прекращаю"
+					break
+				fi ;;
+		esac
+		# ОТКАЗ SM-DP+ - ЭТО РЕШЕНИЕ СЕРВЕРА, А НЕ СБОЙ.
+		#
+		# Шаги es9p_* - это разговор с сервером оператора. Если он ответил
+		# осмысленным отказом (по SGP.22 - коды GSMA в statusCodeData, у lpac они
+		# приезжают текстом в data), повтор не изменит НИЧЕГО: код активации не
+		# станет снова годным, а профиль - снова доступным. Живой случай
+		# 04.08.2026: «MatchingID is refused» - код уже использован, и мы всё
+		# равно отработали пять кругов по полторы минуты, прежде чем сказать
+		# человеку то, что было известно с первой попытки.
+		# Обрыв закачки сюда не попадает - он разобран выше и уходит в повтор.
+		case "$(printf '%s\n' "$R" | grep '"type":"lpa"' | tail -1)" in
+			*'"message":"es9p_'*'"data":""'*) : ;;
+			*'"message":"es9p_'*)
+				logger -t 5gmodem "esim: сервер оператора отказал - повторы бессмысленны, прекращаю"
+				break ;;
+		esac
+		if printf '%s\n' "$R" | grep -q 'iccid_already_exists_on_euicc'; then
+			logger -t 5gmodem "esim: профиль с этим ICCID уже на чипе - считаю установку успешной"
+			R='{"type":"lpa","payload":{"code":0,"message":"success","data":"already_installed"}}'
+			break
+		fi
+		[ "$_dl_n" -ge "$_dl_max" ] && break
+		# Ретрай зависит от бэкенда: AT/bridge держатся за конкретный tty ->
+		# сбрасываем кэш и ищем порт заново. qmi/uqmi/mbim ходят по cdc-wdm и
+		# PORT игнорируют, а find_port гоняет CCHO-пробы по AT-портам (лишнее и
+		# может задеть модем) - для них просто повторяем по cdc-wdm.
+		case "$_dl_be" in
 			at|bridge)
 				rm -f "$PORTCACHE"
 				PORT=$(find_port)
-				[ -n "$PORT" ] && R=$(run_lpac "$_T" "$@") ;;
+				[ -n "$PORT" ] || break ;;
 			*)
-				R=$(run_lpac "$_T" "$@") ;;
+				_wdm_free_channels "$(esim_wdm)" "$(_mbim_uim_slot)"
+				# ПОСЛЕ СОРВАВШЕЙСЯ ЗАГРУЗКИ ЧИП УХОДИТ В ОТКАЗ ЦЕЛИКОМ:
+				# следующая попытка отвечает «euicc_init: -1» и закрытие каналов
+				# уже не спасает (проверено - пять попыток подряд легли одинаково).
+				# Оживляет переинициализация карты: слот туда-обратно вендорной
+				# AT-командой (T99W175/MV31-W: 0 = SIM1, 1 = eSIM). Это дешевле
+				# перезагрузки модема (та лечила, но стоит полминуты) и не трогает
+				# QMI-канал. Команды нет - просто ждём, как раньше.
+				if [ "$_dl_max" -gt 2 ]; then
+					# sms_tool НАПРЯМУЮ, а не at_query: esim.sh не подключает
+					# lib.sh, и вызов at_query здесь молча не выполнялся вовсе -
+					# восстановление не происходило ни разу (проверено).
+					# Нумерация вендорной команды 0-based: 0 = SIM1, 1 = eSIM,
+					# тогда как _mbim_uim_slot отдаёт физический номер (1..N).
+					_dl_p=$(live_port)
+					_dl_s=$(_mbim_uim_slot); case "$_dl_s" in ''|*[!0-9]*) _dl_s=2 ;; esac
+					_dl_cur=$((_dl_s - 1))
+					_dl_alt=0; [ "$_dl_cur" = 0 ] && _dl_alt=1
+					if [ -n "$_dl_p" ] && sms_tool -d "$_dl_p" at "AT^switch_slot?" 2>/dev/null \
+						| grep -qi "SIM"; then
+						logger -t 5gmodem "esim: чип не отвечает - переинициализирую карту сменой слота $_dl_cur -> $_dl_alt -> $_dl_cur"
+						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_alt" >/dev/null 2>&1
+						sleep 5
+						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_cur" >/dev/null 2>&1
+						sleep 8
+					else
+						sleep 3
+					fi
+				fi ;;
 		esac
-	fi
+		_dl_n=$((_dl_n + 1))
+		[ "$_dl_max" -gt 2 ] && logger -t 5gmodem "esim: загрузка профиля не удалась - попытка $_dl_n из $_dl_max"
+		# И В ЖИВОЙ ЛОГ ТОЖЕ - его читает вкладка.
+		# Ретраи молчали для человека: он видел, как одни и те же шаги идут по
+		# кругу, и не понимал, зависло это или так задумано (пять попыток на
+		# qmi/mbim/uqmi - см. выше). Строку кладём в том же формате, что шлёт
+		# lpac, чтобы фронту не пришлось разбирать два разных вида записей.
+		printf '{"type":"progress","payload":{"code":0,"message":"retry","data":"%s/%s"}}\n' \
+			"$_dl_n" "$_dl_max" >> "$LIVELOG" 2>/dev/null
+	done
 	echo "$R"
 }
+
+
+
+
 
 # ---- дешёвый статус: без lpac и без замка -----------------------------------
 case "$1" in
@@ -993,6 +1276,21 @@ status-probe)
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	_es_sec="m_$(echo "$_AP" | sed 's/[^A-Za-z0-9]/_/g')"
 	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
+	# КАНАЛ ЗАНЯТ СОЕДИНЕНИЕМ - НЕ ПРОБУЕМ И НЕ ХОРОНИМ ЧИП.
+	#
+	# Пока интерфейс поднят, узлом cdc-wdm владеет umbim, и выбор бэкенда
+	# ЗАКОНОМЕРНО падает на «at». А у SDX55 eUICC по AT недостижим - CCHO-проба
+	# перебирает порты впустую и возвращает «чипа нет», после чего вердикт ещё и
+	# оседает в кэше. Человек читает совет «сообщите vid:pid, добавим поддержку»
+	# про модем, на котором eSIM только что работала (04.08.2026, ModemManager ->
+	# MBIM). Здесь проверка НУЖНА отдельно: ветка ниже смотрит уже выбранный
+	# бэкенд, а он к этому моменту «at», и занятость канала из него не видна.
+	_pb_w=$(esim_wdm)
+	if [ -n "$_pb_w" ] && _wdm_owned_by_umbim "$_pb_w"; then
+		[ -s "$_SCACHE" ] && { cat "$_SCACHE"; exit 0; }
+		echo '{"available":0,"active":0,"reason":"uplink"}'
+		exit 0
+	fi
 	if [ -x "$LPAC" ]; then
 		_NET=$(uci -q show 5gmodem 2>/dev/null | sed -n \
 			"s/^5gmodem\.\(m_[^.]*\)\.path='$_AP'\$/\1/p" | head -1)
@@ -1013,6 +1311,21 @@ status-probe)
 				AVAIL=1; ACTIVE=1
 				printf '{"available":1,"active":1}\n' > "$_SCACHE"
 				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
+			elif _wdm_owned_by_umbim "$(esim_wdm)"; then
+				# КАНАЛ ЗАНЯТ СОЕДИНЕНИЕМ - ЭТО НЕ «ЧИПА НЕТ».
+				#
+				# Проба по cdc-wdm при поднятом интерфейсе не проходит по
+				# определению: каналом владеет umbim. Раньше мы записывали в кэш
+				# «eUICC нет» и вкладка потом ПОКАЗЫВАЛА этот приговор - вплоть до
+				# совета «сообщите vid:pid, добавим поддержку» на модеме, где eSIM
+				# минуту назад работала (живой случай 04.08.2026 после переключения
+				# ModemManager -> MBIM). Отрицательный вердикт тут НЕ кэшируем:
+				# отдаём последний хороший, а если его нет - честную причину.
+				if [ -s "$_SCACHE" ]; then
+					cat "$_SCACHE"; exit 0
+				fi
+				echo '{"available":0,"active":0,"reason":"uplink"}'
+				exit 0
 			else
 				printf '{"available":0,"active":0,"reason":"noeuicc"}\n' > "$_SCACHE"
 				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
@@ -1080,6 +1393,60 @@ esac
 [ -n "$LPAC_BROKEN" ] && { err "$LPAC_BROKEN"; exit 0; }
 [ -x "$LPAC" ] || { err "lpac not installed"; exit 0; }
 
+# ПРОВЕРКА СЕТИ - ДО ВСЕГО ОСТАЛЬНОГО, ОНА ПРО РОУТЕР, А НЕ ПРО ЧИП.
+#
+# Раньше netcheck стоял среди операций с eUICC, то есть ПОСЛЕ общего гейта
+# (замок, активный слот, поиск eUICC-порта). Стоило чипу перестать отвечать -
+# например, после серии оборванных загрузок - и netcheck вообще не выполнялся,
+# отвечая «no eUICC-capable AT port». Вкладка, не найдя поля net, показывала
+# «Нет доступа в интернет», хотя роутер онлайн и человек в этот момент сидит на
+# нём удалённо (живой случай 04.08.2026). К eUICC эта проверка отношения не
+# имеет, поэтому отвечаем сразу.
+case "$1" in
+netcheck)
+	# Есть ли у роутера доступ в интернет для загрузки профиля? Загрузка идёт с
+	# SM-DP+ оператора по HTTPS, и без сети lpac просто молча висит до таймаута.
+	# Проверяем ИМЕННО SM-DP+ из activation code (LPA:1$HOST$ID -> 2-е поле $),
+	# а не абстрактный хост: у него может быть доступ, а до SM-DP+ - фаервол.
+	# Возврат: {"net":1} - всё ок; {"net":1,"smdp":0} - интернет есть, но SM-DP+
+	# не ответил; {"net":0} - интернета нет вовсе.
+	_host=$(echo "$2" | awk -F'[$]' '{print $2}')
+	if [ -n "$_host" ] && curl -sS -m 15 -o /dev/null "https://$_host/" 2>/dev/null; then
+		echo '{"net":1,"smdp":1}'
+	elif curl -sS -m 10 -o /dev/null https://www.gstatic.com/generate_204 2>/dev/null; then
+		# интернет есть; SM-DP+ мог не ответить на GET корня - это не всегда
+		# ошибка (часть серверов отвечает только на RSP-эндпоинты), но флажок даём
+		[ -n "$_host" ] && echo '{"net":1,"smdp":0}' || echo '{"net":1,"smdp":1}'
+	else
+		echo '{"net":0}'
+	fi
+	# ВЫХОДИМ СРАЗУ: ниже идёт работа с чипом под замком, а нам она не нужна -
+	# иначе ответ уже отдан, а процесс ещё полминуты держал бы eUICC.
+	exit 0
+	;;
+esac
+
+
+# КАНАЛ ЗАНЯТ СОЕДИНЕНИЕМ - ОТВЕЧАЕМ СРАЗУ, НЕ БЕРЯ ЗАМОК.
+#
+# У модема с cdc-wdm под mbim eUICC живёт ЗА ЭТИМ ЖЕ каналом, и пока соединение
+# поднято, читать чип нельзя. Раньше мы всё равно шли дальше: брали замок,
+# перебирали CCHO-пробами все tty (их у SDX55 три, и ни один не отвечает), и
+# висли на минуты - а любой другой запрос в это время получал «busy». Хуже
+# того, отвалившись по таймауту, мы отвечали «ни один порт не ответил как
+# eUICC», и человек читал это как «модем не поддерживается» (живой случай
+# 04.08.2026 после переключения ModemManager -> MBIM).
+# Изменяющие операции сюда не попадают: они ниже сами опускают интерфейс
+# (_uplink_release) и работают штатно.
+case "$1" in
+	download|enable|disable|delete|nickname|flush|notif|notifications) : ;;
+	*)
+		_ub_w=$(esim_wdm)
+		if [ -n "$_ub_w" ] && _wdm_owned_by_umbim "$_ub_w"; then
+			err "uplink busy"; exit 0
+		fi ;;
+esac
+
 # ---- всё остальное: под замком (у eUICC один логический канал) ---------------
 LOCK="/tmp/5gmodem_esim.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
@@ -1099,7 +1466,57 @@ if ! mkdir "$LOCK" 2>/dev/null; then
 	mkdir "$LOCK" 2>/dev/null || { err "busy"; exit 0; }
 fi
 echo "$$" > "$LOCK/pid" 2>/dev/null
-trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
+
+# ВРЕМЕННО ОТКЛЮЧАЕМ СОЕДИНЕНИЕ ЭТОГО МОДЕМА НА ВРЕМЯ ОПЕРАЦИИ.
+#
+# У модемов, где eUICC живёт только за MBIM (Qualcomm SDX55 и родня), канал
+# управления ОДИН и на двоих не делится: пока соединение поднято, им владеет
+# umbim, и трогать чип нельзя - оборвём интернет. А выключенный профиль без
+# доступа к чипу не включить: получался замкнутый круг, из которого человек сам
+# выбраться не мог (04.08.2026: eSIM подняла связь, после чего перестала
+# управляться).
+# Поэтому опускаем интерфейс САМИ - но ТОЛЬКО:
+#   * этого модема (имя берём из его секции, а не общее - у соседних модемов
+#     свои интерфейсы, и рвать их нельзя ни при каких условиях);
+#   * на ИЗМЕНЯЮЩИХ операциях. Чтение списка (dump) идёт при каждом открытии
+#     вкладки - рвать из-за него связь было бы дико;
+#   * когда канал действительно занят umbim и другого пути к чипу нет.
+# Возвращаем обратно в trap - и на нормальном выходе, и когда процесс убьют.
+_UPLINK_IF=""
+_uplink_release() {
+	_wdm_owned_by_umbim "$(esim_wdm)" || return 0
+	_ur_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_ur_ap" ] || return 0
+	_ur_sec="m_$(echo "$_ur_ap" | sed 's/[^A-Za-z0-9]/_/g')"
+	_ur_if=$(uci -q get "5gmodem.$_ur_sec.network")
+	[ -n "$_ur_if" ] || return 0
+	logger -t 5gmodem "esim: канал занят соединением - опускаю $_ur_if на время операции"
+	[ -n "$LIVELOG" ] && printf '%s {"type":"progress","payload":{"code":0,"message":"uplink_down","data":"%s"}}\n' \
+		"$(date '+%H:%M:%S' 2>/dev/null)" "$_ur_if" >> "$LIVELOG" 2>/dev/null
+	ifdown "$_ur_if" >/dev/null 2>&1
+	_UPLINK_IF="$_ur_if"
+	# Ждём, пока netifd действительно отпустит узел: сразу после ifdown umbim
+	# ещё живёт секунду-другую, и mbim-проба упёрлась бы в него же.
+	_ur_i=0
+	while [ "$_ur_i" -lt 10 ]; do
+		ubus call "network.interface.$_ur_if" status 2>/dev/null \
+			| grep -q '"up": true' || break
+		sleep 1
+		_ur_i=$((_ur_i + 1))
+	done
+	sleep 1
+}
+_uplink_restore() {
+	[ -n "$_UPLINK_IF" ] || return 0
+	logger -t 5gmodem "esim: операция завершена - поднимаю $_UPLINK_IF"
+	ifup "$_UPLINK_IF" >/dev/null 2>&1
+	_UPLINK_IF=""
+}
+trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
+
+case "$1" in
+	download|enable|disable|delete|nickname|flush|notif|notifications) _uplink_release ;;
+esac
 
 # МОДЕМ ПОД MM: к eUICC не ходим вообще - ни по tty, ни по cdc-wdm (см.
 # _mm_owns_channel; на T99W175 это роняло модем). Все чиповые вербы ниже
@@ -1127,12 +1544,60 @@ if ! wdm_backend; then
 	for _ch in 1 2 3 4 5 6 7 8 9 10; do at_bounded "$D" "AT+CCHC=$_ch" 2 >/dev/null; done
 
 	PORT=$(find_port)
-	[ -n "$PORT" ] || { err "no eUICC-capable AT port"; exit 0; }
+	if [ -z "$PORT" ]; then
+		# ЧЕСТНАЯ ПРИЧИНА ВМЕСТО «нет eUICC-порта».
+		#
+		# У модемов, где eUICC живёт ТОЛЬКО за MBIM/QMI (Qualcomm SDX55), AT-порта
+		# для чипа нет вовсе, и сюда мы попадаем ровно в одном случае: канал занят
+		# ПОДНЯТЫМ соединением (proto=mbim, umbim держит узел), поэтому mbim-проба
+		# запрещена гейтом выше. Сообщение «no eUICC-capable AT port» в этой
+		# ситуации сбивает с толку - человек ищет проблему в модеме, хотя всё
+		# работает и мешает как раз рабочий интернет через эту же eSIM (живой
+		# случай 04.08.2026: профиль поднял связь, после чего список профилей
+		# перестал читаться).
+		if _wdm_owned_by_umbim "$(esim_wdm)"; then
+			err "uplink busy"
+		else
+			err "no eUICC-capable AT port"
+		fi
+		exit 0
+	fi
 fi
 
 flush_notifications() {
 	R=$(run_lpac 60 notification process -a -r)
 	echo "$R" | grep -q '"code":0' || { rm -f "$PORTCACHE"; }
+}
+
+# СБРОС МОДЕМА ПОСЛЕ СМЕНЫ АКТИВНОГО ПРОФИЛЯ.
+#
+# По SGP.22 eUICC после включения профиля выдаёт проактивную команду REFRESH, и
+# модем обязан перечитать карту сам. Часть прошивок этого не делает: в eUICC
+# профиль уже enabled, а модем работает со старым - человек видит «переключил, и
+# ничего не изменилось». Лечится полным сбросом (AT+CFUN=1,1).
+#
+# Кому именно сбрасывать - решает quirks.sh (esim_reset_after_switch), потому что
+# сброс стоит переэнумерации на USB и примерно минуты без сети: там, где REFRESH
+# отрабатывает штатно (FM350-GL), это был бы чистый регресс. Для семейства SDX55
+# сброс задан штатным шагом и на чужом рабочем стенде с этим модемом
+# (luci-app-epm: «Reboot Method: AT Command, AT+CFUN=1,1, /dev/ttyUSB2»).
+#
+# ФОНОМ И С ОТВЯЗКОЙ ДЕСКРИПТОРОВ НА САМОМ subshell: вызов приходит через rpcd
+# (fs.exec) с потолком 30 c, а сброс с переэнумерацией занимает минуту и больше.
+# Без перенаправления rpcd продолжает ждать унаследованный stdout и отдаёт
+# вкладке «XHR error» на успешно выполненной операции.
+esim_reset_after_switch_maybe() {
+	printf '%s' "$1" | jsonfilter -e '@.payload.code' 2>/dev/null | grep -qx 0 || return 0
+	_ers_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	[ -n "$_ers_ap" ] || return 0
+	_ers_sec="m_$(echo "$_ers_ap" | sed 's/[^A-Za-z0-9]/_/g')"
+	. /usr/share/5gmodem/quirks.sh
+	[ "$(esim_reset_after_switch "$(uci -q get "5gmodem.$_ers_sec.model")" \
+		"$(uci -q get "5gmodem.$_ers_sec.vidpid")")" = 1 ] || return 0
+	_ers_at=$(uci -q get "5gmodem.$_ers_sec.at_port")
+	[ -n "$_ers_at" ] && [ -e "$_ers_at" ] || return 0
+	logger -t 5gmodem "eSIM: профиль переключён - сбрасываю модем (AT+CFUN=1,1 на $_ers_at)"
+	( /usr/share/5gmodem/reboot_modem.sh hard "$_ers_at" ) >/dev/null 2>&1 </dev/null &
 }
 
 case "$1" in
@@ -1154,12 +1619,16 @@ dump)
 enable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
 	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
-	O=$(do_lpac 60 profile enable "$2"); flush_notifications; echo "$O"
+	O=$(do_lpac 60 profile enable "$2"); flush_notifications
+	esim_reset_after_switch_maybe "$O"
+	echo "$O"
 	;;
 disable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
 	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
-	O=$(do_lpac 60 profile disable "$2"); flush_notifications; echo "$O"
+	O=$(do_lpac 60 profile disable "$2"); flush_notifications
+	esim_reset_after_switch_maybe "$O"
+	echo "$O"
 	;;
 delete)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
@@ -1169,24 +1638,6 @@ delete)
 nickname)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
 	do_lpac 45 profile nickname "$2" "$3"
-	;;
-netcheck)
-	# Есть ли у роутера доступ в интернет для загрузки профиля? Загрузка идёт с
-	# SM-DP+ оператора по HTTPS, и без сети lpac просто молча висит до таймаута.
-	# Проверяем ИМЕННО SM-DP+ из activation code (LPA:1$HOST$ID -> 2-е поле $),
-	# а не абстрактный хост: у него может быть доступ, а до SM-DP+ - фаервол.
-	# Возврат: {"net":1} - всё ок; {"net":1,"smdp":0} - интернет есть, но SM-DP+
-	# не ответил; {"net":0} - интернета нет вовсе.
-	_host=$(echo "$2" | awk -F'[$]' '{print $2}')
-	if [ -n "$_host" ] && curl -sS -m 15 -o /dev/null "https://$_host/" 2>/dev/null; then
-		echo '{"net":1,"smdp":1}'
-	elif curl -sS -m 10 -o /dev/null https://www.gstatic.com/generate_204 2>/dev/null; then
-		# интернет есть; SM-DP+ мог не ответить на GET корня - это не всегда
-		# ошибка (часть серверов отвечает только на RSP-эндпоинты), но флажок даём
-		[ -n "$_host" ] && echo '{"net":1,"smdp":0}' || echo '{"net":1,"smdp":1}'
-	else
-		echo '{"net":0}'
-	fi
 	;;
 download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
@@ -1255,7 +1706,55 @@ download)
 		fi
 	fi
 	rm -f "$_ERRFILE"
-	flush_notifications; echo "$O"
+	# ЧИП ПОСЛЕ НЕУДАЧИ ОСТАЁТСЯ В ОТКАЗЕ - ПОДНИМАЕМ ЕГО САМИ.
+	#
+	# Серия оборванных сессий доводит eUICC до состояния, когда он не отвечает
+	# даже на чтение: следом «euicc_init: -1», и вкладка показывает «eUICC не
+	# отвечает», а список профилей не обновляется ничем, кроме перезагрузки
+	# (живой случай 04.08.2026 после пяти неудачных попыток подряд). Лечится тем
+	# же приёмом, что и между попытками, - переинициализацией карты сменой слота
+	# туда-обратно. Делаем ТОЛЬКО при провале: успешная загрузка чип не роняет.
+	if ! printf '%s\n' "$O" | grep '"type":"lpa"' | tail -1 | grep -q '"code":0'; then
+		_rc_p=$(live_port)
+		_rc_s=$(_mbim_uim_slot); case "$_rc_s" in ''|*[!0-9]*) _rc_s=2 ;; esac
+		_rc_cur=$((_rc_s - 1)); _rc_alt=0; [ "$_rc_cur" = 0 ] && _rc_alt=1
+		if [ -n "$_rc_p" ] && sms_tool -d "$_rc_p" at "AT^switch_slot?" 2>/dev/null \
+			| grep -qi "SIM"; then
+			logger -t 5gmodem "esim: загрузка не удалась - переинициализирую карту, чтобы чип снова отвечал"
+			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_alt" >/dev/null 2>&1
+			sleep 5
+			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_cur" >/dev/null 2>&1
+			sleep 8
+			rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+		fi
+	fi
+	flush_notifications
+	# ПЕРВЫЙ ПРОФИЛЬ ВКЛЮЧАЕМ САМИ.
+	#
+	# Пустой чип + один загруженный профиль = других вариантов нет, и человек
+	# ожидает, что eSIM просто заработает. У нас же профиль оставался выключенным,
+	# и это было совсем неочевидно: список показывает профиль, а связи нет, пока
+	# не нажмёшь «Включить» (замечание владельца 04.08.2026).
+	# ТОЛЬКО КОГДА ПРОФИЛЬ РОВНО ОДИН И НИ ОДИН НЕ ВКЛЮЧЁН: если на чипе уже
+	# работает другая eSIM, молча переключать её нельзя - это увело бы человека с
+	# рабочей связи без спроса.
+	if printf '%s\n' "$O" | grep '"type":"lpa"' | tail -1 | grep -q '"code":0'; then
+		_PL=$(do_lpac 45 profile list)
+		_PN=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[*].iccid' 2>/dev/null | grep -c .)
+		_PE=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[*].profileState' 2>/dev/null \
+			| grep -ci enabled)
+		if [ "$_PN" = 1 ] && [ "$_PE" = 0 ]; then
+			_PI=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[0].iccid' 2>/dev/null)
+			if [ -n "$_PI" ]; then
+				logger -t 5gmodem "esim: единственный профиль $_PI - включаю автоматически"
+				_PR=$(do_lpac 60 profile enable "$_PI")
+				flush_notifications
+				esim_reset_after_switch_maybe "$_PR"
+				rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+			fi
+		fi
+	fi
+	echo "$O"
 	;;
 notifications)
 	do_lpac 45 notification list
