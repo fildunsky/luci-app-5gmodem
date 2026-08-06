@@ -137,8 +137,8 @@ apdu_backend() {
 				*qmi_wwan*) echo qmi ;;
 				*)
 					if [ -z "$(esim_wdm)" ]; then
-						logger -t 5gmodem "esim: выбран $_ab, но cdc-wdm у модема нет - иду по AT"
-						echo at
+						logger -t 5gmodem "esim: выбран $_ab, но cdc-wdm у модема нет - иду по AT через мост"
+						echo bridge
 					else
 						echo "$_ab"
 					fi ;;
@@ -167,7 +167,24 @@ apdu_backend() {
 				# Драйвер не определился - решаем по прото, как раньше.
 				*) [ "$_abp" = qmi ] && echo qmi || _mbim_or_at ;;
 			esac ;;
-		*) echo at ;;
+		# AT-МОДЕМ (cdc-wdm нет вовсе: fibocom/xmm/atc) - ТОЛЬКО ЧЕРЕЗ НАШ МОСТ.
+		#
+		# Здесь стояло `at` - родной AT-драйвер lpac. Он поехал 25.07 ради быстрой
+		# загрузки на медленном eUICC FM350 с патченым lpac 2.3.x, но живые логи
+		# 06.08.2026 показали, чем это кончается: `es10b_prepare_download` встаёт
+		# РОВНО на 240 c (два захода подряд, секунда в секунду) - у драйвера
+		# рассинхронизируется persistent-буфер at_expect на длинной цепочке CGLA,
+		# и шаг умирает по его собственному таймеру. Ровно из-за этого мост когда-то
+		# и был написан (см. шапку run_lpac).
+		#
+		# Обратное доказательство прямое: единственная достоверно доведённая до
+		# конца загрузка на FM350 (Tele2, 17.07.2026) шла через МОСТ - тогда в
+		# коде был безусловный LPAC_APDU=stdio, выбора ещё не существовало.
+		#
+		# Модемов это касается только AT-класса: у T99W175/MV31-W узел cdc_mbim,
+		# и они уходят веткой выше в нативный mbim, который у них и работает.
+		# Родной драйвер остаётся доступен вручную: esim_apdu='at'.
+		*) echo bridge ;;
 	esac
 }
 
@@ -275,8 +292,10 @@ _wdm_owned_by_umbim() {   # $1 - узел /dev/cdc-wdmN
 # mbim-бэкенд, если узлом не владеет umbim; иначе честный at (мост).
 _mbim_or_at() {
 	if _wdm_owned_by_umbim "$(esim_wdm)"; then
-		logger -t 5gmodem "esim: узлом $(esim_wdm) владеет umbim (proto=mbim) - mbim-проба запрещена, идём по AT"
-		echo at
+		# По AT - значит через мост: родной AT-драйвер lpac виснет на длинных
+		# цепочках CGLA (см. ветку AT-модема в apdu_backend).
+		logger -t 5gmodem "esim: узлом $(esim_wdm) владеет umbim (proto=mbim) - mbim-проба запрещена, идём по AT через мост"
+		echo bridge
 	else
 		echo mbim
 	fi

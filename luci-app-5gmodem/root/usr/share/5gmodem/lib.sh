@@ -669,8 +669,19 @@ _vendor_by_vid() {
 _model_vendor_ok() {   # $1 - модель, $2 - vidpid
 	_mv_want=$(_vendor_by_vid "$2")
 	[ -n "$_mv_want" ] || return 0            # вендор по vid неизвестен - не судим
+	# СИНОНИМЫ ОДНОЙ КОМПАНИИ. VID 1e2d принадлежит Cinterion, но это тот же
+	# Thales (бывший Gemalto): MV31-W честно отвечает «Thales MV31-W», а гвард
+	# считал thales чужим вендором и браковал модель НА КАЖДОМ опросе - в
+	# журнале раз в 5 c «модель не от вендора, в профиль не пишем», модель в
+	# секции так и не появлялась (живой отчёт 06.08.2026, MV31-W под umbim).
+	_mv_syn="$_mv_want"
+	case "$_mv_want" in
+		cinterion) _mv_syn="cinterion thales gemalto" ;;
+	esac
 	_mv_low=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
-	case "$_mv_low" in *"$_mv_want"*) return 0 ;; esac
+	for _mv_a in $_mv_syn; do
+		case "$_mv_low" in *"$_mv_a"*) return 0 ;; esac
+	done
 	# Имя вендора в строке вообще не названо - тоже не судим: многие модемы
 	# отдают голую модель ("RM520N-GL", "E3372"), и это нормально.
 	#
@@ -682,7 +693,7 @@ _model_vendor_ok() {   # $1 - модель, $2 - vidpid
 	# показываться вторым «Compal» в табах) - вот это ловим и не пишем/не показываем.
 	for _mv_other in fibocom huawei telit quectel zte cinterion meiglink simcom \
 	                 compal foxconn thales dell; do
-		[ "$_mv_other" = "$_mv_want" ] && continue
+		case " $_mv_syn " in *" $_mv_other "*) continue ;; esac
 		case "$_mv_low" in *"$_mv_other"*) return 1 ;; esac
 	done
 	return 0

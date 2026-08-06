@@ -1313,6 +1313,25 @@ report() {
 	run 5  "CA-сертификаты (нужны для загрузки профиля)" sh -c "ls -l /etc/ssl/certs/ca-certificates.crt 2>/dev/null || echo 'ca-bundle НЕ УСТАНОВЛЕН -> загрузка профиля eSIM работать не будет'"
 	run 5  "HTTP-бэкенд в lpac" "$RES/esim.sh" httpinfo
 	run 15 "Проверка HTTPS наружу" sh -c "curl -sS -o /dev/null -w 'код=%{http_code} tls=%{ssl_verify_result} время=%{time_total}s\n' https://ya.ru 2>&1 | head -3"
+	# ЧЕМ ХОДИТ МОСТ APDU. Он написан под GNU wget (wget-ssl): --method,
+	# --body-file, -S. busybox-wget этих ключей не знает и печатает СПРАВКУ
+	# вместо запроса - в отчёте это выглядело как «transport failed» с текстом
+	# man-страницы в поле причины, и распознать причину было нельзя (живой лог
+	# 06.08.2026, FM350 на чистой прошивке). Теперь при busybox уходим на curl,
+	# но GNU wget всё равно предпочтительнее: curl с mbedTLS не тянет часть
+	# цепочек GSMA CI. Показываем, что есть на роутере.
+	run 5  "HTTP-клиент для eSIM (wget/curl)" sh -c '
+		_w=$(wget --version 2>/dev/null | head -1)
+		case "$_w" in
+			*"GNU Wget"*) echo "wget: $_w - подходит для загрузки профиля" ;;
+			*) echo "wget: busybox (нет --method/--body-file) - мост пойдёт через curl"
+			   echo "  для самой надёжной загрузки профиля: apk add wget-ssl" ;;
+		esac
+		if command -v curl >/dev/null 2>&1; then
+			echo "curl: $(curl --version 2>/dev/null | head -1)"
+		else
+			echo "curl: НЕ УСТАНОВЛЕН - если wget тоже busybox, загрузка профиля невозможна"
+		fi'
 	collect "esim"
 	run 5  "eSIM: конфиг lpac (порт AT/uqmi)" sh -c "uci -q show lpac 2>/dev/null; echo '--- custom AID ---'; uci -q get lpac.global.custom_isd_r_aid 2>/dev/null || echo '(по умолчанию A0000005591010FFFFFFFF8900000100)'"
 	# ЧЕМ ХОДИМ К eUICC. Транспорт APDU выбирается автоматически по протоколу и
