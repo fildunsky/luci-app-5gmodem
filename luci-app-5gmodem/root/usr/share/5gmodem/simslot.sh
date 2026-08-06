@@ -300,7 +300,6 @@ if [ -n "$MI" ]; then
 			exit 0
 		fi
 		logger -t 5gmodem "слоты: ModemManager их не отдал - спрашиваю модем напрямую"
-		_MM_ACT="$ACT"
 		;;
 	esac
 fi

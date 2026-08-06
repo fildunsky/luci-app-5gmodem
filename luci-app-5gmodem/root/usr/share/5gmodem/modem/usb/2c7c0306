@@ -68,6 +68,11 @@ if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
 fi
 
 if [ "x$MODE_NUM" = "x7" ]; then
+	# ОТВЕТ QENG СОХРАНЯЕМ: ниже $O перезаписывается ответом QCAINFO, а из QENG
+	# ещё нужен SINR. Без этого он считался по строке, которой в новом $O уже
+	# нет, и на модеме С АГРЕГАЦИЕЙ поле «SINR» всегда было пустым (живой EP06-E
+	# на стенде 05.08.2026: QENG отдаёт индекс 5, а в снимке прочерк).
+	_QENG_O="$O"
 	O=$(sms_tool -d $DEVICE at "AT+QCAINFO")
 	
 	T=$(echo "$O" | awk -F[,] '/^\+QCAINFO: "scc"/{print $4}' | xargs)
@@ -90,16 +95,70 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		S1PCI="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $3}')
 		S1EARFCN="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $10}')
-		RSSI=$T
+		# МЕТРИКИ ВТОРИЧНОЙ НЕСУЩЕЙ - В СВОИ ПОЛЯ, А НЕ ПОВЕРХ ОСНОВНЫХ.
+		# Раньше RSRP/RSRQ/RSSI из блока "scc" затирали значения обслуживающей
+		# соты, и карточка при включённой агрегации показывала уровень ВТОРОЙ
+		# несущей как основной - он обычно слабее, и выглядело это как внезапно
+		# просевший сигнал. У страницы для них есть отдельные поля (s1rsrp/s1rsrq,
+		# заведены для SCC у Compal), их и заполняем.
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $8}')
-		RSRP=$T
+		S1RSRP=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $9}')
-		RSRQ=$T
-#		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $11}' | awk '{printf "%.1f\n", $1*0.2-20}')
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", 0.2*$1*10 - 20}')
+		S1RSRQ=$T
+		# SINR - ИЗ СОХРАНЁННОГО ОТВЕТА QENG (в $O его уже нет, см. выше).
+		T=$(echo "$_QENG_O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", 0.2*$1*10 - 20}')
 		SINR=$T
 	fi
+fi
+
+# ШИРИНА ПОЛОСЫ ОТДЕЛЬНЫМ ПОЛЕМ. В подписи диапазона она уже есть («DL: @20
+# MHz»), но карточка показывает её и самостоятельной строкой - там был прочерк.
+# Индекс DL-полосы - поле 13 ответа QENG (0=1.4, 1=3, 2=5, 3=10, 4=15, 5=20).
+if [ -z "$BANDWIDTH" ]; then
+	T=$(echo "${_QENG_O:-$O}" | awk -F[,:] '/^\+QENG:/ {print $13}')
+	case "$T" in
+		0) BANDWIDTH="1.4 MHz";; 1) BANDWIDTH="3 MHz";; 2) BANDWIDTH="5 MHz";;
+		3) BANDWIDTH="10 MHz";; 4) BANDWIDTH="15 MHz";; 5) BANDWIDTH="20 MHz";;
+	esac
+fi
+
+# СОСЕДНИЕ СОТЫ. AT+QENG="neighbourcell" отдаёт строки вида
+#   +QENG: "neighbourcell intra","LTE",<earfcn>,<pci>,<rsrq>,<rsrp>,<rssi>,...
+# Столбец 5 - именно RSRQ, а 6 - RSRP (порядок обратный привычному), проверено
+# на живом EP06-E: rsrq -19, rsrp -105. Таблицу соседей страница уже умеет
+# рисовать - до сих пор для этого модема она просто была пуста.
+if [ -z "$NEIGHBORS" ]; then
+	_NB=$(sms_tool -d $DEVICE at "AT+QENG=\"neighbourcell\"" 2>/dev/null | tr -d '\r')
+	# ДИАПАЗОН СЧИТАЕМ ИЗ EARFCN. Сам модем его для соседей не сообщает, и в
+	# таблице стояли прочерки - хотя номер канала однозначно задаёт диапазон
+	# (3GPP 36.101, таблица 5.7.3-1). Диапазоны перечислены те, что EP06-E
+	# поддерживает; незнакомый канал оставляем без подписи, а не врём.
+	# ПУСТЫЕ СТРОКИ ОТСЕИВАЕМ: модем печатает и обрезанные записи (все нули или
+	# без хвоста) - в таблице они выглядели как сота «по нулям» (замечание
+	# владельца 05.08.2026). Сота без уровня сигнала бесполезна.
+	NEIGHBORS=$(echo "$_NB" | awk -F, '
+		function ch2band(c) {
+			if (c <= 599) return 1;      if (c <= 1199) return 2
+			if (c <= 1949) return 3;     if (c <= 2399) return 4
+			if (c <= 2649) return 5;     if (c >= 2750 && c <= 3449) return 7
+			if (c >= 3450 && c <= 3799) return 8
+			if (c >= 6150 && c <= 6449) return 20
+			if (c >= 9210 && c <= 9659) return 28
+			if (c >= 37750 && c <= 38249) return 38
+			if (c >= 38650 && c <= 39649) return 40
+			if (c >= 39650 && c <= 41589) return 41
+			return 0
+		}
+		/^\+QENG: "neighbourcell/ {
+			gsub(/"/, "", $2)
+			if ($2 != "LTE") next
+			if (NF < 7) next
+			earfcn = $3 + 0; pci = $4 + 0; rsrq = $5 + 0; rsrp = $6 + 0; rssi = $7 + 0
+            if (earfcn == 0 || rsrp == 0) next
+			b = ch2band(earfcn)
+			if (n++) printf ","
+			printf "{\"band\":\"%s\",\"earfcn\":\"%d\",\"pci\":\"%d\",\"rsrp\":\"%d\",\"rsrq\":\"%d\",\"rssi\":\"%d\",\"serving\":false}", (b ? b : ""), earfcn, pci, rsrp, rsrq, rssi
+		}')
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed "s/LTE_A/LTE-A | /g")

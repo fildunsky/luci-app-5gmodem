@@ -458,6 +458,47 @@ ttl_verdict() {
 	fi
 }
 
+# APN: СОВПАДАЕТ ЛИ С БАЗОЙ ДЛЯ ЭТОЙ SIM.
+#
+# Самая частая причина «модем зарегистрирован, а IP нет» - не тот APN. По логам
+# это неотличимо от поломки: сеть найдена, сигнал есть, а сессия не встаёт.
+# Автоподбор ставит APN сам, но НЕ перетирает значение, если для этой симки он
+# уже отрабатывал (штамп apn_imsi) - то есть ручную правку уважает. В итоге
+# опечатка в APN живёт сколько угодно и выглядит как отказ программы (живой
+# случай 05.08.2026: APN «tt» на симке Тинькофф, база знает «m.tinkoff»; после
+# замены связь поднялась сразу).
+# Поэтому просто сверяем: что стоит в интерфейсе и что предлагает база.
+apn_verdict() {
+	_av_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_av_if" ] || { echo "интерфейс модема не настроен - проверка не применима"; return 0; }
+	_av_cur=$(uci -q get "network.$_av_if.apn")
+	echo "APN в интерфейсе: ${_av_cur:-(пусто)}"
+	_av_imsi=$(printf '%s' "$(cat /tmp/5gmodem_snapshot_* 2>/dev/null | head -c 4000)" \
+		| sed -n 's/.*"imsi":"\([0-9]\{6,\}\)".*/\1/p' | head -1)
+	[ -n "$_av_imsi" ] || _av_imsi=$(uci -q show 5gmodem 2>/dev/null \
+		| sed -n "s/^5gmodem\.m_[^.]*\.apn_imsi='\([0-9]*\)'$/\1/p" | head -1)
+	if [ -z "$_av_imsi" ]; then
+		echo "  IMSI неизвестен - сверить с базой не с чем"
+		return 0
+	fi
+	echo "IMSI: $_av_imsi (PLMN ${_av_imsi%??????????})"
+	_av_db=$(awk -F'\t' -v p="${_av_imsi%??????????}" '$1 == p && $7 != "" && $7 != "-" {print $6" -> "$7}' \
+		/usr/share/5gmodem/providers.tsv 2>/dev/null | head -3)
+	if [ -z "$_av_db" ]; then
+		echo "  в базе для этого PLMN записей нет - сверять не с чем"
+		return 0
+	fi
+	echo "  база знает для этой сети:"
+	printf '%s\n' "$_av_db" | sed 's/^/    /'
+	if printf '%s\n' "$_av_db" | grep -q -- "-> *$_av_cur\$"; then
+		echo "  СОВПАДАЕТ - APN из базы"
+	else
+		echo "  НЕ СОВПАДАЕТ. Если интернета нет, начните отсюда: поставьте APN из"
+		echo "  списка выше (Сеть -> Модем -> Настройки соединения) и переподнимите"
+		echo "  интерфейс. Автоподбор его не меняет, если APN правили вручную."
+	fi
+}
+
 fw_zone_verdict() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
@@ -1283,6 +1324,7 @@ report() {
 	run 40 "QMI: формат кадров и счётчики (итог)" qmi_format_verdict
 	run 10 "uci firewall (зоны)" sh -c "uci show firewall 2>/dev/null | grep -E 'zone|forwarding' | head -40"
 	run 10 "Зона wan и NAT (итог)" fw_zone_verdict
+	run 15 "APN: сверка с базой (итог)" apn_verdict
 	run 15 "Подмена TTL (итог)" ttl_verdict
 	run 15 "Доступ к админке (итог)" webstack_verdict
 	run 15 "Policy routing / mwan3 (итог)" policyrouting_verdict

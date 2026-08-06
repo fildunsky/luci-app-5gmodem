@@ -269,9 +269,16 @@ function renderCellLock(state) {
 
 	var parts = String(state).split(' ');
 	var locked = (parts[0] === 'cell' || parts[0] === 'arfcn');
+	/* «unlockable» - модем умеет СТАВИТЬ привязку, но не умеет её читать
+	   (Intel XMM и родня). Состояние неизвестно, и без этой пометки кнопка
+	   «Отвязать» не появлялась вовсе: снять привязку из интерфейса было нечем,
+	   а она способна оставить модем без связи. Снятие безопасно и вхолостую,
+	   поэтому кнопку показываем всегда. */
+	var unlockable = (parts[parts.length - 1] === 'unlockable');
 	var txt;
 	if (!locked) {
-		txt = _('Not locked');
+		txt = unlockable ? _('Lock state unknown - this modem does not report it')
+		                 : _('Not locked');
 	} else if (parts[0] === 'cell') {
 		txt = _('Locked to cell: EARFCN %s, PCI %s').format(parts[1], parts[2]);
 	} else {
@@ -305,7 +312,7 @@ function renderCellLock(state) {
 
 	// СНАЧАЛА КНОПКА (действие), затем состояние («к чему привязан») - единый порядок
 	// для всех модемов.
-	if (locked) {
+	if (locked || unlockable) {
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-reset',
 			'click': ui.createHandlerFn(this, function() {
@@ -712,7 +719,12 @@ function applyBands() {
 	   ждала «возвращения модема», которого не происходило, - отсюда чёрный
 	   прямоугольник на полминуты вместо карточки. Просто применяем и
 	   перечитываем блок. */
-	return fs.exec('/usr/bin/mmcli', [ '-m', ctx.getMmIdx(), '--set-current-bands=' + bandsOther.concat(sel).join('|') ]).then(function(res) {
+	/* ЧЕРЕЗ bands.sh, А НЕ ГОЛЫЙ mmcli. Канал у модема под ModemManager один, и в
+	   него же ходит наш опрос метрик; прямой вызов mmcli попадал в занятый канал
+	   и отваливался «couldn't set selection preference: Transaction timed out»,
+	   утаскивая за собой модем. bands.sh берёт ту же очередь на устройство, что и
+	   наши читатели, поэтому MM применяет диапазоны спокойно. */
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
 			return;

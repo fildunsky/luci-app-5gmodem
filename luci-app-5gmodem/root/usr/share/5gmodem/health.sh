@@ -200,7 +200,7 @@ judge() {
 			[ "$_j_st" = down ] && _j_wasdown=1
 			[ "$_j_st" = gone ] && [ -f "$HDIR/$_j_if.heal" ] && _j_wasdown=1
 			# ожил - лестница лечения начинается с нуля при следующем падении
-			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim"
+			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
 				_ev "линк $_j_if ожил - оставлен в конце (по настройке)"
@@ -259,11 +259,11 @@ round() {
 	_r_zone=" $(wan_nets | tr '\n' ' ') "
 	for _r_f in "$HDIR"/*; do
 		[ -f "$_r_f" ] || continue
-		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		_r_bn="${_r_f##*/}"
 		case "$_r_zone" in
 			*" $_r_bn "*) ;;
-			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" ;;
+			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" "$_r_f.nodata" ;;
 		esac
 	done
 }
@@ -315,13 +315,13 @@ _move_defaults() {   # $1 - dev, $2 - желаемая метрика
 enforce() {
 	_e_anyup=""; _e_cnt=0
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_cnt=$((_e_cnt + 1))
 		[ "$_e_st" = up ] && _e_anyup=1
 	done
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		_e_if="${_e_f##*/}"
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_dev=$(iface_dev "$_e_if"); [ -n "$_e_dev" ] || _e_dev=$(iface_dev "${_e_if}_4")
@@ -375,6 +375,16 @@ enforce() {
 HEAL_COOLDOWN=$(conf heal_cooldown); case "$HEAL_COOLDOWN" in ''|*[!0-9]*) HEAL_COOLDOWN=300 ;; esac
 HEAL_MAX=6
 
+# Сколько модем должен провисеть в gone, прежде чем лестница сочтёт это отказом.
+# Обычный дозвон укладывается в минуту, переэнумерация после нашей же
+# перезагрузки модуля - в полторы; берём с запасом, чтобы не влезть в них.
+GONE_HEAL_MIN=180
+
+# Сколько уважать ЛЕЖАЧИЙ интерфейс с autostart=false, не записанным в конфиг.
+# Ручная остановка из интерфейса столько не живёт, а незавершённый ifdown - живёт
+# вечно, и без этого срока модем из него не выбирается (см. лечение ниже).
+STUCK_DOWN_MIN=900
+
 heal_cap() { case "$1" in ifup) echo 1 ;; reboot) echo 2 ;; power) echo 3 ;; *) echo 0 ;; esac }
 
 # SIM ТОЧНО ОТСУТСТВУЕТ? Модем без карты перезагружать бессмысленно - лестница
@@ -419,16 +429,16 @@ heal() {
 	# однмодемного роутера.
 	_h_cnt=0; _h_anyup=""
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		read -r _h_st _ _ _ _ < "$_h_f" || continue
 		_h_cnt=$((_h_cnt + 1))
 		[ "$_h_st" = up ] && _h_anyup=1
 	done
 	[ "$_h_cnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		_h_if="${_h_f##*/}"
-		read -r _h_st _ _ _ _ < "$_h_f" || continue
+		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		# WI-FI-АПЛИНК - своя короткая лестница, и она берёт в работу ещё и
 		# состояние gone: живой класс отказа - netifd расцепил интерфейс с
 		# радио (NO_DEVICE при ассоциированной станции), и лечится он только
@@ -543,8 +553,69 @@ heal() {
 			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "лечение $_h_if: попытки исчерпаны - нужно вмешательство"
 			continue
 		fi
-		[ "$_h_st" = down ] || continue
+		# GONE ПРИ ЖИВОМ ЖЕЛЕЗЕ - ЭТО ОТКАЗ, А НЕ ОТСУТСТВИЕ МОДЕМА.
+		#
+		# Раньше модемные лестницы брали только down: считалось, что gone бывает
+		# лишь когда модуля нет на шине. Это неверно для класса отказов, где
+		# netifd ЗАСТРЯЛ в дозвоне: l3-устройства ещё нет, поэтому состояние
+		# gone, а лечить надо срочно. Живой случай 05.08.2026, Quectel EP06 в
+		# qmi: uqmi отдал «illegal» на состояние SIM, и протокол ушёл в вечный
+		# цикл `--uim-power-off/--uim-power-on` каждые 8 секунд (в qmi.sh он
+		# ограничен таймаутом, а тот по умолчанию 0 - то есть бесконечен). Этому
+		# модему после сброса нужно около двух минут на инициализацию карты, а
+		# ему режут ей питание раз в восемь секунд - SIM не успевает подняться
+		# НИКОГДА, петля кормит сама себя. Оба сторожа при этом стояли в
+		# стороне: sessionwatch не мешает netifd в pending, health списывал в
+		# gone. Связь не возвращалась до вмешательства руками.
+		#
+		# Настоящее отсутствие модема отсекает проверка usb-пути ниже, а выдержка
+		# GONE_HEAL_MIN - обычный дозвон и нашу же переэнумерацию.
+		case "$_h_st" in
+			down) ;;
+			gone)
+				case "$_h_since" in ''|*[!0-9]*) continue ;; esac
+				[ $(( $(uptime_s) - _h_since )) -ge "$GONE_HEAL_MIN" ] || continue ;;
+			*) continue ;;
+		esac
 		[ "$H_HEAL" = "1" ] || continue
+		# ВЫКЛЮЧЕННЫЙ ИНТЕРФЕЙС НЕ ЛЕЧИМ - НО РАЗЛИЧАЕМ ВОЛЮ И АВАРИЮ.
+		#
+		# autostart=false бывает двух совершенно разных природ:
+		#   - воля человека, записанная в конфиг (auto='0' / disabled='1') -
+		#     её уважаем всегда, иначе выключенный модем не просто поднимут, а
+		#     дойдут до перезагрузки модуля;
+		#   - следствие ЧУЖОГО (и нашего же) незавершённого ifdown - состояние
+		#     временное, в конфиге его нет, и после перезагрузки роутера
+		#     интерфейс поднялся бы сам.
+		#
+		# Второе нельзя уважать вечно: первая ступень лестницы сама делает
+		# `ifdown` + `iface_up`, и если подъём не довёлся (модем в этот момент
+		# переэнумерировался), интерфейс остаётся опущенным - а дальше и
+		# лестница, и sessionwatch обходят его стороной как «выключенный
+		# намеренно». Модем висит вечно при исправном железе и готовой SIM:
+		# ровно это и случилось на стенде 05.08.2026 через час после включения
+		# лечения. Поэтому runtime-ifdown уважаем ограниченное время, а дальше
+		# считаем аварией и поднимаем.
+		_h_auto=$(printf '%s' "$_HDUMP" | jsonfilter \
+			-e "@.interface[@.interface=\"$_h_if\"].autostart" 2>/dev/null)
+		if [ "$_h_auto" = "false" ]; then
+			[ "$(uci -q get "network.$_h_if.auto")" = "0" ] && continue
+			[ "$(uci -q get "network.$_h_if.disabled")" = "1" ] && continue
+			# ОШИБКА ПРОТОКОЛА - ЭТО НЕ ВОЛЯ ЧЕЛОВЕКА, ЛЕЧИМ СРАЗУ.
+			#
+			# Сдавшись, протокол зовёт proto_block_restart, и netifd СНИМАЕТ
+			# autostart - внешне неотличимо от ручной остановки. Отличает их
+			# список errors: у ручного ifdown он пуст, а здесь лежит причина
+			# отказа (живой случай 05.08.2026, Quectel EP06: `{"subsystem":
+			# "qmi","code":"SIM_ILLEGAL_STATE"}` после самосброса модуля).
+			# Ждать выдержку в этом случае незачем - интерфейс уже мёртв, и
+			# сам netifd к нему больше не вернётся.
+			if [ -z "$(printf '%s' "$_HDUMP" | jsonfilter \
+				-e "@.interface[@.interface=\"$_h_if\"].errors[0].code" 2>/dev/null)" ]; then
+				case "$_h_since" in ''|*[!0-9]*) continue ;; esac
+				[ $(( $(uptime_s) - _h_since )) -ge "$STUCK_DOWN_MIN" ] || continue
+			fi
+		fi
 		_h_sec=$(sec_for_iface_h "$_h_if") || continue
 		_h_cap=$(heal_cap "$(uci -q get "$CFG.$_h_sec.heal")")
 		[ "$_h_cap" -ge 1 ] || continue
@@ -565,6 +636,34 @@ heal() {
 			continue
 		fi
 		rm -f "$HDIR/$_h_if.nosim"
+		# ТРАФИК КОНЧИЛСЯ - ЭТО НЕ ПОЛОМКА МОДЕМА, И ЛЕЧИТЬ ТУТ НЕЧЕГО.
+		#
+		# Когда у интерфейса ЕСТЬ адрес, сессия установлена: SIM жива, модем
+		# зарегистрирован, канал поднят. Значит трафик режет ОПЕРАТОР - исчерпан
+		# пакет, нулевой баланс, блокировка. Ни перезагрузка модуля, ни передёрг
+		# USB, ни ifup такое не лечат: после переподключения модем упирается в
+		# тот же лимит. Замечание владельца 05.08.2026: сперва лестница трижды
+		# перезагрузила исправный EP06, а когда осталась только первая ступень -
+		# продолжила жечь попытки, показывая на карточке «Переподключение (3/6)».
+		#
+		# Поэтому останавливаемся совсем, как при отсутствующей SIM: попытку НЕ
+		# считаем, лестницу сбрасываем (иначе карточка держит счётчик прошлого
+		# эпизода), событие пишем один раз. Пропал адрес - маркер снимается, и
+		# лестница едет с нуля как обычно. Залипшую сессию, где адрес тоже на
+		# месте, продолжает лечить sessionwatch - он сверяет адрес с модемом.
+		_h_lip=$(printf '%s' "$_HDUMP" | jsonfilter \
+			-e "@.interface[@.interface=\"$_h_if\"]['ipv4-address'][0].address" 2>/dev/null)
+		[ -n "$_h_lip" ] || _h_lip=$(printf '%s' "$_HDUMP" | jsonfilter \
+			-e "@.interface[@.interface=\"${_h_if}_4\"]['ipv4-address'][0].address" 2>/dev/null)
+		if [ -n "$_h_lip" ]; then
+			if [ ! -f "$HDIR/$_h_if.nodata" ]; then
+				: > "$HDIR/$_h_if.nodata"
+				rm -f "$HDIR/$_h_if.heal"
+				_ev "$_h_if: адрес есть ($_h_lip), а трафика нет - похоже на ограничение оператора, лечение остановлено"
+			fi
+			continue
+		fi
+		rm -f "$HDIR/$_h_if.nodata"
 		_h_next=$((_h_step + 1))
 		[ "$_h_next" -gt "$_h_cap" ] && _h_next="$_h_cap"
 		# Ступень 2 у HiLink - ЕГО API (device/control), не AT: AT+CFUN=1,1
@@ -621,7 +720,7 @@ _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
 		[ -f "$_td_f" ] || continue
-		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.last_event) continue ;; esac
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.last_event) continue ;; esac
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue

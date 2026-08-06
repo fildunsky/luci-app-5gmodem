@@ -24,6 +24,45 @@ case "$1" in
 		esac ;;
 esac
 
+# ПРИМЕНЕНИЕ ДИАПАЗОНОВ ЧЕРЕЗ ModemManager - ПОД ТОЙ ЖЕ ОЧЕРЕДЬЮ, ЧТО НАШИ QMI.
+#
+# Страница раньше звала `mmcli --set-current-bands` НАПРЯМУЮ из браузера, мимо
+# всех наших очередей. А канал у модема под MM один, и в него же каждые
+# несколько секунд ходит наш опрос метрик (qmicli --nas-*). Команда MM при этом
+# упирается в занятый канал и отваливается: «couldn't set selection preference:
+# Transaction timed out», а следом отваливается и сам модем (живой отчёт
+# с места 05.08.2026, Dell DW5821e). Берём тот же замок на устройство, что и
+# qmicli_p в lib.sh, - наши читатели ждут, MM спокойно применяет диапазоны.
+# Ждём очередь до 20 c; не дождались - всё равно выполняем: это действие
+# человека, отказать ему хуже, чем рискнуть одним пропущенным тиком метрик.
+if [ "$1" = "mmsetbands" ]; then
+	[ -n "$2" ] || { echo "no bands"; exit 1; }
+	[ -n "$3" ] || { echo "no modem index"; exit 1; }
+	case "$3" in ''|*[!0-9]*) echo "bad index"; exit 1 ;; esac
+	command -v mmcli >/dev/null 2>&1 || { echo "no mmcli"; exit 1; }
+	# Список диапазонов приходит со страницы - пускаем только то, из чего он
+	# состоит по формату mmcli: eutran-3|utran-1|ngran-78, разделитель «|».
+	case "$2" in
+		*[!a-zA-Z0-9\|-]*) echo "bad bands"; exit 1 ;;
+	esac
+	_mb_w=""
+	for _mb_d in /dev/cdc-wdm*; do [ -e "$_mb_d" ] && { _mb_w="$_mb_d"; break; }; done
+	if [ -n "$_mb_w" ]; then
+		exec 7>"/var/lock/5gmodem_qmi_${_mb_w##*/}.lock" 2>/dev/null
+		_mb_i=0
+		while [ "$_mb_i" -lt 20 ]; do
+			flock -n 7 2>/dev/null && break
+			sleep 1
+			_mb_i=$((_mb_i + 1))
+		done
+	fi
+	logger -t 5gmodem "диапазоны: применяю через MM ($2)"
+	mmcli -m "$3" --set-current-bands="$2" 2>&1
+	_mb_rc=$?
+	exec 7>&- 2>/dev/null
+	exit "$_mb_rc"
+fi
+
 active_modem() {
 	[ -n "$BANDS_ACTIVE_MODEM" ] && { printf '%s\n' "$BANDS_ACTIVE_MODEM"; return 0; }
 	uci -q get 5gmodem.@5gmodem[0].active_modem
@@ -471,6 +510,35 @@ set5gmode() {
 # опущенным: проверено на живом FM350 (CEREG: 2,1 и оператор есть, при этом
 # CGACT пуст, up=false, интернета нет). Без этого пользователь после привязки
 # остаётся без связи и должен чинить руками.
+# ДЕЙСТВУЮЩАЯ ПРИВЯЗКА К СОТЕ = ЧТО СКАЗАЛ МОДЕМ ИЛИ ЧТО СТАВИЛИ МЫ.
+#
+# Читать привязку умеет не всякая прошивка: у Intel XMM (8087:095a) getcelllock
+# возвращает «off» ВСЕГДА, потому что команды чтения у модуля нет вовсе. А
+# ставили её мы, и она действует - человек это видит по агрегации и по тому,
+# что модем сидит на одной соте. Показывать «не привязан» в такой момент - врать,
+# и, что хуже, ПРЯТАТЬ кнопку «Отвязать»: снять привязку из интерфейса
+# становится нечем, а без неё модем может остаться без связи (живой случай
+# 05.08.2026 - человеку пришлось снимать привязку тремя AT-командами по SSH).
+# Поэтому при «off» подставляем СВОЙ штамп из uci и помечаем источник -
+# страница объяснит, что модем о привязке молчит, но она в силе.
+_celllock_effective() {
+	_cle_now=$(getcelllock)
+	[ "$_cle_now" = "off" ] || { printf '%s\n' "$_cle_now"; return 0; }
+	_cle_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
+	[ -n "$_cle_sec" ] || { printf '%s\n' "$_cle_now"; return 0; }
+	case "$(uci -q get "5gmodem.m_$_cle_sec.celllock")" in
+		arfcn\ *|cell\ *) printf '%s remembered\n' "$(uci -q get "5gmodem.m_$_cle_sec.celllock")"; return 0 ;;
+	esac
+	# Штампа нет, а модем читать привязку не умеет: он мог быть привязан раньше,
+	# другим приложением или до переустановки. Отдаём «off unlockable» - страница
+	# оставит кнопку снятия доступной, и человек не окажется заперт.
+	if [ "$_CELLLOCK_WRITEONLY" = "1" ]; then
+		printf 'off unlockable\n'
+		return 0
+	fi
+	printf '%s\n' "$_cle_now"
+}
+
 _reconnect_iface() {
 	_ri_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
 	[ -n "$_ri_sec" ] || return
@@ -1415,18 +1483,7 @@ case $1 in
 		# соте (EARFCN 1450, PCI 359), а стоило снять привязку явной командой -
 		# ушёл на 100/480, свой обычный выбор. Показывать в такой момент «лока
 		# нет» - врать пользователю: он видит одно, а модем делает другое.
-		_cl_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
-		[ -n "$_cl_sec" ] && _cl_sec="m_$_cl_sec"
-		_cl_now=$(getcelllock)
-		if [ "$_cl_now" = "off" ] && [ -n "$_cl_sec" ]; then
-			_cl_saved=$(uci -q get "5gmodem.$_cl_sec.celllock")
-			# Отдаём запомненное, помечая источник: интерфейс объяснит, что модем
-			# о привязке молчит, но она в силе.
-			case "$_cl_saved" in
-				arfcn\ *|cell\ *) printf '%s remembered\n' "$_cl_saved"; exit 0 ;;
-			esac
-		fi
-		printf '%s\n' "$_cl_now"
+		_celllock_effective
 		;;
 	"get5gmode")
 		get5gmode
@@ -1454,7 +1511,32 @@ case $1 in
 				esac
 				uci -q commit 5gmodem
 			fi
-			( setcelllock "$2" "$3" "$4"; _reconnect_iface ) >/dev/null 2>&1 </dev/null &
+			# ПОСЛЕ ПРИВЯЗКИ ПРОВЕРЯЕМ, ЧТО МОДЕМ ВООБЩЕ ЖИВ.
+			#
+			# Привязка идёт через цикл режима полёта (CFUN=4 -> вендорная команда
+			# -> CFUN=1), и на части прошивок модем из него не возвращается: AT
+			# перестаёт отвечать совсем, имя модема в карточке подменяется эхом
+			# команд, а страница советует «переключите на ModemManager» - хотя
+			# дело не в протоколе (живой отчёт 05.08.2026, Intel XMM 8087:095a
+			# после нажатия «привязать к соте»). Сам пользователь вернуть модем
+			# не может: без AT ни снять привязку, ни перезагрузить модуль нечем.
+			# Поэтому ждём и проверяем ответ; молчит - поднимаем по USB (питание
+			# порта / деавторизация / unbind-bind, см. reboot_modem.sh usbpower).
+			( setcelllock "$2" "$3" "$4"; _reconnect_iface
+			  _cl_at=$(uci -q get "5gmodem.$_cl_sec.at_port")
+			  [ -n "$_cl_at" ] || _cl_at=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
+			  if [ -n "$_cl_at" ] && [ -e "$_cl_at" ]; then
+				_cl_ok=0
+				for _cl_i in 1 2 3 4 5 6; do
+					sleep 5
+					sms_tool -d "$_cl_at" at "AT" 2>/dev/null | grep -qi "OK" && { _cl_ok=1; break; }
+				done
+				if [ "$_cl_ok" = 0 ]; then
+					logger -t 5gmodem "cell-lock: модем не отвечает на AT после привязки - поднимаю по USB"
+					/usr/share/5gmodem/reboot_modem.sh usbpower "$(active_modem)" >/dev/null 2>&1
+				fi
+			  fi
+			) >/dev/null 2>&1 </dev/null &
 		fi
 		;;
 	"getantports")
@@ -1485,7 +1567,10 @@ case $1 in
 			done
 			json_close_array
 		fi
-		CL=$(getcelllock)
+		# Через _celllock_effective, а не голый getcelllock: страница берёт
+		# состояние ИМЕННО отсюда, и без штампа кнопка «Отвязать» не появлялась
+		# у модемов, которые читать привязку не умеют.
+		CL=$(_celllock_effective)
 		if [ "x$CL" != "xUnsupported" ]; then
 			json_add_string celllock "$CL"
 		fi

@@ -4,6 +4,54 @@
 
 Приложение LuCI для 4G/5G-модемов в OpenWrt. Объединяет [`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite), [`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js) и часть `modemband` в одно приложение.
 
+<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-39" src="https://github.com/user-attachments/assets/1adb9ca6-8f38-445c-8cb8-2a0f6b8005c9" />
+
+## Установка
+
+Возьмите ссылку на `.apk` (OpenWrt 25.12.x) или `.ipk` (24.10.x) со страницы
+[Releases](../../releases) и выполните команды:
+
+### .apk (OpenWrt 25.12.x)
+
+```sh
+apk update && apk add curl
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.3.1/luci-app-5gmodem-2.3.1-r1.apk > /tmp/luci-app-5gmodem.apk
+apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
+```
+
+Для **eSIM** (необязательно) поставьте заодно наш патченый `lpac` — **выберите
+сборку под свою платформу** в [релизе lpac-build](https://github.com/fildunsky/lpac-build/releases/latest).
+Пример для MediaTek Filogic (например, WH3000):
+
+```sh
+curl -L https://github.com/fildunsky/lpac-build/releases/latest/download/lpac-25.12.5-mediatek-filogic.apk > /tmp/lpac.apk
+apk add /tmp/lpac.apk --allow-untrusted
+```
+
+Эта же сборка для Filogic лежит и в нашем репозитории — если не хочется идти в
+релизы lpac-build, замените ссылку на
+`https://github.com/fildunsky/luci-app-5gmodem/raw/master/dist/lpac-25.12.5-mediatek-filogic.apk`.
+Сборки для остальных платформ есть только в релизе.
+
+### .ipk (OpenWrt 24.10.x)
+
+```sh
+opkg update && opkg install curl
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.3.1/luci-app-5gmodem_2.3.1-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+opkg install /tmp/luci-app-5gmodem.ipk
+```
+
+Обычный пакет тянет за собой полный набор (`sms-tool`, `comgt`, `qmi-utils`,
+`modemmanager`, протоколы QMI/MBIM, kmod'ы USB-serial) — ставьте его поверх
+любой предыдущей версии, ничего не удалится.
+
+Для устройств с малой флеш-памятью (платы MT7628 с 8 МБ, куда полный набор не
+влезет вообще) в релизе есть отдельный **`-lite.apk`**: ему нужен только
+`sms-tool`. Метрики, SMS, USSD, управление диапазонами и AT-консоль работают;
+теряются протоколы интерфейса QMI/MBIM и номер телефона, читаемый через `mmcli`.
+Не ставьте lite-сборку как обновление на роутер, где работает модем по QMI или
+MBIM: менеджер пакетов удалит эти пакеты как осиротевшие.
+
 ## Возможности
 
 - **Кнопка «Создать интерфейс модема»** (Настройки модема) — интерфейс `network` для модема настраивается автоматически.
@@ -22,7 +70,6 @@
 - **USB-свистки без AT-портов** (Huawei HiLink и родственники) тоже поддерживаются — см. ниже.
 - **`5gtop`** — те же данные в терминале, когда вы в SSH, а не в браузере.
 
-<img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-39" src="https://github.com/user-attachments/assets/1adb9ca6-8f38-445c-8cb8-2a0f6b8005c9" />
 
 ## Модемы, которые есть у меня лично
 Для них добавлены новые возможности (по сравнению с 3ginfo и modemband):
@@ -83,51 +130,6 @@
 `r` обновляет, `q` выходит. Раскладка подстраивается под ширину терминала и на
 узких экранах переключается в компактный режим.
 
-## Установка
-
-Возьмите ссылку на `.apk` (OpenWrt 25.12.x) или `.ipk` (24.10.x) со страницы
-[Releases](../../releases) и выполните команды:
-
-### .apk (OpenWrt 25.12.x)
-
-```sh
-apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.9/luci-app-5gmodem-2.2.9-r1.apk > /tmp/luci-app-5gmodem.apk
-apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
-```
-
-Для **eSIM** (необязательно) поставьте заодно наш патченый `lpac` — **выберите
-сборку под свою платформу** в [релизе lpac-build](https://github.com/fildunsky/lpac-build/releases/latest).
-Пример для MediaTek Filogic (например, WH3000):
-
-```sh
-curl -L https://github.com/fildunsky/lpac-build/releases/latest/download/lpac-25.12.5-mediatek-filogic.apk > /tmp/lpac.apk
-apk add /tmp/lpac.apk --allow-untrusted
-```
-
-Эта же сборка для Filogic лежит и в нашем репозитории — если не хочется идти в
-релизы lpac-build, замените ссылку на
-`https://github.com/fildunsky/luci-app-5gmodem/raw/master/dist/lpac-25.12.5-mediatek-filogic.apk`.
-Сборки для остальных платформ есть только в релизе.
-
-### .ipk (OpenWrt 24.10.x)
-
-```sh
-opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.2.9/luci-app-5gmodem_2.2.9-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
-opkg install /tmp/luci-app-5gmodem.ipk
-```
-
-Обычный пакет тянет за собой полный набор (`sms-tool`, `comgt`, `qmi-utils`,
-`modemmanager`, протоколы QMI/MBIM, kmod'ы USB-serial) — ставьте его поверх
-любой предыдущей версии, ничего не удалится.
-
-Для устройств с малой флеш-памятью (платы MT7628 с 8 МБ, куда полный набор не
-влезет вообще) в релизе есть отдельный **`-lite.apk`**: ему нужен только
-`sms-tool`. Метрики, SMS, USSD, управление диапазонами и AT-консоль работают;
-теряются протоколы интерфейса QMI/MBIM и номер телефона, читаемый через `mmcli`.
-Не ставьте lite-сборку как обновление на роутер, где работает модем по QMI или
-MBIM: менеджер пакетов удалит эти пакеты как осиротевшие.
 
 ## eSIM / lpac
 

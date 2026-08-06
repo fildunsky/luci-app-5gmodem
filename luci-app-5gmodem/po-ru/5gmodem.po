@@ -156,7 +156,7 @@ msgid "Problem with registering to the network, check the SIM card"
 msgstr "Проблема с регистрацией в сети оператора, проверьте SIM-карту"
 
 msgid "SIM PIN required"
-msgstr "Требуется код PUK2 для SIM-карты"
+msgstr "Требуется PIN-код SIM-карты"
 
 msgid "SIM PUK required"
 msgstr "Требуется код PUK для SIM-карты"
@@ -411,7 +411,7 @@ msgid "Sender"
 msgstr "Отправитель"
 
 msgid "Received"
-msgstr "Получено"
+msgstr "Принято"
 
 msgid "Message"
 msgstr "Сообщение"
@@ -1634,32 +1634,11 @@ msgstr "Роуминг в этой зоне не разрешён"
 msgid "SIM Blocked"
 msgstr "SIM-карта заблокирована"
 
-msgid "SIM PIN required"
-msgstr "Требуется PIN SIM-карты"
-
-msgid "SIM PIN2 required"
-msgstr "Требуется PIN2 SIM-карты"
-
-msgid "SIM PUK required"
-msgstr "Требуется PUK SIM-карты"
-
-msgid "SIM PUK2 required"
-msgstr "Требуется PUK2 SIM-карты"
-
-msgid "SIM busy"
-msgstr "SIM-карта занята"
-
-msgid "SIM failure"
-msgstr "Сбой SIM-карты"
-
 msgid "SIM not inserted"
 msgstr "SIM-карта не вставлена"
 
 msgid "SIM powered down"
 msgstr "SIM-карта отключена"
-
-msgid "SIM wrong"
-msgstr "Неверная SIM-карта"
 
 msgid "SMS forwarding function is not enabled"
 msgstr "Функция пересылки SMS не включена"
@@ -2565,6 +2544,9 @@ msgstr "Закрытие сессии с сервером"
 msgid "Retrying"
 msgstr "Повторная попытка"
 
+msgid "Lock state unknown - this modem does not report it"
+msgstr "Состояние привязки неизвестно — этот модем его не сообщает"
+
 msgid "%s address of this router: %s"
 msgstr "Адрес роутера в сети %s: %s"
 
@@ -3338,12 +3320,6 @@ msgstr ""
 "переподключении модема (актуально для модемов, которые не умеют запоминать "
 "такие настройки, например FM350)."
 
-msgid "IPv4 only (recommended)"
-msgstr "Только IPv4 (рекомендуется)"
-
-msgid "IPv4 and IPv6"
-msgstr "IPv4 и IPv6"
-
 msgid ""
 "IP type for the modem interface. IPv4 is the default: on most networks/modems "
 "a dual-stack (IPv4/IPv6) context registers but never gets an address, while "
@@ -3402,9 +3378,6 @@ msgstr "Светодиоды на этом устройстве не найде�
 
 msgid "on"
 msgstr "вкл"
-
-msgid "off"
-msgstr "выкл"
 
 msgid "Momentary button: each press flips between the two states below (like a service on/off toggle) - running that state’s command and setting its LEDs."
 msgstr "Моментальная кнопка: каждое нажатие переключает между двумя состояниями ниже (как тумблер сервиса вкл/выкл) — выполняет команду этого состояния и выставляет его светодиоды."
@@ -4114,9 +4087,6 @@ msgstr "%d мин назад"
 msgid "now"
 msgstr "сейчас"
 
-msgid "Received"
-msgstr "Принято"
-
 msgid "Sent"
 msgstr "Отправлено"
 
@@ -4128,12 +4098,6 @@ msgstr "Месяц"
 
 msgid "KB"
 msgstr "КБ"
-
-msgid "MB"
-msgstr "МБ"
-
-msgid "GB"
-msgstr "ГБ"
 
 msgid "TB"
 msgstr "ТБ"
