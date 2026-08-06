@@ -29,6 +29,22 @@
 # 'refresh' = 'status', выполненный РАДИ ОБНОВЛЕНИЯ КЭША в фоне (вывод отбрасывает
 # вызвавший). Ремапим в status, чтобы обслужили те же ветки; флаг _REFRESH не даёт
 # cache-first fast-path'у ниже снова уйти в кэш и зациклить фоновые обновления.
+# УЗЛОМ ВЛАДЕЕТ ЖИВОЙ umbim? Штатный прото mbim открывает /dev/cdc-wdmN НАПРЯМУЮ,
+# без прокси, и второго хозяина не переживает: наш mbimcli (хоть прямой, хоть -p,
+# поднимающий mbim-proxy) отбирает канал, umbim получает «mbim message timeout»,
+# и связь у человека рвётся. Тот же гейт давно стоит в esim.sh - здесь его не
+# было, а слоты опрашиваются при каждом показе карточки.
+# Смотрим И proto, И то, что интерфейс реально поднят: на опущенном узел свободен.
+_umbim_owns_wdm() {   # $1 - узел /dev/cdc-wdmN
+	[ -n "$1" ] || return 1
+	for _uo in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
+		[ "$(uci -q get "network.$_uo.proto")" = "mbim" ] || continue
+		ubus call "network.interface.$_uo" status 2>/dev/null \
+			| grep -q '"up": true' && return 0
+	done
+	return 1
+}
+
 _REFRESH=""
 [ "$1" = "refresh" ] && { _REFRESH=1; set -- status; }
 
@@ -201,6 +217,28 @@ if [ -n "$MI" ]; then
 		N=$(echo "$K" | sed -n 's/^modem\.generic\.sim-slots\.length *: *//p' | tr -dc 0-9)
 		ACT=$(echo "$K" | sed -n 's/^modem\.generic\.primary-sim-slot *: *//p' | tr -dc 0-9)
 		OUT=""
+		# ОДИН СЛОТ - ЭТО ОТВЕТ, А НЕ ОТКАЗ.
+		#
+		# Список ниже строится только при двух и более слотах, а иначе мы уходили в
+		# фолбэк «спрашиваю модем напрямую» - то есть лезли в канал, которым владеет
+		# MM, ради данных, которые MM уже дал. У модема с единственным слотом
+		# переключать нечего, поэтому честно отдаём его и выходим: меньше лишних
+		# заходов в занятый канал - меньше поводов для гонок.
+		#
+		# Замечено при разборе отчёта 06.08.2026 (DW5821e под ModemManager): MM
+		# видел ОДИН слот, а мы считали это неудачей и шли к модему. Что именно
+		# сломало там связь, на нашем железе воспроизвести НЕ удалось (EP06,
+		# переведённый в MBIM под MM, три раза подряд пережил такой запрос без
+		# последствий - при контрольной серии без запросов результат тот же).
+		if [ -n "$N" ] && [ "$N" = 1 ] 2>/dev/null; then
+			_SP1=$(echo "$K" | sed -n 's/^modem\.generic\.sim-slots\.value\[1\] *: *//p')
+			_PR1=1; case "$_SP1" in ''|'/'|'--') _PR1=0 ;; esac
+			printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"%s"}],"active":"1"}\n' "$_PR1" \
+				> "/tmp/5gmodem_slots_$_ss_am"
+			cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_ss_am.t"
+			cat "/tmp/5gmodem_slots_$_ss_am"
+			exit 0
+		fi
 		if [ -n "$N" ] && [ "$N" -ge 2 ] 2>/dev/null; then
 			L_ALL=""; P_ALL=""
 			i=1
@@ -452,6 +490,21 @@ if [ "$_VIA" = qmi ]; then
 					# аргумент («mbimcli 1 -d ...»), и слот читался неверно.
 					_MPX=""
 					pgrep -f 'sbin/ModemManager$' >/dev/null 2>&1 && _MPX="-p"
+					# ПОД ЖИВЫМ umbim К УЗЛУ НЕ ПОДХОДИМ ВООБЩЕ.
+					#
+					# Третий владелец канала, кроме нас и MM, - штатный протокол
+					# mbim: netifd поднимает сессию через umbim, открывая устройство
+					# НАПРЯМУЮ, без прокси. Здесь -p не спасает, а вредит: mbimcli с
+					# прокси поднимет mbim-proxy, тот захватит /dev/cdc-wdm0, и umbim
+					# получит «mbim message timeout» - связь рвётся. Это ровно та
+					# жалоба «открываю модуль 5gmodem - отваливается инет», из-за
+					# которой в esim.sh появился гейт _wdm_owned_by_umbim; здесь его
+					# не было, а код слотов ходит к устройству при каждом опросе
+					# карточки. Слоты в этом случае оставляем QMI-пути ниже.
+					_umbim_owns_wdm "$_WDM" && _MPX="SKIP"
+					if [ "$_MPX" = "SKIP" ]; then
+						_MMAP=""
+					else
 					_MMAP=$(mbimcli $_MPX -d "$_WDM" --ms-query-device-slot-mappings 2>/dev/null)
 					_MACT=$(printf '%s' "$_MMAP" | sed -n "s/.*Executor '0': slot '\([0-9]*\)'.*/\1/p" | head -1)
 					if [ -n "$_MACT" ]; then
@@ -483,6 +536,7 @@ if [ "$_VIA" = qmi ]; then
 							_mn=$((_mn + 1))
 						done
 						[ -n "$_MBS" ] && _MACT=$((_MACT + 1))
+					fi
 					fi
 					exec 8>&- 2>/dev/null
 				fi
@@ -621,6 +675,7 @@ slot_redial() {
 	sleep 2
 	ifup "$_IF" >/dev/null 2>&1
 }
+
 
 case "$1" in
 set)

@@ -93,23 +93,28 @@ T_MODE=""
 # EARFCN и pband прыгал (B1<->B3) на каждый переход idle<->active.
 T1=$(echo "$O" | grep -A3 '+GTCCINFO:' | grep -E "^1,[49]," | head -1)
 if [ -n "$T1" ]; then
-  T_RAT=$(echo "$T1" | awk -F, '{print $2}')
-  T=$(echo "$T1" | awk -F, '{print $5}')
+  # Поля CSV-строки - ОДНИМ разбором через IFS, а не awk на каждое: этот блок
+  # выполняется на каждом опросе, и восемь awk стоили ~8 форков впустую
+  # (замер 06.08.2026: сбор FM350 1.4 c чистого CPU, 41 awk на проход).
+  _oIFS=$IFS; IFS=','; set -- $T1; IFS=$_oIFS
+  _F2=$2; _F5=$5; _F7=$7; _F8=$8; _F9=$9; _F11=${11}; _F13=${13}; _F14=${14}
+  T_RAT=$_F2
+  T=$_F5
   if [ -n "$T" ]; then
     T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
     T_HEX=$T
   fi
-  T=$(echo "$T1" | awk -F, '{print $7}')
+  T=$_F7
   if [ -n "$T" ]; then
     EARFCN=$T
   fi
-  T=$(echo "$T1" | awk -F, '{print $8}')
+  T=$_F8
   if [ -n "$T" ]; then
     PCI=$T
   fi
   # band: prefer an explicit field ($9, index+100) if the firmware ever provides
   # one; otherwise derive it from the EARFCN (this unit leaves $9 empty).
-  T=$(echo "$T1" | awk -F, '{print $9}')
+  T=$_F9
   if [ -n "$T" ]; then
     case $T_RAT in
       4)
@@ -134,21 +139,21 @@ if [ -n "$T1" ]; then
   # Метрики берём ТОЛЬКО в допустимых по мануалу диапазонах (11.1.15): при
   # реинициализации прошивка шлёт мусор (напр. rssnr=8192 -> «SINR 4096.0 dB»
   # растягивал таблицу в горизонтальный скролл и дёргал страницу).
-  T=$(echo "$T1" | awk -F, '{print $11}')
+  T=$_F11
   if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
       4) [ "$T" -ge -100 ] && [ "$T" -le 100 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", $1/2 }');;
       9) [ "$T" -ge 0 ] && [ "$T" -le 127 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", ($1-45)/2-1 }');;
     esac
   fi
-  T=$(echo "$T1" | awk -F, '{print $13}')
+  T=$_F13
   if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
       4) [ "$T" -ge 0 ] && [ "$T" -le 140 ] && RSRP=$((T - 141));;
       9) [ "$T" -ge 0 ] && [ "$T" -le 157 ] && RSRP=$((T - 157));;
     esac
   fi
-  T=$(echo "$T1" | awk -F, '{print $14}')
+  T=$_F14
   if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
       4) [ "$T" -ge 0 ] && [ "$T" -le 40 ] && RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-34)/2-3 }');;
@@ -286,17 +291,20 @@ T_5G_PCI=""
 T_5G_EARFCN=""
 
 for LINE in $LINES; do
-  T_BAND=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $2}')
-  T_PCI=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $3}')
-  T_EARFCN=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $4}')
-  T_DBW=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $5}')
+  # Поля - одним IFS-разбором вместо шести awk (строки уже отобраны grep выше;
+  # первый элемент после ":" - band, разделители и ":", и ",").
+  _oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
+  T_BAND=$2
+  T_PCI=$3
+  T_EARFCN=$4
+  T_DBW=$5
   # PCC: у ЭТОЙ прошивки на одно поле больше, чем в мануале (лишний ul_bw):
   #   band,pci,earfcn,dl_bw,ul_bw,dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp
   # (живой пример: PCC:107,366,3400,50,50,1,1,1,1,-104). Значит слои MIMO
   # (DL) = $7, модуляция (DL) = $9. MIMO валиден только в 1..4 (0/255 = нет
   # передачи) - иначе прочерк и для MIMO, и для модуляции.
-  T_MIMO=$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $7}')
-  T_MOD=$(convert_mod "$(echo "$LINE" | awk -F[:,] '/^PCC:/{print $9}')")
+  T_MIMO=$7
+  T_MOD=$(convert_mod "$9")
   case "$T_MIMO" in
     1|2|3|4) ;;
     *) T_MIMO=""; T_MOD="";;
@@ -350,9 +358,19 @@ IFS="
 IDX=1
 LINES=$(echo "$O" | grep -E '^SCC\s?[0-9]:2,')
 for LINE in $LINES; do
-  T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $4}')
+  # Один IFS-разбор на несущую вместо шести awk. Прежний awk заодно сверял
+  # индекс строки с ожидаемым ($IDX) - сверяем так же, из самой строки:
+  # не совпал - поля пустые, строка пропускается, IDX ниже всё равно шагнёт.
+  _oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
+  _lidx="${1#SCC}"; _lidx="${_lidx# }"
+  if [ "$_lidx" = "$IDX" ]; then
+    _S4=$4; _S5=$5; _S6=$6; _S7=$7; _S9=$9; _S11=${11}; _S13=${13}
+  else
+    _S4=""; _S5=""; _S6=""; _S7=""; _S9=""; _S11=""; _S13=""
+  fi
+  T=$_S4
   if [ -n "$T" ]; then
-    T_DBW=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $7}')
+    T_DBW=$_S7
     DBW=""
     if [ -n "$T_DBW" -a "$T_DBW" -ne "0" ]; then
       DBW=" @$(convert_bw $T_DBW)"
@@ -378,7 +396,7 @@ for LINE in $LINES; do
     fi
   fi
   
-  T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $5}')
+  T=$_S5
   if [ -n "$T" ]; then
     case $IDX in
       "1") S1PCI="$T";;
@@ -389,7 +407,7 @@ for LINE in $LINES; do
     esac
   fi
   
-  T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $6}')
+  T=$_S6
   if [ -n "$T" ]; then
     case $IDX in
       "1") S1EARFCN="$T";;
@@ -404,7 +422,7 @@ for LINE in $LINES; do
   # Field mapping confirmed against modemdata's FM350 (0e8d7127) parser. LTE SCC
   # rows don't carry per-carrier RSRQ/SINR (modemdata doesn't emit them either);
   # those exist only for 5G-NSA SCC (via GTCCINFO), added separately below.
-  T=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $13}')
+  T=$_S13
   if [ -n "$T" ] && [ "$T" != "255" ] && [ "$T" -le -40 ] 2>/dev/null && [ "$T" -ge -157 ] 2>/dev/null; then
     case $IDX in
       "1") S1RSRP="$T";;
@@ -419,10 +437,10 @@ for LINE in $LINES; do
   # dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp -> MIMO (DL) = $9, модуляция (DL) = $11.
   # mimo=0/255 значит "по SCC сейчас ничего не передаётся" (простой) - тогда
   # прочерк и для MIMO, и для модуляции (mod=0/BPSK там просто заглушка).
-  T_SMIMO=$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $9}')
+  T_SMIMO=$_S9
   case "$T_SMIMO" in
     1|2|3|4)
-      T_SMOD=$(convert_mod "$(echo "$LINE" | awk -F[:,] '/^SCC\s?'$IDX':2,/{print $11}')")
+      T_SMOD=$(convert_mod ""$_S11"")
       case $IDX in
         "1") S1MIMO="$T_SMIMO"; S1MOD="$T_SMOD";;
         "2") S2MIMO="$T_SMIMO"; S2MOD="$T_SMOD";;

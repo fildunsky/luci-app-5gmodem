@@ -124,10 +124,24 @@ apdu_backend() {
 			# MBIM-композиции, а qmi-бэкенд lpac на cdc_mbim канал не открывает
 			# (проба отвечала "ни один порт не eSIM"). Сверяем с реальным драйвером
 			# и берём совместимый бэкенд; драйвер неизвестен - доверяем юзеру.
+			#
+			# УЗЛА НЕТ ВОВСЕ - ВЫБОР ЗАВЕДОМО МЁРТВЫЙ, НЕ УВАЖАЕМ ЕГО.
+			# Прежняя сверка ловила только «узел есть, драйвер чужой». А у AT-модема
+			# (Fibocom FM350 в fibocom/xmm-композиции) cdc-wdm НЕТ СОВСЕМ: _wdm_driver
+			# отдаёт пусто, ветка `*)` возвращала ручной qmi, lpac падал на
+			# euicc_init, и вкладка честно писала «eUICC не найден» - при живом
+			# eUICC на AT-порту. Живой отчёт 06.08.2026 (FM350-GL, esim_apdu=qmi,
+			# cdc-wdm нет, а наша же проба CCHO нашла eUICC на ttyUSB1 и ttyUSB3).
 			case "$(_wdm_driver)" in
 				*cdc_mbim*) _mbim_or_at ;;
 				*qmi_wwan*) echo qmi ;;
-				*)          echo "$_ab" ;;
+				*)
+					if [ -z "$(esim_wdm)" ]; then
+						logger -t 5gmodem "esim: выбран $_ab, но cdc-wdm у модема нет - иду по AT"
+						echo at
+					else
+						echo "$_ab"
+					fi ;;
 			esac
 			return ;;
 	esac
@@ -206,18 +220,33 @@ _is_wdm_node() {   # $1 - путь к узлу
 
 esim_wdm() {
 	_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-	_w=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
+	_ew_lm=$("$RES/listmodems.sh" 2>/dev/null)
+	_w=$(printf '%s' "$_ew_lm" | jsonfilter -e "@[@.path=\"$_ap\"].wdm[0]" 2>/dev/null)
 	_is_wdm_node "$_w" || _w=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).device")
 	_is_wdm_node "$_w" && { echo "$_w"; return; }
-	# ЗАПАСНОЙ /dev/cdc-wdm0 - ТОЛЬКО КОГДА УЗЕЛ В СИСТЕМЕ ОДИН.
+	# ЗАПАСНОЙ /dev/cdc-wdm0 - ТОЛЬКО КОГДА ПРО НАШ МОДЕМ НИЧЕГО НЕ ИЗВЕСТНО.
 	#
-	# Он стоял здесь безусловно и на мультимодеме бил мимо: у модема без своего
-	# cdc-wdm (FM350 в RNDIS) это узел СОСЕДА, то есть APDU к чужой eUICC и чужой
-	# драйвер в определении транспорта. Один узел в системе - промахнуться не обо
-	# что, там фолбэк по-прежнему полезен (listmodems мог сорваться).
+	# Смысл фолбэка был один: listmodems мог сорваться, а узел в системе один -
+	# промахнуться не обо что. Но условие «узел один» этого НЕ проверяет: на
+	# мультимодеме у модема без своего cdc-wdm (FM350 в RNDIS) единственный узел
+	# принадлежит СОСЕДУ, и мы уходили APDU к чужой eUICC, а транспорт выбирали
+	# по чужому драйверу. Поймано на стенде 06.08.2026: активен FM350 (`wdm: []`),
+	# а функция отдавала /dev/cdc-wdm0 модема EP06 - `apduinfo` показывал
+	# `qmi_wwan` там, где своего канала нет вовсе.
+	#
+	# Теперь: listmodems ОТВЕТИЛ про наш модем и узла у него нет - так и говорим,
+	# без подстановок. Фолбэк остаётся ровно для исходного случая - модема в
+	# перечислении нет (сорвалось/переэнумерация), и то лишь если единственный
+	# узел не числится за другим модемом (числится - он заведомо не наш).
+	case "$_ew_lm" in
+		*"\"path\":\"$_ap\""*) echo ""; return ;;
+	esac
 	set -- /dev/cdc-wdm*
-	[ "$#" = 1 ] && [ -c "$1" ] && { echo "$1"; return; }
-	echo ""
+	[ "$#" = 1 ] && [ -c "$1" ] || { echo ""; return; }
+	case "$_ew_lm" in
+		*"\"$1\""*) echo ""; return ;;
+	esac
+	echo "$1"
 }
 
 # УЗЕЛ ПОД KERNEL-ПРОТО mbim (umbim) НЕПРИКАСАЕМ. umbim открывает cdc-wdm
@@ -1484,13 +1513,45 @@ echo "$$" > "$LOCK/pid" 2>/dev/null
 # Возвращаем обратно в trap - и на нормальном выходе, и когда процесс убьют.
 _UPLINK_IF=""
 _uplink_release() {
-	_wdm_owned_by_umbim "$(esim_wdm)" || return 0
+	# ДВА РАЗНЫХ КОНФЛИКТА, А НЕ ОДИН.
+	#
+	# Изначально здесь проверялся ТОЛЬКО захват cdc-wdm протоколом mbim. Но у
+	# AT-модема (Fibocom FM350 - наш главный AT-eSIM) узла cdc-wdm нет вовсе, а
+	# дозвонщик дерётся за ТОТ ЖЕ AT-порт, по которому идут APDU: fibocom-прото
+	# держит at_lock на весь диалог подъёма. Пока eUICC пуст, регистрации нет, и
+	# прото КРУТИТ дозвон бесконечно (каждые ~70 c: «no network registration
+	# after 60s» -> down -> setting up). Загрузка профиля занимает минуты - она
+	# просто не пролезает в порт и замирает «на подготовке». Живой отчёт
+	# 06.08.2026: FM350, EMPTY_EUICC, в журнале десятки «at_lock: порт
+	# /dev/ttyUSB1 занят дольше 10c» вперемешку с циклом дозвона.
+	#
+	# Поэтому опускаем интерфейс в ОБОИХ случаях: канал занят umbim ИЛИ операция
+	# идёт по AT-порту, которым владеет наш же дозвонщик.
 	_ur_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	[ -n "$_ur_ap" ] || return 0
 	_ur_sec="m_$(echo "$_ur_ap" | sed 's/[^A-Za-z0-9]/_/g')"
 	_ur_if=$(uci -q get "5gmodem.$_ur_sec.network")
 	[ -n "$_ur_if" ] || return 0
-	logger -t 5gmodem "esim: канал занят соединением - опускаю $_ur_if на время операции"
+	_ur_at=""
+	case "$(apdu_backend)" in
+		at|bridge) _ur_at=1 ;;
+	esac
+	if [ -n "$_ur_at" ]; then
+		# ПОДНЯТЫЙ AT-ИНТЕРФЕЙС НЕ ТРОГАЕМ. Во-первых, дозвон уже закончен - за
+		# порт дерётся разве что опрос метрик, а он ходит через ту же очередь
+		# культурно. Во-вторых, у модема с рабочим профилем это может быть
+		# ЕДИНСТВЕННЫЙ путь в интернет, а загрузке профиля нужен HTTPS до SM-DP+:
+		# опустив его, мы сами оборвали бы себе загрузку.
+		ubus call "network.interface.$_ur_if" status 2>/dev/null \
+			| grep -q '"up": true' && return 0
+	else
+		_wdm_owned_by_umbim "$(esim_wdm)" || return 0
+	fi
+	if [ -n "$_ur_at" ]; then
+		logger -t 5gmodem "esim: дозвон держит AT-порт - опускаю $_ur_if на время операции"
+	else
+		logger -t 5gmodem "esim: канал занят соединением - опускаю $_ur_if на время операции"
+	fi
 	[ -n "$LIVELOG" ] && printf '%s {"type":"progress","payload":{"code":0,"message":"uplink_down","data":"%s"}}\n' \
 		"$(date '+%H:%M:%S' 2>/dev/null)" "$_ur_if" >> "$LIVELOG" 2>/dev/null
 	ifdown "$_ur_if" >/dev/null 2>&1

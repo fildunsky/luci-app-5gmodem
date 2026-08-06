@@ -821,6 +821,57 @@ stick_verdict() {
 	echo "  kmod-usb-serial-option."
 }
 
+# МОДЕМ ЕСТЬ, AT-ПОРТ ЕСТЬ, А КАНАЛА QMI НЕТ - ДЕЛО В КОМПОЗИЦИИ USB.
+#
+# Класс отказа, который проверка накопителя выше НЕ ловит: порты ttyUSB на месте
+# (значит модем опознан и переключён), но нет ни cdc-wdm, ни сетевого узла - и
+# proto=qmi просто некуда прицепить. У Qualcomm-модулей за это отвечает вендорная
+# настройка композиции, и без неё человек бесконечно чинит usb_modeswitch и
+# драйверы, хотя лечится это одной AT-командой с последующим передёргом питания
+# (модем должен переэнумерироваться).
+#
+# Сетевой узел проверяем ОТДЕЛЬНО: часть модулей ходит через ECM/RNDIS без всякого
+# cdc-wdm (наш профиль 2c7c:6005 - как раз такой), и для них это норма, а не беда.
+usbcomp_verdict() {
+	echo ""
+	echo "----- Есть AT-порт, но нет канала QMI? (итог) -----"
+	_uc_found=""
+	for _uc_d in /sys/bus/usb/devices/*; do
+		case "$_uc_d" in *:*) continue ;; esac
+		[ -f "$_uc_d/idVendor" ] || continue
+		_uc_v=$(cat "$_uc_d/idVendor" 2>/dev/null)
+		case "$_uc_v" in
+			2c7c|1e0e|1bc7) ;;             # Quectel, SimCom, Telit
+			*) continue ;;
+		esac
+		_uc_tty=""; _uc_wdm=""; _uc_net=""
+		for _uc_n in "$_uc_d":*/ttyUSB* "$_uc_d":*/tty/ttyUSB*; do
+			[ -e "$_uc_n" ] && { _uc_tty=1; break; }
+		done
+		for _uc_n in "$_uc_d":*/usbmisc/cdc-wdm*; do
+			[ -e "$_uc_n" ] && { _uc_wdm=1; break; }
+		done
+		for _uc_n in "$_uc_d":*/net/*; do
+			[ -e "$_uc_n" ] && { _uc_net=1; break; }
+		done
+		[ -n "$_uc_tty" ] || continue
+		[ -z "$_uc_wdm" ] && [ -z "$_uc_net" ] || continue
+		_uc_found="$_uc_found
+   $(basename "$_uc_d")  $_uc_v:$(cat "$_uc_d/idProduct" 2>/dev/null)"
+	done
+	if [ -z "$_uc_found" ]; then
+		echo "нет - у модемов с AT-портом канал данных на месте"
+		return
+	fi
+	echo "ДА, у модема есть ttyUSB, но нет ни cdc-wdm, ни сетевого узла:"
+	printf '   %s\n' $_uc_found
+	echo "  Композиция USB не содержит канала данных. Лечится вендорной командой"
+	echo "  в AT-консоли, после неё модем нужно передёрнуть ПО ПИТАНИЮ:"
+	echo "    Quectel: AT+QCFG=\"usbnet\"      -> должно быть 0, иначе AT+QCFG=\"usbnet\",0"
+	echo "    SimCom:  AT+CUSBPIDSWITCH?      -> должно быть 9001, иначе"
+	echo "             AT+CUSBPIDSWITCH=9001,1,1"
+}
+
 radio_verdict() {   # $1 - АТ-порт
 	echo ""
 	echo "----- Состояние радио (итог) -----"
@@ -1125,7 +1176,7 @@ report() {
 	echo "Если не хотите публиковать идентификаторы - отправьте файл лично."
 
 	collect "system"
-	run 5  "Версия приложения" sh -c "(apk list -I 2>/dev/null || opkg list-installed 2>/dev/null) | grep -iE '5gmodem|sms-tool|modemmanager|lpac|ca-bundle|libcurl|qmi-utils|comgt'"
+	run 5  "Версия приложения" sh -c "(apk list -I 2>/dev/null || opkg list-installed 2>/dev/null) | grep -iE '5gmodem|sms-tool|modemmanager|lpac|ca-bundle|libcurl|qmi-utils|mbim-utils|libmbim|libqmi|umbim|uqmi|comgt'"
 	run 5  "Прошивка" cat /etc/openwrt_release
 	run 5  "Модель железа" sh -c "cat /tmp/sysinfo/model 2>/dev/null; cat /proc/device-tree/model 2>/dev/null"
 	run 5  "Uptime / память" sh -c "uptime; free"
@@ -1222,6 +1273,7 @@ report() {
 	fcclock_verdict "$P"
 	proxy_verdict
 	stick_verdict
+	usbcomp_verdict
 	mbim_verdict
 
 	collect "sim"

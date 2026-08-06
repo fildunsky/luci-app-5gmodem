@@ -32,6 +32,162 @@ wan_nets() {
 # вне списка ничего не теряют.
 _IFDUMP=""
 ifdump_snapshot() { _IFDUMP=$(ubus call network.interface dump 2>/dev/null); }
+
+# КАРТА «ИНТЕРФЕЙС -> up|l3_device|ipv4» ОДНИМ ПРОХОДОМ awk ПО ДАМПУ.
+#
+# Даже со снимком дампа каждая карточка стоила jsonfilter-запусков: объект
+# интерфейса (_if_scan), l3_device ребёнка «<имя>_4», адреса детей в iface_ip,
+# список имён (_ifdump_names) - на восьми аплинках это ~20 разборов ВСЕГО дампа
+# на один list, и каждый парсит JSON целиком. Замер: list 0.7-1.1 c при опросе
+# раз в 15 c. Теперь дамп разбирается ОДИН раз; выборки ниже - чистый шелл.
+#
+# Разбор построчный по красивому JSON ubus: имя открывает запись, поля берутся
+# первые по записи, блок "inactive" (там ПРОШЛЫЕ адреса) отсекает дальнейший
+# сбор. Флаг want4 не даёт спутать адрес ipv4 с ipv6/маршрутами: он взводится
+# строкой '"ipv4-address": [' и гасится первым же адресом или закрытием массива.
+_IFMAP=""
+ifmap_build() {
+	[ -n "$_IFDUMP" ] || return 0
+	_IFMAP=$(printf '%s\n' "$_IFDUMP" | awk '
+		function flush() { if (name != "") printf "%s|%s|%s|%s\n", name, up, dev, ip4 }
+		/"interface": "/ {
+			flush()
+			name = $0; sub(/.*"interface": "/, "", name); sub(/".*/, "", name)
+			up = "false"; dev = ""; ip4 = ""; inact = 0; want4 = 0; gotup = 0
+			next
+		}
+		inact { next }
+		/"inactive"/ { inact = 1; next }
+		!gotup && /"up": / { up = ($0 ~ /true/) ? "true" : "false"; gotup = 1; next }
+		dev == "" && /"l3_device": "/ {
+			dev = $0; sub(/.*"l3_device": "/, "", dev); sub(/".*/, "", dev); next
+		}
+		/"ipv4-address": \[/ { if (ip4 == "" && $0 !~ /\]/) want4 = 1; next }
+		/"ipv6-address"/ { want4 = 0 }
+		want4 && /"address": "/ {
+			ip4 = $0; sub(/.*"address": "/, "", ip4); sub(/".*/, "", ip4)
+			want4 = 0; next
+		}
+		want4 && /\]/ { want4 = 0; next }
+		END { flush() }
+	' 2>/dev/null)
+}
+# Поле из карты: $1 - интерфейс, $2 - up|dev|ip4. Код 1 = интерфейса в карте нет.
+# Совпадение ТОЛЬКО с начала строки (через приклеенный перевод строки): иначе
+# «wan» находил бы хвост записи «wwan».
+_IFNL='
+'
+_ifmap_get() {
+	_imx="$_IFNL$_IFMAP$_IFNL"
+	case "$_imx" in
+		*"$_IFNL$1|"*) : ;;
+		*) return 1 ;;
+	esac
+	_img="${_imx#*"$_IFNL$1|"}"
+	_img="${_img%%"$_IFNL"*}"
+	case "$2" in
+		up)  printf '%s' "${_img%%|*}" ;;
+		dev) _img="${_img#*|}"; printf '%s' "${_img%%|*}" ;;
+		ip4) printf '%s' "${_img##*|}" ;;
+	esac
+	return 0
+}
+
+# КАРТЫ ГОРЯЧИХ КЛЮЧЕЙ КОНФИГОВ - ТЕМ ЖЕ ПРИЁМОМ, ЧТО _IFMAP.
+#
+# Даже со снимками каждая выборка _uci_snap_get - это скан 3-5-КБ дампа
+# подстановкой оболочки, ~2-5 мс; карточка делает их с десяток, и цикл list
+# стоил ~80 мс НА ИНТЕРФЕЙС чистого шелла (замер чекпойнтами 06.08.2026).
+# Два awk строят карты только нужных ключей; выборка из карты в ~300 байт -
+# доли миллисекунды.
+#   _NETMAP: iface|proto|device|disabled|metric
+#   _M5MAP:  секция m_*|network|path|parked|kind
+_NETMAP=""; _M5MAP=""
+ucimap_build() {
+	[ -n "$_UCINET_SNAP" ] && _NETMAP=$(printf '%s\n' "$_UCINET_SNAP" | awk '
+		/^network\./ {
+			line = substr($0, 9)
+			dot = index(line, "."); if (!dot) next
+			sec = substr(line, 1, dot - 1)
+			rest = substr(line, dot + 1)
+			eq = index(rest, "="); if (!eq) next
+			key = substr(rest, 1, eq - 1)
+			val = substr(rest, eq + 1)
+			gsub(/^\x27|\x27$/, "", val)
+			seen[sec] = 1
+			if (key == "proto") p[sec] = val
+			else if (key == "device") d[sec] = val
+			else if (key == "disabled") x[sec] = val
+			else if (key == "metric") m[sec] = val
+		}
+		END { for (s in seen) printf "%s|%s|%s|%s|%s\n", s, p[s], d[s], x[s], m[s] }
+	' 2>/dev/null)
+	[ -n "$_UCI5G_SNAP" ] && _M5MAP=$(printf '%s\n' "$_UCI5G_SNAP" | awk '
+		/^5gmodem\.m_/ {
+			line = substr($0, 9)
+			dot = index(line, "."); if (!dot) next
+			sec = substr(line, 1, dot - 1)
+			rest = substr(line, dot + 1)
+			eq = index(rest, "="); if (!eq) next
+			key = substr(rest, 1, eq - 1)
+			val = substr(rest, eq + 1)
+			gsub(/^\x27|\x27$/, "", val)
+			seen[sec] = 1
+			if (key == "network") n[sec] = val
+			else if (key == "path") pt[sec] = val
+			else if (key == "parked") pk[sec] = val
+			else if (key == "kind") k[sec] = val
+		}
+		END { for (s in seen) printf "%s|%s|%s|%s|%s\n", s, n[s], pt[s], pk[s], k[s] }
+	' 2>/dev/null)
+}
+# Выборка "имя|поле" из карты вида "имя|a|b|c|d": $1 карта, $2 имя, $3 номер поля 1..4.
+_map_field() {
+	_mfx="$_IFNL$1$_IFNL"
+	case "$_mfx" in
+		*"$_IFNL$2|"*) : ;;
+		*) return 1 ;;
+	esac
+	_mfv="${_mfx#*"$_IFNL$2|"}"
+	_mfv="${_mfv%%"$_IFNL"*}"
+	while [ "$3" -gt 1 ]; do set -- "$1" "$2" $(($3 - 1)); _mfv="${_mfv#*|}"; done
+	printf '%s' "${_mfv%%|*}"
+	return 0
+}
+# Переопределения поверх lib.sh: горячие ключи из карт, прочее - прежним путём.
+# Карта строится только в list (ucimap_build); пустая карта = поведение lib.sh.
+ucinet_get() {
+	if [ -n "$_NETMAP" ]; then
+		case "$2" in
+			proto)    _map_field "$_NETMAP" "$1" 1; return ;;
+			device)   _map_field "$_NETMAP" "$1" 2; return ;;
+			disabled) _map_field "$_NETMAP" "$1" 3; return ;;
+			metric)   _map_field "$_NETMAP" "$1" 4; return ;;
+		esac
+	fi
+	if [ -n "$_UCINET_SNAP" ]; then
+		_uci_snap_get "$_UCINET_SNAP" "network.$1.$2"
+		return
+	fi
+	uci -q get "network.$1.$2" 2>/dev/null
+}
+uci5g_get() {
+	if [ -n "$_M5MAP" ]; then
+		case "$1" in m_*)
+			case "$2" in
+				network) _map_field "$_M5MAP" "$1" 1; return ;;
+				path)    _map_field "$_M5MAP" "$1" 2; return ;;
+				parked)  _map_field "$_M5MAP" "$1" 3; return ;;
+				kind)    _map_field "$_M5MAP" "$1" 4; return ;;
+			esac ;;
+		esac
+	fi
+	if [ -n "$_UCI5G_SNAP" ]; then
+		_uci_snap_get "$_UCI5G_SNAP" "5gmodem.$1.$2"
+		return
+	fi
+	uci -q get "5gmodem.$1.$2" 2>/dev/null
+}
 # РАЗБОР ОДНОГО ИНТЕРФЕЙСА - ОДИН jsonfilter НА ВСЕ ЕГО ПОЛЯ.
 #
 # Раньше каждое поле стоило пары процессов (jsonfilter + head), а list спрашивает
@@ -45,7 +201,14 @@ ifdump_snapshot() { _IFDUMP=$(ubus call network.interface dump 2>/dev/null); }
 _IFO_NAME=""; _IFO_DEV=""; _IFO_IP=""
 _if_scan() {   # $1 - интерфейс
 	_IFO_NAME="$1"; _IFO_DEV=""; _IFO_IP=""
-	[ -n "$_IFDUMP" ] && [ -n "$1" ] || return 0
+	[ -n "$1" ] || return 0
+	# Карта построена (list) - ноль процессов; иначе прежний одиночный разбор.
+	if [ -n "$_IFMAP" ]; then
+		_IFO_DEV=$(_ifmap_get "$1" dev)
+		_IFO_IP=$(_ifmap_get "$1" ip4)
+		return 0
+	fi
+	[ -n "$_IFDUMP" ] || return 0
 	_ifo=$(printf '%s' "$_IFDUMP" | jsonfilter -e "@.interface[@.interface=\"$1\"]" 2>/dev/null)
 	[ -n "$_ifo" ] || return 0
 	# Блок "inactive" держит ПРОШЛЫЕ адреса того же интерфейса. Без обрезки у
@@ -70,6 +233,18 @@ ifup_state() {
 			'@["ipv4-address"][0].address') printf '%s\n' "$_IFO_IP"; return ;;
 		esac
 	fi
+	# Ходовые поля ЛЮБОГО интерфейса (включая детей "<имя>_4") - из карты, без
+	# процессов. Карта покрывает дамп ЦЕЛИКОМ, поэтому она авторитетна и для
+	# отсутствующих: не нашли - интерфейса нет, отвечаем пусто, а не падаем в
+	# jsonfilter (несуществующий ребёнок "_4" - обычное дело на каждой карточке).
+	if [ -n "$_IFMAP" ]; then
+		case "$2" in
+			'@["l3_device"]')
+				_ifmap_get "$1" dev; printf '\n'; return ;;
+			'@["ipv4-address"][0].address')
+				_ifmap_get "$1" ip4; printf '\n'; return ;;
+		esac
+	fi
 	if [ -n "$_IFDUMP" ]; then
 		printf '%s' "$_IFDUMP" \
 			| jsonfilter -e "@.interface[@.interface=\"$1\"]${2#@}" 2>/dev/null | head -1
@@ -79,6 +254,10 @@ ifup_state() {
 }
 # Имена интерфейсов из дампа (для поиска детей "<имя>_4"): без дампа - как раньше.
 _ifdump_names() {
+	if [ -n "$_IFMAP" ]; then
+		printf '%s\n' "$_IFMAP" | cut -d'|' -f1
+		return
+	fi
 	if [ -n "$_IFDUMP" ]; then
 		printf '%s' "$_IFDUMP" | jsonfilter -e '@.interface[*].interface' 2>/dev/null
 		return
@@ -181,6 +360,20 @@ iface_ip() {
 	p="$1"
 	ip=$(ifup_state "$p" '@["ipv4-address"][0].address')
 	[ -n "$ip" ] && { echo "$ip"; return; }
+	# Дети "<имя>_*" - прямо из карты, чистым шеллом (по процессу на ребёнка
+	# здесь набегало и на несуществующих).
+	if [ -n "$_IFMAP" ]; then
+		_iim="$_IFMAP$_IFNL"
+		while [ -n "$_iim" ]; do
+			_iil="${_iim%%"$_IFNL"*}"
+			_iim="${_iim#*"$_IFNL"}"
+			case "$_iil" in
+				"${p}_"*) _iip="${_iil##*|}"
+				          [ -n "$_iip" ] && { echo "$_iip"; return; } ;;
+			esac
+		done
+		return
+	fi
 	for c in $(_ifdump_names | grep -E "^${p}_"); do
 		ip=$(ifup_state "$c" '@["ipv4-address"][0].address')
 		[ -n "$ip" ] && { echo "$ip"; return; }
@@ -649,8 +842,10 @@ list)
 	# (70 uci, 34 sed, 19 jsonfilter, 11 ifstatus) на КАЖДЫЙ вызов, а страница
 	# метрик зовёт его раз в 5 c.
 	ifdump_snapshot
+	ifmap_build
 	uci5g_snapshot
 	ucinet_snapshot
+	ucimap_build
 	lm_snapshot
 	# Секундомер один на весь вызов: uptime_s - это чтение /proc/uptime отдельным
 	# процессом, а нужен он в цикле по разу-два на карточку со сторожем.
@@ -665,7 +860,10 @@ list)
 	# метрикой. Нужно сторожу (health.sh): при штрафном переключении uci-порядок
 	# и реальность расходятся, и подсветка активной карточки обязана следовать
 	# реальности. Одна команда на весь list.
-	_LIVE_DEV=$(ip -4 route show default 2>/dev/null | awk '{m=0; d=""; for(i=1;i<NF;i++){if($i=="dev")d=$(i+1); if($i=="metric")m=$(i+1)+0} if(d!="")print m, d}' | sort -n | head -1 | cut -d' ' -f2)
+	_LIVE_DEV=$(ip -4 route show default 2>/dev/null | awk '
+		{ m=0; d=""; for(i=1;i<NF;i++){ if($i=="dev") d=$(i+1); if($i=="metric") m=$(i+1)+0 }
+		  if (d != "" && (best == "" || m < bm)) { bm = m; best = d } }
+		END { print best }')
 	printf '['
 	first=1
 	NEEDREFRESH=0
@@ -723,7 +921,20 @@ list)
 			# секции этого интерфейса и прячем, ТОЛЬКО если НИ ОДНА не присутствует.
 			# Нет ни одной секции с путём (legacy-конфиг) - поведение прежнее: показываем.
 			_any_path=""; _any_present=""; _any_parked=""
-			for _ms in $(_uci5g_dump | sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$n'\?\$/\1/p"); do
+			# Секции этого интерфейса - из уже построенной карты (_MS_MAP держит
+			# ВСЕ пары «сеть=секция»), без printf-дампа и sed на каждую карточку.
+			_ms_list=""
+			_msr=" $_MS_MAP"
+			while :; do
+				case "$_msr" in
+					*" $n="*) _msr="${_msr#* "$n"=}"
+					          _ms_list="$_ms_list ${_msr%% *}" ;;
+					*) break ;;
+				esac
+			done
+			[ -n "$_ms_list" ] || _ms_list=$(_uci5g_dump \
+				| sed -n "s/^5gmodem\.\(m_[^.]*\)\.network='\?$n'\?\$/\1/p")
+			for _ms in $_ms_list; do
 				_mp=$(uci5g_get "$_ms" path)
 				if [ -z "$_mp" ]; then
 					# Секция БЕЗ пути - это ПАРКОВКА вытесненного модема (park_profile
