@@ -8,10 +8,13 @@ T=$(echo "$O" | awk -F: '/Temperature:/ {print $3}' | xargs)
 if [ "$REGOK" = "1" ]; then
 
 if [ "x$MODE_NUM" = "x7" ]; then
+	# TAC клался в переменную $TAC - её каркас уже заполнил из +CEREG ВЫШЕ и
+	# больше не читает, а в снимок уходят T_HEX/T_DEC. Разобранное значение
+	# просто пропадало.
 	T=$(echo "$O" | awk '/.*TAC:/ {print $5}')
 	if [ -n "$T" ]; then
-		T_DEC=$(printf "%d" "0x$T")
-		TAC="${T_DEC} ($T)"
+		T_HEX="$T"
+		T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
 	fi
 
 	T=$(echo "$O" | awk '/^RSSI/ {print $3}')
@@ -27,12 +30,14 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	if [ -n "$T" ]; then
 		T1=$(echo "$O" | awk '/^LTE band:/ {print $6}')
 		PBAND="$(band4g ${T/B/}) @${T1} MHz"
-		MODE="LTE $(band4g ${T/B/})"
+		# Разделитель как у остальных модемов: без него в карточке стояло
+		# «4G B3 (1800 MHz)» вместо «4G | B3 (1800 MHz)».
+		MODE="LTE | $(band4g ${T/B/})"
 	fi
+	# Канал разбирался и выбрасывался (остаток от механизма addon, которого в
+	# приложении нет) - в карточке на его месте был прочерк.
 	T=$(echo "$O" | awk '/^LTE Rx chan:/ {print $4}')
-#	[ -n "$T" ] && addon 34 "EARFCN DL" "$T"
-	T=$(echo "$O" | awk '/^LTE Rx chan:/ {print $8}')
-#	[ -n "$T" ] && addon 34 "EARFCN UL" "$T"
+	[ -n "$T" ] && EARFCN="$T"
 fi
 
 fi

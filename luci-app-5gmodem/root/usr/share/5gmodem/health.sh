@@ -200,7 +200,7 @@ judge() {
 			[ "$_j_st" = down ] && _j_wasdown=1
 			[ "$_j_st" = gone ] && [ -f "$HDIR/$_j_if.heal" ] && _j_wasdown=1
 			# ожил - лестница лечения начинается с нуля при следующем падении
-			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata"
+			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" "$HDIR/$_j_if.mmoff"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
 				_ev "линк $_j_if ожил - оставлен в конце (по настройке)"
@@ -263,7 +263,7 @@ round() {
 		_r_bn="${_r_f##*/}"
 		case "$_r_zone" in
 			*" $_r_bn "*) ;;
-			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" "$_r_f.nodata" ;;
+			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" "$_r_f.nodata" "$_r_f.mmoff" ;;
 		esac
 	done
 }
@@ -331,7 +331,23 @@ enforce() {
 			# ШТРАФУЕМ только когда есть живая альтернатива: если легли ВСЕ,
 			# лучший исход - оставить порядок пользователя как есть
 			_e_want=$((_e_base + PEN))
-			if ip -4 route show default 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qv "metric $_e_want\$"; then
+			# «УЖЕ ОШТРАФОВАН?» - СРАВНИВАЕМ ПОЛЕ, А НЕ ХВОСТ СТРОКИ.
+			#
+			# Здесь стоял grep по "metric N$", но `ip route show` печатает строку
+			# С ПРОБЕЛОМ НА КОНЦЕ, и якорь конца строки не срабатывал НИКОГДА.
+			# Трафик уводился правильно, а вот событие «без интернета - увожу
+			# трафик» писалось на КАЖДОМ круге: в журнале одна и та же строка
+			# каждые 30 c, и под панелью приоритета она же мигала как свежая
+			# (живой стенд 07.08.2026, Wi-Fi-аплинк wwan). Разбираем поле metric
+			# у маршрута этого устройства и сравниваем числа.
+			_e_cur=$(ip -4 route show default 2>/dev/null | awk -v d="$_e_dev" '
+				$0 ~ (" dev " d " ") || $0 ~ (" dev " d "$") {
+					m = 0
+					for (i = 1; i <= NF; i++) if ($i == "metric") m = $(i + 1)
+					print m; exit
+				}')
+			[ -n "$_e_cur" ] || _e_cur=0
+			if [ "$_e_cur" != "$_e_want" ]; then
 				_ev "$_e_if без интернета - увожу трафик (метрика $_e_base -> $_e_want)"
 			fi
 			_move_defaults "$_e_dev" "$_e_want"
@@ -664,6 +680,43 @@ heal() {
 			continue
 		fi
 		rm -f "$HDIR/$_h_if.nodata"
+		# МОДЕМ ПОД ModemManager ПРОСТО ВЫКЛЮЧЕН - ВКЛЮЧАЕМ, А НЕ ЛЕЧИМ.
+		#
+		# MM держит модем в состоянии disabled после части событий (живой случай
+		# 06.08.2026: EP06 после смены USB-композиции остался disabled/registered
+		# и поднялся только руками через `mmcli --enable`). Для netifd такой
+		# модем «есть, но соединения нет», и лестница честно шла ступенями:
+		# ifup впустую (включать нечего), затем AT+CFUN=1,1 с переэнумерацией
+		# на полминуты, затем передёрг USB по питанию - тремя тяжёлыми шагами
+		# ради одной команды.
+		#
+		# Поэтому ПЕРЕД лестницей: если модем виден MM и выключен - включаем и
+		# ждём подъёма своим чередом (netifd сам поднимет интерфейс, когда
+		# появится модем; форсировать ifup здесь не надо - MM объявляет модем
+		# доступным не мгновенно).
+		#
+		# Попытку НЕ считаем и лестницу НЕ двигаем: это не лечение аварии, а
+		# доведение до состояния, с которого лечение вообще имеет смысл. Если
+		# `--enable` не помог, следующий круг придёт сюда снова и увидит модем
+		# уже не disabled - тогда поедет обычная лестница.
+		# Событие пишем один раз на эпизод (маркер снимается при выздоровлении).
+		if command -v mmcli >/dev/null 2>&1; then
+			_h_mmi=$("$RES/modemswitch.sh" mmindex "$_h_path" 2>/dev/null)
+			if [ -n "$_h_mmi" ]; then
+				_h_mms=$(mmcli -m "$_h_mmi" -K 2>/dev/null \
+					| sed -n 's/^modem\.generic\.state *: *//p' | head -1)
+				case "$_h_mms" in
+					disabled|locked)
+						if [ ! -f "$HDIR/$_h_if.mmoff" ]; then
+							: > "$HDIR/$_h_if.mmoff"
+							_ev "лечу $_h_if: модем выключен в ModemManager ($_h_mms) - включаю"
+						fi
+						( mmcli -m "$_h_mmi" --enable ) >/dev/null 2>&1 </dev/null 9>&- &
+						continue ;;
+				esac
+			fi
+		fi
+		rm -f "$HDIR/$_h_if.mmoff"
 		_h_next=$((_h_step + 1))
 		[ "$_h_next" -gt "$_h_cap" ] && _h_next="$_h_cap"
 		# Ступень 2 у HiLink - ЕГО API (device/control), не AT: AT+CFUN=1,1

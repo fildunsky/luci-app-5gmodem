@@ -301,6 +301,15 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
+		/* Номер приоритета фоном на карточках аплинков. По умолчанию ВЫКЛЮЧЕН:
+		   порядок и так читается слева направо, а крупная цифра - вкусовщина.
+		   Зависимость от widget_netpri: без самой панели опция бессмысленна. */
+		o = wdg.option(form.Flag, 'netpri_rank', _('Show priority numbers'),
+			_('Large translucent number in the corner of each uplink card'));
+		o.default = '0';
+		o.rmempty = false;
+		o.depends('widget_netpri', '1');
+
 		/* --- Пинг (внутри «Виджеты»): галочка + вложенная таблица карточек. --- */
 		o = wdg.option(form.Flag, 'widget_status', _('Ping monitor'),
 			_('Ping cards (host with a green/red dot and latency)'));

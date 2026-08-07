@@ -605,7 +605,7 @@ function switchToXmm(btn) {
 
 function applyBandsReadOnly() {
 	var ro = bandsReadOnly;
-	[ 'bands-lte', 'bands-nr', 'bands-3g', 'modesw-btns' ].forEach(function(id) {
+	[ 'bands-lte', 'bands-nr', 'bands-3g', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
 		var c = document.getElementById(id);
 		if (!c) { return; }
 		c.querySelectorAll('button').forEach(function(b) {

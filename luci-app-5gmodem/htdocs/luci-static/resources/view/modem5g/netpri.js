@@ -27,6 +27,12 @@ var BIN = '/usr/share/5gmodem/netpri.sh';
 /* Мастер-флаги групп (вкл/выкл целиком). Внутри групп сами карточки задаются
    секциями pingwidget / svcwidget (можно добавить сколько угодно). */
 var _widgets = { netpri: true, status: true, services: true, speedtest: true };
+/* Номер приоритета фоном на карточке - отдельная галка, по умолчанию ВЫКЛЮЧЕНА
+   (в отличие от мастер-флагов виджетов, которые по умолчанию включены). */
+var _netpriRank = false;
+/* Порядок правых виджетов: ключи p:<хост> / s:<служба> / speed. Пусто - порядок
+   по умолчанию (пинги, службы, спидтест). */
+var _widgetOrder = [];
 var _pingWidgets = [];   /* [{host, mode}] */
 var _svcWidgets = [];    /* ['ssclash', ...] - сервисы из секций svcwidget */
 function loadWidgetFlags() {
@@ -36,6 +42,9 @@ function loadWidgetFlags() {
 		_widgets.status    = on('widget_status');
 		_widgets.services  = on('widget_services');
 		_widgets.speedtest = on('widget_speedtest');
+		_netpriRank = (uci.get('5gmodem', '@5gmodem[0]', 'netpri_rank') === '1');
+		/* Порядок правых карточек, заданный перетаскиванием (netpri.sh worder). */
+		_widgetOrder = String(uci.get('5gmodem', '@5gmodem[0]', 'widget_order') || '').split(/\s+/).filter(Boolean);
 		/* Карточки берём ТОЛЬКО из секций. Умолчания (YouTube, SSClash) заведены
 		   реальными секциями при установке (uci-defaults/seed_widgets.sh), поэтому
 		   видны и правятся в настройках; удалил все - значит пусто, без «магии». */
@@ -197,6 +206,7 @@ function stCardInner() {
 function stCard() {
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-st',
+		'data-wkey': 'speed',
 		'data-tooltip': _('Measure the real download/upload speed over the modem - a quick way to see whether carrier aggregation is actually working'),
 		'click': function() { runSpeedtest(); }
 	}, stCardInner());
@@ -467,6 +477,7 @@ function ssClashBtn(kind) {
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-ssclash',
 		'data-ssckind': kind,
+		'data-wkey': 's:' + (kind === 'go' ? 'ssclash-go' : 'ssclash'),
 		'data-tooltip': _('Open the SSClash admin panel in a new tab'),
 		'click': function() { window.open(url, '_blank', 'noopener'); }
 	}, [
@@ -525,6 +536,8 @@ function pingCard(w) {
 		/* ping-busy возвращаем и при пересоздании карточки поллом бара: замер
 		   мог идти прямо в этот момент, и сияние не должно пропадать. */
 		'class': 'btn cbi-button netpri-btn netpri-status' + (_pingBusy[host] ? ' ping-busy' : ''), 'data-host': host,
+		/* Ключ для перетаскивания правых карточек - см. _npWidgetCards. */
+		'data-wkey': 'p:' + host,
 		'data-tooltip': _('Click to measure ping to %s over the active uplink').format(info.name),
 		'click': function(ev) { ev.preventDefault(); pingOnce(host); }
 	}, [
@@ -661,6 +674,7 @@ function svcCard(service) {
 		'title': (r === undefined) ? service : (r.running ? _('%s is running').format(service) : _('%s is stopped').format(service)) });
 	var attrs = {
 		'class': 'btn cbi-button netpri-btn netpri-status', 'data-svc': service,
+		'data-wkey': 's:' + service,
 		'data-tooltip': (r && r.ip) ? _('%s address of this router: %s').format(svcName(service), r.ip)
 			: ((k && k.port) ? _('Open %s').format(svcName(service)) : service)
 	};
@@ -861,6 +875,17 @@ function chevron() {
 	return s;
 }
 
+/* НОМЕР ПРИОРИТЕТА ФОНОМ - крупная полупрозрачная цифра у правого края
+   карточки. Читается как «этот аплинк первый/второй/третий» без наведения на
+   подсказку с метрикой. Позиция и размер - в CSS (.netpri-rank): цифра вынута
+   из потока, поэтому три строки текста стоят ровно там же, где стояли, и
+   ширина карточки не меняется. aria-hidden: для читалки это украшение, порядок
+   и так виден по последовательности кнопок. */
+function rankEl(idx) {
+	if (!_netpriRank) { return ''; }
+	return E('span', { 'class': 'netpri-rank', 'aria-hidden': 'true' }, String(idx + 1));
+}
+
 function nameEl(o) {
 	var txt = o.label || o.iface;
 	var ic = typeIcon(o);
@@ -881,11 +906,24 @@ var _npJustDragged = false;  // подавить click, идущий сразу 
 function _npEnsureDragCss() {
 	}
 
-function _npIfaceCards(row) {
+/* КАРТОЧКИ ОДНОГО РОДА В РЯДУ.
+   В ряду соседствуют два семейства: аплинки (data-iface) и правые виджеты
+   (data-wkey - пинги, службы, спидтест). Перетаскивание работает ВНУТРИ своего
+   семейства: аплинк не должен уезжать в середину виджетов, у них разный смысл
+   порядка (метрики против оформления). Родовой признак берём у той карточки,
+   которую тянут. */
+function _npCards(row, attr) {
 	return Array.prototype.slice.call(row.children).filter(function(c) {
-		return c.nodeType === 1 && c.classList.contains('netpri-btn') && c.hasAttribute('data-iface');
+		return c.nodeType === 1 && c.classList.contains('netpri-btn') && c.hasAttribute(attr);
 	});
 }
+
+function _npIfaceCards(row) { return _npCards(row, 'data-iface'); }
+function _npWidgetCards(row) { return _npCards(row, 'data-wkey'); }
+
+/* Признак семейства активного перетаскивания (см. _npEnableReorder). */
+function _npDragAttr() { return (_npDrag && _npDrag.attr) ? _npDrag.attr : 'data-iface'; }
+function _npDragCards(row) { return _npCards(row, _npDragAttr()); }
 
 function _npMakeSlot(w, h) {
 	var s = E('div', { 'class': 'netpri-btn netpri-slot' });
@@ -911,11 +949,16 @@ function _npLayoutPos(c) {
 }
 
 /* FLIP в 2D (X и Y): при переносе строк карточки едут и по вертикали. */
+/* $before - Map: сам элемент -> его позиция ДО перестановки.
+   Раньше ключом было значение data-iface, и для ПРАВЫХ виджетов (у них такого
+   атрибута нет) ключ у всех выходил один и тот же - «null». Позиции путались
+   между собой, карточки прыгали вместо плавного разъезда: ровно та дёрганая
+   анимация, что была у аплинков до отладки (замечено владельцем 07.08.2026). */
 function _npFlip(cards, before) {
 	cards.forEach(function(c) {
-		var k = c.getAttribute('data-iface'); if (!(k in before)) { return; }
+		var b = before.get(c); if (!b) { return; }
 		var now = _npLayoutPos(c);
-		var dx = before[k].left - now.left, dy = before[k].top - now.top;
+		var dx = b.left - now.left, dy = b.top - now.top;
 		if (Math.abs(dx) < 1 && Math.abs(dy) < 1) { return; }
 		c.style.transition = 'none';
 		c.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
@@ -926,12 +969,32 @@ function _npFlip(cards, before) {
 	});
 }
 
+/* ПРАВАЯ ГРУППА НАЧИНАЕТСЯ С ПЕРВОГО ВИДЖЕТА - ВСЕГДА.
+   Отступ, отжимающий виджеты вправо (margin-left:auto), висит классом на первой
+   правой карточке. При перестановке класс уезжал вместе со своей карточкой, и
+   остальные виджеты «прилипали» к приоритетам - выглядело так, будто они
+   перескочили в чужую группу. Пересчитываем после каждой перестановки и после
+   отпускания. */
+function _npFixRightStart(row) {
+	Array.prototype.slice.call(row.querySelectorAll('.netpri-rightstart'))
+		.forEach(function(c) { c.classList.remove('netpri-rightstart'); });
+	/* Пустое место под тянущийся виджет - тоже часть правой группы: если отступ
+	   достанется карточке ПОСЛЕ него, место останется прижатым к приоритетам. */
+	var slot = (_npDrag && _npDrag.attr === 'data-wkey') ? _npDrag.slot : null;
+	var lifted = (_npDrag && _npDrag.active) ? _npDrag.card : null;   // вырван из потока
+	var w = Array.prototype.slice.call(row.children).filter(function(c) {
+		if (c.nodeType !== 1 || c === lifted) { return false; }
+		return c === slot || (c.classList.contains('netpri-btn') && c.hasAttribute('data-wkey'));
+	});
+	if (w.length) { w[0].classList.add('netpri-rightstart'); }
+}
+
 /* Индекс вставки в ПОТОКЕ (учитывает перенос строк): первый card, ПЕРЕД которым
    стоит указатель - выше его строки, либо в его строке и левее центра. */
 function _npReposition(clientX, clientY) {
 	var d = _npDrag; if (!d || !d.slot) { return; }
 	var row = d.row, slot = d.slot;
-	var cards = _npIfaceCards(row).filter(function(c) { return c !== d.card; });
+	var cards = _npDragCards(row).filter(function(c) { return c !== d.card; });
 	var idx = cards.length;
 	for (var i = 0; i < cards.length; i++) {
 		var p = _npLayoutPos(cards[i]), ow = cards[i].offsetWidth, oh = cards[i].offsetHeight;
@@ -940,13 +1003,19 @@ function _npReposition(clientX, clientY) {
 	}
 	if (idx === d.lastIndex) { return; }
 	d.lastIndex = idx;
-	var before = {}; cards.forEach(function(c) { before[c.getAttribute('data-iface')] = _npLayoutPos(c); });
+	var before = new Map(); cards.forEach(function(c) { before.set(c, _npLayoutPos(c)); });
+	/* ГРАНИЦЫ СЕМЕЙСТВА. Карточка не должна покидать свой участок ряда: аплинк
+	   не уезжает к виджетам, виджет - к аплинкам (у них разный смысл порядка, а
+	   у виджетов ещё и своя правая группа с margin-left:auto). Вставляем ЛИБО
+	   перед соседом по семейству, ЛИБО сразу за последним из них - но никогда
+	   в конец всего ряда. Без этого виджет утаскивался в область приоритетов, а
+	   аплинк - в хвост виджетов. */
 	var refBefore = cards[idx] || null;
-	var rs = row.querySelector('.netpri-rightstart');
 	if (refBefore) { row.insertBefore(slot, refBefore); }
-	else if (rs) { row.insertBefore(slot, rs); }
+	else if (cards.length) { row.insertBefore(slot, cards[cards.length - 1].nextSibling); }
 	else { row.appendChild(slot); }
 	_npFlip(cards, before);
+	_npFixRightStart(row);
 }
 
 function _npBeginDrag() {
@@ -961,6 +1030,7 @@ function _npBeginDrag() {
 	card.classList.add('netpri-lift');
 	document.body.style.userSelect = 'none';
 	d.active = true;
+	_npFixRightStart(d.row);
 }
 
 function _npMove(ev) {
@@ -992,20 +1062,37 @@ function _npTeardown() {
 		[ 'position','left','top','width','height','margin','zIndex','pointerEvents','transform' ]
 			.forEach(function(k) { card.style[k] = ''; });
 		if (d.slot && d.slot.parentNode) { d.slot.parentNode.insertBefore(card, d.slot); d.slot.parentNode.removeChild(d.slot); }
-		_npIfaceCards(d.row).forEach(function(c) { c.style.transition = ''; c.style.transform = ''; });
+		_npDragCards(d.row).forEach(function(c) { c.style.transition = ''; c.style.transform = ''; });
+		_npFixRightStart(d.row);
 	}
 	return d;
 }
 
 function _npEnd() {
 	var d = _npDrag; if (!d) { return; }
-	var active = d.active, row = d.row, commit = d.commit;
+	/* Семейство запоминаем ДО teardown: он обнуляет _npDrag, и определять род
+	   карточек после него было бы уже не по чему - правые виджеты уезжали в
+	   ветку аплинков и порядок не сохранялся вовсе. */
+	var active = d.active, row = d.row, commit = d.commit, attr = d.attr || 'data-iface';
 	_npTeardown();
 	if (!active) { return; }   // не двигали - это клик, обработчик click сам отработает
 	_npJustDragged = true;
 	/* Рамку активного переносим на новую первую карточку СРАЗУ (оптимистично), не
 	   дожидаясь ответа бэкенда - после teardown DOM уже в новом порядке, метрика 1
 	   будет у левой. Иначе подсветка «догоняла» с задержкой round-trip. */
+	/* ПРАВЫЕ ВИДЖЕТЫ - СВОЙ ПОРЯДОК И СВОЙ ПОЛУЧАТЕЛЬ.
+	   У них нет ни метрик, ни «активной» карточки: порядок чисто оформительский
+	   и живёт в одном ключе конфига. Поэтому здесь ветка расходится: аплинкам
+	   пишем метрики через `netpri.sh order`, виджетам - список ключей через
+	   `netpri.sh worder`. */
+	if (attr === 'data-wkey') {
+		var wkeys = _npWidgetCards(row).map(function(c) { return c.getAttribute('data-wkey'); });
+		_npApplying = true;
+		var _wDone = function() { _npApplying = false; };
+		setTimeout(_wDone, 4000);
+		L.resolveDefault(fs.exec(BIN, [ 'worder' ].concat(wkeys)), {}).then(_wDone, _wDone);
+		return;
+	}
 	var _cards = _npIfaceCards(row);
 	_cards.forEach(function(c) { c.classList.remove('active'); });
 	if (_cards[0]) { _cards[0].classList.add('active'); }
@@ -1023,14 +1110,16 @@ function _npEnd() {
 	}, _npDone);
 }
 
-function _npEnableReorder(row, commit) {
+function _npEnableReorder(row, commit, attr) {
 	_npEnsureDragCss();
-	_npIfaceCards(row).forEach(function(card) {
+	var _attr = attr || 'data-iface';
+	_npCards(row, _attr).forEach(function(card) {
 		card.addEventListener('pointerdown', function(ev) {
 			if (ev.button !== 0) { return; }
 			if (_npDrag) { _npTeardown(); }   // самовосстановление после подвисшего drag
 			_npDrag = { card: card, row: row, startX: ev.clientX, startY: ev.clientY,
-			            active: false, commit: commit, pid: ev.pointerId, lastIndex: -1 };
+			            active: false, commit: commit, pid: ev.pointerId, lastIndex: -1,
+			            attr: _attr };
 			try { card.setPointerCapture(ev.pointerId); } catch (e) {}
 			/* слушатели на DOCUMENT (а не на карточке): ловим pointerup/cancel даже
 			   если указатель ушёл за пределы или capture потерялся - иначе _npDrag
@@ -1312,6 +1401,7 @@ function buildBar(list, redraw) {
 				   что у обычной карточки - ряд не дёргается ни на пиксель),
 				   а скелетоны лежат ПОВЕРХ отдельным absolute-слоем. */
 				return [
+					rankEl(_rank),
 					E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
 					E('span', { 'class': 'netpri-name' }, o.iface),
 					E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***'),
@@ -1346,6 +1436,7 @@ function buildBar(list, redraw) {
 				];
 			}
 			return [
+			rankEl(_rank),
 			E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
 			nameEl(o),
 			/* keep the IP line present even without an address so the button height
@@ -1384,6 +1475,18 @@ function buildBar(list, redraw) {
 		});
 	}
 	if (_widgets.speedtest) { right.push(stCard()); }
+	/* ПОРЯДОК, ЗАДАННЫЙ ЧЕЛОВЕКОМ. Карточки, которых нет в сохранённом списке
+	   (только что добавленная в настройках, новая служба), уходят в КОНЕЦ и не
+	   ломают уже выстроенный ряд. */
+	if (_widgetOrder.length) {
+		right.sort(function(a, b) {
+			var ia = _widgetOrder.indexOf(a.getAttribute('data-wkey'));
+			var ib = _widgetOrder.indexOf(b.getAttribute('data-wkey'));
+			if (ia < 0) { ia = 1e6; }
+			if (ib < 0) { ib = 1e6; }
+			return ia - ib;
+		});
+	}
 	if (right.length) { right[0].classList.add('netpri-rightstart'); }
 	btns = btns.concat(right);
 	/* Сворачивание убрано. Небольшой заголовок «Приоритет интернета» возвращаем
@@ -1425,6 +1528,8 @@ function buildBar(list, redraw) {
 	var rowEl = E('div', { 'class': 'netpri-row' }, btns);
 	/* перетаскивание карточек-аплинков - только когда виджет приоритета включён */
 	if (_widgets.netpri) { _npEnableReorder(rowEl, redraw); }
+	/* Правые виджеты тасуются между собой независимо от аплинков. */
+	_npEnableReorder(rowEl, null, 'data-wkey');
 	kids.push(rowEl);
 	/* Строку последнего события под карточками убрали (решение владельца):
 	   статус лечения теперь живёт В САМОЙ карточке, а полная история - в

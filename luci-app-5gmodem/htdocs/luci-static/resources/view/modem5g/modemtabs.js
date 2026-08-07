@@ -96,11 +96,19 @@ function dedupLabels(modems) {
 	var seen = {}, out = modems.map(function(m, i) { return label(m, i); });
 	out.forEach(function(l) { seen[l] = (seen[l] || 0) + 1; });
 	return out.map(function(l, i) {
+		/* Заданное человеком имя оставляем КАК ЕСТЬ, даже если совпало: дописать
+		   к нему технический путь значило бы спорить с его выбором. */
+		if (modems[i] && modems[i].alias) { return l; }
 		return (seen[l] > 1) ? (l + ' (' + (modems[i].path || (i + 1)) + ')') : l;
 	});
 }
 
 function label(m, i) {
+	/* СВОЁ ИМЯ ПОЛЬЗОВАТЕЛЯ СИЛЬНЕЕ ЛЮБОГО АВТОМАТИЧЕСКОГО. Его резолвит бэкенд
+	   (listmodems: привязка к IMEI, откат на секцию пути), здесь только
+	   показываем. Дедупликация путём такому имени не нужна - человек сам его
+	   различил, иначе бы не задавал. */
+	if (m && m.alias) { return String(m.alias).trim(); }
 	var p = modelName(m);
 	var v = vendor(m);
 	var generic = (!p || /^android$/i.test(p) || /^usb/i.test(p) || /^simtech/i.test(p)
@@ -425,6 +433,85 @@ function watchModems(bar, sig) {
 	}, 10);
 }
 
+/* Переименование вкладки на месте: подпись -> поле ввода с галочкой.
+   Сохраняем через modemswitch.sh setalias (там же ставится IMEI-штамп), затем
+   перечитываем страницу - имя показывается не только во вкладке, но и в
+   карточках приоритета и в заголовке модема, а они строятся отдельно. */
+/* ЗАКРЫТЬ РЕДАКТОР НА ВКЛАДКЕ (без сохранения). Вынесено из startRename, чтобы
+   звать снаружи: открытие правки на СОСЕДНЕЙ вкладке должно закрывать эту.
+   Иначе получалось два поля разом, и было непонятно, какое из них применится
+   (поймано владельцем 07.08.2026). */
+function endRename(tab) {
+	if (!tab) { return; }
+	/* Снимаем сторожа клика мимо вкладки - иначе он пережил бы редактор и
+	   продолжал бы срабатывать на каждый клик по странице. */
+	if (tab._renameOutside) {
+		document.removeEventListener('mousedown', tab._renameOutside, true);
+		tab._renameOutside = null;
+	}
+	tab.querySelectorAll('.modemtab-input, .modemtab-editctl').forEach(function(e) {
+		e.parentNode && e.parentNode.removeChild(e);
+	});
+	var nameEl = tab.querySelector('.modemtab-name');
+	var pen = tab.querySelector('.modemtab-edit');
+	if (nameEl) { nameEl.style.display = ''; }
+	if (pen) { pen.style.display = ''; }
+}
+
+function startRename(tab, m, current) {
+	if (!tab || tab.querySelector('.modemtab-input')) { return; }
+	/* Правка - ОДНА НА РЯД: закрываем всё, что открыто на других вкладках. */
+	var bar = tab.parentNode;
+	if (bar) {
+		bar.querySelectorAll('.modemtab').forEach(function(other) {
+			if (other !== tab) { endRename(other); }
+		});
+	}
+	var nameEl = tab.querySelector('.modemtab-name');
+	var pen = tab.querySelector('.modemtab-edit');
+	if (!nameEl) { return; }
+	var inp = E('input', {
+		'type': 'text',
+		'class': 'modemtab-input',
+		/* Поле открывается С УЖЕ НАБРАННЫМ именем - тем, что человек видит на
+		   вкладке: своё, если задано, иначе автоматическое. Placeholder
+		   показывает, какое имя вернётся, если поле очистить. */
+		'value': (m && m.alias) ? String(m.alias) : String(current || ''),
+		'placeholder': current,
+		'maxlength': 32,
+		'click': function(ev) { ev.stopPropagation(); },
+		'keydown': function(ev) {
+			if (ev.key === 'Enter') { ev.preventDefault(); save(); }
+			if (ev.key === 'Escape') { ev.preventDefault(); endRename(tab); }
+		}
+	});
+	var ok = E('span', { 'class': 'modemtab-edit modemtab-editctl', 'title': _('Save'),
+		'click': function(ev) { ev.preventDefault(); ev.stopPropagation(); save(); } }, '✓');
+	function save() {
+		var v = String(inp.value || '').trim();
+		inp.disabled = true;
+		L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh',
+			[ 'setalias', m.path, v ]), {}).then(function() {
+			window.location.reload();
+		});
+	}
+	nameEl.style.display = 'none';
+	if (pen) { pen.style.display = 'none'; }
+	tab.appendChild(inp);
+	tab.appendChild(ok);
+	/* ОТМЕНА БЕЗ КРЕСТИКА (решение владельца): не сохранил - значит не
+	   применилось. Закрываем редактор по клику мимо вкладки и по Escape;
+	   отдельная кнопка отмены только занимала место в узкой вкладке.
+	   Слушаем в фазе перехвата и по mousedown - чтобы закрыться раньше, чем
+	   клик доедет до соседней вкладки и переключит модем. */
+	tab._renameOutside = function(ev) {
+		if (!tab.contains(ev.target)) { endRename(tab); }
+	};
+	document.addEventListener('mousedown', tab._renameOutside, true);
+	inp.focus();
+	inp.select();
+}
+
 function tabsBar(modems, active) {
 	tabsCacheSave(modems, active);
 	var labels = dedupLabels(modems);
@@ -466,7 +553,7 @@ function tabsBar(modems, active) {
 				   принудительно - подсветится честный active, панель оживёт. При
 				   нормальном переключении reload случается раньше и таймер умирает
 				   вместе со страницей. */
-				window.setTimeout(function() { window.location.reload(); }, 12000);
+				window.setTimeout(function() { pageLeaveThenReload(); }, 12000);
 				L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
 					.then(function() {
 						/* ПЕРЕЗАГРУЖАЕМСЯ ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ. resolveDefault
@@ -481,7 +568,7 @@ function tabsBar(modems, active) {
 							L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'active' ]), '')
 								.then(function(out) {
 									if (String(out).trim() === path || ++_swTries >= 10) {
-										window.location.reload();
+										pageLeaveThenReload();
 									} else {
 										window.setTimeout(_swChk, 400);
 									}
@@ -501,10 +588,58 @@ function tabsBar(modems, active) {
 				'width': 16, 'height': 16, 'alt': '',
 				'title': m.operator || ''
 			}),
-			E('span', {}, labels[i])
+			E('span', { 'class': 'modemtab-name' }, labels[i]),
+			/* КАРАНДАШ ПО НАВЕДЕНИЮ - переименование вкладки.
+			   Своё имя нужно, когда модемы одинаковые: два EP06 с одним
+			   оператором различить в ряду нечем. По клику подпись превращается в
+			   поле с галочкой; пустое значение снимает имя и возвращает
+			   автоматическое. Клик по карандашу НЕ должен переключать модем -
+			   гасим всплытие. */
+			E('span', {
+				'class': 'modemtab-edit',
+				'title': _('Rename'),
+				'click': function(ev) {
+					ev.preventDefault();
+					ev.stopPropagation();
+					startRename(ev.currentTarget.parentNode, m, labels[i]);
+				}
+			}, '✎')
 		]);
 	});
 	return E('div', { 'class': 'modemtabs-bar' }, tabs);
+}
+
+/* УХОД СТРАНИЦЫ ПЕРЕД ПЕРЕЗАГРУЗКОЙ.
+   Гасим содержимое ТОЛЬКО в момент, когда перезагрузка уже вызывается, и
+   ненадолго. Первая редакция вешала класс сразу по клику - а перезагрузка
+   случается лишь после подтверждения switch (до 4 с, при зависшем rpcd - до
+   12 с). Всё это время страница стояла ПУСТОЙ, и выглядело это как поломка
+   («переключил - а там пусто, пока не перезагрузишь», поймано владельцем).
+   Страховка на случай, если перезагрузка не состоится вовсе (bfcache,
+   отменённая навигация): класс снимается по таймеру, содержимое возвращается. */
+var _pageLeaving = false;
+function pageLeaveThenReload() {
+	/* Двойной вызов возможен: сработали и подтверждение switch, и 12-секундный
+	   предохранитель. Перезагружаемся один раз. */
+	if (_pageLeaving) { return; }
+	_pageLeaving = true;
+	var el = document.getElementById('view') || document.querySelector('.cbi-map, #maincontent');
+	if (el) {
+		el.classList.add('tgpage-leave');
+		window.setTimeout(function() { el.classList.remove('tgpage-leave'); }, 1200);
+	}
+	window.setTimeout(function() { window.location.reload(); }, el ? 160 : 0);
+}
+
+/* ПРОЯВЛЕНИЕ СТРАНИЦЫ ПРИ ВХОДЕ. Зовётся из renderBar - он есть на каждой
+   странице приложения, поэтому отдельного места для инициализации не нужно.
+   Класс снимаем после анимации: иначе он мешал бы будущим transition на том же
+   контейнере. */
+function pageFadeIn() {
+	var el = document.getElementById('view') || document.querySelector('.cbi-map, #maincontent');
+	if (!el || el.classList.contains('tgpage-in')) { return; }
+	el.classList.add('tgpage-in');
+	window.setTimeout(function() { el.classList.remove('tgpage-in'); }, 400);
 }
 
 return baseclass.extend({
@@ -512,6 +647,7 @@ return baseclass.extend({
 	   модема показывается заголовком блока «Общая информация» в самой вьюхе.
 	   Возвращает Promise<DOM|null>. null - если модем один/нет. */
 	renderBar: function() {
+		pageFadeIn();
 		return loadModems().then(function(st) {
 			/* Раньше при одном модеме возвращали null - полосы не было вовсе.
 			   Теперь рисуем всегда: одна кнопка показывает, о каком модеме

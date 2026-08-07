@@ -37,12 +37,32 @@ case $MODE_NUM in
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $12/10}')
 		[ -n "$T" ] && RSRQ=$T
+		# ID соты - из CPSI (шестое поле при разборе по «,» и «:»): в `+CREG`
+		# этот модем кладёт ноль, из-за чего в карточке был «ID соты 0» и не
+		# появлялась кнопка карты сот. Заполняем, только если каркас остался
+		# с нулём.
+		T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $6}' | xargs)
+		case "$T" in
+			''|*[!0-9]*) ;;
+			*) if [ "$T" -gt 0 ]; then
+				case "${CID_DEC:-0}" in
+					''|0|-) CID_DEC="$T"; CID_HEX=$(printf '%X' "$T" 2>/dev/null) ;;
+				esac
+			   fi ;;
+		esac
+
 		T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $13/10}')
 		[ -n "$T" ] && RSRP=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $14/10}')
 		[ -n "$T" ] && RSSI=$T
+		# RSSNR -> SINR по формуле из мануала SIMCOM (SIM7000 Series AT
+		# Command Manual V1.04, AT+CPSI): SINR = 2 * <RSSNR> - 20, диапазон
+		# -20..30. Сырое поле бралось как готовые децибелы; на живом SIM7100E
+		# 07.08.2026 формула сошлась с QMI (19 -> 18 при QMI 19.0), сырое
+		# значение тоже близко, но у краёв шкалы они расходятся, а мануал
+		# однозначен.
 		T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $15}' | xargs)
-		[ -n "$T" ] && SINR=$T
+		[ -n "$T" ] && SINR=$((2 * T - 20))
 		;;
 	11) MODE="5G SA";;
 	13) MODE="5G NSA";;

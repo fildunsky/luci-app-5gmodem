@@ -1531,6 +1531,42 @@ resolve)
 	printf '{"result":"resolved","active":"%s","at_port":"%s"}\n' "$AMP" "$ATP"
 	;;
 
+setalias)
+	# setalias <usb-путь> [имя] - своё имя модема. Пустое имя (или отсутствие
+	# аргумента) снимает его и возвращает автоматическое.
+	#
+	# ПРИВЯЗКА - К IMEI, ХРАНЕНИЕ - В СЕКЦИИ ПУТИ. Рядом с именем кладём IMEI, с
+	# которым его задали: имя ездит вместе с железкой, а не остаётся у разъёма
+	# (решение владельца 07.08.2026). Если IMEI не читается или одинаков у всей
+	# партии, привязка не сработает - тогда имя останется у секции пути, и это
+	# ровно то поведение, которое и нужно в таком случае.
+	_sa_p="$2"
+	[ -n "$_sa_p" ] || { echo '{"error":"no path"}'; exit 0; }
+	_sa_sec="m_$(echo "$_sa_p" | sed 's/[^A-Za-z0-9]/_/g')"
+	uci -q get "$CFG.$_sa_sec" >/dev/null 2>&1 || { echo '{"error":"no section"}'; exit 0; }
+	shift 2
+	_sa_name=$(printf '%s' "$*" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+	# ДЛИНУ ОГРАНИЧИВАЕМ: имя рисуется во вкладке и в карточках приоритета, и
+	# «поэма» там растянула бы весь ряд. Режем молча - это подпись, а не данные.
+	_sa_name=$(printf '%s' "$_sa_name" | cut -c1-32)
+	if [ -z "$_sa_name" ]; then
+		uci -q delete "$CFG.$_sa_sec.alias" 2>/dev/null
+		uci -q delete "$CFG.$_sa_sec.alias_imei" 2>/dev/null
+	else
+		uci -q set "$CFG.$_sa_sec.alias=$_sa_name"
+		_sa_im=$(uci -q get "$CFG.$_sa_sec.imei" 2>/dev/null)
+		if [ -n "$_sa_im" ]; then
+			uci -q set "$CFG.$_sa_sec.alias_imei=$_sa_im"
+		else
+			uci -q delete "$CFG.$_sa_sec.alias_imei" 2>/dev/null
+		fi
+	fi
+	uci -q commit "$CFG"
+	# Список модемов кэшируется - сбрасываем, иначе вкладка покажет старое имя.
+	rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+	printf '{"ok":1,"alias":"%s"}\n' "$_sa_name"
+	;;
+
 mmindex)
 	# ModemManager index. Без аргумента - АКТИВНОГО модема (управление
 	# диапазонами/режимом всегда о нём), с аргументом - модема по USB-пути.

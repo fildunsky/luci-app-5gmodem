@@ -249,9 +249,47 @@ function fmtMonth(ym) {
 	return name + ', ' + m[1];
 }
 
+/* ЗНАЧОК СТРОКИ ТРАФИКА. Трафик копится либо по SIM-карте (ключ "sim-<iccid>"),
+   либо по интерфейсу - у старых записей и у не-модемных линков. Для карты берём
+   иконку оператора, как в «Приоритете интернета»; для линка судим по имени:
+   беспроводная станция - Wi-Fi, проводной - WAN. Не опознали - нейтральная
+   иконка SIM, она же запасная у оператора без своей. */
+function trafficIcon(key, label, opName) {
+	var f;
+	if (/^sim-/.test(String(key || ''))) {
+		/* Имя оператора приходит ОТДЕЛЬНЫМ ярлыком (labels["op.<ключ>"]) и
+		   запоминается за картой на роутере: снимок отдаёт оператора не всегда,
+		   а значок должен быть постоянным. Подпись строки берём запасным
+		   вариантом - в ней оператор есть, только если был известен в момент
+		   записи. */
+		f = mutil.operatorIcon(opName || '') || mutil.operatorIcon(label) || 'op-sim';
+		f = 'icons/5gmodem/' + f + '.png';
+	} else if (/^(wwan|wlan|phy|wifi)/i.test(String(key || ''))) {
+		f = 'icons/5gmodem/cwifi.svg';
+	} else if (/^(wan|eth|lan)/i.test(String(key || ''))) {
+		f = 'icons/5gmodem/cwan.svg';
+	} else {
+		f = 'icons/5gmodem/op-sim.png';
+	}
+	return E('img', { 'src': L.resource(f), 'width': 18, 'height': 18, 'alt': '',
+		'style': 'display:block' });
+}
+
+/* НОМЕР ТЕЛЕФОНА В ПОДПИСИ - В ТОМ ЖЕ ВИДЕ, ЧТО В КАРТОЧКЕ МОДЕМА.
+   Бэкенд склеивает подпись как «<оператор> <номер>» и номер отдаёт сырым
+   (+79654688753). Форматируем ту же цифровую часть тем же mutil.formatPhone,
+   иначе в одном интерфейсе соседствуют два написания одного номера. */
+function prettyTrafficLabel(label) {
+	var s = String(label || '');
+	return s.replace(/\+?\d[\d\s()-]{9,}\d/, function(m) { return mutil.formatPhone(m); });
+}
+
 /* Таблица помесячного трафика: ключи приходят как "<sim|iface>|<YYYY-MM>". */
 function trafficTable(data, labels) {
 	var rows = [ E('tr', { 'class': 'tr table-titles' }, [
+		/* Колонка значка - без заголовка: подпись «значок» ничего не добавляет,
+		   а ширину съедает. */
+		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ]),
 		E('th', { 'class': 'th' }, [ _('SIM card') ]),
 		E('th', { 'class': 'th' }, [ _('Month') ]),
 		E('th', { 'class': 'th' }, [ _('Received') ]),
@@ -268,7 +306,9 @@ function trafficTable(data, labels) {
 		   интерфейсу, показываем как раньше - по имени линка. */
 		var lab = (labels || {})[parts[0]] || (labels || {})['ping.' + parts[0]] || parts[0];
 		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td' }, [ lab ]),
+			E('td', { 'class': 'td', 'style': 'width:1%' },
+				[ trafficIcon(parts[0], lab, (labels || {})['op.' + parts[0]]) ]),
+			E('td', { 'class': 'td' }, [ prettyTrafficLabel(lab) ]),
 			E('td', { 'class': 'td' }, [ fmtMonth(parts[1]) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(rx) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(tx) ]),
@@ -277,7 +317,7 @@ function trafficTable(data, labels) {
 	});
 	if (keys.length === 0) {
 		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td', 'colspan': '5' }, [ _('No data yet') ])
+			E('td', { 'class': 'td', 'colspan': '6' }, [ _('No data yet') ])
 		]));
 	}
 	return E('table', { 'class': 'table' }, rows);

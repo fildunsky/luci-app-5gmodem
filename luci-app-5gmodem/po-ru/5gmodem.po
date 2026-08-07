@@ -4293,3 +4293,33 @@ msgstr "активна"
 
 msgid "deactivated"
 msgstr "не активна"
+
+msgid "Show priority numbers"
+msgstr "Отображать цифры"
+
+msgid "Large translucent number in the corner of each uplink card"
+msgstr "Крупная полупрозрачная цифра в углу карточки аплинка"
+
+msgid "Free the modem and read eSIM"
+msgstr "Освободить модем и прочитать eSIM"
+
+msgid "The modem connection will be dropped for about a minute while the eSIM chip is read, then restored. Continue?"
+msgstr "Соединение модема прервётся примерно на минуту, пока читается чип eSIM, затем восстановится. Продолжить?"
+
+msgid "Freeing the modem and reading the eSIM chip..."
+msgstr "Освобождаю модем и читаю чип eSIM..."
+
+msgid "The physical SIM slot is active, so the eSIM chip cannot be read. Switch to the eSIM slot to manage profiles."
+msgstr "Активен слот физической SIM, чтобы управлять профилями, переключитесь на слот eSIM."
+
+msgid "Switch to the eSIM slot"
+msgstr "Переключиться на слот eSIM"
+
+msgid "Rename"
+msgstr "Переименовать"
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "Cancel"
+msgstr "Отмена"

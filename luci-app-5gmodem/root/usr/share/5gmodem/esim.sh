@@ -1040,6 +1040,29 @@ do_lpac() {
 
 
 
+# КЭШ ВЕРДИКТА О ЧИПЕ: «ЕСТЬ» ХРАНИМ ДОЛГО, «НЕТ» - НЕДОЛГО.
+#
+# Положительный ответ стабилен: чип никуда не денется, его можно отдавать
+# мгновенно хоть весь день. А отрицательный почти всегда следствие МОМЕНТА:
+# модем ещё инициализировался, канал был занят соединением, порт не ответил.
+# Раньше такой ответ оседал в файле НАВСЕГДА, и вкладка потом упорно писала
+# «ни один порт не ответил как eSIM-чип - сообщите vid:pid», хотя чип цел
+# (живой случай 07.08.2026, MV31-W на 2.3.3: стоило освободить канал - тот же
+# модем отдал EID без заминки). Отметка времени рядом с кэшем писалась и
+# раньше, но её никто не читал - теперь читаем.
+_SCACHE_NEG_TTL=600
+_scache_get() {   # $1 - файл кэша; печатает вердикт и возвращает 0, если он годен
+	[ -s "$1" ] || return 1
+	case "$(cat "$1" 2>/dev/null)" in
+		*'"available":1'*) cat "$1"; return 0 ;;
+	esac
+	_sg_t=$(cat "$1.t" 2>/dev/null)
+	case "$_sg_t" in ''|*[!0-9]*) return 1 ;; esac
+	[ $(( $(cut -d. -f1 /proc/uptime) - _sg_t )) -lt "$_SCACHE_NEG_TTL" ] || return 1
+	cat "$1"
+	return 0
+}
+
 # ---- дешёвый статус: без lpac и без замка -----------------------------------
 case "$1" in
 # progress ДО блокировки: это чтение файла, порт не трогает. Под блокировкой
@@ -1315,7 +1338,7 @@ status-cached)
 	[ "$_ES_FORCE" = "0" ] && { echo '{"available":0,"active":0,"forced":1}'; exit 0; }
 	[ -x "$LPAC" ] || { echo '{"available":0,"active":0,"reason":"nolpac"}'; exit 0; }
 	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
-	[ -s "$_SCACHE" ] && { cat "$_SCACHE"; exit 0; }
+	_scache_get "$_SCACHE" && exit 0
 	echo '{"unknown":1}'
 	exit 0
 	;;
@@ -1335,7 +1358,7 @@ status-probe)
 	# бэкенд, а он к этому моменту «at», и занятость канала из него не видна.
 	_pb_w=$(esim_wdm)
 	if [ -n "$_pb_w" ] && _wdm_owned_by_umbim "$_pb_w"; then
-		[ -s "$_SCACHE" ] && { cat "$_SCACHE"; exit 0; }
+		_scache_get "$_SCACHE" && exit 0
 		echo '{"available":0,"active":0,"reason":"uplink"}'
 		exit 0
 	fi
@@ -1369,9 +1392,7 @@ status-probe)
 				# минуту назад работала (живой случай 04.08.2026 после переключения
 				# ModemManager -> MBIM). Отрицательный вердикт тут НЕ кэшируем:
 				# отдаём последний хороший, а если его нет - честную причину.
-				if [ -s "$_SCACHE" ]; then
-					cat "$_SCACHE"; exit 0
-				fi
+				_scache_get "$_SCACHE" && exit 0
 				echo '{"available":0,"active":0,"reason":"uplink"}'
 				exit 0
 			else
@@ -1390,6 +1411,27 @@ status-probe)
 			# Блокировку берём НА ВРЕМЯ ПРОБЫ: find_port перебирает порты
 			# командой CCHO, и столкновение с опросом метрик даёт ложное
 			# «eUICC не отвечает».
+			# АКТИВНА ФИЗИЧЕСКАЯ SIM - ЧИП НЕ ОТВЕЧАЕТ ПО ЗАКОНУ, А НЕ ПО БОЛЕЗНИ.
+			#
+			# У модема один канал к карте: пока активен слот физической SIM,
+			# ISD-R eUICC недостижим - CCHO не откроется НИ НА ОДНОМ порту. Мы
+			# при этом печатали «ни один порт не ответил как eSIM-чип, сообщите
+			# vid:pid, добавим поддержку», то есть валили на композицию модема
+			# то, что лечится одной кнопкой (живой стенд 07.08.2026: FM350 с
+			# eUICC, слот 0 - и этот же чип читается сразу после переключения на
+			# слот eSIM). Отдаём отдельную причину «slot» - страница предложит
+			# переключиться. Ответ НЕ кэшируем: он меняется вместе со слотом.
+			_es_sl=$("$RES/simslot.sh" status 2>/dev/null)
+			case "$_es_sl" in
+				*'"label":"eSIM"'*)
+					_es_act=$(printf '%s' "$_es_sl" | jsonfilter -e '@.active' 2>/dev/null)
+					_es_eid=$(printf '%s' "$_es_sl" \
+						| jsonfilter -e '@.slots[@.label="eSIM"].id' 2>/dev/null | head -1)
+					if [ -n "$_es_act" ] && [ -n "$_es_eid" ] && [ "$_es_act" != "$_es_eid" ]; then
+						echo '{"available":0,"active":0,"reason":"slot"}'
+						exit 0
+					fi ;;
+			esac
 			at_lock "$(live_port 2>/dev/null)" 10; _es_locked=$?
 			D=$(find_port)
 			if [ -n "$D" ]; then
@@ -1410,7 +1452,7 @@ status-probe)
 				# кэшируем - перепроверим на следующем заходе.
 				printf '{"available":0,"active":0,"reason":"noeuicc"}\n' > "$_SCACHE"
 				cut -d. -f1 /proc/uptime > "$_SCACHE.t"
-			elif [ -s "$_SCACHE" ]; then
+			elif _scache_get "$_SCACHE" >/dev/null 2>&1; then
 				# Порт не ответил: он общий с метриками и simslot.sh, коллизии
 				# неизбежны, а модем мог ещё и переперечисляться. Раньше отсюда
 				# уходил available=0, и вкладка eSIM ПРОПАДАЛА при живом eUICC -
@@ -1487,7 +1529,7 @@ esac
 # Изменяющие операции сюда не попадают: они ниже сами опускают интерфейс
 # (_uplink_release) и работают штатно.
 case "$1" in
-	download|enable|disable|delete|nickname|flush|notif|notifications) : ;;
+	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) : ;;
 	*)
 		_ub_w=$(esim_wdm)
 		if [ -n "$_ub_w" ] && _wdm_owned_by_umbim "$_ub_w"; then
@@ -1551,10 +1593,24 @@ _uplink_release() {
 	_ur_sec="m_$(echo "$_ur_ap" | sed 's/[^A-Za-z0-9]/_/g')"
 	_ur_if=$(uci -q get "5gmodem.$_ur_sec.network")
 	[ -n "$_ur_if" ] || return 0
+	# РЕШАЕМ ПО ПРИЧИНЕ, А НЕ ПО ИМЕНИ БЭКЕНДА.
+	#
+	# Здесь стояла проверка `apdu_backend` = at|bridge - и она сама себя
+	# обманывала: у MBIM-модема с поднятым соединением бэкенд И ЕСТЬ «bridge»
+	# ровно потому, что канал занят umbim. Мы попадали в AT-ветку, та говорила
+	# «интерфейс поднят - не трогаем», канал не освобождался, и операция
+	# упиралась в «uplink busy» (проверено на MV31-W 07.08.2026). Сначала
+	# спрашиваем про ЗАНЯТЫЙ КАНАЛ, и лишь если дело не в нём - про AT-порт.
 	_ur_at=""
-	case "$(apdu_backend)" in
-		at|bridge) _ur_at=1 ;;
-	esac
+	_ur_w=$(esim_wdm)
+	if [ -n "$_ur_w" ] && _wdm_owned_by_umbim "$_ur_w"; then
+		_ur_at=""
+	else
+		case "$(apdu_backend)" in
+			at|bridge) _ur_at=1 ;;
+			*) return 0 ;;
+		esac
+	fi
 	if [ -n "$_ur_at" ]; then
 		# ПОДНЯТЫЙ AT-ИНТЕРФЕЙС НЕ ТРОГАЕМ. Во-первых, дозвон уже закончен - за
 		# порт дерётся разве что опрос метрик, а он ходит через ту же очередь
@@ -1563,8 +1619,6 @@ _uplink_release() {
 		# опустив его, мы сами оборвали бы себе загрузку.
 		ubus call "network.interface.$_ur_if" status 2>/dev/null \
 			| grep -q '"up": true' && return 0
-	else
-		_wdm_owned_by_umbim "$(esim_wdm)" || return 0
 	fi
 	if [ -n "$_ur_at" ]; then
 		logger -t 5gmodem "esim: дозвон держит AT-порт - опускаю $_ur_if на время операции"
@@ -1595,7 +1649,7 @@ _uplink_restore() {
 trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
 
 case "$1" in
-	download|enable|disable|delete|nickname|flush|notif|notifications) _uplink_release ;;
+	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) _uplink_release ;;
 esac
 
 # МОДЕМ ПОД MM: к eUICC не ходим вообще - ни по tty, ни по cdc-wdm (см.
@@ -1681,7 +1735,17 @@ esim_reset_after_switch_maybe() {
 }
 
 case "$1" in
-dump)
+dump-free|dump)
+	# dump-free - ЯВНОЕ РАЗРЕШЕНИЕ ЧЕЛОВЕКА ОСВОБОДИТЬ МОДЕМ РАДИ ЧТЕНИЯ.
+	#
+	# У модемов, где eUICC живёт только за MBIM (SDX55 и родня), канал управления
+	# один: пока соединение поднято, им владеет umbim, и читать чип нельзя. До сих
+	# пор человеку оставалось только читать объяснение и идти опускать интерфейс
+	# руками - а на роутере, где модем не единственный аплинк, это совершенно
+	# безобидное действие. Тот же самый путь, что у изменяющих операций: интерфейс
+	# опускается ПЕРЕД работой и поднимается в trap на любом выходе, включая
+	# убийство процесса. Обычный dump ничего не опускает - он идёт при каждом
+	# открытии вкладки, и рвать из-за него связь недопустимо.
 	CHIP=$(do_lpac 45 chip info)
 	LIST=$(do_lpac 45 profile list)
 	_OUT="{\"chip\":$CHIP,\"profiles\":$LIST}"
@@ -1691,6 +1755,9 @@ dump)
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	if [ -n "$_AP" ] && printf '%s' "$_OUT" \
 	   | jsonfilter -e '@.profiles.payload.code' 2>/dev/null | grep -qx 0; then
+		# Чип ответил - старый приговор «чипа нет» больше не имеет силы.
+		printf '{"available":1,"active":1}\n' > "/tmp/5gmodem_esimstat_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_esimstat_$_AP.t"
 		printf '%s\n' "$_OUT" > "/tmp/5gmodem_esimdump_$_AP.tmp" \
 			&& mv "/tmp/5gmodem_esimdump_$_AP.tmp" "/tmp/5gmodem_esimdump_$_AP"
 	fi
@@ -1857,7 +1924,7 @@ flush)
 	echo '{"type":"lpa","payload":{"code":0,"message":"success","data":""}}'
 	;;
 *)
-	err "usage: esim.sh status|dump|enable|disable|delete|nickname|download|notifications|flush|progress"
+	err "usage: esim.sh status|dump|dump-free|enable|disable|delete|nickname|download|notifications|flush|progress"
 	;;
 esac
 exit 0

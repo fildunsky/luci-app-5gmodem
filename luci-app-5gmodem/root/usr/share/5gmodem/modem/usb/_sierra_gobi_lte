@@ -1,0 +1,168 @@
+# Разбор AT!GSTATUS? у Sierra на платформе Gobi/Snapdragon X5-X7
+# (EM7305/EM7355/MC7355, EM7455/MC7455, DW5809e/DW5811e).
+#
+# ВЫНЕСЕНО В ОБЩИЙ ФАЙЛ НАМЕРЕННО. Это были две почти одинаковые копии
+# (11999041 и 11999071), и они уже разошлись: в одной вызывалась несуществующая
+# функция `band` вместо `band4g`, то есть диапазон агрегации там не появлялся
+# вовсе. Тот же урок, что с шестью копиями профиля SDX55.
+#
+# ФОРМАТ ДРУГОЙ, ЧЕМ У EM9190 (X55), хотя команда та же:
+#   LTE CA state:  ACTIVE        LTE Scell band:B12     <- без пробела после «:»
+#   LTE Scell bw:10 MHz          LTE Scell chan:5110
+#   PCC RxM RSSI:  -45           RSRP (dBm):  -81       <- тракты названы M/D,
+#   PCC RxD RSSI:  -44           RSRP (dBm):  -79          а не Rx0..Rx3
+#   Tx Power:      15            TAC:         8C65 (35666)
+#   RSRQ (dB):     -14.0         Cell ID:     0A14666A (169106666)
+# Несущая агрегации ровно одна (Scell), а не три.
+#
+# Разбор сверен с живым дампом EM7455 (danielewood/sierra-wireless-modems).
+
+_SG=$(printf '%s\n' "$O" | tr -d '\r' | awk '
+	# Значение после метки: метка ищется ПОДСТРОКОЙ (в метках есть скобки вида
+	# "RSRQ (dB)"), затем пропускаются необязательные единицы и двоеточие.
+	# $2 - какой по счёту токен нужен: у TAC и Cell ID идут hex и (dec).
+	function after(lbl, k,   p, s, a, n) {
+		p = index($0, lbl)
+		if (p == 0) return ""
+		s = substr($0, p + length(lbl))
+		if (!sub(/^[ \t]*(\([^)]*\))?[ \t]*:[ \t]*/, "", s)) return ""
+		n = split(s, a, /[ \t]+/)
+		if (k == "") k = 1
+		if (n < k) return ""
+		s = a[k]
+		gsub(/[()]/, "", s)
+		return (s == "---" || s == "--") ? "" : s
+	}
+	function put(k, v) { if (v != "") V[k] = v }
+	# В общую метрику идёт СИЛЬНЕЙШИЙ тракт: основной и разнесённый меряют одну
+	# и ту же соту, и «-81/-79» в поле уровня - это не одно значение, а два.
+	function best(k, v) { if (v != "" && (!(k in V) || v + 0 > V[k] + 0)) V[k] = v }
+
+	/Temperature/            { put("TEMP", after("Temperature")) }
+	/^LTE band:/             { put("PBAND", after("LTE band")); put("PBW", after("LTE bw")) }
+	/^LTE Rx chan:/          { put("PEARFCN", after("LTE Rx chan")) }
+	/^LTE CA state:/         { put("CASTATE", after("LTE CA state"))
+	                           put("SCBAND",  after("LTE Scell band")) }
+	/^LTE Scell bw:/         { put("SCBW",     after("LTE Scell bw"))
+	                           put("SCEARFCN", after("LTE Scell chan")) }
+	/^PCC Rx[MD] RSSI:/      { i = (substr($0, 7, 1) == "M") ? 0 : 1
+	                           r = after("RSRP"); q = after("RSSI")
+	                           if (r != "" || q != "") ANT[i] = r ":" q
+	                           best("PRSRP", r); best("PRSSI", q) }
+	/^SCC Rx[MD] RSSI:/      { best("SRSRP", after("RSRP")) }
+	/Tx Power:/              { put("TXPWR", after("Tx Power")) }
+	/TAC:/                   { put("TACHEX", after("TAC", 1)); put("TACDEC", after("TAC", 2)) }
+	/Cell ID:/               { put("CIDHEX", after("Cell ID", 1)); put("CIDDEC", after("Cell ID", 2)) }
+	/^RSRQ/                  { put("RSRQ", after("RSRQ")) }
+	/^SINR/                  { put("SINR", after("SINR")) }
+
+	END {
+		for (k in V) print k " " V[k]
+		for (i in ANT) print "ANT" i " " ANT[i]
+	}
+')
+
+# Значение по ключу - в $_V. Подстановка команд на каждый ключ стоила бы форк,
+# а ключей два десятка на каждый опрос; разбор уже сделан, осталось пройти по
+# готовым парам.
+_sg() {
+	_V=""
+	_sg_o=$IFS; IFS='
+'
+	set -f            # ответ модема - данные, а не шаблон имён файлов
+	for _sg_l in $_SG; do
+		case "$_sg_l" in
+			"$1 "*) _V=${_sg_l#* }; break ;;
+		esac
+	done
+	set +f
+	IFS=$_sg_o
+}
+
+_pb=""; _scb=""
+
+_sg TEMP; [ -n "$_V" ] && TEMP="$_V &deg;C"
+
+if [ "x$MODE_NUM" = "x7" ]; then
+	_sg TACHEX
+	if [ -n "$_V" ]; then
+		T_HEX="$_V"
+		_sg TACDEC; T_DEC="$_V"
+		[ -n "$T_DEC" ] || T_DEC=$(printf "%d" "0x$T_HEX" 2>/dev/null)
+	fi
+	# Идентификатор соты модем печатает, но профиль его НЕ забирал - в карточке
+	# оставался прочерк, а кнопка карты сот не появлялась вовсе.
+	_sg CIDHEX
+	if [ -n "$_V" ]; then
+		CID_HEX="$_V"
+		_sg CIDDEC; CID_DEC="$_V"
+		[ -n "$CID_DEC" ] || CID_DEC=$(printf "%d" "0x$CID_HEX" 2>/dev/null)
+	fi
+
+	_sg PRSRP; [ -n "$_V" ] && RSRP="$_V"
+	_sg PRSSI; [ -n "$_V" ] && RSSI="$_V"
+	_sg RSRQ;  [ -n "$_V" ] && RSRQ="$_V"
+	_sg SINR;  [ -n "$_V" ] && SINR="$_V"
+	_sg TXPWR; [ -n "$_V" ] && TXPOWER="$_V dBm"
+
+	# АНТЕННЫЕ ПОРТЫ. Формат общий с Telit #LAPS - "порт:rsrp:rsrq[:rssi]".
+	# RSRQ по трактам этот модем не даёт (только общий по соте), поэтому поле
+	# пустое, а RSSI наоборот есть. Порт 0 - основной (RxM), 1 - разнесённый
+	# (RxD): именно так и видно, подключена ли вторая антенна.
+	ANTPORTS=""
+	for _ap in 0 1; do
+		_sg "ANT$_ap"
+		case "$_V" in
+			:*|'') continue ;;
+		esac
+		ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_ap:${_V%:*}::${_V#*:}"
+	done
+
+	_sg PBAND
+	if [ -n "$_V" ]; then
+		_pb="$_V"
+		_sg PBW
+		PBAND="$(band4g ${_pb#B})"
+		if [ -n "$_V" ]; then
+			PBAND="$PBAND @$_V MHz"
+			BANDWIDTH="$_V MHz"
+		fi
+	fi
+	_sg PEARFCN; [ -n "$_V" ] && EARFCN="$_V"
+
+	# НЕСУЩАЯ АГРЕГАЦИИ. Прежнее условие ловило состояние ПОДСТРОКОЙ
+	# (/CA state:.*ACTIVE/), а «INACTIVE» содержит «ACTIVE» - неактивная
+	# несущая засчитывалась работающей, и модем рапортовал 4G+ на одной
+	# несущей. Состояние берём значением.
+	_sg SCBAND
+	if [ -n "$_V" ]; then
+		_scb="$_V"
+		_sg SCBW
+		if [ -n "$_V" ]; then
+			S1BAND="$(band4g ${_scb#B}) @$_V MHz"
+		else
+			S1BAND="$(band4g ${_scb#B})"
+		fi
+		_sg SCEARFCN; S1EARFCN="$_V"
+		_sg SRSRP;    S1RSRP="$_V"
+		_sg CASTATE
+		case "$_V" in
+			ACTIVE|active) S1STATE="activated" ;;
+			*) S1STATE="deactivated" ;;
+		esac
+	fi
+
+	# ЯРЛЫК СОБИРАЕМ ЦЕЛИКОМ, А НЕ ПРАВИМ ПРИШЕДШИЙ. Прежний код дописывал
+	# диапазон к $MODE, а «LTE-A |» получалось подстановкой через sed - и без
+	# агрегации разделителя не появлялось вовсе: в карточке стояло «4G B2 (1900
+	# MHz)» вместо «4G | B2 (1900 MHz)», как у всех остальных модемов. Трогаем
+	# только когда диапазон реально разобран - иначе ярлык, поставленный
+	# каркасом по +COPS, остаётся как был.
+	if [ -n "$_pb" ]; then
+		if [ "$S1STATE" = "activated" ]; then
+			MODE="LTE-A | $(band4g ${_pb#B}) + $(band4g ${_scb#B})"
+		else
+			MODE="LTE | $(band4g ${_pb#B})"
+		fi
+	fi
+fi

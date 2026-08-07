@@ -1,134 +1,212 @@
 # Sierra Wireless EM9190
 
-O=$(sms_tool -d $DEVICE at "at!gstatus?")
-
-T=$(echo "$O" | awk -F: '/Temperature:/ {print $3}')
-[ -n "$T" ] && TEMP="$T &deg;C"
-
-
-T=$(echo "$O" | awk '/^System mode:/ {print $3}')
-case $T in
-	"LTE")
-		MODE="LTE"
-		;;
-	"ENDC")
-		MODE="5G NSA"
-		;;
+# AT!GSTATUS? отдаёт ВСЁ одним ответом: температуру, режим, несущие PCC/SCC1..3
+# с полосой и каналом, уровни по КАЖДОМУ приёмному тракту (Rx0..Rx3), TAC,
+# Cell ID и секцию NR5G. Раньше здесь стояло около тридцати отдельных вызовов
+# awk по одному и тому же тексту; разбираем один раз и отдаём готовые пары
+# «ключ значение». Значения от модема в шелл не выполняются (никакого eval) -
+# читаются как данные.
+# ОТВЕТ РВЁТСЯ, КОГДА ПОРТ ДЕЛИМ С ModemManager. У этого модуля MM держит
+# ttyUSB0 своим AT-портом и опрашивает его сам; наш at!gstatus? тогда приходит
+# оборванным на полуслове - явление описано владельцем EM9190 и на десктопном
+# Linux, и на OpenWrt. Признак целого ответа - завершающее OK/ERROR: без него
+# читаем ещё раз, прежде чем разбирать. Обрывок НЕ портит данные (разбор идёт
+# по меткам, чего нет - того не трогаем), но и толку от него нет.
+_SG_RAW=$(sms_tool -d $DEVICE at "at!gstatus?" 2>/dev/null | tr -d '\r')
+case "$_SG_RAW" in
+	*OK*|*ERROR*) ;;
+	*) _SG_RAW=$(sms_tool -d $DEVICE at "at!gstatus?" 2>/dev/null | tr -d '\r') ;;
 esac
 
-T=$(echo "$O" | awk '/.*TAC:/ {print $6}')
+_SG=$(printf '%s\n' "$_SG_RAW" | awk '
+	# Значение после метки: метка ищется ПОДСТРОКОЙ (не регулярным выражением -
+	# в метках есть скобки вида "NR5G RSRP (dBm)"), затем пропускаются
+	# необязательная скобка с единицами и двоеточие. $2 - какой по счёту токен
+	# нужен: у TAC и Cell ID в строке идут hex и (dec).
+	function after(lbl, k,   p, s, a, n) {
+		p = index($0, lbl)
+		if (p == 0) return ""
+		s = substr($0, p + length(lbl))
+		if (!sub(/^[ \t]*(\([^)]*\))?[ \t]*:[ \t]*/, "", s)) return ""
+		n = split(s, a, /[ \t]+/)
+		if (k == "") k = 1
+		if (n < k) return ""
+		s = a[k]
+		gsub(/[()]/, "", s)
+		return (s == "---" || s == "--") ? "" : s
+	}
+	function put(k, v) { if (v != "") V[k] = v }
+	# Лучший из приёмных трактов: у модема их до четырёх, и в общую метрику идёт
+	# сильнейший - именно его отдаёт QMI как RSRP соты (сверено с signal-info).
+	function best(k, v) { if (v != "" && (!(k in V) || v + 0 > V[k] + 0)) V[k] = v }
+
+	/Temperature/            { put("TEMP",   after("Temperature")) }
+	/^System mode/           { put("SYSMODE", after("System mode")) }
+	/^LTE band/              { put("PBAND",  after("LTE band")); put("PBW", after("LTE bw")) }
+	/^LTE Rx chan/           { put("PEARFCN", after("LTE Rx chan")) }
+	/^LTE SCC[0-9] state/    { n = substr($0, 8, 1)
+	                           put("S" n "STATE", after("state"))
+	                           put("S" n "BAND",  after("band")) }
+	/^LTE SCC[0-9] bw/       { n = substr($0, 8, 1)
+	                           put("S" n "BW",     after("bw"))
+	                           put("S" n "EARFCN", after("Rx chan")) }
+	/^PCC Rx[0-9] RSSI/      { i = substr($0, 7, 1)
+	                           r = after("PCC Rx" i " RSRP"); q = after("PCC Rx" i " RSSI")
+	                           if (r != "" || q != "") ANT[i] = r ":" q
+	                           best("PRSRP", r); best("PRSSI", q) }
+	/^SCC[0-9] Rx[0-9] RSSI/ { n = substr($0, 4, 1); i = substr($0, 8, 1)
+	                           best("S" n "RSRP", after("SCC" n " Rx" i " RSRP")) }
+	/^PCC Tx Power/          { put("TXPWR", after("PCC Tx Power")) }
+	/TAC/                    { put("TACHEX", after("TAC", 1)); put("TACDEC", after("TAC", 2)) }
+	/Cell ID/                { put("CIDHEX", after("Cell ID", 1)); put("CIDDEC", after("Cell ID", 2)) }
+	/^RSRQ/                  { put("RSRQ", after("RSRQ")) }
+	/^SINR/                  { put("SINR", after("SINR")) }
+	/^NR5G band/             { put("NRBAND", after("NR5G band")); put("NRBW", after("NR5G bw")) }
+	/^NR5G Rx chan/          { put("NREARFCN", after("NR5G Rx chan")); put("NRRSRP", after("NR5G RSRP")) }
+	/^NR5G RSRQ/             { put("NRRSRQ", after("NR5G RSRQ")); put("NRSINR", after("NR5G SINR")) }
+
+	END {
+		for (k in V) print k " " V[k]
+		for (i in ANT) print "ANT" i " " ANT[i]
+	}
+')
+
+# Значение по ключу - в $_V. Ключей здесь четыре десятка, и подстановка команд
+# на каждый ($(...)) стоила бы столько же форков на КАЖДЫЙ опрос; разбор уже
+# сделан, осталось пройти по готовым парам.
+_sg() {
+	_V=""
+	_sg_o=$IFS; IFS='
+'
+	set -f            # ответ модема - данные, а не шаблон имён файлов
+	for _sg_l in $_SG; do
+		case "$_sg_l" in
+			"$1 "*) _V=${_sg_l#* }; break ;;
+		esac
+	done
+	set +f
+	IFS=$_sg_o
+}
+
+_sg SYSMODE; _SYSMODE=$_V
+_sg NRBAND; _NRBAND=$_V
+
+_sg TEMP; T=$_V
+[ -n "$T" ] && TEMP="$T &deg;C"
+
+_sg TACHEX; T=$_V
 if [ -n "$T" ]; then
-	T_DEC=$(printf "%d" "0x$T")
-	T_HEX=$T
+	T_HEX="$T"
+	_sg TACDEC; T_DEC=$_V
+	[ -n "$T_DEC" ] || T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
+fi
+_sg CIDHEX; T=$_V
+if [ -n "$T" ]; then
+	CID_HEX="$T"
+	_sg CIDDEC; CID_DEC=$_V
+	[ -n "$CID_DEC" ] || CID_DEC=$(printf "%d" "0x$T" 2>/dev/null)
 fi
 
-T=$(echo "$O" | awk '/^PCC.*RSSI/ {print $4}' | xargs)
-[ -n "$T" ] && RSSI="${T// //}"
-T=$(echo "$O" | awk '/^PCC.*RSRP/ {print $8}' | xargs)
-[ -n "$T" ] && RSRP="${T// //}"
-T=$(echo "$O" | awk '/^RSRQ/ {print $3}')
-[ -n "$T" ] && RSRQ="$T"
-T=$(echo "$O" | awk '/^SINR/ {print $3}')
-[ -n "$T" ] && SINR="$T"
+_sg PRSRP; T=$_V; [ -n "$T" ] && RSRP="$T"
+_sg PRSSI; T=$_V; [ -n "$T" ] && RSSI="$T"
+_sg RSRQ; T=$_V;  [ -n "$T" ] && RSRQ="$T"
+_sg SINR; T=$_V;  [ -n "$T" ] && SINR="$T"
+_sg TXPWR; T=$_V; [ -n "$T" ] && TXPOWER="$T dBm"
 
-T=$(echo "$O" | awk '/^LTE band:/ {print $3}')
+# Первичная несущая. Полосу кладём и отдельным полем: страница берёт её оттуда,
+# когда в строке диапазона её нет.
+_sg PBAND; T=$_V
 if [ -n "$T" ]; then
-	T1=$(echo "$O" | awk '/^LTE band:/ {print $6}')
-	PBAND="$(band4g ${T/B/}) @${T1} MHz"
-	MODE="$MODE $(band4g ${T/B/})"
-fi
-T=$(echo "$O" | awk '/^LTE Rx chan:/ {print $4}')
-# [ -n "$T" ] && addon 34 "EARFCN DL" "$T"
-T=$(echo "$O" | awk '/^LTE Rx chan:/ {print $8}')
-# [ -n "$T" ] && addon 34 "EARFCN UL" "$T"
-
-T=$(echo "$O" | awk -F: '/^LTE SCC1 state:.*ACTIVE/ {print $3}')
-if [ -n "$T" ]; then
-	T1=$(echo "$O" | awk '/^LTE SCC1 bw/ {print $5}')
+	_sg PBW; T1=$_V
+	PBAND="$(band4g ${T#B})"
 	if [ -n "$T1" ]; then
-		S1BAND="$(band4g ${T/B/}) @${T1} MHz"
-	else
-		S1BAND="$(band4g ${T/B/})"
+		PBAND="$PBAND @$T1 MHz"
+		BANDWIDTH="$T1 MHz"
 	fi
-	MODE="${MODE/LTE/LTE_A} / $(band4g ${T/B/})"
+fi
+_sg PEARFCN; T=$_V; [ -n "$T" ] && EARFCN="$T"
 
-	T=$(echo "$O" | awk '/.*LTE SCC1 Rx chan:/ {print $11}')
-# 	[ -n "$T" ] && addon 54 "(S1) EARFCN DL" "${T}"
-	T=$(echo "$O" | awk '/.*LTE SCC1 Tx chan:/ {print $10}')
-# 	[ -n "$T" ] && addon 54 "(S1) EARFCN UL" "${T}"
+# АНТЕННЫЕ ПОРТЫ. Формат общий с Telit #LAPS - "порт:rsrp:rsrq[:rssi]". RSRQ по
+# трактам модем не даёт (только общий по соте), поэтому поле пустое, а RSSI
+# наоборот есть - он и показывает, приёмник с антенной или без неё.
+ANTPORTS=""
+for _ap in 0 1 2 3; do
+	_sg "ANT$_ap"; T=$_V
+	case "$T" in
+		:*|'') continue ;;
+	esac
+	ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_ap:${T%:*}::${T#*:}"
+done
 
-	T=$(echo "$O" | awk '/^SCC1.*RSSI/ {print $4}' | xargs)
-# 	[ -n "$T" ] && addon 55 "(S1) RSSI" "${T// //} dBm"
-	T=$(echo "$O" | awk '/^SCC1.*RSRP/ {print $8}' | xargs)
-# 	[ -n "$T" ] && addon 56 "(S1) RSRP" "${T// //} dBm"
+# ДОПОЛНИТЕЛЬНЫЕ НЕСУЩИЕ. Модем перечисляет их даже когда сеть их только
+# сконфигурировала, но не включила (state INACTIVE): такие показываем - их
+# видно и они объясняют, почему скорость не растёт, - но за работающую
+# агрегацию НЕ выдаём. Прежний разбор ловил "ACTIVE" подстрокой и потому считал
+# активными ВСЕ, включая INACTIVE.
+_CANUM=0
+_CABANDS=""
+for _cc in 1 2 3 4; do
+	_sg "S${_cc}BAND"; T=$_V
+	[ -n "$T" ] || continue
+	_sg "S${_cc}BW"; T1=$_V
+	_b="$(band4g ${T#B})"
+	[ -n "$T1" ] && _b="$_b @$T1 MHz"
+	_sg "S${_cc}STATE"; _st=$_V
+	case "$_st" in
+		INACTIVE|inactive) _st="deactivated" ;;
+		ACTIVE|active|ACTIVATED) _st="activated"; _CANUM=$((_CANUM + 1))
+			_CABANDS="$_CABANDS + $(band4g ${T#B})" ;;
+		*) _st="" ;;
+	esac
+	_sg "S${_cc}EARFCN"; _er=$_V
+	_sg "S${_cc}RSRP"; _rp=$_V
+	case "$_cc" in
+		1) S1BAND="$_b"; S1STATE="$_st"; S1EARFCN="$_er"; S1RSRP="$_rp" ;;
+		2) S2BAND="$_b"; S2STATE="$_st"; S2EARFCN="$_er"; S2RSRP="$_rp" ;;
+		3) S3BAND="$_b"; S3STATE="$_st"; S3EARFCN="$_er"; S3RSRP="$_rp" ;;
+		4) S4BAND="$_b"; S4STATE="$_st"; S4EARFCN="$_er"; S4RSRP="$_rp" ;;
+	esac
+done
+
+# NR-несущая в EN-DC занимает первый СВОБОДНЫЙ слот SCC - так же, как у Fibocom:
+# таблица агрегации одна на обе технологии, отдельного места под 5G в ней нет.
+if [ -n "$_NRBAND" ]; then
+	_nb="$(band5g ${_NRBAND#n})"
+	_sg NRBW; T1=$_V
+	[ -n "$T1" ] && _nb="$_nb @$T1 MHz"
+	_sg NREARFCN; _ner=$_V
+	_sg NRRSRP; _nrp=$_V
+	_sg NRRSRQ; _nrq=$_V
+	if [ -z "$S1BAND" ]; then
+		S1BAND="$_nb"; S1STATE="activated"; S1EARFCN="$_ner"; S1RSRP="$_nrp"; S1RSRQ="$_nrq"
+	elif [ -z "$S2BAND" ]; then
+		S2BAND="$_nb"; S2STATE="activated"; S2EARFCN="$_ner"; S2RSRP="$_nrp"; S2RSRQ="$_nrq"
+	elif [ -z "$S3BAND" ]; then
+		S3BAND="$_nb"; S3STATE="activated"; S3EARFCN="$_ner"; S3RSRP="$_nrp"; S3RSRQ="$_nrq"
+	elif [ -z "$S4BAND" ]; then
+		S4BAND="$_nb"; S4STATE="activated"; S4EARFCN="$_ner"; S4RSRP="$_nrp"; S4RSRQ="$_nrq"
+	fi
 fi
 
-T=$(echo "$O" | awk -F: '/^LTE SCC2 state:.*ACTIVE/ {print $3}')
-if [ -n "$T" ]; then
-	T1=$(echo "$O" | awk '/^LTE SCC2 bw/ {print $5}')
-	if [ -n "$T1" ]; then
-		S2BAND="$(band4g ${T/B/}) @${T1} MHz"
-	else
-		S2BAND="$(band4g ${T/B/})"
-	fi
-	MODE="$MODE / $(band4g ${T/B/})"
-
-	T=$(echo "$O" | awk '/.*LTE SCC2 Rx chan:/ {print $11}')
-# 	[ -n "$T" ] && addon 64 "(S2) EARFCN DL" "${T}"
-	T=$(echo "$O" | awk '/.*LTE SCC2 Tx chan:/ {print $10}')
-# 	[ -n "$T" ] && addon 64 "(S2) EARFCN UL" "${T}"
-
-	T=$(echo "$O" | awk '/^SCC2.*RSSI/ {print $4}' | xargs)
-# 	[ -n "$T" ] && addon 65 "(S2) RSSI" "${T// //} dBm"
-	T=$(echo "$O" | awk '/^SCC2.*RSRP/ {print $8}' | xargs)
-# 	[ -n "$T" ] && addon 66 "(S2) RSRP" "${T// //} dBm"
+# ЯРЛЫК ТЕХНОЛОГИИ - ПО ФАКТУ НЕСУЩИХ. Модем пишет ENDC, как только сеть
+# разрешила двойное подключение, - но пока NR-несущей нет, это обычная LTE
+# (тот же урок, что с AcT=13 у Fibocom).
+# Молчащий порт (занят, коллизия) ярлык НЕ ТРОГАЕТ: каркас уже положил в $MODE
+# значение по +COPS, и присвоение пустой строки стёрло бы его - в карточке
+# оставался бы прочерк вместо «4G».
+case "$_SYSMODE" in
+	'')    ;;
+	ENDC)  [ -n "$_NRBAND" ] && MODE="5G NSA" || MODE="LTE" ;;
+	NR5G|SA|ENDC_SA) MODE="5G SA" ;;
+	LTE)   MODE="LTE" ;;
+	WCDMA|HSPA|UMTS) MODE="WCDMA" ;;
+	*)     MODE="$_SYSMODE" ;;
+esac
+[ "$MODE" = "LTE" ] && [ "$_CANUM" -gt 0 ] && MODE="LTE-A"
+if [ -n "$_SYSMODE" ] && [ -n "$PBAND" ]; then
+	MODE="$MODE | ${PBAND%% @*}$_CABANDS"
+	[ -n "$_NRBAND" ] && MODE="$MODE + $(band5g ${_NRBAND#n})"
 fi
-
-T=$(echo "$O" | awk -F: '/^LTE SCC3 state:.*ACTIVE/ {print $3}')
-if [ -n "$T" ]; then
-	T1=$(echo "$O" | awk '/^LTE SCC3 bw/ {print $5}')
-	if [ -n "$T1" ]; then
-		S3BAND"$(band4g ${T/B/}) @${T1} MHz"
-	else
-		S3BAND"$(band4g ${T/B/})"
-	fi
-	MODE="$MODE / $(band4g ${T/B/})"
-
-	T=$(echo "$O" | awk '/.*LTE SCC3 Rx chan:/ {print $11}')
-# 	[ -n "$T" ] && addon 74 "(S3) EARFCN DL" "${T}"
-	T=$(echo "$O" | awk '/.*LTE SCC3 Tx chan:/ {print $10}')
-# 	[ -n "$T" ] && addon 74 "(S3) EARFCN UL" "${T}"
-
-	T=$(echo "$O" | awk '/^SCC3.*RSSI/ {print $4}' | xargs)
-# 	[ -n "$T" ] && addon 75 "(S3) RSSI" "${T// //} dBm"
-	T=$(echo "$O" | awk '/^SCC3.*RSRP/ {print $8}' | xargs)
-# 	[ -n "$T" ] && addon 76 "(S3) RSRP" "${T// //} dBm"
-fi
-
-T=$(echo "$O" | awk '/^SCC. NR5G band:/ {print $4}')
-if [ -n "$T" ] && [ "$T" != "---" ]; then
-	MODE="$MODE / $(band5g ${T/n/})"
-	T1=$(echo "$O" | awk '/^SCC.*SCC. NR5G bw:/ {print $8}')
-	if [ -n "$T1" ]; then
-		:   # ветка пуста: вызовы addon отключены (механизма нет)
-# 		addon 80 "5G band" "$(band5g ${T/n/}) @${T1} MHz"
-	else
-		:   # ветка пуста: вызовы addon отключены (механизма нет)
-# 		addon 80 "5G band" "$(band5g ${T/n/})"
-	fi
-	T=$(echo "$O" | awk '/^SCC. NR5G Rx chan:/ {print $5}')
-# 	[ -n "$T" ] && addon 84 "EARFCN DL" "$T"
-	T=$(echo "$O" | awk '/^SCC.*SCC. NR5G Tx chan:/ {print $10}')
-# 	[ -n "$T" ] && addon 84 "EARFCN UL" "$T"
-	T=$(echo "$O" | awk '/^NR5G RSRP/ {print $4}')
-# 	[ -n "$T" ] && addon 86 "RSRP" "$T dBm"
-	T=$(echo "$O" | awk '/^NR5G.*RSRQ/ {print $8}')
-# 	[ -n "$T" ] && addon 87 "RSRQ" "$T dB"
-	T=$(echo "$O" | awk '/^NR5G SINR/ {print $4}')
-# 	[ -n "$T" ] && addon 88 "RSRP" "$T dBm"
-fi
-
-MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,')
 
 # Modem
 

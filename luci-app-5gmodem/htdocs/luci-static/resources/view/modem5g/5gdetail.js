@@ -938,12 +938,20 @@ function collapsibleSection(key, titleText, content, extraAttrs) {
 	var expanded = blockExpanded(key);   // по умолчанию свёрнут
 	var chev = E('span', { 'style': 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (expanded ? '180' : '0') + 'deg)' });
 	chev.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
-	var body = E('div', { 'style': 'display:' + (expanded ? 'block' : 'none') }, content);
+	/* РАСКРЫТИЕ - АНИМАЦИЕЙ ВЫСОТЫ, А НЕ display:none.
+	   Высоту содержимого мы не знаем заранее (таблицы метрик растут и
+	   сжимаются), поэтому анимируем сеточную дорожку: 0fr -> 1fr. Приём
+	   работает с любым содержимым, в отличие от max-height с выдуманным
+	   потолком, и не требует пересчётов в JS. Внутренняя обёртка нужна для
+	   overflow: без неё содержимое торчало бы за пределы схлопнутой дорожки.
+	   Кто уважает prefers-reduced-motion - см. CSS: там переход отключается. */
+	var inner = E('div', { 'class': 'tg-collapse-inner' }, content);
+	var body = E('div', { 'class': 'tg-collapse' + (expanded ? ' open' : '') }, [ inner ]);
 	var title = E('h3', {
 		'style': 'display:flex;align-items:center;gap:.35em;cursor:pointer;user-select:none;margin-bottom:' + (expanded ? '.5em' : '0'),
 		'click': function() {
-			var exp = (body.style.display === 'none');
-			body.style.display = exp ? 'block' : 'none';
+			var exp = !body.classList.contains('open');
+			body.classList.toggle('open', exp);
 			title.style.marginBottom = exp ? '.5em' : '0';
 			chev.style.transform = 'rotate(' + (exp ? '180' : '0') + 'deg)';
 			try { localStorage.setItem('5gm-blk-' + key, exp ? '1' : '0'); } catch (e) {}
@@ -1451,9 +1459,16 @@ function fillAntPorts(raw, rxdiv) {
 		}
 		if (txt) { rxl.setAttribute('data-hadata', '1'); }
 	}
+	/* «порт:rsrp:rsrq[:rssi]». RSRQ по трактам даёт не каждый модем (Sierra по
+	   AT!GSTATUS? отдаёт RSRP и RSSI, а RSRQ - только общий по соте), поэтому
+	   поле может быть пустым; строка годится, если есть хоть один уровень. */
 	var rows = String(raw || '').trim().split(/\s+/).filter(function(l) {
-		return /^\d+:-?\d+:-?\d+$/.test(l);
+		return /^\d+:(-?\d+(\.\d+)?)?:(-?\d+(\.\d+)?)?(:(-?\d+(\.\d+)?)?)?$/.test(l)
+			&& /:-?\d/.test(l);
 	});
+	/* Колонка RSSI появляется только там, где модем её отдал: у остальных она
+	   была бы столбцом прочерков. */
+	var hasRssi = rows.some(function(l) { return /^[^:]*:[^:]*:[^:]*:-?\d/.test(l); });
 	/* Блок, который УЖЕ показывали, не прячем: пустой antports почти всегда
 	   означает коллизию на порту, а не исчезновение антенн. Правило то же, что
 	   в setRowVisible - иначе целая секция схлопывается и уводит прокрутку. */
@@ -1472,15 +1487,16 @@ function fillAntPorts(raw, rxdiv) {
 	   обрезал scrollTop, и страница уезжала вверх (proton2025, домотано до низа).
 	   Подпись каркаса - только НОМЕРА ПОРТОВ: они постоянны, поэтому DOM
 	   перестраивается лишь когда портов реально стало больше или меньше. */
-	var ports = rows.map(function(l) { return l.split(':')[0]; }).join(',');
+	var ports = rows.map(function(l) { return l.split(':')[0]; }).join(',') + (hasRssi ? '+rssi' : '');
 	if (!sameRender(tbl, ports)) {
 		tbl.innerHTML = '';
 		tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
 			E('th', { 'class': 'th left' }, _('Antenna port')),
 			E('th', { 'class': 'th left' }, _('RSRP')),
 			E('th', { 'class': 'th left' }, _('RSRQ')),
+		].concat(hasRssi ? [ E('th', { 'class': 'th left' }, _('RSSI')) ] : []).concat([
 			E('th', { 'class': 'th left' }, _('State'))
-		]));
+		])));
 		rows.forEach(function(l) {
 			tbl.appendChild(E('tr', { 'class': 'tr ant-row' }, [
 				/* Номер порта - тот, что дал модем. Подписи пигтейлов (PRI/DIV)
@@ -1490,8 +1506,9 @@ function fillAntPorts(raw, rxdiv) {
 				E('td', { 'class': 'td left ant-port' }, _('Port %d').format(parseInt(l.split(':')[0], 10))),
 				E('td', { 'class': 'td left', 'data-l': _('RSRP') }, '-'),
 				E('td', { 'class': 'td left', 'data-l': _('RSRQ') }, '-'),
+			].concat(hasRssi ? [ E('td', { 'class': 'td left', 'data-l': _('RSSI') }, '-') ] : []).concat([
 				E('td', { 'class': 'td left', 'data-l': _('State') }, '-')
-			]));
+			])));
 		});
 	}
 
@@ -1531,10 +1548,12 @@ function fillAntPorts(raw, rxdiv) {
 		};
 		if (td[1]) { paint(td[1], 'rsrp', p[1], p[1] + ' dBm'); }
 		if (td[2]) { paint(td[2], 'rsrq', p[2], p[2] + ' dB'); }
-		if (td[3]) {
-			td[3].textContent = st;
-			td[3].style.color = col ? CA_COLOR[col] : '';
-			td[3].style.fontWeight = col ? '600' : '';
+		var stCell = 3;
+		if (hasRssi) { if (td[3]) { paint(td[3], 'rssi', p[3], p[3] + ' dBm'); } stCell = 4; }
+		if (td[stCell]) {
+			td[stCell].textContent = st;
+			td[stCell].style.color = col ? CA_COLOR[col] : '';
+			td[stCell].style.fontWeight = col ? '600' : '';
 		}
 	});
 }
@@ -2028,8 +2047,18 @@ function applyMetrics(json) {
 					// Заголовок блока = полное имя активного модема (моноширинный).
 					// Класс дописываем ЗДЕСЬ, а не в само имя: имя расходится по
 					// вкладкам и карточкам профилей, где пометка была бы шумом.
+					// СВОЁ ИМЯ ПОЛЬЗОВАТЕЛЯ (alias) сильнее разобранной модели -
+					// оно должно совпадать с тем, что во вкладке и в карточке
+					// приоритета, иначе кажется, что это разные модемы.
 					if (document.getElementById('modemname')) {
-						var _nm = (json.modem && json.modem.length > 1) ? json.modem : _('Modem');
+						/* ПУСТОЕ ЗНАЧЕНИЕ В СНИМКЕ - ЭТО «-», А НЕ ПУСТАЯ СТРОКА.
+						   Весь снимок метрик проходит через sanitize_string, и
+						   незаданное поле приезжает прочерком. Без этой проверки
+						   заголовок карточки показывал прочерк вместо имени
+						   модема у всех, кто ничего не переименовывал. */
+						var _al = (json.alias && json.alias !== '-') ? String(json.alias).trim() : '';
+						var _nm = _al ? _al
+							: ((json.modem && json.modem.length > 1) ? json.modem : _('Modem'));
 						if (json.backend === 'hilink') { _nm += ' (HiLink)'; }
 						else if (json.at_debug === '1') { _nm += ' (Debug)'; }
 						/* Обновляем ТОЛЬКО текстовый span - правые элементы

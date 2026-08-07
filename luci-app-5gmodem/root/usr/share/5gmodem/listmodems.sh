@@ -188,6 +188,23 @@ for _ts in $(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.=]*\)=
 	PORTREC="${PORTREC}${NCNT} net ${_tn}${NL}"
 done
 
+# КАРТА «IMEI -> своё имя» и список IMEI ПРИСУТСТВУЮЩИХ модемов - собираем ОДИН
+# раз на весь список: скрипт зовётся часто, и лишний десяток `uci get` на каждый
+# модем тут дороже всего остального. Формат карты: "<imei>\t<имя>" по строке.
+_UCISNAP=$(uci -q show 5gmodem 2>/dev/null)
+_ALIASMAP=$(printf '%s\n' "$_UCISNAP" | awk -F"[.=]" '
+	/\.alias_imei=/ { gsub(/^.|.$/, "", $NF); imei[$2] = $NF; next }
+	/\.alias=/       { line = $0; sub(/^[^=]*=/, "", line); gsub(/^.|.$/, "", line); nm[$2] = line }
+	END { for (s in nm) if (nm[s] != "" && imei[s] != "") printf "%s\t%s\n", imei[s], nm[s] }')
+_IMEIS_PRESENT=""
+for _n in $NODES; do
+	_p=$(basename "$_n")
+	_s="m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g')"
+	_im=$(printf '%s\n' "$_UCISNAP" | sed -n "s/^5gmodem\.$_s\.imei='\(.*\)'\$/\1/p" | head -1)
+	[ -n "$_im" ] && _IMEIS_PRESENT="$_IMEIS_PRESENT$_im
+"
+done
+
 OUT=""
 i=0
 for n in $NODES; do
@@ -300,7 +317,19 @@ PORTREC_EOF
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
 	# HiLink от обычного и не предлагает для него AT-возможности.
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
+	# СВОЁ ИМЯ ОТ ПОЛЬЗОВАТЕЛЯ. Привязка - к IMEI (имя ездит вместе с железкой,
+	# а не остаётся у разъёма), с откатом на секцию пути: IMEI бывает нечитаем,
+	# а в дешёвых партиях - одинаковым у всех модулей. Одинаковый IMEI у двух
+	# ПРИСУТСТВУЮЩИХ модемов = привязку по нему не используем вовсе, иначе одно
+	# имя показалось бы обоим.
+	_alias=""
+	_myimei=$(uci -q get "5gmodem.$_sec.imei" 2>/dev/null)
+	if [ -n "$_myimei" ] && [ "$(printf '%s\n' "$_IMEIS_PRESENT" | grep -c "^$_myimei\$")" = 1 ]; then
+		_alias=$(printf '%s\n' "$_ALIASMAP" | sed -n "s/^$_myimei	//p" | head -1)
+	fi
+	[ -n "$_alias" ] || _alias=$(uci -q get "5gmodem.$_sec.alias" 2>/dev/null)
+	_alias=$(esc "$_alias")
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
 done
 OUT="[$OUT]"
 

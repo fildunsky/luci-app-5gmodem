@@ -294,12 +294,68 @@ return view.extend({
 				   недоступен. Отдельная причина нужна, чтобы не пугать человека
 				   советом «сообщите vid:pid»: с модемом всё в порядке. */
 				msg = _('The modem control channel is busy with the active connection, so the eSIM chip cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles.');
+			} else if (st.reason === 'slot') {
+				/* Активна физическая SIM - чип по определению недоступен.
+				   Отдельная причина нужна, чтобы не пугать советом «сообщите
+				   vid:pid»: модем поддерживается, просто занят другой картой. */
+				msg = _('The physical SIM slot is active, so the eSIM chip cannot be read. Switch to the eSIM slot to manage profiles.');
 			} else if (st.reason === 'noeuicc') {
 				msg = _('No eSIM chip (eUICC) answered on this modem. If you are sure it has one, it may be in a USB composition this app does not talk to yet - please report your modem model and its USB ID (vid:pid) so we can add support.');
 			} else {
 				msg = _('eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem');
 			}
-			body.appendChild(E('p', { 'class': 'cbi-section-descr' }, msg));
+			/* КНОПКА ПЕРВОЙ, ПОЯСНЕНИЕ - ЗА НЕЙ, В ОДНУ СТРОКУ.
+			   Действие важнее объяснения: человек, который уже понял причину,
+			   не должен искать кнопку под абзацем текста. Ряд собирается
+			   флексом (.tgesim-actionrow) и на узком экране переносится сам.
+			   Причины без действия (нет lpac, чужая композиция) как и раньше
+			   показывают один абзац. */
+			var _btn = null;
+			if (st.reason === 'slot') {
+				/* Слот физической SIM активен - eUICC недостижим по определению.
+				   Кнопка переключает слот; модем переперечисляется, поэтому
+				   страница перезагружается с задержкой. */
+				var esimId2 = null;
+				(slot.slots || []).forEach(function(s) { if (s.label == 'eSIM') { esimId2 = s.id; } });
+				if (esimId2 != null) {
+					_btn = E('button', {
+						'class': 'btn cbi-button cbi-button-action',
+						'click': function(ev) {
+							ev.preventDefault();
+							ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching to the eSIM slot...')));
+							fs.exec(SLOT, [ 'set', String(esimId2) ]).then(function() {
+								window.setTimeout(function() { location.reload(); }, 45000);
+							}).catch(function() { ui.hideModal(); });
+						}
+					}, _('Switch to the eSIM slot'));
+				}
+			}
+			else if (st.reason === 'uplink') {
+				/* ЗАНЯТЫЙ КАНАЛ - ЭТО ДЕЙСТВИЕ, А НЕ ПРИГОВОР. У модемов, где
+				   eUICC живёт только за MBIM, канал управления один, и пока
+				   поднято соединение, читать чип нельзя. Предлагаем освободить
+				   модем за человека, честно предупредив об обрыве связи;
+				   интерфейс поднимается обратно сам (trap в esim.sh). */
+				_btn = E('button', {
+					'class': 'btn cbi-button cbi-button-action',
+					'click': function(ev) {
+						ev.preventDefault();
+						if (!confirm(_('The modem connection will be dropped for about a minute while the eSIM chip is read, then restored. Continue?'))) { return; }
+						ui.showModal(null, E('p', { 'class': 'spinning' },
+							_('Freeing the modem and reading the eSIM chip...')));
+						esimExec([ 'dump-free' ]).then(function(d) {
+							ui.hideModal();
+							applyDump(d);
+						}).catch(function() { ui.hideModal(); });
+					}
+				}, _('Free the modem and read eSIM'));
+			}
+			var _descr = E('p', { 'class': 'cbi-section-descr' }, msg);
+			if (_btn) {
+				body.appendChild(E('div', { 'class': 'tgesim-actionrow' }, [ _btn, _descr ]));
+			} else {
+				body.appendChild(_descr);
+			}
 		}
 		else if (!st.active) {
 			// найти id eSIM-слота (по метке) для кнопки перехода

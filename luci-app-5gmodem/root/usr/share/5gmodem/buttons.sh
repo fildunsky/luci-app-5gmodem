@@ -48,12 +48,17 @@ _led_dummy() { case "$1" in *-phy[0-9]*) return 0 ;; *) return 1 ;; esac; }
 # uci system (config led ... option trigger 'none'). Без этого netdev-триггер
 # возвращает свою яркость сразу после нашей записи. Секцию ищем по sysfs-имени,
 # нет - создаём. commit/reload делает вызывающий (пакетно).
+# Секция uci system для диода по имени sysfs; пусто - секции нет.
+_led_sec() {
+	for _ls in $(uci show system 2>/dev/null | sed -n 's/^system\.\([^.=]*\)=led$/\1/p'); do
+		[ "$(uci -q get "system.$_ls.sysfs")" = "$1" ] && { printf '%s' "$_ls"; return 0; }
+	done
+	return 1
+}
+
 _led_detach() {
 	_name="$1"; [ -n "$_name" ] || return 0
-	_sec=""
-	for _s in $(uci show system 2>/dev/null | sed -n 's/^system\.\([^.=]*\)=led$/\1/p'); do
-		[ "$(uci -q get "system.$_s.sysfs")" = "$_name" ] && { _sec="$_s"; break; }
-	done
+	_sec=$(_led_sec "$_name")
 	if [ -z "$_sec" ]; then
 		_sec=$(uci add system led 2>/dev/null) || return 0
 		uci -q set "system.$_sec.name=$_name"
@@ -68,6 +73,7 @@ _led_detach() {
 # флеша): персистентно это же делает _led_detach при сохранении, но триггер мог
 # ещё висеть - иначе netdev вернул бы свою яркость поверх нашей.
 _apply_leds() {
+	_al_dirty=0
 	for _kv in $1; do
 		_ln="${_kv%=*}"; _lv="${_kv##*=}"
 		[ -n "$_ln" ] || continue
@@ -79,7 +85,29 @@ _apply_leds() {
 		else
 			printf '0' > "$LEDS_DIR/$_ln/brightness" 2>/dev/null
 		fi
+		# СОСТОЯНИЕ ЗАПОМИНАЕМ И В uci system - ПОЛЕМ default.
+		#
+		# Системная служба диодов при каждом `led reload` выставляет настроенным
+		# диодам их триггер и при trigger=none берёт яркость из `default` (нет
+		# поля - гасит). Раньше поля не было, и любой reload - наш собственный
+		# при сохранении настроек, сохранение страницы светодиодов в LuCI, чужой
+		# пакет, правящий uci system - тушил диоды кнопки насовсем (живой стенд
+		# 07.08.2026: сервис работает, оба диода тёмные). Теперь reload и
+		# загрузка роутера восстанавливают ПОСЛЕДНЕЕ применённое состояние сами,
+		# без ожидания круга сторожа.
+		#
+		# Пишем ТОЛЬКО при реальном изменении: сверка диодов идёт раз в 30 c, и
+		# коммит на каждый круг был бы записью во флеш на ровном месте.
+		_al_sec=$(_led_sec "$_ln")
+		[ -n "$_al_sec" ] || continue
+		[ "$(uci -q get "system.$_al_sec.default")" = "$_lv" ] && continue
+		uci -q set "system.$_al_sec.default=$_lv"
+		_al_dirty=1
 	done
+	# Коммит без `led reload`: перечитывать конфиг незачем - в железе состояние
+	# уже выставлено, а reload его же и погасил бы на миг.
+	[ "$_al_dirty" = 1 ] && uci -q commit system
+	return 0
 }
 
 # Запущен ли сервис. Общий хелпер (нужен и в svc, и в условных командах run).
@@ -145,6 +173,43 @@ _dts_buttons() {
 _is_system() { [ "$1" = "reset" ]; }
 
 _json_esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+# Привести диоды к ФАКТИЧЕСКОМУ состоянию сервисов условных кнопок.
+#
+# Зовётся из трёх мест: при загрузке (init 5gmodem-btnleds), сразу после нашего
+# же `led reload` в setleds (он гасит ВСЕ настроенные диоды - см. там) и
+# периодически из сторожа: системная служба диодов перечитывает конфиг при любой
+# правке uci system, гасит их и обратно уже не зажигает.
+_sync_leds_all() {
+	# Выставить диоды ПОД ТЕКУЩЕЕ состояние сервиса. Зовётся при загрузке роутера
+	# (init 5gmodem-btnleds).
+	#
+	# ЗАЧЕМ. Диоды условной кнопки выставляет только обработчик нажатия, поэтому
+	# после перезагрузки они оставались тёмными до первого физического нажатия -
+	# хотя сервис уже работал (наблюдалось на кнопке-тумблере ssclash).
+	#
+	# ВНИМАНИЕ НА СЕМАНТИКУ. При НАЖАТИИ диоды показывают БУДУЩЕЕ состояние
+	# (команда сейчас переключит сервис), а здесь - ТЕКУЩЕЕ. Поэтому соответствие
+	# ОБРАТНОЕ к ветке run: сервис запущен -> leds_on_*, остановлен -> leds_off_*.
+	#
+	# Только УСЛОВНЫЕ кнопки: у простой диоды статичны и отражают факт нажатия,
+	# а не наблюдаемое состояние - применять их на старте значило бы соврать.
+	for _s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\([^.=]*\)=button\$/\1/p"); do
+		for _st in pressed released; do
+			[ "$(uci -q get "$CFG.$_s.ct_$_st")" = "conditional" ] || continue
+			_cmd=$(uci -q get "$CFG.$_s.$_st")
+			# Имя сервиса берём из самой команды - тем же разбором, что и run.
+			_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
+			[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
+			[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || continue
+			if _svc_running "$_svc"; then
+				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
+			else
+				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
+			fi
+		done
+	done
+}
 
 case "$1" in
 detect)
@@ -267,7 +332,15 @@ setleds)
 			[ -e "$LEDS_DIR/$_ln/brightness" ] || continue
 			_led_detach "$_ln"; _any=1
 		done
-		[ "$_any" = 1 ] && { uci -q commit system; /etc/init.d/led reload 2>/dev/null; }
+		# ПОСЛЕ RELOAD ДИОДЫ ГАСНУТ - СРАЗУ ЗАЖИГАЕМ ОБРАТНО.
+		#
+		# `/etc/init.d/led reload` перечитывает секции uci system и выставляет
+		# каждому настроенному диоду его триггер, а яркость при trigger=none
+		# обнуляет. То есть наша же правка настроек тушила диоды кнопки, и
+		# зажечь их снова мог только человек - физическим нажатием (живой стенд
+		# 07.08.2026: сервис работает, оба диода тёмные). Возвращаем состояние
+		# сервиса сразу за reload.
+		[ "$_any" = 1 ] && { uci -q commit system; /etc/init.d/led reload 2>/dev/null; _sync_leds_all; }
 	fi
 	echo '{"ok":1}'
 	;;
@@ -331,34 +404,7 @@ run)
 	[ -n "$_cmd" ] && BUTTON="$2" ACTION="$_st" SEEN="$4" sh -c "$_cmd"
 	;;
 syncleds)
-	# Выставить диоды ПОД ТЕКУЩЕЕ состояние сервиса. Зовётся при загрузке роутера
-	# (init 5gmodem-btnleds).
-	#
-	# ЗАЧЕМ. Диоды условной кнопки выставляет только обработчик нажатия, поэтому
-	# после перезагрузки они оставались тёмными до первого физического нажатия -
-	# хотя сервис уже работал (наблюдалось на кнопке-тумблере ssclash).
-	#
-	# ВНИМАНИЕ НА СЕМАНТИКУ. При НАЖАТИИ диоды показывают БУДУЩЕЕ состояние
-	# (команда сейчас переключит сервис), а здесь - ТЕКУЩЕЕ. Поэтому соответствие
-	# ОБРАТНОЕ к ветке run: сервис запущен -> leds_on_*, остановлен -> leds_off_*.
-	#
-	# Только УСЛОВНЫЕ кнопки: у простой диоды статичны и отражают факт нажатия,
-	# а не наблюдаемое состояние - применять их на старте значило бы соврать.
-	for _s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\([^.=]*\)=button\$/\1/p"); do
-		for _st in pressed released; do
-			[ "$(uci -q get "$CFG.$_s.ct_$_st")" = "conditional" ] || continue
-			_cmd=$(uci -q get "$CFG.$_s.$_st")
-			# Имя сервиса берём из самой команды - тем же разбором, что и run.
-			_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
-			[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
-			[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || continue
-			if _svc_running "$_svc"; then
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
-			else
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
-			fi
-		done
-	done
+	_sync_leds_all
 	;;
 svc)
 	# svc <toggle|start|stop|restart> <service> - универсальное управление сервисом
