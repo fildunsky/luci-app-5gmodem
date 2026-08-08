@@ -59,7 +59,19 @@ case "$MODE_NUM" in
 		MODE="5G SA |"
 		;;
 	"13")
-		MODE="5G NSA |"
+		# AcT=13 - ЗАЯВКА EN-DC, а не работающий 5G: Билайн раздаёт её на
+		# голом LTE, и в карточке красовалось «5G» при единственной несущей
+		# B3 - а после принудительного «только 4G» человек не мог даже
+		# убедиться, что режим применился (живой отчёт 08.08.2026). Ярлык -
+		# по факту NR-несущей в ^debug: тот же урок, что у FM350 (AcT=13)
+		# и EM9190 (System mode: ENDC).
+		if echo "$O" | grep -q "^nr_band:"; then
+			MODE="5G NSA |"
+		elif echo "$O" | grep -q "scell:"; then
+			MODE="LTE-A |"
+		else
+			MODE="LTE |"
+		fi
 		;;
 esac
 
@@ -200,25 +212,38 @@ MODE=$(echo $MODE | sed 's,/,+,'| sed 's,LTE B,LTE | B,')
 
 # Modem
 
-MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
-MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
-MODELACUT=$(echo $MODELA | sed s/"AT+CGMM "//)
-MODELBCUT=$(echo $MODELB | sed s/"AT+CGMI "//)
-MODEL="$MODELBCUT "$MODELACUT
+# ПЕРВАЯ ОСМЫСЛЕННАЯ СТРОКА ОТВЕТА - остальное мусор. У этого модуля эхо
+# включено с завода, а батч ядра подписывает +CREG=2/+CEREG=2 - и их URC
+# прилетают ПОСРЕДИ чужого чтения. Прежний разбор склеивал всё в одну строку,
+# и в имени модема оседали обрывки команд: «Thales AT MV31-W AT +CREG: 0
+# +CEREG: 0» (живой отчёт 08.08.2026).
+_mv_first_clean() {
+	printf '%s\n' "$1" | tr -d '\r' | awk '
+		/^AT/ { next }
+		/^\+/ { next }
+		/^\^/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ print; exit }
+	'
+}
+MODELACUT=$(_mv_first_clean "$(sms_tool -d $DEVICE at "AT+CGMM")")
+MODELBCUT=$(_mv_first_clean "$(sms_tool -d $DEVICE at "AT+CGMI")")
+MODEL="$MODELBCUT $MODELACUT"
 
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
 # International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
-NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
+NR_I=$(digits_of "$O" 15 17)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
 # International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
-NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
+NR_C=$(digits_of "$O" 14 16)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi

@@ -811,6 +811,15 @@ uci commit network
 # reload сам поднимает autostart-интерфейсы; ifup после него безвреден.
 ubus call network reload >/dev/null 2>&1
 
+# СОЗДАЛИ ИНТЕРФЕЙС НА НАШЕМ ШЕЛЛ-ПРОТО, А NETIFD ЕГО НЕ ЗНАЕТ - вот
+# ЕДИНСТВЕННЫЙ момент, когда рестарт сети оправдан: без него интерфейс мёртв
+# («Не поддерживаемый тип протокола»), человек настраивает модем прямо сейчас
+# и короткий обрыв ждёт. Постинст пакета сеть ради регистрации НЕ трогает
+# (уронил удалённый роутер - см. register_proto.sh), поэтому форс отсюда.
+case "$FPROTO" in
+	fibocom) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
+esac
+
 # в зону wan - для NAT/forwarding (см. _fw_zone_add выше)
 _fw_zone_add "$IF"
 
