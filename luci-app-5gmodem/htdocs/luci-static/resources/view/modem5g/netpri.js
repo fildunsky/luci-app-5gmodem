@@ -29,7 +29,8 @@ var BIN = '/usr/share/5gmodem/netpri.sh';
 var _widgets = { netpri: true, status: true, services: true, speedtest: true };
 /* Номер приоритета фоном на карточке - отдельная галка, по умолчанию ВЫКЛЮЧЕНА
    (в отличие от мастер-флагов виджетов, которые по умолчанию включены). */
-var _netpriRank = false;
+/* Режим фона карточек аплинков: '' - выкл, 'num' - номер, 'icon' - иконка. */
+var _netpriRank = '';
 /* Порядок правых виджетов: ключи p:<хост> / s:<служба> / speed. Пусто - порядок
    по умолчанию (пинги, службы, спидтест). */
 var _widgetOrder = [];
@@ -42,7 +43,8 @@ function loadWidgetFlags() {
 		_widgets.status    = on('widget_status');
 		_widgets.services  = on('widget_services');
 		_widgets.speedtest = on('widget_speedtest');
-		_netpriRank = (uci.get('5gmodem', '@5gmodem[0]', 'netpri_rank') === '1');
+		var _nrv = uci.get('5gmodem', '@5gmodem[0]', 'netpri_rank');
+		_netpriRank = (_nrv === '1') ? 'num' : (_nrv === 'icon') ? 'icon' : '';
 		/* Порядок правых карточек, заданный перетаскиванием (netpri.sh worder). */
 		_widgetOrder = String(uci.get('5gmodem', '@5gmodem[0]', 'widget_order') || '').split(/\s+/).filter(Boolean);
 		/* Карточки берём ТОЛЬКО из секций. Умолчания (YouTube, SSClash) заведены
@@ -881,9 +883,78 @@ function chevron() {
    из потока, поэтому три строки текста стоят ровно там же, где стояли, и
    ширина карточки не меняется. aria-hidden: для читалки это украшение, порядок
    и так виден по последовательности кнопок. */
-function rankEl(idx) {
-	if (!_netpriRank) { return ''; }
-	return E('span', { 'class': 'netpri-rank', 'aria-hidden': 'true' }, String(idx + 1));
+function rankEl(idx, o) {
+	if (_netpriRank === 'icon') {
+		/* ТА ЖЕ КАРТИНКА, ЧТО В ШАПКЕ КАРТОЧКИ (typeIcon): у модема - логотип
+		   оператора SIM (переставили карту - фон сменится сам вместе с label),
+		   у Wi-Fi и кабеля - их значки. Размер и посадка - в CSS: картинка, в
+		   отличие от цифры, честно растягивается от верха до низа. */
+		var src = null;
+		if (o && o.type === 'modem') {
+			var oi = mutil.operatorIcon(o.label);
+			src = L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.png');
+		} else if (o && o.type === 'wifi') {
+			src = L.resource('icons/5gmodem/cwifi.svg');
+		} else if (o && o.type === 'wan') {
+			src = L.resource('icons/5gmodem/cwan.svg');
+		}
+		if (!src) { return ''; }
+		return E('img', { 'class': 'netpri-rank netpri-rank-ic', 'src': src,
+			'alt': '', 'aria-hidden': 'true' });
+	}
+	if (_netpriRank !== 'num') { return ''; }
+	var sp = E('span', { 'class': 'netpri-rank', 'aria-hidden': 'true' }, String(idx + 1));
+	_rankFit(sp);
+	return sp;
+}
+
+/* ПОСАДКА ЦИФРЫ - ПО МЕТРИКАМ ЖИВОГО ШРИФТА, А НЕ КОНСТАНТАМИ. Подобранные в
+   CSS кегль и смещение верны только для шрифта одной темы (Inter в proton2025);
+   на другой теме глиф съезжал на пиксели (поймано при сверке с bootstrap).
+   Считаем через canvas TextMetrics: кегль - чтобы глиф был ровно с карточку,
+   top - чтобы зазоры сверху и снизу были равны. Метрики шрифта линейны по
+   кеглю, поэтому хватает одного замера без второго чтения раскладки. Повтор на
+   fonts.ready: веб-шрифт темы может доехать позже первой отрисовки. */
+function _rankFit(sp) {
+	/* Два шага. Первый ставит кегль «глиф = высота карточки». Второй меряет
+	   ФАКТИЧЕСКИЕ зазоры уже применённой раскладки и двигает top так, чтобы
+	   сверху и снизу осталось поровну, - никакие предположения о line box не
+	   нужны, и рассинхрон с межстрочником темы исключён по построению. */
+	var gaps = function(card) {
+		var cs = getComputedStyle(sp);
+		var ctx = _rankFit._cv || (_rankFit._cv = document.createElement('canvas').getContext('2d'));
+		ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+		var m = ctx.measureText(sp.textContent);
+		if (!m || !m.actualBoundingBoxAscent) { return null; }
+		var rr = sp.getBoundingClientRect(), cr = card.getBoundingClientRect();
+		var baseline = (rr.height - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2
+			+ m.fontBoundingBoxAscent;
+		return {
+			fs: parseFloat(cs.fontSize),
+			glyph: m.actualBoundingBoxAscent + m.actualBoundingBoxDescent,
+			top: (rr.top - cr.top) + baseline - m.actualBoundingBoxAscent,
+			bot: cr.height - ((rr.top - cr.top) + baseline + m.actualBoundingBoxDescent)
+		};
+	};
+	var step2 = function() {
+		if (!sp.isConnected) { return; }
+		var card = sp.closest('.netpri-btn');
+		var g = card && gaps(card);
+		if (!g) { return; }
+		var want = (g.top + g.bot) / 2;
+		sp.style.top = ((parseFloat(getComputedStyle(sp).top) || 0) - (g.top - want)) + 'px';
+	};
+	var step1 = function() {
+		if (!sp.isConnected) { return; }
+		var card = sp.closest('.netpri-btn');
+		var g = card && gaps(card);
+		if (!g) { return; }
+		sp.style.lineHeight = '1';
+		sp.style.fontSize = (g.fs * card.clientHeight / g.glyph) + 'px';
+		window.requestAnimationFrame(step2);
+	};
+	window.requestAnimationFrame(step1);
+	if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function() { window.requestAnimationFrame(step1); }); }
 }
 
 function nameEl(o) {
@@ -1087,6 +1158,13 @@ function _npEnd() {
 	   `netpri.sh worder`. */
 	if (attr === 'data-wkey') {
 		var wkeys = _npWidgetCards(row).map(function(c) { return c.getAttribute('data-wkey'); });
+		/* Порядок в ПАМЯТИ обновляем сразу: тик поллинга пересобирает ряд по
+		   _widgetOrder, и со старым массивом карточки спустя тик разъезжались
+		   обратно (поймано владельцем 07.08.2026). Кэш uci.js тоже сбрасываем -
+		   запись идёт мимо него (fs.exec), и loadWidgetFlags иначе отдал бы
+		   старый порядок до конца жизни страницы. */
+		_widgetOrder = wkeys.slice();
+		try { uci.unload('5gmodem'); } catch (e) {}
 		_npApplying = true;
 		var _wDone = function() { _npApplying = false; };
 		setTimeout(_wDone, 4000);
@@ -1401,7 +1479,7 @@ function buildBar(list, redraw) {
 				   что у обычной карточки - ряд не дёргается ни на пиксель),
 				   а скелетоны лежат ПОВЕРХ отдельным absolute-слоем. */
 				return [
-					rankEl(_rank),
+					rankEl(_rank, o),
 					E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
 					E('span', { 'class': 'netpri-name' }, o.iface),
 					E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***'),
@@ -1436,7 +1514,7 @@ function buildBar(list, redraw) {
 				];
 			}
 			return [
-			rankEl(_rank),
+			rankEl(_rank, o),
 			E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
 			nameEl(o),
 			/* keep the IP line present even without an address so the button height
@@ -1592,7 +1670,13 @@ return baseclass.extend({
 		var seen = false;
 		var pollFn = function() {
 			if (document.body.contains(wrap)) { seen = true; }
-			else if (seen) { poll.remove(pollFn); return Promise.resolve(); }
+			else if (seen) {
+				/* Флаг СБРАСЫВАЕМ вместе со снятием: иначе следующий экземпляр
+				   блока никогда не зарегистрирует опрос - гард ниже посчитает,
+				   что поллер уже есть, и ряд молча замрёт до перезагрузки. */
+				window._npListPoll = false;
+				poll.remove(pollFn); return Promise.resolve();
+			}
 			return loadList().then(apply);
 		};
 		/* КАДЕНЦИЯ 15 c, А НЕ 5.
@@ -1642,7 +1726,10 @@ return baseclass.extend({
 			   take much longer than a fixed retry window) shows up on its own, with
 			   no manual page reload. Self-removes once the bar leaves the DOM. */
 			var pollFn = function() {
-				if (!document.body.contains(wrap)) { poll.remove(pollFn); return Promise.resolve(); }
+				if (!document.body.contains(wrap)) {
+					window._npListPoll = false;   // см. такой же поллер в mount()
+					poll.remove(pollFn); return Promise.resolve();
+				}
 				if (_npDrag || _npApplying) { return Promise.resolve(); }   // пауза при drag/применении
 				return loadList().then(redraw);
 			};

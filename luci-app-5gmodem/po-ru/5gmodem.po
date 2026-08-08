@@ -2006,9 +2006,6 @@ msgstr "Страница релиза"
 msgid "Current version"
 msgstr "Текущая версия"
 
-msgid "Latest version"
-msgstr "Последняя версия"
-
 msgid "It also installs the translation if available"
 msgstr "Русификация ставится вместе с программой, если доступна"
 
@@ -2017,9 +2014,6 @@ msgstr "Проверка последнего релиза…"
 
 msgid "Could not check for updates"
 msgstr "Не удалось проверить обновления"
-
-msgid "A new version is available"
-msgstr "Доступна новая версия"
 
 msgid "You have the latest version"
 msgstr "Установлена последняя версия"
@@ -4240,9 +4234,6 @@ msgstr "Проверяю базу APN…"
 msgid "Updating the APN database…"
 msgstr "Обновляю базу APN…"
 
-msgid "A newer database is available"
-msgstr "Есть более свежая база"
-
 msgid "The APN database is up to date"
 msgstr "База APN актуальна"
 
@@ -4254,9 +4245,6 @@ msgstr "Не удалось проверить базу APN"
 
 msgid "Failed to update the APN database"
 msgstr "Не удалось обновить базу APN"
-
-msgid "Operator APNs from GNOME MBPI and AOSP. Used to pick an APN automatically when a SIM changes."
-msgstr "APN операторов из GNOME MBPI и AOSP. По ней подбирается APN при смене SIM."
 
 msgid "operators"
 msgstr "операторов"
@@ -4294,11 +4282,17 @@ msgstr "активна"
 msgid "deactivated"
 msgstr "не активна"
 
-msgid "Show priority numbers"
-msgstr "Отображать цифры"
+msgid "Card background"
+msgstr "Фон карточек"
 
-msgid "Large translucent number in the corner of each uplink card"
-msgstr "Крупная полупрозрачная цифра в углу карточки аплинка"
+msgid "Priority number"
+msgstr "Номер приоритета"
+
+msgid "Interface icon"
+msgstr "Иконка интерфейса"
+
+msgid "Large translucent mark on each uplink card"
+msgstr "Крупный полупрозрачный знак на карточках аплинков"
 
 msgid "Free the modem and read eSIM"
 msgstr "Освободить модем и прочитать eSIM"
@@ -4323,3 +4317,18 @@ msgstr "Сохранить"
 
 msgid "Cancel"
 msgstr "Отмена"
+
+msgid "None"
+msgstr "Ничего"
+
+msgid "Update available"
+msgstr "Доступно обновление"
+
+msgid ""
+"Telegram is not reachable from the router: the direct path is blocked by the "
+"carrier and no working proxy tunnel was found. Start SSClash (or route the "
+"router through a VPN) and try again."
+msgstr ""
+"Telegram недоступен с роутера: прямой путь закрыт оператором, а работающего "
+"прокси-туннеля не нашлось. Запустите SSClash (или пустите роутер через VPN) "
+"и повторите."

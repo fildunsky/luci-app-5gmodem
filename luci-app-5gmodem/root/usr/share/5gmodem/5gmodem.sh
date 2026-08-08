@@ -1516,6 +1516,27 @@ sanitize_number() {
 	esac
 }
 
+# ТА ЖЕ САНАЦИЯ, НО БЕЗ ПОДСТАНОВОК КОМАНД. В снимке ~98 полей, и каждое
+# $(sanitize_string ...) - это форк; на каждый опрос выходило ~98 форков только
+# ради санации. Замер на стенде 07.08.2026: сам эмиттер 134 -> 86 мс на снимок
+# (снимков на холодном сборе два - частичный и финальный). Здесь имена переменных обходятся встроенными средствами: значение
+# читается и кладётся В КОПИЮ _J_<имя>, оригинал НЕ трогается - частичная
+# публикация идёт ДО профилей, а профили различают «пусто» и «-»
+# ([ -z "$RSRP" ] перестал бы срабатывать). Форк остаётся только в редкой
+# ветке с управляющими символами - как и раньше.
+# eval безопасен: имена - из нашего фиксированного списка, а значение
+# подставляется параметром (\$_sv) и шеллом не разбирается.
+_sanv() {
+	for _sv_n in "$@"; do
+		eval "_sv=\$$_sv_n"
+		case "$_sv" in
+			'') _sv="-" ;;
+			*[[:cntrl:]]*) _sv=$(printf '%s' "$_sv" | tr -d '\000-\037') ;;
+		esac
+		eval "_J_$_sv_n=\$_sv"
+	done
+}
+
 # ЖИВОЙ СТАТУС ПОДКЛЮЧЕНИЯ ИЗ ЛОГА. Пока интерфейс не получил IP, UI показывает
 # плашку «Ожидание данных…». Вместо статики отдаём последнюю ОСМЫСЛЕННУЮ строку
 # netifd для этого интерфейса (прото-хендлеры туда пишут ход дозвона: «Register
@@ -1587,113 +1608,134 @@ _snap_prepare() {
 
 emit_snapshot() {
 _snap_prepare
+_SN_CONNST=$(conn_status_line "$SEC")
+_SN_ALIAS=$(uci -q get "5gmodem.$AMP_SEC.alias" 2>/dev/null)
+_SN_CPORT="${DEVICE:-$_CPORT_MM}"
+[ "$IS_ROAMING" = 1 ] && _SN_ROAM10=1 || _SN_ROAM10=0
+_sanv _POLL_AM IPADDR IPADDR6 SEC CONN_TIME CT
+_sanv CONN_TIME_SINCE RX TX MODEL _SN_VIDPID TEMP
+_sanv THERM ANTPORTS RXDIV FW PROTO _SN_IFPROTO
+_sanv _SN_APN _SN_PDP CSQ CSQ_PER COPS HOME_OP
+_sanv HOME_MCC HOME_MNC PHONE COPS_MCC COPS_MNC LOC
+_sanv MODE REG REG_CS SSIM NR_IMEI NR_IMSI
+_sanv NR_ICCID LAC_DEC LAC_HEX TAC_DEC TAC_HEX T_HEX
+_sanv T_DEC CID_DEC CID_HEX PCI EARFCN PBAND
+_sanv S1BAND S1PCI S1EARFCN S2BAND S2PCI S2EARFCN
+_sanv S3BAND S3PCI S3EARFCN S4BAND S4PCI S4EARFCN
+_sanv S1STATE S2STATE S3STATE S4STATE S1RSRP S2RSRP
+_sanv S3RSRP S4RSRP S1RSRQ S2RSRQ S3RSRQ S4RSRQ
+_sanv PMIMO PMOD S1MIMO S1MOD S2MIMO S2MOD
+_sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
+_sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
+_sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
+_sanv _SN_ALIAS _SN_CPORT
 cat <<EOF
 {
-"path":"$(sanitize_string "$_POLL_AM")",
-"ipaddr":"$(sanitize_string "$IPADDR")",
-"ipaddr6":"$(sanitize_string "$IPADDR6")",
-"iface":"$(sanitize_string "$SEC")",
-"conn_time":"$(sanitize_string "$CONN_TIME")",
-"conn_time_sec":"$(sanitize_number "$CT")",
-"conn_time_since":"$(sanitize_string "$CONN_TIME_SINCE")",
-"conn_status":"$(sanitize_string "$(conn_status_line "$SEC")")",
-"rx":"$(sanitize_number "$RX")",
-"tx":"$(sanitize_number "$TX")",
-"modem":"$(sanitize_string "$MODEL")",
-"alias":"$(sanitize_string "$(uci -q get "5gmodem.$AMP_SEC.alias" 2>/dev/null)")",
-"vidpid":"$(sanitize_string "$_SN_VIDPID")",
-"mtemp":"$(sanitize_string "$TEMP")",
-"mtherm":"$(sanitize_number "$THERM")",
-"antports":"$(sanitize_string "$ANTPORTS")",
-"rxdiv":"$(sanitize_string "$RXDIV")",
-"firmware":"$(sanitize_string "$FW")",
-"cport":"$(sanitize_string "${DEVICE:-$_CPORT_MM}")",
-"protocol":"$(sanitize_string "$PROTO")",
-"iface_proto":"$(sanitize_string "$_SN_IFPROTO")",
+"path":"${_J__POLL_AM}",
+"ipaddr":"${_J_IPADDR}",
+"ipaddr6":"${_J_IPADDR6}",
+"iface":"${_J_SEC}",
+"conn_time":"${_J_CONN_TIME}",
+"conn_time_sec":"${_J_CT}",
+"conn_time_since":"${_J_CONN_TIME_SINCE}",
+"conn_status":"${_J__SN_CONNST}",
+"rx":"${_J_RX}",
+"tx":"${_J_TX}",
+"modem":"${_J_MODEL}",
+"alias":"${_J__SN_ALIAS}",
+"vidpid":"${_J__SN_VIDPID}",
+"mtemp":"${_J_TEMP}",
+"mtherm":"${_J_THERM}",
+"antports":"${_J_ANTPORTS}",
+"rxdiv":"${_J_RXDIV}",
+"firmware":"${_J_FW}",
+"cport":"${_J__SN_CPORT}",
+"protocol":"${_J_PROTO}",
+"iface_proto":"${_J__SN_IFPROTO}",
 "mm_running":"$_SN_MMRUN",
 "mm_hidden":"$_SN_MMHID",
 "xmm_capable":"$_SN_XMM",
-"iface_apn":"$(sanitize_string "$_SN_APN")",
-"iface_pdptype":"$(sanitize_string "$_SN_PDP")",
-"csq":"$(sanitize_number "$CSQ")",
-"signal":"$(sanitize_number "$CSQ_PER")",
-"operator_name":"$(sanitize_string "$COPS")",
-"home_operator":"$(sanitize_string "$HOME_OP")",
-"home_mcc":"$(sanitize_string "$HOME_MCC")",
-"home_mnc":"$(sanitize_string "$HOME_MNC")",
-"roaming":"$([ "$IS_ROAMING" = 1 ] && echo 1 || echo 0)",
-"phone":"$(sanitize_string "$PHONE")",
-"operator_mcc":"$(sanitize_string "$COPS_MCC")",
-"operator_mnc":"$(sanitize_string "$COPS_MNC")",
-"location":"$(sanitize_string "$LOC")",
-"mode":"$(sanitize_string "$MODE")",
-"registration":"$(sanitize_string "$REG")",
-"registration_cs":"$(sanitize_string "$REG_CS")",
-"simslot":"$(sanitize_string "$SSIM")",
+"iface_apn":"${_J__SN_APN}",
+"iface_pdptype":"${_J__SN_PDP}",
+"csq":"${_J_CSQ}",
+"signal":"${_J_CSQ_PER}",
+"operator_name":"${_J_COPS}",
+"home_operator":"${_J_HOME_OP}",
+"home_mcc":"${_J_HOME_MCC}",
+"home_mnc":"${_J_HOME_MNC}",
+"roaming":"$_SN_ROAM10",
+"phone":"${_J_PHONE}",
+"operator_mcc":"${_J_COPS_MCC}",
+"operator_mnc":"${_J_COPS_MNC}",
+"location":"${_J_LOC}",
+"mode":"${_J_MODE}",
+"registration":"${_J_REG}",
+"registration_cs":"${_J_REG_CS}",
+"simslot":"${_J_SSIM}",
 "allow_roaming":"$_SN_ROAMOK",
-"imei":"$(sanitize_string "$NR_IMEI")",
-"imsi":"$(sanitize_string "$NR_IMSI")",
-"iccid":"$(sanitize_string "$NR_ICCID")",
+"imei":"${_J_NR_IMEI}",
+"imsi":"${_J_NR_IMSI}",
+"iccid":"${_J_NR_ICCID}",
 "at_debug":"$_SN_ATDBG",
-"lac_dec":"$(sanitize_number "$LAC_DEC")",
-"lac_hex":"$(sanitize_string "$LAC_HEX")",
-"tac_dec":"$(sanitize_number "$TAC_DEC")",
-"tac_hex":"$(sanitize_string "$TAC_HEX")",
-"tac_h":"$(sanitize_string "$T_HEX")",
-"tac_d":"$(sanitize_number "$T_DEC")",
-"cid_dec":"$(sanitize_number "$CID_DEC")",
-"cid_hex":"$(sanitize_string "$CID_HEX")",
-"pci":"$(sanitize_number "$PCI")",
-"earfcn":"$(sanitize_number "$EARFCN")",
-"pband":"$(sanitize_string "$PBAND")",
-"s1band":"$(sanitize_string "$S1BAND")",
-"s1pci":"$(sanitize_number "$S1PCI")",
-"s1earfcn":"$(sanitize_number "$S1EARFCN")",
-"s2band":"$(sanitize_string "$S2BAND")",
-"s2pci":"$(sanitize_number "$S2PCI")",
-"s2earfcn":"$(sanitize_number "$S2EARFCN")",
-"s3band":"$(sanitize_string "$S3BAND")",
-"s3pci":"$(sanitize_number "$S3PCI")",
-"s3earfcn":"$(sanitize_number "$S3EARFCN")",
-"s4band":"$(sanitize_string "$S4BAND")",
-"s4pci":"$(sanitize_number "$S4PCI")",
-"s4earfcn":"$(sanitize_number "$S4EARFCN")",
-"s1state":"$(sanitize_string "$S1STATE")",
-"s2state":"$(sanitize_string "$S2STATE")",
-"s3state":"$(sanitize_string "$S3STATE")",
-"s4state":"$(sanitize_string "$S4STATE")",
-"s1rsrp":"$(sanitize_number "$S1RSRP")",
-"s2rsrp":"$(sanitize_number "$S2RSRP")",
-"s3rsrp":"$(sanitize_number "$S3RSRP")",
-"s4rsrp":"$(sanitize_number "$S4RSRP")",
-"s1rsrq":"$(sanitize_number "$S1RSRQ")",
-"s2rsrq":"$(sanitize_number "$S2RSRQ")",
-"s3rsrq":"$(sanitize_number "$S3RSRQ")",
-"s4rsrq":"$(sanitize_number "$S4RSRQ")",
-"pmimo":"$(sanitize_string "$PMIMO")",
-"pmod":"$(sanitize_string "$PMOD")",
-"s1mimo":"$(sanitize_string "$S1MIMO")",
-"s1mod":"$(sanitize_string "$S1MOD")",
-"s2mimo":"$(sanitize_string "$S2MIMO")",
-"s2mod":"$(sanitize_string "$S2MOD")",
-"s3mimo":"$(sanitize_string "$S3MIMO")",
-"s3mod":"$(sanitize_string "$S3MOD")",
-"s4mimo":"$(sanitize_string "$S4MIMO")",
-"s4mod":"$(sanitize_string "$S4MOD")",
+"lac_dec":"${_J_LAC_DEC}",
+"lac_hex":"${_J_LAC_HEX}",
+"tac_dec":"${_J_TAC_DEC}",
+"tac_hex":"${_J_TAC_HEX}",
+"tac_h":"${_J_T_HEX}",
+"tac_d":"${_J_T_DEC}",
+"cid_dec":"${_J_CID_DEC}",
+"cid_hex":"${_J_CID_HEX}",
+"pci":"${_J_PCI}",
+"earfcn":"${_J_EARFCN}",
+"pband":"${_J_PBAND}",
+"s1band":"${_J_S1BAND}",
+"s1pci":"${_J_S1PCI}",
+"s1earfcn":"${_J_S1EARFCN}",
+"s2band":"${_J_S2BAND}",
+"s2pci":"${_J_S2PCI}",
+"s2earfcn":"${_J_S2EARFCN}",
+"s3band":"${_J_S3BAND}",
+"s3pci":"${_J_S3PCI}",
+"s3earfcn":"${_J_S3EARFCN}",
+"s4band":"${_J_S4BAND}",
+"s4pci":"${_J_S4PCI}",
+"s4earfcn":"${_J_S4EARFCN}",
+"s1state":"${_J_S1STATE}",
+"s2state":"${_J_S2STATE}",
+"s3state":"${_J_S3STATE}",
+"s4state":"${_J_S4STATE}",
+"s1rsrp":"${_J_S1RSRP}",
+"s2rsrp":"${_J_S2RSRP}",
+"s3rsrp":"${_J_S3RSRP}",
+"s4rsrp":"${_J_S4RSRP}",
+"s1rsrq":"${_J_S1RSRQ}",
+"s2rsrq":"${_J_S2RSRQ}",
+"s3rsrq":"${_J_S3RSRQ}",
+"s4rsrq":"${_J_S4RSRQ}",
+"pmimo":"${_J_PMIMO}",
+"pmod":"${_J_PMOD}",
+"s1mimo":"${_J_S1MIMO}",
+"s1mod":"${_J_S1MOD}",
+"s2mimo":"${_J_S2MIMO}",
+"s2mod":"${_J_S2MOD}",
+"s3mimo":"${_J_S3MIMO}",
+"s3mod":"${_J_S3MOD}",
+"s4mimo":"${_J_S4MIMO}",
+"s4mod":"${_J_S4MOD}",
 "age":"0",
-"bandwidth":"$(sanitize_string "$BANDWIDTH")",
-"enbid":"$(sanitize_string "$ENBID")",
-"pathloss":"$(sanitize_string "$PATHLOSS")",
-"txpower":"$(sanitize_string "$TXPOWER")",
-"uecat":"$(sanitize_string "$UECAT")",
-"cqi":"$(sanitize_string "$CQI")",
-"volte":"$(sanitize_string "$VOLTE")",
-"rscp":"$(sanitize_string "$RSCP")",
-"ecio":"$(sanitize_string "$ECIO")",
-"rsrp":"$(sanitize_string "$RSRP")",
-"rsrq":"$(sanitize_string "$RSRQ")",
-"rssi":"$(sanitize_string "$RSSI")",
-"sinr":"$(sanitize_string "$SINR")",
+"bandwidth":"${_J_BANDWIDTH}",
+"enbid":"${_J_ENBID}",
+"pathloss":"${_J_PATHLOSS}",
+"txpower":"${_J_TXPOWER}",
+"uecat":"${_J_UECAT}",
+"cqi":"${_J_CQI}",
+"volte":"${_J_VOLTE}",
+"rscp":"${_J_RSCP}",
+"ecio":"${_J_ECIO}",
+"rsrp":"${_J_RSRP}",
+"rsrq":"${_J_RSRQ}",
+"rssi":"${_J_RSSI}",
+"sinr":"${_J_SINR}",
 "neighbors":[$NEIGHBORS]
 }
 EOF

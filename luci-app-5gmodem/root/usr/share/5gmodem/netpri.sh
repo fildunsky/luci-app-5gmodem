@@ -1244,6 +1244,68 @@ worder)
 	else
 		uci -q delete "5gmodem.@5gmodem[0].widget_order" 2>/dev/null
 	fi
+	# СЕКЦИИ ВИДЖЕТОВ - В ТОТ ЖЕ ПОРЯДОК (просьба владельца 07.08.2026).
+	# Настройки рисуют списки пингов и служб по порядку СЕКЦИЙ, и после
+	# перетаскивания на панели оба места должны совпадать. Секции анонимные и
+	# однородные, поэтому переставляем их СОДЕРЖИМОЕ по существующим слотам:
+	# идентификаторы секций стабильны, открытая страница настроек ничего не
+	# теряет. Не упомянутые в порядке значения уходят в конец, сохраняя
+	# взаимный порядок (то же правило, что у карточек на панели).
+	_WRNL='
+'
+	_wo_reorder() {   # $1 - тип секции, $2 - главное поле, $3 - доп. поле или '', $4 - желаемый порядок значений
+		[ -n "$4" ] || return 0
+		_wr_pairs=""
+		_wr_i=0
+		while [ "$(uci -q get "5gmodem.@$1[$_wr_i]" 2>/dev/null)" = "$1" ]; do
+			_wr_v=$(uci -q get "5gmodem.@$1[$_wr_i].$2")
+			_wr_x=""
+			[ -n "$3" ] && _wr_x=$(uci -q get "5gmodem.@$1[$_wr_i].$3")
+			_wr_pairs="${_wr_pairs}${_wr_v}~${_wr_x}${_WRNL}"
+			_wr_i=$((_wr_i + 1))
+		done
+		[ "$_wr_i" -gt 1 ] || return 0
+		_wr_out=""
+		for _wr_want in $4; do
+			# Построчный проход с case: значение сравнивается ЛИТЕРАЛОМ. grep
+			# здесь означал бы регулярное выражение - в хостах есть точки.
+			_wr_rest=""; _wr_hit=""
+			_wr_old="$_wr_pairs"
+			while [ -n "$_wr_old" ]; do
+				_wr_l="${_wr_old%%${_WRNL}*}"; _wr_old="${_wr_old#*${_WRNL}}"
+				if [ -z "$_wr_hit" ]; then
+					case "$_wr_l" in
+						"$_wr_want~"*) _wr_hit="$_wr_l"; continue ;;
+					esac
+				fi
+				_wr_rest="${_wr_rest}${_wr_l}${_WRNL}"
+			done
+			[ -n "$_wr_hit" ] && { _wr_out="${_wr_out}${_wr_hit}${_WRNL}"; _wr_pairs="$_wr_rest"; }
+		done
+		_wr_out="${_wr_out}${_wr_pairs}"
+		_wr_i=0
+		while [ -n "$_wr_out" ]; do
+			_wr_l="${_wr_out%%${_WRNL}*}"; _wr_out="${_wr_out#*${_WRNL}}"
+			uci -q set "5gmodem.@$1[$_wr_i].$2=${_wr_l%%~*}"
+			[ -n "$3" ] && uci -q set "5gmodem.@$1[$_wr_i].$3=${_wr_l#*~}"
+			_wr_i=$((_wr_i + 1))
+		done
+	}
+	# Ключ панели != значение секции у SSClash: секция service='ssclash' даёт
+	# карточку s:ssclash-go, а service='clash' (легаси-ветка) - s:ssclash
+	# (sscKindForSvc в netpri.js). Возвращаем к значениям секций, иначе
+	# перестановка промахивается ровно на этих двух.
+	_wo_ping=""; _wo_svc=""
+	for _wk in $_wo; do
+		case "$_wk" in
+			p:*)          _wo_ping="${_wo_ping:+$_wo_ping }${_wk#p:}" ;;
+			s:ssclash-go) _wo_svc="${_wo_svc:+$_wo_svc }ssclash" ;;
+			s:ssclash)    _wo_svc="${_wo_svc:+$_wo_svc }clash" ;;
+			s:*)          _wo_svc="${_wo_svc:+$_wo_svc }${_wk#s:}" ;;
+		esac
+	done
+	_wo_reorder pingwidget host mode "$_wo_ping"
+	_wo_reorder svcwidget service "" "$_wo_svc"
 	uci -q commit 5gmodem
 	echo '{"ok":1}'
 	;;

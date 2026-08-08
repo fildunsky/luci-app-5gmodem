@@ -239,8 +239,12 @@
 .netpribar .netpri-btn > .netpri-rank {
 	position: absolute;
 	right: -.02em;
-	top: -.132em;
-	font-size: 4.9em;
+	/* Цифра НА ВСЮ ВЫСОТУ карточки и отцентрована: кегль и смещение решены
+	   в браузере по фактическим границам глифа (canvas TextMetrics на живом
+	   шрифте темы, Inter 800), зазоры сверху и снизу выровнены. bottom не
+	   задаём: на глиф он не влияет, а растягивание бокса сбивало line box. */
+	top: -.14em;
+	font-size: 5.9em;
 	line-height: 1;
 	font-weight: 800;
 	font-variant-numeric: tabular-nums;
@@ -261,6 +265,25 @@
    долю - по ощущению это та же ненавязчивость, что и на светлой. */
 @media (prefers-color-scheme: dark) {
 	.netpribar .netpri-btn > .netpri-rank { opacity: .3; }
+}
+
+/* ФОН-ИКОНКА вместо цифры (режим 'icon'). Картинка, в отличие от глифа,
+   растягивается честно: top/bottom 0 и height 100% сажают её ровно в край
+   карточки сверху и снизу, ширина - по пропорции. Прозрачность своя: цветные
+   логотипы операторов при цифровых 0.14 почти пропадали. */
+.netpribar .netpri-btn > img.netpri-rank-ic {
+	/* На 30% крупнее карточки и на треть своей ширины задвинута за правый
+	   край (решение владельца): по вертикали центрируется отрицательным top,
+	   выступ за край срезает overflow кнопки. */
+	top: -22.5%;
+	height: 145%;
+	right: 0;
+	transform: translateX(33%);
+	width: auto;
+	opacity: .16;
+}
+@media (prefers-color-scheme: dark) {
+	.netpribar .netpri-btn > img.netpri-rank-ic { opacity: .3; }
 }
 
 /* Текст - ПОВЕРХ цифры. Без этого в темах, где у кнопки свой фон, строки могли

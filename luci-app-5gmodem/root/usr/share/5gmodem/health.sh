@@ -711,7 +711,17 @@ heal() {
 							: > "$HDIR/$_h_if.mmoff"
 							_ev "лечу $_h_if: модем выключен в ModemManager ($_h_mms) - включаю"
 						fi
-						( mmcli -m "$_h_mmi" --enable ) >/dev/null 2>&1 </dev/null 9>&- &
+						# ОДИН enable ЗА РАЗ И С ТАЙМАУТОМ. Команда уходит в фон,
+						# и на заклинившем MM она не завершается - без гарда каждый
+						# круг сторожа плодил бы ещё один висящий mmcli (утечка
+						# процессов, по одному в ~30 c). Пока прошлый жив - не
+						# запускаем новый; сам он ограничен 30 секундами.
+						if ! pgrep -f "mmcli -m $_h_mmi --enable" >/dev/null 2>&1; then
+							( mmcli -m "$_h_mmi" --enable >/dev/null 2>&1 & _h_mep=$!
+							  ( sleep 30; kill "$_h_mep" 2>/dev/null ) >/dev/null 2>&1 & _h_mew=$!
+							  wait "$_h_mep" 2>/dev/null
+							  kill "$_h_mew" 2>/dev/null ) >/dev/null 2>&1 </dev/null 9>&- &
+						fi
 						continue ;;
 				esac
 			fi

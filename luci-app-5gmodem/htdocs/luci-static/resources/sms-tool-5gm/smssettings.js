@@ -550,8 +550,15 @@ function addTelegramForwarding(s) {
 			var j = {};
 			try { j = JSON.parse(out || '{}'); } catch (e) {}
 			if (!j.ok) {
-				ui.addNotification(null, E('p', {},
-					_('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'))), 'error');
+				/* «noreply» - сеть молчит на прямом пути И через прокси: у
+				   операторов РФ прямой доступ к Telegram закрыт, и без
+				   работающего SSClash (или VPN-аплинка) роутеру туда не
+				   попасть. Без расшифровки человек шёл проверять токен,
+				   который тут ни при чём. */
+				var msg = (j.error === 'noreply')
+					? _('Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Start SSClash (or route the router through a VPN) and try again.')
+					: _('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'));
+				ui.addNotification(null, E('p', {}, msg), 'error');
 				return;
 			}
 			/* Имена Telegram отдаёт в \uXXXX - без раскодирования в уведомлении

@@ -16,6 +16,14 @@
 
 /* --- Проверка/установка обновления с GitHub (app + перевод) --- */
 function updSet(id, txt) { var e = document.getElementById(id); if (e) { e.textContent = txt; } }
+/* Статус с ЖИРНЫМ номером версии - тем же <strong>, что у «Текущая версия». */
+function updSetVer(id, label, ver) {
+	var e = document.getElementById(id);
+	if (!e) { return; }
+	e.textContent = '';
+	e.appendChild(document.createTextNode(label + ': '));
+	e.appendChild(E('strong', {}, ver));
+}
 function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
 /* Локализация кодов ошибок обновления. Спец-случай asset_pending: тег релиза уже
    выпущен, а .apk ещё собирается на сервере (CI) - показываем понятную подсказку
@@ -33,13 +41,15 @@ function checkUpdate() {
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		updSet('upd-current', d.current || '—');
-		updSet('upd-latest', d.latest || '—');
+		/* Версию показываем БЕЗ префикса тега: человек сравнивает её с текущей,
+		   а «v» - служебная часть имени тега на GitHub. */
+		var latest = String(d.latest || '').replace(/^v/i, '');
 		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
 		if (!d.success) {
 			updSet('upd-status', updErrText(d.error, _('Could not check for updates')));
 		} else if (d.update_available == 1 || d.update_available === true) {
 			updShow('upd-install', true);
-			updSet('upd-status', _('A new version is available'));
+			updSetVer('upd-status', _('Update available'), latest || '—');
 		} else {
 			updSet('upd-status', _('You have the latest version'));
 		}
@@ -150,10 +160,10 @@ function apnCheck() {
 			updSet('apn-status', _('Could not check the APN database') + (d.error ? (': ' + d.error) : ''));
 			return;
 		}
-		updSet('apn-latest', (d.available_version || '—') + ' · ' + (d.available || 0) + ' ' + _('operators'));
 		if (String(d.update_available) === '1') {
 			updShow('apn-update', true);
-			updSet('apn-status', _('A newer database is available'));
+			updSetVer('apn-status', _('Update available'),
+				(d.available_version || '—') + ' · ' + (d.available || 0) + ' ' + _('operators'));
 		} else {
 			updSet('apn-status', _('The APN database is up to date'));
 		}
@@ -222,10 +232,14 @@ return view.extend({
 							'style': 'display:none'
 						}, [ _('Release page') ]),
 					]),
+					/* Одна КОЛОНКА внутри описания: тема кладёт описание флексом в
+					   строку (значок-вопросик слева), поэтому наши строки живут в
+					   общем столбике справа от значка, а не под ним. */
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
-						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'upd-latest' }, [ '—' ]) ]),
-						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
+						E('div', {}, [
+							E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
+							E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
+						]),
 					]),
 				]),
 			]),
@@ -248,11 +262,10 @@ return view.extend({
 						}, [ _('Update the APN database') ]),
 					]),
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'apn-current' }, [ '—' ]) ]),
-						E('div', {}, [ _('Latest version') + ': ', E('strong', { 'id': 'apn-latest' }, [ '—' ]) ]),
-						E('div', { 'id': 'apn-status', 'style': 'margin-top:4px' }, []),
-						E('div', { 'style': 'margin-top:4px;opacity:.75' },
-							_('Operator APNs from GNOME MBPI and AOSP. Used to pick an APN automatically when a SIM changes.')),
+						E('div', {}, [
+							E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'apn-current' }, [ '—' ]) ]),
+							E('div', { 'id': 'apn-status', 'style': 'margin-top:4px' }, []),
+						]),
 					]),
 				]),
 			]),
@@ -301,11 +314,18 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
-		/* Номер приоритета фоном на карточках аплинков. По умолчанию ВЫКЛЮЧЕН:
-		   порядок и так читается слева направо, а крупная цифра - вкусовщина.
+		/* Фон карточек аплинков. По умолчанию ВЫКЛЮЧЕН: порядок и так читается
+		   слева направо, а крупный знак - вкусовщина. Три режима: ничего, номер
+		   приоритета, иконка интерфейса (у модема - логотип оператора SIM, у
+		   Wi-Fi и кабеля - их значки; та же картинка, что в шапке карточки).
+		   Значение '1' оставлено за номером - у ранних установок оно уже в
+		   конфиге от прежней галочки «Отображать цифры».
 		   Зависимость от widget_netpri: без самой панели опция бессмысленна. */
-		o = wdg.option(form.Flag, 'netpri_rank', _('Show priority numbers'),
-			_('Large translucent number in the corner of each uplink card'));
+		o = wdg.option(form.ListValue, 'netpri_rank', _('Card background'),
+			_('Large translucent mark on each uplink card'));
+		o.value('0', _('None'));
+		o.value('1', _('Priority number'));
+		o.value('icon', _('Interface icon'));
 		o.default = '0';
 		o.rmempty = false;
 		o.depends('widget_netpri', '1');
@@ -438,7 +458,10 @@ return view.extend({
 			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */
 			apnVersion();
 			return E('div', {}, [
-				updateBlock,
+				/* Тот же контейнер, что у формы: темы рисуют «карточку» секции по
+				   селектору .cbi-map .cbi-section, и собранный вручную блок вне
+				   формы оставался без плашки (замечено владельцем 07.08.2026). */
+				E('div', { 'class': 'cbi-map' }, [ updateBlock ]),
 				/* Карточки виджетов (пинг/сервисы): обе темы рендерят настоящую
 				   <table class="cbi-section-table">, но по умолчанию она тянется
 				   на 100% ширины и колонки расползаются по-разному. Сжимаем

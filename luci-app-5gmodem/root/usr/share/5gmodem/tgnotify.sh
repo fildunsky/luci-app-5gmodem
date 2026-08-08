@@ -77,12 +77,89 @@ _ready() {
 # 2 - Телеграм ОТКАЗАЛСЯ принимать это сообщение (4xx). Разница принципиальна:
 # при 1 круг надо прервать и повторить позже, а при 2 повторять бессмысленно -
 # одно негодное сообщение иначе держит очередь вечно (так и было с битой SMS).
+# ПРЯМОЙ 443 К TELEGRAM У ОПЕРАТОРОВ РФ ЗАКРЫТ, а СВОЙ трафик роутера идёт
+# мимо clash: tproxy перехватывает только форвард из LAN (живой стенд
+# 07.08.2026: прямой curl - таймаут, через mixed-порт отвечает). Тот же обход,
+# что у пробы Telegram в netpri.sh и geo-запросов спидтеста: сначала прямой
+# путь (за границей и на VPN-роуте он быстрее и не зависит от clash), при
+# молчании - повтор через http/mixed-порт clash. Ответ с полем "ok" - ЛЮБОЕ
+# слово от сервера, включая честную ошибку токена: такое прокси не лечит и
+# повторять его не надо.
+# Запрос к API clash (ssclash держит его на 9090); секрет - если задан в конфиге.
+_TG_CAPI=http://127.0.0.1:9090
+_tg_capi() {
+	if [ -n "$_TG_CSEC" ]; then
+		curl -s -m 3 -H "Authorization: Bearer $_TG_CSEC" "$@" 2>/dev/null
+	else
+		curl -s -m 3 "$@" 2>/dev/null
+	fi
+}
+
+# HTTP-порт clash тремя способами, по возрастанию хитрости:
+#   1) mixed-port/port из файла конфига (legacy-раскладка ssclash);
+#   2) РАНТАЙМ mihomo: в tproxy/tun-конфиге HTTP-порта в файле нет вовсе, но
+#      он мог быть открыт на лету - спрашиваем /configs;
+#   3) порт закрыт - просим mihomo ОТКРЫТЬ его через PATCH /configs. Это
+#      штатная ручка (ею пользуются все дашборды), слушает только 127.0.0.1 и
+#      живёт до перезапуска clash; повторные вызовы находят порт шагом 2 и
+#      PATCH больше не дёргают. Проверено на живом стенде (mihomo 1.19.29,
+#      tproxy-конфиг без единого HTTP-порта): 204 -> порт слушает -> Telegram
+#      отвечает через него 302.
+_tg_proxy_port() {
+	_tp_f=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+	case "$_tp_f" in ''|0) ;; *) printf '%s' "$_tp_f"; return 0 ;; esac
+	_TG_CSEC=$(sed -n "s/^ *secret *: *[\"']*\([^\"' ]*\).*/\1/p" \
+		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+	_tp_r=$(_tg_capi "$_TG_CAPI/configs" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)
+	case "$_tp_r" in ''|*[!0-9]*) return 1 ;; esac
+	if [ "$_tp_r" = "0" ]; then
+		_tg_capi -X PATCH "$_TG_CAPI/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
+		_tp_r=7895
+		logger -t 5gmodem "telegram: прямой путь к api.telegram.org закрыт - открыл у clash mixed-port 7895 (API, только 127.0.0.1)"
+	fi
+	printf '%s' "$_tp_r"
+}
+
+# Отметка «прямой путь мёртв»: без неё КАЖДЫЙ вызов (а тик шлёт и опрашивает
+# каждые ~30 c) сжигал бы таймаут прямой попытки впустую. TTL 10 минут: смена
+# аплинка на туннельный снимет блокировку - и мы это заметим.
+_TG_DDEAD=/tmp/5gmodem_tg_direct_dead
+_tg_direct_dead() {
+	_td_t=$(cat "$_TG_DDEAD" 2>/dev/null)
+	case "$_td_t" in ''|*[!0-9]*) return 1 ;; esac
+	read -r _td_n _ < /proc/uptime; _td_n=${_td_n%%.*}
+	[ $((_td_n - _td_t)) -lt 600 ]
+}
+
+_tg_curl() {   # аргументы curl без -s/-m
+	_tc_o=""
+	if ! _tg_direct_dead; then
+		# 8 c, не 20: живой прямой путь отвечает за секунды, а на закрытом
+		# каждая лишняя секунда - это висящая кнопка и замёрзший тик.
+		_tc_o=$(curl -s -m 8 "$@" 2>&1)
+		case "$_tc_o" in
+			*'"ok":'*) rm -f "$_TG_DDEAD" 2>/dev/null; printf '%s' "$_tc_o"; return 0 ;;
+		esac
+		read -r _tc_n _ < /proc/uptime; printf '%s' "${_tc_n%%.*}" > "$_TG_DDEAD" 2>/dev/null
+	fi
+	_tc_pp=$(_tg_proxy_port)
+	if [ -n "$_tc_pp" ] && [ "$_tc_pp" != "0" ]; then
+		_tc_p=$(curl -s -m 20 -x "http://127.0.0.1:$_tc_pp" "$@" 2>&1)
+		case "$_tc_p" in
+			*'"ok":'*) printf '%s' "$_tc_p"; return 0 ;;
+		esac
+	fi
+	printf '%s' "$_tc_o"
+	return 1
+}
+
 _tg_send() {   # $1 - текст
 	_ts_t=$(printf '%s' "$1" | utf8_fix)
-	_ts_o=$(curl -s -m 20 "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
+	_ts_o=$(_tg_curl "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
 		--data-urlencode "chat_id=$TG_CHAT" \
 		--data-urlencode "text=$_ts_t" \
-		-d "disable_web_page_preview=true" 2>&1)
+		-d "disable_web_page_preview=true")
 	case "$_ts_o" in
 		*'"ok":true'*) printf 'ok' > "$LASTLOG" 2>/dev/null; return 0 ;;
 	esac
@@ -291,9 +368,15 @@ $_tk_ts
 chatid() {
 	[ -n "$TG_TOKEN" ] || { echo '{"ok":false,"error":"no token"}'; return 0; }
 	command -v curl >/dev/null 2>&1 || { echo '{"ok":false,"error":"no curl"}'; return 0; }
-	_ci_o=$(curl -s -m 20 "https://api.telegram.org/bot$TG_TOKEN/getUpdates" 2>&1)
+	_ci_o=$(_tg_curl "https://api.telegram.org/bot$TG_TOKEN/getUpdates")
 	case "$_ci_o" in
 		*'"ok":true'*) ;;
+		'')
+			# Пустота = не ответил ни прямой путь, ни прокси: это не «неверный
+			# токен», а сеть. Отдаём код - страница покажет человеку, что
+			# именно происходит и чем лечится.
+			echo '{"ok":false,"error":"noreply"}'
+			return 0 ;;
 		*)
 			printf '{"ok":false,"error":"%s"}\n' \
 				"$(printf '%s' "$_ci_o" | tr -d '"\\' | tr '\n' ' ' | head -c 180)"
@@ -476,7 +559,7 @@ commands() {
 	case "$_co_off" in ''|*[!0-9]*) _co_off=0 ;; esac
 	_co_url="https://api.telegram.org/bot$TG_TOKEN/getUpdates?timeout=0&limit=10"
 	[ "$_co_off" -gt 0 ] && _co_url="$_co_url&offset=$_co_off"
-	_co_j=$(curl -s -m 20 "$_co_url" 2>/dev/null)
+	_co_j=$(_tg_curl "$_co_url")
 	case "$_co_j" in *'"ok":true'*) ;; *) return 0 ;; esac
 
 	_co_i=0
