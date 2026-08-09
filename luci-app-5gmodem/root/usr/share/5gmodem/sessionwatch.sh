@@ -220,6 +220,33 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			_dflag="/tmp/5gmodem_sw_down_$_if"
 			if [ -f "$_dflag" ]; then
 				rm -f "$_dflag"
+				# ДЕРЕГИСТРИРОВАН КОМАНДОЙ - ДОЗВОН НЕ ПОЛУЧИТСЯ НИКОГДА.
+				# +COPS: 2 оставляет оборванный цикл дозвона (скрипты xmm/gcom
+				# шлют COPS=2 в начале), и сам модем сеть искать больше не
+				# будет: интерфейс лежит, передозвоны крутятся впустую, а тот же
+				# модем в другом роутере регистрируется сразу (живой отчёт
+				# 09.08.2026: L850, МТС «Not registered»). Возвращаем поиск сети
+				# командой AT+COPS=0 - не чаще раза в 5 минут и только при
+				# свободном от дозвонщика порте.
+				if [ -n "$_port" ] && ! at_dialer_busy "$_port"; then
+					case "$_proto" in
+						xmm|atc|fibocom|3g|ncm)
+							_swcf="/tmp/5gmodem_sw_cops_$_if"
+							_swnow=$(_now)
+							_swlast=$(cat "$_swcf" 2>/dev/null)
+							case "$_swlast" in ''|*[!0-9]*) _swlast=0 ;; esac
+							if [ $((_swnow - _swlast)) -ge 300 ]; then
+								_swc=$(at_query "$_port" "AT+COPS?" 6 4 2>/dev/null 									| tr -d '\r' \
+									| sed -n 's/^+COPS: *\([0-9]*\).*/\1/p' | head -1)
+								if [ "$_swc" = "2" ]; then
+									_log "модем на $_if дерегистрирован командой (+COPS: 2) - возвращаю поиск сети"
+									at_query "$_port" "AT+COPS=0" 20 4 >/dev/null 2>&1
+									printf '%s' "$_swnow" > "$_swcf" 2>/dev/null
+								fi
+							fi
+							;;
+					esac
+				fi
 				# ЗАЛИПШАЯ WDS-СЕССИЯ. Модем отвечает «connected», хотя интерфейс
 				# лежит: netifd не довёл прошлый дозвон до конца (таймаут), сессия
 				# осталась висеть с чужим client-id, и КАЖДАЯ новая попытка падает

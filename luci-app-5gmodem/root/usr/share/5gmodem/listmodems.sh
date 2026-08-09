@@ -327,7 +327,18 @@ PORTREC_EOF
 	if [ -n "$_myimei" ] && [ "$(printf '%s\n' "$_IMEIS_PRESENT" | grep -c "^$_myimei\$")" = 1 ]; then
 		_alias=$(printf '%s\n' "$_ALIASMAP" | sed -n "s/^$_myimei	//p" | head -1)
 	fi
-	[ -n "$_alias" ] || _alias=$(uci -q get "5gmodem.$_sec.alias" 2>/dev/null)
+	# Фолбэк на секцию слота - только если её имя НЕ привязано к ДРУГОМУ IMEI:
+	# после замены модема в разъёме новый не должен носить имя старого
+	# (правило то же, что в alias_for_path из lib.sh).
+	if [ -z "$_alias" ]; then
+		_seca=$(printf '%s\n' "$_UCISNAP" | sed -n "s/^5gmodem\.$_sec\.alias='\(.*\)'\$/\1/p" | head -1)
+		if [ -n "$_seca" ]; then
+			_secam=$(printf '%s\n' "$_UCISNAP" | sed -n "s/^5gmodem\.$_sec\.alias_imei='\(.*\)'\$/\1/p" | head -1)
+			if [ -z "$_secam" ] || [ "$_secam" = "$_myimei" ]; then
+				_alias="$_seca"
+			fi
+		fi
+	fi
 	_alias=$(esc "$_alias")
 	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
 done

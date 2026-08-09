@@ -313,13 +313,18 @@ function renderCellLock(state) {
 	// СНАЧАЛА КНОПКА (действие), затем состояние («к чему привязан») - единый порядок
 	// для всех модемов.
 	if (locked || unlockable) {
+		/* При НЕИЗВЕСТНОМ состоянии (unlockable без locked) кнопка зовётся
+		   иначе: голое «Unlock» читалось как «модем привязан к соте» - человек
+		   шёл искать несуществующую привязку (живой отчёт 09.08.2026, L850).
+		   «Сбросить привязку» честнее: это страховочное действие, безопасное и
+		   вхолостую. */
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-reset',
 			'click': ui.createHandlerFn(this, function() {
 				return run([ 'setcelllock', 'off' ],
 					_('Removing the lock - the modem restarts, connection drops for a while...'));
 			})
-		}, [ _('Unlock') ]));
+		}, [ (locked ? _('Unlock') : _('Reset cell lock')) ]));
 	} else {
 		/* Соту берём В МОМЕНТ НАЖАТИЯ, а не при отрисовке. Раньше кнопка читала
 		   последний снимок метрик, но эта строка рисуется при раскрытии блока

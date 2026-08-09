@@ -367,7 +367,7 @@ serve_cache() {
 	# Секцию считаем ОБЩЕЙ формулой от пути модема (secname), а не из ключа
 	# снимка: snap_key даёт свой формат (с хвостовым подчёркиванием) и в имя
 	# секции не годится. AMP_SEC здесь ещё пуст - он вычисляется много ниже.
-	_sc_al=$(uci -q get "5gmodem.$(secname "$_POLL_AM").alias" 2>/dev/null)
+	_sc_al=$(alias_for_path "$_POLL_AM")
 	[ -n "$_sc_al" ] || _sc_al="-"
 	sed -e "s/\"age\":\"[0-9]*\"/\"age\":\"$_a\"/" \
 		-e "s|\"alias\":\"[^\"]*\"|\"alias\":\"$(printf '%s' "$_sc_al" | sed 's/[&|\\]/\\&/g')\"|" \
@@ -629,6 +629,12 @@ fi
 # устаревшие данные честнее перемешанных, а отличить перепутанный ответ от
 # «модем молчит» потом невозможно.
 . "$RES/atlock.sh"
+# Дозвонщик gcom (прото xmm/atc) нашу очередь не уважает - при живом дозвоне
+# уступаем порт сразу, не выстаивая at_lock (см. at_dialer_busy в lib.sh).
+if [ -n "$DEVICE" ] && at_dialer_busy "$DEVICE"; then
+	_age=$(_snapshot_age)
+	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
+fi
 if [ -n "$DEVICE" ] && ! at_lock "$DEVICE" 10; then
 	_age=$(_snapshot_age)
 	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
@@ -1609,7 +1615,7 @@ _snap_prepare() {
 emit_snapshot() {
 _snap_prepare
 _SN_CONNST=$(conn_status_line "$SEC")
-_SN_ALIAS=$(uci -q get "5gmodem.$AMP_SEC.alias" 2>/dev/null)
+_SN_ALIAS=$(alias_for_path "$_POLL_AM")
 _SN_CPORT="${DEVICE:-$_CPORT_MM}"
 [ "$IS_ROAMING" = 1 ] && _SN_ROAM10=1 || _SN_ROAM10=0
 _sanv _POLL_AM IPADDR IPADDR6 SEC CONN_TIME CT
