@@ -281,7 +281,17 @@ function trafficIcon(key, label, opName) {
    иначе в одном интерфейсе соседствуют два написания одного номера. */
 function prettyTrafficLabel(label) {
 	var s = String(label || '');
-	return s.replace(/\+?\d[\d\s()-]{9,}\d/, function(m) { return mutil.formatPhone(m); });
+	/* Ряд без подписи приходит СЫРЫМ КЛЮЧОМ «sim-8970...»: подпись потерялась
+	   (напр. симка вынута, а её ярлык не пережил ребут на старой версии).
+	   Показываем «ICCID: 8970...» - так же сборщик подписывает карты без
+	   номера, и когда номер появится, строка с тем же ключом просто сменит
+	   подпись, не теряя истории. */
+	var m = s.match(/^sim-(\d{6,})$/);
+	if (m) { return 'ICCID: ' + m[1]; }
+	/* ICCID в подписи длиннее телефона и попал бы под телефонную маску -
+	   не форматируем такие строки. */
+	if (/ICCID:/.test(s)) { return s; }
+	return s.replace(/\+?\d[\d\s()-]{9,}\d/, function(m2) { return mutil.formatPhone(m2); });
 }
 
 /* Таблица помесячного трафика: ключи приходят как "<sim|iface>|<YYYY-MM>". */
@@ -294,7 +304,9 @@ function trafficTable(data, labels) {
 		E('th', { 'class': 'th' }, [ _('Month') ]),
 		E('th', { 'class': 'th' }, [ _('Received') ]),
 		E('th', { 'class': 'th' }, [ _('Sent') ]),
-		E('th', { 'class': 'th' }, [ _('Total') ])
+		E('th', { 'class': 'th' }, [ _('Total') ]),
+		/* Колонка корзины - без заголовка, как у значка. */
+		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ])
 	]) ];
 	var keys = Object.keys(data || {}).sort();
 	keys.forEach(function(k) {
@@ -312,15 +324,50 @@ function trafficTable(data, labels) {
 			E('td', { 'class': 'td' }, [ fmtMonth(parts[1]) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(rx) ]),
 			E('td', { 'class': 'td' }, [ fmtBytes(tx) ]),
-			E('td', { 'class': 'td' }, [ fmtBytes(rx + tx) ])
+			E('td', { 'class': 'td' }, [ fmtBytes(rx + tx) ]),
+			E('td', { 'class': 'td', 'style': 'width:1%' }, [
+				/* Маленький крестик в круге, а не кнопка-корзина (решение
+				   владельца): это чистка строки, ей незачем выглядеть тяжелее
+				   самих данных. Свои стили вместо классов кнопок - темы дают
+				   кнопкам крупные поля и рамки. */
+				E('button', {
+					'title': _('Delete this row'),
+					'style': 'width:20px;height:20px;padding:0;border-radius:50%;' +
+					         'border:1px solid rgba(128,128,128,.45);background:transparent;' +
+					         'color:inherit;opacity:.6;cursor:pointer;line-height:1;' +
+					         'display:inline-flex;align-items:center;justify-content:center;' +
+					         'font-size:13px',
+					'mouseover': function(ev) { ev.currentTarget.style.opacity = '1'; },
+					'mouseout': function(ev) { ev.currentTarget.style.opacity = '.6'; },
+					'click': function(ev) { forgetTrafficRow(ev.currentTarget, parts[0], parts[1]); }
+				}, '×')
+			])
 		]));
 	});
 	if (keys.length === 0) {
 		rows.push(E('tr', { 'class': 'tr' }, [
-			E('td', { 'class': 'td', 'colspan': '6' }, [ _('No data yet') ])
+			E('td', { 'class': 'td', 'colspan': '7' }, [ _('No data yet') ])
 		]));
 	}
 	return E('table', { 'class': 'table' }, rows);
+}
+
+/* Удаление строки отчёта. Свежая строка активного аплинка возродится со
+   следующим тиком (счёт пойдёт заново с нуля) - это ожидаемо; строки вынутых
+   карт и старых месяцев уходят насовсем, поэтому короткое подтверждение. */
+function forgetTrafficRow(btn, key, month) {
+	if (!confirm(_('Delete this traffic row? This cannot be undone.'))) { return; }
+	btn.disabled = true;
+	callStats([ 'forget', key, month ]).then(function() {
+		return callStats([ 'traffic' ]);
+	}).then(function(t) {
+		_state.traffic = t || {};
+		var tt = document.getElementById('traffic-table');
+		if (tt) {
+			tt.innerHTML = '';
+			tt.appendChild(trafficTable(_state.traffic, (_state.list || {}).labels || {}));
+		}
+	});
 }
 
 function redraw() {

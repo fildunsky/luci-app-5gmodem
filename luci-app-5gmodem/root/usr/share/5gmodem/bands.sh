@@ -928,6 +928,41 @@ fi
 # queries (getbands/getmode = current selection) are gated on the port.
 _PORT_OK=0
 [ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] && _PORT_OK=1
+# Живой дозвонщик netifd (gcom, прото xmm/atc) на нашем порту: любое живое
+# чтение ворует у него ответы - и дозвону хуже, и сами читаем мусор (из
+# такого мусора рождались фантомные вердикты). Статические списки остаются,
+# живые запросы пропускаем - как при недоступном порте.
+# Проверка инлайном (как at_dialer_busy в lib.sh - он здесь ещё не подключён).
+if [ "$_PORT_OK" = 1 ] && pgrep -f "gcom .*-d *$_DEVICE" >/dev/null 2>&1; then
+	_PORT_OK=0
+fi
+
+# Модемом фактически владеет ModemManager (числится в его списке), а интерфейс
+# в конфиге НЕ modemmanager - конфиг разошёлся с реальностью. AT под MM не
+# трогаем: у DW5821e/T77W968 это роняло сессию данных (issue #13). Статические
+# списки остаются, живые чтения пропускаем. Проверка инлайном (lib.sh здесь ещё
+# не подключён), кэш общий с mm_owns_path из lib.sh. Тот же путь - ручной
+# запрет AT для модема: uci 5gmodem.<секция>.no_at=1.
+if [ "$_PORT_OK" = 1 ]; then
+	if [ "$(uci -q get "5gmodem.$_bs_sec.no_at" 2>/dev/null)" = "1" ]; then
+		_PORT_OK=0
+	else
+		_bo_if=$(uci -q get "5gmodem.$_bs_sec.network")
+		[ -n "$_bo_if" ] || _bo_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+		if [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" != "modemmanager" ] \
+		   && pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
+			_bo_c="/tmp/5gmodem_mmowns_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
+			if [ -s "$_bo_c" ] && [ -n "$(find "$_bo_c" -mmin -1 2>/dev/null)" ]; then
+				_bo_v=$(cat "$_bo_c" 2>/dev/null)
+			else
+				_bo_v=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_bs_am" 2>/dev/null)
+				_bo_v="${_bo_v:-none}"
+				printf '%s\n' "$_bo_v" > "$_bo_c" 2>/dev/null
+			fi
+			[ -n "$_bo_v" ] && [ "$_bo_v" != "none" ] && _PORT_OK=0
+		fi
+	fi
+fi
 
 # УПРАВЛЯЕМОСТЬ в ТЕКУЩЕМ протоколе интерфейса. Профиль объявляет транспорт:
 #   _BAND_VIA=at    (по умолчанию) - вендорные AT-команды, работают всегда;

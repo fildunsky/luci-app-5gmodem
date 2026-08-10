@@ -1,6 +1,7 @@
 'use strict';
 'require view';
 'require view.modem5g.modemtabs as modemtabs';
+'require view.modem5g.healthform as healthform';
 'require fs';
 'require ui';
 'require uci';
@@ -329,6 +330,63 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 		o.depends('widget_netpri', '1');
+
+		/* База метрик аплинков (issue #12). По умолчанию 100, 110, 120... -
+		   туннелям (wireguard, zerotier) остаётся весь диапазон 1-99. Галочка
+		   возвращает прежние 10, 20, 30... - соглашение mwan3. Читают её
+		   netpri.sh (_metric_base) и mkiface.sh (метрика нового интерфейса).
+		   Без depends: метрики аплинков существуют и при выключенном виджете. */
+		o = wdg.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
+			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		/* Слежение за интернетом - СВОРАЧИВАЕМЫЙ блок прямо под приоритетом
+		   (решение владельца, issue #12): по смыслу настройки сторожа живут
+		   рядом с приоритетом, но развёрнутая форма отодвигала бы остальные
+		   виджеты - свёрнутая занимает одну строку. Сохранение своё и
+		   немедленное (setconf, как у модалки на панели) - Save/Apply страницы
+		   этот блок не трогает. Без depends: сторож работает и при выключенном
+		   виджете, ради этого блок сюда и добавлен. */
+		/* Разворачивается с той же анимацией, что блоки на вкладке «Сеть»
+		   (.tg-collapse в modem.css: дорожка сетки 0fr -> 1fr, работает с
+		   любой высотой содержимого без пересчётов в JS). */
+		var hwArrow = E('span', { 'style': 'display:inline-block;width:1em' }, '▸');
+		var hwBody = E('div', { 'style': 'margin-top:.6em' });
+		var hwCollapse = E('div', { 'class': 'tg-collapse' }, [
+			E('div', { 'class': 'tg-collapse-inner' }, [ hwBody ])
+		]);
+		var hwWrap = E('div', { 'class': 'cbi-value' }, [
+			E('div', {
+				'style': 'cursor:pointer;user-select:none;font-weight:600',
+				'click': function() {
+					var open = !hwCollapse.classList.contains('open');
+					hwCollapse.classList.toggle('open', open);
+					hwArrow.textContent = open ? '▾' : '▸';
+				}
+			}, [ hwArrow, _('Internet watchdog') ]),
+			hwCollapse
+		]);
+		/* Без кнопки: каждое изменение применяется само (autosave в
+		   healthform.js), плашка коротко подтверждает. */
+		var hwNote = E('em', { 'style': 'display:none' }, _('Saved and applied.'));
+		var hwNoteT = null;
+		healthform.load().then(function(d) {
+			var hf = healthform.build(d.conf, d.uplinks, {
+				autosave: true,
+				onsaved: function() {
+					hwNote.style.display = '';
+					if (hwNoteT) { window.clearTimeout(hwNoteT); }
+					hwNoteT = window.setTimeout(function() {
+						hwNote.style.display = 'none';
+					}, 2000);
+				}
+			});
+			hwBody.appendChild(hf.node);
+			hwBody.appendChild(hwNote);
+		});
+		o = wdg.option(form.DummyValue, '_health');
+		o.render = function() { return hwWrap; };
 
 		/* --- Пинг (внутри «Виджеты»): галочка + вложенная таблица карточек. --- */
 		o = wdg.option(form.Flag, 'widget_status', _('Ping monitor'),

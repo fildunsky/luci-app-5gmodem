@@ -895,13 +895,39 @@ return view.extend({
 
 		/* Поле APN над кнопкой создания. Если интерфейс уже есть - берём его
 		   текущий APN; иначе автоподстановка по оператору (можно исправить,
-		   пусто = провайдерский по умолчанию). Чистое UI-поле, в uci не пишется. */
+		   пусто = провайдерский по умолчанию).
+		   В РУЧНОМ режиме поле ПИШЕТСЯ в интерфейс при сохранении: раньше оно
+		   было чисто витринным (применялось только кнопкой пересоздания), и
+		   «Вручную + свой APN + Сохранить» молча ничего не меняло, а при
+		   перерисовке значение затиралось подсказкой по оператору (issue #12).
+		   В автоматическом режиме поведение прежнее - интерфейсом распоряжается
+		   автоподбор. */
+		var apnIsManual = function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return false; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sec, 'apn_mode') === 'manual';
+		};
 		o = s.option(form.Value, '_apn', _('APN'),
 			_('APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default.'));
 		o.placeholder = 'internet';
 		o.rmempty = true;
-		o.write = function() {};
-		o.remove = function() {};
+		/* _apn_mode объявлен ВЫШЕ, его write уже отработал - uci-кэш отдаёт
+		   свежевыбранный режим. */
+		o.write = function(section_id, value) {
+			if (!apnIsManual() || !mIfExists) { return; }
+			var v = String(value || '').trim();
+			if (v === (uci.get('network', mIfName, 'apn') || '')) { return; }
+			if (v) { uci.set('network', mIfName, 'apn', v); }
+			else { uci.unset('network', mIfName, 'apn'); }
+		};
+		o.remove = function() {
+			/* Пустое поле в ручном режиме = провайдерский APN по умолчанию. */
+			if (!apnIsManual() || !mIfExists) { return; }
+			if (uci.get('network', mIfName, 'apn') != null) {
+				uci.unset('network', mIfName, 'apn');
+			}
+		};
 		o.load = function(section_id) {
 			/* СТРАНИЦА НЕ ЖДЁТ ОПРОС МОДЕМА. Раньше здесь форсировался свежий
 			   AT-опрос оператора ('fresh'), и форма НЕ РИСОВАЛАСЬ, пока он не
@@ -922,6 +948,10 @@ return view.extend({
 					})
 					.then(function(want) {
 						if (!want) { return; }
+						/* В ручном режиме подсказка НЕ трогает поле: там стоит
+						   значение пользователя (issue #12 - оно «сбрасывалось
+						   на internet» ровно этой подстановкой). */
+						if (apnIsManual()) { return; }
 						var el = self.getUIElement(section_id);
 						/* Не перетираем то, что пользователь УЖЕ начал править. */
 						if (!el || el.isChanged && el.isChanged()) { return; }
@@ -1127,7 +1157,26 @@ return view.extend({
 			_('IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to "IPv4 and IPv6" only if you need IPv6 and the modem supports it.'));
 		o.value('ipv4', _('IPv4 only (recommended)'));
 		o.value('ipv4v6', _('IPv4 and IPv6'));
-		o.write = function() {};
+		/* Поле было витринным (write-заглушка): применялось только кнопкой
+		   пересоздания интерфейса, а «Сохранить» молча ничего не менял - та же
+		   ловушка, что у APN (issue #12). Теперь пишем в живой интерфейс. ИМЯ
+		   ОПЦИИ И СЛОВАРЬ у прото свои (см. set_pdp_opt в mkiface.sh): xmm/atc
+		   читают 'pdp' со значениями IP/IPV4V6, modemmanager - 'iptype',
+		   fibocom - 'pdptype' в верхнем регистре, kernel-прото - 'pdptype' в
+		   нижнем. Применится со следующим дозвоном (Save & Apply перечитает
+		   сеть). */
+		o.write = function(section_id, value) {
+			if (!mIfExists) { return; }
+			var proto = String(uci.get('network', mIfName, 'proto') || '');
+			var v6 = (String(value) === 'ipv4v6');
+			var opt, val;
+			if (proto === 'xmm' || proto === 'atc') { opt = 'pdp'; val = v6 ? 'IPV4V6' : 'IP'; }
+			else if (proto === 'modemmanager') { opt = 'iptype'; val = v6 ? 'ipv4v6' : 'ipv4'; }
+			else if (proto === 'fibocom') { opt = 'pdptype'; val = v6 ? 'IPV4V6' : 'IPV4'; }
+			else { opt = 'pdptype'; val = v6 ? 'ipv4v6' : 'ipv4'; }
+			if ((uci.get('network', mIfName, opt) || '') === val) { return; }
+			uci.set('network', mIfName, opt, val);
+		};
 		o.remove = function() {};
 		o.load = function(section_id) {
 			// показываем то, что стоит у существующего интерфейса (имя опции

@@ -755,15 +755,30 @@ label_for() {
 # 0.0.0.0/:: = честный on-link (у сотовых point-to-point шлюза нет). У интерфейса
 # с адресом /32 (Wi-Fi client, сотовый) шлюз не on-link - сперва прямой маршрут
 # до самого шлюза (как netifd).
+# База uci-метрик аплинков. По умолчанию 100 (100, 110, 120...) - под
+# туннелями остаётся весь диапазон 1-99 (просьба из issue #12: у wireguard,
+# zerotier и прочих свои метрики ниже, и им было тесно под прежней десяткой).
+# Галочка «Совместимость с mwan3» в настройках возвращает прежнюю базу 10.
+_metric_base() {
+	[ "$(uci5g_get "@5gmodem[0]" mwan3_metrics)" = "1" ] && echo 10 || echo 100
+}
+
 _add_default_route() {   # $1 - iface, $2 - метрика
 	_dev=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dev" ] || return 0
+	# СВОЯ ТАБЛИЦА МАРШРУТИЗАЦИИ (опция ip4table/ip6table интерфейса). netifd
+	# кладёт default такого интерфейса в его таблицу, и правка main его не
+	# касалась - смена приоритета «не срабатывала» (issue #12). Пишем туда, где
+	# маршрут живёт на самом деле; пусто = main. Значение бывает и именем из
+	# rt_tables, и номером - `ip` принимает оба.
+	_t4=$(uci -q get "network.$1.ip4table" 2>/dev/null)
+	_ta4=""; [ -n "$_t4" ] && _ta4="table $_t4"
 	_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
 	if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
-		ip -4 route add "$_gw4" dev "$_dev" 2>/dev/null
-		ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" 2>/dev/null
+		ip -4 route add "$_gw4" dev "$_dev" $_ta4 2>/dev/null
+		ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" $_ta4 2>/dev/null
 	else
 		# on-link default (сотовый point-to-point) - обязателен scope link.
-		ip -4 route add default dev "$_dev" metric "$2" scope link 2>/dev/null
+		ip -4 route add default dev "$_dev" metric "$2" scope link $_ta4 2>/dev/null
 	fi
 	# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
 	# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
@@ -772,14 +787,20 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	# по устройству. Итог: каждое переключение приоритета УБИВАЛО IPv6 default
 	# до следующего события netifd. Теперь шлюз ищем и у спутников.
 	_gw6=$(ifup_state "$1" '@.route[@.target="::"].nexthop')
+	_t6=$(uci -q get "network.$1.ip6table" 2>/dev/null)
 	if [ -z "$_gw6" ] || [ "$_gw6" = "::" ]; then
 		for _sat in "${1}6" "${1}_6"; do
 			_gw6=$(ifup_state "$_sat" '@.route[@.target="::"].nexthop')
-			[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && break
+			if [ -n "$_gw6" ] && [ "$_gw6" != "::" ]; then
+				# таблицу берём у того, чей шлюз: у спутника своя опция
+				_t6=$(uci -q get "network.$_sat.ip6table" 2>/dev/null)
+				break
+			fi
 		done
 	fi
+	_ta6=""; [ -n "$_t6" ] && _ta6="table $_t6"
 	[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
-		ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" 2>/dev/null
+		ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" $_ta6 2>/dev/null
 }
 # `ip route del default dev X` удаляет РОВНО ОДИН маршрут за вызов. Если на
 # устройстве их несколько (разные метрики, формы via и on-link сосуществуют),
@@ -787,9 +808,25 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 # каждым переключением (наблюдалось вживую: шесть default-маршрутов вместо двух).
 # Поэтому удаляем В ЦИКЛЕ, пока есть что удалять; потолок - страховка от вечного
 # цикла.
-_del_all_default() {   # $1 - l3_device
-	_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
-	_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" 2>/dev/null || break; _i=$((_i + 1)); done
+_del_all_default() {   # $1 - l3_device, $2 - имя сети (для своих таблиц)
+	# Метём и main, и свою таблицу интерфейса (ip4table/ip6table, см.
+	# _add_default_route); у v6 таблица бывает и у спутника ("<имя>6"/"<имя>_6").
+	_dd_seen=""
+	for _dd_t in "" "$(uci -q get "network.$2.ip4table" 2>/dev/null)"; do
+		case " $_dd_seen " in *" ${_dd_t:-main} "*) continue ;; esac
+		_dd_seen="$_dd_seen ${_dd_t:-main}"
+		_dd_a=""; [ -n "$_dd_t" ] && _dd_a="table $_dd_t"
+		_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" $_dd_a 2>/dev/null || break; _i=$((_i + 1)); done
+	done
+	_dd_seen=""
+	for _dd_t in "" "$(uci -q get "network.$2.ip6table" 2>/dev/null)" \
+			"$(uci -q get "network.${2}6.ip6table" 2>/dev/null)" \
+			"$(uci -q get "network.${2}_6.ip6table" 2>/dev/null)"; do
+		case " $_dd_seen " in *" ${_dd_t:-main} "*) continue ;; esac
+		_dd_seen="$_dd_seen ${_dd_t:-main}"
+		_dd_a=""; [ -n "$_dd_t" ] && _dd_a="table $_dd_t"
+		_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" $_dd_a 2>/dev/null || break; _i=$((_i + 1)); done
+	done
 }
 
 # ТРЕТЬЕ МНЕНИЕ - ЧЕРЕЗ ТУННЕЛЬ CLASH. Собственный трафик роутера идёт МИМО
@@ -1158,16 +1195,17 @@ set)
 	esac
 	note_foreign_uci network "netpri set"
 	CHANGED=0
-	# Метрики с шагом 10 (10, 20, 30...): остаётся место вставить линк между
-	# существующими без перенумерации остальных, нет столкновения с чужой
-	# metric=1 (её любят дефолтные конфиги), и это соглашение mwan3 - меньше
-	# сюрпризов при сожительстве. Шаг оставляет место и под будущие «штрафные»
-	# промежуточные значения сторожа.
-	_mset=20
+	# Метрики с шагом 10: остаётся место вставить линк между существующими без
+	# перенумерации остальных. БАЗА ПЕРЕКЛЮЧАЕМАЯ (issue #12): по умолчанию 100
+	# (100, 110, 120...) - туннелям с их метриками остаётся весь диапазон 1-99;
+	# галочка «Совместимость с mwan3» в настройках возвращает прежние 10, 20,
+	# 30... - соглашение mwan3, меньше сюрпризов при сожительстве с ним.
+	_mb=$(_metric_base)
+	_mset=$((_mb + 10))
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		ucinet_has "$n" || continue
-		if [ "$n" = "$CH" ]; then NEW=10; else NEW=$_mset; _mset=$((_mset + 10)); fi
+		if [ "$n" = "$CH" ]; then NEW=$_mb; else NEW=$_mset; _mset=$((_mset + 10)); fi
 		OLD=$(ucinet_get "$n" metric)
 		[ "x$OLD" = "x$NEW" ] && continue
 		uci -q set "network.$n.metric=$NEW"
@@ -1199,7 +1237,7 @@ set)
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
-		_del_all_default "$_d"
+		_del_all_default "$_d" "$n"
 	done
 	# ОДИН default-маршрут НА УСТРОЙСТВО. IPv6-спутник (`<имя>6`) - это ОТДЕЛЬНАЯ
 	# сеть на ТОМ ЖЕ l3_device, и раньше цикл добавлял ей собственный маршрут:
@@ -1216,8 +1254,8 @@ set)
 		_add_default_route "$1" "$2"
 		return 0
 	}
-	_add_once "$CH" 10
-	_m=20
+	_add_once "$CH" "$_mb"
+	_m=$((_mb + 10))
 	for n in $(wan_nets); do
 		[ -n "$n" ] && [ "$n" != "$CH" ] && { _add_once "$n" "$_m" && _m=$((_m + 10)); }
 	done
@@ -1334,10 +1372,10 @@ order)
 	# конце» от сторожа (failback=demote) больше не действуют
 	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
 	note_foreign_uci network "netpri order"
-	_rank=10
-	# uci-метрики по рангу с шагом 10 (см. пояснение в set); интерфейсы вне
-	# переданного порядка - в хвост (метрики должны быть уникальными: два
-	# default с одной метрикой конфликтуют в ядре).
+	_rank=$(_metric_base)
+	# uci-метрики по рангу с шагом 10 от переключаемой базы (см. пояснение в
+	# set); интерфейсы вне переданного порядка - в хвост (метрики должны быть
+	# уникальными: два default с одной метрикой конфликтуют в ядре).
 	for n in $_ord $(wan_nets); do
 		[ -n "$n" ] || continue
 		case " $_seen_o " in *" $n "*) continue ;; esac
@@ -1351,10 +1389,10 @@ order)
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
-		_del_all_default "$_d"
+		_del_all_default "$_d" "$n"
 	done
 	# Один маршрут на устройство (IPv6-спутник делит l3_device - не дублируем).
-	_seen=""; _rank=10
+	_seen=""; _rank=$(_metric_base)
 	for n in $_ord $(wan_nets); do
 		[ -n "$n" ] || continue
 		case " $_seen_r " in *" $n "*) continue ;; esac

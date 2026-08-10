@@ -293,20 +293,41 @@ base_metric() {
 	printf '%s' "$_bm"
 }
 
+# Аргумент `table X` для v4-маршрутов интерфейса со своей таблицей (опция
+# ip4table); пусто = main. Как в netpri.sh: default такого интерфейса живёт в
+# его таблице, и правка main его не касалась (issue #12).
+_rt4_args() {
+	_r4=$(uci -q get "network.$1.ip4table" 2>/dev/null)
+	[ -n "$_r4" ] && printf 'table %s' "$_r4"
+}
+
 # Переставить default-маршруты УСТРОЙСТВА на нужную метрику (обе семьи).
 # Повторяем форму исходной строки: via сохраняем, on-link остаётся on-link.
-_move_defaults() {   # $1 - dev, $2 - желаемая метрика
+# Смотрим и в main, и в свою таблицу интерфейса (у v6 таблица бывает у
+# спутника "<имя>6"/"<имя>_6") - маршрут двигается там, где лежит.
+_move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - имя сети
 	for _fam in -4 -6; do
-		ip "$_fam" route show default 2>/dev/null | grep -E " dev $1( |$)" | while read -r _ln; do
-			_cm=$(printf '%s' "$_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p'); _cm="${_cm:-0}"
-			[ "$_cm" = "$2" ] && continue
-			_gw=$(printf '%s' "$_ln" | sed -n 's/.*via \([^ ]*\).*/\1/p')
-			ip "$_fam" route del default dev "$1" metric "$_cm" 2>/dev/null
-			if [ -n "$_gw" ]; then
-				ip "$_fam" route add default via "$_gw" dev "$1" metric "$2" 2>/dev/null
-			else
-				ip "$_fam" route add default dev "$1" metric "$2" scope link 2>/dev/null
-			fi
+		if [ "$_fam" = "-4" ]; then
+			_mt_l="$(uci -q get "network.$3.ip4table" 2>/dev/null)"
+		else
+			_mt_l="$(uci -q get "network.$3.ip6table" 2>/dev/null) $(uci -q get "network.${3}6.ip6table" 2>/dev/null) $(uci -q get "network.${3}_6.ip6table" 2>/dev/null)"
+		fi
+		_mt_seen=""
+		for _mt in "" $_mt_l; do
+			case " $_mt_seen " in *" ${_mt:-main} "*) continue ;; esac
+			_mt_seen="$_mt_seen ${_mt:-main}"
+			_mt_a=""; [ -n "$_mt" ] && _mt_a="table $_mt"
+			ip "$_fam" route show default $_mt_a 2>/dev/null | grep -E " dev $1( |$)" | while read -r _ln; do
+				_cm=$(printf '%s' "$_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p'); _cm="${_cm:-0}"
+				[ "$_cm" = "$2" ] && continue
+				_gw=$(printf '%s' "$_ln" | sed -n 's/.*via \([^ ]*\).*/\1/p')
+				ip "$_fam" route del default dev "$1" metric "$_cm" $_mt_a 2>/dev/null
+				if [ -n "$_gw" ]; then
+					ip "$_fam" route add default via "$_gw" dev "$1" metric "$2" $_mt_a 2>/dev/null
+				else
+					ip "$_fam" route add default dev "$1" metric "$2" scope link $_mt_a 2>/dev/null
+				fi
+			done
 		done
 	done
 }
@@ -340,7 +361,8 @@ enforce() {
 			# каждые 30 c, и под панелью приоритета она же мигала как свежая
 			# (живой стенд 07.08.2026, Wi-Fi-аплинк wwan). Разбираем поле metric
 			# у маршрута этого устройства и сравниваем числа.
-			_e_cur=$(ip -4 route show default 2>/dev/null | awk -v d="$_e_dev" '
+			_e_ta=$(_rt4_args "$_e_if")
+			_e_cur=$(ip -4 route show default $_e_ta 2>/dev/null | awk -v d="$_e_dev" '
 				$0 ~ (" dev " d " ") || $0 ~ (" dev " d "$") {
 					m = 0
 					for (i = 1; i <= NF; i++) if ($i == "metric") m = $(i + 1)
@@ -350,20 +372,22 @@ enforce() {
 			if [ "$_e_cur" != "$_e_want" ]; then
 				_ev "$_e_if без интернета - увожу трафик (метрика $_e_base -> $_e_want)"
 			fi
-			_move_defaults "$_e_dev" "$_e_want"
+			_move_defaults "$_e_dev" "$_e_want" "$_e_if"
 		elif [ "$_e_st" = up ] && [ -f "$_e_f.demoted" ] && [ "$H_FO" = "1" ] \
 		     && [ "$_e_cnt" -gt 1 ]; then
 			# ожил, но по настройке остаётся В КОНЦЕ: держим штрафную метрику,
 			# пока пользователь сам не вернёт (netpri set/order снимают метку).
 			# С ЕДИНСТВЕННЫМ линком понижать некуда - метка не действует (иначе
 			# его default навсегда висел бы со штрафной метрикой без смысла).
-			_move_defaults "$_e_dev" $((_e_base + PEN))
+			_move_defaults "$_e_dev" $((_e_base + PEN)) "$_e_if"
 		else
 			# живой (или штрафовать нельзя/выключено) - вернуть родную метрику
-			if ip -4 route show default 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -q "metric $((_e_base + PEN))\$"; then
+			# ( |$): `ip route show` печатает пробел на конце строки, голый
+			# якорь $ тут не срабатывал никогда (см. разбор выше у _e_cur).
+			if ip -4 route show default $(_rt4_args "$_e_if") 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qE "metric $((_e_base + PEN))( |$)"; then
 				_ev "$_e_if - возвращаю приоритет (метрика $_e_base)"
 			fi
-			_move_defaults "$_e_dev" "$_e_base"
+			_move_defaults "$_e_dev" "$_e_base" "$_e_if"
 		fi
 	done
 }
@@ -787,7 +811,7 @@ _teardown() {
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue
-		_move_defaults "$_td_dev" "$(base_metric "$_td_if")"
+		_move_defaults "$_td_dev" "$(base_metric "$_td_if")" "$_td_if"
 	done
 	rm -rf "$HDIR"
 	logger -t 5gmodem "сторож выключен: штрафы сняты, метрики возвращены к uci, состояние очищено"

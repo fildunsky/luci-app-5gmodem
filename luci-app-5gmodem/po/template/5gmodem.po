@@ -73,7 +73,36 @@ msgstr ""
 msgid "Language"
 msgstr ""
 
-msgid "Data is stale (shown from the last snapshot)"
+msgid "Data has not been updated for %d s (shown from the last snapshot)"
+msgstr ""
+
+msgid "Data has not been updated for %d min (shown from the last snapshot)"
+msgstr ""
+
+msgid "(initialisation #%d)"
+msgstr ""
+
+msgid "Delete this row"
+msgstr ""
+
+msgid "Saved and applied."
+msgstr ""
+
+msgid "mwan3-compatible metrics"
+msgstr ""
+
+msgid ""
+"Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they "
+"start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect "
+"on the next priority change."
+msgstr ""
+
+msgid "Delete this traffic row? This cannot be undone."
+msgstr ""
+
+msgid ""
+"The modem keeps reconnecting over USB (%d times in 10 minutes) - usually not "
+"enough power: try another port, a shorter cable or a powered hub."
 msgstr ""
 
 msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."

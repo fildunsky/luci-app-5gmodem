@@ -821,6 +821,27 @@ sms_tool() {
 	cat "$_stf" 2>/dev/null; rm -f "$_stf"
 }
 
+# AT НЕ ТРОГАЕМ МОДЕМ, КОТОРЫМ ФАКТИЧЕСКИ ВЛАДЕЕТ ModemManager, даже если
+# протокол интерфейса в конфиге иной (mbim/qmi/пусто - конфиг мог разойтись с
+# реальностью, тогда прежние ворота «AT только не при modemmanager» молчали).
+# На DW5821e/T77W968 наш AT-батч параллельно MM роняет сессию данных - связь
+# падала при каждом открытии вкладки (issue #13). Порт обнуляем: обёртка
+# sms_tool делает все AT no-op, карточку наполняет mmcli-блок ниже (его условие
+# расширено флагом). Той же дорогой - ручной рычаг no_at в секции модема:
+# полный запрет AT-опроса для хрупких прошивок.
+_MM_OWNS=""
+if [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" = "1" ]; then
+	_MM_OWNS=1
+	DEVICE=""
+elif [ -n "$DEVICE" ]; then
+	_mo_if=$(uci -q get "5gmodem.$_hl_sec.network")
+	if [ "$(uci -q get "network.$_mo_if.proto" 2>/dev/null)" != modemmanager ] \
+	   && mm_owns_path "$_POLL_AM"; then
+		_MM_OWNS=1
+		DEVICE=""
+	fi
+fi
+
 O=""
 if [ -e /usr/bin/sms_tool ]; then
 	# Один round-trip на всё «ядро»: PIN, сигнал, оператор (буквенный+числовой),
@@ -1605,6 +1626,24 @@ _snap_prepare() {
 		*) [ "$_SN_IFPROTO" = modemmanager ] && _SN_MMHID=0 || _SN_MMHID=1 ;;
 	esac
 
+	# СЧЁТЧИК ЖИЗНЕЙ НА USB-ШИНЕ. «Бесконечная инициализация» в двух живых
+	# отчётах (L860 на Cudy TR3000: 7 переподключений за 12 минут, дважды
+	# смерть через секунду после появления) - это модем, падающий с шины, а не
+	# зависший дозвон. Человек видел вечное «Инициализация...» и винил
+	# программу, пока счётчик ре-энумераций не всплыл в диагностике. Теперь он
+	# в снимке: номер текущей энумерации - в строке стадии, а частые обрывы
+	# за последние 10 минут - отдельным предупреждением про питание.
+	_SN_USBENUM=0; _SN_USBFLAP=0
+	if [ -n "$_POLL_AM" ]; then
+		eval "$(dmesg 2>/dev/null | awk -v p="usb $_POLL_AM:" -v now="$(uptime_s)" '
+			index($0, p " new ") { n++ }
+			index($0, p " USB disconnect") {
+				ts = $0; sub(/^\[[ \t]*/, "", ts); sub(/\..*/, "", ts)
+				if (ts + 0 > now - 600) f++
+			}
+			END { printf "_SN_USBENUM=%d; _SN_USBFLAP=%d", n + 0, f + 0 }')"
+	fi
+
 	_SN_XMM=0
 	if [ -f /lib/netifd/proto/xmm.sh ] \
 	   && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0"; then
@@ -1658,6 +1697,8 @@ cat <<EOF
 "cport":"${_J__SN_CPORT}",
 "protocol":"${_J_PROTO}",
 "iface_proto":"${_J__SN_IFPROTO}",
+"usb_enum":"$_SN_USBENUM",
+"usb_flaps":"$_SN_USBFLAP",
 "mm_running":"$_SN_MMRUN",
 "mm_hidden":"$_SN_MMHID",
 "xmm_capable":"$_SN_XMM",
@@ -2450,7 +2491,7 @@ fi
 # плейсхолдерах. Тянем основное из mmcli: оператор, сигнал %, режим (RAT),
 # регистрацию и уровни через --signal-get. Заполняем ТОЛЬКО пустые - у AT-модема
 # приоритет за его же данными. mmcli читает по своему каналу, AT-порт не трогает.
-if [ "$IFPROTO" = modemmanager ] && command -v mmcli >/dev/null 2>&1; then
+if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli >/dev/null 2>&1; then
 	# ИНДЕКС ИМЕННО ОПРАШИВАЕМОГО МОДЕМА. Безадресный mmindex отдаёт индекс
 	# АКТИВНОГО, и при опросе соседа (POLL_MODEM: подогрев снимков, карточка
 	# другой вкладки) в его снимок и кэш оператора уезжали данные активного -

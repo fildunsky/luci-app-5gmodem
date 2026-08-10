@@ -751,6 +751,33 @@ at_dialer_busy() {   # $1 - порт; код 0 = на порту живёт до
 	pgrep -f "gcom -d *$1" >/dev/null 2>&1
 }
 
+# Модемом фактически владеет ModemManager? Проверка ПО ФАКТУ - модем числится
+# в списке MM, - а не по прото интерфейса: конфиг может разойтись с реальностью
+# (интерфейс mbim/qmi/отсутствует, а MM запущен и модем захватил). Свои модемы
+# мы прячем от MM инхибицией (mm-inhibit.sh), их в списке нет - ложных
+# срабатываний на них не будет. Нужна там, где под MM нельзя трогать AT-порт и
+# канал: у DW5821e/T77W968 наш AT-батч параллельно MM ронял сессию данных при
+# каждом открытии вкладки (issue #13).
+# mmcli - это D-Bus: ответ кэшируем на минуту, лог - только при смене вердикта.
+mm_owns_path() {   # $1 - usb-путь; код 0 = владеет MM
+	[ -n "$1" ] || return 1
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 1
+	_mo_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mo_v=""
+	if [ -s "$_mo_c" ] && [ -n "$(find "$_mo_c" -mmin -1 2>/dev/null)" ]; then
+		read -r _mo_v < "$_mo_c" 2>/dev/null
+	else
+		_mo_old=$(cat "$_mo_c" 2>/dev/null)
+		_mo_v=$(/usr/share/5gmodem/modemswitch.sh mmindex "$1" 2>/dev/null)
+		_mo_v="${_mo_v:-none}"
+		printf '%s\n' "$_mo_v" > "$_mo_c" 2>/dev/null
+		if [ "$_mo_v" != "$_mo_old" ] && [ "$_mo_v" != "none" ]; then
+			logger -t 5gmodem "модем $1 числится в ModemManager (индекс $_mo_v) - AT и канал не трогаем"
+		fi
+	fi
+	[ -n "$_mo_v" ] && [ "$_mo_v" != "none" ]
+}
+
 alias_for_path() {   # $1 - usb-путь; печатает имя или ничего
 	[ -n "$1" ] || return 0
 	_af_sec=$(secname "$1")

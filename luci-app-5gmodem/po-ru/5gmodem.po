@@ -3922,8 +3922,11 @@ msgstr "Модем сейчас зарегистрирован в %s, а USSD х
 msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
 msgstr "Модем сейчас зарегистрирован в %s, а USSD ходит по каналу CS, которого в LTE нет. Многие модемы всё равно отвечают; если этот молчит — включите «Переводить модем в 3G для USSD» в настройках ниже."
 
-msgid "Data is stale (shown from the last snapshot)"
-msgstr "Данные устарели (показан последний снимок)"
+msgid "Data has not been updated for %d s (shown from the last snapshot)"
+msgstr "Данные не обновлялись %d с (показан последний снимок)"
+
+msgid "Data has not been updated for %d min (shown from the last snapshot)"
+msgstr "Данные не обновлялись %d мин (показан последний снимок)"
 
 msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
 msgstr "Этим модемом управляет ModemManager, и канал управления принадлежит ему. Вторая eSIM-сессия на том же канале может уронить прошивку модема (проверено вживую на T99W175 — модем перезагружается). Для работы с eSIM включите «Скрыть от ModemManager» в настройках модема (или смените протокол интерфейса) и вернитесь сюда."
@@ -4335,3 +4338,34 @@ msgstr ""
 
 msgid "Reset cell lock"
 msgstr "Сбросить привязку к соте"
+
+msgid "(initialisation #%d)"
+msgstr "(инициализация №%d)"
+
+msgid "Delete this row"
+msgstr "Удалить строку"
+
+msgid "Saved and applied."
+msgstr "Сохранено и применено."
+
+msgid "mwan3-compatible metrics"
+msgstr "Метрики, совместимые с mwan3"
+
+msgid ""
+"Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they "
+"start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect "
+"on the next priority change."
+msgstr ""
+"Метрики аплинков идут от 10 (10, 20, 30...), как ожидает mwan3. Без галочки "
+"- от 100 (100, 110, 120...), оставляя туннелям диапазон 1-99. Применяется "
+"при следующей смене приоритета."
+
+msgid "Delete this traffic row? This cannot be undone."
+msgstr "Удалить эту строку трафика? Отменить будет нельзя."
+
+msgid ""
+"The modem keeps reconnecting over USB (%d times in 10 minutes) - usually not "
+"enough power: try another port, a shorter cable or a powered hub."
+msgstr ""
+"Модем переподключается по USB (%d раз за 10 минут) — обычно не хватает "
+"питания: другой порт, короче кабель или хаб с внешним питанием."

@@ -1398,14 +1398,65 @@ function connStageText(json) {
 	var sig = String(json.signal || '').trim();
 	var cs  = String(json.conn_status || '').toLowerCase();
 	var hasSig = sig && sig != '-' && sig != '0';
+	/* НОМЕР ЭНУМЕРАЦИИ - К ЛЮБОЙ СТАДИИ ОЖИДАНИЯ (решение владельца). Когда
+	   модем падает с шины, каждая «инициализация» на вид одинакова - счётчик
+	   делает видимым, что это уже седьмой заход, а не один долгий. Больше
+	   одного - значит с момента включения модем ПЕРЕПОЯВЛЯЛСЯ на шине. */
+	var tail = '';
+	var en = parseInt(json.usb_enum, 10);
+	if (en > 1) { tail = ' ' + _('(initialisation #%d)').format(en); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
 	if (reg == '3') { return _('Registration denied'); }
 	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован
-		return hasSig ? _('Searching for network…') : _('Initialising modem…');
+		return (hasSig ? _('Searching for network…') : _('Initialising modem…')) + tail;
 	}
 	// зарегистрирован, но IP ещё нет: дозвон -> получение адреса
-	if (/no ip|retry|connected|cgpaddr|address|адрес/.test(cs)) { return _('Obtaining IP…'); }
-	return _('Establishing connection…');
+	if (/no ip|retry|connected|cgpaddr|address|адрес/.test(cs)) { return _('Obtaining IP…') + tail; }
+	return _('Establishing connection…') + tail;
+}
+
+/* МОДЕМ ПАДАЕТ С USB-ШИНЫ - СКАЗАТЬ ПРЯМО, А НЕ ЖДАТЬ ОТЧЁТА. Порог 3 обрыва
+   за 10 минут: единичный обрыв бывает при штатном сбросе модема лечением, а
+   три подряд - почти всегда питание (живые отчёты 09.08.2026, оба Cudy
+   TR3000). Строка живёт под статусом соединения и снимается сама, когда
+   обрывы прекращаются. */
+/* Значок «модем сыплется с USB-шины» - в заголовке, рядом с песочными
+   часами несвежих данных: та же геометрия, суть - в title при наведении.
+   Красная строка текста в карточке была отвергнута владельцем. */
+function updateUsbFlapWarn(json) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var w = document.getElementById('usbflap-warn');
+	var n = parseInt(json.usb_flaps, 10);
+	if (!(n >= 3)) {
+		if (w) { w.remove(); }
+		return;
+	}
+	var txt = _('The modem keeps reconnecting over USB (%d times in 10 minutes) - usually not enough power: try another port, a shorter cable or a powered hub.').format(n);
+	if (!w) {
+		w = E('span', {
+			'id': 'usbflap-warn', 'title': txt,
+			'style': 'float:right;opacity:.85;display:inline-flex;align-items:center;' +
+			         'position:relative;top:.38rem;margin-left:.8em'
+		}, [
+			E('img', {
+				'src': L.resource('icons/5gmodem/cwarn.svg'), 'title': txt, 'alt': '⚠',
+				'style': 'width:13px;height:13px'
+			})
+		]);
+		head.appendChild(w);
+	} else {
+		w.title = txt;
+		var wi = w.querySelector('img');
+		if (wi) { wi.title = txt; }
+	}
+	/* Место - СЛЕВА от чипа vid:pid (просьба владельца). Флоаты укладываются
+	   справа налево в порядке DOM, поэтому «левее чипа» = «в DOM после него».
+	   На первом тике чипа может ещё не быть - тогда поправляем на следующем. */
+	var vp = document.getElementById('modemvidpid');
+	if (vp && w.previousElementSibling !== vp) {
+		head.insertBefore(w, vp.nextSibling);
+	}
 }
 
 function updateSimIcon(name) {
@@ -1871,6 +1922,8 @@ function applyMetrics(json) {
 						}
 					}
 
+					updateUsbFlapWarn(json);
+
 					if (document.getElementById('operator')) {
 						var view = document.getElementById("operator");
 						var _visited = String(json.operator_name || '');
@@ -2216,8 +2269,17 @@ function applyMetrics(json) {
 						   подпись «данные не обновлялись N мин» занимала место в
 						   заголовке, а само число ничего не решает - несвежесть либо
 						   есть, либо нет. Пояснение остаётся в title при наведении. */
-						var txt = _('Data is stale (shown from the last snapshot)');
-						if (mark) { return; }
+						/* Возраст - в подсказке (просьба владельца): сколько именно
+						   не обновлялся снимок, видно при наведении. */
+						var txt = (age < 120)
+							? _('Data has not been updated for %d s (shown from the last snapshot)').format(age)
+							: _('Data has not been updated for %d min (shown from the last snapshot)').format(Math.round(age / 60));
+						if (mark) {
+							mark.title = txt;
+							var mi = mark.querySelector('img');
+							if (mi) { mi.title = txt; }
+							return;
+						}
 						head.appendChild(E('span', {
 							'id': 'stale-mark', 'title': txt,
 							/* Та же вертикальная поправка, что у чипа vid:pid

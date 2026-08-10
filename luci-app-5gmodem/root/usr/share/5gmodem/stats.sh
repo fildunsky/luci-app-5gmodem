@@ -109,12 +109,36 @@ _merge_from() {   # $1 - каталог
 		[ "$_mf_tx" -gt "$_mf_ctx" ] || _mf_tx="$_mf_ctx"
 		printf '%s %s\n' "$_mf_rx" "$_mf_tx" > "$DIR/$_mf_n"
 	done
+	# Подписи - «в /tmp пусто -> берём сохранённую»: свежая из живого модема
+	# всегда перезапишет её обычным путём.
+	for _mf_f in "$1"/*.label; do
+		[ -f "$_mf_f" ] || continue
+		_mf_n="${_mf_f##*/}"
+		[ -f "$DIR/$_mf_n" ] || cat "$_mf_f" > "$DIR/$_mf_n" 2>/dev/null
+	done
 }
 
 _now() { uptime_s 2>/dev/null || cut -d. -f1 /proc/uptime; }
 json_esc_s() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Подпись ряда для UI (человеческая). $1 - имя ряда, $2 - подпись.
-_label() { [ -n "$2" ] && printf '%s\n' "$2" > "$DIR/$1.label"; }
+#
+# ПОДПИСИ SIM-РЯДОВ - ЕЩЁ И В ПЕРСИСТ. Счётчики месяцев живут в /etc и
+# переживают ребут, а подписи жили только в /tmp - и после перезагрузки ряд
+# симки, которой сейчас нет ни в одном модеме, показывался сырым ключом
+# «sim-8970...» (живой стенд 09.08.2026: МегаФон-карта лежала на столе).
+# Пишем только при РЕАЛЬНОЙ смене значения: подписи меняются редко, а каждая
+# запись в /etc - цикл флеш-памяти.
+_label() {
+	[ -n "$2" ] || return 0
+	printf '%s\n' "$2" > "$DIR/$1.label"
+	case "$1" in
+		sim-*|op.sim-*)
+			_lb_d=$(_pdir_now 2>/dev/null) || return 0
+			if [ "$(cat "$_lb_d/$1.label" 2>/dev/null)" != "$2" ]; then
+				printf '%s\n' "$2" > "$_lb_d/$1.label" 2>/dev/null
+			fi ;;
+	esac
+}
 _month() { date '+%Y-%m'; }
 
 # Добавить точку в ряд с кольцевой обрезкой. $1 - имя ряда, $2 - значение.
@@ -261,8 +285,14 @@ _collect_traffic() {
 				# номера телефона).
 				[ -n "$_ct_op" ] && _label "op.$_ct_key" "$_ct_op"
 				_ct_lbl="$_ct_op"
-				[ -n "$_ct_ph" ] && _ct_lbl="${_ct_lbl:+$_ct_lbl }$_ct_ph"
-				[ -n "$_ct_lbl" ] || _ct_lbl="SIM ...$(printf '%s' "$_ct_icc" | tail -c 5)"
+				# Номера нет (карта не отдаёт AT+CNUM) - подписываем полным
+				# ICCID: «t2 ICCID: 8970...». Появится номер - подпись сменится
+				# на обычную, а ключ (ICCID) тот же, история строки сохранится.
+				if [ -n "$_ct_ph" ]; then
+					_ct_lbl="${_ct_lbl:+$_ct_lbl }$_ct_ph"
+				else
+					_ct_lbl="${_ct_lbl:+$_ct_lbl }ICCID: $_ct_icc"
+				fi
 				_label "$_ct_key" "$_ct_lbl"
 			fi
 		fi
@@ -435,13 +465,27 @@ setconf)
 	_persist || rm -rf "$PDIR_DEF" 2>/dev/null
 	echo '{"result":"ok"}'
 	;;
+forget)
+	# forget <ключ> <YYYY-MM> - убрать одну строку помесячного трафика. Стираем
+	# и в /tmp, и в персисте (иначе часовой merge воскресит её из /etc), и в
+	# своём каталоге пользователя, если задан.
+	case "$2" in ''|*[!A-Za-z0-9._-]*) echo '{"error":"bad key"}'; exit 1 ;; esac
+	case "$3" in
+		[0-9][0-9][0-9][0-9]-[0-9][0-9]) ;;
+		*) echo '{"error":"bad month"}'; exit 1 ;;
+	esac
+	rm -f "$DIR/traffic.$2.$3" "$PDIR_DEF/traffic.$2.$3" 2>/dev/null
+	_fg_d=$(_pdir_now 2>/dev/null)
+	[ -n "$_fg_d" ] && rm -f "$_fg_d/traffic.$2.$3" 2>/dev/null
+	echo '{"result":"ok"}'
+	;;
 reset)
 	rm -rf "$DIR" "$PDIR_DEF" 2>/dev/null
 	mkdir -p "$DIR" 2>/dev/null
 	echo '{"result":"ok"}'
 	;;
 *)
-	echo '{"error":"usage: stats.sh tick|list|series <name>|traffic|setconf k=v|reset"}'
+	echo '{"error":"usage: stats.sh tick|list|series <name>|traffic|setconf k=v|forget <key> <month>|reset"}'
 	exit 1
 	;;
 esac

@@ -105,6 +105,17 @@ stamp_iface() {
 }
 
 # Записать APN интерфейса $1 по правилам выше ($2 = прежний APN)
+# Метрика нового аплинка по умолчанию: ступень ниже базы «Приоритета
+# интернета» (база переключаемая, см. _metric_base в netpri.sh) - созданный
+# интерфейс никогда не перехватывает default-маршрут у соседей.
+_def_metric() {
+	if [ "$(uci -q get 5gmodem.@5gmodem[0].mwan3_metrics)" = "1" ]; then
+		echo 20
+	else
+		echo 110
+	fi
+}
+
 set_apn_opt() {
 	case "$APNARG" in
 		-)  uci -q delete "network.$1.apn" ;;
@@ -500,7 +511,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 			# есть в конфиге стояло бы одно, а модем набирал бы другое. Пишем
 			# сразу то, что протокол понимает; смысл тот же (IP = IPv4).
 			[ "$(uci -q get "network.$IF.pdp")" = "IPV4" ] && uci set "network.$IF.pdp=IP"
-			uci set "network.$IF.metric=${OLDMETRIC:-20}"
+			uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 			FDEV="$DIALPORT"
 			# remember the dial AT port so resolve can re-pin it after renumbering
 			[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.data_at_port=$DIALPORT"
@@ -515,7 +526,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# secondary uplink by default so (re)creating it never hijacks another
 		# modem's default route; lower the metric in Network > Interfaces to make
 		# it primary.
-		uci set "network.$IF.metric=${OLDMETRIC:-20}"
+		uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 		[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 		uci commit network
 
@@ -796,7 +807,7 @@ case "$PROTO" in
 		;;
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
-uci set "network.$IF.metric=${OLDMETRIC:-20}"
+uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 uci commit network
 
 # ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.
