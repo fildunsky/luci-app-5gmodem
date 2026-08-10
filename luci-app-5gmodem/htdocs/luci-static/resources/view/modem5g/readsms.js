@@ -1051,6 +1051,19 @@ return view.extend({
 									   ДО разбора. Настоящее место фикса — JSON-эскейпер sms_tool. */
 									res2 = res2.replace(/\\u([0-9a-fA-F]{2})f{6}([0-9a-fA-F]{2})/g, '\\u$1$2');
 
+									/* СЫРЫЕ УПРАВЛЯЮЩИЕ СИМВОЛЫ ВНУТРИ СТРОК. sms_tool
+									   экранирует \n, но не \r: у MV31-W имя отправителя
+									   приходит «beeline\r», а голый CR в строке - незаконный
+									   JSON. JSON.parse кидал исключение, и страница показывала
+									   «Нет сообщений» при живых SMS и счётчике 3/3 (роутер
+									   Андрея, 10.08.2026; по SSH тот же JSON «работал» -
+									   jsonfilter снисходительный). Меняем управляющие на
+									   пробел: между токенами это легальный пробел, внутри
+									   строк - мусорный CR, которому там не место. Экранированных
+									   последовательностей замена не касается - это два обычных
+									   символа, а не управляющий. */
+									res2 = res2.replace(/[\u0000-\u001F]+/g, ' ');
+
 									/* Proper parsing instead of positional slicing:
 									   substring(7) relied on the exact byte format
 									   of sms_tool ({"msg":[...]}) and broke on any
@@ -1078,6 +1091,10 @@ return view.extend({
 									json.forEach(function(o) {
 										if (o && typeof o.content === 'string') {
 											o.content = o.content.replace(/\uFFFD/g, ' ');
+										}
+										/* \u043F\u043E\u0441\u043B\u0435 \u0437\u0430\u043C\u0435\u043D\u044B CR \u043D\u0430 \u043F\u0440\u043E\u0431\u0435\u043B \u0443 \u0438\u043C\u0435\u043D\u0438 \u0431\u044B\u0432\u0430\u0435\u0442 \u0445\u0432\u043E\u0441\u0442 */
+										if (o && typeof o.sender === 'string') {
+											o.sender = o.sender.replace(/\s+$/, '');
 										}
 									});
 

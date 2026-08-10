@@ -401,7 +401,10 @@ return view.extend({
 		var pw = psv.subsection;
 		pw.anonymous = true;
 		pw.addremove = true;
-		pw.addbtntitle = _('Add ping card');
+		/* Просто «+» (решение владельца): подпись «Добавить карточку пинга»
+		   растягивала кнопку, а смысл ясен из таблицы над ней. Полное название
+		   остаётся в подсказке (title ставится после рендера). */
+		pw.addbtntitle = '+';
 
 		var pho = pw.option(form.Value, 'host', _('Host'));
 		/* Пресеты-подсказки для поля host (просто варианты в выпадашке). Дефолтную
@@ -437,7 +440,7 @@ return view.extend({
 		var sw = ssv.subsection;
 		sw.anonymous = true;
 		sw.addremove = true;
-		sw.addbtntitle = _('Add service card');
+		sw.addbtntitle = '+';
 
 		/* ВЫПАДАЮЩИЙ СПИСОК, а не свободный ввод. form.Value с placeholder='ssclash'
 		   не имел реального значения: при «Добавить» поле пустое, плейсхолдер лишь
@@ -515,6 +518,14 @@ return view.extend({
 			/* Версию установленной базы APN показываем СРАЗУ (чтение файла, без
 			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */
 			apnVersion();
+			/* Кнопкам «+» - полное название в подсказку: сами они лаконичны
+			   намеренно, но при наведении должно быть ясно, что добавляется. */
+			formNode.querySelectorAll('.cbi-button-add').forEach(function(b) {
+				var w = b.closest('[id*="__pingcards"], [id*="__svccards"]');
+				if (!w) { return; }
+				b.title = (w.id.indexOf('__pingcards') >= 0)
+					? _('Add ping card') : _('Add service card');
+			});
 			return E('div', {}, [
 				/* Тот же контейнер, что у формы: темы рисуют «карточку» секции по
 				   селектору .cbi-map .cbi-section, и собранный вручную блок вне

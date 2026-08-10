@@ -2478,3 +2478,28 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
   opacity: .85;
   white-space: nowrap;
 }
+
+/* ===== ТАБЛИЦЫ КАРТОЧЕК В НАСТРОЙКАХ (пинг/сервисы) ===== */
+/* Колонка действий - по содержимому: темы растягивали её на половину
+   страницы, и кнопка «Удалить» раздувалась вместе с ней (решение владельца:
+   кнопка - по ширине своего текста). Кнопка «+» добавления - компактная. */
+[data-page^="admin-modem-5gmodem"] .cbi-section-table .cbi-section-actions,
+[data-page^="admin-modem-5gmodem"] .cbi-section-table th.cbi-section-actions {
+	width: 1% !important;
+	white-space: nowrap;
+}
+/* !important: темы (a43 и родня bootstrap) дают кнопкам в ячейках width:100% -
+   без него кнопка снова раздувается вместе с колонкой. */
+[data-page^="admin-modem-5gmodem"] .cbi-section-table .cbi-section-actions .cbi-button {
+	width: auto !important;
+	min-width: 0 !important;
+	/* обёртка ячейки - flex, и темы дают кнопке flex-grow - расти нельзя */
+	flex: 0 0 auto !important;
+}
+[data-page^="admin-modem-5gmodem"] .cbi-tblsection-create .cbi-button-add {
+	width: auto;
+	min-width: 2.4em;
+	padding-left: .8em;
+	padding-right: .8em;
+	font-weight: 700;
+}
