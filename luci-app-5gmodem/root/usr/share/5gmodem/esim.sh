@@ -1501,12 +1501,33 @@ netcheck)
 	# Возврат: {"net":1} - всё ок; {"net":1,"smdp":0} - интернет есть, но SM-DP+
 	# не ответил; {"net":0} - интернета нет вовсе.
 	_host=$(echo "$2" | awk -F'[$]' '{print $2}')
+	# ЕДИНСТВЕННЫЙ ЛИ ЭТО ИСТОЧНИК ИНТЕРНЕТА. Изменяющие операции освобождают
+	# модем (_uplink_release: ifdown), а загрузка профиля требует интернет
+	# ПОСРЕДИ операции - если весь default-трафик шёл через этот модем, загрузка
+	# гарантированно сломается на обращении к SM-DP+ (жалоба с 9esim/T99W175).
+	# Страница по флагу предупредит ДО старта, а не сломанной загрузкой после.
+	_nc_sole=0
+	_nc_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	_nc_if=$(uci -q get "5gmodem.m_$(echo "$_nc_ap" | sed 's/[^A-Za-z0-9]/_/g').network")
+	[ -n "$_nc_if" ] || _nc_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+	_nc_dev=$(ubus call "network.interface.$_nc_if" status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
+	if [ -n "$_nc_dev" ]; then
+		_nc_defs=$(ip -4 route show default 2>/dev/null)
+		if printf '%s\n' "$_nc_defs" | grep -q " dev $_nc_dev " \
+		   && ! printf '%s\n' "$_nc_defs" | grep -v " dev $_nc_dev " | grep -q "^default"; then
+			_nc_sole=1
+		fi
+	fi
 	if [ -n "$_host" ] && curl -sS -m 15 -o /dev/null "https://$_host/" 2>/dev/null; then
-		echo '{"net":1,"smdp":1}'
+		echo '{"net":1,"smdp":1,"sole":'"$_nc_sole"'}'
 	elif curl -sS -m 10 -o /dev/null https://www.gstatic.com/generate_204 2>/dev/null; then
 		# интернет есть; SM-DP+ мог не ответить на GET корня - это не всегда
 		# ошибка (часть серверов отвечает только на RSP-эндпоинты), но флажок даём
-		[ -n "$_host" ] && echo '{"net":1,"smdp":0}' || echo '{"net":1,"smdp":1}'
+		if [ -n "$_host" ]; then
+			echo '{"net":1,"smdp":0,"sole":'"$_nc_sole"'}'
+		else
+			echo '{"net":1,"smdp":1,"sole":'"$_nc_sole"'}'
+		fi
 	else
 		echo '{"net":0}'
 	fi

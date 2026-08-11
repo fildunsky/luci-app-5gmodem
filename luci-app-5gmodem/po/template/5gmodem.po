@@ -85,7 +85,29 @@ msgstr ""
 msgid "Delete this row"
 msgstr ""
 
+msgid "Could not read messages - will retry on the next refresh"
+msgstr ""
+
+msgid ""
+"This modem is currently the only internet source, and the download must take "
+"the modem offline to reach the eSIM chip. The profile download needs "
+"internet at that very moment, so it cannot finish. Connect the router to "
+"another source first (Wi-Fi, cable, or a phone hotspot) and try again."
+msgstr ""
+
+msgid ""
+"An empty chip is a special case: some modems cannot work with a profile-less "
+"eSIM (the modem keeps resetting or the slot stays unusable). Loading any "
+"public test profile usually settles it - see the list of known test profiles:"
+msgstr ""
+
+msgid "Download anyway"
+msgstr ""
+
 msgid "Saved and applied."
+msgstr ""
+
+msgid "Switching to the modem…"
 msgstr ""
 
 msgid "mwan3-compatible metrics"

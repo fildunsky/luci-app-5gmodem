@@ -337,9 +337,11 @@ function loadSimSlots(cb) {
 		   каждом опросе (см. подробности у sameRender). */
 		if (sameRender(box, JSON.stringify(st))) { return; }
 		box.innerHTML = '';
-		if (st.type) {
-			box.appendChild(E('span', { 'class': 'tginfo-simslot-type', 'title': _('SIM type') }, [ st.type ]));
-		}
+		/* Тип SIM (USIM/eSIM) подписью слева УБРАН (решение владельца): кнопки
+		   слотов и так названы (SIM1/eSIM/SIM0), а «USIM» = «физическая карта» -
+		   лишняя для пользователя техническая деталь. Приходил не на всех
+		   модемах (simslot.sh отдаёт type не везде), отчего блок ещё и выглядел
+		   непоследовательно. */
 		st.slots.forEach(function(s) {
 			var on = (String(st.active) === String(s.id));
 			/* present приходит там, где прошивка умеет сказать, есть ли в слоте
@@ -917,6 +919,62 @@ var ledsAvail = false;
    Пусто - модемов нет вовсе или конфиг ещё не прочитан: тогда сверять нечего и
    снимки применяются как раньше. */
 var pageModemPath = '';
+/* Ссылка на тик опроса метрик - чтобы форсировать его при переключении модема
+   БЕЗ перезагрузки страницы (см. switchModemInPlace). */
+var pollTickFn = null;
+
+/* ПЕРЕКЛЮЧЕНИЕ МОДЕМА БЕЗ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ.
+   Зовётся из modemtabs (клик по вкладке) через window.__5gmInPlaceSwitch.
+   Вместо тяжёлого window.location.reload (перезагрузка всего LuCI SPA -
+   каскад «приоритет пропал -> вкладки пропали -> всё нарисовалось заново»)
+   перерисовываем ТОЛЬКО карточку модема: меняем адресуемый путь, сбрасываем
+   всё модем-скоупное состояние страницы и модуля диапазонов, мгновенно
+   применяем тёплый снимок нового модема и форсируем свежий тик.
+   Данные адресуются через for=<путь> (pageModemPath), поэтому карточка
+   заполняется данными ИМЕННО нового модема, даже если active_modem на роутере
+   ещё не догнал. */
+function switchModemInPlace(path) {
+	if (!path || path === pageModemPath) { return; }
+	pageModemPath = String(path);
+	try { window.sessionStorage.setItem('5gm-tab', pageModemPath); } catch (e) {}
+	/* Сброс состояния прежнего модема - иначе блоки показывали бы его данные. */
+	ifaceProtoIsMM = false;
+	mmIdx = '';
+	simSlotsSeen = false;
+	slotImsiSeen = null;
+	slotIdleTicks = 0;
+	if (typeof bandsui.resetForModem === 'function') { bandsui.resetForModem(); }
+	/* Индекс MM нового активного - для кнопок режимов/бендов (блок ленивый,
+	   к его раскрытию значение уже придёт). */
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
+		.then(function(idx) { mmIdx = String(idx || '').trim(); });
+	/* Видимость вкладок eSIM/USSD зависит от модема - пересчитываем. */
+	if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
+	if (modemtabs.refreshUssdTab) { modemtabs.refreshUssdTab(); }
+	/* Тёплый снимок НОВОГО модема - мгновенно (peek не трогает порт, читает
+	   файл снимка ИМЕННО этого модема, не завязан на active). Он даёт
+	   немедленную обратную связь: карточка меняется сразу, ещё до того как
+	   backend switch на роутере доедет (тот бывает медленным - занятый rpcd,
+	   переопрос AT-порта). Пустой warm (модем ни разу не опрашивался) не
+	   применяем поверх скелета - тогда покажем «переключается» коротким
+	   спиннером до первых свежих данных. */
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek', pageModemPath ]), '{}')
+		.then(function(out) {
+			var j = null; try { j = JSON.parse(out); } catch (e) {}
+			if (j && (j.modem || j.signal)) { applyMetrics(j); }
+			else { setModemBusy(_('Switching to the modem…')); }
+		});
+	/* Свежие данные придут, когда active на роутере догонит выбранный модем и
+	   cached for=<путь> соберёт полный снимок. До switch cached отвечает
+	   not_active мгновенно (данные warm остаются), поэтому просто форсируем тик
+	   сразу и ещё пару раз с задержкой - поймать момент, как только switch
+	   доехал, не дожидаясь регулярного 5-секундного тика. */
+	if (typeof pollTickFn === 'function') {
+		pollTickFn();
+		window.setTimeout(function() { if (pollTickFn) { pollTickFn(); } }, 900);
+		window.setTimeout(function() { if (pollTickFn) { pollTickFn(); } }, 2200);
+	}
+}
 /* Сколько тиков подряд пришли данные ЧУЖОГО модема. Один-два - переключение
    вкладки ещё коммитится, ждём. Больше - активный модем сменился не нами
    (modemswitch.sh resolve при переподключении, второй браузер), и страница
@@ -2976,7 +3034,7 @@ simDialog: baseclass.extend({
 			   if(!json.error) по peek-снимку: модем занят/не найден в момент
 			   открытия страницы - и опрос не регистрировался вовсе, страница
 			   навсегда замирала с прочерками до ручного F5 (находка ревью). */
-			poll.add(function() {
+			pollTickFn = function() {
 				/* ЧИТАЕМ СНИМОК, а не опрашиваем модем. В порт ходит ровно один
 				   процесс (блокировка в 5gmodem.sh), остальные берут готовые
 				   данные - иначе открытая страница, второй браузер и 5gtop
@@ -3018,7 +3076,12 @@ simDialog: baseclass.extend({
 						   (раз в ~3 опроса). Второй тикающий вызов отсюда только
 						   удваивал запросы и гонки перерисовки. */
 					});
-				});
+				};
+				poll.add(pollTickFn);
+				/* ОБРАБОТЧИК ПЕРЕКЛЮЧЕНИЯ МОДЕМА БЕЗ ПЕРЕЗАГРУЗКИ (см. modemtabs).
+				   Регистрируем ТОЛЬКО на странице детали - другие страницы
+				   (SMS/USSD/настройки) его не ставят и переключаются reload'ом. */
+				window.__5gmInPlaceSwitch = function(p) { switchModemInPlace(p); };
 
 		} catch (err) {
 				ui.addNotification(null, E('p', _('Error: ') + err.message), 'error');
@@ -3136,13 +3199,17 @@ simDialog: baseclass.extend({
 						]),
 						E('span', { 'id': 'temp' }, [ '-' ]),
 					]),
+					/* APN и тип адреса - НИЖНЯЯ строка правой колонки, а не
+					   отдельный див под всем рядом: снаружи он вставал ниже
+					   самой высокой колонки, и между температурой и APN зияла
+					   «пустая строка» (замечено владельцем). margin-top:auto
+					   прижимает его к низу ряда - строка всегда вровень с
+					   последней строкой левого блока: 3 строки там - 3 здесь,
+					   добавился IPv6 (4 строки) - выровнено и так. */
+					E('div', { 'id': 'apnline',
+						'style': 'text-align:right; font-size:85%; opacity:.8; margin-top:auto; display:none;' }, []),
 				]),
 			]),
-
-			/* Правый нижний угол блока: APN и тип адреса интерфейса. Заполняется
-			   опросом (renderApnLine), скрыто пока данных нет. */
-			E('div', { 'id': 'apnline',
-				'style': 'text-align:right; font-size:85%; opacity:.8; margin-top:.35em; display:none;' }, []),
 			]),
 
 			/* Второй блок - управление частотами (сворачиваемый) */

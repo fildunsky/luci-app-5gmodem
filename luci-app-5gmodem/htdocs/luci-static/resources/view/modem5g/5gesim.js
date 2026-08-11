@@ -700,6 +700,28 @@ return view.extend({
 			// а на несовпадение TLS-стека с тем, которым мы реально качаем (мост).
 			// Ложная тревога, да ещё и под модалкой, где её не видно. Отсутствие
 			// доступа в интернет (nc.net) проверяем по-прежнему - это осмысленно.
+			/* МОДЕМ - ЕДИНСТВЕННЫЙ ИСТОЧНИК ИНТЕРНЕТА. Операция освобождает
+			   модем (иначе к eUICC не пробиться), а загрузке нужен интернет
+			   ПОСРЕДИ работы - на единственном аплинке она сломается
+			   гарантированно, и раньше человек узнавал об этом только по
+			   оборванной загрузке (жалоба 9esim/T99W175). Предупреждаем ДО
+			   старта; «продолжить» оставляем - вдруг запасной канал появится
+			   через секунды или пользователь знает, что делает. */
+			if (String(nc.sole) === '1') {
+				ui.hideModal();
+				ui.showModal(_('Add eSIM profile'), [
+					E('p', {}, _('This modem is currently the only internet source, and the download must take the modem offline to reach the eSIM chip. The profile download needs internet at that very moment, so it cannot finish. Connect the router to another source first (Wi-Fi, cable, or a phone hotspot) and try again.')),
+					E('div', { 'class': 'right' }, [
+						E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
+						' ',
+						E('button', { 'class': 'btn cbi-button cbi-button-negative', 'click': function() {
+							ui.hideModal();
+							self._doDownload(code, inp);
+						} }, _('Download anyway'))
+					])
+				]);
+				return;
+			}
 			self._doDownload(code, inp);
 		});
 	},
@@ -1117,7 +1139,23 @@ function renderProfiles(list) {
 	tbl.querySelectorAll('tr.esim-row').forEach(function(r) { r.parentNode.removeChild(r); });
 	if (!list.length) {
 		tbl.appendChild(E('tr', { 'class': 'tr esim-row' }, [
-			E('td', { 'class': 'td', 'colspan': '5' }, [ E('em', _('No profiles installed')) ]),
+			E('td', { 'class': 'td', 'colspan': '5' }, [
+				E('em', _('No profiles installed')),
+				/* ПУСТОЙ ЧИП - ОСОБЫЙ СЛУЧАЙ, и об этом стоит сказать сразу:
+				   часть модемов не может нормально работать со слотом, на
+				   котором совсем нет профилей (флап, «modem failed», вечный
+				   дозвон - см. mm-esim-without-profiles). Полевой опыт с
+				   9esim v3 на T99W175: заводится после загрузки любого
+				   ТЕСТОВОГО профиля из публичного списка. */
+				E('div', { 'style': 'font-size:90%; opacity:.75; margin-top:.4em' }, [
+					_('An empty chip is a special case: some modems cannot work with a profile-less eSIM (the modem keeps resetting or the slot stays unusable). Loading any public test profile usually settles it - see the list of known test profiles:'),
+					' ',
+					E('a', {
+						'href': 'https://euicc-manual.osmocom.org/docs/rsp/known-test-profile/',
+						'target': '_blank', 'rel': 'noreferrer'
+					}, 'euicc-manual: known test profiles')
+				])
+			]),
 		]));
 		return;
 	}

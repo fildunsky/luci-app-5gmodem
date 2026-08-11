@@ -127,6 +127,19 @@ function loadModems() {
 		try { modems = JSON.parse(res[0] || '[]') || []; } catch (e) {}
 		if (!Array.isArray(modems)) { modems = []; }
 		var active = String(res[1] || '').trim();
+		/* ПОДСВЕТКУ ВКЛАДКИ БЕРЁМ ИЗ КЛИКА (sessionStorage '5gm-tab'), а не
+		   только из active_modem на роутере. Клик по вкладке пишет туда путь
+		   ДО перезагрузки страницы, и мы перезагружаемся сразу, не дожидаясь,
+		   пока resolve на роутере догонит active (это и давало «первый раз
+		   залипает»: до 4 c ждали active==path только ради подсветки, тогда как
+		   данные и так адресуются по sessionStorage через for=). Уважаем
+		   sessionStorage ТОЛЬКО если путь реально есть в списке модемов - иначе
+		   он мог протухнуть (модем вынули, слот сменили). */
+		var _sel = '';
+		try { _sel = window.sessionStorage.getItem('5gm-tab') || ''; } catch (e) {}
+		if (_sel && modems.some(function(m) { return m.path === _sel; })) {
+			active = _sel;
+		}
 		if (!modems.some(function(m) { return m.path === active; })) {
 			active = modems.length ? modems[0].path : '';
 		}
@@ -530,14 +543,25 @@ function tabsBar(modems, active) {
 			'data-tooltip': (m.vidpid || '') + ' @ ' + (m.path || ''),
 			'click': function(ev) {
 				var path = ev.currentTarget.getAttribute('data-path');
-				if (path === active) { return; }
+				var card = ev.currentTarget, row = card.parentNode;
+				/* ТЕКУЩИЙ активный берём ИЗ DOM, а не из замыкания `active`:
+				   при переключении БЕЗ перезагрузки (in-place) полоса вкладок не
+				   перерисовывается, и `active` остался бы значением на момент
+				   первого рендера - повторный клик по уже показанному модему
+				   считался бы «тем же» и игнорировался (застревание после
+				   первого переключения). */
+				var curActive = active;
+				if (row) {
+					var _a = row.querySelector('.modemtab.active');
+					if (_a) { curActive = _a.getAttribute('data-path'); }
+				}
+				if (path === curActive) { return; }
 				/* Без попапа (решение владельца): переключение - это быстрые
 				   uci-правки (AT-порт заново не пробуется при обычной смене
 				   вкладки). Мгновенно перекидываем акцентную рамку на выбранную
-				   вкладку - обратная связь есть сразу, а перезагрузку страницы
-				   (нужна, чтобы весь экран перечитал данные нового модема)
-				   запускаем следом. Повторные клики глушим, пока идёт switch. */
-				var card = ev.currentTarget, row = card.parentNode;
+				   вкладку - обратная связь есть сразу. Повторные клики глушим,
+				   пока идёт switch; при in-place клики возвращаем в конце (при
+				   reload их вернула бы сама перезагрузка). */
 				if (row) {
 					row.querySelectorAll('.modemtab.active').forEach(function(b) { b.classList.remove('active'); });
 					row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = 'none'; });
@@ -558,29 +582,44 @@ function tabsBar(modems, active) {
 				   принудительно - подсветится честный active, панель оживёт. При
 				   нормальном переключении reload случается раньше и таймер умирает
 				   вместе со страницей. */
-				window.setTimeout(function() { pageLeaveThenReload(); }, 12000);
-				L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
-					.then(function() {
-						/* ПЕРЕЗАГРУЖАЕМСЯ ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ. resolveDefault
-						   глотает ошибку/таймаут switch, и reload уезжал со СТАРЫМ
-						   active_modem - вкладка подсвечена новая, а вся страница
-						   строится по прежнему модему («висит инфа другого модема»,
-						   поймано владельцем). Ждём, пока active реально станет
-						   выбранным (до ~4 с), иначе перезагружаемся как есть -
-						   хуже прежнего не будет, а честный active подсветится. */
-						var _swTries = 0;
-						var _swChk = function() {
-							L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'active' ]), '')
-								.then(function(out) {
-									if (String(out).trim() === path || ++_swTries >= 10) {
-										pageLeaveThenReload();
-									} else {
-										window.setTimeout(_swChk, 400);
-									}
-								});
-						};
-						_swChk();
-					});
+				/* ПЕРЕКЛЮЧЕНИЕ БЕЗ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ.
+				   Полный window.location.reload перезагружал ВЕСЬ LuCI SPA (меню,
+				   ACL, ресурсы, форму) - отсюда и «тяжёлый» каскад (пропадает
+				   приоритет, потом вкладки, потом всё рисуется заново), и
+				   залипание на инициализации фреймворка. Если страница детали
+				   зарегистрировала обработчик (__5gmInPlaceSwitch), меняем модем
+				   ВНУТРИ неё: обновляется только карточка, всё остальное на месте.
+				   Прочие страницы (SMS/USSD/настройки) обработчик не ставят - они
+				   перечитываются прежней перезагрузкой (их load() зависит от
+				   активного модема целиком). */
+				/* In-place возможен ТОЛЬКО на странице детали: там есть карточка
+				   (#modemname) и живой обработчик. window.__5gmInPlaceSwitch -
+				   глобальный и переживает уход на SMS/USSD/настройки, поэтому
+				   сверяем ещё и наличие карточки в DOM - иначе на другой странице
+				   клик дёрнул бы мёртвый обработчик вместо перезагрузки. */
+				var _inplace = window.__5gmInPlaceSwitch;
+				if (typeof _inplace === 'function' && document.getElementById('modemname')) {
+					/* ПЕРЕРИСОВЫВАЕМ КАРТОЧКУ СРАЗУ, НЕ ДОЖИДАЯСЬ backend switch.
+					   switch на роутере бывает медленным (занятый rpcd, переопрос
+					   AT-порта - те самые «иногда 5-7 c»), а карточке его ждать
+					   незачем: данные адресуются for=<путь>, warm-снимок читается
+					   по этому модему независимо от active. Раньше _inplace висел
+					   в .then(switch) - отсюда залипание без обратной связи. */
+					try { _inplace(path); }
+					catch (e) { pageLeaveThenReload(); return; }
+					/* Клики по вкладкам возвращаем сразу (reload'а, который бы
+					   пересоздал полосу, нет). */
+					if (row) { row.querySelectorAll('.modemtab').forEach(function(b) { b.style.pointerEvents = ''; }); }
+					/* switch на роутере - В ФОНЕ: делает выбор постоянным
+					   (переживёт F5) и переустанавливает at_port/network под новый
+					   модем. UI его не ждёт; когда он доедет, свежие данные придут
+					   отложенными тиками (см. switchModemInPlace). */
+					fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]);
+				} else {
+					window.setTimeout(function() { pageLeaveThenReload(); }, 12000);
+					L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
+						.then(function() { pageLeaveThenReload(); });
+				}
 			}
 		}, [
 			/* Иконка перед именем: у модема с собственной сетевой картой (USB-
@@ -683,6 +722,7 @@ return baseclass.extend({
 	   вкладка появлялась только после ручного F5 (applyEsimTabVisibility
 	   отрабатывает лишь при загрузке страницы). */
 	refreshEsimTab: function() { applyEsimTabVisibility(0); },
+	refreshUssdTab: function() { applyUssdTabVisibility(); },
 
 	/* ПОЛОСУ СТАВИМ СРАЗУ, ДАННЫЕ ПОДКЛАДЫВАЕМ ПОТОМ.
 	   Раньше вся полоса появлялась только после двух вызовов shell

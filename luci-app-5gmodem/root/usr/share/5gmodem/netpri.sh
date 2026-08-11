@@ -829,6 +829,47 @@ _del_all_default() {   # $1 - l3_device, $2 - имя сети (для своих
 	done
 }
 
+# ПЕРЕСТАВИТЬ МЕТРИКУ У НЕ-default МАРШРУТОВ ИНТЕРФЕЙСА (issue #12, доп. от
+# Laxilef). netifd вешает СВОЮ метрику интерфейса не только на default, но и на
+# его подсеточные маршруты (`10.31.67.0/24 dev X proto static metric N`), а наше
+# живое переключение трогало только default - подсети оставались со старой
+# метрикой до рестарта интерфейса. При пересекающихся подсетях/policy-routing
+# это меняло выбор пути. Здесь переставляем и их.
+# Порядок ДОБАВИТЬ-ПОТОМ-УДАЛИТЬ (не наоборот): если add сорвётся, старый
+# маршрут уцелеет - терять подсеточный маршрут (локальная связность) нельзя.
+# Трогаем ТОЛЬКО маршруты с полем metric; `<шлюз> dev X scope link` без метрики
+# (прямой путь к шлюзу) не наш - его метрику netifd не ставит.
+_rerank_iface_routes() {   # $1 - l3_device, $2 - нужная метрика, $3 - имя сети
+	for _rr_fam in -4 -6; do
+		if [ "$_rr_fam" = "-4" ]; then
+			_rr_tl="$(uci -q get "network.$3.ip4table" 2>/dev/null)"
+		else
+			_rr_tl="$(uci -q get "network.$3.ip6table" 2>/dev/null) $(uci -q get "network.${3}6.ip6table" 2>/dev/null) $(uci -q get "network.${3}_6.ip6table" 2>/dev/null)"
+		fi
+		_rr_seen=""
+		for _rr_t in "" $_rr_tl; do
+			case " $_rr_seen " in *" ${_rr_t:-main} "*) continue ;; esac
+			_rr_seen="$_rr_seen ${_rr_t:-main}"
+			_rr_a=""; [ -n "$_rr_t" ] && _rr_a="table $_rr_t"
+			ip "$_rr_fam" route show $_rr_a 2>/dev/null | grep -E " dev $1( |$)" | while read -r _rr_ln; do
+				case "$_rr_ln" in
+					default*) continue ;;      # default пересоздаёт _add_default_route
+					*" metric "*) ;;
+					*) continue ;;             # без метрики - не трогаем
+				esac
+				_rr_cur=$(printf '%s' "$_rr_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p')
+				[ -n "$_rr_cur" ] || continue
+				[ "$_rr_cur" = "$2" ] && continue
+				_rr_pfx=${_rr_ln%% *}
+				# строку целиком переиспользуем как аргументы add, заменив метрику
+				_rr_new=$(printf '%s' "$_rr_ln" | sed "s/metric $_rr_cur/metric $2/")
+				ip "$_rr_fam" route add $_rr_new $_rr_a 2>/dev/null
+				ip "$_rr_fam" route del "$_rr_pfx" dev "$1" metric "$_rr_cur" $_rr_a 2>/dev/null
+			done
+		done
+	done
+}
+
 # ТРЕТЬЕ МНЕНИЕ - ЧЕРЕЗ ТУННЕЛЬ CLASH. Собственный трафик роутера идёт МИМО
 # clash (tproxy перехватывает только форвард LAN), и на аплинке с блокировками
 # прямые ICMP и TCP с роутера мертвы, хотя у клиентов сервис открывается.
@@ -1252,6 +1293,8 @@ set)
 		case " $_seen " in *" $_dv "*) return 1 ;; esac
 		_seen="$_seen $_dv"
 		_add_default_route "$1" "$2"
+		# и подсеточные маршруты этого интерфейса - на ту же метрику (issue #12)
+		_rerank_iface_routes "$_dv" "$2" "$1"
 		return 0
 	}
 	_add_once "$CH" "$_mb"
@@ -1401,6 +1444,8 @@ order)
 		case " $_seen " in *" $_dv "*) continue ;; esac
 		_seen="$_seen $_dv"
 		_add_default_route "$n" "$_rank"
+		# подсеточные маршруты интерфейса - на ту же метрику (issue #12)
+		_rerank_iface_routes "$_dv" "$_rank" "$n"
 		_rank=$((_rank + 10))
 	done
 	echo '{"result":"ok","changed":true,"mode":"order"}'

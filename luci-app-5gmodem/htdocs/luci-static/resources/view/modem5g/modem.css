@@ -1100,13 +1100,6 @@
   height: auto !important;
   margin-left: 4px;
 }
-/* подпись типа SIM (USIM/eSIM) слева от кнопок */
-.tginfo-simslot .tginfo-simslot-type {
-  font-size: 80%;
-  opacity: 0.7;
-  margin-right: 4px;
-}
-
 /* ===== ЗНАК «ТЕКУЩЕЕ» (tg-current) =====
    Активный SIM-слот и выбранный режим сети - той же полосой слева, что
    вкладка активного модема (.modemtab.active), активная карточка приоритета
@@ -2502,4 +2495,18 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 	padding-left: .8em;
 	padding-right: .8em;
 	font-weight: 700;
+}
+
+/* ===== МОДАЛКИ ОЖИДАНИЯ (спиннер + фраза) ===== */
+/* ui.showModal(null, <p.spinning>) рисует ПУСТОЙ заголовок (полоса из его
+   нижней границы) и прижимает колечко к левому краю окна (замечено
+   владельцем). Прицел точный - пустой h4 и последний p.spinning: модалки с
+   настоящим заголовком или кнопками не задеты. Колечко у LuCI - фон слева от
+   текста, поэтому центруем сам абзац шириной по содержимому. */
+.modal > h4:empty { display: none; }
+.modal > h4:empty + p.spinning:last-child {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	margin: 1em auto;
 }

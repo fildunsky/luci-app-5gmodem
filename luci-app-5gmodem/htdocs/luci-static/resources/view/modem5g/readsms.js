@@ -142,11 +142,17 @@ function smsPlaceholder(state) {
 	   «плейсхолдер уже есть» видела собственный спиннер - «читаю сообщения…»
 	   никогда не сменялось на «нет сообщений», а пользователь не мог отличить
 	   пустую память от зависшего чтения. */
+	/* 'error' - СВОЙ текст. Раньше ошибка чтения на пустом экране рисовала
+	   «Нет сообщений» - то же, что честная пустота, и сломанное чтение
+	   выглядело как отсутствие SMS (счётчик при этом показывал 3/3 - живой
+	   случай, роутер Андрея 10.08.2026). */
 	list.appendChild(E('div', { 'class': 'sms-empty', 'id': 'smsEmpty',
-		'data-state': state === 'loading' ? 'loading' : 'empty' }, [
+		'data-state': state === 'loading' ? 'loading' : (state === 'error' ? 'error' : 'empty') }, [
 		state === 'loading'
 			? E('span', { 'class': 'spinning' }, _('Loading messages…'))
-			: E('span', {}, _('No messages'))
+			: (state === 'error'
+				? E('span', {}, _('Could not read messages - will retry on the next refresh'))
+				: E('span', {}, _('No messages')))
 	]));
 }
 

@@ -4345,8 +4345,38 @@ msgstr "(инициализация №%d)"
 msgid "Delete this row"
 msgstr "Удалить строку"
 
+msgid "Could not read messages - will retry on the next refresh"
+msgstr "Не удалось прочитать сообщения — повторим при следующем обновлении"
+
+msgid ""
+"This modem is currently the only internet source, and the download must take "
+"the modem offline to reach the eSIM chip. The profile download needs "
+"internet at that very moment, so it cannot finish. Connect the router to "
+"another source first (Wi-Fi, cable, or a phone hotspot) and try again."
+msgstr ""
+"Сейчас этот модем — единственный источник интернета, а для доступа к "
+"eSIM-чипу его придётся отключить от сети. Загрузке профиля интернет нужен "
+"ровно в этот момент — она не сможет завершиться. Сначала подключите роутер "
+"к другому источнику (Wi-Fi, кабель или раздача с телефона) и повторите."
+
+msgid ""
+"An empty chip is a special case: some modems cannot work with a profile-less "
+"eSIM (the modem keeps resetting or the slot stays unusable). Loading any "
+"public test profile usually settles it - see the list of known test profiles:"
+msgstr ""
+"Пустой чип — особый случай: часть модемов не может работать с eSIM без "
+"единого профиля (модем перезапускается или слот остаётся недоступным). "
+"Обычно помогает загрузка любого публичного тестового профиля — список "
+"известных тестовых профилей:"
+
+msgid "Download anyway"
+msgstr "Всё равно загрузить"
+
 msgid "Saved and applied."
 msgstr "Сохранено и применено."
+
+msgid "Switching to the modem…"
+msgstr "Переключение на модем…"
 
 msgid "mwan3-compatible metrics"
 msgstr "Метрики, совместимые с mwan3"

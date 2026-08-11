@@ -899,5 +899,15 @@ return baseclass.extend({
 	ungate: ungate,
 	setOther: setOther,
 	isTakeover: function() { return bandsTakeover; },
-	isReadOnly: function() { return bandsReadOnly; }
+	isReadOnly: function() { return bandsReadOnly; },
+	/* Сброс состояния под НОВЫЙ модем при переключении вкладки БЕЗ перезагрузки
+	   страницы (in-place): все модульные флаги завязаны на конкретный модем и
+	   без сброса блок частот показывал бы данные прежнего. warm-ключ включает
+	   путь (см. warmKey), поэтому тёплый старт нового модема подтянется сам. */
+	resetForModem: function() {
+		_bandsWarmed = false; _bandsPollN = 0; _bandsRetry = 0;
+		_bandsAfterBusy = false; _has3gMM = false;
+		bandsReadOnly = false; bandsTakeover = false;
+		bandsOther = [];
+	}
 });
