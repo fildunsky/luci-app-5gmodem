@@ -1,5 +1,22 @@
-Сигнал (HCSQ) ➜ AT^HCSQ?
-Системная информация ➜ AT^SYSINFOEX
-Режим и диапазоны ➜ AT^SYSCFGEX?
-Температура ➜ AT^CHIPTEMP?
-Композиция портов ➜ AT^SETPORT?
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Signal and system
+
+# Signal (HCSQ)
+AT^HCSQ?
+
+# System information
+AT^SYSINFOEX
+
+## Bands and ports
+
+# Mode and bands
+AT^SYSCFGEX?
+
+# Temperature
+AT^CHIPTEMP?
+
+# Port composition
+AT^SETPORT?

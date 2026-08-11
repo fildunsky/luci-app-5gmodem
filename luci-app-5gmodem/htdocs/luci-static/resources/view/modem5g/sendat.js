@@ -14,16 +14,11 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
-/* Строка шаблона AT: "подпись;команда[;команда...]" - разделитель ';' служит и
-   для отделения подписи, и для перечисления команд. Собирая команды обратно,
-   их надо СКЛЕИТЬ В ОДНУ AT-строку по правилам V.250/27.007: префикс "AT"
-   допустим РОВНО ОДИН РАЗ, в самом начале; последующие команды идут без него.
-   Раньше склейка сохраняла "AT" у каждой, и модем получал
-   AT+CPBS="ON";AT+CNUM - проверено на живом модеме: "No response from modem." /
-   "NO CARRIER". Правильный вид AT+CPBS="ON";+CNUM отвечает нормально. Из-за
-   этого не работали ровно те строки шаблона, где команд больше одной.
-   Снимаем "AT" только у РАСШИРЕННЫХ команд, т.е. начинающихся с + ^ $ * или #:
-   у базовых (ATI, ATZ) обрезка префикса сломала бы саму команду. */
+/* Склейка нескольких AT-команд ОДНОЙ строки в валидную цепочку по V.250/27.007:
+   префикс "AT" допустим один раз в начале, у последующих РАСШИРЕННЫХ команд
+   (+ ^ $ * #) его снимаем. Так пользователь пишет привычно
+   "AT+CPBS="ON";AT+CNUM", а модем получает верное "AT+CPBS="ON";+CNUM" (иначе -
+   "No response"/"NO CARRIER"). У базовых (ATI, ATZ) префикс не трогаем. */
 function atChain(cmds) {
 	return cmds.map(function(c, i) {
 		c = String(c).trim();
@@ -31,43 +26,94 @@ function atChain(cmds) {
 	}).join(';');
 }
 
-/* РАЗБОР СТРОКИ ШАБЛОНА - ОДИН НА ВСЕ ТРИ МЕСТА, ГДЕ ОН БЫЛ СКОПИРОВАН.
-   ФОРМАТ, КОТОРЫЙ ХОЧЕТСЯ ПИСАТЬ:
-       Название ➜ AT-команда
-   Одна строка, одна команда. Цепочку пишем как обычно, через точку с запятой:
-       Оператор ➜ AT+COPS=3,0;+COPS?
-   Стрелка любая: «➜», «→» или «->».
+/* ФОРМАТ ФАЙЛА AT-ШАБЛОНОВ - человеко-понятный, ОПИСАНИЕ КОММЕНТАРИЕМ НАД
+   КОМАНДОЙ (см. шапку в самих файлах etc/5gmodem/modem/atcmmds/):
 
-   СТАРЫЙ ФОРМАТ ТОЖЕ ЖИВ, иначе у людей разом перестали бы работать их
-   собственные файлы. Он выглядел так:
-       Название ➜ ATI;ATI
-   то есть слева от точки с запятой была ПОДПИСЬ (в неё для наглядности вписывали
-   команду), а справа - сама команда, из-за чего команду приходилось писать
-   дважды. Отличаем по простому признаку: если первая часть в точности равна
-   второй, это дубль из старого формата - отбрасываем его. Ни одна настоящая
-   цепочка не начинается с двух одинаковых команд подряд.
+       ## Раздел               - заголовок группы в выпадающем списке
+       # Что делает команда    - описание (msgid, переводится через _())
+       AT+CSQ                   - сама команда: уходит в модем КАК ЕСТЬ
+                                  (несколько через ';' - в одной AT-сессии)
+       <пустая строка>          - разделитель; сбрасывает «висящее» описание
 
-   Без стрелки строка читается по-старому: «имя;команда;команда». */
-function parseTemplateLine(line) {
-	var s = String(line || '').trim();
-	if (!s) { return null; }
+   Описание берётся из строки '#' НЕПОСРЕДСТВЕННО над командой. '##' - раздел.
+
+   ЛЕГАСИ читается тоже, чтобы ничьи существующие .user не сломались:
+       Название ➜ AT-команда   (стрелка '➜'/'→'/'->')
+       Название;AT-команда */
+function isAtLine(s) { return /^at/i.test(String(s || '').trim()); }
+
+function parseLegacyLine(s) {
 	var m = s.match(/^(.*?)\s*(?:➜|→|->)\s*(.*)$/);
 	if (m) {
 		var name = m[1].trim();
 		var parts = m[2].split(';');
 		if (parts.length > 1 && parts[0].trim() === parts[1].trim()) { parts.shift(); }
 		var code = atChain(parts);
-		if (!code) { return null; }
-		return { name: (name || code), code: code };
+		return code ? { name: (name || code), code: code } : null;
 	}
-	var f = s.split(';');
-	return { name: f[0].trim(), code: atChain(f.slice(1)) || f[0].trim() };
+	/* "имя;команда" - старый бесстрелочный вид; только если строка НЕ сама
+	   AT-команда (иначе это новый формат с цепочкой через ';'). */
+	if (s.indexOf(';') >= 0 && !isAtLine(s)) {
+		var f = s.split(';');
+		var c2 = atChain(f.slice(1));
+		if (c2) { return { name: f[0].trim() || c2, code: c2 }; }
+	}
+	return null;
 }
 
-/* Подпись в выпадающем списке: имя и сама команда - чтобы было видно, что
-   именно уйдёт в модем, и при этом не приходилось дублировать её в файле. */
+/* Перевод подписи/раздела: msgid из файла -> текущий язык. Своя (не из каталога)
+   строка вернётся как есть - пользовательские команды показываем как написаны. */
+function tr(s) { return s ? _(s) : s; }
+
+/* Разбор ВСЕГО файла в упорядоченный список:
+   {type:'section', name} | {type:'cmd', name, code}. */
+function parseTemplates(content) {
+	var out = [], desc = null;
+	String(content || '').split('\n').forEach(function(raw) {
+		var s = raw.trim();
+		if (s === '') { desc = null; return; }
+		if (s.slice(0, 2) === '##') {
+			out.push({ type: 'section',
+				name: tr(s.replace(/^#+/, '').replace(/[═=─\-\s]+$/, '').trim()) });
+			desc = null; return;
+		}
+		if (s.charAt(0) === '#') { desc = s.replace(/^#+\s?/, '').trim(); return; }
+		var legacy = parseLegacyLine(s);
+		if (legacy) { out.push({ type: 'cmd', name: tr(legacy.name), code: legacy.code }); desc = null; return; }
+		var code = atChain(s.split(';'));
+		if (code) { out.push({ type: 'cmd', name: desc ? tr(desc) : code, code: code }); }
+		desc = null;
+	});
+	return out;
+}
+
+/* Текст пункта: описание + сама команда - видно, что именно уйдёт в модем. */
 function templateLabel(t) {
 	return (t.name === t.code) ? t.code : (t.name + ' → ' + t.code);
+}
+
+/* Наполнить <select> пунктами файла: плейсхолдер, разделы -> <optgroup>,
+   команды -> <option>. ОДИН строитель на оба места (первичный рендер и смена
+   файла) - раньше цикл был скопирован дважды и расходился. */
+function fillTemplateSelect(sel, content) {
+	if (!sel) { return; }
+	sel.innerHTML = '';
+	var ph = document.createElement('option');
+	ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
+	sel.appendChild(ph);
+	var group = null;
+	parseTemplates(content).forEach(function(it) {
+		if (it.type === 'section') {
+			group = document.createElement('optgroup');
+			group.label = it.name;
+			sel.appendChild(group);
+			return;
+		}
+		var o = document.createElement('option');
+		o.value = it.code;
+		o.textContent = templateLabel(it);
+		(group || sel).appendChild(o);
+	});
 }
 
 /* СЕМЕЙНЫЙ ФАЙЛ AT-ШАБЛОНОВ ПО АКТИВНОМУ МОДЕМУ (запрос владельца): раньше
@@ -261,26 +307,10 @@ return view.extend({
 		this.saveSettingsToLocalStorage(selectedFile);
 
 		return fs.read_direct(atFilePath(selectedFile)).then(function(content) {
-			selectElement.innerHTML = '';
-			// Плейсхолдер первым пунктом: иначе первая реальная команда (AT)
-			// уже "выбрана" и повторный клик по ней не даёт события change,
-			// то есть её нельзя применить. С плейсхолдером выбор любой
-			// команды, включая первую, всегда генерирует change.
-			let ph = document.createElement('option');
-			ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
-			selectElement.appendChild(ph);
-
-			let commands = (content || '').trim().split('\n');
-			commands.forEach(function(cmd) {
-				let t = parseTemplateLine(cmd);
-				if (t) {
-					let option = document.createElement('option');
-					option.value = t.code;
-					option.textContent = templateLabel(t);
-					selectElement.appendChild(option);
-				}
-			});
-
+			/* Плейсхолдер + разделы + команды строит общий fillTemplateSelect.
+			   Плейсхолдер нужен, чтобы выбор ПЕРВОЙ команды тоже давал change
+			   (иначе она уже "выбрана" и повторный клик не применяется). */
+			fillTemplateSelect(selectElement, content);
 			let cmdInput = document.getElementById('cmdvalue');
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
@@ -445,25 +475,7 @@ return view.extend({
 
 								setTimeout(function() {
 									L.resolveDefault(fs.read_direct(atFilePath(fileToLoad)), '').then(function(content) {
-										let selectElement = document.getElementById('tk');
-										if (!selectElement) return;
-
-										selectElement.innerHTML = '';
-										// плейсхолдер первым пунктом (см. handleFileChange)
-										let ph = document.createElement('option');
-										ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
-										selectElement.appendChild(ph);
-
-										let commands = (content || '').trim().split('\n');
-										commands.forEach(function(cmd) {
-											let t = parseTemplateLine(cmd);
-											if (t) {
-												let option = document.createElement('option');
-												option.value = t.code;
-												option.textContent = templateLabel(t);
-												selectElement.appendChild(option);
-											}
-										});
+										fillTemplateSelect(document.getElementById('tk'), content);
 									}).catch(function(err) {
 										console.error('Error loading initial AT commands file:', err);
 									});
@@ -515,16 +527,24 @@ return view.extend({
 										if (userFiles.length === 0 && loadResults[0]) {
 											content = loadResults[0];
 										}
-										
+
 										if (!content || !content.trim()) {
 											return [E('option', { 'value': '' }, _('No AT commands available'))];
 										}
-										
-										return content.trim().split("\n").map(function(cmd) {
-											let t = parseTemplateLine(cmd);
-											if (!t) return null;
-											return E('option', { 'value': t.code }, templateLabel(t));
-										}).filter(function(opt) { return opt !== null; });
+										/* Разделы -> <optgroup>, команды -> <option>; тот же
+										   разбор, что и в fillTemplateSelect (см. parseTemplates). */
+										let nodes = [ E('option', { 'value': '', 'disabled': true, 'selected': true }, '—') ];
+										let group = null;
+										parseTemplates(content).forEach(function(it) {
+											if (it.type === 'section') {
+												group = E('optgroup', { 'label': it.name }, []);
+												nodes.push(group);
+												return;
+											}
+											let opt = E('option', { 'value': it.code }, templateLabel(it));
+											if (group) { group.appendChild(opt); } else { nodes.push(opt); }
+										});
+										return nodes;
 									})()
 								)
 							]) 

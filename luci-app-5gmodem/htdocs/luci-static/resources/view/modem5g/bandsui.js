@@ -181,6 +181,14 @@ function applyMgmtMM(j) {
 		var show = function(id, on) { var e = document.getElementById(id); if (e) { e.style.display = on ? '' : 'none'; } };
 		show('modeswn', true); show('bands3gn', sup3.length); show('bandsn', sup4.length);
 		show('bands5gn', sup5.length); show('bandsactn', true);
+		/* 5G-режим (SA/NSA), CA-enabled и cell-lock - ВЕНДОРНЫЕ строки (их считает
+		   AT-путь, bands.sh json). Путь MM их не заполняет - и ОБЯЗАН скрыть:
+		   иначе при переключении с 5G-модема (FM350, вендорный путь) на MM-модем
+		   (напр. SIMCom SIM7100E - LTE, вовсе без 5G) строка «Режим 5G: Включён
+		   (SA + NSA)» оставалась висеть от прежнего модема. */
+		render5gMode(null);
+		renderCaEnabled(null);
+		renderCellLock(null);
 		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
 		   а не из живых current-modes: конфиг не мигает на передозвоне и
 		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */
@@ -909,5 +917,9 @@ return baseclass.extend({
 		_bandsAfterBusy = false; _has3gMM = false;
 		bandsReadOnly = false; bandsTakeover = false;
 		bandsOther = [];
+		/* Вендорные строки прежнего модема гасим СРАЗУ при переключении, не
+		   дожидаясь данных нового: иначе «Режим 5G / CA / cell-lock» от FM350
+		   мигают на вкладке следующего модема, пока не придёт его ответ. */
+		render5gMode(null); renderCaEnabled(null); renderCellLock(null);
 	}
 });

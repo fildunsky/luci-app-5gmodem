@@ -1,9 +1,38 @@
-Режим сети и диапазоны ➜ AT+XACT?
-Агрегация (CA) ➜ AT+XLEC?
-Соты ➜ AT+XMCI=1
-RSRP по трактам ➜ AT+RSRP?
-RSRQ по трактам ➜ AT+RSRQ?
-Антенные тракты (только 1-й ACM-порт) ➜ at@errc:pcell_scell_measurement_info()
-Версия пакета прошивки ➜ AT+GTPKGVER?
-SIM-слоты ➜ AT+GTDUALSIM?
-USB-композиция (NVM) ➜ at@nvm:cal_usbmode.num?
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Bands and modes
+
+# Network mode and bands
+AT+XACT?
+
+## Cell and signal
+
+# Aggregation (CA)
+AT+XLEC?
+
+# Cells
+AT+XMCI=1
+
+# RSRP per branch
+AT+RSRP?
+
+# RSRQ per branch
+AT+RSRQ?
+
+# Antenna branches (first ACM port only)
+at@errc:pcell_scell_measurement_info()
+
+## USB and SIM
+
+# USB composition (NVM)
+at@nvm:cal_usbmode.num?
+
+# SIM slots
+AT+GTDUALSIM?
+
+## Firmware
+
+# Firmware package version
+AT+GTPKGVER?

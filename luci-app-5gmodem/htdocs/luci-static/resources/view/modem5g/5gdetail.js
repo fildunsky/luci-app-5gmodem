@@ -308,7 +308,12 @@ var slotsInflight = false;
 function loadSimSlots(cb) {
 	if (slotsInflight) { if (cb) { cb(null); } return; }
 	slotsInflight = true;
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+	/* Слоты просматриваемого модема, а не активного аплинка: у каждого модема
+	   свои слоты. Адресуем for=<путь вкладки> (simslot.sh сам подставит активный,
+	   если путь пуст). */
+	var _slArgs = [ 'status' ];
+	if (pageModemPath) { _slArgs.push('for=' + pageModemPath); }
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', _slArgs), '').then(function(out) {
 		slotsInflight = false;
 		var st = {};
 		try { st = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
@@ -370,7 +375,11 @@ function loadSimSlots(cb) {
 					ev.preventDefault();
 					if (on) { return; }
 					ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
-					fs.exec('/usr/share/5gmodem/simslot.sh', [ 'set', String(s.id) ]).then(function(res) {
+					/* Переключаем слот ИМЕННО просматриваемого модема (for=), а не
+					   активного: кнопки показаны для него же. */
+					var _stArgs = [ 'set', String(s.id) ];
+					if (pageModemPath) { _stArgs.push('for=' + pageModemPath); }
+					fs.exec('/usr/share/5gmodem/simslot.sh', _stArgs).then(function(res) {
 						ui.hideModal();
 						var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
 						/* Слот переключён -> модем в ребут (переэнумерация USB, десятки

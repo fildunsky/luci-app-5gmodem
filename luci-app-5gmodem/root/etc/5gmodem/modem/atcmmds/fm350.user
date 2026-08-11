@@ -1,8 +1,37 @@
-Режим сети и диапазоны ➜ AT+GTACT?
-Поддерживаемые режимы/диапазоны ➜ AT+GTACT=?
-Текущая сота и соседи ➜ AT+GTCCINFO?
-Версия пакета прошивки ➜ AT+GTPKGVER?
-USB-композиция ➜ AT+GTUSBMODE?
-Температура ➜ AT+ETHERMAL?
-SIM-слоты ➜ AT+GTDUALSIM?
-ICCID ➜ AT+ICCID
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Bands and modes
+
+# Network mode and bands
+AT+GTACT?
+
+# Supported modes and bands
+AT+GTACT=?
+
+## Cell
+
+# Serving cell and neighbours
+AT+GTCCINFO?
+
+## Temperature
+
+# Temperature
+AT+ETHERMAL?
+
+## USB and SIM
+
+# USB composition
+AT+GTUSBMODE?
+
+# SIM slots
+AT+GTDUALSIM?
+
+# ICCID
+AT+ICCID
+
+## Firmware
+
+# Firmware package version
+AT+GTPKGVER?

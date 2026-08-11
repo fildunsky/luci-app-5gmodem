@@ -1,5 +1,24 @@
 #!/bin/sh
 
+# ЦЕЛЕВОЙ МОДЕМ. У каждого модема СВОИ слоты, поэтому показывать и переключать
+# надо слоты ИМЕННО той вкладки, что открыл пользователь, а не «активного»
+# аплинка (на многомодемном роутере это РАЗНЫЕ модемы). UI передаёт usb-путь
+# вкладки аргументом for=<путь>; без него берём активный модем (совместимость с
+# вызовами из скриптов и кроном). Путь вырезаем из аргументов, чтобы дальше
+# $1=верб (status|set|refresh), $2=номер слота - как раньше.
+_TGT=""; _args=""
+for _a in "$@"; do
+	case "$_a" in
+		for=*) _TGT="${_a#for=}" ;;
+		*)     _args="$_args $_a" ;;
+	esac
+done
+# usb-путь и верб/номер - простые токены без пробелов, поэтому пересборка
+# позиционных через словоделение безопасна.
+# shellcheck disable=SC2086
+set -- $_args
+[ -n "$_TGT" ] || _TGT=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+
 # У модема без AT-портов слотами управлять нечем: команды переключения - AT.
 # Без этой проверки страница показывала «SIM / eSIM» у односимочного Huawei,
 # потому что в секции оставались slot_type_* от прежнего модема на том же порту.
@@ -48,7 +67,7 @@ _umbim_owns_wdm() {   # $1 - узел /dev/cdc-wdmN
 _REFRESH=""
 [ "$1" = "refresh" ] && { _REFRESH=1; set -- status; }
 
-_ss_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_ss_am="$_TGT"
 # У модемов этого класса слот ФИЗИЧЕСКИ ОДИН - независимо от того, открыты у
 # него AT-порты или нет. Ответ на AT-пробу у них при этом бывает вводящим в
 # заблуждение: E3372 отвечает так, будто у него есть и SIM1, и eSIM.
@@ -99,7 +118,9 @@ if [ "$1" = "status" ] && [ -z "$_REFRESH" ]; then
 	esac
 	if [ -n "$_SRUN" ]; then
 		printf '%s\n' "$_SNOW" > "$_SLK"
-		( /usr/share/5gmodem/simslot.sh refresh ) >/dev/null 2>&1 </dev/null &
+		# Фоновое обновление ТОГО ЖЕ модема: без for= дочерний вызов взял бы
+		# активный, и кэш чужой вкладки не обновился бы никогда.
+		( /usr/share/5gmodem/simslot.sh refresh for="$_ss_am" ) >/dev/null 2>&1 </dev/null &
 	fi
 	if [ -s "$_SF" ]; then
 		cat "$_SF"
@@ -124,13 +145,13 @@ fi
 #    физически первый слот у прошивки - 0, и рассинхрон путал.)
 # Кнопки показываются, только если слотов >= 2.
 
-MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null)
+MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_TGT" 2>/dev/null)
 
 # mmcli-путь выбираем по ПРОТОКОЛУ интерфейса активного модема, а не по
 # наличию модема в MM: kernel-proto модем (напр. FM350/fibocom) MM успевает
 # заново зарегистрировать после каждого USB-переперечисления (пока mm-inhibit
 # его не отпустит), и слепой mmindex уводил запрос к полумёртвому MM-объекту.
-_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_AP="$_TGT"
 
 # СВЕЖИЙ ОТВЕТ ОТДАЁМ ИЗ КЭША.
 #
@@ -426,7 +447,7 @@ if [ "$_VIA" = qmi ]; then
 					logger -t 5gmodem "слот SIM переключён на $2 по AT^switch_slot"
 					rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 					( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-					  _IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+					  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
 					  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
 					) >/dev/null 2>&1 </dev/null &
 					echo '{"result":"ok"}'
@@ -438,7 +459,7 @@ if [ "$_VIA" = qmi ]; then
 			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 			# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
 			( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-			  _IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+			  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
 			  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
 			) >/dev/null 2>&1 </dev/null &
 			echo '{"result":"ok"}'
@@ -611,9 +632,14 @@ fi
 # Список портов даёт реестр; ответ detect.sh пробуем первым, лишь если он
 # принадлежит этому модему (так дешёвый путь сохраняется).
 live_port() {
-	_LPT=$(/usr/share/5gmodem/registry.sh active 2>/dev/null \
-		| jsonfilter -e '@.tty[*]' 2>/dev/null | tr '\n' ' ')
+	# ПОРТЫ ИМЕННО ЦЕЛЕВОГО МОДЕМА (по usb-пути), а не активного: AT+GTDUALSIM= /
+	# AT+CEISWITCHSIM= физически переключают слот, и уход в порт соседа переключил
+	# бы не ту SIM в не том модеме.
+	_LPT=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$_TGT\"].tty[*]" 2>/dev/null | tr '\n' ' ')
 	[ -n "$_LPT" ] || return 1
+	# Порт из detect.sh (он про АКТИВНЫЙ модем) пробуем первым, лишь если он реально
+	# принадлежит целевому - тогда дешёвый путь сохраняется, иначе он отбрасывается.
 	_D=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 	case " $_LPT " in
 		*" $_D "*) _LPT="$_D $_LPT" ;;
@@ -659,17 +685,18 @@ at_has_gtdualsim() {
 # Работаем в фоне: модем после смены слота ресетится и переперечисляется на USB
 # (у FM350 - десятки секунд), а HTTP-запрос из UI столько не живёт.
 slot_redial() {
-	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	# Ждём возврата ЦЕЛЕВОГО модема на шину (ресет+переэнумерация после смены
+	# слота, у FM350 - десятки секунд), затем переподнимаем ИМЕННО его интерфейс.
 	_n=0
 	while [ "$_n" -lt 120 ]; do
 		sleep 3; _n=$((_n + 3))
-		[ -n "$_AP" ] || break
-		/usr/share/5gmodem/listmodems.sh 2>/dev/null | grep -q "\"$_AP\"" && break
+		[ -n "$_TGT" ] || break
+		/usr/share/5gmodem/listmodems.sh 2>/dev/null | grep -q "\"$_TGT\"" && break
 	done
 	# resolve перепривязывает device после переперечисления (ttyUSB/cdc-wdm поехали)
 	# и возвращает активность предпочтительному модему.
 	/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-	_IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+	_IF=$(uci -q get "5gmodem.$_ss_sec.network")
 	[ -n "$_IF" ] || return 0
 	ifdown "$_IF" >/dev/null 2>&1
 	sleep 2
@@ -751,7 +778,7 @@ set)
 		# фолбэком) и есть eSIM (eUICC на нём). Ключ кэша - как в esim.sh (сырой
 		# active_modem).
 		_ESAV=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
-			"/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null)
+			"/tmp/5gmodem_esimstat_$_TGT" 2>/dev/null)
 		if [ "$_ESAV" = 1 ]; then
 			[ "$L0" = SIM ] && case "$L1" in SIM0|SIM1) L1="eSIM";; esac
 			[ "$L1" = SIM ] && case "$L0" in SIM0|SIM1) L0="eSIM";; esac

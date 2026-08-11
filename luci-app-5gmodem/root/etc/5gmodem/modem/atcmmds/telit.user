@@ -1,9 +1,38 @@
-Диапазоны ➜ AT#BND?
-Поддерживаемые диапазоны ➜ AT#BND=?
-RF-статус ➜ AT#RFSTS
-Антенные порты ➜ AT#LAPS
-4RX-приём ➜ AT#4RXDIS?
-USB-композиция ➜ AT#USBCFG?
-Образ прошивки ➜ AT#FWSWITCH?
-GNSS: питание ➜ AT$GPSP?
-GNSS: позиция ➜ AT$GPSACP
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Bands and modes
+
+# Bands
+AT#BND?
+
+# Supported bands
+AT#BND=?
+
+## Cell and signal
+
+# RF status
+AT#RFSTS
+
+# Antenna ports
+AT#LAPS
+
+# 4RX receive
+AT#4RXDIS?
+
+## USB and firmware
+
+# USB composition
+AT#USBCFG?
+
+# Firmware image
+AT#FWSWITCH?
+
+## GNSS
+
+# GNSS power
+AT$GPSP?
+
+# GNSS position
+AT$GPSACP

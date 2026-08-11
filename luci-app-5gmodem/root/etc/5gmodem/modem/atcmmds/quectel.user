@@ -1,8 +1,33 @@
-Обслуживающая сота ➜ AT+QENG="servingcell"
-Сеть и диапазон ➜ AT+QNWINFO
-Температура ➜ AT+QTEMP
-USB-режим ➜ AT+QCFG="usbnet"
-Диапазоны (маски) ➜ AT+QCFG="band"
-SIM-слот ➜ AT+QUIMSLOT?
-Статус SIM ➜ AT+QSIMSTAT?
-MBN-профили ➜ AT+QMBNCFG="List"
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Cell and signal
+
+# Serving cell
+AT+QENG="servingcell"
+
+# Network and band
+AT+QNWINFO
+
+# Temperature
+AT+QTEMP
+
+## Network and bands
+
+# USB mode
+AT+QCFG="usbnet"
+
+# Bands (masks)
+AT+QCFG="band"
+
+## SIM
+
+# SIM slot
+AT+QUIMSLOT?
+
+# SIM status
+AT+QSIMSTAT?
+
+# MBN profiles
+AT+QMBNCFG="List"

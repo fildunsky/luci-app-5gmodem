@@ -1,20 +1,82 @@
-Информация о модеме ➜ ATI
-Производитель/модель/прошивка ➜ AT+CGMI;+CGMM;+CGMR
-IMEI ➜ AT+CGSN
-Качество сигнала ➜ AT+CSQ
-Расширенный сигнал ➜ AT+CESQ
-Оператор ➜ AT+COPS?
-Регистрация LTE ➜ AT+CEREG?
-Регистрация 5G ➜ AT+C5GREG?
-PDP-контексты ➜ AT+CGDCONT?
-Адреса PDP ➜ AT+CGPADDR
-Attach к сети ➜ AT+CGATT?
-SIM: PIN-статус ➜ AT+CPIN?
-SIM: IMSI ➜ AT+CIMI
-Свой номер ➜ AT+CNUM;+CPBS="ON";+CNUM
-Часы модема ➜ AT+CCLK?
-Режим радио ➜ AT+CFUN?
-Перезагрузка модема ➜ AT+CFUN=1,1
-Радио выключить ➜ AT+CFUN=4
-Радио включить ➜ AT+CFUN=1
-Записать номер на SIM ➜ AT+CPBW;+CSCS="IRA";+CPBS="ON";+CPBW=1,"+79876543210",145,"Number"
+# ── AT command templates ───────────────────────────────────────────────
+# Format is line-based and human-readable:
+#   ## Group            a section header shown in the drop-down list
+#   # What it does       a description of the command right below it
+#   AT+CSQ               the command itself — sent to the modem verbatim
+#                        (several commands joined by ';' run in one session)
+# A blank line ends an entry. Lines starting with '#' are NEVER sent to the
+# modem — they are comments/descriptions only. Descriptions are translated in
+# the web UI; your own text is shown as written. Edit this file freely — it
+# is a user file and survives package upgrades.
+
+## Identity
+
+# Modem information
+ATI
+
+# Manufacturer, model, firmware
+AT+CGMI;+CGMM;+CGMR
+
+# IMEI
+AT+CGSN
+
+## Signal and network
+
+# Signal quality
+AT+CSQ
+
+# Extended signal quality
+AT+CESQ
+
+# Operator
+AT+COPS?
+
+# LTE registration
+AT+CEREG?
+
+# 5G registration
+AT+C5GREG?
+
+## Data session
+
+# PDP contexts (APN)
+AT+CGDCONT?
+
+# PDP addresses
+AT+CGPADDR
+
+# Packet-service attach
+AT+CGATT?
+
+## SIM
+
+# SIM PIN status
+AT+CPIN?
+
+# IMSI
+AT+CIMI
+
+# Own number
+AT+CPBS="ON";+CNUM
+
+## Radio control
+
+# Modem clock
+AT+CCLK?
+
+# Radio function mode
+AT+CFUN?
+
+# Reboot the modem
+AT+CFUN=1,1
+
+# Radio off
+AT+CFUN=4
+
+# Radio on
+AT+CFUN=1
+
+## Phonebook — edit the number before sending
+
+# Write a number to the SIM
+AT+CSCS="IRA";+CPBS="ON";+CPBW=1,"+79876543210",145,"Number"

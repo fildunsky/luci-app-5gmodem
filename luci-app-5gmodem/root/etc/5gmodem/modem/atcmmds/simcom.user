@@ -1,4 +1,19 @@
-Сота и сигнал ➜ AT+CPSI?
-Температура ➜ AT+CPMUTEMP
-Режим сети ➜ AT+CNMP?
-ICCID ➜ AT+CICCID
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Cell and signal
+
+# Cell and signal
+AT+CPSI?
+
+# Temperature
+AT+CPMUTEMP
+
+## Network and SIM
+
+# Network mode
+AT+CNMP?
+
+# ICCID
+AT+CICCID

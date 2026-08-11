@@ -1,10 +1,41 @@
-Агрегация ➜ AT^CA_INFO?
-Температура ➜ AT^TEMP?
-Режим сети (чтение) ➜ AT^SLMODE?
-Диапазоны LTE ➜ AT^BAND_PREF?
-Скорость USB ➜ AT^USBTYPE?
-Отладка ➜ AT^DEBUG?
-Вендор-заказчик ➜ AT^CUSTOMER?
-Слот SIM (чтение) ➜ AT^switch_slot?
-Слот: физическая SIM1 ➜ AT^switch_slot=0
-Слот: eSIM (SIM2) ➜ AT^switch_slot=1
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Signal and cell
+
+# Carrier aggregation
+AT^CA_INFO?
+
+# Temperature
+AT^TEMP?
+
+## Bands and modes
+
+# Network mode (read)
+AT^SLMODE?
+
+# LTE bands
+AT^BAND_PREF?
+
+## SIM slots
+
+# SIM slot (read)
+AT^switch_slot?
+
+# Slot: physical SIM1
+AT^switch_slot=0
+
+# Slot: eSIM (SIM2)
+AT^switch_slot=1
+
+## Vendor / debug
+
+# USB speed
+AT^USBTYPE?
+
+# Debug
+AT^DEBUG?
+
+# Vendor customer
+AT^CUSTOMER?

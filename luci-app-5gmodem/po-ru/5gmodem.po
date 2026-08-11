@@ -4399,3 +4399,231 @@ msgid ""
 msgstr ""
 "Модем переподключается по USB (%d раз за 10 минут) — обычно не хватает "
 "питания: другой порт, короче кабель или хаб с внешним питанием."
+
+msgid "Identity"
+msgstr "Идентификация"
+
+msgid "Signal and network"
+msgstr "Сигнал и сеть"
+
+msgid "Data session"
+msgstr "Сессия данных"
+
+msgid "Radio control"
+msgstr "Управление радио"
+
+msgid "Phonebook — edit the number before sending"
+msgstr "Телефонная книга — впишите номер перед отправкой"
+
+msgid "Cell and signal"
+msgstr "Сота и сигнал"
+
+msgid "Network and bands"
+msgstr "Сеть и диапазоны"
+
+msgid "Bands and modes"
+msgstr "Диапазоны и режимы"
+
+msgid "Temperature"
+msgstr "Температура"
+
+msgid "USB and SIM"
+msgstr "USB и SIM"
+
+msgid "Firmware"
+msgstr "Прошивка"
+
+msgid "Signal and cell"
+msgstr "Сигнал и сота"
+
+msgid "USB and firmware"
+msgstr "USB и прошивка"
+
+msgid "SIM slots"
+msgstr "Слоты SIM"
+
+msgid "Vendor / debug"
+msgstr "Вендор / отладка"
+
+msgid "Bands and temperature"
+msgstr "Диапазоны и температура"
+
+msgid "USB composition"
+msgstr "USB-композиция"
+
+msgid "Network and SIM"
+msgstr "Сеть и SIM"
+
+msgid "Signal and system"
+msgstr "Сигнал и система"
+
+msgid "Bands and ports"
+msgstr "Диапазоны и порты"
+
+msgid "Network and band"
+msgstr "Сеть и диапазон"
+
+msgid "Modem information"
+msgstr "Информация о модеме"
+
+msgid "Manufacturer, model, firmware"
+msgstr "Производитель, модель, прошивка"
+
+msgid "IMEI"
+msgstr "IMEI"
+
+msgid "Signal quality"
+msgstr "Качество сигнала"
+
+msgid "Extended signal quality"
+msgstr "Расширенный сигнал"
+
+msgid "LTE registration"
+msgstr "Регистрация LTE"
+
+msgid "5G registration"
+msgstr "Регистрация 5G"
+
+msgid "PDP contexts (APN)"
+msgstr "PDP-контексты (APN)"
+
+msgid "PDP addresses"
+msgstr "Адреса PDP"
+
+msgid "Packet-service attach"
+msgstr "Attach к сети"
+
+msgid "SIM PIN status"
+msgstr "SIM: статус PIN"
+
+msgid "IMSI"
+msgstr "IMSI"
+
+msgid "Own number"
+msgstr "Свой номер"
+
+msgid "Modem clock"
+msgstr "Часы модема"
+
+msgid "Radio function mode"
+msgstr "Режим радио (CFUN)"
+
+msgid "Radio off"
+msgstr "Выключить радио"
+
+msgid "Radio on"
+msgstr "Включить радио"
+
+msgid "Write a number to the SIM"
+msgstr "Записать номер на SIM"
+
+msgid "Serving cell"
+msgstr "Обслуживающая сота"
+
+msgid "USB mode"
+msgstr "USB-режим"
+
+msgid "Bands (masks)"
+msgstr "Диапазоны (маски)"
+
+msgid "MBN profiles"
+msgstr "MBN-профили"
+
+msgid "Network mode and bands"
+msgstr "Режим сети и диапазоны"
+
+msgid "Supported modes and bands"
+msgstr "Поддерживаемые режимы и диапазоны"
+
+msgid "Serving cell and neighbours"
+msgstr "Обслуживающая сота и соседи"
+
+msgid "Firmware package version"
+msgstr "Версия пакета прошивки"
+
+msgid "Bands"
+msgstr "Диапазоны"
+
+msgid "Supported bands"
+msgstr "Поддерживаемые диапазоны"
+
+msgid "RF status"
+msgstr "RF-статус"
+
+msgid "4RX receive"
+msgstr "4RX-приём"
+
+msgid "Firmware image"
+msgstr "Образ прошивки"
+
+msgid "GNSS power"
+msgstr "GNSS: питание"
+
+msgid "GNSS position"
+msgstr "GNSS: позиция"
+
+msgid "GNSS"
+msgstr "GNSS"
+
+msgid "Network mode (read)"
+msgstr "Режим сети (чтение)"
+
+msgid "USB speed"
+msgstr "Скорость USB"
+
+msgid "Vendor customer"
+msgstr "Вендор-заказчик"
+
+msgid "SIM slot (read)"
+msgstr "Слот SIM (чтение)"
+
+msgid "Slot: physical SIM1"
+msgstr "Слот: физическая SIM1"
+
+msgid "Slot: eSIM (SIM2)"
+msgstr "Слот: eSIM (SIM2)"
+
+msgid "Aggregation (CA)"
+msgstr "Агрегация (CA)"
+
+msgid "Cells"
+msgstr "Соты"
+
+msgid "RSRP per branch"
+msgstr "RSRP по трактам"
+
+msgid "RSRQ per branch"
+msgstr "RSRQ по трактам"
+
+msgid "Antenna branches (first ACM port only)"
+msgstr "Антенные тракты (только 1-й ACM-порт)"
+
+msgid "USB composition (NVM)"
+msgstr "USB-композиция (NVM)"
+
+msgid "Signal (HCSQ)"
+msgstr "Сигнал (HCSQ)"
+
+msgid "System information"
+msgstr "Системная информация"
+
+msgid "Mode and bands"
+msgstr "Режим и диапазоны"
+
+msgid "Port composition"
+msgstr "Композиция портов"
+
+msgid "Base station and signal"
+msgstr "БС и сигнал"
+
+msgid "Aggregation"
+msgstr "Агрегация"
+
+msgid "Bands and 5G mode (masks)"
+msgstr "Диапазоны и 5G-режим (маски)"
+
+msgid "Thermal sensors"
+msgstr "Тепловые датчики"
+
+msgid "Current USB composition"
+msgstr "Текущая USB-композиция"

@@ -1,10 +1,41 @@
-БС и сигнал ➜ AT+BINFO;+CESQ
-Агрегация ➜ AT+LCAINFO
-Диапазоны и 5G-режим (маски) ➜ AT+BCONFIG?
-Тепловые датчики ➜ AT+CEITHERM?
-SIM-слот ➜ AT+CEISWITCHSIM?
-ICCID ➜ AT+ICCID
-Текущая композиция ➜ AT+USBCOMP?
-Compal MBIM 05c6:90d5 ➜ AT+USBCOMP=USER
-Compal QMI 05c6:9025 ➜ AT+USBCOMP=RNDIS
-Compal QMI 1e2d:00b7 ➜ AT+USBCOMP=DEBUG
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Signal and cell
+
+# Base station and signal
+AT+BINFO;+CESQ
+
+# Aggregation
+AT+LCAINFO
+
+## Bands and temperature
+
+# Bands and 5G mode (masks)
+AT+BCONFIG?
+
+# Thermal sensors
+AT+CEITHERM?
+
+## SIM
+
+# SIM slot
+AT+CEISWITCHSIM?
+
+# ICCID
+AT+ICCID
+
+## USB composition
+
+# Current USB composition
+AT+USBCOMP?
+
+# Compal MBIM 05c6:90d5
+AT+USBCOMP=USER
+
+# Compal QMI 05c6:9025
+AT+USBCOMP=RNDIS
+
+# Compal QMI 1e2d:00b7
+AT+USBCOMP=DEBUG

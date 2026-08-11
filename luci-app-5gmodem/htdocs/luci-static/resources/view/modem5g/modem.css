@@ -1114,6 +1114,12 @@
 #modesw-btns .cbi-button.tg-current {
   border-left: 3px solid var(--tg-accent) !important;
 }
+/* Активную SIM-карту дополнительно выделяем ЖИРНЫМ (решение владельца): когда
+   слотов всего два и кнопки рядом, полоски слева мало, чтобы с ходу увидеть,
+   какая карта активна. Только слоты - у переключателя режимов оставляем как есть. */
+.tginfo-simslot .cbi-button.tg-current {
+  font-weight: 700 !important;
+}
 /* секция eSIM */
 .esim-meta {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
