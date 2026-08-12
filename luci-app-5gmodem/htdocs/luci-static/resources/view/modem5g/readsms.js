@@ -345,6 +345,20 @@ function sms_mark_all_read() {
 	return sms_seen_add(keys);
 }
 
+/* Красивый вид номера в шапке карточки: 79626999032 -> +7 (962) 699-90-32.
+   Формат применяем ТОЛЬКО к телефоноподобному: 11 цифр с 7/8 или 10 цифр (РФ).
+   Буквенные отправители («T-Mob», «Beeline»), короткие коды (900), номера других
+   стран и замаскированные (#####) отдаём как есть - у них своего формата нет. */
+function sms_fmt_sender(s) {
+	if (!s || s.indexOf('#') >= 0) { return s; }
+	var digits = s.replace(/\D/g, '');
+	var n = '';
+	if (/^[78]\d{10}$/.test(digits)) { n = digits.slice(1); }
+	else if (/^\d{10}$/.test(digits)) { n = digits; }
+	else { return s; }
+	return '+7 (' + n.slice(0, 3) + ') ' + n.slice(3, 6) + '-' + n.slice(6, 8) + '-' + n.slice(8, 10);
+}
+
 function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
@@ -376,7 +390,7 @@ function sms_make_card(item, iconSrc, hide) {
 				E('span', { 'class': 'sms-row-icon' }, [
 					E('img', { 'src': iconSrc })
 				]),
-				E('span', {}, sender)
+				E('span', {}, sms_fmt_sender(sender))
 			]),
 			E('span', { 'class': 'sms-card-time' }, when)
 		]),

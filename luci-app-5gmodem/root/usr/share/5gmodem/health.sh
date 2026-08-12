@@ -246,6 +246,29 @@ round() {
 				[ "$_r_ost" = gone ] && _r_gs="$_r_osince"
 				printf 'gone 0 0 0 %s\n' "$_r_gs" > "$HDIR/$_r_n.tmp" \
 					&& mv "$HDIR/$_r_n.tmp" "$HDIR/$_r_n"
+			else
+				# НЕТ УСТРОЙСТВА И НЕТ ИСТОРИИ, НО ЖЕЛЕЗО НА ШИНЕ - ЭТО НЕ ПАРКОВКА,
+				# А МОДЕМ, НЕ СУМЕВШИЙ ПОДНЯТЬСЯ. После ребута роутера QMI-модем с
+				# картой в illegal так и не отдаёт l3-устройство (netifd крутит
+				# power-cycle SIM, потом сдаётся с autostart=false), а следа в этой
+				# загрузке у него ещё нет - и без файла состояния лестница не видит
+				# его НИКОГДА: связь не вернётся до вмешательства руками (ровно
+				# случай Telit LM960 на стенде 12.08.2026). Заводим след gone
+				# только когда секция модема реально присутствует на шине и
+				# интерфейс не выключен человеком - тогда его берёт лестница (у неё
+				# своя выдержка gone, проверка SIM и путь). Настоящую парковку
+				# (секции/пути нет или железа нет на шине) это не трогает, слот
+				# пунктиром не повиснет.
+				_r_sec=$(sec_for_iface_h "$_r_n")
+				if [ -n "$_r_sec" ]; then
+					_r_pth=$(uci -q get "$CFG.$_r_sec.path")
+					if [ -n "$_r_pth" ] && [ -e "/sys/bus/usb/devices/$_r_pth" ] \
+					   && [ "$(uci -q get "network.$_r_n.auto")" != "0" ] \
+					   && [ "$(uci -q get "network.$_r_n.disabled")" != "1" ]; then
+						printf 'gone 0 0 0 %s\n' "$(uptime_s)" > "$HDIR/$_r_n.tmp" \
+							&& mv "$HDIR/$_r_n.tmp" "$HDIR/$_r_n"
+					fi
+				fi
 			fi
 			continue
 		fi
@@ -659,6 +682,23 @@ heal() {
 		_h_sec=$(sec_for_iface_h "$_h_if") || continue
 		_h_cap=$(heal_cap "$(uci -q get "$CFG.$_h_sec.heal")")
 		[ "$_h_cap" -ge 1 ] || continue
+		# SIM В «illegal» ЛЕЧИТ ТОЛЬКО ПЕРЕЗАГРУЗКА МОДУЛЯ - ПОДНИМАЕМ ПОЛ ДО reboot.
+		#
+		# После ребута роутера QMI-модем (Telit LM960, Quectel EP06) нередко встаёт
+		# с картой в состоянии illegal: netifd упирается в SIM_ILLEGAL_STATE, зовёт
+		# proto_block_restart, интерфейс ложится с autostart=false. ifup здесь
+		# бесполезен по определению - он лишь перезапускает тот же отказ (а на qmi.sh
+		# ещё и вечную петлю power-cycle SIM раз в 8 c). Снимает illegal единственное
+		# - AT+CFUN=1,1 (проверено на стенде 12.08.2026: illegal->ready за один
+		# сброс, следом ifup поднял IP). Поэтому при этой ошибке берём пол уровня
+		# reboot, даже если пользователь оставил heal=ifup: sessionwatch как раз
+		# откладывает подъём «в ожидании лестницы» (сам дозвон кормил бы петлю), и
+		# без этого пола лестнице нечем ответить - оба сторожа ждут друг друга.
+		_h_illegal=""
+		case "$(printf '%s' "$_HDUMP" | jsonfilter \
+			-e "@.interface[@.interface=\"$_h_if\"].errors[0].code" 2>/dev/null)" in
+			SIM_ILLEGAL_STATE) _h_illegal=1; [ "$_h_cap" -lt 2 ] && _h_cap=2 ;;
+		esac
 		_h_path=$(uci -q get "$CFG.$_h_sec.path")
 		[ -n "$_h_path" ] && [ -e "/sys/bus/usb/devices/$_h_path" ] || continue
 		_h_step=0; _h_last=0; _h_n=0
@@ -753,6 +793,9 @@ heal() {
 		rm -f "$HDIR/$_h_if.mmoff"
 		_h_next=$((_h_step + 1))
 		[ "$_h_next" -gt "$_h_cap" ] && _h_next="$_h_cap"
+		# illegal лечит только перезагрузка - ступень ifup жгла бы попытку впустую,
+		# идём сразу на неё (ниже сработает та же проверка at_port, что и обычно).
+		[ -n "$_h_illegal" ] && [ "$_h_next" -lt 2 ] && _h_next=2
 		# Ступень 2 у HiLink - ЕГО API (device/control), не AT: AT+CFUN=1,1
 		# выбил бы Huawei из debug-композиции (проверено на диапазонах - см.
 		# bands.sh), а API перезагружает модуль в любой композиции, лишь бы

@@ -4627,3 +4627,7 @@ msgstr "Тепловые датчики"
 
 msgid "Current USB composition"
 msgstr "Текущая USB-композиция"
+
+msgid "Unread SMS — open Incoming"
+msgstr "Непрочитанные SMS — открыть Входящие"
+

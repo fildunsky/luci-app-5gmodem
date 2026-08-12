@@ -174,8 +174,19 @@ purge_path_caches() {   # $1 - usb-путь
 # с байтами, что здесь и нужно.
 utf8_fix() {
 	awk '
-		BEGIN { for (n = 1; n < 256; n++) o[sprintf("%c", n)] = n }
+		BEGIN { for (n = 1; n < 256; n++) o[sprintf("%c", n)] = n
+			MK = sprintf("%c%cffff", 195, 191)     # маркер мусора: ÿ + "ffff"
+			MKJ = sprintf("%cu00ffffff", 92) }     # он же в JSON-экранировке: ÿ + "ffff"
 		function cont(str, i,   b) { b = o[substr(str, i, 1)]; return (b >= 128 && b < 192) }
+		function hx(s,   i, c, v, d) {
+			v = 0
+			for (i = 1; i <= length(s); i++) {
+				d = index("0123456789abcdef", tolower(substr(s, i, 1))) - 1
+				if (d < 0) return -1
+				v = v * 16 + d
+			}
+			return v
+		}
 		{
 			out = ""; i = 1; n = length($0)
 			while (i <= n) {
@@ -185,6 +196,40 @@ utf8_fix() {
 				else if (b >= 224 && b <= 239 && i + 2 <= n && cont($0, i + 1) && cont($0, i + 2)) { out = out substr($0, i, 3); i += 3 }
 				else if (b >= 240 && b <= 244 && i + 3 <= n && cont($0, i + 1) && cont($0, i + 2) && cont($0, i + 3)) { out = out substr($0, i, 4); i += 4 }
 				else { out = out sprintf("%c%c", 192 + int(b / 64), 128 + (b % 64)); i += 1 }
+			}
+			# ВТОРОЙ МУСОР sms_tool (версии 2025.08.x): неразрывный пробел и
+			# ёлочки (U+00A0/AB/BB и подобные latin1) приходят как "ÿffffHH" -
+			# ÿ (U+00FF) + буквальное "ffff" + hex-код latin1-байта. Проход выше
+			# это НЕ ловит (там валидный UTF-8 ÿ и ASCII "ffff..."). Возвращаем
+			# правильный символ U+00HH (двухбайтный UTF-8). index() побайтный.
+			st = 1; p = index(substr(out, st), MK)
+			while (p > 0) {
+				ap = st + p - 1
+				code = hx(substr(out, ap + 6, 2))
+				if (code >= 128 && code <= 255) {
+					out = substr(out, 1, ap - 1) sprintf("%c%c", 192 + int(code / 64), 128 + (code % 64)) substr(out, ap + 8)
+					st = 1
+				} else {
+					st = ap + 6
+				}
+				p = index(substr(out, st), MK)
+			}
+			# ТОТ ЖЕ МУСОР, НО В JSON-ВЫВОДЕ sms_tool -j. Там ÿ экранирован как
+			# "ÿ", то есть маркер выглядит как "ÿffffHH" (ASCII), и проход
+			# выше по байтам его не ловит - именно поэтому recv отдавал битьё, а
+			# newdump чинил уже ПОСЛЕ декода jsonfilter. Возвращаем правильный символ
+			# тем же JSON-escape "\u00HH" - вывод остаётся валидным JSON.
+			st = 1; p = index(substr(out, st), MKJ)
+			while (p > 0) {
+				ap = st + p - 1
+				code = hx(substr(out, ap + 10, 2))
+				if (code >= 128 && code <= 255) {
+					out = substr(out, 1, ap - 1) sprintf("%cu00%02x", 92, code) substr(out, ap + 12)
+					st = 1
+				} else {
+					st = ap + 10
+				}
+				p = index(substr(out, st), MKJ)
 			}
 			print out
 		}

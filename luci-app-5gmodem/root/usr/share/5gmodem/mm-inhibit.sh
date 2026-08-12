@@ -289,7 +289,11 @@ _mm_rebind() {   # $1 - usb-путь
 		done
 		_fw=""; sleep 2; _fwait=$((_fwait + 2))
 	done
-	[ -n "$_fw" ] || { logger -t 5gmodem "пересборка $_fp: контрол-порт не вернулся за ${_fwait}c"; return 0; }
+	# Контрол-порт не вернулся = переэнумерация провалилась (обычно
+	# `can't set config #1, error -71`): устройство осталось без конфигурации и
+	# само не выйдет. Возвращаем ПРОВАЛ - вызывающий это заметит и не будет
+	# долбить unbind/bind по кругу.
+	[ -n "$_fw" ] || { logger -t 5gmodem "пересборка $_fp: контрол-порт не вернулся за ${_fwait}c"; return 1; }
 	sleep 3
 	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
 		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=usbmisc,name=$(basename "$_fw")" >/dev/null 2>&1
@@ -306,11 +310,36 @@ _mm_rebind() {   # $1 - usb-путь
 	_mm_ifup_if_down "$_fp"
 }
 
+# MM СЕЙЧАС ОПРАШИВАЕТ ЭТО УСТРОЙСТВО? Истина, если ModemManager держит открытым
+# любой tty/cdc-wdm этого usb-пути - значит идёт нативный опрос портов (probe:
+# AT open port ...), и рвать устройство перепривязкой ПОСРЕДИ опроса нельзя.
+# Сигнал без разбора логов: смотрим дескрипторы MM. $1 - usb-путь.
+_mm_probing() {
+	local _path="$1" _pp _fd _tgt _dp _mmpids
+	_mmpids=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null)
+	[ -n "$_mmpids" ] || return 1
+	for _pp in $_mmpids; do
+		for _fd in /proc/"$_pp"/fd/*; do
+			_tgt=$(readlink "$_fd" 2>/dev/null)
+			case "$_tgt" in /dev/ttyUSB*|/dev/ttyACM*|/dev/cdc-wdm*|/dev/wdm*) ;; *) continue ;; esac
+			for _dp in /sys/bus/usb/devices/"$_path":*/ttyUSB* \
+				/sys/bus/usb/devices/"$_path":*/tty/ttyUSB* \
+				/sys/bus/usb/devices/"$_path":*/ttyACM* \
+				/sys/bus/usb/devices/"$_path":*/tty/ttyACM* \
+				/sys/bus/usb/devices/"$_path":*/usbmisc/cdc-wdm* \
+				/sys/bus/usb/devices/"$_path":*/usbmisc/wdm*; do
+				[ -e "$_dp" ] && [ "/dev/${_dp##*/}" = "$_tgt" ] && return 0
+			done
+		done
+	done
+	return 1
+}
+
 mm_recover_missing() {
 	# local ОБЯЗАТЕЛЕН: цикл `for _n in .../net/*` ниже делит имя _n со счётчиком
 	# главного цикла сервиса - без local он утекал и ронял шелл на арифметике
 	# (см. _mm_ifup_if_down).
-	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last
+	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm
 	command -v mmcli >/dev/null 2>&1 || return 0
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0   # демон должен быть жив
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
@@ -330,24 +359,69 @@ mm_recover_missing() {
 			# type», «Failed to find primary AT port») и модем не собирает. На
 			# стенде 01.08.2026 три круга репортов подряд не дали ничего, а
 			# unbind/bind собрал модем с первого раза. Поэтому: первый круг -
-			# дешёвый репорт, а если через минуту модема в MM всё ещё нет -
+			# дешёвый репорт, а если через время модема в MM всё ещё нет -
 			# настоящий hotplug. Кулдаун 5 минут на модем, как у пересборки
 			# AT-only: перепривязка это десятки секунд переэнумерации.
-			_rb_mk="$RUN/$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_').missing"
+			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
+			_rb_mk="$RUN/$_rb_key.missing"
+			_rb_fail="$RUN/$_rb_key.rebindfail"
 			_rb_now=$(cut -d. -f1 /proc/uptime)
+			# ПЕРЕПРИВЯЗКА УЖЕ ПРОВАЛИЛАСЬ (устройство не вернулось, обычно
+			# `can't set config #1, error -71`) - БОЛЬШЕ НЕ ТРОГАЕМ. Повторные
+			# unbind/bind такое не воскрешают, выводит из него только
+			# ОБЕСТОЧИВАНИЕ. Флаг снимется, когда модем всё же соберётся, или на
+			# ребуте (RUN в tmpfs). Ждём человека - не молотим.
+			[ -f "$_rb_fail" ] && continue
+			# МОДЕМ С ЖИВЫМ QMI-КАНАЛОМ (cdc-wdm) - НЕ ПЕРЕПРИВЯЗЫВАЕМ ВОВСЕ.
+			# Если MM его не собрал (libudev-zero: ВСЕ порты «unhandled port type»,
+			# «Failed to find primary AT port»), rebind не поможет: у части железа
+			# (ZBT-Z8102AX + Genesys hub) unbind/bind роняет устройство в
+			# `can't set config #1, error -71`, и модем гибнет до обесточивания.
+			# А у такого модема ЕСТЬ QMI - он поднимается по uqmi БЕЗ ModemManager
+			# (именно так он и работал без нашей программы). Правильный выход -
+			# прото QMI, а НЕ разрушительный rebind. Сюда попадаем, только когда MM
+			# модем не собрал (_seen=0): у нормально собранного cdc-wdm-модема
+			# (напр. Compal под MM) этой ветки нет. Логируем один раз.
+			_has_wdm=""
+			for _w in /sys/bus/usb/devices/"$_rp":*/usbmisc/cdc-wdm* \
+				/sys/bus/usb/devices/"$_rp":*/usbmisc/wdm*; do
+				[ -e "$_w" ] && { _has_wdm=1; break; }
+			done
+			if [ -n "$_has_wdm" ]; then
+				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
+					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
+					logger -t 5gmodem "модем $_rp: ModemManager не собрал (нет primary AT port), но у него ЕСТЬ QMI-канал cdc-wdm - переключите интерфейс на прото QMI (uqmi). Перепривязку НЕ делаю: она рискует уронить устройство (config #1 error -71)."
+				fi
+				continue
+			fi
+			# MM СЕЙЧАС ОПРАШИВАЕТ ПОРТЫ - НЕ МЕШАЕМ. На медленном модеме с
+			# россыпью tty нативный опрос MM идёт по 1-2 минуты. Раньше мы били
+			# через фиксированные 60 c и рвали устройство ПОСРЕДИ опроса -
+			# unbind/bind ловил `error -71`, и модем оставался без конфигурации
+			# совсем (живой отчёт ZBT-Z8102AX, 12.08.2026). Пока MM держит любой
+			# порт устройства - отсчёт сбрасываем в ноль.
+			if _mm_probing "$_rp"; then
+				printf '%s' "$_rb_now" > "$_rb_mk" 2>/dev/null
+				continue
+			fi
 			_rb_first=$(cat "$_rb_mk" 2>/dev/null)
 			case "$_rb_first" in ''|*[!0-9]*) _rb_first="" ;; esac
 			if [ -z "$_rb_first" ]; then
 				printf '%s' "$_rb_now" > "$_rb_mk" 2>/dev/null
-			elif [ "$((_rb_now - _rb_first))" -ge 60 ]; then
-				_rb_cd="/tmp/5gmodem_mmrebind_$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')"
+			elif [ "$((_rb_now - _rb_first))" -ge 150 ]; then
+				_rb_cd="/tmp/5gmodem_mmrebind_$_rb_key"
 				_rb_last=$(cat "$_rb_cd" 2>/dev/null)
 				case "$_rb_last" in ''|*[!0-9]*) _rb_last="" ;; esac
 				if [ -z "$_rb_last" ] || [ "$((_rb_now - _rb_last))" -ge 300 ]; then
 					printf '%s' "$_rb_now" > "$_rb_cd" 2>/dev/null
 					rm -f "$_rb_mk" 2>/dev/null
 					logger -t 5gmodem "MM не собрал модем $_rp после переотправки событий - перепривязываю устройство"
-					_mm_rebind "$_rp"
+					if ! _mm_rebind "$_rp"; then
+						# Устройство не вернулось после unbind/bind - дальше долбить
+						# бессмысленно и вредно. Ставим флаг и говорим прямо.
+						: > "$_rb_fail" 2>/dev/null
+						logger -t 5gmodem "перепривязка $_rp НЕ вернула устройство (обычно config #1 error -71) - ОБЕСТОЧЬТЕ роутер; возможно, модему нужен прото QMI, а не ModemManager"
+					fi
 					continue
 				fi
 			fi
@@ -367,7 +441,8 @@ mm_recover_missing() {
 		fi
 		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
 		[ "$_seen" = 1 ] && {
-			rm -f "$RUN/$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_').missing" 2>/dev/null
+			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
+			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" 2>/dev/null
 			_mm_fix_atonly "$_rp"
 		}
 		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.

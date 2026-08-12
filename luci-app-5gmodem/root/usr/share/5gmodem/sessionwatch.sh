@@ -645,6 +645,19 @@ case "$1" in
 			# AT-порт за списком сообщений, поэтому пусть сначала отработают
 			# проверка сессии и метрики. Свой предохранитель по времени внутри.
 			"$RES/tgnotify.sh" tick >/dev/null 2>&1
+			# Зеркало непрочитанных входящих для ВНЕШНИХ программ: один JSON в
+			# /tmp, читается кем угодно (уведомления и т.п.). Не push - файл
+			# обновляется этим циклом, но НЕ каждый круг: newdump ходит в AT-порт
+			# за списком, поэтому не чаще раза в 60 c (мгновенность тут не нужна).
+			# Пишем атомарно (.tmp + mv).
+			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+			_smw_prev=$(cat /tmp/5gmodem_sms_new.stamp 2>/dev/null)
+			case "$_smw_prev" in ''|*[!0-9]*) _smw_prev=0 ;; esac
+			if [ "$((_smw_now - _smw_prev))" -ge 60 ]; then
+				printf '%s' "$_smw_now" > /tmp/5gmodem_sms_new.stamp 2>/dev/null
+				"$RES/smsbridge.sh" newdump > /tmp/5gmodem_sms_new.json.tmp 2>/dev/null \
+					&& mv /tmp/5gmodem_sms_new.json.tmp /tmp/5gmodem_sms_new.json 2>/dev/null
+			fi
 			# Досылка отложенных исходящих: одно сообщение за круг, под общей
 			# очередью к порту. Пусто - выходит мгновенно.
 			"$RES/smsbridge.sh" queue-run >/dev/null 2>&1

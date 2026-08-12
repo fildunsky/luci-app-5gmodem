@@ -115,7 +115,116 @@ _seen_file() {
 	[ -n "$_sp" ] && echo "$SEEN_DIR/sms_seen.$_sp" || echo "$SEEN_DIR/sms_seen"
 }
 
+# Печатает JSON-строку (в кавычках) из $1 - для верба newdump. Экранируем ровно
+# то, что бывает в SMS: обратный слэш, кавычку, перевод строки, таб; CR убираем.
+_nd_jesc() {
+	printf '%s' "$1" | awk '
+		BEGIN { ORS=""; printf "\"" }
+		{ gsub(/\r/,""); gsub(/\\/,"\\\\"); gsub(/"/,"\\\""); gsub(/\t/,"\\t");
+		  if (NR>1) printf "\\n"; printf "%s", $0 }
+		END { printf "\"" }'
+}
+
 case "$1" in
+	newdump)
+		# НЕПРОЧИТАННЫЕ ВХОДЯЩИЕ В JSON для внешних программ (файл-зеркало
+		# /tmp/5gmodem_sms_new.json, пишет sessionwatch раз в круг). «Новое» =
+		# сообщение из recv, чей ключ sender|timestamp ещё НЕ в seen - ровно то,
+		# что подсвечивает страница «Входящие» и шлёт Telegram. Обходим ВСЕ модемы
+		# (как tgnotify): у каждого свой seen (sms_seen.<путь>), в каждой записи -
+		# поле modem. Порт и гард SMS-канала - как в tgnotify.
+		_nd_active=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+		_nd_paths=$("$RES/registry.sh" paths 2>/dev/null)
+		[ -n "$_nd_paths" ] || _nd_paths="$_nd_active"
+		_nd_store=$(uci -q get "$CFG.sms.storage")
+		_nd_now=$(cut -d. -f1 /proc/uptime 2>/dev/null); case "$_nd_now" in ''|*[!0-9]*) _nd_now=0 ;; esac
+		_nd_out=""; _nd_cnt=0
+		for _nd_p in $_nd_paths; do
+			# Есть ли у устройства SMS-канал (tty/cdc-wdm/HiLink)? Иначе пропускаем:
+			# у телефона-тетеринга порта нет, и recv свалился бы на АКТИВНЫЙ модем
+			# (тогда его входящие задвоились бы под чужим именем).
+			_nd_sec="m_$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')"
+			if [ "$(uci -q get "$CFG.$_nd_sec.kind")" != "hilink" ]; then
+				"$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_nd_p\"].tty[0]" -e "@[@.path=\"$_nd_p\"].wdm[0]" 2>/dev/null | grep -q . || continue
+			fi
+			# Порт: у активного - настроенный readport (выбран не мешать метрикам),
+			# у прочих - at_port их секции. Пусто - HiLink/MM, мост разберётся сам.
+			if [ "$_nd_p" = "$_nd_active" ]; then
+				_nd_port=$(uci -q get "$CFG.sms.readport")
+			else
+				_nd_port=$(uci -q get "$CFG.$_nd_sec.at_port")
+			fi
+			_nd_recv=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" recv "$_nd_store" "$_nd_port" 2>/dev/null)
+			[ -n "$_nd_recv" ] || continue
+			_nd_seen=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" seen 2>/dev/null | jsonfilter -e '@.keys[*]' 2>/dev/null)
+			_nd_idx=$(printf '%s' "$_nd_recv" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
+			_nd_done=""
+			for _nd_i in $_nd_idx; do
+				_nd_s=$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].sender" 2>/dev/null)
+				_nd_t=$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].timestamp" 2>/dev/null)
+				_nd_key="$_nd_s|$_nd_t"
+				# уже видели (страница/Telegram)? уже вывели этот ключ (мультипарт-
+				# SMS = несколько частей с ОДНИМ ключом)? - пропускаем.
+				printf '%s\n' "$_nd_seen" | grep -qxF "$_nd_key" && continue
+				printf '%s\n' "$_nd_done" | grep -qxF "$_nd_key" && continue
+				_nd_done="$_nd_done$_nd_key
+"
+				# Склеиваем текст ВСЕХ частей с этим ключом по порядку - иначе
+				# длинная SMS пришла бы обрезанной до первой части.
+				_nd_c=""
+				for _nd_j in $_nd_idx; do
+					[ "$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].sender" 2>/dev/null)|$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].timestamp" 2>/dev/null)" = "$_nd_key" ] || continue
+					_nd_c="$_nd_c$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].content" 2>/dev/null)"
+				done
+				# Ещё раз чиним кодировку по СКЛЕЕННОМУ тексту: мусор sms_tool
+				# ("ÿffffHH") мог быть разорван границей части мультипарта, и склейка
+				# собрала его заново - по частям utf8_fix его тогда не увидел.
+				_nd_c=$(printf '%s' "$_nd_c" | utf8_fix)
+				[ -n "$_nd_out" ] && _nd_out="$_nd_out,"
+				_nd_out="$_nd_out{\"modem\":$(_nd_jesc "$_nd_p"),\"sender\":$(_nd_jesc "$_nd_s"),\"time\":$(_nd_jesc "$_nd_t"),\"text\":$(_nd_jesc "$_nd_c"),\"key\":$(_nd_jesc "$_nd_key")}"
+				_nd_cnt=$((_nd_cnt + 1))
+			done
+		done
+		printf '{"count":%s,"ts":%s,"sms":[%s]}\n' "$_nd_cnt" "$_nd_now" "$_nd_out"
+		exit 0 ;;
+	newcount)
+		# СКОЛЬКО НЕПРОЧИТАННЫХ - одним числом, для конвертика на карточке и любых
+		# внешних программ. Читаем ГОТОВОЕ зеркало newdump (пишет sessionwatch раз
+		# в круг): дёшево и без похода в AT-порт, поэтому годится для частого опроса
+		# страницей на каждом тике. Зеркало восстанавливается из ПОСТОЯННЫХ источников
+		# (SIM у обычных модемов, архив у MM), так что переживает перезагрузку - после
+		# бута первый круг sessionwatch наполнит его заново. for=<путь> - считать
+		# только этот модем (его вкладка); без аргумента - по всем.
+		_ncf="/tmp/5gmodem_sms_new.json"
+		_nc_for=""
+		for _nc_a in "$@"; do case "$_nc_a" in for=*) _nc_for="${_nc_a#for=}" ;; esac; done
+		[ -f "$_ncf" ] || { echo 0; exit 0; }
+		_nc_j=$(cat "$_ncf" 2>/dev/null)
+		# ВЫЧИТАЕМ УЖЕ ПРОЧИТАННЫЕ. seen пишется МГНОВЕННО при отметке на «Входящих»,
+		# а зеркало обновляется лишь раз в круг sessionwatch - без вычета конверт
+		# висел бы до следующего круга (до минуты) после отметки прочитанным. Считаем
+		# ПОМОДЕМНО: ключи зеркала этого модема минус его seen (путь как в _seen_file,
+		# getline из отсутствующего файла - пусто). Это делаем И для суммы по всем
+		# модемам, иначе без for= total был бы завышен на уже прочитанные.
+		_nc_one() {   # $1 - usb-путь модема; печатает число непрочитанных
+			_nco_sf="$SEEN_DIR/sms_seen.$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+			printf '%s' "$_nc_j" | jsonfilter -e "@.sms[@.modem=\"$1\"].key" 2>/dev/null \
+				| awk -v sf="$_nco_sf" '
+					BEGIN { while ((getline l < sf) > 0) if (l != "") seen[l] = 1 }
+					$0 != "" && !($0 in seen) { c++ }
+					END { print c + 0 }'
+		}
+		if [ -n "$_nc_for" ]; then
+			_nc_n=$(_nc_one "$_nc_for")
+		else
+			_nc_n=0
+			for _nc_m in $(printf '%s' "$_nc_j" | jsonfilter -e '@.sms[*].modem' 2>/dev/null | sort -u); do
+				_nc_n=$((_nc_n + $(_nc_one "$_nc_m")))
+			done
+		fi
+		case "$_nc_n" in ''|*[!0-9]*) _nc_n=0 ;; esac
+		echo "$_nc_n"
+		exit 0 ;;
 	seen)
 		_sf=$(_seen_file)
 		# ПЕРВЫЙ ЗАПУСК ОТДАЁМ ОТДЕЛЬНЫМ ПРИЗНАКОМ. Файла нет - значит мы про

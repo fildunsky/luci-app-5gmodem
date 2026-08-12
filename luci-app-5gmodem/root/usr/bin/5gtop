@@ -323,6 +323,19 @@ _bytes_l10n() {
 # Длина в СИМВОЛАХ: wc -m в busybox считает байты (без locale), а кириллица и
 # псевдографика в UTF-8 занимают по 2-3 байта - подписи и рамки разъезжались.
 clen() { printf '%s' "$1" | tr -d '\200-\277' | wc -c; }
+
+# ГЛИФЫ ШКАЛ. Блочные символы читаются с одного взгляда - видно не только
+# «сколько», но и форму. Считаются как один знак: clen отбрасывает продолжения
+# UTF-8, поэтому вся арифметика колонок остаётся прежней. На голой консоли без
+# UTF-8 (serial, урезанный терминал) они превратятся в мусор - TOP_ASCII=1
+# возвращает прежний вид решётками.
+if [ "${TOP_ASCII:-0}" = 1 ]; then
+	GL_FULL='#'; GL_EMPTY='.'; GL_LINE='-'
+	GL_S='. : | I H'
+else
+	GL_FULL='█'; GL_EMPTY='░'; GL_LINE='─'
+	GL_S='▁ ▃ ▅ ▇ █'
+fi
 # pad <строка> <ширина> - вывести строку и ДОБРАТЬ ширину, НЕ рисуя пробелов.
 # Пробел - это закрашенная ячейка (см. box_mid): в терминалах со своей темой
 # такие «хвосты» после каждого значения выглядели чёрными прямоугольниками.
@@ -395,7 +408,7 @@ qcolor() {
 	case "$_n" in *[0-9]*) : ;; *) printf '%s' "$C_DIM"; return ;; esac
 	case "$1" in
 		rsrp) [ "$_n" -ge -90 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -105 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
-		rsrq) [ "$_n" -ge -10 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -15 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
+		rsrq) [ "$_n" -ge -12 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -16 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
 		sinr) [ "$_n" -ge 13 ]  && printf '%s' "$C_GRN" || { [ "$_n" -ge 0 ]   && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
 		rssi) [ "$_n" -ge -65 ] && printf '%s' "$C_GRN" || { [ "$_n" -ge -85 ] && printf '%s' "$C_YEL" || printf '%s' "$C_RED"; } ;;
 		*) printf '%s' "$C_RST" ;;
@@ -410,29 +423,66 @@ bar() {
 	if   [ "$_p" -ge 60 ]; then _c="$C_GRN"
 	elif [ "$_p" -ge 30 ]; then _c="$C_YEL"
 	else _c="$C_RED"; fi
-	printf '%s' "$_c"; rep '#' "$_f"
-	printf '%s' "$C_DIM"; rep '.' "$((_w - _f))"
+	printf '%s' "$_c"; rep "$GL_FULL" "$_f"
+	printf '%s' "$C_DIM"; rep "$GL_EMPTY" "$((_w - _f))"
+	printf '%s' "$C_RST"
+}
+
+# Столбики уровня, как на LCD: заполненные - цветом качества, прочие приглушены.
+sigbars() {
+	_p=$(printf '%s' "$1" | tr -cd '0-9'); [ -n "$_p" ] || _p=0
+	[ "$_p" -gt 100 ] && _p=100
+	if   [ "$_p" -ge 60 ]; then _c="$C_GRN"
+	elif [ "$_p" -ge 30 ]; then _c="$C_YEL"
+	else _c="$C_RED"; fi
+	_n=$(( _p * 5 / 100 ))
+	[ "$_p" -gt 0 ] && [ "$_n" -lt 1 ] && _n=1
+	_i=1
+	for _g in $GL_S; do
+		[ "$_i" -le "$_n" ] && printf '%s%s' "$_c" "$_g" || printf '%s%s' "$C_DIM" "$_g"
+		_i=$((_i + 1))
+	done
 	printf '%s' "$C_RST"
 }
 
 # Мини-шкала метрики: где значение лежит внутри рабочего диапазона.
+# Диапазоны те же, что в таблице C дашборда (dashboard.js) и в MET на LCD -
+# иначе «зелёный» в терминале, в браузере и на экране значат разное.
+# $3 - ширина шкалы (по умолчанию 8). Скобки рисует вызывающий.
 mbar() {
+	_w=${3:-8}
 	_n=$(printf '%s' "$2" | tr -d '+' | cut -d. -f1)
-	case "$_n" in ''|*[!0-9-]*|-) printf '%s' "$C_DIM"; rep '.' 8; printf '%s' "$C_RST"; return ;; esac
-	case "$_n" in *[0-9]*) : ;; *) printf '%s' "$C_DIM"; rep '.' 8; printf '%s' "$C_RST"; return ;; esac
+	case "$_n" in ''|*[!0-9-]*|-) printf '%s' "$C_DIM"; rep "$GL_EMPTY" "$_w"; printf '%s' "$C_RST"; return ;; esac
+	case "$_n" in *[0-9]*) : ;; *) printf '%s' "$C_DIM"; rep "$GL_EMPTY" "$_w"; printf '%s' "$C_RST"; return ;; esac
 	case "$1" in
-		rsrp) _lo=-125; _hi=-70 ;;
+		rsrp) _lo=-130; _hi=-80 ;;
 		rsrq) _lo=-20;  _hi=-3  ;;
-		sinr) _lo=-10;  _hi=30  ;;
+		sinr) _lo=-10;  _hi=20  ;;
 		rssi) _lo=-110; _hi=-50 ;;
 		*) return ;;
 	esac
 	_p=$(( (_n - _lo) * 100 / (_hi - _lo) ))
 	[ "$_p" -lt 0 ] && _p=0; [ "$_p" -gt 100 ] && _p=100
-	_f=$((_p * 8 / 100))
-	printf '%s' "$(qcolor "$1" "$2")"; rep '#' "$_f"
-	printf '%s' "$C_DIM"; rep '.' "$((8 - _f))"
+	_f=$((_p * _w / 100))
+	printf '%s' "$(qcolor "$1" "$2")"; rep "$GL_FULL" "$_f"
+	printf '%s' "$C_DIM"; rep "$GL_EMPTY" "$((_w - _f))"
 	printf '%s' "$C_RST"
+}
+
+# Компактная сводка агрегации: "3CA B7+B3+B1", первичная несущая первой.
+# Пусто, если агрегации нет - строку тогда занимать нечем.
+ca_compact() {
+	_cb=$(printf '%s' "$(v pband)" | sed -n 's/^\(B[0-9]\{1,\}\).*/\1/p')
+	[ -n "$_cb" ] || return 0
+	_cn=1
+	for _ci in 1 2 3 4; do
+		_cs=$(v "s${_ci}band")
+		[ "$_cs" = "-" ] && continue
+		_cs=$(printf '%s' "$_cs" | sed -n 's/^\(B[0-9]\{1,\}\).*/\1/p')
+		[ -n "$_cs" ] || continue
+		_cb="$_cb+$_cs"; _cn=$((_cn + 1))
+	done
+	[ "$_cn" -gt 1 ] && printf '%dCA %s' "$_cn" "$_cb" || printf '%s' "$_cb"
 }
 
 # ВРЕМЯ СОЕДИНЕНИЯ, ИДУЩЕЕ ЖИВО. Опрос приходит раз в несколько секунд (на слабом
@@ -468,7 +518,13 @@ uptime_str() {
 # АБСОЛЮТНЫМ координатам строк, и убери мы хоть одну - разъехался бы весь экран.
 # Цвет заголовка - ТОТ ЖЕ, которым подсвечены буквы клавиш (см. hl_name):
 # жёлтый жирный. Одна акцентная краска на весь экран, а не своя у каждого блока.
-box_top()  { printf '%s- %s -%s\n' "$C_B$C_YEL" "$1" "$C_RST"; }
+box_top() {
+	_bt=$1
+	_bn=$(( ${W:-78} - 5 - $(clen "$_bt") ))
+	[ "$_bn" -lt 0 ] && _bn=0
+	printf '%s%s%s %s %s%s\n' "$C_B$C_YEL" "$GL_LINE$GL_LINE" "$C_RST$C_B$C_YEL" "$_bt" \
+		"$(printf '%s' "$C_DIM"; rep "$GL_LINE" "$_bn")" "$C_RST"
+}
 box_mid()  { printf '\n'; }
 box_end()  { printf '\n'; }
 
@@ -573,7 +629,14 @@ if [ -x /usr/share/5gmodem/esim.sh ]; then
 fi
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
 # вёрстки без нажатий, и просто чтобы открывать сразу нужный экран.
-case "${TAB:-1}" in
+# ПРИСВАИВАЕМ, а не подставляем: "${TAB:-1}" в case давало «1» только самой
+# проверке, а переменная оставалась ПУСТОЙ. Всё, что разбирает `tab_id "$TAB"`,
+# молча проваливалось мимо веток - цифры 1-3 не переключали приоритет интернета,
+# цифры на eSIM не выбирали профиль, Enter на консольных вкладках не открывал
+# ввод. Отрисовка работала, потому что у неё есть ветка по умолчанию, поэтому со
+# стороны выглядело как «клавиша не нажимается».
+TAB="${TAB:-1}"
+case "$TAB" in
 	''|*[!0-9]*) TAB=1 ;;
 esac
 [ "$TAB" -lt 1 ] 2>/dev/null && TAB=1
@@ -733,20 +796,23 @@ frame_cell() {
 	box_top "$T_CELL"
 	box_mid; box_mid; box_mid; box_mid; box_mid; box_mid
 	box_end
+	# Пять строк, а не три: под метриками ещё CSQ/VoLTE, а на 3G и при
+	# раздельной регистрации добавляются RSCP/EcIo и «CS reg.». С тремя
+	# строками они вылезали за рамку и затирали заголовок блока агрегации.
 	box_top "$T_SIGNAL"
-	box_mid; box_mid; box_mid
+	box_mid; box_mid; box_mid; box_mid; box_mid
 	box_end
 	box_top "$T_CA"
 	box_mid; box_mid; box_mid; box_mid; box_mid
 	box_end
 	box_top "$T_ANT"
-	box_mid; box_mid; box_mid; box_mid
+	box_mid; box_mid; box_mid; box_mid; box_mid
 	box_end
 	keyhint "t	$T_K_TEST
 +/-	$T_K_WIDTH"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
-	ROW_END=32
+	ROW_END=35
 }
 
 draw_cell() {
@@ -768,10 +834,10 @@ draw_cell() {
 
 	_row=$((_row + 8))
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
-	lab $((_row))   2  'RSRP' 8 "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")" 28
-	lab $((_row))   40 'RSRQ' 8 "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")" 28
-	lab $((_row+1)) 2  'SINR' 8 "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")" 28
-	lab $((_row+1)) 40 'RSSI' 8 "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")" 28
+	lab $((_row))   2  'RSRP' 8 "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}${C_DIM}[${C_RST}$(mbar rsrp "$_a" 12)${C_DIM}]${C_RST}" 30
+	lab $((_row))   40 'RSRQ' 8 "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}${C_DIM}[${C_RST}$(mbar rsrq "$_b" 12)${C_DIM}]${C_RST}" 30
+	lab $((_row+1)) 2  'SINR' 8 "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}${C_DIM}[${C_RST}$(mbar sinr "$_c" 12)${C_DIM}]${C_RST}" 30
+	lab $((_row+1)) 40 'RSSI' 8 "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}${C_DIM}[${C_RST}$(mbar rssi "$_e" 12)${C_DIM}]${C_RST}" 30
 	lab $((_row+2)) 2  "$T_CSQ"   8 "$(fit "$(v csq)" 20)" 20
 	lab $((_row+2)) 40 "$T_VOLTE" 8 "$(fit "$(v volte)" 20)" 20
 	# МЕТРИКИ 3G. Показываем ТОЛЬКО когда модем реально на 3G: на LTE они пусты,
@@ -790,7 +856,7 @@ draw_cell() {
 	fi
 
 	# --- агрегация: PCC + до четырёх SCC, столбцами как в таблице веба ---
-	_row=$((_row + 5))
+	_row=$((_row + 7))
 	lab $((_row)) 2 '' 0 "${C_DIM}$(pad 'CC' 6)$(pad "$T_BAND" 20)$(pad 'PCI' 8)$(pad 'EARFCN' 10)$(pad 'RSRP' 8)$(pad 'MIMO' 6)$(pad 'MOD' 8)${C_RST}" 68
 	at $((_row+1)) 2 "$(pad 'PCC' 6)$(pad "$(v pband)" 20)$(pad "$(v pci)" 8)$(pad "$(v earfcn)" 10)$(pad "$(v rsrp)" 8)$(pad "$(v pmimo)" 6)$(pad "$(v pmod)" 8)"
 	_i=1
@@ -806,14 +872,14 @@ draw_cell() {
 
 	# --- антенные порты: "0:-108:-13 1:-106:-11" ---
 	_row=$((_row + 7))
-	lab $((_row)) 2 '' 0 "${C_DIM}$(pad "$T_PORT" 8)$(pad 'RSRP' 10)$(pad 'RSRQ' 10)${C_RST}" 40
+	lab $((_row)) 2 '' 0 "${C_DIM}$(pad "$T_PORT" 8)$(pad 'RSRP' 24)RSRQ${C_RST}" 54
 	_i=0
 	for _ap in $(v antports); do
 		[ "$_i" -ge 3 ] && break
 		_pn=$(printf '%s' "$_ap" | cut -d: -f1)
 		_pr=$(printf '%s' "$_ap" | cut -d: -f2)
 		_pq=$(printf '%s' "$_ap" | cut -d: -f3)
-		at $((_row+1+_i)) 2 "$(pad "$_pn" 8)$(pad "$_pr" 10)$(pad "$_pq" 10)"
+		at $((_row+1+_i)) 2 "$(pad "$_pn" 8)$(qcolor rsrp "$_pr")$(pad "$_pr" 8)${C_RST}${C_DIM}[${C_RST}$(mbar rsrp "$_pr" 12)${C_DIM}]${C_RST}  $(qcolor rsrq "$_pq")$(pad "$_pq" 8)${C_RST}${C_DIM}[${C_RST}$(mbar rsrq "$_pq" 12)${C_DIM}]${C_RST}"
 		_i=$((_i + 1))
 	done
 	# РАЗНЕСЁННЫЙ ПРИЁМ - прямо под таблицей портов, как в вебе. Без него
@@ -831,7 +897,7 @@ draw_cell() {
 		lab $((_row + 4)) 2 "$T_RXDIV" 14 "${_rdc}$(fit "$_rdt" 20)${C_RST}" 20
 	fi
 	while [ "$_i" -lt 3 ]; do
-		at $((_row+1+_i)) 2 "$(pad '' 40)"
+		at $((_row+1+_i)) 2 "$(pad '' 54)"
 		_i=$((_i + 1))
 	done
 }
@@ -1221,29 +1287,29 @@ send_console() {   # $1 - тип (ussd|at), $2 - текст
 draw_narrow() {
 	_vc=13
 	_l() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 10)" "$C_RST" "$3"; }
-	_l 5  "$T_MODEL"   "$(fit "$(v modem)" $((W - 12)))"
-	_l 6  "$T_OPERATOR" "$(fit "$(_operator_plmn)" $((W - 12)))"
+	_l 7  "$T_MODEL"   "$(fit "$(v modem)" $((W - 12)))"
+	_l 8  "$T_OPERATOR" "$(fit "$(_operator_plmn)" $((W - 12)))"
 	_sg=$(v signal)
-	_l 7  "$T_LEVEL"  "$(bar "$_sg" 10) ${C_B}${_sg}%${C_RST}  "
-	_l 8  "$T_PHONE"  "$(pad "${C_DIM}$(_phone_or_loc)${C_RST}" $((W - 12)))"
+	_l 9  "$T_LEVEL"  "$(bar "$_sg" 10) ${C_B}${_sg}%${C_RST}  "
+	_l 10 "$T_PHONE"  "$(pad "${C_DIM}$(_phone_or_loc)${C_RST}" $((W - 12)))"
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	_l 9  "$T_TEMP"    "$(pad "$(_temp_cell "$_t")" $((W - 12)))"
+	_l 11 "$T_TEMP"    "$(pad "$(_temp_cell "$_t")" $((W - 12)))"
 
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
-	_l 12 'RSRP'     "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
-	_l 13 'RSRQ'     "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
-	_l 14 'SINR'     "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
-	_l 15 'RSSI'     "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
+	_l 14 'RSRP'     "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
+	_l 15 'RSRQ'     "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
+	_l 16 'SINR'     "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
+	_l 17 'RSSI'     "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
 
 	# Режим и диапазон - самая длинная строка блока: при агрегации в MODE попадает
 	# перечень всех компонентов. Собираем ЧИСТЫЙ текст, обрезаем, и только потом
 	# красим - иначе обрезка попала бы в середину escape-кода.
 	_md=$(v mode); _md=${_md%% | *}
 	_mb=$(fit "${_md}  $(v pband)" $((W - 12)))
-	_l 18 "$T_MODE"    "${C_CYA}${_mb}${C_RST}"
-	_l 19 'PCI/EARF' "$(fit "$(v pci) / $(v earfcn)" $((W - 12)))"
-	_l 20 'IP'       "${C_GRN}$(fit "$(v ipaddr)" 16)${C_RST}$(fit "$(uptime_str)" $((W - 29)))"
+	_l 20 "$T_MODE"    "${C_CYA}${_mb}${C_RST}"
+	_l 21 'PCI/EARF' "$(fit "$(v pci) / $(v earfcn)" $((W - 12)))"
+	_l 22 'IP'       "${C_GRN}$(fit "$(v ipaddr)" 16)${C_RST}$(fit "$(uptime_str)" $((W - 29)))"
 
 	if [ -f "$STFILE" ]; then
 		_sj=$(cat "$STFILE" 2>/dev/null)
@@ -1254,33 +1320,33 @@ draw_narrow() {
 				[ "$_i" = "$_fr" ] && _anim="$_anim#" || _anim="$_anim."
 				_i=$((_i + 1))
 			done
-			_l 23 "$T_TEST"  "$(pad "${C_YEL}${_anim}${C_RST} ${T_RUNNING}" $((W - 12)))"
-			_l 24 ''      "$(pad '' $((W - 12)))"
+			_l 25 "$T_TEST"  "$(pad "${C_YEL}${_anim}${C_RST} ${T_RUNNING}" $((W - 12)))"
+			_l 26 ''      "$(pad '' $((W - 12)))"
 		else
-			_l 23 "$T_DL" "$(pad "${C_GRN}$(printf '%s' "$_sj" | jsonfilter -e '@.down_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
-			_l 24 "$T_UL" "$(pad "${C_BLU}$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
+			_l 25 "$T_DL" "$(pad "${C_GRN}$(printf '%s' "$_sj" | jsonfilter -e '@.down_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
+			_l 26 "$T_UL" "$(pad "${C_BLU}$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
 		fi
 	else
-		_l 23 "$T_TEST" "$(pad "$(hl_name "$T_PRESS_S" t "$C_DIM")" $((W - 12)))"
+		_l 25 "$T_TEST" "$(pad "$(hl_name "$T_PRESS_S" t "$C_DIM")" $((W - 12)))"
 	fi
 
 	# агрегация: в узком режиме только диапазоны, PCI и EARFCN не влезают
-	_ar=29; _any=0
+	_ar=33; _any=0
 	for _i in 1 2 3 4; do
 		_sb=$(v "s${_i}band")
 		[ "$_sb" = "-" ] && continue
-		[ "$_ar" -gt 30 ] && break
+		[ "$_ar" -gt 34 ] && break
 		printf '%s[%d;2H%sSCC%s%s %s' "$ESC" "$_ar" "$C_DIM" "$_i" "$C_RST" "$(fit "$_sb" $((W - 8)))"
 		_ar=$((_ar + 1)); _any=1
 	done
-	while [ "$_ar" -le 30 ]; do
+	[ "$_any" = 0 ] && { printf '%s[33;2H%s%s%s' "$ESC" "$C_DIM" "$(pad "$T_NOCA" $((W - 2)))" "$C_RST"; _ar=34; }
+	while [ "$_ar" -le 34 ]; do
 		printf '%s[%d;2H%s' "$ESC" "$_ar" "$(pad '' $((W - 2)))"
 		_ar=$((_ar + 1))
 	done
-	[ "$_any" = 0 ] && printf '%s[29;2H%s%s%s' "$ESC" "$C_DIM" "$(pad "$T_NOCA" $((W - 2)))" "$C_RST"
 
 	if [ -s "$NPFILE" ]; then
-		_np=$(cat "$NPFILE" 2>/dev/null); _n=0; _rw=25
+		_np=$(cat "$NPFILE" 2>/dev/null); _n=0; _rw=29
 		_act=$(np_active_idx "$_np")
 		while [ "$_n" -lt 2 ]; do
 			_if=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].iface" 2>/dev/null)
@@ -1311,11 +1377,11 @@ draw() {
 	#    Номера строк учитывают ДВЕ полосы навигации над рамками (модемы и
 	#    разделы): всё сдвинуто на 2 относительно старой раскладки.
 	_sg=$(v signal)
-	at 7  4  "$(bar "$_sg" 14)"
-	at 8  4  "$(pad "${C_B}${_sg}%${C_RST}" 22)"
-	at 9  4  "${C_DIM}$(pad "$(v modem)" 22)${C_RST}"
+	at 7  4  "$(pad "${C_DIM}[${C_RST}$(sigbars "$_sg")${C_DIM}]${C_RST} ${C_B}${_sg}%${C_RST}" 25)"
+	at 8  4  "${C_DIM}$(pad "$(v modem)" 25)${C_RST}"
+	at 9  4  "${C_CYA}$(pad "$(ca_compact)" 25)${C_RST}"
 
-	lab 7  28 "$T_OPERATOR" 11 "$(fit "$(_operator_plmn)" 16)" 16
+	lab 7  30 "$T_OPERATOR" 10 "$(fit "$(_operator_plmn)" 16)" 16
 	_r=$(v registration)
 	case "$_r" in
 		1) _rs="${C_GRN}${T_ONLINE}${C_RST}" ;;
@@ -1323,49 +1389,49 @@ draw() {
 		-) _rs="${C_DIM}-${C_RST}" ;;
 		*) _rs="${C_YEL}${T_NOREG}${C_RST}" ;;
 	esac
-	lab 8  28 "$T_STATUS"   11 "$_rs" 16
-	lab 9  28 "$T_PHONE"  11 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
+	lab 8  30 "$T_STATUS"   10 "$_rs" 16
+	lab 9  30 "$T_PHONE"  10 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
 	# Слот SIM: у модемов с двумя слотами показываем ещё и то, что переключение
 	# доступно клавишей - иначе о нём никак не догадаться.
 	_sl=$(v simslot)
 	[ "$SLOT_CNT" -gt 1 ] && _sl="$_sl ${C_DIM}(k)${C_RST}"
-	lab 10  28 'SIM'      11 "$_sl" 16
+	lab 10  30 'SIM'      10 "$_sl" 16
 
 	# Режим БЕЗ диапазона: профиль дописывает его в MODE ради веба, где отдельной
 	# строки нет, а здесь она есть - иначе значение вылезает за рамку.
 	_md=$(v mode); _md=${_md%% | *}
-	lab 7  56 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
-	lab 8  56 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
+	lab 7  57 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
+	lab 8  57 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
 	# IPv6 - только если оператор его выдал: у большинства российских сетей его
 	# нет, и пустая строка была бы про отсутствующее.
 	_v6=$(g ipaddr6)
-	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 9 56 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
-	lab 9  56 "$T_TIME"    9 "$(uptime_str)" 12
+	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 9 57 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
+	lab 9  57 "$T_TIME"    9 "$(uptime_str)" 12
 	# Единицу дописываем ТОЛЬКО если её нет: часть профилей уже отдаёт "56.0 °C",
 	# и без этой проверки получалось "56.0 °C C".
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	lab 10  56 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
-	lab 11  56 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
-	at 12  56 "${C_DIM}$(pad "  ^ $(_bytes_l10n "$(v tx)")" 20)${C_RST}"
+	lab 10  57 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
+	lab 11  57 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
+	at 12  66 "${C_DIM}$(pad "^ $(_bytes_l10n "$(v tx)")" 12)${C_RST}"
 
 	# ── Блок «Сота / Сигнал» (строки 10-14). Тоже три колонки.
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr)
-	at 16 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 7)${C_RST}$(mbar rsrp "$_a")"
-	at 17 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 7)${C_RST}$(mbar rsrq "$_b")"
-	at 18 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 7)${C_RST}$(mbar sinr "$_c")"
 	_e=$(v rssi)
-	at 19 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 7)${C_RST}$(mbar rssi "$_e")"
+	at 16 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrp "$_a" 12)${C_DIM}]${C_RST}"
+	at 17 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrq "$_b" 12)${C_DIM}]${C_RST}"
+	at 18 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 6)${C_RST}${C_DIM}[${C_RST}$(mbar sinr "$_c" 12)${C_DIM}]${C_RST}"
+	at 19 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rssi "$_e" 12)${C_DIM}]${C_RST}"
 
-	lab 16 28 "$T_BAND" 11 "$(v pband)" 16
-	lab 17 28 "$T_BW"   11 "$(v bandwidth)" 16
-	lab 18 28 'PCI'      11 "$(v pci)" 16
-	lab 19 28 'EARFCN'   11 "$(v earfcn)" 16
+	lab 16 30 "$T_BAND" 10 "$(v pband)" 16
+	lab 17 30 "$T_BW"   10 "$(v bandwidth)" 16
+	lab 18 30 'PCI'      10 "$(v pci)" 16
+	lab 19 30 'EARFCN'   10 "$(v earfcn)" 16
 
-	lab 16 56 "$T_ENB"  10 "$(v enbid)" 11
-	lab 17 56 'TAC'      10 "$(v tac_dec)" 11
-	lab 18 56 'MIMO'     10 "$(v pmimo)" 11
-	lab 19 56 'VoLTE'    10 "$(v volte)" 11
+	lab 16 57 "$T_ENB"  10 "$(v enbid)" 11
+	lab 17 57 'TAC'      10 "$(v tac_dec)" 11
+	lab 18 57 'MIMO'     10 "$(v pmimo)" 11
+	lab 19 57 'VoLTE'    10 "$(v volte)" 11
 
 	# ── Блок «Скорость». Тот же speedtest.sh, что и кнопка в вебе: он пишет ход
 	#    теста в JSON-файл, а мы его читаем - своего замера нет, значит и цифры
@@ -1459,19 +1525,23 @@ draw() {
 	# ── Агрегация. Компоненты SCC1..4 отдаются теми же ключами, что читает
 	#    веб-страница. Показываем только те, по которым есть данные: на модеме без
 	#    агрегации строки просто остаются пустыми, а рамка не прыгает.
-	_ar=29; _any=0
+	# Рамка «Агрегация» занимает строки 31-32 (заголовок на 30). Раньше отсчёт
+	# начинался с 29: SCC1 ложился на закрывающую строку предыдущей рамки, а
+	# SCC2 затирал сам заголовок. Чистим ровно те же строки, что и пишем, иначе
+	# «нет агрегации» остаётся висеть под появившимися несущими.
+	_ar=31; _any=0
 	for _i in 1 2 3 4; do
 		_sb=$(v "s${_i}band")
 		[ "$_sb" = "-" ] && continue
-		[ "$_ar" -gt 30 ] && break
+		[ "$_ar" -gt 32 ] && break
 		at "$_ar" 4 "${C_DIM}SCC${_i}${C_RST} $(pad "$_sb" 26)${C_DIM}PCI${C_RST} $(pad "$(v s${_i}pci)" 8)${C_DIM}EARFCN${C_RST} $(pad "$(v s${_i}earfcn)" 10)"
 		_ar=$((_ar + 1)); _any=1
 	done
-	while [ "$_ar" -le 30 ]; do
+	[ "$_any" = 0 ] && { at 31 4 "${C_DIM}$(pad "$T_NOCA" 60)${C_RST}"; _ar=32; }
+	while [ "$_ar" -le 32 ]; do
 		at "$_ar" 4 "$(pad '' 60)"
 		_ar=$((_ar + 1))
 	done
-	[ "$_any" = 0 ] && at 31 4 "${C_DIM}$(pad "$T_NOCA" 60)${C_RST}"
 
 	printf '%s[%d;1H' "$ESC" "$ROW_END"
 }

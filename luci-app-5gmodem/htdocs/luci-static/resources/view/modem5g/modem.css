@@ -1120,6 +1120,20 @@
 .tginfo-simslot .cbi-button.tg-current {
   font-weight: 700 !important;
 }
+/* Ряд «конвертик непрочитанных SMS + переключатель слотов» в одну строку. */
+.tginfo-simslot-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Конвертик показывается, когда у ПРОСМАТРИВАЕМОГО модема есть непрочитанные
+   входящие (JS updateSmsEnvelope из зеркала /tmp/5gmodem_sms_new.json). Цвет -
+   акцент темы; currentColor уносит его и в SVG. Клик - на вкладку «Входящие». */
+.tg-smsenv {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--tg-accent, #1a73e8);
+  text-decoration: none;
+  line-height: 1;
+}
+.tg-smsenv:hover { opacity: .8; }
 /* секция eSIM */
 .esim-meta {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

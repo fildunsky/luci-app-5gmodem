@@ -304,6 +304,25 @@ function pollSlotUntilSwitched(wantId, delays) {
    не ускоряют его, а выстраиваются в очередь rpcd - страница «залипает», а самый
    невезучий запрос упирается в потолок и отваливается. Пропущенный вызов ничего
    не теряет: следующий тик повторит. */
+/* КОНВЕРТИК «есть непрочитанные SMS» в ряду со слотами. Спрашиваем smsbridge.sh
+   newcount (он читает зеркало непрочитанных, что sessionwatch наполняет из
+   ПОСТОЯННЫХ источников - SIM/архив, поэтому переживает перезагрузку). Через
+   fs.exec_direct, а НЕ read_direct: прямое чтение файла идёт cgi-download, и ACL
+   его режет (403) - конверт не появлялся. Скрипт же в ACL разрешён (exec), как
+   simslot.sh. for=<путь вкладки> - непрочитанные ИМЕННО этого модема. Без цифр:
+   один конверт, есть непрочитанные - показан, нет - скрыт. */
+function updateSmsEnvelope() {
+	if (!document.getElementById('smsenv')) { return; }
+	var _args = [ 'newcount' ];
+	if (pageModemPath) { _args.push('for=' + pageModemPath); }
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', _args), '').then(function(out) {
+		var n = parseInt((out || '').replace(/[^0-9]/g, ''), 10);
+		var env = document.getElementById('smsenv');
+		if (!env) { return; }
+		env.style.display = (n > 0) ? '' : 'none';
+	});
+}
+
 var slotsInflight = false;
 function loadSimSlots(cb) {
 	if (slotsInflight) { if (cb) { cb(null); } return; }
@@ -1471,7 +1490,7 @@ function connStageText(json) {
 	   одного - значит с момента включения модем ПЕРЕПОЯВЛЯЛСЯ на шине. */
 	var tail = '';
 	var en = parseInt(json.usb_enum, 10);
-	if (en > 1) { tail = ' ' + _('(initialisation #%d)').format(en); }
+	if (en > 1) { tail = ' ' + _('(#%d)').format(en); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
 	if (reg == '3') { return _('Registration denied'); }
 	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован
@@ -1796,6 +1815,7 @@ function applyMetrics(json) {
 					   simslot/bands (см. afterFirstPoll). */
 					runAfterFirstPoll();
 					refreshSlotsIfChanged(json);
+					updateSmsEnvelope();
 
 					/* МОДЕМА НА ШИНЕ НЕТ ВОВСЕ. Метрики отдают error "Device not
 					   found" (при хотя бы одном модеме скрипт сам его находит,
@@ -3201,7 +3221,22 @@ simDialog: baseclass.extend({
 				/* Правая колонка: переключатель SIM-слотов (если их >= 2) НАД
 				   температурой. Заполняется асинхронно из simslot.sh. */
 				E('div', { 'class': 'tginfo-right' }, [
-					E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
+					/* Ряд: конвертик «есть непрочитанные SMS» (из зеркала
+					   /tmp/5gmodem_sms_new.json) ПЕРЕД переключателем слотов, в одном
+					   ряду с ним. Конверт - отдельный сиблинг, чтобы не трогать
+					   loadSimSlots (он чистит #simslotn). Показывается независимо:
+					   у односимочного модема слотов нет, а конверт всё равно виден. */
+					E('div', { 'class': 'tginfo-simslot-row' }, [
+						(function() {
+							var _env = E('a', { 'id': 'smsenv', 'class': 'tg-smsenv',
+								'href': L.url('admin/modem/5gmodem/readsms'),
+								'title': _('Unread SMS — open Incoming'),
+								'style': 'display:none' }, []);
+							_env.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>';
+							return _env;
+						})(),
+						E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
+					]),
 					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
 							E('img', { 'src': L.resource('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })

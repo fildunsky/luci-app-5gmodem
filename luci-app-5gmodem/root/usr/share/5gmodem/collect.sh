@@ -644,8 +644,26 @@ usb_unconfigured_verdict() {
 		echo "  конфигурация НЕ назначена - интерфейсов нет, драйверы не подключены"
 	done
 	echo "ПРОБЛЕМА: устройство физически на шине (его видно в lsusb), но ядро не"
-	echo "смогло его настроить. Портов у него нет, поэтому в списке модемов его"
-	echo "тоже нет. Это НЕ ошибка приложения и НЕ питание."
+	echo "смогло его настроить. Портов у него нет, поэтому в списке модемов его тоже нет."
+	# Была ли по этому устройству НАША перепривязка (mm_recover_missing)? Тогда
+	# это, скорее всего, ЕЁ след, а не «само сломалось»: unbind/bind не вернул
+	# устройство (config #1 error -71). Не выдаём ложное «это НЕ ошибка приложения».
+	_uu_rb=""
+	for _uu_b in $_uu_bad; do
+		_uu_k=$(printf '%s' "$_uu_b" | tr -c 'A-Za-z0-9' '_')
+		{ [ -f "/var/run/5gmodem-mm-inhibit/$_uu_k.rebindfail" ] || \
+		  [ -f "/tmp/5gmodem_mmrebind_$_uu_k" ]; } && _uu_rb=1
+	done
+	if [ -n "$_uu_rb" ]; then
+		echo "ВНИМАНИЕ: приложение НЕДАВНО перепривязывало это USB-устройство"
+		echo "(mm_recover_missing: ModemManager не собрал модем). Похоже, unbind/bind"
+		echo "не вернул устройство - обычно это 'can't set config #1, error -71'."
+		echo "ЛЕЧЕНИЕ: ОБЕСТОЧИТЬ роутер (вынуть питание на несколько секунд, не reboot)."
+		echo "Для такого модема стоит выбрать прото QMI вместо ModemManager - тогда"
+		echo "перепривязка его больше не тронет."
+	else
+		echo "Это НЕ ошибка приложения и НЕ питание."
+	fi
 	_uu_why=$(dmesg 2>/dev/null | grep -E "Not enough host controller resources|Not enough bandwidth|can't set config" | tail -4)
 	[ -n "$_uu_why" ] && { echo "Из журнала ядра:"; printf '%s\n' "$_uu_why" | sed 's/^/  /'; }
 	if dmesg 2>/dev/null | grep -q "Not enough host controller resources"; then
