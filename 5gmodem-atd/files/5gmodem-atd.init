@@ -1,0 +1,46 @@
+#!/bin/sh /etc/rc.common
+# Слушатель URC (5gmodem-atd): мгновенная реакция на события модема вместо
+# ожидания круга опроса. Демон живёт на ЗАПАСНОМ AT-порту (см. atd.c - почему
+# нельзя на рабочем) и дёргает urc-dispatch.sh.
+#
+# Порт задаётся ЯВНО: uci 5gmodem.atd.port='/dev/ttyUSBx'. Автовыбор запасного
+# порта - дело resolve/mkiface (они знают карту портов модема), фаза 2.
+# Служба выключена, пока порт не задан - на модеме с единственным AT-портом
+# слушателю жить негде.
+
+START=95
+USE_PROCD=1
+
+start_service() {
+	[ "$(uci -q get 5gmodem.atd.enabled)" = "1" ] || return 0
+	local port script
+	port=$(uci -q get 5gmodem.atd.port)
+	[ -n "$port" ] && [ -c "$port" ] || return 0
+	script=$(uci -q get 5gmodem.atd.script)
+	[ -n "$script" ] || script=/usr/share/5gmodem/urc-dispatch.sh
+	procd_open_instance
+	# БАЗОВЫЕ ПОДПИСКИ на URC. Без них демон просто держит порт молча -
+	# события надо ВКЛЮЧИТЬ на этом же порту (подписка действует пофорточно):
+	#   CGEREP=2,1 - события сессии данных (+CGEV: NW DETACH / PDN DEACT) -
+	#     ГЛАВНЫЙ сигнал обрыва, его модемы реально вещают (проверено на EP06);
+	#   CEREG/C5GREG=2 - события регистрации (шлют не все, но подписка дешёвая);
+	#   CNMI=2,1 - +CMTI (новое SMS) - мгновенные входящие вместо поллинга.
+	procd_set_param command /usr/sbin/5gmodem-atd -d "$port" -s "$script" -i "ATE0"
+	# Quectel МАРШРУТИЗИРУЕТ URC на ОДИН порт (usbat/usbmodem): если слушатель
+	# не на нём - событий не увидит. Порт роутинга задаётся адресно (uci
+	# 5gmodem.atd.urcport), СРАЗУ после ATE0 - до подписок. У Fibocom URC во все
+	# порты, urcport не нужен (не задаём).
+	local urcport
+	urcport=$(uci -q get 5gmodem.atd.urcport)
+	[ -n "$urcport" ] && procd_append_param command -i "AT+QURCCFG=\"urcport\",\"$urcport\""
+	procd_append_param command -i "AT+CGEREP=2,1" -i "AT+CEREG=2" \
+		-i "AT+C5GREG=2" -i "AT+CNMI=2,1"
+	# Переэнумерация модема = выход демона; procd поднимает заново, когда
+	# узел вернётся (respawn с паузой, без лавины на вынутом модеме).
+	procd_set_param respawn 3600 5 0
+	procd_close_instance
+}
+
+service_triggers() {
+	procd_add_reload_trigger 5gmodem
+}
