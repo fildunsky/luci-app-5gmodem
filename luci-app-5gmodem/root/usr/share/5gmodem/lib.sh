@@ -602,27 +602,30 @@ active_sec() {
 # «Tele2»), оставляем как есть - различить бренд абонента может только основной
 # опрос, он читает SPN с самой карты.
 # opname_pretty <plmn> <сырое имя>
+# Отсекаем избыточный страновой хвост в имени оператора: "MegaFon RUS" -> "MegaFon",
+# "Tele2 Rus" -> "Tele2". Только завершающее " RUS"/" Rus" (любой регистр); одно
+# слово "RUS" целиком и имена без хвоста не трогаем. Регистр самого имени сохраняем.
+operator_clean() {
+	case "$1" in
+		*' '[Rr][Uu][Ss]) _oc=${1% *}; [ -n "$_oc" ] && printf '%s' "$_oc" || printf '%s' "$1" ;;
+		*) printf '%s' "$1" ;;
+	esac
+}
+
 opname_pretty() {
 	_op_num=$(printf '%s' "$1" | tr -cd '0-9')
 	_op_raw=$(printf '%s' "$2" | sed 's/^ *//;s/ *$//')
-	[ -n "$_op_num" ] || { printf '%s' "$_op_raw"; return; }
-	# tr -d '\r' ОБЯЗАТЕЛЕН: mccmnc.dat в формате CRLF, и возврат каретки уезжает
-	# в конец поля. Без него сравнение с сырым именем не совпадает НИКОГДА
-	# («megafon\r» против «megafon rus»), то есть функция молча ничего не делает -
-	# именно так она и не работала при первом прогоне. Тот же капкан уже описан в
-	# hilink.sh.
-	_op_db=$(awk -F';' '/^'"$_op_num"';/ {print $3}' /usr/share/5gmodem/mccmnc.dat 2>/dev/null \
-		| head -1 | tr -d '\r' | sed 's/^ *//;s/ *$//')
-	[ -n "$_op_db" ] || { printf '%s' "$_op_raw"; return; }
-	[ -n "$_op_raw" ] || { printf '%s' "$_op_db"; return; }
-	_op_l=$(printf '%s' "$_op_raw" | tr 'A-Z' 'a-z')
-	_op_dl=$(printf '%s' "$_op_db" | tr 'A-Z' 'a-z')
-	# Совпало целиком или до странового хвоста («megafon rus» -> «megafon»).
-	case "$_op_l" in
-		"$_op_dl") printf '%s' "$_op_db"; return ;;
-		"$_op_dl "*) printf '%s' "$_op_db"; return ;;
-	esac
-	printf '%s' "$_op_raw"
+	# ИМЯ ОТ МОДЕМА - ПРИОРИТЕТНЕЕ БАЗЫ. Отсекаем страновой хвост тем же
+	# operator_clean, что и главный опрос: 5gmodem.sh кладёт имя как ОТДАЁТ МОДЕМ
+	# ("MegaFon", MVNO "T-Mobile"), и без этого карточка приоритетов расходилась бы
+	# с главной по регистру - probe гнал имя через mccmnc.dat и показывал "Megafon"
+	# там, где главная честно "MegaFon" (замечание владельца). Базу берём ТОЛЬКО как
+	# фолбэк, когда модем имя не отдал (пусто / один код).
+	[ -n "$_op_raw" ] && { operator_clean "$_op_raw"; return; }
+	[ -n "$_op_num" ] || return
+	# tr -d '\r' ОБЯЗАТЕЛЕН: mccmnc.dat в формате CRLF (тот же капкан, что в hilink.sh).
+	awk -F';' '/^'"$_op_num"';/ {print $3}' /usr/share/5gmodem/mccmnc.dat 2>/dev/null \
+		| head -1 | tr -d '\r' | sed 's/^ *//;s/ *$//'
 }
 
 # Пусто (return 1) - оверрайда нет, имя оставляем как отдала сеть.
@@ -887,6 +890,11 @@ digits_of() {   # $1 - текст ответа, $2 - мин длина, $3 - м�
 model_alias() {   # $1 - сырое имя; печатает нормализованное (или исходное)
 	case "$1" in
 		*VOS_5G*|*RXMG1*|*SG500M2*) echo "Compal RXM-G1" ;;
+		# SimCom отдаёт имя с вендорным префиксом (modem.generic.model и AT+CGMM =
+		# "SIMCOM_SIM7100E", а часть прошивок - через пробел "SIMCOM SIM7100E").
+		# Приводим к общему для приложения виду «Вендор Модель»: SimCom SIM7100E.
+		SIMCOM_*) echo "SimCom ${1#SIMCOM_}" ;;
+		SIMCOM\ *) echo "SimCom ${1#SIMCOM }" ;;
 		*) echo "$1" ;;
 	esac
 }

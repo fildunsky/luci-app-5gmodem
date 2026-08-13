@@ -499,7 +499,7 @@ operator_cached() {
 	# карточка честно показывала "T-Mobile". Разбор MVNO по коду из IMSI умеет
 	# только основной опрос - он и должен быть первым источником.
 	if [ -f "/tmp/5gmodem_op_$1" ] && [ -s "/tmp/5gmodem_op_$1" ]; then
-		cat "/tmp/5gmodem_op_$1"; return
+		operator_clean "$(cat "/tmp/5gmodem_op_$1")"; return
 	fi
 	# ЗДЕСЬ НЕ ХОДИМ В СЕТЬ. Функция обязана быть мгновенной - её зовёт "list"
 	# на каждой загрузке страницы. Раньше ветка HiLink делала HTTP-запрос к
@@ -510,12 +510,12 @@ operator_cached() {
 	# имя СЕТИ, поэтому раньше в «Приоритете интернета» появлялся «Tele2 RU» там,
 	# где главная карточка честно показывала «T-Mobile»: probe писал свой кэш, а
 	# он проверялся ПЕРВЫМ и затенял точное имя.
-	if [ -s "/tmp/5gmodem_op_$1" ]; then cat "/tmp/5gmodem_op_$1"; return; fi
+	if [ -s "/tmp/5gmodem_op_$1" ]; then operator_clean "$(cat "/tmp/5gmodem_op_$1")"; return; fi
 	# Фолбэк - собственный кэш probe: основной опрос ведёт файл только для
 	# АКТИВНОГО модема, а в списке показываются все.
 	cf="/tmp/netpri_op_$1"
 	if [ -f "$cf" ] && [ -z "$(find "$cf" -mmin +30 2>/dev/null)" ]; then
-		cat "$cf"; return
+		operator_clean "$(cat "$cf")"; return
 	fi
 }
 

@@ -1316,7 +1316,9 @@ resolve)
 			# ответ чужой команды или имя соседнего модема с общего порта.
 			if [ -n "$_rm" ] && _model_sane "$_rm" \
 			   && _model_vendor_ok "$_rm" "$(uci -q get "$CFG.$SEC.vidpid")"; then
-				uci -q set "$CFG.$SEC.model=$_rm"
+				# Через model_alias, как основной опрос и listmodems: иначе сырое
+				# AT+CGMM ("SIMCOM SIM7100E") затирало нормализованное имя из опроса.
+				uci -q set "$CFG.$SEC.model=$(model_alias "$_rm")"
 				# ШТАМП ЖЕЛЕЗА РЯДОМ С ИМЕНЕМ. Модель принадлежит КОНКРЕТНОМУ
 				# vid:pid, с которого её прочитали. Без штампа имя переживало
 				# смену устройства в том же разъёме и приписывалось новому
@@ -1519,7 +1521,22 @@ resolve)
 	if [ -n "$IF" ]; then
 		uci -q set "$CFG.@5gmodem[0].network=$IF"
 	else
-		uci -q delete "$CFG.@5gmodem[0].network" 2>/dev/null
+		# У АКТИВНОГО МОДЕМА НЕТ СЕКЦИИ (или она без network) - НЕ СНОСИМ РАБОЧУЮ
+		# MM-ПРИВЯЗКУ. MM-модем ведёт ModemManager, своей секции-привязки у него
+		# часто нет (интерфейс proto=modemmanager завёл мастер/пользователь мимо
+		# нашего autosetup). Сносить тут глобальный network значило ломать _via_mm -
+		# и SMS/USSD активного MM-модема переставали читаться (живой случай 12.08.2026:
+		# SIM7100E, resolve затирал network=modem). Оставляем ТОЛЬКО когда MM-интерфейс
+		# ровно один - тогда он однозначно принадлежит активному MM-модему; при
+		# нескольких сносим как раньше (чужой опаснее пустого).
+		_cur=$(uci -q get "$CFG.@5gmodem[0].network")
+		_mmn=$(uci -q show network 2>/dev/null | grep -c "\.proto='modemmanager'")
+		if [ -n "$_cur" ] && [ "$_mmn" = "1" ] \
+		   && [ "$(uci -q get "network.$_cur.proto")" = "modemmanager" ]; then
+			: # единственный MM-интерфейс = интерфейс активного MM-модема, сохраняем
+		else
+			uci -q delete "$CFG.@5gmodem[0].network" 2>/dev/null
+		fi
 	fi
 	uci -q commit "$CFG"
 	rm -f /tmp/modem

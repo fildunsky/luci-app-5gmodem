@@ -1657,6 +1657,9 @@ _SN_CONNST=$(conn_status_line "$SEC")
 _SN_ALIAS=$(alias_for_path "$_POLL_AM")
 _SN_CPORT="${DEVICE:-$_CPORT_MM}"
 [ "$IS_ROAMING" = 1 ] && _SN_ROAM10=1 || _SN_ROAM10=0
+# Страна-хвост в имени оператора избыточен ("MegaFon RUS" -> "MegaFon"): чистим
+# текущий и домашний перед выводом. Общая точка для AT и MM.
+COPS=$(operator_clean "$COPS"); HOME_OP=$(operator_clean "$HOME_OP")
 _sanv _POLL_AM IPADDR IPADDR6 SEC CONN_TIME CT
 _sanv CONN_TIME_SINCE RX TX MODEL _SN_VIDPID TEMP
 _sanv THERM ANTPORTS RXDIV FW PROTO _SN_IFPROTO
@@ -2676,6 +2679,10 @@ fi
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ]; then
 	MODEL=$(model_refine "$MODEL" "$(uci -q get "5gmodem.$AMP_SEC.product")")
 fi
+# Нормализуем имя из ЛЮБОГО источника (AT/MM/дескриптор), а не только в MM-фолбэке
+# выше: сырое "SIMCOM SIM7100E" от AT+CGMM иначе оседало в секции мимо model_alias
+# и затирало нормализованное "SimCom SIM7100E".
+[ -n "$MODEL" ] && MODEL=$(model_alias "$MODEL")
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
 	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] \
 	&& [ "$(uci -q get "5gmodem.$AMP_SEC.model_vp")" = "$(uci -q get "5gmodem.$AMP_SEC.vidpid")" ] || {
@@ -2937,6 +2944,9 @@ op_cache_iface() {
 # оператор и иконка. Дома HOME_OP пуст -> обычный COPS.
 _OPNAME="$COPS"
 [ "$IS_ROAMING" = "1" ] && [ -n "$HOME_OP" ] && _OPNAME="$HOME_OP"
+# Тот же страновой хвост, что и в метриках: файл читает «Приоритет интернета»
+# (netpri operator_cached), и без чистки в его карточке оставалось «MegaFon RUS».
+_OPNAME=$(operator_clean "$_OPNAME")
 if [ -n "$SEC" ] && [ -n "$_OPNAME" ] && ! echo "$_OPNAME" | grep -qE '^[0-9 ]*$'; then
 	OPIF=$(op_cache_iface)
 	[ -n "$OPIF" ] && printf '%s' "$_OPNAME" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
