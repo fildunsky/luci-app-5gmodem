@@ -97,3 +97,75 @@ jobs:
         with:
           files: out/*
           fail_on_unmatched_files: false
+
+  # 5gmodem-atd - это C-БИНАРЬ (слушатель URC), а не arch-независимый пакет:
+  # его надо собрать ПОД КАЖДУЮ целевую архитектуру, как lpac. Отдельная job,
+  # чтобы основное (all) приложение не пересобиралось на каждую арку впустую.
+  # Пакет ОПЦИОНАЛЬНЫЙ: luci-app-5gmodem не DEPENDS на него - кто хочет
+  # мгновенную реакцию на обрывы (AT-модемы), доставляет файл своей арки.
+  atd:
+    name: atd ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # <target_arch>-<openwrt_version>: -24.10.7 -> .ipk (opkg), -SNAPSHOT ->
+        # .apk (25.12+). Покрываем ходовые платформы роутеров под оба формата.
+        arch:
+          - aarch64_cortex-a53-24.10.7       # mediatek filogic (осн. парк)
+          - aarch64_cortex-a53-SNAPSHOT
+          - aarch64_cortex-a72-24.10.7       # bcm27xx / rockchip
+          - aarch64_cortex-a72-SNAPSHOT
+          - arm_cortex-a7_neon-vfpv4-24.10.7 # mt7622 / ipq40xx
+          - arm_cortex-a7_neon-vfpv4-SNAPSHOT
+          - mipsel_24kc-24.10.7              # ramips/mt76x8 (старый мипсель-стенд)
+          - mipsel_24kc-SNAPSHOT
+          - mips_24kc-24.10.7                # ath79
+          - mips_24kc-SNAPSHOT
+          - x86_64-24.10.7
+          - x86_64-SNAPSHOT
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build with OpenWrt SDK
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}
+          FEEDNAME: modem
+          PACKAGES: 5gmodem-atd
+          NO_REFRESH_CHECK: 1
+          BUILD_LOG: 1
+          MAKEFLAGS: -j2
+          V: s
+
+      - name: Show failing build log
+        if: failure()
+        run: |
+          echo "::group::failing package logs"
+          for f in $(find logs -name '*.txt' 2>/dev/null); do
+            if grep -qiE 'Error [0-9]|: error:|ERROR:|collect2|No such file' "$f"; then
+              echo "----------------- $f -----------------"; tail -n 80 "$f"
+            fi
+          done
+          echo "::endgroup::"
+
+      - name: Collect packages
+        run: |
+          mkdir -p out
+          find bin/ -type f \( -name '5gmodem-atd*.ipk' -o -name '5gmodem-atd*.apk' \) -exec cp -v {} out/ \;
+          echo "--- collected ---"; ls -l out/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 5gmodem-atd-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: false
