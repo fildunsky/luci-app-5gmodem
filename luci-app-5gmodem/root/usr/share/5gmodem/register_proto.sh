@@ -78,8 +78,23 @@ if [ "$HAS_FIBO" = 1 ] && [ -n "$CUR" ] \
 	logger -t 5gmodem "register_proto: обработчик fibocom обновлён; дозвон возьмёт новый код с диска, метаданные - после перезагрузки (рестарт сети ради этого не делаем)"
 fi
 
+# qmiraw (наш raw-ip QMI для SimCom) - та же логика регистрации, без слежения за
+# содержимым (дозвон делает uqmi, не наш шелл): рестарт netifd лишь когда есть
+# интерфейс на qmiraw, а netifd про прото не знает - тогда интерфейс и так мёртв.
+HAS_QMIRAW=0
+for _if in $(uci -q show network 2>/dev/null \
+		| sed -n "s/^network\.\([^.]*\)\.proto='qmiraw'\$/\1/p"); do
+	HAS_QMIRAW=1
+done
+if [ -r /lib/netifd/proto/qmiraw.sh ] && ! ubus call network get_proto_handlers 2>/dev/null \
+		| grep -q '"qmiraw"'; then
+	if [ "$REGISTER_PROTO_FORCE" = "1" ] || [ "$HAS_QMIRAW" = "1" ]; then
+		NEED=1
+	fi
+fi
+
 if [ "$NEED" = "1" ]; then
-	logger -t 5gmodem "register_proto: прото fibocom не зарегистрирован в netifd - перезапускаю сеть (интерфейсы кратко прервутся)"
+	logger -t 5gmodem "register_proto: наш прото не зарегистрирован в netifd - перезапускаю сеть (интерфейсы кратко прервутся)"
 	/etc/init.d/network restart >/dev/null 2>&1
 fi
 

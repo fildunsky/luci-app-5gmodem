@@ -277,7 +277,35 @@ function render5gMode(state) {
 	}, _('Enable 5G')));
 }
 
+/* Умеет ли ТЕКУЩИЙ модем ЗАПИСЫВАТЬ привязку к соте. Ставится в renderCellLock по
+   состоянию celllock; читают кнопки лока в строках соседей (5gdetail). */
+var _cellLockWritable = false;
+
+/* Общая точка запуска команды bands.sh с плашкой «модем перезагружается»: команда
+   уходит в фон (цикл режима полёта дольше таймаута rpcd), плашка снимается по
+   факту возвращения модема (clearModemBusy). Используют и cell-lock-строка, и
+   кнопки лока в таблице соседей. */
+function _runBands(args, msg) {
+	ctx.setModemBusy(msg);
+	_bandsAfterBusy = true;
+	fs.exec('/usr/share/5gmodem/bands.sh', args);
+}
+
+/* Привязать к КОНКРЕТНОЙ соте (EARFCN+PCI) - зовётся из строки соседа. Модем сам
+   не обязан быть на этой соте: setcelllock даёт earfcn+pci, и прошивка камперит
+   туда (Quectel QNWLOCK / Fibocom EMMCHLCK|^CELLLOCK / Intel freq_lock). */
+function lockCell(ear, pci) {
+	if (!ear || ear === '-' || pci == null || pci === '' || pci === '-') {
+		ui.addNotification(null, E('p', _('Cell EARFCN/PCI unknown yet - try again in a few seconds')), 'warning');
+		return;
+	}
+	_runBands([ 'setcelllock', 'cell', String(ear), String(pci) ],
+		_('Locking to cell EARFCN %s, PCI %s - the modem re-registers...').format(ear, pci));
+}
+
 function renderCellLock(state) {
+	var _clp = String(state || '').split(' ');
+	_cellLockWritable = !!state && state !== 'Unsupported' && _clp[_clp.length - 1] !== 'readonly';
 	var row = document.getElementById('celllockn');
 	var cell = document.getElementById('celllock-cell');
 	if (!row || !cell) { return; }
@@ -317,16 +345,7 @@ function renderCellLock(state) {
 		return;
 	}
 
-	var run = function(args, msg) {
-		// Плашка поверх блока модема, а не модалка: команда уходит в фон (цикл
-		// режима полёта дольше таймаута rpcd), и сколько модем будет возвращаться -
-		// заранее неизвестно. Плашка снимается по ФАКТУ возвращения (см.
-		// clearModemBusy), тогда как модалка закрывалась по угаданным 20 секундам:
-		// вернулся раньше - зря ждали, позже - показывали старое состояние.
-		ctx.setModemBusy(msg);
-		_bandsAfterBusy = true;
-		fs.exec('/usr/share/5gmodem/bands.sh', args);
-	};
+	var run = _runBands;
 
 	// СНАЧАЛА КНОПКА (действие), затем состояние («к чему привязан») - единый порядок
 	// для всех модемов.
@@ -899,6 +918,8 @@ return baseclass.extend({
 	switchToXmm: function(b) { return switchToXmm(b); },
 	buildBandButtons: function(s, c, p) { return buildBandButtons(s, c, p); },
 	renderCellLock: function(st) { return renderCellLock(st); },
+	cellLockWritable: function() { return _cellLockWritable; },
+	lockCell: function(e, p) { return lockCell(e, p); },
 	render5gMode: function(st) { return render5gMode(st); },
 	renderCaEnabled: function(st) { return renderCaEnabled(st); },
 	onModemBusyCleared: onModemBusyCleared,

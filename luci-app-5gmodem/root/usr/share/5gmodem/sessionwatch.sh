@@ -370,12 +370,14 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					# raw-ip переживает передозвон - uqmi-откат в 802.3 модем игнорит).
 					# Пробуем ОДИН раз за эпизод; не помогло - падаем в ресет ниже.
 					_qrf="/tmp/5gmodem_sw_rawiptry_$_if"
-					if [ ! -f "$_qrf" ] && [ -n "$_qdev" ] && [ -e "/sys/class/net/$_qdev/qmi/raw_ip" ] \
-					   && command -v qmicli >/dev/null 2>&1 && [ -c "$_wdm" ]; then
+					if [ ! -f "$_qrf" ] && [ -f /lib/netifd/proto/qmiraw.sh ] \
+					   && [ "$(uci -q get "network.$_if.proto")" = qmi ]; then
 						: > "$_qrf"
-						_log "$_if: QMI connected без адреса (raw_ip=$_qraw, модем ${_qfmt:-?}) - выравниваю в raw-ip и передозваниваю"
-						qmicli -p -d "$_wdm" --wda-set-data-format=raw-ip >/dev/null 2>&1
-						echo Y > "/sys/class/net/$_qdev/qmi/raw_ip" 2>/dev/null
+						_log "$_if: QMI connected без адреса в 802.3 - перевожу интерфейс на proto=qmiraw (raw-ip + статика из QMI) и передозваниваю"
+						uci set "network.$_if.proto=qmiraw"
+						uci set "network.$_if.dhcp=0"
+						uci commit network
+						REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
 						( ifdown "$_if"; sleep 2; iface_up "$_if" ) >/dev/null 2>&1 </dev/null &
 					else
 						case "$_qraw:$_qfmt" in

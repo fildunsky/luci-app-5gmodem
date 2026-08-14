@@ -737,7 +737,8 @@ function renderNeighbors(json) {
 			E('td', { 'class': 'td', 'data-l': 'EARFCN' }, []),
 			E('td', { 'class': 'td', 'data-l': 'RSRP', 'data-m': 'rsrp' }, []),
 			E('td', { 'class': 'td', 'data-l': 'RSRQ', 'data-m': 'rsrq' }, []),
-			E('td', { 'class': 'td', 'data-l': 'RSSI', 'data-m': 'rssi' }, [])
+			E('td', { 'class': 'td', 'data-l': 'RSSI', 'data-m': 'rssi' }, []),
+			E('td', { 'class': 'td nb-lock' }, [])
 		]));
 	}
 	/* Обновляем ТОЛЬКО реально присутствующих соседей (первые list.length строк).
@@ -762,7 +763,33 @@ function renderNeighbors(json) {
 		paintMetricCell(td[4], 'rsrp', c.rsrp);
 		paintMetricCell(td[5], 'rsrq', c.rsrq);
 		paintMetricCell(td[6], 'rssi', c.rssi);
+		if (td[7]) { nbLockCell(td[7], c, serving); }
 	}
+}
+
+/* Кнопка 🔒 в строке соседа: привязать модем к ЭТОЙ соте (EARFCN+PCI) одним
+   кликом. Показываем только если модем умеет ПИСАТЬ привязку (bandsui знает по
+   celllock-состоянию) и это НЕ обслуживающая сота. Backend/плашка/реконнект -
+   те же, что у кнопки «Привязать к текущей соте» в блоке диапазонов. */
+function nbLockCell(td, c, serving) {
+	var ear = c.earfcn, pci = c.pci;
+	var can = bandsui.cellLockWritable && bandsui.cellLockWritable()
+		&& !serving && ear && ear !== '-' && pci != null && pci !== '' && pci !== '-';
+	if (!can) {
+		if (td.getAttribute('data-lk')) { td.removeAttribute('data-lk'); dom.content(td, ''); }
+		return;
+	}
+	/* Кнопку пересобираем ТОЛЬКО при смене цели строки (иначе моргает/теряет
+	   :hover каждый опрос, а замыкание держало бы старые earfcn/pci). */
+	var key = ear + ':' + pci;
+	if (td.getAttribute('data-lk') === key) { return; }
+	td.setAttribute('data-lk', key);
+	dom.content(td, E('button', {
+		'class': 'btn cbi-button cbi-button-action',
+		'style': 'padding:1px 9px',
+		'title': _('Lock to this cell (EARFCN %s, PCI %s)').format(ear, pci),
+		'click': function(ev) { ev.preventDefault(); bandsui.lockCell(ear, pci); }
+	}, [ '🔒' ]));
 }
 
 function renderCaTable(json) {
@@ -3679,6 +3706,7 @@ simDialog: baseclass.extend({
 							E('th', { 'class': 'th' }, [ 'RSRP' ]),
 							E('th', { 'class': 'th' }, [ 'RSRQ' ]),
 							E('th', { 'class': 'th' }, [ 'RSSI' ]),
+							E('th', { 'class': 'th' }, [ '' ]),
 						])
 					])
 				]),

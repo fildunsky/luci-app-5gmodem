@@ -48,6 +48,18 @@
 		}
 	},
 
+	"admin/modem/5gmodem/align": {
+		"title": "Юстировка",
+		"order": 25,
+		"action": {
+			"type": "view",
+			"path": "modem5g/align"
+		},
+		"depends": {
+			"uci": { "5gmodem": { "@5gmodem[0]": { "align_enabled": "1" } } }
+		}
+	},
+
 	"admin/modem/5gmodem/readsms": {
 		"title": "Inbox",
 		"order": 30,

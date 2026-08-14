@@ -679,7 +679,25 @@ case "$REQ" in
 					PROTO="modemmanager"
 				fi
 				;;
+			# 05c6:90d5 - MV31-W / T99W175 в MBIM-композиции (тот же SDX55, что 9025):
+			# umbim держит AT-порт метриками, местами даёт адрес без трафика - вендор-путь
+			# ModemManager. НО 90d5 делит vid:pid с Compal-прототипом, а Compal в MBIM MM
+			# строит нерабочим - поэтому ТОЛЬКО когда это НЕ Compal.
+			05c6:90d5)
+				if [ -f /lib/netifd/proto/modemmanager.sh ] && ! is_compal "$AMP" "$DEV"; then
+					logger -t 5gmodem "mkiface: 05c6:90d5 (MV31-W/T99W175, не Compal) - ведём через ModemManager"
+					PROTO="modemmanager"
+				fi
+				;;
 		esac
+			# SimCom QMI-модемы (SIM7100E, 1e0e:*): в 802.3 не отдают DHCP -
+			# интерфейс без адреса (uqmi connected, RX=0). Ведём на proto=qmiraw
+			# (raw-ip + статика из QMI, см. /lib/netifd/proto/qmiraw.sh).
+			if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/qmiraw.sh ]; then
+				case "$_mki_vp" in
+					1e0e:*) logger -t 5gmodem "mkiface: $_mki_vp - SimCom QMI: proto=qmiraw (802.3 без DHCP)"; PROTO="qmiraw" ;;
+				esac
+			fi
 		fi
 		;;
 	*) PROTO="$REQ" ;;
@@ -829,6 +847,12 @@ ubus call network reload >/dev/null 2>&1
 # (уронил удалённый роутер - см. register_proto.sh), поэтому форс отсюда.
 case "$FPROTO" in
 	fibocom) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
+esac
+# Наш proto=qmiraw (SimCom raw-ip) - та же регистрация, что и fibocom: netifd
+# знает обработчики только со старта, а свежесозданный qmiraw-интерфейс без
+# регистрации мёртв («Не поддерживаемый тип протокола»).
+case "$PROTO" in
+	qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
 esac
 
 # в зону wan - для NAT/forwarding (см. _fw_zone_add выше)

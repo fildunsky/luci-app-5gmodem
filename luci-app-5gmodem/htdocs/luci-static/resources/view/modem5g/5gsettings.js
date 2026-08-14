@@ -277,6 +277,19 @@ return view.extend({
 		var m = new form.Map('5gmodem');
 		var o;
 
+		/* Вкладки, которые гейтятся через menu.d depends.uci (align_enabled -
+		   «Юстировка»), не появляются/не исчезают сразу после сохранения: дерево
+		   меню LuCI кэшируется по mtime файлов меню, а не по uci, и смену галочки
+		   не подхватывает (вкладка держится до ребута). Поэтому после КАЖДОГО
+		   сохранения сбрасываем кэш меню - дёшево (rm файла), а menu перечитается
+		   на ближайшей навигации. Оборачиваем save, чтобы сброс шёл ПОСЛЕ commit. */
+		var _mSaveOrig = m.save.bind(m);
+		m.save = function() {
+			return _mSaveOrig.apply(null, arguments).then(function(r) {
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'menuflush' ]), null).then(function() { return r; });
+			});
+		};
+
 		/* Отображение блоков на странице «Сеть». Тумблеры включены по умолчанию;
 		   страница «Сеть» скрывает блок, только когда значение явно '0'. */
 		var disp = m.section(form.TypedSection, '5gmodem', _('Network'),
@@ -301,6 +314,15 @@ return view.extend({
 		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
 			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
+		o.rmempty = false;
+
+		/* Вкладка «Юстировка» ВЫКЛЮЧЕНА по умолчанию - нужна не всем. Пункт меню
+		   появляется/исчезает по этому ключу (menu.d, depends.uci), как у
+		   «Статистики»; после сохранения нужна перезагрузка страницы, чтобы LuCI
+		   перечитал дерево меню. */
+		o = disp.option(form.Flag, 'align_enabled', _('Вкладка «Юстировка антенны»'),
+			_('Показывать вкладку «Юстировка»: живые метрики сигнала и звук для наведения внешней антенны. По умолчанию выключено. После изменения перезагрузите страницу.'));
+		o.default = '0';
 		o.rmempty = false;
 
 		/* ОДНА секция «Виджеты» - всё внутри неё: Приоритет интернета, Пинг,

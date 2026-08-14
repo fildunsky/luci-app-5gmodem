@@ -48,8 +48,15 @@ atdebug)
 	uci -q set "5gmodem.$_sec.at_debug=$(_norm01 "$3")"
 	uci -q commit 5gmodem
 	;;
+# menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
+# смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):
+# дерево меню кэшируется по mtime файлов меню, а НЕ по uci, поэтому переключение
+# опции сам кэш не подхватывает - вкладка не появляется/не исчезает до ребута.
+menuflush)
+	rm -f /tmp/luci-indexcache* 2>/dev/null
+	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|menuflush}" >&2
 	exit 1
 	;;
 esac
