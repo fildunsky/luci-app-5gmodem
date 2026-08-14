@@ -361,16 +361,34 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					command -v qmicli >/dev/null 2>&1 && [ -c "$_wdm" ] && \
 						_qfmt=$(qmicli -p -d "$_wdm" --wda-get-data-format 2>/dev/null \
 							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
-					case "$_qraw:$_qfmt" in
-						Y:802-3|N:raw-ip)
-							_log "$_if: формат кадров рассинхронизирован (драйвер raw_ip=$_qraw, модем $_qfmt) - приём отбрасывается" ;;
-					esac
-					_log "$_if: QMI отвечает connected, но адреса нет $_qn круга - переинициализирую модем"
-					"$RES/qmi-recover.sh" reset "$_path" "канал не поднялся ($_if)" >/dev/null 2>&1
+					# 802.3 БЕЗ АДРЕСА (SIM7100E): и драйвер, и модем в 802.3
+					# согласованно (не рассинхрон!), сессия QMI connected и адрес по
+					# QMI есть - а модем DHCP-offer в 802.3 не отдаёт. Штатный qmi.sh
+					# на каждом дозвоне упрямо форсит 802.3, поэтому переинициализация
+					# не помогает - петля. Перевод в raw-ip (IP берётся статикой из
+					# QMI) поднимает адрес без ресета (проверено: SIM7100E 14.08.2026,
+					# raw-ip переживает передозвон - uqmi-откат в 802.3 модем игнорит).
+					# Пробуем ОДИН раз за эпизод; не помогло - падаем в ресет ниже.
+					_qrf="/tmp/5gmodem_sw_rawiptry_$_if"
+					if [ ! -f "$_qrf" ] && [ -n "$_qdev" ] && [ -e "/sys/class/net/$_qdev/qmi/raw_ip" ] \
+					   && command -v qmicli >/dev/null 2>&1 && [ -c "$_wdm" ]; then
+						: > "$_qrf"
+						_log "$_if: QMI connected без адреса (raw_ip=$_qraw, модем ${_qfmt:-?}) - выравниваю в raw-ip и передозваниваю"
+						qmicli -p -d "$_wdm" --wda-set-data-format=raw-ip >/dev/null 2>&1
+						echo Y > "/sys/class/net/$_qdev/qmi/raw_ip" 2>/dev/null
+						( ifdown "$_if"; sleep 2; iface_up "$_if" ) >/dev/null 2>&1 </dev/null &
+					else
+						case "$_qraw:$_qfmt" in
+							Y:802-3|N:raw-ip)
+								_log "$_if: формат кадров рассинхронизирован (драйвер raw_ip=$_qraw, модем $_qfmt) - приём отбрасывается" ;;
+						esac
+						_log "$_if: QMI отвечает connected, но адреса нет $_qn круга - переинициализирую модем"
+						"$RES/qmi-recover.sh" reset "$_path" "канал не поднялся ($_if)" >/dev/null 2>&1
+					fi
 				fi
 			fi
 		fi
-		[ -n "$_iip" ] && [ "$_iip" != "connected" ] && rm -f "/tmp/5gmodem_sw_qmistuck_$_if" 2>/dev/null
+		[ -n "$_iip" ] && [ "$_iip" != "connected" ] && rm -f "/tmp/5gmodem_sw_qmistuck_$_if" "/tmp/5gmodem_sw_rawiptry_$_if" 2>/dev/null
 		if [ -z "$_iip" ]; then
 			# Второй раз подряд - только тогда действуем: одиночный пропуск
 			# бывает в момент нормального передозвона.
@@ -512,6 +530,14 @@ EOF
 	_wlist=""
 	for _wp in $_wall; do
 		[ "$_wp" = "$_wa" ] && continue
+		# MM-МОДЕМ НЕ ГРЕЕМ ИЗ WARM. Полный опрос неактивного модема лезет в AT, а у
+		# MM-модема метрики и так идут из mmcli (при показе карточки). Пока MM его
+		# инициализирует (частый флап EM9190 - переэнумерация каждые ~15с), наш AT в
+		# warm - лишняя драка за порт: опрос виснет и отдаёт стухший снимок, а модему
+		# мешает встать. Активный MM-модем опрашивается штатно; это про НЕактивные.
+		_wsec="m_$(printf '%s' "$_wp" | sed 's/[^A-Za-z0-9]/_/g')"
+		_wif=$(uci -q get "$CFG.$_wsec.network")
+		[ -n "$_wif" ] && [ "$(uci -q get "network.$_wif.proto")" = "modemmanager" ] && continue
 		_wk=$(snap_key "$_wp")
 		[ -s "/tmp/5gmodem_metrics_$_wk.json" ] || { _wlist="$_wlist $_wp"; continue; }
 		_wt=$(cat "/tmp/5gmodem_metrics_$_wk.stamp" 2>/dev/null)
@@ -611,17 +637,35 @@ case "$1" in
 			# Реестр собираем ОДИН раз за круг и отдаём обеим задачам: они смотрят
 			# на одно и то же состояние, а сборка стоит дороже самих проверок.
 			_reg_refresh
-			# САМОЛЕЧЕНИЕ НЕЗАРЕГИСТРИРОВАННОГО МОДЕМА. Модемы в реестре есть, а
-			# active_modem пуст - значит регистрация (resolve/autosetup по hotplug)
-			# не отработала: модем настроен МИМО нашего autosetup (интерфейс
-			# modemmanager завёл мастер/пользователь, нашей секции и активного нет),
-			# а отдельного триггера на буте под этот случай нет. Тогда страница и
-			# recv без явной цели читают пустоту, хотя SMS и метрики есть (живой
-			# случай 12.08.2026: SIM7100E на стенде - 8 непрочитанных, список пуст).
-			# Дёргаем resolve: он выберет активный и привяжет сеть. Как только
-			# active_modem проставлен, условие само перестаёт срабатывать.
-			if [ -n "$_REG_FLAT" ] && [ -z "$(uci -q get "5gmodem.@5gmodem[0].active_modem")" ]; then
-				"$RES/modemswitch.sh" resolve >/dev/null 2>&1
+			# САМОЛЕЧЕНИЕ РЕГИСТРАЦИИ. Модем есть в реестре, но НЕ заведён нами -
+			# карточка без имени и SIM-данных, а recv/метрики бьют по пустой цели.
+			# Причины не ловятся штатным триггером на буте (USB-hotplug):
+			#  1) autosetup не отработал - на прошивках с ЗАШИТЫМ авто-подъёмом
+			#     интерфейса модем поднимает netifd сам, МИМО USB-add, и наш hotplug
+			#     не срабатывает (стенд 13.08.2026: SimCom SIM7100E - секции нет,
+			#     имя = сырой дескриптор "SimTech, Incorporated", иконки SIM нет);
+			#  2) модем настроен мимо autosetup (интерфейс завёл мастер/пользователь).
+			# НЕТ СЕКЦИИ - зовём autosetup (он заводит секцию, at_port, модель, active),
+			# раз в 2 минуты, чтобы не молотить на неподнимаемом устройстве. Секция
+			# ЕСТЬ, но активный не выбран - resolve. Как всё на месте, условие гаснет.
+			if [ -n "$_REG_FLAT" ]; then
+				_sh_noreg=""
+				for _sh_p in $(printf '%s\n' "$_REG_FLAT" | awk 'NF{print $1}'); do
+					uci -q get "5gmodem.m_$(printf '%s' "$_sh_p" | sed 's/[^A-Za-z0-9]/_/g')" >/dev/null 2>&1 \
+						|| { _sh_noreg=1; break; }
+				done
+				if [ -n "$_sh_noreg" ]; then
+					_sh_f=/tmp/5gmodem_sw_autoreg
+					_sh_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+					_sh_last=$(cat "$_sh_f" 2>/dev/null)
+					case "$_sh_last" in ''|*[!0-9]*) _sh_last=0 ;; esac
+					if [ "$((_sh_now - _sh_last))" -ge 120 ]; then
+						printf '%s' "$_sh_now" > "$_sh_f" 2>/dev/null
+						"$RES/modemswitch.sh" autosetup >/dev/null 2>&1
+					fi
+				elif [ -z "$(uci -q get "5gmodem.@5gmodem[0].active_modem")" ]; then
+					"$RES/modemswitch.sh" resolve >/dev/null 2>&1
+				fi
 			fi
 			check_once
 			# Освежение и МЕЖДУ обязанностями: фаза обязанностей длится 10-20 c,

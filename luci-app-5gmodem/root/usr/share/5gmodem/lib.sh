@@ -890,11 +890,12 @@ digits_of() {   # $1 - текст ответа, $2 - мин длина, $3 - м�
 model_alias() {   # $1 - сырое имя; печатает нормализованное (или исходное)
 	case "$1" in
 		*VOS_5G*|*RXMG1*|*SG500M2*) echo "Compal RXM-G1" ;;
-		# SimCom отдаёт имя с вендорным префиксом (modem.generic.model и AT+CGMM =
+		# SIMCom отдаёт имя с вендорным префиксом (modem.generic.model и AT+CGMM =
 		# "SIMCOM_SIM7100E", а часть прошивок - через пробел "SIMCOM SIM7100E").
-		# Приводим к общему для приложения виду «Вендор Модель»: SimCom SIM7100E.
-		SIMCOM_*) echo "SimCom ${1#SIMCOM_}" ;;
-		SIMCOM\ *) echo "SimCom ${1#SIMCOM }" ;;
+		# Приводим к общему для приложения виду «Вендор Модель»: SIMCom SIM7100E
+		# (официальное написание бренда - SIMCom, не SimCom и не SIMCOM).
+		SIMCOM_*) echo "SIMCom ${1#SIMCOM_}" ;;
+		SIMCOM\ *) echo "SIMCom ${1#SIMCOM }" ;;
 		*) echo "$1" ;;
 	esac
 }

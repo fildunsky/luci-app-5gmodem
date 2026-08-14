@@ -55,7 +55,7 @@ function vendor(m) {
 		'1bc7': 'Telit', '2c7c': 'Quectel', '2cb7': 'Fibocom',
 		'0e8d': 'Fibocom', '1e2d': 'Cinterion', '12d1': 'Huawei', '19d2': 'ZTE',
 		'2dee': 'Foxconn', '0489': 'Foxconn', '413c': 'Dell',
-		'1e0e': 'SimCom'
+		'1e0e': 'SIMCom'
 	};
 	return map[vid] || '';
 }

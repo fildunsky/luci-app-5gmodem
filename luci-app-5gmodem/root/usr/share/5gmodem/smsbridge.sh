@@ -156,7 +156,25 @@ case "$1" in
 			fi
 			_nd_recv=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" recv "$_nd_store" "$_nd_port" 2>/dev/null)
 			[ -n "$_nd_recv" ] || continue
-			_nd_seen=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" seen 2>/dev/null | jsonfilter -e '@.keys[*]' 2>/dev/null)
+			_nd_seen_j=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" seen 2>/dev/null)
+			# ПЕРВАЯ ВСТРЕЧА С МОДЕМОМ (seen пуст - после перепрошивки / чистой
+			# установки). Его сообщения могли прийти давно и быть прочитаны; отдавать
+			# их как новые (конвертик/счётчик) - враньё. Молча помечаем ТЕКУЩИЕ
+			# виденными и НЕ отдаём как новое; дальше новое = только пришедшее позже.
+			# Пишем прямо в seen-файл: ключи содержат пробел в timestamp, через
+			# аргументы seen-add они бы разъехались. tgnotify со своим окном
+			# отрабатывает РАНЬШЕ newdump в цикле, поэтому при включённом боте недавние
+			# он уже разослал и файл создал - сюда попадаем только когда бота нет.
+			if [ "$(printf '%s' "$_nd_seen_j" | jsonfilter -e '@.first' 2>/dev/null)" = "1" ]; then
+				mkdir -p "$SEEN_DIR" 2>/dev/null
+				for _nd_i in $(printf '%s' "$_nd_recv" | jsonfilter -e '@.msg[*].index' 2>/dev/null); do
+					printf '%s|%s\n' \
+						"$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].sender" 2>/dev/null)" \
+						"$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].timestamp" 2>/dev/null)"
+				done | sort -u > "$SEEN_DIR/sms_seen.$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')" 2>/dev/null
+				continue
+			fi
+			_nd_seen=$(printf '%s' "$_nd_seen_j" | jsonfilter -e '@.keys[*]' 2>/dev/null)
 			_nd_idx=$(printf '%s' "$_nd_recv" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
 			_nd_done=""
 			for _nd_i in $_nd_idx; do

@@ -144,9 +144,16 @@ _dts_buttons() {
 	case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in
 		huasifei,wh3000*) _force_key=1 ;;
 	esac
-	for _kd in /sys/firmware/devicetree/base/gpio-keys \
-	           /sys/firmware/devicetree/base/gpio-keys-polled; do
-		[ -d "$_kd" ] || continue
+	# УЗЛЫ КНОПОК ИЩЕМ ПО compatible=gpio-keys[-polled], А НЕ ПО ИМЕНИ УЗЛА: часть
+	# плат называет узел иначе (Securifi Almond 3S - узел "keys" с
+	# compatible="gpio-keys"), и скан по имени "gpio-keys" его пропускал - ни Tamper
+	# (linux,code=256=BTN_0), ни reset не попадали в список. gpio-button-hotplug при
+	# этом события шлёт исправно, дело было только в поиске узла.
+	_dtb=/sys/firmware/devicetree/base
+	for _cf in "$_dtb"/*/compatible "$_dtb"/*/*/compatible; do
+		[ -f "$_cf" ] || continue
+		tr '\0' '\n' < "$_cf" 2>/dev/null | grep -qxE 'gpio-keys|gpio-keys-polled' || continue
+		_kd="${_cf%/compatible}"
 		for _b in "$_kd"/*/; do
 			[ -f "${_b}linux,code" ] || continue
 			_hex=$(hexdump -v -e '/1 "%02x"' "${_b}linux,code" 2>/dev/null)
