@@ -1190,6 +1190,52 @@ return view.extend({
 		};
 		} /* if (!activeIsHilink) - тип PDP */
 
+		if (!activeIsHilink) {
+		/* DNS-фолбэк на интерфейсе модема. Часть операторов/модемов поднимает
+		   связь БЕЗ DNS: IP есть, а сайты не открываются, пока не впишешь DNS
+		   руками. Тумблер (по умолчанию ВЫКЛ) вписывает ЗАДАННЫЕ пользователем
+		   DNS в интерфейс аддитивно (DNS оператора, если пришёл, тоже работает).
+		   Состояние = network.<iface>.dns (отдельного хранилища нет); применяется
+		   сразу (setopt dnsfb -> network reload, без ре-дозвона) и переживает
+		   пересоздание интерфейса (mkiface сохраняет OLDDNS). */
+		o = s.option(form.Flag, '_dns_fallback', _('Fallback DNS'),
+			_('Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var on = (value === '1');
+			var so = this.map.lookupOption('_dns_servers', section_id);
+			var srv = (on && so) ? String(so[0].formvalue(section_id) || '').trim() : '';
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'dnsfb', String(p), on ? '1' : '0', srv ]).catch(function() {});
+		};
+		o.load = function(section_id) {
+			return (mIfName && String(uci.get('network', mIfName, 'dns') || '').trim() !== '') ? '1' : '0';
+		};
+		o.remove = function() {};
+
+		o = s.option(form.Value, '_dns_servers', _('DNS servers'),
+			_('Space-separated, e.g. "1.1.1.1 8.8.8.8".'));
+		o.depends('_dns_fallback', '1');
+		o.placeholder = '1.1.1.1 8.8.8.8';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			var fo = this.map.lookupOption('_dns_fallback', section_id);
+			var on = fo ? (String(fo[0].formvalue(section_id)) === '1') : false;
+			var srv = on ? String(value || '').trim() : '';
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'dnsfb', String(p), on ? '1' : '0', srv ]).catch(function() {});
+		};
+		o.load = function(section_id) {
+			return mIfName ? String(uci.get('network', mIfName, 'dns') || '') : '';
+		};
+		o.remove = function() {};
+		} /* if (!activeIsHilink) - DNS-фолбэк */
+
 		if (activeIsHilink) {
 		/* HiLink: DHCP-интерфейс на сетевой карте модема. Протокол не выбираем -
 		   дозвона нет, модем держит соединение сам. Бэкенд mkhilink находит карту

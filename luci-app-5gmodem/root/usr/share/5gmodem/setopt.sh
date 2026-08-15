@@ -48,6 +48,30 @@ atdebug)
 	uci -q set "5gmodem.$_sec.at_debug=$(_norm01 "$3")"
 	uci -q commit 5gmodem
 	;;
+# dnsfb <usb-path> <0|1> [servers] - DNS-фолбэк на интерфейсе модема. Состояние -
+# это САМ network.<iface>.dns (отдельного флага нет): вкл + заданные сервера =
+# пишем dns, выкл (или пусто) = снимаем. Применяем через network reload, а НЕ
+# ifup: смена статического dns подхватывается перечитыванием конфига, дозвон
+# рвать незачем (пользователь как раз чинит уже поднятую связь, только без DNS).
+# Переезд между пересозданиями интерфейса держит mkiface (OLDDNS).
+dnsfb)
+	[ -n "$2" ] || exit 1
+	_sec=$(_sec_for_path "$2")
+	_ifn=$(uci -q get "5gmodem.$_sec.network")
+	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_ifn" ] || exit 0
+	_flag=$(_norm01 "$3")
+	shift 3
+	_srv="$*"
+	note_foreign_uci network "setopt dnsfb"
+	if [ "$_flag" = "1" ] && [ -n "$_srv" ]; then
+		uci -q set "network.$_ifn.dns=$_srv"
+	else
+		uci -q delete "network.$_ifn.dns"
+	fi
+	uci -q commit network
+	ubus call network reload >/dev/null 2>&1
+	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
 # смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):
 # дерево меню кэшируется по mtime файлов меню, а НЕ по uci, поэтому переключение
@@ -56,7 +80,7 @@ menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1>|menuflush}" >&2
 	exit 1
 	;;
 esac

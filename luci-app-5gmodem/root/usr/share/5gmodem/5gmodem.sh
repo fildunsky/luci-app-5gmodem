@@ -1676,7 +1676,7 @@ _sanv PMIMO PMOD S1MIMO S1MOD S2MIMO S2MOD
 _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
-_sanv _SN_ALIAS _SN_CPORT
+_sanv _SN_ALIAS _SN_CPORT BS_DIST
 cat <<EOF
 {
 "path":"${_J__POLL_AM}",
@@ -1776,6 +1776,7 @@ cat <<EOF
 "bandwidth":"${_J_BANDWIDTH}",
 "enbid":"${_J_ENBID}",
 "pathloss":"${_J_PATHLOSS}",
+"bs_distance":"${_J_BS_DIST}",
 "txpower":"${_J_TXPOWER}",
 "uecat":"${_J_UECAT}",
 "cqi":"${_J_CQI}",
@@ -2015,6 +2016,14 @@ _qmi_refresh() {
 		END { flushs(); printf "%s", out }
 	')
 	_qr_cl=$(qmicli_p "$_qr_w" --nas-get-cell-location-info 2>/dev/null)
+	# РАССТОЯНИЕ ДО БС по Timing Advance. QMI отдаёт TA обслуживающей соты в
+	# микросекундах (round-trip задержка, которую UE компенсирует); дистанция ~
+	# TA*c/2 = TA_us*150 м. Оценка грубая: прошивка округляет TA до целых мкс
+	# (~150 м на шаг), значение есть только в RRC-connected при активном обмене.
+	# Пишем метры; пусто, если поля нет (не-LTE, простой).
+	_qr_ta=$(printf '%s\n' "$_qr_cl" | sed -n "s/.*LTE Timing Advance: *'\([0-9]*\)'.*/\1/p" | head -1)
+	_qr_dist=""
+	[ -n "$_qr_ta" ] && _qr_dist=$((_qr_ta * 150))
 	# TAC и Cell ID обслуживающей соты (секция Intrafrequency LTE Info)
 	_qr_cell=$(printf '%s\n' "$_qr_cl" | awk '
 		/^Intrafrequency LTE Info/ { f=1; next }
@@ -2078,6 +2087,7 @@ _qmi_refresh() {
 	printf '%s' "$_qr_sig" > "$_qr_p.sig.tmp" && mv "$_qr_p.sig.tmp" "$_qr_p.sig"
 	printf '%s' "$_qr_lte" > "$_qr_p.lte.tmp" && mv "$_qr_p.lte.tmp" "$_qr_p.lte"
 	printf '%s' "$_qr_cell" > "$_qr_p.cell.tmp" && mv "$_qr_p.cell.tmp" "$_qr_p.cell"
+	printf '%s' "$_qr_dist" > "$_qr_p.dist.tmp" && mv "$_qr_p.dist.tmp" "$_qr_p.dist"
 	cut -d. -f1 /proc/uptime > "$_qr_p.t"
 }
 
@@ -2269,6 +2279,8 @@ _qmi_supplement() {
 	fi
 	case "$BANDWIDTH" in ''|-) [ -s "$_QS_P.bw" ] && BANDWIDTH=$(cat "$_QS_P.bw") ;; esac
 	case "$TXPOWER"  in ''|-) [ -s "$_QS_P.tx" ] && TXPOWER=$(cat "$_QS_P.tx") ;; esac
+	# Расстояние до БС по TA - только из QMI (вендорный AT его не отдаёт).
+	[ -s "$_QS_P.dist" ] && BS_DIST=$(cat "$_QS_P.dist")
 	# 3G-диапазон - как у 4G: «UMTS | B1 (2100 MHz)» вместо голого «UMTS».
 	# Применяем ТОЛЬКО когда режим сейчас 3G: файлы обновляются раз в TTL, и
 	# после возврата в LTE в них ещё до 25 c лежит 3G-запись - гейт по MODE

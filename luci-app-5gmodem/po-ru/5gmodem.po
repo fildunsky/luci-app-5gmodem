@@ -4631,3 +4631,15 @@ msgstr "Текущая USB-композиция"
 msgid "Unread SMS — open Incoming"
 msgstr "Непрочитанные SMS — открыть Входящие"
 
+
+msgid "Fallback DNS"
+msgstr "Запасной DNS"
+
+msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default."
+msgstr "Часть операторов/модемов поднимает связь без DNS-серверов: IP есть, а сайты не открываются. Включите и впишите DNS ниже — они добавятся на интерфейс модема в дополнение к DNS оператора, если тот пришёл. По умолчанию выключено."
+
+msgid "DNS servers"
+msgstr "DNS-серверы"
+
+msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
+msgstr "Через пробел, напр. «1.1.1.1 8.8.8.8»."

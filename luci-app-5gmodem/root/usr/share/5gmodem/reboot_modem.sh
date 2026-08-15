@@ -30,7 +30,8 @@ esac
 # от AT: снимаем питание слота (value=1), пауза, возвращаем (value=0); интерфейс
 # поднимается ~1 мин. На WH3000 это питает ТОЛЬКО M.2-слот (USB-модем не трогает).
 # Список известных имён GPIO сброса/питания модема (по target/.../03_gpio_switches).
-# modem_reset (напр. Almond 3S, GPIO33 active_high) сбрасывается той же
+# modem_reset (напр. Almond 3S, GPIO33 active_low - полярность разруливает ядро,
+# sysfs-value логический) сбрасывается той же
 # последовательностью 1->пауза->0, что и modem_power, поэтому в общем списке.
 POWER_GPIOS="modem_power modem_reset 4g 5g1 5g2"
 first_power_gpio() {

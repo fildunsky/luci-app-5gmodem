@@ -2165,6 +2165,15 @@ function applyMetrics(json) {
 								.replace(/\b([Bn])(\d+)\b/g,
 									'<span class="btn cbi-button cbi-button-action important tginfo-band">$1$2</span>')
 								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
+								/* Расстояние до соты по Timing Advance - в конец строки агрегации,
+								   тем же приглушённым видом, что и частоты «(2100 MHz)» (tginfo-freq).
+								   Только когда QMI отдал TA (RRC-connected при трафике). */
+								var _bsd = parseInt(json.bs_distance, 10);
+								if (_bsd > 0) {
+									var _bskm = (_bsd >= 1000) ? ('~' + (_bsd / 1000).toFixed(1) + 'km')
+									                           : ('~' + _bsd + 'm');
+									view.innerHTML += ' <span class="tginfo-freq">' + _bskm + '</span>';
+								}
 						}
 						else if (!view.textContent || !view.textContent.trim()) {
 							// ещё не было валидного значения -> стабильный placeholder,

@@ -696,6 +696,24 @@ case "$REQ" in
 			if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/qmiraw.sh ]; then
 				case "$_mki_vp" in
 					1e0e:*) logger -t 5gmodem "mkiface: $_mki_vp - SimCom QMI: proto=qmiraw (802.3 без DHCP)"; PROTO="qmiraw" ;;
+					*)
+						# Прочие QMI: на qmiraw, только если модем НАТИВНО в raw-ip. Стоковый qmi
+						# в raw-ip раздаёт адрес DHCP'ом (в raw-ip ненадёжно) - адрес есть, а
+						# трафика нет (Telit LM960). qmiraw берёт IP статикой из QMI. 802.3-модемы
+						# читаются как 802-3 и остаются на стоковом qmi - их не трогаем.
+						if [ -c "$DEV" ]; then
+							# qmicli -p (через qmi-proxy) - тот же путь, что в sessionwatch;
+						# надёжнее uqmi WDA (тот часто «Failed to connect to service»).
+						# timeout: не виснуть, если канал занят (передетект при живом
+						# интерфейсе). Пусто/таймаут -> НЕ raw-ip -> стоковый qmi.
+						_mki_fmt=$(timeout 5 qmicli -p -d "$DEV" --wda-get-data-format 2>/dev/null \
+							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
+							if [ "$_mki_fmt" = "raw-ip" ]; then
+								logger -t 5gmodem "mkiface: $_mki_vp - модем нативно raw-ip: proto=qmiraw (raw-ip+статика)"
+								PROTO="qmiraw"
+							fi
+						fi
+						;;
 				esac
 			fi
 		fi
@@ -732,7 +750,7 @@ if [ "$_MM_WANT" = "1" ]; then
 		# MM нет, значит и рвать ему некого.
 		mm_restart_safe
 	fi
-elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi)'"; then
+elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || [ "$PROTO" = "qmiraw" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi|qmiraw)'"; then
 	/etc/init.d/modemmanager stop >/dev/null 2>&1
 	/etc/init.d/modemmanager disable >/dev/null 2>&1
 fi
@@ -751,7 +769,7 @@ case "$PROTO" in
 		done
 		[ -f "$IDEV/idVendor" ] || IDEV=""
 		;;
-	mbim|qmi)
+	mbim|qmi|qmiraw)
 		# control channel over the cdc-wdm node
 		IDEV="$DEV"
 		;;
@@ -797,6 +815,8 @@ OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 # нельзя было сдвинуть ниже соседей, пока метрику не выставят руками (живой
 # отчёт Cudy TR3000 + DW5821e, 03.08.2026: MM-интерфейс с metric 0).
 OLDMETRIC=$(uci -q get "network.$IF.metric")
+# DNS пользователя (если вписал руками) сохраняем через пересоздание, как apn.
+OLDDNS=$(uci -q get "network.$IF.dns")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -806,7 +826,7 @@ case "$PROTO" in
 	modemmanager)
 		set_pdp_opt "$IF" iptype   # у прото modemmanager опция называется iptype
 		;;
-	qmi|mbim)
+	qmi|mbim|qmiraw)
 		set_pdp_opt "$IF" pdptype
 		uci set "network.$IF.auth=none"
 		# Привязка к железу через стабильный путь (см. ctrl_devpath выше).
@@ -826,6 +846,12 @@ case "$PROTO" in
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
 uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
+# DNS-ФОЛБЭК. Часть операторов/модемов не отдаёт DNS на интерфейс: IP есть, а
+# сайты не открываются, пока пользователь не впишет DNS руками. Свой DNS задаётся
+# тумблером «Fallback DNS» на карточке модема (verb setopt dnsfb) и хранится прямо
+# в network.<iface>.dns - здесь мы лишь ПЕРЕНОСИМ его через пересоздание
+# интерфейса. По умолчанию фолбэк выключен, автоматически ничего не ставим.
+[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
 uci commit network
 
 # ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.
@@ -973,7 +999,7 @@ if [ "$PROTO" = "modemmanager" ]; then
 		done
 		ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
-elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ]; then
+elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 	# kernel-прото: сначала автоматически привести модем в рабочее состояние
 	# (отобрать порт у MM, снять зависшие uqmi, при заклиненном QMI - сбросить
 	# модем), и только потом ifup. Иначе netifd упрётся в мёртвый управляющий
