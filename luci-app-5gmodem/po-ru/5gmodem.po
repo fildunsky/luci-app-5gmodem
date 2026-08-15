@@ -2330,9 +2330,6 @@ msgstr "Загрузка сообщений…"
 msgid "Antenna ports"
 msgstr "Антенные порты"
 
-msgid "RSRP/RSRQ measured separately on each LTE antenna port. A port with RSRP near -140 dBm has no antenna connected (or the cable is bad). LTE only: in 3G the table stays empty."
-msgstr "RSRP/RSRQ, измеренные отдельно по каждому антенному порту LTE. Порт с RSRP около −140 дБм — антенна не подключена (или плохой кабель). Только для LTE: в 3G таблица остаётся пустой."
-
 msgid "Antenna port"
 msgstr "Антенный порт"
 
@@ -2342,8 +2339,8 @@ msgstr "Состояние"
 msgid "Port %d"
 msgstr "Порт %d"
 
-msgid "antenna: none"
-msgstr "нет антенны"
+msgid "antenna not connected"
+msgstr "антенна не подключена"
 
 msgid "antenna: weak signal"
 msgstr "слабый сигнал"
@@ -4643,3 +4640,6 @@ msgstr "DNS-серверы"
 
 msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
 msgstr "Через пробел, напр. «1.1.1.1 8.8.8.8»."
+
+msgid "QMI Cellular (raw-ip)"
+msgstr "Сотовый QMI (raw-ip)"

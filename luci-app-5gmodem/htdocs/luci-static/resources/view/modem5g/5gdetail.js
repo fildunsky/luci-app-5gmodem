@@ -1436,11 +1436,12 @@ function rebootModem(hard) {
 
 /* Аппаратная перезагрузка модема по питанию (GPIO modem_power и т.п.). Кнопка
    показывается только если у платы есть такой GPIO (см. reboot_modem.sh haspower). */
+var _powerRebootMode = 'power';
 function rebootModemPower() {
 	/* Без confirm и без попапа - модем сейчас пропадёт по питанию: сразу
 	   плашка с прогрессбаром на блоке «Модем», pollData снимет по возвращении. */
 	setModemBusy(_('The modem is restarting…'), 75);
-	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'power' ]).then(function(res) {
+	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ _powerRebootMode ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
 			clearModemBusy(true);
@@ -1464,7 +1465,16 @@ function initPowerBtn() {
 	if (!b) { return; }
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'haspower' ]), '').then(function(out) {
 		var g = ''; try { g = (JSON.parse(out || '{}').gpio) || ''; } catch (e) {}
-		if (g) { b.style.display = ''; }
+		if (g) { _powerRebootMode = 'power'; b.style.display = ''; return; }
+		/* Нет GPIO питания - пробуем сброс USB-порта (disable downstream-порта:
+		   порт обесточивается электрически, модем переэнумерируется). Это
+		   единственный жёсткий сброс на платах вроде Almond 3S (MT7621): их
+		   modem_reset - это #PERST mini-PCIe, USB-модем его игнорирует, а
+		   per-port VBUS у xHCI нет. Та же кнопка, другой verb. */
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'hasusbpower' ]), '').then(function(out2) {
+			var m = ''; try { m = (JSON.parse(out2 || '{}').method) || ''; } catch (e) {}
+			if (m) { _powerRebootMode = 'usbpower'; b.style.display = ''; }
+		});
 	});
 }
 
@@ -1693,7 +1703,7 @@ function fillAntPorts(raw, rxdiv) {
 			   фактически нет - так выглядит неподключённый пигтейл (проверено на
 			   LM960: порт без антенны давал -134). Это НЕ «плохой сигнал», а
 			   отсутствие антенны - отдельный случай, порогов caQuality тут мало. */
-			st = _('antenna: none'); col = 'red';
+			st = _('antenna not connected'); col = 'red';
 		} else {
 			/* Подпись СЛЕДУЕТ за цветом: зелёный - норма, жёлтый - слабо,
 			   красный - плохо. Иначе -102 dBm красился бы красным, а
@@ -3733,9 +3743,7 @@ simDialog: baseclass.extend({
 					   разнесение включено, иначе второй приёмник просто не
 					   задействован. */
 					E('div', { 'id': 'rxdiv-line',
-						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, ''),
-					E('div', { 'style': 'font-size:85%;opacity:.75;padding:.4em 0 0 0' },
-						_('RSRP/RSRQ measured separately on each LTE antenna port. A port with RSRP near -140 dBm has no antenna connected (or the cable is bad). LTE only: in 3G the table stays empty.'))
+						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, '')
 				])
 			])
 		]);

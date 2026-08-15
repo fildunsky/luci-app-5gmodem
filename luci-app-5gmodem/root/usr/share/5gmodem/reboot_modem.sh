@@ -30,10 +30,20 @@ esac
 # от AT: снимаем питание слота (value=1), пауза, возвращаем (value=0); интерфейс
 # поднимается ~1 мин. На WH3000 это питает ТОЛЬКО M.2-слот (USB-модем не трогает).
 # Список известных имён GPIO сброса/питания модема (по target/.../03_gpio_switches).
-# modem_reset (напр. Almond 3S, GPIO33 active_low - полярность разруливает ядро,
+# modem_reset - ПО ПЛАТАМ. У Teltonika RUT2xx/RUT9xx это настоящая reset-линия
+# модуля (HC595) и кнопка обязана работать. А на Almond 3S тот же самый
+# экспорт - #PERST слота mini-PCIe: модем работает по USB-линиям и PERST
+# игнорирует (проверено вживую: 5 с LOW - ноль реакции). Поэтому modem_reset
+# остаётся в списке, но на Almond выкидывается гвардом по board_name ниже -
+# там haspower пустеет и кнопка падает на usbpower (disable downstream-порта;
+# настоящего per-port VBUS у MT7621 xHCI нет, это самый жёсткий сброс).
+# (про полярность: GPIO33 active_low - полярность разруливает ядро,
 # sysfs-value логический) сбрасывается той же
 # последовательностью 1->пауза->0, что и modem_power, поэтому в общем списке.
 POWER_GPIOS="modem_power modem_reset 4g 5g1 5g2"
+case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in
+	securifi,almond-3s|securifi,almond3s) POWER_GPIOS="modem_power 4g 5g1 5g2" ;;
+esac
 first_power_gpio() {
 	for _g in $POWER_GPIOS; do
 		[ -e "/sys/class/gpio/$_g/value" ] && { echo "$_g"; return 0; }
@@ -119,6 +129,19 @@ if [ "$MODE" = usbpower ]; then
 		# Порты после переподключения переименовываются - закрепляем заново.
 		sleep 20
 		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+		# ПЕРЕДОЗВОН ОБЯЗАТЕЛЕН. После переэнумерации сессия данных мертва, но
+		# netifd этого НЕ видит (up=true при netdev DOWN): у kernel-прото нет
+		# keepalive, и линк оставался трупом до ручного ifup - живой случай
+		# 15.08.2026 на стенде (qmiraw, wwan0 DOWN 100 минут, сторож увёл
+		# трафик на Wi-Fi). Поднимаем интерфейс модема сами.
+		_ifn=$(uci -q get "5gmodem.m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g').network")
+		[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+		if [ -n "$_ifn" ]; then
+			sleep 5
+			ifdown "$_ifn" >/dev/null 2>&1
+			sleep 2
+			ifup "$_ifn" >/dev/null 2>&1
+		fi
 	) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"usbpower\",\"method\":\"$_m\",\"path\":\"$_p\"}"
 	exit 0
