@@ -279,6 +279,34 @@ return view.extend({
 		var self = this;
 		while (body.firstChild) { body.removeChild(body.firstChild); }
 
+		/* МОДЕМ ПОД MM: бэкенд отдал takeover=1 - операции возможны, но каждый
+		   сеанс временно забирает канал у ModemManager (инхибит), и интернет
+		   через модем прерывается на ~1-2 минуты. Без явного согласия ничего
+		   не трогаем: открытие вкладки не должно ронять связь. Согласие
+		   помнится до ухода со страницы; захват общий на пачку операций
+		   (бэкенд держит канал 90 с после последнего обращения). */
+		if (st.takeover) {
+			var act = null;
+			(slot.slots || []).forEach(function(sl) { if (String(sl.id) === String(slot.active)) { act = sl; } });
+			if (act && act.label !== 'eSIM') {
+				st = { available: 1, active: 0 };
+			} else if (!self._tkAgreed) {
+				body.appendChild(E('div', { 'class': 'tgesim-actionrow' }, [
+					E('button', {
+						'class': 'btn cbi-button cbi-button-action',
+						'click': function(ev) {
+							ev.preventDefault();
+							self._tkAgreed = true;
+							self._fillBody(body, st, slot);
+						}
+					}, _('Read eSIM (drops the connection briefly)')),
+					E('p', { 'class': 'cbi-section-descr' },
+						_('This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window.'))
+				]));
+				return;
+			}
+		}
+
 		if (!st.available) {
 			// Конкретная причина недоступности (backend отдаёт st.reason), чтобы не
 			// гадать «lpac нет ИЛИ не АТ-модем». Для 'noeuicc' сразу просим лог.

@@ -286,26 +286,36 @@ return view.extend({
 		var _mSaveOrig = m.save.bind(m);
 		m.save = function() {
 			return _mSaveOrig.apply(null, arguments).then(function(r) {
-				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'menuflush' ]), null).then(function() { return r; });
+				/* Мгновенное применение: staged-дельты rpcd лежат в ОБЩЕМ
+				   /tmp/.uci (uci -c не песочница), поэтому granted-скрипт
+				   коммитит их обычным `uci commit` и сбрасывает кэш меню
+				   (гейт вкладки Юстировки). Никакого uci.apply с rollback. */
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null).then(function() {
+					/* Коммит прошёл МИМО LuCI - её индикатор «непримененных
+					   изменений» сам об этом не узнает и продолжает висеть.
+					   Перечитываем staged-список с сервера (после commit он
+					   пуст) и выставляем счётчик индикатора по факту. */
+					return uci.changes().then(function(ch) {
+						var n = 0;
+						for (var k in ch) { n += (ch[k] || []).length; }
+						if (ui.changes && ui.changes.setIndicator) { ui.changes.setIndicator(n); }
+						return r;
+					}).catch(function() { return r; });
+				});
 			});
 		};
 
 		/* Отображение блоков на странице «Сеть». Тумблеры включены по умолчанию;
 		   страница «Сеть» скрывает блок, только когда значение явно '0'. */
-		var disp = m.section(form.TypedSection, '5gmodem', _('Network'),
-			_('Options for the Network page and modem behaviour'));
+		var disp = m.section(form.TypedSection, '5gmodem', _('Main'),
+			_('Everyday options of the Network page and modem behaviour'));
 		disp.anonymous = true;
 
-		o = disp.option(form.Flag, 'show_ttl', _('Show TTL fixing'),
-			_('Show the "TTL fixing" block on the Network page.'));
-		o.default = '1';
+		o = disp.option(form.Flag, 'simple_view', _('Simple view of the Network page'),
+			_('Show only the essentials: modem name, signal, status lamp and the restart button. Expert blocks (bands, cell info, TTL, interface details) are hidden. Off by default.'));
+		o.default = '0';
 		o.rmempty = false;
 
-		/* ОДИН ключ на всё: и сбор рядов, и вкладку. Два отдельных выключателя
-		   («собирать» на странице + «показывать» здесь) давали бессмысленное
-		   состояние «вкладка есть, данных нет». Пункт меню появляется/исчезает
-		   по этому же ключу (см. menu.d), поэтому после сохранения нужна
-		   перезагрузка страницы - LuCI перечитает дерево меню. */
 		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
 			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
 		o.default = '1';
@@ -320,16 +330,8 @@ return view.extend({
 		   появляется/исчезает по этому ключу (menu.d, depends.uci), как у
 		   «Статистики»; после сохранения нужна перезагрузка страницы, чтобы LuCI
 		   перечитал дерево меню. */
-		o = disp.option(form.Flag, 'align_enabled', _('Вкладка «Юстировка антенны»'),
-			_('Показывать вкладку «Юстировка»: живые метрики сигнала и звук для наведения внешней антенны. По умолчанию выключено. После изменения перезагрузите страницу.'));
-		o.default = '0';
-		o.rmempty = false;
-
-		/* ОДНА секция «Виджеты» - всё внутри неё: Приоритет интернета, Пинг,
-		   Службы, Тест скорости. У Пинга/Служб карточки вложены ещё глубже
-		   (form.SectionValue), настройки видны только при включённой галочке. */
-		var wdg = m.section(form.TypedSection, '5gmodem', _('Widgets'),
-			_('Show or hide the cards in the widgets row on the Network page. All are on by default.'));
+		var wdg = m.section(form.TypedSection, '5gmodem', _('Appearance'),
+			_('Cards in the widgets row on the Network page. All are on by default.'));
 		wdg.anonymous = true;
 
 		o = wdg.option(form.Flag, 'widget_netpri', _('Internet priority'),
@@ -352,16 +354,6 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 		o.depends('widget_netpri', '1');
-
-		/* База метрик аплинков (issue #12). По умолчанию 100, 110, 120... -
-		   туннелям (wireguard, zerotier) остаётся весь диапазон 1-99. Галочка
-		   возвращает прежние 10, 20, 30... - соглашение mwan3. Читают её
-		   netpri.sh (_metric_base) и mkiface.sh (метрика нового интерфейса).
-		   Без depends: метрики аплинков существуют и при выключенном виджете. */
-		o = wdg.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
-			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
-		o.default = '0';
-		o.rmempty = false;
 
 		/* Слежение за интернетом - СВОРАЧИВАЕМЫЙ блок прямо под приоритетом
 		   (решение владельца, issue #12): по смыслу настройки сторожа живут
@@ -536,7 +528,70 @@ return view.extend({
 		o.placeholder = 'http://ip-api.com/line/{ip}?fields=countryCode';
 		o.rmempty = true;
 
+
+		/* «Для экспертов» - НАМЕРЕННО ПОСЛЕДНЯЯ секция (UX-аудит, P6): редкие
+		   и тонкие опции не должны стоять вперемешку с ежедневными - пользователь
+		   не отличал «сломает интернет» от «поменяет цвет карточки». */
+		var exp = m.section(form.TypedSection, '5gmodem', _('For experts'),
+			_('Rarely needed options. The defaults are fine for most setups.'));
+		exp.anonymous = true;
+
+		o = exp.option(form.Flag, 'show_ttl', _('Show TTL fixing'),
+			_('Show the "TTL fixing" block on the Network page.'));
+		o.default = '1';
+		o.rmempty = false;
+
+		/* ОДИН ключ на всё: и сбор рядов, и вкладку. Два отдельных выключателя
+		   («собирать» на странице + «показывать» здесь) давали бессмысленное
+		   состояние «вкладка есть, данных нет». Пункт меню появляется/исчезает
+		   по этому же ключу (см. menu.d), поэтому после сохранения нужна
+		   перезагрузка страницы - LuCI перечитает дерево меню. */
+
+		o = exp.option(form.Flag, 'align_enabled', _('Юстировка'),
+			_('Живые метрики сигнала и звук для настройки внешней антенны.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		/* ОДНА секция «Виджеты» - всё внутри неё: Приоритет интернета, Пинг,
+		   Службы, Тест скорости. У Пинга/Служб карточки вложены ещё глубже
+		   (form.SectionValue), настройки видны только при включённой галочке. */
+
+		/* База метрик аплинков (issue #12). По умолчанию 100, 110, 120... -
+		   туннелям (wireguard, zerotier) остаётся весь диапазон 1-99. Галочка
+		   возвращает прежние 10, 20, 30... - соглашение mwan3. Читают её
+		   netpri.sh (_metric_base) и mkiface.sh (метрика нового интерфейса).
+		   Без depends: метрики аплинков существуют и при выключенном виджете. */
+		o = exp.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
+			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		/* МГНОВЕННОЕ ПРИМЕНЕНИЕ (решение владельца): любое изменение на
+		   странице сохраняется и применяется само - кнопки Сохранить/Применить
+		   внизу убраны (handle* = null ниже). Слушаем change (инпуты, галки,
+		   списки) и клики по «+»/«удалить» вложенных таблиц; сохранение
+		   дебаунсится, чтобы серия правок ушла одним commit. */
+		var _asT = null;
+		var autoSave = function() {
+			if (_asT) { window.clearTimeout(_asT); }
+			_asT = window.setTimeout(function() {
+				m.save(null, true).catch(function() {});
+			}, 400);
+		};
+
 		return Promise.resolve(m.render()).then(function(formNode) {
+			/* ВСЕ пути изменения значения, а не только нативный change:
+			   кастомные виджеты LuCI (выпадающие списки ListValue - сервис,
+			   фон карточек, режим пинга) нативного change НЕ шлют - они
+			   диспатчат свои widget-change/cbi-dropdown-change. Без этих
+			   двух подписок выбор в списках не сохранялся вовсе (живой отчёт
+			   владельца 16.08.2026: «виджеты и сервисы не применяются»). */
+			formNode.addEventListener('change', autoSave);
+			formNode.addEventListener('widget-change', autoSave);
+			formNode.addEventListener('cbi-dropdown-change', autoSave);
+			formNode.addEventListener('click', function(ev) {
+				if (ev.target.closest && ev.target.closest('.cbi-button-add, .cbi-button-remove')) { autoSave(); }
+			});
 			/* Версию установленной базы APN показываем СРАЗУ (чтение файла, без
 			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */
 			apnVersion();
@@ -560,5 +615,9 @@ return view.extend({
 				E('div', { 'class': 'tg-modem-form' }, [ formNode ])
 			]);
 		});
-	}
+	},
+
+	handleSaveApply: null,
+	handleSave: null,
+	handleReset: null
 });

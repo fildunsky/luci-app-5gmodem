@@ -4376,7 +4376,7 @@ msgid "Switching to the modem…"
 msgstr "Переключение на модем…"
 
 msgid "mwan3-compatible metrics"
-msgstr "Метрики, совместимые с mwan3"
+msgstr "Совместимость с mwan3"
 
 msgid ""
 "Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they "
@@ -4643,3 +4643,201 @@ msgstr "Через пробел, напр. «1.1.1.1 8.8.8.8»."
 
 msgid "QMI Cellular (raw-ip)"
 msgstr "Сотовый QMI (raw-ip)"
+
+msgid "Checking the modem…"
+msgstr "Проверяю модем…"
+
+msgid "Internet works through the modem"
+msgstr "Интернет работает через модем"
+
+msgid "Registered on the network, connecting…"
+msgstr "В сети оператора, подключаюсь…"
+
+msgid "SMS only — no data connection"
+msgstr "Только SMS — передача данных не работает"
+
+msgid "No modem found"
+msgstr "Модем не найден"
+
+msgid "Plug the modem into USB — setup is automatic"
+msgstr "Вставьте модем в USB — настройка произойдёт сама"
+
+msgid "The modem is not registered on the network"
+msgstr "Модем не зарегистрирован в сети"
+
+msgid "Check the SIM card and the antennas"
+msgstr "Проверьте SIM-карту и антенны"
+
+msgid "Signal: excellent"
+msgstr "Сигнал: отличный"
+
+msgid "Signal: fair"
+msgstr "Сигнал: средний"
+
+msgid "Signal: weak"
+msgstr "Сигнал: слабый"
+
+msgid "Try moving the router closer to a window or connecting an external antenna"
+msgstr "Попробуйте переставить роутер ближе к окну или подключить внешнюю антенну"
+
+msgid "Expert mode"
+msgstr "Режим эксперта"
+
+msgid "Simple view"
+msgstr "Простой вид"
+
+msgid "Traffic"
+msgstr "Трафик"
+
+msgid "Internet is working"
+msgstr "Интернет работает"
+
+msgid "No network"
+msgstr "Нет сети"
+
+msgid "Show only the essentials, or the full expert view"
+msgstr "Показывать только главное или полный экспертный вид"
+
+msgid "Simple view of the Network page"
+msgstr "Простой вид страницы «Сеть»"
+
+msgid "Show only the essentials: modem name, signal, status lamp and the restart button. Expert blocks (bands, cell info, TTL, interface details) are hidden. Off by default."
+msgstr "Показывать только главное: имя модема, сигнал, лампочку статуса и кнопку перезагрузки. Экспертные блоки (диапазоны, информация о соте, TTL, детали интерфейса) скрываются. По умолчанию выключено."
+
+msgid "Main"
+msgstr "Основные"
+
+msgid "Everyday options of the Network page and modem behaviour"
+msgstr "Повседневные настройки страницы «Сеть» и поведения модема"
+
+msgid "Appearance"
+msgstr "Внешний вид"
+
+msgid "Cards in the widgets row on the Network page. All are on by default."
+msgstr "Карточки в ряду виджетов на странице «Сеть». По умолчанию включены все."
+
+msgid "For experts"
+msgstr "Для экспертов"
+
+msgid "Rarely needed options. The defaults are fine for most setups."
+msgstr "Редко нужные настройки. Для большинства установок подходят значения по умолчанию."
+
+msgid "Signal strength received from the cell tower. Around -80 dBm is excellent, below -110 dBm is poor."
+msgstr "Уровень сигнала от вышки. Около −80 дБм — отлично, ниже −110 дБм — плохо."
+
+msgid "Signal quality. Around -10 dB is good, below -15 dB is poor."
+msgstr "Качество сигнала. Около −10 дБ — хорошо, ниже −15 дБ — плохо."
+
+msgid "Signal-to-noise ratio. Above 20 dB is excellent, below 0 dB is poor."
+msgstr "Отношение сигнал/шум. Выше 20 дБ — отлично, ниже 0 дБ — плохо."
+
+msgid "Total power received in the channel, including noise and interference."
+msgstr "Суммарная мощность в канале, включая шум и помехи."
+
+msgid "Signal quality index reported by the modem: 0-31, higher is better."
+msgstr "Индекс качества сигнала от модема: 0–31, больше — лучше."
+
+msgid "Tracking area code: a group of cells of the operator network."
+msgstr "Код зоны отслеживания — группа сот в сети оператора."
+
+msgid "Location area code in 2G/3G networks."
+msgstr "Код зоны в сетях 2G/3G."
+
+msgid "Identifier of the cell the modem is connected to."
+msgstr "Номер соты, к которой сейчас подключён модем."
+
+msgid "Number of the base station. Used to find it on coverage maps."
+msgstr "Номер базовой станции. По нему её можно найти на картах покрытия."
+
+msgid "Country code and operator code."
+msgstr "Код страны и код оператора."
+
+msgid "Physical cell identity on the radio interface."
+msgstr "Физический номер соты в радиоэфире."
+
+msgid "Number of the LTE radio channel (frequency)."
+msgstr "Номер частотного канала LTE."
+
+msgid "How much the signal weakens on its way from the tower."
+msgstr "Насколько сигнал ослабевает по пути от вышки."
+
+msgid "Transmit power of the modem right now."
+msgstr "Мощность передатчика модема прямо сейчас."
+
+msgid "Channel quality estimated by the modem: 0-15, higher is better."
+msgstr "Оценка качества канала модемом: 0–15, больше — лучше."
+
+msgid "LTE speed category of the modem."
+msgstr "Категория скорости модема в LTE."
+
+msgid "Voice calls over the LTE network, without falling back to 3G."
+msgstr "Голосовые звонки прямо через LTE, без перехода в 3G."
+
+msgid "LTE frequency band."
+msgstr "Частотный диапазон LTE."
+
+msgid "Channel bandwidth: wider is faster."
+msgstr "Ширина полосы канала: шире — быстрее."
+
+msgid "Number of parallel data streams."
+msgstr "Число параллельных потоков данных."
+
+msgid "Modulation: higher QAM means faster data."
+msgstr "Модуляция: чем выше QAM, тем быстрее передача."
+
+msgid "Component carrier: PCC is the main one, SCC are added by carrier aggregation."
+msgstr "Компонент агрегации: PCC — основная несущая, SCC — добавленные."
+
+msgid "Живые метрики сигнала и звук для настройки внешней антенны."
+msgstr "Живые метрики сигнала и звук для настройки внешней антенны."
+
+msgid "Collecting data from the modem…"
+msgstr "Собираю данные с модема…"
+
+msgid "Weak signal — try moving the router closer to a window or connecting an external antenna"
+msgstr "Слабый сигнал — попробуйте переставить роутер ближе к окну или подключить внешнюю антенну"
+
+msgid "Antenna alignment"
+msgstr "Юстировка"
+
+msgid "Internet not working?"
+msgstr "Интернет не работает?"
+
+msgid "Check and fix"
+msgstr "Проверить и починить"
+
+msgid "Checking the connection…"
+msgstr "Проверяю подключение…"
+
+msgid "The connection is fine"
+msgstr "Подключение в порядке"
+
+msgid "If sites still do not open, check the SIM balance and tariff"
+msgstr "Если сайты всё равно не открываются — проверьте баланс и тариф SIM-карты"
+
+msgid "No connection"
+msgstr "Подключения нет"
+
+msgid "Reconnecting…"
+msgstr "Переподключаюсь…"
+
+msgid "Done — the internet is back"
+msgstr "Готово — интернет восстановлен"
+
+msgid "Did not help"
+msgstr "Не помогло"
+
+msgid "Restarting the modem…"
+msgstr "Перезагружаю модем…"
+
+msgid "Power-cycling the modem over USB…"
+msgstr "Сбрасываю модем по питанию USB…"
+
+msgid "Automatic fixes did not help — check the SIM card, the antennas and the balance"
+msgstr "Автоматически починить не удалось — проверьте SIM-карту, антенны и баланс"
+
+msgid "Read eSIM (drops the connection briefly)"
+msgstr "Прочитать eSIM (связь ненадолго прервётся)"
+
+msgid "This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window."
+msgstr "Этим модемом управляет ModemManager. Чтение и изменение eSIM-профилей временно забирает у него канал управления: интернет через модем прерывается примерно на 1–2 минуты и восстанавливается сам. Несколько операций подряд идут в одно окно захвата."

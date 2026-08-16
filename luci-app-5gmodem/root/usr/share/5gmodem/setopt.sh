@@ -72,6 +72,27 @@ dnsfb)
 	uci -q commit network
 	ubus call network reload >/dev/null 2>&1
 	;;
+# simpleview <0|1> - «Простой вид» страницы Сеть (тумблер под карточкой и галка
+# в Настройках пишут один и тот же ключ).
+simpleview)
+	uci -q set "5gmodem.@5gmodem[0].simple_view=$(_norm01 "$2")"
+	uci -q commit 5gmodem
+	;;
+# reconnect - передозвон интерфейса активного модема («кнопка-доктор», ступень 1).
+# В фоне с отвязкой дескрипторов: rpcd ждёт EOF, а ifup может занять десятки
+# секунд (та же грабля, что в reboot_modem power).
+reconnect)
+	_ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_ifn" ] || exit 0
+	( ifdown "$_ifn"; sleep 2; ifup "$_ifn" ) >/dev/null 2>&1 </dev/null &
+	;;
+# applyset - мгновенные Настройки: страница сохраняет без кнопки «Применить».
+# Staged-дельты rpcd лежат в общем /tmp/.uci (uci -c не песочница), поэтому
+# обычный commit их и подхватывает; кэш меню сбрасываем ради гейта вкладок.
+applyset)
+	uci -q commit 5gmodem
+	rm -f /tmp/luci-indexcache* 2>/dev/null
+	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
 # смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):
 # дерево меню кэшируется по mtime файлов меню, а НЕ по uci, поэтому переключение
@@ -80,7 +101,7 @@ menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1>|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|menuflush}" >&2
 	exit 1
 	;;
 esac

@@ -219,6 +219,59 @@ _mm_owns_channel() {
 		| jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ]
 }
 
+# --- ВРЕМЕННЫЙ ЗАХВАТ КАНАЛА У MODEMMANAGER (план 16.08.2026, путь A) ---------
+#
+# Модем под MM (T99W175/MV31-W и родня по MBIM): канал cdc-wdm принадлежит MM,
+# и раньше eSIM здесь была закрыта совсем (mm_owns). Теперь на время операций
+# канал берётся взаймы: `mmcli --inhibit-device` держится ФОНОВЫМ процессом
+# (инхибит жив, пока жив процесс; на kill MM сам пересобирает модем и netifd
+# передозванивает). Захват ОДИН на пачку операций: сторож снимает инхибит после
+# 90 с без eSIM-обращений - список+включение+обновление идут в одно окно, а не
+# по обрыву связи на каждый вызов. Цена захвата - ~1-2 минуты без интернета
+# через модем; UI предупреждает и просит явное согласие.
+_ESIM_INH_PID=/tmp/5gmodem_esim_mminh.pid
+_ESIM_INH_T=/tmp/5gmodem_esim_mminh.t
+_mm_inh_held() { [ -f "$_ESIM_INH_PID" ] && kill -0 "$(cat "$_ESIM_INH_PID" 2>/dev/null)" 2>/dev/null; }
+_mm_inh_touch() { cut -d. -f1 /proc/uptime > "$_ESIM_INH_T" 2>/dev/null; }
+_mm_esim_take() {
+	_mm_inh_held && { _mm_inh_touch; return 0; }
+	_ti_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	# MM мог как раз пере-пробить модем (например, сразу после прошлого
+	# захвата) - ждём появления индекса, как в band-takeover.
+	_ti_idx=""; _ti_i=0
+	while [ "$_ti_i" -lt 20 ]; do
+		_ti_idx=$("$RES/modemswitch.sh" mmindex "$_ti_ap" 2>/dev/null)
+		[ -n "$_ti_idx" ] && break
+		sleep 3; _ti_i=$((_ti_i + 1))
+	done
+	[ -n "$_ti_idx" ] || return 1
+	mmcli -m "$_ti_idx" --inhibit-device >/dev/null 2>&1 </dev/null &
+	echo $! > "$_ESIM_INH_PID"
+	_mm_inh_touch
+	# ждём, пока MM реально отпустит устройство (модем пропадает из mmcli)
+	_ti_i=0
+	while [ "$_ti_i" -lt 15 ]; do
+		mmcli -m "$_ti_idx" >/dev/null 2>&1 || break
+		sleep 1; _ti_i=$((_ti_i + 1))
+	done
+	logger -t 5gmodem "esim: канал взят у MM (инхибит $_ti_ap) - вернём после 90 c простоя eSIM"
+	# СТОРОЖ-ВОЗВРАЩАТЕЛЬ. Отвязка stdio обязательна (rpcd ждёт EOF).
+	(
+		while :; do
+			sleep 15
+			_wd_p=$(cat "$_ESIM_INH_PID" 2>/dev/null)
+			{ [ -n "$_wd_p" ] && kill -0 "$_wd_p" 2>/dev/null; } || exit 0
+			_wd_now=$(cut -d. -f1 /proc/uptime)
+			_wd_t=$(cat "$_ESIM_INH_T" 2>/dev/null || echo 0)
+			[ $((_wd_now - _wd_t)) -ge 90 ] || continue
+			kill "$_wd_p" 2>/dev/null
+			rm -f "$_ESIM_INH_PID" "$_ESIM_INH_T"
+			logger -t 5gmodem "esim: инхибит снят (простой) - MM пересобирает модем, интерфейс поднимется сам"
+			exit 0
+		done
+	) >/dev/null 2>&1 </dev/null &
+}
+
 # cdc-wdm управляющего узла активного модема (для qmi/mbim-бэкендов lpac).
 # УЗЕЛ ДОЛЖЕН БЫТЬ ИМЕННО КАНАЛОМ УПРАВЛЕНИЯ, А НЕ ЛЮБЫМ СИМВОЛЬНЫМ УСТРОЙСТВОМ.
 #
@@ -1372,8 +1425,12 @@ status-probe)
 			# Модем под MM - канал занят, проба ЗАПРЕЩЕНА (см. _mm_owns_channel:
 			# на T99W175 второй хозяин канала ронял модем в ребут). Ответ не
 			# кэшируем: состояние меняется галкой mm_exclude.
-			if _mm_owns_channel; then
-				echo '{"available":0,"active":0,"reason":"mm_owns"}'
+			if _mm_owns_channel && ! _mm_inh_held; then
+				# Чип НЕ трогаем (канал у MM), но вкладку не хороним: захват
+				# возможен - отдаём takeover-флаг, UI спросит согласие на
+				# кратковременный обрыв связи. Активность eSIM-слота решает UI
+				# по данным слотов. Не кэшируем.
+				echo '{"available":1,"active":1,"takeover":1}'
 				exit 0
 			fi
 			# Qualcomm SDX55 (T99W175/MV31-W/DW5930e) и прочие cdc-wdm-модемы: eUICC
@@ -1677,9 +1734,14 @@ esac
 # _mm_owns_channel; на T99W175 это роняло модем). Все чиповые вербы ниже
 # получают честную ошибку вместо гонки за чужой канал.
 if wdm_backend && _mm_owns_channel; then
-	err "mm_owns"
-	exit 0
+	# Захват канала на время операции (см. _mm_esim_take): отказ только если
+	# MM так и не показал модем (переэнумерация затянулась).
+	if ! _mm_esim_take; then
+		err "mm_owns"
+		exit 0
+	fi
 fi
+_mm_inh_held && _mm_inh_touch
 
 # AT-only преамбул: для бэкендов по cdc-wdm (mbim/qmi/uqmi) eUICC достаётся не по
 # tty, порт/esim_active/каналы не нужны (иначе ложное "no AT port"). run_lpac и

@@ -465,6 +465,44 @@ function SIMdata(data) {
    строка = {id, text(json)} либо {id, render(json, el, c4)} для спец-случаев
    (кнопки 4cells), видимость - единым правилом setRowVisible («показанное не
    прячем» - защита от прыжков высоты, см. комментарий там). */
+/* ==== ГЛОССАРИЙ ТЕРМИНОВ (UX-аудит, P5) ====================================
+   Одно предложение по-человечески у каждого инженерного термина: пунктирное
+   подчёркивание + курсор помощи + title. Гику не мешает, среднему пользователю
+   отвечает на «что это и что мне с этим». Словарь ленивый: строится при первом
+   вызове, когда переводы уже загружены. */
+var _GLOSS = null;
+function gl(term) {
+	if (!_GLOSS) {
+		_GLOSS = {
+			'RSRP': _('Signal strength received from the cell tower. Around -80 dBm is excellent, below -110 dBm is poor.'),
+			'RSRQ': _('Signal quality. Around -10 dB is good, below -15 dB is poor.'),
+			'SINR': _('Signal-to-noise ratio. Above 20 dB is excellent, below 0 dB is poor.'),
+			'RSSI': _('Total power received in the channel, including noise and interference.'),
+			'CSQ': _('Signal quality index reported by the modem: 0-31, higher is better.'),
+			'TAC': _('Tracking area code: a group of cells of the operator network.'),
+			'LAC': _('Location area code in 2G/3G networks.'),
+			'Cell ID': _('Identifier of the cell the modem is connected to.'),
+			'eNB ID': _('Number of the base station. Used to find it on coverage maps.'),
+			'MCC MNC': _('Country code and operator code.'),
+			'PCI': _('Physical cell identity on the radio interface.'),
+			'EARFCN': _('Number of the LTE radio channel (frequency).'),
+			'Path loss': _('How much the signal weakens on its way from the tower.'),
+			'TX power': _('Transmit power of the modem right now.'),
+			'CQI': _('Channel quality estimated by the modem: 0-15, higher is better.'),
+			'UE category': _('LTE speed category of the modem.'),
+			'VoLTE': _('Voice calls over the LTE network, without falling back to 3G.'),
+			'Band': _('LTE frequency band.'),
+			'BW': _('Channel bandwidth: wider is faster.'),
+			'MIMO': _('Number of parallel data streams.'),
+			'Mod': _('Modulation: higher QAM means faster data.'),
+			'CC': _('Component carrier: PCC is the main one, SCC are added by carrier aggregation.')
+		};
+	}
+	var t = _GLOSS[term];
+	var lbl = _(term);
+	return t ? E('span', { 'class': 'tg-gloss', 'title': t }, lbl) : lbl;
+}
+
 var CELL_ROWS = [
 	{ id: 'mccmnc', text: function(j) {
 		var m = mutil.cellVal(j.operator_mcc), n = mutil.cellVal(j.operator_mnc);
@@ -1666,9 +1704,9 @@ function fillAntPorts(raw, rxdiv) {
 		tbl.innerHTML = '';
 		tbl.appendChild(E('tr', { 'class': 'tr table-titles' }, [
 			E('th', { 'class': 'th left' }, _('Antenna port')),
-			E('th', { 'class': 'th left' }, _('RSRP')),
-			E('th', { 'class': 'th left' }, _('RSRQ')),
-		].concat(hasRssi ? [ E('th', { 'class': 'th left' }, _('RSSI')) ] : []).concat([
+			E('th', { 'class': 'th left' }, [ gl('RSRP') ]),
+			E('th', { 'class': 'th left' }, [ gl('RSRQ') ]),
+		].concat(hasRssi ? [ E('th', { 'class': 'th left' }, [ gl('RSSI') ]) ] : []).concat([
 			E('th', { 'class': 'th left' }, _('State'))
 		])));
 		rows.forEach(function(l) {
@@ -1804,7 +1842,11 @@ function buildNoModemBlock() {
 		/* Текст в <span>: на нём ограничиваем ширину длинного пояснения (см. css),
 		   сам блок остаётся flex-контейнером и центрирует его. */
 		E('div', { 'class': 'tgm-nomodem', 'id': 'modem-none-text' }, [
-			E('span', {}, _('No modem connected'))
+			E('span', {}, [
+				_('No modem connected'),
+				E('div', { 'style': 'font-size:85%; opacity:.75; margin-top:.4em; font-weight:normal' },
+					_('Plug the modem into USB — setup is automatic'))
+			])
 		])
 	]);
 }
@@ -1822,7 +1864,234 @@ function noModemRemembered() {
 	try { return window.localStorage.getItem('tgm-nomodem') === '1'; } catch (e) { return false; }
 }
 
+/* ==== ПРОСТОЙ РЕЖИМ (прототип по UX-аудиту, P1/P3) ==========================
+   НЕ новая карточка, а ТА ЖЕ верхняя карточка «Модем» без гик-хвоста: имя
+   модема, наша иконка сигнала, SIM-иконка оператора, 4G-строка, IP и трафик
+   остаются ровно как есть. Прячутся таблица режимов/диапазонов/локов (кроме
+   строки перезагрузки с её штатными «опасными» кнопками), блоки соты/частот/TTL
+   и ряд приоритетов. Добавляется одна строка статуса с лампочкой в стиле
+   netpri-svcdot. Скрытие - классом на body + CSS (!important), чтобы не трогать
+   инлайновые display, которыми управляет динамика страницы. Переключатель - в
+   localStorage браузера: бэкенд и uci не тронуты. */
+var _simpleOverride = null;
+var _advSticky = false;
+var _lastJson = null;
+var _docRun = false;
+function simpleOn() {
+	if (_simpleOverride !== null) { return _simpleOverride; }
+	return uci.get('5gmodem', '@5gmodem[0]', 'simple_view') === '1';
+}
+function applySimpleVis() {
+	var on = simpleOn();
+	document.body.classList.toggle('sc-simple', on);
+	var cb = document.getElementById('sc-switch');
+	if (cb) { cb.classList.toggle('on', on); }
+}
+function buildSimpleUI() {
+	if (document.getElementById('sc-style')) { applySimpleVis(); return; }
+	var mib = document.getElementById('modem-info-block');
+	if (!mib || !mib.parentNode) { return; }
+	/* Класс на body + !important: инлайновыми display управляет динамика
+	   страницы (loadBands, setRowVisible...), и прямое их переписывание при
+	   выходе из режима вернуло бы НЕ то состояние. Класс снялся - и всё
+	   ровно как было. */
+	document.head.appendChild(E('style', { 'id': 'sc-style' },
+		'body.sc-simple [data-blk="cell"], body.sc-simple [data-blk="freq"],' +
+		'body.sc-simple [data-blk="ttl"] { display:none !important; }' +
+		'body.sc-simple #modem-info-block table.table tr { display:none !important; }' +
+		'body.sc-simple #modem-info-block table.table tr#rebootn { display:table-row !important; }' +
+		'#doctorn { display:none; }' +
+		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
+		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
+		'body.sc-simple #apnline, body.sc-simple #stale-mark { display:none !important; }' +
+		'body.sc-simple #mode .tginfo-freq:not(.tginfo-dist) { display:none !important; }' +
+		'body.sc-simple #modemname { border-bottom:none !important; box-shadow:none !important; }' +
+		'#sc-line { display:none; }' +
+		'body.sc-simple #sc-line { display:inline-flex; }' +
+		'body:not(.sc-simple) #sc-advice { display:none !important; }' +
+		'#view { transition: opacity .18s ease; }' +
+		'#view.sc-fading { opacity: 0; }' +
+		'@media (prefers-reduced-motion: reduce) { #view { transition: none; } }'));
+	/* Статус с лампочкой - в ПРАВОМ углу заголовка карточки (то место, где в
+	   эксперте живут чип протокола и vid:pid; в простом режиме они скрыты).
+	   Тот же приём, что у чипа: float:right, свой маленький line-height и
+	   вертикальная поправка - иначе строка наследует большой line-height h3. */
+	var head = document.getElementById('modemname');
+	if (head) {
+		head.appendChild(E('span', { 'id': 'sc-line',
+			'style': 'float:right; align-items:center; gap:.45em; font-size:.78rem;'
+				+ 'font-weight:normal; font-family:-apple-system,system-ui,sans-serif;'
+				+ 'line-height:1.4; position:relative; top:.35em; margin-left:.8em;' }, [
+			E('span', { 'id': 'sc-lamp', 'class': 'netpri-svcdot unknown' }),
+			E('span', { 'id': 'sc-text' }, _('Checking the modem…'))
+		]));
+	}
+	/* Совет при слабом сигнале (UX-аудит, D) - только в простом режиме и только
+	   когда модем зарегистрирован: новичку нужен следующий шаг, а не диагноз.
+	   Появляется под шапкой карточки, гаснет вместе с причиной. */
+	var rb = document.getElementById('rebootn');
+	if (rb && rb.parentNode && !document.getElementById('doctorn')) {
+		rb.parentNode.insertBefore(E('tr', { 'id': 'doctorn', 'class': 'tr' }, [
+			E('td', { 'class': 'td left', 'width': '33%' }, [ _('Internet not working?') ]),
+			E('td', { 'class': 'td left' }, [
+				E('button', { 'class': 'btn cbi-button cbi-button-action',
+					'click': function(ev) { runDoctor(ev.target); } }, _('Check and fix')),
+				E('div', { 'id': 'doctor-log',
+					'style': 'display:none; margin-top:.5em; font-size:92%; line-height:1.75; opacity:.9' })
+			])
+		]), rb.nextSibling);
+	}
+	var gen = mib.querySelector('.tginfo-general');
+	if (gen) {
+		gen.parentNode.insertBefore(E('div', { 'id': 'sc-advice',
+			'style': 'display:none; font-size:90%; opacity:.8; margin:.5em 0 .2em' }), gen.nextSibling);
+	}
+	/* Тумблер режима - ПОД карточкой, вне блока, справа. Наш анимированный
+	   переключатель со страницы «Кнопки» (.btnsw: ползунок, transition,
+	   акцент темы; modem.css уже подключён через modemtabs). Включён =
+	   «Простой вид». Пишется сразу в uci (setopt.sh simpleview), сам переход
+	   режимов - мягким кроссфейдом контента. */
+	mib.parentNode.insertBefore(E('div', {
+		'style': 'display:flex; justify-content:flex-end; align-items:center; gap:.5em;'
+			+ 'margin:-.5em .2em .6em 0; font-size:90%; opacity:.85; cursor:pointer; user-select:none',
+		'click': function() {
+			_simpleOverride = !simpleOn();
+			fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'simpleview', _simpleOverride ? '1' : '0' ]).catch(function() {});
+			/* Кроссфейд: погасить контент, переключить класс, проявить. При
+			   prefers-reduced-motion transition отключён CSS-ом - выйдет мгновенно. */
+			var host = document.getElementById('view') || document.body;
+			host.classList.add('sc-fading');
+			window.setTimeout(function() {
+				applySimpleVis();
+				window.setTimeout(function() { host.classList.remove('sc-fading'); }, 30);
+			}, 180);
+		}
+	}, [
+		E('span', { 'id': 'sc-switch', 'class': 'btnsw btnsw-sm' }),
+		E('span', {}, _('Simple view'))
+	]), mib.nextSibling);
+	applySimpleVis();
+}
+function updateSimpleLine(json) {
+	var lamp = document.getElementById('sc-lamp');
+	var text = document.getElementById('sc-text');
+	if (!lamp || !text || !simpleOn()) { return; }
+	var reg = String(json.registration || '');
+	var regOk = (reg === '1' || reg === '5');
+	var hasIp = !!(json.ipaddr && json.ipaddr !== '-');
+	var st, txt;
+	if (regOk && hasIp)   { st = 'on';      txt = _('Internet is working'); }
+	else if (regOk)       { st = 'unknown'; txt = _('Registered on the network, connecting…'); }
+	else if (reg === '7') { st = 'unknown'; txt = _('SMS only — no data connection'); }
+	else if (!json.modem || json.modem === '-') { st = 'off'; txt = _('No modem found') + ' — ' + _('Plug the modem into USB — setup is automatic'); }
+	else { st = 'off'; txt = _('No network') + ' — ' + _('Check the SIM card and the antennas'); }
+	if (json.error === 'busy' && !regOk && !hasIp) {
+		st = 'unknown'; txt = _('Collecting data from the modem…');
+	}
+	lamp.className = 'netpri-svcdot ' + st;
+	text.textContent = txt;
+	var adv = document.getElementById('sc-advice');
+	if (adv) {
+		/* «Слабо» - согласованно с тем, что ВИДИТ пользователь (иконка = CSQ%):
+		   RSRP <= -110 или сигнал <= 35%. Порог caQuality (-100) тут не годится:
+		   в городе RSRP -102...-105 обычное дело, и совет горел бы вечно при
+		   бодрой иконке 70% (живой случай на стенде 16.08.2026). Гистерезис:
+		   скрываем только при заметно лучшем сигнале, чтобы на колебаниях
+		   -109..-111 совет не мигал. */
+		var _rs = parseFloat(json.rsrp);
+		var _pc = parseInt(json.signal, 10);
+		var _bad = (!isNaN(_rs) && _rs <= -110) || (!isNaN(_pc) && _pc <= 35);
+		var _good = (isNaN(_rs) || _rs >= -106) && (isNaN(_pc) || _pc >= 45);
+		if (regOk && _bad) { _advSticky = true; }
+		else if (!regOk || _good) { _advSticky = false; }
+		if (_advSticky) {
+			if (!adv.firstChild) {
+				adv.appendChild(document.createTextNode(
+					_('Weak signal — try moving the router closer to a window or connecting an external antenna') + ' '));
+				if (uci.get('5gmodem', '@5gmodem[0]', 'align_enabled') === '1') {
+					adv.appendChild(E('a', { 'href': L.url('admin/modem/5gmodem/align') }, _('Antenna alignment')));
+				}
+			}
+			adv.style.display = '';
+		} else {
+			adv.style.display = 'none';
+		}
+	}
+}
+
+
+/* ==== «КНОПКА-ДОКТОР» (UX-аудит, C) ========================================
+   «Проверить и починить» в простом виде: лестница из уже существующих
+   granted-механик (передозвон -> мягкая перезагрузка -> USB-сброс) с журналом
+   по-русски. Успех сверяется по живым тикам метрик (_lastJson): регистрация
+   есть И адрес есть. Новых бэкендов нет - только verb reconnect в setopt. */
+function doctorOk() {
+	var j = _lastJson || {};
+	var reg = String(j.registration || '');
+	return (reg === '1' || reg === '5') && !!(j.ipaddr && j.ipaddr !== '-');
+}
+function doctorWait(secs) {
+	return new Promise(function(res) {
+		var t0 = Date.now();
+		var iv = window.setInterval(function() {
+			if (doctorOk()) { window.clearInterval(iv); res(true); }
+			else if (Date.now() - t0 > secs * 1000) { window.clearInterval(iv); res(false); }
+		}, 1500);
+	});
+}
+function runDoctor(btn) {
+	if (_docRun) { return; }
+	_docRun = true; btn.disabled = true;
+	var log = document.getElementById('doctor-log');
+	log.innerHTML = ''; log.style.display = '';
+	var line = function(t) { var el = E('div', {}, t); log.appendChild(el); return el; };
+	var mark = function(el, ok, t) { el.textContent = (ok ? '\u2713 ' : '\u2717 ') + t; };
+	var finish = function() { _docRun = false; btn.disabled = false; };
+	var giveup = function() {
+		line(_('Automatic fixes did not help — check the SIM card, the antennas and the balance'));
+		finish();
+	};
+	var l1 = line(_('Checking the connection…'));
+	window.setTimeout(function() {
+	if (doctorOk()) {
+		mark(l1, true, _('The connection is fine'));
+		line(_('If sites still do not open, check the SIM balance and tariff'));
+		finish(); return;
+	}
+	mark(l1, false, _('No connection'));
+	var l2 = line(_('Reconnecting…'));
+	fs.exec('/usr/share/5gmodem/setopt.sh', [ 'reconnect' ]).then(function() {
+		return doctorWait(35);
+	}).then(function(ok) {
+		if (ok) { mark(l2, true, _('Done — the internet is back')); finish(); return; }
+		mark(l2, false, _('Did not help'));
+		var l3 = line(_('Restarting the modem…'));
+		return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'soft' ]).then(function() {
+			return doctorWait(80);
+		}).then(function(ok2) {
+			if (ok2) { mark(l3, true, _('Done — the internet is back')); finish(); return; }
+			mark(l3, false, _('Did not help'));
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/reboot_modem.sh', [ 'hasusbpower' ]), '').then(function(out) {
+				var m = ''; try { m = (JSON.parse(out || '{}').method) || ''; } catch (e) {}
+				if (!m) { giveup(); return; }
+				var l4 = line(_('Power-cycling the modem over USB…'));
+				return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'usbpower' ]).then(function() {
+					return doctorWait(120);
+				}).then(function(ok3) {
+					if (ok3) { mark(l4, true, _('Done — the internet is back')); finish(); }
+					else { mark(l4, false, _('Did not help')); giveup(); }
+				});
+			});
+		});
+	}).catch(finish);
+	}, 400);
+}
+
+
 function applyMetrics(json) {
+	_lastJson = json;
+	updateSimpleLine(json);
 					/* СНИМОК ЧУЖОГО МОДЕМА НЕ ПРИМЕНЯЕМ.
 					   Метрики отдаёт активный модем из конфига, а страница
 					   показывает конкретный. Пока переключение вкладки не
@@ -2174,7 +2443,8 @@ function applyMetrics(json) {
 							view.innerHTML = mtext
 								.replace(/\b([Bn])(\d+)\b/g,
 									'<span class="btn cbi-button cbi-button-action important tginfo-band">$1$2</span>')
-								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>');
+								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>')
+								.replace(/\|/g, '<span style="font-weight:normal;opacity:.65">|</span>');
 								/* Расстояние до соты по Timing Advance - в конец строки агрегации,
 								   тем же приглушённым видом, что и частоты «(2100 MHz)» (tginfo-freq).
 								   Только когда QMI отдал TA (RRC-connected при трафике). */
@@ -2182,7 +2452,7 @@ function applyMetrics(json) {
 								if (_bsd > 0) {
 									var _bskm = (_bsd >= 1000) ? ('~' + (_bsd / 1000).toFixed(1) + 'km')
 									                           : ('~' + _bsd + 'm');
-									view.innerHTML += ' <span class="tginfo-freq">' + _bskm + '</span>';
+									view.innerHTML += ' <span class="tginfo-freq tginfo-dist">' + _bskm + '</span>';
 								}
 						}
 						else if (!view.textContent || !view.textContent.trim()) {
@@ -3456,7 +3726,7 @@ simDialog: baseclass.extend({
 					]),
 				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
 				   modemmanager), независимо от доступности управления бендами. */
-				E('tr', { 'class': 'tr' }, [
+				E('tr', { 'class': 'tr', 'id': 'rebootn' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Restart modem') ]),
 					E('td', { 'class': 'td left tginfo-modesw' }, [
 						E('button', {
@@ -3513,19 +3783,19 @@ simDialog: baseclass.extend({
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [
 				E('tr', { 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('MCC MNC')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('MCC MNC') ]),
 					E('td', { 'class': 'td left', 'id': 'mccmnc' }, [ '-' ]),
 					]),
 				E('tr', { 'class': 'tr', 'id': 'cidn' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell ID')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('Cell ID') ]),
 					E('td', { 'class': 'td left', 'id': 'cid' }, [ '-' ]),
 					]),
 				E('tr', { 'class': 'tr', 'id': 'tacn' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('TAC')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('TAC') ]),
 					E('td', { 'class': 'td left', 'id': 'tac' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'lacn', 'class': 'tr' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('LAC')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('LAC') ]),
 					E('td', { 'class': 'td left', 'id': 'lac' }, [ '-' ]),
 					]),
 				/* Расширенные поля соты. Приходят не от всех модемов (у Meig - из
@@ -3535,41 +3805,41 @@ simDialog: baseclass.extend({
 				   данные когда-либо были, больше не скрывается (см. setRowVisible). */
 				E('tr', { 'id': 'enbidn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-						_('eNB ID'),
+						gl('eNB ID'),
 						E('div', { 'class': 'tg-sublabel' }, [ _('(base station)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'enbid' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'pathlossn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-						_('Path loss'),
+						gl('Path loss'),
 						E('div', { 'class': 'tg-sublabel' }, [ _('(signal attenuation)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'pathloss' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'txpowern', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-						_('TX power'),
+						gl('TX power'),
 						E('div', { 'class': 'tg-sublabel' }, [ _('(modem transmit level)') ]),
 					]),
 					E('td', { 'class': 'td left', 'id': 'txpower' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'cqin', 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('CQI')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('CQI') ]),
 					E('td', { 'class': 'td left', 'id': 'cqi' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'uecatn', 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('UE category')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('UE category') ]),
 					E('td', { 'class': 'td left', 'id': 'uecat' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'volten', 'class': 'tr', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('VoLTE')]),
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('VoLTE') ]),
 					E('td', { 'class': 'td left', 'id': 'volte' }, [ '-' ]),
 					]),
 
 				E('tr', { 'id': 'csqn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-					_('CSQ'),
+					gl('CSQ'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal Strength)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
@@ -3581,7 +3851,7 @@ simDialog: baseclass.extend({
 					]),
 				E('tr', { 'id': 'rssin', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-					_('RSSI'),
+					gl('RSSI'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Received Signal Strength Indicator)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
@@ -3593,7 +3863,7 @@ simDialog: baseclass.extend({
 					]),
 				E('tr', { 'id': 'rsrpn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-					_('RSRP'),
+					gl('RSRP'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Receive Power)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
@@ -3605,7 +3875,7 @@ simDialog: baseclass.extend({
 					]),
 				E('tr', { 'id': 'sinrn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-					_('SINR'),
+					gl('SINR'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal to Interference plus Noise Ratio)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
@@ -3617,7 +3887,7 @@ simDialog: baseclass.extend({
 					]),
 				E('tr', { 'id': 'rsrqn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
-					_('RSRQ'),
+					gl('RSRQ'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Received Quality)') ]),
 					]),
 					E('td', { 'class': 'td' }, E('div', {
@@ -3670,16 +3940,16 @@ simDialog: baseclass.extend({
 					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Carrier aggregation (per component)')),
 					E('table', { 'class': 'table', 'id': 'ca-table' }, [
 					E('tr', { 'class': 'tr table-titles ca-head' }, [
-						E('th', { 'class': 'th left' }, [ 'CC' ]),
-						E('th', { 'class': 'th left' }, [ 'Band' ]),
-						E('th', { 'class': 'th' }, [ 'BW' ]),
-						E('th', { 'class': 'th' }, [ 'PCI' ]),
-						E('th', { 'class': 'th' }, [ 'EARFCN' ]),
-						E('th', { 'class': 'th' }, [ 'RSRP' ]),
-						E('th', { 'class': 'th' }, [ 'RSRQ' ]),
-						E('th', { 'class': 'th' }, [ 'SINR' ]),
-						E('th', { 'class': 'th' }, [ 'MIMO' ]),
-						E('th', { 'class': 'th' }, [ 'Mod' ]),
+						E('th', { 'class': 'th left' }, [ gl('CC') ]),
+						E('th', { 'class': 'th left' }, [ gl('Band') ]),
+						E('th', { 'class': 'th' }, [ gl('BW') ]),
+						E('th', { 'class': 'th' }, [ gl('PCI') ]),
+						E('th', { 'class': 'th' }, [ gl('EARFCN') ]),
+						E('th', { 'class': 'th' }, [ gl('RSRP') ]),
+						E('th', { 'class': 'th' }, [ gl('RSRQ') ]),
+						E('th', { 'class': 'th' }, [ gl('SINR') ]),
+						E('th', { 'class': 'th' }, [ gl('MIMO') ]),
+						E('th', { 'class': 'th' }, [ gl('Mod') ]),
 						/* Состояние несущей: сеть держит SCC сконфигурированной,
 						   но неактивной - без этой колонки такая строка выглядит
 						   как работающая агрегация (см. renderCaTable). */
@@ -3719,12 +3989,12 @@ simDialog: baseclass.extend({
 					E('table', { 'class': 'table', 'id': 'nb-table' }, [
 						E('tr', { 'class': 'tr table-titles nb-head' }, [
 							E('th', { 'class': 'th left' }, [ _('Cell') ]),
-							E('th', { 'class': 'th left' }, [ 'Band' ]),
-							E('th', { 'class': 'th' }, [ 'PCI' ]),
-							E('th', { 'class': 'th' }, [ 'EARFCN' ]),
-							E('th', { 'class': 'th' }, [ 'RSRP' ]),
-							E('th', { 'class': 'th' }, [ 'RSRQ' ]),
-							E('th', { 'class': 'th' }, [ 'RSSI' ]),
+							E('th', { 'class': 'th left' }, [ gl('Band') ]),
+							E('th', { 'class': 'th' }, [ gl('PCI') ]),
+							E('th', { 'class': 'th' }, [ gl('EARFCN') ]),
+							E('th', { 'class': 'th' }, [ gl('RSRP') ]),
+							E('th', { 'class': 'th' }, [ gl('RSRQ') ]),
+							E('th', { 'class': 'th' }, [ gl('RSSI') ]),
 							E('th', { 'class': 'th' }, [ '' ]),
 						])
 					])
@@ -3753,6 +4023,8 @@ simDialog: baseclass.extend({
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);
+			// простой режим: карточка-ответ и переключатель (прототип UX-аудита)
+			window.setTimeout(buildSimpleUI, 0);
 			return node;
 		});
 	},
