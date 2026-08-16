@@ -964,6 +964,61 @@ return view.extend({
 			return uci.get('network', mIfName, 'apn') || '';
 		};
 
+		/* АУТЕНТИФИКАЦИЯ PDP (PAP/CHAP). Нужна MVNO с логином/паролем (живой
+		   отчёт 16.08.2026: Экомобайл - APN+@ekomobile+internet+PAP; ввести
+		   их было негде вовсе). Пишем в живой интерфейс, имя опции по прото:
+		   modemmanager читает allowedauth, остальные (fibocom/qmi/mbim) - auth.
+		   Применяется со следующим передозвоном, как тип IP. */
+		if (!activeIsHilink) {
+		o = s.option(form.ListValue, '_pdpauth', _('Authentication'),
+			_('Needed by some virtual operators (MVNO): APN together with a login and password. Leave NONE if the operator did not give you credentials.'));
+		o.value('none', 'NONE');
+		o.value('pap', 'PAP');
+		o.value('chap', 'CHAP');
+		o.write = function(section_id, value) {
+			if (!mIfExists) { return; }
+			var isMM = String(uci.get('network', mIfName, 'proto') || '') === 'modemmanager';
+			if (value === 'none') {
+				uci.unset('network', mIfName, 'auth');
+				uci.unset('network', mIfName, 'allowedauth');
+			} else {
+				uci.set('network', mIfName, isMM ? 'allowedauth' : 'auth', value);
+			}
+		};
+		o.remove = function() {};
+		o.load = function() {
+			var v = uci.get('network', mIfName, 'auth')
+				|| uci.get('network', mIfName, 'allowedauth') || '';
+			v = String(v).split(/\s+/)[0].toLowerCase();
+			return (v === 'pap' || v === 'chap') ? v : 'none';
+		};
+
+		o = s.option(form.Value, '_pdpuser', _('PAP/CHAP username'));
+		o.depends('_pdpauth', 'pap');
+		o.depends('_pdpauth', 'chap');
+		o.write = function(section_id, value) {
+			if (!mIfExists) { return; }
+			var v = String(value || '').trim();
+			if (v) { uci.set('network', mIfName, 'username', v); }
+			else { uci.unset('network', mIfName, 'username'); }
+		};
+		o.remove = function() { if (mIfExists) { uci.unset('network', mIfName, 'username'); } };
+		o.load = function() { return uci.get('network', mIfName, 'username') || ''; };
+
+		o = s.option(form.Value, '_pdppass', _('PAP/CHAP password'));
+		o.password = true;
+		o.depends('_pdpauth', 'pap');
+		o.depends('_pdpauth', 'chap');
+		o.write = function(section_id, value) {
+			if (!mIfExists) { return; }
+			var v = String(value || '');
+			if (v) { uci.set('network', mIfName, 'password', v); }
+			else { uci.unset('network', mIfName, 'password'); }
+		};
+		o.remove = function() { if (mIfExists) { uci.unset('network', mIfName, 'password'); } };
+		o.load = function() { return uci.get('network', mIfName, 'password') || ''; };
+		}
+
 		/* Тип PDP для создаваемого интерфейса. Чистое UI-поле (в uci не пишется):
 		   применяет его mkiface.sh 4-м аргументом. По умолчанию IPv4 - dual-stack
 		   ломает дозвон на части модемов (Quectel EC21 проверен живьём: поднялся

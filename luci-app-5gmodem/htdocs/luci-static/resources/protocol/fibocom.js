@@ -57,6 +57,21 @@ return network.registerProtocol('fibocom', {
 			return true;
 		};
 
+		o = s.taboption('general', form.ListValue, 'auth', _('Authentication Type'));
+		o.value('none', 'NONE');
+		o.value('pap', 'PAP');
+		o.value('chap', 'CHAP');
+		o.default = 'none';
+
+		o = s.taboption('general', form.Value, 'username', _('PAP/CHAP username'));
+		o.depends('auth', 'pap');
+		o.depends('auth', 'chap');
+
+		o = s.taboption('general', form.Value, 'password', _('PAP/CHAP password'));
+		o.depends('auth', 'pap');
+		o.depends('auth', 'chap');
+		o.password = true;
+
 		o = s.taboption('general', form.ListValue, 'pdptype', _('IP Protocol'));
 		o.default = 'IPV4V6';
 		o.value('IP', _('IPv4'));

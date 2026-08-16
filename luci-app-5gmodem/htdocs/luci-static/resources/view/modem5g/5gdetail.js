@@ -2300,7 +2300,20 @@ function applyMetrics(json) {
 						   локально - раз в секунду (см. connTick ниже). Значение с
 						   модема остаётся источником истины: каждый опрос переустанавливает
 						   базу, так что локальный счёт не может «уехать». */
-						_connBase = { sec: parseInt(json.conn_time_sec, 10) || 0, at: Date.now() };
+						/* РАССИНХРОН СЧЁТЧИКА (замечен владельцем 16.08.2026: 44 -> 53,
+						   потом -> 12). Две причины: (1) снимок приходит ИЗ КЭША с
+						   честным json.age, а база ставилась по замороженному
+						   conn_time_sec без поправки на возраст - счётчик отставал
+						   ровно на age и прыгал на свежем снимке; (2) база
+						   переустанавливалась КАЖДЫЙ опрос, дёргая счётчик на
+						   секунду джиттера. Теперь: возраст учитывается, а база
+						   перезакрепляется только при расхождении > 3 c - это
+						   настоящий сброс сессии (передозвон), его честно показываем. */
+						var _ctCand = (parseInt(json.conn_time_sec, 10) || 0) + (parseInt(json.age, 10) || 0);
+						var _ctExp = _connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : null;
+						if (_ctExp === null || Math.abs(_ctCand - _ctExp) > 3) {
+							_connBase = { sec: _ctCand, at: Date.now() };
+						}
 						if (json.conn_time == '' || json.conn_time == '-') {
 							_connBase = null;
 						/* Пока нет IP - показываем короткую ОСМЫСЛЕННУЮ стадию (по
@@ -2311,7 +2324,7 @@ function applyMetrics(json) {
 							+ '<span class="tginfo-connstatus">' + _msg + '</span>';
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + mutil.localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + mutil.localizeBytes(json.tx);
+						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(_connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + mutil.localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + mutil.localizeBytes(json.tx);
 						}
 					}
 

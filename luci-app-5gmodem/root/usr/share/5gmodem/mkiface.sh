@@ -800,6 +800,10 @@ ctrl_devpath() { readlink -f "/sys/class/usbmisc/$(basename "${1:-}")/device" 2>
 # --- (re)write the interface ---
 # keep the existing APN if the interface already exists, else a generic default
 OLDAPN=$(uci -q get "network.$IF.apn")
+OLDAUTH=$(uci -q get "network.$IF.auth")
+[ -n "$OLDAUTH" ] || OLDAUTH=$(uci -q get "network.$IF.allowedauth")
+OLDUSER=$(uci -q get "network.$IF.username")
+OLDPASS=$(uci -q get "network.$IF.password")
 # сохраняем тип PDP через пересоздание (см. коммент в ветке fibocom выше)
 OLDPDP=$(uci -q get "network.$IF.pdptype")
 [ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
@@ -845,6 +849,17 @@ case "$PROTO" in
 		;;
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
+# Аутентификация PDP (PAP/CHAP - MVNO вроде Экомобайла) переезжает вместе с
+# интерфейсом; имя опции по прото: modemmanager читает allowedauth, остальные auth.
+if [ -n "$OLDAUTH" ]; then
+	if [ "$PROTO" = "modemmanager" ]; then
+		uci set "network.$IF.allowedauth=$OLDAUTH"
+	else
+		uci set "network.$IF.auth=$OLDAUTH"
+	fi
+fi
+[ -n "$OLDUSER" ] && uci set "network.$IF.username=$OLDUSER"
+[ -n "$OLDPASS" ] && uci set "network.$IF.password=$OLDPASS"
 uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 # DNS-ФОЛБЭК. Часть операторов/модемов не отдаёт DNS на интерфейс: IP есть, а
 # сайты не открываются, пока пользователь не впишет DNS руками. Свой DNS задаётся

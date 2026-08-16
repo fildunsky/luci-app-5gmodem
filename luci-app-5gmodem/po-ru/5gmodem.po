@@ -4841,3 +4841,15 @@ msgstr "Прочитать eSIM (связь ненадолго прервётс�
 
 msgid "This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window."
 msgstr "Этим модемом управляет ModemManager. Чтение и изменение eSIM-профилей временно забирает у него канал управления: интернет через модем прерывается примерно на 1–2 минуты и восстанавливается сам. Несколько операций подряд идут в одно окно захвата."
+
+msgid "Authentication"
+msgstr "Аутентификация"
+
+msgid "Needed by some virtual operators (MVNO): APN together with a login and password. Leave NONE if the operator did not give you credentials."
+msgstr "Нужна части виртуальных операторов (MVNO): APN вместе с логином и паролем. Оставьте NONE, если оператор не выдавал учётные данные."
+
+msgid "PAP/CHAP username"
+msgstr "Логин PAP/CHAP"
+
+msgid "PAP/CHAP password"
+msgstr "Пароль PAP/CHAP"

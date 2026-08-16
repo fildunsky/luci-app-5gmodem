@@ -95,6 +95,20 @@ _fibocom_reg() {
 _fibocom_activate() {
 	local dial="$1" pdptype="$2" apn="$3" try ip=""
 	sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
+	# АУТЕНТИФИКАЦИЯ PDP (PAP/CHAP). Нужна MVNO вроде Экомобайла (APN+логин+
+	# пароль, живой отчёт 16.08.2026) - без неё сеть даёт адрес, но роняет
+	# трафик в дыру. Команда - СТАНДАРТНАЯ 3GPP AT+CGAUTH=<cid>,<1 PAP|2 CHAP>,
+	# "user","pass" (сверено с xmm.sh из modemfeed: для FM350 0e8d:7127 он шлёт
+	# именно CGAUTH; вендорные MGAUTH/EIAAPN не берём). Сброс - CGAUTH=<cid>,0.
+	# Опции те же, что у xmm/atc и стоковых qmi/mbim (auth/username/password) -
+	# конфиг совместим при любом прото. Модем без CGAUTH ответит ERROR - молча
+	# пропускаем, беспарольный дозвон не страдает.
+	case "$auth" in
+		pap)  sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		chap) sms_tool -d "$dial" at "AT+CGAUTH=1,2,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		both) sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		*)    sms_tool -d "$dial" at "AT+CGAUTH=1,0" >/dev/null 2>&1 ;;
+	esac
 	sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
 	sleep 2
 	for try in 1 2 3 4 5 6; do
@@ -135,6 +149,9 @@ proto_fibocom_init_config() {
 	proto_config_add_string "atport"
 	proto_config_add_string "apn"
 	proto_config_add_string "pdptype"
+	proto_config_add_string "auth"
+	proto_config_add_string "username"
+	proto_config_add_string "password"
 	proto_config_add_int "metric"
 	proto_config_add_boolean "allow_roaming"
 	proto_config_add_defaults
@@ -143,7 +160,7 @@ proto_fibocom_init_config() {
 proto_fibocom_setup() {
 	local interface="$1"
 	local usbpath modem_path device atport apn pdptype metric
-	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming
+	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming auth username password
 
 	[ -n "$apn" ] || apn="internet"
 	[ -n "$pdptype" ] || pdptype="IPV4"
