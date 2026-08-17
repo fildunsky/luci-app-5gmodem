@@ -489,7 +489,12 @@ if [ "$_VIA" = qmi ]; then
 		_MBS=""
 		case "$(readlink -f "/sys/class/usbmisc/${_WDM##*/}/device/driver" 2>/dev/null)" in
 			*/cdc_mbim)
-				if command -v mbimcli >/dev/null 2>&1; then
+				# КАНАЛ У UMBIM (proto=mbim, живая сессия) - mbimcli не пускаем:
+				# и прямой, и -p (поднимающий вечный mbim-proxy) отбирают канал,
+				# umbim ловит message timeout и сессия умирает (живой случай
+				# 17.08.2026: открытие страницы роняло интернет на MV31-W).
+				# Слоты в этот момент отдаст липкий кэш.
+				if command -v mbimcli >/dev/null 2>&1 && qmi_channel_free; then
 					# Замок ТОТ ЖЕ, что у qmicli (см. qmicli_p в lib.sh): устройство
 					# одно, и второй хозяин ломает обоих. Ждём недолго - не
 					# дождались, просто идём дальше на QMI.

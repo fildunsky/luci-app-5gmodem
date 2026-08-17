@@ -645,6 +645,31 @@ case "$1" in
 		fi
 		_sweep_n=0
 		while :; do
+			# ПРОКСИ-СИРОТА НА ПРЯМОМ КАНАЛЕ. Если активный интерфейс на
+			# umbim/uqmi (proto mbim/qmi/qmiraw), а в системе живёт
+			# mbim-proxy/qmi-proxy БЕЗ ModemManager - прокси лишний и
+			# смертельный: он держит cdc-wdm, прямые запросы netifd рушатся, и
+			# сессия не поднимается до ребута (живой случай 17.08.2026,
+			# ZBT-Z8102AX + MV31-W: «после страницы 5gmodem интернет чинится
+			# только перезагрузкой роутера»). Гейт qmi_channel_free новые
+			# прокси больше не плодит, а этот чистильщик добивает уже
+			# существующих и передозванивает.
+			if ! pidof ModemManager >/dev/null 2>&1; then
+				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+				case "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)" in
+					mbim|qmi|qmiraw)
+						# ТОЛЬКО при поднятом интерфейсе: опущенный + прокси =
+						# возможно, наша же легитимная операция (eSIM/слоты
+						# работают через прокси, пока канал свободен).
+						if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true' \
+						   && { pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; }; then
+							_log "прокси-сирота на прямом канале ($_ps_if) - гашу mbim/qmi-proxy и передозваниваю"
+							killall mbim-proxy 2>/dev/null
+							killall qmi-proxy 2>/dev/null
+							( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+						fi ;;
+				esac
+			fi
 			# Круг нарезан ломтями по 5 c: между обязанностями сторожа успеваем
 			# освежать снимок метрик для открытой страницы (см. _page_refresh).
 			_sl=0

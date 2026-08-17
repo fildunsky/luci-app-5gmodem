@@ -947,8 +947,15 @@ qmi_channel_free() {
 	_qcf_if=$(uci -q get "5gmodem.$(active_sec 2>/dev/null).network" 2>/dev/null)
 	[ -n "$_qcf_if" ] || _qcf_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
 	[ -n "$_qcf_if" ] || return 0
+	# qmi/qmiraw - uqmi напрямую; mbim - umbim напрямую. ОБА не переживают
+	# второго хозяина канала: наш qmicli/mbimcli -p поднимает прокси, тот
+	# открывает cdc-wdm и ДЕРЖИТ его - прямые запросы netifd рушатся, сессия
+	# умирает, а прокси живёт вечно (лечилось только ребутом). Живой случай
+	# 17.08.2026, ZBT-Z8102AX + MV31-W на umbim: «открываю страницу 5gmodem -
+	# пропадает интернет». Под ModemManager запрет не нужен: там прокси общий,
+	# MM сам через него ходит.
 	case "$(uci -q get "network.$_qcf_if.proto" 2>/dev/null)" in
-		qmi) : ;;
+		qmi|qmiraw|mbim) : ;;
 		*) return 0 ;;
 	esac
 	# ВЛАДЕЕТ - ЗНАЧИТ ПОДНЯТ. Раньше смотрели ТОЛЬКО на proto, и у модема на
@@ -968,8 +975,10 @@ qmi_channel_free() {
 		# опущенным, и мы читаем снова (наблюдалось на Quectel EP06 05.08.2026).
 		*'"pending": true'*) return 1 ;;
 	esac
-	# uqmi в канале, даже если состояние ещё не обновилось.
-	pgrep -f "uqmi .*$(uci -q get "network.$_qcf_if.device" 2>/dev/null)" >/dev/null 2>&1 && return 1
+	# uqmi/umbim в канале, даже если состояние ещё не обновилось.
+	_qcf_dev=$(uci -q get "network.$_qcf_if.device" 2>/dev/null)
+	pgrep -f "uqmi .*$_qcf_dev" >/dev/null 2>&1 && return 1
+	pgrep -f "umbim .*$_qcf_dev" >/dev/null 2>&1 && return 1
 	return 0
 }
 

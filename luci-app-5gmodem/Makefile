@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.4.10
+PKG_VERSION:=2.4.11
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
