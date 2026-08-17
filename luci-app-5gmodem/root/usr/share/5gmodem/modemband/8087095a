@@ -163,14 +163,18 @@ getcelllock() {
 
 # setcelllock off | arfcn <earfcn> | cell <earfcn> <pci>
 # at@sic:freq_lock($sim=0,$rat=3,$band,$enable,$earfcn,$pci). Применяется ТОЛЬКО через
-# режим полёта (CFUN=4 -> CFUN=1), иначе привязка не встаёт - как у FM350. enable=0
-# снимает (нули в остальных полях годятся, проверено). Реконнект делает bands.sh.
+# режим полёта, иначе привязка не встаёт - как у FM350. enable=0 снимает (нули в
+# остальных полях годятся, проверено). Завершать цикл НАДО AT+CFUN=15 (тихий полный
+# ресет Intel), а не CFUN=1: после freq_lock CFUN=1 поднимает радио в недосброшенном
+# состоянии и модем уходит в вечный поиск сети - живой случай 17.08.2026 (L860-GL-16,
+# fw 18601): CFUN=1 - вечный поиск, CFUN=15 - заработал. CFUN=15 может переэнумерировать
+# USB - порты поднимет наш сторож.
 setcelllock() {
 	case "$1" in
 		off)
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
 			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,0,0,0,0)" >/dev/null 2>&1; sleep 1
-			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1; sleep 6
+			sms_tool -d $_DEVICE at "AT+CFUN=15" >/dev/null 2>&1; sleep 6
 			;;
 		arfcn|cell)
 			_AR="$2"; _PC="$3"; [ -n "$_AR" ] || return
@@ -178,7 +182,7 @@ setcelllock() {
 			_B=$(_ch2band "$_AR"); [ "$_B" = 0 ] && return
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
 			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,$_B,1,$_AR,$_PC)" >/dev/null 2>&1; sleep 1
-			sms_tool -d $_DEVICE at "AT+CFUN=1" >/dev/null 2>&1; sleep 6
+			sms_tool -d $_DEVICE at "AT+CFUN=15" >/dev/null 2>&1; sleep 6
 			;;
 	esac
 }

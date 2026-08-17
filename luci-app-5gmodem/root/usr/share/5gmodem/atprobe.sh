@@ -53,8 +53,17 @@ p=$!
 ( exec 8>&- 9>&-; sleep 2; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 k=$!
 
-wait "$p" 2>/dev/null
-rc=$?
+# НЕ голый wait: если порт повесил sms_tool в D-state (вис в драйвере tty),
+# kill сторожа не берёт, и wait застревал бы навсегда - rpcd отваливается по
+# 30 c, страница падает с XHR error (T99W175 05c6:9025, 17.08.2026). Ждём
+# опросом с потолком ~3 c; неубиваемого бросаем сиротой - ядро дореапит.
+# Дробный sleep есть не во всех busybox (стенд GL9869: «invalid number», и цикл
+# стал бы busy-loop с нулевым таймаутом): проба sleep 0.0 мгновенна и валидна
+# только на FANCY_SLEEP, без него шаг - целая секунда с пересчётом потолка.
+if (sleep 0.0) 2>/dev/null; then ts=0.1; tmax=30; else ts=1; tmax=3; fi
+i=0
+while kill -0 "$p" 2>/dev/null && [ "$i" -lt "$tmax" ]; do i=$((i+1)); sleep "$ts"; done
+if kill -0 "$p" 2>/dev/null; then rc=1; else wait "$p" 2>/dev/null; rc=$?; fi
 
 kill "$k" 2>/dev/null   # cancel the killer if sms_tool finished first
 wait "$k" 2>/dev/null

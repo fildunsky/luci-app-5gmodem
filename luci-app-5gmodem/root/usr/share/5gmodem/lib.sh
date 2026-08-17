@@ -1106,7 +1106,14 @@ qmicli_p() {
 		_qp_pid=$!
 		( sleep "$_qp_w"; kill -9 "$_qp_pid" 2>/dev/null ) >/dev/null 2>&1 9>&- &
 		_qp_k=$!
-		wait "$_qp_pid" 2>/dev/null; _qp_rc=$?
+		# Опрос вместо голого wait: qmicli в D-state на мёртвом cdc-wdm
+		# неубиваем, wait висел бы вечно (класс бага - atprobe/at_query).
+		sleep_tick_init
+		_qp_i=0; _qp_max=$(( (_qp_w + 1) * _TICKS_PER_SEC ))
+		while kill -0 "$_qp_pid" 2>/dev/null && [ "$_qp_i" -lt "$_qp_max" ]; do
+			_qp_i=$((_qp_i + 1)); sleep "$_SLEEP_TICK"
+		done
+		if kill -0 "$_qp_pid" 2>/dev/null; then _qp_rc=1; else wait "$_qp_pid" 2>/dev/null; _qp_rc=$?; fi
 		kill "$_qp_k" 2>/dev/null; wait "$_qp_k" 2>/dev/null
 		if [ -s "$_qp_o" ]; then
 			rm -f "$_qp_bad"
@@ -1121,7 +1128,12 @@ qmicli_p() {
 		_qp_pid=$!
 		( sleep 20; kill -9 "$_qp_pid" 2>/dev/null ) >/dev/null 2>&1 9>&- &
 		_qp_k=$!
-		wait "$_qp_pid" 2>/dev/null; _qp_rc=$?
+		sleep_tick_init
+		_qp_i=0; _qp_max2=$(( 21 * _TICKS_PER_SEC ))
+		while kill -0 "$_qp_pid" 2>/dev/null && [ "$_qp_i" -lt "$_qp_max2" ]; do
+			_qp_i=$((_qp_i + 1)); sleep "$_SLEEP_TICK"
+		done
+		if kill -0 "$_qp_pid" 2>/dev/null; then _qp_rc=1; else wait "$_qp_pid" 2>/dev/null; _qp_rc=$?; fi
 		kill "$_qp_k" 2>/dev/null; wait "$_qp_k" 2>/dev/null
 		[ -s "$_qp_o" ] && logger -t 5gmodem "qmi: прокси не отвечает - прочитано напрямую с $_qp_dev"
 	fi
@@ -1218,6 +1230,24 @@ is_atcmd() {
 	[ -z "$(printf '%s' "$1" | tr -d 'A-Za-z0-9+?=",:;*#._ /()^$!%&@[]{}<>~|'"'"'-')" ]
 }
 
+# --- ШАГ ОЖИДАНИЯ ДЛЯ ЦИКЛОВ-СТОРОЖЕЙ ----------------------------------------
+#
+# Дробный sleep есть НЕ во всех busybox (atlock.sh это уже знал; живьём: стенд
+# GL9869 отвечает «invalid number» на sleep 0.1) - там цикл ожидания превратился
+# бы в busy-loop с нулевым таймаутом. Проба (sleep 0.0) мгновенна и валидна
+# только при FANCY_SLEEP; без него шаг - целая секунда, потолки пересчитываются
+# через _TICKS_PER_SEC.
+_SLEEP_TICK=""
+_TICKS_PER_SEC=1
+sleep_tick_init() {
+	[ -n "$_SLEEP_TICK" ] && return 0
+	if (sleep 0.0) 2>/dev/null; then
+		_SLEEP_TICK="0.1"; _TICKS_PER_SEC=10
+	else
+		_SLEEP_TICK="1"; _TICKS_PER_SEC=1
+	fi
+}
+
 # --- ОДИН ВХОД ДЛЯ AT-ЗАПРОСА ------------------------------------------------
 #
 # ЗАЧЕМ. «Спросить модем и разобрать ответ» в этом дереве написано пятьдесят с
@@ -1280,7 +1310,16 @@ at_query() {
 	sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 8>&- 9>&- &
 	_aq_pid=$!
 	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
-	wait "$_aq_pid" 2>/dev/null
+	# НЕ голый wait: sms_tool в D-state (вис в драйвере tty) не убивается
+	# сторожем, и wait висел бы вечно - rpcd 30 c, XHR error на страницах
+	# (T99W175 05c6:9025, 17.08.2026). Опрос с потолком таймаут+1 c;
+	# неубиваемого бросаем сиротой.
+	sleep_tick_init
+	_aq_i=0; _aq_max=$(( (${_aq_t:-8} + 1) * _TICKS_PER_SEC ))
+	while kill -0 "$_aq_pid" 2>/dev/null && [ "$_aq_i" -lt "$_aq_max" ]; do
+		_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
+	done
+	kill -0 "$_aq_pid" 2>/dev/null || wait "$_aq_pid" 2>/dev/null
 	kill "$_aq_w" 2>/dev/null; wait "$_aq_w" 2>/dev/null
 
 	[ "$_aq_mine" = 1 ] && at_unlock 2>/dev/null

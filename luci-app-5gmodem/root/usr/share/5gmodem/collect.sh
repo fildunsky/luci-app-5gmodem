@@ -66,6 +66,22 @@ mbim_verdict() {
 	[ -n "$_mv_if" ] || { echo "интерфейс модема не настроен"; return; }
 	[ "$(uci -q get "network.$_mv_if.proto")" = mbim ] || {
 		echo "интерфейс работает не по mbim - проверка не нужна"; return; }
+	# ТРЕТЬЯ ЛОВУШКА - ПРОТОКОЛ НЕ ТОТ, ЧТО У УЗЛА. cdc-wdm под драйвером
+	# qmi_wwan говорит по QMI: umbim в него шлёт MBIM-кадры и вечно получает
+	# «mbim message timeout», цикл retry выглядит как мёртвый модем (живой
+	# случай: T99W175 в композиции 05c6:9025, Netcore N60 Pro, 17.08.2026).
+	_mv_dev=$(uci -q get "network.$_mv_if.device")
+	case "$_mv_dev" in
+		/dev/cdc-wdm*)
+			_mv_drv=$(basename "$(readlink -f "/sys/class/usbmisc/${_mv_dev##*/}/device/driver" 2>/dev/null)" 2>/dev/null)
+			if [ "$_mv_drv" = "qmi_wwan" ]; then
+				echo "ПРОБЛЕМА: узел $_mv_dev создан драйвером qmi_wwan (канал QMI),"
+				echo "  а прото интерфейса - mbim. MBIM тут не заговорит никогда:"
+				echo "  будет вечный «mbim message timeout»."
+				echo "  ЧТО ДЕЛАТЬ: uci set network.$_mv_if.proto='qmi'; uci commit network; ifup $_mv_if"
+				return
+			fi ;;
+	esac
 	_mv_err=$(ubus call network.interface."$_mv_if" status 2>/dev/null \
 		| sed -n 's/.*"code": *"\([^"]*\)".*/\1/p' | head -1)
 	_mv_log=$(logread 2>/dev/null | grep -c "Failed to attach to network")

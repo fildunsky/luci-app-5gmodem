@@ -119,6 +119,14 @@ _iface_ip() {
 		| sed -n 's/.*"address": *"\([0-9.]\{7,\}\)".*/\1/p' | head -1
 }
 
+# Только для проверки «поднят, но без адреса»: чисто-IPv6-сессия (оператор дал
+# один v6) - это ЖИВАЯ связь, а v4-проба выше её не видит и сторож рестартил бы
+# её по кругу. В сверку с CGPADDR (v4) этот хелпер НЕ подмешивать.
+_iface_ip6() {
+	ifstatus "$1" 2>/dev/null \
+		| sed -n 's/.*"address": *"\([0-9a-fA-F:]*:[0-9a-fA-F:]*\)".*/\1/p' | head -1
+}
+
 # Адрес, который выдал модем. Пусто - прочитать не удалось (порт занят и т.п.),
 # и это НЕ повод дёргать интерфейс: молчание порта само по себе не значит, что
 # сессия умерла.
@@ -317,6 +325,8 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 		_iip=$(_iface_ip "$_if")
 		[ -n "$_iip" ] || _iip=$(_iface_ip "${_if}_4")
 		[ -n "$_iip" ] || _iip=$(_iface_ip "${_if}_6")
+		[ -n "$_iip" ] || _iip=$(_iface_ip6 "$_if")
+		[ -n "$_iip" ] || _iip=$(_iface_ip6 "${_if}_6")
 		# И спрашиваем сам канал: для qmi это дешёвая и честная проверка.
 		#
 		# СРАВНИВАЕМ ЦЕЛИКОМ, А НЕ ПОДСТРОКОЙ. uqmi отвечает "connected" или
@@ -658,15 +668,27 @@ case "$1" in
 				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 				case "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)" in
 					mbim|qmi|qmiraw)
-						# ТОЛЬКО при поднятом интерфейсе: опущенный + прокси =
-						# возможно, наша же легитимная операция (eSIM/слоты
-						# работают через прокси, пока канал свободен).
-						if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true' \
-						   && { pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; }; then
-							_log "прокси-сирота на прямом канале ($_ps_if) - гашу mbim/qmi-proxy и передозваниваю"
-							killall mbim-proxy 2>/dev/null
-							killall qmi-proxy 2>/dev/null
-							( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+						if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
+							if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
+								_log "прокси-сирота на прямом канале ($_ps_if) - гашу mbim/qmi-proxy и передозваниваю"
+								killall mbim-proxy 2>/dev/null
+								killall qmi-proxy 2>/dev/null
+								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+							elif ! pgrep -x lpac >/dev/null 2>&1 \
+							   && ! pgrep -x qmicli >/dev/null 2>&1 \
+							   && ! pgrep -x mbimcli >/dev/null 2>&1; then
+								# ОПУЩЕННЫЙ интерфейс + прокси БЕЗ ЕДИНОГО КЛИЕНТА -
+								# тоже сирота, причём худший: он душит сам дозвон, и
+								# «только при поднятом» превращалось во взаимоблок -
+								# интерфейс вечно pending («Request timed out» / «SIM
+								# in illegal state» по кругу), метла ждала up (Netcore
+								# N60 Pro + T99W175, 17.08.2026). Живую операцию
+								# eSIM/слотов не заденем: у неё жив lpac/qmicli/mbimcli.
+								_log "прокси-сирота душит дозвон ($_ps_if опущен) - гашу mbim/qmi-proxy и поднимаю"
+								killall mbim-proxy 2>/dev/null
+								killall qmi-proxy 2>/dev/null
+								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+							fi
 						fi ;;
 				esac
 			fi

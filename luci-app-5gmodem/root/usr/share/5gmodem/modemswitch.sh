@@ -106,7 +106,17 @@ at_probe() {
 	_n=0
 	while kill -0 "$_p" 2>/dev/null; do
 		_n=$((_n + 1))
-		if [ "$_n" -ge 4 ]; then kill "$_p" 2>/dev/null; wait "$_p" 2>/dev/null; return 1; fi
+		if [ "$_n" -ge 4 ]; then
+			kill "$_p" 2>/dev/null
+			sleep 1
+			# D-state (вис в драйвере tty): сигналы не доходят, wait висел бы
+			# вечно и rpcd падал по 30с - XHR error на странице (T99W175
+			# 05c6:9025 с немыми портами, 17.08.2026). Бросаем сироту: ядро
+			# дореапит его само, когда драйвер отпустит I/O.
+			kill -0 "$_p" 2>/dev/null && return 1
+			wait "$_p" 2>/dev/null
+			return 1
+		fi
 		sleep 1
 	done
 	wait "$_p" 2>/dev/null   # sms_tool exit code: 0 when the port answered AT
