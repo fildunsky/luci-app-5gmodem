@@ -920,6 +920,26 @@ _clash_ping() {   # $1 - хост; печатает json и возвращает
 
 
 case "$1" in
+# adoptzone <iface> - добавить wifi-STA-интерфейс в зону wan (карточка-сирота
+# из list, см. nozone). Строго гейтится: интерфейс существует, к нему привязан
+# wifi-iface mode=sta, в зоне его ещё нет. Чужие туннели этим не утащить.
+adoptzone)
+	_az="$2"
+	[ -n "$_az" ] || exit 1
+	ucinet_has "$_az" || exit 1
+	_azs=$(uci -q show wireless 2>/dev/null \
+		| sed -n "s/^wireless\.\([^.]*\)\.network='$_az'\$/\1/p" | head -1)
+	{ [ -n "$_azs" ] && [ "$(uci -q get "wireless.$_azs.mode")" = "sta" ]; } || exit 1
+	case " $(wan_nets | tr '\n' ' ') " in *" $_az "*) exit 0 ;; esac
+	_azz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	[ -n "$_azz" ] || exit 1
+	note_foreign_uci firewall "netpri adoptzone"
+	uci add_list "firewall.$_azz.network=$_az"
+	uci commit firewall
+	/etc/init.d/firewall reload >/dev/null 2>&1
+	logger -t 5gmodem "adoptzone: $_az добавлен в зону wan (Wi-Fi-аплинк из мастера подключения)"
+	exit 0
+	;;
 list)
 	# СНИМКИ ПЕРЕД ЦИКЛОМ. `list` только читает и живёт доли секунды, поэтому
 	# состояние интерфейсов, конфиг 5gmodem и перечисление модемов берём по одному
@@ -1160,6 +1180,30 @@ list)
 		printf ',{"event":"%s","failover":%s}' "$(json_esc "$_np_ev")" \
 			"$([ "$_HEALTH_FO" = "1" ] && echo 1 || echo 0)"
 	fi
+	# АПЛИНКИ-СИРОТЫ ВНЕ ЗОНЫ WAN (живой случай 17.08.2026): мастер LuCI
+	# «Подключиться к сети» создаёт STA-интерфейс, но зону ему назначает только
+	# если человек не забыл выбрать её в диалоге. Интерфейс поднимается, IP
+	# есть - а в приоритетах его нет, и как аплинк он всё равно мёртв (нет
+	# forwarding/NAT из LAN). Показываем такого сироту карточкой с пометкой
+	# nozone - UI предложит добавить в зону одним нажатием (verb adoptzone).
+	# Только wifi-STA: чужие туннели/бриджи сами в зону не тащим.
+	_wz=" $(wan_nets | tr '\n' ' ') "
+	for _oi in $(printf '%s' "$_IFDUMP" | jsonfilter -e '@.interface[*].interface' 2>/dev/null); do
+		case "$_oi" in loopback|lan|*_4|*_6) continue ;; esac
+		case "$_wz" in *" $_oi "*) continue ;; esac
+		ucinet_has "$_oi" || continue
+		# секция wifi-iface, привязанная к ЭТОМУ интерфейсу, и только mode=sta
+		_osec=$(uci -q show wireless 2>/dev/null \
+			| sed -n "s/^wireless\.\([^.]*\)\.network='$_oi'\$/\1/p" | head -1)
+		[ -n "$_osec" ] || continue
+		[ "$(uci -q get "wireless.$_osec.mode")" = "sta" ] || continue
+		_if_scan "$_oi"
+		_oip=$(iface_ip "$_oi")
+		[ -n "$_oip" ] || continue
+		_ossid=$(uci -q get "wireless.$_osec.ssid")
+		printf ',{"iface":"%s","type":"wifi","sub":"%s","label":"%s","ip":"%s","metric":9999,"nozone":1}' \
+			"$(json_esc "$_oi")" "$(json_esc "$_oi")" "$(json_esc "${_ossid:-Wi-Fi}")" "$(json_esc "$_oip")"
+	done
 	printf ']\n'
 	# fill the operator cache in the background (bounded AT probes) for next time,
 	# but at most once a minute so page polls don't pile up probes on a modem whose

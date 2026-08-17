@@ -39,7 +39,7 @@ ussd_raw_for() {
 		# OK, ни ERROR, ни URC - ни упакованным, ни сырым, ни на одном из двух
 		# AT-портов. Причина не в кодировании: модем data-only, SS в прошивке
 		# отсутствует. Настройку не трогаем - менять её здесь бессмысленно.
-		0e8d:7127) return ;;
+		0e8d:7127|0e8d:7126) return ;;
 		# Telit LM960A18 (1bc7:1040) - USSD РАБОТАЕТ, сырой формой. Здесь была
 		# обратная запись («SS/voice нет, как у FM350»), и она оказалась неверной:
 		# тот замер делался в LTE, где ответ и не мог прийти. `+CREG: 2,1,...,7`
@@ -103,7 +103,7 @@ ussd_supported_for() {
 		# Compal USSD читается. Обхода нет и в железе - композиций у модуля
 		# только две, обе RNDIS (AT+GTUSBMODE=? -> (40,41)), MBIM/QMI нет, то
 		# есть путь «MBIM под ModemManager» недоступен.
-		0e8d:7127) echo 0; return ;;
+		0e8d:7127|0e8d:7126) echo 0; return ;;
 		# Telit LM960A18 ЗДЕСЬ БОЛЬШЕ НЕ ЧИСЛИТСЯ: у него USSD работает, см.
 		# разбор в ussd_raw_for выше. Плашка «не работает» на его странице была
 		# ложной.
@@ -137,7 +137,7 @@ sim_slots_via() {
 		1bc7:1040) echo qmi; return ;;
 		# Fibocom FM350-GL: проверено - AT+GTDUALSIM отдаёт (0-1), AT+SIMTYPE?
 		# различает USIM/eSIM. Именно на нём это и писалось.
-		0e8d:7127) echo gtdualsim; return ;;
+		0e8d:7127|0e8d:7126) echo gtdualsim; return ;;
 		# Compal RXM-G1 (SG500M2-X): ни AT+SIMTYPE?, ни AT+GTDUALSIM не отвечают
 		# (проверено); слоты живут за AT+CEISWITCHSIM.
 		05c6:90d6) echo ceiswitchsim; return ;;

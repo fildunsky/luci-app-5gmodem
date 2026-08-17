@@ -27,14 +27,19 @@
 	init_proto "$@"
 }
 
-# usbnet device (eth*) that belongs to a given USB topology path
+# usbnet device (eth*/wwan*) that belongs to a given USB topology path.
+# БЕРЁМ ИНТЕРФЕЙС С НАИМЕНЬШИМ НОМЕРОМ ЧИСЛЕННО, а не первый по глобу: ASCII
+# сортирует «1.10» раньше «1.6», и у L860 (3 NCM: 1.6/1.8/1.10) первым выпадал
+# wwan2 (1.10) - а привязка XDATACHANNEL="/USBHS/NCM/0" смотрит на ПЕРВЫЙ NCM
+# (1.6, wwan0). Живой отчёт Cudy TR3000 16.08.2026: device='wwan2' в конфиге.
 _fibocom_netdev() {
-	local p="$1" n
+	local p="$1" n best="" bestnum=999
 	for n in /sys/bus/usb/devices/$p:*/net/*; do
 		[ -e "$n" ] || continue
-		basename "$n"
-		return 0
+		local ifn="${n%/net/*}"; ifn="${ifn##*:}"; ifn="${ifn#*.}"
+		[ "$ifn" -lt "$bestnum" ] 2>/dev/null && { bestnum="$ifn"; best="$n"; }
 	done
+	[ -n "$best" ] && { basename "$best"; return 0; }
 	return 1
 }
 
@@ -85,6 +90,32 @@ _fibocom_reg() {
 	echo "$r"
 }
 
+# АУТЕНТИФИКАЦИЯ PDP (PAP/CHAP). Нужна MVNO вроде Экомобайла (APN+логин+
+# пароль): без неё сеть даёт адрес, но роняет трафик в дыру. Команда -
+# СТАНДАРТНАЯ 3GPP AT+CGAUTH=<cid>,<1 PAP|2 CHAP>,"user","pass" (сверено с
+# xmm.sh: для FM350 0e8d:7127 он шлёт именно CGAUTH). Сброс - CGAUTH=<cid>,0.
+# Модем без CGAUTH ответит ERROR - молча пропускаем.
+# Вынесена ИЗ activate отдельной функцией: авторизацию надо слать не только в
+# холодном дозвоне, но и учитывать в fast path (см. маркер devnum в setup) -
+# CGAUTH НЕ переживает ребут модема, а FM350 после ребута сам активирует
+# контекст 1, и сеть выдаёт адрес БЕЗ авторизации (живой отчёт Экомобайла
+# 17.08.2026: наш usbpower-подъём после клина -> fast path переиспользовал
+# неавторизованный bearer -> IP есть, трафик в дыру).
+_fibocom_auth() {
+	local dial="$1"
+	case "$auth" in
+		pap)  sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		chap) sms_tool -d "$dial" at "AT+CGAUTH=1,2,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		both) sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
+		*)    sms_tool -d "$dial" at "AT+CGAUTH=1,0" >/dev/null 2>&1 ;;
+	esac
+	# маркер «этой инкарнации модема авторизация послана»: ключ - USB devnum,
+	# он меняется при каждой переэнумерации (= ребуте модема)
+	[ -n "$interface" ] && [ -n "$usbpath" ] && \
+		cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null \
+			> "/tmp/fibocom_authed_$interface" 2>/dev/null
+}
+
 # Define APN with a given PDP type, (re)activate the default PDP context and echo
 # the assigned IPv4 (empty on failure). Retries a few times: right after a modem
 # swap / band change / USB re-enumeration the context needs a moment, and a single
@@ -94,21 +125,10 @@ _fibocom_reg() {
 # clears it; on a cold context the release is a harmless no-op.
 _fibocom_activate() {
 	local dial="$1" pdptype="$2" apn="$3" try ip=""
+	# XMM: включить отдачу DNS (XDNS) ДО активации - иначе +XDNS? пуст.
+	[ "$IS_XMM" = 1 ] && sms_tool -d "$dial" at "AT+XDNS=1,1" >/dev/null 2>&1
 	sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdptype\",\"$apn\"" >/dev/null 2>&1
-	# АУТЕНТИФИКАЦИЯ PDP (PAP/CHAP). Нужна MVNO вроде Экомобайла (APN+логин+
-	# пароль, живой отчёт 16.08.2026) - без неё сеть даёт адрес, но роняет
-	# трафик в дыру. Команда - СТАНДАРТНАЯ 3GPP AT+CGAUTH=<cid>,<1 PAP|2 CHAP>,
-	# "user","pass" (сверено с xmm.sh из modemfeed: для FM350 0e8d:7127 он шлёт
-	# именно CGAUTH; вендорные MGAUTH/EIAAPN не берём). Сброс - CGAUTH=<cid>,0.
-	# Опции те же, что у xmm/atc и стоковых qmi/mbim (auth/username/password) -
-	# конфиг совместим при любом прото. Модем без CGAUTH ответит ERROR - молча
-	# пропускаем, беспарольный дозвон не страдает.
-	case "$auth" in
-		pap)  sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		chap) sms_tool -d "$dial" at "AT+CGAUTH=1,2,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		both) sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		*)    sms_tool -d "$dial" at "AT+CGAUTH=1,0" >/dev/null 2>&1 ;;
-	esac
+	_fibocom_auth "$dial"
 	sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
 	sleep 2
 	for try in 1 2 3 4 5 6; do
@@ -116,7 +136,15 @@ _fibocom_activate() {
 		sleep 2
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
-		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && { echo "$ip"; return 0; }
+		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && {
+			# XMM: привязать первый NCM-канал к контексту и стартовать данные -
+			# без этого адрес есть, а кадры в NCM не ходят (суть xmm.sh).
+			if [ "$IS_XMM" = 1 ]; then
+				sms_tool -d "$dial" at "AT+XDATACHANNEL=1,1,\"/USBCDC/0\",\"/USBHS/NCM/0\",2,1" >/dev/null 2>&1
+				sms_tool -d "$dial" at "AT+CGDATA=\"M-RAW_IP\",1" >/dev/null 2>&1
+			fi
+			echo "$ip"; return 0
+		}
 	done
 	return 1
 }
@@ -164,6 +192,17 @@ proto_fibocom_setup() {
 
 	[ -n "$apn" ] || apn="internet"
 	[ -n "$pdptype" ] || pdptype="IPV4"
+	# НОРМАЛИЗАЦИЯ ТИПА PDP. В конфигах исторически лежит «IPV4» (его же пишет
+	# UI), но 3GPP-валидные значения CGDCONT - только IP/IPV6/IPV4V6. FM350
+	# нестандартное «IPV4» прощал, а Intel L860 отвечает ERROR: контекст НЕ
+	# перезаписывался, старый APN (от прежней SIM) жил вечно, и каждый ifup
+	# уходил в «холодный дозвон» по кругу (живой отчёт Cudy TR3000, 16.08.2026).
+	pdptype=$(echo "$pdptype" | tr 'a-z' 'A-Z')
+	case "$pdptype" in
+		IPV4) pdptype="IP" ;;
+		IP|IPV6|IPV4V6) ;;
+		*) pdptype="IPV4V6" ;;
+	esac
 
 	# УСТАРЕВШИЙ usbpath. Он пишется ОДИН раз, при создании интерфейса, а модем
 	# может переехать в другой разъём - тогда штамп владения (modem_path)
@@ -222,6 +261,14 @@ proto_fibocom_setup() {
 		proto_block_restart "$interface"
 		return 1
 	fi
+
+	# INTEL XMM (Fibocom L850/L860, вендор 8087): дозвон тот же 3GPP, но данные
+	# по NCM идут только после привязки канала (XDATACHANNEL + CGDATA), DNS
+	# модем отдаёт через свою XDNS (CGCONTRDP пуст), а на NCM-линке модем НЕ
+	# отвечает на ARP - без `arp off` адрес есть, трафика нет. Логика перенесена
+	# из xmm.sh (modemfeed), внешний пакет больше не обязателен.
+	local IS_XMM=0
+	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null)" = "8087" ] && IS_XMM=1
 
 	local dial="$atport"
 	if [ -z "$dial" ] && [ -n "$usbpath" ]; then
@@ -426,6 +473,21 @@ proto_fibocom_setup() {
 		bands_changed=1
 	fi
 
+	# АВТОРИЗАЦИЯ НЕ ПЕРЕЖИВАЕТ РЕБУТ МОДЕМА. Если настроен PAP/CHAP, а модем
+	# с момента последней отправки CGAUTH переэнумерировался (devnum сменился) -
+	# fast path запрещён: контекст в модеме персистентен и совпадёт, но bearer
+	# будет БЕЗ авторизации (адрес есть, трафика нет). Форсируем холодный дозвон.
+	case "$auth" in
+		pap|chap|both)
+			if [ -n "$username" ]; then
+				_au_now=$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)
+				_au_was=$(cat "/tmp/fibocom_authed_$interface" 2>/dev/null)
+				if [ -z "$_au_was" ] || [ "$_au_now" != "$_au_was" ]; then
+					echo "fibocom[$$] модем переэнумерирован - PAP/CHAP-авторизация слетела, холодный дозвон"
+					bands_changed=1
+				fi
+			fi ;;
+	esac
 	if [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
 		# Переиспользуем живой контекст, ТОЛЬКО если он на нашем APN. FM350 сам
 		# активирует контекст 1 при загрузке/смене SIM с ТЕМ APN, что был прошит
@@ -486,7 +548,7 @@ proto_fibocom_setup() {
 		# configured type yields no IP, retry once with the COMPLEMENTARY type. This
 		# fires ONLY on failure, so the common case (IPV4 works) pays nothing.
 		if [ -z "$ip" ]; then
-			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IPV4"
+			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IP"
 			echo "fibocom[$$] no IP with $pdptype, retrying $alt"
 			ip=$(_fibocom_activate "$dial" "$alt" "$apn")
 		fi
@@ -513,6 +575,18 @@ proto_fibocom_setup() {
 		| sed -n 's/^+CGDCONT: *1,"\([^"]*\)".*/\1/p' | head -1)
 
 	ip link set "$netdev" up 2>/dev/null
+	if [ "$IS_XMM" = 1 ]; then
+		# NCM-канал XMM на ARP не отвечает: без noarp пакеты застревают в
+		# neighbour-резолве. Шлюза у XMM нет (CGCONTRDP пуст) - маршрут on-link.
+		ip link set "$netdev" arp off 2>/dev/null
+		gw=""
+		local xd
+		xd=$(sms_tool -d "$dial" at "AT+XDNS?" 2>/dev/null | tr -d '\r' | grep '^+XDNS: 1,' | head -1)
+		[ -n "$xd" ] && {
+			dns1=$(echo "$xd" | awk -F'"' '{print $2}')
+			dns2=$(echo "$xd" | awk -F'"' '{print $4}')
+		}
+	fi
 
 	proto_init_update "$netdev" 1
 	proto_add_ipv4_address "$ip" "255.255.255.0"

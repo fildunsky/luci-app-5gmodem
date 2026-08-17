@@ -622,6 +622,27 @@ _sweep_tmp() {
 
 case "$1" in
 	*)
+		# ГАРД РЕГИСТРАЦИИ НАШИХ ПРОТО НА СТАРТЕ СТОРОЖА (раз за загрузку).
+		# Симптом «наш протокол Fibocom снова неподдерживаемый в LuCI» всплывает
+		# после обновлений раз за разом: LuCI берёт список прото у netifd, и если
+		# тот по какой-то причине стартовал без нашего обработчика, интерфейс
+		# мёртв до ручного рестарта сети. Сторож запускается на каждом буте -
+		# проверяем один раз: есть интерфейс на fibocom/qmiraw, а netifd прото
+		# не знает -> принудительная регистрация (register_proto сам рестартует
+		# сеть только в этом случае, см. его гарды).
+		if [ ! -f /tmp/5gmodem_protoguard ]; then
+			: > /tmp/5gmodem_protoguard
+			( sleep 45
+			  _pg_h=$(ubus call network get_proto_handlers 2>/dev/null)
+			  for _pg_p in fibocom qmiraw; do
+				uci -q show network 2>/dev/null | grep -q "\.proto='$_pg_p'" || continue
+				echo "$_pg_h" | grep -q "\"$_pg_p\"" && continue
+				logger -t 5gmodem "protoguard: интерфейс на $_pg_p есть, а netifd прото не знает - принудительная регистрация"
+				REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
+				break
+			  done
+			) >/dev/null 2>&1 </dev/null &
+		fi
 		_sweep_n=0
 		while :; do
 			# Круг нарезан ломтями по 5 c: между обязанностями сторожа успеваем

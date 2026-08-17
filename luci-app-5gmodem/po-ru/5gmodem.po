@@ -4853,3 +4853,9 @@ msgstr "Логин PAP/CHAP"
 
 msgid "PAP/CHAP password"
 msgstr "Пароль PAP/CHAP"
+
+msgid "This Wi-Fi uplink is not in the wan firewall zone - click to add it and make it usable"
+msgstr "Этот Wi-Fi-аплинк не входит в зону wan файрвола — нажмите, чтобы добавить и сделать рабочим"
+
+msgid "not in wan zone — click to fix"
+msgstr "вне зоны wan — нажмите, чтобы починить"

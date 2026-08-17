@@ -1274,14 +1274,29 @@ function buildBar(list, redraw) {
 		   невидимо - так карточка держит родные размеры. Кликать/таскать
 		   нечего - pointer-events глушатся классом netpri-gone. */
 		var isGone = (o.health === 'gone');
+		/* СИРОТА ВНЕ ЗОНЫ WAN (nozone=1, живой случай 17.08.2026): мастер LuCI
+		   «Подключиться к сети» создал STA-интерфейс, но зону wan ему не
+		   назначили - связь есть, а аплинком он быть не может (нет NAT из LAN).
+		   Показываем карточку с пунктиром и делаем клик ЛЕЧЕНИЕМ: netpri.sh
+		   adoptzone добавляет интерфейс в зону, и карточка оживает. */
+		var isOrphan = !!o.nozone;
 		return E('button', {
-			'class': 'btn cbi-button netpri-btn' + (isGone ? ' netpri-slot netpri-gone' : (isA ? ' active' : '')),
+			'class': 'btn cbi-button netpri-btn' + (isGone ? ' netpri-slot netpri-gone' : (isOrphan ? ' netpri-slot' : (isA ? ' active' : ''))),
 			'data-iface': o.iface,
-			'data-tooltip': o.iface + (o.metric != null ? (' · metric ' + o.metric) : ''),
+			'data-tooltip': isOrphan
+				? _('This Wi-Fi uplink is not in the wan firewall zone - click to add it and make it usable')
+				: (o.iface + (o.metric != null ? (' · metric ' + o.metric) : '')),
 			'click': function(ev) {
 				/* click, сгенерированный сразу после drop, игнорируем. */
 				if (_npJustDragged) { _npJustDragged = false; return; }
 				var ifc = ev.currentTarget.getAttribute('data-iface');
+				if (isOrphan) {
+					_npApplying = true;
+					L.resolveDefault(fs.exec(BIN, [ 'adoptzone', ifc ]), {}).then(function() {
+						loadList().then(function(l2) { redraw(l2); _npApplying = false; });
+					}, function() { _npApplying = false; });
+					return;
+				}
 				if (ifc === active) { return; }
 				/* Клик = «сделать первым»: строим НОВЫЙ ПОРЯДОК (кликнутый впереди,
 				   остальные в текущем порядке) и отдаём как order - метрики станут
@@ -1346,7 +1361,8 @@ function buildBar(list, redraw) {
 			}
 			return [
 			rankEl(_rank, o),
-			E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
+			E('span', { 'class': 'netpri-sub' },
+				isOrphan ? _('not in wan zone — click to fix') : (o.sub || o.iface)),
 			nameEl(o),
 			/* keep the IP line present even without an address so the button height
 			   never changes; show a neutral placeholder while there is no IP yet.

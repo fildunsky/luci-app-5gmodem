@@ -72,7 +72,7 @@ BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
 #     ВНИМАНИЕ: 05c6:90d5 и 1e2d:00b7 делят с Compal RXM-G1 / Thales MV31-W - у
 #     них eSIM может не быть, тогда вкладка покажется зря; прячется галкой в
 #     настройках (цена ложного «показали» ниже, чем «спрятали нужное»).
-ESIM_CAPABLE_VIDPIDS="0e8d:7127 2cb7:0104 2cb7:0105 2c7c:0800 2c7c:0801 2c7c:0900 05c6:9025 05c6:90d5 1e2d:00b3 1e2d:00b7 1e2d:00b8 1e2d:00b9"
+ESIM_CAPABLE_VIDPIDS="0e8d:7127 0e8d:7126 2cb7:0104 2cb7:0105 2c7c:0800 2c7c:0801 2c7c:0900 05c6:9025 05c6:90d5 1e2d:00b3 1e2d:00b7 1e2d:00b8 1e2d:00b9"
 
 PORTCACHE="/tmp/5gmodem_esim_port_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')"
 # Живой лог операции: мост дописывает сюда строки прогресса ПО МЕРЕ их прихода,

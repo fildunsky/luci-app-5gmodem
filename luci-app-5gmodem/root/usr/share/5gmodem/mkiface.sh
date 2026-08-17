@@ -445,10 +445,19 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# модемов вообще не находил AT-порта, то есть рабочих установок на
 		# fibocom с вендором 8087 не существует. Явный выбор пользователя
 		# (REQ=fibocom) не трогаем - только автоопределение.
-		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } && [ -f /lib/netifd/proto/xmm.sh ] \
+		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } \
 		   && [ "$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null)" = "8087" ]; then
-			FPROTO=xmm
-			logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=xmm: fibocom на NCM-канале не поднимет трафик"
+			if [ -f /lib/netifd/proto/xmm.sh ]; then
+				# Установленный пакет xmm-modem уважаем: работающие на нём
+				# установки не трогаем.
+				FPROTO=xmm
+				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=xmm (пакет xmm-modem установлен)"
+			else
+				# С 2.4.10 XMM-логика (XDATACHANNEL/XDNS/arp off) встроена в наш
+				# fibocom - внешний пакет больше не обязателен.
+				FPROTO=fibocom
+				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=fibocom (встроенная XMM-ветка)"
+			fi
 		fi
 
 		if [ "$FPROTO" = atc ] || [ "$FPROTO" = xmm ]; then
