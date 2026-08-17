@@ -391,7 +391,28 @@ mm_recover_missing() {
 				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
 					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
 					logger -t 5gmodem "модем $_rp: ModemManager не собрал (нет primary AT port), но у него ЕСТЬ QMI-канал cdc-wdm - переключите интерфейс на прото QMI (uqmi). Перепривязку НЕ делаю: она рискует уронить устройство (config #1 error -71)."
+					continue
 				fi
+				# ВТОРОЙ ПРОХОД: MM жив, опрос этого устройства закончен, а модема
+				# в MM так и нет. Совет из лога пользователи не читают - интерфейс
+				# на modemmanager остаётся в NO_DEVICE навсегда (Netcore N60 Pro +
+				# T99W175 05c6:9025, 17.08.2026: AT-порты немые, MM бессилен, QMI
+				# живой). При автоматическом выборе протокола переключаем сами;
+				# ручной выбор не трогаем. Однократно за загрузку (флаг в tmpfs).
+				[ -f "$RUN/$_rb_key.qmiswitch" ] && continue
+				pidof ModemManager >/dev/null 2>&1 || continue
+				_mm_probing "$_rp" && continue
+				_sw_sec="m_$_rb_key"
+				_sw_p=$(uci -q get "5gmodem.$_sw_sec.iface_proto")
+				[ -n "$_sw_p" ] || _sw_p=$(uci -q get 5gmodem.@5gmodem[0].iface_proto)
+				[ "$_sw_p" = "auto" ] || continue
+				_sw_if=$(uci -q get "5gmodem.$_sw_sec.network")
+				[ -n "$_sw_if" ] || _sw_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+				[ -n "$_sw_if" ] || continue
+				[ "$(uci -q get "network.$_sw_if.proto")" = "modemmanager" ] || continue
+				: > "$RUN/$_rb_key.qmiswitch" 2>/dev/null
+				logger -t 5gmodem "модем $_rp: MM его так и не собрал, протокол выбран автоматически - перевожу интерфейс $_sw_if на прото QMI"
+				"$RES/mkiface.sh" "$_sw_if" qmi >/dev/null 2>&1
 				continue
 			fi
 			# MM СЕЙЧАС ОПРАШИВАЕТ ПОРТЫ - НЕ МЕШАЕМ. На медленном модеме с
