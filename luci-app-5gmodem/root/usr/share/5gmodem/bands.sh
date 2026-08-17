@@ -619,7 +619,18 @@ getantports() {
 
 # Любая ЗАПИСЬ диапазонов/режима делает json-кэш устаревшим - сбрасываем его,
 # чтобы следующее чтение пошло в порт за новой маской. get*/json - не трогаем.
-case "$1" in set*|restorebands) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
+# ЧИСТИМ КЭШ ТОЛЬКО ТАМ, ГДЕ ЗАПИСЬ СИНХРОННАЯ (restorebands). Для set*-вербов
+# запись уходит В ФОН, и мгновенная чистка устраивала гонку (живой отчёт
+# MV31-W 17.08.2026, «бенды снова все синие»): UI после Apply перечитывал
+# бенды при пустом кэше, попадал В СЕРЕДИНУ фоновой записи (между голым
+# сбросом AT^BAND_PREF и записью нового списка), читал «все включены» - и это
+# кэшировалось. Ручная запись тех же команд с консоли работала идеально -
+# ломал только наш конвейер. Теперь кэш сбрасывает сама фоновая подоболочка
+# ПОСЛЕ завершения записи (см. set*-вербы): до этого UI честно показывает
+# старый кэш, а первое чтение после - свежую маску; холодное чтение во время
+# записи выстроится ЗА командами записи в очереди at_lock и тоже прочитает
+# уже новую маску.
+case "$1" in restorebands) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
 
 # CACHE-FIRST + фоновое обновление для json.
 #
@@ -1278,7 +1289,7 @@ case $1 in
 		# Выбор ЗАПОМИНАЕМ в секции модема (для восстановления после перезагрузки -
 		# см. restorebands). Делаем до фонового применения: нужно намерение
 		# пользователя ($2), а не то, что реально ляжет в маску.
-		[ -n "$2" ] && { _persist_bands "" "$2"; ( _band_write setbands "$2" ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands "" "$2"; ( _band_write setbands "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -1294,7 +1305,7 @@ case $1 in
 		;;
 	"setbands5gnsa")
 		# Перезапуск радио - в той же подоболочке после записи (см. setbands).
-		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( _band_write setbands5gnsa "$2" ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( _band_write setbands5gnsa "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands5gsa")
 		getsupportedbands5gsa
@@ -1309,7 +1320,7 @@ case $1 in
 		getbandsext5gsa
 		;;
 	"setbands5gsa")
-		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( _band_write setbands5gsa "$2" ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( _band_write setbands5gsa "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"mgmtinfo")
 		# ЕДИНАЯ точка истины для блока «Управление частотами». Раньше фронт сам
@@ -1475,7 +1486,7 @@ case $1 in
 		# AT+CNMP берёт эффект сразу, а CFUN=4->1 его ОТКАТЫВАЕТ, проверено). Флаг
 		# _BANDS_APPLY_LIVE из профиля решает, перезапускать ли радио. В фоне -
 		# перерегистрация модема может не уложиться в таймаут rpcd.
-		[ -n "$2" ] && { ( setmode "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setmode "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	# СИНХРОННАЯ смена режима БЕЗ перезапуска радио - для короткого ухода в 3G
 	# под запрос USSD (см. ussd.sh). Отличий от "setmode" два, и оба нужны:
@@ -1510,7 +1521,7 @@ case $1 in
 		# Как setbands: в ФОНЕ с отвязкой дескрипторов, и СТРОГО ПОСЛЕ записи -
 		# soft-реконнект (GTACT рвёт PDP на FM350). Раньше реконнект дёргал UI
 		# (setBands3gAT) - для combos Telit; теперь один путь для обоих стилей.
-		[ -n "$2" ] && { ( setbands3g "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setbands3g "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getsupportedbands2g")
 		getsupportedbands2g
@@ -1520,7 +1531,7 @@ case $1 in
 		;;
 	"setbands2g")
 		# Зеркало setbands3g: фон + реконнект после записи.
-		[ -n "$2" ] && { ( setbands2g "$2" && _bands_after_write ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setbands2g "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
