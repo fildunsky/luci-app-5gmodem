@@ -116,7 +116,7 @@ _tg_proxy_port() {
 	if [ "$_tp_r" = "0" ]; then
 		_tg_capi -X PATCH "$_TG_CAPI/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
 		_tp_r=7895
-		logger -t 5gmodem "telegram: прямой путь к api.telegram.org закрыт - открыл у clash mixed-port 7895 (API, только 127.0.0.1)"
+		logger -t 5gmodem "telegram: direct path to api.telegram.org is blocked - opened clash mixed-port 7895 (API, 127.0.0.1 only)"
 	fi
 	printf '%s' "$_tp_r"
 }
@@ -331,7 +331,7 @@ $_tk_txt"
 				# держать им очередь нельзя - следом стоят нормальные сообщения.
 				# Человеку шлём хотя бы факт: от кого и когда, чтобы он открыл
 				# «Входящие» и прочитал глазами.
-				_log "Телеграм не принял сообщение от $_tk_snd ($_tk_ts): $(cat "$LASTLOG" 2>/dev/null | head -c 120)"
+				_log "Telegram rejected the message from $_tk_snd ($_tk_ts): $(cat "$LASTLOG" 2>/dev/null | head -c 120)"
 				_tg_send "SMS $_tk_snd$_tk_tag
 $_tk_ts
 
@@ -343,14 +343,14 @@ $_tk_ts
 				# остаётся в памяти модема и в «невиденных» - следующий круг
 				# попробует снова. Это и есть очередь недоставленного: терять
 				# нечего, пока сообщение не подтверждено Телеграмом.
-				_log "не доставлено ($(cat "$LASTLOG" 2>/dev/null | head -c 120))"
+				_log "not delivered ($(cat "$LASTLOG" 2>/dev/null | head -c 120))"
 				return 1 ;;
 		esac
 	done
 	if [ "$_tk_first" = "1" ] && [ "$_tk_n" -gt 0 ]; then
-		_log "первая встреча с модемом $(_tg_name "$_tk_path"): обработано $_tk_n сообщений (свежее ${TG_FIRSTH}ч - в чат, старое - молча виденным)"
+		_log "first encounter with modem $(_tg_name "$_tk_path"): processed $_tk_n messages (newer than ${TG_FIRSTH}h go to the chat, older ones are silently marked seen)"
 	elif [ "$_tk_n" -gt 0 ]; then
-		_log "переслано сообщений: $_tk_n ($(_tg_name "$_tk_path"))"
+		_log "messages forwarded: $_tk_n ($(_tg_name "$_tk_path"))"
 	fi
 	return 0
 }
@@ -580,7 +580,7 @@ commands() {
 		[ -n "$_co_txt" ] || continue
 		# ЧУЖОЙ ЧАТ - МОЛЧА МИМО.
 		[ "$_co_chat" = "$TG_CHAT" ] || {
-			_log "команда из чужого чата $_co_chat пропущена"
+			_log "command from foreign chat $_co_chat ignored"
 			continue
 		}
 		case "$_co_txt" in
@@ -599,7 +599,7 @@ commands() {
 					*queued*)      _tg_reply "Порт занят, поставил в очередь - отправлю при первой возможности ($_co_to)" ;;
 					*)             _tg_reply "Не удалось отправить на $_co_to: ${_co_out:-нет ответа}" ;;
 				esac
-				_log "команда из чата: SMS на $_co_to" ;;
+				_log "chat command: SMS to $_co_to" ;;
 			/sms|/sms@*)
 				_tg_reply "Формат: /sms <номер> <текст>" ;;
 			/status\ *)
@@ -638,7 +638,7 @@ $(_tg_list)"
 					continue
 				}
 				if "$RES/modemswitch.sh" switch "$_co_p" >/dev/null 2>&1; then
-					_log "команда из чата: активный модем -> $_co_p"
+					_log "chat command: active modem -> $_co_p"
 					_tg_reply "Активный модем: $(_tg_name "$_co_p")
 $(status_text "$_co_p")"
 				else

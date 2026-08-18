@@ -51,7 +51,7 @@ setbands() {
 	# кавычками молча игнорируется прошивкой (те же живые пробы).
 	_sb_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF=LTE,2,$T" 2>&1 | tr -d '\r')
 	case "$_sb_o" in
-		*ERROR*) logger -t 5gmodem "band_pref(LTE): прошивка отвергла запись «AT^BAND_PREF=LTE,2,$T»: $(echo "$_sb_o" | tr '\n' ' ' | head -c 120)" ;;
+		*ERROR*) logger -t 5gmodem "band_pref(LTE): firmware rejected the write \"AT^BAND_PREF=LTE,2,$T\": $(echo "$_sb_o" | tr '\n' ' ' | head -c 120)" ;;
 	esac
 }
 
@@ -114,7 +114,7 @@ setbands5gnsa() {
 
 	_sb_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF=NR5G,2,$T" 2>&1 | tr -d '\r')
 	case "$_sb_o" in
-		*ERROR*) logger -t 5gmodem "band_pref(NR5G): прошивка отвергла запись «AT^BAND_PREF=NR5G,2,$T»: $(echo "$_sb_o" | tr '\n' ' ' | head -c 120)" ;;
+		*ERROR*) logger -t 5gmodem "band_pref(NR5G): firmware rejected the write \"AT^BAND_PREF=NR5G,2,$T\": $(echo "$_sb_o" | tr '\n' ' ' | head -c 120)" ;;
 	esac
 }
 # --- Привязка к соте и агрегация (Qualcomm SDX55) ----------------------------

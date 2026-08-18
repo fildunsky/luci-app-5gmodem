@@ -201,7 +201,7 @@ _st running starting
 		"$RES/bands.sh" setmodelive "$_tgt" >/dev/null 2>&1
 		_wait_reg "$PORT" 0
 		if [ "$("$RES/bands.sh" getmode 2>/dev/null)" = "$MODE3G" ]; then
-			logger -t 5gmodem "ussd: режим не вернулся с 3G, повторяю ($_tgt)"
+			logger -t 5gmodem "ussd: network mode did not return from 3G, retrying ($_tgt)"
 			"$RES/bands.sh" setmodelive "$_tgt" >/dev/null 2>&1
 			_wait_reg "$PORT" 0
 		fi
@@ -233,7 +233,7 @@ _st running starting
 		   && [ "$(ussd_supported_for "$_MODEL" "$_VIDPID")" = "0" ]; then
 			MODE3G=""
 			NOTE=',"unsupported":1'
-			logger -t 5gmodem "ussd: $_MODEL в базе как «USSD не работает» - в 3G не уводим"
+			logger -t 5gmodem "ussd: $_MODEL is listed as \"USSD does not work\" - not dropping to 3G"
 		fi
 	fi
 
@@ -243,7 +243,7 @@ _st running starting
 	if [ -n "$MODE3G" ] && [ "$_ISACT" != "true" ]; then
 		MODE3G=""
 		NOTE=',"noswitch":"not_active"'
-		logger -t 5gmodem "ussd: $PORT не принадлежит активному модему - режим сети не трогаем"
+		logger -t 5gmodem "ussd: $PORT does not belong to the active modem - leaving the network mode alone"
 	fi
 
 	# ОДНА ПОПЫТКА ЗАПРОСА.
@@ -326,7 +326,7 @@ _st running starting
 		SWITCHED=1
 		if ! _wait_reg "$PORT" 1; then
 			NOTE=',"reason":"no_3g"'
-			logger -t 5gmodem "ussd: CS-регистрация не появилась за ${REG_WAIT}c - запрос уйдёт как есть"
+			logger -t 5gmodem "ussd: CS registration did not appear within ${REG_WAIT}s - sending the request as is"
 		fi
 	fi
 

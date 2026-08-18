@@ -213,7 +213,7 @@ proto_fibocom_setup() {
 	if [ -n "$modem_path" ] && [ "$modem_path" != "$usbpath" ] \
 	   && [ ! -e "/sys/bus/usb/devices/$usbpath/idVendor" ] \
 	   && [ -e "/sys/bus/usb/devices/$modem_path/idVendor" ]; then
-		echo "fibocom[$$] usbpath «$usbpath» на шине отсутствует, беру modem_path «$modem_path»"
+		echo "fibocom[$$] usbpath \"$usbpath\" is not on the bus, using modem_path \"$modem_path\""
 		usbpath="$modem_path"
 	fi
 
@@ -244,7 +244,7 @@ proto_fibocom_setup() {
 		# ГОВОРИМ ВСЛУХ. Ветка выходила молча, и в журнале оставался лишь
 		# бесконечный «setting up - is now down» без единого намёка на причину
 		# (живой отчёт Cudy TR3000). Одна строка экономит час разбора.
-		echo "fibocom[$$] сетевого устройства нет: путь «$usbpath», device «$device»"
+		echo "fibocom[$$] no network device: path \"$usbpath\", device \"$device\""
 		proto_notify_error "$interface" NO_NETDEV
 		proto_set_available "$interface" 0
 		return 1
@@ -275,7 +275,7 @@ proto_fibocom_setup() {
 		dial=$(_fibocom_atport "$usbpath" "$(uci -q get 5gmodem.@5gmodem[0].at_port)")
 	fi
 	if [ -z "$dial" ]; then
-		echo "fibocom[$$] AT-порт не найден по пути «$usbpath» (ни ttyUSB, ни ttyACM не ответили на AT)"
+		echo "fibocom[$$] no AT port found at path \"$usbpath\" (neither ttyUSB nor ttyACM answered AT)"
 		proto_notify_error "$interface" NO_AT_PORT
 		proto_set_available "$interface" 0
 		return 1
@@ -299,7 +299,7 @@ proto_fibocom_setup() {
 		if command -v at_lock >/dev/null 2>&1 && at_lock "$dial" 20; then
 			_fib_lock_held=1
 		else
-			echo "fibocom[$$] AT-порт $dial занят - продолжаю без очереди"
+			echo "fibocom[$$] AT port $dial is busy - proceeding without the queue"
 		fi
 	fi
 	_fib_unlock() {
@@ -346,7 +346,7 @@ proto_fibocom_setup() {
 		# выбор сети пользователем, перебивать его мы не вправе.
 		if [ "$_kick" = 0 ] && [ "$(_fibocom_cops_mode "$dial")" = 2 ]; then
 			_kick=1
-			echo "fibocom[$$] модем снят с регистрации (+COPS: 2) - включаю автопоиск сети"
+			echo "fibocom[$$] modem was deregistered (+COPS: 2) - enabling automatic network search"
 			sms_tool -d "$dial" at "AT+COPS=0" >/dev/null 2>&1
 		fi
 		[ "$_rw" -ge 60 ] && break
@@ -377,7 +377,7 @@ proto_fibocom_setup() {
 			# ОТКАЗ СЕТИ - это не «пока не нашёл»: так отвечают на незарегистрированную
 			# SIM, неоплаченный тариф или заблокированный IMEI. Повторять бесполезно,
 			# поэтому здесь перезапуск блокируем - как в роуминге.
-			echo "fibocom[$$] network refused registration (+CEREG stat 3) - SIM/подписка/IMEI"
+			echo "fibocom[$$] network refused registration (+CEREG stat 3) - SIM/subscription/IMEI"
 			_fib_unlock
 			proto_notify_error "$interface" REGISTRATION_DENIED
 			proto_block_restart "$interface"
@@ -387,7 +387,7 @@ proto_fibocom_setup() {
 			# Сети нет и за отведённое время не появилась. Перезапуск НЕ блокируем:
 			# сигнал может вернуться сам, и интерфейс обязан подняться без участия
 			# человека. Цикл ожидания выше держит повтор примерно раз в минуту.
-			echo "fibocom[$$] no network registration (+CEREG stat «${_reg:-нет ответа}») after ${_rw}s"
+			echo "fibocom[$$] no network registration (+CEREG stat \"${_reg:-no answer}\") after ${_rw}s"
 			_fib_unlock
 			proto_notify_error "$interface" NOT_REGISTERED
 			return 1
@@ -466,10 +466,10 @@ proto_fibocom_setup() {
 	net_was=$(cat "$net_f" 2>/dev/null)
 	if [ -f "$cold_f" ]; then
 		rm -f "$cold_f"
-		echo "fibocom[$$] запрошено восстановление связи - поднимаю сессию заново"
+		echo "fibocom[$$] recovery requested - re-establishing the session"
 		bands_changed=1
 	elif [ -n "$net_was" ] && [ -n "$net_plmn" ] && [ "$net_plmn" != "$net_was" ]; then
-		echo "fibocom[$$] сеть сменилась ($net_was -> $net_plmn) - старую сессию не переиспользую"
+		echo "fibocom[$$] network changed ($net_was -> $net_plmn) - not reusing the old session"
 		bands_changed=1
 	fi
 
@@ -483,7 +483,7 @@ proto_fibocom_setup() {
 				_au_now=$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)
 				_au_was=$(cat "/tmp/fibocom_authed_$interface" 2>/dev/null)
 				if [ -z "$_au_was" ] || [ "$_au_now" != "$_au_was" ]; then
-					echo "fibocom[$$] модем переэнумерирован - PAP/CHAP-авторизация слетела, холодный дозвон"
+					echo "fibocom[$$] modem was re-enumerated - PAP/CHAP authorization lost, cold dial"
 					bands_changed=1
 				fi
 			fi ;;
@@ -524,12 +524,12 @@ proto_fibocom_setup() {
 				case "$(sms_tool -d "$dial" at "AT+CGATT?" 2>/dev/null | tr -d '\r' \
 					| sed -n 's/^+CGATT: *\([0-9]\).*/\1/p' | head -1)" in
 					1) : ;;
-					*) echo "fibocom[$$] контекст активен, но модем не прикреплён к сети (CGATT!=1) - холодный дозвон"
+					*) echo "fibocom[$$] context is active but the modem is not attached (CGATT!=1) - cold dial"
 					   ip="" ;;
 				esac
 			fi
 		else
-			echo "fibocom[$$] контекст (APN «$cur_apn», $cur_pdp) != настроенного (APN «$apn», $pdptype) - холодный дозвон"
+			echo "fibocom[$$] context (APN \"$cur_apn\", $cur_pdp) != configured (APN \"$apn\", $pdptype) - cold dial"
 		fi
 	fi
 
@@ -627,7 +627,7 @@ proto_fibocom_setup() {
 			[ -n "$zone6" ] && json_add_string zone "$zone6"
 			json_close_object
 			ubus call network add_dynamic "$(json_dump)"
-			echo "fibocom[$$] IPv6 ($ctx_pdp): поднят dhcpv6-интерфейс ${interface}_6 (зона ${zone6:-—})"
+			echo "fibocom[$$] IPv6 ($ctx_pdp): brought up dhcpv6 interface ${interface}_6 (zone ${zone6:--})"
 			;;
 	esac
 }

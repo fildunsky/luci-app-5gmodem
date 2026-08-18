@@ -87,7 +87,7 @@ _kill_stuck_uqmi() {   # $1 - устройство (/dev/cdc-wdm*)
 		case "$_ku_st" in ''|*[!0-9]*) continue ;; esac
 		[ $((_ku_up - _ku_st / 100)) -ge 15 ] || continue
 		_ku_pid="${_ku_p#/proc/}"
-		_log "снимаю зависший uqmi $_ku_pid на $1 - держит канал лежачего интерфейса"
+		_log "killing stuck uqmi $_ku_pid on $1 - it is holding the channel of a down interface"
 		kill -9 "$_ku_pid" 2>/dev/null
 		_ku_killed=1
 	done
@@ -181,11 +181,11 @@ _revive() {   # $1 - интерфейс, $2 - причина для журнал
 		''|*[!0-9]*) _rv_prev=0 ;;
 	esac
 	if [ $((_rv_now - _rv_prev)) -lt "$COOLDOWN" ]; then
-		_log "$1: $2 - подъём был $((_rv_now - _rv_prev))c назад, жду"
+		_log "$1: $2 - last bring-up was $((_rv_now - _rv_prev))s ago, waiting"
 		return 0
 	fi
 	printf '%s' "$_rv_now" > "$_rv_f" 2>/dev/null
-	_log "$1: $2 - перезапускаю"
+	_log "$1: $2 - restarting"
 	iface_up "$1"
 }
 
@@ -247,7 +247,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 								_swc=$(at_query "$_port" "AT+COPS?" 6 4 2>/dev/null 									| tr -d '\r' \
 									| sed -n 's/^+COPS: *\([0-9]*\).*/\1/p' | head -1)
 								if [ "$_swc" = "2" ]; then
-									_log "модем на $_if дерегистрирован командой (+COPS: 2) - возвращаю поиск сети"
+									_log "modem on $_if was deregistered by command (+COPS: 2) - re-enabling network search"
 									at_query "$_port" "AT+COPS=0" 20 4 >/dev/null 2>&1
 									printf '%s' "$_swnow" > "$_swcf" 2>/dev/null
 								fi
@@ -295,7 +295,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 								case "$_swn" in ''|*[!0-9]*) _swn=0 ;; esac
 								if [ "$_swn" -lt 6 ]; then
 									printf '%s' "$((_swn + 1))" > "$_swf" 2>/dev/null
-									_log "$_if: SIM не готова - подъём отложен, ждёт лестницу ($((_swn + 1))/6)"
+									_log "$_if: SIM not ready - bring-up postponed, waiting for the recovery ladder ($((_swn + 1))/6)"
 									return 0
 								fi
 							else
@@ -303,7 +303,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 							fi
 							if [ "$(_sw_run 8 uqmi -d "$_swd" --get-data-status \
 								| tr -d '"' | tr -d '[:space:]')" = "connected" ]; then
-								_log "$_if: сессия висит «connected» при лежачем интерфейсе - гашу перед подъёмом"
+								_log "$_if: session stuck \"connected\" while the interface is down - stopping it before bring-up"
 								_sw_run 10 uqmi -d "$_swd" --stop-network 0xffffffff --autoconnect >/dev/null 2>&1
 								sleep 2
 							fi ;;
@@ -383,7 +383,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					if [ ! -f "$_qrf" ] && [ -f /lib/netifd/proto/qmiraw.sh ] \
 					   && [ "$(uci -q get "network.$_if.proto")" = qmi ]; then
 						: > "$_qrf"
-						_log "$_if: QMI connected без адреса в 802.3 - перевожу интерфейс на proto=qmiraw (raw-ip + статика из QMI) и передозваниваю"
+						_log "$_if: QMI connected but no address in 802.3 mode - switching the interface to proto=qmiraw (raw-ip + static from QMI) and redialing"
 						uci set "network.$_if.proto=qmiraw"
 						uci set "network.$_if.dhcp=0"
 						uci commit network
@@ -392,9 +392,9 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					else
 						case "$_qraw:$_qfmt" in
 							Y:802-3|N:raw-ip)
-								_log "$_if: формат кадров рассинхронизирован (драйвер raw_ip=$_qraw, модем $_qfmt) - приём отбрасывается" ;;
+								_log "$_if: frame format mismatch (driver raw_ip=$_qraw, modem $_qfmt) - inbound traffic is being dropped" ;;
 						esac
-						_log "$_if: QMI отвечает connected, но адреса нет $_qn круга - переинициализирую модем"
+						_log "$_if: QMI says connected but no address for $_qn cycles - reinitializing the modem"
 						"$RES/qmi-recover.sh" reset "$_path" "канал не поднялся ($_if)" >/dev/null 2>&1
 					fi
 				fi
@@ -573,7 +573,7 @@ EOF
 	done
 	printf '%s' "$(( (_wt + 1) % 1000 ))" > "$_wtf" 2>/dev/null
 	[ -n "$_wpick" ] || return 0
-	logger -t 5gmodem "подогрев снимка: опрашиваю неактивный модем $_wpick"
+	logger -t 5gmodem "snapshot warm-up: polling inactive modem $_wpick"
 	POLL_MODEM="$_wpick" "$RES/5gmodem.sh" json >/dev/null 2>&1
 }
 
@@ -647,7 +647,7 @@ case "$1" in
 			  for _pg_p in fibocom qmiraw; do
 				uci -q show network 2>/dev/null | grep -q "\.proto='$_pg_p'" || continue
 				echo "$_pg_h" | grep -q "\"$_pg_p\"" && continue
-				logger -t 5gmodem "protoguard: интерфейс на $_pg_p есть, а netifd прото не знает - принудительная регистрация"
+				logger -t 5gmodem "protoguard: an interface uses $_pg_p but netifd does not know the proto - forcing registration"
 				REGISTER_PROTO_FORCE=1 "$RES/register_proto.sh" >/dev/null 2>&1
 				break
 			  done
@@ -670,7 +670,7 @@ case "$1" in
 					mbim|qmi|qmiraw)
 						if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
 							if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
-								_log "прокси-сирота на прямом канале ($_ps_if) - гашу mbim/qmi-proxy и передозваниваю"
+								_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
 								killall mbim-proxy 2>/dev/null
 								killall qmi-proxy 2>/dev/null
 								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
@@ -684,7 +684,7 @@ case "$1" in
 								# in illegal state» по кругу), метла ждала up (Netcore
 								# N60 Pro + T99W175, 17.08.2026). Живую операцию
 								# eSIM/слотов не заденем: у неё жив lpac/qmicli/mbimcli.
-								_log "прокси-сирота душит дозвон ($_ps_if опущен) - гашу mbim/qmi-proxy и поднимаю"
+								_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy and bringing the interface up"
 								killall mbim-proxy 2>/dev/null
 								killall qmi-proxy 2>/dev/null
 								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &

@@ -137,7 +137,7 @@ apdu_backend() {
 				*qmi_wwan*) echo qmi ;;
 				*)
 					if [ -z "$(esim_wdm)" ]; then
-						logger -t 5gmodem "esim: выбран $_ab, но cdc-wdm у модема нет - иду по AT через мост"
+						logger -t 5gmodem "esim: $_ab selected, but the modem has no cdc-wdm - going over AT via the bridge"
 						echo bridge
 					else
 						echo "$_ab"
@@ -233,15 +233,34 @@ _ESIM_INH_PID=/tmp/5gmodem_esim_mminh.pid
 _ESIM_INH_T=/tmp/5gmodem_esim_mminh.t
 _mm_inh_held() { [ -f "$_ESIM_INH_PID" ] && kill -0 "$(cat "$_ESIM_INH_PID" 2>/dev/null)" 2>/dev/null; }
 _mm_inh_touch() { cut -d. -f1 /proc/uptime > "$_ESIM_INH_T" 2>/dev/null; }
+# MM сейчас держит какой-нибудь узел модема (tty/cdc-wdm)? Пока держит - он
+# щупает порты, и лезть в канал нельзя; отпустил и модема в списке нет - канал
+# фактически свободен.
+_mm_busy_on_dev() {
+	_mb_pid=$(pidof ModemManager 2>/dev/null | head -1)
+	[ -n "$_mb_pid" ] || return 1
+	for _mb_f in /proc/"$_mb_pid"/fd/*; do
+		case "$(readlink "$_mb_f" 2>/dev/null)" in
+			/dev/cdc-wdm*|/dev/ttyUSB*|/dev/ttyACM*) return 0 ;;
+		esac
+	done
+	return 1
+}
 _mm_esim_take() {
 	_mm_inh_held && { _mm_inh_touch; return 0; }
 	_ti_ap=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	# MM мог как раз пере-пробить модем (например, сразу после прошлого
-	# захвата) - ждём появления индекса, как в band-takeover.
+	# захвата) - ждём появления индекса, как в band-takeover. НО: если MM
+	# модема НЕ собрал и его порты не держит - индекса не будет НИКОГДА
+	# (часть прошивок MM не соберёт в принципе: «нет primary AT port»), а
+	# канал при этом свободен - работаем без инхибита, не выжидая минуту.
+	# Раньше каждый чип-верб ждал тут 60 с под общим замком, и страница
+	# крутила busy/mm_owns бесконечно (9eSIM после смены профиля, 17.08.2026).
 	_ti_idx=""; _ti_i=0
 	while [ "$_ti_i" -lt 20 ]; do
 		_ti_idx=$("$RES/modemswitch.sh" mmindex "$_ti_ap" 2>/dev/null)
 		[ -n "$_ti_idx" ] && break
+		_mm_busy_on_dev || return 0
 		sleep 3; _ti_i=$((_ti_i + 1))
 	done
 	[ -n "$_ti_idx" ] || return 1
@@ -254,7 +273,7 @@ _mm_esim_take() {
 		mmcli -m "$_ti_idx" >/dev/null 2>&1 || break
 		sleep 1; _ti_i=$((_ti_i + 1))
 	done
-	logger -t 5gmodem "esim: канал взят у MM (инхибит $_ti_ap) - вернём после 90 c простоя eSIM"
+	logger -t 5gmodem "esim: channel borrowed from MM (inhibit $_ti_ap) - will return after 90s of eSIM idle"
 	# СТОРОЖ-ВОЗВРАЩАТЕЛЬ. Отвязка stdio обязательна (rpcd ждёт EOF).
 	(
 		while :; do
@@ -266,7 +285,7 @@ _mm_esim_take() {
 			[ $((_wd_now - _wd_t)) -ge 90 ] || continue
 			kill "$_wd_p" 2>/dev/null
 			rm -f "$_ESIM_INH_PID" "$_ESIM_INH_T"
-			logger -t 5gmodem "esim: инхибит снят (простой) - MM пересобирает модем, интерфейс поднимется сам"
+			logger -t 5gmodem "esim: inhibit released (idle) - MM is reassembling the modem, the interface will come up on its own"
 			exit 0
 		done
 	) >/dev/null 2>&1 </dev/null &
@@ -347,7 +366,7 @@ _mbim_or_at() {
 	if _wdm_owned_by_umbim "$(esim_wdm)"; then
 		# По AT - значит через мост: родной AT-драйвер lpac виснет на длинных
 		# цепочках CGLA (см. ветку AT-модема в apdu_backend).
-		logger -t 5gmodem "esim: узлом $(esim_wdm) владеет umbim (proto=mbim) - mbim-проба запрещена, идём по AT через мост"
+		logger -t 5gmodem "esim: node $(esim_wdm) is owned by umbim (proto=mbim) - mbim probe forbidden, going over AT via the bridge"
 		echo bridge
 	else
 		echo mbim
@@ -372,7 +391,7 @@ euicc_probe_wdm() {
 	[ -c "$_pwdev" ] || return 1
 	# Страховка на случай прямого вызова с бэкендом mbim (мимо apdu_backend).
 	if [ "$1" = mbim ] && _wdm_owned_by_umbim "$_pwdev"; then
-		logger -t 5gmodem "esim: mbim-проба на узле umbim запрещена (рвёт сессию данных)"
+		logger -t 5gmodem "esim: mbim probe on the umbim node is forbidden (it kills the data session)"
 		return 1
 	fi
 	_pwsave=""
@@ -408,7 +427,7 @@ euicc_probe_wdm() {
 		# раз. У MM-модемов прокси трогать нельзя: это его рабочий канал.
 		if [ "$_pwtry" = 1 ] && [ "$1" = mbim ] \
 			&& pidof mbim-proxy >/dev/null 2>&1 && ! _mm_owns_channel; then
-			logger -t 5gmodem "esim: mbim-проба не ответила, перезапускаю mbim-proxy"
+			logger -t 5gmodem "esim: mbim probe did not answer, restarting mbim-proxy"
 			killall mbim-proxy 2>/dev/null
 			sleep 2
 		else
@@ -525,8 +544,16 @@ _mbim_target_index() {
 _mbim_target_is_active_esim() {
 	if command -v mbimcli >/dev/null 2>&1; then
 		_tie=$(_mbim_target_index) || return 1
-		mbimcli -d "$1" -p --ms-query-slot-info-status="$_tie" 2>/dev/null \
-			| grep -qi "active-esim" && return 0
+		# ТОЧНОЕ СРАВНЕНИЕ, НЕ ПОДСТРОКА. «inactive-esim» СОДЕРЖИТ
+		# «active-esim», и grep по подстроке считал НЕАКТИВНЫЙ пустой eUICC
+		# активным - защита разрешала lpac слот-маппинг, модем персистентно
+		# уезжал на пустой слот, SIM пропадала до ручного AT^switch_slot
+		# (живой случай ZBT-Z8102AX + MV31-W, 18.08.2026, «Освободить модем»).
+		# Тот же класс, что «connected» в выводе uqmi, матчивший
+		# «disconnected» (sessionwatch, июль).
+		_tie_st=$(mbimcli -d "$1" -p --ms-query-slot-info-status="$_tie" 2>/dev/null \
+			| sed -n 's/.*[Ss]lot state:[^a-zA-Z]*\([a-zA-Z-]*\).*/\1/p' | head -1)
+		[ "$_tie_st" = "active-esim" ] && return 0
 		return 1
 	fi
 	# mbimcli В ОБРАЗЕ БЫВАЕТ НЕ ВСЕГДА (пакет umbim/mbim-utils не обязателен).
@@ -540,10 +567,11 @@ _mbim_target_is_active_esim() {
 	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _tie_mb="--device-open-mbim" ;;
 	esac
-	qmicli -d "$1" -p $_tie_mb --uim-get-slot-status 2>/dev/null | awk '
-		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; next }
-		/Slot status: *active/     { act = 1 }
-		/Is eUICC: *yes/           { euicc = 1 }
+	# Якорь в конце ОБЯЗАТЕЛЕН: «inactive» содержит «active» (см. mbim-ветку).
+	qmicli -d "$1" -p $_tie_mb --uim-get-slot-status 2>/dev/null | tr -d '\r' | awk '
+		/^ *Physical slot [0-9]+:/          { act = 0; euicc = 0; next }
+		/Slot status:[ \t]*active[ \t]*$/   { act = 1 }
+		/Is eUICC:[ \t]*yes/                { euicc = 1 }
 		act && euicc { found = 1; exit }
 		END { exit(found ? 0 : 1) }
 	'
@@ -620,7 +648,7 @@ _mbim_use_proxy() {   # $1 - узел cdc-wdm
 	if qmicli -d "$1" -p $_upmb --uim-get-slot-status >/dev/null 2>&1; then
 		echo 1 > "$_upc"
 	else
-		logger -t 5gmodem "esim: mbim-proxy не отвечает - иду к $1 напрямую (канал свободен)"
+		logger -t 5gmodem "esim: mbim-proxy not responding - talking to $1 directly (the channel is free)"
 		echo 0 > "$_upc"
 	fi
 	cat "$_upc"
@@ -1031,9 +1059,9 @@ do_lpac() {
 				# повторить как раз стоит. Смотрим ПОСЛЕДНЮЮ httpx-строку лога.
 				if [ "$(grep '"type":"httpx"' "$LIVELOG" 2>/dev/null | tail -1 \
 					| grep -c '"truncated":1')" = 1 ]; then
-					logger -t 5gmodem "esim: ответ сервера оборвался на полпути - повторяю"
+					logger -t 5gmodem "esim: server response was cut short - retrying"
 				else
-					logger -t 5gmodem "esim: сервер ответил не по протоколу - повторы бессмысленны, прекращаю"
+					logger -t 5gmodem "esim: server response violates the protocol - retries are pointless, stopping"
 					break
 				fi ;;
 		esac
@@ -1050,11 +1078,11 @@ do_lpac() {
 		case "$(printf '%s\n' "$R" | grep '"type":"lpa"' | tail -1)" in
 			*'"message":"es9p_'*'"data":""'*) : ;;
 			*'"message":"es9p_'*)
-				logger -t 5gmodem "esim: сервер оператора отказал - повторы бессмысленны, прекращаю"
+				logger -t 5gmodem "esim: the operator server refused the request - retries are pointless, stopping"
 				break ;;
 		esac
 		if printf '%s\n' "$R" | grep -q 'iccid_already_exists_on_euicc'; then
-			logger -t 5gmodem "esim: профиль с этим ICCID уже на чипе - считаю установку успешной"
+			logger -t 5gmodem "esim: a profile with this ICCID is already on the chip - treating the install as successful"
 			R='{"type":"lpa","payload":{"code":0,"message":"success","data":"already_installed"}}'
 			break
 		fi
@@ -1089,7 +1117,7 @@ do_lpac() {
 					_dl_alt=0; [ "$_dl_cur" = 0 ] && _dl_alt=1
 					if [ -n "$_dl_p" ] && sms_tool -d "$_dl_p" at "AT^switch_slot?" 2>/dev/null \
 						| grep -qi "SIM"; then
-						logger -t 5gmodem "esim: чип не отвечает - переинициализирую карту сменой слота $_dl_cur -> $_dl_alt -> $_dl_cur"
+						logger -t 5gmodem "esim: chip not responding - reinitializing the card by cycling the slot $_dl_cur -> $_dl_alt -> $_dl_cur"
 						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_alt" >/dev/null 2>&1
 						sleep 5
 						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_cur" >/dev/null 2>&1
@@ -1100,7 +1128,7 @@ do_lpac() {
 				fi ;;
 		esac
 		_dl_n=$((_dl_n + 1))
-		[ "$_dl_max" -gt 2 ] && logger -t 5gmodem "esim: загрузка профиля не удалась - попытка $_dl_n из $_dl_max"
+		[ "$_dl_max" -gt 2 ] && logger -t 5gmodem "esim: profile download failed - attempt $_dl_n of $_dl_max"
 		# И В ЖИВОЙ ЛОГ ТОЖЕ - его читает вкладка.
 		# Ретраи молчали для человека: он видел, как одни и те же шаги идут по
 		# кругу, и не понимал, зависло это или так задумано (пять попыток на
@@ -1281,6 +1309,40 @@ setapdu)
 	uci -q commit 5gmodem
 	rm -f /tmp/5gmodem_esimstat_* 2>/dev/null
 	echo '{"result":"ok"}'
+	exit 0
+	;;
+setslot)
+	# Слот eUICC для APDU (просьба юзера 9eSIM, 18.08.2026): автоопределение по
+	# активному слоту работает не на всех связках, а явный uci-ключ до сих пор
+	# можно было прописать только руками. «auto» и всё неизвестное = удалить
+	# ключи (вернуться к активному слоту). Пишем во ВСЕ wdm-бэкенды lpac: наш
+	# _mbim_uim_slot читает lpac.mbim.*, qmi/uqmi-путь - свои секции.
+	# Без пакета lpac файла /etc/config/lpac нет, и uci set молча ничего не
+	# делает (поймано на стенде 18.08.2026) - создаём пустой конфиг сами.
+	[ -f /etc/config/lpac ] || : > /etc/config/lpac
+	case "$2" in
+		1|2)
+			uci -q set "lpac.mbim=mbim";  uci -q set "lpac.mbim.uim_slot=$2"
+			uci -q set "lpac.qmi=qmi";    uci -q set "lpac.qmi.uim_slot=$2"
+			uci -q set "lpac.uqmi=uqmi";  uci -q set "lpac.uqmi.uim_slot=$2"
+			;;
+		*)
+			uci -q delete "lpac.mbim.slot" 2>/dev/null
+			uci -q delete "lpac.mbim.uim_slot" 2>/dev/null
+			uci -q delete "lpac.qmi.uim_slot" 2>/dev/null
+			uci -q delete "lpac.uqmi.uim_slot" 2>/dev/null
+			;;
+	esac
+	uci -q commit lpac
+	rm -f /tmp/5gmodem_esimstat_* /tmp/5gmodem_esim_actslot 2>/dev/null
+	echo '{"result":"ok"}'
+	exit 0
+	;;
+getslot)
+	_gs=$(uci -q get lpac.mbim.uim_slot)
+	[ -n "$_gs" ] || _gs=$(uci -q get lpac.mbim.slot)
+	case "$_gs" in 1|2) ;; *) _gs="auto" ;; esac
+	printf '{"slot":"%s"}\n' "$_gs"
 	exit 0
 	;;
 # ЧЕМ lpac ХОДИТ В СЕТЬ - для отчёта диагностики.
@@ -1722,9 +1784,9 @@ _uplink_release() {
 			| grep -q '"up": true' && return 0
 	fi
 	if [ -n "$_ur_at" ]; then
-		logger -t 5gmodem "esim: дозвон держит AT-порт - опускаю $_ur_if на время операции"
+		logger -t 5gmodem "esim: dialing holds the AT port - taking $_ur_if down for the operation"
 	else
-		logger -t 5gmodem "esim: канал занят соединением - опускаю $_ur_if на время операции"
+		logger -t 5gmodem "esim: the data connection owns the channel - taking $_ur_if down for the operation"
 	fi
 	[ -n "$LIVELOG" ] && printf '%s {"type":"progress","payload":{"code":0,"message":"uplink_down","data":"%s"}}\n' \
 		"$(date '+%H:%M:%S' 2>/dev/null)" "$_ur_if" >> "$LIVELOG" 2>/dev/null
@@ -1743,7 +1805,7 @@ _uplink_release() {
 }
 _uplink_restore() {
 	[ -n "$_UPLINK_IF" ] || return 0
-	logger -t 5gmodem "esim: операция завершена - поднимаю $_UPLINK_IF"
+	logger -t 5gmodem "esim: operation finished - bringing $_UPLINK_IF back up"
 	ifup "$_UPLINK_IF" >/dev/null 2>&1
 	_UPLINK_IF=""
 }
@@ -1836,7 +1898,7 @@ esim_reset_after_switch_maybe() {
 		"$(uci -q get "5gmodem.$_ers_sec.vidpid")")" = 1 ] || return 0
 	_ers_at=$(uci -q get "5gmodem.$_ers_sec.at_port")
 	[ -n "$_ers_at" ] && [ -e "$_ers_at" ] || return 0
-	logger -t 5gmodem "eSIM: профиль переключён - сбрасываю модем (AT+CFUN=1,1 на $_ers_at)"
+	logger -t 5gmodem "esim: profile switched - resetting the modem (AT+CFUN=1,1 on $_ers_at)"
 	( /usr/share/5gmodem/reboot_modem.sh hard "$_ers_at" ) >/dev/null 2>&1 </dev/null &
 }
 
@@ -1973,7 +2035,7 @@ download)
 		_rc_cur=$((_rc_s - 1)); _rc_alt=0; [ "$_rc_cur" = 0 ] && _rc_alt=1
 		if [ -n "$_rc_p" ] && sms_tool -d "$_rc_p" at "AT^switch_slot?" 2>/dev/null \
 			| grep -qi "SIM"; then
-			logger -t 5gmodem "esim: загрузка не удалась - переинициализирую карту, чтобы чип снова отвечал"
+			logger -t 5gmodem "esim: download failed - reinitializing the card so the chip responds again"
 			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_alt" >/dev/null 2>&1
 			sleep 5
 			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_cur" >/dev/null 2>&1
@@ -1999,7 +2061,7 @@ download)
 		if [ "$_PN" = 1 ] && [ "$_PE" = 0 ]; then
 			_PI=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[0].iccid' 2>/dev/null)
 			if [ -n "$_PI" ]; then
-				logger -t 5gmodem "esim: единственный профиль $_PI - включаю автоматически"
+				logger -t 5gmodem "esim: $_PI is the only profile - enabling it automatically"
 				_PR=$(do_lpac 60 profile enable "$_PI")
 				flush_notifications
 				esim_reset_after_switch_maybe "$_PR"

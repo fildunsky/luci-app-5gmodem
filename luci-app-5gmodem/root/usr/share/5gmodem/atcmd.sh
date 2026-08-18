@@ -29,11 +29,11 @@ TMO="${3:-10}"
 command -v is_devpath >/dev/null 2>&1 || { echo "lib unavailable" >&2; exit 1; }
 
 if ! is_devpath "$PORT"; then
-	logger -t 5gmodem "atcmd: отклонён путь устройства"
+	logger -t 5gmodem "atcmd: device path rejected"
 	echo "bad port" >&2; exit 2
 fi
 if ! is_atcmd "$CMD"; then
-	logger -t 5gmodem "atcmd: команда отклонена проверкой формы"
+	logger -t 5gmodem "atcmd: command rejected by input validation"
 	echo "bad command" >&2; exit 2
 fi
 case "$TMO" in ''|*[!0-9]*) TMO=10 ;; esac
@@ -47,7 +47,7 @@ for _t in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].tty[*]' 2>/de
 	[ "$_t" = "$PORT" ] && { _known=1; break; }
 done
 if [ "$_known" != 1 ]; then
-	logger -t 5gmodem "atcmd: порт $PORT не принадлежит ни одному известному модему"
+	logger -t 5gmodem "atcmd: port $PORT does not belong to any known modem"
 	echo "unknown port" >&2; exit 2
 fi
 
@@ -62,7 +62,7 @@ fi
 at_query "$PORT" "$CMD" "$TMO" 25
 _rc=$?
 if [ "$_rc" = 2 ]; then
-	logger -t 5gmodem "atcmd: очередь к $PORT занята дольше 25 c - выполняю команду человека без неё"
+	logger -t 5gmodem "atcmd: queue for $PORT busy for over 25s - running the user command without it"
 	# Сами берём порт мимо очереди: at_query с занятым локом сюда уже не пустит.
 	sms_tool -d "$PORT" at "$CMD" 2>/dev/null | tr -d '\r'
 fi

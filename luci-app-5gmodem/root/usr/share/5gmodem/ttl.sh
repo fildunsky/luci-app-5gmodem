@@ -110,7 +110,7 @@ apply)
 			echo "}"
 		} > "$TMP"
 		if ! nft -f "$TMP" 2>/dev/null; then
-			logger -t 5gmodem "ttl: nft отверг правила (проверьте: nft -c -f $TMP)"
+			logger -t 5gmodem "ttl: nft rejected the rules (check: nft -c -f $TMP)"
 			echo "FAIL"
 			exit 1
 		fi

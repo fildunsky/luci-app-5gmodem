@@ -125,7 +125,7 @@ if [ "$MODE" = usbpower ]; then
 				echo "$_p" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
 				;;
 		esac
-		logger -t 5gmodem "usbpower: $_p перезапущен по питанию ($_m)"
+		logger -t 5gmodem "usbpower: $_p power-cycled ($_m)"
 		# Порты после переподключения переименовываются - закрепляем заново.
 		sleep 20
 		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1

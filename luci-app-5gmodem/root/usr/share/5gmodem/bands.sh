@@ -56,7 +56,7 @@ if [ "$1" = "mmsetbands" ]; then
 			_mb_i=$((_mb_i + 1))
 		done
 	fi
-	logger -t 5gmodem "диапазоны: применяю через MM ($2)"
+	logger -t 5gmodem "bands: applying via MM ($2)"
 	mmcli -m "$3" --set-current-bands="$2" 2>&1
 	_mb_rc=$?
 	exec 7>&- 2>/dev/null
@@ -1107,7 +1107,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 	_mt_path="$_bs_am"
 	_mt_if=$(uci -q get "5gmodem.$_bs_sec.network" 2>/dev/null)
 	[ -n "$_mt_if" ] || _mt_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
-	logger -t 5gmodem "band-set: временный захват MM для $_mt_path (iface $_mt_if): $_mt_op $_mt_list"
+	logger -t 5gmodem "band-set: temporary MM takeover for $_mt_path (iface $_mt_if): $_mt_op $_mt_list"
 	# 1) отпускаем канал cdc-wdm у umbim/uqmi
 	[ -n "$_mt_if" ] && ifdown "$_mt_if" 2>/dev/null
 	# 2) пауза инхибиции ЭТОГО модема (остальные остаются закрыты) + поднять MM
@@ -1128,7 +1128,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 		_MMIDX="$_mt_idx"            # профиль setbands ходит через mmcli -m "$_MMIDX"
 		"$_mt_op" "$_mt_list"
 	else
-		logger -t 5gmodem "band-set: MM не увидел $_mt_path за отведённое время - смена отменена"
+		logger -t 5gmodem "band-set: MM did not see $_mt_path in time - change cancelled"
 	fi
 	# 4) снимаем паузу -> служба инхибирует обратно, mmneed гасит MM
 	"$_R/mm-inhibit.sh" resume "$_mt_path" 2>/dev/null
@@ -1160,7 +1160,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 			sleep 5; _mt_i=$((_mt_i + 1))
 		done
 		if [ -z "$_mt_ok" ]; then
-			logger -t 5gmodem "band-set: $_mt_if поднят, но трафик не идёт (зомби-сессия) - передёргиваю"
+			logger -t 5gmodem "band-set: $_mt_if is up but passes no traffic (zombie session) - bouncing it"
 			ifdown "$_mt_if" 2>/dev/null; sleep 2; ifup "$_mt_if" 2>/dev/null
 			_mt_i=0
 			while [ "$_mt_i" -lt 9 ]; do
@@ -1170,7 +1170,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 			done
 		fi
 	fi
-	logger -t 5gmodem "band-set: захват MM завершён, $_mt_if поднят"
+	logger -t 5gmodem "band-set: MM takeover finished, $_mt_if is up"
 }
 
 # Запись диапазонов: через захват MM (kernel-прото mmcli-профиль) либо напрямую.
@@ -1197,7 +1197,7 @@ if command -v is_num >/dev/null 2>&1; then
 			# «default» - штатный сброс к заводскому набору, остальное - список
 			# номеров диапазонов через пробел.
 			if [ "$2" != "default" ] && ! is_numlist "$2"; then
-				logger -t 5gmodem "bands: отклонён набор диапазонов для $1"
+				logger -t 5gmodem "bands: invalid band list for $1 - rejected"
 				echo "bad bands"; exit 2
 			fi
 			# И ПРОВЕРЯЕМ САМИ НОМЕРА, а не только форму.
@@ -1229,7 +1229,7 @@ if command -v is_num >/dev/null 2>&1; then
 								[ "${_bhave%%:*}" = "$_bwant" ] && { _bok=1; break; }
 							done
 							if [ "$_bok" != 1 ]; then
-								logger -t 5gmodem "bands: диапазон $_bwant не поддерживается модемом ($1)"
+								logger -t 5gmodem "bands: band $_bwant is not supported by the modem ($1)"
 								echo "band $_bwant not supported"; exit 2
 							fi
 						done ;;
@@ -1237,16 +1237,16 @@ if command -v is_num >/dev/null 2>&1; then
 			fi ;;
 		setmode|setmodelive|set5gmode)
 			if ! is_num "$2"; then
-				logger -t 5gmodem "bands: отклонён номер режима для $1"
+				logger -t 5gmodem "bands: invalid mode number for $1 - rejected"
 				echo "bad mode"; exit 2
 			fi ;;
 		setcelllock)
 			# off | cell <arfcn> <pci> | arfcn <arfcn> - всё числовое.
 			case "$2" in
 				off) : ;;
-				cell)  is_num "$3" && is_num "$4" || { logger -t 5gmodem "bands: отклонена привязка к соте"; echo "bad cell"; exit 2; } ;;
-				arfcn) is_num "$3" || { logger -t 5gmodem "bands: отклонён arfcn"; echo "bad arfcn"; exit 2; } ;;
-				*) logger -t 5gmodem "bands: неизвестный режим привязки к соте"; echo "bad lock"; exit 2 ;;
+				cell)  is_num "$3" && is_num "$4" || { logger -t 5gmodem "bands: invalid cell lock arguments - rejected"; echo "bad cell"; exit 2; } ;;
+				arfcn) is_num "$3" || { logger -t 5gmodem "bands: invalid arfcn - rejected"; echo "bad arfcn"; exit 2; } ;;
+				*) logger -t 5gmodem "bands: unknown cell lock mode - rejected"; echo "bad lock"; exit 2 ;;
 			esac ;;
 	esac
 fi
@@ -1455,13 +1455,13 @@ case $1 in
 		# (можно fast-path). CGACT release в самом прото снимает возможный GTACT-затык.
 		if [ "$2" = "prepare" ]; then
 			if [ "$_rb_changed" = 1 ]; then
-				logger -t 5gmodem "restorebands(prepare): маска записана до дозвона для $(active_modem)"
+				logger -t 5gmodem "restorebands(prepare): mask written before dialing for $(active_modem)"
 				exit 0
 			fi
 			exit 3
 		fi
 		if [ "$_rb_changed" = 1 ]; then
-			logger -t 5gmodem "restorebands: восстановлены сохранённые диапазоны для $(active_modem)"
+			logger -t 5gmodem "restorebands: saved bands restored for $(active_modem)"
 			# Применяем ПРИЦЕЛЬНО (вариант A): CFUN на порт нужного модема, затем
 			# down/up ЕГО интерфейса (_reconnect_iface). reboot_modem.sh soft тут не
 			# годится - его реконнект бьёт по глобально активному модему, а под
@@ -1589,7 +1589,7 @@ case $1 in
 					sms_tool -d "$_cl_at" at "AT" 2>/dev/null | grep -qi "OK" && { _cl_ok=1; break; }
 				done
 				if [ "$_cl_ok" = 0 ]; then
-					logger -t 5gmodem "cell-lock: модем не отвечает на AT после привязки - поднимаю по USB"
+					logger -t 5gmodem "cell-lock: modem stopped answering AT after locking - recovering over USB"
 					/usr/share/5gmodem/reboot_modem.sh usbpower "$(active_modem)" >/dev/null 2>&1
 				fi
 			  fi

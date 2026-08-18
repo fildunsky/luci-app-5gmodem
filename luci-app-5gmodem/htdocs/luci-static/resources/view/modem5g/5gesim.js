@@ -511,6 +511,20 @@ return view.extend({
 		]);
 		apduSel.value = apduCur;
 
+		// Слот eUICC для APDU (просьба юзера 9eSIM, 18.08.2026): автоопределение
+		// по активному слоту срабатывает не на всех связках, а uci-ключ до сих
+		// пор можно было прописать только руками. Текущее значение приходит из
+		// бэкенда (uci lpac не загружен в это представление) - подставляем
+		// асинхронно, до ответа селектор честно показывает «Авто».
+		var slotSel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-slot-sel' }, [
+			E('option', { 'value': 'auto' }, [ _('Auto (active slot)') ]),
+			E('option', { 'value': '1'    }, [ _('Slot 1') ]),
+			E('option', { 'value': '2'    }, [ _('Slot 2') ]),
+		]);
+		fs.exec_direct(ESIM, [ 'getslot' ]).then(function(out) {
+			try { slotSel.value = String(JSON.parse(out).slot || 'auto'); } catch (e) {}
+		});
+
 		return E('details', { 'class': 'esim-set' }, [
 			E('summary', {}, [ _('Settings') ]),
 			E('div', { 'class': 'cbi-value' }, [
@@ -552,6 +566,24 @@ return view.extend({
 					}, [ _('Save') ]),
 					E('div', { 'class': 'cbi-value-description' },
 						_('How lpac reaches the eSIM chip. "Auto" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT.')),
+				]),
+			]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('eUICC slot') ]),
+				E('div', { 'class': 'cbi-value-field' }, [
+					slotSel,
+					E('button', {
+						'class': 'btn cbi-button cbi-button-save',
+						'style': 'margin-left:8px',
+						'click': ui.createHandlerFn(this, function() {
+							return fs.exec_direct(ESIM, [ 'setslot', slotSel.value ]).then(function() {
+								ui.addNotification(null,
+									E('p', _('eUICC slot saved — refresh the profile list')), 'info');
+							});
+						})
+					}, [ _('Save') ]),
+					E('div', { 'class': 'cbi-value-description' },
+						_('Which SIM slot holds the eSIM chip. "Auto" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1.')),
 				]),
 			]),
 		]);
@@ -1001,7 +1033,15 @@ return view.extend({
 				}).pop();
 				var why = tr && tr.match(/"why":"([^"]*)"/);
 				if (why && why[1]) {
-					showFail(_('Could not reach the operator server: %s').format(why[1].trim()), tech);
+					var msg = _('Could not reach the operator server: %s').format(why[1].trim());
+					/* Мост шёл через curl (mbedTLS): часть SM-DP+ подписана RSA-PSS,
+					   которую mbedTLS не умеет - рукопожатие падает «X509 Unavailable
+					   feature», и лечится это только установкой GNU wget (wget-ssl).
+					   Совет писался лишь в лог - юзер нашёл его там сам (9eSIM,
+					   17.08.2026); показываем прямо в ошибке. */
+					if ((self._dlLog || '').indexOf('wget-ssl') > 0)
+						msg += ' — ' + _('If this repeats, install the wget-ssl package (apk add wget-ssl): some operator servers use TLS that curl on this router cannot handle');
+					showFail(msg, tech);
 					return;
 				}
 				showFail(esimFailHuman(p.message, raw), tech);

@@ -81,7 +81,7 @@ wan_nets() {
 # Событие для строки под панелью приоритета + журнал. Одно текущее событие,
 # а не свой журнал: полная история и так в logread по тегу.
 _ev() {
-	logger -t 5gmodem "сторож: $1"
+	logger -t 5gmodem "watchdog: $1"
 	mkdir -p "$HDIR"
 	printf '%s %s\n' "$(date '+%H:%M')" "$1" > "$HDIR/.last_event"
 }
@@ -203,12 +203,12 @@ judge() {
 			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" "$HDIR/$_j_if.mmoff"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
-				_ev "линк $_j_if ожил - оставлен в конце (по настройке)"
+				_ev "link $_j_if is back - kept at the end (per settings)"
 			else
-				_ev "линк $_j_if ожил"
+				_ev "link $_j_if is back"
 			fi
 		else
-			_ev "линк $_j_if упал (пинг $_j_f/$H_FAILN мимо)"
+			_ev "link $_j_if went down (missed $_j_f/$H_FAILN pings)"
 		fi
 	fi
 	printf '%s %s %s %s %s\n' "$_j_new" "$_j_f" "$_j_o" "${_j_lms:-0}" "$_j_since" > "$HDIR/$_j_if.tmp" \
@@ -393,7 +393,7 @@ enforce() {
 				}')
 			[ -n "$_e_cur" ] || _e_cur=0
 			if [ "$_e_cur" != "$_e_want" ]; then
-				_ev "$_e_if без интернета - увожу трафик (метрика $_e_base -> $_e_want)"
+				_ev "$_e_if has no internet - steering traffic away (metric $_e_base -> $_e_want)"
 			fi
 			_move_defaults "$_e_dev" "$_e_want" "$_e_if"
 		elif [ "$_e_st" = up ] && [ -f "$_e_f.demoted" ] && [ "$H_FO" = "1" ] \
@@ -408,7 +408,7 @@ enforce() {
 			# ( |$): `ip route show` печатает пробел на конце строки, голый
 			# якорь $ тут не срабатывал никогда (см. разбор выше у _e_cur).
 			if ip -4 route show default $(_rt4_args "$_e_if") 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qE "metric $((_e_base + PEN))( |$)"; then
-				_ev "$_e_if - возвращаю приоритет (метрика $_e_base)"
+				_ev "$_e_if - restoring priority (metric $_e_base)"
 			fi
 			_move_defaults "$_e_dev" "$_e_base" "$_e_if"
 		fi
@@ -549,7 +549,7 @@ heal() {
 			if [ "$_h_step" -lt 1 ] && [ "$_h_st" = down ]; then
 				# радио на месте, адреса нет - сначала мягко
 				_h_next=1
-				_ev "лечу $_h_if: переподключаю Wi-Fi ($_h_n/$HEAL_MAX)"
+				_ev "healing $_h_if: reconnecting Wi-Fi ($_h_n/$HEAL_MAX)"
 				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 			elif [ "$_h_step" -lt 2 ]; then
 				# ПЕРЕПОДКЛЮЧАЕМ ТОЛЬКО СТАНЦИЮ - ТОЧКА ДОСТУПА РАБОТАЕТ ДАЛЬШЕ.
@@ -571,12 +571,12 @@ heal() {
 				_h_sta=$(printf '%s' "$_HDUMP" | jsonfilter \
 					-e "@.interface[@.interface=\"$_h_if\"].device" 2>/dev/null | head -1)
 				if [ -n "$_h_sta" ]; then
-					_ev "лечу $_h_if: переподключаю станцию $_h_sta ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: reconnecting station $_h_sta ($_h_n/$HEAL_MAX)"
 					( ubus call "wpa_supplicant.$_h_sta" control '{"command":"REASSOCIATE"}' \
 					    || iw dev "$_h_sta" disconnect
 					  sleep 6; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				else
-					_ev "лечу $_h_if: станция не определена, переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: station unknown, reconnecting the interface ($_h_n/$HEAL_MAX)"
 					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				fi
 			elif [ "$_h_step" -lt 3 ] || [ -n "$_h_anyup" ]; then
@@ -592,13 +592,13 @@ heal() {
 				_h_next=3
 				_h_radio=$(wifi_radio_for "$_h_if")
 				if [ -n "$_h_radio" ]; then
-					_ev "лечу $_h_if: пересобираю радио $_h_radio ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: rebuilding radio $_h_radio ($_h_n/$HEAL_MAX)"
 					( ubus call network.wireless down "{\"device\":\"$_h_radio\"}"
 					  sleep 2
 					  ubus call network.wireless up "{\"device\":\"$_h_radio\"}"
 					  sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				else
-					_ev "лечу $_h_if: радио не определено, переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: radio unknown, reconnecting the interface ($_h_n/$HEAL_MAX)"
 					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				fi
 			else
@@ -609,11 +609,11 @@ heal() {
 				# строка (в прежней редакции - вторая ступень) роняла работающий
 				# модем при падении Wi-Fi: «modem stopping network» в журнале.
 				_h_next=4
-				_ev "лечу $_h_if: пересобираю сеть целиком, network reload ($_h_n/$HEAL_MAX)"
+				_ev "healing $_h_if: rebuilding the whole network, network reload ($_h_n/$HEAL_MAX)"
 				( ubus call network reload; sleep 2; wifi up >/dev/null 2>&1; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 			fi
 			printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
-			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "лечение $_h_if: попытки исчерпаны - нужно вмешательство"
+			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
 			continue
 		fi
 		# GONE ПРИ ЖИВОМ ЖЕЛЕЗЕ - ЭТО ОТКАЗ, А НЕ ОТСУТСТВИЕ МОДЕМА.
@@ -711,7 +711,7 @@ heal() {
 			# эпизод (маркер стирается при выздоровлении вместе с лестницей)
 			if [ ! -f "$HDIR/$_h_if.nosim" ]; then
 				: > "$HDIR/$_h_if.nosim"
-				_ev "лечу $_h_if: SIM не вставлена - лечение отложено"
+				_ev "healing $_h_if: no SIM inserted - healing postponed"
 			fi
 			continue
 		fi
@@ -739,7 +739,7 @@ heal() {
 			if [ ! -f "$HDIR/$_h_if.nodata" ]; then
 				: > "$HDIR/$_h_if.nodata"
 				rm -f "$HDIR/$_h_if.heal"
-				_ev "$_h_if: адрес есть ($_h_lip), а трафика нет - похоже на ограничение оператора, лечение остановлено"
+				_ev "$_h_if: has an address ($_h_lip) but no traffic - looks like a carrier restriction, healing stopped"
 			fi
 			continue
 		fi
@@ -773,7 +773,7 @@ heal() {
 					disabled|locked)
 						if [ ! -f "$HDIR/$_h_if.mmoff" ]; then
 							: > "$HDIR/$_h_if.mmoff"
-							_ev "лечу $_h_if: модем выключен в ModemManager ($_h_mms) - включаю"
+							_ev "healing $_h_if: modem disabled in ModemManager ($_h_mms) - enabling"
 						fi
 						# ОДИН enable ЗА РАЗ И С ТАЙМАУТОМ. Команда уходит в фон,
 						# и на заклинившем MM она не завершается - без гарда каждый
@@ -812,25 +812,25 @@ heal() {
 		_h_n=$((_h_n + 1))
 		case "$_h_next" in
 			1)
-				_ev "лечу $_h_if: переподключаю интерфейс ($_h_n/$HEAL_MAX)"
+				_ev "healing $_h_if: reconnecting the interface ($_h_n/$HEAL_MAX)"
 				( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				;;
 			2)
 				if [ -n "$_h_hilink" ]; then
-					_ev "лечу $_h_if: перезагружаю модуль через API ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: rebooting the module via API ($_h_n/$HEAL_MAX)"
 					( "$RES/hilink.sh" reboot "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
 				else
-					_ev "лечу $_h_if: перезагружаю модуль, AT+CFUN=1,1 ($_h_n/$HEAL_MAX)"
+					_ev "healing $_h_if: rebooting the module, AT+CFUN=1,1 ($_h_n/$HEAL_MAX)"
 					( "$RES/reboot_modem.sh" hard "$_h_at" ) >/dev/null 2>&1 </dev/null 9>&- &
 				fi
 				;;
 			3)
-				_ev "лечу $_h_if: передёргиваю USB-порт по питанию ($_h_n/$HEAL_MAX)"
+				_ev "healing $_h_if: power-cycling the USB port ($_h_n/$HEAL_MAX)"
 				( "$RES/reboot_modem.sh" usbpower "$_h_path" ) >/dev/null 2>&1 </dev/null 9>&- &
 				;;
 		esac
 		printf '%s %s %s\n' "$_h_next" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
-		[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "лечение $_h_if: попытки исчерпаны - нужно вмешательство"
+		[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
 	done
 }
 
@@ -857,7 +857,7 @@ _teardown() {
 		_move_defaults "$_td_dev" "$(base_metric "$_td_if")" "$_td_if"
 	done
 	rm -rf "$HDIR"
-	logger -t 5gmodem "сторож выключен: штрафы сняты, метрики возвращены к uci, состояние очищено"
+	logger -t 5gmodem "watchdog disabled: penalties lifted, metrics restored from uci, state cleared"
 }
 
 # Общий пролог tick/once: функция выключена, но состояние осталось - прибраться

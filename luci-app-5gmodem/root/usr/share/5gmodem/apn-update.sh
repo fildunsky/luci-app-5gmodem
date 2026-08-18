@@ -81,7 +81,7 @@ case "${1:-check}" in
 			mkdir -p /etc/5gmodem 2>/dev/null
 			mv "$_tmp" "$DB"
 			_n=$(_count "$DB"); _v=$(_ver "$DB")
-			logger -t 5gmodem "база APN обновлена: $_n операторов, версия ${_v:-?}"
+			logger -t 5gmodem "APN database updated: $_n operators, version ${_v:-?}"
 			printf '{"ok":true,"count":%s,"version":"%s"}\n' "$_n" "$_v"
 		else
 			rm -f "$_tmp"

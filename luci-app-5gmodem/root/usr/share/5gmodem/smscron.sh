@@ -49,7 +49,7 @@ on)
 	/etc/init.d/cron restart >/dev/null 2>&1
 	/etc/init.d/"$MARK" enable >/dev/null 2>&1
 	/etc/init.d/"$MARK" start >/dev/null 2>&1
-	logger -t 5gmodem "smscron: перезапуск уведомителя SMS каждые ${H}ч"
+	logger -t 5gmodem "smscron: SMS notifier restart scheduled every ${H}h"
 	echo '{"result":"ok","every":'"$H"'}'
 	;;
 off)
@@ -57,7 +57,7 @@ off)
 	/etc/init.d/cron restart >/dev/null 2>&1
 	/etc/init.d/"$MARK" stop >/dev/null 2>&1
 	/etc/init.d/"$MARK" disable >/dev/null 2>&1
-	logger -t 5gmodem "smscron: расписание уведомителя SMS снято"
+	logger -t 5gmodem "smscron: SMS notifier schedule removed"
 	echo '{"result":"ok"}'
 	;;
 status)

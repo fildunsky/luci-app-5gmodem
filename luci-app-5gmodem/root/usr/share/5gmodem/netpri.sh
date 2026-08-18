@@ -481,7 +481,7 @@ iface_type() {
 _npri_at() {   # $1 - порт, $2 - команда
 	at_query "$1" "$2" 5 3
 	_na_rc=$?
-	[ "$_na_rc" = 2 ] && logger -t 5gmodem "netpri: порт занят, имя оператора берём из кэша"
+	[ "$_na_rc" = 2 ] && logger -t 5gmodem "netpri: port busy, taking the operator name from cache"
 	return 0
 }
 
@@ -937,7 +937,7 @@ adoptzone)
 	uci add_list "firewall.$_azz.network=$_az"
 	uci commit firewall
 	/etc/init.d/firewall reload >/dev/null 2>&1
-	logger -t 5gmodem "adoptzone: $_az добавлен в зону wan (Wi-Fi-аплинк из мастера подключения)"
+	logger -t 5gmodem "adoptzone: $_az added to the wan zone (Wi-Fi uplink from the join wizard)"
 	exit 0
 	;;
 list)
@@ -1451,7 +1451,7 @@ order)
 	for _oi in "$@"; do
 		case "$_wz" in
 			*" $_oi "*) _ord="$_ord $_oi" ;;
-			*) logger -t 5gmodem "netpri order: '$_oi' не аплинк wan-зоны - пропускаю" ;;
+			*) logger -t 5gmodem "netpri order: '$_oi' is not a wan-zone uplink - skipping" ;;
 		esac
 	done
 	[ -n "$_ord" ] || { echo '{"error":"no valid interfaces"}'; exit 1; }
@@ -1553,7 +1553,7 @@ ping)
 		  	' "$_tr_t"; then
 		  	mkdir -p /etc/5gmodem 2>/dev/null
 		  	mv "$_tr_t" "$_TG_CIDR_NEW" 2>/dev/null \
-		  		&& logger -t 5gmodem "список сетей Telegram обновлён ($(wc -l < "$_TG_CIDR_NEW" | tr -d " ") строк)"
+		  		&& logger -t 5gmodem "Telegram network list updated ($(wc -l < "$_TG_CIDR_NEW" | tr -d " ") lines)"
 		  else
 		  	rm -f "$_tr_t"
 		  fi ) >/dev/null 2>&1 </dev/null &

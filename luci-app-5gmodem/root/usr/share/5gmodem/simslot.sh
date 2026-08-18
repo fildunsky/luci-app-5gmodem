@@ -231,7 +231,7 @@ if [ -n "$MI" ]; then
 		# Переключить через MM не вышло - НЕ сдаёмся: ниже есть вендорный путь
 		# (AT^switch_slot) и QMI, они работают там, где mmcli отказывает.
 		# Раньше здесь общий exit заканчивал работу отказом.
-		logger -t 5gmodem "слоты: ModemManager не переключил слот - пробую напрямую"
+		logger -t 5gmodem "slots: ModemManager did not switch the slot - trying directly"
 		;;
 	*)
 		K=$(mmcli -m "$MI" -K 2>/dev/null)
@@ -358,7 +358,7 @@ if [ -n "$MI" ]; then
 			cat "$_MMC"
 			exit 0
 		fi
-		logger -t 5gmodem "слоты: ModemManager их не отдал - спрашиваю модем напрямую"
+		logger -t 5gmodem "slots: ModemManager did not report them - asking the modem directly"
 		;;
 	esac
 fi
@@ -444,7 +444,7 @@ if [ "$_VIA" = qmi ]; then
 						| grep -qi "SIM$2 ENABLE" && { _ss_ok=1; break; }
 				done
 				if [ "$_ss_ok" = 1 ]; then
-					logger -t 5gmodem "слот SIM переключён на $2 по AT^switch_slot"
+					logger -t 5gmodem "SIM slot switched to $2 via AT^switch_slot"
 					rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 					( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 					  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
@@ -575,7 +575,7 @@ if [ "$_VIA" = qmi ]; then
 		# Обнуляем - ниже отработает обычный путь с прежним кэшем.
 		case ",$(printf '%s' "$_MBS" | sed 's/[^0-9,]*"id":"\([0-9]*\)"[^0-9,]*/\1,/g')" in
 			*",$_MACT,"*) : ;;
-			*) [ -n "$_MBS" ] && logger -t 5gmodem "слоты: активный $_MACT не попал в список - чтение неполное, беру кэш"
+			*) [ -n "$_MBS" ] && logger -t 5gmodem "slots: active $_MACT missing from the list - incomplete read, using the cache"
 			   _MBS="" ;;
 		esac
 		if [ -n "$_MBS" ]; then
@@ -716,7 +716,7 @@ set)
 	# поэтому проверяем до использования: в AT-канале возврат каретки внутри
 	# значения превращает одну команду в две. Предикат - в lib.sh.
 	if command -v is_num >/dev/null 2>&1 && ! is_num "$2"; then
-		logger -t 5gmodem "simslot: отклонён номер слота"
+		logger -t 5gmodem "simslot: invalid slot number - rejected"
 		echo '{"error":"bad slot"}'; exit 0
 	fi
 	if at_has_gtdualsim; then

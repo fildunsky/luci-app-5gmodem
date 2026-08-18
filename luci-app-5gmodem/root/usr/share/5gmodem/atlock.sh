@@ -56,7 +56,7 @@ at_lock() {
 	# ДРУГОЙ порт поверх уже взятого лока - явный отказ, а не тихая подмена:
 	# переоткрытие fd 8 снимало лок с ПЕРВОГО порта незаметно (ревью, баг №13).
 	if [ -n "$_AT_LOCK_HELD" ]; then
-		logger -t 5gmodem "at_lock: отказ - держим '$_AT_LOCK_HELD', запрошен '$_al_key' (сначала at_unlock)"
+		logger -t 5gmodem "at_lock: refused - already holding '$_AT_LOCK_HELD', requested '$_al_key' (at_unlock first)"
 		return 1
 	fi
 	_al_d=/var/lock
@@ -86,7 +86,7 @@ at_lock() {
 	# замок мы тронуть не можем (_AT_LOCK_HELD пуст - проверено на входе).
 	flock -u "$AT_LOCK_FD" 2>/dev/null
 	eval "exec $AT_LOCK_FD>&-" 2>/dev/null
-	logger -t 5gmodem "at_lock: порт $1 занят дольше ${_al_max}c"
+	logger -t 5gmodem "at_lock: port $1 busy for over ${_al_max}s"
 	return 1
 }
 

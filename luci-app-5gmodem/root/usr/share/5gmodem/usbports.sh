@@ -21,6 +21,8 @@ driver_for() {   # $1 - vid, $2 - pid
 		# ЕДИНСТВЕННАЯ композиция, которой нужен option1: T99W175 в режиме QMI.
 		# Сам порты не отдаёт вовсе, а нумерация отличается от 90d5.
 		05c6:9025) echo "option1" ;;
+		# Android-палки MDM9600/9610 в режиме «только модем» (см. newid_for).
+		05c6:9091) echo "option1" ;;
 		# Всё остальное - generic. Это касается и Compal RXM-G1 (90d5 и 90d6),
 		# и T99W175 в 90d5.
 		#
@@ -30,6 +32,22 @@ driver_for() {   # $1 - vid, $2 - pid
 		# достались generic, и все три (ttyUSB7/8/9) отвечали ошибкой ввода-вывода
 		# - то есть модем оставался без единого рабочего AT-порта.
 		*)         echo "generic" ;;
+	esac
+}
+
+# Строка для new_id. Обычно «vid pid», но new_id принимает и уточнение
+# «vid pid class subclass protocol» - и для части композиций оно ОБЯЗАТЕЛЬНО.
+# 05c6:9091 (Android-палки MDM9600/9610, режим «только модем»): rmnet-интерфейс
+# канала (If#2) несёт тот же vendor-класс ff/ff/ff, что и DIAG - голая запись
+# «vid pid» на бут-гонке может отдать канал usb-serial'у вместо qmi_wwan, и
+# хирургия ниже его НЕ вернёт (она спасает только не-ff классы). Зато у
+# AT-порта (serial_smd, If#1) триплет уникальный - ff/00/00: привязываем только
+# его, DIAG/rmnet/ADB не трогаем вовсе (живой кейс Cudy TR3000, 18.08.2026:
+# ручной echo дал ttyUSB, AT ответил, метрики появились).
+newid_for() {   # $1 - vid, $2 - pid
+	case "$1:$2" in
+		05c6:9091) echo "$1 $2 ff 00 00" ;;
+		*)         echo "$1 $2" ;;
 	esac
 }
 
@@ -99,7 +117,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 		[ "$(cat "$_bp_d/idProduct" 2>/dev/null)" = "$2" ] || continue
 		for _bp_t in "$_bp_d":*/ttyUSB* "$_bp_d":*/tty/ttyUSB*; do
 			[ -e "$_bp_t" ] || continue
-			logger -t 5gmodem-usbports "$1:$2 уже имеет порты - привязку не трогаю"
+			logger -t 5gmodem-usbports "$1:$2 already has ports - leaving the binding alone"
 			return 0
 		done
 	done
@@ -112,7 +130,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 		logger -t 5gmodem-usbports "no $_bp_drv driver for $1:$2 ($_bp_path missing)"
 		return 1
 	fi
-	echo "$1 $2" > "$_bp_path" 2>/dev/null
+	echo "$(newid_for "$1" "$2")" > "$_bp_path" 2>/dev/null
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
 
 	[ "$_bp_haswdm" = 1 ] || return 0
@@ -134,7 +152,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 					_bp_if=$(basename "$_bp_i")
 					echo "$_bp_if" > "$_bp_i/driver/unbind" 2>/dev/null
 					echo "$_bp_if" > /sys/bus/usb/drivers_probe 2>/dev/null
-					logger -t 5gmodem-usbports "вернул интерфейс $_bp_if (класс $_bp_cls) родному драйверу"
+					logger -t 5gmodem-usbports "returned interface $_bp_if (class $_bp_cls) to its native driver"
 					;;
 			esac
 		done
@@ -175,7 +193,7 @@ pick_config() {   # $1 - каталог устройства в sysfs, $2 - ну
 	case "$_pc_num" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_pc_num" -ge "$2" ] || return 0
 	echo "$2" > "$1/bConfigurationValue" 2>/dev/null \
-		&& logger -t 5gmodem "usb: $(basename "$1") переведён в конфигурацию $2 (было $_pc_now)"
+		&& logger -t 5gmodem "usb: $(basename "$1") switched to configuration $2 (was $_pc_now)"
 }
 
 coldplug() {
@@ -184,7 +202,7 @@ coldplug() {
 		_cp_v=$(cat "$_cp_d/idVendor" 2>/dev/null)
 		_cp_p=$(cat "$_cp_d/idProduct" 2>/dev/null)
 		case "$_cp_v:$_cp_p" in
-			05c6:9025|05c6:90d5|05c6:90d6) bind_ports "$_cp_v" "$_cp_p" ;;
+			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.
 			05c6:9063) pick_config "$_cp_d" 3 ;;
 		esac

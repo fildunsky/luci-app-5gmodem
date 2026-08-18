@@ -108,14 +108,14 @@ setup_one_modem() {
 	# Без этой проверки новый модем забрал бы чужой интерфейс вместе с чужим прото
 	# и настройками - ровно то наследование, от которого штампы и заводились.
 	if [ -n "$_ex" ] && ! iface_owned_by "$_ex" "$P" "$(imei_for_path "$P")"; then
-		logger -t 5gmodem "autosetup: $_ex закреплён за другим модемом - не подхватываем, создадим свой"
+		logger -t 5gmodem "autosetup: $_ex is owned by another modem - not adopting, will create our own"
 		_ex=""
 	fi
 	# Интерфейс, помеченный swap_cleanup как устаревший, НЕ подхватываем: его
 	# настройки относятся к прежнему модему на этом же USB-разъёме. Пропускаем
 	# подхват - ниже mkiface пересоздаст интерфейс с нуля под текущий модем.
 	if [ -n "$_ex" ] && [ "$(uci -q get "network.$_ex.modem_stale")" = "1" ]; then
-		logger -t 5gmodem "autosetup: $_ex помечен устаревшим - пересоздаём"
+		logger -t 5gmodem "autosetup: $_ex marked stale - recreating"
 		_ex=""
 	fi
 	if [ -n "$_ex" ]; then
@@ -151,7 +151,7 @@ setup_one_modem() {
 			ubus call network reload >/dev/null 2>&1
 		fi
 		ifup "$_ex" >/dev/null 2>&1
-		logger -t 5gmodem "autosetup: $P -> подхвачен существующий $_ex"
+		logger -t 5gmodem "autosetup: $P -> adopted existing $_ex"
 		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался
 		# только при создании нового, и унаследованный интерфейс навсегда
 		# оставался с APN прежней симки - именно так Beeline работал с "tt".
@@ -174,7 +174,7 @@ setup_one_modem() {
 	"$RES/ensureports.sh" >/dev/null 2>&1
 	# В журнал пишем то, что получилось НА САМОМ ДЕЛЕ.
 	_made=$(uci -q get "$CFG.$SEC.network")
-	logger -t 5gmodem "autosetup: $P -> ${_made:-не удалось}"
+	logger -t 5gmodem "autosetup: $P -> ${_made:-failed}"
 	# Прежние интерфейсы этого же модема больше не нужны - см. drop_stale_ifaces.
 	[ -n "$_made" ] && drop_stale_ifaces "$P" "$_made"
 	# APN подбираем В ФОНЕ: команда ждёт до минуты, а hotplug столько держать

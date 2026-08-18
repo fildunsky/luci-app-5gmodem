@@ -174,7 +174,7 @@ _mm_ifup_if_down() {
 			for J in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 				_jd=$(mmcli -m "$J" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 				[ "$(basename "$_jd" 2>/dev/null)" = "$_p" ] || continue
-				logger -t 5gmodem "MM увидел модем $_p - поднимаю интерфейс $_mif (netifd снёс его на буте до старта MM)"
+				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
 				: > "$_lk"          # отметить старт попытки - от него считаем cooldown
 				ifup "$_mif"
 				# Не дёргаем повторно, пока идёт коннект: ждём up до 90с. Поднялся -
@@ -257,7 +257,7 @@ _mm_fix_atonly() {   # $1 - usb-путь
 	_flast=$(cat "$_fmark" 2>/dev/null); case "$_flast" in ''|*[!0-9]*) _flast="" ;; esac
 	[ -n "$_flast" ] && [ "$((_fnow - _flast))" -lt 300 ] && return 0
 	printf '%s' "$_fnow" > "$_fmark" 2>/dev/null
-	logger -t 5gmodem "MM собрал $_fp без контрол-порта (есть $(basename "$_fwdm")) - пересобираю модем"
+	logger -t 5gmodem "MM assembled $_fp without a control port ($(basename "$_fwdm") exists) - rebuilding the modem"
 	_mm_rebind "$_fp"
 	return 0
 }
@@ -293,7 +293,7 @@ _mm_rebind() {   # $1 - usb-путь
 	# `can't set config #1, error -71`): устройство осталось без конфигурации и
 	# само не выйдет. Возвращаем ПРОВАЛ - вызывающий это заметит и не будет
 	# долбить unbind/bind по кругу.
-	[ -n "$_fw" ] || { logger -t 5gmodem "пересборка $_fp: контрол-порт не вернулся за ${_fwait}c"; return 1; }
+	[ -n "$_fw" ] || { logger -t 5gmodem "rebuild of $_fp: control port did not come back within ${_fwait}s"; return 1; }
 	sleep 3
 	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
 		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=usbmisc,name=$(basename "$_fw")" >/dev/null 2>&1
@@ -390,7 +390,7 @@ mm_recover_missing() {
 			if [ -n "$_has_wdm" ]; then
 				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
 					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
-					logger -t 5gmodem "модем $_rp: ModemManager не собрал (нет primary AT port), но у него ЕСТЬ QMI-канал cdc-wdm - переключите интерфейс на прото QMI (uqmi). Перепривязку НЕ делаю: она рискует уронить устройство (config #1 error -71)."
+					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a QMI channel (cdc-wdm) - switch the interface to proto QMI (uqmi). NOT rebinding: it risks killing the device (config #1 error -71)."
 					continue
 				fi
 				# ВТОРОЙ ПРОХОД: MM жив, опрос этого устройства закончен, а модема
@@ -411,7 +411,7 @@ mm_recover_missing() {
 				[ -n "$_sw_if" ] || continue
 				[ "$(uci -q get "network.$_sw_if.proto")" = "modemmanager" ] || continue
 				: > "$RUN/$_rb_key.qmiswitch" 2>/dev/null
-				logger -t 5gmodem "модем $_rp: MM его так и не собрал, протокол выбран автоматически - перевожу интерфейс $_sw_if на прото QMI"
+				logger -t 5gmodem "modem $_rp: MM never assembled it and the protocol is on auto - switching interface $_sw_if to proto QMI"
 				"$RES/mkiface.sh" "$_sw_if" qmi >/dev/null 2>&1
 				continue
 			fi
@@ -436,12 +436,12 @@ mm_recover_missing() {
 				if [ -z "$_rb_last" ] || [ "$((_rb_now - _rb_last))" -ge 300 ]; then
 					printf '%s' "$_rb_now" > "$_rb_cd" 2>/dev/null
 					rm -f "$_rb_mk" 2>/dev/null
-					logger -t 5gmodem "MM не собрал модем $_rp после переотправки событий - перепривязываю устройство"
+					logger -t 5gmodem "MM did not assemble modem $_rp after event replay - rebinding the device"
 					if ! _mm_rebind "$_rp"; then
 						# Устройство не вернулось после unbind/bind - дальше долбить
 						# бессмысленно и вредно. Ставим флаг и говорим прямо.
 						: > "$_rb_fail" 2>/dev/null
-						logger -t 5gmodem "перепривязка $_rp НЕ вернула устройство (обычно config #1 error -71) - ОБЕСТОЧЬТЕ роутер; возможно, модему нужен прото QMI, а не ModemManager"
+						logger -t 5gmodem "rebind of $_rp did NOT bring the device back (usually config #1 error -71) - POWER OFF the router; the modem may need proto QMI instead of ModemManager"
 					fi
 					continue
 				fi
@@ -529,7 +529,7 @@ _restore_stolen() {
 			fi
 			_dead="нет связи через $L3"
 		fi
-		logger -t 5gmodem "MM забрал $PATHID и оставил без сессии данных ($_dead) - поднимаем $IF"
+		logger -t 5gmodem "MM took over $PATHID and left it without a data session ($_dead) - bringing up $IF"
 		ifdown "$IF" >/dev/null 2>&1
 		sleep 3
 		ifup "$IF" >/dev/null 2>&1

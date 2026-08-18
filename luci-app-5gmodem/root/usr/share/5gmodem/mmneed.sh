@@ -103,13 +103,13 @@ case "$1" in
 			if ! _running; then
 				/etc/init.d/modemmanager enable >/dev/null 2>&1
 				/etc/init.d/modemmanager start >/dev/null 2>&1
-				logger -t 5gmodem "ModemManager запущен: им управляется подключённый модем"
+				logger -t 5gmodem "ModemManager started: a connected modem is managed by it"
 			fi
 		else
 			if _running; then
 				/etc/init.d/modemmanager stop >/dev/null 2>&1
 				/etc/init.d/modemmanager disable >/dev/null 2>&1
-				logger -t 5gmodem "ModemManager остановлен: ни один подключённый модем им не управляется"
+				logger -t 5gmodem "ModemManager stopped: no connected modem is managed by it"
 				# Сирота mbim-proxy: MM поднимает его под себя, и после
 				# остановки MM тот остаётся жить с открытым cdc-wdm (живьём
 				# 03.08.2026 - висел с бута). Узел нужен umbim'у монопольно -

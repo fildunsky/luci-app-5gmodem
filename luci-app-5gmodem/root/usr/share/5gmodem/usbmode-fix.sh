@@ -51,7 +51,7 @@ _fix_one() {   # $1 - vid:pid
 	# сломанная база лишила бы modeswitch'а все остальные модемы.
 	if [ -s "$JSON.tmp" ] && jsonfilter -i "$JSON.tmp" -e '@.devices' >/dev/null 2>&1; then
 		mv "$JSON.tmp" "$JSON"
-		logger -t 5gmodem "usb_modeswitch: снято вредное правило для $1 (ломало композицию модема)"
+		logger -t 5gmodem "usb_modeswitch: removed a harmful rule for $1 (it was breaking the modem composition)"
 		return 0
 	fi
 	rm -f "$JSON.tmp"

@@ -31,7 +31,7 @@ for N in $CUR; do
 	uci add_list "firewall.$Z.network=$N"
 done
 uci commit firewall
-logger -t 5gmodem "зона wan была склеена в один элемент - расклеил: $CUR"
+logger -t 5gmodem "wan zone network list was collapsed into a single element - split it back out: $CUR"
 [ -x /etc/init.d/firewall ] && /etc/init.d/firewall reload >/dev/null 2>&1
 
 exit 0

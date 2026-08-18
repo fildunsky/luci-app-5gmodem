@@ -67,7 +67,7 @@ if [ -r "$HANDLER" ] && ! ubus call network get_proto_handlers 2>/dev/null \
 	if [ "$REGISTER_PROTO_FORCE" = "1" ] || [ "$HAS_FIBO" = "1" ]; then
 		NEED=1
 	else
-		logger -t 5gmodem "register_proto: прото fibocom не зарегистрирован, но интерфейсов на нём нет - сеть не трогаю (регистрация случится при создании интерфейса или после перезагрузки)"
+		logger -t 5gmodem "register_proto: proto fibocom is not registered, but no interfaces use it - leaving the network alone (registration will happen on interface creation or after a reboot)"
 	fi
 fi
 
@@ -75,7 +75,7 @@ CUR=""
 [ -r "$HANDLER" ] && CUR=$(md5sum "$HANDLER" 2>/dev/null | awk '{print $1}')
 if [ "$HAS_FIBO" = 1 ] && [ -n "$CUR" ] \
    && [ "$CUR" != "$(cat "$STAMP" 2>/dev/null)" ]; then
-	logger -t 5gmodem "register_proto: обработчик fibocom обновлён; дозвон возьмёт новый код с диска, метаданные - после перезагрузки (рестарт сети ради этого не делаем)"
+	logger -t 5gmodem "register_proto: fibocom handler updated; dialing will pick up the new code from disk, metadata after a reboot (not restarting the network for this)"
 fi
 
 # qmiraw (наш raw-ip QMI для SimCom) - та же логика регистрации, без слежения за
@@ -94,7 +94,7 @@ if [ -r /lib/netifd/proto/qmiraw.sh ] && ! ubus call network get_proto_handlers 
 fi
 
 if [ "$NEED" = "1" ]; then
-	logger -t 5gmodem "register_proto: наш прото не зарегистрирован в netifd - перезапускаю сеть (интерфейсы кратко прервутся)"
+	logger -t 5gmodem "register_proto: our proto is not registered in netifd - restarting the network (interfaces will briefly drop)"
 	/etc/init.d/network restart >/dev/null 2>&1
 fi
 

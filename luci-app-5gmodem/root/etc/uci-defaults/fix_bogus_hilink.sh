@@ -35,7 +35,7 @@ for SEC in $(uci -q show 5gmodem 2>/dev/null \
 	# at_debug - галку режима, которой у обычного модема быть не должно.
 	uci -q delete "5gmodem.$SEC.netdev"
 	uci -q delete "5gmodem.$SEC.at_debug"
-	logger -t 5gmodem "миграция: снята ошибочная пометка hilink с $SEC ($VIDPID)"
+	logger -t 5gmodem "migration: removed bogus hilink mark from $SEC ($VIDPID)"
 	CHANGED=1
 done
 

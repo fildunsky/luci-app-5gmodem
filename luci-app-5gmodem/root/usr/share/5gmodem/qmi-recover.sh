@@ -60,12 +60,12 @@ qmi_pool_recover() {
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		at_query "$_t" "AT" 5 | grep -q "OK" || continue
-		logger -t 5gmodem "$_trig на $_qp - сбрасываю модем (AT+CFUN=1,1 на $_t)"
+		logger -t 5gmodem "$_trig on $_qp - resetting the modem (AT+CFUN=1,1 on $_t)"
 		touch "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
 		return 0
 	done
-	logger -t 5gmodem "QMI pool exhausted on $_qp, но живого AT-порта для сброса нет"
+	logger -t 5gmodem "QMI pool exhausted on $_qp, but no live AT port to reset with"
 	return 1
 }
 
@@ -83,12 +83,12 @@ qmi_force_reset() {   # $1 - usb-путь, $2 - причина для журна
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_fr_p\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		at_query "$_t" "AT" 5 | grep -q "OK" || continue
-		logger -t 5gmodem "${2:-нужен сброс} на $_fr_p - сбрасываю модем (AT+CFUN=1,1 на $_t)"
+		logger -t 5gmodem "${2:-reset needed} on $_fr_p - resetting the modem (AT+CFUN=1,1 on $_t)"
 		touch "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
 		return 0
 	done
-	logger -t 5gmodem "${2:-нужен сброс} на $_fr_p, но живого AT-порта для сброса нет"
+	logger -t 5gmodem "${2:-reset needed} on $_fr_p, but no live AT port to reset with"
 	return 1
 }
 

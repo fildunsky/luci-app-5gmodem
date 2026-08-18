@@ -11,15 +11,24 @@ is_hilink() {   # $1 - usb-путь
 	for _ih_k in $HILINK_IDS; do
 		[ "$_ih_id" = "$_ih_k" ] && return 0
 	done
-	# СТРУКТУРНЫЙ ПРИЗНАК (только Huawei): модем отдаёт СЕТЕВУЮ КАРТУ, но ни
-	# одного AT-порта и ни одного cdc-wdm - управлять им нечем, значит он держит
-	# IP-стек сам, т.е. HiLink. Список ID за всеми композициями не поспевает: у
-	# 12d1:14db (E8372 / МТС 8211F) его не было, и модем уезжал в обычную ветку -
+	# СТРУКТУРНЫЙ ПРИЗНАК: модем отдаёт СЕТЕВУЮ КАРТУ, но ни одного AT-порта и
+	# ни одного cdc-wdm - управлять им нечем, значит он держит IP-стек сам,
+	# т.е. HiLink. Список ID за всеми композициями не поспевает: у 12d1:14db
+	# (E8372 / МТС 8211F) его не было, и модем уезжал в обычную ветку -
 	# получал proto=fibocom на eth2 и падал с NO_DEVICE, вместо dhcp.
-	# Ограничено вендором 12d1: у других вендоров «сеть без портов» означает
-	# другое (напр. модуль в RNDIS, которым мы всё же управляем по AT).
+	# Ограничено перечисленными вендорами/устройствами: у прочих «сеть без
+	# портов» означает другое (напр. модуль в RNDIS, которым мы всё же
+	# управляем по AT).
+	# 05c6:90b4 - Android-палки на Qualcomm MDM9600/9610 (PIXLINK/UV310 и
+	# клоны): в RNDIS-режиме это роутер со своим NAT (192.168.100.1), без tty
+	# и cdc-wdm - HiLink-класс, связь по dhcp на usb0, метрик нет (веб-API не
+	# хуавеевский). ВАЖНО: у той же палки есть режим «только модем» (в её
+	# веб-морде выключить раздачу WiFi и USB) - тогда она приходит С cdc-wdm
+	# (qmi_wwan) под тем же vid:pid, и структурная проверка ниже корректно
+	# отправит её НЕ сюда, а обычным путём (QMI). Поэтому именно структура, а
+	# не безусловный whitelist (Cudy TR3000, 17-18.08.2026).
 	case "$_ih_id" in
-		12d1:*)
+		12d1:*|05c6:90b4)
 			_ih_j=$("$RES/listmodems.sh" 2>/dev/null)
 			_ih_tty=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)
 			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
@@ -99,7 +108,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 			*" $_hif "*) ;;
 			*) uci -q add_list "firewall.$_hz.network=$_hif"
 			   uci -q commit firewall
-			   logger -t 5gmodem "hilink: $_hif добавлен в зону wan" ;;
+			   logger -t 5gmodem "hilink: $_hif added to the wan zone" ;;
 		esac
 	fi
 	uci -q set "$CFG.$_hsec.network=$_hif"
@@ -107,7 +116,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 	uci -q set "$CFG.$_hsec.iface_proto=dhcp"
 	uci -q commit "$CFG"
 	ifup "$_hif" >/dev/null 2>&1
-	logger -t 5gmodem "hilink: $_hp ($_hd) -> интерфейс $_hif (dhcp)"
+	logger -t 5gmodem "hilink: $_hp ($_hd) -> interface $_hif (dhcp)"
 	echo "$_hif"
 }
 
@@ -158,7 +167,7 @@ try_at_debug() {   # $1 - usb-путь
 		_ad_t=$((_ad_t + 1))
 	done
 	[ -n "$_ad_ok" ] || return 1
-	logger -t 5gmodem "hilink: $1 переведён в режим с AT-портами"
+	logger -t 5gmodem "hilink: $1 switched to debug mode (AT ports exposed)"
 	# Порты появляются не мгновенно.
 	#
 	# ЖДЁМ ПО sysfs, А НЕ ПЕРЕСБОРКОЙ ПЕРЕЧИСЛЕНИЯ. Прежний цикл на каждом шаге

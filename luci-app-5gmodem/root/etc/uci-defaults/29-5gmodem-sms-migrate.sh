@@ -35,7 +35,7 @@ if [ ! -f "$_STAMP" ] && [ -d /etc/modem ]; then
 	done
 	: > "$_STAMP" 2>/dev/null
 	[ "$_files" -gt 0 ] && \
-		logger -t 5gmodem "списки из /etc/modem перенесены в /etc/5gmodem/modem: $_files файлов"
+		logger -t 5gmodem "lists moved from /etc/modem to /etc/5gmodem/modem: $_files files"
 fi
 
 [ -f /etc/config/sms_tool_js ] || exit 0
@@ -60,7 +60,7 @@ done
 
 if [ "$_moved" -gt 0 ]; then
 	uci -q commit 5gmodem
-	logger -t 5gmodem "настройки SMS перенесены в 5gmodem.sms: $_moved значений"
+	logger -t 5gmodem "SMS settings migrated to 5gmodem.sms: $_moved values"
 fi
 
 exit 0

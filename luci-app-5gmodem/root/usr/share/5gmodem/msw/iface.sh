@@ -71,12 +71,12 @@ ensure_iface() {
 		if [ -n "$_ei_mine" ]; then
 			uci -q set "$CFG.$SEC.network=$_ei_mine"
 			uci -q commit "$CFG"
-			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - переключил на свой $_ei_mine"
+			logger -t 5gmodem-resolve "section $SEC referenced foreign $IF - switched to its own $_ei_mine"
 			IF="$_ei_mine"
 		else
 			uci -q delete "$CFG.$SEC.network"
 			uci -q commit "$CFG"
-			logger -t 5gmodem-resolve "секция $SEC ссылалась на чужой $IF - ссылку снял, интерфейс будет создан заново"
+			logger -t 5gmodem-resolve "section $SEC referenced foreign $IF - reference cleared, the interface will be recreated"
 			return 0
 		fi
 	fi
@@ -240,7 +240,7 @@ fix_iface_proto() {   # $1 - имя интерфейса
 		mbim|qmi) ;;
 		*) return ;;
 	esac
-	logger -t 5gmodem "iface $_fp_if: proto=$_fp_pr не подходит драйверу $_fp_drv - ставим $_fp_want"
+	logger -t 5gmodem "iface $_fp_if: proto=$_fp_pr does not match driver $_fp_drv - setting $_fp_want"
 	uci -q set "network.$_fp_if.proto=$_fp_want"
 	uci -q commit network
 }
@@ -374,7 +374,7 @@ drop_stale_ifaces() {   # $1 - usb-путь модема, $2 - интерфей�
 		ifdown "$_ds_i" >/dev/null 2>&1
 		uci -q delete "network.$_ds_i"
 		[ -n "$_ds_z" ] && uci -q del_list "firewall.$_ds_z.network=$_ds_i"
-		logger -t 5gmodem "убран осиротевший интерфейс $_ds_i (модем $1 теперь на ${2:-?})"
+		logger -t 5gmodem "removed orphan interface $_ds_i (modem $1 is now on ${2:-?})"
 	done
 	uci -q commit network
 	uci -q commit firewall

@@ -4859,3 +4859,24 @@ msgstr "Этот Wi-Fi-аплинк не входит в зону wan файрв
 
 msgid "not in wan zone — click to fix"
 msgstr "вне зоны wan — нажмите, чтобы починить"
+
+msgid "If this repeats, install the wget-ssl package (apk add wget-ssl): some operator servers use TLS that curl on this router cannot handle"
+msgstr "Если повторится — установите пакет wget-ssl (apk add wget-ssl): часть серверов операторов использует TLS, который curl на этом роутере не понимает"
+
+msgid "Auto (active slot)"
+msgstr "Авто (активный слот)"
+
+msgid "Slot 1"
+msgstr "Слот 1"
+
+msgid "Slot 2"
+msgstr "Слот 2"
+
+msgid "eUICC slot"
+msgstr "Слот eUICC"
+
+msgid "eUICC slot saved — refresh the profile list"
+msgstr "Слот eUICC сохранён — перечитайте список профилей"
+
+msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
+msgstr "В каком SIM-слоте живёт чип eSIM. «Авто» — слот, активный в модеме сейчас. Задайте явно, если список профилей пуст при читаемом чипе — например, съёмная eSIM в слоте 1."

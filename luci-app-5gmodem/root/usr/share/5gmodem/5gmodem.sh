@@ -676,7 +676,7 @@ if [ -n "$DEVICE" ] && [ -n "$_POLL_AM" ]; then
 		_own_ttys=$(printf '%s' "$_own_rec" | jsonfilter -e "@[@.path=\"$_POLL_AM\"].tty[*]" 2>/dev/null | tr '\n' ' ')
 		case " $_own_ttys " in
 			*" $DEVICE "*) : ;;
-			*) logger -t 5gmodem "порт $DEVICE не принадлежит модему $_POLL_AM - опрос пропускаем"
+			*) logger -t 5gmodem "port $DEVICE does not belong to modem $_POLL_AM - skipping the poll"
 			   DEVICE="" ;;
 		esac
 	fi
@@ -734,7 +734,7 @@ if [ -z "$DEVICE" ]; then
 		if [ -n "$_POLL_AM" ] && [ "$((_sh_now - _sh_last))" -ge 60 ] \
 		   && ! "$RES/listmodems.sh" | jsonfilter -e '@[*].path' 2>/dev/null | grep -qxF "$_POLL_AM"; then
 			printf '%s' "$_sh_now" > "$_sh_mark" 2>/dev/null
-			logger -t 5gmodem "активный модем «$_POLL_AM» отсутствует в списке - переоцениваю (resolve)"
+			logger -t 5gmodem "active modem \"$_POLL_AM\" is missing from the list - re-evaluating (resolve)"
 			( "$RES/modemswitch.sh" resolve >/dev/null 2>&1 & ) </dev/null
 		fi
 		_age=$(_snapshot_age)
@@ -888,7 +888,7 @@ $(sms_tool -D -d $DEVICE at "AT+CIMI")"
 	if [ -z "$O" ] && [ -n "$DEVICE" ]; then
 		rm -f "$PORTOK" 2>/dev/null   # порт подвис - маркер «жив» больше не верен
 		_wg=$(_snapshot_age) && {
-			logger -t 5gmodem "опрос $DEVICE подвис - отдаю прошлый снимок (${_wg}c)"
+			logger -t 5gmodem "poll of $DEVICE is stuck - serving the previous snapshot (${_wg}s)"
 			serve_cache "$_wg"; exit 0
 		}
 	fi
@@ -1433,7 +1433,7 @@ case "$REG" in
 						7)  REG=6 ;;
 						10) REG=9 ;;
 					esac
-					logger -t 5gmodem "сеть $COPS_NUM той же страны, что и SIM ($_sim_mcc) - роуминг не показываем"
+					logger -t 5gmodem "network $COPS_NUM is in the same country as the SIM ($_sim_mcc) - not showing roaming"
 				fi
 				;;
 		esac
@@ -1479,7 +1479,7 @@ if [ -n "$SIMID" ]; then
 		[ -f "$_apn_stamp.gaveup" ] && _apn_wait=30
 		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +$_apn_wait 2>/dev/null)" ]; }; then
 			: > "$_apn_stamp"
-			logger -t 5gmodem "смена SIM (IMSI) на $_SIM_IF - переподбираем APN"
+			logger -t 5gmodem "SIM change (IMSI) on $_SIM_IF - re-selecting the APN"
 			# КАРТА ДРУГАЯ - СНИМОК СЛОТОВ УСТАРЕЛ. Кэш simslot.sh чистит только
 			# ветка set, то есть переключение НАШИМИ руками. Физическая пересадка
 			# карты его не трогала, и до пяти минут страница показывала прежний
@@ -2673,7 +2673,7 @@ _amp="$_POLL_AM"
 # их использует и modemswitch.sh, дозаполняя модель НЕактивным модемам.
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] \
    && ! _model_vendor_ok "$MODEL" "$(uci -q get "5gmodem.$AMP_SEC.vidpid")"; then
-	logger -t 5gmodem "модель «$MODEL» не от вендора $(uci -q get "5gmodem.$AMP_SEC.vidpid") - в профиль не пишем"
+	logger -t 5gmodem "model \"$MODEL\" is not from vendor $(uci -q get "5gmodem.$AMP_SEC.vidpid") - not writing it to the profile"
 	MODEL=""
 fi
 # УСТРОЙСТВУ БЕЗ AT-КАНАЛОВ МОДЕЛЬ НЕ ПРИПИСЫВАЕМ. У него нечем ответить на
@@ -2867,7 +2867,7 @@ if [ -n "$DEVICE" ] && [ "$_STAMP_PATH" != "$_POLL_AM" ]; then
 	# 016133311799572»), и следом тот же чужой номер уехал в штамп интерфейса.
 	# Не смогли доказать принадлежность порта - не штампуем: следующий круг
 	# опроса сделает это спокойно.
-	logger -t 5gmodem "порт $DEVICE принадлежит ${_STAMP_PATH:-неизвестно кому}, а опрашиваем $_POLL_AM - IMEI не штампую"
+	logger -t 5gmodem "port $DEVICE belongs to ${_STAMP_PATH:-an unknown device}, not to the polled modem ${_POLL_AM:-?} - IMEI not recorded"
 	NR_IMEI=""
 fi
 if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]; then
@@ -2885,7 +2885,7 @@ if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]
 				[ -n "$_fsp" ] && [ -e "/sys/bus/usb/devices/$_fsp" ] && { _foreign="$_fsp"; break; }
 			done
 			if [ -n "$_foreign" ]; then
-				logger -t 5gmodem "IMEI $NR_IMEI принадлежит присутствующему модему $_foreign - в секцию $AMP_SEC не пишу"
+				logger -t 5gmodem "IMEI $NR_IMEI belongs to present modem $_foreign - not writing it into section $AMP_SEC"
 				NR_IMEI=""
 			fi
 			_old_imei=$(uci -q get "5gmodem.$AMP_SEC.imei")
@@ -2912,7 +2912,7 @@ if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]
 			if [ -n "$NR_IMEI" ] && [ -n "$_own_if" ] \
 			   && [ "$(uci -q get "network.$_own_if.modem_path")" = "$_POLL_AM" ] \
 			   && [ "$(uci -q get "network.$_own_if.modem_imei")" != "$NR_IMEI" ]; then
-				logger -t 5gmodem "интерфейс $_own_if числился за IMEI $(uci -q get "network.$_own_if.modem_imei") - исправляю на $NR_IMEI"
+				logger -t 5gmodem "interface $_own_if was owned by IMEI $(uci -q get "network.$_own_if.modem_imei") - correcting to $NR_IMEI"
 				note_foreign_uci network "опрос: штамп IMEI"
 				uci -q set "network.$_own_if.modem_imei=$NR_IMEI"
 				uci -q commit network

@@ -72,7 +72,7 @@ prune_parks() {
 		esac
 		[ $((_pp_now - _pp_at)) -gt "$_pp_ttl" ] && {
 			uci -q delete "$CFG.$_pp_s"
-			logger -t 5gmodem "припаркованный профиль $_pp_s удалён (старше 30 дней)"
+			logger -t 5gmodem "parked profile $_pp_s removed (older than 30 days)"
 		}
 	done
 	uci -q commit "$CFG"
@@ -126,7 +126,7 @@ park_profile() {   # $1 - секция, которую вытесняем
 	# имя интерфейса освобождалось и уходило чужому модему (ревью, баг №1).
 	# Здесь его commit закрывает уже ПОЛНУЮ парковку.
 	prune_parks
-	logger -t 5gmodem "профиль модема ${_pk_imei:+IMEI $_pk_imei}${_pk_imei:+ }${_pk_ser:+serial $_pk_ser} припаркован ($1 -> $_pk_dst) до возврата"
+	logger -t 5gmodem "modem profile ${_pk_imei:+IMEI $_pk_imei}${_pk_imei:+ }${_pk_ser:+serial $_pk_ser} parked ($1 -> $_pk_dst) until it returns"
 }
 
 # Модем на этом USB-пути ПОДМЕНИЛИ на другой?
@@ -167,7 +167,7 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	_vid_old=${_old%%:*}
 	_vid_new=${_new%%:*}
 	if [ "$_vid_old" = "$_vid_new" ]; then
-		logger -t 5gmodem "modem mode change on $1: $_old -> $_new (тот же вендор, свойства железа сохраняем)"
+		logger -t 5gmodem "modem mode change on $1: $_old -> $_new (same vendor, keeping hardware properties)"
 		# В новой композиции другие номера портов и другой набор возможностей -
 		# кэши по пути и порту недействительны (см. purge_path_caches).
 		purge_path_caches "$1"
@@ -212,7 +212,7 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 		uci -q set "network.$_oif.auto=0"
 		_ostamp=$(uci -q get "network.$_oif.modem_imei")
 		if [ -n "$_ostamp" ]; then
-			logger -t 5gmodem "swap: интерфейс '$_oif' сохранён за модемом IMEI $_ostamp (auto=0 до его возвращения)"
+			logger -t 5gmodem "swap: interface '$_oif' kept for modem IMEI $_ostamp (auto=0 until it returns)"
 		else
 			uci -q set "network.$_oif.modem_stale=1"
 			logger -t 5gmodem "swap: stopped stale owned interface '$_oif' (rerun setup to rebuild)"
@@ -385,11 +385,11 @@ migrate_profile() {   # $1 - старая секция, $2 - новая секц
 	for _mk in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
 	           celllock at_debug pdp_mode pdp_ok imei; do
 		[ "$_mk" = mm_exclude ] && [ -n "$_mp_skipmm" ] && {
-			logger -t 5gmodem "перенос профиля $1 -> $2: протоколы разные, mm_exclude не переношу"
+			logger -t 5gmodem "profile move $1 -> $2: protocols differ, not carrying mm_exclude over"
 			continue
 		}
 		[ "$_mk" = network ] && [ -n "$_mp_keepnet" ] && {
-			logger -t 5gmodem "перенос профиля $1 -> $2: интерфейс $_mp_dstnet уже закреплён за IMEI $_mp_dstimei, его оставляю"
+			logger -t 5gmodem "profile move $1 -> $2: interface $_mp_dstnet is already owned by IMEI $_mp_dstimei, leaving it"
 			continue
 		}
 		_mv=$(uci -q get "$CFG.$1.$_mk")
@@ -412,12 +412,12 @@ migrate_profile() {   # $1 - старая секция, $2 - новая секц
 			uci -q delete "network.$_mp_oldnet"
 			uci -q commit network
 			ubus call network reload >/dev/null 2>&1
-			logger -t 5gmodem "перенос профиля $1 -> $2: интерфейс-двойник $_mp_oldnet удалён (тот же IMEI $_mp_dstimei, модем уже живёт на $_mp_dstnet)"
+			logger -t 5gmodem "profile move $1 -> $2: twin interface $_mp_oldnet removed (same IMEI $_mp_dstimei, the modem already lives on $_mp_dstnet)"
 		fi
 	fi
 	uci -q delete "$CFG.$1"
 	uci -q commit "$CFG"
-	logger -t 5gmodem "профиль перенесён: $1 -> $2 (тот же модем в другом разъёме)"
+	logger -t 5gmodem "profile moved: $1 -> $2 (same modem in a different port)"
 }
 
 ensure_section() {
@@ -473,7 +473,7 @@ ensure_section() {
 				uci -q commit "$CFG"
 				_es_ser=""
 			else
-				logger -t 5gmodem "модем serial=$_es_ser опознан на $1 (был $_es_soldpath) - переношу профиль"
+				logger -t 5gmodem "modem serial=$_es_ser recognized on $1 (was $_es_soldpath) - moving the profile"
 				migrate_profile "$_es_sold" "$SEC"
 			fi
 		fi
@@ -500,7 +500,7 @@ ensure_section() {
 	# migrate_profile ниже.
 	_es_previmei=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
 	if [ -n "$_es_imei" ] && [ -n "$_es_previmei" ] && [ "$_es_imei" != "$_es_previmei" ]; then
-		logger -t 5gmodem "в порту $1 другой аппарат при том же vid:pid (IMEI $_es_previmei -> $_es_imei) - перечитываю модель и порты"
+		logger -t 5gmodem "a different unit in port $1 with the same vid:pid (IMEI $_es_previmei -> $_es_imei) - re-reading model and ports"
 		uci -q delete "$CFG.$SEC.model" 2>/dev/null
 		uci -q delete "$CFG.$SEC.model_vp" 2>/dev/null
 		uci -q delete "$CFG.$SEC.at_port" 2>/dev/null
@@ -523,7 +523,7 @@ ensure_section() {
 		if [ -n "$_es_old" ] && [ -n "$_es_ser" ]; then
 			_es_oser=$(uci -q get "$CFG.$_es_old.serial")
 			if [ -n "$_es_oser" ] && [ "$_es_oser" != "$_es_ser" ]; then
-				logger -t 5gmodem "IMEI $_es_imei у $1 совпал с секцией $_es_old, но serial разный ($_es_ser vs $_es_oser) - это другой аппарат, миграцию отменяю"
+				logger -t 5gmodem "IMEI $_es_imei on $1 matches section $_es_old but serial differs ($_es_ser vs $_es_oser) - different unit, cancelling migration"
 				echo "$SEC"
 				return 0
 			fi
@@ -542,7 +542,7 @@ ensure_section() {
 			# Чужой IMEI НЕ пишем и НЕ мигрируем - молчим до следующего опроса.
 			_es_oldpath=$(uci -q get "$CFG.$_es_old.path")
 			if [ -n "$_es_oldpath" ] && [ -e "/sys/bus/usb/devices/$_es_oldpath" ]; then
-				logger -t 5gmodem "IMEI $_es_imei прочитан у $1, но принадлежит присутствующему $_es_oldpath - миграцию профиля отменяю"
+				logger -t 5gmodem "IMEI $_es_imei read from $1 but belongs to present $_es_oldpath - cancelling profile migration"
 				echo "$SEC"
 				return 0
 			fi

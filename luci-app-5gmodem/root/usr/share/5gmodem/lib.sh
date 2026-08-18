@@ -94,7 +94,7 @@ stub_serial_add() {   # $1 - serial
 			[ -n "$_ssa_s" ] && uci -q delete "5gmodem.$_ssa_s.serial"
 		done
 	uci -q commit 5gmodem
-	logger -t 5gmodem "serial $1 партийный (встречен у двух устройств) - как признак модема больше не используется"
+	logger -t 5gmodem "serial $1 is a batch value (seen on two devices) - no longer used as a modem identity"
 	return 0
 }
 
@@ -154,7 +154,7 @@ purge_path_caches() {   # $1 - usb-путь
 		"/tmp/5gmodem_slot_$_ppc_k2" "/tmp/5gmodem_slot_$_ppc_k2.t" \
 		"/tmp/5gmodem_imei_none_$_ppc_k2" \
 		"/tmp/5gmodem_static_$_ppc_k2"* "/tmp/5gmodem_qmi_$_ppc_k2".* 2>/dev/null
-	logger -t 5gmodem "кэши пути $1 сброшены (в порту другой модем)"
+	logger -t 5gmodem "caches for path $1 purged (a different modem is in the port)"
 	return 0
 }
 
@@ -255,7 +255,7 @@ utf8_fix() {
 note_foreign_uci() {
 	_nf=$(uci changes "$1" 2>/dev/null | head -20)
 	[ -n "$_nf" ] || return 0
-	logger -t 5gmodem "$2: в очереди uci ЧУЖИЕ правки $1 - коммичу вместе с ними: $(printf '%s' "$_nf" | tr '\n' '; ' | head -c 400)"
+	logger -t 5gmodem "$2: FOREIGN staged uci changes in $1 - committing them along: $(printf '%s' "$_nf" | tr '\n' '; ' | head -c 400)"
 }
 
 # КЛЮЧ ФАЙЛОВ-СНИМКОВ МЕТРИК по USB-пути.
@@ -820,7 +820,7 @@ mm_owns_path() {   # $1 - usb-путь; код 0 = владеет MM
 		_mo_v="${_mo_v:-none}"
 		printf '%s\n' "$_mo_v" > "$_mo_c" 2>/dev/null
 		if [ "$_mo_v" != "$_mo_old" ] && [ "$_mo_v" != "none" ]; then
-			logger -t 5gmodem "модем $1 числится в ModemManager (индекс $_mo_v) - AT и канал не трогаем"
+			logger -t 5gmodem "modem $1 is registered in ModemManager (index $_mo_v) - leaving AT and the channel alone"
 		fi
 	fi
 	[ -n "$_mo_v" ] && [ "$_mo_v" != "none" ]
@@ -1135,7 +1135,7 @@ qmicli_p() {
 		done
 		if kill -0 "$_qp_pid" 2>/dev/null; then _qp_rc=1; else wait "$_qp_pid" 2>/dev/null; _qp_rc=$?; fi
 		kill "$_qp_k" 2>/dev/null; wait "$_qp_k" 2>/dev/null
-		[ -s "$_qp_o" ] && logger -t 5gmodem "qmi: прокси не отвечает - прочитано напрямую с $_qp_dev"
+		[ -s "$_qp_o" ] && logger -t 5gmodem "qmi: proxy not responding - read directly from $_qp_dev"
 	fi
 	cat "$_qp_o" 2>/dev/null; rm -f "$_qp_o"
 	exec 9>&- 2>/dev/null
@@ -1277,7 +1277,7 @@ at_query() {
 	command -v sms_tool >/dev/null 2>&1 || return 1
 	# Команда уходит в модем - проверяем её так же, как значения со страницы.
 	if command -v is_atcmd >/dev/null 2>&1 && ! is_atcmd "$_aq_c"; then
-		logger -t 5gmodem "at_query: команда отклонена проверкой"
+		logger -t 5gmodem "at_query: command rejected by validation"
 		return 1
 	fi
 	[ -n "$AT_LOCK_FD" ] || . /usr/share/5gmodem/atlock.sh 2>/dev/null

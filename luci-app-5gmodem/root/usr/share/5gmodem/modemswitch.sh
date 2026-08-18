@@ -438,7 +438,7 @@ switch)
 	# защищаемся. Поэтому судим, только когда список НЕПУСТ.
 	_sw_list=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null)
 	if [ -n "$P" ] && [ -n "$_sw_list" ] && ! printf '%s\n' "$_sw_list" | grep -qxF "$P"; then
-		logger -t 5gmodem "switch: «$P» не модем (нет в списке) - активным не делаю"
+		logger -t 5gmodem "switch: \"$P\" is not a modem (not in the list) - not making it active"
 		printf '{"error":"not a modem","path":"%s"}\n' "$P"
 		exit 0
 	fi
@@ -759,7 +759,7 @@ delprofile)
 		case "$_present" in
 			*" $_p "*)
 				# удалённый модем ещё воткнут - оставляем его активным
-				logger -t 5gmodem "профиль $_sec удалён, модем $_p ещё на шине - оставляю активным"
+				logger -t 5gmodem "profile $_sec deleted, modem $_p still on the bus - keeping it active"
 				;;
 			*)
 				# модема нет - берём первый другой присутствующий (или пусто)
@@ -775,7 +775,7 @@ delprofile)
 	fi
 	uci -q commit "$CFG"
 	[ -n "$_killed" ] && /etc/init.d/network reload >/dev/null 2>&1
-	logger -t 5gmodem "профиль $_sec ($_p) удалён${_killed:+, интерфейс $_killed тоже}"
+	logger -t 5gmodem "profile $_sec ($_p) deleted${_killed:+, interface $_killed too}"
 	printf '{"success":true,"iface_removed":"%s"}\n' "$_killed"
 	exit 0
 	;;
@@ -815,7 +815,7 @@ autoapn)
 	# с найденным APN страница показывает и так, применить её - одна кнопка.
 	_am_sec=$(sec_for_iface "$IFACE")
 	if [ "$(uci -q get "$CFG.$_am_sec.apn_mode")" = "manual" ]; then
-		logger -t 5gmodem "autoapn: $IFACE в ручном режиме, APN не трогаем"
+		logger -t 5gmodem "autoapn: $IFACE is in manual mode, leaving the APN alone"
 		exit 0
 	fi
 
@@ -938,7 +938,7 @@ autoapn)
 							| sed -n 's/^sim\.properties\.imsi *: *//p' | tr -cd '0-9') ;;
 					esac
 				fi
-				logger -t 5gmodem "autoapn: добрал из ModemManager - оператор «${_op:--}», сеть ${_mcc:--}-${_mnc:--}, IMSI ${#_imsi} цифр"
+				logger -t 5gmodem "autoapn: details fetched from ModemManager - operator \"${_op:--}\", network ${_mcc:--}-${_mnc:--}, IMSI ${#_imsi} digits"
 			fi
 		fi
 	fi
@@ -977,7 +977,7 @@ autoapn)
 	# FM350 (mm_exclude, добрать из MM неоткуда) APN не подбирался никогда, зато
 	# триггер смены SIM крутился по кругу - см. метку «сдался» выше.
 	if [ -z "$_op$_plmn" ] && [ ${#_imsi} -lt 6 ]; then
-		logger -t 5gmodem "autoapn: ни оператора, ни IMSI - пропускаем"
+		logger -t 5gmodem "autoapn: neither operator nor IMSI - skipping"
 		_apn_giveup
 		exit 0
 	fi
@@ -991,14 +991,14 @@ autoapn)
 	# Признак роуминга - код регистрации 5 (registered, roaming) против 1 (home).
 	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
 	if [ "$_reg" = "5" ]; then
-		logger -t 5gmodem "autoapn: роуминг (сеть «$_op», $_plmn) - APN оставляем пустым"
+		logger -t 5gmodem "autoapn: roaming (network \"$_op\", $_plmn) - leaving the APN empty"
 		_apn_giveup
 		exit 0
 	fi
 
 	_iccid=$(printf '%s' "$_j" | jsonfilter -e '@.iccid' 2>/dev/null | tr -cd '0-9')
 	_apn=$(apn_pick "$_op" "$_plmn" "$_sim_plmns" "$_imsi" "$_iccid") || {
-		logger -t 5gmodem "autoapn: APN для «$_op» ($_plmn, SIM$_sim_plmns) не найден"
+		logger -t 5gmodem "autoapn: no APN found for \"$_op\" ($_plmn, SIM$_sim_plmns)"
 		_apn_giveup
 		exit 0
 	}
@@ -1012,7 +1012,7 @@ autoapn)
 	}
 	_cur=$(uci -q get "network.$IFACE.apn")
 	if [ "$_cur" = "$_apn" ]; then
-		logger -t 5gmodem "autoapn: APN уже $_apn"
+		logger -t 5gmodem "autoapn: APN is already set to $_apn"
 		# Помечаем СИМКУ обработанной (её IMSI) - персистентно, в секции. По этому
 		# ключу опрос метрик понимает, что для ЭТОЙ симки APN уже подобран, и не
 		# дёргает autoapn на каждом опросе. Переживает перезагрузку и очистку /tmp.
@@ -1027,7 +1027,7 @@ autoapn)
 	# значение относится к нынешней симке, а не осталось от прежней.
 	_apn_stamp_sec
 	_apn_done
-	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (было «${_cur:-пусто}», оператор «$_op», $_plmn)"
+	logger -t 5gmodem "autoapn: $IFACE -> APN $_apn (was \"${_cur:-empty}\", operator \"$_op\", $_plmn)"
 	ifdown "$IFACE" >/dev/null 2>&1
 	sleep 3
 	# ПЕРЕД ДОЗВОНОМ ЖДЁМ ГОТОВНОСТИ МОДЕМА - НО ПО ФАКТУ, А НЕ ВСЛЕПУЮ.
@@ -1053,7 +1053,7 @@ autoapn)
 			esac
 			sleep 1; _aa_w=$((_aa_w + 1))
 		done
-		[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: ждал готовности модема $_aa_w c"
+		[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: waited ${_aa_w}s for the modem to become ready"
 	else
 		# БЕЗ ModemManager ЖДЁМ ПО AT - РАНЬШЕ НЕ ЖДАЛИ ВОВСЕ.
 		#
@@ -1079,7 +1079,7 @@ autoapn)
 				esac
 				sleep 2; _aa_w=$((_aa_w + 2))
 			done
-			[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: ждал регистрации модема $_aa_w c (без MM)"
+			[ "$_aa_w" -gt 0 ] && logger -t 5gmodem "autoapn: waited ${_aa_w}s for network registration (no MM)"
 		fi
 	fi
 	ifup "$IFACE" >/dev/null 2>&1
@@ -1189,7 +1189,7 @@ resolve)
 		_dd_os=$(uci -q get "$CFG.$_dd_old.serial")
 		_dd_ns=$(uci -q get "$CFG.$SEC.serial")
 		[ -n "$_dd_os" ] && [ -n "$_dd_ns" ] && [ "$_dd_os" != "$_dd_ns" ] && continue
-		logger -t 5gmodem "resolve: дубль профиля по IMEI $_dd_imei ($_dd_old, путь ${_dd_op:-?} отсутствует) - переношу в $SEC"
+		logger -t 5gmodem "resolve: duplicate profile by IMEI $_dd_imei ($_dd_old, path ${_dd_op:-?} is gone) - moving into $SEC"
 		migrate_profile "$_dd_old" "$SEC"
 	done
 
@@ -1209,7 +1209,7 @@ resolve)
 				uci -q delete "network.$_nc_if.auto"
 				uci -q delete "network.$_nc_if.modem_parked"
 				_nc_changed=1
-				logger -t 5gmodem "resolve: модем $_nc_p вернулся - интерфейс $_nc_if снова включён"
+				logger -t 5gmodem "resolve: modem $_nc_p is back - interface $_nc_if re-enabled"
 			fi
 			continue
 		fi
@@ -1222,7 +1222,7 @@ resolve)
 			modem_ttys "$_nc_pp" 2>/dev/null | grep -qxF "$_nc_dev" && { _nc_own="$_nc_pp"; break; }
 		done
 		[ -n "$_nc_own" ] || continue
-		logger -t 5gmodem "resolve: у интерфейса $_nc_if модема нет (путь $_nc_p), а его нода $_nc_dev принадлежит живому $_nc_own - выключаю до возврата модема"
+		logger -t 5gmodem "resolve: interface $_nc_if has no modem (path $_nc_p) and its node $_nc_dev belongs to live $_nc_own - disabling until the modem returns"
 		ifdown "$_nc_if" 2>/dev/null
 		uci -q set "network.$_nc_if.auto=0"
 		uci -q set "network.$_nc_if.modem_parked=1"
@@ -1306,7 +1306,7 @@ resolve)
 				| grep -oE '^[0-9]{14,16}$' | head -1)
 			_rs_prev=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
 			if [ -n "$_rs_imei" ] && [ -n "$_rs_prev" ] && [ "$_rs_imei" != "$_rs_prev" ]; then
-				logger -t 5gmodem "resolve: в порту $P другой аппарат при том же vid:pid (IMEI $_rs_prev -> $_rs_imei) - перечитываю модель"
+				logger -t 5gmodem "resolve: a different unit in port $P with the same vid:pid (IMEI $_rs_prev -> $_rs_imei) - re-reading the model"
 				uci -q delete "$CFG.$SEC.model" 2>/dev/null
 				uci -q delete "$CFG.$SEC.model_vp" 2>/dev/null
 				uci -q set "$CFG.$SEC.imei=$_rs_imei"
@@ -1335,7 +1335,7 @@ resolve)
 				# (живой случай: телефон Samsung в порту SIM7100E показывался
 				# как «SIMCOM SIM7100E»). Читатель сверяет штамп - см. listmodems.
 				uci -q set "$CFG.$SEC.model_vp=$(uci -q get "$CFG.$SEC.vidpid")"
-				logger -t 5gmodem-resolve "модель $SEC определена: $_rm"
+				logger -t 5gmodem-resolve "model for $SEC identified: $_rm"
 			fi
 		fi
 	done
@@ -1380,11 +1380,11 @@ resolve)
 					_sl_dp=$(dirname "$(dirname "$_sl_w")")
 					uci -q set "network.$_sl_if.device=/dev/$(basename "$_sl_w")"
 					uci -q set "network.$_sl_if.devpath=$_sl_dp"
-					logger -t 5gmodem-resolve "интерфейс $_sl_if: канал управления переподвязан на $_sl_dp"
+					logger -t 5gmodem-resolve "interface $_sl_if: control channel re-bound to $_sl_dp"
 					break
 				done ;;
 		esac
-		logger -t 5gmodem-resolve "интерфейс $_sl_if разбужен: модем $_sl_p вернулся"
+		logger -t 5gmodem-resolve "interface $_sl_if woken up: modem $_sl_p is back"
 	done
 	[ "$_sl_chg" = 1 ] && { uci -q commit network; ubus call network reload >/dev/null 2>&1; }
 
@@ -1413,7 +1413,7 @@ resolve)
 		: # устройства нет на шине - это обычное временное отсутствие, не трогаем
 	elif [ -n "$PREF" ] && [ -n "$PRESENT" ] && ! echo " $PRESENT " | grep -q " $PREF " \
 	     && [ -e "/sys/bus/usb/devices/$PREF" ]; then
-		logger -t 5gmodem-resolve "предпочтительный «$PREF» на шине есть, но модемом не является - снимаю пометку"
+		logger -t 5gmodem-resolve "preferred \"$PREF\" is on the bus but is not a modem - clearing the mark"
 		uci -q delete "$CFG.@5gmodem[0].preferred_modem"; uci -q commit "$CFG"
 		PREF=""
 	fi
@@ -1730,7 +1730,7 @@ cleanup)
 		ifdown "$_cl_i" >/dev/null 2>&1
 		uci -q delete "network.$_cl_i"
 		[ -n "$_cl_z" ] && uci -q del_list "firewall.$_cl_z.network=$_cl_i"
-		logger -t 5gmodem "уборка: снят осиротевший интерфейс $_cl_i (путь ${_cl_p:-?}, IMEI ${_cl_m:-?}) - хозяина нет ни среди модемов, ни в парковках"
+		logger -t 5gmodem "cleanup: removed orphan interface $_cl_i (path ${_cl_p:-?}, IMEI ${_cl_m:-?}) - no owner among modems or parked profiles"
 	done
 	printf '],"parked":['
 	# ПАРКОВКИ, КОТОРЫЕ УЖЕ НИКОГО НЕ ЖДУТ.
@@ -1772,7 +1772,7 @@ cleanup)
 			fi
 			uci -q delete "$CFG.$_cl_s"
 			# IMEI берём ДО удаления секции - иначе в журнале пустое место.
-			logger -t 5gmodem "уборка: парковка $_cl_s (IMEI ${_cl_pimei:-?}, $_cl_age дн.) и её интерфейс ${_cl_pif:-нет} удалены"
+			logger -t 5gmodem "cleanup: parked profile $_cl_s (IMEI ${_cl_pimei:-?}, $_cl_age days) and its interface ${_cl_pif:-none} removed"
 		done
 	fi
 	printf ']'

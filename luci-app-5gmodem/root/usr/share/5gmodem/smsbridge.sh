@@ -324,7 +324,7 @@ _send_one() {   # $1 - порт, $2 - номер, $3 - текст, [$4 - fast|sl
 		if _sms_run "$_so_tmm" "$RES/sms_tool_mm" -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null; then
 			return 0
 		fi
-		logger -t 5gmodem "smsbridge: MM-отправка не удалась за ${_so_tmm}c, пробую AT-порт"
+		logger -t 5gmodem "smsbridge: MM send failed within ${_so_tmm}s, trying the AT port"
 		# Кириллице и на запасном пути нужен наш PDU: sms_tool закодирует её
 		# GSM-7 и адресат получит «?????».
 		if "$RES/smspdu.sh" needucs2 "$_so_txt"; then
@@ -442,7 +442,7 @@ _q_send_one() {   # $1 - файл
 	case "$_qs_tries" in ''|*[!0-9]*) _qs_tries=0 ;; esac
 	case "$_qs_born" in ''|*[!0-9]*) _qs_born=0 ;; esac
 	if [ -z "$_qs_to" ] || [ -z "$_qs_txt" ]; then
-		logger -t 5gmodem "smsbridge: битая запись очереди $_qs_f (нет номера или текста) - удаляю"
+		logger -t 5gmodem "smsbridge: corrupt queue entry $_qs_f (no number or text) - deleting"
 		rm -f "$_qs_f"
 		return 2
 	fi
@@ -450,7 +450,7 @@ _q_send_one() {   # $1 - файл
 	_qs_now=$(date +%s 2>/dev/null); case "$_qs_now" in ''|*[!0-9]*) _qs_now=0 ;; esac
 	if [ "$_qs_tries" -ge "$SMSQ_MAX_TRIES" ] \
 	   || { [ "$_qs_born" -gt 0 ] && [ "$_qs_now" -gt 0 ] && [ $((_qs_now - _qs_born)) -gt "$SMSQ_MAX_AGE" ]; }; then
-		logger -t 5gmodem "smsbridge: сообщение для «$_qs_to» так и не ушло за $_qs_tries попыток - выбрасываю из очереди"
+		logger -t 5gmodem "smsbridge: message for \"$_qs_to\" never went out after $_qs_tries attempts - dropping it from the queue"
 		rm -f "$_qs_f"
 		return 2
 	fi
@@ -483,7 +483,7 @@ _q_send_one() {   # $1 - файл
 		[ -n "$_qs_uid" ] && _qs_uid=$(mmcli -m "$_qs_uid" 2>/dev/null \
 			| sed -n "s|.*device: *||p" | head -1 | tr -d " '")
 		if [ -n "$_qs_uid" ]; then
-			logger -t 5gmodem "smsbridge: последняя попытка - забираю модем у ModemManager на время отправки"
+			logger -t 5gmodem "smsbridge: last attempt - borrowing the modem from ModemManager for the send"
 			( mmcli --inhibit-device="$_qs_uid" >/dev/null 2>&1 & echo $! > /tmp/5gmodem_sms_inhibit.pid ) 
 			_qs_w=0
 			while [ "$_qs_w" -lt 15 ]; do
@@ -494,13 +494,13 @@ _q_send_one() {   # $1 - файл
 			_qs_rc=$?
 			kill "$(cat /tmp/5gmodem_sms_inhibit.pid 2>/dev/null)" 2>/dev/null
 			rm -f /tmp/5gmodem_sms_inhibit.pid
-			logger -t 5gmodem "smsbridge: модем возвращён ModemManager (отправка $([ "$_qs_rc" = 0 ] && echo удалась || echo не удалась))"
+			logger -t 5gmodem "smsbridge: modem returned to ModemManager (send $([ "$_qs_rc" = 0 ] && echo succeeded || echo failed))"
 		fi
 	fi
 	( exit "$_qs_rc" )
 	if [ $? = 0 ]; then
 		rm -f "$_qs_f"
-		logger -t 5gmodem "smsbridge: отложенное сообщение для «$_qs_to» отправлено (попытка $((_qs_tries + 1)))"
+		logger -t 5gmodem "smsbridge: queued message for \"$_qs_to\" sent (attempt $((_qs_tries + 1)))"
 		return 0
 	fi
 	sed -i "s/^tries=.*/tries=$((_qs_tries + 1))/" "$_qs_f" 2>/dev/null
@@ -534,7 +534,7 @@ _send_pdu() {   # $1 - порт, $2 - номер, $3 - текст
 	# страницы, поэтому отказываем сразу и внятно.
 	if _port_is_mm "$_sp_port"; then
 		_SP_LASTERR="портом владеет ModemManager: кириллица через AT недоступна"
-		logger -t 5gmodem "smsbridge: $_sp_port под ModemManager - PDU-путь пропущен"
+		logger -t 5gmodem "smsbridge: $_sp_port is under ModemManager - PDU path skipped"
 		return 3
 	fi
 	_sp_cmd="${SMS_PDU_CMD:-CMGS}"
@@ -582,7 +582,7 @@ _send_pdu() {   # $1 - порт, $2 - номер, $3 - текст
 			   printf '\033' > "$_sp_port" 2>/dev/null
 			   _sp_ceer=$(_sms_run 8 $(_smstool) -d "$_sp_port" at "AT+CEER" 2>/dev/null \
 				| tr -d '\r' | grep -iE "CEER|ERROR" | head -1)
-			   logger -t 5gmodem "smsbridge: часть PDU не ушла ($_sp_cmd, номер «$2», len=$_sp_len): ${_sp_ans:-нет ответа}${_sp_ceer:+ | $_sp_ceer}"
+			   logger -t 5gmodem "smsbridge: a PDU part did not go out ($_sp_cmd, number \"$2\", len=$_sp_len): ${_sp_ans:-no answer}${_sp_ceer:+ | $_sp_ceer}"
 			   _SP_LASTERR="${_sp_ans:-нет ответа от модема}" ;;
 		esac
 	done <<PARTS_EOF

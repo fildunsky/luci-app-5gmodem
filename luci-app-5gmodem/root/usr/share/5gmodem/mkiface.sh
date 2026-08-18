@@ -246,7 +246,7 @@ kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
 	# именно наш модем, не трогая остальные.
 	if pgrep -f ModemManager >/dev/null 2>&1; then
 		if mmcli -L 2>/dev/null | grep -q "/Modem/"; then
-			echo "prepare: инхибирую $_path у ModemManager (соседей не трогаем)" >&2
+			echo "prepare: inhibiting $_path in ModemManager (leaving neighbors alone)" >&2
 			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1
 			_n=0
 			while [ "$_n" -lt 20 ]; do
@@ -389,7 +389,7 @@ if [ -n "$AMP" ]; then
 		          /sys/bus/usb/devices/"$AMP":*/usbmisc/wdm*; do
 			[ -e "$_w" ] || continue
 			WANTWDM="/dev/$(basename "$_w")"
-			logger -t 5gmodem-mkiface "реестр не отдал канал управления для $AMP, нашёл в sysfs: $WANTWDM"
+			logger -t 5gmodem-mkiface "registry did not provide a control channel for $AMP; found one in sysfs: $WANTWDM"
 			break
 		done
 	fi
@@ -451,12 +451,12 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 				# Установленный пакет xmm-modem уважаем: работающие на нём
 				# установки не трогаем.
 				FPROTO=xmm
-				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=xmm (пакет xmm-modem установлен)"
+				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - setting proto=xmm (xmm-modem package installed)"
 			else
 				# С 2.4.10 XMM-логика (XDATACHANNEL/XDNS/arp off) встроена в наш
 				# fibocom - внешний пакет больше не обязателен.
 				FPROTO=fibocom
-				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - ставлю proto=fibocom (встроенная XMM-ветка)"
+				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - setting proto=fibocom (built-in XMM branch)"
 			fi
 		fi
 
@@ -632,7 +632,7 @@ case "$REQ" in
 		if [ -n "$_mki_saved" ] && [ "$_mki_saved" != "auto" ] \
 		   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
 			PROTO="$_mki_saved"
-			logger -t 5gmodem "mkiface: auto -> сохранённый выбор пользователя ($_mki_saved)"
+			logger -t 5gmodem "mkiface: auto -> saved user choice ($_mki_saved)"
 		else
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
@@ -684,7 +684,7 @@ case "$REQ" in
 		case "$_mki_vp" in
 			413c:81d7|0489:e0b5|05c6:9025)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
-					logger -t 5gmodem "mkiface: $_mki_vp - ведём через ModemManager (общий канал, иначе конфликт за cdc-wdm)"
+					logger -t 5gmodem "mkiface: $_mki_vp - driving via ModemManager (shared channel, otherwise cdc-wdm contention)"
 					PROTO="modemmanager"
 				fi
 				;;
@@ -694,7 +694,7 @@ case "$REQ" in
 			# строит нерабочим - поэтому ТОЛЬКО когда это НЕ Compal.
 			05c6:90d5)
 				if [ -f /lib/netifd/proto/modemmanager.sh ] && ! is_compal "$AMP" "$DEV"; then
-					logger -t 5gmodem "mkiface: 05c6:90d5 (MV31-W/T99W175, не Compal) - ведём через ModemManager"
+					logger -t 5gmodem "mkiface: 05c6:90d5 (MV31-W/T99W175, not Compal) - driving via ModemManager"
 					PROTO="modemmanager"
 				fi
 				;;
@@ -704,7 +704,7 @@ case "$REQ" in
 			# (raw-ip + статика из QMI, см. /lib/netifd/proto/qmiraw.sh).
 			if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/qmiraw.sh ]; then
 				case "$_mki_vp" in
-					1e0e:*) logger -t 5gmodem "mkiface: $_mki_vp - SimCom QMI: proto=qmiraw (802.3 без DHCP)"; PROTO="qmiraw" ;;
+					1e0e:*) logger -t 5gmodem "mkiface: $_mki_vp - SimCom QMI: proto=qmiraw (802.3 without DHCP)"; PROTO="qmiraw" ;;
 					*)
 						# Прочие QMI: на qmiraw, только если модем НАТИВНО в raw-ip. Стоковый qmi
 						# в raw-ip раздаёт адрес DHCP'ом (в raw-ip ненадёжно) - адрес есть, а
@@ -718,7 +718,7 @@ case "$REQ" in
 						_mki_fmt=$(timeout 5 qmicli -p -d "$DEV" --wda-get-data-format 2>/dev/null \
 							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
 							if [ "$_mki_fmt" = "raw-ip" ]; then
-								logger -t 5gmodem "mkiface: $_mki_vp - модем нативно raw-ip: proto=qmiraw (raw-ip+статика)"
+								logger -t 5gmodem "mkiface: $_mki_vp - modem is natively raw-ip: proto=qmiraw (raw-ip + static)"
 								PROTO="qmiraw"
 							fi
 						fi
@@ -1059,12 +1059,12 @@ elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 				_xr_o=$(sms_tool -d "$_xr_at" at "AT+CEREG?;+CGREG?;+COPS?" 2>/dev/null | tr -d '\r')
 				case "$_xr_o" in
 					*"+CEREG: "*",1"*|*"+CEREG: "*",5"*|*"+CGREG: "*",1"*|*"+CGREG: "*",5"*)
-						logger -t 5gmodem-mkiface "$IF ($PROTO): модем зарегистрирован за ${_xr_n}c - дозваниваюсь"
+						logger -t 5gmodem-mkiface "$IF ($PROTO): modem registered after ${_xr_n}s - dialing"
 						break ;;
 				esac
 				case "$_xr_o" in
 					*"+COPS: 2"*)
-						logger -t 5gmodem-mkiface "$IF ($PROTO): модем снят с регистрации (+COPS: 2) - толкаю AT+COPS=0"
+						logger -t 5gmodem-mkiface "$IF ($PROTO): modem was deregistered (+COPS: 2) - nudging AT+COPS=0"
 						sms_tool -d "$_xr_at" at "AT+COPS=0" >/dev/null 2>&1 ;;
 				esac
 				sleep 5; _xr_n=$((_xr_n + 5))
