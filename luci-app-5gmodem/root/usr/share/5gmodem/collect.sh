@@ -715,17 +715,44 @@ usb_unconfigured_verdict() {
 fastboot_verdict() {
 	# vid:pid загрузчиков рядом с рабочими: 413c:81e1 - DW5821e (рабочий 81e0),
 	# 413c:81e6 - DW5829e (рабочий 81e5). Список открытый: у других моделей свои.
-	_fb=$(lsusb 2>/dev/null | grep -iE "413c:81e1|413c:81e6|05c6:9008|1199:9070" )
+	# ПО SYSFS, а не lsusb: usbutils на роутерах чаще НЕТ, ошибка глоталась
+	# 2>/dev/null, и вердикт врал «не видно» ровно в живом случае (WH3000 Pro +
+	# DW5821e-eSIM в fastboot, 18.08.2026). Вторая примета - для НЕизвестных
+	# загрузчиков: единственный vendor-интерфейс subclass 42 protocol 03
+	# (fastboot) без драйвера.
+	_fb=""
+	_fb_nl='
+'
+	for _fb_d in /sys/bus/usb/devices/[0-9]*; do
+		[ -f "$_fb_d/idVendor" ] || continue
+		_fb_id="$(cat "$_fb_d/idVendor" 2>/dev/null):$(cat "$_fb_d/idProduct" 2>/dev/null)"
+		case "$_fb_id" in
+			413c:81e1|413c:81e6|05c6:9008|1199:9070)
+				_fb="$_fb  $_fb_id $(cat "$_fb_d/manufacturer" 2>/dev/null) $(cat "$_fb_d/product" 2>/dev/null)$_fb_nl" ;;
+			*)
+				if [ "$(cat "$_fb_d/bNumInterfaces" 2>/dev/null | tr -d ' ')" = "1" ]; then
+					for _fb_i in "$_fb_d":*.0; do
+						[ -f "$_fb_i/bInterfaceSubClass" ] || continue
+						[ "$(cat "$_fb_i/bInterfaceClass" 2>/dev/null)" = "ff" ] || continue
+						[ "$(cat "$_fb_i/bInterfaceSubClass" 2>/dev/null)" = "42" ] || continue
+						[ "$(cat "$_fb_i/bInterfaceProtocol" 2>/dev/null)" = "03" ] || continue
+						[ -e "$_fb_i/driver" ] && continue
+						_fb="$_fb  $_fb_id $(cat "$_fb_d/manufacturer" 2>/dev/null) $(cat "$_fb_d/product" 2>/dev/null) (fastboot-композиция)$_fb_nl"
+					done
+				fi ;;
+		esac
+	done
 	if [ -z "$_fb" ]; then
 		echo "модемов в режиме загрузчика не видно"
 		return
 	fi
-	echo "$_fb"
+	printf '%s' "$_fb"
 	echo "ПРОБЛЕМА: устройство отдаёт композицию ЗАГРУЗЧИКА (fastboot/EDL), а не"
 	echo "модема - поэтому портов нет и в списке модемов оно не появляется."
-	echo "Обычно лечится командой «fastboot reboot» с роутера; на плате Huasifei"
-	echo "WH3000 Pro (слот M.2) причина аппаратная - пин 67 прижат к земле, и"
-	echo "модем уходит в загрузчик при КАЖДОЙ загрузке, то есть нужен автозапуск."
+	echo "Обычно лечится командой «fastboot reboot» с роутера (пакет: apk add"
+	echo "fastboot либо opkg install fastboot); на плате Huasifei WH3000 Pro"
+	echo "(слот M.2) причина аппаратная - пин 67 прижат к земле, и модем уходит"
+	echo "в загрузчик при КАЖДОЙ загрузке, то есть нужен автозапуск команды."
 	echo "Приложение само в загрузчик не лезет: прошивочные режимы - не наша зона."
 }
 

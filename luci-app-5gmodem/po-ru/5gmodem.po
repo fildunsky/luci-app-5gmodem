@@ -150,7 +150,7 @@ msgid "Select a website for searching"
 msgstr "Выберите сайт для поиска"
 
 msgid "SIM Slot"
-msgstr "Слот SIM"
+msgstr "SIM-слот"
 
 msgid "Problem with registering to the network, check the SIM card"
 msgstr "Проблема с регистрацией в сети оператора, проверьте SIM-карту"
@@ -294,7 +294,7 @@ msgid "Download"
 msgstr "Скачать"
 
 msgid "Download error"
-msgstr "Ошибка загрузки"
+msgstr "Файл не скачался. Попробуйте ещё раз"
 
 msgid "Error: "
 msgstr "Ошибка: "
@@ -369,7 +369,7 @@ msgid "Network mode set: %s"
 msgstr "Режим сети установлен: %s"
 
 msgid "Failed to set network mode"
-msgstr "Не удалось установить режим сети"
+msgstr "Модем не принял режим сети. Попробуйте ещё раз или проверьте журнал"
 
 msgid "LTE bands"
 msgstr "Диапазоны LTE"
@@ -393,7 +393,7 @@ msgid "Bands set. The modem will reconnect."
 msgstr "Диапазоны применены. Модем переподключится."
 
 msgid "Failed to set bands"
-msgstr "Не удалось применить диапазоны"
+msgstr "Модем не принял набор диапазонов. Проверьте журнал: возможно, часть из них недоступна на этой прошивке"
 
 msgid "Select at least one band"
 msgstr "Выберите хотя бы один диапазон"
@@ -777,9 +777,7 @@ msgstr ""
 "будут отмечены как прочитанные)."
 
 msgid "Please wait... Saving SMS messages to a text file."
-msgstr ""
-"Пожалуйста, подождите... Идет процесс сохранения SMS-сообщений в текстовый "
-"файл."
+msgstr "Сохраняем SMS в текстовый файл…"
 
 msgid ""
 "This option allows to backup SMS messages or, for example, save messages "
@@ -824,7 +822,7 @@ msgid "View new reply from top"
 msgstr "Показать новый ответ сверху"
 
 msgid "Please wait... deleted"
-msgstr "Пожалуйста, подождите... удалено"
+msgstr "Удаляем… удалено"
 
 msgid "of"
 msgstr "из"
@@ -1069,13 +1067,13 @@ msgid "File uploaded and saved to"
 msgstr "Файл загружен и сохранен в"
 
 msgid "Unable to upload file"
-msgstr "Не удалось загрузить файл"
+msgstr "Файл не загрузился. Проверьте размер и попробуйте ещё раз"
 
 msgid "Phonebook saved successfully"
 msgstr "Телефонная книга успешно сохранена"
 
 msgid "Unable to save the file"
-msgstr "Не удалось сохранить файл"
+msgstr "Файл не сохранился. Попробуйте ещё раз"
 
 msgid "filename.user"
 msgstr "имяфайла.user"
@@ -1090,19 +1088,19 @@ msgid "File created successfully"
 msgstr "Файл успешно создан"
 
 msgid "Unable to create file"
-msgstr "Не удалось создать файл"
+msgstr "Файл не создался. Проверьте свободное место на роутере"
 
 msgid "Please select a file to delete"
 msgstr "Пожалуйста, выберите файл для удаления"
 
 msgid "Are you sure you want to delete this file?"
-msgstr "Вы уверены, что хотите удалить этот файл?"
+msgstr "Удалить файл? Восстановить его не получится"
 
 msgid "File deleted successfully"
 msgstr "Файл успешно удален"
 
 msgid "Unable to delete file"
-msgstr "Не удалось удалить файл"
+msgstr "Файл не удалился. Попробуйте ещё раз"
 
 msgid "Please select or create a file first"
 msgstr "Пожалуйста, сначала выберите или создайте файл"
@@ -1111,7 +1109,7 @@ msgid "File saved successfully"
 msgstr "Файл успешно сохранен"
 
 msgid "Unable to save file"
-msgstr "Не удалось сохранить файл"
+msgstr "Файл не сохранился. Попробуйте ещё раз"
 
 msgid "Load .user file"
 msgstr "Загрузить .user файл"
@@ -1158,19 +1156,19 @@ msgid "Select file with AT commands to load"
 msgstr "Выберите файл с AT-командами для загрузки"
 
 msgid "Error loading AT commands file: "
-msgstr "Ошибка загрузки файла AT-команд: "
+msgstr "Файл AT-команд не загрузился: "
 
 msgid "No AT commands available"
 msgstr "AT-команды недоступны"
 
 msgid "Error loading initial AT commands file:"
-msgstr "Ошибка загрузки исходного файла AT-команд:"
+msgstr "Исходный файл AT-команд не загрузился:"
 
 msgid "Error loading USSD codes file: "
-msgstr "Ошибка загрузки файла USSD-кодов: "
+msgstr "Файл USSD-кодов не загрузился: "
 
 msgid "Error loading initial USSD file:"
-msgstr "Ошибка загрузки исходного файла USSD:"
+msgstr "Исходный файл USSD не загрузился:"
 
 msgid "Select file with USSD codes to load"
 msgstr "Выберите файл с USSD-кодами для загрузки"
@@ -1234,22 +1232,22 @@ msgid "Save .gz archive"
 msgstr "Сохранить архив .gz"
 
 msgid "Failed to extract archive"
-msgstr "Не удалось распаковать архив"
+msgstr "Архив не распаковался. Проверьте, что файл — корректный архив"
 
 msgid "Archive extracted to"
 msgstr "Архив распакован в"
 
 msgid "Upload error"
-msgstr "Ошибка загрузки"
+msgstr "Файл не загрузился. Попробуйте ещё раз"
 
 msgid "Failed to create archive"
-msgstr "Не удалось создать архив"
+msgstr "Архив не создался. Попробуйте ещё раз"
 
 msgid "Failed to read archive"
-msgstr "Не удалось прочитать архив"
+msgstr "Архив не прочитался. Проверьте файл"
 
 msgid "Are you sure you want to delete all files in the folder?"
-msgstr "Вы уверены, что хотите удалить все файлы в папке?"
+msgstr "Удалить все файлы в папке? Восстановить их не получится"
 
 msgid "All files deleted successfully"
 msgstr "Все файлы успешно удалены"
@@ -1595,7 +1593,7 @@ msgid "Phone/Modem failure"
 msgstr "Сбой телефона/модема"
 
 msgid "Phone/Modem is busy"
-msgstr "Телефон/модем занят"
+msgstr "Порт модема занят другой операцией. Подождите несколько секунд и повторите"
 
 msgid "Please configure SMS reading port first"
 msgstr "Сначала настройте порт чтения SMS"
@@ -1605,7 +1603,7 @@ msgstr "Подождите и повторите выбор позже (спец
 
 msgid ""
 "Please wait.. Process of saving SMS message to a text file is in progress."
-msgstr "Подождите... Идёт сохранение SMS-сообщений в текстовый файл."
+msgstr "Сохраняем SMS в текстовый файл…"
 
 msgid "Press [Delete] to delete the content of the message"
 msgstr "Нажмите [Delete], чтобы удалить текст сообщения"
@@ -1693,10 +1691,10 @@ msgid "UCS2"
 msgstr "UCS2"
 
 msgid "Unable to delete files"
-msgstr "Не удалось удалить файлы"
+msgstr "Файлы не удалились. Попробуйте ещё раз"
 
 msgid "Unable to load file"
-msgstr "Не удалось загрузить файл"
+msgstr "Файл не загрузился. Попробуйте ещё раз"
 
 msgid "Unknown error"
 msgstr "Неизвестная ошибка"
@@ -1785,7 +1783,7 @@ msgid "TTL applied"
 msgstr "TTL применён"
 
 msgid "Failed to apply TTL"
-msgstr "Не удалось применить TTL"
+msgstr "Правила TTL не применились. Проверьте журнал"
 
 msgid "TTL must be a number between 1 and 255, or empty to disable"
 msgstr "TTL должен быть числом от 1 до 255 либо пустым (отключено)"
@@ -1797,7 +1795,7 @@ msgid "Advanced (merge with sorting)"
 msgstr "Расширенный (объединение с сортировкой)"
 
 msgid "Please wait, saving the SMS messages to a text file"
-msgstr "Пожалуйста, подождите: сохранение SMS в текстовый файл"
+msgstr "Сохраняем SMS в текстовый файл…"
 
 msgid "Saving the SMS messages to a file failed. Please try again."
 msgstr "Не удалось сохранить SMS в файл. Попробуйте ещё раз."
@@ -1959,7 +1957,7 @@ msgid "The modem is restarting. This can take a minute."
 msgstr "Модем перезагружается. Это может занять до минуты."
 
 msgid "Failed to restart the modem"
-msgstr "Не удалось перезагрузить модем"
+msgstr "Модем не перезагрузился. Попробуйте ещё раз"
 
 msgid "Waiting for the modem to connect…"
 msgstr "Ожидание подключения модема…"
@@ -1989,7 +1987,7 @@ msgid "No modem found to create an interface for"
 msgstr "Модем для создания интерфейса не найден"
 
 msgid "Failed to create the modem interface"
-msgstr "Не удалось создать интерфейс модема"
+msgstr "Интерфейс модема не создался. Проверьте журнал"
 
 msgid "Update"
 msgstr "Обновление"
@@ -2013,7 +2011,7 @@ msgid "Checking the latest release…"
 msgstr "Проверка последнего релиза…"
 
 msgid "Could not check for updates"
-msgstr "Не удалось проверить обновления"
+msgstr "Не удалось проверить обновления. Проверьте доступ роутера в интернет"
 
 msgid "You have the latest version"
 msgstr "Установлена последняя версия"
@@ -2025,7 +2023,7 @@ msgid "Installing the update…"
 msgstr "Установка обновления…"
 
 msgid "Failed to install the update"
-msgstr "Не удалось установить обновление"
+msgstr "Обновление не установилось. Проверьте журнал и попробуйте ещё раз"
 
 msgid "Update installed. Reload the page to see the changes."
 msgstr "Обновление установлено. Обновите страницу, чтобы увидеть изменения."
@@ -2145,7 +2143,7 @@ msgid "SIM slot switched: %s"
 msgstr "SIM-слот переключён: %s"
 
 msgid "SIM slot switch failed"
-msgstr "Не удалось переключить SIM-слот"
+msgstr "Слот не переключился. Проверьте связь с модемом и попробуйте ещё раз"
 
 msgid "Profile"
 msgstr "Профиль"
@@ -2247,7 +2245,7 @@ msgid "Slot is empty (no SIM inserted)"
 msgstr "Слот пуст (SIM-карта не вставлена)"
 
 msgid "Please wait, reading eUICC - updating the profile list can be slow"
-msgstr "Пожалуйста, подождите, идёт чтение eUICC — обновление списка профилей может быть долгим"
+msgstr "Читаем eUICC: обновление списка профилей может быть долгим"
 
 msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
 msgstr "Профиль eSIM загружен. Перезагружаю модем, чтобы он применился..."
@@ -2289,7 +2287,7 @@ msgid "Nothing to forget: every remembered modem is connected"
 msgstr "Забывать нечего: все запомненные модемы подключены"
 
 msgid "Failed to forget disconnected modems"
-msgstr "Не удалось забыть отключённые модемы"
+msgstr "Не удалось убрать отключённые модемы из списка. Попробуйте ещё раз"
 
 msgid "Hide from ModemManager"
 msgstr "Скрыть от ModemManager"
@@ -2310,7 +2308,7 @@ msgid "Collecting logs…"
 msgstr "Собираем логи…"
 
 msgid "Collecting logs failed"
-msgstr "Не удалось собрать логи"
+msgstr "Отчёт не собрался. Попробуйте ещё раз"
 
 msgid "Timed out"
 msgstr "Истекло время ожидания"
@@ -2355,7 +2353,7 @@ msgid "3G bands set: %s"
 msgstr "Диапазоны 3G заданы: %s"
 
 msgid "Failed to set 3G bands"
-msgstr "Не удалось задать диапазоны 3G"
+msgstr "Модем не принял диапазоны 3G. Проверьте журнал"
 
 msgid "Power restart"
 msgstr "Перезагрузка по питанию"
@@ -2413,7 +2411,7 @@ msgid "Mbps"
 msgstr "Мбит/с"
 
 msgid "Test failed"
-msgstr "Ошибка теста"
+msgstr "Тест не прошёл"
 
 msgid "Measure the real download speed over the modem - a quick way to see whether carrier aggregation is actually working"
 msgstr "Замерить реальную скорость загрузки через модем — быстрый способ проверить, работает ли агрегация несущих на самом деле"
@@ -2941,7 +2939,7 @@ msgid "Endpoint that accepts a POST body, for the upload test. The default (Yand
 msgstr "Адрес, принимающий POST-тело, для теста отдачи. По умолчанию Yandex — он доступен в российских сотовых сетях и напрямую, и через прокси: отвечает 404/403, но читает тело, поэтому скорость всё равно измеряется. Cloudflare/Ростелеком работают в сетях без ограничений."
 
 msgid "Failed to power-cycle the modem"
-msgstr "Не удалось перезапустить питание модема"
+msgstr "Питание модема не перезапустилось. Попробуйте ещё раз"
 
 msgid "Fibocom (AT-dial)"
 msgstr "Fibocom (AT-дозвон)"
@@ -3142,7 +3140,7 @@ msgid "Interface switched to ModemManager"
 msgstr "Интерфейс переключён на ModemManager"
 
 msgid "Could not switch the interface to ModemManager"
-msgstr "Не удалось переключить интерфейс на ModemManager"
+msgstr "Интерфейс не переключился на ModemManager. Проверьте журнал"
 
 msgid "Neighbour cells"
 msgstr "Соседние соты"
@@ -3335,7 +3333,7 @@ msgid "Switching the modem to XMM — it is rebooting and re-enumerating (~40 s)
 msgstr "Переключаю модем в XMM — он перезагружается и переопределяется (~40 с)…"
 
 msgid "Could not switch the modem to XMM"
-msgstr "Не удалось переключить модем в XMM"
+msgstr "Модем не переключился в режим XMM. Проверьте журнал"
 
 msgid "Checking eSIM support…"
 msgstr "Проверяем поддержку eSIM…"
@@ -3628,7 +3626,7 @@ msgid "Starting…"
 msgstr "Запуск…"
 
 msgid "Download failed"
-msgstr "Не удалось загрузить профиль"
+msgstr "Профиль не загрузился. Проверьте код активации и попробуйте ещё раз"
 
 msgid "This eSIM profile has already been downloaded to a device and cannot be downloaded again. Ask your operator for a new activation code."
 msgstr "Этот профиль eSIM уже был загружен на устройство, повторная загрузка невозможна. Запросите у оператора новый код активации."
@@ -3720,10 +3718,10 @@ msgid "QR"
 msgstr "QR"
 
 msgid "Could not load the QR decoder."
-msgstr "Не удалось загрузить декодер QR."
+msgstr "Декодер QR не загрузился. Обновите страницу."
 
 msgid "Could not read the image file."
-msgstr "Не удалось прочитать изображение."
+msgstr "Изображение не прочиталось. Попробуйте другой файл."
 
 msgid "No QR code found in the image. Try a clearer picture."
 msgstr "QR-код на изображении не найден. Попробуйте более чёткое фото."
@@ -4241,10 +4239,10 @@ msgid "The APN database has been updated"
 msgstr "База APN обновлена"
 
 msgid "Could not check the APN database"
-msgstr "Не удалось проверить базу APN"
+msgstr "Не удалось свериться с базой APN. Попробуйте ещё раз"
 
 msgid "Failed to update the APN database"
-msgstr "Не удалось обновить базу APN"
+msgstr "База APN не обновилась. Проверьте доступ роутера в интернет"
 
 msgid "operators"
 msgstr "операторов"
@@ -4572,7 +4570,7 @@ msgid "Vendor customer"
 msgstr "Вендор-заказчик"
 
 msgid "SIM slot (read)"
-msgstr "Слот SIM (чтение)"
+msgstr "SIM-слот (чтение)"
 
 msgid "Slot: physical SIM1"
 msgstr "Слот: физическая SIM1"

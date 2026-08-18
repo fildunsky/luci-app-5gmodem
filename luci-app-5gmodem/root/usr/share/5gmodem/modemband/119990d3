@@ -306,22 +306,43 @@ _band_apply() {   # $1 - 4G, $2 - 5G NSA, $3 - 5G SA, $4 - 3G (списки ди
 	# оказывался на непрошенном заводском наборе (живой отчёт Dmitry Korotkov,
 	# 18.08.2026: после Apply активным стал «0C, NR5G ALL», набор 0x10 не
 	# изменился).
+	# ОТКАЗ НЕ ГЛОТАЕМ: успех записи - это «OK» от модема, всё прочее (ERROR,
+	# пустота, обрыв) поднимает флаг, и _band_apply вернёт ненулевой код.
+	# Раньше отказ только логировался, а функция всегда отвечала 0 - вызывающие
+	# (setbands/restorebands) считали запись успешной и перезапускали радио на
+	# нетронутой маске (разбор Dmitry Korotkov, EM9190_band_switch_findings.md).
+	_ba_fail=0
 	_ba_w() {   # $1 - метка RAT для журнала, $2 - команда
 		_bw_o=$(sms_tool -d $_DEVICE at "$2" 2>&1 | tr -d '\r')
 		case "$_bw_o" in
-			*ERROR*) logger -t 5gmodem "EM9190: band write ($1) rejected: $(echo "$_bw_o" | tr '\n' ' ' | head -c 120)" ;;
+			*OK*) ;;
+			*) _ba_fail=1
+			   logger -t 5gmodem "EM9190: band write ($1) rejected: $(echo "$_bw_o" | tr '\n' ' ' | head -c 120)" ;;
 		esac
 		sleep 1
 	}
-	_ba_w "GW/LTE" "AT!BAND=$_ba_n,1,$(_gw_hex "$4"),$(_slot_hex "$1" 1),$(_slot_hex "$1" 2),0000000000000000,0000000000000000"
+	# GW и LTE - ДВУМЯ КОМАНДАМИ, не одной. Число масок в команде жёстко задано
+	# RAT: RAT=0 ждёт одну (GW), RAT=1 - две (LTE). Спаренная форма «RAT=1 +
+	# 5 масок» (GW первой в LTE-слоте) отвергается прошивкой ЦЕЛИКОМ - именно
+	# из-за неё смена 4G-диапазонов не применялась вовсе (воспроизведено и
+	# исправлено вживую, разбор Dmitry Korotkov 18.08.2026).
+	_ba_w "GW"     "AT!BAND=$_ba_n,0,$(_gw_hex "$4")"
+	_ba_w "LTE"    "AT!BAND=$_ba_n,1,$(_slot_hex "$1" 1),$(_slot_hex "$1" 2)"
 	_ba_w "NRNSA"  "AT!BAND=$_ba_n,3,$(_slot_hex "$2" 1),$(_slot_hex "$2" 2),$(_slot_hex "$2" 3),$(_slot_hex "$2" 4),$(_slot_hex "$2" 5)"
 	_ba_w "NRSA"   "AT!BAND=$_ba_n,4,$(_slot_hex "$3" 1),$(_slot_hex "$3" 2),$(_slot_hex "$3" 3),$(_slot_hex "$3" 4),$(_slot_hex "$3" 5)"
 	_ba_w "select" "AT!BAND=$_EM9190_SET"
-	# Проверка результата: активным должен стать наш набор. Расхождение - в
-	# журнал с фактическим состоянием, иначе следующий разбор начнётся с нуля.
+	# Проверка результата ПО ФАКТИЧЕСКИМ МАСКАМ, а не по кодам возврата:
+	# активным должен стать наш набор, и LTE-маска должна совпасть с целевой.
+	# Расхождение - в журнал с фактическим состоянием.
 	_ba_v=$(sms_tool -d $_DEVICE at "AT!BAND?" 2>/dev/null | tr -d '\r')
-	echo "$_ba_v" | grep -q "$_EM9190_SET, *$_EM9190_SETNAME" || \
+	echo "$_ba_v" | grep -q "$_EM9190_SET, *$_EM9190_SETNAME" || {
+		_ba_fail=1
 		logger -t 5gmodem "EM9190: after apply the active band set is NOT $_EM9190_SETNAME: $(echo "$_ba_v" | grep -m1 ',' | head -c 60)"
+	}
+	echo "$_ba_v" | grep -qi "$(_slot_hex "$1" 1)" || {
+		_ba_fail=1
+		logger -t 5gmodem "EM9190: after apply the LTE mask does not match the requested set (wanted $(_slot_hex "$1" 1))"
+	}
 
 	# Предупреждение вендора: ограничение диапазонов вместе с ограничением
 	# технологии даёт несовместимые пары и вешает регистрацию. Не запрещаем -
@@ -334,7 +355,7 @@ _band_apply() {   # $1 - 4G, $2 - 5G NSA, $3 - 5G SA, $4 - 3G (списки ди
 		*) logger -t 5gmodem "EM9190: both a custom band set and network mode $_ba_r are set - the vendor advises against combining them (return one to auto)" ;;
 	esac
 	rm -f "/tmp/5gmodem_bands_bandq_${_DEVICE##*/}" 2>/dev/null
-	return 0
+	return "$_ba_fail"
 }
 
 # Сброс: возвращаем заводскую группу «все диапазоны». Свою НЕ удаляем - она

@@ -36,9 +36,14 @@ set -- $_args
 # сохранённые бенды РАЗ за загрузку (маркер bandsprep), поэтому без сброса он бы
 # пропустил переприменение, и новая SIM поднялась бы на всех диапазонах. Чистим -
 # следующий подъём после переэнумерации применит сохранённый набор (как на ребуте).
+# И кэши eSIM-страницы: активный слот (5gmodem_esim_actslot, TTL 60 мин) и
+# статусы (5gmodem_esimstat_*) - без чистки вкладка eSIM ещё час подсвечивала
+# ПРЕЖНИЙ слот активным (живой случай ZBT + MV31-W 18.08.2026: работал от SIM1,
+# синим горела eSIM).
 [ "$1" = "set" ] && rm -f /tmp/5gmodem_slot_* /tmp/5gmodem_slots_* \
 	/tmp/5gmodem_bandsprep_* /tmp/5gmodem_bandrestore_* \
-	/tmp/5gmodem_metrics_* 2>/dev/null
+	/tmp/5gmodem_metrics_* /tmp/5gmodem_esim_actslot \
+	/tmp/5gmodem_esimstat_* 2>/dev/null
 # Снапшот-кэш метрик ключуется по USB-пути модема, а НЕ по SIM: при eSIM<->SIM путь
 # тот же, и cache-first fast-path отдавал бы СТАРЫЙ снимок (оператор, сота, ID
 # базовой станции от прежней SIM), пока не пройдёт полный опрос - у пользователя
@@ -384,6 +389,44 @@ fi
 #             ICCID: 89701620...
 #          Is eUICC: no
 # id слота = ФИЗИЧЕСКИЙ номер (1..N), активен тот, у кого "Slot status: active".
+
+# Переключение слота вендорной AT-командой (AT^switch_slot, Foxconn T99W175 /
+# Thales MV31-W и родня). Идёт по tty и НЕ ЗАВИСИТ от состояния QMI-канала,
+# поэтому зовётся из ДВУХ мест: из обычной ветки set и из ветки «канал занят
+# netifd» - на kernel-прото qmi/mbim канал занят ВСЕГДА, и раньше set упирался
+# в «qmi busy», не дойдя до AT вовсе: кнопка отвечала «Не удалось переключить
+# СИМ слот», хотя та же команда из АТ-меню переключала с первого раза (живой
+# случай ZBT + MV31-W, 18.08.2026, v2.4.16).
+# Нумерация у команды 0-based (0 = SIM1, 1 = eSIM), у нас слоты 1..N.
+# Через очередь к порту (at_query), не голым sms_tool: порт бывает занят
+# eSIM-мостом или метриками, параллельное чтение перемешивает ответы.
+# Команды нет (пусто/ERROR на пробе) - возврат 1, зовущий идёт своим путём.
+_at_slot_set() {   # $1 - целевой слот (1..N); 0 = переключено (и напечатан ok)
+	_as_at=$(uci -q get "5gmodem.$_ss_sec.at_port")
+	[ -n "$_as_at" ] && [ -e "$_as_at" ] || return 1
+	at_query "$_as_at" "AT^switch_slot?" 6 2>/dev/null | grep -qi "SIM" || return 1
+	at_query "$_as_at" "AT^switch_slot=$(($1 - 1))" 8 >/dev/null 2>&1
+	# Ждём ПОДТВЕРЖДЕНИЯ, а не фиксированную паузу: модем перекидывает слот за
+	# 3-6 с, и одного sleep 3 хватало не всегда - переключение было выполнено,
+	# но мы успевали объявить его неудачей.
+	_as_ok=0
+	for _as_i in 1 2 3 4 5 6; do
+		sleep 2
+		at_query "$_as_at" "AT^switch_slot?" 6 2>/dev/null \
+			| grep -qi "SIM$1 ENABLE" && { _as_ok=1; break; }
+	done
+	[ "$_as_ok" = 1 ] || return 1
+	logger -t 5gmodem "SIM slot switched to $1 via AT^switch_slot"
+	rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+	# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
+	( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+	  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
+	  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
+	) >/dev/null 2>&1 </dev/null &
+	echo '{"result":"ok"}'
+	return 0
+}
+
 if [ "$_VIA" = qmi ]; then
 	# КАНАЛ МОЖЕТ БЫТЬ ЗАНЯТ netifd. При proto=qmi устройством владеет uqmi, и
 	# наш qmicli -p (через qmi-proxy) становится вторым хозяином того же канала -
@@ -398,6 +441,13 @@ if [ "$_VIA" = qmi ]; then
 		# трогается), а пара слотов у семейства фиксированная: 1 = физическая
 		# SIM, 2 = встроенный eSIM. У модемов без этой команды (Telit LM960)
 		# ответ пустой/ERROR - падаем в прежний «busy».
+		# ПЕРЕКЛЮЧЕНИЕ при занятом канале - тоже по AT: QMI тут не светит по
+		# определению (канал у netifd), а AT^switch_slot канал данных не трогает.
+		if [ "$1" = set ]; then
+			[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+			_at_slot_set "$2" && exit 0
+			echo '{"error":"qmi busy"}'; exit 0
+		fi
 		_swf_at=$(uci -q get "5gmodem.$_SEC.at_port")
 		if [ "$1" != set ] && [ -n "$_swf_at" ] && [ -c "$_swf_at" ]; then
 			_swf=$(at_query "$_swf_at" "AT^switch_slot?" 6 2>/dev/null | tr -d '\r')
@@ -438,52 +488,11 @@ if [ "$_VIA" = qmi ]; then
 	case "$1" in
 	set)
 		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
-		# СНАЧАЛА ВЕНДОРНАЯ AT-КОМАНДА, ПОТОМ QMI.
-		#
-		# AT^switch_slot (Foxconn T99W175 / Thales MV31-W и родня) идёт по tty и
-		# НЕ ЗАВИСИТ от состояния QMI-канала - а тот регулярно занят или залипает
-		# вместе с mbim-proxy, и тогда переключение через --uim-switch-slot молча
-		# не доезжает до модема: человек жмёт «SIM1», ничего не происходит, и
-		# понять причину нельзя (живой случай 04.08.2026 - по AT слот переключился
-		# с первого раза, когда QMI-путь не отвечал вовсе).
-		# Нумерация у команды 0-based (0 = SIM1, 1 = eSIM), у нас слоты 1..N.
-		# Команды нет - ответ пустой, просто идём дальше на QMI.
-		# Пакет конфигурации ПИШЕМ ЯВНО: в этом файле нет переменной $CFG (она есть
-		# в lib.sh, который сюда не подключается), и с ней путь uci собирался как
-		# ".m_2_1_4.at_port" - пустой ответ, AT-ветка молча пропускалась, а QMI
-		# на этом модеме не переключает вовсе. Снаружи это выглядело как «кнопка
-		# не работает» без единой строки в журнале.
-		_ss_at=$(uci -q get "5gmodem.$_ss_sec.at_port")
-		if [ -n "$_ss_at" ] && [ -e "$_ss_at" ]; then
-			# ЧЕРЕЗ ОЧЕРЕДЬ К ПОРТУ (at_query), а не голым sms_tool: порт в этот
-			# момент бывает занят eSIM-мостом или метриками, параллельное чтение
-			# перемешивает ответы - проба «^switch_slot?» не видела «SIM», ветка
-			# сваливалась в QMI (занят) и кнопка отвечала «Не удалось переключить»
-			# (живой случай ZBT + MV31-W, 18.08.2026, сразу после eSIM-операции).
-			if at_query "$_ss_at" "AT^switch_slot?" 6 2>/dev/null | grep -qi "SIM"; then
-				at_query "$_ss_at" "AT^switch_slot=$(($2 - 1))" 8 >/dev/null 2>&1
-				# Ждём ПОДТВЕРЖДЕНИЯ, а не фиксированную паузу: модем перекидывает
-				# слот за 3-6 с, и одного sleep 3 хватало не всегда - переключение
-				# было выполнено, но мы успевали объявить его неудачей и уйти на
-				# заведомо нерабочий QMI.
-				_ss_ok=0
-				for _ss_i in 1 2 3 4 5 6; do
-					sleep 2
-					at_query "$_ss_at" "AT^switch_slot?" 6 2>/dev/null \
-						| grep -qi "SIM$2 ENABLE" && { _ss_ok=1; break; }
-				done
-				if [ "$_ss_ok" = 1 ]; then
-					logger -t 5gmodem "SIM slot switched to $2 via AT^switch_slot"
-					rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
-					( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-					  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
-					  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
-					) >/dev/null 2>&1 </dev/null &
-					echo '{"result":"ok"}'
-					exit 0
-				fi
-			fi
-		fi
+		# СНАЧАЛА ВЕНДОРНАЯ AT-КОМАНДА (_at_slot_set выше), ПОТОМ QMI: QMI-путь
+		# регулярно занят или залипает вместе с mbim-proxy, и переключение через
+		# --uim-switch-slot молча не доезжает до модема (живой случай 04.08.2026 -
+		# по AT слот переключился с первого раза, когда QMI не отвечал вовсе).
+		_at_slot_set "$2" && exit 0
 		if _q --uim-switch-slot="$2" 2>/dev/null | grep -qi "success"; then
 			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 			# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
