@@ -390,6 +390,30 @@ if [ "$_VIA" = qmi ]; then
 	# ответы путаются, подъём соединения виснет (см. qmi_channel_free в lib.sh).
 	# Слоты подождут: связь дороже.
 	if command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free; then
+		# «Подождут» не работает на прото mbim/qmi: канал занят netifd ВСЕГДА,
+		# пока соединение живо, и слоты не читались никогда - без списка
+		# страница не рисовала ни кнопок SIM1/eSIM, ни перехода на eSIM-слот
+		# (ZBT-Z8102AX + MV31-W, 18.08.2026). У SDX55 активный слот безопасно
+		# читается ПО AT (^switch_slot? -> «SIM1/SIM2 ENABLE», канал данных не
+		# трогается), а пара слотов у семейства фиксированная: 1 = физическая
+		# SIM, 2 = встроенный eSIM. У модемов без этой команды (Telit LM960)
+		# ответ пустой/ERROR - падаем в прежний «busy».
+		_swf_at=$(uci -q get "5gmodem.$_SEC.at_port")
+		if [ "$1" != set ] && [ -n "$_swf_at" ] && [ -c "$_swf_at" ]; then
+			_swf=$(at_query "$_swf_at" "AT^switch_slot?" 6 2>/dev/null | tr -d '\r')
+			_swf_a=""
+			case "$_swf" in
+				*SIM1*) _swf_a=1 ;;
+				*SIM2*) _swf_a=2 ;;
+			esac
+			if [ -n "$_swf_a" ]; then
+				_swf_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}' "$_swf_a")
+				printf '%s\n' "$_swf_out" > "/tmp/5gmodem_slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+				printf '%s\n' "$_swf_out"
+				exit 0
+			fi
+		fi
 		echo '{"error":"qmi busy"}'; exit 0
 	fi
 	_WDM=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].wdm[0]" 2>/dev/null)
@@ -431,8 +455,13 @@ if [ "$_VIA" = qmi ]; then
 		# не работает» без единой строки в журнале.
 		_ss_at=$(uci -q get "5gmodem.$_ss_sec.at_port")
 		if [ -n "$_ss_at" ] && [ -e "$_ss_at" ]; then
-			if sms_tool -d "$_ss_at" at "AT^switch_slot?" 2>/dev/null | grep -qi "SIM"; then
-				sms_tool -d "$_ss_at" at "AT^switch_slot=$(($2 - 1))" >/dev/null 2>&1
+			# ЧЕРЕЗ ОЧЕРЕДЬ К ПОРТУ (at_query), а не голым sms_tool: порт в этот
+			# момент бывает занят eSIM-мостом или метриками, параллельное чтение
+			# перемешивает ответы - проба «^switch_slot?» не видела «SIM», ветка
+			# сваливалась в QMI (занят) и кнопка отвечала «Не удалось переключить»
+			# (живой случай ZBT + MV31-W, 18.08.2026, сразу после eSIM-операции).
+			if at_query "$_ss_at" "AT^switch_slot?" 6 2>/dev/null | grep -qi "SIM"; then
+				at_query "$_ss_at" "AT^switch_slot=$(($2 - 1))" 8 >/dev/null 2>&1
 				# Ждём ПОДТВЕРЖДЕНИЯ, а не фиксированную паузу: модем перекидывает
 				# слот за 3-6 с, и одного sleep 3 хватало не всегда - переключение
 				# было выполнено, но мы успевали объявить его неудачей и уйти на
@@ -440,7 +469,7 @@ if [ "$_VIA" = qmi ]; then
 				_ss_ok=0
 				for _ss_i in 1 2 3 4 5 6; do
 					sleep 2
-					sms_tool -d "$_ss_at" at "AT^switch_slot?" 2>/dev/null \
+					at_query "$_ss_at" "AT^switch_slot?" 6 2>/dev/null \
 						| grep -qi "SIM$2 ENABLE" && { _ss_ok=1; break; }
 				done
 				if [ "$_ss_ok" = 1 ]; then
@@ -708,6 +737,49 @@ slot_redial() {
 	ifup "$_IF" >/dev/null 2>&1
 }
 
+
+# ---- Sierra EM9190: слоты через AT!UIMS --------------------------------------
+# 0 = UIM1 (первый внешний слот), 1 = UIM2 (второй слот ИЛИ eSIM - решает
+# железо), 3 = Auto-SIM-Switch (тогда фактический слот - во втором поле ответа
+# «!UIMS: <uim>,<used>»). Пароль не нужен, ресет не нужен, персистентно
+# (референс 41113480 r14). Метка второго слота - «eSIM»: она же даёт вкладке
+# eSIM кнопку перехода; для физического второго слота переключение всё равно
+# корректно, неточна только подпись.
+if [ "$_VIA" = uims ]; then
+	case "$1" in
+	set)
+		case "$2" in
+			1|2) ;;
+			*) logger -t 5gmodem "simslot: invalid slot number - rejected"
+			   echo '{"error":"bad slot"}'; exit 0 ;;
+		esac
+		O=$(at_query "$D" "AT!UIMS=$(($2 - 1))" 8)
+		if echo "$O" | grep -q "ERROR"; then
+			echo '{"error":"switch failed"}'
+		else
+			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+			( slot_redial ) >/dev/null 2>&1 </dev/null &
+			echo '{"result":"ok"}'
+		fi
+		;;
+	*)
+		_uq=$(at_query "$D" "AT!UIMS?" 6 2>/dev/null | tr -d '\r' \
+			| sed -n 's/.*!UIMS: *\([0-9]\)[, ]*\([0-9]\)\{0,1\}.*/\1 \2/p' | head -1)
+		_usel="${_uq%% *}"; _uused="${_uq#* }"
+		[ "$_usel" = 3 ] && _usel="$_uused"
+		case "$_usel" in
+			0) _uact=1 ;;
+			1) _uact=2 ;;
+			*) echo '{"type":"","slots":[],"active":""}'; exit 0 ;;
+		esac
+		_uo=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}' "$_uact")
+		printf '%s\n' "$_uo" > "/tmp/5gmodem_slots_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+		printf '%s\n' "$_uo"
+		;;
+	esac
+	exit 0
+fi
 
 case "$1" in
 set)

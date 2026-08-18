@@ -956,6 +956,15 @@ free_channels() {   # $1 - порт
 }
 
 find_port() {
+	# Sierra (1199:*): CCHO/CCHC в tty НЕ шлём - на EM9190 проба подвешивала
+	# SIM-подсистему до физического перетыка карты (18.08.2026). eUICC у
+	# Sierra достаётся по QMI/MBIM; AT-мост там не путь.
+	_fp_vp=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g').vidpid" 2>/dev/null)
+	case "$_fp_vp" in
+		1199:*)
+			logger -t 5gmodem "esim: CCHO port scan skipped on Sierra ($_fp_vp) - it wedges the SIM subsystem; use the QMI/MBIM transport"
+			return 1 ;;
+	esac
 	# Проверяем кэш CCHO-пробой (а не только atprobe): номер eUICC-порта на FM350
 	# плавает при переперечислении, и AT-живой, но НЕ-eUICC порт повесил бы lpac.
 	C=$(cat "$PORTCACHE" 2>/dev/null)

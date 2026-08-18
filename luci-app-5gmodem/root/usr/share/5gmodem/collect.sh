@@ -1420,7 +1420,7 @@ report() {
 		echo "узел: $W"
 		. /usr/share/5gmodem/lib.sh 2>/dev/null
 		if command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free; then
-			echo "канал занят netifd (proto=qmi) - опрос намеренно пропущен, связь дороже"
+			echo "канал занят netifd (kernel-прото qmi/qmiraw/mbim) - опрос намеренно пропущен, связь дороже"
 			exit 0
 		fi
 		echo "--- rf-band-info ---"; qmicli -d "$W" -p --nas-get-rf-band-info 2>&1 | head -20
@@ -1474,6 +1474,17 @@ report() {
 		AID=$(uci -q get lpac.global.custom_isd_r_aid 2>/dev/null)
 		[ -n "$AID" ] || AID=A0000005591010FFFFFFFF8900000100
 		P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+		# Sierra (1199:*): CCHO/CCHC в tty НЕ шлём. На EM9190 эта проба
+		# подвесила SIM-подсистему намертво (subscriber timeout) - не лечилось
+		# даже питанием, только физическим перетыком карты (живой случай
+		# 18.08.2026). eUICC у Sierra достаётся по QMI/MBIM, AT-мост там не
+		# путь, так что проба и не нужна.
+		VP=$(uci -q get "5gmodem.m_$(echo "$P" | sed "s/[^A-Za-z0-9]/_/g").vidpid" 2>/dev/null)
+		case "$VP" in
+			1199:*)
+				echo "Sierra ($VP): CCHO-проба пропущена - на EM9190 она подвешивала SIM-подсистему до перетыка карты; eUICC у Sierra живёт за QMI/MBIM, не за AT"
+				exit 0 ;;
+		esac
 		echo "активный слот SIM: $(/usr/share/5gmodem/simslot.sh status 2>/dev/null | grep -o "\"active\":\"[^\"]*\"")"
 		echo "порты модема $P:"
 		for t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null); do

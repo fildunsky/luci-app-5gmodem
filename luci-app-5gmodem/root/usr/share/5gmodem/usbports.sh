@@ -35,26 +35,59 @@ driver_for() {   # $1 - vid, $2 - pid
 	esac
 }
 
-# Строка для new_id. Обычно «vid pid», но new_id принимает и уточнение
-# «vid pid class subclass protocol» - и для части композиций оно ОБЯЗАТЕЛЬНО.
-# 05c6:9091 (Android-палки MDM9600/9610, режим «только модем»): rmnet-интерфейс
-# канала (If#2) несёт тот же vendor-класс ff/ff/ff, что и DIAG - голая запись
-# «vid pid» на бут-гонке может отдать канал usb-serial'у вместо qmi_wwan, и
-# хирургия ниже его НЕ вернёт (она спасает только не-ff классы). Зато у
-# AT-порта (serial_smd, If#1) триплет уникальный - ff/00/00: привязываем только
-# его, DIAG/rmnet/ADB не трогаем вовсе (живой кейс Cudy TR3000, 18.08.2026:
-# ручной echo дал ttyUSB, AT ответил, метрики появились).
+# Строка для new_id. Обычно «vid pid»; ядро usb-serial принимает МАКСИМУМ
+# третье поле - класс интерфейса («vid pid class»). Пятипольная форма с
+# subclass/protocol ОТВЕРГАЕТСЯ записью (проверено на стенде 18.08.2026:
+# rc=1) - первый вариант этого фикса писал «ff 00 00», отказ тонул в
+# 2>/dev/null, и у юзера пропали все порты при бодром «bound ... via option1»
+# в журнале.
+# 05c6:9091 (Android-палки MDM9600/9610, режим «только модем»): класс ff
+# накрывает и rmnet-канал (If#2, ff/ff/ff) - тоньше ядро не умеет, поэтому
+# канал спасает адресная хирургия _rescue_rmnet ниже.
 newid_for() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
-		05c6:9091) echo "$1 $2 ff 00 00" ;;
+		05c6:9091) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
 	esac
+}
+
+# АДРЕСНАЯ ХИРУРГИЯ ДЛЯ КОМПОЗИЦИЙ, ГДЕ КАНАЛ ДАННЫХ ТОЖЕ vendor-класса.
+# Общая хирургия в bind_ports возвращает родным драйверам только НЕ-ff
+# интерфейсы; у 9091 rmnet - ff/ff/ff, и на реэнумерации option может успеть
+# забрать его раньше qmi_wwan (dynamic id живёт в драйвере до ребута). Здесь
+# по НОМЕРУ интерфейса: If#2 = rmnet, usb-serial'у не принадлежит - снимаем и
+# отдаём drivers_probe, qmi_wwan заберёт обратно. Вызывается и когда порты уже
+# есть: ранний выход bind_ports не должен пропускать спасение канала.
+_rescue_rmnet() {   # $1 - vid, $2 - pid, $3 - номер интерфейса канала (02)
+	for _rr_d in /sys/bus/usb/devices/*; do
+		[ -f "$_rr_d/idVendor" ] || continue
+		[ "$(cat "$_rr_d/idVendor" 2>/dev/null)" = "$1" ] || continue
+		[ "$(cat "$_rr_d/idProduct" 2>/dev/null)" = "$2" ] || continue
+		for _rr_i in "$_rr_d":*."$3"; do
+			[ -f "$_rr_i/bInterfaceNumber" ] || continue
+			_rr_drv=$(basename "$(readlink -f "$_rr_i/driver" 2>/dev/null)" 2>/dev/null)
+			case "$_rr_drv" in
+				option1|usb_serial_generic|generic)
+					_rr_if=$(basename "$_rr_i")
+					echo "$_rr_if" > "$_rr_i/driver/unbind" 2>/dev/null
+					echo "$_rr_if" > /sys/bus/usb/drivers_probe 2>/dev/null
+					logger -t 5gmodem-usbports "rescued data interface $_rr_if from $_rr_drv (returned to its native driver)"
+					;;
+			esac
+		done
+	done
 }
 
 # Привязать порты. Идемпотентно: new_id можно писать повторно, поэтому вызов на
 # уже привязанном устройстве безвреден.
 bind_ports() {   # $1 - vid, $2 - pid
 	[ -n "$1" ] && [ -n "$2" ] || return 1
+
+	# Спасение канала - ДО раннего выхода «порты уже есть»: после реэнумерации
+	# порты есть (dynamic id жив), но rmnet мог достаться usb-serial'у.
+	case "$1:$2" in
+		05c6:9091) _rescue_rmnet "$1" "$2" 2 ;;
+	esac
 
 	# У МОДЕМА ЕСТЬ РАБОЧИЙ КАНАЛ ДАННЫХ - НЕ ТРОГАЕМ ВОВСЕ.
 	#
@@ -130,8 +163,16 @@ bind_ports() {   # $1 - vid, $2 - pid
 		logger -t 5gmodem-usbports "no $_bp_drv driver for $1:$2 ($_bp_path missing)"
 		return 1
 	fi
-	echo "$(newid_for "$1" "$2")" > "$_bp_path" 2>/dev/null
+	# Отказ записи НЕ глотаем: именно молчаливый rc=1 (пятипольная форма)
+	# оставил юзера без портов при бодром «bound» в журнале (18.08.2026).
+	if ! echo "$(newid_for "$1" "$2")" > "$_bp_path" 2>/dev/null; then
+		logger -t 5gmodem-usbports "new_id write failed for $1:$2 via $_bp_drv (kernel rejected '$(newid_for "$1" "$2")')"
+		return 1
+	fi
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
+	case "$1:$2" in
+		05c6:9091) sleep 1; _rescue_rmnet "$1" "$2" 2 ;;
+	esac
 
 	[ "$_bp_haswdm" = 1 ] || return 0
 	# Хирургия после привязки при живом канале: не-ff интерфейсы (CDC comm/data,

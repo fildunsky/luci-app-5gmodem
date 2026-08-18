@@ -138,6 +138,13 @@ sim_slots_via() {
 		# Fibocom FM350-GL: проверено - AT+GTDUALSIM отдаёт (0-1), AT+SIMTYPE?
 		# различает USIM/eSIM. Именно на нём это и писалось.
 		0e8d:7127|0e8d:7126) echo gtdualsim; return ;;
+		# Sierra EM9190: слоты через AT!UIMS (0=UIM1, 1=UIM2/eSIM), без пароля и
+		# без ресета, персистентно (референс 41113480 r14; фидбек Dmitry
+		# Korotkov 18.08.2026 - фибокомовских GTDUALSIM/SIMTYPE у Sierra нет,
+		# и слоты не читались вовсе).
+		# 90d3 - общий PID EM9190/EM9191 (в ядре так и подписан EM9191);
+		# 90e3 - EM9291, то же семейство, живьём не проверен.
+		1199:90d3|1199:90e3) echo uims; return ;;
 		# Compal RXM-G1 (SG500M2-X): ни AT+SIMTYPE?, ни AT+GTDUALSIM не отвечают
 		# (проверено); слоты живут за AT+CEISWITCHSIM.
 		05c6:90d6) echo ceiswitchsim; return ;;
