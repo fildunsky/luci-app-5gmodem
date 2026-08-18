@@ -27,6 +27,16 @@ if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
         # через generic, и отрабатывали оба обработчика.
         /usr/share/5gmodem/usbports.sh bind "05c6" "$PID"
 
+        # Ждать MM есть смысл только когда хоть один интерфейс живёт на
+        # proto=modemmanager. На umbim/qmi-конфигурациях цикл ниже 180 секунд
+        # впустую дёргал mmcli и заканчивался пугающим «did not report a modem»
+        # (живой лог ZBT + MV31-W 18.08.2026, MM выключен вовсе). Скрипт
+        # СОРСИТСЯ hotplug-call'ом, поэтому не exit, а ветвление: exit оборвал
+        # бы и остальные обработчики этого события.
+        if ! uci -q show network | grep -q "\.proto='modemmanager'"; then
+            logger -t hotplug-compal "Ports activated for PID $PID. No modemmanager-proto interfaces - nothing to wait for"
+        else
+
         logger -t hotplug-compal "Ports activated for PID $PID. Waiting for ModemManager to pick the modem up..."
 
         (
@@ -70,5 +80,6 @@ if [ "$ACTION" = "add" ] && [ -z "$INTERFACE" ]; then
                 ifup "$i"
             done
         ) >/dev/null 2>&1 </dev/null &
+        fi
     fi
 fi

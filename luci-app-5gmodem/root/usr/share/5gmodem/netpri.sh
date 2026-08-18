@@ -430,7 +430,18 @@ modem_path_for() {
 }
 modem_atport_for() {
 	s=$(modem_section "$1")
-	if [ -n "$s" ]; then uci5g_get "$s" at_port; return; fi
+	if [ -n "$s" ]; then
+		_ap=$(uci5g_get "$s" at_port)
+		# В секции порта может не быть (его пишет detect.sh в ГЛОБАЛКУ для
+		# активного модема). Без этого фолбэка кандидаты начинались с первого
+		# tty по порядку, а у Android-палок это немой DIAG-порт: каждый опрос
+		# имени оператора честно ждал 5 c под блокировкой и уходил в кэш
+		# («at_lock busy» в логе, живой случай на Cudy TR3000 18.08.2026).
+		if [ -z "$_ap" ] && [ "$(uci5g_get "$s" path)" = "$(uci5g_get "@5gmodem[0]" active_modem)" ]; then
+			_ap=$(uci5g_get "@5gmodem[0]" at_port)
+		fi
+		printf '%s\n' "$_ap"; return
+	fi
 	[ "$1" = "$(uci5g_get "@5gmodem[0]" network)" ] && uci5g_get "@5gmodem[0]" at_port
 }
 # uplink kind: wan | modem | wifi | other. Modem interfaces are checked BEFORE the

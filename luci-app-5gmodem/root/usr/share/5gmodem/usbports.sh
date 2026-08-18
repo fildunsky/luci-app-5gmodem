@@ -78,6 +78,31 @@ _rescue_rmnet() {   # $1 - vid, $2 - pid, $3 - номер интерфейса �
 	done
 }
 
+# Трёхполевый new_id (класс ff без subclass/protocol) захватывает и ADB-
+# интерфейс палки (ff/42/01): на Cudy TR3000 он стал ttyUSB2, и AT-пробы в него
+# кормили adbd мусором, а хостовый adb через usbfs блокировался занятым
+# интерфейсом. Ищем по subclass 42 (номер интерфейса у палок плавает), снимаем
+# option и НЕ перепробуем - ядерного драйвера у ADB нет, adb ходит через usbfs.
+_release_adb() {   # $1 - vid, $2 - pid
+	for _ra_d in /sys/bus/usb/devices/*; do
+		[ -f "$_ra_d/idVendor" ] || continue
+		[ "$(cat "$_ra_d/idVendor" 2>/dev/null)" = "$1" ] || continue
+		[ "$(cat "$_ra_d/idProduct" 2>/dev/null)" = "$2" ] || continue
+		for _ra_i in "$_ra_d":*; do
+			[ -f "$_ra_i/bInterfaceSubClass" ] || continue
+			[ "$(cat "$_ra_i/bInterfaceSubClass" 2>/dev/null)" = "42" ] || continue
+			_ra_drv=$(basename "$(readlink -f "$_ra_i/driver" 2>/dev/null)" 2>/dev/null)
+			case "$_ra_drv" in
+				option1|usb_serial_generic|generic)
+					_ra_if=$(basename "$_ra_i")
+					echo "$_ra_if" > "$_ra_i/driver/unbind" 2>/dev/null
+					logger -t 5gmodem-usbports "released ADB interface $_ra_if from $_ra_drv (it is not a serial port)"
+					;;
+			esac
+		done
+	done
+}
+
 # Привязать порты. Идемпотентно: new_id можно писать повторно, поэтому вызов на
 # уже привязанном устройстве безвреден.
 bind_ports() {   # $1 - vid, $2 - pid
@@ -86,7 +111,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 	# Спасение канала - ДО раннего выхода «порты уже есть»: после реэнумерации
 	# порты есть (dynamic id жив), но rmnet мог достаться usb-serial'у.
 	case "$1:$2" in
-		05c6:9091) _rescue_rmnet "$1" "$2" 2 ;;
+		05c6:9091) _rescue_rmnet "$1" "$2" 2; _release_adb "$1" "$2" ;;
 	esac
 
 	# У МОДЕМА ЕСТЬ РАБОЧИЙ КАНАЛ ДАННЫХ - НЕ ТРОГАЕМ ВОВСЕ.
@@ -171,7 +196,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 	fi
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
 	case "$1:$2" in
-		05c6:9091) sleep 1; _rescue_rmnet "$1" "$2" 2 ;;
+		05c6:9091) sleep 1; _rescue_rmnet "$1" "$2" 2; _release_adb "$1" "$2" ;;
 	esac
 
 	[ "$_bp_haswdm" = 1 ] || return 0
