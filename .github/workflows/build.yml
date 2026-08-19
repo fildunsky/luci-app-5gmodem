@@ -82,6 +82,21 @@ jobs:
           mkdir -p out
           # grab the app AND its translation subpackages (luci-i18n-5gmodem-*)
           find bin/ -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} out/ \;
+          # У языковых пакетов версия из luci.mk - хеш коммита в имени файла,
+          # оно меняется каждый релиз и на него нельзя дать постоянную ссылку в
+          # README. Кладём РЯДОМ копию со стабильным именем (luci-i18n-5gmodem-
+          # <lang>.apk/.ipk): README ссылается на неё, оригинал остаётся для
+          # любителей полной версии в имени.
+          for f in out/luci-i18n-5gmodem-*; do
+            [ -e "$f" ] || continue
+            base=$(basename "$f")
+            lang=$(echo "$base" | sed -n 's/^luci-i18n-5gmodem-\([a-z-]*\)[-_][0-9].*/\1/p')
+            [ -n "$lang" ] || continue
+            case "$base" in
+              *.apk) cp -v "$f" "out/luci-i18n-5gmodem-$lang.apk" ;;
+              *.ipk) cp -v "$f" "out/luci-i18n-5gmodem-$lang.ipk" ;;
+            esac
+          done
           echo "--- collected ---"; ls -l out/
 
       - name: Upload build artifacts

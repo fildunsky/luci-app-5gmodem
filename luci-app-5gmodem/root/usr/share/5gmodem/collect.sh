@@ -576,6 +576,24 @@ usb_flap_verdict() {
 			echo "  соседнее устройство $_d: $_c переподключений"
 			[ "${_c:-0}" -ge 10 ] && echo "  ЭТО МНОГО: устройство не удерживается на шине - смотреть питание, кабель и режим composition"
 		done
+	# УСТРОЙСТВО ЕСТЬ, НО НЕ ЭНУМЕРИРУЕТСЯ - до драйверов дело не доходит, и
+	# все прочие разделы честно молчат «модема нет». Приметы в dmesg: серия
+	# «device descriptor read ... error -62/-71», «device not accepting
+	# address», финал «unable to enumerate USB device»; часто рядом падение
+	# high-speed -> full-speed (модем всплывает на шине OHCI). Это физика:
+	# питание рывком на старте, кабель/переходник без линий данных, битый
+	# модуль. Живой отчёт Cudy TR1200, 19.08.2026 - без этого вердикта отчёт
+	# выглядел как «модем не подключён вовсе».
+	_uf_en=$(dmesg 2>/dev/null | grep -cE "unable to enumerate USB device|device not accepting address|device descriptor read.*error")
+	if [ "${_uf_en:-0}" -ge 3 ]; then
+		echo "  ПРОБЛЕМА: устройство на шине есть, но НЕ ЭНУМЕРИРУЕТСЯ ($_uf_en ошибок в dmesg:"
+		dmesg 2>/dev/null | grep -E "unable to enumerate|not accepting address|descriptor read.*error" | tail -3 | sed 's/^/    /'
+		echo "  ). Это физический уровень - до драйверов и приложения дело не доходит."
+		echo "  Лечится железом: короткий качественный кабель без переходников, хаб с"
+		echo "  внешним питанием (порту роутера может не хватать тока на старт модема),"
+		echo "  проверка модема на ПК. Как только в dmesg появится строка"
+		echo "  «new high-speed USB device» - приложение подхватит модем само."
+	fi
 	# УМЕР САМ КОНТРОЛЛЕР - ЭТО НЕ ПИТАНИЕ, И ГОВОРИТЬ ПРО ПИТАНИЕ ЗДЕСЬ ВРЕДНО.
 	#
 	# Живой отчёт (Banana Pi R4 Lite, FM350 в RNDIS, 30.07): сначала зависла
@@ -1374,7 +1392,9 @@ report() {
 		fi'
 
 	collect "mm"
-	run 15 "mmcli -L" mmcli -L
+	# На lite-пакете ModemManager отсутствует по определению - честная строка
+	# вместо сырого «mmcli: not found» в отчёте (живой отчёт TR1200, 19.08.2026).
+	run 15 "mmcli -L" sh -c 'command -v mmcli >/dev/null && mmcli -L || echo "mmcli не установлен (пакет modemmanager) - для lite-сборки это норма"'
 	# Индексы берём из mmcli -L, а не наугад "-m 0": индекс меняется при каждом
 	# рестарте MM, а на мёртвой шине "-m 0" просто висит до таймаута.
 	run 40 "Модемы в MM (детально)" sh -c "mmcli -L 2>/dev/null | sed -n 's#.*/Modem/\([0-9]*\).*#\1#p' | while read -r i; do echo \"### модем \$i\"; mmcli -m \"\$i\" -K 2>&1 | grep -viE 'password|\.pin'; done"
@@ -1382,7 +1402,7 @@ report() {
 	# ветку "*)", а это ДЕМОН (while :; sleep 15). Вызов отсюда запускал бы лишнего
 	# держателя инхибиции. Читаем состояние напрямую: pid-файлы + флаги в uci.
 	run 5  "Инхибиция (наша)" sh -c "echo '--- активные держатели ---'; for f in /var/run/5gmodem-mm-inhibit/*.pid; do [ -f \"\$f\" ] || continue; p=\$(cat \"\$f\"); kill -0 \"\$p\" 2>/dev/null && echo \"\$(basename \"\$f\" .pid): pid \$p (жив)\" || echo \"\$(basename \"\$f\" .pid): pid \$p (мёртв)\"; done; echo '--- флаги mm_exclude ---'; uci -q show 5gmodem | grep mm_exclude || echo '(не задано)'"
-	run 5  "Автозапуск MM" sh -c "/etc/init.d/modemmanager enabled && echo 'включён' || echo 'выключен'"
+	run 5  "Автозапуск MM" sh -c "[ -x /etc/init.d/modemmanager ] || { echo 'ModemManager не установлен'; exit 0; }; /etc/init.d/modemmanager enabled && echo 'включён' || echo 'выключен'"
 
 	collect "at"
 	P=$("$RES/detect.sh" 2>/dev/null)
