@@ -145,9 +145,11 @@ done
 # активными ВСЕ, включая INACTIVE.
 _CANUM=0
 _CABANDS=""
+_HAVE_LTE_SCC=""
 for _cc in 1 2 3 4; do
 	_sg "S${_cc}BAND"; T=$_V
 	[ -n "$T" ] || continue
+	_HAVE_LTE_SCC=1
 	_sg "S${_cc}BW"; T1=$_V
 	_b="$(band4g ${T#B})"
 	[ -n "$T1" ] && _b="$_b @$T1 MHz"
@@ -177,15 +179,54 @@ if [ -n "$_NRBAND" ]; then
 	_sg NREARFCN; _ner=$_V
 	_sg NRRSRP; _nrp=$_V
 	_sg NRRSRQ; _nrq=$_V
+	_sg NRSINR; _nsi=$_V
 	if [ -z "$S1BAND" ]; then
-		S1BAND="$_nb"; S1STATE="activated"; S1EARFCN="$_ner"; S1RSRP="$_nrp"; S1RSRQ="$_nrq"
+		S1BAND="$_nb"; S1STATE="activated"; S1EARFCN="$_ner"; S1RSRP="$_nrp"; S1RSRQ="$_nrq"; S1SINR="$_nsi"
 	elif [ -z "$S2BAND" ]; then
-		S2BAND="$_nb"; S2STATE="activated"; S2EARFCN="$_ner"; S2RSRP="$_nrp"; S2RSRQ="$_nrq"
+		S2BAND="$_nb"; S2STATE="activated"; S2EARFCN="$_ner"; S2RSRP="$_nrp"; S2RSRQ="$_nrq"; S2SINR="$_nsi"
 	elif [ -z "$S3BAND" ]; then
-		S3BAND="$_nb"; S3STATE="activated"; S3EARFCN="$_ner"; S3RSRP="$_nrp"; S3RSRQ="$_nrq"
+		S3BAND="$_nb"; S3STATE="activated"; S3EARFCN="$_ner"; S3RSRP="$_nrp"; S3RSRQ="$_nrq"; S3SINR="$_nsi"
 	elif [ -z "$S4BAND" ]; then
-		S4BAND="$_nb"; S4STATE="activated"; S4EARFCN="$_ner"; S4RSRP="$_nrp"; S4RSRQ="$_nrq"
+		S4BAND="$_nb"; S4STATE="activated"; S4EARFCN="$_ner"; S4RSRP="$_nrp"; S4RSRQ="$_nrq"; S4SINR="$_nsi"
 	fi
+fi
+
+# SINR ВТОРИЧНЫХ LTE-НЕСУЩИХ - из AT!LTEINFO? (секция CA SCell): GSTATUS по SCC
+# отдаёт только RSRP/RSSI, а фронт поля s<n>sinr уже читает (разбор Dmitry
+# Korotkov, 18.08.2026). Команду шлём лишь когда GSTATUS показал хотя бы одну
+# LTE SCC - иначе секция пуста и запрос был бы холостым расходом порта.
+# Строка секции: EARFCN SCID Bd ST D U Mdl Mul PCI RSRP RSSI SINR (12 колонок).
+# Привязка к слоту - по EARFCN (уникален на несущую), запасной путь - по SCID.
+if [ -n "$_HAVE_LTE_SCC" ]; then
+	_LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
+	case "$_LI" in
+		*OK*|*ERROR*) ;;
+		*) _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r') ;;
+	esac
+	_LIMAP=$(printf '%s\n' "$_LI" | awk \
+		-v e1="$S1EARFCN" -v e2="$S2EARFCN" -v e3="$S3EARFCN" -v e4="$S4EARFCN" '
+		/^CA SCell/ { ca = 1; next }
+		ca && $1 !~ /^[0-9]+$/ { ca = 0 }
+		ca && NF >= 12 {
+			s = $12
+			if (s == "---" || s == "--" || s == "") next
+			if (e1 != "" && $1 == e1) n = 1
+			else if (e2 != "" && $1 == e2) n = 2
+			else if (e3 != "" && $1 == e3) n = 3
+			else if (e4 != "" && $1 == e4) n = 4
+			else n = $2
+			print n " " s
+		}')
+	while read -r _li_n _li_s; do
+		case "$_li_n" in
+			1) S1SINR="$_li_s" ;;
+			2) S2SINR="$_li_s" ;;
+			3) S3SINR="$_li_s" ;;
+			4) S4SINR="$_li_s" ;;
+		esac
+	done <<EOF
+$_LIMAP
+EOF
 fi
 
 # ЯРЛЫК ТЕХНОЛОГИИ - ПО ФАКТУ НЕСУЩИХ. Модем пишет ENDC, как только сеть

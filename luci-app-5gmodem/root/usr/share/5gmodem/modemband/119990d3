@@ -295,6 +295,14 @@ _cur_bands() {
 # дополняет прошивка запись или переписывает её.
 _band_apply() {   # $1 - 4G, $2 - 5G NSA, $3 - 5G SA, $4 - 3G (списки диапазонов)
 	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 1
+	# ПУСТОЙ 4G-НАБОР НЕ ПИШЕМ. EM9190 - NSA-модем: NR без LTE-якоря не даёт
+	# сервиса, а перезапуск радио (CFUN=1,1) на «только 5G» уводит модуль в
+	# мягкий бутлуп БЕЗ AT-консоли - лечится только жёстким снятием питания
+	# (воспроизведено владельцем, 18.08.2026). Отказ честный: журнал + rc 1.
+	if [ -z "$(printf '%s' "$1" | tr -cd '0-9')" ]; then
+		logger -t 5gmodem "EM9190: refusing an empty LTE band set - NSA needs an LTE anchor, and a radio reset without LTE soft-bricks the module (no AT until a hard power cycle)"
+		return 1
+	fi
 	_entercnd
 	_ba_n="$_EM9190_SET,1,\"$_EM9190_SETNAME\""
 
