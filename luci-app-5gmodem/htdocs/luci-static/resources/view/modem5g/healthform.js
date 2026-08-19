@@ -54,8 +54,12 @@ return baseclass.extend({
 		};
 		var healRows = uplinks.filter(function(o) { return o.type === 'modem'; }).map(function(o) {
 			var cur = (c.heal && c.heal[o.iface]) || '';
+			/* Пустое значение = умолчание (переподключение + перезагрузка
+			   модуля, см. heal_cap в health.sh); явное «не лечить» - отдельное
+			   значение none, иначе его не отличить от «не выбирал вовсе». */
 			return row(E('select', { 'id': 'hw-heal-' + o.iface, 'class': 'cbi-input-select', 'data-iface': o.iface }, [
-				E('option', { 'value': '', 'selected': cur === '' ? '' : null }, _('Do nothing')),
+				E('option', { 'value': '', 'selected': cur === '' ? '' : null }, _('Default (reconnect, then reboot the module)')),
+				E('option', { 'value': 'none', 'selected': cur === 'none' ? '' : null }, _('Do nothing')),
 				E('option', { 'value': 'ifup', 'selected': cur === 'ifup' ? '' : null }, _('Reconnect the interface')),
 				E('option', { 'value': 'reboot', 'selected': cur === 'reboot' ? '' : null }, _('...plus reboot the module')),
 				E('option', { 'value': 'power', 'selected': cur === 'power' ? '' : null }, _('...plus USB power cycle'))

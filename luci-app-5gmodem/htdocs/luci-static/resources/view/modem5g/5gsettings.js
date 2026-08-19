@@ -547,7 +547,7 @@ return view.extend({
 		   по этому же ключу (см. menu.d), поэтому после сохранения нужна
 		   перезагрузка страницы - LuCI перечитает дерево меню. */
 
-		o = exp.option(form.Flag, 'align_enabled', _('Юстировка'),
+		o = exp.option(form.Flag, 'align_enabled', _('Alignment'),
 			_('Живые метрики сигнала и звук для настройки внешней антенны.'));
 		o.default = '0';
 		o.rmempty = false;

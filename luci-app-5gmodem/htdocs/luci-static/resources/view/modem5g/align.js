@@ -95,7 +95,7 @@ function drawChart(canvas, series, opts) {
 	ctx.clearRect(0, 0, W, H);
 	var all = [];
 	series.forEach(function(s) { (s.points || []).forEach(function(p) { all.push(p[1]); }); });
-	if (!all.length) { ctx.fillStyle = fg; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(_('Нет данных'), W / 2, H / 2); return; }
+	if (!all.length) { ctx.fillStyle = fg; ctx.font = '12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(_('No data'), W / 2, H / 2); return; }
 	var vmin = (opts.min != null) ? opts.min : Math.min.apply(null, all);
 	var vmax = (opts.max != null) ? opts.max : Math.max.apply(null, all);
 	if (vmax === vmin) vmax = vmin + 1;
@@ -244,10 +244,10 @@ return view.extend({
 			var node = E('div', {}, [ E('div', { class: 'al-lbl' }, label), cell, E('div', { class: 'al-hint' }, hint) ]);
 			return { node: node, cell: cell, key: key, unit: unit };
 		}
-		var mSinr = metric('SINR', _('сигнал/шум · желательно >10 dB'), 'sinr', ' dB');
-		var mRsrp = metric('RSRP', _('мощность LTE · лучше -95 dBm'), 'rsrp', ' dBm');
-		var mRsrq = metric('RSRQ', _('качество соты · лучше -10 dB'), 'rsrq', ' dB');
-		var mRssi = metric('RSSI', _('общий уровень'), 'rssi', ' dBm');
+		var mSinr = metric('SINR', _('signal-to-noise · aim for >10 dB'), 'sinr', ' dB');
+		var mRsrp = metric('RSRP', _('LTE power · better than -95 dBm'), 'rsrp', ' dBm');
+		var mRsrq = metric('RSRQ', _('cell quality · better than -10 dB'), 'rsrq', ' dB');
+		var mRssi = metric('RSSI', _('overall level'), 'rssi', ' dBm');
 		function setMetric(mo, v, arrow) {
 			var has = (v != null && !isNaN(parseFloat(v)));
 			paintMetricCell(mo.cell, mo.key, has ? v : null, has ? (v + mo.unit + (arrow || '')) : '-');
@@ -270,12 +270,12 @@ return view.extend({
 		var pageInfo = E('span', { class: 'al-hint' }, '');
 		var btnPrev = E('button', { class: 'btn cbi-button', click: function() { if (st.page > 0) { st.page--; renderTable(); } } }, '◀');
 		var btnNext = E('button', { class: 'btn cbi-button', click: function() { var tp = Math.ceil(st.cells.length / st.pageSize); if (st.page < tp - 1) { st.page++; renderTable(); } } }, '▶');
-		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); speak('Лог сброшен'); } }, _('Сбросить лог'));
+		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); speak(_('Log cleared')); } }, _('Clear the log'));
 		var logSec = E('div', { class: 'cbi-section' }, [
-			E('h3', {}, _('Лучшие соты (по SINR)')),
-			E('div', { class: 'al-hint', style: 'margin-bottom:8px;font-style:italic' }, _('Клик по строке — выбрать целевую соту')),
+			E('h3', {}, _('Best cells (by SINR)')),
+			E('div', { class: 'al-hint', style: 'margin-bottom:8px;font-style:italic' }, _('Click a row to set the target cell')),
 			E('table', { class: 'al-tbl' }, [
-				E('thead', {}, E('tr', {}, [ E('th', {}, '#'), E('th', {}, 'eNB'), E('th', {}, _('Сектор')), E('th', {}, 'RSRP'), E('th', {}, 'SINR'), E('th', {}, _('Время')) ])),
+				E('thead', {}, E('tr', {}, [ E('th', {}, '#'), E('th', {}, 'eNB'), E('th', {}, _('Sector')), E('th', {}, 'RSRP'), E('th', {}, 'SINR'), E('th', {}, _('Time')) ])),
 				tbody
 			]),
 			E('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px' }, [ btnPrev, pageInfo, btnNext ]),
@@ -286,7 +286,7 @@ return view.extend({
 			var s = sortedCells(), tp = Math.max(1, Math.ceil(s.length / st.pageSize));
 			if (st.page >= tp) st.page = tp - 1; if (st.page < 0) st.page = 0;
 			var start = st.page * st.pageSize;
-			pageInfo.textContent = _('Стр.') + ' ' + (st.page + 1) + '/' + tp + ' (' + s.length + ')';
+			pageInfo.textContent = _('Page') + ' ' + (st.page + 1) + '/' + tp + ' (' + s.length + ')';
 			btnPrev.style.display = btnNext.style.display = (tp > 1) ? '' : 'none';
 			dom.content(tbody, s.slice(start, start + st.pageSize).map(function(e, i) {
 				var isT = st.target && st.target.enb === e.enb && st.target.pci === e.pci;
@@ -294,8 +294,8 @@ return view.extend({
 				paintMetricCell(rsrpTd, 'rsrp', e.rsrp, e.rsrp + ' dBm');
 				paintMetricCell(sinrTd, 'sinr', e.sinr, e.sinr.toFixed(1));
 				return E('tr', { class: 'pick' + (isT ? ' tgt' : ''), click: function() {
-					if (isT) { st.target = null; LS.d('target'); speak('Цель сброшена'); }
-					else { st.target = { enb: e.enb, pci: e.pci }; LS.sj('target', st.target); speak('Цель ' + e.enb + ' сектор ' + e.pci); }
+					if (isT) { st.target = null; LS.d('target'); speak(_('Target cleared')); }
+					else { st.target = { enb: e.enb, pci: e.pci }; LS.sj('target', st.target); speak(_('Target') + ' ' + e.enb + ' ' + _('sector') + ' ' + e.pci); }
 					renderTable();
 				} }, [ E('td', {}, String(start + i + 1)), E('td', {}, String(e.enb)), E('td', {}, String(e.pci)), rsrpTd, sinrTd, E('td', { class: 'al-hint' }, e.time || '--') ]);
 			}));
@@ -303,7 +303,7 @@ return view.extend({
 
 		var canvas = E('canvas', { style: 'width:100%;height:190px;display:block' });
 		function draw() { drawChart(canvas, [ { name: 'SINR', points: st.hist } ], { min: -5, max: 25, fmt: function(v) { return Math.round(v) + ' dB'; } }); }
-		var chartSec = E('div', { class: 'cbi-section tg5g' }, [ E('h3', {}, _('SINR за 30 секунд')), canvas ]);
+		var chartSec = E('div', { class: 'cbi-section tg5g' }, [ E('h3', {}, _('SINR over the last 30 seconds')), canvas ]);
 
 		function sliderRow(label, key, val, onChange) {
 			var vEl = E('span', { class: 'al-hint', style: 'min-width:34px' }, Math.round(val * 100) + '%');
@@ -315,21 +315,21 @@ return view.extend({
 		}
 		var fileInput = E('input', { type: 'file', accept: 'audio/*', style: 'display:none', change: function(ev) {
 			var f = ev.target.files[0]; if (!f) return;
-			if (f.size > 1500000) { ui.addNotification(null, E('p', _('Файл великоват (до ~1.5 МБ)')), 'warning'); return; }
+			if (f.size > 1500000) { ui.addNotification(null, E('p', _('The file is too big (up to ~1.5 MB)')), 'warning'); return; }
 			var r = new FileReader();
-			r.onload = function() { LS.s('customsnd', r.result); loadCustom(r.result); ui.addNotification(null, E('p', _('Свой звук загружен')), 'info'); };
+			r.onload = function() { LS.s('customsnd', r.result); loadCustom(r.result); ui.addNotification(null, E('p', _('Custom sound loaded')), 'info'); };
 			r.readAsDataURL(f);
 		} });
 		var snd0 = LS.g('customsnd', ''); if (snd0) loadCustom(snd0);
 		var soundSec = E('div', { class: 'cbi-section' }, [
-			E('h3', {}, _('Звук')),
-			sliderRow(_('Гейгер (SINR)'), 'vGeiger', au.vGeiger, function(v) { au.vGeiger = v; }),
-			sliderRow(_('Тон RSRP'), 'vTone', au.vTone, function(v) { au.vTone = v; }),
-			sliderRow(_('Голос'), 'vVoice', au.vVoice, function(v) { au.vVoice = v; }),
+			E('h3', {}, _('Sound')),
+			sliderRow(_('Geiger (SINR)'), 'vGeiger', au.vGeiger, function(v) { au.vGeiger = v; }),
+			sliderRow(_('RSRP tone'), 'vTone', au.vTone, function(v) { au.vTone = v; }),
+			sliderRow(_('Voice'), 'vVoice', au.vVoice, function(v) { au.vVoice = v; }),
 			E('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;margin-top:8px' }, [
-				E('button', { class: 'btn cbi-button', click: function() { fileInput.click(); } }, _('Загрузить свой звук')),
-				E('button', { class: 'btn cbi-button', click: function() { var was = au.on; au.on = true; click(); au.on = was; } }, _('Проба')),
-				E('button', { class: 'btn cbi-button', click: function() { au.customBuf = null; LS.d('customsnd'); ui.addNotification(null, E('p', _('Возврат к звуку по умолчанию')), 'info'); } }, _('Звук по умолчанию')),
+				E('button', { class: 'btn cbi-button', click: function() { fileInput.click(); } }, _('Upload a custom sound')),
+				E('button', { class: 'btn cbi-button', click: function() { var was = au.on; au.on = true; click(); au.on = was; } }, _('Preview')),
+				E('button', { class: 'btn cbi-button', click: function() { au.customBuf = null; LS.d('customsnd'); ui.addNotification(null, E('p', _('Back to the default sound')), 'info'); } }, _('Default sound')),
 				fileInput
 			])
 		]);
@@ -340,12 +340,12 @@ return view.extend({
 		} });
 		var sndBtn = E('button', { class: 'btn cbi-button al-sndbtn', click: function() {
 			au.on = !au.on; LS.s('sndon', au.on ? '1' : '0'); paintSndBtn();
-			if (au.on) { ac(); speak('Звук включён'); geiger(st.curSinr || 0); } else { stopAudio(); }
+			if (au.on) { ac(); speak(_('Sound on')); geiger(st.curSinr || 0); } else { stopAudio(); }
 		} });
-		function paintSndBtn() { dom.content(sndBtn, au.on ? [ '🔊 ', _('Звук: вкл') ] : [ '🔇 ', _('Звук: выкл') ]); sndBtn.classList.toggle('cbi-button-positive', au.on); }
+		function paintSndBtn() { dom.content(sndBtn, au.on ? [ '🔊 ', _('Sound: on') ] : [ '🔇 ', _('Sound: off') ]); sndBtn.classList.toggle('cbi-button-positive', au.on); }
 		paintSndBtn();
 		var topBar = E('div', { class: 'cbi-section', style: 'display:flex;flex-wrap:wrap;gap:14px;align-items:center' }, [
-			sndBtn, E('div', { style: 'display:flex;align-items:center;gap:8px' }, [ E('span', { class: 'al-hint' }, _('Интервал, с')), intervalInput ])
+			sndBtn, E('div', { style: 'display:flex;align-items:center;gap:8px' }, [ E('span', { class: 'al-hint' }, _('Interval, s')), intervalInput ])
 		]);
 
 		function updateRx(rx) {
@@ -360,8 +360,8 @@ return view.extend({
 			mimoTitle.textContent = 'MIMO: ' + n + 'x' + n;
 			if (n >= 2) {
 				var d = Math.round((Math.max.apply(null, vals) - Math.min.apply(null, vals)) * 10) / 10;
-				var lbl = d <= 3 ? _('отлично') : d <= 6 ? _('хорошо') : d <= 10 ? _('средне') : _('плохо');
-				mimoBal.textContent = _('Разброс RX') + ': ' + d + ' dB · ' + _('баланс') + ': ' + lbl;
+				var lbl = d <= 3 ? _('excellent') : d <= 6 ? _('good') : d <= 10 ? _('fair') : _('poor');
+				mimoBal.textContent = _('RX spread') + ': ' + d + ' dB · ' + _('balance') + ': ' + lbl;
 			} else mimoBal.textContent = '';
 		}
 		function logCell(enb, pci, rsrp, sinr) {
@@ -391,7 +391,7 @@ return view.extend({
 			if (!online) {
 				stopAudio();
 				[ mSinr, mRsrp, mRsrq, mRssi ].forEach(function(mo) { setMetric(mo, null); });
-				bs.textContent = 'БС: --'; sec.textContent = _('Сектор') + ': --'; earfcn.textContent = 'EARFCN: --'; mode.textContent = '';
+				bs.textContent = _('BS') + ': --'; sec.textContent = _('Sector') + ': --'; earfcn.textContent = 'EARFCN: --'; mode.textContent = '';
 				updateRx([]);
 				return;
 			}
@@ -407,8 +407,8 @@ return view.extend({
 			var enb = (j.enbid != null && j.enbid !== '' && j.enbid !== '-') ? String(j.enbid) : '';
 			var pci = (j.pci != null && j.pci !== '') ? String(j.pci) : '';
 			var isT = st.target && st.target.enb === enb && st.target.pci === pci;
-			bs.textContent = 'БС: ' + (enb || '--') + (isT ? ' 🎯' : '');
-			sec.textContent = _('Сектор') + ': ' + (pci || '--');
+			bs.textContent = _('BS') + ': ' + (enb || '--') + (isT ? ' 🎯' : '');
+			sec.textContent = _('Sector') + ': ' + (pci || '--');
 			earfcn.textContent = 'EARFCN: ' + (j.earfcn || '--');
 			mode.textContent = j.mode ? String(j.mode).split('|')[0].trim() : '';
 
@@ -431,7 +431,7 @@ return view.extend({
 		};
 		document.addEventListener('visibilitychange', function() { if (document.hidden) stopAudio(); });
 
-		var root = E('div', {}, [ style, E('h2', {}, _('Юстировка антенны')), topBar, metricSec, mimoSec, logSec, chartSec, soundSec ]);
+		var root = E('div', {}, [ style, E('h2', {}, _('Antenna alignment')), topBar, metricSec, mimoSec, logSec, chartSec, soundSec ]);
 
 		renderTable();
 		modemtabs.attach();

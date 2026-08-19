@@ -767,6 +767,30 @@ case "$1" in
 			if uci -q show 5gmodem 2>/dev/null | grep -q "\.ct_[a-z]*='conditional'"; then
 				_sw_run 10 "$RES/buttons.sh" syncleds >/dev/null 2>&1
 			fi
+			# СТРАХОВКА МГНОВЕННОГО СОХРАНЕНИЯ: staged-дельта 5gmodem без
+			# commit. Страница Настроек стейджит правку мгновенно (и она сразу
+			# видна всем - libuci подхватывает дельту из общего /tmp/.uci), а
+			# commit уезжает отдельным exec через rpcd - при занятом rpcd он
+			# стоит в очереди, и уход со страницы его обрывает. Правка при этом
+			# ЖИВЁТ до перезагрузки, а после неё tmpfs-дельта исчезает - «после
+			# ребута настройки слетели» (живой случай ZBT-Z8102AX 18.08.2026:
+			# хост пинга и сервер спидтеста возвращались к умолчаниям). Дельту,
+			# не менявшуюся два круга подряд, дозакоммичиваем здесь: это ровно
+			# то состояние, которое пользователь уже видит и считает
+			# сохранённым; своих правок 5gmodem сторож не стейджит никогда.
+			_ucd_l=$(uci -q changes 5gmodem 2>/dev/null)
+			if [ -n "$_ucd_l" ]; then
+				_ucd=$(printf '%s' "$_ucd_l" | md5sum | cut -d' ' -f1)
+				if [ "$(cat /tmp/5gmodem_ucidelta 2>/dev/null)" = "$_ucd" ]; then
+					uci -q commit 5gmodem 2>/dev/null && \
+						_log "committed a stale staged 5gmodem delta (the settings page could not finish its own commit)"
+					rm -f /tmp/5gmodem_ucidelta
+				else
+					printf '%s' "$_ucd" > /tmp/5gmodem_ucidelta
+				fi
+			else
+				rm -f /tmp/5gmodem_ucidelta
+			fi
 			# Пересылка новых SMS в Telegram - последней: она ходит в СЕТЬ и в
 			# AT-порт за списком сообщений, поэтому пусть сначала отработают
 			# проверка сессии и метрики. Свой предохранитель по времени внутри.

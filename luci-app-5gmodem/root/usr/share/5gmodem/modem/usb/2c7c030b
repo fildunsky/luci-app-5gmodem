@@ -29,9 +29,12 @@ if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
 		3) T1="10";;
 		4) T1="15";;
 		5) T1="20";;
-		*) T1="?";;
+		*) T1="";;
 	esac
-	ULBW="UL: @$T1 MHz"
+	# Полосы - отдельным полем BANDWIDTH, не внутри PBAND: легаси-формат
+	# «Bx DL: @.. UL: @..» ломал разрез диапазон/полоса во фронте (caSplitBand
+	# режет по « @»; живой случай EP06-E 19.08.2026, тот же формат был здесь).
+	_ULBW="$T1"
 	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
 	case $T in
 		0) T1="1.4";;
@@ -40,10 +43,13 @@ if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
 		3) T1="10";;
 		4) T1="15";;
 		5) T1="20";;
-		*) T1="?";;
+		*) T1="";;
 	esac
-	DLBW="DL: @$T1 MHz"
-	PBAND="$MAINCUT $DLBW $ULBW"
+	if [ -n "$T1" ]; then
+		BANDWIDTH="$T1 MHz"
+		[ -n "$_ULBW" ] && [ "$_ULBW" != "$T1" ] && BANDWIDTH="$T1/$_ULBW MHz"
+	fi
+	PBAND="$MAINCUT"
 	
 	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}')
 	PCI=$T

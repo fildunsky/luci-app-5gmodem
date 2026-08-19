@@ -191,18 +191,52 @@ if [ -n "$_NRBAND" ]; then
 	fi
 fi
 
-# SINR ВТОРИЧНЫХ LTE-НЕСУЩИХ - из AT!LTEINFO? (секция CA SCell): GSTATUS по SCC
-# отдаёт только RSRP/RSSI, а фронт поля s<n>sinr уже читает (разбор Dmitry
-# Korotkov, 18.08.2026). Команду шлём лишь когда GSTATUS показал хотя бы одну
-# LTE SCC - иначе секция пуста и запрос был бы холостым расходом порта.
+# AT!LTEINFO? добирает то, чего нет в GSTATUS: SINR вторичных несущих (секция
+# CA SCell) и СОСЕДНИЕ СОТЫ (Serving/IntraFreq/InterFreq) - на kernel-прото
+# qmi/mbim канал QMI занят netifd, и обычный источник соседей (cell-location-
+# info) недоступен, LTEINFO - единственный путь (разбор Dmitry Korotkov,
+# 18.08.2026). Одна команда на опрос, тот же ответ разбирается дважды.
+_LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
+case "$_LI" in
+	*OK*|*ERROR*) ;;
+	*) _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r') ;;
+esac
+
+# Соседи. Формат ответа - таблицы с шапками; колонки числовые:
+#   Serving:   EARFCN MCC MNC TAC CID Bd D U SNR PCI RSRQ RSRP RSSI RXLV (14)
+#   IntraFreq: PCI RSRQ RSRP RSSI RXLV (5) - частота и бенд как у serving
+#   InterFreq: EARFCN ThrL ThrH Prio PCI RSRQ RSRP RSSI RXLV (9) - бенд неизвестен
+# JSON собирается в формате QMI-пути (см. 5gmodem.sh _qr_nb): каркас берёт
+# NEIGHBORS профиля, а QMI-фолбэк заполняет только пустое.
+_LINB=$(printf '%s\n' "$_LI" | awk '
+	function emit(bd, ef, pc, rq, rp, rs, sv) {
+		if (pc == "" || pc !~ /^[0-9]+$/) return
+		printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"%s\",\"serving\":%s}",
+			(n++ ? "," : ""), bd, ef, pc, rp, rq, rs, sv
+	}
+	/^Serving:/   { sec = "serv";  next }
+	/^IntraFreq:/ { sec = "intra"; next }
+	/^InterFreq:/ { sec = "inter"; next }
+	/^[A-Za-z]/   { sec = "" }
+	sec == "" { next }
+	sec == "serv" && NF >= 14 && $1 ~ /^[0-9]+$/ {
+		sef = $1; sbd = $6
+		emit(sbd, sef, $10, $11, $12, $13, "1")
+	}
+	sec == "intra" && NF >= 5 && $1 ~ /^[0-9]+$/ {
+		emit(sbd, sef, $1, $2, $3, $4, "0")
+	}
+	sec == "inter" && NF >= 9 && $1 ~ /^[0-9]+$/ {
+		emit("", $1, $5, $6, $7, $8, "0")
+	}
+')
+[ -n "$_LINB" ] && NEIGHBORS="$_LINB"
+
+# SINR вторичных LTE-несущих - секция CA SCell того же ответа: GSTATUS по SCC
+# отдаёт только RSRP/RSSI, а фронт поля s<n>sinr уже читает.
 # Строка секции: EARFCN SCID Bd ST D U Mdl Mul PCI RSRP RSSI SINR (12 колонок).
 # Привязка к слоту - по EARFCN (уникален на несущую), запасной путь - по SCID.
 if [ -n "$_HAVE_LTE_SCC" ]; then
-	_LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
-	case "$_LI" in
-		*OK*|*ERROR*) ;;
-		*) _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r') ;;
-	esac
 	_LIMAP=$(printf '%s\n' "$_LI" | awk \
 		-v e1="$S1EARFCN" -v e2="$S2EARFCN" -v e3="$S3EARFCN" -v e4="$S4EARFCN" '
 		/^CA SCell/ { ca = 1; next }

@@ -2453,9 +2453,10 @@ function applyMetrics(json) {
 							   «(1800 MHz)», разделители «+»/«/» и ярлык «4G |» остаются
 							   ОБЫЧНЫМ текстом СНАРУЖИ кнопки. Оборачиваем бенды ДО частот,
 							   чтобы regex частот не задел сгенерированные span'ы. */
-							view.innerHTML = mtext
+							var _mh = mtext
 								.replace(/\b([Bn])(\d+)\b/g,
-									'<span class="btn cbi-button cbi-button-action important tginfo-band">$1$2</span>')
+									'<span class="btn cbi-button cbi-button-action important tginfo-band" title="' +
+										_('Active carrier: this band is carrying your data right now') + '">$1$2</span>')
 								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>')
 								.replace(/\|/g, '<span style="font-weight:normal;opacity:.65">|</span>');
 								/* Расстояние до соты по Timing Advance - в конец строки агрегации,
@@ -2465,8 +2466,42 @@ function applyMetrics(json) {
 								if (_bsd > 0) {
 									var _bskm = (_bsd >= 1000) ? ('~' + (_bsd / 1000).toFixed(1) + 'km')
 									                           : ('~' + _bsd + 'm');
-									view.innerHTML += ' <span class="tginfo-freq tginfo-dist">' + _bskm + '</span>';
+									_mh += ' <span class="tginfo-freq tginfo-dist">' + _bskm + '</span>';
 								}
+							/* ВСЯ СОБРАННАЯ АГРЕГАЦИЯ, А НЕ ТОЛЬКО АКТИВНАЯ (идея
+							   владельца EM9190): сеть может сконфигурировать несущую
+							   и держать её выключенной - такие дорисовываем тем же
+							   рядом, но приглушённо (как невыбранные бенды в выборе
+							   диапазонов), чтобы собранную агрегацию было видно без
+							   прокрутки к таблице несущих. Активные уже в строке
+							   режима - сюда идут только state=deactivated, и с
+							   проверкой по границе слова (B4 не должен прятаться
+							   за B40). */
+							var _inact = [];
+							for (var _ci = 1; _ci <= 4; _ci++) {
+								if (String(json['s' + _ci + 'state'] || '') !== 'deactivated') { continue; }
+								var _cbm = String(json['s' + _ci + 'band'] || '').match(/[Bn]\d+/);
+								if (!_cbm) { continue; }
+								if (_inact.indexOf(_cbm[0]) >= 0) { continue; }
+								if (new RegExp('\\b' + _cbm[0] + '\\b').test(mtext)) { continue; }
+								_inact.push(_cbm[0]);
+							}
+							if (_inact.length) {
+								_mh += _inact.map(function(b) {
+									return ' <span style="font-weight:normal;opacity:.65">+</span>' +
+										'<span class="btn cbi-button tginfo-band" style="opacity:.45"' +
+										' title="' + _('Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows') + '">' + b + '</span>';
+								}).join('');
+							}
+							/* ПЕРЕРИСОВКА ТОЛЬКО ПРИ ИЗМЕНЕНИИ. innerHTML на каждом опросе
+							   пересоздаёт элементы, и браузер сбрасывает таймер нативного
+							   тултипа - подсказки на кнопках диапазонов не успевали
+							   показаться никогда (замечено владельцем 19.08.2026). Строка
+							   меняется редко (смена несущих/дистанции), сравнение дёшево. */
+							if (view.getAttribute('data-mh') !== _mh) {
+								view.innerHTML = _mh;
+								view.setAttribute('data-mh', _mh);
+							}
 						}
 						else if (!view.textContent || !view.textContent.trim()) {
 							// ещё не было валидного значения -> стабильный placeholder,

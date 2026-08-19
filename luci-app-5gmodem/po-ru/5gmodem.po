@@ -4796,7 +4796,7 @@ msgid "Weak signal — try moving the router closer to a window or connecting an
 msgstr "Слабый сигнал — попробуйте переставить роутер ближе к окну или подключить внешнюю антенну"
 
 msgid "Antenna alignment"
-msgstr "Юстировка"
+msgstr "Юстировка антенны"
 
 msgid "Internet not working?"
 msgstr "Интернет не работает?"
@@ -4878,3 +4878,127 @@ msgstr "Слот eUICC сохранён — перечитайте список 
 
 msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
 msgstr "В каком SIM-слоте живёт чип eSIM. «Авто» — слот, активный в модеме сейчас. Задайте явно, если список профилей пуст при читаемом чипе — например, съёмная eSIM в слоте 1."
+
+msgid "No data"
+msgstr "Нет данных"
+
+msgid "signal-to-noise · aim for >10 dB"
+msgstr "сигнал/шум · желательно >10 dB"
+
+msgid "LTE power · better than -95 dBm"
+msgstr "мощность LTE · лучше -95 dBm"
+
+msgid "cell quality · better than -10 dB"
+msgstr "качество соты · лучше -10 dB"
+
+msgid "overall level"
+msgstr "общий уровень"
+
+msgid "Clear the log"
+msgstr "Сбросить лог"
+
+msgid "Best cells (by SINR)"
+msgstr "Лучшие соты (по SINR)"
+
+msgid "Click a row to set the target cell"
+msgstr "Клик по строке — выбрать целевую соту"
+
+msgid "Sector"
+msgstr "Сектор"
+
+msgid "Time"
+msgstr "Время"
+
+msgid "Page"
+msgstr "Стр."
+
+msgid "SINR over the last 30 seconds"
+msgstr "SINR за 30 секунд"
+
+msgid "The file is too big (up to ~1.5 MB)"
+msgstr "Файл великоват (до ~1.5 МБ)"
+
+msgid "Custom sound loaded"
+msgstr "Свой звук загружен"
+
+msgid "Sound"
+msgstr "Звук"
+
+msgid "Geiger (SINR)"
+msgstr "Гейгер (SINR)"
+
+msgid "RSRP tone"
+msgstr "Тон RSRP"
+
+msgid "Voice"
+msgstr "Голос"
+
+msgid "Upload a custom sound"
+msgstr "Загрузить свой звук"
+
+msgid "Preview"
+msgstr "Проба"
+
+msgid "Back to the default sound"
+msgstr "Возврат к звуку по умолчанию"
+
+msgid "Default sound"
+msgstr "Звук по умолчанию"
+
+msgid "Sound: on"
+msgstr "Звук: вкл"
+
+msgid "Sound: off"
+msgstr "Звук: выкл"
+
+msgid "Interval, s"
+msgstr "Интервал, с"
+
+msgid "excellent"
+msgstr "отлично"
+
+msgid "good"
+msgstr "хорошо"
+
+msgid "fair"
+msgstr "средне"
+
+msgid "poor"
+msgstr "плохо"
+
+msgid "RX spread"
+msgstr "Разброс RX"
+
+msgid "balance"
+msgstr "баланс"
+
+msgid "Log cleared"
+msgstr "Лог сброшен"
+
+msgid "Target cleared"
+msgstr "Цель сброшена"
+
+msgid "Target"
+msgstr "Цель"
+
+msgid "sector"
+msgstr "сектор"
+
+msgid "Sound on"
+msgstr "Звук включён"
+
+msgid "BS"
+msgstr "БС"
+
+msgid "Alignment"
+msgstr "Юстировка"
+
+
+msgid "Default (reconnect, then reboot the module)"
+msgstr "По умолчанию (переподключение, затем перезагрузка модуля)"
+
+msgid "Active carrier: this band is carrying your data right now"
+msgstr "Активная несущая: этот диапазон прямо сейчас передаёт ваши данные"
+
+msgid "Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows"
+msgstr "Несущая в резерве: сеть собрала этот диапазон в агрегацию, но сейчас он простаивает - включится, когда вырастет трафик"

@@ -1042,7 +1042,10 @@
    постоянное значение. */
 .tginfo-info .tginfo-connstatus { font-size: .92em; opacity: .8; }
 /* Диапазоны в строке режима - «кнопкой», как переключатели бендов (активный
-   вид). Это ПОКАЗ текущих бендов, не переключатель: pointer-events:none.
+   вид). Это ПОКАЗ текущих бендов, не переключатель - но pointer-events НЕ
+   отключаем: он глушил hover, и тултипы «активная/резервная несущая» не
+   показывались вовсе (замечено владельцем 19.08.2026). Кликать тут нечего -
+   обработчиков на чипах нет, а курсор help намекает, что подсказка есть.
    ВАЖНО: display НЕ трогаем - у proton2025 .btn это inline-flex с
    align-items:center, он центрирует текст ВЕРТИКАЛЬНО. Если сменить на
    inline-block, вылезает descender-зазор строки снизу (текст «прижат» кверху).
@@ -1057,8 +1060,7 @@
   font-size: .8em;
   line-height: 1.25;
   vertical-align: middle;
-  cursor: default;
-  pointer-events: none;
+  cursor: help;
 }
 .tginfo-info .tginfo-ip {
   font-variant-numeric: tabular-nums;

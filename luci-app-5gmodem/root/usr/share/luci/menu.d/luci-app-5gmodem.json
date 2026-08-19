@@ -49,7 +49,7 @@
 	},
 
 	"admin/modem/5gmodem/align": {
-		"title": "Юстировка",
+		"title": "Alignment",
 		"order": 25,
 		"action": {
 			"type": "view",
