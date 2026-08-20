@@ -760,12 +760,41 @@ heal() {
 		[ -n "$_h_lip" ] || _h_lip=$(printf '%s' "$_HDUMP" | jsonfilter \
 			-e "@.interface[@.interface=\"${_h_if}_4\"]['ipv4-address'][0].address" 2>/dev/null)
 		if [ -n "$_h_lip" ]; then
-			if [ ! -f "$HDIR/$_h_if.nodata" ]; then
-				: > "$HDIR/$_h_if.nodata"
-				rm -f "$HDIR/$_h_if.heal"
-				_ev "$_h_if: has an address ($_h_lip) but no traffic - looks like a carrier restriction, healing stopped"
+			# ИСКЛЮЧЕНИЕ: МОДЕМ СВАЛИЛСЯ В 2G. «Адрес есть, трафика нет» на
+			# GSM/EDGE - это не лимит оператора, а радио-отказ: LTE ушёл, модем
+			# перескочил на 2G, где данных фактически нет, и прежний вердикт
+			# останавливал лечение навсегда (живой случай 20.08.2026, SIM7100E
+			# ночью залип на EGSM 900 с «B-86» в карточке). Перезагрузка модуля
+			# возвращает LTE - лестница должна работать. Режим берём из свежего
+			# снимка метрик; протухший снимок решения не меняет.
+			_h_2g=""
+			_h_mk=$(echo "$_h_path" | tr -c 'A-Za-z0-9' '_')
+			_h_ms="/tmp/5gmodem_metrics_${_h_mk}.json"
+			if [ -s "$_h_ms" ]; then
+				_h_mst=$(cat "/tmp/5gmodem_metrics_${_h_mk}.stamp" 2>/dev/null)
+				case "$_h_mst" in
+					''|*[!0-9]*) ;;
+					*) if [ $(( $(uptime_s) - _h_mst )) -le 300 ]; then
+						case "$(jsonfilter -i "$_h_ms" -e '@.mode' 2>/dev/null)" in
+							*GSM*|*EDGE*|*GPRS*|2G*) _h_2g=1 ;;
+						esac
+					   fi ;;
+				esac
 			fi
-			continue
+			if [ -n "$_h_2g" ]; then
+				if [ ! -f "$HDIR/$_h_if.on2g" ]; then
+					: > "$HDIR/$_h_if.on2g"
+					_ev "$_h_if: modem dropped to 2G and data is dead - treating as a failure, healing continues"
+				fi
+			else
+				rm -f "$HDIR/$_h_if.on2g"
+				if [ ! -f "$HDIR/$_h_if.nodata" ]; then
+					: > "$HDIR/$_h_if.nodata"
+					rm -f "$HDIR/$_h_if.heal"
+					_ev "$_h_if: has an address ($_h_lip) but no traffic - looks like a carrier restriction, healing stopped"
+				fi
+				continue
+			fi
 		fi
 		rm -f "$HDIR/$_h_if.nodata"
 		# МОДЕМ ПОД ModemManager ПРОСТО ВЫКЛЮЧЕН - ВКЛЮЧАЕМ, А НЕ ЛЕЧИМ.
@@ -830,10 +859,37 @@ heal() {
 		# идём сразу на USB, без него - остаёмся на переподключении.
 		_h_hilink=""
 		[ "$(uci -q get "$CFG.$_h_sec.kind")" = "hilink" ] && _h_hilink=1
+		# AT-порт нужен и ступени 2 (CFUN), и гварду поиска ниже - берём один
+		# раз; переменная цикла, без сброса тащила бы порт ПРОШЛОГО модема.
+		_h_at=$(uci -q get "$CFG.$_h_sec.at_port")
 		if [ "$_h_next" = 2 ] && [ -z "$_h_hilink" ]; then
-			_h_at=$(uci -q get "$CFG.$_h_sec.at_port")
 			if [ -z "$_h_at" ] || [ ! -e "$_h_at" ]; then
 				if [ "$_h_cap" -ge 3 ]; then _h_next=3; else _h_next=1; fi
+			fi
+		fi
+		# МОДЕМ В АКТИВНОМ ПОИСКЕ СЕТИ - НЕ МЕШАЕМ. Перезагрузка модуля посреди
+		# сканирования отбрасывает регистрацию в начало: на слабом сигнале скан
+		# занимает дольше кулдауна, и лестница сама не давала модему
+		# зарегистрироваться (живой случай 20.08.2026: SIM7100E после смены
+		# режима сети, попытки 3/6 и 4/6 рвали каждый скан). CREG/CEREG stat=2 =
+		# «ищу сеть»: попытку НЕ считаем и ничего не делаем этот круг. Потолок -
+		# 12 минут непрерывного поиска (маркер .srch), дальше лечим как обычно:
+		# вечный поиск - сам по себе отказ. Проверка только перед ТЯЖЁЛЫМИ
+		# ступенями (reboot/power) и только при живом AT-порте.
+		if [ "$_h_next" -ge 2 ] && [ -z "$_h_hilink" ] && [ -n "$_h_at" ] && [ -e "$_h_at" ]; then
+			_h_reg=$(at_query "$_h_at" "AT+CEREG?" 5 3 2>/dev/null | tr -d '\r' \
+				| sed -n 's/.*+CEREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
+			[ -n "$_h_reg" ] || _h_reg=$(at_query "$_h_at" "AT+CREG?" 5 3 2>/dev/null | tr -d '\r' \
+				| sed -n 's/.*+CREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
+			if [ "$_h_reg" = "2" ]; then
+				_h_ss=$(cat "$HDIR/$_h_if.srch" 2>/dev/null)
+				case "$_h_ss" in ''|*[!0-9]*) _h_ss=$(uptime_s); printf '%s' "$_h_ss" > "$HDIR/$_h_if.srch" ;; esac
+				if [ $(( $(uptime_s) - _h_ss )) -lt 720 ]; then
+					_ev "healing $_h_if: modem is searching for a network - postponing the attempt"
+					continue
+				fi
+			else
+				rm -f "$HDIR/$_h_if.srch"
 			fi
 		fi
 		_h_n=$((_h_n + 1))

@@ -32,7 +32,39 @@ if echo "$MODEL" | grep -qE "7100|7500|7600"; then
 	# Берем строго строку, содержащую +CPSI:
 	T1=$(echo "$O" | grep "+CPSI:" | tr -d '\r')
 
-	if [ -n "$T1" ]; then
+	# СИСТЕМА - ПЕРВОЕ ПОЛЕ. Раскладка колонок у GSM/WCDMA другая, и прежний
+	# безусловный LTE-разбор на GSM-строке брал уровень сигнала как номер
+	# диапазона - карточка показывала бессмысленный «B-86» без единой метрики
+	# (живой случай 20.08.2026: SIM7100E ночью свалился с LTE на EGSM 900).
+	_SYS=$(echo "$T1" | sed 's/^+CPSI: *//' | awk -F, '{print $1}' | xargs)
+
+	if [ -n "$T1" ] && [ "$_SYS" = "GSM" ]; then
+		# +CPSI: GSM,Online,<MCC-MNC>,<LAC>,<CellID>,<bsic+band>,<RSSI>,...
+		MODE="GSM"
+		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
+		if [ -n "$T" ]; then
+			TAC_HEX=$(echo "$T" | sed 's/0x//g')
+			TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
+		fi
+		T=$(echo "$T1" | awk -F, '{print $5}' | xargs)
+		case "$T" in *[!0-9]*|'') ;; *) CID_DEC="$T"; CID_HEX=$(printf '%X' "$T" 2>/dev/null) ;; esac
+		# «34 EGSM 900» - подпись диапазона без выдуманного Bx
+		_gb=$(echo "$T1" | awk -F, '{print $6}' | sed 's/^[0-9]* *//' | xargs)
+		[ -n "$_gb" ] && { PBAND="$_gb"; MODE="GSM | $_gb"; }
+		T=$(echo "$T1" | awk -F, '{print $7}' | xargs)
+		case "$T" in -*[0-9]*) RSSI="$T" ;; esac
+	elif [ -n "$T1" ] && [ "$_SYS" = "WCDMA" ]; then
+		# Раскладку WCDMA-строки без живого образца не угадываем: берём только
+		# совпадающие у всех систем поля (LAC/CID) и честный ярлык режима.
+		MODE="WCDMA"
+		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
+		if [ -n "$T" ]; then
+			TAC_HEX=$(echo "$T" | sed 's/0x//g')
+			TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
+		fi
+		T=$(echo "$T1" | awk -F, '{print $5}' | xargs)
+		case "$T" in *[!0-9]*|'') ;; *) CID_DEC="$T"; CID_HEX=$(printf '%X' "$T" 2>/dev/null) ;; esac
+	elif [ -n "$T1" ]; then
 		# TAC (4-е поле, например: 0x0088)
 		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
 		if [ -n "$T" ]; then
