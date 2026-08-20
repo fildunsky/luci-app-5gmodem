@@ -28,14 +28,12 @@ URL=$(uci -q get 5gmodem.@5gmodem[0].apn_db_url)
 
 _tmp="/tmp/5gmodem_providers.$$"
 
+# Через общую лестницу net_fetch (lib.sh): прямая попытка, при неудаче -
+# повтор через локальный clash/mihomo (белые списки оператора режут прямые
+# запросы роутера, а прокси на нём же - живой).
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 _fetch() {
-	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL --max-time 60 "$URL" -o "$_tmp" 2>/dev/null
-	elif command -v wget >/dev/null 2>&1; then
-		wget -q -T 60 -O "$_tmp" "$URL" 2>/dev/null
-	else
-		return 1
-	fi
+	net_fetch 60 "$URL" "$_tmp"
 }
 
 # Формально валидная база: есть строки-данные с >=8 TAB-полей и правдоподобным

@@ -1327,3 +1327,75 @@ at_query() {
 	rm -f "$_aq_o"
 	return 0
 }
+
+# --- Загрузка из интернета с обходом через локальный прокси -------------------
+# Прямой исходящий трафик РОУТЕРА при операторских белых списках мёртв, хотя
+# на роутере крутится clash/mihomo и трафик клиентов ходит: tproxy перехватывает
+# только форвард из LAN, собственные запросы роутера идут мимо. Лестница
+# обкатана в tgnotify (Telegram в РФ): прямая попытка -> HTTP-порт из конфига
+# clash -> рантайм mihomo (спросить /configs, при закрытом порте открыть его
+# PATCH-ем; порт слушает только 127.0.0.1). Здесь та же лестница общим
+# помощником - для кнопки обновления приложения и базы APN (живой запрос
+# владельца EM9190, 19.08.2026: «виджеты обновляются через прокси, значит и
+# апдейтер должен»). tgnotify пока держит свою копию - объединить при случае.
+
+# HTTP-порт локального clash/mihomo; пусто и код 1, если его нет.
+net_proxy_port() {
+	_np_p=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+	case "$_np_p" in ''|0) ;; *) printf '%s' "$_np_p"; return 0 ;; esac
+	command -v curl >/dev/null 2>&1 || return 1
+	_np_s=$(sed -n "s/^ *secret *: *[\"']*\([^\"' ]*\).*/\1/p" \
+		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
+	_np_capi() {
+		if [ -n "$_np_s" ]; then
+			curl -s -m 3 -H "Authorization: Bearer $_np_s" "$@" 2>/dev/null
+		else
+			curl -s -m 3 "$@" 2>/dev/null
+		fi
+	}
+	_np_r=$(_np_capi "http://127.0.0.1:9090/configs" | jsonfilter -e '@["mixed-port"]' 2>/dev/null)
+	case "$_np_r" in ''|*[!0-9]*) return 1 ;; esac
+	if [ "$_np_r" = "0" ]; then
+		_np_capi -X PATCH "http://127.0.0.1:9090/configs" -d '{"mixed-port":7895}' -o /dev/null || return 1
+		_np_r=7895
+		logger -t 5gmodem "net: direct path is blocked - opened clash mixed-port 7895 (local API, 127.0.0.1 only)"
+	fi
+	printf '%s' "$_np_r"
+}
+
+# net_fetch <таймаут_с> <url> [файл] - в файл либо в stdout. Прямая попытка,
+# при неудаче повтор через локальный прокси: curl -x (умеет CONNECT для https),
+# без curl - wget с env-переменными (лучшее, что можно без него).
+net_fetch() {
+	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"
+	if [ -n "$_nf_o" ]; then
+		wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+		rm -f "$_nf_o" 2>/dev/null
+	else
+		_nf_b=$(wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+	fi
+	_nf_p=$(net_proxy_port) || return 1
+	[ -n "$_nf_p" ] || return 1
+	logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
+	if command -v curl >/dev/null 2>&1; then
+		if [ -n "$_nf_o" ]; then
+			curl -fsSL -m "$_nf_t" -x "http://127.0.0.1:$_nf_p" -o "$_nf_o" "$_nf_u" 2>/dev/null \
+				&& [ -s "$_nf_o" ] && return 0
+			rm -f "$_nf_o" 2>/dev/null; return 1
+		fi
+		_nf_b=$(curl -fsSL -m "$_nf_t" -x "http://127.0.0.1:$_nf_p" "$_nf_u" 2>/dev/null)
+		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+		return 1
+	fi
+	if [ -n "$_nf_o" ]; then
+		http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
+			wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+		rm -f "$_nf_o" 2>/dev/null; return 1
+	fi
+	_nf_b=$(http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
+		wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+	[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
+	return 1
+}

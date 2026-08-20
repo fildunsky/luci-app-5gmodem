@@ -15,7 +15,7 @@
 
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-app-5gmodem-2.4.21-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-app-5gmodem-2.4.22-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -37,7 +37,7 @@ apk add /tmp/lpac.apk --allow-untrusted
 
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-app-5gmodem_2.4.21-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-app-5gmodem_2.4.22-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
@@ -68,6 +68,7 @@ MBIM: менеджер пакетов удалит эти пакеты как о
 - **База APN обновляется кнопкой** — мировая база операторов (GNOME MBPI + AOSP) без переустановки приложения.
 - **Автоопределение портов** — AT-порт и сетевой интерфейс определяются сами; можно задать вручную.
 - **USB-свистки без AT-портов** (Huawei HiLink и родственники) тоже поддерживаются — см. ниже.
+- **Телеметрия для умного дома** — плоский JSON в `/tmp/5gmodem_tele.json` (сигнал, оператор, режим, агрегация, скорости, SMS) плюс опциональная публикация в MQTT с автообнаружением Home Assistant; см. [docs/telemetry.md](docs/telemetry.md).
 - **`5gtop`** — те же данные в терминале, когда вы в SSH, а не в браузере.
 
 

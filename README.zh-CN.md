@@ -12,13 +12,13 @@ OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-app-5gmodem-2.4.21-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-app-5gmodem-2.4.22-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
 apk add /tmp/luci-i18n-5gmodem-zh-cn.apk --allow-untrusted
 apk add luci-i18n-base-zh-cn
 ```
@@ -37,13 +37,13 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-app-5gmodem_2.4.21-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-app-5gmodem_2.4.22-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.21/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.22/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install luci-i18n-base-zh-cn
 ```
@@ -69,6 +69,7 @@ opkg install luci-i18n-base-zh-cn
 - **APN 数据库更新按钮**——无需重装应用即可刷新全球运营商数据库（GNOME MBPI + AOSP）。
 - **端口自动检测**——自动识别 AT 端口和网络接口；也可手动指定。
 - 支持**没有 AT 端口的 USB 上网卡**（华为 HiLink 及同类）——见下文。
+- **智能家居遥测**——`/tmp/5gmodem_tele.json` 中的扁平 JSON（信号、运营商、制式、载波聚合、速率、未读短信数），可选 MQTT 发布并支持 Home Assistant 自动发现；见 [docs/telemetry.md](docs/telemetry.md)。
 - **`5gtop`**——终端仪表盘，SSH 下无浏览器时使用，数据与网页一致。
 
 

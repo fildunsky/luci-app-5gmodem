@@ -9,6 +9,11 @@
 #   update.sh install   - download + install app (+ translation)
 #
 
+# Лестница обхода прокси (net_fetch) - из общей библиотеки: прямые запросы
+# роутера при белых списках мёртвы, а локальный clash их вывозит (запрос
+# владельца EM9190, 19.08.2026 - «апдейтер должен ходить как виджеты»).
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+
 REPO="fildunsky/luci-app-5gmodem"
 API="https://api.github.com/repos/$REPO/releases/latest"
 PAGE="https://github.com/$REPO/releases/latest"
@@ -57,7 +62,7 @@ installed_version() {
 	esac
 }
 
-api_json() { wget -qO- --timeout=15 "$API" 2>/dev/null; }
+api_json() { net_fetch 15 "$API"; }
 
 latest_tag() {
 	api_json | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
@@ -154,7 +159,7 @@ install)
 				fi
 				F="$TMP/$BASE.$EXT"
 				rm -f "$F"
-				if ! wget -qO "$F" --timeout=90 "$URL" 2>/dev/null; then
+				if ! net_fetch 90 "$URL" "$F"; then
 					echo '{"success":false,"error":"Download failed for '"$BASE"'"}'; return
 				fi
 				if [ "$PM" = apk ]; then
