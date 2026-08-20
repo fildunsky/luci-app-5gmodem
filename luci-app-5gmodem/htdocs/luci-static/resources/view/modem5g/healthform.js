@@ -72,6 +72,16 @@ return baseclass.extend({
 		var chk = function(id, on) {
 			return E('input', { 'id': id, 'type': 'checkbox', 'checked': on ? '' : null });
 		};
+		/* Резерв «только вручную»: помеченный линк не получает трафик
+		   автоматически - сторож держит его маршрут со штрафной метрикой,
+		   пока пользователь сам не сделает его первым (клик по карточке).
+		   Кейс: резервный Wi-Fi к смартфону, которого обычно нет в эфире. */
+		var manList = String(c.manual || '').split(/ +/).filter(function(t) { return t; });
+		var manRows = uplinks.map(function(o) {
+			var cb = E('input', { 'id': 'hw-man-' + o.iface, 'type': 'checkbox',
+				'data-iface': o.iface, 'checked': manList.indexOf(o.iface) >= 0 ? '' : null });
+			return row(cb, (o.sub && o.sub !== o.iface) ? (o.sub + ' (' + o.iface + ')') : o.iface);
+		});
 		/* Адреса проверки - стандартным списком LuCI (ui.DynamicList): строка на
 		   адрес, плюс/крестик, как у DNS-серверов в редактировании интерфейса.
 		   Бэкенд хранит их одной строкой через пробел - конвертируем на краях. */
@@ -121,8 +131,11 @@ return baseclass.extend({
 					row(E('select', { 'id': 'hw-fb', 'class': 'cbi-input-select' }, [
 						E('option', { 'value': 'restore', 'selected': c.failback !== 'demote' ? '' : null }, _('Return its priority')),
 						E('option', { 'value': 'demote', 'selected': c.failback === 'demote' ? '' : null }, _('Keep it last'))
-					]), _('When a link recovers'))
-				])
+					]), _('When a link recovers')),
+					row(E('span', { 'style': 'font-size:.85em;opacity:.7' },
+						_('A link marked below never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone.')),
+						E('strong', {}, _('Use only manually')))
+				].concat(manRows))
 			]),
 			healRows.length ? E('div', { 'class': 'hw-block', 'id': 'hw-blk-heal' }, [
 				E('table', { 'class': 'table hw-form' }, [
@@ -197,7 +210,14 @@ return baseclass.extend({
 				'interval=' + num('hw-int', 30),
 				'targets=' + (tgt || '77.88.8.8 1.1.1.1'),
 				'fail_n=' + num('hw-fail', 3),
-				'ok_n=' + num('hw-ok', 5)
+				'ok_n=' + num('hw-ok', 5),
+				'manual=' + (function() {
+					var m = [];
+					node.querySelectorAll('input[id^="hw-man-"]').forEach(function(cb) {
+						if (cb.checked) { m.push(cb.getAttribute('data-iface')); }
+					});
+					return m.join(' ');
+				})()
 			]).then(function() {
 				var heals = [];
 				node.querySelectorAll('select[id^="hw-heal-"]').forEach(function(sel) {

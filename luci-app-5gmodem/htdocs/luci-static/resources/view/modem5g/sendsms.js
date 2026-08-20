@@ -309,7 +309,17 @@ return view.extend({
 	},
 
 	handleGo: function(ev) {
-		let phn = document.getElementById('phonenumber').value;
+		let phn = document.getElementById('phonenumber').value.trim();
+		/* Префикс страны - НА ОТПРАВКЕ и только к 10-значному национальному
+		   номеру (9291067196 -> +79291067196). Раньше поле ПРЕДЗАПОЛНЯЛОСЬ
+		   префиксом, и сервисный номер уезжал как 7000100: модем честно слал
+		   «в никуда», а «SMS отправлено» выглядело ложью (живой случай
+		   МегаФон 000100, 20.08.2026). Короткие сервисные номера (любой
+		   длины, не равной 10) уходят как есть - как у sms_tool в консоли. */
+		if (uci.get('5gmodem', 'sms', 'prefix') == '1' && /^\d{10}$/.test(phn)) {
+			let pn = String(uci.get('5gmodem', 'sms', 'pnumber') || '').replace(/[^0-9+]/g, '');
+			phn = pn + phn;
+		}
 		let port = uci.get('5gmodem', 'sms', 'sendport');
 		/* Пауза между сообщениями группы. Значения в конфиге может не быть
 		   вовсе - тогда без запасного нуля получилось бы NaN, и setTimeout ниже
@@ -407,16 +417,7 @@ return view.extend({
 		let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 		if (gsm7Radio) gsm7Radio.checked = true;
 
-		let prefixnum;
-		let addprefix = uci.get('5gmodem', 'sms', 'prefix');
-		if ( addprefix == '1' )
-			{
-			prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
-			ovc.value = prefixnum;
-			}
-		else {
-			ovc.value = '';
-		}
+		ovc.value = '';
 
 		document.getElementById('phonenumber').focus();
 	},
@@ -528,7 +529,7 @@ return view.extend({
 	
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
 				showNumberHint ? E('div', { 'class': 'alert-message info sms-hint' }, [
-					E('p', {}, _("The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix.")),
+					E('p', {}, _("Enter the number as is: a 10-digit national number gets the country prefix from the settings automatically; short service numbers (like 000100) are sent unchanged.")),
 					E('div', { 'class': 'sms-hint-actions' }, [
 						E('button', {
 							'class': 'cbi-button cbi-button-neutral',
@@ -610,7 +611,8 @@ return view.extend({
 								'class': 'tg-field',
 								'type': 'text',
 								'id': 'phonenumber',
-								'value': prefixnum,
+								'value': '',
+								'placeholder': _('e.g. 9291067196 or a short number like 000100'),
 								'oninput': "this.value = this.value.replace(/[^0-9.]/g, '');",
 								'data-tooltip': _('Press [Delete] to delete the phone number'),
 								'keydown': function(ev) {
@@ -619,16 +621,7 @@ return view.extend({
 										let del = document.getElementById('phonenumber');
 											if (del) {
 												let ovc = document.getElementById('phonenumber');
-												let prefixnum;
-												let addprefix = uci.get('5gmodem', 'sms', 'prefix');
-												if ( addprefix == '1' )
-													{
-													prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
-													ovc.value = prefixnum;
-													}
-												else {
-													ovc.value = '';
-												}
+												ovc.value = '';
 												document.getElementById('phonenumber').focus();
 											}
 										}

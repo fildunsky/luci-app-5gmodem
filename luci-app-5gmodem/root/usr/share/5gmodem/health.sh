@@ -56,6 +56,18 @@ H_FO=$(conf failover)
 # demote - оставить В КОНЦЕ (упавший считается ненадёжным, пока пользователь
 # сам не вернёт его перетаскиванием/кликом - netpri set/order снимают метку).
 H_FB=$(conf failback); [ "$H_FB" = "demote" ] || H_FB="restore"
+# Линки «только вручную» (список имён через пробел): такой линк не получает
+# трафик автоматически - его default держится со штрафной метрикой, пока
+# пользователь сам не сделает его первым (клик/перетаскивание в ряду
+# приоритетов снимают штраф, потому что первым становится его порядок).
+# Кейс владельца пожелания: резервный STA-аплинк к смартфону - точки давно
+# нет в эфире, а «резерв» перехватывал трафик.
+H_MAN=$(conf manual)
+is_manual() { case " $H_MAN " in *" $1 "*) return 0 ;; esac; return 1; }
+# Гард «пробы блокированы фаерволом»: все прямые пробы легли, но через
+# локальный прокси (clash) интернет есть - значит, минимум один линк жив, а
+# прямой выход режет killswitch VPN. Лечить железо в этой ситуации нельзя.
+H_PG=$(conf proxy_guard); [ "$H_PG" = "0" ] || H_PG=1
 # Мастер-выключатель лечения: потолки на модемах - ЧТО можно делать, эта
 # настройка - можно ли ВООБЩЕ (галка блока «Лечить модем» в модалке).
 # ПО УМОЛЧАНИЮ ВКЛЮЧЕНО (решение владельца 19.08.2026): выключенное лечение
@@ -171,6 +183,21 @@ probe_dev() {
 				H_MS=$(printf '%s' "$_pd_tc" | awk '{printf "%d", $1 * 1000}')
 				return 0 ;;
 		esac
+	done
+	return 1
+}
+
+# Интернет через локальный прокси (clash)? Отвечает на вопрос «есть ли инет
+# ВООБЩЕ», а не «жив ли линк»: прокси не привязан к устройству. Успех при
+# провале всех прямых проб доказывает, что пробы режет фаервол: путь прокси
+# сам идёт через один из наших линков. -k осознанно: нужна достижимость цели,
+# а не подлинность сертификата на голом IP.
+probe_proxy() {
+	command -v curl >/dev/null 2>&1 || return 1
+	_pp_p=$(net_proxy_port) || return 1
+	for _pp_t in $H_TGT; do
+		case "$_pp_t" in *[A-Za-z]*) continue ;; esac
+		curl -sk -m 5 -x "http://127.0.0.1:$_pp_p" -o /dev/null "https://$_pp_t/" 2>/dev/null && return 0
 	done
 	return 1
 }
@@ -362,12 +389,16 @@ _move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - им
 
 # Применить/снять штрафы по текущим вердиктам. Вызывается после каждого круга.
 enforce() {
-	_e_anyup=""; _e_cnt=0
+	_e_anyup=""; _e_cnt=0; _e_min=""
 	for _e_f in "$HDIR"/*; do
 		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_cnt=$((_e_cnt + 1))
 		[ "$_e_st" = up ] && _e_anyup=1
+		# минимальная метрика конфига - «первый по порядку пользователя»;
+		# нужна ветке manual: первый = выбран вручную, штраф не действует
+		_e_mm=$(base_metric "${_e_f##*/}")
+		if [ -z "$_e_min" ] || [ "$_e_mm" -lt "$_e_min" ]; then _e_min="$_e_mm"; fi
 	done
 	for _e_f in "$HDIR"/*; do
 		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
@@ -401,12 +432,15 @@ enforce() {
 				_ev "$_e_if has no internet - steering traffic away (metric $_e_base -> $_e_want)"
 			fi
 			_move_defaults "$_e_dev" "$_e_want" "$_e_if"
-		elif [ "$_e_st" = up ] && [ -f "$_e_f.demoted" ] && [ "$H_FO" = "1" ] \
-		     && [ "$_e_cnt" -gt 1 ]; then
+		elif [ "$_e_st" = up ] && [ "$H_FO" = "1" ] && [ "$_e_cnt" -gt 1 ] \
+		     && { [ -f "$_e_f.demoted" ] || { is_manual "$_e_if" && [ "$_e_base" -gt "$_e_min" ]; }; }; then
 			# ожил, но по настройке остаётся В КОНЦЕ: держим штрафную метрику,
 			# пока пользователь сам не вернёт (netpri set/order снимают метку).
 			# С ЕДИНСТВЕННЫМ линком понижать некуда - метка не действует (иначе
 			# его default навсегда висел бы со штрафной метрикой без смысла).
+			# Линк «только вручную» держится здесь же ПОСТОЯННО, а не после
+			# падения: трафик он получает лишь когда пользователь сам сделал
+			# его первым (тогда его метрика минимальна и штраф не ставится).
 			_move_defaults "$_e_dev" $((_e_base + PEN)) "$_e_if"
 		else
 			# живой (или штрафовать нельзя/выключено) - вернуть родную метрику
@@ -507,6 +541,21 @@ heal() {
 		_h_cnt=$((_h_cnt + 1))
 		[ "$_h_st" = up ] && _h_anyup=1
 	done
+	# ПРОБЫ БЛОКИРОВАНЫ - НЕ ЛЕЧИМ ДАЖЕ ЕДИНСТВЕННЫЙ ЛИНК. Гвард «легли все»
+	# ниже единственный линк лечит всегда - и при killswitch VPN (прямой выход
+	# запрещён фаерволом) одномодемный роутер гонял бы лестницу до CFUN=1,1 по
+	# здоровому модему с живым интернетом. Проверка через прокси дорогая
+	# (curl), поэтому только на редком пути «ни одного живого вердикта».
+	if [ -z "$_h_anyup" ] && [ "$_h_cnt" -ge 1 ] && [ "$H_PG" = "1" ] && probe_proxy; then
+		_pg_last=$(cat /tmp/5gmodem_health.fwguard 2>/dev/null)
+		case "$_pg_last" in ''|*[!0-9]*) _pg_last=0 ;; esac
+		_pg_now=$(uptime_s)
+		if [ $((_pg_now - _pg_last)) -ge 1800 ] || [ "$_pg_now" -lt "$_pg_last" ]; then
+			uptime_s > /tmp/5gmodem_health.fwguard
+			_ev "all links fail direct probes, but the internet works via the local proxy - probes look firewall-blocked, healing suspended"
+		fi
+		return 0
+	fi
 	[ "$_h_cnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
 	for _h_f in "$HDIR"/*; do
 		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
@@ -1006,8 +1055,8 @@ getconf)
 		[ -n "$(uci -q get "$CFG.$_gc_s.path")" ] || continue
 		_gc_heal="$_gc_heal,\"$_gc_n\":\"$(uci -q get "$CFG.$_gc_s.heal")\""
 	done
-	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"heal":{%s}}\n' \
-		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "${_gc_heal#,}"
+	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"manual":"%s","proxy_guard":%s,"heal":{%s}}\n' \
+		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_MAN" "$H_PG" "${_gc_heal#,}"
 	;;
 setheal)
 	# setheal <iface> <''|none|ifup|reboot|power> - потолок лечения модема
@@ -1030,7 +1079,7 @@ setconf)
 	for _sc in "$@"; do
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
-			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown|manual|proxy_guard) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
 		esac
 	done
 	uci -q commit "$CFG"

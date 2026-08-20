@@ -4836,3 +4836,15 @@ msgstr "活动载波：此频段当前正在承载您的数据"
 
 msgid "Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows"
 msgstr "待机载波：网络已将此频段加入载波聚合但当前空闲——流量增大时会激活"
+
+msgid "Enter the number as is: a 10-digit national number gets the country prefix from the settings automatically; short service numbers (like 000100) are sent unchanged."
+msgstr "直接输入号码：10 位国内号码会自动加上设置中的国家前缀；短服务号码（如 000100）按原样发送。"
+
+msgid "e.g. 9291067196 or a short number like 000100"
+msgstr "例如 9291067196，或 000100 这类短号码"
+
+msgid "A link marked below never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "下方勾选的链路不会自动承载流量——需要使用时，点击其卡片将它设为第一位。适合手机 Wi-Fi 热点这类备用链路。"
+
+msgid "Use only manually"
+msgstr "仅手动使用"

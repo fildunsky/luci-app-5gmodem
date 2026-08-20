@@ -5002,3 +5002,15 @@ msgstr "Активная несущая: этот диапазон прямо с
 
 msgid "Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows"
 msgstr "Несущая в резерве: сеть собрала этот диапазон в агрегацию, но сейчас он простаивает - включится, когда вырастет трафик"
+
+msgid "Enter the number as is: a 10-digit national number gets the country prefix from the settings automatically; short service numbers (like 000100) are sent unchanged."
+msgstr "Вводите номер как есть: 10-значный национальный номер автоматически получит код страны из настроек; короткие сервисные номера (вроде 000100) отправляются без изменений."
+
+msgid "e.g. 9291067196 or a short number like 000100"
+msgstr "например 9291067196 или короткий номер вроде 000100"
+
+msgid "A link marked below never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "Отмеченный ниже линк никогда не получает трафик автоматически - чтобы им воспользоваться, сделайте его первым кликом по карточке. Удобно для резерва вроде Wi-Fi к смартфону."
+
+msgid "Use only manually"
+msgstr "Использовать только вручную"
