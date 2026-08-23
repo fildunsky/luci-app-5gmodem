@@ -101,7 +101,7 @@ menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|applyset|menuflush}" >&2
 	exit 1
 	;;
 esac

@@ -290,7 +290,18 @@ return view.extend({
 				   /tmp/.uci (uci -c не песочница), поэтому granted-скрипт
 				   коммитит их обычным `uci commit` и сбрасывает кэш меню
 				   (гейт вкладки Юстировки). Никакого uci.apply с rollback. */
-				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null).then(function() {
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null).then(function(_res) {
+					/* СТАРЫЙ БЭКЕНД БЕЗ ВЕРБА applyset. Обновили только htdocs
+					   (наш обычный способ раскатки правок страниц) - и мгновенное
+					   сохранение молча переставало применять: setopt.sh падал в
+					   ветку usage с кодом 1, ошибки нет, коммита тоже. Ловим по
+					   коду возврата и доводим дело штатным применением LuCI,
+					   чтобы правка не осталась висеть непринятой. */
+					if (_res && _res.code) {
+						return ui.changes.apply(true);
+					}
+					return null;
+				}).then(function() {
 					/* Коммит прошёл МИМО LuCI - её индикатор «непримененных
 					   изменений» сам об этом не узнает и продолжает висеть.
 					   Перечитываем staged-список с сервера (после commit он
@@ -617,7 +628,46 @@ return view.extend({
 		});
 	},
 
-	handleSaveApply: null,
+	/* КНОПКА «Сохранить и применить» - СТРАХОВОЧНАЯ СЕТЬ НАД МГНОВЕННЫМ
+	   СОХРАНЕНИЕМ, а не возврат к старому порядку.
+	   Мгновенное применение (autoSave выше) остаётся: обычно нажимать нечего.
+	   Но у него есть пути отказа, и без кнопки они превращались в тупик:
+	   правка застревала в staged-дельте uci, LuCI показывала «непринятые
+	   изменения», а применить их на странице было НЕЧЕМ (отчёт владельца
+	   23.08.2026 - список из десятка uci set висел непринятым). Отказать
+	   мгновенное сохранение может как минимум когда:
+	     - установлен старый setopt.sh без верба applyset (обновили только
+	       htdocs, бэкенд прежний) - commit не делает никто;
+	     - вызов бэкенда не прошёл (ACL, занятый rpcd, таймаут) - ошибку
+	       глотал resolveDefault.
+	   Поэтому: одна кнопка «Сохранить и применить». Reset скрыт намеренно -
+	   при мгновенном сохранении откатывать уже нечего. */
 	handleSave: null,
-	handleReset: null
+	handleReset: null,
+	handleSaveApply: function(ev) {
+		return this.handleSave_(ev);
+	},
+	/* Своя реализация вместо унаследованной: та зовёт save() у всех .cbi-map
+	   на странице, а нам после сохранения нужно ПРОВЕРИТЬ, что дельта
+	   действительно применилась, и если нет - доприменить штатным способом
+	   LuCI (ui.changes.apply). Проверка дешёвая (одно чтение списка). */
+	handleSave_: function(ev) {
+		var tasks = [];
+		document.getElementById('maincontent')
+			.querySelectorAll('.cbi-map').forEach(function(map) {
+				tasks.push(L.dom.callClassMethod(map, 'save'));
+			});
+		return Promise.all(tasks).then(function() {
+			return uci.changes();
+		}).then(function(ch) {
+			var n = 0;
+			for (var k in ch) { n += (ch[k] || []).length; }
+			/* Наш быстрый путь справился - применять больше нечего. */
+			if (!n) { return; }
+			/* Не справился: доводим дело штатным механизмом LuCI. Он умеет
+			   и подтверждение с откатом - для настроек приложения это
+			   безопасно (сетевые интерфейсы страница не трогает). */
+			return ui.changes.apply(true);
+		});
+	}
 });
