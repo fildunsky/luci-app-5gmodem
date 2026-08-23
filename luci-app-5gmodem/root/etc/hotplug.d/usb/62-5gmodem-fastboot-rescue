@@ -27,7 +27,6 @@ case "$PRODUCT" in
 	5c6/9008/*) exit 0 ;;
 esac
 
-command -v fastboot >/dev/null 2>&1 || exit 0
 [ "$(uci -q get 5gmodem.@5gmodem[0].fastboot_rescue)" = "0" ] && exit 0
 
 _d="/sys$DEVPATH"
@@ -72,18 +71,50 @@ printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 # несколько секунд, чтобы доподнять fastboot-стек
 (
 	sleep 3
-	_ser=$(cat "$_d/serial" 2>/dev/null)
-	if [ -n "$_ser" ] && fastboot devices 2>/dev/null | grep -q "^$_ser"; then
-		logger -t 5gmodem "fastboot-rescue: $_id ($_ser) is stuck in the fastboot bootloader - sending fastboot reboot"
-		fastboot -s "$_ser" reboot >/dev/null 2>&1
-	else
-		# серийника нет или не совпал - шлём без адреса, только когда
-		# устройство в fastboot ровно одно (иначе рискуем чужим)
+	# ПУТЬ 1 - бинарь fastboot, если пользователь его принёс (читает ответ
+	# устройства, надёжнее). Пакета в штатных фидах OpenWrt нет.
+	if command -v fastboot >/dev/null 2>&1; then
+		_ser=$(cat "$_d/serial" 2>/dev/null)
+		if [ -n "$_ser" ] && fastboot devices 2>/dev/null | grep -q "^$_ser"; then
+			logger -t 5gmodem "fastboot-rescue: $_id ($_ser) is stuck in the fastboot bootloader - sending fastboot reboot"
+			fastboot -s "$_ser" reboot >/dev/null 2>&1
+			exit 0
+		fi
 		if [ "$(fastboot devices 2>/dev/null | wc -l)" = "1" ]; then
 			logger -t 5gmodem "fastboot-rescue: $_id is stuck in the fastboot bootloader - sending fastboot reboot"
 			fastboot reboot >/dev/null 2>&1
+			exit 0
 		fi
 	fi
+	# ПУТЬ 2 - БЕЗ БИНАРЯ. Команда fastboot-протокола - это голая ASCII-строка
+	# одним bulk-transfer в OUT-endpoint (спецификация протокола: U-Boot
+	# doc/android/fastboot-protocol, Android fastboot/README). Такой transfer
+	# умеет usb-serial: биндим generic на единственный ff-интерфейс загрузчика
+	# (штатный new_id, как в usbports.sh), пишем «reboot» в появившийся tty -
+	# это и есть один bulk OUT. Ответ OKAY не читаем: устройство перезагружается.
+	# Динамический new_id живёт до перезагрузки роутера - безопасно: pid
+	# ЗАГРУЗЧИКА всегда отличается от pid рабочей композиции, рабочему модему
+	# этот бинд не достанется.
+	[ -d /sys/bus/usb-serial/drivers/generic ] || {
+		logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but neither the fastboot binary nor usb-serial-generic is available - cannot rescue"
+		exit 0
+	}
+	echo "${_id%%:*} ${_id##*:} ff" > /sys/bus/usb-serial/drivers/generic/new_id 2>/dev/null
+	_tty=""
+	for _w in 1 2 3 4 5; do
+		for _t in "$_d":*/ttyUSB*; do
+			[ -e "$_t" ] && { _tty=$(basename "$_t"); break; }
+		done
+		[ -n "$_tty" ] && break
+		sleep 1
+	done
+	if [ -z "$_tty" ]; then
+		logger -t 5gmodem "fastboot-rescue: $_id - generic usb-serial did not attach to the bootloader interface"
+		exit 0
+	fi
+	stty -F "/dev/$_tty" raw -echo 2>/dev/null
+	logger -t 5gmodem "fastboot-rescue: $_id is stuck in the fastboot bootloader - sending protocol 'reboot' via /dev/$_tty (no fastboot binary needed)"
+	printf 'reboot' > "/dev/$_tty" 2>/dev/null
 ) >/dev/null 2>&1 </dev/null &
 
 exit 0
