@@ -1,0 +1,89 @@
+#!/bin/sh
+# Модем застрял в ЗАГРУЗЧИКЕ fastboot - вывести его в нормальный режим.
+#
+# ЗАЧЕМ. Часть модулей оказывается в fastboot не по воле пользователя: на
+# плате Huasifei WH3000 Pro (слот M.2) пин 67 прижат к земле, и DW5821e уходит
+# в загрузчик ПРИ КАЖДОЙ ЗАГРУЗКЕ роутера - без автокоманды модем не работает
+# вообще (живой отчёт 23.08.2026, 413c:81d6). Принцип «прошивочные режимы - не
+# наша зона» не нарушается: мы никого В загрузчик не переводим, только выводим
+# ИЗ него командой fastboot reboot - это штатный выход без записи чего-либо.
+#
+# EDL (05c6:9008) НЕ трогаем: это аварийный режим Qualcomm, fastboot-протокол
+# там не действует, а устройство в EDL часто держат намеренно для прошивки.
+#
+# Предохранители:
+#   - только композиция fastboot: единственный интерфейс ff/42/03 без драйвера
+#     (или известные vid:pid загрузчиков рядом с рабочими модемами);
+#   - не лезем, если на роутере уже работает чей-то fastboot/edl-процесс
+#     (человек прошивает модуль - вырвать устройство из-под него нельзя);
+#   - не чаще раза в 60 c и не больше 3 попыток на адрес за загрузку: если
+#     модуль возвращается в загрузчик мгновенно, бесконечный цикл не нужен;
+#   - выключатель: uci set 5gmodem.@5gmodem[0].fastboot_rescue='0'.
+
+[ "$ACTION" = "add" ] || exit 0
+[ "$DEVTYPE" = "usb_device" ] || exit 0
+
+case "$PRODUCT" in
+	5c6/9008/*) exit 0 ;;
+esac
+
+command -v fastboot >/dev/null 2>&1 || exit 0
+[ "$(uci -q get 5gmodem.@5gmodem[0].fastboot_rescue)" = "0" ] && exit 0
+
+_d="/sys$DEVPATH"
+[ -f "$_d/idVendor" ] || exit 0
+_id="$(cat "$_d/idVendor" 2>/dev/null):$(cat "$_d/idProduct" 2>/dev/null)"
+
+_is_fb=0
+case "$_id" in
+	413c:81e1|413c:81e6|413c:81d6|1199:9070) _is_fb=1 ;;
+	*)
+		if [ "$(cat "$_d/bNumInterfaces" 2>/dev/null | tr -d ' ')" = "1" ]; then
+			for _i in "$_d":*.0; do
+				[ -f "$_i/bInterfaceSubClass" ] || continue
+				[ "$(cat "$_i/bInterfaceClass" 2>/dev/null)" = "ff" ] || continue
+				[ "$(cat "$_i/bInterfaceSubClass" 2>/dev/null)" = "42" ] || continue
+				[ "$(cat "$_i/bInterfaceProtocol" 2>/dev/null)" = "03" ] || continue
+				[ -e "$_i/driver" ] && continue
+				_is_fb=1
+			done
+		fi ;;
+esac
+[ "$_is_fb" = "1" ] || exit 0
+
+# кто-то уже работает с загрузчиком - не вмешиваемся
+if ps w 2>/dev/null | grep -v grep | grep -qE '[f]astboot (flash|boot|erase|oem|update)|[e]dl(\.py)? '; then
+	logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but a flashing process is running - leaving it alone"
+	exit 0
+fi
+
+_bp=$(basename "$DEVPATH")
+_mark="/tmp/5gmodem_fbrescue_$(echo "$_bp" | tr -c 'A-Za-z0-9' '_')"
+_now=$(cut -d. -f1 /proc/uptime)
+_last=0; _cnt=0
+[ -f "$_mark" ] && read -r _last _cnt < "$_mark"
+case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
+case "$_cnt" in ''|*[!0-9]*) _cnt=0 ;; esac
+[ $((_now - _last)) -ge 60 ] || exit 0
+[ "$_cnt" -lt 3 ] || exit 0
+printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
+
+# фоном: hotplug-обработчики обязаны отвечать быстро, а устройству нужно
+# несколько секунд, чтобы доподнять fastboot-стек
+(
+	sleep 3
+	_ser=$(cat "$_d/serial" 2>/dev/null)
+	if [ -n "$_ser" ] && fastboot devices 2>/dev/null | grep -q "^$_ser"; then
+		logger -t 5gmodem "fastboot-rescue: $_id ($_ser) is stuck in the fastboot bootloader - sending fastboot reboot"
+		fastboot -s "$_ser" reboot >/dev/null 2>&1
+	else
+		# серийника нет или не совпал - шлём без адреса, только когда
+		# устройство в fastboot ровно одно (иначе рискуем чужим)
+		if [ "$(fastboot devices 2>/dev/null | wc -l)" = "1" ]; then
+			logger -t 5gmodem "fastboot-rescue: $_id is stuck in the fastboot bootloader - sending fastboot reboot"
+			fastboot reboot >/dev/null 2>&1
+		fi
+	fi
+) >/dev/null 2>&1 </dev/null &
+
+exit 0

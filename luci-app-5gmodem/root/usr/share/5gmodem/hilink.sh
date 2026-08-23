@@ -244,11 +244,109 @@ _human() {
 # ConnectionStatus -> есть ли соединение. 901 = подключено.
 conn_up() { [ "$1" = "901" ]; }
 
+# --- ZTE (MF79 и родня): goform-API ------------------------------------------
+#
+# У ZTE-стиков не Huawei-XML, а /goform/goform_get_cmd_process с JSON-ответом.
+# Два обязательных заголовка: Referer на index.html и X-Requested-With - без
+# них прошивка отвечает {"result":"failure"} (проверено сообществом на MF79U).
+# Чтение метрик доступно без логина; операции записи (подключение, ребут) на
+# части прошивок требуют сессии - шлём best-effort, отказ безвреден.
+_zte_get() {   # $1 - адрес, $2 - список cmd через запятую
+	_zg_src=$(_srcip_for "" "$1")
+	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
+		-H "Referer: http://$1/index.html" \
+		-H "X-Requested-With: XMLHttpRequest" \
+		"http://$1/goform/goform_get_cmd_process?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
+}
+
+_zte_set() {   # $1 - адрес, $2 - тело goformId=...
+	_zs_src=$(_srcip_for "" "$1")
+	curl -s --max-time 8 ${_zs_src:+--interface "$_zs_src"} -A "$UA" \
+		-H "Referer: http://$1/index.html" \
+		-H "X-Requested-With: XMLHttpRequest" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "isTest=false&$2" \
+		"http://$1/goform/goform_set_cmd_process" 2>/dev/null
+}
+
+_zj() { printf '%s' "$1" | jsonfilter -e "@.$2" 2>/dev/null; }
+
+# vid:pid модема по usb-пути (или активного) - для развилки Huawei/ZTE
+_vidpid_for() {
+	_vf_p="$1"
+	[ -n "$_vf_p" ] || _vf_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	uci -q get "$CFG.m_$(echo "$_vf_p" | sed 's/[^A-Za-z0-9]/_/g').vidpid"
+}
+
+zte_metrics_json() {
+	_p="$1"
+	_a=$(_addr_for "$_p") || return 1
+	_r=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
+	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
+	# Huawei-ветки: вызывающий отдаст прошлый снимок).
+	case "$_r" in *modem_main_state*|*ppp_status*) ;; *) return 1 ;; esac
+	_model="ZTE"
+	_ntype=$(_zj "$_r" network_type)
+	_op=$(_zj "$_r" network_provider_fullname)
+	[ -n "$_op" ] || _op=$(_zj "$_r" network_provider)
+	_bars=$(_zj "$_r" signalbar | tr -cd '0-9')
+	_pct=""; [ -n "$_bars" ] && _pct=$(( _bars * 20 )) && [ "$_pct" -gt 100 ] && _pct=100
+	_rsrp=$(_zj "$_r" lte_rsrp | tr -cd '0-9-')
+	_rsrq=$(_zj "$_r" lte_rsrq | tr -cd '0-9.-')
+	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
+	_rssi=$(_zj "$_r" lte_rssi | tr -cd '0-9-')
+	[ -n "$_rssi" ] || _rssi=$(_zj "$_r" rssi | tr -cd '0-9-')
+	_cid_hex=$(_zj "$_r" cell_id)
+	_cid=""; [ -n "$_cid_hex" ] && _cid=$(printf '%d' "0x$_cid_hex" 2>/dev/null)
+	_lac=$(_zj "$_r" lac_code)
+	_mcc=$(_zj "$_r" rmcc); [ -n "$_mcc" ] || _mcc=$(_zj "$_r" hmcc)
+	_mnc=$(_zj "$_r" rmnc); [ -n "$_mnc" ] || _mnc=$(_zj "$_r" hmnc)
+	_wanip=$(_zj "$_r" wan_ipaddr)
+	_imei=$(_zj "$_r" imei)
+	_imsi=$(_zj "$_r" sim_imsi)
+	_iccid=$(_zj "$_r" iccid)
+	_fw=$(_zj "$_r" wa_inner_version)
+	_phone=$(_zj "$_r" msisdn)
+	case "$_fw" in MF*) _model="ZTE ${_fw%%V*}" ;; esac
+	_pps=$(_zj "$_r" ppp_status)
+	_reg=0
+	if [ "$_pps" = "ppp_connected" ]; then
+		if [ -n "$_mcc" ] && [ "$_mcc" = "$(_zj "$_r" hmcc)" ]; then _reg=1; else _reg=5; fi
+		[ -z "$(_zj "$_r" hmcc)" ] && _reg=1
+	fi
+	_csq=""
+	if [ -n "$_rssi" ]; then
+		_csq=$(( ( _rssi + 113 ) / 2 ))
+		[ "$_csq" -lt 0 ] && _csq=0; [ "$_csq" -gt 31 ] && _csq=31
+	fi
+	printf '{'
+	printf '"backend":"hilink",'
+	printf '"cport":"%s",' "$_a"
+	printf '"protocol":"HiLink (web API)",'
+	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"imei":"%s","imsi":"%s","iccid":"%s",' "$_imei" "$_imsi" "$_iccid"
+	printf '"firmware":"%s","phone":"%s",' "$(jsafe "$_fw")" "$(jsafe "$_phone")"
+	printf '"operator_name":"%s",' "$(jsafe "$_op")"
+	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
+	printf '"registration":"%s",' "$_reg"
+	printf '"mode":"%s",' "$(jsafe "$_ntype")"
+	printf '"signal":"%s",' "$_pct"
+	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
+		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
+	printf '"cid_dec":"%s","cid_hex":"%s","lac_hex":"%s",' "$_cid" "$_cid_hex" "$_lac"
+	printf '"ipaddr":"%s",' "$_wanip"
+	printf '"csq":"%s",' "$_csq"
+	printf '"conn_status":"%s"' "$_pps"
+	printf '}\n'
+}
+
 # --- метрики В НАШЕМ ФОРМАТЕ -------------------------------------------------
 #
 # Ключи те же, что у 5gmodem.sh: страницы не должны знать, кем добыты данные.
 metrics_json() {
 	_p="$1"
+	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
+	case "$(_vidpid_for "$_p")" in 19d2:*) zte_metrics_json "$_p"; return $? ;; esac
 	_inf=$(api_get /api/device/information "$_p")
 	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
 	# сессию и повторил на пустой ответ). Если ВСЁ РАВНО пусто - модем недоступен:
@@ -782,17 +880,35 @@ case "$1" in
 		_r=$(api_get /api/device/basic_information "$2")
 		case "$_r" in
 			*'<classify>'*) printf '{"hilink":1,"addr":"%s","classify":"%s"}\n' \
-				"$_a" "$(printf '%s' "$_r" | xval classify)" ;;
+				"$_a" "$(printf '%s' "$_r" | xval classify)" ; exit 0 ;;
+		esac
+		# не Huawei - вдруг ZTE goform (MF79 и родня)
+		_r=$(_zte_get "$_a" modem_main_state)
+		case "$_r" in
+			*modem_main_state*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a" ;;
 			*) printf '{"hilink":0,"addr":"%s"}\n' "$_a" ;;
 		esac
 		;;
 	json|metrics) metrics_json "$2" ;;
 	addr)        _addr_for "$2" ;;
 	get)         api_get "$2" "$3" ;;
-	# Подключить/отключить передачу данных.
-	connect)     api_post /api/dialup/mobile-dataswitch "<dataswitch>1</dataswitch>" "$2" ;;
-	disconnect)  api_post /api/dialup/mobile-dataswitch "<dataswitch>0</dataswitch>" "$2" ;;
-	reboot)      api_post /api/device/control "<Control>1</Control>" "$2" ;;
+	# Подключить/отключить передачу данных. У ZTE - goform, best-effort
+	# (часть прошивок требует веб-логина; отказ безвреден).
+	connect)
+		case "$(_vidpid_for "$2")" in
+			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=CONNECT_NETWORK" >/dev/null ;;
+			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>1</dataswitch>" "$2" ;;
+		esac ;;
+	disconnect)
+		case "$(_vidpid_for "$2")" in
+			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=DISCONNECT_NETWORK" >/dev/null ;;
+			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>0</dataswitch>" "$2" ;;
+		esac ;;
+	reboot)
+		case "$(_vidpid_for "$2")" in
+			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=REBOOT_DEVICE" >/dev/null ;;
+			*) api_post /api/device/control "<Control>1</Control>" "$2" ;;
+		esac ;;
 	# Переключить композицию USB.
 	#
 	# ЗАЧЕМ. Часть HiLink-модемов умеет отдавать последовательные AT-порты - в

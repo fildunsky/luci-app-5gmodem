@@ -27,8 +27,12 @@ is_hilink() {   # $1 - usb-путь
 	# (qmi_wwan) под тем же vid:pid, и структурная проверка ниже корректно
 	# отправит её НЕ сюда, а обычным путём (QMI). Поэтому именно структура, а
 	# не безусловный whitelist (Cudy TR3000, 17-18.08.2026).
+	# 19d2:* - ZTE-стики (MF79 и родня): в RNDIS-композиции это сетевая карта
+	# со своим NAT (192.168.0.1) без tty и cdc-wdm - HiLink-класс, метрики по
+	# goform (hilink.sh, ветка zte). В debug-композиции у них появляются AT-
+	# порты, и структурная проверка корректно уводит их обычным путём.
 	case "$_ih_id" in
-		12d1:*|05c6:90b4)
+		12d1:*|05c6:90b4|19d2:*)
 			_ih_j=$("$RES/listmodems.sh" 2>/dev/null)
 			_ih_tty=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)
 			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
