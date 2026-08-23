@@ -1399,3 +1399,29 @@ net_fetch() {
 	[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 	return 1
 }
+
+# Аплинки ВНЕ зоны wan. Роутер с единственным портом держит интернет на
+# LAN-интерфейсе (DHCP-клиент в зоне lan, живой случай: Odroid C2 с одним
+# eth0) - в зоне wan его нет, и ряд приоритетов со сторожем его не видели.
+# Признак аплинка - default-маршрут: у обычного статического lan его не
+# бывает, поэтому на роутерах с отдельным wan-портом список не меняется.
+# Виртуальные обёртки (tun/wg/zt...) не считаем: их default - туннель ПОВЕРХ
+# аплинка, двигать их метрику из ряда приоритетов бессмысленно и вредно.
+# $1 - сети зоны wan (через пробел): уже учтённые не повторяем.
+extra_uplink_nets() {
+	_eu_wan=" $1 "
+	_eu_dump=$(ubus call network.interface dump 2>/dev/null)
+	[ -n "$_eu_dump" ] || return 0
+	ip -4 route show default 2>/dev/null \
+		| sed -n 's/.* dev \([^ ]*\).*/\1/p' | sort -u | while read -r _eu_dev; do
+		case "$_eu_dev" in
+			tun*|tap*|wg*|zt*|vti*|xfrm*|gre*|tailscale*) continue ;;
+		esac
+		_eu_if=$(printf '%s' "$_eu_dump" \
+			| jsonfilter -e "@.interface[@.l3_device=\"$_eu_dev\"].interface" 2>/dev/null | head -1)
+		[ -n "$_eu_if" ] || continue
+		case "$_eu_if" in loopback) continue ;; esac
+		case "$_eu_wan" in *" $_eu_if "*) continue ;; esac
+		printf '%s\n' "$_eu_if"
+	done
+}

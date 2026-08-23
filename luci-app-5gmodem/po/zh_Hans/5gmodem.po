@@ -4848,3 +4848,18 @@ msgstr "下方勾选的链路不会自动承载流量——需要使用时，点
 
 msgid "Use only manually"
 msgstr "仅手动使用"
+
+msgid "Transmission rank: the network is sending %d parallel data streams right now"
+msgstr "传输秩：网络此刻正在发送 %d 路并行数据流"
+
+msgid "Receive chains: %d of %d antenna ports hear the network (details in the Antenna ports table)"
+msgstr "接收链路：%d/%d 个天线端口收到网络信号（详见“天线端口”表格）"
+
+msgid "backend said \"%s\" for protocol \"%s\""
+msgstr "后端返回 \"%s\"（协议 \"%s\"）"
+
+msgid "empty backend reply"
+msgstr "后端返回为空"
+
+msgid "Details are in the system log (logread, tag 5gmodem)."
+msgstr "详情见系统日志（logread，标签 5gmodem）。"

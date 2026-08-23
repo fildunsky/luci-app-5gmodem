@@ -500,3 +500,5 @@ elif echo "$PVCUT" | grep -q "Driver=cdc_ether"
 then
     PROTO="ecm"
 fi
+
+. "$RES/modem/usb/_quectel_qrsrp"

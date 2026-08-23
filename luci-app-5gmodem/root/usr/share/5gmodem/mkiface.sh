@@ -793,7 +793,14 @@ case "$PROTO" in
 		;;
 esac
 
-[ -n "$IDEV" ] || { json nomodem "$PROTO" ""; exit 1; }
+# Причину отказа - в журнал: страница показывает общее «модем не найден», и
+# без этой строки кейс «не удалось создать интерфейс» неразбираем по отчёту
+# (живой случай: MV31-W на вендорской прошивке, недели без диагноза).
+[ -n "$IDEV" ] || {
+	logger -t 5gmodem "mkiface: cannot create interface for proto '$PROTO': no control device (cdc-wdm='$DEV', at-port='$ATP', modem path='$AMP')"
+	json nomodem "$PROTO" ""
+	exit 1
+}
 
 # Стабильный sysfs-путь ИНТЕРФЕЙСА-контроллера (родитель cdc-wdm), напр.
 # /sys/devices/.../1-1.2/1-1.2:1.4. Он привязан к ТОПОЛОГИИ USB (путь + номер
@@ -903,6 +910,24 @@ esac
 # регистрации мёртв («Не поддерживаемый тип протокола»).
 case "$PROTO" in
 	qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
+esac
+
+# СТАНДАРТНЫЙ ПРОТО (mbim/qmi/ncm/modemmanager/...) ТОЖЕ МОЖЕТ БЫТЬ НЕИЗВЕСТЕН
+# NETIFD: на чистой ОС пакеты протоколов ставятся ПОСЛЕ его старта, обработчики
+# он сканирует только на старте - и свежесозданный интерфейс мёртв с «Не
+# поддерживаемый тип протокола» до рестарта сети, хотя установлено всё (живой
+# случай: Nokia XG-040G + Compal VOS 5G в MBIM, недели поисков). Момент тот же,
+# что и для наших прото выше: человек настраивает модем прямо сейчас и короткий
+# обрыв ждёт. Вне этого окна блок не срабатывает никогда: после любой
+# перезагрузки netifd знает все установленные обработчики.
+case "$PROTO" in
+	fibocom|qmiraw) ;;
+	*)
+		if [ -n "$PROTO" ] && [ -f "/lib/netifd/proto/$PROTO.sh" ] \
+		   && ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
+			logger -t 5gmodem "mkiface: proto $PROTO was installed after netifd started - restarting the network to register it (interfaces will briefly drop)"
+			/etc/init.d/network restart >/dev/null 2>&1
+		fi ;;
 esac
 
 # в зону wan - для NAT/forwarding (см. _fw_zone_add выше)

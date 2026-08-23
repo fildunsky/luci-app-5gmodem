@@ -1376,7 +1376,15 @@ return view.extend({
 					   состояние с роутера, поэтому показывают уже новое. */
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
-					ui.addNotification(null, E('p', _('No modem found to create an interface for')), 'error');
+					/* Причина отказа - в тексте, а не общее «модем не найден»:
+					   бэкенд пишет подробности в системный журнал, сюда даём
+					   его вердикт и адрес, где искать (кейс MV31-W: пользователь
+					   неделями видел немую ошибку и грешил на программу). */
+					var _mkWhy = (out.result && out.result !== 'created')
+						? _('backend said "%s" for protocol "%s"').format(out.result, out.proto || '?')
+						: ((res && res.stderr) ? String(res.stderr).slice(0, 200) : _('empty backend reply'));
+					ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + _mkWhy + '. ' +
+						_('Details are in the system log (logread, tag 5gmodem).')), 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();

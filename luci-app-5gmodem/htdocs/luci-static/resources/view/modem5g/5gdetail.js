@@ -2477,13 +2477,20 @@ function applyMetrics(json) {
 							   режима - сюда идут только state=deactivated, и с
 							   проверкой по границе слова (B4 не должен прятаться
 							   за B40). */
+							/* БЕЗ ДЕДУПЛИКАЦИИ ПО ИМЕНИ БЕНДА. Здесь стояли две проверки
+							   «такой бенд уже показан» (против строки режима и внутри
+							   списка) - и они прятали внутриполосную агрегацию: у
+							   B7+B7 активная несущая уже пишет «B7» в строку режима,
+							   и спящая SCC B7 считалась дубликатом (живой случай
+							   EP06 у МегаФона, 22.08.2026 - серый чип не появлялся
+							   никогда). Каждый deactivated-слот - это отдельная
+							   реальная несущая, сколько слотов - столько чипов;
+							   активные сюда не попадают по условию state. */
 							var _inact = [];
 							for (var _ci = 1; _ci <= 4; _ci++) {
 								if (String(json['s' + _ci + 'state'] || '') !== 'deactivated') { continue; }
 								var _cbm = String(json['s' + _ci + 'band'] || '').match(/[Bn]\d+/);
 								if (!_cbm) { continue; }
-								if (_inact.indexOf(_cbm[0]) >= 0) { continue; }
-								if (new RegExp('\\b' + _cbm[0] + '\\b').test(mtext)) { continue; }
 								_inact.push(_cbm[0]);
 							}
 							if (_inact.length) {
@@ -2492,6 +2499,39 @@ function applyMetrics(json) {
 										'<span class="btn cbi-button tginfo-band" style="opacity:.45"' +
 										' title="' + _('Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows') + '">' + b + '</span>';
 								}).join('');
+							}
+							/* Бейдж MIMO/антенн - в конец строки режима. Два уровня
+							   честности: слои MIMO (pmimo, настоящий ранк передачи)
+							   показываем как «MIMO N×N»; где ранка нет, но есть
+							   антенные уровни (antports) - «RX N/M»: сколько цепей
+							   слышат сеть из скольких видимых. Ничего нет - бейджа
+							   нет: пустота честнее ложной определённости. */
+							var _mimoTxt = '', _mimoTip = '';
+							var _pm = parseInt(json.pmimo, 10);
+							if (_pm >= 1 && _pm <= 4) {
+								_mimoTxt = 'MIMO ' + _pm + '×' + _pm;
+								_mimoTip = _('Transmission rank: the network is sending %d parallel data streams right now').format(_pm);
+							} else if (json.rxdiv === '4rx' || json.rxdiv === '2rx' || json.rxdiv === 'off') {
+								/* rxdiv надёжнее подсчёта портов: Telit отдаёт в
+								   #LAPS два порта, хотя приёмников четыре - счёт по
+								   antports показал бы «RX 2» вразрез со строкой 4RX. */
+								_mimoTxt = (json.rxdiv === '4rx') ? 'RX 4' : (json.rxdiv === '2rx') ? 'RX 2' : 'RX 1';
+								_mimoTip = (json.rxdiv === '4rx') ? _('Receive diversity: on, 4 receivers (4RX)')
+								         : (json.rxdiv === '2rx') ? _('Receive diversity: on (2RX)')
+								         : _('Receive diversity: off - the second antenna is not used');
+							} else {
+								var _apRows = String(json.antports || '').trim().split(/\s+/).filter(function(l) { return /:-?\d/.test(l); });
+								if (_apRows.length) {
+									var _apOn = _apRows.filter(function(l) {
+										var m = l.match(/^\d+:(-?\d+)/);
+										return m && parseInt(m[1], 10) > -130;
+									}).length;
+									_mimoTxt = 'RX ' + _apOn + '/' + _apRows.length;
+									_mimoTip = _('Receive chains: %d of %d antenna ports hear the network (details in the Antenna ports table)').format(_apOn, _apRows.length);
+								}
+							}
+							if (_mimoTxt) {
+								_mh += ' <span class="tginfo-freq" style="cursor:help" title="' + _mimoTip + '">' + _mimoTxt + '</span>';
 							}
 							/* ПЕРЕРИСОВКА ТОЛЬКО ПРИ ИЗМЕНЕНИИ. innerHTML на каждом опросе
 							   пересоздаёт элементы, и браузер сбрасывает таймер нативного

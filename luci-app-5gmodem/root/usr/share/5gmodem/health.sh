@@ -91,6 +91,10 @@ wan_nets() {
 		_WANNETS_DONE=1
 		_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 		[ -n "$_z" ] && _WANNETS=$(uci -q get "firewall.$_z.network")
+		# плюс аплинки вне зоны wan (LAN-DHCP на однопортовых роутерах,
+		# см. extra_uplink_nets в lib.sh): сторож обязан видеть и их -
+		# иначе линк, реально несущий default, живёт без проб и штрафов
+		_WANNETS="$_WANNETS $(extra_uplink_nets "$_WANNETS" | tr '\n' ' ')"
 	fi
 	printf '%s\n' "$_WANNETS"
 }

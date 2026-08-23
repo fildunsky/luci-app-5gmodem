@@ -547,3 +547,5 @@ then
     PROTO="ecm"
 fi
                                                                                                                                                                                                                                          
+
+. "$RES/modem/usb/_quectel_qrsrp"

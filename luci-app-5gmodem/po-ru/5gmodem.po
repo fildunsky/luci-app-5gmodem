@@ -5014,3 +5014,18 @@ msgstr "Отмеченный ниже линк никогда не получа�
 
 msgid "Use only manually"
 msgstr "Использовать только вручную"
+
+msgid "Transmission rank: the network is sending %d parallel data streams right now"
+msgstr "Ранг передачи: сеть прямо сейчас шлёт %d параллельных потока данных"
+
+msgid "Receive chains: %d of %d antenna ports hear the network (details in the Antenna ports table)"
+msgstr "Приёмные цепи: %d из %d антенных портов слышат сеть (подробности в таблице «Антенные порты»)"
+
+msgid "backend said \"%s\" for protocol \"%s\""
+msgstr "бэкенд ответил «%s» для протокола «%s»"
+
+msgid "empty backend reply"
+msgstr "пустой ответ бэкенда"
+
+msgid "Details are in the system log (logread, tag 5gmodem)."
+msgstr "Подробности в системном журнале (logread, тег 5gmodem)."

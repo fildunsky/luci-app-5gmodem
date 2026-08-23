@@ -13,7 +13,11 @@
 # networks that belong to the firewall 'wan' zone
 wan_nets() {
 	z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
-	[ -n "$z" ] && uci -q get "firewall.$z.network"
+	_wn=""
+	[ -n "$z" ] && _wn=$(uci -q get "firewall.$z.network")
+	# плюс аплинки вне зоны wan (LAN-DHCP на однопортовых роутерах) -
+	# см. extra_uplink_nets в lib.sh
+	printf '%s %s\n' "$_wn" "$(extra_uplink_nets "$_wn" | tr '\n' ' ')"
 }
 
 . /usr/share/5gmodem/atlock.sh
@@ -476,6 +480,12 @@ iface_type() {
 	# is_wifi_iface), - иначе UI и лечение расходятся во мнении об одном линке.
 	_is_wifi_cfg "$i" && { echo wifi; return; }
 	case "$i" in wan|wan6) echo wan; return;; esac
+	# Проводной аплинк с ДРУГИМ именем: LAN-DHCP однопортового роутера (попал в
+	# список через extra_uplink_nets) или переименованный пользователем wan.
+	# Ethernet-устройство = карточка и иконка как у проводного WAN; заодно
+	# наследуется правило «wan без адреса скрывать» - для провода оно верно.
+	[ -n "$dev" ] || dev=$(ucinet_get "$i" device)
+	case "$dev" in eth*|br-*|lan*|wan*) echo wan; return ;; esac
 	echo other
 }
 
@@ -746,7 +756,11 @@ ssid_for() {
 label_for() {
 	i="$1"
 	case "$(iface_type "$i")" in
-	wan)  echo "WAN" ;;
+	# «WAN» - только для интерфейса, который так и называется. Проводной
+	# аплинк с другим именем (LAN-DHCP однопортового роутера) подписываем
+	# его настоящим именем: технически это lan, врать «WAN» нельзя -
+	# иконка и так проводная, принадлежность видна по ней.
+	wan)  case "$i" in wan|wan6) echo "WAN" ;; *) echo "$i" ;; esac ;;
 	wifi) s=$(ssid_for "$i"); [ -n "$s" ] && echo "$s" || echo "Wi-Fi" ;;
 	modem)
 		# operator name once known; until the background probe fills the cache, fall
