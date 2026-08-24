@@ -36,7 +36,7 @@ jobs:
           - sdk: x86_64-25.12.5
             label: 25.12.x (apk)
             slug: 25.12-apk
-          - sdk: x86_64-24.10.7
+          - sdk: x86_64-24.10.8
             label: 24.10.x (opkg)
             slug: 24.10-opkg
     steps:
