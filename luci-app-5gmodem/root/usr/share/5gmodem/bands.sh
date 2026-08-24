@@ -1579,7 +1579,19 @@ case $1 in
 			# не может: без AT ни снять привязку, ни перезагрузить модуль нечем.
 			# Поэтому ждём и проверяем ответ; молчит - поднимаем по USB (питание
 			# порта / деавторизация / unbind-bind, см. reboot_modem.sh usbpower).
-			( setcelllock "$2" "$3" "$4"; _reconnect_iface
+			# ПОМНИМ ТОЛЬКО ТО, ЧТО РЕАЛЬНО ЗАПИСАЛОСЬ. Профиль без записи
+			# отвечает "Unsupported", а мы уже сохранили выбор выше - и
+			# страница честно показывала «Привязан к соте», хотя модем ничего
+			# не получал (живой отчёт 24.08.2026, T99W175). Снимаем память,
+			# если профиль отказался.
+			( _cl_out=$(setcelllock "$2" "$3" "$4" 2>/dev/null)
+			  case "$_cl_out" in
+				*Unsupported*)
+					[ -n "$_cl_sec" ] && { uci -q delete "5gmodem.$_cl_sec.celllock"; uci -q commit 5gmodem; }
+					logger -t 5gmodem "celllock: this modem profile cannot write a cell lock - the choice was not remembered"
+					exit 0 ;;
+			  esac
+			  _reconnect_iface
 			  _cl_at=$(uci -q get "5gmodem.$_cl_sec.at_port")
 			  [ -n "$_cl_at" ] || _cl_at=$(/usr/share/5gmodem/detect.sh 2>/dev/null)
 			  if [ -n "$_cl_at" ] && [ -e "$_cl_at" ]; then

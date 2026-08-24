@@ -251,11 +251,58 @@ conn_up() { [ "$1" = "901" ]; }
 # них прошивка отвечает {"result":"failure"} (проверено сообществом на MF79U).
 # Чтение метрик доступно без логина; операции записи (подключение, ребут) на
 # части прошивок требуют сессии - шлём best-effort, отказ безвреден.
+# ВХОД В ВЕБ-ИНТЕРФЕЙС МОДЕМА - БЕЗ НЕГО ПОЛОВИНА ПОЛЕЙ ПУСТА.
+#
+# Живой разбор (MF79N, прошивка BD_XBKZMF79N, 24.08.2026): без сессии goform
+# честно отвечает, но заполняет ЛИШЬ общедоступное - состояние модема, тип
+# сети, оператора и шкалу сигнала. Уровни (rsrp/rsrq/snr), сота, IMSI, ICCID,
+# WAN-адрес приходят ПУСТЫМИ строками, а не отсутствуют - поэтому и выглядело
+# как «метрики не работают». После входа те же ключи наполняются.
+#
+# Пароль берём из настроек модема (uci ...web_pass), по умолчанию admin - он
+# стоит на большинстве свистков. Сессию (cookie stok) кэшируем на 5 минут:
+# логин на каждый опрос - лишний запрос в модем каждые несколько секунд.
+_zte_pass() {
+	_zp=$(uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+		| sed 's/[^A-Za-z0-9]/_/g').web_pass")
+	[ -n "$_zp" ] && { printf '%s' "$_zp"; return; }
+	printf 'admin'
+}
+
+_zte_b64() {   # base64 без внешних зависимостей, если их нет
+	if command -v base64 >/dev/null 2>&1; then printf '%s' "$1" | base64 | tr -d '\n'; return; fi
+	if command -v openssl >/dev/null 2>&1; then printf '%s' "$1" | openssl base64 | tr -d '\n'; return; fi
+	printf '%s' "$1"
+}
+
+_zte_login() {   # $1 - адрес; печатает stok
+	_zl_f="$CACHE_DIR/5gmodem_ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"
+	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +5 2>/dev/null)" ]; then
+		cat "$_zl_f"; return 0
+	fi
+	_zl_src=$(_srcip_for "" "$1")
+	_zl_h=$(curl -s -i --max-time 8 ${_zl_src:+--interface "$_zl_src"} -A "$UA" \
+		-H "Referer: http://$1/index.html" \
+		-H "X-Requested-With: XMLHttpRequest" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "isTest=false&goformId=LOGIN&password=$(_zte_b64 "$(_zte_pass)")" \
+		"http://$1/goform/goform_set_cmd_process" 2>/dev/null)
+	_zl_t=$(printf '%s' "$_zl_h" | sed -n 's/.*[Ss]et-[Cc]ookie: *stok=\([^;[:space:]]*\).*/\1/p' | head -1)
+	if [ -n "$_zl_t" ]; then
+		printf '%s' "$_zl_t" > "$_zl_f"
+		printf '%s' "$_zl_t"
+		return 0
+	fi
+	return 1
+}
+
 _zte_get() {   # $1 - адрес, $2 - список cmd через запятую
 	_zg_src=$(_srcip_for "" "$1")
+	_zg_tok=$(cat "$CACHE_DIR/5gmodem_ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
+		${_zg_tok:+-b "stok=$_zg_tok"} \
 		"http://$1/goform/goform_get_cmd_process?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
 }
 
@@ -284,7 +331,26 @@ zte_metrics_json() {
 	_r=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
 	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
 	# Huawei-ветки: вызывающий отдаст прошлый снимок).
-	case "$_r" in *modem_main_state*|*ppp_status*) ;; *) return 1 ;; esac
+	case "$_r" in
+		*modem_main_state*|*ppp_status*) ;;
+		*)  # НЕ МОЛЧА. Раньше отказ API выглядел как «метрик просто нет», и
+		    # разобраться по отчёту было нельзя: ни строки в журнале, ни следа.
+		    # Пишем ОДИН раз на загрузку (маркер в /tmp), чтобы не залить лог.
+		    _zm_m="/tmp/5gmodem_zteapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
+		    if [ ! -f "$_zm_m" ]; then
+			: > "$_zm_m"
+			logger -t 5gmodem "hilink(zte): $_a did not answer goform_get_cmd_process (first 120 chars: $(printf '%s' "$_r" | tr '\n' ' ' | head -c 120))"
+		    fi
+		    return 1 ;;
+	esac
+	# Пустые уровни при живом соединении = мы не авторизованы (см. _zte_login).
+	# Логинимся и переспрашиваем ОДИН раз; не вышло - работаем с тем, что есть.
+	case "$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)" in
+		'') if _zte_login "$_a" >/dev/null 2>&1; then
+			_r2=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
+			case "$_r2" in *modem_main_state*|*ppp_status*) _r="$_r2" ;; esac
+		   fi ;;
+	esac
 	_model="ZTE"
 	_ntype=$(_zj "$_r" network_type)
 	_op=$(_zj "$_r" network_provider_fullname)
@@ -307,7 +373,14 @@ zte_metrics_json() {
 	_iccid=$(_zj "$_r" iccid)
 	_fw=$(_zj "$_r" wa_inner_version)
 	_phone=$(_zj "$_r" msisdn)
-	case "$_fw" in MF*) _model="ZTE ${_fw%%V*}" ;; esac
+	# МОДЕЛЬ ИЗ СТРОКИ ПРОШИВКИ. У вендорских сборок она не начинается с «MF»:
+	# живой пример - «BD_XBKZMF79NV1.0.0B02», где модель зашита в середину.
+	# Вытаскиваем подстроку MF<цифры><буквы> откуда угодно, иначе останется
+	# просто «ZTE».
+	# Хвост «V1.0.0B02» приклеен вплотную, поэтому режем по «V» перед цифрой:
+	# из BD_XBKZMF79NV1.0.0B02 нужен MF79N, а не MF79NV.
+	_mfm=$(printf '%s' "$_fw" | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
+	[ -n "$_mfm" ] && _model="ZTE $_mfm"
 	_pps=$(_zj "$_r" ppp_status)
 	_reg=0
 	if [ "$_pps" = "ppp_connected" ]; then

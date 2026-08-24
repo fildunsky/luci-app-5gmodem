@@ -129,11 +129,41 @@ setbands5gnsa() {
 # Наш контракт - "cell <arfcn> <pci>", поэтому пару меняем местами. Это главная
 # ловушка этого модема: у FM350 сначала ARFCN, здесь - сначала PCI.
 #
-# Запись (AT^LTE_LOCK=...) НЕ РЕАЛИЗОВАНА СОЗНАТЕЛЬНО. По инструкции она
-# применяется через AT+CFUN=1,1, переживает перезагрузку и снимается только
-# вручную - ошибка в порядке аргументов оставила бы модем привязанным к
-# несуществующей соте, и чинить пришлось бы AT-командами. Поэтому отдаём признак
-# readonly: интерфейс покажет привязку, но не даст кнопку, которая не работает.
+# ЗАПИСЬ ЕСТЬ, но с двумя особенностями этой прошивки (обе подтверждены живыми
+# отчётами 24.08.2026):
+#   1) порядок аргументов ОБРАТНЫЙ нашему контракту - сначала PCI, потом EARFCN;
+#   2) команда вступает в силу ТОЛЬКО после перезапуска модуля (AT+CFUN=1,1), а
+#      до него чтение честно отвечает «Have not set cell lock before». Без
+#      перезапуска пользователь видел «привязано», а сота не менялась.
+# Привязка переживает перезагрузку и снимается только вручную - снятие тем же
+# вербом (off).
+# setcelllock off | cell <arfcn> <pci>  (контракт bands.sh)
+setcelllock() {
+	case "$1" in
+		off)
+			sms_tool -d $_DEVICE at "AT^LTE_LOCK" >/dev/null 2>&1
+			sms_tool -d $_DEVICE at "AT^WCDMA_LOCK" >/dev/null 2>&1
+			;;
+		cell)
+			_sc_ar="$2"; _sc_pc="$3"
+			case "$_sc_ar" in ''|*[!0-9]*) return 1 ;; esac
+			case "$_sc_pc" in ''|*[!0-9]*) return 1 ;; esac
+			# ПОРЯДОК: PCI, EARFCN - у этой прошивки он обратный нашему
+			_sc_o=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK=$_sc_pc,$_sc_ar" 2>&1 | tr -d '\r')
+			case "$_sc_o" in
+				*ERROR*) logger -t 5gmodem "celllock: firmware rejected \"AT^LTE_LOCK=$_sc_pc,$_sc_ar\": $(echo "$_sc_o" | tr '\n' ' ' | head -c 120)"
+				         return 1 ;;
+			esac
+			;;
+		*) return 1 ;;
+	esac
+	# ПРИМЕНЕНИЕ - ТОЛЬКО ПЕРЕЗАПУСКОМ МОДУЛЯ. Без него команда записана, но
+	# сота не меняется, а чтение отвечает «привязки нет»: ровно так это и
+	# выглядело у пользователя.
+	sms_tool -d $_DEVICE at "AT+CFUN=1,1" >/dev/null 2>&1
+	return 0
+}
+
 getcelllock() {
 	O=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^\^*LTE_LOCK: *//p' | head -1 | tr -d '() ')
@@ -143,7 +173,7 @@ getcelllock() {
 		case "$_AR" in ''|*[!0-9]*) _AR="" ;; esac
 		case "$_PC" in ''|*[!0-9]*) _PC="" ;; esac
 		if [ -n "$_AR" ] && [ -n "$_PC" ]; then
-			echo "cell $_AR $_PC readonly"; return
+			echo "cell $_AR $_PC"; return
 		fi
 	fi
 	# 3G-привязка - отдельная команда; сообщаем о ней так же, как об LTE.
@@ -152,7 +182,7 @@ getcelllock() {
 	if [ -n "$O" ]; then
 		_AR=$(echo "$O" | cut -d, -f1)
 		case "$_AR" in ''|*[!0-9]*) _AR="" ;; esac
-		[ -n "$_AR" ] && { echo "arfcn $_AR readonly"; return; }
+		[ -n "$_AR" ] && { echo "arfcn $_AR"; return; }
 	fi
 	# Команда есть, но привязки нет - это тоже полезный ответ.
 	sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | grep -q "LTE_LOCK" \

@@ -653,6 +653,23 @@ case "$1" in
 			  done
 			) >/dev/null 2>&1 </dev/null &
 		fi
+		# НЕ ЧАЩЕ РАЗА В ДВЕ МИНУТЫ. Даже с проверками ниже остаётся окно, где
+		# прокси уже поднят, а дозвон ещё не отметился ни процессом, ни
+		# pending: тогда мы убивали прокси, netifd начинал заново, поднимал
+		# новый прокси - и мы убивали снова. Живой случай 24.08.2026 (T99W175
+		# после страницы eSIM): интерфейс перезапускался каждые две секунды и
+		# адрес не получал вовсе. Ограничитель разрывает такую петлю: если
+		# прокси действительно сирота, следующая попытка всё равно случится.
+		_stray_ok() {
+			_so_f=/tmp/5gmodem_straykill
+			_so_now=$(cut -d. -f1 /proc/uptime)
+			_so_last=$(cat "$_so_f" 2>/dev/null)
+			case "$_so_last" in ''|*[!0-9]*) _so_last=0 ;; esac
+			[ $((_so_now - _so_last)) -ge 120 ] || return 1
+			printf '%s\n' "$_so_now" > "$_so_f"
+			return 0
+		}
+
 		_sweep_n=0
 		while :; do
 			# ПРОКСИ-СИРОТА НА ПРЯМОМ КАНАЛЕ. Если активный интерфейс на
@@ -676,7 +693,12 @@ case "$1" in
 								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
 							elif ! pgrep -x lpac >/dev/null 2>&1 \
 							   && ! pgrep -x qmicli >/dev/null 2>&1 \
-							   && ! pgrep -x mbimcli >/dev/null 2>&1; then
+							   && ! pgrep -x mbimcli >/dev/null 2>&1 \
+							   && ! pgrep -x umbim >/dev/null 2>&1 \
+							   && ! pgrep -x uqmi >/dev/null 2>&1 \
+							   && ! pgrep -f "[m]bim\.sh|[q]mi\.sh" >/dev/null 2>&1 \
+							   && ! ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"pending": true' \
+							   && _stray_ok; then
 								# ОПУЩЕННЫЙ интерфейс + прокси БЕЗ ЕДИНОГО КЛИЕНТА -
 								# тоже сирота, причём худший: он душит сам дозвон, и
 								# «только при поднятом» превращалось во взаимоблок -

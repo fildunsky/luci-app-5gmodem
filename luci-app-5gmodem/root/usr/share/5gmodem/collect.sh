@@ -1320,6 +1320,56 @@ collect() {
 	echo "$STEP_N/$STEP_TOTAL $1" > "$STEP"
 }
 
+# --- СВОДКА ДЛЯ ЧЕЛОВЕКА -----------------------------------------------------
+#
+# ЗАЧЕМ. Отчёт вырос до полутора тысяч строк и начинался со списка пакетов - то
+# есть с того, что нужно НАМ, а не тому, кто его прислал. Человек не понимал,
+# что у него не так, и просто пересылал простыню целиком. Теперь сверху -
+# короткая сводка: что за роутер, какая версия программы, какой модем, есть ли
+# интернет и один общий вердикт. Всё подробное осталось ниже без изменений.
+#
+# ПРАВИЛО ЭТОГО БЛОКА: только УЖЕ СОБРАННЫЕ дешёвые источники (uci, ubus, sysfs,
+# файлы состояния сторожа). Ни одной новой AT-команды и ни одного запроса в
+# порт: сводка не должна ни задерживать отчёт, ни мешать модему.
+_sum_verdict() {
+	# несём ли трафик
+	_sv_def=$(ip -4 route show default 2>/dev/null | head -1)
+	_sv_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+	_sv_ip=""
+	[ -n "$_sv_if" ] && _sv_ip=$(ubus call "network.interface.$_sv_if" status 2>/dev/null \
+		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	[ -n "$_sv_ip" ] || _sv_ip=$(ubus call "network.interface.${_sv_if}_4" status 2>/dev/null \
+		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	# модем на шине?
+	_sv_mod=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[0].model' 2>/dev/null)
+	if [ -z "$_sv_mod" ]; then
+		echo "МОДЕМ НЕ НАЙДЕН на USB-шине. Проверьте питание и подключение;"
+		echo "если модем в слоте M.2 - раздел «Модем в режиме загрузчика» ниже."
+		return
+	fi
+	if [ -z "$_sv_ip" ]; then
+		echo "Модем найден, но АДРЕСА У НЕГО НЕТ - соединение не поднялось."
+		echo "Смотрите разделы «Почему модем не подключается» и «APN: сверка с базой»."
+		return
+	fi
+	if [ -z "$_sv_def" ]; then
+		echo "У модема есть адрес ($_sv_ip), но МАРШРУТА ПО УМОЛЧАНИЮ НЕТ -"
+		echo "трафик идти некуда. Смотрите раздел «Кто держит интернет»."
+		return
+	fi
+	# есть адрес и маршрут - спросим сторожа, ходят ли пакеты
+	_sv_st=""
+	[ -n "$_sv_if" ] && [ -f "/tmp/5gmodem_health/$_sv_if" ] \
+		&& read -r _sv_st _ _ _ _ < "/tmp/5gmodem_health/$_sv_if" 2>/dev/null
+	case "$_sv_st" in
+		down) echo "Адрес есть ($_sv_ip), но интернет через модем НЕ ОТВЕЧАЕТ на пробы."
+		      echo "Смотрите разделы «Кто держит интернет» и «DNS»." ;;
+		up)   echo "Всё в порядке: модем на связи, адрес $_sv_ip, пробы проходят." ;;
+		*)    echo "Модем на связи, адрес $_sv_ip. Проверок сторожа пока нет" \
+		      "(слежение выключено или роутер только загрузился)." ;;
+	esac
+}
+
 report() {
 	echo "===== luci-app-5gmodem: диагностический отчёт ====="
 	echo "Собран: $(date)"
@@ -1327,6 +1377,22 @@ report() {
 	echo "ВНИМАНИЕ: отчёт содержит идентификаторы модема и SIM (IMEI, IMSI,"
 	echo "ICCID, EID) и имя оператора. Пароли и ключи Wi-Fi сюда НЕ попадают."
 	echo "Если не хотите публиковать идентификаторы - отправьте файл лично."
+	echo ""
+	echo "----- КОРОТКО О ГЛАВНОМ -----"
+	echo "Роутер:    $(cat /tmp/sysinfo/model 2>/dev/null | head -1)"
+	echo "Прошивка:  $(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'/\1/p" /etc/openwrt_release 2>/dev/null | head -1)"
+	echo "Программа: $( (apk list -I 2>/dev/null || opkg list-installed 2>/dev/null) \
+		| sed -n 's/^\(luci-app-5gmodem[a-z-]*\)[ -]\([0-9][^ ]*\).*/\1 \2/p' | head -1)"
+	_sum_m=$("$RES/listmodems.sh" 2>/dev/null)
+	echo "Модем:     $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].model' 2>/dev/null) $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].vidpid' 2>/dev/null)"
+	echo "Оператор:  $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].operator' 2>/dev/null)"
+	echo "Интерфейс: $(uci -q get 5gmodem.@5gmodem[0].network) ($(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto" 2>/dev/null))"
+	echo ""
+	echo "ВЕРДИКТ:"
+	_sum_verdict | sed 's/^/  /'
+	echo ""
+	echo "Ниже - подробная диагностика. Она нужна разработчику: если всё"
+	echo "работает, читать её не обязательно."
 
 	collect "system"
 	run 5  "Версия приложения" sh -c "(apk list -I 2>/dev/null || opkg list-installed 2>/dev/null) | grep -iE '5gmodem|sms-tool|modemmanager|lpac|ca-bundle|libcurl|qmi-utils|mbim-utils|libmbim|libqmi|umbim|uqmi|comgt'"
@@ -1598,6 +1664,20 @@ report() {
 	run 20 "Лог: netifd/интерфейсы" sh -c "logread 2>/dev/null | grep -iE 'netifd|wwan|qmi|mbim|fibocom' | tail -80"
 	run 20 "Лог: ядро (USB)" sh -c "dmesg 2>/dev/null | grep -iE 'usb|option|qmi_wwan|cdc_|reset' | tail -60"
 	run 20 "Лог: весь хвост" sh -c "logread 2>/dev/null | tail -120"
+
+	# Расшифровка кодов +CME ERROR, попавшихся ВЫШЕ по отчёту и в журнале.
+	# Голое «+CME ERROR: 133» не говорит ничего даже нам; таблица общая
+	# (см. cme.sh), поэтому раздел стоит копейки и закрывает вопрос «а что
+	# это за число» разом для всех модемов.
+	run 10 "Коды +CME ERROR из этого отчёта" sh -c '
+		. /usr/share/5gmodem/cme.sh
+		{ cat /tmp/5gmodem-diag.txt 2>/dev/null; logread 2>/dev/null | tail -200; } \
+			| grep -oE "CME ERROR: *[0-9]+" | grep -oE "[0-9]+" | sort -un | while read -r c; do
+				t=$(cme_text "$c" 2>/dev/null) || t="(нет в справочнике)"
+				printf "  %-4s %s\n" "$c" "$t"
+			done
+		[ -s /tmp/5gmodem-diag.txt ] || echo "  (ошибок CME в отчёте нет)"
+	'
 
 	collect "done"
 	echo ""
