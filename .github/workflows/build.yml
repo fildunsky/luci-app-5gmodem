@@ -2,8 +2,8 @@ name: Build packages
 
 # The package is PKGARCH:=all (arch-independent), so ONE build per package
 # format is enough for every device:
-#   - a 23.05 SDK produces the .ipk
-#   - a snapshot SDK produces the .apk
+#   - a 24.10 SDK produces the .ipk (that branch still defaults to opkg)
+#   - a 25.12 SDK produces the .apk (the format current releases use)
 # On a version tag (v*) the artifacts are attached to a GitHub Release;
 # the workflow can also be run manually from the Actions tab.
 
@@ -18,17 +18,27 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.arch }}
+    name: ${{ matrix.label }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # <target_arch>-<openwrt_version>. x86_64 is only the *builder*;
-        # the resulting package is arch-independent and installs anywhere.
-        arch:
-          - x86_64-24.10.7   # -> .ipk (24.10 still defaults to opkg/ipk; its
-                             #    libxslt host tool builds fine, unlike 23.05.5)
-          - x86_64-SNAPSHOT  # -> .apk
+        # ЧТО ЗДЕСЬ ДВА РАЗНЫХ ПОЛЯ. sdk - это ТЕГ ОБРАЗА openwrt/sdk, его
+        # нельзя писать произвольно: значение уходит в переменную ARCH, и
+        # действие тянет по нему контейнер (нет такого тега - сборка падает
+        # сразу). label - только подпись задания в списке Actions, чтобы с
+        # первого взгляда было видно ветку и формат пакета. slug - то же для
+        # имён артефактов: там пробелы и скобки нежелательны.
+        #
+        # x86_64 - это только СБОРЩИК: пакет arch-independent и ставится на
+        # любое железо.
+        include:
+          - sdk: x86_64-25.12.5
+            label: 25.12.x (apk)
+            slug: 25.12-apk
+          - sdk: x86_64-24.10.7
+            label: 24.10.x (opkg)
+            slug: 24.10-opkg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,7 +46,7 @@ jobs:
       - name: Build with OpenWrt SDK
         uses: openwrt/gh-action-sdk@main
         env:
-          ARCH: ${{ matrix.arch }}
+          ARCH: ${{ matrix.sdk }}
           FEEDNAME: modem
           # ТОЛЬКО исходный пакет. Облегчённый вариант (luci-app-5gmodem-lite)
           # объявлен в том же Makefile и собирается вместе с основным сам -
@@ -73,7 +83,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-${{ matrix.arch }}
+          name: build-logs-${{ matrix.slug }}
           path: build-logs.tar.gz
           if-no-files-found: ignore
 
@@ -102,7 +112,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: luci-app-5gmodem-${{ matrix.arch }}
+          name: luci-app-5gmodem-${{ matrix.slug }}
           path: out/*
           if-no-files-found: error
 
