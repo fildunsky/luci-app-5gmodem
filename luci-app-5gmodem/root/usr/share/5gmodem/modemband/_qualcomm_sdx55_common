@@ -169,3 +169,68 @@ getcaenabled() {
 	[ -n "$O" ] || { echo "Unsupported"; return; }
 	[ "$O" = "0" ] && echo "off" || echo "on"
 }
+
+# --- Диапазоны 3G (WCDMA) ----------------------------------------------------
+#
+# Прошивка управляет WCDMA той же командой, что LTE и NR5G - подтверждено живым
+# выводом (сообщество, MV31-W/T99W175):
+#   AT^BAND_PREF?
+#     WCDMA,Enable Bands :1,2,4,5,6,8,9,19,
+#     WCDMA,Disable Bands:
+# Список ровно совпадает с паспортом модуля (UMTS/HSPA+ FDD 1,2,4,5,6,8,9,19),
+# то есть прошивка отдаёт полный набор железа.
+#
+# Стиль - mask (галочки произвольного набора), как у LTE/NR: готовых комбинаций
+# у этого семейства нет.
+bands3g_style() {
+	echo "mask"
+}
+
+# Поддерживаемые - объединение Enable и Disable из ответа модема (что железо
+# умеет), с откатом на паспортный список, если ответ не пришёл.
+getsupportedbands3g() {
+	_g3_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r')
+	_g3_l=$(printf '%s\n' "$_g3_o" | awk -F: '/^WCDMA,(Enable|Disable) Bands/{print $2}' \
+		| tr ',' ' ' | tr -s ' ')
+	_g3_u=""
+	for _g3_b in $_g3_l; do
+		case "$_g3_b" in ''|*[!0-9]*) continue ;; esac
+		case " $_g3_u " in *" $_g3_b "*) continue ;; esac
+		_g3_u="$_g3_u$_g3_b "
+	done
+	_g3_u=$(printf '%s' "$_g3_u" | tr ' ' '\n' | sort -n | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_g3_u" ] && { echo "$_g3_u"; return; }
+	echo "1 2 4 5 6 8 9 19"
+}
+
+getbands3g() {
+	sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r' \
+		| awk -F: '/^WCDMA,Enable Bands/{gsub(",", " "); print $2}' | xargs
+}
+
+setbands3g() {
+	BANDS="$1"
+
+	if [ "$BANDS" = "default" ]; then
+		sms_tool -d $_DEVICE at "AT^BAND_PREF"
+		return
+	fi
+
+	T=""
+	for BAND in $BANDS; do
+		case $BAND in
+			''|*[!0-9]*) continue ;;
+		esac
+		[ -n "$T" ] && T="${T},"
+		T="${T}${BAND}"
+	done
+	[ -z "$T" ] && return 1
+
+	# enable=2 переопределяет маску своего RAT целиком и переживает
+	# перезагрузку - ровно как у LTE-ветки выше; голый AT^BAND_PREF перед
+	# записью не шлём, он сбрасывает маски ВСЕХ RAT к заводским.
+	_s3_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF=WCDMA,2,$T" 2>&1 | tr -d '\r')
+	case "$_s3_o" in
+		*ERROR*) logger -t 5gmodem "band_pref(WCDMA): firmware rejected the write \"AT^BAND_PREF=WCDMA,2,$T\": $(echo "$_s3_o" | tr '\n' ' ' | head -c 120)" ;;
+	esac
+}

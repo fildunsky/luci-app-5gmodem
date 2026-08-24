@@ -373,6 +373,35 @@ if [ -n "$AMP" ]; then
 		n=$((n + 1)); cand="modem$n"
 	done
 	IF="$cand"
+
+	# ПОСЛЕДНИЙ ГВАРД ОТ ДУБЛЯ: интерфейс на ТУ ЖЕ сетевую карту уже есть.
+	#
+	# Имя выбрано, но прежде чем заводить НОВЫЙ интерфейс, смотрим, нет ли уже
+	# интерфейса, который смотрит в ту же сетевую карту этого же модема. Такой
+	# дубль не даёт ничего (один адрес, один маршрут), но висит в зоне wan, в
+	# ряду приоритетов и в списке резолверов - и накапливается. Живой случай:
+	# E3372 с рандомизатором IMEI наплодил modem/modem2/modem3/modem4 на одной
+	# eth2 (отчёт 24.08.2026). Якорь по MAC выше закрывает саму причину, этот
+	# гвард - страховка на любые будущие пути потери опознания.
+	if ! uci -q get "network.$IF" >/dev/null 2>&1; then
+		# сетевую карту модема берём прямо из sysfs: msw/hilink.sh сюда не
+		# сорсится, а зависимость ради одной строки заводить незачем
+		_mk_nd=""
+		for _mk_n in /sys/bus/usb/devices/"$AMP":*/net/*; do
+			[ -e "$_mk_n" ] || continue
+			_mk_nd=$(basename "$_mk_n"); break
+		done
+		if [ -n "$_mk_nd" ]; then
+			for _mk_c in $(uci -q show network 2>/dev/null \
+					| sed -n "s/^network\.\([^.]*\)\.device='\?$_mk_nd'\?\$/\1/p"); do
+				[ "$(uci -q get "network.$_mk_c.modem_path")" = "$AMP" ] || continue
+				logger -t 5gmodem-mkiface "interface $_mk_c already serves $_mk_nd of modem $AMP - reusing it instead of creating $IF"
+				IF="$_mk_c"
+				break
+			done
+		fi
+	fi
+
 	# the cdc-wdm control node that belongs to THIS modem
 	WANTWDM=$(/usr/share/5gmodem/registry.sh path "$AMP" 2>/dev/null \
 		| jsonfilter -e '@.wdm[0]' 2>/dev/null)

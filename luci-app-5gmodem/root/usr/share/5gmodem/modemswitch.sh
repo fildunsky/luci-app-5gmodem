@@ -1616,6 +1616,68 @@ wdm)
 	wdm_for_path "${2:-$(active_path)}"
 	;;
 
+# dedupe-ifaces - убрать интерфейсы-дубли на одной сетевой карте.
+#
+# ЗАЧЕМ. Свисток с рандомизатором IMEI (E3372 и родня) на каждом
+# переподключении выглядел новым модемом, и на него заводился ещё один
+# интерфейс: у пользователя накопились modem/modem2/modem3/modem4 - все с
+# device=eth2 и одним адресом, все в зоне wan, в ряду приоритетов и в списке
+# резолверов. Причину закрывает якорь по MAC (lib.sh), здесь - уборка того,
+# что уже накопилось.
+#
+# ОСТОРОЖНО ПО ПОСТРОЕНИЮ: сносим только интерфейс, который
+#   - смотрит в ту же сетевую карту (device) и тот же usb-путь, что «главный»;
+#   - НЕ упомянут ни в одной секции модема (на него никто не ссылается);
+#   - не несёт сейчас маршрут по умолчанию.
+# «Главным» считаем тот, на который ссылается секция модема, иначе - самый
+# первый по имени. Интерфейсы без штампа modem_path (провод, Wi-Fi, чужие)
+# не рассматриваем вовсе.
+dedupe-ifaces)
+	note_foreign_uci network "modemswitch dedupe-ifaces"
+	note_foreign_uci firewall "modemswitch dedupe-ifaces"
+	_dd_used=" $(uci -q show "$CFG" 2>/dev/null \
+		| sed -n "s/^$CFG\.m_[^.]*\.network='\?\([^']*\)'\?\$/\1/p" | tr '\n' ' ') "
+	_dd_def=$(ip -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | tr '\n' ' ')
+	_dd_gone=""
+	for _dd_if in $(uci -q show network 2>/dev/null \
+			| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
+		_dd_dev=$(uci -q get "network.$_dd_if.device")
+		_dd_path=$(uci -q get "network.$_dd_if.modem_path")
+		[ -n "$_dd_dev" ] && [ -n "$_dd_path" ] || continue
+		# на этот интерфейс ссылается секция модема - он главный, не трогаем
+		case "$_dd_used" in *" $_dd_if "*) continue ;; esac
+		# есть ли ДРУГОЙ интерфейс с тем же устройством и путём, на который
+		# ссылается секция? если да - этот лишний
+		_dd_owner=""
+		for _dd_o in $(uci -q show network 2>/dev/null \
+				| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
+			[ "$_dd_o" = "$_dd_if" ] && continue
+			[ "$(uci -q get "network.$_dd_o.device")" = "$_dd_dev" ] || continue
+			[ "$(uci -q get "network.$_dd_o.modem_path")" = "$_dd_path" ] || continue
+			case "$_dd_used" in *" $_dd_o "*) _dd_owner="$_dd_o"; break ;; esac
+		done
+		[ -n "$_dd_owner" ] || continue
+		# не сносим тот, через который прямо сейчас идёт трафик
+		_dd_l3=$(ubus call network.interface."$_dd_if" status 2>/dev/null \
+			| jsonfilter -e '@.l3_device' 2>/dev/null)
+		case " $_dd_def " in *" ${_dd_l3:-nope} "*) continue ;; esac
+		ifdown "$_dd_if" >/dev/null 2>&1
+		uci -q delete "network.$_dd_if"
+		_dd_z=$(uci show firewall 2>/dev/null \
+			| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+		[ -n "$_dd_z" ] && uci -q del_list "firewall.$_dd_z.network=$_dd_if"
+		_dd_gone="$_dd_gone $_dd_if"
+	done
+	if [ -n "$_dd_gone" ]; then
+		uci -q commit network
+		uci -q commit firewall
+		ubus call network reload >/dev/null 2>&1
+		logger -t 5gmodem "dedupe-ifaces: removed duplicate interfaces on the same network card:$_dd_gone"
+	fi
+	printf '{"removed":"%s"}\n' "${_dd_gone# }"
+	exit 0
+	;;
+
 forget)
 	note_foreign_uci network "modemswitch forget"
 	# «Забыть отключённые модемы»: удалить секции модемов, которых нет на шине.
