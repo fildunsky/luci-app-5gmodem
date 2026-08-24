@@ -175,8 +175,12 @@ getcaenabled() {
 # Прошивка управляет WCDMA той же командой, что LTE и NR5G - подтверждено живым
 # выводом (сообщество, MV31-W/T99W175):
 #   AT^BAND_PREF?
-#     WCDMA,Enable Bands :1,2,4,5,6,8,9,19,
-#     WCDMA,Disable Bands:
+#      WCDMA,Enable Bands :1,2,4,5,6,8,9,19,
+#      WCDMA,Disable Bands:
+# ВЕДУЩИЙ ПРОБЕЛ В СТРОКАХ - НЕ ОПЕЧАТКА: прошивка печатает их с отступом
+# (живой вывод пользователя 24.08.2026). Якорь "^" в шаблоне поэтому НЕ
+# ставим - с ним разбор молча возвращал пустоту, и секция 3G не появлялась.
+# У LTE-ветки выше якоря нет с самого начала, потому она и работала.
 # Список ровно совпадает с паспортом модуля (UMTS/HSPA+ FDD 1,2,4,5,6,8,9,19),
 # то есть прошивка отдаёт полный набор железа.
 #
@@ -190,7 +194,7 @@ bands3g_style() {
 # умеет), с откатом на паспортный список, если ответ не пришёл.
 getsupportedbands3g() {
 	_g3_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r')
-	_g3_l=$(printf '%s\n' "$_g3_o" | awk -F: '/^WCDMA,(Enable|Disable) Bands/{print $2}' \
+	_g3_l=$(printf '%s\n' "$_g3_o" | awk -F: '/WCDMA,(Enable|Disable) Bands/{print $2}' \
 		| tr ',' ' ' | tr -s ' ')
 	_g3_u=""
 	for _g3_b in $_g3_l; do
@@ -205,7 +209,7 @@ getsupportedbands3g() {
 
 getbands3g() {
 	sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r' \
-		| awk -F: '/^WCDMA,Enable Bands/{gsub(",", " "); print $2}' | xargs
+		| awk -F: '/WCDMA,Enable Bands/{gsub(",", " "); print $2}' | xargs
 }
 
 setbands3g() {
