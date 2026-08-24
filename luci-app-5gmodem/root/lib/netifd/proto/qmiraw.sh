@@ -131,14 +131,46 @@ proto_qmiraw_setup() {
 	done
 
 	# Check if UIM application is stuck in illegal state
+	#
+	# ПУСТОЙ ОТВЕТ - НЕ ТО ЖЕ САМОЕ, ЧТО «illegal».
+	#
+	# Апстримная логика (и наш форк вслед за ней) считала отсутствующее поле
+	# card_application_state признаком нерабочей карты и передёргивала ей
+	# питание. Но пустой ответ приходит и просто потому, что UIM ЕЩЁ НЕ ГОТОВ
+	# на ранней стадии дозвона: карта исправна, ответ будет через секунду. Мы
+	# же гасили ей питание - и получали ту самую петлю power-cycle, из-за
+	# которой модем не регистрировался в сети (наш разбор «SIM illegal:
+	# восстановление»; в апстриме то же лечат в openwrt/openwrt#24868 на
+	# ZTE MF287 и BroadMobi BM806C).
+	#
+	# Поэтому три разных случая вместо двух:
+	#   - ответа нет (UIM не готов) - ЖДЁМ в пределах общего таймаута и
+	#     сдаёмся без питания: SIM_NOT_INITIALIZED;
+	#   - состояние ЯВНО illegal - как и раньше, передёргиваем питание;
+	#   - всё остальное - выходим, карта готова.
+	# Имя ошибки берём существующее (SIM_NOT_INITIALIZED) - новых строк для
+	# перевода не заводим, и вердикт совпадёт с апстримным, когда PR примут.
 	local uim_state_timeout=0
+	local uim_unavail_timeout=0
 	while true; do
 		json_load "$(uqmi -s -d "$device" -t 2000 --uim-get-sim-state)"
 		json_get_var card_application_state card_application_state
 
-		# SIM card is either completely absent or state is labeled as illegal
+		if [ -z "$card_application_state" ]; then
+			[ -e "$device" ] || return 1
+			if [ "$uim_unavail_timeout" -lt "$timeout" ] || [ "$timeout" = "0" ]; then
+				let uim_unavail_timeout++
+				sleep 1
+				continue
+			fi
+			echo "SIM state unavailable - not power-cycling the SIM"
+			proto_notify_error "$interface" SIM_NOT_INITIALIZED
+			proto_block_restart "$interface"
+			return 1
+		fi
+
 		# Try to power-cycle the SIM card to recover from this state
-		if [ -z "$card_application_state" -o "$card_application_state" = "illegal" ]; then
+		if [ "$card_application_state" = "illegal" ]; then
 			echo "SIM in illegal state - Power-cycling SIM"
 
 			# Try to reset SIM application
