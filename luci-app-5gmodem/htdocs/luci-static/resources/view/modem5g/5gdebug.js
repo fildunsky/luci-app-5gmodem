@@ -555,7 +555,7 @@ return view.extend({
 			[ 'rsrp',   _('RSRP (signal level, default)') ],
 			[ 'rsrq',   _('RSRQ (signal quality)') ],
 			[ 'sinr',   _('SINR (signal to noise)') ],
-			[ 'signal', _('Percent (modem scale)') ]
+			[ 'signal', _('Overall level (percent)') ]
 		];
 
 		var sel = E('select', { 'class': 'cbi-input-select', 'id': 'leds-metric' },

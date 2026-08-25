@@ -557,12 +557,13 @@ fi
 # сырого CSQ, и «завышение» чистого RSRP. Кэшируем последний хороший процент,
 # чтобы редкий опрос без GTCCINFO/CESQ не уронил бар к пессимистичному CSQ.
 SIGCACHE="/tmp/5gmodem_fm350_sig_${DEVICE##*/}"
-# FM350 занижает сырой +CSQ, поэтому ПЕРЕКРЫВАЕМ его взвешенной оценкой даже при
-# валидном CSQ (общий хелпер sig_weighted в lib.sh - та же формула, что и в
-# центральном fallback 5gmodem.sh, одна на всех). Кэшируем последний хороший
-# процент: редкий опрос без GTCCINFO/CESQ иначе уронил бы бар к пессимистичному CSQ.
+# FM350 занижает сырой +CSQ - но теперь это общее правило, а не исключение:
+# метрики своей технологии главнее CSQ у всех модемов (sig_percent в lib.sh,
+# центральный расчёт в 5gmodem.sh). Здесь оставлен только КЭШ последнего
+# хорошего процента: редкий опрос без GTCCINFO/CESQ иначе уронил бы бар к
+# пессимистичному CSQ.
 if [ -n "$RSRP" ]; then
-	CSQ_PER=$(sig_weighted "$RSRP" "$SINR" "$RSRQ")
+	CSQ_PER=$(sig_percent "$MODE" "$RSRP" "$RSRQ" "$SINR")
 	CSQ=$(( 31 * CSQ_PER / 100 ))
 	echo "$CSQ_PER" > "$SIGCACHE" 2>/dev/null
 elif [ -f "$SIGCACHE" ] && [ -z "$(find "$SIGCACHE" -mmin +2 2>/dev/null)" ]; then

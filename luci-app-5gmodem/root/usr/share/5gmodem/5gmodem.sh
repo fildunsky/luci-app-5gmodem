@@ -2524,7 +2524,7 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 		[ -z "$COPS" ]    && COPS=$(_mmv "modem.3gpp.operator-name")
 		# Процент из mmcli - ТОЛЬКО когда нет детальных метрик (RSRP): он у многих
 		# прошивок пессимистичен (Compal: 12% при RSRP -106), а при живом RSRP
-		# сигнал считает sig_weighted ниже - как у всех остальных модемов.
+		# сигнал считает sig_percent ниже - как у всех остальных модемов.
 		[ -z "$CSQ_PER" ] && [ -z "$RSRP" ] && CSQ_PER=$(_mmv "modem.generic.signal-quality.value")
 		# РЕГИСТРАЦИЮ ПЕРЕВОДИМ В КОД, а не кладём словом. Поле registration в
 		# нашем JSON - число по 3GPP (0 нет сети, 1 дома, 2 поиск, 3 отказ,
@@ -3006,9 +3006,17 @@ if [ -z "$CSQ" ] && [ -n "$RSSI" ]; then
 	esac
 fi
 
-if [ -z "$CSQ_PER" ] && [ -n "$RSRP" ]; then
-	CSQ_PER=$(sig_weighted "$RSRP" "$SINR" "$RSRQ")
-fi
+# ПРОЦЕНТ СИГНАЛА: МЕТРИКИ СВОЕЙ ТЕХНОЛОГИИ ГЛАВНЕЕ CSQ.
+#
+# Раньше очередь была обратной - валидный +CSQ побеждал, а разбор по
+# RSRP/RSRQ/SINR включался только когда CSQ пуст. Из-за этого карточка врала
+# ровно там, где это больнее всего: RSSI громкий, сота далёкая. Живой стенд
+# 25.08.2026 - CSQ 23 рисовал 74 % при RSRP -109, RSRQ -19, SINR 0.0 и реальном
+# 1 Мбит/с; по порогам своей технологии те же цифры дают 27 %. Разбор и пороги -
+# в sig_percent (lib.sh). CSQ остаётся там, где он законен: 2G и модемы, не
+# отдающие ничего кроме него.
+_sig_pct=$(sig_percent "$MODE" "$RSRP" "$RSRQ" "$SINR" "$RSCP" "$ECIO" "$RSSI")
+[ -n "$_sig_pct" ] && CSQ_PER="$_sig_pct"
 
 _TMP="$CACHE.$$"
 emit_snapshot > "$_TMP"

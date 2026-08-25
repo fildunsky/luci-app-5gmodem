@@ -797,13 +797,22 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	# rt_tables, и номером - `ip` принимает оба.
 	_t4=$(uci -q get "network.$1.ip4table" 2>/dev/null)
 	_ta4=""; [ -n "$_t4" ] && _ta4="table $_t4"
+	# ШЛЮЗ v4 ЖИВЁТ У ДИНАМИЧЕСКОГО РЕБЁНКА. У qmi и mbim протокол поднимает
+	# адрес отдельной сетью "<имя>_4" (proto dhcp) на том же устройстве, и у
+	# РОДИТЕЛЯ список маршрутов ПУСТ - шлюз мы не находили и ставили on-link
+	# default. Для сотовых point-to-point это ещё сходило с рук, а на 802.3-
+	# кадрах (ECM/NCM, часть MBIM) scope link означает «весь интернет достижим
+	# напрямую»: устройство начинает ARP-ить каждый адрес и трафик умирает.
+	# Спрашиваем и ребёнка - ровно как у IPv6-спутника ниже.
 	_gw4=$(ifup_state "$1" '@.route[@.target="0.0.0.0"].nexthop')
+	if [ -z "$_gw4" ] || [ "$_gw4" = "0.0.0.0" ]; then
+		_gw4=$(ifup_state "${1}_4" '@.route[@.target="0.0.0.0"].nexthop')
+	fi
 	if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
-		ip -4 route add "$_gw4" dev "$_dev" $_ta4 2>/dev/null
-		ip -4 route add default via "$_gw4" dev "$_dev" metric "$2" $_ta4 2>/dev/null
+		route_add_default -4 "$_dev" "$2" "$_gw4" "$_ta4"
 	else
 		# on-link default (сотовый point-to-point) - обязателен scope link.
-		ip -4 route add default dev "$_dev" metric "$2" scope link $_ta4 2>/dev/null
+		route_add_default -4 "$_dev" "$2" "" "$_ta4"
 	fi
 	# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
 	# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления
@@ -825,7 +834,7 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	fi
 	_ta6=""; [ -n "$_t6" ] && _ta6="table $_t6"
 	[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
-		ip -6 route add default via "$_gw6" dev "$_dev" metric "$2" $_ta6 2>/dev/null
+		route_add_default -6 "$_dev" "$2" "$_gw6" "$_ta6"
 }
 # `ip route del default dev X` удаляет РОВНО ОДИН маршрут за вызов. Если на
 # устройстве их несколько (разные метрики, формы via и on-link сосуществуют),

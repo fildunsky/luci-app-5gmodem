@@ -7,7 +7,6 @@
 			"recurse": true
 		}
 	},
-
 	"admin/modem/5gmodem": {
 		"title": "5G Modem",
 		"order": 10,
@@ -16,11 +15,14 @@
 			"path": "admin/modem/5gmodem/detail"
 		},
 		"depends": {
-			"acl": [ "luci-app-5gmodem" ],
-			"uci": { "5gmodem": true }
+			"acl": [
+				"luci-app-5gmodem"
+			],
+			"uci": {
+				"5gmodem": true
+			}
 		}
 	},
-
 	"admin/modem/5gmodem/detail": {
 		"title": "Network",
 		"order": 10,
@@ -29,7 +31,6 @@
 			"path": "modem5g/5gdetail"
 		}
 	},
-
 	"admin/modem/5gmodem/esim": {
 		"title": "eSIM",
 		"order": 15,
@@ -38,7 +39,6 @@
 			"path": "modem5g/5gesim"
 		}
 	},
-
 	"admin/modem/5gmodem/diagnostics": {
 		"title": "Modem",
 		"order": 20,
@@ -47,19 +47,14 @@
 			"path": "modem5g/5gdebug"
 		}
 	},
-
 	"admin/modem/5gmodem/align": {
 		"title": "Alignment",
 		"order": 25,
 		"action": {
 			"type": "view",
 			"path": "modem5g/align"
-		},
-		"depends": {
-			"uci": { "5gmodem": { "@5gmodem[0]": { "align_enabled": "1" } } }
 		}
 	},
-
 	"admin/modem/5gmodem/readsms": {
 		"title": "Inbox",
 		"order": 30,
@@ -68,7 +63,6 @@
 			"path": "modem5g/readsms"
 		}
 	},
-
 	"admin/modem/5gmodem/sendsms": {
 		"title": "Outbox",
 		"order": 40,
@@ -77,7 +71,6 @@
 			"path": "modem5g/sendsms"
 		}
 	},
-
 	"admin/modem/5gmodem/sendussd": {
 		"title": "USSD",
 		"order": 50,
@@ -86,7 +79,6 @@
 			"path": "modem5g/sendussd"
 		}
 	},
-
 	"admin/modem/5gmodem/sendat": {
 		"title": "AT",
 		"order": 60,
@@ -95,7 +87,6 @@
 			"path": "modem5g/sendat"
 		}
 	},
-
 	"admin/modem/5gmodem/buttons": {
 		"title": "Buttons",
 		"order": 65,
@@ -104,19 +95,14 @@
 			"path": "modem5g/buttons"
 		}
 	},
-
 	"admin/modem/5gmodem/stats": {
 		"title": "Statistics",
 		"order": 67,
 		"action": {
 			"type": "view",
 			"path": "modem5g/5gstats"
-		},
-		"depends": {
-			"uci": { "5gmodem": { "@5gmodem[0]": { "show_stats": "1" } } }
 		}
 	},
-
 	"admin/modem/5gmodem/settings": {
 		"title": "Settings",
 		"order": 70,

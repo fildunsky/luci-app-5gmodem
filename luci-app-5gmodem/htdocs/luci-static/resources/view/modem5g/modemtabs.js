@@ -247,6 +247,42 @@ function ussdHideRule(on) {
 	} catch (e) {}
 })();
 
+/* ВКЛАДКИ ПО ГАЛОЧКЕ («Юстировка», «Статистика») - ТЕМ ЖЕ ПРИЁМОМ, ЧТО eSIM.
+   Раньше они гейтились через depends.uci в menu.d, и это не работало: дерево
+   меню LuCI кэшируется в /tmp/luci-indexcache.<хеш>.json, а хеш считается по
+   списку ФАЙЛОВ меню (inode/mtime/размер) - от значений uci он не зависит.
+   Пока кэш жив, вердикт «показывать» остаётся прежним: доказано на стенде
+   25.08.2026 - при align_enabled=1 в кэше лежало "satisfied": false, и вкладка
+   не появлялась ни после переключения, ни после чистки кэша БРАУЗЕРА (файл-то
+   на роутере). Теперь узлы в меню безусловные, а ссылку прячем стилем - как у
+   eSIM и USSD. Работает мгновенно, кэш меню ни при чём. */
+function gateHideRule(id, sub, on) {
+	var st = document.getElementById(id);
+	if (on) {
+		if (!st) {
+			st = E('style', { 'id': id, 'type': 'text/css' },
+				'a[href*="5gmodem/' + sub + '"], li:has(> a[href*="5gmodem/' + sub + '"]) { display: none !important; }');
+			document.head.appendChild(st);
+		}
+	} else if (st && st.parentNode) {
+		st.parentNode.removeChild(st);
+	}
+}
+
+/* Галочки читаем из uci. Пустое значение у «Юстировки» - выключено (вкладка
+   для тех, кто её осознанно включил), у «Статистики» - включено (сбор идёт по
+   умолчанию, и прятать её у всех было бы регрессом). */
+function applyGateTabs() {
+	return L.resolveDefault(uci.load('5gmodem')).then(function() {
+		var ss = uci.sections('5gmodem', '5gmodem');
+		var sid = (ss && ss[0]) ? ss[0]['.name'] : null;
+		var al = sid ? String(uci.get('5gmodem', sid, 'align_enabled') || '') : '';
+		var stt = sid ? String(uci.get('5gmodem', sid, 'show_stats') || '') : '';
+		gateHideRule('align-tab-hide', 'align', al !== '1');
+		gateHideRule('stats-tab-hide', 'stats', stt === '0');
+	});
+}
+
 function applyUssdTabVisibility() {
 	return L.resolveDefault(uci.load('5gmodem'))
 		.then(function() {
@@ -723,6 +759,9 @@ return baseclass.extend({
 	   отрабатывает лишь при загрузке страницы). */
 	refreshEsimTab: function() { applyEsimTabVisibility(0); },
 	refreshUssdTab: function() { applyUssdTabVisibility(); },
+	/* Зовётся страницей настроек сразу после сохранения галочки: вкладка
+	   появляется/исчезает на месте, без перезагрузки страницы. */
+	refreshGateTabs: function() { return applyGateTabs(); },
 
 	/* ПОЛОСУ СТАВИМ СРАЗУ, ДАННЫЕ ПОДКЛАДЫВАЕМ ПОТОМ.
 	   Раньше вся полоса появлялась только после двух вызовов shell
@@ -738,6 +777,8 @@ return baseclass.extend({
 		applyEsimTabVisibility(0);
 		// То же и для USSD: есть модемы, у которых он не работает в принципе.
 		applyUssdTabVisibility();
+		// И вкладки по галочкам - «Юстировка» и «Статистика».
+		applyGateTabs();
 
 		var bar = document.querySelector('.modembar');
 		/* полоса уже наполнена данными - второй раз не работаем */

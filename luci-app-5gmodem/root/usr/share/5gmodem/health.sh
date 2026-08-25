@@ -386,15 +386,66 @@ _move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - им
 				_cm=$(printf '%s' "$_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p'); _cm="${_cm:-0}"
 				[ "$_cm" = "$2" ] && continue
 				_gw=$(printf '%s' "$_ln" | sed -n 's/.*via \([^ ]*\).*/\1/p')
+				# ПОРЯДОК ДОБАВИТЬ-ПОТОМ-УДАЛИТЬ. Метрика default-маршрута
+				# уникальна в таблице целиком, и добавление СРЫВАЕТСЯ, если
+				# нужную метрику уже занял ДРУГОЙ интерфейс. Удалив первым, мы
+				# в этом случае оставляли линк вовсе без default - зелёный, но
+				# без интернета до ребута. Теперь старый маршрут держится, пока
+				# новый не встал; про сорвавшееся добавление route_add_default
+				# пишет в журнал (метрики разные, конфликта между ними нет).
+				route_add_default "$_fam" "$1" "$2" "$_gw" "$_mt_a" || continue
 				ip "$_fam" route del default dev "$1" metric "$_cm" $_mt_a 2>/dev/null
-				if [ -n "$_gw" ]; then
-					ip "$_fam" route add default via "$_gw" dev "$1" metric "$2" $_mt_a 2>/dev/null
-				else
-					ip "$_fam" route add default dev "$1" metric "$2" scope link $_mt_a 2>/dev/null
-				fi
 			done
 		done
 	done
+}
+
+# ПРОПАВШИЙ DEFAULT-МАРШРУТ - ВЕРНУТЬ.
+#
+# ЖИВОЙ СЛУЧАЙ (Almond_13, 25.08.2026): пользователь переставил аплинк на
+# модем, интерфейс поднят и с адресом, обе карточки зелёные - а default-
+# маршрута у модема в таблице НЕТ вообще, трафик так и шёл по Wi-Fi. Пробы
+# ходят с привязкой к устройству (`ping -I`), маршрут им не нужен - потому
+# сторож и не видел беды, а _move_defaults переставляет только СУЩЕСТВУЮЩИЕ
+# маршруты: нечего двигать - ничего и не делает. Дыра затягивалась ребутом.
+#
+# Маршрут не выдумываем: берём то, что знает netifd - у самой сети или у её
+# динамического ребёнка ("<имя>_4"/"<имя>_6", туда qmi и mbim кладут адрес со
+# шлюзом). netifd не знает default - значит его тут и не должно быть.
+_nd_gw() {   # $1 - сеть, $2 - цель ("0.0.0.0"/"::"), $3 - суффикс ребёнка
+	for _ng_n in "$1" "${1}$3"; do
+		_ng_v=$(printf '%s' "$_HDUMP" | jsonfilter \
+			-e "@.interface[@.interface=\"$_ng_n\"].route[@.target=\"$2\"].nexthop" 2>/dev/null | head -1)
+		[ -n "$_ng_v" ] && { printf '%s' "$_ng_v"; return 0; }
+	done
+	return 1
+}
+
+_rt6_args() {
+	for _r6 in "$(uci -q get "network.$1.ip6table" 2>/dev/null)" \
+			"$(uci -q get "network.${1}6.ip6table" 2>/dev/null)" \
+			"$(uci -q get "network.${1}_6.ip6table" 2>/dev/null)"; do
+		[ -n "$_r6" ] && { printf 'table %s' "$_r6"; return 0; }
+	done
+}
+
+_ensure_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - имя сети
+	_ed_a=$(_rt4_args "$3")
+	if ! ip -4 route show default $_ed_a 2>/dev/null | grep -qE " dev $1( |$)"; then
+		if _ed_gw=$(_nd_gw "$3" "0.0.0.0" _4); then
+			[ "$_ed_gw" = "0.0.0.0" ] && _ed_gw=""
+			route_add_default -4 "$1" "$2" "$_ed_gw" "$_ed_a" && \
+				_ev "$3 had no default route - restored (metric $2)"
+		fi
+	fi
+	_ed_a6=$(_rt6_args "$3")
+	if ! ip -6 route show default $_ed_a6 2>/dev/null | grep -qE " dev $1( |$)"; then
+		if _ed_gw6=$(_nd_gw "$3" "::" _6); then
+			[ "$_ed_gw6" = "::" ] && _ed_gw6=""
+			[ -n "$_ed_gw6" ] && route_add_default -6 "$1" "$2" "$_ed_gw6" "$_ed_a6" && \
+				_ev "$3 had no IPv6 default route - restored (metric $2)"
+		fi
+	fi
 }
 
 # РЕЗОЛВЕРЫ МЁРТВОГО ЛИНКА - УБРАТЬ ИЗ ОБЩЕГО СПИСКА.
@@ -489,7 +540,7 @@ enforce() {
 				_ev "$_e_if has no internet - steering traffic away (metric $_e_base -> $_e_want)"
 			fi
 			_e_dead="$_e_dead $_e_if"
-			_move_defaults "$_e_dev" "$_e_want" "$_e_if"
+			_e_target=$_e_want
 		elif [ "$_e_st" = up ] && [ "$H_FO" = "1" ] && [ "$_e_cnt" -gt 1 ] \
 		     && { [ -f "$_e_f.demoted" ] || { is_manual "$_e_if" && [ "$_e_base" -gt "$_e_min" ]; }; }; then
 			# ожил, но по настройке остаётся В КОНЦЕ: держим штрафную метрику,
@@ -499,7 +550,7 @@ enforce() {
 			# Линк «только вручную» держится здесь же ПОСТОЯННО, а не после
 			# падения: трафик он получает лишь когда пользователь сам сделал
 			# его первым (тогда его метрика минимальна и штраф не ставится).
-			_move_defaults "$_e_dev" $((_e_base + PEN)) "$_e_if"
+			_e_target=$((_e_base + PEN))
 		else
 			# живой (или штрафовать нельзя/выключено) - вернуть родную метрику
 			# ( |$): `ip route show` печатает пробел на конце строки, голый
@@ -507,8 +558,12 @@ enforce() {
 			if ip -4 route show default $(_rt4_args "$_e_if") 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qE "metric $((_e_base + PEN))( |$)"; then
 				_ev "$_e_if - restoring priority (metric $_e_base)"
 			fi
-			_move_defaults "$_e_dev" "$_e_base" "$_e_if"
+			_e_target=$_e_base
 		fi
+		# Маршрут мог ПРОПАСТЬ совсем (сорвавшееся добавление у соседа по
+		# метрике, чужая правка таблицы) - двигать тогда нечего, сперва вернём.
+		_ensure_defaults "$_e_dev" "$_e_target" "$_e_if"
+		_move_defaults "$_e_dev" "$_e_target" "$_e_if"
 	done
 	# DNS ходит за трафиком: серверы оштрафованных линков убираем из общего
 	# списка (см. _dns_demote выше). Только когда есть куда переключаться -

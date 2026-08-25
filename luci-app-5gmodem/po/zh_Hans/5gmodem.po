@@ -2662,7 +2662,7 @@ msgstr "RSRQ（信号质量）"
 msgid "SINR (signal to noise)"
 msgstr "SINR（信噪比）"
 
-msgid "Percent (modem scale)"
+msgid "Overall level (percent)"
 msgstr "百分比（调制解调器标度）"
 
 msgid "Show on the case LEDs"
@@ -4863,3 +4863,4 @@ msgstr "后端返回为空"
 
 msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "详情见系统日志（logread，标签 5gmodem）。"
+

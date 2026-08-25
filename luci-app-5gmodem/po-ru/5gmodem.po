@@ -2689,8 +2689,8 @@ msgstr "RSRQ (качество сигнала)"
 msgid "SINR (signal to noise)"
 msgstr "SINR (сигнал/шум)"
 
-msgid "Percent (modem scale)"
-msgstr "Проценты (шкала модема)"
+msgid "Overall level (percent)"
+msgstr "Общий уровень (проценты)"
 
 msgid "Show on the case LEDs"
 msgstr "Показывать на светодиодах корпуса"
@@ -5029,3 +5029,4 @@ msgstr "пустой ответ бэкенда"
 
 msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "Подробности в системном журнале (logread, тег 5gmodem)."
+

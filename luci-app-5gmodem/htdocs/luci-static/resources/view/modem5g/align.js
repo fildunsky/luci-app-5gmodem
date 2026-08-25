@@ -385,7 +385,10 @@ return view.extend({
 			}
 			st.foreignN = 0;
 			var sinr = parseFloat(j.sinr), rsrp = parseInt(j.rsrp, 10), rsrq = parseInt(j.rsrq, 10);
-			var rssiRaw = (j.rssi != null && j.rssi !== '') ? j.rssi : j.signal;
+			/* Раньше при отсутствии rssi сюда подставлялся j.signal - а это
+			   процент уровня, не дБм: поле RSSI показывало «-64» рядом с
+			   «33» и оба выглядели как измерения. Нет rssi - пишем прочерк. */
+			var rssiRaw = (j.rssi != null && j.rssi !== '') ? j.rssi : '';
 			var online = !isNaN(rsrp) || !isNaN(sinr) || !!(j.modem && j.modem.length > 1);
 			st.online = online;
 			if (!online) {

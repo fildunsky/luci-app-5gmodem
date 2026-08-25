@@ -283,6 +283,29 @@ return view.extend({
 		   не подхватывает (вкладка держится до ребута). Поэтому после КАЖДОГО
 		   сохранения сбрасываем кэш меню - дёшево (rm файла), а menu перечитается
 		   на ближайшей навигации. Оборачиваем save, чтобы сброс шёл ПОСЛЕ commit. */
+		/* ГАЛОЧКИ, КОТОРЫЕ ГЕЙТЯТ ВКЛАДКИ, ТРЕБУЮТ ПЕРЕЗАГРУЗКИ СТРАНИЦЫ.
+		   Бэкенд отрабатывает верно: значение сохраняется, кэш дерева меню
+		   сбрасывается (см. applyset), и следующий запрос уже отдаёт вкладку.
+		   Но ОТКРЫТАЯ страница получила меню один раз при загрузке - и полоса
+		   вкладок остаётся прежней. Со стороны это выглядит как «включил
+		   Юстировку, а вкладки нет» (отчёт пользователя 25.08.2026).
+		   Поэтому запоминаем исходные значения и после сохранения
+		   перезагружаем страницу, если хоть одно изменилось. */
+		var _gateOpts = [ 'align_enabled', 'show_stats' ];
+		var _gateWas = {};
+		_gateOpts.forEach(function(k) {
+			_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
+		});
+		function sid0() {
+			var ss = uci.sections('5gmodem', '5gmodem');
+			return (ss && ss[0]) ? ss[0]['.name'] : '';
+		}
+		function _gateChanged() {
+			return _gateOpts.some(function(k) {
+				return String(uci.get('5gmodem', sid0(), k) || '') !== _gateWas[k];
+			});
+		}
+
 		var _mSaveOrig = m.save.bind(m);
 		m.save = function() {
 			return _mSaveOrig.apply(null, arguments).then(function(r) {
@@ -310,6 +333,16 @@ return view.extend({
 						var n = 0;
 						for (var k in ch) { n += (ch[k] || []).length; }
 						if (ui.changes && ui.changes.setIndicator) { ui.changes.setIndicator(n); }
+						/* Вкладки «Юстировка» и «Статистика» прячутся стилем
+						   (см. modemtabs.applyGateTabs), поэтому появляются на
+						   месте - ни перезагрузки страницы, ни сброса кэша меню
+						   не нужно. */
+						if (_gateChanged()) {
+							_gateOpts.forEach(function(k) {
+								_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
+							});
+							modemtabs.refreshGateTabs();
+						}
 						return r;
 					}).catch(function() { return r; });
 				});
