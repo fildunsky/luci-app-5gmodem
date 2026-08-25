@@ -4,8 +4,13 @@
 # modemswitch.sh): каждый новый IMEI выглядел новым модемом. Причину закрыл
 # якорь по MAC, здесь убираем уже накопившееся - один раз, с маркером.
 uci -q get 5gmodem.@5gmodem[0] >/dev/null 2>&1 || exit 0
-[ "$(uci -q get 5gmodem.@5gmodem[0].ifdedupe_done)" = "1" ] && exit 0
+# ВЕРСИЯ МАРКЕРА, а не просто «сделано». Первая редакция уборки не убирала
+# ничего: её предохранитель сравнивал l3_device дубля с устройством маршрута
+# по умолчанию, а у дублей оно ОДНО И ТО ЖЕ с главным - совпадало у каждого.
+# Пользователи с уже выставленным маркером «1» остались бы с мусором навсегда,
+# поэтому маркер поднят до «2»: у них уборка пройдёт ещё раз, уже рабочая.
+[ "$(uci -q get 5gmodem.@5gmodem[0].ifdedupe_done)" = "2" ] && exit 0
 /usr/share/5gmodem/modemswitch.sh dedupe-ifaces >/dev/null 2>&1
-uci -q set 5gmodem.@5gmodem[0].ifdedupe_done='1'
+uci -q set 5gmodem.@5gmodem[0].ifdedupe_done='2'
 uci -q commit 5gmodem
 exit 0

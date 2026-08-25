@@ -1637,7 +1637,6 @@ dedupe-ifaces)
 	note_foreign_uci firewall "modemswitch dedupe-ifaces"
 	_dd_used=" $(uci -q show "$CFG" 2>/dev/null \
 		| sed -n "s/^$CFG\.m_[^.]*\.network='\?\([^']*\)'\?\$/\1/p" | tr '\n' ' ') "
-	_dd_def=$(ip -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | tr '\n' ' ')
 	_dd_gone=""
 	for _dd_if in $(uci -q show network 2>/dev/null \
 			| sed -n "s/^network\.\([^.]*\)\.modem_path=.*/\1/p"); do
@@ -1657,10 +1656,23 @@ dedupe-ifaces)
 			case "$_dd_used" in *" $_dd_o "*) _dd_owner="$_dd_o"; break ;; esac
 		done
 		[ -n "$_dd_owner" ] || continue
-		# не сносим тот, через который прямо сейчас идёт трафик
-		_dd_l3=$(ubus call network.interface."$_dd_if" status 2>/dev/null \
-			| jsonfilter -e '@.l3_device' 2>/dev/null)
-		case " $_dd_def " in *" ${_dd_l3:-nope} "*) continue ;; esac
+		# ПРОВЕРКА «НЕ ТРОГАТЬ НЕСУЩЕГО ТРАФИК» ЗДЕСЬ НЕ РАБОТАЕТ - И БЛОКИРОВАЛА
+		# ВСЮ УБОРКУ. Дубли по определению сидят на ОДНОЙ сетевой карте с
+		# главным, поэтому l3_device у них одинаковый (eth2), и сравнение с
+		# устройством маршрута по умолчанию совпадало у КАЖДОГО: уборка молча
+		# пропускала всех (живой отчёт 25.08.2026 - четыре modem* на eth2
+		# пережили миграцию). Смысла в проверке нет и по сути: маршрут
+		# принадлежит устройству, а устройство остаётся за главным интерфейсом -
+		# снос дубля лишь убирает лишнюю копию маршрута с худшей метрикой.
+		#
+		# Настоящая страховка - другая: убеждаемся, что ГЛАВНЫЙ интерфейс
+		# сейчас поднят. Если он лежит, а трафик идёт через дубль, ничего не
+		# трогаем: сначала пусть поднимется штатный.
+		ubus call network.interface."$_dd_owner" status 2>/dev/null \
+			| grep -q '"up": true' || {
+				logger -t 5gmodem "dedupe-ifaces: $_dd_if looks like a duplicate of $_dd_owner, but $_dd_owner is down - leaving both alone"
+				continue
+			}
 		ifdown "$_dd_if" >/dev/null 2>&1
 		uci -q delete "network.$_dd_if"
 		_dd_z=$(uci show firewall 2>/dev/null \
