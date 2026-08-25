@@ -1,0 +1,110 @@
+name: Build packages (cached SDK)
+
+# ЭКСПЕРИМЕНТ РЯДОМ С БОЕВЫМ. Основной build.yml не трогаем: он выпускает
+# релизы, и ломать его ради ускорения нельзя. Здесь то же самое, но SDK
+# распаковывается на сам раннер, а его рабочие каталоги переживают запуски
+# через кеш GitHub.
+#
+# ЗАЧЕМ. Наш пакет - набор скриптов, но SDK тянет сборку зависимостей, среди
+# которых тяжёлый стек ModemManager (glib2, gio, libmm-glib). Готовое действие
+# openwrt/gh-action-sdk не кеширует НИЧЕГО (проверено по его entrypoint.sh),
+# поэтому каждый прогон компилирует их заново: 14-18 минут на ровном месте.
+# С кешем повторные сборки должны свестись к нашему пакету.
+#
+# ПОЧЕМУ НЕ КЕШИРУЕМ КОНТЕЙНЕР. SDK-образ держит toolchain внутри
+# /builder/staging_dir; примонтировать туда пустой том с раннера - значит
+# закрыть содержимое образа и получить сборку без компилятора. Поэтому SDK
+# берём тарболом и распаковываем на раннер, где кешировать можно что угодно.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }} (cached)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 25.12.5
+            label: 25.12.x (apk)
+            slug: 25.12-apk
+          - version: 24.10.8
+            label: 24.10.x (opkg)
+            slug: 24.10-opkg
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: feed
+
+      - name: Host prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+            gettext git libncurses-dev libssl-dev python3-setuptools rsync swig \
+            unzip zlib1g-dev file wget zstd
+
+      # Тарбол SDK кешируем отдельно от рабочих каталогов: он неизменен для
+      # версии, а рабочие каталоги растут и меняются.
+      - name: Cache SDK tarball
+        uses: actions/cache@v4
+        with:
+          path: sdk.tar.zst
+          key: sdk-tar-${{ matrix.version }}
+
+      - name: Download SDK
+        run: |
+          set -e
+          BASE="https://downloads.openwrt.org/releases/${{ matrix.version }}/targets/x86/64"
+          NAME=$(curl -s "$BASE/sha256sums" | grep -oE 'openwrt-sdk-[^ ]*\.tar\.zst' | head -1)
+          echo "SDK: $NAME"
+          [ -s sdk.tar.zst ] || curl -fsSL -o sdk.tar.zst "$BASE/$NAME"
+          mkdir -p sdk
+          tar --zstd -xf sdk.tar.zst -C sdk --strip-components=1
+
+      # ГЛАВНОЕ. staging_dir - собранные заголовки и библиотеки зависимостей,
+      # build_dir - их деревья сборки со штампами «уже собрано», dl - скачанные
+      # исходники. Вместе это и есть «не компилировать glib2 заново».
+      # Ключ включает версию SDK и хеш нашего Makefile: сменились зависимости -
+      # кеш честно пересобирается. restore-keys подхватывает прошлый кеш той же
+      # версии SDK, чтобы правка Makefile не обнуляла всё.
+      - name: Cache SDK work dirs
+        uses: actions/cache@v4
+        with:
+          path: |
+            sdk/staging_dir
+            sdk/build_dir
+            sdk/dl
+          key: sdk-work-${{ matrix.version }}-${{ hashFiles('feed/luci-app-5gmodem/Makefile') }}
+          restore-keys: |
+            sdk-work-${{ matrix.version }}-
+
+      - name: Add our feed and build
+        run: |
+          set -e
+          cd sdk
+          echo "src-link modem $GITHUB_WORKSPACE/feed" > feeds.conf
+          cat feeds.conf.default >> feeds.conf 2>/dev/null || true
+          ./scripts/feeds update -a >/dev/null
+          ./scripts/feeds install -a -p modem >/dev/null
+          make defconfig >/dev/null
+          time make package/luci-app-5gmodem/compile -j"$(nproc)" V=w
+
+      - name: Collect packages
+        run: |
+          mkdir -p out
+          find sdk/bin -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} out/ \;
+          echo "--- collected ---"; ls -l out/
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cached-${{ matrix.slug }}
+          path: out/*
+          if-no-files-found: error
