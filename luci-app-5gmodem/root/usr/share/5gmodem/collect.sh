@@ -17,6 +17,13 @@
 . /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
 
 RES="/usr/share/5gmodem"
+
+# ОТЧЁТ НИЧЕГО НЕ ЛОМАЕТ. Диагностика обязана быть чтением: единственный
+# инструмент, которым человек зовёт на помощь, не имеет права оборвать ему
+# связь. Флаг видят все наши скрипты, которые умеют забирать себе канал
+# (esim.sh) - в этом режиме они уступают и отвечают «занято».
+ESIM_READONLY=1
+export ESIM_READONLY
 OUT="/tmp/5gmodem-diag.txt"
 LOCK="/tmp/5gmodem-diag.lock"
 STEP="/tmp/5gmodem-diag.step"
@@ -254,8 +261,20 @@ uplink_verdict() {
 		_uv_ip=$(_uv_get "$_uv_n" '["ipv4-address"][0].address')
 		_uv_h="-"
 		[ -f "/tmp/5gmodem_health/$_uv_n" ] && read -r _uv_h _ _ _ _ < "/tmp/5gmodem_health/$_uv_n" 2>/dev/null
-		printf 'metric %-5s %-8s %-10s %-16s сторож: %s\n' \
-			"$_uv_m" "$_uv_n" "${_uv_d:--}" "${_uv_ip:-нет адреса}" "$_uv_h"
+		# «ЕСТЬ АДРЕС» И «МОЖЕТ НЕСТИ ТРАФИК» - РАЗНЫЕ ВЕЩИ. Линк с адресом, но
+		# без шлюза (DHCP не прислал option router) выглядел в этом списке
+		# здоровым - и человек не понимал, почему приоритет на него не
+		# переключается: переключать не на что, default-маршрута у линка нет и
+		# взяться ему неоткуда (живой случай 25.08.2026, WH3000 Pro).
+		_uv_gw=$(_uv_get "$_uv_n" '.route[@.target="0.0.0.0"].nexthop')
+		_uv_note=""
+		if [ -n "$_uv_d" ] && [ -n "$_uv_ip" ]; then
+			ip -4 route show default 2>/dev/null | grep -qE " dev $_uv_d( |$)" \
+				|| _uv_note="  БЕЗ МАРШРУТА"
+			[ -n "$_uv_note" ] && [ -z "$_uv_gw" ] && _uv_note="  БЕЗ ШЛЮЗА (DHCP не дал option router)"
+		fi
+		printf 'metric %-5s %-8s %-10s %-16s сторож: %s%s\n' \
+			"$_uv_m" "$_uv_n" "${_uv_d:--}" "${_uv_ip:-нет адреса}" "$_uv_h" "$_uv_note"
 	done | sort -n -k2
 
 	# ЖИВОЙ маршрут, а не порядок в uci: сторож штрафует метрику в таблице ядра,
@@ -274,6 +293,22 @@ uplink_verdict() {
 		[ "$(_uv_get "$_uv_n" '.l3_device')" = "$_uv_ldev" ] && { _uv_lif="$_uv_n"; break; }
 	done
 	echo "трафик идёт через: ${_uv_lif:-?} ($_uv_ldev)"
+	# Линки выше по приоритету, которые НЕ МОГУТ взять трафик, - объясняем
+	# прямо здесь: иначе «почему не переключается на кабель» остаётся загадкой.
+	for _uv_n in $_uv_nets; do
+		_uv_d2=$(_uv_get "$_uv_n" '.l3_device'); [ -n "$_uv_d2" ] || continue
+		[ "$_uv_d2" = "$_uv_ldev" ] && continue
+		_uv_m2=$(uci -q get "network.$_uv_n.metric"); [ -n "$_uv_m2" ] || _uv_m2=0
+		_uv_lm=$(uci -q get "network.${_uv_lif}.metric"); [ -n "$_uv_lm" ] || _uv_lm=0
+		[ "$_uv_m2" -lt "$_uv_lm" ] 2>/dev/null || continue
+		ip -4 route show default 2>/dev/null | grep -qE " dev $_uv_d2( |$)" && continue
+		echo "  ВНИМАНИЕ: $_uv_n ($_uv_d2) стоит выше по приоритету (metric $_uv_m2),"
+		echo "  но default-маршрута у него нет - переключиться на него не на что."
+		if [ -z "$(_uv_get "$_uv_n" '.route[@.target="0.0.0.0"].nexthop')" ]; then
+			echo "  Причина: сеть не выдала шлюз (у DHCP нет option router)."
+			echo "  Чинить у вышестоящего роутера либо прописать шлюз статикой."
+		fi
+	done
 
 	# Проба ИМЕННО через это устройство (SO_BINDTODEVICE): обычный ping с
 	# роутера ходит по любому маршруту и на вопрос «жив ли ЭТОТ линк» не

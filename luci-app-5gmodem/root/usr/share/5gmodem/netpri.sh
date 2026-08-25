@@ -810,9 +810,20 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	fi
 	if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
 		route_add_default -4 "$_dev" "$2" "$_gw4" "$_ta4"
-	else
+	elif is_p2p_dev "$_dev"; then
 		# on-link default (сотовый point-to-point) - обязателен scope link.
 		route_add_default -4 "$_dev" "$2" "" "$_ta4"
+	else
+		# ШЛЮЗА НЕТ, А УСТРОЙСТВО НЕ POINT-TO-POINT - МАРШРУТ НЕ ВЫДУМЫВАЕМ.
+		#
+		# `default dev eth1 scope link` на 802.3-линке означает «весь интернет
+		# достижим напрямую»: устройство начинает ARP-ить каждый адрес, и это
+		# чёрная дыра, а не аплинк. Раньше мы такой маршрут ставили - и клик по
+		# кабельному WAN «срабатывал», хотя связи не появлялось (живой случай
+		# 25.08.2026, WH3000 Pro: DHCP выдал адрес с маской /16 и БЕЗ опции
+		# router). Честный ответ: шлюза нет - нести трафик нечем, чинить надо у
+		# вышестоящего роутера.
+		logger -t 5gmodem "netpri: $1 ($_dev) has no gateway - cannot make it the default route; check the upstream DHCP server (option router)"
 	fi
 	# IPv6-шлюз ЖИВЁТ НЕ У РОДИТЕЛЯ. Default v6 обычно держит спутник
 	# (`wan6`, `<имя>_6`) - отдельная сеть на ТОМ ЖЕ устройстве. Фаза удаления

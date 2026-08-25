@@ -524,7 +524,10 @@ _restore_stolen() {
 			# 100% потерь пакетов, при этом HTTP отвечает за 0.4 с. Полагаться
 			# на один пинг значило бы регулярно рвать рабочее соединение.
 			if command -v curl >/dev/null 2>&1; then
-				curl -s --max-time 8 --interface "$L3" -o /dev/null \
+				# if! - строго устройство: без префикса curl при неудаче
+				# привязывается к АДРЕСУ, и проба уходит по чужому маршруту
+				# (тот же разбор, что в health.sh).
+				curl -s --max-time 8 --interface "if!$L3" -o /dev/null \
 					http://ip-api.com/line/?fields=query 2>/dev/null && continue
 			fi
 			_dead="нет связи через $L3"

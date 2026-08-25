@@ -1700,14 +1700,26 @@ esac
 # 04.08.2026 после переключения ModemManager -> MBIM).
 # Изменяющие операции сюда не попадают: они ниже сами опускают интерфейс
 # (_uplink_release) и работают штатно.
+_esim_may_disrupt=1
 case "$1" in
-	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) : ;;
-	*)
-		_ub_w=$(esim_wdm)
-		if [ -n "$_ub_w" ] && _wdm_owned_by_umbim "$_ub_w"; then
-			err "uplink busy"; exit 0
-		fi ;;
+	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) ;;
+	*) _esim_may_disrupt="" ;;
 esac
+# РЕЖИМ ТОЛЬКО ЧТЕНИЯ - ДИАГНОСТИКА. Отчёт (collect.sh) зовёт нас ради пары
+# строк, и права рвать связь у него нет НИКАКОГО. Живой случай 25.08.2026,
+# MV31-W: сбор отчёта дошёл до «eSIM: уведомления», верб notifications честно
+# опустил интерфейс, чтобы забрать канал у umbim, - а обратный дозвон у этого
+# модема упирается в ловушку PIN2 и не поднимается. Человек остался без
+# интернета после НАЖАТИЯ КНОПКИ «СОБРАТЬ ОТЧЁТ» и чинил ребутом. Теперь в этом
+# режиме изменяющие вербы уступают так же, как читающие: строка в отчёте
+# дешевле связи.
+[ "$ESIM_READONLY" = "1" ] && _esim_may_disrupt=""
+if [ -z "$_esim_may_disrupt" ]; then
+	_ub_w=$(esim_wdm)
+	if [ -n "$_ub_w" ] && _wdm_owned_by_umbim "$_ub_w"; then
+		err "uplink busy"; exit 0
+	fi
+fi
 
 # ---- всё остальное: под замком (у eUICC один логический канал) ---------------
 LOCK="/tmp/5gmodem_esim.lock"
@@ -1746,6 +1758,12 @@ echo "$$" > "$LOCK/pid" 2>/dev/null
 # Возвращаем обратно в trap - и на нормальном выходе, и когда процесс убьют.
 _UPLINK_IF=""
 _uplink_release() {
+	# Вторая створка того же запрета (см. ESIM_READONLY выше): опускать чужой
+	# интерфейс ради чтения нельзя ни из какого верба.
+	if [ "$ESIM_READONLY" = "1" ]; then
+		logger -t 5gmodem "esim: read-only mode - leaving the data connection alone"
+		return 0
+	fi
 	# ДВА РАЗНЫХ КОНФЛИКТА, А НЕ ОДИН.
 	#
 	# Изначально здесь проверялся ТОЛЬКО захват cdc-wdm протоколом mbim. Но у

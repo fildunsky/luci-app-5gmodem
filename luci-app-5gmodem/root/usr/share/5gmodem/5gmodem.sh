@@ -1955,14 +1955,30 @@ _qmi_refresh() {
 	# (#LAPS): "порт:rsrp:rsrq ...". Под ModemManager AT-профиль молчит, и
 	# таблица антенн у Telit пустовала, хотя QMI цепочки отдаёт (31.07.2026).
 	# Знаки прошивка теряет (RSRP '100.3 dBm', ECIO '9.6') - возвращаем минус.
+	# «-256.0 dBm» - ЗАГЛУШКА «ИЗМЕРЕНИЯ НЕТ», А НЕ УРОВЕНЬ. Цепь числится
+	# включённой ("Radio tuned: yes"), но в этот момент ничего не мерила.
+	# Живой Compal RXM-G1 25.08.2026: цепи 0 и 1 дают -106/-104, а 2 и 3 -
+	# ровно -256.0 при ECIO -3.0. На AT-пути мы это отсекаем давно (см. фильтр
+	# в профиле 05c690d5), а на QMI-пути фильтра не было: в таблице антенн у
+	# человека висели два порта с «-256 дБм», то есть нарисованные мёртвые
+	# антенны там, где просто нет данных. Оставляем только физичный диапазон.
 	_qr_ant=$(printf '%s\n' "$_qr_txraw" | awk '
 		/^RX Chain/ { if (t == "yes" && r != "") emit(); n = 0 + substr($3, 1, 1); t = ""; r = ""; q = "" }
 		/Radio tuned:/ { t = ($0 ~ /yes/) ? "yes" : "" }
 		/RSRP:/ { gsub(/[^0-9.-]/, "", $2); r = $2; if (r + 0 > 0) r = -r }
 		/ECIO:/ { gsub(/[^0-9.-]/, "", $2); q = $2; if (q + 0 > 0) q = -q }
-		function emit() { out = out (out == "" ? "" : " ") n ":" r ":" q }
+		function emit() { if (r + 0 > -160 && r + 0 < -20) { out = out (out == "" ? "" : " ") n ":" r ":" q; ok++ } }
 		END { if (t == "yes" && r != "") emit(); printf "%s", out }
 	')
+	# ВЕРДИКТ РАЗНЕСЁННОГО ПРИЁМА - по числу ЖИВЫХ цепей, как на AT-пути.
+	# Меньше двух измеренных уровней - вердикта не даём вовсе: отличить
+	# «цепи не мерили» от «цепи мертвы» по одному значению нельзя.
+	_qr_rxd=""
+	_qr_an=$(printf '%s' "$_qr_ant" | wc -w)
+	case "$_qr_an" in
+		2)   _qr_rxd="2rx" ;;
+		3|4) _qr_rxd="4rx" ;;
+	esac
 	[ -n "$_qr_tx" ] && _qr_tx="$_qr_tx dBm"
 
 	# Соседние соты. Две секции: "Intrafrequency" - соты на ТОЙ ЖЕ частоте (там же
@@ -2086,6 +2102,7 @@ _qmi_refresh() {
 	printf '%s' "$_qr_bw" > "$_qr_p.bw.tmp" && mv "$_qr_p.bw.tmp" "$_qr_p.bw"
 	printf '%s' "$_qr_tx" > "$_qr_p.tx.tmp" && mv "$_qr_p.tx.tmp" "$_qr_p.tx"
 	printf '%s' "$_qr_ant" > "$_qr_p.ant.tmp" && mv "$_qr_p.ant.tmp" "$_qr_p.ant"
+	printf '%s' "$_qr_rxd" > "$_qr_p.rxd.tmp" && mv "$_qr_p.rxd.tmp" "$_qr_p.rxd"
 	printf '%s' "$_qr_b3" > "$_qr_p.b3g.tmp" && mv "$_qr_p.b3g.tmp" "$_qr_p.b3g"
 	printf '%s' "$_qr_u3" > "$_qr_p.u3g.tmp" && mv "$_qr_p.u3g.tmp" "$_qr_p.u3g"
 	printf '%s' "$_qr_3g" > "$_qr_p.c3g.tmp" && mv "$_qr_p.c3g.tmp" "$_qr_p.c3g"
@@ -2145,6 +2162,7 @@ _qmi_supplement() {
 	[ -z "$NEIGHBORS" ] && [ -s "$_QS_P.nb" ] && NEIGHBORS=$(cat "$_QS_P.nb")
 	# Антенные порты из QMI - когда AT-профиль их не дал (MM-модем).
 	[ -z "$ANTPORTS" ] && [ -s "$_QS_P.ant" ] && ANTPORTS=$(cat "$_QS_P.ant")
+	[ -z "$RXDIV" ] && [ -s "$_QS_P.rxd" ] && RXDIV=$(cat "$_QS_P.rxd")
 	# АГРЕГАЦИЯ ИЗ QMI (issue #11): у модема под ModemManager вендорный AT-профиль
 	# не выполняется, и SCC оставались пустыми, хотя qmicli их видит. Формат файла:
 	# "band,earfcn|band,earfcn|..." - первая пара PCC, дальше SCC1..4. Заполняем

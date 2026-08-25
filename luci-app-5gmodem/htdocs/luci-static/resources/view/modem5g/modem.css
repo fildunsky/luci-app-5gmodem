@@ -2532,3 +2532,24 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 	max-width: 100%;
 	margin: 1em auto;
 }
+
+/* ==== ВЫПАДАШКА В КАРТОЧКАХ ВИДЖЕТОВ НЕ ДОЛЖНА ОБРЕЗАТЬСЯ =================
+   Раскрытый список хостов пинга упирался в границу блока: часть пунктов
+   пропадала, и прокрутить их было нельзя - список ОБРЕЗАН, а не свёрнут
+   (жалоба владельца 25.08.2026, proton2025). Соседний «Режим» вёл себя
+   прилично потому, что он ListValue - обычный <select>, его попап рисует
+   браузер, и никакой overflow ему не указ.
+   Режет контейнер секции: тема задаёт
+   `body:not([data-page^="admin-status"]) .cbi-tblsection{overflow-x:auto}`.
+   Правило, снимающее это, в файле уже есть - но лежит внутри незакрытого
+   комментария и не применяется. Комментарии НЕ ТРОГАЕМ: их в файле много,
+   часть правил под ними мертва давно, и разом оживлённые они ломают отступы
+   по всей теме (проверено вживую - плашки слиплись с текстом). Поэтому
+   правило повторено здесь, в конце файла, где оно точно живое и ничего
+   постороннего за собой не тянет. */
+.tg-modem-form .cbi-value[data-name="__pingcards"] .cbi-tblsection,
+.tg-modem-form .cbi-value[data-name="__svccards"] .cbi-tblsection { overflow: visible; }
+.tg-modem-form table.cbi-section-table,
+.tg-modem-form table.cbi-section-table td,
+.tg-modem-form table.cbi-section-table th,
+.tg-modem-form .cbi-section-table-row { overflow: visible; }

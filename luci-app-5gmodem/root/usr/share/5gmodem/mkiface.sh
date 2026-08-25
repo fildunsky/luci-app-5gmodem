@@ -91,9 +91,19 @@ _fw_zone_add() {
 		uci commit firewall
 		return 0
 	fi
+	# ЧИСТИМ ВЕСЬ СПИСОК, А НЕ ТОЛЬКО СВОЮ СЕТЬ. Пересборка пропускала дубли
+	# лишь у ДОБАВЛЯЕМОЙ сети, а остальные переносила как есть - и чужие
+	# повторы жили вечно, накапливаясь с каждым созданием интерфейса. Живой
+	# стенд 25.08.2026: `modem` в зоне wan 24 раза (и ровно то же в отчёте
+	# пользователя). Само по себе это не ломает NAT - fw4 схлопывает
+	# устройства, - но конфиг растёт, а диагностика печатает линк по разу на
+	# каждую запись.
 	uci -q delete "firewall.$_fz.network"
+	_fadd=" "
 	for _fe in $_fcur; do
 		[ "$_fe" = "$1" ] && continue
+		case "$_fadd" in *" $_fe "*) continue ;; esac
+		_fadd="$_fadd$_fe "
 		uci add_list "firewall.$_fz.network=$_fe"
 	done
 	uci add_list "firewall.$_fz.network=$1"

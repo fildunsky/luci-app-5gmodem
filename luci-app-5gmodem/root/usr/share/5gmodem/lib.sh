@@ -1526,6 +1526,16 @@ net_fetch() {
 #
 # Шлюз не on-link (адрес /32 у Wi-Fi-клиента и сотовых) - сперва прямой маршрут
 # до самого шлюза, как это делает netifd.
+# УСТРОЙСТВО POINT-TO-POINT? Флаг IFF_POINTOPOINT (0x10) в sysfs. Нужен там,
+# где решается судьба default-маршрута без шлюза: у сотового raw-ip такой
+# маршрут единственно верный, у 802.3-линка - чёрная дыра.
+is_p2p_dev() {
+	[ -n "$1" ] || return 1
+	read -r _p2p < "/sys/class/net/$1/flags" 2>/dev/null || return 1
+	case "$_p2p" in 0x*) ;; *) return 1 ;; esac
+	[ $(( _p2p & 16 )) -ne 0 ]
+}
+
 route_add_default() {
 	_rad_f="$1"; _rad_d="$2"; _rad_m="$3"; _rad_gw="$4"; _rad_t="$5"
 	[ "$_rad_f" = "-4" ] && [ -n "$_rad_gw" ] && \

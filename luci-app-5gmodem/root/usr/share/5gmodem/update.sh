@@ -190,6 +190,20 @@ install)
 			# whose asset was built/labelled with an OLD version) - which used to
 			# report a silent "success" while nothing changed. Surface that.
 			if [ -n "$PREV" ] && [ "$CUR" = "$PREV" ]; then
+				# ПЕРЕУСТАНОВКА ТОЙ ЖЕ ВЕРСИИ - НЕ ПОЛОМКА.
+				#
+				# Проверка ниже ловит настоящий случай: релиз обещает новую
+				# версию, а в ассете лежит старая. Но она срабатывала и на
+				# СОВПАДЕНИИ версий, то есть на обычной переустановке текущей -
+				# и человек получал «релиз собран неправильно, пересоберите» там,
+				# где всё в порядке. Отличаем по свежему тегу: версия равна
+				# последней - это переустановка, и она удалась.
+				_up_lat=$(latest_tag); _up_lat=${_up_lat#v}
+				if [ -n "$_up_lat" ] && [ "$_up_lat" = "$CUR" ]; then
+					printf '{"success":true,"installed":"%s","current":"%s","reinstalled":1}\n' \
+						"$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+					return
+				fi
 				printf '{"success":false,"current":"%s","error":"Reinstalled but version stayed %s - the release asset looks mispackaged (rebuild/reupload it)"}\n' "$(json_esc "$CUR")" "$(json_esc "$CUR")"
 			else
 				printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"

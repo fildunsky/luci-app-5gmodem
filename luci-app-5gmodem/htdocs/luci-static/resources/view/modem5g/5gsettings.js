@@ -5,7 +5,41 @@
 'require fs';
 'require ui';
 'require uci';
+'require rpc';
 'require form';
+
+/* КОММИТ ЧЕРЕЗ СЕССИЮ БРАУЗЕРА, А НЕ ВНЕШНИМ СКРИПТОМ.
+   Отложенные правки LuCI живут В СЕССИИ rpcd, а НЕ в общем /tmp/.uci - там
+   лежит пустой файл-пустышка, из-за которого мы годами думали обратное.
+   Проверено на стенде 25.08.2026: после `ubus uci set` с сессией обычный
+   `uci changes` пуст, `uci commit` не пишет ничего, а дельта сессии жива.
+   Отсюда и жалоба владельца: настройки «сохранялись», индикатор непринятых
+   изменений висел, а после перезагрузки роутера сессия умирала вместе с
+   правкой - и возвращался прежний источник спидтеста.
+   Коммитим тем же путём, которым правка и создавалась. Это НЕ uci.apply():
+   у того есть откат по таймауту подтверждения, и он сам по себе умеет
+   вернуть настройки назад. */
+var uciCommit = rpc.declare({
+	object: 'uci',
+	method: 'commit',
+	params: [ 'config' ],
+	expect: { '': {} }
+});
+
+/* Коммитим ВСЕ конфиги, у которых есть непринятые правки, а не только
+   «5gmodem»: страница правит и соседние (сети, фаервол - через вложенные
+   формы), и оставить их висеть значило бы воспроизвести ту же беду в
+   другом файле. Список берём у сервера - он знает про сессию. */
+function commitPending() {
+	return uci.changes().then(function(ch) {
+		var names = [];
+		for (var k in ch) { if ((ch[k] || []).length) { names.push(k); } }
+		if (!names.length) { return null; }
+		return Promise.all(names.map(function(n) {
+			return L.resolveDefault(uciCommit(n), null);
+		}));
+	}).catch(function() { return null; });
+}
 
 /*
 	Copyright 2021-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -313,17 +347,13 @@ return view.extend({
 				   /tmp/.uci (uci -c не песочница), поэтому granted-скрипт
 				   коммитит их обычным `uci commit` и сбрасывает кэш меню
 				   (гейт вкладки Юстировки). Никакого uci.apply с rollback. */
-				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null).then(function(_res) {
-					/* СТАРЫЙ БЭКЕНД БЕЗ ВЕРБА applyset. Обновили только htdocs
-					   (наш обычный способ раскатки правок страниц) - и мгновенное
-					   сохранение молча переставало применять: setopt.sh падал в
-					   ветку usage с кодом 1, ошибки нет, коммита тоже. Ловим по
-					   коду возврата и доводим дело штатным применением LuCI,
-					   чтобы правка не осталась висеть непринятой. */
-					if (_res && _res.code) {
-						return ui.changes.apply(true);
-					}
-					return null;
+				/* КОММИТ - ПЕРВЫМ ДЕЛОМ И ПО СВОЕЙ СЕССИИ (см. uciCommit выше).
+				   Внешний скрипт сюда не годится в принципе: он не видит
+				   сессионную дельту. Он остаётся только ради сброса кэша меню
+				   и как страховка на случай, если правка всё же осела в общем
+				   /tmp/.uci (туда пишут наши же скрипты). */
+				return commitPending().then(function() {
+					return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null);
 				}).then(function() {
 					/* Коммит прошёл МИМО LuCI - её индикатор «непримененных
 					   изменений» сам об этом не узнает и продолжает висеть.
@@ -697,10 +727,21 @@ return view.extend({
 			for (var k in ch) { n += (ch[k] || []).length; }
 			/* Наш быстрый путь справился - применять больше нечего. */
 			if (!n) { return; }
-			/* Не справился: доводим дело штатным механизмом LuCI. Он умеет
-			   и подтверждение с откатом - для настроек приложения это
-			   безопасно (сетевые интерфейсы страница не трогает). */
-			return ui.changes.apply(true);
+			/* Не справился - коммитим сами, по своей сессии: правка живёт
+			   именно там. ui.changes.apply оставлен последним рубежом, но
+			   идти в него не хочется - у него откат по таймауту
+			   подтверждения, а он и сам умеет вернуть настройки назад. */
+			return commitPending().then(function() {
+				return uci.changes();
+			}).then(function(ch2) {
+				var n2 = 0;
+				for (var k2 in ch2) { n2 += (ch2[k2] || []).length; }
+				if (!n2) {
+					if (ui.changes && ui.changes.setIndicator) { ui.changes.setIndicator(0); }
+					return;
+				}
+				return ui.changes.apply(true);
+			});
 		});
 	}
 });
