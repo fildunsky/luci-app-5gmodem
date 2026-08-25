@@ -56,11 +56,21 @@ jobs:
           # Готовые файлы обоих вариантов забирает шаг Collect по маске *5gmodem*.
           PACKAGES: luci-app-5gmodem
           NO_REFRESH_CHECK: 1
-          # write per-package build logs to logs/ so a failure is diagnosable,
-          # and keep memory in check while heavy deps compile on the runner
+          # ЛОГИ ПО ПАКЕТАМ - чтобы падение было разбираемо (logs/).
           BUILD_LOG: 1
-          MAKEFLAGS: -j2
-          V: s
+          # ПАРАЛЛЕЛЬНОСТЬ ПО ЧИСЛУ ЯДЕР РАННЕРА, а не жёсткое «-j2».
+          #
+          # Прежнее ограничение ставилось «чтобы не съесть память»: наш пакет -
+          # набор скриптов, но SDK тянет сборку зависимостей, а среди них
+          # тяжёлый стек ModemManager (glib2, gio, libmm-glib). На них уходит
+          # почти всё время сборки (24 минуты у apk-задания). У стандартного
+          # раннера GitHub четыре ядра и 16 ГБ: половина простаивала, а памяти
+          # этим пакетам нужно заметно меньше доступного.
+          MAKEFLAGS: -j4
+          # V=s печатает каждую команду компилятора: мегабайты бесполезного
+          # лога и время на его запись. При падении подробности всё равно
+          # берутся из logs/ шагом «Show failing build log» ниже.
+          V: w
 
       # If the build failed, surface the ACTUAL error (the toplevel "Error 2"
       # is useless; the real one is the first failing package's compile log).
