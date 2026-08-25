@@ -402,12 +402,17 @@ function operatorTabIcon(name) {
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
 	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
 	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'op-t2'; }
-	if (n.indexOf('t-mobile') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('тинькофф') >= 0 || n.indexOf('т-банк') >= 0) { return 'op-tbank'; }
+	/* Граница слова - иначе «RT-Mobile»/«РТ-Мобайл» уезжают к Т-Банку. */
+	if (/(^|[^0-9a-zа-яё])(t-mobile|tinkoff|t-bank|т-мобайл|т-банк|тинькофф)/.test(n)) { return 'op-tbank'; }
 	if (n.indexOf('just esim') >= 0 || n.indexOf('justesim') >= 0 || n.indexOf('just-esim') >= 0) { return 'op-justesim'; }
 	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
 	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0) { return 'op-motiv'; }
 	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
 	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
+	/* Ростелеком опознаётся только по имени - см. разбор в mutil.js. */
+	if (n.indexOf('rostelecom') >= 0 || n.indexOf('ростелеком') >= 0 ||
+	    n.indexOf('rt-mobile') >= 0 || n.indexOf('rtmobile') >= 0 || n.indexOf('рт-мобайл') >= 0 ||
+	    n.trim() == 'rtk' || n.trim() == 'ртк' || n.indexOf('rtk ') == 0 || n.indexOf(' rtk') >= 0) { return 'op-rostelecom'; }
 	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
 	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
 	return null;

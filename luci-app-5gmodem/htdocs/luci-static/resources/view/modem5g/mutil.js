@@ -133,7 +133,9 @@ function pdpLabel(v) {
 /* Иконка SIM по имени оператора (упрощённые фирменные значки) */
 function operatorIcon(name) {
 	var n = (name || '').toLowerCase();
-	if (n.indexOf('t-mobile') >= 0 || n.indexOf('tinkoff') >= 0 || n.indexOf('t-bank') >= 0 || n.indexOf('т-мобайл') >= 0 || n.indexOf('т-банк') >= 0) { return 'op-tbank'; }
+	/* ГРАНИЦА СЛОВА, А НЕ ПРОСТО ВХОЖДЕНИЕ: «RT-Mobile» (Ростелеком) содержит
+	   «t-mobile», а «РТ-Мобайл» - «т-мобайл», и оба уезжали к Т-Банку. */
+	if (/(^|[^0-9a-zа-яё])(t-mobile|tinkoff|t-bank|т-мобайл|т-банк|тинькофф)/.test(n)) { return 'op-tbank'; }
 	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
 	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
@@ -143,12 +145,18 @@ function operatorIcon(name) {
 	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
 	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
 	/* РФ-операторы/MVNO по имени. Мотив (Екатеринбург-2000), Таттелеком (бренд
-	   Летай), Вайнах Телеком (Чечня), СберМобайл (MVNO). Кодов в APN-базе нет -
-	   ловим по собственному имени и русским написаниям. */
+	   Летай), Вайнах Телеком (Чечня), СберМобайл (MVNO), Ростелеком. Кодов в
+	   APN-базе нет - ловим по собственному имени и русским написаниям.
+	   Ростелеком ТОЛЬКО так и опознаётся: его нет ни в providers.tsv, ни в
+	   mccmnc.dat, а мобильная связь у него живёт на сети Tele2 - по PLMN
+	   отличить бренд нельзя, только по имени, которое отдаёт симка. */
 	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0 || n.indexOf('ekaterinburg') >= 0 || n.indexOf('екатеринбург') >= 0) { return 'op-motiv'; }
 	if (n.indexOf('sbermobile') >= 0 || n.indexOf('sber mobile') >= 0 || n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
 	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('letai') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
 	if (n.indexOf('vainah') >= 0 || n.indexOf('vainakh') >= 0 || n.indexOf('вайнах') >= 0) { return 'op-vainah'; }
+	if (n.indexOf('rostelecom') >= 0 || n.indexOf('ростелеком') >= 0 ||
+	    n.indexOf('rt-mobile') >= 0 || n.indexOf('rtmobile') >= 0 || n.indexOf('рт-мобайл') >= 0 ||
+	    n.trim() == 'rtk' || n.trim() == 'ртк' || n.indexOf('rtk ') == 0 || n.indexOf(' rtk') >= 0) { return 'op-rostelecom'; }
 	/* KT (Korea Telecom, бренд olleh, MCC 450). Имя приходит коротким «KT» -
 	   матчим как отдельный токен, чтобы не ловить «kt» внутри других слов. */
 	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
