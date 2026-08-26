@@ -12,7 +12,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 ### .apk (OpenWrt 25.12.x)
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-app-5gmodem-2.4.36-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-app-5gmodem-2.4.37-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -30,13 +30,19 @@ the release.
 ### .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-app-5gmodem_2.4.36-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-app-5gmodem_2.4.37-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 The regular package pulls in the full set (`sms-tool`, `comgt`, `qmi-utils`, `modemmanager`, QMI/MBIM protocols, USB-serial kmods) — upgrade it over any earlier version and nothing gets removed.
 
 For low-flash devices (MT7628 boards with 8 MB, where the full set will not install at all) there is a separate **`-lite.apk`** in the release: it requires only `sms-tool`. Metrics, SMS, USSD, band control and the AT console all work; you lose the QMI/MBIM interface protocols and the phone number read through `mmcli`. Do not use the lite build as an upgrade on a router that runs a QMI or MBIM modem — the package manager would drop those packages as orphans.
+
+> **Pulling data out of the app from your own service?** Smart home, an
+> external display, someone else's dashboard, a hand-written script - it is all
+> in one place: [Telemetry: how to consume the metrics](docs/telemetry.md).
+> Field format, the consumer contract, and four delivery options - file, SSH,
+> MQTT, HTTP.
 
 ## Features
 

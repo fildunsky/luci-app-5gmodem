@@ -286,11 +286,10 @@ json_esc() {
 _svc_json() {
 	_sv_r=0
 	if [ -n "$1" ] && [ -x "/etc/init.d/$1" ]; then
-		if ubus -S call service list "{\"name\":\"$1\"}" 2>/dev/null | grep -q '"running": *true'; then
-			_sv_r=1
-		elif /etc/init.d/"$1" status >/dev/null 2>&1; then
-			_sv_r=1
-		fi
+		# Разбор общий с кнопкой (svc_running в lib.sh): у не-procd сервиса
+		# `status` печатает справку и выходит с нулём, поэтому карточка
+		# passwall2 всегда горела «работает» независимо от правды.
+		svc_running "$1" && _sv_r=1
 	fi
 	# ВЕРСИЯ - ЛЮБОМУ СЕРВИСУ, А НЕ ТОЛЬКО zapret.
 	#

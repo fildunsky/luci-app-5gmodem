@@ -12,13 +12,13 @@ OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-app-5gmodem-2.4.36-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-app-5gmodem-2.4.37-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
 apk add /tmp/luci-i18n-5gmodem-zh-cn.apk --allow-untrusted
 apk add luci-i18n-base-zh-cn
 ```
@@ -37,13 +37,13 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-app-5gmodem_2.4.36-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-app-5gmodem_2.4.37-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.36/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.37/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install luci-i18n-base-zh-cn
 ```
@@ -52,6 +52,10 @@ opkg install luci-i18n-base-zh-cn
 标准包会拉取完整依赖（`sms-tool`、`comgt`、`qmi-utils`、`modemmanager`、QMI/MBIM 协议、USB 串口内核模块）——在任何旧版本之上升级都不会丢失组件。
 
 针对小容量闪存设备（8 MB 的 MT7628 主板，完整依赖根本装不下），发布页另有 **`-lite.apk`**：它只依赖 `sms-tool`。信号指标、短信、USSD、频段管理和 AT 控制台都可用；缺少的是 QMI/MBIM 接口协议和通过 `mmcli` 读取的手机号码。不要在运行 QMI 或 MBIM 调制解调器的路由器上用 lite 版覆盖完整版——包管理器会把这些协议包当作孤儿包删除。
+
+> **要用自己的服务从本应用取数据？** 智能家居、外接显示屏、第三方仪表盘、自写脚本，
+> 全部集中在一处说明：[遥测：如何获取指标](docs/telemetry.md)。
+> 其中有字段格式、使用方须遵守的规则，以及四种取数方式——文件、SSH、MQTT、HTTP。
 
 ## 功能
 

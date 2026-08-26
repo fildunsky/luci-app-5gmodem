@@ -135,8 +135,18 @@ function drawChart(canvas, series, opts) {
 	});
 }
 
-function fetchSnapshot() {
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]), '').then(function(out) {
+/* ДОПУСК СВЕЖЕСТИ = ВЫБРАННЫЙ ИНТЕРВАЛ, А НЕ ЖЁСТКИЕ ЧЕТЫРЕ СЕКУНДЫ.
+   Здесь стояло `cached 4`, и поле «Интервал» врало: оно меняло частоту
+   ВОПРОСОВ, а бэкенд всё равно отдавал снимок, пока тому меньше четырёх
+   секунд. Поставив 2 с, человек получал те же цифры дважды и ждал обновления
+   6-7 секунд - крутить антенну по такой обратной связи невозможно (жалоба
+   пользователя 26.08.2026). Теперь просим ровно ту свежесть, которую он
+   выбрал: снимок старше - бэкенд опросит модем.
+   Пол в одну секунду: возраст снимка считается целыми секундами по
+   /proc/uptime, дробный допуск там смысла не имеет. */
+function fetchSnapshot(ttl) {
+	var t = Math.max(1, Math.round(Number(ttl) || 4));
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', String(t) ]), '').then(function(out) {
 		var j = null; try { j = JSON.parse(out); } catch (e) {}
 		return j;
 	});
@@ -423,7 +433,16 @@ return view.extend({
 		function tick() {
 			if (!root.isConnected) { clearInterval(st.timer); stopAudio(); return; }
 			if (document.hidden) return;
-			fetchSnapshot().then(function(j) { if (root.isConnected && !document.hidden && j) apply(j); });
+			/* НЕ НАКЛАДЫВАЕМ ЗАПРОСЫ ДРУГ НА ДРУГА. На коротком интервале опрос
+			   модема может не уложиться в тик, и без этой защиты запросы копились
+			   бы очередью в rpcd - а он рвёт вызов на 30-й секунде («ошибка XHR»).
+			   Пропущенный тик безвреден: следующий возьмёт те же свежие данные. */
+			if (st.busy) return;
+			st.busy = true;
+			fetchSnapshot(st.interval).then(function(j) {
+				st.busy = false;
+				if (root.isConnected && !document.hidden && j) apply(j);
+			}).catch(function() { st.busy = false; });
 		}
 		function restart() { if (st.timer) clearInterval(st.timer); st.timer = setInterval(tick, st.interval * 1000); }
 

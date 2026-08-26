@@ -1536,6 +1536,35 @@ is_p2p_dev() {
 	[ $(( _p2p & 16 )) -ne 0 ]
 }
 
+# ЗАПУЩЕН ЛИ СЕРВИС. Общий ответ для кнопки-тумблера и карточки служб.
+#
+# ГЛАВНАЯ ЛОВУШКА - `status` У НЕ-PROCD СЕРВИСА. В /etc/rc.common команда
+# status объявлена ТОЛЬКО внутри `[ -n "$USE_PROCD" ]`. У классического
+# init-скрипта её в списке команд нет, и rc.common молча подменяет действие на
+# `help`: печатает справку и выходит с кодом 0. То есть проверка «по коду
+# возврата status» у таких сервисов ВСЕГДА отвечает «работает».
+#
+# Живой отчёт 26.08.2026: кнопка, настроенная на passwall2 (у него нет ни
+# USE_PROCD, ни своего status), гасила сервис - и больше не включала. Каждое
+# нажатие снова читало «работает» и снова делало stop+disable.
+#
+# Поэтому: procd спрашиваем как раньше; `status` зовём ТОЛЬКО когда он
+# настоящий (есть USE_PROCD либо свой status()/status_service()); всем
+# остальным судим по признаку «включён» - симлинку в /etc/rc.d. Для тумблера
+# это честно: он сам держит enable и disable в паре с start и stop.
+svc_running() {   # $1 - имя сервиса; код 0 = работает
+	[ -n "$1" ] && [ -x "/etc/init.d/$1" ] || return 1
+	ubus -S call service list "{\"name\":\"$1\"}" 2>/dev/null | grep -q '"running": *true' && return 0
+	if grep -qE "^[[:space:]]*USE_PROCD=|^status\(\)|^status_service\(\)" "/etc/init.d/$1" 2>/dev/null; then
+		/etc/init.d/"$1" status >/dev/null 2>&1
+		return $?
+	fi
+	for _sr in /etc/rc.d/S??"$1"; do
+		[ -e "$_sr" ] && return 0
+	done
+	return 1
+}
+
 route_add_default() {
 	_rad_f="$1"; _rad_d="$2"; _rad_m="$3"; _rad_gw="$4"; _rad_t="$5"
 	[ "$_rad_f" = "-4" ] && [ -n "$_rad_gw" ] && \
