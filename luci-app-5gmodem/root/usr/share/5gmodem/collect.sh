@@ -237,6 +237,46 @@ cap() {   # cap <секунды> <команда...>
 # Поэтому здесь: порядок аплинков по метрикам, КТО реально несёт default,
 # отвечает ли ИМЕННО ОН (ping с привязкой к его устройству), и что об этом
 # думает сторож - вместе с состоянием его выключателей.
+# USB_MODESWITCH СБРОСИЛ КОНФИГУРАЦИЮ - И МОДЕМ ОСТАЛСЯ БЕЗ КАНАЛА ДАННЫХ.
+#
+# В базе /etc/usb-mode.json встречаются записи «config: 0» для модемов, которые
+# и так приходят в рабочей композиции (Dell DW5821e / Foxconn T77W968). Ядро по
+# такому правилу снимает уже привязанный драйвер, и модем остаётся с одними
+# AT-портами: ни cdc-wdm, ни wwan0, настраивать интерфейс не на чем. Снаружи это
+# выглядит как «модем появился и сразу отвалился» - живой отчёт 26.08.2026,
+# Cudy TR3000. Раздел ищет ОБА следа: запись в базе и характерные строки ядра.
+usbmode_verdict() {
+	_um_hit=0
+	if logread 2>/dev/null | grep -q "usbmode.*sets config #0"; then
+		echo "В ЖУРНАЛЕ ЕСТЬ СЛЕД: usbmode выставлял устройству config #0."
+		echo "Это снимает драйвер данных: в логе рядом видно «cdc_mbim ... unregister»."
+		_um_hit=1
+	fi
+	for _um_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].vidpid' 2>/dev/null | sort -u); do
+		[ "$(jsonfilter -i /etc/usb-mode.json -e "@.devices[\"$_um_p\"][\"*\"].config" 2>/dev/null)" = "0" ] || continue
+		echo "ПРАВИЛО НА МЕСТЕ: у $_um_p в /etc/usb-mode.json стоит «config: 0» -"
+		echo "оно сломает композицию при следующем подключении модема."
+		_um_hit=1
+	done
+	# Есть AT-порты, но нет ни cdc-wdm, ни сетевого - ровно тот итог, к которому
+	# приводит сброс конфигурации.
+	if "$RES/listmodems.sh" 2>/dev/null | grep -q '"tty":\["' \
+	   && ! "$RES/listmodems.sh" 2>/dev/null | grep -qE '"wdm":\["|"net":\["'; then
+		echo "У модема есть AT-порты, но НЕТ канала данных (cdc-wdm/сетевого интерфейса)."
+		echo "Настраивать интерфейс не на чем - это и есть последствие сброса конфигурации."
+		_um_hit=1
+	fi
+	if [ "$_um_hit" = 0 ]; then
+		echo "следов нет - раздел не применим"
+		return
+	fi
+	echo
+	echo "ЧТО ДЕЛАТЬ: приложение снимает вредное правило само и заново применяет"
+	echo "конфигурацию USB, чтобы ядро вернуло драйверы. Если этого не случилось"
+	echo "(старая версия приложения) - обновитесь и переподключите модем."
+	echo "Проверить руками:  /usr/share/5gmodem/usbmode-fix.sh"
+}
+
 uplink_verdict() {
 	_uv_dump=$(ubus call network.interface dump 2>/dev/null)
 	_uv_wz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
@@ -1689,6 +1729,7 @@ report() {
 	run 10 "Незакоммиченные правки uci (мины)" sh -c 'uci changes 2>/dev/null | head -40; [ -z "$(uci changes 2>/dev/null)" ] && echo "(пусто - мин нет)"'
 	run 10 "Питание и стабильность USB (итог)" usb_flap_verdict
 	run 10 "Устройство на шине, но без конфигурации? (итог)" usb_unconfigured_verdict
+	run 15 "usb_modeswitch сломал композицию? (итог)" usbmode_verdict
 	run 10 "Модем в режиме загрузчика? (итог)" fastboot_verdict
 	run 20 "Питание радио модема (итог)" power_state_verdict
 	run 10 "Пинг 77.88.8.8" ping -c 3 -W 2 77.88.8.8

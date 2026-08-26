@@ -720,8 +720,13 @@ case "$REQ" in
 		# 0489:e0b5 - тот же T77W968/DW5821e-eSIM под Foxconn VID: подтверждено на
 		# чистой установке 03.08.2026 (Cudy TR3000): umbim циклически валит подъём
 		# («Subscriber init failed», мусорные PIN-поля), под MM модем стабилен.
+		# 413c:81e0 - ТОТ ЖЕ DW5821e, только вариант с eSIM. Прошивка и
+		# поведение те же (T77W968.F1.0.0.5.2), а в списке его не было - и
+		# автонастройка уводила владельца именно этой ревизии в mbim, то есть
+		# в заведомо нерабочий путь, пока соседний 81d7 вели правильно. Живой
+		# отчёт 26.08.2026, Cudy TR3000: «модем появится и пропадает».
 		case "$_mki_vp" in
-			413c:81d7|0489:e0b5|05c6:9025)
+			413c:81d7|413c:81e0|0489:e0b5|05c6:9025)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 					logger -t 5gmodem "mkiface: $_mki_vp - driving via ModemManager (shared channel, otherwise cdc-wdm contention)"
 					PROTO="modemmanager"
