@@ -19,6 +19,8 @@
 #        smsbridge.sh seen                     - список уже виденных сообщений
 #        smsbridge.sh seen-add <ключ>...       - пометить прочитанными
 #        smsbridge.sh seen-reset               - забыть всё (снова «новые»)
+#        smsbridge.sh archive-run [store] [port] - перенести входящие в память
+#                                                роутера и освободить модем
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -714,9 +716,34 @@ _sms_run() {   # $1 - таймаут (с), дальше - команда
 # первая строка время, вторая отправитель, дальше текст как есть. Имя файла -
 # «<номер>.<ключ>»: ключ (хеш отправителя, времени и текста) даёт дедупликацию,
 # номер - устойчивый индекс для удаления.
-ARCH_MAX=200
+# ПРЕДЕЛ АРХИВА НАСТРАИВАЕМЫЙ. У MM-пути он был жёстким (200) - там архив лишь
+# дублировал память MM. Со сливом из модема архив становится ЕДИНСТВЕННЫМ
+# местом, где сообщения живут, и «сколько хранить» - решение человека.
+ARCH_MAX=$(uci -q get "$CFG.sms.archive_limit")
+case "$ARCH_MAX" in ''|*[!0-9]*) ARCH_MAX=200 ;; esac
+[ "$ARCH_MAX" -ge 10 ] 2>/dev/null || ARCH_MAX=10
+[ "$ARCH_MAX" -le 2000 ] 2>/dev/null || ARCH_MAX=2000
 ARCH_BASE=100000
 _LIVE_MAP=" "
+
+# ВКЛЮЧЁН ЛИ АРХИВ ДЛЯ ЭТОГО МОДЕМА.
+#
+# У MM-пути - всегда: там без архива переписка исчезает при любом пересоздании
+# модема в MM (см. выше). У обычного AT-модема - по настройке `archive`, и это
+# ОСОЗНАННО не по умолчанию: пока архива нет, сообщения лежат в модеме, и мы
+# показываем ровно его содержимое - в том числе удалённое мимо нас, с телефона
+# или другой утилитой. Включённый архив меняет источник правды, и человек должен
+# согласиться на это сам.
+_ARCH_ON=""
+_arch_on() {
+	if [ -z "$_ARCH_ON" ]; then
+		if _via_mm; then _ARCH_ON=1
+		elif [ "$(uci -q get "$CFG.sms.archive")" = "1" ]; then _ARCH_ON=1
+		else _ARCH_ON=0
+		fi
+	fi
+	[ "$_ARCH_ON" = 1 ]
+}
 
 _arch_dir() {
 	_ad=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
@@ -744,10 +771,30 @@ _arch_files() {   # $1 - каталог; имена в порядке номер
 	ls "$1" 2>/dev/null | sort -t. -k1,1n
 }
 
-_arch_read() {   # $1 - файл; заполняет _A_TS _A_FROM _A_TEXT
-	_A_TS=""; _A_FROM=""; _A_TEXT=""
+# ЧАСТИ ДЛИННОЙ SMS ХРАНИМ КАК ЕСТЬ, а не склеиваем при записи. Склейка на
+# входе выглядит заманчиво, но части приходят РАЗНЫМИ кругами опроса (вторая
+# может прийти через минуту), и «собранное» сообщение пришлось бы потом
+# дописывать - то есть держать незавершённые склейки и разбираться, что делать с
+# частью, которая не пришла никогда. Поэтому части остаются отдельными записями
+# со своими part/total/reference, а собирают их те же, кто собирал раньше:
+# страница «Входящие» (mergesms) и уведомитель Telegram. Ничего в них менять не
+# пришлось.
+#
+# СТАРЫЕ ФАЙЛЫ ЧИТАЮТСЯ КАК РАНЬШЕ. Первая строка нового формата - «#p=часть/
+# всего/ссылка»; в старом формате первой строкой шло время, и с «#p=» оно не
+# начинается никогда. Одночастные сообщения пишутся вообще без заголовка, то
+# есть в точности прежним форматом.
+_arch_read() {   # $1 - файл; заполняет _A_TS _A_FROM _A_TEXT _A_PART _A_TOTAL _A_REF
+	_A_TS=""; _A_FROM=""; _A_TEXT=""; _A_PART=""; _A_TOTAL=""; _A_REF=""
 	{
 		IFS= read -r _A_TS
+		case "$_A_TS" in
+			'#p='*)
+				_arh=${_A_TS#\#p=}
+				_A_PART=${_arh%%/*}; _arh=${_arh#*/}
+				_A_TOTAL=${_arh%%/*}; _A_REF=${_arh#*/}
+				IFS= read -r _A_TS ;;
+		esac
 		IFS= read -r _A_FROM
 		while IFS= read -r _arl || [ -n "$_arl" ]; do
 			_A_TEXT="${_A_TEXT:+$_A_TEXT
@@ -785,7 +832,17 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		_ams=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].sender" 2>/dev/null)
 		_amt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].timestamp" 2>/dev/null)
 		_amc=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].content" 2>/dev/null)
+		_ampt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].part" 2>/dev/null)
+		_amtt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].total" 2>/dev/null)
+		_amrf=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].reference" 2>/dev/null)
 		_ami=$((_ami + 1))
+		# НЕРАЗОБРАННОЕ СООБЩЕНИЕ НЕ АРХИВИРУЕМ. sms_tool на битом PDU отдаёт
+		# запись с полем error и пустыми отправителем/текстом (воспроизведено на
+		# стенде: в память модема попал SUBMIT-PDU, и recv вернул «error decoding
+		# pdu»). Складывать такие пустышки в архив - засорять ящик, а главное -
+		# они не должны дать повода СТЕРЕТЬ их из модема: сообщение, которое мы
+		# не смогли прочитать, ещё может быть прочитано другой утилитой.
+		[ -n "$_ams$_amc" ] || continue
 		_amk=$(_arch_key "$_ams" "$_amt" "$_amc")
 		case "$_amx" in ''|*[!0-9]*) ;; *) _LIVE_MAP="$_LIVE_MAP$_amk:$_amx " ;; esac
 		# СЧИТАЕМ КРАТНОСТЬ, а не «есть ли такой ключ». Время у сообщения с
@@ -803,7 +860,13 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		_amhave=0
 		for _amf in "$_amd"/*."$_amk"; do [ -f "$_amf" ] && _amhave=$((_amhave + 1)); done
 		[ "$_amseen" -le "$_amhave" ] && continue
-		printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null
+		case "$_ampt$_amtt" in
+			''|*[!0-9]*)
+				printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
+			*)
+				printf '#p=%s/%s/%s\n%s\n%s\n%s' "$_ampt" "$_amtt" "${_amrf:-0}" \
+					"$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
+		esac
 		_amnext=$((_amnext + 1))
 	done
 	_arch_trim "$_amd"
@@ -840,6 +903,16 @@ _arch_json() {
 		json_add_string sender "$_A_FROM"
 		json_add_string timestamp "$_A_TS"
 		json_add_string content "$_A_TEXT"
+		# Поля мультипарта отдаём ТОЛЬКО когда они есть: у одночастного
+		# сообщения их не было и в живом ответе sms_tool, а «total: 1» на пустом
+		# месте заставил бы страницу и бота лезть в склейку без надобности.
+		case "$_A_TOTAL" in
+			''|*[!0-9]*) ;;
+			*)
+				json_add_int part "${_A_PART:-1}"
+				json_add_int total "$_A_TOTAL"
+				json_add_int reference "${_A_REF:-0}" ;;
+		esac
 		json_close_object
 	done
 	json_close_array
@@ -898,25 +971,121 @@ _arch_live_json() {
 	_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j ${STORE:+-s "$STORE"} recv 2>/dev/null | utf8_fix
 }
 
+# ===== СЛИВ В ПАМЯТЬ РОУТЕРА =====
+#
+# ЗАЧЕМ. Память для входящих у модема крошечная и у некоторых её нет вовсе.
+# Живой пример, с которого всё началось: Fibocom FM350 на вопрос AT+CPMS=?
+# отвечает («SM»),(«SM»),(«SM») - памяти модема у него НЕТ, только SIM, и на
+# карте десять слотов. Десять сообщений - и оператор просто перестаёт доставлять
+# новые, пока человек не почистит ящик руками. Никакая настройка хранилища тут
+# не поможет: класть больше некуда.
+#
+# Поэтому сообщения переносим к себе и освобождаем слоты. Архив у нас уже был
+# написан ради MM-пути (файл на сообщение, дедупликация по хешу, обрезка по
+# количеству) - здесь он же, только теперь ещё и с удалением из модема.
+#
+# ПОРЯДОК ГАРАНТИЙ - ГЛАВНОЕ В ЭТОЙ ФУНКЦИИ. Удалять из модема можно ТОЛЬКО то,
+# что уже:
+#   1) лежит в архиве - иначе неудачная запись (нет места, сбой) means потерю;
+#   2) отдано уведомителю Telegram, если он включён. Бот помечает ключ
+#      «отправитель|время» ТОЛЬКО после подтверждённой доставки: сеть у роутера
+#      может лежать, и сообщение обязано дождаться следующего круга В МОДЕМЕ.
+#      Технически архив бота бы и так выручил (он читает через этот же мост), но
+#      полагаться на это - значит связать две независимые гарантии в узел;
+#   3) обработано командами по SMS, если они включены (у них свой список
+#      выполненного - см. smscmd.sh).
+# Ни одно из условий не «оптимизируется»: цена ошибки - молча потерянное
+# сообщение, а это худшее, что может сделать программа с SMS.
+_arch_purge() {   # $1 - живой JSON от sms_tool
+	[ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && return 0
+	_apd=$(_arch_dir)
+	[ -d "$_apd" ] || return 0
+	_apn=$(printf '%s' "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	case "$_apn" in ''|*[!0-9]*) return 0 ;; esac
+	[ "$_apn" -gt 0 ] || return 0
+
+	_ap_tg=$(uci -q get "$CFG.sms.tg_enabled")
+	_ap_cmd=$(uci -q get "$CFG.sms.cmd_enabled")
+	_ap_sf=$(_seen_file)
+	_ap_df=$(sms_cmd_done_file "$_TGT_PATH")
+
+	_ap_i=0; _ap_del=0
+	while [ "$_ap_i" -lt "$_apn" ]; do
+		_ap_x=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].index" 2>/dev/null)
+		_ap_s=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].sender" 2>/dev/null)
+		_ap_t=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].timestamp" 2>/dev/null)
+		_ap_c=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].content" 2>/dev/null)
+		_ap_i=$((_ap_i + 1))
+		case "$_ap_x" in ''|*[!0-9]*) continue ;; esac
+		# Пустая запись = sms_tool не разобрал PDU. В архив она не попала (см.
+		# _arch_merge), и удалять её отсюда НЕЛЬЗЯ: мы бы уничтожили сообщение,
+		# которого никогда не видели.
+		[ -n "$_ap_s$_ap_c" ] || continue
+
+		# 1) в архиве?
+		_ap_k=$(_arch_key "$_ap_s" "$_ap_t" "$_ap_c")
+		_ap_have=0
+		for _apf in "$_apd"/*."$_ap_k"; do [ -f "$_apf" ] && { _ap_have=1; break; }; done
+		[ "$_ap_have" = 1 ] || continue
+
+		# 2) бот уже доставил?
+		if [ "$_ap_tg" = "1" ]; then
+			grep -qxF "$_ap_s|$_ap_t" "$_ap_sf" 2>/dev/null || continue
+		fi
+
+		# 3) команды по SMS уже отработали? Ключ тот же, что у smscmd.sh.
+		if [ "$_ap_cmd" = "1" ]; then
+			grep -qxF "$(sms_cmd_key "$_ap_s" "$_ap_t" "$_ap_c")" "$_ap_df" 2>/dev/null || continue
+		fi
+
+		_sms_run 12 $(_smstool) -d "$PORT" delete "$_ap_x" >/dev/null 2>&1 \
+			&& _ap_del=$((_ap_del + 1))
+	done
+	[ "$_ap_del" -gt 0 ] && \
+		logger -t 5gmodem "sms: в память роутера перенесено и удалено из модема сообщений: $_ap_del"
+	return 0
+}
+
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$STORE" ] && set -- -s "$STORE" "$@"
 case "$BOX" in
 	status)
-		if _via_mm; then
+		if _arch_on; then
 			_arch_merge "$(_arch_live_json)"
+			# СЧИТАЕМ АРХИВ, А НЕ МОДЕМ. При включённом сливе модем почти всегда
+			# пуст - «used: 0 из 10» было бы правдой про железку и враньём про
+			# ящик, в котором человек читает переписку.
 			# Формат и ширина префикса важны: страница вырезает счётчик как
-			# substring(17, indexOf("total")), а «Storage type: MT,» - ровно 17.
-			printf 'Storage type: MT, used: %d, total: 255\n' "$(_arch_count)"
+			# substring(17, indexOf("total")), а «Storage type: MT,» - ровно 17,
+			# поэтому метка хранилища тут всегда двухбуквенная.
+			_st_l="MT"
+			_via_mm || { _st_l=${STORE:-SM}; _st_l=$(printf '%.2s' "$_st_l"); }
+			printf 'Storage type: %s, used: %d, total: %d\n' \
+				"$_st_l" "$(_arch_count)" "$ARCH_MAX"
 			exit 0
 		fi
 		_sms_run 20 $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status; exit $? ;;
+	# КРУГ СЛИВА. Зовётся из sessionwatch ПОСЛЕ уведомителя и команд - только
+	# тогда выполнены условия, при которых сообщение разрешено убирать из модема
+	# (см. _arch_purge). Отдельным глаголом, а не «заодно при чтении»: удаление
+	# не должно случаться от того, что кто-то открыл страницу.
+	archive-run)
+		_arch_on || { echo '{"result":"off"}'; exit 0; }
+		# У MM-пути удалять нечего: сообщения живут в памяти ModemManager, а не
+		# в AT-хранилищах, и sms_tool delete там не при делах.
+		_via_mm && { echo '{"result":"mm"}'; exit 0; }
+		_ar_j=$(_arch_live_json)
+		_arch_merge "$_ar_j"
+		_arch_purge "$_ar_j"
+		echo '{"result":"ok"}'
+		exit 0 ;;
 	sent)   _sms_run 45 $(_smstool) "$@" recv SR | utf8_fix; exit $? ;;
 	# delete <index|all> - индекс проверяем здесь: наружу уходит уже
 	# безопасное значение, а страница не решает, что можно слать в модем.
 	delete)
 		case "$DEL" in
 			all)
-				_via_mm && _arch_wipe
+				_arch_on && _arch_wipe
 				# У части модемов «delete all» виснет (L850/XMM) - тогда
 				# добиваем ПОШТУЧНО по индексам из списка, каждый шаг с
 				# собственным потолком.
@@ -930,7 +1099,7 @@ case "$BOX" in
 				exit 0 ;;
 			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
 			*)
-				if _via_mm; then
+				if _arch_on; then
 					# Номер от ARCH_BASE - сообщения в модеме уже нет, удалять
 					# нечего и негде, кроме архива.
 					if [ "$DEL" -ge "$ARCH_BASE" ]; then
@@ -1026,14 +1195,14 @@ case "$BOX" in
 	# бот, выгрузка в файл), поэтому починка живёт тут. utf8_fix идемпотентна:
 	# валидный UTF-8 через неё проходит без изменений.
 	dump)
-		if _via_mm; then
+		if _arch_on; then
 			_arch_merge "$(_arch_live_json)"
 			_arch_text
 			exit 0
 		fi
 		_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv | utf8_fix; exit $? ;;
 	*)
-		if _via_mm; then
+		if _arch_on; then
 			_arch_merge "$(_arch_live_json)"
 			_arch_json
 			exit 0

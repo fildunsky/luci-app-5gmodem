@@ -5030,3 +5030,81 @@ msgstr "пустой ответ бэкенда"
 msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "Подробности в системном журнале (logread, тег 5gmodem)."
 
+
+msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
+msgstr "И для чтения, и для приёма: модему сообщается, что новые входящие тоже класть сюда. На SIM-карте всего два-три десятка слотов - когда они закончатся, оператор перестанет доставлять сообщения. Пока вы не выбрали значение сами, приложение берёт то хранилище из двух, что вместительнее."
+
+msgid "Restart on uplink"
+msgstr "Перезапуск после подъёма интернета"
+
+msgid "Restart the service once the uplink starts carrying traffic."
+msgstr "Перезапустить сервис, когда через аплинк пошли пакеты."
+
+msgid "Keep messages in router memory"
+msgstr "Хранить сообщения в памяти роутера"
+
+msgid "Copy incoming messages to the router and show them from there. Modem storage is tiny - some modems have no memory of their own at all and can only use the SIM card, where a couple of dozen slots fill up and the operator stops delivering. Messages are kept on flash and survive a reboot."
+msgstr "Переносить входящие в роутер и показывать их оттуда. Памяти у модема мало, а у части модемов её нет вовсе - только SIM-карта, где пара десятков слотов заканчивается, и оператор перестаёт доставлять сообщения. Архив лежит во флеш-памяти и переживает перезагрузку."
+
+msgid "Free modem slots"
+msgstr "Освобождать память модема"
+
+msgid "Delete a message from the modem once it is in the router memory. This is what removes the limit. A message is only deleted after it has been stored AND, if enabled, forwarded to Telegram and offered to the SMS commands - so nothing is lost when the network is down."
+msgstr "Удалять сообщение из модема после того, как оно попало в память роутера. Именно это снимает ограничение. Удаляется только то, что уже сохранено и - если включены - переслано в Telegram и предложено командам по SMS, поэтому при лежащей сети ничего не теряется."
+
+msgid "Keep at most"
+msgstr "Хранить не больше"
+
+msgid "Older messages are dropped when the limit is reached."
+msgstr "При достижении предела самые старые сообщения удаляются."
+
+msgid "%s messages"
+msgstr "%s сообщений"
+
+msgid "Run commands from SMS"
+msgstr "Команды по SMS"
+
+msgid "Execute a configured command when a message starts with its keyword. Useful when the router is unreachable over the network - SMS still gets through. The message text is never pasted into the command line: whatever follows the keyword is passed as the SMS_ARGS environment variable."
+msgstr "Выполнять заданную команду, когда сообщение начинается с её ключевого слова. Выручает, когда до роутера не достучаться по сети, - SMS доходит. Текст сообщения в командную строку не подставляется: хвост после ключевого слова передаётся в переменной окружения SMS_ARGS."
+
+msgid "Trusted numbers only"
+msgstr "Только с доверенных номеров"
+
+msgid "Run commands only from the numbers listed below. With this on and the list empty, nothing runs at all. Turning it off lets anyone who knows the SIM number run your commands."
+msgstr "Выполнять команды только с перечисленных ниже номеров. Список пуст при включённой проверке - не выполняется ничего. Сняв галочку, вы разрешаете команды любому, кто знает номер SIM-карты."
+
+msgid "Trusted numbers"
+msgstr "Доверенные номера"
+
+msgid "Compared by the last ten digits, so +7…, 8… and 7… are the same number."
+msgstr "Сравниваются последние десять цифр, поэтому +7…, 8… и 7… - один и тот же номер."
+
+msgid "Keyword"
+msgstr "Ключевое слово"
+
+msgid "First word of the message, case-insensitive"
+msgstr "Первое слово сообщения, регистр не важен"
+
+msgid "Command"
+msgstr "Команда"
+
+msgid "Shell command to run"
+msgstr "Команда оболочки, которую нужно выполнить"
+
+msgid "Send the command output back to the sender"
+msgstr "Отправить вывод команды обратно отправителю"
+
+msgid "Reply text"
+msgstr "Текст ответа"
+
+msgid "Sent before the output; on its own when a delay is set"
+msgstr "Уходит перед выводом; при заданной задержке - вместо него"
+
+msgid "Delay, s"
+msgstr "Задержка, с"
+
+msgid "Wait before running. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "Подождать перед выполнением. При задержке ответ уходит ПЕРВЫМ - иначе команда вроде перезагрузки не успевает ответить вовсе."
+
+msgid "The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "Ключевое слово - первое слово сообщения, регистр не важен; остальное передаётся команде в SMS_ARGS. При задержке ответ уходит ПЕРВЫМ - иначе команда вроде перезагрузки не успевает ответить вовсе."

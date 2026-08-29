@@ -92,6 +92,18 @@ reconnect)
 applyset)
 	uci -q commit 5gmodem
 	rm -f /tmp/luci-indexcache* 2>/dev/null
+	# ХРАНИЛИЩЕ SMS ДОКЛАДЫВАЕМ МОДЕМУ. Выбор в конфиге сам по себе меняет только
+	# ЧТЕНИЕ (sms_tool -s шлёт mem1); куда лягут НОВЫЕ входящие, решает mem3 той
+	# же +CPMS - его выставляет sms_apply_cpms. Без этого шага человек выбирает
+	# «память модема», а сообщения продолжают ложиться на SIM и заполнять её.
+	# В ФОНЕ: AT-обмен занимает секунды, а страница сохраняет мгновенно.
+	_ss=$(uci -q get 5gmodem.sms.storage)
+	if [ -n "$_ss" ]; then
+		_sp=$(uci -q get 5gmodem.sms.readport)
+		[ -n "$_sp" ] || _sp=$(uci -q get 5gmodem.sms.atport)
+		[ -c "$_sp" ] && ( sms_apply_cpms "$_sp" "$_ss" ) \
+			>/dev/null 2>&1 </dev/null &
+	fi
 	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
 # смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):

@@ -181,7 +181,7 @@ return view.extend({
 		var st = {
 			interval: parseFloat(LS.g('interval', '2')) || 2,
 			cells: LS.gj('celllog', []), target: LS.gj('target', null),
-			page: 0, pageSize: 5, hist: [], t: 0, lastSinr: null, online: true, timer: null, foreignN: 0
+			page: 0, pageSize: 15, hist: [], t: 0, lastSinr: null, online: true, timer: null, foreignN: 0
 		};
 		var au = {
 			on: LS.g('sndon', '0') === '1', ctx: null, geigerTimer: null, curSinr: 0, tone: null, toneGain: null, customBuf: null,
@@ -280,6 +280,10 @@ return view.extend({
 		var pageInfo = E('span', { class: 'al-hint' }, '');
 		var btnPrev = E('button', { class: 'btn cbi-button', click: function() { if (st.page > 0) { st.page--; renderTable(); } } }, '◀');
 		var btnNext = E('button', { class: 'btn cbi-button', click: function() { var tp = Math.ceil(st.cells.length / st.pageSize); if (st.page < tp - 1) { st.page++; renderTable(); } } }, '▶');
+		/* ЛИСТАЛКА - ТОЛЬКО КОГДА ЕСТЬ ЧТО ЛИСТАТЬ. Строка «Стр. 1/1 (7)» под
+		   таблицей из семи строк - чистый шум; прячем её целиком, а не одни
+		   стрелки. */
+		var pager = E('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px' }, [ btnPrev, pageInfo, btnNext ]);
 		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); speak(_('Log cleared')); } }, _('Clear the log'));
 		var logSec = E('div', { class: 'cbi-section' }, [
 			E('h3', {}, _('Best cells (by SINR)')),
@@ -288,7 +292,7 @@ return view.extend({
 				E('thead', {}, E('tr', {}, [ E('th', {}, '#'), E('th', {}, 'eNB'), E('th', {}, _('Sector')), E('th', {}, 'RSRP'), E('th', {}, 'SINR'), E('th', {}, _('Time')) ])),
 				tbody
 			]),
-			E('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px' }, [ btnPrev, pageInfo, btnNext ]),
+			pager,
 			E('div', { style: 'margin-top:8px' }, [ btnReset ])
 		]);
 		function sortedCells() { return st.cells.slice().sort(function(a, b) { return b.sinr - a.sinr; }); }
@@ -297,7 +301,7 @@ return view.extend({
 			if (st.page >= tp) st.page = tp - 1; if (st.page < 0) st.page = 0;
 			var start = st.page * st.pageSize;
 			pageInfo.textContent = _('Page') + ' ' + (st.page + 1) + '/' + tp + ' (' + s.length + ')';
-			btnPrev.style.display = btnNext.style.display = (tp > 1) ? '' : 'none';
+			pager.style.display = (tp > 1) ? 'flex' : 'none';
 			dom.content(tbody, s.slice(start, start + st.pageSize).map(function(e, i) {
 				var isT = st.target && st.target.enb === e.enb && st.target.pci === e.pci;
 				var rsrpTd = E('td', {}), sinrTd = E('td', {});

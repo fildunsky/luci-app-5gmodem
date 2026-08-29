@@ -148,11 +148,44 @@ function addReceiveIncoming(s) {
 	o.rmempty = false;
 
 	o = s.option(form.ListValue, 'storage', _('Message storage area'),
-		_('Messages are stored in a specific location (for example, on the SIM card or modem memory), but other areas may also be available depending on the type of device'));
+		_('Both reading and receiving: the modem is told to put new incoming messages here as well. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own.'));
 	o.value('SM', _('SIM card'));
 	o.value('ME', _('Modem memory'));
 	o.default = 'SM';
 	o.rmempty = false;
+	/* РУЧНОЙ ВЫБОР ВЫШЕ АВТОМАТИЧЕСКОГО. Автовыбор хранилища (set_sms_storage
+	   в msw/iface.sh) отступает, увидев этот флаг: иначе он переставлял бы
+	   значение при каждом переключении модема, и выбор человека не жил бы до
+	   следующей перезагрузки. Пишется ТОЛЬКО при изменении - LuCI зовёт write()
+	   лишь когда значение формы разошлось с конфигом. */
+	o.write = function(section_id, value) {
+		uci.set('5gmodem', 'sms', 'storage_touched', '1');
+		return form.ListValue.prototype.write.apply(this, [section_id, value]);
+	};
+
+	/* --- Перенос входящих в память роутера ---------------------------------
+	   Память для входящих у модема крошечная, а у части модемов её нет вовсе:
+	   FM350 на AT+CPMS=? отвечает ("SM"),("SM"),("SM") - только SIM, десять
+	   слотов. Заполнились - оператор больше ничего не доставит. Перенос к себе
+	   снимает потолок совсем. */
+	o = s.option(form.Flag, 'archive', _('Keep messages in router memory'),
+		_('Copy incoming messages to the router and show them from there. Modem storage is tiny - some modems have no memory of their own at all and can only use the SIM card, where a couple of dozen slots fill up and the operator stops delivering. Messages are kept on flash and survive a reboot.'));
+	o.default = '0';
+	o.rmempty = false;
+
+	o = s.option(form.Flag, 'archive_purge', _('Free modem slots'),
+		_('Delete a message from the modem once it is in the router memory. This is what removes the limit. A message is only deleted after it has been stored AND, if enabled, forwarded to Telegram and offered to the SMS commands - so nothing is lost when the network is down.'));
+	o.default = '1';
+	o.rmempty = false;
+	o.depends('archive', '1');
+
+	o = s.option(form.ListValue, 'archive_limit', _('Keep at most'),
+		_('Older messages are dropped when the limit is reached.'));
+	[ '50', '100', '200', '500', '1000', '2000' ].forEach(function(v) {
+		o.value(v, _('%s messages').format(v));
+	});
+	o.default = '200';
+	o.depends('archive', '1');
 
 	o = s.option(form.Flag, 'mergesms', _('Merge split messages'),
 		_('Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received'));
@@ -750,8 +783,68 @@ function addUssdOptions(s) {
 	o.rmempty = false;
 }
 
+/* ---- команды по SMS --------------------------------------------------------
+   Последний работающий канал управления, когда сети нет: канал лёг, адрес
+   сменился, туннель не поднялся - а SMS доходит. Поэтому выключено по
+   умолчанию и с белым списком номеров: команду присылает кто угодно, кто знает
+   номер симки. Текст в командную строку НЕ подставляется, хвост после
+   ключевого слова уходит в переменную окружения SMS_ARGS (см. smscmd.sh). */
+function addSmsCommands(s) {
+	var o;
+
+	o = s.option(form.Flag, 'cmd_enabled', _('Run commands from SMS'),
+		_('Execute a configured command when a message starts with its keyword. Useful when the router is unreachable over the network - SMS still gets through. The message text is never pasted into the command line: whatever follows the keyword is passed as the SMS_ARGS environment variable.'));
+	o.default = '0';
+	o.rmempty = false;
+
+	o = s.option(form.Flag, 'cmd_whitelist_only', _('Trusted numbers only'),
+		_('Run commands only from the numbers listed below. With this on and the list empty, nothing runs at all. Turning it off lets anyone who knows the SIM number run your commands.'));
+	o.default = '1';
+	o.rmempty = false;
+	o.depends('cmd_enabled', '1');
+
+	o = s.option(form.DynamicList, 'cmd_phone', _('Trusted numbers'),
+		_('Compared by the last ten digits, so +7…, 8… and 7… are the same number.'));
+	o.placeholder = '+79001234567';
+	o.depends('cmd_whitelist_only', '1');
+	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ - как у остальных зависимых полей на этой
+	   странице: выключил белый список на минуту, включил - список номеров
+	   пришлось бы набирать заново. */
+	o.remove = function() { return Promise.resolve(); };
+
+	var cv = s.option(form.SectionValue, '__smscmds', form.TableSection, 'smscmd');
+	cv.depends('cmd_enabled', '1');
+	var cs = cv.subsection;
+	cs.anonymous = true;
+	cs.addremove = true;
+	cs.addbtntitle = '+';
+	/* ПОДПИСИ КОЛОНОК - ОДНОЙ СТРОКОЙ НАД ТАБЛИЦЕЙ. В таблице описание каждой
+	   опции рисуется отдельной строкой под заголовками и занимает больше места,
+	   чем сами поля (проверено на стенде: пять абзацев над пустым списком). */
+	cs.nodescriptions = true;
+	cs.description = _('The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all.');
+
+	o = cs.option(form.Value, 'keyword', _('Keyword'));
+	o.placeholder = 'reboot';
+	o.rmempty = false;
+
+	o = cs.option(form.Value, 'exec', _('Command'));
+	o.placeholder = '/sbin/reboot';
+	o.rmempty = false;
+
+	o = cs.option(form.Flag, 'answer', _('Reply'));
+	o.default = '0';
+
+	o = cs.option(form.Value, 'answer_text', _('Reply text'));
+	o.depends('answer', '1');
+
+	o = cs.option(form.Value, 'delay', _('Delay, s'));
+	o.placeholder = '0';
+	o.datatype = 'range(0,300)';
+}
+
 var GROUPS = {
-	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); addTelegramForwarding(s); },
+	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); addTelegramForwarding(s); addSmsCommands(s); },
 	send:    addSendOptions,
 	ussd:    addUssdOptions
 };

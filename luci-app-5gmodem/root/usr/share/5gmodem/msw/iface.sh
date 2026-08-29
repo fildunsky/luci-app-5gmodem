@@ -326,28 +326,60 @@ ifup_state_dev() {
 		| jsonfilter -e '@["l3_device"]' 2>/dev/null
 }
 
-# Pick the SMS read storage for the active modem. Incoming messages land in
-# different places by modem: many USB modems (e.g. SimCom SIM7100) deliver them
-# to ME (modem memory), not SM (SIM) - reading SM then shows an empty inbox and
-# the UI complains there is no port. Probe both and prefer the one that holds
-# messages; default to ME (the common case). Only sets the value when the user
-# has not chosen one, so it never overrides a manual SIM/Memory pick.
+# Выбор хранилища SMS для активного модема - И ДЛЯ ЧТЕНИЯ, И ДЛЯ ПРИЁМА.
+#
+# ЗАЧЕМ ВООБЩЕ. Входящие у разных модемов ложатся в разные места: у многих USB
+# (SimCom SIM7100 и родня) - в память модема (ME), у других - на SIM (SM).
+# Читать не оттуда - значит показать пустой ящик и жалобу «нет порта».
+#
+# ЧТО ИЗМЕНИЛОСЬ. Раньше здесь выбиралось хранилище ДЛЯ ЧТЕНИЯ по признаку «где
+# сейчас лежат сообщения», и на этом всё заканчивалось. Две беды:
+#
+#   1. Функция не работала вовсе. Условие «значение ещё не задано» не выполнялось
+#      никогда: /etc/config/5gmodem ставит storage='SM' с завода, то есть значение
+#      задано всегда, и автовыбор молча выходил на первой строке у ВСЕХ.
+#   2. Выбор «где лежат» закрепляет то, что есть, а не то, что нужно. Модем с
+#      mem3=SM (FM350) складывает входящие на SIM - двадцать-тридцать слотов, -
+#      автовыбор видел их там и оставлял SIM навсегда. Дальше SIM заполняется, и
+#      оператор просто перестаёт доставлять.
+#
+# ТЕПЕРЬ. Спрашиваем у модема ВМЕСТИМОСТЬ обоих хранилищ и выбираем БОЛЬШЕЕ
+# (память модема обычно на сотню сообщений против трёх десятков на SIM), а потом
+# ЗАКРЕПЛЯЕМ выбор в самом модеме через sms_apply_cpms - вместе с mem3, который
+# и решает, куда лягут новые. Без второго шага настройка меняла только чтение.
+#
+# ВЫБОР ЧЕЛОВЕКА ВЫШЕ НАШЕГО. Признак - storage_touched, его ставит страница
+# настроек при ручном выборе. Есть флаг - автовыбор не трогает значение, но
+# CPMS всё равно применяем: раз человек выбрал память модема, входящие должны
+# идти туда, а не только читаться оттуда.
 set_sms_storage() {
 	AT="$1"
 	[ -n "$AT" ] && [ -e "$AT" ] || return 0
 	command -v sms_tool >/dev/null 2>&1 || return 0
 	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
-	[ -z "$(uci -q get 5gmodem.sms.storage)" ] || return 0
-	me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-	sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*used:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-	if   [ "${me:-0}" -gt 0 ] 2>/dev/null; then STG=ME
-	elif [ "${sm:-0}" -gt 0 ] 2>/dev/null; then STG=SM
-	elif [ -n "$me" ]; then STG=ME          # ME supported, just empty
-	elif [ -n "$sm" ]; then STG=SM          # only SM answered
-	else STG=ME
+
+	STG=$(uci -q get 5gmodem.sms.storage)
+
+	if [ "$(uci -q get 5gmodem.sms.storage_touched)" != 1 ]; then
+		# «used: N, total: M» - берём и то, и другое одним запросом.
+		me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+		sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+		if   [ "${me:-0}" -gt "${sm:-0}" ] 2>/dev/null; then NEW=ME
+		elif [ "${sm:-0}" -gt "${me:-0}" ] 2>/dev/null; then NEW=SM
+		elif [ -n "$me" ]; then NEW=ME          # равны или неизвестны - ME
+		elif [ -n "$sm" ]; then NEW=SM          # ответило только SM
+		else NEW=""                             # молчат оба - не выдумываем
+		fi
+		if [ -n "$NEW" ] && [ "$NEW" != "$STG" ]; then
+			uci -q set "5gmodem.sms.storage=$NEW"
+			uci -q commit 5gmodem
+			logger -t 5gmodem "sms: хранилище выбрано автоматически - $NEW (ME=${me:-?}, SM=${sm:-?})"
+			STG="$NEW"
+		fi
 	fi
-	uci -q set "5gmodem.sms.storage=$STG"
-	uci -q commit 5gmodem
+
+	[ -n "$STG" ] || return 0
+	sms_apply_cpms "$AT" "$STG" >/dev/null 2>&1
 }
 
 # Убрать НАШИ ЖЕ интерфейсы, оставшиеся от прежних подключений этого модема.

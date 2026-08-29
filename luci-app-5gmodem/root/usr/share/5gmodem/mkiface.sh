@@ -1033,7 +1033,15 @@ fi
 # so incoming SMS are received. The hotplug does this on device appearance, but
 # switching to modemmanager here does not re-enumerate USB, so re-apply on every
 # switch. qmicli works over QMI-in-MBIM even while ModemManager owns the modem.
-if [ -n "$DEV" ] && command -v qmicli >/dev/null 2>&1; then
+#
+# ТОЛЬКО COMPAL. Условие раньше было «есть cdc-wdm и есть qmicli», то есть
+# лечение одного модема применялось КО ВСЕМ qmi/mbim-модемам подряд. У здорового
+# модема это не лечение, а вред: мы своими руками уводили входящие на SIM -
+# память на два-три десятка сообщений, после заполнения которой оператор больше
+# ничего не доставит. Память модема (ME) при этом оставалась пустой, и человек
+# видел сообщения только с «SIM card» в настройках. Гейт тот же, что в hotplug
+# 70-5gmodem-sms-modems, где эта правка живёт с самого начала.
+if [ -n "$DEV" ] && command -v qmicli >/dev/null 2>&1 && is_compal "$AMP" "$DEV"; then
 	for c in 0 1 2 3 none; do
 		qmicli -p -d "$DEV" \
 			--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \

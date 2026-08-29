@@ -11,6 +11,11 @@ config 5gmodem
 
 config sms 'sms'
 	option storage 'SM'
+	option archive '0'
+	option archive_purge '1'
+	option archive_limit '200'
+	option cmd_enabled '0'
+	option cmd_whitelist_only '1'
 	option mergesms '1'
 	option pnumber '+7'
 	option prefix '1'

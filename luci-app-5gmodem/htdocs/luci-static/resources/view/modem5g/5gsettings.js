@@ -549,6 +549,18 @@ return view.extend({
 		}
 		svo.rmempty = false;   // пишем даже значение, равное дефолту
 
+		/* ПЕРЕЗАПУСК ПОСЛЕ ПОДЪЁМА ИНТЕРНЕТА. Туннели и обходилки стартуют по
+		   procd раньше, чем поднялся аплинк, и инициализируются без сети:
+		   подписка не скачалась, DNS не поднялся. Галочка отдаёт сервис
+		   hotplug-у 70-5gmodem-svcrestart - он перезапустит его в момент, когда
+		   через аплинк реально пошли пакеты. Аплинк ЛЮБОЙ из «Приоритета
+		   интернета», не только модем: Wi-Fi STA и WAN по DHCP поднимаются так
+		   же поздно. */
+		var ruo = sw.option(form.Flag, 'restart_on_uplink', _('Restart on uplink'),
+			_('Restart the service once the uplink starts carrying traffic.'));
+		ruo.default = '0';
+		ruo.rmempty = false;
+
 		/* --- Тест скорости (внутри «Виджеты»): галочка + ВЛОЖЕННЫЙ блок настроек
 		   (form.SectionValue, как у карточек), видимый только при вкл. --- */
 		o = wdg.option(form.Flag, 'widget_speedtest', _('Speed test'), _('Speed-test card'));
