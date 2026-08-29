@@ -66,14 +66,19 @@ For low-flash devices (MT7628 boards with 8 MB, where the full set will not inst
 
 ## Tested:
 I've added new features to them (compared to 3ginfo and modemband)
-- Fibocom FM350GL
-- Fibocom L850
-- Compal RXM-G1
+- Fibocom FM350-GL
+- Fibocom L850 (Intel XMM)
+- Fibocom L860 (Intel XMM)
+- Compal RXM-G1 (SG500M2-X)
 - Telit LM960A18
 - SIMCOM SIM7100E
 - SIMCOM SIM7600E-H
 - Quectel EC21-E
+- Quectel EP06-E
 - MeigLink SLM770A-R
+- Foxconn T99W175 / Thales MV31-W (Snapdragon X55)
+- Dell DW5821e / Foxconn T77W968 (Snapdragon X20)
+- Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
 - Many more untested, but should support all the modems handled by the upstream forks.
 

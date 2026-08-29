@@ -80,14 +80,19 @@ MBIM: менеджер пакетов удалит эти пакеты как о
 ## Модемы, которые есть у меня лично
 Для них добавлены новые возможности (по сравнению с 3ginfo и modemband):
 
-- Fibocom FM350GL
-- Fibocom L850
-- Compal RXM-G1
+- Fibocom FM350-GL
+- Fibocom L850 (Intel XMM)
+- Fibocom L860 (Intel XMM)
+- Compal RXM-G1 (SG500M2-X)
 - Telit LM960A18
 - SIMCOM SIM7100E
 - SIMCOM SIM7600E-H
 - Quectel EC21-E
+- Quectel EP06-E
 - MeigLink SLM770A-R
+- Foxconn T99W175 / Thales MV31-W (Snapdragon X55)
+- Dell DW5821e / Foxconn T77W968 (Snapdragon X20)
+- Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
 - Многие другие не проверялись, но должны работать — поддерживаются все модемы из исходных проектов.
 

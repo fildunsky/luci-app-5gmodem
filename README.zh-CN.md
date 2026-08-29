@@ -79,14 +79,19 @@ opkg install luci-i18n-base-zh-cn
 
 ## 已测试的调制解调器：
 （相对上游 3ginfo 和 modemband 增加了新功能）
-- Fibocom FM350GL
-- Fibocom L850
-- Compal RXM-G1
+- Fibocom FM350-GL
+- Fibocom L850（Intel XMM）
+- Fibocom L860（Intel XMM）
+- Compal RXM-G1（SG500M2-X）
 - Telit LM960A18
 - SIMCOM SIM7100E
 - SIMCOM SIM7600E-H
 - Quectel EC21-E
+- Quectel EP06-E
 - MeigLink SLM770A-R
+- Foxconn T99W175 / Thales MV31-W（Snapdragon X55）
+- Dell DW5821e / Foxconn T77W968（Snapdragon X20）
+- Sierra Wireless EM9190
 - Huawei E3372（HiLink）
 - 更多型号未逐一测试，但上游分支支持的调制解调器均应可用。
 
