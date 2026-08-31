@@ -210,6 +210,7 @@ fi
 # qmi_channel_free - см. lib.sh (канал cdc-wdm может принадлежать netifd).
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 . /usr/share/5gmodem/quirks.sh
+. /usr/share/5gmodem/esimcaps.sh   # esim_capable - подписать неизвестный слот «eSIM»
 if [ "$1" != "set" ] \
    && [ "$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")" = none ]; then
 	echo '{"type":"","slots":[],"active":""}'; exit 0
@@ -865,6 +866,22 @@ set)
 		# active_modem).
 		_ESAV=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
 			"/tmp/5gmodem_esimstat_$_TGT" 2>/dev/null)
+		# ЗАМКНУТЫЙ КРУГ: КЭША НЕ БУДЕТ, ПОКА АКТИВНА ФИЗИЧЕСКАЯ SIM.
+		#
+		# Одного кэша мало. Пока активен слот физической карты, ISD-R eUICC
+		# недостижим - CCHO-проба честно возвращает «чипа нет», available=1 в
+		# кэш не попадает НИКОГДА, второй слот остаётся «SIM1», а вкладка eSIM
+		# из-за этого не видит слота с меткой eSIM и печатает «ни один порт не
+		# ответил как eSIM-чип, сообщите vid:pid» - вместо кнопки «перейти на
+		# eSIM». Именно так выглядит FM350 с распаянной eUICC (отчёт 30.08.2026).
+		#
+		# Разрываем круг известной моделью: чип у неё есть по паспорту, и
+		# подписать второй слот «eSIM» можно, ни разу на нём не побывав.
+		if [ "$_ESAV" != 1 ] \
+		   && esim_capable "$(uci -q get "5gmodem.$_SEC.vidpid")" \
+				   "$(uci -q get "5gmodem.$_SEC.product")"; then
+			_ESAV=1
+		fi
 		if [ "$_ESAV" = 1 ]; then
 			[ "$L0" = SIM ] && case "$L1" in SIM0|SIM1) L1="eSIM";; esac
 			[ "$L1" = SIM ] && case "$L0" in SIM0|SIM1) L0="eSIM";; esac

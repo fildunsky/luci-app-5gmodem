@@ -5031,8 +5031,8 @@ msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "Подробности в системном журнале (logread, тег 5gmodem)."
 
 
-msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
-msgstr "И для чтения, и для приёма: модему сообщается, что новые входящие тоже класть сюда. На SIM-карте всего два-три десятка слотов - когда они закончатся, оператор перестанет доставлять сообщения. Пока вы не выбрали значение сами, приложение берёт то хранилище из двух, что вместительнее."
+msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. A modem that cannot receive into the chosen storage keeps its own, and this setting is corrected to match - the list always shows the box the messages actually land in. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
+msgstr "И для чтения, и для приёма: модему сообщается, что новые входящие тоже класть сюда. Модем, который не умеет принимать в выбранное хранилище, оставляет своё - тогда настройка правится под него, чтобы список показывал тот ящик, куда сообщения приходят на самом деле. На SIM-карте всего два-три десятка слотов - когда они закончатся, оператор перестанет доставлять сообщения. Пока вы не выбрали значение сами, приложение берёт то хранилище из двух, что вместительнее."
 
 msgid "Restart on uplink"
 msgstr "Перезапуск после подъёма интернета"

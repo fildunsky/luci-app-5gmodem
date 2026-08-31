@@ -97,12 +97,11 @@ applyset)
 	# же +CPMS - его выставляет sms_apply_cpms. Без этого шага человек выбирает
 	# «память модема», а сообщения продолжают ложиться на SIM и заполнять её.
 	# В ФОНЕ: AT-обмен занимает секунды, а страница сохраняет мгновенно.
-	_ss=$(uci -q get 5gmodem.sms.storage)
-	if [ -n "$_ss" ]; then
-		_sp=$(uci -q get 5gmodem.sms.readport)
-		[ -n "$_sp" ] || _sp=$(uci -q get 5gmodem.sms.atport)
-		[ -c "$_sp" ] && ( sms_apply_cpms "$_sp" "$_ss" ) \
-			>/dev/null 2>&1 </dev/null &
+	_sp=$(uci -q get 5gmodem.sms.readport)
+	[ -n "$_sp" ] || _sp=$(uci -q get 5gmodem.sms.atport)
+	if [ -c "$_sp" ]; then
+		rm -f /tmp/5gmodem_cpms_* 2>/dev/null
+		( set_sms_storage "$_sp" ) >/dev/null 2>&1 </dev/null &
 	fi
 	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после

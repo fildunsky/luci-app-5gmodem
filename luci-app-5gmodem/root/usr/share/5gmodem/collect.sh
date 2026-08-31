@@ -1677,7 +1677,19 @@ report() {
 				echo "Sierra ($VP): CCHO-проба пропущена - на EM9190 она подвешивала SIM-подсистему до перетыка карты; eUICC у Sierra живёт за QMI/MBIM, не за AT"
 				exit 0 ;;
 		esac
-		echo "активный слот SIM: $(/usr/share/5gmodem/simslot.sh status 2>/dev/null | grep -o "\"active\":\"[^\"]*\"")"
+		# АКТИВНА ФИЗИЧЕСКАЯ SIM - ПЕРЕБОР БЕССМЫСЛЕН, И ЭТО НАДО СКАЗАТЬ.
+		# Канал к карте у модема один: пока активен слот физической SIM, ISD-R
+		# eUICC недостижим, и CCHO молчит на ВСЕХ портах. Отчёт при этом
+		# выглядел как «модем не поддерживается» (жалоба 30.08.2026 по FM350 с
+		# распаянной eUICC) - хотя лечится переключением слота.
+		SL=$(/usr/share/5gmodem/simslot.sh status 2>/dev/null)
+		SLA=$(printf "%s" "$SL" | jsonfilter -e "@.active" 2>/dev/null)
+		SLE=$(printf "%s" "$SL" | jsonfilter -e "@.slots[@.label=\"eSIM\"].id" 2>/dev/null | head -1)
+		echo "активный слот SIM: $(printf "%s" "$SL" | grep -o "\"active\":\"[^\"]*\"")"
+		if [ -n "$SLE" ] && [ -n "$SLA" ] && [ "$SLE" != "$SLA" ]; then
+			echo "активен слот физической SIM ($SLA), eSIM - слот $SLE: канал к карте у модема ОДИН, поэтому ISD-R eUICC сейчас недостижим и CCHO не откроется НИ НА ОДНОМ порту. Это не признак отсутствия чипа - переключите слот на eSIM и повторите."
+			exit 0
+		fi
 		echo "порты модема $P:"
 		for t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null); do
 			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done

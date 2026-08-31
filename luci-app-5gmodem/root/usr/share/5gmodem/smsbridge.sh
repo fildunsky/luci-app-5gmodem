@@ -968,7 +968,7 @@ _arch_wipe() {
 }
 
 _arch_live_json() {
-	_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j ${STORE:+-s "$STORE"} recv 2>/dev/null | utf8_fix
+	_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j $_STORE_ARG recv 2>/dev/null | utf8_fix
 }
 
 # ===== СЛИВ В ПАМЯТЬ РОУТЕРА =====
@@ -1046,8 +1046,65 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 	return 0
 }
 
+# ХРАНИЛИЩЕ ДОКЛАДЫВАЕМ МОДЕМУ РАЗ ЗА ЗАГРУЗКУ - ЗДЕСЬ, А НЕ ТОЛЬКО ПРИ
+# ПЕРЕВЫБОРЕ МОДЕМА. Причин две, и обе живые:
+#
+#   1. +CPMS у многих модемов не переживает своего же сброса, а set_sms_storage
+#      зовётся лишь из resolve/autosetup - между ними mem3 успевает вернуться к
+#      заводскому, и входящие снова уходят мимо читаемого ящика.
+#   2. У тех, кому 2.4.38 уже записал в настройку недостижимое хранилище, оно
+#      так и осталось бы до следующего перевыбора модема: ящик пустой, а
+#      сообщения на SIM (жалоба 30.08.2026).
+#
+# Стоит ПОД замком порта, платит двумя AT-обменами один раз за загрузку, и
+# правит настройку по факту - страница читает оттуда, куда модем реально кладёт.
+case "$BOX" in
+recv|sent|status|dump|archive-run)
+	# ТОЛЬКО ДЛЯ АКТИВНОГО МОДЕМА. Ключ storage - ОДИН на конфиг, а бот обходит
+	# ВСЕ модемы (SMS_MODEM=<путь>): без этой проверки круг бота по соседнему
+	# модему переписал бы настройку активного его хранилищем.
+	if ! _via_mm && [ "$_TGT_PATH" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ]; then
+		_cs_mark="/tmp/5gmodem_cpms_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+		# Отметка ставится ПО УСПЕХУ, а не по факту попытки: порт мог быть занят
+		# опросом метрик, и «сходили один раз» означало бы промолчать до
+		# перезагрузки. Но и вечно долбиться нельзя - молчащий модем стоил бы
+		# по AT-таймауту каждому кругу бота, поэтому попыток три.
+		_cs_st=$(cat "$_cs_mark" 2>/dev/null)
+		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ]; then
+			if set_sms_storage "$PORT" 2>/dev/null; then
+				printf 'ok' > "$_cs_mark"
+				# Настройку могли поправить под факт - читаем ту, что вышла.
+				_cs_eff=$(uci -q get "$CFG.sms.storage")
+				[ -n "$_cs_eff" ] && [ -n "$STORE" ] && STORE="$_cs_eff"
+			else
+				printf '.' >> "$_cs_mark"
+			fi
+		fi
+	fi ;;
+esac
+
+# КЛЮЧ `-s` СБРАСЫВАЕТ mem3 - ИМЕННО ЭТИМ ЯЩИК И ПУСТЕЛ.
+# sms_tool -s XX шлёт КОРОТКУЮ форму AT+CPMS="XX", а FM350-GL на неё возвращает
+# mem2/mem3 к заводскому SM: было ME|ME|ME - стало ME|SM|SM (проверено на живом
+# модеме 31.08.2026, сразу после команды). То есть каждое открытие «Входящих»
+# своими руками уводило ПРИЁМ обратно на SIM, а читали мы память модема - и
+# пользователь видел пустой список при пришедшей SMS.
+# Поэтому хранилище выбираем ПОЛНОЙ формой (sms_apply_cpms, все три слота), а
+# sms_tool зовём БЕЗ -s: он и так читает текущий mem1. Короткую форму оставляем
+# только там, где полную применить не вышло - хуже, чем сегодня, не станет.
+_STORE_ARG=""
+if [ -n "$STORE" ]; then
+	_STORE_ARG="-s $STORE"
+	if ! _via_mm && [ -c "$PORT" ]; then
+		case "$(sms_cpms_state "$PORT" 2>/dev/null)" in
+			"$STORE|"*) _STORE_ARG="" ;;
+			?*) sms_apply_cpms "$PORT" "$STORE" >/dev/null 2>&1 && _STORE_ARG="" ;;
+		esac
+	fi
+fi
+
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
-[ -n "$STORE" ] && set -- -s "$STORE" "$@"
+[ -n "$_STORE_ARG" ] && set -- $_STORE_ARG "$@"
 case "$BOX" in
 	status)
 		if _arch_on; then
@@ -1064,7 +1121,7 @@ case "$BOX" in
 				"$_st_l" "$(_arch_count)" "$ARCH_MAX"
 			exit 0
 		fi
-		_sms_run 20 $(_smstool) -d "$PORT" ${STORE:+-s "$STORE"} status; exit $? ;;
+		_sms_run 20 $(_smstool) -d "$PORT" $_STORE_ARG status; exit $? ;;
 	# КРУГ СЛИВА. Зовётся из sessionwatch ПОСЛЕ уведомителя и команд - только
 	# тогда выполнены условия, при которых сообщение разрешено убирать из модема
 	# (см. _arch_purge). Отдельным глаголом, а не «заодно при чтении»: удаление
@@ -1200,7 +1257,7 @@ case "$BOX" in
 			_arch_text
 			exit 0
 		fi
-		_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' ${STORE:+-s "$STORE"} recv | utf8_fix; exit $? ;;
+		_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' $_STORE_ARG recv | utf8_fix; exit $? ;;
 	*)
 		if _arch_on; then
 			_arch_merge "$(_arch_live_json)"

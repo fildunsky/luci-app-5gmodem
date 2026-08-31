@@ -339,7 +339,7 @@ mm_recover_missing() {
 	# local ОБЯЗАТЕЛЕН: цикл `for _n in .../net/*` ниже делит имя _n со счётчиком
 	# главного цикла сервиса - без local он утекал и ронял шелл на арифметике
 	# (см. _mm_ifup_if_down).
-	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm
+	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm _wdm_node _wdm_drv _sw_pro _sw_vp
 	command -v mmcli >/dev/null 2>&1 || return 0
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0   # демон должен быть жив
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
@@ -382,15 +382,59 @@ mm_recover_missing() {
 			# прото QMI, а НЕ разрушительный rebind. Сюда попадаем, только когда MM
 			# модем не собрал (_seen=0): у нормально собранного cdc-wdm-модема
 			# (напр. Compal под MM) этой ветки нет. Логируем один раз.
-			_has_wdm=""
+			_has_wdm=""; _wdm_node=""
 			for _w in /sys/bus/usb/devices/"$_rp":*/usbmisc/cdc-wdm* \
 				/sys/bus/usb/devices/"$_rp":*/usbmisc/wdm*; do
-				[ -e "$_w" ] && { _has_wdm=1; break; }
+				[ -e "$_w" ] && { _has_wdm=1; _wdm_node="$_w"; break; }
 			done
+			# ПРОТОКОЛ ЗАПАСНОГО ПУТИ - ПО ДРАЙВЕРУ УЗЛА, А НЕ "ВСЕГДА QMI".
+			# Наличие cdc-wdm ещё не значит QMI: у cdc_mbim узел ровно такой же, и
+			# uqmi на нём говорит в пустоту - netifd сыпал "Request timed out",
+			# "Failed to parse message data" и "SIM in illegal state - Power-cycling
+			# SIM", интерфейс навсегда pending, адреса нет. Так ломались MBIM-
+			# композиции, которые мы САМИ ведём через ModemManager: T99W175/MV31-W
+			# (05c6:90d5) и DW5821e/T77W968 (413c:81e0, 0489:e0b5). Хуже того,
+			# mkiface записывал qmi в iface_proto секции, и дальше это значение
+			# считалось ВЫБОРОМ ПОЛЬЗОВАТЕЛЯ - авто-детект и вендорные исключения
+			# больше не срабатывали никогда.
+			_wdm_drv=""
+			[ -n "$_wdm_node" ] && _wdm_drv=$(basename "$(readlink -f "${_wdm_node%/usbmisc/*}/driver" 2>/dev/null)" 2>/dev/null)
+			case "$_wdm_drv" in
+				qmi_wwan) _sw_pro="qmi" ;;
+				cdc_mbim) _sw_pro="mbim" ;;
+				*)        _sw_pro="" ;;
+			esac
+			_sw_vp=""
+			[ -f "/sys/bus/usb/devices/$_rp/idVendor" ] && \
+				_sw_vp="$(cat "/sys/bus/usb/devices/$_rp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_rp/idProduct" 2>/dev/null)"
+			# MBIM-МОДУЛИ, КОТОРЫЕ МЫ ВЕДЁМ ЧЕРЕЗ MM НАМЕРЕННО, ЗАПАСНОГО ПУТИ НЕ
+			# ИМЕЮТ. У DW5821e/T77W968 (413c:81d7, 413c:81e0, 0489:e0b5) и
+			# MV31-W/T99W175 в MBIM-композиции (05c6:90d5) umbim либо не поднимает
+			# сессию, либо даёт адрес без трафика - ровно поэтому mkiface и уводит
+			# их на modemmanager. Переключить такой модем на mbim значит променять
+			# «MM ещё не собрал» на «не работает никогда». А MM их не собирает
+			# чаще всего временно: гонка с libudev-zero на загрузке лечится сама
+			# следующим кругом. Ждём MM и ничего не ломаем.
+			# QMI-композиций (05c6:9025) это не касается: там запасной путь живой
+			# и как раз он спасал молчащие AT-порты.
+			if [ "$_sw_pro" = "mbim" ]; then
+				case "$_sw_vp" in
+					413c:81d7|413c:81e0|0489:e0b5|05c6:90d5)
+						if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
+							: > "$RUN/$_rb_key.mmonly" 2>/dev/null
+							logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to mbim, waiting for MM"
+						fi
+						continue
+						;;
+				esac
+			fi
 			if [ -n "$_has_wdm" ]; then
+				# Драйвер узла не опознан - переключать не на что, но и перепривязка
+				# тут по-прежнему под запретом (см. выше): просто не трогаем модем.
+				[ -n "$_sw_pro" ] || continue
 				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
 					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
-					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a QMI channel (cdc-wdm) - switch the interface to proto QMI (uqmi). NOT rebinding: it risks killing the device (config #1 error -71)."
+					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a control channel (cdc-wdm, driver $_wdm_drv) - switch the interface to proto $_sw_pro. NOT rebinding: it risks killing the device (config #1 error -71)."
 					continue
 				fi
 				# ВТОРОЙ ПРОХОД: MM жив, опрос этого устройства закончен, а модема
@@ -411,8 +455,10 @@ mm_recover_missing() {
 				[ -n "$_sw_if" ] || continue
 				[ "$(uci -q get "network.$_sw_if.proto")" = "modemmanager" ] || continue
 				: > "$RUN/$_rb_key.qmiswitch" 2>/dev/null
-				logger -t 5gmodem "modem $_rp: MM never assembled it and the protocol is on auto - switching interface $_sw_if to proto QMI"
-				"$RES/mkiface.sh" "$_sw_if" qmi >/dev/null 2>&1
+				logger -t 5gmodem "modem $_rp: MM never assembled it and the protocol is on auto - switching interface $_sw_if to proto $_sw_pro (cdc-wdm driver $_wdm_drv)"
+				# MKIFACE_AUTOFALLBACK: это ВЫНУЖДЕННЫЙ прото, а не выбор человека -
+				# в iface_proto его писать нельзя (см. mkiface.sh).
+				MKIFACE_AUTOFALLBACK=1 "$RES/mkiface.sh" "$_sw_if" "$_sw_pro" >/dev/null 2>&1
 				continue
 			fi
 			# MM СЕЙЧАС ОПРАШИВАЕТ ПОРТЫ - НЕ МЕШАЕМ. На медленном модеме с
@@ -463,7 +509,7 @@ mm_recover_missing() {
 		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
 		[ "$_seen" = 1 ] && {
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
-			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" 2>/dev/null
+			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" 2>/dev/null
 			_mm_fix_atonly "$_rp"
 		}
 		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.

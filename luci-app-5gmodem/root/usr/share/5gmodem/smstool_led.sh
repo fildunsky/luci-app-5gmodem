@@ -7,6 +7,25 @@
 
 DEBUG_FILE="/tmp/my_newsms_log"
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+
+# ХРАНИЛИЩЕ ВЫБИРАЕМ ПОЛНОЙ ФОРМОЙ, А НЕ КЛЮЧОМ -s.
+# sms_tool -s XX шлёт короткую AT+CPMS="XX", и FM350-GL на неё возвращает
+# mem2/mem3 к заводскому SM: приём уезжает на SIM, а читаем мы память модема -
+# ящик выглядит пустым при пришедшей SMS. Сторож моргалки ходит по кругу, то
+# есть ломал бы приём раз за разом. Печатаем ключ, только если полную форму
+# применить не удалось.
+store_arg() {   # $1 - порт, $2 - хранилище
+	[ -n "$2" ] || return 0
+	if [ -c "$1" ]; then
+		case "$(sms_cpms_state "$1" 2>/dev/null)" in
+			"$2|"*) return 0 ;;
+			?*) sms_apply_cpms "$1" "$2" >/dev/null 2>&1 && return 0 ;;
+		esac
+	fi
+	printf -- '-s %s' "$2"
+}
+
 debug_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$DEBUG_FILE"
 }
@@ -46,7 +65,7 @@ handle_old_format() {
     MEM=$(uci -q get 5gmodem.sms.storage)
     debug_log "MEM (storage): $MEM"
     
-    STX=$(sms_tool -s $MEM -d $DEV status | cut -c23-27)
+    STX=$(sms_tool $(store_arg "$DEV" "$MEM") -d $DEV status | cut -c23-27)
     debug_log "STX (raw cut): '$STX'"
     
     SMS=$(echo $STX | tr -dc '0-9')
@@ -121,7 +140,7 @@ handle_new_format() {
         debug_log "Modem #$modem_num: storage='$MEM'"
         
         debug_log "Modem #$modem_num: reading SMS count with sms_tool..."
-        STX=$(sms_tool -s $MEM -d $DEV status 2>/dev/null | cut -c23-27)
+        STX=$(sms_tool $(store_arg "$DEV" "$MEM") -d $DEV status 2>/dev/null | cut -c23-27)
         SMS=$(echo $STX | tr -dc '0-9')
         
         if [ -z "$SMS" ]; then

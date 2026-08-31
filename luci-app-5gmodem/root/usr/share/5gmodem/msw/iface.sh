@@ -240,6 +240,48 @@ fix_iface_proto() {   # $1 - имя интерфейса
 		mbim|qmi) ;;
 		*) return ;;
 	esac
+	_fp_sec=$(sec_for_iface "$_fp_if")
+	# ВЫЧИЩАЕМ ЯД ИЗ НАШЕГО КОНФИГА. Несовместимая пара «прото vs драйвер» выбором
+	# пользователя быть не может: uqmi на узле cdc_mbim (и наоборот) не работает в
+	# принципе. Значит iface_proto с тем же значением попал в секцию
+	# АВТОМАТИЧЕСКИ - а ветка auto в mkiface читает его первым, как ЯВНЫЙ ВЫБОР, и
+	# с тех пор не применяет ни детект по драйверу, ни вендорные исключения. Так
+	# модули, которым положен ModemManager (413c:81e0, 05c6:90d5), намертво
+	# застревали на qmi. Ключ убираем - решение примет авто-детект.
+	if [ -n "$_fp_sec" ] && [ "$(uci -q get "5gmodem.$_fp_sec.iface_proto")" = "$_fp_pr" ]; then
+		logger -t 5gmodem "iface $_fp_if: dropping the automatic iface_proto=$_fp_pr from 5gmodem.$_fp_sec so auto-detect (and the vendor exceptions) can decide again"
+		uci -q delete "5gmodem.$_fp_sec.iface_proto"
+	fi
+	if [ "$(uci -q get 5gmodem.@5gmodem[0].network)" = "$_fp_if" ] \
+	   && [ "$(uci -q get 5gmodem.@5gmodem[0].iface_proto)" = "$_fp_pr" ]; then
+		uci -q delete 5gmodem.@5gmodem[0].iface_proto
+	fi
+	uci -q commit 5gmodem
+
+	# ЧИНИМ НА ТОТ ПУТЬ, КОТОРЫЙ ДЛЯ ЭТОГО МОДУЛЯ РАБОТАЕТ. У DW5821e/T77W968
+	# (413c:81d7, 413c:81e0, 0489:e0b5) и MV31-W/T99W175 в MBIM-композиции
+	# (05c6:90d5) это ТОЛЬКО ModemManager: umbim на них либо не поднимает сессию,
+	# либо даёт адрес без трафика. Починить сломанный qmi в mbim значило бы
+	# заменить один нерабочий путь другим.
+	# Пересоздаём интерфейс ЧЕРЕЗ mkiface, а не правкой одного proto: у прото
+	# modemmanager другое device (sysfs-путь устройства, не /dev/cdc-wdm), своя
+	# опция типа PDP (iptype) и авторизации (allowedauth), плюс надо снять
+	# mm_exclude и вернуть автозапуск MM. MKIFACE_AUTOFALLBACK - чтобы этот
+	# вынужденный прото не осел в iface_proto как «выбор пользователя».
+	_fp_amp=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$_fp_dev")/device/.." 2>/dev/null)" 2>/dev/null)
+	_fp_vp=""
+	[ -n "$_fp_amp" ] && [ -f "/sys/bus/usb/devices/$_fp_amp/idVendor" ] && \
+		_fp_vp="$(cat "/sys/bus/usb/devices/$_fp_amp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_fp_amp/idProduct" 2>/dev/null)"
+	case "$_fp_vp" in
+		413c:81d7|413c:81e0|0489:e0b5|05c6:90d5)
+			if [ -f /lib/netifd/proto/modemmanager.sh ]; then
+				logger -t 5gmodem "iface $_fp_if: $_fp_vp only works under ModemManager - rebuilding the interface on proto=modemmanager"
+				MKIFACE_AUTOFALLBACK=1 MODEM_PATH="$_fp_amp" \
+					/usr/share/5gmodem/mkiface.sh "$_fp_if" modemmanager >/dev/null 2>&1
+				return
+			fi
+			;;
+	esac
 	logger -t 5gmodem "iface $_fp_if: proto=$_fp_pr does not match driver $_fp_drv - setting $_fp_want"
 	uci -q set "network.$_fp_if.proto=$_fp_want"
 	uci -q commit network
@@ -326,61 +368,9 @@ ifup_state_dev() {
 		| jsonfilter -e '@["l3_device"]' 2>/dev/null
 }
 
-# Выбор хранилища SMS для активного модема - И ДЛЯ ЧТЕНИЯ, И ДЛЯ ПРИЁМА.
-#
-# ЗАЧЕМ ВООБЩЕ. Входящие у разных модемов ложатся в разные места: у многих USB
-# (SimCom SIM7100 и родня) - в память модема (ME), у других - на SIM (SM).
-# Читать не оттуда - значит показать пустой ящик и жалобу «нет порта».
-#
-# ЧТО ИЗМЕНИЛОСЬ. Раньше здесь выбиралось хранилище ДЛЯ ЧТЕНИЯ по признаку «где
-# сейчас лежат сообщения», и на этом всё заканчивалось. Две беды:
-#
-#   1. Функция не работала вовсе. Условие «значение ещё не задано» не выполнялось
-#      никогда: /etc/config/5gmodem ставит storage='SM' с завода, то есть значение
-#      задано всегда, и автовыбор молча выходил на первой строке у ВСЕХ.
-#   2. Выбор «где лежат» закрепляет то, что есть, а не то, что нужно. Модем с
-#      mem3=SM (FM350) складывает входящие на SIM - двадцать-тридцать слотов, -
-#      автовыбор видел их там и оставлял SIM навсегда. Дальше SIM заполняется, и
-#      оператор просто перестаёт доставлять.
-#
-# ТЕПЕРЬ. Спрашиваем у модема ВМЕСТИМОСТЬ обоих хранилищ и выбираем БОЛЬШЕЕ
-# (память модема обычно на сотню сообщений против трёх десятков на SIM), а потом
-# ЗАКРЕПЛЯЕМ выбор в самом модеме через sms_apply_cpms - вместе с mem3, который
-# и решает, куда лягут новые. Без второго шага настройка меняла только чтение.
-#
-# ВЫБОР ЧЕЛОВЕКА ВЫШЕ НАШЕГО. Признак - storage_touched, его ставит страница
-# настроек при ручном выборе. Есть флаг - автовыбор не трогает значение, но
-# CPMS всё равно применяем: раз человек выбрал память модема, входящие должны
-# идти туда, а не только читаться оттуда.
-set_sms_storage() {
-	AT="$1"
-	[ -n "$AT" ] && [ -e "$AT" ] || return 0
-	command -v sms_tool >/dev/null 2>&1 || return 0
-	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
+# Выбор хранилища SMS (set_sms_storage) переехал в lib.sh: его зовут не только
+# перевыбор модема, но и обе страницы, и первое чтение SMS после загрузки.
 
-	STG=$(uci -q get 5gmodem.sms.storage)
-
-	if [ "$(uci -q get 5gmodem.sms.storage_touched)" != 1 ]; then
-		# «used: N, total: M» - берём и то, и другое одним запросом.
-		me=$(sms_tool -d "$AT" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-		sm=$(sms_tool -d "$AT" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
-		if   [ "${me:-0}" -gt "${sm:-0}" ] 2>/dev/null; then NEW=ME
-		elif [ "${sm:-0}" -gt "${me:-0}" ] 2>/dev/null; then NEW=SM
-		elif [ -n "$me" ]; then NEW=ME          # равны или неизвестны - ME
-		elif [ -n "$sm" ]; then NEW=SM          # ответило только SM
-		else NEW=""                             # молчат оба - не выдумываем
-		fi
-		if [ -n "$NEW" ] && [ "$NEW" != "$STG" ]; then
-			uci -q set "5gmodem.sms.storage=$NEW"
-			uci -q commit 5gmodem
-			logger -t 5gmodem "sms: хранилище выбрано автоматически - $NEW (ME=${me:-?}, SM=${sm:-?})"
-			STG="$NEW"
-		fi
-	fi
-
-	[ -n "$STG" ] || return 0
-	sms_apply_cpms "$AT" "$STG" >/dev/null 2>&1
-}
 
 # Убрать НАШИ ЖЕ интерфейсы, оставшиеся от прежних подключений этого модема.
 #

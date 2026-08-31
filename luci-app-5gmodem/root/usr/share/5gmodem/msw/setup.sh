@@ -129,8 +129,24 @@ setup_one_modem() {
 		# (proto/device) или netifd секцию вовсе не знает - сравниваем до/после.
 		_fp_was="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")"
 		fix_iface_proto "$_ex"
+		# ПОДТЯГИВАЕМ ТОЛЬКО УЖЕ СДЕЛАННЫЙ ВЫБОР, А НЕ СОЗДАЁМ ЕГО.
+		# Здесь стояло безусловное `iface_proto=<текущий proto интерфейса>` - и
+		# любой прото, выставленный АВТОМАТИКОЙ (запасной путь mm-inhibit,
+		# правка fix_iface_proto), при следующем же hotplug превращался в
+		# «выбор пользователя». Дальше ветка auto в mkiface читала его первым и
+		# больше никогда не применяла ни детект по драйверу, ни вендорные
+		# исключения: модем, который обязан идти под ModemManager (413c:81e0,
+		# 05c6:90d5), намертво застревал на qmi. Тот же инвариант уже соблюдён в
+		# modemswitch.sh - переписываем только kernel-пару, и только если выбор
+		# в секции уже есть.
 		_pr=$(uci -q get "network.$_ex.proto")
-		[ -n "$_pr" ] && uci -q set "$CFG.$SEC.iface_proto=$_pr"
+		case "$(uci -q get "$CFG.$SEC.iface_proto")" in
+			mbim|qmi)
+				case "$_pr" in
+					mbim|qmi) uci -q set "$CFG.$SEC.iface_proto=$_pr" ;;
+				esac
+				;;
+		esac
 		uci -q commit "$CFG"
 		"$RES/ensureports.sh" >/dev/null 2>&1
 		# ПОДНЯТЬ ИНТЕРФЕЙС СРАЗУ. Мы только что сняли «спящее» auto=0, но netifd

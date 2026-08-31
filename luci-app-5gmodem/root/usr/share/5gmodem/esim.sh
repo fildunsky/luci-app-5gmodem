@@ -55,25 +55,14 @@ fi
 # у модема, где eUICC есть, - живой случай на FM350 с eSIM.
 . /usr/share/5gmodem/atlock.sh
 BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
+# Список моделей с eUICC и esim_capable - в общем файле: его же читает
+# simslot.sh, чтобы подписать «eSIM» второй слот, на котором мы ещё не бывали.
+. /usr/share/5gmodem/esimcaps.sh
+
 # Кэш порта eUICC - ПО ПУТИ МОДЕМА, а не один на всех. Был общий файл, и когда
 # активный модем менялся, find_port проверял ЧУЖОЙ закэшированный порт: на нём
 # открывался eUICC ДРУГОГО модема, и односимочный SIM7600 объявлялся с eSIM,
 # потому что рядом стоял FM350 с настоящей eUICC на /dev/ttyUSB1.
-# Модемы, у которых ПОТЕНЦИАЛЬНО есть eSIM (eUICC) - по vid:pid. Список для
-# ВИДИМОСТИ ВКЛАДКИ (не для работы с чипом): показать вкладку, если воткнут
-# такой модуль. Ошибка в сторону «показали лишнее» дёшева - в настройках есть
-# галка скрыть; ошибка «спрятали нужное» хуже. Расширяется по мере проверки.
-#   0e8d:7127 Fibocom FM350-GL (проверено живьём: eUICC есть)
-#   2cb7:0104/0105 Fibocom FM150/FM160
-#   2c7c:0800/0801 Quectel RM500Q / RM520N-GL (варианты с eUICC)
-#   2c7c:0900 Quectel RG500Q
-#   Foxconn T99W175 / Dell DW5930e (SDX55, eUICC) - несколько композиций:
-#     05c6:9025, 05c6:90d5, 1e2d:00b3, 1e2d:00b7, 1e2d:00b8, 1e2d:00b9.
-#     ВНИМАНИЕ: 05c6:90d5 и 1e2d:00b7 делят с Compal RXM-G1 / Thales MV31-W - у
-#     них eSIM может не быть, тогда вкладка покажется зря; прячется галкой в
-#     настройках (цена ложного «показали» ниже, чем «спрятали нужное»).
-ESIM_CAPABLE_VIDPIDS="0e8d:7127 0e8d:7126 2cb7:0104 2cb7:0105 2c7c:0800 2c7c:0801 2c7c:0900 05c6:9025 05c6:90d5 1e2d:00b3 1e2d:00b7 1e2d:00b8 1e2d:00b9"
-
 PORTCACHE="/tmp/5gmodem_esim_port_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')"
 # Живой лог операции: мост дописывает сюда строки прогресса ПО МЕРЕ их прихода,
 # UI читает его во время спиннера. Переживает неудачу - нужен для диагностики.
@@ -1455,19 +1444,9 @@ status)
 
 	_vp=$(uci -q get "5gmodem.$_es_sec.vidpid")
 	[ -n "$_vp" ] || _vp=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_AP\"].vidpid" 2>/dev/null | head -1)
-	for _cap in $ESIM_CAPABLE_VIDPIDS; do
-		[ "$_vp" = "$_cap" ] && { echo '{"available":1,"active":0}'; exit 0; }
-	done
-	# МОДЕЛЬ, У КОТОРОЙ «eSIM» НАПИСАНО ПРЯМО В ИМЕНИ. Списка vid:pid мало: у
-	# Dell DW5821e-eSIM (0489:e0b5) вкладка не показывалась, хотя eUICC у него
-	# распаян - буквально в названии. Общий признак закрывает и будущие модели
-	# без правки списка. Вариант без eSIM у того же vid:pid ярлыка в имени не
-	# несёт - ложных показов не даёт.
 	_prod=$("$RES/listmodems.sh" 2>/dev/null \
 		| jsonfilter -e "@[@.path=\"$_AP\"].product" 2>/dev/null | head -1)
-	case "$_prod" in
-		*eSIM*|*ESIM*) echo '{"available":1,"active":0}'; exit 0 ;;
-	esac
+	esim_capable "$_vp" "$_prod" && { echo '{"available":1,"active":0}'; exit 0; }
 	echo '{"available":0,"active":0}'
 	exit 0
 	;;

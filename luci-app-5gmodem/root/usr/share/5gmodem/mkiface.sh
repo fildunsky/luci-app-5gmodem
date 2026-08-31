@@ -980,7 +980,21 @@ _fw_zone_add "$IF"
 # point the app at the interface, and remember the user's protocol choice
 # (auto/mbim/modemmanager/qmi) so the settings page shows it on return - done
 # here, on the router, so LuCI does not raise an "unsaved changes" banner.
-if [ "$_IS_ACTIVE" = 1 ]; then
+# ВЫНУЖДЕННЫЙ ПРОТО - НЕ ВЫБОР ПОЛЬЗОВАТЕЛЯ. mm-inhibit сам уводит модем на
+# kernel-прото, когда ModemManager его не собрал. Записанный в iface_proto, такой
+# прото читается веткой auto как ЯВНЫЙ ВЫБОР - и дальше не срабатывают ни
+# детект по драйверу узла, ни вендорные исключения (413c:81e0, 05c6:90d5 ->
+# modemmanager). Модем оставался на нерабочем пути НАВСЕГДА, до ручной правки
+# конфига: живой отчёт 31.08.2026, Cudy TR3000 + DW5821e-eSIM - в секции
+# iface_proto=qmi, а узел /dev/cdc-wdm0 под cdc_mbim, uqmi в пустоту
+# («Request timed out», «Failed to parse message data», SIM illegal, интерфейс
+# вечно pending). Ключ при этом ЧИСТИМ: пусть решает авто-детект.
+if [ "$MKIFACE_AUTOFALLBACK" = "1" ]; then
+	if [ "$_IS_ACTIVE" = 1 ]; then
+		uci -q set "5gmodem.@5gmodem[0].network=$IF"
+		uci -q delete "5gmodem.@5gmodem[0].iface_proto" 2>/dev/null
+	fi
+elif [ "$_IS_ACTIVE" = 1 ]; then
 	uci -q set "5gmodem.@5gmodem[0].network=$IF"
 	uci -q set "5gmodem.@5gmodem[0].iface_proto=$REQ"
 fi
@@ -1000,7 +1014,11 @@ if [ -n "$MSEC" ]; then
 				[ -n "$_mk_pr" ] && uci -q set "5gmodem.$MSEC.product=$_mk_pr"
 			fi
 	uci -q set "5gmodem.$MSEC.network=$IF"
-	uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+	if [ "$MKIFACE_AUTOFALLBACK" = "1" ]; then
+		uci -q delete "5gmodem.$MSEC.iface_proto" 2>/dev/null
+	else
+		uci -q set "5gmodem.$MSEC.iface_proto=$REQ"
+	fi
 	# см. ту же ветку выше: интерфейс пересоздан для этого модема - метка снята.
 	uci -q delete "5gmodem.$MSEC.foreign_iface" 2>/dev/null
 fi
