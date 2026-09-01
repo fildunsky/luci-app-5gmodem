@@ -103,6 +103,11 @@ applyset)
 		rm -f /tmp/5gmodem_cpms_* 2>/dev/null
 		( set_sms_storage "$_sp" ) >/dev/null 2>&1 </dev/null &
 	fi
+	# СПИСОК МОДЕМОВ КЭШИРУЕТСЯ (см. listmodems.sh). Галочка «это модем» меняет
+	# именно его вывод, и без сброса кэша лишняя вкладка держалась бы ещё до
+	# восьми секунд - ровно столько, чтобы человек решил, что настройка не
+	# сработала, и полез щёлкать снова.
+	rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
 	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
 # смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):

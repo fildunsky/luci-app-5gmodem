@@ -58,6 +58,8 @@ esc() {
 # в секции после свопа модема (см. ниже). lib.sh - только определения функций,
 # сорсить дёшево и без побочек.
 [ -r /usr/share/5gmodem/lib.sh ] && . /usr/share/5gmodem/lib.sh
+# Список «это не модем» (переходники USB-UART и родня) - общий, см. notmodem.sh.
+[ -r /usr/share/5gmodem/notmodem.sh ] && . /usr/share/5gmodem/notmodem.sh
 
 # usb_device sysfs node (has idVendor) that owns a given /dev char device
 owner_node() {
@@ -76,6 +78,7 @@ NCNT=0
 NL='
 '
 PORTREC=""
+SKIPNODES=""
 for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -e "$t" ] || continue
 	n=$(owner_node "$t")
@@ -88,6 +91,16 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 		i=$((i + 1))
 	done
 	if [ -z "$idx" ]; then
+		# ЧУЖОЕ УСТРОЙСТВО С ttyUSB (переходник USB-UART и т.п.) - не модем и
+		# вкладки не заслуживает. Проверяем ТОЛЬКО на первом порте устройства:
+		# у отвергнутого запоминаем узел, чтобы не читать sysfs на каждый его
+		# порт (у CH341 их бывает два, у FT2232 - четыре).
+		case " $SKIPNODES " in *" $n "*) continue ;; esac
+		if command -v is_not_modem >/dev/null 2>&1 && \
+		   is_not_modem "$(cat "$n/idVendor" 2>/dev/null):$(cat "$n/idProduct" 2>/dev/null)"; then
+			SKIPNODES="$SKIPNODES $n"
+			continue
+		fi
 		NCNT=$((NCNT + 1)); idx=$NCNT
 		NODES="$NODES $n"
 	fi

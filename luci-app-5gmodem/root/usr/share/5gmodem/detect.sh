@@ -13,6 +13,8 @@
 
 # tty_usbpath (сверка «чей это порт») - общая, см. lib.sh.
 . /usr/share/5gmodem/lib.sh 2>/dev/null
+# Фильтр «это не модем» - для перебора вслепую в самом конце файла.
+. /usr/share/5gmodem/notmodem.sh 2>/dev/null
 # --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
 #
 # У HiLink-модемов (Huawei E3372h и родня) AT-порта нет вовсе. Молчать об этом
@@ -258,6 +260,13 @@ fi
 # auto-detection froze the page. atprobe.sh caps the wait AND rejects DIAG/NMEA
 # ports (they never answer AT), so we land on a real AT port.
 for DEVICE in $DEVICES; do
+	# Переходник USB-UART отвечать на AT не обязан, но и слать ему AT нельзя:
+	# на другом конце провода чужая железка, для которой это мусор в консоли.
+	_dp=$(tty_usbpath "$DEVICE" 2>/dev/null)
+	if [ -n "$_dp" ] && command -v is_not_modem >/dev/null 2>&1 \
+	   && is_not_modem "$(cat "/sys/bus/usb/devices/$_dp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_dp/idProduct" 2>/dev/null)"; then
+		continue
+	fi
 	if /usr/share/5gmodem/atprobe.sh "$DEVICE"; then
 		echo "$DEVICE" | tee $MODEMFILE
 		exit 0

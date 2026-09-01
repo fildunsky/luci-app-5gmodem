@@ -5108,3 +5108,12 @@ msgstr "Подождать перед выполнением. При задер�
 
 msgid "The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
 msgstr "Ключевое слово - первое слово сообщения, регистр не важен; остальное передаётся команде в SMS_ARGS. При задержке ответ уходит ПЕРВЫМ - иначе команда вроде перезагрузки не успевает ответить вовсе."
+
+msgid "What counts as a modem"
+msgstr "Что считать модемом"
+
+msgid "USB devices with ports that the app found. Uncheck the ones that are not modems — a USB-to-serial adapter, for example — and they lose their tab and stop being probed with AT commands."
+msgstr "Найденные USB-устройства с портами. Снимите галочку с того, что модемом не является - например, с переходника USB-UART: устройство лишится своей вкладки, и мы перестанем слать ему AT-команды."
+
+msgid "not on the bus"
+msgstr "нет на шине"

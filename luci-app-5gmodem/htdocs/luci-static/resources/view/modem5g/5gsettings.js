@@ -232,7 +232,8 @@ return view.extend({
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(uci.load('5gmodem')),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}')
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}'),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/notmodem.sh', [ 'scan' ]), '[]')
 		]);
 	},
 
@@ -240,6 +241,9 @@ return view.extend({
 		modemtabs.attach();
 		var services = [];
 		try { services = (JSON.parse((res && res[1]) || '{}').services) || []; } catch (e) {}
+		/* Устройства на шине для галочки «это модем» - см. notmodem.sh scan. */
+		var usbDevs = [];
+		try { usbDevs = JSON.parse((res && res[2]) || '[]') || []; } catch (e) {}
 
 		/* Блок обновления (без Save/Apply - действие немедленное). */
 		var updateBlock = E('div', { 'class': 'cbi-section tg5g' }, [
@@ -651,6 +655,83 @@ return view.extend({
 			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
 		o.default = '0';
 		o.rmempty = false;
+
+		/* ЧТО СЧИТАТЬ МОДЕМОМ.
+		   Модем опознаётся по портам, поэтому свою вкладку получал и переходник
+		   USB-UART, воткнутый в роутер для чужой железки (живой случай 01.09.2026,
+		   CH340 1a86:7523). Известные переходники прячет встроенный список
+		   (notmodem.sh), но список конечен - здесь пользователь решает сам.
+
+		   ОДИН СПИСОК ГАЛОЧЕК НА ДВЕ РУЧКИ КОНФИГА. Галочка стоит = «это модем»;
+		   куда лечь значению, считаем по тому, что о нём думает встроенный список:
+		   сняли с обычного устройства - в ignore_vidpid, поставили на устройство
+		   из встроенного списка - в modem_vidpid (отладочная плата, где модуль
+		   подключён к роутеру как раз через мост). Пользователю про две ручки
+		   знать незачем: он видит список железа и галочки. */
+		if (usbDevs.length) {
+			var devOpt = exp.option(form.MultiValue, 'ignore_vidpid', _('What counts as a modem'),
+				_('USB devices with ports that the app found. Uncheck the ones that are not modems — a USB-to-serial adapter, for example — and they lose their tab and stop being probed with AT commands.'));
+			devOpt.widget = 'checkbox';
+			devOpt.orientation = 'vertical';
+			devOpt.optional = true;
+			devOpt.rmempty = false;
+
+			var seenVp = {};
+			usbDevs.forEach(function(d) {
+				if (seenVp[d.vidpid]) { return; }
+				seenVp[d.vidpid] = true;
+				var name = d.product || '';
+				var parts = [];
+				if (name) { parts.push(name); }
+				parts.push(d.vidpid);
+				var label = parts.join(' — ');
+				var ports = (d.ports || []).join(', ');
+				if (d.absent === '1') { label += ' (' + _('not on the bus') + ')'; }
+				else if (ports) { label += ' — ' + ports; }
+				devOpt.value(d.vidpid, label);
+			});
+
+			/* Отмечено = сейчас считается модемом. Итог уже посчитан бэкендом
+			   (skip), с учётом обеих ручек - повторять их разбор в браузере
+			   значило бы держать две копии одного правила. */
+			devOpt.cfgvalue = function() {
+				var v = [];
+				var seen = {};
+				usbDevs.forEach(function(d) {
+					if (seen[d.vidpid] || d.skip === '1') { return; }
+					seen[d.vidpid] = true;
+					v.push(d.vidpid);
+				});
+				return v;
+			};
+
+			devOpt.write = function(section_id, formvalue) {
+				var checked = {};
+				L.toArray(formvalue).forEach(function(v) { checked[v] = true; });
+				var ign = [], force = [], seen = {};
+				usbDevs.forEach(function(d) {
+					if (seen[d.vidpid]) { return; }
+					seen[d.vidpid] = true;
+					if (checked[d.vidpid]) {
+						if (d.builtin === '1') { force.push(d.vidpid); }
+					} else if (d.builtin !== '1') {
+						ign.push(d.vidpid);
+					}
+				});
+				/* Пустую ручку УДАЛЯЕМ, а не пишем пустой строкой: пустое
+				   значение в конфиге выглядит как настройка, которой нет. */
+				if (ign.length) { uci.set('5gmodem', section_id, 'ignore_vidpid', ign); }
+				else { uci.unset('5gmodem', section_id, 'ignore_vidpid'); }
+				if (force.length) { uci.set('5gmodem', section_id, 'modem_vidpid', force); }
+				else { uci.unset('5gmodem', section_id, 'modem_vidpid'); }
+			};
+
+			/* Сняли ВСЕ галочки - LuCI зовёт remove вместо write, а нам и в этом
+			   случае есть что записать: все устройства уходят в исключения. */
+			devOpt.remove = function(section_id) {
+				return devOpt.write(section_id, []);
+			};
+		}
 
 		/* МГНОВЕННОЕ ПРИМЕНЕНИЕ (решение владельца): любое изменение на
 		   странице сохраняется и применяется само - кнопки Сохранить/Применить

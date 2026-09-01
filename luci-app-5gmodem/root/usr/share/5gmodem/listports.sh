@@ -8,6 +8,11 @@
 # Output: a JSON object  { "<port>": {"vidpid","product","path"}, ... }
 #
 
+# Тот же фильтр «это не модем», что и в listmodems.sh: переходник USB-UART не
+# должен предлагаться в выпадающих списках AT-порта - выбрав его, пользователь
+# получил бы AT-команды в консоль соседней железки.
+[ -r /usr/share/5gmodem/notmodem.sh ] && . /usr/share/5gmodem/notmodem.sh
+
 esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 first=1
@@ -23,6 +28,7 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -f "$p/idVendor" ] || continue
 	vid=$(cat "$p/idVendor" 2>/dev/null)
 	pid=$(cat "$p/idProduct" 2>/dev/null)
+	command -v is_not_modem >/dev/null 2>&1 && is_not_modem "$vid:$pid" && continue
 	prod=$(esc "$(cat "$p/product" 2>/dev/null)")
 	path=$(basename "$p" 2>/dev/null)
 	[ "$first" = 1 ] || printf ','
