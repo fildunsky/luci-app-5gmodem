@@ -817,7 +817,7 @@ function addSmsCommands(s) {
 	   в настройках и очевидно с первого взгляда. Кода по умолчанию нет: пока
 	   защита - только доверенные номера, а номер отправителя подделывается. */
 	o = s.option(form.Value, 'cmd_secret', _('Security code'),
-		_('If set, this must be the FIRST word of the message, before the command word: "%s". Without it the router ignores the message. Leave empty and the only protection is the list of trusted numbers - and a sender number can be forged.').format('1234 reboot'));
+		_('The FIRST word of the message, before the command word: "%s" runs the command named "reboot" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged.').format('secret reboot'));
 	o.placeholder = _('empty - no code');
 	o.depends('cmd_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };

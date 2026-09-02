@@ -5142,8 +5142,8 @@ msgstr "исключено вручную"
 msgid "has answered as a modem before"
 msgstr "уже отвечало модемом"
 
-msgid "If set, this must be the FIRST word of the message, before the command word: \"%s\". Without it the router ignores the message. Leave empty and the only protection is the list of trusted numbers - and a sender number can be forged."
-msgstr "Если задан, должен идти ПЕРВЫМ словом сообщения, перед словом команды: «%s». Без него роутер сообщение не выполнит. Оставите пустым - защитой останется только список доверенных номеров, а номер отправителя подделывается."
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "ПЕРВОЕ слово сообщения, перед словом команды: «%s» выполнит команду «reboot» из списка ниже. Смените его на слово, которое знаете только вы, - по умолчанию оно у всех одинаковое. Пустое поле означает, что кода нет вовсе, и защитой остаётся только список доверенных номеров, а номер отправителя подделывается."
 
 msgid "marked as a modem by hand"
 msgstr "отмечено модемом вручную"

@@ -236,6 +236,20 @@ _tg_has_sms() {   # $1 - usb-путь
 		| grep -q .
 }
 
+# СВЕЖЕЕ ЛИ СООБЩЕНИЕ. Метку времени sms_tool печатает в UTC и игнорирует $TZ
+# (проверено), поэтому сравниваем в UTC.
+#   $1 - метка времени сообщения
+#   $2 - что считать при неразобранной метке: old (молчать) или fresh (слать)
+# Окно 0 = не ограничивать по возрасту.
+_tk_fresh() {
+	[ "$TG_FIRSTH" = 0 ] && return 0
+	_tf_e=$(date -u -D '%Y-%m-%d %H:%M' -d "$1" +%s 2>/dev/null)
+	case "$_tf_e" in
+		''|*[!0-9]*) [ "$2" = fresh ]; return $? ;;
+	esac
+	[ $(( $(date -u +%s) - _tf_e )) -lt $((TG_FIRSTH * 3600)) ]
+}
+
 _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нельзя (Telegram недоступен)
 	_tk_path="$1"
 	_tg_has_sms "$_tk_path" || return 0
@@ -254,6 +268,7 @@ _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нел
 
 	_tk_idx=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
 	_tk_n=0
+	_tk_skipped=0
 	for _tk_i in $_tk_idx; do
 		_tk_snd=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].sender" 2>/dev/null)
 		_tk_ts=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].timestamp" 2>/dev/null)
@@ -304,19 +319,37 @@ $_tk_key"
 			# Метку времени sms_tool печатает в UTC и игнорирует $TZ (проверено),
 			# поэтому и сравниваем в UTC. Не разобралось - считаем старым: лучше
 			# промолчать, чем высыпать архив.
+			# Окно 0 при первой встрече означает «не слать ничего»: память
+			# могла копиться год, и высыпать её в чат нельзя. Неразобранную
+			# метку тоже считаем старой - лучше промолчать, чем высыпать архив.
 			_tk_old=1
-			if [ "$TG_FIRSTH" != 0 ]; then
-				_tk_ts_e=$(date -u -D '%Y-%m-%d %H:%M' -d "$_tk_ts" +%s 2>/dev/null)
-				case "$_tk_ts_e" in
-					''|*[!0-9]*) : ;;
-					*) [ $(( $(date -u +%s) - _tk_ts_e )) -lt $((TG_FIRSTH * 3600)) ] && _tk_old="" ;;
-				esac
-			fi
+			[ "$TG_FIRSTH" != 0 ] && _tk_fresh "$_tk_ts" old && _tk_old=""
 			if [ -n "$_tk_old" ]; then
 				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
 				_tk_n=$((_tk_n + 1))
 				continue
 			fi
+		fi
+		# СТАРОЕ СООБЩЕНИЕ НЕ ПЕРЕСЫЛАЕМ И НА ЗНАКОМОМ МОДЕМЕ.
+		#
+		# Окно возраста работало только при первой встрече с модемом - то есть
+		# ровно один раз, пока нет файла «виденного». Но пачка ранее не виденных
+		# сообщений появляется и позже, и самый обычный способ - СМЕНИТЬ SIM:
+		# модем тот же, файл виденного на месте, а в памяти карты лежит её
+		# собственная переписка за месяцы. Живой случай 02.09.2026 (FM350,
+		# переключение eSIM -> физическая SIM): в чат ушли 50 сообщений, самые
+		# старые - январские. То же самое даёт очистка памяти модема и
+		# перестановка карты из телефона.
+		#
+		# Уведомитель существует ради СВЕЖИХ сообщений: то, что старше окна,
+		# помечаем виденным молча - оно останется в «Входящих» и в архиве.
+		# Неразобранную метку здесь считаем свежей (в отличие от первой встречи):
+		# на знакомом модеме это скорее странный формат у нового сообщения, чем
+		# архив, а потерять уведомление хуже, чем прислать лишнее.
+		if ! _tk_fresh "$_tk_ts" fresh; then
+			SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+			_tk_skipped=$((_tk_skipped + 1))
+			continue
 		fi
 		_tg_send "SMS $_tk_snd$_tk_tag
 $_tk_ts
@@ -347,6 +380,10 @@ $_tk_ts
 				return 1 ;;
 		esac
 	done
+	# Молчаливый пропуск объясняем в журнале: иначе «сообщения есть, а бот
+	# молчит» выглядит поломкой. Пишем только когда что-то пропустили.
+	[ "$_tk_first" != "1" ] && [ "$_tk_skipped" -gt 0 ] && \
+		_log "$(_tg_name "$_tk_path"): $_tk_skipped message(s) older than ${TG_FIRSTH}h marked seen without forwarding (SIM swap or a wiped modem memory)"
 	if [ "$_tk_first" = "1" ] && [ "$_tk_n" -gt 0 ]; then
 		_log "first encounter with modem $(_tg_name "$_tk_path"): processed $_tk_n messages (newer than ${TG_FIRSTH}h go to the chat, older ones are silently marked seen)"
 	elif [ "$_tk_n" -gt 0 ]; then
