@@ -28,7 +28,9 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -f "$p/idVendor" ] || continue
 	vid=$(cat "$p/idVendor" 2>/dev/null)
 	pid=$(cat "$p/idProduct" 2>/dev/null)
-	command -v is_not_modem >/dev/null 2>&1 && is_not_modem "$vid:$pid" && continue
+	# Не модем (переходник USB-UART, счётчик, принтер) - его порт не должен
+	# попадать в выпадающие списки AT-портов. Признаки - см. notmodem.sh.
+	command -v usb_is_modem >/dev/null 2>&1 && ! usb_is_modem "$p" && continue
 	prod=$(esc "$(cat "$p/product" 2>/dev/null)")
 	path=$(basename "$p" 2>/dev/null)
 	[ "$first" = 1 ] || printf ','

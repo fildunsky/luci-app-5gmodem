@@ -63,6 +63,120 @@ is_not_modem_builtin() {
 	return 1
 }
 
+# ===== ЧТО ВООБЩЕ СЧИТАТЬ МОДЕМОМ =====
+#
+# Чёрный список выше лечил симптом: воткнули переходник - добавили его vid:pid.
+# Но правило, по которому программа искала модемы, звучало как «есть ttyUSB или
+# cdc-wdm - значит модем», и под него попадает что угодно: счётчик, контроллер,
+# плата с USB-UART, принтер, отладочный адаптер. Каждое такое устройство
+# получало вкладку, секцию в конфиге, место в приоритете интернета и попытки
+# опроса AT-командами. Перечислить всё, что бывает воткнуто в роутер, нельзя -
+# значит решать должен не список, а признаки самого устройства.
+#
+# ПРИЗНАКИ. Всё, что нужно, ядро уже выяснило, когда привязывало драйверы к
+# интерфейсам устройства, - надо лишь прочитать это в sysfs:
+#
+#   1. ДРАЙВЕР интерфейса. У сотового модема это option/qcserial/sierra/
+#      usb_wwan (порты) и qmi_wwan/cdc_mbim/cdc_ncm/cdc_ether/rndis_host (канал
+#      данных). У переходника - ch341/ftdi_sio/cp210x/pl2303, и он не бывает ни
+#      тем, ни другим: разные драйверы, разные классы, разное железо.
+#   2. КЛАСС интерфейса: MBIM (02:0e), CDC ECM (02:06), NCM (02:0d). Это всегда
+#      сетевой канал, и у переходника с принтером его нет.
+#   3. ВЕНДОР. Список сотовых вендоров короткий и меняется раз в годы, а модем в
+#      «сыром» виде (драйвер ещё не привязан, портов нет) узнаётся только по нему.
+#   4. НАША СЕКЦИЯ В КОНФИГЕ с IMEI или моделью: устройство уже отвечало нам как
+#      модем, что бы ни думали пункты выше. Это страховка от главного риска
+#      такой проверки - спрятать чей-то работающий модем незнакомой модели.
+#
+# Не подошло ни одно - не модем. Ошиблись - человек ставит галочку в Настройках
+# («Что считать модемом»), vid:pid уезжает в modem_vidpid, и устройство
+# возвращается: ручной ответ всегда сильнее любой эвристики.
+MODEM_DRIVERS="option qcserial sierra sierra_net usb_wwan qmi_wwan cdc_mbim cdc_ncm cdc_wdm huawei_cdc_ncm cdc_ether rndis_host cdc_subset qcaux GobiNet GobiSerial simcom_wwan"
+
+# Вендоры сотовых модулей и свистков. 05c6 (Qualcomm) и 0e8d (MediaTek) - самые
+# широкие: под ними ходит и референсная периферия, но в роутер её втыкают редко,
+# а модемов на этих идентификаторах - половина всего, что мы поддерживаем.
+#
+# ЧЕГО ЗДЕСЬ НЕТ И ПОЧЕМУ. Dell (413c), HP (03f0), Intel (8087), Foxconn (0489),
+# TP-Link (2357) выпускают модемы, но под теми же вендорами ходят клавиатуры,
+# принтеры, Bluetooth-контроллеры и Wi-Fi свистки - по вендору их не отличить.
+# Их модемы попадают сюда другим путём: у DW5821e и L850 интерфейс MBIM, у
+# HP lt4120 - qmi_wwan, и признаки 1-2 узнают их и без списка.
+CELL_VENDORS="12d1 19d2 2c7c 1e0e 1bc7 0e8d 2cb7 1e2d 2dee 05c6 1199 2020 1c9e 0af0 1bbb 2001 0421 1546 1782 1410 16d8 106c"
+
+# ПРИЧИНА РЕШЕНИЯ - КОДОМ, А НЕ ФРАЗОЙ. Строку показывает страница настроек, а
+# она бывает на трёх языках: перевести пришедшее из скрипта нельзя, поэтому
+# отсюда уходит короткий код (vendor/driver/mbim/bridge/...) и, если есть,
+# уточнение - имя драйвера или вендора. Фразу собирает страница.
+IM_WHY=""
+IM_DETAIL=""
+
+# Usage: usb_is_modem <каталог usb-устройства в sysfs>  ->  0 = это модем
+usb_is_modem() {
+	_im_n="$1"
+	IM_WHY=""; IM_DETAIL=""
+	[ -n "$_im_n" ] && [ -f "$_im_n/idVendor" ] || { IM_WHY=none; IM_DETAIL=""; return 1; }
+	_im_v=$(cat "$_im_n/idVendor" 2>/dev/null)
+	_im_p=$(cat "$_im_n/idProduct" 2>/dev/null)
+	_nm_cfg
+
+	# РУЧНОЙ ОТВЕТ ВЫШЕ ВСЕГО ОСТАЛЬНОГО - в обе стороны.
+	for _im_x in $NOT_MODEM_FORCE; do
+		[ "$_im_v:$_im_p" = "$_im_x" ] && { IM_WHY=forced; IM_DETAIL=""; return 0; }
+	done
+	if is_not_modem "$_im_v:$_im_p"; then
+		IM_DETAIL=""
+		is_not_modem_builtin "$_im_v:$_im_p" && IM_WHY=bridge || IM_WHY=ignored
+		return 1
+	fi
+
+	case " $CELL_VENDORS " in
+		*" $_im_v "*) IM_WHY=vendor; IM_DETAIL="$_im_v"; return 0 ;;
+	esac
+
+	for _im_i in "$_im_n":*; do
+		[ -d "$_im_i" ] || continue
+		_im_d=$(readlink "$_im_i/driver" 2>/dev/null); _im_d=${_im_d##*/}
+		case " $MODEM_DRIVERS " in
+			*" $_im_d "*) IM_WHY=driver; IM_DETAIL="$_im_d"; return 0 ;;
+		esac
+		case "$(cat "$_im_i/bInterfaceClass" 2>/dev/null):$(cat "$_im_i/bInterfaceSubClass" 2>/dev/null)" in
+			02:0e) IM_WHY=mbim; IM_DETAIL=""; return 0 ;;
+			02:06) IM_WHY=ecm; IM_DETAIL=""; return 0 ;;
+			02:0d) IM_WHY=ncm; IM_DETAIL=""; return 0 ;;
+		esac
+	done
+
+	# ПОСЛЕДНЯЯ СТРАХОВКА: у нас уже есть профиль этого устройства с IMEI или
+	# моделью - значит когда-то оно отвечало нам как модем. Признаки выше могли
+	# не сработать (модем незнакомого вендора, порты которому подсунули руками
+	# через new_id), а спрятать чей-то работающий модем - худшее, что эта
+	# проверка может сделать. Стоит в конце, чтобы причина в настройках
+	# называла настоящий признак, когда он есть.
+	_im_s="m_$(basename "$_im_n" | sed 's/[^A-Za-z0-9]/_/g')"
+	if [ -n "$(uci -q get "5gmodem.$_im_s.imei" 2>/dev/null)$(uci -q get "5gmodem.$_im_s.model" 2>/dev/null)" ]; then
+		IM_WHY=profile; IM_DETAIL=""
+		return 0
+	fi
+
+	IM_WHY=none; IM_DETAIL=""
+	return 1
+}
+
+# То же по vid:pid, когда каталога устройства под рукой нет: ищем его на шине.
+usb_is_modem_vidpid() {   # $1 - vid:pid
+	case "$1" in *:*) ;; *) return 1 ;; esac
+	for _iv_n in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
+		case "$_iv_n" in *:*) continue ;; esac
+		[ -f "$_iv_n/idVendor" ] || continue
+		[ "$(cat "$_iv_n/idVendor" 2>/dev/null):$(cat "$_iv_n/idProduct" 2>/dev/null)" = "$1" ] || continue
+		usb_is_modem "$_iv_n"
+		return $?
+	done
+	IM_WHY=absent; IM_DETAIL=""
+	return 1
+}
+
 # --- notmodem.sh scan --------------------------------------------------------
 #
 # Список устройств для страницы настроек: что сейчас на шине, чем мы это считаем
@@ -77,8 +191,11 @@ is_not_modem_builtin() {
 #
 # Вывод: JSON-массив
 #   [ { "path","vidpid","product","ports":[...],
-#       "skip":"1"     - прячем сейчас (с учётом обеих ручек),
-#       "builtin":"1"  - прячем по встроенному списку,
+#       "skip":"1"     - не показываем сейчас (с учётом обеих ручек),
+#       "builtin":"1"  - в списке переходников USB-UART,
+#       "auto":"1"     - считалось бы модемом само по себе, без ручек,
+#       "why":"vendor|driver|mbim|ecm|ncm|profile|forced|bridge|ignored|none|absent"
+#       "detail":"..."  - уточнение к причине: имя драйвера или вендор,
 #       "absent":"1" } - устройства на шине нет, запись из конфига ]
 nm_scan() {
 	_ns_esc() {
@@ -89,21 +206,47 @@ nm_scan() {
 	}
 	_ns_out=""
 	_ns_seen=""
-	_ns_add() {   # _ns_add <path> <vidpid> <product> <ports> <absent>
+	# КЕМ УСТРОЙСТВО СЧИТАЛОСЬ БЫ БЕЗ РУЧЕК. Страница по этому полю решает, куда
+	# писать галочку: чтобы ПОКАЗАТЬ то, что само по себе модемом не считается,
+	# нужен modem_vidpid; чтобы СПРЯТАТЬ то, что считается, - ignore_vidpid.
+	_ns_auto() {   # $1 - каталог устройства
+		_sa_e="$NOT_MODEM_EXTRA"; _sa_f="$NOT_MODEM_FORCE"
+		NOT_MODEM_EXTRA=""; NOT_MODEM_FORCE=""
+		usb_is_modem "$1"; _sa_r=$?
+		NOT_MODEM_EXTRA="$_sa_e"; NOT_MODEM_FORCE="$_sa_f"
+		return $_sa_r
+	}
+	_ns_add() {   # _ns_add <path> <vidpid> <product> <ports> <absent> <узел>
 		_nb=0; is_not_modem_builtin "$2" && _nb=1
-		_nk=0; is_not_modem "$2" && _nk=1
+		_na=0; _nw=""
+		if [ -n "$6" ]; then
+			_ns_auto "$6" && _na=1
+			_nk=0; usb_is_modem "$6" || _nk=1
+			_nw="$IM_WHY"; _nwd="$IM_DETAIL"
+		else
+			_na=0
+			_nk=0; is_not_modem "$2" && _nk=1
+			usb_is_modem_vidpid "$2" >/dev/null 2>&1
+			_nw=absent; _nwd=""
+		fi
 		[ -n "$_ns_out" ] && _ns_out="$_ns_out,"
-		_ns_out="$_ns_out{\"path\":\"$(_ns_esc "$1")\",\"vidpid\":\"$(_ns_esc "$2")\",\"product\":\"$(_ns_esc "$3")\",\"ports\":[$4],\"skip\":\"$_nk\",\"builtin\":\"$_nb\",\"absent\":\"$5\"}"
+		_ns_out="$_ns_out{\"path\":\"$(_ns_esc "$1")\",\"vidpid\":\"$(_ns_esc "$2")\",\"product\":\"$(_ns_esc "$3")\",\"ports\":[$4],\"skip\":\"$_nk\",\"builtin\":\"$_nb\",\"auto\":\"$_na\",\"why\":\"$(_ns_esc "$_nw")\",\"detail\":\"$(_ns_esc "$_nwd")\",\"absent\":\"$5\"}"
 	}
 
 	for _nd in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
 		[ -f "$_nd/idVendor" ] || continue
 		case "$_nd" in *:*) continue ;; esac   # интерфейс, а не устройство
 		_np=""
+		# ГДЕ ЛЕЖАТ ПОРТА. У cdc_acm и cdc-wdm узел висит прямо на интерфейсе
+		# (<iface>/tty/ttyACM0), а у usb-serial - уровнем глубже, через
+		# собственный узел порта (<iface>/ttyUSB0/tty/ttyUSB0). Без второго
+		# шаблона список портов у любого модема на option оставался пустым.
 		for _ni in "$_nd":*; do
-			for _nn in "$_ni"/tty/* "$_ni"/usbmisc/*; do
+			for _nn in "$_ni"/tty/* "$_ni"/usbmisc/* "$_ni"/*/tty/* "$_ni"/*/usbmisc/*; do
 				[ -e "$_nn" ] || continue
-				_np="${_np}${_np:+,}\"/dev/$(basename "$_nn")\""
+				_nnb=$(basename "$_nn")
+				case ",$_np," in *"\"/dev/$_nnb\","*) continue ;; esac
+				_np="${_np}${_np:+,}\"/dev/$_nnb\""
 			done
 		done
 		_nvp="$(cat "$_nd/idVendor" 2>/dev/null):$(cat "$_nd/idProduct" 2>/dev/null)"
@@ -113,7 +256,7 @@ nm_scan() {
 			case " $NM_MODEM_PATHS " in *" $_nbn "*) ;; *) continue ;; esac
 		fi
 		_ns_seen="$_ns_seen $_nvp"
-		_ns_add "$_nbn" "$_nvp" "$(cat "$_nd/product" 2>/dev/null)" "$_np" 0
+		_ns_add "$_nbn" "$_nvp" "$(cat "$_nd/product" 2>/dev/null)" "$_np" 0 "$_nd"
 	done
 
 	# ЗАПИСИ КОНФИГА БЕЗ ЖЕЛЕЗА. Устройство могли вынуть из разъёма - если не
@@ -123,7 +266,7 @@ nm_scan() {
 	for _nvp in $NOT_MODEM_EXTRA $NOT_MODEM_FORCE; do
 		case " $_ns_seen " in *" $_nvp "*) continue ;; esac
 		_ns_seen="$_ns_seen $_nvp"
-		_ns_add "" "$_nvp" "" "" 1
+		_ns_add "" "$_nvp" "" "" 1 ""
 	done
 
 	echo "[$_ns_out]"

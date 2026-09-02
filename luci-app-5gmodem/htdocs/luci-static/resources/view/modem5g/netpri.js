@@ -1346,16 +1346,48 @@ function buildBar(list, redraw) {
 			   держит состояние gone) - прячется она только после грейс-периода,
 			   и это решает list, а не мы. */
 			if (o.health === 'down' && o.healstep) {
-				var stepName = (o.healstep === 1) ? _('Reconnecting')
-				             : (o.healstep === 2) ? _('Rebooting') : _('USB power cycle');
-				var stepCmd = (o.healstep === 1) ? 'ifdown/ifup'
-				            : (o.healstep === 2) ? 'AT+CFUN=1,1' : 'USB power';
+				/* ПОДПИСЬ СТУПЕНИ - ПО СВОЕЙ ЛЕСТНИЦЕ. У Wi-Fi-аплинка ступени
+				   совсем другие, чем у модема, и подписывать их модемными
+				   значило печатать неправду: на падении станции карточка
+				   показывала «AT+CFUN=1,1» - AT-команду, которую Wi-Fi никто
+				   не слал (лечение модема к чужому интерфейсу и не подпустит,
+				   см. sec_for_iface_h в health.sh). Тип лестницы приходит с
+				   бэкенда: только он знает, чем этот линк является. */
+				var ladders = {
+					wifi: [
+						[ _('Reconnecting'),        'ifdown/ifup' ],
+						[ _('Reassociating'),       'REASSOCIATE' ],
+						[ _('Restarting the radio'), 'wireless down/up' ],
+						[ _('Rebuilding the network'), 'network reload' ]
+					],
+					hilink: [
+						[ _('Reconnecting'),  'ifdown/ifup' ],
+						[ _('Rebooting'),     _('modem web API') ],
+						[ _('USB power cycle'), 'USB power' ]
+					],
+					modem: [
+						[ _('Reconnecting'),  'ifdown/ifup' ],
+						[ _('Rebooting'),     'AT+CFUN=1,1' ],
+						[ _('USB power cycle'), 'USB power' ]
+					]
+				};
+				var ladder = ladders[o.healkind] || ladders.modem;
+				var step = ladder[o.healstep - 1] || ladder[ladder.length - 1];
+				var stepName = step[0], stepCmd = step[1];
+				/* Секунды с начала попытки - С ЕДИНИЦЕЙ. Голое «1432» рядом с
+				   именем команды читается как счётчик чего угодно, чаще всего
+				   как число попыток. */
+				var forTxt = null;
+				if (o.healfor != null) {
+					forTxt = (o.healfor < 90) ? _('%ds').format(o.healfor)
+					                          : _('%dm').format(Math.round(o.healfor / 60));
+				}
 				return [
 					E('span', { 'class': 'netpri-sub' }, stepName + ' (' + o.healn + '/' + o.healmax + ')'),
 					E('span', { 'class': 'netpri-name' }, o.iface),
 					E('span', { 'class': 'netpri-ip' }, [
 						E('span', { 'class': 'netpri-svcdot netpri-health off', 'title': _('No internet on this link') }),
-						(o.healfor != null ? o.healfor + ' | ' : '') + stepCmd
+						(forTxt ? forTxt + ' | ' : '') + stepCmd
 					])
 				];
 			}

@@ -91,13 +91,15 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 		i=$((i + 1))
 	done
 	if [ -z "$idx" ]; then
-		# ЧУЖОЕ УСТРОЙСТВО С ttyUSB (переходник USB-UART и т.п.) - не модем и
-		# вкладки не заслуживает. Проверяем ТОЛЬКО на первом порте устройства:
-		# у отвергнутого запоминаем узел, чтобы не читать sysfs на каждый его
-		# порт (у CH341 их бывает два, у FT2232 - четыре).
+		# А МОДЕМ ЛИ ЭТО ВООБЩЕ. Наличие ttyUSB/cdc-wdm ничего не доказывает:
+		# порт отдаёт и переходник USB-UART, и счётчик, и плата, и принтер, а
+		# вкладку с опросом по AT заслуживает только модем. Решение - по
+		# признакам устройства (драйверы интерфейсов, классы, вендор), см.
+		# usb_is_modem в notmodem.sh. Проверяем ТОЛЬКО на первом порте
+		# устройства: у отвергнутого запоминаем узел, чтобы не читать sysfs на
+		# каждый его порт (у CH341 их бывает два, у FT2232 - четыре).
 		case " $SKIPNODES " in *" $n "*) continue ;; esac
-		if command -v is_not_modem >/dev/null 2>&1 && \
-		   is_not_modem "$(cat "$n/idVendor" 2>/dev/null):$(cat "$n/idProduct" 2>/dev/null)"; then
+		if command -v usb_is_modem >/dev/null 2>&1 && ! usb_is_modem "$n"; then
 			SKIPNODES="$SKIPNODES $n"
 			continue
 		fi

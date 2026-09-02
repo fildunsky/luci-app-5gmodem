@@ -793,7 +793,7 @@ function addSmsCommands(s) {
 	var o;
 
 	o = s.option(form.Flag, 'cmd_enabled', _('Run commands from SMS'),
-		_('Execute a configured command when a message starts with its keyword. Useful when the router is unreachable over the network - SMS still gets through. The message text is never pasted into the command line: whatever follows the keyword is passed as the SMS_ARGS environment variable.'));
+		_('Send an SMS that starts with the word of a command below - the router runs it. Useful when the router is unreachable over the network: SMS still gets through. The message text is never pasted into the command line, whatever follows the word is passed as the SMS_ARGS environment variable.'));
 	o.default = '0';
 	o.rmempty = false;
 
@@ -812,6 +812,16 @@ function addSmsCommands(s) {
 	   пришлось бы набирать заново. */
 	o.remove = function() { return Promise.resolve(); };
 
+	/* ЗАЩИТНЫЙ КОД - ОТДЕЛЬНО ОТ СЛОВА КОМАНДЫ. Их постоянно путают: слово
+	   («reboot») говорит, ЧТО сделать, и секретом быть не может - оно записано
+	   в настройках и очевидно с первого взгляда. Кода по умолчанию нет: пока
+	   защита - только доверенные номера, а номер отправителя подделывается. */
+	o = s.option(form.Value, 'cmd_secret', _('Security code'),
+		_('If set, this must be the FIRST word of the message, before the command word: "%s". Without it the router ignores the message. Leave empty and the only protection is the list of trusted numbers - and a sender number can be forged.').format('1234 reboot'));
+	o.placeholder = _('empty - no code');
+	o.depends('cmd_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
 	var cv = s.option(form.SectionValue, '__smscmds', form.TableSection, 'smscmd');
 	cv.depends('cmd_enabled', '1');
 	var cs = cv.subsection;
@@ -822,14 +832,15 @@ function addSmsCommands(s) {
 	   опции рисуется отдельной строкой под заголовками и занимает больше места,
 	   чем сами поля (проверено на стенде: пять абзацев над пустым списком). */
 	cs.nodescriptions = true;
-	cs.description = _('The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all.');
+	cs.description = _('Send the word from the first column in an SMS - the router runs what is in the second. The word is matched without case, anything after it reaches the command as SMS_ARGS. A command that kills the connection (reboot, modem power cycle) needs a delay: the reply is then sent BEFORE the command runs, which is the only way it can be sent at all.');
 
-	o = cs.option(form.Value, 'keyword', _('Keyword'));
+	o = cs.option(form.Value, 'keyword', _('Word in the SMS'));
 	o.placeholder = 'reboot';
 	o.rmempty = false;
 
-	o = cs.option(form.Value, 'exec', _('Command'));
-	o.placeholder = '/sbin/reboot';
+	o = cs.option(form.Value, 'exec', _('What to run'),
+		_('A shell command, exactly as you would type it over SSH.'));
+	o.placeholder = 'reboot';
 	o.rmempty = false;
 
 	o = cs.option(form.Flag, 'answer', _('Reply'));

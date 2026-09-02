@@ -670,7 +670,7 @@ return view.extend({
 		   знать незачем: он видит список железа и галочки. */
 		if (usbDevs.length) {
 			var devOpt = exp.option(form.MultiValue, 'ignore_vidpid', _('What counts as a modem'),
-				_('USB devices with ports that the app found. Uncheck the ones that are not modems — a USB-to-serial adapter, for example — and they lose their tab and stop being probed with AT commands.'));
+				_('Every USB device the app found with ports of its own. Checked ones are treated as modems; the app decides that by the drivers the kernel bound to the device, so an adapter or a printer stays out. Check a device to force it in, uncheck one to make it lose its tab and stop being probed with AT commands.'));
 			devOpt.widget = 'checkbox';
 			devOpt.orientation = 'vertical';
 			devOpt.optional = true;
@@ -688,6 +688,22 @@ return view.extend({
 				var ports = (d.ports || []).join(', ');
 				if (d.absent === '1') { label += ' (' + _('not on the bus') + ')'; }
 				else if (ports) { label += ' — ' + ports; }
+				/* ПОЧЕМУ устройство считается тем, чем считается: без этого
+				   снятая галочка у чужого свистка выглядит произволом. Бэкенд
+				   присылает код, фразу собираем здесь - она переводимая. */
+				var why = {
+					vendor:  _('cellular module vendor'),
+					driver:  _('modem driver in the kernel'),
+					mbim:    _('MBIM interface'),
+					ecm:     _('CDC Ethernet interface'),
+					ncm:     _('CDC NCM interface'),
+					profile: _('has answered as a modem before'),
+					forced:  _('marked as a modem by hand'),
+					bridge:  _('USB-to-serial adapter'),
+					ignored: _('excluded by hand'),
+					none:    _('no modem driver and no modem network interface')
+				}[d.why];
+				if (why) { label += ' — ' + why + (d.detail ? ' (' + d.detail + ')' : ''); }
 				devOpt.value(d.vidpid, label);
 			});
 
@@ -712,9 +728,12 @@ return view.extend({
 				usbDevs.forEach(function(d) {
 					if (seen[d.vidpid]) { return; }
 					seen[d.vidpid] = true;
+					/* auto - каким устройство было бы БЕЗ обеих ручек. Ручку
+					   ставим только там, где галочка расходится с этим: иначе
+					   конфиг зарастал бы записями, ничего не меняющими. */
 					if (checked[d.vidpid]) {
-						if (d.builtin === '1') { force.push(d.vidpid); }
-					} else if (d.builtin !== '1') {
+						if (d.auto !== '1') { force.push(d.vidpid); }
+					} else if (d.auto === '1') {
 						ign.push(d.vidpid);
 					}
 				});

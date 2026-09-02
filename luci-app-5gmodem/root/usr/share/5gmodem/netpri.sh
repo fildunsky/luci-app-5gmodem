@@ -160,6 +160,14 @@ _map_field() {
 }
 # Переопределения поверх lib.sh: горячие ключи из карт, прочее - прежним путём.
 # Карта строится только в list (ucimap_build); пустая карта = поведение lib.sh.
+# Снимок беспроводки - ОДИН раз на процесс и только по требованию: нужен лишь
+# карточке лечения, а list зовётся каждые 5 секунд.
+_NP_WLS=""; _NP_WLS_DONE=""
+_np_wlsnap() {
+	[ -n "$_NP_WLS_DONE" ] || { _NP_WLS_DONE=1; _NP_WLS=$(uci -q show wireless 2>/dev/null); }
+	printf '%s' "$_NP_WLS"
+}
+
 ucinet_get() {
 	if [ -n "$_NETMAP" ]; then
 		case "$2" in
@@ -1199,7 +1207,23 @@ list)
 				# идёт лечение - карточка рисует статус реанимации
 				if [ -f "/tmp/5gmodem_health/$n.heal" ] \
 				   && read -r _np_hstep _np_hlast _np_hn < "/tmp/5gmodem_health/$n.heal" 2>/dev/null; then
-					_np_h="$_np_h,\"healstep\":${_np_hstep:-0},\"healn\":${_np_hn:-0},\"healmax\":6,\"healfor\":$(( _NOW_S - ${_np_hlast:-0} ))"
+					# КАКАЯ ИМЕННО ЛЕСТНИЦА ЛЕЧИТ ЭТОТ ЛИНК.
+					#
+					# Ступени у них РАЗНЫЕ (см. health.sh): у модема - ifup,
+					# AT+CFUN=1,1, питание USB; у Wi-Fi-аплинка - переподключение,
+					# REASSOCIATE станции, пересборка радио, network reload; у
+					# HiLink вторая ступень идёт через его API, а не AT. Карточка
+					# подписывала ступень по одному лишь номеру, то есть на
+					# падении Wi-Fi честно печатала «AT+CFUN=1,1» - команду,
+					# которую этому интерфейсу никто не слал и слать не мог.
+					# Тип решает бэкенд: он один знает, чем этот линк является.
+					_np_hk=modem
+					case "$(_np_wlsnap)" in *".network='$n'"*) _np_hk=wifi ;; esac
+					if [ "$_np_hk" = modem ] && [ "$(printf '%s\n' "$_M5MAP" \
+							| awk -F'|' -v i="$n" '$2==i {print $5; exit}')" = hilink ]; then
+						_np_hk=hilink
+					fi
+					_np_h="$_np_h,\"healstep\":${_np_hstep:-0},\"healn\":${_np_hn:-0},\"healmax\":6,\"healfor\":$(( _NOW_S - ${_np_hlast:-0} )),\"healkind\":\"$_np_hk\""
 				fi
 			fi
 		fi

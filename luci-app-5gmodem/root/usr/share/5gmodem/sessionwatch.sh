@@ -839,6 +839,30 @@ case "$1" in
 			# перенести в архив и освободить слоты модема (у FM350 их всего
 			# десять - см. _arch_purge). Выключено - выходит на первой строке.
 			"$RES/smsbridge.sh" archive-run >/dev/null 2>&1
+			# ОСТАЛЬНЫЕ МОДЕМЫ - ТОЖЕ, но раз в пять минут. Слив ходил только к
+			# активному, а сообщения приходят на каждую SIM: у человека с двумя
+			# модемами ящик неактивного заполнялся до отказа при включённой
+			# галочке. Бот в Telegram обходит все модемы давно (SMS_MODEM=<путь>),
+			# слив теперь тоже. Реже, чем активного: каждый обход - это AT-запрос
+			# списка сообщений в чужой порт, а круг сторожа тут всего полминуты.
+			_ar_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+			_ar_prev=$(cat /tmp/5gmodem_arch_all.stamp 2>/dev/null)
+			case "$_ar_prev" in ''|*[!0-9]*) _ar_prev=0 ;; esac
+			if [ "$((_ar_now - _ar_prev))" -ge 300 ]; then
+				printf '%s' "$_ar_now" > /tmp/5gmodem_arch_all.stamp 2>/dev/null
+				_ar_act=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+				_ar_list=$("$RES/listmodems.sh" 2>/dev/null)
+				for _ar_p in $("$RES/registry.sh" paths 2>/dev/null); do
+					[ "$_ar_p" = "$_ar_act" ] && continue
+					# Нет ни AT-порта, ни канала управления - читать нечем.
+					printf '%s' "$_ar_list" \
+						| jsonfilter -e "@[@.path=\"$_ar_p\"].tty[0]" \
+						             -e "@[@.path=\"$_ar_p\"].wdm[0]" 2>/dev/null \
+						| grep -q . || continue
+					( export SMS_MODEM="$_ar_p"
+					  _sw_run 45 "$RES/smsbridge.sh" archive-run ) >/dev/null 2>&1
+				done
+			fi
 			# Досылка отложенных исходящих: одно сообщение за круг, под общей
 			# очередью к порту. Пусто - выходит мгновенно.
 			"$RES/smsbridge.sh" queue-run >/dev/null 2>&1

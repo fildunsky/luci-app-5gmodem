@@ -5117,3 +5117,78 @@ msgstr "Найденные USB-устройства с портами. Сним�
 
 msgid "not on the bus"
 msgstr "нет на шине"
+
+msgid "A shell command, exactly as you would type it over SSH."
+msgstr "Команда оболочки - ровно так, как вы набрали бы её по SSH."
+
+msgid "CDC Ethernet interface"
+msgstr "интерфейс CDC Ethernet"
+
+msgid "CDC NCM interface"
+msgstr "интерфейс CDC NCM"
+
+msgid "cellular module vendor"
+msgstr "вендор сотовых модулей"
+
+msgid "empty - no code"
+msgstr "пусто - без кода"
+
+msgid "Every USB device the app found with ports of its own. Checked ones are treated as modems; the app decides that by the drivers the kernel bound to the device, so an adapter or a printer stays out. Check a device to force it in, uncheck one to make it lose its tab and stop being probed with AT commands."
+msgstr "Все найденные USB-устройства со своими портами. Отмеченные считаются модемами; программа решает это по драйверам, которые ядро привязало к устройству, поэтому переходник или принтер сюда не попадают. Поставьте галочку, чтобы устройство считалось модемом принудительно, снимите - и оно потеряет вкладку и перестанет опрашиваться AT-командами."
+
+msgid "excluded by hand"
+msgstr "исключено вручную"
+
+msgid "has answered as a modem before"
+msgstr "уже отвечало модемом"
+
+msgid "If set, this must be the FIRST word of the message, before the command word: \"%s\". Without it the router ignores the message. Leave empty and the only protection is the list of trusted numbers - and a sender number can be forged."
+msgstr "Если задан, должен идти ПЕРВЫМ словом сообщения, перед словом команды: «%s». Без него роутер сообщение не выполнит. Оставите пустым - защитой останется только список доверенных номеров, а номер отправителя подделывается."
+
+msgid "marked as a modem by hand"
+msgstr "отмечено модемом вручную"
+
+msgid "MBIM interface"
+msgstr "интерфейс MBIM"
+
+msgid "modem driver in the kernel"
+msgstr "модемный драйвер ядра"
+
+msgid "no modem driver and no modem network interface"
+msgstr "нет ни модемного драйвера, ни сетевого интерфейса модема"
+
+msgid "Security code"
+msgstr "Защитный код"
+
+msgid "Send the word from the first column in an SMS - the router runs what is in the second. The word is matched without case, anything after it reaches the command as SMS_ARGS. A command that kills the connection (reboot, modem power cycle) needs a delay: the reply is then sent BEFORE the command runs, which is the only way it can be sent at all."
+msgstr "Пришлите в SMS слово из первого столбца - роутер выполнит то, что во втором. Регистр не важен, всё, что идёт после слова, попадает в команду переменной SMS_ARGS. Команде, которая рвёт связь (перезагрузка роутера или модема), нужна задержка: тогда ответ уходит ДО выполнения - иначе он не уйдёт вовсе."
+
+msgid "USB-to-serial adapter"
+msgstr "переходник USB-UART"
+
+msgid "What to run"
+msgstr "Что выполнить"
+
+msgid "Word in the SMS"
+msgstr "Слово в SMS"
+
+msgid "Send an SMS that starts with the word of a command below - the router runs it. Useful when the router is unreachable over the network: SMS still gets through. The message text is never pasted into the command line, whatever follows the word is passed as the SMS_ARGS environment variable."
+msgstr "Пришлите SMS, начинающуюся со слова одной из команд ниже, - роутер её выполнит. Выручает, когда до роутера не достучаться по сети: SMS доходит. Текст сообщения в командную строку не подставляется, всё после слова уходит в переменную окружения SMS_ARGS."
+
+msgid "Reassociating"
+msgstr "Переподключение станции"
+
+msgid "Restarting the radio"
+msgstr "Перезапуск радио"
+
+msgid "Rebuilding the network"
+msgstr "Пересборка сети"
+
+msgid "modem web API"
+msgstr "веб-API модема"
+
+msgid "%ds"
+msgstr "%d с"
+
+msgid "%dm"
+msgstr "%d мин"

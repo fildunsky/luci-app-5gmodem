@@ -263,8 +263,8 @@ for DEVICE in $DEVICES; do
 	# Переходник USB-UART отвечать на AT не обязан, но и слать ему AT нельзя:
 	# на другом конце провода чужая железка, для которой это мусор в консоли.
 	_dp=$(tty_usbpath "$DEVICE" 2>/dev/null)
-	if [ -n "$_dp" ] && command -v is_not_modem >/dev/null 2>&1 \
-	   && is_not_modem "$(cat "/sys/bus/usb/devices/$_dp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_dp/idProduct" 2>/dev/null)"; then
+	if [ -n "$_dp" ] && command -v usb_is_modem >/dev/null 2>&1 \
+	   && ! usb_is_modem "/sys/bus/usb/devices/$_dp"; then
 		continue
 	fi
 	if /usr/share/5gmodem/atprobe.sh "$DEVICE"; then

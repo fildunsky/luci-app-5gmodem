@@ -996,8 +996,36 @@ _arch_live_json() {
 #      выполненного - см. smscmd.sh).
 # Ни одно из условий не «оптимизируется»: цена ошибки - молча потерянное
 # сообщение, а это худшее, что может сделать программа с SMS.
+# ЖДАТЬ БОТА И КОМАНДЫ - НО НЕ ВЕЧНО (крайний срок).
+#
+# Условия 2 и 3 были жёсткими, и на живых роутерах это обернулось ровно тем, от
+# чего слив спасает. У человека с включённым уведомителем и недоступным
+# Telegram (в РФ без VPN на роутере это обычное дело) бот НИКОГДА не
+# подтверждает доставку - значит из модема не удаляется НИ ОДНО сообщение:
+# галочка «хранить в памяти роутера» стоит, архив полон, а ящик модема всё
+# равно забивается до отказа и оператор перестаёт доставлять. То же самое, если
+# круг команд по SMS почему-либо не доходит до конца.
+#
+# Поэтому ждём ARCH_GRACE_MIN минут с того момента, как сообщение легло в архив
+# (возраст файла), и дальше удаляем из модема независимо от бота и команд.
+# Гарантия при этом НЕ теряется: при включённом архиве источник правды - он, а
+# не модем (recv отдаёт архив), и бот с командами читают через этот же мост, то
+# есть увидят сообщение и после того, как оно ушло из памяти модема.
+ARCH_GRACE_MIN=60
+
+# Диагностика «почему сообщение до сих пор в модеме»: при _AP_WHY=1 функция
+# ничего не удаляет, а печатает построчно «индекс<TAB>причина» (верб archive-why).
+_AP_WHY=""
+_ap_why() {   # $1 - индекс, $2 - причина
+	[ -n "$_AP_WHY" ] || return 0
+	printf '%s\t%s\n' "$1" "$2"
+}
+
 _arch_purge() {   # $1 - живой JSON от sms_tool
-	[ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && return 0
+	if [ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ]; then
+		_ap_why '-' "освобождение слотов выключено настройкой"
+		return 0
+	fi
 	_apd=$(_arch_dir)
 	[ -d "$_apd" ] || return 0
 	_apn=$(printf '%s' "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
@@ -1009,7 +1037,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 	_ap_sf=$(_seen_file)
 	_ap_df=$(sms_cmd_done_file "$_TGT_PATH")
 
-	_ap_i=0; _ap_del=0
+	_ap_i=0; _ap_del=0; _ap_stuck=0; _ap_late_n=0
 	while [ "$_ap_i" -lt "$_apn" ]; do
 		_ap_x=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].index" 2>/dev/null)
 		_ap_s=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].sender" 2>/dev/null)
@@ -1017,32 +1045,77 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 		_ap_c=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].content" 2>/dev/null)
 		_ap_i=$((_ap_i + 1))
 		case "$_ap_x" in ''|*[!0-9]*) continue ;; esac
+		# Номер из диапазона архива - сообщения в модеме уже нет, удалять нечего.
+		[ "$_ap_x" -ge "$ARCH_BASE" ] 2>/dev/null && continue
 		# Пустая запись = sms_tool не разобрал PDU. В архив она не попала (см.
 		# _arch_merge), и удалять её отсюда НЕЛЬЗЯ: мы бы уничтожили сообщение,
 		# которого никогда не видели.
-		[ -n "$_ap_s$_ap_c" ] || continue
+		if [ -z "$_ap_s$_ap_c" ]; then
+			_ap_stuck=$((_ap_stuck + 1))
+			_ap_why "$_ap_x" "PDU не разобран - в архив не попало"
+			continue
+		fi
 
 		# 1) в архиве?
 		_ap_k=$(_arch_key "$_ap_s" "$_ap_t" "$_ap_c")
-		_ap_have=0
-		for _apf in "$_apd"/*."$_ap_k"; do [ -f "$_apf" ] && { _ap_have=1; break; }; done
-		[ "$_ap_have" = 1 ] || continue
+		_ap_have=""
+		for _apf in "$_apd"/*."$_ap_k"; do [ -f "$_apf" ] && { _ap_have="$_apf"; break; }; done
+		if [ -z "$_ap_have" ]; then
+			_ap_stuck=$((_ap_stuck + 1))
+			_ap_why "$_ap_x" "ещё не в архиве"
+			continue
+		fi
+
+		# Пролежало в архиве дольше крайнего срока - ждать больше нечего.
+		_ap_late=0
+		[ -n "$(find "$_ap_have" -mmin +"$ARCH_GRACE_MIN" 2>/dev/null)" ] && _ap_late=1
 
 		# 2) бот уже доставил?
-		if [ "$_ap_tg" = "1" ]; then
-			grep -qxF "$_ap_s|$_ap_t" "$_ap_sf" 2>/dev/null || continue
+		if [ "$_ap_tg" = "1" ] && [ "$_ap_late" = 0 ] \
+		   && ! grep -qxF "$_ap_s|$_ap_t" "$_ap_sf" 2>/dev/null; then
+			_ap_stuck=$((_ap_stuck + 1))
+			_ap_why "$_ap_x" "ждём отправки в Telegram (крайний срок ${ARCH_GRACE_MIN} мин)"
+			continue
 		fi
 
 		# 3) команды по SMS уже отработали? Ключ тот же, что у smscmd.sh.
-		if [ "$_ap_cmd" = "1" ]; then
-			grep -qxF "$(sms_cmd_key "$_ap_s" "$_ap_t" "$_ap_c")" "$_ap_df" 2>/dev/null || continue
+		if [ "$_ap_cmd" = "1" ] && [ "$_ap_late" = 0 ] \
+		   && ! grep -qxF "$(sms_cmd_key "$_ap_s" "$_ap_t" "$_ap_c")" "$_ap_df" 2>/dev/null; then
+			_ap_stuck=$((_ap_stuck + 1))
+			_ap_why "$_ap_x" "ждём круга команд по SMS (крайний срок ${ARCH_GRACE_MIN} мин)"
+			continue
 		fi
 
-		_sms_run 12 $(_smstool) -d "$PORT" delete "$_ap_x" >/dev/null 2>&1 \
+		[ "$_ap_late" = 1 ] && _ap_late_n=$((_ap_late_n + 1))
+		if [ -n "$_AP_WHY" ]; then
+			_ap_why "$_ap_x" "готово к удалению"
+			continue
+		fi
+		# У MM-пути цель задаётся путём, а не портом: mmcli адресуется по индексу
+		# модема (см. sms_tool_mm), и без этого удаление ушло бы в активный.
+		MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_ap_x" >/dev/null 2>&1 \
 			&& _ap_del=$((_ap_del + 1))
 	done
-	[ "$_ap_del" -gt 0 ] && \
+	[ -n "$_AP_WHY" ] && return 0
+	if [ "$_ap_del" -gt 0 ]; then
 		logger -t 5gmodem "sms: в память роутера перенесено и удалено из модема сообщений: $_ap_del"
+		[ "$_ap_late_n" -gt 0 ] && logger -t 5gmodem \
+			"sms: из них по крайнему сроку (бот или команды так и не отчитались): $_ap_late_n"
+	fi
+	# ЗАСТРЯВШИЕ - В ЛОГ, НО НЕ КАЖДЫЕ ПОЛМИНУТЫ. Сообщения, которые слив не
+	# может убрать, - единственный симптом, по которому человек поймёт, почему
+	# ящик всё-таки заполняется; молчать о них нельзя, но и круг сторожа
+	# засорять незачем. Раз в час, с подсказкой, где смотреть подробности.
+	if [ "$_ap_stuck" -gt 0 ]; then
+		_ap_mk=/tmp/5gmodem_arch_stuck.stamp
+		_ap_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+		_ap_prev=$(cat "$_ap_mk" 2>/dev/null)
+		case "$_ap_prev" in ''|*[!0-9]*) _ap_prev=0 ;; esac
+		if [ "$((_ap_now - _ap_prev))" -ge 3600 ]; then
+			printf '%s' "$_ap_now" > "$_ap_mk" 2>/dev/null
+			logger -t 5gmodem "sms: в модеме осталось сообщений, которые пока нельзя удалить: $_ap_stuck (почему - smsbridge.sh archive-why)"
+		fi
+	fi
 	return 0
 }
 
@@ -1059,7 +1132,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 # Стоит ПОД замком порта, платит двумя AT-обменами один раз за загрузку, и
 # правит настройку по факту - страница читает оттуда, куда модем реально кладёт.
 case "$BOX" in
-recv|sent|status|dump|archive-run)
+recv|sent|status|dump|archive-run|archive-why)
 	# ТОЛЬКО ДЛЯ АКТИВНОГО МОДЕМА. Ключ storage - ОДИН на конфиг, а бот обходит
 	# ВСЕ модемы (SMS_MODEM=<путь>): без этой проверки круг бота по соседнему
 	# модему переписал бы настройку активного его хранилищем.
@@ -1128,13 +1201,51 @@ case "$BOX" in
 	# не должно случаться от того, что кто-то открыл страницу.
 	archive-run)
 		_arch_on || { echo '{"result":"off"}'; exit 0; }
-		# У MM-пути удалять нечего: сообщения живут в памяти ModemManager, а не
-		# в AT-хранилищах, и sms_tool delete там не при делах.
-		_via_mm && { echo '{"result":"mm"}'; exit 0; }
+		# У MM-ПУТИ СЛИВ ТОЖЕ НУЖЕН. Считалось, что удалять там нечего:
+		# сообщения живут в памяти ModemManager. Но приходят они в то же
+		# физическое хранилище (чаще всего на SIM), MM их оттуда читает и НЕ
+		# убирает - карта заполняется, и оператор перестаёт доставлять ровно
+		# так же, как без ModemManager. mmcli умеет удалять (sms_tool_mm delete),
+		# поэтому единственное отличие MM-пути остаётся такое: архив там
+		# включён всегда, а вот освобождать хранилище можно только по ЯВНОЙ
+		# галочке человека - у него архива никто не спрашивал.
+		if _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; then
+			echo '{"result":"mm"}'; exit 0
+		fi
 		_ar_j=$(_arch_live_json)
 		_arch_merge "$_ar_j"
 		_arch_purge "$_ar_j"
 		echo '{"result":"ok"}'
+		exit 0 ;;
+	# ПОЧЕМУ СООБЩЕНИЯ ВСЁ ЕЩЁ В МОДЕМЕ. Диагностика для случая «галочка стоит,
+	# а ящик заполняется»: печатает состояние слива и построчно - что мешает
+	# каждому сообщению. Ничего не меняет и ничего не удаляет.
+	archive-why)
+		echo "модем:        ${_TGT_PATH:-?}"
+		echo "порт:         ${PORT:-?}"
+		echo "хранилище:    ${STORE:-$(uci -q get "$CFG.sms.storage")}"
+		echo "через MM:     $(_via_mm && echo да || echo нет)"
+		echo "архив:        $(_arch_on && echo включён || echo выключен)"
+		echo "слив слотов:  $([ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && echo выключен || echo включён)"
+		echo "Telegram:     $([ "$(uci -q get "$CFG.sms.tg_enabled")" = "1" ] && echo включён || echo выключен)"
+		echo "команды SMS:  $([ "$(uci -q get "$CFG.sms.cmd_enabled")" = "1" ] && echo включены || echo выключены)"
+		if ! _arch_on; then
+			echo
+			echo "Архив выключен - сообщения остаются в модеме. Настройки -> SMS -> «Хранить сообщения в памяти роутера»."
+			exit 0
+		fi
+		if _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; then
+			echo
+			echo "Модем работает через ModemManager, а галочка «Хранить сообщения в памяти роутера» не стоит: слоты не освобождаются."
+			exit 0
+		fi
+		_aw_j=$(_arch_live_json)
+		echo "в архиве:     $(_arch_count)"
+		echo "в модеме:     $(printf '%s' "$_aw_j" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)"
+		echo
+		_arch_merge "$_aw_j"
+		_AP_WHY=1
+		_arch_purge "$_aw_j"
 		exit 0 ;;
 	sent)   _sms_run 45 $(_smstool) "$@" recv SR | utf8_fix; exit $? ;;
 	# delete <index|all> - индекс проверяем здесь: наружу уходит уже
