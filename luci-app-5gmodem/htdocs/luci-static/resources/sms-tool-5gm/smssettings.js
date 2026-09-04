@@ -820,7 +820,11 @@ function addSmsCommands(s) {
 		_('The FIRST word of the message, before the command word: "%s" runs the command named "reboot" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged.').format('secret reboot'));
 	o.placeholder = _('empty - no code');
 	o.depends('cmd_enabled', '1');
-	o.remove = function() { return Promise.resolve(); };
+	/* УДАЛЯТЬ КОД РАЗРЕШЕНО. Здесь стояла заглушка remove(), и она делала
+	   ровно обратное задуманному: LuCI на ПУСТОМ поле зовёт не write(), а
+	   remove(), поэтому очистить код было физически нельзя - старое значение
+	   возвращалось после каждого сохранения (жалоба 04.09.2026). А описание
+	   выше прямо обещает «пусто - кода нет». */
 
 	var cv = s.option(form.SectionValue, '__smscmds', form.TableSection, 'smscmd');
 	cv.depends('cmd_enabled', '1');

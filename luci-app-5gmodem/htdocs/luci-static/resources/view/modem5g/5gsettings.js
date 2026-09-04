@@ -437,7 +437,7 @@ return view.extend({
 			_('Large translucent mark on each uplink card'));
 		o.value('0', _('None'));
 		o.value('1', _('Priority number'));
-		o.value('icon', _('Interface icon'));
+		o.value('icon', _('Icons'));
 		o.default = '0';
 		o.rmempty = false;
 		o.depends('widget_netpri', '1');

@@ -51,7 +51,7 @@ for _pm_d in /sys/bus/usb/devices/*; do
 
 	# порты ЭТОГО устройства
 	_pm_ttys=""
-	for _pm_if in "$_pm_d":*; do
+	for _pm_if in "$_pm_d"/*:*; do
 		[ -d "$_pm_if" ] || continue
 		for _pm_t in "$_pm_if"/ttyUSB* "$_pm_if"/tty/ttyUSB* "$_pm_if"/ttyACM* "$_pm_if"/tty/ttyACM*; do
 			[ -e "$_pm_t" ] && _pm_ttys="$_pm_ttys $(basename "$_pm_t")"
@@ -59,12 +59,12 @@ for _pm_d in /sys/bus/usb/devices/*; do
 	done
 	# управляющие узлы (для полноты картины)
 	_pm_wdm=""
-	for _pm_w in "$_pm_d":*/usbmisc/cdc-wdm* "$_pm_d":*/usbmisc/wdm*; do
+	for _pm_w in "$_pm_d"/*:*/usbmisc/cdc-wdm* "$_pm_d"/*:*/usbmisc/wdm*; do
 		[ -e "$_pm_w" ] && _pm_wdm="$_pm_wdm $(basename "$_pm_w")"
 	done
 	# сетевые карты (HiLink и подобные)
 	_pm_net=""
-	for _pm_n in "$_pm_d":*/net/*; do
+	for _pm_n in "$_pm_d"/*:*/net/*; do
 		[ -e "$_pm_n" ] && _pm_net="$_pm_net $(basename "$_pm_n")"
 	done
 	# устройство без единого модемного узла - не модем, пропускаем

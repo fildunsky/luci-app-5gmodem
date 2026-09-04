@@ -39,7 +39,7 @@ for P in $PATHS; do
 	# него нет. Именно так выглядит недокормленный модем: AT-порты поднялись,
 	# а MBIM/QMI - нет. Интерфейсы класса ff (DIAG и т.п.) без драйвера
 	# встречаются и в норме, поэтому их НЕ считаем за поломку.
-	for I in "$D":*; do
+	for I in "$D"/*:*; do
 		[ -d "$I" ] || continue
 		[ "$(cat "$I/bInterfaceClass" 2>/dev/null)" = "02" ] || continue
 		if [ ! -e "$I/driver" ]; then

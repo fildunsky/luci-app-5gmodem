@@ -1539,10 +1539,48 @@ function buildBar(list, redraw) {
 	var _bar = E('div', { 'class': 'netpribar' }, kids);
 	/* Класс темы ставим ПОСЛЕ вставки в документ: до этого у узла нет ни
 	   родителя, ни унаследованного цвета, и getComputedStyle врёт. */
-	window.setTimeout(function() {
-		if (_bar.isConnected) { _bar.classList.toggle('netpri-dark', isDarkUI(_bar)); }
-	}, 0);
+	window.setTimeout(npSyncTheme, 0);
+	npWatchTheme();
 	return _bar;
+}
+
+/* ТЕМУ ПЕРЕСПРАШИВАЕМ, А НЕ ЗАПОМИНАЕМ ОДИН РАЗ.
+   Класс netpri-dark ставился ровно однажды, сразу после вставки блока. Пока
+   тему меняют перезагрузкой страницы, этого хватает; но если её переключают
+   на живой странице, класс остаётся ПРЕЖНИМ до следующей полной перерисовки -
+   а она приходит только с тиком опроса, раз в 15 c. Наружу это выглядело так:
+   переключил на светлую - значков в карточках пингов и сервисов несколько
+   секунд нет (силуэты остались инвертированными, то есть белыми на белом);
+   переключил на тёмную - несколько секунд держатся старые цвета, потом
+   «сами инвертируются» (жалоба владельца 04.09.2026; в прошлый раз я не смог
+   это воспроизвести, потому что проверял перезагрузкой страницы, а не
+   переключением темы). */
+function npSyncTheme() {
+	var bar = document.querySelector('.netpribar');
+	if (!bar || !bar.isConnected) { return; }
+	bar.classList.toggle('netpri-dark', isDarkUI(bar));
+}
+var _npThemeWatched = false;
+function npWatchTheme() {
+	if (_npThemeWatched) { return; }
+	_npThemeWatched = true;
+	/* Тему меняют по-разному: класс/атрибут на <html> или <body>, подмена
+	   тега <link> в <head>, системная настройка. Слушаем все три источника -
+	   проверка стоит один getComputedStyle, дешевле любой перерисовки. */
+	try {
+		var obs = new MutationObserver(function() { window.setTimeout(npSyncTheme, 0); });
+		obs.observe(document.documentElement, { attributes: true,
+			attributeFilter: [ 'class', 'style', 'data-theme', 'data-darkmode' ] });
+		if (document.body) {
+			obs.observe(document.body, { attributes: true, attributeFilter: [ 'class', 'style' ] });
+		}
+		obs.observe(document.head, { childList: true });
+	} catch (e) {}
+	try {
+		var mq = window.matchMedia('(prefers-color-scheme: dark)');
+		if (mq.addEventListener) { mq.addEventListener('change', npSyncTheme); }
+		else if (mq.addListener) { mq.addListener(npSyncTheme); }
+	} catch (e) {}
 }
 
 return baseclass.extend({

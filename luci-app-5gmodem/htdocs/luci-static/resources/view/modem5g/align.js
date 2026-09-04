@@ -11,6 +11,41 @@ function loadCss() {
 	l.id = 'tg-modem-css'; l.rel = 'stylesheet';
 	l.href = L.resource('view/modem5g/modem.css');
 	document.head.appendChild(l);
+	probeCheckmark();
+}
+
+/* СЛОМАНА ЛИ У ТЕМЫ ГАЛОЧКА - СПРАШИВАЕМ У БРАУЗЕРА, А НЕ ЧИНИМ ВСЛЕПУЮ.
+   Тема Routy рисует галочку маской, а цвет заливки берёт из --fg-color, который
+   при минификации превращается в невалидный calc: заливка становится прозрачной
+   и отмеченный чекбокс выглядит снятым. Лечилось это правилом
+   «background: currentColor» для ВСЕХ тем - и в proton2025 оно закрасило
+   собственную, здоровую галочку темы (жалоба владельца 04.09.2026: «галочки
+   стали уродские»).
+   Теперь проверяем по факту: если у ::after есть маска и есть содержимое, а
+   заливка прозрачная - это та самая поломка, и только тогда вешаем класс, под
+   который заскоплено правило в modem.css. */
+function probeCheckmark() {
+	if (document.documentElement.hasAttribute('data-tg-checkprobe')) { return; }
+	document.documentElement.setAttribute('data-tg-checkprobe', '1');
+	var run = function() {
+		var box = document.createElement('input');
+		box.type = 'checkbox'; box.checked = true;
+		box.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+		document.body.appendChild(box);
+		var broken = false;
+		try {
+			var cs = getComputedStyle(box, '::after');
+			var mask = cs.maskImage || cs.webkitMaskImage || 'none';
+			var bg = String(cs.backgroundColor || '');
+			var transparent = (bg === 'transparent' || /rgba\(0,\s*0,\s*0,\s*0\)/.test(bg) || bg === '');
+			broken = (mask !== 'none' && mask !== '' && cs.content !== 'none' && transparent);
+		} catch (e) { broken = false; }
+		box.remove();
+		if (broken) { document.documentElement.classList.add('tg-fixcheck'); }
+	};
+	/* Ждём, пока тема применит свой CSS: до этого ::after ещё пуст у всех. */
+	if (document.body) { setTimeout(run, 0); }
+	else { document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 0); }); }
 }
 
 var IS_PROTON = (function() {

@@ -341,6 +341,61 @@ run)
 		_one "$_p"
 	done
 	;;
+chat)
+	# КОМАНДА ИЗ ЧАТА TELEGRAM. Тот же список команд, что и по SMS, - иначе
+	# пользователь настраивает «reboot» в одном месте, а бот его не знает
+	# (жалоба 04.09.2026: /status работает, reboot - нет).
+	#
+	# ОТВЕЧАЕТ И ВЫПОЛНЯЕТ ЗДЕСЬ, а печатает то, что бот должен отправить в чат.
+	# Задержку соблюдаем ровно как в SMS-пути: команда вроде reboot убьёт нас
+	# раньше ответа, поэтому при заданной задержке сначала печатаем ответ, а
+	# выполнение уходит в фон.
+	#
+	# Права: chat-вход зовёт только tgnotify, а он уже отбросил чужие чаты.
+	# Секретное слово всё равно спрашиваем, если оно задано, - чтобы правило
+	# было одно на оба канала и «secret reboot» работал везде одинаково.
+	[ "$CMD_EN" = "1" ] || { echo '{"error":"disabled"}'; exit 1; }
+	_ct=$(printf '%s' "$2" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+	[ -n "$_ct" ] || { echo '{"error":"empty"}'; exit 2; }
+	if [ -n "$CMD_SECRET" ]; then
+		_cw1=$(printf '%s' "$_ct" | awk '{print $1; exit}')
+		if [ "$(printf '%s' "$_cw1" | tr 'A-Z' 'a-z')" \
+		   = "$(printf '%s' "$CMD_SECRET" | tr 'A-Z' 'a-z')" ]; then
+			_ct=$(printf '%s' "$_ct" | awk '{ $1=""; sub(/^[ \t]+/,""); print; exit }')
+		else
+			echo '{"error":"secret"}'; exit 1
+		fi
+	fi
+	_cword=$(printf '%s' "$_ct" | awk '{print $1; exit}')
+	_crest=$(printf '%s' "$_ct" | awk '{ $1=""; sub(/^[ \t]+/,""); print; exit }')
+	_ccs=$(_find_cmd "$_cword") || { echo '{"error":"no such command"}'; exit 1; }
+	_cex=$(uci -q get "$_ccs.exec")
+	[ -n "$_cex" ] || { echo '{"error":"no such command"}'; exit 1; }
+	_ctxt=$(uci -q get "$_ccs.answer_text")
+	_cdly=$(uci -q get "$_ccs.delay")
+	case "$_cdly" in ''|*[!0-9]*) _cdly=0 ;; esac
+	[ "$_cdly" -gt 300 ] 2>/dev/null && _cdly=300
+	_log "из чата: $_cword -> $_cex"
+	_cjson() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' '; }
+	if [ "$_cdly" -gt 0 ]; then
+		(
+			exec >/dev/null 2>&1 </dev/null
+			sleep "$_cdly"
+			SMS_FROM="telegram" SMS_ARGS="$_crest" SMS_TEXT="$_ct" sh -c "$_cex"
+		) &
+		printf '{"result":"ok","output":"%s"}\n' \
+			"$(_cjson "${_ctxt:-OK} (через ${_cdly} c)")"
+	else
+		_cout=$(SMS_FROM="telegram" SMS_ARGS="$_crest" SMS_TEXT="$_ct" \
+			sh -c "$_cex" 2>&1 | head -c "$ANS_MAX")
+		printf '{"result":"ok","output":"%s"}\n' \
+			"$(_cjson "${_ctxt:+$_ctxt }${_cout}")"
+	fi
+	;;
+list)
+	# Список ключевых слов - боту для подсказки в /help.
+	uci -q show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.[^.]*\.keyword='\(.*\)'\$/\1/p"
+	;;
 test)
 	# Ручная проверка команды со страницы: то же выполнение, но без SMS.
 	[ -n "$2" ] || { echo '{"error":"no keyword"}'; exit 2; }
@@ -357,7 +412,7 @@ test)
 	fi
 	;;
 *)
-	echo "usage: $0 run | test <keyword> [args]" >&2
+	echo "usage: $0 run | chat <text> | list | test <keyword> [args]" >&2
 	exit 2 ;;
 esac
 exit 0

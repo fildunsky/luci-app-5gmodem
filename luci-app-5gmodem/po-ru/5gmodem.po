@@ -4286,8 +4286,8 @@ msgstr "Фон карточек"
 msgid "Priority number"
 msgstr "Номер приоритета"
 
-msgid "Interface icon"
-msgstr "Иконка интерфейса"
+msgid "Icons"
+msgstr "Иконки"
 
 msgid "Large translucent mark on each uplink card"
 msgstr "Крупный полупрозрачный знак на карточках аплинков"

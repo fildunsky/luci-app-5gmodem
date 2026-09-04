@@ -159,7 +159,7 @@ for _nd in /sys/class/net/*; do
 	# их нет вовсе - только 02/0a (CDC Ethernet) и 08 (остаток «диска»).
 	# Проверено на живых: E3372h - 02,0a,08; FM350 - 02,0a,ff,ff.
 	_hasff=0
-	for _if in "$_dev":*; do
+	for _if in "$_dev"/*:*; do
 		[ -f "$_if/bInterfaceClass" ] || continue
 		[ "$(cat "$_if/bInterfaceClass" 2>/dev/null)" = "ff" ] && { _hasff=1; break; }
 	done

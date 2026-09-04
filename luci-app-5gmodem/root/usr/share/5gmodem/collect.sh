@@ -1564,6 +1564,30 @@ report() {
 	# печатается USB-серийник (различает одинаковые модули) и готовый вердикт.
 	run 40 "Карта портов и IMEI (из sysfs)" "$RES/portmap.sh"
 	run 5  "Активный модем" "$RES/modemswitch.sh" active
+	# УСТРОЙСТВО В ЧЁРНОМ СПИСКЕ - НАЗЫВАЕМ ЭТО ВСЛУХ.
+	#
+	# Отмеченное устройство мы намеренно не считаем модемом: ему не ищут
+	# AT-порт, у него нет метрик и диапазонов. Со стороны это выглядит как
+	# поломка - «модем есть, а приложение его не видит», и в отчёте признак
+	# был виден только строкой ignore_vidpid среди сотни строк uci. Живой
+	# случай 04.09.2026: человек дважды прислал отчёт с заблокированным
+	# собственным модемом и не заметил причину.
+	run 5  "Чёрный список устройств" sh -c '
+		_bl=$(uci -q get 5gmodem.@5gmodem[0].ignore_vidpid)
+		if [ -z "$_bl" ]; then echo "пусто - раздел не применим"; exit 0; fi
+		echo "спрятаны вручную: $_bl"
+		for _p in $(/usr/share/5gmodem/registry.sh paths 2>/dev/null); do
+			_v=$(cat /sys/bus/usb/devices/"$_p"/idVendor 2>/dev/null)
+			_d=$(cat /sys/bus/usb/devices/"$_p"/idProduct 2>/dev/null)
+			[ -n "$_v" ] || continue
+			for _b in $_bl; do
+				[ "$_v:$_d" = "$_b" ] || continue
+				echo "ВНИМАНИЕ: устройство $_p ($_b) СТОИТ НА ШИНЕ, но помечено"
+				echo "  как «не модем». Приложение не ищет ему AT-порт и не"
+				echo "  показывает метрики - это и выглядит как «модем пропал»."
+				echo "  Снять: Настройки -> Чёрный список устройств, убрать галочку."
+			done
+		done'
 	run 5  "AT-порт (detect.sh)" "$RES/detect.sh"
 	run 5  "tty/cdc-wdm в системе" sh -c "ls -l /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan* 2>/dev/null"
 	run 10 "Кто держит порты" sh -c "for f in /dev/ttyUSB* /dev/cdc-wdm*; do [ -e \"\$f\" ] || continue; u=\$(fuser \"\$f\" 2>/dev/null); [ -n \"\$u\" ] && echo \"\$f: \$u\"; done; echo '--- процессы ---'; ps w 2>/dev/null | grep -iE 'ModemManager|uqmi|mbim|sms_tool|lpac|gcom' | grep -v grep"
