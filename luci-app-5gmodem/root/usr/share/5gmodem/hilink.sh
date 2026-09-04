@@ -30,10 +30,18 @@ UA="5gmodem"
 
 # --- адрес модема ------------------------------------------------------------
 
+# ПУТЬ, С КОТОРЫМ РАБОТАЕМ. Пустой аргумент = активный модем, но читать его
+# ЗАНОВО в каждой мелкой функции нельзя: опрос web-API длится десятки секунд (5
+# запросов по 6 c плюс сессия), а активный модем за это время меняется - его
+# переключает и пользователь, и сторож интернета. Живой отчёт 03.09.2026: опрос
+# стартовал на HiLink-стике, к моменту записи активным стал Foxconn T99W175 -
+# и модель с IMEI Huawei E3276 уехали в ЕГО секцию (в списке появился «второй
+# E3276»). Кто зовёт - тот и фиксирует путь один раз, вызовом этой функции.
+_hl_path() { [ -n "$1" ] && echo "$1" || uci -q get "$CFG.@5gmodem[0].active_modem"; }
+
 # Сетевая карта модема по usb-пути (или у активного, если путь не задан).
 _netdev_for() {
-	_p="$1"
-	[ -n "$_p" ] || _p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	_p=$(_hl_path "$1")
 	[ -n "$_p" ] || return 1
 	_s="m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g')"
 	_d=$(uci -q get "$CFG.$_s.netdev")
@@ -80,9 +88,9 @@ _addr_for() {
 _sess_file() { echo "$CACHE_DIR/5gmodem_hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"; }
 
 # Обновить пару сессия/токен. Печатает "SID<TAB>TOK".
-_sess_new() {
+_sess_new() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-путь
 	_a="$1"; _d="$2"
-	_src=$(_srcip_for "" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
 	_r=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 		"http://$_a/api/webserver/SesTokInfo" 2>/dev/null)
 	_sid=$(echo "$_r" | sed -n 's|.*<SesInfo>\(.*\)</SesInfo>.*|\1|p')
@@ -92,7 +100,7 @@ _sess_new() {
 	printf '%s\t%s\n' "$_sid" "$_tok"
 }
 
-_sess_get() {
+_sess_get() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-путь
 	_f=$(_sess_file "$1")
 	# 10 секунд - компромисс: токен живёт дольше, но при записи он одноразовый,
 	# и слишком долгий кэш означал бы гарантированный промах на каждой команде.
@@ -100,7 +108,7 @@ _sess_get() {
 		cat "$_f"
 		return 0
 	fi
-	_sess_new "$1" "$2"
+	_sess_new "$1" "$2" "$3"
 }
 
 # GET к API. При ошибке сессии (125002/125003) обновляет её и повторяет ОДИН раз.
@@ -108,7 +116,7 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	_ep="$1"
 	_a=$(_addr_for "$2") || return 1
 	_d=$(_netdev_for "$2") || return 1
-	_s=$(_sess_get "$_a" "$_d") || return 1
+	_s=$(_sess_get "$_a" "$_d" "$2") || return 1
 	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
 	_src=$(_srcip_for "$2" "$_a"); [ -n "$_src" ] || _src="$_d"
 	_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
@@ -120,7 +128,7 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	# бланк поверх хорошего снимка. Обновляем сессию и пробуем ещё раз.
 	case "$_out" in
 		''|*'<code>125002</code>'*|*'<code>125003</code>'*|*'<code>125001</code>'*)
-			_s=$(_sess_new "$_a" "$_d") || return 1
+			_s=$(_sess_new "$_a" "$_d" "$2") || return 1
 			_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
 			_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 				-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
@@ -135,7 +143,7 @@ api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
 	_ep="$1"; _body="$2"
 	_a=$(_addr_for "$3") || return 1
 	_d=$(_netdev_for "$3") || return 1
-	_s=$(_sess_new "$_a" "$_d") || return 1
+	_s=$(_sess_new "$_a" "$_d" "$3") || return 1
 	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
 	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
 	curl -s --max-time 10 --interface "$_src" -A "$UA" \
@@ -326,8 +334,8 @@ _vidpid_for() {
 }
 
 zte_metrics_json() {
-	_p="$1"
-	_a=$(_addr_for "$_p") || return 1
+	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
+	_a=$(_addr_for "$_HLP") || return 1
 	_r=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
 	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
 	# Huawei-ветки: вызывающий отдаст прошлый снимок).
@@ -421,10 +429,10 @@ zte_metrics_json() {
 #
 # Ключи те же, что у 5gmodem.sh: страницы не должны знать, кем добыты данные.
 metrics_json() {
-	_p="$1"
+	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
-	case "$(_vidpid_for "$_p")" in 19d2:*) zte_metrics_json "$_p"; return $? ;; esac
-	_inf=$(api_get /api/device/information "$_p")
+	case "$(_vidpid_for "$_HLP")" in 19d2:*) zte_metrics_json "$_HLP"; return $? ;; esac
+	_inf=$(api_get /api/device/information "$_HLP")
 	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
 	# сессию и повторил на пустой ответ). Если ВСЁ РАВНО пусто - модем недоступен:
 	# НЕ печатаем бланк-JSON (иначе 5gmodem.sh закэшировал бы его поверх хорошего
@@ -432,15 +440,15 @@ metrics_json() {
 	# запроса по 6-12 c каждый. Возврат без вывода -> вызывающий отдаст прошлый
 	# снимок, как при любом другом сбое json.
 	[ -n "$_inf" ] || return 1
-	_st=$(api_get /api/monitoring/status "$_p")
-	_sig=$(api_get /api/device/signal "$_p")
-	_tr=$(api_get /api/monitoring/traffic-statistics "$_p")
-	_plmn=$(api_get /api/net/current-plmn "$_p")
+	_st=$(api_get /api/monitoring/status "$_HLP")
+	_sig=$(api_get /api/device/signal "$_HLP")
+	_tr=$(api_get /api/monitoring/traffic-statistics "$_HLP")
+	_plmn=$(api_get /api/net/current-plmn "$_HLP")
 
 	_model=$(printf '%s' "$_inf" | xval DeviceName)
 	# API отдаёт только модель ("E3372") без производителя. Дописываем его по
 	# VID устройства - в заголовке "Huawei E3372" читается однозначно.
-	_vid=$(uci -q get "$CFG.m_$(echo "${_p:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+	_vid=$(uci -q get "$CFG.m_$(echo "${_HLP:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
 		| sed 's/[^A-Za-z0-9]/_/g').vidpid" | cut -d: -f1)
 	case "$_vid" in
 		12d1) _vend="Huawei" ;;
@@ -554,14 +562,25 @@ metrics_json() {
 	# и IMEI от FM350). Пишем только при расхождении - uci не любит лишних правок,
 	# а метрики опрашиваются постоянно.
 	if [ -n "$_imei" ] || [ -n "$_model" ]; then
-		_hsec="m_$(echo "${_p:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
-			| sed 's/[^A-Za-z0-9]/_/g')"
+		# Путь ЗАФИКСИРОВАН на входе (_hl_path) - активный модем здесь заново не
+		# читаем: между стартом опроса и этой строкой проходят десятки секунд.
+		_hsec="m_$(echo "$_HLP" | sed 's/[^A-Za-z0-9]/_/g')"
 		_ch=0
-		[ -n "$_model" ] && [ "$(uci -q get "$CFG.$_hsec.model")" != "$_model" ] && {
+		# ВТОРОЙ РУБЕЖ: секция должна быть HiLink-овой. Ответ web-API принадлежит
+		# модему, которым правит его собственная прошивка; если путь всё же указал
+		# на обычный модем (композиция без kind), имя и IMEI там заведомо чужие.
+		# Сами значения НЕ чистим - они ещё уходят в JSON карточки; запрещаем
+		# только запись в конфиг.
+		_hlwr=1
+		[ "$(uci -q get "$CFG.$_hsec.kind")" = "hilink" ] || {
+			logger -t 5gmodem "hilink: $_hsec is not a HiLink modem - not writing model/IMEI from the web API"
+			_hlwr=0
+		}
+		[ "$_hlwr" = 1 ] && [ -n "$_model" ] && [ "$(uci -q get "$CFG.$_hsec.model")" != "$_model" ] && {
 			uci -q set "$CFG.$_hsec.model=$_model"
 			# Штамп железа - см. пояснение в modemswitch.sh (resolve).
 			uci -q set "$CFG.$_hsec.model_vp=$(uci -q get "$CFG.$_hsec.vidpid")"; _ch=1; }
-		[ -n "$_imei" ] && [ "$(uci -q get "$CFG.$_hsec.imei")" != "$_imei" ] && {
+		[ "$_hlwr" = 1 ] && [ -n "$_imei" ] && [ "$(uci -q get "$CFG.$_hsec.imei")" != "$_imei" ] && {
 			uci -q set "$CFG.$_hsec.imei=$_imei"; _ch=1; }
 		[ "$_ch" = "1" ] && uci -q commit "$CFG"
 	fi
@@ -578,7 +597,7 @@ metrics_json() {
 	# интерфейса. У HiLink «порт связи» - это адрес его веб-API, а протокол -
 	# сам факт того, что модемом правит его прошивка, а не мы. Без них в блоке
 	# стояли прочерки.
-	printf '"cport":"%s",' "$(_addr_for "$_p" 2>/dev/null)"
+	printf '"cport":"%s",' "$(_addr_for "$_HLP" 2>/dev/null)"
 	printf '"protocol":"HiLink (web API)",'
 	printf '"modem":"%s",' "$(jsafe "$_model")"
 	printf '"imei":"%s",' "$_imei"

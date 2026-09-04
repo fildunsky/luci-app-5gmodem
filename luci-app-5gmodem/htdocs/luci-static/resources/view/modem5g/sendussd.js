@@ -151,6 +151,37 @@ function typewrite(el, text) {
 	}, 28);
 }
 
+/* СПИСОК USSD-КОДОВ - ui.Dropdown, как все списки программы.
+   Список пересобирается при смене файла кодов, а у дропдауна нет ни innerHTML с
+   <option>, ни .value: строим новый виджет и подменяем узел на месте. Роль
+   прежнего disabled-плейсхолдера «—» играет select_placeholder - выбор ПЕРВОГО
+   кода тоже даёт событие, иначе он уже «выбран» и повторный клик молчит. */
+var ussdW = null;
+var ussdSelf = null;
+
+function ussdFill(content) {
+	var host = document.getElementById('tk');
+	if (!host) { return; }
+	var ch = {}, order = [];
+	(content || '').trim().split('\n').forEach(function(cmd) {
+		if (!cmd.trim()) { return; }
+		var fields = cmd.split(/;/);
+		var code = fields[1] || fields[0];
+		if (!code) { return; }
+		ch[code] = fields[0] || code;
+		order.push(code);
+	});
+	ussdW = new ui.Dropdown('', ch, {
+		id: 'tk', sort: order, optional: true, select_placeholder: '\u2014'
+	});
+	var n = ussdW.render();
+	n.classList.add('tg-field');
+	if (ussdSelf) {
+		n.addEventListener('cbi-dropdown-change', ui.createHandlerFn(ussdSelf, 'handleCopy'));
+	}
+	host.parentNode.replaceChild(n, host);
+}
+
 return view.extend({
 	viewName: 'sendussd',
 	
@@ -490,25 +521,7 @@ return view.extend({
 		this.saveSettingsToLocalStorage(selectedFile);
 		
 		return fs.read_direct('/etc/5gmodem/modem/ussdcodes/' + selectedFile).then(function(content) {
-			selectElement.innerHTML = '';
-			// плейсхолдер первым пунктом: иначе первый реальный USSD-код уже
-			// "выбран" и повторный клик по нему не даёт события change.
-			let ph = document.createElement('option');
-			ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
-			selectElement.appendChild(ph);
-
-			let codes = (content || '').trim().split('\n');
-			codes.forEach(function(cmd) {
-				if (cmd.trim()) {
-					let fields = cmd.split(/;/);
-					let name = fields[0];
-					let code = fields[1] || fields[0];
-					let option = document.createElement('option');
-					option.value = code;
-					option.textContent = name;
-					selectElement.appendChild(option);
-				}
-			});
+			ussdFill(content);
 
 			let cmdInput = document.getElementById('cmdvalue');
 			if (cmdInput) cmdInput.value = '';
@@ -682,8 +695,7 @@ return view.extend({
 
 		let ov = document.getElementById('cmdvalue');
 		ov.value = '';
-		let x = document.getElementById('tk').value;
-		ov.value = x;
+		ov.value = ussdW ? String(ussdW.getValue() || '') : '';
 	},
 
 	handleModemChange: function(ev) {
@@ -868,27 +880,7 @@ return view.extend({
 								
 								setTimeout(function() {
 									L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/ussdcodes/' + fileToLoad), '').then(function(content) {
-										let selectElement = document.getElementById('tk');
-										if (!selectElement) return;
-
-										selectElement.innerHTML = '';
-										// плейсхолдер первым пунктом (см. handleFileChange)
-										let ph = document.createElement('option');
-										ph.value = ''; ph.textContent = '—'; ph.disabled = true; ph.selected = true;
-										selectElement.appendChild(ph);
-
-										let codes = (content || '').trim().split('\n');
-										codes.forEach(function(cmd) {
-											if (cmd.trim()) {
-												let fields = cmd.split(/;/);
-												let name = fields[0];
-												let code = fields[1] || fields[0];
-												let option = document.createElement('option');
-												option.value = code;
-												option.textContent = name;
-												selectElement.appendChild(option);
-											}
-										});
+										ussdFill(content);
 									}).catch(function(err) {
 										console.error('Error loading initial USSD file:', err);
 									});
@@ -927,36 +919,36 @@ return view.extend({
 						E('div', { 'class': 'cbi-value' }, [
 							E('label', { 'class': 'cbi-value-title' }, [ _('User USSD codes') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
-									E('select', { 'class': 'cbi-input-select',
-										'id': 'tk',
-										'class': 'tg-field',
-										'change': ui.createHandlerFn(this, 'handleCopy'),
-										'mousedown': ui.createHandlerFn(this, 'handleCopy')
-									},
-									(function() {
+									(function(self) {
+										ussdSelf = self;
 										let ussdFiles = loadResults[1] || [];
 										let userFiles = ussdFiles.filter(function(file) {
 											return file.type === 'file' && file.name && file.name.match(/\.user$/);
 										});
-										
 										let content = '';
 										if (userFiles.length === 0 && loadResults[0]) {
 											content = loadResults[0];
 										}
-										
-										if (!content || !content.trim()) {
-											return [E('option', { 'value': '' }, _('No USSD codes available'))];
-										}
-										
-										return content.trim().split("\n").map(function(cmd) {
-											if (!cmd.trim()) return null;
+										var ch = {}, order = [];
+										(content || '').trim().split('\n').forEach(function(cmd) {
+											if (!cmd.trim()) { return; }
 											let fields = cmd.split(/;/);
-											let name = fields[0];
 											let code = fields[1] || fields[0];
-											return E('option', { 'value': code }, name );
-										}).filter(function(opt) { return opt !== null; });
-									})()
-								)
+											if (!code) { return; }
+											ch[code] = fields[0] || code;
+											order.push(code);
+										});
+										if (!order.length) { ch[''] = _('No USSD codes available'); }
+										ussdW = new ui.Dropdown('', ch, {
+											id: 'tk', sort: order,
+											optional: true, select_placeholder: '\u2014'
+										});
+										var n = ussdW.render();
+										n.classList.add('tg-field');
+										n.addEventListener('cbi-dropdown-change',
+											ui.createHandlerFn(self, 'handleCopy'));
+										return n;
+									})(this)
 							]) 
 						]),
 						E('div', { 'class': 'cbi-value' }, [

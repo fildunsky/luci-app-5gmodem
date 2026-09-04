@@ -490,39 +490,43 @@ return view.extend({
 	// сертификат (штатный curl-бэкенд lpac проверку отключает).
 	renderSettings: function() {
 		var cur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_http') || 'auto');
-		var sel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-http-sel' }, [
-			E('option', { 'value': 'auto'   }, [ _('Auto (recommended)') ]),
-			E('option', { 'value': 'bridge' }, [ _('wget / OpenSSL bridge') ]),
-			E('option', { 'value': 'curl'   }, [ _('lpac built-in curl') ]),
-		]);
-		sel.value = cur;
+		/* Списки - ui.Dropdown, как везде в программе: один вид виджета на все
+		   страницы (решение владельца 03.09.2026). Значение читаем у виджета
+		   (getValue), а не у узла: у дропдауна .value нет. */
+		var selW = new ui.Dropdown(cur, {
+			'auto':   _('Auto (recommended)'),
+			'bridge': _('wget / OpenSSL bridge'),
+			'curl':   _('lpac built-in curl')
+		}, { id: 'esim-http-sel', sort: [ 'auto', 'bridge', 'curl' ] });
+		var sel = selW.render();
 
 		// Транспорт APDU к eUICC. Auto: серийные модемы -> AT, mbim/qmi -> тот же
 		// канал cdc-wdm. Для Qualcomm SDX55 (T99W175/MV31-W) eUICC доступен только
 		// по QMI/MBIM, не по AT - там нужен qmi/mbim. Ручной выбор перебивает auto.
 		var apduCur = String(uci.get('5gmodem', '@5gmodem[0]', 'esim_apdu') || 'auto');
-		var apduSel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-apdu-sel' }, [
-			E('option', { 'value': 'auto' }, [ _('Auto (recommended)') ]),
-			E('option', { 'value': 'at'   }, [ _('AT (serial - FM350 etc.)') ]),
-			E('option', { 'value': 'qmi'  }, [ _('QMI / libqmi (Qualcomm)') ]),
-			E('option', { 'value': 'uqmi' }, [ _('QMI / uqmi CLI') ]),
-			E('option', { 'value': 'mbim' }, [ _('MBIM') ]),
-			E('option', { 'value': 'bridge' }, [ _('AT bridge (sms_tool)') ]),
-		]);
-		apduSel.value = apduCur;
+		var apduW = new ui.Dropdown(apduCur, {
+			'auto':   _('Auto (recommended)'),
+			'at':     _('AT (serial - FM350 etc.)'),
+			'qmi':    _('QMI / libqmi (Qualcomm)'),
+			'uqmi':   _('QMI / uqmi CLI'),
+			'mbim':   _('MBIM'),
+			'bridge': _('AT bridge (sms_tool)')
+		}, { id: 'esim-apdu-sel', sort: [ 'auto', 'at', 'qmi', 'uqmi', 'mbim', 'bridge' ] });
+		var apduSel = apduW.render();
 
 		// Слот eUICC для APDU (просьба юзера 9eSIM, 18.08.2026): автоопределение
 		// по активному слоту срабатывает не на всех связках, а uci-ключ до сих
 		// пор можно было прописать только руками. Текущее значение приходит из
 		// бэкенда (uci lpac не загружен в это представление) - подставляем
 		// асинхронно, до ответа селектор честно показывает «Авто».
-		var slotSel = E('select', { 'class': 'cbi-input-select', 'id': 'esim-slot-sel' }, [
-			E('option', { 'value': 'auto' }, [ _('Auto (active slot)') ]),
-			E('option', { 'value': '1'    }, [ _('Slot 1') ]),
-			E('option', { 'value': '2'    }, [ _('Slot 2') ]),
-		]);
+		var slotW = new ui.Dropdown('auto', {
+			'auto': _('Auto (active slot)'),
+			'1':    _('Slot 1'),
+			'2':    _('Slot 2')
+		}, { id: 'esim-slot-sel', sort: [ 'auto', '1', '2' ] });
+		var slotSel = slotW.render();
 		fs.exec_direct(ESIM, [ 'getslot' ]).then(function(out) {
-			try { slotSel.value = String(JSON.parse(out).slot || 'auto'); } catch (e) {}
+			try { slotW.setValue(String(JSON.parse(out).slot || 'auto')); } catch (e) {}
 		});
 
 		return E('details', { 'class': 'esim-set' }, [
@@ -540,7 +544,7 @@ return view.extend({
 							// «Настройки/Изменения». sethttp делает set+commit сразу.
 							// НЕ трогаем клиентский uci-кэш - иначе появится фантомная
 							// «несохранённая» дельта; sel уже показывает выбранное.
-							return fs.exec_direct(ESIM, [ 'sethttp', sel.value ]).then(function() {
+							return fs.exec_direct(ESIM, [ 'sethttp', selW.getValue() ]).then(function() {
 								ui.addNotification(null,
 									E('p', _('Download transport saved')), 'info');
 							});
@@ -558,7 +562,7 @@ return view.extend({
 						'class': 'btn cbi-button cbi-button-save',
 						'style': 'margin-left:8px',
 						'click': ui.createHandlerFn(this, function() {
-							return fs.exec_direct(ESIM, [ 'setapdu', apduSel.value ]).then(function() {
+							return fs.exec_direct(ESIM, [ 'setapdu', apduW.getValue() ]).then(function() {
 								ui.addNotification(null,
 									E('p', _('eUICC access saved')), 'info');
 							});
@@ -576,7 +580,7 @@ return view.extend({
 						'class': 'btn cbi-button cbi-button-save',
 						'style': 'margin-left:8px',
 						'click': ui.createHandlerFn(this, function() {
-							return fs.exec_direct(ESIM, [ 'setslot', slotSel.value ]).then(function() {
+							return fs.exec_direct(ESIM, [ 'setslot', slotW.getValue() ]).then(function() {
 								ui.addNotification(null,
 									E('p', _('eUICC slot saved — refresh the profile list')), 'info');
 							});

@@ -277,7 +277,7 @@ case "$1" in
 		# ХВОСТ ОБРЕЗАЕМ. Файл лежит во флеш-памяти и растёт с каждым новым
 		# сообщением; помнить нужно ровно столько, сколько модем способен
 		# хранить, дальше отметка бесполезна.
-		if [ "$(wc -l < "$_sf" 2>/dev/null || echo 0)" -gt "$SEEN_MAX" ]; then
+		if [ "$(wc -l 2>/dev/null < "$_sf" || echo 0)" -gt "$SEEN_MAX" ]; then
 			tail -n "$SEEN_MAX" "$_sf" > "$_sf.tmp" 2>/dev/null && mv "$_sf.tmp" "$_sf"
 		fi
 		echo '{"success":true}'

@@ -256,7 +256,7 @@ start)
 		_PREVB=0; _PREVT=$(cut -d. -f1 /proc/uptime); _LASTLIVE=0
 		while kill -0 "$CPID" 2>/dev/null; do
 			sleep 1
-			_LINE=$(tr '\r' '\n' < "$PROG" 2>/dev/null | grep -E '^[ ]*[0-9]' | tail -1)
+			_LINE=$(tr '\r' '\n' 2>/dev/null < "$PROG" | grep -E '^[ ]*[0-9]' | tail -1)
 			_RECV=$(printf '%s' "$_LINE" | awk '{print $4}')
 			_NOWT=$(cut -d. -f1 /proc/uptime)
 			LIVE=""

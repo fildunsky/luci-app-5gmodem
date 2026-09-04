@@ -294,7 +294,7 @@ modem_imei() {   # $1 - usb-путь
 	_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \
 		| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')
 	if [ -f "$_mi_nc" ]; then
-		read -r _mi_ot _mi_op < "$_mi_nc" 2>/dev/null
+		read -r _mi_ot _mi_op 2>/dev/null < "$_mi_nc"
 		case "$_mi_ot" in ''|*[!0-9]*) _mi_ot=0 ;; esac
 		if [ "$_mi_op" = "${_mi_ttys% }" ] \
 		   && [ "$((_mi_now - _mi_ot))" -ge 0 ] \
@@ -422,6 +422,16 @@ migrate_profile() {   # $1 - старая секция, $2 - новая секц
 
 ensure_section() {
 	SEC=$(secname "$1")
+	# НОВЫЙ ПРОФИЛЬ - ТОЛЬКО ПОД ЖИВОЕ ЖЕЛЕЗО. Устройство, которого на шине уже
+	# нет, дало бы пустые product и vidpid (оба читаются из sysfs), а сама секция
+	# осталась бы в «Сохранённых профилях» как модем-фантом. Ровно так после
+	# краха модуля появлялся профиль аварийной композиции (отчёт 03.09.2026).
+	# Существующие секции не трогаем: отсутствие модема для них - обычное дело,
+	# профиль вынутого аппарата мы храним намеренно.
+	if ! uci -q get "$CFG.$SEC" >/dev/null 2>&1 && ! usb_path_present "$1"; then
+		echo "$SEC"
+		return 0
+	fi
 	if ! uci -q get "$CFG.$SEC" >/dev/null 2>&1; then
 		uci -q set "$CFG.$SEC=modem"
 		uci -q set "$CFG.$SEC.path=$1"

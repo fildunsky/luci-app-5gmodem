@@ -516,9 +516,9 @@ return view.extend({
 						E('div', { 'class': 'cbi-value' }, [
 							E('label', { 'class': 'cbi-value-title' }, [ _('User AT commands') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
-								E('select', { 'class': 'cbi-input-select',
+								E('select', {
 										'id': 'tk',
-										'class': 'tg-field',
+										'class': 'cbi-input-select tg-field',
 										'change': ui.createHandlerFn(this, 'handleCopy'),
 										'mousedown': ui.createHandlerFn(this, 'handleCopy')
 									    },

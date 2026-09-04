@@ -7,6 +7,7 @@
 'require uci';
 'require rpc';
 'require form';
+'require dom';
 
 /* КОММИТ ЧЕРЕЗ СЕССИЮ БРАУЗЕРА, А НЕ ВНЕШНИМ СКРИПТОМ.
    Отложенные правки LuCI живут В СЕССИИ rpcd, а НЕ в общем /tmp/.uci - там
@@ -228,6 +229,14 @@ function apnUpdate() {
 	});
 }
 
+/* ВЫПАДАЮЩИЕ СПИСКИ - ОДНИМ ВИДОМ НА ВСЮ ПРОГРАММУ (решение владельца 03.09.2026).
+   form.ListValue рисует нативный <select>, а form.Value со списком подсказок -
+   ui.Dropdown; выглядят они по-разному (отступ текста, стрелка), и в программе
+   встречались оба. Берём везде дропдаун: RichListValue - штатный класс LuCI,
+   отличающийся от ListValue ровно виджетом. На старых сборках LuCI его может не
+   быть - тогда молча падаем обратно на ListValue, чтобы страница не рухнула. */
+var ListDropdown = form.RichListValue || form.ListValue;
+
 return view.extend({
 	load: function() {
 		return Promise.all([
@@ -241,7 +250,7 @@ return view.extend({
 		modemtabs.attach();
 		var services = [];
 		try { services = (JSON.parse((res && res[1]) || '{}').services) || []; } catch (e) {}
-		/* Устройства на шине для галочки «это модем» - см. notmodem.sh scan. */
+		/* Устройства на шине для чёрного списка - см. notmodem.sh scan. */
 		var usbDevs = [];
 		try { usbDevs = JSON.parse((res && res[2]) || '[]') || []; } catch (e) {}
 
@@ -424,7 +433,7 @@ return view.extend({
 		   Значение '1' оставлено за номером - у ранних установок оно уже в
 		   конфиге от прежней галочки «Отображать цифры».
 		   Зависимость от widget_netpri: без самой панели опция бессмысленна. */
-		o = wdg.option(form.ListValue, 'netpri_rank', _('Card background'),
+		o = wdg.option(ListDropdown, 'netpri_rank', _('Card background'),
 			_('Large translucent mark on each uplink card'));
 		o.value('0', _('None'));
 		o.value('1', _('Priority number'));
@@ -514,7 +523,7 @@ return view.extend({
 		pho.value('cloudflare.com');
 		pho.value('yandex.ru');
 
-		var pmo = pw.option(form.ListValue, 'mode', _('Ping mode'));
+		var pmo = pw.option(ListDropdown, 'mode', _('Ping mode'));
 		pmo.value('click', _('On click only'));
 		pmo.value('10', _('Every 10 s'));
 		pmo.value('30', _('Every 30 s'));
@@ -539,7 +548,7 @@ return view.extend({
 		   подсказка, и Save записывал секцию svcwidget БЕЗ service - карточка не
 		   появлялась (config-driven, см. netpri.js). ListValue всегда пишет
 		   ВЫБРАННОЕ значение и имеет дефолт, поэтому пустых карточек не бывает. */
-		var svo = sw.option(form.ListValue, 'service', _('Service'));
+		var svo = sw.option(ListDropdown, 'service', _('Service'));
 		if (services.length) {
 			/* известным сервисам - человеческое имя в списке (карточка тоже
 			   покажет его, см. SVC_KNOWN в netpri.js) */
@@ -656,101 +665,112 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 
-		/* ЧТО СЧИТАТЬ МОДЕМОМ.
-		   Модем опознаётся по портам, поэтому свою вкладку получал и переходник
-		   USB-UART, воткнутый в роутер для чужой железки (живой случай 01.09.2026,
-		   CH340 1a86:7523). Известные переходники прячет встроенный список
-		   (notmodem.sh), но список конечен - здесь пользователь решает сам.
+		/* ЧЁРНЫЙ СПИСОК УСТРОЙСТВ.
+		   Модем опознаётся по драйверам и классам интерфейсов (notmodem.sh), но
+		   эвристика конечна: воткнутая в роутер железка с ttyUSB может получить
+		   вкладку и опрос AT-командами (живой случай 01.09.2026, CH340 1a86:7523).
+		   Здесь человек говорит последнее слово - но говорить его нужно только
+		   про СОМНИТЕЛЬНЫЕ устройства.
 
-		   ОДИН СПИСОК ГАЛОЧЕК НА ДВЕ РУЧКИ КОНФИГА. Галочка стоит = «это модем»;
-		   куда лечь значению, считаем по тому, что о нём думает встроенный список:
-		   сняли с обычного устройства - в ignore_vidpid, поставили на устройство
-		   из встроенного списка - в modem_vidpid (отладочная плата, где модуль
-		   подключён к роутеру как раз через мост). Пользователю про две ручки
-		   знать незачем: он видит список железа и галочки. */
-		if (usbDevs.length) {
-			var devOpt = exp.option(form.MultiValue, 'ignore_vidpid', _('What counts as a modem'),
-				_('Every USB device the app found with ports of its own. Checked ones are treated as modems; the app decides that by the drivers the kernel bound to the device, so an adapter or a printer stays out. Check a device to force it in, uncheck one to make it lose its tab and stop being probed with AT commands.'));
-			devOpt.widget = 'checkbox';
-			devOpt.orientation = 'vertical';
-			devOpt.optional = true;
-			devOpt.rmempty = false;
+		   ЧТО В СПИСКЕ. Всё, чего НЕТ в базе модемов (modem/usb/<vidpid>, поле
+		   known): про эти устройства программа не уверена. Известные модемы (тот
+		   же FM350) в список не попадают - раньше они висели там с галочкой «это
+		   модем», и человек читал это как вопрос, на который уже ответили
+		   (замечание владельца 03.09.2026). Исключение - устройство, про которое
+		   ручка в конфиге уже стоит: спрятать его строку значило бы потерять
+		   настройку.
 
-			var seenVp = {};
-			usbDevs.forEach(function(d) {
-				if (seenVp[d.vidpid]) { return; }
-				seenVp[d.vidpid] = true;
-				var name = d.product || '';
-				var parts = [];
-				if (name) { parts.push(name); }
-				parts.push(d.vidpid);
-				var label = parts.join(' — ');
-				var ports = (d.ports || []).join(', ');
-				if (d.absent === '1') { label += ' (' + _('not on the bus') + ')'; }
-				else if (ports) { label += ' — ' + ports; }
-				/* ПОЧЕМУ устройство считается тем, чем считается: без этого
-				   снятая галочка у чужого свистка выглядит произволом. Бэкенд
-				   присылает код, фразу собираем здесь - она переводимая. */
-				var why = {
-					vendor:  _('cellular module vendor'),
-					driver:  _('modem driver in the kernel'),
-					mbim:    _('MBIM interface'),
-					ecm:     _('CDC Ethernet interface'),
-					ncm:     _('CDC NCM interface'),
-					profile: _('has answered as a modem before'),
-					forced:  _('marked as a modem by hand'),
-					bridge:  _('USB-to-serial adapter'),
-					ignored: _('excluded by hand'),
-					none:    _('no modem driver and no modem network interface')
-				}[d.why];
-				if (why) { label += ' — ' + why + (d.detail ? ' (' + d.detail + ')' : ''); }
-				devOpt.value(d.vidpid, label);
-			});
+		   ГАЛОЧКА = ИСКЛЮЧИТЬ. Одна на две ручки конфига: поставили на устройстве,
+		   которое считается модемом само по себе (auto), - оно уезжает в
+		   ignore_vidpid; сняли с того, что модемом не считается, - в modem_vidpid
+		   (отладочная плата, где сотовый модуль подключён через мост USB-UART).
 
-			/* Отмечено = сейчас считается модемом. Итог уже посчитан бэкендом
-			   (skip), с учётом обеих ручек - повторять их разбор в браузере
-			   значило бы держать две копии одного правила. */
-			devOpt.cfgvalue = function() {
-				var v = [];
-				var seen = {};
-				usbDevs.forEach(function(d) {
-					if (seen[d.vidpid] || d.skip === '1') { return; }
-					seen[d.vidpid] = true;
-					v.push(d.vidpid);
-				});
-				return v;
-			};
-
-			devOpt.write = function(section_id, formvalue) {
-				var checked = {};
-				L.toArray(formvalue).forEach(function(v) { checked[v] = true; });
-				var ign = [], force = [], seen = {};
-				usbDevs.forEach(function(d) {
-					if (seen[d.vidpid]) { return; }
-					seen[d.vidpid] = true;
-					/* auto - каким устройство было бы БЕЗ обеих ручек. Ручку
-					   ставим только там, где галочка расходится с этим: иначе
-					   конфиг зарастал бы записями, ничего не меняющими. */
-					if (checked[d.vidpid]) {
-						if (d.auto !== '1') { force.push(d.vidpid); }
-					} else if (d.auto === '1') {
-						ign.push(d.vidpid);
+		   ПИШЕМ ВЕРБОМ, А НЕ ФОРМОЙ. Обычная запись через uci копится в сессии
+		   LuCI до кнопки «Применить», а галочка должна срабатывать сразу: верб
+		   setblack ставит обе ручки и коммитит, после чего страница перечитывается
+		   - вкладка исключённого устройства исчезает тут же. */
+		var bl = usbDevs.filter(function(d) {
+			return d.known !== '1' || d.why === 'ignored' || d.why === 'forced' || d.absent === '1';
+		});
+		/* Подпись устройства: имя, vid:pid, порты и - одним словом в конце - чем
+		   программа считает его сейчас. Без этого галочка у чужого свистка
+		   выглядит произволом. Бэкенд присылает код, фразу собираем здесь: она
+		   переводимая. */
+		var devLabel = function(d) {
+			var parts = [];
+			if (d.product) { parts.push(d.product); }
+			parts.push(d.vidpid);
+			var label = parts.join(' — ');
+			var ports = (d.ports || []).join(', ');
+			if (d.absent === '1') { label += ' (' + _('not on the bus') + ')'; }
+			else if (ports) { label += ' — ' + ports; }
+			var why = {
+				vendor:  _('cellular module vendor'),
+				driver:  _('modem driver in the kernel'),
+				mbim:    _('MBIM interface'),
+				ecm:     _('CDC Ethernet interface'),
+				ncm:     _('CDC NCM interface'),
+				profile: _('has answered as a modem before'),
+				forced:  _('returned to modems by hand'),
+				bridge:  _('USB-to-serial adapter'),
+				ignored: _('excluded by hand'),
+				none:    _('no modem driver and no modem network interface')
+			}[d.why];
+			if (why) { label += ' — ' + why + (d.detail ? ' (' + d.detail + ')' : ''); }
+			return label;
+		};
+		var blBoxes = [];
+		var blSeen = {};
+		var blItems = [];
+		bl.forEach(function(d) {
+			if (blSeen[d.vidpid]) { return; }
+			blSeen[d.vidpid] = true;
+			/* Отмечено = сейчас НЕ показывается как модем. Итог уже посчитан
+			   бэкендом (skip), с учётом обеих ручек - повторять их разбор в
+			   браузере значило бы держать две копии одного правила. */
+			var w = new ui.Checkbox(d.skip === '1' ? '1' : '0',
+				{ id: 'blk-' + d.vidpid.replace(':', '_') });
+			blBoxes.push({ dev: d, w: w });
+			var wn = w.render();
+			blItems.push(E('div', { 'class': 'tg-blitem' }, [ wn, E('span', {
+				'style': 'cursor:pointer',
+				'click': function() { wn.querySelector('input').click(); }
+			}, devLabel(d)) ]));
+		});
+		var blBody = E('div', {}, blItems.length ? blItems
+			: [ E('em', {}, _('No doubtful devices: everything found on the bus is in the modem database.')) ]);
+		/* Пауза перед записью склеивает серию галочек в одно применение - иначе
+		   страница перечитывалась бы после каждой. */
+		var blT = null;
+		blBody.addEventListener('widget-change', function() {
+			if (blT) { window.clearTimeout(blT); }
+			blT = window.setTimeout(function() {
+				var ign = [], force = [];
+				blBoxes.forEach(function(b) {
+					/* auto - каким устройство было бы БЕЗ обеих ручек. Ручку ставим
+					   только там, где галочка расходится с этим: иначе конфиг
+					   зарастал бы записями, ничего не меняющими. */
+					if (b.w.isChecked()) {
+						if (b.dev.auto === '1') { ign.push(b.dev.vidpid); }
+					} else if (b.dev.auto !== '1') {
+						force.push(b.dev.vidpid);
 					}
 				});
-				/* Пустую ручку УДАЛЯЕМ, а не пишем пустой строкой: пустое
-				   значение в конфиге выглядит как настройка, которой нет. */
-				if (ign.length) { uci.set('5gmodem', section_id, 'ignore_vidpid', ign); }
-				else { uci.unset('5gmodem', section_id, 'ignore_vidpid'); }
-				if (force.length) { uci.set('5gmodem', section_id, 'modem_vidpid', force); }
-				else { uci.unset('5gmodem', section_id, 'modem_vidpid'); }
-			};
-
-			/* Сняли ВСЕ галочки - LuCI зовёт remove вместо write, а нам и в этом
-			   случае есть что записать: все устройства уходят в исключения. */
-			devOpt.remove = function(section_id) {
-				return devOpt.write(section_id, []);
-			};
-		}
+				fs.exec('/usr/share/5gmodem/notmodem.sh',
+					[ 'setblack', ign.join(' '), force.join(' ') ])
+					.then(function() { window.location.reload(); });
+			}, 600);
+		});
+		o = exp.option(form.DummyValue, '_blacklist', _('Device blacklist'),
+			_('USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately.'));
+		o.render = function(option_index, section_id) {
+			return E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Device blacklist')),
+				E('div', { 'class': 'cbi-value-field' }, [ blBody,
+					E('div', { 'class': 'cbi-value-description' },
+						_('USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately.')) ])
+			]);
+		};
 
 		/* МГНОВЕННОЕ ПРИМЕНЕНИЕ (решение владельца): любое изменение на
 		   странице сохраняется и применяется само - кнопки Сохранить/Применить
@@ -758,10 +778,84 @@ return view.extend({
 		   списки) и клики по «+»/«удалить» вложенных таблиц; сохранение
 		   дебаунсится, чтобы серия правок ушла одним commit. */
 		var _asT = null;
-		var autoSave = function() {
+		var _asNode = null;
+		var _asSig = null;
+
+		/* СНИМОК ЗНАЧЕНИЙ ФОРМЫ. Нужен, чтобы отличить настоящую правку от
+		   пустого события: ui.Dropdown шлёт cbi-dropdown-change и когда список
+		   просто закрыли, не выбрав ничего, - без этой проверки каждый промах
+		   мимо списка уходил бы в сохранение. */
+		var formSig = function() {
+			if (!_asNode) { return ''; }
+			var parts = [];
+			_asNode.querySelectorAll('input, textarea').forEach(function(el) {
+				parts.push((el.type === 'checkbox' || el.type === 'radio')
+					? (el.checked ? '1' : '0') : String(el.value));
+			});
+			_asNode.querySelectorAll('.cbi-dropdown').forEach(function(el) {
+				var w = dom.findClassInstance(el);
+				parts.push(w ? String(w.getValue()) : '');
+			});
+			return parts.join('\u0001');
+		};
+
+		/* ПРИМЕНЯЕМ СРАЗУ - НО ТОЛЬКО СВОЙ КОНФИГ (просьба владельца 03.09.2026).
+		   uci.save() лишь складывает правки в сессию LuCI: до нажатия «Применить»
+		   на роутере ничего не меняется, и внизу висит «не принятые изменения».
+		   Для страницы с автосохранением это бессмысленно, поэтому применяем сами.
+
+		   ДВА ПРЕДОХРАНИТЕЛЯ, без которых так делать нельзя:
+
+		   1. ЧУЖИЕ ПРАВКИ НЕ ТРОГАЕМ. uci apply применяет ВСЁ, что скопилось в
+		      сессии, а не только наше. Человек мог отредактировать сеть на другой
+		      странице и не применить - молча применить это за него значило бы
+		      уронить ему связь. Поэтому применяем, лишь когда в очереди ровно один
+		      конфиг и он наш; иначе оставляем всё как есть, и человек нажимает
+		      «Применить» сам, видя полный список.
+		   2. БЕЗ ОТКАТА. Штатный uci.apply() применяет с таймером отката и потом
+		      подтверждает вызовом confirm: не дошло подтверждение - роутер вернёт
+		      конфиг назад (у нас так уже терялись настройки). Этот танец нужен
+		      сетевым конфигам, где можно отрезать себе доступ. Наш 5gmodem -
+		      настройки самой программы: ни сети, ни фаервола он не трогает, и
+		      откатывать нечего. Зовём apply с rollback=false - применяется сразу
+		      и насовсем. По триггерам procd перечитывают конфиг только 5gmodem-leds
+		      и 5gmodem-sms-notify - ровно те, кому новые настройки и нужны. */
+		var applyOwn = function() {
+			return uci.changes().then(function(ch) {
+				var cfgs = Object.keys(ch || {});
+				if (cfgs.length !== 1 || cfgs[0] !== '5gmodem') { return; }
+				return uci.callApply(0, false).then(function() {
+					/* плашка «не принятые изменения» должна погаснуть */
+					if (ui.changes && ui.changes.init) { return ui.changes.init(); }
+				});
+			});
+		};
+
+		/* СОХРАНЯЕМ БЕЗ ПЕРЕРИСОВКИ СТРАНИЦЫ. m.save() в LuCI заканчивается
+		   renderContents() - карта пересобирается целиком, и на автосохранении
+		   это выглядит как моргание всей страницы после каждого выбора в списке
+		   (замечено владельцем 03.09.2026). Нам нужен только разбор формы и
+		   запись: parse() кладёт значения в uci, uci.save() отправляет их.
+		   Видимость зависимых полей от этого не страдает - её пересчитывает сам
+		   form.js по widget-change. */
+		var autoSave = function(heavy) {
 			if (_asT) { window.clearTimeout(_asT); }
 			_asT = window.setTimeout(function() {
-				m.save(null, true).catch(function() {});
+				if (heavy === true) {
+					/* добавление/удаление строки во вложенной таблице - там
+					   перерисовка нужна: строки появляются и исчезают */
+					_asSig = null;
+					m.save(null, true).then(function() { _asSig = formSig(); })
+						.catch(function() {});
+					return;
+				}
+				var sig = formSig();
+				if (_asSig !== null && sig === _asSig) { return; }
+				_asSig = sig;
+				m.parse()
+					.then(function() { return uci.save(); })
+					.then(applyOwn)
+					.catch(function() {});
 			}, 400);
 		};
 
@@ -772,11 +866,14 @@ return view.extend({
 			   диспатчат свои widget-change/cbi-dropdown-change. Без этих
 			   двух подписок выбор в списках не сохранялся вовсе (живой отчёт
 			   владельца 16.08.2026: «виджеты и сервисы не применяются»). */
-			formNode.addEventListener('change', autoSave);
-			formNode.addEventListener('widget-change', autoSave);
-			formNode.addEventListener('cbi-dropdown-change', autoSave);
+			_asNode = formNode;
+			_asSig = formSig();
+			var onChange = function() { autoSave(false); };
+			formNode.addEventListener('change', onChange);
+			formNode.addEventListener('widget-change', onChange);
+			formNode.addEventListener('cbi-dropdown-change', onChange);
 			formNode.addEventListener('click', function(ev) {
-				if (ev.target.closest && ev.target.closest('.cbi-button-add, .cbi-button-remove')) { autoSave(); }
+				if (ev.target.closest && ev.target.closest('.cbi-button-add, .cbi-button-remove')) { autoSave(true); }
 			});
 			/* Версию установленной базы APN показываем СРАЗУ (чтение файла, без
 			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */

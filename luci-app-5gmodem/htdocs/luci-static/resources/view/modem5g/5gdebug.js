@@ -46,6 +46,14 @@ function detectBoxedHeading() {
 if (document.body) { detectBoxedHeading(); }
 else { document.addEventListener('DOMContentLoaded', detectBoxedHeading); }
 
+/* ВЫПАДАЮЩИЕ СПИСКИ - ОДНИМ ВИДОМ НА ВСЮ ПРОГРАММУ (решение владельца 03.09.2026).
+   form.ListValue рисует нативный <select>, а form.Value со списком подсказок -
+   ui.Dropdown; выглядят они по-разному (отступ текста, стрелка), и в программе
+   встречались оба. Берём везде дропдаун: RichListValue - штатный класс LuCI,
+   отличающийся от ListValue ровно виджетом. На старых сборках LuCI его может не
+   быть - тогда молча падаем обратно на ListValue, чтобы страница не рухнула. */
+var ListDropdown = form.RichListValue || form.ListValue;
+
 return view.extend({
 	handleCommand: function(exec, args) {
 		var buttons = document.querySelectorAll('.diag-action > .cbi-button');
@@ -558,27 +566,32 @@ return view.extend({
 			[ 'signal', _('Overall level (percent)') ]
 		];
 
-		var sel = E('select', { 'class': 'cbi-input-select', 'id': 'leds-metric' },
-			metrics.map(function(m) {
-				return E('option', { 'value': m[0], 'selected': (m[0] === metric) ? '' : null }, m[1]);
-			}));
-		sel.addEventListener('change', function(ev) {
-			fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', ev.currentTarget.value ]);
+		/* Список - ui.Dropdown, как везде в программе. Своё событие у него
+		   cbi-dropdown-change, нативный change он не шлёт. */
+		var ch = {}; var order = [];
+		metrics.forEach(function(m) { ch[m[0]] = m[1]; order.push(m[0]); });
+		var selW = new ui.Dropdown(metric, ch, { id: 'leds-metric', sort: order });
+		var sel = selW.render();
+		sel.addEventListener('cbi-dropdown-change', function() {
+			fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', selW.getValue() ]);
 		});
 
 		return E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, _('Signal level indicator')),
-			E('div', { 'class': 'cbi-value' }, [
+			E('div', { 'class': 'cbi-value tg-flag' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Show on the case LEDs')),
 				E('div', { 'class': 'cbi-value-field' }, [
-					E('input', {
-						'type': 'checkbox',
-						'checked': (cur == '0') ? null : '',
-						'change': function(ev) {
+					(function() {
+						/* Галочка - ui.Checkbox, а не голый <input>: голый в темах
+						   рисуется по-своему и выпадает из общего вида. */
+						var w = new ui.Checkbox(cur == '0' ? '0' : '1', { id: 'leds-on' });
+						var n = w.render();
+						n.addEventListener('widget-change', function() {
 							fs.exec('/usr/share/5gmodem/signal-leds.sh',
-								[ ev.currentTarget.checked ? 'enable' : 'disable' ]);
-						}
-					}),
+								[ w.isChecked() ? 'enable' : 'disable' ]);
+						});
+						return n;
+					})(),
 					E('div', { 'class': 'cbi-value-description' },
 						_('Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed.'))
 				])
@@ -697,7 +710,7 @@ return view.extend({
 		   404, промис отклоняется и ВСЯ страница настроек модема перестаёт
 		   открываться. Заменили на простой список имён интерфейсов из uci -
 		   он самодостаточен и ничего не подгружает. */
-		o = s.option(form.ListValue, 'network', _('Interface'),
+		o = s.option(ListDropdown, 'network', _('Interface'),
 			_('Network interface for Internet access'));
 		o.depends('auto_port', '0');
 		o.rmempty = true;
@@ -769,7 +782,7 @@ return view.extend({
 		   строится по установленным на роутере обработчикам протоколов, так
 		   что для Fibocom с luci-proto-xmm/atc появятся XMM/ATC и т.д. */
 		if (!activeIsHilink) {
-		o = s.option(form.ListValue, 'iface_proto', _('Interface protocol'),
+		o = s.option(ListDropdown, 'iface_proto', _('Interface protocol'),
 			_('Protocol for the "Create modem interface" button. "Auto" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem).'));
 		o.value('auto', _('Auto (detect)'));
 		/* человекочитаемые подписи известных модемных протоколов */
@@ -873,7 +886,7 @@ return view.extend({
 		   унаследованном оставался APN прежнего оператора. В ручном мы не трогаем
 		   ничего: значение пользователя хранится в самом интерфейсе, а найденный
 		   APN остаётся подсказкой в поле ниже. */
-		o = s.option(form.ListValue, '_apn_mode', _('APN selection'));
+		o = s.option(ListDropdown, '_apn_mode', _('APN selection'));
 		o.value('auto', _('Automatic (by operator)'));
 		o.value('manual', _('Manual'));
 		o.default = 'auto';
@@ -970,7 +983,7 @@ return view.extend({
 		   modemmanager читает allowedauth, остальные (fibocom/qmi/mbim) - auth.
 		   Применяется со следующим передозвоном, как тип IP. */
 		if (!activeIsHilink) {
-		o = s.option(form.ListValue, '_pdpauth', _('Authentication'),
+		o = s.option(ListDropdown, '_pdpauth', _('Authentication'),
 			_('Needed by some virtual operators (MVNO): APN together with a login and password. Leave NONE if the operator did not give you credentials.'));
 		o.value('none', 'NONE');
 		o.value('pap', 'PAP');
@@ -1077,7 +1090,7 @@ return view.extend({
 		   пользователю нечем. Поэтому показываем, ЧТО ИМЕННО определилось, и
 		   даём переопределить. Три состояния, а не галка: галка не отличает
 		   «мы так определили» от «пользователь так велел». */
-		o = s.option(form.ListValue, '_esim_show', _('eSIM tab'),
+		o = s.option(ListDropdown, '_esim_show', _('eSIM tab'),
 			_('Detected automatically by probing the modem for an eUICC. If the probe is wrong, force the tab on or off here.'));
 		o.value('auto', _('Automatically'));
 		o.value('1', _('Always show'));
@@ -1208,7 +1221,7 @@ return view.extend({
 		/* Тип PDP - аргумент дозвона (mkiface). У HiLink дозвона нет, тип IP
 		   согласует сам модем, поэтому поле ему не показываем. */
 		if (!activeIsHilink) {
-		o = s.option(form.ListValue, '_pdptype', _('IP type'),
+		o = s.option(ListDropdown, '_pdptype', _('IP type'),
 			_('IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to "IPv4 and IPv6" only if you need IPv6 and the modem supports it.'));
 		o.value('ipv4', _('IPv4 only (recommended)'));
 		o.value('ipv4v6', _('IPv4 and IPv6'));

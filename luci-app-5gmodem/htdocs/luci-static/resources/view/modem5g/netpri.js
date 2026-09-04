@@ -484,6 +484,7 @@ function ssClashBtn(kind) {
 		'data-tooltip': _('Open the SSClash admin panel in a new tab'),
 		'click': function() { window.open(url, '_blank', 'noopener'); }
 	}, [
+		svcRankEl(ic),
 		E('span', { 'class': 'netpri-sub' }, st.version || 'SSClash'),
 		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, 'SSClash') ]),
 		E('span', { 'class': 'netpri-ip' }, host)
@@ -535,6 +536,7 @@ function pingCard(w) {
 	var info = pingInfo(host);
 	var st = _pingState[host];
 	var dot = E('span', { 'class': 'netpri-svcdot ' + _pDot(st), 'title': _pTip(st, info) });
+	var pic = pingBadge(info);
 	return E('button', {
 		/* ping-busy возвращаем и при пересоздании карточки поллом бара: замер
 		   мог идти прямо в этот момент, и сияние не должно пропадать. */
@@ -544,8 +546,10 @@ function pingCard(w) {
 		'data-tooltip': _('Click to measure ping to %s over the active uplink').format(info.name),
 		'click': function(ev) { ev.preventDefault(); pingOnce(host); }
 	}, [
+		/* фон карточки - её же значок (см. svcRankEl), как у карточек сервисов */
+		svcRankEl(pic),
 		E('span', { 'class': 'netpri-sub' }, _('Status')),
-		E('span', { 'class': 'netpri-name' }, [ dot, pingBadge(info), E('span', {}, info.name) ]),
+		E('span', { 'class': 'netpri-name' }, [ dot, pic, E('span', {}, info.name) ]),
 		E('span', { 'class': 'netpri-ip' }, _pMs(st))
 	]);
 }
@@ -644,6 +648,42 @@ var SVC_KNOWN = {
 	   голове неудобно. Веб-админки у него нет, порт не задаём. */
 	zerotier: { name: 'ZeroTier', img: 'zt.png' }
 };
+/* ФОН ПРАВЫХ КАРТОЧЕК - ТА ЖЕ ИКОНКА, ЧТО В ИХ СТРОКЕ ИМЕНИ (просьба владельца
+   03.09.2026). Общий строитель для карточек СЕРВИСОВ и карточек ПИНГА.
+   Включается ТОЙ ЖЕ настройкой, что фон карточек аплинков («Фон карточек» ->
+   «Иконка интерфейса»): отдельной галочки нет, чтобы не плодить две ручки для
+   одного и того же приёма. Цифр здесь не бывает - ни у сервиса, ни у хоста нет
+   порядкового номера, поэтому режим «Номер приоритета» этим карточкам ничего
+   не рисует.
+
+   Иконку не выбираем заново, а КЛОНИРУЕМ ту, что карточка уже показывает: у
+   сервисов они разного рода (файл-картинка, инлайн-SVG у SSClash, эмодзи-бейдж),
+   и второй источник правды тут же бы разошёлся с первым. Размер, размытие и
+   прозрачность - в CSS (.netpri-rank-bg), там же зеркальный сдвиг: у аплинков
+   пятно выходит за ПРАВЫЙ край карточки, у сервисов - за ЛЕВЫЙ. */
+/* СВЕТЛАЯ ТЕМА ИЛИ ТЁМНАЯ - СПРАШИВАЕМ У СТРАНИЦЫ, А НЕ У СИСТЕМЫ.
+   Фон карточек красится по-разному на светлой и тёмной теме, и раньше выбор
+   ветки висел на медиазапросе prefers-color-scheme. А он говорит про настройку
+   ОС, тогда как тему LuCI человек выбирает отдельно: светлый bootstrap при
+   тёмной системе - обычное дело, и тогда к светлым карточкам применялись
+   ТЁМНЫЕ значения (владелец 03.09.2026: «как будто все светлые темы работают
+   по-другому и твои настройки не применяются»).
+   Спрашиваем у самой страницы: берём цвет ТЕКСТА карточек - он задан всегда, в
+   отличие от фона, который бывает прозрачным. Светлый текст = тёмная тема. */
+function isDarkUI(el) {
+	var c = getComputedStyle(el || document.body).color;
+	var m = String(c).match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+	if (!m) { return false; }
+	return (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) > 128;
+}
+
+function svcRankEl(icon) {
+	if (_netpriRank !== 'icon') { return ''; }
+	if (!icon || typeof icon.cloneNode !== 'function') { return ''; }
+	return E('span', { 'class': 'netpri-rank netpri-rank-bg', 'aria-hidden': 'true' },
+		[ icon.cloneNode(true) ]);
+}
+
 function svcName(service) { return (SVC_KNOWN[service] && SVC_KNOWN[service].name) || service; }
 function svcIcon(service) {
 	var k = SVC_KNOWN[service];
@@ -694,9 +734,11 @@ function svcCard(service) {
 		   должно ничего менять в системе, а состояние показывает точка. */
 		attrs['click'] = function(ev) { ev.preventDefault(); };
 	}
+	var sic = svcIcon(service);
 	return E('button', attrs, [
+		svcRankEl(sic),
 		E('span', { 'class': 'netpri-sub' }, _sTop(r)),
-		E('span', { 'class': 'netpri-name' }, [ dot, svcIcon(service), E('span', {}, svcName(service)) ]),
+		E('span', { 'class': 'netpri-name' }, [ dot, sic, E('span', {}, svcName(service)) ]),
 		E('span', { 'class': 'netpri-ip' }, _sBottom(r))
 	]);
 }
@@ -1222,8 +1264,10 @@ function healthModal() {
 		var hf = healthform.build(d.conf, d.uplinks);
 		ui.showModal(_('Internet watchdog'), [
 			hf.node,
+			/* Кнопки модалки - штатная пара LuCI: нейтральная «Отмена» и
+			   активная «Сохранить», как в любом диалоге интерфейса. */
 			E('div', { 'class': 'right' }, [
-				E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel')),
+				E('button', { 'class': 'btn cbi-button cbi-button-neutral', 'click': ui.hideModal }, _('Cancel')),
 				' ',
 				E('button', { 'class': 'btn cbi-button cbi-button-action important', 'click': function() {
 					hf.save().then(function() { ui.hideModal(); });
@@ -1492,7 +1536,13 @@ function buildBar(list, redraw) {
 	   статус лечения теперь живёт В САМОЙ карточке, а полная история - в
 	   logread по тегу 5gmodem. Бэкенд событие по-прежнему шлёт (хвост list),
 	   loadList его вынимает - просто не рисуем. */
-	return E('div', { 'class': 'netpribar' }, kids);
+	var _bar = E('div', { 'class': 'netpribar' }, kids);
+	/* Класс темы ставим ПОСЛЕ вставки в документ: до этого у узла нет ни
+	   родителя, ни унаследованного цвета, и getComputedStyle врёт. */
+	window.setTimeout(function() {
+		if (_bar.isConnected) { _bar.classList.toggle('netpri-dark', isDarkUI(_bar)); }
+	}, 0);
+	return _bar;
 }
 
 return baseclass.extend({

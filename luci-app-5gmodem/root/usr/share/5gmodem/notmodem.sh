@@ -88,9 +88,10 @@ is_not_modem_builtin() {
 #      модем, что бы ни думали пункты выше. Это страховка от главного риска
 #      такой проверки - спрятать чей-то работающий модем незнакомой модели.
 #
-# Не подошло ни одно - не модем. Ошиблись - человек ставит галочку в Настройках
-# («Что считать модемом»), vid:pid уезжает в modem_vidpid, и устройство
-# возвращается: ручной ответ всегда сильнее любой эвристики.
+# Не подошло ни одно - не модем. Ошиблись - человек правит список в Настройках
+# («Чёрный список устройств»): снятая там галочка уводит vid:pid в modem_vidpid
+# и возвращает устройство в модемы, поставленная - в ignore_vidpid и убирает
+# устройство из программы. Ручной ответ всегда сильнее любой эвристики.
 MODEM_DRIVERS="option qcserial sierra sierra_net usb_wwan qmi_wwan cdc_mbim cdc_ncm cdc_wdm huawei_cdc_ncm cdc_ether rndis_host cdc_subset qcaux GobiNet GobiSerial simcom_wwan"
 
 # Вендоры сотовых модулей и свистков. 05c6 (Qualcomm) и 0e8d (MediaTek) - самые
@@ -193,11 +194,19 @@ usb_is_modem_vidpid() {   # $1 - vid:pid
 #   [ { "path","vidpid","product","ports":[...],
 #       "skip":"1"     - не показываем сейчас (с учётом обеих ручек),
 #       "builtin":"1"  - в списке переходников USB-UART,
+#       "known":"1"    - vid:pid есть в базе модемов (modem/usb/<vidpid>),
 #       "auto":"1"     - считалось бы модемом само по себе, без ручек,
 #       "why":"vendor|driver|mbim|ecm|ncm|profile|forced|bridge|ignored|none|absent"
 #       "detail":"..."  - уточнение к причине: имя драйвера или вендор,
 #       "absent":"1" } - устройства на шине нет, запись из конфига ]
 nm_scan() {
+	# ОБЕ РУЧКИ ЧИТАЕМ ДО ПЕРВОГО ОБРАЩЕНИЯ. _ns_auto ниже временно обнуляет их,
+	# чтобы спросить «а без ручек?», и восстанавливает сохранённое. Пока чтения
+	# не было, _nm_cfg срабатывал ВНУТРИ этого обнуления - и восстанавливал
+	# пустоту: остаток прогона шёл без ручек вообще. Живой эффект - галочка
+	# скрытого устройства в настройках стояла так, будто устройство показано,
+	# а запись из конфига без железа не показывалась вовсе.
+	_nm_cfg
 	_ns_esc() {
 		case "$1" in
 			*\\*|*\"*) echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' ;;
@@ -218,6 +227,10 @@ nm_scan() {
 	}
 	_ns_add() {   # _ns_add <path> <vidpid> <product> <ports> <absent> <узел>
 		_nb=0; is_not_modem_builtin "$2" && _nb=1
+		# ЕСТЬ ЛИ УСТРОЙСТВО В БАЗЕ МОДЕМОВ. Профиль modem/usb/<vid><pid> пишут
+		# под конкретную модель - раз он есть, это точно модем, и предлагать
+		# такое устройство в чёрном списке незачем.
+		_nk2=0; [ -f "/usr/share/5gmodem/modem/usb/$(echo "$2" | tr -d ':')" ] && _nk2=1
 		_na=0; _nw=""
 		if [ -n "$6" ]; then
 			_ns_auto "$6" && _na=1
@@ -230,7 +243,7 @@ nm_scan() {
 			_nw=absent; _nwd=""
 		fi
 		[ -n "$_ns_out" ] && _ns_out="$_ns_out,"
-		_ns_out="$_ns_out{\"path\":\"$(_ns_esc "$1")\",\"vidpid\":\"$(_ns_esc "$2")\",\"product\":\"$(_ns_esc "$3")\",\"ports\":[$4],\"skip\":\"$_nk\",\"builtin\":\"$_nb\",\"auto\":\"$_na\",\"why\":\"$(_ns_esc "$_nw")\",\"detail\":\"$(_ns_esc "$_nwd")\",\"absent\":\"$5\"}"
+		_ns_out="$_ns_out{\"path\":\"$(_ns_esc "$1")\",\"vidpid\":\"$(_ns_esc "$2")\",\"product\":\"$(_ns_esc "$3")\",\"ports\":[$4],\"skip\":\"$_nk\",\"builtin\":\"$_nb\",\"known\":\"$_nk2\",\"auto\":\"$_na\",\"why\":\"$(_ns_esc "$_nw")\",\"detail\":\"$(_ns_esc "$_nwd")\",\"absent\":\"$5\"}"
 	}
 
 	for _nd in /sys/bus/usb/devices/[0-9]*-[0-9]*; do
@@ -277,12 +290,47 @@ nm_scan() {
 case "$0" in
 	*/notmodem.sh|notmodem.sh)
 		case "$1" in
+			# ЗАПИСЬ ЧЁРНОГО СПИСКА - ОТДЕЛЬНЫМ ВЕРБОМ, а не через uci из браузера.
+			# Страница настроек копит правки в сессии LuCI и ждёт кнопки
+			# «Применить»; чёрному списку это не годится - галочка должна
+			# срабатывать сразу, вместе с исчезновением вкладки устройства.
+			# Верб пишет и коммитит обе ручки сам.
+			#   setblack "<исключить>" "<вернуть в модемы>"  - списки vid:pid
+			setblack)
+				_sb_i=""; _sb_f=""
+				for _sb_t in $2; do
+					case "$_sb_t" in
+						[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+							_sb_i="$_sb_i${_sb_i:+ }$_sb_t" ;;
+					esac
+				done
+				for _sb_t in $3; do
+					case "$_sb_t" in
+						[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]:[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+							_sb_f="$_sb_f${_sb_f:+ }$_sb_t" ;;
+					esac
+				done
+				if [ -n "$_sb_i" ]; then
+					uci -q set "5gmodem.@5gmodem[0].ignore_vidpid=$_sb_i"
+				else
+					uci -q delete 5gmodem.@5gmodem[0].ignore_vidpid
+				fi
+				if [ -n "$_sb_f" ]; then
+					uci -q set "5gmodem.@5gmodem[0].modem_vidpid=$_sb_f"
+				else
+					uci -q delete 5gmodem.@5gmodem[0].modem_vidpid
+				fi
+				uci -q commit 5gmodem
+				# кэши списка модемов держат прежний состав устройств
+				rm -f /tmp/5gmodem_listmodems.* /tmp/luci-indexcache* 2>/dev/null
+				echo ok
+				;;
 			scan)
 				NM_MODEM_PATHS=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
 					| jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
 				nm_scan
 				;;
-			*) echo "usage: notmodem.sh scan" >&2; exit 1 ;;
+			*) echo "usage: notmodem.sh scan | setblack <ignore> <force>" >&2; exit 1 ;;
 		esac
 		;;
 esac

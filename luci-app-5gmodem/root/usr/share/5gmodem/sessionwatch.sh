@@ -76,9 +76,9 @@ _kill_stuck_uqmi() {   # $1 - устройство (/dev/cdc-wdm*)
 		# нож попадает всё, где рядом встретились «uqmi» и путь устройства:
 		# шелл-обёртки, наши же скрипты, grep. Поймано при проверке 05.08.2026 -
 		# первым совпадением оказалась сама тестовая команда.
-		read -r _ku_cm < "$_ku_p/comm" 2>/dev/null || continue
+		read -r _ku_cm 2>/dev/null < "$_ku_p/comm" || continue
 		[ "$_ku_cm" = uqmi ] || continue
-		_ku_cl=$(tr '\0' ' ' < "$_ku_p/cmdline" 2>/dev/null) || continue
+		_ku_cl=$(tr '\0' ' ' 2>/dev/null < "$_ku_p/cmdline") || continue
 		case "$_ku_cl" in
 			*" $1 "*|*" $1") ;;
 			*) continue ;;

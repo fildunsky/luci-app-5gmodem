@@ -203,7 +203,7 @@ while IFS= read -r line; do
 				_bt=$(tail -c 1 "$_rb" 2>/dev/null)
 				_btr=0; [ "$_bj" = 1 ] && [ "$_bt" != "}" ] && _btr=1
 				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","rcode":%s,"bytes":%s,"json":%s,"truncated":%s,"head":"%s"}}\n' \
-					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$rcode" "$(wc -c < "$_rb" 2>/dev/null || echo 0)" "$_bj" "$_btr" "$_bh" >> "$LIVELOG"
+					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$rcode" "$(wc -c 2>/dev/null < "$_rb" || echo 0)" "$_bj" "$_btr" "$_bh" >> "$LIVELOG"
 			fi
 			[ -n "$rcode" ] || rcode=500
 			# Сохраняем тело ответа ES9+, когда в нём есть маркеры ошибки: по

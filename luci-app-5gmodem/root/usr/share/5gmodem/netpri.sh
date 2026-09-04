@@ -1191,7 +1191,7 @@ list)
 		# слежение выключено - поля нет, страница точку не рисует.
 		_np_h=""
 		if [ "$_HEALTH_ON" = "1" ] && [ -f "/tmp/5gmodem_health/$n" ]; then
-			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs < "/tmp/5gmodem_health/$n" 2>/dev/null; then
+			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs 2>/dev/null < "/tmp/5gmodem_health/$n"; then
 				# Линк без устройства (gone) показываем - карточка обязана
 				# пережить переэнумерацию при лечении; прячем, когда ничего не
 				# поднимается дольше грейс-периода. Грейс зависит от контекста:
@@ -1206,7 +1206,7 @@ list)
 				_np_h=",\"health\":\"$_np_hst\",\"hms\":${_np_hms:-0}"
 				# идёт лечение - карточка рисует статус реанимации
 				if [ -f "/tmp/5gmodem_health/$n.heal" ] \
-				   && read -r _np_hstep _np_hlast _np_hn < "/tmp/5gmodem_health/$n.heal" 2>/dev/null; then
+				   && read -r _np_hstep _np_hlast _np_hn 2>/dev/null < "/tmp/5gmodem_health/$n.heal"; then
 					# КАКАЯ ИМЕННО ЛЕСТНИЦА ЛЕЧИТ ЭТОТ ЛИНК.
 					#
 					# Ступени у них РАЗНЫЕ (см. health.sh): у модема - ifup,

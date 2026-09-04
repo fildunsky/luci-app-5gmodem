@@ -9,6 +9,14 @@
 'require sms-tool-5gm.editors as editors';
 'require sms-tool-5gm.smssettings as smssettings';
 
+/* СПИСОК КОНТАКТОВ - ОДИН ИСТОЧНИК ДЛЯ ВИДЖЕТА И ДЛЯ РАССЫЛКИ.
+   Список рисуется ui.Dropdown'ом (единый вид списков в программе), а у него нет
+   ни .value, ни .options - раньше рассылка «всем» перебирала <option> прямо в
+   DOM. Держим разобранные пары «имя - номер» здесь: виджет строится из них, и
+   рассылка идёт по ним же, в том же порядке. */
+var smsBook = [];
+var smsBookW = null;
+
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
 	
@@ -374,7 +382,7 @@ return view.extend({
 					return false;
 				}
 				else {
-				   		let xs = document.getElementById('pb');
+				   		let xs = smsBook;
 
     						let phone, i;
 						    res.stdout = '';
@@ -382,7 +390,7 @@ return view.extend({
 							for (let i = 0; i < xs.length; i++) {
   								(function(i) {
     								setTimeout(function() { 
-		    						phone = xs.options[i].value;
+		    						phone = xs[i].code;
 
 									let out = document.querySelector('.smscommand-output');
 									out.style.display = '';
@@ -428,8 +436,7 @@ return view.extend({
 
 		let ov = document.getElementById('phonenumber');
 		ov.value = '';
-		let x = document.getElementById('pb').value;
-		ov.value = x;
+		ov.value = smsBookW ? String(smsBookW.getValue() || '') : '';
 	},
 
 	handleModemChange: function(ev) {
@@ -589,19 +596,26 @@ return view.extend({
 						E('div', { 'class': 'cbi-value' }, [
 							E('label', { 'class': 'cbi-value-title' }, [ _('User contacts') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
-								E('select', { 'class': 'cbi-input-select',
-										'id': 'pb',
-										'class': 'tg-field',
-										'change': ui.createHandlerFn(this, 'handleCopy'),
-										'mousedown': ui.createHandlerFn(this, 'handleCopy')
-									    },
-									(loadResults[0] || "").trim().split("\n").map(function(cmd) {
-                                        let fields = cmd.split(/;/);
-                                        let name = fields[0];
-                                        let code = fields[1] || fields[0];
-                                    return E('option', { 'value': code }, name );
-                                    })
-								)
+								(function(self) {
+									smsBook = [];
+									var ch = {}, order = [];
+									(loadResults[0] || "").trim().split("\n").forEach(function(cmd) {
+										var fields = cmd.split(/;/);
+										var name = fields[0];
+										var code = fields[1] || fields[0];
+										if (!code) { return; }
+										smsBook.push({ name: name, code: code });
+										ch[code] = name || code;
+										order.push(code);
+									});
+									smsBookW = new ui.Dropdown(order[0] || '', ch,
+										{ id: 'pb', sort: order });
+									var n = smsBookW.render();
+									n.classList.add('tg-field');
+									n.addEventListener('cbi-dropdown-change',
+										ui.createHandlerFn(self, 'handleCopy'));
+									return n;
+								})(this)
 							]) 
 						]),
 						E('div', { 'class': 'cbi-value' }, [

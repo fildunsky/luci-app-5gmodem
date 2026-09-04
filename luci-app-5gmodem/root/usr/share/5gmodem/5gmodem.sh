@@ -488,7 +488,10 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; t
 		cat "$_hl_cache"
 		exit 0
 	fi
-	_hl_out=$("$RES/hilink.sh" json 2>/dev/null)
+	# ПУТЬ ПЕРЕДАЁМ ЯВНО. Без него hilink.sh брал активный модем сам, а опрос
+	# web-API длится десятки секунд: за это время активный меняется, и модель с
+	# IMEI стика уезжали в секцию ДРУГОГО модема (см. _hl_path в hilink.sh).
+	_hl_out=$("$RES/hilink.sh" json "$_POLL_AM" 2>/dev/null)
 	case "$_hl_out" in
 		'{'*)
 			printf '%s\n' "$_hl_out" > "$_hl_cache.tmp" && mv "$_hl_cache.tmp" "$_hl_cache"
@@ -697,7 +700,7 @@ fi
 PORTOK="/tmp/5gmodem_portok_$_MKEY"
 _pok=""
 if [ -n "$DEVICE" ]; then
-	read -r _pok_port _pok_t < "$PORTOK" 2>/dev/null
+	read -r _pok_port _pok_t 2>/dev/null < "$PORTOK"
 	case "$_pok_t" in ''|*[!0-9]*) _pok_t="" ;; esac
 	if [ "$_pok_port" = "$DEVICE" ] && [ -n "$_pok_t" ] \
 	   && [ "$(( $(uptime_s) - _pok_t ))" -lt 30 ] 2>/dev/null; then
@@ -1606,8 +1609,8 @@ _snap_prepare() {
 	_SNAP_PREPARED=1
 
 	_SN_VID=""; _SN_PID=""
-	read -r _SN_VID < "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null
-	read -r _SN_PID < "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null
+	read -r _SN_VID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idVendor"
+	read -r _SN_PID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idProduct"
 	_SN_VIDPID="$_SN_VID:$_SN_PID"
 
 	_SN_IFPROTO=$(uci -q get "network.$SEC.proto")
@@ -2718,6 +2721,16 @@ fi
 # выше: сырое "SIMCOM SIM7100E" от AT+CGMM иначе оседало в секции мимо model_alias
 # и затирало нормализованное "SimCom SIM7100E".
 [ -n "$MODEL" ] && MODEL=$(model_alias "$MODEL")
+# ПОРТ ДОЛЖЕН ПРИНАДЛЕЖАТЬ ОПРОШЕННОМУ МОДЕМУ. Ровно такой же гвард стоит ниже
+# у IMEI, а у модели его не было - и имя, прочитанное с ЧУЖОГО tty (гонка портов
+# при смене активного модема), оседало в секции насовсем: проверка вендора для
+# generic-идентификаторов Qualcomm (05c6) не судит по определению, а штамп
+# model_vp писался тем же чужим значением, поэтому и читатели ему верили.
+if [ -n "$MODEL" ] && [ -n "$DEVICE" ] \
+   && [ "$(tty_usbpath "$DEVICE" 2>/dev/null)" != "$_POLL_AM" ]; then
+	logger -t 5gmodem "port $DEVICE does not belong to the polled modem ${_POLL_AM:-?} - model \"$MODEL\" not recorded"
+	MODEL=""
+fi
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
 	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] \
 	&& [ "$(uci -q get "5gmodem.$AMP_SEC.model_vp")" = "$(uci -q get "5gmodem.$AMP_SEC.vidpid")" ] || {

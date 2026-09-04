@@ -466,21 +466,25 @@ return view.extend({
 
 		var controls = E('div', { 'class': 'cbi-section tg5g' }, [
 			E('h3', {}, [ _('Statistics') ]),
-			E('div', { 'class': 'cbi-value' }, [
+			E('div', { 'class': 'cbi-value tg-flag' }, [
 				E('label', { 'class': 'cbi-value-title' }, [ _('Keep monthly traffic across reboots') ]),
 				E('div', { 'class': 'cbi-value-field' }, [
-					E('input', {
-						'type': 'checkbox', 'id': 'st-persist', 'checked': (lst.persist ? '' : null),
-						'change': function(ev) {
-							callStats([ 'setconf', 'persist=' + (ev.target.checked ? '1' : '0') ]).then(function() {
+					(function() {
+						/* Галочка - ui.Checkbox, как везде: голый <input> в темах
+						   рисуется по-своему. Пояснение справа даёт tg-flag. */
+						var w = new ui.Checkbox(lst.persist ? '1' : '0', { id: 'st-persist' });
+						var n = w.render();
+						n.addEventListener('widget-change', function() {
+							callStats([ 'setconf', 'persist=' + (w.isChecked() ? '1' : '0') ]).then(function() {
 								return callStats([ 'list' ]).then(function(lst2) {
 									_state.list = lst2 || {};
 									var el = document.getElementById('st-path-now');
 									if (el) { el.textContent = pathNowText(lst2); }
 								});
 							});
-						}
-					}),
+						});
+						return n;
+					})(),
 					E('div', { 'class': 'cbi-value-description' },
 						[ _('Monthly totals are written to flash about once an hour. Ping series are never written there.') ])
 				])

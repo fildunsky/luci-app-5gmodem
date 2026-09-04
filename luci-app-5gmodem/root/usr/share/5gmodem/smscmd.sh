@@ -312,7 +312,7 @@ $_o_grp"
 	done
 
 	# Хвост обрезаем: файл на флеше и растёт с каждым сообщением.
-	if [ "$(wc -l < "$_o_df" 2>/dev/null || echo 0)" -gt "$DONE_MAX" ]; then
+	if [ "$(wc -l 2>/dev/null < "$_o_df" || echo 0)" -gt "$DONE_MAX" ]; then
 		tail -n "$DONE_MAX" "$_o_df" > "$_o_df.tmp" 2>/dev/null && mv "$_o_df.tmp" "$_o_df"
 	fi
 	# «Первая встреча» теперь про КАРТУ: список выполненного привязан к ICCID

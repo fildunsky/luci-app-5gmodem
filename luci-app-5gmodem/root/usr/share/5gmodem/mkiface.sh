@@ -841,7 +841,15 @@ esac
 # без этой строки кейс «не удалось создать интерфейс» неразбираем по отчёту
 # (живой случай: MV31-W на вендорской прошивке, недели без диагноза).
 [ -n "$IDEV" ] || {
-	logger -t 5gmodem "mkiface: cannot create interface for proto '$PROTO': no control device (cdc-wdm='$DEV', at-port='$ATP', modem path='$AMP')"
+	# УСТРОЙСТВА УЖЕ НЕТ НА ШИНЕ - и тогда «нет управляющего узла» правда, но
+	# уводит в сторону: искать надо не композицию, а причину исчезновения.
+	# Так выглядит модуль, мелькнувший в аварийной композиции после краха
+	# (отчёт 03.09.2026: `modem path='1-1'`, устройство прожило секунду).
+	if [ -n "$AMP" ] && ! usb_path_present "$AMP"; then
+		logger -t 5gmodem "mkiface: $AMP is gone from the bus - not creating an interface for proto '$PROTO'"
+	else
+		logger -t 5gmodem "mkiface: cannot create interface for proto '$PROTO': no control device (cdc-wdm='$DEV', at-port='$ATP', modem path='$AMP')"
+	fi
 	json nomodem "$PROTO" ""
 	exit 1
 }

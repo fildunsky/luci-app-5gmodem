@@ -5009,8 +5009,8 @@ msgstr "Вводите номер как есть: 10-значный нацио�
 msgid "e.g. 9291067196 or a short number like 000100"
 msgstr "например 9291067196 или короткий номер вроде 000100"
 
-msgid "A link marked below never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
-msgstr "Отмеченный ниже линк никогда не получает трафик автоматически - чтобы им воспользоваться, сделайте его первым кликом по карточке. Удобно для резерва вроде Wi-Fi к смартфону."
+msgid "A link marked here never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "Отмеченный здесь линк никогда не получает трафик автоматически - чтобы им воспользоваться, сделайте его первым кликом по карточке. Удобно для резерва вроде Wi-Fi к смартфону."
 
 msgid "Use only manually"
 msgstr "Использовать только вручную"
@@ -5192,3 +5192,18 @@ msgstr "%d с"
 
 msgid "%dm"
 msgstr "%d мин"
+
+msgid "Device blacklist"
+msgstr "Чёрный список устройств"
+
+msgid "USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately."
+msgstr "USB-устройства, в которых программа не уверена: их нет в её базе модемов. Отметьте лишнее - и оно исчезнет из программы: ни вкладки, ни опроса AT-командами, ни места в приоритете интернета. Применяется сразу."
+
+msgid "No doubtful devices: everything found on the bus is in the modem database."
+msgstr "Сомнительных устройств нет: всё, что найдено на шине, есть в базе модемов."
+
+msgid "returned to modems by hand"
+msgstr "возвращено в модемы вручную"
+
+msgid "none"
+msgstr "нет"

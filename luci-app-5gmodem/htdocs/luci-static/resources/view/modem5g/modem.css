@@ -263,10 +263,10 @@
 /* НА ТЁМНОЙ ТЕМЕ ЦИФРА ПРОПАДАЕТ. Одна и та же прозрачность читается
    по-разному: на светлом фоне синий акцент при 0.14 - ровно фоновая метка, а на
    тёмном (argon в тёмной схеме, proton2025 dark) исчезает совсем. Поднимаем
-   долю - по ощущению это та же ненавязчивость, что и на светлой. */
-@media (prefers-color-scheme: dark) {
-	.netpribar .netpri-btn > .netpri-rank { opacity: .3; }
-}
+   долю - по ощущению это та же ненавязчивость, что и на светлой.
+   Ветку выбираем ПО КЛАССУ полосы (isDarkUI в netpri.js), а не по настройке ОС:
+   светлая тема LuCI при тёмной системе - обычное дело. */
+.netpribar.netpri-dark .netpri-btn > .netpri-rank { opacity: .3; }
 
 /* ФОН-ИКОНКА вместо цифры (режим 'icon'). Картинка, в отличие от глифа,
    растягивается честно: top/bottom 0 и height 100% сажают её ровно в край
@@ -281,10 +281,100 @@
 	right: 0;
 	transform: translateX(33%);
 	width: auto;
-	opacity: .16;
+	/* ПРОЗРАЧНОСТЬ У ТЕМ РАЗНАЯ, И ЭТО НЕ ПРИХОТЬ. На тёмной карточке значок
+	   светлее фона и при .22 читается мягким пятном. На светлой он ТЕМНЕЕ фона,
+	   а тёмное на белом бьёт по глазам сильнее при том же числе - там же .22
+	   выглядело бы грязью под текстом. Поэтому светлой теме даём вдвое меньше
+	   (замечание владельца 03.09.2026: «на тёмной нормально, на светлой надо
+	   прилично прозрачнее»). Числа выстраданы: .07 на светлой оказалось уже
+	   невидимкой, вернулись к .18 - на ней логотип оператора читается, но текст
+	   не задевает. Эта пара и радиус размытия - вся регулировка фона. */
+	opacity: .18;
+	/* РАЗМЫТИЕ, ЧТОБЫ ФОН НЕ СПОРИЛ С ТЕКСТОМ (просьба владельца 03.09.2026).
+	   Логотипы операторов - контрастные картинки с буквами и мелкой графикой:
+	   одной прозрачностью их не утихомирить, они всё равно читаются как второй
+	   слой надписей под именем аплинка и адресом. Размытие убирает именно это:
+	   остаётся цветное пятно нужной формы, но букв в нём уже не разобрать, и
+	   поэтому прозрачность можно держать заметной, а не выкручивать в ноль.
+	   Радиус - примерно высота строки карточки; он и регулирует «мягче/резче». */
+	filter: blur(2px);
 }
-@media (prefers-color-scheme: dark) {
-	.netpribar .netpri-btn > img.netpri-rank-ic { opacity: .3; }
+/* Тёмная тема - ПО КЛАССУ НА САМОЙ ПОЛОСЕ (его ставит isDarkUI в netpri.js),
+   а не по prefers-color-scheme: тему LuCI выбирают отдельно от системной. */
+.netpribar.netpri-dark .netpri-btn > img.netpri-rank-ic { opacity: .34; }
+
+/* ФОН СЕРВИСНЫХ КАРТОЧЕК - зеркало предыдущего блока. Та же иконка, что в
+   строке имени карточки (клон, см. svcRankEl в netpri.js), те же прозрачность
+   и радиус размытия, тот же выступ на треть ширины - но за ЛЕВЫЙ край, чтобы
+   ряд карточек не выглядел одинаково «утяжелённым» справа.
+
+   Иконки у сервисов разного рода: файл-картинка, инлайн-SVG (SSClash),
+   эмодзи-бейдж. Поэтому размер задаём КОНТЕЙНЕРУ, а всё, что внутри, тянем на
+   его высоту - так любая из трёх форм садится в одну и ту же рамку. */
+.netpribar .netpri-btn > .netpri-rank-bg {
+	top: -22.5%;
+	height: 145%;
+	left: 0;
+	right: auto;
+	transform: translateX(-33%);
+	display: flex;
+	align-items: center;
+	/* ЗДЕСЬ НЕ ЦВЕТ, А СИЛУЭТ - И ЭТО НЕ КАПРИЗ (разбор 03.09.2026: «в
+	   приоритетах интернета фон хоть чуть-чуть видно, а в сервисах и пингах -
+	   вообще нет»). У аплинков значок - плотный цветной логотип оператора, он
+	   держит пятно сам. А значки сервисов и хостов рисованы ПОД СВОЮ ПЛАШКУ:
+	   октокот GitHub белый, потому что лежит на тёмном квадрате бренда. Стоит
+	   убрать плашку - и на светлой теме он становится белым по белому, невидим
+	   при любой прозрачности (проверено: при opacity 1 без размытия его всё
+	   равно нет, а SSClash виден).
+	   Поэтому здесь значок сплющиваем в одноцветный силуэт: чёрный на светлой
+	   теме, белый на тёмной. Форма читается у любого значка - и у цветного, и у
+	   белого, и у штрихового, - а прозрачность снова становится единственной
+	   ручкой яркости.
+	   ЧИСЛА ЗДЕСЬ ВТРОЕ БОЛЬШЕ, ЧЕМ У АПЛИНКОВ, И ЭТО НЕ ОПЕЧАТКА: у оператора
+	   логотип - плотная заливка, а тут силуэт тонкого штриха, чернил в нём в
+	   разы меньше. При «одинаковых» числах он просто не виден. */
+	opacity: .45;
+	filter: blur(2px) grayscale(1) brightness(0);
+	pointer-events: none;
+}
+/* !important здесь по делу: у обёрток иконок (.netpri-ssclash-ic, .netpri-ic,
+   .netpri-pingbadge) прибит свой размер в 16 px - без перебивки фон оставался
+   шестнадцатипиксельной полоской у края. */
+.netpribar .netpri-btn > .netpri-rank-bg > * {
+	height: 100% !important;
+	width: auto !important;
+	min-width: 0 !important;
+	max-width: none !important;
+	padding: 0 !important;
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1 / 1;
+	/* ПЛАШКА ПОД ЗНАЧКОМ ФОНУ НЕ НУЖНА. У части значков своя подложка: тёмный
+	   квадрат бренда у GitHub, серый скруглённый у SSClash. В строке имени она
+	   к месту, а размытым пятном даёт просто прямоугольник цвета подложки -
+	   на тёмной теме его вообще не видно. Оставляем только сам значок. */
+	background: none !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+	box-shadow: none !important;
+	/* эмодзи-значки (у сервисов без картинки) масштабируем кеглем: у них нет
+	   ни img, ни svg, тянуть высотой нечего */
+	font-size: 2.8em;
+	line-height: 1;
+}
+.netpribar .netpri-btn > .netpri-rank-bg img,
+.netpribar .netpri-btn > .netpri-rank-bg svg {
+	height: 100% !important;
+	width: auto !important;
+	max-width: none !important;
+	display: block;
+}
+/* на тёмной карточке силуэт должен быть светлым - добавляем инверсию */
+.netpribar.netpri-dark .netpri-btn > .netpri-rank-bg {
+	opacity: .52;
+	filter: blur(2px) grayscale(1) brightness(0) invert(1);
 }
 
 /* Текст - ПОВЕРХ цифры. Без этого в темах, где у кнопки свой фон, строки могли
@@ -298,30 +388,11 @@
 /* IP-строка без адреса приглушена (.empty) - лампочку не глушим: она несёт
    собственный вердикт и на фоне заглушки адреса читается тем же цветом */
 .netpribar .netpri-ip.empty .netpri-svcdot { opacity: 1; }
-/* Модалка сторожа: ТРИ смысловых блока, заголовок блока = его выключатель.
-   Flex в заголовке выравнивает галку с текстом по центру строки. */
-.hw-block { margin-bottom: 1.1em; }
-.hw-block .hw-block-title {
-	display: flex; align-items: center; gap: .5em;
-	font-weight: 600; margin-bottom: .35em; cursor: pointer;
-}
-.hw-block .hw-block-title input[type="checkbox"] { margin: 0; }
-/* Строки параметров как в «Управлении частотами»; вертикальное центрирование
-   обеих ячеек чинит съехавшие по горизонтали элементы. */
-.hw-form .td { vertical-align: middle !important; }
-.hw-form input[type="checkbox"] { vertical-align: middle; margin: 0; }
-/* Без зебры и линеек таблицы: это ФОРМА, а не данные - полосатый фон и рамки
-   ячеек здесь только шумят. Табличная у неё лишь сетка колонок. */
-.hw-form, .hw-form .tr, .hw-form .td {
-	background: none !important;
-	border: none !important;
-	box-shadow: none !important;
-}
-/* Колонки: подпись слева (33%), поле справа - как строки «Управления
-   частотами». Подписи прижаты к ПРАВОМУ краю своей колонки - вплотную к
-   полям, строка читается парой «подпись → поле» без разрыва. */
-.hw-form .td:first-child { text-align: right !important; padding-right: .9em; }
-/* список адресов (ui.DynamicList) - шириной с обычные поля, не во всю колонку */
+/* Форма сторожа интернета - СТАНДАРТНЫЕ строки LuCI (.cbi-value): вид полей,
+   галочек и списков берём у темы. Своего здесь только три мелочи. */
+/* Числовые поля (интервал, счётчики) - по содержимому, а не во всю колонку. */
+.hw-form .cbi-value-field > div > input.cbi-input-text { max-width: 7em; }
+/* Список адресов проверки - шириной с обычные поля. */
 .hw-form .cbi-dynlist { max-width: 20em; }
 /* Кнопка «+» списка - ФИКСИРОВАННЫЙ квадрат. У тем она свёрстана по-разному
    («x» удаления - вообще псевдоэлемент ::after строки, не кнопка): на proton
@@ -339,6 +410,43 @@
 	justify-content: center !important;
 	box-sizing: border-box !important;
 }
+/* ГАЛОЧКА ДОЛЖНА БЫТЬ ВИДНА. Тема Routy рисует «птичку» маской на ::after и
+   заливает её через background: var(--fg-color); после минификации CSS цвет
+   превращается в невалидный calc (пропал пробел перед «+»), заливка становится
+   прозрачной - и ЛЮБОЙ отмеченный чекбокс выглядит снятым (замечено владельцем
+   03.09.2026 на списке устройств: FM350 был отмечен, а квадрат пустой).
+   Ставим цвет явно: у тем со здоровым --fg-color картинка та же, у сломанной
+   галочка возвращается. Правило безвредно для тем с родными чекбоксами - там
+   у ::after нет content, и блок не создаётся. */
+input[type="checkbox"]:checked::after,
+input[type="radio"]:checked::after { background: currentColor; }
+/* ГАЛОЧКА И ЕЁ ПОЯСНЕНИЕ - В ОДНУ СТРОКУ (решение владельца 03.09.2026).
+   Тема ставит пояснение ПОД полем и вешает на него значок «?». Для поля ввода
+   или списка это читается нормально, а у галочки получалось так: галка, под ней
+   вопросительный знак и текст - и к чему относится текст, непонятно. Ставим
+   пояснение СПРАВА от галочки и убираем значок. Только для строк-галочек:
+   у form.Flag тема сама размечает строку data-widget="CBI.FlagValue", свои
+   рукописные строки помечаем классом tg-flag. Списков это не касается. */
+.cbi-value[data-widget="CBI.FlagValue"] > .cbi-value-field,
+.cbi-value.tg-flag > .cbi-value-field {
+	display: flex;
+	align-items: center;
+	gap: .6em;
+	flex-wrap: wrap;
+}
+.cbi-value[data-widget="CBI.FlagValue"] > .cbi-value-field > .cbi-value-description,
+.cbi-value.tg-flag > .cbi-value-field > .cbi-value-description {
+	margin: 0;
+	flex: 1 1 18em;
+	min-width: 12em;
+}
+.cbi-value[data-widget="CBI.FlagValue"] > .cbi-value-field > .cbi-value-description::before,
+.cbi-value.tg-flag > .cbi-value-field > .cbi-value-description::before {
+	display: none;
+}
+/* Строка чёрного списка устройств: галочка и подпись в одну линию. */
+.tg-blitem { display: flex; align-items: center; gap: .5em; margin: .2em 0; }
+.tg-blitem .cbi-checkbox { flex: 0 0 auto; }
 /* Модалка сторожа - шириной и видом как карточки страницы («Модем»,
    «Управление частотами»): дефолт темы (90%, максимум 800px у proton) резал
    двухколоночные строки. Фон/рамку/скругление даёт сама тема модалки - они
@@ -2015,6 +2123,10 @@ pre.atcommand-output.has-output::after {
 .tg-row { display: flex;  align-items: center;  gap: 10px }
 /* поле ввода во всю ширину строки формы */
 .tg-field { margin:5px 0;  width:100% }
+/* Дропдаун на месте прежнего <select> должен занимать ту же ширину строки:
+   у темы у .cbi-dropdown своя фиксированная ширина, и одного .tg-field ей мало
+   - берём специфичностью двух классов. */
+.cbi-dropdown.tg-field:not(.btn):not(.cbi-button) { width: 100%; max-width: 100%; }
 /* узкая колонка таблицы (номер, флаг) */
 .tg-col-narrow { min-width: 40px }
 /* растянутая колонка с центровкой */
@@ -2268,6 +2380,24 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 .tg-modem-form table.cbi-section-table td{width:1%;white-space:nowrap;text-align:left;vertical-align:middle}
 .tg-modem-form table.cbi-section-table select,
 .tg-modem-form table.cbi-section-table input[type="text"]{width:auto;min-width:10em}
+	/* ТАБЛИЦА НЕ ДОЛЖНА ВЫЛЕЗАТЬ ЗА КАРТОЧКУ. Сжатие выше держит ячейки в одну
+	   строку, и ширину таблицы задавала самая длинная из них - пояснение под
+	   заголовком («Перезапустить сервис, когда через аплинк пошли пакеты.»).
+	   Таблица уходила за рамку секции и за правый край экрана уже на ноутбучной
+	   ширине (замечено владельцем 03.09.2026). Заголовки оставляем строкой,
+	   переносим ПОЯСНЕНИЕ - и запрещаем таблице быть шире своей коробки. */
+.tg-modem-form table.cbi-section-table{max-width:100%}
+.tg-modem-form table.cbi-section-table .cbi-section-table-descr .th{white-space:normal}
+	/* На телефоне не спасает и это: сама строка «список + галка + Удалить» шире
+	   экрана. Там компактную раскладку отпускаем совсем - ячейки переносятся,
+	   таблица и поля тянутся по ширине карточки. */
+@media (max-width:700px){
+	.tg-modem-form table.cbi-section-table{width:100%}
+	.tg-modem-form table.cbi-section-table th,
+	.tg-modem-form table.cbi-section-table td{width:auto;white-space:normal}
+	.tg-modem-form table.cbi-section-table select,
+	.tg-modem-form table.cbi-section-table input[type="text"]{min-width:0;width:100%}
+}
 	/* Внешняя коробка вложенного блока (SectionValue) — во всю ширину
 .tg-modem-form .cbi-value[data-name="__pingcards"],
 .tg-modem-form .cbi-value[data-name="__svccards"]{display:block}

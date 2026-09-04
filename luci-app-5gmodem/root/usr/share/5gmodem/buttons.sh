@@ -165,7 +165,7 @@ _dts_buttons() {
 	_dtb=/sys/firmware/devicetree/base
 	for _cf in "$_dtb"/*/compatible "$_dtb"/*/*/compatible; do
 		[ -f "$_cf" ] || continue
-		tr '\0' '\n' < "$_cf" 2>/dev/null | grep -qxE 'gpio-keys|gpio-keys-polled' || continue
+		tr '\0' '\n' 2>/dev/null < "$_cf" | grep -qxE 'gpio-keys|gpio-keys-polled' || continue
 		_kd="${_cf%/compatible}"
 		for _b in "$_kd"/*/; do
 			[ -f "${_b}linux,code" ] || continue

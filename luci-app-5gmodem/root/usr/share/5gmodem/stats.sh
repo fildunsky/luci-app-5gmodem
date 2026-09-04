@@ -98,11 +98,11 @@ _merge_from() {   # $1 - каталог
 		[ -f "$_mf_f" ] || continue
 		_mf_n="${_mf_f##*/}"
 		_mf_rx=0; _mf_tx=0
-		read -r _mf_rx _mf_tx < "$_mf_f" 2>/dev/null
+		read -r _mf_rx _mf_tx 2>/dev/null < "$_mf_f"
 		case "$_mf_rx" in ''|*[!0-9]*) _mf_rx=0 ;; esac
 		case "$_mf_tx" in ''|*[!0-9]*) _mf_tx=0 ;; esac
 		_mf_crx=0; _mf_ctx=0
-		[ -f "$DIR/$_mf_n" ] && read -r _mf_crx _mf_ctx < "$DIR/$_mf_n" 2>/dev/null
+		[ -f "$DIR/$_mf_n" ] && read -r _mf_crx _mf_ctx 2>/dev/null < "$DIR/$_mf_n"
 		case "$_mf_crx" in ''|*[!0-9]*) _mf_crx=0 ;; esac
 		case "$_mf_ctx" in ''|*[!0-9]*) _mf_ctx=0 ;; esac
 		[ "$_mf_rx" -gt "$_mf_crx" ] || _mf_rx="$_mf_crx"
@@ -147,7 +147,7 @@ _push() {
 	case "$2" in *[!0-9.-]*) return 0 ;; esac
 	_p_f="$DIR/$1"
 	printf '%s %s\n' "$(_now)" "$2" >> "$_p_f"
-	_p_n=$(wc -l < "$_p_f" 2>/dev/null || echo 0)
+	_p_n=$(wc -l 2>/dev/null < "$_p_f" || echo 0)
 	if [ "${_p_n:-0}" -gt "$((RING_MAX + 120))" ]; then
 		tail -n "$RING_MAX" "$_p_f" > "$_p_f.tmp" 2>/dev/null && mv "$_p_f.tmp" "$_p_f"
 	fi
@@ -171,7 +171,7 @@ _collect_ping() {
 		[ -f "$_cp_f" ] || continue
 		case "$_cp_f" in */.t|*.heal|*.demoted|*.nosim|*.last_event) continue ;; esac
 		_cp_if="${_cp_f##*/}"
-		read -r _cp_st _ _ _cp_ms _ < "$_cp_f" 2>/dev/null || continue
+		read -r _cp_st _ _ _cp_ms _ 2>/dev/null < "$_cp_f" || continue
 		# «down» пишем нулём: разрыв в графике должен быть виден, а не сглажен
 		[ "$_cp_st" = up ] || _cp_ms=0
 		_push "ping.$_cp_if" "${_cp_ms:-0}"
@@ -231,7 +231,7 @@ _collect_traffic() {
 		case "$_ct_rx$_ct_tx" in ''|*[!0-9]*) continue ;; esac
 		_ct_base="$DIR/base.$_ct_if"
 		_ct_prx=0; _ct_ptx=0
-		[ -f "$_ct_base" ] && read -r _ct_prx _ct_ptx < "$_ct_base" 2>/dev/null
+		[ -f "$_ct_base" ] && read -r _ct_prx _ct_ptx 2>/dev/null < "$_ct_base"
 		case "$_ct_prx" in ''|*[!0-9]*) _ct_prx=0 ;; esac
 		case "$_ct_ptx" in ''|*[!0-9]*) _ct_ptx=0 ;; esac
 		printf '%s %s\n' "$_ct_rx" "$_ct_tx" > "$_ct_base"
@@ -298,7 +298,7 @@ _collect_traffic() {
 		fi
 		_ct_acc="$DIR/traffic.$_ct_key.$(_month)"
 		_ct_arx=0; _ct_atx=0
-		[ -f "$_ct_acc" ] && read -r _ct_arx _ct_atx < "$_ct_acc" 2>/dev/null
+		[ -f "$_ct_acc" ] && read -r _ct_arx _ct_atx 2>/dev/null < "$_ct_acc"
 		case "$_ct_arx" in ''|*[!0-9]*) _ct_arx=0 ;; esac
 		case "$_ct_atx" in ''|*[!0-9]*) _ct_atx=0 ;; esac
 		printf '%s %s\n' "$((_ct_arx + _ct_drx))" "$((_ct_atx + _ct_dtx))" > "$_ct_acc"
@@ -311,7 +311,7 @@ _flush() {
 	_persist || return 0
 	_fl_st="$DIR/.flush"
 	_fl_last=0
-	[ -f "$_fl_st" ] && read -r _fl_last < "$_fl_st" 2>/dev/null
+	[ -f "$_fl_st" ] && read -r _fl_last 2>/dev/null < "$_fl_st"
 	case "$_fl_last" in ''|*[!0-9]*) _fl_last=0 ;; esac
 	[ $(( $(_now) - _fl_last )) -ge "$FLUSH_EVERY" ] || return 0
 	_fl_d=$(_pdir_now) || {
@@ -395,7 +395,7 @@ list)
 	for _ls_f in "$DIR"/*.label; do
 		[ -f "$_ls_f" ] || continue
 		_ls_k="${_ls_f##*/}"; _ls_k="${_ls_k%.label}"
-		read -r _ls_v < "$_ls_f" 2>/dev/null
+		read -r _ls_v 2>/dev/null < "$_ls_f"
 		[ -n "$_ls_v" ] && _ls_l="$_ls_l,\"$_ls_k\":\"$(json_esc_s "$_ls_v")\""
 	done
 	# Куда пишем и куда просили: страница обязана показать, что данные уходят
@@ -432,7 +432,7 @@ traffic)
 		[ -f "$_tr_f" ] || continue
 		_tr_n="${_tr_f##*/traffic.}"
 		_tr_if="${_tr_n%.*}"; _tr_m="${_tr_n##*.}"
-		read -r _tr_rx _tr_tx < "$_tr_f" 2>/dev/null
+		read -r _tr_rx _tr_tx 2>/dev/null < "$_tr_f"
 		case "$_tr_rx" in ''|*[!0-9]*) _tr_rx=0 ;; esac
 		case "$_tr_tx" in ''|*[!0-9]*) _tr_tx=0 ;; esac
 		[ "$_tr_first" = 1 ] || printf ','

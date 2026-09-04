@@ -3013,17 +3013,23 @@ modemDialog: baseclass.extend({
 							E('p'),
 							E('label', { 'class': 'cbi-value-title' }, [ _('Modem') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
-								E('select', { 'class': 'cbi-input-select',
-										'id': 'mselect',
-										'style': 'margin:0px 0; width:100%;',
-										},
-									(result || "").trim().split(/;/).map(function(cmd) {
+								(function() {
+									/* Список - ui.Dropdown, как везде в программе.
+									   Значение читает handleSave: у дропдауна нет
+									   .value, берём экземпляр по узлу (dom). */
+									var ch = {}; var order = [];
+									(result || "").trim().split(/;/).forEach(function(cmd) {
 										var fields = cmd.split(/#/);
-										var name = fields[1];
-										var code = fields[0];
-									return E('option', { 'value': code }, name ) })
-
-								)
+										if (!fields[0]) { return; }
+										ch[fields[0]] = fields[1] || fields[0];
+										order.push(fields[0]);
+									});
+									var w = new ui.Dropdown(order[0] || '', ch,
+										{ id: 'mselect', sort: order });
+									var n = w.render();
+									n.style.width = '100%';
+									return n;
+								})()
 							]) 
 						]),
 						)
@@ -3050,7 +3056,9 @@ modemDialog: baseclass.extend({
 
 			return uci.load('modemdefine').then(function() {
 
-				var vx = document.getElementById('mselect').value;
+				var _msn = document.getElementById('mselect');
+				var _msw = _msn ? dom.findClassInstance(_msn) : null;
+				var vx = _msw ? String(_msw.getValue() || '') : '';
 				var marr = vx.split('_');
 
 				uci.set('modemdefine', '@general[0]', 'main_modem', marr[0].toString());
