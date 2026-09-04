@@ -4310,11 +4310,7 @@ msgstr "Переключиться на слот eSIM"
 msgid "Rename"
 msgstr "Переименовать"
 
-msgid "Save"
-msgstr "Сохранить"
 
-msgid "Cancel"
-msgstr "Отмена"
 
 msgid "None"
 msgstr "Ничего"
@@ -5207,3 +5203,108 @@ msgstr "возвращено в модемы вручную"
 
 msgid "none"
 msgstr "нет"
+
+msgid "%s - receive only, works only as an aggregation carrier"
+msgstr "%s - только приём, работает лишь как агрегируемая несущая"
+
+msgid "%s is running"
+msgstr "%s работает"
+
+msgid "%s is stopped"
+msgstr "%s остановлен"
+
+msgid "(#%d)"
+msgstr "(№%d)"
+
+msgid "APN profile index"
+msgstr "Номер профиля APN"
+
+msgid "Applying bands — the connection will briefly drop, then reconnect."
+msgstr "Применяем диапазоны — связь ненадолго прервётся и восстановится."
+
+msgid "Authentication Type"
+msgstr "Тип аутентификации"
+
+msgid "Cell EARFCN/PCI unknown yet - try again in a few seconds"
+msgstr "EARFCN/PCI соты пока не известны - повторите через несколько секунд"
+
+msgid "Change bands"
+msgstr "Сменить диапазоны"
+
+msgid "Changing bands briefly interrupts the connection: the app hands the modem to ModemManager, applies the change and reconnects (up to a minute)."
+msgstr "Смена диапазонов ненадолго рвёт связь: программа передаёт модем ModemManager, применяет изменение и подключается заново (до минуты)."
+
+msgid "Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received"
+msgstr "С этой галочкой сообщения читать удобнее, но число показанных и полученных сообщений будет расходиться"
+
+msgid "Could not read messages"
+msgstr "Не удалось прочитать сообщения"
+
+msgid "Ec/No"
+msgstr "Ec/No"
+
+msgid "IPv6 APN"
+msgstr "APN для IPv6"
+
+msgid "IPv6 APN profile index"
+msgstr "Номер профиля APN для IPv6"
+
+msgid "If unchecked, no default route is configured"
+msgstr "Без галочки маршрут по умолчанию не настраивается"
+
+msgid "If unchecked, the advertised DNS server addresses are ignored"
+msgstr "Без галочки адреса DNS-серверов, полученные от сети, игнорируются"
+
+msgid "Lock to this cell (EARFCN %s, PCI %s)"
+msgstr "Закрепиться за этой сотой (EARFCN %s, PCI %s)"
+
+msgid "MBIM"
+msgstr "MBIM"
+
+msgid "Maximum amount of seconds to wait for the modem to become ready"
+msgstr "Сколько секунд ждать готовности модема"
+
+msgid "Modem device"
+msgstr "Устройство модема"
+
+msgid "Modem init timeout"
+msgstr "Таймаут инициализации модема"
+
+msgid "ModemManager"
+msgstr "ModemManager"
+
+msgid "Open the SSClash admin panel in a new tab"
+msgstr "Открыть панель SSClash в новой вкладке"
+
+msgid "Override MTU"
+msgstr "Переопределить MTU"
+
+msgid "PDP Type"
+msgstr "Тип PDP"
+
+msgid "PIN"
+msgstr "PIN"
+
+msgid "RSCP"
+msgstr "RSCP"
+
+msgid "Reset"
+msgstr "Сбросить"
+
+msgid "This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool"
+msgstr "Эта настройка позволяет делать резервные копии SMS или, например, сохранять сообщения, которые sms-tool не поддерживает"
+
+msgid "To change bands the app briefly hands this modem to ModemManager, applies the change and reconnects. The connection will drop for up to a minute."
+msgstr "Чтобы сменить диапазоны, программа ненадолго передаёт этот модем ModemManager, применяет изменение и подключается заново. Связь пропадёт не более чем на минуту."
+
+msgid "USB vendor and product ID"
+msgstr "Идентификаторы производителя и устройства USB"
+
+msgid "Use DNS servers advertised by peer"
+msgstr "Использовать DNS-серверы, полученные от сети"
+
+msgid "Use default gateway"
+msgstr "Использовать шлюз по умолчанию"
+
+msgid "Use gateway metric"
+msgstr "Использовать метрику шлюза"
