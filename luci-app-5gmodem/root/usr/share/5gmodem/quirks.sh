@@ -135,6 +135,13 @@ sim_slots_via() {
 		#   qmicli --uim-get-slot-status -> "2 physical slots found",
 		#   слот 1 present/active (ICCID виден), слот 2 absent/inactive.
 		1bc7:1040) echo qmi; return ;;
+		# Telit FN990 (1bc7:1070) - тот же вендор и тот же QMI, слотов два.
+		# AT-команд выбора слота у Telit нет (см. выше про LM960), а по AT
+		# приложение ничего и не получало: раздел «Слоты SIM» приходил пустым,
+		# кнопок не было, и человек, переключивший слот сторонней утилитой,
+		# не мог ни увидеть этого, ни вернуть обратно (живой отчёт 05.09.2026,
+		# WH3000 Pro: карта исправна, а модем её «не видит»).
+		1bc7:1070) echo qmi; return ;;
 		# Fibocom FM350-GL: проверено - AT+GTDUALSIM отдаёт (0-1), AT+SIMTYPE?
 		# различает USIM/eSIM. Именно на нём это и писалось.
 		0e8d:7127|0e8d:7126) echo gtdualsim; return ;;
