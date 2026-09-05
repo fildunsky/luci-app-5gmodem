@@ -1,6 +1,7 @@
 'use strict';
 'require baseclass';
 'require view.modem5g.mutil as mutil';
+'require view.modem5g.extip as extip';
 'require view.modem5g.healthform as healthform';
 'require fs';
 'require ui';
@@ -131,14 +132,6 @@ function stArrow(name) {
 	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': L.resource('icons/5gmodem/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
 }
 
-/* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
-   буквы. Пусто, если код не 2 латинские буквы. */
-function flagEmoji(cc) {
-	cc = String(cc || '').toUpperCase();
-	if (!/^[A-Z]{2}$/.test(cc)) { return ''; }
-	return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
-}
-
 /* содержимое средней строки (скорость) по фазе. Во время загрузки показываем
    ЖИВОЕ число (растёт в реальном времени), во время отдачи - готовый download и
    «…» у upload, по готовности - оба числа. */
@@ -199,7 +192,7 @@ function stCardInner() {
 			'data-tooltip': _st.ipLocal ? _('Modem address, not external') : null
 		}, (function() {
 			if (_st.ipLocal) { return _st.ip; }
-			var fl = flagEmoji(_st.cc);
+			var fl = mutil.flagEmoji(_st.cc);
 			return fl ? (fl + ' ' + _st.ip) : _st.ip;   // флаг + тонкий пробел + IP
 		})())
 		       : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
@@ -1446,17 +1439,36 @@ function buildBar(list, redraw) {
 			   адресом, тем же стилем, что точки статусов виджетов (netpri-svcdot:
 			   размер и свечение). Поле health есть только при включённом
 			   слежении - без него карточка как раньше. */
-			E('span', { 'class': 'netpri-ip' + (o.ip ? '' : ' empty') }, [
-				o.health ? E('span', {
-					'class': 'netpri-svcdot netpri-health ' +
-						(o.health === 'up' ? 'on' : (o.health === 'down' || o.health === 'gone' ? 'off' : 'unknown')),
-					'title': (o.health === 'up') ? _('Internet is working (%s ms)').format(o.hms)
-					       : (o.health === 'down') ? _('No internet on this link')
-					       : (o.health === 'gone') ? _('Device is gone')
-					       : _('Checking…')
-				}) : '',
-				o.ip || '***.***.***.***'
-			])
+			(function() {
+				/* ВНЕШНИЙ АДРЕС - ТОЛЬКО НА АКТИВНОЙ КАРТОЧКЕ. Он описывает
+				   маршрут по умолчанию, а не интерфейс: на соседних аплинках,
+				   через которые сейчас никто не ходит, это была бы неправда. */
+				/* У КАЖДОЙ КАРТОЧКИ - СВОЙ внешний адрес, если он уже известен:
+				   карточка модема берёт адрес, узнанный ЧЕРЕЗ МОДЕМ (за ним
+				   следит страница модема), остальным годится общий - маршрут по
+				   умолчанию, а он и есть активный аплинк. Новых запросов это не
+				   добавляет: показываем то, что и так опрошено. */
+				var ex = extip.state(o.iface);
+				if (!ex.ip && isA) { ex = extip.state(''); }
+				var extShown = !!(extip.flags().inNetpri && ex.ip);
+				return E('span', {
+					'class': 'netpri-ip' + ((o.ip || extShown) ? '' : ' empty'),
+					'data-tooltip': extShown
+						? _('External address via %s. Interface address: %s')
+							.format(ex.src || '?', o.ip || '-')
+						: null
+				}, [
+					o.health ? E('span', {
+						'class': 'netpri-svcdot netpri-health ' +
+							(o.health === 'up' ? 'on' : (o.health === 'down' || o.health === 'gone' ? 'off' : 'unknown')),
+						'title': (o.health === 'up') ? _('Internet is working (%s ms)').format(o.hms)
+						       : (o.health === 'down') ? _('No internet on this link')
+						       : (o.health === 'gone') ? _('Device is gone')
+						       : _('Checking…')
+					}) : '',
+					extShown ? extip.withFlag(ex.ip, ex.cc) : (o.ip || '***.***.***.***')
+				]);
+			})()
 			];
 		})());
 	});
@@ -1610,6 +1622,13 @@ return baseclass.extend({
 		/* Сначала флаги видимости виджетов, потом отрисовка - иначе на первый
 		   кадр показали бы отключённые виджеты. uci.load обычно уже в кэше
 		   (страница «Сеть» его грузит), так что это почти синхронно. */
+		/* Внешний адрес подтягиваем ОДНИМ опросом на страницу (extip.js);
+		   пришёл он позже первого кадра - перерисуем ряд на месте. */
+		extip.init().then(function(fl) {
+			if (!fl.inNetpri) { return; }
+			extip.watch('');
+			extip.subscribe(function() { redraw(lastList()); });
+		});
 		loadWidgetFlags().then(function() {
 			/* WARM-RENDER: первый кадр рисуем БЕЗУСЛОВНО (даже пустым списком) -
 			   иначе при отключённом «Приоритете интернета» и пустом списке
@@ -1676,6 +1695,13 @@ return baseclass.extend({
 				refreshStCard();
 			};
 			redraw(list);
+			/* Тот же единый опрос внешнего адреса, что и в mount(): ряд на
+			   странице состояния - такой же его потребитель. */
+			extip.init().then(function(fl) {
+				if (!fl.inNetpri) { return; }
+				extip.watch('');
+				extip.subscribe(function() { redraw(lastList()); });
+			});
 			if (_widgets.speedtest) { stInit(); }
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {

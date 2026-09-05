@@ -2,6 +2,7 @@
 'require view';
 'require view.modem5g.modemtabs as modemtabs';
 'require view.modem5g.healthform as healthform';
+'require view.modem5g.extip as extip';
 'require fs';
 'require ui';
 'require uci';
@@ -105,6 +106,7 @@ function updBusy(busy) {
 var CACHED_RES = [
 	'view/modem5g/5gdetail.js', 'view/modem5g/5gdebug.js', 'view/modem5g/5gesim.js',
 	'view/modem5g/5gsettings.js', 'view/modem5g/netpri.js', 'view/modem5g/modemtabs.js',
+	'view/modem5g/extip.js', 'view/modem5g/mutil.js',
 	'view/modem5g/readsms.js', 'view/modem5g/sendsms.js', 'view/modem5g/sendussd.js',
 	'view/modem5g/sendat.js', 'protocol/fibocom.js'
 ];
@@ -236,6 +238,7 @@ function apnUpdate() {
    отличающийся от ListValue ровно виджетом. На старых сборках LuCI его может не
    быть - тогда молча падаем обратно на ListValue, чтобы страница не рухнула. */
 var ListDropdown = form.RichListValue || form.ListValue;
+var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 
 return view.extend({
 	load: function() {
@@ -607,25 +610,22 @@ return view.extend({
 		o.placeholder = 'https://speedtest.rt.ru/backend/empty.php';
 		o.rmempty = true;
 
-		o = sts.option(form.Value, 'speedtest_ip_url', _('Public IP service'),
-			_('Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag).'));
-		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + country flag)');
-		o.value('http://api.ipify.org', 'ipify (api.ipify.org)');
-		o.value('https://ip.wtf', 'ip.wtf');
-		o.value('http://ifconfig.me/ip', 'ifconfig.me');
-		o.value('https://icanhazip.com', 'icanhazip.com');
-		o.value('https://2ip.ru', '2ip.ru');
-		o.value('https://whoer.net', 'whoer.net');
-		o.default = 'http://ip-api.com/line/?fields=countryCode,query';
-		o.placeholder = 'http://ip-api.com/line/?fields=countryCode,query';
-		o.rmempty = true;
-
-		o = sts.option(form.Value, 'speedtest_cc_url', _('Country lookup'),
-			_('Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder.'));
-		o.value('http://ip-api.com/line/{ip}?fields=countryCode', 'ip-api.com');
-		o.value('https://ipapi.co/{ip}/country/', 'ipapi.co');
-		o.placeholder = 'http://ip-api.com/line/{ip}?fields=countryCode';
-		o.rmempty = true;
+		/* СЕРВИС ОПРЕДЕЛЕНИЯ АДРЕСА ЗДЕСЬ БОЛЬШЕ НЕ СПРАШИВАЕМ. Он один и тот
+		   же для карточки теста и для «Внешнего IP» - две настройки об одном
+		   и том же расходились и путали. Настройка переехала в «Для экспертов»,
+		   здесь - только ссылка на неё. */
+		o = sts.option(form.DummyValue, '_extip_hint', _('Public IP service'));
+		o.cfgvalue = function() { return ''; };
+		o.renderWidget = function() {
+			return E('a', {
+				'href': '#',
+				'click': function(ev) {
+					ev.preventDefault();
+					var t = document.querySelector('[id$="-extip_url"]');
+					if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+				}
+			}, _('Shared with "External IP" - set it under "For experts"'));
+		};
 
 
 		/* «Для экспертов» - НАМЕРЕННО ПОСЛЕДНЯЯ секция (UX-аудит, P6): редкие
@@ -647,13 +647,132 @@ return view.extend({
 		   перезагрузка страницы - LuCI перечитает дерево меню. */
 
 		o = exp.option(form.Flag, 'align_enabled', _('Alignment'),
-			_('Живые метрики сигнала и звук для настройки внешней антенны.'));
+			_('Live signal metrics and a tone for aiming an external antenna.'));
 		o.default = '0';
 		o.rmempty = false;
 
-		/* ОДНА секция «Виджеты» - всё внутри неё: Приоритет интернета, Пинг,
-		   Службы, Тест скорости. У Пинга/Служб карточки вложены ещё глубже
-		   (form.SectionValue), настройки видны только при включённой галочке. */
+		/* ВНЕШНИЙ АДРЕС. Адрес на интерфейсе и адрес, с которого роутер виден
+		   интернету, совпадают далеко не всегда: у сотовой это CGNAT оператора,
+		   за туннелем - адрес выходного узла. Разница между ними и отвечает на
+		   вопрос «ходит ли сам роутер через VPN».
+		   СНАЧАЛА «ЧЕМ УЗНАЁМ», ПОТОМ «ПОКАЗЫВАТЬ ЛИ». Сервис общий с тестом
+		   скорости, поэтому он виден всегда - даже когда показ выключен;
+		   выключатель ниже управляет только строками в карточках.
+		   Фолбэков у адреса намеренно нет - спрашиваем ровно то, что задано:
+		   кому показывать свой адрес, человек решает сам. */
+		var exsv = exp.option(form.SectionValue, '__extipsvc', form.TypedSection, '5gmodem');
+		var exs = exsv.subsection;
+		exs.anonymous = true;
+		exs.title = _('External IP');
+		exs.description = _('Where the router asks what its address looks like from the outside. The speed-test card uses the same service.');
+
+		o = exs.option(form.Value, 'extip_url', _('IPv4 service'),
+			_('Only this service is queried - there are no silent fallbacks. One that also returns the country (like ip-api.com) gets a flag shown next to the address. Foreign services often stay silent over Russian cellular; the Yandex one answers there.'));
+		o.value('http://ip-api.com/line/?fields=countryCode,query', 'ip-api.com (IP + ' + _('country') + ')');
+		o.value('https://api.ipify.org', 'ipify (api.ipify.org)');
+		o.value('https://ifconfig.me/ip', 'ifconfig.me');
+		o.value('https://icanhazip.com', 'icanhazip.com');
+		o.value('https://ident.me', 'ident.me');
+		o.value('https://ipinfo.io/ip', 'ipinfo.io');
+		o.value('https://yandex.ru/internet/api/v0/ip', 'Yandex - RU (' + _('works over cellular') + ')');
+		o.default = 'http://ip-api.com/line/?fields=countryCode,query';
+		o.placeholder = 'http://ip-api.com/line/?fields=countryCode,query';
+		o.rmempty = true;
+
+		o = exs.option(form.Value, 'extip_url6', _('IPv6 service'),
+			_('Queried only when the router actually has an IPv6 default route - otherwise the request would just sit there until it times out.'));
+		o.value('https://api6.ipify.org', 'ipify (api6.ipify.org)');
+		o.value('https://v6.ident.me', 'ident.me (v6)');
+		o.value('https://ipv6.icanhazip.com', 'icanhazip.com (v6)');
+		o.default = 'https://api6.ipify.org';
+		o.placeholder = 'https://api6.ipify.org';
+		o.rmempty = true;
+
+		o = exs.option(form.Value, 'extip_cc_url', _('Country lookup'),
+			_('Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder.'));
+		o.value('http://ip-api.com/line/{ip}?fields=countryCode', 'ip-api.com');
+		o.value('https://ipapi.co/{ip}/country/', 'ipapi.co');
+		o.placeholder = 'http://ip-api.com/line/{ip}?fields=countryCode';
+		o.rmempty = true;
+
+		o = exs.option(form.Value, 'extip_ua', _('User-Agent'),
+			_('Header sent with the request. Some services answer a console client with plain text and a browser with an HTML page; and a header of your own keeps the router from introducing itself as one. Empty - whatever curl/wget sends by default.'));
+		o.value('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', 'Chrome (Windows)');
+		o.value('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', 'Safari (macOS)');
+		o.value('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1', 'Safari (iPhone)');
+		o.value('curl/8.19.0', 'curl');
+		o.rmempty = true;
+
+		/* ПРОВЕРКА ПРЯМО ИЗ НАСТРОЕК. Выбрать сервис вслепую нельзя: половина
+		   из них с сотовой в РФ молчит, и без ответа тут же на месте человек
+		   узнал бы об этом только по пустой строке в карточке. Кнопка спрашивает
+		   ИМЕННО ТО, ЧТО СЕЙЧАС В ПОЛЯХ, - до сохранения. */
+		o = exs.option(form.Button, '__extip_check', _('Check now'),
+			_('Query the services above with the current settings and show what they answer.'));
+		o.inputtitle = _('Check');
+		o.inputstyle = 'apply';
+		/* ОТВЕТ - ПОД КНОПКОЙ, А НЕ ВСПЛЫВАШКОЙ. Уведомление LuCI показывается
+		   в самом верху страницы, а «Для экспертов» - в самом низу: нажавший
+		   кнопку не увидел бы своего же ответа, не пролистав вверх. */
+		o.onclick = function(ev, section_id) {
+			var btn = ev.target;
+			var fld = (btn.closest && btn.closest('.cbi-value-field')) || btn.parentNode;
+			var box = fld.querySelector('.extip-res');
+			if (!box) { box = E('div', { 'class': 'extip-res' }); fld.appendChild(box); }
+			var u4 = this.section.formvalue(section_id, 'extip_url') || 'http://ip-api.com/line/?fields=countryCode,query';
+			var u6 = this.section.formvalue(section_id, 'extip_url6') || '';
+			var ua = this.section.formvalue(section_id, 'extip_ua') || '';
+			/* Флаг вместо кода страны - как в карточке модема и в «Приоритете
+			   интернета»: одна и та же вещь везде выглядит одинаково. */
+			var line = function(fam, res) {
+				var d = {};
+				try { d = JSON.parse(res || '{}'); } catch (e) {}
+				if (d.ok == 1) {
+					return E('div', {}, [
+						E('span', { 'class': 'extip-res-fam' }, fam + ': '),
+						E('span', {}, extip.withFlag(d.ip, d.cc)),
+						d.src ? E('span', { 'class': 'extip-res-src' }, ' - ' + d.src) : ''
+					]);
+				}
+				return E('div', { 'class': 'extip-res-bad' },
+					fam + ': ' + _('no answer from %s').format(d.src || '?'));
+			};
+			btn.disabled = true;
+			dom.content(box, E('div', { 'class': 'extip-res-wait' }, _('Checking…')));
+			return L.resolveDefault(fs.exec_direct(EXTIPBIN, [ 'probe', u4, '4', ua ]), '')
+				.then(function(r4) {
+					var out = [ line('extIPv4', r4) ];
+					if (!u6) { return out; }
+					return L.resolveDefault(fs.exec_direct(EXTIPBIN, [ 'probe', u6, '6', ua ]), '')
+						.then(function(r6) { out.push(line('extIPv6', r6)); return out; });
+				}).then(function(out) {
+					dom.content(box, out);
+					btn.disabled = false;
+				});
+		};
+
+		o = exp.option(form.Flag, 'extip_enabled', _('Show the external address'),
+			_('Show it next to the address the carrier assigned - in the modem card as "IPv4: 10.x.x.x | 1.2.3.4". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router\'s own traffic goes through the VPN. Off by default: this is a request to a third-party service.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		var exdv = exp.option(form.SectionValue, '__extipshow', form.TypedSection, '5gmodem');
+		exdv.depends('extip_enabled', '1');
+		var exd = exdv.subsection;
+		exd.anonymous = true;
+
+		o = exd.option(form.Flag, 'extip_in_netpri', _('Show in the priority bar'),
+			_('On the card of the uplink that currently carries the traffic, show the external address instead of the one assigned by the carrier.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		o = exd.option(ListDropdown, 'extip_ttl', _('Refresh interval'),
+			_('How often the address is looked up again. A change of uplink refreshes it immediately, without waiting for the interval.'));
+		o.value('60', _('Every minute'));
+		o.value('300', _('Every 5 minutes'));
+		o.value('900', _('Every 15 minutes'));
+		o.value('1800', _('Every 30 minutes'));
+		o.default = '300';
 
 		/* База метрик аплинков (issue #12). По умолчанию 100, 110, 120... -
 		   туннелям (wireguard, zerotier) остаётся весь диапазон 1-99. Галочка

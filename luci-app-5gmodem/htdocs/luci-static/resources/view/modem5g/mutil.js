@@ -266,7 +266,16 @@ function lsSweep(prefixes, maxAgeDays) {
 	lsIdxWrite(idx);
 }
 
+/* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
+   буквы. Пусто, если код не 2 латинские буквы. */
+function flagEmoji(cc) {
+	cc = String(cc || '').toUpperCase();
+	if (!/^[A-Z]{2}$/.test(cc)) { return ''; }
+	return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
+}
+
 return baseclass.extend({
+	flagEmoji: flagEmoji,
 	ratLabel: ratLabel,
 	formatModeDisplay: formatModeDisplay,
 	cellVal: cellVal,

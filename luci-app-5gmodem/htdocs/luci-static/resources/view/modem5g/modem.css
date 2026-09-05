@@ -1225,6 +1225,41 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
 @media (max-width: 800px) {
   #modemip6 { font-size: 0.7em; }
 }
+/* внешний адрес в той же строке, что и выданный оператором: разделитель
+   бледный, сам адрес - обычным цветом, чтобы читались оба как равные. */
+.tginfo-info .tginfo-extsep {
+  opacity: 0.35;
+  margin: 0 0.45em;
+}
+.tginfo-info .tginfo-extip {
+  white-space: nowrap;
+}
+/* «Простой вид»: два адреса в одной строке - это уже не простой вид. Оставляем
+   один, внешний (он с флагом и говорит сам за себя). */
+body.sc-simple .tginfo-info .has-ext .tginfo-locip,
+body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
+  display: none !important;
+}
+
+/* ответ кнопки «Проверить» - строкой под самой кнопкой */
+.extip-res {
+  margin-top: 0.5em;
+  font-size: 0.92em;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.extip-res .extip-res-fam {
+  font-weight: 600;
+  margin-right: 0.25em;
+}
+.extip-res .extip-res-src,
+.extip-res .extip-res-wait {
+  opacity: 0.6;
+}
+.extip-res .extip-res-bad {
+  opacity: 0.6;
+}
+
 /* правая колонка шапки: SIM-слоты над температурой, прижаты вправо */
 .tginfo-right {
   margin-left: auto;

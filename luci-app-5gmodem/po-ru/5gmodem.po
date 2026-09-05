@@ -4782,7 +4782,7 @@ msgstr "Модуляция: чем выше QAM, тем быстрее пере�
 msgid "Component carrier: PCC is the main one, SCC are added by carrier aggregation."
 msgstr "Компонент агрегации: PCC — основная несущая, SCC — добавленные."
 
-msgid "Живые метрики сигнала и звук для настройки внешней антенны."
+msgid "Live signal metrics and a tone for aiming an external antenna."
 msgstr "Живые метрики сигнала и звук для настройки внешней антенны."
 
 msgid "Collecting data from the modem…"
@@ -5308,3 +5308,90 @@ msgstr "Использовать шлюз по умолчанию"
 
 msgid "Use gateway metric"
 msgstr "Использовать метрику шлюза"
+
+msgid "Check now"
+msgstr "Проверить сейчас"
+
+msgid "Every minute"
+msgstr "Каждую минуту"
+
+msgid "Every 5 minutes"
+msgstr "Каждые 5 минут"
+
+msgid "Every 15 minutes"
+msgstr "Каждые 15 минут"
+
+msgid "Every 30 minutes"
+msgstr "Каждые 30 минут"
+
+msgid "External IP"
+msgstr "Внешний IP"
+
+msgid "External address as seen from the internet%s"
+msgstr "Внешний адрес, каким его видит интернет%s"
+
+msgid "External address via %s. Interface address: %s"
+msgstr "Внешний адрес по данным %s. Адрес интерфейса: %s"
+
+msgid "Header sent with the request. Some services answer a console client with plain text and a browser with an HTML page; and a header of your own keeps the router from introducing itself as one. Empty - whatever curl/wget sends by default."
+msgstr "Заголовок, который уходит с запросом. Одни сервисы отвечают консольному клиенту простым текстом, а браузерному - HTML-страницей; свой заголовок к тому же не выдаёт в вас роутер. Пусто - то, чем представляется сам curl/wget."
+
+msgid "How often the address is looked up again. A change of uplink refreshes it immediately, without waiting for the interval."
+msgstr "Как часто адрес узнаётся заново. Смена аплинка обновляет его сразу, не дожидаясь интервала."
+
+msgid "IPv4 service"
+msgstr "Сервис для IPv4"
+
+msgid "IPv6 service"
+msgstr "Сервис для IPv6"
+
+msgid "On the card of the uplink that currently carries the traffic, show the external address instead of the one assigned by the carrier."
+msgstr "На карточке аплинка, через который сейчас идёт трафик, показывать внешний адрес вместо выданного оператором."
+
+msgid "Only this service is queried - there are no silent fallbacks. One that also returns the country (like ip-api.com) gets a flag shown next to the address. Foreign services often stay silent over Russian cellular; the Yandex one answers there."
+msgstr "Спрашивается только он - никаких тихих запасных. Сервис, который отдаёт ещё и страну (как ip-api.com), даёт флаг рядом с адресом. Зарубежные сервисы с сотовой в РФ часто молчат - там отвечает яндексовский."
+
+msgid "Queried only when the router actually has an IPv6 default route - otherwise the request would just sit there until it times out."
+msgstr "Спрашивается, только когда у роутера правда есть маршрут по умолчанию для IPv6 - иначе запрос просто висел бы до таймаута."
+
+msgid "Query the services above with the current settings and show what they answer."
+msgstr "Спросить сервисы выше с текущими настройками и показать, что они ответят."
+
+msgid "Refresh interval"
+msgstr "Как часто обновлять"
+
+msgid "Show in the priority bar"
+msgstr "Показывать в «Приоритете интернета»"
+
+msgid "Show the address the internet sees (extIPv4/extIPv6) next to the one the carrier assigned. Behind CGNAT or a tunnel the two differ - and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "Показывать адрес, каким роутер виден интернету (extIPv4/extIPv6), рядом с выданным оператором. За CGNAT и за туннелем они разные - и по этой разнице видно, идёт ли собственный трафик роутера через VPN. По умолчанию выключено: это запрос к постороннему сервису."
+
+msgid "User-Agent"
+msgstr "User-Agent"
+
+msgid "country"
+msgstr "страна"
+
+msgid "no answer from %s"
+msgstr "%s не ответил"
+
+msgid "works over cellular"
+msgstr "работает через сотовую"
+
+msgid "Shared with \"External IP\" - set it under \"For experts\""
+msgstr "Общий с «Внешним IP» - задаётся в «Для экспертов»"
+
+msgid "Show the external address"
+msgstr "Показывать внешний адрес"
+
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "Показывать его рядом с выданным оператором - в карточке модема строкой «IPv4: 10.x.x.x | 1.2.3.4». За CGNAT и за туннелем они разные, и по этой разнице видно, идёт ли собственный трафик роутера через VPN. По умолчанию выключено: это запрос к постороннему сервису."
+
+msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
+msgstr "Нужен, только если сервис выше отдаёт адрес, но не страну: тогда флаг узнаётся вторым запросом - за одной лишь страной. {ip} - место для адреса."
+
+msgid "Where the router asks what its address looks like from the outside. The speed-test card uses the same service."
+msgstr "Где роутер спрашивает, каким его адрес выглядит снаружи. Тем же сервисом пользуется карточка теста скорости."
+
+msgid "The address is public: the interface has exactly what the internet sees%s"
+msgstr "Адрес белый: на интерфейсе ровно то, что видит интернет%s"

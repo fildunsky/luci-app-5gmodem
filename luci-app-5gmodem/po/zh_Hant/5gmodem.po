@@ -4590,7 +4590,7 @@ msgstr "調製方式：QAM 階數越高，數據速率越快。"
 msgid "Component carrier: PCC is the main one, SCC are added by carrier aggregation."
 msgstr "分量載波：PCC 為主載波，SCC 由載波聚合添加。"
 
-msgid "Живые метрики сигнала и звук для настройки внешней антенны."
+msgid "Live signal metrics and a tone for aiming an external antenna."
 msgstr "實時信號指標與提示音，用於調整外置天線。"
 
 msgid "Collecting data from the modem…"
@@ -4830,3 +4830,462 @@ msgstr "後端返回為空"
 msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "詳情見系統日誌（logread，標籤 5gmodem）。"
 
+
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> Name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
+
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
+
+msgid "Interface \"%s\" created (%s), bringing it up…"
+msgstr "已建立接口“%s”（%s），正在啟動…"
+
+msgid "Interface \"%s\" already exists — bringing it up."
+msgstr "接口“%s”已存在 — 正在啟動。"
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems)."
+msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。MBIM（核心 umbim）對 MBIM 模組最可靠，並會停用 ModemManager。選擇 ModemManager 則由 MM 管理模組（指標更豐富，但在部分模組上不穩定）。"
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem)."
+msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。只列出路由器上已安裝處理程式的協定。除 ModemManager 之外的任何協定都會停用 ModemManager：它們無法共用同一個模組。"
+
+msgid "Live settings of the current modem interface \"%s\". Edit and press Save & Apply at the bottom; use \"Recreate\" above to rebuild it with the chosen protocol."
+msgstr "目前數據機接口“%s”的即時設定。修改後請點擊下方的“儲存並套用”；如需按所選協定重建，請使用上方的“重建”。"
+
+msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
+msgstr "數據機接口“%s”的目前設定。完整編輯請前往“網路 → 接口”頁面。"
+
+msgid "Show the \"Internet priority\" bar on the Network page for quickly switching the primary uplink (modems / WAN / Wi-Fi)."
+msgstr "在“網路”頁面顯示“網際網路優先級”欄，用於快速切換主上行（數據機 / WAN / Wi-Fi）。"
+
+msgid "Delete profile \"%s\" (%s)? This cannot be undone."
+msgstr "刪除設定檔“%s”（%s）？此操作無法復原。"
+
+msgid "Settings for the speed-test button in the \"Internet priority\" block on the Network page. The test runs from the router over the active uplink."
+msgstr "“網路”頁面“網際網路優先級”區塊中測速按鈕的設定。測速從路由器出發，經目前使用中的上行進行。"
+
+msgid "Operator changed to \"%s\" after switching the eSIM profile. The recommended APN is \"%s\" (current: \"%s\"). Open Modem Settings to apply it."
+msgstr "切換 eSIM 設定檔後電信業者已變為“%s”。建議的 APN 為“%s”（目前：“%s”）。請開啟數據機設定以套用。"
+
+msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
+msgstr "lpac 與電信業者伺服器（SM-DP+）通訊的方式。“自動”在可用時使用橋接。橋接能存取使用 GSMA CI 憑證的 SM-DP+ 伺服器——mbedTLS 建置中內建的 curl 無法處理這類憑證——並且會驗證憑證。"
+
+msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
+msgstr "測速需要 curl 套件：請用“apk add curl”（或“opkg install curl”）安裝。它未隨應用一起打包——在 8 MB 快閃記憶體的路由器上 libcurl 的體積很可觀。"
+
+msgid "Its network interface \"%s\" will be removed too."
+msgstr "它的網路接口“%s”也會一併刪除。"
+
+msgid "The interface \"%s\" stays: another profile uses it."
+msgstr "接口“%s”將保留：另一個設定檔正在使用它。"
+
+msgid "APN for the new operator may differ. Recommended: \"%s\" (current: \"%s\"). You are in manual APN mode - open Modem Settings to apply it."
+msgstr "新電信業者的 APN 可能不同。建議：“%s”（目前：“%s”）。您處於手動 APN 模式——請開啟數據機設定以套用。"
+
+msgid "IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to \"IPv4 only\" only if a modem has trouble with dual-stack."
+msgstr "數據機接口的 IP 類型。IPv4/IPv6 是穩妥的預設值：在僅 IPv4 的網路中模組只會協商 IPv4，而某些網路（例如 FM350 上的 Tele2）在僅 IPv4 時根本不會啟用資料內容。只有當模組在雙堆疊下出問題時才切換到“僅 IPv4”。"
+
+msgid "Interface \"%s\" created (DHCP on %s), bringing it up…"
+msgstr "已建立接口“%s”（%s 上的 DHCP），正在啟動…"
+
+msgid "Show the \"TTL fixing\" block on the Network page."
+msgstr "在“網路”頁面顯示“TTL 修正”區塊。"
+
+msgid "How lpac reaches the eSIM chip. \"Auto\" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT."
+msgstr "lpac 存取 eSIM 晶片的方式。“自動”為序列埠模組（FM350）選擇 AT，為透過 cdc-wdm 驅動的模組選擇 QMI/MBIM。對於 eUICC 無法透過 AT 存取的高通模組（T99W175 / MV31-W / DW5930e），請手動設為 QMI/MBIM。"
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
+msgstr "數據機目前註冊在 %s，而 USSD 走電路交換通道，LTE 沒有這一通道。多數模組仍會回應；如果這台一直沉默，請在下方設定中啟用“USSD 時切換到 3G”。"
+
+msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
+msgstr "這台數據機由 ModemManager 管理，控制通道屬於 MM。在同一通道上再開一個 eSIM 工作階段可能導致模組韌體當機（在 T99W175 上實測：模組會重新啟動）。要管理 eSIM，請先在數據機設定中啟用“對 ModemManager 隱藏”（或變更接口協定），然後再回到此頁。"
+
+msgid "Adds the \"Statistics\" tab with charts of uplink latency, signal, temperature and monthly traffic."
+msgstr "新增“統計”分頁，顯示上行延遲、訊號、溫度和每月流量的圖表。"
+
+msgid "Collects uplink latency, signal, temperature and monthly traffic, and shows the \"Statistics\" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself."
+msgstr "蒐集上行延遲、訊號、溫度和每月流量，並在“統計”分頁中顯示圖表。資料序列保存在記憶體裡；每月流量可以在該分頁上設定為跨重新啟動保留。"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Inbox settings page."
+msgstr "機器人已連線，可以接收訊息。若要從聊天中傳送簡訊，請在“收件匣”設定頁勾選“允許從聊天傳送簡訊”。"
+
+msgid "Icons"
+msgstr "圖示"
+
+msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
+msgstr "以空格分隔，例如“1.1.1.1 8.8.8.8”。"
+
+msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
+msgstr "eSIM 晶片所在的 SIM 卡槽。“自動”跟隨模組中目前啟用的卡槽。如果晶片可讀但設定檔清單始終為空（例如卡槽 1 中的可插拔 eSIM），請明確指定。"
+
+msgid "A link marked here never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "標記為此的鏈路不會自動承載流量——要使用它，請先點擊它的卡片把它設為主用。適合作為備用鏈路，例如連到手機的 Wi-Fi。"
+
+msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. A modem that cannot receive into the chosen storage keeps its own, and this setting is corrected to match - the list always shows the box the messages actually land in. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
+msgstr "既讀取也接收：會讓數據機把新收到的訊息也放到這裡。如果模組無法接收到所選儲存區，它會保留自己的儲存區，此設定也隨之修正——清單始終顯示訊息實際落入的位置。SIM 卡只能存二三十條訊息，存滿後電信業者就不再投遞。在您做出選擇之前，應用會自行選用兩者中較大的儲存區。"
+
+msgid "Restart on uplink"
+msgstr "上行恢復後重新啟動"
+
+msgid "Restart the service once the uplink starts carrying traffic."
+msgstr "當上行開始承載流量後重新啟動該服務。"
+
+msgid "Keep messages in router memory"
+msgstr "把訊息保存在路由器上"
+
+msgid "Copy incoming messages to the router and show them from there. Modem storage is tiny - some modems have no memory of their own at all and can only use the SIM card, where a couple of dozen slots fill up and the operator stops delivering. Messages are kept on flash and survive a reboot."
+msgstr "把收到的訊息複製到路由器並從這裡顯示。模組的儲存空間非常小——有些模組自身沒有儲存空間，只能用 SIM 卡，而那裡只有幾十個槽位，存滿後電信業者就不再投遞。訊息保存在快閃記憶體中，重新啟動後仍在。"
+
+msgid "Free modem slots"
+msgstr "釋放模組槽位"
+
+msgid "Delete a message from the modem once it is in the router memory. This is what removes the limit. A message is only deleted after it has been stored AND, if enabled, forwarded to Telegram and offered to the SMS commands - so nothing is lost when the network is down."
+msgstr "訊息存入路由器之後，把它從模組中刪除。正是這一步解除了容量限制。只有在訊息已保存，並且（若已啟用）已轉發到 Telegram 並交給簡訊命令之後，才會刪除——因此網路中斷時不會遺失任何訊息。"
+
+msgid "Keep at most"
+msgstr "最多保留"
+
+msgid "Older messages are dropped when the limit is reached."
+msgstr "達到上限後，較早的訊息會被丟棄。"
+
+msgid "%s messages"
+msgstr "%s 條訊息"
+
+msgid "Run commands from SMS"
+msgstr "透過簡訊執行命令"
+
+msgid "Execute a configured command when a message starts with its keyword. Useful when the router is unreachable over the network - SMS still gets through. The message text is never pasted into the command line: whatever follows the keyword is passed as the SMS_ARGS environment variable."
+msgstr "當訊息以某條命令的關鍵字開頭時，執行已設定的命令。在路由器無法透過網路存取時很有用——簡訊仍然送得到。訊息文字絕不會拼進命令列：關鍵字之後的內容透過環境變數 SMS_ARGS 傳入。"
+
+msgid "Trusted numbers only"
+msgstr "僅限信任號碼"
+
+msgid "Run commands only from the numbers listed below. With this on and the list empty, nothing runs at all. Turning it off lets anyone who knows the SIM number run your commands."
+msgstr "只執行來自下列號碼的命令。開啟此項而清單為空時，任何命令都不會執行。關閉它，則任何知道 SIM 卡號碼的人都能執行您的命令。"
+
+msgid "Trusted numbers"
+msgstr "信任號碼"
+
+msgid "Compared by the last ten digits, so +7…, 8… and 7… are the same number."
+msgstr "按最後十位數字比較，因此 +7…、8… 和 7… 是同一個號碼。"
+
+msgid "Keyword"
+msgstr "關鍵字"
+
+msgid "First word of the message, case-insensitive"
+msgstr "訊息的第一個詞，不區分大小寫"
+
+msgid "Command"
+msgstr "命令"
+
+msgid "Shell command to run"
+msgstr "要執行的 shell 命令"
+
+msgid "Send the command output back to the sender"
+msgstr "把命令輸出回覆給傳送者"
+
+msgid "Reply text"
+msgstr "回覆文字"
+
+msgid "Sent before the output; on its own when a delay is set"
+msgstr "在輸出之前傳送；設定了延遲時則單獨傳送"
+
+msgid "Delay, s"
+msgstr "延遲，秒"
+
+msgid "Wait before running. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "執行前先等待。設定延遲後會先傳送回覆——這是 reboot 這類命令唯一能夠作出回應的方式。"
+
+msgid "The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "關鍵字是訊息的第一個詞，不區分大小寫；其餘內容作為 SMS_ARGS 傳給命令。設定延遲後會先傳送回覆——這是 reboot 這類命令唯一能夠作出回應的方式。"
+
+msgid "What counts as a modem"
+msgstr "什麼算作數據機"
+
+msgid "USB devices with ports that the app found. Uncheck the ones that are not modems — a USB-to-serial adapter, for example — and they lose their tab and stop being probed with AT commands."
+msgstr "應用找到的、帶連接埠的 USB 裝置。取消勾選那些不是數據機的裝置——例如 USB 轉序列埠轉換器——它們會失去自己的分頁，也不再被 AT 命令探測。"
+
+msgid "not on the bus"
+msgstr "不在匯流排上"
+
+msgid "A shell command, exactly as you would type it over SSH."
+msgstr "一條 shell 命令，與您透過 SSH 輸入的完全一樣。"
+
+msgid "CDC Ethernet interface"
+msgstr "CDC Ethernet 接口"
+
+msgid "CDC NCM interface"
+msgstr "CDC NCM 接口"
+
+msgid "cellular module vendor"
+msgstr "行動網路模組廠商"
+
+msgid "empty - no code"
+msgstr "留空表示不用密語"
+
+msgid "Every USB device the app found with ports of its own. Checked ones are treated as modems; the app decides that by the drivers the kernel bound to the device, so an adapter or a printer stays out. Check a device to force it in, uncheck one to make it lose its tab and stop being probed with AT commands."
+msgstr "應用找到的每一個自帶連接埠的 USB 裝置。勾選的會被當作數據機；應用依據核心為裝置繫結的驅動來判斷，因此轉換器或印表機不會被算進來。勾選可強制納入，取消勾選則該裝置失去分頁，也不再被 AT 命令探測。"
+
+msgid "excluded by hand"
+msgstr "已手動排除"
+
+msgid "has answered as a modem before"
+msgstr "此前曾以數據機身分回應"
+
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "訊息的第一個詞，位於命令詞之前：“%s” 會執行下面名為 “reboot” 的命令。請把它改成只有您知道的詞——預設值對所有人都一樣。留空表示完全不用密語，那時唯一的保護就是信任號碼清單，而傳送號碼是可以偽造的。"
+
+msgid "marked as a modem by hand"
+msgstr "已手動標記為數據機"
+
+msgid "MBIM interface"
+msgstr "MBIM 接口"
+
+msgid "modem driver in the kernel"
+msgstr "核心中的數據機驅動"
+
+msgid "no modem driver and no modem network interface"
+msgstr "既沒有數據機驅動，也沒有數據機網路接口"
+
+msgid "Security code"
+msgstr "安全密語"
+
+msgid "Send the word from the first column in an SMS - the router runs what is in the second. The word is matched without case, anything after it reaches the command as SMS_ARGS. A command that kills the connection (reboot, modem power cycle) needs a delay: the reply is then sent BEFORE the command runs, which is the only way it can be sent at all."
+msgstr "用簡訊傳送第一欄中的詞——路由器就會執行第二欄中的內容。該詞不區分大小寫，其後的全部內容作為 SMS_ARGS 傳給命令。會中斷連線的命令（重新啟動、模組斷電重啟）需要設定延遲：這樣回覆會在命令執行之前發出，也只有這樣才發得出去。"
+
+msgid "USB-to-serial adapter"
+msgstr "USB 轉序列埠轉換器"
+
+msgid "What to run"
+msgstr "要執行什麼"
+
+msgid "Word in the SMS"
+msgstr "簡訊中的詞"
+
+msgid "Send an SMS that starts with the word of a command below - the router runs it. Useful when the router is unreachable over the network: SMS still gets through. The message text is never pasted into the command line, whatever follows the word is passed as the SMS_ARGS environment variable."
+msgstr "傳送以下面某條命令的詞開頭的簡訊——路由器就會執行它。當路由器無法透過網路存取時很有用：簡訊仍然送得到。訊息文字絕不會拼進命令列，詞之後的內容透過環境變數 SMS_ARGS 傳入。"
+
+msgid "Reassociating"
+msgstr "正在重新關聯"
+
+msgid "Restarting the radio"
+msgstr "正在重新啟動無線電"
+
+msgid "Rebuilding the network"
+msgstr "正在重建網路"
+
+msgid "modem web API"
+msgstr "數據機 web 介面"
+
+msgid "%ds"
+msgstr "%d 秒"
+
+msgid "%dm"
+msgstr "%d 分"
+
+msgid "Device blacklist"
+msgstr "裝置黑名單"
+
+msgid "USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately."
+msgstr "應用不確定的 USB 裝置——它們不在應用的數據機資料庫中。勾選某個裝置即可把它從應用中移除：沒有分頁，不做 AT 探測，也不出現在網際網路優先級裡。立即生效。"
+
+msgid "No doubtful devices: everything found on the bus is in the modem database."
+msgstr "沒有可疑裝置：匯流排上找到的一切都在數據機資料庫中。"
+
+msgid "returned to modems by hand"
+msgstr "已手動恢復為數據機"
+
+msgid "none"
+msgstr "無"
+
+msgid "%s - receive only, works only as an aggregation carrier"
+msgstr "%s — 僅接收，只能作為載波聚合的輔載波工作"
+
+msgid "%s is running"
+msgstr "%s 正在執行"
+
+msgid "%s is stopped"
+msgstr "%s 已停止"
+
+msgid "(#%d)"
+msgstr "(#%d)"
+
+msgid "APN profile index"
+msgstr "APN 設定索引"
+
+msgid "Applying bands — the connection will briefly drop, then reconnect."
+msgstr "正在套用頻段 — 連線會短暫中斷，然後重新連線。"
+
+msgid "Authentication Type"
+msgstr "驗證方式"
+
+msgid "Cell EARFCN/PCI unknown yet - try again in a few seconds"
+msgstr "尚不知道小區的 EARFCN/PCI — 請過幾秒再試"
+
+msgid "Change bands"
+msgstr "變更頻段"
+
+msgid "Changing bands briefly interrupts the connection: the app hands the modem to ModemManager, applies the change and reconnects (up to a minute)."
+msgstr "變更頻段會短暫中斷連線：應用先把數據機交給 ModemManager，套用變更後再重新連線（最多一分鐘）。"
+
+msgid "Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received"
+msgstr "勾選此項會讓訊息更易閱讀，但會導致顯示的訊息數量與實際收到的數量不一致"
+
+msgid "Could not read messages"
+msgstr "無法讀取訊息"
+
+msgid "Ec/No"
+msgstr "Ec/No"
+
+msgid "IPv6 APN"
+msgstr "IPv6 APN"
+
+msgid "IPv6 APN profile index"
+msgstr "IPv6 APN 設定索引"
+
+msgid "If unchecked, no default route is configured"
+msgstr "不勾選則不設定預設路由"
+
+msgid "If unchecked, the advertised DNS server addresses are ignored"
+msgstr "不勾選則忽略對端通告的 DNS 伺服器位址"
+
+msgid "Lock to this cell (EARFCN %s, PCI %s)"
+msgstr "鎖定到此小區（EARFCN %s，PCI %s）"
+
+msgid "MBIM"
+msgstr "MBIM"
+
+msgid "Maximum amount of seconds to wait for the modem to become ready"
+msgstr "等待數據機就緒的最長秒數"
+
+msgid "Modem device"
+msgstr "數據機裝置"
+
+msgid "Modem init timeout"
+msgstr "數據機初始化逾時"
+
+msgid "ModemManager"
+msgstr "ModemManager"
+
+msgid "Open the SSClash admin panel in a new tab"
+msgstr "在新分頁中開啟 SSClash 管理面板"
+
+msgid "Override MTU"
+msgstr "覆寫 MTU"
+
+msgid "PDP Type"
+msgstr "PDP 類型"
+
+msgid "PIN"
+msgstr "PIN"
+
+msgid "RSCP"
+msgstr "RSCP"
+
+msgid "Reset"
+msgstr "重設"
+
+msgid "This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool"
+msgstr "此選項可用於備份簡訊，或者例如保存 sms-tool 不支援的訊息"
+
+msgid "To change bands the app briefly hands this modem to ModemManager, applies the change and reconnects. The connection will drop for up to a minute."
+msgstr "變更頻段時，應用會把這台數據機暫時交給 ModemManager，套用變更後再重新連線。連線會中斷，最多一分鐘。"
+
+msgid "USB vendor and product ID"
+msgstr "USB 廠商與產品 ID"
+
+msgid "Use DNS servers advertised by peer"
+msgstr "使用對端通告的 DNS 伺服器"
+
+msgid "Use default gateway"
+msgstr "使用預設閘道"
+
+msgid "Use gateway metric"
+msgstr "使用閘道躍點數"
+
+msgid "Check now"
+msgstr "立即檢查"
+
+msgid "Every minute"
+msgstr "每分鐘"
+
+msgid "Every 5 minutes"
+msgstr "每 5 分鐘"
+
+msgid "Every 15 minutes"
+msgstr "每 15 分鐘"
+
+msgid "Every 30 minutes"
+msgstr "每 30 分鐘"
+
+msgid "External IP"
+msgstr "外網 IP"
+
+msgid "External address as seen from the internet%s"
+msgstr "網際網路看到的外部位址%s"
+
+msgid "External address via %s. Interface address: %s"
+msgstr "外部位址來自 %s。接口位址：%s"
+
+msgid "Header sent with the request. Some services answer a console client with plain text and a browser with an HTML page; and a header of your own keeps the router from introducing itself as one. Empty - whatever curl/wget sends by default."
+msgstr "隨請求傳送的標頭。有些服務對命令列用戶端回傳純文字，對瀏覽器回傳 HTML 頁面；自訂標頭還能避免路由器自報家門。留空則使用 curl/wget 自身的預設值。"
+
+msgid "How often the address is looked up again. A change of uplink refreshes it immediately, without waiting for the interval."
+msgstr "多久重新查詢一次位址。切換上行會立即重新整理，不必等到間隔結束。"
+
+msgid "IPv4 service"
+msgstr "IPv4 服務"
+
+msgid "IPv6 service"
+msgstr "IPv6 服務"
+
+msgid "On the card of the uplink that currently carries the traffic, show the external address instead of the one assigned by the carrier."
+msgstr "在目前承載流量的那條上行的卡片上，顯示外部位址而不是電信業者分配的位址。"
+
+msgid "Only this service is queried - there are no silent fallbacks. One that also returns the country (like ip-api.com) gets a flag shown next to the address. Foreign services often stay silent over Russian cellular; the Yandex one answers there."
+msgstr "只會查詢這一個服務——沒有任何暗中的備援。若服務同時回傳國家（例如 ip-api.com），位址旁會顯示國旗。國外服務在俄羅斯的行動網路下常常沒有回應，那裡 Yandex 的服務可用。"
+
+msgid "Queried only when the router actually has an IPv6 default route - otherwise the request would just sit there until it times out."
+msgstr "只有當路由器確實存在 IPv6 預設路由時才會查詢——否則請求只會一直掛到逾時。"
+
+msgid "Query the services above with the current settings and show what they answer."
+msgstr "用目前設定詢問上面的服務，並顯示它們的回答。"
+
+msgid "Refresh interval"
+msgstr "重新整理間隔"
+
+msgid "Show in the priority bar"
+msgstr "在優先級欄中顯示"
+
+msgid "Show the address the internet sees (extIPv4/extIPv6) next to the one the carrier assigned. Behind CGNAT or a tunnel the two differ - and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "把網際網路看到的位址（extIPv4/extIPv6）顯示在電信業者分配的位址旁邊。在 CGNAT 或隧道後面二者並不相同——正是這個差別說明路由器自身的流量是否走了 VPN。預設關閉：這會向第三方服務發出請求。"
+
+msgid "User-Agent"
+msgstr "User-Agent"
+
+msgid "country"
+msgstr "國家"
+
+msgid "no answer from %s"
+msgstr "%s 沒有回應"
+
+msgid "works over cellular"
+msgstr "在行動網路下可用"
+
+msgid "Shared with \"External IP\" - set it under \"For experts\""
+msgstr "與“外網 IP”共用 — 在“專家選項”中設定"
+
+msgid "Show the external address"
+msgstr "顯示外部位址"
+
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "把它顯示在電信業者分配的位址旁邊——在數據機卡片中形如“IPv4: 10.x.x.x | 1.2.3.4”。在 CGNAT 或隧道後面二者並不相同，正是這個差別說明路由器自身的流量是否走了 VPN。預設關閉：這會向第三方服務發出請求。"
+
+msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
+msgstr "只有當上面的服務回傳了位址卻沒有國家時才用到：這時會再發一次請求，只為查國家，從而得到國旗。用 {ip} 作為位址佔位符。"
+
+msgid "Where the router asks what its address looks like from the outside. The speed-test card uses the same service."
+msgstr "路由器到哪裡去問自己的位址從外面看是什麼樣。測速卡片使用同一個服務。"
+
+msgid "The address is public: the interface has exactly what the internet sees%s"
+msgstr "位址是公網的：接口上就是網際網路看到的那個%s"

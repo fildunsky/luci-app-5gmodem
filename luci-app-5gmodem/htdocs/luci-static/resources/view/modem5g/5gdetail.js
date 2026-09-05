@@ -5,6 +5,7 @@
 'require view';
 'require view.modem5g.modemtabs as modemtabs';
 'require view.modem5g.netpri as netpri';
+'require view.modem5g.extip as extip';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.bandsui as bandsui';
 'require ui';
@@ -435,6 +436,58 @@ function loadSimSlots(cb) {
 		if (cb) { cb(null); }
 	});
 }
+
+/* АДРЕС ИНТЕРФЕЙСА И ВНЕШНИЙ - ОДНОЙ СТРОКОЙ: «IPv4: 100.75.179.161 |
+   🇷🇺 92.241.26.221». Ценность именно в их сопоставлении, поэтому
+   разносить по двум строкам незачем. Нет адреса на интерфейсе - нет и строки:
+   внешний в такой момент неоткуда взяться.
+   Источник у строки два (метрики модема и опрос внешнего адреса приходят
+   вразнобой), поэтому последний известный адрес интерфейса держим здесь -
+   иначе приход одного затирал бы показанное другим. */
+var _extScope = '';
+var _ipLast = { v4: '', v6: '' };
+
+function paintIpRow(kind) {
+	var v4 = (kind === 'v4');
+	var row = document.getElementById(v4 ? 'modemipn' : 'modemip6n');
+	var val = document.getElementById(v4 ? 'modemip' : 'modemip6');
+	if (!row || !val) { return; }
+	var local = _ipLast[kind];
+	if (!local) { row.style.display = 'none'; return; }
+	var st = extip.state(_extScope);
+	var ext = v4 ? st.ip : st.ip6;
+	var src = v4 ? st.src : st.src6;
+	var srcTxt = src ? (' (' + src + ')') : '';
+	var same = !!(ext && ext === local);
+	var extEl = function(tip) {
+		return E('span', { 'class': 'tginfo-extip', 'data-tooltip': tip },
+			extip.withFlag(ext, st.cc));
+	};
+	var kids;
+	if (!ext) {
+		kids = [ E('span', { 'class': 'tginfo-locip' }, local) ];
+	} else if (same) {
+		/* БЕЛЫЙ IP. Оператор выдал настоящий публичный адрес - тот же, каким
+		   роутер виден снаружи. Показывать его дважды незачем: оставляем один,
+		   и именно вариант с флагом - он же и говорит, что адрес внешний. */
+		kids = [ extEl(_('The address is public: the interface has exactly what the internet sees%s').format(srcTxt)) ];
+	} else {
+		kids = [
+			E('span', { 'class': 'tginfo-locip' }, local),
+			E('span', { 'class': 'tginfo-extsep' }, '|'),
+			extEl(_('External address as seen from the internet%s').format(srcTxt))
+		];
+	}
+	/* Метка для «Простого вида»: там два адреса в строке - уже не простой вид,
+	   поэтому CSS прячет свой адрес и разделитель, оставляя внешний с флагом.
+	   Классом, а не пересборкой: переключатель режима не перерисовывает
+	   карточку, он лишь вешает класс на body. */
+	val.classList.toggle('has-ext', !!(ext && !same));
+	dom.content(val, kids);
+	row.style.display = '';
+}
+
+function applyExtIp() { paintIpRow('v4'); paintIpRow('v6'); }
 
 function SIMdata(data) {
 	var sdata = {};
@@ -2554,29 +2607,21 @@ function applyMetrics(json) {
 						// шапки постоянна -> нет мигания и скачков скролла).
 					}
 
-					if (document.getElementById('modemip')) {
-						var ip = json.ipaddr || '';
-						var row = document.getElementById('modemipn');
-						if (ip && ip != '-') {
-						document.getElementById('modemip').textContent = ip;
-						if (row) row.style.display = '';
+					/* ВНЕШНИЙ АДРЕС СПРАШИВАЕМ ЧЕРЕЗ САМ МОДЕМ. Обычный запрос
+					   уходит по маршруту по умолчанию, и когда основным выбран
+					   другой аплинк (Wi-Fi-станция, провод), в карточке модема
+					   оказался бы ЕГО адрес - а это разные адреса. */
+					if (json.iface) {
+						if (json.iface !== _extScope) {
+							extip.unwatch(_extScope);
+							_extScope = json.iface;
 						}
-						else if (row) {
-						row.style.display = 'none';
-						}
+						extip.watch(_extScope);
 					}
-
-					if (document.getElementById('modemip6')) {
-						var ip6 = json.ipaddr6 || '';
-						var row6 = document.getElementById('modemip6n');
-						if (ip6 && ip6 != '-') {
-						document.getElementById('modemip6').textContent = ip6;
-						if (row6) row6.style.display = '';
-						}
-						else if (row6) {
-						row6.style.display = 'none';
-						}
-					}
+					_ipLast.v4 = (json.ipaddr  && json.ipaddr  != '-') ? json.ipaddr  : '';
+					_ipLast.v6 = (json.ipaddr6 && json.ipaddr6 != '-') ? json.ipaddr6 : '';
+					paintIpRow('v4');
+					paintIpRow('v6');
 
 					if (document.getElementById('modem')) {
 						var view = document.getElementById("modem");
@@ -3539,6 +3584,12 @@ simDialog: baseclass.extend({
 		if (initjson && (initjson.modem || initjson.signal)) {
 			window.setTimeout(function() { applyMetrics(initjson); }, 0);
 		}
+
+		/* Внешний адрес: опрос один на страницу (extip.js), строки заполняем
+		   по подписке. Выключено - строк просто нет, в сеть никто не ходит. */
+		extip.init().then(function(fl) {
+			if (fl.enabled) { extip.subscribe(applyExtIp); }
+		});
 
 		var info = _('').format('');
 		m = new form.JSONMap(this.formdata, '', '');

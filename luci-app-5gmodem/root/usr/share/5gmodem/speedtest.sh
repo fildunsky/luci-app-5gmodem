@@ -86,6 +86,13 @@ _tobytes() {
 	}'
 }
 
+# ЧИСЛО ИЛИ НОЛЬ. Остановка теста убивает curl, и файл с его итогом остаётся
+# ПУСТЫМ: `awk '{print $1+0}'` по пустому файлу не печатает ничего, дальше
+# падал уже awk с пустой подстановкой, и DMBPS оставался пустым. В кэш уходило
+# "down_mbps":, - невалидный JSON, который фронт разобрать не мог, поэтому
+# после отмены карточка молча теряла и результат, и адрес.
+_num() { case "$1" in ''|*[!0-9.]*) printf '0' ;; *) printf '%s' "$1" ;; esac; }
+
 _tombps() {
 	echo "$1" | awk '{
 		v=$1; u="";
@@ -96,6 +103,14 @@ _tombps() {
 		else if (u=="g"||u=="G") m=1073741824;
 		printf "%.1f", (v*m*8)/1000000
 	}'
+}
+
+# Гео-запрос: тот же curl, но со СВОИМ User-Agent, если он задан в настройках
+# «Внешнего IP». Отдельная функция, а не подстановка аргументов: заголовок
+# содержит пробелы, и голое ${VAR:+-A $VAR} развалило бы его на слова.
+_geo() {
+	if [ -n "$GEOUA" ]; then curl --max-time "$1" -s -A "$GEOUA" "$2" 2>/dev/null
+	else curl --max-time "$1" -s "$2" 2>/dev/null; fi
 }
 
 case "$1" in
@@ -122,14 +137,22 @@ start)
 	# РФ, и через прокси. Отвечает 404/403, но ЧИТАЕТ тело -> скорость отдачи
 	# измеряется (наш код берёт speed_upload независимо от HTTP-кода).
 	[ -n "$UPURL" ] || UPURL="https://speedtest.rt.ru/backend/empty.php"
-	IPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ip_url)
+	# СЕРВИС ОПРЕДЕЛЕНИЯ АДРЕСА - ОБЩИЙ С «Внешним IP» (настройки в одном
+	# месте, см. extip.sh): раньше одно и то же спрашивалось двумя настройками.
+	# Прежние ключи читаем как запасные - ради тех, кто выставил их до переезда.
+	IPURL=$(uci -q get 5gmodem.@5gmodem[0].extip_url)
+	[ -n "$IPURL" ] || IPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ip_url)
 	# по умолчанию ip-api.com/line - отдаёт СТРАНУ и IP простым текстом
 	# ("RU\n<ip>"), чтобы рядом с IP показать флаг страны. Сервис можно сменить.
 	[ -n "$IPURL" ] || IPURL="http://ip-api.com/line/?fields=countryCode,query"
 	# Сервис для ДОЗАПРОСА страны по IP (когда основной её не отдаёт).
 	# {ip} подставляется. По умолчанию ip-api /line - возвращает голое "RU".
-	CCURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_cc_url)
+	CCURL=$(uci -q get 5gmodem.@5gmodem[0].extip_cc_url)
+	[ -n "$CCURL" ] || CCURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_cc_url)
 	[ -n "$CCURL" ] || CCURL="http://ip-api.com/line/{ip}?fields=countryCode"
+	# Свой User-Agent - оттуда же. К ЗАМЕРУ его НЕ применяем: у закачки маркер
+	# 5gmodem-speedtest, по нему stop находит и убивает именно наши curl.
+	GEOUA=$(uci -q get 5gmodem.@5gmodem[0].extip_ua)
 	# Резервный гео-сервис: отдаёт адрес И страну разом. Используется, когда
 	# основной (speedtest_ip_url) не ответил.
 	CCFALLBACK="http://ip-api.com/line/?fields=countryCode,query"
@@ -166,13 +189,13 @@ start)
 			# показывала «***.***.***.***» - почти до конца замера. Яндекс отвечает
 			# за доли секунды и доступен всегда; страну он не даёт, поэтому дальше
 			# идут обычные источники - они лишь уточнят IP и добавят cc.
-			_fast=$(_parse_ip "$(curl --max-time 3 -s "$YAIPURL" 2>/dev/null)")
+			_fast=$(_parse_ip "$(_geo 3 "$YAIPURL")")
 			[ -n "$_fast" ] && printf '%s' "$_fast" > "$GEOIP" 2>/dev/null
-			_g=$(curl --max-time 6 -s "$IPURL" 2>/dev/null)
+			_g=$(_geo 6 "$IPURL")
 			_pub=$(_parse_ip "$_g"); _cc=$(_parse_cc "$_g")
 			[ -n "$_pub" ] || _pub="$_fast"
 			if [ -z "$_pub" ]; then
-				_g2=$(curl --max-time 5 -s "$CCFALLBACK" 2>/dev/null)
+				_g2=$(_geo 5 "$CCFALLBACK")
 				_pub=$(_parse_ip "$_g2")
 				[ -n "$_cc" ] || _cc=$(_parse_cc "$_g2")
 			fi
@@ -184,7 +207,7 @@ start)
 			# Яндекс доступен всегда, отдаёт чистый JSON-строкой "1.2.3.4".
 			# Страну он не даёт - флаг в таком случае просто не покажем.
 			if [ -z "$_pub" ]; then
-				_pub=$(_parse_ip "$(curl --max-time 6 -s "$YAIPURL" 2>/dev/null)")
+				_pub=$(_parse_ip "$(_geo 6 "$YAIPURL")")
 			fi
 			_local=0
 			if [ -z "$_pub" ]; then
@@ -207,7 +230,7 @@ start)
 			# дозапрос страны - только для реально публичного адреса
 			if [ -z "$_cc" ] && [ -n "$_pub" ] && [ "$_local" = 0 ]; then
 				_ccu=$(echo "$CCURL" | sed "s|{ip}|$_pub|g")
-				_cc=$(_parse_cc "$(curl --max-time 4 -s "$_ccu" 2>/dev/null)")
+				_cc=$(_parse_cc "$(_geo 4 "$_ccu")")
 				[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
 			fi
 			# ФОЛБЭК: ЧЕРЕЗ ПРОКСИ CLASH. Свой трафик роутера идёт МИМО туннеля
@@ -220,8 +243,13 @@ start)
 				_pp=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 					/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 				if [ -n "$_pp" ] && [ "$_pp" != "0" ]; then
-					_cc=$(_parse_cc "$(curl --max-time 5 -s -x "http://127.0.0.1:$_pp" \
-						"$CCFALLBACK" 2>/dev/null)")
+					if [ -n "$GEOUA" ]; then
+						_cc=$(_parse_cc "$(curl --max-time 5 -s -A "$GEOUA" \
+							-x "http://127.0.0.1:$_pp" "$CCFALLBACK" 2>/dev/null)")
+					else
+						_cc=$(_parse_cc "$(curl --max-time 5 -s \
+							-x "http://127.0.0.1:$_pp" "$CCFALLBACK" 2>/dev/null)")
+					fi
 					[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
 				fi
 			fi
@@ -285,6 +313,7 @@ start)
 				0|0.0) [ "$(awk "BEGIN{print ($MAXD+0>0)?1:0}")" = 1 ] && LIVE="$_LASTLIVE" ;;
 				*) _LASTLIVE="$LIVE" ;;
 			esac
+			LIVE=$(_num "$LIVE"); MAXD=$(_num "$MAXD")
 			MAXD=$(awk "BEGIN{m=$MAXD+0;v=$LIVE+0;printf \"%.1f\",(v>m)?v:m}")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
@@ -295,10 +324,11 @@ start)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"elapsed\":$(( _NOWT - _DL_T0 )),\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
-		SPD=$(awk '{print $1+0}' "$RESF")
+		SPD=$(_num "$(awk '{print $1+0}' "$RESF")")
 		HTTP=$(awk '{print $2}' "$RESF")
 		AVGD=$(awk "BEGIN{printf \"%.1f\", ($SPD*8)/1000000}")
-		DMBPS=$(awk "BEGIN{printf \"%.1f\", ($MAXD>0)?$MAXD:$AVGD}")
+		AVGD=$(_num "$AVGD"); MAXD=$(_num "$MAXD")
+		DMBPS=$(_num "$(awk "BEGIN{printf \"%.1f\", ($MAXD>0)?$MAXD:$AVGD}")")
 		rm -f "$PROG" "$RESF"
 
 		# Пользователь остановил тест (повторный клик по карточке): выходим тихо,
@@ -360,6 +390,7 @@ start)
 			_upb=$(awk 'END{print $1+0}' "$URES" 2>/dev/null)
 			_upn=$(awk "BEGIN{printf \"%.1f\", (${_upb:-0}*8)/1000000}")
 			[ "$(awk "BEGIN{print ($_upn>0)?1:0}")" = 1 ] && LIVEU="$_upn"
+			MAXU=$(_num "$MAXU"); LIVEU=$(_num "$LIVEU")
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
@@ -376,7 +407,8 @@ start)
 		[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
 		rm -f "$GEOIP" "$GEOCC" "$GEOLOC"
 		AVGU=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
-		UBEST=$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")
+		AVGU=$(_num "$AVGU"); MAXU=$(_num "$MAXU")
+		UBEST=$(_num "$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")")
 		UMBPS=""
 		[ "$(awk "BEGIN{print ($UBEST>0)?1:0}")" = 1 ] && UMBPS="$UBEST"
 
@@ -396,6 +428,12 @@ start)
 	echo "{\"running\":1,\"service\":\"$SERVICE\"}"
 	;;
 status)
+	# БИТЫЙ КЭШ ВЫБРАСЫВАЕМ, А НЕ ОТДАЁМ. Испорченный файл мог остаться от
+	# прежних версий (см. _num выше), и карточка на нём молча пустела до
+	# следующего теста - хотя лечится он один раз и сам.
+	if [ -s "$CACHE" ] && ! jsonfilter -i "$CACHE" -e '@' >/dev/null 2>&1; then
+		rm -f "$CACHE" 2>/dev/null
+	fi
 	if [ -f "$CACHE" ]; then
 		cat "$CACHE"
 	else
