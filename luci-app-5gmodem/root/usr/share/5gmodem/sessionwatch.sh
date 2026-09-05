@@ -172,6 +172,57 @@ COOLDOWN=180
 
 _now() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }
 
+# КАРТА В ОТКАЗЕ - ПОДНИМАТЬ ИНТЕРФЕЙС НЕЛЬЗЯ, ЭТО КОРМИТ ПЕТЛЮ.
+#
+# Получив «illegal» (или пустоту) на состояние карты, qmi.sh уходит в
+# бесконечный цикл power-cycle SIM раз в 8 секунд. Модему, которому на
+# инициализацию карты нужны минуты (Quectel EP06 - около двух), это не даёт
+# подняться никогда. Свой ifup здесь только перезапускал бы петлю, поэтому
+# ждём: пока мы молчим, интерфейс висит в gone, и его забирает лестница
+# health - у неё есть перезагрузка модуля (AT+CFUN=1,1), а это единственное,
+# что такой отказ снимает (живой случай 05.08.2026).
+#
+# Ждём не вечно: если канал занят и состояние не читается кругами, разрешаем
+# подъём как раньше - молчащий uqmi не повод оставлять исправный модем лежать.
+#
+# ПОЧЕМУ ОДНА ФУНКЦИЯ НА ДВА СТОРОЖА. Проверка была только у ветки залипшей
+# WDS-сессии, а ветка прокси-сироты поднимала интерфейс без неё - и на модеме
+# с картой в illegal раз в две минуты сбрасывала ошибку интерфейса, из-за чего
+# лестница health не накапливала ни одной попытки и не доходила до сброса
+# модуля (живой случай Telit FN990A28 на WH3000 Pro, 04.09.2026: петля
+# «SIM in illegal state» шла кругами всё время работы роутера).
+#
+# 0 - поднимать можно, 1 - ждём лестницу.
+_sw_sim_ready() {   # $1 - интерфейс
+	_ssr_if="$1"
+	# Состояние карты читает uqmi, а он говорит только по QMI. Для mbim и
+	# прочих прото проверки нет - ведём себя как раньше.
+	case "$(uci -q get "network.$_ssr_if.proto" 2>/dev/null)" in
+		qmi|qmiraw) : ;;
+		*) return 0 ;;
+	esac
+	_ssr_dev=$(uci -q get "network.$_ssr_if.device" 2>/dev/null)
+	case "$_ssr_dev" in /dev/*) : ;; *) return 0 ;; esac
+	_ssr_st=$(_sw_run 8 uqmi -s -d "$_ssr_dev" -t 2000 --uim-get-sim-state 2>/dev/null)
+	_ssr_bad=""
+	case "$_ssr_st" in
+		*'"card_application_state"'*)
+			case "$_ssr_st" in *'"illegal"'*) _ssr_bad=1 ;; esac ;;
+		*) _ssr_bad=1 ;;
+	esac
+	_ssr_f="/tmp/5gmodem_sw_sim_$_ssr_if"
+	if [ -z "$_ssr_bad" ]; then
+		rm -f "$_ssr_f" 2>/dev/null
+		return 0
+	fi
+	_ssr_n=$(cat "$_ssr_f" 2>/dev/null)
+	case "$_ssr_n" in ''|*[!0-9]*) _ssr_n=0 ;; esac
+	[ "$_ssr_n" -lt 6 ] || return 0
+	printf '%s' "$((_ssr_n + 1))" > "$_ssr_f" 2>/dev/null
+	_log "$_ssr_if: SIM not ready - bring-up postponed, waiting for the recovery ladder ($((_ssr_n + 1))/6)"
+	return 1
+}
+
 # Переподнять интерфейс, если не дёргали его совсем недавно.
 _revive() {   # $1 - интерфейс, $2 - причина для журнала
 	_rv_f="/tmp/5gmodem_sw_last_$1"
@@ -267,40 +318,8 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					_swd=$(uci -q get "network.$_if.device")
 					case "$_swd" in
 						/dev/*)
-							# SIM В ОТКАЗЕ - ПОДНИМАТЬ НЕЛЬЗЯ, ЭТО КОРМИТ ПЕТЛЮ.
-							#
-							# Получив «illegal» (или пустоту) на состояние карты,
-							# qmi.sh уходит в бесконечный цикл power-cycle SIM раз
-							# в 8 секунд. Модему, которому на инициализацию карты
-							# нужны минуты (Quectel EP06 - около двух), это не даёт
-							# подняться никогда. Свой ifup здесь только перезапускал
-							# бы петлю, поэтому ждём: пока мы молчим, интерфейс
-							# висит в gone, и его забирает лестница health - у неё
-							# есть перезагрузка модуля, а это единственное, что
-							# такой отказ снимает (живой случай 05.08.2026).
-							#
-							# Ждём не вечно: если канал занят и состояние не читается
-							# кругами, поднимаем как раньше - молчащий uqmi не повод
-							# оставлять исправный модем лежать.
-							_swsim=$(_sw_run 8 uqmi -s -d "$_swd" -t 2000 --uim-get-sim-state 2>/dev/null)
-							_swbad=""
-							case "$_swsim" in
-								*'"card_application_state"'*)
-									case "$_swsim" in *'"illegal"'*) _swbad=1 ;; esac ;;
-								*) _swbad=1 ;;
-							esac
-							_swf="/tmp/5gmodem_sw_sim_$_if"
-							if [ -n "$_swbad" ]; then
-								_swn=$(cat "$_swf" 2>/dev/null)
-								case "$_swn" in ''|*[!0-9]*) _swn=0 ;; esac
-								if [ "$_swn" -lt 6 ]; then
-									printf '%s' "$((_swn + 1))" > "$_swf" 2>/dev/null
-									_log "$_if: SIM not ready - bring-up postponed, waiting for the recovery ladder ($((_swn + 1))/6)"
-									return 0
-								fi
-							else
-								rm -f "$_swf" 2>/dev/null
-							fi
+							# Карта в отказе - подъём откладываем (см. _sw_sim_ready).
+							_sw_sim_ready "$_if" || return 0
 							if [ "$(_sw_run 8 uqmi -d "$_swd" --get-data-status \
 								| tr -d '"' | tr -d '[:space:]')" = "connected" ]; then
 								_log "$_if: session stuck \"connected\" while the interface is down - stopping it before bring-up"
@@ -367,9 +386,16 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					# начнётся с нуля.
 					_qdev=$(ifstatus "$_if" 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
 					_qraw=$(cat "/sys/class/net/$_qdev/qmi/raw_ip" 2>/dev/null)
+					# Формат читаем ТОЛЬКО через qmicli_p. Голый `qmicli -p` поднимал
+					# здесь qmi-proxy, тот оставался жить - и следующий же круг этого
+					# сторожа видел его как сироту, убивал и делал ifup. Сторож ловил
+					# собственный хвост, а на модеме с картой в illegal этот ifup ещё
+					# и сбрасывал ошибку интерфейса, из-за чего лестница health не
+					# накапливала попытку (Telit FN990A28, 04.09.2026). У qmicli_p
+					# гейт на это есть: при proto=qmi он читает напрямую.
 					_qfmt=""
-					command -v qmicli >/dev/null 2>&1 && [ -c "$_wdm" ] && \
-						_qfmt=$(qmicli -p -d "$_wdm" --wda-get-data-format 2>/dev/null \
+					[ -c "$_wdm" ] && \
+						_qfmt=$(qmicli_p "$_wdm" --wda-get-data-format 2>/dev/null \
 							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
 					# 802.3 БЕЗ АДРЕСА (SIM7100E): и драйвер, и модем в 802.3
 					# согласованно (не рассинхрон!), сессия QMI connected и адрес по
@@ -706,10 +732,16 @@ case "$1" in
 								# in illegal state» по кругу), метла ждала up (Netcore
 								# N60 Pro + T99W175, 17.08.2026). Живую операцию
 								# eSIM/слотов не заденем: у неё жив lpac/qmicli/mbimcli.
-								_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy and bringing the interface up"
+								_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy"
 								killall mbim-proxy 2>/dev/null
 								killall qmi-proxy 2>/dev/null
-								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+								# Прокси убираем всегда - он душит и наш дозвон, и AT-сброс
+								# лестницы. А вот ПОДЪЁМ - только при живой карте: с картой
+								# в illegal он лишь запускал петлю qmi.sh заново и обнулял
+								# ошибку интерфейса, на которую смотрит health.
+								if _sw_sim_ready "$_ps_if"; then
+									( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+								fi
 							fi
 						fi ;;
 				esac

@@ -511,21 +511,50 @@ qmi_format_verdict() {
 			[ -e "$_qf_w" ] && { _qf_wdm="/dev/$(basename "$_qf_w")"; break; }
 		done
 		printf '%s: raw_ip=%s' "$_qf_if" "${_qf_raw:-?}"
-		if [ -n "$_qf_wdm" ] && command -v qmicli >/dev/null 2>&1; then
-			_qf_fmt=$(cap 15 qmicli -p -d "$_qf_wdm" --wda-get-data-format 2>/dev/null \
+		# ПОДНЯТ ЛИ ИНТЕРФЕЙС - ОТ ЭТОГО ЗАВИСИТ, ЕСТЬ ЛИ ЧТО СВЕРЯТЬ.
+		_qf_up=$(ubus call network.interface dump 2>/dev/null \
+			| jsonfilter -e "@.interface[@.l3_device=\"$_qf_if\"].up" 2>/dev/null | head -1)
+		_qf_fmt=""
+		# СПРАШИВАЕМ МОДЕМ, ТОЛЬКО ЕСЛИ КАНАЛ СВОБОДЕН - И БЕЗ -p.
+		#
+		# Флаг прокси поднимал qmi-proxy, который переживал сбор отчёта, а
+		# следующий круг sessionwatch видел его как сироту: убивал и делал ifup.
+		# На модеме с картой в illegal этот ifup перезапускал петлю qmi.sh и
+		# обнулял ошибку интерфейса, за которую держится лестница health - то
+		# есть САМ СБОР ОТЧЁТА ронял дозвон (живой случай Telit FN990A28 на
+		# WH3000 Pro, 04.09.2026: отчёт в 23:51, сорванный дозвон в 23:52).
+		# Канал проверен свободным, поэтому прямой заход безопасен.
+		if [ -n "$_qf_wdm" ] && command -v qmicli >/dev/null 2>&1 \
+		   && command -v qmi_channel_free >/dev/null 2>&1 && qmi_channel_free; then
+			_qf_mb=""
+			case "$(readlink -f "/sys/class/usbmisc/${_qf_wdm##*/}/device/driver" 2>/dev/null)" in
+				*/cdc_mbim) _qf_mb="--device-open-mbim" ;;
+			esac
+			_qf_fmt=$(cap 15 qmicli -d "$_qf_wdm" $_qf_mb --wda-get-data-format 2>/dev/null \
 				| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
 			printf ', модем: %s' "${_qf_fmt:-не ответил}"
+		fi
+		# ВЕРДИКТ - ТОЛЬКО ПРИ ПОДНЯТОМ ИНТЕРФЕЙСЕ.
+		# raw_ip у qmi_wwan по умолчанию N, а Y его выставляет netifd в момент
+		# дозвона. Пока дозвон не прошёл, «N против raw-ip» - не рассинхрон, а
+		# просто незаполненная настройка. Без этой оговорки отчёт писал «приём
+		# отбрасывается молча» КАЖДОМУ модему, который не подключился, и увозил
+		# разбор в сторону от настоящей причины (тот же FN990A28: карта в
+		# illegal, интерфейс не поднимался ни разу).
+		if [ "$_qf_up" = "true" ]; then
 			case "$_qf_raw:$_qf_fmt" in
 				Y:raw-ip|N:802-3|*:) : ;;
 				*) printf ' <- РАССИНХРОН: приём отбрасывается молча' ;;
 			esac
+		else
+			printf ' | интерфейс не поднят - формат кадров выставляется при дозвоне, сверять нечего'
 		fi
 		# Счётчики: RX=0 при растущем TX - тот же симптом с другой стороны.
 		_qf_rx=$(cat "/sys/class/net/$_qf_if/statistics/rx_packets" 2>/dev/null)
 		_qf_tx=$(cat "/sys/class/net/$_qf_if/statistics/tx_packets" 2>/dev/null)
 		printf ' | пакеты rx=%s tx=%s' "${_qf_rx:-?}" "${_qf_tx:-?}"
 		case "$_qf_rx" in
-			0|1|2|3) [ "${_qf_tx:-0}" -gt 50 ] 2>/dev/null && printf ' <- ТРАФИК НЕ ХОДИТ (ушло %s, пришло %s)' "$_qf_tx" "$_qf_rx" ;;
+			0|1|2|3) [ "${_qf_tx:-0}" -gt 50 ] 2>/dev/null && printf ' <- ТРАФИК НЕ ХОДИТ (ушло %s, пришло %s), обычная причина - разный формат кадров у драйвера и прошивки' "$_qf_tx" "$_qf_rx" ;;
 		esac
 		echo
 	done
@@ -1704,8 +1733,15 @@ report() {
 			echo "канал занят netifd (kernel-прото qmi/qmiraw/mbim) - опрос намеренно пропущен, связь дороже"
 			exit 0
 		fi
-		echo "--- rf-band-info ---"; qmicli -d "$W" -p --nas-get-rf-band-info 2>&1 | head -20
-		echo "--- signal-info ---";  qmicli -d "$W" -p --nas-get-signal-info 2>&1 | head -20'
+		MB=""
+		case "$(readlink -f "/sys/class/usbmisc/${W##*/}/device/driver" 2>/dev/null)" in
+			*/cdc_mbim) MB="--device-open-mbim" ;;
+		esac
+		# БЕЗ ФЛАГА ПРОКСИ. Он поднимал qmi-proxy, тот оставался жить после отчёта,
+		# и следующий круг sessionwatch убивал его как сироту вместе с дозвоном.
+		# Канал выше проверен свободным - идём напрямую и демона не плодим.
+		echo "--- rf-band-info ---"; qmicli -d "$W" $MB --nas-get-rf-band-info 2>&1 | head -20
+		echo "--- signal-info ---";  qmicli -d "$W" $MB --nas-get-signal-info 2>&1 | head -20'
 	run 5  "lpac установлен?" sh -c "ls -l /usr/bin/lpac /usr/lib/lpac 2>/dev/null; echo '--- зависимости ---'; ldd /usr/lib/lpac 2>/dev/null"
 	# HTTPS к SM-DP+ - самая частая причина, почему СПИСОК профилей обновляется
 	# (это чистый APDU), а ЗАГРУЗКА профиля молча не идёт: нет ca-bundle, кривое
