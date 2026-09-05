@@ -120,7 +120,7 @@ function sortNetModes(modes) {
 
 function protoLabel(v) {
 	return ({
-		'qmi': 'QMI', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
+		'qmi': 'QMI', 'qmiraw': 'QMI raw-ip', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
 		'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G', 'modemmanager': 'ModemManager',
 		'fibocom': 'Fibocom', 'dhcp': 'DHCP'
 	})[String(v || '').toLowerCase()] || (v || '');

@@ -15,7 +15,7 @@
 
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem-2.4.50-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-app-5gmodem-2.4.51-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -37,7 +37,7 @@ apk add /tmp/lpac.apk --allow-untrusted
 
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem_2.4.50-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-app-5gmodem_2.4.51-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
@@ -94,7 +94,15 @@ MBIM: менеджер пакетов удалит эти пакеты как о
 - Dell DW5821e / Foxconn T77W968 (Snapdragon X20)
 - Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
+- Дешёвые Android-палки на Qualcomm MDM9600 / MDM9610 (PIXLINK, ALEKA UV310 и родня), в том числе их режим «только модем» (QMI)
 - Многие другие не проверялись, но должны работать — поддерживаются все модемы из исходных проектов.
+
+### Доведены по отчётам пользователей
+Этих модемов у меня нет. Владельцы прислали логи и вывод AT-команд, правки вышли:
+
+- Telit FN990A28 — чистый старт без петли «SIM in illegal state», управление диапазонами и режимом сети, агрегация несущих
+- Quectel RM520N-GL — имя модема и версия прошивки
+- Foxconn T99W373 — агрегация несущих в 5G NSA
 
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 

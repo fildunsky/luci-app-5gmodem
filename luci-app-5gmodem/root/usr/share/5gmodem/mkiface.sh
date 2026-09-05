@@ -760,12 +760,32 @@ case "$REQ" in
 						# трафика нет (Telit LM960). qmiraw берёт IP статикой из QMI. 802.3-модемы
 						# читаются как 802-3 и остаются на стоковом qmi - их не трогаем.
 						if [ -c "$DEV" ]; then
-							# qmicli -p (через qmi-proxy) - тот же путь, что в sessionwatch;
-						# надёжнее uqmi WDA (тот часто «Failed to connect to service»).
-						# timeout: не виснуть, если канал занят (передетект при живом
-						# интерфейсе). Пусто/таймаут -> НЕ raw-ip -> стоковый qmi.
-						_mki_fmt=$(timeout 5 qmicli -p -d "$DEV" --wda-get-data-format 2>/dev/null \
-							| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
+							# СПРАШИВАЕМ ДВУМЯ СПОСОБАМИ, И ПЕРВЫЙ - uqmi.
+							#
+							# Раньше тут стоял только `timeout 5 qmicli -p`. На роутере
+							# БЕЗ внешнего timeout (в busybox этот апплет собран не
+							# везде) вся подстановка молча падала с «timeout: not
+							# found», результат выходил пустым - и модем, нативно
+							# работающий в raw-ip, оставался на стоковом qmi. Поймано
+							# живьём на Quectel EC21: netifd сам печатал «Device does
+							# not support 802.3 mode», а автоопределение упорно
+							# выбирало qmi. Ошибка тихая: пусто = «не raw-ip».
+							#
+							# У uqmi таймаут СВОЙ (-t), внешняя команда ему не нужна,
+							# и на живом EC21 он отвечает мгновенно. qmicli остаётся
+							# вторым мнением (он надёжнее там, где uqmi отвечает
+							# «Failed to connect to service») - и вызывается через
+							# timeout только если тот на роутере есть.
+							_mki_fmt=$(uqmi -s -d "$DEV" -t 4000 --wda-get-data-format 2>/dev/null \
+								| sed -n 's/.*"link-layer-protocol":"\([^"]*\)".*/\1/p' | head -1)
+							if [ -z "$_mki_fmt" ]; then
+								# ПОЗИЦИОННЫЕ ПАРАМЕТРЫ НЕ ТРОГАЕМ (никакого `set --`):
+								# из $1/$3 выше взяты имя интерфейса и APN.
+								_mki_to=""
+								command -v timeout >/dev/null 2>&1 && _mki_to="timeout 5"
+								_mki_fmt=$($_mki_to qmicli -p -d "$DEV" --wda-get-data-format 2>/dev/null \
+									| sed -n "s/.*Link layer protocol: *'\([^']*\)'.*/\1/p" | head -1)
+							fi
 							if [ "$_mki_fmt" = "raw-ip" ]; then
 								logger -t 5gmodem "mkiface: $_mki_vp - modem is natively raw-ip: proto=qmiraw (raw-ip + static)"
 								PROTO="qmiraw"

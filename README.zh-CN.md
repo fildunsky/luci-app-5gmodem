@@ -12,13 +12,13 @@ OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem-2.4.50-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-app-5gmodem-2.4.51-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
 apk add /tmp/luci-i18n-5gmodem-zh-cn.apk --allow-untrusted
 apk add luci-i18n-base-zh-cn
 ```
@@ -37,13 +37,13 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem_2.4.50-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-app-5gmodem_2.4.51-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.51/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install luci-i18n-base-zh-cn
 ```
@@ -93,7 +93,14 @@ opkg install luci-i18n-base-zh-cn
 - Dell DW5821e / Foxconn T77W968（Snapdragon X20）
 - Sierra Wireless EM9190
 - Huawei E3372（HiLink）
+- 高通 MDM9600 / MDM9610 平台的廉价 Android 上网棒（PIXLINK、ALEKA UV310 及同类），包括其“纯调制解调器”（QMI）模式
 - 更多型号未逐一测试，但上游分支支持的调制解调器均应可用。
+
+### 依据用户反馈修复的型号
+这些设备我本人没有。机主提供了日志和 AT 命令输出，相应修复已经发布：
+- Telit FN990A28 —— 开机不再陷入“SIM in illegal state”的反复上下电，支持频段与网络模式管理、载波聚合
+- Quectel RM520N-GL —— 型号与固件版本字段
+- Foxconn T99W373 —— 5G NSA 下的载波聚合
 
 <img width="1960" height="1474" alt="截图" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 

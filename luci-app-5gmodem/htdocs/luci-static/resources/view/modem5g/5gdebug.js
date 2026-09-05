@@ -790,6 +790,12 @@ return view.extend({
 			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
 			'qmi': 'QMI (uqmi)',
+			/* Наш прото: тот же uqmi и то же железо (qmi_wwan + cdc-wdm), но
+			   адрес берётся статикой из QMI вместо DHCP-ребёнка. Показываем
+			   РЯДОМ С qmi и только вместе с ним: модему без cdc-wdm (FM350 в
+			   RNDIS, HiLink, чисто последовательные) он не подойдёт так же,
+			   как не подходит стоковый qmi. */
+			'qmiraw': 'QMI raw-ip (uqmi, static IP from QMI)',
 			'ncm': 'NCM',
 			'xmm': 'XMM (Fibocom / Intel)',
 			'atc': 'AT (atc)',
@@ -802,7 +808,7 @@ return view.extend({
 		   поднимается FM350: у него нет cdc-wdm, поэтому mbim/qmi/ModemManager с
 		   ним не работают. В protoAvail он был всегда, но отсутствовал в ЭТОМ
 		   списке и в protoLabels - поэтому в выпадашку и не попадал. */
-		[ 'fibocom', 'mbim', 'qmi', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+		[ 'fibocom', 'mbim', 'qmi', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
 			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
 		});
 		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,
