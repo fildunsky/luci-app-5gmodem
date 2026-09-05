@@ -34,7 +34,7 @@ ensure_iface() {
 	# строка "point the app at the active modem's interface" прописывала в
 	# @5gmodem[0].network интерфейс ЧУЖОГО модема (at_port/active_modem при этом
 	# оставались от активного). Так секция и разъезжалась на каждой загрузке.
-	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER _dp _dpo
+	local P="$1" SEC="$2" IF PROTO CUR NEW CHG MET t tt OWNER _dp _dpo _ifst
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
@@ -191,7 +191,17 @@ ensure_iface() {
 			fi
 			;;
 	esac
-	if [ "$CHG" = 1 ] || ! ifstatus "$IF" 2>/dev/null | grep -q '"up": true'; then
+	# «pending» - интерфейс УЖЕ ДОЗВАНИВАЕТСЯ. Второй ifup поверх идущего дозвона
+	# рвёт его и начинает заново: на загрузке netifd поднимает модем сам, а resolve
+	# по горячему подключению приходит следом и запускает параллельный. Ждём, а не
+	# мешаем. Если устройство сменилось (CHG=1), дозвон идёт на СТАРЫЙ узел - вот
+	# тогда перезапуск и нужен.
+	_ifst=$(ifstatus "$IF" 2>/dev/null)
+	if [ "$CHG" = 1 ] || ! printf '%s\n' "$_ifst" | grep -q '"up": true'; then
+		if [ "$CHG" != 1 ] && printf '%s\n' "$_ifst" | grep -q '"pending": true'; then
+			logger -t 5gmodem-resolve "interface $IF is already pending - not starting a parallel ifup"
+			return 0
+		fi
 		ifup "$IF" >/dev/null 2>&1
 	fi
 }

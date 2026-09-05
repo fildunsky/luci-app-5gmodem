@@ -113,6 +113,22 @@ proto_qmiraw_setup() {
 		/sbin/ip link set dev $ifname mtu $mtu
 	}
 
+	# РАДИО ДО ПРОВЕРОК SIM. Модем может перечислиться с выключенным радио
+	# (AT+CFUN=0, «низкое потребление»). В этом состоянии UIM отвечает illegal на
+	# ИСПРАВНУЮ карту, и ниже включается петля power-cycle: карта так и не
+	# инициализируется, интерфейс не поднимается (разбор на Telit FN990A28,
+	# netifd: «SIM in illegal state - Power-cycling SIM»; вручную лечилось
+	# AT+CFUN=1). Online выставляется и ниже по коду - но уже ПОСЛЕ проверок SIM,
+	# то есть слишком поздно. Здесь то же самое средствами QMI и до них. Если
+	# радио уже включено, ничего не делаем и не теряем время; ответ «не
+	# поддерживается» (пусто) - тоже повод попробовать, команда безобидная.
+	local opmode
+	opmode=$(uqmi -s -d "$device" -t 3000 --get-device-operating-mode 2>/dev/null | tr -d '"')
+	if [ "$opmode" != "online" ]; then
+		echo "Device operating mode is ${opmode:-unknown} - going online before SIM initialization"
+		uqmi -s -d "$device" -t 5000 --set-device-operating-mode online > /dev/null 2>&1 && sleep 2
+	fi
+
 	echo "Waiting for SIM initialization"
 	local uninitialized_timeout=0
 	# timeout 3s for first call to avoid hanging uqmi

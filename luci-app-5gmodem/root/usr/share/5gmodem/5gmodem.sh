@@ -770,8 +770,9 @@ fi
 # Что НЕ перехватываем: составные (';' - ядровой батч), вендорные ('@'),
 # вызовы с -D (их формат вывода отличается: закэшированный -D-ответ пришёл бы
 # потом читателю без -D) и всё до определения STATIC_CACHE.
-_st_static_key() {   # $*: аргументы вызова -> имя файла кэша либо пусто
-	[ -n "$STATIC_CACHE" ] || return 0
+# Команда-идентификатор (модель, вендор, прошивка, IMEI/IMSI/ICCID): ответ у неё
+# постоянный. Отсюда и кэш, и чистка хвостового OK ниже.
+_st_ident_cmd() {   # $*: аргументы вызова -> печатает имя команды либо пусто
 	case " $* " in *" -D "*) return 0 ;; esac
 	case " $* " in *" at "*) : ;; *) return 0 ;; esac
 	eval "_stq=\${$#}"
@@ -779,9 +780,25 @@ _st_static_key() {   # $*: аргументы вызова -> имя файла 
 	_stn_c=$(printf '%s' "$_stq" | tr 'a-z' 'A-Z' | sed 's/^AT//; s/^[+#]//; s/[? ]*$//')
 	case "$_stn_c" in
 		CGMI|GMI|CGMM|GMM|CGMR|GMR|CGSN|GSN|CIMI|CCID|ICCID|QCCID|GTPKGVER)
-			printf '%s' "${STATIC_CACHE}_cmd_$_stn_c" ;;
+			printf '%s' "$_stn_c" ;;
 	esac
 }
+
+_st_static_key() {   # $*: аргументы вызова -> имя файла кэша либо пусто
+	[ -n "$STATIC_CACHE" ] || return 0
+	_stn_k=$(_st_ident_cmd "$@")
+	[ -n "$_stn_k" ] && printf '%s' "${STATIC_CACHE}_cmd_$_stn_k"
+}
+
+# ХВОСТОВОЙ «OK» - НЕ ЧАСТЬ ЗНАЧЕНИЯ. Профили собирают модель, прошивку и
+# идентификаторы идиомой `... | tr -s "\n" | xargs` и срезают только эхо
+# команды, поэтому терминатор ответа оседал В САМОМ ЗНАЧЕНИИ - и попадал в
+# карточку, в конфиг и в телеметрию: «Quectel OK RM520N-GL OK», прошивка
+# «RM520NGLAAR01A06M4G OK» (живой отчёт 05.09.2026, RM520N-GL; на большинстве
+# модулей sms_tool терминатор не печатает, оттого это и жило незамеченным).
+# Чистим ТОЛЬКО ответы команд-идентификаторов: пробники живости порта шлют
+# голый AT, и у них «OK» - единственный признак того, что модем ответил.
+_st_drop_ok() { grep -vE '^[[:space:]]*OK[[:space:]]*$'; }
 # Кэшируем ТОЛЬКО валидный ответ: один украденный на коллизии ответ портил бы
 # вечный кэш (урок at_static: в файл IMEI однажды въехал ответ чужого #BND).
 # Валидный = нет ERROR, есть содержательная строка (не эхо/OK/пустая); для
@@ -803,8 +820,9 @@ sms_tool() {
 	# метрики такого модема берутся из mmcli (см. блок ниже по коду).
 	[ -n "$DEVICE" ] || return 0
 	_stc=$(_st_static_key "$@")
+	_sti=$(_st_ident_cmd "$@")
 	if [ -n "$_stc" ] && [ -s "$_stc" ]; then
-		cat "$_stc"
+		_st_drop_ok < "$_stc"
 		return 0
 	fi
 	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem_st.$$.$_st_n"
@@ -821,7 +839,9 @@ sms_tool() {
 		# tmp+mv: конкурирующий читатель кэша не должен увидеть полфайла
 		cp "$_stf" "$_stc.$$" 2>/dev/null && mv "$_stc.$$" "$_stc" 2>/dev/null
 	fi
-	cat "$_stf" 2>/dev/null; rm -f "$_stf"
+	if [ -n "$_sti" ]; then _st_drop_ok < "$_stf" 2>/dev/null
+	else cat "$_stf" 2>/dev/null; fi
+	rm -f "$_stf"
 }
 
 # AT НЕ ТРОГАЕМ МОДЕМ, КОТОРЫМ ФАКТИЧЕСКИ ВЛАДЕЕТ ModemManager, даже если
@@ -2160,22 +2180,124 @@ _at_ca_supplement() {
 			return 0
 		fi
 		_ac_o=$(sms_tool -d "$DEVICE" at "AT^CA_INFO?" 2>/dev/null)
-		# «Не знает команду» - это ERROR, пустой ответ или ответ без несущих.
 		case "$_ac_o" in
-			*"Band is"*) rm -f "$_ac_p.no" 2>/dev/null ;;
-			*) printf '%s' "$_ac_now" > "$_ac_p.no" 2>/dev/null; return 0 ;;
+			*"Band is"*)
+				# Компоненты в порядке выдачи: «диапазон,полоса диапазон,полоса ...».
+				# Пробел разделителем безопасен - в самих значениях его нет.
+				_ac_l=$(printf '%s\n' "$_ac_o" | awk '
+					/Band is/ {
+						if (!match($0, /Band is [A-Za-z0-9_]+/)) next
+						t = substr($0, RSTART + 8, RLENGTH - 8)
+						bw = ""
+						if (match($0, /Band_width is [0-9.]+/)) bw = substr($0, RSTART + 14, RLENGTH - 14)
+						printf "%s%s,%s", (n++ ? " " : ""), t, bw
+					}
+				')
+				;;
+			*)
+				# ВТОРАЯ КОМАНДА - ДЛЯ TELIT. ^CA_INFO? модули Telit не знают, а
+				# агрегацию отдают своей #CAINFOEXT? - с именованными полями и
+				# отдельной строкой на несущую:
+				#   #CAINFOEXT: 5, LTE
+				#   PCC- BandClass: 126, RX_CH: 3048, DL_BW: 5, PCI: 249, ...
+				#   SCC0- BandClass: 126, RX_CH: 2850, DL_BW: 5, ...
+				# Диапазон считаем ИЗ EARFCN (3GPP 36.101 табл. 5.7.3-1), а не из
+				# BandClass: это перечисление Qualcomm, у поздних диапазонов оно
+				# расходится с «номер = класс - 119». Класс остаётся запасным
+				# вариантом, когда канал не попал ни в один диапазон таблицы.
+				# DL_BW - тоже перечисление, а не мегагерцы: 0=1.4 1=3 2=5 3=10
+				# 4=15 5=20 (на живом FN990A28 несущие 20/20/20/15/10 МГц).
+				# 5G-блок пропускаем: нумерация классов и полос там своя, живого
+				# ответа под рукой нет, а показать не тот диапазон хуже, чем не
+				# показать ничего.
+				_ac_o=$(sms_tool -d "$DEVICE" at "AT#CAINFOEXT?" 2>/dev/null)
+				case "$_ac_o" in
+					*BandClass:*) : ;;
+					*) printf '%s' "$_ac_now" > "$_ac_p.no" 2>/dev/null; return 0 ;;
+				esac
+				_ac_l=$(printf '%s\n' "$_ac_o" | awk '
+					function eband(c) {
+						if (c <= 0) return 0
+						if (c <= 599) return 1
+						if (c <= 1199) return 2
+						if (c <= 1949) return 3
+						if (c <= 2399) return 4
+						if (c <= 2649) return 5
+						if (c <= 2749) return 6
+						if (c <= 3449) return 7
+						if (c <= 3799) return 8
+						if (c <= 4149) return 9
+						if (c <= 4749) return 10
+						if (c <= 4949) return 11
+						if (c >= 5010 && c <= 5179) return 12
+						if (c >= 5180 && c <= 5279) return 13
+						if (c >= 5280 && c <= 5379) return 14
+						if (c >= 5730 && c <= 5849) return 17
+						if (c >= 5850 && c <= 5999) return 18
+						if (c >= 6000 && c <= 6149) return 19
+						if (c >= 6150 && c <= 6449) return 20
+						if (c >= 6450 && c <= 6599) return 21
+						if (c >= 6600 && c <= 7399) return 22
+						if (c >= 7500 && c <= 7699) return 23
+						if (c >= 7700 && c <= 8039) return 24
+						if (c >= 8040 && c <= 8689) return 25
+						if (c >= 8690 && c <= 9039) return 26
+						if (c >= 9040 && c <= 9209) return 27
+						if (c >= 9210 && c <= 9659) return 28
+						if (c >= 9660 && c <= 9769) return 29
+						if (c >= 9770 && c <= 9869) return 30
+						if (c >= 9870 && c <= 9919) return 31
+						if (c >= 9920 && c <= 10359) return 32
+						if (c >= 36000 && c <= 36199) return 33
+						if (c >= 36200 && c <= 36349) return 34
+						if (c >= 36350 && c <= 36949) return 35
+						if (c >= 36950 && c <= 37549) return 36
+						if (c >= 37550 && c <= 37749) return 37
+						if (c >= 37750 && c <= 38249) return 38
+						if (c >= 38250 && c <= 38649) return 39
+						if (c >= 38650 && c <= 39649) return 40
+						if (c >= 39650 && c <= 41589) return 41
+						if (c >= 41590 && c <= 43589) return 42
+						if (c >= 43590 && c <= 45589) return 43
+						if (c >= 45590 && c <= 46589) return 44
+						if (c >= 46590 && c <= 46789) return 45
+						if (c >= 46790 && c <= 54539) return 46
+						if (c >= 54540 && c <= 55239) return 47
+						if (c >= 55240 && c <= 56739) return 48
+						if (c >= 66436 && c <= 67335) return 66
+						if (c >= 67536 && c <= 67835) return 67
+						if (c >= 67836 && c <= 68335) return 68
+						if (c >= 68586 && c <= 68935) return 71
+						return 0
+					}
+					function ebw(v) {
+						if (v == 0) return "1.4"
+						if (v == 1) return "3"
+						if (v == 2) return "5"
+						if (v == 3) return "10"
+						if (v == 4) return "15"
+						if (v == 5) return "20"
+						return ""
+					}
+					/^#CAINFOEXT:/ { rat = ($0 ~ /LTE/) ? "LTE" : ""; next }
+					rat == "LTE" && /BandClass:/ {
+						if (!match($0, /BandClass:[ ]*[0-9]+/)) next
+						bc = substr($0, RSTART + 10, RLENGTH - 10) + 0
+						ch = 0
+						if (match($0, /RX_CH:[ ]*[0-9]+/)) ch = substr($0, RSTART + 6, RLENGTH - 6) + 0
+						b = eband(ch)
+						if (b == 0) b = bc - 119
+						if (b <= 0) next
+						bw = ""
+						if (match($0, /DL_BW:[ ]*[0-9]+/)) bw = ebw(substr($0, RSTART + 6, RLENGTH - 6) + 0)
+						printf "%sLTE_B%d,%s", (n++ ? " " : ""), b, bw
+					}
+				')
+				;;
 		esac
-		# Компоненты в порядке выдачи: «диапазон,полоса диапазон,полоса ...».
-		# Пробел разделителем безопасен - в самих значениях его нет.
-		_ac_l=$(printf '%s\n' "$_ac_o" | awk '
-			/Band is/ {
-				if (!match($0, /Band is [A-Za-z0-9_]+/)) next
-				t = substr($0, RSTART + 8, RLENGTH - 8)
-				bw = ""
-				if (match($0, /Band_width is [0-9.]+/)) bw = substr($0, RSTART + 14, RLENGTH - 14)
-				printf "%s%s,%s", (n++ ? " " : ""), t, bw
-			}
-		')
+		# «Не знает команду» - это ERROR, пустой ответ или ответ без несущих.
+		[ -n "$_ac_l" ] || { printf '%s' "$_ac_now" > "$_ac_p.no" 2>/dev/null; return 0; }
+		rm -f "$_ac_p.no" 2>/dev/null
 		printf '%s' "$_ac_l" > "$_ac_p" 2>/dev/null
 		printf '%s' "$_ac_now" > "$_ac_p.t" 2>/dev/null
 	fi

@@ -1,0 +1,242 @@
+_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+
+# Telit FN990 (1bc7:1070). От LM960 (1bc71040) отличается ДЛИНОЙ #BND: там четыре
+# поля, здесь больше - добавились пары масок под 5G NR:
+#   #BND: <GSM>,<UMTS>,<LTE 1-64>,<LTE 65-128>,<NSA 1-64>,<NSA 65-128>,<SA 1-64>,<SA 65-128>[,...]
+# Число полей у прошивок РАЗНОЕ (встречались и восемь, и десять - хвост нулевой),
+# поэтому позиции читаем по номеру, а при записи переписываем ТОЛЬКО свою пару, а
+# все остальные поля возвращаем модему дословно, сколько бы их ни было.
+#
+# Обе половины пары - обычные битовые маски, бит N = диапазон N (в старшей
+# половине N+64). Проверено на живом ответе Telit
+# "#BND=0,21,A3E2BB0F38DF,42,100080800D7,7042,0,0,0,0": 0x42 = биты 1 и 6 =
+# LTE B66 и B71, 0x7042 = биты 1,6,12,13,14 = n66,n71,n77,n78,n79, а 0xA3E2BB0F38DF
+# разворачивается ровно в документированный список LTE FN990. Никаких таблиц не
+# нужно, работают общие hextobands/bandstohex.
+#
+# Диапазоны 3G НЕ поддерживаем: второе поле #BND - не маска, а НОМЕР готовой
+# комбинации UMTS (как у LM960), а таблицы комбинаций для FN990 у нас нет.
+
+# Запасной список - ТОЛЬКО когда AT-порт недоступен (модем в ребуте, порт занят
+# дозвонщиком). Это путь восстановления: кнопки нужны и тогда, когда модем ушёл
+# на диапазон без покрытия. Реальные возможности всегда берутся у самого модема.
+# Списки из FN990 Family Hardware Design Guide (1VV0301752 Rev.3, таблицы 2 и 3).
+_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
+_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 75 77 78 79"
+_DEFAULT_5GSA_BANDS="$_DEFAULT_5GNSA_BANDS"
+_MODES="1:Auto 4:4G 6:5G"
+
+# Ответы модема кэшируем В ПАМЯТИ ПРОЦЕССА: bands.sh собирает весь JSON за один
+# запуск и дёргает getsupported* несколько раз подряд. Файловый кэш тут не нужен
+# и вреден - он пережил бы смену модема в том же порту.
+_BND_NOW=""
+_BND_CAP=""
+_WS46_CAP=""
+_MODEL=""
+
+_port_ok() { [ -n "$_DEVICE" ] && [ -e "$_DEVICE" ]; }
+
+# Текущее состояние: "0,21,A3E2BB0F38DF,42,100080800D7,7042,0,0"
+_now() {
+	if [ -z "$_BND_NOW" ] && _port_ok; then
+		_BND_NOW=$(sms_tool -d $_DEVICE at "AT#BND?" 2>/dev/null | tr -d '\r ' \
+			| sed -n 's/^#BND://p' | head -1)
+	fi
+	printf '%s' "$_BND_NOW"
+}
+
+# Возможности: "#BND: (0),(0-11,17,18),(A7E0BB0F38DF),(42),(...)".
+# Группы разделяем по "),(" , а НЕ по запятой: внутри группы запятые свои
+# (у UMTS это перечисление номеров комбинаций вида "0-11,17,18").
+_cap() {
+	if [ -z "$_BND_CAP" ] && _port_ok; then
+		_BND_CAP=$(sms_tool -d $_DEVICE at "AT#BND=?" 2>/dev/null | tr -d '\r ' \
+			| sed -n 's/^#BND://p' | head -1 | sed 's/^(//; s/)$//; s/),(/;/g')
+	fi
+	printf '%s' "$_BND_CAP"
+}
+
+_nowf()  { _now | cut -d, -f"$1"; }
+_capf()  { _cap | cut -d';' -f"$1"; }
+_nowN()  { _now | tr ',' '\n' | grep -c .; }
+_capN()  { _cap | tr ';' '\n' | grep -c .; }
+
+_pad16() { printf '%16s' "${1:-0}" | tr ' ' '0'; }
+
+# пара масок (младшая 1-64, старшая 65-128) -> список диапазонов
+_pair2bands() { hextobands "0x$(_pad16 "$2")$(_pad16 "$1")" | xargs -n1 2>/dev/null | sort -n | uniq | xargs; }
+
+# список диапазонов -> младшая маска
+_lomask() {
+	_l=""
+	for _b in $1; do
+		case "$_b" in ''|*[!0-9]*) continue ;; esac
+		[ "$_b" -le 64 ] && _l="$_l $_b"
+	done
+	bandstohex "$_l"
+}
+
+# список диапазонов -> старшая маска (номера сдвигаем на 64: бит 1 = диапазон 66)
+_himask() {
+	_h=""
+	for _b in $1; do
+		case "$_b" in ''|*[!0-9]*) continue ;; esac
+		[ "$_b" -gt 64 ] && _h="$_h $((_b - 64))"
+	done
+	bandstohex "$_h"
+}
+
+# пара полей $1/$1+1 из текущего ответа -> список диапазонов ("" если полей нет)
+_read_pair() {
+	[ "$(_nowN)" -ge $(($1 + 1)) ] 2>/dev/null || return 0
+	_pair2bands "$(_nowf "$1")" "$(_nowf $(($1 + 1)))"
+}
+
+# та же пара из ответа о возможностях
+_read_cap_pair() {
+	[ "$(_capN)" -ge $(($1 + 1)) ] 2>/dev/null || return 0
+	_pair2bands "$(_capf "$1")" "$(_capf $(($1 + 1)))"
+}
+
+# запись #BND: переписываем пару $1/$1+1, ВСЕ остальные поля возвращаем дословно
+_write_pair() {   # $1 - номер младшего поля, $2 - младшая маска, $3 - старшая маска
+	_n=$(_nowN)
+	[ "$_n" -ge $(($1 + 1)) ] 2>/dev/null || return 1
+	_out=""; _i=1
+	while [ "$_i" -le "$_n" ]; do
+		_v=$(_nowf "$_i")
+		[ "$_i" = "$1" ] && _v="$2"
+		[ "$_i" = "$(($1 + 1))" ] && _v="$3"
+		_out="$_out,$_v"
+		_i=$((_i + 1))
+	done
+	sms_tool -d $_DEVICE at "AT#BND=${_out#,}"
+}
+
+getinfo() {
+	if [ -z "$_MODEL" ] && _port_ok; then
+		_MODEL=$(sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+			| grep -oE "FN[0-9]+[A-Za-z0-9-]*" | head -1)
+	fi
+	echo "Telit ${_MODEL:-FN990}"
+}
+
+getsupportedbands() {
+	_B=$(_read_cap_pair 3)
+	[ -n "$_B" ] || _B="$_DEFAULT_LTE_BANDS"
+	echo "$_B"
+}
+
+getbands() { _read_pair 3; }
+
+setbands() {
+	_BS="$1"
+	[ "$_BS" = "default" ] && _BS="$(getsupportedbands)"
+	_LO=$(_lomask "$_BS"); _HI=$(_himask "$_BS")
+	# Руководство Telit: LTE band и LTE band ext не могут быть нулями
+	# одновременно - модем отвергнет запись. Снимать ВСЕ диапазоны и так незачем.
+	[ "$_LO" = 0 ] && [ "$_HI" = 0 ] && return 1
+	_write_pair 3 "$_LO" "$_HI"
+}
+
+getsupportedbands5gnsa() {
+	_B=$(_read_cap_pair 5)
+	[ -n "$_B" ] || { _port_ok && return; echo "$_DEFAULT_5GNSA_BANDS"; }
+	echo "$_B"
+}
+
+getbands5gnsa() { _read_pair 5; }
+
+setbands5gnsa() {
+	_BS="$1"
+	[ "$_BS" = "default" ] && _BS="$(getsupportedbands5gnsa)"
+	_write_pair 5 "$(_lomask "$_BS")" "$(_himask "$_BS")"
+}
+
+getsupportedbands5gsa() {
+	_B=$(_read_cap_pair 7)
+	[ -n "$_B" ] || { _port_ok && return; echo "$_DEFAULT_5GSA_BANDS"; }
+	echo "$_B"
+}
+
+getbands5gsa() { _read_pair 7; }
+
+setbands5gsa() {
+	_BS="$1"
+	[ "$_BS" = "default" ] && _BS="$(getsupportedbands5gsa)"
+	_write_pair 7 "$(_lomask "$_BS")" "$(_himask "$_BS")"
+}
+
+# --- Режимы сети (+WS46, 3GPP 27.007) ----------------------------------------
+# Список принимаемых значений у ЭТОЙ прошивки: на FN990A28 M0R.100005 это
+# (28,36,37) - 3G модем не предлагает, хотя железо семейства его умеет. Поэтому
+# список СПРАШИВАЕМ, а не прибиваем: на другой прошивке появятся 22/31/38.
+_ws46_cap() {
+	if [ -z "$_WS46_CAP" ] && _port_ok; then
+		_WS46_CAP=$(sms_tool -d $_DEVICE at "AT+WS46=?" 2>/dev/null | tr -d '\r ' \
+			| sed -n 's/^+WS46:(\(.*\))$/\1/p' | head -1 | tr ',' ' ')
+	fi
+	printf '%s' "$_WS46_CAP"
+}
+
+# «Авто» - самый широкий набор технологий, который прошивка принимает:
+# 38 (UTRAN+E-UTRAN+NG-RAN), иначе 37 (E-UTRAN+NG-RAN), иначе 31, иначе 28.
+_ws46_auto() {
+	_c=$(_ws46_cap)
+	for _w in 38 37 31 28; do
+		for _s in $_c; do
+			[ "$_s" = "$_w" ] && { echo "$_w"; return; }
+		done
+	done
+	echo 37
+}
+
+_ws46_id() {
+	case "$1" in
+		22) echo 2 ;;
+		31) echo 3 ;;
+		28) echo 4 ;;
+		37) echo 5 ;;
+		36) echo 6 ;;
+		*)  echo "" ;;
+	esac
+}
+
+# Значение, выбранное под «Авто», в списке ВТОРОЙ РАЗ не показываем: иначе на
+# прошивке без 38 «Авто» и «4G+5G» были бы одной и той же кнопкой, и текущий
+# режим подсвечивался бы то там, то там.
+getsupportedmodes() {
+	_c=$(_ws46_cap)
+	[ -n "$_c" ] || { echo "$_MODES"; return; }
+	_a=$(_ws46_auto)
+	_o="1:Auto"
+	for _p in 22:3G 31:3G+4G 28:4G 37:4G+5G 36:5G; do
+		_v=${_p%%:*}
+		[ "$_v" = "$_a" ] && continue
+		for _s in $_c; do
+			[ "$_s" = "$_v" ] && _o="$_o $(_ws46_id "$_v"):${_p#*:}"
+		done
+	done
+	echo "$_o"
+}
+
+getmode() {
+	_M=$(sms_tool -d $_DEVICE at "AT+WS46?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+WS46: *\([0-9]*\).*/\1/p' | head -1)
+	[ -n "$_M" ] || { echo ""; return; }
+	[ "$_M" = "$(_ws46_auto)" ] && { echo 1; return; }
+	_ws46_id "$_M"
+}
+
+setmode() {
+	case "$1" in
+		1) _W=$(_ws46_auto) ;;
+		2) _W=22 ;;
+		3) _W=31 ;;
+		4) _W=28 ;;
+		5) _W=37 ;;
+		6) _W=36 ;;
+		*) return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT+WS46=$_W"
+}

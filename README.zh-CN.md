@@ -12,13 +12,13 @@ OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.49/luci-app-5gmodem-2.4.49-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem-2.4.50-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.49/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
 apk add /tmp/luci-i18n-5gmodem-zh-cn.apk --allow-untrusted
 apk add luci-i18n-base-zh-cn
 ```
@@ -37,13 +37,13 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.49/luci-app-5gmodem_2.4.49-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-app-5gmodem_2.4.50-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.49/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.50/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install luci-i18n-base-zh-cn
 ```

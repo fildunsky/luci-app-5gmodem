@@ -93,6 +93,14 @@ _tobytes() {
 # после отмены карточка молча теряла и результат, и адрес.
 _num() { case "$1" in ''|*[!0-9.]*) printf '0' ;; *) printf '%s' "$1" ;; esac; }
 
+_spent() {
+	printf '%s' "$1" | awk '{
+		n=0; for (i=1;i<=NF;i++) if ($i ~ /^[0-9]+:[0-9]+(:[0-9]+)?$/) t[++n]=$i;
+		s=(n>=2)?t[2]:((n==1)?t[1]:"0");
+		m=split(s,a,":"); v=0; for (i=1;i<=m;i++) v=v*60+a[i];
+		printf "%d", v }'
+}
+
 _tombps() {
 	echo "$1" | awk '{
 		v=$1; u="";
@@ -281,7 +289,7 @@ start)
 		# двумя отсчётами делённая на время даёт МГНОВЕННУЮ скорость с первой
 		# секунды. Если разобрать не удалось (формат метра поехал), откатываемся
 		# на прежнюю колонку - хуже, чем было, не станет.
-		_PREVB=0; _PREVT=$(cut -d. -f1 /proc/uptime); _LASTLIVE=0
+		_PREVB=0; _PREVS=0; _LASTLIVE=0
 		while kill -0 "$CPID" 2>/dev/null; do
 			sleep 1
 			_LINE=$(tr '\r' '\n' 2>/dev/null < "$PROG" | grep -E '^[ ]*[0-9]' | tail -1)
@@ -290,12 +298,16 @@ start)
 			LIVE=""
 			if [ -n "$_RECV" ]; then
 				_NOWB=$(_tobytes "$_RECV")
-				_DT=$(( _NOWT - _PREVT )); [ "$_DT" -ge 1 ] || _DT=1
+				_SP=$(_spent "$_LINE")
 				case "$_NOWB" in
 					''|*[!0-9]*) : ;;
-					*) [ "$_NOWB" -ge "$_PREVB" ] && \
-						LIVE=$(awk "BEGIN{printf \"%.1f\", (($_NOWB-$_PREVB)*8)/1000000/$_DT}")
-					   _PREVB="$_NOWB"; _PREVT="$_NOWT" ;;
+					*) _DS=$(( _SP - _PREVS ))
+					   if [ "$_DS" -ge 1 ] && [ "$_NOWB" -ge "$_PREVB" ]; then
+						LIVE=$(awk "BEGIN{printf \"%.1f\", (($_NOWB-$_PREVB)*8)/1000000/$_DS}")
+						_PREVB="$_NOWB"; _PREVS="$_SP"
+					   else
+						LIVE="$_LASTLIVE"
+					   fi ;;
 				esac
 			fi
 			if [ -z "$LIVE" ]; then
@@ -379,17 +391,36 @@ start)
 		UPT0=$(cut -d. -f1 /proc/uptime)
 		MAXU=0
 		LIVEU=0
+		_UPB=0; _UPS=0
 		while kill -0 "$UPID" 2>/dev/null; do
 			sleep 1
-			# Живая цифра - средняя ПОСЛЕДНЕГО ЗАВЕРШЁННОГО POST'а (строки URES):
-			# на HTTPS-выгрузке прогресс-метр curl держит «Current Speed» нулём
-			# до конца передачи, поэтому семплить его бесполезно (наблюдалось:
-			# live_up почти всегда 0.0 с редким проскоком средней). Обновление
-			# ступенчатое (раз в ~3-4 c на POST), зато честное; между POST'ами
-			# держим последнее значение, а не мигаем нулём.
-			_upb=$(awk 'END{print $1+0}' "$URES" 2>/dev/null)
-			_upn=$(awk "BEGIN{printf \"%.1f\", (${_upb:-0}*8)/1000000}")
-			[ "$(awk "BEGIN{print ($_upn>0)?1:0}")" = 1 ] && LIVEU="$_upn"
+			_LINE=$(tr '\r' '\n' 2>/dev/null < "$UPROG" | grep -E '^[ ]*[0-9]' | tail -1)
+			_XF=$(printf '%s' "$_LINE" | awk '{print $6}')
+			_live=""
+			if [ -n "$_XF" ]; then
+				_NB=$(_tobytes "$_XF")
+				_SP=$(_spent "$_LINE")
+				case "$_NB" in
+					''|*[!0-9]*) : ;;
+					*) if [ "$_NB" -lt "$_UPB" ] || [ "$_SP" -lt "$_UPS" ]; then
+						_UPB=0; _UPS=0
+					   fi
+					   _DS=$(( _SP - _UPS ))
+					   if [ "$_DS" -ge 1 ] && [ "$_NB" -gt "$_UPB" ]; then
+						_live=$(awk "BEGIN{printf \"%.1f\", (($_NB-$_UPB)*8)/1000000/$_DS}")
+						_UPB="$_NB"; _UPS="$_SP"
+					   fi ;;
+				esac
+			fi
+			if [ -n "$_live" ]; then
+				LIVEU="$_live"
+			elif [ -n "$_XF" ] && [ "$_UPB" -gt 0 ]; then
+				:
+			else
+				_upb=$(awk 'END{print $1+0}' "$URES" 2>/dev/null)
+				_upn=$(awk "BEGIN{printf \"%.1f\", (${_upb:-0}*8)/1000000}")
+				[ "$(awk "BEGIN{print ($_upn>0)?1:0}")" = 1 ] && LIVEU="$_upn"
+			fi
 			MAXU=$(_num "$MAXU"); LIVEU=$(_num "$LIVEU")
 			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
@@ -420,7 +451,7 @@ start)
 				# ts во ВСЕХ финалах (не только ok): фронт отличает свежий финал от
 			# протухшего кэша прошлого теста побайтовым сравнением - без метки
 			# два одинаковых исхода неразличимы.
-			_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
+				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 		esac
 	) >/dev/null 2>&1 </dev/null &
