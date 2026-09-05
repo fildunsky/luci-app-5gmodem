@@ -2116,6 +2116,102 @@ _qmi_refresh() {
 	cut -d. -f1 /proc/uptime > "$_qr_p.t"
 }
 
+# АГРЕГАЦИЯ ЧЕРЕЗ AT^CA_INFO? - ОБЩИЙ ФОЛБЭК, КОГДА ВЕНДОРНЫЙ РАЗБОР МОЛЧИТ.
+#
+# Живой случай (issue #15, Foxconn T99W373): вендорный ^DEBUG? на этой прошивке
+# отдаёт только pcell - ни scell, ни nr_band в нём нет, и в карточке оставалась
+# ОДНА несущая, хотя AT^CA_INFO? тут же перечисляет всю агрегацию:
+#
+#   LTE serving information :
+#   PCC info: Band is LTE_B66, Band_width is 15.0 MHz
+#   SCC1 info: Band is LTE_B5, Band_width is 10.0 MHz
+#   PCC info: Band is NR5G_N77, Band_width is 60.0 MHz
+#
+# Команда вендорная по имени, но отвечают на неё модули разных производителей
+# (Foxconn, Telit LN940, Compal) ОДНИМ форматом - разбор общий, как у соседних
+# сот по QMI выше. Несущая NR в NSA приходит ТОЖЕ строкой «PCC info»: различаем
+# по имени диапазона (LTE_B / NR5G_N), а не по заголовку секции - заголовка у
+# NR-строки может не быть вовсе.
+#
+# ПРОФИЛЬ ГЛАВНЕЕ: работаем, только если он не нашёл ни одной вторичной несущей,
+# и заполняем лишь пустые поля. Ответ держим по TTL, а модем, который команды не
+# знает, переспрашиваем не чаще раза в 10 минут: лишний ход в AT-порт стоит
+# времени опроса и спорит за at_lock с остальными читателями.
+_ATCA_TTL=20
+_ATCA_NEG=600
+_at_ca_supplement() {
+	case "$S1BAND" in ''|-) : ;; *) return 0 ;; esac
+	[ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
+	[ "$REGOK" = "1" ] || return 0
+	# В 2G/3G агрегации нет вовсе - команду не тратим.
+	case "$MODE" in
+		*GSM*|*GPRS*|*EDGE*|*UMTS*|*WCDMA*|*HSPA*|*HSDPA*|*HSUPA*|*2G*|*3G*) return 0 ;;
+	esac
+	_ac_p="/tmp/5gmodem_atca_$_MKEY"
+	_ac_now=$(uptime_s)
+	_ac_ts=$(cat "$_ac_p.t" 2>/dev/null)
+	case "$_ac_ts" in ''|*[!0-9]*) _ac_ts=0 ;; esac
+	if [ "$(( _ac_now - _ac_ts ))" -lt "$_ATCA_TTL" ]; then
+		_ac_l=$(cat "$_ac_p" 2>/dev/null)
+	else
+		_ac_ng=$(cat "$_ac_p.no" 2>/dev/null)
+		case "$_ac_ng" in ''|*[!0-9]*) _ac_ng="" ;; esac
+		if [ -n "$_ac_ng" ] && [ "$(( _ac_now - _ac_ng ))" -lt "$_ATCA_NEG" ]; then
+			return 0
+		fi
+		_ac_o=$(sms_tool -d "$DEVICE" at "AT^CA_INFO?" 2>/dev/null)
+		# «Не знает команду» - это ERROR, пустой ответ или ответ без несущих.
+		case "$_ac_o" in
+			*"Band is"*) rm -f "$_ac_p.no" 2>/dev/null ;;
+			*) printf '%s' "$_ac_now" > "$_ac_p.no" 2>/dev/null; return 0 ;;
+		esac
+		# Компоненты в порядке выдачи: «диапазон,полоса диапазон,полоса ...».
+		# Пробел разделителем безопасен - в самих значениях его нет.
+		_ac_l=$(printf '%s\n' "$_ac_o" | awk '
+			/Band is/ {
+				if (!match($0, /Band is [A-Za-z0-9_]+/)) next
+				t = substr($0, RSTART + 8, RLENGTH - 8)
+				bw = ""
+				if (match($0, /Band_width is [0-9.]+/)) bw = substr($0, RSTART + 14, RLENGTH - 14)
+				printf "%s%s,%s", (n++ ? " " : ""), t, bw
+			}
+		')
+		printf '%s' "$_ac_l" > "$_ac_p" 2>/dev/null
+		printf '%s' "$_ac_now" > "$_ac_p.t" 2>/dev/null
+	fi
+	[ -n "$_ac_l" ] || return 0
+	_ac_i=0
+	for _ac_c in $_ac_l; do
+		_ac_t="${_ac_c%%,*}"
+		_ac_bw="${_ac_c#*,}"
+		# Полосу прошивка печатает с десятичной частью («15.0 MHz»): целую
+		# показываем без хвоста, дробную (1.4 МГц в LTE) оставляем как есть.
+		case "$_ac_bw" in *.0) _ac_bw="${_ac_bw%.0}" ;; esac
+		_ac_b=""
+		case "$_ac_t" in
+			LTE_B[0-9]*)  _ac_b=$(band4g "${_ac_t#LTE_B}") ;;
+			NR5G_N[0-9]*) _ac_b=$(band5g "${_ac_t#NR5G_N}") ;;
+			NR_N[0-9]*)   _ac_b=$(band5g "${_ac_t#NR_N}") ;;
+		esac
+		[ -n "$_ac_b" ] || continue
+		[ -n "$_ac_bw" ] && _ac_b="$_ac_b @$_ac_bw MHz"
+		if [ "$_ac_i" = 0 ]; then
+			case "$PBAND" in ''|-) PBAND="$_ac_b" ;; esac
+		else
+			# Состояние команда не печатает, но перечисляет она ДЕЙСТВУЮЩИЕ
+			# несущие - иначе их в выдаче не было бы.
+			case "$_ac_i" in
+				1) case "$S1BAND" in ''|-) S1BAND="$_ac_b"; S1STATE="activated" ;; esac ;;
+				2) case "$S2BAND" in ''|-) S2BAND="$_ac_b"; S2STATE="activated" ;; esac ;;
+				3) case "$S3BAND" in ''|-) S3BAND="$_ac_b"; S3STATE="activated" ;; esac ;;
+				4) case "$S4BAND" in ''|-) S4BAND="$_ac_b"; S4STATE="activated" ;; esac ;;
+			esac
+		fi
+		_ac_i=$((_ac_i + 1))
+	done
+	return 0
+}
+
 # CACHE-FIRST + ФОНОВОЕ ОБНОВЛЕНИЕ. Снимок берёт последние известные QMI-данные
 # МГНОВЕННО (заполняя лишь поля, которые профиль оставил пустыми), а свежие
 # досчитывает в фоне к следующему опросу. Так карточка на переключении вкладки
@@ -2186,7 +2282,11 @@ _qmi_supplement() {
 			[ -n "$_qs_b" ] || continue
 			if [ "$_qs_i" = 0 ]; then
 				case "$PBAND" in ''|-) PBAND="B$_qs_b" ;; esac
-				case "$EARFCN" in ''|-) EARFCN="$_qs_c" ;; esac
+				# НОЛЬ - ЭТО «НЕ ЗАПОЛНЕНО» (как у Cell ID ниже): часть прошивок
+				# печатает в вендорной выдаче «channel:0» вместо номера канала
+				# (живьём - T99W373 в 5G NSA, issue #15), и в карточке висел
+				# «EARFCN 0». Настоящий канал из QMI такое значение перебивает.
+				case "$EARFCN" in ''|-|0) EARFCN="$_qs_c" ;; esac
 			else
 				case "$_qs_i" in
 					1) case "$S1BAND" in ''|-) S1BAND="B$_qs_b"; S1EARFCN="$_qs_c" ;; esac ;;
@@ -2276,7 +2376,7 @@ _qmi_supplement() {
 			[ -n "$_l_band" ] && PBAND=$(band4g "$_l_band")
 			;;
 		esac
-		case "$EARFCN" in ''|-) [ -n "$_l_earfcn" ] && EARFCN="$_l_earfcn" ;; esac
+		case "$EARFCN" in ''|-|0) [ -n "$_l_earfcn" ] && EARFCN="$_l_earfcn" ;; esac
 		# Строка режима у generic-модема - голое «LTE» без диапазона; дополняем.
 		case "$MODE" in
 			LTE|LTE-A|4G) [ -n "$PBAND" ] && MODE="$MODE | $PBAND" ;;
@@ -2425,6 +2525,12 @@ case "$ENBID" in
 esac
 
 _qmi_supplement
+# ПОСЛЕ QMI, А НЕ ВМЕСТО: там, где канал cdc-wdm свободен, агрегация уже
+# пришла с PCI/EARFCN каждой несущей (по ним же подбирается их уровень из
+# соседних сот). AT^CA_INFO? даёт только диапазон и полосу - это фолбэк для
+# модема, у которого канал занят дозвоном, а вендорный профиль вторичные
+# несущие не разобрал.
+_at_ca_supplement
 
 # ПОВТОРНЫЙ РАСЧЁТ eNB ID. Блок выше считает его ДО QMI (чтобы поле было и у
 # модемов без cdc-wdm), но у модема под ModemManager сам Cell ID к тому моменту
