@@ -1355,22 +1355,22 @@ getslot)
 # её, а не гадаем со стороны.
 httpinfo)
 	_hi=$(http_local_drv)
-	printf 'драйвер HTTP: %s\n' "$_hi"
+	printf 'HTTP driver: %s\n' "$_hi"
 	if [ "$_hi" = stdio ]; then
-		echo 'запросы к серверу профилей делает роутер (stdio) - curl внутри lpac НЕ нужен'
+		echo 'the router itself talks to the profile server (stdio) - curl inside lpac is NOT needed'
 		exit 0
 	fi
 	if [ -f /usr/lib/lpac/driver/driver_http_curl.so ]; then
 		if ldd /usr/lib/lpac/driver/driver_http_curl.so 2>/dev/null | grep -q "not found"; then
-			echo 'ПРОБЛЕМА: плагину curl не хватает библиотек:'
+			echo 'PROBLEM: the curl plugin is missing libraries:'
 			ldd /usr/lib/lpac/driver/driver_http_curl.so 2>/dev/null | grep "not found" | sed 's/^/  /'
 		else
-			echo 'плагин curl на месте, библиотеки разрешаются'
+			echo 'the curl plugin is in place, its libraries resolve'
 		fi
 	elif [ -f "$LPAC" ] && strings "$LPAC" 2>/dev/null | grep -qi curl_easy_perform; then
-		echo 'curl вшит в бинарь (раскладка 2.1.x без плагинов)'
+		echo 'curl is built into the binary (2.1.x layout, no plugins)'
 	else
-		echo 'ПРОБЛЕМА: драйвер curl выбран, но ни плагина, ни curl в бинаре не видно'
+		echo 'PROBLEM: the curl driver is selected, but neither the plugin nor curl in the binary is visible'
 	fi
 	exit 0
 	;;
@@ -1381,16 +1381,16 @@ apduinfo)
 	# code -1 "euicc_init", а какой транспорт выбран, ручной он или авто и на
 	# каком драйвере сидит узел - не видно ни из чего. Живой случай (два T99W175,
 	# 30.07): авто-выбор дал mbim на узле qmi_wwan, и eSIM молчала «по-честному».
-	printf 'выбранный APDU-бэкенд: %s\n' "$(apdu_backend)"
-	printf 'задан вручную (esim_apdu): %s\n' "$(uci -q get 5gmodem.@5gmodem[0].esim_apdu || echo '(нет, автоопределение)')"
+	printf 'selected APDU backend: %s\n' "$(apdu_backend)"
+	printf 'set by hand (esim_apdu): %s\n' "$(uci -q get 5gmodem.@5gmodem[0].esim_apdu || echo '(no, autodetected)')"
 	# Пустые значения подписываем словами: в отчёте пустая строка после двоеточия
 	# читается как обрыв вывода, а не как «узла нет» - а это разные диагнозы.
 	_ai_wdm=$(esim_wdm)
 	_ai_drv=$(_wdm_driver)
-	printf 'узел cdc-wdm: %s\n' "${_ai_wdm:-(нет - у этого модема канала управления нет)}"
-	printf 'драйвер узла: %s\n' "${_ai_drv:-(не определён)}"
-	printf 'прото интерфейса: %s\n' "$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto")"
-	printf 'HTTP-драйвер lpac: %s\n' "$(http_local_drv 2>/dev/null || echo '(не определён)')"
+	printf 'cdc-wdm node: %s\n' "${_ai_wdm:-(none - this modem has no control channel)}"
+	printf 'node driver: %s\n' "${_ai_drv:-(undetermined)}"
+	printf 'interface protocol: %s\n' "$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto")"
+	printf 'lpac HTTP driver: %s\n' "$(http_local_drv 2>/dev/null || echo '(undetermined)')"
 	exit 0
 	;;
 recheck)

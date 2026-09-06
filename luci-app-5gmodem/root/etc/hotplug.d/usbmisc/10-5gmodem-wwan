@@ -1,0 +1,58 @@
+#!/bin/sh
+# ВЕРНУТЬ НАШИМ ПРОТОКОЛАМ ПРИЗНАК "УСТРОЙСТВО ЕСТЬ".
+#
+# ЗАЧЕМ. Протоколы с no_device=1 (наш qmiraw в том числе) при пропаже
+# /dev/cdc-wdm* объявляют себя недоступными - proto_set_available <iface> 0, а в
+# ifstatus остаётся "available": false и ошибка NO_DEVICE. Обратно этот признак
+# ставит ТОЛЬКО hotplug: штатный /etc/hotplug.d/usbmisc/00_wwan.sh из пакета
+# wwan знает список proto = wwan|mbim|qmi|ncm - НАШЕГО qmiraw там нет и быть не
+# может. Итог: когда узел возвращается (переэнумерация модема, спасение канала в
+# usbports.sh, перезагрузка модуля), интерфейс так и лежит - до ручного ifup или
+# перезагрузки роутера.
+#
+# Живой отчёт issue #16 (T99W175 05c6:9025 на BPI-R4 Lite, 06.09.2026):
+# proto=qmiraw, "up": false, "available": false, errors: NO_DEVICE - и никакого
+# движения 24 минуты аптайма.
+#
+# ЧТО ДЕЛАЕМ. То же, что делает штатный обработчик для qmi/mbim, но для наших
+# протоколов. Сам ifup не зовём: netifd поднимает интерфейс сам, как только
+# устройство снова доступно, а лишний ifup поверх этого только плодит гонки.
+
+[ "$ACTION" = add ] || [ "$ACTION" = remove ] || exit 0
+case "$DEVNAME" in
+	cdc-wdm*) ;;
+	*) exit 0 ;;
+esac
+
+. /lib/functions.sh
+. /lib/netifd/netifd-proto.sh
+
+_wwan_mark() {
+	local cfg="$1"
+	local proto device devpath
+
+	config_get proto "$cfg" proto
+	# Только протоколы ЭТОГО пакета: остальные обслуживает 00_wwan.sh, и
+	# дублировать его нельзя - два обработчика на один интерфейс дают гонку.
+	[ "$proto" = qmiraw ] || return 0
+
+	config_get device "$cfg" device
+	config_get devpath "$cfg" devpath
+
+	# Секция без device (или с device по USB-пути) принимает ЛЮБОЙ узел: путь
+	# устройства qmiraw разбирает сам при дозвоне, а cdc-wdmN у него плавает
+	# после переэнумерации - привязываться к номеру узла тут нельзя.
+	if [ -n "$device" ] && [ -z "$devpath" ] && [ "$device" != "/dev/$DEVNAME" ]; then
+		return 0
+	fi
+
+	if [ "$ACTION" = add ]; then
+		proto_set_available "$cfg" 1
+		logger -t 5gmodem "wwan-hotplug: $DEVNAME is back - interface $cfg ($proto) marked available"
+	else
+		proto_set_available "$cfg" 0
+	fi
+}
+
+config_load network
+config_foreach _wwan_mark interface
