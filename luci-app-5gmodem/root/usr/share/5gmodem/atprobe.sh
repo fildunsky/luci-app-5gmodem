@@ -71,7 +71,10 @@ wait "$k" 2>/dev/null
 if [ "$MODE" = "model" ]; then
 	# Нужен НЕПУСТОЙ осмысленный ответ: строка помимо эха команды и OK/ERROR.
 	# Настоящий MODEM даёт имя модели (FM350-GL, EC25, ...); DIAG/secondary - нет.
-	MODEL=$(tr -d '\r' 2>/dev/null < "$OUT" | grep -vE '^AT|^OK$|^ERROR|^\+CME|^$' | head -1)
+	# CR/LF сводим к переводу строки: у части прошивок ответ разделён ОДНИМИ
+	# CR, и `tr -d` склеивал его в одну строку - шаблоны ниже не срабатывали, а
+	# настоящий MODEM-порт выглядел немым (см. at_strip_ok в lib.sh).
+	MODEL=$(tr -s '\r\n' '\n\n' 2>/dev/null < "$OUT" | grep -vE '^AT|^OK$|^ERROR|^\+CME|^$' | head -1)
 	rm -f "$OUT"
 	[ -n "$MODEL" ] && exit 0 || exit 1
 fi
