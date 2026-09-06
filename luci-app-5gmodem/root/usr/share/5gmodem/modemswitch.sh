@@ -174,21 +174,28 @@ at_for_path() {
 	# рвёт data-сессию, и интерфейс флапает. Метрики должны идти по ДРУГОМУ AT-порту,
 	# поэтому dial-порт таких прото исключаем из перебора (у L850/L860 остаётся
 	# ttyACM2). Для прочих прото (mbim/qmi/…) данные идут не по tty - исключать нечего.
-	# Мемоизация на процесс: resolve зовёт at_for_path до 6 раз подряд для ОДНОГО
-	# пути (ретраи ожидания порта), а dial-порт прото за это время не меняется -
-	# пересчитывать iface_for_path + 2×uci get на каждый ретрай незачем.
-	if [ "$_AFP_SKIP_P" = "$1" ]; then
-		_afp_skip="$_AFP_SKIP_V"
-	else
-		_afp_skip=""
-		_afp_if=$(iface_for_path "$1")
-		if [ -n "$_afp_if" ]; then
-			case "$(uci -q get "network.$_afp_if.proto")" in
-				xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
-			esac
+	#
+	# ПРАВИЛО ПЕРЕЕХАЛО В lib.sh (dial_port_for_path): тем же перебором tty занято
+	# ещё пять мест, и все они дозвонный порт выбирали свободно - см. пояснение
+	# там же. Здесь остаётся только поиск порта по интерфейсу, если секция ещё не
+	# связана с ним (iface_for_path знает больше, чем ключ network в секции).
+	_afp_skip=$(dial_port_for_path "$1")
+	if [ -z "$_afp_skip" ]; then
+		# Мемоизация на процесс: resolve зовёт at_for_path до 6 раз подряд для
+		# ОДНОГО пути (ретраи ожидания порта), а dial-порт прото за это время не
+		# меняется - гонять iface_for_path на каждый ретрай незачем.
+		if [ "$_AFP_SKIP_P" = "$1" ]; then
+			_afp_skip="$_AFP_SKIP_V"
+		else
+			_afp_if=$(iface_for_path "$1")
+			if [ -n "$_afp_if" ]; then
+				case "$(uci -q get "network.$_afp_if.proto")" in
+					xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
+				esac
+			fi
+			_AFP_SKIP_P="$1"
+			_AFP_SKIP_V="$_afp_skip"
 		fi
-		_AFP_SKIP_P="$1"
-		_AFP_SKIP_V="$_afp_skip"
 	fi
 	# ИЗВЕСТНЫЙ AT-ПОРТ ПРОБУЕМ ПЕРВЫМ.
 	#

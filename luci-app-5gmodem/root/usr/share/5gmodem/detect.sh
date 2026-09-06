@@ -199,7 +199,12 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# ответивший на "AT" - и на части прошивок это был не тот порт: IP есть,
 	# метрики/логи пусты. Если MODEM-порт не нашёлся (у некоторых модемов CGMM
 	# не на дозвонном порту) - второй проход берёт любой отвечающий на "AT".
-	TTYS=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null)
+	# ПОРТ ДОЗВОНА НЕ БЕРЁМ. У xmm/atc тот же tty несёт данные, и порт метрик
+	# обязан быть другим (mkiface так его и выбирает: DIALPORT != METRIC_AT).
+	# Без этого старый конфиг, где at_port совпал с портом дозвона, чинился
+	# только руками (drop_dial_port в lib.sh).
+	TTYS=$(drop_dial_port "$AMP" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null))
 	for MODE in model at; do
 		for T in $TTYS; do
 			[ "$MODE" = model ] && { /usr/share/5gmodem/atprobe.sh "$T" model || continue; } \

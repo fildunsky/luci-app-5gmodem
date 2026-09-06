@@ -18,6 +18,9 @@
 RES="/usr/share/5gmodem"
 PORT="$1"
 
+# drop_dial_port / secname
+. "$RES/lib.sh" 2>/dev/null
+
 # ОТДЕЛЬНЫЙ ПОРТ ДЛЯ SMS, ЕСЛИ МОДЕМ ЕГО ДАЁТ.
 #
 # Вкладки SMS/USSD/AT и основной опрос метрик - независимые потоки, и когда они
@@ -45,7 +48,12 @@ pick_sms_port() {
 	[ -n "$_ep_if" ] || _ep_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 	[ "$(uci -q get "network.$_ep_if.proto" 2>/dev/null)" = "modemmanager" ] && return 1
 
-	for _t in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_path\"].tty[*]" 2>/dev/null); do
+	# ПОРТ ДОЗВОНА ИСКЛЮЧЁН (drop_dial_port). Он свободен ровно в том смысле, что
+	# не занят метриками, - и именно поэтому перебор его и выбирал: у L860-GL под
+	# xmm SMS, USSD и AT-консоль садились на ttyACM0, то есть на канал ДАННЫХ.
+	# Каждое обращение к ним рвало сессию (отчёт 06.09.2026).
+	for _t in $(drop_dial_port "$_path" $("$RES/listmodems.sh" 2>/dev/null \
+			| jsonfilter -e "@[@.path=\"$_path\"].tty[*]" 2>/dev/null)); do
 		[ -e "$_t" ] || continue
 		[ "$_t" = "$_at" ] && continue
 		if "$RES/atprobe.sh" "$_t" >/dev/null 2>&1; then echo "$_t"; return 0; fi
@@ -62,19 +70,26 @@ if [ -z "$PORT" ] || [ ! -e "$PORT" ]; then
 fi
 
 _ATP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+# Порт дозвона xmm/atc - чтобы УВЕСТИ с него уже осевшие значения (см. ниже).
+_DLP=$(dial_port_for_path "$(uci -q get 5gmodem.@5gmodem[0].active_modem)")
 
 CHANGED=0
 for _opt in readport sendport ussdport atport; do
 	_cur=$(uci -q get "5gmodem.sms.$_opt")
-	# Перезаписываем в трёх случаях:
+	# Перезаписываем в четырёх случаях:
 	#   - пусто (модем подключили до установки пакета);
 	#   - порт УЖЕ НЕ СУЩЕСТВУЕТ: после переподключения номера tty сдвигаются, и
 	#     старое значение указывает в пустоту - для пользователя это выглядит так
 	#     же, как незаданный порт;
 	#   - порт СОВПАДАЕТ с портом метрик, а мы нашли свободный: это и есть та
-	#     самая конкуренция (см. pick_sms_port выше).
+	#     самая конкуренция (см. pick_sms_port выше);
+	#   - порт СОВПАДАЕТ с портом ДОЗВОНА: там идут данные, и каждое чтение SMS
+	#     рвёт сессию. Отбор выше такой порт больше не выбирает, но у тех, кому он
+	#     уже записан, сам по себе он не уйдёт - уводим (отчёт 06.09.2026,
+	#     L860-GL: все четыре ключа смотрели в дозвонный ttyACM0).
 	if [ -z "$_cur" ] || [ ! -e "$_cur" ] || \
-	   { [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; }; then
+	   { [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; } || \
+	   { [ -n "$_DLP" ] && [ "$_cur" = "$_DLP" ] && [ "$PORT" != "$_DLP" ]; }; then
 		uci -q set "5gmodem.sms.$_opt=$PORT"
 		CHANGED=1
 	fi

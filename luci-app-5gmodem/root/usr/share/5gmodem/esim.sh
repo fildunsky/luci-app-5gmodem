@@ -967,12 +967,30 @@ find_port() {
 	# SIM7600 получал «eSIM» от стоящего рядом FM350. Берём tty строго по
 	# USB-пути активного модема; detect.sh добавляем, лишь если он этому пути
 	# и принадлежит.
+	# ПОРТ ДОЗВОНА xmm/atc ИСКЛЮЧАЕМ. CCHO по нему уходит в канал ДАННЫХ и рвёт
+	# сессию: в отчёте 06.09.2026 (L860-GL) поиск eUICC щупал ttyACM0, которым
+	# дозванивался xmm. Логика та же, что в drop_dial_port (lib.sh); здесь она
+	# инлайном - esim.sh намеренно не подключает lib.sh (см. esim_active).
+	_fp_skip=""
+	_fp_if=$(uci -q get "5gmodem.m_$(printf '%s' "$P" | sed 's/[^A-Za-z0-9]/_/g').network")
+	if [ -n "$_fp_if" ]; then
+		case "$(uci -q get "network.$_fp_if.proto" 2>/dev/null)" in
+			xmm|atc) _fp_skip=$(uci -q get "network.$_fp_if.device" 2>/dev/null) ;;
+		esac
+	fi
 	if [ -n "$P" ]; then
 		CANDS=$("$RES/listmodems.sh" 2>/dev/null \
 			| jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null)
 	else
 		# Путь неизвестен (старый одномодемный конфиг) - поведение прежнее.
 		CANDS=$("$RES/detect.sh" 2>/dev/null)
+	fi
+	# Единственный порт не отбираем (см. drop_dial_port): иначе у композиции с
+	# одним tty eUICC стал бы недостижим вовсе.
+	if [ -n "$_fp_skip" ]; then
+		_fp_n=0
+		for _fp_t in $CANDS; do _fp_n=$((_fp_n + 1)); done
+		[ "$_fp_n" -gt 1 ] && CANDS=$(printf '%s\n' $CANDS | grep -vxF "$_fp_skip")
 	fi
 	SEEN=""; ALIVE=""
 	for t in $CANDS; do
