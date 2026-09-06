@@ -918,6 +918,56 @@ at_dialer_busy() {   # $1 - порт; код 0 = на порту живёт до
 	pgrep -f "gcom -d *$1" >/dev/null 2>&1
 }
 
+# ПОРТ ДОЗВОНА ЧУЖОЙ - В НЕГО НЕ ХОДИМ.
+#
+# Прото xmm/atc держат СВОЙ tty под ДАННЫЕ (M-RAW_IP): любая AT-проба на нём
+# рвёт сессию - интерфейс флапает, а на части прошивок модем ещё и теряет
+# регистрацию и уходит в переперечисление USB. Правило это давно записано в
+# modemswitch (at_for_path), но перебором tty занимаются ещё пять мест, и они
+# дозвонный порт выбирали наравне с прочими. Живой отчёт 06.09.2026 (L860-GL,
+# xmm, ttyACM0 = дозвон, ttyACM2 = метрики): в дозвонный порт попали SMS, USSD и
+# AT-консоль (ensureports), фоновой опрос оператора (netpri), поиск eUICC (esim)
+# и опрос слотов (simslot). Правило одно на всех - и живёт оно здесь.
+dial_port_for_path() {   # $1 - usb-путь; печатает tty дозвонщика или ничего
+	[ -n "$1" ] || return 1
+	if [ "$_DPP_IN" = "$1" ]; then
+		printf '%s\n' "$_DPP_OUT"
+		return 0
+	fi
+	_dpp_sec=$(secname "$1")
+	_dpp_out=""
+	_dpp_if=$(uci -q get "5gmodem.$_dpp_sec.network")
+	if [ -n "$_dpp_if" ]; then
+		# СУДИМ ПО ЖИВОМУ КОНФИГУ ИНТЕРФЕЙСА, а не по data_at_port в секции: тот
+		# остаётся от прежней настройки, и после перевода модема на qmi/mbim мы
+		# исключали бы совершенно свободный порт.
+		case "$(uci -q get "network.$_dpp_if.proto" 2>/dev/null)" in
+			xmm|atc) _dpp_out=$(uci -q get "network.$_dpp_if.device" 2>/dev/null) ;;
+		esac
+	fi
+	case "$_dpp_out" in /dev/*) : ;; *) _dpp_out="" ;; esac
+	_DPP_IN="$1"; _DPP_OUT="$_dpp_out"
+	printf '%s\n' "$_dpp_out"
+}
+
+# Убрать порт дозвона из списка кандидатов (см. dial_port_for_path).
+# Usage: drop_dial_port <usb-путь> <tty>...
+drop_dial_port() {
+	_ddp_p="$1"; shift
+	_ddp_skip=$(dial_port_for_path "$_ddp_p")
+	[ -n "$_ddp_skip" ] || { printf '%s\n' "$*"; return 0; }
+	_ddp_out=""
+	for _ddp_t in "$@"; do
+		[ "$_ddp_t" = "$_ddp_skip" ] && continue
+		_ddp_out="$_ddp_out $_ddp_t"
+	done
+	# ЕДИНСТВЕННЫЙ ПОРТ НЕ ОТБИРАЕМ. У композиции с одним tty исключение оставило
+	# бы без порта и метрики, и SMS, и слоты - это хуже риска пробы: там дозвон и
+	# опрос делят порт по построению, и очередь at_lock для того и есть.
+	[ -n "$_ddp_out" ] || { printf '%s\n' "$*"; return 0; }
+	printf '%s\n' "${_ddp_out# }"
+}
+
 # Модемом фактически владеет ModemManager? Проверка ПО ФАКТУ - модем числится
 # в списке MM, - а не по прото интерфейса: конфиг может разойтись с реальностью
 # (интерфейс mbim/qmi/отсутствует, а MM запущен и модем захватил). Свои модемы

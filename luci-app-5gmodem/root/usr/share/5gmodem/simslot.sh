@@ -679,8 +679,10 @@ live_port() {
 	# ПОРТЫ ИМЕННО ЦЕЛЕВОГО МОДЕМА (по usb-пути), а не активного: AT+GTDUALSIM= /
 	# AT+CEISWITCHSIM= физически переключают слот, и уход в порт соседа переключил
 	# бы не ту SIM в не том модеме.
-	_LPT=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$_TGT\"].tty[*]" 2>/dev/null | tr '\n' ' ')
+	# Порт дозвона xmm/atc исключён: AT+GTDUALSIM?/AT+CEISWITCHSIM? в канале
+	# ДАННЫХ рвут сессию (drop_dial_port в lib.sh).
+	_LPT=$(drop_dial_port "$_TGT" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$_TGT\"].tty[*]" 2>/dev/null))
 	[ -n "$_LPT" ] || return 1
 	# Порт из detect.sh (он про АКТИВНЫЙ модем) пробуем первым, лишь если он реально
 	# принадлежит целевому - тогда дешёвый путь сохраняется, иначе он отбрасывается.

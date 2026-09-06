@@ -1737,6 +1737,36 @@ report() {
 			done
 		done'
 	run 5  "AT port (detect.sh)" "$RES/detect.sh"
+	# РОЛИ ПОРТОВ: КТО ДОЗВАНИВАЕТСЯ, КТО ОПРАШИВАЕТ.
+	#
+	# У прото xmm/atc дозвон идёт ПО AT-ПОРТУ, и этот tty несёт данные всю
+	# сессию. Порт метрик обязан быть другим (mkiface так его и выбирает), иначе
+	# каждый опрос рвёт соединение. Столкновение ролей руками из UI не видно
+	# вовсе, а выглядит оно как «выставляю порт, а он возвращается обратно»:
+	# resolve исключает дозвонный порт и переписывает закреплённый (отчёт
+	# 06.09.2026, L860-GL). Печатаем обе роли и говорим прямо, если они сошлись.
+	run 5 "Ports: dialer vs metrics (verdict)" sh -c '
+		P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+		[ -n "$P" ] || { echo "no active modem - this section does not apply"; exit 0; }
+		SEC="m_$(echo "$P" | sed "s/[^A-Za-z0-9]/_/g")"
+		IF=$(uci -q get "5gmodem.$SEC.network")
+		PR=$(uci -q get "network.$IF.proto" 2>/dev/null)
+		AT=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		SM=$(uci -q get 5gmodem.sms.readport)
+		echo "interface: ${IF:-(none)}  proto: ${PR:-(none)}"
+		case "$PR" in
+			xmm|atc) ;;
+			*) echo "data does not go over a tty with this proto - the roles cannot collide"; exit 0 ;;
+		esac
+		DL=$(uci -q get "network.$IF.device" 2>/dev/null)
+		echo "dialer port:  ${DL:-(none)}"
+		echo "metrics port: ${AT:-(none)}"
+		echo "SMS port:     ${SM:-(none)}"
+		RC=0
+		[ -n "$DL" ] && [ "$DL" = "$AT" ] && { echo "PROBLEM: the metrics port IS the dialer port - every poll breaks the data session. The app keeps re-pinning it, which is why a hand-picked port comes back changed."; RC=1; }
+		[ -n "$DL" ] && [ "$DL" = "$SM" ] && { echo "PROBLEM: SMS/USSD/AT console sit on the dialer port - every read breaks the data session."; RC=1; }
+		[ "$RC" = 0 ] && echo "roles are separate - fine"
+		exit 0'
 	run 5  "tty/cdc-wdm in the system" sh -c "ls -l /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan* 2>/dev/null"
 	run 10 "Who holds the ports" sh -c "for f in /dev/ttyUSB* /dev/cdc-wdm*; do [ -e \"\$f\" ] || continue; u=\$(fuser \"\$f\" 2>/dev/null); [ -n \"\$u\" ] && echo \"\$f: \$u\"; done; echo '--- processes ---'; ps w 2>/dev/null | grep -iE 'ModemManager|uqmi|mbim|sms_tool|lpac|gcom' | grep -v grep"
 
@@ -1944,8 +1974,23 @@ report() {
 			echo "the physical SIM slot ($SLA) is active, eSIM is slot $SLE: the modem has ONE channel to the card, so the eUICC ISD-R is unreachable right now and CCHO will not open on ANY port. This does not mean the chip is missing - switch the slot to eSIM and try again."
 			exit 0
 		fi
+		# ПОРТ ДОЗВОНА В ПЕРЕБОР НЕ БЕРЁМ. У xmm/atc тот же tty несёт ДАННЫЕ, а
+		# проба шлёт в него CCHC+CCHO - это рвёт сессию, то есть отчёт своими
+		# руками ломал связь, которую пришли чинить (в отчёте 06.09.2026 по
+		# L860-GL видно "/dev/ttyACM0 -> нет" - это и есть дозвонный порт).
+		# Логика та же, что в drop_dial_port (lib.sh); здесь инлайном - блок
+		# идёт отдельным sh -c, без библиотеки.
+		DSK=""
+		DIF=$(uci -q get "5gmodem.m_$(echo "$P" | sed "s/[^A-Za-z0-9]/_/g").network" 2>/dev/null)
+		if [ -n "$DIF" ]; then
+			case "$(uci -q get "network.$DIF.proto" 2>/dev/null)" in
+				xmm|atc) DSK=$(uci -q get "network.$DIF.device" 2>/dev/null) ;;
+			esac
+		fi
 		echo "ports of modem $P:"
+		[ -n "$DSK" ] && echo "  $DSK -> skipped: the xmm/atc dialer owns this port (it carries data)"
 		for t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null); do
+			[ -n "$DSK" ] && [ "$t" = "$DSK" ] && continue
 			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done
 			R=$(sms_tool -d "$t" at "AT+CCHO=\"$AID\"" 2>/dev/null | tr -d "\r" | grep -v "^$" | grep -vi "^at+ccho" | head -1)
 			case "$R" in

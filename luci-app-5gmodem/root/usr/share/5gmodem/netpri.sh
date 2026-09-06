@@ -606,7 +606,12 @@ operator_probe() {
 	path=$(modem_path_for "$i")
 	cands=$(modem_atport_for "$i")
 	if [ -n "$path" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
-		cands="$cands $(_lm | jsonfilter -e "@[@.path=\"$path\"].tty[*]" 2>/dev/null)"
+		# ПОРТ ДОЗВОНА СЮДА НЕ ПОПАДАЕТ (drop_dial_port в lib.sh). Проба ниже -
+		# это AT+COPS=3,0 в фоновом обновлении списка, то есть регулярно; на
+		# xmm/atc тот же tty несёт ДАННЫЕ, и такая проба рвёт сессию (отчёт
+		# 06.09.2026, L860-GL: соединение отваливалось «через некоторое время»).
+		cands=$(drop_dial_port "$path" $cands \
+			$(_lm | jsonfilter -e "@[@.path=\"$path\"].tty[*]" 2>/dev/null))
 	fi
 	for port in $cands; do
 		[ -n "$port" ] && [ -e "$port" ] || continue
