@@ -51,6 +51,49 @@ newid_for() {   # $1 - vid, $2 - pid
 	esac
 }
 
+# НОМЕР ИНТЕРФЕЙСА КАНАЛА ДАННЫХ - для композиций, где канал ТОЖЕ vendor-класса
+# (ff) и потому неотличим для usb-serial от обычного порта. Общая хирургия в
+# bind_ports возвращает родным драйверам только НЕ-ff интерфейсы, а этот номер
+# позволяет спасти и ff-канал (_rescue_rmnet).
+#
+# 05c6:9025 (T99W175 в режиме QMI): канал - If#4, ровно как в статической
+# таблице ядра, drivers/net/usb/qmi_wwan.c:
+#   {QMI_QUIRK_SET_DTR(0x05c6, 0x9025, 4)}
+# То есть qmi_wwan заберёт интерфейс обратно сразу, как только usb-serial его
+# отпустит. Живой отчёт issue #16 (BPI-R4 Lite, 06.09.2026): на загрузке
+# cdc-wdm0 и wwan0 поднялись штатно (08:30:51), в 08:31:38 модем прошёл
+# реэнумерацию, и generic - с уже прописанным динамическим id - забрал ВСЕ
+# пять ff-интерфейсов, включая канал. Итог: пять ttyUSB, ни одного cdc-wdm,
+# интерфейс с NO_DEVICE и «после обновления всё сломалось».
+# 05c6:9091 (Android-палки MDM9600/9610): rmnet - If#2.
+data_iface_for() {   # $1 - vid, $2 - pid
+	case "$1:$2" in
+		05c6:9025) echo 4 ;;
+		05c6:9091) echo 2 ;;
+		*)         echo "" ;;
+	esac
+}
+
+# Композиции, где трёхполевый new_id (или жадный generic) захватывает и
+# ADB-интерфейс (ff/42/01): порт из него получается мёртвый, а хостовый adb
+# упирается в занятый интерфейс.
+_has_adb_iface() {   # $1 - vid, $2 - pid
+	case "$1:$2" in
+		05c6:9025|05c6:9091) return 0 ;;
+		*)                   return 1 ;;
+	esac
+}
+
+# Спасение канала данных: если у композиции известен номер ff-интерфейса
+# канала - снимаем с него usb-serial и отдаём родному драйверу. Идемпотентно:
+# _rescue_rmnet трогает интерфейс, только если им владеет usb-serial.
+_rescue_data() {   # $1 - vid, $2 - pid
+	_rd_n=$(data_iface_for "$1" "$2")
+	[ -n "$_rd_n" ] && _rescue_rmnet "$1" "$2" "$_rd_n"
+	_has_adb_iface "$1" "$2" && _release_adb "$1" "$2"
+	return 0
+}
+
 # АДРЕСНАЯ ХИРУРГИЯ ДЛЯ КОМПОЗИЦИЙ, ГДЕ КАНАЛ ДАННЫХ ТОЖЕ vendor-класса.
 # Общая хирургия в bind_ports возвращает родным драйверам только НЕ-ff
 # интерфейсы; у 9091 rmnet - ff/ff/ff, и на реэнумерации option может успеть
@@ -70,8 +113,29 @@ _rescue_rmnet() {   # $1 - vid, $2 - pid, $3 - номер интерфейса �
 				option1|usb_serial_generic|generic)
 					_rr_if=$(basename "$_rr_i")
 					echo "$_rr_if" > "$_rr_i/driver/unbind" 2>/dev/null
-					echo "$_rr_if" > /sys/bus/usb/drivers_probe 2>/dev/null
-					logger -t 5gmodem-usbports "rescued data interface $_rr_if from $_rr_drv (returned to its native driver)"
+					# ПРИВЯЗЫВАЕМ АДРЕСНО, А НЕ ЧЕРЕЗ drivers_probe.
+					#
+					# Динамический id из new_id снять нельзя: у usb-serial нет
+					# remove_id, запись живёт в драйвере до перезагрузки. Значит
+					# при общем перепроборе жадный usb-serial - такой же
+					# кандидат, как родной драйвер, и кто победит, решает
+					# порядок регистрации: интерфейс мог тут же вернуться туда
+					# же, откуда мы его сняли. Адресный bind однозначен, а если
+					# драйвер по таблице не подходит, запись просто отвалится
+					# ошибкой - тогда и пробуем общий путь.
+					_rr_ok=0
+					for _rr_nat in qmi_wwan cdc_mbim cdc_ncm cdc_ether rndis_host; do
+						[ -d "/sys/bus/usb/drivers/$_rr_nat" ] || continue
+						echo "$_rr_if" > "/sys/bus/usb/drivers/$_rr_nat/bind" 2>/dev/null || continue
+						[ -e "$_rr_i/driver" ] || continue
+						_rr_ok=1
+						logger -t 5gmodem-usbports "rescued data interface $_rr_if from $_rr_drv (bound to $_rr_nat)"
+						break
+					done
+					if [ "$_rr_ok" = 0 ]; then
+						echo "$_rr_if" > /sys/bus/usb/drivers_probe 2>/dev/null
+						logger -t 5gmodem-usbports "rescued data interface $_rr_if from $_rr_drv (returned to its native driver)"
+					fi
 					;;
 			esac
 		done
@@ -109,10 +173,10 @@ bind_ports() {   # $1 - vid, $2 - pid
 	[ -n "$1" ] && [ -n "$2" ] || return 1
 
 	# Спасение канала - ДО раннего выхода «порты уже есть»: после реэнумерации
-	# порты есть (dynamic id жив), но rmnet мог достаться usb-serial'у.
-	case "$1:$2" in
-		05c6:9091) _rescue_rmnet "$1" "$2" 2; _release_adb "$1" "$2" ;;
-	esac
+	# порты есть (dynamic id жив), но канал мог достаться usb-serial'у. Это и
+	# есть единственный проход, который чинит уже сломанное устройство: при
+	# живых портах bind_ports выходит ниже, ничего не привязывая.
+	_rescue_data "$1" "$2"
 
 	# У МОДЕМА ЕСТЬ РАБОЧИЙ КАНАЛ ДАННЫХ - НЕ ТРОГАЕМ ВОВСЕ.
 	#
@@ -182,6 +246,20 @@ bind_ports() {   # $1 - vid, $2 - pid
 
 	_bp_drv=$(driver_for "$1" "$2")
 	_bp_path="/sys/bus/usb-serial/drivers/$_bp_drv/new_id"
+	# ОТКАТ НА GENERIC, ЕСЛИ ЖЕЛАЕМОГО ДРАЙВЕРА В СИСТЕМЕ НЕТ.
+	#
+	# option1 живёт в kmod-usb-serial-option, а его на сборке может не быть -
+	# в lite-образах и на прошивках, собранных под конкретный модем, ставят
+	# один kmod-usb-serial. Раньше мы в этом случае просто выходили с записью
+	# в журнал, и пользователь оставался без портов вовсе; на его месте порты
+	# заводил кто-то ещё (строка в автозагрузке), и получалась ровно та гонка
+	# двух new_id, от которой мы уходили. Generic даёт урезанные порты, но
+	# даёт: метрики, SMS и USSD работают, а канал прикрыт _rescue_data.
+	if [ ! -w "$_bp_path" ] && [ "$_bp_drv" != "generic" ]; then
+		logger -t 5gmodem-usbports "no $_bp_drv driver for $1:$2 ($_bp_path missing) - falling back to generic"
+		_bp_drv="generic"
+		_bp_path="/sys/bus/usb-serial/drivers/$_bp_drv/new_id"
+	fi
 	if [ ! -w "$_bp_path" ]; then
 		# Драйвер не собран или не загружен - это не авария, но молчать нельзя:
 		# без портов не будет ни метрик, ни SMS, и причина иначе не видна.
@@ -195,9 +273,10 @@ bind_ports() {   # $1 - vid, $2 - pid
 		return 1
 	fi
 	logger -t 5gmodem-usbports "bound $1:$2 via $_bp_drv"
-	case "$1:$2" in
-		05c6:9091) sleep 1; _rescue_rmnet "$1" "$2" 2; _release_adb "$1" "$2" ;;
-	esac
+	if [ -n "$(data_iface_for "$1" "$2")" ]; then
+		sleep 1
+		_rescue_data "$1" "$2"
+	fi
 
 	[ "$_bp_haswdm" = 1 ] || return 0
 	# Хирургия после привязки при живом канале: не-ff интерфейсы (CDC comm/data,
@@ -278,5 +357,20 @@ coldplug() {
 case "$1" in
 	bind)     bind_ports "$2" "$3" ;;
 	driver)   driver_for "$2" "$3" ;;
+	# Номер интерфейса канала данных - нужен отчёту, чтобы отличить «канал
+	# увёл жадный usb-serial» от «в композиции канала нет вовсе».
+	dataif)   data_iface_for "$2" "$3" ;;
 	coldplug) coldplug ;;
+	# Ручное спасение канала данных: пригодится в поддержке, когда порты
+	# устройству завёл кто-то ещё, а cdc-wdm/сеть при этом пропали.
+	rescue)
+		if [ -n "$2" ] && [ -n "$3" ]; then
+			_rescue_data "$2" "$3"
+		else
+			for _r_d in /sys/bus/usb/devices/*; do
+				[ -f "$_r_d/idVendor" ] || continue
+				_rescue_data "$(cat "$_r_d/idVendor" 2>/dev/null)" \
+					"$(cat "$_r_d/idProduct" 2>/dev/null)"
+			done
+		fi ;;
 esac

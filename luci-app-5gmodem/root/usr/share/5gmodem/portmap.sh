@@ -71,9 +71,9 @@ for _pm_d in /sys/bus/usb/devices/*; do
 	[ -n "$_pm_ttys$_pm_wdm$_pm_net" ] || continue
 
 	echo "### $_pm_path  [$_pm_vid:$_pm_pid]  serial=$(cat "$_pm_d/serial" 2>/dev/null || echo '-')"
-	echo "    продукт: $(cat "$_pm_d/product" 2>/dev/null || echo '-')"
-	echo "    порты:  ${_pm_ttys:- нет}"
-	echo "    cdc-wdm:${_pm_wdm:- нет}    сеть:${_pm_net:- нет}"
+	echo "    product: $(cat "$_pm_d/product" 2>/dev/null || echo '-')"
+	echo "    ports:  ${_pm_ttys:- none}"
+	echo "    cdc-wdm:${_pm_wdm:- none}    net:${_pm_net:- none}"
 
 	_pm_imei_dev=""
 	_pm_tried=0
@@ -82,14 +82,14 @@ for _pm_d in /sys/bus/usb/devices/*; do
 		_pm_tried=$((_pm_tried + 1))
 		_pm_r=$(_pm_imei "/dev/$_pm_t") || continue
 		_pm_imei_dev="$_pm_r"
-		echo "    IMEI:   $_pm_r  (прочитан с /dev/$_pm_t)"
+		echo "    IMEI:   $_pm_r  (read from /dev/$_pm_t)"
 		break
 	done
 	if [ -z "$_pm_imei_dev" ]; then
 		if [ -n "$_pm_ttys" ]; then
-			echo "    IMEI:   порты не ответили на AT+CGSN"
+			echo "    IMEI:   no port answered AT+CGSN"
 		else
-			echo "    IMEI:   AT-портов нет (HiLink или композиция без них)"
+			echo "    IMEI:   no AT ports (HiLink, or a composition without them)"
 		fi
 		continue
 	fi
@@ -99,7 +99,7 @@ for _pm_d in /sys/bus/usb/devices/*; do
 		case "$_pm_e" in
 			"$_pm_imei_dev":*)
 				_pm_other=${_pm_e#*:}
-				_pm_dupes="$_pm_dupes$_pm_imei_dev ($_pm_other и $_pm_path)
+				_pm_dupes="$_pm_dupes$_pm_imei_dev ($_pm_other and $_pm_path)
 "
 				;;
 		esac
@@ -109,13 +109,13 @@ done
 
 echo ""
 if [ -n "$_pm_dupes" ]; then
-	echo "!!! ОДИНАКОВЫЙ IMEI У РАЗНЫХ УСТРОЙСТВ:"
+	echo "!!! THE SAME IMEI ON DIFFERENT DEVICES:"
 	printf '%s' "$_pm_dupes" | sed 's/^/    /'
-	echo "    Устройства различаются по USB-серийнику выше, то есть это"
-	echo "    физически РАЗНЫЕ модули с совпадающим IMEI (клонированный или"
-	echo "    не прошитый). Приложение это переживает, но владение интерфейсом"
-	echo "    и профили в таком случае решаются по USB-пути, а не по IMEI."
+	echo "    The devices differ by the USB serial above, so these are"
+	echo "    physically DIFFERENT modules sharing one IMEI (cloned, or never"
+	echo "    flashed). The app survives this, but interface ownership and"
+	echo "    profiles are then decided by USB path, not by IMEI."
 else
-	echo "IMEI у всех опрошенных устройств различаются - дубликатов нет."
+	echo "Every polled device has its own IMEI - no duplicates."
 fi
 exit 0
