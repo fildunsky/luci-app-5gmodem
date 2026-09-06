@@ -539,7 +539,8 @@ keyhint() {
 	# против латинских клавиш, а также Tab/BkSp/Enter/1-3/+/-), hl_name сама
 	# покажет клавишу перед словом - иначе её негде было бы увидеть.
 	_kh() { printf '%s   ' "$(hl_name "$2" "$1" "$C_DIM")"; }
-	printf '\n '
+	# На крошечном экране пустая строка над подсказкой - роскошь.
+	[ "${TINY:-0}" = 1 ] && printf ' ' || printf '\n '
 	_kh "q" "$T_K_QUIT"
 	_kh "r" "$T_K_REFRESH"
 	if [ -n "$1" ]; then
@@ -550,11 +551,15 @@ keyhint() {
 	fi
 	# Переключение модема показываем, только если модемов больше одного.
 	[ "$MCOUNT" -gt 1 ] && _kh "Tab" "$T_K_MODEM"
-	printf '%s\n' "$(hl_name "$T_K_TAB" "BkSp" "$C_DIM")"
+	# На крошечном экране подсказка занимает последнюю, 22-ю строку: перевод
+	# строки после неё прокрутил бы весь экран на строку вверх.
+	[ "${TINY:-0}" = 1 ] && printf '%s' "$(hl_name "$T_K_TAB" "BkSp" "$C_DIM")" \
+		|| printf '%s\n' "$(hl_name "$T_K_TAB" "BkSp" "$C_DIM")"
 }
 
 frame() {
 	printf '%s[2J%s[H' "$ESC" "$ESC"
+	[ "$TINY" = 1 ] && { frame_tiny; return; }
 	[ "$NARROW" = 1 ] && { frame_narrow; return; }
 	printf ' %s%s5gtop%s  %s%s\n' "$C_B" "$C_CYA" "$C_RST" "$C_DIM" "$C_RST"
 	bar_modems
@@ -714,7 +719,7 @@ bar_tabs() {
 		fi
 	done
 	printf '\n'
-	printf '\n'   # воздух между полосой вкладок и первым блоком
+	[ "${_tight:-0}" = 1 ] || printf '\n'   # воздух между полосой вкладок и первым блоком
 }
 
 # Полоса модемов: активный отмечен маркером. Список берём из конфига (он же
@@ -743,7 +748,7 @@ bar_modems() {
 		fi
 	done
 	printf '\n'
-	printf '\n'   # воздух под полосой модемов
+	[ "${_tight:-0}" = 1 ] || printf '\n'   # воздух под полосой модемов
 }
 
 # at <строка> <колонка> <текст> - переписать только значение. [K не используем:
@@ -784,6 +789,27 @@ frame_narrow() {
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
 	ROW_END=36
+}
+
+# ── КРОШЕЧНЫЙ ЭКРАН (LCD-терминал Almond, 52x22). Та же узкая раскладка, но
+#    без пустых строк между блоками и без разделов «Приоритет» и «Агрегация»:
+#    в 22 строки входят модем, сигнал, сота и скорость. Ровно 22 строки, до
+#    последней - подсказка клавиш.
+frame_tiny() {
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	# _tight - без пустых строк под полосами модемов и вкладок: только здесь и
+	# в «Соте», остальные вкладки и так помещаются со своими рядами.
+	_tight=1; bar_modems; bar_tabs; _tight=0
+	box_top "$T_MODEM"
+	box_mid; box_mid; box_mid; box_mid; box_mid
+	box_top "$T_SIGNAL"
+	box_mid; box_mid; box_mid; box_mid
+	box_top "$T_CELL"
+	box_mid; box_mid; box_mid
+	box_top "$T_SPEED"
+	box_mid; box_mid
+	keyhint "t	$T_K_TEST"
+	ROW_END=22
 }
 
 # ── РАЗДЕЛ «СОТА». Полный набор строк, как в блоке «Информация о соте» веба,
@@ -912,25 +938,30 @@ draw_cell() {
 frame_cell_narrow() {
 	printf '%s[2J%s[H' "$ESC" "$ESC"
 	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
-	bar_modems
-	bar_tabs
+	_tight="$TINY"; bar_modems; bar_tabs; _tight=0
 	box_top "$T_CELL"
 	box_mid; box_mid; box_mid; box_mid; box_mid; box_mid; box_mid; box_mid
-	box_end
+	[ "$TINY" = 1 ] || box_end
 	box_top "$T_SIGNAL"
 	box_mid; box_mid; box_mid; box_mid; box_mid
-	box_end
+	[ "$TINY" = 1 ] || box_end
 	box_top "$T_CA"
-	box_mid; box_mid; box_mid
-	box_end
+	box_mid; box_mid
+	[ "$TINY" = 1 ] || { box_mid; box_end; }
 	keyhint "+/-	$T_K_WIDTH"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
+	# На крошечном экране блоки идут без пустых строк - 22 строки ровно.
 	ROW_END=28
+	[ "$TINY" = 1 ] && ROW_END=22
 }
 
 draw_cell_narrow() {
 	_w=$((W - 14))
+	# Сдвиги строк для крошечного экрана: без пустых строк между блоками
+	# сигнал поднимается на одну, агрегация - на две и теряет третью строку.
+	_o1=0; _o2=0; _rmax=24
+	[ "$TINY" = 1 ] && { _o1=1; _o2=2; _rmax=21; }
 	_n() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 11)" "$C_RST" "$3"; }
 	_n 5  "$T_LAC"      "$(fit "$(v lac_hex) / $(v lac_dec)" $_w)"
 	_n 6  "$T_CID"      "$(fit "$(v cid_hex) / $(v cid_dec)" $_w)"
@@ -942,24 +973,24 @@ draw_cell_narrow() {
 	_n 12 "$T_CQI"      "$(fit "$(v cqi)  $T_UECAT $(v uecat)" $_w)"
 
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
-	_n 15 'RSRP' "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
-	_n 16 'RSRQ' "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
-	_n 17 'SINR' "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
-	_n 18 'RSSI' "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
-	_n 19 "$T_TXPOWER" "$(fit "$(v txpower)" $_w)"
+	_n $((15 - _o1)) 'RSRP' "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
+	_n $((16 - _o1)) 'RSRQ' "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
+	_n $((17 - _o1)) 'SINR' "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
+	_n $((18 - _o1)) 'RSSI' "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
+	_n $((19 - _o1)) "$T_TXPOWER" "$(fit "$(v txpower)" $_w)"
 
 	# Агрегация: в узком режиме только диапазоны, без PCI/EARFCN - иначе строка
 	# не помещается, а сам факт агрегации важнее её подробностей.
-	_r=22; _any=0
+	_r=$((22 - _o2)); _any=0
 	for _i in 1 2 3; do
 		_sb=$(v "s${_i}band")
 		[ "$_sb" = "-" ] && continue
-		[ "$_r" -gt 24 ] && break
+		[ "$_r" -gt "$_rmax" ] && break
 		_n "$_r" "SCC$_i" "$(fit "$_sb" $_w)"
 		_r=$((_r + 1)); _any=1
 	done
-	[ "$_any" = 0 ] && { _n 22 '' "${C_DIM}$(fit "$T_NOCA" $_w)${C_RST}"; _r=23; }
-	while [ "$_r" -le 24 ]; do _n "$_r" '' "$(fit '' $_w)"; _r=$((_r + 1)); done
+	[ "$_any" = 0 ] && { _n $((22 - _o2)) '' "${C_DIM}$(fit "$T_NOCA" $_w)${C_RST}"; _r=$((23 - _o2)); }
+	while [ "$_r" -le "$_rmax" ]; do _n "$_r" '' "$(fit '' $_w)"; _r=$((_r + 1)); done
 }
 
 frame_modem() {
@@ -975,11 +1006,12 @@ frame_modem() {
 	box_end
 	box_top "$T_PORTS"
 	box_mid; box_mid; box_mid
-	box_end
+	[ "$TINY" = 1 ] || box_end
 	keyhint "+/-	$T_K_WIDTH"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
 	ROW_END=23
+	[ "$TINY" = 1 ] && ROW_END=22
 }
 
 draw_modem() {
@@ -1008,7 +1040,8 @@ draw_modem() {
 # сообщение на экран влезало ВСЕГО ДВА сообщения, хотя в вебе их было четыре.
 # Теперь блок выше, а тексту - две строки: список остаётся списком, а не
 # читалкой, зато сообщений видно вчетверо больше.
-SMS_ROWS=24
+SMS_ROWS_DEF=24
+SMS_ROWS=$SMS_ROWS_DEF
 SMS_TEXT_LINES=2
 
 frame_sms() {
@@ -1023,11 +1056,11 @@ frame_sms() {
 	keyhint "+/-	$T_K_WIDTH"
 	# Курсор паркуется ПОД этой рамкой. Значение своё у каждой: общее
 	# ROW_END оставляло его то ниже экрана, то посреди данных.
-	ROW_END=32
+	ROW_END=$((SMS_ROWS + 8))
 }
 
 draw_sms() {
-	_r=5
+	_r=7
 	# СУЩЕСТВОВАНИЕ файла, а не его размер: пустой файл означает «прочитали,
 	# сообщений нет», и раньше он был неотличим от «ещё не читали» - обе ветки
 	# давали -s = ложь, и надпись «читаю сообщения…» не сменялась никогда.
@@ -1044,7 +1077,7 @@ draw_sms() {
 		# протекает в остальной скрипт.
 		while IFS="$(printf '\t')" read -r _sn _ts _tx; do
 			[ -n "$_sn" ] || continue
-			[ "$_r" -gt $((4 + SMS_ROWS - 1)) ] && break
+			[ "$_r" -gt $((6 + SMS_ROWS - 1)) ] && break
 			at $_r 4 "${C_B}$(fit "$_sn" 24)${C_RST}${C_DIM}$(fit "$_ts" $((W - 32)))${C_RST}"
 			_r=$((_r + 1))
 			# ТЕКСТ ПЕРЕНОСИМ, а не обрезаем: на узком экране от сообщения
@@ -1057,7 +1090,7 @@ draw_sms() {
 				_ln=$((_ln + 1))
 			done > "$DATA.wrap"
 			while read -r _wl; do
-				[ "$_r" -gt $((4 + SMS_ROWS)) ] && break
+				[ "$_r" -gt $((6 + SMS_ROWS)) ] && break
 				at $_r 4 "$(fit "$_wl" $((W - 6)))"
 				_r=$((_r + 1))
 			done < "$DATA.wrap"
@@ -1067,7 +1100,7 @@ draw_sms() {
 		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
 	fi
 	# гасим остаток блока, иначе от прошлого кадра останутся хвосты
-	while [ "$_r" -le $((4 + SMS_ROWS)) ]; do
+	while [ "$_r" -le $((6 + SMS_ROWS)) ]; do
 		at $_r 4 "$(fit '' $((W - 6)))"
 		_r=$((_r + 1))
 	done
@@ -1361,12 +1394,56 @@ draw_narrow() {
 	printf '%s[%d;1H' "$ESC" "$ROW_END"
 }
 
+draw_tiny() {
+	_l() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 10)" "$C_RST" "$3"; }
+	_l 5  "$T_MODEL"    "$(fit "$(v modem)" $((W - 12)))"
+	_l 6  "$T_OPERATOR" "$(fit "$(_operator_plmn)" $((W - 12)))"
+	_sg=$(v signal)
+	_l 7  "$T_LEVEL"    "$(bar "$_sg" 10) ${C_B}${_sg}%${C_RST}  "
+	_l 8  "$T_PHONE"    "$(pad "${C_DIM}$(_phone_or_loc)${C_RST}" $((W - 12)))"
+	_t=$(v mtemp)
+	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
+	_l 9  "$T_TEMP"     "$(pad "$(_temp_cell "$_t")" $((W - 12)))"
+
+	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr); _e=$(v rssi)
+	_l 11 'RSRP' "$(qcolor rsrp "$_a")$(pad "$_a" 8)${C_RST}$(mbar rsrp "$_a")"
+	_l 12 'RSRQ' "$(qcolor rsrq "$_b")$(pad "$_b" 8)${C_RST}$(mbar rsrq "$_b")"
+	_l 13 'SINR' "$(qcolor sinr "$_c")$(pad "$_c" 8)${C_RST}$(mbar sinr "$_c")"
+	_l 14 'RSSI' "$(qcolor rssi "$_e")$(pad "$_e" 8)${C_RST}$(mbar rssi "$_e")"
+
+	_md=$(v mode); _md=${_md%% | *}
+	_mb=$(fit "${_md}  $(v pband)" $((W - 12)))
+	_l 16 "$T_MODE"  "${C_CYA}${_mb}${C_RST}"
+	_l 17 'PCI/EARF' "$(fit "$(v pci) / $(v earfcn)" $((W - 12)))"
+	_l 18 'IP'       "${C_GRN}$(fit "$(v ipaddr)" 16)${C_RST}$(fit "$(uptime_str)" $((W - 29)))"
+
+	if [ -f "$STFILE" ]; then
+		_sj=$(cat "$STFILE" 2>/dev/null)
+		_run=$(printf '%s' "$_sj" | jsonfilter -e '@.running' 2>/dev/null)
+		if [ "$_run" = "1" ]; then
+			_fr=$((_spin % 8)); _anim=""; _i=0
+			while [ "$_i" -lt 8 ]; do
+				[ "$_i" = "$_fr" ] && _anim="$_anim#" || _anim="$_anim."
+				_i=$((_i + 1))
+			done
+			_l 20 "$T_TEST" "$(pad "${C_YEL}${_anim}${C_RST} ${T_RUNNING}" $((W - 12)))"
+			_l 21 ''        "$(pad '' $((W - 12)))"
+		else
+			_l 20 "$T_DL" "$(pad "${C_GRN}$(printf '%s' "$_sj" | jsonfilter -e '@.down_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
+			_l 21 "$T_UL" "$(pad "${C_BLU}$(printf '%s' "$_sj" | jsonfilter -e '@.up_mbps' 2>/dev/null)${C_RST} ${T_MBPS}" $((W - 12)))"
+		fi
+	else
+		_l 20 "$T_TEST" "$(pad "$(hl_name "$T_PRESS_S" t "$C_DIM")" $((W - 12)))"
+	fi
+	printf '%s[%d;1H' "$ESC" "$ROW_END"
+}
+
 draw() {
 	_spin=$((_spin + 1))
 	if [ "$NARROW" = 1 ]; then
 		_st=" "; [ -f "$FETCHING" ] && _st="${C_YEL}*${C_RST}"
 		printf '%s[1;%dH%s%s%s' "$ESC" "$((W - 8))" "$C_DIM" "$(date '+%H:%M')" "$C_RST$_st"
-		draw_narrow
+		[ "$TINY" = 1 ] && draw_tiny || draw_narrow
 		return
 	fi
 	_st=" "
@@ -1600,6 +1677,17 @@ term_width() {
 	printf '%s' "$_w"
 }
 
+# ВЫСОТА ТЕРМИНАЛА. Нужна только чтобы распознать совсем маленький экран
+# (LCD-терминал Almond: 52x22), где даже узкая раскладка на 36 строк не
+# помещается. Источник один - stty size; без него высота неизвестна (0), и
+# раскладка выбирается по ширине, как раньше.
+term_height() {
+	_h=""
+	[ "$HAS_STTY" = 1 ] && _h=$(stty size 2>/dev/null | cut -d' ' -f1)
+	case "$_h" in ''|*[!0-9]*) _h=0 ;; esac
+	printf '%s' "$_h"
+}
+
 # Ширину можно задать явно: 5gtop 5 46  или  COLS=46 5gtop
 # Нужно и для узких терминалов, где автоопределение не срабатывает (не всякий
 # терминал отвечает на запрос позиции курсора), и просто чтобы посмотреть, как
@@ -1630,7 +1718,15 @@ apply_width() {
 	else
 		NARROW=1; W=$((TW - 2)); ROW_END=36
 	fi
+	# Крошечный экран: узкая раскладка, ужатая в 22 строки. Только когда высота
+	# известна и её действительно не хватает - на обычном терминале ничего не
+	# меняется.
+	TINY=0
+	[ "$NARROW" = 1 ] && [ "$TH" -gt 0 ] && [ "$TH" -lt 30 ] && TINY=1
+	# Список SMS: 14 строк входят в 22 вместе с шапкой и подсказкой.
+	[ "$TINY" = 1 ] && SMS_ROWS=14 || SMS_ROWS=$SMS_ROWS_DEF
 }
+TH=$(term_height)
 apply_width
 [ "$W" -lt 28 ] && W=28
 
@@ -1873,7 +1969,11 @@ switch_modem() {
 
 if [ "$TTY" = 1 ]; then
 	printf '%s[?25l' "$ESC"
-	stty -echo 2>/dev/null
+	# -icanon на всё время работы, а не только внутри read -n: между чтениями
+	# терминал возвращался в канонический режим, и пришедший в эту паузу
+	# Backspace-код 0x7f (erase) дисциплина линии съедала - клавиша «не
+	# работала» на терминалах с erase=^? (LCD-клавиатура Almond, часть ssh).
+	stty -echo -icanon 2>/dev/null
 fi
 
 # Рамка и наполнение выбираются по активному разделу. Раньше вызывались
@@ -1913,8 +2013,9 @@ _on_winch() {
 	[ "$TW_FIXED" = 1 ] && return 0
 	_ww=$(term_width)
 	case "$_ww" in ''|*[!0-9]*) return 0 ;; esac
-	[ "$_ww" = "$TW" ] && return 0
-	TW="$_ww"; apply_width
+	_hh=$(term_height)
+	[ "$_ww" = "$TW" ] && [ "$_hh" = "$TH" ] && return 0
+	TW="$_ww"; TH="$_hh"; apply_width
 	printf '%s[2J%s[H' "$ESC" "$ESC"
 	render_frame
 	render_draw
