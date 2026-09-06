@@ -1321,7 +1321,10 @@ resolve)
 		# опрашивается) и при расхождении обнуляем производное - модель
 		# перечитает блок ниже, порты уже переизбраны выше.
 		if [ -n "$A" ] && [ -n "$(uci -q get "$CFG.$SEC.model")" ]; then
-			_rs_imei=$(sms_tool -d "$A" at "AT+CGSN" 2>/dev/null | tr -d '\r' \
+			# CR/LF -> перевод строки, а не просто «выкинуть CR»: часть прошивок
+			# разделяет ответ ОДНИМИ CR, и `tr -d` склеивал его в одну строку -
+			# построчные шаблоны ниже не находили ничего (см. at_strip_ok).
+			_rs_imei=$(sms_tool -d "$A" at "AT+CGSN" 2>/dev/null | tr -s '\r\n' '\n\n' \
 				| grep -oE '^[0-9]{14,16}$' | head -1)
 			_rs_prev=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
 			if [ -n "$_rs_imei" ] && [ -n "$_rs_prev" ] && [ "$_rs_imei" != "$_rs_prev" ]; then
@@ -1334,7 +1337,7 @@ resolve)
 			fi
 		fi
 		if [ -n "$A" ] && [ -z "$(uci -q get "$CFG.$SEC.model")" ]; then
-			_rm=$(sms_tool -d "$A" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+			_rm=$(sms_tool -d "$A" at "AT+CGMM" 2>/dev/null | tr -s '\r\n' '\n\n' \
 				| grep -vE '^[[:space:]]*$|^OK$|^AT' | head -1)
 			# Часть прошивок отвечает "+CGMM: <модель>" и/или в кавычках.
 			_rm=$(printf '%s' "$_rm" \
