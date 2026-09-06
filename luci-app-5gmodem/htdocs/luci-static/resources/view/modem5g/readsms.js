@@ -292,6 +292,21 @@ function sms_msg_key(item) {
 	].join('|').replace(/[\x00-\x1f]/g, ' ');
 }
 
+/* ВСЕ КЛЮЧИ ОДНОГО ПИСЬМА, А НЕ ОДИН.
+   Склеенная карточка - это несколько частей, и части ОДНОГО сообщения могут
+   нести РАЗНОЕ время: SMSC штампует каждый сегмент по факту приёма, а
+   потерянный сегмент дошлётся минутой позже. Ключ - "отправитель|время"
+   (см. sms_msg_key), поэтому у такой карточки ключей несколько, а отмечалась
+   прочитанной только первая часть: конвертик на карточке модема не гас, потому
+   что зеркало непрочитанных считает ключи по частям (smsbridge.sh newcount).
+   Живой случай 06.09.2026 (стенд 11.1, T-Mob ref=8): часть 1/4 пришла в 15:09,
+   части 1..4 - в 15:10; в seen ложился только 15:09.
+   Одиночное сообщение - тот же список из одного ключа. */
+function sms_msg_keys(item) {
+	if (item && Array.isArray(item.keys) && item.keys.length) { return item.keys; }
+	return [ sms_msg_key(item) ];
+}
+
 function sms_seen_load() {
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'seen' ]), '')
 		.then(function(res) {
@@ -319,7 +334,9 @@ function sms_seen_add(keys) {
 function sms_seen_sync(list) {
 	if (!smsSeen || !smsSeenFirst || !list || !list.length) { return; }
 	smsSeenFirst = false;
-	sms_seen_add(list.map(sms_msg_key));
+	var keys = [];
+	list.forEach(function(m) { sms_msg_keys(m).forEach(function(k) { keys.push(k); }); });
+	sms_seen_add(keys);
 }
 
 /* Счётчик новых и кнопка «Прочитано» - показываем, только когда есть что
@@ -338,7 +355,10 @@ function sms_update_newcount() {
 function sms_mark_all_read() {
 	var keys = [];
 	document.querySelectorAll('.sms-card.sms-new').forEach(function(c) {
-		if (c.dataset.key) { keys.push(c.dataset.key); }
+		/* data-keys - ВСЕ части письма (см. sms_msg_keys); data-key оставлен
+		   для карточек из старого кэша в localStorage. */
+		(c.dataset.keys ? c.dataset.keys.split('\n') : [ c.dataset.key ])
+			.forEach(function(k) { if (k) { keys.push(k); } });
 		c.classList.remove('sms-new');
 	});
 	sms_update_newcount();
@@ -367,8 +387,12 @@ function sms_make_card(item, iconSrc, hide) {
 
 	/* Новизну решаем ЗДЕСЬ, при постройке карточки: список перерисовывается
 	   целиком на каждом обновлении, и класс иначе слетал бы вместе с ней. */
-	var key = sms_msg_key(item);
-	var isNew = !!(smsSeen && !smsSeenFirst && !smsSeen.has(key));
+	var keys = sms_msg_keys(item);
+	var key = keys[0];
+	/* Непрочитанным считаем письмо, у которого не отмечена ХОТЬ ОДНА часть -
+	   так же, как считает зеркало (smsbridge.sh newcount): иначе карточка
+	   выглядела бы прочитанной при горящем конвертике. */
+	var isNew = !!(smsSeen && !smsSeenFirst && keys.some(function(k) { return !smsSeen.has(k); }));
 
 	var card = E('button', {
 		'type': 'button',
@@ -376,6 +400,7 @@ function sms_make_card(item, iconSrc, hide) {
 		   вид карточки приходит отсюда, .sms-card только раскладывает содержимое. */
 		'class': 'btn cbi-button sms-card' + (isNew ? ' sms-new' : ''),
 		'data-key': key,
+		'data-keys': keys.join('\n'),
 		'aria-pressed': 'false',
 		/* Удаление берёт индексы отсюда, пересылка - отправителя, время и текст.
 		   Раньше и то и другое читалось из ячеек строки (cells[1..3]); с уходом
@@ -402,7 +427,7 @@ function sms_make_card(item, iconSrc, hide) {
 		   отдельного нажатия «Прочитано» ради одного письма незачем. */
 		if (card.classList.contains('sms-new')) {
 			card.classList.remove('sms-new');
-			sms_seen_add([ key ]);
+			sms_seen_add(keys);
 			sms_update_newcount();
 		}
 		sms_set_selected(card, !card.classList.contains('selected'));
@@ -1156,6 +1181,24 @@ return view.extend({
 											});
 											var result = Object.keys(groups).map(function(k) {
 												var parts = groups[k].sort(function(a, b) { return (a.part || 0) - (b.part || 0); });
+												/* ОДИН НОМЕР ЧАСТИ - ОДИН СЕГМЕНТ.
+												   Сегмент может лежать в памяти ДВАЖДЫ: оператор дошлёт
+												   потерянную часть, и в SIM остаются обе копии с разным
+												   временем (стенд 11.1, 06.09.2026: T-Mob ref=8 - часть
+												   1/4 от 15:09 и она же в полном наборе от 15:10). Обе
+												   попадали в склейку, и начало письма показывалось
+												   дважды. Оставляем ПОЗДНЮЮ копию: она из того набора,
+												   что дошёл целиком. */
+												var byPart = {}, dedup = [];
+												parts.forEach(function(p) {
+													var pn = (p.part == null) ? ('i' + p.index) : String(p.part);
+													var prev = byPart[pn];
+													if (prev === undefined) { byPart[pn] = dedup.push(p) - 1; return; }
+													if (String(p.timestamp || '') >= String(dedup[prev].timestamp || '')) {
+														dedup[prev] = p;
+													}
+												});
+												parts = dedup;
 												var first = parts[0];
 												var text = parts.map(function(p) { return p.content; }).join('');
 												/* ЧАСТЕЙ МЕНЬШЕ, ЧЕМ ЗАЯВЛЕНО - и это не наша обрезка:
@@ -1166,12 +1209,23 @@ return view.extend({
 												if (want > 1 && parts.length < want) {
 													text += ' [' + parts.length + '/' + want + ']';
 												}
+												/* Ключи ВСЕХ частей - и ОТБРОШЕННЫХ ДУБЛЕЙ ТОЖЕ
+												   (groups[k], а не parts): у сегментов одного письма время
+												   может отличаться, и отметка по одному ключу оставляла
+												   письмо непрочитанным в зеркале - оно считает по частям,
+												   включая дубли (см. sms_msg_keys). */
+												var pkeys = [];
+												groups[k].forEach(function(p) {
+													var pk = sms_msg_key(p);
+													if (pkeys.indexOf(pk) < 0) { pkeys.push(pk); }
+												});
 												return {
 													sender: first.sender,
 													timestamp: first.timestamp,
 													total: first.total,
 													index: parts.map(function(p) { return p.index; }).join('-'),
-													content: text
+													content: text,
+													keys: pkeys
 												};
 											});
 											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
