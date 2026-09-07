@@ -713,6 +713,209 @@ sms_delete() {   # $1 - индекс, $2 - usb-путь
 	esac
 }
 
+
+# --- SMS у ZTE (goform) ------------------------------------------------------
+#
+# У ZTE-стика Huawei-эндпоинтов /api/sms/* нет вовсе: сообщения лежат за тем же
+# goform, что и метрики. Отличий от Huawei три, и все три надо учесть.
+#
+#   1. ТЕКСТ И НОМЕР ПРИХОДЯТ HEX-ОМ UCS2 (UTF-16BE), а не готовой строкой:
+#      «Привет» - это 041F04400438043204350442. Декодируем сами (iconv на
+#      роутере нет) - подробности у _zte_sms_parse.
+#   2. ЯЩИК ЗАДАЁТСЯ НЕ ЗАПРОСОМ, А ПОЛЕМ tag: 0/1 - входящие (прочитанное и
+#      непрочитанное), 2/3 - исходящие (отправленное и не отправленное),
+#      4 - черновик. Просим весь список и раскладываем сами.
+#   3. ДАТА - «yy,mm,dd,hh,mm,ss,+tz» в местном времени модема.
+#
+# ПРОЧИТАННЫМИ НЕ ПОМЕЧАЕМ. У goform есть SET_MSG_READ, но ставить эту метку при
+# каждом показе страницы нельзя: наш же телеграм-мост шлёт уведомления только о
+# новых сообщениях, и опережающая отметка их гасит (то же правило, что и для
+# AT-ветки). Метку ставит только сам пользователь, читая сообщение.
+_zte_sms_fetch() {   # $1 - адрес, $2 - хранилище (1 - модем, 0 - SIM)
+	_zte_get "$1" "sms_data_total&page=0&data_per_page=100&mem_store=$2&tags=10&order_by=order%20by%20id%20desc"
+}
+
+# Разбор списка. Ответ приходит ОДНОЙ строкой, объекты внутри "messages" плоские
+# (вложенных скобок нет), поэтому режем по «},{» - это надёжнее и в разы дешевле,
+# чем звать jsonfilter по разу на каждое поле каждого сообщения.
+#
+# КИРИЛЛИЦУ ОТДАЁМ JSON-ЭКРАНИРОВАНИЕМ «\uXXXX», а не собранными байтами UTF-8.
+# Кодовая единица UCS2 - это ровно то, что стоит после \u, поэтому перекодировать
+# нечего: ни таблицы байтов, ни догадок о локали awk (у busybox она C и байты
+# сырые, у awk на рабочей станции - нет; на этом уже спотыкались). Суррогатная
+# пара эмодзи так и уезжает парой \u - JSON.parse и jsonfilter соберут её сами.
+_zte_sms_parse() {   # $1 - ящик (in|out)
+	awk -v box="$1" '
+		BEGIN { printf "{\"msg\":["; first = 1 }
+		function hv(s,   i, d, v) {
+			v = 0
+			for (i = 1; i <= length(s); i++) {
+				d = index("0123456789abcdef", tolower(substr(s, i, 1))) - 1
+				if (d < 0) return -1
+				v = v * 16 + d
+			}
+			return v
+		}
+		function jesc(v) {
+			gsub(/\\/, "\\\\", v); gsub(/"/, "\\\"", v)
+			gsub(/\t/, " ", v); gsub(/\n/, " ", v); gsub(/\r/, "", v)
+			return v
+		}
+		# hex UCS2 -> готовая к подстановке в JSON строка. Не похоже на UCS2 -
+		# отдаём как есть: часть прошивок пишет короткую латиницу открытым текстом.
+		function ucs2(h,   i, u, out) {
+			if (h == "" || length(h) % 4 != 0 || h ~ /[^0-9A-Fa-f]/) return jesc(h)
+			out = ""
+			for (i = 1; i <= length(h); i += 4) {
+				u = hv(substr(h, i, 4))
+				if (u < 0) return jesc(h)
+				if (u == 0) continue
+				if (u == 34) out = out "\\\""
+				else if (u == 92) out = out "\\\\"
+				else if (u >= 32 && u < 127) out = out sprintf("%c", u)
+				else out = out sprintf("\\u%04x", u)
+			}
+			return out
+		}
+		# НОМЕР ДЕКОДИРУЕМ ОСТОРОЖНЕЕ ТЕКСТА. «9000» - это и валидный hex, и живой
+		# короткий номер; спутать их нельзя. У любой ASCII-строки в UCS2 каждая
+		# кодовая единица начинается с «00», у десятичного номера - почти никогда,
+		# поэтому требуем именно этот признак.
+		function ucs2num(h) {
+			if (h ~ /^(00[0-9A-Fa-f][0-9A-Fa-f])+$/ && length(h) >= 8) return ucs2(h)
+			return jesc(h)
+		}
+		function fld(r, k,   v) {
+			if (!match(r, "\"" k "\":\"[^\"]*\"")) return ""
+			v = substr(r, RSTART, RLENGTH)
+			sub("^\"" k "\":\"", "", v); sub("\"$", "", v)
+			return v
+		}
+		# «26,09,07,12,30,00,+12» -> «2026-09-07 12:30:00»
+		function zdate(d,   p, n) {
+			n = split(d, p, ",")
+			if (n < 6) return d
+			return sprintf("20%02d-%02d-%02d %02d:%02d:%02d", p[1], p[2], p[3], p[4], p[5], p[6])
+		}
+		{
+			p = index($0, "\"messages\":")
+			if (p == 0) next
+			s = substr($0, p)
+			n = split(s, rec, /\},[ ]*\{/)
+			for (k = 1; k <= n; k++) {
+				id = fld(rec[k], "id")
+				if (id == "") continue
+				tag = fld(rec[k], "tag") + 0
+				if (box == "out") { if (tag != 2 && tag != 3) continue }
+				else              { if (tag != 0 && tag != 1) continue }
+				if (!first) printf ",\n"; first = 0
+				printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", \
+					id, ucs2num(fld(rec[k], "number")), jesc(zdate(fld(rec[k], "date"))), \
+					ucs2(fld(rec[k], "content"))
+			}
+		}
+		END { print "]}" }'
+}
+
+zte_sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
+	_zs_p=$(_hl_path "$2")
+	_zs_a=$(_addr_for "$_zs_p") || { echo '{"msg":[]}'; return 1; }
+	_zs_r=$(_zte_sms_fetch "$_zs_a" 1)
+	# Без сессии прошивка отвечает отказом или пустотой - логинимся и повторяем
+	# (тот же приём, что и у метрик: гадать о сроке жизни сессии дороже).
+	case "$_zs_r" in
+		*'"messages"'*) ;;
+		*) _zte_login "$_zs_a" >/dev/null 2>&1 && _zs_r=$(_zte_sms_fetch "$_zs_a" 1) ;;
+	esac
+	# ПУСТО В ПАМЯТИ МОДЕМА - СМОТРИМ НА SIM. Прошивки расходятся в том, какое
+	# хранилище считать основным, а пустой ящик выглядит одинаково.
+	case "$_zs_r" in
+		*'"messages":[]'*|*'"messages": []'*|'') _zs_r=$(_zte_sms_fetch "$_zs_a" 0) ;;
+	esac
+	printf '%s' "$_zs_r" | tr -d '\r\n' | _zte_sms_parse "${1:-in}"
+}
+
+# Ёмкость ящика. Отдаём В ФОРМАТЕ HUAWEI: разбор в smsbridge.sh один на оба
+# семейства, и плодить там развилку ради двух чисел незачем.
+zte_sms_count() {   # $1 - usb-путь
+	_zc_a=$(_addr_for "$(_hl_path "$1")") || return 1
+	_zc_r=$(_zte_get "$_zc_a" "sms_capacity_info")
+	_zc_u=$(_zj "$_zc_r" sms_nv_rev_total)
+	_zc_m=$(_zj "$_zc_r" sms_nv_total)
+	printf '<LocalInbox>%s</LocalInbox><LocalMaxInbox>%s</LocalMaxInbox>\n' \
+		"${_zc_u:-0}" "${_zc_m:-100}"
+}
+
+# UTF-8 -> UCS2 hex для отправки (тот же разбор UTF-8, что в smspdu.sh).
+_zte_ucs2hex() {
+	printf '%s' "$1" | awk '
+		BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i; body = ""; nl = 0 }
+		{ body = (nl++ ? body "\n" $0 : $0) }
+		END {
+			n = length(body); i = 1; out = ""
+			while (i <= n) {
+				c = ord[substr(body, i, 1)]
+				if (c < 0x80) { cp = c; i += 1 }
+				else if (c >= 0xC0 && c < 0xE0) {
+					cp = (c - 0xC0) * 64 + (ord[substr(body, i + 1, 1)] - 0x80); i += 2
+				}
+				else if (c >= 0xE0 && c < 0xF0) {
+					cp = (c - 0xE0) * 4096 + (ord[substr(body, i + 1, 1)] - 0x80) * 64 \
+					     + (ord[substr(body, i + 2, 1)] - 0x80); i += 3
+				}
+				else if (c >= 0xF0) {
+					cp = (c - 0xF0) * 262144 + (ord[substr(body, i + 1, 1)] - 0x80) * 4096 \
+					     + (ord[substr(body, i + 2, 1)] - 0x80) * 64 \
+					     + (ord[substr(body, i + 3, 1)] - 0x80); i += 4
+				}
+				else { i += 1; continue }
+				if (cp > 0xFFFF) {
+					cp -= 0x10000
+					out = out sprintf("%04X%04X", 0xD800 + int(cp / 1024), 0xDC00 + (cp % 1024))
+				} else out = out sprintf("%04X", cp)
+			}
+			print out
+		}'
+}
+
+# Метка времени в формате прошивки: «yy;mm;dd;hh;mm;ss;+<четверти часа>».
+_zte_smstime() {
+	_zt_z=$(date +%z 2>/dev/null)
+	_zt_s="+"; _zt_q=0
+	case "$_zt_z" in
+		[+-][0-9][0-9][0-9][0-9])
+			_zt_s=$(printf '%s' "$_zt_z" | cut -c1)
+			_zt_h=$(printf '%s' "$_zt_z" | cut -c2-3 | sed 's/^0*//')
+			_zt_m=$(printf '%s' "$_zt_z" | cut -c4-5 | sed 's/^0*//')
+			_zt_q=$(( ${_zt_h:-0} * 4 + ${_zt_m:-0} / 15 ))
+			;;
+	esac
+	printf '%s;%s%s' "$(date '+%y;%m;%d;%H;%M;%S')" "$_zt_s" "$_zt_q"
+}
+
+zte_sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
+	[ -n "$1" ] && [ -n "$2" ] || { echo '{"error":"no number or text"}'; return 1; }
+	_zd_a=$(_addr_for "$(_hl_path "$3")") || { echo '{"success":false}'; return 1; }
+	_zte_login "$_zd_a" >/dev/null 2>&1
+	_zd_n=$(printf '%s' "$1" | sed 's/+/%2B/g')
+	_zd_b=$(_zte_ucs2hex "$2")
+	_zd_r=$(_zte_set "$_zd_a" \
+		"goformId=SEND_SMS&notCallback=true&Number=$_zd_n&sms_time=$(_zte_smstime)&MessageBody=$_zd_b&ID=-1&encode_type=UNICODE")
+	case "$_zd_r" in
+		*success*) echo '{"success":true}' ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_zd_r" result)" ;;
+	esac
+}
+
+zte_sms_delete() {   # $1 - индекс, $2 - usb-путь
+	_zx_a=$(_addr_for "$(_hl_path "$2")") || { echo '{"success":false}'; return 1; }
+	_zte_login "$_zx_a" >/dev/null 2>&1
+	_zx_r=$(_zte_set "$_zx_a" "goformId=DELETE_SMS&msg_id=$1;&notCallback=true")
+	case "$_zx_r" in
+		*success*) echo '{"success":true}' ;;
+		*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_zx_r" result)" ;;
+	esac
+}
 # --- USSD --------------------------------------------------------------------
 #
 # У этого класса модемов USSD работает через API, а не AT: в /api/global/
@@ -1023,10 +1226,24 @@ case "$1" in
 			*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
 		esac
 		;;
-	smsread)     sms_list "${2:-in}" "$3" ;;
-	smscount)    api_get /api/sms/sms-count "$2" ;;
-	smssend)     sms_send "$2" "$3" "$4" ;;
-	smsdel)      sms_delete "$2" "$3" ;;
+	# У ZTE-стика своё SMS-хранилище за goform (см. блок «SMS у ZTE»), у
+	# остальных - Huawei-XML. Развилка та же, что у connect/reboot.
+	smsread)     case "$(_vidpid_for "$3")" in
+			19d2:*) zte_sms_list "${2:-in}" "$3" ;;
+			*) sms_list "${2:-in}" "$3" ;;
+		esac ;;
+	smscount)    case "$(_vidpid_for "$2")" in
+			19d2:*) zte_sms_count "$2" ;;
+			*) api_get /api/sms/sms-count "$2" ;;
+		esac ;;
+	smssend)     case "$(_vidpid_for "$4")" in
+			19d2:*) zte_sms_send "$2" "$3" "$4" ;;
+			*) sms_send "$2" "$3" "$4" ;;
+		esac ;;
+	smsdel)      case "$(_vidpid_for "$3")" in
+			19d2:*) zte_sms_delete "$2" "$3" ;;
+			*) sms_delete "$2" "$3" ;;
+		esac ;;
 	ussd)        hl_ussd "$2" "$3" ;;
 	getbands)    hl_getbands "$2" ;;
 	setbands)    hl_setbands "$2" "$3" ;;

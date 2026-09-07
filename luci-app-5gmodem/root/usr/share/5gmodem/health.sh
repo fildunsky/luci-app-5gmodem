@@ -139,13 +139,58 @@ is_wifi_iface() {
 	esac
 }
 
+# Секции wifi-iface, привязанные к этому интерфейсу - по одной на строку.
+wifi_secs_for() {   # $1 - интерфейс
+	is_wifi_iface "$1" || return 1
+	printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.\([^.]*\)\.network='\?$1'\?\$/\1/p"
+}
+
+# Включённых СТАНЦИЙ на этом интерфейсе. Точки доступа не в счёт: интерфейс
+# перецепляет netifd именно станция (её ассоциация появляется и пропадает),
+# а AP в той же сети - обычный мост-повторитель, он никому не мешает.
+wifi_sta_count() {   # $1 - интерфейс
+	_wc_n=0
+	for _wc_s in $(wifi_secs_for "$1"); do
+		[ "$(uci -q get "wireless.$_wc_s.disabled")" = "1" ] && continue
+		[ "$(uci -q get "wireless.$_wc_s.mode")" = "sta" ] || continue
+		_wc_n=$((_wc_n + 1))
+	done
+	printf '%s\n' "$_wc_n"
+}
+
 # Радио (radio0/radio1), на котором живёт станция этого интерфейса. Нужно, чтобы
 # лечить ТОЧЕЧНО: пересобрать одно радио, а не всю сеть роутера.
+#
+# РАДИО БЕРЁМ ПО ЖИВОМУ УСТРОЙСТВУ, А НЕ ПО ПЕРВОЙ СЕКЦИИ КОНФИГА. К одной сети
+# бывает привязано несколько wifi-iface (в т.ч. выключенных), и прежний `head -1`
+# выбирал ту, что просто идёт раньше в /etc/config/wireless. Живой отчёт
+# 07.09.2026: три станции на сети wwan, первой в конфиге лежала ВЫКЛЮЧЕННАЯ
+# секция на radio1 - лестница исправно пересобирала radio1, пока работающая
+# станция висела на radio0. Поэтому сначала спрашиваем netifd, каким устройством
+# сейчас представлен интерфейс, и ищем радио, у которого это устройство есть;
+# и только если живого устройства нет (состояние gone), идём по конфигу -
+# пропуская выключенные секции.
+_WLST=""; _WLST_DONE=""
 wifi_radio_for() {   # $1 - интерфейс
 	is_wifi_iface "$1" || return 1
-	_wr_s=$(printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.\([^.]*\)\.network='\?$1'\?\$/\1/p" | head -1)
-	[ -n "$_wr_s" ] || return 1
-	printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.$_wr_s\.device='\?\([^']*\)'\?\$/\1/p" | head -1
+	_wr_dev=$(printf '%s' "$_HDUMP" | jsonfilter \
+		-e "@.interface[@.interface=\"$1\"].device" 2>/dev/null | head -1)
+	if [ -n "$_wr_dev" ]; then
+		if [ -z "$_WLST_DONE" ]; then
+			_WLST_DONE=1
+			_WLST=$(ubus call network.wireless status 2>/dev/null)
+		fi
+		for _wr_r in $(printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.\([^.]*\)=wifi-device\$/\1/p"); do
+			printf '%s' "$_WLST" | jsonfilter -e "@['$_wr_r'].interfaces[*].ifname" 2>/dev/null \
+				| grep -qx "$_wr_dev" && { printf '%s\n' "$_wr_r"; return 0; }
+		done
+	fi
+	for _wr_s in $(wifi_secs_for "$1"); do
+		[ "$(uci -q get "wireless.$_wr_s.disabled")" = "1" ] && continue
+		_wr_d=$(printf '%s\n' "$_WLDUMP" | sed -n "s/^wireless\.$_wr_s\.device='\?\([^']*\)'\?\$/\1/p" | head -1)
+		[ -n "$_wr_d" ] && { printf '%s\n' "$_wr_d"; return 0; }
+	done
+	return 1
 }
 
 # Устройство аплинка: l3_device родителя, иначе - динамического ребёнка
@@ -724,6 +769,36 @@ heal() {
 					fi
 				fi
 			fi
+			# НЕСКОЛЬКО ВКЛЮЧЁННЫХ СТАНЦИЙ НА ОДНОЙ СЕТИ - ЭТО ДЕФЕКТ КОНФИГА,
+			# И ГЛОБАЛЬНАЯ ПЕРЕСБОРКА ЕГО НЕ ЛЕЧИТ.
+			#
+			# netifd отдаёт логический интерфейс той станции, которая поднялась
+			# последней. Пока соседка по той же сети ищет свою точку (её выключили,
+			# она вне зоны), каждая её попытка и каждый обрыв перецепляют интерфейс:
+			# в журнале идут бесконечные «Interface 'wwan' is disabled/enabled», а
+			# dhcp-клиент не успевает взять аренду - адреса нет ни у кого.
+			#
+			# Живой отчёт 07.09.2026: три станции на сети wwan, точка одной из них
+			# выключена. Лестница честно видела «линк без адреса» и на третьем круге
+			# доходила до `network reload` - тот поднимал ту же гонку заново, гасил
+			# по дороге точку доступа роутера, и связь появилась только после того,
+			# как лишнюю станцию выключили руками.
+			#
+			# Поэтому мягкие ступени (переподключение, REASSOCIATE, своё радио)
+			# оставляем - они безвредны и иногда помогают, - а глобальную пересборку
+			# в этом случае запрещаем и пишем в журнал, что чинить надо конфиг.
+			_h_multi=""
+			if [ "$(wifi_sta_count "$_h_if")" -gt 1 ]; then
+				_h_multi=1
+				_h_mw="/tmp/5gmodem_health.multi.$_h_if"
+				_h_mwt=$(cat "$_h_mw" 2>/dev/null)
+				case "$_h_mwt" in ''|*[!0-9]*) _h_mwt=0 ;; esac
+				_h_mnow=$(uptime_s)
+				if [ $((_h_mnow - _h_mwt)) -ge 3600 ] || [ "$_h_mnow" -lt "$_h_mwt" ]; then
+					printf '%s\n' "$_h_mnow" > "$_h_mw"
+					_ev "$_h_if is shared by several enabled Wi-Fi stations - netifd keeps re-attaching the interface and DHCP cannot finish; leave one station per network"
+				fi
+			fi
 			_h_step=0; _h_last=0; _h_n=0
 			[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
 			[ "$_h_n" -lt "$HEAL_MAX" ] || continue
@@ -763,7 +838,7 @@ heal() {
 					_ev "healing $_h_if: station unknown, reconnecting the interface ($_h_n/$HEAL_MAX)"
 					( ifdown "$_h_if"; sleep 3; iface_up "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
 				fi
-			elif [ "$_h_step" -lt 3 ] || [ -n "$_h_anyup" ]; then
+			elif [ "$_h_step" -lt 3 ] || [ -n "$_h_anyup" ] || [ -n "$_h_multi" ]; then
 				# ПЕРЕСБОРКА СВОЕГО РАДИО - здесь точка доступа на нём ПОГАСНЕТ на
 				# несколько секунд, поэтому ступень идёт только после того, как
 				# мягкое переподключение станции не помогло. Лечит другой класс
@@ -792,6 +867,8 @@ heal() {
 				# всю сеть нельзя - на нём сейчас работает пользователь. Именно эта
 				# строка (в прежней редакции - вторая ступень) роняла работающий
 				# модем при падении Wi-Fi: «modem stopping network» в журнале.
+				# Сюда же не пускает _h_multi: при нескольких станциях на одной
+				# сети пересборка лишь запускает гонку netifd заново (см. выше).
 				_h_next=4
 				_ev "healing $_h_if: rebuilding the whole network, network reload ($_h_n/$HEAL_MAX)"
 				( ubus call network reload; sleep 2; wifi up >/dev/null 2>&1; sleep 3; ifup "$_h_if" ) >/dev/null 2>&1 </dev/null 9>&- &
