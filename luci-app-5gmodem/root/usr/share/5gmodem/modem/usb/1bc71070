@@ -1,0 +1,516 @@
+# Telit FN990A28 / FN990Axx (1bc7:1070)
+#
+# ЗАЧЕМ ЭТОМУ МОДЕМУ СВОЙ ПРОФИЛЬ. Он ходит на proto=qmiraw, а там канал
+# cdc-wdm принадлежит uqmi - и generic-дозаполнение по QMI (gate
+# qmi_channel_free в lib.sh) для него ВЫКЛЮЧЕНО целиком: второй хозяин канала
+# рвёт сессию. То есть соседние соты, антенные порты, уровни и агрегация,
+# которые у остальных модемов приносит qmicli, сюда не приходят вовсе, и без
+# профиля в карточке пустовали pci, earfcn, rsrp, rsrq, rssi, sinr, cqi,
+# antports, rxdiv, temp, therm (отчёт владельца FN990A28, 06.09.2026).
+# Значит всё - только через AT-порт.
+#
+# ЧТО ПРОВЕРЕНО НА ЖИВОМ МОДУЛЕ, А ЧТО НЕТ.
+#   #CAINFOEXT? - проверено (см. разбор в 5gmodem.sh: несущие 20/20/20/15/10
+#                 МГц сняты с живого FN990A28).
+#   #BND / #BND=? - проверено, см. modemband/1bc71070.
+#   +CESQ       - стандарт 3GPP 27.007, у 5G-модуля есть всегда.
+#   #TEMPSENS / #TMLVL / #LAPS / #CQI / #LRXDIV / #4RXDIS - взяты из семейного
+#                 набора Telit (проверены на LM960A18, профиль 1bc71040), на
+#                 FN990 живьём НЕ проверялись.
+# Поэтому цепочка САМООБУЧАЮЩАЯСЯ (см. ниже): команду, на которой прошивка
+# ответила ERROR, профиль вычёркивает сам и больше не тратит на неё ход.
+#
+# #SERVINFO СОЗНАТЕЛЬНО НЕ ИСПОЛЬЗУЕМ. У FN990 её раскладка зависит от RAT
+# (LTE, LTE+NR ENDC и NR SA дают РАЗНОЕ число полей), а разбор по номеру поля
+# при смене раскладки молча положит в rsrp чужое число. Те же значения дают
+# +CESQ и #CAINFOEXT? - с именованными полями и без догадок.
+
+# --- САМООБУЧАЮЩАЯСЯ ЦЕПОЧКА ------------------------------------------------
+#
+# Модем обрывает цепочку на первой команде с ERROR: если #TMLVL? прошивке
+# незнакома, всё, что стоит за ней, не выполнится НИКОГДА - а по одному
+# запросу на команду это восемь заходов в порт на каждый опрос (порт общий с
+# SMS и слотами, см. at_lock). Поэтому команду-виновника вычисляем из самого
+# ответа: обрыв - это первый отсутствующий префикс, ЗА которым не ответил
+# никто. Если префикса нет, а следующие на месте - команда просто промолчала
+# (так #LAPS молчит в 3G), и вычёркивать её нельзя.
+# ВЫЧЁРКИВАЕМ СО ВТОРОГО РАЗА. AT-порт общий, и при коллизии на нём в ответ
+# прилетает чужое эхо и ERROR - по одному такому случаю выкинуть рабочую
+# команду на час нельзя. Первый промах только помечается; вторым он должен
+# подтвердиться в ближайшие 10 минут, иначе счётчик обнуляется.
+# Запись живёт час: смена прошивки или RAT возвращает команду в строй сама.
+_FN_TAGS="cesq ca temp tml cqi laps lrx rx4"
+
+_fn_cmd() {
+	case "$1" in
+		cesq) echo '+CESQ' ;;
+		ca)   echo '#CAINFOEXT?' ;;
+		temp) echo '#TEMPSENS=2' ;;
+		tml)  echo '#TMLVL?' ;;
+		cqi)  echo '#CQI' ;;
+		laps) echo '#LAPS' ;;
+		lrx)  echo '#LRXDIV?' ;;
+		rx4)  echo '#4RXDIS?' ;;
+	esac
+}
+
+_fn_pfx() {
+	case "$1" in
+		cesq) echo '+CESQ:' ;;
+		ca)   echo '#CAINFOEXT:' ;;
+		temp) echo '#TEMPSENS:' ;;
+		tml)  echo '#TMLVL:' ;;
+		cqi)  echo '#CQI:' ;;
+		laps) echo '#LAPS:' ;;
+		lrx)  echo '#LRXDIV:' ;;
+		rx4)  echo '#4RXDIS:' ;;
+	esac
+}
+
+# EARFCN -> номер диапазона LTE (3GPP 36.101, таблица 5.7.3-1). Перечислены
+# ТОЛЬКО диапазоны, которые FN990 поддерживает (1VV0301752 Rev.3): лишние
+# ветки тут не помогают, а мешают - канал из чужого диапазона должен остаться
+# неопознанным, а не получить правдоподобный неверный номер.
+_fn_lteb() {
+	case "$1" in ''|*[!0-9]*) return ;; esac
+	if   [ "$1" -le 599 ];                          then echo 1
+	elif [ "$1" -ge 600 ]   && [ "$1" -le 1199 ];   then echo 2
+	elif [ "$1" -ge 1200 ]  && [ "$1" -le 1949 ];   then echo 3
+	elif [ "$1" -ge 1950 ]  && [ "$1" -le 2399 ];   then echo 4
+	elif [ "$1" -ge 2400 ]  && [ "$1" -le 2649 ];   then echo 5
+	elif [ "$1" -ge 2750 ]  && [ "$1" -le 3449 ];   then echo 7
+	elif [ "$1" -ge 3450 ]  && [ "$1" -le 3799 ];   then echo 8
+	elif [ "$1" -ge 5010 ]  && [ "$1" -le 5179 ];   then echo 12
+	elif [ "$1" -ge 5180 ]  && [ "$1" -le 5279 ];   then echo 13
+	elif [ "$1" -ge 5280 ]  && [ "$1" -le 5379 ];   then echo 14
+	elif [ "$1" -ge 5730 ]  && [ "$1" -le 5849 ];   then echo 17
+	elif [ "$1" -ge 5850 ]  && [ "$1" -le 5999 ];   then echo 18
+	elif [ "$1" -ge 6000 ]  && [ "$1" -le 6149 ];   then echo 19
+	elif [ "$1" -ge 6150 ]  && [ "$1" -le 6449 ];   then echo 20
+	elif [ "$1" -ge 8040 ]  && [ "$1" -le 8689 ];   then echo 25
+	elif [ "$1" -ge 8690 ]  && [ "$1" -le 9039 ];   then echo 26
+	elif [ "$1" -ge 9210 ]  && [ "$1" -le 9659 ];   then echo 28
+	elif [ "$1" -ge 9660 ]  && [ "$1" -le 9769 ];   then echo 29
+	elif [ "$1" -ge 9770 ]  && [ "$1" -le 9869 ];   then echo 30
+	elif [ "$1" -ge 9920 ]  && [ "$1" -le 10359 ];  then echo 32
+	elif [ "$1" -ge 36200 ] && [ "$1" -le 36349 ];  then echo 34
+	elif [ "$1" -ge 37750 ] && [ "$1" -le 38249 ];  then echo 38
+	elif [ "$1" -ge 38250 ] && [ "$1" -le 38649 ];  then echo 39
+	elif [ "$1" -ge 38650 ] && [ "$1" -le 39649 ];  then echo 40
+	elif [ "$1" -ge 39650 ] && [ "$1" -le 41589 ];  then echo 41
+	elif [ "$1" -ge 41590 ] && [ "$1" -le 43589 ];  then echo 42
+	elif [ "$1" -ge 43590 ] && [ "$1" -le 45589 ];  then echo 43
+	elif [ "$1" -ge 46790 ] && [ "$1" -le 54539 ];  then echo 46
+	elif [ "$1" -ge 55240 ] && [ "$1" -le 56739 ];  then echo 48
+	elif [ "$1" -ge 66436 ] && [ "$1" -le 67335 ];  then echo 66
+	elif [ "$1" -ge 68586 ] && [ "$1" -le 68935 ];  then echo 71
+	fi
+}
+
+# DL_BW у Telit - перечисление, а не мегагерцы.
+_fn_bw() {
+	case "$1" in
+		0) echo "1.4" ;;
+		1) echo "3" ;;
+		2) echo "5" ;;
+		3) echo "10" ;;
+		4) echo "15" ;;
+		5) echo "20" ;;
+	esac
+}
+
+# SINR у Telit приходит и в децибелах, и ИНДЕКСОМ 0..250 (шаг 0.2 дБ от -20) -
+# зависит от команды и прошивки. Какой именно вариант у #CAINFOEXT на FN990,
+# в открытой части руководства не написано, поэтому решаем ПО ЗНАЧЕНИЮ:
+# в децибелах SINR физически не бывает выше 40, всё что больше - индекс.
+# Так карточка не покажет "143 dB" (ровно этим болел LM960 до правки).
+_fn_sinr() {
+	case "$1" in ''|-|*[!0-9-]*) return ;; esac
+	if [ "$1" -gt 40 ] 2>/dev/null; then
+		awk -v n="$1" 'BEGIN { printf "%.1f", n * 0.2 - 20 }'
+	else
+		printf '%s' "$1"
+	fi
+}
+
+if [ -n "$DEVICE" ] && [ -c "$DEVICE" ]; then
+
+_FN_KEY="${_MKEY:-$(basename "$DEVICE" 2>/dev/null)}"
+_FN_SKIP="/tmp/5gmodem_fn990_skip_$_FN_KEY"
+_FN_NOW=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+case "$_FN_NOW" in ''|*[!0-9]*) _FN_NOW=0 ;; esac
+
+# строка стоп-листа: "<тег> <промахов> <когда>"
+_fn_strikes() { sed -n "s/^$1 //p" "$_FN_SKIP" 2>/dev/null | head -1 | cut -d' ' -f1; }
+_fn_seen()    { sed -n "s/^$1 //p" "$_FN_SKIP" 2>/dev/null | head -1 | cut -d' ' -f2; }
+
+_FN_USE=""
+for _fn_t in $_FN_TAGS; do
+	_fn_n=$(_fn_strikes "$_fn_t"); _fn_ts=$(_fn_seen "$_fn_t")
+	case "$_fn_n$_fn_ts" in ''|*[!0-9]*) _fn_n=0; _fn_ts=0 ;; esac
+	if [ "$_fn_n" -ge 2 ] && [ "$(( _FN_NOW - _fn_ts ))" -lt 3600 ]; then
+		continue
+	fi
+	_FN_USE="$_FN_USE $_fn_t"
+done
+
+_FN_CHAIN=""
+for _fn_t in $_FN_USE; do
+	_FN_CHAIN="$_FN_CHAIN${_FN_CHAIN:+;}$(_fn_cmd "$_fn_t")"
+done
+
+O=""
+[ -n "$_FN_CHAIN" ] && O=$(sms_tool -d "$DEVICE" at "AT$_FN_CHAIN" 2>/dev/null | tr -d '\r')
+
+# Виновник обрыва: первый пропавший префикс, за которым тоже никто не ответил.
+case "$O" in
+	*ERROR*)
+		_FN_BAD=""
+		for _fn_t in $_FN_USE; do
+			case "$O" in
+				*"$(_fn_pfx "$_fn_t")"*)
+					[ -n "$_FN_BAD" ] && { _FN_BAD=""; break; }
+					;;
+				*)
+					[ -n "$_FN_BAD" ] || _FN_BAD="$_fn_t"
+					;;
+			esac
+		done
+		if [ -n "$_FN_BAD" ]; then
+			_fn_n=$(_fn_strikes "$_FN_BAD"); _fn_ts=$(_fn_seen "$_FN_BAD")
+			case "$_fn_n$_fn_ts" in ''|*[!0-9]*) _fn_n=0; _fn_ts=0 ;; esac
+			[ "$(( _FN_NOW - _fn_ts ))" -gt 600 ] && _fn_n=0
+			_fn_n=$(( _fn_n + 1 ))
+			{ grep -v "^$_FN_BAD " "$_FN_SKIP" 2>/dev/null
+			  echo "$_FN_BAD $_fn_n $_FN_NOW"; } > "$_FN_SKIP.tmp" 2>/dev/null \
+				&& mv "$_FN_SKIP.tmp" "$_FN_SKIP" 2>/dev/null
+			[ "$_fn_n" -ge 2 ] && logger -t 5gmodem \
+				"FN990: $(_fn_cmd "$_FN_BAD") is not supported by this firmware - dropped from the metrics chain for an hour"
+		fi
+		;;
+esac
+
+# --- УРОВНИ: +CESQ (3GPP 27.007) --------------------------------------------
+# "+CESQ: <rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>" - все поля ИНДЕКСЫ, 255 =
+# "нет измерения". rsrp: 1..97 -> -140..-44 дБм; rsrq: 1..34 -> -19..-3 дБ.
+# Стандартная команда взята НЕ вместо вендорной, а потому что вендорная
+# (#SERVINFO) на этом модуле меняет раскладку вместе с RAT.
+_FN_C=$(printf '%s\n' "$O" | sed -n 's/^+CESQ: *//p' | head -1)
+if [ -n "$_FN_C" ]; then
+	_FN_RQ=$(printf '%s' "$_FN_C" | cut -d, -f5 | tr -dc '0-9')
+	_FN_RP=$(printf '%s' "$_FN_C" | cut -d, -f6 | tr -dc '0-9')
+	case "$_FN_RP" in
+		''|0|255) ;;
+		*) [ "$_FN_RP" -le 97 ] && RSRP=$(( _FN_RP - 141 )) ;;
+	esac
+	case "$_FN_RQ" in
+		''|255) ;;
+		*) [ "$_FN_RQ" -ge 1 ] && [ "$_FN_RQ" -le 34 ] && \
+			RSRQ=$(awk -v n="$_FN_RQ" 'BEGIN { printf "%.1f", n * 0.5 - 19.5 }' | sed 's/\.0$//') ;;
+	esac
+fi
+
+# RSSI отдельной командой НЕ добираем: +CSQ уже пришёл в общей цепочке
+# диспетчера, и его индекс - тот же rssi (0..31 -> -113..-51 дБм). Это грубая
+# оценка, поэтому ставим её только там, где точного значения нет.
+case "$RSSI" in
+	''|-)
+		case "$CSQ" in
+			''|-|*[!0-9]*) ;;
+			*) [ "$CSQ" -le 31 ] && RSSI=$(( CSQ * 2 - 113 )) ;;
+		esac
+		;;
+esac
+
+# --- НЕСУЩИЕ: #CAINFOEXT? ---------------------------------------------------
+# Ответ построчный, поля ИМЕНОВАННЫЕ - разбираем по именам, а не по позиции:
+#   #CAINFOEXT: 5, LTE
+#   PCC- BandClass: 126, RX_CH: 3048, DL_BW: 5, PCI: 249, ...
+#   SCC0- BandClass: 126, RX_CH: 2850, DL_BW: 5, ...
+# Диапазон считаем ИЗ КАНАЛА, а BandClass оставляем запасным вариантом:
+# перечисление классов Qualcomm расходится с номерами диапазонов на поздних
+# бендах (там, где "номер = класс - 119" уже неверно).
+# ДИАПАЗОН NR НЕ ПОКАЗЫВАЕМ: нумерация классов и полос в 5G-блоке своя, живого
+# ответа под рукой нет, а показать не тот диапазон хуже, чем не показать
+# ничего. А вот САМ ФАКТ несущей NR из блока берём - по нему и подписываем
+# режим. Ярлык ставим по фактическим несущим, а не по флагу ENDC из
+# регистрации: сеть объявляет ENDC и там, где NR-несущей не выделено, и такой
+# модем показывал бы "5G" на чистом LTE.
+_FN_NR=$(printf '%s\n' "$O" | awk '
+	/^#CAINFOEXT:/ { nr = ($0 ~ /NR/) ? 1 : 0; next }
+	nr && /^(PCC|SCC[0-9]*)-/ {
+		if (match($0, /RX_CH:[ ]*[0-9]+/) && substr($0, RSTART + 6, RLENGTH - 6) + 0 > 0) { print 1; exit }
+	}
+')
+
+_FN_CA=$(printf '%s\n' "$O" | awk '
+	/^#CAINFOEXT:/ { rat = ($0 ~ /LTE/) ? "LTE" : ""; next }
+	rat == "LTE" && /^(PCC|SCC[0-9]*)-/ {
+		bc = ch = bw = pci = rsrp = rsrq = rssi = sinr = "-"
+		if (match($0, /BandClass:[ ]*[0-9]+/))   bc   = substr($0, RSTART + 11, RLENGTH - 11) + 0
+		if (match($0, /RX_CH:[ ]*[0-9]+/))       ch   = substr($0, RSTART + 6,  RLENGTH - 6) + 0
+		if (match($0, /DL_BW:[ ]*[0-9]+/))       bw   = substr($0, RSTART + 6,  RLENGTH - 6) + 0
+		if (match($0, /PCI:[ ]*[0-9]+/))         pci  = substr($0, RSTART + 4,  RLENGTH - 4) + 0
+		if (match($0, /RSRP:[ ]*-?[0-9]+/))      rsrp = substr($0, RSTART + 5,  RLENGTH - 5) + 0
+		if (match($0, /RSRQ:[ ]*-?[0-9]+/))      rsrq = substr($0, RSTART + 5,  RLENGTH - 5) + 0
+		if (match($0, /RSSI:[ ]*-?[0-9]+/))      rssi = substr($0, RSTART + 5,  RLENGTH - 5) + 0
+		if (match($0, /SINR:[ ]*-?[0-9]+/))      sinr = substr($0, RSTART + 5,  RLENGTH - 5) + 0
+		printf "%s:%s:%s:%s:%s:%s:%s:%s\n", bc, ch, bw, pci, rsrp, rsrq, rssi, sinr
+	}
+')
+
+if [ -n "$_FN_CA" ]; then
+	_FN_I=0
+	_FN_MODE=""
+	_FN_SIFS="$IFS"; IFS='
+'
+	for _fn_l in $_FN_CA; do
+		IFS="$_FN_SIFS"
+		_fn_bc=$(printf '%s' "$_fn_l" | cut -d: -f1)
+		_fn_ch=$(printf '%s' "$_fn_l" | cut -d: -f2)
+		_fn_bwn=$(printf '%s' "$_fn_l" | cut -d: -f3)
+		_fn_pci=$(printf '%s' "$_fn_l" | cut -d: -f4)
+		_fn_rp=$(printf '%s' "$_fn_l" | cut -d: -f5)
+		_fn_rq=$(printf '%s' "$_fn_l" | cut -d: -f6)
+		_fn_rs=$(printf '%s' "$_fn_l" | cut -d: -f7)
+		_fn_sn=$(printf '%s' "$_fn_l" | cut -d: -f8)
+		IFS='
+'
+		# НЕСУЩАЯ БЕЗ КАНАЛА - НЕ НЕСУЩАЯ. Руководство: у недействительной SCC
+		# все поля нули, а нулевой канал попал бы в B1 фантомом.
+		case "$_fn_ch" in ''|-|0) continue ;; esac
+		_fn_bn=$(_fn_lteb "$_fn_ch")
+		if [ -z "$_fn_bn" ]; then
+			case "$_fn_bc" in
+				''|-|*[!0-9]*) : ;;
+				*) [ "$_fn_bc" -gt 119 ] && _fn_bn=$(( _fn_bc - 119 )) ;;
+			esac
+		fi
+		[ -n "$_fn_bn" ] || continue
+		_fn_b=$(band4g "$_fn_bn")
+		_fn_bwt=$(_fn_bw "$_fn_bwn")
+		_fn_bf="$_fn_b"
+		[ -n "$_fn_bwt" ] && _fn_bf="$_fn_b @$_fn_bwt MHz"
+		case "$_fn_pci" in -|'') _fn_pci="" ;; esac
+		case "$_fn_rp" in -|'') _fn_rp="" ;; esac
+		case "$_fn_rq" in -|'') _fn_rq="" ;; esac
+		case "$_fn_rs" in -|'') _fn_rs="" ;; esac
+		case "$_fn_sn" in -|'') _fn_sn="" ;; esac
+		_fn_sn=$(_fn_sinr "$_fn_sn")
+		if [ "$_FN_I" = 0 ]; then
+			PBAND="$_fn_bf"
+			EARFCN="$_fn_ch"
+			[ -n "$_fn_pci" ] && PCI="$_fn_pci"
+			[ -n "$_fn_rp" ] && RSRP="$_fn_rp"
+			[ -n "$_fn_rq" ] && RSRQ="$_fn_rq"
+			[ -n "$_fn_rs" ] && RSSI="$_fn_rs"
+			[ -n "$_fn_sn" ] && SINR="$_fn_sn"
+			_FN_MODE="| $_fn_b"
+		else
+			_FN_MODE="$_FN_MODE + $_fn_b"
+			case "$_FN_I" in
+				1) S1BAND="$_fn_bf"; S1EARFCN="$_fn_ch"; S1PCI="$_fn_pci"
+				   S1RSRP="$_fn_rp"; S1RSRQ="$_fn_rq"; S1SINR="$_fn_sn"; S1STATE="activated" ;;
+				2) S2BAND="$_fn_bf"; S2EARFCN="$_fn_ch"; S2PCI="$_fn_pci"
+				   S2RSRP="$_fn_rp"; S2RSRQ="$_fn_rq"; S2SINR="$_fn_sn"; S2STATE="activated" ;;
+				3) S3BAND="$_fn_bf"; S3EARFCN="$_fn_ch"; S3PCI="$_fn_pci"
+				   S3RSRP="$_fn_rp"; S3RSRQ="$_fn_rq"; S3SINR="$_fn_sn"; S3STATE="activated" ;;
+				4) S4BAND="$_fn_bf"; S4EARFCN="$_fn_ch"; S4PCI="$_fn_pci"
+				   S4RSRP="$_fn_rp"; S4RSRQ="$_fn_rq"; S4SINR="$_fn_sn"; S4STATE="activated" ;;
+			esac
+		fi
+		_FN_I=$(( _FN_I + 1 ))
+	done
+	IFS="$_FN_SIFS"
+	if [ "$_FN_I" -gt 0 ]; then
+		# Есть несущая NR поверх LTE-якоря - это NSA. Иначе агрегация LTE
+		# (несущих больше одной) или обычный LTE.
+		if [ "$_FN_NR" = 1 ]; then
+			_FN_TECH="5G NSA"
+		elif [ "$_FN_I" -gt 1 ]; then
+			_FN_TECH="LTE-A"
+		else
+			_FN_TECH="LTE"
+		fi
+		MODE="$_FN_TECH $_FN_MODE"
+		# Диспетчеру больше незачем переспрашивать ту же #CAINFOEXT? своим
+		# общим фолбэком: несущие уже разобраны, и разобраны подробнее.
+		_CA_FROM_PROFILE=1
+	fi
+elif [ "$_FN_NR" = 1 ]; then
+	# Несущая NR есть, LTE-якоря нет - автономная 5G. Диапазон не подписываем
+	# по той же причине, что и выше.
+	MODE="5G SA"
+fi
+
+# --- CQI, ТЕМПЕРАТУРА, ТРОТТЛИНГ, АНТЕННЫ, РАЗНЕСЁННЫЙ ПРИЁМ ----------------
+# Разбор тот же, что у LM960 (1bc71040): у Telit это семейный набор команд с
+# одинаковым форматом ответа. Всё - из УЖЕ полученной цепочки, лишних заходов
+# в порт нет.
+_FN_V=$(printf '%s\n' "$O" | sed -n 's/^#CQI: *\([0-9]\{1,\}\).*/\1/p' | head -1)
+[ -n "$_FN_V" ] && CQI="$_FN_V"
+
+# Датчиков несколько - берём МАКСИМУМ: честнее показать самую горячую точку
+# модуля, чем средний или случайно первый датчик.
+_FN_V=$(printf '%s\n' "$O" | sed -n 's/^#TEMPSENS: *[A-Za-z0-9_]*,\(-\{0,1\}[0-9]\{1,\}\).*/\1/p' \
+	| sort -n | tail -1)
+case "$_FN_V" in
+	''|*[!0-9-]*) ;;
+	*) TEMP="$_FN_V &deg;C" ;;
+esac
+
+# Уровень троттлинга - тоже максимум по датчикам. НЕ ЗАЖИМАЕМ в 0..3, как это
+# делает профиль LM960: у FN990 шкала мер по перегреву длиннее, и подменять
+# "уровень 5" на "уровень 3" значит врать. Карточка сейчас подписывает словом
+# только 0..3, значение выше просто не подписано - это лучше подмены.
+_FN_V=$(printf '%s\n' "$O" | sed -n 's/^#TMLVL: *[A-Za-z0-9_]*,\([0-9]\{1,\}\).*/\1/p' \
+	| sort -n | tail -1)
+case "$_FN_V" in
+	''|*[!0-9]*) ;;
+	*) THERM="$_FN_V" ;;
+esac
+
+# "#LAPS: -111,-11,-134,-19" -> "0:-111:-11 1:-134:-19" (пары rsrp/rsrq на
+# порт, портов 2 или 4).
+_FN_V=$(printf '%s\n' "$O" | sed -n 's/^#LAPS: *//p' | head -1)
+if [ -n "$_FN_V" ]; then
+	ANTPORTS=$(printf '%s' "$_FN_V" | awk -F, '{
+		out = ""
+		for (i = 1; i + 1 <= NF; i += 2) {
+			p = (i - 1) / 2
+			gsub(/ /, "", $i); gsub(/ /, "", $(i+1))
+			out = out (out == "" ? "" : " ") p ":" $i ":" $(i+1)
+		}
+		print out
+	}')
+fi
+
+# По одному #LAPS нельзя понять, задействован ли второй приёмник ВООБЩЕ: при
+# выключенном разнесении порты тоже показывают похожие уровни.
+#   #LRXDIV: 1  - разнесение для LTE
+#   #4RXDIS: 0  - НОЛЬ значит 4RX не отключён, то есть работают четыре приёмника
+_FN_RD=$(printf '%s\n' "$O" | sed -n 's/^#LRXDIV: *\([0-9]\).*/\1/p' | head -1)
+_FN_R4=$(printf '%s\n' "$O" | sed -n 's/^#4RXDIS: *\([0-9]\).*/\1/p' | head -1)
+case "$_FN_RD" in
+	1) RXDIV=2rx; [ "$_FN_R4" = "0" ] && RXDIV=4rx ;;
+	0) RXDIV=off ;;
+esac
+
+# --- МОДЕЛЬ И ПРОШИВКА ------------------------------------------------------
+# Берём ТОЛЬКО правдоподобный токен модели, а не первую непустую строку:
+# AT-порт общий (метрики, SMS, слоты, bands.sh), и при коллизии в ответ на
+# AT+CGMM прилетает чужое - в заголовке страницы уже ловили эхо чужой команды.
+_FN_V=$(sms_tool -d "$DEVICE" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+	| grep -oE 'FN[0-9]{3,4}[A-Za-z0-9-]*' | head -1)
+[ -n "$_FN_V" ] && MODEL="Telit $_FN_V"
+_FN_V=$(sms_tool -d "$DEVICE" at "AT+CGMR" 2>/dev/null | tr -d '\r' \
+	| grep -vE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
+[ -n "$_FN_V" ] && FW="$_FN_V"
+
+# --- СОСЕДНИЕ СОТЫ (AT#MONI) ------------------------------------------------
+#
+# Под qmiraw это ЕДИНСТВЕННЫЙ источник соседей: generic-разбор по QMI выключен
+# вместе со всем доступом к cdc-wdm.
+# У Telit соседи достаются иначе, чем у всех: #MONI=<n> ВЫБИРАЕТ набор, а
+# следующий #MONI печатает соты этого набора. Селектор в конце ВОЗВРАЩАЕМ на
+# 0, иначе следующий #MONI (наш или из AT-консоли) покажет соседей вместо
+# обслуживающей соты.
+#
+# ЦЕНА. Набор стоит две команды, а опрос метрик идёт раз в пару секунд -
+# гонять их каждый круг нельзя: соседи обновляются раз в 30 c и лежат в кэше.
+# Модем, который команду не знает, переспрашиваем не чаще раза в 10 минут.
+#
+# РАСКЛАДКА СТРОКИ НА FN990 ЖИВЬЁМ НЕ ПРОВЕРЕНА, поэтому берём только строки
+# известной формы (RSRP + Id + EARFCN): чужой формат даст пустой список, а не
+# мусор в таблице.
+_FN_NB_F="/tmp/5gmodem_moni_fn_$_FN_KEY"
+_FN_NB_AGE=999
+if [ -f "$_FN_NB_F.t" ]; then
+	_FN_NB_T=$(cat "$_FN_NB_F.t" 2>/dev/null)
+	case "$_FN_NB_T" in
+		''|*[!0-9]*) : ;;
+		*) _FN_NB_AGE=$(( _FN_NOW - _FN_NB_T )) ;;
+	esac
+fi
+# НОЛЬ ЗДЕСЬ - НЕ "ДАВНО", А "НИКОГДА". Если считать отсутствующий файл нулём,
+# то в первые десять минут после загрузки (uptime < 600) разница окажется
+# меньше порога, и опрос соседей не запустится ни разу - ровно там, где
+# карточку открывают чаще всего.
+_FN_NB_NEG=$(cat "$_FN_NB_F.no" 2>/dev/null)
+case "$_FN_NB_NEG" in *[!0-9]*) _FN_NB_NEG="" ;; esac
+_FN_NB_OK=1
+[ -n "$_FN_NB_NEG" ] && [ "$(( _FN_NOW - _FN_NB_NEG ))" -lt 600 ] && _FN_NB_OK=0
+
+if [ "$_FN_NB_AGE" -ge 30 ] 2>/dev/null && [ "$_FN_NB_OK" = 1 ]; then
+	_FN_NB_OUT=""
+	_FN_NB_N=1
+	while [ "$_FN_NB_N" -le 5 ]; do
+		sms_tool -d "$DEVICE" at "AT#MONI=$_FN_NB_N" >/dev/null 2>&1
+		_FN_NB_SET=$(sms_tool -d "$DEVICE" at "AT#MONI" 2>/dev/null | tr -d '\r' \
+			| grep "^#MONI: *RSRP")
+		[ -n "$_FN_NB_SET" ] || break
+		_FN_NB_OUT="$_FN_NB_OUT$_FN_NB_SET
+"
+		_FN_NB_N=$(( _FN_NB_N + 1 ))
+	done
+	sms_tool -d "$DEVICE" at "AT#MONI=0" >/dev/null 2>&1
+
+	_FN_NB_JSON=""
+	_FN_NB_SEEN=" "
+	_FN_SIFS="$IFS"; IFS='
+'
+	for _fn_nb in $_FN_NB_OUT; do
+		case "$_fn_nb" in *RSRP*) ;; *) continue ;; esac
+		IFS="$_FN_SIFS"
+		# Id у соседей Telit печатает ШЕСТНАДЦАТЕРИЧНЫМ PCI.
+		_fn_ph=$(printf '%s' "$_fn_nb" | sed -n 's/.*Id:\([0-9A-Fa-f]*\).*/\1/p')
+		if [ -n "$_fn_ph" ]; then
+			_fn_p=$(printf '%d' "0x$_fn_ph" 2>/dev/null)
+			_fn_e=$(printf '%s' "$_fn_nb" | sed -n 's/.*EARFCN:\([0-9]*\).*/\1/p')
+			_fn_rp=$(printf '%s' "$_fn_nb" | sed -n 's/.*RSRP:\(-\{0,1\}[0-9]*\).*/\1/p')
+			_fn_rq=$(printf '%s' "$_fn_nb" | sed -n 's/.*RSRQ:\(-\{0,1\}[0-9]*\).*/\1/p')
+			_fn_rs=$(printf '%s' "$_fn_nb" | sed -n 's/.*PWR:\(-\{0,1\}[0-9]*\).*/\1/p')
+			# Набор 1 включает и САМУ обслуживающую соту - в таблице она уже
+			# есть отдельной подсвеченной строкой, второй раз не показываем.
+			# ОДНА СОТА - ОДНА СТРОКА. Наборы #MONI пересекаются (у части
+			# прошивок соседний набор повторяет предыдущий целиком), и без
+			# этой проверки таблица размножала одни и те же соты.
+			case "$_FN_NB_SEEN" in *" $_fn_p:$_fn_e "*) _fn_p="" ;; esac
+			if [ -n "$_fn_p" ] && [ -n "$_fn_e" ] && \
+			   { [ "$_fn_p" != "$PCI" ] || [ "$_fn_e" != "$EARFCN" ]; }; then
+				_FN_NB_SEEN="$_FN_NB_SEEN$_fn_p:$_fn_e "
+				_fn_bn=$(_fn_lteb "$_fn_e")
+				_FN_NB_JSON="$_FN_NB_JSON${_FN_NB_JSON:+,}$(printf \
+					'{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":0}' \
+					"$_fn_bn" "$_fn_e" "$_fn_p" "$_fn_rp" "$_fn_rq" "$_fn_rs")"
+			fi
+		fi
+		IFS='
+'
+	done
+	IFS="$_FN_SIFS"
+
+	if [ -n "$_FN_NB_JSON" ]; then
+		rm -f "$_FN_NB_F.no" 2>/dev/null
+		printf '%s' "$_FN_NB_JSON" > "$_FN_NB_F" 2>/dev/null
+		printf '%s' "$_FN_NOW" > "$_FN_NB_F.t" 2>/dev/null
+	else
+		# Ни одной строки известной формы - команда либо не поддержана, либо
+		# отвечает иначе. Не долбим порт каждые 30 секунд.
+		printf '%s' "$_FN_NOW" > "$_FN_NB_F.no" 2>/dev/null
+		printf '%s' "$_FN_NOW" > "$_FN_NB_F.t" 2>/dev/null
+	fi
+else
+	_FN_NB_JSON=$(cat "$_FN_NB_F" 2>/dev/null)
+fi
+
+# Обслуживающая сота - первой строкой таблицы, из уже разобранных полей.
+if [ -n "$PCI" ] && [ -n "$EARFCN" ]; then
+	NEIGHBORS=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
+		"$(_fn_lteb "$EARFCN")" "$EARFCN" "$PCI" "$RSRP" "$RSRQ" "$RSSI")
+	NEIGHBORS="$NEIGHBORS${_FN_NB_JSON:+,$_FN_NB_JSON}"
+else
+	NEIGHBORS="$_FN_NB_JSON"
+fi
+
+fi
