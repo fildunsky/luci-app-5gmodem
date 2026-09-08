@@ -706,6 +706,27 @@ usb_flap_verdict() {
 			echo "  neighbouring device $_d: $_c re-connects"
 			[ "${_c:-0}" -ge 10 ] && echo "  THAT IS A LOT: the device does not stay on the bus - check power, cable and the USB composition"
 		done
+	# ПЕРЕЕЗД ИЗ РЕЖИМА НАКОПИТЕЛЯ - ЭТО НЕ ПРОСАДКА ПИТАНИЯ.
+	#
+	# Свисток приходит на шину «установочным диском» и переезжает в модемную
+	# композицию сам; каждый переезд в журнале выглядит как «USB disconnect» и
+	# новая энумерация. Разбор ниже считал такие отвалы наравне с настоящими и
+	# уверенно советовал другой кабель, другой порт и блок питания с отдельным
+	# питанием - живой отчёт 08.09.2026 (ZTE 19d2:1405 на wwGate AX3000): два
+	# отвала подряд, оба штатные, интернет при этом работал, а человек пошёл
+	# искать неисправное питание. Признак переезда - энумерация НУЛЕВОГО
+	# интерфейса как mass storage: в рабочей композиции этих свистков остаётся
+	# CD-ROM, но уже на другом номере интерфейса.
+	_uf_ms=$(logread 2>/dev/null | grep -c "usb-storage $_uf_p:1\.0: USB Mass Storage device detected")
+	_uf_msw=""
+	if [ "${_uf_ms:-0}" -ge 1 ] && [ "${_uf_ms:-0}" -ge "${_uf_n:-0}" ]; then
+		_uf_msw=1
+		echo "these re-enumerations are the switch OUT OF MASS-STORAGE mode ($_uf_ms of them):"
+		echo "the stick arrives as an installer disk and moves to its modem composition on"
+		echo "its own. That is normal usb_modeswitch behaviour, not a power problem -"
+		echo "there is nothing to fix in the cable or the power supply."
+	fi
+
 	# КОГДА ОТВАЛИВАЛОСЬ И ЧТО БЫЛО ПЕРЕД ЭТИМ.
 	#
 	# Голого счётчика мало: он говорит «модем не держится», но не отвечает на
@@ -717,7 +738,7 @@ usb_flap_verdict() {
 	# двух наблюдаемых шли через 16 и 22 с после подвисшего опроса, и выяснять
 	# это пришлось вручную - человека просили останавливать службы и следить за
 	# логом. Теперь ответ виден прямо в отчёте.
-	logread 2>/dev/null | awk '
+	[ -n "$_uf_msw" ] || logread 2>/dev/null | awk '
 		function t2s(t,   a) {
 			if (t !~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]$/) return -1
 			split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3]
@@ -811,6 +832,8 @@ usb_flap_verdict() {
 		return
 	fi
 
+	# Штатный переезд из режима накопителя разобран выше - пугать нечем.
+	[ -n "$_uf_msw" ] && return
 	[ "${_uf_n:-0}" -ge 1 ] || return
 	echo "PROBLEM: the device disappeared from the bus and re-enumerated."
 	echo "If this happens SHORTLY AFTER attaching to the network, it is almost certainly"
@@ -1324,7 +1347,23 @@ at_conn_verdict() {   # $1 - AT-порт
 				[ -n "$_ac_if" ] && _ac_up=$(ubus call "network.interface.$_ac_if" status 2>/dev/null \
 					| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
 				if [ -n "$_ac_up" ]; then
-					echo "    the connection works: address $_ac_up on interface $_ac_if - question closed."
+					# ДОЗВОН УДАЛСЯ - НО ЭТО ЕЩЁ НЕ ИНТЕРНЕТ. Раздел закрывал вопрос
+					# словами «всё работает» даже тогда, когда общий вердикт вверху
+					# отчёта уже сказал «адрес есть, пробы не отвечают»: читатель
+					# видел два противоположных утверждения и останавливался на
+					# первом (живой отчёт 08.09.2026, FM350 на МегаФоне - адрес
+					# выдан, наружу не проходит ничего, кроме DNS оператора).
+					# Состояние берём у того же сторожа, что и общий вердикт.
+					_ac_hst=""
+					[ -f "/tmp/5gmodem_health/$_ac_if" ] \
+						&& read -r _ac_hst _ _ _ _ 2>/dev/null < "/tmp/5gmodem_health/$_ac_if"
+					if [ "$_ac_hst" = down ]; then
+						echo "    the modem DID connect: address $_ac_up on interface $_ac_if."
+						echo "    So the dial-up is not the problem - the packets are lost further on."
+						echo "    See the sections 'Who holds the internet' and 'DNS'."
+					else
+						echo "    the connection works: address $_ac_up on interface $_ac_if - question closed."
+					fi
 				else
 					echo "    registered and attached to the packet network - the radio is fine."
 					echo "    Since there is still no address, the cause is further on: APN, PDP type or netifd."
@@ -1901,6 +1940,34 @@ report() {
 		# Канал выше проверен свободным - идём напрямую и демона не плодим.
 		echo "--- rf-band-info ---"; qmicli -d "$W" $MB --nas-get-rf-band-info 2>&1 | head -20
 		echo "--- signal-info ---";  qmicli -d "$W" $MB --nas-get-signal-info 2>&1 | head -20'
+	# МОДЕМ БЕЗ AT-ПОРТОВ - ЕГО НАДО СПРАШИВАТЬ ПО HTTP, А НЕ МОЛЧАТЬ.
+	#
+	# У свистка с веб-интерфейсом (HiLink: ZTE, Huawei и родня) нет ни tty, ни
+	# cdc-wdm, и полтора десятка разделов отчёта честно писали «AT-порта нет,
+	# спросить нечем». Живой отчёт 08.09.2026 (ZTE 19d2:1405): человек жалуется,
+	# что модем «не заводится», интернет при этом работает, а по отчёту нельзя
+	# сказать даже, отвечает ли веб-API модема - то есть будут ли в карточке
+	# уровни. Единственный источник у этого класса - его собственный API,
+	# поэтому спрашиваем его тем же кодом, что и опрос метрик.
+	run 20 "HiLink modem: its own web API" sh -c '
+		P=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+		S="m_$(echo "$P" | sed "s/[^A-Za-z0-9]/_/g")"
+		[ "$(uci -q get "5gmodem.$S.kind")" = hilink ] || {
+			echo "the active modem is not a web-managed stick - this check does not apply"; exit 0; }
+		echo "address of the modem: $(/usr/share/5gmodem/hilink.sh addr "$P" 2>/dev/null)"
+		echo "--- probe ---"
+		/usr/share/5gmodem/hilink.sh probe "$P" 2>&1 | head -3
+		echo "--- metrics ---"
+		_m=$(/usr/share/5gmodem/hilink.sh json "$P" 2>&1 | head -c 1200)
+		echo "$_m"
+		case "$_m" in
+			"") echo "EMPTY ANSWER: the web API of the modem did not reply - the card will be blank" ;;
+			*'"'"'"rsrp":""'"'"'*|*'"'"'"csq":""'"'"'*)
+				echo "the API answers, but the LEVELS ARE EMPTY. On ZTE sticks that means we are"
+				echo "not logged in to the web interface: without a session the firmware fills"
+				echo "only the public fields (operator, network type, signal bar). The password"
+				echo "is taken from 5gmodem.<section>.web_pass, admin by default." ;;
+		esac'
 	run 5  "Is lpac installed?" sh -c "ls -l /usr/bin/lpac /usr/lib/lpac 2>/dev/null; echo '--- dependencies ---'; ldd /usr/lib/lpac 2>/dev/null"
 	# HTTPS к SM-DP+ - самая частая причина, почему СПИСОК профилей обновляется
 	# (это чистый APDU), а ЗАГРУЗКА профиля молча не идёт: нет ca-bundle, кривое

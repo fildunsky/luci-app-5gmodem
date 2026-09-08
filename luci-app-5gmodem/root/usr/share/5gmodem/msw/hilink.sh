@@ -73,6 +73,8 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 			_hn=$((_hn + 1)); _hif="modem$_hn"
 		done
 	fi
+	# СНИМОК ДО ПРАВОК - ЧТОБЫ НЕ ДЁРГАТЬ ЖИВОЙ ИНТЕРФЕЙС ЗРЯ (см. ifup в конце).
+	_h_pre=$(uci -q show "network.$_hif" 2>/dev/null)
 	uci -q set "network.$_hif=interface"
 	uci -q set "network.$_hif.proto=dhcp"
 	uci -q set "network.$_hif.device=$_hd"
@@ -119,8 +121,35 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 	drop_stale_ifaces "$_hp" "$_hif"
 	uci -q set "$CFG.$_hsec.iface_proto=dhcp"
 	uci -q commit "$CFG"
-	ifup "$_hif" >/dev/null 2>&1
-	logger -t 5gmodem "hilink: $_hp ($_hd) -> interface $_hif (dhcp)"
+	# ПОДНИМАЕМ ТОЛЬКО ЕСЛИ ЕСТЬ ЧТО ПОДНИМАТЬ.
+	#
+	# Функция зовётся на КАЖДЫЙ круг хотплага, а свисток при включении проходит
+	# через режим накопителя и перечисляется три раза подряд - то есть безусловный
+	# ifup рвал уже работающее соединение по нескольку раз за минуту. В журнале
+	# это выглядит так: аренда получена, через полминуты udhcpc её отдаёт
+	# («unicasting a release»), интерфейс уходит вниз и поднимается заново -
+	# а вместе с ним перезагружается вся беспроводка (живой отчёт 08.09.2026,
+	# ZTE 19d2:1405: два таких круга подряд, клиенты Wi-Fi отваливались).
+	#
+	# Правило простое: интерфейс уже поднят на ТОМ ЖЕ устройстве и в конфиге
+	# ничего не изменилось - трогать нечего. Любая правка конфига или лежащий
+	# интерфейс по-прежнему требуют ifup.
+	_h_post=$(uci -q show "network.$_hif" 2>/dev/null)
+	_h_live=$(ubus call "network.interface.$_hif" status 2>/dev/null)
+	_h_skip=""
+	case "$_h_live" in
+		*'"up": true'*)
+			case "$_h_live" in
+				*"\"l3_device\": \"$_hd\""*)
+					[ "$_h_pre" = "$_h_post" ] && _h_skip=1 ;;
+			esac ;;
+	esac
+	if [ -n "$_h_skip" ]; then
+		logger -t 5gmodem "hilink: $_hp ($_hd) is already up on interface $_hif - leaving it alone"
+	else
+		ifup "$_hif" >/dev/null 2>&1
+		logger -t 5gmodem "hilink: $_hp ($_hd) -> interface $_hif (dhcp)"
+	fi
 	echo "$_hif"
 }
 
