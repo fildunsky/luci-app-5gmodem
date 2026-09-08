@@ -1743,6 +1743,7 @@ _sanv S1SINR S2SINR S3SINR S4SINR
 _sanv PMIMO PMOD S1MIMO S1MOD S2MIMO S2MOD
 _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
+_sanv MAXDL MAXUL
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
 _sanv _SN_ALIAS _SN_CPORT BS_DIST
 cat <<EOF
@@ -1851,6 +1852,8 @@ cat <<EOF
 "bs_distance":"${_J_BS_DIST}",
 "txpower":"${_J_TXPOWER}",
 "uecat":"${_J_UECAT}",
+"maxdl":"${_J_MAXDL}",
+"maxul":"${_J_MAXUL}",
 "cqi":"${_J_CQI}",
 "volte":"${_J_VOLTE}",
 "rscp":"${_J_RSCP}",
@@ -2426,6 +2429,48 @@ _qmi_supplement() {
 	# него и работает.
 	qmi_channel_free || return 0
 	_QS_P="/tmp/5gmodem_qmi_$_MKEY"
+
+	# ПАСПОРТНАЯ СКОРОСТЬ МОДУЛЯ - ЧИТАЕМ ОДИН РАЗ ЗА ЗАГРУЗКУ.
+	#
+	# Источник - `--wds-get-channel-rates`. Соблазнительный `--dms-get-capabilities`
+	# НЕ ГОДИТСЯ: он отдаёт зашитую в прошивку константу. Проверено 08.09.2026 на
+	# одном и том же стенде: HP lt4120 (Cat 4) и Quectel EC21 (Cat 1) ответили
+	# ОДИНАКОВО - «100/50 Мбит/с», хотя между ними пятнадцатикратная разница по
+	# приёму. WDS на тех же модулях дал 150/50 и 10/5, то есть ровно их категории.
+	#
+	# НАПРАВЛЕНИЯ ПО ВЕЛИЧИНЕ, А НЕ ПО ПОДПИСИ. У EC21 прошивка меняет TX и RX
+	# местами (пишет «Max TX 10 Мбит/с, Max RX 5» при Cat 1 = 10 вниз / 5 вверх),
+	# у lt4120 подписи верные. Спорить с прошивкой не о чем: у любой категории LTE
+	# приём не меньше передачи, поэтому большее число - вниз, меньшее - вверх.
+	#
+	# Величина у модуля неизменна, поэтому кэш по IMEI - как у прошивки. Ключ
+	# именно IMEI, а не usb-путь: файлы в /tmp переживают смену модема в разъёме,
+	# и путь отдал бы новому модулю чужие цифры. Без известного IMEI просто
+	# пропускаем - он появится следующим опросом.
+	if [ -z "$MAXDL" ]; then
+		_QS_IM=$(uci -q get "5gmodem.$(secname "$_POLL_AM").imei" 2>/dev/null | tr -cd '0-9')
+		if [ -n "$_QS_IM" ]; then
+			_QS_MR="/tmp/5gmodem_maxrate_$_QS_IM"
+			if [ -s "$_QS_MR" ]; then
+				read -r MAXDL MAXUL < "$_QS_MR"
+			else
+				# бит/с -> Мбит/с. Через awk с «%.0f», а не «%d»: у busybox
+				# «%d» режет по int32, и гигабитные значения 5G в него не влезут.
+				_QS_RT=$(qmicli_p "$_QS_WDM" --wds-get-channel-rates 2>/dev/null | awk '
+					/Max (TX|RX) rate:/ {
+						v = $NF; sub(/bps$/, "", v); v += 0
+						if (v <= 0) next
+						if (v > hi) { lo = hi; hi = v } else if (v > lo) lo = v
+					}
+					END { if (hi > 0 && lo > 0) printf "%.0f %.0f", hi / 1000000, lo / 1000000 }')
+				case "$_QS_RT" in
+					[0-9]*' '[0-9]*)
+						MAXDL="${_QS_RT%% *}"; MAXUL="${_QS_RT##* }"
+						printf '%s %s\n' "$MAXDL" "$MAXUL" > "$_QS_MR" 2>/dev/null ;;
+				esac
+			fi
+		fi
+	fi
 
 	# 0) Кэш ЧУЖОЙ RAT-эры. Модем вернулся из 3G в LTE, а файлы ещё 3G (TTL до
 	#    25 c): непустой .b3g при не-3G режиме = стейл. Гасим 3G-файлы, полосу

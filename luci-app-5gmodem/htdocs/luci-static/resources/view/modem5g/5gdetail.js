@@ -543,6 +543,7 @@ function gl(term) {
 			'TX power': _('Transmit power of the modem right now.'),
 			'CQI': _('Channel quality estimated by the modem: 0-15, higher is better.'),
 			'UE category': _('LTE speed category of the modem.'),
+			'Max speed': _('What the modem itself can do. Not the speed of the current connection.'),
 			'VoLTE': _('Voice calls over the LTE network, without falling back to 3G.'),
 			'Band': _('LTE frequency band.'),
 			'BW': _('Channel bandwidth: wider is faster.'),
@@ -568,6 +569,10 @@ var CELL_ROWS = [
 	{ id: 'txpower',  text: function(j) { return mutil.cellVal(j.txpower); } },
 	{ id: 'cqi',      text: function(j) { return mutil.cellVal(j.cqi); } },
 	{ id: 'uecat',    text: function(j) { return mutil.cellVal(j.uecat); } },
+	/* Паспортный максимум модуля (QMI DMS), а не скорость текущего соединения. */
+	{ id: 'maxrate',  text: function(j) {
+		var d = mutil.cellVal(j.maxdl), u = mutil.cellVal(j.maxul);
+		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps')) : ''; } },
 	{ id: 'volte',    text: function(j) { return mutil.cellVal(j.volte); } },
 	/* pband всегда видим (базовая строка таблицы): только текст. */
 	{ id: 'pband', always: true, text: function(j) {
@@ -3978,6 +3983,10 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'uecatn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('UE category') ]),
 					E('td', { 'class': 'td left', 'id': 'uecat' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'maxraten', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('Max speed') ]),
+					E('td', { 'class': 'td left', 'id': 'maxrate' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'volten', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('VoLTE') ]),

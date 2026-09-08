@@ -5395,3 +5395,9 @@ msgstr "Где роутер спрашивает, каким его адрес �
 
 msgid "The address is public: the interface has exactly what the internet sees%s"
 msgstr "Адрес белый: на интерфейсе ровно то, что видит интернет%s"
+
+msgid "What the modem itself can do. Not the speed of the current connection."
+msgstr "На что способен сам модем. Это не скорость текущего соединения."
+
+msgid "Max speed"
+msgstr "Максимум модема"
