@@ -37,6 +37,45 @@ band3g() {
 	esac
 }
 
+# НОМЕР ДИАПАЗОНА LTE ПО EARFCN. Таблица одна на всех: раньше её носил в себе
+# каждый профиль, а расходящиеся копии в этом репозитории мы уже проходили
+# (шесть версий профилей modemband). Диапазоны - из 3GPP 36.101, таблица 5.7.3-1.
+earfcn2band() {   # $1 - EARFCN; печатает номер диапазона LTE
+	case "$1" in ''|*[!0-9]*) return ;; esac
+	if   [ "$1" -le 599 ];                          then echo 1
+	elif [ "$1" -ge 600 ]   && [ "$1" -le 1199 ];   then echo 2
+	elif [ "$1" -ge 1200 ]  && [ "$1" -le 1949 ];   then echo 3
+	elif [ "$1" -ge 1950 ]  && [ "$1" -le 2399 ];   then echo 4
+	elif [ "$1" -ge 2400 ]  && [ "$1" -le 2649 ];   then echo 5
+	elif [ "$1" -ge 2750 ]  && [ "$1" -le 3449 ];   then echo 7
+	elif [ "$1" -ge 3450 ]  && [ "$1" -le 3799 ];   then echo 8
+	elif [ "$1" -ge 5010 ]  && [ "$1" -le 5179 ];   then echo 12
+	elif [ "$1" -ge 5180 ]  && [ "$1" -le 5279 ];   then echo 13
+	elif [ "$1" -ge 5280 ]  && [ "$1" -le 5379 ];   then echo 14
+	elif [ "$1" -ge 5730 ]  && [ "$1" -le 5849 ];   then echo 17
+	elif [ "$1" -ge 5850 ]  && [ "$1" -le 5999 ];   then echo 18
+	elif [ "$1" -ge 6000 ]  && [ "$1" -le 6149 ];   then echo 19
+	elif [ "$1" -ge 6150 ]  && [ "$1" -le 6449 ];   then echo 20
+	elif [ "$1" -ge 8040 ]  && [ "$1" -le 8689 ];   then echo 25
+	elif [ "$1" -ge 8690 ]  && [ "$1" -le 9039 ];   then echo 26
+	elif [ "$1" -ge 9210 ]  && [ "$1" -le 9659 ];   then echo 28
+	elif [ "$1" -ge 9660 ]  && [ "$1" -le 9769 ];   then echo 29
+	elif [ "$1" -ge 9770 ]  && [ "$1" -le 9869 ];   then echo 30
+	elif [ "$1" -ge 9920 ]  && [ "$1" -le 10359 ];  then echo 32
+	elif [ "$1" -ge 36200 ] && [ "$1" -le 36349 ];  then echo 34
+	elif [ "$1" -ge 37750 ] && [ "$1" -le 38249 ];  then echo 38
+	elif [ "$1" -ge 38250 ] && [ "$1" -le 38649 ];  then echo 39
+	elif [ "$1" -ge 38650 ] && [ "$1" -le 39649 ];  then echo 40
+	elif [ "$1" -ge 39650 ] && [ "$1" -le 41589 ];  then echo 41
+	elif [ "$1" -ge 41590 ] && [ "$1" -le 43589 ];  then echo 42
+	elif [ "$1" -ge 43590 ] && [ "$1" -le 45589 ];  then echo 43
+	elif [ "$1" -ge 46790 ] && [ "$1" -le 54539 ];  then echo 46
+	elif [ "$1" -ge 55240 ] && [ "$1" -le 56739 ];  then echo 48
+	elif [ "$1" -ge 66436 ] && [ "$1" -le 67335 ];  then echo 66
+	elif [ "$1" -ge 68586 ] && [ "$1" -le 68935 ];  then echo 71
+	fi
+}
+
 band4g() {
 # see https://en.wikipedia.org/wiki/LTE_frequency_bands
 	echo -n "B${1}"
@@ -3182,6 +3221,15 @@ if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]
 				uci -q commit 5gmodem
 			elif [ "$_old_imei" != "$NR_IMEI" ]; then
 				logger -t 5gmodem "modem swap on $(uci -q get 5gmodem.@5gmodem[0].active_modem): IMEI $_old_imei -> $NR_IMEI, settings may belong to the previous modem"
+				# ЗАПОМИНАЕМ НОМЕР ПРЕЖНЕГО ХОЗЯИНА - ОН НУЖЕН ПАРКОВКЕ.
+				# Вытеснение профиля (park_profile) случается ПОЗЖЕ: сначала на
+				# пути читается IMEI нового модуля, и только следующий круг
+				# различает vid:pid. К тому моменту в секции стоит уже новый
+				# номер, и настройки прежнего модема парковались под НЕГО - на
+				# стенде 08.09.2026 профиль Quectel EC21 (APN, интерфейс) уехал
+				# в m_park_<IMEI HP lt4120>. Одна строка здесь чинит обе стороны:
+				# вернувшийся EC21 снова найдёт своё, а lt4120 не получит чужого.
+				uci -q set "5gmodem.$AMP_SEC.imei_prev=$_old_imei"
 				uci -q set "5gmodem.$AMP_SEC.imei=$NR_IMEI"
 				uci -q set "5gmodem.$AMP_SEC.imei_changed=1"
 				uci -q commit 5gmodem

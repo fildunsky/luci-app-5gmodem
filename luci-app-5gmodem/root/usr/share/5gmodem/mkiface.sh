@@ -725,8 +725,16 @@ case "$REQ" in
 		# автонастройка уводила владельца именно этой ревизии в mbim, то есть
 		# в заведомо нерабочий путь, пока соседний 81d7 вели правильно. Живой
 		# отчёт 26.08.2026, Cudy TR3000: «модем появится и пропадает».
+		# 03f0:9d1d - HP lt4120 (Foxconn T77W595). Причина та же, что у SDX55:
+		# канал cdc-wdm один. На kernel-протоколе им владеет netifd, наши
+		# QMI-запросы туда запрещены (qmi_channel_free) - и в карточке нет ни
+		# SINR, ни полной таблицы соседей, а диапазонами управлять нечем вовсе:
+		# libqmi умеет их только читать. Замерено на стенде 08.09.2026: под
+		# qmiraw SINR прочерк и одна соседняя сота, под MM - SINR 7.0, три соты
+		# и рабочий список диапазонов у mmcli. AT-профиль (modem/usb/03f09d1d)
+		# остаётся страховкой: без установленного MM карточка живёт на нём.
 		case "$_mki_vp" in
-			413c:81d7|413c:81e0|0489:e0b5|05c6:9025)
+			413c:81d7|413c:81e0|0489:e0b5|05c6:9025|03f0:9d1d)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 					logger -t 5gmodem "mkiface: $_mki_vp - driving via ModemManager (shared channel, otherwise cdc-wdm contention)"
 					PROTO="modemmanager"

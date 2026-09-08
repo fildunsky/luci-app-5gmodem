@@ -371,6 +371,9 @@ smsopt)
 ackswap)
 	[ -n "$2" ] || { echo '{"error":"no section"}'; exit 0; }
 	uci -q delete "$CFG.$2.imei_changed" 2>/dev/null
+	# Номер прежнего хозяина нужен был только парковке (park_profile); человек
+	# предупреждение увидел - хвост можно убрать вместе с ним.
+	uci -q delete "$CFG.$2.imei_prev" 2>/dev/null
 	uci -q commit "$CFG"
 	echo '{"result":"ok"}'
 	;;

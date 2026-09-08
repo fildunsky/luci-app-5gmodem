@@ -79,7 +79,13 @@ prune_parks() {
 }
 
 park_profile() {   # $1 - секция, которую вытесняем
-	_pk_imei=$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')
+	# ПАРКУЕМ ПОД IMEI ТОГО, ЧЬИ ЭТО НАСТРОЙКИ, А НЕ ТОГО, КТО СЕЙЧАС В ПОРТУ.
+	# Опрос успевает переписать imei в секции раньше, чем сюда дойдёт очередь
+	# (он читает номер по AT, а vid:pid сверяется кругом позже), и парковка
+	# уезжала под номер НОВОГО модема: вернувшийся старый своих настроек не
+	# находил, а новый получал чужие. Прежний номер опрос оставляет в imei_prev.
+	_pk_imei=$(uci -q get "$CFG.$1.imei_prev" | tr -cd '0-9')
+	[ -n "$_pk_imei" ] || _pk_imei=$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')
 	_pk_ser=$(uci -q get "$CFG.$1.serial")
 	# ПАРКОВАТЬ МОЖНО И БЕЗ IMEI - ЕСЛИ ЕСТЬ SERIAL.
 	#
@@ -125,6 +131,7 @@ park_profile() {   # $1 - секция, которую вытесняем
 	# коммит недописанной парковки при обрыве оставлял m_park_* без network -
 	# имя интерфейса освобождалось и уходило чужому модему (ревью, баг №1).
 	# Здесь его commit закрывает уже ПОЛНУЮ парковку.
+	uci -q delete "$CFG.$1.imei_prev"
 	prune_parks
 	logger -t 5gmodem "modem profile ${_pk_imei:+IMEI $_pk_imei}${_pk_imei:+ }${_pk_ser:+serial $_pk_ser} parked ($1 -> $_pk_dst) until it returns"
 }

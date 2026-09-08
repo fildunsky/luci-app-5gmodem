@@ -12,7 +12,7 @@ Grab the `.apk` (OpenWrt 25.12.x) or `.ipk` (24.10.x) link from the [Releases](.
 ### .apk (OpenWrt 25.12.x)
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-app-5gmodem-2.4.57-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-app-5gmodem-2.4.58-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -30,7 +30,7 @@ the release.
 ### .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-app-5gmodem_2.4.57-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-app-5gmodem_2.4.58-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
@@ -78,6 +78,7 @@ I've added new features to them (compared to 3ginfo and modemband)
 - MeigLink SLM770A-R
 - Foxconn T99W175 / Thales MV31-W (Snapdragon X55)
 - Dell DW5821e / Foxconn T77W968 (Snapdragon X20)
+- HP lt4120 / Foxconn T77W595 (Snapdragon X5)
 - Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
 - Cheap Qualcomm MDM9600 / MDM9610 Android sticks (PIXLINK, ALEKA UV310 and relatives), including their "modem only" (QMI) mode

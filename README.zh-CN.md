@@ -12,13 +12,13 @@ OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-app-5gmodem-2.4.57-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-app-5gmodem-2.4.58-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-i18n-5gmodem-zh-cn.apk > /tmp/luci-i18n-5gmodem-zh-cn.apk
 apk add /tmp/luci-i18n-5gmodem-zh-cn.apk --allow-untrusted
 apk add luci-i18n-base-zh-cn
 ```
@@ -37,13 +37,13 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-app-5gmodem_2.4.57-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-app-5gmodem_2.4.58-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **中文界面**：再安装本应用的简体中文语言包，并确保 LuCI 本身的中文包已安装：
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.57/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.4.58/luci-i18n-5gmodem-zh-cn.ipk > /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install /tmp/luci-i18n-5gmodem-zh-cn.ipk
 opkg install luci-i18n-base-zh-cn
 ```
@@ -91,6 +91,7 @@ opkg install luci-i18n-base-zh-cn
 - MeigLink SLM770A-R
 - Foxconn T99W175 / Thales MV31-W（Snapdragon X55）
 - Dell DW5821e / Foxconn T77W968（Snapdragon X20）
+- HP lt4120 / Foxconn T77W595（Snapdragon X5）
 - Sierra Wireless EM9190
 - Huawei E3372（HiLink）
 - 高通 MDM9600 / MDM9610 平台的廉价 Android 上网棒（PIXLINK、ALEKA UV310 及同类），包括其“纯调制解调器”（QMI）模式

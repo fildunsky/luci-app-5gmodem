@@ -23,6 +23,11 @@ driver_for() {   # $1 - vid, $2 - pid
 		05c6:9025) echo "option1" ;;
 		# Android-палки MDM9600/9610 в режиме «только модем» (см. newid_for).
 		05c6:9091) echo "option1" ;;
+		# HP lt4120 (Foxconn T77W595) в QMI-композиции. Порты generic здесь
+		# МЁРТВЫЕ: привязка проходит, четыре ttyUSB появляются, и все четыре на
+		# «ATI» отвечают «No response from modem» (стенд, 08.09.2026). После
+		# option те же интерфейсы отзываются сразу - AT живёт на If#2.
+		03f0:9d1d) echo "option1" ;;
 		# Всё остальное - generic. Это касается и Compal RXM-G1 (90d5 и 90d6),
 		# и T99W175 в 90d5.
 		#
@@ -70,6 +75,9 @@ data_iface_for() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
 		05c6:9025) echo 4 ;;
 		05c6:9091) echo 2 ;;
+		# HP lt4120: QMI-канал (cdc-wdm + wwan0) - на If#1, и он тоже
+		# vendor-класса, то есть для usb-serial неотличим от AT-порта.
+		03f0:9d1d) echo 1 ;;
 		*)         echo "" ;;
 	esac
 }
@@ -350,6 +358,16 @@ coldplug() {
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.
 			05c6:9063) pick_config "$_cp_d" 3 ;;
+			# HP lt4120 (Foxconn T77W595) отдаёт три конфигурации:
+			#   1 - QMI + четыре последовательных порта (нужна нам)
+			#   2 - CDC ECM: сетевая карта и ничего больше (берётся по умолчанию)
+			#   3 - CDC MBIM
+			# В ECM модем работает «как флешка»: интернет по dhcp есть, а канала
+			# управления нет вовсе - ни метрик, ни SMS, ни USSD. Форум советует
+			# правкой usb-mode.json уводить его в MBIM под ModemManager, но в
+			# конфигурации 1 он полностью наш: uqmi поднимает соединение, а AT
+			# отдаёт уровни, соту и соседей (профиль modem/usb/03f09d1d).
+			03f0:9d1d) pick_config "$_cp_d" 1; sleep 2; bind_ports "$_cp_v" "$_cp_p" ;;
 		esac
 	done
 }
