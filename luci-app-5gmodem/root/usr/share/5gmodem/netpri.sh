@@ -1493,6 +1493,8 @@ worder)
 	# карточку s:ssclash-go, а service='clash' (легаси-ветка) - s:ssclash
 	# (sscKindForSvc в netpri.js). Возвращаем к значениям секций, иначе
 	# перестановка промахивается ровно на этих двух.
+	# Остальные ветки панелей (nikki) исключений НЕ требуют: ключ карточки там
+	# совпадает с именем сервиса, и общая ветка s:* разбирает их правильно.
 	_wo_ping=""; _wo_svc=""
 	for _wk in $_wo; do
 		case "$_wk" in
@@ -1775,10 +1777,10 @@ svcstatus)
 	echo
 	;;
 svcall)
-	# Агрегат для панели виджетов: статусы всех сервисов + веток SSClash ОДНИМ
-	# вызовом ubus/rpcd вместо N параллельных exec_direct (каждый - отдельный
-	# spawn rpcd каждые 5 секунд). $2 = сервисы через запятую, $3 = ветки
-	# ssclash (go/legacy) через запятую.
+	# Агрегат для панели виджетов: статусы всех сервисов + веток веб-панелей
+	# ОДНИМ вызовом ubus/rpcd вместо N параллельных exec_direct (каждый -
+	# отдельный spawn rpcd каждые 5 секунд). $2 = сервисы через запятую,
+	# $3 = ветки панелей (go/legacy/nikki) через запятую.
 	# '-' = пустой список: exec_direct теряет пустые аргументы (см. netpri.js).
 	_sj=""
 	for _s in $(printf '%s' "$2" | tr ',' ' '); do
@@ -1787,8 +1789,15 @@ svcall)
 	done
 	_cj=""
 	for _k in $(printf '%s' "$3" | tr ',' ' '); do
-		case "$_k" in go|legacy) ;; *) continue ;; esac
-		_ko=$(/usr/share/5gmodem/ssclash.sh status "$_k" 2>/dev/null)
+		# Ветка -> скрипт. go/legacy - две ветки ОДНОГО проекта (ssclash.sh),
+		# nikki - отдельный проект со своим детектом; контракт вербов у них
+		# общий, поэтому здесь достаточно выбрать исполняемый файл.
+		case "$_k" in
+			go|legacy) _kb=/usr/share/5gmodem/ssclash.sh ;;
+			nikki)     _kb=/usr/share/5gmodem/nikki.sh ;;
+			*)         continue ;;
+		esac
+		_ko=$("$_kb" status "$_k" 2>/dev/null)
 		[ -n "$_ko" ] || _ko='{}'
 		_cj="$_cj,\"$_k\":$_ko"
 	done

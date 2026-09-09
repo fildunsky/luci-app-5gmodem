@@ -5,8 +5,8 @@
 # повторно вернуть карточки, которые пользователь осознанно удалил.
 #
 #   pingwidget (host=youtube.com, mode=click) - карточка пинга по умолчанию;
-#   svcwidget  (service=ssclash)              - карточка сервиса, ТОЛЬКО если
-#                                               ssclash реально установлен;
+#   svcwidget  (service=<панель прокси>)      - карточка сервиса, ТОЛЬКО если
+#                                               такая панель реально стоит;
 #   netpri_rank=icon                          - фон карточек аплинков.
 
 CFG=5gmodem
@@ -25,9 +25,16 @@ if ! uci -q show "$CFG" 2>/dev/null | grep -q "=pingwidget$"; then
 	}
 fi
 
-# Карточка сервиса по умолчанию - SSClash, но лишь когда он установлен.
-if [ -x /etc/init.d/ssclash ] && ! uci -q show "$CFG" 2>/dev/null | grep -q "=svcwidget$"; then
-	_s=$(uci add "$CFG" svcwidget) && uci -q set "$CFG.$_s.service=ssclash"
+# Карточка сервиса по умолчанию - ПЕРВАЯ УСТАНОВЛЕННАЯ веб-панель прокси.
+# Порядок перебора не вкусовщина: nikki ставят как замену ssclash, поэтому у
+# кого стоят оба - показываем более новый. Сеем РОВНО ОДНУ карточку, как и
+# раньше: остальные человек добавит в настройках сам.
+if ! uci -q show "$CFG" 2>/dev/null | grep -q "=svcwidget$"; then
+	for _svc in nikki ssclash; do
+		[ -x "/etc/init.d/$_svc" ] || continue
+		_s=$(uci add "$CFG" svcwidget) && uci -q set "$CFG.$_s.service=$_svc"
+		break
+	done
 fi
 
 # ФОН КАРТОЧЕК АПЛИНКОВ - ИКОНКА ИНТЕРФЕЙСА (решение владельца 03.09.2026).

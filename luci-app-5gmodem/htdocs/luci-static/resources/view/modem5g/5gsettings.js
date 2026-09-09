@@ -555,11 +555,15 @@ return view.extend({
 		if (services.length) {
 			/* известным сервисам - человеческое имя в списке (карточка тоже
 			   покажет его, см. SVC_KNOWN в netpri.js) */
-			var _svcNice = { zapret: 'Zapret', zerotier: 'ZeroTier' };
+			var _svcNice = { zapret: 'Zapret', zerotier: 'ZeroTier', nikki: 'Nikki',
+			                 ssclash: 'SSClash', clash: 'SSClash (4.7)' };
 			services.forEach(function(s) { svo.value(s, _svcNice[s] || s); });
-			svo.default = (services.indexOf('ssclash') >= 0) ? 'ssclash'
-			            : (services.indexOf('clash') >= 0)   ? 'clash'
-			            : services[0];
+			/* Умолчание - первая установленная панель прокси, в том же порядке,
+			   что и сидинг карточки (uci-defaults/seed_widgets.sh). Список, а не
+			   лесенка тернарников: четвёртая ветка в ней стала бы нечитаемой. */
+			svo.default = [ 'nikki', 'ssclash', 'clash' ].filter(function(s) {
+				return services.indexOf(s) >= 0;
+			})[0] || services[0];
 		} else {
 			svo.value('ssclash'); svo.default = 'ssclash';
 		}

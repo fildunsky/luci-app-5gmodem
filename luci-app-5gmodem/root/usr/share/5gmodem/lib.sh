@@ -1835,17 +1835,29 @@ is_p2p_dev() {
 # USE_PROCD, ни своего status), гасила сервис - и больше не включала. Каждое
 # нажатие снова читало «работает» и снова делало stop+disable.
 #
-# Поэтому: procd спрашиваем как раньше; `status` зовём ТОЛЬКО когда он
-# настоящий (есть USE_PROCD либо свой status()/status_service()); всем
-# остальным судим по признаку «включён» - симлинку в /etc/rc.d. Для тумблера
-# это честно: он сам держит enable и disable в паре с start и stop.
+# ВТОРАЯ ЛОВУШКА - `status` У PROCD-СЕРВИСА БЕЗ ИНСТАНСОВ. Замер на стенде
+# 09.09.2026 (nikki, USE_PROCD=1, сервис остановлен):
+#
+#   ubus call service list '{"name":"nikki"}'  ->  {"nikki":{}}
+#   /etc/init.d/nikki status  ->  «active with no instances», код 0
+#
+# То есть у procd `status` отвечает «зарегистрирован», а не «работает», и по
+# его коду остановленный сервис выглядел живым - карточка горела зелёным.
+# Для procd ЕДИНСТВЕННЫЙ честный источник - ubus: инстанс с "running": true.
+#
+# Итог: сперва ubus; свой status()/status_service() зовём, если он написан
+# руками (тогда он что-то да проверяет); у procd БЕЗ своего status ответ ubus
+# окончательный; всем остальным судим по признаку «включён» - симлинку в
+# /etc/rc.d. Для тумблера это честно: он сам держит enable и disable в паре
+# со start и stop.
 svc_running() {   # $1 - имя сервиса; код 0 = работает
 	[ -n "$1" ] && [ -x "/etc/init.d/$1" ] || return 1
 	ubus -S call service list "{\"name\":\"$1\"}" 2>/dev/null | grep -q '"running": *true' && return 0
-	if grep -qE "^[[:space:]]*USE_PROCD=|^status\(\)|^status_service\(\)" "/etc/init.d/$1" 2>/dev/null; then
+	if grep -qE "^status\(\)|^status_service\(\)" "/etc/init.d/$1" 2>/dev/null; then
 		/etc/init.d/"$1" status >/dev/null 2>&1
 		return $?
 	fi
+	grep -qE "^[[:space:]]*USE_PROCD=" "/etc/init.d/$1" 2>/dev/null && return 1
 	for _sr in /etc/rc.d/S??"$1"; do
 		[ -e "$_sr" ] && return 0
 	done

@@ -37,7 +37,7 @@ var _netpriRank = '';
    по умолчанию (пинги, службы, спидтест). */
 var _widgetOrder = [];
 var _pingWidgets = [];   /* [{host, mode}] */
-var _svcWidgets = [];    /* ['ssclash', ...] - сервисы из секций svcwidget */
+var _svcWidgets = [];    /* ['nikki', 'ssclash', ...] - сервисы из секций svcwidget */
 function loadWidgetFlags() {
 	return L.resolveDefault(uci.load('5gmodem')).then(function() {
 		function on(k) { return uci.get('5gmodem', '@5gmodem[0]', k) !== '0'; }
@@ -398,42 +398,95 @@ function stPoll(expectStart) {
 }
 
 /* подтянуть начальную подпись сервиса и последний результат (если был) */
-/* SSClash-Go: если сервис есть, слева от спидтеста показываем кнопку на его
-   веб-админку. Детект (наличие/порт/схема) - в ssclash.sh. Пробуем ОДИН раз;
-   при находке дёргаем redraw, чтобы кнопка появилась без ожидания следующего
-   тика поллинга. */
-/* ДВЕ НЕЗАВИСИМЫЕ ветки SSClash, каждая - своя карточка (могут стоять обе сразу:
-   5.x нередко ставят поверх 4.7). Свидджет 'ssclash' -> ветка go (SSClash-Go 5.x),
-   свидджет 'clash' -> ветка legacy (luci-app-ssclash 4.7.x). Состояние, кэш и
-   опрос статуса - раздельные по ветке. */
+/* КАРТОЧКА-ССЫЛКА НА ВЕБ-ПАНЕЛЬ ПРОКСИ: если сервис есть, слева от спидтеста
+   показываем кнопку на его веб-админку. Детект (наличие/порт/схема/путь) - в
+   бэкенд-скрипте ветки. Пробуем ОДИН раз; при находке дёргаем redraw, чтобы
+   кнопка появилась без ожидания следующего тика поллинга. */
+/* ТРИ НЕЗАВИСИМЫЕ ВЕТКИ, у каждой своя карточка (могут стоять сразу несколько:
+   5.x нередко ставят поверх 4.7, а nikki живёт рядом с любым из них):
+     свидджет 'ssclash' -> ветка go     (SSClash-Go 5.x,         ssclash.sh)
+     свидджет 'clash'   -> ветка legacy (luci-app-ssclash 4.7.x, ssclash.sh)
+     свидджет 'nikki'   -> ветка nikki  (OpenWrt-nikki / mihomo,  nikki.sh)
+   Состояние, кэш и опрос статуса - раздельные по ветке.
+
+   ИМЕНА ЗДЕСЬ ИСТОРИЧЕСКИЕ (_ssc, ssClashBtn, класс netpri-ssclash, ключ
+   localStorage): они завелись, когда веток было две и обе от SSClash. НЕ
+   переименованы намеренно - wkey лежит в widget_order у людей, и смена ключа
+   развалила бы сохранённый порядок карточек. Читать их надо как «ветка
+   веб-панели», а какой за веткой проект - говорит PANEL_BRAND. */
 var _sscDefault = {
 	go:     { present: false, port: 9091, scheme: 'http', version: '', path: '/'   },
-	legacy: { present: false, port: 9090, scheme: 'http', version: '', path: '/ui/' }
+	legacy: { present: false, port: 9090, scheme: 'http', version: '', path: '/ui/' },
+	nikki:  { present: false, port: 9090, scheme: 'http', version: '', path: '/ui/' }
 };
-var _ssc = { go: Object.assign({}, _sscDefault.go), legacy: Object.assign({}, _sscDefault.legacy) };
+var _ssc = {};
+Object.keys(_sscDefault).forEach(function(k) { _ssc[k] = Object.assign({}, _sscDefault[k]); });
 /* Warm-seed из localStorage (по ветке): карточка есть уже в первом кадре. */
-['go', 'legacy'].forEach(function(k) {
+Object.keys(_sscDefault).forEach(function(k) {
 	try {
 		var s = JSON.parse(window.localStorage.getItem('netpri-ssclash-' + k) || 'null');
 		if (s && s.present) { _ssc[k] = s; }
 	} catch (e) {}
 });
-/* svcwidget -> ветка. 'clash' = старый 4.7 (сервис так и зовётся), 'ssclash' = 5.x. */
-function sscKindForSvc(svc) { return svc === 'clash' ? 'legacy' : (svc === 'ssclash' ? 'go' : null); }
+/* svcwidget -> ветка. 'clash' = старый 4.7 (сервис так и зовётся), 'ssclash' =
+   5.x, 'nikki' = одноимённый сервис из OpenWrt-nikki. */
+var _svcToKind = { ssclash: 'go', clash: 'legacy', nikki: 'nikki' };
+function sscKindForSvc(svc) { return _svcToKind[svc] || null; }
 
-var _sscProbed = { go: false, legacy: false };
+/* Фирменный значок SSClash-Go (brand-mark с его страницы): два связанных узла.
+   На currentColor - подхватит цвет текста кнопки. */
+var SSCLASH_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+	'<path d="M6 7.5c0 3 2.5 4.5 6 4.5s6 1.5 6 4.5M18 16.5c0-3-2.5-4.5-6-4.5S6 10.5 6 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+	'<circle cx="6" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="6" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/></svg>';
+/* Значок nikki - СВОЯ рисовка, а не чужой логотип: карточке нужен монохромный
+   глиф под currentColor (он живёт в обеих темах), а логотип проекта идёт под
+   своей лицензией. Мотив - развилка трафика: один вход, два выхода (напрямую и
+   через прокси), ровно то, чем занят mihomo. */
+var NIKKI_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+	'<path d="M8.6 10.7 15.5 6.9M8.6 13.3l6.9 3.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' +
+	'<circle cx="6" cy="12" r="2.4" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="6" r="2.1" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
+	'<circle cx="18" cy="18" r="2.1" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/></svg>';
+
+/* ВЕТКА -> ЧЕМ ЕЁ ЗВАТЬ, ЧЕМ РИСОВАТЬ И КОГО СПРАШИВАТЬ. Раньше имя, значок и
+   путь к скрипту были зашиты прямо в тело кнопки, и третья ветка потребовала бы
+   третьей копии функции.
+   wkey - ключ карточки для перетаскивания (сохраняется в widget_order), поэтому
+   у go/legacy он ИСТОРИЧЕСКИЙ: сменишь - у людей развалится сохранённый порядок. */
+var PANEL_BRAND = {
+	go:     { name: 'SSClash', icon: SSCLASH_ICON, wkey: 'ssclash-go', bin: '/usr/share/5gmodem/ssclash.sh' },
+	legacy: { name: 'SSClash', icon: SSCLASH_ICON, wkey: 'ssclash',    bin: '/usr/share/5gmodem/ssclash.sh' },
+	nikki:  { name: 'Nikki',   icon: NIKKI_ICON,   wkey: 'nikki',      bin: '/usr/share/5gmodem/nikki.sh' }
+};
+
+/* Секрет api в кэш НЕ КЛАДЁМ. В ссылке он нужен (иначе панель nikki встретит
+   формой пароля), но localStorage живёт до ручной чистки, и хранить там пароль
+   от api ради экономии одного вызова детекта - плохой размен. Пишем через эту
+   функцию ВЕЗДЕ, где кэш обновляется: тик статуса делает это каждые 5 секунд, и
+   один забытый setItem сводит всю осторожность к нулю. */
+function sscCache(kind) {
+	try { window.localStorage.setItem('netpri-ssclash-' + kind,
+		JSON.stringify(Object.assign({}, _ssc[kind], { secret: '' }))); } catch (e) {}
+}
+
+var _sscProbed = {};
 function ssclashInit(kind, redraw) {
 	var st = _ssc[kind];
+	if (!st || !PANEL_BRAND[kind]) { return; }
 	if (st.present) { ssclashStatusInit(kind); }   // из кэша - точку опрашиваем сразу
 	if (_sscProbed[kind]) { return; }
 	_sscProbed[kind] = true;
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/ssclash.sh', [ 'detect', kind ]), '').then(function(out) {
+	L.resolveDefault(fs.exec_direct(PANEL_BRAND[kind].bin, [ 'detect', kind ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j && j.present) {
 			_ssc[kind] = { present: true, port: (j.port || _sscDefault[kind].port),
 				scheme: (j.scheme || 'http'), version: (j.version || ''),
-				path: (j.path || _sscDefault[kind].path), kind: kind, running: st.running };
-			try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
+				path: (j.path || _sscDefault[kind].path), kind: kind, running: st.running,
+				secret: (j.secret || '') };
+			sscCache(kind);
 			ssclashStatusInit(kind);
 			if (typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		} else {
@@ -445,41 +498,45 @@ function ssclashInit(kind, redraw) {
 	});
 }
 
-/* Кнопка-ссылка на админку SSClash-Go (новое окно). Хост берём из адресной
-   строки (тот же, на котором открыт LuCI), порт/схему - из детекта. */
-/* Фирменный значок SSClash-Go (brand-mark с его страницы): два связанных узла.
-   На currentColor - подхватит цвет текста кнопки. */
-var SSCLASH_ICON = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
-	'<path d="M6 7.5c0 3 2.5 4.5 6 4.5s6 1.5 6 4.5M18 16.5c0-3-2.5-4.5-6-4.5S6 10.5 6 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
-	'<circle cx="6" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
-	'<circle cx="18" cy="7.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
-	'<circle cx="6" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/>' +
-	'<circle cx="18" cy="16.5" r="1.85" fill="currentColor" fill-opacity=".22" stroke="currentColor" stroke-width="1.75"/></svg>';
+/* Кнопка-ссылка на веб-панель ветки (новое окно). Хост берём из адресной строки
+   (тот же, на котором открыт LuCI), порт/схему/путь - из детекта. */
 function ssClashBtn(kind) {
 	var st = _ssc[kind];
+	var br = PANEL_BRAND[kind] || PANEL_BRAND.go;
 	var host = window.location.hostname;
 	// Путь зависит от ветки: SSClash-Go отдаёт админку в корне ("/"), а legacy
-	// 4.7 - через external-ui самого clash ("/ui/"). См. ssclash.sh detect.
+	// 4.7 и nikki - через external-ui самого ядра ("/ui/" либо "/ui/<имя>/").
+	// См. detect в ssclash.sh и nikki.sh.
 	var url = st.scheme + '://' + host + ':' + st.port + (st.path || '/');
+	/* nikki: панели (zashboard, metacubexd) спрашивают, к какому api идти, и без
+	   параметров показывают форму подключения вместо самой панели. Тот же набор
+	   подставляет сам luci-app-nikki (tools/nikki.js, openDashboard) - расходиться
+	   с ним нельзя, иначе ссылка ведёт «не туда, куда родная кнопка». */
+	if (kind === 'nikki') {
+		url += '?host=' + encodeURIComponent(host) +
+			'&hostname=' + encodeURIComponent(host) +
+			'&port=' + encodeURIComponent(st.port) +
+			'&secret=' + encodeURIComponent(st.secret || '');
+	}
 	var ic = E('span', { 'class': 'netpri-ssclash-ic' });
-	ic.innerHTML = SSCLASH_ICON;
+	ic.innerHTML = br.icon;
 	/* Три строки, как у карточек «Приоритета интернета»: версия сверху, имя с
 	   значком по центру, IP роутера снизу (совпадает с целью ссылки). */
-	/* Точка состояния после «SSClash». Начальный цвет - из последнего известного
+	/* Точка состояния после имени. Начальный цвет - из последнего известного
 	   (st.running, переживает в localStorage), опрос ниже освежает. Адресуем точку
-	   по data-ssckind, чтобы опрос красил именно ЭТУ карточку (их может быть две). */
+	   по data-ssckind, чтобы опрос красил именно ЭТУ карточку (их бывает несколько). */
 	var dot = E('span', { 'class': 'netpri-svcdot ' + (st.running ? 'on' : 'off'),
-		'title': st.running ? _('SSClash is running') : _('SSClash is stopped') });
+		'title': (st.running ? _('%s is running') : _('%s is stopped')).format(br.name) });
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-ssclash',
 		'data-ssckind': kind,
-		'data-wkey': 's:' + (kind === 'go' ? 'ssclash-go' : 'ssclash'),
-		'data-tooltip': _('Open the SSClash admin panel in a new tab'),
+		'data-wkey': 's:' + br.wkey,
+		'data-tooltip': _('Open the %s admin panel in a new tab').format(br.name),
 		'click': function() { window.open(url, '_blank', 'noopener'); }
 	}, [
 		svcRankEl(ic),
-		E('span', { 'class': 'netpri-sub' }, st.version || 'SSClash'),
-		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, 'SSClash') ]),
+		E('span', { 'class': 'netpri-sub' }, st.version || br.name),
+		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, br.name) ]),
 		E('span', { 'class': 'netpri-ip' }, host)
 	]);
 }
@@ -628,7 +685,9 @@ function pingInit() {
 	});
 }
 
-/* --- Карточки сервисов (виджет «Сервисы»), кроме SSClash (у него своя) ------ */
+/* --- Карточки сервисов (виджет «Сервисы»). Сервисы со СВОЕЙ веб-панелью
+   (ssclash/clash/nikki) сюда не попадают - у них своя карточка, см. PANEL_BRAND
+   и ssClashBtn; развилка - в buildBar через sscKindForSvc. ----------------- */
 /* Известные сервисы с уникальными иконками добавим позже; пока - гаечный ключ. */
 /* Известные сервисы: имя/иконка для карточки и (если есть) порт собственной
    веб-админки - такая карточка кликабельна и открывает её в новой вкладке.
@@ -767,7 +826,7 @@ function _svcAggTick() {
 		_svcAgg.kinds.forEach(function(kind) {
 			var r = (j.ssc || {})[kind] || {};
 			_ssc[kind].running = !!r.running;
-			try { window.localStorage.setItem('netpri-ssclash-' + kind, JSON.stringify(_ssc[kind])); } catch (e) {}
+			sscCache(kind);
 			updateSscDot(kind);
 		});
 	});
@@ -779,7 +838,12 @@ function _svcAggStart() {
 }
 function svcStatusInit(services) {
 	services = (services || []).filter(function(s) {
-		return s && s !== 'ssclash' && s !== 'clash' && _svcAgg.services.indexOf(s) < 0;
+		/* Сервисы, У КОТОРЫХ ЕСТЬ СВОЯ ВЕТКА-КАРТОЧКА, здесь пропускаем: их статус
+		   приезжает отдельной половиной ответа svcall (j.ssc), и попади они ещё и
+		   в generic-список - опрашивались бы дважды за тик, а точку красили бы два
+		   разных обработчика. Список берём из карты веток, а не перечисляем
+		   именами: забыть дописать сюда третий - ровно тот баг. */
+		return s && !sscKindForSvc(s) && _svcAgg.services.indexOf(s) < 0;
 	});
 	if (!services.length) { return; }
 	_svcAgg.services = _svcAgg.services.concat(services);
@@ -787,12 +851,13 @@ function svcStatusInit(services) {
 	_svcAggStart();
 }
 
-/* Живой опрос состояния сервиса SSClash - красит точку ИМЕННО этой ветки-карточки
-   (по data-ssckind: карточек может быть две, у каждой свой сервис). */
+/* Живой опрос состояния ветки веб-панели - красит точку ИМЕННО этой карточки
+   (по data-ssckind: карточек бывает несколько, у каждой свой сервис). */
 function updateSscDot(kind) {
 	var st = _ssc[kind];
+	var nm = (PANEL_BRAND[kind] || PANEL_BRAND.go).name;
 	var cls = st.running ? 'on' : 'off';
-	var tip = st.running ? _('SSClash is running') : _('SSClash is stopped');
+	var tip = (st.running ? _('%s is running') : _('%s is stopped')).format(nm);
 	document.querySelectorAll('.netpri-ssclash[data-ssckind="' + kind + '"] .netpri-svcdot').forEach(function(d) {
 		d.classList.remove('on', 'off'); d.classList.add(cls); d.title = tip;
 	});
@@ -1478,9 +1543,10 @@ function buildBar(list, redraw) {
 	if (_widgets.status) { _pingWidgets.forEach(function(w) { right.push(pingCard(w)); }); }
 	if (_widgets.services) {
 		// Карточки ведёт КОНФИГ пользователя (секции svcwidget) - и только он.
-		// Выбран ssclash/clash -> карточку SSClash показываем БЕЗУСЛОВНО; detect
-		// (ssclash.sh) лишь наполняет порт/версию/статус, его провал НЕ прячет
-		// выбранную карточку. Не выбран -> не показываем (и убирается в настройках).
+		// Выбран сервис со своей веб-панелью (ssclash/clash/nikki) -> её карточку
+		// показываем БЕЗУСЛОВНО; detect (ssclash.sh / nikki.sh) лишь наполняет
+		// порт/версию/статус, его провал НЕ прячет выбранную карточку.
+		// Не выбран -> не показываем (и убирается в настройках).
 		effectiveSvcs().forEach(function(svc) {
 			var _sk = sscKindForSvc(svc);
 			if (_sk) { right.push(ssClashBtn(_sk)); }
@@ -1643,8 +1709,10 @@ return baseclass.extend({
 				// Карточка показывается по конфигу (см. buildBar) независимо от
 				// detect; здесь лишь наполняем порт/версию и красим статус-точку.
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); ssclashStatusInit('go'); }
-				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); ssclashStatusInit('legacy'); }
+				_svcs.forEach(function(s) {
+					var k = sscKindForSvc(s);
+					if (k) { ssclashInit(k, redraw); ssclashStatusInit(k); }
+				});
 				svcStatusInit(_svcs);
 			}
 		});
@@ -1709,8 +1777,10 @@ return baseclass.extend({
 				// Карточка показывается по конфигу (см. buildBar) независимо от
 				// detect; здесь лишь наполняем порт/версию и красим статус-точку.
 				var _svcs = effectiveSvcs();
-				if (_svcs.indexOf('ssclash') >= 0) { ssclashInit('go', redraw); ssclashStatusInit('go'); }
-				if (_svcs.indexOf('clash') >= 0) { ssclashInit('legacy', redraw); ssclashStatusInit('legacy'); }
+				_svcs.forEach(function(s) {
+					var k = sscKindForSvc(s);
+					if (k) { ssclashInit(k, redraw); ssclashStatusInit(k); }
+				});
 				svcStatusInit(_svcs);
 			}
 			/* Keep the bar live with a steady poll: the operator name (bounded

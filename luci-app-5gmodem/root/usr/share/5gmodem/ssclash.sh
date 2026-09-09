@@ -14,6 +14,8 @@
 #
 # Использование: ssclash.sh detect <go|legacy> | ssclash.sh status <go|legacy>
 
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+
 # Присутствует ли ветка $1 (go|legacy)? Ветки проверяются НЕЗАВИСИМО.
 ssc_present() {
 	case "$1" in
@@ -73,13 +75,12 @@ detect)
 	;;
 status)
 	# Запущен ли сервис указанной ветки - для «живой» точки в карточке.
+	# Разбор ОБЩИЙ (svc_running в lib.sh), а не свой: у procd-сервиса без
+	# инстансов `status` выходит с нулём, и точка врала бы зелёным. См. замер
+	# у svc_running.
 	SVC=$(ssc_service "$2")
 	R=0
-	if ubus -S call service list "{\"name\":\"$SVC\"}" 2>/dev/null | grep -q '"running": *true'; then
-		R=1
-	elif [ -x "/etc/init.d/$SVC" ] && "/etc/init.d/$SVC" status >/dev/null 2>&1; then
-		R=1
-	fi
+	svc_running "$SVC" && R=1
 	printf '{"running":%s}\n' "$R"
 	;;
 *)

@@ -3443,12 +3443,6 @@ msgstr "Выберите сервис из меню команды выше (▾
 msgid "Dismiss"
 msgstr "Закрыть"
 
-msgid "SSClash is running"
-msgstr "SSClash запущен"
-
-msgid "SSClash is stopped"
-msgstr "SSClash остановлен"
-
 msgid "Widgets"
 msgstr "Виджеты"
 
@@ -5273,9 +5267,6 @@ msgstr "Таймаут инициализации модема"
 msgid "ModemManager"
 msgstr "ModemManager"
 
-msgid "Open the SSClash admin panel in a new tab"
-msgstr "Открыть панель SSClash в новой вкладке"
-
 msgid "Override MTU"
 msgstr "Переопределить MTU"
 
@@ -5401,3 +5392,6 @@ msgstr "На что способен сам модем. Это не скорос
 
 msgid "Max speed"
 msgstr "Максимум модема"
+
+msgid "Open the %s admin panel in a new tab"
+msgstr "Открыть панель %s в новой вкладке"
