@@ -102,6 +102,12 @@ opkg install luci-i18n-base-zh-cn
 - Telit FN990A28 —— 开机不再陷入“SIM in illegal state”的反复上下电，支持频段与网络模式管理、载波聚合
 - Quectel RM520N-GL —— 型号与固件版本字段
 - Foxconn T99W373 —— 5G NSA 下的载波聚合
+- NTmore NTLM-500（Altair ALT3800，来自 Skylink H1 家用路由器）—— 信号、服务小区与邻区、各天线电平、温度、发射功率、路径损耗、频段选择
+
+### 依据厂商文档添加的型号
+这些设备我手上没有，也暂无用户反馈：配置文件依据厂商 AT 命令手册编写，并用手册中的示例应答做过验证。欢迎机主提供日志。
+- Foxconn T99W373 / Thales MV32-W（Snapdragon X62）—— LTE、5G NSA、5G SA 与 WCDMA 频段，锁定小区，网络模式，5G 模式，完整的小区与天线指标
+- 其他 Altair ALT3100 / ALT3800 调制解调器（USB 厂商 216f）：Yota 4G LTE（Swift WLTUBA-107）、NTmore JMR814 —— 沿用 NTLM-500 的配置文件，上网棒提供 AT 端口时生效
 
 <img width="1960" height="1474" alt="截图" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 

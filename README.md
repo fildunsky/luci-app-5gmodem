@@ -89,6 +89,12 @@ I do not own these. Their owners sent logs and AT output, and the fixes shipped:
 - Telit FN990A28 — clean start without the "SIM in illegal state" power-cycle loop, band and network-mode control, carrier aggregation
 - Quectel RM520N-GL — model and firmware strings
 - Foxconn T99W373 — carrier aggregation in 5G NSA
+- NTmore NTLM-500 (Altair ALT3800, from the Skylink H1 home router) — signal, serving and neighbour cells, per-antenna levels, temperature, TX power, path loss, band selection
+
+### Added from vendor documentation
+No hardware and no reports for these yet: the profiles follow the vendors' AT command guides and were checked against the sample answers printed in them. Logs from owners are welcome.
+- Foxconn T99W373 / Thales MV32-W (Snapdragon X62) — bands for LTE, 5G NSA, 5G SA and WCDMA, cell lock, network mode, 5G mode, full cell and antenna metrics
+- Other Altair ALT3100 / ALT3800 modems (USB vendor 216f): Yota 4G LTE (Swift WLTUBA-107), NTmore JMR814 — the NTLM-500 profile, used whenever the stick exposes an AT port
 
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
