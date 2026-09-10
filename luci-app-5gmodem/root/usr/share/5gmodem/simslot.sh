@@ -402,22 +402,37 @@ fi
 # Через очередь к порту (at_query), не голым sms_tool: порт бывает занят
 # eSIM-мостом или метриками, параллельное чтение перемешивает ответы.
 # Команды нет (пусто/ERROR на пробе) - возврат 1, зовущий идёт своим путём.
+# ИМЯ КОМАНДЫ У СЕМЕЙСТВА ДВА. У SDX55 (T99W175 / MV31-W) это «AT^switch_slot»,
+# у SDX62 (T99W373 / MV32-W) фирменное руководство называет ту же команду
+# «AT+SWITCH_SLOT» (раздел 15.38) - ответы и нумерация одинаковые. Пробуем оба и
+# дальше держимся того, который ответил: слепо слать один вариант значило бы,
+# что на половине семейства кнопка слота молча ничего не делает.
+_at_slot_cmd() {   # $1 - порт; печатает имя команды или ничего
+	for _asc_n in "^switch_slot" "+SWITCH_SLOT"; do
+		at_query "$1" "AT${_asc_n}?" 6 2>/dev/null | grep -qi "SIM" && {
+			printf '%s\n' "$_asc_n"
+			return 0
+		}
+	done
+	return 1
+}
+
 _at_slot_set() {   # $1 - целевой слот (1..N); 0 = переключено (и напечатан ok)
 	_as_at=$(uci -q get "5gmodem.$_ss_sec.at_port")
 	[ -n "$_as_at" ] && [ -e "$_as_at" ] || return 1
-	at_query "$_as_at" "AT^switch_slot?" 6 2>/dev/null | grep -qi "SIM" || return 1
-	at_query "$_as_at" "AT^switch_slot=$(($1 - 1))" 8 >/dev/null 2>&1
+	_as_cmd=$(_at_slot_cmd "$_as_at") || return 1
+	at_query "$_as_at" "AT${_as_cmd}=$(($1 - 1))" 8 >/dev/null 2>&1
 	# Ждём ПОДТВЕРЖДЕНИЯ, а не фиксированную паузу: модем перекидывает слот за
 	# 3-6 с, и одного sleep 3 хватало не всегда - переключение было выполнено,
 	# но мы успевали объявить его неудачей.
 	_as_ok=0
 	for _as_i in 1 2 3 4 5 6; do
 		sleep 2
-		at_query "$_as_at" "AT^switch_slot?" 6 2>/dev/null \
+		at_query "$_as_at" "AT${_as_cmd}?" 6 2>/dev/null \
 			| grep -qi "SIM$1 ENABLE" && { _as_ok=1; break; }
 	done
 	[ "$_as_ok" = 1 ] || return 1
-	logger -t 5gmodem "SIM slot switched to $1 via AT^switch_slot"
+	logger -t 5gmodem "SIM slot switched to $1 via AT$_as_cmd"
 	rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
 	# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
 	( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
@@ -451,7 +466,13 @@ if [ "$_VIA" = qmi ]; then
 		fi
 		_swf_at=$(uci -q get "5gmodem.$_SEC.at_port")
 		if [ "$1" != set ] && [ -n "$_swf_at" ] && [ -c "$_swf_at" ]; then
-			_swf=$(at_query "$_swf_at" "AT^switch_slot?" 6 2>/dev/null | tr -d '\r')
+			# Имя команды у семейства два - см. _at_slot_cmd выше.
+			_swf=""
+			for _swf_n in "^switch_slot" "+SWITCH_SLOT"; do
+				_swf=$(at_query "$_swf_at" "AT${_swf_n}?" 6 2>/dev/null | tr -d '\r')
+				case "$_swf" in *SIM[12]*) break ;; esac
+				_swf=""
+			done
 			_swf_a=""
 			case "$_swf" in
 				*SIM1*) _swf_a=1 ;;

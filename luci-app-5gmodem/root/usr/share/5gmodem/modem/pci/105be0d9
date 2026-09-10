@@ -1,0 +1,22 @@
+# Foxconn T99W373 (Thales Cinterion MV32-W, Qualcomm SDX62) - вариант PCIe/MHI.
+#
+# Идентификатор из таблицы ядра (drivers/bus/mhi/host/pci_generic.c:
+# PCI_VENDOR_ID_FOXCONN 0x105b, устройство 0xe0d9 -> mhi_foxconn_t99w373_info).
+# AT приезжает на /dev/wwan<N>at<M>, канал данных - отдельным символьным
+# устройством того же узла.
+. "$RES/modem/_foxconn_mv32_common"
+
+# ПРОТОКОЛ КАНАЛА ДАННЫХ У MHI - НЕ ИЗ SYSFS USB. Общий файл ищет драйвер
+# usb-интерфейса, а здесь шины USB нет вовсе. Смотрим, какой канал модуль
+# выставил рядом с AT-портом: wwan0mbim0 -> MBIM, wwan0qmi0 -> QMI.
+if [ -z "$PROTO" ]; then
+	case "${DEVICE##*/}" in
+		wwan*)
+			_MPFX=$(printf '%s' "${DEVICE##*/}" | sed 's/at[0-9]*$//')
+			if [ -n "$_MPFX" ]; then
+				[ -e "/dev/${_MPFX}mbim0" ] && PROTO="mbim"
+				[ -z "$PROTO" ] && [ -e "/dev/${_MPFX}qmi0" ] && PROTO="qmi"
+			fi
+			;;
+	esac
+fi

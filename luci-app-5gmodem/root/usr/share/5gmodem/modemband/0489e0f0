@@ -1,0 +1,3 @@
+# Foxconn T99W373 / Thales Cinterion MV32-W - композиция MBIM (0489:e0f0).
+# Диапазоны, режим сети и привязка к соте - в общем файле семейства.
+. "$RES/_foxconn_mv32_common"

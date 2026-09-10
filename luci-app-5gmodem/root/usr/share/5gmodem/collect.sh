@@ -989,6 +989,35 @@ fastboot_verdict() {
 # попытку каждые пару секунд. Единственный признак - одна строка в mmcli, которую
 # в длинном выводе легко пропустить (живой отчёт: Dell DW5821e на Radxa ROCK 5T).
 power_state_verdict() {
+	# РУБИЛЬНИК СПРАШИВАЕМ У САМОГО МОДЕМА, ЕСЛИ ОН УМЕЕТ ОТВЕЧАТЬ.
+	#
+	# Ниже вердикт про W_DISABLE# строится по строке в логе ModemManager - а она
+	# появляется только с --log-level=INFO и только там, где MM вообще есть. У
+	# семейства Foxconn/Thales (T99W373 / MV32-W, раздел 15.29 руководства) пин
+	# читается напрямую: «RF HW key is pull up» - радио разрешено, «pull down» -
+	# рубильник прижат. Это прямая улика вместо косвенной, и она работает на
+	# kernel-протоколе, где MM не участвует вовсе.
+	# Команды нет - ответ пустой или ERROR, и мы просто молчим.
+	_ps_at=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+	if [ -n "$_ps_at" ] && [ -e "$_ps_at" ] && command -v sms_tool >/dev/null 2>&1; then
+		_ps_rf=$(sms_tool -d "$_ps_at" at "AT+RFPIN_STATUS?" 2>/dev/null | tr -d '\r')
+		case "$_ps_rf" in
+			*RFPIN*|*"RF HW key"*) ;;
+			*) _ps_rf=$(sms_tool -d "$_ps_at" at "AT^RFPIN_STATUS?" 2>/dev/null | tr -d '\r') ;;
+		esac
+		case "$_ps_rf" in
+			*"pull down"*)
+				echo "PROBLEM (HARDWARE): the modem reports its radio-disable pin is pulled down"
+				echo "(AT+RFPIN_STATUS? -> 'RF HW key is pull down'). That is the W_DISABLE# pin on"
+				echo "M.2: while it is held, no software can switch the radio on."
+				echo "Check:"
+				echo "  - the radio-disable switch/jumper on the M.2 adapter;"
+				echo "  - power: behind a USB hub the modem shares the port's 500 mA, while its"
+				echo "    peak draw is over an amp - a sagging supply makes adapters pull the pin."
+				;;
+			*"pull up"*) echo "radio-disable pin (W_DISABLE#): released - the hardware allows the radio" ;;
+		esac
+	fi
 	command -v mmcli >/dev/null 2>&1 || { echo "no mmcli - nothing to check with"; return; }
 	_ps_i=$("$RES/modemswitch.sh" mmindex 2>/dev/null)
 	[ -n "$_ps_i" ] || { echo "the modem is not registered in ModemManager - this check does not apply"; return; }

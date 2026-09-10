@@ -1,0 +1,420 @@
+# Общая часть модемов Foxconn T99W373 / Thales Cinterion MV32-W (Qualcomm SDX62).
+#
+# ОТКУДА ФОРМАТЫ. Всё ниже сверено по фирменному «MV32-W AT Command Reference
+# Guide» 80781ST11134A Rev 3 (2024-11-12), разделы 15.20-15.40. Модема в руках
+# не было: НИ ОДНА функция чтения состояния радио не трогает, а у записи ошибка
+# прошивки уходит в журнал (logger), а не проглатывается.
+#
+# ЧЕМ MV32 ОТЛИЧАЕТСЯ ОТ MV31 (_qualcomm_sdx55_common) - три вещи, и все три
+# ломают прямое переиспользование того файла:
+#   1) имена RAT в BAND_PREF. У MV31 маска 5G одна и зовётся NR5G; у MV32 их
+#      ДВЕ - NR5G_NSA и NR5G_SA, а голое NR5G означает «обе сразу». Прочитать
+#      SA-маску шаблоном MV31 нельзя: «NR5G,Enable» не совпадает с
+#      «NR5G_SA,Enable», и раздел 5G SA остался бы пустым.
+#   2) префикс команд. Руководство MV32 называет их через «+» (AT+BAND_PREF),
+#      а примеры в том же документе отвечают через «^» (^SLMODE:, ^NR5G_LOCK:).
+#      Прошивка понимает оба, но какой именно - зависит от сборки, поэтому
+#      команды идут через _mv32_at: сперва «+», при ERROR/пустоте - «^».
+#   3) BAND_PREF применяется БЕЗ перезагрузки (прямая цитата руководства:
+#      «The difference between AT+BAND_PREF and AT+SLBAND is AT+BAND_PREF can
+#      enable/disable band(s) without reboot»). У MV31 мы этого не знали и
+#      перезагружали модем после каждой правки.
+#
+# _DEVICE задаёт bands.sh (uci at_port / detect.sh) - в профиле НЕ прибиваем:
+# на мультимодемном роутере прибитый порт принадлежал бы другому модему.
+_DEVICE=""
+
+# Применение диапазонов - ВЖИВУЮ, без перезапуска радио (см. пункт 3 выше).
+_BANDS_APPLY_LIVE=1
+
+# Паспортные списки - на случай, если модем не ответил (порт занят дозвоном).
+# Взяты из <band> в разделах 15.20/15.30, а не из даташита: прошивка отдаёт
+# именно их, и расхождение (даташит обещает WCDMA B6, руководство - нет)
+# лучше решать в пользу того, что реально примет команда.
+_MV32_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
+_MV32_NR_BANDS="1 2 3 5 7 8 12 13 14 18 20 25 26 28 30 38 40 41 48 53 66 70 71 75 76 77 78 79"
+_MV32_WCDMA_BANDS="1 2 4 5 8"
+
+getinfo() {
+	echo "Thales/Cinterion MV32-W"
+}
+
+# --- Транспорт ---------------------------------------------------------------
+#
+# ОДНА КОМАНДА, ДВА ПРЕФИКСА. Пробуем документированный «+», при отказе - «^».
+# Второй заход стоит одного лишнего обмена с портом и только на тех сборках,
+# где «+» не понят; на понявших его не будет вовсе.
+_mv32_at() {   # $1 - тело команды без префикса, напр. "BAND_PREF?"
+	_m32_o=$(sms_tool -d $_DEVICE at "AT+$1" 2>&1 | tr -d '\r')
+	case "$_m32_o" in
+		''|*ERROR*) _m32_o=$(sms_tool -d $_DEVICE at "AT^$1" 2>&1 | tr -d '\r') ;;
+	esac
+	printf '%s\n' "$_m32_o"
+}
+
+# Одна секция ответа AT+BAND_PREF? / AT+SLBAND?.
+#
+# Ответ прошивки - набор строк вида «LTE,Enable Bands : 1,2,3,». В фирменном
+# руководстве соседние секции местами напечатаны В ОДНОЙ строке
+# («LTE,Disable Bands: NR5G_NSA,Enable Bands :»), и полагаться на то, что
+# живая прошивка так не делает, нельзя: разбор по номеру поля после первого
+# «:» отдал бы тогда чужой список. Поэтому сперва режем ответ ПЕРЕД каждым
+# заголовком, и только затем берём свой - вместе с продолжением: длинный список
+# 5G прошивка переносит на следующие строки, и разбор «только заголовок»
+# вернул бы пустоту там, где бенды есть.
+_mv32_pick() {   # $1 - RAT, $2 - Enable|Disable; ответ на stdin
+	awk '
+	{
+		gsub(/[A-Za-z0-9_]+,(Enable|Disable) Bands[[:space:]]*:/, "\n&")
+		print
+	}' | awk -v h="$1,$2 Bands" '
+	index($0, h) == 1 { grab = 1; sub(/^[^:]*:[[:space:]]*/, ""); acc = $0; next }
+	grab && $0 ~ /^[A-Za-z0-9_]+,(Enable|Disable) Bands/ { exit }
+	grab && $0 ~ /^(OK|ERROR)/ { exit }
+	grab { acc = acc $0 }
+	END { gsub(/,/, " ", acc); print acc }
+	'
+}
+
+# ОДИН ОТВЕТ BAND_PREF? НА ВЕСЬ ПОКАЗ СТРАНИЦЫ.
+#
+# json-сборщик bands.sh зовёт get*/getsupported* по отдельности, каждый в своей
+# подоболочке, - переменную-кэш между ними не передать. А чтений восемь
+# (4G/5G NSA/5G SA/3G, каждое дважды), и без кэша это восемь походов в порт, за
+# который дерутся дозвон, метрики и SMS. Кэш короткий (5 c) и лежит под
+# префиксом /tmp/5gmodem_bands_* - тем самым, который set*-вербы уже чистят
+# после записи, так что «применил и вижу старое» здесь появиться неоткуда.
+_mv32_bp() {
+	_m32_c="/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	if [ -s "$_m32_c" ]; then
+		_m32_ts=$(cat "$_m32_c.t" 2>/dev/null)
+		case "$_m32_ts" in
+			''|*[!0-9]*) _m32_ts="" ;;
+		esac
+		if [ -n "$_m32_ts" ]; then
+			_m32_age=$(( $(cut -d. -f1 /proc/uptime) - _m32_ts ))
+			if [ "$_m32_age" -ge 0 ] && [ "$_m32_age" -le 5 ]; then
+				cat "$_m32_c"
+				return
+			fi
+		fi
+	fi
+	_m32_o=$(_mv32_at "BAND_PREF?")
+	case "$_m32_o" in
+		*Bands*)
+			printf '%s\n' "$_m32_o" > "$_m32_c.tmp" 2>/dev/null \
+				&& mv "$_m32_c.tmp" "$_m32_c" 2>/dev/null \
+				&& cut -d. -f1 /proc/uptime > "$_m32_c.t" 2>/dev/null
+			;;
+	esac
+	printf '%s\n' "$_m32_o"
+}
+
+# Оставить только числа: у прошивки список кончается запятой, и пустое поле
+# после неё иначе доехало бы до интерфейса пустой кнопкой.
+_mv32_nums() {
+	_m32_r=""
+	for _m32_b in $(cat); do
+		case "$_m32_b" in
+			''|*[!0-9]*) continue ;;
+		esac
+		_m32_r="$_m32_r${_m32_r:+ }$_m32_b"
+	done
+	printf '%s\n' "$_m32_r"
+}
+
+# Список бендов -> «1,2,3» для записи. Пустой список = отказ: команда с пустым
+# хвостом у этой прошивки означает «сбросить к заводским», а это не то, что
+# просил человек.
+_mv32_csv() {
+	_m32_t=""
+	for _m32_b in $1; do
+		case "$_m32_b" in
+			''|*[!0-9]*) continue ;;
+		esac
+		_m32_t="${_m32_t}${_m32_t:+,}${_m32_b}"
+	done
+	[ -n "$_m32_t" ] || return 1
+	printf '%s\n' "$_m32_t"
+}
+
+# Запись маски одного RAT. status=2 - «включить ровно эти», маска своего RAT
+# переопределяется целиком (раздел 15.30). Голое AT+BAND_PREF СЮДА НЕ ШЛЁМ: у
+# родственного MV31 это сбрасывало маски ВСЕХ RAT к заводским, и правка 4G
+# возвращала весь 5G (живой разбор 17.08.2026, см. _qualcomm_sdx55_common).
+# Список без кавычек: руководство MV32 печатает их, а прошивка MV31 такую форму
+# молча проглатывала - вариант без кавычек понимают обе.
+_mv32_setbands() {   # $1 - RAT, $2 - список бендов через пробел
+	if [ "$2" = "default" ]; then
+		_mv32_at "BAND_PREF" >/dev/null 2>&1
+		return
+	fi
+	_m32_l=$(_mv32_csv "$2") || return 1
+	rm -f "/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')" \
+		"/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_').t" 2>/dev/null
+	_m32_w=$(_mv32_at "BAND_PREF=$1,2,$_m32_l")
+	case "$_m32_w" in
+		*ERROR*) logger -t 5gmodem "band_pref($1): firmware rejected the write \"BAND_PREF=$1,2,$_m32_l\": $(printf '%s' "$_m32_w" | tr '\n' ' ' | head -c 120)"
+		         return 1 ;;
+	esac
+	return 0
+}
+
+# --- 4G ----------------------------------------------------------------------
+getsupportedbands() {
+	_m32_o=$(_mv32_bp)
+	_m32_u=$(printf '%s %s\n' "$(printf '%s\n' "$_m32_o" | _mv32_pick LTE Enable)" \
+		"$(printf '%s\n' "$_m32_o" | _mv32_pick LTE Disable)" \
+		| _mv32_nums | tr ' ' '\n' | sort -nu | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_m32_u" ] && { echo "$_m32_u"; return; }
+	echo "$_MV32_LTE_BANDS"
+}
+
+getbands() {
+	_mv32_bp | _mv32_pick LTE Enable | _mv32_nums
+}
+
+setbands() {
+	_mv32_setbands LTE "$1"
+}
+
+# --- 5G NSA ------------------------------------------------------------------
+getsupportedbands5gnsa() {
+	_m32_o=$(_mv32_bp)
+	_m32_u=$(printf '%s %s\n' "$(printf '%s\n' "$_m32_o" | _mv32_pick NR5G_NSA Enable)" \
+		"$(printf '%s\n' "$_m32_o" | _mv32_pick NR5G_NSA Disable)" \
+		| _mv32_nums | tr ' ' '\n' | sort -nu | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_m32_u" ] && { echo "$_m32_u"; return; }
+	echo "$_MV32_NR_BANDS"
+}
+
+getbands5gnsa() {
+	_mv32_bp | _mv32_pick NR5G_NSA Enable | _mv32_nums
+}
+
+setbands5gnsa() {
+	_mv32_setbands NR5G_NSA "$1"
+}
+
+# --- 5G SA -------------------------------------------------------------------
+# У MV31 этого раздела нет вовсе: там маска 5G одна на обе схемы. Здесь SA -
+# отдельная маска, и без неё выбор диапазонов для SA-сети был бы недоступен.
+getsupportedbands5gsa() {
+	_m32_o=$(_mv32_bp)
+	_m32_u=$(printf '%s %s\n' "$(printf '%s\n' "$_m32_o" | _mv32_pick NR5G_SA Enable)" \
+		"$(printf '%s\n' "$_m32_o" | _mv32_pick NR5G_SA Disable)" \
+		| _mv32_nums | tr ' ' '\n' | sort -nu | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_m32_u" ] && { echo "$_m32_u"; return; }
+	echo "$_MV32_NR_BANDS"
+}
+
+getbands5gsa() {
+	_mv32_bp | _mv32_pick NR5G_SA Enable | _mv32_nums
+}
+
+setbands5gsa() {
+	_mv32_setbands NR5G_SA "$1"
+}
+
+# --- 3G ----------------------------------------------------------------------
+# Стиль mask (галочки произвольного набора) - готовых комбинаций у прошивки нет,
+# как и у MV31.
+bands3g_style() {
+	echo "mask"
+}
+
+getsupportedbands3g() {
+	_m32_o=$(_mv32_bp)
+	_m32_u=$(printf '%s %s\n' "$(printf '%s\n' "$_m32_o" | _mv32_pick WCDMA Enable)" \
+		"$(printf '%s\n' "$_m32_o" | _mv32_pick WCDMA Disable)" \
+		| _mv32_nums | tr ' ' '\n' | sort -nu | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_m32_u" ] && { echo "$_m32_u"; return; }
+	echo "$_MV32_WCDMA_BANDS"
+}
+
+getbands3g() {
+	_mv32_bp | _mv32_pick WCDMA Enable | _mv32_nums
+}
+
+setbands3g() {
+	_mv32_setbands WCDMA "$1"
+}
+
+# --- Режим сети (RAT) --------------------------------------------------------
+# AT+SLMODE=<pref_term>,<pref_mode>. pref_term=1 - PERMANENT (переживает
+# перезагрузку модуля), pref_mode - БИТОВАЯ МАСКА 1=WCDMA, 2=LTE, 4=NR5G
+# (раздел 15.22). Кодировка совпала с MV31 - но переносить её «по родству»
+# нельзя: у T77W968 та же команда с совершенно другими числами (Auto=4), и
+# ошибка не даёт сообщения, модем просто уходит в другой RAT.
+getsupportedmodes() {
+	echo "0:Auto 1:3G 2:4G 3:3G+4G 6:4G+5G 7:3G+4G+5G"
+}
+
+getmode() {
+	_mv32_at "SLMODE?" | awk -F'[:,]' '/SLMODE:/{gsub(/ /,"",$3); print $3; exit}'
+}
+
+setmode() {
+	case "$1" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	_mv32_at "SLMODE=1,$1" >/dev/null 2>&1
+}
+
+# --- Агрегация несущих -------------------------------------------------------
+# Агрегация бывает выключена в самой прошивке - тогда модуль работает как cat4,
+# а причина ниоткуда не видна. Ответ: «CA_FLAG: DISABLE» / «CA_FLAG: ENABLE».
+# ВНИМАНИЕ на инверсию в записи: у AT+CA_ENABLE 0 = включить, 1-255 = выключить
+# (раздел 15.24). Мы только читаем, но следующему это сэкономит вечер.
+getcaenabled() {
+	_m32_o=$(_mv32_at "CA_ENABLE?" | sed -n 's/.*CA_FLAG:[[:space:]]*//p' | head -1 | tr -d ' ')
+	case "$_m32_o" in
+		[Ee][Nn][Aa][Bb][Ll][Ee]*) echo "on" ;;
+		[Dd][Ii][Ss][Aa][Bb][Ll][Ee]*) echo "off" ;;
+		*) echo "Unsupported" ;;
+	esac
+}
+
+# --- Режим 5G в самом модеме -------------------------------------------------
+# AT+NR5G_MODE: 0 - NSA и SA, 1 - только NSA, 2 - только SA (раздел 15.39).
+# Полного выключения 5G эта команда не умеет - «off» отдавать неоткуда, и это
+# честно: за выключение 5G у MV32 отвечает режим сети (SLMODE) и маски бендов.
+# Применяется без перезапуска модуля, модему нужно время на пересканирование.
+get5gmode() {
+	_m32_o=$(_mv32_at "NR5G_MODE?" | sed -n 's/.*NR5G_MODE:[[:space:]]*//p' | head -1 | tr -cd '0-9')
+	case "$_m32_o" in
+		0) echo "sa+nsa" ;;
+		1) echo "nsa" ;;
+		2) echo "sa" ;;
+		*) echo "Unsupported" ;;
+	esac
+}
+
+set5gmode() {
+	case "$1" in
+		full) _mv32_at "NR5G_MODE=0" >/dev/null 2>&1 ;;
+		*) return 1 ;;
+	esac
+}
+
+# --- Привязка к соте ---------------------------------------------------------
+#
+# ТРИ РАЗНЫЕ КОМАНДЫ, И У КАЖДОЙ СВОЙ ПОРЯДОК АРГУМЕНТОВ (разделы 15.36-15.40):
+#   AT+LTE_LOCK=<pci>,<earfcn>[,<pci>,<earfcn> ... до 8 пар]
+#   AT+WCDMA_LOCK=<uarfcn>,<psc>
+#   AT+NR5G_LOCK=<band>,<scs>,<nr_arfcn>,<pci>
+# Наш контракт - «cell <arfcn> <pci>». У LTE пару поэтому МЕНЯЕМ МЕСТАМИ: это
+# главная ловушка семейства (у FM350 сначала ARFCN, здесь - сначала PCI).
+#
+# ЗАПИСЬ ВСТУПАЕТ В СИЛУ ТОЛЬКО ПОСЛЕ ПЕРЕЗАПУСКА МОДУЛЯ - прямая оговорка
+# руководства («Write command and Exec command needs to restart device to take
+# effect»), и ровно так же вёл себя MV31: до перезапуска чтение честно отвечает
+# «Have not set cell lock before», а человек видит «привязано» и недоумевает,
+# почему сота прежняя.
+#
+# ПОЧЕМУ 5G-ПРИВЯЗКУ МЫ ЧИТАЕМ, НО НЕ СТАВИМ. NR5G_LOCK требует ещё band и
+# нумерологию SCS, которых в контракте «cell <arfcn> <pci>» нет и угадать
+# нельзя: неверная пара band/SCS уводит модуль в «no service». Читать - можно и
+# нужно: иначе поставленная другим приложением привязка была бы невидимой, а
+# кнопка «Снять» - недоступной.
+setcelllock() {
+	case "$1" in
+		off)
+			_mv32_at "LTE_LOCK" >/dev/null 2>&1
+			_mv32_at "WCDMA_LOCK" >/dev/null 2>&1
+			_mv32_at "NR5G_LOCK" >/dev/null 2>&1
+			;;
+		cell)
+			_m32_ar="$2"; _m32_pc="$3"
+			case "$_m32_ar" in ''|*[!0-9]*) return 1 ;; esac
+			case "$_m32_pc" in ''|*[!0-9]*) return 1 ;; esac
+			# ПОРЯДОК: PCI, EARFCN - у этой прошивки он обратный нашему
+			_m32_w=$(_mv32_at "LTE_LOCK=$_m32_pc,$_m32_ar")
+			case "$_m32_w" in
+				*ERROR*) logger -t 5gmodem "celllock: firmware rejected \"LTE_LOCK=$_m32_pc,$_m32_ar\": $(printf '%s' "$_m32_w" | tr '\n' ' ' | head -c 120)"
+				         return 1 ;;
+			esac
+			;;
+		*) return 1 ;;
+	esac
+	# ПРИМЕНЕНИЕ - ТОЛЬКО ПЕРЕЗАПУСКОМ МОДУЛЯ. AT+CFUN=1,1, а не AT+RESET:
+	# первый проверен на родственном MV31, второй у этого семейства уводит
+	# модуль в полную переэнумерацию USB.
+	_mv32_at "CFUN=1,1" >/dev/null 2>&1
+	return 0
+}
+
+getcelllock() {
+	# LTE. Ответ: «+LTE_LOCK: (405,40936),(477,1300)» - пары (pci,earfcn).
+	# Показываем ПЕРВУЮ: контракт держит одну соту, а привязка к нескольким
+	# парам - это всё равно «привязан».
+	_m32_o=$(_mv32_at "LTE_LOCK?" | sed -n 's/.*LTE_LOCK:[[:space:]]*//p' | head -1)
+	case "$_m32_o" in
+		*[0-9]*)
+			_m32_p=$(printf '%s' "$_m32_o" | sed -n 's/^[^(]*(\([0-9]*\),\([0-9]*\)).*/\1 \2/p')
+			if [ -n "$_m32_p" ]; then
+				_m32_pc=${_m32_p%% *}; _m32_ar=${_m32_p##* }
+				case "$_m32_ar$_m32_pc" in
+					''|*[!0-9]*) ;;
+					*) echo "cell $_m32_ar $_m32_pc"; return ;;
+				esac
+			fi
+			;;
+	esac
+	# 5G SA. Ответ: «^NR5G_LOCK:(78,1,627264,148)» - band,scs,arfcn,pci.
+	_m32_o=$(_mv32_at "NR5G_LOCK?" | sed -n 's/.*NR5G_LOCK:[[:space:]]*//p' | head -1)
+	_m32_p=$(printf '%s' "$_m32_o" | sed -n 's/^[^(]*([0-9]*,[0-9]*,\([0-9]*\),\([0-9]*\)).*/\1 \2/p')
+	if [ -n "$_m32_p" ]; then
+		_m32_ar=${_m32_p%% *}; _m32_pc=${_m32_p##* }
+		case "$_m32_ar$_m32_pc" in
+			''|*[!0-9]*) ;;
+			*) echo "cell $_m32_ar $_m32_pc"; return ;;
+		esac
+	fi
+	# 3G. Ответ: «^WCDMA_LOCK:(10663,143)» - uarfcn,psc.
+	_m32_o=$(_mv32_at "WCDMA_LOCK?" | sed -n 's/.*WCDMA_LOCK:[[:space:]]*//p' | head -1)
+	_m32_ar=$(printf '%s' "$_m32_o" | sed -n 's/^[^(]*(\([0-9]*\),[0-9]*).*/\1/p')
+	case "$_m32_ar" in
+		''|*[!0-9]*) ;;
+		*) echo "arfcn $_m32_ar"; return ;;
+	esac
+	# Команда есть, привязки нет - «Have not set cell lock before». Это тоже
+	# полезный ответ: раздел в интерфейсе появится с кнопкой привязки.
+	_mv32_at "LTE_LOCK?" | grep -q "LTE_LOCK" && { echo "off"; return; }
+	echo "Unsupported"
+}
+
+# --- Сигнал по антенным портам -----------------------------------------------
+# Из того же AT+DEBUG?, что и метрики: «lte_ant_rsrp:rx_diversity:15
+# (-77.0dBm,-256.0dBm,...)». В 5G SA строки lte_ant_rsrp нет - там уровни по
+# трактам печатаются после nr_rsrp. Формат вывода общий со страницей:
+# «порт:rsrp:rsrq», RSRQ по трактам модуль не даёт - поле пустое.
+# «-256.0dBm» и «NA» - ЗАГЛУШКИ «измерения нет», а не уровни: показать их
+# значило бы нарисовать мёртвые антенны там, где просто нет данных.
+getantports() {
+	# ОДНОЙ СТРОКОЙ. Уровень и скобка с уровнями по трактам у части сборок
+	# печатаются на РАЗНЫХ строках (так они и напечатаны в руководстве), и
+	# построчный разбор молча возвращал бы «нет данных».
+	_m32_o=$(_mv32_at "DEBUG?" | tr '\n' ' ')
+	_m32_v=$(printf '%s\n' "$_m32_o" | sed -n 's/.*lte_ant_rsrp:rx_diversity:[0-9]*[^(]*(\([^)]*\)).*/\1/p' | head -1)
+	[ -n "$_m32_v" ] || _m32_v=$(printf '%s\n' "$_m32_o" | sed -n 's/.*nr_rsrp:[^(]*rx_diversity:[[:space:]]*[0-9]*[^(]*(\([^)]*\)).*/\1/p' | head -1)
+	[ -n "$_m32_v" ] || { echo "Unsupported"; return; }
+	_m32_i=0; _m32_r=""
+	for _m32_x in $(printf '%s\n' "$_m32_v" | tr ',' ' '); do
+		_m32_x=$(printf '%s' "$_m32_x" | sed 's/dBm//g' | tr -d ' ')
+		case "$_m32_x" in
+			''|*[!0-9.-]*) _m32_i=$((_m32_i + 1)); continue ;;
+		esac
+		_m32_n=$(awk "BEGIN{printf \"%.0f\", $_m32_x}" 2>/dev/null)
+		case "$_m32_n" in
+			''|*[!0-9-]*) _m32_i=$((_m32_i + 1)); continue ;;
+		esac
+		if [ "$_m32_n" -le -160 ] 2>/dev/null || [ "$_m32_n" -ge -20 ] 2>/dev/null; then
+			_m32_i=$((_m32_i + 1)); continue
+		fi
+		_m32_r="$_m32_r${_m32_r:+ }$_m32_i:$_m32_n:"
+		_m32_i=$((_m32_i + 1))
+	done
+	[ -n "$_m32_r" ] || { echo "Unsupported"; return; }
+	printf '%s\n' "$_m32_r"
+}

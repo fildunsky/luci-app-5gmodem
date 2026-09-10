@@ -1,0 +1,485 @@
+# Метрики Foxconn T99W373 / Thales Cinterion MV32-W (Qualcomm SDX62).
+#
+# ОБЩИЙ ФАЙЛ ДЛЯ ДВУХ ШИН. Один и тот же модуль ходит и по USB (0489:e0f0), и по
+# PCIe/MHI (105b:e0d9) - AT-набор у них ОДИН, различаются только имя порта и
+# способ узнать протокол канала данных. Поэтому логика живёт здесь, а профили
+# modem/usb/0489e0f0 и modem/pci/105be0d9 - тонкие обёртки. У родственного MV31
+# так не сделали, и шесть копий уже разошлись: правку вносили в одну, а
+# остальные пять оставались со старым разбором.
+#
+# ЧТО ЗДЕСЬ НОВОГО ПО СРАВНЕНИЮ С ПРОФИЛЯМИ MV31 (05c690d5/1e2d00b7/1e2d00b9):
+#   1) РАЗБОР НЕ ПОСТРОЧНЫЙ. Фирменное руководство MV32 показывает ТРИ разные
+#      раскладки одного и того же ответа ^DEBUG?: «pcell:lte_band:3,lte_band_
+#      width:20.0MHz» (через запятую), «pcell: lte_band:7» + ширина следующей
+#      строкой, и уровни то с приставкой (lte_rsrp:), то без (rsrp:). Разбор по
+#      номеру поля после N-го двоеточия, как у MV31, ломается на второй же
+#      раскладке. Здесь ответ разбирается на пары «ключ:значение» без оглядки
+#      на переносы и разделители.
+#   2) 5G SA - ПЕРВИЧНАЯ сота, а не «вторая несущая». У MV31 блок nr_* всегда
+#      уезжал в S1..S4, поэтому в чистой SA-сети карточка показывала пустые
+#      RSRP/RSRQ/SINR и бэнд не на своём месте.
+#   3) Уровни ПО ВТОРИЧНЫМ несущим (S1RSRP/S1RSRQ/S1SINR ...) заполняются. У
+#      MV31 они разбирались и тут же выбрасывались - строки остались от давно
+#      удалённого API `addon`.
+#   4) Уровень теплового троттлинга (AT+THERM_LVL?).
+#
+# ПРЕФИКС КОМАНД. Руководство MV32 называет команды через «+», а примеры в нём
+# же отвечают через «^». Прошивка понимает оба, но какой именно - зависит от
+# сборки: сперва «+», при ERROR/пустоте - «^».
+_mv32_at() {   # $1 - тело команды без префикса
+	_m32_o=$(sms_tool -d $DEVICE at "AT+$1" 2>&1 | tr -d '\r')
+	case "$_m32_o" in
+		''|*ERROR*) _m32_o=$(sms_tool -d $DEVICE at "AT^$1" 2>&1 | tr -d '\r') ;;
+	esac
+	printf '%s\n' "$_m32_o"
+}
+
+# --- Температура -------------------------------------------------------------
+# AT+TEMP?: TSENS / PA / Skin Sensor в °C. Берём максимум - карточке нужна самая
+# горячая точка, а не среднее по модулю.
+_MT=$(_mv32_at "TEMP?")
+_MTV=$(printf '%s\n' "$_MT" | awk '
+	/^(TSENS|PA|Skin Sensor):/ {
+		v = $NF
+		gsub(/[^0-9.-]/, "", v)
+		if (v ~ /^-?[0-9]+(\.[0-9]+)?$/ && (n == 0 || v + 0 > m)) { m = v + 0; n = 1 }
+	}
+	END { if (n) printf "%.0f", m }')
+[ -n "$_MTV" ] && TEMP="$_MTV &deg;C"
+
+# --- Уровень теплового троттлинга --------------------------------------------
+# AT+THERM_LVL? -> «LTE MDM LVL: 8 / NR MDM LVL: 4». Шкалы РАЗНЫЕ и обе длиннее
+# нашей: у LTE 0..11 (плюс 255 = limited service), у NR 0..10 (плюс 254/255).
+# Карточка знает четыре ступени 0..3, поэтому раскладываем по таблице
+# «конвертов» из руководства (раздел 15.59): на 0 модуль не ограничен, дальше
+# у него последовательно урезаются число приёмных трактов и число несущих, а на
+# верхних ступенях доходит до limited service. Границы НАШИ - прошивка про
+# «тепло/горячо» ничего не говорит, она даёт только номер ступени.
+# НЕГАТИВНЫЙ КЭШ: команда вендорная, и на сборке без неё каждый опрос платил бы
+# лишним обменом с портом, который делят дозвон, метрики и SMS.
+_MTC="/tmp/5gmodem_nothermlvl_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+if [ -z "$THERM" ] && [ ! -f "$_MTC" ]; then
+	_MTL=$(_mv32_at "THERM_LVL?")
+	case "$_MTL" in
+		*MDM\ LVL*)
+			THERM=$(printf '%s\n' "$_MTL" | awk '
+				function bucket(kind, v) {
+					if (v == "") return -1
+					# ЧИСЛОМ, А НЕ СТРОКОЙ. После gsub значение теряет числовой
+					# признак, и busybox awk (в отличие от gawk) сравнивает его
+					# ПОСТРОЧНО: «8» >= «254» оказывалось истиной, и ступень 8
+					# превращалась в «критический перегрев». На роутере awk
+					# именно busybox-овый.
+					v = v + 0
+					if (kind == "LTE") {
+						if (v >= 254) return 3
+						if (v == 0) return 0
+						if (v <= 3) return 1
+						if (v <= 8) return 2
+						return 3
+					}
+					if (v >= 254) return 3
+					if (v == 0) return 0
+					if (v <= 2) return 1
+					if (v <= 7) return 2
+					return 3
+				}
+				/LTE MDM LVL/ { v = $NF; gsub(/[^0-9]/, "", v); b = bucket("LTE", v); if (b > best) best = b; seen = 1 }
+				/NR MDM LVL/  { v = $NF; gsub(/[^0-9]/, "", v); b = bucket("NR",  v); if (b > best) best = b; seen = 1 }
+				END { if (seen) print best + 0 }')
+			;;
+		*) : > "$_MTC" 2>/dev/null ;;
+	esac
+fi
+
+if [ "$REGOK" = "1" ]; then
+
+_DBG=$(_mv32_at "DEBUG?")
+
+# --- Разбор ^DEBUG? ----------------------------------------------------------
+#
+# ТОКЕНАМИ, А НЕ СТРОКАМИ. Скобки с уровнями по трактам вырезаем заранее (в них
+# запятые, которые иначе стали бы разделителями), остальное режем по запятым и
+# пробелам на пары «ключ:значение». Маркеры pcell/scell/nr_sccN переключают
+# текущую секцию - они бывают и отдельным токеном («pcell:»), и приклеенными к
+# первому ключу («pcell:lte_band:3»).
+#
+# Печатаем ТОЛЬКО из белого списка ключей и только безопасные значения: вывод
+# уходит в eval, и подставлять туда что попало из ответа модема нельзя.
+eval "$(printf '%s\n' "$_DBG" | sed 's/([^)]*)/ /g' | awk '
+# СЧЁТЧИКИ СЕКЦИЙ ОБНУЛЯЕМ ЯВНО. Неинициализированная переменная в awk при
+# склейке строк - ПУСТАЯ, а не ноль: без этого ключ первичной NR-несущей
+# получался «_band» вместо «0_band», и в NSA-сети 5G-несущая пропадала из
+# карточки целиком.
+BEGIN { sn = 0; nn = 0 }
+{
+	gsub(/[,\t\r]/, " ")
+	n = split($0, tok, / +/)
+	for (i = 1; i <= n; i++) {
+		t = tok[i]
+		if (t == "") continue
+		# маркер секции - бывает отдельным токеном ("pcell:") и слипшимся со
+		# следующим ключом ("pcell:lte_band:3")
+		if (t ~ /^pcell:/)             { sec = "p";  sub(/^pcell:/, "", t) }
+		else if (t ~ /^scell:/)        { sec = "s"; sn++; sub(/^scell:/, "", t) }
+		else if (t ~ /^nr_scc[0-9]*:/) { nn++; sub(/^nr_scc[0-9]*:/, "", t) }
+		else if (t ~ /^cell[0-9]+:/)   { sub(/^cell[0-9]+:/, "", t) }
+		if (t == "") continue
+		# «RAT: LTE» - значение отдельным токеном (пробел после двоеточия есть
+		# не во всех сборках). Без этого технология терялась, и 3G-ответ
+		# разбирался как LTE: в карточке появлялось «LTE | B1» на сети, где
+		# LTE нет вовсе.
+		if (want_rat) { want_rat = 0; if (t ~ /^[A-Za-z0-9_+]+$/) { g["RAT"] = t; continue } }
+		p = index(t, ":")
+		if (p < 2) continue
+		k = substr(t, 1, p - 1)
+		v = substr(t, p + 1)
+		if (k == "RAT" && v == "") { want_rat = 1; continue }
+		gsub(/(dBm|dB|MHz|C)$/, "", v)
+		if (v == "" || v == "NA") continue
+		# НЕСУЩАЯ NR - ОТДЕЛЬНАЯ СЕКЦИЯ, А НЕ ГЛОБАЛЬНОЕ ПОЛЕ. Поля nr_* носят
+		# приставку и в первичной соте (5G SA), и в дополнительных (nr_scc1,
+		# nr_scc2). Без нумерации секций nr_scc1 затирал бы первичную несущую:
+		# в SA-сети карточка показала бы бэнд дополнительной соты как основной.
+		if (k ~ /^nr_(band|band_width|channel|pci|rsrp|rsrq|rssi|snr)$/) {
+			sub(/^nr_/, "", k)
+			if (k == "band") { if (v !~ /^n?[0-9]+$/) continue; sub(/^n/, "", v) }
+			else if (v !~ /^-?[0-9]+(\.[0-9]+)?$/) continue
+			nc[nn "_" k] = v
+			continue
+		}
+		if (k == "RAT") { if (v ~ /^[A-Za-z0-9_+]+$/) g["RAT"] = v; continue }
+		if (v !~ /^-?[0-9]+(\.[0-9]+)?$/) continue
+		# уровни несущей: у части сборок с приставкой lte_, у части без
+		if (k == "lte_rsrp") k = "rsrp"
+		if (k == "lte_rssi") k = "rssi"
+		if (k == "lte_snr")  k = "snr"
+		if (k == "lte_band")       k = "band"
+		if (k == "lte_band_width") k = "band_width"
+		if (k ~ /^(band|band_width|channel|pci|rsrp|rsrq|rssi|snr)$/) {
+			if (sec == "s") sc[sn "_" k] = v
+			else            pc[k] = v      # 3G и 5G SA секций не печатают вовсе
+			continue
+		}
+		if (k ~ /^(mcc|mnc|lac|psc|rscp|ecio|tx_pwr|cell_id|lte_cell_id|lte_tac|lte_tx_pwr|nr_cell_id|nr_tac|nr_tx_pwr)$/)
+			g[k] = v
+	}
+}
+END {
+	for (k in g)  printf "_D_%s=%s\n", k, g[k]
+	for (k in pc) printf "_DP_%s=%s\n", k, pc[k]
+	for (k in sc) printf "_DS%s_%s=%s\n", substr(k, 1, index(k, "_") - 1), substr(k, index(k, "_") + 1), sc[k]
+	for (k in nc) printf "_DN%s_%s=%s\n", substr(k, 1, index(k, "_") - 1), substr(k, index(k, "_") + 1), nc[k]
+	printf "_D_SCELLS=%d\n_D_NRSCC=%d\n", sn + 0, nn + 0
+}')"
+
+# --- Ярлык технологии - ПО ФАКТУ НЕСУЩИХ, А НЕ ПО ЗАЯВКЕ СЕТИ ----------------
+# AcT=13 в +COPS означает «умею EN-DC», а не «работаю по NR»: на голом LTE
+# Билайна карточка родственного MV31 показывала «5G», а после принудительного
+# «только 4G» человек не мог убедиться, что режим применился (живой отчёт
+# 08.08.2026). Смотрим на то, что модем реально держит.
+#
+# 3G СЮДА НЕ ПОПАДАЕТ НАМЕРЕННО. В WCDMA ответ печатает «band:1» без всякой
+# приставки, и принять его за LTE-бэнд ничего не стоит - карточка родственного
+# профиля так и делала бы («LTE | B1» на трёхжильной сети). Ярлык и бэнд для 3G
+# оставляем каркасу, из ^DEBUG? берём только уровни, которых у него нет.
+_MIS3G=0
+case "$_D_RAT" in
+	*WCDMA*|*UMTS*|*HSPA*|*HSDPA*|*GSM*) _MIS3G=1 ;;
+esac
+
+_MTECH=""
+if [ "$_MIS3G" = 0 ]; then
+	case "$_D_RAT" in
+		NR5G_SA*) _MTECH="5G SA" ;;
+	esac
+	if [ -z "$_MTECH" ]; then
+		if [ -n "$_DN0_band" ]; then
+			_MTECH="5G NSA"
+		elif [ "${_D_SCELLS:-0}" -gt 0 ] 2>/dev/null; then
+			_MTECH="LTE-A"
+		elif [ -n "$_DP_band" ]; then
+			_MTECH="LTE"
+		fi
+	fi
+fi
+# Модем зарегистрирован, но ^DEBUG? ничего не отдал (порт занят) - оставляем
+# ярлык каркаса, а не затираем его пустотой.
+[ -n "$_MTECH" ] && MODE="$_MTECH |"
+
+# --- Область слежения и сота -------------------------------------------------
+_MTAC="$_D_lte_tac"; [ -n "$_MTAC" ] || _MTAC="$_D_nr_tac"
+if [ -n "$_MTAC" ]; then
+	TAC_DEC="$_MTAC"
+	TAC_HEX=$(printf "%X" "$_MTAC" 2>/dev/null)
+fi
+# ИДЕНТИФИКАТОРЫ - ТОЛЬКО ЕСЛИ КАРКАС ИХ НЕ ЗНАЕТ. ^DEBUG? отдаёт полный
+# идентификатор соты, но переписывать уже полученное из +CREG значение мы не
+# вправе: расхождение потом не объяснить.
+case "$LAC_DEC" in
+	''|0)
+		case "$_D_lac" in
+			''|*[!0-9]*) ;;
+			*) LAC_DEC="$_D_lac"; LAC_HEX=$(printf "%X" "$_D_lac" 2>/dev/null) ;;
+		esac
+		;;
+esac
+_MCID="$_D_lte_cell_id"; [ -n "$_MCID" ] || _MCID="$_D_nr_cell_id"
+[ -n "$_MCID" ] || _MCID="$_D_cell_id"
+case "$CID_DEC" in
+	''|0)
+		case "$_MCID" in
+			''|*[!0-9]*) ;;
+			*) CID_DEC="$_MCID"; CID_HEX=$(printf "%X" "$_MCID" 2>/dev/null) ;;
+		esac
+		;;
+esac
+_MTXP="$_D_lte_tx_pwr"; [ -n "$_MTXP" ] || _MTXP="$_D_nr_tx_pwr"
+[ -n "$_MTXP" ] || _MTXP="$_D_tx_pwr"
+[ -n "$_MTXP" ] && [ -z "$TXPOWER" ] && TXPOWER="$_MTXP"
+
+# --- Первичная несущая -------------------------------------------------------
+# В 5G SA обслуживающая сота - NR, и никакого pcell в ответе нет. У MV31 этот
+# случай уезжал в «вторую несущую»: карточка оставалась без RSRP и RSRQ.
+_M4=""   # 4G-несущие для ярлыка
+_M5=""   # 5G-несущие для ярлыка
+_MIDX=0
+_MNR0=0  # первичная NR-несущая уже израсходована?
+if [ "$_MIS3G" = 1 ]; then
+	# 3G: уровни есть, бэнд и ярлык - за каркасом (см. выше).
+	[ -n "$_D_rscp" ] && [ -z "$RSCP" ] && RSCP="$_D_rscp"
+	[ -n "$_D_ecio" ] && [ -z "$ECIO" ] && ECIO="$_D_ecio"
+	[ -n "$_DP_rssi" ] && [ -z "$RSSI" ] && RSSI="$_DP_rssi"
+	[ -n "$_DP_channel" ] && [ -z "$EARFCN" ] && EARFCN="$_DP_channel"
+elif [ "$_D_RAT" = "NR5G_SA" ] && [ -n "$_DN0_band" ]; then
+	PBAND="$(band5g "$_DN0_band")${_DN0_band_width:+ @$_DN0_band_width MHz}"
+	_M5="$(band5g "$_DN0_band")"
+	_MNR0=1
+	[ -n "$_DN0_band_width" ] && BANDWIDTH="$_DN0_band_width"
+	[ -n "$_DN0_pci" ] && PCI="$_DN0_pci"
+	[ -n "$_DN0_channel" ] && EARFCN="$_DN0_channel"
+	[ -n "$_DN0_rsrp" ] && RSRP="$_DN0_rsrp"
+	[ -n "$_DN0_rsrq" ] && RSRQ="$_DN0_rsrq"
+	[ -n "$_DN0_snr" ] && SINR="$_DN0_snr"
+elif [ -n "$_DP_band" ]; then
+	PBAND="$(band4g "$_DP_band")${_DP_band_width:+ @$_DP_band_width MHz}"
+	_M4="$(band4g "$_DP_band")"
+	[ -n "$_DP_band_width" ] && BANDWIDTH="$_DP_band_width"
+	[ -n "$_DP_pci" ] && PCI="$_DP_pci"
+	[ -n "$_DP_channel" ] && EARFCN="$_DP_channel"
+	[ -n "$_DP_rsrp" ] && RSRP="$_DP_rsrp"
+	[ -n "$_DP_rsrq" ] && RSRQ="$_DP_rsrq"
+	[ -n "$_DP_rssi" ] && RSSI="$_DP_rssi"
+	[ -n "$_DP_snr" ] && SINR="$_DP_snr"
+fi
+
+# --- Вторичные несущие -------------------------------------------------------
+# Уровни по каждой несущей заполняем ПО-НАСТОЯЩЕМУ: карточка их показывает, и
+# без них строка агрегации выглядит как «есть вторая несущая, а какая - неясно».
+# У MV31 они разбирались и тут же выбрасывались - строки остались от давно
+# удалённого API `addon`.
+_msec() {   # $1 - слот 1..4, дальше band pci earfcn rsrp rsrq sinr
+	case "$1" in
+		1) S1BAND="$2"; S1PCI="$3"; S1EARFCN="$4"; S1RSRP="$5"; S1RSRQ="$6"; S1SINR="$7" ;;
+		2) S2BAND="$2"; S2PCI="$3"; S2EARFCN="$4"; S2RSRP="$5"; S2RSRQ="$6"; S2SINR="$7" ;;
+		3) S3BAND="$2"; S3PCI="$3"; S3EARFCN="$4"; S3RSRP="$5"; S3RSRQ="$6"; S3SINR="$7" ;;
+		4) S4BAND="$2"; S4PCI="$3"; S4EARFCN="$4"; S4RSRP="$5"; S4RSRQ="$6"; S4SINR="$7" ;;
+	esac
+}
+
+if [ "$_MIS3G" = 0 ]; then
+	_MVI=1
+	while [ "$_MVI" -le "${_D_SCELLS:-0}" ] 2>/dev/null; do
+		eval "_MB=\$_DS${_MVI}_band; _MW=\$_DS${_MVI}_band_width; _MP=\$_DS${_MVI}_pci"
+		eval "_MC=\$_DS${_MVI}_channel; _MR=\$_DS${_MVI}_rsrp; _MQ=\$_DS${_MVI}_rsrq; _MS=\$_DS${_MVI}_snr"
+		if [ -n "$_MB" ]; then
+			_MIDX=$((_MIDX + 1))
+			[ "$_MIDX" -le 4 ] && _msec "$_MIDX" "$(band4g "$_MB")${_MW:+ @$_MW MHz}" "$_MP" "$_MC" "$_MR" "$_MQ" "$_MS"
+			_M4="$_M4${_M4:+ + }$(band4g "$_MB")"
+		fi
+		_MVI=$((_MVI + 1))
+	done
+
+	# NR-несущие: при EN-DC первичная (_DN0) вторична по отношению к LTE, при
+	# SA она уже разобрана выше, а nr_scc1..N - дополнительные соты SA.
+	_MVI=$_MNR0
+	while [ "$_MVI" -le "${_D_NRSCC:-0}" ] 2>/dev/null; do
+		eval "_MB=\$_DN${_MVI}_band; _MW=\$_DN${_MVI}_band_width; _MP=\$_DN${_MVI}_pci"
+		eval "_MC=\$_DN${_MVI}_channel; _MR=\$_DN${_MVI}_rsrp; _MQ=\$_DN${_MVI}_rsrq; _MS=\$_DN${_MVI}_snr"
+		if [ -n "$_MB" ]; then
+			_MIDX=$((_MIDX + 1))
+			[ "$_MIDX" -le 4 ] && _msec "$_MIDX" "$(band5g "$_MB")${_MW:+ @$_MW MHz}" "$_MP" "$_MC" "$_MR" "$_MQ" "$_MS"
+			_M5="$_M5${_M5:+ + }$(band5g "$_MB")"
+		fi
+		_MVI=$((_MVI + 1))
+	done
+fi
+
+# «+» между несущими одного поколения, «/» между поколениями - тот же вид, что
+# у FM350. У MV31 здесь стоял `sed 's,/,+,'`, который менял ТОЛЬКО ПЕРВЫЙ
+# разделитель: на трёх несущих выходило «B1 + B3 / B7».
+if [ -n "$_MTECH" ]; then
+	MODE="$_MTECH |"
+	[ -n "$_M4" ] && MODE="$MODE $_M4"
+	[ -n "$_M5" ] && { [ -n "$_M4" ] && MODE="$MODE /"; MODE="$MODE $_M5"; }
+fi
+
+# --- Антенные порты ----------------------------------------------------------
+# Из того же ^DEBUG?, лишних обменов с портом ноль:
+#   lte_ant_rsrp:rx_diversity:15 (-77.0dBm,-256.0dBm,-256.0dBm,-256.0dBm)
+# rx_diversity - БИТОВАЯ МАСКА активных трактов (15 = 0b1111 = четыре), а не их
+# число: уровни печатаются для всех трактов, включая выключенные. Позиция в
+# скобках = номер тракта (проверено на маске 3, где измеренные значения стояли
+# в позициях 0 и 1).
+# «-256.0dBm» и «NA» - ЗАГЛУШКИ «измерения нет», а не уровни; показать их
+# значило бы нарисовать мёртвые антенны там, где просто нет данных.
+# В 5G SA строки lte_ant_rsrp нет - тракты печатаются после nr_rsrp.
+if [ -z "$ANTPORTS" ]; then
+	_MFLAT=$(printf '%s\n' "$_DBG" | tr '\n' ' ')
+	_MAL=$(printf '%s\n' "$_MFLAT" | sed -n 's/.*lte_ant_rsrp:rx_diversity:\([0-9]*\)[^(]*(\([^)]*\)).*/\1|\2/p' | head -1)
+	[ -n "$_MAL" ] || _MAL=$(printf '%s\n' "$_MFLAT" | sed -n 's/.*nr_rsrp:[^(]*rx_diversity:[ ]*\([0-9]*\)[^(]*(\([^)]*\)).*/\1|\2/p' | head -1)
+	# Часть сборок печатает маску БЕЗ приставки - просто «rx_diversity:15 (...)».
+	# В 3G такую же строку даёт wcdma_ant_rscp, но там в скобках RSCP, а не
+	# RSRP, и подписать её «RSRP» значило бы соврать - в 3G блок не собираем.
+	[ "$_MIS3G" = 0 ] && [ -z "$_MAL" ] && \
+		_MAL=$(printf '%s\n' "$_MFLAT" | sed -n 's/.*rx_diversity:[ ]*\([0-9]*\)[^(]*(\([^)]*\)).*/\1|\2/p' | head -1)
+	if [ -n "$_MAL" ]; then
+		_MMASK="${_MAL%%|*}"; _MVALS="${_MAL#*|}"
+		_MAI=0; _MAOK=0
+		for _MAV in $(printf '%s\n' "$_MVALS" | tr ',' ' '); do
+			_MAV=$(printf '%s' "$_MAV" | sed 's/dBm//g' | tr -d ' ')
+			case "$_MAV" in ''|*[!0-9.-]*) _MAI=$((_MAI + 1)); continue ;; esac
+			_MAR=$(awk "BEGIN{printf \"%.0f\", $_MAV}" 2>/dev/null)
+			case "$_MAR" in ''|*[!0-9-]*) _MAI=$((_MAI + 1)); continue ;; esac
+			if [ "$_MAR" -le -160 ] 2>/dev/null || [ "$_MAR" -ge -20 ] 2>/dev/null; then
+				_MAI=$((_MAI + 1)); continue
+			fi
+			ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_MAI:$_MAR:"
+			_MAOK=$((_MAOK + 1))
+			_MAI=$((_MAI + 1))
+		done
+		ANTPORTS=$(printf '%s\n' "$ANTPORTS" | tr ' ' '\n' | sort -n | tr '\n' ' ' | sed 's/ *$//')
+		# ВЕРДИКТ РАЗНЕСЁННОГО ПРИЁМА - только когда есть на чём его строить.
+		# Маска говорит, сколько трактов ВКЛЮЧЕНО, но при одном измеренном
+		# значении отличить «три тракта не мерили» от «три тракта мертвы»
+		# нельзя: в первом случае «4RX» - вымысел, во втором «off» - ложная
+		# тревога. Меньше двух живых уровней - вердикта не даём вовсе.
+		if [ "$_MAOK" -ge 2 ]; then
+			case "$_MMASK" in
+				''|*[!0-9]*) ;;
+				*) _MAN=0
+				   for _MAB in 1 2 4 8; do [ $(( _MMASK & _MAB )) -ne 0 ] && _MAN=$((_MAN + 1)); done
+				   case "$_MAN" in
+					   1) RXDIV="off" ;;
+					   2) RXDIV="2rx" ;;
+					   3|4) RXDIV="4rx" ;;
+				   esac ;;
+			esac
+		fi
+	fi
+fi
+
+# --- Соседние секторы --------------------------------------------------------
+# AT+VZWRSRP?/AT+VZWRSRQ? (разделы 15.32/15.33). Формат неочевиден и разобран по
+# живым выводам семейства:
+#   +VZWRSRP: 325,1275,"-1082"      <- префикс только у ПЕРВОЙ строки
+#   387,6350,"-1016"                <- остальные секторы идут БЕЗ него
+#   +VZWRSRQ: 325,1275,"-122",387,6350,"-99",...   <- ВСЁ одной строкой
+# Тройка - <pci>,<earfcn>,"<значение>", значение В ДЕСЯТЫХ ДОЛЯХ и в кавычках:
+# "-1082" = -108.2 dBm. RSRQ сшиваем с RSRP ПО ПАРЕ (pci,earfcn), а не по
+# порядку: в живых выводах порядок совпадал не всегда.
+# НЕГАТИВНЫЙ КЭШ: у части прошивок команд нет, и тогда каждый опрос платил бы
+# двумя заведомо пустыми обменами с портом.
+_MVC="/tmp/5gmodem_novzw_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+if [ -z "$NEIGHBORS" ] && [ ! -f "$_MVC" ]; then
+	_MVP=$(_mv32_at "VZWRSRP?")
+	case "$_MVP" in
+		*VZWRSRP:*) ;;
+		*) : > "$_MVC" 2>/dev/null ;;
+	esac
+	if printf '%s\n' "$_MVP" | grep -q "VZWRSRP:"; then
+		_MVQ=$(_mv32_at "VZWRSRQ?")
+		NEIGHBORS=$(printf '%s\n@@RSRQ@@\n%s\n' "$_MVP" "$_MVQ" | awk '
+			function num(v) {   # "-1082" -> -108.2 -> -108
+				gsub(/"/, "", v); gsub(/[ \t]/, "", v)
+				if (v !~ /^-?[0-9]+$/) return ""
+				return sprintf("%.0f", v / 10)
+			}
+			/@@RSRQ@@/ { part = 2; next }
+			{
+				line = $0
+				sub(/^.*VZWRSRP:[[:space:]]*/, "", line)
+				sub(/^.*VZWRSRQ:[[:space:]]*/, "", line)
+				gsub(/[ \t]/, "", line)
+				if (line == "" || line == "OK") next
+				n = split(line, a, ",")
+				for (i = 1; i + 2 <= n; i += 3) {
+					pc = a[i]; ef = a[i+1]; vl = num(a[i+2])
+					if (pc !~ /^[0-9]+$/ || ef !~ /^[0-9]+$/) continue
+					key = pc "_" ef
+					if (part == 2) { rq[key] = vl; continue }
+					if (!(key in seen)) { seen[key] = ++cnt; kp[cnt] = pc; ke[cnt] = ef; kr[cnt] = vl }
+				}
+			}
+			END {
+				for (i = 1; i <= cnt; i++) {
+					key = kp[i] "_" ke[i]
+					printf "%s{\"band\":\"\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
+						(o++ ? "," : ""), ke[i], kp[i], kr[i], (key in rq ? rq[key] : ""), (i == 1 ? 1 : 0)
+				}
+			}')
+	fi
+fi
+
+fi   # REGOK
+
+# --- Кто это и какая прошивка ------------------------------------------------
+# ПЕРВАЯ ОСМЫСЛЕННАЯ СТРОКА ОТВЕТА - остальное мусор. У этого семейства эхо
+# включено с завода, а подписки +CREG=2/+CEREG=2 рождают URC, прилетающие
+# ПОСРЕДИ чужого чтения: в имени модема оседало «Thales AT MV31-W AT +CREG: 0
+# +CEREG: 0» (живой отчёт 08.08.2026 по родственному MV31). Урок общий: строки,
+# начинающиеся с AT, «+» или «^», - не данные.
+_mv32_first_clean() {
+	printf '%s\n' "$1" | tr -d '\r' | awk '
+		/^AT/ { next }
+		/^\+/ { next }
+		/^\^/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ print; exit }
+	'
+}
+_MMDL=$(_mv32_first_clean "$(sms_tool -d $DEVICE at "AT+CGMM")")
+_MVEN=$(_mv32_first_clean "$(sms_tool -d $DEVICE at "AT+CGMI")")
+[ -n "$_MMDL$_MVEN" ] && MODEL=$(printf '%s %s' "$_MVEN" "$_MMDL" | xargs)
+
+_MFW=$(_mv32_first_clean "$(sms_tool -d $DEVICE at "AT+CGMR")")
+[ -n "$_MFW" ] && FW="$_MFW"
+
+_MVX=$(digits_of "$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)" 15 17)
+[ -n "$_MVX" ] && NR_IMEI="$_MVX"
+
+_MVX=$(digits_of "$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)" 14 16)
+[ -n "$_MVX" ] && NR_IMSI="$_MVX"
+
+_MVX=$(_mv32_at "ICCID" | sed -n 's/.*ICCID:[[:space:]]*//p' | head -1 | tr -cd '0-9')
+[ -n "$_MVX" ] && NR_ICCID="$_MVX"
+
+# --- Протокол канала данных --------------------------------------------------
+# ИЗ SYSFS, А НЕ ИЗ DEBUGFS. Профили MV31 грепают /sys/kernel/debug/usb/devices
+# по прибитой строке «Vendor=xxxx ProdID=yyyy» - это и требует смонтированного
+# debugfs (на части сборок его нет), и заново переписывается под каждый новый
+# идентификатор. Драйвер интерфейса лежит в sysfs всегда.
+# На PCIe-обёртке $_POLL_AM не USB-путь, и цикл просто не найдёт узла - там
+# протокол проставляет сама обёртка.
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _MIF in "/sys/bus/usb/devices/$_POLL_AM":*; do
+		[ -e "$_MIF/driver" ] || continue
+		case "$(readlink -f "$_MIF/driver" 2>/dev/null)" in
+			*/qmi_wwan)  PROTO="qmi";  break ;;
+			*/cdc_mbim)  PROTO="mbim"; break ;;
+			*/cdc_ncm)   PROTO="ncm";  break ;;
+			*/cdc_ether) PROTO="ecm";  break ;;
+		esac
+	done
+fi
