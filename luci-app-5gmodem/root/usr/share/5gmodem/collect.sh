@@ -1302,10 +1302,14 @@ radio_verdict() {   # $1 - АТ-порт
 # состояние сети за это время меняется - истолковывать надо то, что есть сейчас.
 at_conn_verdict() {   # $1 - AT-порт
 	[ -n "$1" ] || { echo "    No AT port - nothing to ask the modem with, the cause cannot be named"; return; }
+	# ПРОБЕЛЫ ПОСЛЕ ЗАПЯТЫХ ДОПУСТИМЫ. Altair ALT3800 (NTmore NTLM-500) отвечает
+	# «+CEREG: 2, 1, 3339, 08671C0C, 7», и шаблон без пробела давал пустоту:
+	# отчёт писал «состояние регистрации не прочитать» при зарегистрированном и
+	# работающем модеме (живой отчёт 10.09.2026).
 	_ac_reg=$(at_query "$1" "AT+CEREG?" 8 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		| sed -n 's/^+CEREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 	[ -n "$_ac_reg" ] || _ac_reg=$(at_query "$1" "AT+CREG?" 8 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		| sed -n 's/^+CREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 	_ac_att=$(at_query "$1" "AT+CGATT?" 8 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+CGATT: *\([0-9]*\).*/\1/p' | head -1)
 	_ac_csq=$(at_query "$1" "AT+CSQ" 8 2>/dev/null | tr -d '\r' \

@@ -1,0 +1,317 @@
+# Метрики модемов на Altair ALT3100 / ALT3800 (вендор USB 216f).
+#
+# ОБЩИЙ ФАЙЛ СЕМЕЙСТВА. Набор AT%-команд у чипов один, различаются только
+# USB-идентификатор, композиция и имя; профили modem/usb/216f00XX - тонкие
+# обёртки. Писалось под NTmore NTLM-500 (216f:0047) по живому отчёту, остальные
+# идентификаторы заведены по тому же набору команд.
+#
+# НЕ У ВСЕХ ЕСТЬ AT-ПОРТ. Модемы Yota на этих чипах в штатном режиме отдают
+# только сетевую карту и веб-морду. Порта нет - профиль просто не участвует
+# (проверка ниже), вреда от лишнего идентификатора никакого.
+#
+# ОТКУДА КОМАНДЫ. Модемов в руках не было. Набор Altair (%MEAS, %PCONI, %BANDCAP)
+# сверен по двум фирменным руководствам на родственные чипы: Quanta LI17x
+# («Altair Proprietary AT commands», поколение ALT3100/3800) и Murata Type 1SC
+# (ALT1250), и по плагину Altair в ModemManager (живые образцы %BANDCAP и
+# %GETCFG="BAND"). Форматы ответа у руководств РАЗНЫЕ даже внутри одного
+# документа («RSRP: Reported = -80, Rx0Tx0 = -80» и «%MEAS: Signal Quality:
+# RSRP = -90»), поэтому разбор ищет пары «ИМЯ = число» без оглядки на префикс
+# и пробелы.
+#
+# СКЛЕЙКИ ЧЕРЕЗ «;» ЗДЕСЬ НЕТ НАМЕРЕННО. У NTLM-500 оборванная цепочка уже
+# стоила карточке оператора и регистрации (см. фолбэк ядра в 5gmodem.sh): ошибка
+# одной команды молча съедает все следующие. Команды короткие, по одной.
+[ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
+
+_alt_at() {   # $1 - команда целиком
+	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r'
+}
+
+# Число после «ИМЯ =» в ответе. Разделители у прошивок гуляют - запятые,
+# двоеточия, пробелы вокруг «=», - поэтому режем по запятым и двоеточиям и
+# сравниваем имя без учёта окружения. «N/A» (нет измерения) и «N/S» (не
+# поддерживается) числом не являются и отсекаются сами.
+_alt_kv() {   # $1 - текст ответа, $2 - имя
+	printf '%s\n' "$1" | awk -v k="$2" '
+		{
+			s = $0
+			gsub(/[[:space:]]*=[[:space:]]*/, "=", s)
+			n = split(s, f, /[,:]/)
+			for (i = 1; i <= n; i++) {
+				t = f[i]
+				gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+				if (index(t, k "=") != 1) continue
+				v = substr(t, length(k) + 2)
+				if (v ~ /^-?[0-9]+(\.[0-9]+)?$/) { print v; exit }
+			}
+		}'
+}
+
+# Число в пределах, иначе пусто. Уровень за пределами физичного - не уровень,
+# а заглушка прошивки, и показывать его хуже, чем прочерк.
+_alt_in() {   # $1 - число, $2 - нижняя граница, $3 - верхняя
+	case "$1" in ''|*[!0-9.-]*) return ;; esac
+	awk -v v="$1" -v lo="$2" -v hi="$3" 'BEGIN { v += 0; if (v >= lo && v <= hi) printf "%.0f", v }'
+}
+
+_ALT_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
+
+# --- Уровни обслуживающей соты -----------------------------------------------
+# %MEAS="8" отдаёт все четыре одной строкой. Сборка без него (в руководстве
+# LI17x тип 8 есть не во всех редакциях) получает те же уровни четырьмя
+# одиночными запросами - негативный кэш держит выбор до перезагрузки роутера.
+_ALT_NO8="/tmp/5gmodem_alt_nomeas8_$_ALT_KEY"
+if [ ! -f "$_ALT_NO8" ]; then
+	_ALT_Q=$(_alt_at 'AT%MEAS="8"')
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" RSRP)" -140 -44); [ -n "$_ALT_V" ] && RSRP="$_ALT_V"
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" RSRQ)" -40 0);    [ -n "$_ALT_V" ] && RSRQ="$_ALT_V"
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" SINR)" -20 50);   [ -n "$_ALT_V" ] && SINR="$_ALT_V"
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" RSSI)" -120 -20); [ -n "$_ALT_V" ] && RSSI="$_ALT_V"
+	case "$_ALT_Q" in
+		*ERROR*) : > "$_ALT_NO8" 2>/dev/null ;;
+	esac
+fi
+
+# Уровни по приёмным трактам: «Rx0Tx0 = -80, Rx0Tx1 = -76, Rx1Tx0 = -92, ...».
+# Номер Rx - это антенна модуля, Tx - антенна базовой станции; на каждую
+# приёмную берём лучший из передающих лучей. «Reported» - это то же, что
+# отдал бы %MEAS="8", поэтому он же служит запасом для RSRP.
+_ALT_A=$(_alt_at 'AT%MEAS="0"')
+if [ -f "$_ALT_NO8" ]; then
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_A" Reported)" -140 -44); [ -n "$_ALT_V" ] && RSRP="$_ALT_V"
+	_ALT_Q=$(_alt_at 'AT%MEAS="1"')
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" Reported)" -40 0);    [ -n "$_ALT_V" ] && RSRQ="$_ALT_V"
+	_ALT_Q=$(_alt_at 'AT%MEAS="2"')
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" Reported)" -20 50);   [ -n "$_ALT_V" ] && SINR="$_ALT_V"
+	_ALT_Q=$(_alt_at 'AT%MEAS="3"')
+	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" Reported)" -120 -20); [ -n "$_ALT_V" ] && RSSI="$_ALT_V"
+fi
+if [ -z "$ANTPORTS" ]; then
+	_ALT_OK=0
+	for _alt_rx in 0 1; do
+		_ALT_BEST=""
+		for _alt_tx in 0 1 2 3; do
+			_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_A" "Rx${_alt_rx}Tx${_alt_tx}")" -150 -30)
+			[ -n "$_ALT_V" ] || continue
+			if [ -z "$_ALT_BEST" ] || [ "$_ALT_V" -gt "$_ALT_BEST" ]; then
+				_ALT_BEST="$_ALT_V"
+			fi
+		done
+		[ -n "$_ALT_BEST" ] || continue
+		ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_alt_rx:$_ALT_BEST:"
+		_ALT_OK=$((_ALT_OK + 1))
+	done
+	# Вердикт разнесённого приёма - только по двум живым уровням. Один уровень
+	# при «N/A» на втором тракте не отличить от «тракт мёртв»: молчим.
+	[ "$_ALT_OK" = 2 ] && RXDIV="2rx"
+fi
+
+# --- Сота и полоса -----------------------------------------------------------
+# %PCONI отвечает ERROR, пока модуль не сидит на соте, - это не поломка.
+# Форматов два: строкой «FDD, SISO, 3, 1602, 140973580, 386» (LI17x) и
+# построчный - его отдаёт живой NTLM-500 (10.09.2026):
+#   duplexing mode: FDD
+#   Transmission mode: Closed loop MIMO
+#   Bandwidth: 5
+#   EARFCN: 1700
+#   Global Cell ID: 08671C0C
+#   Physical Cell ID: 350
+#
+# ПОЛОСА НЕОДНОЗНАЧНА. В строчном формате руководство LI17x прямо называет её
+# ИНДЕКСОМ: 0=1.4, 1=3, 2=5, 3=10, 4=15, 5=20 МГц. Для построчного формата
+# описания нет вовсе (у Murata поле «Reserved»), и «Bandwidth: 5» одинаково
+# читается как «5 МГц» и как «индекс 5 = 20 МГц». Однозначны только значения,
+# которых нет в одной из шкал: 10/15/20 - это мегагерцы, 0/1/2/4 - индексы.
+# На 3 и 5 полосу НЕ ПОКАЗЫВАЕМ: неверная ширина в карточке хуже прочерка -
+# по ней человек судит, стоит ли бороться за этот бенд.
+_ALT_P=$(_alt_at 'AT%PCONI')
+_ALT_E=""; _ALT_PCI=""; _ALT_BW=""; _ALT_CID=""; _ALT_BWDONE=""
+case "$_ALT_P" in
+	*EARFCN:*)
+		_ALT_E=$(printf '%s\n' "$_ALT_P" | sed -n 's/^[[:space:]]*EARFCN:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
+		_ALT_PCI=$(printf '%s\n' "$_ALT_P" | sed -n 's/^[[:space:]]*Physical Cell ID:[[:space:]]*\([0-9]*\).*/\1/p' | head -1)
+		_ALT_BW=$(printf '%s\n' "$_ALT_P" | sed -n 's/^[[:space:]]*Bandwidth:[[:space:]]*//p' | head -1 \
+			| sed 's/[[:space:]]*MHz//; s/[[:space:]]*$//')
+		case "$_ALT_BW" in
+			10|15|20|1.4) ;;
+			0) _ALT_BW=1.4 ;; 1) _ALT_BW=3 ;; 2) _ALT_BW=5 ;; 4) _ALT_BW=15 ;;
+			*) _ALT_BW="" ;;
+		esac
+		_ALT_BWDONE=1
+		;;
+	*ERROR*|'') ;;
+	*)
+		_ALT_L=$(printf '%s\n' "$_ALT_P" | grep -E '(^|[:[:space:]])(FDD|TDD)[[:space:]]*,' | head -1 \
+			| sed 's/^%PCONI:[[:space:]]*//')
+		if [ -n "$_ALT_L" ]; then
+			_ALT_BW=$(printf '%s' "$_ALT_L" | cut -d, -f3 | tr -d ' ')
+			_ALT_E=$(printf '%s' "$_ALT_L" | cut -d, -f4 | tr -d ' ')
+			_ALT_CID=$(printf '%s' "$_ALT_L" | cut -d, -f5 | tr -d ' ')
+			_ALT_PCI=$(printf '%s' "$_ALT_L" | cut -d, -f6 | tr -d ' ')
+		fi
+		;;
+esac
+# Строчный формат: индекс по таблице LI17x.
+if [ -z "$_ALT_BWDONE" ]; then
+	case "$_ALT_BW" in
+		0) _ALT_BW=1.4 ;; 1) _ALT_BW=3 ;; 2) _ALT_BW=5 ;; 3) _ALT_BW=10 ;; 4) _ALT_BW=15 ;; 5) _ALT_BW=20 ;;
+		*) _ALT_BW="" ;;
+	esac
+fi
+case "$_ALT_PCI" in ''|*[!0-9]*) _ALT_PCI="" ;; *) [ "$_ALT_PCI" -le 503 ] || _ALT_PCI="" ;; esac
+case "$_ALT_E" in ''|*[!0-9]*) _ALT_E="" ;; esac
+if [ -n "$_ALT_E" ]; then
+	EARFCN="$_ALT_E"
+	[ -n "$_ALT_PCI" ] && PCI="$_ALT_PCI"
+	_ALT_B=$(earfcn2band "$_ALT_E")
+	if [ -n "$_ALT_B" ]; then
+		PBAND="$(band4g "$_ALT_B")${_ALT_BW:+ @$_ALT_BW MHz}"
+		# Cat 4: агрегации у модуля нет, несущая всегда одна.
+		MODE="LTE | $(band4g "$_ALT_B")"
+	fi
+	[ -n "$_ALT_BW" ] && BANDWIDTH="$_ALT_BW"
+fi
+# Идентификатор соты - только если каркас его не знает: +CEREG у этого модуля
+# отдаёт его сам, а расхождение двух источников потом не объяснить.
+case "$CID_DEC" in
+	''|0|-)
+		case "$_ALT_CID" in
+			''|*[!0-9]*) ;;
+			*) CID_DEC="$_ALT_CID"; CID_HEX=$(printf '%X' "$_ALT_CID" 2>/dev/null) ;;
+		esac
+		;;
+esac
+
+# --- Температура, мощность передатчика, потери на трассе ---------------------
+# Меняются медленно, а порт у модуля один на всё: опрос раз в 30 c, между
+# ними - прошлое значение. Иначе каждый тик страницы стоил бы ещё трёх обменов.
+_ALT_SLOW="/tmp/5gmodem_alt_slow_$_ALT_KEY"
+_ALT_NOW=$(cut -d. -f1 /proc/uptime)
+_ALT_TS=$(sed -n '1p' "$_ALT_SLOW" 2>/dev/null)
+case "$_ALT_TS" in ''|*[!0-9]*) _ALT_TS=0 ;; esac
+if [ $((_ALT_NOW - _ALT_TS)) -ge 30 ] || [ "$_ALT_TS" -gt "$_ALT_NOW" ]; then
+	_ALT_T=$(_alt_at 'AT%MEAS="5"' | grep -i 'temperature' | head -1 | sed 's/.*[:=][[:space:]]*//')
+	_ALT_T=$(_alt_in "$_ALT_T" -40 125)
+	# Мощность передатчика - поле PUSCH, В ДЕСЯТЫХ ДОЛЯХ дБм. Руководство пишет
+	# единицы как «10dBm», и это они и есть: живой NTLM-500 (10.09.2026) отдал
+	# «PUSCH=79, PUCCH=230, PRACH=10, SRS=180» - PUCCH=230 это ровно 23.0 дБм,
+	# потолок мощности абонентского устройства класса 3. Делим всегда: прежняя
+	# догадка «число в пределах -50..40 - уже дБм» приняла бы PUSCH=35 (3.5 дБм)
+	# за 35 дБм.
+	_ALT_X=$(_alt_kv "$(_alt_at 'AT%MEAS="4"')" PUSCH)
+	_ALT_XV=""
+	case "$_ALT_X" in
+		-[0-9]*|[0-9]*)
+			_ALT_XV=$(awk -v v="$_ALT_X" 'BEGIN { if (v ~ /^-?[0-9]+$/) { v = v / 10; if (v >= -50 && v <= 30) printf "%.1f", v } }') ;;
+	esac
+	_ALT_L=$(_alt_at 'AT%MEAS="6"' | grep -i 'pathloss' | head -1 | sed 's/.*[:=][[:space:]]*//')
+	_ALT_L=$(_alt_in "$_ALT_L" 40 200)
+	printf '%s\n%s\n%s\n%s\n' "$_ALT_NOW" "$_ALT_T" "$_ALT_XV" "$_ALT_L" > "$_ALT_SLOW.tmp" 2>/dev/null \
+		&& mv "$_ALT_SLOW.tmp" "$_ALT_SLOW" 2>/dev/null
+else
+	_ALT_T=$(sed -n '2p' "$_ALT_SLOW" 2>/dev/null)
+	_ALT_XV=$(sed -n '3p' "$_ALT_SLOW" 2>/dev/null)
+	_ALT_L=$(sed -n '4p' "$_ALT_SLOW" 2>/dev/null)
+fi
+[ -n "$_ALT_T" ] && TEMP="$_ALT_T &deg;C"
+[ -n "$_ALT_XV" ] && [ -z "$TXPOWER" ] && TXPOWER="$_ALT_XV dBm"
+[ -n "$_ALT_L" ] && [ -z "$PATHLOSS" ] && PATHLOSS="$_ALT_L dB"
+
+# --- Соседние соты -----------------------------------------------------------
+# %MEAS="97": «EARFCN=1700, CellID=350, RSRP=-93 RSRQ=-24» построчно (живой
+# NTLM-500: без префикса, между RSRP и RSRQ пробел вместо запятой).
+# Две ловушки из самих руководств: EARFCN=0 означает «частота обслуживающей
+# соты», а в примере уровни напечатаны без знака («RSRP =76»). Положительных
+# RSRP и RSRQ в природе не бывает, поэтому знак восстанавливаем.
+# CellID больше 503 - это уже глобальный идентификатор, а не PCI: такую строку
+# не показываем, выдумывать PCI не из чего.
+# НЕГАТИВНЫЙ КЭШ: сборка без типа 97 платила бы лишним обменом на каждом опросе.
+_ALT_NON="/tmp/5gmodem_alt_nonbr_$_ALT_KEY"
+if [ -z "$NEIGHBORS" ] && [ ! -f "$_ALT_NON" ]; then
+	_ALT_N=$(_alt_at 'AT%MEAS="97"')
+	case "$_ALT_N" in
+		*ERROR*) : > "$_ALT_NON" 2>/dev/null ;;
+	esac
+	_ALT_NB=$(printf '%s\n' "$_ALT_N" | awk -v se="$EARFCN" -v sp="$PCI" '
+		function num(v) { gsub(/[^0-9-]/, "", v); return v }
+		/CellID/ {
+			s = $0
+			gsub(/[[:space:]]*=[[:space:]]*/, "=", s)
+			e = ""; c = ""; p = ""; q = ""
+			n = split(s, f, /[,:[:space:]]+/)
+			for (i = 1; i <= n; i++) {
+				if (f[i] ~ /^EARFCN=/) e = num(substr(f[i], 8))
+				else if (f[i] ~ /^CellID=/) c = num(substr(f[i], 8))
+				else if (f[i] ~ /^RSRP=/) p = num(substr(f[i], 6))
+				else if (f[i] ~ /^RSRQ=/) q = num(substr(f[i], 6))
+			}
+			if (c == "" || c + 0 > 503) next
+			if (e == "" || e + 0 == 0) e = se
+			if (p != "" && p + 0 > 0) p = -p
+			if (q != "" && q + 0 > 0) q = -q
+			# RSRQ ЗДЕСЬ БЫВАЕТ НЕ В ДЕЦИБЕЛАХ: у той же обслуживающей соты
+			# %MEAS="8" дал -9, а список соседей -24 (живой NTLM-500). Ниже
+			# -20 дБ стандартного RSRQ не бывает - такое значение не показываем.
+			if (q != "" && (q + 0 < -20 || q + 0 > 0)) q = ""
+			if (p != "" && (p + 0 < -140 || p + 0 > -44)) p = ""
+			if (e == se && c == sp) next
+			key = e "_" c
+			if (key in seen) next
+			seen[key] = 1
+			printf "%s %s %s %s\n", e, c, p, q
+		}')
+	_ALT_NJ=""
+	_ALT_SIFS="$IFS"
+	IFS='
+'
+	for _alt_l in $_ALT_NB; do
+		IFS="$_ALT_SIFS"
+		_alt_e="${_alt_l%% *}"; _alt_r="${_alt_l#* }"
+		_alt_c="${_alt_r%% *}"; _alt_r="${_alt_r#* }"
+		_alt_p="${_alt_r%% *}"; _alt_q="${_alt_r#* }"
+		[ "$_alt_q" = "$_alt_r" ] && [ "$_alt_p" = "$_alt_r" ] && _alt_q=""
+		_ALT_NJ="$_ALT_NJ${_ALT_NJ:+,}$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"","serving":0}' \
+			"$(earfcn2band "$_alt_e")" "$_alt_e" "$_alt_c" "$_alt_p" "$_alt_q")"
+		IFS='
+'
+	done
+	IFS="$_ALT_SIFS"
+	if [ -n "$EARFCN" ] && [ -n "$PCI" ]; then
+		NEIGHBORS=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
+			"$(earfcn2band "$EARFCN")" "$EARFCN" "$PCI" "$RSRP" "$RSRQ" "$RSSI")
+		NEIGHBORS="$NEIGHBORS${_ALT_NJ:+,$_ALT_NJ}"
+	elif [ -n "$_ALT_NJ" ]; then
+		NEIGHBORS="$_ALT_NJ"
+	fi
+fi
+
+# --- Кто это и какая прошивка ------------------------------------------------
+# Первая осмысленная строка ответа: эхо команды, «OK» и URC - не данные.
+_alt_first() {
+	printf '%s\n' "$1" | awk '
+		/^AT/ { next }
+		/^[+%^]/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }'
+}
+_ALT_V=$(_alt_first "$(_alt_at 'AT+CGMR')")
+[ -n "$_ALT_V" ] && FW="$_ALT_V"
+_ALT_M=$(_alt_first "$(_alt_at 'AT+CGMM')")
+_ALT_I=$(_alt_first "$(_alt_at 'AT+CGMI')")
+[ -n "$_ALT_M" ] && MODEL=$(printf '%s %s' "$_ALT_I" "$_ALT_M" | xargs)
+
+# Протокол канала данных. Модуль сам держит соединение и отдаёт роутеру сетевую
+# карту - какую именно, зависит от композиции: NTLM-500 и Yota 216f:0043 идут
+# через cdc_ether, отладочная 216f:0044 - через RNDIS. Драйвер берём из sysfs.
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _alt_if in "/sys/bus/usb/devices/$_POLL_AM":*; do
+		[ -e "$_alt_if/driver" ] || continue
+		case "$(readlink -f "$_alt_if/driver" 2>/dev/null)" in
+			*/rndis_host) PROTO="rndis"; break ;;
+			*/cdc_ncm)    PROTO="ncm";   break ;;
+			*/cdc_ether)  PROTO="ecm";   break ;;
+		esac
+	done
+fi
+[ -n "$PROTO" ] || PROTO="ecm"

@@ -1,0 +1,5 @@
+# NTmore NTLM-500 (Altair ALT3800) - 216f:0047. Логика - в общем файле семейства.
+. "$RES/_altair_lte_common"
+getinfo() {
+	echo "NTmore NTLM-500"
+}

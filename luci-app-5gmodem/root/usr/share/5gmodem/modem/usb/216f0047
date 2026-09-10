@@ -1,0 +1,6 @@
+# NTmore NTLM-500 (Altair ALT3800 + ALT6300, LTE Cat 4) - 216f:0047.
+#
+# Модуль из домашнего роутера Skylink H1 (он же V-FL500): сетевая карта
+# cdc_ether и три ttyACM, AT на ttyACM0, канал данных держит сам модуль - роутеру
+# достаточно dhcp. Тот же идентификатор ModemManager знает как «Altair NPe».
+. "$RES/modem/usb/_altair_lte_common"

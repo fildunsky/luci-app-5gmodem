@@ -1,0 +1,173 @@
+# Диапазоны модемов на Altair ALT3100 / ALT3800 (вендор USB 216f).
+#
+# Общий файл семейства: modemband/216f00XX - обёртки, отличаются только именем.
+#
+# Модуль только LTE: режимов сети, 3G и 5G у него нет, соответствующие вербы
+# остаются заглушками bands.sh.
+#
+# ОТКУДА КОМАНДЫ. Модемов в руках не было; синтаксис - из руководства Quanta LI17x
+# «Altair Proprietary AT commands» (то же поколение чипов), форматы ответа
+# сверены с плагином Altair в ModemManager («%BANDCAP: 4,13», «Bands: 13»; там же
+# предупреждение, что прошивка иногда вставляет в список нули - их отсекаем):
+#   AT%BANDCAP              -> «%BANDCAP:3,7,20» - что железо умеет (откалибровано
+#                              на заводе, в PHYBP);
+#   AT%GETCFG="BAND"        -> «Bands: "3","7","20"» - что сейчас разрешено;
+#   AT%SETCFG="BAND","3","7" - записать разрешённые. Принимаются ТОЛЬКО бенды из
+#                              %BANDCAP, всё остальное прошивка отвергает.
+#
+# ЗАПИСЬ ИДЁТ В NV, И ПРИМЕНЯЕТСЯ ОНА ПЕРЕЗАПУСКОМ МОДУЛЯ. Руководство описывает
+# этот список как «bands to be calibrated and scanned» из файла DOP - его читают
+# при старте. Перезапуск делаем сами, после проверки записи, поэтому каркасу
+# говорим «применено вживую»: иначе он добавил бы сверху ещё и цикл CFUN.
+#
+# ПЕТЛИ ПЕРЕЗАПУСКОВ НЕТ. restorebands после появления модема сравнивает
+# сохранённый набор с прочитанным из NV и пишет только при расхождении, а
+# setbands сам ничего не делает, если набор уже совпал: модем перезапустится
+# ровно один раз, и на следующем появлении сравнение даст «одинаково».
+_DEVICE=""
+_BANDS_APPLY_LIVE=1
+
+getinfo() {
+	echo "Altair LTE"
+}
+
+_alt_at() {
+	sms_tool -d $_DEVICE at "$1" 2>/dev/null | tr -d '\r'
+}
+
+# Числа из текста, по возрастанию, без повторов: «"3","7","20"» -> «3 7 20».
+_alt_nums() {
+	tr -c '0-9\n' ' ' | tr -s ' ' '\n' | awk '/^[0-9]+$/ && $1 >= 1 && $1 <= 255' \
+		| sort -nu | tr '\n' ' ' | sed 's/ *$//'
+}
+
+# Полезная часть ответа: первая строка, которая не эхо и не код завершения, от
+# последнего двоеточия. Подпись у прошивок разная («Bands:», «%GETCFG:», без
+# подписи вовсе), а числа после неё одни и те же.
+_alt_payload() {
+	awk '
+		/^AT/ { next }
+		/^(OK|ERROR)/ { next }
+		/^[[:space:]]*$/ { next }
+		{ sub(/^.*:/, ""); print; exit }'
+}
+
+# ФОРМА ЗАПРОСА У ПРОШИВОК РАЗНАЯ: руководство LI17x даёт «%BANDCAP» и
+# «%BANDCAP?», а ModemManager шлёт «%BANDCAP=». Пробуем по очереди, пока одна
+# не ответит списком.
+#
+# NTLM-500 НЕ ОТВЕЧАЕТ НИ НА ОДНУ (живая проба 10.09.2026: «%BANDCAP ничего не
+# выдаёт»). Тогда умеет-список неоткуда взять, кроме включённого, - а из него
+# выключенный бенд пропадает, и включить его обратно было бы нечем. Поэтому
+# запоминаем САМЫЙ ШИРОКИЙ набор, какой модем когда-либо показывал включённым
+# (тот же ключ band_full, что у HiLink-модемов: смысл один - «что модем умеет»).
+# Первое чтение до всякой правки даёт заводской набор целиком: у NTLM-500 из
+# Skylink H1 это «3 7 20 31».
+# Негативный кэш: трижды спрашивать молчащую прошивку на каждом показе
+# страницы - это секунды занятого порта.
+getsupportedbands() {
+	_ab_key=$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
+	_ab_nc="/tmp/5gmodem_alt_nobandcap_$_ab_key"
+	_ab_s=""
+	if [ ! -f "$_ab_nc" ]; then
+		for _ab_q in 'AT%BANDCAP' 'AT%BANDCAP=' 'AT%BANDCAP?'; do
+			_ab_s=$(_alt_at "$_ab_q" | grep -i 'BANDCAP:' | _alt_payload | _alt_nums)
+			[ -n "$_ab_s" ] && break
+		done
+		[ -n "$_ab_s" ] || : > "$_ab_nc" 2>/dev/null
+	fi
+	[ -n "$_ab_s" ] && { echo "$_ab_s"; return; }
+
+	_ab_mem=""
+	[ -n "$_bs_sec" ] && _ab_mem=$(uci -q get "5gmodem.$_bs_sec.band_full" | _alt_nums)
+	_ab_s=$(printf '%s %s\n' "$_ab_mem" "$(getbands)" | _alt_nums)
+	if [ -n "$_bs_sec" ] && [ -n "$_ab_s" ] && [ "$_ab_s" != "$_ab_mem" ]; then
+		uci -q set "5gmodem.$_bs_sec.band_full=$_ab_s" && uci -q commit 5gmodem
+	fi
+	echo "$_ab_s"
+}
+
+getbands() {
+	_alt_at 'AT%GETCFG="BAND"' | _alt_payload | _alt_nums
+}
+
+setbands() {
+	_ab_sup=$(getsupportedbands)
+	if [ "$1" = "default" ]; then
+		_ab_want="$_ab_sup"
+	else
+		_ab_want=$(echo "$1" | _alt_nums)
+	fi
+	# Только из того, что железо умеет: бенд вне %BANDCAP прошивка отвергнет
+	# целиком, и человек остался бы без изменений и без объяснения.
+	if [ -n "$_ab_sup" ]; then
+		_ab_f=""
+		for _ab_b in $_ab_want; do
+			case " $_ab_sup " in *" $_ab_b "*) _ab_f="$_ab_f${_ab_f:+ }$_ab_b" ;; esac
+		done
+		_ab_want="$_ab_f"
+	fi
+	[ -n "$_ab_want" ] || return 1
+
+	_ab_cur=$(getbands)
+	[ "$_ab_cur" = "$_ab_want" ] && return 0
+
+	_ab_arg=""
+	for _ab_b in $_ab_want; do
+		_ab_arg="$_ab_arg,\"$_ab_b\""
+	done
+	_ab_o=$(_alt_at "AT%SETCFG=\"BAND\"$_ab_arg")
+	case "$_ab_o" in
+		*ERROR*)
+			logger -t 5gmodem "bands: firmware rejected AT%SETCFG=\"BAND\"$_ab_arg: $(printf '%s' "$_ab_o" | tr '\n' ' ' | head -c 120)"
+			return 1 ;;
+	esac
+	# Сверяем по чтению NV: «OK» без записи уже встречался у прошивок, и
+	# перезапускать модем ради незаписанного набора - это минута без связи зря.
+	_ab_cur=$(getbands)
+	if [ "$_ab_cur" != "$_ab_want" ]; then
+		logger -t 5gmodem "bands: AT%SETCFG answered, but NV holds \"$_ab_cur\" instead of \"$_ab_want\" - not restarting the modem"
+		return 1
+	fi
+	logger -t 5gmodem "bands: NV band list set to \"$_ab_want\", restarting the modem to apply it"
+	# Полный перезапуск: NV читается при старте. Если прошивка не знает
+	# AT+CFUN=1,1 - ATZ: именно им перезапускает модуль плагин Altair в
+	# ModemManager. Не понят и он - хотя бы цикл радио, чтобы модуль
+	# пересканировал сеть.
+	case "$(_alt_at 'AT+CFUN=1,1')" in
+		*ERROR*)
+			case "$(_alt_at 'ATZ')" in
+				*ERROR*)
+					_alt_at 'AT+CFUN=4' >/dev/null
+					sleep 3
+					_alt_at 'AT+CFUN=1' >/dev/null
+					;;
+			esac
+			;;
+	esac
+	return 0
+}
+
+# Сигнал по антенным портам - тот же %MEAS="0", что в профиле метрик: лучший
+# из лучей базовой станции на каждый приёмный тракт модуля.
+getantports() {
+	_ap_o=$(_alt_at 'AT%MEAS="0"')
+	_ap_r=$(printf '%s\n' "$_ap_o" | awk '
+		{
+			s = $0
+			gsub(/[[:space:]]*=[[:space:]]*/, "=", s)
+			n = split(s, f, /[,:]/)
+			for (i = 1; i <= n; i++) {
+				t = f[i]; gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+				if (t !~ /^Rx[01]Tx[0-3]=-?[0-9]+(\.[0-9]+)?$/) continue
+				rx = substr(t, 3, 1); v = substr(t, 8) + 0
+				if (v < -150 || v > -30) continue
+				if (!(rx in best) || v > best[rx]) best[rx] = v
+			}
+		}
+		END {
+			for (r = 0; r <= 1; r++) if (r in best) printf "%s%d:%.0f:", (o++ ? " " : ""), r, best[r]
+		}')
+	[ -n "$_ap_r" ] || { echo "Unsupported"; return; }
+	echo "$_ap_r"
+}

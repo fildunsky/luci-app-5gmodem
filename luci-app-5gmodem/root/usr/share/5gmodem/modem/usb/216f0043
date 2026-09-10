@@ -1,0 +1,6 @@
+# Altair ALT3800 - 216f:0043, «Modem YOTA 4G LTE» (Yota Swift WLTUBA-107,
+# NTmore JMR814). Композиция CDC-Ethernet.
+#
+# Логика - в общем файле семейства. В штатном режиме у модема Yota AT-порта
+# может не быть вовсе - тогда профиль не участвует.
+. "$RES/modem/usb/_altair_lte_common"

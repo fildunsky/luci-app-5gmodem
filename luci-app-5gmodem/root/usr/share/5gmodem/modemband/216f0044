@@ -1,0 +1,5 @@
+# Altair ALT38XX, отладочная композиция (RNDIS) - 216f:0044. Логика - в общем файле.
+. "$RES/_altair_lte_common"
+getinfo() {
+	echo "Altair ALT38XX"
+}

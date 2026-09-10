@@ -1,0 +1,5 @@
+# Altair ALT3100 (LTE Cat 3) - 216f:0041. Логика - в общем файле семейства.
+. "$RES/_altair_lte_common"
+getinfo() {
+	echo "Altair ALT3100"
+}

@@ -1103,7 +1103,7 @@ autoapn)
 			_aa_w=0
 			while [ "$_aa_w" -lt 30 ]; do
 				case "$(at_query "$_aa_p" "AT+CEREG?" 5 2>/dev/null | tr -d '\r' \
-					| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)" in
+					| sed -n 's/^+CEREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)" in
 					1|5|6|7|9|10) break ;;
 				esac
 				sleep 2; _aa_w=$((_aa_w + 2))

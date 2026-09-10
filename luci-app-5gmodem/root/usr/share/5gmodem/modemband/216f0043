@@ -1,0 +1,5 @@
+# Yota 4G LTE (Altair ALT3800, CDC-Ethernet) - 216f:0043. Логика - в общем файле.
+. "$RES/_altair_lte_common"
+getinfo() {
+	echo "Yota 4G LTE"
+}
