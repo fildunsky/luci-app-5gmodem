@@ -4,8 +4,14 @@ name: Build packages
 # format is enough for every device:
 #   - a 24.10 SDK produces the .ipk (that branch still defaults to opkg)
 #   - a 25.12 SDK produces the .apk (the format current releases use)
-# On a version tag (v*) the artifacts are attached to a GitHub Release;
-# the workflow can also be run manually from the Actions tab.
+# On a version tag (v*) the artifacts are attached to a DRAFT GitHub Release,
+# and only the publish job - after BOTH builds succeeded and every package is
+# attached - makes the release public and points the README install links at
+# it. Until that moment "latest" (README links, the in-app updater, the
+# releases/latest API) keeps serving the previous, complete release, so there
+# is no window in which the install command or the update button hits a 404.
+# A failed build leaves the draft unpublished and everything on the old version.
+# The workflow can also be run manually from the Actions tab (no release then).
 
 on:
   push:
@@ -129,9 +135,91 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-      - name: Attach to release
+      # Upload with the gh CLI, NOT softprops/action-gh-release: that action
+      # publishes a reused draft after uploading unless told otherwise, and with
+      # two matrix jobs the first one would make the release public while the
+      # other format was still building. `gh release upload` never changes the
+      # draft state. The draft normally exists already (created with the notes
+      # before the tag is pushed); if not, create an empty one - `|| view`
+      # covers the other matrix job having created it a moment earlier.
+      - name: Attach to draft release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes "" \
+              || gh release view "$TAG" >/dev/null
+          fi
+          gh release upload "$TAG" out/* --clobber
+
+  publish:
+    name: Publish release, point README links
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-${{ github.ref_name }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
         with:
-          files: out/*
-          fail_on_unmatched_files: false
+          ref: master
+          fetch-depth: 0
+
+      # Every package the READMEs and the updater point at must be there, or the
+      # release stays a draft - publishing half a release is exactly the bug
+      # this job exists to prevent.
+      - name: Check attached packages
+        run: |
+          set -e
+          V="${TAG#v}"
+          R=$(git show "$TAG:luci-app-5gmodem/Makefile" | sed -n 's/^PKG_RELEASE:=//p')
+          [ -n "$R" ] || { echo "::error::PKG_RELEASE not found in $TAG"; exit 1; }
+          NAMES=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          MISSING=0
+          for WANT in "luci-app-5gmodem-$V-r$R.apk" "luci-app-5gmodem-lite-$V-r$R.apk" \
+                      "luci-app-5gmodem_$V-r${R}_all.ipk" "luci-app-5gmodem-lite_$V-r${R}_all.ipk" \
+                      "luci-i18n-5gmodem-zh-cn.apk" "luci-i18n-5gmodem-zh-cn.ipk"; do
+            if printf '%s\n' "$NAMES" | grep -qxF "$WANT"; then
+              echo "ok      $WANT"
+            else
+              echo "::error::missing asset $WANT"; MISSING=1
+            fi
+          done
+          [ "$MISSING" = 0 ]
+          echo "PKG_V=$V" >> "$GITHUB_ENV"
+          echo "PKG_R=$R" >> "$GITHUB_ENV"
+
+      - name: Publish release
+        run: gh release edit "$TAG" --draft=false --latest
+
+      - name: Point README install links at the release
+        run: |
+          set -e
+          .github/scripts/readme-links.sh "$PKG_V" "$PKG_R"
+          FAIL=0
+          for U in $(grep -hoE 'https://github.com/fildunsky/luci-app-5gmodem/releases/download/[^ )<>"]+' README*.md | sort -u); do
+            CODE=$(curl -sIL -o /dev/null -w '%{http_code}' "$U")
+            echo "$CODE $U"
+            [ "$CODE" = 200 ] || FAIL=1
+          done
+          [ "$FAIL" = 0 ] || { echo "::error::a README link does not resolve - not committing"; exit 1; }
+          if git diff --quiet -- README.md README.ru.md README.zh-CN.md; then
+            echo "README links already point at $TAG"
+            exit 0
+          fi
+          git config user.name "Fil Dunsky"
+          git config user.email "filipp.dunsky@gmail.com"
+          git commit -m "README: install links for $TAG" -- README.md README.ru.md README.zh-CN.md
+          for TRY in 1 2 3; do
+            git push origin HEAD:master && exit 0
+            git pull --rebase origin master
+          done
+          echo "::error::could not push the README update"; exit 1
