@@ -233,7 +233,7 @@ fi
 # Раньше я ошибочно «чинил» её через XMCI type-4 и уводил доп. соты в neighbors[] -
 # откатил. Соседей отдельно не строим: доп. соты идут как SCC.
 
-MODE=$(echo $MODE | sed 's,/,+,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 OT=$(sms_tool -d $DEVICE at "AT+XCCINFO=1;+XCCINFO?")
 if [ -n "$OT" ]; then

@@ -189,7 +189,7 @@ fi
 
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,'| sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
 
 # Modem

@@ -44,8 +44,14 @@ FW=$(echo $DEV2 | awk -F 'Revision:|IMEI' '{print $2}'| xargs)
 
 # Protocol
 # Driver=qmi_wwan & Driver=cdc_mbim & Driver=cdc_ether & Driver=huawei_cdc_ncm
+# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
+# профиля («Vendor=12d1 ProdID=1506»), скопированная вместе с кодом, и протокол у этого
+# модема не определялся никогда.
+_PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+_PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+_PV_ID="Vendor=${_PV_V:-12d1} ProdID=${_PV_P:-1506}"
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=12d1 ProdID=1506' '{print $2}' | cut -c-1104)
+PVCUT=$(echo $PV | awk -F "$_PV_ID" '{print $2}' | cut -c-1104)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
 then
     PROTO="qmi"
@@ -63,7 +69,7 @@ fi
 # International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 NR_I=$(echo "$O" | sed 's/AT+GSN//g' | xargs)
-if [ -n "NR_I" ]
+if [ -n "$NR_I" ]
 then
 	NR_IMEI="$NR_I"
 fi
@@ -83,18 +89,31 @@ if [ -n "$NR_D" ]; then
 fi
 
 # DL / UL / Band
+# ЧАСТОТЫ - ТОЛЬКО ЧИСЛОМ. Пустое или нечисловое поле в $((...)) - это
+# «arithmetic syntax error», а он в подключаемом профиле ОБРЫВАЕТ ВЕСЬ
+# опрос: карточка оставалась пустой при любом ответе без частот (модем не
+# зарегистрирован, порт занят, прошивка без ^HFREQINFO). Найдено прогоном
+# профилей на подставном модеме 10.09.2026.
 OTB=$(sms_tool -d $DEVICE at "AT^HFREQINFO?")
 TBX=$(echo "$OTB" | awk -F [:] '/^\^HFREQINFO:/{print $2}' | xargs)
 TB=$(echo "$TBX" | cut -d ',' -f3-3 )
 
 TDL=$(echo "$TBX" | cut -d ',' -f6-6 )
-DL=$(($TDL/1000))
+case "$TDL" in
+	''|*[!0-9]*) DL="" ;;
+	*) DL=$((TDL / 1000)) ;;
+esac
 
 TUL=$(echo "$TBX" | cut -d ',' -f9-9 )
-UL=$(($TUL/1000))
+case "$TUL" in
+	''|*[!0-9]*) UL="" ;;
+	*) UL=$((TUL / 1000)) ;;
+esac
 
-ULBW="UL: @$UL MHz"
-DLBW="DL: @$DL MHz"
+ULBW=""
+[ -n "$UL" ] && ULBW="UL: @$UL MHz"
+DLBW=""
+[ -n "$DL" ] && DLBW="DL: @$DL MHz"
 
 PBAND="$(band4g $TB "") $DLBW $ULBW"
 EARFCN=$(echo "$TBX" | cut -d ',' -f4-4 )

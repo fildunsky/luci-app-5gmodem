@@ -33,7 +33,7 @@ if [ -n "$T" ]; then
 	fi
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A ,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE_A,LTE-A ,')
 
 # Primary band
 T1=$(echo "$O" | awk '/PCC/{print $5}' | sed -e 's/LTE_//g' -e 's/.$//')
@@ -69,11 +69,16 @@ if [ -n "$T" ]; then
 fi
 
 # Cell ID & LAC & TAC
-LAC_HEX=$(printf "%X" $LAC_DEC)
-if [ -n "$LAC_DEC" ]; then
-	TAC_HEX=$LAC_HEX
-fi
-CID_HEX=$(printf "%X" $CID_DEC)
+# ТОЛЬКО ЧИСЛО. Пустой LAC_DEC давал `printf "%X"` без аргумента - это «0», и
+# в карточке появлялся LAC 0 там, где модем его просто не отдал.
+case "$LAC_DEC" in
+	''|*[!0-9]*) ;;
+	*) LAC_HEX=$(printf "%X" "$LAC_DEC"); TAC_HEX=$LAC_HEX ;;
+esac
+case "$CID_DEC" in
+	''|*[!0-9]*) ;;
+	*) CID_HEX=$(printf "%X" "$CID_DEC") ;;
+esac
 
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER

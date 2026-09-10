@@ -1,0 +1,186 @@
+# Marvell PXA1826 (ASR) - 1286:4e28: Notion R281 / R291, МегаФон C300-1 и его
+# близнец Yota C300-1. Модем встроен в роутер, отдаёт RNDIS и ttyACM.
+#
+# ПРОШИВКА ZTE-ОБРАЗНАЯ. Уровни, сота и агрегация - те же +ZRSSI, +ZCELLINFO?,
+# +ZCAINFO?, что у ZTE MF286R (19d2:1489, тоже ASR), идентификация - вендорские
+# *READVER, *MRD_IMEI?, *ICCID?. Основа - профиль 3ginfo-lite под этот
+# идентификатор, присланный в копилку 10.09.2026; разбор переписан, три его
+# дефекта исправлены (см. ниже). Модема в руках не было.
+#
+# РАСКЛАДКА +ZCAINFO? - по исходному профилю, где она проверена владельцем: поля
+# режутся по «,», «:» и «;» (несущие разделены «;»), первичная несущая -
+# «pci,band,tac,earfcn,ширина», каждая вторичная - «pci,?,band,earfcn,ширина».
+[ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
+
+_asr_at() {
+	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r'
+}
+
+# Склейка одним заходом, как у ZTE. Не ответила (прошивка не приняла цепочку
+# или её оборвала ошибка одной из команд) - те же три запроса по одному.
+O=$(_asr_at "AT+ZRSSI;+ZCELLINFO?;+ZCAINFO?")
+case "$O" in
+	*ZRSSI:*) ;;
+	*) O=$(_asr_at "AT+ZRSSI"; _asr_at "AT+ZCELLINFO?"; _asr_at "AT+ZCAINFO?") ;;
+esac
+
+_asr_in() {   # $1 - число, $2 - нижняя граница, $3 - верхняя
+	case "$1" in ''|*[!0-9.-]*) return ;; esac
+	awk -v v="$1" -v lo="$2" -v hi="$3" 'BEGIN { v += 0; if (v >= lo && v <= hi) print v }'
+}
+
+_ASR_CELL=$(printf '%s\n' "$O" | awk -F'[,:]' '/^\+ZCELLINFO/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $4); print $4; exit }')
+
+case "$_ASR_CELL" in
+	*LTE*) _ASR_LTE=1 ;;
+	*)
+		case "$MODE_NUM" in
+			7*|9*) _ASR_LTE=1 ;;
+			*) _ASR_LTE=0 ;;
+		esac
+		;;
+esac
+
+if [ "$_ASR_LTE" = 0 ]; then
+	case "$MODE_NUM" in
+		3*)
+			_ASR_V=$(printf '%s\n' "$O" | awk -F'[,:]' '/^\+ZRSSI/ { print $2 + 0; exit }')
+			_ASR_V=$(_asr_in "$_ASR_V" -120 -20); [ -n "$_ASR_V" ] && RSSI="$_ASR_V"
+			;;
+		*)
+			[ -n "$_ASR_CELL" ] && MODE="$_ASR_CELL"
+			;;
+	esac
+else
+	# +ZRSSI: <rsrp>,<rsrq>,<rssi>,<sinr>
+	eval "$(printf '%s\n' "$O" | awk -F'[,:]' '
+		/^\+ZRSSI/ {
+			for (i = 2; i <= 5; i++) { v[i] = $i; gsub(/[^0-9.-]/, "", v[i]) }
+			printf "_ASR_P=%s\n_ASR_Q=%s\n_ASR_S=%s\n_ASR_N=%s\n", v[2], v[3], v[4], v[5]
+			exit
+		}')"
+	_ASR_V=$(_asr_in "$_ASR_P" -140 -44);  [ -n "$_ASR_V" ] && RSRP="$_ASR_V"
+	_ASR_V=$(_asr_in "$_ASR_Q" -30 0);     [ -n "$_ASR_V" ] && RSRQ="$_ASR_V"
+	_ASR_V=$(_asr_in "$_ASR_S" -120 -20);  [ -n "$_ASR_V" ] && RSSI="$_ASR_V"
+	_ASR_V=$(_asr_in "$_ASR_N" -20 50);    [ -n "$_ASR_V" ] && SINR="$_ASR_V"
+
+	# Несущие +ZCAINFO по строке на каждую: «p|s pci band earfcn ширина».
+	# Нули у этой прошивки означают «поля нет», а не нулевой PCI.
+	_ASR_CA=$(printf '%s\n' "$O" | awk -F'[,:;]' '
+		function n(x) { gsub(/[^0-9.]/, "", x); return x }
+		/^\+ZCAINFO/ {
+			if (n($3) + 0 > 0) {
+				printf "p %s %s %s %s\n", n($2), n($3), n($5), n($6)
+				tac = n($4)
+			}
+			for (i = 7; i + 4 <= NF; i += 5) {
+				b = n($(i + 2))
+				if (b + 0 > 0) printf "s %s %s %s %s\n", n($i), b, n($(i + 3)), n($(i + 4))
+			}
+			if (tac + 0 > 0) printf "t %s\n", tac
+			exit
+		}')
+
+	_ASR_M=""
+	_ASR_I=0
+	_ASR_SIFS="$IFS"
+	IFS='
+'
+	for _asr_l in $_ASR_CA; do
+		IFS="$_ASR_SIFS"
+		_asr_k="${_asr_l%% *}"; _asr_r="${_asr_l#* }"
+		case "$_asr_k" in
+			t)
+				T_DEC="$_asr_r"
+				T_HEX=$(printf '%X' "$_asr_r" 2>/dev/null)
+				;;
+			p|s)
+				_asr_pci="${_asr_r%% *}"; _asr_r="${_asr_r#* }"
+				_asr_b="${_asr_r%% *}"; _asr_r="${_asr_r#* }"
+				_asr_e="${_asr_r%% *}"; _asr_w="${_asr_r#* }"
+				[ "$_asr_w" = "$_asr_e" ] && _asr_w=""
+				case "$_asr_w" in ''|0|*[!0-9.]*) _asr_w="" ;; esac
+				case "$_asr_pci" in ''|*[!0-9]*) _asr_pci="" ;; esac
+				case "$_asr_e" in ''|0|*[!0-9]*) _asr_e="" ;; esac
+				_asr_lb="$(band4g "$_asr_b")${_asr_w:+ @$_asr_w MHz}"
+				_ASR_M="$_ASR_M${_ASR_M:+ + }$(band4g "$_asr_b")"
+				if [ "$_asr_k" = p ]; then
+					PBAND="$_asr_lb"
+					[ -n "$_asr_pci" ] && [ "$_asr_pci" != 0 ] && PCI="$_asr_pci"
+					[ -n "$_asr_e" ] && EARFCN="$_asr_e"
+					[ -n "$_asr_w" ] && BANDWIDTH="$_asr_w"
+				else
+					_ASR_I=$((_ASR_I + 1))
+					case "$_ASR_I" in
+						1) S1BAND="$_asr_lb"; S1PCI="$_asr_pci"; S1EARFCN="$_asr_e" ;;
+						2) S2BAND="$_asr_lb"; S2PCI="$_asr_pci"; S2EARFCN="$_asr_e" ;;
+						3) S3BAND="$_asr_lb"; S3PCI="$_asr_pci"; S3EARFCN="$_asr_e" ;;
+						4) S4BAND="$_asr_lb"; S4PCI="$_asr_pci"; S4EARFCN="$_asr_e" ;;
+					esac
+				fi
+				;;
+		esac
+		IFS='
+'
+	done
+	IFS="$_ASR_SIFS"
+
+	# ЯРЛЫК - ПО ФАКТУ ВТОРИЧНОЙ НЕСУЩЕЙ, А НЕ ПО AcT=9. Исходный профиль брал
+	# агрегацию только при AcT=9 - это не код агрегации ни в одном стандарте,
+	# и при другой нумерации прошивки вторая несущая молча терялась.
+	# «+» между ВСЕМИ несущими: исходное `sed 's,/,+,'` меняло только первый
+	# разделитель.
+	if [ -n "$_ASR_M" ]; then
+		if [ "$_ASR_I" -gt 0 ]; then
+			MODE="LTE-A | $_ASR_M"
+		else
+			MODE="LTE | $_ASR_M"
+		fi
+	else
+		_ASR_B=$(printf '%s' "$_ASR_CELL" | sed -n 's/.*LTE B\([0-9][0-9]*\).*/\1/p')
+		[ -n "$_ASR_B" ] && MODE="LTE | $(band4g "$_ASR_B")"
+	fi
+fi
+
+# --- Кто это и какая прошивка ------------------------------------------------
+_asr_first() {
+	printf '%s\n' "$1" | awk '
+		/^AT/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ sub(/^[+*][A-Z_]+:[[:space:]]*/, ""); gsub(/"/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }'
+}
+
+_ASR_V=$(_asr_at "AT*READVER" | sed -n 's/^release_version[[:space:]]*:[[:space:]]*//p' | head -1 | sed 's/[[:space:]]*$//')
+[ -n "$_ASR_V" ] && FW="$_ASR_V"
+
+_ASR_MA=$(_asr_first "$(_asr_at "AT+CGMI")")
+_ASR_MB=$(_asr_first "$(_asr_at "AT+CGMM")")
+[ -n "$_ASR_MB" ] && MODEL=$(printf '%s %s' "$_ASR_MA" "$_ASR_MB" | xargs)
+
+# IMEI: запас на *MRD_IMEI? - когда AT+GSN молчит. В исходном профиле проверка
+# стояла как `[ -z "NR_I" ]` (строка, а не переменная), и запас не срабатывал
+# никогда.
+_ASR_V=$(digits_of "$(_asr_at "AT+GSN")" 15 17)
+[ -n "$_ASR_V" ] || _ASR_V=$(digits_of "$(_asr_at "AT*MRD_IMEI?")" 15 17)
+[ -n "$_ASR_V" ] && NR_IMEI="$_ASR_V"
+
+_ASR_V=$(digits_of "$(_asr_at "AT+CIMI")" 14 16)
+[ -n "$_ASR_V" ] && NR_IMSI="$_ASR_V"
+
+_ASR_V=$(_asr_at "AT*ICCID?" | sed -n 's/^\*ICCID:[[:space:]]*//p' | head -1 | tr -cd '0-9A-Fa-f')
+[ -n "$_ASR_V" ] && NR_ICCID="$_ASR_V"
+
+# Протокол - по драйверу интерфейса из sysfs, а не по debugfs с прибитым
+# идентификатором: debugfs смонтирован не везде.
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _asr_if in "/sys/bus/usb/devices/$_POLL_AM":*; do
+		[ -e "$_asr_if/driver" ] || continue
+		case "$(readlink -f "$_asr_if/driver" 2>/dev/null)" in
+			*/rndis_host) PROTO="rndis"; break ;;
+			*/cdc_ncm)    PROTO="ncm";   break ;;
+			*/cdc_mbim)   PROTO="mbim";  break ;;
+			*/cdc_ether)  PROTO="ecm";   break ;;
+		esac
+	done
+fi

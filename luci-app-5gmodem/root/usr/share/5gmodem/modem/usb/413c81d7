@@ -148,7 +148,7 @@ if [ -n "$T" ]; then
 #	[ -n "$T" ] && addon 68 "(S4) SNR" "$T"
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
 
 # Cell ID & LAC & TAC
 LAC_HEX=$(printf "%X" $LAC_DEC 2>/dev/null)

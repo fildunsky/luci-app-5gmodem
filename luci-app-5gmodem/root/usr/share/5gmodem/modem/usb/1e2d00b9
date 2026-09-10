@@ -173,7 +173,7 @@ fi
 
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,'| sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
 
 # Modem
@@ -211,8 +211,14 @@ fi
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
+# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
+# профиля («Vendor=1e2d ProdID=00b7»), скопированная вместе с кодом, и протокол у этого
+# модема не определялся никогда.
+_PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+_PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+_PV_ID="Vendor=${_PV_V:-1e2d} ProdID=${_PV_P:-00b7}"
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=1e2d ProdID=00b7' '{print $2}' | cut -c-1290)
+PVCUT=$(echo $PV | awk -F "$_PV_ID" '{print $2}' | cut -c-1290)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
 then
     PROTO="qmi"

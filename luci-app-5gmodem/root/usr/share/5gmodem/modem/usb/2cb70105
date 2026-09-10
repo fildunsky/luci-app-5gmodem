@@ -4,9 +4,8 @@
 O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?;+GTCAINFO?")
 
 if [ "x$MODE" = "xLTE" ]; then
-	if [[ "$O" == *"SCC"* ]]; then
-		MODE="LTE_A"
-	fi
+	# case, а не [[ == *SCC* ]]: шаблон в [[ ]] раскрывается по файлам каталога.
+	case "$O" in *SCC*) MODE="LTE_A" ;; esac
 	T1=$(echo "$O" | grep -A 3 'LTE service cell' | grep '1,4,'${COPS_MCC}','${COPS_MNC}',')
 	if [ -n "$T1" ]; then
 		T=$(echo "$T1" | awk -F, '{print $5}')
@@ -45,8 +44,8 @@ if [ "x$MODE" = "xLTE" ]; then
 			RSRQ=$T2
 		fi
 
-		if [ -n "$CSQ" ]; then
-			RSSI=$((2 * $CSQ -113))
+		if [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
+			RSSI=$((2 * CSQ - 113))
 		fi
 
 
@@ -110,7 +109,7 @@ IFS="
 
 fi
 
-MODE=$(echo $MODE | sed "s/LTE_A /LTE-A /g" | sed 's,/,+,')
+MODE=$(echo $MODE | sed "s/LTE_A /LTE-A /g" | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 # Modem
 OA=$(sms_tool -d $DEVICE at "AT+CGMM?")
@@ -145,12 +144,19 @@ fi
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
-TTY=$(basename $DEVICE)
-devpath=$(readlink -f /sys/class/tty/$TTY/device)
-BASE=$(readlink -f ${devpath%/*/*})
-
-NETIF=$(for a in /sys/class/net/*; do readlink -f $a; done | grep "$BASE")
-NETDRV=$(basename $(readlink -f $NETIF/../../driver))
+# СЕТЕВАЯ КАРТА - ТОЛЬКО ЭТОГО МОДЕМА. Раньше порт, которого нет в sysfs (модем
+# отвалился посреди опроса), давал пустой BASE, `grep ""` совпадал с КАЖДЫМ
+# интерфейсом роутера, и протокол брался по драйверу чужой карты. А без
+# границы «/» путь 1-1 совпадал и с соседним модемом на 1-1.2.
+TTY=$(basename "$DEVICE")
+devpath=$(readlink -f "/sys/class/tty/$TTY/device" 2>/dev/null)
+BASE=""
+[ -n "$devpath" ] && BASE=$(readlink -f "${devpath%/*/*}" 2>/dev/null)
+NETDRV=""
+if [ -n "$BASE" ]; then
+	NETIF=$(for a in /sys/class/net/*; do readlink -f "$a"; done | grep "^$BASE/" | head -1)
+	[ -n "$NETIF" ] && NETDRV=$(basename "$(readlink -f "$NETIF/../../driver" 2>/dev/null)")
+fi
 
 case $NETDRV in
 	"qmi_wwan")

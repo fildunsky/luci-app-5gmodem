@@ -74,7 +74,7 @@ fi
 # International Mobile Equipment Identity (IMEI)
 OI=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 NR_I=$(echo "$OI" | sed 's/AT+GSN//g' | xargs)
-if [ -n "NR_I" ]
+if [ -n "$NR_I" ]
 then
 	NR_IMEI="$NR_I"
 fi
@@ -98,23 +98,40 @@ XFRCOUNT=$(echo -n "$XFR" | wc -c)
 if [ -n "$XFR" ] && [ "$XFRCOUNT" -gt "15" ]; then
 
 # DL / UL / Band
+# ЧАСТОТЫ - ТОЛЬКО ЧИСЛОМ. Пустое или нечисловое поле в $((...)) - это
+# «arithmetic syntax error», а он в подключаемом профиле ОБРЫВАЕТ ВЕСЬ
+# опрос: карточка оставалась пустой при любом ответе без частот (модем не
+# зарегистрирован, порт занят, прошивка без ^HFREQINFO). Найдено прогоном
+# профилей на подставном модеме 10.09.2026.
 TBX=$(echo "$XFR" | awk -F [:] '/^\^HFREQINFO:/{print $2}' | xargs)
 TB=$(echo "$TBX" | cut -d ',' -f3-3 )
 
 TDL=$(echo "$TBX" | cut -d ',' -f6-6 )
-DL=$(($TDL/1000))
+case "$TDL" in
+	''|*[!0-9]*) DL="" ;;
+	*) DL=$((TDL / 1000)) ;;
+esac
 
 TUL=$(echo "$TBX" | cut -d ',' -f9-9 )
-UL=$(($TUL/1000))
+case "$TUL" in
+	''|*[!0-9]*) UL="" ;;
+	*) UL=$((TUL / 1000)) ;;
+esac
 
-ULBW="UL: @$UL MHz"
-DLBW="DL: @$DL MHz"
+ULBW=""
+[ -n "$UL" ] && ULBW="UL: @$UL MHz"
+DLBW=""
+[ -n "$DL" ] && DLBW="DL: @$DL MHz"
 
 PBAND="$(band4g $TB "") $DLBW $ULBW"
 EARFCN=$(echo "$TBX" | cut -d ',' -f4-4 )
 PCI="-"
 
-if [[ "$MODE" == *"LTE"* ]] && [ -n "$TB" ]; then
+# СОПОСТАВЛЕНИЕ ЧЕРЕЗ case, А НЕ [[ == *...* ]]: в busybox ash шаблон в [[ ]]
+# раскрывается по ФАЙЛАМ текущего каталога - запуск из папки с подходящими
+# именами давал «unknown operand», и ветка молча не срабатывала.
+case "$MODE" in *LTE*) _hw_lte=1 ;; *) _hw_lte=0 ;; esac
+if [ "$_hw_lte" = 1 ] && [ -n "$TB" ]; then
 MODE="LTE | "$(band4g $TB "")
 fi
       

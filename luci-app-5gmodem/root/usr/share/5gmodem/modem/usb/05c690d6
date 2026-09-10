@@ -437,7 +437,7 @@ if [ "$REGOK" = "1" ]; then
 
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE B,LTE | B,' | sed 's,LTE-A B,LTE-A | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE-A B,LTE-A | B,')
 
 # --- Тепловое состояние: градусов у этой прошивки НЕТ ----------------------
 # AT^TEMP? (ветка T99W175 ниже) она не отвечает вовсе - поле температуры всегда
@@ -611,7 +611,7 @@ fi
 
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,'| sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
 # Modem
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
@@ -635,8 +635,14 @@ O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 [ -n "$NR_D" ] && NR_ICCID="$NR_D"
 
+# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
+# профиля («Vendor=05c6 ProdID=90d5»), скопированная вместе с кодом, и протокол у этого
+# модема не определялся никогда.
+_PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+_PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+_PV_ID="Vendor=${_PV_V:-05c6} ProdID=${_PV_P:-90d5}"
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=05c6 ProdID=90d5' '{print $2}' | cut -c-1290)
+PVCUT=$(echo $PV | awk -F "$_PV_ID" '{print $2}' | cut -c-1290)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"; then
     PROTO="qmi"
 elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"; then

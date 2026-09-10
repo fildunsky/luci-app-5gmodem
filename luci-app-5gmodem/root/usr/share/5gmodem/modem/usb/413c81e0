@@ -103,7 +103,7 @@ T=$(echo "$O1" | awk -F '[:,\ ]' '/^EARFCN/{print $4}' | xargs)
 [ -n "$T" ] && S4PCI="$T"
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
 
 LAC_HEX=$(printf "%X" $LAC_DEC 2>/dev/null)
 # TAC берём ОТ LAC только если своего нет. Раньше присваивание шло всегда, когда

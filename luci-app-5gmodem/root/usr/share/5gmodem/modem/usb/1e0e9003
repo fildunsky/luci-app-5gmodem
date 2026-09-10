@@ -68,7 +68,7 @@ case $MODE_NUM in
 	13) MODE="5G NSA";;
 esac
 
-MODE=$(echo $MODE | sed 's,/,+,'| sed 's,LTE B,LTE | B,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
 # Modem
 OF=$(sms_tool -d $DEVICE at "AT+CGMR")

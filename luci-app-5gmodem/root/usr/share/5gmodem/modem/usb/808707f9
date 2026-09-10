@@ -410,7 +410,7 @@ fi
 
 fi
 
-MODE=$(echo $MODE | sed 's,/,+,')
+MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 # Modem
 FWA=$(sms_tool -d $DEVICE at "AT+GTPKGVER?" | xargs)

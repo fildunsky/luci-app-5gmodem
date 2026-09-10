@@ -69,13 +69,18 @@ case "$MODE_NUM" in
 		;;
 esac
 
-MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,')
+MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 # Firmware
 FWB=$(sms_tool -d $DEVICE at "AT+GMR")
 FW=$(echo $FWB | tr -d " \t\n\r" | xargs)
 
-if [[ "$FW" == *"MF286RA"* && "$CSQ" == *"-"* ]]; then
+# СОПОСТАВЛЕНИЕ ЧЕРЕЗ case, А НЕ [[ == *...* ]]: в busybox ash шаблон в [[ ]]
+# раскрывается по ФАЙЛАМ текущего каталога - запуск из папки с подходящими
+# именами давал «unknown operand», и ветка молча не срабатывала.
+case "$FW" in *MF286RA*) _zte_ra=1 ;; *) _zte_ra=0 ;; esac
+case "$CSQ" in *-*) ;; *) _zte_ra=0 ;; esac
+if [ "$_zte_ra" = 1 ]; then
 OQ=$(sms_tool -D -d $DEVICE at "AT+CSQ")
 CSQ=$(echo "$OQ" | awk -F[,\ ] '/^\+CSQ/ {print $2}')
 
@@ -88,7 +93,8 @@ fi
 # Modem
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n"  | xargs)
 
-if [[ "$MODELA" == *"ZTE"* ]]; then
+case "$MODELA" in *ZTE*) _zte_mdl=1 ;; *) _zte_mdl=0 ;; esac
+if [ "$_zte_mdl" = 1 ]; then
 MODELACUT=$(echo $MODELA | awk -F'CGMI: ' '{print $2}' | sed 's/"//g' | sed 's/ CORPORATION//g')
 MODELO=$(echo $MODELACUT | tr -d " \t\n\r" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMM")
@@ -107,7 +113,7 @@ fi
 # International Mobile Equipment Identity (IMEI)
 OI=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 NR_I=$(echo "$OI" | sed 's/AT+GSN//g' | xargs)
-if [ -z "NR_I" ]; then
+if [ -z "$NR_I" ]; then
 	OIB=$(sms_tool -d $DEVICE at "AT*MRD_IMEI?" | xargs)
 	NR_I=$(echo "$OIB" | awk -F [:] '/^\*MRD_IMEI:/{print $2}' | xargs)
 	NR_IMEI="$NR_I"

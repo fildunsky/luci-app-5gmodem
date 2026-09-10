@@ -171,8 +171,8 @@ if [ -n "$T1" ]; then
       9) [ "$T" -ge 0 ] && [ "$T" -le 127 ] && RSRQ=$(echo "$T" | awk '{printf "%0.1f", ($1-87)/2 }');;
     esac
   fi
-  if [ -n "$CSQ" ]; then
-    RSSI=$((2 * $CSQ -113))
+  if [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
+    RSSI=$((2 * CSQ - 113))
   fi
 fi
 
@@ -280,8 +280,8 @@ if [ -z "$T1" ]; then
     fi
   fi
   # RSSI на 3G из CSQ (строки GTCCINFO нет, а поле выше заполняется только в LTE-ветке)
-  if [ -n "$CSQ" ] && [ -n "$RSCP" ]; then
-    RSSI=$((2 * $CSQ -113))
+  if [ -n "$RSCP" ] && [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
+    RSSI=$((2 * CSQ - 113))
   fi
 fi
 
@@ -663,12 +663,19 @@ fi
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
-TTY=$(basename $DEVICE)
-devpath=$(readlink -f /sys/class/tty/$TTY/device)
-BASE=$(readlink -f ${devpath%/*/*})
-
-NETIF=$(for a in /sys/class/net/*; do readlink -f $a; done | grep "$BASE")
-NETDRV=$(basename $(readlink -f $NETIF/../../driver))
+# СЕТЕВАЯ КАРТА - ТОЛЬКО ЭТОГО МОДЕМА. Раньше порт, которого нет в sysfs (модем
+# отвалился посреди опроса), давал пустой BASE, `grep ""` совпадал с КАЖДЫМ
+# интерфейсом роутера, и протокол брался по драйверу чужой карты. А без
+# границы «/» путь 1-1 совпадал и с соседним модемом на 1-1.2.
+TTY=$(basename "$DEVICE")
+devpath=$(readlink -f "/sys/class/tty/$TTY/device" 2>/dev/null)
+BASE=""
+[ -n "$devpath" ] && BASE=$(readlink -f "${devpath%/*/*}" 2>/dev/null)
+NETDRV=""
+if [ -n "$BASE" ]; then
+	NETIF=$(for a in /sys/class/net/*; do readlink -f "$a"; done | grep "^$BASE/" | head -1)
+	[ -n "$NETIF" ] && NETDRV=$(basename "$(readlink -f "$NETIF/../../driver" 2>/dev/null)")
+fi
 
 case $NETDRV in
   "qmi_wwan")

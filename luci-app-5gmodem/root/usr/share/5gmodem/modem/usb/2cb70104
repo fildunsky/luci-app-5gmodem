@@ -3,9 +3,8 @@
 O=$(sms_tool -d $DEVICE at "at+gtccinfo?;+gtcainfo?")
 
 if [ "x$MODE" = "xLTE" ]; then
-	if [[ "$O" == *"SCC"* ]]; then
-		MODE="LTE_A"
-	fi
+	# case, а не [[ == *SCC* ]]: шаблон в [[ ]] раскрывается по файлам каталога.
+	case "$O" in *SCC*) MODE="LTE_A" ;; esac
 	T1=$(echo "$O" | grep -A 3 'LTE service cell' | grep '1,4,'${COPS_MCC}','${COPS_MNC}',')
 	if [ -n "$T1" ]; then
 		T=$(echo "$T1" | awk -F, '{print $5}')
@@ -155,7 +154,7 @@ IFS="
 
 fi
 
-MODE=$(echo $MODE | sed "s/LTE_A /LTE-A /g" | sed 's,/,+,')
+MODE=$(echo $MODE | sed "s/LTE_A /LTE-A /g" | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 # Modem
 OA=$(sms_tool -d $DEVICE at "AT+CGMM?")

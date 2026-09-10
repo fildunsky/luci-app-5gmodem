@@ -117,7 +117,7 @@ case "$MODE_NUM" in
 		;;
 esac
 
-MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,')
+MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 
 if [ "${LAC_DEC}" = "0" ]; then
 	LAC_DEC="-"
@@ -137,7 +137,11 @@ MODELB=$(echo $MODELA | awk -F 'Manufacturer: |CORPORATION' '{print $2}'| xargs)
 MODELD=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n"  | xargs)
 
 SUB='MODULE'
-if [[ "$MODELD" == *"$SUB"* ]]; then
+# СОПОСТАВЛЕНИЕ ЧЕРЕЗ case, А НЕ [[ == *...* ]]: в busybox ash шаблон в [[ ]]
+# раскрывается по ФАЙЛАМ текущего каталога - запуск из папки с подходящими
+# именами давал «unknown operand», и ветка молча не срабатывала.
+case "$MODELD" in *"$SUB"*) _zte_sub=1 ;; *) _zte_sub=0 ;; esac
+if [ "$_zte_sub" = 1 ]; then
 MODELDCUT=$(echo $MODELD | awk -F 'CGMM |MODULE' '{print $2}'| xargs)
 MODEL="$MODELB "$MODELDCUT
 else
