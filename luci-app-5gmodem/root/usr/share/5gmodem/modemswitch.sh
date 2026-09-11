@@ -24,6 +24,7 @@ CFG=5gmodem
 [ -r "$RES/quirks.sh" ] && . "$RES/quirks.sh"
 
 . /usr/share/5gmodem/lib.sh   # secname / sec_for_iface / active_path
+. /usr/share/5gmodem/runtime-state.sh
 . /usr/share/5gmodem/atlock.sh   # at_lock/at_unlock - чтение IMEI не должно
                                  # сталкиваться с опросом метрик в том же порту
 

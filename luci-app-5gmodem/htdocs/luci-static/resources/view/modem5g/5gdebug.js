@@ -1379,7 +1379,7 @@ return view.extend({
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg, 'user' ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
@@ -1394,6 +1394,10 @@ return view.extend({
 					   и APN. uci-кэш вьюхи при этом устарел, но карточки читают
 					   состояние с роутера, поэтому показывают уже новое. */
 					if (profilesView) { profilesView.loadProfiles(); }
+					// All existence/protocol/APN fields were rendered from an old UCI snapshot.
+					window.setTimeout(function() { window.location.reload(); }, 1200);
+				} else if (out.result == 'busy') {
+					ui.addNotification(null, E('p', _('An interface operation is still running. Please wait and try again.')), 'info');
 				} else {
 					/* Причина отказа - в тексте, а не общее «модем не найден»:
 					   бэкенд пишет подробности в системный журнал, сюда даём

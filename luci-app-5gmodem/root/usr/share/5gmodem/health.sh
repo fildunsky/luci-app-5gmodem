@@ -28,6 +28,7 @@
 
 RES="/usr/share/5gmodem"
 . "$RES/lib.sh"
+. "$RES/runtime-state.sh"
 
 HDIR=/tmp/5gmodem_health
 CFG=5gmodem
@@ -652,11 +653,6 @@ HEAL_MAX=6
 # перезагрузки модуля - в полторы; берём с запасом, чтобы не влезть в них.
 GONE_HEAL_MIN=180
 
-# Сколько уважать ЛЕЖАЧИЙ интерфейс с autostart=false, не записанным в конфиг.
-# Ручная остановка из интерфейса столько не живёт, а незавершённый ifdown - живёт
-# вечно, и без этого срока модем из него не выбирается (см. лечение ниже).
-STUCK_DOWN_MIN=900
-
 # Потолок по умолчанию (опция не задана) - reboot: переподключение и
 # перезагрузка модуля обратимы и безопасны, а именно они закрывают главные
 # самолечимые классы (SIM illegal, залипший дозвон). Питание USB-порта -
@@ -902,44 +898,9 @@ heal() {
 			*) continue ;;
 		esac
 		[ "$H_HEAL" = "1" ] || continue
-		# ВЫКЛЮЧЕННЫЙ ИНТЕРФЕЙС НЕ ЛЕЧИМ - НО РАЗЛИЧАЕМ ВОЛЮ И АВАРИЮ.
-		#
-		# autostart=false бывает двух совершенно разных природ:
-		#   - воля человека, записанная в конфиг (auto='0' / disabled='1') -
-		#     её уважаем всегда, иначе выключенный модем не просто поднимут, а
-		#     дойдут до перезагрузки модуля;
-		#   - следствие ЧУЖОГО (и нашего же) незавершённого ifdown - состояние
-		#     временное, в конфиге его нет, и после перезагрузки роутера
-		#     интерфейс поднялся бы сам.
-		#
-		# Второе нельзя уважать вечно: первая ступень лестницы сама делает
-		# `ifdown` + `iface_up`, и если подъём не довёлся (модем в этот момент
-		# переэнумерировался), интерфейс остаётся опущенным - а дальше и
-		# лестница, и sessionwatch обходят его стороной как «выключенный
-		# намеренно». Модем висит вечно при исправном железе и готовой SIM:
-		# ровно это и случилось на стенде 05.08.2026 через час после включения
-		# лечения. Поэтому runtime-ifdown уважаем ограниченное время, а дальше
-		# считаем аварией и поднимаем.
-		_h_auto=$(printf '%s' "$_HDUMP" | jsonfilter \
-			-e "@.interface[@.interface=\"$_h_if\"].autostart" 2>/dev/null)
-		if [ "$_h_auto" = "false" ]; then
-			[ "$(uci -q get "network.$_h_if.auto")" = "0" ] && continue
-			[ "$(uci -q get "network.$_h_if.disabled")" = "1" ] && continue
-			# ОШИБКА ПРОТОКОЛА - ЭТО НЕ ВОЛЯ ЧЕЛОВЕКА, ЛЕЧИМ СРАЗУ.
-			#
-			# Сдавшись, протокол зовёт proto_block_restart, и netifd СНИМАЕТ
-			# autostart - внешне неотличимо от ручной остановки. Отличает их
-			# список errors: у ручного ifdown он пуст, а здесь лежит причина
-			# отказа (живой случай 05.08.2026, Quectel EP06: `{"subsystem":
-			# "qmi","code":"SIM_ILLEGAL_STATE"}` после самосброса модуля).
-			# Ждать выдержку в этом случае незачем - интерфейс уже мёртв, и
-			# сам netifd к нему больше не вернётся.
-			if [ -z "$(printf '%s' "$_HDUMP" | jsonfilter \
-				-e "@.interface[@.interface=\"$_h_if\"].errors[0].code" 2>/dev/null)" ]; then
-				case "$_h_since" in ''|*[!0-9]*) continue ;; esac
-				[ $(( $(uptime_s) - _h_since )) -ge "$STUCK_DOWN_MIN" ] || continue
-			fi
-		fi
+		# Administrative stops are not faults, regardless of how long they last.
+		case "$(iface_runtime_state "$_h_if")" in missing|disabled|stopped) continue ;; esac
+		# runtime-state leaves protocol-blocked failures eligible for recovery.
 		_h_sec=$(sec_for_iface_h "$_h_if") || continue
 		_h_cap=$(heal_cap "$(uci -q get "$CFG.$_h_sec.heal")")
 		[ "$_h_cap" -ge 1 ] || continue

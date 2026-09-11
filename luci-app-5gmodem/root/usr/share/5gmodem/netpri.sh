@@ -22,6 +22,17 @@ wan_nets() {
 
 . /usr/share/5gmodem/atlock.sh
 . /usr/share/5gmodem/lib.sh
+. /usr/share/5gmodem/runtime-state.sh
+
+_netpri_prepare() {
+	exec 9>/tmp/5gmodem-mkiface.lock
+	flock -n 9 || { echo '{"error":"interface operation in progress"}'; return 1; }
+	local iface
+	for iface in $(wan_nets); do
+		[ "$(ifup_state "$iface" '@.up')" = true ] || continue
+		firewall_sync_iface "$iface" || { echo '{"error":"firewall synchronization failed"}'; return 1; }
+	done
+}
 
 # СОСТОЯНИЕ ИНТЕРФЕЙСОВ - ОДНИМ ДАМПОМ НА ВЕСЬ ВЫЗОВ.
 #
@@ -920,8 +931,11 @@ _rerank_iface_routes() {   # $1 - l3_device, $2 - нужная метрика, $
 				_rr_pfx=${_rr_ln%% *}
 				# строку целиком переиспользуем как аргументы add, заменив метрику
 				_rr_new=$(printf '%s' "$_rr_ln" | sed "s/metric $_rr_cur/metric $2/")
-				ip "$_rr_fam" route add $_rr_new $_rr_a 2>/dev/null
-				ip "$_rr_fam" route del "$_rr_pfx" dev "$1" metric "$_rr_cur" $_rr_a 2>/dev/null
+				if ip "$_rr_fam" route add $_rr_new $_rr_a 2>/dev/null; then
+					ip "$_rr_fam" route del "$_rr_pfx" dev "$1" metric "$_rr_cur" $_rr_a 2>/dev/null
+				else
+					logger -t 5gmodem "netpri: preserving old subnet route after add failure on $1"
+				fi
 			done
 		done
 	done
@@ -1351,7 +1365,8 @@ set)
 		*" $CH "*) ;;
 		*) echo '{"error":"not a wan uplink"}'; exit 1 ;;
 	esac
-	note_foreign_uci network "netpri set"
+		note_foreign_uci network "netpri set"
+		_netpri_prepare || exit 1
 	CHANGED=0
 	# Метрики с шагом 10: остаётся место вставить линк между существующими без
 	# перенумерации остальных. БАЗА ПЕРЕКЛЮЧАЕМАЯ (issue #12): по умолчанию 100
@@ -1533,7 +1548,8 @@ order)
 	# перетаскивание = пользователь заново задал порядок: метки «оставлен в
 	# конце» от сторожа (failback=demote) больше не действуют
 	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
-	note_foreign_uci network "netpri order"
+		note_foreign_uci network "netpri order"
+		_netpri_prepare || exit 1
 	_rank=$(_metric_base)
 	# uci-метрики по рангу с шагом 10 от переключаемой базы (см. пояснение в
 	# set); интерфейсы вне переданного порядка - в хвост (метрики должны быть

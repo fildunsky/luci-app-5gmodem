@@ -257,6 +257,7 @@ RES="/usr/share/5gmodem"
 # пять раз в этом файле, а общая secname лежит именно здесь и до сих пор была
 # недоступна первым из этих мест. Файл без побочных эффектов - только определения.
 . "$RES/lib.sh"
+. "$RES/runtime-state.sh"
 
 # --- Кэш метрик: снимок для тех, кому не нужен свежий опрос -------------------
 #
@@ -1350,16 +1351,7 @@ fi
 
 # CREG
 eval $(echo "$O" | busybox awk -F[,] '/^\+CREG/ {gsub(/[[:space:]"]+/,"");printf "T=\"%d\";LAC_HEX=\"%X\";CID_HEX=\"%X\";LAC_DEC=\"%d\";CID_DEC=\"%d\";MODE_NUM=\"%d\"", $2, "0x"$3, "0x"$4, "0x"$3, "0x"$4, $5}')
-case "$T" in
-	0*) REG="0";;
-	1*) REG="1";;
-	2*) REG="2";;
-	3*) REG="3";;
-	5*) REG="5";;
-	6*) REG="6";;
-	7*) REG="7";;
-	*) REG="";;
-esac
+modem_registration "$O"
 
 # EPS/data registration (CEREG) overrides a "SMS only" CS status. Many LTE data
 # modems (e.g. Fibocom FM350-GL) register the CS/voice domain as "SMS only"
@@ -1373,21 +1365,7 @@ esac
 # SLM770A-R: AT+CUSD=? отвечает "(0-2)", а любой запрос молчит при CREG 2,6).
 # Без этого поля подсказка на вкладке USSD не смогла бы отличить «модем не
 # умеет» от «сеть сейчас не даёт».
-REG_CS="$REG"
-# НЕ ЗАРЕГИСТРИРОВАН В CS - ЕЩЁ НЕ «НЕ ЗАРЕГИСТРИРОВАН». У модулей только для
-# данных (LTE-only, без голоса) CS-домена нет вовсе: +CREG отвечает 0, поиск или
-# ERROR, а данные идут по EPS. Раньше подмена срабатывала лишь для «SMS only», и
-# такой модем числился незарегистрированным при живом соединении - а вместе с
-# этим профиль вендора пропускал весь блок сотовых метрик (он гейтится REGOK).
-case "$REG" in
-	0|2|3|4|6|7|'')
-	CEREG_STAT=$(echo "$O" | busybox awk -F[,] '/^\+CEREG/{gsub(/[[:space:]"]+/,"");print $2;exit}')
-	case "$CEREG_STAT" in
-		1) REG="1";;
-		5) REG="5";;
-	esac
-	;;
-esac
+# REG_CS and REG_DATA remain separate; modem_registration also preserves SIM errors.
 
 # MODE
 if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" == "x0" ]; then
@@ -1738,7 +1716,8 @@ emit_snapshot() {
 _snap_prepare
 _SN_CONNST=$(conn_status_line "$SEC")
 _SN_ALIAS=$(alias_for_path "$_POLL_AM")
-_SN_CPORT="${DEVICE:-$_CPORT_MM}"
+	_SN_CPORT="${DEVICE:-$_CPORT_MM}"
+	_SN_IFSTATE=$(iface_runtime_state "$SEC")
 [ "$IS_ROAMING" = 1 ] && _SN_ROAM10=1 || _SN_ROAM10=0
 # Страна-хвост в имени оператора избыточен ("MegaFon RUS" -> "MegaFon"): чистим
 # текущий и домашний перед выводом. Общая точка для AT и MM.
@@ -1761,13 +1740,17 @@ _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
 _sanv MAXDL MAXUL
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
-_sanv _SN_ALIAS _SN_CPORT BS_DIST
+	_sanv _SN_ALIAS _SN_CPORT BS_DIST
+	_sanv _SN_IFSTATE SIM_STATE REG_DATA
 cat <<EOF
 {
 "path":"${_J__POLL_AM}",
 "ipaddr":"${_J_IPADDR}",
 "ipaddr6":"${_J_IPADDR6}",
 "iface":"${_J_SEC}",
+"iface_state":"${_J__SN_IFSTATE}",
+"sim_state":"${_J_SIM_STATE}",
+"registration_data":"${_J_REG_DATA}",
 "conn_time":"${_J_CONN_TIME}",
 "conn_time_sec":"${_J_CT}",
 "conn_time_since":"${_J_CONN_TIME_SINCE}",
@@ -3430,4 +3413,3 @@ else
 	rm -f "$_TMP"
 fi
 exit 0
-

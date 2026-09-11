@@ -31,6 +31,7 @@ export SW_BG=1
 
 . "$RES/atlock.sh" 2>/dev/null
 . "$RES/lib.sh" 2>/dev/null   # active_path
+. "$RES/runtime-state.sh"
 
 _log() { logger -t 5gmodem "sessionwatch: $*"; }
 
@@ -257,14 +258,13 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 	# Поднимаем сами: только автозапускаемый интерфейс (намеренно опущенный
 	# автозапуск не имеет), только если устройство модема на месте, и не чаще
 	# кулдауна - тем же _revive, что и остальные случаи.
-	_sw_st=$(ifstatus "$_if" 2>/dev/null)
+		_sw_st=$(ifstatus "$_if" 2>/dev/null)
+		case "$(iface_runtime_state "$_if" "$_sw_st")" in missing|disabled|stopped) return 0 ;; esac
 	case "$_sw_st" in
 		*'"up": true'*) : ;;
 		*)
-			case "$_sw_st" in
-				*'"autostart": true'*) : ;;
-				*) return 0 ;;    # опущен намеренно - не трогаем
-			esac
+			# A protocol error can block autostart too; runtime-state distinguishes
+			# that from a deliberate ifdown or persistent auto=0/disabled=1.
 			# Модема на шине нет - поднимать нечего, этим занимается resolve.
 			[ -n "$_path" ] && [ -e "/sys/bus/usb/devices/$_path/idVendor" ] || return 0
 			# ЗАВИСШИЕ uqmi СНИМАЕМ ДО ВСЕГО ОСТАЛЬНОГО, включая проверку pending:
@@ -775,7 +775,10 @@ case "$1" in
 			if [ -n "$_REG_FLAT" ]; then
 				_sh_noreg=""
 				for _sh_p in $(printf '%s\n' "$_REG_FLAT" | awk 'NF{print $1}'); do
-					uci -q get "5gmodem.m_$(printf '%s' "$_sh_p" | sed 's/[^A-Za-z0-9]/_/g')" >/dev/null 2>&1 \
+					_sh_sec="m_$(printf '%s' "$_sh_p" | sed 's/[^A-Za-z0-9]/_/g')"
+					uci -q get "5gmodem.$_sh_sec" >/dev/null 2>&1 || { _sh_noreg=1; break; }
+					_sh_if=$(uci -q get "5gmodem.$_sh_sec.network")
+					[ -n "$_sh_if" ] && [ "$(uci -q get "network.$_sh_if")" = interface ] \
 						|| { _sh_noreg=1; break; }
 				done
 				if [ -n "$_sh_noreg" ]; then

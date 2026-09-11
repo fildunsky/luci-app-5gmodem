@@ -130,6 +130,12 @@ setup_one_modem() {
 	if [ -n "$_ex" ]; then
 		uci -q set "$CFG.$SEC.network=$_ex"
 		[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].network=$_ex"
+		case "$(iface_runtime_state "$_ex")" in
+			disabled|stopped)
+				uci -q commit "$CFG"
+				logger -t 5gmodem "autosetup: preserving administrative stop of $_ex"
+				return 0 ;;
+		esac
 		# Модем вернулся: снимаем «спящее» auto=0, выставленное при вытеснении, и
 		# переставляем штамп пути на ТЕКУЩИЙ разъём (IMEI остаётся прежним).
 		uci -q delete "network.$_ex.auto" 2>/dev/null

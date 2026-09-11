@@ -18,6 +18,7 @@
 # Runs as a small procd service (see /etc/init.d/5gmodem-mm-inhibit).
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+. /usr/share/5gmodem/runtime-state.sh
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -158,6 +159,7 @@ _mm_ifup_if_down() {
 	_sec="m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g')"
 	_mif=$(uci -q get "$CFG.$_sec.network"); [ -n "$_mif" ] || return 0
 	[ "$(uci -q get "network.$_mif.proto")" = modemmanager ] || return 0
+	case "$(iface_runtime_state "$_mif")" in missing|disabled|stopped|up|pending) return 0 ;; esac
 	ifstatus "$_mif" 2>/dev/null | grep -q '"up": true' && return 0   # уже поднят
 	# ГАРД от параллельных подъёмов + COOLDOWN: лок держится всё время попытки
 	# (ожидание MM + ifup + добор коннекта), чтобы НЕ дёргать ifup повторно, пока
@@ -176,6 +178,9 @@ _mm_ifup_if_down() {
 				[ "$(basename "$_jd" 2>/dev/null)" = "$_p" ] || continue
 				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
 				: > "$_lk"          # отметить старт попытки - от него считаем cooldown
+				case "$(iface_runtime_state "$_mif")" in
+					missing|disabled|stopped|up|pending) rm -f "$_lk"; exit 0 ;;
+				esac
 				ifup "$_mif"
 				# Не дёргаем повторно, пока идёт коннект: ждём up до 90с. Поднялся -
 				# готово; нет - отпускаем лок, следующий проход попробует заново.
@@ -454,11 +459,11 @@ mm_recover_missing() {
 				[ -n "$_sw_if" ] || _sw_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 				[ -n "$_sw_if" ] || continue
 				[ "$(uci -q get "network.$_sw_if.proto")" = "modemmanager" ] || continue
-				: > "$RUN/$_rb_key.qmiswitch" 2>/dev/null
 				logger -t 5gmodem "modem $_rp: MM never assembled it and the protocol is on auto - switching interface $_sw_if to proto $_sw_pro (cdc-wdm driver $_wdm_drv)"
 				# MKIFACE_AUTOFALLBACK: это ВЫНУЖДЕННЫЙ прото, а не выбор человека -
 				# в iface_proto его писать нельзя (см. mkiface.sh).
-				MKIFACE_AUTOFALLBACK=1 "$RES/mkiface.sh" "$_sw_if" "$_sw_pro" >/dev/null 2>&1
+				_sw_result=$(MKIFACE_AUTOFALLBACK=1 "$RES/mkiface.sh" "$_sw_if" "$_sw_pro" 2>/dev/null)
+				case "$_sw_result" in *'"result":"created"'*) : > "$RUN/$_rb_key.qmiswitch" ;; esac
 				continue
 			fi
 			# MM СЕЙЧАС ОПРАШИВАЕТ ПОРТЫ - НЕ МЕШАЕМ. На медленном модеме с
@@ -537,6 +542,7 @@ _restore_stolen() {
 		SEC="m_$(echo "$PATHID" | sed 's/[^A-Za-z0-9]/_/g')"
 		IF=$(uci -q get "$CFG.$SEC.network")
 		[ -n "$IF" ] || continue
+		case "$(iface_runtime_state "$IF")" in missing|disabled|stopped) continue ;; esac
 		# Правду о сессии знает МОДЕМ, а не netifd - см. пояснение выше.
 		# Спрашиваем ДВУМЯ независимыми способами, потому что ни один не
 		# самодостаточен:

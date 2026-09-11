@@ -38,6 +38,8 @@ ensure_iface() {
 	IF=$(uci -q get "$CFG.$SEC.network")
 	[ -n "$IF" ] || return 0
 	uci -q get "network.$IF" >/dev/null 2>&1 || return 0
+	# Do not undo a user's persistent disable or an explicit runtime ifdown.
+	case "$(iface_runtime_state "$IF")" in disabled|stopped) return 0 ;; esac
 
 	# ШТАМП ВЛАДЕЛЬЦА (network.<if>.modem_path, ставит mkiface.sh). Если интерфейс
 	# создан для ДРУГОГО модема - не трогаем его. Иначе мы бы своими руками
@@ -204,6 +206,7 @@ ensure_iface() {
 		fi
 		ifup "$IF" >/dev/null 2>&1
 	fi
+	firewall_sync_iface "$IF" || logger -t 5gmodem-resolve "Firewall synchronization failed for $IF"
 }
 
 # ИНТЕРФЕЙС-СИРОТА для модема $1: указывает на устройство ЭТОГО модема, но создан

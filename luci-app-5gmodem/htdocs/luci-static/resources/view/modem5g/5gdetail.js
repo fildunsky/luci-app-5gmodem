@@ -1624,6 +1624,12 @@ function connStageText(json) {
 	var tail = '';
 	var en = parseInt(json.usb_enum, 10);
 	if (en > 1) { tail = ' ' + _('(#%d)').format(en); }
+	if (json.sim_state == 'absent' || reg == 'SIM not inserted') { return _('SIM not inserted'); }
+	if (json.sim_state == 'pin' || reg == 'SIM PIN required') { return _('SIM PIN required'); }
+	if (json.sim_state == 'puk' || reg == 'SIM PUK required') { return _('SIM PUK required'); }
+	if (json.iface_state == 'missing') { return _('Modem interface is missing'); }
+	if (json.iface_state == 'disabled' || json.iface_state == 'stopped') { return _('Modem interface is stopped'); }
+	if (json.iface_state == 'failed') { return _('Modem interface failed to connect'); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
 	if (reg == '3') { return _('Registration denied'); }
 	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован

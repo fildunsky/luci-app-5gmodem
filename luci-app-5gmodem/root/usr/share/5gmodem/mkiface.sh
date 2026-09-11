@@ -51,6 +51,20 @@ APNARG="$3"
 # пути их не различить (интерфейс прежнего сносился при подмене). Реализация -
 # общая, в lib.sh (её же используют resolve/swap_cleanup).
 . /usr/share/5gmodem/lib.sh
+. /usr/share/5gmodem/runtime-state.sh
+# Serialize every creator, including fallback and the deferred start worker.
+# A busy reply is retryable, not a failed/partially committed creation.
+exec 9>/tmp/5gmodem-mkiface.lock
+flock -n 9 || { printf '{"result":"busy"}\n'; exit 0; }
+USER_REQUEST="$6"
+
+_mk_may_start() {
+	[ "$(uci -q get "network.$IF.proto")" = "$PROTO" ] || return 1
+	[ "$(uci -q get "network.$IF.device")" = "$IDEV" ] || return 1
+	iface_config_disabled "$IF" && return 1
+	case "$(iface_runtime_state "$IF")" in missing|disabled|stopped|up|pending) return 1 ;; esac
+	return 0
+}
 # ДОБАВИТЬ ИНТЕРФЕЙС В ЗОНУ wan - ЧЕРЕЗ ПОЛНУЮ ПЕРЕСБОРКУ СПИСКА.
 #
 # ЗАЧЕМ ТАК, А НЕ add_list. Список сетей зоны в /etc/config/firewall бывает ДВУХ
@@ -66,7 +80,7 @@ APNARG="$3"
 # разбираем по пробелам и пересобираем ЯВНЫМ списком. Заодно это чинит уже
 # испорченную зону и убирает дубликаты (старые версии добавляли интерфейс по
 # нескольку раз - он появлялся в «Приоритете интернета» четырежды).
-_fw_zone_add() {
+_fw_zone_add_config() {
 	_fz=$(uci show firewall 2>/dev/null \
 		| sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	[ -n "$_fz" ] && [ -n "$1" ] || return 0
@@ -110,6 +124,13 @@ _fw_zone_add() {
 	uci commit firewall
 }
 
+_fw_zone_add() {
+	_fw_zone_add_config "$1" && firewall_sync_iface "$1" && return 0
+	logger -t 5gmodem 'Interface configuration saved, but firewall synchronization failed'
+	json firewall_failed "${PROTO:-$FPROTO}" "${IDEV:-$FDEV}"
+	exit 1
+}
+
 stamp_iface() {
 	stamp_iface_owner "$1" "$2"
 }
@@ -119,11 +140,21 @@ stamp_iface() {
 # интернета» (база переключаемая, см. _metric_base в netpri.sh) - созданный
 # интерфейс никогда не перехватывает default-маршрут у соседей.
 _def_metric() {
+	local base
 	if [ "$(uci -q get 5gmodem.@5gmodem[0].mwan3_metrics)" = "1" ]; then
-		echo 20
+		base=20
 	else
-		echo 110
+		base=110
 	fi
+	# A deleted interface has no OLDMETRIC. A fixed 110 can collide with the
+	# remaining WAN (also 110 after it was ranked second), losing its fallback
+	# route during subsequent route updates. Put new interfaces after existing
+	# priorities; recreating an existing section still preserves its own metric.
+	uci -q show network | awk -F= -v base="$base" '
+		/\.metric=/ {
+			v=$2; gsub(/[^0-9]/,"",v);
+			if (v != "" && v+0 >= base && v+0 <= 4294967285) base=v+10;
+		} END { printf "%.0f\n", base }'
 }
 
 set_apn_opt() {
@@ -459,7 +490,9 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# uci). Безусловное metric=20 ниже сбрасывало порядок аплинков при каждом
 		# пересоздании интерфейса (смена SIM, hotplug, кнопка) - сохраняем, как APN.
 		OLDMETRIC=$(uci -q get "network.$IF.metric")
-		uci -q delete "network.$IF" 2>/dev/null
+		for _mk_opt in proto device ifname devpath pdptype iptype pdp auth allowedauth; do
+			uci -q delete "network.$IF.$_mk_opt" 2>/dev/null
+		done
 		uci set "network.$IF=interface"
 
 		# Default to the built-in 'fibocom' proto: stable, SMS-safe (does not
@@ -625,9 +658,12 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		if [ -n "$MSEC" ]; then
 			uci -q set "5gmodem.$MSEC.mm_exclude=1"
 			uci -q commit 5gmodem
-			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+			/usr/share/5gmodem/mm-inhibit.sh once 9>&- >/dev/null 2>&1 &
 		fi
-		ifup "$IF" >/dev/null 2>&1
+		ubus call network reload >/dev/null 2>&1 || { json network_failed "$FPROTO" "$FDEV"; exit 1; }
+		firewall_sync_iface "$IF" || { json firewall_failed "$FPROTO" "$FDEV"; exit 1; }
+		PROTO="$FPROTO"; IDEV="$FDEV"
+		_mk_may_start && ifup "$IF" >/dev/null 2>&1
 		json created "$FPROTO" "$FDEV"
 		exit 0
 	fi
@@ -666,13 +702,14 @@ case "$REQ" in
 		# интерфейс снова mbim, MM выключен apply_mm_state, метрики пустые -
 		# «Модем не подключен» при живом IP). iface_proto пишется в секцию при
 		# каждом ЯВНОМ выборе; swap_cleanup чистит его при смене железа в
-		# разъёме, так что чужому модему он не достанется.
-		_mki_saved=$(uci -q get "5gmodem.$MSEC.iface_proto" 2>/dev/null)
-		if [ -n "$_mki_saved" ] && [ "$_mki_saved" != "auto" ] \
-		   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
-			PROTO="$_mki_saved"
-			logger -t 5gmodem "mkiface: auto -> saved user choice ($_mki_saved)"
-		else
+			# разъёме, так что чужому модему он не достанется.
+			_mki_saved=$(uci -q get "5gmodem.$MSEC.iface_proto" 2>/dev/null)
+			[ "$USER_REQUEST" = user ] && _mki_saved=""
+			if [ -n "$_mki_saved" ] && [ "$_mki_saved" != "auto" ] \
+			   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
+				PROTO="$_mki_saved"
+				logger -t 5gmodem "mkiface: auto -> saved user choice ($_mki_saved)"
+			else
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
 			qmi_wwan) PROTO="qmi" ;;
@@ -922,7 +959,11 @@ OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 OLDMETRIC=$(uci -q get "network.$IF.metric")
 # DNS пользователя (если вписал руками) сохраняем через пересоздание, как apn.
 OLDDNS=$(uci -q get "network.$IF.dns")
-uci -q delete "network.$IF" 2>/dev/null
+# Preserve administrative state, MTU, tables, DNS lists and route policy.
+# Remove only transport-specific options that cannot be carried across protocols.
+for _mk_opt in proto device ifname devpath pdptype iptype pdp auth allowedauth; do
+	uci -q delete "network.$IF.$_mk_opt" 2>/dev/null
+done
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
 uci set "network.$IF.device=$IDEV"
@@ -967,7 +1008,7 @@ uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 # тумблером «Fallback DNS» на карточке модема (verb setopt dnsfb) и хранится прямо
 # в network.<iface>.dns - здесь мы лишь ПЕРЕНОСИМ его через пересоздание
 # интерфейса. По умолчанию фолбэк выключен, автоматически ничего не ставим.
-[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
+# Existing DNS options/lists remain intact above.
 uci commit network
 
 # ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.
@@ -980,7 +1021,7 @@ uci commit network
 # than max size 15» (для proto none поле device он разбирает как имя сетевухи
 # и режет по точке) - и модем «не заводился» до ручного вмешательства.
 # reload сам поднимает autostart-интерфейсы; ifup после него безвреден.
-ubus call network reload >/dev/null 2>&1
+# Applied below, after ownership and firewall membership are synchronized.
 
 # СОЗДАЛИ ИНТЕРФЕЙС НА НАШЕМ ШЕЛЛ-ПРОТО, А NETIFD ЕГО НЕ ЗНАЕТ - вот
 # ЕДИНСТВЕННЫЙ момент, когда рестарт сети оправдан: без него интерфейс мёртв
@@ -1139,8 +1180,11 @@ if [ -n "$MSEC" ]; then
 		[ -f "$_mki_ipf" ] && { kill "$(cat "$_mki_ipf" 2>/dev/null)" 2>/dev/null; rm -f "$_mki_ipf"; }
 	fi
 	# применить немедленно, не дожидаясь 15-секундного прохода демона
-	/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+	/usr/share/5gmodem/mm-inhibit.sh once 9>&- >/dev/null 2>&1 &
 fi
+
+ubus call network reload >/dev/null 2>&1 || { json network_failed "$PROTO" "$IDEV"; exit 1; }
+firewall_sync_iface "$IF" || { json firewall_failed "$PROTO" "$IDEV"; exit 1; }
 
 if [ "$PROTO" = "modemmanager" ]; then
 	# ifup ТОЛЬКО после того, как MM реально увидит модем. Сразу после
@@ -1157,7 +1201,7 @@ if [ "$PROTO" = "modemmanager" ]; then
 			mmcli -L 2>/dev/null | grep -q "/Modem/" && break
 			sleep 2; _n=$((_n + 2))
 		done
-		ifup "$IF"
+		_mk_may_start && ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
 elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 	# kernel-прото: сначала автоматически привести модем в рабочее состояние
@@ -1167,9 +1211,10 @@ elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 	# В ФОНЕ с отвязанными дескрипторами: подготовка может занять до ~2 минут
 	# (сброс + переэнумерация), а rpcd ждёт EOF и упал бы по таймауту (XHR error).
 	(
+		_mk_may_start || exit 0
 		kernel_proto_prepare "$IDEV" "$AMP" || logger -t 5gmodem-mkiface \
 			"kernel_proto_prepare failed for $IF ($PROTO) - bringing it up anyway"
-		ifup "$IF"
+		_mk_may_start && ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
 elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 	# ДОЗВОН ТОЛЬКО ПОСЛЕ РЕГИСТРАЦИИ В СЕТИ.
@@ -1208,10 +1253,10 @@ elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 			[ "$_xr_n" -ge 90 ] && logger -t 5gmodem-mkiface \
 				"$IF ($PROTO): регистрации нет за 90c - поднимаю интерфейс как есть"
 		fi
-		ifup "$IF"
+		_mk_may_start && ifup "$IF"
 	) >/dev/null 2>&1 </dev/null &
 else
-	ifup "$IF" >/dev/null 2>&1
+	_mk_may_start && ifup "$IF" >/dev/null 2>&1
 fi
 
 json created "$PROTO" "$IDEV"
