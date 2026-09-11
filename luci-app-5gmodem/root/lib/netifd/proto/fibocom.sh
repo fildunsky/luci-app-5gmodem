@@ -167,6 +167,117 @@ _fibocom_fwzone() {   # $1 = имя интерфейса
 	done
 }
 
+# --- MikroTik R11e-LTE (2cd2:0001, Marvell PXA1802) ----------------------------
+# Сессию данных эта карта поднимает НЕ через AT+CGACT. Рабочая схема - у mrhaav
+# (пакет atc-mik-r11e_lte, проверен на MikroTik wAP R), ей же следует RouterOS:
+# при выключенном радио записать APN в настройки сессии по умолчанию
+# (AT*CGDFLT), включить радио - сеть сама поднимет контекст при регистрации
+# (+CGEV: EPS PDN ACT, номер контекста свой, у RouterOS был 5). Адрес - из
+# +CGCONTRDP этого контекста, ставится на RNDIS-карту статикой, шлюз
+# вычисляется из самого адреса. Наш общий путь (CGDCONT=1 + CGACT=1,1 + ждать
+# адрес на контексте 1) у этой карты адреса не получает никогда.
+_r11e_at() {   # $1 - порт, $2 - команда
+	sms_tool -d "$1" at "$2" 2>/dev/null | tr -d '\r'
+}
+
+# Настройки сессии по умолчанию действуют ДО перезагрузки модема (режим 0 - без
+# записи в NV, как у mrhaav и RouterOS), поэтому повторяем их на каждом
+# появлении модема на шине: ключ - номер устройства USB и сами параметры.
+# Здесь же - привязка к соте: у R11e-LTE она тоже теряется при перезагрузке, и
+# лучшего момента, чем выключенное радио, для неё нет.
+_r11e_prepare() {   # $1 - порт, $2 - тип PDP, $3 - APN, $4 - интерфейс
+	local dev="$1" key mark a s cl o
+	key="$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)|$2|$3|$auth|$(printf '%s|%s' "$username" "$password" | md5sum | cut -c1-16)"
+	mark="/tmp/5gmodem_r11e_prep_$4"
+	[ "$(cat "$mark" 2>/dev/null)" = "$key" ] && return 0
+	case "$auth" in pap|both) a=1 ;; chap) a=2 ;; *) a=0 ;; esac
+	for s in $(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[0-9A-Za-z_]*\)\.network=.*/\1/p'); do
+		case "$s" in m_park_*) continue ;; esac
+		[ "$(uci -q get "5gmodem.$s.network")" = "$4" ] || continue
+		cl=$(uci -q get "5gmodem.$s.celllock"); break
+	done
+	echo "fibocom[$$] R11e-LTE: default bearer APN \"$3\" ($2) - radio off for the change"
+	_r11e_at "$dev" 'AT+CFUN=4' >/dev/null
+	o=$(_r11e_at "$dev" "AT*CGDFLT=0,\"$2\",\"$3\",,,,,,,,,,1,0,,,,,,,1")
+	case "$o" in *ERROR*) echo "fibocom[$$] R11e-LTE: AT*CGDFLT rejected: $(printf '%s' "$o" | tr '\n' ' ' | head -c 100)" ;; esac
+	_r11e_at "$dev" "AT*CGDFAUTH=0,$a,\"$username\",\"$password\"" >/dev/null
+	set -- $cl
+	case "$1" in
+		cell)  [ -n "$3" ] && _r11e_at "$dev" "AT*Cell=2,3,,$2,$3" >/dev/null && echo "fibocom[$$] R11e-LTE: cell lock re-applied ($2/$3)" ;;
+		arfcn) [ -n "$2" ] && _r11e_at "$dev" "AT*Cell=1,3,,$2" >/dev/null && echo "fibocom[$$] R11e-LTE: frequency lock re-applied ($2)" ;;
+	esac
+	_r11e_at "$dev" 'AT+CFUN=1' >/dev/null
+	printf '%s' "$key" > "$mark" 2>/dev/null
+	[ "$a" != 0 ] && cat "/sys/bus/usb/devices/$usbpath/devnum" > "/tmp/fibocom_authed_$interface" 2>/dev/null
+	R11E_CYCLED=1
+}
+
+# Активный контекст с данными. Их бывает несколько (IMS у части операторов),
+# поэтому берём тот, чей APN начинается с нашего (сеть дописывает к нему
+# .mncXXX.mccYYY.gprs), иначе первый не-IMS. Ждём до $3 секунд: после включения
+# радио регистрация и подъём сессии занимают десятки секунд.
+_r11e_cid() {   # $1 - порт, $2 - APN, $3 - секунд
+	local n=0 c a first
+	while :; do
+		first=""
+		for c in $(_r11e_at "$1" 'AT+CGACT?' | sed -n 's/^+CGACT: *\([0-9]*\), *1.*/\1/p'); do
+			a=$(_r11e_at "$1" "AT+CGCONTRDP=$c" | sed -n 's/^+CGCONTRDP: *[0-9]*, *[0-9]*, *"\([^"]*\)".*/\1/p' | head -1 | tr 'A-Z' 'a-z')
+			case "$a" in *ims*) continue ;; esac
+			[ -n "$2" ] && case "$a" in "$(echo "$2" | tr 'A-Z' 'a-z')"*) echo "$c"; return 0 ;; esac
+			[ -n "$first" ] || first="$c"
+		done
+		[ -n "$first" ] && { echo "$first"; return 0; }
+		[ "$n" -ge "$3" ] && return 1
+		sleep 3; n=$((n + 3))
+	done
+}
+
+# Разбор +CGCONTRDP в присваивания (только цифры и точки - безопасно для eval).
+# Формы у прошивок разные: «cid,bearer,apn,адрес» (лог RouterOS), по 3GPP
+# «...,адрес,шлюз,dns1,dns2», у mrhaav адрес - 4-е поле, DNS - 7-е и 8-е, то есть
+# между ними ещё маска и шлюз; адрес бывает и в форме «a.b.c.d.m.m.m.m». Поэтому
+# берём адрес, маску узнаём по «255.», а из оставшихся IPv4 три - это шлюз и два
+# DNS, меньше трёх - только DNS.
+# Маски нет - подсеть и шлюз считаем как mrhaav: наименьшая сеть от /30, где
+# адрес не первый и не последний, шлюз - её первый адрес (или второй, если
+# первый - это мы).
+_r11e_rdp() {   # $1 - строка +CGCONTRDP
+	printf '%s\n' "$1" | awk -F',' '
+		function ip4(v) { return v ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ }
+		{
+			for (i = 1; i <= NF; i++) gsub(/["[:space:]]/, "", $i)
+			a = $4; m = ""
+			if (split(a, o, ".") == 8) { a = o[1] "." o[2] "." o[3] "." o[4]; m = o[5] "." o[6] "." o[7] "." o[8] }
+			if (!ip4(a) || a == "0.0.0.0") exit
+			k = 0
+			for (i = 5; i <= NF; i++) {
+				if (!ip4($i) || $i == "0.0.0.0" || $i == a) continue
+				if ($i ~ /^255\./ && m == "") { m = $i; continue }
+				L[++k] = $i
+			}
+			g = ""; d1 = L[1]; d2 = L[2]
+			if (k >= 3) { g = L[1]; d1 = L[2]; d2 = L[3] }
+			split(a, q, "."); d = q[4] + 0
+			pfx = 0
+			if (m != "") {
+				split(m, mm, ".")
+				for (i = 1; i <= 4; i++) { v = mm[i] + 0; while (v > 0) { pfx += v % 2; v = int(v / 2) } }
+			}
+			if (pfx < 24 || pfx > 30) {
+				y = 4
+				while (y < 256 && (d % y == 0 || d % y == y - 1)) y *= 2
+				pfx = 32; t = y; while (t > 1) { pfx--; t /= 2 }
+			} else {
+				y = 1; for (i = pfx; i < 32; i++) y *= 2
+			}
+			if (g == "") {
+				base = d - d % y
+				g = q[1] "." q[2] "." q[3] "." ((d == base + 1) ? base + 2 : base + 1)
+			}
+			printf "r11e_ip=%s\nr11e_mask=%s\nr11e_gw=%s\nr11e_dns1=%s\nr11e_dns2=%s\n", a, pfx, g, d1, d2
+		}'
+}
+
 proto_fibocom_init_config() {
 	no_device=1
 	available=1
@@ -271,6 +382,8 @@ proto_fibocom_setup() {
 	# из xmm.sh (modemfeed), внешний пакет больше не обязателен.
 	local IS_XMM=0
 	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null)" = "8087" ] && IS_XMM=1
+	local IS_R11E=0
+	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "2cd2:0001" ] && IS_R11E=1
 
 	local dial="$atport"
 	if [ -z "$dial" ] && [ -n "$usbpath" ]; then
@@ -331,6 +444,8 @@ proto_fibocom_setup() {
 	# отсутствие сети. Сразу после включения модем честно ищет сеть десятки
 	# секунд, поэтому с первого ответа не сдаёмся, а ЖДЁМ - это заодно и есть
 	# пауза между попытками netifd, отдельный троттлинг не нужен.
+	R11E_CYCLED=""
+	[ "$IS_R11E" = 1 ] && _r11e_prepare "$dial" "$pdptype" "$apn" "$interface"
 	local _reg="" _rw=0 _kick=0
 	while :; do
 		_reg=$(_fibocom_reg "$dial")
@@ -421,7 +536,7 @@ proto_fibocom_setup() {
 		[ -n "$bpath" ] || bpath="$usbpath"
 		if [ -n "$bpath" ] && [ -n "$(uci -q get "$bsec.save_band")$(uci -q get "$bsec.save_band5gnsa")$(uci -q get "$bsec.save_band5gsa")" ]; then
 			BANDS_ACTIVE_MODEM="$bpath" /usr/share/5gmodem/bands.sh restorebands prepare
-			[ "$?" = "0" ] && bands_changed=1
+			[ "$?" = "0" ] && { bands_changed=1; R11E_CYCLED=1; }
 			# Мы применили/сверили сохранённые бенды ПРЯМО ЗДЕСЬ, до дозвона. Гасим
 			# восстановление на ifup (31-5gmodem-bands) его же маркером - иначе оно
 			# на поднявшемся интерфейсе сделало бы ВТОРОЙ реконнект (тот самый
@@ -490,7 +605,26 @@ proto_fibocom_setup() {
 				fi
 			fi ;;
 	esac
-	if [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
+	local r11e_cid="" r11e_ip="" r11e_mask="" r11e_gw="" r11e_dns1="" r11e_dns2=""
+	if [ "$IS_R11E" = 1 ]; then
+		# Новая сессия по запросу (сторож, смена сети, потеря авторизации):
+		# у этой карты её даёт только цикл радио - если его ещё не было.
+		if [ "$bands_changed" = 1 ] && [ "$R11E_CYCLED" != 1 ]; then
+			echo "fibocom[$$] R11e-LTE: new session requested - radio off and on"
+			_r11e_at "$dial" 'AT+CFUN=4' >/dev/null
+			sleep 2
+			_r11e_at "$dial" 'AT+CFUN=1' >/dev/null
+		fi
+		r11e_cid=$(_r11e_cid "$dial" "$apn" 90)
+		if [ -n "$r11e_cid" ]; then
+			eval "$(_r11e_rdp "$(_r11e_at "$dial" "AT+CGCONTRDP=$r11e_cid" | grep '+CGCONTRDP:' | head -1)")"
+			ip="$r11e_ip"
+			echo "fibocom[$$] R11e-LTE: context $r11e_cid, address ${ip:-none}/$r11e_mask via $r11e_gw"
+		else
+			echo "fibocom[$$] R11e-LTE: the network brought up no data context (AT+CGACT? has none active)"
+		fi
+	fi
+	if [ "$IS_R11E" != 1 ] && [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
 		# Переиспользуем живой контекст, ТОЛЬКО если он на нашем APN. FM350 сам
 		# активирует контекст 1 при загрузке/смене SIM с ТЕМ APN, что был прошит
 		# последним (напр. "internet.tele2.ru" от прежней eSIM). Если autoapn затем
@@ -539,7 +673,7 @@ proto_fibocom_setup() {
 	# IPv4 from CGPADDR, retrying a few times - right after a modem swap / USB
 	# re-enumeration the context needs a moment, and a single try would leave the
 	# interface down until netifd happens to retry.
-	if [ -z "$ip" ]; then
+	if [ -z "$ip" ] && [ "$IS_R11E" != 1 ]; then
 		ip=$(_fibocom_activate "$dial" "$pdptype" "$apn")
 		# PDP-TYPE FALLBACK. Some SIMs bring up the default bearer only under a
 		# specific PDP type. The fleet default IPV4 gets an IP at once, but Tele2 RU
@@ -558,23 +692,29 @@ proto_fibocom_setup() {
 	if [ -z "$ip" ]; then
 		_fib_unlock
 		proto_notify_error "$interface" NO_IP_ADDRESS
-		proto_block_restart "$interface"
+		# R11e-LTE регистрируется, а контекст сеть поднимает сама и не сразу -
+		# это ожидание, а не отказ: пусть netifd повторит. Цикла радио повтор не
+		# вызовет, настройки сессии помечены на это появление модема.
+		[ "$IS_R11E" = 1 ] || proto_block_restart "$interface"
 		return 1
 	fi
 
 	# gateway (field 5) and DNS (fields 6,7) from CGCONTRDP - gw is usually empty
 	# on cellular (point-to-point), in which case the default route is on-link.
 	local rdp gw dns1 dns2
-	rdp=$(sms_tool -d "$dial" at "AT+CGCONTRDP=1" 2>/dev/null | tr -d '\r' | grep '+CGCONTRDP:' | head -1)
+	rdp=$(sms_tool -d "$dial" at "AT+CGCONTRDP=${r11e_cid:-1}" 2>/dev/null | tr -d '\r' | grep '+CGCONTRDP:' | head -1)
 	gw=$(echo "$rdp"   | awk -F',' '{gsub(/"/,"",$5); print $5}')
 	dns1=$(echo "$rdp" | awk -F',' '{gsub(/"/,"",$6); print $6}')
 	dns2=$(echo "$rdp" | awk -F',' '{gsub(/"/,"",$7); print $7}')
+	if [ "$IS_R11E" = 1 ]; then
+		gw="$r11e_gw"; dns1="$r11e_dns1"; dns2="$r11e_dns2"
+	fi
 
 	# Фактический тип PDP ЖИВОГО контекста: после fallback IPV4V6<->IPV4 (см. выше)
 	# он мог отличаться от настроенного. По нему решаем, поднимать ли IPv6.
 	local ctx_pdp
 	ctx_pdp=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CGDCONT: *1,"\([^"]*\)".*/\1/p' | head -1)
+		| sed -n "s/^+CGDCONT: *${r11e_cid:-1},\"\([^\"]*\)\".*/\1/p" | head -1)
 
 	ip link set "$netdev" up 2>/dev/null
 	if [ "$IS_XMM" = 1 ]; then
@@ -591,7 +731,7 @@ proto_fibocom_setup() {
 	fi
 
 	proto_init_update "$netdev" 1
-	proto_add_ipv4_address "$ip" "255.255.255.0"
+	proto_add_ipv4_address "$ip" "${r11e_mask:-255.255.255.0}"
 	case "$gw" in
 		""|"0.0.0.0") proto_add_ipv4_route "0.0.0.0" "0" ;;   # on-link default
 		*)            proto_add_ipv4_route "0.0.0.0" "0" "$gw" ;;

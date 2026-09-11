@@ -1,88 +1,145 @@
-# Mikrotik R11e-LTE6
+# MikroTik R11e-LTE - 2cd2:0001 (Marvell PXA1802), miniPCIe, LTE Cat 4.
+#
+# ПОРТЫ. ttyACM0 - двоичный журнал прошивки: AT в него перезагружает модем, и
+# драйвер от него отвязан (см. noatports.sh). Опрос идёт через ttyACM1.
+#
+# ОТКУДА КОМАНДЫ. Модема в руках не было. Набор - Marvell/ASR: руководство Luat
+# на ASR1802 (преемник PXA1802), логи RouterOS с этой картой, профиль MIKROTIK
+# из modemfeed (luci-app-modeminfo) под этот же идентификатор. Прежний профиль из
+# 3ginfo-lite слал сюда +ZPAS/+ZCELLINFO/+ZCAINFO - это набор R11e-LTE6 (ASR,
+# 2cd2:0004), у PXA1802 его нет.
+#
+# УРОВНИ - ПО +CESQ: стандарт 3GPP, шкала известна точно. Сота, частота, полоса,
+# SINR и уровни по антеннам - из инженерного режима (+EEMOPT=1, затем
+# +EEMGINFO? отдаёт строку +EEMLTESVC). Раскладка этой строки у прошивок Marvell
+# РАЗНАЯ: по руководству за полосой идёт идентификатор соты
+#   <mcc>,<длина mnc>,<mnc>,<tac>,<pci>,<dl earfcn>,<ul earfcn>,<band>,<полоса>,<ci>,<rsrp>,<rsrq>,<sinr>,<rsrp осн>,<rsrp разн>,<rsrq осн>,<rsrq разн>,...
+# а у R11l-LTE7 его нет вовсе («659,2,65,6,235,400,18400,1,20,43,10,-4,...»).
+# Различаем по полю за полосой: номер соты - число большое, индекс RSRP не
+# больше 97. Уровни в этой строке бывают и индексами 3GPP, и готовыми дБм - знак
+# их различает однозначно: индекс неотрицателен, дБм отрицательны.
+[ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
 
-if [ "$REGOK" = "1" ]; then
+_mt_at() {
+	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r'
+}
 
-O=$(sms_tool -d $DEVICE at "at+cesq;+zcainfo?;+zpas?;+zcellinfo?")
-T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $2}' | xargs)
-if [ -n "$T" ]; then
-	[ "$T" != "99" ] && RSSI="$((T - 111))"
+_mt_rsrp() {   # индекс 0..97 или дБм -> дБм
+	case "$1" in ''|*[!0-9-]*) return ;; esac
+	awk -v v="$1" 'BEGIN { v += 0; if (v >= 0 && v <= 97) v -= 141; if (v >= -141 && v <= -44) printf "%d", v }'
+}
+
+_mt_rsrq() {   # индекс 0..34 или дБ -> дБ
+	case "$1" in ''|*[!0-9-]*) return ;; esac
+	awk -v v="$1" 'BEGIN { v += 0; if (v >= 0 && v <= 34) v = v * 0.5 - 20; if (v >= -30 && v < 0) printf "%g", v }'
+}
+
+# --- Уровни: +CESQ -----------------------------------------------------------
+_MT_P=""; _MT_Q=""
+eval "$(_mt_at 'AT+CESQ' | awk -F'[:,]' '
+	/^\+CESQ:/ {
+		for (i = 2; i <= 7; i++) { v[i] = $i; gsub(/[^0-9]/, "", v[i]) }
+		if (v[7] != "" && v[7] + 0 <= 97) printf "_MT_P=%s\n", v[7]
+		if (v[6] != "" && v[6] + 0 <= 34) printf "_MT_Q=%s\n", v[6]
+		exit
+	}')"
+_MT_V=$(_mt_rsrp "$_MT_P"); [ -n "$_MT_V" ] && RSRP="$_MT_V"
+_MT_V=$(_mt_rsrq "$_MT_Q"); [ -n "$_MT_V" ] && RSRQ="$_MT_V"
+
+# --- Инженерный режим --------------------------------------------------------
+# Режим запроса (+EEMOPT=1) живёт до перезагрузки модема: включаем один раз на
+# каждое его появление на шине (номер устройства USB меняется при каждой
+# переэнумерации), а не на каждом опросе.
+_MT_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
+_MT_DN=""
+[ -n "$_POLL_AM" ] && _MT_DN=$(cat "/sys/bus/usb/devices/$_POLL_AM/devnum" 2>/dev/null)
+if [ "$(cat "/tmp/5gmodem_r11e_eem_$_MT_KEY" 2>/dev/null)" != "${_MT_DN:-x}" ]; then
+	_mt_at 'AT+EEMOPT=1' >/dev/null
+	printf '%s' "${_MT_DN:-x}" > "/tmp/5gmodem_r11e_eem_$_MT_KEY" 2>/dev/null
 fi
-T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $4}' | xargs)
-#if [ -n "$T" ]; then
-#	[ "$T" != "255" ] && addon 35 "RSCP" "$((T - 121)) dBm"
-#fi
-T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $5}' | xargs)
-#if [ -n "$T" ]; then
-#	if [ "$T" != "255" ]; then
-#		T=$(echo "$T" | awk '{printf "%.1f", -1 * (24.5 - $1 * 0.5)}')
-#		addon 36 "ECIO" "$T dB"
-#	fi
-#fi
-T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $7}' | xargs)
-if [ -n "$T" ]; then
-	[ "$T" != "255" ] && RSRP="$((T - 141))"
-fi
-T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $6}' | xargs)
-if [ -n "$T" ]; then
-	if [ "$T" != "255" ]; then
-		T=$(echo "$T" | awk '{printf "%.1f", -1 * (20 - $1 * 0.5)}')
-		RSRQ="$T"
-	fi
-fi
 
-T=$(echo "$O" | awk -F[,:] '/^\+ZPAS/ {print $2}' | xargs)
-[ -n "$T" ] && MODE=$T
+_MT_TAC=""; _MT_PCI=""; _MT_E=""; _MT_B=""; _MT_BW=""; _MT_CI=""
+_MT_ERP=""; _MT_ERQ=""; _MT_SNR=""; _MT_MRP=""; _MT_DRP=""; _MT_MRQ=""; _MT_DRQ=""
+eval "$(_mt_at 'AT+EEMGINFO?' | awk -F',' '
+	function n(x) { gsub(/[^0-9-]/, "", x); return x }
+	/^\+EEMLTESVC:/ {
+		sub(/^\+EEMLTESVC:[[:space:]]*/, "")
+		if (NF < 12) exit
+		for (i = 1; i <= NF; i++) f[i] = n($i)
+		o = (f[10] + 0 > 97) ? 1 : 0
+		printf "_MT_TAC=%s\n_MT_PCI=%s\n_MT_E=%s\n_MT_B=%s\n_MT_BW=%s\n", f[4], f[5], f[6], f[8], f[9]
+		if (o) printf "_MT_CI=%s\n", f[10]
+		printf "_MT_ERP=%s\n_MT_ERQ=%s\n_MT_SNR=%s\n", f[10 + o], f[11 + o], f[12 + o]
+		if (o) printf "_MT_MRP=%s\n_MT_DRP=%s\n_MT_MRQ=%s\n_MT_DRQ=%s\n", f[14], f[15], f[16], f[17]
+		exit
+	}')"
 
-case "$MODE_NUM" in
-	7*)
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCELLINFO/ {print $4}' | xargs)
-		MODE="$MODE $(band4g ${T/LTE B/})"
-		PBAND="$(band4g ${T/LTE B/})"
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCELLINFO/ {print $3}' | xargs)
-		PCI="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCELLINFO/ {print $5}' | xargs)
-		EARFCN="$T"
-		;;
-	9*)
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCELLINFO/ {print $4}' | xargs)
-		MODE="$MODE $(band4g ${T/LTE B/})"
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			PBAND="$(band4g ${T/LTE B/})"
-		fi
-
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCAINFO: /{print $6}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			DBW="$T MHz"
-			PBAND="$PBAND @$DBW"
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCAINFO: /{print $2}' | xargs)
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			PCI="$T"
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+ZCAINFO: /{print $5}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			EARFCN="$T"
-		fi
-
-		T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO: /{print $13}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			MODE="$MODE / $(band4g ${T})"
-			S1BAND="$(band4g ${T})"
-		fi
-		T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO: /{print $15}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			S1DBW="$T MHz"
-			S1BAND="$S1BAND @$S1DBW"
-		fi
-		T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO: /{print $11}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			S1PCI="$T"
-		fi
-		T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO: /{print $14}')
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			S1EARFCN="$T"
-		fi
-		;;
+[ -z "$RSRP" ] && RSRP=$(_mt_rsrp "$_MT_ERP")
+[ -z "$RSRQ" ] && RSRQ=$(_mt_rsrq "$_MT_ERQ")
+# SINR: в руководстве просто «sinr», без шкалы; у R11l-LTE7 рядом с RSRQ -15 дБ
+# стоит -4 - это правдоподобно как дБ. Сверить с живым ответом этой карты.
+case "$_MT_SNR" in
+	''|*[!0-9-]*) ;;
+	*) [ "$_MT_SNR" -ge -20 ] && [ "$_MT_SNR" -le 50 ] && SINR="$_MT_SNR" ;;
 esac
 
+# Уровни по антеннам модуля: основная и разнесённая. Только в раскладке из
+# руководства - где они лежат у варианта без номера соты, неизвестно.
+if [ -z "$ANTPORTS" ]; then
+	_MT_A0=$(_mt_rsrp "$_MT_MRP"); _MT_A1=$(_mt_rsrp "$_MT_DRP")
+	[ -n "$_MT_A0" ] && ANTPORTS="0:$_MT_A0:$(_mt_rsrq "$_MT_MRQ")"
+	[ -n "$_MT_A1" ] && ANTPORTS="$ANTPORTS${ANTPORTS:+ }1:$_MT_A1:$(_mt_rsrq "$_MT_DRQ")"
+	[ -n "$_MT_A0" ] && [ -n "$_MT_A1" ] && RXDIV="2rx"
+fi
+
+case "$_MT_PCI" in ''|*[!0-9]*) _MT_PCI="" ;; *) [ "$_MT_PCI" -le 503 ] || _MT_PCI="" ;; esac
+case "$_MT_E" in ''|0|*[!0-9]*) _MT_E="" ;; esac
+# Полоса: 10/15/20 - это мегагерцы, 0/1/2/4 - индекс 3GPP (1.4/3/5/15 МГц). 3 и
+# 5 одинаково читаются в обеих шкалах - такую ширину не показываем.
+case "$_MT_BW" in
+	10|15|20) ;;
+	0) _MT_BW=1.4 ;; 1) _MT_BW=3 ;; 2) _MT_BW=5 ;; 4) _MT_BW=15 ;;
+	*) _MT_BW="" ;;
+esac
+if [ -n "$_MT_E" ]; then
+	EARFCN="$_MT_E"
+	[ -n "$_MT_PCI" ] && PCI="$_MT_PCI"
+	_MT_BAND=$(earfcn2band "$_MT_E")
+	[ -n "$_MT_BAND" ] || case "$_MT_B" in [1-9]|[1-8][0-9]) _MT_BAND="$_MT_B" ;; esac
+	if [ -n "$_MT_BAND" ]; then
+		PBAND="$(band4g "$_MT_BAND")${_MT_BW:+ @$_MT_BW MHz}"
+		# Cat 4: агрегации у модуля нет, несущая всегда одна.
+		MODE="LTE | $(band4g "$_MT_BAND")"
+	fi
+	[ -n "$_MT_BW" ] && BANDWIDTH="$_MT_BW"
+fi
+case "$T_DEC" in
+	''|0|-) case "$_MT_TAC" in ''|0|*[!0-9]*) ;; *) T_DEC="$_MT_TAC"; T_HEX=$(printf '%X' "$_MT_TAC" 2>/dev/null) ;; esac ;;
+esac
+case "$CID_DEC" in
+	''|0|-) case "$_MT_CI" in ''|0|*[!0-9]*) ;; *) CID_DEC="$_MT_CI"; CID_HEX=$(printf '%X' "$_MT_CI" 2>/dev/null) ;; esac ;;
+esac
+
+# --- Кто это и какая прошивка ------------------------------------------------
+# «+CGMR: "MikroTik_CP_2.160.000_v020"» - подпись и кавычки не данные.
+_mt_val() {
+	printf '%s\n' "$1" | awk '
+		/^AT/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ sub(/^\+[A-Z]+:[[:space:]]*/, ""); gsub(/"/, ""); gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print; exit }'
+}
+_MT_V=$(_mt_val "$(_mt_at 'AT+CGMR')")
+[ -n "$_MT_V" ] && FW="$_MT_V"
+_MT_M=$(_mt_val "$(_mt_at 'AT+CGMM')")
+[ -n "$_MT_M" ] && MODEL=$(printf '%s %s' "$(_mt_val "$(_mt_at 'AT+CGMI')")" "$_MT_M" | xargs)
+
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _mt_if in "/sys/bus/usb/devices/$_POLL_AM":*; do
+		[ -e "$_mt_if/driver" ] || continue
+		case "$(readlink -f "$_mt_if/driver" 2>/dev/null)" in
+			*/rndis_host) PROTO="rndis"; break ;;
+			*/cdc_ether)  PROTO="ecm";   break ;;
+		esac
+	done
 fi

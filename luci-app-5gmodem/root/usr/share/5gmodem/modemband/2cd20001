@@ -1,0 +1,137 @@
+# MikroTik R11e-LTE - 2cd2:0001 (Marvell PXA1802).
+#
+# ДИАПАЗОНЫ И РЕЖИМ СЕТИ - ОДНОЙ КОМАНДОЙ:
+#   AT*BAND=<режим>,<GSM>,<UMTS>,<LTE TDD>,<LTE FDD>,<роуминг>,<домен>,<приоритет>
+# Маски - десятичные числа: в FDD-маске бит N-1 = бенд N, в TDD-маске бит N-33 =
+# бенд N (руководство Luat на ASR1802). Раскладка сверена с живой картой: RouterOS
+# шлёт ей «AT*BAND=15,78,147,160,524487,0,2,0», и 524487 = B1,2,3,7,8,20,
+# 160 = B38,40 - ровно паспортный набор R11e-LTE (ветка OpenWrt про LtAP mini).
+#
+# ЗАПИСЬ - ПРИ ВЫКЛЮЧЕННОМ РАДИО, КАК У RouterOS: он шлёт *BAND между CFUN=4 и
+# CFUN=1. Сессия данных при этом рвётся - каркас переподнимает интерфейс
+# (reconnect).
+#
+# ПРИВЯЗКА К СОТЕ: AT*Cell=<режим>,<сеть>,<бенд>,<частота>,<PCI> (режим 1 -
+# частота, 2 - сота, сеть 3 - LTE, бенд пустой - как в документации MikroTik).
+# У R11e-LTE привязка НЕ ПЕРЕЖИВАЕТ перезагрузку модема - прото дозвона
+# переприменяет запомненную (см. fibocom.sh, _r11e_prepare).
+_DEVICE=""
+_BANDS_APPLY_LIVE=reconnect
+_CELLLOCK_WRITEONLY=1
+_R11E_BANDS="1 2 3 7 8 20 38 40"
+
+getinfo() {
+	echo "MikroTik R11e-LTE"
+}
+
+_r11e_at() {
+	sms_tool -d $_DEVICE at "$1" 2>/dev/null | tr -d '\r'
+}
+
+# Текущие параметры *BAND одной строкой через запятую, без пробелов и подписи.
+_r11e_band() {
+	_r11e_at 'AT*BAND?' | sed -n 's/^\*BAND[[:space:]]*:[[:space:]]*//p' | head -1 | tr -d ' "' \
+		| awk -F',' 'NF >= 5 { for (i = 1; i <= NF; i++) if ($i !~ /^[0-9]+$/) exit; print }'
+}
+
+getsupportedbands() {
+	echo "$_R11E_BANDS"
+}
+
+getbands() {
+	_r11e_band | awk -F',' '{
+		h = $4 + 0; l = $5 + 0; s = ""
+		for (b = 1; b <= 32; b++) { if (l % 2 == 1) s = s (s == "" ? "" : " ") b; l = int(l / 2) }
+		for (b = 33; b <= 64; b++) { if (h % 2 == 1) s = s (s == "" ? "" : " ") b; h = int(h / 2) }
+		print s
+	}'
+}
+
+# $1 - режим, $2 - бенды через пробел. Остальные поля берём у модема как есть:
+# роуминг и домен услуг - не наша забота.
+_r11e_write() {
+	_rw_cur=$(_r11e_band)
+	[ -n "$_rw_cur" ] || _rw_cur="15,78,147,160,524487,2,4,0"
+	_rw_cmd=$(printf '%s\n' "$_rw_cur" | awk -F',' -v m="$1" -v bl="$2" '{
+		h = 0; l = 0
+		n = split(bl, b, " ")
+		for (i = 1; i <= n; i++) {
+			v = 1
+			if (b[i] >= 1 && b[i] <= 32) { for (j = 1; j < b[i]; j++) v *= 2; l += v }
+			else if (b[i] >= 33 && b[i] <= 64) { for (j = 33; j < b[i]; j++) v *= 2; h += v }
+		}
+		r = ($6 == "") ? 2 : $6; d = ($7 == "") ? 4 : $7; p = ($8 == "") ? 0 : $8
+		printf "AT*BAND=%s,%s,%s,%.0f,%.0f,%s,%s,%s", m, $2, $3, h, l, r, d, p
+	}')
+	_r11e_at 'AT+CFUN=4' >/dev/null
+	_rw_out=$(_r11e_at "$_rw_cmd")
+	_r11e_at 'AT+CFUN=1' >/dev/null
+	case "$_rw_out" in
+		*ERROR*)
+			logger -t 5gmodem "bands: R11e-LTE rejected $_rw_cmd: $(printf '%s' "$_rw_out" | tr '\n' ' ' | head -c 120)"
+			return 1 ;;
+	esac
+	return 0
+}
+
+setbands() {
+	if [ "$1" = "default" ]; then
+		_sb_want="$_R11E_BANDS"
+	else
+		_sb_want=""
+		for _sb_b in $1; do
+			case " $_R11E_BANDS " in *" $_sb_b "*) _sb_want="$_sb_want${_sb_want:+ }$_sb_b" ;; esac
+		done
+	fi
+	[ -n "$_sb_want" ] || return 1
+	[ "$(getbands)" = "$_sb_want" ] && return 0
+	_sb_mode=$(_r11e_band | cut -d, -f1)
+	_r11e_write "${_sb_mode:-15}" "$_sb_want"
+}
+
+getsupportedmodes() {
+	echo "15:Auto 5:4G 11:3G+4G 1:3G"
+}
+
+getmode() {
+	_r11e_band | cut -d, -f1
+}
+
+setmode() {
+	case "$1" in 1|5|11|15) ;; *) return 1 ;; esac
+	_sm_b=$(getbands)
+	_r11e_write "$1" "${_sm_b:-$_R11E_BANDS}"
+}
+
+# Ответ на AT*Cell? в документации - «*Cell: <режим>,<сеть>,<бенд>,<частота>,<соты>».
+# Не разобрали - говорим «off»: каркас покажет запомненную привязку и оставит
+# кнопку снятия (_CELLLOCK_WRITEONLY).
+getcelllock() {
+	_r11e_at 'AT*Cell?' | sed -n 's/^\*[Cc][Ee][Ll][Ll][[:space:]]*:[[:space:]]*//p' | head -1 | tr -d ' "' \
+		| awk -F',' '
+			$1 == 1 && $4 ~ /^[0-9]+$/ { print "arfcn " $4; exit }
+			$1 == 2 && $4 ~ /^[0-9]+$/ && $5 ~ /^[0-9]+$/ { print "cell " $4 " " $5; exit }
+			{ print "off"; exit }
+			END { if (NR == 0) print "off" }'
+}
+
+setcelllock() {
+	case "$1" in
+		off)   _sc_cmd='AT*Cell=0' ;;
+		arfcn) case "$2" in ''|*[!0-9]*) return 1 ;; esac
+		       _sc_cmd="AT*Cell=1,3,,$2" ;;
+		cell)  case "$2$3" in ''|*[!0-9]*) return 1 ;; esac
+		       [ -n "$3" ] || return 1
+		       _sc_cmd="AT*Cell=2,3,,$2,$3" ;;
+		*) return 1 ;;
+	esac
+	_r11e_at 'AT+CFUN=4' >/dev/null
+	_sc_out=$(_r11e_at "$_sc_cmd")
+	_r11e_at 'AT+CFUN=1' >/dev/null
+	case "$_sc_out" in
+		*ERROR*)
+			logger -t 5gmodem "celllock: R11e-LTE rejected $_sc_cmd: $(printf '%s' "$_sc_out" | tr '\n' ' ' | head -c 120)"
+			return 1 ;;
+	esac
+	return 0
+}
