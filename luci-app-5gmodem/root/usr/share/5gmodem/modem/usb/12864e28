@@ -157,6 +157,20 @@ _ASR_V=$(_asr_at "AT*READVER" | sed -n 's/^release_version[[:space:]]*:[[:space:
 _ASR_MA=$(_asr_first "$(_asr_at "AT+CGMI")")
 _ASR_MB=$(_asr_first "$(_asr_at "AT+CGMM")")
 [ -n "$_ASR_MB" ] && MODEL=$(printf '%s %s' "$_ASR_MA" "$_ASR_MB" | xargs)
+# ИМЯ ИЗ ВЕРСИИ ПРОШИВКИ. Сам модуль представляется безлико - «+CGMI: "Marvell"»,
+# «+CGMM: "LINUX"» (живой Yota C300-1, 11.09.2026), а оператор и модель зашиты
+# в release_version: «P29M29HYOTA_C300-1_SC62_CP_V002».
+case "$_ASR_MA $_ASR_MB" in
+	*[Mm]arvell*|*LINUX*)
+		_ASR_OP=$(printf '%s' "$FW" | grep -oE 'YOTA|MEGAFON|NOTION|MTS|BEELINE' | head -1)
+		_ASR_MD=$(printf '%s' "$FW" | grep -oE '[CR][0-9]{3}(-[0-9])?' | head -1)
+		case "$_ASR_OP" in
+			YOTA) _ASR_OP="Yota" ;; MEGAFON) _ASR_OP="MegaFon" ;; NOTION) _ASR_OP="Notion" ;;
+			MTS) _ASR_OP="MTS" ;; BEELINE) _ASR_OP="Beeline" ;;
+		esac
+		[ -n "$_ASR_MD" ] && MODEL=$(printf '%s %s' "$_ASR_OP" "$_ASR_MD" | xargs)
+		;;
+esac
 
 # IMEI: запас на *MRD_IMEI? - когда AT+GSN молчит. В исходном профиле проверка
 # стояла как `[ -z "NR_I" ]` (строка, а не переменная), и запас не срабатывал

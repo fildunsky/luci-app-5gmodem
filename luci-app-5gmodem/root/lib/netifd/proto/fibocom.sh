@@ -180,6 +180,26 @@ _r11e_at() {   # $1 - порт, $2 - команда
 	sms_tool -d "$1" at "$2" 2>/dev/null | tr -d '\r'
 }
 
+# ГОТОВНОСТЬ ПРОШИВКИ - ПРЕЖДЕ ВСЕГО. Порт появляется раньше, чем модем
+# начинает отвечать, и mrhaav ничего не шлёт, пока AT+CMEE=2 не ответит OK
+# (крутит её в цикле). Мы же выключали радио через секунду после появления
+# порта, не спросив, жив ли модем. Проба ограничена по времени (atprobe.sh, до
+# 2 c): голый sms_tool на молчащем порту висит десятки секунд.
+_r11e_ready() {   # $1 - порт
+	local n=0
+	sleep 1
+	while [ "$n" -lt 30 ]; do
+		if /usr/share/5gmodem/atprobe.sh "$1"; then
+			case "$(_r11e_at "$1" 'AT+CMEE=2')" in
+				*ERROR*) ;;
+				*) return 0 ;;
+			esac
+		fi
+		sleep 1; n=$((n + 1))
+	done
+	return 1
+}
+
 # Настройки сессии по умолчанию действуют ДО перезагрузки модема (режим 0 - без
 # записи в NV, как у mrhaav и RouterOS), поэтому повторяем их на каждом
 # появлении модема на шине: ключ - номер устройства USB и сами параметры.
@@ -190,6 +210,10 @@ _r11e_prepare() {   # $1 - порт, $2 - тип PDP, $3 - APN, $4 - интер�
 	key="$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)|$2|$3|$auth|$(printf '%s|%s' "$username" "$password" | md5sum | cut -c1-16)"
 	mark="/tmp/5gmodem_r11e_prep_$4"
 	[ "$(cat "$mark" 2>/dev/null)" = "$key" ] && return 0
+	if ! _r11e_ready "$dev"; then
+		echo "fibocom[$$] R11e-LTE: $dev does not answer AT - default bearer not configured"
+		return 1
+	fi
 	case "$auth" in pap|both) a=1 ;; chap) a=2 ;; *) a=0 ;; esac
 	for s in $(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[0-9A-Za-z_]*\)\.network=.*/\1/p'); do
 		case "$s" in m_park_*) continue ;; esac

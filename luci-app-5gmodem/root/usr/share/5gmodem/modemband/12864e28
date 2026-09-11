@@ -19,6 +19,17 @@ getinfo() {
 
 . $RES/_zte_common
 
+# Ответ «+ZNLOCKBAND: 40,480000» (живой Yota C300-1, 11.09.2026): первое поле -
+# маска LTE, 0x40 = B7, ровно на нём модем и сидел. Что во втором поле, не
+# знаем - не читаем его. Строку берём по подписи: эхо команды и коды ошибок в
+# разбор не попадают.
+getbands() {
+	HEX=$(sms_tool -d $_DEVICE at "at+znlockband?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+ZNLOCKBAND:[[:space:]]*\([0-9A-Fa-f]*\).*/\1/p' | head -1)
+	[ -n "$HEX" ] || return 0
+	hextobands "0x$HEX"
+}
+
 getsupportedbands() {
 	_zb_mem=""
 	[ -n "$_bs_sec" ] && _zb_mem=$(uci -q get "5gmodem.$_bs_sec.band_full")
