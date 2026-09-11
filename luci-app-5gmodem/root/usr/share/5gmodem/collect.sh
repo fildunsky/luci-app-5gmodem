@@ -2091,6 +2091,8 @@ report() {
 		[ -n "$DSK" ] && echo "  $DSK -> skipped: the xmm/atc dialer owns this port (it carries data)"
 		for t in $(/usr/share/5gmodem/listmodems.sh 2>/dev/null | jsonfilter -e "@[@.path=\"$P\"].tty[*]" 2>/dev/null); do
 			[ -n "$DSK" ] && [ "$t" = "$DSK" ] && continue
+			. /usr/share/5gmodem/noatports.sh
+			tty_no_at "$t" && { echo "  $t -> skipped: a service port, AT resets this modem"; continue; }
 			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done
 			R=$(sms_tool -d "$t" at "AT+CCHO=\"$AID\"" 2>/dev/null | tr -d "\r" | grep -v "^$" | grep -vi "^at+ccho" | head -1)
 			case "$R" in

@@ -33,6 +33,8 @@ MODE="$2"
 # (ttyUSB/ttyACM/cdc-wdm/smd) - ВСЕГДА символьное устройство, поэтому `-c`
 # отсекает фантом: DEVICE становится пустым, и карточка честно показывает пропажу.
 [ -n "$D" ] && [ -c "$D" ] || exit 1
+. /usr/share/5gmodem/noatports.sh
+tty_no_at "$D" && exit 1
 
 CMD="AT"
 [ "$MODE" = "model" ] && CMD="AT+CGMM"

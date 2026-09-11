@@ -18,9 +18,14 @@ start() {
 		# отрабатывает - а вот у самого usbmode свой сканер шины на старте есть.
 		# То есть «config 0» модему выставят, а снять правило будет некому:
 		# HP lt4120 после каждой перезагрузки оставался без единого интерфейса.
+		# Служебные порты, роняющие модем от AT (noatports.sh), - первым делом:
+		# событие bind для модема, воткнутого до загрузки, в хотплаг не приходит.
+		. /usr/share/5gmodem/noatports.sh
+		noat_unbind
 		/usr/share/5gmodem/usbmode-fix.sh
 		_i=1
 		while [ "$_i" -le 6 ]; do
+			noat_unbind
 			/usr/share/5gmodem/usbports.sh coldplug
 			sleep 5
 			_i=$((_i + 1))

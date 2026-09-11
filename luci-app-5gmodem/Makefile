@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.4.64
+PKG_VERSION:=2.4.65
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -47,6 +47,7 @@ define Package/luci-app-5gmodem/postinst
 chmod +x "$${IPKG_INSTROOT}"/usr/share/5gmodem/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/lib/netifd/proto/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/usb/71-5gmodem-resolve 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/tty/05-5gmodem-noat 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/uci-defaults/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-leds 2>/dev/null

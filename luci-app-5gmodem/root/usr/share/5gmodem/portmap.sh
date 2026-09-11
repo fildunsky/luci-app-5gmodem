@@ -28,6 +28,7 @@
 RES=/usr/share/5gmodem
 [ -r "$RES/atlock.sh" ] && . "$RES/atlock.sh"
 [ -r "$RES/lib.sh" ] && . "$RES/lib.sh"   # at_query: очередь + таймаут
+. "$RES/noatports.sh"
 
 _pm_imei() {   # $1 - tty; печатает IMEI либо пусто
 	command -v at_lock >/dev/null 2>&1 && { at_lock "$1" 5 2>/dev/null || return 1; }
@@ -78,6 +79,7 @@ for _pm_d in /sys/bus/usb/devices/*; do
 	_pm_imei_dev=""
 	_pm_tried=0
 	for _pm_t in $_pm_ttys; do
+		tty_no_at "$_pm_t" && continue
 		[ "$_pm_tried" -ge 2 ] && break
 		_pm_tried=$((_pm_tried + 1))
 		_pm_r=$(_pm_imei "/dev/$_pm_t") || continue

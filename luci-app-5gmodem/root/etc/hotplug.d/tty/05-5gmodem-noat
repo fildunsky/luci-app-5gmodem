@@ -1,0 +1,9 @@
+#!/bin/sh
+# Служебный порт, который перезагружает модем от любого AT (см. noatports.sh),
+# отвязываем от драйвера в момент появления его узла: раньше, чем до него
+# доберётся хоть одна проба портов - наша или посторонняя.
+[ "$ACTION" = add ] || exit 0
+case "$DEVNAME" in ttyACM*|ttyUSB*) ;; *) exit 0 ;; esac
+[ -r /usr/share/5gmodem/noatports.sh ] || exit 0
+. /usr/share/5gmodem/noatports.sh
+noat_unbind_iface "/sys${DEVPATH%/tty/*}"

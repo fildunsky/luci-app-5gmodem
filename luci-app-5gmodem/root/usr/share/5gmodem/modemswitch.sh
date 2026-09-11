@@ -98,6 +98,8 @@ modem_vidpid() {
 # take half a minute (the UI "Switching…" spinner hung). Run it in the
 # background and kill it if it does not answer quickly.
 at_probe() {
+	. "$RES/noatports.sh"
+	tty_no_at "$1" && return 1
 	# 8>&- 9>&- обязательны: вызывающий может держать at_lock (fd 8) и замок
 	# хотплага (fd 9) - фоновый sms_tool унаследовал бы их OFD и держал локи
 	# дольше владельца (ревью, баг №6; тот же класс, что в atprobe.sh/lib.sh).

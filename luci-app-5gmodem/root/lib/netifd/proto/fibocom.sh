@@ -56,10 +56,12 @@ _fibocom_netdev() {
 # был в portmap.sh - оттуда и берём.
 _fibocom_atport() {
 	local p="$1" avoid="$2" t tt fallback=""
+	. /usr/share/5gmodem/noatports.sh
 	for t in /sys/bus/usb/devices/$p:*/ttyUSB* /sys/bus/usb/devices/$p:*/tty/ttyUSB* \
 	         /sys/bus/usb/devices/$p:*/ttyACM* /sys/bus/usb/devices/$p:*/tty/ttyACM*; do
 		[ -e "$t" ] || continue
 		tt="/dev/$(basename "$t")"
+		tty_no_at "$tt" && continue
 		sms_tool -d "$tt" at "AT" >/dev/null 2>&1 || continue
 		if [ "$tt" = "$avoid" ]; then
 			[ -z "$fallback" ] && fallback="$tt"
