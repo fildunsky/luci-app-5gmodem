@@ -1328,23 +1328,38 @@ else
 	esac
 fi
 
+# Состояние SIM держим ОТДЕЛЬНО от REG: разбор +CREG ниже переиспользует $T и
+# безусловно перетирал REG, поэтому строки «SIM not inserted» и прочие до
+# карточки не доезжали никогда.
+SIM_STATE=""
 T=$(echo "$O" | awk -F[,\ ] '/^\+CPIN:/ {print $0;exit}' | xargs)
 if [ -n "$T" ]; then
-	[ "$T" == "+CPIN: READY" ] || REG=$(echo "$T" | cut -f2 -d: | xargs)
+	# PIN2/PUK2 - код второго уровня (FDN, тарификация); данные он не блокирует,
+	# а прежний разбор выдавал его как «требуется PIN».
+	case "$T" in
+		"+CPIN: READY"|*PIN2*|*PUK2*) : ;;
+		*) SIM_STATE=$(echo "$T" | cut -f2 -d: | xargs);;
+	esac
 fi
 
 T=$(echo "$O" | awk -F[,\ ] '/^\+CME ERROR:/ {print $0;exit}')
 if [ -n "$T" ]; then
-	case "$T" in
-		"+CME ERROR: 10"*) REG="SIM not inserted";;
-		"+CME ERROR: 11"*) REG="SIM PIN required";;
-		"+CME ERROR: 12"*) REG="SIM PUK required";;
-		"+CME ERROR: 13"*) REG="SIM failure";;
-		"+CME ERROR: 14"*) REG="SIM busy";;
-		"+CME ERROR: 15"*) REG="SIM wrong";;
-		"+CME ERROR: 17"*) REG="SIM PIN2 required";;
-		"+CME ERROR: 18"*) REG="SIM PUK2 required";;
-		*) REG=$(echo "$T" | cut -f2 -d: | xargs);;
+	# Код выкусываем целиком, а не префиксом: «+CME ERROR: 100» (unknown
+	# command - обычное дело внутри длинной склейки) попадал под шаблон "10"* и
+	# модем числился «без SIM»; так же врали 107/112/132/148. Числовой код не из
+	# списка - это не про SIM, и показывать голую цифру вместо статуса незачем;
+	# словесную форму (CMEE=2) по-прежнему выводим как есть.
+	CME_CODE=$(printf '%s' "$T" | sed -n 's/^+CME ERROR:[[:space:]]*\([0-9][0-9]*\).*/\1/p')
+	case "$CME_CODE" in
+		10) SIM_STATE="SIM not inserted";;
+		11) SIM_STATE="SIM PIN required";;
+		12) SIM_STATE="SIM PUK required";;
+		13) SIM_STATE="SIM failure";;
+		14) SIM_STATE="SIM busy";;
+		15) SIM_STATE="SIM wrong";;
+		17) SIM_STATE="SIM PIN2 required";;
+		18) SIM_STATE="SIM PUK2 required";;
+		"") SIM_STATE=$(echo "$T" | cut -f2 -d: | xargs);;
 	esac
 fi
 
@@ -1388,6 +1403,11 @@ case "$REG" in
 	esac
 	;;
 esac
+
+# Ни CS, ни EPS статуса не дали - вот теперь показываем состояние SIM. Именно
+# ЗДЕСЬ, а не выше: непустой REG закрыл бы дорогу CEREG-фолбэку, и модем с
+# любой ошибкой CME в склейке терял живую EPS-регистрацию, а с ней и метрики.
+[ -n "$REG" ] || REG="$SIM_STATE"
 
 # MODE
 if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" == "x0" ]; then

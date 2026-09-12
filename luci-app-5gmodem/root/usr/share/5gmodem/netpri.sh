@@ -787,8 +787,9 @@ label_for() {
 # в каждом жила своя копия ~50 строк, и правки v6-логики приходилось дублировать).
 #
 # Добавить default-маршрут интерфейса $1 с метрикой $2 (v4+v6). БЕЗ удаления -
-# удаляем всё заранее (_del_all_default). Шлюз берём у netifd (авторитетно), а НЕ
-# из живой таблицы: у не-primary интерфейса default-маршрута может не быть.
+# старое убирает _rerank_default_route, уже после добавления. Шлюз берём у netifd
+# (авторитетно), а НЕ из живой таблицы: у не-primary интерфейса default-маршрута
+# может не быть.
 # 0.0.0.0/:: = честный on-link (у сотовых point-to-point шлюза нет). У интерфейса
 # с адресом /32 (Wi-Fi client, сотовый) шлюз не on-link - сперва прямой маршрут
 # до самого шлюза (как netifd).
@@ -859,31 +860,125 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	[ -n "$_gw6" ] && [ "$_gw6" != "::" ] && \
 		route_add_default -6 "$_dev" "$2" "$_gw6" "$_ta6"
 }
+# Таблицы, в которых живут маршруты сети: main плюс своя ip4table/ip6table
+# интерфейса (см. _add_default_route); у v6 таблица бывает и у спутника
+# ("<имя>6"/"<имя>_6"). main отдаём именем: аргумент `table` для неё не нужен.
+_route_tables() {   # $1 - семейство (-4/-6), $2 - имя сети
+	if [ "$1" = "-4" ]; then
+		_rt_l="$(uci -q get "network.$2.ip4table" 2>/dev/null)"
+	else
+		_rt_l="$(uci -q get "network.$2.ip6table" 2>/dev/null) $(uci -q get "network.${2}6.ip6table" 2>/dev/null) $(uci -q get "network.${2}_6.ip6table" 2>/dev/null)"
+	fi
+	_rt_o="main"
+	for _rt_t in $_rt_l; do
+		case " $_rt_o " in *" $_rt_t "*) continue ;; esac
+		_rt_o="$_rt_o $_rt_t"
+	done
+	echo "$_rt_o"
+}
+
+# Метрики default-маршрутов устройства в одной семье, по строке (0 - маршрут без
+# поля metric).
+_default_metrics() {   # $1 - семейство, $2 - l3_device, $3 - список таблиц
+	for _dm_t in $3; do
+		_dm_a=""; [ "$_dm_t" = "main" ] || _dm_a="table $_dm_t"
+		ip "$1" route show default $_dm_a 2>/dev/null | grep -E "^default" \
+			| grep -E " dev $2( |$)" \
+			| sed -e 's/.* metric \([0-9][0-9]*\).*/\1/' -e t -e 's/.*/0/'
+	done
+}
+
 # `ip route del default dev X` удаляет РОВНО ОДИН маршрут за вызов. Если на
 # устройстве их несколько (разные метрики, формы via и on-link сосуществуют),
-# один вызов сносит первый, а мы тут же добавляем новый - остаток копится с
-# каждым переключением (наблюдалось вживую: шесть default-маршрутов вместо двух).
-# Поэтому удаляем В ЦИКЛЕ, пока есть что удалять; потолок - страховка от вечного
-# цикла.
-_del_all_default() {   # $1 - l3_device, $2 - имя сети (для своих таблиц)
-	# Метём и main, и свою таблицу интерфейса (ip4table/ip6table, см.
-	# _add_default_route); у v6 таблица бывает и у спутника ("<имя>6"/"<имя>_6").
-	_dd_seen=""
-	for _dd_t in "" "$(uci -q get "network.$2.ip4table" 2>/dev/null)"; do
-		case " $_dd_seen " in *" ${_dd_t:-main} "*) continue ;; esac
-		_dd_seen="$_dd_seen ${_dd_t:-main}"
-		_dd_a=""; [ -n "$_dd_t" ] && _dd_a="table $_dd_t"
-		_i=0; while [ "$_i" -lt 16 ]; do ip -4 route del default dev "$1" $_dd_a 2>/dev/null || break; _i=$((_i + 1)); done
+# один вызов сносит первый, а остаток копится с каждым переключением
+# (наблюдалось вживую: шесть default-маршрутов вместо двух). Поэтому сносим
+# ПОИМЁННО - по списку того, что реально лежит на устройстве.
+_del_default_family() {   # $1 - семейство, $2 - l3_device, $3 - таблицы, $4 - метрика, которую оставить
+	for _dd_t in $3; do
+		_dd_a=""; [ "$_dd_t" = "main" ] || _dd_a="table $_dd_t"
+		ip "$1" route show default $_dd_a 2>/dev/null | grep -E "^default" \
+			| grep -E " dev $2( |$)" | while read -r _dd_ln; do
+			_dd_m=0
+			case "$_dd_ln" in *" metric "*) _dd_m=${_dd_ln##* metric }; _dd_m=${_dd_m%% *} ;; esac
+			[ "$_dd_m" = "$4" ] && continue
+			if [ "$_dd_m" = "0" ]; then
+				ip "$1" route del default dev "$2" $_dd_a 2>/dev/null
+			else
+				ip "$1" route del default dev "$2" metric "$_dd_m" $_dd_a 2>/dev/null
+			fi
+		done
 	done
-	_dd_seen=""
-	for _dd_t in "" "$(uci -q get "network.$2.ip6table" 2>/dev/null)" \
-			"$(uci -q get "network.${2}6.ip6table" 2>/dev/null)" \
-			"$(uci -q get "network.${2}_6.ip6table" 2>/dev/null)"; do
-		case " $_dd_seen " in *" ${_dd_t:-main} "*) continue ;; esac
-		_dd_seen="$_dd_seen ${_dd_t:-main}"
-		_dd_a=""; [ -n "$_dd_t" ] && _dd_a="table $_dd_t"
-		_i=0; while [ "$_i" -lt 16 ]; do ip -6 route del default dev "$1" $_dd_a 2>/dev/null || break; _i=$((_i + 1)); done
+}
+
+_has_metric() {   # $1 - семейство, $2 - l3_device, $3 - таблицы, $4 - метрика; 0 = маршрут есть
+	case " $(_default_metrics "$1" "$2" "$3" | tr '\n' ' ')" in *" $4 "*) return 0 ;; esac
+	return 1
+}
+
+_new_metric() {   # $1 - семейство, $2 - l3_device, $3 - таблицы, $4 - метрики до добавления; пусто = не добавилось
+	for _nm_m in $(_default_metrics "$1" "$2" "$3"); do
+		case "$4" in *" $_nm_m "*) continue ;; esac
+		echo "$_nm_m"; return 0
 	done
+}
+
+_free_metric() {   # $1 - семейство, $2 - метрика, $3 - своё устройство, $4 - таблицы, $5 - управляемые устройства
+	_fm_r=1   # 0 - освободили, 2 - нельзя (последний default), 1 - нечего
+	for _fm_t in $4; do
+		_fm_a=""; [ "$_fm_t" = "main" ] || _fm_a="table $_fm_t"
+		_fm_all=$(ip "$1" route show default $_fm_a 2>/dev/null | grep -E "^default")
+		_fm_ln=$(printf '%s\n' "$_fm_all" | grep -E " metric $2( |$)" | head -1)
+		[ -n "$_fm_ln" ] || continue
+		_fm_d=${_fm_ln##* dev }; _fm_d=${_fm_d%% *}
+		[ "$_fm_d" = "$3" ] && continue
+		case " $5 " in *" $_fm_d "*) ;; *) continue ;; esac
+		# ПОСЛЕДНИЙ default в таблице не снимаем: свой поставим следом, но между
+		# двумя командами роутер остался бы вовсе без пути наружу
+		if [ "$(printf '%s\n' "$_fm_all" | grep -c "^default")" -lt 2 ]; then
+			_fm_r=2; continue
+		fi
+		ip "$1" route del default dev "$_fm_d" metric "$2" $_fm_a 2>/dev/null && _fm_r=0
+	done
+	return "$_fm_r"
+}
+
+# СПЕРВА ДОБАВИТЬ, ПОТОМ УДАЛИТЬ. Между del и add роутер остаётся вовсе без
+# default-маршрута, и оборванный ровно тут вызов уносит связь до следующего
+# события netifd. Нужную метрику мог занять соседний управляемый аплинк - её
+# освобождаем, но последний default в таблице не снимаем; если из-за этого
+# метрика осталась занятой, первый заход берёт любую свободную, и на втором уже
+# есть чем дышать. Итог проверяем по факту, а не по коду возврата: add на уже
+# существующем маршруте отвечает "File exists", и это успех; маршрута с нужной
+# метрикой не нашли - старый не трогаем и отвечаем ошибкой.
+_rerank_default_route() {   # $1 - сеть, $2 - метрика, $3 - l3_device, $4 - управляемые устройства
+	_rd_t4=$(_route_tables -4 "$1")
+	_rd_t6=$(_route_tables -6 "$1")
+	_rd_s4=" $(_default_metrics -4 "$3" "$_rd_t4" | tr '\n' ' ')"
+	_rd_s6=" $(_default_metrics -6 "$3" "$_rd_t6" | tr '\n' ' ')"
+	_rd_try=0
+	while [ "$_rd_try" -lt 2 ]; do
+		_rd_try=$((_rd_try + 1))
+		_rd_b4=" $(_default_metrics -4 "$3" "$_rd_t4" | tr '\n' ' ')"
+		_rd_b6=" $(_default_metrics -6 "$3" "$_rd_t6" | tr '\n' ' ')"
+		_rd_f4=1; case "$_rd_b4" in *" $2 "*) ;; *) _free_metric -4 "$2" "$3" "$_rd_t4" "$4"; _rd_f4=$? ;; esac
+		_rd_f6=1; case "$_rd_b6" in *" $2 "*) ;; *) _free_metric -6 "$2" "$3" "$_rd_t6" "$4"; _rd_f6=$? ;; esac
+		case "$_rd_b4" in
+			*" $2 "*) case "$_rd_b6" in " "|*" $2 "*) break ;; esac ;;
+		esac
+		_add_default_route "$1" "$2"
+		_has_metric -4 "$3" "$_rd_t4" "$2" && break
+		_has_metric -6 "$3" "$_rd_t6" "$2" && break
+		# второй заход - ровно для случая «освободить метрику было нечем»:
+		# теперь свой маршрут есть, снять чужой уже можно
+		[ "$_rd_f4" = "2" ] || [ "$_rd_f6" = "2" ] || break
+	done
+	_rd_rc=1
+	_rd_k4="$2"; _has_metric -4 "$3" "$_rd_t4" "$2" || _rd_k4=$(_new_metric -4 "$3" "$_rd_t4" "$_rd_s4")
+	_rd_k6="$2"; _has_metric -6 "$3" "$_rd_t6" "$2" || _rd_k6=$(_new_metric -6 "$3" "$_rd_t6" "$_rd_s6")
+	[ -n "$_rd_k4" ] && { _del_default_family -4 "$3" "$_rd_t4" "$_rd_k4"; _rd_rc=0; }
+	[ -n "$_rd_k6" ] && { _del_default_family -6 "$3" "$_rd_t6" "$_rd_k6"; _rd_rc=0; }
+	[ "$_rd_rc" = "0" ] || logger -t 5gmodem "netpri: $1 ($3) keeps its old default route - adding one with metric $2 failed"
+	return "$_rd_rc"
 }
 
 # ПЕРЕСТАВИТЬ МЕТРИКУ У НЕ-default МАРШРУТОВ ИНТЕРФЕЙСА (issue #12, доп. от
@@ -921,6 +1016,8 @@ _rerank_iface_routes() {   # $1 - l3_device, $2 - нужная метрика, $
 				# строку целиком переиспользуем как аргументы add, заменив метрику
 				_rr_new=$(printf '%s' "$_rr_ln" | sed "s/metric $_rr_cur/metric $2/")
 				ip "$_rr_fam" route add $_rr_new $_rr_a 2>/dev/null
+				ip "$_rr_fam" route show $_rr_a 2>/dev/null | grep -E "^$_rr_pfx( |$)" \
+					| grep -E " dev $1( |$)" | grep -qE " metric $2( |$)" || continue
 				ip "$_rr_fam" route del "$_rr_pfx" dev "$1" metric "$_rr_cur" $_rr_a 2>/dev/null
 			done
 		done
@@ -1383,19 +1480,22 @@ set)
 	# default-маршрута, чистая операция таблицы маршрутизации. Меняем её напрямую
 	# через `ip route`, не трогая netifd и, главное, PDP-сессию модема - никакого
 	# передозвона и моргания IP. Метрика входит в идентичность маршрута, поэтому
-	# «сменить метрику» = удалить старый default через этот dev и добавить с новой
-	# (via сохраняем, если шлюз есть; у сотовых он часто on-link). Делаем и для
-	# IPv4, и для IPv6. netifd при своём следующем событии переустановит маршруты
-	# уже из обновлённого uci - итог совпадёт.
-	# СНОСИМ все default-маршруты управляемых интерфейсов, ПОТОМ добавляем с
-	# УНИКАЛЬНЫМИ метриками. Иначе два default с ОДИНАКОВОЙ метрикой конфликтуют в
-	# ядре ("RTNETLINK: File exists") - именно поэтому «переставить метрику» в лоб
-	# не срабатывало. chosen=1, остальные 20,21,22... (метрика default-маршрута
-	# должна быть уникальной). Сами функции - общие с `order`, см. над case.
+	# «сменить метрику» = добавить default через этот dev с новой метрикой и убрать
+	# старый (via сохраняем, если шлюз есть; у сотовых он часто on-link). Делаем и
+	# для IPv4, и для IPv6. netifd при своём следующем событии переустановит
+	# маршруты уже из обновлённого uci - итог совпадёт.
+	# Метрики УНИКАЛЬНЫ: два default с ОДИНАКОВОЙ метрикой конфликтуют в ядре
+	# ("RTNETLINK: File exists") - именно поэтому «переставить метрику» в лоб не
+	# срабатывало. chosen=1, остальные 20,21,22... Переставляет их
+	# _rerank_default_route (добавить-потом-удалить); список управляемых устройств
+	# нужен ему, чтобы освободить метрику, занятую соседним аплинком. Сами функции -
+	# общие с `order`, см. над case.
+	_devs=""
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
-		_del_all_default "$_d" "$n"
+		case " $_devs " in *" $_d "*) continue ;; esac
+		_devs="$_devs $_d"
 	done
 	# ОДИН default-маршрут НА УСТРОЙСТВО. IPv6-спутник (`<имя>6`) - это ОТДЕЛЬНАЯ
 	# сеть на ТОМ ЖЕ l3_device, и раньше цикл добавлял ей собственный маршрут:
@@ -1409,7 +1509,7 @@ set)
 		_dv=$(ifup_state "$1" '@["l3_device"]'); [ -n "$_dv" ] || return 1
 		case " $_seen " in *" $_dv "*) return 1 ;; esac
 		_seen="$_seen $_dv"
-		_add_default_route "$1" "$2"
+		_rerank_default_route "$1" "$2" "$_dv" "$_devs"
 		# и подсеточные маршруты этого интерфейса - на ту же метрику (issue #12)
 		_rerank_iface_routes "$_dv" "$2" "$1"
 		return 0
@@ -1548,10 +1648,12 @@ order)
 	done
 	uci -q commit network
 	# живое переустановление default-маршрутов - общие функции, см. над case
+	_devs=""
 	for n in $(wan_nets); do
 		[ -n "$n" ] || continue
 		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
-		_del_all_default "$_d" "$n"
+		case " $_devs " in *" $_d "*) continue ;; esac
+		_devs="$_devs $_d"
 	done
 	# Один маршрут на устройство (IPv6-спутник делит l3_device - не дублируем).
 	_seen=""; _rank=$(_metric_base)
@@ -1562,7 +1664,7 @@ order)
 		_dv=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_dv" ] || continue
 		case " $_seen " in *" $_dv "*) continue ;; esac
 		_seen="$_seen $_dv"
-		_add_default_route "$n" "$_rank"
+		_rerank_default_route "$n" "$_rank" "$_dv" "$_devs"
 		# подсеточные маршруты интерфейса - на ту же метрику (issue #12)
 		_rerank_iface_routes "$_dv" "$_rank" "$n"
 		_rank=$((_rank + 10))
