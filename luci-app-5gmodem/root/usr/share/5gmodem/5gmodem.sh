@@ -2657,6 +2657,14 @@ _qmi_supplement() {
 		IFS='|'
 		for _qs_cc in $_qs_ca; do
 			_qs_b="${_qs_cc%%,*}"; _qs_c="${_qs_cc#*,}"
+			# ДИАПАЗОН - ПО КАНАЛУ, А НЕ ПО ПОЛЮ LTE Band. У Foxconn T77W968 /
+			# Dell DW5821e прошивка отдаёт в nas-get-lte-cphy-ca-info номер на
+			# единицу больше: канал 1348 подписан eutran-4, 300 - eutran-2, 6300 -
+			# eutran-21 (форум 4pda, тема DW5821e; живые жалобы на B4/B2 при
+			# CA_INFO B3+B1 после 2.5.0, когда под MM карточку стал заполнять QMI).
+			# EARFCN однозначен по 3GPP 36.101, поле прошивки - запасной вариант.
+			_qs_eb=$(earfcn2band "$_qs_c")
+			[ -n "$_qs_eb" ] && _qs_b="$_qs_eb"
 			[ -n "$_qs_b" ] || continue
 			if [ "$_qs_i" = 0 ]; then
 				case "$PBAND" in ''|-) PBAND="B$_qs_b" ;; esac
@@ -2750,6 +2758,8 @@ _qmi_supplement() {
 	if [ -s "$_QS_P.lte" ]; then
 		_QS_L=$(cat "$_QS_P.lte")
 		_l_band=${_QS_L%%|*}; _l_earfcn=${_QS_L##*|}
+		_l_eb=$(earfcn2band "$_l_earfcn")
+		[ -n "$_l_eb" ] && _l_band="$_l_eb"
 		case "$PBAND" in ''|-)
 			[ -n "$_l_band" ] && PBAND=$(band4g "$_l_band")
 			;;
