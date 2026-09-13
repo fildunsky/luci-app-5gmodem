@@ -90,6 +90,7 @@ I do not own these. Their owners sent logs and AT output, and the fixes shipped:
 - Quectel RM520N-GL — model and firmware strings
 - Foxconn T99W373 — carrier aggregation in 5G NSA
 - NTmore NTLM-500 (Altair ALT3800, from the Skylink H1 home router) — signal, serving and neighbour cells, per-antenna levels, temperature, TX power, path loss, band selection
+- Tri Cascade VOS 5G / SG500M2-X (Compal RXM-G1, USB 05c6:9091, ModemManager over QMI) — recognised by model, so the interface is built on `proto=modemmanager` instead of the `uqmi` path its firmware does not serve; the ADB interface is released from the serial driver. Known limitation: source-specific IPv6 defaults (`default from …`) stay with netifd and are not re-ranked by the internet-priority feature
 
 ### Added from vendor documentation
 No hardware and no reports for these yet: the profiles follow the vendors' AT command guides and were checked against the sample answers printed in them. Logs from owners are welcome.

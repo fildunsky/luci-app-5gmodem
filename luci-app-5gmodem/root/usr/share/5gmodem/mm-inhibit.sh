@@ -18,6 +18,7 @@
 # Runs as a small procd service (see /etc/init.d/5gmodem-mm-inhibit).
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+. /usr/share/5gmodem/iscompal.sh 2>/dev/null   # is_compal: Compal только под MM
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -314,6 +315,25 @@ _mm_rebind() {   # $1 - usb-путь
 # любой tty/cdc-wdm этого usb-пути - значит идёт нативный опрос портов (probe:
 # AT open port ...), и рвать устройство перепривязкой ПОСРЕДИ опроса нельзя.
 # Сигнал без разбора логов: смотрим дескрипторы MM. $1 - usb-путь.
+# _compal_mm_only <usb_path> <sysfs cdc-wdm node> <vid:pid> <run key>
+# 0 = НЕ Compal (запасной путь разрешён), 1 = Compal RXM-G1 / SG500M2-X.
+# Инверсия нарочно: вызов читается как «если не только-MM - предлагаем qmi».
+_compal_mm_only() {
+	local _cm_path="$1" _cm_wdm="$2" _cm_vp="$3" _cm_key="$4" _cm_dev="" _cm_at=""
+	[ -f "$RUN/$_cm_key.compal" ] && return 1
+	[ -n "$_cm_wdm" ] && _cm_dev="/dev/$(basename "$_cm_wdm")"
+	[ -c "$_cm_dev" ] || _cm_dev=""
+	case "$_cm_vp" in
+		05c6:*)
+			_mm_probing "$_cm_path" || _cm_at=$("$RES/registry.sh" path "$_cm_path" 2>/dev/null \
+				| jsonfilter -e '@.at_port' 2>/dev/null)
+			;;
+	esac
+	is_compal "$_cm_path" "$_cm_dev" "$_cm_at" || return 0
+	: > "$RUN/$_cm_key.compal" 2>/dev/null
+	return 1
+}
+
 _mm_probing() {
 	local _path="$1" _pp _fd _tgt _dp _mmpids
 	_mmpids=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null)
@@ -432,6 +452,28 @@ mm_recover_missing() {
 				# Драйвер узла не опознан - переключать не на что, но и перепривязка
 				# тут по-прежнему под запретом (см. выше): просто не трогаем модем.
 				[ -n "$_sw_pro" ] || continue
+				# COMPAL RXM-G1 / SG500M2-X В QMI-КОМПОЗИЦИИ - ТОЛЬКО ПОД MM. У этой
+				# прошивки uqmi не открывает сервисы («Failed to connect to
+				# service»), и mkiface ради того и уводит его на modemmanager. Но
+				# сюда модем попадает ДО того, как MM его соберёт (на NanoPi R3S
+				# сборка занимала 35 c после привязки портов, полевой отчёт
+				# 13.09.2026), и запасной путь предлагал, а на втором проходе МОГ
+				# переключить интерфейс обратно на qmi - в неработающий протокол.
+				# Опознание то же, что в mkiface: по ПУТИ (не по vid:pid - 05c6:9091
+				# носят и чужие Qualcomm), по узлу cdc-wdm и по модели через AT.
+				# AT-порт даём только вендору 05c6 и только когда MM его НЕ
+				# опрашивает: параллельный читатель крадёт у MM ответы, и тот
+				# помечает порт «unhandled» - ровно та поломка, от которой лечим.
+				# Положительный ответ запоминаем на загрузку (модель за это время
+				# не меняется), отрицательный переспрашиваем: на первом проходе
+				# порт мог быть занят.
+				if [ "$_sw_pro" = "qmi" ] && ! _compal_mm_only "$_rp" "$_wdm_node" "$_sw_vp" "$_rb_key"; then
+					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
+						: > "$RUN/$_rb_key.mmonly" 2>/dev/null
+						logger -t 5gmodem "modem $_rp ($_sw_vp, SG500M2-X): ModemManager has not assembled it yet; this model requires ModemManager (uqmi cannot open its QMI services) - NOT switching the interface to qmi, waiting for MM"
+					fi
+					continue
+				fi
 				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
 					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
 					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a control channel (cdc-wdm, driver $_wdm_drv) - switch the interface to proto $_sw_pro. NOT rebinding: it risks killing the device (config #1 error -71)."
@@ -509,7 +551,7 @@ mm_recover_missing() {
 		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
 		[ "$_seen" = 1 ] && {
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
-			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" 2>/dev/null
+			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" "$RUN/$_rb_key.compal" 2>/dev/null
 			_mm_fix_atonly "$_rp"
 		}
 		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.

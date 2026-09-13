@@ -103,6 +103,7 @@ opkg install luci-i18n-base-zh-cn
 - Quectel RM520N-GL —— 型号与固件版本字段
 - Foxconn T99W373 —— 5G NSA 下的载波聚合
 - NTmore NTLM-500（Altair ALT3800，来自 Skylink H1 家用路由器）—— 信号、服务小区与邻区、各天线电平、温度、发射功率、路径损耗、频段选择
+- Tri Cascade VOS 5G / SG500M2-X（Compal RXM-G1，USB 05c6:9091，通过 QMI 使用 ModemManager）—— 按型号识别，接口使用 `proto=modemmanager`，不再走该固件不支持的 `uqmi` 路径；ADB 接口会从串口驱动上解绑。已知限制：带源前缀的 IPv6 默认路由（`default from …`）仍由 netifd 管理，“上网优先级”不会重新排序
 
 ### 依据厂商文档添加的型号
 这些设备我手上没有，也暂无用户反馈：配置文件依据厂商 AT 命令手册编写，并用手册中的示例应答做过验证。欢迎机主提供日志。
