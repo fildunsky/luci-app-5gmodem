@@ -136,7 +136,9 @@ band4g() {
 		"88") echo " (410 MHz)";;
 		"103") echo " (700 MHz)";;
 		"106") echo " (900 MHz)";;
-		"*") echo "";;
+		# Звёздочка БЕЗ кавычек - иначе ветка ловила только буквальный «*» и
+		# ветки «по умолчанию» у case не было вовсе (аудит 12.09.2026).
+		*) echo "";;
 	esac
 }
 
@@ -216,7 +218,9 @@ band5g() {
 		"261") echo " (28 GHz)";;
 		"262") echo " (47 GHz)";;
 		"263") echo " (60 GHz)";;
-		"*") echo "";;
+		# Звёздочка БЕЗ кавычек - иначе ветка ловила только буквальный «*» и
+		# ветки «по умолчанию» у case не было вовсе (аудит 12.09.2026).
+		*) echo "";;
 	esac
 }
 
@@ -364,6 +368,14 @@ CACHE="/tmp/5gmodem_metrics_$_MKEY.json"
 STAMP="/tmp/5gmodem_metrics_$_MKEY.stamp"
 LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
 
+# ВРЕМЯНКИ ПО PID УБИРАЕМ ПРИ ЛЮБОМ ВЫХОДЕ, А НЕ ТОЛЬКО ПРИ НОРМАЛЬНОМ.
+# rpcd рубит вызов на 30-й секунде, и ответы sms_tool с недописанным снимком
+# оставались в tmpfs навсегда: чистить их по маске некому, а на роутере с
+# 32-64 МБ ОЗУ мусор копится без верхней границы. Подоболочки трап не наследуют
+# (проверено под busybox ash), фоновые обновления не пострадают (аудит 12.09.2026).
+_cleanup_tmp() { rm -f /tmp/5gmodem_st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
+trap '_cleanup_tmp' EXIT INT TERM HUP
+
 # uptime_s - из lib.sh (builtin-версия без спавна cut; lib сорсится выше).
 
 # 1 - активный модем сейчас на USB-шине, 0 - нет. Дёшево (sysfs, без AT-хождения).
@@ -409,8 +421,15 @@ serve_cache() {
 	# секции не годится. AMP_SEC здесь ещё пуст - он вычисляется много ниже.
 	_sc_al=$(alias_for_path "$_POLL_AM")
 	[ -n "$_sc_al" ] || _sc_al="-"
+	# ЭКРАНИРУЕМ ТАК ЖЕ, КАК В _sanv: имя - свободный текст пользователя, и
+	# кавычка в нём рвала JSON уже на выдаче. А шаблон поля берём строкой
+	# целиком: «[^"]*» спотыкается о экранированную кавычку внутри имени и
+	# резал бы значение пополам (аудит 12.09.2026).
+	case "$_sc_al" in
+		*\\*|*\"*) _sc_al=$(printf '%s' "$_sc_al" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g') ;;
+	esac
 	sed -e "s/\"age\":\"[0-9]*\"/\"age\":\"$_a\"/" \
-		-e "s|\"alias\":\"[^\"]*\"|\"alias\":\"$(printf '%s' "$_sc_al" | sed 's/[&|\\]/\\&/g')\"|" \
+		-e "s|^\"alias\":\".*\",$|\"alias\":\"$(printf '%s' "$_sc_al" | sed 's/[&|\\]/\\&/g')\",|" \
 		"$CACHE" 2>/dev/null || cat "$CACHE"
 }
 
@@ -453,6 +472,8 @@ _take_lock() {
 # (см. шапку у _POLL_AM), иначе переключение вкладки посреди опроса смешивает
 # два модема. Здесь оно нарушалось.
 _hl_sec=$(secname "$_POLL_AM")
+# Ворота QMI (lib.sh) судят по интерфейсу ИМЕННО опрашиваемого модема.
+export QMI_TARGET_PATH="$_POLL_AM"
 _hl_at=$(uci -q get "5gmodem.$_hl_sec.at_port")
 [ -n "$_hl_at" ] && [ -c "$_hl_at" ] && _hl_at="yes" || _hl_at=""
 
@@ -524,7 +545,14 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; t
 	_hl_cache="/tmp/5gmodem_hilink_metrics"
 	_hl_ttl="${2:-5}"
 	case "$_hl_ttl" in ''|*[!0-9]*) _hl_ttl=5 ;; esac
-	if [ -s "$_hl_cache" ] && [ -z "$(find "$_hl_cache" -mmin +1 2>/dev/null)" ] 	   && [ "$(( $(uptime_s) - $(cat "$_hl_cache.t" 2>/dev/null || echo 0) ))" -lt "$_hl_ttl" ]; then
+	# ШТАМП ПРОВЕРЯЕМ, КАК ВСЕ ОСТАЛЬНЫЕ ЧИСЛА ИЗ ФАЙЛОВ. «|| echo 0» спасает
+	# только от ОТСУТСТВИЯ файла, а пустой файл - это успешный cat с пустым
+	# выводом, и $(( uptime - )) не даёт ноль, а ВАЛИТ весь 5gmodem.sh: странице
+	# не уходит ничего. Нулевой штамп остаётся после убийства процесса между
+	# созданием файла и записью в него (аудит 12.09.2026).
+	_hl_t=$(cat "$_hl_cache.t" 2>/dev/null)
+	case "$_hl_t" in ''|*[!0-9]*) _hl_t=0 ;; esac
+	if [ -s "$_hl_cache" ] && [ -z "$(find "$_hl_cache" -mmin +1 2>/dev/null)" ] 	   && [ "$(( $(uptime_s) - _hl_t ))" -lt "$_hl_ttl" ]; then
 		cat "$_hl_cache"
 		exit 0
 	fi
@@ -535,7 +563,10 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; t
 	case "$_hl_out" in
 		'{'*)
 			printf '%s\n' "$_hl_out" > "$_hl_cache.tmp" && mv "$_hl_cache.tmp" "$_hl_cache"
-			cut -d. -f1 /proc/uptime > "$_hl_cache.t"
+			# Штамп пишем так же атомарно, как сам кэш строкой выше: «>» обрезает
+			# файл в ноль ДО записи, и параллельный опрос успевал прочитать пустой
+			# штамп (аудит 12.09.2026).
+			cut -d. -f1 /proc/uptime > "$_hl_cache.t.tmp" && mv "$_hl_cache.t.tmp" "$_hl_cache.t"
 			printf '%s\n' "$_hl_out"
 			;;
 		# Web-API не ответил. КРАТКО (снимок свежее 30 c) - отдаём прошлый: пустой
@@ -543,7 +574,7 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; t
 		# честно «модема нет» (+ onbus), иначе HiLink-цифры висели живыми ЧАСАМИ,
 		# ведь этот путь всегда отдавал старый кэш (issue #2: stale часами).
 		*)
-			_hl_a=$(( $(uptime_s) - $(cat "$_hl_cache.t" 2>/dev/null || echo 0) ))
+			_hl_a=$(( $(uptime_s) - _hl_t ))
 			if [ -s "$_hl_cache" ] && [ "$_hl_a" -lt 30 ] 2>/dev/null; then
 				cat "$_hl_cache"
 			else
@@ -618,14 +649,14 @@ if [ "$1" = "cached" ]; then
 		exit 0
 	fi
 	uptime_s > "$LOCKDIR/stamp" 2>/dev/null
-	trap 'rm -rf "$LOCKDIR" 2>/dev/null' EXIT INT TERM HUP
+	trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT INT TERM HUP
 	# блокировка наша - проваливаемся в полный опрос ниже
 else
 	# Полный опрос по явному запросу тоже под блокировкой: иначе два таких
 	# вызова столкнутся в порту ровно так же, как раньше страница с терминалом.
 	if _take_lock; then
 		uptime_s > "$LOCKDIR/stamp" 2>/dev/null
-		trap 'rm -rf "$LOCKDIR" 2>/dev/null' EXIT INT TERM HUP
+		trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT INT TERM HUP
 	else
 		# Порт занят. Свежий снимок (моложе 3 c) - это ровно то, что сейчас
 		# дописывает другой процесс; отдаём его вместо второй ходки в модем.
@@ -659,6 +690,19 @@ if [ -n "$_PINNED" ]; then
 	# одному потребителю за раз. Если вернётся класс «MM не может подключиться»
 	# (см. историю правила, 1.9.8.x), лечение - не запрет, а короче таймауты и
 	# реже вендорные запросы.
+	#
+	# ПОПРАВКА 12.09.2026: класс вернулся, и не «MM не может подключиться», а
+	# хуже - «работает часами, открываю вкладку - линк перезапускается» (Dell
+	# DW5821e/T77W968 на 2.4.68, интерфейс штатный modemmanager). Ворота
+	# detect.sh (AT только при connected) здесь не работали вовсе: порт брался
+	# из реестра напрямую. Теперь правило одно на всех - mm_at_allowed в
+	# quirks.sh: хрупким прошивкам AT под MM не даём (пока владелец не включит
+	# mm_at=1), остальным - как в detect.sh, только при поднятой сессии.
+	if [ -n "$DEVICE" ] \
+	   && [ "$(printf '%s' "$_pin_rec" | jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ]; then
+		. "$RES/quirks.sh" 2>/dev/null
+		mm_at_allowed "$_POLL_AM" "$_hl_sec" || DEVICE=""
+	fi
 else
 	DEVICE=$($RES/detect.sh)
 fi
@@ -879,7 +923,24 @@ sms_tool() {
 	/usr/bin/sms_tool "$@" > "$_stf" 2>/dev/null 8>&- 9>&- &
 	_stp=$!
 	( exec 8>&- 9>&-; sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
-	wait "$_stp" 2>/dev/null; kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
+	# НЕ голый wait - ровно тот же класс, что вылечен в atprobe.sh: порт, повесивший
+	# sms_tool в D-state, не берёт kill сторожа, и wait ждал бы ВЕЧНО. А обёртку за
+	# один опрос зовут десятки раз, так что зависал весь вызов: rpcd рубит его на
+	# 30-й секунде, страница падает с XHR error, а висящий процесс ещё и держит
+	# at_lock на порту (T99W175 05c6:9025, 17.08.2026). Ждём опросом с потолком
+	# ~10 c (чуть больше 8 c сторожа), неубиваемого бросаем сиротой - ядро дореапит.
+	# Шаг МЕЛКИЙ (0.05 c, а не 0.1 как в atprobe): обёртку зовут в разы чаще, и
+	# на каждом вызове мы переплачиваем полшага против мгновенного wait - на
+	# десятке AT-запросов за опрос это разница между четвертью секунды и двумя.
+	# Дробный sleep есть не во всех busybox: проба sleep 0.0 валидна только на
+	# FANCY_SLEEP, без него шаг - целая секунда с пересчётом потолка (аудит 12.09.2026).
+	if (sleep 0.0) 2>/dev/null; then _sts=0.05; _stmax=200; else _sts=1; _stmax=10; fi
+	_stw=0
+	while kill -0 "$_stp" 2>/dev/null && [ "$_stw" -lt "$_stmax" ]; do
+		_stw=$((_stw + 1)); sleep "$_sts"
+	done
+	kill -0 "$_stp" 2>/dev/null || wait "$_stp" 2>/dev/null
+	kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
 	if [ -n "$_stc" ] && _st_static_ok "$_stf"; then
 		# tmp+mv: конкурирующий читатель кэша не должен увидеть полфайла
 		cp "$_stf" "$_stc.$$" 2>/dev/null && mv "$_stc.$$" "$_stc" 2>/dev/null
@@ -1412,7 +1473,16 @@ esac
 # MODE
 if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" == "x0" ]; then
 #	MODE_NUM=$(echo "$O" | awk -F[,] '/^\+COPS/ {print $4;exit}' | xargs)
-	MODE_NUM=$(echo "$O" | awk -F[,] '/^\+COPS: 0,2/ {print $4;exit}' | xargs)
+	# Режим выбора - любой (0 авто, 1 ручной AT+COPS=1,2,"PLMN"): с прежним
+	# «+COPS: 0,2» ручная регистрация оставляла MODE_NUM пустым, и у L850/L860
+	# профиль не разбирал ни одной сотовой метрики (ревью 12.09.2026).
+	MODE_NUM=$(echo "$O" | awk -F[,] '/^\+COPS: [0-9],2/ {print $4;exit}' | xargs)
+fi
+# Технология из PS-домена: +CEREG=2 отдаёт AcT последним полем, а +CREG (CS) на
+# LTE-only сети часто пуст.
+if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" = "x0" ]; then
+	_ceact=$(echo "$O" | tr -d '\r' | awk -F, '/^\+CEREG: *[0-9]+,[15],/ {gsub(/[^0-9]/,"",$5); print $5; exit}')
+	case "$_ceact" in [0-9]|1[0-9]) MODE_NUM="$_ceact" ;; esac
 fi
 case "$MODE_NUM" in
 	2*) MODE="UMTS";;
@@ -1663,6 +1733,15 @@ _sanv() {
 			'') _sv="-" ;;
 			*[[:cntrl:]]*) _sv=$(printf '%s' "$_sv" | tr -d '\000-\037') ;;
 		esac
+		# КАВЫЧКА И СЛЭШ ЛОМАЛИ ВЕСЬ СНИМОК. alias и apn - свободный текст
+		# пользователя; имя вида «Дом "основной"» давало невалидный JSON, его
+		# отбраковывала проверка публикации, и кэш не обновлялся НИКОГДА -
+		# каждый тик страницы шёл в полный опрос, а карточка оставалась пустой.
+		# Форк только при наличии этих символов - обычные значения по-прежнему
+		# без подстановок команд (аудит 12.09.2026).
+		case "$_sv" in
+			*\\*|*\"*) _sv=$(printf '%s' "$_sv" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g') ;;
+		esac
 		eval "_J_$_sv_n=\$_sv"
 	done
 }
@@ -1776,6 +1855,7 @@ _sanv S3BAND S3PCI S3EARFCN S4BAND S4PCI S4EARFCN
 _sanv S1STATE S2STATE S3STATE S4STATE S1RSRP S2RSRP
 _sanv S3RSRP S4RSRP S1RSRQ S2RSRQ S3RSRQ S4RSRQ
 _sanv S1SINR S2SINR S3SINR S4SINR
+_sanv S1RSSI S2RSSI S3RSSI S4RSSI RI
 _sanv PMIMO PMOD S1MIMO S1MOD S2MIMO S2MOD
 _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
@@ -1871,6 +1951,10 @@ cat <<EOF
 "s2sinr":"${_J_S2SINR}",
 "s3sinr":"${_J_S3SINR}",
 "s4sinr":"${_J_S4SINR}",
+"s1rssi":"${_J_S1RSSI}",
+"s2rssi":"${_J_S2RSSI}",
+"s3rssi":"${_J_S3RSSI}",
+"s4rssi":"${_J_S4RSSI}",
 "pmimo":"${_J_PMIMO}",
 "pmod":"${_J_PMOD}",
 "s1mimo":"${_J_S1MIMO}",
@@ -1891,6 +1975,7 @@ cat <<EOF
 "maxdl":"${_J_MAXDL}",
 "maxul":"${_J_MAXUL}",
 "cqi":"${_J_CQI}",
+"ri":"${_J_RI}",
 "volte":"${_J_VOLTE}",
 "rscp":"${_J_RSCP}",
 "ecio":"${_J_ECIO}",
@@ -2434,6 +2519,34 @@ _at_ca_supplement() {
 	return 0
 }
 
+# КАНАЛ СВЕРЯЕМ С ОПРАШИВАЕМЫМ МОДЕМОМ, А НЕ С АКТИВНЫМ.
+#
+# qmi_channel_free (lib.sh) смотрит интерфейс АКТИВНОГО модема, а запрос уходит
+# в cdc-wdm ТОГО, КОГО ОПРАШИВАЮТ: страница и сторож умеют адресный опрос
+# (for=<путь>). На мультимодеме это разрешало лезть в канал СОСЕДА с поднятой
+# сессией uqmi/umbim - ровно та беда, от которой гейт и поставлен: netifd вис на
+# «Waiting for network registration», в ядре NETDEV WATCHDOG, интернет пропадал
+# при открытии страницы. Пока гейт в lib.sh не принимает путь, НЕактивный модем
+# проверяем здесь и отказываем при сомнении (аудит 12.09.2026).
+_poll_chan_free() {
+	[ -n "$_POLL_AM" ] || return 0
+	[ "$_POLL_AM" = "$(_active_path)" ] && return 0
+	_pcf_if=$(uci -q get "5gmodem.$(secname "$_POLL_AM" 2>/dev/null).network" 2>/dev/null)
+	[ -n "$_pcf_if" ] || return 0
+	case "$(uci -q get "network.$_pcf_if.proto" 2>/dev/null)" in
+		qmi|qmiraw|mbim) : ;;
+		*) return 0 ;;
+	esac
+	case "$(ubus call "network.interface.$_pcf_if" status 2>/dev/null)" in
+		*'"up": true'*|*'"pending": true'*) return 1 ;;
+	esac
+	_pcf_dev=$(uci -q get "network.$_pcf_if.device" 2>/dev/null)
+	[ -n "$_pcf_dev" ] || return 0
+	pgrep -f "uqmi .*$_pcf_dev" >/dev/null 2>&1 && return 1
+	pgrep -f "umbim .*$_pcf_dev" >/dev/null 2>&1 && return 1
+	return 0
+}
+
 # CACHE-FIRST + ФОНОВОЕ ОБНОВЛЕНИЕ. Снимок берёт последние известные QMI-данные
 # МГНОВЕННО (заполняя лишь поля, которые профиль оставил пустыми), а свежие
 # досчитывает в фоне к следующему опросу. Так карточка на переключении вкладки
@@ -2464,6 +2577,7 @@ _qmi_supplement() {
 	# ModemManager этого гейта НЕТ и он не нужен - там прокси общий, MM сам через
 	# него и работает.
 	qmi_channel_free || return 0
+	_poll_chan_free || return 0
 	_QS_P="/tmp/5gmodem_qmi_$_MKEY"
 
 	# ПАСПОРТНАЯ СКОРОСТЬ МОДУЛЯ - ЧИТАЕМ ОДИН РАЗ ЗА ЗАГРУЗКУ.
@@ -2979,7 +3093,7 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 				read -r FW < "$_fwc"
 			else
 				_fw_w=$(/usr/share/5gmodem/modemswitch.sh wdm "$_POLL_AM" 2>/dev/null)
-				if [ -c "$_fw_w" ]; then
+				if [ -c "$_fw_w" ] && _poll_chan_free; then
 					FW=$(qmicli_p "$_fw_w" --dms-get-software-version 2>/dev/null \
 						| sed -n "s/.*Software version: *'\{0,1\}\([^']*\)'\{0,1\}\$/\1/p" | head -1 | xargs)
 					[ -n "$FW" ] && printf '%s\n' "$FW" > "$_fwc"
@@ -3076,9 +3190,11 @@ fi
 # CGMM, значит любой «прочитанный» для него ответ - ЧУЖОЙ (пришёл с порта
 # соседа: гонка портов при смене активного). Живой случай 03.08.2026: телефон
 # в режиме USB-модема побыл активным, и опрос записал ему модель FM350.
-if [ -n "$MODEL" ] && [ -n "$AMP" ] \
+# Путь берём из $_POLL_AM: переменной AMP в этом файле нет вовсе (она живёт в
+# detect.sh/modemswitch.sh), поэтому гвард молча не срабатывал (аудит 12.09.2026).
+if [ -n "$MODEL" ] && [ -n "$_POLL_AM" ] \
    && ! "$RES/listmodems.sh" 2>/dev/null \
-	| jsonfilter -e "@[@.path=\"$AMP\"].tty[0]" -e "@[@.path=\"$AMP\"].wdm[0]" 2>/dev/null \
+	| jsonfilter -e "@[@.path=\"$_POLL_AM\"].tty[0]" -e "@[@.path=\"$_POLL_AM\"].wdm[0]" 2>/dev/null \
 	| grep -q .; then
 	MODEL=""
 fi

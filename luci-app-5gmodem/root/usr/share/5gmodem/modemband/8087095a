@@ -6,11 +6,20 @@ _BANDS_APPLY_LIVE="reconnect"
 
 getinfo() {
 	O=$(sms_tool -d $_DEVICE at "at+gmm")
-	_NAME="Fibocom $(echo "$O" | awk -F, '{print $2}')"
+	# Только строка +GMM: без фильтра awk печатал $2 для эха, пустых строк и OK.
+	_NAME="Fibocom $(echo "$O" | awk -F, '/^\+GMM:/{gsub(/"/,""); gsub(/^ +| +$/,"",$2); print $2; exit}')"
 	echo "$_NAME"
 }
 
 getsupportedbands() {
+	# Список у модема: AT+XACT=? -> +XACT: (0-6),(0-2),0,1,2,4,5,8,101,102,...,166 -
+	# коды >100 это LTE-диапазоны (минус 100). Набор зависит от cust-файла прошивки
+	# (форум: в одних дампах есть 134/143/148/171, в других нет; B46 появляется
+	# вопреки документации) - статические списки ниже остаются откатом.
+	_XS=$(sms_tool -d $_DEVICE at "at+xact=?" 2>/dev/null | tr -d '\r' \
+		| awk -F: '/^\+XACT:/{print $2}' | tr ',' '\n' | tr -cd '0-9\n' \
+		| awk '$1>100 && $1<300 {print $1-100}' | sort -n | uniq | xargs)
+	if [ -n "$_XS" ]; then echo "$_XS"; return; fi
 	O=$(sms_tool -d $_DEVICE at "at+gmm")
 	if echo "$O" | grep -q "L850"; then
 		_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 11 12 13 17 18 19 20 21 26 28 29 30 38 39 40 41 66"
@@ -178,7 +187,10 @@ setcelllock() {
 			;;
 		arfcn|cell)
 			_AR="$2"; _PC="$3"; [ -n "$_AR" ] || return
-			case "$_PC" in ''|*[!0-9]*) _PC=0 ;; esac
+			# PCI=65535 - «любая сота на этой частоте» (агрегация сохраняется);
+			# PCI=0 модем понимает буквально и уходит из LTE в 3G (форум,
+			# ревью 12.09.2026). Раньше «привязать к частоте» слала именно 0.
+			case "$_PC" in ''|*[!0-9]*|0) _PC=65535 ;; esac
 			_B=$(_ch2band "$_AR"); [ "$_B" = 0 ] && return
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
 			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,$_B,1,$_AR,$_PC)" >/dev/null 2>&1; sleep 1

@@ -1,33 +1,69 @@
 # DW5821e Snapdragon X20 LTE
 
 
-O=$(sms_tool -d $DEVICE at "at+temp")
+O=$(sms_tool -d $DEVICE at "at+temp" | tr -d '\r')
 
-T=$(echo "$O" | awk -F: '/xo_therm_buf:/ {print $2}' | xargs)
+# Ответ вида «"xo_therm_buf:33",» - кавычки и запятая: xargs на них падал
+# («unmatched double quote»), оставляем только число.
+T=$(echo "$O" | awk -F: '/xo_therm_buf:/ {print $2}' | tr -cd '0-9-')
 if [ -n "$T" ]; then
 	TEMP="$T &deg;C"
 else
-	O=$(sms_tool -d $DEVICE at "at^temp?")
-	T=$(echo "$O" | awk '{gsub("C","");print $2}' | sort -r | head -n 1)
+	O=$(sms_tool -d $DEVICE at "at^temp?" | tr -d '\r')
+	# Прошивка 5.2 отвечает двумя датчиками («PA: 44C» / «TSENS: 37C»), берём
+	# больший. Сортировка ЧИСЛОВАЯ: лексическая ставила «9C» выше «37C».
+	T=$(echo "$O" | awk -F': *' '/^(PA|TSENS|XO|MODEM)[A-Z_0-9]*:/ {gsub(/[^0-9-]/,"",$2); print $2}' | sort -nr | head -n 1)
 	[ -n "$T" ] && TEMP="$T &deg;C"
 fi
 
-O=$(sms_tool -d $DEVICE at "at^ca_info?;^debug?")
+O=$(sms_tool -d $DEVICE at "at^ca_info?;^debug?" | tr -d '\r')
 
 O1=$(echo "$O" | sed -n '/^RAT:/,/^SCell1:/p')
 [ -z "$O1" ] && O1=$(echo "$O" | sed -n '/^EARFCN/,/^SCell1:/p')
+# В 3G (и без сети) ответ ^DEBUG? начинается с «Active channel (DL): 10563», без
+# RAT/EARFCN - оба среза выше пусты, и BAND/PCI/TAC не читались вовсе.
+_DBG_3G=""
+if [ -z "$O1" ]; then
+	O1=$(echo "$O" | sed -n '/^Active channel/,/^SCell1:/p')
+	echo "$O" | grep -q '^RSCP:' && _DBG_3G=1
+fi
+# ПРИЗНАК 3G - ПО ПЕРВОЙ СТРОКЕ «RAT:», а не только по пустому срезу. На части
+# прошивок ответ начинается прямо с «RAT:WCDMA» (форум 4pda #45204, #49345,
+# #55579), срез выше при этом НЕ пуст - и вся 3G-выдача разбиралась как LTE:
+# «BAND: 1» уезжало в band4g, и в карточке висело «LTE | B1» на трёхжильной
+# сети. Берём именно ПЕРВЫЙ RAT: прошивка печатает подряд несколько срезов
+# (#23413: RAT:LTE, затем RAT:WCDMA, затем пустой) (ревью 13.09.2026, форум 4pda).
+_RATV=$(echo "$O" | sed -n 's/^ *RAT: *//p' | head -n 1 | tr -d ' \t')
+case "$_RATV" in
+	WCDMA*|UMTS*|HSPA*|HSDPA*|HSUPA*|GSM*|GPRS*|EDGE*) _DBG_3G=1 ;;
+esac
 
-T=$(echo "$O1" | awk '/TAC:/ {print $2}')
+# TAC в ^DEBUG? - ДЕСЯТИЧНЫЙ (по выборке из восьми живых ответов на форуме ни
+# одного шестнадцатеричного знака: 5090, 27889, 40108, 8004, 177, 7814). Раньше
+# читался как hex, и в карточку уходил чужой TAC (0x5090 = 20624 вместо 5090).
+T=$(echo "$O1" | awk '/^TAC:/ {print $2}' | tr -cd '0-9')
+# 0 и 65535 - сентинелы «нет сети» (живые логи: TAC: 0, TAC: 65535), не TAC.
+case "$T" in 0|65535) T="" ;; esac
 if [ -n "$T" ]; then
-    T_DEC=$(printf "%d" "0x$T")
-    T_HEX=$T
+    T_DEC=$T
+    T_HEX=$(printf "%X" "$T" 2>/dev/null)
 fi
 
-T=$(echo "$O" | awk '/^RSSI:/ {print $2}' | sed 's/dBm//')
+# Два формата строки у разных прошивок: «RSRP: -100.2dBm rx_diversity: 15 (...)»
+# (5.2) и «RSSI: rx_diversity: 1 (-73.0dBm,-214748364.-8dBm)» (4.2) - у второго
+# число стоит только в скобках, и $2 давал «rx_diversity:» вместо уровня.
+# Берём первое число с суффиксом dB/dBm, откуда бы оно ни стояло; заведомо
+# пустые цепи (-214748364) не в счёт.
+_dbg_val() {   # $1 - имя поля
+	echo "$O" | sed -n "s/^$1: *//p" | head -n 1 \
+		| sed 's/-214748364[^ ,)]*//g' \
+		| grep -oE -- '-?[0-9]+(\.[0-9]+)?dBm?' | head -n 1 | sed 's/dBm\{0,1\}$//'
+}
+T=$(_dbg_val RSSI)
 [ -n "$T" ] && RSSI=$T
-T=$(echo "$O" | awk '/^RSRP:/ {print $2}' | sed 's/dBm//')
+T=$(_dbg_val RSRP)
 [ -n "$T" ] && RSRP=$T
-T=$(echo "$O" | awk '/^RSRQ:/ {print $2}' | sed 's/dB//')
+T=$(_dbg_val RSRQ)
 [ -n "$T" ] && RSRQ=$T
 T=$(echo "$O" | awk '/^RS-SINR/ {print $2}' | sed 's/dB//')
 [ -n "$T" ] && SINR=$T
@@ -35,22 +71,143 @@ T=$(echo "$O" | awk '/^RS-SNR/ {print $2}' | sed 's/dB//')
 [ -n "$T" ] && SINR=$T
 # SNR > SINR
 
-T=$(echo "$O1" | awk '/^BAND:/ {print $2}')
+# ЧИСЛО ИЗ ПОЛЯ ^DEBUG?: «-86.6dBm» -> «-86.6», «15 dBm» -> «15», «-» -> пусто.
+# Прошивки пишут единицы по-разному (даже у одного поля: «Tx Pwr: -7.0dB» #39275
+# против «Tx Pwr: 9.0dBm» #40320), а страница принимает голое число.
+_dbg_num() {
+	printf '%s' "$1" | grep -oE -- '-?[0-9]+(\.[0-9]+)?' | head -n 1
+}
+
+# RANK INDICATOR, CQI И МОЩНОСТЬ ПЕРЕДАТЧИКА. Все три уже лежат в этом же
+# ответе, но раньше выбрасывались (ревью 13.09.2026, форум 4pda: #39275 «RI: 1 /
+# CQI:  9 / Tx Pwr: -7.0dB», #6102 «RI: 2 / CQI:  6 / Tx Pwr: -3.0dB», #49016
+# «RI: 2 / Tx Pwr: -19.0dB»). RI - единственный честный признак реального MIMO
+# на этом модуле: четыре несущие в агрегации при RI=1 означают SISO (#45398,
+# #61542). Прочерк вместо значения («Tx Pwr: -», #23413) - это «сейчас не
+# передаём», а не ноль, поэтому _dbg_num вернёт пусто и поле останется пустым.
+T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *RI: *//p' | head -n 1)")
 if [ -n "$T" ]; then
+	RI="$T"
+	# Поле ранга у страницы - число слоёв (бейдж «MIMO N×N»), ровно это RI и есть.
+	case "$RI" in 1|2|3|4) [ -z "$PMIMO" ] && PMIMO="$RI" ;; esac
+fi
+T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *CQI: *//p' | head -n 1)")
+[ -n "$T" ] && CQI="$T"
+T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *Tx Pwr: *//p' | head -n 1)")
+[ -n "$T" ] && TXPOWER="$T dBm"
+
+# АНТЕННЫЕ ПОРТЫ - ИЗ ТОГО ЖЕ ОТВЕТА, лишних запросов к порту ноль.
+# LTE (#39275, #49016): «RSRP: -82.5dBm rx_diversity: 15 (-83.6dBm,-82.5dBm,
+# -85.2dBm,-87.0dBm)», 3G (#45204, #6102): «RSCP: rx_diversity: 3 (-107.0dBm,
+# -110.0dBm)» - у WCDMA цепи две, а не четыре, и после «rx_diversity:» стоит
+# пробел. rx_diversity - БИТОВАЯ МАСКА включённых цепей (15 = 0b1111 = четыре),
+# по ней и считаем вердикт разнесённого приёма: уровни печатаются для всех
+# цепей, включая выключенные. Заглушки «измерения нет» - «-256.0dBm»,
+# «-214748364.-8dBm» (#6102) и мусор вроде «-531.5dBm» (#41637): отсекаем всё
+# за пределами физичного диапазона -160..-20 дБм. Формат ANTPORTS общий со
+# страницей - «порт:rsrp:rsrq», RSRQ по цепям модем не даёт.
+if [ -z "$ANTPORTS" ]; then
+	# Класс символов, а не «\|»: альтернация в BRE - расширение GNU, у busybox
+	# sed на неё рассчитывать нельзя.
+	_AL=$(echo "$O" | sed -n 's/^ *RS[CR]P: *[^r]*rx_diversity: *\([0-9][0-9]*\)[^(]*(\([^)]*\)).*/\1|\2/p' | head -n 1)
+	if [ -n "$_AL" ]; then
+		_AMASK="${_AL%%|*}"; _AVALS="${_AL#*|}"
+		_AI=0; _AOK=0
+		for _AV in $(echo "$_AVALS" | tr ',' ' '); do
+			_AV=$(_dbg_num "$_AV")
+			_AR=""
+			[ -n "$_AV" ] && _AR=$(awk "BEGIN{printf \"%.0f\", $_AV}" 2>/dev/null)
+			case "$_AR" in ''|*[!0-9-]*) _AI=$((_AI+1)); continue ;; esac
+			if [ "$_AR" -le -160 ] 2>/dev/null || [ "$_AR" -ge -20 ] 2>/dev/null; then
+				_AI=$((_AI+1)); continue
+			fi
+			ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_AI:$_AR:"
+			_AOK=$((_AOK+1))
+			_AI=$((_AI+1))
+		done
+		# Вердикт разнесённого приёма - только когда есть на чём его строить:
+		# при одном измеренном уровне «три цепи не мерили» и «три цепи мертвы»
+		# неразличимы (тот же довод, что в _qualcomm_sdx55_extras).
+		if [ "$_AOK" -ge 2 ]; then
+			case "$_AMASK" in
+				''|*[!0-9]*) ;;
+				*) _AN=0
+				   for _AB in 1 2 4 8; do [ $(( _AMASK & _AB )) -ne 0 ] && _AN=$((_AN+1)); done
+				   case "$_AN" in
+					   1) RXDIV="off" ;;
+					   2) RXDIV="2rx" ;;
+					   3|4) RXDIV="4rx" ;;
+				   esac ;;
+			esac
+		fi
+	fi
+fi
+
+# 3G: УРОВНИ ЕСТЬ, ПРОСТО ЗОВУТСЯ ИНАЧЕ. В WCDMA ^DEBUG? печатает RSCP/ECIO
+# вместо RSRP/RSRQ (#45204: «RSCP: rx_diversity: 3 (-107.0dBm,-110.0dBm)» +
+# «PSC:324 / ECIO:-12.5dB»), и карточка на 3G оставалась пустой. Поля RSCP/ECIO
+# в снимке уже есть - заполняем их, как это делает профиль MV32.
+if [ -n "$_DBG_3G" ]; then
+	# ЧЕРЕЗ _dbg_val, А НЕ ПРОСТЫМ «первое число»: в строке «RSCP: rx_diversity:
+	# 3 (-107.0dBm,-110.0dBm)» первое число - это МАСКА цепей (3), а уровень
+	# стоит только в скобках. _dbg_val берёт первое число С суффиксом dB/dBm и
+	# отбрасывает заглушку -214748364.
+	T=$(_dbg_val RSCP)
+	[ -n "$T" ] && RSCP="$T"
+	T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *ECIO: *//p' | head -n 1)")
+	[ -n "$T" ] && ECIO="$T"
+	# В WCDMA роль PCI играет скремблирующий код соты (PSC). Первая пара
+	# «PSC:/ECIO:» - обслуживающая сота, дальше идут соседи активного набора
+	# (#45204: PSC:324/ECIO:-12.5 и PSC:157/ECIO:-17.5) - их берём только для
+	# обслуживающей, соседей этот ответ без уровней RSRP показать не даёт.
+	T=$(echo "$O" | sed -n 's/^ *PSC: *//p' | head -n 1 | tr -cd '0-9')
+	[ -n "$T" ] && [ -z "$PCI" ] && PCI="$T"
+fi
+
+T=$(echo "$O1" | awk '/^BAND:/ {print $2}')
+# В 3G «BAND: 80» - не номер LTE-диапазона, через band4g не гоняем.
+if [ -n "$T" ] && [ -z "$_DBG_3G" ]; then
 	B=$(band4g $T)
 	PBAND="$B"
 	MODE="$MODE $B"
 fi
 T=$(echo "$O1" | awk '/^BW:/ {print $2}')
-[ -n "$T" ] && PBAND="$PBAND @$T MHz"
+[ -n "$T" ] && [ -n "$PBAND" ] && PBAND="$PBAND @$T MHz"
 T=$(echo "$O1" | awk -F[\(\)] '/^eNB ID\(PCI\)/ {print $4}')
+# «eNB ID(PCI): 0-0(0)» и 4294967295 - сентинелы без регистрации.
+case "$(echo "$O1" | awk '/^eNB ID\(PCI\)/ {print $3}')" in 0-0\(0\)|4294967295*) T="" ;; esac
 [ -n "$T" ] && PCI="$T"
 T=$(echo "$O1" | awk '/^EARFCN/ {print $2}' | xargs)
+# В 3G канал называется «Active channel (DL): <UARFCN>».
+[ -n "$T" ] || T=$(echo "$O1" | sed -n 's/^Active channel (DL): *\([0-9][0-9]*\).*/\1/p' | head -n 1)
 if [ -n "$T" ]; then
 	EARFCN="$(echo $T | cut -f1 -d/)"
 #	addon 34 "EARFCN DL" "$(echo $T | cut -f1 -d/)"
 #	addon 34 "EARFCN UL" "$(echo $T | cut -f2 -d/)"
 fi
+
+# УРОВНИ ВТОРИЧНЫХ НЕСУЩИХ. Блок «SCellN:» ответа ^DEBUG? отдаёт их полностью
+# (#40320, дословно):
+#   SCell1:
+#    BAND:3 BW:15.0MHz
+#   EARFCN:1275 PCI:151
+#   RSRP:-86.6dBm,RSRQ:-13.2dB
+#   RSSI:-64.4dBm,SNR:5.2dB
+# Раньше значения разбирались и тут же выбрасывались - присваивания остались
+# закомментированными от давно удалённого API `addon` (ревью 13.09.2026, форум
+# 4pda). Имена полей те же, что у остальных профилей: S<n>RSRP/RSRQ/RSSI/SINR.
+_dbg_scell() {   # $1 - номер несущей 1..4, $2 - текст блока SCellN
+	_SC_P=$(_dbg_num "$(echo "$2" | awk -F'[:,]' '/^ *RSRP:/{print $2}' | head -n 1)")
+	_SC_Q=$(_dbg_num "$(echo "$2" | awk -F'[:,]' '/^ *RSRP:/{print $4}' | head -n 1)")
+	_SC_I=$(_dbg_num "$(echo "$2" | awk -F'[:,]' '/^ *RSSI:/{print $2}' | head -n 1)")
+	_SC_N=$(_dbg_num "$(echo "$2" | awk -F'[:,]' '/^ *RSSI:/{print $4}' | head -n 1)")
+	case "$1" in
+		1) S1RSRP="$_SC_P"; S1RSRQ="$_SC_Q"; S1RSSI="$_SC_I"; S1SINR="$_SC_N" ;;
+		2) S2RSRP="$_SC_P"; S2RSRQ="$_SC_Q"; S2RSSI="$_SC_I"; S2SINR="$_SC_N" ;;
+		3) S3RSRP="$_SC_P"; S3RSRQ="$_SC_Q"; S3RSSI="$_SC_I"; S3SINR="$_SC_N" ;;
+		4) S4RSRP="$_SC_P"; S4RSRQ="$_SC_Q"; S4RSSI="$_SC_I"; S4SINR="$_SC_N" ;;
+	esac
+}
 
 T=$(echo "$O" | awk '/^SCC1 info:/ {print $5}')
 if [ -n "$T" ]; then
@@ -66,14 +223,7 @@ if [ -n "$T" ]; then
 	[ -n "$T" ] && S1EARFCN="$T"
 	T=$(echo "$O1" | awk -F [:,\ ] '/^EARFCN/{print $4}' | xargs)
 	[ -n "$T" ] && S1PCI="$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $2}' | sed 's/dBm//')
-#	[ -n "$T" ] && addon 56 "(S1) RSRP" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $4}' | xargs | sed 's/dB//')
-#	[ -n "$T" ] && addon 57 "(S1) RSRQ" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $2}' | sed 's/dBm//')
-#	[ -n "$T" ] && addon 55 "(S1) RSSI" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $4}' | xargs | sed 's/dB//')
-#	[ -n "$T" ] && addon 58 "(S1) SNR" "$T"
+	_dbg_scell 1 "$O1"
 fi
 
 T=$(echo "$O" | awk '/^SCC2 info:/ {print $5}')
@@ -90,14 +240,7 @@ if [ -n "$T" ]; then
 	[ -n "$T" ] && S2EARFCN="$T"
 	T=$(echo "$O1" | awk -F [:,\ ] '/^EARFCN/{print $4}' | xargs)
 	[ -n "$T" ] && S2PCI="$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 66 "(S2) RSRP" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 67 "(S2) RSRQ" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 65 "(S2) RSSI" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 68 "(S2) SNR" "$T"
+	_dbg_scell 2 "$O1"
 fi
 
 T=$(echo "$O" | awk '/^SCC3 info:/ {print $5}')
@@ -114,14 +257,7 @@ if [ -n "$T" ]; then
 	[ -n "$T" ] && S3EARFCN="$T"
 	T=$(echo "$O1" | awk -F [:,\ ] '/^EARFCN/{print $4}' | xargs)
 	[ -n "$T" ] && S3PCI="$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 66 "(S3) RSRP" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 67 "(S3) RSRQ" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 65 "(S3) RSSI" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 68 "(S3) SNR" "$T"
+	_dbg_scell 3 "$O1"
 fi
 
 T=$(echo "$O" | awk '/^SCC4 info:/ {print $5}')
@@ -138,14 +274,7 @@ if [ -n "$T" ]; then
 	[ -n "$T" ] && S4EARFCN="$T"
 	T=$(echo "$O1" | awk -F [:,\ ] '/^EARFCN/{print $4}' | xargs)
 	[ -n "$T" ] && S4PCI="$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 66 "(S4) RSRP" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSRP/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 67 "(S4) RSRQ" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $2}' | sed 's/dBm/ dBm/')
-#	[ -n "$T" ] && addon 65 "(S4) RSSI" "$T"
-	T=$(echo "$O1" | awk -F [:,] '/^RSSI/{print $4}' | xargs | sed 's/dB/ dB/')
-#	[ -n "$T" ] && addon 68 "(S4) SNR" "$T"
+	_dbg_scell 4 "$O1"
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE_A,LTE-A | ,' | sed 's,LTE B,LTE | B,')
@@ -172,7 +301,14 @@ fi
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices)
-PVCUT=$(echo $PV | awk -F 'Vendor=413c ProdID=81d7' '{print $2}' | cut -c-1520)
+# ID берём у ОПРАШИВАЕМОГО устройства: профиль делят 413c:81d7, 413c:81e0 и
+# 0489:e0b5, а с прибитым «413c ProdID=81d7» под чужим ID ничего не совпадало.
+_PVID="413c"; _PPID="81d7"
+if [ -n "$_POLL_AM" ] && [ -f "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
+	_PVID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+	_PPID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+fi
+PVCUT=$(echo $PV | awk -F "Vendor=$_PVID ProdID=$_PPID" '{print $2}' | cut -c-1520)
 
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
 then
@@ -186,7 +322,7 @@ then
 fi
 
 # Modem
-PVMODEL=$(echo $PV | awk -F 'Vendor=413c ProdID=81d7' '{print $2}' | cut -c-150)
+PVMODEL=$(echo $PV | awk -F "Vendor=$_PVID ProdID=$_PPID" '{print $2}' | cut -c-150)
 if [ -z "$MODEL" ]
 then
 	MODELBCUT=$(echo $PVMODEL | awk -F 'Manufacturer=|S: Product=' '{print $2}' | sed s/"Inc. "// | xargs)

@@ -47,7 +47,10 @@ get)
 	DEF6=$(sysctl -n net.ipv6.conf.all.hop_limit 2>/dev/null); [ -n "$DEF6" ] || DEF6=64
 	# Сколько пакетов реально прошло через наши правила: 0 при заданном TTL =
 	# правило есть, но трафик мимо (не то устройство/интерфейс не поднят).
-	HITS=$(nft list ruleset 2>/dev/null | awk '/ttl set|hoplimit set/ {
+	# Считаем ТОЛЬКО СВОЮ таблицу: по всему рулсету в счётчик попадали чужие
+	# правила подмены TTL (свой инклюд fw4, другой пакет), и индикатор показывал
+	# «правила работают» даже когда нашей таблицы нет вовсе (аудит 12.09.2026).
+	HITS=$(nft list table inet modem5g_ttl 2>/dev/null | awk '/ttl set|hoplimit set/ {
 		for (i = 1; i <= NF; i++) if ($i == "packets") { s += $(i + 1); break } } END { print s + 0 }')
 	printf '{"iface":"%s","device":"%s","def4":"%s","def6":"%s","hits":"%s","ttl4in":"%s","ttl4out":"%s","ttl6in":"%s","ttl6out":"%s"}\n' \
 		"$IFACE" "$DEV" "$DEF4" "$DEF6" "$HITS" \

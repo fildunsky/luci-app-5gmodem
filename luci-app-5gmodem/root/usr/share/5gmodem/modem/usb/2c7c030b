@@ -61,11 +61,16 @@ if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
 	RSRP=$T
 	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
 	RSRQ=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", $1*0.2-20}')
+	# SINR уже в дБ (см. modem/usb/2c7c0306: по живым ответам QENG поле 0..25 и
+	# растёт с RSRP; «x*0.2-20» давало -15..-19 дБ на отличном сигнале).
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {v=$18; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
 	SINR=$T
 fi
 
-T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $2}' | xargs)
+# SPN - поле 4 (см. modem/usb/2c7c0306: поле 2 у старых прошивок «000 000»).
+T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $4}' | xargs)
+case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac
+[ -n "$T" ] || { T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $2}' | xargs); case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac; }
 if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
 	COPS="$T"
 fi

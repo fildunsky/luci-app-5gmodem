@@ -176,6 +176,12 @@ xval() {
 # странице, а выглядит это как «данных нет» - искать потом долго.
 jsafe() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# Значение, безопасное для вставки в XML запроса. Экранирование в файле было
+# только на ЧТЕНИЕ ответов; текст пользователя со знаком «&» или «<» делал
+# документ невалидным, и прошивка отвечала кодом ошибки вместо OK - выглядело
+# как «SMS не отправляется», причём стабильно (аудит 12.09.2026).
+_xesc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
+
 # ДАННЫЕ В РОУМИНГЕ у HiLink-модема.
 #
 # Настройка живёт в /api/dialup/connection, поле RoamAutoConnectEnable - это
@@ -696,9 +702,10 @@ sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
 	_n="$1"; _t="$2"
 	[ -n "$_n" ] && [ -n "$_t" ] || { echo '{"error":"no number or text"}'; return 1; }
 	_d=$(date '+%Y-%m-%d %H:%M:%S')
+	# Длину считаем по ИСХОДНОМУ тексту: прошивке важен он, а не его запись в XML.
 	_r=$(api_post /api/sms/send-sms \
-		"<Index>-1</Index><Phones><Phone>$_n</Phone></Phones><Sca></Sca>\
-<Content>$_t</Content><Length>${#_t}</Length><Reserved>1</Reserved><Date>$_d</Date>" "$3")
+		"<Index>-1</Index><Phones><Phone>$(_xesc "$_n")</Phone></Phones><Sca></Sca>\
+<Content>$(_xesc "$_t")</Content><Length>${#_t}</Length><Reserved>1</Reserved><Date>$_d</Date>" "$3")
 	case "$_r" in
 		*'<response>OK</response>'*) echo '{"success":true}' ;;
 		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
@@ -932,7 +939,7 @@ hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
 	api_post /api/ussd/release "" "$2" >/dev/null 2>&1
 
 	_r=$(api_post /api/ussd/send \
-		"<content>$_code</content><codeType>CodeType</codeType><timeout></timeout>" "$2")
+		"<content>$(_xesc "$_code")</content><codeType>CodeType</codeType><timeout></timeout>" "$2")
 	case "$_r" in
 		*'<response>OK</response>'*) ;;
 		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)"; return 1 ;;

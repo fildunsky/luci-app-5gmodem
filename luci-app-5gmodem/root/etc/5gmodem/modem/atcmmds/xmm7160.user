@@ -1,0 +1,33 @@
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+#
+# Sierra Wireless EM7345 and other Intel XMM7160 (FIH7160) modules. The module
+# is labelled Sierra, but the chip is Intel: the Sierra '!' commands
+# (AT!ENTERCND, AT!BAND, AT!IMPREF) always answer ERROR here.
+# The XMM commands below are taken from the related XMM7360 (Fibocom L850/L860)
+# and are NOT confirmed on the 7160 — an ERROR in reply is normal and harmless.
+# Everything that is guaranteed to work (ATI, +CSQ, +CESQ, +COPS, +CEREG,
+# +CGMI/+CGMM/+CGMR, +CGDCONT) lives in generic.user.
+
+## Cell and signal
+
+# Serving and neighbour cells
+AT+XMCI=1
+
+# Extended signal quality (Intel)
+AT+XCESQ?
+
+# Cell change info
+AT+XCCINFO?
+
+# Aggregation (CA) — the 7160 is Cat 4, aggregation is not expected
+AT+XLEC?
+
+## Bands and modes
+
+# Network mode and bands
+AT+XACT?
+
+# Supported modes and bands
+AT+XACT=?

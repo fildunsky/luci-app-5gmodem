@@ -105,5 +105,20 @@ return baseclass.extend({
 		if (typeof fn === 'function') { _subs.push(fn); }
 	},
 
+	/* ПАРНОЕ ОТПИСЫВАНИЕ. Список подписчиков только рос: блок «Приоритет
+	   интернета» живёт ВНУТРИ другой страницы, его убирают и создают заново, и
+	   каждый новый экземпляр добавлял свою перерисовку к перерисовкам всех
+	   прежних - те работали с оторванными от документа узлами. Когда не
+	   остаётся ни подписчиков, ни каналов, снимаем и сам опрос
+	   (аудит 12.09.2026). */
+	unsubscribe: function(fn) {
+		var i = _subs.indexOf(fn);
+		if (i >= 0) { _subs.splice(i, 1); }
+		if (!_subs.length && !Object.keys(_scopes).length && _polling) {
+			_polling = false;
+			poll.remove(tick);
+		}
+	},
+
 	withFlag: withFlag
 });

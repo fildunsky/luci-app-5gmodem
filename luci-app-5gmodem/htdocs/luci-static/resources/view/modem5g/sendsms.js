@@ -159,69 +159,37 @@ return view.extend({
 			.replace(/[^\x00-\x7F@£$¥èéùìòÇØøÅåΔΦΓΛΩΠΨΣΘΞÆæßÉ¡¤§¿äöñüà^{}\\[\]~|€]/g, '');
 	},
 
+	/* СЧЁТЧИК НЕ РЕЖЕТ ТЕКСТ.
+	   Раньше обработчик ввода перезаписывал поле обрезком в 70 (UCS2) или 160
+	   (GSM-7) символов: длинное сообщение, набранное или вставленное целиком,
+	   молча теряло хвост - а отправка длинного текста поддерживается. Мост
+	   нарезает UCS2 по 67 кодовых единиц с UDH конкатенации (smspdu.sh), латиницу
+	   многочастно собирает сам sms_tool. Поэтому значение поля не трогаем, а
+	   показываем либо остаток символов в одной части, либо «длина · число частей»
+	   (аудит 12.09.2026). */
+	counterText: function(text) {
+		let uni = this.isUnicode(text);
+		let len = uni ? this.getUnicodeLength(text) : this.getGSM7Length(text);
+		let single = uni ? 70 : 160;
+		let per = uni ? 67 : 153;
+
+		if (len <= single) { return String(single - len); }
+		return len + ' · ' + Math.ceil(len / per);
+	},
+
 	updateMessageCounter: function() {
 		let textarea = document.getElementById('smstext');
 		let text = textarea.value;
 		let counter = document.getElementById('counter');
 		let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 		let unicodeRadio = document.querySelector('input[name="encoding_type"][value="unicode"]');
-		
+
 		if (this.isUnicode(text)) {
 			unicodeRadio.checked = true;
-			let maxLength = 70;
-			let currentLength = this.getUnicodeLength(text);
-			counter.innerHTML = (maxLength - currentLength);
-			
-			if (currentLength > maxLength) {
-				let newText = '';
-				let length = 0;
-				for (let i = 0; i < text.length; i++) {
-					let charCode = text.charCodeAt(i);
-					let charLength = 1;
-					
-					if (charCode >= 0xD800 && charCode <= 0xDBFF && i + 1 < text.length) {
-						charLength = 2;
-						if (length + charLength <= maxLength) {
-							newText += text.charAt(i) + text.charAt(i + 1);
-							i++;
-						} else {
-							break;
-						}
-					} else {
-						if (length + charLength <= maxLength) {
-							newText += text.charAt(i);
-						} else {
-							break;
-						}
-					}
-					length += charLength;
-				}
-				textarea.value = newText;
-				counter.innerHTML = (maxLength - length);
-			}
 		} else {
 			gsm7Radio.checked = true;
-			let maxLength = 160;
-			let currentLength = this.getGSM7Length(text);
-			counter.innerHTML = (maxLength - currentLength);
-			
-			if (currentLength > maxLength) {
-				let newText = '';
-				let length = 0;
-				for (let i = 0; i < text.length; i++) {
-					let char = text.charAt(i);
-					let charLength = ('^{}\\[~]|€'.indexOf(char) !== -1) ? 2 : 1;
-					if (length + charLength <= maxLength) {
-						newText += char;
-						length += charLength;
-					} else {
-						break;
-					}
-				}
-				textarea.value = newText;
-				counter.innerHTML = (maxLength - length);
-			}
 		}
+		counter.textContent = this.counterText(text);
 	},
 
 	handleEncodingChange: function(ev) {
@@ -230,68 +198,27 @@ return view.extend({
 		let encodingType = ev.target.value;
 		let counter = document.getElementById('counter');
 		
+		/* Смена кодировки текст тоже НЕ обрезает - только приводит его к GSM-7,
+		   если выбран этот алфавит (аудит 12.09.2026). */
 		if (encodingType === 'gsm7') {
 			textarea.value = this.normalizeToGSM7(text);
-			let currentLength = this.getGSM7Length(textarea.value);
-			let maxLength = 160;
-			
-			if (currentLength > maxLength) {
-				let newText = '';
-				let length = 0;
-				for (let i = 0; i < textarea.value.length; i++) {
-					let char = textarea.value.charAt(i);
-					let charLength = ('^{}\\[~]|€'.indexOf(char) !== -1) ? 2 : 1;
-					if (length + charLength <= maxLength) {
-						newText += char;
-						length += charLength;
-					} else {
-						break;
-					}
-				}
-				textarea.value = newText;
-				currentLength = this.getGSM7Length(textarea.value);
-			}
-			counter.innerHTML = (maxLength - currentLength);
-		} else {
-			let maxLength = 70;
-			let currentLength = this.getUnicodeLength(textarea.value);
-			
-			if (currentLength > maxLength) {
-				let newText = '';
-				let length = 0;
-				for (let i = 0; i < textarea.value.length; i++) {
-					let charCode = textarea.value.charCodeAt(i);
-					let charLength = 1;
-					
-					if (charCode >= 0xD800 && charCode <= 0xDBFF && i + 1 < textarea.value.length) {
-						charLength = 2;
-						if (length + charLength <= maxLength) {
-							newText += textarea.value.charAt(i) + textarea.value.charAt(i + 1);
-							i++;
-						} else {
-							break;
-						}
-					} else {
-						if (length + charLength <= maxLength) {
-							newText += textarea.value.charAt(i);
-						} else {
-							break;
-						}
-					}
-					length += charLength;
-				}
-				textarea.value = newText;
-			}
-			counter.innerHTML = (maxLength - this.getUnicodeLength(textarea.value));
 		}
+		counter.textContent = this.counterText(textarea.value);
 		this.updateMessageCounter();
 	},
 
 	handleCommand: function(exec, args) {
 		let buttons = document.querySelectorAll('.cbi-button');
+		/* ЗАПОМИНАЕМ ИСХОДНОЕ СОСТОЯНИЕ КАЖДОЙ КНОПКИ. Снимать disabled со ВСЕХ
+		   кнопок документа нельзя: ниже на той же странице живёт панель настроек
+		   SMS, где часть кнопок выключена осознанно, - после отправки они
+		   становились нажимаемыми (аудит 12.09.2026). */
+		let wasDisabled = [];
 
-		for (let i = 0; i < buttons.length; i++)
+		for (let i = 0; i < buttons.length; i++) {
+			wasDisabled[i] = buttons[i].hasAttribute('disabled');
 			buttons[i].setAttribute('disabled', 'true');
+		}
 
 		return fs.exec(exec, args).then(function(res) {
 			let out = document.querySelector('.smscommand-output');
@@ -312,11 +239,11 @@ return view.extend({
 			ui.addNotification(null, E('p', [ err ]))
 		}).finally(function() {
 			for (let i = 0; i < buttons.length; i++)
-			buttons[i].removeAttribute('disabled');
+				if (!wasDisabled[i]) { buttons[i].removeAttribute('disabled'); }
 		});
 	},
 
-	handleGo: function(ev) {
+	handleGo: function(ev, cbval) {
 		let phn = document.getElementById('phonenumber').value.trim();
 		/* Префикс страны - НА ОТПРАВКЕ и только к 10-значному национальному
 		   номеру (9291067196 -> +79291067196). Раньше поле ПРЕДЗАПОЛНЯЛОСЬ
@@ -335,10 +262,15 @@ return view.extend({
 		let dx = (uci.get('5gmodem', 'sms', 'delay') || 0) * 1000;
 		let get_smstxt = document.getElementById('smstext').value;
 
-		let elem = document.getElementById('execute');
-		let vN = elem.innerText;
-
-		if (vN.includes(_('Send to number')) == true)
+		/* РЕЖИМ ОТПРАВКИ РЕШАЕТ ЗНАЧЕНИЕ ВИДЖЕТА, А НЕ НАДПИСЬ НА КНОПКЕ.
+		   Раньше сравнивали innerText комбо-кнопки со строкой _('Send to number'),
+		   а подпись собирается совсем из других строк - _('Send') + ' ' +
+		   _('to number'). В любом переводе, кроме английского, сравнение
+		   промахивалось, и «отправить на номер» уходило в рассылку ПО ВСЕЙ
+		   телефонной книге (аудит 12.09.2026). ui.ComboButton передаёт выбранное
+		   значение вторым аргументом обработчика; у обычной кнопки (рассылка
+		   выключена) его нет - это всегда одиночная отправка. */
+		if (cbval !== 'sendg')
 		{
 				if ( phn.length < 3 )
 				{
@@ -362,11 +294,6 @@ return view.extend({
 						}
 					}
 		        }
-				if ( !port )
-				{
-					ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
-					return false;
-				}
 		}
 		else {
 
@@ -384,12 +311,17 @@ return view.extend({
 				else {
 				   		let xs = smsBook;
 
-    						let phone, i;
-						    res.stdout = '';
+						/* Журнал рассылки - СВОЯ переменная. Раньше строки копились в
+						   `res.stdout`, а `res` в этой функции не существует вовсе (это
+						   имя параметра колбэка в handleCommand): рассылка падала с
+						   ReferenceError ещё до первого сообщения, причём синхронно -
+						   то есть мимо .finally(), и кнопка «Отправить» навсегда
+						   оставалась заблокированной и крутящейся (аудит 12.09.2026). */
+    						let phone, log = '';
 
 							for (let i = 0; i < xs.length; i++) {
   								(function(i) {
-    								setTimeout(function() { 
+    								setTimeout(function() {
 		    						phone = xs[i].code;
 
 									let out = document.querySelector('.smscommand-output');
@@ -397,11 +329,10 @@ return view.extend({
 
 									fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'send', phone, get_smstxt, port ]);
 
-									res.stdout += (i+1)+_('/')+xs.length+' * '+_('[Bot] Message sent to number:') + ' ' + phone +'\n';
-									res.stdout = res.stdout.replace(/undefined/g, "");
+									log += (i+1)+'/'+xs.length+' * '+_('[Bot] Message sent to number:') + ' ' + phone +'\n';
 
-									dom.content(out, [ res.stdout || '' ]);		
-						
+									dom.content(out, [ log ]);
+
 									}, dx * i);
 								})(i);
 							}
@@ -571,7 +502,7 @@ return view.extend({
 										E('div', { 'class': 'controls' }, [
 											E('div', { 'class': 'pager center tg-row' }, [
 												E('button', { 
-													'class': 'btn cbi-button-neutral prev', 
+													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',
@@ -579,7 +510,7 @@ return view.extend({
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 												E('button', { 
-													'class': 'btn cbi-button-neutral next', 
+													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',

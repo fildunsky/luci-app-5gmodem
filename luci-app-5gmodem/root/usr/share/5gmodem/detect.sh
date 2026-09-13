@@ -50,14 +50,11 @@ if [ -n "$_dt_am" ]; then
 	# Поэтому молчим только пока модем НЕ connected.
 	_dt_nif=$(uci -q get "5gmodem.$_dt_sec.network")
 	if [ "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)" = "modemmanager" ]; then
-		_dt_mmi=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null)
-		_dt_st=""
-		[ -n "$_dt_mmi" ] && _dt_st=$(mmcli -m "$_dt_mmi" -K 2>/dev/null \
-			| sed -n 's/^modem\.generic\.state *: *//p' | head -1)
-		case "$_dt_st" in
-			connected) : ;;          # сессия поднята - AT-порт свободен, отдаём
-			*) exit 0 ;;             # поднимается или лежит - не мешаем MM
-		esac
+		# Правило вынесено в quirks.sh (mm_at_allowed): те же ворота стоят у
+		# адресного опроса страницы (5gmodem.sh for=<путь>) и у bands.sh, иначе
+		# они расходились - здесь молчали, а там порт брали из реестра напрямую.
+		. /usr/share/5gmodem/quirks.sh 2>/dev/null
+		mm_at_allowed "$_dt_am" "$_dt_sec" || exit 0
 	fi
 fi
 
@@ -146,13 +143,26 @@ tty_belongs() {   # tty_belongs <tty> <usb_path>
 
 ACTP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 _ACTM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-if [ -n "$ACTP" ] && [ -e "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM"; then
+# «-c», а не «-e»: на месте пропавшего tty остаётся ФАНТОМНЫЙ обычный файл,
+# который создаёт sms_tool при обращении к мёртвому пути (разбор в atprobe.sh).
+# Ниже по файлу проверка кэша уже сделана через «-c» (аудит 12.09.2026).
+if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM"; then
 	echo "$ACTP"
 	exit 0
 fi
 # порт есть, но принадлежит ДРУГОМУ модему (сдвинулась нумерация после
-# переэнумерации) - закреплённое значение протухло, сбрасываем и ищем заново
-[ -n "$ACTP" ] && [ -e "$ACTP" ] && uci -q delete 5gmodem.@5gmodem[0].at_port
+# переэнумерации) - закреплённое значение протухло, сбрасываем и ищем заново.
+# УДАЛЕНИЕ - ТОЖЕ ТРАНЗАКЦИЯ. Голый «uci delete» кладётся в ОБЩИЙ стейджинг
+# /tmp/.uci, и ближайший чужой commit (resolve держит замок и собирает секции
+# до ~12 c) утаскивал его в свою транзакцию. Берём тот же замок, что и пиннинг
+# ниже, и коммитим сами (аудит 12.09.2026).
+if [ -n "$ACTP" ] && [ -c "$ACTP" ]; then
+	if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
+		uci -q delete 5gmodem.@5gmodem[0].at_port
+		uci -q commit 5gmodem 2>/dev/null
+		flock -u 6
+	fi
+fi
 # not pinned yet (fresh boot before resolve): resolve the active modem's AT port
 # by probing the ttys of its USB path (time-bounded, skips DIAG ports).
 AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
@@ -215,14 +225,18 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 			# быстрый путь (at_port pinned) вместо перебора DIAG-портов через
 			# atprobe (это и был весь холодный детект ~8 c). Пиннится один раз -
 			# дальше сюда не доходим. Если модем переперечислится и tty исчезнет,
-			# быстрый путь провалит [ -e ] и мы снова окажемся здесь.
+			# быстрый путь провалит [ -c ] и мы снова окажемся здесь.
 			[ "$(uci -q get 5gmodem.@5gmodem[0].at_port)" = "$T" ] || {
 				# идёт resolve-транзакция - НЕ коммитим поверх её стейджинга
-				# (ревью, баг №7); пиннинг повторится следующим вызовом
-				if exec 7>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 7; then
+				# (ревью, баг №7); пиннинг повторится следующим вызовом.
+				# ДЕСКРИПТОР ОТДЕЛЬНЫЙ (6, а не 7): переоткрытие fd 7 закрывает
+				# прежний OFD и НЕЗАМЕТНО снимает гвард от «стада», взятый выше
+				# на /tmp/5gmodem_detect.lock - тот же капкан, что запрещён в
+				# atlock.sh (ревью, баг №13) (аудит 12.09.2026).
+				if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
 					uci -q set 5gmodem.@5gmodem[0].at_port="$T"
 					uci -q commit 5gmodem 2>/dev/null
-					flock -u 7
+					flock -u 6
 				fi
 			}
 			echo "$T"

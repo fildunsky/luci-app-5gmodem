@@ -23,6 +23,14 @@
 # сбрасываем и переоткрываем порт (модем мог переперечислиться).
 
 RES="/usr/share/5gmodem"
+
+# СИРОТЫ ПРЕДЫДУЩИХ ЗАПУСКОВ. trap ниже убирает файлы этого процесса на любом
+# ВИДИМОМ выходе, но убитый по KILL (rpcd на 30-й секунде) trap не выполняет, и
+# в tmpfs навсегда остаются res/loop/mloop/at/wdmprobe - утечка памяти при каждом
+# открытии вкладки на молчащем lpac. Порог 30 минут: самая долгая живая операция
+# (загрузка профиля) укладывается в 10 минут сторожа. (аудит 12.09.2026)
+find /tmp -maxdepth 1 -name '5gmodem_esim_*.[0-9]*' -mmin +30 -exec rm -f {} + 2>/dev/null
+
 # lpac бинарь: 2.3.x кладёт его в /usr/lib/lpac/lpac + driver-плагины в
 # /usr/lib/lpac/driver (loader находит их по LPAC_DRIVER_HOME - наш патч, т.к.
 # OpenWrt срезает RUNPATH). 2.1.x был единым файлом /usr/lib/lpac. Поддерживаем оба.
@@ -1833,7 +1841,13 @@ _uplink_restore() {
 	ifup "$_UPLINK_IF" >/dev/null 2>&1
 	_UPLINK_IF=""
 }
-trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM HUP
+# ВРЕМЕННЫЕ ФАЙЛЫ ЭТОГО ЗАПУСКА - В ТОТ ЖЕ trap. Их чистили только на счастливом
+# пути (rm сразу после чтения), а нас штатно убивают: rpcd на 30-й секунде, наши
+# же сторожа - раньше. /tmp здесь tmpfs, то есть каждый оборванный показ вкладки
+# eSIM оставлял в памяти файл (а _LOOP/_MLOOP - ещё и FIFO) навсегда. Глоб ловит
+# res/loop/mloop/at/wdmprobe - все они кончаются на PID этого процесса.
+# (аудит 12.09.2026)
+trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null; rm -f /tmp/5gmodem_esim_*.$$ 2>/dev/null' EXIT INT TERM HUP
 
 case "$1" in
 	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) _uplink_release ;;
@@ -1892,7 +1906,19 @@ fi
 
 flush_notifications() {
 	R=$(run_lpac 60 notification process -a -r)
+	_FLUSH_OUT="$R"
 	echo "$R" | grep -q '"code":0' || { rm -f "$PORTCACHE"; }
+}
+
+# Ответ lpac с пометкой «сброс модема уже запущен»: страница иначе делала второй
+# reboot_modem.sh hard поверх нашего (аудит 12.09.2026, группа 7, №15).
+_ERS_STARTED=""
+_ers_echo() {
+	if [ "$_ERS_STARTED" = 1 ]; then
+		printf '%s\n' "$1" | sed 's/"payload":{/"payload":{"reset":1,/'
+	else
+		printf '%s\n' "$1"
+	fi
 }
 
 # СБРОС МОДЕМА ПОСЛЕ СМЕНЫ АКТИВНОГО ПРОФИЛЯ.
@@ -1924,6 +1950,7 @@ esim_reset_after_switch_maybe() {
 	[ -n "$_ers_at" ] && [ -e "$_ers_at" ] || return 0
 	logger -t 5gmodem "esim: profile switched - resetting the modem (AT+CFUN=1,1 on $_ers_at)"
 	( /usr/share/5gmodem/reboot_modem.sh hard "$_ers_at" ) >/dev/null 2>&1 </dev/null &
+	_ERS_STARTED=1
 }
 
 case "$1" in
@@ -1960,14 +1987,14 @@ enable)
 	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile enable "$2"); flush_notifications
 	esim_reset_after_switch_maybe "$O"
-	echo "$O"
+	_ers_echo "$O"
 	;;
 disable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
 	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile disable "$2"); flush_notifications
 	esim_reset_after_switch_maybe "$O"
-	echo "$O"
+	_ers_echo "$O"
 	;;
 delete)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
@@ -2031,8 +2058,14 @@ download)
 			# а UI (parseLpa берёт lpa-строку) покажет неизменённый текст. lpac кладёт в
 			# data свой текст ("Refused"/"profile status is error") - оставляем контекстом.
 			# Меняем ЗНАЧЕНИЕ data целиком ([^"]* - кавычек в data lpac нет), но по
-			# АДРЕСУ lpa-строки. sed-разделитель '|' и спецсимволы (&,\) в кодах/сообщении
-			# GSMA не встречаются.
+			# АДРЕСУ lpa-строки.
+			# ТЕКСТ ЦЕЛИКОМ ПРИШЁЛ ОТ СЕРВЕРА ОПЕРАТОРА (message/subjectIdentifier
+			# в statusCodeData), поэтому «спецсимволов у GSMA не бывает» - не
+			# защита, а допущение. '|' ломает сам sed («unknown option to s»), и
+			# тогда $O становится пустым - вкладка eSIM показывает пустоту вместо
+			# причины отказа; '&' подставляет в текст найденный кусок; '"' и '\'
+			# делают строку невалидным JSON, и parseLpa на странице падает.
+			# Чистим то, что портит подстановку, и режем длину. (аудит 12.09.2026)
 			_LP=$(printf '%s' "$_LPALINE" | jsonfilter -e '@.payload.data' 2>/dev/null)
 			_NEW="$_TAIL"
 			# lpac нередко кладёт в data ТО ЖЕ сообщение, что уже в _TAIL (message
@@ -2041,6 +2074,7 @@ download)
 				""|Refused) : ;;
 				*) case "$_TAIL" in *"$_LP") : ;; *) _NEW="$_TAIL — $_LP" ;; esac ;;
 			esac
+			_NEW=$(printf '%s' "$_NEW" | tr -d '\\"|&\r\n' | cut -c1-200)
 			O=$(printf '%s' "$O" | sed '/"type":"lpa"/ s|"data":"[^"]*"|"data":"'"$_NEW"'"|')
 		fi
 	fi
@@ -2093,7 +2127,7 @@ download)
 			fi
 		fi
 	fi
-	echo "$O"
+	_ers_echo "$O"
 	;;
 notifications)
 	do_lpac 45 notification list
@@ -2112,8 +2146,14 @@ notif)
 	esac
 	;;
 flush)
+	# ОТДАЁМ НАСТОЯЩИЙ ОТВЕТ lpac: с константой code:0 ветка ошибки на странице
+	# была недостижима, и «Отправить все» рапортовало об успехе при мёртвой сети
+	# (аудит 12.09.2026, группа 7, №33).
 	flush_notifications
-	echo '{"type":"lpa","payload":{"code":0,"message":"success","data":""}}'
+	case "$_FLUSH_OUT" in
+		*'"payload"'*) printf '%s\n' "$_FLUSH_OUT" ;;
+		*) echo '{"type":"lpa","payload":{"code":-1,"message":"no answer from lpac","data":""}}' ;;
+	esac
 	;;
 *)
 	err "usage: esim.sh status|dump|dump-free|enable|disable|delete|nickname|download|notifications|flush|progress"

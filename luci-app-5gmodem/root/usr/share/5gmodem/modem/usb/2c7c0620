@@ -2,7 +2,7 @@
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
-T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | sort -r | head -n1 | xargs)
+T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | tr -d '"' | sort -rn | head -n1 | xargs)
 if [ -n "$T" ]; then
 	TEMP="$T &deg;C"
 fi
@@ -33,33 +33,33 @@ if [ -n "$T" ]; then
 fi
 
 if [ "x$MODE_NUM" = "x7" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4; exit}' | xargs)
 	if [ "x$T" = "xLTE" ]; then
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-			T_DEC=$(printf "%d" "0x$T")
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+			T_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 			T_HEX=$T
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 		SINR=$T
 
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $17}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $17; exit}' | xargs)
 		if [ -n "$T" ]; then
 			RSSI=$T
 		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15; exit}' | xargs)
 		if [ -n "$T" ]; then
 			RSRP=$T
 		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16; exit}' | xargs)
 		if [ -n "$T" ]; then
 			RSRQ=$T
 		fi
 
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9; exit}' | xargs)
 		if [ -n "$T" ]; then
 			PCI=$T
 		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $10}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $10; exit}' | xargs)
 		if [ -n "$T" ]; then
 			EARFCN=$T
 		fi
@@ -68,7 +68,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		PBAND=$(echo "$QO" | awk -F[,:] '/^\+QNWINFO:/ {print $4}' | xargs)
 		MAINCUT=$(echo $PBAND | sed 's/LTE BAND //g')
 
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;
@@ -79,7 +79,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			*) T1="?";;
 		esac
 		ULBW="UL: @$T1 MHz"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;

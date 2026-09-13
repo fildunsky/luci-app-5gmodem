@@ -186,8 +186,13 @@ return baseclass.extend({
 			show(grpWifi, en);
 			/* настройка возврата без включённого переключения не имеет смысла */
 			show(grpFb, en && wFo.isChecked());
-			/* потолки по модемам - только при включённом лечении */
-			show(grpHealTbl, en && wHeal.isChecked());
+			/* потолки по модемам - только при включённом лечении.
+			   ГАЛКУ СПРАШИВАЕМ, ТОЛЬКО ЕСЛИ ОНА ОТРИСОВАНА: без модемных аплинков
+			   wHeal.render() не вызывался, узла у виджета нет, и isChecked() падал
+			   с TypeError - модалка сторожа не открывалась вовсе, а на «Настройках»
+			   блок оставался пустым (аудит 12.09.2026). Так же загорожены соседние
+			   обращения в save(). */
+			show(grpHealTbl, en && healSel.length > 0 && wHeal.isChecked());
 		};
 		[ wEn.node, wFo.node, wHeal.node ].forEach(function(n) {
 			if (n) { n.addEventListener('widget-change', deps); }
@@ -224,7 +229,12 @@ return baseclass.extend({
 			}).then(function() {
 				/* первый круг - сразу, чтобы точки появились без ожидания
 				   тика sessionwatch (фоном, страницу не держим) */
-				fs.exec(HBIN, [ 'once' ]);
+				/* ОТКАЗ ГЛУШИМ: круг блокирующий (ждёт flock, затем опрашивает каждый
+				   упавший линк) и на трёх аплинках заведомо длиннее 20-секундного
+				   предела XHR - необработанный reject показывал ошибку поверх
+				   страницы, хотя на роутере круг отрабатывал нормально
+				   (аудит 12.09.2026). */
+				L.resolveDefault(fs.exec(HBIN, [ 'once' ]), null);
 			});
 		};
 		if (opts && opts.autosave) {

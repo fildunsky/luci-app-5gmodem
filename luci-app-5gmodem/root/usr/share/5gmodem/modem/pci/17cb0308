@@ -1,0 +1,29 @@
+# Quectel RM520N-GLAP (тот же RM520N-GL, Qualcomm SDX62) - вариант PCIe/MHI.
+#
+# У AP-модуля USB отрезан на заводе, и роутеру он приходит не по шине USB, а
+# PCI-устройством 17cb:0308 под generic-драйвером ядра (mhi-pci-generic, «MHI
+# PCI device found: quectel-rm5xx»; живой lspci -d 17cb:0308 -n -v). AT-порт -
+# /dev/wwan<N>at<M>, канал данных - /dev/wwan<N>mbim<M>. Для таких узлов
+# 5gmodem.sh строит ключ профиля как pci/<vendor><device>, файла с таким именем
+# не было, и у AP-варианта не показывалось НИ ОДНОЙ вендорной метрики.
+# Набор AT-команд у него тот же, что у USB-варианта, - переиспользуем профиль
+# целиком. (ревью RM520N 13.09.2026, форум 4pda)
+. "$RES/modem/usb/2c7c0801"
+
+# ПРОТОКОЛ КАНАЛА ДАННЫХ - НЕ ИЗ SYSFS USB. Профиль выше ищет драйвер
+# usb-интерфейса, а шины USB здесь нет вовсе, и PROTO всегда оставался пустым.
+# Смотрим, какой канал модуль выставил рядом с AT-портом; под mhi-pci-generic
+# это всегда MBIM («qmi ожидаемо нет, есть mbim»), qmi-канал появляется только с
+# вендорным драйвером - поэтому он же и значение по умолчанию для MHI-узла.
+if [ -z "$PROTO" ]; then
+	case "${DEVICE##*/}" in
+		wwan*)
+			_MPFX=$(printf '%s' "${DEVICE##*/}" | sed 's/at[0-9]*$//')
+			if [ -n "$_MPFX" ]; then
+				[ -e "/dev/${_MPFX}mbim0" ] && PROTO="mbim"
+				[ -z "$PROTO" ] && [ -e "/dev/${_MPFX}qmi0" ] && PROTO="qmi"
+			fi
+			[ -z "$PROTO" ] && PROTO="mbim"
+			;;
+	esac
+fi

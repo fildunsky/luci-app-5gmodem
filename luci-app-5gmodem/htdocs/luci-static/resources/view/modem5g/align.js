@@ -181,7 +181,14 @@ function drawChart(canvas, series, opts) {
    /proc/uptime, дробный допуск там смысла не имеет. */
 function fetchSnapshot(ttl) {
 	var t = Math.max(1, Math.round(Number(ttl) || 4));
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', String(t) ]), '').then(function(out) {
+	/* СНИМОК ПРОСИМ У МОДЕМА ЭТОЙ ВКЛАДКИ. Без for=<путь> бэкенд всегда
+	   отвечал про активный модем: на вкладке соседа каждый тик приходил
+	   чужой снимок, apply() его отбрасывал, а через три тика страница
+	   стирала выбор вкладки (общий ключ 5gm-tab) и начинала рисовать чужие
+	   метрики под подсвеченной вкладкой (аудит 12.09.2026). */
+	var a = [ 'cached', String(t) ];
+	if (pageModemPath) { a.push('for=' + pageModemPath); }
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', a), '').then(function(out) {
 		var j = null; try { j = JSON.parse(out); } catch (e) {}
 		return j;
 	});
@@ -389,7 +396,12 @@ return view.extend({
 		} });
 		var sndBtn = E('button', { class: 'btn cbi-button al-sndbtn', click: function() {
 			au.on = !au.on; LS.s('sndon', au.on ? '1' : '0'); paintSndBtn();
-			if (au.on) { ac(); speak(_('Sound on')); geiger(st.curSinr || 0); } else { stopAudio(); }
+			/* Темп щелчков берём ОТТУДА, ГДЕ ОН ЖИВЁТ - из au. Поля curSinr у st нет
+			   вовсе, и включение звука записывало в au.curSinr ноль: щелчки шли
+			   раз в секунду (как при SINR=0) до следующего применённого тика -
+			   то есть ровно в тот момент, когда обратную связь включили
+			   (аудит 12.09.2026). */
+			if (au.on) { ac(); speak(_('Sound on')); geiger(au.curSinr || 0); } else { stopAudio(); }
 		} });
 		function paintSndBtn() { dom.content(sndBtn, au.on ? [ '🔊 ', _('Sound: on') ] : [ '🔇 ', _('Sound: off') ]); sndBtn.classList.toggle('cbi-button-positive', au.on); }
 		paintSndBtn();
@@ -406,7 +418,10 @@ return view.extend({
 				if (r && r.rsrp != null && !isNaN(parseFloat(r.rsrp))) vals.push(parseFloat(r.rsrp));
 			}
 			var n = vals.length;
-			mimoTitle.textContent = 'MIMO: ' + n + 'x' + n;
+			/* Нет ни одного измеренного порта - это «неизвестно», а не «нуль
+			   приёмных цепей»: у модемов без ANTPORTS страница писала «MIMO: 0x0»
+			   вместо исходного прочерка (аудит 12.09.2026). */
+			mimoTitle.textContent = 'MIMO: ' + (n ? (n + 'x' + n) : '--');
 			if (n >= 2) {
 				var d = Math.round((Math.max.apply(null, vals) - Math.min.apply(null, vals)) * 10) / 10;
 				var lbl = d <= 3 ? _('excellent') : d <= 6 ? _('good') : d <= 10 ? _('fair') : _('poor');

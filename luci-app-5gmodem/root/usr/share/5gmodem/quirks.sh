@@ -104,6 +104,14 @@ ussd_supported_for() {
 		# только две, обе RNDIS (AT+GTUSBMODE=? -> (40,41)), MBIM/QMI нет, то
 		# есть путь «MBIM под ModemManager» недоступен.
 		0e8d:7127|0e8d:7126) echo 0; return ;;
+		# Quectel EP06-E / EG06-E: USSD не поддерживается прошивкой - AT+CUSD
+		# отвечает OK, ответа сети не бывает, обхода на форуме нет (тема
+		# «Агрегация - дорого?», #1055, #11614, #11626; сводка kb/quectel-ep06.md).
+		# Только европейская ревизия: за EP06-A свидетельств нет, и vid:pid у
+		# них общий - различаем по модели.
+		2c7c:0306)
+			case "$1" in *EP06-E*|*EG06-E*) echo 0; return ;; esac
+			return ;;
 		# Telit LM960A18 ЗДЕСЬ БОЛЬШЕ НЕ ЧИСЛИТСЯ: у него USSD работает, см.
 		# разбор в ussd_raw_for выше. Плашка «не работает» на его странице была
 		# ложной.
@@ -172,7 +180,16 @@ sim_slots_via() {
 				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo ceiswitchsim; return ;;
 			esac
 			echo qmi; return ;;
-		05c6:9025|413c:81d7|0489:e0b5) echo qmi; return ;;
+		05c6:9025|413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) echo qmi; return ;;
+		# Thales-композиции того же T99W175/MV31-W (AT^CUSTOMER=14/16/33): без
+		# записи слоты и кнопка eSIM у них не показывались вовсе (ревью 12.09.2026).
+		# 1e2d:00b7 делит с прототипом Compal - отличаем по модели, как 05c6:90d5.
+		1e2d:00b7)
+			case "$1" in
+				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo ceiswitchsim; return ;;
+			esac
+			echo qmi; return ;;
+		1e2d:00b3|1e2d:00b8|1e2d:00b9) echo qmi; return ;;
 		# Foxconn T99W373 / Thales MV32-W (SDX62). Слоты у модуля есть - паспорт
 		# обещает «Dual SIM support with DSSS» и переключение между внешней SIM
 		# и встроенным eUICC. AT-команда тоже есть (AT+SWITCH_SLOT, раздел 15.38
@@ -180,7 +197,8 @@ sim_slots_via() {
 		# запасной путь, что у всего семейства, и он же единственный, который
 		# отдаёт СПИСОК слотов с признаком eUICC.
 		0489:e0f0) echo qmi; return ;;
-		# Quectel EP06-E: AT-команды слотов нет (AT+QUIMSLOT=? не отвечает), но
+		# Quectel EP06-E: AT+QUIMSLOT=? не отвечает (это команда линейки EM12/M.2; по
+		# форуму у EC25/EP06 слоты переключает AT+QDSIM - живьём не проверено), но
 		# слоты у модуля ЕСТЬ - и QMI их отдаёт («2 physical slots found»,
 		# слот 1 с картой, слот 2 пустой), и ModemManager видит два. Проверено на
 		# живом модеме 05.08.2026. Поэтому путь именно qmi: под ModemManager
@@ -188,6 +206,18 @@ sim_slots_via() {
 		# а в QMI-режиме слоты прочитает qmicli. Объявить «none» было бы неверно
 		# вдвойне - слоты есть, просто AT-командой их не спросить.
 		2c7c:0306) echo qmi; return ;;
+		# Quectel RM520N-GL (2c7c:0801) и родня по набору команд: слоты живут за
+		# AT+QUIMSLOT. Чтение «AT+QUIMSLOT?» -> «+QUIMSLOT: 1», запись
+		# «AT+QUIMSLOT=1»/«=2» -> OK (форум: живой обмен, плюс переключение
+		# туда-обратно лечит отваливающуюся регистрацию у одного из операторов).
+		# Без записи simslot.sh перебирал чужие команды - AT^switch_slot,
+		# AT+GTDUALSIM, AT!UIMS, AT+CEISWITCHSIM: ни одну из них прошивка не
+		# знает, и слоты не читались вовсе, хотя профиль метрик активный слот
+		# показывал. (ревью RM520N 13.09.2026, форум 4pda)
+		# 2c7c:0800 (RM500Q/RM502Q) и 2c7c:0900 (RG500Q) - та же команда: их
+		# профили метрик уже читают AT+QUIMSLOT?, значит у прошивки она есть.
+		# EP06 (2c7c:0306) сюда НЕ входит - см. запись выше: у него QUIMSLOT нет.
+		2c7c:0800|2c7c:0801|2c7c:0900) echo quimslot; return ;;
 	esac
 	case "$1" in
 		# SIMCOM SIM7600E-H: один SIM-слот. AT+SIMTYPE? молчит (это команда
@@ -222,7 +252,13 @@ esim_reset_after_switch() {
 				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo 0; return ;;
 			esac
 			echo 1; return ;;
-		05c6:9025|413c:81d7|0489:e0b5) echo 1; return ;;
+		05c6:9025|413c:81d7|413c:81e0|0489:e0b5) echo 1; return ;;
+		1e2d:00b7)
+			case "$1" in
+				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo 0; return ;;
+			esac
+			echo 1; return ;;
+		1e2d:00b3|1e2d:00b8|1e2d:00b9) echo 1; return ;;
 		# T99W373 / MV32-W: живьём не проверялось, ставим по семейству. Цена
 		# ошибки несимметрична: лишний сброс стоит минуты без сети, а нехватка
 		# сброса выглядит как «переключил профиль, и ничего не изменилось» -
@@ -230,4 +266,52 @@ esim_reset_after_switch() {
 		0489:e0f0) echo 1; return ;;
 	esac
 	echo 0
+}
+
+# AT-ПОРТ МОДЕМА, КОТОРЫМ ВЛАДЕЕТ ModemManager: ОТДАВАТЬ ЛИ ЕГО НАШЕМУ ОПРОСУ.
+#
+# Прошивки, у которых чужой AT-обмен параллельно MM роняет сессию данных:
+# Foxconn T77W968 = Dell DW5821e / DW5821e-eSIM. Две независимые жалобы с
+# одинаковой картиной «связь работает часами, открываю вкладку - линк
+# перезапускается»: issue #13 (10.08.2026, проверка владения по факту закрыла
+# только случай прото≠modemmanager) и отчёт 12.09.2026 уже на 2.4.68 - там
+# интерфейс штатный modemmanager, и адресный опрос страницы (for=<путь>) брал
+# AT-порт из реестра без единых ворот. У таких модемов AT под MM выключен,
+# карточку наполняет mmcli; температура и несущие возвращаются явным
+# mm_at=1 в секции модема (галка «AT-опрос под ModemManager» на вкладке Модем).
+# Аргумент - vid:pid.
+mm_at_fragile() {
+	case "$1" in
+		413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) echo 1 ;;
+	esac
+}
+
+# $1 - usb-путь, $2 - секция. Код 0 = AT-порт брать можно, 1 = нельзя (MM ещё
+# поднимает сессию), 2 = нельзя из-за хрупкой прошивки (постоянно, не состояние).
+#   mm_at=1 в секции      - можно всегда: воля владельца, любая прошивка;
+#   хрупкая прошивка      - нельзя (см. mm_at_fragile);
+#   остальные             - только при УЖЕ установленной сессии: срывается
+#                           именно enable/connect (см. detect.sh), а без порта
+#                           пропадают метрики, которых у mmcli нет (температура,
+#                           несущие, антенны) - ради них профили MBIM/QMI и писались.
+# Самодостаточна нарочно: bands.sh зовёт её ДО подключения lib.sh. Индекс MM
+# берётся из того же минутного кэша, что у mm_owns_path (lib.sh) и bands.sh.
+mm_at_allowed() {
+	[ "$(uci -q get "5gmodem.$2.mm_at" 2>/dev/null)" = "1" ] && return 0
+	_maa_vp=""
+	[ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ] && \
+		_maa_vp="$(cat "/sys/bus/usb/devices/$1/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$1/idProduct" 2>/dev/null)"
+	[ -n "$(mm_at_fragile "$_maa_vp")" ] && return 2
+	command -v mmcli >/dev/null 2>&1 || return 1
+	_maa_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_maa_i=""
+	if [ -s "$_maa_c" ] && [ -n "$(find "$_maa_c" -mmin -1 2>/dev/null)" ]; then
+		read -r _maa_i < "$_maa_c" 2>/dev/null
+	else
+		_maa_i=$(/usr/share/5gmodem/modemswitch.sh mmindex "$1" 2>/dev/null)
+		printf '%s\n' "${_maa_i:-none}" > "$_maa_c" 2>/dev/null
+	fi
+	[ -n "$_maa_i" ] && [ "$_maa_i" != "none" ] || return 1
+	[ "$(mmcli -m "$_maa_i" -K 2>/dev/null \
+		| sed -n 's/^modem\.generic\.state *: *//p' | head -1)" = "connected" ]
 }

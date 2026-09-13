@@ -1,9 +1,8 @@
-# Quectel RM520N-GL
-# Quectel RM521F-GL
+# Quectel RM520N-GL (2c7c:0801; RM521F-GL - по общему руководству AT-команд, свой PID в теме не подтверждён)
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
-T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | sort -r | head -n1 | xargs)
+T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | tr -d '"' | sort -rn | head -n1 | xargs)
 [ -n "$T" ] && TEMP="$T &deg;C"
 
 if [ -z "$REG" ] || [ "x$MODE_NUM" = "x11" ]; then
@@ -38,10 +37,18 @@ if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
 	COPS="$T"
 fi
 
-if [ "$CID_HEX" = "0" ]; then
-Oz=$(sms_tool -d $DEVICE at "at+qeng=\"servingcell\";")
-CID_HEX=$(echo "$Oz" | awk -F',' '/LTE/ {print $5}')
-CID_DEC=$(printf "%d" "0x${CID_HEX}")
+# ИДЕНТИФИКАТОР СОТЫ - ИЗ УЖЕ ПОЛУЧЕННОГО QENG, БЕЗ ВТОРОГО ЗАХОДА В ПОРТ.
+# Раньше поле бралось как 5-е по запятым - в сплошной раскладке
+# +QENG: "servingcell","NOCONN","LTE","FDD",250,11,4E23802,... это MCC (250),
+# и в карточку уезжала «сота 592». Раскладок две: сплошная (сота - 7-е поле)
+# и NSA-разнесённая +QENG: "LTE",... (сота - 5-е) (ревью RM520N 13.09.2026,
+# живой ответ с форума 4pda).
+if [ "$CID_HEX" = "0" ] || [ -z "$CID_HEX" ]; then
+	T=$(echo "$O" | tr -d '\r' | awk -F, '/^\+QENG: "servingcell",.*"LTE"/ {print $7; exit} /^\+QENG: "LTE",/ {print $5; exit}' | tr -cd '0-9A-Fa-f')
+	if [ -n "$T" ]; then
+		CID_HEX="$T"
+		CID_DEC=$(printf "%d" "0x$T" 2>/dev/null)
+	fi
 fi
 
 
@@ -60,23 +67,23 @@ case "$MODE_NUM" in
 		else
 			if echo "$O" | grep -q -i "+QCAINFO.*PCC.*LTE"; then
 
-					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 					SINR=$OTS
 
-					TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-					TAC_DEC=$(printf "%d" "0x$TDX")
+					TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+					TAC_DEC=$(case "$TDX" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$TDX";; esac)
 					TAC_HEX=$TDX
 
 				if echo "$O" | grep -q -i "+QCAINFO.*SCC"; then
 					MODE="LTE-A |"
 
-						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 						SINR=$OTS
 
-						TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-						TAC_DEC=$(printf "%d" "0x$TDX")
+						TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+						TAC_DEC=$(case "$TDX" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$TDX";; esac)
 						TAC_HEX=$TDX
 				fi
 			fi
@@ -140,15 +147,15 @@ else
 fi
 
 if [ "x$MODE_NUM" = "x7" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4; exit}' | xargs)
 	if [ "x$T" = "xLTE" ]; then
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-		TAC_DEC=$(printf "%d" "0x$T")
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+		TAC_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 		TAC_HEX="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 		SINR="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;
@@ -159,7 +166,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			*) T1="";;
 		esac
 		[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;
@@ -174,16 +181,16 @@ if [ "x$MODE_NUM" = "x7" ]; then
 fi
 
 if [ "x$MODE_NUM" = "x11" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4; exit}' | xargs)
 	if [ "x$T" = "xNR5G-SA" ]; then
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $8}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $8; exit}')
 		if [ -n "$T" ]; then
 			CID_HEX=$T
 			CID_DEC=$(printf "%d" "0x${CID_HEX}")
 		fi
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}')
+#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9; exit}')
 #		[ -n "$T" ] && PCI="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 		case $T in
 			0) BW="5";;
 			1) BW="10";;
@@ -203,7 +210,7 @@ if [ "x$MODE_NUM" = "x11" ]; then
 			*) BW="";;
 		esac
 		[ -n "$BW" ] && DBW="@$BW MHz"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
 		if [ -n "$T" ]; then
 			RSRP="$T"
 			if [ -n "$BW" ]; then
@@ -218,9 +225,9 @@ if [ "x$MODE_NUM" = "x11" ]; then
 				fi
 			fi
 		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15; exit}')
 		[ -n "$T" ] && RSRQ="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16; exit}')
 		[ -n "$T" ] && SINR="$T"
 	fi
 fi
@@ -231,16 +238,16 @@ IFS="
 if [ "x$MODE_NUM" = "x13" ]; then
 	LINES=$(echo "$O" | grep "+QENG")
 	for LINE in $LINES; do
-		T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/{print $2}' | xargs)
+		T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/{print $2; exit}' | xargs)
 		if [ "x$T" = "xLTE" ]; then
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $12}')
-			TAC_DEC=$(printf "%d" "0x$T")
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
+			TAC_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 			TAC_HEX=$T
 
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $16}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $16; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 			SINR="$T"
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $10}')
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $10; exit}')
 			case $T in
 				0*) T1="1.4";;
 				1*) T1="3";;
@@ -251,7 +258,7 @@ if [ "x$MODE_NUM" = "x13" ]; then
 				*) T1="";;
 			esac
 			[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $11}')
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $11; exit}')
 			case $T in
 				0*) T1="1.4";;
 				1*) T1="3";;
@@ -264,13 +271,13 @@ if [ "x$MODE_NUM" = "x13" ]; then
 			[ -n "$T1" ] && DLBW="DL: @$T1 MHz"
 			elif [ "x$T" = "xservingcell" ]; then
 			if [ "x${MODE:0:3}" = "xLTE" ]; then
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-				T_DEC=$(printf "%d" "0x$T")
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+				T_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 				T_HEX="$T"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", 0.2*$1*10 - 20}')
-#				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 				SINR="$T"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
 				case $T in
 					0*) T1="1.4";;
 					1*) T1="3";;
@@ -281,7 +288,7 @@ if [ "x$MODE_NUM" = "x13" ]; then
 					*) T1="";;
 				esac
 				[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 				case $T in
 					0*) T1="1.4";;
 					1*) T1="3";;
@@ -343,7 +350,50 @@ if [ -n "$T" ]; then
 		[ -n "$T" ] && RSRP="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{print $9}')
 		[ -n "$T" ] && RSRQ="$T"
+		# SINR - ИЗ QCAINFO, а не из QENG: у SDX62 поле SINR обслуживающей соты
+		# в QENG отдаёт 0, тогда как последнее поле PCC в QCAINFO той же сессии
+		# показывает 8 дБ (живой дамп с форума 4pda, ревью RM520N 13.09.2026).
+		# Целые дБ как есть; QENG остаётся запасным вариантом выше.
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{v=$11; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/) print v; exit}')
+		[ -n "$T" ] && SINR="$T"
 	fi
+
+	# УРОВНИ ПО КАЖДОЙ ВТОРИЧНОЙ НЕСУЩЕЙ.
+	#
+	# QCAINFO отдаёт их прямо в строке SCC, а код читал и выбрасывал: присвоения
+	# оставались от давно удалённого API `addon` (закомментированные строки).
+	# На форуме нормой считаются 3-5 несущих («1+1+3+3+78», 5 несущих на 85 МГц -
+	# #1145, #1398-1401, #2377, #2656), и без уровней таблица агрегации отвечала
+	# на вопрос «какая полоса» и молчала о том, живая ли она вообще.
+	#
+	# Раскладка LTE SCC подтверждена пятью независимыми живыми дампами
+	# (#487, #1364, #2378, #2383, #2545):
+	#   "SCC",<earfcn>,<bw>,"LTE BAND n",<state>,<pci>,<rsrp>,<rsrq>,<rssi>,
+	#         <sinr>[,<ul_cfg>,<ul_bw>,<ul_earfcn>]
+	# При разборе через -F[,:] это поля $3,$4,$5,$6,$7,$8,$9,$10,$11 - те самые,
+	# что уже брал код для earfcn/pci. Хвост после SINR прошивка заполняет
+	# прочерками («,0,-,-»), поэтому каждое значение проверяем на число и на
+	# физичный диапазон, иначе в карточку уедет «-».
+	# (ревью 13.09.2026, форум 4pda)
+	_sccnum() {   # $1 - имя переменной, $2 - значение, $3 - минимум, $4 - максимум
+		# Пишем через eval, а не через echo в $(...): подстановка команды - это
+		# ещё один форк на каждое из четырёх значений каждой несущей.
+		eval "$1=''"
+		case "$2" in
+			''|'-'|*[!0-9-]*) return;;
+		esac
+		[ "$2" -ge "$3" ] 2>/dev/null || return
+		[ "$2" -le "$4" ] 2>/dev/null || return
+		eval "$1=\$2"
+	}
+	_sccsig() {   # $1 - номер несущей, дальше rsrp rsrq rssi sinr
+		case "$1" in
+			1) S1RSRP="$2"; S1RSRQ="$3"; S1RSSI="$4"; S1SINR="$5";;
+			2) S2RSRP="$2"; S2RSRQ="$3"; S2RSSI="$4"; S2SINR="$5";;
+			3) S3RSRP="$2"; S3RSRQ="$3"; S3RSSI="$4"; S3SINR="$5";;
+			4) S4RSRP="$2"; S4RSRQ="$3"; S4RSSI="$4"; S4SINR="$5";;
+		esac
+	}
 
 	IDX=1
 	LINES=$(echo "$O" | grep -E "^\+QCAINFO: \"(scc|SCC)\"")
@@ -387,14 +437,20 @@ if [ -n "$T" ]; then
 					esac
 				fi
 				
-				T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $10}' | xargs)
-#				[ -n "$T5" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "$T5 dBm"
-				
-				T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}' | xargs)
-#				[ -n "$T5" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
-				
-				T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}' | xargs)
-#				[ -n "$T5" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
+				# Четыре уровня - ОДНИМ awk, а не четырьмя: цикл крутится на
+				# каждом опросе по числу несущих (до пяти), и прежние три awk
+				# на несущую стоили полтора десятка форков впустую. Пустое поле
+				# заменяем прочерком ПРЯМО В AWK: без этого два пробела подряд
+				# схлопнулись бы при разборе и уровни уехали бы на поле влево.
+				T5=$(echo "$LINE" | tr -d '\r' | awk -F[,:] '{
+					for (i = 8; i <= 11; i++) printf "%s%s", ($i == "" ? "-" : $i), (i < 11 ? " " : "\n")
+				}')
+				_oIFS=$IFS; IFS=' '; set -- $T5; IFS=$_oIFS
+				_sccnum _S_RSRP "$1" -160 -30
+				_sccnum _S_RSRQ "$2" -40 0
+				_sccnum _S_RSSI "$3" -160 -10
+				_sccnum _S_SINR "$4" -30 50
+				_sccsig "$IDX" "$_S_RSRP" "$_S_RSRQ" "$_S_RSSI" "$_S_SINR"
 				;;
 			*"NR5G BAND"*)
 				B=$(echo $T | sed 's/"NR5G BAND \(.*\)"/\1/')
@@ -441,10 +497,11 @@ if [ -n "$T" ]; then
 			                esac
 		            		fi
 					
-					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}')
-#					[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
-					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}')
-#					[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
+					# УРОВНЕЙ ПО NR-НЕСУЩЕЙ НЕ ЗАПОЛНЯЕМ. В теме нет ни одного
+					# живого дампа QCAINFO в SA, где у строки NR5G были бы
+					# уровни: закомментированные $8/$9 пришли из чужого кода и
+					# сверить их не с чем. Угадывать позиции - значит рисовать
+					# чужой RSRP (ревью 13.09.2026, форум 4pda).
 				else
 					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $6}' | xargs)
 						if [ -n "$T5" ]; then
@@ -456,10 +513,13 @@ if [ -n "$T" ]; then
 							*) ;;
 							esac
 						fi
-					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $7}')
-#					[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
-					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}')
-#					[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
+					# NR-НЕСУЩАЯ В NSA УРОВНЕЙ НЕ НЕСЁТ ВОВСЕ. Единственный
+					# живой дамп такой строки в теме - `+QCAINFO: "SCC",643320,
+					# 12,"NR5G BAND 78",145` (#487): пять полей, дальше ничего.
+					# Поэтому заполняем только то, что там есть, - ARFCN, полосу
+					# и PCI (выше), а RSRP/RSRQ/RSSI/SINR оставляем пустыми:
+					# уровни 5G в NSA приходится смотреть по LTE-якорю.
+					# (ревью 13.09.2026, форум 4pda)
 				fi
 				;;
 		esac
@@ -487,6 +547,48 @@ fi
 
 fi
 
+# СОСЕДНИЕ СОТЫ - AT+QENG="neighbourcell", формат тот же, что у EP06:
+#   +QENG: "neighbourcell intra","LTE",<earfcn>,<pci>,<rsrq>,<rsrp>,<rssi>,...
+# (живой дамп RM520N с форума 4pda: intra 2850,136,-10,-100,-68 сходится с
+# обслуживающей сотой - 5-е поле RSRQ, 6-е RSRP). Разбор перенесён из
+# modem/usb/2c7c0306, таблица EARFCN->диапазон расширена до набора RM520N-GL
+# (ревью RM520N 13.09.2026). Обслуживающая сота в списке есть - помечаем её.
+if [ -z "$NEIGHBORS" ]; then
+	_NB=$(sms_tool -d $DEVICE at "AT+QENG=\"neighbourcell\"" 2>/dev/null | tr -d '\r')
+	NEIGHBORS=$(echo "$_NB" | awk -v spci="$PCI" -v sear="$EARFCN" -F, '
+		function ch2band(c) {
+			if (c <= 599) return 1;      if (c <= 1199) return 2
+			if (c <= 1949) return 3;     if (c <= 2399) return 4
+			if (c <= 2649) return 5;     if (c >= 2750 && c <= 3449) return 7
+			if (c >= 3450 && c <= 3799) return 8
+			if (c >= 5010 && c <= 5179) return 12;  if (c >= 5180 && c <= 5279) return 13
+			if (c >= 5280 && c <= 5379) return 14;  if (c >= 5730 && c <= 5849) return 17
+			if (c >= 5850 && c <= 5999) return 18;  if (c >= 6000 && c <= 6149) return 19
+			if (c >= 6150 && c <= 6449) return 20
+			if (c >= 8040 && c <= 8689) return 25;  if (c >= 8690 && c <= 9039) return 26
+			if (c >= 9210 && c <= 9659) return 28;  if (c >= 9660 && c <= 9769) return 29
+			if (c >= 9770 && c <= 9869) return 30;  if (c >= 9920 && c <= 10359) return 32
+			if (c >= 36200 && c <= 36349) return 34
+			if (c >= 37750 && c <= 38249) return 38; if (c >= 38250 && c <= 38649) return 39
+			if (c >= 38650 && c <= 39649) return 40; if (c >= 39650 && c <= 41589) return 41
+			if (c >= 41590 && c <= 43589) return 42; if (c >= 43590 && c <= 45589) return 43
+			if (c >= 46790 && c <= 54539) return 46; if (c >= 55240 && c <= 56739) return 48
+			if (c >= 66436 && c <= 67335) return 66; if (c >= 68586 && c <= 68935) return 71
+			return 0
+		}
+		/^\+QENG: "neighbourcell/ {
+			gsub(/"/, "", $2)
+			if ($2 != "LTE") next
+			if (NF < 7) next
+			earfcn = $3 + 0; pci = $4 + 0; rsrq = $5 + 0; rsrp = $6 + 0; rssi = $7 + 0
+			if (earfcn == 0 || rsrp == 0) next
+			b = ch2band(earfcn)
+			if (n++) printf ","
+			sv = (spci != "" && sear != "" && pci == spci+0 && earfcn == sear+0) ? "true" : "false"
+			printf "{\"band\":\"%s\",\"earfcn\":\"%d\",\"pci\":\"%d\",\"rsrp\":\"%d\",\"rsrq\":\"%d\",\"rssi\":\"%d\",\"serving\":%s}", (b ? b : ""), earfcn, pci, rsrp, rsrq, rssi, sv
+		}')
+fi
+
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE_A,LTE-A,' | sed 's,LTE-A B,LTE-A | B,')
 
 if [ "${LAC_DEC}" = "0" ]; then
@@ -497,6 +599,11 @@ fi
 # Modem
 FWA=$(sms_tool -d $DEVICE at "AT+GMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+GMR "//)
+# ПОЛНЫЙ БИЛД - AT+QGMR?: RM520NGLAAR03A03M4G_01.201.01.201. Только по нему
+# видно ветку прошивки (R01A06 - без регионального блока, R03/«200/201/30x» -
+# с блоком РФ), AT+GMR отдаёт короткую ревизию (форум 4pda, ревью 13.09.2026).
+T=$(sms_tool -d $DEVICE at "AT+QGMR?" 2>/dev/null | tr -d '\r' | awk '/^[A-Z][A-Z0-9]+_[0-9][0-9.]*$/ {print; exit}')
+[ -n "$T" ] && FW="$T"
 
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
@@ -534,18 +641,34 @@ fi
 
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=2c7c ProdID=0801' '{print $2}' | cut -c-1290)
-if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
-then
-    PROTO="qmi"
-elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"
-then
-    PROTO="mbim"
-elif echo "$PVCUT" | grep -q "Driver=cdc_ether"
-then
-    PROTO="ecm"
+# ДРАЙВЕР - ИЗ SYSFS СВОЕГО USB-ПУТИ. Разбор debugfs брал текст после ПЕРВОГО
+# «Vendor=2c7c ProdID=0801» и резал по 1290 символам: при двух одинаковых
+# модулях протокол приезжал от соседа, а без смонтированного debugfs не
+# определялся вовсе (ревью RM520N 13.09.2026). debugfs остаётся запасным.
+_QPROTO=""
+if [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _qi in "/sys/bus/usb/devices/$_POLL_AM":*/driver; do
+		[ -L "$_qi" ] || continue
+		case "$(readlink "$_qi" 2>/dev/null)" in
+			*/qmi_wwan)  _QPROTO="qmi" ;;
+			*/cdc_mbim)  _QPROTO="mbim" ;;
+			*/cdc_ether) _QPROTO="ecm" ;;
+		esac
+		[ -n "$_QPROTO" ] && break
+	done
 fi
+if [ -z "$_QPROTO" ]; then
+	PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
+	PVCUT=$(echo $PV | awk -F 'Vendor=2c7c ProdID=0801' '{print $2}' | cut -c-1290)
+	if echo "$PVCUT" | grep -q "Driver=qmi_wwan"; then
+		_QPROTO="qmi"
+	elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"; then
+		_QPROTO="mbim"
+	elif echo "$PVCUT" | grep -q "Driver=cdc_ether"; then
+		_QPROTO="ecm"
+	fi
+fi
+[ -n "$_QPROTO" ] && PROTO="$_QPROTO"
                                                                                                                                                                                                                                          
 
 . "$RES/modem/usb/_quectel_qrsrp"

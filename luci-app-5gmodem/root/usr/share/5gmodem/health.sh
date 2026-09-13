@@ -295,7 +295,11 @@ judge() {
 			[ "$_j_st" = down ] && _j_wasdown=1
 			[ "$_j_st" = gone ] && [ -f "$HDIR/$_j_if.heal" ] && _j_wasdown=1
 			# ожил - лестница лечения начинается с нуля при следующем падении
-			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" "$HDIR/$_j_if.mmoff"
+			# вместе с лестницей стираем и её маркеры-спутники: они живут
+			# ровно один эпизод, а после подчистки призраков (см. round)
+			# переживали бы его и портили следующий (аудит 12.09.2026)
+			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" \
+				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
 				_ev "link $_j_if is back - kept at the end (per settings)"
@@ -374,14 +378,20 @@ round() {
 	# случай: modem5 -> modem4). Его файл состояния иначе жил бы вечно со
 	# статусом «up» и ломал гварды «легли все»: призрачный anyup разрешал бы
 	# штрафы и лечение при общей аварии.
+	# Спутники лестницы (.mmoff/.on2g/.srch) - ТОЖЕ НЕ ПРИЗРАКИ. Их имена не
+	# совпадают ни с одной сетью зоны, поэтому подчистка стирала их каждый круг:
+	# маркер «событие один раз за эпизод» терялся, а потолок поиска сети (.srch)
+	# не наступал никогда - модем в вечном скане не лечился, и запись о поиске
+	# сыпалась в журнал каждые 30 секунд (аудит 12.09.2026).
 	_r_zone=" $(wan_nets | tr '\n' ' ') "
 	for _r_f in "$HDIR"/*; do
 		[ -f "$_r_f" ] || continue
-		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
+		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		_r_bn="${_r_f##*/}"
 		case "$_r_zone" in
 			*" $_r_bn "*) ;;
-			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" "$_r_f.nodata" "$_r_f.mmoff" ;;
+			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" \
+				"$_r_f.nodata" "$_r_f.mmoff" "$_r_f.on2g" "$_r_f.srch" ;;
 		esac
 	done
 }
@@ -435,7 +445,17 @@ _move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - им
 			case " $_mt_seen " in *" ${_mt:-main} "*) continue ;; esac
 			_mt_seen="$_mt_seen ${_mt:-main}"
 			_mt_a=""; [ -n "$_mt" ] && _mt_a="table $_mt"
-			ip "$_fam" route show default $_mt_a 2>/dev/null | grep -E " dev $1( |$)" | while read -r _ln; do
+			# `default from <префикс>` НЕ ТРОГАЕМ. Это source-specific default
+			# IPv6, их кладёт netifd по одному на каждый делегированный
+			# префикс. Селектор `from` мы не сохраняли, и каждая такая строка
+			# пересобиралась в ОДИН И ТОТ ЖЕ обычный default - первый вставал,
+			# остальные упирались в «File exists» и уезжали по метрикам +1..+8
+			# (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026). Переранжировать их
+			# честно можно только вместе с from/via/dev/метрикой/таблицей -
+			# до тех пор они остаются за netifd.
+			ip "$_fam" route show default $_mt_a 2>/dev/null \
+				| grep -v '^default from ' \
+				| grep -E " dev $1( |$)" | while read -r _ln; do
 				_cm=$(printf '%s' "$_ln" | sed -n 's/.*metric \([0-9]*\).*/\1/p'); _cm="${_cm:-0}"
 				[ "$_cm" = "$2" ] && continue
 				_gw=$(printf '%s' "$_ln" | sed -n 's/.*via \([^ ]*\).*/\1/p')
@@ -552,7 +572,7 @@ _dns_demote() {   # $1 - имена мёртвых линков через пр�
 enforce() {
 	_e_anyup=""; _e_cnt=0; _e_min=""; _e_dead=""
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_cnt=$((_e_cnt + 1))
 		[ "$_e_st" = up ] && _e_anyup=1
@@ -562,7 +582,7 @@ enforce() {
 		if [ -z "$_e_min" ] || [ "$_e_mm" -lt "$_e_min" ]; then _e_min="$_e_mm"; fi
 	done
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		_e_if="${_e_f##*/}"
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_dev=$(iface_dev "$_e_if"); [ -n "$_e_dev" ] || _e_dev=$(iface_dev "${_e_if}_4")
@@ -706,7 +726,7 @@ heal() {
 	# однмодемного роутера.
 	_h_cnt=0; _h_anyup=""
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		read -r _h_st _ _ _ _ < "$_h_f" || continue
 		_h_cnt=$((_h_cnt + 1))
 		[ "$_h_st" = up ] && _h_anyup=1
@@ -728,7 +748,7 @@ heal() {
 	fi
 	[ "$_h_cnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		_h_if="${_h_f##*/}"
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		# WI-FI-АПЛИНК - своя короткая лестница, и она берёт в работу ещё и
@@ -801,6 +821,13 @@ heal() {
 			fi
 			_h_step=0; _h_last=0; _h_n=0
 			[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
+			# ОБРЕЗАННЫЙ ФАЙЛ ЛЕСТНИЦЫ - НЕ ТУПИК. read по пустому файлу
+			# обнуляет переменные В ПУСТУЮ СТРОКУ, а `[ "" -lt N ]` у busybox -
+			# ошибка «bad number» (код 2), и continue замораживал бы лечение
+			# этого линка навсегда (аудит 12.09.2026)
+			case "$_h_step" in ''|*[!0-9]*) _h_step=0 ;; esac
+			case "$_h_last" in ''|*[!0-9]*) _h_last=0 ;; esac
+			case "$_h_n" in ''|*[!0-9]*) _h_n=0 ;; esac
 			[ "$_h_n" -lt "$HEAL_MAX" ] || continue
 			_h_now=$(uptime_s)
 			[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
@@ -978,6 +1005,12 @@ heal() {
 		fi
 		_h_step=0; _h_last=0; _h_n=0
 		[ -f "$HDIR/$_h_if.heal" ] && read -r _h_step _h_last _h_n < "$HDIR/$_h_if.heal"
+		# обрезанный файл лестницы (см. ту же страховку в ветке Wi-Fi):
+		# пустое поле в арифметике busybox - ошибка, и линк застрял бы без
+		# лечения навсегда (аудит 12.09.2026)
+		case "$_h_step" in ''|*[!0-9]*) _h_step=0 ;; esac
+		case "$_h_last" in ''|*[!0-9]*) _h_last=0 ;; esac
+		case "$_h_n" in ''|*[!0-9]*) _h_n=0 ;; esac
 		[ "$_h_n" -lt "$HEAL_MAX" ] || continue
 		_h_now=$(uptime_s)
 		[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
@@ -1205,7 +1238,7 @@ _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
 		[ -f "$_td_f" ] || continue
-		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.last_event) continue ;; esac
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.last_event) continue ;; esac
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue
@@ -1249,12 +1282,21 @@ once)
 	# только что выключили - немедленно прибраться (штрафы снять), а не ждать тика
 	[ "$H_EN" = "1" ] || _off_cleanup
 	mkdir -p "$HDIR"
-	# once ждёт замок (блокирующе): его зовут руками/со страницы - ответ нужен
-	exec 9>"/tmp/5gmodem_health.lock"
-	flock 9
-	round
-	enforce
-	heal
+	# ЖДЁМ ЗАМОК, НО НЕ ДЕРЖИМ СТРАНИЦУ. Замок блокирующий (круг должен быть
+	# один, см. tick), а сам круг ходит в сеть и в AT-порты: ожидание чужого
+	# тика плюс собственные пробы легко перекрывают 30-секундный потолок rpcd, и
+	# сохранение настроек сторожа заканчивалось «ошибкой XHR» при уже
+	# записанных настройках. Круг уводим в фон с отвязкой дескрипторов (иначе
+	# rpcd досиживает до EOF на пайпах), ответ отдаём сразу - страница результат
+	# круга не читает, она перечитывает состояние следующим опросом
+	# (аудит 12.09.2026).
+	( exec >/dev/null 2>&1 </dev/null
+	  exec 9>"/tmp/5gmodem_health.lock"
+	  flock 9
+	  round
+	  enforce
+	  heal ) &
+	echo '{"result":"ok"}'
 	;;
 event)
 	# Внеочередной круг ПО СОБЫТИЮ ifup/ifdown аплинка (hotplug.d/iface).

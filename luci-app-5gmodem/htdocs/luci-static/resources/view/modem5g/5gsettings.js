@@ -102,13 +102,21 @@ function updBusy(busy) {
 	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
 }
 
-/* Ресурсы приложения, которые браузер кэширует и которые меняются с релизом. */
+/* Ресурсы приложения, которые браузер кэширует и которые меняются с релизом.
+   ЗДЕСЬ ДОЛЖНЫ БЫТЬ ВСЕ наши файлы. Пропущенный модуль опаснее отсутствующего
+   списка: bandsui/healthform выделены из 5gdetail/5gsettings, и после обновления
+   новый 5gdetail.js встречался в браузере со СТАРЫМ bandsui.js - несогласованный
+   ctx и «обновились, а половина страницы не работает». Ровно от этого список и
+   заведён. (аудит 12.09.2026) */
 var CACHED_RES = [
 	'view/modem5g/5gdetail.js', 'view/modem5g/5gdebug.js', 'view/modem5g/5gesim.js',
 	'view/modem5g/5gsettings.js', 'view/modem5g/netpri.js', 'view/modem5g/modemtabs.js',
 	'view/modem5g/extip.js', 'view/modem5g/mutil.js',
 	'view/modem5g/readsms.js', 'view/modem5g/sendsms.js', 'view/modem5g/sendussd.js',
-	'view/modem5g/sendat.js', 'protocol/fibocom.js'
+	'view/modem5g/sendat.js',
+	'view/modem5g/bandsui.js', 'view/modem5g/healthform.js', 'view/modem5g/buttons.js',
+	'view/modem5g/align.js', 'view/modem5g/5gstats.js', 'view/modem5g/modem.css',
+	'protocol/fibocom.js', 'protocol/qmiraw.js'
 ];
 
 /* Принудительно перетянуть наши ресурсы МИМО кэша браузера (fetch cache:reload). */

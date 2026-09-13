@@ -117,8 +117,14 @@ _rescue_rmnet() {   # $1 - vid, $2 - pid, $3 - номер интерфейса �
 		for _rr_i in "$_rr_d":*."$3"; do
 			[ -f "$_rr_i/bInterfaceNumber" ] || continue
 			_rr_drv=$(basename "$(readlink -f "$_rr_i/driver" 2>/dev/null)" 2>/dev/null)
+			# ПОЧЕМУ ЗДЕСЬ ЕСТЬ И option, И option1. Ссылка driver у ИНТЕРФЕЙСА
+			# ведёт на usb-драйвер, а он у option.ko зовётся "option" (option1 -
+			# это имя usb_serial_driver, оно видно только на шине usb-serial).
+			# Без первого имени ветка не срабатывала ни разу - канал данных и
+			# ADB так и оставались у option (VOS 5G / SG500M2-X, полевой отчёт
+			# 13.09.2026, ядро 25.12).
 			case "$_rr_drv" in
-				option1|usb_serial_generic|generic)
+				option|option1|usb_serial_generic|generic)
 					_rr_if=$(basename "$_rr_i")
 					echo "$_rr_if" > "$_rr_i/driver/unbind" 2>/dev/null
 					# ПРИВЯЗЫВАЕМ АДРЕСНО, А НЕ ЧЕРЕЗ drivers_probe.
@@ -162,10 +168,20 @@ _release_adb() {   # $1 - vid, $2 - pid
 		[ "$(cat "$_ra_d/idProduct" 2>/dev/null)" = "$2" ] || continue
 		for _ra_i in "$_ra_d":*; do
 			[ -f "$_ra_i/bInterfaceSubClass" ] || continue
+			# ТОЛЬКО ТОЧНАЯ ТРОЙКА ADB (ff/42/01). Раньше признаком был один
+			# subclass 42, и отвязать могло что угодно с таким subclass -
+			# включая fastboot (ff/42/03) и чужие vendor-интерфейсы. Класс и
+			# протокол проверяем явно: отвязка - необратимая до ребута потеря
+			# порта, гадать тут нельзя.
 			[ "$(cat "$_ra_i/bInterfaceSubClass" 2>/dev/null)" = "42" ] || continue
+			[ "$(cat "$_ra_i/bInterfaceClass" 2>/dev/null)" = "ff" ] || continue
+			[ "$(cat "$_ra_i/bInterfaceProtocol" 2>/dev/null)" = "01" ] || continue
 			_ra_drv=$(basename "$(readlink -f "$_ra_i/driver" 2>/dev/null)" 2>/dev/null)
+			# option - имя usb-драйвера у option.ko (см. _rescue_rmnet выше):
+			# без него ADB-интерфейс оставался последовательным портом
+			# (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026).
 			case "$_ra_drv" in
-				option1|usb_serial_generic|generic)
+				option|option1|usb_serial_generic|generic)
 					_ra_if=$(basename "$_ra_i")
 					echo "$_ra_if" > "$_ra_i/driver/unbind" 2>/dev/null
 					logger -t 5gmodem-usbports "released ADB interface $_ra_if from $_ra_drv (it is not a serial port)"

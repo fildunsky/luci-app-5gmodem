@@ -59,11 +59,20 @@ fi
 # картину (живой отчёт 05.08.2026: сброс диапазонов у человека не проходил
 # вовсе). Поэтому очередь ЖДЁМ ДОЛЬШЕ обычного, а не дождались - выполняем
 # всё равно: пусть рискует один пропущенный тик метрик, а не команда человека.
-at_query "$PORT" "$CMD" "$TMO" 25
+# Ждём очередь не дольше, чем страница готова ждать ответа: клиентский предел
+# ubus-вызова 20 c, а 25 c ожидания + таймаут команды его перекрывали всегда -
+# человек получал «XHR error» вместо ответа (аудит 12.09.2026, группа 7, №22).
+at_query "$PORT" "$CMD" "$TMO" 8
 _rc=$?
 if [ "$_rc" = 2 ]; then
-	logger -t 5gmodem "atcmd: queue for $PORT busy for over 25s - running the user command without it"
+	logger -t 5gmodem "atcmd: queue for $PORT busy for over 8s - running the user command without it"
 	# Сами берём порт мимо очереди: at_query с занятым локом сюда уже не пустит.
-	sms_tool -d "$PORT" at "$CMD" 2>/dev/null | tr -d '\r'
+	# Ограничено по времени: зависший модем иначе держал бы порт до таймаута rpcd.
+	_ac_o=$(mktemp /tmp/5gmodem_atcmd.XXXXXX 2>/dev/null) || _ac_o="/tmp/5gmodem_atcmd.$$"
+	sms_tool -d "$PORT" at "$CMD" > "$_ac_o" 2>/dev/null &
+	_ac_p=$!
+	( sleep "$(( ${TMO:-8} + 1 ))"; kill "$_ac_p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _ac_k=$!
+	wait "$_ac_p" 2>/dev/null; kill "$_ac_k" 2>/dev/null; wait "$_ac_k" 2>/dev/null
+	tr -d '\r' < "$_ac_o"; rm -f "$_ac_o"
 fi
 exit 0

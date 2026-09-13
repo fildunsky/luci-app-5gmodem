@@ -75,7 +75,10 @@ function smsSetState(state, opts) {
 
 	if (state === 'error') {
 		smsNote(hasCards ? (opts.note || _('Could not read messages')) : null);
-		if (!hasCards) { smsPlaceholder('empty'); }
+		/* Плейсхолдер ОШИБКИ, а не пустоты: 'empty' рисует «Нет сообщений» -
+		   ровно то, от чего этот код и должен был избавить, а ветка 'error' в
+		   smsPlaceholder оставалась недостижимой (аудит 12.09.2026). */
+		if (!hasCards) { smsPlaceholder('error'); }
 		return null;
 	}
 	if (state === 'loading') {
@@ -307,8 +310,50 @@ function sms_msg_keys(item) {
 	return [ sms_msg_key(item) ];
 }
 
+/* ПАМЯТЬ О ПРОЧИТАННОМ - У ТОГО МОДЕМА, ЧЕЙ СПИСОК ПОКАЗАН.
+   Мост берёт цель из SMS_MODEM, иначе из active_modem, а стрелки ◄► на этой
+   странице меняют только sms.readport: прочитав сообщения СОСЕДНЕГО модема и
+   нажав «Прочитано», мы дописывали его ключи в файл виденного АКТИВНОГО. У
+   соседа конвертик не гас никогда, а чужие ключи могли заглушить собственное
+   будущее сообщение активного модема с тем же отправителем и минутой
+   (аудит 12.09.2026). Путь модема выясняем по порту через listmodems.sh (его
+   вывод кэшируется на роутере), и только при расхождении с активным зовём мост
+   через fs.exec с окружением. Если exec недоступен, поведение прежнее. */
+var smsPortMapP = null;
+
+function sms_port_map() {
+	if (!smsPortMapP) {
+		smsPortMapP = L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]')
+			.then(function(out) {
+				var map = {};
+				try {
+					(JSON.parse(out || '[]') || []).forEach(function(m) {
+						(m && m.tty || []).forEach(function(t) { map[t] = m.path; });
+					});
+				} catch (e) {}
+				return map;
+			});
+	}
+	return smsPortMapP;
+}
+
+function sms_seen_exec(args) {
+	var port = uci.get('5gmodem', 'sms', 'readport') || '';
+	var direct = function() {
+		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', args), '');
+	};
+	if (!port) { return direct(); }
+	return sms_port_map().then(function(map) {
+		var path = map[port] || '';
+		var active = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		if (!path || path === active) { return direct(); }
+		return fs.exec('/usr/share/5gmodem/smsbridge.sh', args, { SMS_MODEM: path })
+			.then(function(r) { return (r && r.stdout) || ''; }, direct);
+	});
+}
+
 function sms_seen_load() {
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'seen' ]), '')
+	return sms_seen_exec([ 'seen' ])
 		.then(function(res) {
 			smsSeen = new Set();
 			smsSeenFirst = false;
@@ -325,8 +370,7 @@ function sms_seen_load() {
 function sms_seen_add(keys) {
 	if (!keys || !keys.length) { return Promise.resolve(); }
 	if (smsSeen) { keys.forEach(function(k) { smsSeen.add(k); }); }
-	return L.resolveDefault(
-		fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'seen-add' ].concat(keys)), '');
+	return sms_seen_exec([ 'seen-add' ].concat(keys));
 }
 
 /* ПЕРВЫЙ ЗАПУСК НЕ ПОДСВЕЧИВАЕМ. Сообщения могли прийти когда угодно, и залить
@@ -415,9 +459,14 @@ function sms_make_card(item, iconSrc, hide) {
 				E('span', { 'class': 'sms-row-icon' }, [
 					E('img', { 'src': iconSrc })
 				]),
-				E('span', {}, sms_fmt_sender(sender))
+				/* СТРОКА - ТОЛЬКО МАССИВОМ. E(tag, props, 'строка') у LuCI означает
+				   node.innerHTML, а не текст: имя отправителя приходит от оператора
+				   (альфанумерическое, до 11 символов), и разметка в нём исполнялась бы
+				   в админке роутера. В массиве dom.append создаёт текстовый узел
+				   (аудит 12.09.2026). */
+				E('span', {}, [ sms_fmt_sender(sender) ])
 			]),
-			E('span', { 'class': 'sms-card-time' }, when)
+			E('span', { 'class': 'sms-card-time' }, [ when ])
 		]),
 		E('div', { 'class': 'sms-card-text' }, sms_linkify(text))
 	]);
@@ -806,25 +855,38 @@ return view.extend({
 					/* Без confirm (решение владельца): выделение и есть намерение,
 					   кнопка удаляет сразу. */
 					{
-							var portDA = uci.get('5gmodem', 'sms', 'readport');
-							var storeDA = uci.get('5gmodem', 'sms', 'storage');
+							var portDA = uci.get('5gmodem', 'sms', 'readport') || '';
+							var storeDA = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 
-							fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', storeDA, portDA ]);
-							/* Через модель, а не innerHTML напрямую: после удаления
-							   всех сообщений экран должен показать «нет сообщений», а не
-							   схлопнуться в пустоту. */
-							smsSetState('empty');
+							/* РЕЗУЛЬТАТ УДАЛЕНИЯ ПРОВЕРЯЕМ. Раньше промис отбрасывался, а экран
+							   сразу переводился в «нет сообщений»: при отказе (занятый порт,
+							   ошибка ubus) человек видел пустой ящик, а через полминуты
+							   автоопрос возвращал все сообщения назад (аудит 12.09.2026).
+							   До ответа показываем чтение, а не пустоту: у L850/XMM удаление
+							   всего идёт до сорока секунд. */
+							smsSetState('loading');
 							sms_update_selcount();
-							try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
+							L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', storeDA, portDA ]), null)
+								.then(function(r) {
+									if (r == null) {
+										ui.addNotification(null, E('p', [ _('Could not delete messages') ]), 'error');
+									}
+									smsSetState('empty');
+									try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
+								});
     							setTimeout(function() {
 								L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeDA, portDA ]))
 									.then(function(res) {
 										if (res) {
-											var total = res.substring(res.indexOf("total"));
-											var t = total.replace ( /[^\d.]/g, '' );
-											var u = "0";
-											msg_bar(Math.floor(u), t);
-											save_count();
+											/* Разбор ТЕМ ЖЕ способом, что и везде. Позиционный
+											   substring(indexOf('total')) при отсутствии подстроки даёт
+											   -1, то есть ВСЮ строку, и в полоску памяти уезжало число
+											   из всех цифр подряд (аудит 12.09.2026). */
+											var _st = sms_parse_status(res);
+											if (_st.t != null) {
+												msg_bar(0, _st.t);
+												save_count();
+											}
 										}
 								});
 							}, 2000);
@@ -836,9 +898,14 @@ return view.extend({
 						{
 							uci.load('5gmodem').then(function() {
 
-								var storeL = (uci.get('5gmodem', 'sms', 'storage'));
-								var portR = (uci.get('5gmodem', 'sms', 'readport'));
-								var portDEL = uci.get('5gmodem', 'sms', 'readport');
+								/* Хранилище и порт - строками и с тем же запасным значением, что в
+								   doRefreshInner: аргументы уходят в ubus, а отсутствующий ключ uci
+								   даёт undefined, то есть JSON null, который rpcd отвергает целиком.
+								   Пустое хранилище вдобавок заставляло мост искать удаляемый номер в
+								   текущем mem1 модема, а не в выбранном на странице (аудит 12.09.2026). */
+								var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
+								var portR = uci.get('5gmodem', 'sms', 'readport') || '';
+								var portDEL = portR;
 
 								/* Индексы из data-index карточек; у склеенного сообщения
 								   там все части через дефис - разворачиваем в плоский
@@ -873,7 +940,7 @@ return view.extend({
 								var chain = Promise.resolve();
 								idx.forEach(function(n) {
 									chain = chain.then(function() {
-										return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', String(n), '', portDEL ]), '')
+										return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', String(n), storeL, portDEL ]), '')
 											.then(function() { done++; showProgress(); });
 									});
 								});
@@ -973,10 +1040,13 @@ return view.extend({
 			{
 				switch (ledt) {
   					case 'S':
-    						fs.exec_direct('/etc/init.d/led', [ 'restart' ]);
+    						L.resolveDefault(fs.exec_direct('/etc/init.d/led', [ 'restart' ]), null);
     						break;
   					case 'D':
-    						fs.write('/sys/class/leds/'+led+'/brightness', '0');
+    						/* Диод гасим, ТОЛЬКО если он настроен: в поставляемом конфиге ключа
+    						   smsled нет, и запись уходила в /sys/class/leds/undefined/brightness -
+    						   необработанным отказом промиса (аудит 12.09.2026). */
+    						if (led) { L.resolveDefault(fs.write('/sys/class/leds/'+led+'/brightness', '0'), null); }
     						break;
   					default:
 					}
@@ -1003,8 +1073,12 @@ return view.extend({
 			/* Снимаем ТОЛЬКО пометку. Решение «пусто или нет» принимает модель
 			   в момент отрисовки: раньше hideLoading сам ставил «нет сообщений»
 			   и успевал сделать это при ещё не разобранном ответе. */
-			smsNote(null);
+			/* Пометку и плейсхолдер ОШИБКИ не трогаем: их ставит тот же тик, а
+			   «нет сообщений» на месте сбоя чтения - неправда (аудит 12.09.2026). */
 			var l = document.getElementById('smsList');
+			var ph = l ? l.querySelector('#smsEmpty') : null;
+			if (ph && ph.getAttribute('data-state') === 'error') { return; }
+			smsNote(null);
 			if (l && !l.firstChild) { smsSetState('empty'); }
 		}
 
@@ -1042,8 +1116,16 @@ return view.extend({
 		   чего не существует. Признак берём из профиля активного модема. */
 		/* ОДИН попап на страницу: напоминание тикало каждый опрос и множилось
    до бесконечности (поймано владельцем на Compal) */
-		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
-			ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
+		/* РАННИЙ ВЫХОД НЕ ЗАВИСИТ ОТ ФЛАГА ПОПАПА. Оба условия делили один
+		   одноразовый window._smsPortNagged, а взводит его показ попапа в
+		   renderMain - до первого вызова сюда. Значит проверка тут не
+		   срабатывала никогда, и мост звался с пустым портом
+		   (аудит 12.09.2026). Попап остаётся одноразовым, выход - нет. */
+		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1') {
+			if (!window._smsPortNagged) {
+				window._smsPortNagged = true;
+				ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
+			}
 			return Promise.resolve();
 		}
 		return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status' , storeL , portR ]))
@@ -1246,10 +1328,6 @@ return view.extend({
 															axx = axx.replace(/,/g, ' ');
 															axx = axx.replace(/-/g, ' ');
 
-															var axx = aidx.toString();
-															axx = axx.replace(/,/g, ' ');
-															axx = axx.replace(/-/g, ' ');
-
 															if (updateCount && u != null) format_with_modem_index(axx).then(function(formattedIndex) {
 																update_sms_count_for_modem(u).then(function(updatedCount) {
 																	sms_persist({ 'sms_count_index': formattedIndex, 'sms_count': updatedCount });
@@ -1440,7 +1518,7 @@ return view.extend({
 								E('div', { 'class': 'controls' }, [
 									E('div', { 'class': 'pager center tg-row' }, [
 										E('button', { 
-											'class': 'btn cbi-button-neutral prev', 
+											'class': 'btn cbi-button-neutral tg-col-narrow prev',
 											'aria-label': _('Previous modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),
@@ -1449,7 +1527,7 @@ return view.extend({
 										}, [ ' ◄ ' ]),
 										E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 										E('button', { 
-											'class': 'btn cbi-button-neutral next', 
+											'class': 'btn cbi-button-neutral tg-col-narrow next',
 											'aria-label': _('Next modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),

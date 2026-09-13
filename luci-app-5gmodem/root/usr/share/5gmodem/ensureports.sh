@@ -54,7 +54,10 @@ pick_sms_port() {
 	# Каждое обращение к ним рвало сессию (отчёт 06.09.2026).
 	for _t in $(drop_dial_port "$_path" $("$RES/listmodems.sh" 2>/dev/null \
 			| jsonfilter -e "@[@.path=\"$_path\"].tty[*]" 2>/dev/null)); do
-		[ -e "$_t" ] || continue
+		# ТОЛЬКО символьное устройство: sms_tool, обратившись к мёртвому пути,
+		# СОЗДАЁТ на его месте обычный файл, и «-e» засчитывал фантом за живой
+		# порт (разбор в atprobe.sh) (аудит 12.09.2026).
+		[ -c "$_t" ] || continue
 		[ "$_t" = "$_at" ] && continue
 		if "$RES/atprobe.sh" "$_t" >/dev/null 2>&1; then echo "$_t"; return 0; fi
 	done
@@ -64,7 +67,9 @@ pick_sms_port() {
 [ -n "$PORT" ] || PORT=$(pick_sms_port)
 [ -n "$PORT" ] || PORT=$("$RES/detect.sh" 2>/dev/null)
 
-if [ -z "$PORT" ] || [ ! -e "$PORT" ]; then
+# «-c», а не «-e»: фантомный обычный файл от sms_tool на месте пропавшего tty
+# проходил проверку существования (аудит 12.09.2026).
+if [ -z "$PORT" ] || [ ! -c "$PORT" ]; then
 	echo '{"ok":0,"reason":"no port"}'
 	exit 0
 fi
@@ -87,7 +92,10 @@ for _opt in readport sendport ussdport atport; do
 	#     рвёт сессию. Отбор выше такой порт больше не выбирает, но у тех, кому он
 	#     уже записан, сам по себе он не уйдёт - уводим (отчёт 06.09.2026,
 	#     L860-GL: все четыре ключа смотрели в дозвонный ttyACM0).
-	if [ -z "$_cur" ] || [ ! -e "$_cur" ] || \
+	# Проверка «-c»: после пропажи модема на старом пути остаётся ФАНТОМНЫЙ
+	# обычный файл (его создаёт любое чтение SMS/USSD), и «-e» считал протухшее
+	# значение живым - самолечение не срабатывало никогда (аудит 12.09.2026).
+	if [ -z "$_cur" ] || [ ! -c "$_cur" ] || \
 	   { [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; } || \
 	   { [ -n "$_DLP" ] && [ "$_cur" = "$_DLP" ] && [ "$PORT" != "$_DLP" ]; }; then
 		uci -q set "5gmodem.sms.$_opt=$PORT"

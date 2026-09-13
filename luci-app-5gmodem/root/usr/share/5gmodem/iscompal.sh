@@ -38,18 +38,24 @@ is_compal() {
 	# заданном пути ЗАПРЕЩЁН, даже если узла сейчас нет (переэнумерация): он
 	# отвечает про ЧУЖИЕ устройства - отсутствующий Telit засчитывался за
 	# Compal по дескриптору соседа (воспроизведено на стенде).
+	# НАПИСАНИЕ МОДЕЛИ У ЭТОГО МОДЕМА ПЛАВАЕТ. Дескриптор бывает и "VOS_5G", и
+	# "Compal RXM-G1" (через дефис!), и "SG500M2-X" - здесь же стоял только
+	# слитный RXMG1, и аппарат с дефисом опознанием не проходил вовсе: в
+	# QMI-композиции 05c6:9091 автонастройка уводила его на proto=qmi с
+	# mm_exclude=1, где uqmi не открывает сервисы (VOS 5G / SG500M2-X, полевой
+	# отчёт 13.09.2026). Набор написаний тот же, что в quirks.sh.
 	if [ -n "$_ic_path" ]; then
 		if [ -r "/sys/bus/usb/devices/$_ic_path/product" ]; then
 			case "$(cat "/sys/bus/usb/devices/$_ic_path/product" 2>/dev/null)" in
-				*VOS_5G*|*RXMG1*) return 0 ;;
+				*VOS_5G*|*RXMG1*|*RXM-G1*|*SG500M2*) return 0 ;;
 			esac
 			case "$(cat "/sys/bus/usb/devices/$_ic_path/manufacturer" 2>/dev/null)" in
 				*Tri\ Cascade*) return 0 ;;
 			esac
 		fi
 	else
-		grep -qiE "VOS_5G|RXMG1" /sys/bus/usb/devices/*/product 2>/dev/null && return 0
-		grep -qiE "Product=VOS_5G|Manufacturer=Tri Cascade" \
+		grep -qiE "VOS_5G|RXMG1|RXM-G1|SG500M2" /sys/bus/usb/devices/*/product 2>/dev/null && return 0
+		grep -qiE "Product=VOS_5G|Product=Compal RXM-G1|Manufacturer=Tri Cascade" \
 			/sys/kernel/debug/usb/devices 2>/dev/null && return 0
 	fi
 
@@ -90,7 +96,7 @@ is_compal() {
 		if [ -n "$_ic_path" ]; then
 			printf '%s\n' "$_ic_mk" | grep -q "modem\.generic\.device .*/$_ic_path\$" || _ic_mk=""
 		fi
-		printf '%s\n' "$_ic_mk" | grep -qE "RXMG1|SG500M2-X" && return 0
+		printf '%s\n' "$_ic_mk" | grep -qE "RXMG1|RXM-G1|SG500M2-X" && return 0
 	fi
 
 	# 4) AT - последний рубеж: дороже всего и порт может быть занят.
@@ -98,7 +104,7 @@ is_compal() {
 		# at_query, а не sms_tool напрямую: он берёт очередь к порту и ограничивает
 		# время. Раньше запрос шёл без очереди, и параллельный читатель мог забрать
 		# ответ - модем тогда «не опознавался» без всякой причины.
-		at_query "$_ic_at" "AT+CGMM" 6 | grep -q "SG500M2-X" && return 0
+		at_query "$_ic_at" "AT+CGMM" 6 | grep -qE "SG500M2-X|RXM-G1|RXMG1" && return 0
 	fi
 
 	return 1

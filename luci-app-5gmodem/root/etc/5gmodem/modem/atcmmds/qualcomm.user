@@ -39,3 +39,15 @@ AT^DEBUG?
 
 # Vendor customer
 AT^CUSTOMER?
+
+# Supported bands (LTE list)
+AT^SLBAND=?
+
+# Uplink carrier aggregation
+AT^ULCA?
+
+# 5G cell lock
+AT^NR5G_LOCK?
+
+# Carrier aggregation enable
+AT^CA_ENABLE?

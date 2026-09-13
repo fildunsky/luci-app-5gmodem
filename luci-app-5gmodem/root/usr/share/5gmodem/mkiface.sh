@@ -76,11 +76,21 @@ _fw_zone_add() {
 	# кавычки, мы заодно РАСКЛЕИВАЕМ такой элемент обратно в две сети, то есть
 	# чиним уже испорченную зону.
 	_fcur=$(uci -q get "firewall.$_fz.network" | tr -d "'\"")
+	# СКЛЕЕННУЮ ОПЦИЮ «option network 'wan wan6'» uci get отдаёт неотличимо от
+	# списка из двух элементов, и она считалась чистой: add_list на ОПЦИИ
+	# превращал её в list с одним элементом «wan wan6» + наш - настоящий wan
+	# выпадал из зоны, NAT пропадал (аудит 12.09.2026, группа 2, №3). Форму
+	# видно только в uci show: у списка элементы в своих кавычках «'wan' 'wan6'».
+	_fdirty=0
+	case "$(uci -q show "firewall.$_fz.network" 2>/dev/null)" in
+		*"' '"*) ;;
+		*=\'*\ *\') _fdirty=1 ;;
+	esac
 	# ЧИСТУЮ ЗОНУ НЕ ПЕРЕСОБИРАЕМ (ревью, баг №9): delete+rebuild оставляет в
 	# общем стейджинге /tmp/.uci окно «зона без сетей», и оборванная операция
 	# детонирует чужим commit'ом - вся локалка без NAT. Полная пересборка
 	# остаётся только для грязного списка (дубликаты/склейка).
-	_fdirty=0; _fseen=" "
+	_fseen=" "
 	for _fe in $_fcur; do
 		case "$_fseen" in *" $_fe "*) _fdirty=1 ;; esac
 		_fseen="$_fseen$_fe "
@@ -192,7 +202,7 @@ json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1"
 # а uqmi не соблюдает свой -t. Возвращает вывод; при зависании убивает процесс.
 run_bounded() {   # $1 = секунды, далее команда
 	_lim="$1"; shift
-	_out="/tmp/5gmodem_bounded.$$"
+	_out=$(mktemp /tmp/5gmodem_bounded.XXXXXX 2>/dev/null) || _out="/tmp/5gmodem_bounded.$$.$(date +%s)"
 	rm -f "$_out"
 	( "$@" >"$_out" 2>&1 ) &
 	_p=$!
@@ -280,7 +290,7 @@ kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
 	_atp=$(at_port_of "$_path")
 	[ -n "$_atp" ] || { echo "prepare: QMI wedged and no AT port to reset the modem" >&2; return 1; }
 	echo "prepare: QMI is wedged - resetting the modem via AT+CFUN=1,1 on $_atp" >&2
-	( at_query "$_atp" "AT+CFUN=1,1" 6 ) >/dev/null 2>&1 </dev/null &
+	( at_query "$_atp" "AT+CFUN=1,1" 6 ) >/dev/null 2>&1 </dev/null 7>&- &
 
 	# ждём возвращения на шину (переэнумерация) + готовности QMI
 	_n=0
@@ -484,8 +494,9 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# модемов вообще не находил AT-порта, то есть рабочих установок на
 		# fibocom с вендором 8087 не существует. Явный выбор пользователя
 		# (REQ=fibocom) не трогаем - только автоопределение.
+		_mki_xvp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
 		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } \
-		   && [ "$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null)" = "8087" ]; then
+		   && { [ "${_mki_xvp%%:*}" = "8087" ] || [ "$_mki_xvp" = "2cb7:000b" ]; }; then
 			if [ -f /lib/netifd/proto/xmm.sh ]; then
 				# Установленный пакет xmm-modem уважаем: работающие на нём
 				# установки не трогаем.
@@ -678,6 +689,11 @@ case "$REQ" in
 			qmi_wwan) PROTO="qmi" ;;
 			*)        PROTO="mbim" ;;
 		esac
+		# vid:pid нужен и Compal-ветке ниже (см. про 05c6:*), и вендорным
+		# исключениям дальше - считаем его один раз здесь.
+		_mki_vp=""
+		[ -n "$AMP" ] && [ -f "/sys/bus/usb/devices/$AMP/idVendor" ] && \
+			_mki_vp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
 		# Compal RXM-G1 в QMI-композиции - ИСКЛЮЧЕНИЕ в пользу ModemManager.
 		# У этой прошивки нет своих AT-команд бенд-лока, а в CLI libqmi нет TLV
 		# для ИХ ЗАПИСИ (только чтение), поэтому управлять диапазонами и режимом
@@ -691,8 +707,29 @@ case "$REQ" in
 		# grep по ВСЕЙ шине, и на двухмодемном роутере СОСЕДНИЙ Compal превращал
 		# чужой QMI-модем (T99W175) в proto=modemmanager - «программа затёрла
 		# мой тип интерфейса».
-		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && is_compal "$AMP" "$DEV"; then
+		# AT-ПОРТ В ОПОЗНАНИЕ - ТОЛЬКО ДЛЯ ВЕНДОРА 05c6 (Qualcomm). У этого
+		# вендора Compal и живёт, а дескриптор в его QMI-композициях generic
+		# («Qualcomm, Inc. HSUSB Device») - тогда решает AT+CGMM. Живой случай
+		# 05c6:9091 (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026): дешёвые
+		# источники молчали, модем уезжал на proto=qmi, а uqmi у этой прошивки
+		# не открывает сервисы («Failed to connect to service»), процессы висли
+		# и их добивал sessionwatch. Гейт по вендору важен: лишняя AT-проба на
+		# чужом модеме - это до шести секунд и занятая очередь порта.
+		# САМ ВЫБОР - ПО МОДЕЛИ, а не по vid:pid: 05c6:9091 носят и
+		# Android-палки, их этой веткой трогать нельзя.
+		# Порт ищем ТОЛЬКО когда дело дошло до qmi: _mk_atport в худшем случае
+		# зовёт detect.sh, а он не бесплатный.
+		_mki_cat=""
+		if [ "$PROTO" = "qmi" ]; then
+			case "$_mki_vp" in 05c6:*) _mki_cat=$(_mk_atport) ;; esac
+		fi
+		if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/modemmanager.sh ] \
+		   && is_compal "$AMP" "$DEV" "$_mki_cat"; then
+			logger -t 5gmodem "mkiface: Compal RXM-G1 / SG500M2-X ($_mki_vp) - driving via ModemManager (uqmi cannot open its QMI services)"
 			PROTO="modemmanager"
+			# Модем опознан по МОДЕЛИ - запомним, чтобы ниже дать интерфейсу
+			# force_connection (см. там же).
+			MKI_COMPAL_MM=1
 		fi
 		# Dell DW5821e / Foxconn T77W968 (413c:81d7) - ИСКЛЮЧЕНИЕ в пользу
 		# ModemManager. У этого модуля штатный mbim НЕ поднимает сессию: umbim
@@ -704,9 +741,6 @@ case "$REQ" in
 		# YOTA, МТС; OpenWrt 24.10 и 25.12; MediaTek, Radxa, x86).
 		# Раньше auto по драйверу cdc_mbim уводил такого пользователя в путь,
 		# который заведомо не работает, и он неделями искал причину.
-		_mki_vp=""
-		[ -n "$AMP" ] && [ -f "/sys/bus/usb/devices/$AMP/idVendor" ] && \
-			_mki_vp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
 		# 05c6:9025 - модули на Qualcomm SDX55 (Foxconn T99W175 / Dell, Compal в
 		# debug-композиции). Здесь причина другая, чем у 81d7: сессию qmi поднимает,
 		# но КАНАЛ cdc-wdm у него один, а нам он нужен постоянно - диапазоны и режим
@@ -734,7 +768,7 @@ case "$REQ" in
 		# и рабочий список диапазонов у mmcli. AT-профиль (modem/usb/03f09d1d)
 		# остаётся страховкой: без установленного MM карточка живёт на нём.
 		case "$_mki_vp" in
-			413c:81d7|413c:81e0|0489:e0b5|05c6:9025|03f0:9d1d)
+			413c:81d7|413c:81e0|0489:e0b5|0489:e0b4|05c6:9025|03f0:9d1d)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 					logger -t 5gmodem "mkiface: $_mki_vp - driving via ModemManager (shared channel, otherwise cdc-wdm contention)"
 					PROTO="modemmanager"
@@ -922,6 +956,9 @@ OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 OLDMETRIC=$(uci -q get "network.$IF.metric")
 # DNS пользователя (если вписал руками) сохраняем через пересоздание, как apn.
 OLDDNS=$(uci -q get "network.$IF.dns")
+# force_connection (прото modemmanager) - тоже осознанная настройка: пересоздание
+# интерфейса не должно её терять.
+OLDFORCE=$(uci -q get "network.$IF.force_connection")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -930,6 +967,15 @@ set_apn_opt "$IF" "$OLDAPN"
 case "$PROTO" in
 	modemmanager)
 		set_pdp_opt "$IF" iptype   # у прото modemmanager опция называется iptype
+		# force_connection - ТОЧЕЧНО, ТОЛЬКО ОПОЗНАННОМУ ПО МОДЕЛИ Compal.
+		# У этой прошивки первый заход после загрузки нередко падает на снятии
+		# старого носителя («couldn't load bearer path: disconnecting anyway»),
+		# и без форса netifd больше не пробует - интерфейс остаётся лежать до
+		# ручного ifup. С форсом следующая попытка проходит (VOS 5G /
+		# SG500M2-X, полевой отчёт 13.09.2026). Всем MM-модемам подряд не
+		# ставим: у здоровых это лишние попытки подключения.
+		[ "$MKI_COMPAL_MM" = "1" ] && uci set "network.$IF.force_connection=1"
+		[ -n "$OLDFORCE" ] && uci set "network.$IF.force_connection=$OLDFORCE"
 		;;
 	qmi|mbim|qmiraw)
 		set_pdp_opt "$IF" pdptype
@@ -987,14 +1033,15 @@ ubus call network reload >/dev/null 2>&1
 # («Не поддерживаемый тип протокола»), человек настраивает модем прямо сейчас
 # и короткий обрыв ждёт. Постинст пакета сеть ради регистрации НЕ трогает
 # (уронил удалённый роутер - см. register_proto.sh), поэтому форс отсюда.
-case "$FPROTO" in
-	fibocom) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
-esac
-# Наш proto=qmiraw (SimCom raw-ip) - та же регистрация, что и fibocom: netifd
-# знает обработчики только со старта, а свежесозданный qmiraw-интерфейс без
-# регистрации мёртв («Не поддерживаемый тип протокола»).
+# СУДИМ ПО $PROTO: $FPROTO выставляется только в AT-дозвонной ветке выше, а
+# та всегда кончается exit 0 - сюда с fibocom доходит лишь путь «у модема есть
+# cdc-wdm, а человек выбрал Fibocom (AT-dial)», и там $FPROTO пуст: обработчик
+# не регистрировался, интерфейс был мёртв до ребута (аудит 12.09.2026, гр. 2, №4).
+# Наш proto=qmiraw (SimCom raw-ip) - та же регистрация: netifd знает
+# обработчики только со старта, а свежесозданный интерфейс без регистрации
+# мёртв («Не поддерживаемый тип протокола»).
 case "$PROTO" in
-	qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
+	fibocom|qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
 esac
 
 # СТАНДАРТНЫЙ ПРОТО (mbim/qmi/ncm/modemmanager/...) ТОЖЕ МОЖЕТ БЫТЬ НЕИЗВЕСТЕН
@@ -1158,7 +1205,7 @@ if [ "$PROTO" = "modemmanager" ]; then
 			sleep 2; _n=$((_n + 2))
 		done
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null &
+	) >/dev/null 2>&1 </dev/null 7>&- &
 elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 	# kernel-прото: сначала автоматически привести модем в рабочее состояние
 	# (отобрать порт у MM, снять зависшие uqmi, при заклиненном QMI - сбросить
@@ -1170,7 +1217,7 @@ elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 		kernel_proto_prepare "$IDEV" "$AMP" || logger -t 5gmodem-mkiface \
 			"kernel_proto_prepare failed for $IF ($PROTO) - bringing it up anyway"
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null &
+	) >/dev/null 2>&1 </dev/null 7>&- &
 elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 	# ДОЗВОН ТОЛЬКО ПОСЛЕ РЕГИСТРАЦИИ В СЕТИ.
 	#
@@ -1209,7 +1256,7 @@ elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 				"$IF ($PROTO): регистрации нет за 90c - поднимаю интерфейс как есть"
 		fi
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null &
+	) >/dev/null 2>&1 </dev/null 7>&- &
 else
 	ifup "$IF" >/dev/null 2>&1
 fi

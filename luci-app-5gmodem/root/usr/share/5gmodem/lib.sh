@@ -145,7 +145,10 @@ serial_of() {
 # сверяемся с шиной ещё раз - проверка стоит один stat.
 usb_path_present() {   # $1 - usb-путь; код 0 = устройство на шине сейчас
 	[ -n "$1" ] || return 1
-	[ -e "/sys/bus/usb/devices/$1" ]
+	# PCI/MHI-модуль (RM520N-GLAP, T99W175 на PCIe) в списке модемов идёт под
+	# путём PCI-устройства; для него USB-проверка всегда «нет на шине», и
+	# автонастройка молча его пропускала. (ревью 13.09.2026)
+	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ]
 }
 
 purge_path_caches() {   # $1 - usb-путь
@@ -1146,9 +1149,22 @@ model_refine() {   # $1 - модель, $2 - product с шины; печатае
 #
 # Возвращает 0 (можно), если интерфейс модема НЕ на proto=qmi. Под ModemManager
 # запрет не нужен: прокси там общий, MM сам через него и ходит.
+# ИНТЕРФЕЙС ЦЕЛИ, А НЕ АКТИВНОГО. Ворота и qmicli_p судили по интерфейсу
+# АКТИВНОГО модема, а устройство -d приходит от вызывающего и может быть
+# соседским: адресный опрос вкладки соседа (for=<путь>) видел «канал свободен»
+# по чужому интерфейсу и лез прямым qmicli/mbim-proxy в живую сессию соседа
+# (аудит 12.09.2026, группа 1, №4). Вызывающий, который работает с конкретным
+# модемом, выставляет QMI_TARGET_PATH=<usb-путь>; без него - прежнее поведение.
+_qmi_target_iface() {
+	_qti=""
+	[ -n "$QMI_TARGET_PATH" ] && _qti=$(uci -q get "5gmodem.$(secname "$QMI_TARGET_PATH").network" 2>/dev/null)
+	[ -n "$_qti" ] || _qti=$(uci -q get "5gmodem.$(active_sec 2>/dev/null).network" 2>/dev/null)
+	[ -n "$_qti" ] || _qti=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	printf '%s' "$_qti"
+}
+
 qmi_channel_free() {
-	_qcf_if=$(uci -q get "5gmodem.$(active_sec 2>/dev/null).network" 2>/dev/null)
-	[ -n "$_qcf_if" ] || _qcf_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	_qcf_if=$(_qmi_target_iface)
 	[ -n "$_qcf_if" ] || return 0
 	# qmi/qmiraw - uqmi напрямую; mbim - umbim напрямую. ОБА не переживают
 	# второго хозяина канала: наш qmicli/mbimcli -p поднимает прокси, тот
@@ -1245,12 +1261,12 @@ qmicli_p() {
 	# это наблюдалось на живом EP06 05.08.2026, и лечилось killall qmi-proxy.
 	# Поэтому для qmi-интерфейсов прокси не трогаем: одно чтение напрямую дешевле
 	# и безопаснее, чем демон, конфликтующий с netifd.
-	_qp_proto=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null).proto" 2>/dev/null)
+	_qp_if=$(_qmi_target_iface)
+	_qp_proto=$(uci -q get "network.$_qp_if.proto" 2>/dev/null)
 	_qp_direct=""
 	if [ "$_qp_proto" = "qmi" ]; then
 		_qp_direct=1
 	elif ! pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
-		_qp_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
 		if [ -z "$_qp_if" ] || ! ubus call "network.interface.$_qp_if" status 2>/dev/null \
 			| grep -q '"up": true'; then
 			_qp_direct=1
@@ -1297,7 +1313,10 @@ qmicli_p() {
 			*) [ $((_qp_now - _qp_when)) -lt 120 ] && _qp_skip=1 || rm -f "$_qp_bad" ;;
 		esac
 	fi
-	_qp_o="/tmp/5gmodem_qmicli.$$"
+	# mktemp, а не $$: в подоболочке `( ... ) &` $$ остаётся PID родителя, и фон
+	# делил файл ответа с одновременным вызовом в родителе (аудит 12.09.2026,
+	# группа 2, №6). Осиротевшие при kill подметает _sweep_tmp сторожа.
+	_qp_o=$(mktemp /tmp/5gmodem_qmicli.XXXXXX 2>/dev/null) || _qp_o="/tmp/5gmodem_qmicli.$$.$(date +%s)"
 	# Для qmi-интерфейса пробу через прокси пропускаем совсем (см. выше).
 	[ "$_qp_proto" = "qmi" ] && _qp_skip=1
 	if [ -z "$_qp_skip" ]; then
@@ -1388,6 +1407,20 @@ is_devpath() {
 		*..*|*[!A-Za-z0-9/._-]*) return 1 ;;
 		/dev/ttyUSB[0-9]*|/dev/ttyACM[0-9]*|/dev/cdc-wdm[0-9]*|/dev/wwan[0-9]*) return 0 ;;
 		*) return 1 ;;
+	esac
+}
+
+# СТРОКА В JSON-ЗНАЧЕНИЕ. Реестр и «Сохранённые профили» собирали JSON printf-ом
+# с сырыми полями: кавычка или обратный слэш в USB-дескрипторе product (ребренды,
+# телефоны в режиме модема) или в APN (свободный ввод) ломали ответ целиком, и
+# все читатели через jsonfilter молча получали пустоту - «портов нет», «cdc-wdm
+# нет», профили не рисуются (аудит 12.09.2026, группа 2, №5). Управляющие
+# символы вычищаем: CR из ответов модема тоже валит строгий парсер.
+json_esc() {
+	case "$1" in
+		*\\*|*\"*|*[[:cntrl:]]*)
+			printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g' ;;
+		*) printf '%s' "$1" ;;
 	esac
 }
 
@@ -1503,7 +1536,7 @@ at_query() {
 	# Ограничение времени: sms_tool своего не имеет. Сторож ЗАКРЫВАЕТ унаследованные
 	# дескрипторы - иначе он держит stdout вызывающего, и читатель ждёт EOF лишние
 	# секунды уже после того, как ответ готов (эти грабли стоили 1.4 c на опрос).
-	_aq_o="/tmp/5gmodem_atq.$$"
+	_aq_o=$(mktemp /tmp/5gmodem_atq.XXXXXX 2>/dev/null) || _aq_o="/tmp/5gmodem_atq.$$.$(date +%s)"   # см. _qp_o
 	# 8>&- 9>&- ОБЯЗАТЕЛЬНЫ: fd 8 - это flock на самом порту (atlock.sh), и дети
 	# наследуют его. Без закрытия killer-подоболочка ДЕРЖАЛА порт до конца своего
 	# sleep ПОСЛЕ выхода at_query - следующий at_lock ждал до 6-8 c. Тот же урок
@@ -1870,14 +1903,37 @@ route_add_default() {
 		ip -4 route add "$_rad_gw" dev "$_rad_d" $_rad_t 2>/dev/null
 	_rad_i=0
 	while [ "$_rad_i" -lt 9 ]; do
+		_rad_mx=$((_rad_m + _rad_i))
 		if [ -n "$_rad_gw" ]; then
 			_rad_e=$(ip "$_rad_f" route add default via "$_rad_gw" dev "$_rad_d" \
-				metric "$((_rad_m + _rad_i))" $_rad_t 2>&1) && return 0
+				metric "$_rad_mx" $_rad_t 2>&1) && return 0
 		else
 			_rad_e=$(ip "$_rad_f" route add default dev "$_rad_d" \
-				metric "$((_rad_m + _rad_i))" scope link $_rad_t 2>&1) && return 0
+				metric "$_rad_mx" scope link $_rad_t 2>&1) && return 0
 		fi
 		case "$_rad_e" in *"File exists"*) ;; *) break ;; esac
+		# «File exists» НЕ ЗНАЧИТ «метрику занял чужой». Ровно такой же маршрут
+		# мог поставить наш прошлый заход (или netifd), и тогда работа уже
+		# сделана: добавление ДОЛЖНО быть идемпотентным. Раньше мы этого не
+		# проверяли и уходили перебирать метрики +1..+8 - один тик сторожа плодил
+		# до девяти одинаковых default'ов и сотню строк «metric N is taken by
+		# another device» (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026).
+		# Сверяем ПОЛНУЮ личность маршрута: семейство ($_rad_f), таблица
+		# ($_rad_t), устройство, метрика и форма шлюза. Шлюз сравниваем
+		# ФИКСИРОВАННОЙ строкой: в адресе IPv6 есть ':' и точки, а regexp принял
+		# бы чужой адрес за свой.
+		_rad_x=$(ip "$_rad_f" route show default $_rad_t 2>/dev/null \
+			| grep -v '^default from ' \
+			| grep -E " dev $_rad_d( |$)" \
+			| grep -E " metric $_rad_mx( |$)")
+		if [ -n "$_rad_gw" ]; then
+			printf '%s\n' "$_rad_x" | grep -Fq " via $_rad_gw " && return 0
+		else
+			# on-link: нужна строка БЕЗ via - иначе на той же метрике стоит
+			# чужой маршрут со шлюзом, и это действительно конфликт.
+			printf '%s\n' "$_rad_x" | grep -q '^default ' \
+				&& ! printf '%s\n' "$_rad_x" | grep -q ' via ' && return 0
+		fi
 		_rad_i=$((_rad_i + 1))
 		# Съехали с задуманной метрики - это стоит увидеть в журнале: значит
 		# метрику занял кто-то со стороны (туннель, чужой демон маршрутов).

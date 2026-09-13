@@ -29,15 +29,21 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	T=$(echo "$O" | awk '/^LTE band:/ {print $3}')
 	if [ -n "$T" ]; then
 		T1=$(echo "$O" | awk '/^LTE band:/ {print $6}')
-		PBAND="$(band4g ${T/B/}) @${T1} MHz"
+		PBAND="$(band4g ${T#B}) @${T1} MHz"
 		# Разделитель как у остальных модемов: без него в карточке стояло
 		# «4G B3 (1800 MHz)» вместо «4G | B3 (1800 MHz)».
-		MODE="LTE | $(band4g ${T/B/})"
+		MODE="LTE | $(band4g ${T#B})"
 	fi
 	# Канал разбирался и выбрасывался (остаток от механизма addon, которого в
 	# приложении нет) - в карточке на его месте был прочерк.
 	T=$(echo "$O" | awk '/^LTE Rx chan:/ {print $4}')
 	[ -n "$T" ] && EARFCN="$T"
+	# Cell ID модем печатает («Cell ID: 05CF9C12 (97491986)»), профиль не забирал -
+	# прочерк в карточке и нет кнопки карты сот (как чинили в _sierra_gobi_lte).
+	T=$(echo "$O" | sed -n 's/.*Cell ID:[ \t]*\([0-9A-Fa-f]*\)[ \t]*(\([0-9]*\)).*/\1 \2/p' | head -n 1)
+	if [ -n "$T" ]; then
+		CID_HEX="${T%% *}"; CID_DEC="${T##* }"
+	fi
 fi
 
 fi

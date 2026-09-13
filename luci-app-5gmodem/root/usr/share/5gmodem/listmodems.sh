@@ -119,6 +119,57 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	esac
 done
 
+# --- Модемы на шине PCI/MHI (без USB вовсе) ---------------------------------
+#
+# Модуль в M.2-слоте с отрезанным USB (Quectel RM520N-GLAP 17cb:0308, Foxconn
+# T99W175/DW5930e 105b:e0b0, Foxconn T99W373/MV32-W 105b:e0d9) приходит в
+# систему PCI-устройством под mhi-pci-generic, а порты отдаёт классом wwan:
+# /dev/wwan<N>at<M> - AT, /dev/wwan<N>mbim<M> - канал данных. Цикл выше его НЕ
+# ВИДИТ: owner_node поднимается до узла с idVendor, а у PCI-родителя такого
+# файла нет вовсе. Итог был - модем не попадал в список ВООБЩЕ: ни вкладки, ни
+# записи реестра, ни vidpid, а без vidpid страница диапазонов не находила файл
+# профиля modemband и писала «Unsupported» (профили метрик modem/pci/* при этом
+# работали - их ключ строит 5gmodem.sh сам, мимо перечисления).
+# (ревью 13.09.2026)
+#
+# Поднимаемся от порта вверх ДО PCI-устройства, но останавливаемся, если по
+# дороге встретился USB-узел (idVendor): у USB-модема с cdc_mbim wwan-порт тоже
+# есть, он уже найден циклом выше, а слепое восхождение довело бы нас до
+# контроллера xHCI - и в модемы попал бы он.
+for _wpt in /sys/class/wwan/*; do
+	[ -e "$_wpt/device" ] || continue
+	# У класса wwan есть и сам узел устройства (wwan0), и его порты (wwan0at0).
+	# У первого нет /dev - он нам не порт и записи не даёт.
+	_wnode="/dev/${_wpt##*/}"
+	[ -c "$_wnode" ] || continue
+	_wdev=$(readlink -f "$_wpt/device" 2>/dev/null)
+	_wpci=""
+	while [ -n "$_wdev" ] && [ "$_wdev" != "/" ] && [ "$_wdev" != "/sys" ]; do
+		[ -f "$_wdev/idVendor" ] && break
+		if [ -e "/sys/bus/pci/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
+		_wdev="${_wdev%/*}"
+	done
+	[ -n "$_wpci" ] || continue
+
+	idx=""
+	i=1
+	for known in $NODES; do
+		[ "$known" = "$_wpci" ] && { idx=$i; break; }
+		i=$((i + 1))
+	done
+	if [ -z "$idx" ]; then
+		NCNT=$((NCNT + 1)); idx=$NCNT
+		NODES="$NODES $_wpci"
+	fi
+	# AT-порт кладём к последовательным (tty): для потребителей это ровно он -
+	# порт, куда шлют AT. Остальные каналы узла (mbim/qmi) - управляющие, как
+	# cdc-wdm у USB.
+	case "${_wpt##*/}" in
+		*at*) PORTREC="${PORTREC}${idx} tty ${_wnode}${NL}" ;;
+		*)    PORTREC="${PORTREC}${idx} wdm ${_wnode}${NL}" ;;
+	esac
+done
+
 # --- Модемы БЕЗ портов (HiLink) ------------------------------------------
 #
 # Часть модемов не отдаёт роутеру ни AT-порта, ни cdc-wdm: они держат IP-стек
@@ -227,6 +278,14 @@ for n in $NODES; do
 	path=$(basename "$n")
 	vid=$(cat "$n/idVendor" 2>/dev/null)
 	pid=$(cat "$n/idProduct" 2>/dev/null)
+	# PCI/MHI-узел: idVendor/idProduct у него нет, пара лежит в vendor/device и
+	# записана с префиксом «0x». Формат поля тот же, что у USB (17cb:0308), -
+	# иначе bands.sh не нашёл бы modemband/17cb0308, а он ищет ровно по нему.
+	# (ревью 13.09.2026)
+	if [ -z "$vid" ] && [ -f "$n/vendor" ] && [ -f "$n/device" ]; then
+		vid=$(cat "$n/vendor" 2>/dev/null); vid="${vid#0x}"
+		pid=$(cat "$n/device" 2>/dev/null); pid="${pid#0x}"
+	fi
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
 	# Порты этого модема - из плоского списка (см. сбор выше). Кавычки для JSON
 	# навешиваются здесь же; в путях /dev и именах сетевых устройств кавычек и
@@ -313,6 +372,10 @@ PORTREC_EOF
 				;;
 		esac
 	fi
+	# У PCI/MHI-узла строки product нет вовсе - до первого опроса вкладка была
+	# без имени. Ключ vid:pid, как у generic-дескриптора; настоящее имя придёт
+	# из секции после AT+CGMM. (ревью 13.09.2026)
+	[ -z "$model" ] && [ -n "$vid" ] && [ ! -f "$n/product" ] && model="$vid:$pid"
 	model=$(esc "$model")
 	# ОПЕРАТОР ЭТОГО МОДЕМА - для значка сети на вкладке (у кого какая SIM).
 	# Берём из кэша, который пишет основной опрос (/tmp/5gmodem_op_<iface>, тот же

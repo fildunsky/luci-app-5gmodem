@@ -25,6 +25,16 @@ var _has3gMM = false;
 
 var _bandsPollN = 0;   // счётчик для редкого авто-освежения блока диапазонов в опросе
 
+/* ПОТОЛОК ПОПЫТОК ДОЖДАТЬСЯ БЕНДОВ ОТ MM. Пустой список у MM-модема бывает
+   штатно и НАВСЕГДА (FM350 под MM бендов не отдаёт вовсе - см. bands.sh), а
+   пере-опрос планировался без счётчика: раскрытый блок «Управление частотами»
+   бесконечно, каждые 1.5 c, гонял bands.sh mgmtinfo (это ещё mmcli) и bands.sh
+   json. Счётчик сбрасывается, как только бенды наконец пришли.
+   (аудит 12.09.2026) */
+var _revealTries = 0;
+
+var _revealTriesMax = 10;
+
 var bandsOther = [];
 
 function buildBandButtons(supported, current, prefix) {
@@ -169,6 +179,7 @@ function loadBands() {
 function applyMgmtMM(j) {
 		bandSource = 'mmcli';
 		bandsReadOnly = false; bandsTakeover = false;
+		_revealTries = 0;   // дождались mmcli - счётчик ожидания обнуляем
 		var note = document.getElementById('bandnote');
 		if (note) { note.style.display = 'none'; }
 		var sup3 = j.sup3g || [], sup4 = j.sup4g || [], sup5 = j.sup5g || [];
@@ -189,6 +200,9 @@ function applyMgmtMM(j) {
 		render5gMode(null);
 		renderCaEnabled(null);
 		renderCellLock(null);
+		renderCellLock5g(null);
+		render256qam(null);
+		renderUlca(null);
 		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
 		   а не из живых current-modes: конфиг не мигает на передозвоне и
 		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */
@@ -239,6 +253,83 @@ function renderCaEnabled(state) {
 		_('The modem works without carrier aggregation, as if it were cat4')));
 }
 
+/* СТРОКИ, КОТОРЫХ В РАЗМЕТКЕ СТРАНИЦЫ НЕТ, - создаём на месте.
+   Таблицу «Управление частотами» строит 5gdetail, и у 256QAM, uplink CA и
+   5G-лока своих <tr> там нет. Дописывать их туда пришлось бы четырьмя правками
+   в чужом файле ради строк, которые и так показываются только по ответу
+   профиля; здесь же владелец у них один - этот модуль, который их и рисует.
+   Ищем существующую строку перед вставкой: рендер зовётся на каждый опрос.
+   (ревью 13.09.2026, форум 4pda) */
+function _ensureRow(id, cellId, label, afterId) {
+	var row = document.getElementById(id);
+	if (row) { return row; }
+	var anchor = document.getElementById(afterId);
+	if (!anchor || !anchor.parentNode) { return null; }
+	row = E('tr', { 'class': 'tr', 'id': id, 'style': 'display:none' }, [
+		E('td', { 'class': 'td left', 'width': '33%' }, [ label ]),
+		E('td', { 'class': 'td left tginfo-modesw', 'id': cellId }, [ '-' ])
+	]);
+	anchor.parentNode.insertBefore(row, anchor.nextSibling);
+	return row;
+}
+
+/* 256QAM: показываем ТОЛЬКО состояние и переключатель, без обещаний скорости.
+   По форуму прибавка видна лишь при SINR ~21 дБ и поддержке на БС, поэтому
+   «включено» - это факт о модеме, а не прогноз (#1209, #22649).
+   (ревью 13.09.2026, форум 4pda) */
+function render256qam(state) {
+	var row = _ensureRow('qam256n', 'qam256-cell', _('256QAM (download)'), 'caenn');
+	var cell = document.getElementById('qam256-cell');
+	if (!row || !cell) { return; }
+	if (state !== 'on' && state !== 'off') { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+
+	var on = (state === 'on');
+	cell.appendChild(E('button', {
+		'class': 'btn cbi-button ' + (on ? 'cbi-button-reset' : 'cbi-button-apply'),
+		'click': ui.createHandlerFn(this, function() {
+			_runBands([ 'set256qam', on ? '0' : '1' ],
+				on ? _('Turning 256QAM off — the modem is restarting its radio…')
+				   : _('Turning 256QAM on — the modem is restarting its radio…'));
+		})
+	}, on ? _('Turn off') : _('Turn on')));
+	cell.appendChild(E('span', { 'style': 'margin-left:.6em' },
+		on ? _('Enabled') : _('Disabled')));
+	if (!on) {
+		cell.appendChild(E('span', { 'style': 'opacity:.65; font-size:90%; margin-left:.6em' },
+			_('Helps only with a strong signal and a base station that supports it')));
+	}
+}
+
+/* Uplink CA: кнопка ТОЛЬКО когда выключено. Команды выключения у этого модуля
+   на форуме нет ни одной, поэтому обратного переключателя мы не рисуем - он
+   молча ничего бы не делал. (ревью 13.09.2026, форум 4pda) */
+function renderUlca(state) {
+	var row = _ensureRow('ulcan', 'ulca-cell', _('Uplink aggregation'), 'caenn');
+	var cell = document.getElementById('ulca-cell');
+	if (!row || !cell) { return; }
+	if (state !== 'on' && state !== 'off') { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+
+	if (state === 'on') {
+		cell.appendChild(E('span', {}, _('Enabled')));
+		return;
+	}
+	cell.appendChild(E('button', {
+		'class': 'btn cbi-button cbi-button-apply',
+		'click': ui.createHandlerFn(this, function() {
+			_runBands([ 'setulca', 'on' ],
+				_('Enabling uplink aggregation — the modem is restarting its radio…'));
+		})
+	}, _('Enable')));
+	cell.appendChild(E('span', { 'style': 'margin-left:.6em; color:#e58a00' },
+		_('Disabled in modem')));
+	cell.appendChild(E('span', { 'style': 'opacity:.65; font-size:90%; margin-left:.6em' },
+		_('Upload often sits at 1-2 Mbit/s until this is on')));
+}
+
 function render5gMode(state) {
 	var row = document.getElementById('mode5gn');
 	var cell = document.getElementById('mode5g-cell');
@@ -272,7 +363,9 @@ function render5gMode(state) {
 		'click': ui.createHandlerFn(this, function() {
 			ctx.setModemBusy(_('Enabling 5G — the modem is restarting its radio…'));
 			_bandsAfterBusy = true;
-			fs.exec('/usr/share/5gmodem/bands.sh', [ 'set5gmode', 'full' ]);
+			/* Через resolveDefault: команда уходит в фон, но отказ самого rpcd
+			   (занят, таймаут) иначе всплывал необработанным. (аудит 12.09.2026) */
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', [ 'set5gmode', 'full' ]), {});
 		})
 	}, _('Enable 5G')));
 }
@@ -288,7 +381,9 @@ var _cellLockWritable = false;
 function _runBands(args, msg) {
 	ctx.setModemBusy(msg);
 	_bandsAfterBusy = true;
-	fs.exec('/usr/share/5gmodem/bands.sh', args);
+	/* Через resolveDefault: команда фоновая, но отказ rpcd иначе оставался
+	   необработанным отказом промиса. (аудит 12.09.2026) */
+	L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', args), {});
 }
 
 /* Привязать к КОНКРЕТНОЙ соте (EARFCN+PCI) - зовётся из строки соседа. Модем сам
@@ -403,6 +498,65 @@ function renderCellLock(state) {
 	}
 }
 
+/* ПРИВЯЗКА К СОТЕ 5G - ОТДЕЛЬНАЯ СТРОКА, а не флаг в строке 4G: у прошивки это
+   разные команды с независимым состоянием (T99W175: AT^LTE_LOCK и
+   AT^NR5G_LOCK), модем может быть привязан по 4G и свободен по 5G. Одна строка
+   на двоих показывала бы одну привязку вместо двух и снимала бы не ту.
+   Строка появляется, только если профиль ответил не «Unsupported».
+   (ревью 13.09.2026, форум 4pda) */
+function renderCellLock5g(state) {
+	var row = _ensureRow('celllock5gn', 'celllock5g-cell', _('5G cell lock'), 'celllockn');
+	var cell = document.getElementById('celllock5g-cell');
+	if (!row || !cell) { return; }
+	if (!state || state === 'Unsupported') { row.style.display = 'none'; return; }
+	row.style.display = '';
+	cell.innerHTML = '';
+
+	var parts = String(state).split(' ');
+	var locked = (parts[0] === 'cell');
+
+	if (locked) {
+		cell.appendChild(E('button', {
+			'class': 'btn cbi-button cbi-button-reset',
+			'click': ui.createHandlerFn(this, function() {
+				return _runBands([ 'setcelllock5g', 'off' ],
+					_('Removing the lock - the modem restarts, connection drops for a while...'));
+			})
+		}, [ _('Unlock') ]));
+		cell.appendChild(E('span', { 'style': 'margin-left:.6em' },
+			_('Locked to cell: ARFCN %s, PCI %s').format(parts[1], parts[2])));
+		return;
+	}
+
+	/* НЕСУЩУЮ БЕРЁМ В МОМЕНТ НАЖАТИЯ. Отдельного поля «ARFCN/PCI соты 5G» в
+	   метриках нет: в NSA это ВТОРИЧНАЯ несущая, и живёт она в s1..s4 рядом с
+	   LTE-несущими. Ищем среди них ту, у которой диапазон начинается на «n» -
+	   иначе привязали бы 5G к номеру LTE-канала. */
+	cell.appendChild(E('button', {
+		'class': 'btn cbi-button cbi-button-action',
+		'click': ui.createHandlerFn(this, function() {
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]), '')
+				.then(function(out) {
+					var m = {}; try { m = JSON.parse(out) || {}; } catch (e) {}
+					var ear = null, pci = null;
+					for (var i = 1; i <= 4; i++) {
+						if (!/^n[0-9]/.test(String(m['s' + i + 'band'] || ''))) { continue; }
+						var e1 = m['s' + i + 'earfcn'], p1 = m['s' + i + 'pci'];
+						if (!e1 || e1 === '-' || !p1 || p1 === '-') { continue; }
+						ear = e1; pci = p1; break;
+					}
+					if (!ear) {
+						ui.addNotification(null, E('p',
+							_('No 5G carrier right now - the lock needs its ARFCN and PCI')), 'warning');
+						return;
+					}
+					return _runBands([ 'setcelllock5g', 'cell', String(ear), String(pci) ],
+						_('Locking to cell ARFCN %s, PCI %s - the modem re-registers...').format(ear, pci));
+				});
+		})
+	}, [ _('Lock to current 5G cell') ]));
+}
+
 function nrC_hasEnabled(j) {
 	return ((j.enabled5gnsa || []).length > 0) || ((j.enabled5gsa || []).length > 0);
 }
@@ -426,6 +580,9 @@ function applyVendorJson(j) {
 		render5gMode(j.mode5g);
 		renderCaEnabled(j.ca_enabled);
 		renderCellLock(j.celllock);
+		renderCellLock5g(j.celllock5g);
+		render256qam(j.qam256);
+		renderUlca(j.ulca);
 		var hasBands = (j.supported && j.supported.length) ||
 		               (j.supported5gnsa && j.supported5gnsa.length) ||
 		               (j.supported5gsa && j.supported5gsa.length);
@@ -444,7 +601,10 @@ function applyVendorJson(j) {
 			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
 			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
 			if (note) { note.style.display = ctx.isMM() ? 'none' : ''; }
-			if (ctx.isMM()) { window.setTimeout(revealMgmtWhenReady, 1500); }
+			if (ctx.isMM() && _revealTries < _revealTriesMax) {
+				_revealTries++;
+				window.setTimeout(revealMgmtWhenReady, 1500);
+			}
 			return;
 		}
 		/* READ-ONLY: состояние читается, но применить его нельзя без ModemManager.
@@ -452,9 +612,20 @@ function applyVendorJson(j) {
 		   неактивными, и оставляем подсказку с кнопкой переключения. Раньше в
 		   этом случае bands.sh отдавал пустые списки и блок подменялся текстом -
 		   пользователь не видел даже того, что реально включено в модеме. */
+		_revealTries = 0;   // бенды пришли - счётчик ожидания обнуляем
 		bandsReadOnly = !!j.readonly;
 		bandsTakeover = !!j.takeover;
 		if (note) { note.style.display = (bandsReadOnly || bandsTakeover) ? '' : 'none'; }
+		/* AT под ModemManager выключен для хрупкой прошивки (T77W968/DW5821e):
+		   кнопки работают, но текущий выбор модема не читается - подсветки нет.
+		   Плашка объясняет это и не предлагает «переключиться на MM» (он уже). */
+		if (note && j.mm_at_static) {
+			var nt = document.getElementById('bandnote-text');
+			var nb = document.getElementById('bandnote-mm-btn');
+			if (nt) { nt.textContent = _('AT polling under ModemManager is off for this firmware (it drops the data session), so the current band selection is not read. Applying bands and mode still works; to see the current selection, enable "AT polling under ModemManager" in the modem settings.'); }
+			if (nb) { nb.style.display = 'none'; }
+			note.style.display = '';
+		}
 		bandSource = 'modemband';
 		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
 		   У LTE прошивка принимает битовую маску (любой набор), а у 3G - номер
@@ -766,7 +937,7 @@ function applyBands() {
 	   и отваливался «couldn't set selection preference: Transaction timed out»,
 	   утаскивая за собой модем. bands.sh берёт ту же очередь на устройство, что и
 	   наши читатели, поэтому MM применяет диапазоны спокойно. */
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
 			return;
@@ -887,7 +1058,7 @@ function hwTick(json) {
 	if (hw !== '|' && window.__hwSig && window.__hwSig !== hw) {
 		bandsReadOnly = false; bandsTakeover = false;
 		bandSource = 'mmcli';
-		_bandsRetry = 0; _bandsRetryMax = 3;
+		_bandsRetry = 0; _bandsRetryMax = 3; _revealTries = 0;
 		[ 'bands-3g', 'bands-lte', 'bands-nr', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
 			var c = document.getElementById(id);
 			if (c) { c.innerHTML = ''; c.removeAttribute('data-sig'); }
@@ -899,6 +1070,7 @@ function hwTick(json) {
 
 /* Переход прото в modemmanager (ловит applyMetrics): разбудить mmcli-путь. */
 function ungate() {
+	_revealTries = 0;   // смена прото на modemmanager - повод ждать бенды заново
 	window.setTimeout(revealMgmtWhenReady, 500);
 }
 

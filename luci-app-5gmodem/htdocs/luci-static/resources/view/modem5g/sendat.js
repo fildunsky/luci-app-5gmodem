@@ -61,6 +61,30 @@ function parseLegacyLine(s) {
 	return null;
 }
 
+/* ОПАСНЫЕ КОМАНДЫ - ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ.
+   Консоль отправляет в модем что угодно, и это правильно, но часть вендорных
+   команд необратима без вскрытия корпуса: AT+QPCIE="adb",1 у PCIe-варианта
+   Quectel RM520N гасит ВСЕ порты USB сразу и насовсем - дальше модем оживает
+   только через EDL и перепрошивку (три независимых случая на форуме). Смена
+   композиции (usbcfg / data_interface / pcie/mode) и уход в fastboot тоже
+   способны увести модем в режим, в котором роутер его не видит вовсе.
+   ЧТЕНИЕ НЕ ТРОГАЕМ: предупреждать на AT+QCFG="usbnet" без значения незачем -
+   именно чтение композиции и советует диагностика. Поэтому в шаблонах записи
+   обязательна запятая с аргументом. (ревью RM520N 13.09.2026, форум 4pda) */
+var DANGEROUS_AT = [
+	/\+QPCIE\s*=\s*"adb"/i,
+	/\+QCFG\s*=\s*"usbcfg"\s*,/i,
+	/\+QCFG\s*=\s*"data_interface"\s*,/i,
+	/\+QCFG\s*=\s*"pcie\/mode"\s*,/i,
+	/\+QFASTBOOT/i,
+	/\+QPRTPARA\s*=\s*3/i
+];
+
+function isDangerousAt(cmd) {
+	var s = String(cmd || '');
+	return DANGEROUS_AT.some(function(re) { return re.test(s); });
+}
+
 /* Перевод подписи/раздела: msgid из файла -> текущий язык. Своя (не из каталога)
    строка вернётся как есть - пользовательские команды показываем как написаны. */
 function tr(s) { return s ? _(s) : s; }
@@ -129,14 +153,24 @@ function atFamilyFor(vp, model) {
 	if (/compal|vos_5g|rxm|sg500/.test(m)) { return 'compal'; }
 	if (/fm350/.test(m) || vp.indexOf('0e8d:') === 0) { return 'fm350'; }
 	if (/l850|l860/.test(m) || vp === '8087:095a') { return 'xmm'; }
-	if (vp === '1e2d:00b3' || vp === '1e2d:00b7' || vp === '1e2d:00b8'
-		|| vp === '1e2d:00b9' || vp === '05c6:90d6') { return 'compal'; }
+	/* Sierra Wireless EM7345 (1199:a001) - ярлык Sierra, внутри Intel XMM7160:
+	   «!»-команды Sierra ему не отвечают (AT!ENTERCND="A710" -> ERROR, форум
+	   4pda #731/#2405-2407), поэтому подсказки Qualcomm/Sierra тут были бы
+	   заведомо чужими. Файл отдельный, а не общий xmm: у L850/L860 половина
+	   команд фибокомовские (AT+GTPKGVER, AT+GTDUALSIM, at@nvm) - для 7160 это
+	   такой же чужой набор (ревью EM7345 13.09.2026). */
+	if (vp === '1199:a001' || /em7345/.test(m)) { return 'xmm7160'; }
+	/* 1e2d:00b3/00b7/00b8/00b9 - штатные Thales-композиции самого T99W175/MV31-W
+	   (AT^CUSTOMER=14/16/33), не Compal: настоящий Compal уже отсечён по модели
+	   строкой выше. Прежде владелец самой ходовой конфигурации (customer 14,
+	   00B3) получал чужие AT+USBCOMP/AT+CEISWITCHSIM (ревью 12.09.2026). */
+	if (vp === '05c6:90d6') { return 'compal'; }
 	if (vp.indexOf('1bc7:') === 0 || /telit|lm9/.test(m)) { return 'telit'; }
 	if (vp.indexOf('2c7c:') === 0 || /quectel|^e[gmp]\d|^r[gm]5/.test(m)) { return 'quectel'; }
 	if (vp.indexOf('1e0e:') === 0 || /simcom|sim7/.test(m)) { return 'simcom'; }
 	if (vp.indexOf('12d1:') === 0 || /huawei/.test(m)) { return 'huawei'; }
-	if (vp === '413c:81d7' || vp === '0489:e0b5' || vp === '05c6:9025'
-		|| vp === '05c6:90d5' || /t99w|t77w|dw58|mv31/.test(m)) { return 'qualcomm'; }
+	if (vp === '413c:81d7' || vp === '413c:81e0' || vp === '0489:e0b5' || vp === '0489:e0b4' || vp === '05c6:9025'
+		|| vp === '05c6:90d5' || vp.indexOf('1e2d:00b') === 0 || /t99w|t77w|dw58|mv31/.test(m)) { return 'qualcomm'; }
 	return null;
 }
 
@@ -236,7 +270,7 @@ return view.extend({
 		});
 	},
 
-	handleGo: function(ev) {
+	handleGo: function(ev, confirmed) {
 		let atcmd = document.getElementById('cmdvalue').value;
 		let port = uci.get('5gmodem', 'sms', 'atport');
 		/* Фолбэк - AT-порт секции АКТИВНОГО модема: у MM-модема (Compal) легаси
@@ -268,7 +302,31 @@ return view.extend({
 			   форма команды и принадлежность порта модему проверяются на
 			   роутере. Произвольная команда при этом остаётся - консоль AT для
 			   этого и нужна. */
-			return this.handleCommand('/usr/share/5gmodem/atcmd.sh', [ port, atcmd ]);
+			/* ТАЙМАУТ ЗАДАЁМ ЯВНО. Без третьего аргумента скрипт ждёт
+			   очереди к порту до 25 с и только потом выполняет команду, а
+			   браузер рвёт вызов ubus на 20-й: пользователь получал голое
+			   «Request timeout» вместо ответа, хотя команда к модему уже
+			   ушла (аудит 12.09.2026). */
+			/* Необратимая команда - спрашиваем ДО отправки (см. DANGEROUS_AT).
+			   Отмена ничего не шлёт и оставляет набранное в поле. */
+			if (!confirmed && isDangerousAt(atcmd)) {
+				var self = this;
+				ui.showModal(_('Dangerous AT command'), [
+					E('p', {}, _('This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back.')),
+					/* Команду показываем ТЕКСТОМ, без разбора: она пришла из поля ввода. */
+					E('p', {}, E('strong', {}, atcmd)),
+					E('div', { 'class': 'right' }, [
+						E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
+						' ',
+						E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
+							ui.hideModal();
+							self.handleGo(ev, true);
+						} }, [ _('Send anyway') ])
+					])
+				]);
+				return false;
+			}
+			return this.handleCommand('/usr/share/5gmodem/atcmd.sh', [ port, atcmd, '8' ]);
 			}
 		}
 		if ( !port )
@@ -289,12 +347,16 @@ return view.extend({
 	},
 
 	handleCopy: function(ev) {
+		/* ПУСТОЙ ВЫБОР ПОЛЕ НЕ ТРОГАЕТ. При первом раскрытии списка выбран
+		   плейсхолдер со значением '', и обработчик стирал уже набранную
+		   команду - вместе с показанным ответом модема (аудит 12.09.2026). */
+		let x = document.getElementById('tk').value;
+		if (!x) { return; }
+
 		let out = document.querySelector('.atcommand-output');
 		out.style.display = 'none';
 
 		let ov = document.getElementById('cmdvalue');
-		ov.value = '';
-		let x = document.getElementById('tk').value;
 		ov.value = x;
 	},
 
@@ -435,7 +497,7 @@ return view.extend({
 										E('div', { 'class': 'controls' }, [
 											E('div', { 'class': 'pager center tg-row' }, [
 												E('button', { 
-													'class': 'btn cbi-button-neutral prev', 
+													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',
@@ -443,7 +505,7 @@ return view.extend({
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 												E('button', { 
-													'class': 'btn cbi-button-neutral next', 
+													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',
@@ -519,8 +581,11 @@ return view.extend({
 								E('select', {
 										'id': 'tk',
 										'class': 'cbi-input-select tg-field',
-										'change': ui.createHandlerFn(this, 'handleCopy'),
-										'mousedown': ui.createHandlerFn(this, 'handleCopy')
+										/* Только 'change'. Обработчик на 'mousedown' срабатывал
+										   на ПОПЫТКЕ заглянуть в список и переписывал поле ввода
+										   значением селекта - набранная команда пропадала ещё до
+										   выбора (аудит 12.09.2026). */
+										'change': ui.createHandlerFn(this, 'handleCopy')
 									    },
 									(function() {
 										let content = '';
@@ -556,7 +621,7 @@ return view.extend({
 								'class': 'tg-field',
 								'type': 'text',
 								'id': 'cmdvalue',
-								'data-tooltip': _('Press [Enter] to send the command, press [Delete] to delete the command'),
+								'data-tooltip': _('Press [Enter] to send the command, press [Ctrl+Delete] to clear the field'),
 								'keydown': function(ev) {
 									 if (ev.keyCode === 13)  
 										{
@@ -565,8 +630,13 @@ return view.extend({
 												execBtn.click();
 											}
 										}
-									 if (ev.keyCode === 46)  
+									 /* ОЧИСТКА ПОЛЯ - ТОЛЬКО С CTRL ИЛИ SHIFT. Голый [Delete]
+									    стирал команду целиком: поставить курсор в середину
+									    длинной команды и убрать один символ было невозможно
+									    (аудит 12.09.2026). */
+									 if (ev.keyCode === 46 && (ev.ctrlKey || ev.shiftKey))
 										{
+										ev.preventDefault();
 										let del = document.getElementById('cmdvalue');
 											if (del) {
 												let ov = document.getElementById('cmdvalue');

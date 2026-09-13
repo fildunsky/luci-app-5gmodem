@@ -45,6 +45,14 @@ if [ "$1" = "mmsetbands" ]; then
 	case "$2" in
 		*[!a-zA-Z0-9\|-]*) echo "bad bands"; exit 1 ;;
 	esac
+	# И ПУСТОЕ ИМЯ ДИАПАЗОНА - ТОЖЕ БРАК. Проверка выше пропускает "|eutran-3"
+	# и "eutran-3||eutran-7": символы-то разрешённые. mmcli на таком списке
+	# отказывает целиком, и человек видит «не применилось» без причины. Ловим
+	# здесь, чтобы ошибка называлась своим именем. (аудит 12.09.2026)
+	case "$2" in
+		\|*|*\|) echo "bad bands"; exit 1 ;;
+		*\|\|*)  echo "bad bands"; exit 1 ;;
+	esac
 	_mb_w=""
 	for _mb_d in /dev/cdc-wdm*; do [ -e "$_mb_d" ] && { _mb_w="$_mb_d"; break; }; done
 	if [ -n "$_mb_w" ]; then
@@ -92,8 +100,31 @@ _persist_bands() {
 	[ -n "$_pb_if" ] && : > "/tmp/5gmodem_bandrestore_$_pb_if" 2>/dev/null
 }
 
+# То же для РЕЖИМА СЕТИ: у Quectel RM520N прошивка после перезагрузки сама
+# возвращает mode_pref в AUTO, и выставленный «только LTE» терялся - модем уходил
+# в 3G (форум 4pda, ревью RM520N 13.09.2026). Храним id режима в save_mode той же
+# секции, восстанавливает restorebands. Маркер ставим по той же причине, что и
+# у диапазонов: выбор только что применён, в эту загрузку восстанавливать нечего.
+_persist_mode() {
+	_pm_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$_pm_sec" != "m_" ] || return 0
+	case "$1" in
+		'') uci -q delete "5gmodem.$_pm_sec.save_mode" 2>/dev/null ;;
+		*)  uci -q set "5gmodem.$_pm_sec.save_mode=$1" ;;
+	esac
+	uci -q commit 5gmodem
+	_pm_if=$(uci -q get "5gmodem.$_pm_sec.network")
+	[ -n "$_pm_if" ] && : > "/tmp/5gmodem_bandrestore_$_pm_if" 2>/dev/null
+}
+
 hextobands() {
 	BANDS=""
+	# HHEX (старшая половина длинной маски) - ТОЖЕ СБРАСЫВАЕМ. Переменная не
+	# локальная: после вызова с маской длиннее 18 символов она оставалась
+	# заполненной, и следующий вызов в ТОЙ ЖЕ оболочке дописывал к короткой маске
+	# фантомные диапазоны 65+. Сейчас все профили зовут hextobands в подоболочке,
+	# и наружу это не выходит, но цена страховки - одна строка. (аудит 12.09.2026)
+	HHEX=""
 	HEX="$1"
 	# ПУСТАЯ МАСКА - НЕ ОШИБКА АРИФМЕТИКИ. Профили собирают её как "0x"$(разбор),
 	# и на пустом ответе модема (порт занят, команда не понята) сюда приходило
@@ -495,6 +526,22 @@ setcelllock() {
 	echo "Unsupported"
 }
 
+# --- Привязка к соте 5G (NR) -------------------------------------------------
+# ОТДЕЛЬНЫЙ КОНТРАКТ, А НЕ ФЛАГ В getcelllock: у прошивок это РАЗНЫЕ команды с
+# разным состоянием (T99W175: AT^LTE_LOCK и AT^NR5G_LOCK живут независимо, и
+# модем может быть привязан по 4G и свободен по 5G одновременно). Слепив их в
+# одну строку, мы показали бы одну привязку вместо двух и сняли бы не ту.
+# Формат тот же, что у 4G: "Unsupported" | "off" | "cell <nr-arfcn> <pci>".
+# (ревью 13.09.2026, форум 4pda)
+getcelllock5g() {
+	echo "Unsupported"
+}
+
+# setcelllock5g off | cell <nr-arfcn> <pci>
+setcelllock5g() {
+	echo "Unsupported"
+}
+
 # --- Режим 5G в самом модеме -------------------------------------------------
 # Отдельная от диапазонов настройка: модем умеет 5G, но 5G ВЫКЛЮЧЕН в прошивке -
 # тогда ни выбор диапазонов, ни привязка к соте ничего не дадут, а причина
@@ -613,6 +660,36 @@ _bands_after_write() {
 # --- Агрегация включена в модеме? --------------------------------------------
 # "Unsupported" - не умеем спросить (строка скрыта) | "on" | "off"
 getcaenabled() {
+	echo "Unsupported"
+}
+
+# --- 256QAM в нисходящем канале ----------------------------------------------
+# "Unsupported" - модем не умеет (строка скрыта) | "on" | "off". Это ПЕРВОЕ, что
+# на EP06 крутят ради скорости, и до сих пор делалось тремя AT-командами по SSH.
+# Честно показываем только «включено/выключено»: прибавки не обещаем - по форуму
+# эффект есть лишь при SINR ~21 дБ и поддержке на БС (#1209, #22649).
+# (ревью 13.09.2026, форум 4pda)
+get256qam() {
+	echo "Unsupported"
+}
+
+# set256qam 0|1
+set256qam() {
+	echo "Unsupported"
+}
+
+# --- Агрегация в восходящем канале (uplink CA) -------------------------------
+# "Unsupported" | "on" | "off". У DW5821e/T77W968 аплинк - известное узкое место
+# (1-2 Мбит при богатом DL), включение поднимало его до 55-90 Мбит (#50082,
+# #58893). Обратной команды на форуме нет ни одной - поэтому setulca умеет
+# ТОЛЬКО "on", а UI показывает кнопку лишь когда выключено.
+# (ревью 13.09.2026, форум 4pda)
+getulca() {
+	echo "Unsupported"
+}
+
+# setulca on
+setulca() {
 	echo "Unsupported"
 }
 
@@ -763,8 +840,15 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 			_en3g=""; [ -n "$_sup3g" ] && _en3g=$("$_HL" getbands3g "$_bs_am" 2>/dev/null)
 			_sup2g=$("$_HL" supbands2g "$_bs_am" 2>/dev/null)
 			_en2g=""; [ -n "$_sup2g" ] && _en2g=$("$_HL" getbands2g "$_bs_am" 2>/dev/null)
+			# ИМЯ МОДЕЛИ И РЕЖИМ - В JSON ЧЕРЕЗ ЧИСТКУ. Эта ветка собирается
+			# printf'ом, а не через jshn (см. ниже), и кавычка или обратный слэш
+			# из USB-дескриптора («Thales\/Cinterion MV31-W») делали весь ответ
+			# невалидным JSON - страница «Сеть» не рисовала блок частот вовсе.
+			# (аудит 12.09.2026)
+			_bs_mdl=$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')
+			_cm=$(printf '%s' "$_cm" | tr -d '\\"\r\n')
 			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
-				"$(uci -q get "5gmodem.$_bs_sec.model")" "$_cm"
+				"$_bs_mdl" "$_cm"
 			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
 			printf '], "supported": ['
 			_f=1
@@ -991,6 +1075,25 @@ if [ "$_PORT_OK" = 1 ]; then
 			fi
 			[ -n "$_bo_v" ] && [ "$_bo_v" != "none" ] && _PORT_OK=0
 		fi
+		# Прото modemmanager - те же ворота, что у опроса (quirks.sh, mm_at_allowed):
+		# хрупкой прошивке (T77W968/DW5821e) живые AT-чтения под MM не даём, прочим -
+		# только при поднятой сессии. Статические списки остаются.
+		_MM_AT_STATIC=""
+		if [ "$_PORT_OK" = 1 ] \
+		   && [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" = "modemmanager" ]; then
+			. /usr/share/5gmodem/quirks.sh 2>/dev/null
+			mm_at_allowed "$_bs_am" "$_bs_sec"
+			case "$?" in
+				0) ;;
+				# Хрупкая прошивка: НЕПРЕРЫВНЫЕ чтения (текущий выбор в каждом json)
+				# не делаем, а ЯВНОЕ действие человека (set*) пропускаем - смена
+				# диапазона и так рвёт сессию, а AT^SLBAND/AT^SLMODE у T77W968 -
+				# единственные рычаги; иначе блок молчал «Port not found» без
+				# объяснений (ревью 12.09.2026, C10). UI получает mm_at_static.
+				2) _MM_AT_STATIC=1; _PORT_OK=0 ;;
+				*) _PORT_OK=0 ;;
+			esac
+		fi
 	fi
 fi
 
@@ -1060,6 +1163,14 @@ if [ "x$1" != "xjson" ]; then
 		# порт «не найден», и страница не показывала ничего, хотя ModemManager
 		# знал и списки диапазонов, и режим).
 		mgmtinfo) : ;;
+		set*)
+			# Явная запись у хрупкой прошивки под MM - разрешаем (см. _MM_AT_STATIC).
+			[ -n "$_MM_AT_STATIC" ] && [ -n "$_DEVICE" ] && [ -c "$_DEVICE" ] && _PORT_OK=1
+			if [ "$_PORT_OK" != "1" ]; then
+				echo "Port not found, quitting..."
+				exit 0
+			fi
+			;;
 		*)
 			if [ "$_PORT_OK" != "1" ]; then
 				echo "Port not found, quitting..."
@@ -1367,13 +1478,20 @@ case $1 in
 			printf '%s\n' "$1" | grep "^$2" | sed "s/^$2//" | sort -n | sed "s/^/$2/" \
 				| sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//'
 		}
+		# ПУСТОЙ other - ЭТО [], А НЕ [""]. У модема, которому MM отдаёт
+		# supported-bands, но не current-bands (прошивка не заполнила, модем ещё
+		# не зарегистрирован), $_mi_cur пуст, а printf всё равно печатает ОДНУ
+		# пустую строку - grep -v её пропускал, и в JSON уезжало [""]. Страница
+		# кладёт other в bandsOther и при «Применить» шлёт его в mmsetbands
+		# впереди выбранных: получалось "|eutran-3|eutran-7", mmcli отвергал
+		# пустое имя диапазона, и диапазоны не применялись вовсе. (аудит 12.09.2026)
 		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
 			"$(uci -q get "network.$_mi_if.allowedmode")" \
 			"$(uci -q get "network.$_mi_if.preferredmode")" \
 			"$(_mi_arr "$_mi_sup" utran-)"  "$(_mi_arr "$_mi_cur" utran-)" \
 			"$(_mi_arr "$_mi_sup" eutran-)" "$(_mi_arr "$_mi_cur" eutran-)" \
 			"$(_mi_arr "$_mi_sup" ngran-)"  "$(_mi_arr "$_mi_cur" ngran-)" \
-			"$(printf '%s\n' "$_mi_cur" | grep -vE '^(utran-|eutran-|ngran-)' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
+			"$(printf '%s\n' "$_mi_cur" | grep -v '^$' | grep -vE '^(utran-|eutran-|ngran-)' | sed 's/.*/"&"/' | tr '\n' ',' | sed 's/,$//')"
 		;;
 	"setmodemm")
 		# Режим сети для modemmanager-модема - СТОЙКО. Голый mmcli
@@ -1456,6 +1574,15 @@ case $1 in
 		_rb_one ""     getbands       setbands
 		_rb_one 5gnsa  getbands5gnsa  setbands5gnsa
 		_rb_one 5gsa   getbands5gsa   setbands5gsa
+		# Режим сети - тем же правилом: сравниваем сохранённый id с текущим и
+		# пишем только при расхождении; молчащий порт (пустой getmode) не трогаем.
+		_rb_msaved=$(uci -q get "5gmodem.$_rb_sec.save_mode")
+		if [ -n "$_rb_msaved" ]; then
+			_rb_mcur=$(getmode 2>/dev/null | head -1 | tr -d ' \r')
+			if [ -n "$_rb_mcur" ] && [ "$_rb_mcur" != "$_rb_msaved" ]; then
+				setmode "$_rb_msaved" >/dev/null 2>&1 && _rb_changed=1
+			fi
+		fi
 		# РЕЖИМ prepare: только записать маску и выйти, БЕЗ CFUN и реконнекта -
 		# дозвон сделает сам прото следом. Код возврата сообщает вызвавшему прото,
 		# менялась ли маска: 0 = записали новую (прото должен идти ХОЛОДНЫМ дозвоном,
@@ -1494,7 +1621,7 @@ case $1 in
 		# AT+CNMP берёт эффект сразу, а CFUN=4->1 его ОТКАТЫВАЕТ, проверено). Флаг
 		# _BANDS_APPLY_LIVE из профиля решает, перезапускать ли радио. В фоне -
 		# перерегистрация модема может не уложиться в таймаут rpcd.
-		[ -n "$2" ] && { ( setmode "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( setmode "$2" && { _persist_mode "$2"; _bands_after_write; }; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	# СИНХРОННАЯ смена режима БЕЗ перезапуска радио - для короткого ухода в 3G
 	# под запрос USSD (см. ussd.sh). Отличий от "setmode" два, и оба нужны:
@@ -1556,6 +1683,50 @@ case $1 in
 	"getcaenabled")
 		getcaenabled
 		;;
+	"get256qam")
+		get256qam
+		;;
+	"set256qam")
+		# Как setmode: запись уходит В ФОН (часть прошивок применяет её только
+		# после перезапуска радио - решает профиль через _bands_after_write), и
+		# кэш json чистит сама фоновая подоболочка ПОСЛЕ записи, иначе UI успеет
+		# закэшировать состояние из середины записи. (ревью 13.09.2026, форум 4pda)
+		case "$2" in
+			0|1) ( set256qam "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+		esac
+		;;
+	"getulca")
+		getulca
+		;;
+	"setulca")
+		# Выключения uplink CA на форуме не нашлось ни одного - принимаем только
+		# "on". Молча выполнить "off" значило бы соврать кнопкой.
+		case "$2" in
+			on) ( setulca on && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+		esac
+		;;
+	"getcelllock5g")
+		getcelllock5g
+		;;
+	"setcelllock5g")
+		# Зеркало "setcelllock": привязка идёт через перезапуск радио и в
+		# 30-секундный таймаут rpcd не укладывается - в фон с отвязкой
+		# дескрипторов, кэш бендов чистим ПОСЛЕ записи.
+		# Штампа в uci здесь НЕТ намеренно: _celllock_effective подставляет
+		# запомненное значение только для 4G, и второй штамп на ту же секцию
+		# показал бы 5G-привязку в строке 4G. (ревью 13.09.2026, форум 4pda)
+		if [ -n "$2" ]; then
+			( _cl5_out=$(setcelllock5g "$2" "$3" "$4" 2>/dev/null)
+			  case "$_cl5_out" in
+				*Unsupported*)
+					logger -t 5gmodem "celllock5g: this modem profile cannot write a 5G cell lock - nothing was sent"
+					exit 0 ;;
+			  esac
+			  rm -f /tmp/5gmodem_bands_* 2>/dev/null
+			  _reconnect_iface
+			) >/dev/null 2>&1 </dev/null &
+		fi
+		;;
 	"set5gmode")
 		# Как и привязка к соте: применяется через цикл режима полёта, дольше
 		# 30-секундного таймаута rpcd - поэтому в фон с отвязкой дескрипторов.
@@ -1593,6 +1764,11 @@ case $1 in
 			# не получал (живой отчёт 24.08.2026, T99W175). Снимаем память,
 			# если профиль отказался.
 			( _cl_out=$(setcelllock "$2" "$3" "$4" 2>/dev/null)
+			  # КЭШ JSON СБРАСЫВАЕМ ПОСЛЕ ЗАПИСИ, как у setbands/setmode: без этого
+			  # страница до истечения кэша показывала снятую привязку как живую
+			  # (проверено на EP06-E 13.09.2026: модем отвечал "common/4g",0,
+			  # карточка - «Привязан к соте 3300/326»).
+			  rm -f /tmp/5gmodem_bands_* 2>/dev/null
 			  case "$_cl_out" in
 				*Unsupported*)
 					[ -n "$_cl_sec" ] && { uci -q delete "5gmodem.$_cl_sec.celllock"; uci -q commit 5gmodem; }
@@ -1630,6 +1806,9 @@ case $1 in
 		if [ "$_BAND_READONLY" = "1" ]; then
 			if _needs_mm_takeover; then json_add_int takeover 1; else json_add_int readonly 1; fi
 		fi
+		# Текущий выбор не читался (AT под MM выключен у хрупкой прошивки), но
+		# кнопки применения работают - UI объяснит, почему нет подсветки.
+		[ -n "$_MM_AT_STATIC" ] && json_add_int mm_at_static 1
 		MODES=$(getsupportedmodes)
 		if [ "x$MODES" != "xUnsupported" ]; then
 			# currentmode is a LIVE query - only when the port is reachable.
@@ -1658,6 +1837,21 @@ case $1 in
 		CAE=$(getcaenabled)
 		if [ "x$CAE" != "xUnsupported" ]; then
 			json_add_string ca_enabled "$CAE"
+		fi
+		# 5G-лок, 256QAM и uplink CA - вендорные строки того же класса, что
+		# celllock/ca_enabled: профиль отвечает "Unsupported", и строка в UI
+		# просто не появляется. (ревью 13.09.2026, форум 4pda)
+		CL5=$(getcelllock5g)
+		if [ "x$CL5" != "xUnsupported" ]; then
+			json_add_string celllock5g "$CL5"
+		fi
+		Q256=$(get256qam)
+		if [ "x$Q256" != "xUnsupported" ]; then
+			json_add_string qam256 "$Q256"
+		fi
+		ULCA=$(getulca)
+		if [ "x$ULCA" != "xUnsupported" ]; then
+			json_add_string ulca "$ULCA"
 		fi
 		json_add_array supported
 		T=$(getsupportedbands)

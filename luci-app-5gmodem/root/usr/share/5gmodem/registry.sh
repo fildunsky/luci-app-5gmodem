@@ -120,6 +120,10 @@ EOF
 		case "$_r_l" in
 			'') ;;
 			/dev/tty*) _r_tty="$_r_tty$_r_l " ;;
+			# AT-порт PCI/MHI-модема - /dev/wwan<N>at<M>: без этой строки он
+			# уезжал в управляющие, реестр гасил at_port, и диапазоны у
+			# PCIe-модуля не читались. USB таких узлов не отдаёт. (ревью 13.09.2026)
+			/dev/wwan*at*) _r_tty="$_r_tty$_r_l " ;;
 			/dev/*)    _r_wdm="$_r_wdm$_r_l " ;;
 			*)         _r_net="$_r_net$_r_l " ;;
 		esac
@@ -166,17 +170,18 @@ EOF
 	# serial - ЖИВОЙ, из перечисления, и только годный (см. serial_of в lib.sh:
 	# заглушки вроде 0123456789ABCDEF и пустые отброшены там). Пусто - нормально:
 	# у FM350 серийника нет вовсе, опознание тогда идёт по IMEI и пути, как раньше.
+	# Строковые поля - через json_esc (lib.sh): product с кавычкой ломал весь JSON.
 	printf '{"path":"%s","section":"%s","model":"%s","product":"%s","vidpid":"%s","serial":"%s","imei":"%s",' \
-		"$_r_p" "$_r_s" \
-		"$(uci5g_get "$_r_s" model)" \
-		"$_r_prod" \
-		"$_r_vp" \
-		"$_r_ser" \
-		"$(uci5g_get "$_r_s" imei)"
+		"$(json_esc "$_r_p")" "$(json_esc "$_r_s")" \
+		"$(json_esc "$(uci5g_get "$_r_s" model)")" \
+		"$(json_esc "$_r_prod")" \
+		"$(json_esc "$_r_vp")" \
+		"$(json_esc "$_r_ser")" \
+		"$(json_esc "$(uci5g_get "$_r_s" imei)")"
 	printf '"iface":"%s","proto":"%s","at_port":"%s","owner":"%s","active":%s,' \
-		"$_r_if" \
-		"$_r_proto" \
-		"$_r_at" "$(_owner "$_r_s" "$_r_if" "$_r_proto")" \
+		"$(json_esc "$_r_if")" \
+		"$(json_esc "$_r_proto")" \
+		"$(json_esc "$_r_at")" "$(_owner "$_r_s" "$_r_if" "$_r_proto")" \
 		"$([ "$_r_p" = "$_ACTIVE" ] && echo true || echo false)"
 	printf '"tty":%s,"wdm":%s,"net":%s}' \
 		"$(_r_json_list "$_r_tty")" \

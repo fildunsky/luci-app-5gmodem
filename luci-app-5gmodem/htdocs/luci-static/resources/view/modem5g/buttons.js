@@ -397,20 +397,30 @@ function buttonCard(b, leds, services, onDelete) {
 
 	var save = E('button', { 'class': 'btn cbi-button cbi-button-save',
 		'click': ui.createHandlerFn(this, function() {
-			var ops = [ setField(b.name, 'btntype', isSwitch ? 'switch' : 'button'),
-				setField(b.name, 'debounce', dbc.value) ];
+			/* СОХРАНЯЕМ ПО ОЧЕРЕДИ, А НЕ ЗАЛПОМ.
+			   Каждый вызов buttons.sh set/setleds делает свой `uci set` в дельту
+			   и тут же `uci commit`, а commit читает дельту и ОБНУЛЯЕТ её: правка
+			   соседнего процесса, попавшая между чтением и обнулением, терялась -
+			   поле молча не сохранялось, а форма рисовала «Сохранено» (Promise.all
+			   успешен). Плюс два setleds параллельно перезапускали /etc/init.d/led
+			   внахлёст. Складываем ФУНКЦИИ и выполняем цепочкой (аудит 12.09.2026).
+			   Поле btntype не пишем: его никто не читает - ни обработчик события
+			   (buttons.sh run), ни форма (тип берётся из DTS, b.type), - а каждое
+			   сохранение стоило лишнего цикла uci commit, то есть записи во флеш. */
+			var ops = [ function() { return setField(b.name, 'debounce', dbc.value); } ];
 			[ [ 'pressed', pPanel ], [ 'released', rPanel ] ].forEach(function(pair) {
 				var st = pair[0], v = pair[1].getVals();
-				ops.push(setField(b.name, 'ct_' + st, v.ct));
-				ops.push(setField(b.name, st, v.cmd));
+				ops.push(function() { return setField(b.name, 'ct_' + st, v.ct); });
+				ops.push(function() { return setField(b.name, st, v.cmd); });
 				if (v.ct === 'conditional') {
-					ops.push(setLeds(b.name, 'on_' + st, v.onLeds));
-					ops.push(setLeds(b.name, 'off_' + st, v.offLeds));
+					ops.push(function() { return setLeds(b.name, 'on_' + st, v.onLeds); });
+					ops.push(function() { return setLeds(b.name, 'off_' + st, v.offLeds); });
 				} else {
-					ops.push(setLeds(b.name, st, v.simpleLeds));
+					ops.push(function() { return setLeds(b.name, st, v.simpleLeds); });
 				}
 			});
-			return Promise.all(ops).then(function() { flashSaved(status); });
+			return ops.reduce(function(p, mk) { return p.then(mk); }, Promise.resolve())
+				.then(function() { flashSaved(status); });
 		}) }, _('Save'));
 
 	card.appendChild(E('div', { 'class': 'btndbc' }, [

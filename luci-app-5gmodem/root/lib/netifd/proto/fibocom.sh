@@ -134,7 +134,15 @@ _fibocom_activate() {
 	sms_tool -d "$dial" at "AT+CGACT=0,1" >/dev/null 2>&1
 	sleep 2
 	for try in 1 2 3 4 5 6; do
-		sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
+		# ПОВТОРНЫЙ CGACT=1,1 НА АКТИВНОМ КОНТЕКСТЕ КРАШИТ МОДЕМ (+CME ERROR: 500,
+		# ребут, пропажа ttyACM0 - форум, подтверждено экспериментально). Первая
+		# попытка могла контекст поднять, а адрес ещё не пришёл - активируем только
+		# когда AT+CGACT? не показывает 1,1 (ревью 12.09.2026).
+		if sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
+			:
+		else
+			sms_tool -d "$dial" at "AT+CGACT=1,1" >/dev/null 2>&1
+		fi
 		sleep 2
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
@@ -142,7 +150,11 @@ _fibocom_activate() {
 			# XMM: привязать первый NCM-канал к контексту и стартовать данные -
 			# без этого адрес есть, а кадры в NCM не ходят (суть xmm.sh).
 			if [ "$IS_XMM" = 1 ]; then
-				sms_tool -d "$dial" at "AT+XDATACHANNEL=1,1,\"/USBCDC/0\",\"/USBHS/NCM/0\",2,1" >/dev/null 2>&1
+				# Индекс ACM берём из имени порта дозвона: XDATACHANNEL привязывает
+				# КОНКРЕТНЫЙ ACM к NCM-каналу, а в режиме 11 роутерный AT-порт - ACM2
+				# (форум: живые логи и с /USBCDC/0, и с /USBCDC/2; ревью 12.09.2026).
+				_xdc=$(printf '%s' "$dial" | sed -n 's/.*ttyACM\([0-9][0-9]*\)$/\1/p'); [ -n "$_xdc" ] || _xdc=0
+				sms_tool -d "$dial" at "AT+XDATACHANNEL=1,1,\"/USBCDC/$_xdc\",\"/USBHS/NCM/0\",2,1" >/dev/null 2>&1
 				sms_tool -d "$dial" at "AT+CGDATA=\"M-RAW_IP\",1" >/dev/null 2>&1
 			fi
 			echo "$ip"; return 0
@@ -406,6 +418,9 @@ proto_fibocom_setup() {
 	# из xmm.sh (modemfeed), внешний пакет больше не обязателен.
 	local IS_XMM=0
 	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null)" = "8087" ] && IS_XMM=1
+	# Режим 11 (AT+GTUSBMODE=11): 2cb7:000b, 3×ACM + 3×NCM под Fibocom-VID - тот же
+	# XMM, без XDNS/XDATACHANNEL/M-RAW_IP/arp off «адрес есть, трафика нет» (форум).
+	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "2cb7:000b" ] && IS_XMM=1
 	local IS_R11E=0
 	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "2cd2:0001" ] && IS_R11E=1
 

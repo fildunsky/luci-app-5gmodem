@@ -83,6 +83,7 @@ BWDL=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r","",$4); print $4}')
 			3) NP=50 ;;
 			4) NP=75 ;;
 			5) NP=100 ;;
+			0) NP=6 ;;    # 1.4 МГц; при NP=0 log(0) валил расчёт RSSI
 			*) NP=0 ;;
 		esac
 		
@@ -101,7 +102,7 @@ else
 fi
 
 RSRQ=$(echo "$O" | awk -F [:,] '/\+RSRQ:/{printf "%.0f\n", $4}')
-SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); printf "%.0f\n", $13/4+5}')
+SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); if ($13+0 != 255) printf "%.0f\n", $13/4+5}')   # 255 = нет данных (форум), иначе «69 дБ»
 
 LTE_Cx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{print $3}')
 case "$LTE_Cx" in ''|*[!0-9]*) LTE_Cx=1 ;; esac
@@ -173,6 +174,7 @@ T2=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "}')
 		3*) T4="10";;
 		4*) T4="15";;
 		5*) T4="20";;
+		0*) T4="1.4";;
 		*) T4="0";;
 	esac
 
@@ -217,6 +219,7 @@ if [[ "$MODE" != *"LTE-A"* ]]; then
 		3*) T4="10";;
 		4*) T4="15";;
 		5*) T4="20";;
+		0*) T4="1.4";;
 		*) T4="0";;
 	esac
 

@@ -78,3 +78,107 @@ setbands5gsa() {
 
 	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+qnwprefcfg=\"nr5g_band\",$T"
 }
+
+# --- Привязка к соте (LTE) ---------------------------------------------------
+#
+# ПОЧЕМУ ЗДЕСЬ. У 5G-Quectel привязки не было вовсе, хотя команда в прошивке
+# есть и на форуме ею пользуются:
+#   AT+QNWLOCK="common/4g"                - показать текущий лок
+#   AT+QNWLOCK="common/4g",1,<earfcn>,<pci> - привязать к одной соте
+#   AT+QNWLOCK="common/4g",0              - снять
+#   AT+QNWLOCK="save_ctrl",1,1            - чтобы лок пережил перезагрузку
+# Привязка К ЧАСТОТЕ этой командой не выражается: EARFCN и PCI - обязательная
+# пара, а PCI=0 модем понял бы буквально. Поэтому вариант "arfcn" отклоняем
+# ответом "Unsupported" - bands.sh по нему снимет запомненный выбор, и страница
+# не покажет привязку, которой в модеме нет.
+# 5G-лок (common/5g) НЕ делаем: подтверждённого применения нет, только форма
+# ответа на AT+QNWLOCK=?.
+# ЖИВОГО ДАМПА ЧТЕНИЯ НЕТ - разбираем осторожно: не разобрали, значит молчим
+# ("Unsupported"), а не показываем пустую привязку с нерабочей кнопкой.
+# (ревью RM520N 13.09.2026, форум 4pda)
+getcelllock() {
+	_gcl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\"" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+QNWLOCK: *"common\/4g", *//p' | head -1)
+	[ -n "$_gcl_o" ] || { echo "Unsupported"; return; }
+	# Первое поле - число залоченных сот: 0 = лока нет.
+	_gcl_n=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$1); print $1}')
+	case "$_gcl_n" in
+		''|*[!0-9]*) echo "Unsupported"; return ;;
+		0) echo "off"; return ;;
+	esac
+	_gcl_ar=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$2); print $2}')
+	_gcl_pc=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$3); print $3}')
+	case "$_gcl_ar" in ''|*[!0-9]*) echo "off"; return ;; esac
+	case "$_gcl_pc" in ''|*[!0-9]*) echo "off"; return ;; esac
+	# Сот может быть до трёх - показываем первую: контракт знает одну.
+	echo "cell $_gcl_ar $_gcl_pc"
+}
+
+# setcelllock off | cell <earfcn> <pci>  (контракт bands.sh)
+setcelllock() {
+	case "$1" in
+		off)
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",0" 2>&1 | tr -d '\r')
+			;;
+		cell)
+			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			case "$3" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",1,$2,$3" 2>&1 | tr -d '\r')
+			;;
+		arfcn)
+			# Формы «только частота» у QNWLOCK нет - см. комментарий выше.
+			echo "Unsupported"; return 1 ;;
+		*) return 1 ;;
+	esac
+	case "$_scl_o" in
+		*ERROR*)
+			logger -t 5gmodem "celllock: firmware rejected QNWLOCK: $(echo "$_scl_o" | tr '\n' ' ' | head -c 120)"
+			echo "Unsupported"; return 1 ;;
+	esac
+	# Без save_ctrl привязка живёт только до перезагрузки модуля.
+	sms_tool -d $_DEVICE at "at+qnwlock=\"save_ctrl\",1,1" >/dev/null 2>&1
+	return 0
+}
+
+# --- Режим сети (RAT) --------------------------------------------------------
+#
+# AT+QNWPREFCFG="mode_pref" -> +QNWPREFCFG: "mode_pref",AUTO. Набор EC2x
+# (at+qcfg="nwscanmode", см. _quectel_common) этим модемам не подходит, поэтому
+# селектор режима у 5G-Quectel был пуст.
+# ЗНАЧЕНИЯ СЛОВЕСНЫЕ, А НАРУЖУ ОТДАЁМ ЧИСЛА: в списке режимов bands.sh пара
+# «id:подпись» режется по первому двоеточию, и id «LTE:NR5G» разорвало бы пару -
+# подписью стало бы «NR5G». Слова прошивки держим внутри профиля.
+# 5G-only (NR5G) на форуме не встречается, но он есть в наборе команд и может
+# вернуться при чтении - поэтому в списке он тоже есть.
+# (ревью RM520N 13.09.2026, форум 4pda)
+getsupportedmodes() {
+	echo "0:Auto 1:3G 2:4G 3:4G+5G 4:5G"
+}
+
+_qmode_word() {   # id -> слово прошивки
+	case "$1" in
+		0) echo "AUTO" ;;
+		1) echo "WCDMA" ;;
+		2) echo "LTE" ;;
+		3) echo "LTE:NR5G" ;;
+		4) echo "NR5G" ;;
+	esac
+}
+
+getmode() {
+	_gm=$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"mode_pref\"" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+QNWPREFCFG: *"mode_pref", *//p' | head -1 | tr -d ' ')
+	# Порядок веток важен: LTE:NR5G содержит и LTE, и NR5G.
+	case "$_gm" in
+		AUTO*)   echo 0 ;;
+		*NR5G*)  case "$_gm" in *LTE*) echo 3 ;; *) echo 4 ;; esac ;;
+		*LTE*)   echo 2 ;;
+		*WCDMA*) echo 1 ;;
+	esac
+}
+
+setmode() {
+	_sm_w=$(_qmode_word "$1")
+	[ -n "$_sm_w" ] || { echo "ERROR: bad mode"; return 1; }
+	sms_tool -d $_DEVICE at "at+qnwprefcfg=\"mode_pref\",$_sm_w"
+}

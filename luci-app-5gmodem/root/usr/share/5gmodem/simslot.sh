@@ -19,6 +19,23 @@ done
 set -- $_args
 [ -n "$_TGT" ] || _TGT=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 
+# НОМЕР СЛОТА ПРОВЕРЯЕМ ДО ВСЕХ ВЕТОК. Веток "set" в скрипте три (AT, QMI/UIM и
+# «канал занят netifd»), а проверка стояла только в последней, AT-ветке - до неё
+# две другие не доходят. Между тем QMI-ветка первым же шагом считает
+# $((номер - 1)): на "1x" или ";x" busybox ash валится с arithmetic syntax error
+# и умирает ВЕСЬ скрипт (в stdout не остаётся ничего, страница получает не-JSON
+# и не знает, переключился слот или нет), а на "abc" арифметика молча даёт -1 и
+# в модем уходит реальная AT^switch_slot=-1. Предикат тот же, что is_num в
+# lib.sh, но lib.sh здесь ещё не подключён. (аудит 12.09.2026)
+if [ "$1" = "set" ]; then
+	[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+	case "$2" in
+		*[!0-9]*)
+			logger -t 5gmodem "simslot: invalid slot number - rejected"
+			echo '{"error":"bad slot"}'; exit 0 ;;
+	esac
+fi
+
 # У модема без AT-портов слотами управлять нечем: команды переключения - AT.
 # Без этой проверки страница показывала «SIM / eSIM» у односимочного Huawei,
 # потому что в секции оставались slot_type_* от прежнего модема на том же порту.
@@ -182,6 +199,10 @@ fi
 _SEC=$(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.]*\)\.path='$_AP'\$/\1/p" | head -1)
 _NET=$(uci -q get "5gmodem.$_SEC.network")
 _PROTO=$(uci -q get "network.$_NET.proto")
+# Ворота канала в lib.sh (qmi_channel_free / qmicli_p) судят по интерфейсу
+# ИМЕННО этого модема, а не глобально активного: слоты соседа (for=<путь>)
+# иначе не читались никогда (аудит 12.09.2026, группа 3, №2).
+export QMI_TARGET_PATH="$_AP"
 case "$_PROTO" in
 	modemmanager) ;;                    # MM-модем -> mmcli-путь ниже
 	"") [ -n "$MI" ] || MI="" ;;        # конфиг не найден -> прежняя эвристика
@@ -211,8 +232,15 @@ fi
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 . /usr/share/5gmodem/quirks.sh
 . /usr/share/5gmodem/esimcaps.sh   # esim_capable - подписать неизвестный слот «eSIM»
-if [ "$1" != "set" ] \
-   && [ "$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")" = none ]; then
+# ОДИН ОТВЕТ sim_slots_via НА ВЕСЬ СКРИПТ. Раньше её звали дважды с РАЗНЫМИ
+# первыми аргументами: здесь «<модель из uci> <product из дескриптора>», а при
+# выборе транспорта ниже - только модель. А по $1 функция различает прототип
+# Compal на 05c6:90d5 (*SG500M2*/*RXM-G1*/*Compal*) и односимочный SIM7600, и
+# пока модель не дописана в секцию (новая секция, модель дозаполняется отдельно),
+# два вызова расходились: гейт видел ceiswitchsim, а транспорт - qmi, и слоты
+# Compal читались чужим путём. Считаем один раз и переиспользуем. (аудит 12.09.2026)
+_SVIA=$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model") $_APROD" "$_AVIDPID")
+if [ "$1" != "set" ] && [ "$_SVIA" = none ]; then
 	echo '{"type":"","slots":[],"active":""}'; exit 0
 fi
 # Раньше здесь стоял СПИСОК VID:PID (только 05c6:90d6 и 05c6:90d5). Этого не
@@ -373,7 +401,7 @@ fi
 # Способ чтения слотов берём из базы проверенных модемов, а не перебором: лишние
 # команды в общий AT-порт конкурируют с опросом метрик, и ответы перепутываются
 # (эхо "AT+SIMTYPE?" однажды прилетело на чтение AT+CGMM и осело в имени модема).
-_VIA=$(sim_slots_via "$(uci -q get "5gmodem.$_SEC.model")" "$_AVIDPID")
+_VIA="$_SVIA"   # тот же ответ, что у гейта выше - см. _SVIA (аудит 12.09.2026)
 if [ "$_VIA" = none ] && [ "$1" != set ]; then
 	# Модем с единственным слотом (SIM7600E-H): спрашивать нечего, кнопок нет.
 	echo '{"type":"","slots":[],"active":""}'; exit 0
@@ -809,6 +837,85 @@ if [ "$_VIA" = uims ]; then
 		printf '%s\n' "$_uo" > "/tmp/5gmodem_slots_$_AP"
 		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
 		printf '%s\n' "$_uo"
+		;;
+	esac
+	exit 0
+fi
+
+# ---- Quectel RM520N-GL и родня: слоты через AT+QUIMSLOT ----------------------
+# 1 = первый физический слот, 2 = второй (у экземпляров с распаянным eUICC на
+# нём и живёт eSIM). Чтение - «AT+QUIMSLOT?» -> «+QUIMSLOT: 1», запись -
+# «AT+QUIMSLOT=<n>» -> OK. СБРОС МОДЕМА НЕ ДЕЛАЕМ: команда применяется сразу
+# (форум переключает слот на лету и тут же возвращается обратно), а лишний
+# CFUN=1,1 стоил бы минуты без сети. Зато переключение РВЁТ сессию данных
+# («выставил вторую SIM - интернет пропал»), поэтому интерфейс переподнимаем,
+# как в остальных ветках. (ревью RM520N 13.09.2026, форум 4pda)
+if [ "$_VIA" = quimslot ]; then
+	_qi_read() {   # печатает номер активного слота или ничего
+		at_query "$D" "AT+QUIMSLOT?" 6 2>/dev/null | tr -d '\r' \
+			| sed -n 's/.*+QUIMSLOT: *\([0-9]\).*/\1/p' | head -1
+	}
+	case "$1" in
+	set)
+		case "$2" in
+			1|2) ;;
+			*) logger -t 5gmodem "simslot: invalid slot number - rejected"
+			   echo '{"error":"bad slot"}'; exit 0 ;;
+		esac
+		O=$(at_query "$D" "AT+QUIMSLOT=$2" 8)
+		if echo "$O" | grep -q "ERROR"; then
+			echo '{"error":"switch failed"}'; exit 0
+		fi
+		# Результат ПЕРЕЧИТЫВАЕМ, а не считаем успехом молчание: модем
+		# перекидывает слот за пару секунд. Пустой ответ провалом не считаем -
+		# порт в этот момент бывает недоступен, а слот уже переключён (та же
+		# оговорка, что у ветки gtdualsim ниже).
+		_qi_a=""
+		for _qi_i in 1 2 3; do
+			sleep 2
+			_qi_a=$(_qi_read)
+			[ "$_qi_a" = "$2" ] && break
+		done
+		if [ -n "$_qi_a" ] && [ "$_qi_a" != "$2" ]; then
+			echo '{"error":"switch failed"}'; exit 0
+		fi
+		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+		logger -t 5gmodem "SIM slot switched to $2 via AT+QUIMSLOT"
+		# fds отвязаны ОТ ПОДОБОЛОЧКИ - см. пояснение у ветки ниже.
+		( slot_redial ) >/dev/null 2>&1 </dev/null &
+		echo '{"result":"ok"}'
+		;;
+	*)
+		_qi_act=$(_qi_read)
+		case "$_qi_act" in
+			1|2) ;;
+			*)  # Порт занят/команда не ответила. Для status это НЕ «слотов
+			    # нет»: отдаём последний валидный ответ, иначе кнопки SIM
+			    # пропадают на ровном месте.
+			    if [ -s "/tmp/5gmodem_slots_$_AP" ]; then
+				cat "/tmp/5gmodem_slots_$_AP"; exit 0
+			    fi
+			    echo '{"type":"","slots":[],"active":""}'; exit 0 ;;
+		esac
+		# МЕТКА ВТОРОГО СЛОТА. Подписать его «eSIM» по одному vid:pid (как это
+		# делает esim_capable из esimcaps.sh) здесь нельзя: чип у этого
+		# семейства распаян далеко не у всех экземпляров - на ходовых вариантах
+		# AT+QESIM="eid" отвечает ERROR, штатный EID приходит лишь у отдельной
+		# модификации. Поэтому спрашиваем сам модем, и только когда есть повод:
+		# vid:pid в списке потенциальных eSIM, а кэш вкладки eSIM ещё пуст.
+		# Одна команда в уже занятый нами порт - дешевле CCHO/APDU-пробинга.
+		_qi_l2="SIM2"
+		_qi_es=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
+			"/tmp/5gmodem_esimstat_$_TGT" 2>/dev/null)
+		if [ "$_qi_es" != 1 ] && esim_capable "$_AVIDPID" "$_APROD"; then
+			at_query "$D" "AT+QESIM=\"eid\"" 6 2>/dev/null \
+				| grep -q '"eid",[0-9]' && _qi_es=1
+		fi
+		[ "$_qi_es" = 1 ] && _qi_l2="eSIM"
+		_qi_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"%s","present":"1"}],"active":"%s"}' "$_qi_l2" "$_qi_act")
+		printf '%s\n' "$_qi_out" > "/tmp/5gmodem_slots_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+		printf '%s\n' "$_qi_out"
 		;;
 	esac
 	exit 0

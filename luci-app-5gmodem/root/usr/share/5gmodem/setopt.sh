@@ -48,6 +48,18 @@ atdebug)
 	uci -q set "5gmodem.$_sec.at_debug=$(_norm01 "$3")"
 	uci -q commit 5gmodem
 	;;
+# mmat <usb-path> <0|1> - AT-опрос модема, которым владеет ModemManager (см.
+# mm_at_allowed в quirks.sh). Секцию заводим с path по той же причине, что atdebug.
+mmat)
+	[ -n "$2" ] || exit 1
+	_sec=$(_sec_for_path "$2")
+	uci -q get "5gmodem.$_sec" >/dev/null 2>&1 || {
+		uci -q set "5gmodem.$_sec=modem"
+		uci -q set "5gmodem.$_sec.path=$2"
+	}
+	uci -q set "5gmodem.$_sec.mm_at=$(_norm01 "$3")"
+	uci -q commit 5gmodem
+	;;
 # dnsfb <usb-path> <0|1> [servers] - DNS-фолбэк на интерфейсе модема. Состояние -
 # это САМ network.<iface>.dns (отдельного флага нет): вкл + заданные сервера =
 # пишем dns, выкл (или пусто) = снимаем. Применяем через network reload, а НЕ
@@ -61,7 +73,11 @@ dnsfb)
 	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
 	[ -n "$_ifn" ] || exit 0
 	_flag=$(_norm01 "$3")
-	shift 3
+	# СДВИГАЕМ, ТОЛЬКО ЕСЛИ ЕСТЬ ЧТО СДВИГАТЬ. При вызове без списка серверов
+	# «shift 3» не выполняется вовсе, и в _srv попадали САМИ аргументы верба
+	# («dnsfb /2-1») - сегодня безвредно (флаг 0 уводит в ветку delete), но это
+	# мина под первым же вызовом с флагом 1 (аудит 12.09.2026).
+	if [ $# -ge 3 ]; then shift 3; else set --; fi
 	_srv="$*"
 	note_foreign_uci network "setopt dnsfb"
 	if [ "$_flag" = "1" ] && [ -n "$_srv" ]; then
@@ -117,7 +133,7 @@ menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|applyset|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|mmat <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|applyset|menuflush}" >&2
 	exit 1
 	;;
 esac

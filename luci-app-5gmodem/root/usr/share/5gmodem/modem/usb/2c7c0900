@@ -2,7 +2,7 @@
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
-T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | sort -r | head -n1 | xargs)
+T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | tr -d '"' | sort -rn | head -n1 | xargs)
 [ -n "$T" ] && TEMP="$T &deg;C"
 
 if [ -z "$REG" ] || [ "x$MODE_NUM" = "x11" ]; then
@@ -49,23 +49,23 @@ case "$MODE_NUM" in
 			if echo "$O" | grep -q -i "+QCAINFO.*PCC.*LTE"; then
 				MODE="LTE |"
 
-					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#					OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 					SINR=$OTS
 
-					TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-					TAC_DEC=$(printf "%d" "0x$TDX")
+					TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+					TAC_DEC=$(case "$TDX" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$TDX";; esac)
 					TAC_HEX=$TDX
 
 				if echo "$O" | grep -q -i "+QCAINFO.*SCC"; then
 					MODE="LTE-A |"
 
-						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#						OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 						SINR=$OTS
 
-						TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-						TAC_DEC=$(printf "%d" "0x$TDX")
+						TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+						TAC_DEC=$(case "$TDX" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$TDX";; esac)
 						TAC_HEX=$TDX
 				fi
 			fi
@@ -112,15 +112,15 @@ if [ -n "$T" ]; then
 fi
 
 if [ "x$MODE_NUM" = "x7" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4; exit}' | xargs)
 	if [ "x$T" = "xLTE" ]; then
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-		TAC_DEC=$(printf "%d" "0x$T")
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+		TAC_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 		TAC_HEX="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 		SINR="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;
@@ -131,7 +131,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			*) T1="";;
 		esac
 		[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 		case $T in
 			0*) T1="1.4";;
 			1*) T1="3";;
@@ -146,16 +146,16 @@ if [ "x$MODE_NUM" = "x7" ]; then
 fi
 
 if [ "x$MODE_NUM" = "x11" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4; exit}' | xargs)
 	if [ "x$T" = "xNR5G-SA" ]; then
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $8}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $8; exit}')
 		if [ -n "$T" ]; then
 			CID_HEX=$T
 			CID_DEC=$(printf "%d" "0x${CID_HEX}")
 		fi
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}')
+#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9; exit}')
 #		[ -n "$T" ] && PCI="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 		case $T in
 			0) BW="5";;
 			1) BW="10";;
@@ -175,7 +175,7 @@ if [ "x$MODE_NUM" = "x11" ]; then
 			*) BW="";;
 		esac
 		[ -n "$BW" ] && DBW="@$BW MHz"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
 		if [ -n "$T" ]; then
 			RSRP="$T"
 			if [ -n "$BW" ]; then
@@ -190,9 +190,9 @@ if [ "x$MODE_NUM" = "x11" ]; then
 				fi
 			fi
 		fi
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15; exit}')
 		[ -n "$T" ] && RSRQ="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16; exit}')
 		[ -n "$T" ] && SINR="$T"
 	fi
 fi
@@ -203,16 +203,16 @@ IFS="
 if [ "x$MODE_NUM" = "x13" ]; then
 	LINES=$(echo "$O" | grep "+QENG")
 	for LINE in $LINES; do
-		T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/{print $2}' | xargs)
+		T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/{print $2; exit}' | xargs)
 		if [ "x$T" = "xLTE" ]; then
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $12}')
-			TAC_DEC=$(printf "%d" "0x$T")
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
+			TAC_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 			TAC_HEX=$T
 
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $16}' | awk '{printf "%.0f\n", 0.2*$1*10 - 20}')
-#			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $16; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 			SINR="$T"
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $10}')
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $10; exit}')
 			case $T in
 				0*) T1="1.4";;
 				1*) T1="3";;
@@ -223,7 +223,7 @@ if [ "x$MODE_NUM" = "x13" ]; then
 				*) T1="";;
 			esac
 			[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $11}')
+			T=$(echo "$LINE" | awk -F[,:] '/^\+QENG:/ {print $11; exit}')
 			case $T in
 				0*) T1="1.4";;
 				1*) T1="3";;
@@ -236,13 +236,13 @@ if [ "x$MODE_NUM" = "x13" ]; then
 			[ -n "$T1" ] && DLBW="DL: @$T1 MHz"
 			elif [ "x$T" = "xservingcell" ]; then
 			if [ "x${MODE:0:3}" = "xLTE" ]; then
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-				T_DEC=$(printf "%d" "0x$T")
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
+				T_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 				T_HEX="$T"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | awk '{printf "%.1f\n", 0.2*$1*10 - 20}')
-#				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
+#				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 				SINR="$T"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12; exit}')
 				case $T in
 					0*) T1="1.4";;
 					1*) T1="3";;
@@ -253,7 +253,7 @@ if [ "x$MODE_NUM" = "x13" ]; then
 					*) T1="";;
 				esac
 				[ -n "$T1" ] && ULBW="UL: @$T1 MHz"
-				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
+				T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 				case $T in
 					0*) T1="1.4";;
 					1*) T1="3";;

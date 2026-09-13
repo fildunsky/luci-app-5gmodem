@@ -329,9 +329,16 @@ smsopt)
 	_ch=0; _st_ch=0
 	for _kv in "$@"; do
 		_k=${_kv%%=*}; _v=${_kv#*=}
+		# ЗНАЧЕНИЕ ТОЖЕ ПРОВЕРЯЕМ, не только имя ключа: верб доступен с веба, и
+		# любой путь оседал в конфиге и уезжал в -d у sms_tool (аудит 12.09.2026,
+		# группа 2, №7). Пустое значение - законное «снять настройку».
 		case "$_k" in
-			sms_count|sms_count_index|readport|sendport|ussdport|atport|\
-			information|mergesms|mergesms_auto|storage) ;;
+			readport|sendport|ussdport|atport)
+				[ -z "$_v" ] || is_devpath "$_v" || continue ;;
+			sms_count|sms_count_index|information|mergesms|mergesms_auto)
+				[ -z "$_v" ] || is_num "$_v" || continue ;;
+			storage)
+				case "$_v" in *[!A-Za-z]*) continue ;; esac ;;
 			*) continue ;;
 		esac
 		_cur=$(uci -q get "5gmodem.sms.$_k")
@@ -727,17 +734,17 @@ profiles)
 		_kind=$(_pg kind)
 		printf '{"sec":"%s","path":"%s","model":"%s","imei":"%s","iface":"%s","proto":"%s","apn":"%s","pdptype":"%s","present":%d,"active":%d,"iface_shared":%d,"celllock":"%s","mm_exclude":"%s","vidpid":"%s","kind":"%s","netdev":"%s","webaddr":"%s","esim":"%s","save_band":"%s","save_band5gnsa":"%s","save_band5gsa":"%s"}' \
 			"$_sec" "$_p" \
-			"$(_pg model)" \
+			"$(json_esc "$(_pg model)")" \
 			"$(_pg imei)" \
-			"$_if" "$_proto" "$_apn" "$_pdp" "$_on" \
+			"$_if" "$_proto" "$(json_esc "$_apn")" "$_pdp" "$_on" \
 			"$([ "$_p" = "$_act" ] && echo 1 || echo 0)" "$_shared" \
-			"$(_pg celllock)" \
+			"$(json_esc "$(_pg celllock)")" \
 			"$(_pg mm_exclude)" \
 			"$(_pg vidpid)" \
 			"$_kind" \
-			"$(_pg netdev)" \
-			"$([ "$_kind" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)" \
-			"$(_esim_state "$_sec" "$_p")" \
+			"$(json_esc "$(_pg netdev)")" \
+			"$(json_esc "$([ "$_kind" = "hilink" ] && "$RES/hilink.sh" addr "$_p" 2>/dev/null)")" \
+			"$(json_esc "$(_esim_state "$_sec" "$_p")")" \
 			"$(_pg save_band)" \
 			"$(_pg save_band5gnsa)" \
 			"$(_pg save_band5gsa)"
@@ -1588,7 +1595,11 @@ resolve)
 	# либо парковка старше park_ttl_days, по умолчанию 30 дней), но трогает она
 	# конфиг, поэтому идёт последней и не задерживает ответ hotplug'у. Выключается
 	# одним ключом: 5gmodem.@5gmodem[0].park_ttl_days=0.
-	( "$0" cleanup apply >/dev/null 2>&1 & ) >/dev/null 2>&1 </dev/null &
+	# ЗАМОК ТРАНЗАКЦИИ (fd 7) ДЕТЯМ НЕ ОТДАЁМ: flock живёт на open file
+	# description, и фоновая уборка держала бы его после выхода resolve - каждый
+	# следующий resolve (хотплаг, загрузка) ждал бы её, а через mkiface - ещё и
+	# двухминутный фон подъёма QMI-интерфейса (аудит 12.09.2026, группа 2, №1).
+	( "$0" cleanup apply >/dev/null 2>&1 7>&- & ) >/dev/null 2>&1 </dev/null 7>&- &
 	printf '{"result":"resolved","active":"%s","at_port":"%s"}\n' "$AMP" "$ATP"
 	;;
 
@@ -1788,7 +1799,17 @@ xmm)
 	uci -q set "$CFG.$MSEC.want_proto=xmm"; uci -q commit "$CFG"
 	# Сменить USB-композицию в NCM и ребутнуть модем. Порт на ребуте отвалится
 	# ("I/O error" на tcsetattr) - это норма, ответа не ждём.
-	sms_tool -d "$A" at "AT+GTUSBMODE=0" >/dev/null 2>&1
+	# AT+GTUSBMODE удалена из прошивок 18600/18601 (линейка L860): там ERROR и
+	# модем оставался в прежней композиции, а UI 40 с ждал впустую (форум, ревью
+	# 12.09.2026). Рабочий путь для них - at@nvm:cal_usbmode.num=0 с фиксацией
+	# at@store_nvm(cal_usbmode); без store_nvm режим слетает после ребута.
+	_xm_o=$(sms_tool -d "$A" at "AT+GTUSBMODE=0" 2>/dev/null | tr -d '\r')
+	case "$_xm_o" in
+		*ERROR*)
+			logger -t 5gmodem "xmm: AT+GTUSBMODE rejected (L860 firmware?) - switching via at@nvm:cal_usbmode"
+			sms_tool -d "$A" at "at@nvm:cal_usbmode.num=0" >/dev/null 2>&1
+			sms_tool -d "$A" at "at@store_nvm(cal_usbmode)" >/dev/null 2>&1 ;;
+	esac
 	sms_tool -d "$A" at "AT+CFUN=15" >/dev/null 2>&1
 	printf '{"ok":1}\n'
 	;;
@@ -1827,7 +1848,10 @@ cleanup)
 		# Живой интерфейс не трогаем ни при каких условиях.
 		_cl_up=$(ifstatus "$_cl_i" 2>/dev/null | grep -c '"up": true')
 		_cl_ip=$(ifstatus "$_cl_i" 2>/dev/null | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
-		[ "$_cl_up" != 0 ] && [ -n "$_cl_ip" ] && continue
+		# «ИЛИ», как и обещано выше: живой интерфейс без IPv4 (IPv6-only
+		# контекст, raw-ip до адреса, миг между up и DHCP) с «&&» шёл в сироты
+		# и сносился фоном на каждом resolve (аудит 12.09.2026, группа 2, №2).
+		{ [ "$_cl_up" != 0 ] || [ -n "$_cl_ip" ]; } && continue
 		_cl_p=$(uci -q get "network.$_cl_i.modem_path")
 		_cl_m=$(uci -q get "network.$_cl_i.modem_imei")
 		[ "$_cl_first" = 1 ] || printf ','

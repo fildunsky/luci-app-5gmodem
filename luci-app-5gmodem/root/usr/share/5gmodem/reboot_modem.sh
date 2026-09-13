@@ -194,7 +194,11 @@ fi
 # посреди чужого обмена, молча не сработает, а пользователь увидит "перезагружаю"
 # и ничего больше.
 . /usr/share/5gmodem/atlock.sh
-at_lock "$PORT" 15
+# ...а значит очередь надо ДОЖДАТЬСЯ, а не просто попросить: at_lock возвращает
+# 1, если за отведённые секунды порт не освободился, и CFUN, посланный поверх
+# чужого обмена, ровно тем же способом «молча не срабатывает» (тот же отказ, что
+# соблюдает at_query). Лучше честно ответить «порт занят» (аудит 12.09.2026).
+at_lock "$PORT" 15 || { echo '{"success":false,"error":"AT port busy"}'; exit 0; }
 
 if [ "$MODE" = "hard" ]; then
 	# Full reset (AT+CFUN=1,1): the modem reboots and RE-ENUMERATES on USB, so
@@ -258,15 +262,23 @@ else
 	# stays. This drops the data bearer, so nudge the app's interface back up
 	# (kernel qmi/mbim/atc/fibocom need it; MM-managed modems reconnect on their
 	# own). Backgrounded so the script returns promptly to the UI.
-	sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
-	sleep 3
-	sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
 	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
 	# Намеренный soft-reconnect (кнопка «переподключить», применение бендов и т.п.),
 	# не холодный boot-attach: гасим восстановление диапазонов на порождённый нами
 	# ifup, иначе 31-5gmodem-bands сделал бы лишний CFUN поверх (двойной CFUN подряд
 	# вешает PDP-контекст FM350).
 	[ -n "$IF" ] && : > "/tmp/5gmodem_bandrestore_$IF" 2>/dev/null
+	# ВЕСЬ ЦИКЛ - В ФОНЕ, ОДНОЙ ПОДОБОЛОЧКОЙ (аудит 12.09.2026).
+	# 1) Синхронным он не мог быть по той же причине, что и ветки power/hard:
+	#    у sms_tool нет своего таймаута, и на занятом или подвисающем порту
+	#    ожидание очереди плюс CFUN легко перекрывали 30-секундный потолок rpcd -
+	#    UI показывал «ошибку XHR» при уже перезапущенном радио.
+	# 2) Дескриптор AT-замка (fd 8) подоболочка НАСЛЕДУЕТ намеренно: замок
+	#    должен жить ровно пока идёт CFUN-обмен. Отпускаем его сами (at_unlock)
+	#    сразу после обмена - раньше он не снимался вовсе и висел на порту всё
+	#    время фоновых пауз, а следующий опрос метрик упирался в «порт занят».
+	# 3) Порядок и паузы сохранены один в один: down/up идут ПОСЛЕ CFUN=1, иначе
+	#    передозвон пришёлся бы на ещё не поднятое радио.
 	# Прицельно через ubus DOWN+UP, а не `ifup`: на части прошивок ifup вызывает
 	# полную перезагрузку конфигурации ("hostapd: Reload all interfaces") и роняет
 	# ЧУЖИЕ интерфейсы - на двухмодемном роутере от этого падал соседний модем.
@@ -276,7 +288,12 @@ else
 	# (регресс 1.7.1 на FM350, воспроизведён: ubus up -> 0 пакетов, down+up -> ок).
 	# down форсирует teardown прото, up - заново дозвон; и то и другое прицельно,
 	# глобального reload нет. ifup - фолбэк, если ubus-пути нет.
-	[ -n "$IF" ] && ( sleep 6
+	( sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
+		sleep 3
+		sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
+		at_unlock
+		[ -n "$IF" ] || exit 0
+		sleep 6
 		ubus call "network.interface.$IF" down >/dev/null 2>&1
 		sleep 3
 		ubus call "network.interface.$IF" up >/dev/null 2>&1 \

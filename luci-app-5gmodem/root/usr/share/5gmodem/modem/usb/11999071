@@ -1,6 +1,5 @@
-# DW5809e Dell Wireless 5809e Gobi 4G LTE Mobile Broadband Card (EM7305)
-# DW5811e Snapdragon X7 LTE (EM7455B)
-# Sierra Wireless EM7455
+# Sierra Wireless EM7455 / MC7455 / EM7430 / MC7430 - generic-PID 1199:9071
+# (MDM9x30). EM7305/MC7305 живут на 1199:9041 (свой файл), DW5811e - на 413c:81b6.
 
 O=$(sms_tool -d $DEVICE at "at!gstatus?")
 
@@ -42,7 +41,14 @@ fi
 # Protocol
 # DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices)
-PVCUT=$(echo $PV | awk -F 'Vendor=1199 ProdID=9071' '{print $2}' | cut -c-1100)
+# ID берём у ОПРАШИВАЕМОГО устройства: профиль делят несколько vid:pid (тонкие
+# файлы-сателлиты), а с прибитым ProdID под чужим ID протокол не определялся.
+_PVID="1199"; _PPID="9071"
+if [ -n "$_POLL_AM" ] && [ -f "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
+	_PVID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+	_PPID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+fi
+PVCUT=$(echo $PV | awk -F "Vendor=$_PVID ProdID=$_PPID" '{print $2}' | cut -c-1100)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
 then
     PROTO="qmi"

@@ -75,7 +75,7 @@
 			},
 			"uci": [ "5gmodem", "modemdefine", "defmodems", "network", "firewall", "system" ],
 			"ubus": {
-				"file": [ "read" ],
+				"file": [ "read", "exec" ],
 				"5gmodem_sms_forward": [ "forward" ]
 			}
 		},
@@ -135,7 +135,7 @@
 			},
 			"uci": [ "5gmodem", "modemdefine", "network", "firewall" ],
 			"ubus": {
-				"file": [ "read", "write", "remove" ]
+				"file": [ "read", "write", "remove", "exec" ]
 			}
 		}
 	}

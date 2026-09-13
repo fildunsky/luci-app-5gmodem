@@ -1,0 +1,208 @@
+# Sierra Wireless EM7345 (1199:a001) - ярлык Sierra, внутри Intel XMM7160.
+# Подтверждено форумом (тема 4pda 444921, посты #731, #2405-2407; ревью EM7345
+# 13.09.2026): mmcli с живого модуля отдаёт h/w revision XMM7160_V1.1_MBIM_GNSS_
+# NAND_AD и firmware FIH7160_V1.1_WW_01.1531.00_AT, а Sierra-команды «!»-семейства
+# модулю НЕ ПРИМЕНИМЫ (AT!ENTERCND="A710" -> ERROR). Поэтому профиля Qualcomm/
+# Sierra (1199:9071 и соседи) здесь нет и быть не может.
+#
+# КОМПОЗИЦИЯ (usb-devices с форума, #731): четыре интерфейса -
+# cdc_mbim (If#0/1) + cdc_acm (If#2/3); наружу cdc-wdm0 (mbim), ttyACM0 (at),
+# wwan0 (net). Встречается и трёхпортовый вариант (ttyACM0/1/2). Узлы создаёт
+# cdc_acm сам - привязывать usb-serial (option/generic), как 05c6:90xx, этому
+# модему НЕ НУЖНО.
+#
+# ЧТО СПРАШИВАЕМ И ПОЧЕМУ ИМЕННО ЭТО.
+# Ни одного живого ответа вендорных XMM-команд (+XCESQ/+XLEC/+XMCI/+XACT/
+# +XCCINFO) именно с EM7345 в теме НЕТ - форум по ним молчит. Поэтому основа
+# профиля - только 3GPP: +CESQ (уровни) и +CGMI/+CGMM/+CGMR (имя, прошивка).
+# Ядро скрипта выше уже спросило +CSQ/+COPS/+CREG/+CEREG - оттуда приходят
+# регистрация, оператор, TAC и CID, здесь их не дублируем.
+# XMM7160 - это Cat 4, агрегации у него нет вовсе, поэтому +XLEC и вся ветка
+# SCC из профиля L850 (modem/usb/2cb70007, XMM7360) тут не нужны в принципе.
+#
+# Соту (PCI/EARFCN/диапазон) и SINR стандартными командами не получить, поэтому
+# РОДСТВЕННЫЙ XMM-запрос +XMCI=1 пробуем ОДИН раз на каждое появление модема на
+# шине: ответил «+XMCI:» - разбираем по шкалам, выверенным на живом L850
+# (rsrp = idx-141, rsrq = (idx-45)/2, sinr = idx/4+5 - сверка в 2cb70007);
+# не ответил - запоминаем и до следующей переэнумерации не спрашиваем.
+# Шкалы для 7160 НЕ ПОДТВЕРЖДЕНЫ: все значения прогоняем через проверку на
+# правдоподобие, чужой формат просто не пройдёт и полей не будет.
+[ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
+
+_em_at() {
+	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r'
+}
+
+# --- Уровни: +CESQ (3GPP TS 27.007, шкала известна точно) --------------------
+# +CESQ: <rxlev>,<ber>,<rscp>,<ecno>,<rsrq>,<rsrp>; 99/255 - «нет данных».
+_EM_RXLEV=""; _EM_RSCP=""; _EM_ECNO=""; _EM_Q=""; _EM_P=""
+eval "$(_em_at 'AT+CESQ' | awk -F'[:,]' '
+	/^\+CESQ:/ {
+		for (i = 2; i <= 7; i++) { v[i] = $i; gsub(/[^0-9]/, "", v[i]) }
+		if (v[2] != "" && v[2] + 0 <= 63) printf "_EM_RXLEV=%s\n", v[2]
+		if (v[4] != "" && v[4] + 0 <= 96) printf "_EM_RSCP=%s\n", v[4]
+		if (v[5] != "" && v[5] + 0 <= 49) printf "_EM_ECNO=%s\n", v[5]
+		if (v[6] != "" && v[6] + 0 <= 34) printf "_EM_Q=%s\n", v[6]
+		if (v[7] != "" && v[7] + 0 <= 97) printf "_EM_P=%s\n", v[7]
+		exit
+	}')"
+[ -n "$_EM_P" ] && RSRP=$((_EM_P - 141))
+[ -n "$_EM_Q" ] && RSRQ=$(awk -v v="$_EM_Q" 'BEGIN { printf "%g", v * 0.5 - 19.5 }')
+# RSSI ядро считает из +CSQ; rxlev берём только как запас (тот же дБм-масштаб).
+case "$RSSI" in ''|-) [ -n "$_EM_RXLEV" ] && RSSI=$((_EM_RXLEV - 110)) ;; esac
+[ -n "$_EM_RSCP" ] && RSCP=$((_EM_RSCP - 121))
+[ -n "$_EM_ECNO" ] && ECIO=$(awk -v v="$_EM_ECNO" 'BEGIN { printf "%g", v * 0.5 - 24.5 }')
+
+# --- Сота и соседи: +XMCI (Intel, для 7160 НЕ подтверждён) -------------------
+# Негативный кэш по номеру устройства на шине: номер меняется при каждой
+# переэнумерации, то есть после перетыка/ребута модема проба повторится.
+_EM_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
+_EM_DN=""
+[ -n "$_POLL_AM" ] && _EM_DN=$(cat "/sys/bus/usb/devices/$_POLL_AM/devnum" 2>/dev/null)
+_EM_MARK="/tmp/5gmodem_em7345_noxmci_$_EM_KEY"
+_EM_X=""
+if [ "$(cat "$_EM_MARK" 2>/dev/null)" != "${_EM_DN:-x}" ]; then
+	_EM_X=$(_em_at 'AT+XMCI=1')
+	case "$_EM_X" in
+		*"+XMCI:"*) ;;
+		*)
+			printf '%s' "${_EM_DN:-x}" > "$_EM_MARK" 2>/dev/null
+			_EM_X=""
+			;;
+	esac
+fi
+
+if [ -n "$_EM_X" ]; then
+	# Раскладка строки (эталон - живой L850, см. 2cb70007):
+	#   +XMCI: <тип>,<mcc>,<mnc>,"<tac>","<cellid>","<pci>","<earfcn>",...,
+	#          <rsrp>,<rsrq>,<sinr>
+	# тип 4 - обслуживающая сота, тип 5 - соседняя; PCI/EARFCN шестнадцатеричные.
+	# strtonum в busybox awk НЕТ - переводим вручную.
+	_EM_PCI=""; _EM_E=""; _EM_SP=""; _EM_SQ=""; _EM_SNR=""
+	eval "$(printf '%s\n' "$_EM_X" | awk -F, '
+		function hex2dec(h,   i, c, n) {
+			gsub(/^[ \t]*"?0[xX]/, "", h); gsub(/"/, "", h); h = toupper(h)
+			if (h == "" || h ~ /[^0-9A-F]/) return -1
+			n = 0
+			for (i = 1; i <= length(h); i++) {
+				c = index("0123456789ABCDEF", substr(h, i, 1))
+				n = n * 16 + c - 1
+			}
+			return n
+		}
+		/^\+XMCI: *4,/ {
+			gsub(/"/, ""); gsub(/ /, "")
+			pci = hex2dec($6); earfcn = hex2dec($7)
+			if (pci >= 0 && pci <= 503) printf "_EM_PCI=%d\n", pci
+			if (earfcn > 0 && earfcn <= 262143) printf "_EM_E=%d\n", earfcn
+			if ($10 + 0 > 0 && $10 + 0 <= 97) printf "_EM_SP=%d\n", $10 - 141
+			if ($11 + 0 > 0 && $11 + 0 <= 45) printf "_EM_SQ=%.1f\n", ($11 - 45) / 2
+			if ($12 + 0 > 0 && $12 + 0 < 255) printf "_EM_SNR=%.0f\n", $12 / 4 + 5
+			exit
+		}')"
+	# ВСЁ ИЗ XMCI - ТОЛЬКО В LTE. Строки типов 4/5 описывают ИМЕННО LTE-соту
+	# (у GSM/UMTS у Intel свои типы), а модуль работает и в 3G (utran 1/2/4/5/8):
+	# EARFCN, PCI и уровни RSRP/RSRQ, показанные при UMTS, были бы прямой ложью.
+	# Режим ядро уже поставило выше по AcT из +COPS/+CEREG.
+	_EM_LTE=""
+	case "$MODE" in ''|-|LTE|4G) _EM_LTE=1 ;; esac
+	if [ -n "$_EM_LTE" ]; then
+		# Уровни из XMCI - только если +CESQ промолчал: у CESQ шкала стандартная,
+		# а у XMCI на 7160 не проверена.
+		case "$RSRP" in ''|-) [ -n "$_EM_SP" ] && RSRP="$_EM_SP" ;; esac
+		case "$RSRQ" in ''|-) [ -n "$_EM_SQ" ] && RSRQ="$_EM_SQ" ;; esac
+		case "$SINR" in ''|-) [ -n "$_EM_SNR" ] && SINR="$_EM_SNR" ;; esac
+		if [ -n "$_EM_E" ]; then
+			EARFCN="$_EM_E"
+			[ -n "$_EM_PCI" ] && PCI="$_EM_PCI"
+			_EM_B=$(earfcn2band "$_EM_E")
+			if [ -n "$_EM_B" ]; then
+				PBAND=$(band4g "$_EM_B")
+				# Cat 4: несущая всегда одна, «LTE-A» тут не бывает.
+				MODE="LTE | $(band4g "$_EM_B")"
+			fi
+		fi
+	fi
+
+	# Соседи - строки типа 5 (тоже LTE, см. выше). Заглушки «не знаю» прошивка
+	# кодирует всеми F и нулями: такие записи наружу не отдаём, в таблице это
+	# выглядело бы как настоящая сота.
+	_EM_N=$([ -n "$_EM_LTE" ] && printf '%s\n' "$_EM_X" | awk -F, '
+		function e2b(e) {
+			if (e <= 599) return 1;   if (e <= 1199) return 2
+			if (e <= 1949) return 3;  if (e <= 2399) return 4
+			if (e <= 2649) return 5
+			if (e >= 2750 && e <= 3449) return 7
+			if (e >= 3450 && e <= 3799) return 8
+			if (e >= 5010 && e <= 5179) return 12
+			if (e >= 5180 && e <= 5279) return 13
+			if (e >= 5730 && e <= 5849) return 17
+			if (e >= 5850 && e <= 5999) return 18
+			if (e >= 6000 && e <= 6149) return 19
+			if (e >= 6150 && e <= 6449) return 20
+			return ""
+		}
+		function hex2dec(h,   i, c, n) {
+			gsub(/^[ \t]*"?0[xX]/, "", h); gsub(/"/, "", h); h = toupper(h)
+			if (h == "" || h ~ /[^0-9A-F]/) return -1
+			n = 0
+			for (i = 1; i <= length(h); i++) {
+				c = index("0123456789ABCDEF", substr(h, i, 1))
+				n = n * 16 + c - 1
+			}
+			return n
+		}
+		/^\+XMCI: *5,/ {
+			gsub(/"/, ""); gsub(/ /, "")
+			pci = hex2dec($6); earfcn = hex2dec($7)
+			rsrp = $10 + 0; rsrq = $11 + 0
+			if (pci < 0 || pci > 503 || earfcn <= 0 || earfcn > 262143) next
+			if (rsrp <= 0 || rsrp > 200) next
+			printf "%s{\"band\":\"%s\",\"earfcn\":\"%d\",\"pci\":\"%d\",\"rsrp\":\"%d\",\"rsrq\":\"%.1f\",\"rssi\":\"\",\"serving\":0}",
+				(n++ ? "," : ""), e2b(earfcn), earfcn, pci, rsrp - 141, (rsrq - 45) / 2
+		}')
+	if [ -n "$_EM_LTE" ] && [ -n "$_EM_PCI" ] && [ -n "$_EM_E" ]; then
+		_EM_SB=$(printf '%s' "$PBAND" | sed -n 's/^B\([0-9]\{1,\}\).*/\1/p')
+		NEIGHBORS=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
+			"$_EM_SB" "$_EM_E" "$_EM_PCI" "$RSRP" "$RSRQ" "$RSSI")
+		NEIGHBORS="$NEIGHBORS${_EM_N:+,$_EM_N}"
+	else
+		NEIGHBORS="$_EM_N"
+	fi
+fi
+
+# --- Кто это и какая прошивка ------------------------------------------------
+# Ответы у Intel бывают с эхом и с подписью команды: берём первую
+# СОДЕРЖАТЕЛЬНУЮ строку (как в 2cb70007), кавычки снимаем.
+_em_val() {
+	printf '%s\n' "$1" | awk '
+		{ sub(/^[ \t]+/, ""); sub(/[ \t]+$/, "") }
+		/^$/ || /^AT/ || /^OK$/ || /ERROR/ { next }
+		{ sub(/^\+[A-Za-z0-9]+:[ \t]*/, ""); gsub(/"/, ""); print; exit }'
+}
+_EM_V=$(_em_val "$(_em_at 'AT+CGMR')")
+# Эталон с форума: «FIH7160_V1.1_WW_01.1531.00_AT».
+[ -n "$_EM_V" ] && FW="$_EM_V"
+case "$MODEL" in
+	''|-)
+		_EM_M=$(_em_val "$(_em_at 'AT+CGMM')")
+		if [ -n "$_EM_M" ]; then
+			MODEL=$(printf '%s %s' "$(_em_val "$(_em_at 'AT+CGMI')")" "$_EM_M" | xargs)
+		fi
+		;;
+esac
+
+# --- Транспорт ---------------------------------------------------------------
+# У этого модуля канал данных - MBIM (cdc_mbim), но в чужих прошивках тот же
+# чип встречается и в NCM/ECM: смотрим, кто реально держит интерфейсы.
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
+	for _em_if in "/sys/bus/usb/devices/$_POLL_AM":*; do
+		[ -e "$_em_if/driver" ] || continue
+		case "$(readlink -f "$_em_if/driver" 2>/dev/null)" in
+			*/cdc_mbim)  PROTO="mbim"; break ;;
+			*/cdc_ncm)   PROTO="ncm";  break ;;
+			*/cdc_ether) PROTO="ecm";  break ;;
+			*/qmi_wwan)  PROTO="qmi";  break ;;
+		esac
+	done
+fi

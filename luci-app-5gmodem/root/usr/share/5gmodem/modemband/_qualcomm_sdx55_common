@@ -9,15 +9,18 @@
 
 _DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
-_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"
+# n25 убран: ни один из десяти живых дампов AT^BAND_PREF? на форуме его не
+# содержит, а забракованный список = не применился ни один диапазон.
+_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 28 38 41 66 71 77 78 79"
 
 getinfo() {
-	echo "Thales/Cinterion MV31-W"
+	# Файл общий для 05c6:9025/90d5 и 1e2d:*, где на 9025 живут Foxconn/Dell -
+	# не подписываем всех как Thales.
+	echo "Qualcomm SDX55 (T99W175 / MV31-W / DW5930e)"
 }
 
-getsupportedbands() {
-	echo "$_DEFAULT_LTE_BANDS"
-}
+# getsupportedbands / getsupportedbands5gnsa - НИЖЕ, у блока _bp_sup: список
+# берётся у модема, а константы выше остались фолбэком на молчащий порт.
 
 getbands() {
 	O=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?")
@@ -82,10 +85,6 @@ setmode() {
 		''|*[!0-9]*) return 1 ;;
 	esac
 	sms_tool -d $_DEVICE at "AT^SLMODE=1,$M"
-}
-
-getsupportedbands5gnsa() {
-	echo "$_DEFAULT_5GNSA_BANDS"
 }
 
 getbands5gnsa() {
@@ -185,8 +184,17 @@ getcelllock() {
 		[ -n "$_AR" ] && { echo "arfcn $_AR"; return; }
 	fi
 	# Команда есть, но привязки нет - это тоже полезный ответ.
-	sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | grep -q "LTE_LOCK" \
-		&& { echo "off"; return; }
+	# ИЩЕМ ОТВЕТ, А НЕ ЭХО. sms_tool печатает и саму команду, а в её эхе
+	# «LTE_LOCK» есть всегда - по голому grep «off» получался и на прошивке,
+	# которая команды НЕ знает (эхо + ERROR). «Unsupported» тогда не возвращался
+	# никогда, на странице появлялся рабочий на вид блок привязки к соте, а его
+	# кнопка делала AT+CFUN=1,1 - модем перезагружался впустую. Строки эха
+	# начинаются на AT, а ERROR означает «команды нет». (аудит 12.09.2026)
+	_gcl_o=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+	case "$_gcl_o" in
+		*ERROR*)    : ;;
+		*LTE_LOCK*) echo "off"; return ;;
+	esac
 	echo "Unsupported"
 }
 
@@ -194,10 +202,16 @@ getcelllock() {
 # причина ниоткуда не видна. Ровно тот же класс диагностики, что и режим 5G у
 # FM350: показываем, когда выключено, и молчим, когда всё в порядке.
 getcaenabled() {
-	O=$(sms_tool -d $_DEVICE at "AT^CA_ENABLE?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^\^*CA_ENABLE: *//p' | head -1 | tr -cd '0-9')
-	[ -n "$O" ] || { echo "Unsupported"; return; }
-	[ "$O" = "0" ] && echo "off" || echo "on"
+	# Модем отвечает «CA_FLAG: ENABLE» / «CA_FLAG: DISABLE» (форум, живые
+	# ответы), а не «^CA_ENABLE: <цифра>» - прежний разбор всегда давал
+	# «Unsupported», и диагностика «агрегация выключена» не срабатывала никогда
+	# (ревью 12.09.2026). DISABLE проверяем первым: в нём есть подстрока ABLE.
+	O=$(sms_tool -d $_DEVICE at "AT^CA_ENABLE?" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+	case "$O" in
+		*CA_FLAG*[Dd][Ii][Ss][Aa][Bb][Ll][Ee]*) echo "off"; return ;;
+		*CA_FLAG*[Ee][Nn][Aa][Bb][Ll][Ee]*)     echo "on";  return ;;
+	esac
+	echo "Unsupported"
 }
 
 # --- Диапазоны 3G (WCDMA) ----------------------------------------------------
@@ -267,4 +281,105 @@ setbands3g() {
 	case "$_s3_o" in
 		*ERROR*) logger -t 5gmodem "band_pref(WCDMA): firmware rejected the write \"AT^BAND_PREF=WCDMA,2,$T\": $(echo "$_s3_o" | tr '\n' ' ' | head -c 120)" ;;
 	esac
+}
+
+# --- Поддерживаемые диапазоны - У МОДЕМА, а не из константы -------------------
+#
+# Ответ AT^BAND_PREF? содержит ОБЕ половины - Enable и Disable (#186, #366,
+# #1034), и их объединение даёт список ИМЕННО этой прошивки/ревизии. Раньше мы
+# отдавали статику: у модуля с урезанным набором (OEM-прошивки, Canada-only) на
+# странице появлялись галочки, которых в железе нет, а запись
+# AT^BAND_PREF=<RAT>,2,<весь список> могла уйти в ERROR целиком.
+# Рабочий образец уже был рядом - getsupportedbands3g ниже.
+#
+# КЭШИРУЕМ В /tmp НАВСЕГДА (до перезагрузки): набор «что железо вообще умеет»
+# меняется только с прошивкой, а json на странице «Сеть» и так спрашивает
+# AT^BAND_PREF? шесть раз за сборку - седьмой и восьмой запрос в тот же занятый
+# порт ничего не добавляют. Текущий ВЫБОР (getbands/getbands5gnsa) читается
+# по-прежнему живьём.
+# ВЕДУЩИЙ ПРОБЕЛ в строках ответа - не опечатка прошивки, поэтому якоря "^" в
+# шаблоне нет (та же ловушка, что расписана у 3G ниже).
+# (ревью 13.09.2026, форум 4pda)
+_bp_sup() {   # $1 - метка RAT в ответе (LTE / NR5G)
+	_bs_f="/tmp/5gmodem_bpsup_$1_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_bs_c=$(cat "$_bs_f" 2>/dev/null)
+	[ -n "$_bs_c" ] && { echo "$_bs_c"; return; }
+	_bs_l=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r' \
+		| awk -v rat="$1" '$0 ~ rat ",(Enable|Disable) *Bands" { p = index($0, ":"); if (p) print substr($0, p + 1) }' \
+		| tr ',' ' ' | tr -s ' ')
+	_bs_u=""
+	for _bs_b in $_bs_l; do
+		case "$_bs_b" in ''|*[!0-9]*) continue ;; esac
+		case " $_bs_u " in *" $_bs_b "*) continue ;; esac
+		_bs_u="$_bs_u$_bs_b "
+	done
+	_bs_u=$(printf '%s' "$_bs_u" | tr ' ' '\n' | sort -n | tr '\n' ' ' | sed 's/ *$//')
+	[ -n "$_bs_u" ] || return 0
+	printf '%s' "$_bs_u" > "$_bs_f" 2>/dev/null
+	echo "$_bs_u"
+}
+
+getsupportedbands() {
+	_gl=$(_bp_sup LTE)
+	[ -n "$_gl" ] && { echo "$_gl"; return; }
+	echo "$_DEFAULT_LTE_BANDS"
+}
+
+getsupportedbands5gnsa() {
+	_gn=$(_bp_sup NR5G)
+	[ -n "$_gn" ] && { echo "$_gn"; return; }
+	echo "$_DEFAULT_5GNSA_BANDS"
+}
+
+# --- Привязка к соте 5G (AT^NR5G_LOCK) ---------------------------------------
+#
+# Третья команда лока этой прошивки рядом с AT^LTE_LOCK и AT^WCDMA_LOCK, живой
+# вывод чтения есть (#366, saniap):
+#   AT^NR5G_LOCK?  ->  NR5G_LOCK:Have not set cell lock before   (лока нет)
+# Модем в теме гоняют по NSA, и 5G-лок для него - такой же рабочий инструмент,
+# как 4G-лок.
+#
+# ЧЕСТНАЯ ОГОВОРКА: живого дампа ЗАПИСИ на форуме нет ни одного - форму
+# «AT^NR5G_LOCK=<pci>,<arfcn>» берём по симметрии с AT^LTE_LOCK (там порядок
+# именно такой, обратный нашему контракту, #123, #6253). Поэтому ответ модема
+# проверяем: на ERROR возвращаем "Unsupported" (bands.sh тогда ничего не
+# запоминает и пишет строку в журнал) и, главное, НЕ шлём AT+CFUN=1,1 - иначе
+# модем перезагружался бы впустую после каждой неудачной попытки.
+# Как и у 4G-лока, запись вступает в силу только после перезапуска модуля.
+# (ревью 13.09.2026, форум 4pda)
+getcelllock5g() {
+	_g5_o=$(sms_tool -d $_DEVICE at "AT^NR5G_LOCK?" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+	case "$_g5_o" in
+		*ERROR*) echo "Unsupported"; return ;;
+		*NR5G_LOCK*) : ;;
+		*) echo "Unsupported"; return ;;
+	esac
+	_g5_v=$(printf '%s\n' "$_g5_o" | sed -n 's/^\^*NR5G_LOCK: *//p' | head -1 | tr -d '() ')
+	_g5_pc=$(echo "$_g5_v" | cut -d, -f1)
+	_g5_ar=$(echo "$_g5_v" | cut -d, -f2)
+	case "$_g5_pc" in ''|*[!0-9]*) echo "off"; return ;; esac
+	case "$_g5_ar" in ''|*[!0-9]*) echo "off"; return ;; esac
+	echo "cell $_g5_ar $_g5_pc"
+}
+
+# setcelllock5g off | cell <nr-arfcn> <pci>   (контракт bands.sh)
+setcelllock5g() {
+	case "$1" in
+		off)
+			_s5_c="AT^NR5G_LOCK" ;;
+		cell)
+			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			case "$3" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			# ПОРЯДОК: PCI, ARFCN - как у AT^LTE_LOCK, обратный нашему контракту
+			_s5_c="AT^NR5G_LOCK=$3,$2" ;;
+		*) return 1 ;;
+	esac
+	_s5_o=$(sms_tool -d $_DEVICE at "$_s5_c" 2>&1 | tr -d '\r')
+	case "$_s5_o" in
+		*ERROR*)
+			logger -t 5gmodem "celllock5g: firmware rejected \"$_s5_c\": $(echo "$_s5_o" | tr '\n' ' ' | head -c 120)"
+			echo "Unsupported"; return 1 ;;
+	esac
+	sms_tool -d $_DEVICE at "AT+CFUN=1,1" >/dev/null 2>&1
+	return 0
 }

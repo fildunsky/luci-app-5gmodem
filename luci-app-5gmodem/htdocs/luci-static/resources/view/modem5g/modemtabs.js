@@ -571,6 +571,53 @@ function startRename(tab, m, current) {
 	inp.select();
 }
 
+/* РАЗБОР ОТВЕТА `modemswitch.sh switch`. Ответ отбрасывался, и отказ выглядел
+   как удача: скрипт печатает {"error":"not a modem"} и выходит с кодом 0 (либо
+   {"error":"no path"} с кодом 1, либо rpcd вовсе не отвечает - тогда
+   resolveDefault подставляет {}), а страница всё равно перезагружалась с новой
+   вкладкой. Активным при этом оставался ПРЕЖНИЙ модем, и карточка врала.
+   Возвращаем null при успехе и готовый текст ошибки при отказе.
+   (ревью 13.09.2026) */
+function switchFailure(res) {
+	/* Кода нет вовсе - значит промис отклонили (занятый rpcd, таймаут 30 с), и
+	   подменыш resolveDefault долетел сюда вместо ответа. */
+	if (!res || typeof res.code !== 'number') { return _('Could not switch the modem'); }
+	var d = {};
+	try { d = JSON.parse(String(res.stdout || '').trim() || '{}') || {}; } catch (e) {}
+	if (d.error) {
+		/* Отказы, у которых есть человеческая причина, переводим; незнакомый
+		   код показываем как есть - иначе причина теряется по дороге. */
+		if (d.error === 'not a modem') { return _('The selected device is not a modem'); }
+		if (d.error === 'no path') { return _('No modem selected'); }
+		return _('Could not switch the modem') + ': ' + d.error;
+	}
+	if (res.code !== 0) {
+		var t = String(res.stderr || '').trim();
+		return _('Could not switch the modem') + (t ? ': ' + t : '');
+	}
+	return null;
+}
+
+/* ВОЗВРАТ ПОЛОСЫ ВКЛАДОК К ПРЕЖНЕМУ МОДЕМУ. Рамку и sessionStorage мы
+   перекидываем ДО ответа switch (чтобы обратная связь была мгновенной),
+   поэтому при отказе их приходится возвращать руками: иначе подсвечена и
+   «своей» считается вкладка модема, активным который так и не стал.
+   (ревью 13.09.2026) */
+function revertTabSwitch(row, prevPath) {
+	try {
+		if (prevPath) { window.sessionStorage.setItem('5gm-tab', prevPath); }
+		else { window.sessionStorage.removeItem('5gm-tab'); }
+	} catch (e) {}
+	if (!row) { return; }
+	row.querySelectorAll('.modemtab').forEach(function(b) {
+		/* Клики вернуть обязательно: без этого полоса остаётся мёртвой и
+		   переключиться нельзя уже никуда. */
+		b.style.pointerEvents = '';
+		if (b.getAttribute('data-path') === prevPath) { b.classList.add('active'); }
+		else { b.classList.remove('active'); }
+	});
+}
+
 function tabsBar(modems, active) {
 	tabsCacheSave(modems, active);
 	var labels = dedupLabels(modems);
@@ -655,11 +702,34 @@ function tabsBar(modems, active) {
 					   (переживёт F5) и переустанавливает at_port/network под новый
 					   модем. UI его не ждёт; когда он доедет, свежие данные придут
 					   отложенными тиками (см. switchModemInPlace). */
-					fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]);
-				} else {
-					window.setTimeout(function() { pageLeaveThenReload(); }, 12000);
+					/* Через resolveDefault, как в ветке с перезагрузкой ниже: отказ
+					   rpcd (занят, таймаут 30 c) иначе оставался необработанным
+					   отказом промиса. (аудит 12.09.2026) */
 					L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
-						.then(function() { pageLeaveThenReload(); });
+						.then(function(res) {
+							var err = switchFailure(res);
+							if (!err) { return; }
+							/* Активным остался ПРЕЖНИЙ модем - возвращаем к нему и
+							   карточку, и рамку. Иначе человек видит чужие метрики
+							   под именем выбранного модема. (ревью 13.09.2026) */
+							revertTabSwitch(row, curActive);
+							if (curActive) { try { _inplace(curActive); } catch (e) {} }
+							ui.addNotification(null, E('p', err), 'error');
+						});
+				} else {
+					var guard = window.setTimeout(function() { pageLeaveThenReload(); }, 12000);
+					L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'switch', path ]), {})
+						.then(function(res) {
+							var err = switchFailure(res);
+							if (!err) { pageLeaveThenReload(); return; }
+							/* Отказ - перезагружаться НЕЛЬЗЯ: страница перечиталась бы
+							   под прежним активным модемом, а вкладка осталась бы
+							   чужой. Гасим и предохранитель, он бы перезагрузил через
+							   12 с. (ревью 13.09.2026) */
+							window.clearTimeout(guard);
+							revertTabSwitch(row, curActive);
+							ui.addNotification(null, E('p', err), 'error');
+						});
 				}
 			}
 		}, [

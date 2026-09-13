@@ -122,8 +122,11 @@ return view.extend({
 					link.click();
 					URL.revokeObjectURL(link.href);
 				}
-			}).catch(() => {
-				ui.addNotification(null, E('p', {}, _('Download error') + ': ' + err.message));
+			}).catch(function(err) {
+				/* Параметр ошибки обязателен: обработчик был объявлен БЕЗ него, и
+				   err в теле оказывался несуществующей переменной - вместо
+				   сообщения о сбое выходил ReferenceError. (аудит 12.09.2026) */
+				ui.addNotification(null, E('p', {}, _('Download error') + ': ' + ((err && err.message) || err)));
 		});
 
 	},
@@ -573,7 +576,9 @@ return view.extend({
 		var selW = new ui.Dropdown(metric, ch, { id: 'leds-metric', sort: order });
 		var sel = selW.render();
 		sel.addEventListener('cbi-dropdown-change', function() {
-			fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', selW.getValue() ]);
+			/* Через resolveDefault: отказ rpcd (занят, таймаут, отозванные права)
+			   иначе даёт необработанный отказ промиса. (аудит 12.09.2026) */
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', selW.getValue() ]), {});
 		});
 
 		return E('div', { 'class': 'cbi-section tg5g' }, [
@@ -587,8 +592,10 @@ return view.extend({
 						var w = new ui.Checkbox(cur == '0' ? '0' : '1', { id: 'leds-on' });
 						var n = w.render();
 						n.addEventListener('widget-change', function() {
-							fs.exec('/usr/share/5gmodem/signal-leds.sh',
-								[ w.isChecked() ? 'enable' : 'disable' ]);
+							/* см. выпадашку метрики выше: отказ rpcd не должен
+							   всплывать необработанным. (аудит 12.09.2026) */
+							L.resolveDefault(fs.exec('/usr/share/5gmodem/signal-leds.sh',
+								[ w.isChecked() ? 'enable' : 'disable' ]), {});
 						});
 						return n;
 					})(),
@@ -731,7 +738,10 @@ return view.extend({
 			_("Port used to read modem/connection info. <br /> \
 				<br />Traditional modem: one of the available ttyUSBX ports.<br /> \
 				<br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."));
-		devs.sort((a, b) => a.name > b.name);
+		/* Компаратор ОБЯЗАН возвращать число. Прежний отдавал true/false, а из них
+		   отрицательного не бывает - список портов оставался в порядке выдачи
+		   ubus file list, а не по алфавиту. (аудит 12.09.2026) */
+		devs.sort(function(a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
 		devs.forEach(dev => o.value('/dev/' + dev.name, portLabel(dev.name)));
 		o.placeholder = _('Please select a port');
 		o.rmempty = true;
@@ -763,9 +773,11 @@ return view.extend({
 				uci.set('5gmodem', 'sms', k, value);
 			});
 		};
-		o.remove = function(section_id) {
-			uci.unset('5gmodem', section_id, 'at_port');
-		};
+		/* ВТОРОГО o.remove ЗДЕСЬ БОЛЬШЕ НЕТ. Он перетирал заглушку выше и делал
+		   ровно то, от чего она защищает: при включённом автоопределении поле
+		   скрыто, LuCI звал remove(), и at_port исчезал из конфига - а зеркала
+		   sms.{readport,sendport,ussdport,atport} оставались от прежнего порта.
+		   (аудит 12.09.2026) */
 
 		/* HiLink-модем не дозванивается через netifd: он держит соединение сам
 		   и раздаёт IP по DHCP на своей сетевой карте. AT-протоколы (mbim/qmi/…)
@@ -1224,6 +1236,30 @@ return view.extend({
 			return (p && p !== 'modemmanager') ? '1' : '0';
 		};
 
+		/* AT-опрос модема под ModemManager. По умолчанию ворота в quirks.sh
+		   (mm_at_allowed): хрупким прошивкам (T77W968/DW5821e - линк падал при
+		   каждом открытии вкладки) AT под MM не даём вовсе, остальным - только
+		   при поднятой сессии. Галка - явная воля владельца: опрашивать всегда,
+		   ради температуры/несущих/антенн, которых у mmcli нет. Показываем
+		   только у modemmanager-интерфейса: у остальных порт и так наш. */
+		if (String(uci.get('network', mIfName, 'proto') || '') === 'modemmanager') {
+		o = s.option(form.Flag, '_mm_at', _('AT polling under ModemManager'),
+			_('Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return Promise.resolve(); }
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'mmat', String(p), String(value) === '1' ? '1' : '0' ]);
+		};
+		o.remove = function() { return Promise.resolve(); };
+		o.load = function(section_id) {
+			if (!mSec) { return '0'; }
+			return uci.get('5gmodem', mSec, 'mm_at') === '1' ? '1' : '0';
+		};
+		}
+
 		/* Тип PDP - аргумент дозвона (mkiface). У HiLink дозвона нет, тип IP
 		   согласует сам модем, поэтому поле ему не показываем. */
 		if (!activeIsHilink) {
@@ -1676,7 +1712,7 @@ return view.extend({
 
 		   ТОЛЬКО простые настройки. Интерфейс/порт/протокол/APN ПЕРЕСОЗДАЮТ
 		   интерфейс (mkiface) - их мгновенно дёргать нельзя, они на общей кнопке. */
-		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }
 			var prev = o.onchange;

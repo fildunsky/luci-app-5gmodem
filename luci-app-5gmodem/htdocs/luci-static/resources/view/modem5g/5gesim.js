@@ -166,10 +166,14 @@ function esimFailHuman(step, raw) {
 
 function notify(ok, msgOk, msgFail) {
 	var m = ok ? msgOk : msgFail;
+	/* СТРОКУ КЛАДЁМ МАССИВОМ. E(tag, 'строка') у LuCI - это innerHTML, а в
+	   сообщении бывает текст, пришедший от сервера SM-DP+ (payload.data): его
+	   разметка исполнялась бы в админке роутера. В массиве создаётся
+	   текстовый узел (аудит 12.09.2026). */
 	if (ui.addTimeLimitedNotification) {
-		ui.addTimeLimitedNotification(null, E('p', m), 6000, ok ? 'info' : 'error');
+		ui.addTimeLimitedNotification(null, E('p', [ m ]), 6000, ok ? 'info' : 'error');
 	} else {
-		ui.addNotification(null, E('p', m), ok ? 'info' : 'error');
+		ui.addNotification(null, E('p', [ m ]), ok ? 'info' : 'error');
 	}
 }
 
@@ -236,7 +240,14 @@ return view.extend({
 		   странице. Теперь load() мгновенный: status-cached отдаёт последний
 		   вердикт пробы из кэша (или unknown), slot status - липкий кэш.
 		   Настоящая проба, если нужна, идёт ФОНОМ уже на видимой странице. */
-		return Promise.all([ esimExec([ 'status-cached' ]), slotExec([ 'status' ]) ]);
+		/* ПАКЕТ uci ГРУЗИМ ЗДЕСЬ. renderSettings читает 5gmodem синхронно, а без
+		   загрузки uci.get() всегда отдаёт null: оба селектора показывали «Авто»,
+		   и «Сохранить» стирал ручной выбор esim_apdu - у модемов, где он
+		   обязателен (T99W175/MV31-W), работа с eUICC ломалась. Ключ ETA-полосы
+		   по той же причине вырождался в общий для всех модемов
+		   (аудит 12.09.2026). */
+		return Promise.all([ esimExec([ 'status-cached' ]), slotExec([ 'status' ]),
+		                     L.resolveDefault(uci.load('5gmodem')) ]);
 	},
 
 	render: function(res) {
@@ -999,8 +1010,10 @@ return view.extend({
 						esimSimIcon('esim-simicon esim-simicon-err'),
 						E('div', { 'class': 'esim-h' }, _('Download failed')),
 					]),
-					E('div', { 'class': 'esim-d' }, human || _('The download did not complete.')),
-					tech ? E('div', { 'class': 'esim-log' }, tech) : '',
+					/* Массивом - и человеческий текст, и технический: оба содержат ответ
+					   сервера SM-DP+ (аудит 12.09.2026). */
+					E('div', { 'class': 'esim-d' }, [ human || _('The download did not complete.') ]),
+					tech ? E('div', { 'class': 'esim-log' }, [ tech ]) : '',
 					E('div', { 'class': 'right' }, [
 						E('button', {
 							'class': 'btn cbi-button',
@@ -1064,7 +1077,16 @@ return view.extend({
 			ui.hideModal();
 			modemtabs.setBusy('#esim-section',
 				_('Profile added. The modem is restarting to apply it - up to a minute…'), 240000, 90);
-			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			/* ВТОРОЙ СБРОС НЕ ЗАПУСКАЕМ, ЕСЛИ ПЕРВЫЙ УЖЕ ЗАПУЩЕН БЭКЕНДОМ.
+			   Для части моделей (семейство SDX55) esim.sh после успеха сам уходит в
+			   reboot_modem.sh hard, и наш безусловный вызов давал ВТОРОЙ экземпляр: он
+			   ждал at_lock до 15 c и слал CFUN=1,1 повторно, уже вернувшемуся модему, а
+			   главное - оба поднимали свой сторож «дождаться исчезновения -> ifdown ->
+			   ifup», и up одного приходил между down и up другого (аудит 12.09.2026).
+			   Признак «сброс мой» бэкенд отдаёт полем payload.reset. */
+			if (!(j && j.payload && j.payload.reset == 1)) {
+				fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			}
 			// Дождаться модема и передёрнуть интерфейс: иначе netifd держит
 			// аренду и маршрут от старого профиля (интерфейс up со старым IP,
 			// данные не идут). Скрипт сам ждёт готовности, здесь не блокируемся.
@@ -1374,7 +1396,16 @@ function esimOp(verb, iccid, name) {
 				? _('Profile enabled. The modem is restarting to apply it - up to a minute…')
 				: _('Profile disabled. The modem is restarting to apply it - up to a minute…'),
 				300000, 90);
-			fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			/* ВТОРОЙ СБРОС НЕ ЗАПУСКАЕМ, ЕСЛИ ПЕРВЫЙ УЖЕ ЗАПУЩЕН БЭКЕНДОМ.
+			   Для части моделей (семейство SDX55) esim.sh после успеха сам уходит в
+			   reboot_modem.sh hard, и наш безусловный вызов давал ВТОРОЙ экземпляр: он
+			   ждал at_lock до 15 c и слал CFUN=1,1 повторно, уже вернувшемуся модему, а
+			   главное - оба поднимали свой сторож «дождаться исчезновения -> ifdown ->
+			   ifup», и up одного приходил между down и up другого (аудит 12.09.2026).
+			   Признак «сброс мой» бэкенд отдаёт полем payload.reset. */
+			if (!(j && j.payload && j.payload.reset == 1)) {
+				fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+			}
 			fs.exec(ESIM, [ 'reapply' ]);   // см. выше: без этого остаётся старый IP
 			/* Ждём ВОЗВРАЩЕНИЯ модема (как полоса вкладок: пропал -> появился),
 			   тогда прогрессбар добегает и плашка уходит СРАЗУ - а обновление
@@ -1432,7 +1463,9 @@ function esimOp(verb, iccid, name) {
 
 function esimDeleteConfirm(iccid, name) {
 	ui.showModal(_('Delete eSIM profile'), [
-		E('p', _('Delete profile "%s" (%s)? This cannot be undone.').format(name, iccid)),
+		/* Имя профиля приходит с eUICC - в страницу только текстом
+		   (аудит 12.09.2026). */
+		E('p', [ _('Delete profile "%s" (%s)? This cannot be undone.').format(name, iccid) ]),
 		E('div', { 'class': 'right' }, [
 			E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
 			' ',

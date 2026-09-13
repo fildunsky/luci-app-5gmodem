@@ -133,6 +133,11 @@ _label() {
 	printf '%s\n' "$2" > "$DIR/$1.label"
 	case "$1" in
 		sim-*|op.sim-*)
+			# ПЕРСИСТ ВЫКЛЮЧЕН - В /etc НЕ ЛЕЗЕМ ВОВСЕ. _pdir_now делает mkdir и
+			# пробу записью, а _label зовётся каждый тик сбора: это был цикл
+			# записи во флеш-память раз в минуту и каталог, воскресающий сразу
+			# после того, как его удалил setconf (аудит 12.09.2026).
+			_persist || return 0
 			_lb_d=$(_pdir_now 2>/dev/null) || return 0
 			if [ "$(cat "$_lb_d/$1.label" 2>/dev/null)" != "$2" ]; then
 				printf '%s\n' "$2" > "$_lb_d/$1.label" 2>/dev/null

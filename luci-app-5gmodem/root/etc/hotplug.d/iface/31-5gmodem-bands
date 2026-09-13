@@ -31,7 +31,7 @@ MPATH=$(uci -q get "$SEC.path")
 [ -n "$MPATH" ] || exit 0
 
 # Есть ли вообще что восстанавливать - иначе не гоняем bands.sh (он лез бы в порт).
-S=$(uci -q get "$SEC.save_band")$(uci -q get "$SEC.save_band5gnsa")$(uci -q get "$SEC.save_band5gsa")
+S=$(uci -q get "$SEC.save_band")$(uci -q get "$SEC.save_band5gnsa")$(uci -q get "$SEC.save_band5gsa")$(uci -q get "$SEC.save_mode")
 [ -n "$S" ] || exit 0
 
 # НЕ БОЛЬШЕ ОДНОЙ попытки на интерфейс за загрузку. Маркер в /tmp живёт до

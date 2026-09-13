@@ -1,18 +1,36 @@
 _DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
 
+# ИНЖЕНЕРНЫЙ ПАРОЛЬ НЕ ВСЕГДА A710: у Fujitsu-брендированных EM7455 - F710, а на
+# модулях с однажды неверно сменённым паролем не подходит ни один (форум,
+# ревью 12.09.2026). Раньше ответ ENTERCND уходил в /dev/null, AT!BAND? давал
+# ERROR, маска - пусто, и кнопки диапазонов исчезали без строки в журнале.
+# Пробуем A710, затем F710; сработавший пароль помним до перезагрузки.
+_sierra_cnd() {
+	_sc_f="/tmp/5gmodem_sierra_cnd_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_sc_p=$(cat "$_sc_f" 2>/dev/null)
+	for _sc_try in ${_sc_p:+"$_sc_p"} A710 F710; do
+		sms_tool -d $_DEVICE at "AT!ENTERCND=\"$_sc_try\"" >/dev/null 2>&1
+		case "$(sms_tool -d $_DEVICE at 'AT!BAND?' 2>/dev/null)" in
+			*[0-9a-fA-F][0-9a-fA-F],*) printf '%s' "$_sc_try" > "$_sc_f" 2>/dev/null; return 0 ;;
+		esac
+	done
+	logger -t 5gmodem "sierra: AT!ENTERCND rejected both A710 and F710 on $_DEVICE - band control unavailable (custom password?)"
+	return 1
+}
+
 getinfo() {
 	echo "Sierra Wireless EM7455/MC7455/DW5811e"
 }
 
 getsupportedbands() {
-	sms_tool -d $_DEVICE at 'AT!ENTERCND="A710"' >/dev/null 2>&1
+	_sierra_cnd || return 1
 	O=$(sms_tool -d $_DEVICE at 'AT!BAND=?')
 	HEX=$(echo "$O" | awk '/^00, All bands/{printf "0x%s\n", $5}')
 	[ "$HEX" = "0x" ] || hextobands "$HEX"
 }
 
 getbands() {
-	sms_tool -d $_DEVICE at 'AT!ENTERCND="A710"' >/dev/null 2>&1
+	_sierra_cnd || return 1
 	O=$(sms_tool -d $_DEVICE at 'AT!BAND?')
 	HEX=$(echo "$O" | awk -F, '/^[0-9a-fA-F][0-9a-fA-F],/{print $3}' | awk '{printf "0x%s\n", $2}')
 	[ "$HEX" = "0x" ] || hextobands "$HEX"
@@ -22,17 +40,102 @@ setbands() {
 	BANDS="$1"
 
 	if [ "$BANDS" = "default" ]; then
-		sms_tool -d $_DEVICE at 'AT!ENTERCND="A710"' >/dev/null 2>&1
+		_sierra_cnd || return 1
 		sms_tool -d $_DEVICE at 'AT!BAND=00' >/dev/null 2>&1
 	else
 		HEXL=$(bandstohex "$BANDS")
 		if [ "$HEXL" != "0" ]; then
-			sms_tool -d $_DEVICE at 'AT!ENTERCND="A710"' >/dev/null 2>&1
+			_sierra_cnd || return 1
 			O=$(sms_tool -d $_DEVICE at 'AT!BAND?')
 			HEXGW=$(echo "$O" | awk -F, '/^[0-9a-fA-F][0-9a-fA-F],/{print $3}' | awk '{print $1}')
-			sms_tool -d $_DEVICE at 'AT!BAND=10,"Custom bands",'$HEXGW','$HEXL
-			sms_tool -d $_DEVICE at 'AT!BAND=10'
-			sms_tool -d $_DEVICE at 'AT!RESET'
+			# ЗАПИСЬ ПРОВЕРЯЕМ: индекс 10 для MDM9x30 не подтверждён (живой
+			# AT!BAND=? показывает занятыми 00..0c), и на ERROR мы всё равно
+			# слали AT!BAND=10 и AT!RESET - модем перезагружался с прежними
+			# диапазонами (ревью 12.09.2026). При отказе берём первый свободный
+			# индекс из AT!BAND=?; не удалось - без сброса.
+			_SI=10
+			_W=$(sms_tool -d $_DEVICE at 'AT!BAND='$_SI',"Custom bands",'$HEXGW','$HEXL 2>/dev/null)
+			case "$_W" in *ERROR*)
+				_used=$(sms_tool -d $_DEVICE at 'AT!BAND=?' 2>/dev/null | awk -F, '/^[0-9a-fA-F][0-9a-fA-F],/{print tolower($1)}' | xargs)
+				_SI=""
+				for _c in 0a 0b 0c 0d 0e 0f 10 11 12 13; do
+					case " $_used " in *" $_c "*) continue ;; esac
+					_W=$(sms_tool -d $_DEVICE at 'AT!BAND='$_c',"Custom bands",'$HEXGW','$HEXL 2>/dev/null)
+					case "$_W" in *ERROR*) continue ;; esac
+					_SI="$_c"; break
+				done
+				;;
+			esac
+			if [ -n "$_SI" ]; then
+				sms_tool -d $_DEVICE at 'AT!BAND='$_SI
+				sms_tool -d $_DEVICE at 'AT!RESET'
+			else
+				logger -t 5gmodem "sierra: AT!BAND slot write rejected on $_DEVICE - bands not changed, no reset"
+			fi
 		fi
 	fi
+}
+
+# --- Режим сети (AT!SELRAT) --------------------------------------------------
+#
+# Селектора режима у EM7455/EM7565 не было вовсе: bands.sh без getsupportedmodes
+# отдаёт "Unsupported" и прячет строку, хотя команда у этих модулей есть.
+#
+# НАБОР КОРОЧЕ, ЧЕМ У X55 (там же 5G-режимы, см. 119990d3). Живой AT!SELRAT=?
+# с модуля 9x30 (#487) - всё остальное «Not Supported»:
+#   00, Automatic | 01, UMTS 3G Only | 06, LTE Only | 11, UMTS and LTE Only
+# Ответ на чтение - «!SELRAT: 00, Automatic» (#409, #487, #761, #2205, #2507),
+# но бывает и «!SELRAT: Unknown RAT mode. Use AT!SELRAT to set band.» с хвостом
+# из hex-строк (#2951) - поэтому номер ПРОВЕРЯЕМ, а не берём как есть: без
+# проверки в селектор уезжал бы кусок фразы.
+# ИДЕНТИФИКАТОРЫ ДВУЗНАЧНЫЕ («00», а не «0») намеренно - ровно в таком виде их
+# принимает команда, и ровно так их печатает чтение; страница сверяет строки.
+#
+# ЗАПИСЬ СВЕРЯЕМ ПО ФАКТУ. Форум расходится: на EM7565 команда отвечает OK, а
+# режим не меняется (#2944), на части экземпляров «=06» даёт ERROR при
+# заявленной поддержке (#489, #490 - признак урезанной модификации). Молчаливое
+# «применено» там, где ничего не применилось, хуже отказа.
+# ПРАВА: AT!SELRAT требует инженерного режима - в теме её всегда шлют после
+# AT!ENTERCND (#455, #804, #3154), для этого рядом уже есть _sierra_cnd().
+# ОДНОВРЕМЕННО ограничивать !BAND и !SELRAT вендор не советует - то же
+# предупреждение стоит у X55-профиля.
+# (ревью 13.09.2026, форум 4pda)
+_SIERRA_MODES="00:Auto 01:3G 06:4G 11:3G+4G"
+
+getsupportedmodes() {
+	echo "$_SIERRA_MODES"
+}
+
+getmode() {
+	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 0
+	_gm_v=$(sms_tool -d $_DEVICE at 'AT!SELRAT?' 2>/dev/null | tr -d '\r' | grep -v '^AT' \
+		| sed -n 's/^!*SELRAT: *//p' | head -1 | cut -d, -f1 | tr -d ' ')
+	case "$_gm_v" in
+		''|*[!0-9]*) return 0 ;;
+	esac
+	for _gm_p in $_SIERRA_MODES; do
+		[ "${_gm_p%%:*}" = "$_gm_v" ] && { echo "$_gm_v"; return 0; }
+	done
+	return 0
+}
+
+setmode() {
+	_sm="$1"
+	_sm_ok=""
+	for _sm_p in $_SIERRA_MODES; do
+		[ "${_sm_p%%:*}" = "$_sm" ] && { _sm_ok=1; break; }
+	done
+	[ -n "$_sm_ok" ] || { echo "ERROR: bad mode"; return 1; }
+	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 1
+	_sierra_cnd || return 1
+	_sm_o=$(sms_tool -d $_DEVICE at "AT!SELRAT=$_sm" 2>&1 | tr -d '\r')
+	case "$_sm_o" in
+		*ERROR*)
+			logger -t 5gmodem "selrat: firmware rejected AT!SELRAT=$_sm (cut-down module?): $(echo "$_sm_o" | tr '\n' ' ' | head -c 120)"
+			return 1 ;;
+	esac
+	# Сверка: «OK без эффекта» на этих модулях - штатная жалоба темы.
+	[ "$(getmode)" = "$_sm" ] && return 0
+	logger -t 5gmodem "selrat: modem answered OK but AT!SELRAT? still reports another mode - the firmware ignored the write"
+	return 1
 }

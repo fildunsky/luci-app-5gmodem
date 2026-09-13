@@ -55,6 +55,16 @@ _SG=$(printf '%s\n' "$O" | tr -d '\r' | awk '
 	/Cell ID:/               { put("CIDHEX", after("Cell ID", 1)); put("CIDDEC", after("Cell ID", 2)) }
 	/^RSRQ/                  { put("RSRQ", after("RSRQ")) }
 	/^SINR/                  { put("SINR", after("SINR")) }
+	# «Простой» формат без раздельных трактов (MDM9x15: MC7355/EM7305, и часть
+	# прошивок 9x30): «RSSI (dBm): -79   Tx Power: 0» / «RSRP (dBm): -109  TAC:…».
+	# Правил для него не было, и у таких модулей уровня не было вовсе
+	# (ревью 12.09.2026 по эталонному дампу форума).
+	/^RSSI/                  { best("PRSSI", after("RSSI")) }
+	/^RSRP/                  { best("PRSRP", after("RSRP")) }
+	# «System mode: LTE» - технология из самого ответа: когда +COPS промолчал
+	# (порт занят, коллизия с MM - для Sierra штатно), MODE_NUM пуст, и весь
+	# уже полученный GSTATUS выбрасывался.
+	/^System mode:/          { put("SYSMODE", after("System mode")) }
 
 	END {
 		for (k in V) print k " " V[k]
@@ -83,7 +93,8 @@ _pb=""; _scb=""
 
 _sg TEMP; [ -n "$_V" ] && TEMP="$_V &deg;C"
 
-if [ "x$MODE_NUM" = "x7" ]; then
+_sg SYSMODE; _sysmode="$_V"
+if [ "x$MODE_NUM" = "x7" ] || [ "$_sysmode" = "LTE" ]; then
 	_sg TACHEX
 	if [ -n "$_V" ]; then
 		T_HEX="$_V"
@@ -165,4 +176,74 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			MODE="LTE | $(band4g ${_pb#B})"
 		fi
 	fi
+fi
+
+# --- СОСЕДНИЕ СОТЫ (AT!LTEINFO?) ---------------------------------------------
+#
+# У EM7455/MC7455/DW5811e соседей не было вовсе: на kernel-протоколе (qmi/mbim)
+# QMI-канал занят netifd, и обычный источник (cell-location-info) недоступен -
+# ровно та же причина, что расписана в mkiface.sh. AT!LTEINFO? - единственный
+# путь, и разбор этого ответа у нас уже написан и работает для X55 (119990d3).
+#
+# ФОРМАТ ПОДТВЕРЖДЁН ЖИВЫМ ВЫВОДОМ С 9x30 (#783, Caizar) - он совпадает с X55
+# слово в слово:
+#   !LTEINFO:
+#   Serving: EARFCN MCC MNC TAC CID Bd D U SNR PCI RSRQ RSRP RSSI RXLV
+#    550 250 99 60816 0272CA65 1 3 3 16 468 -8.0 -68.3 -45.2 --
+#   IntraFreq: PCI RSRQ RSRP RSSI RXLV
+#    468 -8.0 -68.3 -45.2 --
+#   InterFreq: EARFCN ThresholdLow ThresholdHi Priority PCI RSRQ RSRP RSSI RXLV
+#   WCDMA: UARFCN ThreshL ThreshH Prio PSC RSCP ECN0 RXLV
+# Диапазон и частоту соседей IntraFreq берём у обслуживающей соты (они по
+# определению на той же частоте), у InterFreq диапазон неизвестен - оставляем
+# пустым, а не выдумываем.
+#
+# НЕГАТИВНЫЙ КЭШ. Файл общий и с MDM9x15 (EM7305/MC7355, 1199:9041), где команды
+# может не быть: один ERROR - и больше не спрашиваем до перезагрузки, иначе
+# каждый опрос платил бы заведомо пустым AT-запросом в порт, который делят
+# метрики и дозвон. Кэшируем ТОЛЬКО явный ERROR: пустой или оборванный ответ -
+# это занятый порт (для Sierra штатно), и запирать из-за него команду навсегда
+# было бы хуже, чем спросить ещё раз.
+# (ревью 13.09.2026, форум 4pda)
+_LINC="/tmp/5gmodem_nolteinfo_$(echo "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+# Условие «мы в LTE» - то же, что у разбора GSTATUS выше: +COPS мог промолчать
+# (порт делит ModemManager), и тогда технологию знает только сам ответ модема.
+if [ -z "$NEIGHBORS" ] && { [ "x$MODE_NUM" = "x7" ] || [ "$_sysmode" = "LTE" ]; } && [ ! -f "$_LINC" ]; then
+	_LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
+	case "$_LI" in
+		*LTEINFO*) ;;
+		*ERROR*) : > "$_LINC" ;;
+	esac
+	case "$_LI" in
+	*LTEINFO*)
+		NEIGHBORS=$(printf '%s\n' "$_LI" | awk '
+			# ОБСЛУЖИВАЮЩАЯ СОТА ЕСТЬ И В IntraFreq - она по определению на своей
+			# же частоте. Без отсева она попадала бы в таблицу ДВАЖДЫ: раз
+			# помеченной, раз «ещё одним соседом» с бессмысленной кнопкой лока.
+			function emit(bd, ef, pc, rq, rp, rs, sv,   key) {
+				if (pc == "" || pc !~ /^[0-9]+$/) return
+				key = ef "_" pc
+				if (key in done) return
+				done[key] = 1
+				printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"%s\",\"serving\":%s}",
+					(n++ ? "," : ""), bd, ef, pc, rp, rq, rs, sv
+			}
+			/^Serving:/   { sec = "serv";  next }
+			/^IntraFreq:/ { sec = "intra"; next }
+			/^InterFreq:/ { sec = "inter"; next }
+			/^[A-Za-z]/   { sec = "" }
+			sec == "" { next }
+			sec == "serv" && NF >= 14 && $1 ~ /^[0-9]+$/ {
+				sef = $1; sbd = $6
+				emit(sbd, sef, $10, $11, $12, $13, "true")
+			}
+			sec == "intra" && NF >= 5 && $1 ~ /^[0-9]+$/ {
+				emit(sbd, sef, $1, $2, $3, $4, "false")
+			}
+			sec == "inter" && NF >= 9 && $1 ~ /^[0-9]+$/ {
+				emit("", $1, $5, $6, $7, $8, "false")
+			}
+		')
+		;;
+	esac
 fi

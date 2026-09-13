@@ -49,6 +49,8 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
+# Снимок ^DEBUG? для общего блока антенн (O ниже переиспользуется).
+_DBG="$O"
 
 case "$MODE_NUM" in
 	"7")
@@ -270,3 +272,6 @@ elif echo "$PVCUT" | grep -q "Driver=cdc_ether"
 then
     PROTO="ecm"
 fi
+
+# Антенные порты и соседние сектора - общий блок семейства (см. _qualcomm_sdx55_extras).
+. "$RES/modem/usb/_qualcomm_sdx55_extras"

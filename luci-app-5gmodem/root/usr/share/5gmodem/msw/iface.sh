@@ -242,6 +242,36 @@ fix_iface_proto() {   # $1 - имя интерфейса
 		qmi_wwan) _fp_want="qmi" ;;
 		*)        return ;;
 	esac
+	# vid:pid устройства - нужен и здесь (Compal ниже), и вендорным исключениям
+	# в самом конце функции. Считаем один раз.
+	_fp_amp=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$_fp_dev")/device/.." 2>/dev/null)" 2>/dev/null)
+	_fp_vp=""
+	[ -n "$_fp_amp" ] && [ -f "/sys/bus/usb/devices/$_fp_amp/idVendor" ] && \
+		_fp_vp="$(cat "/sys/bus/usb/devices/$_fp_amp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_fp_amp/idProduct" 2>/dev/null)"
+	# ПАРА «qmi + qmi_wwan» ВЫГЛЯДИТ ЗДОРОВОЙ, НО ДЛЯ Compal RXM-G1 ОНА МЁРТВАЯ.
+	# У этой прошивки uqmi не открывает сервисы («Failed to connect to service»),
+	# часть вызовов виснет и их добивает sessionwatch, а mm_exclude=1 при этом
+	# прячет модем от ModemManager - единственного, кто его поднимает. Проверка
+	# ниже по драйверу такой интерфейс считает здоровым и уходит, поэтому
+	# подхваченный с прошлой версии qmi-интерфейс чинится ЗДЕСЬ - пересборкой
+	# ТОГО ЖЕ интерфейса (имя сохраняем, второй не плодим).
+	# Вендор 05c6 - только гейт дешёвой проверки, решение принимает МОДЕЛЬ
+	# (is_compal): 05c6:9091 носят и Android-палки (VOS 5G / SG500M2-X,
+	# полевой отчёт 13.09.2026).
+	if [ "$_fp_pr" = "qmi" ] && [ "$_fp_drv" = "qmi_wwan" ] \
+	   && [ -f /lib/netifd/proto/modemmanager.sh ]; then
+		case "$_fp_vp" in
+			05c6:*)
+				. /usr/share/5gmodem/iscompal.sh
+				if is_compal "$_fp_amp" "$_fp_dev"; then
+					logger -t 5gmodem "iface $_fp_if: Compal RXM-G1 / SG500M2-X ($_fp_vp) - uqmi cannot open its QMI services, rebuilding the interface on proto=modemmanager"
+					MKIFACE_AUTOFALLBACK=1 MODEM_PATH="$_fp_amp" \
+						/usr/share/5gmodem/mkiface.sh "$_fp_if" modemmanager >/dev/null 2>&1
+					return
+				fi
+				;;
+		esac
+	fi
 	[ "$_fp_pr" = "$_fp_want" ] && return
 	# Правим ТОЛЬКО заведомо несовместимую пару kernel-протоколов. Всё прочее
 	# (modemmanager, xmm, atc, ncm...) - осознанный выбор пользователя, и
@@ -278,10 +308,6 @@ fix_iface_proto() {   # $1 - имя интерфейса
 	# опция типа PDP (iptype) и авторизации (allowedauth), плюс надо снять
 	# mm_exclude и вернуть автозапуск MM. MKIFACE_AUTOFALLBACK - чтобы этот
 	# вынужденный прото не осел в iface_proto как «выбор пользователя».
-	_fp_amp=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$_fp_dev")/device/.." 2>/dev/null)" 2>/dev/null)
-	_fp_vp=""
-	[ -n "$_fp_amp" ] && [ -f "/sys/bus/usb/devices/$_fp_amp/idVendor" ] && \
-		_fp_vp="$(cat "/sys/bus/usb/devices/$_fp_amp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_fp_amp/idProduct" 2>/dev/null)"
 	case "$_fp_vp" in
 		413c:81d7|413c:81e0|0489:e0b5|05c6:90d5)
 			if [ -f /lib/netifd/proto/modemmanager.sh ]; then

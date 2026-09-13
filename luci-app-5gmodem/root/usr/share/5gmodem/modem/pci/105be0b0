@@ -1,14 +1,21 @@
 # Dell DW5930e
 # Foxconn T99W175
 
-O=$(sms_tool -d $DEVICE at "at^temp")
+# «AT^TEMP?» - с вопросительным знаком, как во всех USB-профилях того же модема
+# и в живых ответах форума; без «?» команда в теме не встречается.
+O=$(sms_tool -d $DEVICE at "at^temp?" | tr -d '\r')
 
 T=$(echo "$O" | awk '/^TSENS: / {gsub("C","",$2); print $2}')
 T1=$(echo "$O" | awk '/^PA: / {gsub("C","",$2); print $2}')
+# Сравниваем только числа: нечисловое значение роняло весь опрос («bad number»).
+case "$T" in ''|*[!0-9-]*) T="" ;; esac
+case "$T1" in ''|*[!0-9-]*) T1="" ;; esac
 if [ -n "$T" ] && [ -n "$T1" ]; then
 	[ "$T1" -gt "$T" ] && T="$T1"
 fi
+[ -z "$T" ] && T="$T1"
 T1=$(echo "$O" | awk '/^Skin Sensor: / {gsub("C","",$2); print $2}')
+case "$T1" in ''|*[!0-9-]*) T1="" ;; esac
 if [ -n "$T" ] && [ -n "$T1" ]; then
 	[ "$T1" -gt "$T" ] && T="$T1"
 fi
@@ -17,6 +24,8 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
+# Снимок ^DEBUG? для общего блока антенн (O ниже переиспользуется).
+_DBG="$O"
 
 case "$MODE_NUM" in
 	"7")
@@ -31,10 +40,12 @@ case "$MODE_NUM" in
 		;;
 esac
 
-T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}')
+# lte_tac в ^DEBUG? ДЕСЯТИЧНЫЙ (живые ответы: 7814, 7403, 15103) - как и в
+# USB-профилях того же модема; прежний разбор считал ту же строку ещё и hex.
+T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}' | tr -cd '0-9')
 if [ -n "$T" ]; then
-	TAC_HEX=$(printf "%X" $T)
-	TAC_DEC=$(printf "%d" "0x$T")
+	TAC_DEC="$T"
+	TAC_HEX=$(printf "%X" "$T" 2>/dev/null)
 fi
 
 O1=$(echo "$O" | grep -A 3 pcell)
@@ -202,3 +213,6 @@ if echo "$DEVICE" | grep -q "wwan0at0"
 then
     PROTO="mbim"
 fi
+
+# Антенные порты и соседние сектора - общий блок семейства (см. _qualcomm_sdx55_extras).
+. "$RES/modem/usb/_qualcomm_sdx55_extras"

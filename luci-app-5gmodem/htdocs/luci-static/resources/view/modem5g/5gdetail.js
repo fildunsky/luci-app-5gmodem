@@ -542,6 +542,7 @@ function gl(term) {
 			'Path loss': _('How much the signal weakens on its way from the tower.'),
 			'TX power': _('Transmit power of the modem right now.'),
 			'CQI': _('Channel quality estimated by the modem: 0-15, higher is better.'),
+			'RI': _('Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2.'),
 			'UE category': _('LTE speed category of the modem.'),
 			'Max speed': _('What the modem itself can do. Not the speed of the current connection.'),
 			'VoLTE': _('Voice calls over the LTE network, without falling back to 3G.'),
@@ -568,6 +569,10 @@ var CELL_ROWS = [
 	{ id: 'pathloss', text: function(j) { return mutil.cellVal(j.pathloss); } },
 	{ id: 'txpower',  text: function(j) { return mutil.cellVal(j.txpower); } },
 	{ id: 'cqi',      text: function(j) { return mutil.cellVal(j.cqi); } },
+	/* Ранг передачи (RI): сколько пространственных потоков сеть реально ведёт.
+	   Единственный честный признак MIMO - четыре несущих в агрегации при RI=1
+	   означают SISO. Строку показываем только когда модем отдал значение. */
+	{ id: 'ri',       text: function(j) { return mutil.cellVal(j.ri); } },
 	{ id: 'uecat',    text: function(j) { return mutil.cellVal(j.uecat); } },
 	/* Паспортный максимум модуля (QMI DMS), а не скорость текущего соединения. */
 	{ id: 'maxrate',  text: function(j) {
@@ -903,7 +908,7 @@ function renderCaTable(json) {
 		   выбрасывалось вместе с мёртвой переменной ADDON. Используем как запасной
 		   источник, когда в строке диапазона полосы нет. */
 		data['PCC'] = { band: p.band, bw: p.bw || json.bandwidth, pci: json.pci, earfcn: json.earfcn,
-			rsrp: json.rsrp, rsrq: json.rsrq, sinr: json.sinr,
+			rsrp: json.rsrp, rsrq: json.rsrq, rssi: json.rssi, sinr: json.sinr,
 			mimo: json.pmimo, mod: json.pmod,
 			/* Первичный компонент активен по определению - иначе не было бы связи. */
 			state: _('activated') };
@@ -919,7 +924,11 @@ function renderCaTable(json) {
 			var st = String(json['s' + i + 'state'] || '');
 			data['SCC' + i] = { band: sb.band, bw: sb.bw,
 				pci: json['s' + i + 'pci'], earfcn: json['s' + i + 'earfcn'],
-				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'], sinr: json['s' + i + 'sinr'],
+				rsrp: json['s' + i + 'rsrp'], rsrq: json['s' + i + 'rsrq'],
+				/* RSSI по несущей: полная мощность в канале вместе с шумом. Модемы
+				   семейства Qualcomm отдают её в том же блоке, что RSRP/RSRQ, а
+				   раньше она никуда не доезжала. */
+				rssi: json['s' + i + 'rssi'], sinr: json['s' + i + 'sinr'],
 				mimo: json['s' + i + 'mimo'], mod: json['s' + i + 'mod'],
 				state: (st === 'activated') ? _('activated')
 					: (st === 'deactivated') ? _('deactivated') : '' };
@@ -942,7 +951,7 @@ function renderCaTable(json) {
 		}
 	}
 	var txt = function(v) { return (v != null && v !== '' && v !== '-') ? String(v) : '-'; };
-	var isMetric = { rsrp: 1, rsrq: 1, sinr: 1 };
+	var isMetric = { rsrp: 1, rsrq: 1, rssi: 1, sinr: 1 };
 	function paintCell(td, key, c) {
 		/* Метрики - через общую точку: там же решается, как их показывать в
 		   текущей теме (см. paintMetricCell). */
@@ -953,7 +962,7 @@ function renderCaTable(json) {
 	}
 	// Заполняем ЗАРАНЕЕ нарисованные строки (см. разметку). Строки не создаются
 	// и не удаляются - только их ячейки. Первая ячейка (метка CC) статична.
-	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'sinr', 'mimo', 'mod', 'state' ];
+	var cols = [ 'band', 'bw', 'pci', 'earfcn', 'rsrp', 'rsrq', 'rssi', 'sinr', 'mimo', 'mod', 'state' ];
 	tbl.querySelectorAll('tr.ca-row').forEach(function(row) {
 		var cc = row.getAttribute('data-cc');
 		var c = data[cc] || {};
@@ -1515,7 +1524,9 @@ function rebootModem(hard) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
 			if (hard) { clearModemBusy(true); }
-			ui.addNotification(null, E('p', _('Modem AT port not found')), 'error');
+			/* Скрипт теперь различает причины («AT port busy» при занятом порте) -
+			   показываем его текст, а «порт не найден» оставляем умолчанием. */
+			ui.addNotification(null, E('p', d.error === 'AT port busy' ? _('The modem AT port is busy, try again') : _('Modem AT port not found')), 'error');
 			return;
 		}
 		if (!hard) {
@@ -1577,7 +1588,13 @@ function initPowerBtn() {
 /* Зафиксировать TTL/hop-limit на интерфейсе модема через ttl.sh */
 function applyTTL(has6) {
 	var g = function(id) { var e = document.getElementById(id); return e ? String(e.value).trim() : ''; };
-	var vals = [ g('ttl4in'), g('ttl4out'), has6 ? g('ttl6in') : '', has6 ? g('ttl6out') : '' ];
+	/* БЕЗ ПОЛЕЙ IPv6 ШЛЁМ ТО, ЧТО В КОНФИГЕ, А НЕ ПУСТОТУ. has6 считается один раз
+	   при отрисовке по снимку: пока модем не поднял IPv6 (или снимок пришёл пустым/
+	   busy), полей ttl6in/ttl6out на странице нет вовсе. Пустое значение ttl.sh set
+	   трактует как «удалить» - и заданный ранее hop-limit молча стирался при нажатии
+	   «Применить» в строке IPv4. (аудит 12.09.2026) */
+	var cfg = function(k) { var v = uci.get('5gmodem', '@5gmodem[0]', k); return (v == null) ? '' : String(v); };
+	var vals = [ g('ttl4in'), g('ttl4out'), has6 ? g('ttl6in') : cfg('ttl6in'), has6 ? g('ttl6out') : cfg('ttl6out') ];
 	for (var i = 0; i < vals.length; i++) {
 		if (vals[i] !== '' && (!/^\d+$/.test(vals[i]) || +vals[i] < 1 || +vals[i] > 255)) {
 			ui.addNotification(null, E('p', _('TTL must be a number between 1 and 255, or empty to disable')), 'error');
@@ -2842,7 +2859,10 @@ function applyMetrics(json) {
 						var view = document.getElementById("temp");
 						var viewn = document.getElementById("tempn");
 						var t = json.mtemp;
-						if (t == null || t == '' || t == '-' || (!t.length > 1 && t.includes(' '))) {
+						/* Последняя проверка была записана как «!t.length > 1», то есть
+						   (!t.length) > 1 - всегда false, и мусорная короткая строка
+						   уходила в ветку «есть градусы». (аудит 12.09.2026) */
+						if (t == null || t == '' || t == '-' || (String(t).length <= 1 && String(t).indexOf(' ') >= 0)) {
 						/* Градусов нет. У части прошивок (Compal RXM-G1) их не отдаёт
 						   НИ ОДНА AT-команда: единственная тепловая - +CEITHERM, и та
 						   даёт уровень троттлинга 0-3. Показываем его словом: выдавать
@@ -2919,7 +2939,15 @@ function applyMetrics(json) {
 
 					if (document.getElementById('rssi')) {
 						var view = document.getElementById("rssi");
-						if (json.rssi == '-') { 
+						/* СНИМОК БЕЗ МЕТРИК ОСТАВЛЯЕМ КАК ЕСТЬ. Занятый порт отдаёт
+						   голое {"error":"busy"} - полей метрик в нём нет вовсе, и
+						   json.rssi тут был undefined: .includes ниже ронял ВЕСЬ тик,
+						   то есть шкалы RSRP/SINR/RSRQ, строки 3G, соты, агрегацию и
+						   соседей - всё, что рисуется после этого места. Значение
+						   просто остаётся прежним до следующего тика.
+						   (аудит 12.09.2026) */
+						if (json.rssi == null) { }
+						else if (json.rssi == '-') {
 						view.style.visibility = 'hidden';
 						}
 						else {
@@ -2938,7 +2966,9 @@ function applyMetrics(json) {
 
 					if (document.getElementById('rsrp')) {
 						var view = document.getElementById('rsrp');
-						if (json.rsrp == '-') { 
+						/* см. rssi выше: снимок без метрик пропускаем (аудит 12.09.2026) */
+						if (json.rsrp == null) { }
+						else if (json.rsrp == '-') {
 						view.style.visibility = 'hidden';
 						}
 						else {
@@ -2958,7 +2988,9 @@ function applyMetrics(json) {
 
 					if (document.getElementById('sinr')) {
 						var view = document.getElementById("sinr");
-						if (json.sinr == '-') { 
+						/* см. rssi выше: снимок без метрик пропускаем (аудит 12.09.2026) */
+						if (json.sinr == null) { }
+						else if (json.sinr == '-') {
 						view.style.visibility = 'hidden';
 						}
 						else {
@@ -2976,7 +3008,9 @@ function applyMetrics(json) {
 
 					if (document.getElementById('rsrq')) {
 						var view = document.getElementById("rsrq");
-						if (json.rsrq == '-') { 
+						/* см. rssi выше: снимок без метрик пропускаем (аудит 12.09.2026) */
+						if (json.rsrq == null) { }
+						else if (json.rsrq == '-') {
 						view.style.visibility = 'hidden';
 						}
 						else {
@@ -3052,7 +3086,10 @@ modemDialog: baseclass.extend({
        			       	result += sections[i].comm_port + '_' + sections[i].network + '#' + sections[i].comm_port + ' - ' + sections[i].modem + ' (' + sections[i].user_desc + ');';
     			}
 			var result = result.slice(0, -1);
-			var result = result.replace("(undefined)", "");
+			/* ГЛОБАЛЬНО: replace со строкой чистит только ПЕРВОЕ вхождение, и у
+			   третьего и дальше модемов без подписи в списке оставалось
+			   «(undefined)». (аудит 12.09.2026) */
+			var result = result.replace(/\(undefined\)/g, "");
 
 			ui.showModal(this.title, [
 				E('div', { 'class': 'cbi-section' }, [
@@ -3141,8 +3178,13 @@ modemDialog: baseclass.extend({
 				ui.hideModal();
 				return this.render(content);
 			}).catch(e => {
+				/* this.error() у baseclass НЕ СУЩЕСТВУЕТ (error живёт на LuCI.prototype,
+				   это L.error): обработчик сам бросал вторую ошибку, и опрос страницы,
+				   остановленный перед показом диалога, не возвращался НИКОГДА - метрики,
+				   слоты и вкладки замирали до перезагрузки страницы. (аудит 12.09.2026) */
 				ui.hideModal();
-				return this.error(e);
+				if (!poll.active()) poll.start();
+				ui.addNotification(null, E('p', {}, _('Failed to read modem data') + ': ' + (e.message || e)), 'error');
 			})
 		},
 	}),
@@ -3163,18 +3205,26 @@ simDialog: baseclass.extend({
 			   симку первого» (отчёт с двумя T99W175, 30.07). */
 			var _sArgs = [ 'cached', '10' ];
 			if (pageModemPath) { _sArgs.push('for=' + pageModemPath); }
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _sArgs));
+			/* Второй аргумент ОБЯЗАТЕЛЕН: без него отказ rpcd даёт undefined, и
+			   JSON.parse(undefined) ронял render (аудит 12.09.2026). */
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _sArgs), '{}');
 		},
 
 		render: function(content) {
 
-			var json = JSON.parse(content);
+			var json = {};
+			try { json = JSON.parse(content) || {}; } catch (e) {}
 
-			if (json) {
-				if (!json.imei.length > 2) {
-					return false,
-					       poll.start()
-				}
+			/* СНИМКА МОЖЕТ НЕ БЫТЬ: на занятом порту cached отдаёт голое
+			   {"error":"busy"}, где нет ни imei, ни imsi. Прежний guard
+			   «!json.imei.length > 2» читался как (!length) > 2 и был всегда
+			   false, то есть не срабатывал НИКОГДА, а на undefined.length ещё и
+			   бросал исключение - опрос страницы оставался остановленным.
+			   (аудит 12.09.2026) */
+			if (!json.imei || String(json.imei).length < 3) {
+				if (!poll.active()) poll.start();
+				ui.addNotification(null, E('p', {}, _('The modem port is busy, try again in a few seconds')), 'warning');
+				return;
 			}
 
 
@@ -3238,8 +3288,13 @@ simDialog: baseclass.extend({
 				ui.hideModal();
 				return this.render(content);
 			}).catch(e => {
+				/* this.error() у baseclass НЕ СУЩЕСТВУЕТ (error живёт на LuCI.prototype,
+				   это L.error): обработчик сам бросал вторую ошибку, и опрос страницы,
+				   остановленный перед показом диалога, не возвращался НИКОГДА - метрики,
+				   слоты и вкладки замирали до перезагрузки страницы. (аудит 12.09.2026) */
 				ui.hideModal();
-				return this.error(e);
+				if (!poll.active()) poll.start();
+				ui.addNotification(null, E('p', {}, _('Failed to read modem data') + ': ' + (e.message || e)), 'error');
 			})
 		},
 	}),
@@ -3980,6 +4035,13 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('CQI') ]),
 					E('td', { 'class': 'td left', 'id': 'cqi' }, [ '-' ]),
 					]),
+				E('tr', { 'id': 'rin', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [
+						gl('RI'),
+						E('div', { 'class': 'tg-sublabel' }, [ _('(transmission rank)') ]),
+					]),
+					E('td', { 'class': 'td left', 'id': 'ri' }, [ '-' ]),
+					]),
 				E('tr', { 'id': 'uecatn', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('UE category') ]),
 					E('td', { 'class': 'td left', 'id': 'uecat' }, [ '-' ]),
@@ -4103,6 +4165,7 @@ simDialog: baseclass.extend({
 						E('th', { 'class': 'th' }, [ gl('EARFCN') ]),
 						E('th', { 'class': 'th' }, [ gl('RSRP') ]),
 						E('th', { 'class': 'th' }, [ gl('RSRQ') ]),
+						E('th', { 'class': 'th' }, [ gl('RSSI') ]),
 						E('th', { 'class': 'th' }, [ gl('SINR') ]),
 						E('th', { 'class': 'th' }, [ gl('MIMO') ]),
 						E('th', { 'class': 'th' }, [ gl('Mod') ]),
@@ -4126,6 +4189,7 @@ simDialog: baseclass.extend({
 						E('td', { 'class': 'td', 'data-l': 'EARFCN' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'RSRP' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'RSRQ' }, [ '-' ]),
+						E('td', { 'class': 'td', 'data-l': 'RSSI' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'SINR' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'MIMO' }, [ '-' ]),
 						E('td', { 'class': 'td', 'data-l': 'Mod' }, [ '-' ]),

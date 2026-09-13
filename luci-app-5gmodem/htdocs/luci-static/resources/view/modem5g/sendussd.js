@@ -124,8 +124,15 @@ function ussdReadReply(stdout) {
 	}
 	/* Отладки нет - остаётся сырой хекс из -r, схему определим по данным. */
 	var only = txt.replace(/^\s*debug:.*$/gm, '').replace(/\s+/g, '');
-	if (only.length >= 4 && !(only.length % 2) && /^[0-9A-Fa-f]+$/.test(only)) {
-		return ussdDecodeHex(only, null);
+	/* ГОЛОЕ ЧИСЛО - НЕ ХЕКС. Ответ сети вполне может быть просто числом («1500»
+	   остатка минут): чётная длина и одни цифры делали его «хексом», и вместо
+	   числа в поле «Ответ» появлялся один невидимый управляющий символ
+	   (аудит 12.09.2026). Поэтому, во-первых, требуем длину настоящего ответа
+	   (от четырёх символов UCS2), во-вторых, принимаем расшифровку, только если
+	   она ЧИТАЕМА: управляющие символы означают, что это был обычный текст. */
+	if (only.length >= 8 && !(only.length % 2) && /^[0-9A-Fa-f]+$/.test(only)) {
+		var d = ussdDecodeHex(only, null);
+		if (d != null && d.length && ussdCtrlScore(d) === 0) { return d; }
 	}
 	return null;
 }
@@ -441,8 +448,31 @@ return view.extend({
 		   Перепечатываем только при СМЕНЕ стадии - опрос идёт раз в две секунды,
 		   и запуск анимации на каждый тик сбрасывал бы её в начало. */
 		var lastStage = null;
+		/* РЕЖИМ ИСТОРИИ СТАДИЯМИ НЕ ЗАТИРАЕТСЯ. typewrite() обнуляет весь <pre>,
+		   поэтому с галкой «оставлять прошлый ответ» первое же «Отправляю
+		   запрос…» стирало меню оператора - отвечать в нём было уже нечему
+		   (аудит 12.09.2026). В этом режиме дописываем стадию к сохранённой
+		   истории и без анимации, а перед показом ответа историю возвращаем
+		   как была. */
+		var keepHistory = !!(document.getElementById('history-full') || {}).checked;
+		var baseText = (out && keepHistory) ? out.innerText : '';
 		var say = function(text) {
-			if (out) { out.style.display = ''; typewrite(out, text); }
+			if (!out) { return; }
+			out.style.display = '';
+			if (keepHistory) {
+				if (out._twTimer) { clearInterval(out._twTimer); out._twTimer = null; }
+				out.classList.add('has-output');
+				out.textContent = baseText + (baseText.trim() ? '\n\n' : '') + text;
+			} else {
+				typewrite(out, text);
+			}
+		};
+		/* Перед выводом ответа гасим анимацию последней стадии: она тикает ещё
+		   секунду с лишним и раньше посимвольно вклинивалась в конец ответа. */
+		var stopStage = function() {
+			if (!out) { return; }
+			if (out._twTimer) { clearInterval(out._twTimer); out._twTimer = null; }
+			if (keepHistory) { out.textContent = baseText; }
 		};
 		if (out) { out.style.display = ''; }
 		say(_('Sending the request') + '…');
@@ -452,14 +482,34 @@ return view.extend({
 				buttons[i].removeAttribute('disabled');
 		};
 
-		return fs.exec('/usr/share/5gmodem/ussd.sh', [ 'send', code ]).then(function() {
+		return fs.exec('/usr/share/5gmodem/ussd.sh', [ 'send', code ]).then(function(r) {
+			/* ОТКАЗ ЗАПУСКА РАЗБИРАЕМ СРАЗУ. ussd.sh печатает {"error":...} и
+			   выходит, НЕ трогая файл состояния, - а там лежит удачный прошлый
+			   запрос со status:"done". Первый же опрос читал его и показывал
+			   ПРОШЛЫЙ ответ как ответ на новый код (аудит 12.09.2026). */
+			var j = {};
+			try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+			if (j.error) {
+				done();
+				stopStage();
+				say(_('The request was rejected: %s').format(String(j.error)));
+				return null;
+			}
 			return new Promise(function(resolve) {
 				/* Предел с запасом к замеренным 18 с: сюда же попадает случай,
 				   когда сота 3G ищется дольше обычного. Дальше сдаёмся сами -
 				   висеть без объяснений хуже, чем сказать «нет ответа». */
 				var left = 60, timer = null;
+				/* ГАРД «ЗАПРОС В ПОЛЁТЕ»: тики идут по таймеру, а ответ может
+				   задержаться - без него вызовы к rpcd накладывались друг на
+				   друга. Ссылку на таймер держим во вью, чтобы уход со страницы
+				   его останавливал (см. leave). */
+				var inflight = false;
 				var tick = function() {
+					if (inflight) { return; }
+					inflight = true;
 					L.resolveDefault(fs.exec('/usr/share/5gmodem/ussd.sh', [ 'status' ]), {}).then(function(r) {
+						inflight = false;
 						var st = {};
 						try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
 						if (st.status === 'running') {
@@ -470,14 +520,18 @@ return view.extend({
 							if (--left > 0) { return; }
 						}
 						if (timer) { clearInterval(timer); timer = null; }
+						self._ussdTimer = null;
 						resolve(st);
 					});
 				};
 				timer = setInterval(tick, 2000);
+				self._ussdTimer = timer;
 				tick();
 			});
 		}).then(function(st) {
+			if (!st) { return; }
 			done();
+			stopStage();
 			if (st.status === 'done') {
 				var dec = function(b) { try { return b ? atob(b) : ''; } catch (e) { return ''; } };
 				var body = dec(st.out);
@@ -535,7 +589,7 @@ return view.extend({
 	   is not stable — it changes after a reboot/reconnect, so ask
 	   mmcli -L every time */
 	getMMModemNumber: function() {
-		return fs.exec('mmcli', ['-L']).then(function(res) {
+		return fs.exec('/usr/bin/mmcli', [ '--timeout=8', '-L' ]).then(function(res) {
 			let out = ((res.stdout || '') + '\n' + (res.stderr || '')).trim();
 			let ids = [], re = /\/Modem\/(\d+)/g, mm;
 			while ((mm = re.exec(out)) !== null) { ids.push(mm[1]); }
@@ -549,7 +603,7 @@ return view.extend({
 			// registered > enabled, пропуская disabled/locked.
 			var rank = { connected: 4, registered: 3, searching: 2, enabled: 1 };
 			return Promise.all(ids.map(function(id) {
-				return L.resolveDefault(fs.exec('mmcli', [ '-m', id, '-K' ]), {}).then(function(r) {
+				return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', id, '--timeout=8', '-K' ]), {}).then(function(r) {
 					var s = (((r && r.stdout) || '').match(/generic\.state\s*:\s*(\S+)/) || [])[1] || '';
 					return { id: id, r: (rank[s] || 0) };
 				});
@@ -613,7 +667,7 @@ return view.extend({
 					return (!self.ussdSessionActive
 							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-cancel' ]), {})
 							: Promise.resolve())
-						.then(function() { return self.handleCommand('mmcli', [ '-m', modemNum, '--timeout=20', arg ]); })
+						.then(function() { return self.handleCommand('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=15', arg ]); })
 						.then(function() {
 						// достоверно узнаём состояние сессии из статуса
 						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-status' ]), {}).then(function(r) {
@@ -662,7 +716,7 @@ return view.extend({
 
 		// отменяем открытую USSD-сессию, чтобы следующий код шёл как initiate
 		if (this.ussdSessionActive && this.ussdModemNum != null) {
-			L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', this.ussdModemNum, '--3gpp-ussd-cancel' ]));
+			L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', this.ussdModemNum, '--timeout=8', '--3gpp-ussd-cancel' ]));
 			this.ussdSessionActive = false;
 		}
 
@@ -791,7 +845,12 @@ return view.extend({
 		   смене сети или тарифа, поэтому и формулировки разные. */
 		let ussdState = (function() {
 			try {
-				let r = loadResults && loadResults[4];
+				/* Индекс - шестой элемент load(): именно там лежит вывод
+				   modemswitch.sh ussdsupport. Пятый - это uci.load('defmodems'),
+				   он резолвится списком имён пакетов, JSON.parse на нём всегда
+				   бросал, и ВСЕ три предупреждения USSD были мертвы: страница
+				   выглядела исправной, а запрос уходил в никуда (аудит 12.09.2026). */
+				let r = loadResults && loadResults[5];
 				return JSON.parse((r && (r.stdout || r)) || '{}');
 			} catch (e) { return {}; }
 		})();
@@ -806,6 +865,8 @@ return view.extend({
 		   в предупреждение подставляем только сам режим. */
 		let ussdRat = String(ussdState.rat || '').split('|')[0].trim();
 		let ussdCsfb = !ussdNotSupported && !ussdSmsOnly && /^(LTE|5G)/i.test(ussdRat);
+		let ussd3gSection = 'm_' + String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '')
+			.replace(/[^A-Za-z0-9]/g, '_');
 
 		return E('div', { 'class': 'cbi-map', 'id': 'map' }, [
 				ussdNotSupported ? E('div', { 'class': 'alert-message warning' }, [
@@ -818,7 +879,12 @@ return view.extend({
 					/* Текст зависит от галки: обещать автопереключение, когда оно
 					   выключено, значит врать - а без него человеку надо знать,
 					   где включить, если ответа нет. */
-					E('p', {}, (uci.get('5gmodem', 'sms', 'ussd_3g') == '1')
+					/* Спрашиваем ТУ ЖЕ настройку, по которой решает ussd.sh, -
+					   ключ секции активного модема. Глобальный sms.ussd_3g
+					   описывает лишь последний выбранный модем и мог остаться от
+					   предыдущего: баннер обещал уход в 3G и возврат, а скрипт
+					   слал запрос как есть (аудит 12.09.2026). */
+					E('p', {}, (uci.get('5gmodem', ussd3gSection, 'ussd_3g') == '1')
 						? _('The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds.').format(ussdRat)
 						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings below.').format(ussdRat))
 				]) : '',
@@ -835,7 +901,7 @@ return view.extend({
 										E('div', { 'class': 'controls' }, [
 											E('div', { 'class': 'pager center tg-row' }, [
 												E('button', { 
-													'class': 'btn cbi-button-neutral prev', 
+													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',
@@ -843,7 +909,7 @@ return view.extend({
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
 												E('button', { 
-													'class': 'btn cbi-button-neutral next', 
+													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
 													'class': 'tg-col-narrow',
@@ -958,7 +1024,7 @@ return view.extend({
 								'class': 'tg-field',
 								'type': 'text',
 								'id': 'cmdvalue',
-								'data-tooltip': _('Press [Enter] to send the code, press [Delete] to delete the code'),
+								'data-tooltip': _('Press [Enter] to send the code, press [Ctrl+Delete] to clear the field'),
 								'keydown': function(ev) {
 									if (ev.keyCode === 13) {
 										let execBtn = document.getElementById('execute');
@@ -966,7 +1032,11 @@ return view.extend({
 											execBtn.click();
 											}
 									}
-									if (ev.keyCode === 46) {
+									/* ОЧИСТКА ПОЛЯ - ТОЛЬКО С CTRL ИЛИ SHIFT. Голый [Delete]
+									   стирал код целиком, и отредактировать длинный код было
+									   нельзя (аудит 12.09.2026). */
+									if (ev.keyCode === 46 && (ev.ctrlKey || ev.shiftKey)) {
+										ev.preventDefault();
 										let del = document.getElementById('cmdvalue');
 										if (del) {
 											let ov = document.getElementById('cmdvalue');
@@ -1031,5 +1101,13 @@ return view.extend({
 				E('pre', { 'class': 'ussdcommand-output', 'style': 'display:none' }),
 
 			]);
+	},
+
+	/* УХОД СО СТРАНИЦЫ ГАСИТ ОПРОС. Опрос состояния USSD живёт до двух минут:
+	   без этого он продолжал раз в две секунды дёргать ussd.sh на уже закрытой
+	   странице и писал в оторванный от документа <pre>, а при возврате и новом
+	   запросе опросов становилось два (аудит 12.09.2026). */
+	leave: function() {
+		if (this._ussdTimer) { clearInterval(this._ussdTimer); this._ussdTimer = null; }
 	}
 });

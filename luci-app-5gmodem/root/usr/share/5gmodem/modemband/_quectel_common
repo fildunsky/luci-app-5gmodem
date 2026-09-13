@@ -58,7 +58,17 @@ _q_gw_mask() {   # текущая GSM+WCDMA маска (десятичным ч�
 	# именно его, и маска всегда выходила нулевой (enabled3g пустел молча).
 	_qg=$(sms_tool -d $_DEVICE at "at+qcfg=\"band\"" | grep -i '+QCFG:' \
 		| awk -F[:,] '{print $3}' | tr -d '\r ' | head -1)
-	case "$_qg" in 0x*|0X*) echo $((_qg)) ;; *) echo 0 ;; esac
+	# ПРЕФИКСА МАЛО - нужны и цифры после него. Коллизия на общем tty (ровно то,
+	# от чего выше спасает head -1) обрезает ответ до «+QCFG: "band",0x», и
+	# $((0x)) в busybox ash - ФАТАЛЬНАЯ ошибка: умирает весь bands.sh, страница
+	# «Сеть» получает пустой ответ. Та же защита давно стоит в hextobands.
+	# (аудит 12.09.2026)
+	case "$_qg" in
+		0[xX]) echo 0 ;;
+		0[xX]*[!0-9A-Fa-f]*) echo 0 ;;
+		0[xX]*) echo $((_qg)) ;;
+		*) echo 0 ;;
+	esac
 }
 
 getsupportedbands2g() {
@@ -120,4 +130,161 @@ setmode() {
 	[ -n "$_QMODES" ] || { echo "Unsupported"; return; }
 	case "$1" in ''|*[!0-9]*) echo "ERROR: bad mode"; return ;; esac
 	sms_tool -d $_DEVICE at "at+qcfg=\"nwscanmode\",$1,1"
+}
+
+# --- Привязка к соте (AT+QNWLOCK) --------------------------------------------
+#
+# ПОЧЕМУ ЗДЕСЬ. Каркас привязки в bands.sh готов давно, реализации есть у
+# Fibocom/Intel/Compal/MikroTik - и ни одной у Quectel EC2x/EP06, хотя на форуме
+# лок соты это главный инструмент темы (им ловят агрегацию). Человек до сих пор
+# делал это тремя AT-командами по SSH.
+#
+# ДВЕ ФОРМЫ КОМАНДЫ, И ВЫБИРАТЬ НАДО ЖИВЬЁМ. Синтаксис привязан к ревизии
+# прошивки, а не к модели (#2472, #2501, #3930, #5292, #5296, #9261):
+#   Rev4.xx: AT+QNWLOCK="common/4g"                 - показать
+#            AT+QNWLOCK="common/4g",1,<earfcn>,<pci> - привязать к соте
+#            AT+QNWLOCK="common/4g",0               - снять
+#            запрос отдаёт +QNWLOCK: "common/4g",<число сот>[,<freq>,<pci>...]
+#   Rev3.xx: AT+QNWLOCK="common/lte"                - показать
+#            AT+QNWLOCK="common/lte",1,<earfcn>,0   - привязка к ЧАСТОТЕ
+#            AT+QNWLOCK="common/lte",2,<earfcn>,<pci> - привязка к соте
+#            AT+QNWLOCK="common/lte",0              - снять
+# «common/lte» на части Rev4-прошивок отдаёт ERROR и наоборот - поэтому ветку
+# выбираем не разбором ATI, а тем, какая форма ОТВЕТИЛА: ревизии в теме
+# пересекаются, а ответ модема не врёт. Результат помним в /tmp до перезагрузки,
+# чтобы не платить лишним AT-запросом на каждое чтение страницы.
+# ЛОК СЛЕТАЕТ ПРИ КАЖДОЙ ПЕРЕЗАГРУЗКЕ модема/роутера (#17945, #26882) - это
+# ровно то, ради чего в bands.sh есть uci-штамп и restorebands.
+# (ревью 13.09.2026, форум 4pda)
+_qnl_key() {
+	_qk_f="/tmp/5gmodem_qnwlock_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_qk_v=$(cat "$_qk_f" 2>/dev/null)
+	case "$_qk_v" in
+		common/4g|common/lte|none) echo "$_qk_v"; return ;;
+	esac
+	for _qk_t in common/4g common/lte; do
+		_qk_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"$_qk_t\"" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+		case "$_qk_o" in
+			*QNWLOCK:*) printf '%s' "$_qk_t" > "$_qk_f" 2>/dev/null; echo "$_qk_t"; return ;;
+		esac
+	done
+	# Негативный кэш: команды нет вовсе - больше не спрашиваем до перезагрузки.
+	printf 'none' > "$_qk_f" 2>/dev/null
+	echo "none"
+}
+
+# Хвост ответа после ключа: "+QNWLOCK: "common/4g",0" -> "0".
+_qnl_read() {
+	_qr_k="$1"
+	sms_tool -d $_DEVICE at "at+qnwlock=\"$_qr_k\"" 2>/dev/null | tr -d '\r' \
+		| grep -v '^AT' | sed -n 's/^+QNWLOCK: *"[^"]*", *//p' | head -1 | tr -d ' '
+}
+
+getcelllock() {
+	_gc_k=$(_qnl_key)
+	[ "$_gc_k" = "none" ] && { echo "Unsupported"; return; }
+	_gc_v=$(_qnl_read "$_gc_k")
+	# Ответ без хвоста («+QNWLOCK: "common/4g"») - привязки нет.
+	[ -n "$_gc_v" ] || { echo "off"; return; }
+	_gc_a=$(echo "$_gc_v" | cut -d, -f1)
+	case "$_gc_a" in
+		''|*[!0-9]*) echo "Unsupported"; return ;;
+		0) echo "off"; return ;;
+	esac
+	_gc_ar=$(echo "$_gc_v" | cut -d, -f2)
+	_gc_pc=$(echo "$_gc_v" | cut -d, -f3)
+	case "$_gc_ar" in ''|*[!0-9]*) echo "off"; return ;; esac
+	# У Rev3 действие 1 - это привязка к ЧАСТОТЕ, PCI там заведомо 0 и значения
+	# не несёт: показать «сота 0» значило бы придумать соту, которой нет.
+	if [ "$_gc_k" = "common/lte" ] && [ "$_gc_a" = "1" ]; then
+		echo "arfcn $_gc_ar"; return
+	fi
+	case "$_gc_pc" in ''|*[!0-9]*) echo "arfcn $_gc_ar"; return ;; esac
+	# Сот в ответе бывает несколько - показываем первую: контракт знает одну.
+	echo "cell $_gc_ar $_gc_pc"
+}
+
+# setcelllock off | arfcn <n> | cell <arfcn> <pci>   (контракт bands.sh)
+setcelllock() {
+	_sc_k=$(_qnl_key)
+	[ "$_sc_k" = "none" ] && { echo "Unsupported"; return 1; }
+	case "$1" in
+		off)
+			_sc_c="at+qnwlock=\"$_sc_k\",0" ;;
+		arfcn)
+			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			# Формы «только частота» у Rev4 нет вовсе, а подставлять PCI=0
+			# нельзя: модем понял бы его буквально как соту номер 0.
+			[ "$_sc_k" = "common/lte" ] || { echo "Unsupported"; return 1; }
+			_sc_c="at+qnwlock=\"common/lte\",1,$2,0" ;;
+		cell)
+			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			case "$3" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
+			if [ "$_sc_k" = "common/lte" ]; then
+				_sc_c="at+qnwlock=\"common/lte\",2,$2,$3"
+			else
+				_sc_c="at+qnwlock=\"common/4g\",1,$2,$3"
+			fi ;;
+		*) return 1 ;;
+	esac
+	_sc_o=$(sms_tool -d $_DEVICE at "$_sc_c" 2>&1 | tr -d '\r')
+	case "$_sc_o" in
+		*ERROR*)
+			logger -t 5gmodem "celllock: firmware rejected \"$_sc_c\": $(echo "$_sc_o" | tr '\n' ' ' | head -c 120)"
+			echo "Unsupported"; return 1 ;;
+	esac
+	return 0
+}
+
+# --- 256QAM в нисходящем канале ----------------------------------------------
+#
+# ДВА СИНТАКСИСА, РАЗВЕДЁННЫЕ ПО ПРОШИВКАМ (#1457, #6353, #8700, #10302, #15453,
+# #16204, #16205, #46464):
+#   до EP06ELAR04A04M4G:  AT+QCFG="256qam",1/0     (в списке AT+QCFG=? так и
+#                         стоит: +QCFG: "256qam",(0,1))
+#   с   EP06ELAR04A04M4G: AT+QCFG="dl_256qam",1/0, чтение -> +QCFG: "dl_256qam",1
+# Ветку выбираем ОТВЕТОМ МОДЕМА, а не разбором ревизии из ATI: на 04A02/04A03
+# старая форма местами отсутствует, и по одной лишь версии не угадать. Ответ
+# помним в /tmp до перезагрузки - иначе каждое чтение страницы стоило бы двух
+# AT-запросов в порт, который делят метрики и дозвон.
+# (ревью 13.09.2026, форум 4pda)
+_q256_key() {
+	_qq_f="/tmp/5gmodem_q256_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_qq_v=$(cat "$_qq_f" 2>/dev/null)
+	case "$_qq_v" in
+		dl_256qam|256qam|none) echo "$_qq_v"; return ;;
+	esac
+	for _qq_t in dl_256qam 256qam; do
+		_qq_o=$(sms_tool -d $_DEVICE at "at+qcfg=\"$_qq_t\"" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+		case "$_qq_o" in
+			*QCFG:*[0-9]*) printf '%s' "$_qq_t" > "$_qq_f" 2>/dev/null; echo "$_qq_t"; return ;;
+		esac
+	done
+	printf 'none' > "$_qq_f" 2>/dev/null
+	echo "none"
+}
+
+get256qam() {
+	_gq_k=$(_q256_key)
+	[ "$_gq_k" = "none" ] && { echo "Unsupported"; return; }
+	_gq_v=$(sms_tool -d $_DEVICE at "at+qcfg=\"$_gq_k\"" 2>/dev/null | tr -d '\r' \
+		| grep -v '^AT' | sed -n 's/^+QCFG: *"[^"]*", *//p' | head -1 | tr -d ' ' | cut -d, -f1)
+	case "$_gq_v" in
+		0) echo "off" ;;
+		[1-9]*) echo "on" ;;
+		*) echo "Unsupported" ;;
+	esac
+}
+
+set256qam() {
+	case "$1" in 0|1) : ;; *) echo "Unsupported"; return 1 ;; esac
+	_sq_k=$(_q256_key)
+	[ "$_sq_k" = "none" ] && { echo "Unsupported"; return 1; }
+	_sq_o=$(sms_tool -d $_DEVICE at "at+qcfg=\"$_sq_k\",$1" 2>&1 | tr -d '\r')
+	case "$_sq_o" in
+		*ERROR*)
+			logger -t 5gmodem "256qam: firmware rejected \"at+qcfg=\\\"$_sq_k\\\",$1\": $(echo "$_sq_o" | tr '\n' ' ' | head -c 120)"
+			echo "Unsupported"; return 1 ;;
+	esac
+	return 0
 }

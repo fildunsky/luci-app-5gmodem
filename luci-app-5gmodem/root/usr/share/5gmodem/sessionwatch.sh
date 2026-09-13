@@ -652,7 +652,8 @@ _page_refresh() {
 # УБОРКА ВРЕМЯНОК, ОСИРОТЕВШИХ ПОСЛЕ УБИЙСТВА ПРОЦЕССА.
 #
 # Файлы с PID в имени (5gmodem_st.$$.N, atq.$$, qmicli.$$, providers.$$,
-# .atprobe.$$, cache.tmp.$$, файлы моста eSIM) убираются только на счастливом
+# .atprobe.$$, cache.tmp.$$, .tgcidr.$$ - недокачанный список сетей Telegram
+# (аудит 12.09.2026), файлы моста eSIM) убираются только на счастливом
 # пути: их создатель либо доработал и стёр их сам, либо был убит - нашим же
 # киллером на 25-й секунде или rpcd на 30-й - и тогда rm не выполнился. /tmp
 # здесь tmpfs, то есть это утечка ПАМЯТИ: при деградации порта (каждый опрос
@@ -661,14 +662,23 @@ _page_refresh() {
 # профиля eSIM) укладывается в минуты, а опрос - в секунды.
 _sweep_tmp() {
 	find /tmp -maxdepth 1 \( \
-		-name '5gmodem_st.[0-9]*' -o -name '5gmodem_atq.[0-9]*' \
-		-o -name '5gmodem_qmicli.[0-9]*' -o -name '5gmodem_providers.[0-9]*' \
+		-name '5gmodem_st.[0-9]*' -o -name '5gmodem_atq.*' \
+		-o -name '5gmodem_qmicli.*' -o -name '5gmodem_providers.[0-9]*' \
+		-o -name '5gmodem_bounded.*' \
 		-o -name '.atprobe.[0-9]*' -o -name '5gmodem_listmodems.cache.tmp.[0-9]*' \
-		-o -name '5gmodem_esim_hreq.[0-9]*' -o -name '5gmodem_esim_hbody.[0-9]*' \
-		-o -name '5gmodem_esim_hhdr.[0-9]*' -o -name '5gmodem_esim_res.[0-9]*' \
 		-o -name '5gmodem_uim.[0-9]*' -o -name '5gmodem_ttl.[0-9]*.nft' \
 		-o -name '5gmodem_metrics_*.p[0-9]*' \
+		-o -name '.tgcidr.*' \
 	\) -mmin +10 -exec rm -f {} + 2>/dev/null
+	# eSIM - ОТДЕЛЬНЫМ ПОРОГОМ: сторож загрузки профиля живёт 600 с, и десять
+	# минут снесли бы файл ответа у ЖИВОЙ загрузки перед самым финалом («timeout»
+	# на ровном месте). Тридцать минут, как в esim.sh (аудит 12.09.2026, группа 3).
+	find /tmp -maxdepth 1 \( \
+		-name '5gmodem_esim_hreq.[0-9]*' -o -name '5gmodem_esim_hbody.[0-9]*' \
+		-o -name '5gmodem_esim_hhdr.[0-9]*' -o -name '5gmodem_esim_res.[0-9]*' \
+		-o -name '5gmodem_esim_wdmprobe.[0-9]*' -o -name '5gmodem_esim_mloop.[0-9]*' \
+		-o -name '5gmodem_esim_loop.[0-9]*' -o -name '5gmodem_esim_at.[0-9]*' \
+	\) -mmin +30 -exec rm -f {} + 2>/dev/null
 }
 
 case "$1" in

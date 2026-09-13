@@ -28,6 +28,14 @@ OUT="/tmp/5gmodem-diag.txt"
 LOCK="/tmp/5gmodem-diag.lock"
 STEP="/tmp/5gmodem-diag.step"
 
+# ЧЕРНОВИК ТЕКУЩЕГО ОТЧЁТА. Разделы, которым нужно посмотреть на УЖЕ СОБРАННОЕ
+# (расшифровка кодов +CME), раньше читали готовый $OUT - а он в этот момент ещё
+# пишется (start) или не пишется вовсе (run, отчёт идёт в stdout), и в разбор
+# попадал ЧУЖОЙ отчёт недельной давности. Пишем свою копию по мере сбора
+# (аудит 12.09.2026).
+SESS="/tmp/.5gmodem-diag-sess.$$"
+export SESS
+
 # Команда с ограничением по времени. Без него sms_tool на занятом/молчащем порту
 # висит ~35 c, mmcli на полумёртвом MM - бесконечно, и отчёт не собирается вовсе.
 # Каждый блок сам себе таймаут: сломанный модем НЕ должен ронять весь сбор.
@@ -43,6 +51,8 @@ run() {   # run <timeout> <заголовок> <команда...>
 	wait "$_p" 2>/dev/null
 	kill "$_w" 2>/dev/null; wait "$_w" 2>/dev/null
 	if [ -s "$_tmp" ]; then cat "$_tmp"; else echo "(empty, or timed out after ${_t}s)"; fi
+	# Копия в черновик сессии - по ней работают разделы, читающие собранное.
+	cat "$_tmp" >> "$SESS" 2>/dev/null
 	rm -f "$_tmp"
 }
 
@@ -301,6 +311,32 @@ usbmode_verdict() {
 	echo "configuration so the kernel gives the drivers back. If that did not happen"
 	echo "(an older version of the app), update and re-plug the modem."
 	echo "Check by hand:  /usr/share/5gmodem/usbmode-fix.sh"
+}
+
+# АДРЕС ИЗ 192.168.225.0/24 - ЭТО НЕ ОПЕРАТОР, ЭТО САМ МОДЕМ.
+#
+# Quectel RM520N держит внутри собственную подсеть (bridge0 192.168.225.1/24), и
+# когда интерфейс роутера получает адрес оттуда, значит passthrough/мост не
+# отдал адрес оператора: роутер сидит за NAT модема, второй NAT поверх нашего.
+# Снаружи это выглядит как «часть сайтов грузится, часть нет» - и разбор уходил
+# в DNS, MTU и TTL, мимо причины. (ревью RM520N 13.09.2026, форум 4pda)
+modem_subnet_verdict() {
+	_ms=$(ip -4 addr show 2>/dev/null \
+		| awk '/^[0-9]+: /{d=$2; sub(/:$/,"",d)} /inet 192\.168\.225\./{print "  " d ": " $2}')
+	if [ -z "$_ms" ]; then
+		echo "no interface holds an address from 192.168.225.0/24 - this section does not apply"
+		return
+	fi
+	echo "AN ADDRESS FROM THE MODEM'S OWN SUBNET 192.168.225.0/24:"
+	printf '%s\n' "$_ms"
+	echo "That address comes from the modem itself (Quectel RM520N and relatives keep an"
+	echo "internal bridge on 192.168.225.1/24), not from the carrier. It means the modem"
+	echo "is routing and NAT-ing on its own instead of passing the carrier address through:"
+	echo "the router sits behind a second NAT, and that is the usual cause of 'some sites"
+	echo "open, some do not' plus broken incoming connections."
+	echo "What to do: turn the modem's IP passthrough / bridge mode on (or fix it), or"
+	echo "accept the double NAT knowingly. If the router LAN itself uses 192.168.225.x,"
+	echo "change it: the address ranges collide."
 }
 
 uplink_verdict() {
@@ -934,8 +970,10 @@ usb_unconfigured_verdict() {
 # Dell DW5821e в слоте M.2 у Huasifei WH3000 Pro - на плате пин сброса (67)
 # притянут к земле, и модем стартует в загрузчик после каждого ребута.
 fastboot_verdict() {
-	# vid:pid загрузчиков рядом с рабочими: 413c:81e1 - DW5821e (рабочий 81e0),
-	# 413c:81e6 - DW5829e (рабочий 81e5). Список открытый: у других моделей свои.
+	# vid:pid загрузчиков рядом с рабочими: 413c:81e1 - DW5821e (рабочий 81e0).
+	# 413c:81e6 - НЕ загрузчик, а рабочий DW5829e (81e4 - его eSIM-вариант);
+	# прежняя запись «рабочий 81e5» не подтверждается ни одним источником.
+	# Список открытый: у других моделей свои.
 	# ПО SYSFS, а не lsusb: usbutils на роутерах чаще НЕТ, ошибка глоталась
 	# 2>/dev/null, и вердикт врал «не видно» ровно в живом случае (WH3000 Pro +
 	# DW5821e-eSIM в fastboot, 18.08.2026). Вторая примета - для НЕизвестных
@@ -948,7 +986,7 @@ fastboot_verdict() {
 		[ -f "$_fb_d/idVendor" ] || continue
 		_fb_id="$(cat "$_fb_d/idVendor" 2>/dev/null):$(cat "$_fb_d/idProduct" 2>/dev/null)"
 		case "$_fb_id" in
-			413c:81e1|413c:81e6|05c6:9008|1199:9070)
+			413c:81e1|05c6:9008|1199:9070)
 				_fb="$_fb  $_fb_id $(cat "$_fb_d/manufacturer" 2>/dev/null) $(cat "$_fb_d/product" 2>/dev/null)$_fb_nl" ;;
 			*)
 				if [ "$(cat "$_fb_d/bNumInterfaces" 2>/dev/null | tr -d ' ')" = "1" ]; then
@@ -1129,7 +1167,10 @@ stick_verdict() {
 		return
 	fi
 	echo "YES, the device shows up as a USB mass-storage device and has no modem ports:"
-	printf '   %s\n' $_sv_found
+	# ПЕЧАТАЕМ СТРОКАМИ, А НЕ СЛОВАМИ - как в проверке канала данных ниже:
+	# неквотированный printf резал запись по пробелам, и путь с vid:pid
+	# уезжали на РАЗНЫЕ строки (аудит 12.09.2026).
+	printf '%s\n' "$_sv_found" | sed '/^[[:space:]]*$/d'
 	echo "  usb_modeswitch is supposed to switch it. Check:"
 	echo "    /etc/init.d/usbmode enable; /etc/init.d/usbmode start"
 	echo "  and that usb-modeswitch, kmod-usb-net-cdc-ether,"
@@ -1231,7 +1272,16 @@ usbcomp_verdict() {
 	fi
 	echo "  The USB composition carries no data channel. The cure is a vendor command"
 	echo "  in the AT console, after which the modem must be POWER-CYCLED:"
-	echo "    Quectel: AT+QCFG=\"usbnet\"      -> must be 0, otherwise AT+QCFG=\"usbnet\",0"
+	# «usbnet должен быть 0» - неверный совет: композиций с каналом данных две,
+	# 0 (NDIS/QMI) и 2 (MBIM), на MBIM люди работают постоянно; без канала
+	# остаются только 1 (ECM) и 3 (RNDIS). И новое значение НИЧЕГО не меняет до
+	# перезапуска модуля - человек менял композицию, ничего не происходило (даже
+	# порты те же), и решал, что модем сломан.
+	# (ревью RM520N 13.09.2026, форум 4pda)
+	echo "    Quectel: AT+QCFG=\"usbnet\"      -> a composition WITH a data channel is needed:"
+	echo "             0 (NDIS/QMI) and 2 (MBIM) both carry one, 1 (ECM) and 3 (RNDIS) do not."
+	echo "             Set it with AT+QCFG=\"usbnet\",0 (or ,2), then AT+CFUN=1,1 or a power-cycle:"
+	echo "             until the module restarts nothing changes at all, not even the port list."
 	echo "    SimCom:  AT+CUSBPIDSWITCH?      -> must be 9001, otherwise"
 	echo "             AT+CUSBPIDSWITCH=9001,1,1"
 }
@@ -1284,6 +1334,21 @@ radio_verdict() {   # $1 - АТ-порт
 		    echo "    giving up, the protocol turns the radio off while tearing the session"
 		    echo "    down. A module reboot turns it back on - AT+CFUN=1,1 or the 'Reboot modem' button." ;;
 		4)  echo "CFUN=4 - airplane mode: no connection will come up" ;;
+		5)  echo "CFUN=5 - FACTORY TEST MODE (FTM): the radio is not in service, no data will work"
+		    echo "    Quectel: AT+QRFTESTMODE? answering 1 confirms it; Foxconn/Dell: AT+FTM? -> 'Device is in: 1, FTM'."
+		    echo "    Quectel: AT+CFUN=1 then reboot the module. T77W968/DW5821e: at^nv=2497,1,\"01\" followed by AT+CFUN=1,1"
+		    echo "    (alternative: AT^qtuner_enable=0); also remove the Dell firmware updater from the PC - it re-arms FTM."
+		    echo "    On late eSIM batches this often does not help; the forum reports only a QPST NV/EFS restore working." ;;
+		# CFUN=7 - НЕ «просто не 1». У Quectel это отдельный диагноз: прошивка не
+		# соответствует EFS/QCN (кросс-ревизионная перепрошивка) либо сбой
+		# усилителя. Раньше он падал в общую ветку, и разбор уходил в APN и
+		# протокол - мимо. (ревью RM520N 13.09.2026, форум 4pda)
+		7)  echo "CFUN=7 - THE FIRMWARE DOES NOT MATCH THE CALIBRATION DATA (EFS/QCN), or the"
+		    echo "    power amplifier failed. On Quectel this is what a cross-revision flash"
+		    echo "    leaves behind: the image was written, the QCN stayed from another branch."
+		    echo "    The radio will not come up in this state and no setting cures it."
+		    echo "    The cure is to restore a QCN of the matching firmware version (QFIL ->"
+		    echo "    QCN Backup Restore), ideally the backup taken from THIS module." ;;
 		'') echo "CFUN could not be read (the port is busy or the modem is silent)" ;;
 		*)  echo "CFUN=$_rv - NOT full functionality, CFUN=1 is expected: data may not work" ;;
 	esac
@@ -1537,7 +1602,7 @@ mm_fail_verdict() {   # $1 - АТ-порт (для модемов вне MM)
 				[ -z "$_mf_script" ] && [ -n "$_mf_vid" ] && [ -e "$_mf_av/$_mf_vid" ] && _mf_script="$_mf_vid"
 				# Dell/Foxconn-родня без своего скрипта - подходит foxconn (105b)
 				case "$_mf_vid:$_mf_pid" in
-					413c:81d7|0489:e0b5) [ -z "$_mf_script" ] && [ -e "$_mf_av/105b" ] && _mf_script=105b ;;
+					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) [ -z "$_mf_script" ] && [ -e "$_mf_av/105b" ] && _mf_script=105b ;;
 				esac
 				if [ -e "$_mf_en/$_mf_vid:$_mf_pid" ]; then
 					echo "    the unlock script is ALREADY enabled - the cause is something else"
@@ -1629,6 +1694,10 @@ fcclock_verdict() {   # $1 - АТ-порт
 # которую без этой секции никто не увидит.
 sierra_image_verdict() {   # $1 - АТ-порт
 	[ -n "$1" ] || return 0
+	# EM7345 (1199:a001) сюда не попадёт, и это правильно: ярлык Sierra, а чип
+	# Intel XMM7160 - всё «!»-семейство отвечает ERROR, образов и PRI у него нет
+	# (форум 4pda #731/#2405-2407, ревью EM7345 13.09.2026). Отдельный гейт по
+	# vid:pid не нужен: вердикт и так строится ПО ОТВЕТУ, а не по вендору.
 	_si=$(at_query "$1" "AT!IMPREF?" 8)
 	case "$_si" in
 		*IMPREF*) ;;
@@ -1649,6 +1718,45 @@ sierra_image_verdict() {   # $1 - АТ-порт
 	else
 		echo "the selected image and profile match the loaded ones - normal"
 	fi
+}
+
+# ПОЛНЫЙ НОМЕР СБОРКИ QUECTEL И РЕГИОНАЛЬНЫЙ БЛОК.
+#
+# AT+CGMR отдаёт короткую ревизию, а решает всё полная строка из AT+QGMR?:
+# RM520NGLAAR01A06M4G_01.001.01.001 - чистая прошивка, RM520NGLAAR03A03M4G_
+# 01.201.01.201 - ветка с блоком РФ/Ирана. На заблокированной сборке модем
+# исправен, но сеть его не берёт: одна сеть со статусом LIMSRV, регистрации
+# нет. Снаружи это неотличимо от мёртвого модема, и разбор каждый раз уходил
+# в антенны, SIM и APN - хотя ответ в одной строке версии.
+# (ревью RM520N 13.09.2026, форум 4pda)
+quectel_fw_verdict() {   # $1 - АТ-порт
+	[ -n "$1" ] || return 0
+	_qf=$(at_query "$1" "AT+QGMR?" 8 2>/dev/null | tr -d '\r')
+	case "$_qf" in
+		*ERROR*|"") return 0 ;;   # не Quectel (или команды нет) - молчим
+	esac
+	# Часть прошивок отвечает «+QGMR: <билд>», часть - голой строкой; берём оба
+	# вида, отбрасывая эхо команды и OK.
+	_qfb=$(printf '%s\n' "$_qf" | sed -n 's/^+QGMR: *//p' | head -1 | tr -d ' ')
+	[ -n "$_qfb" ] || _qfb=$(printf '%s\n' "$_qf" | grep -viE '^(at\+|ok$)' | grep -E '[A-Za-z0-9]' | head -1 | tr -d ' ')
+	[ -n "$_qfb" ] || return 0
+	echo ""
+	echo "----- Quectel: full firmware build (verdict) -----"
+	echo "  build: $_qfb"
+	case "$_qfb" in
+		RM520N*|RM530N*|RG520N*)
+			case "$_qfb" in
+				*R03*|*_01.2*|*_A0.3*|*A0.30*)
+					echo "  THIS BUILD CARRIES THE REGIONAL BLOCK (Russia/Iran): the R03 branch and the"
+					echo "  200/201/30x versions refuse to register in those countries. The block sits"
+					echo "  in the modem binary itself, so no setting and no QCN edit removes it."
+					echo "  'The network is not seen', LIMSRV in AT+COPS?, an endless search with a good"
+					echo "  signal - on such a build that is NOT a broken modem and NOT our bug."
+					echo "  The known clean build is RM520NGLAAR01A06M4G_01.001.01.001 (branch R01A06)." ;;
+				*R01A06*_01.001*)
+					echo "  the clean build without the regional block - registration is not limited by firmware" ;;
+			esac ;;
+	esac
 }
 
 # ЭТАП СБОРА -> файл прогресса. Пишем КЛЮЧ (латиницей) и номер шага, а не
@@ -1731,6 +1839,7 @@ _sum_verdict() {
 }
 
 report() {
+	: > "$SESS" 2>/dev/null
 	echo "===== luci-app-5gmodem: diagnostic report ====="
 	echo "Collected: $(date)"
 	echo ""
@@ -1931,6 +2040,7 @@ report() {
 	mm_fail_verdict "$P"
 	fcclock_verdict "$P"
 	sierra_image_verdict "$P"
+	quectel_fw_verdict "$P"
 	proxy_verdict
 	stick_verdict
 	usbcomp_verdict
@@ -2125,6 +2235,7 @@ report() {
 	# ПЕРВЫЙ ВОПРОС ЖАЛОБЫ «ИНЕТА НЕТ» - кто держит трафик и жив ли он. Стоит
 	# сразу за маршрутами: дальше по отчёту читателя уносит в модемы, а причина
 	# чаще здесь (аплинк с адресом, но без выхода) и в DNS ниже.
+	run 10 "An address from the modem's own subnet (verdict)" modem_subnet_verdict
 	run 40 "Who holds the internet (verdict)" uplink_verdict
 	run 60 "DNS: resolving and rebind (verdict)" dns_verdict
 	run 40 "QMI: frame format and counters (verdict)" qmi_format_verdict
@@ -2158,16 +2269,21 @@ report() {
 	# Голое «+CME ERROR: 133» не говорит ничего даже нам; таблица общая
 	# (см. cme.sh), поэтому раздел стоит копейки и закрывает вопрос «а что
 	# это за число» разом для всех модемов.
+	# Разбираем ЧЕРНОВИК ЭТОЙ сессии ($SESS), а не готовый файл отчёта: тот
+	# либо ещё пишется, либо (режим run) не пишется совсем (аудит 12.09.2026).
 	run 10 "+CME ERROR codes seen in this report" sh -c '
 		. /usr/share/5gmodem/cme.sh
-		{ cat /tmp/5gmodem-diag.txt 2>/dev/null; logread 2>/dev/null | tail -200; } \
+		_cme_t="/tmp/.diag-cme.$$"
+		{ cat "$SESS" 2>/dev/null; logread 2>/dev/null | tail -200; } \
 			| grep -oE "CME ERROR: *[0-9]+" | grep -oE "[0-9]+" | sort -un | while read -r c; do
 				t=$(cme_text "$c" 2>/dev/null) || t="(not in the reference table)"
 				printf "  %-4s %s\n" "$c" "$t"
-			done
-		[ -s /tmp/5gmodem-diag.txt ] || echo "  (no CME errors in this report)"
+			done > "$_cme_t" 2>/dev/null
+		if [ -s "$_cme_t" ]; then cat "$_cme_t"; else echo "  (no CME errors in this report)"; fi
+		rm -f "$_cme_t"
 	'
 
+	rm -f "$SESS" 2>/dev/null
 	collect "done"
 	echo ""
 	echo "===== end of report ====="

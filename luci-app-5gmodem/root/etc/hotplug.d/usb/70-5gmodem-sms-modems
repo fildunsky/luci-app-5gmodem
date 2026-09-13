@@ -109,11 +109,18 @@ esac
 	# them on every device appearance in case they reset on a modem
 	# power cycle. The cdc-wdm node may show up a few seconds after the
 	# usb_device event.
+	# Узел ищем СТРОГО ПОД ЭТИМ УСТРОЙСТВОМ ($DEVPATH), а не первым попавшимся
+	# /dev/cdc-wdm*: на роутере с двумя модемами первым в системе может стоять
+	# СОСЕД (он же занял cdc-wdm0), и маршруты WMS уходили бы ему - соседу молча
+	# переводили входящие на хранение в SIM, а этот модем оставался с заводскими
+	# маршрутами. Порядок появления узлов на буте тоже не определён. Привязка по
+	# usb-пути - та же, что в mm-inhibit.sh (аудит 12.09.2026).
 	if command -v qmicli >/dev/null 2>&1; then
 		for try in 1 2 3 4 5 6; do
 			WDM=""
-			for wdm in /dev/cdc-wdm*; do
-				[ -c "$wdm" ] && { WDM="$wdm"; break; }
+			for wdm in /sys"$DEVPATH"/*:*/usbmisc/cdc-wdm*; do
+				[ -e "$wdm" ] || continue
+				[ -c "/dev/${wdm##*/}" ] && { WDM="/dev/${wdm##*/}"; break; }
 			done
 			[ -n "$WDM" ] && break
 			sleep 5
@@ -169,6 +176,9 @@ esac
 	set_if_empty atport "$ATPORT"
 
 	uci commit 5gmodem
-) >/dev/null 2>&1 &
+# stdin отвязываем вместе с выводом, как во всех остальных фонах проекта:
+# подоболочка живёт до 40 секунд и незачем ей держать унаследованный канал
+# (аудит 12.09.2026)
+) >/dev/null 2>&1 </dev/null &
 
 exit 0

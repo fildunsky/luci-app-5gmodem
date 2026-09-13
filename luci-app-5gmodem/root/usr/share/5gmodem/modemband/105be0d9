@@ -1,0 +1,7 @@
+# Foxconn T99W373 / Thales Cinterion MV32-W (PCIe/MHI, 105b:e0d9) - Qualcomm SDX62.
+#
+# Идентификатор из таблицы ядра (drivers/bus/mhi/host/pci_generic.c,
+# mhi_foxconn_t99w373_info); по USB тот же модуль - 0489:e0f0. Диапазоны, режим
+# сети и привязка к соте - в общем файле семейства, шина на AT-команды не влияет.
+# (ревью 13.09.2026)
+. "$RES/_foxconn_mv32_common"

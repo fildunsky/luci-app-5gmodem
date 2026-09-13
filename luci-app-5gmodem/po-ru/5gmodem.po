@@ -5395,3 +5395,105 @@ msgstr "Максимум модема"
 
 msgid "Open the %s admin panel in a new tab"
 msgstr "Открыть панель %s в новой вкладке"
+
+msgid "AT polling under ModemManager"
+msgstr "AT-опрос под ModemManager"
+
+msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open."
+msgstr "Читать температуру, агрегацию несущих и другие вендорные метрики по AT-порту, пока модемом управляет ModemManager. По умолчанию выключено для прошивок, у которых параллельный AT-обмен роняет сессию данных (Dell DW5821e / Foxconn T77W968); остальные модемы опрашиваются только при поднятой сессии. Включайте, только если связь остаётся стабильной при открытой странице."
+
+msgid "Failed to read modem data"
+msgstr "Не удалось прочитать данные модема"
+
+msgid "The modem port is busy, try again in a few seconds"
+msgstr "Порт модема занят, повторите через несколько секунд"
+
+msgid "The modem AT port is busy, try again"
+msgstr "AT-порт модема занят, попробуйте ещё раз"
+
+msgid "AT polling under ModemManager is off for this firmware (it drops the data session), so the current band selection is not read. Applying bands and mode still works; to see the current selection, enable \"AT polling under ModemManager\" in the modem settings."
+msgstr "AT-опрос под ModemManager для этой прошивки выключен (он роняет сессию данных), поэтому текущий выбор диапазонов не читается. Применение диапазонов и режима работает; чтобы видеть текущий выбор, включите «AT-опрос под ModemManager» в настройках модема."
+
+msgid "Could not delete messages"
+msgstr "Не удалось удалить сообщения"
+
+msgid "Press [Enter] to send the code, press [Ctrl+Delete] to clear the field"
+msgstr "[Enter] - отправить код, [Ctrl+Delete] - очистить поле"
+
+msgid "Press [Enter] to send the command, press [Ctrl+Delete] to clear the field"
+msgstr "[Enter] - отправить команду, [Ctrl+Delete] - очистить поле"
+
+msgid "The request was rejected: %s"
+msgstr "Запрос отклонён: %s"
+
+msgid "Dangerous AT command"
+msgstr "Опасная AT-команда"
+
+msgid ""
+"This command can change the modem composition or disable its ports for good. "
+"On some modules it removes all USB ports, and only reflashing over EDL brings "
+"them back."
+msgstr ""
+"Команда способна сменить композицию модема или навсегда отключить его порты. "
+"На части модулей после неё пропадают все порты USB, и вернуть их можно только "
+"перепрошивкой через EDL."
+
+msgid "Send anyway"
+msgstr "Всё равно отправить"
+
+msgid "Could not switch the modem"
+msgstr "Не удалось переключить модем"
+
+msgid "The selected device is not a modem"
+msgstr "Выбранное устройство не является модемом"
+
+msgid "No modem selected"
+msgstr "Модем не выбран"
+
+msgid "256QAM (download)"
+msgstr "256QAM (приём)"
+
+msgid "5G cell lock"
+msgstr "Привязка к соте 5G"
+
+msgid "Enabling uplink aggregation — the modem is restarting its radio…"
+msgstr "Включаем агрегацию отдачи — модем перезапускает радио…"
+
+msgid "Helps only with a strong signal and a base station that supports it"
+msgstr "Помогает только при сильном сигнале и поддержке на базовой станции"
+
+msgid "Lock to current 5G cell"
+msgstr "Привязать к текущей соте 5G"
+
+msgid "Locked to cell: ARFCN %s, PCI %s"
+msgstr "Привязан к соте: ARFCN %s, PCI %s"
+
+msgid "Locking to cell ARFCN %s, PCI %s - the modem re-registers..."
+msgstr "Привязываем к соте ARFCN %s, PCI %s — модем перерегистрируется…"
+
+msgid "No 5G carrier right now - the lock needs its ARFCN and PCI"
+msgstr "Сейчас нет несущей 5G — для привязки нужны её ARFCN и PCI"
+
+msgid "Turn off"
+msgstr "Выключить"
+
+msgid "Turn on"
+msgstr "Включить"
+
+msgid "Turning 256QAM off — the modem is restarting its radio…"
+msgstr "Выключаем 256QAM — модем перезапускает радио…"
+
+msgid "Turning 256QAM on — the modem is restarting its radio…"
+msgstr "Включаем 256QAM — модем перезапускает радио…"
+
+msgid "Uplink aggregation"
+msgstr "Агрегация отдачи"
+
+msgid "Upload often sits at 1-2 Mbit/s until this is on"
+msgstr "Без неё отдача часто держится на 1–2 Мбит/с"
+
+msgid "(transmission rank)"
+msgstr "(ранг передачи)"
+
+msgid "Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2."
+msgstr "Ранг передачи: сколько параллельных потоков данных сеть ведёт на самом деле. 1 — SISO, 2 — MIMO 2x2."

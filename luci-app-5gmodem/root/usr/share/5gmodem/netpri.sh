@@ -879,10 +879,18 @@ _route_tables() {   # $1 - семейство (-4/-6), $2 - имя сети
 
 # Метрики default-маршрутов устройства в одной семье, по строке (0 - маршрут без
 # поля metric).
+#
+# `default from <префикс>` ИСКЛЮЧЕНЫ ВЕЗДЕ В ЭТОМ ФАЙЛЕ. Это source-specific
+# default IPv6 от netifd (по одному на делегированный префикс). Мы умеем
+# двигать только ПОЛНУЮ личность маршрута, а `from` через add/del не проносили -
+# такие строки попадали в перебор метрик и пересобирались в обычный default
+# (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026). Сознательное ограничение:
+# приоритет IPv6 у source-specific маршрутов не переранжируется.
 _default_metrics() {   # $1 - семейство, $2 - l3_device, $3 - список таблиц
 	for _dm_t in $3; do
 		_dm_a=""; [ "$_dm_t" = "main" ] || _dm_a="table $_dm_t"
 		ip "$1" route show default $_dm_a 2>/dev/null | grep -E "^default" \
+			| grep -v '^default from ' \
 			| grep -E " dev $2( |$)" \
 			| sed -e 's/.* metric \([0-9][0-9]*\).*/\1/' -e t -e 's/.*/0/'
 	done
@@ -896,7 +904,10 @@ _default_metrics() {   # $1 - семейство, $2 - l3_device, $3 - спис�
 _del_default_family() {   # $1 - семейство, $2 - l3_device, $3 - таблицы, $4 - метрика, которую оставить
 	for _dd_t in $3; do
 		_dd_a=""; [ "$_dd_t" = "main" ] || _dd_a="table $_dd_t"
+		# см. _default_metrics: удалять `default from ...` по паре dev+metric
+		# нельзя - это не обратная операция, селектор from потеряется.
 		ip "$1" route show default $_dd_a 2>/dev/null | grep -E "^default" \
+			| grep -v '^default from ' \
 			| grep -E " dev $2( |$)" | while read -r _dd_ln; do
 			_dd_m=0
 			case "$_dd_ln" in *" metric "*) _dd_m=${_dd_ln##* metric }; _dd_m=${_dd_m%% *} ;; esac
@@ -926,7 +937,12 @@ _free_metric() {   # $1 - семейство, $2 - метрика, $3 - своё
 	_fm_r=1   # 0 - освободили, 2 - нельзя (последний default), 1 - нечего
 	for _fm_t in $4; do
 		_fm_a=""; [ "$_fm_t" = "main" ] || _fm_a="table $_fm_t"
-		_fm_all=$(ip "$1" route show default $_fm_a 2>/dev/null | grep -E "^default")
+		# см. _default_metrics: source-specific defaults не наши - ни освобождать
+		# метрику у них, ни засчитывать их в «последний default в таблице»
+		# (иначе гвард считал бы, что путь наружу остаётся, и снял бы последний
+		# ОБЫЧНЫЙ default).
+		_fm_all=$(ip "$1" route show default $_fm_a 2>/dev/null | grep -E "^default" \
+			| grep -v '^default from ')
 		_fm_ln=$(printf '%s\n' "$_fm_all" | grep -E " metric $2( |$)" | head -1)
 		[ -n "$_fm_ln" ] || continue
 		_fm_d=${_fm_ln##* dev }; _fm_d=${_fm_d%% *}
@@ -1371,7 +1387,12 @@ list)
 		_oip=$(iface_ip "$_oi")
 		[ -n "$_oip" ] || continue
 		_ossid=$(uci -q get "wireless.$_osec.ssid")
-		printf ',{"iface":"%s","type":"wifi","sub":"%s","label":"%s","ip":"%s","metric":9999,"nozone":1}' \
+		# Запятая только после предыдущего элемента: при пустом основном списке
+		# сирота печаталась как «[,{...}]», JSON.parse падал, и панель приоритетов
+		# застывала на прогретом кэше (аудит 12.09.2026, группа 7, №6).
+		[ "$first" = 1 ] || printf ','
+		first=0
+		printf '{"iface":"%s","type":"wifi","sub":"%s","label":"%s","ip":"%s","metric":9999,"nozone":1}' \
 			"$(json_esc "$_oi")" "$(json_esc "$_oi")" "$(json_esc "${_ossid:-Wi-Fi}")" "$(json_esc "$_oip")"
 	done
 	printf ']\n'

@@ -419,7 +419,7 @@ mm_recover_missing() {
 			# и как раз он спасал молчащие AT-порты.
 			if [ "$_sw_pro" = "mbim" ]; then
 				case "$_sw_vp" in
-					413c:81d7|413c:81e0|0489:e0b5|05c6:90d5)
+					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4|05c6:90d5)
 						if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
 							: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 							logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to mbim, waiting for MM"

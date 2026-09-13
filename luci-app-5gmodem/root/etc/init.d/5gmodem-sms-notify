@@ -21,16 +21,16 @@ service_triggers()
 }
 
 
+# СЛУЖБУ ГАСИТ PROCD, РУЧНОГО УБИЙЦЫ ЗДЕСЬ БЫТЬ НЕ ДОЛЖНО. Прежний цикл искал
+# в `ps` строку «5gmodem-sms-notify», а сама служба запущена как
+# «/bin/sh /usr/share/5gmodem/sms_led.sh» - этой строки в её командной строке
+# нет. Первым и единственным совпадением оказывался СОБСТВЕННЫЙ init-скрипт
+# (/bin/sh /etc/init.d/5gmodem-sms-notify stop), и kill -9 убивал оболочку
+# rc.common посреди stop_service: до procd_kill дело не доходило, экземпляр
+# оставался в procd, а sms_led.sh продолжал работать. По той же причине не
+# доживал до start_service и restart. rc.common сам зовёт procd_kill после
+# stop_service, а restart - это stop+start (restart_service он не вызывает
+# вовсе, это была мёртвая ветка) (аудит 12.09.2026).
 stop_service() {
-	for KILLPID in `ps | grep '5gmodem-sms-notify' | awk ' { print $1;}'`; do 
-  	kill -9 $KILLPID >/dev/null 2>&1 &
-	done
-	sleep 1
 	return 0
-}
-
-
-restart_service() {
-    stop_service
-    start_service
 }

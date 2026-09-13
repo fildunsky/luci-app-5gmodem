@@ -137,7 +137,10 @@ _fm350_reapply_bands() {
     LINE=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
         | sed -n 's/^+GTACT: *//p' | head -1)
     [ -n "$LINE" ] || return
-    MODE=$(echo "$LINE" | cut -d, -f1-3)
+    # Пробелы вычищаем: часть прошивок отвечает «+GTACT: 20, 6, 3, ...», и
+    # «AT+GTACT=20, 6, 3,...» уходил в ERROR - «Применить» молча не работало
+    # (ревью 12.09.2026 по форуму: формат менялся между прошивками).
+    MODE=$(echo "$LINE" | cut -d, -f1-3 | tr -d ' \r')
     CUR=$(echo "$LINE" | cut -d, -f4- | tr ',' '\n' | grep -E '^[0-9]+$' | sort -n | xargs)
     [ -n "$CUR" ] || return
 
@@ -173,7 +176,7 @@ setbands() {
 
     if [ -n "$T" ]; then
         O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}'| xargs)
+        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
         sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
     fi
 }
@@ -240,7 +243,7 @@ setbands3g() {
     fi
     case "$T" in ''|*[!0-9,]*) return ;; esac
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | xargs)
+    MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
     sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
 }
 
@@ -299,7 +302,7 @@ setbands5gsa() {
 
     if [ -n "$T" ]; then
         O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}'| xargs)
+        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
         sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
     fi
 }
@@ -322,7 +325,7 @@ setbands5gnsa() {
 
     if [ -n "$T" ]; then
         O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}'| xargs)
+        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
         sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
     fi
 }

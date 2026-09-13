@@ -112,15 +112,18 @@ var _st = { phase: 'idle', service: '', down: null, up: null, ip: '', cc: '', li
    Тикаем чаще поллинга (200 мс) - CSS transition на ::before доводит плавно. */
 var _stProgTimer = null;
 function setStProgress() {
-	var card = document.querySelector('.netpri-st');
-	if (!card) { return; }
+	/* КАРТОЧЕК В ДОКУМЕНТЕ МОЖЕТ БЫТЬ НЕСКОЛЬКО (mount() плюс renderBar() на
+	   той же странице): querySelector находил только первую, и вторая не
+	   анимировалась и не показывала результат (аудит 12.09.2026). */
+	var cards = document.querySelectorAll('.netpri-st');
+	if (!cards.length) { return; }
 	if (_st.phase !== 'running' || !_st.secs || !_st.hasData || _st.elapsed == null) {
-		card.style.removeProperty('--st-p'); return;
+		cards.forEach(function(c) { c.style.removeProperty('--st-p'); }); return;
 	}
 	var ms = _st.elapsed * 1000 + (Date.now() - _st.elapsedAt);
 	var pct = ms / (_st.secs * 1000) * 100;
 	if (pct < 0) { pct = 0; } if (pct > 100) { pct = 100; }
-	card.style.setProperty('--st-p', pct.toFixed(1) + '%');
+	cards.forEach(function(c) { c.style.setProperty('--st-p', pct.toFixed(1) + '%'); });
 }
 function stProgStart() { if (!_stProgTimer) { _stProgTimer = window.setInterval(setStProgress, 200); } }
 function stProgStop() { if (_stProgTimer) { window.clearInterval(_stProgTimer); _stProgTimer = null; } setStProgress(); }
@@ -204,17 +207,17 @@ function stCard() {
 		'class': 'btn cbi-button netpri-btn netpri-st',
 		'data-wkey': 'speed',
 		'data-tooltip': _('Measure the real download/upload speed over the modem - a quick way to see whether carrier aggregation is actually working'),
-		'click': function() { runSpeedtest(); }
+		'click': function() { if (_npSwallowClick()) { return; } runSpeedtest(); }
 	}, stCardInner());
 }
 
 /* перерисовать ТОЛЬКО внутренности карточки (её саму мог пересоздать поллинг
    бара - поэтому ищем актуальную в DOM каждый раз). */
 function patchStCard() {
-	var card = document.querySelector('.netpri-st');
-	if (!card) { return; }
-	while (card.firstChild) { card.removeChild(card.firstChild); }
-	stCardInner().forEach(function(n) { card.appendChild(n); });
+	document.querySelectorAll('.netpri-st').forEach(function(card) {
+		while (card.firstChild) { card.removeChild(card.firstChild); }
+		stCardInner().forEach(function(n) { card.appendChild(n); });
+	});
 }
 
 /* Плавно «докручиваем» показанное число до target (за ~0.9 c, к следующему тику
@@ -222,15 +225,15 @@ function patchStCard() {
 var _liveDisplay = 0;
 var _liveRaf = null;
 function animateLive(target) {
-	var el = document.querySelector('.netpri-st .netpri-st-live');
-	if (!el) { _liveDisplay = target; return; }
+	var els = document.querySelectorAll('.netpri-st .netpri-st-live');
+	if (!els.length) { _liveDisplay = target; return; }
 	var from = _liveDisplay, to = (target != null ? target : 0), t0 = null, dur = 900;
 	if (_liveRaf) { window.cancelAnimationFrame(_liveRaf); }
 	var step = function(ts) {
 		if (t0 === null) { t0 = ts; }
 		var p = Math.min((ts - t0) / dur, 1);
 		var v = from + (to - from) * p;
-		el.textContent = v.toFixed(1);
+		els.forEach(function(el) { el.textContent = v.toFixed(1); });
 		_liveDisplay = v;
 		if (p < 1) { _liveRaf = window.requestAnimationFrame(step); }
 		else { _liveDisplay = to; _liveRaf = null; }
@@ -258,14 +261,13 @@ function refreshStCard() {
 			_renderedPhase = key;
 		}
 	}
-	var card = document.querySelector('.netpri-st');
-	if (card) {
+	document.querySelectorAll('.netpri-st').forEach(function(card) {
 		card.classList.toggle('st-dl', _st.phase === 'running' && !_st.upPhase);
 		card.classList.toggle('st-ul', _st.phase === 'running' && !!_st.upPhase);
 		/* Фаза идёт, но реальных цифр ещё нет (DNS/коннект/разгон TCP) - кнопка
 		   пульсирует рамкой цвета фазы; полосы в этот момент нет вовсе. */
 		card.classList.toggle('st-wait', _st.phase === 'running' && !_st.hasData);
-	}
+	});
 	// анимируем текущее живое число: при отдаче - upload, иначе - download
 	if (_st.phase === 'running') { animateLive(_st.upPhase ? (_st.liveUp || 0) : (_st.live || 0)); }
 	setStProgress();
@@ -278,7 +280,9 @@ function runSpeedtest() {
 		   финальный JSON ни пришёл (cancelled, ok с частичным результатом,
 		   ошибка от убитого curl) - показываем ДЕФОЛТ, а не «Ошибка теста». */
 		_st.stopping = true;
-		fs.exec(SPEEDBIN, [ 'stop' ]);
+		/* Отказ глушим: у соседнего 'start' это уже сделано, а необработанный
+		   reject показывает ошибку поверх страницы (аудит 12.09.2026). */
+		fs.exec(SPEEDBIN, [ 'stop' ]).catch(function() {});
 		return;
 	}
 	_st.phase = 'running'; _st.live = 0; _st.liveUp = 0; _st.upPhase = false;
@@ -532,7 +536,7 @@ function ssClashBtn(kind) {
 		'data-ssckind': kind,
 		'data-wkey': 's:' + br.wkey,
 		'data-tooltip': _('Open the %s admin panel in a new tab').format(br.name),
-		'click': function() { window.open(url, '_blank', 'noopener'); }
+		'click': function() { if (_npSwallowClick()) { return; } window.open(url, '_blank', 'noopener'); }
 	}, [
 		svcRankEl(ic),
 		E('span', { 'class': 'netpri-sub' }, st.version || br.name),
@@ -594,7 +598,7 @@ function pingCard(w) {
 		/* Ключ для перетаскивания правых карточек - см. _npWidgetCards. */
 		'data-wkey': 'p:' + host,
 		'data-tooltip': _('Click to measure ping to %s over the active uplink').format(info.name),
-		'click': function(ev) { ev.preventDefault(); pingOnce(host); }
+		'click': function(ev) { ev.preventDefault(); if (_npSwallowClick()) { return; } pingOnce(host); }
 	}, [
 		/* фон карточки - её же значок (см. svcRankEl), как у карточек сервисов */
 		svcRankEl(pic),
@@ -605,7 +609,7 @@ function pingCard(w) {
 }
 function updatePingCard(host) {
 	var st = _pingState[host], info = pingInfo(host);
-	var sel = '.netpri-status[data-host="' + host + '"]';
+	var sel = '.netpri-status[data-host="' + _npCssEsc(host) + '"]';
 	document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
 		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_pDot(st)); d.title = _pTip(st, info);
 	});
@@ -617,7 +621,7 @@ function updatePingCard(host) {
    Один rAF на хост; при провале анимировать нечего - прочерк сразу. */
 var _pingAnim = {};
 function animatePingMs(host, from, to) {
-	var sel = '.netpri-status[data-host="' + host + '"] .netpri-ip';
+	var sel = '.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-ip';
 	if (!document.querySelector(sel)) { return; }
 	if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
 	if (_pingAnim[host]) { window.cancelAnimationFrame(_pingAnim[host]); _pingAnim[host] = null; }
@@ -633,6 +637,15 @@ function animatePingMs(host, from, to) {
 	};
 	_pingAnim[host] = window.requestAnimationFrame(step);
 }
+/* ХОСТ В CSS-СЕЛЕКТОРЕ ЭКРАНИРУЕМ. Значение приходит из настроек, а кавычка
+   или пробел в нём делали querySelectorAll синтаксически неверным: исключение
+   летело СИНХРОННО, уже после взвода _pingBusy - карточка навсегда оставалась
+   «в замере», а первое такое исключение обрывало инициализацию остальных
+   виджетов (аудит 12.09.2026). */
+function _npCssEsc(v) {
+	v = String(v == null ? '' : v);
+	return (window.CSS && CSS.escape) ? CSS.escape(v) : v.replace(/["\\]/g, '\\$&');
+}
 var _pingBusy = {};
 function pingOnce(host) {
 	host = String(host).trim();
@@ -643,9 +656,9 @@ function pingOnce(host) {
 	   показывать нечего (первый замер или прошлый провалился). Что замер идёт,
 	   видно по синему сиянию карточки (класс ping-busy, CSS). */
 	var _hadPrev = (_pingState[host] && _pingState[host].ok && _pingState[host].ms != null);
-	document.querySelectorAll('.netpri-status[data-host="' + host + '"]').forEach(function(c) { c.classList.add('ping-busy'); });
+	document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"]').forEach(function(c) { c.classList.add('ping-busy'); });
 	if (!_hadPrev) {
-		document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
+		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-ip').forEach(function(el) { el.textContent = '…'; });
 	}
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'ping', host ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
@@ -658,13 +671,13 @@ function pingOnce(host) {
 		try { window.localStorage.setItem('netpri-pingstate', JSON.stringify(_pingState)); } catch (e) {}
 		mutil.lsTouch('netpri-pingstate');
 		_pingBusy[host] = false;
-		document.querySelectorAll('.netpri-status[data-host="' + host + '"]').forEach(function(c) { c.classList.remove('ping-busy'); });
+		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"]').forEach(function(c) { c.classList.remove('ping-busy'); });
 		updatePingCard(host);
 		/* Вспышка лампочки цветом ИТОГА: updatePingCard уже перекрасил её в
 		   зелёный/красный (смена цвета перетекает transition'ом), вспышка
 		   поверх - масштаб+яркость. Снятие/чтение offsetWidth перезапускает
 		   анимацию, если класс ещё висит с прошлого замера. */
-		document.querySelectorAll('.netpri-status[data-host="' + host + '"] .netpri-svcdot').forEach(function(d) {
+		document.querySelectorAll('.netpri-status[data-host="' + _npCssEsc(host) + '"] .netpri-svcdot').forEach(function(d) {
 			d.classList.remove('ping-flash');
 			void d.offsetWidth;
 			d.classList.add('ping-flash');
@@ -674,6 +687,22 @@ function pingOnce(host) {
 	});
 }
 /* Автопинг только у карточек с интервальным режимом; «по клику» ждут клика. */
+/* ПОЛЛЕРЫ БЛОКА СНИМАЮТСЯ ВМЕСТЕ С НИМ.
+   Блок «Приоритет интернета» живёт ВНУТРИ другой страницы: он исчезает из DOM,
+   когда страницу перерисовывают, - и снимал себя только опрос списка. Агрегат
+   сервисов (раз в 5 c форкает статусы всех веток) и автопинги (ping/curl раз в
+   N секунд) продолжали работать до перезагрузки документа - ровно та цена, ради
+   которой каденцию списка поднимали с 5 c до 15 c (аудит 12.09.2026).
+   Держим их в реестре и снимаем тем же условием, что и опрос списка. */
+var _npExtipSub = null;
+var _npPolls = [];
+function _npPollAdd(fn, n) { _npPolls.push(fn); poll.add(fn, n); }
+function _npPollsStop() {
+	_npPolls.forEach(function(fn) { poll.remove(fn); });
+	_npPolls = [];
+	_svcAgg.started = false;
+	_pingPolls = {};
+}
 var _pingPolls = {};
 function pingInit() {
 	_pingWidgets.forEach(function(w) {
@@ -681,7 +710,7 @@ function pingInit() {
 		if (isNaN(n) || n <= 0 || _pingPolls[w.host]) { return; }
 		_pingPolls[w.host] = true;
 		pingOnce(w.host);
-		(function(h) { poll.add(function() { return pingOnce(h); }, n); })(w.host);
+		(function(h) { _npPollAdd(function() { return pingOnce(h); }, n); })(w.host);
 	});
 }
 
@@ -834,7 +863,7 @@ function _svcAggTick() {
 function _svcAggStart() {
 	if (_svcAgg.started) { return; }
 	_svcAgg.started = true;
-	poll.add(_svcAggTick, 5);
+	_npPollAdd(_svcAggTick, 5);
 }
 function svcStatusInit(services) {
 	services = (services || []).filter(function(s) {
@@ -1073,7 +1102,13 @@ function nameEl(o) {
    порядок (netpri.sh order …): метрики = ранг, отвал первого → трафик на второй. */
 var _npDrag = null;          // активное перетаскивание (или null)
 var _npApplying = false;     // идёт применение нового порядка (пауза poll до подтверждения)
-var _npJustDragged = false;  // подавить click, идущий сразу после drop
+var _npJustDragged = false;
+/* Клик, сгенерированный браузером сразу после drop, глотаем ОДИН раз -
+   и у карточек аплинков, и у правых виджетов (аудит 12.09.2026). */
+function _npSwallowClick() {
+	if (_npJustDragged) { _npJustDragged = false; return true; }
+	return false;
+}  // подавить click, идущий сразу после drop
 
 function _npEnsureDragCss() {
 	}
@@ -1248,6 +1283,11 @@ function _npEnd() {
 	var active = d.active, row = d.row, commit = d.commit, attr = d.attr || 'data-iface';
 	_npTeardown();
 	if (!active) { return; }   // не двигали - это клик, обработчик click сам отработает
+	/* Флаг ставится для ОБОИХ семейств, поэтому и проверять его должны оба.
+	   Раньше его снимал только обработчик карточки аплинка: перетащенный
+	   виджет ловил свой click (тест скорости стартовал сам собой, панель
+	   открывалась в новой вкладке), а флаг оставался взведённым - и
+	   следующий клик по аплинку съедался (аудит 12.09.2026). */
 	_npJustDragged = true;
 	/* Рамку активного переносим на новую первую карточку СРАЗУ (оптимистично), не
 	   дожидаясь ответа бэкенда - после teardown DOM уже в новом порядке, метрика 1
@@ -1390,13 +1430,18 @@ function buildBar(list, redraw) {
 				: (o.iface + (o.metric != null ? (' · metric ' + o.metric) : '')),
 			'click': function(ev) {
 				/* click, сгенерированный сразу после drop, игнорируем. */
-				if (_npJustDragged) { _npJustDragged = false; return; }
+				if (_npSwallowClick()) { return; }
 				var ifc = ev.currentTarget.getAttribute('data-iface');
 				if (isOrphan) {
+					/* Страховка на случай зависшего вызова или исключения в redraw:
+					   без неё _npApplying оставался взведённым до перезагрузки страницы,
+					   и ряд переставал обновляться совсем (аудит 12.09.2026). */
 					_npApplying = true;
+					var _azDone = function() { _npApplying = false; };
+					setTimeout(_azDone, 4000);
 					L.resolveDefault(fs.exec(BIN, [ 'adoptzone', ifc ]), {}).then(function() {
-						loadList().then(function(l2) { redraw(l2); _npApplying = false; });
-					}, function() { _npApplying = false; });
+						loadList().then(function(l2) { redraw(l2); _azDone(); }, _azDone);
+					}, _azDone);
 					return;
 				}
 				if (ifc === active) { return; }
@@ -1693,7 +1738,13 @@ return baseclass.extend({
 		extip.init().then(function(fl) {
 			if (!fl.inNetpri) { return; }
 			extip.watch('');
-			extip.subscribe(function() { redraw(lastList()); });
+			/* ПЕРЕРИСОВКА ВО ВРЕМЯ ПЕРЕТАСКИВАНИЯ ЗАПРЕЩЕНА - тот же гард, что
+			   у apply() и у поллеров. Без него 15-секундный тик внешнего адреса
+			   пересоздавал ряд прямо под поднятой карточкой: она исчезала
+			   из-под пальца, а порядок считался с отсоединённого ряда
+			   (аудит 12.09.2026). */
+			_npExtipSub = function() { if (_npDrag || _npApplying) { return; } redraw(lastList()); };
+			extip.subscribe(_npExtipSub);
 		});
 		loadWidgetFlags().then(function() {
 			/* WARM-RENDER: первый кадр рисуем БЕЗУСЛОВНО (даже пустым списком) -
@@ -1729,7 +1780,10 @@ return baseclass.extend({
 				   блока никогда не зарегистрирует опрос - гард ниже посчитает,
 				   что поллер уже есть, и ряд молча замрёт до перезагрузки. */
 				window._npListPoll = false;
-				poll.remove(pollFn); return Promise.resolve();
+				poll.remove(pollFn);
+				_npPollsStop();
+				if (_npExtipSub) { extip.unsubscribe(_npExtipSub); _npExtipSub = null; }
+				return Promise.resolve();
 			}
 			return loadList().then(apply);
 		};
@@ -1768,7 +1822,12 @@ return baseclass.extend({
 			extip.init().then(function(fl) {
 				if (!fl.inNetpri) { return; }
 				extip.watch('');
-				extip.subscribe(function() { redraw(lastList()); });
+				/* ПЕРЕРИСОВКА ВО ВРЕМЯ ПЕРЕТАСКИВАНИЯ ЗАПРЕЩЕНА - тот же гард, что
+				   у apply() и у поллеров. Без него 15-секундный тик внешнего адреса
+				   пересоздавал ряд прямо под поднятой карточкой: она исчезала
+				   из-под пальца, а порядок считался с отсоединённого ряда
+				   (аудит 12.09.2026). */
+				extip.subscribe(function() { if (_npDrag || _npApplying) { return; } redraw(lastList()); });
 			});
 			if (_widgets.speedtest) { stInit(); }
 			if (_widgets.status) { pingInit(); }
