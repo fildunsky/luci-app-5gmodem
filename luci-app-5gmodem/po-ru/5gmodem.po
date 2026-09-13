@@ -5497,3 +5497,42 @@ msgstr "(ранг передачи)"
 
 msgid "Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2."
 msgstr "Ранг передачи: сколько параллельных потоков данных сеть ведёт на самом деле. 1 — SISO, 2 — MIMO 2x2."
+
+msgid "Antennas"
+msgstr "Антенны"
+
+msgid "Antenna mode"
+msgstr "Режим антенн"
+
+msgid "Antenna %d"
+msgstr "Антенна %d"
+
+msgid "Internal antennas"
+msgstr "Внутренние антенны"
+
+msgid "External antennas"
+msgstr "Внешние антенны"
+
+msgid "Automatic: external where an antenna is detected"
+msgstr "Автоматически: внешняя там, где антенна обнаружена"
+
+msgid "Mixed: antenna 1 automatic, antenna 2 internal"
+msgstr "Смешанный: антенна 1 автоматически, антенна 2 внутренняя"
+
+msgid "external"
+msgstr "внешняя"
+
+msgid "internal"
+msgstr "внутренняя"
+
+msgid "antenna detected"
+msgstr "антенна обнаружена"
+
+msgid "no antenna detected"
+msgstr "антенна не обнаружена"
+
+msgid "detector unavailable"
+msgstr "датчик недоступен"
+
+msgid "Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in."
+msgstr "Применяется сразу, без кнопки «Сохранить». Автоматические режимы проверяют разъёмы каждые 3 секунды. Датчик видит только антенны, замыкающие разъём на землю: пассивная антенна может оставаться необнаруженной даже подключённой."

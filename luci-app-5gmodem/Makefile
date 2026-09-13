@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.5.1
+PKG_VERSION:=2.5.2
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -51,6 +51,7 @@ chmod +x "$${IPKG_INSTROOT}"/etc/hotplug.d/tty/05-5gmodem-noat 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/uci-defaults/*.sh 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-mm-inhibit 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-leds 2>/dev/null
+chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-antenna 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
@@ -125,6 +126,10 @@ fi
 	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" != "0" ]; then
 		/etc/init.d/5gmodem-leds enable 2>/dev/null
 		/etc/init.d/5gmodem-leds restart 2>/dev/null
+	fi
+	if /usr/share/5gmodem/antenna.sh detect 2>/dev/null | grep -q '"available":1'; then
+		/etc/init.d/5gmodem-antenna enable 2>/dev/null
+		/etc/init.d/5gmodem-antenna restart 2>/dev/null
 	fi
 	# ЛИШНЯЯ '}' СТОЯЛА ЗДЕСЬ и закрывала группу раньше времени: shell падал с
 	# "syntax error: unexpected }", и ВСЁ, что ниже, не выполнялось - в том

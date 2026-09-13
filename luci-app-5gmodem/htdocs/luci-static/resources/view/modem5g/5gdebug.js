@@ -156,7 +156,11 @@ return view.extend({
 			/* Светодиоды уровня сигнала: есть ли они на этом устройстве.
 			   Читаем каталог, а не запускаем скрипт - путь /sys/class/leds
 			   разрешён в ACL, и лишнего процесса на открытие страницы нет. */
-			L.resolveDefault(fs.list('/sys/class/leds'), [])
+			L.resolveDefault(fs.list('/sys/class/leds'), []),
+			/* Переключатель антенн корпуса (Notion R281 / Yota C300-1). Скрипт сам
+			   сверяет плату и контроллер GPIO и на чужом железе отвечает
+			   available:0 - тогда блока нет. */
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/antenna.sh', [ 'status' ]), '')
 		]);
 	},
 
@@ -609,6 +613,60 @@ return view.extend({
 					sel,
 					E('div', { 'class': 'cbi-value-description' },
 						_('Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing'))
+				])
+			])
+		]);
+	},
+
+	renderAntenna: function(raw) {
+		var st = {};
+		try { st = JSON.parse(raw || '{}') || {}; } catch (e) { st = {}; }
+		if (st.available != 1) { return ''; }
+
+		var modes = [
+			[ 'internal', _('Internal antennas') ],
+			[ 'external', _('External antennas') ],
+			[ 'auto',     _('Automatic: external where an antenna is detected') ],
+			[ 'mix',      _('Mixed: antenna 1 automatic, antenna 2 internal') ]
+		];
+		var ch = {}; var order = [];
+		modes.forEach(function(m) { ch[m[0]] = m[1]; order.push(m[0]); });
+
+		var chainText = function(v) {
+			return v === 'external' ? _('external') : (v === 'internal' ? _('internal') : '-');
+		};
+		var detText = function(v) {
+			return v === 'connected' ? _('antenna detected') : (v === 'absent' ? _('no antenna detected') : _('detector unavailable'));
+		};
+		var statusNode = E('div', { 'class': 'cbi-value-description' }, []);
+		var paint = function(s) {
+			statusNode.textContent = [
+				_('Antenna %d').format(1) + ': ' + chainText(s.chain1) + ', ' + detText(s.detect1),
+				_('Antenna %d').format(2) + ': ' + chainText(s.chain2) + ', ' + detText(s.detect2)
+			].join(' · ');
+		};
+		paint(st);
+
+		var selW = new ui.Dropdown(st.mode || 'internal', ch, { id: 'antenna-mode', sort: order });
+		var sel = selW.render();
+		sel.addEventListener('cbi-dropdown-change', function() {
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/antenna.sh', [ 'set', selW.getValue() ]), {})
+				.then(function(r) {
+					var ns = {};
+					try { ns = JSON.parse((r && r.stdout) || '{}') || {}; } catch (e) { return; }
+					if (ns.available == 1) { paint(ns); }
+				});
+		});
+
+		return E('div', { 'class': 'cbi-section tg5g' }, [
+			E('h3', {}, _('Antennas')),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, _('Antenna mode')),
+				E('div', { 'class': 'cbi-value-field' }, [
+					sel,
+					statusNode,
+					E('div', { 'class': 'cbi-value-description' },
+						_('Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in.'))
 				])
 			])
 		]);
@@ -1727,6 +1785,7 @@ return view.extend({
 		});
 
 		var ledsBlock = this.renderLeds(ledsAvail);
+		var antennaBlock = this.renderAntenna(res[8]);
 		var self = this;
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
@@ -1738,6 +1797,7 @@ return view.extend({
 				/* Блок светодиодов ПОСЛЕ формы, но вне её: он применяется сразу
 				   и не должен подписываться под Save/Apply формы. */
 				ledsBlock,
+				antennaBlock,
 				diag
 			]);
 		}).then(function(node) {
