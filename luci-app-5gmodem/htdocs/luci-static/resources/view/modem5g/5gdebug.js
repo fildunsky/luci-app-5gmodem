@@ -1342,6 +1342,13 @@ return view.extend({
 			else if (proto === 'modemmanager') { opt = 'iptype'; val = v6 ? 'ipv4v6' : 'ipv4'; }
 			else if (proto === 'fibocom') { opt = 'pdptype'; val = v6 ? 'IPV4V6' : 'IPV4'; }
 			else { opt = 'pdptype'; val = v6 ? 'ipv4v6' : 'ipv4'; }
+			/* Двухстековый PDP под ModemManager - вместе с начальным EPS-носителем
+			   (см. mkiface.sh): без init_epsbearer обработчик сбрасывает его, модем
+			   прикрепляется только с IPv4, и IPv6 не поднимается. Явный выбор
+			   (custom) не трогаем. */
+			if (proto === 'modemmanager' && v6 && !uci.get('network', mIfName, 'init_epsbearer')) {
+				uci.set('network', mIfName, 'init_epsbearer', 'default');
+			}
 			if ((uci.get('network', mIfName, opt) || '') === val) { return; }
 			uci.set('network', mIfName, opt, val);
 		};

@@ -132,11 +132,13 @@ setup_one_modem() {
 		[ "$(active_path)" = "$P" ] && uci -q set "$CFG.@5gmodem[0].network=$_ex"
 		# Модем вернулся: снимаем «спящее» auto=0, выставленное при вытеснении, и
 		# переставляем штамп пути на ТЕКУЩИЙ разъём (IMEI остаётся прежним).
+		# reload нужен, только если у интерфейса меняется существенное для netifd
+		# (proto/device/devpath) или netifd секцию вовсе не знает - сравниваем
+		# до/после. Снимок ДО любых правок: ниже адрес устройства переписывается.
+		_fp_was="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")|$(uci -q get "network.$_ex.devpath")"
 		uci -q delete "network.$_ex.auto" 2>/dev/null
 		stamp_iface_owner "$_ex" "$P"
-		# reload нужен, только если у интерфейса меняется существенное для netifd
-		# (proto/device) или netifd секцию вовсе не знает - сравниваем до/после.
-		_fp_was="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")"
+		follow_iface_device "$_ex" "$P"
 		fix_iface_proto "$_ex"
 		# ПОДТЯГИВАЕМ ТОЛЬКО УЖЕ СДЕЛАННЫЙ ВЫБОР, А НЕ СОЗДАЁМ ЕГО.
 		# Здесь стояло безусловное `iface_proto=<текущий proto интерфейса>` - и
@@ -170,7 +172,7 @@ setup_one_modem() {
 		# reload намеренно), и вставка нового модема роняла работающий соседний
 		# (живой случай 31.07.2026: Telit воткнули - FM350 передёрнулся на 6 с).
 		# Подхваченную секцию netifd уже знает: обычно хватает чистого ifup.
-		_fp_now="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")"
+		_fp_now="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")|$(uci -q get "network.$_ex.devpath")"
 		if [ "$_fp_was" != "$_fp_now" ] \
 		   || ! ubus -S call "network.interface.$_ex" status >/dev/null 2>&1; then
 			ubus call network reload >/dev/null 2>&1

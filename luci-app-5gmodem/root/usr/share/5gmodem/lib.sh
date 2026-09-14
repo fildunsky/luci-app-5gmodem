@@ -1102,6 +1102,11 @@ model_alias() {   # $1 - сырое имя; печатает нормализо�
 		# (официальное написание бренда - SIMCom, не SimCom и не SIMCOM).
 		SIMCOM_*) echo "SIMCom ${1#SIMCOM_}" ;;
 		SIMCOM\ *) echo "SIMCom ${1#SIMCOM }" ;;
+		# Dell отдаёт в дескрипторе и в MM название вместе с чипсетом:
+		# «Dell DW5821e-eSIM Snapdragon X20 LTE» не помещается ни во вкладку, ни в
+		# заголовок карточки. Оставляем модель и признак eSIM (решение владельца).
+		*DW5821e*[Ee][Ss][Ii][Mm]*) echo "Dell DW5821e eSIM" ;;
+		*DW5821e*) echo "Dell DW5821e" ;;
 		*) echo "$1" ;;
 	esac
 }

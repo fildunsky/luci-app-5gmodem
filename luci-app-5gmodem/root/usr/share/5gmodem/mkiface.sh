@@ -959,6 +959,14 @@ OLDDNS=$(uci -q get "network.$IF.dns")
 # force_connection (прото modemmanager) - тоже осознанная настройка: пересоздание
 # интерфейса не должно её терять.
 OLDFORCE=$(uci -q get "network.$IF.force_connection")
+# Начальный EPS-носитель (прото modemmanager) - политика регистрации в сети,
+# выбранная человеком или нами; пересоздание не должно её терять.
+OLDEPS=$(uci -q get "network.$IF.init_epsbearer")
+OLDEPS_APN=$(uci -q get "network.$IF.init_apn")
+OLDEPS_IPT=$(uci -q get "network.$IF.init_iptype")
+OLDEPS_AUTH=$(uci -q get "network.$IF.init_allowedauth")
+OLDEPS_USER=$(uci -q get "network.$IF.init_username")
+OLDEPS_PASS=$(uci -q get "network.$IF.init_password")
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -976,6 +984,23 @@ case "$PROTO" in
 		# ставим: у здоровых это лишние попытки подключения.
 		[ "$MKI_COMPAL_MM" = "1" ] && uci set "network.$IF.force_connection=1"
 		[ -n "$OLDFORCE" ] && uci set "network.$IF.force_connection=$OLDFORCE"
+		[ -n "$OLDEPS" ] && uci set "network.$IF.init_epsbearer=$OLDEPS"
+		[ -n "$OLDEPS_APN" ] && uci set "network.$IF.init_apn=$OLDEPS_APN"
+		[ -n "$OLDEPS_IPT" ] && uci set "network.$IF.init_iptype=$OLDEPS_IPT"
+		[ -n "$OLDEPS_AUTH" ] && uci set "network.$IF.init_allowedauth=$OLDEPS_AUTH"
+		[ -n "$OLDEPS_USER" ] && uci set "network.$IF.init_username=$OLDEPS_USER"
+		[ -n "$OLDEPS_PASS" ] && uci set "network.$IF.init_password=$OLDEPS_PASS"
+		# ДВУХСТЕКОВЫЙ PDP ТРЕБУЕТ ТАКОГО ЖЕ НАЧАЛЬНОГО НОСИТЕЛЯ. Без
+		# init_epsbearer штатный modemmanager.sh перед регистрацией ОЧИЩАЕТ
+		# настройки начального EPS-носителя, модем прикрепляется по профилю
+		# оператора только с IPv4, и IPv6-половина носителя данных падает:
+		# «CallFailed ... ip-version-mismatch». С default обработчик строит
+		# начальный носитель из APN и iptype интерфейса - прикрепление сразу
+		# ipv4v6, и оба адреса приходят одной сессией (Compal RXM-G1 / SG500M2-X
+		# на МегаФоне, полевой отчёт 14.09.2026). Явный выбор (custom) не трогаем.
+		[ "$(uci -q get "network.$IF.iptype")" = "ipv4v6" ] \
+			&& [ -z "$(uci -q get "network.$IF.init_epsbearer")" ] \
+			&& uci set "network.$IF.init_epsbearer=default"
 		;;
 	qmi|mbim|qmiraw)
 		set_pdp_opt "$IF" pdptype

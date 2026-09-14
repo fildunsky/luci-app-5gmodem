@@ -2043,6 +2043,36 @@ if [ "$_pf_proto" = modemmanager ] && [ -z "$REG" ] && command -v mmcli >/dev/nu
 				COPS_MNC=${COPS_NUM:3:3}
 			fi
 		fi
+		# ЦИФРЫ ВМЕСТО ИМЕНИ. Разбор, превращающий код в имя по mccmnc.dat, стоит
+		# в AT-ветке выше, а сюда имя приходит уже после неё. У модемов, которым
+		# под MM AT не шлём (DW5821e с 2.5.0), operator-name - голый код, да ещё
+		# в обратном порядке: «11 250» вместо «250 11» (Yota). В карточке висели
+		# цифры, без имени пропадала и иконка оператора. Порядок узнаём по длине:
+		# MCC всегда из трёх цифр.
+		case "$COPS" in
+			''|*[!0-9\ ]*) : ;;
+			*)
+				if [ -z "$COPS_NUM" ]; then
+					COPS_NUM=$(printf '%s' "$COPS" | awk '
+						NF == 2 && length($1) == 3 { print $1 $2; exit }
+						NF == 2 && length($2) == 3 { print $2 $1; exit }
+						NF == 1 && length($1) >= 5 { print $1; exit }')
+					if [ -n "$COPS_NUM" ]; then
+						COPS_MCC=${COPS_NUM:0:3}
+						COPS_MNC=${COPS_NUM:3:3}
+					fi
+				fi
+				if [ -n "$COPS_NUM" ]; then
+					_pf_on=$(awk -F';' '/^'"$COPS_NUM"';/ {print $3; exit}' "$RES/mccmnc.dat" 2>/dev/null | tr -d '\r' | xargs)
+					[ -n "$_pf_on" ] && COPS="$_pf_on"
+					case "$LOC" in ''|-)
+						_pf_lc=$(awk -F';' '/^'"$COPS_NUM"';/ {print $2; exit}' "$RES/mccmnc.dat" 2>/dev/null | tr -d '\r')
+						[ -n "$_pf_lc" ] && LOC="$_pf_lc"
+						;;
+					esac
+				fi
+				;;
+		esac
 		_pf_act=$(_pfv "modem.generic.access-technologies.value[1]")
 		if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" = "x0" ]; then
 			case "$_pf_act" in

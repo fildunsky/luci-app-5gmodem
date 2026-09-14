@@ -318,6 +318,7 @@ PORTREC_EOF
 	# (живой баг: "Compal RXM-G1" осел в секции FM350 0e8d, и FM350 показывался
 	# вторым «Compal» в табах и в приоритетах). Если имя называет ДРУГОГО вендора,
 	# чем vid секции - не верим ему и берём дескриптор product (для FM350 = "FM350-GL").
+	[ -n "$model" ] && model=$(model_alias "$model")
 	if [ -n "$model" ] && command -v _model_vendor_ok >/dev/null 2>&1 \
 	   && ! _model_vendor_ok "$model" "$vid:$pid"; then
 		model=""

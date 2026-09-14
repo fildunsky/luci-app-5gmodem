@@ -23,6 +23,58 @@ apply_mm_state() {
 	/usr/share/5gmodem/mmneed.sh apply >/dev/null 2>&1
 }
 
+# ПОДХВАЧЕННЫЙ ИНТЕРФЕЙС ИДЁТ ЗА МОДЕМОМ В НОВЫЙ ПОРТ.
+#
+# Модем вернулся в другой разъём или на другой контроллер (2-1 -> 1-1): профиль
+# переезжает по serial/IMEI, autosetup узнаёт свой интерфейс, но в нём остаётся
+# ПРЕЖНИЙ абсолютный путь. modemmanager.sh ищет модем по device (sysfs-путь
+# USB-устройства), qmi/mbim - по devpath (sysfs-путь интерфейса управления), и
+# netifd по кругу получал NO_DEVICE: «couldn't find modem» каждые полторы минуты
+# при собранном ModemManager модеме (полевой отчёт VOS 5G / SG500M2-X на
+# 2.5.3, 14.09.2026). ensure_iface из resolve это не спасал: сразу после
+# переезда штамп пути на интерфейсе ещё старый, IMEI часто не прочитан, и
+# интерфейс для него «чужой». Здесь интерфейс уже признан своим (подхват идёт по
+# IMEI/владению), поэтому переписываем только адрес устройства и только когда
+# новое значение живое и принадлежит ИМЕННО этому пути. atc/xmm/fibocom ведут
+# порты своей логикой в ensure_iface - их не трогаем.
+# follow_iface_device <iface> <usb-путь>
+follow_iface_device() {
+	local _fd_if="$1" _fd_p="$2" _fd_new="" _fd_dp="" _fd_ch=0
+	[ -n "$_fd_if" ] && [ -n "$_fd_p" ] || return 0
+	case "$(uci -q get "network.$_fd_if.proto")" in
+		modemmanager)
+			_fd_new=$(readlink -f "/sys/bus/usb/devices/$_fd_p" 2>/dev/null)
+			[ -n "$_fd_new" ] && [ -f "$_fd_new/idVendor" ] || _fd_new=""
+			;;
+		mbim|qmi|ncm)
+			_fd_new=$(wdm_for_path "$_fd_p")
+			[ -n "$_fd_new" ] && [ -e "$_fd_new" ] \
+				&& [ "$(path_for_wdm "$_fd_new")" = "$_fd_p" ] || _fd_new=""
+			;;
+		*) return 0 ;;
+	esac
+	[ -n "$_fd_new" ] || return 0
+	if [ "$(uci -q get "network.$_fd_if.device")" != "$_fd_new" ]; then
+		uci -q set "network.$_fd_if.device=$_fd_new"
+		_fd_ch=1
+	fi
+	case "$(uci -q get "network.$_fd_if.proto")" in
+		mbim|qmi)
+			_fd_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$_fd_new")/device" 2>/dev/null)
+			if [ -n "$_fd_dp" ] && [ -d "$_fd_dp/usbmisc" ] \
+			   && [ "$(uci -q get "network.$_fd_if.devpath")" != "$_fd_dp" ]; then
+				uci -q set "network.$_fd_if.devpath=$_fd_dp"
+				_fd_ch=1
+			fi
+			;;
+	esac
+	if [ "$_fd_ch" = 1 ]; then
+		uci -q commit network
+		logger -t 5gmodem "iface $_fd_if: modem $_fd_p returned on another path - device now $_fd_new"
+	fi
+	return 0
+}
+
 # repair a modem's interface: re-point its device to the current node for THIS
 # modem's stable USB path (cdc-wdm / ttyUSB numbers are unstable), then bring it
 # up if the device changed or it is not up. This is what auto-recovers the
