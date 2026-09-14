@@ -1600,9 +1600,12 @@ mm_fail_verdict() {   # $1 - АТ-порт (для модемов вне MM)
 				_mf_script=""
 				[ -n "$_mf_vid" ] && [ -e "$_mf_av/$_mf_vid:$_mf_pid" ] && _mf_script="$_mf_vid:$_mf_pid"
 				[ -z "$_mf_script" ] && [ -n "$_mf_vid" ] && [ -e "$_mf_av/$_mf_vid" ] && _mf_script="$_mf_vid"
-				# Dell/Foxconn-родня без своего скрипта - подходит foxconn (105b)
+				# DW5821e / T77W968: штатный «105b» ищет только порт MBIM и в
+				# QMI-композиции ничего не шлёт - берём свой скрипт пакета (его же
+				# ссылкой ставит uci-defaults 46-5gmodem-fcc-unlock.sh).
 				case "$_mf_vid:$_mf_pid" in
-					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) [ -z "$_mf_script" ] && [ -e "$_mf_av/105b" ] && _mf_script=105b ;;
+					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4)
+						[ -x /usr/share/5gmodem/fcc-unlock.sh ] && { _mf_av=/usr/share/5gmodem; _mf_script=fcc-unlock.sh; } ;;
 				esac
 				if [ -e "$_mf_en/$_mf_vid:$_mf_pid" ]; then
 					echo "    the unlock script is ALREADY enabled - the cause is something else"

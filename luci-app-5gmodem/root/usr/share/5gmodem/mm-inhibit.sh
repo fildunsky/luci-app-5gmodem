@@ -437,6 +437,20 @@ mm_recover_missing() {
 			# следующим кругом. Ждём MM и ничего не ломаем.
 			# QMI-композиций (05c6:9025) это не касается: там запасной путь живой
 			# и как раз он спасал молчащие AT-порты.
+			# DW5821e / T77W968 - ТОЛЬКО MM И В QMI-КОМПОЗИЦИИ. mkiface ведёт его на
+			# modemmanager в обеих композициях (в QMI у модуля сессия есть, трафика
+			# нет), а запасной путь ниже, не дождавшись MM, переключал интерфейс на
+			# qmi и прятал модем от MM: полевой отчёт 14.09.2026 (413c:81e0 на
+			# WH3000) - proto=qmi, mm_exclude=1 и сбросы USB.
+			case "$_sw_pro:$_sw_vp" in
+				qmi:413c:81d7|qmi:413c:81e0|qmi:0489:e0b5|qmi:0489:e0b4)
+					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
+						: > "$RUN/$_rb_key.mmonly" 2>/dev/null
+						logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to qmi, waiting for MM"
+					fi
+					continue
+					;;
+			esac
 			if [ "$_sw_pro" = "mbim" ]; then
 				case "$_sw_vp" in
 					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4|05c6:90d5)

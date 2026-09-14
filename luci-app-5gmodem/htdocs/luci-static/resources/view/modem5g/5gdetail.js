@@ -2026,9 +2026,13 @@ function buildSimpleUI() {
 	   акцент темы; modem.css уже подключён через modemtabs). Включён =
 	   «Простой вид». Пишется сразу в uci (setopt.sh simpleview), сам переход
 	   режимов - мягким кроссфейдом контента. */
+	/* Отступ - в modem.css (tg-simple-toggle): отрицательный верх тянет тумблер к
+	   карточке только там, где у секции есть своё поле (tg-boxed-sec). У bootstrap
+	   поля нет, и тумблер наезжал на рамку «Модем не подключен». */
 	mib.parentNode.insertBefore(E('div', {
+		'class': 'tg-simple-toggle',
 		'style': 'display:flex; justify-content:flex-end; align-items:center; gap:.5em;'
-			+ 'margin:-.5em .2em .6em 0; font-size:90%; opacity:.85; cursor:pointer; user-select:none',
+			+ 'font-size:90%; opacity:.85; cursor:pointer; user-select:none',
 		'click': function() {
 			_simpleOverride = !simpleOn();
 			fs.exec('/usr/share/5gmodem/setopt.sh',

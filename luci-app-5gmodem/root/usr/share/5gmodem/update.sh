@@ -25,6 +25,7 @@ PKG="$PKG_FULL"
 I18N="luci-i18n-5gmodem-ru"
 TMP=/tmp
 STATUS=/tmp/5gmodem_update.json
+LOCK=/tmp/5gmodem_update.pid
 
 json_esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
@@ -119,6 +120,15 @@ install)
 	# The download + install of two packages over a modem link can take longer
 	# than the LuCI RPC/XHR timeout, so we run it in the background, write the
 	# result to a status file, and let the UI poll 'update.sh status'.
+	# ВТОРАЯ УСТАНОВКА ПОВЕРХ ИДУЩЕЙ - НЕ ЗАПУСКАЕМ. Обе писали итог в один
+	# файл, вторая упиралась в занятую базу apk и затирала успех первой ошибкой
+	# «Install failed» (живой случай 14.09.2026: XHR error на первом нажатии,
+	# повторное нажатие - ошибка, хотя пакет встал). Идёт - отвечаем «запущено»,
+	# страница просто продолжает ждать итог прежней.
+	if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
+		echo '{"started":true,"already":true}'
+		exit 0
+	fi
 	rm -f "$STATUS" "$STATUS.tmp"
 	# ФАЙЛ ПРОГРЕССА СОЗДАЁМ СРАЗУ, А НЕ В КОНЦЕ.
 	#
@@ -162,10 +172,21 @@ install)
 				if ! net_fetch 90 "$URL" "$F"; then
 					echo '{"success":false,"error":"Download failed for '"$BASE"'"}'; return
 				fi
+				# ВЕРСИЯ ИЗ ИМЕНИ АССЕТА (luci-app-5gmodem-2.5.5-r1.apk,
+				# luci-app-5gmodem_2.5.5-r1_all.ipk) - чтобы отличить настоящий
+				# провал от ненулевого кода при уже вставшем пакете.
+				_want=$(basename "$URL" | sed -n 's/^.*[-_]\([0-9][0-9.]*\)-r[0-9][0-9]*[._].*$/\1/p')
 				if [ "$PM" = apk ]; then
-					apk add --allow-untrusted "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return; }
+					apk add --allow-untrusted "$F" >/dev/null 2>&1; _rc=$?
 				else
-					opkg install --force-reinstall "$F" >/dev/null 2>&1 || { rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return; }
+					opkg install --force-reinstall "$F" >/dev/null 2>&1; _rc=$?
+				fi
+				if [ "$_rc" != 0 ]; then
+					if [ -n "$_want" ] && [ "$(installed_version "$PM")" = "$_want" ]; then
+						logger -t 5gmodem "update: $PM returned $_rc, but $BASE $_want is installed - treating as success"
+					else
+						rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return
+					fi
 				fi
 				rm -f "$F"
 				INSTALLED="$INSTALLED $BASE"
@@ -211,9 +232,23 @@ install)
 		}
 		# write to a temp file and move into place only when done, so
 		# 'status' can tell "running" (no final file yet) from "finished"
+		# PID ИМЕННО ПОДШЕЛЛА: $$ в нём - PID родителя, который уже вышел.
+		# read встроенный, /proc/self здесь - сам подшелл.
+		read -r _upid _ < /proc/self/stat 2>/dev/null
+		echo "$_upid" > "$LOCK" 2>/dev/null
 		do_install > "$STATUS.tmp" 2>/dev/null
 		mv "$STATUS.tmp" "$STATUS"
-	) >/dev/null 2>&1 &
+		rm -f "$LOCK"
+	) >/dev/null 2>&1 </dev/null &
+	# ПАУЗА ПЕРЕД ВЫХОДОМ ОБЯЗАТЕЛЬНА. rpcd (file exec) теряет выход скрипта,
+	# если тот завершается мгновенно после запуска фонового потомка: ответ не
+	# уходит, запрос висит до таймаута rpcd в 30 с, и страница показывает XHR
+	# error. Замер на OpenWrt 25.12.5 через `ubus call file exec`: без паузы
+	# висло примерно каждое второе обращение, с `sleep 1` - шесть из шести
+	# ответили за секунду (14.09.2026). Страница вдобавок страхуется чтением
+	# файла состояния (5gsettings.js).
+	sleep 1
+	exit 0
 	;;
 
 status)

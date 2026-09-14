@@ -18,6 +18,37 @@
 	document.head.appendChild(l);
 })();
 
+/* РИСУЕТ ЛИ ТЕМА СЕКЦИЮ КАРТОЧКОЙ? proton2025 и argon дают .cbi-section рамку,
+   фон или тень - внутри такой плашки содержимому нужен отступ. bootstrap секцию
+   не обрамляет вовсе, и тот же отступ висел пустым полем слева и справа от
+   карточек (замечено владельцем 14.09.2026). Проверяем НАСТОЯЩИМ элементом в
+   контейнере страницы (правило темы может быть привязано к нему), один раз и до
+   отрисовки. Класс на <html> включает отступы в modem.css. Дублируется в
+   buttons.js: та страница этот модуль не грузит. */
+(function() {
+	function run() {
+		var de = document.documentElement;
+		if (de.hasAttribute('data-tg-sec')) { return; }
+		de.setAttribute('data-tg-sec', '1');
+		var host = document.getElementById('view') || document.getElementById('maincontent') || document.body;
+		if (!host) { return; }
+		var p = document.createElement('div');
+		p.className = 'cbi-section';
+		p.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden';
+		host.appendChild(p);
+		var cs = getComputedStyle(p);
+		var bg = cs.backgroundColor || '';
+		var framed = (parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none')
+			|| (cs.boxShadow && cs.boxShadow !== 'none')
+			|| (bg !== '' && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg));
+		host.removeChild(p);
+		if (framed) { de.classList.add('tg-boxed-sec'); }
+	}
+	if (document.body) { run(); }
+	else { document.addEventListener('DOMContentLoaded', run); }
+})();
+
+
 /* Вкладка «Кнопки»: автоопределение железных кнопок (имя из linux,code, тип из
    linux,input-type: EV_SW=переключатель, EV_KEY=кнопка) и привязка команды.
    Кнопка - имя-плашка в тема-стиле; переключатель - тумблер. Команда в

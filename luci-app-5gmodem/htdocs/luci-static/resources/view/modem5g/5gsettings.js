@@ -172,14 +172,33 @@ function installUpdate() {
 	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
 	updSet('upd-status', _('Installing the update…'));
 	updBusy(true);
+	/* ОТВЕТ НА ЗАПУСК МОЖЕТ НЕ ПРИЙТИ, А УСТАНОВКА ПРИ ЭТОМ ИДЁТ. update.sh
+	   сразу пишет файл состояния и уходит в фон, но rpcd на части прошивок
+	   теряет момент выхода скрипта с живым фоновым потомком и держит запрос
+	   до своего таймаута (воспроизведено на 25.12.5: примерно каждый второй
+	   запуск), а скрипт после установки ещё и перезапускает rpcd. Человек
+	   видел «XHR error», жал ещё раз - и получал «Install failed» поверх
+	   вставшего пакета (14.09.2026). Поэтому на ошибке запроса смотрим файл:
+	   установка идёт или уже закончилась - ждём и показываем её итог. */
+	var fallback = function(errText) {
+		return L.resolveDefault(fs.read_direct('/tmp/5gmodem_update.json'), '').then(function(txt) {
+			var st = {}; try { st = JSON.parse(String(txt || '').trim() || '{}'); } catch (e) {}
+			if (st.running || st.success != null) { pollInstall(0); return; }
+			updSet('upd-status', errText);
+			updBusy(false);
+		});
+	};
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.started) { pollInstall(0); return; }
-		updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
-		updBusy(false);
+		if (d.error) {
+			updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
+			updBusy(false);
+			return;
+		}
+		return fallback(_('Failed to install the update'));
 	}).catch(function(err) {
-		updSet('upd-status', _('Failed to install the update') + ' ' + (err.message || err));
-		updBusy(false);
+		return fallback(_('Failed to install the update') + ' ' + (err.message || err));
 	});
 }
 

@@ -1545,6 +1545,16 @@ resolve)
 		p=$(uci -q get "$CFG.$s.path")
 		[ -n "$p" ] || continue
 		echo " $PRESENT " | grep -q " $p " || continue
+		# FCC-РАЗБЛОКИРОВКА DW5821e / T77W968 без ModemManager. Под MM её шлёт сам
+		# MM скриптом из fcc-unlock.d (ставит uci-defaults), а на qmi/mbim - никто,
+		# и модуль без неё сбрасывал USB раз в пять минут (полевой отчёт
+		# 14.09.2026). Скрипт сам отсеет чужие vid:pid и уже отправленное на это
+		# подключение модема; в фоне, чтобы resolve не ждал канал.
+		case "$(uci -q get "network.$(uci -q get "$CFG.$s.network").proto" 2>/dev/null)" in
+			qmi|qmiraw|mbim)
+				( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 8>&- 9>&- &
+				;;
+		esac
 		ensure_iface "$p" "$s"
 		# Пометить чужой интерфейс, прилипший к этому модему через
 		# переиспользованную device-ноду (см. orphan_iface_for). Метку читает

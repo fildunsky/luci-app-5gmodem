@@ -780,9 +780,9 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
    IP вылезал наружу. Ряды диапазонов той же высотой, наоборот, сплющивало.
 
    Поэтому ниже - не «подгонка под argon», а СОБСТВЕННЫЕ гарантии наших блоков:
-   отступ секции и высота по содержимому. Значения совпадают с тем, что уже дают
-   proton2025/bootstrap, так что там ничего не меняется, а темы без этих правил
-   (или с чужеродными) перестают ломать раскладку. Область действия - только
+   отступ секции и высота по содержимому. Отступ секции - ТОЛЬКО на темах, где
+   секция нарисована карточкой (класс tg-boxed-sec, см. modemtabs.js): у
+   bootstrap рамки нет, и отступ висел пустым полем по бокам. Область действия - только
    наши секции .tginfo и наши кнопки, чужие страницы LuCI не затрагиваются. */
 /* Отступ получают ВСЕ секции наших страниц - привязка по адресу страницы, а не
    по классу на каждом блоке. Раньше правило висело на маркерах (tginfo/tgesim/
@@ -803,7 +803,7 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
    (`table-layout: fixed`, первая колонка 33%, прозрачный фон без рамок). Это не
    гарантия, а вид КОНКРЕТНОЙ таблицы - на страницах SMS, USSD и eSIM таблицы
    свои, и общее правило сломало бы их. */
-[data-page^="admin-modem-5gmodem"] .cbi-section {
+.tg-boxed-sec [data-page^="admin-modem-5gmodem"] .cbi-section {
   padding: 20px;
 }
 /* Вложенная секция своего отступа не получает - иначе он удваивается. Но
@@ -826,7 +826,7 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
    её ширину, а текст внутри встаёт ровно под содержимое. width:auto обязателен -
    тема задаёт шапке width:100%, и с отрицательными margin она вылезла бы за
    границы блока. */
-.tg-boxed-h3 [data-page^="admin-modem-5gmodem"] .cbi-section > h3 {
+.tg-boxed-h3.tg-boxed-sec [data-page^="admin-modem-5gmodem"] .cbi-section > h3 {
   width: auto;
   margin-left: -20px;
   margin-right: -20px;
@@ -1456,13 +1456,13 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
    диагностики прилипают к краям экрана. И может навязать кнопкам жёсткую
    высоту (argon: .btn { height: 2.5rem }) - тогда всё, что выше одной строки,
    обрезается. Задаём это сами, только для СВОИХ секций. */
-.cbi-section.tg5g {
+.tg-boxed-sec .cbi-section.tg5g {
   padding: 20px;
 }
 /* См. пояснение в 5gdetail.js: выравниваем заголовок-«шапку» только на темах,
    которые его так рисуют. Класс на <html> ставит detectBoxedHeading оттуда же -
    вкладки одного приложения, скрипт грузится в обоих случаях. */
-.tg-boxed-h3 .cbi-section.tg5g > h3 {
+.tg-boxed-h3.tg-boxed-sec .cbi-section.tg5g > h3 {
   width: auto;
   margin-left: -20px;
   margin-right: -20px;
@@ -2760,3 +2760,13 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 .tg-modem-form table.cbi-section-table td,
 .tg-modem-form table.cbi-section-table th,
 .tg-modem-form .cbi-section-table-row { overflow: visible; }
+
+/* Тумблер «Простой вид» под карточкой «Модем» (5gdetail.js). На темах с
+   карточками (tg-boxed-sec) он подтягивается в нижнее поле секции; где поля нет
+   (bootstrap), отрицательный отступ клал его на рамку «Модем не подключен». */
+.tg-simple-toggle {
+  margin: .4em .2em .6em 0;
+}
+.tg-boxed-sec .tg-simple-toggle {
+  margin-top: -.5em;
+}
