@@ -2258,9 +2258,12 @@ function applyMetrics(json) {
 							   короткая подпись - как была (см. tgm-nomodem-note). */
 							_nt.classList.toggle('tgm-nomodem-note', !!_onbus);
 							var _ns = _nt.firstElementChild || _nt;
-							_ns.textContent = _onbus
-								? _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.')
-								: _('No modem connected');
+							/* hasports=1: у устройства есть свои AT-порты - это модем, чей
+							   порт сейчас молчит (занят или завис), а не телефон. */
+							_ns.textContent = !_onbus ? _('No modem connected')
+								: (String(json.hasports) === '1')
+									? _('The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management.')
+									: _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');
 						}
 						if (_none) { _none.style.display = ''; }
 						return;   /* метрики не заполняем - заполнять нечем */

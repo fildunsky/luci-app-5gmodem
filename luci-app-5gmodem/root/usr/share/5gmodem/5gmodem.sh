@@ -826,6 +826,18 @@ if [ -z "$DEVICE" ]; then
 		fi
 		_age=$(_snapshot_age)
 		[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }
+		# МОДЕМ НА ШИНЕ СО СВОИМИ AT-ПОРТАМИ - НЕ «УСТРОЙСТВА НЕТ». Порт молчит,
+		# потому что его держит зависший процесс (sms_tool в D-состоянии) или
+		# модем занят, а страница на «Device not found» с onbus=1 писала про
+		# телефон без AT-портов - у FM350 с семью tty (живой отчёт 14.09.2026).
+		# Есть снимок любого возраста - отдаём его: карточка останется живой с
+		# отметкой «данные не обновлялись». Снимка нет - говорим, что порты есть.
+		if [ "$(_active_onbus)" = 1 ] && [ -n "$_POLL_AM" ] \
+		   && [ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_POLL_AM\"].tty[0]" 2>/dev/null)" ]; then
+			[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
+			echo '{"error":"Device not found","onbus":"1","hasports":"1"}'
+			exit 0
+		fi
 		echo "{\"error\":\"Device not found\",\"onbus\":\"$(_active_onbus)\"}"
 		exit 0
 	fi

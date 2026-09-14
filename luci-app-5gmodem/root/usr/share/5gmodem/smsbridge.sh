@@ -691,6 +691,19 @@ fi
 # ветка send ниже так и не срабатывала (аудит 12.09.2026).
 at_lock "$PORT" 15; _AT_LOCKED=$?
 
+# СЧЁТЧИК ПРИ ЗАНЯТОМ ПОРТУ - ИЗ ПОСЛЕДНЕГО ОТВЕТА, А НЕ ИЗ МОДЕМА. Правило
+# «не дождались очереди - идём всё равно» написано ради чтения сообщений: их
+# терять нельзя. Счётчику терять нечего, а заход в порт, который держит
+# зависший процесс, добавлял ещё одного ждущего - и шёл с короткой формой
+# «-s ME» (хранилище не прочиталось), которая у FM350 уводит приём на SIM.
+# Живой отчёт 14.09.2026 (FM350-GL, 2.5.1): «sms_tool -s ME status» в
+# D-состоянии на ttyUSB3, порт метрик занят восемь минут подряд.
+_ST_CACHE="/tmp/5gmodem_smsstatus_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+if [ "$BOX" = status ] && [ "$_AT_LOCKED" != 0 ] && ! _via_mm; then
+	cat "$_ST_CACHE" 2>/dev/null
+	exit 0
+fi
+
 # ОГРАНИЧИТЕЛЬ ВРЕМЕНИ: sms_tool своего таймаута не имеет, и модем, не
 # ответивший на команду, оставлял процесс держать порт НАВСЕГДА (живой случай
 # 31.07.2026: L850/XMM молча виснет на «delete all») - все последующие
@@ -1211,10 +1224,16 @@ case "$BOX" in
 			_st_l="MT"
 			_via_mm || { _st_l=${STORE:-SM}; _st_l=$(printf '%.2s' "$_st_l"); }
 			printf 'Storage type: %s, used: %d, total: %d\n' \
-				"$_st_l" "$(_arch_count)" "$ARCH_MAX"
+				"$_st_l" "$(_arch_count)" "$ARCH_MAX" | tee "$_ST_CACHE.tmp"
+			mv "$_ST_CACHE.tmp" "$_ST_CACHE" 2>/dev/null
 			exit 0
 		fi
-		_sms_run 20 $(_smstool) -d "$PORT" $_STORE_ARG status; exit $? ;;
+		_st_out=$(_sms_run 20 $(_smstool) -d "$PORT" $_STORE_ARG status); _st_rc=$?
+		case "$_st_out" in
+			*used:*) printf '%s\n' "$_st_out" > "$_ST_CACHE.tmp" && mv "$_ST_CACHE.tmp" "$_ST_CACHE" 2>/dev/null ;;
+		esac
+		[ -n "$_st_out" ] && printf '%s\n' "$_st_out"
+		exit $_st_rc ;;
 	# КРУГ СЛИВА. Зовётся из sessionwatch ПОСЛЕ уведомителя и команд - только
 	# тогда выполнены условия, при которых сообщение разрешено убирать из модема
 	# (см. _arch_purge). Отдельным глаголом, а не «заодно при чтении»: удаление

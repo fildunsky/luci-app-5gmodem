@@ -5536,3 +5536,6 @@ msgstr "датчик недоступен"
 
 msgid "Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in."
 msgstr "Применяется сразу, без кнопки «Сохранить». Автоматические режимы проверяют разъёмы каждые 3 секунды. Датчик видит только антенны, замыкающие разъём на землю: пассивная антенна может оставаться необнаруженной даже подключённой."
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management."
+msgstr "Модем на USB-шине, но его AT-порт не отвечает: он занят или модем завис. Если это надолго, перезагрузите модем по питанию в «Управлении частотами»."
