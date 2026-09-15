@@ -57,6 +57,15 @@ _mm_failed_unknowncaps() {   # $1 = usb path
 # Сбросить модем, если пул исчерпан.  $1 = usb-путь.  Не чаще раза в 3 минуты.
 qmi_pool_recover() {
 	_qp="$1"; [ -n "$_qp" ] || return 1
+	# ТОЛЬКО ПОД MODEMMANAGER. Оба триггера - про MM (его init падает на
+	# пустом пуле), а проход mm-inhibit зовёт нас постоянно. На umbim/uqmi
+	# (proto mbim/qmi/qmiraw) наш qmicli -p поднимал вечный mbim-proxy или
+	# qmi-proxy поверх живой сессии: сторож убивал его и передозванивал, и так
+	# по кругу - связь рвалась каждые пару минут (2.5.7, MV31-W на mbim).
+	# До 2.5.7 вызов падал на несуществующем ключе -t и прокси не поднимал.
+	pgrep -f 'sbin/ModemManager' >/dev/null 2>&1 || return 1
+	QMI_TARGET_PATH="$_qp"
+	command -v qmi_channel_free >/dev/null 2>&1 && qmi_channel_free || return 1
 	_lm=$("$RES/listmodems.sh" 2>/dev/null)
 	_qw=$(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].wdm[0]" 2>/dev/null)
 	[ -n "$_qw" ] && [ -e "$_qw" ] || return 1
