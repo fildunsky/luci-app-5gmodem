@@ -200,9 +200,9 @@ install)
 				apk)  apk del "$I18N" >/dev/null 2>&1 ;;
 				opkg) opkg remove "$I18N" >/dev/null 2>&1 ;;
 			esac
-			[ -f /usr/share/5gmodem/i18n/5gmodem.ru.lmo ] && \
-				cp /usr/share/5gmodem/i18n/5gmodem.ru.lmo \
-					/usr/lib/lua/luci/i18n/5gmodem.ru.lmo 2>/dev/null
+			for _lmo in /usr/share/5gmodem/i18n/5gmodem.*.lmo; do
+				[ -f "$_lmo" ] && cp "$_lmo" /usr/lib/lua/luci/i18n/ 2>/dev/null
+			done
 
 			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
 			CUR=$(installed_version "$PM")

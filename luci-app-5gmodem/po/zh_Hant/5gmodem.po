@@ -924,7 +924,7 @@ msgstr "刪除所選檔案"
 msgid "Select file with AT commands to load"
 msgstr "選擇要載入的AT命令檔案"
 
-msgid "Error loading AT commands file: "
+msgid "Error loading AT commands file:"
 msgstr "載入AT命令檔案時發生錯誤："
 
 msgid "No AT commands available"
@@ -933,7 +933,7 @@ msgstr "沒有可用的AT命令"
 msgid "Error loading initial AT commands file:"
 msgstr "載入初始AT命令檔案時發生錯誤："
 
-msgid "Error loading USSD codes file: "
+msgid "Error loading USSD codes file:"
 msgstr "載入USSD代碼檔案時發生錯誤："
 
 msgid "Error loading initial USSD file:"
@@ -1278,7 +1278,7 @@ msgstr "下載"
 msgid "Download error"
 msgstr "下載錯誤"
 
-msgid "Error: "
+msgid "Error:"
 msgstr "錯誤:"
 
 msgid "Interface"
@@ -1449,7 +1449,7 @@ msgstr "需要輸入 5 到 59 之間的十進位數值"
 msgid "Expect a decimal value between three and fifty-nine"
 msgstr "需要輸入 3 到 59 之間的十進位數值"
 
-msgid "Failed to detect modem: "
+msgid "Failed to detect modem:"
 msgstr "檢測數據機失敗:"
 
 msgid "For modems managed by ModemManager over MBIM/QMI (e.g. Compal RXM-G1 / Tri Cascade VOS_5G): incoming messages are captured by ModemManager and never appear in AT storages, so sms_tool cannot see them. In this mode port and storage settings are not used. Requires the modemmanager package."
@@ -1728,7 +1728,7 @@ msgstr "數據機設置"
 msgid "Port for modem communication"
 msgstr "數據機通信埠"
 
-msgid "Port used to read modem/connection info. <br /> 				<br />Traditional modem: one of the available ttyUSBX ports.<br /> 				<br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
+msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
 msgstr "用於讀取數據機/連接信息的埠。<br /><br />傳統數據機:可用的 ttyUSBX 埠之一。<br /><br />HiLink 數據機:輸入數據機可用的 IP 地址 192.168.X.X。"
 
 msgid "Port for AT / SMS / USSD"

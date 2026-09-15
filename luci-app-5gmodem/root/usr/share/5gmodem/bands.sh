@@ -1293,12 +1293,32 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 }
 
 # Запись диапазонов: через захват MM (kernel-прото mmcli-профиль) либо напрямую.
+# ОДНО «ПРИМЕНИТЬ» - ОДИН ПЕРЕЗАПУСК. Страница шлёт списки LTE и NSA двумя
+# вызовами подряд, каждый пишет в своём фоне. Раньше каждый сам перезапускал
+# радио, и второй CFUN=4 приходил через секунду после первого CFUN=1, посреди
+# дозвона (отчёт #24, Quectel RM551E-GL). Теперь задание отдаёт очередь порта,
+# ждёт немного и перезапускает, только если после него запись не началась;
+# иначе перезапуск делает последнее. Флаг pending переносит успех записи.
+_BW_TOK=/tmp/5gmodem_bandapply.tok
+_BW_PEND=/tmp/5gmodem_bandapply.pending
 _band_write() {  # $1 - функция записи, $2 - список
 	if _needs_mm_takeover; then
 		_mm_takeover_run "$1" "$2"
-	else
-		"$1" "$2" && _bands_after_write
+		return
 	fi
+	read -r _bw_me _ < /proc/self/stat
+	echo "$_bw_me" > "$_BW_TOK"
+	"$1" "$2" && : > "$_BW_PEND"
+	[ -f "$_BW_PEND" ] || return 1
+	if [ "$_BANDS_APPLY_LIVE" = 1 ]; then
+		rm -f "$_BW_PEND"
+		return 0
+	fi
+	at_unlock
+	sleep 5
+	[ "$(cat "$_BW_TOK" 2>/dev/null)" = "$_bw_me" ] || return 0
+	rm -f "$_BW_PEND" "$_BW_TOK"
+	_bands_after_write
 }
 
 # ЗНАЧЕНИЯ СО СТРАНИЦЫ ПРОВЕРЯЕМ ДО ПЕРВОГО ИСПОЛЬЗОВАНИЯ.
@@ -1784,10 +1804,11 @@ case $1 in
 					sleep 5
 					sms_tool -d "$_cl_at" at "AT" 2>/dev/null | grep -qi "OK" && { _cl_ok=1; break; }
 				done
-				if [ "$_cl_ok" = 0 ]; then
-					logger -t 5gmodem "cell-lock: modem stopped answering AT after locking - recovering over USB"
-					/usr/share/5gmodem/reboot_modem.sh usbpower "$(active_modem)" >/dev/null 2>&1
-				fi
+				# Питание USB сами НЕ передёргиваем: на порту корневого хаба
+				# (контроллер проброшен в ВМ) модем после disable на шину не
+				# вернулся вовсе, лечил только сброс контроллера (отчёт #25).
+				# Сброс по питанию остаётся кнопкой у пользователя.
+				[ "$_cl_ok" = 0 ] && logger -t 5gmodem "cell-lock: modem stopped answering AT after locking - power-cycle it from Frequency management if it does not recover"
 			  fi
 			) >/dev/null 2>&1 </dev/null &
 		fi

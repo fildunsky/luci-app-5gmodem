@@ -113,6 +113,17 @@ if [ "$MODE" = usbpower ]; then
 				echo 1 > "$_pd/disable" 2>/dev/null
 				sleep 6
 				echo 0 > "$_pd/disable" 2>/dev/null
+				# Модем мог не вернуться на шину (отчёт #25: порт корневого
+				# хаба, «device descriptor read -110» до сброса контроллера).
+				# Проверяем, повторно снимаем disable и пишем в журнал громко.
+				_up_n=0
+				while [ "$_up_n" -lt 40 ] && [ ! -e "/sys/bus/usb/devices/$_p" ]; do
+					sleep 1; _up_n=$((_up_n + 1))
+				done
+				if [ ! -e "/sys/bus/usb/devices/$_p" ]; then
+					echo 0 > "$_pd/disable" 2>/dev/null
+					logger -p daemon.err -t 5gmodem "usbpower: $_p did NOT come back after port disable - disable=$(cat "$_pd/disable" 2>/dev/null); a USB controller reset or reboot may be needed"
+				fi
 				;;
 			authorized)
 				echo 0 > "/sys/bus/usb/devices/$_p/authorized" 2>/dev/null

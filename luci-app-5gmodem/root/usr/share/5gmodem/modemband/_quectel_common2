@@ -1,3 +1,33 @@
+# ЗАПИСЬ ДИАПАЗОНОВ ПРИМЕНЯЕТСЯ ВЖИВУЮ. Мануал Quectel на RM5x0N/RG5x0F
+# (5.24.2-5.24.5) про lte_band, nsa_nr5g_band, nr5g_band и mode_pref: «The
+# command takes effect immediately». Проверено на RM551E-GL (отчёт #24): смена
+# NSA 77<->78 без реконнекта, сессия данных жива, NR-нога уходит и приходит за
+# секунды. Модели 2c7c:0800 (SDX55) это не проверяли - их профили ставят
+# reconnect после подключения этого файла.
+_BANDS_APPLY_LIVE=1
+
+# Запись одного списка: неизменённый не пишем (NVM модема), результат сверяем
+# обратным чтением - sms_tool at на успешную запись иногда не печатает ничего.
+# 0 - записано (или прочитать назад не удалось), 1 - нечего писать или модем
+# ответил другим списком.
+_qnw_norm() {
+	echo "$1" | tr ': ' '\n\n' | grep -E '^[0-9]+$' | sort -n | tr '\n' ':' | sed 's/:$//'
+}
+_qnw_read() {   # $1 - ключ
+	_qnw_norm "$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"$1\"" 2>/dev/null \
+		| awk -F, '/^\+QNWPREFCFG:/{print $2}' | tr -d '\r ')"
+}
+_qnw_write() {   # $1 - ключ (lte_band ...), $2 - список через «:»
+	_qw_want=$(_qnw_norm "$2")
+	[ -n "$_qw_want" ] || return 1
+	[ "$(_qnw_read "$1")" = "$_qw_want" ] && return 1
+	sms_tool -d $_DEVICE at "at+qnwprefcfg=\"$1\",$_qw_want" >/dev/null 2>&1
+	_qw_have=$(_qnw_read "$1")
+	[ -z "$_qw_have" ] || [ "$_qw_have" = "$_qw_want" ] && return 0
+	logger -t 5gmodem "bands: modem did not accept $1=$_qw_want (reads back $_qw_have)"
+	return 1
+}
+
 getsupportedbands() {
 	echo "$_DEFAULT_LTE_BANDS"
 }
@@ -22,7 +52,7 @@ setbands() {
 		T="${T}${BAND}"
 	done
 
-	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+qnwprefcfg=\"lte_band\",$T"
+	_qnw_write lte_band "$T"
 }
 
 getsupportedbands5gnsa() {
@@ -49,7 +79,7 @@ setbands5gnsa() {
 		T="${T}${BAND}"
 	done
 
-	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+qnwprefcfg=\"nsa_nr5g_band\",$T"
+	_qnw_write nsa_nr5g_band "$T"
 }
 
 getsupportedbands5gsa() {
@@ -76,7 +106,7 @@ setbands5gsa() {
 		T="${T}${BAND}"
 	done
 
-	[ -n "$T" ] && sms_tool -d $_DEVICE at "at+qnwprefcfg=\"nr5g_band\",$T"
+	_qnw_write nr5g_band "$T"
 }
 
 # --- Привязка к соте (LTE) ---------------------------------------------------

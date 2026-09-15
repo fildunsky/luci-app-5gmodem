@@ -66,6 +66,9 @@ apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
 		/^[[:space:]]*#/ || NF < 8 { next }
 		{
 			mccmnc=$1; imsi_p=$2; iccid_p=$3; apn=$7; priority=$8
+			# 440-11 это Rakuten Mobile, а в исходной базе к нему прилипли APN
+			# docomo (mopera) - при равном счёте они выигрывали по алфавиту.
+			if (mccmnc == "44011" && apn ~ /^mopera\./) next
 			if (!wildcard(mccmnc) && !starts(imsi, mccmnc)) next
 			if (!wildcard(imsi_p) && !dmatch(imsi, imsi_p)) next
 			if (!wildcard(iccid_p) && iccid != "" && !dmatch(iccid, iccid_p)) next

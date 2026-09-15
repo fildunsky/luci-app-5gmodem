@@ -39,7 +39,15 @@ def po_unescape(s):
     return ''.join(out)
 
 
+def trimws(s):
+    """Ключ так, как его ищет LuCI (trimws в cbi.js, lmo_translate в luci-base):
+    края обрезаны, пробелы, табы и переводы строк схлопнуты в один пробел.
+    po2lmo хеширует msgid как написан, поэтому ключ в другой форме не найдётся."""
+    return re.sub(r'[ \t\n]+', ' ', s.strip())
+
+
 def js_unescape(s):
+    s = s.replace('\\\n', '')
     s = s.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
     for _ in range(2):
         s = re.sub(r'\\u([0-9a-fA-F]{4})', lambda m: chr(int(m.group(1), 16)), s)
@@ -71,12 +79,13 @@ def main():
             raw = m.group(1) if m.group(1) is not None else m.group(2)
             if not raw:
                 continue
-            s = js_unescape(raw)
+            s = trimws(js_unescape(raw))
             if s not in catalog:
                 missing.setdefault(s, set()).add(rel)
             elif catalog[s] == '':
                 empty.setdefault(s, set()).add(rel)
     dups = sorted({k for k in order if order.count(k) > 1 and k})
+    unnorm = sorted({k for k in order if k and trimws(k) != k})
 
     for title, data in (('НЕТ в каталоге', missing), ('перевод ПУСТОЙ', empty)):
         if data:
@@ -87,7 +96,11 @@ def main():
         print('дубликаты msgid: %d' % len(dups))
         for s in dups:
             print('  %s' % s)
-    if not (missing or empty or dups):
+    if unnorm:
+        print('msgid не в форме рантайма (пробелы по краям, табы, переводы строк): %d' % len(unnorm))
+        for k in unnorm:
+            print('  %r' % k)
+    if not (missing or empty or dups or unnorm):
         print('перевод полный: %d строк, дубликатов нет' % len(catalog))
         return 0
     return 1

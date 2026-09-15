@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.5.6
+PKG_VERSION:=2.5.7
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -87,11 +87,11 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 	# следующий бут с ним и сломается. Правила пересоздаст hotplug/страница.
 	sh /etc/uci-defaults/5gmodem-ttl-migrate.sh 2>/dev/null
 }
-if [ -f "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" ]; then
+for _lmo in "$${IPKG_INSTROOT}"/usr/share/5gmodem/i18n/5gmodem.*.lmo; do
+	[ -f "$$_lmo" ] || continue
 	mkdir -p "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n"
-	cp "$${IPKG_INSTROOT}/usr/share/5gmodem/i18n/5gmodem.ru.lmo" \
-		"$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n/5gmodem.ru.lmo"
-fi
+	cp "$$_lmo" "$${IPKG_INSTROOT}/usr/lib/lua/luci/i18n/"
+done
 [ -n "$${IPKG_INSTROOT}" ] || {
 	rm -f /tmp/luci-indexcache*
 	rm -rf /tmp/luci-modulecache/
@@ -156,7 +156,7 @@ endef
 
 define Package/luci-app-5gmodem/prerm
 #!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ru.lmo
+[ -n "$${IPKG_INSTROOT}" ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ru.lmo /usr/lib/lua/luci/i18n/5gmodem.ja.lmo
 exit 0
 endef
 
@@ -166,6 +166,8 @@ define Build/Prepare/luci-app-5gmodem
 	$(INSTALL_DIR) $(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n
 	-$(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po-ru/5gmodem.po \
 		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
+	-[ ! -f $(CURDIR)/po/ja/5gmodem.po ] || $(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po/ja/5gmodem.po \
+		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ja.lmo
 endef
 
 # --- ОБЛЕГЧЁННЫЙ ВАРИАНТ -----------------------------------------------------

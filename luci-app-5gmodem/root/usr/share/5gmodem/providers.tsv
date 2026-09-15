@@ -2353,9 +2353,7 @@
 44010	-	-	-	-	OCN モバイル ONE	ocn.ne.jp	3194	mobileid@ocn	mobile	chap	ipv4
 44010	-	-	-	-	OCN モバイル ONE (LTE)	lte-d.ocn.ne.jp	3195	mobileid@ocn	mobile	chap	ipv4
 44010	-	-	-	-	TONE mobile	tone.ne.jp	3196	tone	tone	chap	-
-44011	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
 44011	-	-	-	-	楽天モバイル	rakuten.jp	100	-	-	-	-
-44011	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-
 44011	-	-	-	-	楽天(rakuten.jp)	rakuten.jp	3197	-	-	-	ipv4v6
 44012	-	-	-	-	NTTdocomo (postpaid)	mopera.ne.jp	100	-	-	-	-
 44012	-	-	-	-	NTTdocomo (postpaid)	mopera.net	101	-	-	-	-

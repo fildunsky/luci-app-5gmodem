@@ -793,9 +793,7 @@ return view.extend({
 
 		o = s.option(form.Value, 'device',
 			_('Port for modem communication'),
-			_("Port used to read modem/connection info. <br /> \
-				<br />Traditional modem: one of the available ttyUSBX ports.<br /> \
-				<br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."));
+			_("Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."));
 		/* Компаратор ОБЯЗАН возвращать число. Прежний отдавал true/false, а из них
 		   отрицательного не бывает - список портов оставался в порядке выдачи
 		   ubus file list, а не по алфавиту. (аудит 12.09.2026) */

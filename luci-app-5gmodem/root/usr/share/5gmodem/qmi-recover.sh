@@ -22,8 +22,20 @@ RES=/usr/share/5gmodem
 # Пул исчерпан?  $1 = cdc-wdm.  0 = да (исчерпан).
 qmi_pool_exhausted() {
 	[ -n "$1" ] && [ -e "$1" ] || return 1
-	# -t 5: не виснуть; -p: спрашиваем через прокси (свой клиент не плодим).
-	qmicli -p -t 5 -d "$1" --nas-get-serving-system 2>&1 | grep -qi "ClientIdsExhausted"
+	# -p: спрашиваем через прокси (свой клиент не плодим). Ключа -t у qmicli
+	# нет, на занятом канале он виснет - ограничиваем временем сами.
+	_qpe_o="/tmp/5gmodem_qmipool.$$"
+	qmicli -p -d "$1" --nas-get-serving-system >"$_qpe_o" 2>&1 </dev/null &
+	_qpe_p=$!
+	_qpe_n=0
+	while kill -0 "$_qpe_p" 2>/dev/null && [ "$_qpe_n" -lt 8 ]; do
+		sleep 1; _qpe_n=$((_qpe_n + 1))
+	done
+	kill -9 "$_qpe_p" 2>/dev/null
+	wait "$_qpe_p" 2>/dev/null
+	grep -qi "ClientIdsExhausted" "$_qpe_o" 2>/dev/null; _qpe_rc=$?
+	rm -f "$_qpe_o"
+	return $_qpe_rc
 }
 
 # MM держит модем на usb-пути $1 в состоянии failed из-за unknown-capabilities?

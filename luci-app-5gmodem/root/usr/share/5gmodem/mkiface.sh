@@ -226,7 +226,9 @@ run_bounded() {   # $1 = секунды, далее команда
 # С -p убитый qmicli пул не трогает: client-ID держит ПРОКСИ. uqmi прокси не
 # умеет, поэтому спрашиваем UIM через qmicli --uim-get-card-status.
 qmi_alive() {   # $1 = cdc-wdm
-	case "$(run_bounded 8 qmicli -d "$1" -p -t 5 --uim-get-card-status 2>/dev/null)" in
+	# Без -p: прокси остался бы держать канал, и uqmi из netifd получал бы
+	# «Request timed out». Ключа -t у qmicli нет - время ограничивает run_bounded.
+	case "$(run_bounded 8 qmicli -d "$1" --uim-get-card-status 2>/dev/null)" in
 		*"card status"*|*"Card state"*|*present*) return 0 ;;
 	esac
 	return 1

@@ -296,7 +296,7 @@ msgstr "Скачать"
 msgid "Download error"
 msgstr "Файл не скачался. Попробуйте ещё раз"
 
-msgid "Error: "
+msgid "Error:"
 msgstr "Ошибка: "
 
 msgid "Interface"
@@ -1155,7 +1155,7 @@ msgstr "Удалить выбранный файл"
 msgid "Select file with AT commands to load"
 msgstr "Выберите файл с AT-командами для загрузки"
 
-msgid "Error loading AT commands file: "
+msgid "Error loading AT commands file:"
 msgstr "Файл AT-команд не загрузился: "
 
 msgid "No AT commands available"
@@ -1164,7 +1164,7 @@ msgstr "AT-команды недоступны"
 msgid "Error loading initial AT commands file:"
 msgstr "Исходный файл AT-команд не загрузился:"
 
-msgid "Error loading USSD codes file: "
+msgid "Error loading USSD codes file:"
 msgstr "Файл USSD-кодов не загрузился: "
 
 msgid "Error loading initial USSD file:"
@@ -1450,7 +1450,7 @@ msgstr "Ожидается число от пяти до пятидесяти д
 msgid "Expect a decimal value between three and fifty-nine"
 msgstr "Ожидается число от трёх до пятидесяти девяти"
 
-msgid "Failed to detect modem: "
+msgid "Failed to detect modem:"
 msgstr "Не удалось определить модем: "
 
 msgid ""
@@ -1749,9 +1749,8 @@ msgstr "Настройки модема"
 msgid "Port for modem communication"
 msgstr "Порт связи с модемом"
 
-msgid "Port used to read modem/connection info. <br /> 				<br />Traditional modem: one of the available ttyUSBX ports.<br /> 				<br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "Порт для чтения информации о модеме/соединении. <br /> 				<br />Обычный модем: один из доступных портов ttyUSBX.<br /> 				<br />HiLink-модем: введите IP-адрес 192.168.X.X, по которому доступен модем."
-
+msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
+msgstr "Порт для чтения информации о модеме/соединении. <br /> <br />Обычный модем: один из доступных портов ttyUSBX.<br /> <br />HiLink-модем: введите IP-адрес 192.168.X.X, по которому доступен модем."
 msgid "Port for AT / SMS / USSD"
 msgstr "Порт для AT / SMS / USSD"
 
