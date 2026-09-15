@@ -1,0 +1,4221 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8"
+
+msgid "Align preview to:"
+msgstr "プレビューの配置:"
+
+msgid "Alignment settings saved successfully"
+msgstr "配置の設定を保存しました"
+
+msgid "Cancel"
+msgstr "キャンセル"
+
+msgid "Center"
+msgstr "中央"
+
+msgid "Left"
+msgstr "左"
+
+msgid "Loading..."
+msgstr "読み込み中..."
+
+msgid "Modem"
+msgstr "モデム"
+
+msgid "Modems"
+msgstr "モデム"
+
+msgid "New SMS"
+msgstr "新着 SMS"
+
+msgid "New message information block settings"
+msgstr "新着メッセージ表示ブロックの設定"
+
+msgid "No new SMS"
+msgstr "新着 SMS はありません"
+
+msgid "Right"
+msgstr "右"
+
+msgid "SMS Info"
+msgstr "SMS 情報"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Signal Quality"
+msgstr "信号品質"
+
+msgid "%d modems request %d mA. Such a modem answers AT commands, but its interface stays down — a powered USB hub helps."
+msgstr "モデム %d 台で %d mA を要求しています。このようなモデムは AT コマンドには応答しますが、インターフェースが上がりません。セルフパワーの USB ハブが有効です。"
+
+msgid "A different modem is now in this USB port"
+msgstr "この USB ポートには別のモデムが接続されています"
+
+msgid "APN"
+msgstr "APN"
+
+msgid "APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default."
+msgstr "モデムインターフェースの APN です。検出した事業者から自動で入力されますが、変更できます。空欄にすると事業者の既定値を使います。"
+
+msgid "APN selection"
+msgstr "APN の選択"
+
+msgid "AT command port used for SMS, USSD and AT commands. On most modems it is the same as the modem communication port."
+msgstr "SMS・USSD・AT コマンドに使う AT コマンドポートです。ほとんどのモデムでは通信用ポートと同じです。"
+
+msgid "AT polling under ModemManager"
+msgstr "ModemManager 動作中の AT ポーリング"
+
+msgid "AT ports (debug mode)"
+msgstr "AT ポート (デバッグモード)"
+
+msgid "AT query"
+msgstr "AT 問い合わせ"
+
+msgid "Allow data roaming"
+msgstr "データローミングを許可"
+
+msgid "Always hide"
+msgstr "常に隠す"
+
+msgid "Always show"
+msgstr "常に表示"
+
+msgid "Antenna %d"
+msgstr "アンテナ %d"
+
+msgid "Antenna mode"
+msgstr "アンテナモード"
+
+msgid "Antennas"
+msgstr "アンテナ"
+
+msgid "Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in."
+msgstr "保存しなくてもすぐに反映されます。自動モードは 3 秒ごとにコネクタを確認します。検出できるのはコネクタをグランドに短絡するアンテナだけで、パッシブアンテナは接続していても検出されないことがあります。"
+
+msgid "Authentication"
+msgstr "認証"
+
+msgid "Auto (detect)"
+msgstr "自動 (検出)"
+
+msgid "Auto-detect port and interface"
+msgstr "ポートとインターフェースを自動検出"
+
+msgid "Automatic (by operator)"
+msgstr "自動 (事業者に合わせる)"
+
+msgid "Automatic: external where an antenna is detected"
+msgstr "自動: アンテナを検出した側を外部に"
+
+msgid "Automatically"
+msgstr "自動"
+
+msgid "Automatically find the modem AT port and its network interface (via ModemManager when available). Turn this off to select them manually below."
+msgstr "モデムの AT ポートとネットワークインターフェースを自動で探します (利用できれば ModemManager 経由)。下で手動で選ぶ場合はオフにしてください。"
+
+msgid "Check availability of ttyX ports"
+msgstr "ttyX ポートの利用可否を確認"
+
+msgid "Check data read by the 5gmodem scripts"
+msgstr "5gmodem スクリプトが読み取ったデータを確認"
+
+msgid "Chip Temperature"
+msgstr "チップ温度"
+
+msgid "Clear"
+msgstr "クリア"
+
+msgid "Collect logs"
+msgstr "ログを収集"
+
+msgid "Collecting logs failed"
+msgstr "ログの収集に失敗しました"
+
+msgid "Collecting logs…"
+msgstr "ログを収集中…"
+
+msgid "Collects settings, modem ports, AT command output, ModemManager and eSIM state, and system logs into one text file and downloads it. Attach it to a bug report. The file contains modem and SIM identifiers (IMEI, IMSI, ICCID, EID) and the operator name; it does not contain passwords or Wi-Fi keys."
+msgstr "設定、モデムのポート、AT コマンドの出力、ModemManager と eSIM の状態、システムログを 1 つのテキストファイルにまとめてダウンロードします。不具合報告に添付してください。ファイルにはモデムと SIM の識別子 (IMEI・IMSI・ICCID・EID) と事業者名が含まれますが、パスワードや Wi-Fi のキーは含まれません。"
+
+msgid "Create (or switch) the modem network interface using the protocol chosen above. Switching to MBIM disables ModemManager; switching to ModemManager enables it (they cannot share the modem)."
+msgstr "上で選んだプロトコルでモデムのネットワークインターフェースを作成 (または切り替え) します。MBIM に切り替えると ModemManager は無効になり、ModemManager に切り替えると有効になります (同じモデムを共有できないため)。"
+
+msgid "Create interface (HiLink DHCP)"
+msgstr "インターフェースを作成 (HiLink DHCP)"
+
+msgid "Create modem interface"
+msgstr "モデムインターフェースを作成"
+
+msgid "Creating the modem interface..."
+msgstr "モデムインターフェースを作成中..."
+
+msgid "DNS servers"
+msgstr "DNS サーバー"
+
+msgid "Debug"
+msgstr "デバッグ"
+
+msgid "Delete"
+msgstr "削除"
+
+msgid "Delete profile"
+msgstr "プロファイルを削除"
+
+msgid "Delete the profile of %s?"
+msgstr "%s のプロファイルを削除しますか？"
+
+msgid "Details are in the system log (logread, tag 5gmodem)."
+msgstr "詳細はシステムログにあります (logread、タグ 5gmodem)。"
+
+msgid "Detected automatically by probing the modem for an eUICC. If the probe is wrong, force the tab on or off here."
+msgstr "モデムに eUICC があるかを調べて自動で判定します。判定が誤っている場合は、ここでタブの表示を強制的にオン・オフしてください。"
+
+msgid "Diagnostic report"
+msgstr "診断レポート"
+
+msgid "Diagnostics"
+msgstr "診断"
+
+msgid "Disconnected modems"
+msgstr "切断されたモデム"
+
+msgid "Download"
+msgstr "ダウンロード"
+
+msgid "Download error"
+msgstr "ダウンロードエラー"
+
+msgid "External antennas"
+msgstr "外部アンテナ"
+
+msgid "Failed to create the modem interface"
+msgstr "モデムインターフェースの作成に失敗しました"
+
+msgid "Failed to forget disconnected modems"
+msgstr "切断されたモデムの情報を削除できませんでした"
+
+msgid "Fallback DNS"
+msgstr "予備の DNS"
+
+msgid "Forget disconnected modems"
+msgstr "切断されたモデムの情報を削除"
+
+msgid "Forgotten modems: %d"
+msgstr "削除したモデム: %d"
+
+msgid "Hide from ModemManager"
+msgstr "ModemManager から隠す"
+
+msgid "IMEI unknown"
+msgstr "IMEI 不明"
+
+msgid "IP adress / Communication Port"
+msgstr "IP アドレス / 通信ポート"
+
+msgid "IP type"
+msgstr "IP タイプ"
+
+msgid "IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to \"IPv4 and IPv6\" only if you need IPv6 and the modem supports it."
+msgstr "モデムインターフェースの IP タイプです。既定は IPv4 です。多くのネットワークやモデムでは、デュアルスタック (IPv4/IPv6) の接続は登録されてもアドレスが割り当てられず、IPv4 ならすぐに割り当てられます。IPv6 が必要で、モデムが対応している場合だけ「IPv4 と IPv6」にしてください。"
+
+msgid "IPv4 and IPv6"
+msgstr "IPv4 と IPv6"
+
+msgid "IPv4 only (recommended)"
+msgstr "IPv4 のみ (推奨)"
+
+msgid "Interface"
+msgstr "インターフェース"
+
+msgid "Interface \"%s\" created (%s), bringing it up…"
+msgstr "インターフェース \"%s\" を作成しました (%s)。起動しています…"
+
+msgid "Interface \"%s\" created (DHCP on %s), bringing it up…"
+msgstr "インターフェース \"%s\" を作成しました (%s で DHCP)。起動しています…"
+
+msgid "Interface protocol"
+msgstr "インターフェースのプロトコル"
+
+msgid "Interface “%s” was created for a different modem"
+msgstr "インターフェース「%s」は別のモデム用に作成されたものです"
+
+msgid "Internal antennas"
+msgstr "内部アンテナ"
+
+msgid "It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now."
+msgstr "このインターフェースは、カーネルがデバイスノードを再利用したためにこのモデムに結び付いているだけです。設定 (特に APN) は前のモデムと SIM のものかもしれません。下でインターフェースを作り直してください。APN は今検出した事業者から入力されます。"
+
+msgid "Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed."
+msgstr "IMEI が以前ここで見たものと一致しません。モデムが入れ替わった可能性があります。このスロットの設定 (特にインターフェースとその APN) は前のモデムと SIM のものです。下で確認し、必要ならインターフェースを作り直してください。"
+
+msgid "Its network interface \"%s\" will be removed too."
+msgstr "ネットワークインターフェース \"%s\" も削除されます。"
+
+msgid "LED metric"
+msgstr "LED で表示する指標"
+
+msgid "Loading…"
+msgstr "読み込み中…"
+
+msgid "Manual"
+msgstr "手動"
+
+msgid "Mixed: antenna 1 automatic, antenna 2 internal"
+msgstr "混在: アンテナ 1 は自動、アンテナ 2 は内部"
+
+msgid "Modem Information"
+msgstr "モデム情報"
+
+msgid "Modem interface"
+msgstr "モデムインターフェース"
+
+msgid "Modem type"
+msgstr "モデムの種類"
+
+msgid "ModemManager"
+msgstr "モデムマネージャー"
+
+msgid "ModemManager and a kernel protocol (QMI/MBIM) cannot share one modem: MM grabs the control channel and the interface gets no IP. Enabled by default for such protocols. Turn it off to hand the modem to ModemManager (its band/mode control is richer on some modems) - then use the ModemManager protocol for it."
+msgstr "ModemManager とカーネルプロトコル (QMI/MBIM) は 1 台のモデムを共有できません。MM が制御チャネルを占有し、インターフェースに IP が付かなくなります。そのため、これらのプロトコルでは既定でオンです。オフにするとモデムを ModemManager に任せます (モデムによってはバンドやモードの制御が充実しています)。その場合は ModemManager プロトコルを使ってください。"
+
+msgid "ModemManager is running"
+msgstr "ModemManager は動作中です"
+
+msgid "ModemManager is stopped — no connected modem needs it"
+msgstr "ModemManager は停止中です — 必要とする接続中のモデムはありません"
+
+msgid "Needed by some virtual operators (MVNO): APN together with a login and password. Leave NONE if the operator did not give you credentials."
+msgstr "一部の仮想移動体通信事業者 (MVNO) で必要です。APN と一緒にログイン名とパスワードを使います。事業者から認証情報を指定されていなければ NONE のままにしてください。"
+
+msgid "Network interface for Internet access"
+msgstr "インターネット接続用のネットワークインターフェース"
+
+msgid "No HiLink network card found to create an interface for"
+msgstr "インターフェースを作成できる HiLink ネットワークカードが見つかりません"
+
+msgid "No modem detected. Insert a modem, then reload the page."
+msgstr "モデムが検出されません。モデムを接続してから、ページを再読み込みしてください。"
+
+msgid "No modems seen yet"
+msgstr "まだモデムが見つかっていません"
+
+msgid "Not enough power?"
+msgstr "電力不足ですか？"
+
+msgid "Nothing to forget: every remembered modem is connected"
+msgstr "削除するものはありません: 記憶しているモデムはすべて接続中です"
+
+msgid "Overall level (percent)"
+msgstr "全体のレベル (パーセント)"
+
+msgid "PAP/CHAP password"
+msgstr "PAP/CHAPパスワード"
+
+msgid "PAP/CHAP username"
+msgstr "PAP/CHAPユーザー名"
+
+msgid "Please select a port"
+msgstr "ポートを選択してください"
+
+msgid "Port for AT / SMS / USSD"
+msgstr "AT / SMS / USSD 用ポート"
+
+msgid "Port for modem communication"
+msgstr "モデム通信用ポート"
+
+msgid "Protocol"
+msgstr "プロトコル"
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem)."
+msgstr "「モデムインターフェースを作成」ボタンで使うプロトコルです。「自動」はモデムのドライバから選びます (推奨)。ルーターに処理が組み込まれているプロトコルだけが表示されます。ModemManager 以外のプロトコルを選ぶと ModemManager は無効になります (同じモデムを共有できないため)。"
+
+msgid "RSRP (signal level, default)"
+msgstr "RSRP (信号レベル、既定)"
+
+msgid "RSRQ (signal quality)"
+msgstr "RSRQ (信号品質)"
+
+msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open."
+msgstr "ModemManager がモデムを制御している間も、温度・キャリアアグリゲーションなどのベンダー固有の値を AT ポートで読み取ります。並行して AT をやり取りするとデータ接続が切れるファームウェア (Dell DW5821e / Foxconn T77W968) では既定でオフです。それ以外のモデムでは接続中だけ問い合わせます。ページを開いたままでも接続が安定している場合だけ有効にしてください。"
+
+msgid "Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed."
+msgstr "各ページと同じスナップショットを読み取ります。モデムに別途問い合わせることはありません。保存しなくてもすぐに反映されます。"
+
+msgid "Recreate interface (HiLink DHCP)"
+msgstr "インターフェースを作り直す (HiLink DHCP)"
+
+msgid "Recreate modem interface"
+msgstr "モデムインターフェースを作り直す"
+
+msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
+msgstr "接続されなくなったモデムについて記憶している設定 (AT ポート、インターフェース、SIM スロットの種類) を削除します。古い情報が残っていると、同じインターフェース名を名乗ったときに、動作中のモデムがインターネット優先度の一覧から隠れることがあります。"
+
+msgid "Removing…"
+msgstr "削除中…"
+
+msgid "Revision / Firmware"
+msgstr "リビジョン / ファームウェア"
+
+msgid "SIM"
+msgstr "SIM"
+
+msgid "SINR (signal to noise)"
+msgstr "SINR (信号対雑音比)"
+
+msgid "Saved bands"
+msgstr "保存したバンド"
+
+msgid "Saved modem profiles"
+msgstr "保存したモデムプロファイル"
+
+msgid "Show devices"
+msgstr "デバイスを表示"
+
+msgid "Show on the case LEDs"
+msgstr "本体の LED に表示"
+
+msgid "Signal level indicator"
+msgstr "信号レベル表示"
+
+msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default."
+msgstr "事業者やモデムによっては、DNS サーバーなしで接続されることがあります (IP は付くのにサイトが開かない)。その場合はオンにして下に DNS サーバーを入力すると、事業者の DNS (提供されていれば) に加えてモデムインターフェースに設定されます。既定はオフです。"
+
+msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
+msgstr "スペース区切りで入力 (例: \"1.1.1.1 8.8.8.8\")。"
+
+msgid "Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears."
+msgstr "この種のモデムは通常 Web 画面しか持たず、TAC・バンド・EARFCN・USSD は分かりません。このモードではシリアルポートも出し、ネットワークカードとインターネット接続を保ったまま他のモデムと同じように制御できます。モードはモデムの再起動で元に戻るため、モデムが現れるたびに適用し直します。"
+
+msgid "The interface \"%s\" stays: another profile uses it."
+msgstr "インターフェース \"%s\" は残します: 別のプロファイルが使っています。"
+
+msgid "The report has been downloaded. Attach it to your bug report."
+msgstr "レポートをダウンロードしました。不具合報告に添付してください。"
+
+msgid "This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose."
+msgstr "このモデムは自分で接続を保ち、自分のネットワークカード上で DHCP によりアドレスを配ります。このボタンはその DHCP インターフェースを作成 (または作り直し) します。選ぶべきダイヤルアッププロトコルはありません。"
+
+msgid "This modem is connected right now. It will be set up again from scratch."
+msgstr "このモデムは現在接続中です。最初から設定し直します。"
+
+msgid "Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing"
+msgstr "しきい値はネットワークページの色分けと同じです。LED が 3 つ点灯していれば、緑色の値と同じ意味です"
+
+msgid "Timed out"
+msgstr "タイムアウトしました"
+
+msgid "USB and ports"
+msgstr "USB とポート"
+
+msgid "USB debug information"
+msgstr "USB デバッグ情報"
+
+msgid "When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected."
+msgstr "オフの場合、ローミング中はネットワークに登録しますがデータ接続は確立しません。そのためローミング料金の通信は発生しません。SMS と通話には影響しません。"
+
+msgid "antenna detected"
+msgstr "アンテナを検出"
+
+msgid "backend said \"%s\" for protocol \"%s\""
+msgstr "バックエンドの応答 \"%s\" (プロトコル \"%s\")"
+
+msgid "configuration"
+msgstr "設定"
+
+msgid "connected"
+msgstr "接続中"
+
+msgid "default"
+msgstr "既定"
+
+msgid "detected by probing the modem"
+msgstr "モデムを調べて検出"
+
+msgid "detector unavailable"
+msgstr "検出器を利用できません"
+
+msgid "done"
+msgstr "完了"
+
+msgid "eSIM (may take a minute)"
+msgstr "eSIM (1 分ほどかかることがあります)"
+
+msgid "eSIM tab"
+msgstr "eSIM タブ"
+
+msgid "empty backend reply"
+msgstr "バックエンドの応答が空です"
+
+msgid "external"
+msgstr "外部"
+
+msgid "hidden from ModemManager"
+msgstr "ModemManager から隠しています"
+
+msgid "internal"
+msgstr "内部"
+
+msgid "locked to cell %s/%s"
+msgstr "セル %s/%s にロック中"
+
+msgid "locked to frequency %s"
+msgstr "周波数 %s にロック中"
+
+msgid "network and logs"
+msgstr "ネットワークとログ"
+
+msgid "no"
+msgstr "いいえ"
+
+msgid "no (manually)"
+msgstr "いいえ (手動)"
+
+msgid "no antenna detected"
+msgstr "アンテナは検出されていません"
+
+msgid "no interface"
+msgstr "インターフェースなし"
+
+msgid "not connected"
+msgstr "未接続"
+
+msgid "set manually in the modem settings"
+msgstr "モデムの設定で手動設定"
+
+msgid "shares interface %s with another profile"
+msgstr "インターフェース %s を別のプロファイルと共有しています"
+
+msgid "starting"
+msgstr "起動中"
+
+msgid "system"
+msgstr "システム"
+
+msgid "the data interface did not come up — not enough power?"
+msgstr "データインターフェースが上がりませんでした — 電力不足ですか？"
+
+msgid "visible to ModemManager"
+msgstr "ModemManager から見えています"
+
+msgid "yes"
+msgstr "はい"
+
+msgid "yes (manually)"
+msgstr "はい (手動)"
+
+msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
+msgstr "「ModemManager から隠す」をオフにしました: ModemManager プロトコルでは MM がこのモデムを管理する必要があります"
+
+msgid "(#%d)"
+msgstr "(#%d)"
+
+msgid "(Received Signal Code Power, 3G)"
+msgstr "(受信信号コード電力、3G)"
+
+msgid "(Received Signal Strength Indicator)"
+msgstr "(受信信号強度)"
+
+msgid "(Reference Signal Receive Power)"
+msgstr "(参照信号受信電力)"
+
+msgid "(Reference Signal Received Quality)"
+msgstr "(参照信号受信品質)"
+
+msgid "(Signal Strength)"
+msgstr "(信号強度)"
+
+msgid "(Signal to Interference plus Noise Ratio)"
+msgstr "(信号対干渉雑音比)"
+
+msgid "(base station)"
+msgstr "(基地局)"
+
+msgid "(chip energy to noise ratio, 3G)"
+msgstr "(チップあたりのエネルギー対雑音比、3G)"
+
+msgid "(modem transmit level)"
+msgstr "(モデムの送信レベル)"
+
+msgid "(signal attenuation)"
+msgstr "(信号の減衰)"
+
+msgid "(transmission rank)"
+msgstr "(伝送ランク)"
+
+msgid "2G bands"
+msgstr "2G バンド"
+
+msgid "3G bands"
+msgstr "3G バンド"
+
+msgid "4G bands"
+msgstr "4G バンド"
+
+msgid "5G bands"
+msgstr "5G バンド"
+
+msgid "5G in modem"
+msgstr "モデムの 5G"
+
+msgid "A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable."
+msgstr "USB バス上にデバイスはありますが、AT コマンドに応答しません。携帯電話のようです。インターネットの共有はできますが、信号・事業者・SMS の管理は使えません。"
+
+msgid "Active carrier: this band is carrying your data right now"
+msgstr "アクティブなキャリア: 今このバンドでデータを運んでいます"
+
+msgid "All bands"
+msgstr "全バンド"
+
+msgid "Antenna alignment"
+msgstr "アンテナの向き調整"
+
+msgid "Antenna port"
+msgstr "アンテナポート"
+
+msgid "Antenna ports"
+msgstr "アンテナポート"
+
+msgid "Apply"
+msgstr "適用"
+
+msgid "Applying TTL..."
+msgstr "TTL を適用中..."
+
+msgid "Auto"
+msgstr "自動"
+
+msgid "Automatic fixes did not help — check the SIM card, the antennas and the balance"
+msgstr "自動修復では直りませんでした — SIM カード、アンテナ、残高を確認してください"
+
+msgid "Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands."
+msgstr "%s モードではバンドとネットワークモードを管理できません。バンドを管理するには、(モデムの設定で) インターフェースを ModemManager に切り替えてください。"
+
+msgid "Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands."
+msgstr "%s モードではバンドとネットワークモードを管理できません。バンドを管理するには、このモデムを XMM モードに切り替えてください (下のボタン)。"
+
+msgid "Band and network-mode management is not available in HiLink (web API) mode. Switch the modem to Debug mode (button below): it exposes AT ports for bands, network mode and USSD while keeping the connection."
+msgstr "HiLink (Web API) モードではバンドとネットワークモードを管理できません。モデムをデバッグモードに切り替えてください (下のボタン)。接続を保ったまま、バンド・ネットワークモード・USSD 用の AT ポートが使えるようになります。"
+
+msgid "Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands."
+msgstr "現在のインターフェースモードでは、このモデムのバンドとネットワークモードを切り替えられません。バンドを管理するには、(モデムの設定で) インターフェースを ModemManager に切り替えてください。"
+
+msgid "Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them."
+msgstr "バンドとネットワークモードは読み取り専用で表示しています: %s モードでは読み取れますが変更できません。管理するにはインターフェースを ModemManager に切り替えてください。"
+
+msgid "Carrier aggregation"
+msgstr "キャリアアグリゲーション"
+
+msgid "Carrier aggregation (per component)"
+msgstr "キャリアアグリゲーション (コンポーネント別)"
+
+msgid "Cell"
+msgstr "セル"
+
+msgid "Cell / Signal Information"
+msgstr "セル / 信号情報"
+
+msgid "Cell lock"
+msgstr "セルロック"
+
+msgid "Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem."
+msgstr "バンドを変更すると接続が一時的に切れます: IP が 15〜20 秒ほど消え、自動で戻ります。このモデムでは正常な動作です。"
+
+msgid "Changing bands briefly interrupts the connection: the app hands the modem to ModemManager, applies the change and reconnects (up to a minute)."
+msgstr "バンドを変更すると接続が一時的に途切れます: アプリがモデムを ModemManager に渡して変更を適用し、再接続します (最大 1 分)。"
+
+msgid "Channel bandwidth: wider is faster."
+msgstr "チャネル帯域幅: 広いほど高速です。"
+
+msgid "Channel quality estimated by the modem: 0-15, higher is better."
+msgstr "モデムが推定したチャネル品質: 0〜15、高いほど良好です。"
+
+msgid "Check and fix"
+msgstr "確認して修復"
+
+msgid "Check the SIM card and the antennas"
+msgstr "SIM カードとアンテナを確認してください"
+
+msgid "Checking the connection…"
+msgstr "接続を確認中…"
+
+msgid "Checking the modem…"
+msgstr "モデムを確認中…"
+
+msgid "Close"
+msgstr "閉じる"
+
+msgid "Collecting data from the modem…"
+msgstr "モデムからデータを収集中…"
+
+msgid "Component carrier: PCC is the main one, SCC are added by carrier aggregation."
+msgstr "コンポーネントキャリア: PCC が主キャリア、SCC はキャリアアグリゲーションで追加されたものです。"
+
+msgid "Country code and operator code."
+msgstr "国番号と事業者番号。"
+
+msgid "Critical"
+msgstr "重大"
+
+msgid "Current interface protocol"
+msgstr "現在のインターフェースプロトコル"
+
+msgid "Cuts power to the modem slot for a few seconds - as if you unplugged it. The modem comes back in ~1 min. Use when a full restart did not help."
+msgstr "モデムスロットの電源を数秒間切ります (抜き差ししたのと同じ)。モデムは 1 分ほどで戻ります。完全再起動で直らなかったときに使います。"
+
+msgid "Data has not been updated for %d min (shown from the last snapshot)"
+msgstr "データが %d 分間更新されていません (最後のスナップショットを表示)"
+
+msgid "Data has not been updated for %d s (shown from the last snapshot)"
+msgstr "データが %d 秒間更新されていません (最後のスナップショットを表示)"
+
+msgid "Data roaming is off"
+msgstr "データローミングはオフです"
+
+msgid "Defined modems"
+msgstr "定義済みのモデム"
+
+msgid "Did not help"
+msgstr "直りませんでした"
+
+msgid "Done — the internet is back"
+msgstr "完了 — インターネットが復旧しました"
+
+msgid "Ec/No"
+msgstr "Ec/No"
+
+msgid "Enable all supported bands"
+msgstr "対応バンドをすべて有効化"
+
+msgid "Error:"
+msgstr "エラー: "
+
+msgid "Establishing connection…"
+msgstr "接続を確立中…"
+
+msgid "Excellent"
+msgstr "非常に良好"
+
+msgid "External address as seen from the internet%s"
+msgstr "インターネットから見た外部アドレス%s"
+
+msgid "Failed to apply TTL"
+msgstr "TTL を適用できませんでした"
+
+msgid "Failed to power-cycle the modem"
+msgstr "モデムの電源を入れ直せませんでした"
+
+msgid "Failed to read modem data"
+msgstr "モデムのデータを読み取れませんでした"
+
+msgid "Failed to restart the modem"
+msgstr "モデムを再起動できませんでした"
+
+msgid "Fair"
+msgstr "普通"
+
+msgid "Frequency management"
+msgstr "周波数の管理"
+
+msgid "Full restart"
+msgstr "完全再起動"
+
+msgid "Full restart (CFUN=1,1): the modem reboots and re-enumerates on USB. Slower, connection drops ~1 min; use when the radio restart did not help."
+msgstr "完全再起動 (CFUN=1,1): モデムが再起動し、USB で再認識されます。時間がかかり、接続は 1 分ほど切れます。電波の再起動で直らなかったときに使います。"
+
+msgid "Good"
+msgstr "良好"
+
+msgid "Hop Limit IPv6 (in / out)"
+msgstr "IPv6 ホップ制限 (受信 / 送信)"
+
+msgid "Hot"
+msgstr "高温"
+
+msgid "How much the signal weakens on its way from the tower."
+msgstr "基地局から届くまでに信号がどれだけ弱まるか。"
+
+msgid "Identifier of the cell the modem is connected to."
+msgstr "モデムが接続しているセルの識別子。"
+
+msgid "If sites still do not open, check the SIM balance and tariff"
+msgstr "それでもサイトが開かない場合は、SIM の残高と料金プランを確認してください"
+
+msgid "Information read from the SIM card and device"
+msgstr "SIM カードとデバイスから読み取った情報"
+
+msgid "Initialising modem…"
+msgstr "モデムを初期化中…"
+
+msgid "Interface for selecting user defined modems"
+msgstr "ユーザー定義モデムを選ぶインターフェース"
+
+msgid "Internet is working"
+msgstr "インターネットは正常です"
+
+msgid "Internet not working?"
+msgstr "インターネットにつながりませんか？"
+
+msgid "LTE frequency band."
+msgstr "LTE の周波数バンド。"
+
+msgid "LTE speed category of the modem."
+msgstr "モデムの LTE 速度カテゴリ。"
+
+msgid "Loading"
+msgstr "読み込み中"
+
+msgid "Location area code in 2G/3G networks."
+msgstr "2G/3G ネットワークの位置登録エリアコード。"
+
+msgid "Lock to this cell (EARFCN %s, PCI %s)"
+msgstr "このセルにロック (EARFCN %s、PCI %s)"
+
+msgid "Mbps"
+msgstr "Mbps"
+
+msgid "Modem AT port not found"
+msgstr "モデムの AT ポートが見つかりません"
+
+msgid "Modem IMEI"
+msgstr "モデムの IMEI"
+
+msgid "Modem selection menu"
+msgstr "モデム選択メニュー"
+
+msgid "Modem temperature"
+msgstr "モデム温度"
+
+msgid "Modem thermal throttling level: %d of 3"
+msgstr "モデムの温度による速度制限レベル: 3 段階中 %d"
+
+msgid "Modulation: higher QAM means faster data."
+msgstr "変調方式: QAM が高いほど高速です。"
+
+msgid "Neighbour cells"
+msgstr "周辺セル"
+
+msgid "Network mode"
+msgstr "ネットワークモード"
+
+msgid "No connection"
+msgstr "接続なし"
+
+msgid "No modem connected"
+msgstr "モデムが接続されていません"
+
+msgid "No modem found"
+msgstr "モデムが見つかりません"
+
+msgid "No modem power GPIO on this board"
+msgstr "このボードにはモデム電源用の GPIO がありません"
+
+msgid "No network"
+msgstr "ネットワークなし"
+
+msgid "Normal"
+msgstr "標準"
+
+msgid "Not registered"
+msgstr "未登録"
+
+msgid "Number of parallel data streams."
+msgstr "並列データストリームの数。"
+
+msgid "Number of the LTE radio channel (frequency)."
+msgstr "LTE 無線チャネル (周波数) の番号。"
+
+msgid "Number of the base station. Used to find it on coverage maps."
+msgstr "基地局の番号。カバレッジマップで基地局を探すのに使います。"
+
+msgid "Obtaining IP…"
+msgstr "IP を取得中…"
+
+msgid "Online"
+msgstr "オンライン"
+
+msgid "Online, only SMS"
+msgstr "オンライン (SMS のみ)"
+
+msgid "Physical cell identity on the radio interface."
+msgstr "無線インターフェース上の物理セル ID。"
+
+msgid "Plug the modem into USB — setup is automatic"
+msgstr "モデムを USB に接続してください — 設定は自動で行われます"
+
+msgid "Poor"
+msgstr "弱い"
+
+msgid "Port %d"
+msgstr "ポート %s"
+
+msgid "Power restart"
+msgstr "電源の入れ直し"
+
+msgid "Power-cycling the modem over USB…"
+msgstr "USB 経由でモデムの電源を入れ直しています…"
+
+msgid "Primary band (PCC) | PCI & EARFCN"
+msgstr "プライマリバンド (PCC) | PCI と EARFCN"
+
+msgid "Problem with registering to the network, check the SIM card"
+msgstr "ネットワークへの登録に問題があります。SIM カードを確認してください"
+
+msgid "RSCP"
+msgstr "RSCP"
+
+msgid "RSRP"
+msgstr "RSRP"
+
+msgid "RSRQ"
+msgstr "RSRQ"
+
+msgid "RSSI"
+msgstr "RSSI"
+
+msgid "Radio restart (CFUN=4→1): quickly re-registers on the network without re-enumerating USB. Try this first."
+msgstr "電波の再起動 (CFUN=4→1): USB の再認識なしで、すばやくネットワークに登録し直します。まずこれを試してください。"
+
+msgid "Receive chains: %d of %d antenna ports hear the network (details in the Antenna ports table)"
+msgstr "受信系統: %d / %d 個のアンテナポートがネットワークを受信しています (詳細はアンテナポートの表)"
+
+msgid "Receive diversity: off - the second antenna is not used"
+msgstr "受信ダイバーシティ: オフ - 2 本目のアンテナは使われていません"
+
+msgid "Receive diversity: on (2RX)"
+msgstr "受信ダイバーシティ: オン (2RX)"
+
+msgid "Receive diversity: on, 4 receivers (4RX)"
+msgstr "受信ダイバーシティ: オン、受信機 4 系統 (4RX)"
+
+msgid "Reconnecting…"
+msgstr "再接続中…"
+
+msgid "Registered"
+msgstr "登録済み"
+
+msgid "Registered on the network, connecting…"
+msgstr "ネットワークに登録済み、接続中…"
+
+msgid "Registered, only SMS"
+msgstr "登録済み (SMS のみ)"
+
+msgid "Registering denied"
+msgstr "登録拒否"
+
+msgid "Registration denied"
+msgstr "登録が拒否されました"
+
+msgid "Restart modem"
+msgstr "モデムを再起動"
+
+msgid "Restart radio"
+msgstr "電波を再起動"
+
+msgid "Restarting the modem…"
+msgstr "モデムを再起動中…"
+
+msgid "Roaming"
+msgstr "ローミング"
+
+msgid "SIM ICCID"
+msgstr "SIM の ICCID"
+
+msgid "SIM IMSI"
+msgstr "SIM の IMSI"
+
+msgid "SIM PIN required"
+msgstr "SIM PIN が必要です"
+
+msgid "SIM PIN2 required"
+msgstr "SIM PIN2 が必要です"
+
+msgid "SIM PUK required"
+msgstr "SIM PUK が必要です"
+
+msgid "SIM PUK2 required"
+msgstr "SIM PUK2 が必要です"
+
+msgid "SIM Slot"
+msgstr "SIM スロット"
+
+msgid "SIM busy"
+msgstr "SIM 使用中"
+
+msgid "SIM card menu"
+msgstr "SIM カードメニュー"
+
+msgid "SIM failure"
+msgstr "SIM の障害"
+
+msgid "SIM slot switch failed"
+msgstr "SIM スロットを切り替えられませんでした"
+
+msgid "SIM slot switched: %s"
+msgstr "SIM スロットを切り替えました: %s"
+
+msgid "SIM type"
+msgstr "SIM の種類"
+
+msgid "SIM wrong"
+msgstr "SIM が不正です"
+
+msgid "SMS only — no data connection"
+msgstr "SMS のみ — データ接続なし"
+
+msgid "Searching for network…"
+msgstr "ネットワークを検索中…"
+
+msgid "Searching.."
+msgstr "検索中.."
+
+msgid "Signal quality index reported by the modem: 0-31, higher is better."
+msgstr "モデムが報告する信号品質指数: 0〜31、高いほど良好です。"
+
+msgid "Signal quality. Around -10 dB is good, below -15 dB is poor."
+msgstr "信号品質。-10 dB 前後なら良好、-15 dB 未満は弱いです。"
+
+msgid "Signal strength received from the cell tower. Around -80 dBm is excellent, below -110 dBm is poor."
+msgstr "基地局から受信した信号強度。-80 dBm 前後なら非常に良好、-110 dBm 未満は弱いです。"
+
+msgid "Signal-to-noise ratio. Above 20 dB is excellent, below 0 dB is poor."
+msgstr "信号対雑音比。20 dB を超えれば非常に良好、0 dB 未満は弱いです。"
+
+msgid "Simple view"
+msgstr "シンプル表示"
+
+msgid "Slot is empty (no SIM inserted)"
+msgstr "スロットは空です (SIM が入っていません)"
+
+msgid "Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows"
+msgstr "待機中のキャリア: ネットワークがこのバンドをアグリゲーションに組み込んでいますが、今は使われていません。通信量が増えると有効になります"
+
+msgid "State"
+msgstr "状態"
+
+msgid "Switch the modem into the mode with AT ports: TAC, bands, EARFCN, USSD and the AT console become available. The mode resets when the modem reboots."
+msgstr "モデムを AT ポートのあるモードに切り替えます: TAC・バンド・EARFCN・USSD・AT コンソールが使えるようになります。このモードはモデムの再起動で元に戻ります。"
+
+msgid "Switch to Debug mode"
+msgstr "デバッグモードに切り替え"
+
+msgid "Switch to ModemManager"
+msgstr "ModemManager に切り替え"
+
+msgid "Switch to XMM"
+msgstr "XMM に切り替え"
+
+msgid "Switching SIM slot..."
+msgstr "SIM スロットを切り替え中..."
+
+msgid "Switching the modem into the mode with AT ports…"
+msgstr "モデムを AT ポートのあるモードに切り替え中…"
+
+msgid "Switching to the modem…"
+msgstr "モデムに切り替え中…"
+
+msgid "TTL IPv4 (in / out)"
+msgstr "IPv4 TTL (受信 / 送信)"
+
+msgid "TTL applied"
+msgstr "TTL を適用しました"
+
+msgid "TTL fixing"
+msgstr "TTL の固定"
+
+msgid "TTL must be a number between 1 and 255, or empty to disable"
+msgstr "TTL は 1〜255 の数値で指定してください (空欄で無効)"
+
+msgid "The address is public: the interface has exactly what the internet sees%s"
+msgstr "アドレスはグローバルです: インターフェースのアドレスがインターネットから見えるアドレスと一致しています%s"
+
+msgid "The connection is fine"
+msgstr "接続は正常です"
+
+msgid "The modem AT port is busy, try again"
+msgstr "モデムの AT ポートが使用中です。もう一度お試しください"
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management."
+msgstr "モデムは USB バス上にありますが、AT ポートが応答しません: 使用中か、モデムが固まっています。続く場合は「周波数の管理」でモデムの電源を入れ直してください。"
+
+msgid "The modem is power-cycling. This can take a minute."
+msgstr "モデムの電源を入れ直しています。1 分ほどかかることがあります。"
+
+msgid "The modem is restarting after the SIM switch…"
+msgstr "SIM の切り替え後、モデムを再起動しています…"
+
+msgid "The modem is restarting. This can take a minute."
+msgstr "モデムを再起動しています。1 分ほどかかることがあります。"
+
+msgid "The modem is restarting…"
+msgstr "モデムを再起動中…"
+
+msgid "The modem keeps reconnecting over USB (%d times in 10 minutes) - usually not enough power: try another port, a shorter cable or a powered hub."
+msgstr "モデムが USB で再接続を繰り返しています (10 分間に %d 回)。多くは電力不足です: 別のポート、短いケーブル、セルフパワーのハブを試してください。"
+
+msgid "The modem port is busy, try again in a few seconds"
+msgstr "モデムのポートが使用中です。数秒後にもう一度お試しください"
+
+msgid "This is a plain USB network device (phone tethering or similar), not a modem: it has no AT port and no control channel. Bands, network mode and other cellular settings are managed on the device itself."
+msgstr "これはモデムではなく、単純な USB ネットワークデバイス (スマートフォンのテザリングなど) です: AT ポートも制御チャネルもありません。バンド、ネットワークモードなどのモバイル通信の設定はデバイス本体で行います。"
+
+msgid "Total power received in the channel, including noise and interference."
+msgstr "チャネル内で受信した電力の合計 (雑音と干渉を含む)。"
+
+msgid "Tracking area code: a group of cells of the operator network."
+msgstr "トラッキングエリアコード: 事業者ネットワークのセルのグループ。"
+
+msgid "Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2."
+msgstr "伝送ランク: ネットワークが実際に送っている並列データストリームの数。1 は SISO、2 は MIMO 2x2 です。"
+
+msgid "Transmission rank: the network is sending %d parallel data streams right now"
+msgstr "伝送ランク: ネットワークは現在 %d 本の並列データストリームを送っています"
+
+msgid "Transmit power of the modem right now."
+msgstr "現在のモデムの送信電力。"
+
+msgid "USB vendor and product ID"
+msgstr "USB ベンダー ID とプロダクト ID"
+
+msgid "Unread SMS — open Incoming"
+msgstr "未読 SMS — 受信箱を開く"
+
+msgid "View the tower on the 4cells.ru map"
+msgstr "4cells.ru の地図で基地局を表示"
+
+msgid "Voice calls over the LTE network, without falling back to 3G."
+msgstr "3G に切り替えずに LTE ネットワークで行う音声通話。"
+
+msgid "Waiting for the modem to connect…"
+msgstr "モデムの接続を待っています…"
+
+msgid "Warm"
+msgstr "やや高温"
+
+msgid "Weak signal — try moving the router closer to a window or connecting an external antenna"
+msgstr "信号が弱いです — ルーターを窓に近づけるか、外部アンテナを接続してください"
+
+msgid "What the modem itself can do. Not the speed of the current connection."
+msgstr "モデム自体の性能です。現在の接続速度ではありません。"
+
+msgid "activated"
+msgstr "有効"
+
+msgid "antenna not connected"
+msgstr "アンテナ未接続"
+
+msgid "antenna: normal"
+msgstr "アンテナ: 正常"
+
+msgid "antenna: poor signal"
+msgstr "アンテナ: 信号が悪い"
+
+msgid "antenna: weak signal"
+msgstr "アンテナ: 信号が弱い"
+
+msgid "deactivated"
+msgstr "無効"
+
+msgid "debug"
+msgstr "デバッグ"
+
+msgid "neighbour"
+msgstr "周辺"
+
+msgid "serving"
+msgstr "接続中"
+
+msgid "☰"
+msgstr "☰"
+
+msgid "A confirmation code is required for this profile, or the one entered is wrong."
+msgstr "このプロファイルには確認コードが必要です。または、入力したコードが間違っています。"
+
+msgid "A profile with this ICCID is already installed on the eSIM."
+msgstr "この ICCID のプロファイルはすでに eSIM にインストールされています。"
+
+msgid "APN for the new operator may differ. Recommended: \"%s\" (current: \"%s\"). You are in manual APN mode - open Modem Settings to apply it."
+msgstr "新しい事業者では APN が異なる場合があります。推奨: \"%s\" (現在: \"%s\")。APN は手動モードになっています。適用するにはモデムの設定を開いてください。"
+
+msgid "AT (serial - FM350 etc.)"
+msgstr "AT (シリアル - FM350 など)"
+
+msgid "AT bridge (sms_tool)"
+msgstr "AT ブリッジ (sms_tool)"
+
+msgid "Add eSIM profile"
+msgstr "eSIM プロファイルを追加"
+
+msgid "Added"
+msgstr "追加しました"
+
+msgid "An empty chip is a special case: some modems cannot work with a profile-less eSIM (the modem keeps resetting or the slot stays unusable). Loading any public test profile usually settles it - see the list of known test profiles:"
+msgstr "空のチップは特殊なケースです: プロファイルのない eSIM を扱えないモデムがあります (モデムがリセットを繰り返す、スロットが使えないままになる)。公開されているテスト用プロファイルを何か読み込むと、たいてい解消します。既知のテスト用プロファイルの一覧:"
+
+msgid "Applying eSIM operation..."
+msgstr "eSIM の操作を適用中..."
+
+msgid "Attempt %s of %s"
+msgstr "%s 回目 (全 %s 回)"
+
+msgid "Authenticating the card"
+msgstr "カードを認証中"
+
+msgid "Auto (active slot)"
+msgstr "自動 (アクティブなスロット)"
+
+msgid "Auto (recommended)"
+msgstr "自動 (推奨)"
+
+msgid "Checking eSIM support…"
+msgstr "eSIM の対応を確認中…"
+
+msgid "Checking internet access..."
+msgstr "インターネット接続を確認中..."
+
+msgid "Closing the server session"
+msgstr "サーバーのセッションを終了中"
+
+msgid "Closing the session"
+msgstr "セッションを終了中"
+
+msgid "Contacting the operator server"
+msgstr "事業者のサーバーに接続中"
+
+msgid "Could not load the QR decoder."
+msgstr "QR デコーダーを読み込めませんでした。"
+
+msgid "Could not reach the operator server: %s"
+msgstr "事業者のサーバーに接続できませんでした: %s"
+
+msgid "Could not read the image file."
+msgstr "画像ファイルを読み取れませんでした。"
+
+msgid "Could not refresh the list automatically. Press Refresh in a few seconds."
+msgstr "一覧を自動で更新できませんでした。数秒後に「更新」を押してください。"
+
+msgid "Delete eSIM profile"
+msgstr "eSIM プロファイルを削除"
+
+msgid "Delete profile \"%s\" (%s)? This cannot be undone."
+msgstr "プロファイル \"%s\" (%s) を削除しますか？ 元に戻せません。"
+
+msgid "Deleted"
+msgstr "削除しました"
+
+msgid "Disable"
+msgstr "無効"
+
+msgid "Disabled"
+msgstr "無効"
+
+msgid "Discard this notification locally without sending"
+msgstr "送信せずに、この通知をローカルで破棄"
+
+msgid "Download anyway"
+msgstr "それでもダウンロード"
+
+msgid "Download failed"
+msgstr "ダウンロードに失敗しました"
+
+msgid "Download transport (ES9+)"
+msgstr "ダウンロードの通信方式 (ES9+)"
+
+msgid "Download transport saved"
+msgstr "ダウンロードの通信方式を保存しました"
+
+msgid "Downloading eSIM profile…"
+msgstr "eSIM プロファイルをダウンロード中…"
+
+msgid "Downloading the profile"
+msgstr "プロファイルをダウンロード中"
+
+msgid "Enable"
+msgstr "有効化"
+
+msgid "Enabled"
+msgstr "有効"
+
+msgid "Free memory"
+msgstr "空きメモリ"
+
+msgid "Free the modem and read eSIM"
+msgstr "モデムを解放して eSIM を読み取る"
+
+msgid "Freeing the modem and reading the eSIM chip..."
+msgstr "モデムを解放して eSIM チップを読み取っています..."
+
+msgid "How lpac reaches the eSIM chip. \"Auto\" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT."
+msgstr "lpac が eSIM チップにアクセスする方法です。「自動」は、シリアル接続のモデム (FM350) では AT を、cdc-wdm で制御するモデムでは QMI/MBIM を選びます。AT で eUICC にアクセスできない Qualcomm 系モデム (T99W175 / MV31-W / DW5930e) では、QMI/MBIM を手動で指定してください。"
+
+msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
+msgstr "lpac が事業者のサーバー (SM-DP+) と通信する方法です。「自動」は、使えればブリッジを使います。ブリッジは GSMA CI 証明書を提示する SM-DP+ サーバーにも接続でき (mbedTLS ビルドの内蔵 curl では扱えません)、証明書も検証します。"
+
+msgid "ICCID"
+msgstr "ICCID"
+
+msgid "If this repeats, install the wget-ssl package (apk add wget-ssl): some operator servers use TLS that curl on this router cannot handle"
+msgstr "繰り返す場合は wget-ssl パッケージをインストールしてください (apk add wget-ssl): 事業者のサーバーによっては、このルーターの curl では扱えない TLS を使っています"
+
+msgid "Installing onto the card"
+msgstr "カードにインストール中"
+
+msgid "Load a QR code image and read the activation code from it"
+msgstr "QR コードの画像を読み込んで、アクティベーションコードを読み取る"
+
+msgid "MBIM"
+msgstr "MBIM"
+
+msgid "No QR code found in the image. Try a clearer picture."
+msgstr "画像に QR コードが見つかりません。もっと鮮明な画像を試してください。"
+
+msgid "No eSIM chip (eUICC) answered on this modem. If you are sure it has one, it may be in a USB composition this app does not talk to yet - please report your modem model and its USB ID (vid:pid) so we can add support."
+msgstr "このモデムでは eSIM チップ (eUICC) が応答しませんでした。チップがあるのが確実なら、このアプリがまだ対応していない USB 構成なのかもしれません。対応を追加できるよう、モデムの型番と USB ID (vid:pid) を報告してください。"
+
+msgid "No internet access. The router must be online to download an eSIM profile from the operator."
+msgstr "インターネットに接続できません。事業者から eSIM プロファイルをダウンロードするには、ルーターがオンラインである必要があります。"
+
+msgid "No profiles installed"
+msgstr "インストール済みのプロファイルはありません"
+
+msgid "Not enough free memory on the eSIM to install the profile. Delete an unused profile and try again."
+msgstr "eSIM の空きメモリが足りず、プロファイルをインストールできません。使っていないプロファイルを削除してから、もう一度お試しください。"
+
+msgid "Not enough memory on the eSIM chip for this profile. Delete an unused profile and try again."
+msgstr "eSIM チップのメモリが足りず、このプロファイルを入れられません。使っていないプロファイルを削除してから、もう一度お試しください。"
+
+msgid "Notification action failed: %s"
+msgstr "通知の操作に失敗しました: %s"
+
+msgid "Notifications sent to the operator"
+msgstr "事業者に通知を送信しました"
+
+msgid "Open Modem Settings"
+msgstr "モデムの設定を開く"
+
+msgid "Operator"
+msgstr "事業者"
+
+msgid "Pending operator notifications"
+msgstr "事業者への未送信の通知"
+
+msgid "Please wait, reading eUICC - updating the profile list can be slow"
+msgstr "eUICC を読み取っています。お待ちください。プロファイル一覧の更新には時間がかかることがあります"
+
+msgid "Preparing the download"
+msgstr "ダウンロードを準備中"
+
+msgid "Profile"
+msgstr "プロファイル"
+
+msgid "Profile added. The modem is restarting to apply it - up to a minute…"
+msgstr "プロファイルを追加しました。適用のためモデムを再起動しています (最大 1 分)…"
+
+msgid "Profile disabled. The modem is restarting to apply it - up to a minute…"
+msgstr "プロファイルを無効にしました。適用のためモデムを再起動しています (最大 1 分)…"
+
+msgid "Profile enabled. The modem is restarting to apply it - up to a minute…"
+msgstr "プロファイルを有効にしました。適用のためモデムを再起動しています (最大 1 分)…"
+
+msgid "QMI / libqmi (Qualcomm)"
+msgstr "QMI / libqmi (Qualcomm)"
+
+msgid "QMI / uqmi CLI"
+msgstr "QMI / uqmi CLI"
+
+msgid "QR"
+msgstr "QR"
+
+msgid "QR code recognized"
+msgstr "QR コードを認識しました"
+
+msgid "Read eSIM (drops the connection briefly)"
+msgstr "eSIM を読み取る (接続が一時的に切れます)"
+
+msgid "Reading eUICC..."
+msgstr "eUICC を読み取り中..."
+
+msgid "Reading the eUICC"
+msgstr "eUICC を読み取り中"
+
+msgid "Reading the eUICC, about %ds left"
+msgstr "eUICC を読み取り中、残り約 %d 秒"
+
+msgid "Receiving profile details"
+msgstr "プロファイルの詳細を受信中"
+
+msgid "Refresh"
+msgstr "更新"
+
+msgid "Remove"
+msgstr "削除"
+
+msgid "Removing notification…"
+msgstr "通知を削除中…"
+
+msgid "Retrying"
+msgstr "再試行中"
+
+msgid "Save log"
+msgstr "ログを保存"
+
+msgid "Send"
+msgstr "送信"
+
+msgid "Send all"
+msgstr "すべて送信"
+
+msgid "Send all pending notifications to the operator, then clear them"
+msgstr "未送信の通知をすべて事業者に送信してから消去"
+
+msgid "Send this notification to the operator, then remove it"
+msgstr "この通知を事業者に送信してから削除"
+
+msgid "Sending notifications…"
+msgstr "通知を送信中…"
+
+msgid "Sending notification…"
+msgstr "通知を送信中…"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "Slot 1"
+msgstr "スロット 1"
+
+msgid "Slot 2"
+msgstr "スロット 2"
+
+msgid "Starting…"
+msgstr "開始中…"
+
+msgid "Status"
+msgstr "状態"
+
+msgid "Switch to eSIM slot"
+msgstr "eSIM スロットに切り替え"
+
+msgid "Switch to the eSIM slot"
+msgstr "eSIM スロットに切り替える"
+
+msgid "Switching to the eSIM slot..."
+msgstr "eSIM スロットに切り替え中..."
+
+msgid "Taking longer than usual (%ds)"
+msgstr "通常より時間がかかっています (%d 秒)"
+
+msgid "The download did not complete."
+msgstr "ダウンロードが完了しませんでした。"
+
+msgid "The download did not complete. See the log below for details."
+msgstr "ダウンロードが完了しませんでした。詳細は下のログを確認してください。"
+
+msgid "The eSIM chip did not confirm the installation. This modem loses long commands from time to time, so a repeat usually helps. Check the profile list first — the profile may already be installed."
+msgstr "eSIM チップがインストールを確認しませんでした。このモデムはときどき長いコマンドを取りこぼすため、たいていは再実行で解決します。先にプロファイル一覧を確認してください — すでにインストールされているかもしれません。"
+
+msgid "The modem connection will be dropped for about a minute while the eSIM chip is read, then restored. Continue?"
+msgstr "eSIM チップを読み取る間、モデムの接続が 1 分ほど切れ、その後に戻ります。続けますか？"
+
+msgid "The modem control channel is busy with the active connection, so the eSIM chip cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles."
+msgstr "モデムの制御チャネルが使用中の接続でふさがっているため、今は eSIM チップを読み取れません。プロファイルを管理するには、モデムインターフェースを切断してください (または別の SIM に切り替えてください)。"
+
+msgid "The modem control channel is busy with the active connection, so the profile list cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles."
+msgstr "モデムの制御チャネルが使用中の接続でふさがっているため、今はプロファイル一覧を読み取れません。プロファイルを管理するには、モデムインターフェースを切断してください (または別の SIM に切り替えてください)。"
+
+msgid "The operator could not verify this eSIM chip (eUICC verification failed)."
+msgstr "事業者がこの eSIM チップを検証できませんでした (eUICC の検証に失敗)。"
+
+msgid "The operator has run out of free profiles in this test pool — nothing to hand out. This is on the operator side; try another code or ask them."
+msgstr "事業者のテスト用プールに空きプロファイルがなく、配布できるものがありません。事業者側の問題です。別のコードを試すか、事業者に問い合わせてください。"
+
+msgid "The operator refused to release this profile."
+msgstr "事業者がこのプロファイルの払い出しを拒否しました。"
+
+msgid "The physical SIM is active now. Switch to the eSIM slot to manage eSIM profiles."
+msgstr "現在は物理 SIM が有効です。eSIM プロファイルを管理するには eSIM スロットに切り替えてください。"
+
+msgid "The physical SIM slot is active, so the eSIM chip cannot be read. Switch to the eSIM slot to manage profiles."
+msgstr "物理 SIM スロットが有効なため、eSIM チップを読み取れません。プロファイルを管理するには eSIM スロットに切り替えてください。"
+
+msgid "These are status reports the modem sends to your operator (SM-DP+) after a profile is enabled, disabled or deleted. They normally go out on their own. If some are stuck here (e.g. there was no internet at the time), the safe choice is Send — it is harmless and just confirms the change. Remove only discards a report without sending it. If unsure, you can leave them or press Send all."
+msgstr "プロファイルの有効化・無効化・削除の後に、モデムが事業者 (SM-DP+) に送る状態通知です。通常は自動で送信されます。ここに残っている場合 (その時インターネットにつながっていなかったなど)、安全なのは「送信」です。害はなく、変更を確認するだけです。「削除」は通知を送らずに破棄します。迷ったらそのままにするか、「すべて送信」を押してください。"
+
+msgid "This QR code is not an eSIM activation code."
+msgstr "この QR コードは eSIM のアクティベーションコードではありません。"
+
+msgid "This activation (QR) code has already been used or is no longer valid. Ask your operator for a new one."
+msgstr "このアクティベーション (QR) コードは使用済みか、無効になっています。事業者に新しいコードを依頼してください。"
+
+msgid "This can take up to a minute — please stay on this page."
+msgstr "最大 1 分ほどかかります — このページを開いたままお待ちください。"
+
+msgid "This eSIM profile has already been downloaded to a device and cannot be downloaded again. Ask your operator for a new activation code."
+msgstr "この eSIM プロファイルはすでに端末にダウンロード済みで、再ダウンロードできません。事業者に新しいアクティベーションコードを依頼してください。"
+
+msgid "This modem is currently the only internet source, and the download must take the modem offline to reach the eSIM chip. The profile download needs internet at that very moment, so it cannot finish. Connect the router to another source first (Wi-Fi, cable, or a phone hotspot) and try again."
+msgstr "現在このモデムが唯一のインターネット接続で、ダウンロードでは eSIM チップにアクセスするためにモデムをオフラインにする必要があります。プロファイルのダウンロードにはその時点でインターネットが必要なので、完了できません。先にルーターを別の接続 (Wi-Fi、有線、スマートフォンのテザリング) につないでから、もう一度お試しください。"
+
+msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
+msgstr "このモデムは ModemManager が管理しており、制御チャネルは MM のものです。同じチャネルで 2 つ目の eSIM セッションを開くと、モデムのファームウェアが落ちることがあります (T99W175 で実際に発生 - モデムが再起動)。eSIM を管理するには、モデムの設定で「ModemManager から隠す」を有効にするか、インターフェースのプロトコルを切り替えてから、ここに戻ってください。"
+
+msgid "This modem is managed by ModemManager. Reading and changing eSIM profiles temporarily takes the control channel from it: the modem internet connection drops for about 1-2 minutes and then recovers automatically. Several operations in a row share one takeover window."
+msgstr "このモデムは ModemManager が管理しています。eSIM プロファイルの読み取りや変更では一時的に制御チャネルを借りるため、モデムのインターネット接続が 1〜2 分ほど切れ、その後自動で戻ります。続けて行う複数の操作は、1 回の借用でまとめて行います。"
+
+msgid "This modem is on the ModemManager protocol, where eSIM over AT commands is not available. Switch the modem interface to the fibocom / MBIM / QMI protocol to manage eSIM."
+msgstr "このモデムは ModemManager プロトコルで動作しており、AT コマンドによる eSIM は使えません。eSIM を管理するには、モデムインターフェースを fibocom / MBIM / QMI プロトコルに切り替えてください。"
+
+msgid "This profile is already installed on the eSIM — look for it in the list below."
+msgstr "このプロファイルはすでに eSIM にインストールされています — 下の一覧を確認してください。"
+
+msgid "Updating the profile list..."
+msgstr "プロファイル一覧を更新中..."
+
+msgid "Verifying the server"
+msgstr "サーバーを検証中"
+
+msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
+msgstr "eSIM チップがどの SIM スロットにあるかを指定します。「自動」はモデムで現在有効なスロットに従います。チップは読み取れるのにプロファイル一覧が空のままの場合 (スロット 1 の取り外し式 eSIM など) は、明示的に指定してください。"
+
+msgid "activation code"
+msgstr "アクティベーションコード"
+
+msgid "already exists"
+msgstr "すでに存在します"
+
+msgid "certificate expired"
+msgstr "証明書の期限切れ"
+
+msgid "confirmation code"
+msgstr "確認コード"
+
+msgid "eSIM chip"
+msgstr "eSIM チップ"
+
+msgid "eSIM management is unavailable: the lpac package is not installed, or the active modem is not an AT-type modem"
+msgstr "eSIM 管理は使えません: lpac パッケージがインストールされていないか、アクティブなモデムが AT 型ではありません"
+
+msgid "eSIM management needs the lpac package, which is not installed. Install the lpac build for your platform - see the app README."
+msgstr "eSIM 管理には lpac パッケージが必要ですが、インストールされていません。お使いのプラットフォーム用の lpac をインストールしてください (アプリの README を参照)。"
+
+msgid "eSIM operation done"
+msgstr "eSIM の操作が完了しました"
+
+msgid "eSIM operation failed: %s"
+msgstr "eSIM の操作に失敗しました: %s"
+
+msgid "eSIM profile added and applied"
+msgstr "eSIM プロファイルを追加して適用しました"
+
+msgid "eSIM profile switched - checking and updating the APN automatically"
+msgstr "eSIM プロファイルを切り替えました - APN を自動で確認・更新しています"
+
+msgid "eUICC access (APDU)"
+msgstr "eUICC へのアクセス (APDU)"
+
+msgid "eUICC access saved"
+msgstr "eUICC へのアクセス方法を保存しました"
+
+msgid "eUICC is not responding (%s). Try Refresh in a few seconds."
+msgstr "eUICC が応答しません (%s)。数秒後に「更新」を試してください。"
+
+msgid "eUICC slot"
+msgstr "eUICC スロット"
+
+msgid "eUICC slot saved — refresh the profile list"
+msgstr "eUICC スロットを保存しました — プロファイル一覧を更新してください"
+
+msgid "expired"
+msgstr "期限切れ"
+
+msgid "expired (time limit reached)"
+msgstr "期限切れ (時間制限に達しました)"
+
+msgid "invalid association"
+msgstr "関連付けが無効です"
+
+msgid "invalid signature"
+msgstr "署名が無効です"
+
+msgid "lpac built-in curl"
+msgstr "lpac 内蔵の curl"
+
+msgid "not enough memory"
+msgstr "メモリ不足"
+
+msgid "profile"
+msgstr "プロファイル"
+
+msgid "profile package"
+msgstr "プロファイルパッケージ"
+
+msgid "refused or already used"
+msgstr "拒否されたか使用済みです"
+
+msgid "unavailable"
+msgstr "利用できません"
+
+msgid "value not allowed"
+msgstr "値が許可されていません"
+
+msgid "verification failed"
+msgstr "検証に失敗しました"
+
+msgid "wget / OpenSSL bridge"
+msgstr "wget / OpenSSL ブリッジ"
+
+msgid "5G modem"
+msgstr "5G モデム"
+
+msgid "APN database"
+msgstr "APN データベース"
+
+msgid "Add ping card"
+msgstr "ping カードを追加"
+
+msgid "Add service card"
+msgstr "サービスカードを追加"
+
+msgid "Alignment"
+msgstr "アンテナ調整"
+
+msgid "Appearance"
+msgstr "外観"
+
+msgid "Application update"
+msgstr "アプリの更新"
+
+msgid "CDC Ethernet interface"
+msgstr "CDC Ethernet インターフェース"
+
+msgid "CDC NCM interface"
+msgstr "CDC NCM インターフェース"
+
+msgid "Card background"
+msgstr "カードの背景"
+
+msgid "Cards in the widgets row on the Network page. All are on by default."
+msgstr "ネットワークページのウィジェット列に並ぶカードです。既定ではすべてオンです。"
+
+msgid "Check"
+msgstr "確認"
+
+msgid "Check for updates"
+msgstr "更新を確認"
+
+msgid "Check now"
+msgstr "今すぐ確認"
+
+msgid "Check the APN database"
+msgstr "APN データベースを確認"
+
+msgid "Checking the APN database…"
+msgstr "APN データベースを確認中…"
+
+msgid "Checking the latest release…"
+msgstr "最新リリースを確認中…"
+
+msgid "Checking…"
+msgstr "確認中…"
+
+msgid "Collect statistics"
+msgstr "統計を収集"
+
+msgid "Collects uplink latency, signal, temperature and monthly traffic, and shows the \"Statistics\" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself."
+msgstr "上り回線の遅延、信号、温度、月間通信量を収集し、グラフ付きの「統計」タブを表示します。系列データは RAM に保持します。月間通信量はタブ上の設定で再起動後も残せます。"
+
+msgid "Could not check for updates"
+msgstr "更新を確認できませんでした"
+
+msgid "Could not check the APN database"
+msgstr "APN データベースを確認できませんでした"
+
+msgid "Country lookup"
+msgstr "国の判定"
+
+msgid "Current version"
+msgstr "現在のバージョン"
+
+msgid "Device blacklist"
+msgstr "デバイスの除外リスト"
+
+msgid "Download and install the latest version now?"
+msgstr "最新バージョンを今すぐダウンロードしてインストールしますか？"
+
+msgid "Download source"
+msgstr "ダウンロード元"
+
+msgid "Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgstr "アップロード試験用に POST の本文を受け付けるエンドポイントです。ロシア国内のエンドポイント (Rostelecom/Yandex) はロシアのモバイル回線でも使えます。サーバーは 404/403 を返しても本文を読み取るため、速度は測定できます。"
+
+msgid "Every 10 s"
+msgstr "10 秒ごと"
+
+msgid "Every 15 minutes"
+msgstr "15 分ごと"
+
+msgid "Every 30 minutes"
+msgstr "30 分ごと"
+
+msgid "Every 30 s"
+msgstr "30 秒ごと"
+
+msgid "Every 5 minutes"
+msgstr "5 分ごと"
+
+msgid "Every 60 s"
+msgstr "60 秒ごと"
+
+msgid "Every minute"
+msgstr "1 分ごと"
+
+msgid "Everyday options of the Network page and modem behaviour"
+msgstr "ネットワークページの日常的なオプションとモデムの動作"
+
+msgid "External IP"
+msgstr "外部 IP"
+
+msgid "Failed to install the update"
+msgstr "更新をインストールできませんでした"
+
+msgid "Failed to update the APN database"
+msgstr "APN データベースを更新できませんでした"
+
+msgid "For experts"
+msgstr "上級者向け"
+
+msgid "GB"
+msgstr "GB"
+
+msgid "Header sent with the request. Some services answer a console client with plain text and a browser with an HTML page; and a header of your own keeps the router from introducing itself as one. Empty - whatever curl/wget sends by default."
+msgstr "リクエストで送るヘッダーです。サービスによっては、コンソールのクライアントにはテキストを、ブラウザには HTML ページを返します。独自のヘッダーを使うと、ルーターであることを名乗らずに済みます。空欄なら curl/wget の既定値を送ります。"
+
+msgid "Host"
+msgstr "ホスト"
+
+msgid "How often the address is looked up again. A change of uplink refreshes it immediately, without waiting for the interval."
+msgstr "アドレスを取得し直す間隔です。上り回線が切り替わったときは、間隔を待たずにすぐ更新します。"
+
+msgid "IPv4 service"
+msgstr "IPv4 サービス"
+
+msgid "IPv6 service"
+msgstr "IPv6 サービス"
+
+msgid "Icons"
+msgstr "アイコン"
+
+msgid "Install update"
+msgstr "更新をインストール"
+
+msgid "Installing the update…"
+msgstr "更新をインストール中…"
+
+msgid "Internet priority"
+msgstr "インターネット優先度"
+
+msgid "Internet watchdog"
+msgstr "インターネット監視"
+
+msgid "Large translucent mark on each uplink card"
+msgstr "各上り回線カードに大きな半透明のマーク"
+
+msgid "Live signal metrics and a tone for aiming an external antenna."
+msgstr "外部アンテナの向き調整用に、リアルタイムの信号値と音を出します。"
+
+msgid "MB"
+msgstr "MB"
+
+msgid "MBIM interface"
+msgstr "MBIM インターフェース"
+
+msgid "Main"
+msgstr "メイン"
+
+msgid "No doubtful devices: everything found on the bus is in the modem database."
+msgstr "疑わしいデバイスはありません: バス上で見つかったものはすべてモデムデータベースに載っています。"
+
+msgid "None"
+msgstr "なし"
+
+msgid "On click only"
+msgstr "クリックしたときだけ"
+
+msgid "On the card of the uplink that currently carries the traffic, show the external address instead of the one assigned by the carrier."
+msgstr "現在通信を運んでいる上り回線のカードに、事業者が割り当てたアドレスではなく外部アドレスを表示します。"
+
+msgid "Only this service is queried - there are no silent fallbacks. One that also returns the country (like ip-api.com) gets a flag shown next to the address. Foreign services often stay silent over Russian cellular; the Yandex one answers there."
+msgstr "問い合わせるのはこのサービスだけで、黙って別のサービスに切り替えることはありません。国も返すサービス (ip-api.com など) なら、アドレスの横に国旗を表示します。国外のサービスはロシアのモバイル回線では応答しないことが多く、Yandex のサービスは応答します。"
+
+msgid "Ping cards (host with a green/red dot and latency)"
+msgstr "ping カード (緑/赤の点と遅延を表示するホスト)"
+
+msgid "Ping mode"
+msgstr "ping のモード"
+
+msgid "Ping monitor"
+msgstr "ping 監視"
+
+msgid "Priority number"
+msgstr "優先順位の番号"
+
+msgid "Public IP service"
+msgstr "グローバル IP の確認サービス"
+
+msgid "Queried only when the router actually has an IPv6 default route - otherwise the request would just sit there until it times out."
+msgstr "ルーターに IPv6 の既定経路が実際にあるときだけ問い合わせます。ない場合は、タイムアウトまで待つだけになるためです。"
+
+msgid "Query the services above with the current settings and show what they answer."
+msgstr "現在の設定で上のサービスに問い合わせ、応答を表示します。"
+
+msgid "Rarely needed options. The defaults are fine for most setups."
+msgstr "めったに使わないオプションです。ほとんどの環境では既定値のままで問題ありません。"
+
+msgid "Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched."
+msgstr "モデムが再接続したときに、選んだバンドを適用し直します。再起動でバンドの選択がリセットされるモデム (FM350 など) でも選択が保たれます。実際に選択が失われたモデムにだけ適用します。"
+
+msgid "Refresh interval"
+msgstr "更新間隔"
+
+msgid "Release page"
+msgstr "リリースページ"
+
+msgid "Remember bands after reboot"
+msgstr "再起動後もバンドを保持"
+
+msgid "Restart on uplink"
+msgstr "上り回線で再起動"
+
+msgid "Restart the service once the uplink starts carrying traffic."
+msgstr "上り回線が通信を始めたら、サービスを 1 回再起動します。"
+
+msgid "Saved and applied."
+msgstr "保存して適用しました。"
+
+msgid "Service"
+msgstr "サービス"
+
+msgid "Service monitor"
+msgstr "サービス監視"
+
+msgid "Service status cards (running/stopped)"
+msgstr "サービス状態カード (動作中/停止)"
+
+msgid "Shared with \"External IP\" - set it under \"For experts\""
+msgstr "「外部 IP」と共通です - 「上級者向け」で設定してください"
+
+msgid "Show TTL fixing"
+msgstr "TTL の固定を表示"
+
+msgid "Show in the priority bar"
+msgstr "優先度バーに表示"
+
+msgid "Show it next to the address the carrier assigned - in the modem card as \"IPv4: 10.x.x.x | 1.2.3.4\". Behind CGNAT or a tunnel the two differ, and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "事業者が割り当てたアドレスの横に、モデムカードで「IPv4: 10.x.x.x | 1.2.3.4」のように表示します。CGNAT やトンネルの内側では 2 つが異なり、その違いでルーター自身の通信が VPN を通っているかが分かります。第三者のサービスへの問い合わせになるため、既定はオフです。"
+
+msgid "Show only the essentials: modem name, signal, status lamp and the restart button. Expert blocks (bands, cell info, TTL, interface details) are hidden. Off by default."
+msgstr "必要最低限だけを表示します: モデム名、信号、状態ランプ、再起動ボタン。上級者向けのブロック (バンド、セル情報、TTL、インターフェースの詳細) は非表示になります。既定はオフです。"
+
+msgid "Show the \"TTL fixing\" block on the Network page."
+msgstr "ネットワークページに「TTL の固定」ブロックを表示します。"
+
+msgid "Show the external address"
+msgstr "外部アドレスを表示"
+
+msgid "Simple view of the Network page"
+msgstr "ネットワークページのシンプル表示"
+
+msgid "Speed test"
+msgstr "速度テスト"
+
+msgid "Speed-test card"
+msgstr "速度テストカード"
+
+msgid "The APN database has been updated"
+msgstr "APN データベースを更新しました"
+
+msgid "The APN database is up to date"
+msgstr "APN データベースは最新です"
+
+msgid "The update is still building on the server. Please wait about 15-20 minutes and try again."
+msgstr "更新はまだサーバーでビルド中です。15〜20 分ほど待ってから、もう一度お試しください。"
+
+msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgstr "ダウンロード試験用の URL です。約 15 秒の試験で速度が上がりきるよう、大きいファイルを選んでください。小さいファイルは早く終わり、低めの値になります。ロシア国内の配信元 (Selectel/Yandex/Tele2) はロシアのモバイル回線でも使えますが、Cloudflare/Hetzner はブロックされることがあります。おおよそのサイズを表示しています。"
+
+msgid "USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately."
+msgstr "アプリが判断できない USB デバイスです (モデムデータベースに載っていません)。チェックするとアプリの対象から外します: タブを出さず、AT の問い合わせもせず、インターネット優先度にも入れません。すぐに反映されます。"
+
+msgid "USB-to-serial adapter"
+msgstr "USB シリアル変換アダプタ"
+
+msgid "Update available"
+msgstr "更新があります"
+
+msgid "Update installed. Refreshing resources…"
+msgstr "更新をインストールしました。リソースを再読み込みしています…"
+
+msgid "Update installed. Signing out to apply it…"
+msgstr "更新をインストールしました。適用のためログアウトします…"
+
+msgid "Update is taking too long. Check the connection and try again."
+msgstr "更新に時間がかかりすぎています。接続を確認して、もう一度お試しください。"
+
+msgid "Update the APN database"
+msgstr "APN データベースを更新"
+
+msgid "Updating the APN database…"
+msgstr "APN データベースを更新中…"
+
+msgid "Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change."
+msgstr "上り回線のメトリックを mwan3 の想定どおり 10 から (10, 20, 30...) 振ります。オフの場合は 100 から (100, 110, 120...) 振り、1〜99 をトンネル用に空けます。次に優先度を変更したときに反映されます。"
+
+msgid "Uplink switch — modems / Wi-Fi / WAN"
+msgstr "上り回線の切り替え — モデム / Wi-Fi / WAN"
+
+msgid "Upload endpoint"
+msgstr "アップロード先"
+
+msgid "Used only when the service above returns an address but no country: the flag is then resolved by a second request, for the country alone. Use {ip} as the address placeholder."
+msgstr "上のサービスがアドレスだけを返し、国を返さない場合にだけ使います: 国旗を、国だけを問い合わせる 2 回目のリクエストで判定します。アドレスの位置には {ip} を書いてください。"
+
+msgid "User-Agent"
+msgstr "User-Agent"
+
+msgid "Where the router asks what its address looks like from the outside. The speed-test card uses the same service."
+msgstr "外から見たルーターのアドレスを問い合わせる先です。速度テストカードも同じサービスを使います。"
+
+msgid "You have the latest version"
+msgstr "最新バージョンです"
+
+msgid "cellular module vendor"
+msgstr "モバイル通信モジュールのベンダー"
+
+msgid "country"
+msgstr "国"
+
+msgid "economical"
+msgstr "省電力"
+
+msgid "excluded by hand"
+msgstr "手動で除外"
+
+msgid "has answered as a modem before"
+msgstr "以前モデムとして応答したことがあります"
+
+msgid "modem driver in the kernel"
+msgstr "カーネルのモデムドライバ"
+
+msgid "mwan3-compatible metrics"
+msgstr "mwan3 互換のメトリック"
+
+msgid "no answer from %s"
+msgstr "%s から応答がありません"
+
+msgid "no modem driver and no modem network interface"
+msgstr "モデムドライバもモデムのネットワークインターフェースもありません"
+
+msgid "not on the bus"
+msgstr "バス上にありません"
+
+msgid "operators"
+msgstr "事業者"
+
+msgid "returned to modems by hand"
+msgstr "手動でモデムに戻しました"
+
+msgid "stream"
+msgstr "ストリーム"
+
+msgid "works over cellular"
+msgstr "モバイル回線で使えます"
+
+msgid "%d min ago"
+msgstr "%d 分前"
+
+msgid "B"
+msgstr "B"
+
+msgid "Delete this row"
+msgstr "この行を削除"
+
+msgid "Delete this traffic row? This cannot be undone."
+msgstr "この通信量の行を削除しますか？ 元に戻せません。"
+
+msgid "Empty - the router's own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals."
+msgstr "空欄の場合はルーター本体のメモリ (%s)。USB ドライブのパスを指定すると、月間合計だけでなくグラフの系列データも保存します。"
+
+msgid "KB"
+msgstr "KB"
+
+msgid "Keep monthly traffic across reboots"
+msgstr "再起動後も月間通信量を保持"
+
+msgid "Month"
+msgstr "月"
+
+msgid "Monthly totals are written to flash about once an hour. Ping series are never written there."
+msgstr "月間合計はおよそ 1 時間に 1 回フラッシュに書き込みます。ping の系列データは書き込みません。"
+
+msgid "Monthly traffic"
+msgstr "月間通信量"
+
+msgid "No data yet"
+msgstr "まだデータがありません"
+
+msgid "Nowhere to write - check the path."
+msgstr "書き込み先がありません - パスを確認してください。"
+
+msgid "Path rejected: %s"
+msgstr "パスが受け付けられませんでした: %s"
+
+msgid "Received"
+msgstr "受信"
+
+msgid "Reset"
+msgstr "リセット"
+
+msgid "Reset statistics"
+msgstr "統計をリセット"
+
+msgid "SIM card"
+msgstr "SIM カード"
+
+msgid "Sent"
+msgstr "送信"
+
+msgid "Signal level"
+msgstr "信号レベル"
+
+msgid "Statistics"
+msgstr "統計"
+
+msgid "Storing is off - data lives in RAM until the next reboot."
+msgstr "保存はオフです - データは次の再起動まで RAM にあります。"
+
+msgid "TB"
+msgstr "TB"
+
+msgid "The drive is not mounted - writing to %s for now, and merging back when it returns."
+msgstr "ドライブがマウントされていません - いったん %s に書き込み、ドライブが戻ったら統合します。"
+
+msgid "Total"
+msgstr "合計"
+
+msgid "Uplink latency"
+msgstr "上り回線の遅延"
+
+msgid "Where to store"
+msgstr "保存先"
+
+msgid "Writing to %s"
+msgstr "%s に書き込み中"
+
+msgid "now"
+msgstr "たった今"
+
+msgid "BS"
+msgstr "基地局"
+
+msgid "Back to the default sound"
+msgstr "既定の音に戻す"
+
+msgid "Best cells (by SINR)"
+msgstr "最良のセル (SINR 順)"
+
+msgid "Clear the log"
+msgstr "ログを消去"
+
+msgid "Click a row to set the target cell"
+msgstr "行をクリックして目標のセルに設定"
+
+msgid "Custom sound loaded"
+msgstr "カスタム音を読み込みました"
+
+msgid "Default sound"
+msgstr "既定の音"
+
+msgid "Geiger (SINR)"
+msgstr "ガイガー (SINR)"
+
+msgid "Interval, s"
+msgstr "間隔 (秒)"
+
+msgid "LTE power · better than -95 dBm"
+msgstr "LTE の電力 · -95 dBm より良ければ良好"
+
+msgid "Log cleared"
+msgstr "ログを消去しました"
+
+msgid "No data"
+msgstr "データ無し"
+
+msgid "Page"
+msgstr "ページ"
+
+msgid "Preview"
+msgstr "プレビュー"
+
+msgid "RSRP tone"
+msgstr "RSRP の音"
+
+msgid "RX spread"
+msgstr "受信のばらつき"
+
+msgid "SINR over the last 30 seconds"
+msgstr "直近 30 秒の SINR"
+
+msgid "Sector"
+msgstr "セクター"
+
+msgid "Sound"
+msgstr "音"
+
+msgid "Sound on"
+msgstr "音をオン"
+
+msgid "Sound: off"
+msgstr "音: オフ"
+
+msgid "Sound: on"
+msgstr "音: オン"
+
+msgid "Target"
+msgstr "ターゲット"
+
+msgid "Target cleared"
+msgstr "目標を解除しました"
+
+msgid "The file is too big (up to ~1.5 MB)"
+msgstr "ファイルが大きすぎます (約 1.5 MB まで)"
+
+msgid "Time"
+msgstr "時刻"
+
+msgid "Upload a custom sound"
+msgstr "カスタム音をアップロード"
+
+msgid "Voice"
+msgstr "音声"
+
+msgid "balance"
+msgstr "バランス"
+
+msgid "cell quality · better than -10 dB"
+msgstr "セルの品質 · -10 dB より良ければ良好"
+
+msgid "excellent"
+msgstr "非常に良好"
+
+msgid "fair"
+msgstr "普通"
+
+msgid "good"
+msgstr "良好"
+
+msgid "overall level"
+msgstr "全体のレベル"
+
+msgid "poor"
+msgstr "弱い"
+
+msgid "sector"
+msgstr "セクター"
+
+msgid "signal-to-noise · aim for >10 dB"
+msgstr "信号対雑音比 · 10 dB 超を目指す"
+
+msgid "(after modem restart the lock stays in effect, but the modem reports it as off)"
+msgstr "(モデムの再起動後もロックは有効ですが、モデムはオフと報告します)"
+
+msgid "256QAM (download)"
+msgstr "256QAM (ダウンロード)"
+
+msgid "3G bands set: %s"
+msgstr "3G バンドを設定しました: %s"
+
+msgid "5G bands and cell lock have no effect until this is enabled"
+msgstr "これを有効にするまで、5G バンドとセルロックは効きません"
+
+msgid "5G cell lock"
+msgstr "5G セルロック"
+
+msgid "AT polling under ModemManager is off for this firmware (it drops the data session), so the current band selection is not read. Applying bands and mode still works; to see the current selection, enable \"AT polling under ModemManager\" in the modem settings."
+msgstr "このファームウェアでは ModemManager 動作中の AT ポーリングがオフ (データ接続が切れるため) なので、現在のバンド選択は読み取りません。バンドとモードの適用はできます。現在の選択を表示するには、モデムの設定で「ModemManager 動作中の AT ポーリング」を有効にしてください。"
+
+msgid "Applying 3G bands..."
+msgstr "3G バンドを適用中..."
+
+msgid "Applying bands — the connection will briefly drop, then reconnect."
+msgstr "バンドを適用中 — 接続が一時的に切れた後、再接続します。"
+
+msgid "Applying network mode..."
+msgstr "ネットワークモードを適用中..."
+
+msgid "Bands applied, refreshing…"
+msgstr "バンドを適用しました。更新中…"
+
+msgid "Cell EARFCN/PCI unknown yet - try again in a few seconds"
+msgstr "セルの EARFCN/PCI がまだ分かりません - 数秒後にもう一度お試しください"
+
+msgid "Change bands"
+msgstr "バンドを変更"
+
+msgid "Could not switch the interface to ModemManager"
+msgstr "インターフェースを ModemManager に切り替えられませんでした"
+
+msgid "Could not switch the modem to XMM"
+msgstr "モデムを XMM に切り替えられませんでした"
+
+msgid "Disabled in modem"
+msgstr "モデムで無効"
+
+msgid "Enable 5G"
+msgstr "5G を有効化"
+
+msgid "Enabled (SA + NSA)"
+msgstr "有効 (SA + NSA)"
+
+msgid "Enabling 5G — the modem is restarting its radio…"
+msgstr "5G を有効化中 — モデムが電波を再起動しています…"
+
+msgid "Enabling uplink aggregation — the modem is restarting its radio…"
+msgstr "上りアグリゲーションを有効化中 — モデムが電波を再起動しています…"
+
+msgid "Failed to set 3G bands"
+msgstr "3G バンドを設定できませんでした"
+
+msgid "Failed to set bands"
+msgstr "バンドを設定できませんでした"
+
+msgid "Failed to set network mode"
+msgstr "ネットワークモードを設定できませんでした"
+
+msgid "Helps only with a strong signal and a base station that supports it"
+msgstr "信号が強く、基地局が対応している場合にだけ効果があります"
+
+msgid "Interface switched to ModemManager"
+msgstr "インターフェースを ModemManager に切り替えました"
+
+msgid "Lock state unknown - this modem does not report it"
+msgstr "ロック状態は不明です - このモデムは報告しません"
+
+msgid "Lock to current 5G cell"
+msgstr "現在の 5G セルにロック"
+
+msgid "Lock to current cell"
+msgstr "現在のセルにロック"
+
+msgid "Locked to cell: ARFCN %s, PCI %s"
+msgstr "セルにロック中: ARFCN %s、PCI %s"
+
+msgid "Locked to cell: EARFCN %s, PCI %s"
+msgstr "セルにロック中: EARFCN %s、PCI %s"
+
+msgid "Locked to frequency: EARFCN %s"
+msgstr "周波数にロック中: EARFCN %s"
+
+msgid "Locking to cell ARFCN %s, PCI %s - the modem re-registers..."
+msgstr "セル ARFCN %s、PCI %s にロックしています - モデムが再登録します..."
+
+msgid "Locking to cell EARFCN %s, PCI %s - the modem re-registers..."
+msgstr "セル EARFCN %s、PCI %s にロックしています - モデムが再登録します..."
+
+msgid "ModemManager does not manage this modem"
+msgstr "ModemManager はこのモデムを管理していません"
+
+msgid "Network mode set: %s"
+msgstr "ネットワークモードを設定しました: %s"
+
+msgid "No 5G carrier right now - the lock needs its ARFCN and PCI"
+msgstr "現在 5G キャリアがありません - ロックには ARFCN と PCI が必要です"
+
+msgid "Not locked"
+msgstr "ロックなし"
+
+msgid "Only NSA enabled"
+msgstr "NSA のみ有効"
+
+msgid "Only SA enabled"
+msgstr "SA のみ有効"
+
+msgid "Read-only for this modem: the lock can be removed with an AT command only"
+msgstr "このモデムでは読み取り専用: ロックの解除は AT コマンドでのみ行えます"
+
+msgid "Removing the lock - the modem restarts, connection drops for a while..."
+msgstr "ロックを解除しています - モデムが再起動し、しばらく接続が切れます..."
+
+msgid "Reset cell lock"
+msgstr "セルロックをリセット"
+
+msgid "Select at least one band"
+msgstr "バンドを 1 つ以上選んでください"
+
+msgid "Serving cell is unknown yet - try again in a few seconds"
+msgstr "接続中のセルがまだ分かりません - 数秒後にもう一度お試しください"
+
+msgid "Switching the modem to XMM — it is rebooting and re-enumerating (~40 s)…"
+msgstr "モデムを XMM に切り替えています — 再起動して USB で再認識されます (約 40 秒)…"
+
+msgid "The modem works without carrier aggregation, as if it were cat4"
+msgstr "モデムはキャリアアグリゲーションなしで、cat4 のように動作します"
+
+msgid "To change bands the app briefly hands this modem to ModemManager, applies the change and reconnects. The connection will drop for up to a minute."
+msgstr "バンドを変更するため、アプリはこのモデムを一時的に ModemManager に渡し、変更を適用して再接続します。接続は最大 1 分切れます。"
+
+msgid "Turn off"
+msgstr "オフにする"
+
+msgid "Turn on"
+msgstr "オンにする"
+
+msgid "Turning 256QAM off — the modem is restarting its radio…"
+msgstr "256QAM をオフにしています — モデムが電波を再起動しています…"
+
+msgid "Turning 256QAM on — the modem is restarting its radio…"
+msgstr "256QAM をオンにしています — モデムが電波を再起動しています…"
+
+msgid "Unlock"
+msgstr "ロック解除"
+
+msgid "Uplink aggregation"
+msgstr "上りアグリゲーション"
+
+msgid "Upload often sits at 1-2 Mbit/s until this is on"
+msgstr "これをオンにするまで、上りは 1〜2 Mbit/s にとどまることが多いです"
+
+msgid "(click the button to switch state)"
+msgstr "(ボタンをクリックして状態を切り替え)"
+
+msgid "All buttons of this device have been added"
+msgstr "このデバイスのボタンはすべて追加済みです"
+
+msgid "Apply this LED combination now to check it"
+msgstr "この LED の組み合わせを今すぐ適用して確認"
+
+msgid "Assign actions to this router’s physical buttons. Click a button below to add and configure it."
+msgstr "このルーターの物理ボタンに動作を割り当てます。下のボタンをクリックすると、追加して設定できます。"
+
+msgid "Buttons"
+msgstr "ボタン"
+
+msgid "Cleared"
+msgstr "消去しました"
+
+msgid "Click the button to switch between its pressed and released state"
+msgstr "ボタンをクリックすると、押した状態と離した状態が切り替わります"
+
+msgid "Command type:"
+msgstr "コマンドの種類:"
+
+msgid "Command:"
+msgstr "コマンド:"
+
+msgid "Conditional"
+msgstr "条件付き"
+
+msgid "Dismiss"
+msgstr "閉じる"
+
+msgid "LEDs in this state:"
+msgstr "この状態の LED:"
+
+msgid "LEDs when the service is running:"
+msgstr "サービス動作中の LED:"
+
+msgid "LEDs when the service is stopped:"
+msgstr "サービス停止中の LED:"
+
+msgid "No LEDs found on this device"
+msgstr "このデバイスに LED が見つかりません"
+
+msgid "No assignable buttons were detected on this device"
+msgstr "このデバイスには割り当て可能なボタンが見つかりませんでした"
+
+msgid "Pick a service from the command menu above (▾) - it fills the toggle command. Each press flips it; the LEDs below reflect whether it ends up running or stopped."
+msgstr "上のコマンドメニュー (▾) からサービスを選ぶと、切り替えコマンドが入力されます。押すたびに切り替わり、下の LED は結果として動作中か停止中かを表します。"
+
+msgid "Pressed"
+msgstr "押した"
+
+msgid "Reboot the modem"
+msgstr "モデムを再起動"
+
+msgid "Released"
+msgstr "離した"
+
+msgid "Restart service"
+msgstr "サービスを再起動"
+
+msgid "Saved"
+msgstr "保存しました"
+
+msgid "Simple"
+msgstr "シンプル"
+
+msgid "Start service"
+msgstr "サービスを開始"
+
+msgid "Stop service"
+msgstr "サービスを停止"
+
+msgid "Switch OFF"
+msgstr "オフに切り替え"
+
+msgid "Switch ON"
+msgstr "オンに切り替え"
+
+msgid "Switch SIM slot"
+msgstr "SIM スロットを切り替え"
+
+msgid "Toggle service"
+msgstr "サービスを切り替え"
+
+msgid "Toggle service (on/off)"
+msgstr "サービスを切り替え (オン/オフ)"
+
+msgid "delay between repeats, seconds"
+msgstr "繰り返しの間隔 (秒)"
+
+msgid "insert a preset"
+msgstr "プリセットを挿入"
+
+msgid "off"
+msgstr "オフ"
+
+msgid "on"
+msgstr "オン"
+
+msgid "shell command"
+msgstr "シェルコマンド"
+
+msgid "test on LEDs"
+msgstr "LED でテスト"
+
+msgid "-- Select file --"
+msgstr "-- ファイルを選択 --"
+
+msgid "All files deleted successfully"
+msgstr "すべてのファイルを削除しました"
+
+msgid "Archive extracted to"
+msgstr "アーカイブの展開先:"
+
+msgid "Are you sure you want to delete all files in the folder?"
+msgstr "フォルダー内のファイルをすべて削除しますか？"
+
+msgid "Are you sure you want to delete this file?"
+msgstr "このファイルを削除しますか？"
+
+msgid "Create"
+msgstr "作成"
+
+msgid "Delete all files"
+msgstr "すべてのファイルを削除"
+
+msgid "Delete selected file"
+msgstr "選択したファイルを削除"
+
+msgid "Deleting files"
+msgstr "ファイルを削除中"
+
+msgid "Error"
+msgstr "エラー"
+
+msgid "Failed to create archive"
+msgstr "アーカイブを作成できませんでした"
+
+msgid "Failed to extract archive"
+msgstr "アーカイブを展開できませんでした"
+
+msgid "Failed to read archive"
+msgstr "アーカイブを読み取れませんでした"
+
+msgid "File created successfully"
+msgstr "ファイルを作成しました"
+
+msgid "File deleted successfully"
+msgstr "ファイルを削除しました"
+
+msgid "File saved successfully"
+msgstr "ファイルを保存しました"
+
+msgid "File uploaded and saved to"
+msgstr "ファイルをアップロードし、保存しました:"
+
+msgid "Load .gz archive"
+msgstr ".gz アーカイブを読み込む"
+
+msgid "Load .user file"
+msgstr ".user ファイルを読み込む"
+
+msgid "New file name"
+msgstr "新しいファイル名"
+
+msgid "Phonebook saved successfully"
+msgstr "電話帳を保存しました"
+
+msgid "Please enter a file name"
+msgstr "ファイル名を入力してください"
+
+msgid "Please select a file to delete"
+msgstr "削除するファイルを選んでください"
+
+msgid "Please select or create a file first"
+msgstr "先にファイルを選ぶか作成してください"
+
+msgid "Save .gz archive"
+msgstr ".gz アーカイブを保存"
+
+msgid "Save .user file"
+msgstr ".user ファイルを保存"
+
+msgid "Select file"
+msgstr "ファイルを選択"
+
+msgid "Select or create a file to edit..."
+msgstr "編集するファイルを選ぶか作成してください..."
+
+msgid "Unable to create file"
+msgstr "ファイルを作成できません"
+
+msgid "Unable to delete file"
+msgstr "ファイルを削除できません"
+
+msgid "Unable to delete files"
+msgstr "ファイルを削除できません"
+
+msgid "Unable to load file"
+msgstr "ファイルを読み込めません"
+
+msgid "Unable to save file"
+msgstr "ファイルを保存できません"
+
+msgid "Unable to save the file"
+msgstr "ファイルを保存できません"
+
+msgid "Unable to upload file"
+msgstr "ファイルをアップロードできません"
+
+msgid "Upload error"
+msgstr "アップロードエラー"
+
+msgid "filename.user"
+msgstr "filename.user"
+
+msgid "AT command port used for dialing; auto-selected when empty"
+msgstr "ダイヤルに使う AT コマンドポート。空欄なら自動で選びます"
+
+msgid "AT port"
+msgstr "AT ポート"
+
+msgid "Authentication Type"
+msgstr "認証タイプ"
+
+msgid "Fibocom (AT-dial)"
+msgstr "Fibocom (AT ダイヤル)"
+
+msgid "IP Protocol"
+msgstr "IPプロトコル"
+
+msgid "IPv4"
+msgstr "IPv4"
+
+msgid "IPv4+IPv6"
+msgstr "IPv4+IPv6"
+
+msgid "IPv6"
+msgstr "IPv6"
+
+msgid "Invalid APN provided"
+msgstr "APN が無効です"
+
+msgid "Metric"
+msgstr "メトリック"
+
+msgid "Modem did not provide an IP address"
+msgstr "モデムから IP アドレスが割り当てられませんでした"
+
+msgid "Network device"
+msgstr "ネットワークデバイス"
+
+msgid "No AT control port found"
+msgstr "AT 制御ポートが見つかりません"
+
+msgid "No usbnet device found for the modem"
+msgstr "モデムの usbnet デバイスが見つかりません"
+
+msgid "Registered in roaming, and roaming is disabled"
+msgstr "ローミングで登録されましたが、ローミングは無効です"
+
+msgid "Route metric - higher value means lower priority"
+msgstr "経路のメトリック - 値が大きいほど優先度が低くなります"
+
+msgid "Stable USB topology path of the modem (managed by the 5G Modem app)"
+msgstr "モデムの固定の USB トポロジーパス (5G モデムアプリが管理)"
+
+msgid "The modem is not registered on any network — check the antennas and the signal level"
+msgstr "モデムがどのネットワークにも登録されていません — アンテナと信号レベルを確認してください"
+
+msgid "The modem network device is missing from the system"
+msgstr "モデムのネットワークデバイスがシステムにありません"
+
+msgid "The network refused registration — check the SIM, the plan and whether the IMEI is blocked"
+msgstr "ネットワークが登録を拒否しました — SIM、料金プラン、IMEI がブロックされていないかを確認してください"
+
+msgid "USB path"
+msgstr "USB パス"
+
+msgid "usbnet device, auto-resolved from the USB path"
+msgstr "usbnet デバイス (USB パスから自動で決定)"
+
+msgid "...plus USB power cycle"
+msgstr "...さらに USB の電源入れ直し"
+
+msgid "...plus reboot the module"
+msgstr "...さらにモジュールを再起動"
+
+msgid "A link marked here never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "ここで印を付けた回線には、自動で通信が流れることはありません。使うにはカードをクリックして最優先にしてください。スマートフォンへの Wi-Fi のような予備回線に便利です。"
+
+msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
+msgstr "アドレスはあるのにインターネットにつながらない回線は、自分からは通信を手放しません。監視機能が経路をその回線より後ろに回し、回線が戻ったら元に戻します。設定の経路メトリックは変更しません。既定はオンです。"
+
+msgid "Check interval, s"
+msgstr "確認の間隔 (秒)"
+
+msgid "Default (reconnect, then reboot the module)"
+msgstr "既定 (再接続し、だめならモジュールを再起動)"
+
+msgid "Do nothing"
+msgstr "何もしない"
+
+msgid "Enable watching"
+msgstr "監視を有効化"
+
+msgid "Failures before down"
+msgstr "切断と判定するまでの失敗回数"
+
+msgid "Heal a modem while its link is down"
+msgstr "回線が落ちているモデムを修復"
+
+msgid "Heal the Wi-Fi uplink while it is down"
+msgstr "落ちている Wi-Fi の上り回線を修復"
+
+msgid "If at least one target responds"
+msgstr "対象のどれか 1 つでも応答すれば"
+
+msgid "Keep it last"
+msgstr "最後尾のままにする"
+
+msgid "Ping targets"
+msgstr "ping の対象"
+
+msgid "Reconnect the interface"
+msgstr "インターフェースを再接続"
+
+msgid "Return its priority"
+msgstr "優先度を元に戻す"
+
+msgid "Successes before up"
+msgstr "復旧と判定するまでの成功回数"
+
+msgid "Switch traffic to a backup link when one goes down"
+msgstr "回線が落ちたら予備の回線に通信を切り替える"
+
+msgid "Use only manually"
+msgstr "手動でのみ使う"
+
+msgid "When a link recovers"
+msgstr "回線が復旧したとき"
+
+msgid "none"
+msgstr "なし"
+
+msgid "Could not switch the modem"
+msgstr "モデムを切り替えられませんでした"
+
+msgid "Modem %d"
+msgstr "モデム %d"
+
+msgid "No modem selected"
+msgstr "モデムが選択されていません"
+
+msgid "Rename"
+msgstr "名前を変更"
+
+msgid "The selected device is not a modem"
+msgstr "選択したデバイスはモデムではありません"
+
+msgid "modem"
+msgstr "モデム"
+
+msgid "%s - receive only, works only as an aggregation carrier"
+msgstr "%s - 受信専用。アグリゲーションのキャリアとしてのみ動作します"
+
+msgid "GiB"
+msgstr "GiB"
+
+msgid "KiB"
+msgstr "KiB"
+
+msgid "MiB"
+msgstr "MiB"
+
+msgid "TiB"
+msgstr "TiB"
+
+msgid "%dm"
+msgstr "%d分"
+
+msgid "%ds"
+msgstr "%d秒"
+
+msgid "%s address of this router: %s"
+msgstr "このルーターの %s アドレス: %s"
+
+msgid "%s is reachable"
+msgstr "%s に到達できます"
+
+msgid "%s is running"
+msgstr "%s は動作中です"
+
+msgid "%s is stopped"
+msgstr "%s は停止しています"
+
+msgid "Click to measure ping to %s over the active uplink"
+msgstr "クリックすると、使用中の上り回線で %s への ping を測定します"
+
+msgid "Click to ping %s"
+msgstr "クリックして %s に ping"
+
+msgid "DNS returns a foreign address for %s (%s) - the resolver substitutes it"
+msgstr "DNS が %s に対して別のアドレス (%s) を返しています - リゾルバーが置き換えています"
+
+msgid "Device is gone"
+msgstr "デバイスがなくなりました"
+
+msgid "External address via %s. Interface address: %s"
+msgstr "%s 経由の外部アドレス。インターフェースのアドレス: %s"
+
+msgid "Internet is working (%s ms)"
+msgstr "インターネットは正常です (%s ms)"
+
+msgid "Internet watchdog settings"
+msgstr "インターネット監視の設定"
+
+msgid "Measure the real download/upload speed over the modem - a quick way to see whether carrier aggregation is actually working"
+msgstr "モデム経由の実際のダウンロード/アップロード速度を測定します - キャリアアグリゲーションが本当に効いているかを手早く確認できます"
+
+msgid "Modem address, not external"
+msgstr "モデムのアドレスで、外部アドレスではありません"
+
+msgid "No connection to %s"
+msgstr "%s に接続できません"
+
+msgid "No internet on this link"
+msgstr "この回線ではインターネットにつながりません"
+
+msgid "Open %s"
+msgstr "%s を開く"
+
+msgid "Open the %s admin panel in a new tab"
+msgstr "%s の管理画面を新しいタブで開く"
+
+msgid "Reassociating"
+msgstr "再接続中 (Wi-Fi)"
+
+msgid "Rebooting"
+msgstr "再起動中"
+
+msgid "Rebuilding the network"
+msgstr "ネットワークを再構築中"
+
+msgid "Reconnecting"
+msgstr "再接続中"
+
+msgid "Restarting the radio"
+msgstr "電波を再起動中"
+
+msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
+msgstr "速度テストには curl パッケージが必要です: \"apk add curl\" (または \"opkg install curl\") でインストールしてください。libcurl は 8 MB フラッシュのルーターでは大きいため、同梱していません。"
+
+msgid "Test failed"
+msgstr "テストに失敗しました"
+
+msgid "This Wi-Fi uplink is not in the wan firewall zone - click to add it and make it usable"
+msgstr "この Wi-Fi の上り回線は wan ファイアウォールゾーンに入っていません - クリックすると追加して使えるようにします"
+
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
+msgstr "通信は %s を通っていますが、そこではインターネットにつながりません。自動切り替えがオフなので、監視機能は障害を検知しても何もしません。"
+
+msgid "Turn switching on"
+msgstr "切り替えをオンにする"
+
+msgid "USB power cycle"
+msgstr "USB の電源入れ直し"
+
+msgid "modem web API"
+msgstr "モデムの Web API"
+
+msgid "ms"
+msgstr "ms"
+
+msgid "not in wan zone — click to fix"
+msgstr "wan ゾーンに入っていません — クリックして修正"
+
+msgid "running"
+msgstr "動作中"
+
+msgid "stopped"
+msgstr "停止"
+
+msgid "APN profile index"
+msgstr "APN プロファイル番号"
+
+msgid "IPv6 APN"
+msgstr "IPv6 APN"
+
+msgid "IPv6 APN profile index"
+msgstr "IPv6 APN プロファイル番号"
+
+msgid "If unchecked, no default route is configured"
+msgstr "チェックが付いていない場合、デフォルトルートは構成されません"
+
+msgid "If unchecked, the advertised DNS server addresses are ignored"
+msgstr "チェックが付いていない場合、通知されたDNSサーバーアドレスを無視します"
+
+msgid "Maximum amount of seconds to wait for the modem to become ready"
+msgstr "モデムの準備が完了するまでの最大の待ち時間（秒）"
+
+msgid "Modem device"
+msgstr "モデムデバイス"
+
+msgid "Modem init timeout"
+msgstr "モデム初期化タイムアウト"
+
+msgid "Override MTU"
+msgstr "MTUを上書き"
+
+msgid "PDP Type"
+msgstr "PDPタイプ"
+
+msgid "PIN"
+msgstr "PIN"
+
+msgid "QMI Cellular (raw-ip)"
+msgstr "QMI セルラー (raw-ip)"
+
+msgid "Use DNS servers advertised by peer"
+msgstr "ピアから通知されたDNSサーバーを使用"
+
+msgid "Use default gateway"
+msgstr "デフォルトゲートウェイを使用"
+
+msgid "Use gateway metric"
+msgstr "ゲートウェイメトリックを使用"
+
+msgid "Any change in the area from which SMS messages will be read requires refreshing the messages"
+msgstr "SMS を読み取る領域を変更した場合は、メッセージを再読み込みしてください"
+
+msgid "Changing a modem requires refreshing the messages"
+msgstr "モデムを変更した場合は、メッセージを再読み込みしてください"
+
+msgid "Could not delete messages"
+msgstr "メッセージを削除できませんでした"
+
+msgid "Could not read messages"
+msgstr "メッセージを読み取れませんでした"
+
+msgid "Could not read messages - will retry on the next refresh"
+msgstr "メッセージを読み取れませんでした - 次の更新で再試行します"
+
+msgid "Error: %s"
+msgstr "エラー: %s"
+
+msgid "Failed to forward message: %s"
+msgstr "メッセージを転送できませんでした: %s"
+
+msgid "Forward SMS"
+msgstr "SMS を転送"
+
+msgid "Forward SMS to E-mail"
+msgstr "SMS をメールに転送"
+
+msgid "Loading messages…"
+msgstr "メッセージを読み込み中…"
+
+msgid "Mark read"
+msgstr "既読にする"
+
+msgid "Memory: %s/%s"
+msgstr "メモリ: %s/%s"
+
+msgid "Message forwarded successfully"
+msgstr "メッセージを転送しました"
+
+msgid "Message text:"
+msgstr "メッセージ本文:"
+
+msgid "Modem memory"
+msgstr "モデムのメモリ"
+
+msgid "Multipart messages found - merging enabled automatically. You can turn it off in SMS settings."
+msgstr "分割されたメッセージが見つかったため、自動で結合を有効にしました。SMS の設定でオフにできます。"
+
+msgid "My Router"
+msgstr "マイルーター"
+
+msgid "New"
+msgstr "新着"
+
+msgid "Next modem"
+msgstr "次のモデム"
+
+msgid "No messages"
+msgstr "メッセージはありません"
+
+msgid "Please select the message(s) to be deleted"
+msgstr "削除するメッセージを選んでください"
+
+msgid "Please select the message(s) to be forwarded"
+msgstr "転送するメッセージを選んでください"
+
+msgid "Please set the port for communication with the modem"
+msgstr "モデムと通信するポートを設定してください"
+
+msgid "Please wait... deleted"
+msgstr "お待ちください... 削除済み"
+
+msgid "Previous modem"
+msgstr "前のモデム"
+
+msgid "SMS forwarding function is not enabled"
+msgstr "SMS 転送機能が有効になっていません"
+
+msgid "Select modem"
+msgstr "モデムを選択"
+
+msgid "Sending e-mail..."
+msgstr "メールを送信中..."
+
+msgid "Subject and body cannot be empty"
+msgstr "件名と本文は空にできません"
+
+msgid "Subject:"
+msgstr "件名:"
+
+msgid "of"
+msgstr "/"
+
+msgid "selected messages"
+msgstr "件 (選択したメッセージ)"
+
+msgid "selected: %d"
+msgstr "選択: %d"
+
+msgid "AT templates"
+msgstr "AT テンプレート"
+
+msgid "Clear form"
+msgstr "フォームをクリア"
+
+msgid "Command to send"
+msgstr "送信するコマンド"
+
+msgid "Dangerous AT command"
+msgstr "危険な AT コマンド"
+
+msgid "Defined AT command files"
+msgstr "定義済みの AT コマンドファイル"
+
+msgid "Error loading AT commands file:"
+msgstr "AT コマンドファイルの読み込みエラー: "
+
+msgid "My commands"
+msgstr "マイコマンド"
+
+msgid "No AT commands available"
+msgstr "使える AT コマンドがありません"
+
+msgid "No response from modem"
+msgstr "モデムから応答がありません"
+
+msgid "Please specify the command to send"
+msgstr "送信するコマンドを指定してください"
+
+msgid "Press [Enter] to send the command, press [Ctrl+Delete] to clear the field"
+msgstr "[Enter] でコマンドを送信、[Ctrl+Delete] で入力欄をクリアします"
+
+msgid "Reply"
+msgstr "応答"
+
+msgid "Select file with AT commands to load"
+msgstr "読み込む AT コマンドファイルを選択"
+
+msgid "Send anyway"
+msgstr "それでも送信"
+
+msgid "Send command"
+msgstr "コマンドを送信"
+
+msgid "This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back."
+msgstr "このコマンドはモデムの構成を変えたり、ポートを完全に無効にしたりすることがあります。モジュールによってはすべての USB ポートが消え、EDL で書き直さないと戻りません。"
+
+msgid "User AT commands"
+msgstr "ユーザー AT コマンド"
+
+msgid "User interface for sending AT commands using sms-tool"
+msgstr "sms-tool で AT コマンドを送信する画面"
+
+msgid "Characters remaining:"
+msgstr "残りの文字数:"
+
+msgid "Edit User Contacts"
+msgstr "ユーザー連絡先を編集"
+
+msgid "Encoding standard"
+msgstr "文字コード"
+
+msgid "Enter the number as is: a 10-digit national number gets the country prefix from the settings automatically; short service numbers (like 000100) are sent unchanged."
+msgstr "番号はそのまま入力してください: 10 桁の国内番号には設定の国番号が自動で付きます。短いサービス番号 (000100 など) はそのまま送信します。"
+
+msgid "GSM-7 (160 characters)"
+msgstr "GSM-7 (160 文字)"
+
+msgid "GSM-7 encoding (160 characters)"
+msgstr "GSM-7 エンコード (160 文字)"
+
+msgid "Manage contacts"
+msgstr "連絡先を管理"
+
+msgid "Message text"
+msgstr "メッセージ本文"
+
+msgid "Please enter a message text"
+msgstr "メッセージ本文を入力してください"
+
+msgid "Please enter phone number"
+msgstr "電話番号を入力してください"
+
+msgid "Press [Delete] to delete the content of the message"
+msgstr "[Delete] でメッセージの内容を削除します"
+
+msgid "Press [Delete] to delete the phone number"
+msgstr "[Delete] で電話番号を削除します"
+
+msgid "SMS sent sucessfully"
+msgstr "SMS を送信しました"
+
+msgid "Send to"
+msgstr "送信先"
+
+msgid "Send to number"
+msgstr "番号に送信"
+
+msgid "Unicode (70 characters)"
+msgstr "Unicode (70 文字)"
+
+msgid "Unicode encoding (70 characters), does not support sending national characters (in utf8) - only ascii"
+msgstr "Unicode エンコード (70 文字)。各国語の文字 (utf8) は送信できず、ASCII のみです"
+
+msgid "User contacts"
+msgstr "ユーザー連絡先"
+
+msgid "User interface for sending messages using sms-tool"
+msgstr "sms-tool でメッセージを送信する画面"
+
+msgid "[Bot] Message sent to number:"
+msgstr "[Bot] メッセージを送信した番号:"
+
+msgid "e.g. 9291067196 or a short number like 000100"
+msgstr "例: 9291067196、または 000100 のような短い番号"
+
+msgid "to group"
+msgstr "(グループへ)"
+
+msgid "to number"
+msgstr "(番号へ)"
+
+msgid "Call barred"
+msgstr "発信規制中"
+
+msgid "Check this option if you need to use the menu built on USSD codes"
+msgstr "USSD コードで作られたメニューを使う場合はオンにしてください"
+
+msgid "Code to send"
+msgstr "送信するコード"
+
+msgid "Corporate personalization PIN required"
+msgstr "法人向けパーソナライズの PIN が必要です"
+
+msgid "Corporate personalization PUK required"
+msgstr "法人向けパーソナライズの PUK が必要です"
+
+msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
+msgstr "モデムを 3G に切り替えられなかったため、リクエストを送信しませんでした: USSD には回線交換チャネルが必要です。"
+
+msgid "Defined USSD code files"
+msgstr "定義済みの USSD コードファイル"
+
+msgid "Dial string too long"
+msgstr "ダイヤル文字列が長すぎます"
+
+msgid "Error loading USSD codes file:"
+msgstr "USSD コードファイルの読み込みエラー: "
+
+msgid "Failed to detect modem:"
+msgstr "モデムを検出できませんでした: "
+
+msgid "GPRS services not allowed"
+msgstr "GPRS サービスは許可されていません"
+
+msgid "Illegal ME"
+msgstr "不正な ME"
+
+msgid "Illegal MS"
+msgstr "不正な MS"
+
+msgid "Incorrect password"
+msgstr "パスワードが間違っています"
+
+msgid "Invalid block"
+msgstr "無効なブロック"
+
+msgid "Invalid characters in dial string"
+msgstr "ダイヤル文字列に無効な文字があります"
+
+msgid "Invalid characters in text string"
+msgstr "テキスト文字列に無効な文字があります"
+
+msgid "Invalid dial string"
+msgstr "無効なダイヤル文字列"
+
+msgid "Invalid index"
+msgstr "無効なインデックス"
+
+msgid "Invalid mobile class"
+msgstr "無効な移動機クラス"
+
+msgid "Keep the previous reply when sending a new USSD"
+msgstr "新しい USSD を送るときに前の応答を残す"
+
+msgid "Location area not allowed"
+msgstr "位置登録エリアが許可されていません"
+
+msgid "Location update failure – emergency calls only (Specific Modem Sierra)"
+msgstr "位置登録に失敗 – 緊急通報のみ (Sierra 製モデム固有)"
+
+msgid "Memory failure"
+msgstr "メモリの障害"
+
+msgid "Memory full"
+msgstr "メモリがいっぱいです"
+
+msgid "Network not allowed, emergency calls only"
+msgstr "ネットワークが許可されていません。緊急通報のみ"
+
+msgid "Network personalization PIN required"
+msgstr "ネットワークパーソナライズの PIN が必要です"
+
+msgid "Network personalization PUK required"
+msgstr "ネットワークパーソナライズの PUK が必要です"
+
+msgid "Network subset personalization PIN required"
+msgstr "ネットワークサブセットパーソナライズの PIN が必要です"
+
+msgid "Network subset personalization PUK required"
+msgstr "ネットワークサブセットパーソナライズの PUK が必要です"
+
+msgid "Network timeout"
+msgstr "ネットワークのタイムアウト"
+
+msgid "Newest replies first"
+msgstr "新しい応答を上に表示"
+
+msgid "No USSD codes available"
+msgstr "使える USSD コードがありません"
+
+msgid "No connection to phone"
+msgstr "電話機との接続がありません"
+
+msgid "No modems found by ModemManager (mmcli -L)"
+msgstr "ModemManager がモデムを見つけられません (mmcli -L)"
+
+msgid "No network service"
+msgstr "ネットワークサービスなし"
+
+msgid "No reply. The request went to a modem that is not the active one, so it was not switched to 3G - and USSD needs the circuit-switched channel. Select this modem and repeat."
+msgstr "応答がありません。リクエストはアクティブではないモデムに送られたため、3G に切り替えませんでした。USSD には回線交換チャネルが必要です。このモデムを選んでから、もう一度送ってください。"
+
+msgid "Not found"
+msgstr "見つかりません"
+
+msgid "Operation not allowed"
+msgstr "操作は許可されていません"
+
+msgid "Operation not supported"
+msgstr "操作はサポートされていません"
+
+msgid "Operation temporarily not allowed"
+msgstr "操作は一時的に許可されていません"
+
+msgid "Operation temporary not allowed"
+msgstr "操作は一時的に許可されていません"
+
+msgid "PDP authentication failure"
+msgstr "PDP の認証に失敗しました"
+
+msgid "PH-SIM PUK required"
+msgstr "PH-SIM PUK が必要です"
+
+msgid "PH_FSIM PIN required"
+msgstr "PH_FSIM PIN が必要です"
+
+msgid "PH_FSIM PUK required"
+msgstr "PH_FSIM PUK が必要です"
+
+msgid "PH_SIM PIN required"
+msgstr "PH_SIM PIN が必要です"
+
+msgid "PLMN not allowed"
+msgstr "PLMN が許可されていません"
+
+msgid "Phone/Modem adapter link reserved"
+msgstr "電話機/モデムのアダプタリンクは予約済みです"
+
+msgid "Phone/Modem failure"
+msgstr "電話機/モデムの障害"
+
+msgid "Phone/Modem is busy"
+msgstr "電話機/モデムが使用中です"
+
+msgid "Please specify the code to send"
+msgstr "送信するコードを指定してください"
+
+msgid "Please wait, and retry your selection later (Specific Modem Sierra)"
+msgstr "しばらく待ってから選択し直してください (Sierra 製モデム固有)"
+
+msgid "Preparing the request…"
+msgstr "リクエストを準備中…"
+
+msgid "Press [Enter] to send the code, press [Ctrl+Delete] to clear the field"
+msgstr "[Enter] でコードを送信、[Ctrl+Delete] で入力欄をクリアします"
+
+msgid "Requested service option not subscribed"
+msgstr "要求したサービスオプションは契約されていません"
+
+msgid "Restoring the previous network mode"
+msgstr "元のネットワークモードに戻しています"
+
+msgid "Roaming not allowed in this location area"
+msgstr "この位置登録エリアではローミングが許可されていません"
+
+msgid "SIM Blocked"
+msgstr "SIM がブロックされています"
+
+msgid "SIM not inserted"
+msgstr "SIM が挿入されていません"
+
+msgid "SIM powered down"
+msgstr "SIM の電源がオフです"
+
+msgid "SS not executed"
+msgstr "補足サービス (SS) は実行されませんでした"
+
+msgid "Select file with USSD codes to load"
+msgstr "読み込む USSD コードファイルを選択"
+
+msgid "Selection failure – emergency calls only (Specific Modem Sierra)"
+msgstr "選択に失敗 – 緊急通報のみ (Sierra 製モデム固有)"
+
+msgid "Send code"
+msgstr "コードを送信"
+
+msgid "Sending the request"
+msgstr "リクエストを送信中"
+
+msgid "Service operation not supported"
+msgstr "サービス操作はサポートされていません"
+
+msgid "Service option temporary out of order"
+msgstr "サービスオプションは一時的に利用できません"
+
+msgid "Service provider personalization PIN required"
+msgstr "サービスプロバイダーパーソナライズの PIN が必要です"
+
+msgid "Service provider personalization PUK required"
+msgstr "サービスプロバイダーパーソナライズの PUK が必要です"
+
+msgid "Switching the modem to 3G - USSD needs the circuit-switched channel"
+msgstr "モデムを 3G に切り替えています - USSD には回線交換チャネルが必要です"
+
+msgid "Text string too long"
+msgstr "テキスト文字列が長すぎます"
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
+msgstr "モデムは現在 %s で登録されています。USSD は回線交換チャネルで動作しますが、LTE にはこのチャネルがありません。それでも応答するモデムは多いですが、応答がない場合は下の設定で「USSD のためにモデムを 3G に切り替える」を有効にしてください。"
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds."
+msgstr "モデムは現在 %s で登録されており、USSD は回線交換チャネルで動作します。そのため、リクエストの際にモデムを 3G に切り替えてから元に戻します。接続は 20 秒ほど切れます。"
+
+msgid "The network registered this SIM for SMS only, so USSD is unavailable right now: it is a voice-domain service. The modem itself supports USSD - requests will simply stay unanswered until the registration changes."
+msgstr "ネットワークはこの SIM を SMS 専用で登録したため、今は USSD を使えません (音声ドメインのサービスのため)。モデム自体は USSD に対応しています。登録状態が変わるまで、リクエストに応答がないだけです。"
+
+msgid "The request was rejected: %s"
+msgstr "リクエストが拒否されました: %s"
+
+msgid "This modem does not answer USSD requests: its firmware has no SS support. Verified on real hardware."
+msgstr "このモデムは USSD リクエストに応答しません: ファームウェアが SS に対応していません。実機で確認済みです。"
+
+msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
+msgstr "このモデムでは USSD は使えません: ファームウェアが SS に対応していないデータ専用モジュールです。実機で確認済みで、モデムは USSD リクエストに一切応答しません。"
+
+msgid "USSD session is active — type your reply and press Send"
+msgstr "USSD セッション中です — 返信を入力して「送信」を押してください"
+
+msgid "USSD templates"
+msgstr "USSD テンプレート"
+
+msgid "USSD works over the circuit-switched channel. If the modem is registered in LTE only, switch it to 3G on the frequency-management page and repeat the request."
+msgstr "USSD は回線交換チャネルで動作します。モデムが LTE のみで登録されている場合は、周波数の管理ページで 3G に切り替えてから、もう一度送ってください。"
+
+msgid "Unknown error"
+msgstr "不明なエラー"
+
+msgid "Unspecified GPRS error"
+msgstr "不明な GPRS エラー"
+
+msgid "User USSD codes"
+msgstr "ユーザー USSD コード"
+
+msgid "User abort"
+msgstr "ユーザーによる中止"
+
+msgid "User interface for sending USSD codes using sms-tool"
+msgstr "sms-tool で USSD コードを送信する画面"
+
+msgid "View new reply from top"
+msgstr "新しい応答を上から表示"
+
+msgid "%s messages"
+msgstr "%s 件のメッセージ"
+
+msgid "1 min"
+msgstr "1 分"
+
+msgid "12h"
+msgstr "12 時間"
+
+msgid "15 min"
+msgstr "15 分"
+
+msgid "3–59 seconds. Important: messages are sent without delivery verification or confirmation, so there is a risk they are not delivered."
+msgstr "3〜59 秒。重要: メッセージは配信の確認なしで送るため、届かないおそれがあります。"
+
+msgid "4h"
+msgstr "4 時間"
+
+msgid "5 min"
+msgstr "5 分"
+
+msgid "6h"
+msgstr "6 時間"
+
+msgid "7-bit"
+msgstr "7 ビット"
+
+msgid "8h"
+msgstr "8 時間"
+
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> の名前"
+
+msgid "A shell command, exactly as you would type it over SSH."
+msgstr "SSH で入力するのとまったく同じシェルコマンド。"
+
+msgid "Add prefix to the phone number"
+msgstr "電話番号に国番号を付ける"
+
+msgid "Advanced (merge with sorting)"
+msgstr "高度 (並べ替えて結合)"
+
+msgid "Allow sending SMS from the chat"
+msgstr "チャットからの SMS 送信を許可"
+
+msgid "App password / password for SMTP authentication"
+msgstr "アプリパスワード / SMTP 認証のパスワード"
+
+msgid "Autodetect"
+msgstr "自動検出"
+
+msgid "Automatically add the prefix to the phone-number field"
+msgstr "電話番号の欄に国番号を自動で付ける"
+
+msgid "Bot token"
+msgstr "ボットのトークン"
+
+msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. A modem that cannot receive into the chosen storage keeps its own, and this setting is corrected to match - the list always shows the box the messages actually land in. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
+msgstr "読み取りと受信の両方: 新しく受信したメッセージもここに保存するようモデムに指示します。選んだ保存先に受信できないモデムは自分の保存先を使い続け、この設定もそれに合わせて修正されます (一覧には、メッセージが実際に届く保存先を常に表示します)。SIM カードに保存できるのは 20〜30 件ほどで、いっぱいになると事業者は配信を止めます。ここで値を選ぶまでは、アプリが 2 つのうち容量の大きい方を自動で選びます。"
+
+msgid "Chat ID"
+msgstr "チャット ID"
+
+msgid "Chat ID found and saved: %s (%s)"
+msgstr "チャット ID を見つけて保存しました: %s (%s)"
+
+msgid "Chat ID found: %s - but saving failed, press Save manually"
+msgstr "チャット ID を見つけました: %s - ただし保存に失敗したので、手動で「保存」を押してください"
+
+msgid "Check for new messages every"
+msgstr "新着メッセージの確認間隔"
+
+msgid "Check the inbox every, minutes"
+msgstr "受信箱の確認間隔 (分)"
+
+msgid "Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received"
+msgstr "オンにするとメッセージが読みやすくなりますが、表示される件数と受信した件数が合わなくなります"
+
+msgid "Compared by the last ten digits, so +7…, 8… and 7… are the same number."
+msgstr "下 10 桁で比較するため、+7…、8…、7… は同じ番号として扱われます。"
+
+msgid "Copy incoming messages to the router and show them from there. Modem storage is tiny - some modems have no memory of their own at all and can only use the SIM card, where a couple of dozen slots fill up and the operator stops delivering. Messages are kept on flash and survive a reboot."
+msgstr "受信したメッセージをルーターにコピーし、そこから表示します。モデムの保存領域はとても小さく、自前のメモリを持たず SIM カードしか使えないモデムもあります (20 件ほどで埋まり、事業者が配信を止めます)。メッセージはフラッシュに保存され、再起動後も残ります。"
+
+msgid "Could not query Telegram: %s"
+msgstr "Telegram に問い合わせられませんでした: %s"
+
+msgid "Delay, s"
+msgstr "遅延 (秒)"
+
+msgid "Delete a message from the modem once it is in the router memory. This is what removes the limit. A message is only deleted after it has been stored AND, if enabled, forwarded to Telegram and offered to the SMS commands - so nothing is lost when the network is down."
+msgstr "ルーターのメモリに入ったメッセージをモデムから削除します。これで件数の上限がなくなります。メッセージを削除するのは、保存が済み、さらに有効なら Telegram への転送と SMS コマンドへの受け渡しが済んだ後だけです。そのため、ネットワークが落ちていても失われません。"
+
+msgid "Delete all"
+msgstr "すべて削除"
+
+msgid "Delete all messages"
+msgstr "すべてのメッセージを削除"
+
+msgid "Delete all the messages?"
+msgstr "すべてのメッセージを削除しますか？"
+
+msgid "Direction of message merging"
+msgstr "メッセージを結合する方向"
+
+msgid "E-mail address of the recipient"
+msgstr "宛先のメールアドレス"
+
+msgid "E-mail address of the sender"
+msgstr "送信元のメールアドレス"
+
+msgid "E-mail settings"
+msgstr "メールの設定"
+
+msgid "Enable group messaging"
+msgstr "グループ送信を有効化"
+
+msgid "Enable message forwarding"
+msgstr "メッセージの転送を有効化"
+
+msgid "Enter a country prefix, for example +7"
+msgstr "国番号を入力してください (例: +7)"
+
+msgid "Enter a number between 3 and 59"
+msgstr "3〜59 の数値を入力してください"
+
+msgid "Enter a number between 5 and 59"
+msgstr "5〜59 の数値を入力してください"
+
+msgid "Failed to send: %s"
+msgstr "送信に失敗しました: %s"
+
+msgid "Find"
+msgstr "検索"
+
+msgid "Find Chat ID"
+msgstr "チャット ID を探す"
+
+msgid "For modems managed by ModemManager over MBIM/QMI (e.g. Compal RXM-G1 / Tri Cascade VOS_5G): incoming messages are captured by ModemManager and never appear in AT storages, so sms_tool cannot see them. In this mode port and storage settings are not used. Requires the modemmanager package."
+msgstr "MBIM/QMI 経由で ModemManager が管理するモデム (Compal RXM-G1 / Tri Cascade VOS_5G など) 向けです。受信メッセージは ModemManager が取り込み、AT の保存領域には現れないため、sms_tool からは見えません。このモードではポートと保存先の設定は使いません。modemmanager パッケージが必要です。"
+
+msgid "Free modem slots"
+msgstr "モデムの空き枠"
+
+msgid "From beginning to end"
+msgstr "先頭から末尾へ"
+
+msgid "From end to beginning"
+msgstr "末尾から先頭へ"
+
+msgid "Hostname or IP address of the SMTP server"
+msgstr "SMTP サーバーのホスト名または IP アドレス"
+
+msgid "How often (in minutes) the inbox is checked"
+msgstr "受信箱を確認する間隔 (分)"
+
+msgid "Installed"
+msgstr "インストール済み"
+
+msgid "Install…"
+msgstr "インストール…"
+
+msgid "Keep at most"
+msgstr "最大保存件数"
+
+msgid "Keep messages in router memory"
+msgstr "メッセージをルーターのメモリに保存"
+
+msgid "LED is dedicated only to these notifications"
+msgstr "LED をこの通知専用にする"
+
+msgid "Merge algorithm"
+msgstr "結合のアルゴリズム"
+
+msgid "Merge split messages"
+msgstr "分割されたメッセージを結合"
+
+msgid "Message storage area"
+msgstr "メッセージの保存先"
+
+msgid "Message-sending delay"
+msgstr "メッセージ送信の遅延"
+
+msgid "No"
+msgstr "いいえ"
+
+msgid "Notify about new messages"
+msgstr "新着メッセージを通知"
+
+msgid "Numeric chat or channel ID. Write any message to the bot first, then press the button below - it will find the ID for you."
+msgstr "数値のチャットまたはチャンネル ID。先にボットに何かメッセージを送ってから下のボタンを押すと、ID を探してくれます。"
+
+msgid "Older messages are dropped when the limit is reached."
+msgstr "上限に達すると古いメッセージから削除します。"
+
+msgid "One bot for both directions: it forwards every new incoming SMS to the chosen chat and, if allowed below, sends SMS by the /sms command from that chat. Works with the ACTIVE modem: messages from the SIM of the other modem are not forwarded until you switch to it. The very first run only remembers the current messages and sends nothing. Settings live here only - the outgoing page just points at them."
+msgstr "送受信両方に 1 つのボットを使います: 新しく受信した SMS をすべて選んだチャットに転送し、下で許可すれば、そのチャットの /sms コマンドで SMS を送信します。対象はアクティブなモデムで、もう一方のモデムの SIM に届いたメッセージは、そちらに切り替えるまで転送しません。初回は現在のメッセージを記憶するだけで、何も送りません。設定はここにしかありません (送信ページはここを案内するだけです)。"
+
+msgid "PDU decoding scheme"
+msgstr "PDU のデコード方式"
+
+msgid "Password"
+msgstr "パスワード"
+
+msgid "Phone number to be blurred"
+msgstr "ぼかす電話番号"
+
+msgid "Pick a predefined e-mail provider or enter the settings manually"
+msgstr "定義済みのメールプロバイダーを選ぶか、設定を手動で入力してください"
+
+msgid "Pick the chat the messages should go to:"
+msgstr "メッセージの送り先のチャットを選んでください:"
+
+msgid "Please configure the SMS reading port first"
+msgstr "先に SMS 読み取りポートを設定してください"
+
+msgid "Please wait, saving the SMS messages to a text file"
+msgstr "お待ちください。SMS メッセージをテキストファイルに保存しています"
+
+msgid "Prefix number"
+msgstr "国番号"
+
+msgid "Read and send SMS via ModemManager (mmcli)"
+msgstr "ModemManager (mmcli) で SMS を読み取り・送信する"
+
+msgid "Receive and display the reply without decoding it as a PDU"
+msgstr "応答を PDU としてデコードせずに受信して表示する"
+
+msgid "Receive the reply without PDU decoding"
+msgstr "応答を PDU デコードせずに受信する"
+
+msgid "Recipient"
+msgstr "宛先"
+
+msgid "Reply text"
+msgstr "返信の本文"
+
+msgid "Restart the inbox-checking process every"
+msgstr "受信箱確認プロセスの再起動間隔"
+
+msgid "Run commands from SMS"
+msgstr "SMS からコマンドを実行"
+
+msgid "Run commands only from the numbers listed below. With this on and the list empty, nothing runs at all. Turning it off lets anyone who knows the SIM number run your commands."
+msgstr "下に登録した番号からのコマンドだけを実行します。オンで一覧が空の場合は何も実行しません。オフにすると、SIM の番号を知っている誰でもコマンドを実行できます。"
+
+msgid "SMS can also be sent from a Telegram chat - set the bot up on the Inbox settings page."
+msgstr "Telegram のチャットからも SMS を送信できます - 受信箱の設定ページでボットを設定してください。"
+
+msgid "SMTP server"
+msgstr "SMTP サーバー"
+
+msgid "SMTP server port"
+msgstr "SMTP サーバーのポート"
+
+msgid "SSL: SMTP over SSL"
+msgstr "SSL: SMTP over SSL"
+
+msgid "Save as .txt file"
+msgstr ".txt ファイルとして保存"
+
+msgid "Save messages to a text file"
+msgstr "メッセージをテキストファイルに保存"
+
+msgid "Save sms to txt file?"
+msgstr "SMS を txt ファイルに保存しますか？"
+
+msgid "Saving the SMS messages to a file failed. Please try again."
+msgstr "SMS メッセージをファイルに保存できませんでした。もう一度お試しください。"
+
+msgid "Saving..."
+msgstr "保存中..."
+
+msgid "Security"
+msgstr "セキュリティ"
+
+msgid "Security code"
+msgstr "セキュリティコード"
+
+msgid "Select 'No' if the router has a single LED or the LED serves several purposes. This option needs an LED defined in the system to work reliably when the LED is shared."
+msgstr "ルーターに LED が 1 つしかない場合や、LED を複数の用途で使っている場合は「いいえ」を選んでください。LED を共用する場合、安定して動作させるにはシステムで LED が定義されている必要があります。"
+
+msgid "Select the notification LED"
+msgstr "通知用の LED を選択"
+
+msgid "Send USSD via ModemManager (mmcli)"
+msgstr "ModemManager (mmcli) で USSD を送信する"
+
+msgid "Send an SMS that starts with the word of a command below - the router runs it. Useful when the router is unreachable over the network: SMS still gets through. The message text is never pasted into the command line, whatever follows the word is passed as the SMS_ARGS environment variable."
+msgstr "下のコマンドの単語で始まる SMS を送ると、ルーターがそれを実行します。ネットワーク経由でルーターに届かないときも SMS は届くので便利です。メッセージの本文がコマンドラインに貼り込まれることはなく、単語の後に続く部分は環境変数 SMS_ARGS として渡されます。"
+
+msgid "Send one message to every contact in the contact list"
+msgstr "連絡先一覧のすべての連絡先に 1 通ずつメッセージを送る"
+
+msgid "Send test message"
+msgstr "テストメッセージを送信"
+
+msgid "Send the USSD code as plain text"
+msgstr "USSD コードをプレーンテキストで送信"
+
+msgid "Send the USSD code as plain text; the command is not encoded into a PDU"
+msgstr "USSD コードをプレーンテキストで送信します (コマンドを PDU にエンコードしません)"
+
+msgid "Send the word from the first column in an SMS - the router runs what is in the second. The word is matched without case, anything after it reaches the command as SMS_ARGS. A command that kills the connection (reboot, modem power cycle) needs a delay: the reply is then sent BEFORE the command runs, which is the only way it can be sent at all."
+msgstr "1 列目の単語を SMS で送ると、ルーターが 2 列目の内容を実行します。単語は大文字小文字を区別せずに照合し、その後に続く部分は SMS_ARGS としてコマンドに渡します。接続を切るコマンド (再起動、モデムの電源入れ直し) には遅延が必要です: 遅延を設定すると、返信はコマンドの実行「前」に送られます。そうしないと返信を送れません。"
+
+msgid "Sender"
+msgstr "送信者"
+
+msgid "Sending from the chat is on - write to the bot:"
+msgstr "チャットからの送信はオンです - ボットに次のように書いてください:"
+
+msgid "Sends a test message with the SAVED settings - save the form first."
+msgstr "保存済みの設定でテストメッセージを送ります - 先にフォームを保存してください。"
+
+msgid "Show notification icon"
+msgstr "通知アイコンを表示"
+
+msgid "Show the new-message notification icon on the status overview page"
+msgstr "状態の概要ページに新着メッセージの通知アイコンを表示する"
+
+msgid "Simple (merge without sorting)"
+msgstr "シンプル (並べ替えずに結合)"
+
+msgid "Switch the modem to 3G for USSD"
+msgstr "USSD のためにモデムを 3G に切り替える"
+
+msgid "TLS: use STARTTLS if the server supports it"
+msgstr "TLS: サーバーが対応していれば STARTTLS を使う"
+
+msgid "Telegram bot"
+msgstr "Telegram ボット"
+
+msgid "Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Start SSClash (or route the router through a VPN) and try again."
+msgstr "ルーターから Telegram に接続できません: 直接の経路は事業者にブロックされており、動作するプロキシトンネルも見つかりませんでした。SSClash を起動する (またはルーターを VPN 経由にする) してから、もう一度お試しください。"
+
+msgid "Telegram returned no chats. Write any message to the bot and press the button again."
+msgstr "Telegram からチャットが返ってきませんでした。ボットに何かメッセージを送ってから、もう一度ボタンを押してください。"
+
+msgid "Test delivery"
+msgstr "配信テスト"
+
+msgid "Test message sent"
+msgstr "テストメッセージを送信しました"
+
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "メッセージの最初の単語 (コマンドの単語の前) です: \"%s\" と送ると、下の \"reboot\" という名前のコマンドが実行されます。自分だけが知っている単語に変えてください (既定値は全員共通です)。空欄にするとコードなしになり、守りは信頼する番号の一覧だけになります (送信元の番号は偽装できます)。"
+
+msgid "The LED signals a new message. Before enabling this, configure and save the SMS reading port, the inbox check interval and the notification LED."
+msgstr "LED で新着メッセージを知らせます。有効にする前に、SMS 読み取りポート、受信箱の確認間隔、通知用 LED を設定して保存してください。"
+
+msgid "The bot accepts commands from the chat above: /sms &lt;number&gt; &lt;text&gt; sends an SMS, /status shows the modem state. Commands are accepted ONLY from the configured Chat ID - the bot itself is reachable by anyone who knows its name."
+msgstr "ボットは上のチャットからのコマンドを受け付けます: /sms &lt;番号&gt; &lt;本文&gt; で SMS を送信し、/status でモデムの状態を表示します。コマンドを受け付けるのは設定したチャット ID からだけです (ボット自体は名前を知っていれば誰でも話しかけられます)。"
+
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Inbox settings page."
+msgstr "ボットは受信メッセージ用に接続済みです。チャットから SMS を送るには、受信箱の設定ページで「チャットからの SMS 送信を許可」にチェックを入れてください。"
+
+msgid "The last 5 digits of this number will be blurred"
+msgstr "この番号の下 5 桁をぼかします"
+
+msgid "The mailsend package is not installed. Install it first using the Install… button below."
+msgstr "mailsend パッケージがインストールされていません。先に下の「インストール…」ボタンでインストールしてください。"
+
+msgid "The phone number should start with the country prefix in international format, with the '+' (for example +7 for Russia). Without the '+' the network treats the number as national and may refuse to send. Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
+msgstr "電話番号は、国際形式で '+' 付きの国番号から始めてください (例: ロシアは +7)。'+' がないと、ネットワークは国内番号として扱い、送信を拒否することがあります。3〜5 桁の番号は「短い番号」として扱われ、国番号を付けてはいけません。"
+
+msgid "The process restarts at the chosen interval, which removes any delay in checking the inbox"
+msgstr "選んだ間隔でプロセスを再起動し、受信箱の確認の遅れをなくします"
+
+msgid "This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool"
+msgstr "SMS メッセージのバックアップや、sms-tool が対応していないメッセージの保存などに使えます"
+
+msgid "This option deletes all SMS messages, including ones not visible on the Inbox tab"
+msgstr "受信箱タブに表示されないものも含め、すべての SMS メッセージを削除します"
+
+msgid "Token issued by @BotFather, e.g. 123456789:AA..."
+msgstr "@BotFather が発行したトークン (例: 123456789:AA...)"
+
+msgid "Trusted numbers"
+msgstr "信頼する番号"
+
+msgid "Trusted numbers only"
+msgstr "信頼する番号のみ"
+
+msgid "UCS2"
+msgstr "UCS2"
+
+msgid "USSD runs over the circuit-switched channel, which LTE does not have. Some modems handle this themselves; others answer nothing until the modem is actually in 3G. With this option the request switches the modem to 3G and switches it back - about twenty seconds without a connection. It is enabled automatically for modems already known to need it."
+msgstr "USSD は回線交換チャネルで動作しますが、LTE にはこのチャネルがありません。自分で処理するモデムもあれば、実際に 3G になるまで何も応答しないモデムもあります。このオプションを使うと、リクエストの際にモデムを 3G に切り替えてから元に戻します (20 秒ほど接続が切れます)。必要と分かっているモデムでは自動で有効になります。"
+
+msgid "Use ModemManager instead of sms_tool to send USSD codes, for modems managed by ModemManager that do not handle +CUSD on the AT port properly (e.g. Compal RXM-G1 / Tri Cascade VOS_5G). Requires the modemmanager package. The USSD port setting is not used in this mode."
+msgstr "ModemManager が管理し、AT ポートで +CUSD を正しく扱えないモデム (Compal RXM-G1 / Tri Cascade VOS_5G など) 向けに、sms_tool の代わりに ModemManager で USSD コードを送ります。modemmanager パッケージが必要です。このモードでは USSD ポートの設定は使いません。"
+
+msgid "User"
+msgstr "ユーザー"
+
+msgid "Username for SMTP authentication"
+msgstr "SMTP 認証のユーザー名"
+
+msgid "Uses the SAVED token: write to the bot first, then save the form and press this."
+msgstr "保存済みのトークンを使います: 先にボットにメッセージを送り、フォームを保存してからこれを押してください。"
+
+msgid "What to run"
+msgstr "実行する内容"
+
+msgid "Word in the SMS"
+msgstr "SMS の単語"
+
+msgid "Yes"
+msgstr "はい"
+
+msgid "check the token and the router internet connection"
+msgstr "トークンとルーターのインターネット接続を確認してください"
+
+msgid "check the token, chat ID and the router internet connection"
+msgstr "トークン、チャット ID、ルーターのインターネット接続を確認してください"
+
+msgid "empty - no code"
+msgstr "空欄 - コードなし"
+
+msgid "mailsend"
+msgstr "mailsend"
+
+msgid "mailsend package"
+msgstr "mailsend パッケージ"
+
+msgid "number"
+msgstr "番号"
+
+msgid "text"
+msgstr "本文"
+
+msgid "user define"
+msgstr "ユーザー定義"
+
+msgid "5G Modem"
+msgstr "5G モデム"
+
+msgid "AT"
+msgstr "AT"
+
+msgid "Inbox"
+msgstr "受信箱"
+
+msgid "Network"
+msgstr "ネットワーク"
+
+msgid "Outbox"
+msgstr "送信箱"
+
+msgid "USSD"
+msgstr "USSD"
+
+msgid "eSIM"
+msgstr "eSIM"
+
+msgid "Details"
+msgstr "詳細"
+
+msgid "Configuration"
+msgstr "設定"
+
+msgid "Technology"
+msgstr "技術"
+
+msgid "Signal strength"
+msgstr "信号強度"
+
+msgid "Weak"
+msgstr "弱"
+
+msgid "SIM status"
+msgstr "SIM の状態"
+
+msgid "Search"
+msgstr "検索"
+
+msgid "Hint"
+msgstr "ヒント"
+
+msgid "5gmodem"
+msgstr "5gmodem"
+
+msgid "CSQ"
+msgstr "CSQ"
+
+msgid "Cell ID"
+msgstr "セル ID"
+
+msgid "LAC"
+msgstr "LAC"
+
+msgid "MCC MNC"
+msgstr "MCC MNC"
+
+msgid "SINR"
+msgstr "SINR"
+
+msgid "TAC"
+msgstr "TAC"
+
+msgid "LTE bands"
+msgstr "LTE バンド"
+
+msgid "Messages"
+msgstr "メッセージ"
+
+msgid "Receive"
+msgstr "受信"
+
+msgid "Message"
+msgstr "メッセージ"
+
+msgid "SMS reading port"
+msgstr "SMS 読み取りポート"
+
+msgid "Delete selected"
+msgstr "選択したものを削除"
+
+msgid "new message"
+msgstr "新着メッセージ"
+
+msgid "new messages"
+msgstr "新着メッセージ"
+
+msgid "All"
+msgstr "すべて"
+
+msgid "Show"
+msgstr "表示"
+
+msgid "Read"
+msgstr "既読"
+
+msgid "Unread"
+msgstr "未読"
+
+msgid "Diode"
+msgstr "LED"
+
+msgid "Forward"
+msgstr "転送"
+
+msgid "Error loading initial AT commands file:"
+msgstr "初期 AT コマンドファイルの読み込みエラー:"
+
+msgid "Error loading initial USSD file:"
+msgstr "初期 USSD ファイルの読み込みエラー:"
+
+msgid "Date"
+msgstr "日付"
+
+msgid "Type"
+msgstr "タイプ"
+
+msgid "Number"
+msgstr "番号"
+
+msgid "Duration"
+msgstr "通話時間"
+
+msgid "Name"
+msgstr "名前"
+
+msgid "Calls"
+msgstr "通話"
+
+msgid "Notification LED"
+msgstr "通知用 LED"
+
+msgid "/"
+msgstr "/"
+
+msgid "160"
+msgstr "160"
+
+msgid "Modem Settings"
+msgstr "モデムの設定"
+
+msgid "Russia"
+msgstr "ロシア"
+
+msgid "Update"
+msgstr "更新"
+
+msgid "Component"
+msgstr "コンポーネント"
+
+msgid "Bandwidth"
+msgstr "帯域幅"
+
+msgid "SIM slot"
+msgstr "SIM スロット"
+
+msgid "enabled"
+msgstr "有効"
+
+msgid "disabled"
+msgstr "無効"
+
+msgid "Serving cell is unknown yet"
+msgstr "接続中のセルはまだ分かりません"
+
+msgid "eNB ID"
+msgstr "eNB ID"
+
+msgid "Path loss"
+msgstr "パスロス"
+
+msgid "TX power"
+msgstr "送信電力"
+
+msgid "UE category"
+msgstr "UE カテゴリ"
+
+msgid "%d s"
+msgstr "%d 秒"
+
+msgid "%d min"
+msgstr "%d 分"
+
+msgid "active"
+msgstr "有効"
+
+msgid "visible"
+msgstr "表示"
+
+msgid "hidden"
+msgstr "（非表示）"
+
+msgid "CQI"
+msgstr "CQI"
+
+msgid "IPv4 only"
+msgstr "IPv4のみ"
+
+msgid "VoLTE"
+msgstr "VoLTE"
+
+msgid "luci-app-5gmodem"
+msgstr "luci-app-5gmodem"
+
+msgid "assignable"
+msgstr "割り当て可能"
+
+msgid "switch"
+msgstr "スイッチ"
+
+msgid "button"
+msgstr "ボタン"
+
+msgid "example"
+msgstr "例"
+
+msgid "Widgets"
+msgstr "ウィジェット"
+
+msgid "Ping"
+msgstr "Ping"
+
+msgid "click"
+msgstr "クリック"
+
+msgid "Service status"
+msgstr "サービスの状態"
+
+msgid "Services"
+msgstr "サービス"
+
+msgid "Ping cards"
+msgstr "ping カード"
+
+msgid "sec"
+msgstr "秒"
+
+msgid "Identity"
+msgstr "識別子"
+
+msgid "Signal and network"
+msgstr "信号とネットワーク"
+
+msgid "Data session"
+msgstr "データセッション"
+
+msgid "Radio control"
+msgstr "無線の制御"
+
+msgid "Phonebook — edit the number before sending"
+msgstr "電話帳 — 送信前に番号を編集してください"
+
+msgid "Cell and signal"
+msgstr "セルと信号"
+
+msgid "Network and bands"
+msgstr "ネットワークとバンド"
+
+msgid "Bands and modes"
+msgstr "バンドとモード"
+
+msgid "Temperature"
+msgstr "温度"
+
+msgid "USB and SIM"
+msgstr "USB と SIM"
+
+msgid "Firmware"
+msgstr "ファームウェア"
+
+msgid "Signal and cell"
+msgstr "信号とセル"
+
+msgid "USB and firmware"
+msgstr "USB とファームウェア"
+
+msgid "SIM slots"
+msgstr "SIM スロット"
+
+msgid "Vendor / debug"
+msgstr "ベンダー / デバッグ"
+
+msgid "Bands and temperature"
+msgstr "バンドと温度"
+
+msgid "USB composition"
+msgstr "USB 構成"
+
+msgid "Network and SIM"
+msgstr "ネットワークと SIM"
+
+msgid "Signal and system"
+msgstr "信号とシステム"
+
+msgid "Bands and ports"
+msgstr "バンドとポート"
+
+msgid "Network and band"
+msgstr "ネットワークとバンド"
+
+msgid "Modem information"
+msgstr "モデム情報"
+
+msgid "Manufacturer, model, firmware"
+msgstr "メーカー、型番、ファームウェア"
+
+msgid "IMEI"
+msgstr "IMEI"
+
+msgid "Signal quality"
+msgstr "信号品質"
+
+msgid "Extended signal quality"
+msgstr "拡張信号品質"
+
+msgid "LTE registration"
+msgstr "LTE の登録状態"
+
+msgid "5G registration"
+msgstr "5G の登録状態"
+
+msgid "PDP contexts (APN)"
+msgstr "PDP コンテキスト (APN)"
+
+msgid "PDP addresses"
+msgstr "PDP アドレス"
+
+msgid "Packet-service attach"
+msgstr "パケットサービスの接続状態"
+
+msgid "SIM PIN status"
+msgstr "SIM PIN の状態"
+
+msgid "IMSI"
+msgstr "IMSI"
+
+msgid "Own number"
+msgstr "自分の電話番号"
+
+msgid "Modem clock"
+msgstr "モデムの時計"
+
+msgid "Radio function mode"
+msgstr "無線の動作モード"
+
+msgid "Radio off"
+msgstr "電波オフ"
+
+msgid "Radio on"
+msgstr "電波オン"
+
+msgid "Write a number to the SIM"
+msgstr "SIM に番号を書き込む"
+
+msgid "Serving cell"
+msgstr "接続中のセル"
+
+msgid "USB mode"
+msgstr "USB モード"
+
+msgid "Bands (masks)"
+msgstr "バンド (マスク)"
+
+msgid "MBN profiles"
+msgstr "MBN プロファイル"
+
+msgid "Network mode and bands"
+msgstr "ネットワークモードとバンド"
+
+msgid "Supported modes and bands"
+msgstr "対応モードとバンド"
+
+msgid "Serving cell and neighbours"
+msgstr "接続中のセルと周辺セル"
+
+msgid "Firmware package version"
+msgstr "ファームウェアパッケージのバージョン"
+
+msgid "Bands"
+msgstr "バンド"
+
+msgid "Supported bands"
+msgstr "対応バンド"
+
+msgid "RF status"
+msgstr "RF の状態"
+
+msgid "4RX receive"
+msgstr "4RX 受信"
+
+msgid "Firmware image"
+msgstr "ファームウェアイメージ"
+
+msgid "GNSS power"
+msgstr "GNSS の電源"
+
+msgid "GNSS position"
+msgstr "GNSS の位置"
+
+msgid "GNSS"
+msgstr "GNSS"
+
+msgid "Network mode (read)"
+msgstr "ネットワークモード (読み取り)"
+
+msgid "USB speed"
+msgstr "USB の速度"
+
+msgid "Vendor customer"
+msgstr "ベンダーのカスタマー設定"
+
+msgid "SIM slot (read)"
+msgstr "SIM スロット (読み取り)"
+
+msgid "Slot: physical SIM1"
+msgstr "スロット: 物理 SIM1"
+
+msgid "Slot: eSIM (SIM2)"
+msgstr "スロット: eSIM (SIM2)"
+
+msgid "Aggregation (CA)"
+msgstr "アグリゲーション (CA)"
+
+msgid "Cells"
+msgstr "セル"
+
+msgid "RSRP per branch"
+msgstr "ブランチごとの RSRP"
+
+msgid "RSRQ per branch"
+msgstr "ブランチごとの RSRQ"
+
+msgid "Antenna branches (first ACM port only)"
+msgstr "アンテナブランチ (最初の ACM ポートのみ)"
+
+msgid "USB composition (NVM)"
+msgstr "USB 構成 (NVM)"
+
+msgid "Signal (HCSQ)"
+msgstr "信号 (HCSQ)"
+
+msgid "System information"
+msgstr "システム情報"
+
+msgid "Mode and bands"
+msgstr "モードとバンド"
+
+msgid "Port composition"
+msgstr "ポート構成"
+
+msgid "Base station and signal"
+msgstr "基地局と信号"
+
+msgid "Aggregation"
+msgstr "アグリゲーション"
+
+msgid "Bands and 5G mode (masks)"
+msgstr "バンドと 5G モード (マスク)"
+
+msgid "Thermal sensors"
+msgstr "温度センサー"
+
+msgid "Current USB composition"
+msgstr "現在の USB 構成"
+
+msgid "Traffic"
+msgstr "トラフィック"
+
+msgid "Command"
+msgstr "コマンド"
+
+msgid "Max speed"
+msgstr "最大速度"
+
+msgid "Japan"
+msgstr "日本"
+
+msgid "Profile %s…"
+msgstr "プロファイル %s…"
+
+msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
+msgstr "モデムや接続の情報を読み取るポートです。<br /> <br />通常のモデム: 使える ttyUSBX ポートのどれか。<br /> <br />HiLink モデム: モデムにアクセスできる IP アドレス (192.168.X.X) を入力してください。"
+
