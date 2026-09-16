@@ -16,6 +16,12 @@ curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.11/
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
+**日本語表示について**: このアプリの日本語カタログはパッケージ本体に含まれているため、専用の言語パッケージを入れる必要はありません。LuCI 自体を日本語にするには、LuCI の言語パッケージを入れてください:
+```sh
+apk add luci-i18n-base-ja
+```
+そのあと LuCI で言語を選びます: システム → システム → 言語とスタイル → 日本語。
+
 **eSIM** を使う場合（任意）は、パッチ済みの `lpac` も併せてインストールしてください。[lpac-build のリリース](https://github.com/fildunsky/lpac-build/releases/latest)から**お使いのプラットフォーム向けのビルドを選んでください**。MediaTek Filogic（WH3000 など）の例:
 ```sh
 curl -L https://github.com/fildunsky/lpac-build/releases/latest/download/lpac-25.12.5-mediatek-filogic.apk > /tmp/lpac.apk
@@ -31,6 +37,11 @@ apk add /tmp/lpac.apk --allow-untrusted
 opkg update && opkg install curl
 curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.11/luci-app-5gmodem_2.5.11-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
+```
+
+日本語カタログは本体に同梱されています。LuCI 自体を日本語にする場合のみ、次を実行してください:
+```sh
+opkg install luci-i18n-base-ja
 ```
 
 通常のパッケージは一式（`sms-tool`、`comgt`、`qmi-utils`、`modemmanager`、QMI/MBIM プロトコル、USB シリアル kmod）を導入します。以前のどのバージョンからでも上書き更新でき、何かが削除されることはありません。
