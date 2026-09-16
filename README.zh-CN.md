@@ -1,6 +1,6 @@
 # luci-app-5gmodem
 
-*[English](README.md) · [Русская версия](README.ru.md)*
+*[English](README.md) · [Русская версия](README.ru.md) · [日本語](README.ja.md)*
 
 OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite)、[`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js) 以及 `modemband` 的部分功能合并成一个应用。
 

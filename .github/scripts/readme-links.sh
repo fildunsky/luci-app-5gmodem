@@ -1,5 +1,5 @@
 #!/bin/sh
-# Point every install link in the three READMEs at release <version>-r<release>.
+# Point every install link in the four READMEs at release <version>-r<release>.
 #
 # Called by the publish job of build.yml ONLY after all packages are attached
 # and the draft release is published - until then the links keep pointing at
@@ -16,7 +16,7 @@ case "$V" in ''|*[!0-9.]*) echo "bad version: $V" >&2; exit 2 ;; esac
 case "$R" in ''|*[!0-9]*) echo "bad release: $R" >&2; exit 2 ;; esac
 
 URL='https://github.com/fildunsky/luci-app-5gmodem/releases/download'
-for f in README.md README.ru.md README.zh-CN.md; do
+for f in README.md README.ru.md README.zh-CN.md README.ja.md; do
 	[ -f "$f" ] || continue
 	sed -i \
 		-e "s|$URL/v[0-9][0-9.]*/|$URL/v$V/|g" \

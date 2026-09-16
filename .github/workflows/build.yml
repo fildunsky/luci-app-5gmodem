@@ -211,13 +211,13 @@ jobs:
             [ "$CODE" = 200 ] || FAIL=1
           done
           [ "$FAIL" = 0 ] || { echo "::error::a README link does not resolve - not committing"; exit 1; }
-          if git diff --quiet -- README.md README.ru.md README.zh-CN.md; then
+          if git diff --quiet -- README.md README.ru.md README.zh-CN.md README.ja.md; then
             echo "README links already point at $TAG"
             exit 0
           fi
           git config user.name "Fil Dunsky"
           git config user.email "filipp.dunsky@gmail.com"
-          git commit -m "README: install links for $TAG" -- README.md README.ru.md README.zh-CN.md
+          git commit -m "README: install links for $TAG" -- README.md README.ru.md README.zh-CN.md README.ja.md
           for TRY in 1 2 3; do
             git push origin HEAD:master && exit 0
             git pull --rebase origin master
