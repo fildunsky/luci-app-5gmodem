@@ -43,6 +43,32 @@ is_hilink() {   # $1 - usb-путь
 	return 1
 }
 
+# Телефон, раздающий интернет по USB (RNDIS-тетеринг).
+#
+# Отличие от HiLink: у HiLink есть веб-API, откуда берутся метрики, SMS и
+# управление диапазонами. У телефона нет ничего - только сетевая карта. Общего
+# у них ровно одно: интерфейс поднимается по dhcp, дозваниваться некуда.
+# Поэтому настройка у них общая (setup_hilink), а вид (kind) разный - иначе
+# приложение полезло бы к телефону за метриками по несуществующему адресу.
+#
+# Признак строго структурный, без списка вендоров: RNDIS-функция и ни одного
+# порта управления. Обоснование выбора именно RNDIS - в listmodems.sh.
+is_tether() {   # $1 - usb-путь
+	[ "$(uci -q get "$CFG.$(secname "$1").kind")" = "tether" ] && return 0
+	_it_d="/sys/bus/usb/devices/$1"
+	[ -f "$_it_d/idVendor" ] || return 1
+	for _it_p in "$_it_d"/*:*/ttyUSB* "$_it_d"/*:*/tty/tty* "$_it_d"/*:*/usbmisc/*; do
+		[ -e "$_it_p" ] && return 1
+	done
+	for _it_i in "$_it_d"/*:*; do
+		[ -f "$_it_i/bInterfaceClass" ] || continue
+		case "$(cat "$_it_i/bInterfaceClass" 2>/dev/null)/$(cat "$_it_i/bInterfaceSubClass" 2>/dev/null)/$(cat "$_it_i/bInterfaceProtocol" 2>/dev/null)" in
+			ef/04/01|e0/01/03) return 0 ;;
+		esac
+	done
+	return 1
+}
+
 # Сетевая карта HiLink-модема (eth*/usb* через cdc_ether), если есть.
 hilink_netdev() {   # $1 - usb-путь
 	for _hd in /sys/bus/usb/devices/"$1":*/net/*; do
@@ -55,10 +81,10 @@ hilink_netdev() {   # $1 - usb-путь
 # Интерфейс для модема без портов. Никакого mkiface: у HiLink нет ни AT, ни
 # cdc-wdm, дозваниваться некуда - модем держит соединение сам и раздаёт адрес
 # по DHCP. Роутеру остаётся обычный dhcp-клиент на его сетевой карте.
-setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
-	_hp="$1"; _hd="$2"
+setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - вид (hilink|tether)
+	_hp="$1"; _hd="$2"; _hkind="${3:-hilink}"
 	_hsec=$(ensure_section "$_hp")
-	uci -q set "$CFG.$_hsec.kind=hilink"
+	uci -q set "$CFG.$_hsec.kind=$_hkind"
 	uci -q set "$CFG.$_hsec.netdev=$_hd"
 	_hif=$(uci -q get "$CFG.$_hsec.network")
 	# ВОЗВРАТ МОДЕМА. Секцию мог очистить swap_cleanup (его вытеснили из порта),
@@ -114,7 +140,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 			*" $_hif "*) ;;
 			*) uci -q add_list "firewall.$_hz.network=$_hif"
 			   uci -q commit firewall
-			   logger -t 5gmodem "hilink: $_hif added to the wan zone" ;;
+			   logger -t 5gmodem "$_hkind: $_hif added to the wan zone" ;;
 		esac
 	fi
 	uci -q set "$CFG.$_hsec.network=$_hif"
@@ -145,10 +171,10 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3)
 			esac ;;
 	esac
 	if [ -n "$_h_skip" ]; then
-		logger -t 5gmodem "hilink: $_hp ($_hd) is already up on interface $_hif - leaving it alone"
+		logger -t 5gmodem "$_hkind: $_hp ($_hd) is already up on interface $_hif - leaving it alone"
 	else
 		ifup "$_hif" >/dev/null 2>&1
-		logger -t 5gmodem "hilink: $_hp ($_hd) -> interface $_hif (dhcp)"
+		logger -t 5gmodem "$_hkind: $_hp ($_hd) -> interface $_hif (dhcp)"
 	fi
 	echo "$_hif"
 }

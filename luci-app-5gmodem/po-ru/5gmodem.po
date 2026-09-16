@@ -5374,6 +5374,15 @@ msgstr "%s не ответил"
 msgid "public demo"
 msgstr "публичное демо"
 
+msgid "Create interface (USB tethering)"
+msgstr "Создать интерфейс (USB-модем)"
+
+msgid "Recreate interface (USB tethering)"
+msgstr "Пересоздать интерфейс (USB-модем)"
+
+msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
+msgstr "Этот телефон раздаёт интернет по USB и выдаёт адрес по DHCP. Кнопка создаёт (или пересоздаёт) этот DHCP-интерфейс - протокол дозвона тут выбирать не из чего, и метрик модема тоже нет."
+
 msgid "works over cellular"
 msgstr "работает через сотовую"
 

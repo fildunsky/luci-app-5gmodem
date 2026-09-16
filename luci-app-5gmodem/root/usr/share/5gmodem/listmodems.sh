@@ -220,6 +220,47 @@ for _nd in /sys/class/net/*; do
 	PORTREC="${PORTREC}${NCNT} net $(basename "$_nd")${NL}"
 done
 
+# --- ТЕЛЕФОН, РАЗДАЮЩИЙ ИНТЕРНЕТ ПО USB (RNDIS-тетеринг) --------------------
+#
+# Такой телефон - сетевая карта без единого порта управления, и до сих пор он
+# попадал в список ТОЛЬКО через ветку ниже, то есть лишь если секция о нём уже
+# была. Свежий телефон в разъёме, где раньше стоял модем другого вендора, не
+# появлялся вовсе: приложение не видело ни его, ни модема, active_modem
+# указывал в пустоту, и опрос бесконечно звал resolve (живой случай 16.09.2026,
+# Xiaomi 17 в разъёме от Quectel EC21).
+#
+# ОПОЗНАЁМ ПО RNDIS, А НЕ ПО «СЕТЬ БЕЗ ПОРТОВ». Второе описывает и обычную
+# USB-сетевуху, которой интерфейс с зоной wan не нужен и вреден. RNDIS же
+# (ef/04/01, у старых прошивок e0/01/03) - это протокол раздачи интернета с
+# хоста: им пользуются телефоны, а Ethernet-переходники - практически никогда
+# (у них либо свой драйвер с интерфейсами класса ff, либо CDC-ECM/NCM).
+# ECM/NCM-тетеринг (новые Android умеют и так) намеренно НЕ берём: отличить
+# его от переходника нечем, а ложное срабатывание здесь дороже пропуска.
+for _nd in /sys/class/net/*; do
+	[ -e "$_nd/device" ] || continue
+	_dev=$(readlink -f "$_nd/device" 2>/dev/null)
+	while [ -n "$_dev" ] && [ -n "${_dev%/}" ] && [ "$_dev" != "/" ] && [ ! -f "$_dev/idVendor" ]; do _dev="${_dev%/*}"; done
+	[ -f "$_dev/idVendor" ] || continue
+	case " $NODES " in *" $_dev "*) continue ;; esac
+	# Порт управления - значит это модем, им занимаются ветки выше.
+	_tskip=0
+	for _tp in "$_dev"/*:*/ttyUSB* "$_dev"/*:*/tty/tty* "$_dev"/*:*/usbmisc/*; do
+		[ -e "$_tp" ] && { _tskip=1; break; }
+	done
+	[ "$_tskip" = 1 ] && continue
+	_trndis=0
+	for _if in "$_dev"/*:*; do
+		[ -f "$_if/bInterfaceClass" ] || continue
+		case "$(cat "$_if/bInterfaceClass" 2>/dev/null)/$(cat "$_if/bInterfaceSubClass" 2>/dev/null)/$(cat "$_if/bInterfaceProtocol" 2>/dev/null)" in
+			ef/04/01|e0/01/03) _trndis=1; break ;;
+		esac
+	done
+	[ "$_trndis" = 1 ] || continue
+	NCNT=$((NCNT + 1))
+	NODES="$NODES $_dev"
+	PORTREC="${PORTREC}${NCNT} net $(basename "$_nd")${NL}"
+done
+
 # --- Известные устройства С СЕТЬЮ, но БЕЗ модемных портов (телефон) ----------
 #
 # Телефон в режиме USB-модема - сетевая карта: ни tty, ни cdc-wdm, по портам он

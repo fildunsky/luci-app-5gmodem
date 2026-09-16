@@ -848,7 +848,7 @@ msgid "Poor"
 msgstr "弱い"
 
 msgid "Port %d"
-msgstr "ポート %s"
+msgstr "ポート %d"
 
 msgid "Power restart"
 msgstr "電源の入れ直し"
@@ -4219,3 +4219,1143 @@ msgstr "プロファイル %s…"
 msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
 msgstr "モデムや接続の情報を読み取るポートです。<br /> <br />通常のモデム: 使える ttyUSBX ポートのどれか。<br /> <br />HiLink モデム: モデムにアクセスできる IP アドレス (192.168.X.X) を入力してください。"
 
+msgid "Modem settings"
+msgstr "モデム設定"
+
+msgid "General Information"
+msgstr "基本情報"
+
+msgid "Connection statistics"
+msgstr "接続統計"
+
+msgid "Additional information"
+msgstr "追加情報"
+
+msgid "Configuration 5gmodem"
+msgstr "5gmodem の設定"
+
+msgid "Configuration panel for the 5gmodem application"
+msgstr "5gmodem アプリケーションの設定パネル"
+
+msgid "IP adress / Port for communication with the modem"
+msgstr "モデムとの通信に使う IP アドレス / ポート"
+
+msgid ""
+"Select the appropriate settings. <br /> <br />Traditional modem. <br /> "
+"Select one of the available ttyUSBX ports.<br /> <br />HiLink modem. <br /> "
+"Enter the IP address 192.168.X.X under which the modem is available."
+msgstr "適切な設定を選択してください。<br /> <br />従来型モデムの場合。<br /> 利用可能な ttyUSBX ポートのいずれかを選択します。<br /> <br />HiLink モデムの場合。<br /> モデムにアクセスできる IP アドレス 192.168.X.X を入力します。"
+
+msgid "Very good"
+msgstr "非常に良好"
+
+msgid "Very weak"
+msgstr "非常に弱い"
+
+msgid "Mid cell"
+msgstr "セル中間"
+
+msgid "Cell edge"
+msgstr "セル端"
+
+msgid "Registered (roaming)"
+msgstr "登録済み (ローミング)"
+
+msgid "Registered (roaming), only SMS"
+msgstr "登録済み (ローミング、SMS のみ)"
+
+msgid "Waiting to read data from the modem..."
+msgstr "モデムからのデータ読み取りを待機しています..."
+
+msgid "Waiting for connection data..."
+msgstr "接続データを待機しています..."
+
+msgid "BTS Search"
+msgstr "基地局 (BTS) 検索"
+
+msgid "Search BTS using Cell ID"
+msgstr "セル ID で基地局 (BTS) を検索"
+
+msgid ""
+"Hint: To set up a BTS search engine, all you have to do is select the "
+"dedicated website for your location."
+msgstr "ヒント: 基地局 (BTS) 検索を設定するには、お住まいの地域に対応したウェブサイトを選択するだけです。"
+
+msgid "BTS search settings"
+msgstr "基地局 (BTS) 検索の設定"
+
+msgid "Website to search for BTS"
+msgstr "基地局 (BTS) 検索に使うウェブサイト"
+
+msgid "Select a website for searching"
+msgstr "検索に使うウェブサイトを選択してください"
+
+msgid ""
+"There is a problem reading data from the modem. <br /><br /><b>Please check:"
+"</b> <ul><li>1. Modem availability in the system.</li><li>2. The correct "
+"installation of the SIM card in the modem.</li><li> 3. Port for "
+"communication with the modem.</li><li><ul>"
+msgstr "モデムからデータを読み取れません。<br /><br /><b>次の点を確認してください:</b> <ul><li>1. システムがモデムを認識しているか。</li><li>2. SIM カードがモデムに正しく挿入されているか。</li><li> 3. モデムとの通信ポート。</li><li><ul>"
+
+msgid ""
+"There is a problem reading connection data. <br /><br /><b>Please check:</b> "
+"<ul><li>1. Connection of the modem to the internet, the correctness of the "
+"entered APN. Some modems need to force the APN on the modem using at "
+"commands to connect to internet.</li><li> 2. Check that the correct "
+"interface assigned to the modem is selected. The default name of the "
+"interface in the package is wan.</li><li><ul>"
+msgstr "接続データを読み取れません。<br /><br /><b>次の点を確認してください:</b> <ul><li>1. モデムがインターネットに接続されているか、入力した APN が正しいか。モデムによっては、インターネットに接続するために AT コマンドで APN を強制設定する必要があります。</li><li> 2. モデムに割り当てられた正しいインターフェースが選択されているか。本パッケージの既定のインターフェース名は wan です。</li><li><ul>"
+
+msgid "CLICK ME TO SEE NEW MENU"
+msgstr "クリックすると新しいメニューが表示されます"
+
+msgid ""
+"Execution of various commands to check the availability of the modem and "
+"eliminate errors in the data collected by the scripts."
+msgstr "モデムの状態を確認し、スクリプトが収集したデータの不具合を解消するための各種コマンドを実行します。"
+
+msgid "CA band (SCC1)"
+msgstr "CA バンド (SCC1)"
+
+msgid "CA band (SCC2)"
+msgstr "CA バンド (SCC2)"
+
+msgid "CA band (SCC3)"
+msgstr "CA バンド (SCC3)"
+
+msgid "CA band (SCC4)"
+msgstr "CA バンド (SCC4)"
+
+msgid "Applying bands..."
+msgstr "バンドを適用しています..."
+
+msgid "Bands set. The modem will reconnect."
+msgstr "バンドを設定しました。モデムが再接続します。"
+
+msgid "Please enter a USSD code"
+msgstr "USSD コードを入力してください"
+
+msgid "SMS Settings"
+msgstr "SMS 設定"
+
+msgid "USSD Settings"
+msgstr "USSD 設定"
+
+msgid "SMS sending port"
+msgstr "SMS 送信ポート"
+
+msgid "AT commands sending port"
+msgstr "AT コマンド送信ポート"
+
+msgid "AT Settings"
+msgstr "AT 設定"
+
+msgid ""
+"Checking this option will make it easier to read the messages, but it will "
+"cause a discrepancy in the number of messages shown and received."
+msgstr "このオプションを有効にするとメッセージは読みやすくなりますが、表示される件数と実際の受信件数が食い違うことがあります。"
+
+msgid "USSD sending port"
+msgstr "USSD 送信ポート"
+
+msgid "Send USSD as plain text"
+msgstr "USSD をプレーンテキストで送信"
+
+msgid "Get message without PDU decoding"
+msgstr "PDU デコードなしでメッセージを取得"
+
+msgid ""
+"Send the USSD code in plain text. Command is not being coded to the PDU."
+msgstr "USSD コードをプレーンテキストで送信します。コマンドは PDU に符号化されません。"
+
+msgid "Display the message without decoding it as a PDU."
+msgstr "メッセージを PDU としてデコードせずに表示します。"
+
+msgid "Explanation of number and prefix"
+msgstr "番号と国番号の説明"
+
+msgid ""
+"In the tab for sending SMS, show an explanation of the prefix and the "
+"correct phone number."
+msgstr "SMS 送信タブに、国番号と正しい電話番号の書式についての説明を表示します。"
+
+msgid ""
+"The phone number should be preceded by the country prefix (e.g for Russia it is "
+"7, without '+'). If the number is 3-5 characters long, it is treated as "
+"'short' and should not be preceded by a country prefix."
+msgstr "電話番号の先頭には国番号を付けてください (ロシアなら '+' なしの 7)。3〜5 桁の番号は「短縮番号」として扱われ、国番号を付けてはいけません。"
+
+msgid "Add prefix to phone number"
+msgstr "電話番号に国番号を付加"
+
+msgid "Automatically add prefix to the phone number field."
+msgstr "電話番号の入力欄に国番号を自動で付加します。"
+
+msgid ""
+"Messages are stored in a specific location (for example, on the SIM card or "
+"modem memory), but other areas may also be available depending on the type "
+"of device."
+msgstr "メッセージは特定の場所 (SIM カードやモデムのメモリなど) に保存されます。機種によっては、ほかの保存領域も利用できます。"
+
+msgid "Storage used / Total capacity"
+msgstr "使用済み容量 / 総容量"
+
+msgid "Delete selected message(s)?"
+msgstr "選択したメッセージを削除しますか?"
+
+msgid "Configuration sms-tool"
+msgstr "sms-tool の設定"
+
+msgid "Configuration panel for sms-tool and gui application."
+msgstr "sms-tool と GUI アプリケーションの設定パネルです。"
+
+msgid "Port for communication with the modem"
+msgstr "モデムとの通信ポート"
+
+msgid "Select one of the available ttyUSBX ports."
+msgstr "利用可能な ttyUSBX ポートのいずれかを選択してください。"
+
+msgid ""
+"This option allows you to send one message to all contacts in the user's "
+"contact list."
+msgstr "このオプションを使うと、連絡先リストの全員に同じメッセージを一斉送信できます。"
+
+msgid "Message sending delay"
+msgstr "メッセージ送信の間隔"
+
+msgid ""
+"Each line must have the following format: 'Contact name;phone number'. For "
+"user convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
+"phonebook.user</code>."
+msgstr "各行は「連絡先名;電話番号」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/phonebook.user</code> に保存されます。"
+
+msgid ""
+"Each line must have the following format: 'At command description;AT "
+"command'. For user convenience, the file is saved to the location <code>/etc/"
+"modem/atcmmds.user</code>."
+msgstr "各行は「AT コマンドの説明;AT コマンド」の形式で記述してください。ファイルは <code>/etc/modem/atcmmds.user</code> に保存されます。"
+
+msgid ""
+"Each line must have the following format: 'Code description;code'. For user "
+"convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
+"ussdcodes.user</code>."
+msgstr "各行は「コードの説明;コード」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/ussdcodes.user</code> に保存されます。"
+
+msgid "Display new messages notification on login page"
+msgstr "ログインページに新着メッセージの通知を表示"
+
+msgid ""
+"Display notification when new messages arrive in the selected message area."
+msgstr "選択したメッセージ領域に新着メッセージが届いたときに通知を表示します。"
+
+msgid "All / Read / Unread"
+msgstr "すべて / 既読 / 未読"
+
+msgid "Show all, read or unread messages"
+msgstr "すべて・既読・未読のメッセージを表示します"
+
+msgid "Show system messages in the message list"
+msgstr "メッセージ一覧にシステムメッセージを表示"
+
+msgid "Mark as read"
+msgstr "既読にする"
+
+msgid "Mark as unread"
+msgstr "未読にする"
+
+msgid "Please select the message(s) to be marked as read"
+msgstr "既読にするメッセージを選択してください"
+
+msgid "Please select the message(s) to be marked as unread"
+msgstr "未読にするメッセージを選択してください"
+
+msgid "Mark selected message(s) as read?"
+msgstr "選択したメッセージを既読にしますか?"
+
+msgid "Mark selected message(s) as unread?"
+msgstr "選択したメッセージを未読にしますか?"
+
+msgid "Message marked as read"
+msgstr "メッセージを既読にしました"
+
+msgid "Messages marked as read"
+msgstr "メッセージを既読にしました"
+
+msgid "Message marked as unread"
+msgstr "メッセージを未読にしました"
+
+msgid "Messages marked as unread"
+msgstr "メッセージを未読にしました"
+
+msgid "System messages"
+msgstr "システムメッセージ"
+
+msgid "New messages notification LED"
+msgstr "新着メッセージ通知 LED"
+
+msgid "Enable SMS notification LED on new message"
+msgstr "新着メッセージ時に SMS 通知 LED を点灯させる"
+
+msgid ""
+"Enable notification LED when new messages arrive in the selected message "
+"area."
+msgstr "選択したメッセージ領域に新着メッセージが届いたときに通知 LED を点灯させます。"
+
+msgid "Selected LED"
+msgstr "使用する LED"
+
+msgid ""
+"Select an LED diode for new message notification. The selection is made from "
+"the available LEDs in the system."
+msgstr "新着メッセージの通知に使う LED を選択します。システムで利用可能な LED から選べます。"
+
+msgid "Automatically select LED"
+msgstr "LED を自動選択"
+
+msgid "Automatically select the first available LED."
+msgstr "利用可能な最初の LED を自動的に選択します。"
+
+msgid "Advanced settings"
+msgstr "詳細設定"
+
+msgid "LED Flashing interval (in seconds)"
+msgstr "LED の点滅間隔 (秒)"
+
+msgid "Set the LED flashing interval (in seconds)."
+msgstr "LED の点滅間隔を秒単位で指定します。"
+
+msgid "Flashing duration (in seconds)"
+msgstr "点滅の継続時間 (秒)"
+
+msgid ""
+"Set the flashing duration (in seconds). Set to 0 for infinite duration (LED "
+"will flash until messages are marked as read)."
+msgstr "点滅の継続時間を秒単位で指定します。0 を指定すると無制限になり、メッセージを既読にするまで LED が点滅し続けます。"
+
+msgid "Please wait... Saving SMS messages to a text file."
+msgstr "お待ちください... SMS メッセージをテキストファイルに保存しています。"
+
+msgid ""
+"This option allows to backup SMS messages or, for example, save messages "
+"that are not supported by the sms-tool."
+msgstr "このオプションで SMS メッセージをバックアップしたり、sms-tool が対応していないメッセージを保存したりできます。"
+
+msgid ""
+"This option allows you to delete all SMS messages when they are not visible "
+"in the 'Received Messages' tab."
+msgstr "「受信メッセージ」タブに表示されない SMS も含めて、すべてのメッセージを削除できます。"
+
+msgid "Saving SMS messages to a file failed. Please try again."
+msgstr "SMS メッセージのファイル保存に失敗しました。もう一度お試しください。"
+
+msgid ""
+"The package requires user configuration. <br /><br /><b>The following need "
+"to be set:</b> <ul><li>1. All ports for communication with the modem.</"
+"li><li>2. Additional options specific to the given modem (for handling USSD "
+"codes).</li><li> 3. Notification LED (optional).</li><li><ul>"
+msgstr "このパッケージは初期設定が必要です。<br /><br /><b>次の項目を設定してください:</b> <ul><li>1. モデムとの通信ポートすべて。</li><li>2. 使用するモデム固有の追加オプション (USSD コードの処理用)。</li><li> 3. 通知 LED (任意)。</li><li><ul>"
+
+msgid "The tab allows users to support the package."
+msgstr "このタブからパッケージの開発を支援できます。"
+
+msgid "Luci-app-sms-tool-js Info"
+msgstr "Luci-app-sms-tool-js について"
+
+msgid "Report a bug"
+msgstr "バグを報告"
+
+msgid "Write in the topic of the package on the forum eko.one.pl"
+msgstr "フォーラム eko.one.pl のパッケージのスレッドに投稿する"
+
+msgid "Write on forum"
+msgstr "フォーラムに投稿"
+
+msgid "Report a bug on the package Github page"
+msgstr "パッケージの Github ページでバグを報告する"
+
+msgid "Open a package discussion on Github"
+msgstr "Github でパッケージのディスカッションを開く"
+
+msgid "Open discussion"
+msgstr "ディスカッションを開く"
+
+msgid ""
+"Buy a coffee if you want to support the development of the project and the "
+"author"
+msgstr "プロジェクトと作者を支援したい場合はコーヒーをおごってください"
+
+msgid "Buy a coffee"
+msgstr "コーヒーをおごる"
+
+msgid ""
+"Become a sponsor if you want to support the development of the project and "
+"the author"
+msgstr "プロジェクトと作者を支援したい場合はスポンサーになってください"
+
+msgid "Become a sponsor"
+msgstr "スポンサーになる"
+
+msgid "Package Info"
+msgstr "パッケージ情報"
+
+msgid "Author (package maintainer)"
+msgstr "作者 (パッケージメンテナー)"
+
+msgid "Package update and support"
+msgstr "パッケージの更新とサポート"
+
+msgid "Email Forwarding"
+msgstr "メール転送"
+
+msgid "An e-mail will be sent.."
+msgstr "メールを送信します.."
+
+msgid "Select a predefined e-mail settings or enter settings manually."
+msgstr "定義済みのメール設定を選ぶか、手動で設定を入力してください。"
+
+msgid "Google app password / Password for SMTP authentication."
+msgstr "Google のアプリパスワード、または SMTP 認証用のパスワード。"
+
+msgid "Hostname/IP address of the SMTP server."
+msgstr "SMTP サーバーのホスト名または IP アドレス。"
+
+msgid "Required Package"
+msgstr "必要なパッケージ"
+
+msgid ""
+"The SMS forwarding option requires the mailsend package to be installed."
+msgstr "SMS 転送機能には mailsend パッケージのインストールが必要です。"
+
+msgid "Check required packages"
+msgstr "必要なパッケージを確認"
+
+msgid "Mailsend Package"
+msgstr "mailsend パッケージ"
+
+msgid "Loading package data…"
+msgstr "パッケージ情報を読み込んでいます…"
+
+msgid "Please select exactly one message to forward"
+msgstr "転送するメッセージを 1 件だけ選択してください"
+
+msgid "Forward selected message to e-mail?"
+msgstr "選択したメッセージをメールに転送しますか?"
+
+msgid "SMS forwarding function is not enabled. Please configure it first"
+msgstr "SMS 転送機能が有効になっていません。先に設定してください"
+
+msgid ""
+"Package mailsend is not installed. Please install it first using the "
+"Install... button below"
+msgstr "mailsend パッケージがインストールされていません。下の「インストール...」ボタンからインストールしてください"
+
+msgid ""
+"Each line must have the following format: 'Code description;code'. For user "
+"convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes/</"
+"code>."
+msgstr "各行は「コードの説明;コード」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/ussdcodes/</code> に保存されます。"
+
+msgid ""
+"Each line must have the following format: 'AT command description;AT "
+"command'. For user convenience, the file is saved to the location <code>/etc/"
+"modem/atcmmds/</code>."
+msgstr "各行は「AT コマンドの説明;AT コマンド」の形式で記述してください。ファイルは <code>/etc/modem/atcmmds/</code> に保存されます。"
+
+msgid "Show the new message notification icon on the status overview page."
+msgstr "ステータス概要ページに新着メッセージの通知アイコンを表示します。"
+
+msgid "Call Log"
+msgstr "通話履歴"
+
+msgid "Clear all call log entries?"
+msgstr "通話履歴をすべて消去しますか?"
+
+msgid "No call log entries found"
+msgstr "通話履歴がありません"
+
+msgid "No matching call log entries found"
+msgstr "条件に一致する通話履歴はありません"
+
+msgid ""
+"User interface for viewing call logs. The log is collected by a background "
+"daemon."
+msgstr "通話履歴を表示する画面です。履歴はバックグラウンドのデーモンが収集します。"
+
+msgid ""
+"Call log daemon is disabled. Please enable it in the configuration to start "
+"collecting logs."
+msgstr "通話履歴デーモンが無効です。履歴の収集を始めるには、設定で有効にしてください。"
+
+msgid "Filter call type"
+msgstr "通話種別で絞り込み"
+
+msgid "All calls"
+msgstr "すべての通話"
+
+msgid "Missed calls"
+msgstr "不在着信"
+
+msgid "Received calls"
+msgstr "着信"
+
+msgid "Dialed calls"
+msgstr "発信"
+
+msgid "Clear Log"
+msgstr "履歴を消去"
+
+msgid "Call log reading port"
+msgstr "通話履歴の読み取りポート"
+
+msgid "Enable call log daemon"
+msgstr "通話履歴デーモンを有効化"
+
+msgid "Background process to log incoming and missed calls."
+msgstr "着信と不在着信を記録するバックグラウンドプロセスです。"
+
+msgid "Notification Settings"
+msgstr "通知設定"
+
+msgid ""
+"The LED informs about a new message. Before activating this function, please "
+"config and save the SMS reading port, time to check SMS inbox and select the "
+"notification LED."
+msgstr "LED で新着メッセージを知らせます。この機能を有効にする前に、SMS 読み取りポートと受信箱の確認間隔を設定して保存し、通知用の LED を選択してください。"
+
+msgid "Check inbox every minute(s)"
+msgstr "受信箱を確認する間隔 (分)"
+
+msgid "Specify how many minutes you want your inbox to be checked."
+msgstr "受信箱を何分ごとに確認するかを指定します。"
+
+msgid "Notify new messages"
+msgstr "新着メッセージを通知"
+
+msgid "Restart the inbox checking process every"
+msgstr "受信箱の確認プロセスを再起動する間隔"
+
+msgid ""
+"The process will restart at the selected time interval. This will eliminate "
+"the delay in checking your inbox."
+msgstr "指定した間隔でプロセスを再起動します。受信箱の確認が遅れるのを防げます。"
+
+msgid "The diode is dedicated only to these notifications"
+msgstr "この LED はこの通知専用"
+
+msgid ""
+"Select 'No' in case the router has only one LED or if the LED is multi-"
+"tasking. <br /><br /><b>Important</b> <br />This option requires LED to be "
+"defined in the system (if possible) to work properly. This requirement "
+"applies when the diode supports multiple tasks."
+msgstr "ルーターに LED が 1 つしかない場合や、その LED が他の用途にも使われている場合は「いいえ」を選択してください。<br /><br /><b>重要</b> <br />このオプションを正しく動かすには、可能であれば LED がシステムに定義されている必要があります。この条件は、LED が複数の用途を兼ねる場合に当てはまります。"
+
+msgid "Call Log Settings"
+msgstr "通話履歴の設定"
+
+msgid ""
+"Background process to log incoming and missed calls. <br /><br /"
+"><b>Important</b> <br />Option dedicated to Qualcomm modems that do not have "
+"internal call history memory and do not support the standard AT+CPBR "
+"command. Enabling this option adds a new tab. If dedicated tab does not "
+"appear, clear your browser cache and restart the router."
+msgstr "着信と不在着信を記録するバックグラウンドプロセスです。<br /><br /><b>重要</b> <br />内部に通話履歴のメモリを持たず、標準の AT+CPBR コマンドに対応しない Qualcomm 系モデム向けのオプションです。有効にすると新しいタブが追加されます。タブが表示されない場合は、ブラウザーのキャッシュを消去してルーターを再起動してください。"
+
+msgid "7Bit"
+msgstr "7Bit"
+
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> Name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> の名前"
+
+msgid "Advanced (merges with sorting)"
+msgstr "詳細 (並べ替えと併用)"
+
+msgid "Expect a decimal value"
+msgstr "10 進数の値を入力してください"
+
+msgid "Expect a decimal value between five and fifty-nine"
+msgstr "5 から 59 までの 10 進数の値を入力してください"
+
+msgid "Expect a decimal value between three and fifty-nine"
+msgstr "3 から 59 までの 10 進数の値を入力してください"
+
+msgid "Please configure SMS reading port first"
+msgstr "先に SMS 読み取りポートを設定してください"
+
+msgid ""
+"Please wait.. Process of saving SMS message to a text file is in progress."
+msgstr "お待ちください.. SMS メッセージをテキストファイルに保存しています。"
+
+msgid "Press [Enter] to send the code, press [Delete] to delete the code"
+msgstr "[Enter] でコードを送信、[Delete] でコードを削除します"
+
+msgid "Press [Enter] to send the command, press [Delete] to delete the command"
+msgstr "[Enter] でコマンドを送信、[Delete] でコマンドを削除します"
+
+msgid ""
+"Use ModemManager instead of sms_tool to send USSD codes. For modems that are "
+"managed by ModemManager and do not handle +CUSD on the AT port properly "
+"(e.g. Compal RXM-G1 / Tri Cascade VOS_5G). Requires the modemmanager "
+"package. The USSD port setting is not used in this mode."
+msgstr "USSD コードの送信に sms_tool ではなく ModemManager を使います。ModemManager が管理していて、AT ポートでの +CUSD を正しく処理できないモデム (Compal RXM-G1 / Tri Cascade VOS_5G など) 向けです。modemmanager パッケージが必要です。このモードでは USSD ポートの設定は使われません。"
+
+msgid "TTL IPv6 (in / out)"
+msgstr "TTL IPv6 (受信 / 送信)"
+
+msgid "Apply TTL"
+msgstr "TTL を適用"
+
+msgid "Enter a decimal value"
+msgstr "10 進数の値を入力してください"
+
+msgid "Show number and prefix hints"
+msgstr "番号と国番号のヒントを表示"
+
+msgid "On the Send tab, show a hint about the prefix and the correct phone-number format."
+msgstr "送信タブに、国番号と正しい電話番号の書式についてのヒントを表示します。"
+
+msgid "Edit user contacts"
+msgstr "ユーザー連絡先を編集"
+
+msgid "Receiving settings"
+msgstr "受信の設定"
+
+msgid "Sending settings"
+msgstr "送信の設定"
+
+msgid "USSD settings"
+msgstr "USSD の設定"
+
+msgid "AT settings"
+msgstr "AT の設定"
+
+msgid "The phone number should start with the country prefix (for example 7 for Russia, without the '+'). Numbers of 3, 4 or 5 digits are treated as 'short' and must not get a country prefix."
+msgstr "電話番号は国番号から始めてください (ロシアなら '+' なしの 7)。3 桁、4 桁、5 桁の番号は「短縮番号」として扱われ、国番号を付けてはいけません。"
+
+msgid "Each line must use the format 'Contact name;phone number'. The file is saved to <code>/etc/5gmodem/modem/phonebook.user</code>."
+msgstr "各行は「連絡先名;電話番号」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/phonebook.user</code> に保存されます。"
+
+msgid "Each line must use the format 'Code description;code'. The file is saved to <code>/etc/5gmodem/modem/ussdcodes/</code>."
+msgstr "各行は「コードの説明;コード」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/ussdcodes/</code> に保存されます。"
+
+msgid "Each line must use the format 'AT command description;AT command'. The file is saved to <code>/etc/5gmodem/modem/atcmmds/</code>."
+msgstr "各行は「AT コマンドの説明;AT コマンド」の形式で記述してください。ファイルは <code>/etc/5gmodem/modem/atcmmds/</code> に保存されます。"
+
+msgid "Send SMS"
+msgstr "SMS を送信"
+
+msgid "Restart the modem (AT+CFUN=1,1)"
+msgstr "モデムを再起動 (AT+CFUN=1,1)"
+
+msgid "Restart the modem now? The connection will drop for a while."
+msgstr "モデムを再起動しますか? しばらく接続が切れます。"
+
+msgid "Restarting the modem..."
+msgstr "モデムを再起動しています..."
+
+msgid "Create a network interface for the modem automatically (the control protocol is detected). If it already exists, it is just brought up."
+msgstr "モデム用のネットワークインターフェースを自動で作成します (制御プロトコルは自動検出)。すでに存在する場合は起動するだけです。"
+
+msgid "Interface \"%s\" already exists — bringing it up."
+msgstr "インターフェース \"%s\" はすでに存在します — 起動します。"
+
+msgid "No modem found to create an interface for"
+msgstr "インターフェースを作成できるモデムが見つかりません"
+
+msgid "It also installs the translation if available"
+msgstr "利用できる場合は翻訳も併せてインストールします"
+
+msgid "Update installed. Reload the page to see the changes."
+msgstr "更新をインストールしました。変更を反映するにはページを再読み込みしてください。"
+
+msgid "Restart the modem radio (re-register on the network)"
+msgstr "モデムの無線を再起動 (ネットワークに再登録)"
+
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems)."
+msgstr "「モデムインターフェースを作成」ボタンで使うプロトコルです。「自動」はモデムのドライバーから判別します (推奨)。MBIM (カーネルの umbim) は MBIM モデムで最も確実で、ModemManager を無効にします。ModemManager を選ぶと MM がモデムを管理します (メトリクスは充実しますが、一部のモデムでは不安定です)。"
+
+msgid "Bands set, restarting the modem radio to apply them..."
+msgstr "バンドを設定しました。適用するためモデムの無線を再起動しています..."
+
+msgid "Fully restart the modem (CFUN=1,1)? It will reboot and re-enumerate on USB - this takes longer and the connection will drop for about a minute."
+msgstr "モデムを完全に再起動しますか (CFUN=1,1)? モデムが再起動して USB 上で列挙し直されるため時間がかかり、接続は 1 分ほど切れます。"
+
+msgid "Restart the modem radio now? The connection will drop for a while."
+msgstr "モデムの無線を再起動しますか? しばらく接続が切れます。"
+
+msgid "Modem interface settings"
+msgstr "モデムインターフェースの設定"
+
+msgid "Live settings of the current modem interface \"%s\". Edit and press Save & Apply at the bottom; use \"Recreate\" above to rebuild it with the chosen protocol."
+msgstr "現在のモデムインターフェース \"%s\" の実際の設定です。編集したら下の「保存して適用」を押してください。選んだプロトコルで作り直すには、上の「再作成」を使います。"
+
+msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
+msgstr "モデムインターフェース \"%s\" の現在の設定です。すべての項目を編集するには「ネットワーク → インターフェース」ページを開いてください。"
+
+msgid "Switching to the selected modem…"
+msgstr "選択したモデムに切り替えています…"
+
+msgid "Switching the primary uplink…"
+msgstr "主回線を切り替えています…"
+
+msgid "Show the internet-priority switcher"
+msgstr "インターネット優先度の切り替えを表示"
+
+msgid "Show the \"Internet priority\" bar on the Network page for quickly switching the primary uplink (modems / WAN / Wi-Fi)."
+msgstr "ネットワークページに「インターネット優先度」バーを表示し、主回線 (モデム / WAN / Wi-Fi) をすばやく切り替えられるようにします。"
+
+msgid "Download profile"
+msgstr "プロファイルをダウンロード"
+
+msgid "Downloading eSIM profile..."
+msgstr "eSIM プロファイルをダウンロードしています..."
+
+msgid "eSIM profile downloaded"
+msgstr "eSIM プロファイルをダウンロードしました"
+
+msgid "Switch to the eSIM slot (SIM buttons in the header above) to manage eSIM profiles."
+msgstr "eSIM プロファイルを管理するには、eSIM スロットに切り替えてください (上部ヘッダーの SIM ボタン)。"
+
+msgid "eUICC is not responding (%s), retrying..."
+msgstr "eUICC が応答しません (%s)。再試行しています..."
+
+msgid "Manage embedded SIM (eUICC) profiles: add by activation code, enable, disable or delete"
+msgstr "組み込み SIM (eUICC) のプロファイルを管理します。アクティベーションコードでの追加、有効化、無効化、削除ができます"
+
+msgid "Downloading eSIM profile... This can take a minute, do not leave the page."
+msgstr "eSIM プロファイルをダウンロードしています... 1 分ほどかかる場合があります。ページを離れないでください。"
+
+msgid "Download failed: %s"
+msgstr "ダウンロードに失敗しました: %s"
+
+msgid "eSIM profile downloaded. Rebooting the modem to apply it..."
+msgstr "eSIM プロファイルをダウンロードしました。適用するためモデムを再起動しています..."
+
+msgid "IP type for the modem interface. IPv4 is the safe default: dual-stack (IPv4/IPv6) prevents some modems from connecting at all, and mobile operators rarely provide usable IPv6."
+msgstr "モデムインターフェースの IP 種別です。安全な既定値は IPv4 です。デュアルスタック (IPv4/IPv6) ではまったく接続できないモデムがあり、携帯事業者が実用的な IPv6 を提供することもまれです。"
+
+msgid "Profile %s. Rebooting the modem to apply it - this takes up to a minute, please wait..."
+msgstr "プロファイル %s。適用するためモデムを再起動しています。最大 1 分ほどかかります。お待ちください..."
+
+msgid "Profile added. Rebooting the modem to apply it - this takes up to a minute, please wait..."
+msgstr "プロファイルを追加しました。適用するためモデムを再起動しています。最大 1 分ほどかかります。お待ちください..."
+
+msgid "The operator server did not respond to a test request, but the internet is up. Trying to download anyway..."
+msgstr "事業者のサーバーはテスト要求に応答しませんでしたが、インターネットには接続できています。このままダウンロードを試みます..."
+
+msgid "Testing speed…"
+msgstr "速度を測定しています…"
+
+msgid "Measure the real download speed over the modem - a quick way to see whether carrier aggregation is actually working"
+msgstr "モデム経由の実際のダウンロード速度を測定します。キャリアアグリゲーションが実際に効いているかを手早く確認できます"
+
+msgid "Speed test: download source"
+msgstr "速度テスト: ダウンロード元"
+
+msgid "Large-file URL for the download test, fetched over the modem. Pick a preset or enter your own. The default uses ~16 MB per run."
+msgstr "モデム経由で取得する、ダウンロードテスト用の大きいファイルの URL です。プリセットを選ぶか、独自の URL を入力してください。既定では 1 回あたり約 16 MB を使います。"
+
+msgid "Speed test: upload endpoint"
+msgstr "速度テスト: アップロード先"
+
+msgid "Endpoint that accepts and discards a POST body, for the upload test. In Russia the default (Cloudflare) is often unreachable over cellular - set a reachable one or leave upload unused."
+msgstr "アップロードテスト用に、POST の本文を受け取って破棄するエンドポイントです。ロシアでは既定の Cloudflare にモバイル回線から到達できないことが多いため、到達できる先を指定するか、アップロード測定を使わないでください。"
+
+msgid "Service that returns your public IP, checked over the modem. Pick a preset or enter your own; if it fails, the modem WAN IP is shown instead."
+msgstr "モデム経由で問い合わせる、グローバル IP を返すサービスです。プリセットを選ぶか、独自の URL を入力してください。失敗した場合はモデムの WAN IP が代わりに表示されます。"
+
+msgid "Settings for the speed-test button in the \"Internet priority\" block on the Network page. The test runs from the router over the active uplink."
+msgstr "ネットワークページの「インターネット優先度」ブロックにある速度テストボタンの設定です。テストはルーターから、現在有効な回線を通して実行されます。"
+
+msgid "Large-file URL for the download test. Pick a preset or enter your own. The default uses ~16 MB per run."
+msgstr "ダウンロードテスト用の大きいファイルの URL です。プリセットを選ぶか、独自の URL を入力してください。既定では 1 回あたり約 16 MB を使います。"
+
+msgid "Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead."
+msgstr "グローバル IP を返すサービスです。プリセットを選ぶか、独自の URL を入力してください。失敗した場合は、有効な回線の WAN IP が代わりに表示されます。"
+
+msgid "Operator changed to \"%s\" after switching the eSIM profile. The recommended APN is \"%s\" (current: \"%s\"). Open Modem Settings to apply it."
+msgstr "eSIM プロファイルの切り替えにより、事業者が「%s」に変わりました。推奨 APN は「%s」です (現在: 「%s」)。適用するにはモデム設定を開いてください。"
+
+msgid "Used only when the service above returns an IP but no country: the flag is then resolved by a second request. Use {ip} as the address placeholder."
+msgstr "上のサービスが IP は返すものの国を返さない場合にのみ使われ、2 回目の要求で国旗を判定します。アドレスのプレースホルダーには {ip} を使ってください。"
+
+msgid "Service that returns your public IP. The default (ip-api.com) also returns the country, shown as a flag next to the IP. Pick a preset or enter your own; if it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
+msgstr "グローバル IP を返すサービスです。既定の ip-api.com は国も返し、IP の横に国旗として表示されます。プリセットを選ぶか、独自の URL を入力してください。失敗した場合は予備のサービスに問い合わせ、それも駄目なときにローカルの回線アドレスが (国旗なしで) 表示されます。"
+
+msgid "Profile %s. The modem is restarting to apply it - up to a minute…"
+msgstr "プロファイル %s。適用するためモデムを再起動しています。最大 1 分ほどかかります…"
+
+msgid "Locking to the current cell - the modem re-registers..."
+msgstr "現在のセルにロックしています。モデムが再登録します..."
+
+msgid "Data not refreshed for: %s"
+msgstr "データが更新されていません: %s"
+
+msgid "Select all"
+msgstr "すべて選択"
+
+msgid "Show signal level on the case LEDs"
+msgstr "筐体の LED に信号レベルを表示"
+
+msgid "Three LEDs show the signal level. Reads the same data as this page - the modem is not polled separately."
+msgstr "3 つの LED で信号レベルを示します。このページと同じデータを読むため、モデムを別途ポーリングすることはありません。"
+
+msgid "Signal LEDs enabled"
+msgstr "信号 LED を有効にしました"
+
+msgid "Signal LEDs disabled"
+msgstr "信号 LED を無効にしました"
+
+msgid "Show the signal level on the three case LEDs. Reads the same snapshot as the pages - the modem is not polled separately."
+msgstr "筐体の 3 つの LED に信号レベルを表示します。各ページと同じスナップショットを読むため、モデムを別途ポーリングすることはありません。"
+
+msgid "Which value the LEDs show. Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing."
+msgstr "LED に表示する値です。しきい値はネットワークページの色分けと一致しているので、LED 3 つの点灯と緑色の値は同じ意味になります。"
+
+msgid "Device ID"
+msgstr "デバイス ID"
+
+msgid "default APN"
+msgstr "既定の APN"
+
+msgid "The app saves the settings of every modem you connect. Plug a known modem back in and it is detected automatically and picks up its profile. Profiles that are no longer relevant are worth deleting — their network interfaces can cause confusion."
+msgstr "接続したモデムごとに設定が保存されます。一度使ったモデムを挿し直せば自動的に認識され、そのプロファイルが適用されます。不要になったプロファイルは削除しておくとよいでしょう。残ったネットワークインターフェースが混乱のもとになります。"
+
+msgid "Endpoint that accepts a POST body, for the upload test. The default (Yandex) is the one reachable over Russian cellular both directly and via a proxy - it answers 404/403 but reads the body, so the speed is still measured. Cloudflare/Rostelecom work on unrestricted networks."
+msgstr "アップロードテスト用に POST の本文を受け取るエンドポイントです。既定の Yandex は、ロシアのモバイル回線から直接でもプロキシ経由でも到達できます。404/403 を返しますが本文は読み取るため、速度は測定できます。Cloudflare や Rostelecom は制限のないネットワークで利用できます。"
+
+msgid "IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to \"IPv4 only\" only if a modem has trouble with dual-stack."
+msgstr "モデムインターフェースの IP 種別です。安全な既定値は IPv4/IPv6 です。IPv4 のみのネットワークではモデムが IPv4 をネゴシエートするだけですが、逆に IPv4 のみでは一切データコンテキストを有効にしないネットワークもあります (FM350 での Tele2 など)。デュアルスタックで問題が出るモデムの場合だけ「IPv4 のみ」に切り替えてください。"
+
+msgid "IPv4 and IPv6 (recommended)"
+msgstr "IPv4 と IPv6 (推奨)"
+
+msgid "Power-cycle the modem via the board power line? Power is cut for a few seconds and the modem re-appears in about a minute. On some boards this affects only the M.2 slot."
+msgstr "基板の電源ラインでモデムの電源を入れ直しますか? 数秒間給電が止まり、1 分ほどでモデムが再び現れます。基板によっては M.2 スロットだけが対象になります。"
+
+msgid "Power-cycling the modem..."
+msgstr "モデムの電源を入れ直しています..."
+
+msgid "stream, up to ~1 GB"
+msgstr "ストリーム、最大約 1 GB"
+
+msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. Pick a preset (approx. size shown) or enter your own."
+msgstr "ダウンロードテストに使う URL です。ファイルが大きいほど、約 15 秒のテスト中に速度が上がりきります。小さいファイルは途中で終わってしまい、低い値になります。プリセット (おおよそのサイズを表示) を選ぶか、独自の URL を入力してください。"
+
+msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgstr "ダウンロードテストの取得元です。「Интернетометр」は実行のたびに Yandex へ最寄りの CDN ノードを問い合わせるため、ロシアのモバイル回線では最適です。アップロード先を自分で選んでいない場合は、それも併せて設定されます。通常の URL の場合、ファイルが大きいほど約 15 秒のテスト中に速度が上がりきります。ロシア国内にある取得元 (Selectel / Yandex / Tele2) はロシアのモバイル回線から利用できますが、Cloudflare や Hetzner は遮断されることがあります。おおよそのサイズを表示しています。"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgstr "アップロードテスト用に POST の本文を受け取るエンドポイントです。「Интернетометр」はダウンロード元と同じ探索リストのノードを使い、ここで単独に選ぶこともできます。ロシア国内のエンドポイント (Rostelecom / Yandex) はロシアのモバイル回線から利用できます。サーバーが 404/403 を返す場合でも本文は読み取るため、速度は測定できます。"
+
+msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
+msgstr "グローバル IP を返すサービスです。ip-api.com のように国も返す場合は、IP の横に国旗が表示されます。失敗した場合は予備のサービスに問い合わせ、それも駄目なときにローカルの回線アドレスが (国旗なしで) 表示されます。"
+
+msgid "Applying bands…"
+msgstr "バンドを適用しています…"
+
+msgid "Options for the Network page and modem behaviour"
+msgstr "ネットワークページとモデムの動作に関するオプション"
+
+msgid "system button"
+msgstr "システムボタン"
+
+msgid "Has a built-in system action - reassigning is not offered yet."
+msgstr "システム標準の動作が割り当てられています。再割り当てにはまだ対応していません。"
+
+msgid "Command on short press (runs as root):"
+msgstr "短押し時のコマンド (root で実行):"
+
+msgid "shell command, e.g."
+msgstr "シェルコマンド。例:"
+
+msgid ""
+"Physical buttons detected on this router. Assign a shell command to a free "
+"button; it runs on a short press."
+msgstr "このルーターで検出された物理ボタンです。空いているボタンにシェルコマンドを割り当てると、短押しで実行されます。"
+
+msgid "No physical buttons were detected on this device."
+msgstr "このデバイスでは物理ボタンが検出されませんでした。"
+
+msgid "On press (runs as root):"
+msgstr "押したとき (root で実行):"
+
+msgid "On release (optional):"
+msgstr "離したとき (任意):"
+
+msgid "(optional) command on release"
+msgstr "(任意) 離したときのコマンド"
+
+msgid ""
+"Physical buttons detected on this router. Assign a shell command to a free "
+"button; it runs on press (and, optionally, on release)."
+msgstr "このルーターで検出された物理ボタンです。空いているボタンにシェルコマンドを割り当てると、押したとき (および任意で離したとき) に実行されます。"
+
+msgid "In one position (pressed):"
+msgstr "一方の位置 (押し込み):"
+
+msgid "In the other position (released):"
+msgstr "もう一方の位置 (戻り):"
+
+msgid "On press (pressed):"
+msgstr "押したとき (押し込み):"
+
+msgid "On release (released, optional):"
+msgstr "離したとき (戻り、任意):"
+
+msgid "Debounce, s"
+msgstr "チャタリング防止 (秒)"
+
+msgid "ignore repeats within N seconds (for slow services)"
+msgstr "N 秒以内の連続操作を無視します (起動の遅いサービス向け)"
+
+msgid "one position"
+msgstr "一方の位置"
+
+msgid "the other position"
+msgstr "もう一方の位置"
+
+msgid "Show as"
+msgstr "表示方法"
+
+msgid "Physical buttons of this router model, available for assigning functions"
+msgstr "このルーター機種の物理ボタンです。機能を割り当てられます"
+
+msgid "Example of a switch-type button (not present on this device):"
+msgstr "スイッチ型ボタンの例 (このデバイスにはありません):"
+
+msgid "Open the SSClash-Go admin panel in a new tab"
+msgstr "SSClash-Go の管理画面を新しいタブで開く"
+
+msgid "Button pressed"
+msgstr "ボタンを押した状態"
+
+msgid "Button released"
+msgstr "ボタンを離した状態"
+
+msgid "One position"
+msgstr "一方の位置"
+
+msgid "The other position"
+msgstr "もう一方の位置"
+
+msgid "Momentary button: each press flips between the two states below (like a service on/off toggle) - running that state’s command and setting its LEDs."
+msgstr "モーメンタリー式のボタンです。押すたびに下の 2 つの状態が切り替わり (サービスのオン / オフの切り替えのように)、その状態のコマンドを実行して LED を設定します。"
+
+msgid "Simple (runs once, no state check)"
+msgstr "単純 (状態を見ずに 1 回実行)"
+
+msgid "Conditional (checks a service and reflects it on LEDs)"
+msgstr "条件付き (サービスの状態を確認し LED に反映)"
+
+msgid "Each press starts the service if it is stopped, or stops it if it is running. The LEDs below then reflect the resulting state."
+msgstr "押すたびに、サービスが停止していれば起動し、動作していれば停止します。その結果の状態が下の LED に反映されます。"
+
+msgid "Service name (init.d):"
+msgstr "サービス名 (init.d):"
+
+msgid "Add button"
+msgstr "ボタンを追加"
+
+msgid "Assign actions to this router’s physical buttons. Add a button below to configure it."
+msgstr "このルーターの物理ボタンに動作を割り当てます。下からボタンを追加して設定してください。"
+
+msgid "Each press starts the service if stopped, or stops it if running; the LEDs then reflect the result. The terminal above may hold an extra command."
+msgstr "押すたびに、サービスが停止していれば起動し、動作していれば停止します。その結果が LED に反映されます。上の入力欄には追加のコマンドを指定できます。"
+
+msgid "Add:"
+msgstr "追加:"
+
+msgid "Show or hide the cards in the widgets row on the Network page. All are on by default."
+msgstr "ネットワークページのウィジェット列に表示するカードを選びます。既定ではすべて有効です。"
+
+msgid "The uplink switch - buttons for modem / Wi-Fi / WAN."
+msgstr "回線の切り替えです。モデム / Wi-Fi / WAN のボタンが並びます。"
+
+msgid "YouTube reachability card with live ping."
+msgstr "YouTube への到達性を示すカードです。ping をリアルタイムに表示します。"
+
+msgid "SSClash-Go card (appears only when the service is installed)"
+msgstr "SSClash-Go のカード (サービスがインストールされている場合のみ表示)"
+
+msgid "YouTube is reachable"
+msgstr "YouTube に接続できます"
+
+msgid "No connection to YouTube"
+msgstr "YouTube に接続できません"
+
+msgid "Ping to YouTube over the active uplink"
+msgstr "有効な回線経由の YouTube への ping"
+
+msgid "Click to ping YouTube"
+msgstr "クリックすると YouTube に ping を送ります"
+
+msgid "Click to measure ping to YouTube over the active uplink"
+msgstr "クリックすると、有効な回線経由で YouTube への ping を測定します"
+
+msgid "YouTube ping"
+msgstr "YouTube への ping"
+
+msgid "When to measure ping to YouTube"
+msgstr "YouTube への ping を測定するタイミング"
+
+msgid "YouTube reachability card with ping"
+msgstr "YouTube への到達性を ping で示すカード"
+
+msgid "Card that pings a service and shows a green/red dot with latency"
+msgstr "サービスに ping を送り、緑または赤の点と応答時間を表示するカード"
+
+msgid "Service to ping"
+msgstr "ping を送る宛先"
+
+msgid "Pick a preset or type any host / domain"
+msgstr "プリセットを選ぶか、任意のホストやドメインを入力してください"
+
+msgid "When to measure the ping"
+msgstr "ping を測定するタイミング"
+
+msgid "Service ping"
+msgstr "サービスへの ping"
+
+msgid "Ping cards (green/red dot with latency). Configure the hosts below"
+msgstr "ping カード (緑または赤の点と応答時間)。宛先は下で設定します"
+
+msgid "Service status cards (running/stopped). Configure the services below"
+msgstr "サービス状態のカード (動作中 / 停止中)。対象は下で設定します"
+
+msgid "Each card pings a host and shows the latency. Add as many as you like; if none, YouTube is shown by default."
+msgstr "各カードは指定したホストに ping を送り、応答時間を表示します。いくつでも追加できます。1 つも追加しない場合は、既定で YouTube が表示されます。"
+
+msgid "Service cards"
+msgstr "サービスカード"
+
+msgid "Each card shows whether a service is running. Add as many as you like; if none, SSClash-Go is shown when installed."
+msgstr "各カードはサービスが動作しているかを表示します。いくつでも追加できます。1 つも追加しない場合は、インストールされていれば SSClash-Go が表示されます。"
+
+msgid "Speed-test card in the widgets row on the Network page. The test runs from the router over the active uplink."
+msgstr "ネットワークページのウィジェット列に置く速度テストのカードです。テストはルーターから、有効な回線を通して実行されます。"
+
+msgid "No modem on the bus. Insert a modem — the card fills in automatically."
+msgstr "バス上にモデムがありません。モデムを挿すと、カードが自動的に埋まります。"
+
+msgid "The eSIM chip could not install this profile. It likely does not have enough working memory for it — some profiles are too large for this modem. Try a different profile or ask the operator."
+msgstr "eSIM チップがこのプロファイルをインストールできませんでした。作業用メモリが足りない可能性があります。このモデムには大きすぎるプロファイルもあります。別のプロファイルを試すか、事業者に問い合わせてください。"
+
+msgid "The operator (SM-DP+) should be told about these profile changes. Normally sent automatically; send here if one got stuck (e.g. no internet during the operation)."
+msgstr "これらのプロファイル変更は事業者 (SM-DP+) に通知する必要があります。通常は自動で送信されますが、操作中にインターネットが切れたなどで送信できなかった場合は、ここから送信してください。"
+
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back on its own - the connection drops for about twenty seconds."
+msgstr "モデムは現在 %s に登録されており、USSD は回線交換チャネルで動作します。そのため要求時にモデムを 3G へ切り替え、終了後に自動で戻します。接続は 20 秒ほど切れます。"
+
+msgid "Pings each uplink through its own device. A link is marked down after several consecutive failures and up again after several successes, so single lost packets do not flip the state. Health lamps are shown on the cards; traffic switching is optional and enabled below."
+msgstr "各回線を、それぞれのデバイス経由で ping します。連続して数回失敗すると停止と判定し、数回成功すると復帰と判定するため、パケットが 1 つ落ちただけでは状態は変わりません。ヘルスランプはカードに表示されます。トラフィックの切り替えは任意で、下で有効にできます。"
+
+msgid "Ping targets (comma-separated)"
+msgstr "ping の宛先 (カンマ区切り)"
+
+msgid "Steps are tried from mild to strong, at most once per 5 minutes, 6 attempts total; the ladder resets when the link recovers."
+msgstr "対処は軽いものから順に、5 分に 1 回まで、合計 6 回試します。回線が復旧すると段階はリセットされます。"
+
+msgid "Rebooting the module"
+msgstr "モジュールを再起動しています"
+
+msgid "Also heal the Wi-Fi uplink"
+msgstr "Wi-Fi 回線も自動復旧の対象にする"
+
+msgid "Series live in RAM and are lost on reboot."
+msgstr "データ系列は RAM 上にあり、再起動すると失われます。"
+
+msgid "Show statistics"
+msgstr "統計を表示"
+
+msgid "Adds the \"Statistics\" tab with charts of uplink latency, signal, temperature and monthly traffic."
+msgstr "回線の応答時間、信号、温度、月間トラフィックのグラフを表示する「統計」タブを追加します。"
+
+msgid "Forward incoming messages to Telegram"
+msgstr "受信メッセージを Telegram に転送"
+
+msgid "A bot sends every new incoming SMS to the chosen chat. The very first run only remembers the current messages and sends nothing."
+msgstr "新着 SMS をボットが指定のチャットに送信します。初回の実行では現在のメッセージを記録するだけで、何も送信しません。"
+
+msgid "Numeric chat or channel ID. Write to the bot first, then take the ID from https://api.telegram.org/bot<token>/getUpdates"
+msgstr "チャットまたはチャンネルの数値 ID です。まずボットにメッセージを送り、https://api.telegram.org/bot<token>/getUpdates から ID を取得してください"
+
+msgid "Chat ID found: %s (%s). Save the form."
+msgstr "チャット ID が見つかりました: %s (%s)。フォームを保存してください。"
+
+msgid "(initialisation #%d)"
+msgstr "(初期化 #%d)"
+
+msgid "Internet works through the modem"
+msgstr "インターネットはモデム経由で動作しています"
+
+msgid "The modem is not registered on the network"
+msgstr "モデムがネットワークに登録されていません"
+
+msgid "Signal: excellent"
+msgstr "信号: 非常に良好"
+
+msgid "Signal: fair"
+msgstr "信号: 普通"
+
+msgid "Signal: weak"
+msgstr "信号: 弱い"
+
+msgid "Try moving the router closer to a window or connecting an external antenna"
+msgstr "ルーターを窓際に移すか、外部アンテナを接続してみてください"
+
+msgid "Expert mode"
+msgstr "エキスパートモード"
+
+msgid "Show only the essentials, or the full expert view"
+msgstr "要点だけを表示するか、エキスパート向けの全項目を表示するかを選びます"
+
+msgid "Execute a configured command when a message starts with its keyword. Useful when the router is unreachable over the network - SMS still gets through. The message text is never pasted into the command line: whatever follows the keyword is passed as the SMS_ARGS environment variable."
+msgstr "メッセージがキーワードで始まるとき、設定したコマンドを実行します。ネットワーク経由でルーターに届かないときでも SMS なら届くため便利です。メッセージ本文がコマンドラインに貼り付けられることはありません。キーワードより後ろの部分は、環境変数 SMS_ARGS として渡されます。"
+
+msgid "Keyword"
+msgstr "キーワード"
+
+msgid "First word of the message, case-insensitive"
+msgstr "メッセージの最初の単語。大文字と小文字は区別しません"
+
+msgid "Shell command to run"
+msgstr "実行するシェルコマンド"
+
+msgid "Send the command output back to the sender"
+msgstr "コマンドの出力を送信者に返信する"
+
+msgid "Sent before the output; on its own when a delay is set"
+msgstr "出力より先に送信されます。遅延を設定した場合はこれだけが送信されます"
+
+msgid "Wait before running. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "実行前に待機します。遅延を設定すると返信が先に送られます。reboot のようなコマンドが応答を返せるのは、この方法だけです。"
+
+msgid "The keyword is the first word of the message, case-insensitive; the rest is passed to the command as SMS_ARGS. With a delay the reply is sent FIRST - that is the only way a command like reboot can answer at all."
+msgstr "キーワードはメッセージの最初の単語で、大文字と小文字は区別しません。残りの部分は SMS_ARGS としてコマンドに渡されます。遅延を設定すると返信が先に送られます。reboot のようなコマンドが応答を返せるのは、この方法だけです。"
+
+msgid "What counts as a modem"
+msgstr "モデムとして扱う対象"
+
+msgid "USB devices with ports that the app found. Uncheck the ones that are not modems — a USB-to-serial adapter, for example — and they lose their tab and stop being probed with AT commands."
+msgstr "アプリが見つけた、ポートを持つ USB デバイスです。USB シリアル変換アダプターなどモデムでないものはチェックを外してください。タブが消え、AT コマンドによる問い合わせも行われなくなります。"
+
+msgid "Every USB device the app found with ports of its own. Checked ones are treated as modems; the app decides that by the drivers the kernel bound to the device, so an adapter or a printer stays out. Check a device to force it in, uncheck one to make it lose its tab and stop being probed with AT commands."
+msgstr "アプリが見つけた、独自のポートを持つすべての USB デバイスです。チェックの付いたものがモデムとして扱われます。判定はカーネルがデバイスに割り当てたドライバーに基づくため、変換アダプターやプリンターは対象外になります。強制的にモデムとして扱うにはチェックを入れ、タブを消して AT コマンドによる問い合わせを止めるにはチェックを外してください。"
+
+msgid "marked as a modem by hand"
+msgstr "手動でモデムに指定"
+
+msgid "Show the address the internet sees (extIPv4/extIPv6) next to the one the carrier assigned. Behind CGNAT or a tunnel the two differ - and that difference tells you whether the router's own traffic goes through the VPN. Off by default: this is a request to a third-party service."
+msgstr "事業者から割り当てられたアドレスの隣に、インターネット側から見えるアドレス (extIPv4/extIPv6) を表示します。CGNAT やトンネルの内側では両者が異なり、その違いからルーター自身の通信が VPN を経由しているかが分かります。外部サービスへの問い合わせが発生するため、既定では無効です。"
+
+msgid "public demo"
+msgstr "公開デモ"
+
+msgid "Create interface (USB tethering)"
+msgstr "インターフェースを作成 (USB テザリング)"
+
+msgid "Recreate interface (USB tethering)"
+msgstr "インターフェースを再作成 (USB テザリング)"
+
+msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
+msgstr "このスマートフォンは USB 経由でインターネットを共有し、DHCP でアドレスを配布します。このボタンはその DHCP インターフェースを作成 (または再作成) します。選ぶべきダイヤルアップのプロトコルはなく、読み取れるモデムの統計情報もありません。"

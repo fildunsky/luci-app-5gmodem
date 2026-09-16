@@ -665,9 +665,15 @@ mkhilink)
 	# (kind=hilink или наш whitelist vid:pid), поэтому строгий автодетект
 	# hilink_net здесь не годится: он падает, если модем сейчас в AT-debug и
 	# засветил tty. Авторитет - is_hilink; карту берём по USB-пути.
-	is_hilink "$_p" || { echo '{"error":"not a hilink modem"}'; exit 0; }
+	# Телефон в режиме USB-модема настраивается так же (dhcp на его сетевой
+	# карте), поэтому кнопка одна на оба случая - расходится только вид.
+	_k=hilink
+	if ! is_hilink "$_p"; then
+		is_tether "$_p" || { echo '{"error":"not a hilink modem"}'; exit 0; }
+		_k=tether
+	fi
 	_d=$(hilink_netdev "$_p") || { echo '{"error":"no network card"}'; exit 0; }
-	_r=$(setup_hilink "$_p" "$_d")
+	_r=$(setup_hilink "$_p" "$_d" "$_k")
 	printf '{"success":true,"iface":"%s","netdev":"%s"}\n' "$_r" "$_d"
 	exit 0
 	;;
@@ -1173,6 +1179,20 @@ autosetup)
 			   && [ -z "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_p\"].tty[0]" 2>/dev/null)" ]; then
 				TARGETS="$TARGETS $_p"
 				continue
+			fi
+			# ТЕЛЕФОН В РЕЖИМЕ USB-МОДЕМА - ЦЕЛЬ, пока его интерфейс не поднят
+			# по dhcp на ЕГО ЖЕ сетевой карте. Проверки «интерфейс есть, значит
+			# настроен» тут мало: в том же разъёме раньше мог стоять модем, и от
+			# него остался интерфейс с дозвоном (напр. proto=qmiraw на cdc-wdm).
+			# Телефону он не подходит и подняться уже не может, а autosetup
+			# считал такой модем настроенным и молча проходил мимо.
+			if is_tether "$_p"; then
+				_tn=$(hilink_netdev "$_p")
+				_tok=0
+				[ -n "$_n" ] && [ "$(uci -q get "network.$_n.proto")" = dhcp ] \
+					&& [ -n "$_tn" ] \
+					&& [ "$(uci -q get "network.$_n.device")" = "$_tn" ] && _tok=1
+				[ "$_tok" = 1 ] || { TARGETS="$TARGETS $_p"; continue; }
 			fi
 			[ -n "$_n" ] && uci -q get "network.$_n" >/dev/null 2>&1 && continue
 			TARGETS="$TARGETS $_p"

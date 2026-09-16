@@ -55,6 +55,21 @@ setup_one_modem() {
 		return 0
 	fi
 
+	# ТЕЛЕФОН В РЕЖИМЕ USB-МОДЕМА. Настройка та же, что у HiLink (dhcp на его
+	# сетевой карте), но ни debug-режима, ни AT-порта тут не бывает - просить
+	# их не у кого. Проверяем ПОСЛЕ is_hilink: Android-палки 05c6:90b4 тоже
+	# приходят как RNDIS, но у них есть веб-морда, и они должны остаться
+	# HiLink-ветке.
+	if is_tether "$P"; then
+		_tnet=$(hilink_netdev "$P")
+		if [ -n "$_tnet" ]; then
+			setup_hilink "$P" "$_tnet" tether >/dev/null
+		else
+			logger -t 5gmodem "tether: $P looks like USB tethering but has no network device yet"
+		fi
+		return 0
+	fi
+
 	SEC=$(ensure_section "$P")
 
 	# АКТИВНОСТЬ НЕ ОТБИРАЕМ. Свежевоткнутый модем настраиваем, но активным

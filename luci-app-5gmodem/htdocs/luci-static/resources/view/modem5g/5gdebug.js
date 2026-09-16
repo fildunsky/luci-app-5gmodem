@@ -839,12 +839,16 @@ return view.extend({
 		   и раздаёт IP по DHCP на своей сетевой карте. AT-протоколы (mbim/qmi/…)
 		   к нему неприменимы, поэтому выпадашку протокола и кнопку mkiface ему НЕ
 		   показываем - вместо них ниже отдельная кнопка «HiLink DHCP» (mkhilink). */
-		var activeIsHilink = (function() {
+		var activeKind = (function() {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
-			if (!p) { return false; }
+			if (!p) { return ''; }
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
-			return uci.get('5gmodem', sc, 'kind') === 'hilink';
+			return uci.get('5gmodem', sc, 'kind') || '';
 		})();
+		/* Телефон в режиме USB-модема (kind=tether) ведёт себя как HiLink: дозвона
+		   нет, интерфейс поднимается по dhcp. Значит и прятать надо то же самое -
+		   протокол, APN, тип PDP, DNS-фолбэк. Расходится только подпись кнопки. */
+		var activeIsHilink = (activeKind === 'hilink' || activeKind === 'tether');
 
 		/* Выбор протокола + кнопка создания интерфейса модема. Список типов
 		   строится по установленным на роутере обработчикам протоколов, так
@@ -1415,8 +1419,12 @@ return view.extend({
 		   (hilink_net) и заводит proto=dhcp (setup_hilink). */
 		o = s.option(form.Button, '_mkhilink');
 		o.title = _('Modem interface');
-		o.description = _('This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose.');
-		o.inputtitle = mIfExists ? _('Recreate interface (HiLink DHCP)') : _('Create interface (HiLink DHCP)');
+		o.description = (activeKind === 'tether')
+			? _('This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read.')
+			: _('This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose.');
+		o.inputtitle = (activeKind === 'tether')
+			? (mIfExists ? _('Recreate interface (USB tethering)') : _('Create interface (USB tethering)'))
+			: (mIfExists ? _('Recreate interface (HiLink DHCP)') : _('Create interface (HiLink DHCP)'));
 		o.inputstyle = 'apply';
 		o.onclick = function() {
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
