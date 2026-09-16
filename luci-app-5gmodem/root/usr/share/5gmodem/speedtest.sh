@@ -20,22 +20,49 @@
 #   speedtest.sh status   -> live/final JSON
 #
 # Config (uci 5gmodem.@5gmodem[0]):
-#   speedtest_url     download file URL   (default: Yandex mirror, ~16 MB)
-#   speedtest_up_url  upload POST endpoint(default: Cloudflare __up)
+#   speedtest_url     download source: a URL, or "internetometer" (default) -
+#                     the Yandex Internetometer probe list, see YA_* below
+#   speedtest_up_url  upload POST endpoint; empty = chosen by the download
+#                     source (Internetometer node, otherwise Rostelecom)
 #   speedtest_ip_url  public-IP service   (default: api.ipify.org)
 #   speedtest_secs    per-phase time cap  (default 15)
 
 CACHE="/tmp/5gmodem_speedtest.json"
-URL_DEFAULT="http://speedtest.tele2.net/1GB.zip"   # RU-достижимый ~1 ГБ: тест 15 c успевает разогнаться. Cloudflare/Hetzner на РФ-сотовой отдают 403/недоступны, поэтому дефолт RU (мелкий файл кончался раньше и занижал скорость)
+URL_DEFAULT="internetometer"     # зонды Яндекс-Интернетометра, см. YA_* ниже
+UPURL_DEFAULT="internetometer"   # то же и для отдачи
+# Запасной источник на случай, когда список зондов не пришёл. Здесь был Tele2
+# и снят: с двух наших роутеров он молчит наглухо (curl отдаёт 000), а фолбэк
+# обязан работать именно тогда, когда основной путь уже не сработал.
+# Selectel отвечает и напрямую, и через сотовую; файл большой - 15-секундный
+# тест успевает разогнаться (мелкий кончался раньше и занижал скорость).
+URL_FALLBACK="https://speedtest.selectel.ru/1GB"
+UPURL_FALLBACK="https://speedtest.rt.ru/backend/empty.php"
+
+# ИНТЕРНЕТОМЕТР ЯНДЕКСА. Публичный список зондов: узлы CDN подбираются под
+# клиента, поэтому на сотовой в РФ это самый близкий сервер, а не случайное
+# зеркало. Ключей и заголовков не требует (проверено: 200 без Referer).
+# Адреса СЕССИОННЫЕ - в них зашиты mid/sid, поэтому статической настройкой
+# их не задать, и список приходится брать перед каждым замером.
+YA_PROBES_URL="https://yandex.ru/internet/api/v0/get-probes"
+# Ответ сервиса - ДАННЫЕ ИЗВНЕ, а мы по ним льём POST с телом. Поэтому адреса
+# не «разбираем», а ВЫКУСЫВАЕМ по строгому шаблону: хост обязан оканчиваться
+# на .cdn.yandex.net (после .net сразу «/», так что .cdn.yandex.net.zlo.com не
+# пройдёт), путь - ровно один из двух. Это и есть проверка, а не украшение.
+YA_RE_HOST='https://[a-zA-Z0-9.-]+\.cdn\.yandex\.net/[A-Za-z0-9_-]+'
+YA_RE_DOWN="$YA_RE_HOST/probes/50mb\?[A-Za-z0-9._~%&=:/-]+"
+YA_RE_UP="$YA_RE_HOST/upload\?[A-Za-z0-9._~%&=:/-]+"
 
 _write() {   # atomic write of $1 to CACHE
 	echo "$1" > "$CACHE.$$" 2>/dev/null && mv "$CACHE.$$" "$CACHE" 2>/dev/null
 }
 
 # Дружелюбное имя сервиса замера (верхняя строка карточки) из URL загрузки.
+# $1 - адрес; без него берём настройку (так зовут status и стартовый снимок).
 _service_name() {
-	_u=$(uci -q get 5gmodem.@5gmodem[0].speedtest_url)
+	_u="$1"
+	[ -n "$_u" ] || _u=$(uci -q get 5gmodem.@5gmodem[0].speedtest_url)
 	[ -n "$_u" ] || _u="$URL_DEFAULT"
+	[ "$_u" = internetometer ] && { echo "Интернетометр"; return; }
 	_h=$(echo "$_u" | sed -e 's#^[a-zA-Z]*://##' -e 's#/.*##' -e 's#:.*##')
 	case "$_h" in
 		*yandex*)     echo "Yandex" ;;
@@ -150,11 +177,13 @@ start)
 	[ -n "$URL" ] || URL="$URL_DEFAULT"
 	SECS=$(uci -q get 5gmodem.@5gmodem[0].speedtest_secs)
 	case "$SECS" in ''|*[!0-9]*) SECS=15 ;; esac
+	# Точка отдачи - такой же выбор из списка, как источник загрузки, и в нём
+	# есть тот же «internetometer»: тогда узел берётся из зондов. ПУСТО значит
+	# ровно то же самое - это умолчание, и трактовать его иначе нельзя, иначе
+	# страница показывала бы один сервис, а замер шёл на другой. Любой другой
+	# адрес - явный выбор пользователя, зонды его не перебивают.
 	UPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_up_url)
-	# по умолчанию Yandex - единственный, кто доступен и напрямую через сотовую в
-	# РФ, и через прокси. Отвечает 404/403, но ЧИТАЕТ тело -> скорость отдачи
-	# измеряется (наш код берёт speed_upload независимо от HTTP-кода).
-	[ -n "$UPURL" ] || UPURL="https://speedtest.rt.ru/backend/empty.php"
+	[ -n "$UPURL" ] || UPURL="$UPURL_DEFAULT"
 	# СЕРВИС ОПРЕДЕЛЕНИЯ АДРЕСА - ОБЩИЙ С «Внешним IP» (настройки в одном
 	# месте, см. extip.sh): раньше одно и то же спрашивалось двумя настройками.
 	# Прежние ключи читаем как запасные - ради тех, кто выставил их до переезда.
@@ -274,6 +303,42 @@ start)
 		) >/dev/null 2>&1 </dev/null &
 		PUB=""; CC=""
 
+		# --- ЗОНДЫ ИНТЕРНЕТОМЕТРА ---
+		# Берём ЗДЕСЬ, в фоне: запрос сетевой, а стартовый ответ rpcd уже отдан.
+		# Имя сервиса на карточке уже написано, но при неудаче мы честно
+		# переключаемся на запасной источник и МЕНЯЕМ имя - иначе карточка
+		# говорила бы «Интернетометр», меряя Tele2.
+		# Список нужен, если Интернетометр выбран ХОТЯ БЫ ДЛЯ ОДНОЙ фазы:
+		# источник загрузки и точка отдачи настраиваются независимо, и «своя
+		# ссылка на загрузку + узел Яндекса на отдачу» - рабочее сочетание.
+		if [ "$URL" = internetometer ] || [ "$UPURL" = internetometer ]; then
+			_yp=$(curl -A 5gmodem-speedtest -s --connect-timeout 5 --max-time 8 \
+				"$YA_PROBES_URL" 2>/dev/null)
+			_yd=$(printf '%s' "$_yp" | grep -oE "$YA_RE_DOWN" | head -1)
+			# Быстрые зонды (timeout=) - для замера задержки, они обрываются
+			# на сотне миллисекунд и для скорости не годятся.
+			_yu=$(printf '%s' "$_yp" | grep -oE "$YA_RE_UP" | grep -v 'timeout=' | head -1)
+			if [ -z "$_yd" ] || [ -z "$_yu" ]; then
+				logger -t 5gmodem "speedtest: Internetometer probes unavailable - falling back to $URL_FALLBACK"
+				_yd=""; _yu=""
+			fi
+			if [ "$URL" = internetometer ]; then
+				if [ -n "$_yd" ]; then
+					URL="$_yd"
+				else
+					# Имя пересчитываем ТОЛЬКО при откате: у зонда в адресе
+					# стоит yandex.net, и по нему карточка подписалась бы
+					# «Yandex» вместо «Интернетометра».
+					URL="$URL_FALLBACK"
+					SERVICE=$(_service_name "$URL")
+				fi
+			fi
+			if [ "$UPURL" = internetometer ]; then
+				if [ -n "$_yu" ]; then UPURL="$_yu"; else UPURL="$UPURL_FALLBACK"; fi
+			fi
+			_yp=""
+		fi
+
 		# --- DOWNLOAD: живое семплирование, ИТОГ = МАКС по секундным семплам ---
 		# stderr (прогресс-метр) -> PROG, stdout (итоговый -w) -> RESF. Заголовком
 		# берём максимум устойчивой скорости из посекундных семплов (это «скорость
@@ -282,8 +347,23 @@ start)
 		# -A маркер: по нему stop убивает ИМЕННО замерные curl'ы (busybox без pkill
 		# по имени+аргументам, pgrep -f по маркеру - точечно, чужие curl не трогаем)
 		_DL_T0=$(cut -d. -f1 /proc/uptime)
-		curl -A 5gmodem-speedtest -o /dev/null --max-time "$SECS" --connect-timeout 8 \
-			-w '%{speed_download} %{http_code}' "$URL" 2>"$PROG" >"$RESF" &
+		# ЦИКЛ ЗАКАЧЕК, А НЕ ОДНА. Зонд Интернетометра - файл на 50 МБ: на
+		# быстром канале он кончается за три секунды, и фаза обрывалась бы на
+		# разгоне TCP, как это было с «экономичным» 16-МБ зеркалом. Качаем
+		# заново, пока не выйдет $SECS. Для большого файла (Tele2, 1 ГБ) второй
+		# итерации не случается - там поведение ровно прежнее.
+		# --max-time у curl считается НА ПЕРЕДАЧУ, не на команду, поэтому предел
+		# каждой итерации - остаток фазы, и общее время не разъезжается.
+		(
+			while :; do
+				[ -f /tmp/5gmodem_st_stop ] && break
+				_dl_left=$(( SECS - ($(cut -d. -f1 /proc/uptime) - _DL_T0) ))
+				[ "$_dl_left" -ge 2 ] || break
+				curl -A 5gmodem-speedtest -o /dev/null --max-time "$_dl_left" \
+					--connect-timeout 8 -w '%{speed_download} %{http_code}\n' \
+					"$URL" 2>>"$PROG" >>"$RESF"
+			done
+		) </dev/null &
 		CPID=$!
 		MAXD=0
 		# ЖИВУЮ СКОРОСТЬ СЧИТАЕМ САМИ - ПО ДЕЛЬТЕ ПРИНЯТЫХ БАЙТ.
@@ -299,11 +379,18 @@ start)
 		# двумя отсчётами делённая на время даёт МГНОВЕННУЮ скорость с первой
 		# секунды. Если разобрать не удалось (формат метра поехал), откатываемся
 		# на прежнюю колонку - хуже, чем было, не станет.
-		_PREVB=0; _PREVS=0; _LASTLIVE=0
+		_PREVB=0; _PREVS=0; _LASTLIVE=0; _DONEN=0
 		while kill -0 "$CPID" 2>/dev/null; do
 			sleep 1
 			_LINE=$(tr '\r' '\n' 2>/dev/null < "$PROG" | grep -E '^[ ]*[0-9]' | tail -1)
 			_RECV=$(printf '%s' "$_LINE" | awk '{print $4}')
+			# СКОЛЬКО ЗАКАЧЕК УЖЕ ЗАВЕРШИЛОСЬ - по строкам итогов (-w пишет по
+			# строке на каждую). Это НАДЁЖНЫЙ признак границы файлов; по самим
+			# счётчикам метра её не видно: новая закачка может успеть набрать
+			# больше байт, чем было в прошлом отсчёте у предыдущей, и тогда
+			# «сброс» не распознаётся, а дельта получается завышенной.
+			_NDONE=$(wc -l < "$RESF" 2>/dev/null | tr -d ' ')
+			case "$_NDONE" in ''|*[!0-9]*) _NDONE="$_DONEN" ;; esac
 			_NOWT=$(cut -d. -f1 /proc/uptime)
 			LIVE=""
 			if [ -n "$_RECV" ]; then
@@ -311,12 +398,26 @@ start)
 				_SP=$(_spent "$_LINE")
 				case "$_NOWB" in
 					''|*[!0-9]*) : ;;
-					*) _DS=$(( _SP - _PREVS ))
-					   if [ "$_DS" -ge 1 ] && [ "$_NOWB" -ge "$_PREVB" ]; then
-						LIVE=$(awk "BEGIN{printf \"%.1f\", (($_NOWB-$_PREVB)*8)/1000000/$_DS}")
+					# СЧЁТЧИКИ МЕТРА СБРАСЫВАЮТСЯ НА КАЖДОЙ ЗАКАЧКЕ. Цикл выше
+					# качает файл заново, и «Received» с «Time Spent» начинают
+					# с нуля.
+					# НА САМОМ СБРОСЕ СКОРОСТЬ НЕ СЧИТАЕМ, а только берём новую
+					# точку отсчёта: «Time Spent» округлён до целой секунды, и
+					# на первом отрезке новой закачки делитель занижен - цифра
+					# выходила вдвое больше настоящей (на стенде 297 при плато
+					# 136) и, как максимум по семплам, попадала в заголовок.
+					*) if [ "$_NDONE" != "$_DONEN" ] || [ "$_NOWB" -lt "$_PREVB" ] || [ "$_SP" -lt "$_PREVS" ]; then
+						_DONEN="$_NDONE"
 						_PREVB="$_NOWB"; _PREVS="$_SP"
-					   else
 						LIVE="$_LASTLIVE"
+					   else
+						_DS=$(( _SP - _PREVS ))
+						if [ "$_DS" -ge 1 ] && [ "$_NOWB" -ge "$_PREVB" ]; then
+							LIVE=$(awk "BEGIN{printf \"%.1f\", (($_NOWB-$_PREVB)*8)/1000000/$_DS}")
+							_PREVB="$_NOWB"; _PREVS="$_SP"
+						else
+							LIVE="$_LASTLIVE"
+						fi
 					   fi ;;
 				esac
 			fi
@@ -346,8 +447,12 @@ start)
 			_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":${LIVE:-0},\"secs\":$SECS,\"elapsed\":$(( _NOWT - _DL_T0 )),\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$CPID" 2>/dev/null
-		SPD=$(_num "$(awk '{print $1+0}' "$RESF")")
-		HTTP=$(awk '{print $2}' "$RESF")
+		# В РЕЗУЛЬТАТАХ ТЕПЕРЬ НЕСКОЛЬКО СТРОК - по одной на закачку цикла.
+		# Средним берём ЛУЧШУЮ из них (как в фазе отдачи), а кодом ответа -
+		# успешный, если он был хоть раз: обрыв последней закачки по остатку
+		# времени не должен зачёркивать удачно измеренные до него.
+		SPD=$(_num "$(awk '{v=$1+0; if (v>m) m=v} END{printf "%.0f", m+0}' "$RESF")")
+		HTTP=$(awk '{c=$2; if (c==200 || c==206) ok=c} END{print (ok!="")?ok:c}' "$RESF")
 		AVGD=$(awk "BEGIN{printf \"%.1f\", ($SPD*8)/1000000}")
 		AVGD=$(_num "$AVGD"); MAXD=$(_num "$MAXD")
 		DMBPS=$(_num "$(awk "BEGIN{printf \"%.1f\", ($MAXD>0)?$MAXD:$AVGD}")")
@@ -401,24 +506,32 @@ start)
 		UPT0=$(cut -d. -f1 /proc/uptime)
 		MAXU=0
 		LIVEU=0
-		_UPB=0; _UPS=0
+		_UPB=0; _UPS=0; _UDONEN=0
 		while kill -0 "$UPID" 2>/dev/null; do
 			sleep 1
 			_LINE=$(tr '\r' '\n' 2>/dev/null < "$UPROG" | grep -E '^[ ]*[0-9]' | tail -1)
 			_XF=$(printf '%s' "$_LINE" | awk '{print $6}')
+			# Граница POST'ов - по числу написанных итогов, см. фазу загрузки.
+			_NUDONE=$(wc -l < "$URES" 2>/dev/null | tr -d ' ')
+			case "$_NUDONE" in ''|*[!0-9]*) _NUDONE="$_UDONEN" ;; esac
 			_live=""
 			if [ -n "$_XF" ]; then
 				_NB=$(_tobytes "$_XF")
 				_SP=$(_spent "$_LINE")
 				case "$_NB" in
 					''|*[!0-9]*) : ;;
-					*) if [ "$_NB" -lt "$_UPB" ] || [ "$_SP" -lt "$_UPS" ]; then
-						_UPB=0; _UPS=0
-					   fi
-					   _DS=$(( _SP - _UPS ))
-					   if [ "$_DS" -ge 1 ] && [ "$_NB" -gt "$_UPB" ]; then
-						_live=$(awk "BEGIN{printf \"%.1f\", (($_NB-$_UPB)*8)/1000000/$_DS}")
+					# Новый POST - счётчики метра с нуля. Как и в загрузке,
+					# на сбросе только переставляем точку отсчёта: считать по
+					# округлённому до секунды «Time Spent» здесь нельзя.
+					*) if [ "$_NUDONE" != "$_UDONEN" ] || [ "$_NB" -lt "$_UPB" ] || [ "$_SP" -lt "$_UPS" ]; then
+						_UDONEN="$_NUDONE"
 						_UPB="$_NB"; _UPS="$_SP"
+					   else
+						_DS=$(( _SP - _UPS ))
+						if [ "$_DS" -ge 1 ] && [ "$_NB" -gt "$_UPB" ]; then
+							_live=$(awk "BEGIN{printf \"%.1f\", (($_NB-$_UPB)*8)/1000000/$_DS}")
+							_UPB="$_NB"; _UPS="$_SP"
+						fi
 					   fi ;;
 				esac
 			fi

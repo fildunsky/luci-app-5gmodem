@@ -620,26 +620,47 @@ return view.extend({
 		sts.anonymous = true;
 
 		o = sts.option(form.Value, 'speedtest_url', _('Download source'),
-			_('URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown.'));
+			_('Source for the download test. "Интернетометр" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown.'));
+		/* Значение-МАРКЕР, а не адрес: у зондов Интернетометра адреса сессионные
+		   (внутри mid/sid), поэтому их нельзя записать в настройку - скрипт
+		   берёт список сам перед каждым замером. */
+		o.value('internetometer', 'Интернетометр (Yandex CDN)');
 		o.value('https://speedtest.selectel.ru/1GB', 'Selectel — RU (~1 ' + _('GB') + ')');
 		o.value('http://mirror.yandex.ru/archlinux/iso/latest/archlinux-x86_64.iso', 'Yandex — RU (~1 ' + _('GB') + ')');
 		o.value('http://speedtest.tele2.net/1GB.zip', 'Tele2 (~1 ' + _('GB') + ')');
 		o.value('https://speed.cloudflare.com/__down?bytes=1000000000', 'Cloudflare (' + _('stream') + ')');
 		o.value('https://speed.hetzner.de/1GB.bin', 'Hetzner — EU (~1 ' + _('GB') + ')');
 		o.value('http://mirror.yandex.ru/debian/ls-lR.gz', 'Yandex (~16 ' + _('MB') + ', ' + _('economical') + ')');
-		o.default = 'http://speedtest.tele2.net/1GB.zip';
-		o.placeholder = 'http://speedtest.tele2.net/1GB.zip';
-		o.rmempty = true;
+		/* БЕЗ placeholder И БЕЗ rmempty. У необязательного поля LuCI вставляет
+		   в список ЛИШНЮЮ строку с текстом placeholder (ui.js, ветка optional),
+		   и рядом с «Интернетометр (Yandex CDN)» появлялся сырой «internetometer»
+		   - тот же вариант, только без подписи. */
+		o.default = 'internetometer';
+		o.rmempty = false;
+		/* СИММЕТРИЯ: выбрали Интернетометр на загрузке - он же встаёт и на
+		   отдачу. Оба конца замера тогда на одном узле CDN, а не вразнобой.
+		   Поменять отдачу после этого никто не мешает. */
+		o.onchange = function(ev, section_id, value) {
+			if (value != 'internetometer')
+				return;
+			var up = this.map.lookupOption('speedtest_up_url', section_id);
+			var el = up ? up[0].getUIElement(section_id) : null;
+			if (el && el.getValue() != 'internetometer')
+				el.setValue('internetometer');
+		};
 
 		o = sts.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
-			_('Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured.'));
+			_('Endpoint that accepts a POST body, for the upload test. "Интернетометр" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured.'));
+		o.value('internetometer', 'Интернетометр (Yandex CDN)');
 		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
-		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex (RU, works over cellular)');
+		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex - RU (' + _('works over cellular') + ')');
 		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
-		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (public demo)');
-		o.default = 'https://speedtest.rt.ru/backend/empty.php';
-		o.placeholder = 'https://speedtest.rt.ru/backend/empty.php';
-		o.rmempty = true;
+		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (' + _('public demo') + ')');
+		/* Умолчание ТАКОЕ ЖЕ, как у источника загрузки, и скрипт трактует
+		   пустое значение ровно так же - иначе страница показывала бы один
+		   сервис, а замер шёл на другой. placeholder и rmempty - см. выше. */
+		o.default = 'internetometer';
+		o.rmempty = false;
 
 		/* СЕРВИС ОПРЕДЕЛЕНИЯ АДРЕСА ЗДЕСЬ БОЛЬШЕ НЕ СПРАШИВАЕМ. Он один и тот
 		   же для карточки теста и для «Внешнего IP» - две настройки об одном
