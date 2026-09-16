@@ -12,7 +12,7 @@ OpenWrt 上で 4G/5G モデムを扱うための LuCI アプリです。[`3ginfo
 ### .apk（OpenWrt 25.12.x）
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.11/luci-app-5gmodem-2.5.11-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/luci-app-5gmodem-2.5.12-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
@@ -35,7 +35,7 @@ apk add /tmp/lpac.apk --allow-untrusted
 ### .ipk（OpenWrt 24.10.x）
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.11/luci-app-5gmodem_2.5.11-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/luci-app-5gmodem_2.5.12-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
