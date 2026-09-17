@@ -702,6 +702,7 @@ if [ -n "$_PINNED" ]; then
 	   && [ "$(printf '%s' "$_pin_rec" | jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ]; then
 		. "$RES/quirks.sh" 2>/dev/null
 		mm_at_allowed "$_POLL_AM" "$_hl_sec" || DEVICE=""
+		[ -n "$MM_AT_PORT" ] && DEVICE="$MM_AT_PORT"
 	fi
 else
 	DEVICE=$($RES/detect.sh)

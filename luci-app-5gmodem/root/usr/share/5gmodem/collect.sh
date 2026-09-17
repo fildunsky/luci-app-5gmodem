@@ -763,6 +763,41 @@ usb_flap_verdict() {
 		echo "there is nothing to fix in the cable or the power supply."
 	fi
 
+	# ЗАГРУЗЧИК MEDIATEK - ТОЖЕ НЕ ПРОСАДКА. Модемы на MediaTek (FM350, RW350,
+	# 0e8d:7127) при каждом старте сначала встают на шину как «MT65xx Preloader»
+	# (0e8d:2000), через секунду уходят и возвращаются уже модемом. В журнале это
+	# один «USB disconnect» на каждое включение, и отчёт уверенно советовал
+	# другой кабель и питание - живой отчёт 17.09.2026 (RW350-GL на Radxa Cubie
+	# A5E), единственный «отвал» был этим штатным стартом.
+	#
+	# Но загрузчик ПОСРЕДИ РАБОТЫ - это уже перезагрузка модуля: он ушёл с шины
+	# рабочей композицией и вернулся через загрузчик (drop.log того же человека:
+	# на 688-й секунде отвал, Preloader, через 20 c модем и минута без связи).
+	# Штатный старт отличаем по времени ядра: первые 120 c после загрузки роутера.
+	_uf_pl=$(logread 2>/dev/null | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
+		| sed -n 's/.*\[ *\([0-9]*\)\.[0-9]*\] usb .*/\1/p')
+	_uf_plb=0; _uf_plr=0
+	for _t in $_uf_pl; do
+		if [ "$_t" -lt 120 ]; then _uf_plb=$((_uf_plb + 1)); else _uf_plr=$((_uf_plr + 1)); fi
+	done
+	if [ "$_uf_plb" -ge 1 ] && [ -z "$_uf_msw" ]; then
+		echo "$_uf_plb of these re-connects are the MediaTek BOOTLOADER stage at router start (MT65xx Preloader, 0e8d:2000):"
+		echo "the module passes through it on every power-up. That is normal, not a power problem."
+		[ "$_uf_plr" = 0 ] && [ "$_uf_plb" -ge "${_uf_n:-0}" ] && _uf_msw=1
+	fi
+	if [ "$_uf_plr" -ge 1 ]; then
+		echo "PROBLEM: the module REBOOTED ITSELF $_uf_plr time(s) while working (left the bus and came back through MT65xx Preloader):"
+		logread 2>/dev/null | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
+			| awk '{ if (match($0, /\[ *[0-9]+\./)) { t = substr($0, RSTART + 1, RLENGTH - 2) + 0; if (t >= 120) print "  " $1, $2, $3, $4, $5 } }'
+		if logread 2>/dev/null | grep -qE '5gmodem.*(CFUN=1,1|power-cycled|rebooting the module)'; then
+			echo "  our healing did reset a module in this log - compare the times above with those lines."
+		else
+			echo "  nothing of ours sent a reset before it: the module rebooted on its own."
+			echo "  Usual causes: power sag under load (use a powered USB hub / separate 5 V),"
+			echo "  overheating (add a heatsink or airflow), or a modem firmware crash."
+		fi
+	fi
+
 	# КОГДА ОТВАЛИВАЛОСЬ И ЧТО БЫЛО ПЕРЕД ЭТИМ.
 	#
 	# Голого счётчика мало: он говорит «модем не держится», но не отвечает на
@@ -1100,6 +1135,39 @@ power_state_verdict() {
 proxy_verdict() {
 	echo ""
 	echo "----- Fight over the control channel (verdict) -----"
+	# ДВА ДОЗВОНЩИКА НА ОДИН МОДЕМ. Интерфейс, заведённый руками или прошивкой
+	# (wwan1 на umbim), и наш интерфейс на ModemManager тянут одну сессию: каждый
+	# сам коннектит и дисконнектит, и модем рвёт соединение через 20-40 с.
+	# Живой отчёт 16.09.2026 (T99W175 + Verizon): в отчёте это читалось только
+	# по маршруту с чужой метрикой на wwan0, а вердикт выше писал «прокси не
+	# мешает» - второй интерфейс при этом не упоминался нигде.
+	_pv_p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	if [ -n "$_pv_p" ]; then
+		_pv_nodes=""
+		for _pv_n in /sys/bus/usb/devices/"$_pv_p":*/net/* /sys/bus/usb/devices/"$_pv_p":*/usbmisc/*; do
+			[ -e "$_pv_n" ] && _pv_nodes="$_pv_nodes ${_pv_n##*/}"
+		done
+		_pv_ifs=$(uci -q show network 2>/dev/null | awk -F"[.=]" -v p="$_pv_p" -v nodes="$_pv_nodes" '
+			BEGIN { n = split(nodes, a, " "); for (i = 1; i <= n; i++) nd[a[i]] = 1 }
+			$3 == "proto" { v = $0; sub(/^[^=]*=/, "", v); gsub(/'"'"'/, "", v); proto[$2] = v }
+			$3 == "auto" { v = $0; sub(/^[^=]*=/, "", v); gsub(/'"'"'/, "", v); off[$2] = (v == "0") }
+			$3 == "devpath" || $3 == "device" || $3 == "modem_path" {
+				v = $0; sub(/^[^=]*=/, "", v); gsub(/'"'"'/, "", v)
+				if (v == p || v ~ ("/" p "$") || v ~ ("/" p "[:/]")) hit[$2] = 1
+				sub(/^\/dev\//, "", v); if (v in nd) hit[$2] = 1
+			}
+			END {
+				for (i in hit) if (!off[i] && proto[i] ~ /^(mbim|qmi|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|dhcp)$/)
+					printf "%s(%s) ", i, proto[i]
+			}')
+		set -- $_pv_ifs
+		if [ "$#" -ge 2 ]; then
+			echo "PROBLEM: $# interfaces work the SAME modem $_pv_p: $_pv_ifs"
+			echo "  Each of them dials and hangs up on its own, so the modem keeps dropping"
+			echo "  the session. Keep ONE (the one the app shows) and delete the rest in"
+			echo "  Network > Interfaces, or: uci delete network.<name>; uci commit network; /etc/init.d/network reload"
+		fi
+	fi
 	_pv=$(ps w 2>/dev/null | grep -E "mbim-proxy|qmi-proxy" | grep -v grep)
 	if [ -z "$_pv" ]; then
 		echo "no proxy processes - the channel is free"

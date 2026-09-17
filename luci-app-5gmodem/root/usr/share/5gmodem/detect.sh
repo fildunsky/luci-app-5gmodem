@@ -55,6 +55,7 @@ if [ -n "$_dt_am" ]; then
 		# они расходились - здесь молчали, а там порт брали из реестра напрямую.
 		. /usr/share/5gmodem/quirks.sh 2>/dev/null
 		mm_at_allowed "$_dt_am" "$_dt_sec" || exit 0
+		[ -n "$MM_AT_PORT" ] && { echo "$MM_AT_PORT"; exit 0; }
 	fi
 fi
 

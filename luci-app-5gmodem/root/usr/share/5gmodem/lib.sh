@@ -554,6 +554,8 @@ stamp_iface_owner() {   # $1 - iface, $2 - usb-путь, [$3 - imei]
 	[ -n "$1" ] && [ -n "$2" ] || return 0
 	note_foreign_uci network "stamp_iface_owner"
 	uci -q set "network.$1.modem_path=$2"
+	_si_u=$(uci -q get "network.$1.usbpath")
+	[ -n "$_si_u" ] && [ "$_si_u" != "$2" ] && uci -q set "network.$1.usbpath=$2"
 	_si_i="$3"
 	[ -n "$_si_i" ] || _si_i=$(imei_for_path "$2")
 	[ -n "$_si_i" ] && uci -q set "network.$1.modem_imei=$_si_i"

@@ -27,18 +27,26 @@ is_foxconn_x20() {
 	return 1
 }
 
-# Команду даём через прокси (-p): канал может держать ModemManager или uqmi.
-# У cdc_mbim-узла канал открывается только с --device-open-mbim. qmicli на
-# занятом канале умеет висеть бесконечно - ограничиваем временем сами.
+# Команду даём через прокси (-p), только если он уже нужен: канал держит
+# ModemManager или прокси уже запущен кем-то ещё. Без MM свой прокси остаётся
+# жить после qmicli, сторож sessionwatch видит «прокси на прямом канале» и
+# передозванивает только что поднятый интерфейс - находка у владельца
+# DW5821e 413c:81e0 17.09.2026. У cdc_mbim-узла канал открывается только с
+# --device-open-mbim. qmicli на занятом канале умеет висеть бесконечно -
+# ограничиваем временем сами.
 send_auth() {   # $1 - узел /dev/cdc-wdmN, $2 - предел ожидания, с
 	command -v qmicli >/dev/null 2>&1 || { echo "qmicli is not installed"; return 2; }
+	_sa_px=""
+	if pidof ModemManager >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1 || pidof mbim-proxy >/dev/null 2>&1; then
+		_sa_px="-p"
+	fi
 	_sa_mb=""
 	case "$(readlink -f "/sys/class/usbmisc/${1##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _sa_mb="--device-open-mbim" ;;
 	esac
 	case "$1" in *mbim*) _sa_mb="--device-open-mbim" ;; esac
 	_sa_out="/tmp/5gmodem_fcc.$$"
-	qmicli -p $_sa_mb -d "$1" --dms-foxconn-set-fcc-authentication=0 > "$_sa_out" 2>&1 &
+	qmicli $_sa_px $_sa_mb -d "$1" --dms-foxconn-set-fcc-authentication=0 > "$_sa_out" 2>&1 &
 	_sa_p=$!
 	_sa_n=0
 	while kill -0 "$_sa_p" 2>/dev/null && [ "$_sa_n" -lt "${2:-15}" ]; do

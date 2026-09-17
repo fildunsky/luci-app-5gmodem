@@ -1084,7 +1084,7 @@ if [ "$_PORT_OK" = 1 ]; then
 			. /usr/share/5gmodem/quirks.sh 2>/dev/null
 			mm_at_allowed "$_bs_am" "$_bs_sec"
 			case "$?" in
-				0) ;;
+				0) [ -n "$MM_AT_PORT" ] && _DEVICE="$MM_AT_PORT" ;;
 				# Хрупкая прошивка: НЕПРЕРЫВНЫЕ чтения (текущий выбор в каждом json)
 				# не делаем, а ЯВНОЕ действие человека (set*) пропускаем - смена
 				# диапазона и так рвёт сессию, а AT^SLBAND/AT^SLMODE у T77W968 -

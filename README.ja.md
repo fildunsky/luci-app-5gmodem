@@ -16,8 +16,10 @@ curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
-**日本語表示について**: このアプリの日本語カタログはパッケージ本体に含まれているため、専用の言語パッケージを入れる必要はありません。LuCI 自体を日本語にするには、LuCI の言語パッケージを入れてください:
+**日本語表示**: このアプリの日本語パッケージと、LuCI 本体の日本語パッケージをインストールしてください:
 ```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/luci-i18n-5gmodem-ja.apk > /tmp/luci-i18n-5gmodem-ja.apk
+apk add /tmp/luci-i18n-5gmodem-ja.apk --allow-untrusted
 apk add luci-i18n-base-ja
 ```
 そのあと LuCI で言語を選びます: システム → システム → 言語とスタイル → 日本語。
@@ -39,8 +41,10 @@ curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
-日本語カタログは本体に同梱されています。LuCI 自体を日本語にする場合のみ、次を実行してください:
+**日本語表示**:
 ```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v2.5.12/luci-i18n-5gmodem-ja.ipk > /tmp/luci-i18n-5gmodem-ja.ipk
+opkg install /tmp/luci-i18n-5gmodem-ja.ipk
 opkg install luci-i18n-base-ja
 ```
 

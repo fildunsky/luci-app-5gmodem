@@ -42,5 +42,22 @@ mkdir -m 0755 -p "${MODEMMANAGER_RUNDIR}"
 # (ровно это и наблюдалось: порт не появлялся у модема). С "usbmisc" MM находит
 # узел, опознаёт cdc_mbim и берёт cdc-wdm как MBIM-контрол - проверено: модем
 # пересобирается с "primary port: cdc-wdm0 (mbim)", wwan0 становится (net).
+#
+# MM НЕ ЗАПУЩЕН (модем на qmi/mbim, MM остановлен) - mmcli не зовём: без демона
+# он ждёт ответа шины, и каждое событие USB оставляло в журнале таймауты
+# (находка владельца DW5821e, 17.09.2026). Событие всё равно пишем в кэш -
+# стартующий MM перечитывает его, так что про порт он узнает.
+if ! pidof ModemManager >/dev/null 2>&1; then
+	case "$ACTION" in
+		add)
+			grep -qs "${DEVNAME},usbmisc" "${MODEMMANAGER_EVENTS_CACHE}" || \
+				echo "add,${DEVNAME},usbmisc,/sys${DEVPATH}" >> "${MODEMMANAGER_EVENTS_CACHE}"
+			;;
+		remove)
+			sed -i "/${DEVNAME},usbmisc/d" "${MODEMMANAGER_EVENTS_CACHE}" 2>/dev/null
+			;;
+	esac
+	exit 0
+fi
 mm_log "info" "${ACTION} usbmisc control port ${DEVNAME}: event processed"
 mm_report_event "${ACTION}" "${DEVNAME}" "usbmisc" "/sys${DEVPATH}"

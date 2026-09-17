@@ -13,8 +13,17 @@
 #
 # В net-hotplug $INTERFACE = имя netdev (eth2), НЕ uci-интерфейс (ср.
 # /etc/hotplug.d/iface, где $INTERFACE - имя сети). $ACTION = add|remove.
-[ "$ACTION" = add ] || exit 0
+#
+# ПРОПАЖА УСТРОЙСТВА ПОД ПОДНЯТЫМ ИНТЕРФЕЙСОМ. Модем, перезагрузившийся сам
+# (FM350/RW350 уходят с шины, проходят загрузчик MT65xx Preloader и через
+# 20 c возвращаются), уносит eth2, а интерфейс для netifd остаётся «up»: прото
+# с no_device=1 пропажу не видит. Проверка «уже поднят» ниже пропускала такое
+# возвращение, и связь поднимал только сторож по трём пропущенным пингам -
+# через минуту (живой отчёт 17.09.2026, RW350-GL на Radxa Cubie A5E). Метка
+# пропажи ставится на remove и снимается ближайшим add.
 [ -n "$INTERFACE" ] || exit 0
+case "$ACTION" in add|remove) ;; *) exit 0 ;; esac
+_gone_dir=/tmp/5gmodem/netdev-gone
 
 # Найти fibocom-интерфейс(ы), которым принадлежит это устройство: по полю device
 # или по usbpath (устройство под тем же USB-путём).
@@ -23,20 +32,34 @@ for _if in $(uci -q show network 2>/dev/null \
 	_match=0
 	[ "$(uci -q get network."$_if".device)" = "$INTERFACE" ] && _match=1
 	if [ "$_match" = 0 ]; then
-		_up=$(uci -q get network."$_if".usbpath)
-		if [ -n "$_up" ]; then
+		for _up in $(uci -q get network."$_if".usbpath) $(uci -q get network."$_if".modem_path); do
 			for _n in /sys/bus/usb/devices/"$_up":*/net/*; do
 				[ -e "$_n" ] || continue
 				[ "$(basename "$_n")" = "$INTERFACE" ] && _match=1
 			done
-		fi
+		done
+	fi
+	if [ "$_match" = 0 ]; then
+		[ "$(ubus call network.interface."$_if" status 2>/dev/null \
+			| jsonfilter -e '@.l3_device' 2>/dev/null)" = "$INTERFACE" ] && _match=1
 	fi
 	[ "$_match" = 1 ] || continue
 
-	# Уже поднят - не трогаем (устройство могло мигнуть на штатном реконнекте).
 	_st=$(ubus call network.interface."$_if" status 2>/dev/null \
 		| jsonfilter -e '@.up' 2>/dev/null)
-	[ "$_st" = "true" ] && continue
+	if [ "$ACTION" = remove ]; then
+		[ "$_st" = "true" ] && { mkdir -p "$_gone_dir"; : > "$_gone_dir/$_if"; }
+		continue
+	fi
+
+	# Уже поднят и устройство не пропадало - не трогаем (мигнуло на штатном
+	# реконнекте самого прото).
+	if [ -e "$_gone_dir/$_if" ]; then
+		rm -f "$_gone_dir/$_if"
+		logger -t 5gmodem "netdev: $INTERFACE is back after the modem left the bus - reconnecting $_if"
+	else
+		[ "$_st" = "true" ] && continue
+	fi
 
 	# ifup (а не `ubus up`): интерфейс мог быть заблокирован proto_block_restart
 	# после NETDEV_MISSING, и только ifup снимает блок и повторяет дозвон. В фоне

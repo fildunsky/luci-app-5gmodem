@@ -19,6 +19,7 @@
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
 . /usr/share/5gmodem/iscompal.sh 2>/dev/null   # is_compal: Compal только под MM
+. /usr/share/5gmodem/quirks.sh 2>/dev/null     # mm_tty_reserved: выделенный AT-порт
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -160,6 +161,12 @@ _mm_ifup_if_down() {
 	_mif=$(uci -q get "$CFG.$_sec.network"); [ -n "$_mif" ] || return 0
 	[ "$(uci -q get "network.$_mif.proto")" = modemmanager ] || return 0
 	ifstatus "$_mif" 2>/dev/null | grep -q '"up": true' && return 0   # уже поднят
+	# ИДЁТ ПОДЪЁМ - ТОЖЕ НЕ ТРОГАЕМ. После обрыва сессии MM-хотплаг сам делает
+	# ifup, и несколько секунд интерфейс висит в pending, пока MM коннектит.
+	# Наш ifup в этот момент - teardown посреди коннекта («couldn't load bearer
+	# path: disconnecting anyway»), и круг начинается заново. Живой отчёт
+	# 16.09.2026: T99W175 + Verizon, интерфейс гонялся по кругу каждые 20-40 с.
+	ifstatus "$_mif" 2>/dev/null | grep -q '"pending": true' && return 0
 	# ГАРД от параллельных подъёмов + COOLDOWN: лок держится всё время попытки
 	# (ожидание MM + ifup + добор коннекта), чтобы НЕ дёргать ifup повторно, пока
 	# MM ещё коннектит. Повторный ifup делает teardown->setup и ПЕРЕБИВАЕТ коннект
@@ -175,6 +182,11 @@ _mm_ifup_if_down() {
 			for J in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 				_jd=$(mmcli -m "$J" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 				[ "$(basename "$_jd" 2>/dev/null)" = "$_p" ] || continue
+				# Ждали модем до двух минут - за это время интерфейс мог подняться
+				# или начать подниматься сам. Проверяем ещё раз прямо перед ifup.
+				case "$(ifstatus "$_mif" 2>/dev/null)" in
+					*'"up": true'*|*'"pending": true'*) rm -f "$_lk"; exit 0 ;;
+				esac
 				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
 				: > "$_lk"          # отметить старт попытки - от него считаем cooldown
 				ifup "$_mif"
@@ -305,7 +317,9 @@ _mm_rebind() {   # $1 - usb-путь
 	done
 	sleep 1
 	for _fw in /sys/bus/usb/devices/"$_fp":*/ttyUSB* /sys/bus/usb/devices/"$_fp":*/tty/ttyUSB*; do
-		[ -e "$_fw" ] && mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_fw")" >/dev/null 2>&1
+		[ -e "$_fw" ] || continue
+		mm_tty_reserved "$(basename "$_fw")" && continue
+		mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_fw")" >/dev/null 2>&1
 	done
 	sleep 10
 	_mm_ifup_if_down "$_fp"
@@ -552,7 +566,9 @@ mm_recover_missing() {
 			for _if in /sys/bus/usb/devices/"$_rp":*; do
 				[ -d "$_if" ] || continue
 				for _t in "$_if"/ttyUSB* "$_if"/tty/ttyUSB* "$_if"/tty/tty*; do
-					[ -e "$_t" ] && mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_t")" >/dev/null 2>&1
+					[ -e "$_t" ] || continue
+					mm_tty_reserved "$(basename "$_t")" && continue
+					mmcli --report-kernel-event="action=add,subsystem=tty,name=$(basename "$_t")" >/dev/null 2>&1
 				done
 				for _w in "$_if"/usbmisc/cdc-wdm* "$_if"/usbmisc/wdm*; do
 					[ -e "$_w" ] && mmcli --report-kernel-event="action=add,subsystem=usbmisc,name=$(basename "$_w")" >/dev/null 2>&1
@@ -621,6 +637,8 @@ _restore_stolen() {
 			[ -n "$L3" ] || continue
 			# 77.88.8.8 (Яндекс), а не 8.8.8.8 - последний недоступен в РФ.
 			ping -c 2 -W 4 -I "$L3" 77.88.8.8 >/dev/null 2>&1 && continue
+			# Вне России Яндекс может не отвечать - вторая цель, как у сторожа.
+			ping -c 2 -W 4 -I "$L3" 1.1.1.1 >/dev/null 2>&1 && continue
 			# ПИНГА МАЛО. У части операторов ICMP закрыт наглухо, и молчание на
 			# пинг не значит отсутствия связи: проверено на живом МегаФоне -
 			# 100% потерь пакетов, при этом HTTP отвечает за 0.4 с. Полагаться

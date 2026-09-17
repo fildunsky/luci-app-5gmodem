@@ -88,12 +88,17 @@ done
 	_ok=0; _via=""
 	_i=0
 	while [ "$_i" -lt 30 ]; do
-		if ping -c 1 -W 2 -I "$DEV" 77.88.8.8 >/dev/null 2>&1; then
-			_ok=1; _via="через $DEV"; break
-		fi
-		if ping -c 1 -W 2 77.88.8.8 >/dev/null 2>&1; then
-			_ok=1; _via="общим маршрутом"; break
-		fi
+		# Две цели, как у сторожа: Яндекс недоступен из части стран, Cloudflare -
+		# из части российских сетей. Хватает ответа любой.
+		for _t in 77.88.8.8 1.1.1.1; do
+			if ping -c 1 -W 2 -I "$DEV" "$_t" >/dev/null 2>&1; then
+				_ok=1; _via="через $DEV"; break
+			fi
+			if ping -c 1 -W 2 "$_t" >/dev/null 2>&1; then
+				_ok=1; _via="общим маршрутом"; break
+			fi
+		done
+		[ "$_ok" = 1 ] && break
 		_i=$((_i + 1))
 		sleep 3
 	done

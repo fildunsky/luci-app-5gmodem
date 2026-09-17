@@ -1,0 +1,20 @@
+#!/bin/sh
+# Отозвать у ModemManager выделенный AT-порт хрупкого модема (DW5821e).
+#
+# 25-modemmanager-tty уже сообщил MM о порте; MM ждёт ~2 c перед опросом
+# портов устройства, и событие remove в этом окне просто убирает порт из
+# очереди, модем собирается без него. Тот же mm_report_event удаляет порт и из
+# кэша событий, чтобы перезапуск MM не вернул его. Какой порт прятать и когда
+# это вообще можно - решает mm_tty_reserved (quirks.sh): только модем из
+# mm_at_fragile под интерфейсом modemmanager, у которого MM ранее сам нашёл
+# два AT-порта. Всё остальное проходит мимо.
+[ "$ACTION" = add ] || exit 0
+case "$DEVNAME" in ttyUSB*|ttyACM*) ;; *) exit 0 ;; esac
+[ -r /usr/share/ModemManager/modemmanager.common ] || exit 0
+. /usr/share/5gmodem/quirks.sh 2>/dev/null
+command -v mm_tty_reserved >/dev/null 2>&1 || exit 0
+mm_tty_reserved "$DEVNAME" || exit 0
+. /usr/share/ModemManager/modemmanager.common
+mm_report_event "remove" "$DEVNAME" "tty" "/sys${DEVPATH}"
+logger -t 5gmodem "mm-at: $DEVNAME is kept away from ModemManager for our AT polling"
+exit 0

@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.5.12
+PKG_VERSION:=2.5.13
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -86,6 +86,16 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 	# он ломает сборку fw4 на холодном старте, ждать следующего бута нельзя -
 	# следующий бут с ним и сломается. Правила пересоздаст hotplug/страница.
 	sh /etc/uci-defaults/5gmodem-ttl-migrate.sh 2>/dev/null
+}
+# Японский до 2.5.13 ехал внутри пакета, и postinst копировал его в каталог
+# LuCI. Теперь он только в luci-i18n-5gmodem-ja: ничейную копию прошлых версий
+# убираем, иначе она навсегда застряла бы на старом переводе. Файл пакета
+# перевода, если тот стоит, не трогаем.
+[ -n "$${IPKG_INSTROOT}" ] || {
+	_ja_pkg=0
+	apk info -e luci-i18n-5gmodem-ja >/dev/null 2>&1 && _ja_pkg=1
+	opkg status luci-i18n-5gmodem-ja 2>/dev/null | grep -q "install ok installed" && _ja_pkg=1
+	[ "$$_ja_pkg" = 1 ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ja.lmo
 }
 for _lmo in "$${IPKG_INSTROOT}"/usr/share/5gmodem/i18n/5gmodem.*.lmo; do
 	[ -f "$$_lmo" ] || continue
@@ -156,7 +166,7 @@ endef
 
 define Package/luci-app-5gmodem/prerm
 #!/bin/sh
-[ -n "$${IPKG_INSTROOT}" ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ru.lmo /usr/lib/lua/luci/i18n/5gmodem.ja.lmo
+[ -n "$${IPKG_INSTROOT}" ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ru.lmo
 exit 0
 endef
 
@@ -166,8 +176,6 @@ define Build/Prepare/luci-app-5gmodem
 	$(INSTALL_DIR) $(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n
 	-$(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po-ru/5gmodem.po \
 		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ru.lmo
-	-[ ! -f $(CURDIR)/po/ja/5gmodem.po ] || $(STAGING_DIR_HOST)/bin/po2lmo $(CURDIR)/po/ja/5gmodem.po \
-		$(PKG_BUILD_DIR)/root/usr/share/5gmodem/i18n/5gmodem.ja.lmo
 endef
 
 # --- ОБЛЕГЧЁННЫЙ ВАРИАНТ -----------------------------------------------------

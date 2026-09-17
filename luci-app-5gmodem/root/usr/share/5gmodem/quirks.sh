@@ -286,6 +286,117 @@ mm_at_fragile() {
 	esac
 }
 
+# Индекс модема в ModemManager по usb-пути, минутный кэш общий с mm_owns_path.
+_mm_index_cached() {
+	_mic_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mic_i=""
+	if [ -s "$_mic_c" ] && [ -n "$(find "$_mic_c" -mmin -1 2>/dev/null)" ]; then
+		read -r _mic_i < "$_mic_c" 2>/dev/null
+	else
+		_mic_i=$(/usr/share/5gmodem/modemswitch.sh mmindex "$1" 2>/dev/null)
+		printf '%s\n' "${_mic_i:-none}" > "$_mic_c" 2>/dev/null
+	fi
+	[ "$_mic_i" = "none" ] && _mic_i=""
+	echo "$_mic_i"
+}
+
+# ВЫДЕЛЕННЫЙ AT-ПОРТ ХРУПКОГО МОДЕМА ПОД ModemManager.
+#
+# У DW5821e два AT-порта, и MM забирает оба. Наш опрос в любой из них
+# перебивает команды MM, и тот рвёт сессию - поэтому AT таким модемам под MM
+# был запрещён. Находка владельца DW5821e 413c:81e0 (17.09.2026): если один из
+# двух портов скрыть от MM, опрос в нём сессию не трогает, и температура с
+# несущими возвращаются без риска.
+#
+# Как это устроено:
+#   1. Пока порт не выбран, смотрим список портов модема у MM. Если MM сам
+#      признал AT-портами ДВА и больше tty, запоминаем номер USB-интерфейса
+#      последнего (mm_at_if) и vid:pid (mm_at_vp) в секции модема. Сейчас
+#      ничего не трогаем - сессия не рвётся.
+#   2. При следующем появлении портов на шине (перезагрузка, переподключение)
+#      hotplug tty/26-5gmodem-mmreserve сразу после события MM отзывает этот
+#      порт: MM 1.24 выбрасывает порт, который ещё ждёт опроса или опрашивается,
+#      без пересборки модема.
+#   3. Порт отдаём опросу, только пока MM его ДЕЙСТВИТЕЛЬНО не держит (нет в
+#      его списке портов модема).
+# Модем с одним AT-портом, любой другой модем и модем не под MM не затронуты.
+# $1 - usb-путь, $2 - секция, $3 - vid:pid. Печатает /dev/tty... или ничего.
+_mm_ports_cached() {   # $1 - usb-путь, $2 - индекс MM
+	_mpc_c="/tmp/5gmodem_mmports_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	if [ -s "$_mpc_c" ] && [ -n "$(find "$_mpc_c" -mmin -1 2>/dev/null)" ]; then
+		cat "$_mpc_c" 2>/dev/null
+		return 0
+	fi
+	mmcli -m "$2" -K 2>/dev/null \
+		| sed -n 's/^modem\.generic\.ports\.value\[[0-9]*\] *: *\([^ ]*\) *(\(.*\))$/\1 \2/p' > "$_mpc_c.$$"
+	mv -f "$_mpc_c.$$" "$_mpc_c" 2>/dev/null
+	cat "$_mpc_c" 2>/dev/null
+}
+
+_tty_ifnum() {   # $1 - имя tty; печатает "<usb-путь> <bInterfaceNumber>"
+	_ti_d=$(readlink -f "/sys/class/tty/$1/device" 2>/dev/null)
+	[ -n "$_ti_d" ] && [ -f "$_ti_d/bInterfaceNumber" ] || return 1
+	_ti_p=${_ti_d##*/}; _ti_p=${_ti_p%%:*}
+	echo "$_ti_p $(cat "$_ti_d/bInterfaceNumber" 2>/dev/null)"
+}
+
+mm_dedicated_at() {
+	[ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] || return 0
+	[ "$(uci -q get "5gmodem.$2.no_at" 2>/dev/null)" = "1" ] && return 0
+	_mda_nif=$(uci -q get "5gmodem.$2.network")
+	[ "$(uci -q get "network.$_mda_nif.proto" 2>/dev/null)" = "modemmanager" ] || return 0
+	command -v mmcli >/dev/null 2>&1 || return 0
+	_mda_i=$(_mm_index_cached "$1")
+	[ -n "$_mda_i" ] || return 0
+	_mda_ports=$(_mm_ports_cached "$1" "$_mda_i")
+	[ -n "$_mda_ports" ] || return 0
+	_mda_if=$(uci -q get "5gmodem.$2.mm_at_if")
+	if [ -z "$_mda_if" ] || [ "$(uci -q get "5gmodem.$2.mm_at_vp")" != "$3" ]; then
+		_mda_at=$(echo "$_mda_ports" | awk '$2 == "at" && $1 ~ /^tty/ { print $1 }')
+		[ "$(echo "$_mda_at" | grep -c .)" -ge 2 ] || return 0
+		_mda_t=$(echo "$_mda_at" | tail -n 1)
+		set -- "$1" "$2" "$3" $(_tty_ifnum "$_mda_t")
+		[ "$4" = "$1" ] && [ -n "$5" ] || return 0
+		if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
+			uci -q set "5gmodem.$2.mm_at_if=$5"
+			uci -q set "5gmodem.$2.mm_at_vp=$3"
+			uci -q commit 5gmodem 2>/dev/null
+			flock -u 6
+			logger -t 5gmodem "mm-at: $1 has two AT ports under ModemManager - $_mda_t (interface $5) will be kept for metrics from the next reconnect" >/dev/null 2>&1
+		fi
+		return 0
+	fi
+	for _mda_d in /sys/bus/usb/devices/"$1":*; do
+		[ "$(cat "$_mda_d/bInterfaceNumber" 2>/dev/null)" = "$_mda_if" ] || continue
+		for _mda_n in "$_mda_d"/ttyUSB* "$_mda_d"/tty/tty*; do
+			[ -e "$_mda_n" ] || continue
+			_mda_n=${_mda_n##*/}
+			[ -c "/dev/$_mda_n" ] || continue
+			echo "$_mda_ports" | awk -v t="$_mda_n" '$1 == t { f = 1 } END { exit !f }' && return 0
+			echo "/dev/$_mda_n"
+			return 0
+		done
+	done
+	return 0
+}
+
+# Этот tty надо прятать от ModemManager? $1 - имя tty. Код 0 = да.
+# Зовут hotplug-обработчик и повторные репорты портов в mm-inhibit.sh.
+mm_tty_reserved() {
+	set -- "$1" $(_tty_ifnum "$1")
+	[ -n "$3" ] || return 1
+	_mtr_s="m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mtr_if=$(uci -q get "5gmodem.$_mtr_s.mm_at_if")
+	[ -n "$_mtr_if" ] && [ "$_mtr_if" = "$3" ] || return 1
+	[ -f "/sys/bus/usb/devices/$2/idVendor" ] || return 1
+	_mtr_vp="$(cat "/sys/bus/usb/devices/$2/idVendor"):$(cat "/sys/bus/usb/devices/$2/idProduct")"
+	[ "$(uci -q get "5gmodem.$_mtr_s.mm_at_vp")" = "$_mtr_vp" ] || return 1
+	[ -n "$(mm_at_fragile "$_mtr_vp")" ] || return 1
+	[ "$(uci -q get "5gmodem.$_mtr_s.no_at" 2>/dev/null)" = "1" ] && return 1
+	_mtr_nif=$(uci -q get "5gmodem.$_mtr_s.network")
+	[ "$(uci -q get "network.$_mtr_nif.proto" 2>/dev/null)" = "modemmanager" ]
+}
+
 # $1 - usb-путь, $2 - секция. Код 0 = AT-порт брать можно, 1 = нельзя (MM ещё
 # поднимает сессию), 2 = нельзя из-за хрупкой прошивки (постоянно, не состояние).
 #   mm_at=1 в секции      - можно всегда: воля владельца, любая прошивка;
@@ -296,22 +407,23 @@ mm_at_fragile() {
 #                           несущие, антенны) - ради них профили MBIM/QMI и писались.
 # Самодостаточна нарочно: bands.sh зовёт её ДО подключения lib.sh. Индекс MM
 # берётся из того же минутного кэша, что у mm_owns_path (lib.sh) и bands.sh.
+#
+# При коде 0 переменная MM_AT_PORT может содержать ВЫДЕЛЕННЫЙ порт (см.
+# mm_dedicated_at) - вызывающий обязан взять его вместо порта из реестра.
 mm_at_allowed() {
-	[ "$(uci -q get "5gmodem.$2.mm_at" 2>/dev/null)" = "1" ] && return 0
+	MM_AT_PORT=""
 	_maa_vp=""
 	[ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ] && \
 		_maa_vp="$(cat "/sys/bus/usb/devices/$1/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$1/idProduct" 2>/dev/null)"
+	if [ -n "$(mm_at_fragile "$_maa_vp")" ]; then
+		MM_AT_PORT=$(mm_dedicated_at "$1" "$2" "$_maa_vp")
+		[ -n "$MM_AT_PORT" ] && return 0
+	fi
+	[ "$(uci -q get "5gmodem.$2.mm_at" 2>/dev/null)" = "1" ] && return 0
 	[ -n "$(mm_at_fragile "$_maa_vp")" ] && return 2
 	command -v mmcli >/dev/null 2>&1 || return 1
-	_maa_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
-	_maa_i=""
-	if [ -s "$_maa_c" ] && [ -n "$(find "$_maa_c" -mmin -1 2>/dev/null)" ]; then
-		read -r _maa_i < "$_maa_c" 2>/dev/null
-	else
-		_maa_i=$(/usr/share/5gmodem/modemswitch.sh mmindex "$1" 2>/dev/null)
-		printf '%s\n' "${_maa_i:-none}" > "$_maa_c" 2>/dev/null
-	fi
-	[ -n "$_maa_i" ] && [ "$_maa_i" != "none" ] || return 1
+	_maa_i=$(_mm_index_cached "$1")
+	[ -n "$_maa_i" ] || return 1
 	[ "$(mmcli -m "$_maa_i" -K 2>/dev/null \
 		| sed -n 's/^modem\.generic\.state *: *//p' | head -1)" = "connected" ]
 }
