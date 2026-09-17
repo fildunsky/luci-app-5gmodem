@@ -337,8 +337,8 @@ msgstr "RSRP (信号レベル、既定)"
 msgid "RSRQ (signal quality)"
 msgstr "RSRQ (信号品質)"
 
-msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open."
-msgstr "ModemManager がモデムを制御している間も、温度・キャリアアグリゲーションなどのベンダー固有の値を AT ポートで読み取ります。並行して AT をやり取りするとデータ接続が切れるファームウェア (Dell DW5821e / Foxconn T77W968) では既定でオフです。それ以外のモデムでは接続中だけ問い合わせます。ページを開いたままでも接続が安定している場合だけ有効にしてください。"
+msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open."
+msgstr "ModemManager がモデムを制御している間も、温度・キャリアアグリゲーションなどのベンダー固有の値を AT ポートで読み取ります。並行して AT をやり取りするとデータ接続が切れるファームウェア (Dell DW5821e / Foxconn T77W968) では既定でオフです。それ以外のモデムでは接続中だけ問い合わせます。AT ポートが 2 つある DW5821e ではこのスイッチは不要です。再起動後に 2 つ目のポートが ModemManager から切り離され、自動的に問い合わせに使われます。ページを開いたままでも接続が安定している場合だけ有効にしてください。"
 
 msgid "Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed."
 msgstr "各ページと同じスナップショットを読み取ります。モデムに別途問い合わせることはありません。保存しなくてもすぐに反映されます。"

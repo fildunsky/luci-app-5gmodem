@@ -252,6 +252,14 @@ fi
 if is_compal "$_AP" "" "$(uci -q get "5gmodem.$_SEC.at_port")"; then
 	MI=""
 fi
+# DW5821e / T77W968 (mm_at_fragile). Разбор владельца 413c:81e0, 17.09.2026:
+#   - mmcli --set-primary-sim-slot роняет MBIM-сессию («Transaction timed out»),
+#     MM объявляет модем непригодным, модуль уходит с USB на 1.5-2 минуты;
+#   - mbimcli --ms-query-device-slot-mappings виснет и держит замок канала,
+#     опрос метрик встаёт;
+#   - AT^switch_slot? отвечает сразу, AT^switch_slot=0/1 переключает за секунду.
+# Поэтому этим модемам слоты - только по AT, без mmcli-переключения и без MBIM.
+_FRAG=$(mm_at_fragile "$_AVIDPID")
 
 # Переключение слота вендорной AT-командой (AT^switch_slot, Foxconn T99W175 /
 # Thales MV31-W и родня). Идёт по tty и НЕ ЗАВИСИТ от состояния QMI-канала,
@@ -325,6 +333,14 @@ if [ -n "$MI" ]; then
 	case "$1" in
 	set)
 		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+		# Порт MM тут допустим как запасной: это одно явное действие человека,
+		# а переключение через mmcli у этой прошивки кончается сбросом модуля.
+		if [ -n "$_FRAG" ]; then
+			SLOT_AT_PORT=$(_slot_at_mm)
+			[ -n "$SLOT_AT_PORT" ] || SLOT_AT_PORT=$(uci -q get "5gmodem.$_SEC.at_port")
+			_at_slot_set "$2" && exit 0
+			echo '{"error":"switch failed"}'; exit 0
+		fi
 		if mmcli -m "$MI" --set-primary-sim-slot="$2" >/dev/null 2>&1; then
 			echo '{"result":"ok"}'
 			exit 0
@@ -461,9 +477,9 @@ if [ -n "$MI" ]; then
 		# знает - спрашиваем его напрямую по MBIM и уточняем подпись. Через
 		# прокси (-p), потому что канал сейчас у MM; лишних вызовов не делаем -
 		# только когда MM не дал ни одной метки eSIM.
-		case "$OUT" in
-			*'"label":"eSIM"'*) : ;;
-			?*)
+		case "$_FRAG:$OUT" in
+			1:*|*'"label":"eSIM"'*) : ;;
+			:?*)
 				_UW=$(echo "$_AJ" | jsonfilter -e "@[@.path=\"$_AP\"].wdm[0]" 2>/dev/null)
 				case "$(readlink -f "/sys/class/usbmisc/${_UW##*/}/device/driver" 2>/dev/null)" in
 					*/cdc_mbim)
@@ -494,6 +510,9 @@ if [ -n "$MI" ]; then
 			cat "$_MMC"
 			exit 0
 		fi
+		# DW5821e к MBIM-запросам слотов не пускаем (см. _FRAG выше): без
+		# безопасного AT-порта честно отдаём «слотов не видно».
+		[ -n "$_FRAG" ] && { echo '{"type":"","slots":[],"active":""}'; exit 0; }
 		logger -t 5gmodem "slots: ModemManager did not report them - asking the modem directly"
 		;;
 	esac
@@ -520,6 +539,39 @@ fi
 #             ICCID: 89701620...
 #          Is eUICC: no
 # id слота = ФИЗИЧЕСКИЙ номер (1..N), активен тот, у кого "Slot status: active".
+
+# DW5821e НЕ под ModemManager (qmi/mbim): AT-порт ничей, спрашиваем модем по
+# AT до любых QMI/MBIM-запросов - MBIM-чтение слотов у этой прошивки виснет,
+# а переключение по AT не трогает канал данных (см. _FRAG выше). Не ответил
+# по AT - прежний путь.
+# Интерфейс на modemmanager, но MM модема ещё не собрал: порт его, канал его -
+# не лезем никуда, ждём MM.
+if [ -n "$_FRAG" ] && [ -z "$MI" ] && [ "$_PROTO" = modemmanager ]; then
+	[ "$1" = set ] && { echo '{"error":"switch failed"}'; exit 0; }
+	echo '{"type":"","slots":[],"active":""}'; exit 0
+fi
+if [ -n "$_FRAG" ] && [ -z "$MI" ]; then
+	if [ "$1" = set ]; then
+		[ -n "$2" ] || { echo '{"error":"no slot"}'; exit 0; }
+		_at_slot_set "$2" && exit 0
+	else
+		_fr_at=$(uci -q get "5gmodem.$_SEC.at_port")
+		if [ -n "$_fr_at" ] && [ -c "$_fr_at" ] && _fr_cmd=$(_at_slot_cmd "$_fr_at"); then
+			_fr_a=""
+			case "$(at_query "$_fr_at" "AT${_fr_cmd}?" 6 2>/dev/null | tr -d '\r')" in
+				*SIM1*) _fr_a=1 ;;
+				*SIM2*) _fr_a=2 ;;
+			esac
+			if [ -n "$_fr_a" ]; then
+				printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}\n' "$_fr_a" \
+					> "/tmp/5gmodem_slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+				cat "/tmp/5gmodem_slots_$_AP"
+				exit 0
+			fi
+		fi
+	fi
+fi
 
 if [ "$_VIA" = qmi ]; then
 	# КАНАЛ МОЖЕТ БЫТЬ ЗАНЯТ netifd. При proto=qmi устройством владеет uqmi, и

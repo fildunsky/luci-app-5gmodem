@@ -133,7 +133,24 @@ getbands() {
 # сброс молча сотрёт его выбор. Поэтому сравниваем текущий набор с полным
 # списком возможностей модема: совпал - значит не ограничивал ничего, и 0
 # безопасен; не совпал - возвращаем ЕГО набор, ничего не додумывая.
+#
+# СНАЧАЛА - ВЫБОР ПОЛЬЗОВАТЕЛЯ, А НЕ ТО, ЧТО ОСТАЛОСЬ В МОДЕМЕ. Цикл CFUN сам
+# сбрасывает маску к заводской, и чтение «текущего» набора после него давало
+# полный список: код считал, что человек ничего не ограничивал, и закреплял
+# сброс командой GTACT=<режим>,0. Со стороны это выглядело так: привязал модем
+# к соте, снял лишние диапазоны - а после обновления страницы снова включены все
+# (жалоба владельца RW350-GL-16 на Radxa, 17.09.2026). Сохранённый выбор лежит в
+# секции модема (save_band, пишет _persist_bands в bands.sh) - он и есть намерение.
 _fm350_reapply_bands() {
+    _rab_sv=""
+    if command -v active_modem >/dev/null 2>&1; then
+        _rab_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+        [ "$_rab_sec" != "m_" ] && _rab_sv=$(uci -q get "5gmodem.$_rab_sec.save_band")
+    fi
+    case "$_rab_sv" in
+        ''|default) : ;;
+        *) setbands "$_rab_sv" >/dev/null 2>&1; return ;;
+    esac
     LINE=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
         | sed -n 's/^+GTACT: *//p' | head -1)
     [ -n "$LINE" ] || return
@@ -178,6 +195,16 @@ setbands() {
         O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
         MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
         sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
+        # СВЕРЯЕМ ПО ФАКТУ. sms_tool отдаёт 0 и когда модем ответил ERROR, и
+        # «Применить» молча не срабатывало: страница показывала прежний (полный)
+        # набор, а причина оставалась в модеме. Расхождение пишем в журнал.
+        [ "$T" = "0" ] && return
+        _sb_new=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
+            | sed -n 's/^+GTACT: *//p' | head -1 | cut -d, -f4- \
+            | tr ',' '\n' | grep -E '^1[0-9][0-9]$' | sort -n | xargs)
+        _sb_want=$(echo "$T" | tr ',' '\n' | grep -E '^1[0-9][0-9]$' | sort -n | xargs)
+        [ "$_sb_new" = "$_sb_want" ] || \
+            logger -t 5gmodem "bands: the modem kept ($_sb_new) instead of the requested ($_sb_want) - AT+GTACT did not apply"
     fi
 }
 

@@ -5416,8 +5416,8 @@ msgstr "Открыть панель %s в новой вкладке"
 msgid "AT polling under ModemManager"
 msgstr "AT-опрос под ModemManager"
 
-msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open."
-msgstr "Читать температуру, агрегацию несущих и другие вендорные метрики по AT-порту, пока модемом управляет ModemManager. По умолчанию выключено для прошивок, у которых параллельный AT-обмен роняет сессию данных (Dell DW5821e / Foxconn T77W968); остальные модемы опрашиваются только при поднятой сессии. Включайте, только если связь остаётся стабильной при открытой странице."
+msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open."
+msgstr "Читать температуру, агрегацию несущих и другие вендорные метрики по AT-порту, пока модемом управляет ModemManager. По умолчанию выключено для прошивок, у которых параллельный AT-обмен роняет сессию данных (Dell DW5821e / Foxconn T77W968); остальные модемы опрашиваются только при поднятой сессии. DW5821e с двумя AT-портами этот переключатель не нужен: после перезагрузки второй порт убирается из-под ModemManager и опрашивается автоматически. Включайте, только если связь остаётся стабильной при открытой странице."
 
 msgid "Failed to read modem data"
 msgstr "Не удалось прочитать данные модема"

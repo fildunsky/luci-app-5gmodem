@@ -377,6 +377,21 @@ coldplug() {
 		[ -f "$_cp_d/idVendor" ] || continue
 		_cp_v=$(cat "$_cp_d/idVendor" 2>/dev/null)
 		_cp_p=$(cat "$_cp_d/idProduct" 2>/dev/null)
+		# МОДЕМ В FASTBOOT С САМОГО СТАРТА. Спасатель висит на hotplug USB, а
+		# событие add для устройства, воткнутого до загрузки, не приходит: модуль,
+		# ушедший в загрузчик ещё на этапе preinit, так в нём и оставался (разбор
+		# владельца DW5821e, 17.09.2026). Зовём тот же обработчик сами; кандидаты -
+		# известные загрузчики и устройства с единственным интерфейсом, остальное
+		# и частоту попыток (раз в 60 c, не больше 3) отсеивает сам обработчик.
+		case "$_cp_v:$_cp_p" in
+			413c:81e1|413c:81d6|1199:9070) _cp_fb=1 ;;
+			*) _cp_fb=0
+			   [ "$(cat "$_cp_d/bDeviceClass" 2>/dev/null)" != "09" ] \
+			   && [ "$(tr -d ' ' < "$_cp_d/bNumInterfaces" 2>/dev/null)" = "1" ] && _cp_fb=1 ;;
+		esac
+		[ "$_cp_fb" = 1 ] && [ -f /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue ] && \
+			ACTION=add DEVTYPE=usb_device DEVPATH="$(readlink -f "$_cp_d" | sed 's#^/sys##')" \
+				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.

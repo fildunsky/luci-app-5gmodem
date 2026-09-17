@@ -1304,7 +1304,7 @@ return view.extend({
 		   только у modemmanager-интерфейса: у остальных порт и так наш. */
 		if (String(uci.get('network', mIfName, 'proto') || '') === 'modemmanager') {
 		o = s.option(form.Flag, '_mm_at', _('AT polling under ModemManager'),
-			_('Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. Enable only if the link stays stable with the page open.'));
+			_('Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open.'));
 		o.default = '0';
 		o.rmempty = false;
 		o.write = function(section_id, value) {
