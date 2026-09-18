@@ -60,6 +60,21 @@ mmat)
 	uci -q set "5gmodem.$_sec.mm_at=$(_norm01 "$3")"
 	uci -q commit 5gmodem
 	;;
+# noat <usb-path> <0|1> - запрет фонового AT к модему (см. bg_at_off в lib.sh).
+noat)
+	[ -n "$2" ] || exit 1
+	_sec=$(_sec_for_path "$2")
+	uci -q get "5gmodem.$_sec" >/dev/null 2>&1 || {
+		uci -q set "5gmodem.$_sec=modem"
+		uci -q set "5gmodem.$_sec.path=$2"
+	}
+	if [ "$(_norm01 "$3")" = 1 ]; then
+		uci -q set "5gmodem.$_sec.no_at=1"
+	else
+		uci -q delete "5gmodem.$_sec.no_at" 2>/dev/null
+	fi
+	uci -q commit 5gmodem
+	;;
 # dnsfb <usb-path> <0|1> [servers] - DNS-фолбэк на интерфейсе модема. Состояние -
 # это САМ network.<iface>.dns (отдельного флага нет): вкл + заданные сервера =
 # пишем dns, выкл (или пусто) = снимаем. Применяем через network reload, а НЕ

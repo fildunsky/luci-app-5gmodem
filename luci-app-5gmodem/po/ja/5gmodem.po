@@ -5359,3 +5359,9 @@ msgstr "インターフェースを再作成 (USB テザリング)"
 
 msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
 msgstr "このスマートフォンは USB 経由でインターネットを共有し、DHCP でアドレスを配布します。このボタンはその DHCP インターフェースを作成 (または再作成) します。選ぶべきダイヤルアップのプロトコルはなく、読み取れるモデムの統計情報もありません。"
+
+msgid "No background AT polling"
+msgstr "バックグラウンドで AT ポーリングしない"
+
+msgid "Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL)."
+msgstr "このモデムとの自動的な AT のやり取りをすべて停止します: 値のポーリング、定期的な SMS 確認、Telegram 転送、SMS コマンド、アーカイブ。温度、キャリアアグリゲーション、SMS の自動受信は使えなくなります。SMS の閲覧と送信、USSD、AT コンソールは操作したときに引き続き動作します。AT でポーリングされているとデータ接続が止まりやすくなるファームウェア (例: Quectel RM551E-GL) 向けです。"

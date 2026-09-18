@@ -1320,6 +1320,29 @@ return view.extend({
 		};
 		}
 
+		/* Запрет фонового AT - для любого протокола. Прошивки, у которых AT-обмен
+		   рядом с передачей данных учащает зависание сессии (Quectel RM551E-GL,
+		   issue #28). Касается только фона: метрик, чтения SMS сторожем, бота,
+		   команд по SMS, слива; действия человека работают. У HiLink и
+		   телефона AT-порта нет - переключатель им не нужен. */
+		if (!activeIsHilink) {
+		o = s.option(form.Flag, '_no_at', _('No background AT polling'),
+			_('Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL).'));
+		o.default = '0';
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return Promise.resolve(); }
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'noat', String(p), String(value) === '1' ? '1' : '0' ]);
+		};
+		o.remove = function() { return Promise.resolve(); };
+		o.load = function(section_id) {
+			if (!mSec) { return '0'; }
+			return uci.get('5gmodem', mSec, 'no_at') === '1' ? '1' : '0';
+		};
+		}
+
 		/* Тип PDP - аргумент дозвона (mkiface). У HiLink дозвона нет, тип IP
 		   согласует сам модем, поэтому поле ему не показываем. */
 		if (!activeIsHilink) {
@@ -1783,7 +1806,7 @@ return view.extend({
 
 		   ТОЛЬКО простые настройки. Интерфейс/порт/протокол/APN ПЕРЕСОЗДАЮТ
 		   интерфейс (mkiface) - их мгновенно дёргать нельзя, они на общей кнопке. */
-		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }
 			var prev = o.onchange;

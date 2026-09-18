@@ -882,7 +882,12 @@ case "$1" in
 			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 			_smw_prev=$(cat /tmp/5gmodem_sms_new.stamp 2>/dev/null)
 			case "$_smw_prev" in ''|*[!0-9]*) _smw_prev=0 ;; esac
-			if [ "$((_smw_now - _smw_prev))" -ge 60 ]; then
+			# Частота - sms.mirror_interval (с), 0 = не читать вовсе. Модем с
+			# запретом фонового AT (bg_at_off, lib.sh) не читаем никогда.
+			_smw_iv=$(uci -q get 5gmodem.sms.mirror_interval)
+			case "$_smw_iv" in ''|*[!0-9]*) _smw_iv=60 ;; esac
+			if [ "$_smw_iv" -gt 0 ] && ! bg_at_off \
+			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem_sms_new.stamp 2>/dev/null
 				"$RES/smsbridge.sh" newdump > /tmp/5gmodem_sms_new.json.tmp 2>/dev/null \
 					&& mv /tmp/5gmodem_sms_new.json.tmp /tmp/5gmodem_sms_new.json 2>/dev/null
@@ -891,11 +896,11 @@ case "$1" in
 			# слив удаляет из модема только то, что уже обработано и ботом, и
 			# командами, - иначе сообщение с командой исчезло бы, ни разу не
 			# выполнившись. Выключено - выходит на первой строке.
-			"$RES/smscmd.sh" run >/dev/null 2>&1
+			bg_at_off || "$RES/smscmd.sh" run >/dev/null 2>&1
 			# СЛИВ В ПАМЯТЬ РОУТЕРА. Здесь же и последний шаг разбора входящих:
 			# перенести в архив и освободить слоты модема (у FM350 их всего
 			# десять - см. _arch_purge). Выключено - выходит на первой строке.
-			"$RES/smsbridge.sh" archive-run >/dev/null 2>&1
+			bg_at_off || "$RES/smsbridge.sh" archive-run >/dev/null 2>&1
 			# ОСТАЛЬНЫЕ МОДЕМЫ - ТОЖЕ, но раз в пять минут. Слив ходил только к
 			# активному, а сообщения приходят на каждую SIM: у человека с двумя
 			# модемами ящик неактивного заполнялся до отказа при включённой
@@ -911,6 +916,7 @@ case "$1" in
 				_ar_list=$("$RES/listmodems.sh" 2>/dev/null)
 				for _ar_p in $("$RES/registry.sh" paths 2>/dev/null); do
 					[ "$_ar_p" = "$_ar_act" ] && continue
+					bg_at_off "$_ar_p" && continue
 					# Нет ни AT-порта, ни канала управления - читать нечем.
 					printf '%s' "$_ar_list" \
 						| jsonfilter -e "@[@.path=\"$_ar_p\"].tty[0]" \

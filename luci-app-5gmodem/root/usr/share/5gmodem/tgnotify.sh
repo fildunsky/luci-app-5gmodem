@@ -253,6 +253,10 @@ _tk_fresh() {
 _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нельзя (Telegram недоступен)
 	_tk_path="$1"
 	_tg_has_sms "$_tk_path" || return 0
+	# Фоновый AT к этому модему запрещён владельцем (bg_at_off, lib.sh):
+	# бот его входящие не читает - иначе запрет терял бы смысл.
+	[ "$(uci -q get "$CFG.$(_tg_sec "$_tk_path").kind")" = "hilink" ] \
+		|| ! bg_at_off "$_tk_path" || return 0
 	_tk_port=$(_tg_port "$_tk_path")
 	_tk_seen=$(_seen_json "$_tk_path")
 	_tk_first=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.first' 2>/dev/null)

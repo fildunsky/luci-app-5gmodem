@@ -5556,3 +5556,9 @@ msgstr "Применяется сразу, без кнопки «Сохрани�
 
 msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management."
 msgstr "Модем на USB-шине, но его AT-порт не отвечает: он занят или модем завис. Если это надолго, перезагрузите модем по питанию в «Управлении частотами»."
+
+msgid "No background AT polling"
+msgstr "Не опрашивать модем по AT в фоне"
+
+msgid "Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL)."
+msgstr "Остановить весь автоматический AT-обмен с этим модемом: опрос метрик, периодическую проверку SMS, пересылку в Telegram, команды по SMS и слив в архив. Пропадут температура, агрегация несущих и автоматический приём SMS; чтение и отправка SMS, USSD и AT-консоль продолжают работать, когда вы ими пользуетесь. Для прошивок, у которых сессия данных чаще зависает, пока модем опрашивают по AT (например, Quectel RM551E-GL)."
