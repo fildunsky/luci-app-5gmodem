@@ -50,7 +50,7 @@ get)
 	# Считаем ТОЛЬКО СВОЮ таблицу: по всему рулсету в счётчик попадали чужие
 	# правила подмены TTL (свой инклюд fw4, другой пакет), и индикатор показывал
 	# «правила работают» даже когда нашей таблицы нет вовсе (аудит 12.09.2026).
-	HITS=$(nft list table inet modem5g_ttl 2>/dev/null | awk '/ttl set|hoplimit set/ {
+	HITS=$( { nft list table inet modem5g_ttl; nft list table netdev modem5g_ttl_dev; } 2>/dev/null | awk '/ttl set|hoplimit set/ {
 		for (i = 1; i <= NF; i++) if ($i == "packets") { s += $(i + 1); break } } END { print s + 0 }')
 	printf '{"iface":"%s","device":"%s","def4":"%s","def6":"%s","hits":"%s","ttl4in":"%s","ttl4out":"%s","ttl6in":"%s","ttl6out":"%s"}\n' \
 		"$IFACE" "$DEV" "$DEF4" "$DEF6" "$HITS" \
@@ -118,8 +118,51 @@ apply)
 			exit 1
 		fi
 		rm -f "$TMP"
+
+		# УСКОРЕННЫЕ СОЕДИНЕНИЯ (flow offloading) ИДУТ МИМО prerouting/postrouting.
+		#
+		# С включённым «Software/Hardware flow offloading» fw4 кладёт во flowtable
+		# все устройства зон, модемное тоже, и после установления соединения
+		# пакеты пересылает хук ingress flowtable - в обход прероутинга и
+		# построутинга, то есть и правил выше. TTL правился только у первых
+		# пакетов каждого соединения, остальные уходили оператору с TTL-1, и
+		# «фикс TTL не работает» (жалобы 18.09.2026). Поэтому дублируем правила
+		# на хуки САМОГО УСТРОЙСТВА: egress видит каждый исходящий пакет, в том
+		# числе ускоренный, ingress с приоритетом раньше flowtable (у fw4 он 0) -
+		# каждый входящий. Для этого нужен netdev-хук ядра (NETFILTER_EGRESS, в
+		# официальных сборках есть); нет его - остаются правила выше и запись в
+		# журнале. Аппаратный оффлоад (PPE) USB-модемы не ускоряет: до них пакет
+		# в любом случае доходит через процессор.
+		TMPD="/tmp/5gmodem_ttl_dev.$$.nft"
+		{
+			echo "table netdev modem5g_ttl_dev"
+			echo "delete table netdev modem5g_ttl_dev"
+			echo "table netdev modem5g_ttl_dev {"
+			if [ -n "$T4I$T6I" ]; then
+				echo "	chain ingress {"
+				echo "		type filter hook ingress device \"$DEV\" priority -300; policy accept;"
+				[ -n "$T4I" ] && echo "		meta protocol ip counter ip ttl set $T4I"
+				[ -n "$T6I" ] && echo "		meta protocol ip6 counter ip6 hoplimit set $T6I"
+				echo "	}"
+			fi
+			if [ -n "$T4O$T6O" ]; then
+				echo "	chain egress {"
+				echo "		type filter hook egress device \"$DEV\" priority 0; policy accept;"
+				[ -n "$T4O" ] && echo "		meta protocol ip counter ip ttl set $T4O"
+				[ -n "$T6O" ] && echo "		meta protocol ip6 counter ip6 hoplimit set $T6O"
+				echo "	}"
+			fi
+			echo "}"
+		} > "$TMPD"
+		if ! nft -f "$TMPD" 2>/dev/null; then
+			nft delete table netdev modem5g_ttl_dev 2>/dev/null
+			[ "$(uci -q get firewall.@defaults[0].flow_offloading)" = 1 ] && \
+				logger -t 5gmodem "ttl: no netdev egress hook in this kernel - with flow offloading on, accelerated connections keep the original TTL; turn offloading off in Network > Firewall"
+		fi
+		rm -f "$TMPD"
 	else
 		nft delete table inet modem5g_ttl 2>/dev/null
+		nft delete table netdev modem5g_ttl_dev 2>/dev/null
 	fi
 	echo "OK"
 	;;
