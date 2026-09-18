@@ -66,13 +66,43 @@ _fm350_caps() {   # $1 = lte | nr ; печатает список диапазо
 # PreferredAct (2-й/3-й параметры): 2=WCDMA, 3=LTE, 6=NR - должны входить в
 # выбранный <rat>, поэтому подбираются под него. Список бендов (хвост GTACT?)
 # при смене режима сохраняем как есть.
+# МОДУЛЬ БЕЗ 5G. FM350-GL-16 и RW350-GL-16 - 4G-версии того же модуля (по
+# даташиту GL-16: LTE + WCDMA, NR нет), но с тем же 0e8d:7127. Отличаем по
+# AT+GTACT=?: у них пуста группа NR-диапазонов (режимы с NR общая прошивка может
+# и перечислять - на них не смотрим), без списка моделей. Раньше пустой NR-список подменялся запасным _DEFAULT_5G_BANDS, и
+# страница рисовала строки 5G и режимы «4G+5G»/«5G», которых у модуля нет
+# (владелец RW350-GL-16, 18.09.2026: «setbands5gnsa - rejected» в журнале).
+# Пока возможности не прочитаны (порт молчит) - ведём себя по-старому.
+_fm350_no_nr() {   # 0 = модуль точно без 5G
+    _fm350_caps lte >/dev/null 2>&1 || return 1
+    _nn_cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    [ -s "$_nn_cf" ] || return 1
+    [ -z "$(_fm350_caps nr)" ]
+}
+
 getsupportedmodes() {
+    if _fm350_no_nr; then
+        # Список - из тех режимов, что модуль сам назвал в AT+GTACT=?. «Авто»
+        # у 4G-версии - 10 (у пятиджишной его показывает 20, см. мануал Note 6).
+        _sm_r=" $(sed -n '1p' "$_nn_cf" | tr -d '()' | tr ',' ' ') "
+        _sm_o=""
+        case "$_sm_r" in *" 10 "*) _sm_o="10:Auto" ;; *" 20 "*) _sm_o="20:Auto" ;; esac
+        case "$_sm_r" in *" 1 "*) _sm_o="$_sm_o 1:3G" ;; esac
+        case "$_sm_r" in *" 4 "*) _sm_o="$_sm_o 4:3G+4G" ;; esac
+        case "$_sm_r" in *" 2 "*) _sm_o="$_sm_o 2:4G" ;; esac
+        echo ${_sm_o:-2:4G}
+        return
+    fi
     echo "20:Auto 1:3G 4:3G+4G 2:4G 17:4G+5G 14:5G"
 }
 
 getmode() {
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    echo "$O" | awk -F[:,] '/^\+GTACT:/{gsub(/ /,"",$2); print $2; exit}'
+    _gm=$(echo "$O" | awk -F[:,] '/^\+GTACT:/{gsub(/ /,"",$2); print $2; exit}')
+    # Режим 10 модуль показывает как 20 (мануал, Note 6); у 4G-версии в списке
+    # только 10 - сводим к нему, иначе «Авто» не подсветится.
+    [ "$_gm" = 20 ] && _fm350_no_nr && _gm=10
+    echo "$_gm"
 }
 
 setmode() {
@@ -115,6 +145,67 @@ getbands() {
         fi
     done
     echo ""
+}
+
+# ЗАПИСЬ ДИАПАЗОНОВ С ПРОВЕРКОЙ И ЗАПАСНЫМИ ФОРМАМИ КОМАНДЫ.
+#
+# Писали всегда «AT+GTACT=<rat>,<pref1>,<pref2>,<диапазоны>», повторяя начало
+# ответа GTACT?. В режиме 20,6,3 это работает, а в режиме «только LTE» модем
+# отвечает «2,3,,...», и запись «AT+GTACT=2,3,,107» прошивка молча игнорирует:
+# ни ошибки, ни изменений (Rolling RW350-GL-16, 18.09.2026, проверено руками).
+# Мануал (FM350 AT Commands, +GTACT, Note 1-2) разрешает задать ТОЛЬКО
+# диапазоны, опустив режим: «AT+GTACT=,,,<диапазоны>». Поэтому пишем прежней
+# формой (у FM350 она проверена), перечитываем и при расхождении пробуем
+# остальные. Рабочей для RW350-GL-16 оказалась «AT+GTACT=2,3,3,<диапазоны>» -
+# второе предпочтение обязано быть заполненным, хотя GTACT? отдаёт его пустым;
+# форму «,,,» эта прошивка отвергает ERROR, а сброс принимает как «AT+GTACT=2»
+# (подобрано владельцем модема 18.09.2026, применяется без режима полёта).
+#   $1 - список через запятую или 0 (заводской набор)
+#   $2 - регэксп «своих» значений: они и сверяются (Note 5: чужие RAT не трогаются)
+#   $3 - строки кэша AT+GTACT=? с полным набором для 0 (sed-скрипт: 6p, 9p, 5p;6p;9p)
+_fm350_gtact_tail() {   # $1 - регэксп; печатает текущие значения по порядку
+    sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
+        | sed -n 's/^+GTACT://p' | head -1 | cut -d, -f4- \
+        | tr ',' '\n' | grep -E "$1" | sort -n | xargs
+}
+
+_fm350_gtact_set() {
+    _gs_line=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r ' \
+        | sed -n 's/^+GTACT://p' | head -1)
+    [ -n "$_gs_line" ] || return 1
+    _gs_rat=$(echo "$_gs_line" | cut -d, -f1)
+    _gs_p1=$(echo "$_gs_line" | cut -d, -f2)
+    _gs_mode=$(echo "$_gs_line" | cut -d, -f1-3)
+    _gs_dup=""
+    [ -n "$_gs_p1" ] && [ -z "$(echo "$_gs_line" | cut -d, -f3)" ] && _gs_dup="$_gs_rat,$_gs_p1,$_gs_p1"
+    if [ "$1" = "0" ]; then
+        _fm350_caps lte >/dev/null 2>&1
+        _gs_cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+        _gs_want=""
+        [ -s "$_gs_cf" ] && _gs_want=$(sed -n "$3" "$_gs_cf" | tr -d '()' \
+            | tr ',' '\n' | grep -E "$2" | sort -n | xargs)
+    else
+        _gs_want=$(echo "$1" | tr ',' '\n' | grep -E "$2" | sort -n | xargs)
+    fi
+    _gs_new=""
+    for _gs_f in "$_gs_mode" $_gs_dup ",," "$_gs_rat,," "$_gs_rat"; do
+        if [ "$_gs_f" = "$_gs_rat" ]; then
+            # голый режим - только как сброс к заводскому набору
+            [ "$1" = "0" ] || continue
+            sms_tool -d $_DEVICE at "AT+GTACT=$_gs_rat" >/dev/null 2>&1
+        else
+            sms_tool -d $_DEVICE at "AT+GTACT=$_gs_f,$1" >/dev/null 2>&1
+        fi
+        [ -n "$_gs_want" ] || return 0
+        _gs_new=$(_fm350_gtact_tail "$2")
+        if [ "$_gs_new" = "$_gs_want" ]; then
+            [ "$_gs_f" = "$_gs_mode" ] || \
+                logger -t 5gmodem "bands: applied as AT+GTACT=$_gs_f,... (the modem ignored AT+GTACT=$_gs_mode,...)"
+            return 0
+        fi
+    done
+    logger -t 5gmodem "bands: the modem kept ($_gs_new) instead of the requested ($_gs_want) - AT+GTACT did not apply in any form"
+    return 1
 }
 
 # Пересобрать выбор диапазонов заново - тем же способом, что кнопка «Применить».
@@ -169,9 +260,9 @@ _fm350_reapply_bands() {
         | grep -E '^[0-9]+$' | sort -n | xargs)
 
     if [ -n "$ALL" ] && [ "$CUR" = "$ALL" ]; then
-        sms_tool -d $_DEVICE at "AT+GTACT=$MODE,0" >/dev/null 2>&1
+        _fm350_gtact_set 0 '^[0-9]+$' '5p;6p;9p'
     else
-        sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$(echo $CUR | tr ' ' ',')" >/dev/null 2>&1
+        _fm350_gtact_set "$(echo $CUR | tr ' ' ',')" '^[0-9]+$'
     fi
 }
 
@@ -191,21 +282,7 @@ setbands() {
         done
     fi
 
-    if [ -n "$T" ]; then
-        O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
-        sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
-        # СВЕРЯЕМ ПО ФАКТУ. sms_tool отдаёт 0 и когда модем ответил ERROR, и
-        # «Применить» молча не срабатывало: страница показывала прежний (полный)
-        # набор, а причина оставалась в модеме. Расхождение пишем в журнал.
-        [ "$T" = "0" ] && return
-        _sb_new=$(sms_tool -d $_DEVICE at "AT+GTACT?" 2>/dev/null | tr -d '\r' \
-            | sed -n 's/^+GTACT: *//p' | head -1 | cut -d, -f4- \
-            | tr ',' '\n' | grep -E '^1[0-9][0-9]$' | sort -n | xargs)
-        _sb_want=$(echo "$T" | tr ',' '\n' | grep -E '^1[0-9][0-9]$' | sort -n | xargs)
-        [ "$_sb_new" = "$_sb_want" ] || \
-            logger -t 5gmodem "bands: the modem kept ($_sb_new) instead of the requested ($_sb_want) - AT+GTACT did not apply"
-    fi
+    [ -n "$T" ] && _fm350_gtact_set "$T" '^1[0-9][0-9]$' '6p'
 }
 
 # --- Диапазоны 3G (UMTS/WCDMA) через GTACT --------------------------------
@@ -269,22 +346,23 @@ setbands3g() {
         done
     fi
     case "$T" in ''|*[!0-9,]*) return ;; esac
-    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
-    sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
+    _fm350_gtact_set "$T" '^([1-9]|10)$' '5p'
 }
 
 getsupportedbands5gsa() {
+    _fm350_no_nr && { echo "Unsupported"; return; }
     _b=$(_fm350_caps nr)
     [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
 }
 
 getsupportedbands5gnsa() {
+    _fm350_no_nr && { echo "Unsupported"; return; }
     _b=$(_fm350_caps nr)
     [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
 }
 
 getbands5gsa() {
+    _fm350_no_nr && { echo "Unsupported"; return; }
     # +GTACT: 20,6,3,501,502,503,505,507,508,5020,5025,5028,5030,5038,5040,5041,5048,5066,5071,5077,5078,5079
 
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
@@ -298,6 +376,7 @@ getbands5gsa() {
 }
 
 getbands5gnsa() {
+    _fm350_no_nr && { echo "Unsupported"; return; }
     # +GTACT: 20,6,3,501,502,503,505,507,508,5020,5025,5028,5030,5038,5040,5041,5048,5066,5071,5077,5078,5079
 
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
@@ -312,6 +391,7 @@ getbands5gnsa() {
 
 
 setbands5gsa() {
+    _fm350_no_nr && return 1
     BANDS="$1"
 
     T=""
@@ -327,14 +407,11 @@ setbands5gsa() {
         done
     fi
 
-    if [ -n "$T" ]; then
-        O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
-        sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
-    fi
+    [ -n "$T" ] && _fm350_gtact_set "$T" '^5[0-9]+$' '9p'
 }
 
 setbands5gnsa() {
+    _fm350_no_nr && return 1
     BANDS="$1"
 
     T=""
@@ -350,10 +427,6 @@ setbands5gnsa() {
         done
     fi
 
-    if [ -n "$T" ]; then
-        O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-        MODE=$(echo "$O" | awk -F[:,] '/\+GTACT:/{print $2","$3","$4}' | tr -d ' \r')
-        sms_tool -d $_DEVICE at "AT+GTACT=$MODE,$T"
-    fi
+    [ -n "$T" ] && _fm350_gtact_set "$T" '^5[0-9]+$' '9p'
 }
 

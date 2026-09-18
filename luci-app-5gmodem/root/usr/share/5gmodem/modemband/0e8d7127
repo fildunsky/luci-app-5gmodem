@@ -43,6 +43,7 @@ getcelllock() {
 # Маска +E5GOPT: бит 1 (значение 2) - SA, бит 2 (значение 4) - NSA, бит 0 всегда
 # взведён. Отсюда 7 = SA+NSA, 3 = только SA, 5 = только NSA, 1 = 5G выключен.
 get5gmode() {
+	_fm350_no_nr && { echo "Unsupported"; return; }
 	O=$(sms_tool -d $_DEVICE at "AT+E5GOPT?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+E5GOPT: *//p' | head -1 | tr -cd '0-9')
 	[ -n "$O" ] || { echo "Unsupported"; return; }
@@ -54,6 +55,7 @@ get5gmode() {
 }
 
 set5gmode() {
+	_fm350_no_nr && return
 	[ "$1" = "full" ] || return
 	# Одной команды мало: модем принимает её, но в работу 5G берёт только после
 	# переустановки соединения - поэтому тот же цикл режима полёта, что и у

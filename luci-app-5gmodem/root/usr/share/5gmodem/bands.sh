@@ -1033,6 +1033,16 @@ if [ -n "$_PROFILE_LOADED" ]; then
 	esac
 fi
 
+# ЗАМОК - НА ТОТ ПОРТ, КУДА ПИШЕМ. Очередь бралась выше по at_port секции, а
+# команды уходят в _DEVICE из реестра - у RW350-GL на Radxa это разные порты
+# (замок на ttyUSB3, запись в ttyUSB1): запись шла мимо очереди, наперегонки с
+# опросом метрик, а вложенные at_query получали «refused - already holding»
+# (журнал 18.09.2026). Перекладываем замок, если порты разошлись.
+if [ -n "$_DEVICE" ] && [ "$_DEVICE" != "$_bs_at" ]; then
+	at_unlock
+	at_lock "$_DEVICE" 15
+fi
+
 # _PORT_OK=1 only when we can actually talk to the modem. The STATIC lists
 # (getsupported*/getsupportedmodes) come from the modemband profile - already
 # sourced above - and must be reported REGARDLESS of port state, so the band /
