@@ -123,7 +123,8 @@ park_profile() {   # $1 - секция, которую вытесняем
 	# интерфейса (наблюдалось: Compal занял modem2, сохранённый за Huawei E3372).
 	# Парковка - тоже секция, поэтому имя остаётся занятым до возвращения модема.
 	for _pk_k in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
-	             celllock at_debug pdp_mode pdp_ok save_band save_band5gnsa save_band5gsa save_mode; do
+	             celllock at_debug pdp_mode pdp_ok save_band save_band5gnsa save_band5gsa save_mode \
+	             alias alias_imei no_at mm_at mm_at_if mm_at_vp; do
 		_pk_v=$(uci -q get "$CFG.$1.$_pk_k")
 		[ -n "$_pk_v" ] && uci -q set "$CFG.$_pk_dst.$_pk_k=$_pk_v"
 	done
@@ -256,7 +257,8 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	# «1 3 7 8 38» от прежнего модема и остался бы без B20).
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
 	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2 \
-	         model_vp apn_plmn apn_imsi band_full save_band save_band5gnsa save_band5gsa save_mode; do
+	         model_vp apn_plmn apn_imsi band_full save_band save_band5gnsa save_band5gsa save_mode \
+	         no_at mm_at mm_at_if mm_at_vp; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
 	uci -q set "$CFG.$2.vidpid=$_new"
@@ -393,8 +395,15 @@ migrate_profile() {   # $1 - старая секция, $2 - новая секц
 	# Со стороны это выглядело как «модем отвалился и не возвращается».
 	_mp_skipmm=""
 	[ "$(uci -q get "$CFG.$1.iface_proto")" = "$(uci -q get "$CFG.$2.iface_proto")" ] || _mp_skipmm=1
+	# СВОЁ ИМЯ И РУЧНЫЕ ФЛАГИ AT - ТОЖЕ ВЫБОР ЧЕЛОВЕКА ПРО ЭТУ ЖЕЛЕЗКУ. Их в
+	# списке не было, и секция-источник уносила их с собой при удалении: у
+	# RW350-GL-16 на Radxa модем при каждой загрузке переезжает 4-1 -> 3-1, и имя,
+	# заданное карандашиком во вкладке, после перезагрузки пропадало (18.09.2026).
+	# mm_at_if/mm_at_vp - выбранный выделенный AT-порт того же модуля (сверяется
+	# по vid:pid, см. quirks.sh), переносится вместе с ним.
 	for _mk in network apn_mode apn_plmn esim_show allow_roaming mm_exclude \
-	           celllock at_debug pdp_mode pdp_ok save_band save_band5gnsa save_band5gsa save_mode imei; do
+	           celllock at_debug pdp_mode pdp_ok save_band save_band5gnsa save_band5gsa save_mode imei \
+	           alias alias_imei no_at mm_at mm_at_if mm_at_vp; do
 		[ "$_mk" = mm_exclude ] && [ -n "$_mp_skipmm" ] && {
 			logger -t 5gmodem "profile move $1 -> $2: protocols differ, not carrying mm_exclude over"
 			continue
