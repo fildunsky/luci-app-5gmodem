@@ -73,8 +73,31 @@ wdm_of_path() {   # $1 - usb-путь
 	return 1
 }
 
+radio_already_on() {   # $1 - usb-путь
+	_ro_sec=$(secname "$1")
+	_ro_if=$(uci -q get "5gmodem.$_ro_sec.network")
+	_ro_st=""
+	[ -n "$_ro_if" ] && _ro_st=$(ubus call "network.interface.$_ro_if" status 2>/dev/null)
+	case "$_ro_st" in
+		*'"up": true'*) echo "interface $_ro_if is up"; return 0 ;;
+	esac
+	_ro_at=$(uci -q get "5gmodem.$_ro_sec.at_port")
+	if [ -n "$_ro_at" ] && [ -c "$_ro_at" ] && [ "$(tty_usbpath "$_ro_at")" = "$1" ]; then
+		_ro_cf=$(at_query "$_ro_at" "AT+CFUN?" 6 | sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' | head -1)
+		[ "$_ro_cf" = 1 ] && { echo "CFUN=1 on $_ro_at"; return 0; }
+		[ -n "$_ro_cf" ] && return 1
+	fi
+	case "$_ro_st" in
+		*'"pending": true'*) return 2 ;;
+	esac
+	pgrep -f "umbim .*cdc-wdm" >/dev/null 2>&1 && return 2
+	pgrep -f "uqmi .*cdc-wdm" >/dev/null 2>&1 && return 2
+	return 1
+}
+
 case "$1" in
 kernel)
+	. /usr/share/5gmodem/lib.sh
 	P="$2"
 	[ -n "$P" ] && [ -f "/sys/bus/usb/devices/$P/idVendor" ] || exit 0
 	VP="$(cat "/sys/bus/usb/devices/$P/idVendor"):$(cat "/sys/bus/usb/devices/$P/idProduct")"
@@ -89,6 +112,14 @@ kernel)
 		_try=$((_try + 1))
 		# Модем переподключился - этот запуск уже не про него.
 		[ "$(cat "/sys/bus/usb/devices/$P/devnum" 2>/dev/null)" = "$DEVNUM" ] || break
+		WHY=$(radio_already_on "$P"); RC=$?
+		if [ "$RC" = 0 ]; then
+			logger -t "$LOGTAG" "fcc: $VP on $P - radio is already on ($WHY), FCC authentication not needed"
+			: > "$MARK"; break
+		elif [ "$RC" = 2 ] && [ "$_try" -lt 10 ]; then
+			OUT="the connection is being set up"
+			sleep 3; continue
+		fi
 		W=$(wdm_of_path "$P")
 		if [ -n "$W" ] && [ -c "$W" ]; then
 			OUT=$(send_auth "$W" 15); RC=$?
