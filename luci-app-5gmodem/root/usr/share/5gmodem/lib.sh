@@ -876,6 +876,7 @@ sig_percent() {   # $1 - режим, $2 - RSRP, $3 - RSRQ, $4 - SINR, $5 - RSCP,
 	function take(v, t0, t1, t2, t3,   p) {
 		if (!isnum(v)) return
 		p = pctof(v + 0, t0, t1, t2, t3)
+		if (p < 1) p = 1
 		if (best < 0 || p < best) best = p
 	}
 	BEGIN {
