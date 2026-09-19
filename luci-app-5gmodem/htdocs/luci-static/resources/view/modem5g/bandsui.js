@@ -626,6 +626,15 @@ function applyVendorJson(j) {
 			if (nb) { nb.style.display = 'none'; }
 			note.style.display = '';
 		}
+		/* Запрет фонового AT (no_at) - та же картина по другой причине: выбор
+		   модема не читается, но «Применить» работает (issue #28). */
+		if (note && j.noat_static) {
+			var nt2 = document.getElementById('bandnote-text');
+			var nb2 = document.getElementById('bandnote-mm-btn');
+			if (nt2) { nt2.textContent = _('Background AT polling is off for this modem, so the current band selection is not read. Applying bands and mode still works.'); }
+			if (nb2) { nb2.style.display = 'none'; }
+			note.style.display = '';
+		}
 		bandSource = 'modemband';
 		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
 		   У LTE прошивка принимает битовую маску (любой набор), а у 3G - номер

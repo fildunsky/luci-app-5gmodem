@@ -1067,8 +1067,14 @@ fi
 # списки остаются, живые чтения пропускаем. Проверка инлайном (lib.sh здесь ещё
 # не подключён), кэш общий с mm_owns_path из lib.sh. Тот же путь - ручной
 # запрет AT для модема: uci 5gmodem.<секция>.no_at=1.
+_NOAT_STATIC=""
 if [ "$_PORT_OK" = 1 ]; then
 	if [ "$(uci -q get "5gmodem.$_bs_sec.no_at" 2>/dev/null)" = "1" ]; then
+		# Запрет ФОНОВОГО AT: живые чтения текущего выбора пропускаем, но явная
+		# запись («Применить») - действие человека и проходит, как у хрупкой
+		# прошивки под MM (_MM_AT_STATIC). Раньше Apply падал «Port not found»
+		# (issue #28, RM551E-GL с no_at=1).
+		_NOAT_STATIC=1
 		_PORT_OK=0
 	else
 		_bo_if=$(uci -q get "5gmodem.$_bs_sec.network")
@@ -1175,7 +1181,7 @@ if [ "x$1" != "xjson" ]; then
 		mgmtinfo) : ;;
 		set*)
 			# Явная запись у хрупкой прошивки под MM - разрешаем (см. _MM_AT_STATIC).
-			[ -n "$_MM_AT_STATIC" ] && [ -n "$_DEVICE" ] && [ -c "$_DEVICE" ] && _PORT_OK=1
+			[ -n "$_MM_AT_STATIC$_NOAT_STATIC" ] && [ -n "$_DEVICE" ] && [ -c "$_DEVICE" ] && _PORT_OK=1
 			if [ "$_PORT_OK" != "1" ]; then
 				echo "Port not found, quitting..."
 				exit 0
@@ -1840,6 +1846,7 @@ case $1 in
 		# Текущий выбор не читался (AT под MM выключен у хрупкой прошивки), но
 		# кнопки применения работают - UI объяснит, почему нет подсветки.
 		[ -n "$_MM_AT_STATIC" ] && json_add_int mm_at_static 1
+		[ -n "$_NOAT_STATIC" ] && json_add_int noat_static 1
 		MODES=$(getsupportedmodes)
 		if [ "x$MODES" != "xUnsupported" ]; then
 			# currentmode is a LIVE query - only when the port is reachable.

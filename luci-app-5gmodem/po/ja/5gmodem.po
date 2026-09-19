@@ -5365,3 +5365,9 @@ msgstr "バックグラウンドで AT ポーリングしない"
 
 msgid "Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL)."
 msgstr "このモデムとの自動的な AT のやり取りをすべて停止します: 値のポーリング、定期的な SMS 確認、Telegram 転送、SMS コマンド、アーカイブ。温度、キャリアアグリゲーション、SMS の自動受信は使えなくなります。SMS の閲覧と送信、USSD、AT コンソールは操作したときに引き続き動作します。AT でポーリングされているとデータ接続が止まりやすくなるファームウェア (例: Quectel RM551E-GL) 向けです。"
+
+msgid "Background AT polling is off for this modem, so the current band selection is not read. Applying bands and mode still works."
+msgstr "このモデムではバックグラウンドの AT ポーリングがオフのため、現在のバンド選択は読み取れません。バンドとモードの適用は引き続き動作します。"
+
+msgid "Metrics are not polled: background AT polling is off"
+msgstr "値は取得していません: バックグラウンドの AT ポーリングがオフです"

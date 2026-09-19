@@ -5562,3 +5562,9 @@ msgstr "Не опрашивать модем по AT в фоне"
 
 msgid "Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL)."
 msgstr "Остановить весь автоматический AT-обмен с этим модемом: опрос метрик, периодическую проверку SMS, пересылку в Telegram, команды по SMS и слив в архив. Пропадут температура, агрегация несущих и автоматический приём SMS; чтение и отправка SMS, USSD и AT-консоль продолжают работать, когда вы ими пользуетесь. Для прошивок, у которых сессия данных чаще зависает, пока модем опрашивают по AT (например, Quectel RM551E-GL)."
+
+msgid "Background AT polling is off for this modem, so the current band selection is not read. Applying bands and mode still works."
+msgstr "Фоновый опрос по AT для этого модема выключен, поэтому текущий выбор диапазонов не читается. Применение диапазонов и режима работает."
+
+msgid "Metrics are not polled: background AT polling is off"
+msgstr "Метрики не опрашиваются: фоновый опрос по AT выключен"

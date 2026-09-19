@@ -39,6 +39,51 @@
    [худшее..гр1]=Слабый(0-25%), [гр1..гр2]=Средний(25-50%), [гр2..гр3]=Хороший
    (50-75%), [гр3..лучшее]=Отличный(75-100%). Значение больше = лучше у всех
    метрик (RSRP/RSRQ/RSSI отрицательные - ближе к нулю лучше). */
+/* ОДНА ШКАЛА ДЛЯ ВСЕХ ПОЛОСОК. Основные полоски считались по четырём уровням с
+   одними порогами, а таблицы (агрегация, соседние соты, антенны) - по трём с
+   другими: RSSI -66 dBm сверху был «Отлично» (зелёный), а в строке агрегации -
+   жёлтый, хотя число то же (жалоба 18.09.2026). Теперь пороги, уровни, цвета и
+   длина заливки берутся отсюда везде.
+   edges = [худшее, гр1, гр2, гр3, лучшее]: Слабый / Средний / Хороший / Отличный. */
+var QUAL_EDGES = {
+	csq:  [ 0,    10,   15,  20,  31  ],
+	rssi: [ -113, -100, -85, -70, -55 ],
+	rsrp: [ -125, -100, -90, -80, -70 ],
+	rsrq: [ -23,  -20,  -15, -10, -3  ],
+	sinr: [ -10,  0,    13,  20,  30  ]
+};
+/* Уровень 0..3 и доля шкалы 0..100 (кусочно-линейно по четвертям). */
+function qualLevelPct(edges, vn) {
+	if (vn <= edges[0]) { return [ 0, 0 ]; }
+	if (vn >= edges[4]) { return [ 3, 100 ]; }
+	for (var i = 0; i < 4; i++) {
+		if (vn <= edges[i + 1]) {
+			return [ i, Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i])) ];
+		}
+	}
+	return [ 3, 100 ];
+}
+/* Имена уровней для таблиц: red / orange / yellow / green = 0..3. */
+var QUAL_NAMES = [ 'red', 'orange', 'yellow', 'green' ];
+var CA_COLOR = { red: '#d95c5c', orange: '#d97a3c', yellow: '#c99a3f', green: '#2fb885' };
+var CA_GRAD = {
+	red:    'linear-gradient(90deg, #d95c5c, #f87171)',
+	orange: 'linear-gradient(90deg, #d97a3c, #fb923c)',
+	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
+	green:  'linear-gradient(90deg, #2fb885, #34d399)'
+};
+function caQuality(key, v) {
+	var e = QUAL_EDGES[key], n = parseFloat(v);
+	if (!e || isNaN(n)) { return null; }
+	return QUAL_NAMES[qualLevelPct(e, n)[0]];
+}
+/* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
+function metricPct(key, v) {
+	var e = QUAL_EDGES[key], n = parseFloat(v);
+	if (!e || isNaN(n)) { return null; }
+	var pc = qualLevelPct(e, n)[1];
+	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
+}
 var _QUAL_BG = [
 	'linear-gradient(90deg, #d95c5c, #f87171)',   /* 0 Слабый  - красный */
 	'linear-gradient(90deg, #d97a3c, #fb923c)',   /* 1 Средний - оранжевый */
@@ -63,20 +108,8 @@ function metricBar(id, rawVal, unit, edges) {
 		return;
 	}
 
-	/* Уровень (0..3) и ширина: кусочно-линейно по четвертям. */
-	var pc, lvl;
-	if (vn <= edges[0]) { pc = 0; lvl = 0; }
-	else if (vn >= edges[4]) { pc = 100; lvl = 3; }
-	else {
-		lvl = 0; pc = 100;
-		for (var i = 0; i < 4; i++) {
-			if (vn <= edges[i + 1]) {
-				lvl = i;
-				pc = Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i]));
-				break;
-			}
-		}
-	}
+	/* Уровень (0..3) и ширина - общей функцией (см. QUAL_EDGES). */
+	var lp = qualLevelPct(edges, vn), lvl = lp[0], pc = lp[1];
 	pf.style.width = pc + '%';
 	pf.style.background = _QUAL_BG[lvl];
 	/* Единицу берём из vn (число), НЕ из rawVal: вызыватели передают значение уже
@@ -86,11 +119,11 @@ function metricBar(id, rawVal, unit, edges) {
 
 /* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
    в CA-таблице - см. caQuality). Крайние edges - разумные пределы шкалы. */
-function csq_bar(v)  { metricBar('csq',  v, '',    [ 0,   10,  15,  20,  31  ]); }
-function rssi_bar(v) { metricBar('rssi', v, 'dBm', [ -113, -100, -85, -70, -55 ]); }
-function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', [ -125, -100, -90, -80, -70 ]); }
-function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  [ -23,  -20, -15, -10, -3  ]); }
-function sinr_bar(v) { metricBar('sinr', v, 'dB',  [ -10,  0,   13,  20,  30  ]); }
+function csq_bar(v)  { metricBar('csq',  v, '',    QUAL_EDGES.csq);  }
+function rssi_bar(v) { metricBar('rssi', v, 'dBm', QUAL_EDGES.rssi); }
+function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', QUAL_EDGES.rsrp); }
+function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  QUAL_EDGES.rsrq); }
+function sinr_bar(v) { metricBar('sinr', v, 'dB',  QUAL_EDGES.sinr); }
 /* 3G: RSCP (сила кода, dBm) и Ec/No (качество, dB). Пороги по общепринятым
    уровням UMTS: RSCP хуже -105 = плохо, лучше -75 = отлично; Ec/No хуже -16 =
    плохо, лучше -6 = отлично. */
@@ -676,33 +709,8 @@ function setRowVisible(view, hasData) {
 /* Цвет оценки метрики CA-компонента (пороги как в modemdata). CA_COLOR - для
    ТЕКСТА значения; заливка полосок - градиентом (CA_GRAD), теми же парами
    цветов, что у основных баров CSQ/RSRP/... - единый вид всех шкал. */
-var CA_COLOR = { green: '#2fb885', orange: '#c99a3f', red: '#d95c5c' };
-var CA_GRAD = {
-	green:  'linear-gradient(90deg, #2fb885, #34d399)',
-	orange: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
-	red:    'linear-gradient(90deg, #d95c5c, #f87171)'
-};
-function caQuality(key, v) {
-	v = parseFloat(v);
-	if (isNaN(v)) { return null; }
-	switch (key) {
-		case 'rsrp': return v >= -80 ? 'green' : (v >= -100 ? 'orange' : 'red');
-		case 'rsrq': return v >= -10 ? 'green' : (v >= -15 ? 'orange' : 'red');
-		case 'sinr': return v >= 20 ? 'green' : (v >= 0 ? 'orange' : 'red');
-		case 'rssi': return v >= -65 ? 'green' : (v >= -85 ? 'orange' : 'red');
-	}
-	return null;
-}
+/* CA_COLOR / CA_GRAD / caQuality - общие, см. QUAL_EDGES в начале файла. */
 
-/* Границы шкалы для ДЛИНЫ полоски. Взяты по краям реально встречающихся
-   значений, а не по теоретически возможным: с теоретическими полоска почти
-   всегда стояла бы у одного края и ничего бы не показывала. */
-var METRIC_RANGE = {
-	rsrp: [ -125, -70 ],
-	rsrq: [ -20, -5 ],
-	rssi: [ -100, -60 ],
-	sinr: [ -5, 25 ]
-};
 
 /* Короткая полоска под значением метрики в таблицах (CA и соседние соты).
    Цвет берёт из caQuality - ТОЙ ЖЕ функции, что красит само число, поэтому в
@@ -727,16 +735,6 @@ var IS_PROTON = (function() {
 	return !!document.querySelector('link[href*="proton2025"]');
 })();
 
-/* Доля шкалы для ДЛИНЫ полоски (0..100), или null, если значения/оценки нет. */
-function metricPct(key, v) {
-	var r = METRIC_RANGE[key];
-	var n = parseFloat(v);
-	if (!r || isNaN(n)) { return null; }
-	var pc = Math.round(100 * (n - r[0]) / (r[1] - r[0]));
-	if (pc < 4) { pc = 4; }       /* нулевую полоску не видно вовсе */
-	if (pc > 100) { pc = 100; }
-	return pc;
-}
 
 /* Заполнить ячейку метрики числом и полоской. КЛЮЧЕВОЕ: обновляем СУЩЕСТВУЮЩИЕ
    узлы, а не пересоздаём. Только так CSS transition на ширине полоски плавно
@@ -1822,7 +1820,7 @@ function fillAntPorts(raw, rxdiv) {
 			   красный - плохо. Иначе -102 dBm красился бы красным, а
 			   подписывался «слабый сигнал» - две правды в одной строке. */
 			col = caQuality('rsrp', rsrp);
-			st = (col === 'green') ? _('antenna: normal')
+			st = (col === 'green' || col === 'yellow') ? _('antenna: normal')
 			   : (col === 'orange') ? _('antenna: weak signal')
 			   : _('antenna: poor signal');
 		}
@@ -2487,7 +2485,12 @@ function applyMetrics(json) {
 					if (document.getElementById('sim')) {
 						var view = document.getElementById("sim");
 						var sv = document.getElementById("simv");
-						if (json.registration == '') { 
+						/* Пустая карточка при no_at - ожидаемая цена флага; подписываем её,
+						   чтобы прочерки не выглядели поломкой (issue #28). */
+						if (json.no_at == '1' && (json.registration == '' || json.registration == '-')) {
+						view.textContent = _('Metrics are not polled: background AT polling is off');
+						}
+						else if (json.registration == '') { 
 						view.textContent = '-';
 						}
 						else {
@@ -3539,7 +3542,9 @@ simDialog: baseclass.extend({
 
 			if(!json.hasOwnProperty('error')){
 				
-				if (json.registration == 'SIM not inserted' || json.registration == '-') {
+				/* При запрете фонового AT (no_at) регистрация не читается вовсе -
+				   прочерк тут не сбой SIM, а настройка (issue #28). */
+				if (json.no_at != '1' && (json.registration == 'SIM not inserted' || json.registration == '-')) {
 					if (ui.addTimeLimitedNotification)
 						ui.addTimeLimitedNotification(null, E('p', _('Problem with registering to the network, check the SIM card')), 5000, 'info');
 					else

@@ -5323,3 +5323,177 @@ msgstr "路由器到哪里去问自己的地址从外面看是什么样。测速
 
 msgid "The address is public: the interface has exactly what the internet sees%s"
 msgstr "地址是公网的：接口上就是互联网看到的那个%s"
+
+msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgstr "下载测试的数据源。“Интернетометр”会在每次测试前向 Yandex 查询最近的 CDN 节点，在俄罗斯蜂窝网络下这是最佳选择；如果您没有自行选择上传端点，它也会一并设置。对于普通 URL，文件越大，速度越能在约 15 秒的测试中充分提升。俄罗斯境内托管的数据源（Selectel/Yandex/Tele2）可在俄罗斯蜂窝网络下使用；Cloudflare/Hetzner 在那里可能被屏蔽。旁边显示的是大致文件大小。"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgstr "用于上传测试的端点，需接受 POST 请求体。“Интернетометр”使用与下载数据源相同探测列表中的节点，也可在此单独选择。俄罗斯境内托管的端点（Rostelecom/Yandex）可在俄罗斯蜂窝网络下使用；即使服务器返回 404/403，也会读取请求体，因此仍能测出速度。"
+
+msgid "public demo"
+msgstr "公开演示"
+
+msgid "Create interface (USB tethering)"
+msgstr "创建接口（USB 网络共享）"
+
+msgid "Recreate interface (USB tethering)"
+msgstr "重新创建接口（USB 网络共享）"
+
+msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
+msgstr "此手机通过 USB 共享网络，并通过 DHCP 分配地址。该按钮用于创建（或重新创建）对应的 DHCP 接口——无需选择拨号协议，也没有调制解调器指标可读取。"
+
+msgid "What the modem itself can do. Not the speed of the current connection."
+msgstr "调制解调器本身的能力，而非当前连接的速度。"
+
+msgid "Max speed"
+msgstr "最高速率"
+
+msgid "Open the %s admin panel in a new tab"
+msgstr "在新标签页中打开 %s 管理面板"
+
+msgid "AT polling under ModemManager"
+msgstr "ModemManager 下的 AT 轮询"
+
+msgid "Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open."
+msgstr "在 ModemManager 管理调制解调器期间，通过 AT 端口读取温度、载波聚合及其他厂商指标。对于已知并行 AT 通信会导致数据会话中断的固件（Dell DW5821e / Foxconn T77W968），默认关闭；其他调制解调器仅在会话建立时轮询。带有两个 AT 端口的 DW5821e 不需要此开关：重启后其第二个端口将不交由 ModemManager 管理，并自动轮询。仅当打开此页面时连接仍保持稳定时才启用。"
+
+msgid "Failed to read modem data"
+msgstr "读取调制解调器数据失败"
+
+msgid "The modem port is busy, try again in a few seconds"
+msgstr "调制解调器端口忙，请几秒后重试"
+
+msgid "The modem AT port is busy, try again"
+msgstr "调制解调器 AT 端口忙，请重试"
+
+msgid "AT polling under ModemManager is off for this firmware (it drops the data session), so the current band selection is not read. Applying bands and mode still works; to see the current selection, enable \"AT polling under ModemManager\" in the modem settings."
+msgstr "此固件已关闭 ModemManager 下的 AT 轮询（它会导致数据会话中断），因此无法读取当前的频段选择。应用频段和网络模式仍然有效；如需查看当前选择，请在调制解调器设置中启用“ModemManager 下的 AT 轮询”。"
+
+msgid "Could not delete messages"
+msgstr "无法删除消息"
+
+msgid "Press [Enter] to send the code, press [Ctrl+Delete] to clear the field"
+msgstr "按 [Enter] 发送代码，按 [Ctrl+Delete] 清空输入框"
+
+msgid "Press [Enter] to send the command, press [Ctrl+Delete] to clear the field"
+msgstr "按 [Enter] 发送命令，按 [Ctrl+Delete] 清空输入框"
+
+msgid "The request was rejected: %s"
+msgstr "请求被拒绝：%s"
+
+msgid "Dangerous AT command"
+msgstr "危险的 AT 命令"
+
+msgid "Send anyway"
+msgstr "仍然发送"
+
+msgid "Could not switch the modem"
+msgstr "无法切换调制解调器"
+
+msgid "The selected device is not a modem"
+msgstr "所选设备不是调制解调器"
+
+msgid "No modem selected"
+msgstr "未选择调制解调器"
+
+msgid "256QAM (download)"
+msgstr "256QAM（下行）"
+
+msgid "5G cell lock"
+msgstr "5G 小区锁定"
+
+msgid "Enabling uplink aggregation — the modem is restarting its radio…"
+msgstr "正在启用上行聚合——调制解调器正在重启射频…"
+
+msgid "Helps only with a strong signal and a base station that supports it"
+msgstr "仅在信号较强且基站支持时有效"
+
+msgid "Lock to current 5G cell"
+msgstr "锁定到当前 5G 小区"
+
+msgid "Locked to cell: ARFCN %s, PCI %s"
+msgstr "已锁定到小区：ARFCN %s，PCI %s"
+
+msgid "Locking to cell ARFCN %s, PCI %s - the modem re-registers..."
+msgstr "正在锁定到小区 ARFCN %s，PCI %s——调制解调器正在重新注册…"
+
+msgid "No 5G carrier right now - the lock needs its ARFCN and PCI"
+msgstr "当前没有 5G 载波——锁定需要其 ARFCN 和 PCI"
+
+msgid "Turn off"
+msgstr "关闭"
+
+msgid "Turn on"
+msgstr "开启"
+
+msgid "Turning 256QAM off — the modem is restarting its radio…"
+msgstr "正在关闭 256QAM——调制解调器正在重启射频…"
+
+msgid "Turning 256QAM on — the modem is restarting its radio…"
+msgstr "正在开启 256QAM——调制解调器正在重启射频…"
+
+msgid "Uplink aggregation"
+msgstr "上行聚合"
+
+msgid "Upload often sits at 1-2 Mbit/s until this is on"
+msgstr "未开启时，上传速率通常停留在 1-2 Mbit/s"
+
+msgid "(transmission rank)"
+msgstr "（传输秩）"
+
+msgid "Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2."
+msgstr "传输秩：网络实际发送的并行数据流数量。1 表示 SISO，2 表示 MIMO 2x2。"
+
+msgid "Antennas"
+msgstr "天线"
+
+msgid "Antenna mode"
+msgstr "天线模式"
+
+msgid "Antenna %d"
+msgstr "天线 %d"
+
+msgid "Internal antennas"
+msgstr "内置天线"
+
+msgid "External antennas"
+msgstr "外置天线"
+
+msgid "Automatic: external where an antenna is detected"
+msgstr "自动：检测到天线的接口使用外置天线"
+
+msgid "Mixed: antenna 1 automatic, antenna 2 internal"
+msgstr "混合：天线 1 自动，天线 2 内置"
+
+msgid "external"
+msgstr "外置"
+
+msgid "internal"
+msgstr "内置"
+
+msgid "antenna detected"
+msgstr "已检测到天线"
+
+msgid "no antenna detected"
+msgstr "未检测到天线"
+
+msgid "detector unavailable"
+msgstr "检测器不可用"
+
+msgid "Applies immediately, no Save needed. Automatic modes check the connectors every 3 seconds. The detector only sees antennas that short the connector to ground; a passive antenna may stay undetected while plugged in."
+msgstr "立即生效，无需点击“保存”。自动模式每 3 秒检查一次天线接口。检测器只能识别将接口对地短路的天线；无源天线即使已插入也可能检测不到。"
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management."
+msgstr "调制解调器已在 USB 总线上，但其 AT 端口无响应：端口忙或调制解调器卡死。如果持续如此，请在“频段管理”中对调制解调器断电重启。"
+
+msgid "No background AT polling"
+msgstr "不在后台通过 AT 轮询"
+
+msgid "Stop all automatic AT exchange with this modem: metrics polling, the periodic SMS check, Telegram forwarding, SMS commands and archiving. Temperature, carrier aggregation and automatic SMS reception are lost; reading and sending SMS, USSD and the AT console still work when you use them. For firmware whose data session freezes more often while it is polled over AT (e.g. Quectel RM551E-GL)."
+msgstr "停止与此调制解调器的所有自动 AT 通信：指标轮询、定期短信检查、Telegram 转发、短信命令和归档。温度、载波聚合和自动接收短信将不可用；手动使用时，短信读取与发送、USSD 和 AT 控制台仍可正常工作。适用于在 AT 轮询期间数据会话更容易卡死的固件（例如 Quectel RM551E-GL）。"
+
+msgid "Background AT polling is off for this modem, so the current band selection is not read. Applying bands and mode still works."
+msgstr "此调制解调器已关闭后台 AT 轮询，因此无法读取当前的频段选择。应用频段和网络模式仍然有效。"
+
+msgid "Metrics are not polled: background AT polling is off"
+msgstr "未轮询指标：后台 AT 轮询已关闭"

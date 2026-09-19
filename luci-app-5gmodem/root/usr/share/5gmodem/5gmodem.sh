@@ -972,8 +972,10 @@ sms_tool() {
 # расширено флагом). Той же дорогой - ручной рычаг no_at в секции модема:
 # полный запрет AT-опроса для хрупких прошивок.
 _MM_OWNS=""
+_SN_NOAT=""
 if [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" = "1" ]; then
 	_MM_OWNS=1
+	_SN_NOAT=1
 	DEVICE=""
 elif [ -n "$DEVICE" ]; then
 	_mo_if=$(uci -q get "5gmodem.$_hl_sec.network")
@@ -1921,6 +1923,7 @@ cat <<EOF
 "registration_cs":"${_J_REG_CS}",
 "simslot":"${_J_SSIM}",
 "allow_roaming":"$_SN_ROAMOK",
+"no_at":"$_SN_NOAT",
 "imei":"${_J_NR_IMEI}",
 "imsi":"${_J_NR_IMSI}",
 "iccid":"${_J_NR_ICCID}",
