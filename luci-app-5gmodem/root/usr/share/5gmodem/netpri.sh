@@ -605,8 +605,13 @@ operator_probe() {
 		return
 	fi
 	path=$(modem_path_for "$i")
+	if command -v bg_at_off >/dev/null 2>&1 && bg_at_off ${path:+"$path"}; then
+		return
+	fi
 	cands=$(modem_atport_for "$i")
-	if [ -n "$path" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
+	_op_known=0
+	for _op_c in $cands; do [ -c "$_op_c" ] && _op_known=1; done
+	if [ "$_op_known" = 0 ] && [ -n "$path" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 		# ПОРТ ДОЗВОНА СЮДА НЕ ПОПАДАЕТ (drop_dial_port в lib.sh). Проба ниже -
 		# это AT+COPS=3,0 в фоновом обновлении списка, то есть регулярно; на
 		# xmm/atc тот же tty несёт ДАННЫЕ, и такая проба рвёт сессию (отчёт
