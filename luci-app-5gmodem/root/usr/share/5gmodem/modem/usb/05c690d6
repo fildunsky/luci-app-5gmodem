@@ -63,6 +63,10 @@ if [ "$_IS_COMPAL" = "1" ]; then
 
 _QMICLI_OK=0
 command -v qmicli >/dev/null 2>&1 && _QMICLI_OK=1
+if [ "$_QMICLI_OK" = 1 ] && [ "$_MM_OK" != "1" ]; then
+	command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free && _QMICLI_OK=0
+	command -v _poll_chan_free >/dev/null 2>&1 && ! _poll_chan_free && _QMICLI_OK=0
+fi
 
 # --- General modem info, TAC, Cell ID, MCC/MNC ---
 if [ "$_MM_OK" = "1" ]; then

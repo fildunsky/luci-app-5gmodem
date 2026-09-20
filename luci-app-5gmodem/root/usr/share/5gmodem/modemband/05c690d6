@@ -60,6 +60,9 @@ _QWDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 _qmi_ssp() {
 	[ -c "$_QWDM" ] || return 0
 	command -v qmicli >/dev/null 2>&1 || return 0
+	if ! pidof ModemManager >/dev/null 2>&1; then
+		command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free && return 0
+	fi
 	qmicli -d "$_QWDM" -p --nas-get-system-selection-preference 2>/dev/null
 }
 

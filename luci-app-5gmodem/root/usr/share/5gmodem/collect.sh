@@ -103,6 +103,10 @@ mbim_verdict() {
 		| sed -n 's/.*"code": *"\([^"]*\)".*/\1/p' | head -1)
 	_mv_log=$(logread 2>/dev/null | grep -c "Failed to attach to network")
 	_mv_pin=$(logread 2>/dev/null | grep -oE "required pin: [0-9]+ - [a-z0-9]+" | tail -1)
+	if ubus call network.interface."$_mv_if" status 2>/dev/null | grep -q '"up": true'; then
+		echo "the interface is up - mbim works on this modem, this check does not apply"
+		return
+	fi
 	[ -n "$_mv_err" ] && echo "interface error: $_mv_err"
 	[ -n "$_mv_pin" ] && echo "the modem reports: $_mv_pin"
 	case "$_mv_pin" in
