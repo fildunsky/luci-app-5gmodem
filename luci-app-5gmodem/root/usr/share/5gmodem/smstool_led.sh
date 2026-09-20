@@ -9,6 +9,10 @@ DEBUG_FILE="/tmp/my_newsms_log"
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 
+if command -v bg_at_off >/dev/null 2>&1 && bg_at_off; then
+	exit 0
+fi
+
 # ХРАНИЛИЩЕ ВЫБИРАЕМ ПОЛНОЙ ФОРМОЙ, А НЕ КЛЮЧОМ -s.
 # sms_tool -s XX шлёт короткую AT+CPMS="XX", и FM350-GL на неё возвращает
 # mem2/mem3 к заводскому SM: приём уезжает на SIM, а читаем мы память модема -
@@ -65,7 +69,7 @@ handle_old_format() {
     MEM=$(uci -q get 5gmodem.sms.storage)
     debug_log "MEM (storage): $MEM"
     
-    STX=$(sms_tool $(store_arg "$DEV" "$MEM") -d $DEV status | cut -c23-27)
+    STX=$(/usr/share/5gmodem/smsbridge.sh status "$MEM" "$DEV" 2>/dev/null | cut -c23-27)
     debug_log "STX (raw cut): '$STX'"
     
     SMS=$(echo $STX | tr -dc '0-9')

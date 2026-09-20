@@ -288,11 +288,39 @@ var smsSeenFirst = false; /* про эту SIM ещё ничего не знае
    вместе.
    Цена: два РАЗНЫХ письма от одного отправителя в одну и ту же минуту считаются
    одним, и второе не подсветится. Времени точнее минуты модем не сообщает. */
-function sms_msg_key(item) {
+function sms_msg_old(item) {
+	if (item && typeof item.okey === 'string' && item.okey) { return item.okey; }
 	return [
 		String(item.sender || ''),
 		String(item.timestamp || '')
 	].join('|').replace(/[\x00-\x1f]/g, ' ');
+}
+
+function sms_msg_key(item) {
+	if (item && typeof item.key === 'string' && item.key) { return item.key; }
+	return sms_msg_old(item);
+}
+
+function sms_msg_pairs(item) {
+	if (item && Array.isArray(item.kp) && item.kp.length) { return item.kp; }
+	if (item && Array.isArray(item.keys) && item.keys.length) {
+		return item.keys.map(function(k) { return [ k, k ]; });
+	}
+	return [ [ sms_msg_key(item), sms_msg_old(item) ] ];
+}
+
+function sms_keys_apply(list, side) {
+	var map = {};
+	(Array.isArray(side) ? side : []).forEach(function(e) {
+		if (e && e.index != null && typeof e.key === 'string') { map[String(e.index)] = e; }
+	});
+	list.forEach(function(o) {
+		var e = o ? map[String(o.index)] : null;
+		if (e) {
+			o.key = e.key;
+			o.okey = (typeof e.old === 'string') ? e.old : '';
+		}
+	});
 }
 
 /* ВСЕ КЛЮЧИ ОДНОГО ПИСЬМА, А НЕ ОДИН.
@@ -306,8 +334,11 @@ function sms_msg_key(item) {
    части 1..4 - в 15:10; в seen ложился только 15:09.
    Одиночное сообщение - тот же список из одного ключа. */
 function sms_msg_keys(item) {
-	if (item && Array.isArray(item.keys) && item.keys.length) { return item.keys; }
-	return [ sms_msg_key(item) ];
+	var out = [];
+	sms_msg_pairs(item).forEach(function(p) {
+		if (out.indexOf(p[0]) < 0) { out.push(p[0]); }
+	});
+	return out;
 }
 
 /* ПАМЯТЬ О ПРОЧИТАННОМ - У ТОГО МОДЕМА, ЧЕЙ СПИСОК ПОКАЗАН.
@@ -436,7 +467,9 @@ function sms_make_card(item, iconSrc, hide) {
 	/* Непрочитанным считаем письмо, у которого не отмечена ХОТЬ ОДНА часть -
 	   так же, как считает зеркало (smsbridge.sh newcount): иначе карточка
 	   выглядела бы прочитанной при горящем конвертике. */
-	var isNew = !!(smsSeen && !smsSeenFirst && keys.some(function(k) { return !smsSeen.has(k); }));
+	var isNew = !!(smsSeen && !smsSeenFirst && sms_msg_pairs(item).some(function(p) {
+		return !smsSeen.has(p[0]) && !smsSeen.has(p[1]);
+	}));
 
 	var card = E('button', {
 		'type': 'button',
@@ -847,6 +880,7 @@ return view.extend({
     },
 
 	handleDelete: function(ev) {
+		var viewSelf = this;
 		if (sms_selected_cards().length == 0){
 		ui.addNotification(null, E('p', _('Please select the message(s) to be deleted')), 'info');   
 		}
@@ -870,6 +904,9 @@ return view.extend({
 								.then(function(r) {
 									if (r == null) {
 										ui.addNotification(null, E('p', [ _('Could not delete messages') ]), 'error');
+										smsNote(null);
+										if (typeof viewSelf._doRefresh == 'function') { viewSelf._doRefresh(false, true); }
+										return;
 									}
 									smsSetState('empty');
 									try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
@@ -1198,7 +1235,9 @@ return view.extend({
 									   which prints spaces). */
 									var json;
 									try {
-										json = JSON.parse(res2).msg || [];
+										var parsed = JSON.parse(res2);
+										json = parsed.msg || [];
+										sms_keys_apply(json, parsed.keys);
 									} catch (e) {
 										/* Битый/обрезанный ответ - состояние error: модель
 										   сама решит, оставить показанное или показать
@@ -1296,10 +1335,13 @@ return view.extend({
 												   может отличаться, и отметка по одному ключу оставляла
 												   письмо непрочитанным в зеркале - оно считает по частям,
 												   включая дубли (см. sms_msg_keys). */
-												var pkeys = [];
+												var pkeys = [], pkp = [];
 												groups[k].forEach(function(p) {
-													var pk = sms_msg_key(p);
+													var pk = sms_msg_key(p), po = sms_msg_old(p);
 													if (pkeys.indexOf(pk) < 0) { pkeys.push(pk); }
+													if (!pkp.some(function(x) { return x[0] === pk && x[1] === po; })) {
+														pkp.push([ pk, po ]);
+													}
 												});
 												return {
 													sender: first.sender,
@@ -1307,7 +1349,8 @@ return view.extend({
 													total: first.total,
 													index: parts.map(function(p) { return p.index; }).join('-'),
 													content: text,
-													keys: pkeys
+													keys: pkeys,
+													kp: pkp
 												};
 											});
 											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
@@ -1522,7 +1565,6 @@ return view.extend({
 											'aria-label': _('Previous modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),
-											'class': 'tg-col-narrow',
 											'disabled': buttonsDisabled
 										}, [ ' ◄ ' ]),
 										E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
@@ -1531,7 +1573,6 @@ return view.extend({
 											'aria-label': _('Next modem'), 
 											'click': ui.createHandlerFn(this, 'handleModemChange'),
 											'data-tooltip': _('Changing a modem requires refreshing the messages'),
-											'class': 'tg-col-narrow',
 											'disabled': buttonsDisabled
 										}, [ ' ► ' ])
 									])

@@ -1,0 +1,11 @@
+. "$RES/modem/usb/2cb70007"
+if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ]; then
+	for _dw_i in /sys/bus/usb/devices/"$_POLL_AM":*; do
+		[ -e "$_dw_i/driver" ] || continue
+		case "$(basename "$(readlink -f "$_dw_i/driver" 2>/dev/null)" 2>/dev/null)" in
+			cdc_mbim) PROTO="mbim"; break ;;
+			cdc_ncm) PROTO="ncm"; break ;;
+			cdc_ether) PROTO="ecm"; break ;;
+		esac
+	done
+fi

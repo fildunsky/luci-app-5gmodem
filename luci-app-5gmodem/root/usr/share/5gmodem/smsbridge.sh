@@ -132,6 +132,268 @@ _nd_jesc() {
 		END { printf "\"" }'
 }
 
+TG_MIG="$SEEN_DIR/sms_tg_migrated"
+
+_tg_file() {
+	_tp=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
+	[ -n "$_tp" ] && echo "$SEEN_DIR/sms_tg.$_tp" || echo "$SEEN_DIR/sms_tg"
+}
+
+_tg_migrate() {
+	[ -f "$TG_MIG" ] && return 0
+	mkdir -p "$SEEN_DIR" 2>/dev/null || return 0
+	for _tm_f in "$SEEN_DIR"/sms_seen "$SEEN_DIR"/sms_seen.*; do
+		[ -f "$_tm_f" ] || continue
+		case "$_tm_f" in *.tmp) continue ;; esac
+		_tm_t="$SEEN_DIR/sms_tg${_tm_f#"$SEEN_DIR/sms_seen"}"
+		[ -f "$_tm_t" ] || cp "$_tm_f" "$_tm_t" 2>/dev/null
+	done
+	: > "$TG_MIG" 2>/dev/null
+}
+
+_list_add() {
+	_la_f="$1"; shift
+	mkdir -p "$SEEN_DIR" 2>/dev/null
+	for _k in "$@"; do
+		[ -n "$_k" ] || continue
+		grep -qxF "$_k" "$_la_f" 2>/dev/null || echo "$_k" >> "$_la_f"
+	done
+	[ -f "$_la_f" ] || : > "$_la_f" 2>/dev/null
+	if [ "$(wc -l 2>/dev/null < "$_la_f" || echo 0)" -gt "$SEEN_MAX" ]; then
+		tail -n "$SEEN_MAX" "$_la_f" > "$_la_f.tmp" 2>/dev/null && mv "$_la_f.tmp" "$_la_f"
+	fi
+}
+
+_kb_n=0
+
+_kb_norm() {
+	_KB_S="$1"
+	case "$_KB_S" in
+		*[[:cntrl:]]*) _KB_S=$(printf '%s' "$_KB_S" | tr -d '\r' | tr '\000-\037' ' ') ;;
+	esac
+	while :; do
+		case "$_KB_S" in *' ') _KB_S=${_KB_S% } ;; *) break ;; esac
+	done
+}
+
+_kb_put() {
+	_kb_n=$((_kb_n + 1))
+	_kb_norm "$2"
+	_kb_pc="$4"
+	while :; do
+		case "$_kb_pc" in
+			*"
+") _kb_pc=${_kb_pc%?} ;;
+			*) break ;;
+		esac
+	done
+	eval "_kb_x$_kb_n=\$1; _kb_f$_kb_n=\$2; _kb_s$_kb_n=\$_KB_S; _kb_t$_kb_n=\$3; _kb_c$_kb_n=\$_kb_pc; _kb_p$_kb_n=\$5; _kb_o$_kb_n=\$6; _kb_r$_kb_n=\$7; _kb_h$_kb_n=\$8; _kb_k$_kb_n=''; _kb_g$_kb_n=''; _kb_gm$_kb_n=''"
+	case "$1" in ''|*[!0-9]*) ;; *) eval "_kb_ix$1=$_kb_n" ;; esac
+}
+
+_kb_feed_json() {
+	_kf_n=$(printf '%s' "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	case "$_kf_n" in ''|*[!0-9]*) return 0 ;; esac
+	_kf_i=0
+	while [ "$_kf_i" -lt "$_kf_n" ]; do
+		_kf_x=""; _kf_s=""; _kf_t=""; _kf_c=""; _kf_p=""; _kf_o=""; _kf_r=""
+		eval "$(printf '%s' "$1" | jsonfilter \
+			-e "_kf_x=@.msg[$_kf_i].index" -e "_kf_s=@.msg[$_kf_i].sender" \
+			-e "_kf_t=@.msg[$_kf_i].timestamp" -e "_kf_c=@.msg[$_kf_i].content" \
+			-e "_kf_p=@.msg[$_kf_i].part" -e "_kf_o=@.msg[$_kf_i].total" \
+			-e "_kf_r=@.msg[$_kf_i].reference" 2>/dev/null)"
+		_kf_i=$((_kf_i + 1))
+		[ -n "$_kf_s$_kf_c" ] || continue
+		_kb_put "$_kf_x" "$_kf_s" "$_kf_t" "$_kf_c" "$_kf_p" "$_kf_o" "$_kf_r" ""
+	done
+}
+
+_kb_feed_arch() {
+	_ka_d=$(_arch_dir)
+	for _ka_f in $(_arch_files "$_ka_d"); do
+		[ -f "$_ka_d/$_ka_f" ] || continue
+		_arch_read "$_ka_d/$_ka_f"
+		_ka_h=""
+		case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _ka_h=${_ka_f#*.} ;; esac
+		_kb_put "${_ka_f%%.*}" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_ka_h"
+	done
+}
+
+_kb_build() {
+	_kb_i=1
+	while [ "$_kb_i" -le "$_kb_n" ]; do
+		eval "_kb_k=\$_kb_k$_kb_i; _kb_s=\$_kb_s$_kb_i; _kb_f=\$_kb_f$_kb_i; _kb_t=\$_kb_t$_kb_i; _kb_p=\$_kb_p$_kb_i; _kb_o=\$_kb_o$_kb_i; _kb_r=\$_kb_r$_kb_i; _kb_h=\$_kb_h$_kb_i"
+		if [ -n "$_kb_k" ]; then _kb_i=$((_kb_i + 1)); continue; fi
+		_kb_multi=1
+		case "$_kb_o" in ''|0|1|*[!0-9]*) _kb_multi=0 ;; esac
+		case "$_kb_p" in ''|*[!0-9]*) _kb_multi=0 ;; esac
+		if [ "$_kb_multi" = 0 ]; then
+			if [ -z "$_kb_h" ]; then
+				eval "_kb_c=\$_kb_c$_kb_i"
+				_kb_h=$(printf '%s|%s|%s' "$_kb_f" "$_kb_t" "$_kb_c" | md5sum)
+				_kb_h=${_kb_h%% *}; _kb_h=${_kb_h%????????????????}
+			fi
+			eval "_kb_k$_kb_i=\"\$_kb_s|\$_kb_t|\$_kb_h\"; _kb_g$_kb_i=1"
+			_kb_i=$((_kb_i + 1)); continue
+		fi
+		_kb_mem=""
+		_kb_q=1
+		while [ "$_kb_q" -le "$_kb_o" ]; do eval "_kb_b$_kb_q=''"; _kb_q=$((_kb_q + 1)); done
+		_kb_j="$_kb_i"
+		while [ "$_kb_j" -le "$_kb_n" ]; do
+			eval "_kb_jk=\$_kb_k$_kb_j; _kb_jf=\$_kb_f$_kb_j; _kb_jo=\$_kb_o$_kb_j; _kb_jr=\$_kb_r$_kb_j; _kb_jp=\$_kb_p$_kb_j; _kb_jt=\$_kb_t$_kb_j"
+			if [ -z "$_kb_jk" ] && [ "$_kb_jf" = "$_kb_f" ] && [ "$_kb_jo" = "$_kb_o" ] && [ "$_kb_jr" = "$_kb_r" ]; then
+				case "$_kb_jp" in
+					''|*[!0-9]*) ;;
+					*)
+						_kb_mem="$_kb_mem $_kb_j"
+						if [ "$_kb_jp" -ge 1 ] && [ "$_kb_jp" -le "$_kb_o" ]; then
+							eval "_kb_bq=\$_kb_b$_kb_jp"
+							if [ -z "$_kb_bq" ]; then
+								eval "_kb_b$_kb_jp=$_kb_j"
+							else
+								eval "_kb_bt=\$_kb_t$_kb_bq"
+								[ "$_kb_jt" \< "$_kb_bt" ] || eval "_kb_b$_kb_jp=$_kb_j"
+							fi
+						fi ;;
+				esac
+			fi
+			_kb_j=$((_kb_j + 1))
+		done
+		_kb_txt=""; _kb_have=0; _kb_tf=""
+		_kb_q=1
+		while [ "$_kb_q" -le "$_kb_o" ]; do
+			eval "_kb_bq=\$_kb_b$_kb_q"
+			if [ -n "$_kb_bq" ]; then
+				eval "_kb_txt=\$_kb_txt\$_kb_c$_kb_bq"
+				[ -n "$_kb_tf" ] || eval "_kb_tf=\$_kb_t$_kb_bq"
+				_kb_have=$((_kb_have + 1))
+			fi
+			_kb_q=$((_kb_q + 1))
+		done
+		[ -n "$_kb_tf" ] || _kb_tf="$_kb_t"
+		_kb_h=$(printf '%s|%s|%s' "$_kb_f" "$_kb_tf" "$_kb_txt" | md5sum)
+		_kb_h=${_kb_h%% *}; _kb_h=${_kb_h%????????????????}
+		_kb_lead=1
+		for _kb_j in $_kb_mem; do
+			eval "_kb_k$_kb_j=\"\$_kb_s|\$_kb_tf|\$_kb_h\"; _kb_g$_kb_j=''; _kb_gm$_kb_j=\$_kb_mem"
+			if [ "$_kb_lead" = 1 ]; then
+				eval "_kb_g$_kb_j=1; _kb_gt$_kb_j=\$_kb_txt; _kb_gh$_kb_j=$_kb_have; _kb_gf$_kb_j=\$_kb_tf"
+				_kb_lead=0
+			fi
+		done
+		_kb_i=$((_kb_i + 1))
+	done
+}
+
+_kb_jq() {
+	case "$1" in
+		*[\\\"]*|*[[:cntrl:]]*) _nd_jesc "$1" ;;
+		*) printf '"%s"' "$1" ;;
+	esac
+}
+
+_kb_side() {
+	_ks_i=1; _ks_any=0
+	printf '"keys":['
+	while [ "$_ks_i" -le "$_kb_n" ]; do
+		eval "_ks_x=\$_kb_x$_ks_i; _ks_k=\$_kb_k$_ks_i; _ks_s=\$_kb_s$_ks_i; _ks_t=\$_kb_t$_ks_i"
+		_ks_i=$((_ks_i + 1))
+		[ -n "$_ks_k" ] || continue
+		case "$_ks_x" in ''|*[!0-9]*) continue ;; esac
+		[ "$_ks_any" = 0 ] || printf ','
+		_ks_any=1
+		printf '{"index":%s,"key":' "$_ks_x"
+		_kb_jq "$_ks_k"
+		printf ',"old":'
+		_kb_jq "$_ks_s|$_ks_t"
+		printf '}'
+	done
+	printf ']'
+}
+
+_kb_in_list() {
+	case "
+$_KB_LIST
+" in
+		*"
+$1
+"*) return 0 ;;
+	esac
+	return 1
+}
+
+_kb_list_load() {
+	_KB_LIST=""
+	[ -f "$1" ] && _KB_LIST=$(tr -d '\r' < "$1" 2>/dev/null)
+}
+
+_kb_known() {
+	eval "_kk_k=\$_kb_k$1; _kk_g=\$_kb_gm$1"
+	_kb_in_list "$_kk_k" && return 0
+	[ -n "$_kk_g" ] || _kk_g="$1"
+	for _kk_j in $_kk_g; do
+		eval "_kk_o=\"\$_kb_s$_kk_j|\$_kb_t$_kk_j\""
+		_kb_in_list "$_kk_o" || return 1
+	done
+	return 0
+}
+
+_kb_unseen() {
+	_ku_first=0
+	[ -f "$1" ] || _ku_first=1
+	_kb_list_load "$1"
+	printf '{"first":%s,"sms":[' "$_ku_first"
+	_ku_i=1; _ku_any=0
+	while [ "$_ku_i" -le "$_kb_n" ]; do
+		eval "_ku_g=\$_kb_g$_ku_i"
+		if [ -n "$_ku_g" ] && ! _kb_known "$_ku_i"; then
+			eval "_ku_k=\$_kb_k$_ku_i; _ku_s=\$_kb_s$_ku_i; _ku_t=\$_kb_t$_ku_i; _ku_o=\$_kb_o$_ku_i; _ku_m=\$_kb_gm$_ku_i"
+			if [ -n "$_ku_m" ]; then
+				eval "_ku_c=\$_kb_gt$_ku_i; _ku_h=\$_kb_gh$_ku_i; _ku_t=\$_kb_gf$_ku_i"
+			else
+				eval "_ku_c=\$_kb_c$_ku_i"
+				_ku_h=1; _ku_o=1
+			fi
+			_ku_c=$(printf '%s' "$_ku_c" | utf8_fix)
+			[ "$_ku_any" = 0 ] || printf ','
+			_ku_any=1
+			printf '{"sender":%s,"time":%s,"text":%s,"key":%s,"have":%s,"total":%s}' \
+				"$(_nd_jesc "$_ku_s")" "$(_nd_jesc "$_ku_t")" "$(_nd_jesc "$_ku_c")" \
+				"$(_nd_jesc "$_ku_k")" "$_ku_h" "$_ku_o"
+		fi
+		_ku_i=$((_ku_i + 1))
+	done
+	printf ']}\n'
+}
+
+_kb_out() {
+	if [ "$BOX" = unseen ]; then
+		[ -n "$1" ] || return 0
+		_kb_feed_json "$1"
+		_kb_build
+		if [ "$UL" = tg ]; then _tg_migrate; _kb_unseen "$(_tg_file)"; else _kb_unseen "$(_seen_file)"; fi
+		return 0
+	fi
+	_ko_j="$1"
+	while :; do
+		case "$_ko_j" in *[[:space:]]) _ko_j=${_ko_j%?} ;; *) break ;; esac
+	done
+	case "$_ko_j" in
+		*'}')
+			_kb_feed_json "$1"
+			_kb_build
+			if [ "$_kb_n" -gt 0 ]; then
+				printf '%s,' "${_ko_j%\}}"
+				_kb_side
+				printf '}\n'
+				return 0
+			fi ;;
+	esac
+	[ -n "$1" ] && printf '%s\n' "$1"
+	return 0
+}
+
 case "$1" in
 	newdump)
 		# НЕПРОЧИТАННЫЕ ВХОДЯЩИЕ В JSON для внешних программ (файл-зеркало
@@ -152,6 +414,7 @@ case "$1" in
 			# (тогда его входящие задвоились бы под чужим именем).
 			_nd_sec="m_$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')"
 			if [ "$(uci -q get "$CFG.$_nd_sec.kind")" != "hilink" ]; then
+				bg_at_off "$_nd_p" && continue
 				"$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_nd_p\"].tty[0]" -e "@[@.path=\"$_nd_p\"].wdm[0]" 2>/dev/null | grep -q . || continue
 			fi
 			# Порт: у активного - настроенный readport (выбран не мешать метрикам),
@@ -161,9 +424,10 @@ case "$1" in
 			else
 				_nd_port=$(uci -q get "$CFG.$_nd_sec.at_port")
 			fi
-			_nd_recv=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" recv "$_nd_store" "$_nd_port" 2>/dev/null)
+			_nd_recv=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" unseen seen "$_nd_store" "$_nd_port" 2>/dev/null)
 			[ -n "$_nd_recv" ] || continue
-			_nd_seen_j=$(SMS_MODEM="$_nd_p" "$RES/smsbridge.sh" seen 2>/dev/null)
+			_nd_gn=$(printf '%s' "$_nd_recv" | jsonfilter -e '@.sms[*].have' 2>/dev/null | wc -l)
+			case "$_nd_gn" in ''|*[!0-9]*) continue ;; esac
 			# ПЕРВАЯ ВСТРЕЧА С МОДЕМОМ (seen пуст - после перепрошивки / чистой
 			# установки). Его сообщения могли прийти давно и быть прочитаны; отдавать
 			# их как новые (конвертик/счётчик) - враньё. Молча помечаем ТЕКУЩИЕ
@@ -172,39 +436,23 @@ case "$1" in
 			# аргументы seen-add они бы разъехались. tgnotify со своим окном
 			# отрабатывает РАНЬШЕ newdump в цикле, поэтому при включённом боте недавние
 			# он уже разослал и файл создал - сюда попадаем только когда бота нет.
-			if [ "$(printf '%s' "$_nd_seen_j" | jsonfilter -e '@.first' 2>/dev/null)" = "1" ]; then
+			if [ "$(printf '%s' "$_nd_recv" | jsonfilter -e '@.first' 2>/dev/null)" = "1" ]; then
 				mkdir -p "$SEEN_DIR" 2>/dev/null
-				for _nd_i in $(printf '%s' "$_nd_recv" | jsonfilter -e '@.msg[*].index' 2>/dev/null); do
-					printf '%s|%s\n' \
-						"$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].sender" 2>/dev/null)" \
-						"$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].timestamp" 2>/dev/null)"
+				_nd_g=0
+				while [ "$_nd_g" -lt "$_nd_gn" ]; do
+					printf '%s\n' "$(printf '%s' "$_nd_recv" | jsonfilter -e "@.sms[$_nd_g].key" 2>/dev/null)"
+					_nd_g=$((_nd_g + 1))
 				done | sort -u > "$SEEN_DIR/sms_seen.$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')" 2>/dev/null
 				continue
 			fi
-			_nd_seen=$(printf '%s' "$_nd_seen_j" | jsonfilter -e '@.keys[*]' 2>/dev/null)
-			_nd_idx=$(printf '%s' "$_nd_recv" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
-			_nd_done=""
-			for _nd_i in $_nd_idx; do
-				_nd_s=$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].sender" 2>/dev/null)
-				_nd_t=$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_i].timestamp" 2>/dev/null)
-				_nd_key="$_nd_s|$_nd_t"
-				# уже видели (страница/Telegram)? уже вывели этот ключ (мультипарт-
-				# SMS = несколько частей с ОДНИМ ключом)? - пропускаем.
-				printf '%s\n' "$_nd_seen" | grep -qxF "$_nd_key" && continue
-				printf '%s\n' "$_nd_done" | grep -qxF "$_nd_key" && continue
-				_nd_done="$_nd_done$_nd_key
-"
-				# Склеиваем текст ВСЕХ частей с этим ключом по порядку - иначе
-				# длинная SMS пришла бы обрезанной до первой части.
-				_nd_c=""
-				for _nd_j in $_nd_idx; do
-					[ "$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].sender" 2>/dev/null)|$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].timestamp" 2>/dev/null)" = "$_nd_key" ] || continue
-					_nd_c="$_nd_c$(printf '%s' "$_nd_recv" | jsonfilter -e "@.msg[@.index=$_nd_j].content" 2>/dev/null)"
-				done
-				# Ещё раз чиним кодировку по СКЛЕЕННОМУ тексту: мусор sms_tool
-				# ("ÿffffHH") мог быть разорван границей части мультипарта, и склейка
-				# собрала его заново - по частям utf8_fix его тогда не увидел.
-				_nd_c=$(printf '%s' "$_nd_c" | utf8_fix)
+			_nd_g=0
+			while [ "$_nd_g" -lt "$_nd_gn" ]; do
+				_nd_s=""; _nd_t=""; _nd_c=""; _nd_key=""
+				eval "$(printf '%s' "$_nd_recv" | jsonfilter -e "_nd_s=@.sms[$_nd_g].sender" \
+					-e "_nd_t=@.sms[$_nd_g].time" -e "_nd_c=@.sms[$_nd_g].text" \
+					-e "_nd_key=@.sms[$_nd_g].key" 2>/dev/null)"
+				_nd_g=$((_nd_g + 1))
+				[ -n "$_nd_key" ] || continue
 				[ -n "$_nd_out" ] && _nd_out="$_nd_out,"
 				_nd_out="$_nd_out{\"modem\":$(_nd_jesc "$_nd_p"),\"sender\":$(_nd_jesc "$_nd_s"),\"time\":$(_nd_jesc "$_nd_t"),\"text\":$(_nd_jesc "$_nd_c"),\"key\":$(_nd_jesc "$_nd_key")}"
 				_nd_cnt=$((_nd_cnt + 1))
@@ -235,8 +483,8 @@ case "$1" in
 			_nco_sf="$SEEN_DIR/sms_seen.$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 			printf '%s' "$_nc_j" | jsonfilter -e "@.sms[@.modem=\"$1\"].key" 2>/dev/null \
 				| awk -v sf="$_nco_sf" '
-					BEGIN { while ((getline l < sf) > 0) if (l != "") seen[l] = 1 }
-					$0 != "" && !($0 in seen) { c++ }
+					BEGIN { while ((getline l < sf) > 0) { sub(/\r$/, "", l); if (l != "") seen[l] = 1 } }
+					$0 != "" && !($0 in seen) { k = $0; sub(/\|[^|]*$/, "", k); if (!(k in seen)) c++ }
 					END { print c + 0 }'
 		}
 		if [ -n "$_nc_for" ]; then
@@ -276,18 +524,16 @@ case "$1" in
 	seen-add)
 		shift
 		[ -n "$1" ] || { echo '{"success":true}'; exit 0; }
-		mkdir -p "$SEEN_DIR" 2>/dev/null
-		_sf=$(_seen_file)
-		for _k in "$@"; do
-			[ -n "$_k" ] || continue
-			grep -qxF "$_k" "$_sf" 2>/dev/null || echo "$_k" >> "$_sf"
-		done
+		_list_add "$(_seen_file)" "$@"
 		# ХВОСТ ОБРЕЗАЕМ. Файл лежит во флеш-памяти и растёт с каждым новым
 		# сообщением; помнить нужно ровно столько, сколько модем способен
 		# хранить, дальше отметка бесполезна.
-		if [ "$(wc -l 2>/dev/null < "$_sf" || echo 0)" -gt "$SEEN_MAX" ]; then
-			tail -n "$SEEN_MAX" "$_sf" > "$_sf.tmp" 2>/dev/null && mv "$_sf.tmp" "$_sf"
-		fi
+		echo '{"success":true}'
+		exit 0 ;;
+	tg-add)
+		shift
+		_tg_migrate
+		_list_add "$(_tg_file)" "$@"
 		echo '{"success":true}'
 		exit 0 ;;
 	seen-reset)
@@ -570,7 +816,7 @@ _send_pdu() {   # $1 - порт, $2 - номер, $3 - текст
 		[ "$_sp_rc" = 0 ] || break
 		stty -F "$_sp_port" 115200 raw -echo 2>/dev/null
 		_sp_ans=""
-		if exec 3<>"$_sp_port" 2>/dev/null; then
+		if command exec 3<>"$_sp_port" 2>/dev/null; then
 			printf 'AT+CMGF=0\r' >&3
 			sleep 1
 			printf 'AT+%s=%s\r' "$_sp_cmd" "$_sp_len" >&3
@@ -616,6 +862,7 @@ case "$BOX" in
 	delete) DEL="$2"; STORE="$3"; PORT="$4" ;;
 	send)   SND_TO="$2"; SND_TXT="$3"; PORT="$4" ;;
 	queue-run|queue-list) PORT="${2:-$(uci -q get "$CFG.sms.sendport")}" ;;
+	unseen) UL="$2"; STORE="$3"; PORT="$4" ;;
 	*)      STORE="$2"; PORT="$3" ;;
 esac
 
@@ -656,7 +903,7 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 		# Путь передаём ВСЕГДА: без него удаление и отправка уходили активному
 		# модему, то есть чужой симке (аудит 12.09.2026).
 		send)   "$RES/hilink.sh" smssend "$SND_TO" "$SND_TXT" "$_TGT_PATH" ;;
-		*)    "$RES/hilink.sh" smsread in "$_TGT_PATH" ;;
+		*)    _kb_out "$("$RES/hilink.sh" smsread in "$_TGT_PATH")" ;;
 	esac
 	exit 0
 fi
@@ -689,6 +936,7 @@ fi
 # РЕЗУЛЬТАТ ЗАПОМИНАЕМ. По неудаче at_lock НИЧЕГО не выставляет (_AT_LOCK_HELD
 # остаётся пустым), поэтому судить о занятости порта по этой переменной нельзя -
 # ветка send ниже так и не срабатывала (аудит 12.09.2026).
+_AT_INH="$_AT_LOCK_HELD"
 at_lock "$PORT" 15; _AT_LOCKED=$?
 
 # СЧЁТЧИК ПРИ ЗАНЯТОМ ПОРТУ - ИЗ ПОСЛЕДНЕГО ОТВЕТА, А НЕ ИЗ МОДЕМА. Правило
@@ -931,6 +1179,9 @@ _arch_json() {
 		[ -f "$_ajd/$_ajf" ] || continue
 		_arch_read "$_ajd/$_ajf"
 		_arch_index "${_ajf%%.*}" "${_ajf#*.}"
+		_aj_h=""
+		case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _aj_h=${_ajf#*.} ;; esac
+		_kb_put "$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_aj_h"
 		json_add_object ""
 		json_add_int index "$_A_IDX"
 		json_add_string sender "$_A_FROM"
@@ -946,6 +1197,20 @@ _arch_json() {
 				json_add_int total "$_A_TOTAL"
 				json_add_int reference "${_A_REF:-0}" ;;
 		esac
+		json_close_object
+	done
+	json_close_array
+	_kb_build
+	json_add_array keys
+	_aj_i=1
+	while [ "$_aj_i" -le "$_kb_n" ]; do
+		eval "_aj_x=\$_kb_x$_aj_i; _aj_k=\$_kb_k$_aj_i; _aj_o=\"\$_kb_s$_aj_i|\$_kb_t$_aj_i\""
+		_aj_i=$((_aj_i + 1))
+		[ -n "$_aj_k" ] || continue
+		json_add_object ""
+		json_add_int index "$_aj_x"
+		json_add_string key "$_aj_k"
+		json_add_string old "$_aj_o"
 		json_close_object
 	done
 	json_close_array
@@ -1070,7 +1335,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 	_ap_sf=$(_seen_file)
 	_ap_df=$(sms_cmd_done_file "$_TGT_PATH")
 
-	_ap_i=0; _ap_del=0; _ap_stuck=0; _ap_late_n=0
+	_ap_i=0; _ap_del=0; _ap_stuck=0; _ap_late_n=0; _ap_kb=0
 	while [ "$_ap_i" -lt "$_apn" ]; do
 		_ap_x=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].index" 2>/dev/null)
 		_ap_s=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].sender" 2>/dev/null)
@@ -1104,8 +1369,22 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 		[ -n "$(find "$_ap_have" -mmin +"$ARCH_GRACE_MIN" 2>/dev/null)" ] && _ap_late=1
 
 		# 2) бот уже доставил?
-		if [ "$_ap_tg" = "1" ] && [ "$_ap_late" = 0 ] \
-		   && ! grep -qxF "$_ap_s|$_ap_t" "$_ap_sf" 2>/dev/null; then
+		_ap_wait=0
+		if [ "$_ap_tg" = "1" ] && [ "$_ap_late" = 0 ]; then
+			if [ "$_ap_kb" = 0 ]; then
+				_kb_n=0
+				_kb_feed_arch
+				_kb_build
+				_tg_migrate
+				_kb_list_load "$(_tg_file)"
+				_ap_kb=1
+			fi
+			_ap_fn=${_ap_have##*/}; _ap_fn=${_ap_fn%%.*}
+			_ap_kn=""
+			case "$_ap_fn" in ''|*[!0-9]*) ;; *) eval "_ap_kn=\$_kb_ix$_ap_fn" ;; esac
+			{ [ -n "$_ap_kn" ] && _kb_known "$_ap_kn"; } || _ap_wait=1
+		fi
+		if [ "$_ap_wait" = 1 ]; then
 			_ap_stuck=$((_ap_stuck + 1))
 			_ap_why "$_ap_x" "ждём отправки в Telegram (крайний срок ${ARCH_GRACE_MIN} мин)"
 			continue
@@ -1165,7 +1444,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 # Стоит ПОД замком порта, платит двумя AT-обменами один раз за загрузку, и
 # правит настройку по факту - страница читает оттуда, куда модем реально кладёт.
 case "$BOX" in
-recv|sent|status|dump|archive-run|archive-why)
+recv|unseen|sent|status|dump|archive-run|archive-why)
 	# ТОЛЬКО ДЛЯ АКТИВНОГО МОДЕМА. Ключ storage - ОДИН на конфиг, а бот обходит
 	# ВСЕ модемы (SMS_MODEM=<путь>): без этой проверки круг бота по соседнему
 	# модему переписал бы настройку активного его хранилищем.
@@ -1414,8 +1693,18 @@ case "$BOX" in
 	*)
 		if _arch_on; then
 			_arch_merge "$(_arch_live_json)"
+			if [ "$BOX" = unseen ]; then
+				[ -n "$_AT_INH" ] || at_unlock
+				_kb_feed_arch
+				_kb_build
+				if [ "$UL" = tg ]; then _tg_migrate; _kb_unseen "$(_tg_file)"; else _kb_unseen "$(_seen_file)"; fi
+				exit 0
+			fi
 			_arch_json
 			exit 0
 		fi
-		_sms_run 45 $(_smstool) "$@" recv | utf8_fix; exit $? ;;
+		_rv_j=$(_sms_run 45 $(_smstool) "$@" recv | utf8_fix)
+		[ -n "$_AT_INH" ] || at_unlock
+		_kb_out "$_rv_j"
+		exit 0 ;;
 esac

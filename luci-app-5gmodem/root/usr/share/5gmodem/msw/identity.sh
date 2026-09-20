@@ -185,6 +185,8 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 		# заново найдёт resolve. Остальное (kind/netdev/at_debug/network) - нет.
 		uci -q delete "$CFG.$2.at_port" 2>/dev/null
 		uci -q delete "$CFG.$2.data_at_port" 2>/dev/null
+		uci -q delete "$CFG.$2.at_if" 2>/dev/null
+		uci -q delete "$CFG.$2.ident_probe" 2>/dev/null
 		uci -q commit "$CFG"
 		return 0
 	fi
@@ -258,7 +260,7 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
 	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2 \
 	         model_vp apn_plmn apn_imsi band_full save_band save_band5gnsa save_band5gsa save_mode \
-	         no_at mm_at mm_at_if mm_at_vp; do
+	         no_at mm_at mm_at_if mm_at_vp at_if ident_probe; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
 	uci -q set "$CFG.$2.vidpid=$_new"
@@ -302,6 +304,23 @@ modem_imei() {   # $1 - usb-путь
 	# Помним не только время, но и СПИСОК ПОРТОВ: появились новые - пробуем
 	# снова немедленно, не дожидаясь конца TTL (порты у модема как раз и
 	# появляются позже самого устройства).
+	_mi_mm=$(mm_index_for_path "$1")
+	if [ -n "$_mi_mm" ]; then
+		_mi=$(mmk_imei "$(mmcli -m "$_mi_mm" -K 2>/dev/null)")
+		[ -n "$_mi" ] && { echo "$_mi"; return 0; }
+	fi
+	_mi_sec=$(secname "$1")
+	if command -v mm_at_fragile >/dev/null 2>&1 && [ -n "$(mm_at_fragile "$(modem_vidpid "$1")")" ] \
+	   && { [ -n "$_mi_mm" ] || [ "$(uci -q get "network.$(uci -q get "$CFG.$_mi_sec.network").proto" 2>/dev/null)" = "modemmanager" ]; }; then
+		mm_at_allowed "$1" "$_mi_sec" || return 1
+		if [ -n "$MM_AT_PORT" ]; then
+			at_lock "$MM_AT_PORT" 8 2>/dev/null || return 1
+			_mi=$(at_query "$MM_AT_PORT" "AT+CGSN" 6 | grep -oE '^[0-9]{14,16}$' | head -1)
+			at_unlock 2>/dev/null
+			[ -n "$_mi" ] && { echo "$_mi"; return 0; }
+			return 1
+		fi
+	fi
 	_mi_nc="/tmp/5gmodem_imei_none_$(snap_key "$1")"
 	_mi_now=$(uptime_s)
 	_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \

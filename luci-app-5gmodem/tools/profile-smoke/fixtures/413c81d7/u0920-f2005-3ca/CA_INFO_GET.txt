@@ -1,0 +1,4 @@
+## user report 20.09.2026, DW5821e 413c:81d7, fw T77W968.F2.0.0.0.5.GC.001
+PCC info: Band is LTE_B1, Band_width is 10.0 MHz
+SCC1 info: Band is LTE_B3, Band_width is 15.0 MHz
+SCC2 info: Band is LTE_B8, Band_width is 5.0 MHz

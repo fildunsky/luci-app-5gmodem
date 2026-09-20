@@ -180,7 +180,7 @@ T2=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "}')
 
 	if [ -n "$T4" ]; then
 		PBAND="$(band4g $T "") @$T4 MHz"
-		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $2}')
+		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {gsub(/ /,"",$2); print $2}')
 		EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $3}')
 	fi
 
@@ -225,7 +225,7 @@ if [[ "$MODE" != *"LTE-A"* ]]; then
 
 	if [ -n "$T4" ]; then
 		PBAND="$(band4g $T "") @$T4 MHz"
-		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $2}')
+		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {gsub(/ /,"",$2); print $2}')
 		EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $3}')
 	fi
   fi

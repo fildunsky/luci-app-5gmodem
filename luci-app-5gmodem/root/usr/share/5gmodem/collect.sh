@@ -617,15 +617,16 @@ qmi_format_verdict() {
 # таблица inet modem5g_ttl и счётчики попаданий. Ноль пакетов при включённой
 # подмене - тоже улика (правило есть, но трафик мимо него).
 ttl_verdict() {
-	_t_on=$(uci -q get 5gmodem.@5gmodem[0].show_ttl)
 	_t_in=$(uci -q get 5gmodem.@5gmodem[0].ttl4in)
 	_t_out=$(uci -q get 5gmodem.@5gmodem[0].ttl4out)
-	if [ "$_t_on" != "1" ] || { [ -z "$_t_in" ] && [ -z "$_t_out" ]; }; then
+	_t_in6=$(uci -q get 5gmodem.@5gmodem[0].ttl6in)
+	_t_out6=$(uci -q get 5gmodem.@5gmodem[0].ttl6out)
+	if [ -z "$_t_in$_t_out$_t_in6$_t_out6" ]; then
 		echo "TTL override is disabled in the settings - this section does not apply"
 		echo "  (if the carrier throttles tethering, turning it on is worth a try: Network -> Modem -> TTL)"
 		return 0
 	fi
-	echo "in the settings: in=${_t_in:-—} out=${_t_out:-—}"
+	echo "in the settings: in=${_t_in:-—} out=${_t_out:-—} (IPv6: in=${_t_in6:-—} out=${_t_out6:-—})"
 	if ! command -v nft >/dev/null 2>&1; then
 		echo "  nft is not in the image - no way to check the live rules"
 		return 0
@@ -637,6 +638,13 @@ ttl_verdict() {
 		echo "  there is NO inet modem5g_ttl table - the override is enabled but NOT APPLIED."
 		echo "  That is the cause if the carrier blocks tethering: the rules are"
 		echo "  created by /usr/share/5gmodem/ttl.sh - check logread for its errors."
+	fi
+	if nft list table netdev modem5g_ttl_dev >/dev/null 2>&1; then
+		echo "  the netdev modem5g_ttl_dev table (covers flow-offloaded connections) IS CREATED:"
+		nft list table netdev modem5g_ttl_dev 2>/dev/null | grep -E "hook|packets" | head -8
+	elif [ "$(uci -q get firewall.@defaults[0].flow_offloading)" = 1 ]; then
+		echo "  there is NO netdev modem5g_ttl_dev table while flow offloading is ON:"
+		echo "  accelerated connections bypass the rules above and keep the original TTL."
 	fi
 }
 
@@ -1395,6 +1403,10 @@ radio_verdict() {   # $1 - АТ-порт
 	fi
 	_rv=$(at_query "$1" "AT+CFUN?" 6 \
 		| sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' | head -1)
+	if [ -z "$_rv" ] && [ -s "$SESS" ]; then
+		_rv=$(sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' "$SESS" 2>/dev/null | head -1)
+		[ -n "$_rv" ] && echo "(the repeated AT+CFUN? got no answer - the port was busy; the value below is the one from the 'AT AT+CFUN?' section above)"
+	fi
 	case "$_rv" in
 		1)  echo "CFUN=1 - the radio is on (normal)" ;;
 		0)  echo "CFUN=0 - THE RADIO IS OFF: no protocol will bring the connection up"
@@ -1508,10 +1520,8 @@ at_conn_verdict() {   # $1 - AT-порт
 				# ИСПРАВНЫЙ СЛУЧАЙ НАЗЫВАЕМ ИСПРАВНЫМ. Раздел спрашивает «почему не
 				# подключается», и на живом соединении он не должен выдумывать
 				# проблему - иначе разбор уходит искать несуществующее.
-				_ac_if=$(uci -q get 5gmodem.@5gmodem[0].network)
-				_ac_up=""
-				[ -n "$_ac_if" ] && _ac_up=$(ubus call "network.interface.$_ac_if" status 2>/dev/null \
-					| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+				_ac_if="$_ac_ifn"
+				_ac_up="$_ac_ifip"
 				if [ -n "$_ac_up" ]; then
 					# ДОЗВОН УДАЛСЯ - НО ЭТО ЕЩЁ НЕ ИНТЕРНЕТ. Раздел закрывал вопрос
 					# словами «всё работает» даже тогда, когда общий вердикт вверху
@@ -1672,7 +1682,7 @@ mm_fail_verdict() {   # $1 - АТ-порт (для модемов вне MM)
 				# QMI-композиции ничего не шлёт - берём свой скрипт пакета (его же
 				# ссылкой ставит uci-defaults 46-5gmodem-fcc-unlock.sh).
 				case "$_mf_vid:$_mf_pid" in
-					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4)
+					413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4)
 						[ -x /usr/share/5gmodem/fcc-unlock.sh ] && { _mf_av=/usr/share/5gmodem; _mf_script=fcc-unlock.sh; } ;;
 				esac
 				if [ -e "$_mf_en/$_mf_vid:$_mf_pid" ]; then
@@ -1713,6 +1723,29 @@ fcclock_verdict() {   # $1 - АТ-порт
 	echo ""
 	echo "----- FCC lock (verdict) -----"
 	[ -n "$1" ] || { echo "no AT port - nothing to check with"; return; }
+	_fl_up=$(tty_usbpath "$1" 2>/dev/null)
+	_fl_vp=""
+	[ -n "$_fl_up" ] && _fl_vp="$(cat "/sys/bus/usb/devices/$_fl_up/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_fl_up/idProduct" 2>/dev/null)"
+	case "$_fl_vp" in
+		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4)
+			echo "Dell DW5821e / Foxconn T77W968 ($_fl_vp): this family DOES have an FCC lock, but it"
+			echo "cannot be read over AT - it is lifted with the QMI command 'Foxconn set FCC"
+			echo "authentication', and a locked module keeps the radio off (CFUN is not 1)."
+			_fl_cf=$(sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' "$SESS" 2>/dev/null | head -1)
+			case "$_fl_cf" in
+				1)  echo "CFUN=1 right now - the radio is on, so the lock is not what holds the modem back." ;;
+				'') echo "CFUN is unknown in this report - the lock state cannot be judged from here." ;;
+				*)  echo "CFUN=$_fl_cf right now - the radio is NOT on; an FCC lock is one of the possible causes." ;;
+			esac
+			echo "The app sends the unlock by itself (fcc-unlock.sh); its lines in the log:"
+			_fl_lg=$(logread 2>/dev/null | grep "5gmodem.*fcc:" | tail -5)
+			if [ -n "$_fl_lg" ]; then
+				printf '%s\n' "$_fl_lg" | sed 's/^/  /'
+			else
+				echo "  (none - the unlock was neither needed nor attempted since the log began)"
+			fi
+			return ;;
+	esac
 	_fl=$(at_query "$1" "AT+GTFCCLOCKMODE?;+GTFCCLOCKSTATE?;+GTFCCEFFSTATUS?" 8)
 	_flm=$(printf '%s' "$_fl" | sed -n 's/.*+GTFCCLOCKMODE: *\([0-9]*\).*/\1/p' | head -1)
 	_fls=$(printf '%s' "$_fl" | sed -n 's/.*+GTFCCLOCKSTATE: *\([0-9]*\).*/\1/p' | head -1)
@@ -1771,7 +1804,7 @@ sierra_image_verdict() {   # $1 - АТ-порт
 	# vid:pid не нужен: вердикт и так строится ПО ОТВЕТУ, а не по вендору.
 	_si=$(at_query "$1" "AT!IMPREF?" 8)
 	case "$_si" in
-		*IMPREF*) ;;
+		*'!IMPREF:'*|*preferred*) ;;
 		*) return 0 ;;   # не Sierra (или команда не поддержана) - молчим
 	esac
 	echo ""
@@ -1855,13 +1888,26 @@ collect() {
 # порт: сводка не должна ни задерживать отчёт, ни мешать модему.
 _sum_verdict() {
 	# несём ли трафик
-	_sv_def=$(ip -4 route show default 2>/dev/null | head -1)
 	_sv_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 	_sv_ip=""
 	[ -n "$_sv_if" ] && _sv_ip=$(ubus call "network.interface.$_sv_if" status 2>/dev/null \
 		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
 	[ -n "$_sv_ip" ] || _sv_ip=$(ubus call "network.interface.${_sv_if}_4" status 2>/dev/null \
 		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	_sv_pend=""; _sv_w=0
+	while [ -z "$_sv_ip" ] && [ -n "$_sv_if" ] && [ "$_sv_w" -lt 20 ]; do
+		case "$(ubus call "network.interface.$_sv_if" status 2>/dev/null)" in
+			*'"pending": true'*) _sv_pend=1 ;;
+			*'"up": true'*) [ -n "$_sv_pend" ] || break ;;
+			*) break ;;
+		esac
+		sleep 1; _sv_w=$((_sv_w + 1))
+		_sv_ip=$(ubus call "network.interface.$_sv_if" status 2>/dev/null \
+			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		[ -n "$_sv_ip" ] || _sv_ip=$(ubus call "network.interface.${_sv_if}_4" status 2>/dev/null \
+			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	done
+	_sv_def=$(ip -4 route show default 2>/dev/null | head -1)
 	# модем на шине?
 	_sv_mod=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[0].model' 2>/dev/null)
 	if [ -z "$_sv_mod" ]; then
@@ -1885,6 +1931,13 @@ _sum_verdict() {
 			echo "The modem has NO DATA CHANNEL:$_sv_bad - neither cdc-wdm nor a network"
 			echo "device. There will be no address until the channel comes back: there is"
 			echo "nothing for the protocol to attach to. See 'AT port present, data channel missing'."
+			return
+		fi
+		if [ -n "$_sv_pend" ]; then
+			echo "The modem was found; the interface is being dialled RIGHT NOW (netifd: pending)"
+			echo "and had no address after ${_sv_w}s of waiting - the report caught it mid-connection."
+			echo "If 'Modem interfaces' or 'Routes' below show an address, the dial succeeded later;"
+			echo "otherwise see 'Why the modem does not connect' and the netifd log."
 			return
 		fi
 		echo "The modem was found, but it HAS NO ADDRESS - the connection never came up."
@@ -2374,6 +2427,7 @@ start)
 	( report 2>&1 | tr -d '\000' > "$OUT"; rm -f "$LOCK" ) >/dev/null 2>&1 </dev/null &
 	echo $! > "$LOCK"
 	echo '{"state":"running"}'
+	sleep 1
 	;;
 status)
 	if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then

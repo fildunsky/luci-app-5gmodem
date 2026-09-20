@@ -1,0 +1,4 @@
+. "$RES/modem/usb/413c81d7"
+case "$MODEL" in
+	"Telit Telit "*) MODEL="${MODEL#Telit }" ;;
+esac

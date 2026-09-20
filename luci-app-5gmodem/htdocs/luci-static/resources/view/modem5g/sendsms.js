@@ -317,25 +317,28 @@ return view.extend({
 						   ReferenceError ещё до первого сообщения, причём синхронно -
 						   то есть мимо .finally(), и кнопка «Отправить» навсегда
 						   оставалась заблокированной и крутящейся (аудит 12.09.2026). */
-    						let phone, log = '';
+    						let log = '';
+							let out = document.querySelector('.smscommand-output');
+							out.style.display = '';
+							let chain = Promise.resolve();
 
-							for (let i = 0; i < xs.length; i++) {
-  								(function(i) {
-    								setTimeout(function() {
-		    						phone = xs[i].code;
-
-									let out = document.querySelector('.smscommand-output');
-									out.style.display = '';
-
-									fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'send', phone, get_smstxt, port ]);
-
-									log += (i+1)+'/'+xs.length+' * '+_('[Bot] Message sent to number:') + ' ' + phone +'\n';
-
-									dom.content(out, [ log ]);
-
-									}, dx * i);
-								})(i);
-							}
+							xs.forEach(function(ent, i) {
+								chain = chain.then(function() {
+									return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'send', ent.code, get_smstxt, port ]), null)
+										.then(function(r) {
+											let t = String(r == null ? '' : r).trim();
+											let line = /^sms sent sucessfully/.test(t)
+												? _('[Bot] Message sent to number:') + ' ' + ent.code
+												: ent.code + ': ' + (t || _('Error'));
+											log += (i+1)+'/'+xs.length+' * '+ line +'\n';
+											dom.content(out, [ log ]);
+											if (dx > 0 && i < xs.length - 1) {
+												return new Promise(function(resolve) { setTimeout(resolve, dx); });
+											}
+										});
+								});
+							});
+							return chain;
 				    }
 			    }
 		    }
@@ -505,7 +508,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
@@ -513,7 +515,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ► ' ])
 											])

@@ -16,7 +16,7 @@
 # ВЫБРАННОЙ вкладки, а не полагается на active_modem; см. 5gmodem.sh cached).
 # Только для чтения: у пишущих вербов второй аргумент занят значением.
 case "$1" in
-	json|jsonrefresh|mgmtinfo|getmode|getsupportedmodes|getcelllock)
+	json|jsonrefresh|mgmtinfo|getmode|getsupportedmodes|getcelllock|applyresult)
 		case "$2" in
 			'') : ;;
 			*[!0-9.:_-]*) : ;;
@@ -594,6 +594,28 @@ _celllock_effective() {
 	printf '%s\n' "$_cle_now"
 }
 
+_celllock_remembered() {
+	_clr_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
+	[ -n "$_clr_sec" ] || { echo "Unsupported"; return 0; }
+	_clr_v=$(uci -q get "5gmodem.m_$_clr_sec.celllock")
+	case "$_clr_v" in
+		arfcn\ *|cell\ *) printf '%s remembered\n' "$_clr_v" ;;
+		*) if [ "$_CELLLOCK_WRITEONLY" = "1" ]; then echo "off unlockable"; else echo "Unsupported"; fi ;;
+	esac
+}
+
+_live_or_unsupported() {
+	if [ "$_PORT_OK" = "1" ]; then "$@"; else echo "Unsupported"; fi
+}
+
+_ri_cereg() {
+	if command -v at_query >/dev/null 2>&1; then
+		at_query "$_DEVICE" "AT+CEREG?" 5 3 2>/dev/null
+	else
+		sms_tool -d "$_DEVICE" at "AT+CEREG?" 2>/dev/null
+	fi
+}
+
 _reconnect_iface() {
 	_ri_sec=$(active_modem | sed 's/[^A-Za-z0-9]/_/g')
 	[ -n "$_ri_sec" ] || return
@@ -606,13 +628,18 @@ _reconnect_iface() {
 	# Ждём именно РЕГИСТРАЦИИ: поднять интерфейс раньше - значит получить отказ
 	# и уйти в паузу netifd, то есть сделать хуже, чем ничего.
 	_ri_n=0
+	_ri_t0=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	case "$_ri_t0" in ''|*[!0-9]*) _ri_t0=0 ;; esac
 	while [ "$_ri_n" -lt 40 ]; do
-		case "$(sms_tool -d $_DEVICE at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
+		case "$(_ri_cereg | tr -d '\r' \
 			| sed -n 's/^+CEREG: *//p' | cut -d, -f2)" in
 			1|5) break ;;
 		esac
 		sleep 2
 		_ri_n=$((_ri_n + 1))
+		_ri_t1=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+		case "$_ri_t1" in ''|*[!0-9]*) _ri_t1="$_ri_t0" ;; esac
+		[ "$((_ri_t1 - _ri_t0))" -ge 80 ] && break
 	done
 	# ПРИЦЕЛЬНЫЙ подъём через ubus, а НЕ `ifup`.
 	#
@@ -661,6 +688,10 @@ _bands_after_write() {
 # "Unsupported" - не умеем спросить (строка скрыта) | "on" | "off"
 getcaenabled() {
 	echo "Unsupported"
+}
+
+setcaenabled() {
+	echo "Unsupported"; return 1
 }
 
 # --- 256QAM в нисходящем канале ----------------------------------------------
@@ -796,6 +827,73 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	exit 0
 fi
 
+_sa_resfile() {
+	printf '/tmp/5gmodem_bandapply_%s.res\n' "$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+}
+_sa_islist() {
+	case "$1" in
+		default) return 0 ;;
+		''|*[!0-9\ ]*) return 1 ;;
+	esac
+	case "$1" in *[0-9]*) return 0 ;; esac
+	return 1
+}
+_sa_bad() {
+	logger -t 5gmodem "bands: invalid setall argument - rejected"
+	echo "bad arguments"
+	exit 2
+}
+_sa_res_write() {
+	_srw_f=$(_sa_resfile)
+	if [ "$1" != "running" ]; then
+		case "$(cat "$_srw_f" 2>/dev/null)" in
+			*"\"id\":\"$_SA_ID\""*) : ;;
+			*) return 0 ;;
+		esac
+	fi
+	printf '{"id":"%s","state":"%s","takeover":%s,"applied":[%s],"failed":[%s]}\n' \
+		"$_SA_ID" "$1" "${_SA_TAKEOVER:-0}" "$_SA_OKJ" "$_SA_FAILJ" > "$_srw_f.tmp" 2>/dev/null \
+		&& mv "$_srw_f.tmp" "$_srw_f" 2>/dev/null
+}
+_sa_fail_add() {
+	_SA_FAILJ="${_SA_FAILJ}${_SA_FAILJ:+,}{\"what\":\"$1\",\"why\":\"$2\",\"arg\":\"$3\"}"
+}
+if [ "$1" = "applyresult" ]; then
+	_ar_f=$(_sa_resfile)
+	if [ -s "$_ar_f" ]; then cat "$_ar_f"; else echo '{"state":"none"}'; fi
+	exit 0
+fi
+if [ "$1" = "setall" ]; then
+	_SA_MODE=""; _SA_LTE=""; _SA_NSA=""; _SA_SA=""; _SA_3G=""; _SA_2G=""
+	_SA_OKJ=""; _SA_FAILJ=""; _SA_TAKEOVER=0
+	_SA_ID="$$"
+	shift
+	for _sa_a in "$@"; do
+		case "$_sa_a" in *=*) : ;; *) _sa_bad ;; esac
+		_sa_k="${_sa_a%%=*}"; _sa_v="${_sa_a#*=}"
+		case "$_sa_k" in
+			mode)
+				case "$_sa_v" in *[!0-9]*) _sa_bad ;; esac
+				_SA_MODE="$_sa_v" ;;
+			lte|nsa|sa|3g|2g)
+				if [ -n "$_sa_v" ]; then _sa_islist "$_sa_v" || _sa_bad; fi
+				case "$_sa_k" in
+					lte) _SA_LTE="$_sa_v" ;;
+					nsa) _SA_NSA="$_sa_v" ;;
+					sa)  _SA_SA="$_sa_v" ;;
+					3g)  _SA_3G="$_sa_v" ;;
+					2g)  _SA_2G="$_sa_v" ;;
+				esac ;;
+			*) _sa_bad ;;
+		esac
+	done
+	set -- setall
+	if [ -z "$_SA_MODE$_SA_LTE$_SA_NSA$_SA_SA$_SA_3G$_SA_2G" ]; then
+		echo "nothing to apply"
+		exit 2
+	fi
+fi
+
 # --- МОДЕМ БЕЗ AT-ПОРТОВ -----------------------------------------------------
 # У HiLink-модема диапазоны читаются и меняются его же API (маска LTEBand в
 # /api/net/net-mode), а не AT-командами. Профилей modemband для него нет и быть
@@ -890,21 +988,40 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; t
 			# модем перерегистрироваться в сети и при этом сбросить USB-композицию
 			# (наблюдалось на B20): он вываливается из debug в чистый HiLink,
 			# теряет AT-порты. В фоне проверяем и возвращаем debug + интерфейс.
-			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &
 			exit 0 ;;
 		setmode)
 			"$_HL" setmode "$2" "$_bs_am"
-			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &
 			exit 0 ;;
 		setbands3g)
 			"$_HL" setbands3g "$2" "$_bs_am"
 			# Тот же сторож debug, что и у setbands: смена NetworkBand может
 			# заставить модем перерегистрироваться и уронить USB-композицию.
-			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &
 			exit 0 ;;
 		setbands2g)
 			"$_HL" setbands2g "$2" "$_bs_am"
-			( sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null &
+			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &
+			exit 0 ;;
+		setall)
+			_sa_hl() {
+				case "$("$_HL" "$2" "$3" "$_bs_am" 2>/dev/null)" in
+					*'"success":true'*) _SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\"" ;;
+					*) _sa_fail_add "$1" rejected "" ;;
+				esac
+			}
+			[ -z "$_SA_MODE" ] || _sa_hl mode setmode "$_SA_MODE"
+			[ -z "$_SA_LTE" ] || _sa_hl lte setbands "$_SA_LTE"
+			[ -z "$_SA_3G" ] || _sa_hl 3g setbands3g "$_SA_3G"
+			[ -z "$_SA_2G" ] || _sa_hl 2g setbands2g "$_SA_2G"
+			[ -z "$_SA_NSA" ] || _sa_fail_add nsa unsupported ""
+			[ -z "$_SA_SA" ] || _sa_fail_add sa unsupported ""
+			_sa_res_write running
+			_sa_res_write done
+			cat "$(_sa_resfile)" 2>/dev/null
+			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &
+			sleep 1
 			exit 0 ;;
 		mgmtinfo)
 			# HiLink всегда ведётся вендорным путём (свой API вместо AT/mmcli).
@@ -1100,7 +1217,12 @@ if [ "$_PORT_OK" = 1 ]; then
 			. /usr/share/5gmodem/quirks.sh 2>/dev/null
 			mm_at_allowed "$_bs_am" "$_bs_sec"
 			case "$?" in
-				0) [ -n "$MM_AT_PORT" ] && _DEVICE="$MM_AT_PORT" ;;
+				0)
+					if [ -n "$MM_AT_PORT" ] && [ "$MM_AT_PORT" != "$_DEVICE" ]; then
+						_DEVICE="$MM_AT_PORT"
+						at_unlock
+						at_lock "$_DEVICE" 15
+					fi ;;
 				# Хрупкая прошивка: НЕПРЕРЫВНЫЕ чтения (текущий выбор в каждом json)
 				# не делаем, а ЯВНОЕ действие человека (set*) пропускаем - смена
 				# диапазона и так рвёт сессию, а AT^SLBAND/AT^SLMODE у T77W968 -
@@ -1163,7 +1285,7 @@ fi
 #
 # Порядок захвата НЕ меняем (это трогало бы сериализатор целиком) - только
 # освобождаем, как только стало известно, что порт больше не понадобится.
-if [ "$_BAND_VIA" = "mmcli" ] && [ -n "$_bs_at" ]; then
+if [ "$_BAND_VIA" = "mmcli" ] && [ -n "$_bs_at$_DEVICE" ]; then
 	at_unlock
 fi
 
@@ -1317,14 +1439,36 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 # иначе перезапуск делает последнее. Флаг pending переносит успех записи.
 _BW_TOK=/tmp/5gmodem_bandapply.tok
 _BW_PEND=/tmp/5gmodem_bandapply.pending
+_bw_serial_lock() {
+	_bsl_f=/var/lock/5gmodem_bandwrite.lock
+	[ -d /var/lock ] || _bsl_f=/tmp/5gmodem_bandwrite.lock
+	touch "$_bsl_f" 2>/dev/null || return 0
+	exec 7>"$_bsl_f"
+	_bsl_n=0
+	while [ "$_bsl_n" -lt 150 ]; do
+		flock -n 7 2>/dev/null && return 0
+		sleep 2
+		_bsl_n=$((_bsl_n + 1))
+	done
+	return 0
+}
+_bw_serial_unlock() {
+	flock -u 7 2>/dev/null
+	exec 7>&- 2>/dev/null
+	return 0
+}
 _band_write() {  # $1 - функция записи, $2 - список
 	if _needs_mm_takeover; then
+		_bw_serial_lock
 		_mm_takeover_run "$1" "$2"
+		_bw_serial_unlock
 		return
 	fi
 	read -r _bw_me _ < /proc/self/stat
+	_bw_serial_lock
 	echo "$_bw_me" > "$_BW_TOK"
 	"$1" "$2" && : > "$_BW_PEND"
+	_bw_serial_unlock
 	[ -f "$_BW_PEND" ] || return 1
 	if [ "$_BANDS_APPLY_LIVE" = 1 ]; then
 		rm -f "$_BW_PEND"
@@ -1390,7 +1534,12 @@ if command -v is_num >/dev/null 2>&1; then
 						done ;;
 				esac
 			fi ;;
-		setmode|setmodelive|set5gmode)
+		set5gmode)
+			if [ "$2" != "full" ]; then
+				logger -t 5gmodem "bands: invalid 5G mode for $1 - rejected"
+				echo "bad mode"; exit 2
+			fi ;;
+		setmode|setmodelive)
 			if ! is_num "$2"; then
 				logger -t 5gmodem "bands: invalid mode number for $1 - rejected"
 				echo "bad mode"; exit 2
@@ -1404,6 +1553,35 @@ if command -v is_num >/dev/null 2>&1; then
 				*) logger -t 5gmodem "bands: unknown cell lock mode - rejected"; echo "bad lock"; exit 2 ;;
 			esac ;;
 	esac
+fi
+
+if [ "$1" = "setall" ]; then
+	_sa_check() {
+		case "$3" in ''|Unsupported*) return 0 ;; esac
+		for _bwant in $2; do
+			_bok=0
+			for _bhave in $3; do
+				[ "${_bhave%%:*}" = "$_bwant" ] && { _bok=1; break; }
+			done
+			if [ "$_bok" != 1 ]; then
+				logger -t 5gmodem "bands: band $_bwant is not supported by the modem (setall $1)"
+				_sa_fail_add "$1" badband "$_bwant"
+				return 1
+			fi
+		done
+		return 0
+	}
+	case "$_SA_LTE" in ''|default) : ;; *) _sa_check lte "$_SA_LTE" "$(getsupportedbands 2>/dev/null)" || _SA_LTE="" ;; esac
+	case "$_SA_NSA" in ''|default) : ;; *) _sa_check nsa "$_SA_NSA" "$(getsupportedbands5gnsa 2>/dev/null)" || _SA_NSA="" ;; esac
+	case "$_SA_SA" in ''|default) : ;; *) _sa_check sa "$_SA_SA" "$(getsupportedbands5gsa 2>/dev/null)" || _SA_SA="" ;; esac
+	case "$_SA_3G" in ''|default) : ;; *) _sa_check 3g "$_SA_3G" "$(getsupportedbands3g 2>/dev/null)" || _SA_3G="" ;; esac
+	case "$_SA_2G" in ''|default) : ;; *) _sa_check 2g "$_SA_2G" "$(getsupportedbands2g 2>/dev/null)" || _SA_2G="" ;; esac
+	if [ -z "$_SA_MODE$_SA_LTE$_SA_NSA$_SA_SA$_SA_3G$_SA_2G" ]; then
+		_sa_res_write running
+		_sa_res_write done
+		cat "$(_sa_resfile)" 2>/dev/null
+		exit 2
+	fi
 fi
 
 case $1 in
@@ -1445,6 +1623,86 @@ case $1 in
 		# см. restorebands). Делаем до фонового применения: нужно намерение
 		# пользователя ($2), а не то, что реально ляжет в маску.
 		[ -n "$2" ] && { _persist_bands "" "$2"; ( _band_write setbands "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		;;
+	"setall")
+		_sa_norm() { echo "$1" | sed 's/:[^ ,]*//g' | tr ' ,' '\n\n' | grep -E '^[0-9]+$' | sort -n | uniq | tr '\n' ' ' | sed 's/ *$//'; }
+		_sa_same() {
+			case "$1" in
+				mode) _ss_want="$2"; _ss_have=$(getmode 2>/dev/null | head -1 | tr -d ' \r') ;;
+				lte)  _ss_g=getbands; _ss_s=getsupportedbands ;;
+				nsa)  _ss_g=getbands5gnsa; _ss_s=getsupportedbands5gnsa ;;
+				sa)   _ss_g=getbands5gsa; _ss_s=getsupportedbands5gsa ;;
+				3g)   _ss_g=getbands3g; _ss_s=getsupportedbands3g ;;
+				2g)   _ss_g=getbands2g; _ss_s=getsupportedbands2g ;;
+			esac
+			if [ "$1" != "mode" ]; then
+				if [ "$2" = "default" ]; then _ss_want=$(_sa_norm "$("$_ss_s" 2>/dev/null)"); else _ss_want=$(_sa_norm "$2"); fi
+				_ss_have=$(_sa_norm "$("$_ss_g" 2>/dev/null)")
+			fi
+			[ -n "$_ss_have" ] && [ "$_ss_have" = "$_ss_want" ]
+		}
+		_sa_one() {
+			_so_out=$("$2" "$3" 2>&1)
+			_so_rc=$?
+			case "$_so_out" in
+				*Unsupported*) _sa_fail_add "$1" unsupported ""; return 1 ;;
+			esac
+			if [ "$_so_rc" != 0 ] && _sa_same "$1" "$3"; then
+				_SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\""
+				return 1
+			fi
+			if [ "$_so_rc" != 0 ]; then
+				_so_d=$(printf '%s' "$_so_out" | tr -d '\r' | grep -v '^$' | tail -1 | tr -cd 'A-Za-z0-9 .,:_()/+-' | cut -c1-120)
+				logger -t 5gmodem "bands: setall $1 was not applied (rc=$_so_rc) $_so_d"
+				_sa_fail_add "$1" rejected "$_so_d"
+				return 1
+			fi
+			_SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\""
+			return 0
+		}
+		_sa_apply() {
+			_SA_RAN=1
+			_sa_any=1
+			if [ -n "$_SA_MODE" ] && _sa_one mode setmode "$_SA_MODE"; then
+				_persist_mode "$_SA_MODE"
+				_sa_any=0
+			fi
+			[ -z "$_SA_LTE" ] || { _sa_one lte setbands "$_SA_LTE" && _sa_any=0; }
+			[ -z "$_SA_NSA" ] || { _sa_one nsa setbands5gnsa "$_SA_NSA" && _sa_any=0; }
+			[ -z "$_SA_SA" ] || { _sa_one sa setbands5gsa "$_SA_SA" && _sa_any=0; }
+			[ -z "$_SA_3G" ] || { _sa_one 3g setbands3g "$_SA_3G" && _sa_any=0; }
+			[ -z "$_SA_2G" ] || { _sa_one 2g setbands2g "$_SA_2G" && _sa_any=0; }
+			_sa_res_write settling
+			return "$_sa_any"
+		}
+		_sa_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+		if [ "$_sa_sec" != "m_" ] && [ -n "$_SA_LTE$_SA_NSA$_SA_SA" ]; then
+			for _sa_p in ":$_SA_LTE" "5gnsa:$_SA_NSA" "5gsa:$_SA_SA"; do
+				_sa_pk="${_sa_p%%:*}"; _sa_pv="${_sa_p#*:}"
+				case "$_sa_pv" in
+					'') : ;;
+					default) uci -q delete "5gmodem.$_sa_sec.save_band$_sa_pk" 2>/dev/null ;;
+					*) uci -q set "5gmodem.$_sa_sec.save_band$_sa_pk=$_sa_pv" ;;
+				esac
+			done
+			uci -q commit 5gmodem
+			_sa_if=$(uci -q get "5gmodem.$_sa_sec.network")
+			[ -n "$_sa_if" ] && : > "/tmp/5gmodem_bandrestore_$_sa_if" 2>/dev/null
+		fi
+		_needs_mm_takeover && _SA_TAKEOVER=1
+		_sa_res_write running
+		( _SA_RAN=""
+		  _band_write _sa_apply "mode=$_SA_MODE lte=$_SA_LTE nsa=$_SA_NSA sa=$_SA_SA 3g=$_SA_3G 2g=$_SA_2G"
+		  if [ -z "$_SA_RAN" ]; then
+			for _sa_w in "mode:$_SA_MODE" "lte:$_SA_LTE" "nsa:$_SA_NSA" "sa:$_SA_SA" "3g:$_SA_3G" "2g:$_SA_2G"; do
+				[ -n "${_sa_w#*:}" ] && _sa_fail_add "${_sa_w%%:*}" mmtimeout ""
+			done
+		  fi
+		  rm -f /tmp/5gmodem_bands_* 2>/dev/null
+		  _sa_res_write done
+		) >/dev/null 2>&1 </dev/null &
+		cat "$(_sa_resfile)" 2>/dev/null
+		sleep 1
 		;;
 	"getsupportedbands5gnsa")
 		getsupportedbands5gnsa
@@ -1719,6 +1977,11 @@ case $1 in
 	"getcaenabled")
 		getcaenabled
 		;;
+	"setcaenabled")
+		case "$2" in
+			0|1) ( setcaenabled "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+		esac
+		;;
 	"get256qam")
 		get256qam
 		;;
@@ -1766,7 +2029,7 @@ case $1 in
 	"set5gmode")
 		# Как и привязка к соте: применяется через цикл режима полёта, дольше
 		# 30-секундного таймаута rpcd - поэтому в фон с отвязкой дескрипторов.
-		[ -n "$2" ] && { ( set5gmode "$2"; _reconnect_iface ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { ( set5gmode "$2"; _reconnect_iface; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
 		;;
 	"setcelllock")
 		# Как и setbands - в фоне с отвязкой дескрипторов: привязка делается через
@@ -1864,30 +2127,31 @@ case $1 in
 		# Через _celllock_effective, а не голый getcelllock: страница берёт
 		# состояние ИМЕННО отсюда, и без штампа кнопка «Отвязать» не появлялась
 		# у модемов, которые читать привязку не умеют.
-		CL=$(_celllock_effective)
+		if [ "$_PORT_OK" = "1" ]; then CL=$(_celllock_effective); else CL=$(_celllock_remembered); fi
 		if [ "x$CL" != "xUnsupported" ]; then
 			json_add_string celllock "$CL"
 		fi
-		G5=$(get5gmode)
+		G5=$(_live_or_unsupported get5gmode)
 		if [ "x$G5" != "xUnsupported" ]; then
 			json_add_string mode5g "$G5"
 		fi
-		CAE=$(getcaenabled)
+		CAE=$(_live_or_unsupported getcaenabled)
 		if [ "x$CAE" != "xUnsupported" ]; then
 			json_add_string ca_enabled "$CAE"
+			[ "$_CA_SWITCH" = 1 ] && json_add_string ca_switch 1
 		fi
 		# 5G-лок, 256QAM и uplink CA - вендорные строки того же класса, что
 		# celllock/ca_enabled: профиль отвечает "Unsupported", и строка в UI
 		# просто не появляется. (ревью 13.09.2026, форум 4pda)
-		CL5=$(getcelllock5g)
+		CL5=$(_live_or_unsupported getcelllock5g)
 		if [ "x$CL5" != "xUnsupported" ]; then
 			json_add_string celllock5g "$CL5"
 		fi
-		Q256=$(get256qam)
+		Q256=$(_live_or_unsupported get256qam)
 		if [ "x$Q256" != "xUnsupported" ]; then
 			json_add_string qam256 "$Q256"
 		fi
-		ULCA=$(getulca)
+		ULCA=$(_live_or_unsupported getulca)
 		if [ "x$ULCA" != "xUnsupported" ]; then
 			json_add_string ulca "$ULCA"
 		fi
@@ -2050,6 +2314,10 @@ case $1 in
 		echo " $0 getbands5gsa"
 		echo " $0 getbandsext5gsa"
 		echo " $0 setbands5gsa \"<band list>\""
+		echo ""
+		echo "several lists and the mode in one pass (one radio restart / one MM takeover)"
+		echo " $0 setall [mode=<id>] [lte=\"<band list>\"|default] [nsa=...] [sa=...] [3g=...] [2g=...]"
+		echo " $0 applyresult [<usb path>]"
 		;;
 	*)
 		echo -n "Modem: "

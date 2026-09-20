@@ -14,7 +14,7 @@
 # #CQI добавлен в ту же цепочку, а не отдельным вызовом: команды в одной строке
 # идут одним обменом с портом, лишней задержки нет (проверено на LM960A18 -
 # отвечает "#CQI: 11").
-O=$(sms_tool -d $DEVICE at "at#servinfo;#cainfo?;#tempsens=2;#tmlvl?;#laps;#cqi;#lrxdiv?;#rxdiv?;#4rxdis?")
+O=$(sms_tool -d $DEVICE at "at#tempsens=2;#tmlvl?;#lrxdiv?;#rxdiv?;#4rxdis?;#ltecat?;#servinfo;#rfsts;#laps;#cqi;#cainfo?")
 
 # SINR в #CAINFO - НЕ децибелы, а ИНДЕКС 0..250 (руководство 80568ST10869A
 # Rev.7, стр. 264: "<sinr>: Measured SINR. This value is mapped to dB.
@@ -35,34 +35,17 @@ sinr_db() {
 # вторичная несущая B40 определялась как "?").
 channeltoband()
 {
-	if   [ $1 -ge 0 ]     && [ $1 -le 599 ];   then echo "1"
-	elif [ $1 -ge 600 ]   && [ $1 -le 1199 ];  then echo "2"
-	elif [ $1 -ge 1200 ]  && [ $1 -le 1949 ];  then echo "3"
-	elif [ $1 -ge 1950 ]  && [ $1 -le 2399 ];  then echo "4"
-	elif [ $1 -ge 2400 ]  && [ $1 -le 2649 ];  then echo "5"
-	elif [ $1 -ge 2750 ]  && [ $1 -le 3449 ];  then echo "7"
-	elif [ $1 -ge 3450 ]  && [ $1 -le 3799 ];  then echo "8"
-	elif [ $1 -ge 5010 ]  && [ $1 -le 5179 ];  then echo "13"
-	elif [ $1 -ge 5730 ]  && [ $1 -le 5849 ];  then echo "17"
-	elif [ $1 -ge 6000 ]  && [ $1 -le 6149 ];  then echo "19"
-	elif [ $1 -ge 6150 ]  && [ $1 -le 6449 ];  then echo "20"
-	elif [ $1 -ge 6450 ]  && [ $1 -le 6599 ];  then echo "21"
-	elif [ $1 -ge 9210 ]  && [ $1 -le 9659 ];  then echo "28"
-	elif [ $1 -ge 37750 ] && [ $1 -le 38249 ]; then echo "38"
-	elif [ $1 -ge 38650 ] && [ $1 -le 39649 ]; then echo "40"
-	elif [ $1 -ge 39650 ] && [ $1 -le 41589 ]; then echo "41"
-	elif [ $1 -ge 66436 ] && [ $1 -le 67335 ]; then echo "66"
-	else echo "?"
-	fi
+	_ctb=$(earfcn2band "$1" 2>/dev/null)
+	echo "${_ctb:-?}"
 }
 
 case "$MODE_NUM" in
 	7*)
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $4}' | xargs)
-		[ -n "$COPS" ] && COPS="$T"
+		[ -n "$COPS" ] && [ -n "$T" ] && COPS="$T"
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $7}' | xargs)
 		if [ -n "$T" ]; then
-			T_DEC=$(printf "%d" "0x$T")
+			T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
 #			ADDON="$ADDON"'{"TAC":"'$T_DEC' ('$T')"}'
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $3}' | xargs)
@@ -82,6 +65,7 @@ case "$MODE_NUM" in
 		fi
 
 		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $3}' | xargs)
+		case "$T" in *[!0-9]*) T="" ;; esac
 		if [ -n "$T" ]; then
 			T1=$(channeltoband $T)
 			PBAND="$(band4g $T1 "")"
@@ -124,66 +108,122 @@ case "$MODE_NUM" in
 		# Проверка [ -n "$T" ] строку "0" ПРОПУСКАЛА, а channeltoband(0) отдаёт
 		# "1" - и неактивная несущая показывалась как фантомный B1 ("LTE-A |
 		# B3 + B1 + B1" при одной реальной несущей).
-		_S1OK=0
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $15}' | xargs)
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			_S1OK=1
-			T1=$(channeltoband $T)
-			S1BAND="$(band4g $T1)"
-			S1EARFCN="$T"
-			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $17}' | xargs)
-		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-			S1PCI=$T
-#			[ -n "$ADDON" ] && ADDON="$ADDON,"
-#			ADDON="$ADDON"'{"(S1) PCI":"'$T'"}'
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $19}' | xargs)
-		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $18}' | xargs)
-		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $20}' | xargs)
-		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $21}' | xargs)
-		if [ "$_S1OK" = 1 ] && [ -n "$T" ]; then
-			T=$(sinr_db "$T")        # индекс 0..250 -> дБ, как и у первичной
-		fi
-
-		_S2OK=0
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $26}' | xargs)
-		if [ -n "$T" ] && [ "$T" != "0" ]; then
-			_S2OK=1
-			T1=$(channeltoband $T)
-			S2BAND="$(band4g $T1)"
-			S2EARFCN="$T"
-			[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $28}' | xargs)
-		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-			S2PCI="$T"
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $30}' | xargs)
-		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $29}' | xargs)
-		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $31}' | xargs)
-		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-		:
-		fi
-		T=$(echo "$O" | awk -F[,:] '/^#CAINFO/ {print $32}' | xargs)
-		if [ "$_S2OK" = 1 ] && [ -n "$T" ]; then
-			T=$(sinr_db "$T")
+		_CAL=$(echo "$O" | tr -d '\r' | awk '/^#CAINFO:/ {
+			sub(/^#CAINFO: */, "")
+			n = split($0, f, ",")
+			for (i = 1; i <= n; i++) gsub(/[^0-9-]/, "", f[i])
+			print "P|" f[3] "|" f[10] "|" f[12]
+			for (b = 13; b + 10 <= n; b += 11)
+				print "S|" f[b+1] "|" f[b+2] "|" f[b+3] "|" f[b+4] "|" f[b+5] "|" f[b+6] "|" f[b+7] "|" f[b+8] "|" f[b+10]
+			exit
+		}')
+		[ -n "$_CAL" ] && _CA_FROM_PROFILE=1
+		_ca_bw() {
+			case "$1" in
+				0) echo "1.4" ;; 1) echo "3" ;; 2) echo "5" ;;
+				3) echo "10" ;; 4) echo "15" ;; 5) echo "20" ;;
+			esac
+		}
+		_ca_mod() {
+			case "$1" in
+				1) echo "QPSK" ;; 2) echo "16QAM" ;; 3) echo "64QAM" ;; 4) echo "256QAM" ;;
+			esac
+		}
+		_ca_num() {
+			case "$1" in
+				''|-|*[!0-9-]*|?*-*) return ;;
+			esac
+			echo "$1"
+		}
+		PCI=$(_ca_num "$PCI")
+		EARFCN=$(_ca_num "$EARFCN")
+		RSRP=$(_ca_num "$RSRP")
+		RSRQ=$(_ca_num "$RSRQ")
+		RSSI=$(_ca_num "$RSSI")
+		_CA_I=0
+		_CA_TX=""
+		while IFS='|' read -r _ca_k _ca_a _ca_b _ca_c _ca_d _ca_e _ca_f _ca_g _ca_h _ca_m; do
+			case "$_ca_k" in
+				P)
+					_ca_w=$(_ca_bw "$_ca_a")
+					if [ -n "$_ca_w" ]; then
+						BANDWIDTH="$_ca_w MHz"
+						[ -n "$PBAND" ] && PBAND="$PBAND @$_ca_w MHz"
+					fi
+					_CA_TX=$(_ca_num "$_ca_b")
+					_ca_w=$(_ca_mod "$_ca_c")
+					[ -n "$_ca_w" ] && PMOD="$_ca_w"
+					;;
+				S)
+					case "$_ca_a" in ''|0|*[!0-9]*) continue ;; esac
+					[ "$_CA_I" -ge 4 ] && continue
+					_CA_I=$((_CA_I + 1))
+					T1=$(channeltoband "$_ca_a")
+					_ca_bt=""
+					[ "$T1" != "?" ] && _ca_bt="$(band4g $T1)"
+					_ca_w=$(_ca_bw "$_ca_b")
+					[ -n "$_ca_bt" ] && [ -n "$_ca_w" ] && _ca_bt="$_ca_bt @$_ca_w MHz"
+					[ -n "$_ca_bt" ] || _ca_bt="B?"
+					_ca_sn=""
+					if [ "$_ca_h" = "2" ]; then
+						_ca_st="activated"
+						_ca_sn=$(sinr_db "$_ca_g")
+						[ "$T1" != "?" ] && MODE="${MODE} / $(band4g $T1)"
+					else
+						_ca_st="deactivated"
+					fi
+					_ca_md=$(_ca_mod "$_ca_m")
+					_ca_p=$(_ca_num "$_ca_c")
+					_ca_rp=$(_ca_num "$_ca_d")
+					_ca_rs=$(_ca_num "$_ca_e")
+					_ca_rq=$(_ca_num "$_ca_f")
+					case "$_CA_I" in
+						1) S1BAND="$_ca_bt"; S1EARFCN="$_ca_a"; S1PCI="$_ca_p"; S1RSRP="$_ca_rp"
+						   S1RSSI="$_ca_rs"; S1RSRQ="$_ca_rq"; S1SINR="$_ca_sn"; S1STATE="$_ca_st"; S1MOD="$_ca_md" ;;
+						2) S2BAND="$_ca_bt"; S2EARFCN="$_ca_a"; S2PCI="$_ca_p"; S2RSRP="$_ca_rp"
+						   S2RSSI="$_ca_rs"; S2RSRQ="$_ca_rq"; S2SINR="$_ca_sn"; S2STATE="$_ca_st"; S2MOD="$_ca_md" ;;
+						3) S3BAND="$_ca_bt"; S3EARFCN="$_ca_a"; S3PCI="$_ca_p"; S3RSRP="$_ca_rp"
+						   S3RSSI="$_ca_rs"; S3RSRQ="$_ca_rq"; S3SINR="$_ca_sn"; S3STATE="$_ca_st"; S3MOD="$_ca_md" ;;
+						4) S4BAND="$_ca_bt"; S4EARFCN="$_ca_a"; S4PCI="$_ca_p"; S4RSRP="$_ca_rp"
+						   S4RSSI="$_ca_rs"; S4RSRQ="$_ca_rq"; S4SINR="$_ca_sn"; S4STATE="$_ca_st"; S4MOD="$_ca_md" ;;
+					esac
+					;;
+			esac
+		done <<EOF
+$_CAL
+EOF
+		_RF=$(echo "$O" | tr -d '\r' | awk -F, '/^#RFSTS:/ { print $8 "|" $11; exit }')
+		_RF_TX=$(_ca_num "${_RF%%|*}")
+		[ -n "$_CA_TX" ] || _CA_TX="$_RF_TX"
+		case "$_CA_TX" in
+			'') ;;
+			0) [ "${_RF##*|}" = "2" ] && TXPOWER="0 dBm" ;;
+			*) TXPOWER="$_CA_TX dBm" ;;
+		esac
+		;;
+	2*|4*|5*|6*)
+		_RF=$(echo "$O" | tr -d '\r' | awk -F, '/^#RFSTS:/ { gsub(/ /, ""); print $2 "|" $3 "|" $4 "|" $5 "|" $6; exit }')
+		_rf_u=${_RF%%|*}; _rf_r=${_RF#*|}
+		_rf_p=${_rf_r%%|*}; _rf_r=${_rf_r#*|}
+		_rf_e=${_rf_r%%|*}; _rf_r=${_rf_r#*|}
+		_rf_c=${_rf_r%%|*}; _rf_s=${_rf_r##*|}
+		_rf_ok=1
+		case "$_rf_u" in ''|*[!0-9]*) _rf_ok=0 ;; esac
+		case "$_rf_p" in ''|*[!0-9]*) _rf_ok=0 ;; esac
+		case "$_rf_c" in -[0-9]*) ;; *) _rf_ok=0 ;; esac
+		case "${_rf_c#-}" in ''|*[!0-9]*) _rf_ok=0 ;; esac
+		if [ "$_rf_ok" = 1 ]; then
+			EARFCN="$_rf_u"
+			PCI="$_rf_p"
+			RSCP="$_rf_c"
+			case "${_rf_e#-}" in
+				''|*[!0-9.]*) ;;
+				*) ECIO="$_rf_e" ;;
+			esac
+			case "${_rf_s#-}" in
+				''|*[!0-9]*) ;;
+				*) RSSI="$_rf_s" ;;
+			esac
 		fi
 		;;
 esac
@@ -216,7 +256,17 @@ _F=$(sms_tool -d "$DEVICE" at "AT+CGMR" 2>/dev/null | tr -d '\r' | grep -vE '^AT
 # чем выше, тем более плотную модуляцию сеть готова дать. Поле cqi в JSON уже
 # было, но заполнять его на этом модеме было нечем.
 _CQI=$(echo "$O" | tr -d '\r' | sed -n 's/^#CQI: *\([0-9]\{1,\}\).*/\1/p' | head -1)
-[ -n "$_CQI" ] && CQI="$_CQI"
+case "$_CQI" in
+	''|31) ;;
+	*) CQI="$_CQI" ;;
+esac
+
+_LC=$(echo "$O" | tr -d '\r' | sed -n 's/^#LTECAT: *\([0-9]\{1,\}\).*/\1/p' | head -1)
+case "$_LC" in
+	'') ;;
+	12) UECAT="12 (DL 18 / UL 13)" ;;
+	*) UECAT="$_LC" ;;
+esac
 
 _T=$(echo "$O" | tr -d '\r' | sed -n 's/^#TEMPSENS: *[A-Za-z0-9_]*,\(-\{0,1\}[0-9]\{1,\}\).*/\1/p' \
 	| sort -n | tail -1)
@@ -229,6 +279,9 @@ esac
 # (пары rsrp/rsrq на порт, портов 2 или 4). В 3G команда молчит - это не ошибка,
 # поле останется пустым и таблица в UI не покажется.
 _AP=$(echo "$O" | tr -d '\r' | sed -n 's/^#LAPS: *//p' | head -1)
+case "$_AP" in
+	*[!0-9,\ -]*) _AP="" ;;
+esac
 if [ -n "$_AP" ]; then
 	ANTPORTS=$(echo "$_AP" | awk -F, '{
 		out = ""
@@ -338,7 +391,7 @@ fi
 
 # Обслуживающая сота - первой строкой таблицы, из уже разобранных полей профиля
 # (у #MONI=0 нет PCI, он берётся из #CAINFO выше).
-if [ -n "$PCI" ] && [ -n "$EARFCN" ]; then
+if [ "${MODE_NUM#7}" != "$MODE_NUM" ] && [ -n "$PCI" ] && [ -n "$EARFCN" ]; then
 	_NB_SRV=$(printf '{"band":"%s","earfcn":"%s","pci":"%s","rsrp":"%s","rsrq":"%s","rssi":"%s","serving":1}' \
 		"$(channeltoband "$EARFCN" 2>/dev/null)" "$EARFCN" "$PCI" "$RSRP" "$RSRQ" "$RSSI")
 	NEIGHBORS="$_NB_SRV${_NB_JSON:+,$_NB_JSON}"

@@ -1,0 +1,64 @@
+#!/bin/busybox sh
+CMD=""
+ISAT=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-d|-b|-s|-t|-f) shift ;;
+		at) ISAT=1; shift; CMD="$1" ;;
+	esac
+	shift
+done
+[ -n "$SMOKE_LOG" ] && printf '%s\n' "${ISAT:+AT }$CMD" >> "$SMOKE_LOG"
+[ -n "$ISAT" ] || exit 0
+
+fixname() {
+	printf '%s' "$1" | tr 'a-z' 'A-Z' | sed -e 's/^AT//' -e 's/"//g' -e 's/=?/_TEST/' \
+		-e 's/?/_GET/' -e 's/=/_SET_/' -e 's/[^A-Z0-9]/_/g' -e 's/__*/_/g' -e 's/^_//' -e 's/_$//'
+}
+prefix() {
+	printf '%s' "$1" | sed -e 's/^[aA][tT]//' -e 's/[=?].*$//' | tr 'a-z' 'A-Z'
+}
+emit() { sed -e '/^##/d' -e 's/\r$//' -e 's/$/\r/' "$1"; }
+
+case "$SMOKE_MODE" in
+	empty) exit 0 ;;
+	err) printf '\r\nERROR\r\n'; exit 0 ;;
+	cme) printf '\r\n+CME ERROR: 100\r\n'; exit 0 ;;
+esac
+
+_rest="$CMD"
+_first=1
+while [ -n "$_rest" ]; do
+	case "$_rest" in
+		*";"*) _part="${_rest%%;*}"; _rest="${_rest#*;}" ;;
+		*) _part="$_rest"; _rest="" ;;
+	esac
+	[ -n "$_part" ] || continue
+	case "$SMOKE_MODE" in
+		ok)
+			_fn=$(fixname "$_part")
+			if [ -n "$SMOKE_FIX" ] && [ -f "$SMOKE_FIX/$_fn.txt" ]; then
+				emit "$SMOKE_FIX/$_fn.txt"
+			elif [ -n "$SMOKE_FIX" ] && [ -n "$SMOKE_LOG" ]; then
+				printf 'MISS %s (%s.txt)\n' "$_part" "$_fn" >> "$SMOKE_LOG"
+			fi
+			;;
+		hollow)
+			_p=$(prefix "$_part")
+			printf '%s: ,,,,,,,,,,,,\r\n' "$_p"
+			;;
+		alpha)
+			_p=$(prefix "$_part")
+			printf '%s: abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc,abc\r\n' "$_p"
+			printf 'abc: abc abc abc\r\nabc abc\r\n'
+			;;
+		junk)
+			_p=$(prefix "$_part")
+			printf '%s: x,"",-,0x,NaN,--,"zz zz",-.,1e,,%%d\r\n' "$_p"
+			printf '%s: "LTE","NR5G",abc,0xZZ,-,,\r\n' "$_p"
+			printf '^RSSI: 12\r\n+CREG: q,,"ZZ"\r\n: : :\r\n0x\r\n-\r\n(((\r\n$%%^&*\r\n'
+			;;
+	esac
+done
+printf '\r\nOK\r\n'
+exit 0

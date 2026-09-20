@@ -123,6 +123,7 @@ fi
 # Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID" | xargs)
 NR_D=$(echo "$O" | awk -F [:] '/ICCID: /{print $2}' | xargs)
+NR_D=$(echo "$NR_D" | tr ' ' '\n' | grep -E '^[0-9A-Fa-f]{18,22}$' | head -1)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi

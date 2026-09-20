@@ -1,0 +1,26 @@
+## 4pda 444921 #2743 (EM7565, SCC configured but INACTIVE; forum collapsed the column padding)
+!GSTATUS:
+Current Time: 573 Temperature: 40
+Reset Counter: 1 Mode: ONLINE
+System mode: LTE PS state: Attached
+LTE band: B7 LTE bw: 10 MHz
+LTE Rx chan: 3400 LTE Tx chan: 21400
+LTE SCC1 state:INACTIVE LTE SCC1 band: B3
+LTE SCC1 bw : 20 MHz LTE SCC1 chan: 1850
+LTE SCC2 state:INACTIVE LTE SCC2 band: B1
+LTE SCC2 bw : 10 MHz LTE SCC2 chan: 100
+LTE SCC3 state:NOT ASSIGNED
+LTE SCC4 state:NOT ASSIGNED
+EMM state: Registered Normal Service
+RRC state: RRC Connected
+IMS reg state: No Srv
+
+PCC RxM RSSI: -64 PCC RxM RSRP: -94
+PCC RxD RSSI: -63 PCC RxD RSRP: -95
+SCC1 RxM RSSI: -63 SCC1 RxM RSRP: -84
+SCC1 RxD RSSI: -65 SCC1 RxD RSRP: -87
+SCC2 RxM RSSI: -67 SCC2 RxM RSRP: -91
+SCC2 RxD RSSI: -65 SCC2 RxD RSRP: -91
+Tx Power: -- TAC: 697f (27007)
+RSRQ (dB): -12.3 Cell ID: 03842516 (58991894)
+SINR (dB): 0.6

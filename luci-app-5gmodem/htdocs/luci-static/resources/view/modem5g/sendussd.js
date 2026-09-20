@@ -235,7 +235,7 @@ return view.extend({
 			   capture is greedy, up to the last quote: the reply may
 			   contain apostrophes. Errors (stderr) are left untouched
 			   and shown as-is. */
-			if (exec == 'mmcli') {
+			if (exec == 'mmcli' || exec == '/usr/bin/mmcli') {
 				let mm = (res.stdout || '').match(/(?:reply|request) from network:\s*'([\s\S]+)'/) ||
 					(res.stdout || '').match(/(?:reply from network|response)[^']*'([\s\S]+)'/) ||
 					(res.stdout || '').match(/'([\s\S]+)'/);
@@ -512,7 +512,7 @@ return view.extend({
 						inflight = false;
 						var st = {};
 						try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
-						if (st.status === 'running') {
+						if (st.status === 'running' || !st.status) {
 							if (STAGES[st.stage] && st.stage !== lastStage) {
 								lastStage = st.stage;
 								say(STAGES[st.stage] + '…');
@@ -904,7 +904,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
@@ -912,7 +911,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ► ' ])
 											])

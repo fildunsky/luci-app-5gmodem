@@ -132,7 +132,17 @@ encode() {
 			# --- разбиение на части ------------------------------------------
 			# 140 октетов на сообщение; с UDH конкатенации (6 октетов) остаётся
 			# 134, то есть 67 кодовых единиц UCS2.
-			if (nu <= 70) { total = 1; per = 70 } else { per = 67; total = int((nu + per - 1) / per) }
+			if (nu <= 70) { total = 1; per = 70 } else {
+				per = 67; total = 0; u = 1
+				while (u <= nu) {
+					cnt = 0
+					while (u <= nu && cnt < per) {
+						if (pair[u] == 1 && cnt + 2 > per) break
+						u++; cnt++
+					}
+					total++
+				}
+			}
 
 			u = 1
 			for (p = 1; p <= total; p++) {

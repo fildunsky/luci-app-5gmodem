@@ -184,6 +184,10 @@ _collect_ping() {
 	done
 }
 
+_metric_num() {
+	printf '%s\n' "$1" | sed -n 's/^ *\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\).*/\1/p' | head -1
+}
+
 # Уровень сигнала активного модема из последнего снимка (без похода в порт).
 _collect_signal() {
 	# ВСЕ модемы, а не только активный: ряд соседа копится из его снимка
@@ -194,6 +198,11 @@ _collect_signal() {
 		[ -n "$_cs_p" ] || continue
 		_cs_j=$("$RES/5gmodem.sh" peek "$_cs_p" 2>/dev/null)
 		[ -n "$_cs_j" ] || continue
+		_cs_age=$(printf '%s' "$_cs_j" | jsonfilter -e '@.age' 2>/dev/null)
+		case "$_cs_age" in
+			''|*[!0-9]*) : ;;
+			*) [ "$_cs_age" -gt 90 ] && continue ;;
+		esac
 		# Процент из снимка (поле signal): он уже посчитан модемо-специфично
 		# (у FM350 честен именно CSQ, а не RSSI) и совпадает с планкой на
 		# главной странице. Сырые dBm на графике читались только специалистом.
@@ -218,6 +227,20 @@ _collect_signal() {
 		if [ -n "$_cs_t" ]; then
 			_push "temp.$_cs_k" "$_cs_t"
 			[ -f "$DIR/temp.$_cs_k.label" ] || _label "temp.$_cs_k" "$_cs_n"
+		fi
+		_cs_rp=$(_metric_num "$(printf '%s' "$_cs_j" | jsonfilter -e '@.rsrp' 2>/dev/null)")
+		_cs_sn=$(_metric_num "$(printf '%s' "$_cs_j" | jsonfilter -e '@.sinr' 2>/dev/null)")
+		if [ -n "$_cs_sn" ]; then
+			_cs_rq=$(_metric_num "$(printf '%s' "$_cs_j" | jsonfilter -e '@.rsrq' 2>/dev/null)")
+			_cs_sn=$(awk -v s="$_cs_sn" -v q="$_cs_rq" 'BEGIN { if (!(s + 0 == 0 && q != "" && q + 0 >= -14)) print s }')
+		fi
+		if [ -n "$_cs_rp" ]; then
+			_push "rsrp.$_cs_k" "$_cs_rp"
+			[ -f "$DIR/rsrp.$_cs_k.label" ] || _label "rsrp.$_cs_k" "$_cs_n"
+		fi
+		if [ -n "$_cs_sn" ]; then
+			_push "sinr.$_cs_k" "$_cs_sn"
+			[ -f "$DIR/sinr.$_cs_k.label" ] || _label "sinr.$_cs_k" "$_cs_n"
 		fi
 	done
 }
@@ -337,7 +360,7 @@ _flush() {
 	# указывает. Во внутреннюю память их не пишем никогда: мегабайты в час на
 	# ресурс флеш-памяти роутера того не стоят.
 	if [ "$_fl_d" != "$PDIR_DEF" ]; then
-		for _fl_f in "$DIR"/ping.* "$DIR"/signal.* "$DIR"/temp.*; do
+		for _fl_f in "$DIR"/ping.* "$DIR"/signal.* "$DIR"/temp.* "$DIR"/rsrp.* "$DIR"/sinr.*; do
 			[ -f "$_fl_f" ] || continue
 			cp "$_fl_f" "$_fl_d/${_fl_f##*/}" 2>/dev/null
 		done
@@ -385,7 +408,7 @@ tick)
 	;;
 list)
 	# Какие ряды есть: {"ping":["modem",...],"signal":[...],"traffic":[...]}
-	_ls_p=""; _ls_s=""; _ls_t=""; _ls_m=""
+	_ls_p=""; _ls_s=""; _ls_t=""; _ls_m=""; _ls_rp=""; _ls_sn=""
 	for _ls_f in "$DIR"/ping.*;    do case "$_ls_f" in *.label) continue ;; esac
 		[ -f "$_ls_f" ] && _ls_p="$_ls_p,\"${_ls_f##*/ping.}\""; done
 	for _ls_f in "$DIR"/signal.*;  do case "$_ls_f" in *.label) continue ;; esac
@@ -393,6 +416,10 @@ list)
 	for _ls_f in "$DIR"/traffic.*; do [ -f "$_ls_f" ] && _ls_t="$_ls_t,\"${_ls_f##*/traffic.}\""; done
 	for _ls_f in "$DIR"/temp.*;    do case "$_ls_f" in *.label) continue ;; esac
 		[ -f "$_ls_f" ] && _ls_m="$_ls_m,\"${_ls_f##*/temp.}\""; done
+	for _ls_f in "$DIR"/rsrp.*;    do case "$_ls_f" in *.label) continue ;; esac
+		[ -f "$_ls_f" ] && _ls_rp="$_ls_rp,\"${_ls_f##*/rsrp.}\""; done
+	for _ls_f in "$DIR"/sinr.*;    do case "$_ls_f" in *.label) continue ;; esac
+		[ -f "$_ls_f" ] && _ls_sn="$_ls_sn,\"${_ls_f##*/sinr.}\""; done
 	# Человеческие подписи рядов: "<имя ряда>" -> "Compal RXM-G1" / "Wi-Fi do".
 	# Пишутся сборщиком рядом с рядом (файл .label) - в имени файла дефисы и
 	# пробелы недопустимы, а в легенде нужны именно они.
@@ -417,10 +444,12 @@ list)
 			_ls_now="$PDIR_DEF"
 		fi
 	fi
-	printf '{"enabled":%s,"persist":%s,"path":"%s","path_now":"%s","path_default":"%s","ping":[%s],"signal":[%s],"traffic":[%s],"temp":[%s],"labels":{%s}}\n' \
-		"$(_enabled && echo 1 || echo 0)" "$(_persist && echo 1 || echo 0)" \
+	_ls_bg=$(uci -q get "$CFG.stats.bgpoll" 2>/dev/null)
+	case "$_ls_bg" in 60|300) : ;; *) _ls_bg=0 ;; esac
+	printf '{"enabled":%s,"persist":%s,"bgpoll":%s,"path":"%s","path_now":"%s","path_default":"%s","ping":[%s],"signal":[%s],"traffic":[%s],"temp":[%s],"rsrp":[%s],"sinr":[%s],"labels":{%s}}\n' \
+		"$(_enabled && echo 1 || echo 0)" "$(_persist && echo 1 || echo 0)" "$_ls_bg" \
 		"$(json_esc_s "$(_cfg path)")" "$(json_esc_s "$_ls_now")" "$PDIR_DEF" \
-		"${_ls_p#,}" "${_ls_s#,}" "${_ls_t#,}" "${_ls_m#,}" "${_ls_l#,}"
+		"${_ls_p#,}" "${_ls_s#,}" "${_ls_t#,}" "${_ls_m#,}" "${_ls_rp#,}" "${_ls_sn#,}" "${_ls_l#,}"
 	;;
 series)
 	# series <имя ряда> - точки одного ряда
@@ -453,6 +482,11 @@ setconf)
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
 			enabled|persist) uci -q set "$CFG.stats.$_sc_k=$_sc_v" ;;
+			bgpoll)
+				case "$_sc_v" in
+					60|300) uci -q set "$CFG.stats.bgpoll=$_sc_v" ;;
+					*) uci -q delete "$CFG.stats.bgpoll" ;;
+				esac ;;
 			# Свой путь: абсолютный, без пробелов и метасимволов - строка
 			# приходит из браузера и уходит в mkdir/cp.
 			path)
@@ -485,6 +519,12 @@ forget)
 	echo '{"result":"ok"}'
 	;;
 reset)
+	_rs_c=$(_pdir_want)
+	if [ "$_rs_c" != "$PDIR_DEF" ] && [ -d "$_rs_c" ]; then
+		rm -f "$_rs_c"/traffic.* "$_rs_c"/ping.* "$_rs_c"/signal.* "$_rs_c"/temp.* \
+			"$_rs_c"/rsrp.* "$_rs_c"/sinr.* \
+			"$_rs_c"/sim-*.label "$_rs_c"/op.sim-*.label 2>/dev/null
+	fi
 	rm -rf "$DIR" "$PDIR_DEF" 2>/dev/null
 	mkdir -p "$DIR" 2>/dev/null
 	echo '{"result":"ok"}'

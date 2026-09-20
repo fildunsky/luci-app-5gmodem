@@ -33,7 +33,10 @@ _LTE_EXT_TABLE="2:66 40:71"
 
 # hex ext -> список диапазонов
 _ext_to_bands() {
-	_v=$((0x${1:-0}))
+	case "$1" in
+		''|*[!0-9A-Fa-f]*) return ;;
+	esac
+	_v=$((0x$1))
 	for _p in $_LTE_EXT_TABLE; do
 		[ $((_v & 0x${_p%%:*})) -ne 0 ] && echo "${_p#*:}"
 	done
@@ -122,6 +125,8 @@ setbands() {
 	GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
 	UMTS=$(echo "$O" | awk -F[:,] '/^#BND/ {print $3}' | xargs)
 	CUREXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+	case "$GSM" in ''|*[!0-9]*) return 1 ;; esac
+	case "$UMTS" in ''|*[!0-9]*) return 1 ;; esac
 
 	# Руководство: "The <LTE band> and <LTE band ext> cannot be 0 at the same
 	# time" - модем отвергнет такую запись. Молча ничего не делаем: снятие ВСЕХ
@@ -258,6 +263,8 @@ setbands3g() {
 	GSM=$(echo "$O" | awk -F[:,] '/^#BND/ {print $2}' | xargs)
 	LTE=$(echo "$O" | awk -F[:,] '/^#BND/ {print $4}' | xargs)
 	EXT=$(echo "$O" | awk -F[:,] '/^#BND/ {print $5}' | xargs)
+	case "$GSM" in ''|*[!0-9]*) return 1 ;; esac
+	case "$LTE" in ''|*[!0-9A-Fa-f]*) return 1 ;; esac
 	# Остальные поля СОХРАНЯЕМ как есть: #BND задаёт все диапазоны разом, и
 	# передать только UMTS нельзя - иначе затрём выбор LTE.
 	if [ -n "$EXT" ]; then
@@ -278,6 +285,9 @@ getantports() {
 	[ -n "$O" ] || { echo "Unsupported"; return; }
 	_i=0
 	# Значения идут парами; разбираем по две штуки за раз.
+	case "$O" in
+		*[!0-9,\ -]*) echo "Unsupported"; return ;;
+	esac
 	set -- $(echo "$O" | tr ',' ' ')
 	while [ $# -ge 2 ]; do
 		echo "$_i:$1:$2"
@@ -309,4 +319,37 @@ setmode() {
 		*) return 1 ;;
 	esac
 	sms_tool -d $_DEVICE at "AT+WS46=$W"
+}
+
+_CA_SWITCH=1
+getcaenabled() {
+	_ca_o=$(sms_tool -d $_DEVICE at "AT#CACTL?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^#CACTL: *\([0-9]*\).*/\1/p' | head -1)
+	case "$_ca_o" in
+		0) echo "off" ;;
+		1) echo "on" ;;
+		*) echo "Unsupported" ;;
+	esac
+}
+
+setcaenabled() {
+	case "$1" in
+		1|on)  _ca_w=1 ;;
+		0|off) _ca_w=0 ;;
+		*) echo "Unsupported"; return 1 ;;
+	esac
+	case "$(getcaenabled):$_ca_w" in
+		on:1|off:0) return 0 ;;
+		on:0|off:1) : ;;
+		*) echo "Unsupported"; return 1 ;;
+	esac
+	_ca_r=$(sms_tool -d $_DEVICE at "AT#CACTL=$_ca_w" 2>&1)
+	_ca_rc=$?
+	case "$_ca_rc:$_ca_r" in
+		0:*ERROR*|[!0]*)
+			logger -t 5gmodem "cactl: firmware rejected AT#CACTL=$_ca_w"
+			echo "Unsupported"; return 1 ;;
+	esac
+	/usr/share/5gmodem/reboot_modem.sh hard "$_DEVICE" >/dev/null 2>&1 </dev/null
+	return 0
 }

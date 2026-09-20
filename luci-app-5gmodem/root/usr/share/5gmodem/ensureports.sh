@@ -38,6 +38,7 @@ pick_sms_port() {
 	_at=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 	_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	[ -n "$_path" ] || return 1
+	command -v bg_at_off >/dev/null 2>&1 && bg_at_off "$_path" && return 1
 
 	# ПОД ModemManager ПОРТЫ НЕ НАШИ. Перебор ниже пробует AT на каждом tty
 	# модема, а у MM-модема среди них есть отведённые под GPS и служебные - наш

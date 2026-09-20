@@ -15,19 +15,62 @@ AT#BND=?
 # RF status
 AT#RFSTS
 
+# Serving cell
+AT#SERVINFO
+
+# Carrier aggregation
+AT#CAINFO?
+
+# Carrier aggregation enabled
+AT#CACTL?
+
+# Cell monitor
+AT#MONI
+
+# Channel quality (CQI)
+AT#CQI
+
 # Antenna ports
 AT#LAPS
 
 # 4RX receive
 AT#4RXDIS?
 
+# LTE RX diversity
+AT#LRXDIV?
+
+# LTE category limit
+AT#LTECAT?
+
+## Temperature
+
+# Temperature sensors
+AT#TEMPSENS=2
+
+# Thermal mitigation level
+AT#TMLVL?
+
+## SIM
+
+# SIM slot (0 = slot 1, 1 = slot 2)
+AT#SIMDET?
+
+# SIM status
+AT#QSS?
+
 ## USB and firmware
 
 # USB composition
 AT#USBCFG?
 
-# Firmware image
+# Firmware image (FN990)
 AT#FWSWITCH?
+
+# Active firmware (LM960)
+AT#ACTIVEFW?
+
+# Firmware images (LM960)
+AT#GETFW
 
 ## GNSS
 

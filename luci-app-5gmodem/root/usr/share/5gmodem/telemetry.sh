@@ -199,9 +199,12 @@ tele_write() {
 		case "$_J" in
 			*'"sig"'*|*'"rsrp"'*|*'"oper"'*) ;;
 			*)
-				case "$(cat "$TELE" 2>/dev/null)" in
-					*'"sig"'*|*'"rsrp"'*|*'"oper"'*) return 0 ;;
-				esac ;;
+				_tw_age=$(( $(date +%s) - $(date -r "$TELE" +%s 2>/dev/null || echo 0) ))
+				if [ "$_tw_age" -lt 120 ]; then
+					case "$(cat "$TELE" 2>/dev/null)" in
+						*'"sig"'*|*'"rsrp"'*|*'"oper"'*) return 0 ;;
+					esac
+				fi ;;
 		esac
 	fi
 
@@ -288,21 +291,29 @@ _mqtt_args() {
 	_h=$(_g mqtt_host); [ -n "$_h" ] || return 1
 	command -v mosquitto_pub >/dev/null 2>&1 || return 1
 	_p=$(_g mqtt_port); _u=$(_g mqtt_user); _w=$(_g mqtt_pass)
-	MARGS="-h $_h -p ${_p:-1883}"
-	[ -n "$_u" ] && MARGS="$MARGS -u $_u"
-	[ -n "$_w" ] && MARGS="$MARGS -P $_w"
 	_dn=$(_g name); [ -n "$_dn" ] || _dn=$(cat /proc/sys/kernel/hostname 2>/dev/null)
 	TOPIC=$(_g mqtt_topic); [ -n "$TOPIC" ] || TOPIC="5gmodem/$_dn"
 	DEVNAME="$_dn"
+	DEVID=$(printf '%s' "$_dn" | tr -c 'A-Za-z0-9_-' '_')
 	return 0
+}
+
+_mpub() {
+	if [ -n "$_u" ] && [ -n "$_w" ]; then
+		mosquitto_pub -h "$_h" -p "${_p:-1883}" -u "$_u" -P "$_w" "$@"
+	elif [ -n "$_u" ]; then
+		mosquitto_pub -h "$_h" -p "${_p:-1883}" -u "$_u" "$@"
+	else
+		mosquitto_pub -h "$_h" -p "${_p:-1883}" "$@"
+	fi
 }
 
 tele_publish() {
 	tele_write
 	_mqtt_args || return 0
 	[ -s "$TELE" ] || return 0
-	mosquitto_pub $MARGS -t "$TOPIC/state" -f "$TELE" 2>/dev/null \
-		&& mosquitto_pub $MARGS -t "$TOPIC/available" -m online 2>/dev/null
+	_mpub -t "$TOPIC/state" -f "$TELE" 2>/dev/null \
+		&& _mpub -t "$TOPIC/available" -m online 2>/dev/null
 }
 
 # HA-автообнаружение: по одной retain-теме на метрику (схема, раздел 4).
@@ -314,7 +325,7 @@ tele_discovery() {
 		[ -n "$4" ] && _cfg="$_cfg,\"device_class\":\"$4\""
 		_cfg="$_cfg,\"availability_topic\":\"$TOPIC/available\",\"unique_id\":\"${DEVNAME}_$1\""
 		_cfg="$_cfg,\"device\":{\"identifiers\":[\"$DEVNAME\"],\"model\":\"luci-app-5gmodem\",\"manufacturer\":\"OpenWrt\"}}"
-		mosquitto_pub $MARGS -r -t "homeassistant/sensor/${DEVNAME}_$1/config" -m "$_cfg" 2>/dev/null
+		_mpub -r -t "homeassistant/sensor/${DEVID}_$1/config" -m "$_cfg" 2>/dev/null
 	}
 	_disc sig  "Signal"        "%"    signal_strength
 	_disc rsrp "RSRP"          "dBm"  signal_strength

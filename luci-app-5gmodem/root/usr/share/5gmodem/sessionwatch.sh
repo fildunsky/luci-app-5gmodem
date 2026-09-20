@@ -105,12 +105,12 @@ _kill_stuck_uqmi() {   # $1 - устройство (/dev/cdc-wdm*)
 _watched_proto() {
 	case "$1" in
 		fibocom|atc|xmm|ncm|3g|wwan) return 0 ;;
-		qmi|mbim) return 0 ;;
+		qmi|qmiraw|mbim) return 0 ;;
 		*) return 1 ;;
 	esac
 }
 _kernel_proto() {
-	case "$1" in qmi|mbim) return 0 ;; *) return 1 ;; esac
+	case "$1" in qmi|qmiraw|mbim) return 0 ;; *) return 1 ;; esac
 }
 
 # Адрес, который netifd держит на интерфейсе.
@@ -618,6 +618,20 @@ EOF
 	POLL_MODEM="$_wpick" "$RES/5gmodem.sh" json >/dev/null 2>&1
 }
 
+warm_active() {
+	_wb=$(uci -q get "$CFG.stats.bgpoll" 2>/dev/null)
+	case "$_wb" in 60|300) : ;; *) return 0 ;; esac
+	[ "$(uci -q get "$CFG.@5gmodem[0].show_stats" 2>/dev/null)" = "0" ] && return 0
+	_wba=$(active_path)
+	[ -n "$_wba" ] || return 0
+	usb_path_present "$_wba" || return 0
+	bg_at_off "$_wba" && return 0
+	_wbt=$(cat "/tmp/5gmodem_metrics_$(snap_key "$_wba").stamp" 2>/dev/null)
+	case "$_wbt" in ''|*[!0-9]*) _wbt=0 ;; esac
+	[ "$(( $(uptime_s) - _wbt ))" -ge "$(( _wb - 10 ))" ] || return 0
+	POLL_MODEM="$_wba" "$RES/5gmodem.sh" json >/dev/null 2>&1
+}
+
 # ФОНОВЫЙ СБОРЩИК МЕТРИК ПРИ ОТКРЫТОЙ СТРАНИЦЕ.
 #
 # Раньше снимок держал свежим сам тик страницы: свежесть 4 c при опросе раз в
@@ -825,6 +839,7 @@ case "$1" in
 			# Подогрев ПОСЛЕ проверки сессии, а не вместо: восстановление связи
 			# важнее тёплой карточки, и порт (если он один) достанется сначала ей.
 			warm_snapshots
+			warm_active
 			_page_refresh
 			# Сторож интернета - последним: он ходит в СЕТЬ (ping), а не в порт,
 			# и с проверкой сессии за AT-порт не конкурирует. Включён ли он и не

@@ -133,11 +133,12 @@ _tg_direct_dead() {
 }
 
 _tg_curl() {   # аргументы curl без -s/-m
+	_tc_u="$1"; shift
 	_tc_o=""
 	if ! _tg_direct_dead; then
 		# 8 c, не 20: живой прямой путь отвечает за секунды, а на закрытом
 		# каждая лишняя секунда - это висящая кнопка и замёрзший тик.
-		_tc_o=$(curl -s -m 8 "$@" 2>&1)
+		_tc_o=$(printf 'url = "%s"\n' "$_tc_u" | curl -s -m 8 -K - "$@" 2>&1)
 		case "$_tc_o" in
 			*'"ok":'*) rm -f "$_TG_DDEAD" 2>/dev/null; printf '%s' "$_tc_o"; return 0 ;;
 		esac
@@ -145,7 +146,7 @@ _tg_curl() {   # аргументы curl без -s/-m
 	fi
 	_tc_pp=$(_tg_proxy_port)
 	if [ -n "$_tc_pp" ] && [ "$_tc_pp" != "0" ]; then
-		_tc_p=$(curl -s -m 20 -x "http://127.0.0.1:$_tc_pp" "$@" 2>&1)
+		_tc_p=$(printf 'url = "%s"\n' "$_tc_u" | curl -s -m 20 -x "http://127.0.0.1:$_tc_pp" -K - "$@" 2>&1)
 		case "$_tc_p" in
 			*'"ok":'*) printf '%s' "$_tc_p"; return 0 ;;
 		esac
@@ -167,12 +168,26 @@ _tg_send() {   # $1 - текст
 	# chat_id или недоступный api.telegram.org.
 	printf '%s' "$(printf '%s' "$_ts_o" | tr -d '\n' | head -c 200)" > "$LASTLOG" 2>/dev/null
 	case "$_ts_o" in
-		*'"error_code":40'*) return 2 ;;
+		*'"error_code":400'*)
+			case "$_ts_o" in
+				*"chat not found"*|*chat_id*) return 1 ;;
+			esac
+			return 2 ;;
 	esac
 	return 1
 }
 
-_seen_json() { SMS_MODEM="$1" "$RES/smsbridge.sh" seen 2>/dev/null; }
+_tk_mark() {
+	SMS_MODEM="$1" "$RES/smsbridge.sh" tg-add "$2" >/dev/null 2>&1
+	SMS_MODEM="$1" "$RES/smsbridge.sh" seen-add "$2" >/dev/null 2>&1
+}
+
+_tk_young() {
+	_ty_e=$(date -u -D '%Y-%m-%d %H:%M' -d "$1" +%s 2>/dev/null)
+	case "$_ty_e" in ''|*[!0-9]*) return 1 ;; esac
+	_ty_a=$(( $(date -u +%s) - _ty_e ))
+	[ "$_ty_a" -ge 0 ] && [ "$_ty_a" -lt 180 ]
+}
 
 # ===== КОГО ОБХОДИМ =====
 #
@@ -258,12 +273,11 @@ _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нел
 	[ "$(uci -q get "$CFG.$(_tg_sec "$_tk_path").kind")" = "hilink" ] \
 		|| ! bg_at_off "$_tk_path" || return 0
 	_tk_port=$(_tg_port "$_tk_path")
-	_tk_seen=$(_seen_json "$_tk_path")
-	_tk_first=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.first' 2>/dev/null)
-	_tk_keys=$(printf '%s' "$_tk_seen" | jsonfilter -e '@.keys[*]' 2>/dev/null)
-
-	_tk_msgs=$(SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" recv "$STORE" "$_tk_port" 2>/dev/null)
+	_tk_msgs=$(SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" unseen tg "$STORE" "$_tk_port" 2>/dev/null)
 	[ -n "$_tk_msgs" ] || return 0
+	_tk_first=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.first' 2>/dev/null)
+	_tk_gn=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.sms[*].have' 2>/dev/null | wc -l)
+	case "$_tk_gn" in ''|*[!0-9]*) return 0 ;; esac
 	# Подпись модема ставим, только когда их несколько: с одним она лишний шум.
 	# Список путей ПОСТРОЧНЫЙ (registry.sh paths печатает путь на строку), а не
 	# через пробел - искали пробел и не находили никогда, подпись не появлялась
@@ -273,48 +287,31 @@ _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нел
 		*" "*) _tk_tag=" ($(_tg_name "$_tk_path"))" ;;
 	esac
 
-	_tk_idx=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
 	_tk_n=0
 	_tk_skipped=0
-	for _tk_i in $_tk_idx; do
-		_tk_snd=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].sender" 2>/dev/null)
-		_tk_ts=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].timestamp" 2>/dev/null)
-		_tk_txt=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].content" 2>/dev/null)
-		_tk_tot=$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_i].total" 2>/dev/null)
-		_tk_key="$_tk_snd|$_tk_ts"
+	_tk_g=0
+	while [ "$_tk_g" -lt "$_tk_gn" ]; do
+		_tk_snd=""; _tk_ts=""; _tk_txt=""; _tk_key=""; _tk_have=""; _tk_tot=""
+		eval "$(printf '%s' "$_tk_msgs" | jsonfilter -e "_tk_snd=@.sms[$_tk_g].sender" \
+			-e "_tk_ts=@.sms[$_tk_g].time" -e "_tk_txt=@.sms[$_tk_g].text" \
+			-e "_tk_key=@.sms[$_tk_g].key" -e "_tk_have=@.sms[$_tk_g].have" \
+			-e "_tk_tot=@.sms[$_tk_g].total" 2>/dev/null)"
+		_tk_g=$((_tk_g + 1))
 		# Уже видели - пропускаем (ключ тот же, что считает страница). В список
 		# виденного дописываем и то, что отправили В ЭТОМ круге: у длинной SMS
 		# все части несут ОДИН ключ, а список прочитан до цикла - без этого
 		# сообщение из шести частей улетало в чат шестью кусками.
-		case "
-$_tk_keys
-" in
-			*"
-$_tk_key
-"*) continue ;;
-		esac
-		_tk_keys="$_tk_keys
-$_tk_key"
+		[ -n "$_tk_key" ] || continue
 		# ДЛИННАЯ SMS - СОБИРАЕМ ЦЕЛИКОМ. Модем отдаёт её частями (part/total), и
 		# читать в чате «...ерь баланс» без начала невозможно. Порядок берём по
 		# номеру части, а не по индексу в памяти модема: они совпадают не всегда.
-		case "$_tk_tot" in
-			''|0|1) : ;;
-			*[!0-9]*) : ;;
+		case "$_tk_have$_tk_tot" in
+			''|*[!0-9]*) : ;;
 			*)
-				_tk_full=""
-				_tk_pn=1
-				while [ "$_tk_pn" -le "$_tk_tot" ]; do
-					for _tk_j in $_tk_idx; do
-						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].sender" 2>/dev/null)" = "$_tk_snd" ] || continue
-						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].timestamp" 2>/dev/null)" = "$_tk_ts" ] || continue
-						[ "$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].part" 2>/dev/null)" = "$_tk_pn" ] || continue
-						_tk_full="$_tk_full$(printf '%s' "$_tk_msgs" | jsonfilter -e "@.msg[@.index=$_tk_j].content" 2>/dev/null)"
-						break
-					done
-					_tk_pn=$((_tk_pn + 1))
-				done
-				[ -n "$_tk_full" ] && _tk_txt="$_tk_full" ;;
+				if [ "$_tk_have" -lt "$_tk_tot" ]; then
+					_tk_young "$_tk_ts" && continue
+					_tk_txt="$_tk_txt [$_tk_have/$_tk_tot]"
+				fi ;;
 		esac
 		if [ "$_tk_first" = "1" ]; then
 			# ПЕРВАЯ ВСТРЕЧА С МОДЕМОМ. Старое обещанное правило - «ничего не
@@ -332,7 +329,7 @@ $_tk_key"
 			_tk_old=1
 			[ "$TG_FIRSTH" != 0 ] && _tk_fresh "$_tk_ts" old && _tk_old=""
 			if [ -n "$_tk_old" ]; then
-				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+				_tk_mark "$_tk_path" "$_tk_key"
 				_tk_n=$((_tk_n + 1))
 				continue
 			fi
@@ -354,7 +351,7 @@ $_tk_key"
 		# на знакомом модеме это скорее странный формат у нового сообщения, чем
 		# архив, а потерять уведомление хуже, чем прислать лишнее.
 		if ! _tk_fresh "$_tk_ts" fresh; then
-			SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+			_tk_mark "$_tk_path" "$_tk_key"
 			_tk_skipped=$((_tk_skipped + 1))
 			continue
 		fi
@@ -364,7 +361,7 @@ $_tk_ts
 $_tk_txt"
 		case "$?" in
 			0)
-				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1
+				_tk_mark "$_tk_path" "$_tk_key"
 				_tk_n=$((_tk_n + 1)) ;;
 			2)
 				# ТЕЛЕГРАМ ОТКАЗАЛСЯ ИМЕННО ОТ ЭТОГО ТЕКСТА. Повторять нечего, а
@@ -376,7 +373,7 @@ $_tk_txt"
 $_tk_ts
 
 (текст не принят Telegram - откройте «Входящие» на роутере)" >/dev/null 2>&1
-				SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" seen-add "$_tk_key" >/dev/null 2>&1 ;;
+				_tk_mark "$_tk_path" "$_tk_key" ;;
 			*)
 				# Не доставили - НЕ помечаем и прекращаем ВЕСЬ круг: если лежит
 				# сеть, остальным модемам в этом круге тоже не уйдёт. Сообщение
@@ -387,6 +384,7 @@ $_tk_ts
 				return 1 ;;
 		esac
 	done
+	[ "$_tk_first" = "1" ] && SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" tg-add >/dev/null 2>&1
 	# Молчаливый пропуск объясняем в журнале: иначе «сообщения есть, а бот
 	# молчит» выглядит поломкой. Пишем только когда что-то пропустили.
 	[ "$_tk_first" != "1" ] && [ "$_tk_skipped" -gt 0 ] && \
@@ -618,7 +616,11 @@ commands() {
 		# Chat ID» могут вернуть старое. Команда тратит деньги - повтор
 		# недопустим, поэтому старое отбрасываем сами.
 		[ "$_co_u" -lt "$_co_off" ] && continue
-		[ "$_co_u" -ge "$_co_max" ] && _co_max=$((_co_u + 1))
+		if [ "$_co_u" -ge "$_co_max" ]; then
+			_co_max=$((_co_u + 1))
+			printf '%s' "$_co_max" > "$OFFSET.tmp" 2>/dev/null && mv "$OFFSET.tmp" "$OFFSET" 2>/dev/null
+			sync 2>/dev/null
+		fi
 		_co_chat=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$((_co_i - 1))].message.chat.id" 2>/dev/null)
 		_co_txt=$(printf '%s' "$_co_j" | jsonfilter -e "@.result[$((_co_i - 1))].message.text" 2>/dev/null)
 		[ -n "$_co_txt" ] || continue

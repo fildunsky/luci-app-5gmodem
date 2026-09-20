@@ -5,10 +5,10 @@ O=$(sms_tool -d $DEVICE at "at#servinfo")
 case "$MODE_NUM" in
 	7*)
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $4}' | xargs)
-		[ -n "$COPS" ] && COPS="$T"
+		[ -n "$COPS" ] && [ -n "$T" ] && COPS="$T"
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $7}' | xargs)
 		if [ -n "$T" ]; then
-			T_DEC=$(printf "%d" "0x$T")
+			T_DEC=$(printf "%d" "0x$T" 2>/dev/null)
 			TAC_HEX=$T
 			TAC_DEC=$T_DEC
 		fi
@@ -22,11 +22,14 @@ case "$MODE_NUM" in
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $6}' | xargs)
 		if [ -n "$T" ]; then
-			PCI="$(printf "%d" "0x$T")"
+			PCI="$(printf "%d" "0x$T" 2>/dev/null)"
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^#SERVINFO/ {print $2}' | xargs)
 		if [ -n "$T" ]; then
 			EARFCN="$T"
 		fi
+		case "$RSSI" in -|*[!0-9-]*) RSSI="" ;; esac
+		case "$RSRP" in -|*[!0-9-]*) RSRP="" ;; esac
+		case "$EARFCN" in *[!0-9]*) EARFCN="" ;; esac
 		;;
 esac

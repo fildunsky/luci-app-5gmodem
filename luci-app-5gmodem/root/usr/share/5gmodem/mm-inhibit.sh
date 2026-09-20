@@ -457,7 +457,7 @@ mm_recover_missing() {
 			# qmi и прятал модем от MM: полевой отчёт 14.09.2026 (413c:81e0 на
 			# WH3000) - proto=qmi, mm_exclude=1 и сбросы USB.
 			case "$_sw_pro:$_sw_vp" in
-				qmi:413c:81d7|qmi:413c:81e0|qmi:0489:e0b5|qmi:0489:e0b4)
+				qmi:413c:81d7|qmi:413c:81e0|qmi:413c:81e4|qmi:413c:81e6|qmi:413c:81d8|qmi:0489:e0b5|qmi:0489:e0b4|qmi:1bc7:1911)
 					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
 						: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 						logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to qmi, waiting for MM"
@@ -467,7 +467,7 @@ mm_recover_missing() {
 			esac
 			if [ "$_sw_pro" = "mbim" ]; then
 				case "$_sw_vp" in
-					413c:81d7|413c:81e0|0489:e0b5|0489:e0b4|05c6:90d5)
+					413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911|05c6:90d5)
 						if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
 							: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 							logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to mbim, waiting for MM"

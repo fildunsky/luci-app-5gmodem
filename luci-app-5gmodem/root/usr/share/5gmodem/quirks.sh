@@ -142,7 +142,7 @@ sim_slots_via() {
 		# через GPIO, а не выбор слота. Зато QMI UIM отдаёт правду:
 		#   qmicli --uim-get-slot-status -> "2 physical slots found",
 		#   слот 1 present/active (ICCID виден), слот 2 absent/inactive.
-		1bc7:1040) echo qmi; return ;;
+		1bc7:1040) echo simdet; return ;;
 		# Telit FN990 (1bc7:1070) - тот же вендор и тот же QMI, слотов два.
 		# AT-команд выбора слота у Telit нет (см. выше про LM960), а по AT
 		# приложение ничего и не получало: раздел «Слоты SIM» приходил пустым,
@@ -180,7 +180,7 @@ sim_slots_via() {
 				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo ceiswitchsim; return ;;
 			esac
 			echo qmi; return ;;
-		05c6:9025|413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) echo qmi; return ;;
+		05c6:9025|413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911) echo qmi; return ;;
 		# Thales-композиции того же T99W175/MV31-W (AT^CUSTOMER=14/16/33): без
 		# записи слоты и кнопка eSIM у них не показывались вовсе (ревью 12.09.2026).
 		# 1e2d:00b7 делит с прототипом Compal - отличаем по модели, как 05c6:90d5.
@@ -252,7 +252,7 @@ esim_reset_after_switch() {
 				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo 0; return ;;
 			esac
 			echo 1; return ;;
-		05c6:9025|413c:81d7|413c:81e0|0489:e0b5) echo 1; return ;;
+		05c6:9025|413c:81d7|413c:81e0|413c:81e4|0489:e0b5) echo 1; return ;;
 		1e2d:00b7)
 			case "$1" in
 				*SG500M2*|*VOS_5G*|*RXM-G1*|*Compal*) echo 0; return ;;
@@ -282,7 +282,7 @@ esim_reset_after_switch() {
 # Аргумент - vid:pid.
 mm_at_fragile() {
 	case "$1" in
-		413c:81d7|413c:81e0|0489:e0b5|0489:e0b4) echo 1 ;;
+		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911) echo 1 ;;
 	esac
 }
 
@@ -335,7 +335,9 @@ _mm_ports_cached() {   # $1 - usb-путь, $2 - индекс MM
 
 _tty_ifnum() {   # $1 - имя tty; печатает "<usb-путь> <bInterfaceNumber>"
 	_ti_d=$(readlink -f "/sys/class/tty/$1/device" 2>/dev/null)
-	[ -n "$_ti_d" ] && [ -f "$_ti_d/bInterfaceNumber" ] || return 1
+	[ -n "$_ti_d" ] || return 1
+	[ -f "$_ti_d/bInterfaceNumber" ] || _ti_d=${_ti_d%/*}
+	[ -f "$_ti_d/bInterfaceNumber" ] || return 1
 	_ti_p=${_ti_d##*/}; _ti_p=${_ti_p%%:*}
 	echo "$_ti_p $(cat "$_ti_d/bInterfaceNumber" 2>/dev/null)"
 }

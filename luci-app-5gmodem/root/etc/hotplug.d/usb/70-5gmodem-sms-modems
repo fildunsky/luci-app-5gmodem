@@ -126,11 +126,15 @@ esac
 			sleep 5
 		done
 		if [ -n "$WDM" ]; then
-			for c in 0 1 2 3 none; do
-				qmicli -p -d "$WDM" \
-					--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \
-					>/dev/null 2>&1
-			done
+			. /usr/share/5gmodem/lib.sh 2>/dev/null
+			QMI_TARGET_PATH="${DEVPATH##*/}"
+			if command -v qmicli_p >/dev/null 2>&1; then
+				for c in 0 1 2 3 none; do
+					qmicli_p "$WDM" \
+						--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \
+						>/dev/null 2>&1
+				done
+			fi
 		fi
 	fi
 

@@ -97,7 +97,7 @@ case "$METRIC" in rsrp|rsrq|sinr|signal) ;; *) METRIC=rsrp ;; esac
 leds_for_metric() {   # $1 - значение
 	_v=$(printf '%s' "$1" | sed -n 's/^\(-\{0,1\}[0-9]\{1,\}\).*/\1/p')
 	[ -n "$_v" ] || { printf '0'; return; }
-	case "$METRIC" in
+	case "${2:-$METRIC}" in
 		rsrp)
 			if   [ "$_v" -ge -80 ];  then printf '3'
 			elif [ "$_v" -ge -100 ]; then printf '2'
@@ -121,7 +121,7 @@ leds_for_metric() {   # $1 - значение
 update_once() {
 	# TTL чуть больше периода опроса: иначе каждый тик заставал бы снимок
 	# протухшим и лез в порт, ради чего всё и затевалось.
-	_j=$("$RES/5gmodem.sh" cached $((INTERVAL + 5)) 2>/dev/null)
+	_j=$(SW_BG=1 "$RES/5gmodem.sh" cached $((INTERVAL + 5)) 2>/dev/null)
 	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
 
 	# Не зарегистрированы в сети - гасим всё. Показывать «уровень» при
@@ -132,7 +132,12 @@ update_once() {
 	esac
 
 	_val=$(printf '%s' "$_j" | jsonfilter -e "@.$METRIC" 2>/dev/null)
-	set_leds "$(leds_for_metric "$_val")"
+	_n=$(leds_for_metric "$_val")
+	if [ "$_n" = 0 ] && [ "$METRIC" != signal ]; then
+		_val=$(printf '%s' "$_j" | jsonfilter -e '@.signal' 2>/dev/null)
+		_n=$(leds_for_metric "$_val" signal)
+	fi
+	set_leds "$_n"
 }
 
 case "$1" in

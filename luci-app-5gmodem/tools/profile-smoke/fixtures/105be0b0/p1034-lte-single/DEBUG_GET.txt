@@ -1,0 +1,11 @@
+## 4pda 1086317 #1034 (T99W175, LTE B3 single carrier, two antennas)
+RAT:LTE
+mcc:250,mnc:02
+lte_cell_id:189442051
+lte_tac:7403
+lte_tx_pwr:0.0dBm
+lte_ant_rsrp:rx_diversity:3 (-107.4dBm,-114.1dBm,-256.0dBm,-256.0dBm)
+pcell: lte_band:3 lte_band_width:15.0MHz
+channel:1275 pci:325
+lte_rsrp:-107.4dBm,rsrq:-13.2dB
+lte_rssi:-75.4dBm,lte_snr:2.6dB

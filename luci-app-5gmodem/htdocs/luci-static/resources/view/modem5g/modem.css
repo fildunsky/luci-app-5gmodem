@@ -444,7 +444,7 @@
 	justify-content: center !important;
 	box-sizing: border-box !important;
 }
-/* ГАЛОЧКА ДОЛЖНА БЫТЬ ВИДНА. Тема Routy рисует «птичку» маской на ::after и
+/* ГАЛОЧКА ДОЛЖНА БЫТЬ ВИДНА. Одна из тем рисует «птичку» маской на ::after и
    заливает её через background: var(--fg-color); после минификации CSS цвет
    превращается в невалидный calc (пропал пробел перед «+»), заливка становится
    прозрачной - и ЛЮБОЙ отмеченный чекбокс выглядит снятым (замечено владельцем
@@ -2770,3 +2770,101 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 .tg-boxed-sec .tg-simple-toggle {
   margin-top: -.5em;
 }
+
+.tg-hist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 10px;
+}
+.tg-hist-card {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(128,128,128,.28);
+  border-radius: var(--tg-radius);
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: left;
+}
+.tg-hist-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.tg-hist-name { display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; }
+.tg-hist-name b { font-size: 13px; font-weight: 700; }
+.tg-hist-lv { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--tg-muted); white-space: nowrap; }
+.tg-hist-lv i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.tg-hist-now { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tg-hist-now small { font-size: 11.5px; font-weight: 400; color: var(--tg-muted); }
+.tg-hist-plot {
+  position: relative;
+  height: 64px;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.tg-hist-plot svg { width: 100%; height: 64px; display: block; overflow: visible; max-width: none; }
+.tg-hist-line { fill: none; stroke: var(--tg-accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.tg-hist-area { fill: var(--tg-accent); fill-opacity: .1; stroke: none; }
+.tg-hist-avg { stroke: currentColor; stroke-opacity: .35; stroke-width: 1; stroke-dasharray: 3 4; }
+.tg-hist-mark { fill: none; stroke: currentColor; stroke-opacity: .5; stroke-width: 1; }
+.tg-hist-cur { stroke: var(--tg-accent); stroke-width: 1; }
+.tg-hist-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--tg-accent);
+  pointer-events: none;
+}
+.tg-hist-hdot { width: 10px; height: 10px; margin: -5px 0 0 -5px; box-shadow: 0 0 0 2px rgba(128,128,128,.35); }
+.tg-hist-tip {
+  position: absolute;
+  top: -25px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(128,128,128,.45);
+  background: var(--tg-term-bg);
+  color: var(--tg-term-fg);
+  font-size: 11.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+  font-variant-numeric: tabular-nums;
+  z-index: 2;
+}
+.tg-hist-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--tg-muted);
+  pointer-events: none;
+}
+.tg-hist-f {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--tg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tg-hist-note { font-size: 12px; color: var(--tg-muted); margin-top: 8px; line-height: 1.4; }
+.tg-theme-argon .tg-hist-grid { margin: 0 1.5rem; }
+.tg-theme-argon .tg-hist-note { margin: 8px 1.5rem 1rem 1.5rem; }
+.tg-hist-f span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

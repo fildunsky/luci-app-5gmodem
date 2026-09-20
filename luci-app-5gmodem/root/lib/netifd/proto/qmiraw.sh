@@ -605,7 +605,9 @@ proto_qmiraw_teardown() {
 		    "$devpath"/*/usbmisc/cdc-wdm* \
 		    "$devpath"/*/wwan[0-9]*/wwan[0-9]*qmi* \
 		    "$devpath"/*/*/wwan[0-9]*/wwan[0-9]*qmi*; do
+			[ -e "$usbmisc_or_wwan_path" ] || continue
 			device="/dev/${usbmisc_or_wwan_path##*/}"
+			break
 		done
 	fi
 

@@ -15,7 +15,7 @@ function loadCss() {
 }
 
 /* СЛОМАНА ЛИ У ТЕМЫ ГАЛОЧКА - СПРАШИВАЕМ У БРАУЗЕРА, А НЕ ЧИНИМ ВСЛЕПУЮ.
-   Тема Routy рисует галочку маской, а цвет заливки берёт из --fg-color, который
+   Одна из тем рисует галочку маской, а цвет заливки берёт из --fg-color, который
    при минификации превращается в невалидный calc: заливка становится прозрачной
    и отмеченный чекбокс выглядит снятым. Лечилось это правилом
    «background: currentColor» для ВСЕХ тем - и в proton2025 оно закрасило
@@ -60,19 +60,55 @@ var IS_PROTON = (function() {
    жёлтый, хотя число то же (жалоба 18.09.2026). Теперь пороги, уровни, цвета и
    длина заливки берутся отсюда везде.
    edges = [худшее, гр1, гр2, гр3, лучшее]: Слабый / Средний / Хороший / Отличный. */
+var QUAL_T = {
+	lte:  { rsrp: [ -128, -118, -108, -98 ], rsrq: [ -20, -17, -14, -11 ], sinr: [ -3, 1, 5, 13 ] },
+	nr:   { rsrp: [ -110, -90, -80, -65 ], rsrq: [ -31, -19, -17, -14 ], sinr: [ -5, 5, 15, 30 ] },
+	umts: { rscp: [ -115, -105, -95, -85 ], ecio: [ -24, -14, -6, 1 ], rssi: [ -107, -103, -97, -89 ] },
+	gsm:  { rssi: [ -107, -103, -97, -89 ] }
+};
 var QUAL_EDGES = {
 	csq:  [ 0,    10,   15,  20,  31  ],
-	rssi: [ -113, -100, -85, -70, -55 ],
-	rsrp: [ -125, -100, -90, -80, -70 ],
-	rsrq: [ -23,  -20,  -15, -10, -3  ],
-	sinr: [ -10,  0,    13,  20,  30  ]
+	rssi: [ -113, -100, -85, -70, -55 ]
 };
+var _qualRat = 'lte';
+function qualRat(mode) {
+	var m = String(mode == null ? '' : mode).toLowerCase();
+	if (/nsa/.test(m)) { return 'lte'; }
+	if (/5g|nr/.test(m)) { return 'nr'; }
+	if (/lte|4g/.test(m)) { return 'lte'; }
+	if (/umts|hspa|wcdma|3g/.test(m)) { return 'umts'; }
+	if (/gsm|edge|gprs|2g/.test(m)) { return 'gsm'; }
+	return 'lte';
+}
+function qualSetMode(mode) {
+	if (mode != null && mode !== '' && mode !== '-') { _qualRat = qualRat(mode); }
+	return _qualRat;
+}
+function qualBandRat(band) {
+	return /^\s*n\d/.test(String(band == null ? '' : band)) ? 'nr' : _qualRat;
+}
+function qualEdges(key, rat) {
+	var tab = QUAL_T[rat || _qualRat] || QUAL_T.lte;
+	var t = tab[key];
+	if (!t && key === 'csq' && tab.rssi) {
+		t = tab.rssi.map(function(x) { return (x + 113) / 2; });
+	}
+	if (!t && !QUAL_EDGES[key]) { t = QUAL_T.lte[key] || QUAL_T.umts[key]; }
+	if (!t) { return QUAL_EDGES[key] || null; }
+	return [ t[0] - (t[1] - t[0]), t[1], t[2], t[3], t[3] + (t[3] - t[2]) ];
+}
+function sinrUnmeasured(sinr, rsrq) {
+	var s = String(sinr == null ? '' : sinr).trim(), q = String(rsrq == null ? '' : rsrq).trim();
+	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(s) || parseFloat(s) !== 0) { return false; }
+	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(q)) { return false; }
+	return parseFloat(q) >= -14;
+}
 /* Уровень 0..3 и доля шкалы 0..100 (кусочно-линейно по четвертям). */
 function qualLevelPct(edges, vn) {
 	if (vn <= edges[0]) { return [ 0, 0 ]; }
 	if (vn >= edges[4]) { return [ 3, 100 ]; }
 	for (var i = 0; i < 4; i++) {
-		if (vn <= edges[i + 1]) {
+		if (vn < edges[i + 1]) {
 			return [ i, Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i])) ];
 		}
 	}
@@ -87,23 +123,23 @@ var CA_GRAD = {
 	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
 	green:  'linear-gradient(90deg, #2fb885, #34d399)'
 };
-function caQuality(key, v) {
-	var e = QUAL_EDGES[key], n = parseFloat(v);
+function caQuality(key, v, rat) {
+	var e = qualEdges(key, rat), n = parseFloat(v);
 	if (!e || isNaN(n)) { return null; }
 	return QUAL_NAMES[qualLevelPct(e, n)[0]];
 }
 /* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
-function metricPct(key, v) {
-	var e = QUAL_EDGES[key], n = parseFloat(v);
+function metricPct(key, v, rat) {
+	var e = qualEdges(key, rat), n = parseFloat(v);
 	if (!e || isNaN(n)) { return null; }
 	var pc = qualLevelPct(e, n)[1];
 	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
 }
-function paintMetricCell(td, key, v, text) {
+function paintMetricCell(td, key, v, text, rat) {
 	var has = (v != null && v !== '' && v !== '-');
 	var txt = has ? String(text != null ? text : v) : '-';
-	var col = has ? caQuality(key, v) : null;
-	var pc  = col ? metricPct(key, v) : null;
+	var col = has ? caQuality(key, v, rat) : null;
+	var pc  = col ? metricPct(key, v, rat) : null;
 	if (IS_PROTON) {
 		if (pc != null) {
 			var pb = td.querySelector('.cbi-progressbar');
@@ -466,7 +502,8 @@ return view.extend({
 				return;
 			}
 			st.foreignN = 0;
-			var sinr = parseFloat(j.sinr), rsrp = parseInt(j.rsrp, 10), rsrq = parseInt(j.rsrq, 10);
+			qualSetMode(j.mode);
+			var sinr = sinrUnmeasured(j.sinr, j.rsrq) ? NaN : parseFloat(j.sinr), rsrp = parseInt(j.rsrp, 10), rsrq = parseInt(j.rsrq, 10);
 			/* Раньше при отсутствии rssi сюда подставлялся j.signal - а это
 			   процент уровня, не дБм: поле RSSI показывало «-64» рядом с
 			   «33» и оба выглядели как измерения. Нет rssi - пишем прочерк. */

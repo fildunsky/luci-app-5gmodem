@@ -1,0 +1,5 @@
+## 4pda 1057776 (FM350-GL): "sometimes +GTCCINFO prints 18020 instead of 1802 in neighbour rows"
++GTCCINFO:
+1,4,250,1,1234,000123456,1802,470,103,100,-3,42,42,7
+
+2,4,,,FFFF,00FFFFFFF,18020,322,,39,39,1

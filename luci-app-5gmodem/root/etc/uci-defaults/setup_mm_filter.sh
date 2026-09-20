@@ -22,7 +22,7 @@ rm -f /etc/udev/rules.d/99-5gmodem-mm-ignore.rules 2>/dev/null
 rm -f /usr/share/5gmodem/mm-filter.sh 2>/dev/null
 
 _is_kernel_proto() {
-	case "$1" in qmi|mbim|xmm|ncm|atc|3g|wwan|ppp|fibocom) return 0 ;; *) return 1 ;; esac
+	case "$1" in qmi|qmiraw|mbim|xmm|ncm|atc|3g|wwan|ppp|fibocom) return 0 ;; *) return 1 ;; esac
 }
 
 for SEC in $(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.=]*\)=modem\$/\1/p"); do

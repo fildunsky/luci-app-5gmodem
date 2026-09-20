@@ -40,12 +40,13 @@ STAMP=/etc/5gmodem_proto.md5   # персистентный (не /tmp): пер�
 # протокола»), хуже не сделать.
 NEED=0
 HAS_FIBO=0
+_rp_known=$(ubus call network get_proto_handlers 2>/dev/null)
 for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
 	HAS_FIBO=1
 	_av=$(ubus call network.interface."$_if" status 2>/dev/null \
 		| jsonfilter -e '@.available' 2>/dev/null)
-	[ "$_av" = "false" ] && NEED=1
+	[ "$_av" = "false" ] && ! printf '%s' "$_rp_known" | grep -q '"fibocom"' && NEED=1
 done
 
 # ПРОТО НЕИЗВЕСТЕН NETIFD, А ИНТЕРФЕЙСА НЕТ - РЕСТАРТ ТОЛЬКО ПО ЯВНОЙ ПРОСЬБЕ.

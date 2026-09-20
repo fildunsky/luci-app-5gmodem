@@ -338,6 +338,9 @@ esac
 # "#LAPS: -111,-11,-134,-19" -> "0:-111:-11 1:-134:-19" (пары rsrp/rsrq на
 # порт, портов 2 или 4).
 _FN_V=$(printf '%s\n' "$O" | sed -n 's/^#LAPS: *//p' | head -1)
+case "$_FN_V" in
+	*[!0-9,\ -]*) _FN_V="" ;;
+esac
 if [ -n "$_FN_V" ]; then
 	ANTPORTS=$(printf '%s' "$_FN_V" | awk -F, '{
 		out = ""

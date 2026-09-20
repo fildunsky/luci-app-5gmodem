@@ -977,24 +977,94 @@ hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
 #
 # Маска 3FFFFFFF в NetworkBand означает «все» - её и ставим, когда пользователь
 # снимает ограничение, а не перечисляем диапазоны поимённо.
+_hl_hexsplit() {
+	_hx=$(printf '%s' "$1" | tr -d '\r\n')
+	case "$_hx" in 0[xX]*) _hx=${_hx#??} ;; esac
+	case "$_hx" in ''|*[!0-9A-Fa-f]*) return 1 ;; esac
+	while [ "${#_hx}" -gt 1 ]; do
+		case "$_hx" in 0*) _hx=${_hx#0} ;; *) break ;; esac
+	done
+	[ "${#_hx}" -le 16 ] || return 1
+	if [ "${#_hx}" -gt 8 ]; then
+		_hx_hi=${_hx%????????}; _hx_lo=${_hx#"$_hx_hi"}
+	else
+		_hx_hi=0; _hx_lo=$_hx
+	fi
+	_hx_hi=$(( 0x$_hx_hi )); _hx_lo=$(( 0x$_hx_lo ))
+}
+
+_hl_lte_all() {
+	_la=$(printf '%s' "$1" | tr -d '\r\n')
+	case "$_la" in 0[xX]*) _la=${_la#??} ;; esac
+	case "$_la" in ''|*[!0-9A-Fa-f]*) return 1 ;; esac
+	while [ "${#_la}" -gt 1 ]; do
+		case "$_la" in 0*) _la=${_la#0} ;; *) break ;; esac
+	done
+	[ "${#_la}" -ge 8 ] || return 1
+	case "${_la#?}" in *[!Ff]*) return 1 ;; esac
+	return 0
+}
+
 _mask_to_bands() {   # $1 - hex-маска; печатает номера диапазонов через пробел
-	_m=$(printf '%d' "0x$1" 2>/dev/null) || return 1
+	_hl_hexsplit "$1" || return 1
 	_i=0; _out=""
 	while [ "$_i" -lt 32 ]; do
-		if [ $(( (_m >> _i) & 1 )) -eq 1 ]; then _out="$_out $(( _i + 1 ))"; fi
+		if [ $(( (_hx_lo >> _i) & 1 )) -eq 1 ]; then _out="$_out $(( _i + 1 ))"; fi
+		_i=$(( _i + 1 ))
+	done
+	_i=0
+	while [ "$_i" -lt 32 ]; do
+		if [ $(( (_hx_hi >> _i) & 1 )) -eq 1 ]; then _out="$_out $(( _i + 33 ))"; fi
 		_i=$(( _i + 1 ))
 	done
 	echo "$_out" | xargs
 }
 
 _bands_to_mask() {   # $1 - номера через пробел; печатает hex-маску
-	_m=0
+	_mlo=0; _mhi=0
 	for _b in $1; do
 		case "$_b" in ''|*[!0-9]*) continue ;; esac
-		[ "$_b" -ge 1 ] && [ "$_b" -le 32 ] || continue
-		_m=$(( _m | (1 << (_b - 1)) ))
+		while [ "${#_b}" -gt 1 ]; do
+			case "$_b" in 0*) _b=${_b#0} ;; *) break ;; esac
+		done
+		[ "${#_b}" -le 2 ] && [ "$_b" -ge 1 ] && [ "$_b" -le 64 ] || return 1
+		if [ "$_b" -le 32 ]; then
+			_mlo=$(( _mlo | (1 << (_b - 1)) ))
+		else
+			_mhi=$(( _mhi | (1 << (_b - 33)) ))
+		fi
 	done
-	printf '%X\n' "$_m"
+	if [ "$_mhi" -gt 0 ]; then
+		printf '%X%08X\n' "$_mhi" "$_mlo"
+	else
+		printf '%X\n' "$_mlo"
+	fi
+}
+
+_hl_lte_fallback="1 2 3 4 5 7 8 20 28 32 38 40 41"
+
+_hl_ltelist() {
+	api_get /api/net/net-mode-list "$1" 2>/dev/null | tr -d '\r\n' \
+		| sed -n 's/.*<LTEBandList>\(.*\)<\/LTEBandList>.*/\1/p'
+}
+
+hl_supbands() {
+	_sl=$(_hl_ltelist "$1")
+	[ -n "$_sl" ] || return 1
+	{
+		printf '%s' "$_sl" | grep -oE 'LTE BC[0-9]+' | sed 's/LTE BC//'
+		for _sv in $(printf '%s' "$_sl" | grep -oE '<Value>[0-9A-Fa-f]+</Value>' | sed 's/<[^>]*>//g'); do
+			_hl_lte_all "$_sv" && continue
+			_mask_to_bands "$_sv" | tr ' ' '\n'
+		done
+	} | grep -E '^[0-9]+$' | sort -nu | xargs
+}
+
+_hl_lte_allval() {
+	for _sv in $(_hl_ltelist "$1" | grep -oE '<Value>[0-9A-Fa-f]+</Value>' | sed 's/<[^>]*>//g'); do
+		_hl_lte_all "$_sv" && { echo "$_sv"; return 0; }
+	done
+	echo "7FFFFFFFFFFFFFFF"
 }
 
 hl_getbands() {
@@ -1002,6 +1072,14 @@ hl_getbands() {
 	_lte=$(printf '%s' "$_r" | xval LTEBand)
 	[ -n "$_lte" ] || return 1
 	# 3FFFFFFF (и подобные «все биты») - ограничения нет.
+	if _hl_lte_all "$_lte"; then
+		_gb=$(hl_supbands "$1")
+		[ -n "$_gb" ] || _gb=$(uci -q get "$CFG.m_$(echo "$(_hl_path "$1")" | sed 's/[^A-Za-z0-9]/_/g').band_full" \
+			| tr -c '0-9\n' ' ' | xargs)
+		[ -n "$_gb" ] || _gb="$_hl_lte_fallback"
+		echo "$_gb"
+		return 0
+	fi
 	_mask_to_bands "$_lte"
 }
 
@@ -1010,9 +1088,10 @@ hl_setbands() {   # $1 - номера диапазонов или "default", $2 
 	_nm=$(printf '%s' "$_cur" | xval NetworkMode)
 	[ -n "$_nm" ] || _nm="03"
 	if [ "$1" = "default" ] || [ -z "$1" ]; then
-		_lte="7FFFFFFFFFFFFFFF"; _nb="3FFFFFFF"
+		_lte=$(_hl_lte_allval "$2"); _nb="3FFFFFFF"
 	else
-		_lte=$(_bands_to_mask "$1"); _nb="3FFFFFFF"
+		_lte=$(_bands_to_mask "$1") || { echo '{"success":false,"error":"bad band"}'; return 1; }
+		_nb="3FFFFFFF"
 		[ "$_lte" = "0" ] && return 1
 	fi
 	_r=$(api_post /api/net/net-mode \
@@ -1254,6 +1333,7 @@ case "$1" in
 	ussd)        hl_ussd "$2" "$3" ;;
 	getbands)    hl_getbands "$2" ;;
 	setbands)    hl_setbands "$2" "$3" ;;
+	supbands)    hl_supbands "$2" ;;
 	getbands3g)  hl_getbands3g "$2" ;;
 	setbands3g)  hl_setbands3g "$2" "$3" ;;
 	supbands3g)  hl_supbands3g "$2" ;;

@@ -146,7 +146,8 @@ if [ "$MODE" = usbpower ]; then
 		# 15.08.2026 на стенде (qmiraw, wwan0 DOWN 100 минут, сторож увёл
 		# трафик на Wi-Fi). Поднимаем интерфейс модема сами.
 		_ifn=$(uci -q get "5gmodem.m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g').network")
-		[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+		[ -n "$_ifn" ] || [ "$_p" != "$(uci -q get 5gmodem.@5gmodem[0].active_modem)" ] \
+			|| _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
 		if [ -n "$_ifn" ]; then
 			sleep 5
 			ifdown "$_ifn" >/dev/null 2>&1
@@ -155,6 +156,7 @@ if [ "$MODE" = usbpower ]; then
 		fi
 	) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"usbpower\",\"method\":\"$_m\",\"path\":\"$_p\"}"
+	sleep 1
 	exit 0
 fi
 
@@ -179,6 +181,7 @@ if [ "$MODE" = power ]; then
 	# дескрипторами ubus file exec отвечает мгновенно (проверено на роутере).
 	( echo 1 > "$GP" 2>/dev/null; sleep 5; echo 0 > "$GP" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
+	sleep 1
 	exit 0
 fi
 
@@ -186,7 +189,22 @@ fi
 # У HiLink-модема перезагрузка делается его же API: AT-канала, куда послать
 # CFUN, попросту нет. Без этой ветки кнопка возвращала бы "AT port not found",
 # хотя перезагрузить модем вполне возможно.
-_rb_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_rb_act=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_rb_am=""
+if [ -n "$PORT" ]; then
+	_rb_tp=$(readlink -f "/sys/class/tty/${PORT##*/}/device" 2>/dev/null)
+	_rb_tp=${_rb_tp%/*}; _rb_tp=${_rb_tp##*/}
+	_rb_am=${_rb_tp%%:*}
+	case "$_rb_am" in [0-9]*-[0-9]*) ;; *) _rb_am="" ;; esac
+fi
+[ -n "$_rb_am" ] || _rb_am="$_rb_act"
+_rb_if=""
+if [ -n "$_rb_am" ]; then
+	_rb_if=$(uci -q get "5gmodem.m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g').network")
+fi
+if [ -z "$_rb_if" ] && [ "$_rb_am" = "$_rb_act" ]; then
+	_rb_if=$(uci -q get 5gmodem.@5gmodem[0].network)
+fi
 if [ -n "$_rb_am" ]; then
 	_rb_sec="m_$(echo "$_rb_am" | sed 's/[^A-Za-z0-9]/_/g')"
 	if [ "$(uci -q get "5gmodem.$_rb_sec.kind")" = "hilink" ]; then
@@ -194,6 +212,7 @@ if [ -n "$_rb_am" ]; then
 		# вызов досидел бы до таймаута rpcd (та же грабля, что и в ветке power).
 		( /usr/share/5gmodem/hilink.sh reboot "$_rb_am" ) >/dev/null 2>&1 </dev/null &
 		echo '{"success":true,"mode":"hilink-api"}'
+		sleep 1
 		exit 0
 	fi
 fi
@@ -221,8 +240,8 @@ if [ "$MODE" = "hard" ]; then
 	# Редирект нужен НА подоболочке (см. ветку power выше): иначе она наследует
 	# пайпы rpcd и держит их, пока sms_tool ждёт ответа от исчезнувшего порта, -
 	# rpcd досиживает до таймаута, и «фон» не спасает от «ошибки XHR».
-	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
-	_AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+	IF="$_rb_if"
+	_AMP="$_rb_am"
 	( sms_tool -d "$PORT" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
 	# ФАНТОМНАЯ СЕССИЯ ПОСЛЕ РЕБУТА. После CFUN=1,1 модем переэнумерируется на USB,
 	# НО у fibocom/xmm/ecm сетевое устройство (RNDIS/CDC) не отваливается -> netifd
@@ -273,7 +292,7 @@ else
 	# stays. This drops the data bearer, so nudge the app's interface back up
 	# (kernel qmi/mbim/atc/fibocom need it; MM-managed modems reconnect on their
 	# own). Backgrounded so the script returns promptly to the UI.
-	IF=$(uci -q get 5gmodem.@5gmodem[0].network)
+	IF="$_rb_if"
 	# Намеренный soft-reconnect (кнопка «переподключить», применение бендов и т.п.),
 	# не холодный boot-attach: гасим восстановление диапазонов на порождённый нами
 	# ifup, иначе 31-5gmodem-bands сделал бы лишний CFUN поверх (двойной CFUN подряд
@@ -313,4 +332,5 @@ else
 fi
 
 echo "{\"success\":true,\"mode\":\"$MODE\"}"
+sleep 1
 exit 0

@@ -103,7 +103,7 @@ at_probe() {
 	# 8>&- 9>&- обязательны: вызывающий может держать at_lock (fd 8) и замок
 	# хотплага (fd 9) - фоновый sms_tool унаследовал бы их OFD и держал локи
 	# дольше владельца (ревью, баг №6; тот же класс, что в atprobe.sh/lib.sh).
-	sms_tool -d "$1" at "AT" >/dev/null 2>&1 8>&- 9>&- &
+	sms_tool -d "$1" at "AT" >/dev/null 2>&1 7>&- 8>&- 9>&- &
 	_p=$!
 	_n=0
 	while kill -0 "$_p" 2>/dev/null; do
@@ -230,6 +230,76 @@ at_for_path() {
 
 
 
+
+mmk_val() {
+	printf '%s\n' "$1" | sed -n "s/^$2 *: *//p" | head -1
+}
+
+mmk_imei() {
+	_mki_v=$(mmk_val "$1" 'modem\.3gpp\.imei' | tr -cd '0-9')
+	case "${#_mki_v}" in 14|15|16) echo "$_mki_v"; return 0 ;; esac
+	_mki_v=$(mmk_val "$1" 'modem\.generic\.equipment-identifier' | tr -cd '0-9')
+	case "${#_mki_v}" in 14|15|16) echo "$_mki_v"; return 0 ;; esac
+	return 1
+}
+
+resolve_at_gate() {
+	_RG_QUIET=0; _RG_NEVER=0; _RG_PORT=""; _RG_MM=""; _RG_MMK=""
+	_rg_frag=""
+	command -v mm_at_fragile >/dev/null 2>&1 && _rg_frag=$(mm_at_fragile "$(modem_vidpid "$1")")
+	_rg_noat=$(uci -q get "$CFG.$2.no_at")
+	[ -n "$_rg_frag" ] || [ "$_rg_noat" = "1" ] || return 0
+	_RG_MM=$(mm_index_for_path "$1")
+	[ -n "$_RG_MM" ] && _RG_MMK=$(mmcli -m "$_RG_MM" -K 2>/dev/null)
+	if [ "$_rg_noat" = "1" ]; then
+		_RG_QUIET=1
+		[ -n "$_RG_MM" ] && _RG_NEVER=1
+		return 0
+	fi
+	_rg_if=$(uci -q get "$CFG.$2.network")
+	[ -n "$_RG_MM" ] || [ "$(uci -q get "network.$_rg_if.proto" 2>/dev/null)" = "modemmanager" ] || return 0
+	mm_at_allowed "$1" "$2"
+	if [ "$?" = 0 ]; then
+		[ -n "$MM_AT_PORT" ] || return 0
+		_RG_PORT="$MM_AT_PORT"
+		_RG_QUIET=1
+		return 0
+	fi
+	_RG_QUIET=1; _RG_NEVER=1
+	return 0
+}
+
+quiet_at_port() {
+	[ -n "$_RG_PORT" ] && [ -c "$_RG_PORT" ] && { echo "$_RG_PORT"; return 0; }
+	_qa_pin=$(uci -q get "$CFG.$2.at_port")
+	if [ -n "$_qa_pin" ] && [ -e "$_qa_pin" ] && modem_ttys "$1" | grep -qxF "$_qa_pin"; then
+		echo "$_qa_pin"; return 0
+	fi
+	_qa_if=$(uci -q get "$CFG.$2.at_if")
+	if [ -n "$_qa_if" ]; then
+		for _qa_d in /sys/bus/usb/devices/"$1":*; do
+			[ "$(cat "$_qa_d/bInterfaceNumber" 2>/dev/null)" = "$_qa_if" ] || continue
+			for _qa_n in "$_qa_d"/ttyUSB* "$_qa_d"/tty/tty*; do
+				[ -e "$_qa_n" ] || continue
+				[ -c "/dev/${_qa_n##*/}" ] || continue
+				echo "/dev/${_qa_n##*/}"; return 0
+			done
+		done
+	fi
+	if [ -n "$_RG_MMK" ]; then
+		_qa_p=$(printf '%s\n' "$_RG_MMK" \
+			| sed -n 's/^modem\.generic\.ports\.value\[[0-9]*\] *: *\(tty[A-Za-z]*[0-9]*\) *(at)$/\1/p' | head -1)
+		[ -n "$_qa_p" ] && [ -e "/dev/$_qa_p" ] && { echo "/dev/$_qa_p"; return 0; }
+	fi
+	return 1
+}
+
+quiet_ident_known() {
+	[ -n "$2" ] && [ -n "$3" ] && [ "$2" != "$3" ] && return 1
+	[ "$(uci -q get "$CFG.$1.ident_probe")" = "$(uci -q get "$CFG.$1.vidpid")|$3" ] && return 0
+	[ -n "$(uci -q get "$CFG.$1.imei" | tr -cd '0-9')" ] || return 1
+	[ -n "$(uci -q get "$CFG.$1.model")" ] || [ -n "$(uci -q get "$CFG.$1.at_port")" ]
+}
 
 # snapshot the current AT port into a modem section. NOTE: we deliberately do
 # NOT copy 'network'/'iface_proto' here - those belong to the interface and are
@@ -1304,8 +1374,12 @@ resolve)
 		# ровно тогда, когда он уже не нужен. Стоит он ноль: реестр всё равно
 		# запрошен рядом (modem_ttys/at_for_path), а sysfs-чтение AT не трогает.
 		# ВАЖНО: строго ПОСЛЕ swap_cleanup - тот удаляет серийник прежнего аппарата.
+		_rs_oser=$(uci -q get "$CFG.$SEC.serial")
 		_rs_ser=$(modem_serial "$P")
 		[ -n "$_rs_ser" ] && uci -q set "$CFG.$SEC.serial=$_rs_ser"
+		resolve_at_gate "$P" "$SEC"
+		_rs_known=0
+		[ "$_RG_QUIET" = 1 ] && quiet_ident_known "$SEC" "$_rs_oser" "$_rs_ser" && _rs_known=1
 		# Порты появляются НЕ мгновенно: после hotplug-add ядро заводит ttyUSB*
 		# ещё несколько секунд (FM350 отдаёт 7 штук), а hotplug ждёт всего 5с.
 		# Ждём порт, но не бесконечно (resolve всегда вызывается из фона).
@@ -1318,15 +1392,29 @@ resolve)
 		# сдвигается, и тогда закрепление протухает.
 		A=""
 		_pin=$(uci -q get "$CFG.$SEC.at_port")
-		if [ -n "$_pin" ] && [ -e "$_pin" ] && modem_ttys "$P" | grep -qxF "$_pin"; then
+		if [ "$_RG_QUIET" != 1 ] && [ -n "$_pin" ] && [ -e "$_pin" ] && modem_ttys "$P" | grep -qxF "$_pin"; then
 			"$RES/atprobe.sh" "$_pin" >/dev/null 2>&1 && A="$_pin"
 		fi
 		_try=0
 		while [ -z "$A" ] && [ "$_try" -lt 6 ]; do
-			A=$(at_for_path "$P")
+			if [ "$_RG_QUIET" = 1 ]; then
+				A=$(quiet_at_port "$P" "$SEC")
+				if [ -z "$A" ] && [ "$_RG_NEVER" != 1 ]; then
+					[ "$_try" = 0 ] && logger -t 5gmodem-resolve "modem $P: background AT is off, but its AT port is unknown - probing once"
+					A=$(at_for_path "$P")
+					_rs_known=0
+				fi
+			else
+				A=$(at_for_path "$P")
+			fi
 			[ -n "$A" ] && break
 			_try=$((_try + 1)); sleep 2
+			[ "$_RG_NEVER" = 1 ] && [ -n "$_RG_MM" ] && _RG_MMK=$(mmcli -m "$_RG_MM" -K 2>/dev/null)
 		done
+		if [ -n "$A" ] && [ "$_RG_QUIET" = 1 ] && command -v _tty_ifnum >/dev/null 2>&1; then
+			_rs_ti=$(_tty_ifnum "${A##*/}")
+			[ "${_rs_ti%% *}" = "$P" ] && [ -n "${_rs_ti#* }" ] && uci -q set "$CFG.$SEC.at_if=${_rs_ti#* }"
+		fi
 		if [ -n "$A" ]; then
 			uci -q set "$CFG.$SEC.at_port=$A"
 		else
@@ -1359,13 +1447,26 @@ resolve)
 		# Сверяем IMEI одной командой (порт уже найден и ниже всё равно
 		# опрашивается) и при расхождении обнуляем производное - модель
 		# перечитает блок ниже, порты уже переизбраны выше.
-		if [ -n "$A" ] && [ -n "$(uci -q get "$CFG.$SEC.model")" ]; then
+		_rs_ask=0
+		if [ "$_RG_QUIET" = 1 ]; then
+			[ -z "$_RG_MMK" ] && [ -n "$A" ] && [ "$_RG_NEVER" != 1 ] && [ "$_rs_known" != 1 ] && _rs_ask=1
+		elif [ -n "$A" ] && [ -n "$(uci -q get "$CFG.$SEC.model")" ]; then
+			_rs_ask=1
+		fi
+		if [ "$_rs_ask" = 1 ] || [ -n "$_RG_MMK" ]; then
 			# CR/LF -> перевод строки, а не просто «выкинуть CR»: часть прошивок
 			# разделяет ответ ОДНИМИ CR, и `tr -d` склеивал его в одну строку -
 			# построчные шаблоны ниже не находили ничего (см. at_strip_ok).
-			_rs_imei=$(sms_tool -d "$A" at "AT+CGSN" 2>/dev/null | tr -s '\r\n' '\n\n' \
-				| grep -oE '^[0-9]{14,16}$' | head -1)
+			if [ "$_rs_ask" = 1 ]; then
+				_rs_imei=$(sms_tool -d "$A" at "AT+CGSN" 2>/dev/null | tr -s '\r\n' '\n\n' \
+					| grep -oE '^[0-9]{14,16}$' | head -1)
+			else
+				_rs_imei=$(mmk_imei "$_RG_MMK")
+			fi
 			_rs_prev=$(uci -q get "$CFG.$SEC.imei" | tr -cd '0-9')
+			if [ "$_RG_QUIET" = 1 ] && [ -n "$_rs_imei" ] && [ -z "$_rs_prev" ]; then
+				uci -q set "$CFG.$SEC.imei=$_rs_imei"
+			fi
 			if [ -n "$_rs_imei" ] && [ -n "$_rs_prev" ] && [ "$_rs_imei" != "$_rs_prev" ]; then
 				logger -t 5gmodem "resolve: a different unit in port $P with the same vid:pid (IMEI $_rs_prev -> $_rs_imei) - re-reading the model"
 				uci -q delete "$CFG.$SEC.model" 2>/dev/null
@@ -1375,9 +1476,23 @@ resolve)
 				purge_path_caches "$P"
 			fi
 		fi
-		if [ -n "$A" ] && [ -z "$(uci -q get "$CFG.$SEC.model")" ]; then
-			_rm=$(sms_tool -d "$A" at "AT+CGMM" 2>/dev/null | tr -s '\r\n' '\n\n' \
-				| grep -vE '^[[:space:]]*$|^OK$|^AT' | head -1)
+		_rs_mask=0
+		if [ -z "$(uci -q get "$CFG.$SEC.model")" ]; then
+			if [ "$_RG_QUIET" != 1 ]; then
+				[ -n "$A" ] && _rs_mask=1
+			elif [ -n "$_RG_MMK" ]; then
+				_rs_mask=2
+			elif [ -n "$A" ] && [ "$_RG_NEVER" != 1 ] && [ "$_rs_known" != 1 ]; then
+				_rs_mask=1
+			fi
+		fi
+		if [ "$_rs_mask" != 0 ]; then
+			if [ "$_rs_mask" = 2 ]; then
+				_rm=$(mmk_val "$_RG_MMK" 'modem\.generic\.model')
+			else
+				_rm=$(sms_tool -d "$A" at "AT+CGMM" 2>/dev/null | tr -s '\r\n' '\n\n' \
+					| grep -vE '^[[:space:]]*$|^OK$|^AT' | head -1)
+			fi
 			# Часть прошивок отвечает "+CGMM: <модель>" и/или в кавычках.
 			_rm=$(printf '%s' "$_rm" \
 				| sed -e 's/^+\{0,1\}CGMM:[[:space:]]*//' -e 's/^"//' -e 's/"$//' \
@@ -1398,6 +1513,9 @@ resolve)
 				uci -q set "$CFG.$SEC.model_vp=$(uci -q get "$CFG.$SEC.vidpid")"
 				logger -t 5gmodem-resolve "model for $SEC identified: $_rm"
 			fi
+		fi
+		if [ "$_RG_QUIET" = 1 ] && [ -n "$A" ] && { [ "$_rs_ask" = 1 ] || [ "$_rs_mask" = 1 ]; }; then
+			uci -q set "$CFG.$SEC.ident_probe=$(uci -q get "$CFG.$SEC.vidpid")|$_rs_ser"
 		fi
 	done
 	uci -q commit "$CFG"
@@ -1434,7 +1552,7 @@ resolve)
 		# при пересоздании это делает mkiface, а разбуженный интерфейс мимо него
 		# проходит (живой случай: парковка Telit с device=/dev/cdc-wdm0).
 		case "$(uci -q get "network.$_sl_if.proto")" in
-			qmi|mbim)
+			qmi|mbim|qmiraw)
 				for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \
 				             /sys/bus/usb/devices/"$_sl_p":*/usbmisc/wdm*; do
 					[ -e "$_sl_w" ] || continue
@@ -1509,7 +1627,15 @@ resolve)
 	if [ -n "$ATP" ] && [ -e "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"
-		if uci -q get 5gmodem.sms >/dev/null 2>&1; then
+		resolve_at_gate "$AMP" "$SEC"
+		if [ "$_RG_QUIET" = 1 ] && uci -q get 5gmodem.sms >/dev/null 2>&1; then
+			for k in readport sendport ussdport atport; do
+				_rs_sp=$(uci -q get "5gmodem.sms.$k")
+				[ -z "$_RG_PORT" ] && [ -n "$_rs_sp" ] && [ -c "$_rs_sp" ] && modem_ttys "$AMP" | grep -qxF "$_rs_sp" && continue
+				uci -q set "5gmodem.sms.$k=$ATP"
+			done
+			uci -q commit 5gmodem
+		elif uci -q get 5gmodem.sms >/dev/null 2>&1; then
 			for k in readport sendport ussdport atport; do uci -q set "5gmodem.sms.$k=$ATP"; done
 			uci -q commit 5gmodem
 			set_sms_storage "$ATP"
@@ -1550,7 +1676,7 @@ resolve)
 		[ -n "$p" ] || continue
 		echo " $PRESENT " | grep -q " $p " && continue   # владелец на месте - им займётся ensure_iface
 		ifa=$(uci -q get "$CFG.$s.network"); [ -n "$ifa" ] || continue
-		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim) ;; *) continue ;; esac
+		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim|qmiraw) ;; *) continue ;; esac
 		deva=$(uci -q get "network.$ifa.device"); [ -n "$deva" ] || continue
 		owp=$(path_for_wdm "$deva")
 		if [ -n "$owp" ] && [ "$owp" != "$p" ]; then
@@ -1572,7 +1698,7 @@ resolve)
 		# подключение модема; в фоне, чтобы resolve не ждал канал.
 		case "$(uci -q get "network.$(uci -q get "$CFG.$s.network").proto" 2>/dev/null)" in
 			qmi|qmiraw|mbim)
-				( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 8>&- 9>&- &
+				( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 				;;
 		esac
 		ensure_iface "$p" "$s"
@@ -1650,7 +1776,10 @@ setalias)
 	_sa_name=$(printf '%s' "$*" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 	# ДЛИНУ ОГРАНИЧИВАЕМ: имя рисуется во вкладке и в карточках приоритета, и
 	# «поэма» там растянула бы весь ряд. Режем молча - это подпись, а не данные.
-	_sa_name=$(printf '%s' "$_sa_name" | cut -c1-32)
+	_sa_name=$(printf '%s' "$_sa_name" | awk 'BEGIN { for (n = 128; n < 192; n++) cb[sprintf("%c", n)] = 1 }
+		{ o = ""; k = 0; L = length($0)
+		  for (i = 1; i <= L; i++) { b = substr($0, i, 1); if (!(b in cb)) { if (k == 32) break; k++ }; o = o b }
+		  printf "%s", o; exit }')
 	if [ -z "$_sa_name" ]; then
 		uci -q delete "$CFG.$_sa_sec.alias" 2>/dev/null
 		uci -q delete "$CFG.$_sa_sec.alias_imei" 2>/dev/null
@@ -1866,6 +1995,7 @@ cleanup)
 	#     него есть хозяин, которого мы просто не распознали, - лучше оставить
 	#     мусор, чем оборвать связь.
 	_cl_apply=""; [ "$2" = apply ] && _cl_apply=1
+	_cl_did=""
 	_cl_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	# Все интерфейсы, которые числит за собой хоть одна секция (в т.ч. парковка).
 	_cl_owned=" $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.m_[^.]*\.network='\?\([^']*\)'\?\$/\1/p" | tr '\n' ' ') "
@@ -1891,6 +2021,7 @@ cleanup)
 		[ -n "$_cl_apply" ] || continue
 		ifdown "$_cl_i" >/dev/null 2>&1
 		uci -q delete "network.$_cl_i"
+		_cl_did=1
 		[ -n "$_cl_z" ] && uci -q del_list "firewall.$_cl_z.network=$_cl_i"
 		logger -t 5gmodem "cleanup: removed orphan interface $_cl_i (path ${_cl_p:-?}, IMEI ${_cl_m:-?}) - no owner among modems or parked profiles"
 	done
@@ -1933,16 +2064,19 @@ cleanup)
 				[ -n "$_cl_z" ] && uci -q del_list "firewall.$_cl_z.network=$_cl_pif"
 			fi
 			uci -q delete "$CFG.$_cl_s"
+			_cl_did=1
 			# IMEI берём ДО удаления секции - иначе в журнале пустое место.
 			logger -t 5gmodem "cleanup: parked profile $_cl_s (IMEI ${_cl_pimei:-?}, $_cl_age days) and its interface ${_cl_pif:-none} removed"
 		done
 	fi
 	printf ']'
 	if [ -n "$_cl_apply" ]; then
-		uci -q commit "$CFG"
-		note_foreign_uci network "modemswitch cleanup"
-		uci -q commit network
-		uci -q commit firewall
+		if [ -n "$_cl_did" ]; then
+			uci -q commit "$CFG"
+			note_foreign_uci network "modemswitch cleanup"
+			uci -q commit network
+			uci -q commit firewall
+		fi
 		printf ',"applied":true'
 	else
 		printf ',"applied":false'

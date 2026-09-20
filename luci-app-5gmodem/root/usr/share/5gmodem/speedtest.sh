@@ -209,7 +209,7 @@ start)
 	[ -n "$YAIPURL" ] || YAIPURL="https://yandex.ru/internet/api/v0/ip"
 	SERVICE=$(_service_name)
 
-	rm -f /tmp/5gmodem_st_stop 2>/dev/null
+	rm -f /tmp/5gmodem_st_stop /tmp/5gmodem_st_ip.* /tmp/5gmodem_st_cc.* /tmp/5gmodem_st_loc.* 2>/dev/null
 	_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0}"
 
 	# ФОН с отвязкой дескрипторов - редирект ИМЕННО на подоболочке, иначе rpcd

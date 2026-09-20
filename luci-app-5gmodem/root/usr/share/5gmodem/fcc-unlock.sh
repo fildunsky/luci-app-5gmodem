@@ -20,7 +20,7 @@
 #       шине (ключ - номер устройства на шине, он меняется при переподключении).
 
 LOGTAG=5gmodem
-FOXCONN_IDS="413c:81d7 413c:81e0 0489:e0b5 0489:e0b4"
+FOXCONN_IDS="413c:81d7 413c:81e0 413c:81e4 413c:81e6 413c:81d8 0489:e0b5 0489:e0b4"
 
 is_foxconn_x20() {
 	case " $FOXCONN_IDS " in *" $1 "*) return 0 ;; esac
@@ -106,6 +106,12 @@ kernel)
 	MARK="/tmp/5gmodem_fcc_$(printf '%s' "$P" | tr -c 'A-Za-z0-9' '_')_$DEVNUM"
 	[ -f "$MARK" ] && exit 0
 	[ -f "$MARK.run" ] && kill -0 "$(cat "$MARK.run" 2>/dev/null)" 2>/dev/null && exit 0
+	for _om in "${MARK%_*}"_[0-9]*; do
+		[ -f "$_om" ] || continue
+		[ "$_om" = "$MARK" ] && continue
+		case "${_om#"${MARK%_*}"_}" in *[!0-9]*) continue ;; esac
+		rm -f "$_om" "$_om.run"
+	done
 	echo $$ > "$MARK.run"
 	_try=0
 	while [ "$_try" -lt 15 ]; do

@@ -438,6 +438,11 @@ return view.extend({
 		o.default = '1';
 		o.rmempty = false;
 
+		o = disp.option(form.Flag, 'show_history', _('Show signal history'),
+			_('Show the collapsible "History" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem.'));
+		o.default = '1';
+		o.rmempty = false;
+
 		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
 			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
@@ -906,7 +911,7 @@ return view.extend({
 			blItems.push(E('div', { 'class': 'tg-blitem' }, [ wn, E('span', {
 				'style': 'cursor:pointer',
 				'click': function() { wn.querySelector('input').click(); }
-			}, devLabel(d)) ]));
+			}, [ devLabel(d) ]) ]));
 		});
 		var blBody = E('div', {}, blItems.length ? blItems
 			: [ E('em', {}, _('No doubtful devices: everything found on the bus is in the modem database.')) ]);

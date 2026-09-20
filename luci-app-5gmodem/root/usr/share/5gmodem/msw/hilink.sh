@@ -138,7 +138,14 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	if [ -n "$_hz" ]; then
 		case " $(uci -q get "firewall.$_hz.network") " in
 			*" $_hif "*) ;;
-			*) uci -q add_list "firewall.$_hz.network=$_hif"
+			*) case "$(uci -q show "firewall.$_hz.network" 2>/dev/null)" in
+				*"' '"*) ;;
+				*=\'*\ *\')
+					_hzl=$(uci -q get "firewall.$_hz.network" | tr -d "'\"")
+					uci -q delete "firewall.$_hz.network"
+					for _hze in $_hzl; do uci -q add_list "firewall.$_hz.network=$_hze"; done ;;
+			   esac
+			   uci -q add_list "firewall.$_hz.network=$_hif"
 			   uci -q commit firewall
 			   logger -t 5gmodem "$_hkind: $_hif added to the wan zone" ;;
 		esac

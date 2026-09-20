@@ -292,7 +292,7 @@ kernel_proto_prepare() {   # $1 = cdc-wdm, $2 = usb path
 	_atp=$(at_port_of "$_path")
 	[ -n "$_atp" ] || { echo "prepare: QMI wedged and no AT port to reset the modem" >&2; return 1; }
 	echo "prepare: QMI is wedged - resetting the modem via AT+CFUN=1,1 on $_atp" >&2
-	( at_query "$_atp" "AT+CFUN=1,1" 6 ) >/dev/null 2>&1 </dev/null 7>&- &
+	( at_query "$_atp" "AT+CFUN=1,1" 6 ) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 
 	# ждём возвращения на шину (переэнумерация) + готовности QMI
 	_n=0
@@ -638,7 +638,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		if [ -n "$MSEC" ]; then
 			uci -q set "5gmodem.$MSEC.mm_exclude=1"
 			uci -q commit 5gmodem
-			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+			/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 7>&- 8>&- 9>&- &
 		fi
 		ifup "$IF" >/dev/null 2>&1
 		json created "$FPROTO" "$FDEV"
@@ -770,7 +770,7 @@ case "$REQ" in
 		# и рабочий список диапазонов у mmcli. AT-профиль (modem/usb/03f09d1d)
 		# остаётся страховкой: без установленного MM карточка живёт на нём.
 		case "$_mki_vp" in
-			413c:81d7|413c:81e0|0489:e0b5|0489:e0b4|05c6:9025|03f0:9d1d)
+			413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911|05c6:9025|03f0:9d1d)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 					logger -t 5gmodem "mkiface: $_mki_vp - driving via ModemManager (shared channel, otherwise cdc-wdm contention)"
 					PROTO="modemmanager"
@@ -1213,7 +1213,7 @@ if [ -n "$MSEC" ]; then
 		[ -f "$_mki_ipf" ] && { kill "$(cat "$_mki_ipf" 2>/dev/null)" 2>/dev/null; rm -f "$_mki_ipf"; }
 	fi
 	# применить немедленно, не дожидаясь 15-секундного прохода демона
-	/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 &
+	/usr/share/5gmodem/mm-inhibit.sh once >/dev/null 2>&1 7>&- 8>&- 9>&- &
 fi
 
 if [ "$PROTO" = "modemmanager" ]; then
@@ -1232,7 +1232,7 @@ if [ "$PROTO" = "modemmanager" ]; then
 			sleep 2; _n=$((_n + 2))
 		done
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null 7>&- &
+	) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 	# kernel-прото: сначала автоматически привести модем в рабочее состояние
 	# (отобрать порт у MM, снять зависшие uqmi, при заклиненном QMI - сбросить
@@ -1244,7 +1244,7 @@ elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
 		kernel_proto_prepare "$IDEV" "$AMP" || logger -t 5gmodem-mkiface \
 			"kernel_proto_prepare failed for $IF ($PROTO) - bringing it up anyway"
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null 7>&- &
+	) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 	# ДОЗВОН ТОЛЬКО ПОСЛЕ РЕГИСТРАЦИИ В СЕТИ.
 	#
@@ -1283,7 +1283,7 @@ elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 				"$IF ($PROTO): регистрации нет за 90c - поднимаю интерфейс как есть"
 		fi
 		ifup "$IF"
-	) >/dev/null 2>&1 </dev/null 7>&- &
+	) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 else
 	ifup "$IF" >/dev/null 2>&1
 fi

@@ -52,12 +52,12 @@ trap 'rm -f "$OUT" 2>/dev/null' EXIT INT TERM HUP
 # ДЕСКРИПТОРЫ ОТВЯЗЫВАЕМ ОТ ПОДОБОЛОЧКИ (>/dev/null на ней самой): иначе сторож
 # наследует stdout вызывающего, осиротевший sleep держит пайп, и читатель
 # (rpcd/cgi-io) ждёт EOF лишние 2 c. Замерено: 5gmodem.sh json 0.64 -> 2.03 c.
-sms_tool -d "$D" at "$CMD" > "$OUT" 2>/dev/null </dev/null 8>&- 9>&- &
+sms_tool -d "$D" at "$CMD" > "$OUT" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
 p=$!
 # 8>&- 9>&-: вызывающие держат flock порта на fd 8 (atlock) - без закрытия
 # осиротевший сторож продолжал держать порт после нашего выхода (класс бага
 # описан в обёртке sms_tool 5gmodem.sh; сегодня он же был пойман в at_query).
-( exec 8>&- 9>&-; sleep 2; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
+( exec 7>&- 8>&- 9>&-; sleep 2; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 k=$!
 
 # НЕ голый wait: если порт повесил sms_tool в D-state (вис в драйвере tty),

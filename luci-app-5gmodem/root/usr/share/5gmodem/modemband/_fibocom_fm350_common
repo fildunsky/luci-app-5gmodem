@@ -138,8 +138,9 @@ getbands() {
     # +GTACT: 20,6,3,101,102,103,104,105,107,108,112,113,114,117,118,119,120,125,126,128,129,130,132,134,138,139,140,141,142,143,146,148,166,171
 
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}')
+    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
     for BAND in $BANDS; do
+        case $BAND in ''|*[!0-9]*) continue ;; esac
         if [ $BAND -gt 100 ] && [ $BAND -lt 200 ]; then
             echo -n "$((BAND - 100)) "
         fi
@@ -366,8 +367,9 @@ getbands5gsa() {
     # +GTACT: 20,6,3,501,502,503,505,507,508,5020,5025,5028,5030,5038,5040,5041,5048,5066,5071,5077,5078,5079
 
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}')
+    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
     for BAND in $BANDS; do
+        case $BAND in ''|*[!0-9]*) continue ;; esac
         if [ $BAND -gt 500 ] && [ $BAND -lt 5100 ]; then
             echo -n "$(echo "$BAND" | sed 's/^50//g') "
         fi
@@ -380,8 +382,9 @@ getbands5gnsa() {
     # +GTACT: 20,6,3,501,502,503,505,507,508,5020,5025,5028,5030,5038,5040,5041,5048,5066,5071,5077,5078,5079
 
     O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}')
+    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
     for BAND in $BANDS; do
+        case $BAND in ''|*[!0-9]*) continue ;; esac
         if [ $BAND -gt 500 ] && [ $BAND -lt 5100 ]; then
             echo -n "$(echo "$BAND" | sed 's/^50//g') "
         fi

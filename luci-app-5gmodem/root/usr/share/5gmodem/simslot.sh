@@ -292,7 +292,12 @@ _at_slot_set() {   # $1 - целевой слот (1..N); 0 = переключе
 	[ -n "$_as_at" ] || _as_at=$(uci -q get "5gmodem.$_ss_sec.at_port")
 	[ -n "$_as_at" ] && [ -e "$_as_at" ] || return 1
 	_as_cmd=$(_at_slot_cmd "$_as_at") || return 1
-	at_query "$_as_at" "AT${_as_cmd}=$(($1 - 1))" 8 >/dev/null 2>&1
+	_as_o=$(at_query "$_as_at" "AT${_as_cmd}=$(($1 - 1))" 8 2>/dev/null)
+	case "$_as_o" in
+		*ERROR*)
+			logger -t 5gmodem "simslot: AT$_as_cmd=$(($1 - 1)) rejected by the firmware"
+			return 1 ;;
+	esac
 	# Ждём ПОДТВЕРЖДЕНИЯ, а не фиксированную паузу: модем перекидывает слот за
 	# 3-6 с, и одного sleep 3 хватало не всегда - переключение было выполнено,
 	# но мы успевали объявить его неудачей.
@@ -391,7 +396,14 @@ if [ -n "$MI" ]; then
 							*SIM2*) _mswa=2 ;;
 						esac
 					else
-						: > "$_nsw"
+						case "$(at_query "$SLOT_AT_PORT" "AT^switch_slot?" 6 2>/dev/null)" in
+							*ERROR*) : > "$_nsw" ;;
+							*)
+								if grep -q '"id":"2"' "/tmp/5gmodem_slots_$_ss_am" 2>/dev/null; then
+									cat "/tmp/5gmodem_slots_$_ss_am"
+									exit 0
+								fi ;;
+						esac
 					fi
 					if [ -n "$_mswa" ]; then
 						printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}\n' "$_mswa" \
@@ -571,6 +583,73 @@ if [ -n "$_FRAG" ] && [ -z "$MI" ]; then
 			fi
 		fi
 	fi
+fi
+
+if [ "$_VIA" = simdet ]; then
+	if [ -n "$MI" ] || [ "$_PROTO" = modemmanager ]; then
+		_sd_at=$(_slot_at_mm)
+	else
+		_sd_at=$(uci -q get "5gmodem.$_SEC.at_port")
+	fi
+	[ -n "$_sd_at" ] && [ -c "$_sd_at" ] || _sd_at=""
+	[ "$1" = set ] || [ "$(uci -q get "5gmodem.$_SEC.no_at")" != 1 ] || _sd_at=""
+	_sd_qss() {
+		at_query "$_sd_at" "AT#QSS?" 4 2>/dev/null \
+			| sed -n 's/^#QSS: *[0-9]*, *\([0-9]\), *\([01]\).*/\1 \2/p' | head -1
+	}
+	if [ -n "$_sd_at" ] && [ "$1" = set ]; then
+		case "$2" in
+			1|2) ;;
+			*) logger -t 5gmodem "simslot: invalid slot number - rejected"
+			   echo '{"error":"bad slot"}'; exit 0 ;;
+		esac
+		. /usr/share/5gmodem/atlock.sh
+		_sd_held="$_AT_LOCK_HELD"
+		at_lock "$_sd_at" 8 || { echo '{"error":"port busy"}'; exit 0; }
+		at_query "$_sd_at" "AT#SIMDET=$(($2 - 1))" 6 >/dev/null 2>&1
+		_sd_m=$(at_query "$_sd_at" "AT#SIMDET?" 4 2>/dev/null \
+			| sed -n 's/^#SIMDET: *\([0-9]\).*/\1/p' | head -1)
+		_sd_ok=0
+		if [ "$_sd_m" = "$(($2 - 1))" ]; then
+			for _sd_i in 1 2 3 4 5; do
+				_sd_q=$(_sd_qss)
+				[ "${_sd_q#* }" = "$(($2 - 1))" ] && { _sd_ok=1; break; }
+				sleep 1
+			done
+		fi
+		[ -n "$_sd_held" ] || at_unlock
+		if [ "$_sd_ok" != 1 ]; then
+			logger -t 5gmodem "simslot: AT#SIMDET=$(($2 - 1)) rejected by the firmware"
+			echo '{"error":"switch failed"}'; exit 0
+		fi
+		logger -t 5gmodem "SIM slot switched to $2 via AT#SIMDET"
+		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+		( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+		  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
+		  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
+		) >/dev/null 2>&1 </dev/null &
+		echo '{"result":"ok"}'
+		exit 0
+	fi
+	if [ -n "$_sd_at" ]; then
+		_sd_q=$(_sd_qss)
+		case "$_sd_q" in
+			[0-9]" "[01])
+				_sd_a=$(( ${_sd_q#* } + 1 ))
+				_sd_p=1; [ "${_sd_q% *}" = 0 ] && _sd_p=0
+				_sd_p1=""; _sd_p2=""
+				if [ "$_sd_a" = 1 ]; then _sd_p1=",\"present\":\"$_sd_p\""; else _sd_p2=",\"present\":\"$_sd_p\""; fi
+				_sd_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1"%s},{"id":"2","label":"SIM2"%s}],"active":"%s"}' "$_sd_p1" "$_sd_p2" "$_sd_a")
+				printf '%s\n' "$_sd_out" > "/tmp/5gmodem_slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+				printf '%s\n' "$_sd_out"
+				exit 0 ;;
+		esac
+		if [ -s "/tmp/5gmodem_slots_$_AP" ]; then
+			cat "/tmp/5gmodem_slots_$_AP"; exit 0
+		fi
+	fi
+	_VIA=qmi
 fi
 
 if [ "$_VIA" = qmi ]; then

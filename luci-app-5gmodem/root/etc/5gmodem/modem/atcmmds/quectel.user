@@ -10,6 +10,15 @@ AT+QENG="servingcell"
 # Network and band
 AT+QNWINFO
 
+# Aggregation (CA)
+AT+QCAINFO
+
+# Cells
+AT+QENG="neighbourcell"
+
+# RSRP per branch
+AT+QRSRP
+
 # Temperature
 AT+QTEMP
 
@@ -20,6 +29,9 @@ AT+QCFG="usbnet"
 
 # Bands (masks)
 AT+QCFG="band"
+
+# Cell lock
+AT+QNWLOCK="common/4g"
 
 ## SIM
 

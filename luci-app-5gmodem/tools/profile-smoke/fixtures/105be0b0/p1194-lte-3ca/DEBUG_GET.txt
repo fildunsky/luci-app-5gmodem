@@ -1,0 +1,19 @@
+## 4pda 1086317 #1194 (MV31-W / T99W175.F0.1.0.0.9.GC.004, LTE B7+B3+B40)
+RAT:LTE
+mcc:250,mnc:20
+lte_cell_id:181907221
+lte_tac:15103
+lte_tx_pwr:21.0dBm
+lte_ant_rsrp:rx_diversity:5 (-93.9dBm,NA,-98.4dBm,NA)
+pcell: lte_band:7 lte_band_width:10.0MHz
+channel:3400 pci:172
+lte_rsrp:-94.3dBm,rsrq:-9.7dB
+lte_rssi:-66.5dBm,lte_snr:23.8dB
+scell: lte_band:3 lte_band_width:15.0MHz
+channel:1619 pci:18
+lte_rsrp:-95.7dBm,rsrq:-10.2dB
+lte_rssi:-77.7dBm,lte_snr:0.0dB
+scell: lte_band:40 lte_band_width:10.0MHz
+channel:39600 pci:459
+lte_rsrp:-81.1dBm,rsrq:-13.9dB
+lte_rssi:-59.4dBm,lte_snr:0.0dB

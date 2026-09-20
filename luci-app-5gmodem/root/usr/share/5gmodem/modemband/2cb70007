@@ -37,8 +37,9 @@ getbands() {
 # +XACT: 4,2,1,1,2,4,5,8,101,102,103,104,105,107,108,112,113,114,117,118,119,120,125,126,128,129,130,132,138,139,140,141,142,146,166
 
 	O=$(sms_tool -d $_DEVICE at "at+xact?")
-	BANDS=$(echo "$O" | awk -F: '/^\+XACT:/{gsub(","," ");print $2}')
+	BANDS=$(echo "$O" | awk -F: '/^\+XACT:/{gsub(","," ");print $2}' | tr -d '\r')
 	for BAND in $BANDS; do
+		case $BAND in ''|*[!0-9]*) continue ;; esac
 		if [ $BAND -gt 100 ] && [ $BAND -lt 200 ]; then
 			echo -n "$((BAND - 100)) "
 		fi

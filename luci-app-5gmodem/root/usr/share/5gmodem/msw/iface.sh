@@ -46,7 +46,7 @@ follow_iface_device() {
 			_fd_new=$(readlink -f "/sys/bus/usb/devices/$_fd_p" 2>/dev/null)
 			[ -n "$_fd_new" ] && [ -f "$_fd_new/idVendor" ] || _fd_new=""
 			;;
-		mbim|qmi|ncm)
+		mbim|qmi|qmiraw|ncm)
 			_fd_new=$(wdm_for_path "$_fd_p")
 			[ -n "$_fd_new" ] && [ -e "$_fd_new" ] \
 				&& [ "$(path_for_wdm "$_fd_new")" = "$_fd_p" ] || _fd_new=""
@@ -59,7 +59,7 @@ follow_iface_device() {
 		_fd_ch=1
 	fi
 	case "$(uci -q get "network.$_fd_if.proto")" in
-		mbim|qmi)
+		mbim|qmi|qmiraw)
 			_fd_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$_fd_new")/device" 2>/dev/null)
 			if [ -n "$_fd_dp" ] && [ -d "$_fd_dp/usbmisc" ] \
 			   && [ "$(uci -q get "network.$_fd_if.devpath")" != "$_fd_dp" ]; then
@@ -144,7 +144,7 @@ ensure_iface() {
 	CUR=$(uci -q get "network.$IF.device")
 	NEW=""
 	case "$PROTO" in
-		mbim|qmi|ncm)     NEW=$(wdm_for_path "$P") ;;
+		mbim|qmi|qmiraw|ncm) NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
 		atc|xmm)
 			# atc И xmm ДОЗВАНИВАЮТСЯ ПО AT-ПОРТУ, а не по каналу управления.
@@ -186,7 +186,7 @@ ensure_iface() {
 						[ "/dev/$(basename "$t")" = "$_dp_cur" ] || continue
 						# Для xmm «живость» порта решает gcom: существующий, но
 						# негодный пин (ttyACM2 у L850) иначе оставался навечно.
-						if [ -n "$_rp_gcom" ]; then
+						if [ -n "$_rp_gcom" ] && [ "$(uci -q get "$CFG.$SEC.no_at")" != "1" ]; then
 							DEVPORT="$_dp_cur" gcom -s /etc/gcom/probeport.gcom >/dev/null 2>&1 || break
 						fi
 						NEW="$_dp_cur"; break
@@ -235,7 +235,7 @@ ensure_iface() {
 	# интерфейса-контроллера, из него системный прото при КАЖДОМ setup находит
 	# cdc-wdm заново. Досетапливаем/чиним существующим интерфейсам.
 	case "$PROTO" in
-		mbim|qmi)
+		mbim|qmi|qmiraw)
 			_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
 			_dpo=$(uci -q get "network.$IF.devpath")
 			if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then
@@ -361,7 +361,7 @@ fix_iface_proto() {   # $1 - имя интерфейса
 	# mm_exclude и вернуть автозапуск MM. MKIFACE_AUTOFALLBACK - чтобы этот
 	# вынужденный прото не осел в iface_proto как «выбор пользователя».
 	case "$_fp_vp" in
-		413c:81d7|413c:81e0|0489:e0b5|05c6:90d5)
+		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911|05c6:90d5)
 			if [ -f /lib/netifd/proto/modemmanager.sh ]; then
 				logger -t 5gmodem "iface $_fp_if: $_fp_vp only works under ModemManager - rebuilding the interface on proto=modemmanager"
 				MKIFACE_AUTOFALLBACK=1 MODEM_PATH="$_fp_amp" \

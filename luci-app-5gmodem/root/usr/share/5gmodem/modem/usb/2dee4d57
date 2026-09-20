@@ -45,18 +45,20 @@ if [ -n "$T" ] && [ "$T" != "255" ]; then
 fi
 
 # RSRP: индекс 0..97 -> дБм, шаг 1, смещение -140.
-T=$(echo "$O" | awk -F'[,:]' '/^\+CESQ/ {gsub(/ /,"",$7); print $7}')
-if [ -n "$T" ] && [ "$T" != "255" ]; then
-	RSRP=$((T - 140))
-fi
+T=$(echo "$O" | awk -F'[,:]' '/^\+CESQ/ {gsub(/ /,"",$7); print $7}' | head -n 1 | tr -d '\r')
+case "$T" in
+	''|255|*[!0-9]*) : ;;
+	*) RSRP=$((T - 140)) ;;
+esac
 
 # RSSI берём из rxlev (индекс 0..63 -> дБм, смещение -111), если общий код его
 # ещё не заполнил из AT+CSQ.
 if [ -z "$RSSI" ]; then
-	T=$(echo "$O" | awk -F'[,:]' '/^\+CESQ/ {gsub(/ /,"",$2); print $2}')
-	if [ -n "$T" ] && [ "$T" != "99" ]; then
-		RSSI=$((T - 111))
-	fi
+	T=$(echo "$O" | awk -F'[,:]' '/^\+CESQ/ {gsub(/ /,"",$2); print $2}' | head -n 1 | tr -d '\r')
+	case "$T" in
+		''|99|*[!0-9]*) : ;;
+		*) RSSI=$((T - 111)) ;;
+	esac
 fi
 
 # --- +SGCELLINFOEX: сота, диапазон и расширенные метрики одной командой -------

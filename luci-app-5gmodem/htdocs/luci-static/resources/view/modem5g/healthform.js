@@ -60,7 +60,7 @@ return baseclass.extend({
 			var isFlag = widget && widget.classList
 				&& widget.classList.contains('cbi-checkbox');
 			return E('div', { 'class': 'cbi-value' + (isFlag ? ' tg-flag' : '') }, [
-				E('label', { 'class': 'cbi-value-title' }, title),
+				E('label', { 'class': 'cbi-value-title' }, [ title ]),
 				field
 			]);
 		};

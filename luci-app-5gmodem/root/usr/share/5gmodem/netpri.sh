@@ -1152,6 +1152,15 @@ adoptzone)
 	_azz=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	[ -n "$_azz" ] || exit 1
 	note_foreign_uci firewall "netpri adoptzone"
+	case "$(uci -q show "firewall.$_azz.network" 2>/dev/null)" in
+		*"' '"*) ;;
+		*=\'*\ *\')
+			_azc=$(uci -q get "firewall.$_azz.network" | tr -d "'\"")
+			uci -q delete "firewall.$_azz.network"
+			for _aze in $_azc; do
+				uci add_list "firewall.$_azz.network=$_aze"
+			done ;;
+	esac
 	uci add_list "firewall.$_azz.network=$_az"
 	uci commit firewall
 	/etc/init.d/firewall reload >/dev/null 2>&1

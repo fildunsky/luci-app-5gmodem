@@ -5568,3 +5568,99 @@ msgstr "Фоновый опрос по AT для этого модема вык�
 
 msgid "Metrics are not polled: background AT polling is off"
 msgstr "Метрики не опрашиваются: фоновый опрос по AT выключен"
+
+msgid "Carrier aggregation enabled"
+msgstr "Агрегация несущих включена"
+
+msgid "Cell monitor"
+msgstr "Монитор сот"
+
+msgid "Channel quality (CQI)"
+msgstr "Качество канала (CQI)"
+
+msgid "LTE RX diversity"
+msgstr "Разнесённый приём LTE"
+
+msgid "LTE category limit"
+msgstr "Ограничение категории LTE"
+
+msgid "Temperature sensors"
+msgstr "Датчики температуры"
+
+msgid "Thermal mitigation level"
+msgstr "Уровень теплового троттлинга"
+
+msgid "SIM slot (0 = slot 1, 1 = slot 2)"
+msgstr "Слот SIM (0 = слот 1, 1 = слот 2)"
+
+msgid "Firmware image (FN990)"
+msgstr "Образ прошивки (FN990)"
+
+msgid "Active firmware (LM960)"
+msgstr "Активная прошивка (LM960)"
+
+msgid "Firmware images (LM960)"
+msgstr "Образы прошивки (LM960)"
+
+msgid "History"
+msgstr "История"
+
+msgid "Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value."
+msgstr "У каждой метрики своя шкала. Пунктир — среднее; тонкая вертикальная черта отмечает смену соты или диапазона. Наведите на график, чтобы увидеть значение."
+
+msgid "avg"
+msgstr "сред."
+
+msgid "max"
+msgstr "макс."
+
+msgid "min"
+msgstr "мин."
+
+msgid "RSRP / SINR"
+msgstr "RSRP / SINR"
+
+msgid "Show signal history"
+msgstr "Показывать историю сигнала"
+
+msgid "Show the collapsible \"History\" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem."
+msgstr "Показывать на странице «Сеть» сворачиваемый блок «История»: RSRP, RSRQ, SINR и RSSI за последние 10 минут. Он строится из данных, которые страница и так опрашивает, и не нагружает модем."
+
+msgid "Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor."
+msgstr "Качество сигнала. В LTE −11 дБ и лучше — отлично, ниже −17 дБ — плохо."
+
+msgid "Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale."
+msgstr "Уровень сигнала, принятого от базовой станции. В LTE −98 дБм и лучше — отлично, ниже −118 дБм — плохо. У 5G своя, более строгая шкала."
+
+msgid "Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor."
+msgstr "Отношение сигнал/шум. В LTE 13 дБ и выше — отлично, ниже 1 дБ — плохо."
+
+msgid "ModemManager did not pick up the modem in time"
+msgstr "ModemManager не успел подхватить модем"
+
+msgid "Not applied: %s"
+msgstr "Не применено: %s"
+
+msgid "The previous band change is still being applied - wait until the modem reconnects."
+msgstr "Предыдущая смена диапазонов ещё применяется — дождитесь, пока модем переподключится."
+
+msgid "Turning carrier aggregation on — the modem is rebooting (1-2 min)…"
+msgstr "Включаем агрегацию несущих — модем перезагружается (1–2 мин)…"
+
+msgid "band %s is not supported by the modem"
+msgstr "диапазон %s не поддерживается модемом"
+
+msgid "not supported by this modem"
+msgstr "не поддерживается этим модемом"
+
+msgid "the modem did not accept it"
+msgstr "модем не принял"
+
+msgid "Collect signal in the background"
+msgstr "Собирать сигнал в фоне"
+
+msgid "Off"
+msgstr "Выключено"
+
+msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
+msgstr "При закрытой странице модем не опрашивается, и графики сигнала останавливаются. С этой настройкой активный модем опрашивается по таймеру, чтобы графики продолжались. Модемы с выключенным фоновым опросом по AT пропускаются."

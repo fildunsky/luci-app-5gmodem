@@ -152,7 +152,7 @@ function atFamilyFor(vp, model) {
 	var m = String(model || '').toLowerCase();
 	if (/compal|vos_5g|rxm|sg500/.test(m)) { return 'compal'; }
 	if (/fm350/.test(m) || vp.indexOf('0e8d:') === 0) { return 'fm350'; }
-	if (/l850|l860/.test(m) || vp === '8087:095a') { return 'xmm'; }
+	if (/l850|l860/.test(m) || vp === '8087:095a' || vp === '413c:81d9') { return 'xmm'; }
 	/* Sierra Wireless EM7345 (1199:a001) - ярлык Sierra, внутри Intel XMM7160:
 	   «!»-команды Sierra ему не отвечают (AT!ENTERCND="A710" -> ERROR, форум
 	   4pda #731/#2405-2407), поэтому подсказки Qualcomm/Sierra тут были бы
@@ -165,11 +165,12 @@ function atFamilyFor(vp, model) {
 	   строкой выше. Прежде владелец самой ходовой конфигурации (customer 14,
 	   00B3) получал чужие AT+USBCOMP/AT+CEISWITCHSIM (ревью 12.09.2026). */
 	if (vp === '05c6:90d6') { return 'compal'; }
+	if (vp === '1bc7:1910' || vp === '1bc7:1911') { return 'qualcomm'; }
 	if (vp.indexOf('1bc7:') === 0 || /telit|lm9/.test(m)) { return 'telit'; }
 	if (vp.indexOf('2c7c:') === 0 || /quectel|^e[gmp]\d|^r[gm]5/.test(m)) { return 'quectel'; }
 	if (vp.indexOf('1e0e:') === 0 || /simcom|sim7/.test(m)) { return 'simcom'; }
 	if (vp.indexOf('12d1:') === 0 || /huawei/.test(m)) { return 'huawei'; }
-	if (vp === '413c:81d7' || vp === '413c:81e0' || vp === '0489:e0b5' || vp === '0489:e0b4' || vp === '05c6:9025'
+	if (vp === '413c:81d7' || vp === '413c:81e0' || vp === '413c:81e4' || vp === '413c:81e6' || vp === '413c:81d8' || vp === '0489:e0b5' || vp === '0489:e0b4' || vp === '05c6:9025'
 		|| vp === '05c6:90d5' || vp.indexOf('1e2d:00b') === 0 || /t99w|t77w|dw58|mv31/.test(m)) { return 'qualcomm'; }
 	return null;
 }
@@ -314,7 +315,7 @@ return view.extend({
 				ui.showModal(_('Dangerous AT command'), [
 					E('p', {}, _('This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back.')),
 					/* Команду показываем ТЕКСТОМ, без разбора: она пришла из поля ввода. */
-					E('p', {}, E('strong', {}, atcmd)),
+					E('p', {}, E('strong', {}, [ atcmd ])),
 					E('div', { 'class': 'right' }, [
 						E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
 						' ',
@@ -500,7 +501,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow prev',
 													'aria-label': _('Previous modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ◄ ' ]),
 												E('div', { 'class': 'text modem-display-text tg-col-center' }, [ label ]),
@@ -508,7 +508,6 @@ return view.extend({
 													'class': 'btn cbi-button-neutral tg-col-narrow next',
 													'aria-label': _('Next modem'), 
 													'click': ui.createHandlerFn(this, 'handleModemChange'),
-													'class': 'tg-col-narrow',
 													'disabled': buttonsDisabled
 												}, [ ' ► ' ])
 											])
@@ -606,7 +605,7 @@ return view.extend({
 												nodes.push(group);
 												return;
 											}
-											let opt = E('option', { 'value': it.code }, templateLabel(it));
+											let opt = E('option', { 'value': it.code }, [ templateLabel(it) ]);
 											if (group) { group.appendChild(opt); } else { nodes.push(opt); }
 										});
 										return nodes;

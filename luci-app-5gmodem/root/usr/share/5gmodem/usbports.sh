@@ -28,6 +28,7 @@ driver_for() {   # $1 - vid, $2 - pid
 		# «ATI» отвечают «No response from modem» (стенд, 08.09.2026). После
 		# option те же интерфейсы отзываются сразу - AT живёт на If#2.
 		03f0:9d1d) echo "option1" ;;
+		413c:81d8|1bc7:1911) echo "option1" ;;
 		# Всё остальное - generic. Это касается и Compal RXM-G1 (90d5 и 90d6),
 		# и T99W175 в 90d5.
 		#
@@ -52,6 +53,7 @@ driver_for() {   # $1 - vid, $2 - pid
 newid_for() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
 		05c6:9091) echo "$1 $2 ff" ;;
+		413c:81d8|1bc7:1911) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
 	esac
 }
@@ -394,6 +396,7 @@ coldplug() {
 				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
+			413c:81d8|1bc7:1911) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.
 			05c6:9063) pick_config "$_cp_d" 3 ;;
 			# HP lt4120 (Foxconn T77W595) отдаёт три конфигурации:

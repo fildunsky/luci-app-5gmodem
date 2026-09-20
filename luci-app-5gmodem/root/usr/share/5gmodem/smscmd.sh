@@ -66,7 +66,7 @@ CMD_COOLDOWN=$(_cfg cmd_cooldown); case "$CMD_COOLDOWN" in ''|*[!0-9]*) CMD_COOL
 
 # Ключ слова - хешем: в поле может оказаться что угодно, включая пробелы, а
 # строки файла разбираются по пробелу.
-_cool_key() { printf '%s' "$1" | md5sum | cut -c1-12; }
+_cool_key() { printf '%s' "$1" | tr 'A-Z' 'a-z' | md5sum | cut -c1-12; }
 
 # 0 - выполнять можно
 _cool_ok() {   # $1 - ключевое слово
@@ -338,6 +338,10 @@ run)
 	[ -n "$_paths" ] || _paths=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	for _p in $_paths; do
 		_has_sms "$_p" || continue
+		if [ "$(uci -q get "$CFG.m_$(printf '%s' "$_p" | sed 's/[^A-Za-z0-9]/_/g').kind")" != "hilink" ] \
+		   && bg_at_off "$_p"; then
+			continue
+		fi
 		_one "$_p"
 	done
 	;;

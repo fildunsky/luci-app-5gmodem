@@ -188,9 +188,9 @@ function drawChart(canvas, series, opts) {
 	}
 }
 
-function chartCard(title, id, legend) {
-	var canvas = E('canvas', { 'id': id,
-		'style': 'width:100%; height:190px; display:block; cursor:crosshair',
+function chartCanvas(id, height) {
+	return E('canvas', { 'id': id,
+		'style': 'width:100%; height:' + (height || 190) + 'px; display:block; cursor:crosshair',
 		/* Перерисовка курсора обязана идти С ТЕМИ ЖЕ опциями, что и штатная
 		   отрисовка: раньше здесь собирался урезанный набор (fmt+zeroBase), и
 		   фиксированная шкала процентов слетала бы при первом движении мыши. */
@@ -206,6 +206,24 @@ function chartCard(title, id, legend) {
 				ev.target.__chart.opts); }
 		}
 	});
+}
+
+function dualChartCard(title, idA, labelA, idB, labelB) {
+	var sub = function(t, top) {
+		return E('div', { 'style': 'font-size:12px; opacity:.7; margin:' + top + ' 0 2px 0' }, [ t ]);
+	};
+	return E('div', { 'class': 'cbi-section tg5g' }, [
+		E('h3', {}, [ title ]),
+		E('div', { 'id': idA + '-legend', 'style': 'display:flex; gap:1em; flex-wrap:wrap; margin-bottom:.4em; font-size:.9em' }, []),
+		sub(labelA, '0'),
+		chartCanvas(idA, 150),
+		sub(labelB, '10px'),
+		chartCanvas(idB, 150)
+	]);
+}
+
+function chartCard(title, id, legend) {
+	var canvas = chartCanvas(id);
 	return E('div', { 'class': 'cbi-section tg5g' }, [
 		E('h3', {}, [ title ]),
 		E('div', { 'id': id + '-legend', 'style': 'display:flex; gap:1em; flex-wrap:wrap; margin-bottom:.4em; font-size:.9em' }, legend || []),
@@ -394,6 +412,26 @@ function redraw() {
 	var l2 = document.getElementById('chart-signal-legend');
 	if (l2) { l2.innerHTML = ''; sigSeries.forEach(function(s, i) { l2.appendChild(legendItem(s.name, i)); }); }
 
+	var rawNames = (lst.rsrp || []).slice();
+	(lst.sinr || []).forEach(function(n) { if (rawNames.indexOf(n) < 0) { rawNames.push(n); } });
+	var rawSeries = function(kind) {
+		return rawNames.map(function(n) {
+			return { name: lab[kind + '.' + n] || lab['signal.' + n] || n.replace(/_/g, ' '), points: (_state.series[kind + '.' + n] || []) };
+		});
+	};
+	var rsrpSeries = rawSeries('rsrp'), sinrSeries = rawSeries('sinr');
+	var rsrpOpts = { fmt: function(v) { return Math.round(v) + ' dBm'; } };
+	var sinrOpts = { fmt: function(v) { return (Math.round(v * 10) / 10) + ' dB'; } };
+	var c4 = document.getElementById('chart-rsrp'), c5 = document.getElementById('chart-sinr');
+	var rc = document.getElementById('card-rsrp');
+	if (rc) { rc.style.display = rawNames.length ? '' : 'none'; }
+	if (rawNames.length) {
+		if (c4) { drawChart(c4, rsrpSeries, rsrpOpts); }
+		if (c5) { drawChart(c5, sinrSeries, sinrOpts); }
+	}
+	var l4 = document.getElementById('chart-rsrp-legend');
+	if (l4) { l4.innerHTML = ''; rsrpSeries.forEach(function(s, i) { l4.appendChild(legendItem(s.name, i)); }); }
+
 	var tempSeries = (lst.temp || []).map(function(n) {
 		return { name: lab['temp.' + n] || n.replace(/_/g, ' '), points: (_state.series['temp.' + n] || []) };
 	});
@@ -437,6 +475,8 @@ function refresh() {
 		(lst && lst.ping || []).forEach(function(n) { names.push('ping.' + n); });
 		(lst && lst.signal || []).forEach(function(n) { names.push('signal.' + n); });
 		(lst && lst.temp || []).forEach(function(n) { names.push('temp.' + n); });
+		(lst && lst.rsrp || []).forEach(function(n) { names.push('rsrp.' + n); });
+		(lst && lst.sinr || []).forEach(function(n) { names.push('sinr.' + n); });
 		return Promise.all(names.map(function(n) {
 			return callStats([ 'series', n ]).then(function(r) {
 				_state.series[n] = (r && r.series) || [];
@@ -489,6 +529,25 @@ return view.extend({
 						[ _('Monthly totals are written to flash about once an hour. Ping series are never written there.') ])
 				])
 			]),
+			E('div', { 'class': 'cbi-value' }, [
+				E('label', { 'class': 'cbi-value-title' }, [ _('Collect signal in the background') ]),
+				E('div', { 'class': 'cbi-value-field' }, [
+					(function() {
+						var w = new ui.Select(String(lst.bgpoll || 0), {
+							'0': _('Off'),
+							'300': _('Every 5 minutes'),
+							'60': _('Every minute')
+						}, { id: 'st-bgpoll', sort: [ '0', '300', '60' ] });
+						var n = w.render();
+						n.addEventListener('widget-change', function() {
+							callStats([ 'setconf', 'bgpoll=' + w.getValue() ]);
+						});
+						return n;
+					})(),
+					E('div', { 'class': 'cbi-value-description' },
+						[ _('With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped.') ])
+				])
+			]),
 			/* КУДА ПИШЕМ. Пустое поле = внутренняя память роутера; свой путь
 			   нужен тем, у кого в роутер воткнута флешка и хочется полный лог,
 			   а не только месячные итоги. Строка ниже показывает РЕАЛЬНЫЙ
@@ -539,6 +598,9 @@ return view.extend({
 			controls,
 			chartCard(_('Uplink latency'), 'chart-ping'),
 			chartCard(_('Signal level'), 'chart-signal'),
+			E('div', { 'id': 'card-rsrp', 'style': 'display:none' }, [
+				dualChartCard(_('RSRP / SINR'), 'chart-rsrp', 'RSRP, dBm', 'chart-sinr', 'SINR, dB')
+			]),
 			E('div', { 'id': 'card-temp', 'style': 'display:none' }, [
 				chartCard(_('Modem temperature'), 'chart-temp')
 			]),

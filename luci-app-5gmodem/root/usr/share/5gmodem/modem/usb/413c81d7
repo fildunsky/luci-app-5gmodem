@@ -209,13 +209,13 @@ _dbg_scell() {   # $1 - номер несущей 1..4, $2 - текст блок
 	esac
 }
 
-T=$(echo "$O" | awk '/^SCC1 info:/ {print $5}')
+T=$(echo "$O" | awk '/^[ \t]*SCC1 info:/ {print $5}')
 if [ -n "$T" ]; then
 	T=${T/,/}
 	T=${T/LTE_B/}
 	S1BAND="$(band4g $T)"
 	MODE="${MODE/LTE/LTE_A} / $(band4g $T)"
-	T=$(echo "$O" | awk '/^SCC1 info:/ {print $8}')
+	T=$(echo "$O" | awk '/^[ \t]*SCC1 info:/ {print $8}')
 	[ -n "$T" ] && S1BAND="$S1BAND @$T MHz"
 	
 	O1=$(echo "$O" | sed -n '/^SCell1:/,/^SCell2:/p')
@@ -226,13 +226,13 @@ if [ -n "$T" ]; then
 	_dbg_scell 1 "$O1"
 fi
 
-T=$(echo "$O" | awk '/^SCC2 info:/ {print $5}')
+T=$(echo "$O" | awk '/^[ \t]*SCC2 info:/ {print $5}')
 if [ -n "$T" ]; then
 	T=${T/,/}
 	T=${T/LTE_B/}
 	S2BAND="$(band4g $T)"
 	MODE="${MODE} / $(band4g $T)"
-	T=$(echo "$O" | awk '/^SCC2 info:/ {print $8}')
+	T=$(echo "$O" | awk '/^[ \t]*SCC2 info:/ {print $8}')
 	[ -n "$T" ] && S2BAND="$S2BAND @$T MHz"
 	
 	O1=$(echo "$O" | sed -n '/^SCell2:/,/^SCell3:/p')
@@ -243,13 +243,13 @@ if [ -n "$T" ]; then
 	_dbg_scell 2 "$O1"
 fi
 
-T=$(echo "$O" | awk '/^SCC3 info:/ {print $5}')
+T=$(echo "$O" | awk '/^[ \t]*SCC3 info:/ {print $5}')
 if [ -n "$T" ]; then
 	T=${T/,/}
 	T=${T/LTE_B/}
 	S3BAND="$(band4g $T)"
 	MODE="${MODE} / $(band4g $T)"
-	T=$(echo "$O" | awk '/^SCC3 info:/ {print $8}')
+	T=$(echo "$O" | awk '/^[ \t]*SCC3 info:/ {print $8}')
 	[ -n "$T" ] && S3BAND="$S3BAND @$T MHz"
 	
 	O1=$(echo "$O" | sed -n '/^SCell3:/,/^SCell4:/p')
@@ -260,13 +260,13 @@ if [ -n "$T" ]; then
 	_dbg_scell 3 "$O1"
 fi
 
-T=$(echo "$O" | awk '/^SCC4 info:/ {print $5}')
+T=$(echo "$O" | awk '/^[ \t]*SCC4 info:/ {print $5}')
 if [ -n "$T" ]; then
 	T=${T/,/}
 	T=${T/LTE_B/}
 	S4BAND="$(band4g $T)"
 	MODE="${MODE} / $(band4g $T)"
-	T=$(echo "$O" | awk '/^SCC4 info:/ {print $8}')
+	T=$(echo "$O" | awk '/^[ \t]*SCC4 info:/ {print $8}')
 	[ -n "$T" ] && S4BAND="$S4BAND @$T MHz"
 
 	O1=$(echo "$O" | sed -n '/^SCell4:/,/^SCell5:/p')

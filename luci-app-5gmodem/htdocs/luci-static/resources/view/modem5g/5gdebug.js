@@ -71,7 +71,7 @@ return view.extend({
 			var spans = lines.map(function(ln) {
 				var color = '#d6e0ea';
 				if (/^\++ /.test(ln)) { color = '#7db2ff'; }
-				return E('div', { 'style': 'color:' + color }, ln.length ? ln : ' ');
+				return E('div', { 'style': 'color:' + color }, [ ln.length ? ln : ' ' ]);
 			});
 			dom.content(document.getElementById('preout'), spans);
 			fs.write('/tmp/debug_result.txt', [ res.stdout || '' ]);
@@ -340,11 +340,11 @@ return view.extend({
 					   head, и когда справа было две строки (статус + веб-адрес
 					   HiLink), он проваливался вниз - под именем зиял отступ. */
 					E('div', { 'style': 'min-width:0' }, [
-						E('strong', { 'class': 'mprof-name' }, p.model || p.path),
+						E('strong', { 'class': 'mprof-name' }, [ p.model || p.path ]),
 						p.vidpid ? E('div', {
 							'class': 'mprof-name',
 							'style': 'font-size:78%; opacity:.55; margin-top:-.15em'
-						}, p.vidpid) : ''
+						}, [ p.vidpid ]) : ''
 					]),
 					/* СПРАВА колонкой: статус, под ним - адрес веб-админки HiLink
 					   (у такого модема настройки делаются там), это тоже «где модем».
@@ -356,7 +356,7 @@ return view.extend({
 							'href': 'http://' + p.webaddr + '/html/home.html',
 							'target': '_blank', 'rel': 'noreferrer',
 							'style': 'font-size:78%; opacity:.7'
-						}, p.webaddr) : ''
+						}, [ p.webaddr ]) : ''
 					])
 				])
 			]);
@@ -397,7 +397,7 @@ return view.extend({
 				   справа чем он ходит в сеть (APN, тип адреса). Правый столбец
 				   выровнен по краю - так значения удобно сверять между карточками. */
 				E('div', { 'class': 'mprof-line', 'style': 'margin-top:.45em' }, [
-					E('span', { 'class': 'mprof-if' }, p.iface || _('no interface')),
+					E('span', { 'class': 'mprof-if' }, [ p.iface || _('no interface') ]),
 					E('span', {}, [
 						E('strong', {}, 'APN:'), ' ',
 						/* Пустой APN не «неизвестен», а провайдерский по умолчанию. */
@@ -533,7 +533,7 @@ return view.extend({
 	   молча резать сеть нельзя. */
 	confirmDelete: function(p) {
 		var self = this;
-		var lines = [ E('p', {}, _('Delete the profile of %s?').format(p.model || p.path)) ];
+		var lines = [ E('p', {}, [ _('Delete the profile of %s?').format(p.model || p.path) ]) ];
 		if (p.iface && !p.iface_shared) {
 			lines.push(E('p', {}, _('Its network interface "%s" will be removed too.').format(p.iface)));
 		} else if (p.iface_shared) {
@@ -947,7 +947,7 @@ return view.extend({
 				E('strong', {}, _('A different modem is now in this USB port')), ' ',
 				_('Its IMEI does not match the one seen here before - the modems were probably swapped. The settings of this slot (the interface and its APN in particular) belong to the previous modem and its SIM. Check them below and create the interface anew if needed.')
 			]), 'warning');
-			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]);
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'ackswap', mSec ]), null);
 		}
 
 		/* ЗДЕСЬ БЫЛА СВОЯ ТАБЛИЦА APN (функция apnForOperator) - вторая копия
@@ -1264,7 +1264,7 @@ return view.extend({
 						.then(function(out) {
 							var v = String(out).trim() === '1' ? '1' : '0';
 							var el = self.getUIElement(section_id);
-							if (el && !(el.isChanged && el.isChanged())) { el.setValue(v); }
+							if (el && !(el.isChanged && el.isChanged())) { el.setValue(v); _instLast['_roaming'] = v; }
 						});
 				}, 0);
 				return '0';
@@ -1402,17 +1402,31 @@ return view.extend({
 			_('Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default.'));
 		o.default = '0';
 		o.rmempty = false;
+		var dnsApplied = null;
+		var dnsCur = function() {
+			if (dnsApplied != null) { return dnsApplied; }
+			var d = mIfName ? uci.get('network', mIfName, 'dns') : null;
+			if (Array.isArray(d)) { d = d.join(' '); }
+			return String(d || '').trim().replace(/\s+/g, ' ');
+		};
+		var dnsApply = function(p, on, srv) {
+			var target = (on && srv) ? srv.replace(/\s+/g, ' ') : '';
+			if (target === dnsCur()) { return Promise.resolve(); }
+			var prev = dnsApplied;
+			dnsApplied = target;
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'dnsfb', String(p), target ? '1' : '0', target ]).catch(function() { dnsApplied = prev; });
+		};
 		o.write = function(section_id, value) {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return; }
 			var on = (value === '1');
 			var so = this.map.lookupOption('_dns_servers', section_id);
 			var srv = (on && so) ? String(so[0].formvalue(section_id) || '').trim() : '';
-			return fs.exec('/usr/share/5gmodem/setopt.sh',
-				[ 'dnsfb', String(p), on ? '1' : '0', srv ]).catch(function() {});
+			return dnsApply(p, on, srv);
 		};
 		o.load = function(section_id) {
-			return (mIfName && String(uci.get('network', mIfName, 'dns') || '').trim() !== '') ? '1' : '0';
+			return (dnsCur() !== '') ? '1' : '0';
 		};
 		o.remove = function() {};
 
@@ -1427,11 +1441,10 @@ return view.extend({
 			var fo = this.map.lookupOption('_dns_fallback', section_id);
 			var on = fo ? (String(fo[0].formvalue(section_id)) === '1') : false;
 			var srv = on ? String(value || '').trim() : '';
-			return fs.exec('/usr/share/5gmodem/setopt.sh',
-				[ 'dnsfb', String(p), on ? '1' : '0', srv ]).catch(function() {});
+			return dnsApply(p, on, srv);
 		};
 		o.load = function(section_id) {
-			return mIfName ? String(uci.get('network', mIfName, 'dns') || '') : '';
+			return dnsCur();
 		};
 		o.remove = function() {};
 		} /* if (!activeIsHilink) - DNS-фолбэк */
@@ -1807,8 +1820,23 @@ return view.extend({
 		   ТОЛЬКО простые настройки. Интерфейс/порт/протокол/APN ПЕРЕСОЗДАЮТ
 		   интерфейс (mkiface) - их мгновенно дёргать нельзя, они на общей кнопке. */
 		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instLast = {};
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }
+			var name = o.option, rawWrite = o.write, rawLoad = o.load;
+			o.load = function(section_id) {
+				if (_instLast[name] != null) { return _instLast[name]; }
+				return rawLoad.call(this, section_id);
+			};
+			o.write = function(section_id, value) {
+				var v = String(value);
+				var known = (_instLast[name] != null) ? _instLast[name] : this.cfgvalue(section_id);
+				if (known != null && String(known) === v) { return Promise.resolve(); }
+				return Promise.resolve(rawWrite.call(this, section_id, value)).then(function(r) {
+					_instLast[name] = v;
+					return r;
+				});
+			};
 			var prev = o.onchange;
 			o.onchange = function(ev, section_id, value) {
 				var opt = this;

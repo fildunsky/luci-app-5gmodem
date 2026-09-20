@@ -349,4 +349,5 @@ _st running starting
 ) >/dev/null 2>&1 </dev/null &
 
 cat "$ST"
+sleep 1
 exit 0

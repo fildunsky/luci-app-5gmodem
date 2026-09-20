@@ -13,12 +13,16 @@ T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {t=-999; for(i=2;i<=NF;i++){v=$i; gsub(/[
 O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qeng=\"servingcell\";+qspn")
 
 T=$(echo "$O" | awk -F[,:] '/^\+QNWINFO/ {print $2"/"$4}' | xargs)
-if [ -n "$T" ]; then
-	if [ "x$MODE_NUM" = "x7" ]; then
-		B=$(echo $T | sed 's/.*LTE BAND \(.*\)/\1/')
-		MODE="LTE $(band4g ${B})"
-		MAINCUT="$(band4g ${B})"
-	fi
+if [ "x$MODE_NUM" = "x7" ]; then
+	B=$(echo $T | sed -n 's/.*LTE BAND \([0-9][0-9]*\).*/\1/p')
+	[ -n "$B" ] || B=$(echo "$O" | awk -F[,:] '/^\+QENG:/ && $4 ~ /LTE/ {v=$11; gsub(/[^0-9]/,"",v); print v; exit}')
+	case "$B" in
+		''|*[!0-9]*) : ;;
+		*)
+			MODE="LTE $(band4g ${B})"
+			MAINCUT="$(band4g ${B})"
+			;;
+	esac
 fi
 
 T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)

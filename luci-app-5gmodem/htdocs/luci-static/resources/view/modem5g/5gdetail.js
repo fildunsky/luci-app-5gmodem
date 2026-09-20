@@ -45,19 +45,55 @@
    жёлтый, хотя число то же (жалоба 18.09.2026). Теперь пороги, уровни, цвета и
    длина заливки берутся отсюда везде.
    edges = [худшее, гр1, гр2, гр3, лучшее]: Слабый / Средний / Хороший / Отличный. */
+var QUAL_T = {
+	lte:  { rsrp: [ -128, -118, -108, -98 ], rsrq: [ -20, -17, -14, -11 ], sinr: [ -3, 1, 5, 13 ] },
+	nr:   { rsrp: [ -110, -90, -80, -65 ], rsrq: [ -31, -19, -17, -14 ], sinr: [ -5, 5, 15, 30 ] },
+	umts: { rscp: [ -115, -105, -95, -85 ], ecio: [ -24, -14, -6, 1 ], rssi: [ -107, -103, -97, -89 ] },
+	gsm:  { rssi: [ -107, -103, -97, -89 ] }
+};
 var QUAL_EDGES = {
 	csq:  [ 0,    10,   15,  20,  31  ],
-	rssi: [ -113, -100, -85, -70, -55 ],
-	rsrp: [ -125, -100, -90, -80, -70 ],
-	rsrq: [ -23,  -20,  -15, -10, -3  ],
-	sinr: [ -10,  0,    13,  20,  30  ]
+	rssi: [ -113, -100, -85, -70, -55 ]
 };
+var _qualRat = 'lte';
+function qualRat(mode) {
+	var m = String(mode == null ? '' : mode).toLowerCase();
+	if (/nsa/.test(m)) { return 'lte'; }
+	if (/5g|nr/.test(m)) { return 'nr'; }
+	if (/lte|4g/.test(m)) { return 'lte'; }
+	if (/umts|hspa|wcdma|3g/.test(m)) { return 'umts'; }
+	if (/gsm|edge|gprs|2g/.test(m)) { return 'gsm'; }
+	return 'lte';
+}
+function qualSetMode(mode) {
+	if (mode != null && mode !== '' && mode !== '-') { _qualRat = qualRat(mode); }
+	return _qualRat;
+}
+function qualBandRat(band) {
+	return /^\s*n\d/.test(String(band == null ? '' : band)) ? 'nr' : _qualRat;
+}
+function qualEdges(key, rat) {
+	var tab = QUAL_T[rat || _qualRat] || QUAL_T.lte;
+	var t = tab[key];
+	if (!t && key === 'csq' && tab.rssi) {
+		t = tab.rssi.map(function(x) { return (x + 113) / 2; });
+	}
+	if (!t && !QUAL_EDGES[key]) { t = QUAL_T.lte[key] || QUAL_T.umts[key]; }
+	if (!t) { return QUAL_EDGES[key] || null; }
+	return [ t[0] - (t[1] - t[0]), t[1], t[2], t[3], t[3] + (t[3] - t[2]) ];
+}
+function sinrUnmeasured(sinr, rsrq) {
+	var s = String(sinr == null ? '' : sinr).trim(), q = String(rsrq == null ? '' : rsrq).trim();
+	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(s) || parseFloat(s) !== 0) { return false; }
+	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(q)) { return false; }
+	return parseFloat(q) >= -14;
+}
 /* Уровень 0..3 и доля шкалы 0..100 (кусочно-линейно по четвертям). */
 function qualLevelPct(edges, vn) {
 	if (vn <= edges[0]) { return [ 0, 0 ]; }
 	if (vn >= edges[4]) { return [ 3, 100 ]; }
 	for (var i = 0; i < 4; i++) {
-		if (vn <= edges[i + 1]) {
+		if (vn < edges[i + 1]) {
 			return [ i, Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i])) ];
 		}
 	}
@@ -72,14 +108,14 @@ var CA_GRAD = {
 	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
 	green:  'linear-gradient(90deg, #2fb885, #34d399)'
 };
-function caQuality(key, v) {
-	var e = QUAL_EDGES[key], n = parseFloat(v);
+function caQuality(key, v, rat) {
+	var e = qualEdges(key, rat), n = parseFloat(v);
 	if (!e || isNaN(n)) { return null; }
 	return QUAL_NAMES[qualLevelPct(e, n)[0]];
 }
 /* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
-function metricPct(key, v) {
-	var e = QUAL_EDGES[key], n = parseFloat(v);
+function metricPct(key, v, rat) {
+	var e = qualEdges(key, rat), n = parseFloat(v);
 	if (!e || isNaN(n)) { return null; }
 	var pc = qualLevelPct(e, n)[1];
 	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
@@ -119,16 +155,16 @@ function metricBar(id, rawVal, unit, edges) {
 
 /* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
    в CA-таблице - см. caQuality). Крайние edges - разумные пределы шкалы. */
-function csq_bar(v)  { metricBar('csq',  v, '',    QUAL_EDGES.csq);  }
-function rssi_bar(v) { metricBar('rssi', v, 'dBm', QUAL_EDGES.rssi); }
-function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', QUAL_EDGES.rsrp); }
-function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  QUAL_EDGES.rsrq); }
-function sinr_bar(v) { metricBar('sinr', v, 'dB',  QUAL_EDGES.sinr); }
+function csq_bar(v)  { metricBar('csq',  v, '',    qualEdges('csq'));  }
+function rssi_bar(v) { metricBar('rssi', v, 'dBm', qualEdges('rssi')); }
+function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', qualEdges('rsrp')); }
+function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  qualEdges('rsrq')); }
+function sinr_bar(v) { metricBar('sinr', v, 'dB',  qualEdges('sinr')); }
 /* 3G: RSCP (сила кода, dBm) и Ec/No (качество, dB). Пороги по общепринятым
    уровням UMTS: RSCP хуже -105 = плохо, лучше -75 = отлично; Ec/No хуже -16 =
    плохо, лучше -6 = отлично. */
-function rscp_bar(v) { metricBar('rscp', v, 'dBm', [ -115, -105, -95, -85, -75 ]); }
-function ecio_bar(v) { metricBar('ecio', v, 'dB',  [ -20,  -16, -10, -6,  0  ]); }
+function rscp_bar(v) { metricBar('rscp', v, 'dBm', qualEdges('rscp', 'umts')); }
+function ecio_bar(v) { metricBar('ecio', v, 'dB',  qualEdges('ecio', 'umts')); }
 
 /* Телефонный ярлык технологии: LTE->4G, LTE-A->4G+, HSPA->H+, HSDPA/HSUPA->H,
    UMTS/WCDMA->3G, EDGE->E, GPRS/GSM->2G, 5G остаётся 5G. Меняем ТОЛЬКО ведущий
@@ -560,9 +596,9 @@ var _GLOSS = null;
 function gl(term) {
 	if (!_GLOSS) {
 		_GLOSS = {
-			'RSRP': _('Signal strength received from the cell tower. Around -80 dBm is excellent, below -110 dBm is poor.'),
-			'RSRQ': _('Signal quality. Around -10 dB is good, below -15 dB is poor.'),
-			'SINR': _('Signal-to-noise ratio. Above 20 dB is excellent, below 0 dB is poor.'),
+			'RSRP': _('Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale.'),
+			'RSRQ': _('Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor.'),
+			'SINR': _('Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor.'),
 			'RSSI': _('Total power received in the channel, including noise and interference.'),
 			'CSQ': _('Signal quality index reported by the modem: 0-31, higher is better.'),
 			'TAC': _('Tracking area code: a group of cells of the operator network.'),
@@ -744,11 +780,11 @@ var IS_PROTON = (function() {
    $4 (text) - необязательная подпись: у антенных портов значение с единицами
    ("-114 dBm"), у CA и соседей - голое число. Оценку и длину считаем по САМОМУ
    значению ($3), не по подписи. IS_PROTON постоянен в сессии, режим не мешаем. */
-function paintMetricCell(td, key, v, text) {
+function paintMetricCell(td, key, v, text, rat) {
 	var has = (v != null && v !== '' && v !== '-');
 	var txt = has ? String(text != null ? text : v) : '-';
-	var col = has ? caQuality(key, v) : null;
-	var pc  = col ? metricPct(key, v) : null;
+	var col = has ? caQuality(key, v, rat) : null;
+	var pc  = col ? metricPct(key, v, rat) : null;
 
 	if (IS_PROTON) {
 		/* proton: число ВНУТРИ толстой полоски (тема рисует его из title). */
@@ -906,7 +942,8 @@ function renderCaTable(json) {
 		   выбрасывалось вместе с мёртвой переменной ADDON. Используем как запасной
 		   источник, когда в строке диапазона полосы нет. */
 		data['PCC'] = { band: p.band, bw: p.bw || json.bandwidth, pci: json.pci, earfcn: json.earfcn,
-			rsrp: json.rsrp, rsrq: json.rsrq, rssi: json.rssi, sinr: json.sinr,
+			rsrp: json.rsrp, rsrq: json.rsrq, rssi: json.rssi,
+			sinr: sinrUnmeasured(json.sinr, json.rsrq) ? '-' : json.sinr,
 			mimo: json.pmimo, mod: json.pmod,
 			/* Первичный компонент активен по определению - иначе не было бы связи. */
 			state: _('activated') };
@@ -953,7 +990,7 @@ function renderCaTable(json) {
 	function paintCell(td, key, c) {
 		/* Метрики - через общую точку: там же решается, как их показывать в
 		   текущей теме (см. paintMetricCell). */
-		if (isMetric[key]) { paintMetricCell(td, key, c[key]); return; }
+		if (isMetric[key]) { paintMetricCell(td, key, c[key], null, qualBandRat(c.band)); return; }
 		td.textContent = txt(c[key]);
 		td.style.color = '';
 		td.style.fontWeight = '';
@@ -1091,6 +1128,61 @@ var pollTickFn = null;
    Данные адресуются через for=<путь> (pageModemPath), поэтому карточка
    заполняется данными ИМЕННО нового модема, даже если active_modem на роутере
    ещё не догнал. */
+function resetStickyForModem() {
+	_qualRat = 'lte';
+	var drop = function(el) {
+		if (!el) { return; }
+		[ 'data-hadata', 'data-empty', 'data-sig' ].forEach(function(a) { el.removeAttribute(a); });
+	};
+	CELL_ROWS.forEach(function(r) {
+		var el = document.getElementById(r.id);
+		if (!el) { return; }
+		drop(el); drop(el.parentNode);
+		el.textContent = '-';
+	});
+	var t = document.getElementById('temp');
+	if (t) {
+		drop(t); drop(t.parentNode);
+		t.textContent = '-';
+		t.removeAttribute('title');
+		if (t.parentNode) { t.parentNode.style.display = 'none'; }
+	}
+	var pv = document.getElementById('phone');
+	if (pv) {
+		pv.removeAttribute('data-hadata');
+		pv.removeAttribute('data-imsi');
+		pv.textContent = '';
+		pv.style.display = 'none';
+	}
+	var mv = document.getElementById('mode');
+	if (mv) { mv.textContent = '-'; mv.removeAttribute('data-mh'); }
+	var nbw = document.getElementById('nb-comp');
+	if (nbw) {
+		drop(nbw);
+		nbw.style.display = 'none';
+		nbw.querySelectorAll('.nb-row').forEach(function(r) { r.parentNode.removeChild(r); });
+	}
+	var apb = document.getElementById('antports-block');
+	var apt = document.getElementById('antports-table');
+	if (apb) { drop(apb); apb.style.display = 'none'; }
+	if (apt) { drop(apt); apt.innerHTML = ''; }
+	var rxl = document.getElementById('rxdiv-line');
+	if (rxl) { drop(rxl); rxl.textContent = ''; rxl.style.display = 'none'; }
+	var cas = document.getElementById('ca-comp');
+	if (cas) {
+		drop(cas);
+		cas.style.display = 'none';
+		cas.querySelectorAll('tr.ca-row').forEach(function(r) {
+			drop(r);
+			if (r.getAttribute('data-cc') !== 'PCC') { r.style.display = 'none'; }
+		});
+	}
+	_c4Last = null;
+	_connBase = null;
+	_advSticky = false;
+	_lastJson = null;
+}
+
 function switchModemInPlace(path) {
 	if (!path || path === pageModemPath) { return; }
 	pageModemPath = String(path);
@@ -1101,6 +1193,8 @@ function switchModemInPlace(path) {
 	simSlotsSeen = false;
 	slotImsiSeen = null;
 	slotIdleTicks = 0;
+	resetStickyForModem();
+	histDraw(null);
 	if (typeof bandsui.resetForModem === 'function') { bandsui.resetForModem(); }
 	/* Индекс MM нового активного - для кнопок режимов/бендов (блок ленивый,
 	   к его раскрытию значение уже придёт). */
@@ -1189,6 +1283,235 @@ onBlockExpand['freq'] = function() {
 	if (typeof bandsui.loadBands === 'function') { bandsui.loadBands(); }
 };
 
+var HIST_SPAN = 600, HIST_MIN_SPAN = 120, HIST_CAP = 240, HIST_GAP = 20, HIST_W = 300, HIST_H = 64;
+var HIST_KEYS = [ [ 'rsrp', 'RSRP', 'dBm' ], [ 'rsrq', 'RSRQ', 'dB' ], [ 'sinr', 'SINR', 'dB' ], [ 'rssi', 'RSSI', 'dBm' ] ];
+var _histOn = true, _hist = null, _histUi = null;
+function histNum(v) {
+	var n = parseFloat(v);
+	return (v == null || v === '' || v === '-' || isNaN(n)) ? null : n;
+}
+function histId(v) {
+	var s = String(v == null ? '' : v).trim();
+	return (s === '' || s === '-') ? '' : s;
+}
+function histStore() {
+	if (_hist) { return _hist; }
+	_hist = {};
+	try {
+		var o = JSON.parse(window.sessionStorage.getItem('5gm-hist') || '{}') || {};
+		var now = Date.now() / 1000;
+		Object.keys(o).forEach(function(k) {
+			var h = o[k];
+			if (!h || !Array.isArray(h.p)) { return; }
+			_hist[k] = { c: String(h.c || ''), p: h.p.filter(function(p) {
+				return Array.isArray(p) && typeof p[0] === 'number' && p[0] > now - HIST_SPAN && p[0] < now + 5;
+			}).slice(-HIST_CAP) };
+		});
+	} catch (e) { _hist = {}; }
+	return _hist;
+}
+function histKey(json) {
+	return String(pageModemPath || (json && json.path) || '-');
+}
+function histPush(json) {
+	if (!_histOn || !json) { return; }
+	if (json.rsrp == null && json.rsrq == null && json.sinr == null && json.rssi == null) { return; }
+	if (parseInt(json.age, 10) >= 30) { return; }
+	var st = histStore(), key = histKey(json);
+	var h = st[key] || (st[key] = { c: '', p: [] });
+	var now = Math.round(Date.now() / 100) / 10;
+	if (h.p.length && now - h.p[h.p.length - 1][0] < 3) { return; }
+	var pt = [ now, histNum(json.rsrp), histNum(json.rsrq),
+		sinrUnmeasured(json.sinr, json.rsrq) ? null : histNum(json.sinr), histNum(json.rssi), '' ];
+	var pci = histId(json.pci), ear = histId(json.earfcn);
+	if (pci && ear) {
+		var ck = pci + '/' + ear;
+		if (h.c && h.c !== ck) {
+			var band = histId(mutil.caSplitBand(json.pband).band).replace(/\s*\(.*$/, '');
+			pt[5] = (band || ('EARFCN ' + ear)) + ' · PCI ' + pci;
+		}
+		h.c = ck;
+	}
+	h.p.push(pt);
+	while (h.p.length > HIST_CAP || (h.p.length && h.p[0][0] < now - HIST_SPAN)) { h.p.shift(); }
+	try { window.sessionStorage.setItem('5gm-hist', JSON.stringify(st)); } catch (e) {}
+}
+function histSvg(tag, attrs) {
+	var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+	for (var k in attrs) { el.setAttribute(k, attrs[k]); }
+	return el;
+}
+function histClock(sec) {
+	sec = Math.max(0, Math.round(sec));
+	var s = sec % 60;
+	return '-' + Math.floor(sec / 60) + ':' + (s < 10 ? '0' : '') + s;
+}
+function histFmt(v) {
+	return String(Math.round(v * 10) / 10);
+}
+function histBuild() {
+	var ui = { cards: {}, t0: 0, span: HIST_SPAN, pts: [], hover: null };
+	var nodes = HIST_KEYS.map(function(m) {
+		var c = { key: m[0], idx: HIST_KEYS.indexOf(m) + 1, unit: m[2] };
+		c.avg = histSvg('line', { 'class': 'tg-hist-avg', x1: 0, x2: HIST_W, y1: 0, y2: 0, 'vector-effect': 'non-scaling-stroke', visibility: 'hidden' });
+		c.area = histSvg('path', { 'class': 'tg-hist-area', d: '' });
+		c.line = histSvg('path', { 'class': 'tg-hist-line', d: '', 'vector-effect': 'non-scaling-stroke' });
+		c.marks = histSvg('path', { 'class': 'tg-hist-mark', d: '', 'vector-effect': 'non-scaling-stroke' });
+		c.cur = histSvg('line', { 'class': 'tg-hist-cur', x1: 0, x2: 0, y1: 0, y2: HIST_H, 'vector-effect': 'non-scaling-stroke', visibility: 'hidden' });
+		c.svg = histSvg('svg', { viewBox: '0 0 ' + HIST_W + ' ' + HIST_H, preserveAspectRatio: 'none', role: 'img', 'aria-label': m[1] });
+		[ c.avg, c.area, c.line, c.marks, c.cur ].forEach(function(n) { c.svg.appendChild(n); });
+		c.dot = E('span', { 'class': 'tg-hist-dot', 'style': 'display:none' });
+		c.hdot = E('span', { 'class': 'tg-hist-dot tg-hist-hdot', 'style': 'display:none' });
+		c.tip = E('span', { 'class': 'tg-hist-tip', 'style': 'display:none' });
+		c.empty = E('span', { 'class': 'tg-hist-empty' }, _('No data yet'));
+		c.plot = E('div', { 'class': 'tg-hist-plot' }, [ c.svg, c.dot, c.hdot, c.tip, c.empty ]);
+		c.lvDot = E('i', {});
+		c.lvTxt = E('span', {}, '');
+		c.now = E('span', { 'class': 'tg-hist-now' }, '-');
+		c.left = E('span', {}, histClock(HIST_SPAN));
+		c.stat = E('span', {}, '');
+		c.root = E('div', { 'class': 'tg-hist-card', 'data-k': m[0] }, [
+			E('div', { 'class': 'tg-hist-h' }, [
+				E('span', { 'class': 'tg-hist-name' }, [ E('b', {}, m[1]), E('span', { 'class': 'tg-hist-lv' }, [ c.lvDot, c.lvTxt ]) ]),
+				c.now
+			]),
+			c.plot,
+			E('div', { 'class': 'tg-hist-f' }, [ c.left, c.stat, E('span', {}, _('now')) ])
+		]);
+		var move = function(ev) {
+			var r = c.svg.getBoundingClientRect();
+			if (!r.width) { return; }
+			ui.hover = Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width));
+			histHover();
+		};
+		var leave = function() { ui.hover = null; histHover(); };
+		c.plot.addEventListener('pointermove', move);
+		c.plot.addEventListener('pointerdown', move);
+		c.plot.addEventListener('pointerleave', leave);
+		c.plot.addEventListener('pointercancel', leave);
+		ui.cards[m[0]] = c;
+		return c.root;
+	});
+	_histUi = ui;
+	return E('div', {}, [
+		E('div', { 'class': 'tg-hist-grid' }, nodes),
+		E('div', { 'class': 'tg-hist-note' }, _('Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value.'))
+	]);
+}
+function histHover() {
+	var ui = _histUi;
+	if (!ui) { return; }
+	Object.keys(ui.cards).forEach(function(k) {
+		var c = ui.cards[k], best = null, bd = HIST_GAP;
+		if (ui.hover != null) {
+			var t = ui.t0 + ui.hover * ui.span;
+			ui.pts.forEach(function(p) {
+				var d = Math.abs(p[0] - t);
+				if (p[c.idx] != null && d <= bd) { bd = d; best = p; }
+			});
+		}
+		if (!best) {
+			c.cur.setAttribute('visibility', 'hidden');
+			c.tip.style.display = 'none';
+			c.hdot.style.display = 'none';
+			return;
+		}
+		var f = (best[0] - ui.t0) / ui.span, x = f * HIST_W;
+		c.cur.setAttribute('x1', x); c.cur.setAttribute('x2', x);
+		c.cur.setAttribute('visibility', 'visible');
+		c.hdot.style.display = '';
+		c.hdot.style.left = (f * 100).toFixed(2) + '%';
+		c.hdot.style.top = c.y(best[c.idx]).toFixed(1) + 'px';
+		var mark = '';
+		ui.pts.forEach(function(p) { if (p[5] && Math.abs(p[0] - best[0]) <= HIST_GAP / 2) { mark = p[5]; } });
+		c.tip.textContent = histFmt(best[c.idx]) + ' ' + c.unit + ' · ' + histClock(ui.t0 + ui.span - best[0]) + (mark ? ' · ' + mark : '');
+		c.tip.style.display = '';
+		var w = c.plot.clientWidth || 1, half = c.tip.offsetWidth / 2 + 2;
+		c.tip.style.left = Math.max(half, Math.min(w - half, f * w)) + 'px';
+	});
+}
+function histDraw(json) {
+	var ui = _histUi;
+	if (!ui || !_histOn) { return; }
+	var body = document.querySelector('[data-blk="hist"] .tg-collapse');
+	if (!body || !body.classList.contains('open')) { return; }
+	var h = histStore()[histKey(json)] || { p: [] };
+	var now = Date.now() / 1000;
+	var pts = h.p.filter(function(p) { return p[0] >= now - HIST_SPAN; });
+	var span = pts.length ? Math.max(HIST_MIN_SPAN, Math.min(HIST_SPAN, now - pts[0][0])) : HIST_SPAN;
+	var t0 = now - span;
+	ui.t0 = t0; ui.span = span; ui.pts = pts;
+	var X = function(t) { return (t - t0) / span * HIST_W; };
+	var marks = '';
+	pts.forEach(function(p) { if (p[5]) { var mx = X(p[0]).toFixed(1); marks += 'M' + mx + ' 0V' + HIST_H; } });
+	Object.keys(ui.cards).forEach(function(k) {
+		var c = ui.cards[k], i = c.idx, vals = [];
+		pts.forEach(function(p) { if (p[i] != null) { vals.push(p[i]); } });
+		if (k === 'rssi') { c.root.style.display = vals.length ? '' : 'none'; }
+		c.left.textContent = histClock(span);
+		c.marks.setAttribute('d', marks);
+		if (!vals.length) {
+			c.line.setAttribute('d', ''); c.area.setAttribute('d', '');
+			c.avg.setAttribute('visibility', 'hidden');
+			c.dot.style.display = 'none'; c.empty.style.display = '';
+			c.now.textContent = '-'; c.stat.textContent = ''; c.lvTxt.textContent = ''; c.lvDot.style.background = 'transparent';
+			return;
+		}
+		c.empty.style.display = 'none';
+		var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals), sum = 0;
+		vals.forEach(function(v) { sum += v; });
+		var avg = sum / vals.length;
+		var a = lo, b = hi;
+		if (b - a < 6) { var mid = (a + b) / 2; a = mid - 3; b = mid + 3; }
+		var pad = (b - a) * 0.15;
+		a -= pad; b += pad;
+		var Y = function(v) { return HIST_H - 4 - (v - a) / (b - a) * (HIST_H - 8); };
+		c.y = Y;
+		var line = '', area = '', seg = [], prevT = null;
+		var flush = function() {
+			if (!seg.length) { return; }
+			var d = '';
+			seg.forEach(function(q, n) { d += (n ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1); });
+			if (seg.length === 1) { d += 'h0.01'; }
+			line += d;
+			if (seg.length > 1) { area += d + 'L' + seg[seg.length - 1][0].toFixed(1) + ' ' + HIST_H + 'L' + seg[0][0].toFixed(1) + ' ' + HIST_H + 'Z'; }
+			seg = [];
+		};
+		pts.forEach(function(p) {
+			if (p[i] == null || (prevT != null && p[0] - prevT > HIST_GAP)) { flush(); }
+			if (p[i] != null) { seg.push([ X(p[0]), Y(p[i]) ]); }
+			prevT = p[0];
+		});
+		flush();
+		c.line.setAttribute('d', line);
+		c.area.setAttribute('d', area);
+		c.avg.setAttribute('y1', Y(avg).toFixed(1)); c.avg.setAttribute('y2', Y(avg).toFixed(1));
+		c.avg.setAttribute('visibility', 'visible');
+		var last = pts[pts.length - 1], cur = last[i];
+		if (cur != null && now - last[0] <= HIST_GAP) {
+			c.dot.style.display = '';
+			c.dot.style.left = (X(last[0]) / HIST_W * 100).toFixed(2) + '%';
+			c.dot.style.top = Y(cur).toFixed(1) + 'px';
+			c.now.textContent = '';
+			c.now.appendChild(document.createTextNode(histFmt(cur) + ' '));
+			c.now.appendChild(E('small', {}, c.unit));
+			var q = caQuality(k, cur);
+			c.lvDot.style.background = q ? CA_COLOR[q] : 'transparent';
+			c.lvTxt.textContent = q ? _qualLabel(QUAL_NAMES.indexOf(q)) : '';
+		} else {
+			c.dot.style.display = 'none';
+			c.now.textContent = '-'; c.lvTxt.textContent = ''; c.lvDot.style.background = 'transparent';
+		}
+		c.stat.textContent = _('min') + ' ' + histFmt(lo) + ' · ' + _('avg') + ' ' + histFmt(avg) + ' · ' + _('max') + ' ' + histFmt(hi);
+	});
+	histHover();
+}
+function histShow(on) {
+	var el = document.querySelector('[data-blk="hist"]');
+	if (el) { el.style.display = on ? '' : 'none'; }
+}
+onBlockExpand['hist'] = function() { histDraw(_lastJson); };
+
 /* Единая сортировка режимов сети для ВСЕХ модемов: Auto, затем по поколению с
    комбинациями сразу после младшего поколения:
    Auto | 2G | 2G+3G | 3G | 3G+4G | 4G | 4G+5G | 5G.
@@ -1229,8 +1552,8 @@ function renderDebugBtn(json) {
 			setModemBusy(_('Switching the modem into the mode with AT ports…'));
 			/* Через autosetup, а не напрямую: он и переключит, и дождётся портов,
 			   и восстановит интерфейс - тот же путь, что при подключении модема. */
-			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
-				(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]);
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
+				(pageModemPath || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]), {});
 			/* Перезагрузка, КОГДА debug реально включился (не по слепому таймеру -
 			   иначе ловим ещё HiLink посреди свитча). */
 			reloadWhenDebugReady();
@@ -1367,8 +1690,8 @@ function renderApnLine(json) {
 function switchToDebug(btn) {
 	if (btn) { btn.disabled = true; }
 	setModemBusy(_('Switching the modem into the mode with AT ports…'));
-	fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
-		(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]);
+	L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autosetup',
+		(pageModemPath || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '') ]), {});
 	reloadWhenDebugReady();
 }
 
@@ -1381,7 +1704,9 @@ function switchToDebug(btn) {
    Крышка ~55 c на случай, если что-то пошло не так. */
 function reloadWhenDebugReady(tries) {
 	tries = tries || 0;
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'cached', '4' ]), '').then(function(out) {
+	var _rdArgs = [ 'cached', '4' ];
+	if (pageModemPath) { _rdArgs.push('for=' + pageModemPath); }
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _rdArgs), '').then(function(out) {
 		var ready = false;
 		try { var j = JSON.parse(out || '{}'); ready = (String(j.backend || '').toLowerCase() !== 'hilink') && (j.at_debug === '1'); } catch (e) {}
 		if (ready || tries >= 18) { window.location.reload(); }
@@ -1641,6 +1966,7 @@ function connStageText(json) {
 	if (en > 1) { tail = ' ' + _('(#%d)').format(en); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
 	if (reg == '3') { return _('Registration denied'); }
+	if (json.no_at == '1' && (reg == '' || reg == '-')) { return _('Establishing connection…') + tail; }
 	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован
 		return (hasSig ? _('Searching for network…') : _('Initialising modem…')) + tail;
 	}
@@ -1970,7 +2296,7 @@ function buildSimpleUI() {
 	   ровно как было. */
 	document.head.appendChild(E('style', { 'id': 'sc-style' },
 		'body.sc-simple [data-blk="cell"], body.sc-simple [data-blk="freq"],' +
-		'body.sc-simple [data-blk="ttl"] { display:none !important; }' +
+		'body.sc-simple [data-blk="ttl"], body.sc-simple [data-blk="hist"] { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#rebootn { display:table-row !important; }' +
 		'#doctorn { display:none; }' +
@@ -2063,6 +2389,10 @@ function updateSimpleLine(json) {
 	else if (reg === '7') { st = 'unknown'; txt = _('SMS only — no data connection'); }
 	else if (!json.modem || json.modem === '-') { st = 'off'; txt = _('No modem found') + ' — ' + _('Plug the modem into USB — setup is automatic'); }
 	else { st = 'off'; txt = _('No network') + ' — ' + _('Check the SIM card and the antennas'); }
+	if (json.no_at == '1' && (reg === '' || reg === '-') && json.modem && json.modem !== '-') {
+		if (hasIp) { st = 'on'; txt = _('Internet is working'); }
+		else { st = 'unknown'; txt = _('Metrics are not polled: background AT polling is off'); }
+	}
 	if (json.error === 'busy' && !regOk && !hasIp) {
 		st = 'unknown'; txt = _('Collecting data from the modem…');
 	}
@@ -2106,7 +2436,9 @@ function updateSimpleLine(json) {
 function doctorOk() {
 	var j = _lastJson || {};
 	var reg = String(j.registration || '');
-	return (reg === '1' || reg === '5') && !!(j.ipaddr && j.ipaddr !== '-');
+	var hasIp = !!(j.ipaddr && j.ipaddr !== '-');
+	if (j.no_at == '1' && (reg === '' || reg === '-')) { return hasIp; }
+	return (reg === '1' || reg === '5') && hasIp;
 }
 function doctorWait(secs) {
 	return new Promise(function(res) {
@@ -2193,6 +2525,7 @@ function applyMetrics(json) {
 						return;
 					}
 					foreignTicks = 0;
+					qualSetMode(json.mode);
 
 					/* Тик пришёл - порт свободен: запускаем отложенные
 					   simslot/bands (см. afterFirstPoll). */
@@ -2239,6 +2572,7 @@ function applyMetrics(json) {
 						/* Сота и TTL без модема пусты - прячем всегда. */
 						if (_cell) { _cell.style.display = 'none'; }
 						if (_ttl) { _ttl.style.display = 'none'; }
+						histShow(false);
 						/* ЗАЛИП (на шине, не отвечает) - оставляем «Управление частотами»:
 						   там кнопка ребута по питанию, которой его можно оживить. УБРАН
 						   совсем - прячем и его (ребутить нечего), остаётся чистый скелет. */
@@ -2275,6 +2609,9 @@ function applyMetrics(json) {
 					if (_cell) { _cell.style.display = ''; }
 					if (_freq) { _freq.style.display = ''; }
 					if (_ttl) { _ttl.style.display = ''; }
+					histShow(true);
+					histPush(json);
+					histDraw(json);
 
 					/* Строки, которых у ЭТОГО КЛАССА МОДЕМОВ не бывает, убираем
 					   совсем. У модемов без AT-портов (HiLink) веб-API не отдаёт
@@ -2297,7 +2634,8 @@ function applyMetrics(json) {
 					if (modemBusyActive()) {
 						var _reg = String(json.registration || '');
 						var _sig = parseInt(json.signal, 10);
-						if (_reg === '1' || (!isNaN(_sig) && _sig > 0)) { clearModemBusy(); }
+						var _noAtUp = (json.no_at == '1' && (_reg === '' || _reg === '-') && !!(json.ipaddr && json.ipaddr !== '-'));
+						if (_reg === '1' || (!isNaN(_sig) && _sig > 0) || _noAtUp) { clearModemBusy(); }
 					}
 
 				/* ЗДЕСЬ БЫЛ «анти-скачок скролла»: если пользователь у низа страницы,
@@ -2751,7 +3089,7 @@ function applyMetrics(json) {
 					/* Пояснение в «Управление частотами»: показываем реальный
 					   протокол интерфейса (mbim/qmi), чтобы было «Управление
 					   невозможно в режиме mbim», а не абстрактный текст. */
-					if (document.getElementById('bandnote-text') && json.protocol && json.protocol != '-') {
+					if (document.getElementById('bandnote-text') && json.protocol && json.protocol != '-' && !bandsui.isStaticNote()) {
 						/* Fibocom L850/L860 (Intel XMM) - на будущее: если родной режим
 						   бенды не отдал, ведём в XMM, а не в ModemManager. У нас сейчас
 						   L850 отдаёт бенды и в MBIM (свой modemband-профиль), так что
@@ -2938,12 +3276,7 @@ function applyMetrics(json) {
 						   провал при занятом AT-порту) прятал шкалу CSQ НАВСЕГДА -
 						   до перезагрузки страницы. Выглядело как "было и пропало". */
 						view.style.visibility = 'visible';
-						if (json.csq == '') { 
-						view.textContent = '-';
-						}
-						else {
 						csq_bar(json.csq, 31);
-						}
 						}
 					}
 
@@ -3006,13 +3339,8 @@ function applyMetrics(json) {
 						else {
 							view.style.visibility = 'visible';
 							var z = json.sinr;
-							if (z.includes('dB')) { 
-							view.textContent = json.sinr;
-							}
-							else {
 							var sinr_min = -21;
-							sinr_bar(json.sinr + " dB", sinr_min);
-							}
+							sinr_bar(sinrUnmeasured(z, json.rsrq) ? '-' : (z.includes('dB') ? z : (z + " dB")), sinr_min);
 						}
 					}
 
@@ -3026,13 +3354,8 @@ function applyMetrics(json) {
 						else {
 							view.style.visibility = 'visible';
 							var z = json.rsrq;
-							if (z.includes('dB')) { 
-							view.textContent = json.rsrq;
-							}
-							else {
 							var rsrq_min = -20;
-							rsrq_bar(json.rsrq + " dB", rsrq_min);
-							}
+							rsrq_bar(z.includes('dB') ? z : (z + " dB"), rsrq_min);
 						}
 					}
 
@@ -3169,7 +3492,7 @@ modemDialog: baseclass.extend({
 					if (!poll.active()) poll.start();
 					location.reload();
 					//ev.target.blur();
-				}, 2000).finally();
+				}, 2000);
 			});
 
 		},
@@ -3274,7 +3597,9 @@ simDialog: baseclass.extend({
 				]),
 			]);
 
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', [ 'status' ]), '').then(function(out) {
+			var _stArgs = [ 'status' ];
+			if (pageModemPath) { _stArgs.push('for=' + pageModemPath); }
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', _stArgs), '').then(function(out) {
 				var st = {};
 				try { st = JSON.parse(out) || {}; } catch (e) { return; }
 				if (st.type) {
@@ -3444,7 +3769,7 @@ simDialog: baseclass.extend({
 				}
 				if (document.getElementById('modem-none-block')) { return; }
 				_mib.style.display = 'none';
-				[ '[data-blk="cell"]', '[data-blk="freq"]', '[data-blk="ttl"]' ].forEach(function(sel) {
+				[ '[data-blk="cell"]', '[data-blk="freq"]', '[data-blk="ttl"]', '[data-blk="hist"]' ].forEach(function(sel) {
 					var el = document.querySelector(sel);
 					if (el) { el.style.display = 'none'; }
 				});
@@ -3459,6 +3784,7 @@ simDialog: baseclass.extend({
 		/* Настройка «Отображать Фиксацию TTL» (вкладка «Настройки» - блок «Сеть»).
 		   Включена по умолчанию: показываем блок, ПОКА значение явно не '0'. */
 		var showTtl = (uci.get('5gmodem', '@5gmodem[0]', 'show_ttl') !== '0');
+		_histOn = (uci.get('5gmodem', '@5gmodem[0]', 'show_history') !== '0');
 
 		var data = Array.isArray(res) ? res[0] : res;
 		var mmK  = Array.isArray(res) ? (res[1] || '') : '';
@@ -4247,7 +4573,9 @@ simDialog: baseclass.extend({
 					E('div', { 'id': 'rxdiv-line',
 						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, '')
 				])
-			])
+			]),
+
+			_histOn ? collapsibleSection('hist', _('History'), [ histBuild() ]) : ''
 		]);
 		}, o, this);
 

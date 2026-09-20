@@ -1,0 +1,7 @@
+getinfo=Qualcomm SDX55 (T99W175 / MV31-W / DW5930e)
+getsupportedbands=1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71
+getbands=1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71
+getsupportedbands5gnsa=1 2 3 5 7 8 12 20 28 38 41 66 71 77 78 79
+getbands5gnsa=1 2 3 5 7 8 12 20 28 38 41 66 71 77 78 79
+getsupportedbands3g=1 2 4 5 6 8 9 19
+getbands3g=1 2 4 5 6 8 9 19

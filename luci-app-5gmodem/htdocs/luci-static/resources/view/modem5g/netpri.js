@@ -603,7 +603,7 @@ function pingCard(w) {
 		/* фон карточки - её же значок (см. svcRankEl), как у карточек сервисов */
 		svcRankEl(pic),
 		E('span', { 'class': 'netpri-sub' }, _('Status')),
-		E('span', { 'class': 'netpri-name' }, [ dot, pic, E('span', {}, info.name) ]),
+		E('span', { 'class': 'netpri-name' }, [ dot, pic, E('span', {}, [ info.name ]) ]),
 		E('span', { 'class': 'netpri-ip' }, _pMs(st))
 	]);
 }
@@ -807,19 +807,20 @@ function svcCard(service) {
 	if (k && k.port) {
 		attrs['click'] = function(ev) {
 			ev.preventDefault();
+			if (_npSwallowClick()) { return; }
 			window.open('//' + window.location.hostname + ':' + k.port + '/', '_blank');
 		};
 	} else {
 		/* КАРТОЧКА БЕЗ АДМИНКИ - ЧИСТО ИНФОРМАЦИОННАЯ. Запускать и останавливать
 		   сервис по клику НЕ надо: это кнопка в форме, случайное нажатие не
 		   должно ничего менять в системе, а состояние показывает точка. */
-		attrs['click'] = function(ev) { ev.preventDefault(); };
+		attrs['click'] = function(ev) { ev.preventDefault(); _npSwallowClick(); };
 	}
 	var sic = svcIcon(service);
 	return E('button', attrs, [
 		svcRankEl(sic),
 		E('span', { 'class': 'netpri-sub' }, _sTop(r)),
-		E('span', { 'class': 'netpri-name' }, [ dot, sic, E('span', {}, svcName(service)) ]),
+		E('span', { 'class': 'netpri-name' }, [ dot, sic, E('span', {}, [ svcName(service) ]) ]),
 		E('span', { 'class': 'netpri-ip' }, _sBottom(r))
 	]);
 }
@@ -1090,8 +1091,8 @@ function _rankFit(sp) {
 function nameEl(o) {
 	var txt = o.label || o.iface;
 	var ic = typeIcon(o);
-	if (ic) { return E('span', { 'class': 'netpri-name' }, [ ic, E('span', {}, txt) ]); }
-	return E('span', { 'class': 'netpri-name' }, txt);
+	if (ic) { return E('span', { 'class': 'netpri-name' }, [ ic, E('span', {}, [ txt ]) ]); }
+	return E('span', { 'class': 'netpri-name' }, [ txt ]);
 }
 
 /* ==== ПЕРЕТАСКИВАНИЕ КАРТОЧЕК: порядок = приоритет (метрика 1,2,3…) ====
@@ -1473,8 +1474,8 @@ function buildBar(list, redraw) {
 				   а скелетоны лежат ПОВЕРХ отдельным absolute-слоем. */
 				return [
 					rankEl(_rank, o),
-					E('span', { 'class': 'netpri-sub' }, o.sub || o.iface),
-					E('span', { 'class': 'netpri-name' }, o.iface),
+					E('span', { 'class': 'netpri-sub' }, [ o.sub || o.iface ]),
+					E('span', { 'class': 'netpri-name' }, [ o.iface ]),
 					E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***'),
 					E('span', { 'class': 'netpri-skelov' }, [
 						/* ширины В ПРОЦЕНТАХ от карточки: em-значения на узкой
@@ -1531,7 +1532,7 @@ function buildBar(list, redraw) {
 				}
 				return [
 					E('span', { 'class': 'netpri-sub' }, stepName + ' (' + o.healn + '/' + o.healmax + ')'),
-					E('span', { 'class': 'netpri-name' }, o.iface),
+					E('span', { 'class': 'netpri-name' }, [ o.iface ]),
 					E('span', { 'class': 'netpri-ip' }, [
 						E('span', { 'class': 'netpri-svcdot netpri-health off', 'title': _('No internet on this link') }),
 						(forTxt ? forTxt + ' | ' : '') + stepCmd
@@ -1541,7 +1542,7 @@ function buildBar(list, redraw) {
 			return [
 			rankEl(_rank, o),
 			E('span', { 'class': 'netpri-sub' },
-				isOrphan ? _('not in wan zone — click to fix') : (o.sub || o.iface)),
+				[ isOrphan ? _('not in wan zone — click to fix') : (o.sub || o.iface) ]),
 			nameEl(o),
 			/* keep the IP line present even without an address so the button height
 			   never changes; show a neutral placeholder while there is no IP yet.

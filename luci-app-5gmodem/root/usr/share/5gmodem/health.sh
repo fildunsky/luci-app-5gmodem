@@ -1297,6 +1297,7 @@ once)
 	  enforce
 	  heal ) &
 	echo '{"result":"ok"}'
+	sleep 1
 	;;
 event)
 	# Внеочередной круг ПО СОБЫТИЮ ifup/ifdown аплинка (hotplug.d/iface).

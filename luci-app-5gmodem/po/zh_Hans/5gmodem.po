@@ -5497,3 +5497,99 @@ msgstr "此调制解调器已关闭后台 AT 轮询，因此无法读取当前�
 
 msgid "Metrics are not polled: background AT polling is off"
 msgstr "未轮询指标：后台 AT 轮询已关闭"
+
+msgid "Carrier aggregation enabled"
+msgstr "载波聚合已启用"
+
+msgid "Cell monitor"
+msgstr "小区监测"
+
+msgid "Channel quality (CQI)"
+msgstr "信道质量 (CQI)"
+
+msgid "LTE RX diversity"
+msgstr "LTE 接收分集"
+
+msgid "LTE category limit"
+msgstr "LTE 类别上限"
+
+msgid "Temperature sensors"
+msgstr "温度传感器"
+
+msgid "Thermal mitigation level"
+msgstr "过热保护等级"
+
+msgid "SIM slot (0 = slot 1, 1 = slot 2)"
+msgstr "SIM 卡槽（0 = 卡槽 1，1 = 卡槽 2）"
+
+msgid "Firmware image (FN990)"
+msgstr "固件镜像 (FN990)"
+
+msgid "Active firmware (LM960)"
+msgstr "当前固件 (LM960)"
+
+msgid "Firmware images (LM960)"
+msgstr "固件镜像 (LM960)"
+
+msgid "History"
+msgstr "历史"
+
+msgid "Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value."
+msgstr "每个指标使用各自的刻度。虚线为平均值；细竖线标记小区或频段切换。将指针移到图表上可查看数值。"
+
+msgid "avg"
+msgstr "平均"
+
+msgid "max"
+msgstr "最大"
+
+msgid "min"
+msgstr "最小"
+
+msgid "RSRP / SINR"
+msgstr "RSRP / SINR"
+
+msgid "Show signal history"
+msgstr "显示信号历史"
+
+msgid "Show the collapsible \"History\" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem."
+msgstr "在“网络”页面显示可折叠的“历史”区块：最近 10 分钟的 RSRP、RSRQ、SINR 和 RSSI。它使用页面已经轮询到的数据绘制，不会给调制解调器增加负担。"
+
+msgid "Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor."
+msgstr "信号质量。LTE 下 -11 dB 及以上为优，低于 -17 dB 为差。"
+
+msgid "Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale."
+msgstr "从基站接收到的信号强度。LTE 下 -98 dBm 及以上为优，低于 -118 dBm 为差。5G 使用单独的、更严格的标准。"
+
+msgid "Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor."
+msgstr "信噪比。LTE 下 13 dB 及以上为优，低于 1 dB 为差。"
+
+msgid "ModemManager did not pick up the modem in time"
+msgstr "ModemManager 未能及时接管调制解调器"
+
+msgid "Not applied: %s"
+msgstr "未应用：%s"
+
+msgid "The previous band change is still being applied - wait until the modem reconnects."
+msgstr "上一次频段更改仍在应用中——请等待调制解调器重新连接。"
+
+msgid "Turning carrier aggregation on — the modem is rebooting (1-2 min)…"
+msgstr "正在启用载波聚合——调制解调器正在重启（1-2 分钟）…"
+
+msgid "band %s is not supported by the modem"
+msgstr "调制解调器不支持频段 %s"
+
+msgid "not supported by this modem"
+msgstr "此调制解调器不支持"
+
+msgid "the modem did not accept it"
+msgstr "调制解调器未接受"
+
+msgid "Collect signal in the background"
+msgstr "在后台采集信号"
+
+msgid "Off"
+msgstr "关闭"
+
+msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
+msgstr "页面关闭时不会轮询调制解调器，信号图表会停止。启用后将定时轮询当前调制解调器，使图表持续更新。已关闭后台 AT 轮询的调制解调器会被跳过。"

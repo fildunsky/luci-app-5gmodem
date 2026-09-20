@@ -374,7 +374,8 @@ LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
 # 32-64 МБ ОЗУ мусор копится без верхней границы. Подоболочки трап не наследуют
 # (проверено под busybox ash), фоновые обновления не пострадают (аудит 12.09.2026).
 _cleanup_tmp() { rm -f /tmp/5gmodem_st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
-trap '_cleanup_tmp' EXIT INT TERM HUP
+trap '_cleanup_tmp' EXIT
+trap 'exit 143' INT TERM HUP
 
 # uptime_s - из lib.sh (builtin-версия без спавна cut; lib сорсится выше).
 
@@ -449,7 +450,13 @@ _take_lock() {
 	# (сам опрос укладывается в 4-14 c даже на медленном железе).
 	_lt=$(cat "$LOCKDIR/stamp" 2>/dev/null)
 	case "$_lt" in ''|*[!0-9]*) _lt="" ;; esac
-	if [ -n "$_lt" ] && [ "$(( $(uptime_s) - _lt ))" -gt 40 ]; then
+	_ls=""
+	if [ -n "$_lt" ]; then
+		[ "$(( $(uptime_s) - _lt ))" -gt 40 ] && _ls=1
+	elif [ -n "$(find "$LOCKDIR" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+		_ls=1
+	fi
+	if [ -n "$_ls" ]; then
 		rm -rf "$LOCKDIR" 2>/dev/null
 		mkdir "$LOCKDIR" 2>/dev/null && return 0
 	fi
@@ -518,7 +525,7 @@ fi
 # пусть фронт видит, что данные древние.
 if [ "$1" = "peek" ]; then
 	if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
-		[ -s /tmp/5gmodem_hilink_metrics ] && cat /tmp/5gmodem_hilink_metrics || echo '{}'
+		[ -s "/tmp/5gmodem_hilink_metrics_$_MKEY" ] && cat "/tmp/5gmodem_hilink_metrics_$_MKEY" || echo '{}'
 		exit 0
 	fi
 	_age=$(_snapshot_age) && { serve_cache "$_age"; exit 0; }
@@ -542,7 +549,7 @@ fi
 if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
 	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
 	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
-	_hl_cache="/tmp/5gmodem_hilink_metrics"
+	_hl_cache="/tmp/5gmodem_hilink_metrics_$_MKEY"
 	_hl_ttl="${2:-5}"
 	case "$_hl_ttl" in ''|*[!0-9]*) _hl_ttl=5 ;; esac
 	# ШТАМП ПРОВЕРЯЕМ, КАК ВСЕ ОСТАЛЬНЫЕ ЧИСЛА ИЗ ФАЙЛОВ. «|| echo 0» спасает
@@ -619,7 +626,7 @@ if [ "$1" = "cached" ]; then
 	# синхронный проход ниже: он покажет настоящую ошибку.
 	if [ -z "$_age" ]; then
 		if [ ! -d "$LOCKDIR" ]; then
-			( exec 8>&- 9>&-; "$RES/5gmodem.sh" json ) >/dev/null 2>&1 </dev/null &
+			( exec 8>&- 9>&-; POLL_MODEM="$POLL_MODEM" "$RES/5gmodem.sh" json ) >/dev/null 2>&1 </dev/null &
 		fi
 		_w=0
 		while [ "$_w" -lt 20 ]; do
@@ -649,14 +656,14 @@ if [ "$1" = "cached" ]; then
 		exit 0
 	fi
 	uptime_s > "$LOCKDIR/stamp" 2>/dev/null
-	trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT INT TERM HUP
+	trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT
 	# блокировка наша - проваливаемся в полный опрос ниже
 else
 	# Полный опрос по явному запросу тоже под блокировкой: иначе два таких
 	# вызова столкнутся в порту ровно так же, как раньше страница с терминалом.
 	if _take_lock; then
 		uptime_s > "$LOCKDIR/stamp" 2>/dev/null
-		trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT INT TERM HUP
+		trap 'rm -rf "$LOCKDIR" 2>/dev/null; _cleanup_tmp' EXIT
 	else
 		# Порт занят. Свежий снимок (моложе 3 c) - это ровно то, что сейчас
 		# дописывает другой процесс; отдаём его вместо второй ходки в модем.
@@ -1114,9 +1121,10 @@ if [ -z "$SEC" ]; then
 	getpath $DEVICE
 	PORIG=$P
 	for DEV in /sys/class/tty/* /sys/class/usbmisc/*; do
-		getpath "/dev/"${DEV##/*/}
+		[ -e "$DEV" ] || continue
+		getpath "/dev/${DEV##/*/}"
 		if [ "x$PORIG" == "x$P" ]; then
-			SEC=$(uci show network | grep "/dev/"${DEV##/*/} | cut -f2 -d.)
+			SEC=$(uci show network | grep "/dev/${DEV##/*/}" | cut -f2 -d.)
 			[ -n "$SEC" ] && break
 		fi
 	done
@@ -1177,7 +1185,7 @@ if [ -n "$NETUP" ]; then
 fi
 
 # CSQ
-CSQ=$(echo "$O" | awk -F[,\ ] '/^\+CSQ/ {print $2}')
+CSQ=$(echo "$O" | awk -F[,\ ] '/^\+CSQ/ {print $2; exit}')
 
 [ "x$CSQ" == "x" ] && CSQ=-1
 if [ $CSQ -ge 0 -a $CSQ -le 31 ]; then
@@ -1440,7 +1448,7 @@ if [ -n "$T" ]; then
 fi
 
 # CREG
-eval $(echo "$O" | busybox awk -F[,] '/^\+CREG/ {gsub(/[[:space:]"]+/,"");printf "T=\"%d\";LAC_HEX=\"%X\";CID_HEX=\"%X\";LAC_DEC=\"%d\";CID_DEC=\"%d\";MODE_NUM=\"%d\"", $2, "0x"$3, "0x"$4, "0x"$3, "0x"$4, $5}')
+eval $(echo "$O" | busybox awk -F[,] '/^\+CREG:[[:space:]]*[0-9][[:space:]]*,[[:space:]]*[0-9][0-9]?[[:space:]]*(,|$)/ {gsub(/[[:space:]"]+/,"");printf "T=\"%d\";LAC_HEX=\"%X\";CID_HEX=\"%X\";LAC_DEC=\"%d\";CID_DEC=\"%d\";MODE_NUM=\"%d\"", $2, "0x"$3, "0x"$4, "0x"$3, "0x"$4, $5; exit}')
 case "$T" in
 	0*) REG="0";;
 	1*) REG="1";;
@@ -1472,7 +1480,7 @@ REG_CS="$REG"
 # этим профиль вендора пропускал весь блок сотовых метрик (он гейтится REGOK).
 case "$REG" in
 	0|2|3|4|6|7|'')
-	CEREG_STAT=$(echo "$O" | busybox awk -F[,] '/^\+CEREG/{gsub(/[[:space:]"]+/,"");print $2;exit}')
+	CEREG_STAT=$(echo "$O" | busybox awk -F[,] '/^\+CEREG:[[:space:]]*[0-9][[:space:]]*,[[:space:]]*[0-9][0-9]?[[:space:]]*(,|$)/{gsub(/[[:space:]"]+/,"");print $2;exit}')
 	case "$CEREG_STAT" in
 		1) REG="1";;
 		5) REG="5";;
@@ -1512,7 +1520,7 @@ esac
 # TAC - из CEREG, уже полученного батчем (там включён CEREG=2, поэтому поле TAC
 # присутствует). Отдельный вызов at+cereg убран; к тому же прежний без CEREG=2
 # возвращал "+CEREG: 0,1" без TAC, т.е. tac_hex всегда был пустым.
-TAC=$(echo "$O" | awk -F[,] '/^\+CEREG/ {printf "%s", toupper($3)}' | sed 's/[^A-F0-9]//g')
+TAC=$(echo "$O" | awk -F[,] '/^\+CEREG:[[:space:]]*[0-9][[:space:]]*,[[:space:]]*[0-9][0-9]?[[:space:]]*(,|$)/ {printf "%s", toupper($3); exit}' | sed 's/[^A-F0-9]//g')
 if [ "x$TAC" != "x" ]; then
 	# $TAC из +CEREG - уже ШЕСТНАДЦАТЕРИЧНЫЙ. Раньше здесь стояло
 	# TAC_HEX=$(printf %d 0x$TAC), т.е. в поле *_HEX клался ДЕСЯТИЧНЫЙ результат,
@@ -1843,7 +1851,7 @@ _snap_prepare() {
 
 	_SN_XMM=0
 	if [ -f /lib/netifd/proto/xmm.sh ] \
-	   && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a)'|\.model='[^']*L8[56]0"; then
+	   && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a|413c:81d9)'|\.model='[^']*L8[56]0"; then
 		_SN_XMM=1
 	fi
 }
@@ -2359,7 +2367,7 @@ _qmi_refresh() {
 	printf '%s' "$_qr_lte" > "$_qr_p.lte.tmp" && mv "$_qr_p.lte.tmp" "$_qr_p.lte"
 	printf '%s' "$_qr_cell" > "$_qr_p.cell.tmp" && mv "$_qr_p.cell.tmp" "$_qr_p.cell"
 	printf '%s' "$_qr_dist" > "$_qr_p.dist.tmp" && mv "$_qr_p.dist.tmp" "$_qr_p.dist"
-	cut -d. -f1 /proc/uptime > "$_qr_p.t"
+	cut -d. -f1 /proc/uptime > "$_qr_p.t.tmp" && mv "$_qr_p.t.tmp" "$_qr_p.t"
 }
 
 # АГРЕГАЦИЯ ЧЕРЕЗ AT^CA_INFO? - ОБЩИЙ ФОЛБЭК, КОГДА ВЕНДОРНЫЙ РАЗБОР МОЛЧИТ.
@@ -2598,6 +2606,7 @@ _poll_chan_free() {
 # досчитывает в фоне к следующему опросу. Так карточка на переключении вкладки
 # показывает инфо сразу, а не ждёт qmicli.
 _QS_TTL=25
+_QS_STALE=300
 _qmi_supplement() {
 	command -v qmicli >/dev/null 2>&1 || return 0
 	# cdc-wdm активного модема, БЕЗ фолбэка на /dev/cdc-wdm0. Фолбэк был багом на
@@ -2668,6 +2677,16 @@ _qmi_supplement() {
 		fi
 	fi
 
+	_QS_MT=$(cat "$_QS_P.t" 2>/dev/null)
+	case "$_QS_MT" in ''|*[!0-9]*) _QS_MT=0 ;; esac
+	_QS_AGE=$(( $(uptime_s) - _QS_MT ))
+	if [ "$_QS_AGE" -ge 0 ] && [ "$_QS_AGE" -lt "$_QS_STALE" ]; then
+		_qmi_fill
+	fi
+	_qmi_kick
+}
+
+_qmi_fill() {
 	# 0) Кэш ЧУЖОЙ RAT-эры. Модем вернулся из 3G в LTE, а файлы ещё 3G (TTL до
 	#    25 c): непустой .b3g при не-3G режиме = стейл. Гасим 3G-файлы, полосу
 	#    «5 MHz» не даём протечь в LTE-строку и сбрасываем штамп - фон обновит
@@ -2913,6 +2932,10 @@ _qmi_supplement() {
 			;;
 	esac
 
+	return 0
+}
+
+_qmi_kick() {
 	# 2) Свежо (< TTL) - обновлять не нужно.
 	_QS_MT=$(cat "$_QS_P.t" 2>/dev/null)
 	case "$_QS_MT" in ''|*[!0-9]*) _QS_MT=0 ;; esac

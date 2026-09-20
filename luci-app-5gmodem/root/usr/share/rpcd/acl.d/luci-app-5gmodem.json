@@ -2,7 +2,7 @@
 	"luci-app-5gmodem": {
 		"description": "Grant access to LuCI app 5gmodem. WARNING: root-equivalent. This group can send arbitrary AT commands to the modem (atcmd.sh - the AT console needs that by design) and restart the modem / switch its bands. Do NOT grant it to a restricted role - give it only to full administrators.",
 		"read": {
-			"cgi-io": [ "exec", "upload" ],
+			"cgi-io": [ "exec", "upload", "download" ],
 			"file": {
 				"/usr/share/5gmodem/5gmodem.sh": [ "exec" ],
 				"/usr/share/5gmodem/detect.sh": [ "exec" ],
@@ -61,6 +61,9 @@
 				"/etc/defmodems": [ "read" ],
 				"/sys/kernel/debug/usb/devices": [ "read" ],
 				"/tmp/mysms.txt": [ "read" ],
+				"/tmp/debug_result.txt": [ "read" ],
+				"/tmp/ussdcodes.tar.gz": [ "read" ],
+				"/tmp/atcmmds.tar.gz": [ "read" ],
 				"/tmp/5gmodem_update.json": [ "read" ],
 				"/tmp/5gmodem_listmodems.cache": [ "read" ],
 				"/tmp/5gmodem-diag.txt": [ "read" ],
@@ -126,6 +129,10 @@
 				"/etc/5gmodem": [ "write" ],
 				"/sys/class/leds/*/brightness": [ "write" ],
 				"/tmp/debug_result.txt": [ "write" ],
+				"/tmp/ussdcodes.tar.gz": [ "write" ],
+				"/tmp/atcmmds.tar.gz": [ "write" ],
+				"/tmp/ussdcodes_upload.tar.gz": [ "write" ],
+				"/tmp/atcmmds_upload.tar.gz": [ "write" ],
 				"/tmp/mysms.txt": [ "write" ],
 				"/etc/5gmodem/modem/atcmmds.user": [ "write" ],
 				"/etc/5gmodem/modem/atcmmds/*.user": [ "write" ],
@@ -137,7 +144,8 @@
 			},
 			"uci": [ "5gmodem", "modemdefine", "network", "firewall" ],
 			"ubus": {
-				"file": [ "read", "write", "remove", "exec" ]
+				"file": [ "read", "write", "remove", "exec" ],
+				"uci": [ "commit" ]
 			}
 		}
 	}

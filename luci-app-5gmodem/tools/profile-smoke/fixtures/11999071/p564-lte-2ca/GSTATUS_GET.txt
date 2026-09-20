@@ -1,0 +1,20 @@
+## 4pda 994474 #564 (Dell DW5811e = EM7455, LTE B7+B7, original tabs kept)
+!GSTATUS:
+Current Time:  3881		Temperature: 42
+Reset Counter: 2		Mode:        ONLINE
+System mode:   LTE        	PS state:    Attached
+LTE band:      B7     		LTE bw:      20 MHz
+LTE Rx chan:   2850		LTE Tx chan: 20850
+LTE CA state:  ACTIVE      		LTE Scell band:B7
+LTE Scell bw:20 MHz  		LTE Scell chan:3048
+EMM state:     Registered     	Normal Service
+RRC state:     RRC Connected
+IMS reg state: No Srv
+
+PCC RxM RSSI:  -74		RSRP (dBm):  -107
+PCC RxD RSSI:  -71		RSRP (dBm):  -105
+SCC RxM RSSI:  -71		RSRP (dBm):  -105
+SCC RxD RSSI:  -72		RSRP (dBm):  -107
+Tx Power:      11		TAC:         2620 (9760)
+RSRQ (dB):     -14.0		Cell ID:     0BCA0202 (197788162)
+SINR (dB):      3.2

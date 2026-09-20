@@ -1,0 +1,2 @@
+EARFCN=1802
+NEIGHBORS={"band":"3","earfcn":"1802","pci":"470","rsrp":"-99","rsrq":"-16.5","rssi":"","serving":1},{"band":"3","earfcn":"1802","pci":"322","rsrp":"-102","rsrq":"-19.5","rssi":"","serving":0}

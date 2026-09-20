@@ -33,7 +33,7 @@ _tmp="/tmp/5gmodem_providers.$$"
 # запросы роутера, а прокси на нём же - живой).
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 _fetch() {
-	net_fetch 60 "$URL" "$_tmp"
+	net_fetch 10 "$URL" "$_tmp"
 }
 
 # Формально валидная база: есть строки-данные с >=8 TAB-полей и правдоподобным

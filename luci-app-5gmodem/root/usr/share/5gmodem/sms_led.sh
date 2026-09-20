@@ -7,6 +7,7 @@
 sleep 2
 CT=$(uci -q get 5gmodem.sms.checktime)
 TX=$(echo $CT | tr -dc '0-9')
+case "$TX" in ''|0*) TX=10 ;; esac
 TM=$(($TX * 60))
 
 while [ 1 ]; do 

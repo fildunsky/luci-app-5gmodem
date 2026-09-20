@@ -42,7 +42,7 @@ case "$_id" in
 	413c:81e1|413c:81d6|1199:9070) _is_fb=1 ;;
 	*)
 		if [ "$(cat "$_d/bNumInterfaces" 2>/dev/null | tr -d ' ')" = "1" ]; then
-			for _i in "$_d":*.0; do
+			for _i in "$_d"/*:*.0; do
 				[ -f "$_i/bInterfaceSubClass" ] || continue
 				[ "$(cat "$_i/bInterfaceClass" 2>/dev/null)" = "ff" ] || continue
 				[ "$(cat "$_i/bInterfaceSubClass" 2>/dev/null)" = "42" ] || continue
@@ -106,7 +106,7 @@ printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 	echo "${_id%%:*} ${_id##*:} ff" > /sys/bus/usb-serial/drivers/generic/new_id 2>/dev/null
 	_tty=""
 	for _w in 1 2 3 4 5; do
-		for _t in "$_d":*/ttyUSB*; do
+		for _t in "$_d"/*:*/ttyUSB*; do
 			[ -e "$_t" ] && { _tty=$(basename "$_t"); break; }
 		done
 		[ -n "$_tty" ] && break

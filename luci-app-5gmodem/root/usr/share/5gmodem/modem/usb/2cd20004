@@ -3,11 +3,11 @@
 O=$(sms_tool -d $DEVICE at "at+cesq;+zcainfo?;+zpas?;+zcellinfo?")
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $2}' | xargs)
 if [ -n "$T" ]; then
-	[ "$T" != "99" ] && RSSI="$((T - 111))"
+	case "$T" in 99|*[!0-9]*) : ;; *) RSSI="$((T - 111))" ;; esac
 fi
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $4}' | xargs)
 if [ -n "$T" ]; then
-	[ "$T" != "255" ] && RSCP="$((T - 121))"
+	case "$T" in 255|*[!0-9]*) : ;; *) RSCP="$((T - 121))" ;; esac
 fi
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $5}' | xargs)
 if [ -n "$T" ]; then
@@ -18,7 +18,7 @@ if [ -n "$T" ]; then
 fi
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $7}' | xargs)
 if [ -n "$T" ]; then
-	[ "$T" != "255" ] && RSRP="$((T - 141))"
+	case "$T" in 255|*[!0-9]*) : ;; *) RSRP="$((T - 141))" ;; esac
 fi
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $6}' | xargs)
 if [ -n "$T" ]; then

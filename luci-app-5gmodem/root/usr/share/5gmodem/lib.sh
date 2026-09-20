@@ -1317,7 +1317,7 @@ qmicli_p() {
 	# fd ЗАКРЫВАЕМ У ВСЕХ ФОНОВЫХ: и qmicli, и сторож наследуют его, и сторож
 	# держал бы замок ещё 20 c после нашего выхода (тот же капкан, что с procd).
 	_qp_lk="/var/lock/5gmodem_qmi_${_qp_dev##*/}.lock"
-	exec 9>"$_qp_lk" 2>/dev/null
+	{ exec 9>"$_qp_lk"; } 2>/dev/null
 	_qp_i=0
 	while [ "$_qp_i" -lt 15 ]; do
 		flock -n 9 2>/dev/null && break
@@ -1381,7 +1381,7 @@ qmicli_p() {
 		[ -s "$_qp_o" ] && logger -t 5gmodem "qmi: proxy not responding - read directly from $_qp_dev"
 	fi
 	cat "$_qp_o" 2>/dev/null; rm -f "$_qp_o"
-	exec 9>&- 2>/dev/null
+	{ exec 9>&-; } 2>/dev/null
 	return "${_qp_rc:-0}"
 }
 
@@ -1564,7 +1564,7 @@ at_query() {
 	# давно записан в обёртке sms_tool основного опроса («первый опрос 1 c,
 	# каждый следующий 8-9 c») - я переизобрёл этот баг в at_query и поймал его
 	# замером: опрос №1 1.8 c, №2-3 по 6.7 c, спящие sleep с fd на ttyUSB2.
-	sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 8>&- 9>&- &
+	sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
 	_aq_pid=$!
 	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
 	# НЕ голый wait: sms_tool в D-state (вис в драйвере tty) не убивается

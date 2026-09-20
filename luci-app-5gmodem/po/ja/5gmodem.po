@@ -5371,3 +5371,99 @@ msgstr "このモデムではバックグラウンドの AT ポーリングが�
 
 msgid "Metrics are not polled: background AT polling is off"
 msgstr "値は取得していません: バックグラウンドの AT ポーリングがオフです"
+
+msgid "Carrier aggregation enabled"
+msgstr "キャリアアグリゲーション有効"
+
+msgid "Cell monitor"
+msgstr "セルモニター"
+
+msgid "Channel quality (CQI)"
+msgstr "チャネル品質 (CQI)"
+
+msgid "LTE RX diversity"
+msgstr "LTE 受信ダイバーシティ"
+
+msgid "LTE category limit"
+msgstr "LTE カテゴリ上限"
+
+msgid "Temperature sensors"
+msgstr "温度センサー"
+
+msgid "Thermal mitigation level"
+msgstr "熱抑制レベル"
+
+msgid "SIM slot (0 = slot 1, 1 = slot 2)"
+msgstr "SIM スロット (0 = スロット 1、1 = スロット 2)"
+
+msgid "Firmware image (FN990)"
+msgstr "ファームウェアイメージ (FN990)"
+
+msgid "Active firmware (LM960)"
+msgstr "有効なファームウェア (LM960)"
+
+msgid "Firmware images (LM960)"
+msgstr "ファームウェアイメージ (LM960)"
+
+msgid "History"
+msgstr "履歴"
+
+msgid "Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value."
+msgstr "各指標には独自のスケールがあります。破線は平均値、細い縦線はセルまたはバンドの切り替わりを示します。グラフにカーソルを合わせると値を確認できます。"
+
+msgid "avg"
+msgstr "平均"
+
+msgid "max"
+msgstr "最大"
+
+msgid "min"
+msgstr "最小"
+
+msgid "RSRP / SINR"
+msgstr "RSRP / SINR"
+
+msgid "Show signal history"
+msgstr "信号履歴を表示"
+
+msgid "Show the collapsible \"History\" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem."
+msgstr "ネットワークページに折りたたみ式の「履歴」ブロックを表示します: 直近 10 分間の RSRP、RSRQ、SINR、RSSI。ページがすでに取得しているデータから描画するため、モデムへの負荷は増えません。"
+
+msgid "Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor."
+msgstr "信号品質。LTE では -11 dB 以上が優秀、-17 dB 未満は不良です。"
+
+msgid "Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale."
+msgstr "基地局から受信した信号強度。LTE では -98 dBm 以上が優秀、-118 dBm 未満は不良です。5G は独自のより厳しいスケールで評価されます。"
+
+msgid "Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor."
+msgstr "信号対雑音比。LTE では 13 dB 以上が優秀、1 dB 未満は不良です。"
+
+msgid "ModemManager did not pick up the modem in time"
+msgstr "ModemManager が時間内にモデムを認識しませんでした"
+
+msgid "Not applied: %s"
+msgstr "適用されませんでした: %s"
+
+msgid "The previous band change is still being applied - wait until the modem reconnects."
+msgstr "前回のバンド変更をまだ適用中です。モデムが再接続するまでお待ちください。"
+
+msgid "Turning carrier aggregation on — the modem is rebooting (1-2 min)…"
+msgstr "キャリアアグリゲーションを有効化中 — モデムを再起動しています (1〜2 分)…"
+
+msgid "band %s is not supported by the modem"
+msgstr "バンド %s はモデムでサポートされていません"
+
+msgid "not supported by this modem"
+msgstr "このモデムではサポートされていません"
+
+msgid "the modem did not accept it"
+msgstr "モデムが受け付けませんでした"
+
+msgid "Collect signal in the background"
+msgstr "バックグラウンドで信号を収集"
+
+msgid "Off"
+msgstr "オフ"
+
+msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
+msgstr "ページを閉じているとモデムはポーリングされず、信号グラフが止まります。この設定では、タイマーでアクティブなモデムをポーリングしてグラフを継続します。バックグラウンド AT ポーリングをオフにしたモデムは対象外です。"

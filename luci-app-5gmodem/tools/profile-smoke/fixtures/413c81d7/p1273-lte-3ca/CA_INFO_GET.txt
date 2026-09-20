@@ -1,0 +1,4 @@
+## 4pda 994474 #1273
+PCC info: Band is LTE_B7, Band_width is 20.0 MHz
+SCC1 info: Band is LTE_B7, Band_width is 20.0 MHz
+SCC2 info: Band is LTE_B3, Band_width is 10.0 MHz

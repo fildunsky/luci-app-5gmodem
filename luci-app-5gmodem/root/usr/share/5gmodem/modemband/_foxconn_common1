@@ -12,7 +12,11 @@ getbands() {
 	# уезжали слова («1 3 7 20 LTE Disabled 2 4 5»): json-сборщик писал их в
 	# массив как числа, а ВЫКЛЮЧЕННЫЕ диапазоны показывались включёнными - нажав
 	# «Применить», человек закреплял их. (аудит 12.09.2026)
-	echo "$O" | awk -F: '/SLBAND:.*LTE,Enabled,/{gsub("LTE,Enabled,","");gsub(","," ");print $2; exit}' | xargs
+	echo "$O" | tr -d '\r' | awk '
+		/LTE,Disabled/ { next }
+		/LTE,Enabled,/ { sub(/.*LTE,Enabled,/, ""); gsub(/,/, " "); print; exit }
+		/LTE,Enable Bands *:/ { sub(/.*LTE,Enable Bands *:/, ""); gsub(/,/, " "); print; exit }
+		/SLBAND: *LTE,[0-9]/ { sub(/.*SLBAND: *LTE,/, ""); gsub(/,/, " "); print; exit }' | xargs
 }
 
 setbands() {

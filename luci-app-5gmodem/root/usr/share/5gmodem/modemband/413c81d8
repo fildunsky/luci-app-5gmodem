@@ -1,0 +1,5 @@
+. $RES/_foxconn_t77w968
+
+getinfo() {
+	echo "Dell DW5821e"
+}

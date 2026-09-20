@@ -1,0 +1,20 @@
+## 4pda 444921 #1388 (EM7565, original column padding)
+!GSTATUS:
+Current Time:  1669             Temperature: 24
+Reset Counter: 1                Mode:        ONLINE
+System mode:   LTE              PS state:    Attached
+LTE band:      B3               LTE bw:      15 MHz
+LTE Rx chan:   1725             LTE Tx chan: 19725
+LTE SCC1 state:NOT ASSIGNED
+LTE SCC2 state:NOT ASSIGNED
+LTE SCC3 state:NOT ASSIGNED
+LTE SCC4 state:NOT ASSIGNED
+EMM state:     Registered       Normal Service
+RRC state:     RRC Idle
+IMS reg state: No Srv
+
+PCC RxM RSSI:  -55              PCC RxM RSRP:  -82
+PCC RxD RSSI:  -65              PCC RxD RSRP:  -93
+Tx Power:      --               TAC:         14ae (5294)
+RSRQ (dB):     -8.9             Cell ID:     xxxx
+SINR (dB):     23.2

@@ -199,7 +199,7 @@ function proposeApnAfterEnable() {
 			/* Автоматический режим: применяем сразу. autoapn сам ничего не
 			   сделает в роуминге и на неизвестном операторе - молчит, значит
 			   безопасно. */
-			fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autoapn', iface ]);
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'autoapn', iface ]), null);
 			ui.addNotification(null, E('p', {},
 				_('eSIM profile switched - checking and updating the APN automatically')),
 				'info');
@@ -980,7 +980,7 @@ return view.extend({
 		// (cgi-exec), а медленный eUICC FM350 отвечает по многу секунд - как EasyLPAC
 		// (cmd.Run() без таймаута), даём загрузке дойти, не упираясь в 60 c.
 		var pollResult = function(tries) {
-			return fs.exec_direct(ESIM, [ 'download-status' ]).then(function(out) {
+			return L.resolveDefault(fs.exec_direct(ESIM, [ 'download-status' ]), '').then(function(out) {
 				var s = String(out || '');
 				// Ещё идёт (dlstate) или пусто - ждём 2.5 c и опрашиваем снова (потолок ~11 мин).
 				if (s.indexOf('"dlstate"') >= 0 || !s.trim()) {
@@ -1085,12 +1085,12 @@ return view.extend({
 			   ifup», и up одного приходил между down и up другого (аудит 12.09.2026).
 			   Признак «сброс мой» бэкенд отдаёт полем payload.reset. */
 			if (!(j && j.payload && j.payload.reset == 1)) {
-				fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+				L.resolveDefault(fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]), null);
 			}
 			// Дождаться модема и передёрнуть интерфейс: иначе netifd держит
 			// аренду и маршрут от старого профиля (интерфейс up со старым IP,
 			// данные не идут). Скрипт сам ждёт готовности, здесь не блокируемся.
-			fs.exec(ESIM, [ 'reapply' ]);
+			L.resolveDefault(fs.exec(ESIM, [ 'reapply' ]), null);
 			// 25 c не хватало: модем перезагружается ЖЁСТКО и переэнумерируется
 			// на USB 30-60 c (столько же ждёт переключение слота). Список
 			// перечитывался, пока eUICC ещё не поднялся, попытки заканчивались,
@@ -1316,9 +1316,9 @@ function renderNotifications(list) {
 		var host = String(n.notificationAddress || '').replace(/^https?:\/\//, '');
 		box.appendChild(E('div', { 'class': 'esim-notif-row' }, [
 			E('div', { 'class': 'esim-notif-info' }, [
-				E('span', { 'class': 'esim-notif-op' }, op), ' \u00b7 ',
-				E('span', { 'style': 'font-family:monospace' }, n.iccid || '-'),
-				host ? E('div', { 'class': 'esim-notif-host' }, host) : ''
+				E('span', { 'class': 'esim-notif-op' }, [ op ]), ' \u00b7 ',
+				E('span', { 'style': 'font-family:monospace' }, [ n.iccid || '-' ]),
+				host ? E('div', { 'class': 'esim-notif-host' }, [ host ]) : ''
 			]),
 			E('div', { 'class': 'esim-notif-btns' }, [
 				E('button', { 'class': 'btn cbi-button cbi-button-action',
@@ -1404,9 +1404,9 @@ function esimOp(verb, iccid, name) {
 			   ifup», и up одного приходил между down и up другого (аудит 12.09.2026).
 			   Признак «сброс мой» бэкенд отдаёт полем payload.reset. */
 			if (!(j && j.payload && j.payload.reset == 1)) {
-				fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]);
+				L.resolveDefault(fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ 'hard' ]), null);
 			}
-			fs.exec(ESIM, [ 'reapply' ]);   // см. выше: без этого остаётся старый IP
+			L.resolveDefault(fs.exec(ESIM, [ 'reapply' ]), null);   // см. выше: без этого остаётся старый IP
 			/* Ждём ВОЗВРАЩЕНИЯ модема (как полоса вкладок: пропал -> появился),
 			   тогда прогрессбар добегает и плашка уходит СРАЗУ - а обновление
 			   списка идёт уже на живой странице с пометкой у EID (решение

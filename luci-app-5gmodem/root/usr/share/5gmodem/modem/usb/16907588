@@ -55,7 +55,7 @@ if [ "$MODE" != "LTE" ]; then
 		if echo "$T1" | grep -q ","; then
 			T2="${T2},"
 		fi
-		T1=$(echo "$T1" | sed 's/^'$T2'//')
+		T1=${T1#"$T2"}
 	done
 fi
 

@@ -1,0 +1,5 @@
+## same answer as u0920-f2005-3ca with the indentation some firmwares print (4pda 994474 shows both layouts)
+LTE serving information :
+          PCC info: Band is LTE_B1, Band_width is 10.0 MHz
+          SCC1 info: Band is LTE_B3, Band_width is 15.0 MHz
+          SCC2 info: Band is LTE_B8, Band_width is 5.0 MHz

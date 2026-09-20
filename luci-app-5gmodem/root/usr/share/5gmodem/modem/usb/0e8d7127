@@ -266,6 +266,13 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 		if (x < 0 || x > 200) return ""
 		return sprintf("%.1f", base + x / 2)
 	}
+	/^(PCC|SCC *[0-9]*):/ {
+		gsub(/\r/, "")
+		k = split($0, ca, ",")
+		if ($0 ~ /^PCC/) { if (k >= 3 && ca[3] + 0 > 0) known[ca[3] + 0] = 1 }
+		else if (k >= 5 && ca[5] + 0 > 0) known[ca[5] + 0] = 1
+		next
+	}
 	/^[12],[249],/ {
 		# sms_tool отдаёт строки с CR - без чистки ПОСЛЕДНЕЕ поле (rsrq) уходит
 		# в проверки как "16\r" и молча отбрасывается: в таблице был прочерк.
@@ -287,8 +294,23 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 			if (srv) rsrp = lvl($11, -121); else rsrp = lvl($15, -121)
 		}
 		if (pci == "") next
-		printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
-			(n++ ? "," : ""), band, arfcn, pci, rsrp, rsrq, srv
+		if (arfcn + 0 > 0 && (srv || arfcn !~ /0$/)) known[arfcn + 0] = 1
+		r++
+		rw_rat[r] = rat; rw_srv[r] = srv; rw_band[r] = band; rw_arfcn[r] = arfcn
+		rw_pci[r] = pci; rw_rsrp[r] = rsrp; rw_rsrq[r] = rsrq
+	}
+	END {
+		for (i = 1; i <= r; i++) {
+			a = rw_arfcn[i]
+			if (rw_rat[i] == 4 && !rw_srv[i] && a ~ /^[0-9]+0$/ && !((a + 0) in known)) {
+				t = int(a / 10)
+				if ((t in known) || (e2b(a) == "" && e2b(t) != "")) {
+					rw_arfcn[i] = t; rw_band[i] = e2b(t)
+				}
+			}
+			printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
+				(n++ ? "," : ""), rw_band[i], rw_arfcn[i], rw_pci[i], rw_rsrp[i], rw_rsrq[i], rw_srv[i]
+		}
 	}
 ')
 
@@ -607,9 +629,10 @@ fi
 #   +CESQ: rxlev,ber,rscp,ecno,rsrq,rsrp   (rsrp 0..97 -> dBm = rsrp-141; 255=n/a)
 if [ -z "$RSRP" ]; then
 	CE_RSRP=$(echo "$O" | tr -d '\r' | sed -n 's/.*+CESQ:[[:space:]]*//p' | head -1 | awk -F, '{print $6}')
-	if [ -n "$CE_RSRP" ] && [ "$CE_RSRP" != "255" ]; then
-		RSRP=$((CE_RSRP - 141))
-	fi
+	case "$CE_RSRP" in
+		''|255|*[!0-9]*) : ;;
+		*) RSRP=$((CE_RSRP - 141)) ;;
+	esac
 fi
 
 # Signal bar НЕ из сырого AT+CSQ: он RSSI-based и на FM350 узкополосный - читает

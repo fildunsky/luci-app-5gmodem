@@ -5463,3 +5463,99 @@ msgstr "此數據機已關閉背景 AT 輪詢，因此無法讀取目前的頻�
 
 msgid "Metrics are not polled: background AT polling is off"
 msgstr "未輪詢指標：背景 AT 輪詢已關閉"
+
+msgid "Carrier aggregation enabled"
+msgstr "載波聚合已啟用"
+
+msgid "Cell monitor"
+msgstr "基地台監測"
+
+msgid "Channel quality (CQI)"
+msgstr "通道品質 (CQI)"
+
+msgid "LTE RX diversity"
+msgstr "LTE 接收分集"
+
+msgid "LTE category limit"
+msgstr "LTE 類別上限"
+
+msgid "Temperature sensors"
+msgstr "溫度感測器"
+
+msgid "Thermal mitigation level"
+msgstr "過熱保護等級"
+
+msgid "SIM slot (0 = slot 1, 1 = slot 2)"
+msgstr "SIM 卡槽（0 = 卡槽 1，1 = 卡槽 2）"
+
+msgid "Firmware image (FN990)"
+msgstr "韌體映像 (FN990)"
+
+msgid "Active firmware (LM960)"
+msgstr "目前韌體 (LM960)"
+
+msgid "Firmware images (LM960)"
+msgstr "韌體映像 (LM960)"
+
+msgid "History"
+msgstr "歷史"
+
+msgid "Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value."
+msgstr "每個指標使用各自的刻度。虛線為平均值；細直線標記基地台或頻段切換。將游標移到圖表上可查看數值。"
+
+msgid "avg"
+msgstr "平均"
+
+msgid "max"
+msgstr "最大"
+
+msgid "min"
+msgstr "最小"
+
+msgid "RSRP / SINR"
+msgstr "RSRP / SINR"
+
+msgid "Show signal history"
+msgstr "顯示訊號歷史"
+
+msgid "Show the collapsible \"History\" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem."
+msgstr "在「網路」頁面顯示可摺疊的「歷史」區塊：最近 10 分鐘的 RSRP、RSRQ、SINR 和 RSSI。它使用頁面已經輪詢到的資料繪製，不會增加數據機的負擔。"
+
+msgid "Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor."
+msgstr "訊號品質。LTE 下 -11 dB 以上為優，低於 -17 dB 為差。"
+
+msgid "Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale."
+msgstr "從基地台接收到的訊號強度。LTE 下 -98 dBm 以上為優，低於 -118 dBm 為差。5G 使用獨立且更嚴格的標準。"
+
+msgid "Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor."
+msgstr "訊噪比。LTE 下 13 dB 以上為優，低於 1 dB 為差。"
+
+msgid "ModemManager did not pick up the modem in time"
+msgstr "ModemManager 未能及時接管數據機"
+
+msgid "Not applied: %s"
+msgstr "未套用：%s"
+
+msgid "The previous band change is still being applied - wait until the modem reconnects."
+msgstr "上一次頻段變更仍在套用中——請等待數據機重新連線。"
+
+msgid "Turning carrier aggregation on — the modem is rebooting (1-2 min)…"
+msgstr "正在啟用載波聚合——數據機正在重新啟動（1-2 分鐘）…"
+
+msgid "band %s is not supported by the modem"
+msgstr "數據機不支援頻段 %s"
+
+msgid "not supported by this modem"
+msgstr "此數據機不支援"
+
+msgid "the modem did not accept it"
+msgstr "數據機未接受"
+
+msgid "Collect signal in the background"
+msgstr "在背景收集訊號"
+
+msgid "Off"
+msgstr "關閉"
+
+msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
+msgstr "頁面關閉時不會輪詢數據機，訊號圖表會停止。啟用後將定時輪詢目前的數據機，讓圖表持續更新。已關閉背景 AT 輪詢的數據機會被略過。"

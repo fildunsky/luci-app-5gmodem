@@ -37,6 +37,28 @@ var _revealTriesMax = 10;
 
 var bandsOther = [];
 
+var bandsStaticNote = false;
+
+var _bandsOpAt = 0;
+
+function _bandsOpActive() {
+	return _bandsAfterBusy && (Date.now() - _bandsOpAt) < 120000;
+}
+
+function _bandsOpStart(args, msg) {
+	if (_bandsOpActive()) { return; }
+	ctx.setModemBusy(msg);
+	_bandsAfterBusy = true;
+	_bandsOpAt = Date.now();
+	L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', args), {}).then(function(res) {
+		if (!res || typeof res.code !== 'number' || res.code === 0) { return; }
+		_bandsAfterBusy = false;
+		ctx.clearModemBusy(true);
+		var why = String(res.stdout || res.stderr || '').trim();
+		ui.addNotification(null, E('p', _('Failed to set network mode') + (why ? ': ' + why : '')), 'error');
+	});
+}
+
 function buildBandButtons(supported, current, prefix) {
 	var numsort = function(a, b) { return parseInt(a.replace(/\D+/g, ''), 10) - parseInt(b.replace(/\D+/g, ''), 10); };
 	return supported.filter(function(b) { return b.indexOf(prefix) == 0; }).sort(numsort).map(function(b) {
@@ -176,9 +198,32 @@ function loadBands() {
 	});
 }
 
+function ensureMmModeButtons() {
+	var c = document.getElementById('modesw-btns');
+	if (!c || c.querySelector('button[data-allowed]')) { return; }
+	c.innerHTML = '';
+	c.removeAttribute('data-sig');
+	[
+		[ _('Auto'), '2g|3g|4g|5g', '5g' ],
+		[ '2G', '2g', '' ],
+		[ '3G', '3g', '' ],
+		[ '4G', '3g|4g', '4g' ],
+		[ '4G+5G', '3g|4g|5g', '5g' ],
+		[ '5G', '3g|5g', '5g' ]
+	].forEach(function(mdef) {
+		c.appendChild(E('button', {
+			'class': 'btn cbi-button',
+			'data-allowed': mdef[1],
+			'data-preferred': mdef[2],
+			'click': ui.createHandlerFn(this, function() { return setNetMode(mdef[1], mdef[2], mdef[0]); })
+		}, mdef[0]));
+	});
+}
+
 function applyMgmtMM(j) {
 		bandSource = 'mmcli';
 		bandsReadOnly = false; bandsTakeover = false;
+		bandsStaticNote = false;
 		_revealTries = 0;   // дождались mmcli - счётчик ожидания обнуляем
 		var note = document.getElementById('bandnote');
 		if (note) { note.style.display = 'none'; }
@@ -203,6 +248,7 @@ function applyMgmtMM(j) {
 		renderCellLock5g(null);
 		render256qam(null);
 		renderUlca(null);
+		ensureMmModeButtons();
 		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
 		   а не из живых current-modes: конфиг не мигает на передозвоне и
 		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */
@@ -240,7 +286,7 @@ function buildBandButtonsNum(supported, enabled, btype) {
 	});
 }
 
-function renderCaEnabled(state) {
+function renderCaEnabled(state, canSwitch) {
 	var row = document.getElementById('caenn');
 	var cell = document.getElementById('caen-cell');
 	if (!row || !cell) { return; }
@@ -251,6 +297,16 @@ function renderCaEnabled(state) {
 		_('Disabled in modem')));
 	cell.appendChild(E('span', { 'style': 'opacity:.65; font-size:90%' },
 		_('The modem works without carrier aggregation, as if it were cat4')));
+	if (canSwitch) {
+		cell.appendChild(E('button', {
+			'class': 'btn cbi-button cbi-button-apply',
+			'style': 'margin-left:.6em',
+			'click': ui.createHandlerFn(this, function() {
+				_runBands([ 'setcaenabled', '1' ],
+					_('Turning carrier aggregation on — the modem is rebooting (1-2 min)…'));
+			})
+		}, _('Turn on')));
+	}
 }
 
 /* СТРОКИ, КОТОРЫХ В РАЗМЕТКЕ СТРАНИЦЫ НЕТ, - создаём на месте.
@@ -361,11 +417,9 @@ function render5gMode(state) {
 	cell.appendChild(E('button', {
 		'class': 'btn cbi-button cbi-button-apply',
 		'click': ui.createHandlerFn(this, function() {
-			ctx.setModemBusy(_('Enabling 5G — the modem is restarting its radio…'));
-			_bandsAfterBusy = true;
 			/* Через resolveDefault: команда уходит в фон, но отказ самого rpcd
 			   (занят, таймаут) иначе всплывал необработанным. (аудит 12.09.2026) */
-			L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', [ 'set5gmode', 'full' ]), {});
+			_bandsOpStart([ 'set5gmode', 'full' ], _('Enabling 5G — the modem is restarting its radio…'));
 		})
 	}, _('Enable 5G')));
 }
@@ -379,11 +433,9 @@ var _cellLockWritable = false;
    факту возвращения модема (clearModemBusy). Используют и cell-lock-строка, и
    кнопки лока в таблице соседей. */
 function _runBands(args, msg) {
-	ctx.setModemBusy(msg);
-	_bandsAfterBusy = true;
 	/* Через resolveDefault: команда фоновая, но отказ rpcd иначе оставался
 	   необработанным отказом промиса. (аудит 12.09.2026) */
-	L.resolveDefault(fs.exec('/usr/share/5gmodem/bands.sh', args), {});
+	_bandsOpStart(args, msg);
 }
 
 /* Привязать к КОНКРЕТНОЙ соте (EARFCN+PCI) - зовётся из строки соседа. Модем сам
@@ -578,7 +630,7 @@ function applyVendorJson(j) {
 		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
 		// рисовать строки бендов с прочерком вместо пояснения.
 		render5gMode(j.mode5g);
-		renderCaEnabled(j.ca_enabled);
+		renderCaEnabled(j.ca_enabled, j.ca_switch);
 		renderCellLock(j.celllock);
 		renderCellLock5g(j.celllock5g);
 		render256qam(j.qam256);
@@ -615,6 +667,7 @@ function applyVendorJson(j) {
 		_revealTries = 0;   // бенды пришли - счётчик ожидания обнуляем
 		bandsReadOnly = !!j.readonly;
 		bandsTakeover = !!j.takeover;
+		bandsStaticNote = !!(j.mm_at_static || j.noat_static);
 		if (note) { note.style.display = (bandsReadOnly || bandsTakeover) ? '' : 'none'; }
 		/* AT под ModemManager выключен для хрупкой прошивки (T77W968/DW5821e):
 		   кнопки работают, но текущий выбор модема не читается - подсветки нет.
@@ -813,6 +866,7 @@ function switchToXmm(btn) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.error) {
 			ui.hideModal();
+			ctx.clearModemBusy(true);
 			if (btn) { btn.disabled = false; }
 			ui.addNotification(null, E('p', _('Could not switch the modem to XMM') + ' ' + d.error), 'error');
 			return;
@@ -820,6 +874,7 @@ function switchToXmm(btn) {
 		window.setTimeout(function() { window.location.reload(); }, 50000);
 	}).catch(function(err) {
 		ui.hideModal();
+		ctx.clearModemBusy(true);
 		if (btn) { btn.disabled = false; }
 		ui.addNotification(null, E('p', _('Could not switch the modem to XMM') + ' ' + (err.message || err)), 'error');
 	});
@@ -840,8 +895,56 @@ function applyBandsReadOnly() {
 	if (act && ro) { act.style.display = 'none'; }
 }
 
+var _applyBusy = null;
+
+function _applyKeyNow() {
+	return (ctx.pagePath && ctx.pagePath()) || '';
+}
+
+function _applyReport(d) {
+	var names = { mode: _('Network mode'), lte: 'LTE', nsa: '5G NSA', sa: '5G SA', '3g': '3G', '2g': '2G' };
+	var parts = (d.failed || []).map(function(f) {
+		var why;
+		switch (String(f.why)) {
+		case 'badband': why = _('band %s is not supported by the modem').format(String(f.arg || '')); break;
+		case 'unsupported': why = _('not supported by this modem'); break;
+		case 'mmtimeout': why = _('ModemManager did not pick up the modem in time'); break;
+		default: why = _('the modem did not accept it') + (f.arg ? ' (' + String(f.arg) + ')' : '');
+		}
+		return (names[String(f.what)] || String(f.what)) + ' - ' + why;
+	});
+	if (!parts.length) { return; }
+	ui.addNotification(null, E('p', _('Not applied: %s').format(parts.join('; '))), 'error');
+}
+
+function _applyWatch(w) {
+	window.setTimeout(function() {
+		if (_applyKeyNow() !== w.key) { return; }
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'applyresult' ].concat(_bandsFor())), '').then(function(out) {
+			var d = null;
+			try { d = JSON.parse(String(out || '').trim()); } catch (e) { d = null; }
+			if (d && (d.state === 'none' || (d.id && String(d.id) !== w.id))) {
+				if (_applyBusy && _applyBusy.key === w.key) { _applyBusy = null; }
+				return;
+			}
+			var st = (d && d.id) ? String(d.state) : '';
+			if ((st === 'settling' || st === 'done') && !w.told) { w.told = true; _applyReport(d); }
+			if (st === 'done' || --w.left <= 0) {
+				if (_applyBusy && _applyBusy.key === w.key) { _applyBusy = null; }
+				if (st === 'done' && _applyKeyNow() === w.key) { loadBandsModemband(true); }
+				return;
+			}
+			_applyWatch(w);
+		});
+	}, 3000);
+}
+
 /* Применить/сбросить диапазоны через modemband */
 function applyBandsModemband(reset, confirmed) {
+	if (_applyBusy && _applyBusy.key === _applyKeyNow() && Date.now() < _applyBusy.until) {
+		ui.addNotification(null, E('p', _('The previous band change is still being applied - wait until the modem reconnects.')), 'info');
+		return Promise.resolve();
+	}
 	/* TAKEOVER: запись потребует временно отдать модем ModemManager'у и передёрнуть
 	   интерфейс - связь на ~минуту прервётся. Предупреждаем и ждём подтверждения. */
 	if (bandsTakeover && !confirmed) {
@@ -882,19 +985,34 @@ function applyBandsModemband(reset, confirmed) {
 	// 3G/2G-маска присутствует только когда есть галочные кнопки (data-btype).
 	var hasThree = document.querySelector('#bands-3g [data-btype="3g"]') != null;
 	var hasTwo = document.querySelector('#bands-2g [data-btype="2g"]') != null;
-	var p = Promise.resolve();
-	if (hasLte) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands', reset ? 'default' : lte.join(' ') ]); }); }
-	if (hasNsa) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', reset ? 'default' : nsa.join(' ') ]); }); }
+	var args = [ 'setall' ];
+	if (hasLte && (reset || lte.length)) { args.push('lte=' + (reset ? 'default' : lte.join(' '))); }
+	if (hasNsa && (reset || nsa.length)) { args.push('nsa=' + (reset ? 'default' : nsa.join(' '))); }
 	// Снятие ВСЕХ 3G/2G-галочек не применяем (пустой набор = no-op у API/GTACT;
 	// чтобы выключить RAT целиком - режим сети).
-	if (hasThree && (reset || three.length)) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', reset ? 'default' : three.join(' ') ]); }); }
-	if (hasTwo && (reset || two.length)) { p = p.then(function() { return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands2g', reset ? 'default' : two.join(' ') ]); }); }
+	if (hasThree && (reset || three.length)) { args.push('3g=' + (reset ? 'default' : three.join(' '))); }
+	if (hasTwo && (reset || two.length)) { args.push('2g=' + (reset ? 'default' : two.join(' '))); }
+	if (args.length < 2) { return Promise.resolve(); }
+	var key = _applyKeyNow();
 	// Перезапуск радио модема (CFUN=4->1) ТЕПЕРЬ ДЕЛАЕТ САМ bands.sh - внутри той
 	// же фоновой подоболочки, СТРОГО ПОСЛЕ записи маски. Раньше reboot дёргали
 	// отсюда, но setbands фоновая и возвращается мгновенно: перезапуск обгонял
 	// запись, модем поднимался на старом наборе, и отключённый диапазон
 	// оставался активным (воспроизведено на SIM7600: снятый B7 не отключался).
-	return p.then(function() {
+	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
+		var d = null;
+		try { d = JSON.parse(String((res && res.stdout) || '').trim()); } catch (e) { d = null; }
+		if (!d || !d.id) {
+			var why = String((res && (res.stdout || res.stderr)) || '').trim();
+			ui.addNotification(null, E('p', _('Failed to set bands') + (why ? ': ' + why : '')), 'error');
+			return;
+		}
+		if (d.state === 'done') {
+			_applyReport(d);
+		} else {
+			_applyBusy = d.takeover ? { key: key, until: Date.now() + 300000 } : null;
+			_applyWatch({ id: String(d.id), key: key, left: d.takeover ? 100 : 40, told: false });
+		}
 		/* Читаем МИМО кэша: setbands только что сменил маску, а обычный json
 		   отдал бы прежний снимок (кэш живёт 300 c) - именно так таблица и
 		   показывала старый набор диапазонов ещё десятки секунд. */
@@ -1066,6 +1184,7 @@ function hwTick(json) {
 	var hw = String(json.modem || '') + '|' + String(json.vidpid || '');
 	if (hw !== '|' && window.__hwSig && window.__hwSig !== hw) {
 		bandsReadOnly = false; bandsTakeover = false;
+		bandsStaticNote = false;
 		bandSource = 'mmcli';
 		_bandsRetry = 0; _bandsRetryMax = 3; _revealTries = 0;
 		[ 'bands-3g', 'bands-lte', 'bands-nr', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
@@ -1110,6 +1229,7 @@ return baseclass.extend({
 	setOther: setOther,
 	isTakeover: function() { return bandsTakeover; },
 	isReadOnly: function() { return bandsReadOnly; },
+	isStaticNote: function() { return bandsStaticNote; },
 	/* Сброс состояния под НОВЫЙ модем при переключении вкладки БЕЗ перезагрузки
 	   страницы (in-place): все модульные флаги завязаны на конкретный модем и
 	   без сброса блок частот показывал бы данные прежнего. warm-ключ включает
@@ -1118,7 +1238,16 @@ return baseclass.extend({
 		_bandsWarmed = false; _bandsPollN = 0; _bandsRetry = 0;
 		_bandsAfterBusy = false; _has3gMM = false;
 		bandsReadOnly = false; bandsTakeover = false;
+		bandsStaticNote = false;
+		bandSource = 'mmcli';
+		_revealTries = 0; _bandsRetryMax = 3;
 		bandsOther = [];
+		[ 'bands-3g', 'bands-lte', 'bands-nr', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
+			var c = document.getElementById(id);
+			if (c) { c.innerHTML = ''; c.removeAttribute('data-sig'); }
+		});
+		window.__hwSig = null;
+		window.setTimeout(loadBands, 300);
 		/* Вендорные строки прежнего модема гасим СРАЗУ при переключении, не
 		   дожидаясь данных нового: иначе «Режим 5G / CA / cell-lock» от FM350
 		   мигают на вкладке следующего модема, пока не придёт его ответ. */
