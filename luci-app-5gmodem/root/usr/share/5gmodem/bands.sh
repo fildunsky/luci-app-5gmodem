@@ -677,6 +677,7 @@ _bands_live() {
 	case "$_BANDS_APPLY_LIVE" in 1|reconnect) return 0 ;; *) return 1 ;; esac
 }
 _bands_after_write() {
+	[ -n "$_MBIMP_IFACE" ] && : > "/tmp/mbimp-keeper.$_MBIMP_IFACE.kick"
 	case "$_BANDS_APPLY_LIVE" in
 		1)         return 0 ;;
 		reconnect) _reconnect_iface ;;
@@ -788,10 +789,14 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# счётчик без списка). Старый кэш без .m считается совпавшим - как раньше
 	# при пустых полях.
 	_BJCM=$(cat "$_BJF.m" 2>/dev/null)
+	_BJTTL=300
+	if [ "$_BJP" = "mbimp" ] && grep -q '"readonly": *1' "$_BJF" 2>/dev/null; then
+		_BJTTL=15
+	fi
 	if [ -s "$_BJF" ] && [ -n "$_BJT" ] \
 	   && [ "$_BJP" = "$(cat "$_BJF.p" 2>/dev/null)" ] \
 	   && { [ -z "$_BJMDL" ] || [ -z "$_BJCM" ] || [ "$_BJMDL" = "$_BJCM" ]; } \
-	   && [ "$(( $(cut -d. -f1 /proc/uptime) - _BJT ))" -lt 300 ]; then
+	   && [ "$(( $(cut -d. -f1 /proc/uptime) - _BJT ))" -lt "$_BJTTL" ]; then
 		# Фонового обновления НЕ делаем: маска меняется только через setbands (она
 		# чистит кэш), поэтому «протухнуть» сама не может, а refresh на каждый показ
 		# грузил бы порт впустую и мешал опросу метрик.
@@ -1258,9 +1263,10 @@ if [ "$_BAND_VIA" = "mmcli" ]; then
 	_BAND_NO_TAKEOVER=""
 	if [ "$_bs_ipr" = "mbimp" ]; then
 		_BAND_NO_TAKEOVER=1
+		_BANDS_APPLY_LIVE=1
+		_MBIMP_IFACE="$_IFACE"
 		if [ -n "$_MMIDX" ] && mmcli -m "$_MMIDX" -K >/dev/null 2>&1; then
 			_bs_ipr="modemmanager"
-			_BANDS_APPLY_LIVE=1
 		fi
 	fi
 	if [ "$_bs_ipr" != "modemmanager" ]; then

@@ -3126,7 +3126,7 @@ function applyMetrics(json) {
 							if (dbgBtn) { dbgBtn.style.display = ''; }
 						} else if (xmmCap && !isXmm) {
 							document.getElementById('bandnote-text').textContent =
-								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(json.protocol);
+								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(mutil.protoLabel(json.protocol));
 							if (mmBtn) { mmBtn.style.display = 'none'; }
 							if (xmmBtn) { xmmBtn.style.display = ''; }
 							if (dbgBtn) { dbgBtn.style.display = 'none'; }
@@ -3150,10 +3150,13 @@ function applyMetrics(json) {
 							   меняются»: кнопки на экране есть, и текст «недоступно»
 							   противоречил бы им. Если не прочитаны вовсе - прежняя
 							   формулировка про недоступность. */
-							document.getElementById('bandnote-text').textContent = bandsui.isReadOnly()
-								? _('Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them.').format(json.protocol)
-								: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(json.protocol);
-							if (mmBtn) { mmBtn.style.display = ''; }
+							var _mbimpWait = (String(json.iface_proto || '').toLowerCase() === 'mbimp');
+							document.getElementById('bandnote-text').textContent = _mbimpWait
+								? _('ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected.')
+								: bandsui.isReadOnly()
+								? _('Bands and network mode are shown read-only: in %s mode they can be read but not changed. Switch the interface to ModemManager to manage them.').format(mutil.protoLabel(json.protocol))
+								: _('Band and network-mode management is not available in %s mode. Switch the interface to ModemManager (in the modem settings) to manage bands.').format(mutil.protoLabel(json.protocol));
+							if (mmBtn) { mmBtn.style.display = _mbimpWait ? 'none' : ''; }
 							if (xmmBtn) { xmmBtn.style.display = 'none'; }
 							if (dbgBtn) { dbgBtn.style.display = 'none'; }
 						}

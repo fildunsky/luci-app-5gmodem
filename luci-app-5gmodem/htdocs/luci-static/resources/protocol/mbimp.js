@@ -21,7 +21,7 @@ network.registerPatternVirtual(/^mbimp-.+$/);
 
 return network.registerProtocol('mbimp', {
 	getI18n: function() {
-		return _('MBIM Cellular (shared proxy)');
+		return _('MBIM+MM (shared proxy, ModemManager for management)');
 	},
 
 	getIfname: function() {

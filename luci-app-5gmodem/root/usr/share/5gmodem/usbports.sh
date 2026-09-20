@@ -89,7 +89,7 @@ data_iface_for() {   # $1 - vid, $2 - pid
 # упирается в занятый интерфейс.
 _has_adb_iface() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
-		05c6:9025|05c6:9091) return 0 ;;
+		05c6:9025|05c6:9091|05c6:90d5) return 0 ;;
 		*)                   return 1 ;;
 	esac
 }

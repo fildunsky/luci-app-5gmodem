@@ -36,8 +36,8 @@ _BAND_VIA=mmcli
 # Multi-modem: read/set bands on the ACTIVE modem, not "any" (with two modems
 # "mmcli -m "$_MMIDX"" hits the wrong one -> both tabs show/set the same bands).
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
-_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 46 48 66 71"
-_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 20 25 28 38 41 66 71 77 78 79"
+_DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
+_DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 14 20 25 28 38 40 41 48 66 71 77 78 79"
 
 getinfo() {
 	echo "Compal RXM-G1"
@@ -182,13 +182,16 @@ getsupportedmodes() {
 
 getmode() {
 	# "modem.generic.current-modes : allowed: 3g, 4g, 5g; preferred: 5g"
-	AL=$(mmcli -m "$_MMIDX" -K 2>/dev/null \
-		| sed -n 's/^modem\.generic\.current-modes *: *//p' | head -1 \
-		| sed -n 's/.*allowed: *\([^;]*\).*/\1/p' | tr -d ' ')
+	AL=""
+	_MP=$(_qmi_ssp | sed -n "s/^[[:space:]]*Mode preference: *'\([^']*\)'.*/\1/p" | head -1)
+	if [ -z "$_MP" ]; then
+		AL=$(mmcli -m "$_MMIDX" -K 2>/dev/null \
+			| sed -n 's/^modem\.generic\.current-modes *: *//p' | head -1 \
+			| sed -n 's/.*allowed: *\([^;]*\).*/\1/p' | tr -d ' ')
+	fi
 	# Нет mmcli (интерфейс на uqmi/umbim) - читаем режим по QMI и приводим к
 	# тому же виду "2g,3g,4g,5g", который разбирает case ниже.
 	if [ -z "$AL" ]; then
-		_MP=$(_qmi_ssp | sed -n "s/^[[:space:]]*Mode preference: *'\([^']*\)'.*/\1/p" | head -1)
 		if [ -n "$_MP" ]; then
 			_a=""
 			case "$_MP" in *gsm*)  _a="${_a}2g,";; esac
@@ -209,16 +212,36 @@ getmode() {
 	esac
 }
 
+_qmi_setmode() {
+	case "$1" in
+		1) _qs_m="gsm|umts|lte|5gnr" ;;
+		2) _qs_m="umts" ;;
+		3) _qs_m="umts|lte" ;;
+		4) _qs_m="lte" ;;
+		5) _qs_m="lte|5gnr" ;;
+		6) _qs_m="5gnr" ;;
+		*) return 1 ;;
+	esac
+	[ -c "$_QWDM" ] || return 1
+	command -v qmicli >/dev/null 2>&1 || return 1
+	if ! pidof ModemManager >/dev/null 2>&1; then
+		command -v qmi_channel_free >/dev/null 2>&1 && ! qmi_channel_free && return 1
+	fi
+	qmicli -d "$_QWDM" -p "--nas-set-system-selection-preference=$_qs_m" 2>&1 | grep -q "set successfully"
+}
+
 setmode() {
 	MP=$(_mm_modes_for_id "$1"); [ -n "$MP" ] || return 1
 	M=$(echo "$MP" | awk '{print $1}')
 	P=$(echo "$MP" | awk '{print $2}')
+	_qmi_setmode "$1" && return 0
 	if [ -n "$P" ]; then
 		mmcli -m "$_MMIDX" --set-allowed-modes="$M" --set-preferred-mode="$P"
 	else
 		mmcli -m "$_MMIDX" --set-allowed-modes="$M"
 	fi
 }
+
 
 getbands5gnsa() {
 	for B in $(_mm_current_bands); do

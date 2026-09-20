@@ -5474,8 +5474,8 @@ msgstr "%s前"
 msgid "Allow roaming"
 msgstr "ローミングを許可"
 
-msgid "MBIM Cellular (shared proxy)"
-msgstr "MBIM セルラー (共有プロキシ)"
+msgid "MBIM+MM (shared proxy, ModemManager for management)"
+msgstr "MBIM+MM (共有プロキシ、管理は ModemManager)"
 
 msgid "Deleted: %d, not deleted: %d"
 msgstr "削除: %d 件、未削除: %d 件"
@@ -5512,3 +5512,6 @@ msgstr "モデムがメッセージの削除を拒否しました"
 
 msgid "the modem refused to delete the message (error %s)"
 msgstr "モデムがメッセージの削除を拒否しました (エラー %s)"
+
+msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
+msgstr "ModemManager がモデムを認識中です。バンドとネットワークモードは 1～2 分で自動的に操作可能になります。接続には影響しません。"

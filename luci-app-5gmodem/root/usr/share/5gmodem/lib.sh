@@ -28,7 +28,7 @@
 #
 #   05c6:90d5  d383e5d6 / 1afc7c2d   два MV31-W различимы
 #   05c6:9025  c7f2a76c / 72f642f6   два T99W175 различимы
-#   05c6:90d6  2e6172c9              уникален
+#   05c6:90d6  2e6172c9              ЗАГЛУШКА на всю партию (три разных IMEI)
 #   05c6:9063  81e6896d              уникален
 #   0489:e0b5  0123456789ABCDEF      ЗАГЛУШКА на всю партию
 #   413c:81d7  0123456789ABCDEF      ЗАГЛУШКА
@@ -45,7 +45,7 @@ serial_valid() {
 	case "$_sv" in
 		-|0|none|None|N/A) return 1 ;;
 		# Заводские заглушки, встреченные живьём.
-		0123456789ABCDEF|0123456789abcdef) return 1 ;;
+		0123456789ABCDEF|0123456789abcdef|2e6172c9) return 1 ;;
 		*[!A-Za-z0-9._:-]*) return 1 ;;
 	esac
 	# Слишком короткий - не идентификатор.
@@ -1342,6 +1342,9 @@ qmicli_p() {
 	_qp_o=$(mktemp /tmp/5gmodem_qmicli.XXXXXX 2>/dev/null) || _qp_o="/tmp/5gmodem_qmicli.$$.$(date +%s)"
 	# Для qmi-интерфейса пробу через прокси пропускаем совсем (см. выше).
 	[ "$_qp_proto" = "qmi" ] && _qp_skip=1
+	case "$_qp_proto" in
+		mbim|qmiraw) [ -n "$_qp_direct" ] && _qp_skip=1 ;;
+	esac
 	if [ -z "$_qp_skip" ]; then
 		# Ждём прокси МЕНЬШЕ, когда есть фолбэк: 20 c нужны только там, где идти
 		# больше некуда. Живой прокси отвечает за доли секунды, так что 6 c с
@@ -1368,7 +1371,7 @@ qmicli_p() {
 	fi
 	# Прокси не ответил (или пропущен как заведомо мёртвый), а канал свободен -
 	# читаем напрямую (см. выше).
-	if [ ! -s "$_qp_o" ] && [ -n "$_qp_direct" ]; then
+	if [ ! -s "$_qp_o" ] && [ -n "$_qp_direct" ] && qmi_channel_free; then
 		qmicli -d "$_qp_dev" $_qp_mb "$@" > "$_qp_o" 2>/dev/null 9>&- &
 		_qp_pid=$!
 		( sleep 20; kill -9 "$_qp_pid" 2>/dev/null ) >/dev/null 2>&1 9>&- &

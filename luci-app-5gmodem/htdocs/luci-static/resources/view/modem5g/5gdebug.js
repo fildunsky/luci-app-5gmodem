@@ -866,7 +866,7 @@ return view.extend({
 		var protoLabels = {
 			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
-			'mbimp': 'MBIM + ModemManager (mbimcli, shared proxy)',
+			'mbimp': 'MBIM+MM (mbimcli + ModemManager, shared proxy)',
 			'qmi': 'QMI (uqmi)',
 			/* Наш прото: тот же uqmi и то же железо (qmi_wwan + cdc-wdm), но
 			   адрес берётся статикой из QMI вместо DHCP-ребёнка. Показываем
@@ -1533,7 +1533,7 @@ return view.extend({
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
-					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto)), 'info');
+					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto === 'mbimp' ? 'MBIM+MM' : out.proto)), 'info');
 					// The Modem Information block is rendered once and not polled, so
 					// its protocol badge would keep showing the OLD protocol (e.g. mbim)
 					// until a manual page reload. Update it to the new protocol now.

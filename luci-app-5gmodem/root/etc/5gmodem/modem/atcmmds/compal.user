@@ -10,6 +10,15 @@ AT+BINFO;+CESQ
 # Aggregation
 AT+LCAINFO
 
+# 5G cell and signal (answers in about 3 s)
+AT+BNRINFO
+
+# 5G aggregation
+AT+NRCAINFO
+
+# Model, firmware and hardware versions
+AT+PRODUCTINFO
+
 ## Bands and temperature
 
 # Bands and 5G mode (masks)

@@ -5,6 +5,7 @@ IFACE="$2"
 USBDEV="$3"
 MM_SYNC_AT=$(( $(cut -d. -f1 /proc/uptime) - 120 ))
 PERIOD=20
+MM_FIX_N=0
 FAILS=0
 
 [ -c "$DEV" ] || exit 1
@@ -55,8 +56,11 @@ mm_enable() {
 	esac
 	_me_k=$(mmcli -m "$_me_i" -K 2>/dev/null)
 	if [ -n "$USBDEV" ] && ! printf '%s\n' "$_me_k" | grep -qE '^modem\.generic\.ports\.value\[[0-9]+\] *: *[A-Za-z0-9-]+ \(mbim\)'; then
-		if [ "$(( _me_now - MM_SYNC_AT ))" -ge 300 ]; then
+		_me_gap=300
+		[ "$MM_FIX_N" = 0 ] && _me_gap=45
+		if [ "$(( _me_now - MM_SYNC_AT ))" -ge "$_me_gap" ]; then
 			MM_SYNC_AT=$_me_now
+			MM_FIX_N=$((MM_FIX_N + 1))
 			logger -t 5gmodem "mbimp: ModemManager assembled $_me_p without its MBIM port - re-reporting the ports (the data session is not touched)"
 			mm_report remove
 			sleep 4
@@ -74,18 +78,35 @@ mm_enable() {
 	done
 	kill -9 "$_me_k" 2>/dev/null
 	wait "$_me_k" 2>/dev/null
+	rm -f /tmp/5gmodem_bands_* 2>/dev/null
 	logger -t 5gmodem "mbimp: enabled modem $_me_p in ModemManager (management only, the data session stays with interface $IFACE)"
 }
 
-trap 'rm -f "/tmp/mbimp-keeper.$$.out"; exit 0' TERM INT
+trap 'rm -f "/tmp/mbimp-keeper.$$.out" "/tmp/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
+
+KICK="/tmp/mbimp-keeper.$IFACE.kick"
+FAST_UNTIL=0
+rm -f "$KICK"
 
 while :; do
-	sleep "$PERIOD" &
-	wait $!
+	_kl_now=$(cut -d. -f1 /proc/uptime)
+	_kl_wait=$PERIOD
+	[ "$_kl_now" -lt "$FAST_UNTIL" ] && _kl_wait=3
+	_kl_n=0
+	while [ "$_kl_n" -lt "$_kl_wait" ]; do
+		if [ -e "$KICK" ]; then
+			rm -f "$KICK"
+			FAST_UNTIL=$(( $(cut -d. -f1 /proc/uptime) + 60 ))
+			break
+		fi
+		sleep 1 &
+		wait $!
+		_kl_n=$((_kl_n + 1))
+	done
 	[ -c "$DEV" ] || { logger -t 5gmodem "mbimp: $DEV is gone - leaving interface $IFACE to netifd"; exit 1; }
 	if probe; then
 		FAILS=0
-		mm_enable
+		[ "$(cut -d. -f1 /proc/uptime)" -lt "$FAST_UNTIL" ] || mm_enable
 	else
 		FAILS=$((FAILS + 1))
 		if [ "$FAILS" -ge 2 ]; then

@@ -68,8 +68,26 @@ case "$PRODUCT" in
 	*) exit 0 ;;
 esac
 
+_HOLD_IF=""
+if command -v qmicli >/dev/null 2>&1 && [ -f /usr/share/5gmodem/lib.sh ]; then
+	_h_sec="m_$(printf '%s' "${DEVPATH##*/}" | sed 's/[^A-Za-z0-9]/_/g')"
+	_h_if=$(uci -q get "5gmodem.$_h_sec.network" 2>/dev/null)
+	if [ -n "$_h_if" ] && [ "$(uci -q get "network.$_h_if.auto" 2>/dev/null)" != "0" ]; then
+		case "$(uci -q get "network.$_h_if.proto" 2>/dev/null)" in
+			mbim|qmi|qmiraw)
+				case "$(ubus call "network.interface.$_h_if" status 2>/dev/null)" in
+					*'"autostart": true'*)
+						ifdown "$_h_if" 2>/dev/null
+						_HOLD_IF="$_h_if"
+						logger -t 5gmodem "sms-routes: interface $_h_if held until the SMS routes of ${DEVPATH##*/} are set" ;;
+				esac ;;
+		esac
+	fi
+fi
+
 # Everything below runs detached: tty ports show up after the usb_device event
 (
+	trap '[ -n "$_HOLD_IF" ] && ifup "$_HOLD_IF" 2>/dev/null' EXIT
 	# This modem does NOT expose its serial (AT/DIAG) ports on its own - the
 	# kernel only creates cdc-wdm0 (MBIM). Bind the generic usb-serial driver
 	# by VID:PID so ttyUSB* appear, which the AT metrics / SMS / USSD paths
@@ -136,6 +154,10 @@ esac
 				done
 			fi
 		fi
+	fi
+	if [ -n "$_HOLD_IF" ]; then
+		ifup "$_HOLD_IF" 2>/dev/null
+		_HOLD_IF=""
 	fi
 
 	# --- Stage 3: AT port probing ---

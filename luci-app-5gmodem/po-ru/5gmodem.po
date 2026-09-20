@@ -5671,8 +5671,8 @@ msgstr "%s назад"
 msgid "Allow roaming"
 msgstr "Разрешить роуминг"
 
-msgid "MBIM Cellular (shared proxy)"
-msgstr "Сотовая связь MBIM (общий прокси)"
+msgid "MBIM+MM (shared proxy, ModemManager for management)"
+msgstr "MBIM+MM (общий прокси, ModemManager для управления)"
 
 msgid "Deleted: %d, not deleted: %d"
 msgstr "Удалено: %d, не удалено: %d"
@@ -5709,3 +5709,6 @@ msgstr "модем отказался удалить сообщение"
 
 msgid "the modem refused to delete the message (error %s)"
 msgstr "модем отказался удалить сообщение (ошибка %s)"
+
+msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
+msgstr "ModemManager ещё подхватывает модем: диапазоны и режим сети разблокируются сами через минуту-две, соединение при этом не затрагивается."

@@ -281,11 +281,13 @@ if [ "$REGOK" = "1" ]; then
 				else
 					B4=""
 				fi
+				_SRP=""
+				[ -n "$B4" ] && _SRP=$(echo "$LINE" | sed -n 's/.*RSRP: *\(-[0-9][0-9]*\).*/\1/p')
 				case $IDX in
-					1) [ -n "$B4" ] && S1BAND="$B4";;
-					2) [ -n "$B4" ] && S2BAND="$B4";;
-					3) [ -n "$B4" ] && S3BAND="$B4";;
-					4) [ -n "$B4" ] && S4BAND="$B4";;
+					1) [ -n "$B4" ] && S1BAND="$B4"; [ -n "$_SRP" ] && S1RSRP="$_SRP";;
+					2) [ -n "$B4" ] && S2BAND="$B4"; [ -n "$_SRP" ] && S2RSRP="$_SRP";;
+					3) [ -n "$B4" ] && S3BAND="$B4"; [ -n "$_SRP" ] && S3RSRP="$_SRP";;
+					4) [ -n "$B4" ] && S4BAND="$B4"; [ -n "$_SRP" ] && S4RSRP="$_SRP";;
 					*) ;;
 				esac
 				IDX=$((IDX + 1))
@@ -301,12 +303,17 @@ if [ "$REGOK" = "1" ]; then
 			O2=$(sms_tool -d $DEVICE at "at+cesq")
 			T=$(echo "$O2" | awk -F[,:] '/^\+CESQ/ {print $2}' | xargs)
 			[ -n "$T" ] && [ "x$T" != "x99" ] && RSSI=$((T*2-113))
-			T=$(echo "$O2" | awk -F[,:] '/^\+CESQ/ {print $6}' | xargs)
-			[ -n "$T" ] && [ "x$T" != "x255" ] && RSRP=$((T-141))
 			T=$(echo "$O2" | awk -F[,:] '/^\+CESQ/ {print $7}' | xargs)
-			[ -n "$T" ] && [ "x$T" != "x255" ] && RSRQ=$((T/2-20))
-			T=$(echo "$O2" | awk -F[,:] '/^\+CESQ/ {print $8}' | xargs)
-			[ -n "$T" ] && [ "x$T" != "x255" ] && SINR="$T"
+			case "$T" in ''|*[!0-9]*|255) ;; *) RSRP=$((T-141)) ;; esac
+			T=$(echo "$O2" | awk -F[,:] '/^\+CESQ/ {print $6}' | xargs)
+			case "$T" in ''|*[!0-9]*|255) ;; *) RSRQ=$((T/2-20)) ;; esac
+			_BSIG=$(echo "$OB" | tr -d '\r' | grep -m1 'RSRQ .*RSRP .*SINR ')
+			T=$(echo "$_BSIG" | sed -n 's/.*RSRP *\(-[0-9][0-9]*\).*/\1/p')
+			[ -n "$T" ] && RSRP="$T"
+			T=$(echo "$_BSIG" | sed -n 's/.*RSRQ *\(-[0-9][0-9]*\).*/\1/p')
+			[ -n "$T" ] && RSRQ="$T"
+			T=$(echo "$_BSIG" | sed -n 's/.*SINR *\(-\{0,1\}[0-9][0-9]*\).*/\1/p')
+			[ -n "$T" ] && SINR="$T"
 		fi
 	fi
 
