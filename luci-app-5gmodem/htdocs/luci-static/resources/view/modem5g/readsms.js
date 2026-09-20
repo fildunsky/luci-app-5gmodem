@@ -881,131 +881,129 @@ return view.extend({
 
 	handleDelete: function(ev) {
 		var viewSelf = this;
-		if (sms_selected_cards().length == 0){
-		ui.addNotification(null, E('p', _('Please select the message(s) to be deleted')), 'info');   
+		if (sms_selected_cards().length == 0) {
+			ui.addNotification(null, E('p', _('Please select the message(s) to be deleted')), 'info');
+			return;
 		}
-		else {
-			if (sms_selected_cards().length === document.querySelectorAll('.sms-card').length) {
-					/* Без confirm (решение владельца): выделение и есть намерение,
-					   кнопка удаляет сразу. */
-					{
-							var portDA = uci.get('5gmodem', 'sms', 'readport') || '';
-							var storeDA = uci.get('5gmodem', 'sms', 'storage') || 'ME';
+		return uci.load('5gmodem').then(function() {
+			var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
+			var portR = uci.get('5gmodem', 'sms', 'readport') || '';
+			var bridge = '/usr/share/5gmodem/smsbridge.sh';
 
-							/* РЕЗУЛЬТАТ УДАЛЕНИЯ ПРОВЕРЯЕМ. Раньше промис отбрасывался, а экран
-							   сразу переводился в «нет сообщений»: при отказе (занятый порт,
-							   ошибка ubus) человек видел пустой ящик, а через полминуты
-							   автоопрос возвращал все сообщения назад (аудит 12.09.2026).
-							   До ответа показываем чтение, а не пустоту: у L850/XMM удаление
-							   всего идёт до сорока секунд. */
-							smsSetState('loading');
-							sms_update_selcount();
-							L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', storeDA, portDA ]), null)
-								.then(function(r) {
-									if (r == null) {
-										ui.addNotification(null, E('p', [ _('Could not delete messages') ]), 'error');
-										smsNote(null);
-										if (typeof viewSelf._doRefresh == 'function') { viewSelf._doRefresh(false, true); }
-										return;
-									}
-									smsSetState('empty');
-									try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
-								});
-    							setTimeout(function() {
-								L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeDA, portDA ]))
-									.then(function(res) {
-										if (res) {
-											/* Разбор ТЕМ ЖЕ способом, что и везде. Позиционный
-											   substring(indexOf('total')) при отсутствии подстроки даёт
-											   -1, то есть ВСЮ строку, и в полоску памяти уезжало число
-											   из всех цифр подряд (аудит 12.09.2026). */
-											var _st = sms_parse_status(res);
-											if (_st.t != null) {
-												msg_bar(0, _st.t);
-												save_count();
-											}
-										}
-								});
-							}, 2000);
-						}
-			}
-			else {
+			var picked = [], idx = [];
+			sms_selected_cards().forEach(function(card) {
+				var own = [];
+				String(card.dataset.index || '').split(/[^0-9]+/).forEach(function(n) {
+					n = parseInt(n, 10);
+					if (!Number.isNaN(n)) { own.push(n); }
+				});
+				if (own.length) {
+					picked.push({ key: String(card.dataset.index), idx: own });
+					idx = idx.concat(own);
+				}
+			});
+			if (!idx.length) { return; }
 
-					/* Без confirm - как и при удалении всех (решение владельца). */
-						{
-							uci.load('5gmodem').then(function() {
-
-								/* Хранилище и порт - строками и с тем же запасным значением, что в
-								   doRefreshInner: аргументы уходят в ubus, а отсутствующий ключ uci
-								   даёт undefined, то есть JSON null, который rpcd отвергает целиком.
-								   Пустое хранилище вдобавок заставляло мост искать удаляемый номер в
-								   текущем mem1 модема, а не в выбранном на странице (аудит 12.09.2026). */
-								var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
-								var portR = uci.get('5gmodem', 'sms', 'readport') || '';
-								var portDEL = portR;
-
-								/* Индексы из data-index карточек; у склеенного сообщения
-								   там все части через дефис - разворачиваем в плоский
-								   список чисел. */
-								var idx = [];
-								sms_selected_cards().forEach(function(card) {
-									String(card.dataset.index || '').split(/[^0-9]+/).forEach(function(n) {
-										n = parseInt(n, 10);
-										if (!Number.isNaN(n)) { idx.push(n); }
-									});
-								});
-								if (!idx.length) { return; }
-
-								var deletelabel = document.getElementById('deleteinfo');
-								if (deletelabel) { deletelabel.style.display = 'block'; }
-								var done = 0;
-								var showProgress = function() {
-									if (!deletelabel) { return; }
-									deletelabel.innerHTML = '';
-									deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'},
-										_('Please wait... deleted')+' '+done+' '+_('of')+' '+idx.length+' '+_('selected messages')));
-								};
-								showProgress();
-
-								/* ПОСЛЕДОВАТЕЛЬНАЯ цепочка промисов: следующее удаление
-								   уходит только после ответа на предыдущее. Прежний код
-								   стрелял залпом setTimeout'ов с шагом 1.5 c: на медленном
-								   порту вызовы наезжали друг на друга, каждый тащил свой
-								   status (плюс немедленный третий на каждой итерации), а
-								   финализатор с проверкой счётчика срабатывал по нескольку
-								   раз. Здесь один проход и один финальный status. */
-								var chain = Promise.resolve();
-								idx.forEach(function(n) {
-									chain = chain.then(function() {
-										return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', String(n), storeL, portDEL ]), '')
-											.then(function() { done++; showProgress(); });
-									});
-								});
-								chain.then(function() {
-									/* Всё удалено: снимаем карточки, чистим warm-кэш и одним
-									   status сверяем полоску памяти и персист счётчика. */
-									sms_selected_cards().forEach(function(card) {
-										if (card.parentNode) { card.parentNode.removeChild(card); }
-									});
-									sms_update_selcount();
-									try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
-									return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeL, portR ]), '')
-										.then(function(res) {
-											var st = sms_parse_status(res);
-											if (st.u != null) {
-												msg_bar(Math.floor(st.u), st.t);
-												update_sms_count_for_modem(st.u).then(function(v) {
-													sms_persist({ 'sms_count': v });
-												});
-											}
-											if (deletelabel) { deletelabel.style.display = 'none'; deletelabel.innerHTML = ''; }
-										});
-								});
+			var deletelabel = document.getElementById('deleteinfo');
+			var showProgress = function(done) {
+				if (!deletelabel) { return; }
+				deletelabel.style.display = 'block';
+				deletelabel.innerHTML = '';
+				deletelabel.appendChild(E('span', {'class': 'spinning', 'style': 'font-size: inherit;'},
+					_('Please wait... deleted')+' '+done+' '+_('of')+' '+idx.length+' '+_('selected messages')));
+			};
+			var hideProgress = function() {
+				if (deletelabel) { deletelabel.style.display = 'none'; deletelabel.innerHTML = ''; }
+			};
+			var parse = function(out) {
+				try { return JSON.parse(out || '{}') || {}; } catch (e) { return {}; }
+			};
+			var whyText = function(f) {
+				switch (f.why) {
+					case 'busy': return _('the modem port is busy with another operation, try again in a minute');
+					case 'noanswer': return _('the modem did not confirm the deletion');
+					case 'refused': return f.arg
+						? _('the modem refused to delete the message (error %s)').format(f.arg)
+						: _('the modem refused to delete the message');
+					case 'archive': return _('could not remove the message from the router memory');
+					case 'noport': return _('the modem has no AT port');
+				}
+				return _('the deletion stopped unexpectedly');
+			};
+			var fail = function(text) {
+				hideProgress();
+				ui.addNotification(null, E('p', text), 'error');
+				if (typeof viewSelf._doRefresh == 'function') { viewSelf._doRefresh(false, true); }
+			};
+			var finish = function(job) {
+				var ok = {}, bad = {}, reasons = [];
+				(job.ok || []).forEach(function(n) { ok[n] = true; });
+				(job.fail || []).forEach(function(f) {
+					bad[f.index] = true;
+					var t = whyText(f);
+					if (reasons.indexOf(t) < 0) { reasons.push(t); }
+				});
+				var gone = 0, kept = 0;
+				picked.forEach(function(p) {
+					var all = p.idx.every(function(n) { return ok[n]; });
+					if (!all) { kept++; return; }
+					gone++;
+					var card = document.querySelector('.sms-card[data-index="' + p.key + '"]');
+					if (card && card.parentNode) { card.parentNode.removeChild(card); }
+				});
+				if (kept && !reasons.length) { reasons.push(whyText({})); }
+				sms_update_selcount();
+				try { window.localStorage.removeItem(sms_cache_key()); } catch (e) {}
+				hideProgress();
+				if (!document.querySelector('.sms-card')) { smsSetState('empty'); }
+				if (kept) {
+					ui.addNotification(null, E('p', _('Deleted: %d, not deleted: %d').format(gone, kept) +
+						' - ' + reasons.join('; ')), 'error');
+					if (typeof viewSelf._doRefresh == 'function') { viewSelf._doRefresh(false, true); return; }
+				}
+				return L.resolveDefault(fs.exec_direct(bridge, [ 'status', storeL, portR ]), '')
+					.then(function(res) {
+						var st = sms_parse_status(res);
+						if (st.u != null) {
+							msg_bar(Math.floor(st.u), st.t);
+							update_sms_count_for_modem(st.u).then(function(v) {
+								sms_persist({ 'sms_count': v });
 							});
 						}
-			    }
-		}
+					});
+			};
+			var started = Date.now();
+			var poll = function() {
+				return new Promise(function(resolve) { window.setTimeout(resolve, 1500); }).then(function() {
+					return L.resolveDefault(fs.exec_direct(bridge, [ 'delete-status' ]), '');
+				}).then(function(out) {
+					var job = parse(out);
+					if (job.state === 'running' || (!job.state && Date.now() - started < 300000)) {
+						if (job.done != null) { showProgress(job.done); }
+						return poll();
+					}
+					if (job.state === 'done' || job.state === 'dead') { return finish(job); }
+					fail(_('Could not delete messages'));
+				});
+			};
+
+			showProgress(0);
+			return L.resolveDefault(fs.exec_direct(bridge, [ 'delete-start', idx.join(','), storeL, portR ]), '')
+				.then(function(out) {
+					var job = parse(out);
+					if (job.state === 'busy') {
+						fail(_('The previous deletion is still running, try again in a minute'));
+						return;
+					}
+					if (job.state !== 'running') {
+						fail(_('Could not delete messages'));
+						return;
+					}
+					return poll();
+				});
+		});
 	},
+
                                                                                                                                               
 	handleRefresh: function(ev) {
 		// Обновляем только список сообщений, без перезагрузки всей страницы.

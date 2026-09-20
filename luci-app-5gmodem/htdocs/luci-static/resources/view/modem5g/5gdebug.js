@@ -160,7 +160,8 @@ return view.extend({
 			/* Переключатель антенн корпуса (Notion R281 / Yota C300-1). Скрипт сам
 			   сверяет плату и контроллер GPIO и на чужом железе отвечает
 			   available:0 - тогда блока нет. */
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/antenna.sh', [ 'status' ]), '')
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/antenna.sh', [ 'status' ]), ''),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'wdmdrv' ]), '')
 		]);
 	},
 
@@ -755,6 +756,10 @@ return view.extend({
 			var m = (f.name || '').match(/^([a-z0-9]+)\.js$/);
 			if (m) { protoAvail[m[1]] = true; }
 		});
+		var wdmDriver = String(res[res.length - 1] || '').trim();
+		if (wdmDriver !== 'cdc_mbim' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'mbimp') {
+			protoAvail['mbimp'] = false;
+		}
 
 		/* ---------------- Настройки модема (бывшая вкладка Modem Settings) --- */
 		var m, s, o;
@@ -861,6 +866,7 @@ return view.extend({
 		var protoLabels = {
 			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
+			'mbimp': 'MBIM + ModemManager (mbimcli, shared proxy)',
 			'qmi': 'QMI (uqmi)',
 			/* Наш прото: тот же uqmi и то же железо (qmi_wwan + cdc-wdm), но
 			   адрес берётся статикой из QMI вместо DHCP-ребёнка. Показываем
@@ -880,7 +886,7 @@ return view.extend({
 		   поднимается FM350: у него нет cdc-wdm, поэтому mbim/qmi/ModemManager с
 		   ним не работают. В protoAvail он был всегда, но отсутствовал в ЭТОМ
 		   списке и в protoLabels - поэтому в выпадашку и не попадал. */
-		[ 'fibocom', 'mbim', 'qmi', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+		[ 'fibocom', 'mbim', 'mbimp', 'qmi', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
 			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
 		});
 		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,
@@ -1224,7 +1230,7 @@ return view.extend({
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
-		if (roamHilink || roamProto === 'mbim' || roamProto === 'modemmanager' || roamProto === 'fibocom') {
+		if (roamHilink || roamProto === 'mbim' || roamProto === 'mbimp' || roamProto === 'modemmanager' || roamProto === 'fibocom') {
 		o = s.option(form.Flag, '_roaming', _('Allow data roaming'),
 			_('When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected.'));
 		o.default = '0';

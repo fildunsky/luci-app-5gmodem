@@ -1169,7 +1169,7 @@ proxy_verdict() {
 				sub(/^\/dev\//, "", v); if (v in nd) hit[$2] = 1
 			}
 			END {
-				for (i in hit) if (!off[i] && proto[i] ~ /^(mbim|qmi|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|dhcp)$/)
+				for (i in hit) if (!off[i] && proto[i] ~ /^(mbim|mbimp|qmi|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|dhcp)$/)
 					printf "%s(%s) ", i, proto[i]
 			}')
 		set -- $_pv_ifs
@@ -1999,8 +1999,8 @@ report() {
 	run 5  "Time (matters for eSIM TLS)" sh -c "date; echo 'UTC:'; date -u"
 
 	collect "config"
-	run 5  "uci 5gmodem" uci -q show 5gmodem
-	run 5  "uci 5gmodem (SMS section)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' || echo '(the sms section is empty)'"
+	run 5  "uci 5gmodem" sh -c "uci -q show 5gmodem | sed -E \"s/^([^=]*(token|secret|pass|psk)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\""
+	run 5  "uci 5gmodem (SMS section)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' | sed -E \"s/^([^=]*(token|secret|pass|psk)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\" || echo '(the sms section is empty)'"
 	run 5  "uci lpac" uci -q show lpac
 	# Пароли/ключи из network не выводим: там PPP/PPPoE-креды и Wi-Fi.
 	run 5  "uci network (secrets stripped)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret'"

@@ -1552,7 +1552,7 @@ resolve)
 		# при пересоздании это делает mkiface, а разбуженный интерфейс мимо него
 		# проходит (живой случай: парковка Telit с device=/dev/cdc-wdm0).
 		case "$(uci -q get "network.$_sl_if.proto")" in
-			qmi|mbim|qmiraw)
+			qmi|mbim|mbimp|qmiraw)
 				for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \
 				             /sys/bus/usb/devices/"$_sl_p":*/usbmisc/wdm*; do
 					[ -e "$_sl_w" ] || continue
@@ -1676,7 +1676,7 @@ resolve)
 		[ -n "$p" ] || continue
 		echo " $PRESENT " | grep -q " $p " && continue   # владелец на месте - им займётся ensure_iface
 		ifa=$(uci -q get "$CFG.$s.network"); [ -n "$ifa" ] || continue
-		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim|qmiraw) ;; *) continue ;; esac
+		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim|mbimp|qmiraw) ;; *) continue ;; esac
 		deva=$(uci -q get "network.$ifa.device"); [ -n "$deva" ] || continue
 		owp=$(path_for_wdm "$deva")
 		if [ -n "$owp" ] && [ "$owp" != "$p" ]; then
@@ -1697,7 +1697,7 @@ resolve)
 		# 14.09.2026). Скрипт сам отсеет чужие vid:pid и уже отправленное на это
 		# подключение модема; в фоне, чтобы resolve не ждал канал.
 		case "$(uci -q get "network.$(uci -q get "$CFG.$s.network").proto" 2>/dev/null)" in
-			qmi|qmiraw|mbim)
+			qmi|qmiraw|mbim|mbimp)
 				( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
 				;;
 		esac
@@ -1809,6 +1809,11 @@ mmindex)
 	# из-за этого модем БЕЗ SIM показывал в «Приоритете интернета» оператора
 	# соседа - и держал его 30 минут, пока жив кэш.
 	mm_index_for_path "${2:-$(active_path)}"
+	;;
+
+wdmdrv)
+	_wd_n=$(wdm_for_path "${2:-$(active_path)}")
+	[ -n "$_wd_n" ] && basename "$(readlink -f "/sys/class/usbmisc/${_wd_n##*/}/device/driver" 2>/dev/null)" 2>/dev/null
 	;;
 
 wdm)

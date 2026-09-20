@@ -1344,7 +1344,7 @@ function histSvg(tag, attrs) {
 function histClock(sec) {
 	sec = Math.max(0, Math.round(sec));
 	var s = sec % 60;
-	return '-' + Math.floor(sec / 60) + ':' + (s < 10 ? '0' : '') + s;
+	return _('%s ago').format(Math.floor(sec / 60) + ':' + (s < 10 ? '0' : '') + s);
 }
 function histFmt(v) {
 	return String(Math.round(v * 10) / 10);
@@ -1369,14 +1369,15 @@ function histBuild() {
 		c.lvTxt = E('span', {}, '');
 		c.now = E('span', { 'class': 'tg-hist-now' }, '-');
 		c.left = E('span', {}, histClock(HIST_SPAN));
-		c.stat = E('span', {}, '');
+		c.stat = E('div', { 'class': 'tg-hist-s' }, '');
 		c.root = E('div', { 'class': 'tg-hist-card', 'data-k': m[0] }, [
 			E('div', { 'class': 'tg-hist-h' }, [
 				E('span', { 'class': 'tg-hist-name' }, [ E('b', {}, m[1]), E('span', { 'class': 'tg-hist-lv' }, [ c.lvDot, c.lvTxt ]) ]),
 				c.now
 			]),
+			c.stat,
 			c.plot,
-			E('div', { 'class': 'tg-hist-f' }, [ c.left, c.stat, E('span', {}, _('now')) ])
+			E('div', { 'class': 'tg-hist-f' }, [ c.left, E('span', {}, _('now')) ])
 		]);
 		var move = function(ev) {
 			var r = c.svg.getBoundingClientRect();
@@ -1454,7 +1455,7 @@ function histDraw(json) {
 			c.line.setAttribute('d', ''); c.area.setAttribute('d', '');
 			c.avg.setAttribute('visibility', 'hidden');
 			c.dot.style.display = 'none'; c.empty.style.display = '';
-			c.now.textContent = '-'; c.stat.textContent = ''; c.lvTxt.textContent = ''; c.lvDot.style.background = 'transparent';
+			c.now.textContent = '-'; c.stat.innerHTML = ''; c.stat.appendChild(E('span', {}, '\u00a0')); c.lvTxt.textContent = ''; c.lvDot.style.background = 'transparent';
 			return;
 		}
 		c.empty.style.display = 'none';
@@ -1502,7 +1503,10 @@ function histDraw(json) {
 			c.dot.style.display = 'none';
 			c.now.textContent = '-'; c.lvTxt.textContent = ''; c.lvDot.style.background = 'transparent';
 		}
-		c.stat.textContent = _('min') + ' ' + histFmt(lo) + ' · ' + _('avg') + ' ' + histFmt(avg) + ' · ' + _('max') + ' ' + histFmt(hi);
+		c.stat.innerHTML = '';
+		[ [ 'min', lo ], [ 'avg', avg ], [ 'max', hi ] ].forEach(function(p) {
+			c.stat.appendChild(E('span', {}, _(p[0]) + ' ' + histFmt(p[1])));
+		});
 	});
 	histHover();
 }
@@ -3057,7 +3061,7 @@ function applyMetrics(json) {
 						view.textContent = '-';
 						}
 						else {
-						view.textContent = json.protocol;
+						view.textContent = mutil.protoLabel(json.protocol);
 						}
 					}
 
@@ -3077,7 +3081,7 @@ function applyMetrics(json) {
 					   модем), и false намертво гасил блок частот. Переход
 					   false->true снимает гейт и будит reveal mmcli-пути. */
 					if (json.iface_proto && json.iface_proto != '-') {
-						var _liveMM = (String(json.iface_proto).toLowerCase() === 'modemmanager');
+						var _liveMM = ([ 'modemmanager', 'mbimp' ].indexOf(String(json.iface_proto).toLowerCase()) >= 0);
 						if (_liveMM && !ifaceProtoIsMM) {
 							ifaceProtoIsMM = true;
 							bandsui.ungate();
@@ -3807,7 +3811,7 @@ simDialog: baseclass.extend({
 		   протокол данных, и у Compal под ModemManager там 'mbim' - флаг ложно
 		   оставался false, и блок частот прятался навсегда с подсказкой
 		   «переключите на MM» (хотя интерфейс уже на MM). */
-		ifaceProtoIsMM = (String(initjson.iface_proto || initjson.protocol || '').toLowerCase() === 'modemmanager');
+		ifaceProtoIsMM = ([ 'modemmanager', 'mbimp' ].indexOf(String(initjson.iface_proto || initjson.protocol || '').toLowerCase()) >= 0);
 
 		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
 		var mmHasModem = /current-modes/.test(mmK);

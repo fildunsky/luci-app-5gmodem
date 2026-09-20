@@ -5593,3 +5593,48 @@ msgstr "关闭"
 
 msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
 msgstr "页面关闭时不会轮询调制解调器，信号图表会停止。启用后将定时轮询当前调制解调器，使图表持续更新。已关闭后台 AT 轮询的调制解调器会被跳过。"
+
+msgid "%s ago"
+msgstr "%s前"
+
+msgid "Allow roaming"
+msgstr "允许漫游"
+
+msgid "MBIM Cellular (shared proxy)"
+msgstr "MBIM 蜂窝网络（共享代理）"
+
+msgid "Deleted: %d, not deleted: %d"
+msgstr "已删除：%d，未删除：%d"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgstr "用于上传测试、可接收 POST 正文的端点。“Интернетометр”使用与下载源相同探测列表中的节点，也可以在此单独选择。只统计服务器完整接收的上传：提前中断传输的端点不会给出上传数值。"
+
+msgid "The previous deletion is still running, try again in a minute"
+msgstr "上一次删除仍在进行，请一分钟后重试"
+
+msgid "Upload was not measured: the endpoint did not answer. Pick another upload endpoint in the settings."
+msgstr "未测得上传速度：端点无响应。请在设置中选择其他上传端点。"
+
+msgid "Upload was not measured: the endpoint refused the data (HTTP %s). Pick another upload endpoint in the settings."
+msgstr "未测得上传速度：端点拒绝了数据（HTTP %s）。请在设置中选择其他上传端点。"
+
+msgid "could not remove the message from the router memory"
+msgstr "无法从路由器存储中移除该消息"
+
+msgid "the deletion stopped unexpectedly"
+msgstr "删除意外中断"
+
+msgid "the modem did not confirm the deletion"
+msgstr "调制解调器未确认删除"
+
+msgid "the modem has no AT port"
+msgstr "调制解调器没有 AT 端口"
+
+msgid "the modem port is busy with another operation, try again in a minute"
+msgstr "调制解调器端口正被其他操作占用，请一分钟后重试"
+
+msgid "the modem refused to delete the message"
+msgstr "调制解调器拒绝删除该消息"
+
+msgid "the modem refused to delete the message (error %s)"
+msgstr "调制解调器拒绝删除该消息（错误 %s）"

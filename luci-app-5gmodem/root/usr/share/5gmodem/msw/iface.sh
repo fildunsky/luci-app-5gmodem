@@ -46,7 +46,7 @@ follow_iface_device() {
 			_fd_new=$(readlink -f "/sys/bus/usb/devices/$_fd_p" 2>/dev/null)
 			[ -n "$_fd_new" ] && [ -f "$_fd_new/idVendor" ] || _fd_new=""
 			;;
-		mbim|qmi|qmiraw|ncm)
+		mbim|mbimp|qmi|qmiraw|ncm)
 			_fd_new=$(wdm_for_path "$_fd_p")
 			[ -n "$_fd_new" ] && [ -e "$_fd_new" ] \
 				&& [ "$(path_for_wdm "$_fd_new")" = "$_fd_p" ] || _fd_new=""
@@ -59,7 +59,7 @@ follow_iface_device() {
 		_fd_ch=1
 	fi
 	case "$(uci -q get "network.$_fd_if.proto")" in
-		mbim|qmi|qmiraw)
+		mbim|mbimp|qmi|qmiraw)
 			_fd_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$_fd_new")/device" 2>/dev/null)
 			if [ -n "$_fd_dp" ] && [ -d "$_fd_dp/usbmisc" ] \
 			   && [ "$(uci -q get "network.$_fd_if.devpath")" != "$_fd_dp" ]; then
@@ -144,7 +144,7 @@ ensure_iface() {
 	CUR=$(uci -q get "network.$IF.device")
 	NEW=""
 	case "$PROTO" in
-		mbim|qmi|qmiraw|ncm) NEW=$(wdm_for_path "$P") ;;
+		mbim|mbimp|qmi|qmiraw|ncm) NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
 		atc|xmm)
 			# atc И xmm ДОЗВАНИВАЮТСЯ ПО AT-ПОРТУ, а не по каналу управления.
@@ -235,7 +235,7 @@ ensure_iface() {
 	# интерфейса-контроллера, из него системный прото при КАЖДОМ setup находит
 	# cdc-wdm заново. Досетапливаем/чиним существующим интерфейсам.
 	case "$PROTO" in
-		mbim|qmi|qmiraw)
+		mbim|mbimp|qmi|qmiraw)
 			_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
 			_dpo=$(uci -q get "network.$IF.devpath")
 			if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then

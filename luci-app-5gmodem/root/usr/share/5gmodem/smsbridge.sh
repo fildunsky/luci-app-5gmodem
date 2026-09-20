@@ -859,11 +859,71 @@ PARTS_EOF
 
 BOX="${1:-recv}"
 case "$BOX" in
-	delete) DEL="$2"; STORE="$3"; PORT="$4" ;;
+	delete|delete-start|delete-run) DEL="$2"; STORE="$3"; PORT="$4" ;;
 	send)   SND_TO="$2"; SND_TXT="$3"; PORT="$4" ;;
 	queue-run|queue-list) PORT="${2:-$(uci -q get "$CFG.sms.sendport")}" ;;
 	unseen) UL="$2"; STORE="$3"; PORT="$4" ;;
 	*)      STORE="$2"; PORT="$3" ;;
+esac
+
+_DJ_FILE="/tmp/5gmodem_smsdel_$(printf '%s' "$_TGT_PATH" | tr -c 'A-Za-z0-9' '_').json"
+_DJ_OK=""; _DJ_FAIL=""; _DJ_DONE=0; _DJ_TOTAL=0
+
+_dj_pid() {
+	sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$_DJ_FILE" 2>/dev/null | head -1
+}
+
+_dj_running() {
+	case "$(cat "$_DJ_FILE" 2>/dev/null)" in *'"state":"running"'*) ;; *) return 1 ;; esac
+	_djr_p=$(_dj_pid)
+	[ -n "$_djr_p" ] && kill -0 "$_djr_p" 2>/dev/null
+}
+
+_dj_write() {
+	printf '{"pid":%s,"state":"%s","total":%s,"done":%s,"ok":[%s],"fail":[%s]}\n' \
+		"${2:-$$}" "$1" "$_DJ_TOTAL" "$_DJ_DONE" "$_DJ_OK" "$_DJ_FAIL" > "$_DJ_FILE.tmp" 2>/dev/null \
+		&& mv "$_DJ_FILE.tmp" "$_DJ_FILE" 2>/dev/null
+}
+
+_dj_ok() {
+	_DJ_OK="${_DJ_OK}${_DJ_OK:+,}$1"
+	_DJ_DONE=$((_DJ_DONE + 1))
+}
+
+_dj_fail() {
+	_DJ_FAIL="${_DJ_FAIL}${_DJ_FAIL:+,}{\"index\":$1,\"why\":\"$2\",\"arg\":\"$3\"}"
+	_DJ_DONE=$((_DJ_DONE + 1))
+}
+
+_dj_count() {
+	_djc_n=0
+	for _djc_i in $(printf '%s' "$1" | tr ',' ' '); do _djc_n=$((_djc_n + 1)); done
+	echo "$_djc_n"
+}
+
+case "$BOX" in
+	delete-status)
+		if [ -s "$_DJ_FILE" ]; then
+			if _dj_running; then cat "$_DJ_FILE"
+			else sed 's/"state":"running"/"state":"dead"/' "$_DJ_FILE"
+			fi
+		else
+			echo '{"state":"none"}'
+		fi
+		exit 0 ;;
+	delete-start)
+		case "$DEL" in ''|*[!0-9,]*|,*|*,|*,,*) echo '{"state":"bad"}'; exit 2 ;; esac
+		if _dj_running; then echo '{"state":"busy"}'; exit 0; fi
+		_DJ_TOTAL=$(_dj_count "$DEL")
+		( SMS_MODEM="$_TGT_PATH" exec "$0" delete-run "$DEL" "$STORE" "$PORT" ) >/dev/null 2>&1 </dev/null &
+		_dj_write running "$!"
+		printf '{"state":"running","pid":%s,"total":%s}\n' "$!" "$_DJ_TOTAL"
+		sleep 1
+		exit 0 ;;
+	delete-run)
+		case "$DEL" in ''|*[!0-9,]*) exit 2 ;; esac
+		_DJ_TOTAL=$(_dj_count "$DEL")
+		_dj_write running ;;
 esac
 
 # Есть AT-порт (режим debug) - обычный путь: sms_tool умеет больше, чем API.
@@ -900,6 +960,16 @@ if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }
 			else
 				"$RES/hilink.sh" smsdel "$DEL" "$_TGT_PATH"
 			fi ;;
+		delete-run)
+			for _dr_i in $(printf '%s' "$DEL" | tr ',' ' '); do
+				_dr_o=$("$RES/hilink.sh" smsdel "$_dr_i" "$_TGT_PATH" 2>/dev/null)
+				case "$_dr_o" in
+					*'"success":true'*) _dj_ok "$_dr_i" ;;
+					*) _dj_fail "$_dr_i" refused "$(printf '%s' "$_dr_o" | sed -n 's/.*"code":"\([0-9A-Za-z_-]*\)".*/\1/p')" ;;
+				esac
+				_dj_write running
+			done
+			_dj_write done ;;
 		# Путь передаём ВСЕГДА: без него удаление и отправка уходили активному
 		# модему, то есть чужой симке (аудит 12.09.2026).
 		send)   "$RES/hilink.sh" smssend "$SND_TO" "$SND_TXT" "$_TGT_PATH" ;;
@@ -913,7 +983,7 @@ fi
 [ -n "$PORT" ] || PORT=$("$RES/detect.sh" 2>/dev/null)
 # Порта нет вовсе - отдаём пустой список, а не ошибку: страница покажет
 # «сообщений нет», и это честнее, чем красный текст про несуществующий /dev.
-[ -n "$PORT" ] || { echo "[]"; exit 0; }
+[ -n "$PORT" ] || [ "$BOX" = delete-run ] || { echo "[]"; exit 0; }
 
 # ПУСТАЯ ОЧЕРЕДЬ ДОСЫЛКИ - ВЫХОД ДО ЗАМКА. queue-run зовётся каждым кругом
 # sessionwatch, и с пустой очередью ему у порта делать нечего, а общий at_lock
@@ -937,7 +1007,7 @@ fi
 # остаётся пустым), поэтому судить о занятости порта по этой переменной нельзя -
 # ветка send ниже так и не срабатывала (аудит 12.09.2026).
 _AT_INH="$_AT_LOCK_HELD"
-at_lock "$PORT" 15; _AT_LOCKED=$?
+if [ "$BOX" = delete-run ]; then _AT_LOCKED=1; else at_lock "$PORT" 15; _AT_LOCKED=$?; fi
 
 # СЧЁТЧИК ПРИ ЗАНЯТОМ ПОРТУ - ИЗ ПОСЛЕДНЕГО ОТВЕТА, А НЕ ИЗ МОДЕМА. Правило
 # «не дождались очереди - идём всё равно» написано ради чтения сообщений: их
@@ -1478,7 +1548,9 @@ esac
 # sms_tool зовём БЕЗ -s: он и так читает текущий mem1. Короткую форму оставляем
 # только там, где полную применить не вышло - хуже, чем сегодня, не станет.
 _STORE_ARG=""
-if [ -n "$STORE" ]; then
+_store_pick() {
+	_STORE_ARG=""
+	[ -n "$STORE" ] || return 0
 	_STORE_ARG="-s $STORE"
 	if ! _via_mm && [ -c "$PORT" ]; then
 		case "$(sms_cpms_state "$PORT" 2>/dev/null)" in
@@ -1486,7 +1558,8 @@ if [ -n "$STORE" ]; then
 			?*) sms_apply_cpms "$PORT" "$STORE" >/dev/null 2>&1 && _STORE_ARG="" ;;
 		esac
 	fi
-fi
+}
+[ "$BOX" = delete-run ] || _store_pick
 
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$_STORE_ARG" ] && set -- $_STORE_ARG "$@"
@@ -1575,13 +1648,12 @@ case "$BOX" in
 				# У части модемов «delete all» виснет (L850/XMM) - тогда
 				# добиваем ПОШТУЧНО по индексам из списка, каждый шаг с
 				# собственным потолком.
-				if ! _sms_run 40 $(_smstool) -d "$PORT" delete all; then
-					for _dl_i in $(_sms_run 45 $(_smstool) "$@" recv \
-							| jsonfilter -e '@.msg[*].index' 2>/dev/null); do
-						case "$_dl_i" in ''|*[!0-9]*) continue ;; esac
-						_sms_run 12 $(_smstool) -d "$PORT" delete "$_dl_i"
-					done
-				fi
+				_sms_run 40 $(_smstool) -d "$PORT" delete all
+				for _dl_i in $(_sms_run 45 $(_smstool) "$@" recv \
+						| jsonfilter -e '@.msg[*].index' 2>/dev/null); do
+					case "$_dl_i" in ''|*[!0-9]*) continue ;; esac
+					_sms_run 12 $(_smstool) -d "$PORT" delete "$_dl_i"
+				done
 				exit 0 ;;
 			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
 			*)
@@ -1597,6 +1669,88 @@ case "$BOX" in
 				fi
 				_sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; exit $? ;;
 		esac ;;
+	delete-run)
+		_dr_live=""
+		for _dr_i in $(printf '%s' "$DEL" | tr ',' ' '); do
+			if [ "$_dr_i" -ge "$ARCH_BASE" ]; then
+				_arch_del_index "$_dr_i"
+				_dr_left=""
+				for _dr_f in "$(_arch_dir)/$_dr_i".*; do [ -f "$_dr_f" ] && _dr_left=1; done
+				if [ -n "$_dr_left" ]; then _dj_fail "$_dr_i" archive ""; else _dj_ok "$_dr_i"; fi
+				_dj_write running
+			else
+				_dr_live="$_dr_live $_dr_i"
+			fi
+		done
+		[ -n "$_dr_live" ] || { _dj_write done; exit 0; }
+		_dr_why=""
+		if [ -z "$PORT" ]; then
+			_dr_why=noport
+		else
+			_dr_try=0
+			while [ "$_AT_LOCKED" != 0 ] && [ "$_dr_try" -lt 3 ]; do
+				at_lock "$PORT" 15; _AT_LOCKED=$?
+				_dr_try=$((_dr_try + 1))
+			done
+			[ "$_AT_LOCKED" = 0 ] || _dr_why=busy
+		fi
+		if [ -n "$_dr_why" ]; then
+			for _dr_i in $_dr_live; do _dj_fail "$_dr_i" "$_dr_why" ""; done
+			_dj_write done
+			exit 0
+		fi
+		_store_pick
+		_dr_before=$(_arch_live_json)
+		_dr_pend=""; _dr_hang=0; _dr_base=$_DJ_DONE
+		for _dr_i in $_dr_live; do
+			if [ "$_dr_hang" -ge 3 ]; then
+				_dr_pend="$_dr_pend $_dr_i:noanswer:"
+				continue
+			fi
+			_dr_o=$(MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_dr_i"); _dr_rc=$?
+			case "$_dr_o" in
+				*"Deleted message $_dr_i"*) _dr_pend="$_dr_pend $_dr_i:ok:"; _dr_hang=0 ;;
+				*"Error deleting message $_dr_i"*)
+					_dr_a=$(printf '%s' "$_dr_o" | sed -n "s/.*Error deleting message $_dr_i: *\\([0-9A-Za-z ]*\\).*/\\1/p" | head -1 | tr -d '\r')
+					_dr_pend="$_dr_pend $_dr_i:refused:$(printf '%s' "$_dr_a" | tr ' ' '_')"; _dr_hang=0 ;;
+				*)
+					if [ "$_dr_rc" = 0 ]; then _dr_pend="$_dr_pend $_dr_i:ok:"; _dr_hang=0
+					else _dr_pend="$_dr_pend $_dr_i:noanswer:"; _dr_hang=$((_dr_hang + 1))
+					fi ;;
+			esac
+			_DJ_DONE=$((_DJ_DONE + 1)); _dj_write running
+		done
+		_dr_after=$(_arch_live_json)
+		_dr_seen=""
+		case "$_dr_after" in
+			*'"msg"'*) _dr_seen=1
+				_dr_left=" $(printf '%s' "$_dr_after" | jsonfilter -e '@.msg[*].index' 2>/dev/null | tr '\n' ' ')" ;;
+		esac
+		_DJ_DONE=$_dr_base
+		for _dr_p in $_dr_pend; do
+			_dr_i=${_dr_p%%:*}; _dr_v=${_dr_p#*:}; _dr_a=${_dr_v#*:}; _dr_v=${_dr_v%%:*}
+			if [ -n "$_dr_seen" ]; then
+				case "$_dr_left" in
+					*" $_dr_i "*)
+						_dr_b=$(printf '%s' "$_dr_before" | jsonfilter -e "@.msg[@.index=$_dr_i].timestamp" 2>/dev/null | head -1)
+						_dr_c=$(printf '%s' "$_dr_after" | jsonfilter -e "@.msg[@.index=$_dr_i].timestamp" 2>/dev/null | head -1)
+						if [ "$_dr_b" = "$_dr_c" ]; then
+							[ "$_dr_v" = ok ] && _dr_v=refused
+						else
+							_dr_v=ok
+						fi ;;
+					*) _dr_v=ok ;;
+				esac
+			fi
+			if [ "$_dr_v" = ok ]; then
+				_arch_on && _arch_del_live "$_dr_i" "$_dr_before"
+				_dj_ok "$_dr_i"
+			else
+				_dj_fail "$_dr_i" "$_dr_v" "$_dr_a"
+			fi
+		done
+		_dj_write done
+		exit 0 ;;
 	send)
 		[ -n "$SND_TO" ] || { echo "no number" >&2; exit 2; }
 		SND_TO=$(_norm_num "$SND_TO")

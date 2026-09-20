@@ -128,6 +128,14 @@ _spent() {
 		printf "%d", v }'
 }
 
+_up_rates() {
+	awk 'NF>=5 {
+		want=$1+0; got=$2+0; t=$3-$4; c=$5+0
+		if (c<=0 || got<want || want<=0 || t<=0) next
+		printf "%.0f\n", got/t
+	}' "$1" 2>/dev/null
+}
+
 _tombps() {
 	echo "$1" | awk '{
 		v=$1; u="";
@@ -489,92 +497,78 @@ start)
 			# приходил только через 4-8 c - карточка висела на нуле при ползущей
 			# полоске. 2 МБ дают цифру через ~1-2 c; лёгкое занижение первого
 			# отсчёта (короткий разгон TCP) гасится макс-агрегацией остальных.
-			_up_sz=2097152
+			_up_sz=262144; _up_n=1
 			while :; do
 				[ -f /tmp/5gmodem_st_stop ] && break
 				_up_now=$(cut -d. -f1 /proc/uptime)
 				_up_left=$(( SECS - (_up_now - _up_t0) ))
 				[ "$_up_left" -ge 2 ] || break
-				head -c "$_up_sz" /dev/zero 2>/dev/null | curl -A 5gmodem-speedtest -o /dev/null \
-					--max-time "$_up_left" --connect-timeout 6 \
-					--data-binary @- -w '%{speed_upload}\n' "$UPURL" \
-					2>>"$UPROG" >>"$URES"
-				_up_sz=8388608
+				set --
+				_up_i=0
+				while [ "$_up_i" -lt "$_up_n" ]; do
+					set -- "$@" -o /dev/null "$UPURL"
+					_up_i=$((_up_i + 1))
+				done
+				head -c "$_up_sz" /dev/zero 2>/dev/null | curl -A 5gmodem-speedtest \
+					--max-time "$_up_left" --connect-timeout 6 -H 'Expect:' \
+					--data-binary @- \
+					-w "$_up_sz"' %{size_upload} %{time_total} %{time_pretransfer} %{http_code}\n' \
+					"$@" 2>/dev/null >>"$URES"
+				_up_bps=$(_up_rates "$URES" | awk '{v=$1} END{printf "%.0f", v+0}')
+				case "$_up_bps" in
+					''|0|*[!0-9]*)
+						[ "$(wc -l < "$URES" 2>/dev/null | tr -d ' ')" -ge 3 ] 2>/dev/null && break
+						sleep 1
+						_up_sz=262144; _up_n=1 ;;
+					*)
+						_up_sz=$(awk "BEGIN{v=$_up_bps*2; if (v<262144) v=262144; if (v>8388608) v=8388608; printf \"%.0f\", v}")
+						_up_n=3 ;;
+				esac
 			done
 		) </dev/null &
 		UPID=$!
 		UPT0=$(cut -d. -f1 /proc/uptime)
 		MAXU=0
 		LIVEU=0
-		_UPB=0; _UPS=0; _UDONEN=0
 		while kill -0 "$UPID" 2>/dev/null; do
 			sleep 1
-			_LINE=$(tr '\r' '\n' 2>/dev/null < "$UPROG" | grep -E '^[ ]*[0-9]' | tail -1)
-			_XF=$(printf '%s' "$_LINE" | awk '{print $6}')
-			# Граница POST'ов - по числу написанных итогов, см. фазу загрузки.
-			_NUDONE=$(wc -l < "$URES" 2>/dev/null | tr -d ' ')
-			case "$_NUDONE" in ''|*[!0-9]*) _NUDONE="$_UDONEN" ;; esac
-			_live=""
-			if [ -n "$_XF" ]; then
-				_NB=$(_tobytes "$_XF")
-				_SP=$(_spent "$_LINE")
-				case "$_NB" in
-					''|*[!0-9]*) : ;;
-					# Новый POST - счётчики метра с нуля. Как и в загрузке,
-					# на сбросе только переставляем точку отсчёта: считать по
-					# округлённому до секунды «Time Spent» здесь нельзя.
-					*) if [ "$_NUDONE" != "$_UDONEN" ] || [ "$_NB" -lt "$_UPB" ] || [ "$_SP" -lt "$_UPS" ]; then
-						_UDONEN="$_NUDONE"
-						_UPB="$_NB"; _UPS="$_SP"
-					   else
-						_DS=$(( _SP - _UPS ))
-						if [ "$_DS" -ge 1 ] && [ "$_NB" -gt "$_UPB" ]; then
-							_live=$(awk "BEGIN{printf \"%.1f\", (($_NB-$_UPB)*8)/1000000/$_DS}")
-							_UPB="$_NB"; _UPS="$_SP"
-						fi
-					   fi ;;
-				esac
+			_up_el=$(( $(cut -d. -f1 /proc/uptime) - UPT0 ))
+			if [ "$_up_el" -gt $(( SECS + 2 )) ]; then
+				kill $(pgrep -f 5gmodem-speedtest) 2>/dev/null
 			fi
-			if [ -n "$_live" ]; then
-				LIVEU="$_live"
-			elif [ -n "$_XF" ] && [ "$_UPB" -gt 0 ]; then
-				:
-			else
-				_upb=$(awk 'END{print $1+0}' "$URES" 2>/dev/null)
-				_upn=$(awk "BEGIN{printf \"%.1f\", (${_upb:-0}*8)/1000000}")
-				[ "$(awk "BEGIN{print ($_upn>0)?1:0}")" = 1 ] && LIVEU="$_upn"
-			fi
-			MAXU=$(_num "$MAXU"); LIVEU=$(_num "$LIVEU")
-			MAXU=$(awk "BEGIN{m=$MAXU+0;v=$LIVEU+0;printf \"%.1f\",(v>m)?v:m}")
+			_upl=$(_up_rates "$URES" | awk '{v=$1; if (v>m) m=v} END{printf "%.1f %.1f", (v*8)/1000000, (m*8)/1000000}')
+			LIVEU=$(_num "${_upl%% *}"); MAXU=$(_num "${_upl##* }")
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
-			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"elapsed\":$(( $(cut -d. -f1 /proc/uptime) - UPT0 )),\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
+			_write "{\"running\":1,\"service\":\"$SERVICE\",\"phase\":\"up\",\"down_mbps\":$DMBPS,\"live_up\":${LIVEU:-0},\"secs\":$SECS,\"elapsed\":$_up_el,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\"}"
 		done
 		wait "$UPID" 2>/dev/null
+		MAXU=$(_num "$(_up_rates "$URES" | awk '{v=$1; if (v>m) m=v} END{printf "%.1f", (m*8)/1000000}')")
+		UERR=""
+		if [ "$(awk "BEGIN{print ($MAXU>0)?1:0}")" != 1 ]; then
+			UERR=$(awk '$5+0>0 {c=$5} END{print (c!="")?"http-" c:"no-answer"}' "$URES" 2>/dev/null)
+			[ -n "$UERR" ] || UERR="no-answer"
+		fi
 		# лучшая средняя среди POST'ов цикла (каждый пишет свою строку)
-		USPD=$(awk '{v=$1+0; if (v>m) m=v} END{print m+0}' "$URES")
 		rm -f "$UPROG" "$URES"
 		# финальный снимок IP/страны: geo мог доехать позже последнего тика
 		[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 		[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 		[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
 		rm -f "$GEOIP" "$GEOCC" "$GEOLOC"
-		AVGU=$(awk "BEGIN{printf \"%.1f\", ($USPD*8)/1000000}")
-		AVGU=$(_num "$AVGU"); MAXU=$(_num "$MAXU")
-		UBEST=$(_num "$(awk "BEGIN{printf \"%.1f\", ($MAXU>0)?$MAXU:$AVGU}")")
 		UMBPS=""
-		[ "$(awk "BEGIN{print ($UBEST>0)?1:0}")" = 1 ] && UMBPS="$UBEST"
+		[ -z "$UERR" ] && UMBPS="$MAXU"
 
 		case "$HTTP" in
 			200|206)
-				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
+				_write "{\"running\":0,\"ok\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"up_mbps\":${UMBPS:-null},\"up_error\":\"$UERR\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 			*)
 				# ts во ВСЕХ финалах (не только ok): фронт отличает свежий финал от
 			# протухшего кэша прошлого теста побайтовым сравнением - без метки
 			# два одинаковых исхода неразличимы.
-				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"up_mbps\":${UMBPS:-null},\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
+				_write "{\"running\":0,\"ok\":0,\"service\":\"$SERVICE\",\"http\":\"$HTTP\",\"up_mbps\":${UMBPS:-null},\"up_error\":\"$UERR\",\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ip_local\":${IPLOC:-0},\"ts\":$(date +%s 2>/dev/null)}"
 				;;
 		esac
 	) >/dev/null 2>&1 </dev/null &

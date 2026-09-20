@@ -174,6 +174,12 @@ function stSpeedContent() {
 	} else if (_st.phase === 'done') {      // готово: оба реальные
 		dlNode = num(_st.down, _st.down == null, false);
 		ulNode = num(_st.up, _st.up == null, false);
+		if (_st.up == null && _st.upErr) {
+			ulNode.textContent = '\u2014';
+			ulNode.setAttribute('data-tooltip', /^http-/.test(_st.upErr)
+				? _('Upload was not measured: the endpoint refused the data (HTTP %s). Pick another upload endpoint in the settings.').format(_st.upErr.substring(5))
+				: _('Upload was not measured: the endpoint did not answer. Pick another upload endpoint in the settings.'));
+		}
 	} else {                                 // покой: оба плейсхолдеры
 		dlNode = num(null, true, false);
 		ulNode = num(null, true, false);
@@ -386,7 +392,7 @@ function stPoll(expectStart) {
 				_renderedKey = ''; stProgStop(); refreshStCard();
 				return;
 			}
-			if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; _st.ipLocal = (j.ip_local == 1); }
+			if (j.ok) { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.upErr = j.up_error || ''; _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; _st.ipLocal = (j.ip_local == 1); }
 			/* Тест не состоялся по ИЗВЕСТНОЙ причине - называем её. Молчаливый
 			   отказ («нажал, ничего не произошло») хуже любой ошибки: человек
 			   не знает, чинить ему что-то или ждать. */
@@ -915,7 +921,7 @@ function stInit() {
 			stPoll();
 			return;
 		}
-		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
+		if (j.ok && _st.phase === 'idle') { _st.phase = 'done'; _st.down = j.down_mbps; _st.up = (j.up_mbps != null ? j.up_mbps : null); _st.upErr = j.up_error || ''; _st.ip = j.pub_ip || ''; _st.cc = j.cc || ''; }
 		patchStCard();
 	});
 }

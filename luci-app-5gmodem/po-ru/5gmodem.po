@@ -5664,3 +5664,48 @@ msgstr "Выключено"
 
 msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
 msgstr "При закрытой странице модем не опрашивается, и графики сигнала останавливаются. С этой настройкой активный модем опрашивается по таймеру, чтобы графики продолжались. Модемы с выключенным фоновым опросом по AT пропускаются."
+
+msgid "%s ago"
+msgstr "%s назад"
+
+msgid "Allow roaming"
+msgstr "Разрешить роуминг"
+
+msgid "MBIM Cellular (shared proxy)"
+msgstr "Сотовая связь MBIM (общий прокси)"
+
+msgid "Deleted: %d, not deleted: %d"
+msgstr "Удалено: %d, не удалено: %d"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgstr "Адрес, принимающий тело POST, для замера отдачи. «Интернетометр» берёт узел из того же списка проб, что и источник загрузки, и его можно выбрать здесь отдельно. Считаются только отправки, которые сервер принял целиком: адрес, обрывающий передачу в начале, цифры отдачи не даёт вовсе."
+
+msgid "The previous deletion is still running, try again in a minute"
+msgstr "Предыдущее удаление ещё выполняется, повторите через минуту"
+
+msgid "Upload was not measured: the endpoint did not answer. Pick another upload endpoint in the settings."
+msgstr "Отдача не измерена: адрес не ответил. Выберите другой адрес отдачи в настройках."
+
+msgid "Upload was not measured: the endpoint refused the data (HTTP %s). Pick another upload endpoint in the settings."
+msgstr "Отдача не измерена: адрес отверг данные (HTTP %s). Выберите другой адрес отдачи в настройках."
+
+msgid "could not remove the message from the router memory"
+msgstr "не удалось убрать сообщение из памяти роутера"
+
+msgid "the deletion stopped unexpectedly"
+msgstr "удаление неожиданно прервалось"
+
+msgid "the modem did not confirm the deletion"
+msgstr "модем не подтвердил удаление"
+
+msgid "the modem has no AT port"
+msgstr "у модема нет AT-порта"
+
+msgid "the modem port is busy with another operation, try again in a minute"
+msgstr "порт модема занят другой операцией, повторите через минуту"
+
+msgid "the modem refused to delete the message"
+msgstr "модем отказался удалить сообщение"
+
+msgid "the modem refused to delete the message (error %s)"
+msgstr "модем отказался удалить сообщение (ошибка %s)"

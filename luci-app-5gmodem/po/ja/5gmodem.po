@@ -5467,3 +5467,48 @@ msgstr "オフ"
 
 msgid "With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped."
 msgstr "ページを閉じているとモデムはポーリングされず、信号グラフが止まります。この設定では、タイマーでアクティブなモデムをポーリングしてグラフを継続します。バックグラウンド AT ポーリングをオフにしたモデムは対象外です。"
+
+msgid "%s ago"
+msgstr "%s前"
+
+msgid "Allow roaming"
+msgstr "ローミングを許可"
+
+msgid "MBIM Cellular (shared proxy)"
+msgstr "MBIM セルラー (共有プロキシ)"
+
+msgid "Deleted: %d, not deleted: %d"
+msgstr "削除: %d 件、未削除: %d 件"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgstr "アップロード測定用に POST 本文を受け付けるエンドポイント。「Интернетометр」はダウンロード元と同じプローブ一覧のノードを使い、ここで個別に選べます。サーバーが全体を受信したアップロードだけを集計します。転送を途中で打ち切るエンドポイントではアップロード値は出ません。"
+
+msgid "The previous deletion is still running, try again in a minute"
+msgstr "前回の削除がまだ実行中です。1 分後にもう一度お試しください"
+
+msgid "Upload was not measured: the endpoint did not answer. Pick another upload endpoint in the settings."
+msgstr "アップロードを測定できませんでした: エンドポイントが応答しません。設定で別のアップロード先を選んでください。"
+
+msgid "Upload was not measured: the endpoint refused the data (HTTP %s). Pick another upload endpoint in the settings."
+msgstr "アップロードを測定できませんでした: エンドポイントがデータを拒否しました (HTTP %s)。設定で別のアップロード先を選んでください。"
+
+msgid "could not remove the message from the router memory"
+msgstr "ルーターのメモリからメッセージを削除できませんでした"
+
+msgid "the deletion stopped unexpectedly"
+msgstr "削除が予期せず中断されました"
+
+msgid "the modem did not confirm the deletion"
+msgstr "モデムが削除を確認しませんでした"
+
+msgid "the modem has no AT port"
+msgstr "モデムに AT ポートがありません"
+
+msgid "the modem port is busy with another operation, try again in a minute"
+msgstr "モデムのポートは別の処理で使用中です。1 分後にもう一度お試しください"
+
+msgid "the modem refused to delete the message"
+msgstr "モデムがメッセージの削除を拒否しました"
+
+msgid "the modem refused to delete the message (error %s)"
+msgstr "モデムがメッセージの削除を拒否しました (エラー %s)"

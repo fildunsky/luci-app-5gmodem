@@ -79,7 +79,15 @@ mm_needed() {
 	if [ -n "$_mm_iface_seen" ] && [ -n "$(echo $_present)" ]; then
 		return 0
 	fi
+	for _if in $(_mbimp_ifaces); do
+		_dev=$(uci -q get "network.$_if.device")
+		[ -c "$_dev" ] && return 0
+	done
 	return 1
+}
+_mbimp_ifaces() {
+	[ -f /lib/netifd/proto/mbimp.sh ] || return 0
+	uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.proto='\?mbimp'\?\$/\1/p"
 }
 
 # Жив ли MM. Раньше грепали «ModemManager --» - procd запускает бинарь БЕЗ
@@ -118,7 +126,7 @@ case "$1" in
 				# момент остановки MM, а не на каждом apply: позже прокси может
 				# законно поднять mbim-проба eSIM. qmi-proxy не трогаем - QMI
 				# мультиплексируется штатно, им пользуются наши же метрики.
-				killall mbim-proxy 2>/dev/null
+				[ -n "$(_mbimp_ifaces)" ] || killall mbim-proxy 2>/dev/null
 			fi
 		fi
 		;;

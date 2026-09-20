@@ -422,7 +422,11 @@ if [ "$REGOK" = "1" ]; then
 	# PCI qmicli не отдаёт ВООБЩЕ (nas-get-signal-info его не содержит), поэтому
 	# $QCRSRP? спрашиваем и на обычном пути - но только когда есть что заполнять,
 	# и одним вызовом на оба поля. Без qmicli тем же ответом закрываем и RSRP.
-	if [ -z "$RSRP" ] || [ -z "$PCI" ]; then
+	_QC_LTE=1
+	case "$MODE" in
+		*UMTS*|*HSPA*|*HSDPA*|*HSUPA*|*WCDMA*|*GSM*|*EDGE*|*GPRS*|3G*|2G*) _QC_LTE=0 ;;
+	esac
+	if [ "$_QC_LTE" = 1 ] && { [ -z "$RSRP" ] || [ -z "$PCI" ]; }; then
 		_QR=$(sms_tool -d $DEVICE at 'AT$QCRSRP?' 2>/dev/null | tr -d '\r')
 		# Ведущие нули срезаем sed'ом, а НЕ через $((10#$T)): base#number - башизм,
 		# busybox ash на нём падает с "arithmetic syntax error".
@@ -432,10 +436,13 @@ if [ "$REGOK" = "1" ]; then
 		[ -z "$EARFCN" ] && [ -n "$T" ] && EARFCN="$T"
 		if [ -z "$RSRP" ]; then
 			T=$(echo "$_QR" | sed -n 's/^\$QCRSRP: *[0-9]*, *[0-9]*, *"\(-\?[0-9.]*\)".*/\1/p' | head -1)
-			[ -n "$T" ] && RSRP="$T"
+			case "$T" in
+				-[3-9][0-9]*|-1[0-5][0-9]*) RSRP="$T" ;;
+				*) T="" ;;
+			esac
 			T=$(sms_tool -d $DEVICE at 'AT$QCRSRQ?' 2>/dev/null | tr -d '\r' \
 				| sed -n 's/^\$QCRSRQ: *[0-9]*, *[0-9]*, *"\(-\?[0-9.]*\)".*/\1/p' | head -1)
-			[ -n "$T" ] && RSRQ="$T"
+			[ -n "$RSRP" ] && [ -n "$T" ] && RSRQ="$T"
 		fi
 	fi
 

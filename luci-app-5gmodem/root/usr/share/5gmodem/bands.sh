@@ -1254,7 +1254,16 @@ if [ "$_BAND_VIA" = "mmcli" ]; then
 	# Интерфейс ТЕКУЩЕЙ секции, не глобальный: под BANDS_ACTIVE_MODEM это разные.
 	_IFACE=$(uci -q get "5gmodem.$_bs_sec.network")
 	[ -n "$_IFACE" ] || _IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
-	if [ "$(uci -q get "network.$_IFACE.proto" 2>/dev/null)" != "modemmanager" ]; then
+	_bs_ipr=$(uci -q get "network.$_IFACE.proto" 2>/dev/null)
+	_BAND_NO_TAKEOVER=""
+	if [ "$_bs_ipr" = "mbimp" ]; then
+		_BAND_NO_TAKEOVER=1
+		if [ -n "$_MMIDX" ] && mmcli -m "$_MMIDX" -K >/dev/null 2>&1; then
+			_bs_ipr="modemmanager"
+			_BANDS_APPLY_LIVE=1
+		fi
+	fi
+	if [ "$_bs_ipr" != "modemmanager" ]; then
 		_BAND_READONLY=1
 		# Живые чтения гейтим по доступности qmicli: он тут единственный источник.
 		_PORT_OK=0
@@ -1331,6 +1340,7 @@ fi
 # зомби-сессию после подъёма ловит трафик-проба (_mt_traffic_ok) с передёргом.
 _needs_mm_takeover() {
 	[ "$(uci -q get 5gmodem.@5gmodem[0].band_takeover 2>/dev/null)" != "0" ] || return 1
+	[ "$_BAND_NO_TAKEOVER" = "1" ] && return 1
 	[ "$_BAND_VIA" = "mmcli" ] && [ "$_BAND_READONLY" = "1" ]
 }
 

@@ -116,7 +116,7 @@ var CACHED_RES = [
 	'view/modem5g/sendat.js',
 	'view/modem5g/bandsui.js', 'view/modem5g/healthform.js', 'view/modem5g/buttons.js',
 	'view/modem5g/align.js', 'view/modem5g/5gstats.js', 'view/modem5g/modem.css',
-	'protocol/fibocom.js', 'protocol/qmiraw.js'
+	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js'
 ];
 
 /* Принудительно перетянуть наши ресурсы МИМО кэша браузера (fetch cache:reload). */
@@ -655,12 +655,13 @@ return view.extend({
 		};
 
 		o = sts.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
-			_('Endpoint that accepts a POST body, for the upload test. "Интернетометр" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured.'));
+			_('Endpoint that accepts a POST body, for the upload test. "Интернетометр" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all.'));
 		o.value('internetometer', 'Интернетометр (Yandex CDN)');
+		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
 		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
 		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex - RU (' + _('works over cellular') + ')');
-		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
 		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (' + _('public demo') + ')');
+		o.value('https://www.librespeed.fi/backend/empty.php', 'LibreSpeed - Helsinki (Hetzner)');
 		/* Умолчание ТАКОЕ ЖЕ, как у источника загрузки, и скрипт трактует
 		   пустое значение ровно так же - иначе страница показывала бы один
 		   сервис, а замер шёл на другой. placeholder и rmempty - см. выше. */

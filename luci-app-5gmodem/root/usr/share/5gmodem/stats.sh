@@ -151,7 +151,9 @@ _push() {
 	[ -n "$2" ] || return 0
 	case "$2" in *[!0-9.-]*) return 0 ;; esac
 	_p_f="$DIR/$1"
-	printf '%s %s\n' "$(_now)" "$2" >> "$_p_f"
+	_p_t=$(_now)
+	[ "$(tail -n1 "$_p_f" 2>/dev/null | cut -d' ' -f1)" = "$_p_t" ] && return 0
+	printf '%s %s\n' "$_p_t" "$2" >> "$_p_f"
 	_p_n=$(wc -l 2>/dev/null < "$_p_f" || echo 0)
 	if [ "${_p_n:-0}" -gt "$((RING_MAX + 120))" ]; then
 		tail -n "$RING_MAX" "$_p_f" > "$_p_f.tmp" 2>/dev/null && mv "$_p_f.tmp" "$_p_f"

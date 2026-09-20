@@ -2038,7 +2038,7 @@ fi
 # даёт AT: registration home->1/roaming->5 (+CREG), access-tech lte->7/5gnr->13
 # (AcT из +COPS). Поздний mmcli-блок заполняет только пустое - дубля нет.
 _pf_proto=$(uci -q get "network.$SEC.proto")
-if [ "$_pf_proto" = modemmanager ] && [ -z "$REG" ] && command -v mmcli >/dev/null 2>&1; then
+if { [ "$_pf_proto" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && [ -z "$REG" ] && command -v mmcli >/dev/null 2>&1; then
 	_pf_mi=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
 	if [ -n "$_pf_mi" ]; then
 		_pf_k=$(mmcli -m "$_pf_mi" -K 2>/dev/null)

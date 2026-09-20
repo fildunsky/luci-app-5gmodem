@@ -503,7 +503,10 @@ mm_recover_missing() {
 					continue
 				fi
 				if [ ! -f "$RUN/$_rb_key.qmihint" ]; then
-					: > "$RUN/$_rb_key.qmihint" 2>/dev/null
+					cut -d. -f1 /proc/uptime > "$RUN/$_rb_key.qmihint" 2>/dev/null
+					if [ "$_sw_pro" = "mbim" ] && ! _compal_mm_only "$_rp" "$_wdm_node" "$_sw_vp" "$_rb_key"; then
+						continue
+					fi
 					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a control channel (cdc-wdm, driver $_wdm_drv) - switch the interface to proto $_sw_pro. NOT rebinding: it risks killing the device (config #1 error -71)."
 					continue
 				fi
@@ -516,6 +519,9 @@ mm_recover_missing() {
 				[ -f "$RUN/$_rb_key.qmiswitch" ] && continue
 				pidof ModemManager >/dev/null 2>&1 || continue
 				_mm_probing "$_rp" && continue
+				_sw_t0=$(cat "$RUN/$_rb_key.qmihint" 2>/dev/null)
+				case "$_sw_t0" in ''|*[!0-9]*) _sw_t0=0 ;; esac
+				[ "$(( $(cut -d. -f1 /proc/uptime) - _sw_t0 ))" -ge 120 ] || continue
 				_sw_sec="m_$_rb_key"
 				_sw_p=$(uci -q get "5gmodem.$_sw_sec.iface_proto")
 				[ -n "$_sw_p" ] || _sw_p=$(uci -q get 5gmodem.@5gmodem[0].iface_proto)

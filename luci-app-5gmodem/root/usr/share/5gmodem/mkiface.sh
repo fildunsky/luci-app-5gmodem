@@ -852,7 +852,16 @@ esac
 # ПРИСУТСТВИЕ, а не только конфиг: интерфейс отсутствующего модема больше не
 # держит MM запущенным (см. mmneed.sh - там же объяснение, чем это вредно).
 _MM_WANT=0
+if [ "$PROTO" = "mbimp" ]; then
+	_mki_wdrv=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-none}")/device/driver" 2>/dev/null)" 2>/dev/null)
+	if [ "$_mki_wdrv" != "cdc_mbim" ]; then
+		logger -t 5gmodem "mkiface: proto mbimp needs an MBIM control channel (driver cdc_mbim), but ${DEV:-the modem} is on ${_mki_wdrv:-no cdc-wdm node} - not creating the interface"
+		printf '{"result":"MBIM+MM needs an MBIM composition, this modem is on %s","proto":"mbimp"}\n' "${_mki_wdrv:-no cdc-wdm node}"
+		exit 1
+	fi
+fi
 [ "$PROTO" = "modemmanager" ] && _MM_WANT=1
+[ "$PROTO" = "mbimp" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && _MM_WANT=1
 [ "$_MM_WANT" = "1" ] || /usr/share/5gmodem/mmneed.sh check 2>/dev/null | grep -q '"needed":1' && _MM_WANT=1
 if [ "$_MM_WANT" = "1" ]; then
 	/etc/init.d/modemmanager enable >/dev/null 2>&1
@@ -891,7 +900,7 @@ case "$PROTO" in
 		done
 		[ -f "$IDEV/idVendor" ] || IDEV=""
 		;;
-	mbim|qmi|qmiraw)
+	mbim|mbimp|qmi|qmiraw)
 		# control channel over the cdc-wdm node
 		IDEV="$DEV"
 		;;
@@ -1004,7 +1013,7 @@ case "$PROTO" in
 			&& [ -z "$(uci -q get "network.$IF.init_epsbearer")" ] \
 			&& uci set "network.$IF.init_epsbearer=default"
 		;;
-	qmi|mbim|qmiraw)
+	qmi|mbim|mbimp|qmiraw)
 		set_pdp_opt "$IF" pdptype
 		uci set "network.$IF.auth=none"
 		# Привязка к железу через стабильный путь (см. ctrl_devpath выше).
@@ -1069,6 +1078,11 @@ ubus call network reload >/dev/null 2>&1
 # мёртв («Не поддерживаемый тип протокола»).
 case "$PROTO" in
 	fibocom|qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
+	mbimp)
+		if ! ubus call network get_proto_handlers 2>/dev/null | grep -q '"mbimp"'; then
+			logger -t 5gmodem "mkiface: proto mbimp is not registered with netifd yet - restarting the network to register it (interfaces will briefly drop)"
+			/etc/init.d/network restart >/dev/null 2>&1
+		fi ;;
 esac
 
 # СТАНДАРТНЫЙ ПРОТО (mbim/qmi/ncm/modemmanager/...) ТОЖЕ МОЖЕТ БЫТЬ НЕИЗВЕСТЕН
@@ -1080,7 +1094,7 @@ esac
 # обрыв ждёт. Вне этого окна блок не срабатывает никогда: после любой
 # перезагрузки netifd знает все установленные обработчики.
 case "$PROTO" in
-	fibocom|qmiraw) ;;
+	fibocom|qmiraw|mbimp) ;;
 	*)
 		if [ -n "$PROTO" ] && [ -f "/lib/netifd/proto/$PROTO.sh" ] \
 		   && ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
@@ -1192,7 +1206,7 @@ fi
 # должна затираться дефолтом). Иначе ставим дефолт по прото; смена прото меняет и
 # правильное значение. Дальше пользователь может переопределить галкой в настройках.
 if [ -n "$MSEC" ]; then
-	if [ "$PROTO" = "modemmanager" ]; then
+	if [ "$PROTO" = "modemmanager" ] || [ "$PROTO" = "mbimp" ]; then
 		# прото modemmanager требует, чтобы MM видел модем - прятать нельзя,
 		# иначе интерфейс останется без IP. Явный выбор здесь игнорируем.
 		uci -q set "5gmodem.$MSEC.mm_exclude=0"
@@ -1208,7 +1222,7 @@ if [ -n "$MSEC" ]; then
 	# пока его не убьют - и модем моргал в MM после смены прото QMI -> MM
 	# (живой случай 31.07.2026: Telit то виден, то нет, метрики скакали).
 	# Симметрично ветке set-exclude 0 в mm-inhibit.sh.
-	if [ "$PROTO" = "modemmanager" ] && [ -n "$AMP" ]; then
+	if { [ "$PROTO" = "modemmanager" ] || [ "$PROTO" = "mbimp" ]; } && [ -n "$AMP" ]; then
 		_mki_ipf="/var/run/5gmodem-mm-inhibit/$AMP.pid"
 		[ -f "$_mki_ipf" ] && { kill "$(cat "$_mki_ipf" 2>/dev/null)" 2>/dev/null; rm -f "$_mki_ipf"; }
 	fi

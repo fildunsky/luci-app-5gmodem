@@ -1285,7 +1285,9 @@ qmicli_p() {
 	_qp_if=$(_qmi_target_iface)
 	_qp_proto=$(uci -q get "network.$_qp_if.proto" 2>/dev/null)
 	_qp_direct=""
-	if [ "$_qp_proto" = "qmi" ]; then
+	if [ "$_qp_proto" = "mbimp" ]; then
+		:
+	elif [ "$_qp_proto" = "qmi" ]; then
 		_qp_direct=1
 	elif ! pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
 		if [ -z "$_qp_if" ] || ! ubus call "network.interface.$_qp_if" status 2>/dev/null \
