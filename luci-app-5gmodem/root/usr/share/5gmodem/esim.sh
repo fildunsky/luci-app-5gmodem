@@ -341,6 +341,20 @@ esim_wdm() {
 # (Cudy TR3000 + DW5821e, proto=mbim): «открываю модуль 5gmodem - отваливается
 # инет». qmi НЕ гейтим: QMI мультиплексирует клиентов штатно (наши метрики так
 # и живут), а у SDX55 eUICC читается ТОЛЬКО по QMI.
+_wdm_owned_by_netifd() {   # $1 - узел /dev/cdc-wdmN
+	[ -n "$1" ] || return 1
+	for _wn in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
+		case "$(uci -q get "network.$_wn.proto")" in
+			mbim|qmi|qmiraw) : ;;
+			*) continue ;;
+		esac
+		case "$(ubus call "network.interface.$_wn" status 2>/dev/null)" in
+			*'"up": true'*|*'"pending": true'*) return 0 ;;
+		esac
+	done
+	return 1
+}
+
 _wdm_owned_by_umbim() {   # $1 - узел /dev/cdc-wdmN
 	[ -n "$1" ] || return 1
 	for _wo in $(uci show network 2>/dev/null | sed -n "s|^network\.\([^.]*\)\.device='$1'\$|\1|p"); do
@@ -926,13 +940,24 @@ esim_active() {   # AT+SIMTYPE: 1 = ESIM
 	case "$(readlink -f "/sys/class/usbmisc/${_ea_w##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _ea_mb="--device-open-mbim" ;;
 	esac
+	_ea_c="/tmp/5gmodem_esim_act_$(printf '%s' "$_ea_w" | tr -c 'A-Za-z0-9' '_')"
+	if ! pidof ModemManager >/dev/null 2>&1 && _wdm_owned_by_netifd "$_ea_w"; then
+		[ "$(cat "$_ea_c" 2>/dev/null)" = 0 ] && return 1
+		return 0
+	fi
 	qmicli -d "$_ea_w" -p $_ea_mb --uim-get-slot-status 2>/dev/null | awk '
-		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; next }
+		/^ *Physical slot [0-9]+:/ { act = 0; euicc = 0; seen = 1; next }
 		/Slot status: *active/     { act = 1 }
 		/Is eUICC: *yes/           { euicc = 1 }
 		act && euicc { found = 1; exit }
-		END { exit(found ? 0 : 1) }
+		END { exit(found ? 0 : (seen ? 1 : 2)) }
 	'
+	_ea_rc=$?
+	case "$_ea_rc" in
+		0) echo 1 > "$_ea_c" 2>/dev/null; return 0 ;;
+		1) echo 0 > "$_ea_c" 2>/dev/null; return 1 ;;
+	esac
+	return 1
 }
 
 
