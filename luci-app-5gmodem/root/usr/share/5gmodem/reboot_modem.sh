@@ -110,9 +110,23 @@ if [ "$MODE" = usbpower ]; then
 	(
 		case "$_m" in
 			disable)
+				_pp=$(readlink -f "$_pd/peer" 2>/dev/null)
+				[ -n "$_pp" ] && [ -w "$_pp/disable" ] || _pp=""
+				_pfirst="$_pd"; _plast="$_pp"
+				if [ -n "$_pp" ]; then
+					_pbus=$(basename "$(dirname "$(dirname "$_pd")")")
+					case "$_pbus" in usb*) ;; *) _pbus="usb${_pbus%%-*}" ;; esac
+					[ "$(cat "/sys/bus/usb/devices/$_pbus/speed" 2>/dev/null)" -ge 5000 ] 2>/dev/null \
+						|| { _pfirst="$_pp"; _plast="$_pd"; }
+					echo 1 > "$_pp/disable" 2>/dev/null
+				fi
 				echo 1 > "$_pd/disable" 2>/dev/null
 				sleep 6
-				echo 0 > "$_pd/disable" 2>/dev/null
+				echo 0 > "$_pfirst/disable" 2>/dev/null
+				if [ -n "$_plast" ]; then
+					sleep 2
+					echo 0 > "$_plast/disable" 2>/dev/null
+				fi
 				# Модем мог не вернуться на шину (отчёт #25: порт корневого
 				# хаба, «device descriptor read -110» до сброса контроллера).
 				# Проверяем, повторно снимаем disable и пишем в журнал громко.
@@ -122,6 +136,7 @@ if [ "$MODE" = usbpower ]; then
 				done
 				if [ ! -e "/sys/bus/usb/devices/$_p" ]; then
 					echo 0 > "$_pd/disable" 2>/dev/null
+					[ -n "$_pp" ] && echo 0 > "$_pp/disable" 2>/dev/null
 					logger -p daemon.err -t 5gmodem "usbpower: $_p did NOT come back after port disable - disable=$(cat "$_pd/disable" 2>/dev/null); a USB controller reset or reboot may be needed"
 				fi
 				;;

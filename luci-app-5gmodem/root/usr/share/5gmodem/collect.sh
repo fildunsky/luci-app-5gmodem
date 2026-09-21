@@ -2078,7 +2078,7 @@ report() {
 		[ "$RC" = 0 ] && echo "roles are separate - fine"
 		exit 0'
 	run 5  "tty/cdc-wdm in the system" sh -c "ls -l /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan* 2>/dev/null"
-	run 10 "Who holds the ports" sh -c "for f in /dev/ttyUSB* /dev/cdc-wdm*; do [ -e \"\$f\" ] || continue; u=\$(fuser \"\$f\" 2>/dev/null); [ -n \"\$u\" ] && echo \"\$f: \$u\"; done; echo '--- processes ---'; ps w 2>/dev/null | grep -iE 'ModemManager|uqmi|mbim|sms_tool|lpac|gcom' | grep -v grep"
+	run 10 "Who holds the ports" sh -c "for f in /dev/ttyUSB* /dev/cdc-wdm*; do [ -e \"\$f\" ] || continue; u=\$(fuser \"\$f\" 2>/dev/null); [ -n \"\$u\" ] && echo \"\$f: \$u\"; done; echo '--- processes ---'; ps w 2>/dev/null | grep -iE 'ModemManager|uqmi|mbim|sms_tool|lpac|gcom' | grep -v -e grep -e ' sed -E '"
 
 	# ПОЧЕМУ У МОДЕМА НЕТ AT-ПОРТОВ.
 	#
