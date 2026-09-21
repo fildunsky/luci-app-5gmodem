@@ -256,7 +256,7 @@ function applyMgmtMM(j) {
 		var pm = j.allowedmode ? (j.preferredmode || '') : '5g';
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
 			var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
-			var on = (a == am && (b.getAttribute('data-preferred') || '') == pm);
+			var on = (a == am && (pm == 'none' || (b.getAttribute('data-preferred') || '') == pm));
 			b.classList.toggle('tg-current', on);
 		});
 }
@@ -1216,6 +1216,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
+	API: 20801,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

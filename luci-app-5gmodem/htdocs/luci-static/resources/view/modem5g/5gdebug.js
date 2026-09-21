@@ -8,6 +8,7 @@
 'require form';
 'require tools.widgets as widgets';
 'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /*
 	Copyright 2021-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -133,6 +134,11 @@ return view.extend({
 	},
 
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		return Promise.all([
 			/* НЕ ЖДЁМ ОПРОС МОДЕМА. Раньше здесь стоял '5gmodem.sh json' -
 			   полный проход по AT-командам, 8 секунд на живом LT300, и всё это
@@ -758,9 +764,6 @@ return view.extend({
 		if (wdmDriver !== 'cdc_mbim' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'mbimp') {
 			protoAvail['mbimp'] = false;
 		}
-		if (wdmDriver !== 'qmi_wwan' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'qmip') {
-			protoAvail['qmip'] = false;
-		}
 
 		/* ---------------- Настройки модема (бывшая вкладка Modem Settings) --- */
 		var m, s, o;
@@ -868,7 +871,6 @@ return view.extend({
 			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
 			'mbimp': 'MBIM+MM (mbimcli + ModemManager, shared proxy)',
-			'qmip': 'QMI+MM (qmicli + ModemManager, shared proxy)',
 			'qmi': 'QMI (uqmi)',
 			/* Наш прото: тот же uqmi и то же железо (qmi_wwan + cdc-wdm), но
 			   адрес берётся статикой из QMI вместо DHCP-ребёнка. Показываем
@@ -888,7 +890,7 @@ return view.extend({
 		   поднимается FM350: у него нет cdc-wdm, поэтому mbim/qmi/ModemManager с
 		   ним не работают. В protoAvail он был всегда, но отсутствовал в ЭТОМ
 		   списке и в protoLabels - поэтому в выпадашку и не попадал. */
-		[ 'fibocom', 'mbim', 'mbimp', 'qmi', 'qmip', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+		[ 'fibocom', 'mbim', 'mbimp', 'qmi', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
 			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
 		});
 		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,

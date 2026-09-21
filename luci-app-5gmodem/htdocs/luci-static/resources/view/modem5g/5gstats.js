@@ -6,6 +6,7 @@
 'require poll';
 'require view.modem5g.modemtabs as modemtabs';
 'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /* ВКЛАДКА «СТАТИСТИКА».
    Ряды копит stats.sh (RTT аплинков из сторожа, уровень сигнала из снимка
@@ -489,6 +490,11 @@ function refresh() {
 
 return view.extend({
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		return Promise.all([
 			uci.load('5gmodem'),
 			callStats([ 'list' ])

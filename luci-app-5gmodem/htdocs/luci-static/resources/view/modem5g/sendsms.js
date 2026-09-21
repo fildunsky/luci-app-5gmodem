@@ -8,6 +8,8 @@
 'require view.modem5g.modemtabs as modemtabs';
 'require sms-tool-5gm.editors as editors';
 'require sms-tool-5gm.smssettings as smssettings';
+'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /* СПИСОК КОНТАКТОВ - ОДИН ИСТОЧНИК ДЛЯ ВИДЖЕТА И ДЛЯ РАССЫЛКИ.
    Список рисуется ui.Dropdown'ом (единый вид списков в программе), а у него нет
@@ -408,6 +410,11 @@ return view.extend({
 	},
 
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		return Promise.all([
 			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/phonebook.user'), null),
 			uci.load('5gmodem'),

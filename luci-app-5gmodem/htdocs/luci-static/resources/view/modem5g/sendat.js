@@ -7,6 +7,8 @@
 'require view';
 'require view.modem5g.modemtabs as modemtabs';
 'require sms-tool-5gm.editors as editors';
+'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /*
 	Copyright 2022-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -417,6 +419,11 @@ return view.extend({
 	},
 
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		/* Фолбэк-порт для MM-модема: его секция БЕЗ at_port намеренно (порт
 		   принадлежит ModemManager), но физические tty есть - берём ВТОРОЙ
 		   AT-порт активного модема из listmodems (первый обычно занят MM).

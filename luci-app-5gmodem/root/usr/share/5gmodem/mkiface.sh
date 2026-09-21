@@ -860,14 +860,6 @@ if [ "$PROTO" = "mbimp" ]; then
 		exit 1
 	fi
 fi
-if [ "$PROTO" = "qmip" ]; then
-	_mki_wdrv=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-none}")/device/driver" 2>/dev/null)" 2>/dev/null)
-	if [ "$_mki_wdrv" != "qmi_wwan" ]; then
-		logger -t 5gmodem "mkiface: QMI+MM needs a QMI control channel (driver qmi_wwan), but ${DEV:-the modem} is on ${_mki_wdrv:-no cdc-wdm node} - not creating the interface"
-		printf '{"result":"QMI+MM needs a QMI composition, this modem is on %s","proto":"qmip"}\n' "${_mki_wdrv:-no cdc-wdm node}"
-		exit 1
-	fi
-fi
 [ "$PROTO" = "modemmanager" ] && _MM_WANT=1
 proto_in proxy "$PROTO" && [ -f /lib/netifd/proto/modemmanager.sh ] && _MM_WANT=1
 [ "$_MM_WANT" = "1" ] || /usr/share/5gmodem/mmneed.sh check 2>/dev/null | grep -q '"needed":1' && _MM_WANT=1
@@ -1082,7 +1074,7 @@ ubus call network reload >/dev/null 2>&1
 # мёртв («Не поддерживаемый тип протокола»).
 if proto_in proxy "$PROTO"; then
 	if ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
-		logger -t 5gmodem "mkiface: protocol $([ "$PROTO" = qmip ] && echo QMI+MM || echo MBIM+MM) is not registered with netifd yet - restarting the network to register it (interfaces will briefly drop)"
+		logger -t 5gmodem "mkiface: protocol MBIM+MM is not registered with netifd yet - restarting the network to register it (interfaces will briefly drop)"
 		/etc/init.d/network restart >/dev/null 2>&1
 	fi
 elif proto_in own "$PROTO"; then

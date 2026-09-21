@@ -5642,5 +5642,5 @@ msgstr "调制解调器拒绝删除该消息（错误 %s）"
 msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
 msgstr "ModemManager 仍在识别调制解调器：频段和网络模式将在一两分钟内自动解锁，连接不受影响。"
 
-msgid "QMI+MM (shared proxy, ModemManager for management)"
-msgstr "QMI+MM（共享代理，由 ModemManager 管理）"
+msgid "The browser keeps outdated files of this page. Clear the browser cache (Ctrl+Shift+R) and reload the page."
+msgstr "浏览器仍保留此页面的旧文件。请清除浏览器缓存（Ctrl+Shift+R）后重新加载页面。"

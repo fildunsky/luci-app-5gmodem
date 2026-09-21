@@ -5713,5 +5713,5 @@ msgstr "модем отказался удалить сообщение (оши�
 msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
 msgstr "ModemManager ещё подхватывает модем: диапазоны и режим сети разблокируются сами через минуту-две, соединение при этом не затрагивается."
 
-msgid "QMI+MM (shared proxy, ModemManager for management)"
-msgstr "QMI+MM (общий прокси, ModemManager для управления)"
+msgid "The browser keeps outdated files of this page. Clear the browser cache (Ctrl+Shift+R) and reload the page."
+msgstr "Браузер держит устаревшие файлы этой страницы. Очистите кэш браузера (Ctrl+Shift+R) и перезагрузите страницу."

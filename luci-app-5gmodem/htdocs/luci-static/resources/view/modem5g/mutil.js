@@ -120,14 +120,14 @@ function sortNetModes(modes) {
 
 function protoLabel(v) {
 	return ({
-		'qmi': 'QMI', 'qmiraw': 'QMI raw-ip', 'mbim': 'MBIM', 'mbimp': 'MBIM+MM', 'qmip': 'QMI+MM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
+		'qmi': 'QMI', 'qmiraw': 'QMI raw-ip', 'mbim': 'MBIM', 'mbimp': 'MBIM+MM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
 		'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G', 'modemmanager': 'ModemManager',
 		'fibocom': 'Fibocom', 'dhcp': 'DHCP', 'ecm': 'ECM', 'rndis': 'RNDIS', 'sierra': 'Sierra'
 	})[String(v || '').toLowerCase()] || (v || '');
 }
 
-var MM_PROTOS = [ 'modemmanager', 'mbimp', 'qmip' ];
-var SHARED_PROXY_PROTOS = [ 'mbimp', 'qmip' ];
+var MM_PROTOS = [ 'modemmanager', 'mbimp' ];
+var SHARED_PROXY_PROTOS = [ 'mbimp' ];
 
 function protoKey(p) {
 	return String(p == null ? '' : p).toLowerCase();
@@ -290,6 +290,7 @@ function flagEmoji(cc) {
 }
 
 return baseclass.extend({
+	API: 20801,
 	flagEmoji: flagEmoji,
 	ratLabel: ratLabel,
 	formatModeDisplay: formatModeDisplay,

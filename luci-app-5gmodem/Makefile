@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=2.8.0
+PKG_VERSION:=2.8.1
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -56,21 +56,33 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
-	/etc/init.d/5gmodem-mm-inhibit enable 2>/dev/null
-	/etc/init.d/5gmodem-mm-inhibit restart 2>/dev/null
+	_5gm_upgrade=0
+	[ -n "$$(uci -q get 5gmodem.@5gmodem[0].widgets_seeded 2>/dev/null)" ] && _5gm_upgrade=1
+	_5gm_svc() {
+		[ -x "/etc/init.d/$$1" ] || return 0
+		if [ ! -e "/etc/5gmodem/.svc/$$1" ]; then
+			mkdir -p /etc/5gmodem/.svc 2>/dev/null
+			: > "/etc/5gmodem/.svc/$$1" 2>/dev/null
+			[ "$$_5gm_upgrade" = 1 ] || /etc/init.d/$$1 enable 2>/dev/null
+		fi
+		if /etc/init.d/$$1 enabled 2>/dev/null; then
+			/etc/init.d/$$1 $$2 2>/dev/null
+		else
+			/etc/init.d/$$1 stop 2>/dev/null
+		fi
+		return 0
+	}
+	_5gm_svc 5gmodem-mm-inhibit restart
 	# Ре-бинд usb-serial портов на каждом буте (new_id не переживает ребут,
 	# coldplug-hotplug в procd не приходит). start сразу накатит порты и на уже
 	# воткнутый при установке модем. См. 05c6:9025/90d5/90d6.
-	/etc/init.d/5gmodem-usbports enable 2>/dev/null
-	/etc/init.d/5gmodem-usbports start 2>/dev/null
+	_5gm_svc 5gmodem-usbports start
 	# Сторож сессии данных: сеть может пересоздать её с новым адресом (смена
 	# макрорегиона в поездке), а netifd за этим не следит - см. sessionwatch.sh.
-	/etc/init.d/5gmodem-sessionwatch enable 2>/dev/null
-	/etc/init.d/5gmodem-sessionwatch restart 2>/dev/null
+	_5gm_svc 5gmodem-sessionwatch restart
 	# Диоды кнопок: приводим их к фактическому состоянию сервиса ОДИН РАЗ при
 	# загрузке (после ребута они оставались тёмными до первого нажатия).
-	/etc/init.d/5gmodem-btnleds enable 2>/dev/null
-	/etc/init.d/5gmodem-btnleds start 2>/dev/null
+	_5gm_svc 5gmodem-btnleds start
 	modprobe rndis_host 2>/dev/null
 	modprobe cdc_ether 2>/dev/null
 	# Снять вредные правила usb_modeswitch (см. usbmode-fix.sh): у части
@@ -153,6 +165,7 @@ done
 	# получает 304 на любой If-Modified-Since. Живой случай 31.07.2026: на
 	# свежепоставленной 2.1.0 карточка SSClash горела красным - в браузере
 	# крутился netpri.js недельной давности при здоровом бэкенде.
+	_5gm_ts=$$(( 2114380800 + $$(date +%s) % 31536000 ))
 	find /www/luci-static/resources/view/modem5g \
 		/www/luci-static/resources/view/status \
 		/www/luci-static/resources/sms-tool-5gm \
@@ -160,8 +173,7 @@ done
 		/www/luci-static/resources/protocol/fibocom.js \
 		/www/luci-static/resources/protocol/qmiraw.js \
 		/www/luci-static/resources/protocol/mbimp.js \
-		/www/luci-static/resources/protocol/qmip.js \
-		/www/luci-static/resources/icons -exec touch {} + 2>/dev/null
+		/www/luci-static/resources/icons -exec touch -d "@$$_5gm_ts" {} + 2>/dev/null
 }
 exit 0
 endef

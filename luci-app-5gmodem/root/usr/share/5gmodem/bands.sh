@@ -811,7 +811,7 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# при пустых полях.
 	_BJCM=$(cat "$_BJF.m" 2>/dev/null)
 	_BJTTL=300
-	if { [ "$_BJP" = "mbimp" ] || [ "$_BJP" = "qmip" ]; } && grep -q '"readonly": *1' "$_BJF" 2>/dev/null; then
+	if [ "$_BJP" = "mbimp" ] && grep -q '"readonly": *1' "$_BJF" 2>/dev/null; then
 		_BJTTL=15
 	fi
 	grep -q '"nolive": *1' "$_BJF" 2>/dev/null && _BJTTL=15
@@ -1283,7 +1283,7 @@ if [ "$_BAND_VIA" = "mmcli" ]; then
 	[ -n "$_IFACE" ] || _IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
 	_bs_ipr=$(uci -q get "network.$_IFACE.proto" 2>/dev/null)
 	_BAND_NO_TAKEOVER=""
-	if [ "$_bs_ipr" = "mbimp" ] || [ "$_bs_ipr" = "qmip" ]; then
+	if [ "$_bs_ipr" = "mbimp" ]; then
 		_BAND_NO_TAKEOVER=1
 		_BANDS_APPLY_LIVE=1
 		_MBIMP_IFACE="$_IFACE"
@@ -1847,8 +1847,23 @@ case $1 in
 			uci -q delete "network.$_smm_if.preferredmode"
 		else
 			uci -q set "network.$_smm_if.allowedmode=$2"
-			if [ -n "$3" ]; then
-				uci -q set "network.$_smm_if.preferredmode=$3"
+			_smm_pref="$3"
+			case "$2" in
+				*"|"*)
+					_smm_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(active_modem)" 2>/dev/null)
+					_smm_sup=""
+					[ -n "$_smm_idx" ] && _smm_sup=$(mmcli -m "$_smm_idx" -K 2>/dev/null \
+						| sed -n 's/^modem\.generic\.supported-modes\.value\[[0-9]*\][[:space:]]*:[[:space:]]*//p')
+					if [ -n "$_smm_pref" ] && [ -n "$_smm_sup" ] \
+					   && ! printf '%s\n' "$_smm_sup" | grep -qxF "allowed: $(echo "$2" | sed 's/|/, /g'); preferred: $_smm_pref"; then
+						logger -t 5gmodem "setmodemm: the modem does not support preferred '$_smm_pref' with '$2' - using none"
+						_smm_pref=""
+					fi
+					[ -n "$_smm_pref" ] || _smm_pref="none"
+					;;
+			esac
+			if [ -n "$_smm_pref" ]; then
+				uci -q set "network.$_smm_if.preferredmode=$_smm_pref"
 			else
 				uci -q delete "network.$_smm_if.preferredmode"
 			fi

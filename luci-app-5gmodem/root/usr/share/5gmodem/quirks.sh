@@ -425,7 +425,7 @@ mm_at_allowed() {
 	[ -n "$(mm_at_fragile "$_maa_vp")" ] && return 2
 	_maa_if=$(uci -q get "5gmodem.$2.network" 2>/dev/null)
 	case "$(uci -q get "network.$_maa_if.proto" 2>/dev/null)" in
-		mbimp|qmip)
+		mbimp)
 			ubus call "network.interface.$_maa_if" status 2>/dev/null | grep -q '"up": true'
 			return $? ;;
 	esac

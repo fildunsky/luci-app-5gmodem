@@ -9,6 +9,8 @@
 'require rpc';
 'require form';
 'require dom';
+'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /* КОММИТ ЧЕРЕЗ СЕССИЮ БРАУЗЕРА, А НЕ ВНЕШНИМ СКРИПТОМ.
    Отложенные правки LuCI живут В СЕССИИ rpcd, а НЕ в общем /tmp/.uci - там
@@ -116,7 +118,7 @@ var CACHED_RES = [
 	'view/modem5g/sendat.js',
 	'view/modem5g/bandsui.js', 'view/modem5g/healthform.js', 'view/modem5g/buttons.js',
 	'view/modem5g/align.js', 'view/modem5g/5gstats.js', 'view/modem5g/modem.css',
-	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js', 'protocol/qmip.js'
+	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js'
 ];
 
 /* Принудительно перетянуть наши ресурсы МИМО кэша браузера (fetch cache:reload). */
@@ -269,6 +271,11 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 
 return view.extend({
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		return Promise.all([
 			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/buttons.sh', [ 'services' ]), '{}'),

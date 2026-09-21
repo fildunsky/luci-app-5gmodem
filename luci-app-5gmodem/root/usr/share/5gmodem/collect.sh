@@ -2430,7 +2430,7 @@ report() {
 }
 
 _proto_names() {
-	sed -E '/^[A-Za-z0-9_@]+[.][^= ]*=/!{s/(^|[^A-Za-z0-9_])mbimp([^.A-Za-z0-9_-]|$)/\1MBIM+MM\2/g;s/(^|[^A-Za-z0-9_])qmip([^.A-Za-z0-9_-]|$)/\1QMI+MM\2/g}'
+	sed -E '/^[A-Za-z0-9_@]+[.][^= ]*=/!{s/(^|[^A-Za-z0-9_])mbimp([^.A-Za-z0-9_-]|$)/\1MBIM+MM\2/g}'
 }
 
 case "$1" in

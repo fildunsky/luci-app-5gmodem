@@ -5516,5 +5516,5 @@ msgstr "モデムがメッセージの削除を拒否しました (エラー %s)
 msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
 msgstr "ModemManager がモデムを認識中です。バンドとネットワークモードは 1～2 分で自動的に操作可能になります。接続には影響しません。"
 
-msgid "QMI+MM (shared proxy, ModemManager for management)"
-msgstr "QMI+MM (共有プロキシ、管理は ModemManager)"
+msgid "The browser keeps outdated files of this page. Clear the browser cache (Ctrl+Shift+R) and reload the page."
+msgstr "ブラウザがこのページの古いファイルを保持しています。ブラウザのキャッシュを消去 (Ctrl+Shift+R) して、ページを再読み込みしてください。"

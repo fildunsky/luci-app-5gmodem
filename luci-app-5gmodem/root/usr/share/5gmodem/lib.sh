@@ -15,18 +15,18 @@
 
 _proto_cls() {
 	case "$1" in
-		wdm)     _PCL="mbim|mbimp|qmi|qmip|qmiraw" ;;
-		wdmdev)  _PCL="mbim|mbimp|qmi|qmip|qmiraw|ncm" ;;
+		wdm)     _PCL="mbim|mbimp|qmi|qmiraw" ;;
+		wdmdev)  _PCL="mbim|mbimp|qmi|qmiraw|ncm" ;;
 		direct)  _PCL="qmi|qmiraw|mbim" ;;
 		uqmi)    _PCL="qmi|qmiraw" ;;
-		proxy)   _PCL="mbimp|qmip" ;;
-		mm)      _PCL="modemmanager|mbimp|qmip" ;;
+		proxy)   _PCL="mbimp" ;;
+		mm)      _PCL="modemmanager|mbimp" ;;
 		nomm)    _PCL="qmi|qmiraw|mbim|xmm|ncm|atc|3g|wwan|ppp|fibocom" ;;
 		at)      _PCL="fibocom|atc|xmm|ncm|3g|wwan" ;;
 		serial)  _PCL="xmm|ncm|atc|3g|wwan|ppp" ;;
 		dialtty) _PCL="xmm|atc" ;;
-		own)     _PCL="fibocom|qmiraw|mbimp|qmip" ;;
-		modem)   _PCL="mbim|mbimp|qmi|qmip|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|wwan|ppp" ;;
+		own)     _PCL="fibocom|qmiraw|mbimp" ;;
+		modem)   _PCL="mbim|mbimp|qmi|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|wwan|ppp" ;;
 		*)       _PCL="" ;;
 	esac
 }

@@ -23,6 +23,7 @@ var HBIN = '/usr/share/5gmodem/health.sh';
 var NBIN = '/usr/share/5gmodem/netpri.sh';
 
 return baseclass.extend({
+	API: 20801,
 	/* Данные формы: конфиг сторожа + список аплинков (для лестниц лечения). */
 	load: function() {
 		return Promise.all([

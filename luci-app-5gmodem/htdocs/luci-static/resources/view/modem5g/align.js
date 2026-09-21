@@ -4,6 +4,8 @@
 'require dom';
 'require fs';
 'require view.modem5g.modemtabs as modemtabs';
+'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 function loadCss() {
 	if (document.getElementById('tg-modem-css')) return;
@@ -261,7 +263,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return Promise.resolve(); },
+	load: function() { return fresh.check(20801, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();

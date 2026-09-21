@@ -13,6 +13,8 @@
 'require poll';
 'require dom';
 'require tools.widgets as widgets';
+'require view.modem5g.healthform as healthform';
+'require view.modem5g.fresh as fresh';
 
 /*
 	Copyright 2021-2025 Rafał Wabik - IceG - From eko.one.pl forum
@@ -3680,6 +3682,11 @@ simDialog: baseclass.extend({
 	   mmIdx получаем в фоне: он нужен только кнопкам режимов/бендов, а блок
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ bandsui, extip, modemtabs, mutil, netpri, healthform ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		/* Тёплые кэши в localStorage заводятся под ключ модема и раньше жили
 		   вечно (см. mutil.lsSweep): чистим то, к чему не обращались месяц. */
 		mutil.lsSweep([ 'bands5g2-', 'bands5g-', '5gmodem.esim.active', '5gmodem.ussd.supported',

@@ -674,8 +674,7 @@ _sweep_tmp() {
 		-o -name '5gmodem_uim.[0-9]*' -o -name '5gmodem_ttl.[0-9]*.nft' \
 		-o -name '5gmodem_metrics_*.p[0-9]*' \
 		-o -name '.tgcidr.*' \
-		-o -name 'mbimp.[0-9]*.out' -o -name 'qmip.[0-9]*.out' \
-		-o -name 'mbimp-keeper.[0-9]*.out' -o -name 'qmip-keeper.[0-9]*.out' \
+		-o -name 'mbimp.[0-9]*.out' -o -name 'mbimp-keeper.[0-9]*.out' \
 		-o -name '5gmodem_fcc.[0-9]*' -o -name '5gmodem_qmipool.[0-9]*' \
 	\) -mmin +10 -exec rm -f {} + 2>/dev/null
 	# eSIM - ОТДЕЛЬНЫМ ПОРОГОМ: сторож загрузки профиля живёт 600 с, и десять

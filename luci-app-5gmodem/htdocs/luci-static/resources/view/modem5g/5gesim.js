@@ -4,6 +4,8 @@
 'require ui';
 'require uci';
 'require view.modem5g.modemtabs as modemtabs';
+'require view.modem5g.mutil as mutil';
+'require view.modem5g.fresh as fresh';
 
 /*
 	Отдельная вкладка «eSIM» — управление профилями eUICC активного модема
@@ -235,6 +237,11 @@ return view.extend({
 	handleReset: null,
 
 	load: function() {
+		var self = this, args = arguments;
+		return fresh.check(20801, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+	},
+
+	_load5g: function() {
 		/* РАНЬШЕ здесь была СИНХРОННАЯ status-probe: CCHO-проба eUICC занимает
 		   секунды (FM350), и всё это время LuCI крутил спиннер на ПУСТОЙ
 		   странице. Теперь load() мгновенный: status-cached отдаёт последний
