@@ -53,7 +53,7 @@ _esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 # Хост сервиса - подпись под адресом («откуда узнали»).
 _host() { printf '%s' "$1" | sed -e 's#^[a-zA-Z]*://##' -e 's#/.*##' -e 's#:.*##'; }
 
-_defdev() { ip -4 route show default 2>/dev/null | awk 'NR==1{print $5}'; }
+_defdev() { ip -4 route show default 2>/dev/null | awk 'NR==1{for(i=1;i<NF;i++) if($i=="dev"){print $(i+1); exit}}'; }
 
 # Имя из интерфейса сети (uci) или прямо имя устройства - на выходе устройство.
 _devof() {

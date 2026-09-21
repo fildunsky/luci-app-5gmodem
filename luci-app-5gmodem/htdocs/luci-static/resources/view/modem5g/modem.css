@@ -1388,7 +1388,6 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   font-weight: 600;
   font-size: 0.9em;
   line-height: 1.6;
-  text-transform: uppercase;
   letter-spacing: 0.02em;
 }
 .tg-code {
@@ -2773,7 +2772,7 @@ justify-content:center;padding:0;width:2.35em;height:2.35em}
 
 .tg-hist-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
   gap: 10px;
 }
 .tg-hist-card {

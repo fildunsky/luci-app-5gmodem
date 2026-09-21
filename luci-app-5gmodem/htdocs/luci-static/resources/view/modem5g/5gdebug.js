@@ -7,6 +7,7 @@
 'require uci';
 'require form';
 'require tools.widgets as widgets';
+'require view.modem5g.mutil as mutil';
 
 /*
 	Copyright 2021-2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -302,7 +303,7 @@ return view.extend({
 			}
 			/* Видимость для MM отмечаем, только когда она РАСХОДИТСЯ с протоколом:
 			   совпадение - норма, а расхождение рвёт связь (MM отбирает канал). */
-			var isMM = (String(p.proto).toLowerCase() === 'modemmanager');
+			var isMM = mutil.isMMProto(p.proto);
 			if (p.mm_exclude === '0' && !isMM && p.proto) {
 				out.push({ txt: _('visible to ModemManager'), color: '#e58a00' });
 			} else if (p.mm_exclude === '1' && isMM) {
@@ -372,10 +373,7 @@ return view.extend({
 			   регистр. Храним как надо протоколу, показываем читаемо: IPv4v6. */
 			/* Общепринятые сокращения - заглавными, собственные имена прото
 			   (fibocom, modemmanager) - как есть. */
-			var protoNice = ({
-				'qmi': 'QMI', 'mbim': 'MBIM', 'ncm': 'NCM', 'xmm': 'XMM',
-				'atc': 'ATC', 'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G'
-			})[String(p.proto || '').toLowerCase()] || (p.proto || '—');
+			var protoNice = mutil.protoLabel(p.proto) || '—';
 			/* У модема без AT-портов протокол интерфейса всегда dhcp, и писать это
 			   в карточке бесполезно: важно не как поднят интерфейс, а что модемом
 			   правит его собственный веб-интерфейс, а не мы. */
@@ -710,7 +708,7 @@ return view.extend({
 				put('dbg-modem', j.modem + modeSuffix(j));
 				put('dbg-firmware', j.firmware);
 				put('dbg-cport', j.cport);
-				put('dbg-protocol', j.protocol);
+				put('dbg-protocol', mutil.protoLabel(j.protocol));
 
 				var t = j.mtemp;
 				if (t != null && String(t).length > 1 && String(t).indexOf(' ') < 0 && String(t) != '-') {
@@ -760,6 +758,9 @@ return view.extend({
 		if (wdmDriver !== 'cdc_mbim' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'mbimp') {
 			protoAvail['mbimp'] = false;
 		}
+		if (wdmDriver !== 'qmi_wwan' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'qmip') {
+			protoAvail['qmip'] = false;
+		}
 
 		/* ---------------- Настройки модема (бывшая вкладка Modem Settings) --- */
 		var m, s, o;
@@ -793,7 +794,7 @@ return view.extend({
 		o.remove = function() { return Promise.resolve(); };
 		(uci.sections('network', 'interface') || []).forEach(function(iface) {
 			var nm = iface['.name'];
-			if (nm && nm != 'loopback') { o.value(nm, nm + (iface.proto ? ' (' + iface.proto + ')' : '')); }
+			if (nm && nm != 'loopback') { o.value(nm, nm + (iface.proto ? ' (' + mutil.protoLabel(iface.proto) + ')' : '')); }
 		});
 
 		o = s.option(form.Value, 'device',
@@ -867,6 +868,7 @@ return view.extend({
 			'fibocom': 'Fibocom (AT-dial, FM350)',
 			'mbim': 'MBIM (umbim)',
 			'mbimp': 'MBIM+MM (mbimcli + ModemManager, shared proxy)',
+			'qmip': 'QMI+MM (qmicli + ModemManager, shared proxy)',
 			'qmi': 'QMI (uqmi)',
 			/* Наш прото: тот же uqmi и то же железо (qmi_wwan + cdc-wdm), но
 			   адрес берётся статикой из QMI вместо DHCP-ребёнка. Показываем
@@ -886,7 +888,7 @@ return view.extend({
 		   поднимается FM350: у него нет cdc-wdm, поэтому mbim/qmi/ModemManager с
 		   ним не работают. В protoAvail он был всегда, но отсутствовал в ЭТОМ
 		   списке и в protoLabels - поэтому в выпадашку и не попадал. */
-		[ 'fibocom', 'mbim', 'mbimp', 'qmi', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
+		[ 'fibocom', 'mbim', 'mbimp', 'qmi', 'qmip', 'qmiraw', 'ncm', 'xmm', 'atc', 'wwan', '3g', 'modemmanager' ].forEach(function(p) {
 			if (protoAvail[p]) { o.value(p, protoLabels[p]); }
 		});
 		/* если вдруг ни одного модемного обработчика не нашли - оставим базовые,
@@ -905,7 +907,7 @@ return view.extend({
 		   НЕ делаем: возврат на kernel-прото не обязан включать инхибицию молча -
 		   у пользователя может быть причина оставить модем видимым для MM. */
 		o.onchange = function(ev, section_id, value) {
-			if (value !== 'modemmanager') { return; }
+			if (!mutil.isMMProto(value)) { return; }
 			var f = this.map.lookupOption('_mm_exclude', section_id);
 			var el = f && f[0] && f[0].getUIElement(section_id);
 			if (el && el.getValue() === '1') {
@@ -1230,7 +1232,7 @@ return view.extend({
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
-		if (roamHilink || roamProto === 'mbim' || roamProto === 'mbimp' || roamProto === 'modemmanager' || roamProto === 'fibocom') {
+		if (roamHilink || mutil.isMMProto(roamProto) || roamProto === 'mbim' || roamProto === 'fibocom') {
 		o = s.option(form.Flag, '_roaming', _('Allow data roaming'),
 			_('When off, the modem registers on the network but the data connection is not established while roaming - so no traffic is billed at roaming rates. SMS and calls are not affected.'));
 		o.default = '0';
@@ -1299,7 +1301,7 @@ return view.extend({
 			if (v === '0' || v === '1') { return v; }
 			// умолчание совпадает с логикой mm-inhibit.sh: прячем kernel-прото
 			var p = String(uci.get('network', mIfName, 'proto') || '');
-			return (p && p !== 'modemmanager') ? '1' : '0';
+			return (p && !mutil.isMMProto(p)) ? '1' : '0';
 		};
 
 		/* AT-опрос модема под ModemManager. По умолчанию ворота в quirks.sh
@@ -1308,7 +1310,7 @@ return view.extend({
 		   при поднятой сессии. Галка - явная воля владельца: опрашивать всегда,
 		   ради температуры/несущих/антенн, которых у mmcli нет. Показываем
 		   только у modemmanager-интерфейса: у остальных порт и так наш. */
-		if (String(uci.get('network', mIfName, 'proto') || '') === 'modemmanager') {
+		if (mutil.isMMProto(uci.get('network', mIfName, 'proto'))) {
 		o = s.option(form.Flag, '_mm_at', _('AT polling under ModemManager'),
 			_('Read temperature, carrier aggregation and other vendor metrics over the AT port while ModemManager drives the modem. Off by default for firmware known to drop the data session on a parallel AT exchange (Dell DW5821e / Foxconn T77W968); other modems are polled only while the session is up. A DW5821e with two AT ports does not need this switch: after a reboot its second port is kept away from ModemManager and polled automatically. Enable only if the link stays stable with the page open.'));
 		o.default = '0';
@@ -1533,12 +1535,12 @@ return view.extend({
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
-					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, out.proto === 'mbimp' ? 'MBIM+MM' : out.proto)), 'info');
+					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, mutil.protoLabel(out.proto))), 'info');
 					// The Modem Information block is rendered once and not polled, so
 					// its protocol badge would keep showing the OLD protocol (e.g. mbim)
 					// until a manual page reload. Update it to the new protocol now.
 					var pb = document.querySelector('.tg-proto-badge');
-					if (pb && out.proto) { pb.textContent = out.proto; }
+					if (pb && out.proto) { pb.textContent = mutil.protoLabel(out.proto); }
 					/* И карточки профилей - у них поменялись интерфейс, протокол
 					   и APN. uci-кэш вьюхи при этом устарел, но карточки читают
 					   состояние с роутера, поэтому показывают уже новое. */
@@ -1549,7 +1551,7 @@ return view.extend({
 					   его вердикт и адрес, где искать (кейс MV31-W: пользователь
 					   неделями видел немую ошибку и грешил на программу). */
 					var _mkWhy = (out.result && out.result !== 'created')
-						? _('backend said "%s" for protocol "%s"').format(out.result, out.proto || '?')
+						? _('backend said "%s" for protocol "%s"').format(out.result, mutil.protoLabel(out.proto) || '?')
 						: ((res && res.stderr) ? String(res.stderr).slice(0, 200) : _('empty backend reply'));
 					ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + _mkWhy + '. ' +
 						_('Details are in the system log (logread, tag 5gmodem).')), 'error');

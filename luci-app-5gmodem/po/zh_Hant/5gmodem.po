@@ -5607,3 +5607,6 @@ msgstr "數據機拒絕刪除該訊息（錯誤 %s）"
 
 msgid "ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected."
 msgstr "ModemManager 仍在識別數據機：頻段與網路模式將在一兩分鐘內自動解鎖，連線不受影響。"
+
+msgid "QMI+MM (shared proxy, ModemManager for management)"
+msgstr "QMI+MM（共用代理，由 ModemManager 管理）"

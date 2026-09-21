@@ -1,0 +1,7 @@
+## QCAINFO without pcc -> QENG path; EM160R-GL is listed in this profile header
+EARFCN=3048
+PCI=98
+RSRP=-93
+RSRQ=-10
+RSSI=-62
+SINR=13

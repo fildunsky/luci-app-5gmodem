@@ -1,0 +1,2 @@
+## 4pda 1106442 #2836 (RM520NGLAP-M20-HP, AT через mbimcli --quectel-set-command)
++QUIMSLOT: 1

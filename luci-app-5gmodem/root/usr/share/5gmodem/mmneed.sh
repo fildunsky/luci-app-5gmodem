@@ -86,8 +86,8 @@ mm_needed() {
 	return 1
 }
 _mbimp_ifaces() {
-	[ -f /lib/netifd/proto/mbimp.sh ] || return 0
-	uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.proto='\?mbimp'\?\$/\1/p"
+	[ -f /lib/netifd/proto/mbimp.sh ] || [ -f /lib/netifd/proto/qmip.sh ] || return 0
+	uci -q show network 2>/dev/null | sed -nE "s/^network\.([^.]*)\.proto='?($(proto_re proxy))'?\$/\1/p"
 }
 
 # Жив ли MM. Раньше грепали «ModemManager --» - procd запускает бинарь БЕЗ

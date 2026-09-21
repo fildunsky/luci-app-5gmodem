@@ -1,0 +1,3 @@
+## 4pda 994474 #1055 - EP06-E reply; EM06 is the M.2 form of EP06, the QENG/QCAINFO layout is the same
++QCAINFO: "pcc",1301,75,"LTE BAND 3",1,199,-103,-12,-74,15
++QCAINFO: "scc",3300,50,"LTE BAND 7",1,51,-107,-14,-83,9

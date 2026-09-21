@@ -1,0 +1,9 @@
+## 4pda 994474 #42041 (EM12-G, MikroTik at-chat); отступы сняты
++QTEMP: "xo_therm_buf","39"
++QTEMP: "mdm_case_therm","40"
++QTEMP: "pa_therm1","38"
++QTEMP: "tsens_tz_sensor0","41"
++QTEMP: "tsens_tz_sensor1","42"
++QTEMP: "tsens_tz_sensor2","41"
++QTEMP: "tsens_tz_sensor3","41"
++QTEMP: "tsens_tz_sensor4","41"

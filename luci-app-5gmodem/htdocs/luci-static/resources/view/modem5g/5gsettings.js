@@ -116,7 +116,7 @@ var CACHED_RES = [
 	'view/modem5g/sendat.js',
 	'view/modem5g/bandsui.js', 'view/modem5g/healthform.js', 'view/modem5g/buttons.js',
 	'view/modem5g/align.js', 'view/modem5g/5gstats.js', 'view/modem5g/modem.css',
-	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js'
+	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js', 'protocol/qmip.js'
 ];
 
 /* Принудительно перетянуть наши ресурсы МИМО кэша браузера (fetch cache:reload). */

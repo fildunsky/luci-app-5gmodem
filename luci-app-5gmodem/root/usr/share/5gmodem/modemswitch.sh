@@ -191,9 +191,8 @@ at_for_path() {
 		else
 			_afp_if=$(iface_for_path "$1")
 			if [ -n "$_afp_if" ]; then
-				case "$(uci -q get "network.$_afp_if.proto")" in
-					xmm|atc) _afp_skip=$(uci -q get "network.$_afp_if.device") ;;
-				esac
+				proto_in dialtty "$(uci -q get "network.$_afp_if.proto")" \
+					&& _afp_skip=$(uci -q get "network.$_afp_if.device")
 			fi
 			_AFP_SKIP_P="$1"
 			_AFP_SKIP_V="$_afp_skip"
@@ -1551,18 +1550,18 @@ resolve)
 		# setup находит по нему актуальный cdc-wdm. Ставим/обновляем ровно тут -
 		# при пересоздании это делает mkiface, а разбуженный интерфейс мимо него
 		# проходит (живой случай: парковка Telit с device=/dev/cdc-wdm0).
-		case "$(uci -q get "network.$_sl_if.proto")" in
-			qmi|mbim|mbimp|qmiraw)
-				for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \
-				             /sys/bus/usb/devices/"$_sl_p":*/usbmisc/wdm*; do
-					[ -e "$_sl_w" ] || continue
-					_sl_dp=$(dirname "$(dirname "$_sl_w")")
-					uci -q set "network.$_sl_if.device=/dev/$(basename "$_sl_w")"
-					uci -q set "network.$_sl_if.devpath=$_sl_dp"
-					logger -t 5gmodem-resolve "interface $_sl_if: control channel re-bound to $_sl_dp"
-					break
-				done ;;
-		esac
+		if proto_in wdm "$(uci -q get "network.$_sl_if.proto")"; then
+			for _sl_w in /sys/bus/usb/devices/"$_sl_p":*/usbmisc/cdc-wdm* \
+			             /sys/bus/usb/devices/"$_sl_p":*/usbmisc/wdm*; do
+				[ -e "$_sl_w" ] || continue
+				_sl_dp=$(readlink -f "$(dirname "$(dirname "$_sl_w")")")
+				[ -n "$_sl_dp" ] || _sl_dp=$(dirname "$(dirname "$_sl_w")")
+				uci -q set "network.$_sl_if.device=/dev/$(basename "$_sl_w")"
+				uci -q set "network.$_sl_if.devpath=$_sl_dp"
+				logger -t 5gmodem-resolve "interface $_sl_if: control channel re-bound to $_sl_dp"
+				break
+			done
+		fi
 		logger -t 5gmodem-resolve "interface $_sl_if woken up: modem $_sl_p is back"
 	done
 	[ "$_sl_chg" = 1 ] && { uci -q commit network; ubus call network reload >/dev/null 2>&1; }
@@ -1676,7 +1675,7 @@ resolve)
 		[ -n "$p" ] || continue
 		echo " $PRESENT " | grep -q " $p " && continue   # владелец на месте - им займётся ensure_iface
 		ifa=$(uci -q get "$CFG.$s.network"); [ -n "$ifa" ] || continue
-		case "$(uci -q get "network.$ifa.proto")" in qmi|mbim|mbimp|qmiraw) ;; *) continue ;; esac
+		proto_in wdm "$(uci -q get "network.$ifa.proto")" || continue
 		deva=$(uci -q get "network.$ifa.device"); [ -n "$deva" ] || continue
 		owp=$(path_for_wdm "$deva")
 		if [ -n "$owp" ] && [ "$owp" != "$p" ]; then
@@ -1696,11 +1695,9 @@ resolve)
 		# и модуль без неё сбрасывал USB раз в пять минут (полевой отчёт
 		# 14.09.2026). Скрипт сам отсеет чужие vid:pid и уже отправленное на это
 		# подключение модема; в фоне, чтобы resolve не ждал канал.
-		case "$(uci -q get "network.$(uci -q get "$CFG.$s.network").proto" 2>/dev/null)" in
-			qmi|qmiraw|mbim|mbimp)
-				( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
-				;;
-		esac
+		if proto_in wdm "$(uci -q get "network.$(uci -q get "$CFG.$s.network").proto" 2>/dev/null)"; then
+			( "$RES/fcc-unlock.sh" kernel "$p" ) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
+		fi
 		ensure_iface "$p" "$s"
 		# Пометить чужой интерфейс, прилипший к этому модему через
 		# переиспользованную device-ноду (см. orphan_iface_for). Метку читает

@@ -182,7 +182,18 @@ _collect_ping() {
 		# «down» пишем нулём: разрыв в графике должен быть виден, а не сглажен
 		[ "$_cp_st" = up ] || _cp_ms=0
 		_push "ping.$_cp_if" "${_cp_ms:-0}"
-		[ -f "$DIR/ping.$_cp_if.label" ] || _label "ping.$_cp_if" "$(_iface_label "$_cp_if")"
+		_cp_mp=$(uci5g_get "$(sec_for_iface "$_cp_if")" path)
+		if [ ! -f "$DIR/ping.$_cp_if.label" ] || [ -n "$(find "$DIR/ping.$_cp_if.label" -mmin +10 2>/dev/null)" ]; then
+			_cp_w=$(_iface_label "$_cp_if")
+			[ -n "$_cp_mp" ] && _mdm_dup "$_cp_mp" && _cp_w="$_cp_w ($_cp_mp)"
+			_cp_l=""
+			{ read -r _cp_l < "$DIR/ping.$_cp_if.label"; } 2>/dev/null
+			if [ "$_cp_l" = "$_cp_w" ]; then
+				touch "$DIR/ping.$_cp_if.label" 2>/dev/null
+			else
+				_label "ping.$_cp_if" "$_cp_w"
+			fi
+		fi
 	done
 }
 
@@ -190,13 +201,173 @@ _metric_num() {
 	printf '%s\n' "$1" | sed -n 's/^ *\(-\{0,1\}[0-9][0-9]*\(\.[0-9][0-9]*\)\{0,1\}\).*/\1/p' | head -1
 }
 
+_METRICS="signal temp rsrp sinr"
+_MDM_PATHS=""; _MDM_SECS=" "; _MDM_LBL=""; _MDM_OLD=""
+
+_mdm_init() {
+	uci5g_snapshot
+	_mi_lm=$("$RES/listmodems.sh" 2>/dev/null)
+	_MDM_PATHS=$(printf '%s' "$_mi_lm" | jsonfilter -e '@[*].path' 2>/dev/null)
+	_mi_rows=""; _MDM_OLD="$_UCI_NL"
+	for _mi_p in $_MDM_PATHS; do
+		_mi_s=$(secname "$_mi_p")
+		_MDM_SECS="$_MDM_SECS$_mi_s "
+		_mi_m=$(uci5g_get "$_mi_s" model)
+		_mi_o="$_mi_m"
+		[ -n "$_mi_o" ] || _mi_o="$_mi_p"
+		_MDM_OLD="$_MDM_OLD$(printf '%s' "$_mi_o" | sed 's/[^A-Za-z0-9]/_/g') $_mi_s$_UCI_NL"
+		_mi_n=$(printf '%s' "$_mi_lm" | jsonfilter -e "@[@.path=\"$_mi_p\"].alias" 2>/dev/null | head -1)
+		[ -n "$_mi_n" ] || _mi_n="$_mi_m"
+		[ -n "$_mi_n" ] || _mi_n=$(printf '%s' "$_mi_lm" | jsonfilter -e "@[@.path=\"$_mi_p\"].model" 2>/dev/null | head -1)
+		[ -n "$_mi_n" ] || _mi_n="$_mi_p"
+		_mi_rows="$_mi_rows$_mi_p	$_mi_n$_UCI_NL"
+	done
+	_MDM_LBL="$_UCI_NL$(printf '%s' "$_mi_rows" | awk -F'\t' 'NF >= 2 { p[++n] = $1; l[n] = $2; c[$2]++ }
+		END { for (i = 1; i <= n; i++) print p[i] "\t" (c[l[i]] > 1 ? l[i] " (" p[i] ")" : l[i]) }')$_UCI_NL"
+}
+
+_mdm_label() {
+	case "$_MDM_LBL" in *"$_UCI_NL$1	"*) ;; *) return 1 ;; esac
+	_ml_r="${_MDM_LBL#*"$_UCI_NL$1	"}"
+	printf '%s' "${_ml_r%%"$_UCI_NL"*}"
+}
+
+_mdm_dup() {
+	case "$(_mdm_label "$1")" in *" ($1)") return 0 ;; esac
+	return 1
+}
+
+_label_set() {
+	[ -n "$2" ] || return 0
+	_lb_c=""
+	{ read -r _lb_c < "$DIR/$1.label"; } 2>/dev/null
+	[ "$_lb_c" = "$2" ] || _label "$1" "$2"
+}
+
+_sec_id() {
+	_cv=$(uci5g_get "$1" vidpid)
+	_ci=$(uci5g_get "$1" imei | tr -cd '0-9')
+	_cs=$(uci5g_get "$1" serial)
+	case "$_cs" in *[!A-Za-z0-9._:-]*) _cs="" ;; esac
+}
+
+_id_get() {
+	_idv=""; _idi=""; _ids=""
+	[ -f "$DIR/id.$1" ] || return 1
+	read -r _idv _idi _ids 2>/dev/null < "$DIR/id.$1"
+	[ "$_idv" = - ] && _idv=""
+	[ "$_idi" = - ] && _idi=""
+	[ "$_ids" = - ] && _ids=""
+	return 0
+}
+
+_id_put() {
+	printf '%s %s %s\n' "${2:--}" "${3:--}" "${4:--}" > "$DIR/id.$1"
+}
+
+_series_move() {
+	[ -n "$1" ] && [ -n "$2" ] && [ "$1" != "$2" ] || return 0
+	for _sm_m in $_METRICS; do
+		_sm_a="$DIR/$_sm_m.$1"; _sm_b="$DIR/$_sm_m.$2"
+		if [ -f "$_sm_a" ]; then
+			if [ -f "$_sm_b" ]; then
+				sort -n -k1,1 "$_sm_a" "$_sm_b" \
+					| awk -v m="$_sm_m" 'm == "signal" && $2 < 0 { next } $1 != p { print; p = $1 }' \
+					| tail -n "$RING_MAX" > "$_sm_b.tmp" && mv "$_sm_b.tmp" "$_sm_b"
+				rm -f "$_sm_a"
+			else
+				mv "$_sm_a" "$_sm_b"
+			fi
+		fi
+		if [ -f "$_sm_a.label" ]; then
+			[ -f "$_sm_b.label" ] || mv "$_sm_a.label" "$_sm_b.label"
+			rm -f "$_sm_a.label"
+		fi
+	done
+	if _id_get "$1"; then
+		_sm_v="$_idv"; _sm_i="$_idi"; _sm_s="$_ids"
+		if _id_get "$2"; then
+			[ -n "$_idv" ] || _idv="$_sm_v"
+			[ -n "$_idi" ] || _idi="$_sm_i"
+			[ -n "$_ids" ] || _ids="$_sm_s"
+			_id_put "$2" "$_idv" "$_idi" "$_ids"
+		else
+			_id_put "$2" "$_sm_v" "$_sm_i" "$_sm_s"
+		fi
+		rm -f "$DIR/id.$1"
+	fi
+	logger -t 5gmodem "stats: series $1 -> $2"
+}
+
+_imei_secs() {
+	printf '%s\n' "$_UCI5G_SNAP" | grep -c "^$CFG\.m_[^.]*\.imei='\{0,1\}$1'\{0,1\}\$"
+}
+
+_mdm_claim() {
+	for _mc_f in "$DIR"/id.*; do
+		[ -f "$_mc_f" ] || continue
+		_mc_k="${_mc_f##*/id.}"
+		[ "$_mc_k" = "$1" ] && continue
+		case "$_MDM_SECS" in *" $_mc_k "*) continue ;; esac
+		case "$_UCI5G_SNAP" in *"$_UCI_NL$CFG.$_mc_k=modem$_UCI_NL"*|*"$_UCI_NL$CFG.$_mc_k=modem") continue ;; esac
+		_id_get "$_mc_k" || continue
+		_mc_ok=""
+		if [ -n "$_ids" ] && [ -n "$_cs" ]; then
+			[ "$_ids" = "$_cs" ] && ! stub_serial_known "$_ids" && _mc_ok=1
+		elif [ -n "$_idi" ] && [ "$_idi" = "$_ci" ] && [ "$(_imei_secs "$_ci")" = 1 ]; then
+			_mc_ok=1
+		fi
+		[ -n "$_mc_ok" ] && _series_move "$_mc_k" "$1"
+	done
+}
+
+_mdm_reconcile() {
+	for _mr_p in $_MDM_PATHS; do
+		_mr_s=$(secname "$_mr_p")
+		_sec_id "$_mr_s"
+		if _id_get "$_mr_s"; then
+			if [ -n "$_idv" ] && [ -n "$_cv" ] && [ "${_idv%%:*}" != "${_cv%%:*}" ]; then
+				if [ -n "$_idi" ]; then
+					_mr_k="m_park_$_idi"
+				elif [ -n "$_ids" ]; then
+					_mr_k="m_park_s$(printf '%s' "$_ids" | sed 's/[^A-Za-z0-9]/_/g')"
+				else
+					_mr_k="x_${_mr_s#m_}_$(printf '%s' "$_idv" | sed 's/[^A-Za-z0-9]/_/g')"
+				fi
+				_series_move "$_mr_s" "$_mr_k"
+				_id_put "$_mr_s" "$_cv" "$_ci" "$_cs"
+			else
+				_mr_o="$_idv $_idi $_ids"
+				[ -n "$_cv" ] && _idv="$_cv"
+				[ -n "$_idi" ] || _idi="$_ci"
+				[ -n "$_ids" ] || _ids="$_cs"
+				[ "$_mr_o" = "$_idv $_idi $_ids" ] || _id_put "$_mr_s" "$_idv" "$_idi" "$_ids"
+			fi
+		else
+			_id_put "$_mr_s" "$_cv" "$_ci" "$_cs"
+		fi
+		_mdm_claim "$_mr_s"
+	done
+	_mr_done=" "
+	for _mr_f in "$DIR"/signal.* "$DIR"/temp.* "$DIR"/rsrp.* "$DIR"/sinr.*; do
+		[ -f "$_mr_f" ] || continue
+		_mr_k="${_mr_f##*/}"; _mr_k="${_mr_k#*.}"
+		case "$_mr_k" in *.*|m_*|x_*) continue ;; esac
+		case "$_mr_done" in *" $_mr_k "*) continue ;; esac
+		_mr_done="$_mr_done$_mr_k "
+		_mr_to=$(printf '%s' "$_MDM_OLD" | awk -v k="$_mr_k" -v x="x_$_mr_k" '$1 == k { n++; s = $2 } END { if (n == 1) print s; else if (n > 1) print x }')
+		[ -n "$_mr_to" ] && _series_move "$_mr_k" "$_mr_to"
+	done
+}
+
 # Уровень сигнала активного модема из последнего снимка (без похода в порт).
 _collect_signal() {
 	# ВСЕ модемы, а не только активный: ряд соседа копится из его снимка
 	# (подогрев sessionwatch их обновляет), иначе на графике одна линия и
-	# сравнить нечего. Имя ряда - МОДЕЛЬ модема, а не ключ снимка: «2_1_4_»
+	# сравнить нечего. Ключ ряда - секция модема (та же лестница личности, что
+	# у профилей на странице Модем), подпись - алиас или модель: «2_1_4_»
 	# в легенде ни о чём не говорит.
-	for _cs_p in $("$RES/registry.sh" paths 2>/dev/null); do
+	for _cs_p in $_MDM_PATHS; do
 		[ -n "$_cs_p" ] || continue
 		_cs_j=$("$RES/5gmodem.sh" peek "$_cs_p" 2>/dev/null)
 		[ -n "$_cs_j" ] || continue
@@ -211,15 +382,15 @@ _collect_signal() {
 		_cs_v=$(printf '%s' "$_cs_j" | jsonfilter -e '@.signal' 2>/dev/null)
 		case "$_cs_v" in ''|*[!0-9]*) continue ;; esac
 		[ "$_cs_v" -le 100 ] || _cs_v=100
-		_cs_n=$(uci -q get "$CFG.m_$(echo "$_cs_p" | sed 's/[^A-Za-z0-9]/_/g').model" 2>/dev/null)
+		_cs_n=$(_mdm_label "$_cs_p")
 		[ -n "$_cs_n" ] || _cs_n="$_cs_p"
-		_cs_k=$(printf '%s' "$_cs_n" | sed 's/[^A-Za-z0-9]/_/g')
+		_cs_k=$(secname "$_cs_p")
 		# Ряд, начатый прошлой версией, хранит dBm (отрицательные числа) -
 		# проценты с ними в одной шкале не живут, начинаем ряд заново.
 		_cs_old=$(tail -n1 "$DIR/signal.$_cs_k" 2>/dev/null | cut -d' ' -f2)
 		case "$_cs_old" in -*) : > "$DIR/signal.$_cs_k" ;; esac
 		_push "signal.$_cs_k" "$_cs_v"
-		[ -f "$DIR/signal.$_cs_k.label" ] || _label "signal.$_cs_k" "$_cs_n"
+		_label_set "signal.$_cs_k" "$_cs_n"
 		# Температура - из того же снимка (поле temp, «45 C» -> 45). Отдают не
 		# все модули (у L850/XMM датчика нет вовсе) - тогда ряда просто не будет.
 		# Поле называется mtemp (temp в снимке НЕТ), значение приходит с
@@ -228,7 +399,7 @@ _collect_signal() {
 			| sed -n 's/^ *\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1)
 		if [ -n "$_cs_t" ]; then
 			_push "temp.$_cs_k" "$_cs_t"
-			[ -f "$DIR/temp.$_cs_k.label" ] || _label "temp.$_cs_k" "$_cs_n"
+			_label_set "temp.$_cs_k" "$_cs_n"
 		fi
 		_cs_rp=$(_metric_num "$(printf '%s' "$_cs_j" | jsonfilter -e '@.rsrp' 2>/dev/null)")
 		_cs_sn=$(_metric_num "$(printf '%s' "$_cs_j" | jsonfilter -e '@.sinr' 2>/dev/null)")
@@ -238,11 +409,11 @@ _collect_signal() {
 		fi
 		if [ -n "$_cs_rp" ]; then
 			_push "rsrp.$_cs_k" "$_cs_rp"
-			[ -f "$DIR/rsrp.$_cs_k.label" ] || _label "rsrp.$_cs_k" "$_cs_n"
+			_label_set "rsrp.$_cs_k" "$_cs_n"
 		fi
 		if [ -n "$_cs_sn" ]; then
 			_push "sinr.$_cs_k" "$_cs_sn"
-			[ -f "$DIR/sinr.$_cs_k.label" ] || _label "sinr.$_cs_k" "$_cs_n"
+			_label_set "sinr.$_cs_k" "$_cs_n"
 		fi
 	done
 }
@@ -260,11 +431,12 @@ _collect_traffic() {
 		_ct_tx=$(cat "/sys/class/net/$_ct_dev/statistics/tx_bytes" 2>/dev/null)
 		case "$_ct_rx$_ct_tx" in ''|*[!0-9]*) continue ;; esac
 		_ct_base="$DIR/base.$_ct_if"
-		_ct_prx=0; _ct_ptx=0
-		[ -f "$_ct_base" ] && read -r _ct_prx _ct_ptx 2>/dev/null < "$_ct_base"
+		_ct_prx=0; _ct_ptx=0; _ct_pdev=""
+		[ -f "$_ct_base" ] && read -r _ct_prx _ct_ptx _ct_pdev 2>/dev/null < "$_ct_base"
 		case "$_ct_prx" in ''|*[!0-9]*) _ct_prx=0 ;; esac
 		case "$_ct_ptx" in ''|*[!0-9]*) _ct_ptx=0 ;; esac
-		printf '%s %s\n' "$_ct_rx" "$_ct_tx" > "$_ct_base"
+		printf '%s %s %s\n' "$_ct_rx" "$_ct_tx" "$_ct_dev" > "$_ct_base"
+		[ "$_ct_pdev" = "$_ct_dev" ] || continue
 		[ "$_ct_rx" -lt "$_ct_prx" ] || [ "$_ct_tx" -lt "$_ct_ptx" ] && continue
 		[ "$_ct_prx" = 0 ] && [ "$_ct_ptx" = 0 ] && continue
 		_ct_drx=$((_ct_rx - _ct_prx)); _ct_dtx=$((_ct_tx - _ct_ptx))
@@ -403,6 +575,8 @@ case "$1" in
 tick)
 	_enabled || exit 0
 	_restore
+	_mdm_init
+	_mdm_reconcile
 	_collect_ping
 	_collect_signal
 	_collect_traffic

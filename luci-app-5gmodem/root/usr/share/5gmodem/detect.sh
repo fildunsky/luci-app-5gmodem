@@ -49,7 +49,7 @@ if [ -n "$_dt_am" ]; then
 	# после перехода на ModemManager карточка осталась без температуры и CA).
 	# Поэтому молчим только пока модем НЕ connected.
 	_dt_nif=$(uci -q get "5gmodem.$_dt_sec.network")
-	if [ "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)" = "modemmanager" ]; then
+	if proto_in mm "$(uci -q get "network.$_dt_nif.proto" 2>/dev/null)"; then
 		# Правило вынесено в quirks.sh (mm_at_allowed): те же ворота стоят у
 		# адресного опроса страницы (5gmodem.sh for=<путь>) и у bands.sh, иначе
 		# они расходились - здесь молчали, а там порт брали из реестра напрямую.

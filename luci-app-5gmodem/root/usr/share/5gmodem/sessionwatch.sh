@@ -103,14 +103,10 @@ _kill_stuck_uqmi() {   # $1 - устройство (/dev/cdc-wdm*)
 #                когда WDS-сессия уже умерла. Для них признак другой - интерфейс
 #                «up», а адреса нет (см. check_once).
 _watched_proto() {
-	case "$1" in
-		fibocom|atc|xmm|ncm|3g|wwan) return 0 ;;
-		qmi|qmiraw|mbim) return 0 ;;
-		*) return 1 ;;
-	esac
+	proto_in at "$1" || proto_in direct "$1"
 }
 _kernel_proto() {
-	case "$1" in qmi|qmiraw|mbim) return 0 ;; *) return 1 ;; esac
+	proto_in direct "$1"
 }
 
 # Адрес, который netifd держит на интерфейсе.
@@ -132,7 +128,7 @@ _iface_ip6() {
 # сессия умерла.
 _modem_ip() {
 	_mi_out=$(at_query "$1" "AT+CGPADDR=1" 8)
-	printf '%s' "$_mi_out" | sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1
+	printf '%s' "$_mi_out" | sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1
 }
 
 # Контекст активен? Пустой ответ трактуем как «не знаем» (см. выше).
@@ -197,10 +193,7 @@ _sw_sim_ready() {   # $1 - интерфейс
 	_ssr_if="$1"
 	# Состояние карты читает uqmi, а он говорит только по QMI. Для mbim и
 	# прочих прото проверки нет - ведём себя как раньше.
-	case "$(uci -q get "network.$_ssr_if.proto" 2>/dev/null)" in
-		qmi|qmiraw) : ;;
-		*) return 0 ;;
-	esac
+	proto_in uqmi "$(uci -q get "network.$_ssr_if.proto" 2>/dev/null)" || return 0
 	_ssr_dev=$(uci -q get "network.$_ssr_if.device" 2>/dev/null)
 	case "$_ssr_dev" in /dev/*) : ;; *) return 0 ;; esac
 	_ssr_st=$(_sw_run 8 uqmi -s -d "$_ssr_dev" -t 2000 --uim-get-sim-state 2>/dev/null)
@@ -303,23 +296,21 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				# командой AT+COPS=0 - не чаще раза в 5 минут и только при
 				# свободном от дозвонщика порте.
 				if [ -n "$_port" ] && ! at_dialer_busy "$_port"; then
-					case "$_proto" in
-						xmm|atc|fibocom|3g|ncm)
-							_swcf="/tmp/5gmodem_sw_cops_$_if"
-							_swnow=$(_now)
-							_swlast=$(cat "$_swcf" 2>/dev/null)
-							case "$_swlast" in ''|*[!0-9]*) _swlast=0 ;; esac
-							if [ $((_swnow - _swlast)) -ge 300 ]; then
-								_swc=$(at_query "$_port" "AT+COPS?" 6 4 2>/dev/null 									| tr -d '\r' \
-									| sed -n 's/^+COPS: *\([0-9]*\).*/\1/p' | head -1)
-								if [ "$_swc" = "2" ]; then
-									_log "modem on $_if was deregistered by command (+COPS: 2) - re-enabling network search"
-									at_query "$_port" "AT+COPS=0" 20 4 >/dev/null 2>&1
-									printf '%s' "$_swnow" > "$_swcf" 2>/dev/null
-								fi
+					if proto_in at "$_proto"; then
+						_swcf="/tmp/5gmodem_sw_cops_$_if"
+						_swnow=$(_now)
+						_swlast=$(cat "$_swcf" 2>/dev/null)
+						case "$_swlast" in ''|*[!0-9]*) _swlast=0 ;; esac
+						if [ $((_swnow - _swlast)) -ge 300 ]; then
+							_swc=$(at_query "$_port" "AT+COPS?" 6 4 2>/dev/null 									| tr -d '\r' \
+								| sed -n 's/^+COPS: *\([0-9]*\).*/\1/p' | head -1)
+							if [ "$_swc" = "2" ]; then
+								_log "modem on $_if was deregistered by command (+COPS: 2) - re-enabling network search"
+								at_query "$_port" "AT+COPS=0" 20 4 >/dev/null 2>&1
+								printf '%s' "$_swnow" > "$_swcf" 2>/dev/null
 							fi
-							;;
-					esac
+						fi
+					fi
 				fi
 				# ЗАЛИПШАЯ WDS-СЕССИЯ. Модем отвечает «connected», хотя интерфейс
 				# лежит: netifd не довёл прошлый дозвон до конца (таймаут), сессия
@@ -683,6 +674,9 @@ _sweep_tmp() {
 		-o -name '5gmodem_uim.[0-9]*' -o -name '5gmodem_ttl.[0-9]*.nft' \
 		-o -name '5gmodem_metrics_*.p[0-9]*' \
 		-o -name '.tgcidr.*' \
+		-o -name 'mbimp.[0-9]*.out' -o -name 'qmip.[0-9]*.out' \
+		-o -name 'mbimp-keeper.[0-9]*.out' -o -name 'qmip-keeper.[0-9]*.out' \
+		-o -name '5gmodem_fcc.[0-9]*' -o -name '5gmodem_qmipool.[0-9]*' \
 	\) -mmin +10 -exec rm -f {} + 2>/dev/null
 	# eSIM - ОТДЕЛЬНЫМ ПОРОГОМ: сторож загрузки профиля живёт 600 с, и десять
 	# минут снесли бы файл ответа у ЖИВОЙ загрузки перед самым финалом («timeout»
@@ -746,44 +740,44 @@ case "$1" in
 			# только перезагрузкой роутера»). Гейт qmi_channel_free новые
 			# прокси больше не плодит, а этот чистильщик добивает уже
 			# существующих и передозванивает.
-			if ! pidof ModemManager >/dev/null 2>&1; then
+			if ! pidof ModemManager >/dev/null 2>&1 \
+			   && ! uci -q show network 2>/dev/null | grep -qE "\.proto='?($(proto_re proxy))'?\$"; then
 				_ps_if=$(uci -q get 5gmodem.@5gmodem[0].network)
-				case "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)" in
-					mbim|qmi|qmiraw)
-						if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
-							if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
-								_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
-								killall mbim-proxy 2>/dev/null
-								killall qmi-proxy 2>/dev/null
+				if proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
+					if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
+						if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
+							_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
+							killall mbim-proxy 2>/dev/null
+							killall qmi-proxy 2>/dev/null
+							( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+						elif ! pgrep -x lpac >/dev/null 2>&1 \
+						   && ! pgrep -x qmicli >/dev/null 2>&1 \
+						   && ! pgrep -x mbimcli >/dev/null 2>&1 \
+						   && ! pgrep -x umbim >/dev/null 2>&1 \
+						   && ! pgrep -x uqmi >/dev/null 2>&1 \
+						   && ! pgrep -f "[m]bim\.sh|[q]mi\.sh" >/dev/null 2>&1 \
+						   && ! ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"pending": true' \
+						   && _stray_ok; then
+							# ОПУЩЕННЫЙ интерфейс + прокси БЕЗ ЕДИНОГО КЛИЕНТА -
+							# тоже сирота, причём худший: он душит сам дозвон, и
+							# «только при поднятом» превращалось во взаимоблок -
+							# интерфейс вечно pending («Request timed out» / «SIM
+							# in illegal state» по кругу), метла ждала up (Netcore
+							# N60 Pro + T99W175, 17.08.2026). Живую операцию
+							# eSIM/слотов не заденем: у неё жив lpac/qmicli/mbimcli.
+							_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy"
+							killall mbim-proxy 2>/dev/null
+							killall qmi-proxy 2>/dev/null
+							# Прокси убираем всегда - он душит и наш дозвон, и AT-сброс
+							# лестницы. А вот ПОДЪЁМ - только при живой карте: с картой
+							# в illegal он лишь запускал петлю qmi.sh заново и обнулял
+							# ошибку интерфейса, на которую смотрит health.
+							if _sw_sim_ready "$_ps_if"; then
 								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
-							elif ! pgrep -x lpac >/dev/null 2>&1 \
-							   && ! pgrep -x qmicli >/dev/null 2>&1 \
-							   && ! pgrep -x mbimcli >/dev/null 2>&1 \
-							   && ! pgrep -x umbim >/dev/null 2>&1 \
-							   && ! pgrep -x uqmi >/dev/null 2>&1 \
-							   && ! pgrep -f "[m]bim\.sh|[q]mi\.sh" >/dev/null 2>&1 \
-							   && ! ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"pending": true' \
-							   && _stray_ok; then
-								# ОПУЩЕННЫЙ интерфейс + прокси БЕЗ ЕДИНОГО КЛИЕНТА -
-								# тоже сирота, причём худший: он душит сам дозвон, и
-								# «только при поднятом» превращалось во взаимоблок -
-								# интерфейс вечно pending («Request timed out» / «SIM
-								# in illegal state» по кругу), метла ждала up (Netcore
-								# N60 Pro + T99W175, 17.08.2026). Живую операцию
-								# eSIM/слотов не заденем: у неё жив lpac/qmicli/mbimcli.
-								_log "a stray proxy is blocking the dial ($_ps_if is down) - killing mbim/qmi-proxy"
-								killall mbim-proxy 2>/dev/null
-								killall qmi-proxy 2>/dev/null
-								# Прокси убираем всегда - он душит и наш дозвон, и AT-сброс
-								# лестницы. А вот ПОДЪЁМ - только при живой карте: с картой
-								# в illegal он лишь запускал петлю qmi.sh заново и обнулял
-								# ошибку интерфейса, на которую смотрит health.
-								if _sw_sim_ready "$_ps_if"; then
-									( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
-								fi
 							fi
-						fi ;;
-				esac
+						fi
+					fi
+				fi
 			fi
 			# Круг нарезан ломтями по 5 c: между обязанностями сторожа успеваем
 			# освежать снимок метрик для открытой страницы (см. _page_refresh).

@@ -1,0 +1,2 @@
+## 4pda 994474 #1055 - EP06-E reply; EM06 is the M.2 form of EP06, the QENG/QCAINFO layout is the same
++QENG: "servingcell","NOCONN","LTE","FDD",250,99,BC81107,199,1301,3,4,4,53E5,-103,-12,-76,16,-

@@ -124,7 +124,7 @@ _mbimp_mm_detach() {
 }
 
 _mbimp_fail() {
-	echo "mbimp[$$] $3"
+	echo "MBIM+MM[$$] $3"
 	proto_notify_error "$1" "$2"
 	[ "$4" = block ] && proto_block_restart "$1"
 	return 1
@@ -175,15 +175,15 @@ proto_mbimp_setup() {
 	_mbimp_proxy
 
 	local out
-	echo "mbimp[$$] Reading capabilities"
+	echo "MBIM+MM[$$] Reading capabilities"
 	out=$(_mbimp_cli 20 --query-device-caps) || { _mbimp_fail "$interface" NO_CAPS "Failed to read modem caps"; return 1; }
 	case "$out" in *"Device ID"*) ;; *) _mbimp_fail "$interface" NO_CAPS "Failed to read modem caps"; return 1 ;; esac
 
 	if [ -n "$pincode" ]; then
-		echo "mbimp[$$] Sending pin"
+		echo "MBIM+MM[$$] Sending pin"
 		out=$(_mbimp_cli 20 --enter-pin="$pincode")
 	fi
-	echo "mbimp[$$] Checking pin"
+	echo "MBIM+MM[$$] Checking pin"
 	out=$(_mbimp_cli 20 --query-pin-state)
 	if [ "$(_mbimp_field 'PIN state' "$out")" = "locked" ]; then
 		case "$(_mbimp_field 'PIN type' "$out")" in
@@ -193,7 +193,7 @@ proto_mbimp_setup() {
 		esac
 	fi
 
-	echo "mbimp[$$] Checking subscriber"
+	echo "MBIM+MM[$$] Checking subscriber"
 	local n=0 ready=""
 	while :; do
 		out=$(_mbimp_cli 20 --query-subscriber-ready-status)
@@ -204,7 +204,7 @@ proto_mbimp_setup() {
 		sleep 3
 	done
 
-	echo "mbimp[$$] Register with network"
+	echo "MBIM+MM[$$] Register with network"
 	local reg="" ok=0
 	n=0
 	while :; do
@@ -224,16 +224,19 @@ proto_mbimp_setup() {
 		_mbimp_fail "$interface" NO_REGISTRATION "Registration failed (state: ${reg:-no answer})"
 		return 1
 	fi
-	echo "mbimp[$$] Registered ($reg, $(_mbimp_field 'Provider name' "$out"))"
+	echo "MBIM+MM[$$] Registered ($reg, $(_mbimp_field 'Provider name' "$out"))"
 
-	echo "mbimp[$$] Attach to network"
-	out=$(_mbimp_cli 30 --query-packet-service-state)
-	if [ "$(_mbimp_field 'Packet service state' "$out")" != "attached" ]; then
-		out=$(_mbimp_cli 45 --attach-packet-service)
-		case "$(_mbimp_field 'Packet service state' "$out")" in
-			attached) ;;
-			*) _mbimp_fail "$interface" ATTACH_FAILED "Failed to attach to network"; return 1 ;;
-		esac
+	echo "MBIM+MM[$$] Attach to network"
+	local pss
+	out=$(_mbimp_cli 20 --query-packet-service-state)
+	pss=$(_mbimp_field 'Packet service state' "$out")
+	if [ "$pss" != "attached" ]; then
+		out=$(_mbimp_cli 30 --attach-packet-service)
+		pss=$(_mbimp_field 'Packet service state' "$out")
+		if [ "$pss" != "attached" ]; then
+			echo "MBIM+MM[$$] The modem did not confirm the packet attach (${pss:-no answer}) - trying to connect anyway"
+			printf '%s\n' "$out" | grep -iE "error|fail" | head -n 2
+		fi
 	fi
 
 	pdptype=$(echo "$pdptype" | awk '{print tolower($0)}')
@@ -248,7 +251,7 @@ proto_mbimp_setup() {
 	[ -n "$username" ] && cstr="$cstr,username=$username"
 	[ -n "$password" ] && cstr="$cstr,password=$password"
 
-	echo "mbimp[$$] Connect to network"
+	echo "MBIM+MM[$$] Connect to network"
 	out=$(_mbimp_cli 20 --query-connection-state=0)
 	if [ "$(_mbimp_field 'Activation state' "$out")" = "activated" ]; then
 		_mbimp_cli 20 --disconnect=0 >/dev/null 2>&1
@@ -261,14 +264,14 @@ proto_mbimp_setup() {
 	fi
 	local iptype
 	iptype=$(_mbimp_field 'IP type' "$out")
-	echo "mbimp[$$] Connected (ip type: $iptype)"
+	echo "MBIM+MM[$$] Connected (ip type: $iptype)"
 
 	local cfg
 	cfg=$(_mbimp_cli 20 --query-ip-configuration=0)
 	local zone
 	zone="$(fw3 -q network "$interface" 2>/dev/null)"
 
-	echo "mbimp[$$] Setting up $ifname"
+	echo "MBIM+MM[$$] Setting up $ifname"
 	proto_init_update "$ifname" 1
 	proto_send_update "$interface"
 
@@ -288,7 +291,7 @@ proto_mbimp_setup() {
 			json_close_array
 			json_add_string gateway "$(_mbimp_ipcfg "$cfg" 4 "Gateway" | head -n 1)"
 		elif [ "$dhcp" != 0 ]; then
-			echo "mbimp[$$] Starting DHCP on $ifname"
+			echo "MBIM+MM[$$] Starting DHCP on $ifname"
 			json_add_string proto "dhcp"
 		fi
 		[ "$peerdns" = 0 -a "$dhcp" != 1 ] || {
@@ -318,7 +321,7 @@ proto_mbimp_setup() {
 			json_close_array
 			json_add_string ip6gw "$(_mbimp_ipcfg "$cfg" 6 "Gateway" | head -n 1)"
 		elif [ "$dhcpv6" != 0 ]; then
-			echo "mbimp[$$] Starting DHCPv6 on $ifname"
+			echo "MBIM+MM[$$] Starting DHCPv6 on $ifname"
 			json_add_string proto "dhcpv6"
 			json_add_string extendprefix 1
 			[ "$delegate" = "0" ] && json_add_boolean delegate "0"
@@ -342,7 +345,7 @@ proto_mbimp_setup() {
 	fi
 	case "$mtu" in
 		''|*[!0-9]*) ;;
-		*) [ "$mtu" -ge 576 ] && { echo "mbimp[$$] Setting MTU of $ifname to $mtu"; ip link set "$ifname" mtu "$mtu" 2>/dev/null; } ;;
+		*) [ "$mtu" -ge 576 ] && { echo "MBIM+MM[$$] Setting MTU of $ifname to $mtu"; ip link set "$ifname" mtu "$mtu" 2>/dev/null; } ;;
 	esac
 
 	uci_set_state network "$interface" mbimp_device "$device"
@@ -354,7 +357,7 @@ proto_mbimp_teardown() {
 	local device
 	device="$(uci_get_state network "$interface" mbimp_device)"
 	[ -n "$device" ] || { json_get_vars device; }
-	echo "mbimp[$$] Stopping network"
+	echo "MBIM+MM[$$] Stopping network"
 	proto_kill_command "$interface"
 	if [ -n "$device" ] && [ -c "$device" ] && command -v mbimcli >/dev/null 2>&1; then
 		_MBIMP_DEV="$device"

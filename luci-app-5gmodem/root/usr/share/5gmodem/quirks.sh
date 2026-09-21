@@ -423,6 +423,12 @@ mm_at_allowed() {
 	fi
 	[ "$(uci -q get "5gmodem.$2.mm_at" 2>/dev/null)" = "1" ] && return 0
 	[ -n "$(mm_at_fragile "$_maa_vp")" ] && return 2
+	_maa_if=$(uci -q get "5gmodem.$2.network" 2>/dev/null)
+	case "$(uci -q get "network.$_maa_if.proto" 2>/dev/null)" in
+		mbimp|qmip)
+			ubus call "network.interface.$_maa_if" status 2>/dev/null | grep -q '"up": true'
+			return $? ;;
+	esac
 	command -v mmcli >/dev/null 2>&1 || return 1
 	_maa_i=$(_mm_index_cached "$1")
 	[ -n "$_maa_i" ] || return 1

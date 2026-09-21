@@ -145,7 +145,7 @@ _fibocom_activate() {
 		fi
 		sleep 2
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
+			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
 		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && {
 			# XMM: привязать первый NCM-канал к контексту и стартовать данные -
 			# без этого адрес есть, а кадры в NCM не ходят (суть xmm.sh).
@@ -684,7 +684,7 @@ proto_fibocom_setup() {
 		# апгрейдит). apn пуст = роуминг: там APN не сверяем, но тип PDP - да.
 		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdptype" ]; then
 			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | head -1)
+				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
 			[ "$ip" = "0.0.0.0" ] && ip=""
 			# СВЕРЯЕМ, ЧТО МОДЕМ ВООБЩЕ ПРИКРЕПЛЁН К ПАКЕТНОЙ СЕТИ.
 			#

@@ -855,13 +855,21 @@ _MM_WANT=0
 if [ "$PROTO" = "mbimp" ]; then
 	_mki_wdrv=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-none}")/device/driver" 2>/dev/null)" 2>/dev/null)
 	if [ "$_mki_wdrv" != "cdc_mbim" ]; then
-		logger -t 5gmodem "mkiface: proto mbimp needs an MBIM control channel (driver cdc_mbim), but ${DEV:-the modem} is on ${_mki_wdrv:-no cdc-wdm node} - not creating the interface"
+		logger -t 5gmodem "mkiface: MBIM+MM needs an MBIM control channel (driver cdc_mbim), but ${DEV:-the modem} is on ${_mki_wdrv:-no cdc-wdm node} - not creating the interface"
 		printf '{"result":"MBIM+MM needs an MBIM composition, this modem is on %s","proto":"mbimp"}\n' "${_mki_wdrv:-no cdc-wdm node}"
 		exit 1
 	fi
 fi
+if [ "$PROTO" = "qmip" ]; then
+	_mki_wdrv=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-none}")/device/driver" 2>/dev/null)" 2>/dev/null)
+	if [ "$_mki_wdrv" != "qmi_wwan" ]; then
+		logger -t 5gmodem "mkiface: QMI+MM needs a QMI control channel (driver qmi_wwan), but ${DEV:-the modem} is on ${_mki_wdrv:-no cdc-wdm node} - not creating the interface"
+		printf '{"result":"QMI+MM needs a QMI composition, this modem is on %s","proto":"qmip"}\n' "${_mki_wdrv:-no cdc-wdm node}"
+		exit 1
+	fi
+fi
 [ "$PROTO" = "modemmanager" ] && _MM_WANT=1
-[ "$PROTO" = "mbimp" ] && [ -f /lib/netifd/proto/modemmanager.sh ] && _MM_WANT=1
+proto_in proxy "$PROTO" && [ -f /lib/netifd/proto/modemmanager.sh ] && _MM_WANT=1
 [ "$_MM_WANT" = "1" ] || /usr/share/5gmodem/mmneed.sh check 2>/dev/null | grep -q '"needed":1' && _MM_WANT=1
 if [ "$_MM_WANT" = "1" ]; then
 	/etc/init.d/modemmanager enable >/dev/null 2>&1
@@ -881,7 +889,7 @@ if [ "$_MM_WANT" = "1" ]; then
 		# MM нет, значит и рвать ему некого.
 		mm_restart_safe
 	fi
-elif [ "$PROTO" = "mbim" ] || [ "$PROTO" = "qmi" ] || [ "$PROTO" = "qmiraw" ] || uci show network 2>/dev/null | grep -qE "\.proto='(mbim|qmi|qmiraw)'"; then
+elif proto_in direct "$PROTO" || uci show network 2>/dev/null | grep -qE "\.proto='($(proto_re direct))'"; then
 	/etc/init.d/modemmanager stop >/dev/null 2>&1
 	/etc/init.d/modemmanager disable >/dev/null 2>&1
 fi
@@ -890,30 +898,25 @@ fi
 ATP=$(_mk_atport)
 
 # --- device path for the interface, by proto family ---
-case "$PROTO" in
-	modemmanager)
-		# MM wants the modem's USB sysfs path: walk up from cdc-wdm to the node
-		# that carries idVendor (the usb_device).
-		IDEV=$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-cdc-wdm0}")/device" 2>/dev/null)
-		while [ -n "$IDEV" ] && [ "$IDEV" != "/" ] && [ ! -f "$IDEV/idVendor" ]; do
-			IDEV=$(dirname "$IDEV")
-		done
-		[ -f "$IDEV/idVendor" ] || IDEV=""
-		;;
-	mbim|mbimp|qmi|qmiraw)
-		# control channel over the cdc-wdm node
-		IDEV="$DEV"
-		;;
-	xmm|ncm|atc|3g|wwan|ppp)
-		# serial-controlled protos talk AT on a ttyUSB/ttyACM port. xmm тоже
-		# дозванивается по AT-порту (Intel/Fibocom L850/FM350 NCM), НЕ по cdc-wdm.
-		IDEV="$ATP"
-		;;
-	*)
-		# unknown proto: prefer the cdc-wdm node, fall back to the AT port
-		IDEV="${DEV:-$ATP}"
-		;;
-esac
+if [ "$PROTO" = modemmanager ]; then
+	# MM wants the modem's USB sysfs path: walk up from cdc-wdm to the node
+	# that carries idVendor (the usb_device).
+	IDEV=$(readlink -f "/sys/class/usbmisc/$(basename "${DEV:-cdc-wdm0}")/device" 2>/dev/null)
+	while [ -n "$IDEV" ] && [ "$IDEV" != "/" ] && [ ! -f "$IDEV/idVendor" ]; do
+		IDEV=$(dirname "$IDEV")
+	done
+	[ -f "$IDEV/idVendor" ] || IDEV=""
+elif proto_in wdm "$PROTO"; then
+	# control channel over the cdc-wdm node
+	IDEV="$DEV"
+elif proto_in serial "$PROTO"; then
+	# serial-controlled protos talk AT on a ttyUSB/ttyACM port. xmm тоже
+	# дозванивается по AT-порту (Intel/Fibocom L850/FM350 NCM), НЕ по cdc-wdm.
+	IDEV="$ATP"
+else
+	# unknown proto: prefer the cdc-wdm node, fall back to the AT port
+	IDEV="${DEV:-$ATP}"
+fi
 
 # Причину отказа - в журнал: страница показывает общее «модем не найден», и
 # без этой строки кейс «не удалось создать интерфейс» неразбираем по отчёту
@@ -1013,22 +1016,23 @@ case "$PROTO" in
 			&& [ -z "$(uci -q get "network.$IF.init_epsbearer")" ] \
 			&& uci set "network.$IF.init_epsbearer=default"
 		;;
-	qmi|mbim|mbimp|qmiraw)
-		set_pdp_opt "$IF" pdptype
-		uci set "network.$IF.auth=none"
-		# Привязка к железу через стабильный путь (см. ctrl_devpath выше).
-		_mdp=$(ctrl_devpath "$IDEV")
-		[ -n "$_mdp" ] && [ -d "$_mdp/usbmisc" ] && uci set "network.$IF.devpath=$_mdp"
-		;;
 	xmm)
 		set_pdp_opt "$IF" pdp        # прото xmm читает опцию 'pdp', не 'pdptype'
 		uci set "network.$IF.auth=none"
 		;;
-	ncm|atc|3g|wwan)
-		# серийные протоколы: базовый auth; порт (ttyUSB) уже задан выше.
-		# Часть модемов требует ещё 'mode'/'delay'/'service' - это оставляем
-		# на доводку в стандартном разделе Сеть > Интерфейсы.
-		uci set "network.$IF.auth=none"
+	*)
+		if proto_in wdm "$PROTO"; then
+			set_pdp_opt "$IF" pdptype
+			uci set "network.$IF.auth=none"
+			# Привязка к железу через стабильный путь (см. ctrl_devpath выше).
+			_mdp=$(ctrl_devpath "$IDEV")
+			[ -n "$_mdp" ] && [ -d "$_mdp/usbmisc" ] && uci set "network.$IF.devpath=$_mdp"
+		elif proto_in serial "$PROTO" && [ "$PROTO" != ppp ]; then
+			# серийные протоколы: базовый auth; порт (ttyUSB) уже задан выше.
+			# Часть модемов требует ещё 'mode'/'delay'/'service' - это оставляем
+			# на доводку в стандартном разделе Сеть > Интерфейсы.
+			uci set "network.$IF.auth=none"
+		fi
 		;;
 esac
 [ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
@@ -1076,14 +1080,14 @@ ubus call network reload >/dev/null 2>&1
 # Наш proto=qmiraw (SimCom raw-ip) - та же регистрация: netifd знает
 # обработчики только со старта, а свежесозданный интерфейс без регистрации
 # мёртв («Не поддерживаемый тип протокола»).
-case "$PROTO" in
-	fibocom|qmiraw) REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1 ;;
-	mbimp)
-		if ! ubus call network get_proto_handlers 2>/dev/null | grep -q '"mbimp"'; then
-			logger -t 5gmodem "mkiface: proto mbimp is not registered with netifd yet - restarting the network to register it (interfaces will briefly drop)"
-			/etc/init.d/network restart >/dev/null 2>&1
-		fi ;;
-esac
+if proto_in proxy "$PROTO"; then
+	if ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
+		logger -t 5gmodem "mkiface: protocol $([ "$PROTO" = qmip ] && echo QMI+MM || echo MBIM+MM) is not registered with netifd yet - restarting the network to register it (interfaces will briefly drop)"
+		/etc/init.d/network restart >/dev/null 2>&1
+	fi
+elif proto_in own "$PROTO"; then
+	REGISTER_PROTO_FORCE=1 /usr/share/5gmodem/register_proto.sh >/dev/null 2>&1
+fi
 
 # СТАНДАРТНЫЙ ПРОТО (mbim/qmi/ncm/modemmanager/...) ТОЖЕ МОЖЕТ БЫТЬ НЕИЗВЕСТЕН
 # NETIFD: на чистой ОС пакеты протоколов ставятся ПОСЛЕ его старта, обработчики
@@ -1093,15 +1097,13 @@ esac
 # что и для наших прото выше: человек настраивает модем прямо сейчас и короткий
 # обрыв ждёт. Вне этого окна блок не срабатывает никогда: после любой
 # перезагрузки netifd знает все установленные обработчики.
-case "$PROTO" in
-	fibocom|qmiraw|mbimp) ;;
-	*)
-		if [ -n "$PROTO" ] && [ -f "/lib/netifd/proto/$PROTO.sh" ] \
-		   && ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
-			logger -t 5gmodem "mkiface: proto $PROTO was installed after netifd started - restarting the network to register it (interfaces will briefly drop)"
-			/etc/init.d/network restart >/dev/null 2>&1
-		fi ;;
-esac
+if ! proto_in own "$PROTO"; then
+	if [ -n "$PROTO" ] && [ -f "/lib/netifd/proto/$PROTO.sh" ] \
+	   && ! ubus call network get_proto_handlers 2>/dev/null | grep -q "\"$PROTO\""; then
+		logger -t 5gmodem "mkiface: proto $PROTO was installed after netifd started - restarting the network to register it (interfaces will briefly drop)"
+		/etc/init.d/network restart >/dev/null 2>&1
+	fi
+fi
 
 # в зону wan - для NAT/forwarding (см. _fw_zone_add выше)
 _fw_zone_add "$IF"
@@ -1161,17 +1163,14 @@ uci -q commit 5gmodem
 # This keeps the SMS/USSD pages working whichever interface is active,
 # instead of silently talking to a daemon that is no longer running.
 if uci -q get 5gmodem.sms >/dev/null 2>&1; then
-	case "$PROTO" in
-		modemmanager)
-			uci -q set "5gmodem.sms.sms_via_mm=1"
-			uci -q set "5gmodem.sms.ussd_via_mm=1"
-			;;
-		*)
-			# любой не-MM протокол: MM выключен -> SMS/USSD через AT-порт
-			uci -q set "5gmodem.sms.sms_via_mm=0"
-			uci -q set "5gmodem.sms.ussd_via_mm=0"
-			;;
-	esac
+	if proto_in mm "$PROTO"; then
+		uci -q set "5gmodem.sms.sms_via_mm=1"
+		uci -q set "5gmodem.sms.ussd_via_mm=1"
+	else
+		# любой не-MM протокол: MM выключен -> SMS/USSD через AT-порт
+		uci -q set "5gmodem.sms.sms_via_mm=0"
+		uci -q set "5gmodem.sms.ussd_via_mm=0"
+	fi
 	uci -q commit 5gmodem
 fi
 
@@ -1206,7 +1205,7 @@ fi
 # должна затираться дефолтом). Иначе ставим дефолт по прото; смена прото меняет и
 # правильное значение. Дальше пользователь может переопределить галкой в настройках.
 if [ -n "$MSEC" ]; then
-	if [ "$PROTO" = "modemmanager" ] || [ "$PROTO" = "mbimp" ]; then
+	if proto_in mm "$PROTO"; then
 		# прото modemmanager требует, чтобы MM видел модем - прятать нельзя,
 		# иначе интерфейс останется без IP. Явный выбор здесь игнорируем.
 		uci -q set "5gmodem.$MSEC.mm_exclude=0"
@@ -1222,7 +1221,7 @@ if [ -n "$MSEC" ]; then
 	# пока его не убьют - и модем моргал в MM после смены прото QMI -> MM
 	# (живой случай 31.07.2026: Telit то виден, то нет, метрики скакали).
 	# Симметрично ветке set-exclude 0 в mm-inhibit.sh.
-	if { [ "$PROTO" = "modemmanager" ] || [ "$PROTO" = "mbimp" ]; } && [ -n "$AMP" ]; then
+	if proto_in mm "$PROTO" && [ -n "$AMP" ]; then
 		_mki_ipf="/var/run/5gmodem-mm-inhibit/$AMP.pid"
 		[ -f "$_mki_ipf" ] && { kill "$(cat "$_mki_ipf" 2>/dev/null)" 2>/dev/null; rm -f "$_mki_ipf"; }
 	fi
@@ -1247,7 +1246,7 @@ if [ "$PROTO" = "modemmanager" ]; then
 		done
 		ifup "$IF"
 	) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
-elif [ "$PROTO" = qmi ] || [ "$PROTO" = mbim ] || [ "$PROTO" = qmiraw ]; then
+elif proto_in direct "$PROTO"; then
 	# kernel-прото: сначала автоматически привести модем в рабочее состояние
 	# (отобрать порт у MM, снять зависшие uqmi, при заклиненном QMI - сбросить
 	# модем), и только потом ifup. Иначе netifd упрётся в мёртвый управляющий

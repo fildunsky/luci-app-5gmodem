@@ -13,6 +13,38 @@
 #
 # Держим по одной реализации: расходиться станет нечему.
 
+_proto_cls() {
+	case "$1" in
+		wdm)     _PCL="mbim|mbimp|qmi|qmip|qmiraw" ;;
+		wdmdev)  _PCL="mbim|mbimp|qmi|qmip|qmiraw|ncm" ;;
+		direct)  _PCL="qmi|qmiraw|mbim" ;;
+		uqmi)    _PCL="qmi|qmiraw" ;;
+		proxy)   _PCL="mbimp|qmip" ;;
+		mm)      _PCL="modemmanager|mbimp|qmip" ;;
+		nomm)    _PCL="qmi|qmiraw|mbim|xmm|ncm|atc|3g|wwan|ppp|fibocom" ;;
+		at)      _PCL="fibocom|atc|xmm|ncm|3g|wwan" ;;
+		serial)  _PCL="xmm|ncm|atc|3g|wwan|ppp" ;;
+		dialtty) _PCL="xmm|atc" ;;
+		own)     _PCL="fibocom|qmiraw|mbimp|qmip" ;;
+		modem)   _PCL="mbim|mbimp|qmi|qmip|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|wwan|ppp" ;;
+		*)       _PCL="" ;;
+	esac
+}
+
+proto_in() {
+	[ -n "$2" ] || return 1
+	_proto_cls "$1"
+	case "|$_PCL|" in
+		*"|$2|"*) return 0 ;;
+	esac
+	return 1
+}
+
+proto_re() {
+	_proto_cls "$1"
+	printf '%s\n' "$_PCL"
+}
+
 # --- SERIAL ИЗ SYSFS: ТРЕТИЙ ПРИЗНАК ЛИЧНОСТИ МОДЕМА -------------------------
 #
 # ЗАЧЕМ. Личность модема мы храним по IMEI, а IMEI надо ПРОЧИТАТЬ - командой в
@@ -169,7 +201,11 @@ purge_path_caches() {   # $1 - usb-путь
 		"/tmp/5gmodem_metrics_$_ppc_k.json" "/tmp/5gmodem_metrics_$_ppc_k.stamp" \
 		"/tmp/5gmodem_slot_$_ppc_k" "/tmp/5gmodem_slot_$_ppc_k.t" \
 		"/tmp/5gmodem_imei_none_$_ppc_k" \
-		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* 2>/dev/null
+		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* \
+		"/tmp/5gmodem_atca_$_ppc_k" "/tmp/5gmodem_atca_$_ppc_k".* \
+		"/tmp/5gmodem_hilink_metrics_$_ppc_k" "/tmp/5gmodem_hilink_metrics_$_ppc_k".* \
+		"/tmp/5gmodem_atport_$_ppc_k" "/tmp/5gmodem_atport_$_ppc_k".neg 2>/dev/null
+	[ -n "$_ppc_k2" ] && rm -f "/tmp/5gmodem_mmowns_$_ppc_k2" "/tmp/5gmodem_mmports_$_ppc_k2" 2>/dev/null
 	[ -n "$_ppc_k2" ] && rm -f \
 		"/tmp/5gmodem_metrics_$_ppc_k2.json" "/tmp/5gmodem_metrics_$_ppc_k2.stamp" \
 		"/tmp/5gmodem_slot_$_ppc_k2" "/tmp/5gmodem_slot_$_ppc_k2.t" \
@@ -960,9 +996,8 @@ dial_port_for_path() {   # $1 - usb-путь; печатает tty дозвон�
 		# СУДИМ ПО ЖИВОМУ КОНФИГУ ИНТЕРФЕЙСА, а не по data_at_port в секции: тот
 		# остаётся от прежней настройки, и после перевода модема на qmi/mbim мы
 		# исключали бы совершенно свободный порт.
-		case "$(uci -q get "network.$_dpp_if.proto" 2>/dev/null)" in
-			xmm|atc) _dpp_out=$(uci -q get "network.$_dpp_if.device" 2>/dev/null) ;;
-		esac
+		proto_in dialtty "$(uci -q get "network.$_dpp_if.proto" 2>/dev/null)" \
+			&& _dpp_out=$(uci -q get "network.$_dpp_if.device" 2>/dev/null)
 	fi
 	case "$_dpp_out" in /dev/*) : ;; *) _dpp_out="" ;; esac
 	_DPP_IN="$1"; _DPP_OUT="$_dpp_out"
@@ -1194,10 +1229,7 @@ qmi_channel_free() {
 	# 17.08.2026, ZBT-Z8102AX + MV31-W на umbim: «открываю страницу 5gmodem -
 	# пропадает интернет». Под ModemManager запрет не нужен: там прокси общий,
 	# MM сам через него ходит.
-	case "$(uci -q get "network.$_qcf_if.proto" 2>/dev/null)" in
-		qmi|qmiraw|mbim) : ;;
-		*) return 0 ;;
-	esac
+	proto_in direct "$(uci -q get "network.$_qcf_if.proto" 2>/dev/null)" || return 0
 	# ВЛАДЕЕТ - ЗНАЧИТ ПОДНЯТ. Раньше смотрели ТОЛЬКО на proto, и у модема на
 	# proto=qmi канал считался занятым ВСЕГДА - даже когда интерфейс лежит и
 	# uqmi не запущен. Из-за этого фоновые QMI-чтения (слоты SIM, дозаполнение
@@ -1285,7 +1317,7 @@ qmicli_p() {
 	_qp_if=$(_qmi_target_iface)
 	_qp_proto=$(uci -q get "network.$_qp_if.proto" 2>/dev/null)
 	_qp_direct=""
-	if [ "$_qp_proto" = "mbimp" ]; then
+	if proto_in proxy "$_qp_proto"; then
 		:
 	elif [ "$_qp_proto" = "qmi" ]; then
 		_qp_direct=1
@@ -1326,6 +1358,10 @@ qmicli_p() {
 		sleep 1
 		_qp_i=$((_qp_i + 1))
 	done
+	if [ "$_qp_i" -gt 0 ] && ! qmi_channel_free; then
+		{ exec 9>&-; } 2>/dev/null
+		return 1
+	fi
 	_qp_bad="/tmp/5gmodem_qmiproxy_bad.${_qp_dev##*/}"
 	_qp_now=$(cut -d. -f1 /proc/uptime)
 	_qp_skip=""
@@ -1342,9 +1378,7 @@ qmicli_p() {
 	_qp_o=$(mktemp /tmp/5gmodem_qmicli.XXXXXX 2>/dev/null) || _qp_o="/tmp/5gmodem_qmicli.$$.$(date +%s)"
 	# Для qmi-интерфейса пробу через прокси пропускаем совсем (см. выше).
 	[ "$_qp_proto" = "qmi" ] && _qp_skip=1
-	case "$_qp_proto" in
-		mbim|qmiraw) [ -n "$_qp_direct" ] && _qp_skip=1 ;;
-	esac
+	proto_in direct "$_qp_proto" && [ -n "$_qp_direct" ] && _qp_skip=1
 	if [ -z "$_qp_skip" ]; then
 		# Ждём прокси МЕНЬШЕ, когда есть фолбэк: 20 c нужны только там, где идти
 		# больше некуда. Живой прокси отвечает за доли секунды, так что 6 c с
@@ -1788,7 +1822,7 @@ set_sms_storage() {   # $1 - at-порт
 
 # HTTP-порт локального clash/mihomo; пусто и код 1, если его нет.
 net_proxy_port() {
-	_np_p=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+	_np_p=$(sed -n 's/^\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 		/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 	case "$_np_p" in ''|0) ;; *) printf '%s' "$_np_p"; return 0 ;; esac
 	command -v curl >/dev/null 2>&1 || return 1

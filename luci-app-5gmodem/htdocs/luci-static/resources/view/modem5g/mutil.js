@@ -120,10 +120,25 @@ function sortNetModes(modes) {
 
 function protoLabel(v) {
 	return ({
-		'qmi': 'QMI', 'qmiraw': 'QMI raw-ip', 'mbim': 'MBIM', 'mbimp': 'MBIM+MM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
+		'qmi': 'QMI', 'qmiraw': 'QMI raw-ip', 'mbim': 'MBIM', 'mbimp': 'MBIM+MM', 'qmip': 'QMI+MM', 'ncm': 'NCM', 'xmm': 'XMM', 'atc': 'ATC',
 		'ppp': 'PPP', 'wwan': 'WWAN', '3g': '3G', 'modemmanager': 'ModemManager',
-		'fibocom': 'Fibocom', 'dhcp': 'DHCP'
+		'fibocom': 'Fibocom', 'dhcp': 'DHCP', 'ecm': 'ECM', 'rndis': 'RNDIS', 'sierra': 'Sierra'
 	})[String(v || '').toLowerCase()] || (v || '');
+}
+
+var MM_PROTOS = [ 'modemmanager', 'mbimp', 'qmip' ];
+var SHARED_PROXY_PROTOS = [ 'mbimp', 'qmip' ];
+
+function protoKey(p) {
+	return String(p == null ? '' : p).toLowerCase();
+}
+
+function isMMProto(p) {
+	return MM_PROTOS.indexOf(protoKey(p)) >= 0;
+}
+
+function isSharedProxyProto(p) {
+	return SHARED_PROXY_PROTOS.indexOf(protoKey(p)) >= 0;
 }
 
 function pdpLabel(v) {
@@ -285,6 +300,8 @@ return baseclass.extend({
 	netModeRank: netModeRank,
 	sortNetModes: sortNetModes,
 	protoLabel: protoLabel,
+	isMMProto: isMMProto,
+	isSharedProxyProto: isSharedProxyProto,
 	pdpLabel: pdpLabel,
 	operatorIcon: operatorIcon,
 	localizeBytes: localizeBytes,

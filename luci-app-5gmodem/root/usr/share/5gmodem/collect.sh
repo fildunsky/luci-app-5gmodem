@@ -1159,7 +1159,7 @@ proxy_verdict() {
 		for _pv_n in /sys/bus/usb/devices/"$_pv_p":*/net/* /sys/bus/usb/devices/"$_pv_p":*/usbmisc/*; do
 			[ -e "$_pv_n" ] && _pv_nodes="$_pv_nodes ${_pv_n##*/}"
 		done
-		_pv_ifs=$(uci -q show network 2>/dev/null | awk -F"[.=]" -v p="$_pv_p" -v nodes="$_pv_nodes" '
+		_pv_ifs=$(uci -q show network 2>/dev/null | awk -F"[.=]" -v p="$_pv_p" -v nodes="$_pv_nodes" -v pre="^($(proto_re modem)|dhcp)\$" '
 			BEGIN { n = split(nodes, a, " "); for (i = 1; i <= n; i++) nd[a[i]] = 1 }
 			$3 == "proto" { v = $0; sub(/^[^=]*=/, "", v); gsub(/'"'"'/, "", v); proto[$2] = v }
 			$3 == "auto" { v = $0; sub(/^[^=]*=/, "", v); gsub(/'"'"'/, "", v); off[$2] = (v == "0") }
@@ -1169,7 +1169,7 @@ proxy_verdict() {
 				sub(/^\/dev\//, "", v); if (v in nd) hit[$2] = 1
 			}
 			END {
-				for (i in hit) if (!off[i] && proto[i] ~ /^(mbim|mbimp|qmi|qmiraw|modemmanager|fibocom|atc|xmm|ncm|3g|dhcp)$/)
+				for (i in hit) if (!off[i] && proto[i] ~ pre)
 					printf "%s(%s) ", i, proto[i]
 			}')
 		set -- $_pv_ifs
@@ -1187,14 +1187,14 @@ proxy_verdict() {
 	fi
 	printf '%s\n' "$_pv"
 	_pvproto=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto" 2>/dev/null)
-	case "$_pvproto" in
-		mbim|qmi)
-			echo "WARNING: the interface runs protocol '$_pvproto', which opens"
-			echo "  /dev/cdc-wdm* directly, while the proxy above holds the same device."
-			echo "  That is what produces 'mbim message timeout'. Cure: killall mbim-proxy qmi-proxy,"
-			echo "  then ifup the interface you need." ;;
-		*) echo "(interface protocol '$_pvproto' - a proxy usually does not bother it)" ;;
-	esac
+	if proto_in direct "$_pvproto"; then
+		echo "WARNING: the interface runs protocol '$_pvproto', which opens"
+		echo "  /dev/cdc-wdm* directly, while the proxy above holds the same device."
+		echo "  That is what produces 'mbim message timeout'. Cure: killall mbim-proxy qmi-proxy,"
+		echo "  then ifup the interface you need."
+	else
+		echo "(interface protocol '$_pvproto' - a proxy usually does not bother it)"
+	fi
 }
 
 # МОДЕМ ЕЩЁ В РЕЖИМЕ НАКОПИТЕЛЯ. Многие свистки при включении отдаются как
@@ -1983,7 +1983,8 @@ report() {
 	_sum_m=$("$RES/listmodems.sh" 2>/dev/null)
 	echo "Modem:     $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].model' 2>/dev/null) $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].vidpid' 2>/dev/null)"
 	echo "Operator:  $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].operator' 2>/dev/null)"
-	echo "Interface: $(uci -q get 5gmodem.@5gmodem[0].network) ($(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto" 2>/dev/null))"
+	_ss_pr=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network).proto" 2>/dev/null)
+	echo "Interface: $(uci -q get 5gmodem.@5gmodem[0].network) ($_ss_pr)"
 	echo ""
 	echo "VERDICT:"
 	_sum_verdict | sed 's/^/  /'
@@ -2003,7 +2004,7 @@ report() {
 	run 5  "uci 5gmodem (SMS section)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' | sed -E \"s/^([^=]*(token|secret|pass|psk)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\" || echo '(the sms section is empty)'"
 	run 5  "uci lpac" uci -q show lpac
 	# Пароли/ключи из network не выводим: там PPP/PPPoE-креды и Wi-Fi.
-	run 5  "uci network (secrets stripped)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret'"
+	run 5  "uci network (secrets stripped)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret|token|pincode|\\.pin=|\\.puk='"
 	# Интерфейсы: и СЕКЦИОННЫЕ (из 5gmodem), и ВСЕ модемные из network - секция
 	# может ссылаться на чужой/несуществующий интерфейс, а собственный при этом
 	# осиротеет, и в отчёте его было не видно вовсе. Плюс ДОЧЕРНИЕ интерфейсы
@@ -2194,6 +2195,14 @@ report() {
 	# вывода (живой случай: два T99W175 на ZBT, 30.07).
 	run 20 "QMI extras (band/signal)" sh -c '
 		command -v qmicli >/dev/null 2>&1 || { echo "qmicli is NOT INSTALLED (the qmi-utils package) - nowhere to read the band and RSRP from"; exit 0; }
+		_qv_err=$(qmicli --version 2>&1 | grep -m1 "Error relocating")
+		if [ -n "$_qv_err" ]; then
+			echo "qmicli is BROKEN: it does not match the installed libqmi library"
+			echo "  qmi-utils $(apk info -v qmi-utils 2>/dev/null | sed 's/^qmi-utils-//' | head -1), libqmi $(apk info -v libqmi 2>/dev/null | sed 's/^libqmi-//' | head -1)"
+			echo "  $_qv_err"
+			echo "  every QMI read (band, RSRP, carrier aggregation, SIM slots) fails until both come from the same feed"
+			exit 0
+		fi
 		W=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 		[ -c "$W" ] || { echo "the active modem has no cdc-wdm of its own - no QMI extras"; exit 0; }
 		echo "node: $W"
@@ -2331,8 +2340,11 @@ report() {
 			[ -n "$DSK" ] && [ "$t" = "$DSK" ] && continue
 			. /usr/share/5gmodem/noatports.sh
 			tty_no_at "$t" && { echo "  $t -> skipped: a service port, AT resets this modem"; continue; }
+			. /usr/share/5gmodem/atlock.sh
+			at_lock "$t" 5 || { echo "  $t -> skipped: the port is busy (metrics poll or an eSIM operation holds it)"; continue; }
 			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done
 			R=$(sms_tool -d "$t" at "AT+CCHO=\"$AID\"" 2>/dev/null | tr -d "\r" | grep -v "^$" | grep -vi "^at+ccho" | head -1)
+			at_unlock
 			case "$R" in
 				*CCHO:*|[0-9]*) echo "  $t -> CHANNEL OPENED [$R]  <= this is the eUICC port" ;;
 				*) echo "  $t -> no ([$R])" ;;
@@ -2378,7 +2390,7 @@ report() {
 	# lan.ipaddr, застрявшая здесь, выглядит потом как «роутер сам сломался»
 	# (живой симптом: пинга до роутера нет, инет есть). Если тут что-то есть -
 	# вот оно и есть главная улика.
-	run 10 "Uncommitted uci changes (landmines)" sh -c 'uci changes 2>/dev/null | head -40; [ -z "$(uci changes 2>/dev/null)" ] && echo "(empty - no landmines)"'
+	run 10 "Uncommitted uci changes (landmines)" sh -c 'uci changes 2>/dev/null | head -40 | sed -E "s/^([^=]*(token|secret|pass|psk|pincode|\\.pin|\\.puk)[^=]*|[^=]*[._]key\\+?)=.*/\\1='"'"'<hidden>'"'"'/"; [ -z "$(uci changes 2>/dev/null)" ] && echo "(empty - no landmines)"'
 	run 10 "USB power and stability (verdict)" usb_flap_verdict
 	run 10 "On the bus but unconfigured? (verdict)" usb_unconfigured_verdict
 	run 15 "Did usb_modeswitch break the composition? (verdict)" usbmode_verdict
@@ -2417,6 +2429,10 @@ report() {
 	echo "===== end of report ====="
 }
 
+_proto_names() {
+	sed -E '/^[A-Za-z0-9_@]+[.][^= ]*=/!{s/(^|[^A-Za-z0-9_])mbimp([^.A-Za-z0-9_-]|$)/\1MBIM+MM\2/g;s/(^|[^A-Za-z0-9_])qmip([^.A-Za-z0-9_-]|$)/\1QMI+MM\2/g}'
+}
+
 case "$1" in
 start)
 	# Уже идёт - не плодим второй сбор (AT-порт один, второй сбор его отберёт).
@@ -2428,7 +2444,7 @@ start)
 	# и обрывает вызов по таймауту, хотя сбор идёт.
 	# tr -d '\000': /proc/device-tree/model и dmesg тащат NUL-байты, из-за которых
 	# отчёт становится "binary file" - его неудобно смотреть и грепать.
-	( report 2>&1 | tr -d '\000' > "$OUT"; rm -f "$LOCK" ) >/dev/null 2>&1 </dev/null &
+	( report 2>&1 | tr -d '\000' | _proto_names > "$OUT"; rm -f "$LOCK" ) >/dev/null 2>&1 </dev/null &
 	echo $! > "$LOCK"
 	echo '{"state":"running"}'
 	sleep 1
@@ -2443,7 +2459,7 @@ status)
 	fi
 	;;
 run)
-	report
+	report | _proto_names
 	;;
 *)
 	echo "usage: collect.sh start|status|run"

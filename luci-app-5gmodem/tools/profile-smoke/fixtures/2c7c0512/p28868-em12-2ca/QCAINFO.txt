@@ -1,0 +1,3 @@
+## 4pda 994474 #28868 (EM12-G в MikroTik, B7+B3); отступы at-chat сняты
++QCAINFO: "pcc",3300,50,"LTE BAND 7",1,112,-53,-11,-32,21
++QCAINFO: "scc",1301,100,"LTE BAND 3",1,421,-49,-10,-21,22

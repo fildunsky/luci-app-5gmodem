@@ -1,0 +1,10 @@
+## SINR в +QCAINFO у EM12-G уже в дБ (RSRP -105, RSRQ -9 при рабочей 3CA - минус 17 дБ невозможны)
+PBAND=B7 (2600 MHz) @20 MHz
+S1BAND=B7 (2600 MHz) @20 MHz
+S2BAND=B3 (1800 MHz) @20 MHz
+EARFCN=2850
+PCI=78
+RSRP=-105
+RSRQ=-9
+RSSI=-76
+SINR=13

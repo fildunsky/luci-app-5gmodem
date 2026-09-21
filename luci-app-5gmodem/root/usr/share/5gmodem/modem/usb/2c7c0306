@@ -1,6 +1,8 @@
 # Quectel EP06
 # Quectel EG06
 
+. "$RES/modem/usb/_quectel_common"
+
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
 # Датчиков 3 или 4 в зависимости от прошивки (форум: «+QTEMP: 49,47,47» и
@@ -25,74 +27,9 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	esac
 fi
 
-T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
-if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-	T_DEC=$(printf "%d" "0x$T")
-	T_HEX=$T
+_qc_qeng_bw
 
-	# Полосы - ОТДЕЛЬНЫМ полем BANDWIDTH, а не внутри PBAND. Легаси-формат
-	# «B3 DL: @20 MHz UL: @20 MHz» ломал фронт: caSplitBand режет строку по
-	# « @», и таблица несущих показывала «B3 (1800 MHz) DL:» в колонке
-	# диапазона и «20 MHz UL:» в колонке полосы с пустотой после двоеточий
-	# (живой случай EP06-E, 19.08.2026). UL-полосу показываем только когда
-	# она отличается от DL (на FDD они совпадают почти всегда).
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
-	case $T in
-		0) T1="1.4";;
-		1) T1="3";;
-		2) T1="5";;
-		3) T1="10";;
-		4) T1="15";;
-		5) T1="20";;
-		*) T1="";;
-	esac
-	_ULBW="$T1"
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
-	case $T in
-		0) T1="1.4";;
-		1) T1="3";;
-		2) T1="5";;
-		3) T1="10";;
-		4) T1="15";;
-		5) T1="20";;
-		*) T1="";;
-	esac
-	if [ -n "$T1" ]; then
-		BANDWIDTH="$T1 MHz"
-		[ -n "$_ULBW" ] && [ "$_ULBW" != "$T1" ] && BANDWIDTH="$T1/$_ULBW MHz"
-	fi
-	PBAND="$MAINCUT"
-	
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}')
-	PCI=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $10}')
-	EARFCN=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $17}')
-	RSSI=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15}')
-	RSRP=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
-	RSRQ=$T
-	# SINR В QENG="servingcell" УЖЕ В ДЕЦИБЕЛАХ. Прежняя формула 0.2*x*10-20 (= 2x-20)
-	# не была ни «1/5 дБ» из мануала EC25, ни живым замером; по 23 живым ответам
-	# QENG с форума поле лежит в 0..25 и растёт вместе с RSRP (-114 → 6, -67 → 25) -
-	# это дБ как есть, ровно как сверено на EC25 (modem/usb/2c7c0125) по AT+QCSQ.
-	# Со сдвигом карточка занижала SINR на 4-14 дБ и решение «256QAM нельзя».
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {v=$18; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
-	SINR=$T
-fi
-
-# +QSPN: <FNN>,<SNN>,<SPN>,<alphabet>,<RPLMN>. Брали поле 2 (FNN) - на старых
-# прошивках при ограниченном сервисе там «000 000» (форум: «+QSPN: "000 000",
-# "000 000","beCloud",0,"000000"»), и это затирало имя, уже найденное по +COPS?.
-# Берём SPN (поле 4, как у EC25/EG25), при пустом - FNN; цифровой мусор не имя.
-T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $4}' | xargs)
-case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac
-[ -n "$T" ] || { T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $2}' | xargs); case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac; }
-if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
-	COPS="$T"
-fi
+_qc_spn4
 
 if [ "x$MODE_NUM" = "x7" ]; then
 	# ОТВЕТ QENG СОХРАНЯЕМ: ниже $O перезаписывается ответом QCAINFO, а из QENG
@@ -127,15 +64,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		[ "$_scc_i" -ge 4 ] && break
 		_scc_i=$((_scc_i + 1))
 		B="${_SBSTR#LTE BAND }"
-		case $_SBW in
-			6) T1="1.4";;
-			15) T1="3";;
-			25) T1="5";;
-			50) T1="10";;
-			75) T1="15";;
-			100) T1="20";;
-			*) T1="?";;
-		esac
+		_qc_cbw T1 "$_SBW" "?"
 		if [ "$_SST" = "2" ]; then
 			_SSTW="activated"
 			case "$MODE" in *LTE_A*) MODE="$MODE / $(band4g ${B})" ;;
@@ -222,49 +151,10 @@ fi
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
 
 # Modem
-OF=$(sms_tool -d $DEVICE at "ati")
-DEVV=$(echo $OF | tr -s "\n"  | xargs)
-FW=$(echo $DEVV | awk -F 'Revision:' '{print $2}'| xargs)
-MODEL=$(echo $DEVV | awk -F 'ati|Revision:' '{print $1}'| xargs)
-if [ -z "$MODEL" ]
-then
-      MODEL=$(echo $DEVV | awk -F 'ati|Revision:' '{print $2}'| xargs)
-fi
+_qc_ati
 
-# International Mobile Equipment Identity (IMEI)
-O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
-NR_I=$(digits_of "$O" 15 17)
-if [ -n "$NR_I" ]; then
-	NR_IMEI="$NR_I"
-fi
+_qc_ids
 
-# International Mobile Subscriber Identity (IMSI)
-O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
-NR_C=$(digits_of "$O" 14 16)
-if [ -n "$NR_C" ]; then
-	NR_IMSI="$NR_C"
-fi
-
-#  Integrated Circuit Card Identifier (ICCID)
-O=$(sms_tool -d $DEVICE at "AT+QCCID")
-NR_D=$(echo "$O" | awk -F [:] '/^\+QCCID/{print $2}' | xargs)
-if [ -n "$NR_D" ]; then
-	NR_ICCID="$NR_D"
-fi
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=2c7c ProdID=0306' '{print $2}' | cut -c-1220)
-if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
-then
-    PROTO="qmi"
-elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"
-then
-    PROTO="mbim"
-elif echo "$PVCUT" | grep -q "Driver=cdc_ether"
-then
-    PROTO="ecm"
-fi
+_qc_proto "Vendor=2c7c ProdID=0306" 1220
 
 . "$RES/modem/usb/_quectel_qrsrp"

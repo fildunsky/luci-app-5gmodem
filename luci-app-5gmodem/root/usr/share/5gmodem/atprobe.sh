@@ -44,7 +44,8 @@ OUT="/tmp/.atprobe.$$"
 # детект многопортового модема (FM350 - 7 tty) rpcd рубит на 30-й секунде, и
 # файл оставался в tmpfs навсегда: маску .atprobe.* никто не чистит, а на
 # роутере с 32-64 МБ ОЗУ это копится без верхней границы (аудит 12.09.2026).
-trap 'rm -f "$OUT" 2>/dev/null' EXIT INT TERM HUP
+trap 'rm -f "$OUT" 2>/dev/null' EXIT
+trap '[ -n "$p" ] && kill "$p" 2>/dev/null; exit 143' INT TERM HUP
 # run sms_tool in the background; a killer terminates it after 2s if it hangs.
 # 'wait' returns the instant sms_tool finishes, so a good port answers in well
 # under a second while a silent one is capped at 2s.

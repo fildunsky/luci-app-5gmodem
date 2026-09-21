@@ -676,13 +676,32 @@ _reconnect_iface() {
 _bands_live() {
 	case "$_BANDS_APPLY_LIVE" in 1|reconnect) return 0 ;; *) return 1 ;; esac
 }
+_bands_kick() {
+	[ -n "$_MBIMP_IFACE" ] && : > "/tmp/${_MBIMP_KIND:-mbimp}-keeper.$_MBIMP_IFACE.kick"
+}
 _bands_after_write() {
-	[ -n "$_MBIMP_IFACE" ] && : > "/tmp/mbimp-keeper.$_MBIMP_IFACE.kick"
+	_bands_kick
 	case "$_BANDS_APPLY_LIVE" in
 		1)         return 0 ;;
 		reconnect) _reconnect_iface ;;
 		*)         /usr/share/5gmodem/reboot_modem.sh soft ;;
 	esac
+}
+_bands_flush() {
+	rm -f /tmp/5gmodem_bands_* 2>/dev/null
+}
+_bands_set_bg() {
+	(
+		_sbg_how="$1"; shift
+		case "$_sbg_how" in
+			band)      _band_write "$@" ;;
+			after)     "$@" && { _bands_flush; _bands_after_write; } ;;
+			mode)      "$@" && { _persist_mode "$2"; _bands_flush; _bands_after_write; } ;;
+			reconnect) "$@"; _bands_flush; _reconnect_iface ;;
+			*)         "$@" ;;
+		esac
+		_bands_flush
+	) >/dev/null 2>&1 </dev/null &
 }
 
 # --- Агрегация включена в модеме? --------------------------------------------
@@ -747,7 +766,7 @@ getantports() {
 # старый кэш, а первое чтение после - свежую маску; холодное чтение во время
 # записи выстроится ЗА командами записи в очереди at_lock и тоже прочитает
 # уже новую маску.
-case "$1" in restorebands) rm -f /tmp/5gmodem_bands_* 2>/dev/null ;; esac
+case "$1" in restorebands) _bands_flush ;; esac
 
 # CACHE-FIRST + фоновое обновление для json.
 #
@@ -772,7 +791,9 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# переключения qmi -> modemmanager до 5 минут отдавался старый снимок с
 	# readonly=1, и UI продолжал советовать «переключитесь на ModemManager», хотя
 	# пользователь уже переключился. Ровно это и наблюдалось.
-	_BJP=$(uci -q get "network.$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null).proto" 2>/dev/null)
+	_BJIF=$(uci -q get "5gmodem.m_$(echo "$_BJAM" | sed 's/[^A-Za-z0-9]/_/g').network" 2>/dev/null)
+	[ -n "$_BJIF" ] || _BJIF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	_BJP=$(uci -q get "network.$_BJIF.proto" 2>/dev/null)
 	# ИДЕНТИЧНОСТЬ МОДЕМА - вторая линия обороны против чужого снимка. Файл keyed
 	# путём, но если в него всё же попали данные другого модема (историческая
 	# гонка active_modem, см. запись ниже) - имя не спасёт. Содержимое несёт своё
@@ -790,9 +811,10 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# при пустых полях.
 	_BJCM=$(cat "$_BJF.m" 2>/dev/null)
 	_BJTTL=300
-	if [ "$_BJP" = "mbimp" ] && grep -q '"readonly": *1' "$_BJF" 2>/dev/null; then
+	if { [ "$_BJP" = "mbimp" ] || [ "$_BJP" = "qmip" ]; } && grep -q '"readonly": *1' "$_BJF" 2>/dev/null; then
 		_BJTTL=15
 	fi
+	grep -q '"nolive": *1' "$_BJF" 2>/dev/null && _BJTTL=15
 	if [ -s "$_BJF" ] && [ -n "$_BJT" ] \
 	   && [ "$_BJP" = "$(cat "$_BJF.p" 2>/dev/null)" ] \
 	   && { [ -z "$_BJMDL" ] || [ -z "$_BJCM" ] || [ "$_BJMDL" = "$_BJCM" ]; } \
@@ -1261,10 +1283,11 @@ if [ "$_BAND_VIA" = "mmcli" ]; then
 	[ -n "$_IFACE" ] || _IFACE=$(uci -q get 5gmodem.@5gmodem[0].network)
 	_bs_ipr=$(uci -q get "network.$_IFACE.proto" 2>/dev/null)
 	_BAND_NO_TAKEOVER=""
-	if [ "$_bs_ipr" = "mbimp" ]; then
+	if [ "$_bs_ipr" = "mbimp" ] || [ "$_bs_ipr" = "qmip" ]; then
 		_BAND_NO_TAKEOVER=1
 		_BANDS_APPLY_LIVE=1
 		_MBIMP_IFACE="$_IFACE"
+		_MBIMP_KIND="$_bs_ipr"
 		if [ -n "$_MMIDX" ] && mmcli -m "$_MMIDX" -K >/dev/null 2>&1; then
 			_bs_ipr="modemmanager"
 		fi
@@ -1485,9 +1508,11 @@ _band_write() {  # $1 - функция записи, $2 - список
 	echo "$_bw_me" > "$_BW_TOK"
 	"$1" "$2" && : > "$_BW_PEND"
 	_bw_serial_unlock
+	_bands_flush
 	[ -f "$_BW_PEND" ] || return 1
 	if [ "$_BANDS_APPLY_LIVE" = 1 ]; then
 		rm -f "$_BW_PEND"
+		_bands_kick
 		return 0
 	fi
 	at_unlock
@@ -1638,7 +1663,7 @@ case $1 in
 		# Выбор ЗАПОМИНАЕМ в секции модема (для восстановления после перезагрузки -
 		# см. restorebands). Делаем до фонового применения: нужно намерение
 		# пользователя ($2), а не то, что реально ляжет в маску.
-		[ -n "$2" ] && { _persist_bands "" "$2"; ( _band_write setbands "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands "" "$2"; _bands_set_bg band setbands "$2"; }
 		;;
 	"setall")
 		_sa_norm() { echo "$1" | sed 's/:[^ ,]*//g' | tr ' ,' '\n\n' | grep -E '^[0-9]+$' | sort -n | uniq | tr '\n' ' ' | sed 's/ *$//'; }
@@ -1714,7 +1739,7 @@ case $1 in
 				[ -n "${_sa_w#*:}" ] && _sa_fail_add "${_sa_w%%:*}" mmtimeout ""
 			done
 		  fi
-		  rm -f /tmp/5gmodem_bands_* 2>/dev/null
+		  _bands_flush
 		  _sa_res_write done
 		) >/dev/null 2>&1 </dev/null &
 		cat "$(_sa_resfile)" 2>/dev/null
@@ -1734,7 +1759,7 @@ case $1 in
 		;;
 	"setbands5gnsa")
 		# Перезапуск радио - в той же подоболочке после записи (см. setbands).
-		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; ( _band_write setbands5gnsa "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gnsa "$2"; _bands_set_bg band setbands5gnsa "$2"; }
 		;;
 	"getsupportedbands5gsa")
 		getsupportedbands5gsa
@@ -1749,7 +1774,7 @@ case $1 in
 		getbandsext5gsa
 		;;
 	"setbands5gsa")
-		[ -n "$2" ] && { _persist_bands 5gsa "$2"; ( _band_write setbands5gsa "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && { _persist_bands 5gsa "$2"; _bands_set_bg band setbands5gsa "$2"; }
 		;;
 	"mgmtinfo")
 		# ЕДИНАЯ точка истины для блока «Управление частотами». Раньше фронт сам
@@ -1915,7 +1940,13 @@ case $1 in
 			if ! _bands_live && [ -n "$_DEVICE" ]; then
 				sms_tool -d "$_DEVICE" at "AT+CFUN=4" >/dev/null 2>&1
 				sleep 3
-				sms_tool -d "$_DEVICE" at "AT+CFUN=1" >/dev/null 2>&1
+				_cf_n=0
+				while [ "$_cf_n" -lt 3 ]; do
+					_cf_n=$((_cf_n + 1))
+					sms_tool -d "$_DEVICE" at "AT+CFUN=1" >/dev/null 2>&1
+					sleep 2
+					case "$(sms_tool -d "$_DEVICE" at "AT+CFUN?" 2>/dev/null)" in *"+CFUN: 1"*) break ;; esac
+				done
 			fi
 			_reconnect_iface
 		fi
@@ -1931,7 +1962,7 @@ case $1 in
 		# AT+CNMP берёт эффект сразу, а CFUN=4->1 его ОТКАТЫВАЕТ, проверено). Флаг
 		# _BANDS_APPLY_LIVE из профиля решает, перезапускать ли радио. В фоне -
 		# перерегистрация модема может не уложиться в таймаут rpcd.
-		[ -n "$2" ] && { ( setmode "$2" && { _persist_mode "$2"; _bands_after_write; }; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && _bands_set_bg mode setmode "$2"
 		;;
 	# СИНХРОННАЯ смена режима БЕЗ перезапуска радио - для короткого ухода в 3G
 	# под запрос USSD (см. ussd.sh). Отличий от "setmode" два, и оба нужны:
@@ -1944,6 +1975,7 @@ case $1 in
 	"setmodelive")
 		[ -n "$2" ] || { echo "no mode"; exit 2; }
 		setmode "$2" >/dev/null 2>&1
+		_bands_flush
 		# СВЕРЯЕМ ПО ФАКТУ, а не по коду возврата. `sms_tool ... at` отдаёт 0 даже
 		# когда модем ответил ERROR, и профиль этого не различает. Поймано живьём:
 		# setmodelive отчитался «ok», а AT+WS46? так и показывал прежние 31 -
@@ -1966,7 +1998,7 @@ case $1 in
 		# Как setbands: в ФОНЕ с отвязкой дескрипторов, и СТРОГО ПОСЛЕ записи -
 		# soft-реконнект (GTACT рвёт PDP на FM350). Раньше реконнект дёргал UI
 		# (setBands3gAT) - для combos Telit; теперь один путь для обоих стилей.
-		[ -n "$2" ] && { ( setbands3g "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && _bands_set_bg after setbands3g "$2"
 		;;
 	"getsupportedbands2g")
 		getsupportedbands2g
@@ -1976,7 +2008,7 @@ case $1 in
 		;;
 	"setbands2g")
 		# Зеркало setbands3g: фон + реконнект после записи.
-		[ -n "$2" ] && { ( setbands2g "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && _bands_set_bg after setbands2g "$2"
 		;;
 	"getcelllock")
 		# ЧТО МЫ САМИ СТАВИЛИ. Нужно из-за поведения, проверенного на живом
@@ -1995,7 +2027,7 @@ case $1 in
 		;;
 	"setcaenabled")
 		case "$2" in
-			0|1) ( setcaenabled "$2"; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+			0|1) _bands_set_bg plain setcaenabled "$2" ;;
 		esac
 		;;
 	"get256qam")
@@ -2007,7 +2039,7 @@ case $1 in
 		# кэш json чистит сама фоновая подоболочка ПОСЛЕ записи, иначе UI успеет
 		# закэшировать состояние из середины записи. (ревью 13.09.2026, форум 4pda)
 		case "$2" in
-			0|1) ( set256qam "$2" && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+			0|1) _bands_set_bg after set256qam "$2" ;;
 		esac
 		;;
 	"getulca")
@@ -2017,7 +2049,7 @@ case $1 in
 		# Выключения uplink CA на форуме не нашлось ни одного - принимаем только
 		# "on". Молча выполнить "off" значило бы соврать кнопкой.
 		case "$2" in
-			on) ( setulca on && _bands_after_write; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & ;;
+			on) _bands_set_bg after setulca on ;;
 		esac
 		;;
 	"getcelllock5g")
@@ -2037,15 +2069,16 @@ case $1 in
 					logger -t 5gmodem "celllock5g: this modem profile cannot write a 5G cell lock - nothing was sent"
 					exit 0 ;;
 			  esac
-			  rm -f /tmp/5gmodem_bands_* 2>/dev/null
+			  _bands_flush
 			  _reconnect_iface
+			  _bands_flush
 			) >/dev/null 2>&1 </dev/null &
 		fi
 		;;
 	"set5gmode")
 		# Как и привязка к соте: применяется через цикл режима полёта, дольше
 		# 30-секундного таймаута rpcd - поэтому в фон с отвязкой дескрипторов.
-		[ -n "$2" ] && { ( set5gmode "$2"; _reconnect_iface; rm -f /tmp/5gmodem_bands_* 2>/dev/null ) >/dev/null 2>&1 </dev/null & }
+		[ -n "$2" ] && _bands_set_bg reconnect set5gmode "$2"
 		;;
 	"setcelllock")
 		# Как и setbands - в фоне с отвязкой дескрипторов: привязка делается через
@@ -2083,7 +2116,7 @@ case $1 in
 			  # страница до истечения кэша показывала снятую привязку как живую
 			  # (проверено на EP06-E 13.09.2026: модем отвечал "common/4g",0,
 			  # карточка - «Привязан к соте 3300/326»).
-			  rm -f /tmp/5gmodem_bands_* 2>/dev/null
+			  _bands_flush
 			  case "$_cl_out" in
 				*Unsupported*)
 					[ -n "$_cl_sec" ] && { uci -q delete "5gmodem.$_cl_sec.celllock"; uci -q commit 5gmodem; }
@@ -2105,6 +2138,7 @@ case $1 in
 				# Сброс по питанию остаётся кнопкой у пользователя.
 				[ "$_cl_ok" = 0 ] && logger -t 5gmodem "cell-lock: modem stopped answering AT after locking - power-cycle it from Frequency management if it does not recover"
 			  fi
+			  _bands_flush
 			) >/dev/null 2>&1 </dev/null &
 		fi
 		;;
@@ -2114,7 +2148,12 @@ case $1 in
 	"json")
 		. /usr/share/libubox/jshn.sh
 		json_init
-		json_add_string modem "$(getinfo)"
+		if [ "$_PORT_OK" = "1" ]; then
+			json_add_string modem "$(getinfo)"
+		else
+			json_add_string modem "$(uci -q get "5gmodem.$_bs_sec.model")"
+			[ -n "$_MM_AT_STATIC$_NOAT_STATIC" ] || json_add_int nolive 1
+		fi
 		# Kernel-прото + mmcli-профиль: применить напрямую нельзя (MM инхибирован).
 		# Захват включён по умолчанию - отдаём "takeover": UI держит кнопки
 		# активными и предупреждает о кратком разрыве. "readonly" остаётся

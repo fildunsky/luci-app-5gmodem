@@ -27,7 +27,7 @@ RUN=/var/run/5gmodem-mm-inhibit
 mkdir -p "$RUN"
 
 _is_kernel_proto() {
-	case "$1" in qmi|mbim|xmm|ncm|atc|3g|wwan|ppp|fibocom) return 0 ;; *) return 1 ;; esac
+	proto_in nomm "$1"
 }
 
 # effective protocol of the modem at usb path $1: real iface proto, else remembered

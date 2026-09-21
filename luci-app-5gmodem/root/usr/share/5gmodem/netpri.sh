@@ -569,7 +569,13 @@ operator_probe() {
 	fi
 	# MM-модемы: имя оператора берём из mmcli (AT+COPS конфликтует с
 	# ModemManager, который держит порт, и на MBIM/QMI часто пуст).
-	if [ "$(ucinet_get "$i" proto)" = "modemmanager" ]; then
+	_op_mmo=""
+	[ "$(ucinet_get "$i" proto)" = "modemmanager" ] && _op_mmo=1
+	if [ -z "$_op_mmo" ] && command -v mm_owns_path >/dev/null 2>&1; then
+		_op_mp=$(modem_path_for "$i")
+		[ -n "$_op_mp" ] && mm_owns_path "$_op_mp" && _op_mmo=1
+	fi
+	if [ -n "$_op_mmo" ]; then
 		# ИНДЕКС ИМЕННО ЭТОГО МОДЕМА, А НЕ АКТИВНОГО.
 		#
 		# Здесь стоял безадресный mmindex, то есть индекс активного модема, а имя
@@ -638,9 +644,10 @@ operator_probe() {
 		# сети («MegaFon RUS») там, где карточка показывает «Megafon» - см.
 		# opname_pretty в lib.sh. Лишняя AT-команда идёт по той же очереди и
 		# только в ФОНОВОМ refresh (list в порт не ходит вовсе).
-		num=$(_npri_at "$port" "AT+COPS=3,2;+COPS?" | tr -d '\r' \
-			| sed -n 's/.*+COPS[^"]*"\([0-9]\{4,\}\)".*/\1/p' | head -1)
+		num=""
 		if [ -z "$name" ] || echo "$name" | grep -qE '^[0-9 ]*$'; then
+			num=$(_npri_at "$port" "AT+COPS=3,2;+COPS?" | tr -d '\r' \
+				| sed -n 's/.*+COPS[^"]*"\([0-9]\{4,\}\)".*/\1/p' | head -1)
 			# tr -d '\r': mccmnc.dat в CRLF, иначе имя уезжает в кэш с возвратом
 			# каретки на конце (см. lib.sh/opname_pretty и hilink.sh).
 			[ -n "$num" ] && name=$(awk -F';' '/^'"$num"';/{print $3}' \
@@ -773,7 +780,7 @@ ssid_for() {
 # friendly label: modem -> operator ("Модем N" fallback), wifi -> SSID, wan -> WAN
 label_for() {
 	i="$1"
-	case "$(iface_type "$i")" in
+	case "${2:-$(iface_type "$i")}" in
 	# «WAN» - только для интерфейса, который так и называется. Проводной
 	# аплинк с другим именем (LAN-DHCP однопортового роутера) подписываем
 	# его настоящим именем: технически это lan, врать «WAN» нельзя -
@@ -1410,7 +1417,7 @@ list)
 		[ "$first" = 1 ] || printf ','
 		first=0
 		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s%s}' \
-			"$n" "$t" "$(json_esc "$sub")" "$(json_esc "$(label_for "$n")")" "$ip" "$m" "$_np_h"
+			"$n" "$t" "$(json_esc "$sub")" "$(json_esc "$(label_for "$n" "$t")")" "$ip" "$m" "$_np_h"
 	done
 	# Последнее событие сторожа и его выключатели - хвостовым элементом ТОГО ЖЕ
 	# списка: страница и так забирает list каждые 5 с, отдельный опрос ради двух
@@ -1903,7 +1910,7 @@ ping)
 			# 03.08.2026: DNS честный, прямой 000, через mixed-port 302).
 			# Тот же обход, что у geo-запросов спидтеста: http/mixed-порт clash;
 			# tproxy-порт не годится - это не HTTP-прокси.
-			_tp_pp=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+			_tp_pp=$(sed -n 's/^\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 				/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 			if [ -n "$_tp_pp" ] && [ "$_tp_pp" != "0" ]; then
 				_tp_w=$(curl -o /dev/null -s -m 6 -x "http://127.0.0.1:$_tp_pp" \

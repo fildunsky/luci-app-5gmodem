@@ -1257,15 +1257,16 @@ function renderProfiles(list) {
 		var on = (p.profileState == 'enabled');
 		var name = p.profileNickname || p.profileName || '-';
 		if (p.profileClass == 'test') { name += ' (test)'; }
+		var pid = /^[0-9A-Fa-f]{32}$/.test(p.isdpAid || '') ? p.isdpAid : p.iccid;
 		var btns = [];
 		if (on) {
 			btns.push(E('button', { 'class': 'btn cbi-button',
-				'click': function(ev) { ev.preventDefault(); esimOp('disable', p.iccid, name); } }, [ _('Disable') ]));
+				'click': function(ev) { ev.preventDefault(); esimOp('disable', pid, name); } }, [ _('Disable') ]));
 		} else {
 			btns.push(E('button', { 'class': 'btn cbi-button cbi-button-action',
-				'click': function(ev) { ev.preventDefault(); esimOp('enable', p.iccid, name); } }, [ _('Enable') ]));
+				'click': function(ev) { ev.preventDefault(); esimOp('enable', pid, name); } }, [ _('Enable') ]));
 			btns.push(E('button', { 'class': 'btn cbi-button cbi-button-remove',
-				'click': function(ev) { ev.preventDefault(); esimDeleteConfirm(p.iccid, name); } }, [ _('Delete') ]));
+				'click': function(ev) { ev.preventDefault(); esimDeleteConfirm(pid, name, p.iccid); } }, [ _('Delete') ]));
 		}
 		tbl.appendChild(E('tr', { 'class': 'tr esim-row' }, [
 			E('td', { 'class': 'td left' }, [
@@ -1461,16 +1462,16 @@ function esimOp(verb, iccid, name) {
 	attempt(0);
 }
 
-function esimDeleteConfirm(iccid, name) {
+function esimDeleteConfirm(id, name, iccid) {
 	ui.showModal(_('Delete eSIM profile'), [
 		/* Имя профиля приходит с eUICC - в страницу только текстом
 		   (аудит 12.09.2026). */
-		E('p', [ _('Delete profile "%s" (%s)? This cannot be undone.').format(name, iccid) ]),
+		E('p', [ _('Delete profile "%s" (%s)? This cannot be undone.').format(name, iccid || id) ]),
 		E('div', { 'class': 'right' }, [
 			E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
 			' ',
 			E('button', { 'class': 'btn cbi-button-remove',
-				'click': function() { ui.hideModal(); esimOp('delete', iccid, name); } }, [ _('Delete') ]),
+				'click': function() { ui.hideModal(); esimOp('delete', id, name); } }, [ _('Delete') ]),
 		]),
 	]);
 }

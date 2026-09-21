@@ -295,7 +295,7 @@ start)
 			# ВАЖНО: tproxy-порт для этого НЕ годится (это не HTTP-прокси), его
 			# намеренно не берём - на стенде только он и есть.
 			if [ -z "$_cc" ]; then
-				_pp=$(sed -n 's/^ *\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
+				_pp=$(sed -n 's/^\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 					/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 				if [ -n "$_pp" ] && [ "$_pp" != "0" ]; then
 					if [ -n "$GEOUA" ]; then

@@ -87,6 +87,7 @@ setbands2g() {
 	_want="$1"
 	[ "$_want" = "default" ] && _want="$_DEFAULT_2G_BANDS"
 	_m=$(_q_gw_mask)
+	[ "$_m" = 0 ] && { echo "ERROR: current band mask unreadable"; return 1; }
 	# гасим все известные 2G-биты, затем поднимаем выбранные; 3G-половина цела
 	for _b in 900 1800 850 1900; do _m=$(( _m & ~$(_q2g_bit "$_b") )); done
 	for _b in $_want; do _m=$(( _m | $(_q2g_bit "$_b") )); done
@@ -111,6 +112,7 @@ setbands3g() {
 	_want="$1"
 	[ "$_want" = "default" ] && _want="$_DEFAULT_3G_BANDS"
 	_m=$(_q_gw_mask)
+	[ "$_m" = 0 ] && { echo "ERROR: current band mask unreadable"; return 1; }
 	for _b in 1 2 5 8; do _m=$(( _m & ~$(_q3g_bit "$_b") )); done
 	for _b in $_want; do _m=$(( _m | $(_q3g_bit "$_b") )); done
 	[ "$_m" = 0 ] && { echo "ERROR: empty band mask"; return; }

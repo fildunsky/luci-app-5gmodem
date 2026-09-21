@@ -15,9 +15,9 @@ apply_mm_state() {
 	# mmneed на следующем шаге его гасил - качели на каждом хотплаге (ревью,
 	# баг №2). Теперь решение одно на всех.
 	_ams_net=$(uci show network 2>/dev/null)
-	if printf '%s' "$_ams_net" | grep -q "\.proto='modemmanager'"; then
+	if printf '%s' "$_ams_net" | grep -qE "\.proto='($(proto_re mm))'"; then
 		/etc/init.d/modemmanager enabled >/dev/null 2>&1 || /etc/init.d/modemmanager enable >/dev/null 2>&1
-	elif printf '%s' "$_ams_net" | grep -qE "\.proto='(mbim|qmi)'"; then
+	elif printf '%s' "$_ams_net" | grep -qE "\.proto='($(proto_re direct))'"; then
 		/etc/init.d/modemmanager disable >/dev/null 2>&1
 	fi
 	/usr/share/5gmodem/mmneed.sh apply >/dev/null 2>&1
@@ -39,35 +39,32 @@ apply_mm_state() {
 # порты своей логикой в ensure_iface - их не трогаем.
 # follow_iface_device <iface> <usb-путь>
 follow_iface_device() {
-	local _fd_if="$1" _fd_p="$2" _fd_new="" _fd_dp="" _fd_ch=0
+	local _fd_if="$1" _fd_p="$2" _fd_new="" _fd_dp="" _fd_ch=0 _fd_pr=""
 	[ -n "$_fd_if" ] && [ -n "$_fd_p" ] || return 0
-	case "$(uci -q get "network.$_fd_if.proto")" in
-		modemmanager)
-			_fd_new=$(readlink -f "/sys/bus/usb/devices/$_fd_p" 2>/dev/null)
-			[ -n "$_fd_new" ] && [ -f "$_fd_new/idVendor" ] || _fd_new=""
-			;;
-		mbim|mbimp|qmi|qmiraw|ncm)
-			_fd_new=$(wdm_for_path "$_fd_p")
-			[ -n "$_fd_new" ] && [ -e "$_fd_new" ] \
-				&& [ "$(path_for_wdm "$_fd_new")" = "$_fd_p" ] || _fd_new=""
-			;;
-		*) return 0 ;;
-	esac
+	_fd_pr=$(uci -q get "network.$_fd_if.proto")
+	if [ "$_fd_pr" = modemmanager ]; then
+		_fd_new=$(readlink -f "/sys/bus/usb/devices/$_fd_p" 2>/dev/null)
+		[ -n "$_fd_new" ] && [ -f "$_fd_new/idVendor" ] || _fd_new=""
+	elif proto_in wdmdev "$_fd_pr"; then
+		_fd_new=$(wdm_for_path "$_fd_p")
+		[ -n "$_fd_new" ] && [ -e "$_fd_new" ] \
+			&& [ "$(path_for_wdm "$_fd_new")" = "$_fd_p" ] || _fd_new=""
+	else
+		return 0
+	fi
 	[ -n "$_fd_new" ] || return 0
 	if [ "$(uci -q get "network.$_fd_if.device")" != "$_fd_new" ]; then
 		uci -q set "network.$_fd_if.device=$_fd_new"
 		_fd_ch=1
 	fi
-	case "$(uci -q get "network.$_fd_if.proto")" in
-		mbim|mbimp|qmi|qmiraw)
-			_fd_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$_fd_new")/device" 2>/dev/null)
-			if [ -n "$_fd_dp" ] && [ -d "$_fd_dp/usbmisc" ] \
-			   && [ "$(uci -q get "network.$_fd_if.devpath")" != "$_fd_dp" ]; then
-				uci -q set "network.$_fd_if.devpath=$_fd_dp"
-				_fd_ch=1
-			fi
-			;;
-	esac
+	if proto_in wdm "$_fd_pr"; then
+		_fd_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$_fd_new")/device" 2>/dev/null)
+		if [ -n "$_fd_dp" ] && [ -d "$_fd_dp/usbmisc" ] \
+		   && [ "$(uci -q get "network.$_fd_if.devpath")" != "$_fd_dp" ]; then
+			uci -q set "network.$_fd_if.devpath=$_fd_dp"
+			_fd_ch=1
+		fi
+	fi
 	if [ "$_fd_ch" = 1 ]; then
 		uci -q commit network
 		logger -t 5gmodem "iface $_fd_if: modem $_fd_p returned on another path - device now $_fd_new"
@@ -143,10 +140,14 @@ ensure_iface() {
 	PROTO=$(uci -q get "network.$IF.proto")
 	CUR=$(uci -q get "network.$IF.device")
 	NEW=""
-	case "$PROTO" in
-		mbim|mbimp|qmi|qmiraw|ncm) NEW=$(wdm_for_path "$P") ;;
+	_ei_pc="$PROTO"
+	proto_in serial "$PROTO" && _ei_pc=serial
+	proto_in dialtty "$PROTO" && _ei_pc=dialtty
+	proto_in wdmdev "$PROTO" && _ei_pc=wdmdev
+	case "$_ei_pc" in
+		wdmdev)           NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
-		atc|xmm)
+		dialtty)
 			# atc И xmm ДОЗВАНИВАЮТСЯ ПО AT-ПОРТУ, а не по каналу управления.
 			#
 			# xmm стоял выше, в одной строке с mbim/qmi/ncm, и получал сюда
@@ -220,7 +221,7 @@ ensure_iface() {
 				NEW=$(uci -q get "$CFG.$SEC.at_port")
 			fi
 			;;
-		3g|wwan|ppp)      NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
+		serial)           NEW=$(uci -q get "$CFG.$SEC.at_port") ;;
 		fibocom)          NEW=$(for n in /sys/bus/usb/devices/$P:*/net/*; do [ -e "$n" ] && { basename "$n"; break; }; done) ;;
 	esac
 	CHG=0
@@ -234,15 +235,13 @@ ensure_iface() {
 	# модема пропадает инет (отчёт ZBT, два 05c6:9025). devpath = sysfs-путь
 	# интерфейса-контроллера, из него системный прото при КАЖДОМ setup находит
 	# cdc-wdm заново. Досетапливаем/чиним существующим интерфейсам.
-	case "$PROTO" in
-		mbim|mbimp|qmi|qmiraw)
-			_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
-			_dpo=$(uci -q get "network.$IF.devpath")
-			if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then
-				uci -q set "network.$IF.devpath=$_dp"; uci -q commit network; CHG=1
-			fi
-			;;
-	esac
+	if proto_in wdm "$PROTO"; then
+		_dp=$(readlink -f "/sys/class/usbmisc/$(basename "$NEW")/device" 2>/dev/null)
+		_dpo=$(uci -q get "network.$IF.devpath")
+		if [ -n "$_dp" ] && [ -d "$_dp/usbmisc" ] && [ "$_dp" != "$_dpo" ]; then
+			uci -q set "network.$IF.devpath=$_dp"; uci -q commit network; CHG=1
+		fi
+	fi
 	# «pending» - интерфейс УЖЕ ДОЗВАНИВАЕТСЯ. Второй ifup поверх идущего дозвона
 	# рвёт его и начинает заново: на загрузке netifd поднимает модем сам, а resolve
 	# по горячему подключению приходит следом и запускает параллельный. Ждём, а не

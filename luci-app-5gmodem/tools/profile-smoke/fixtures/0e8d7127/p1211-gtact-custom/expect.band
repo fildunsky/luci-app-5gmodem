@@ -2,3 +2,4 @@ getmode=20
 getbands=1 3 7 20 38 40 
 getbands5gsa=1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79 
 getbands5gnsa=1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79 
+getsupportedbands5gnsa=1 2 3 5 7 8 20 25 28 30 38 40 41 48 66 71 77 78 79

@@ -2142,7 +2142,9 @@ download)
 		_PE=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[*].profileState' 2>/dev/null \
 			| grep -ci enabled)
 		if [ "$_PN" = 1 ] && [ "$_PE" = 0 ]; then
-			_PI=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[0].iccid' 2>/dev/null)
+			_PI=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[0].isdpAid' 2>/dev/null)
+			case "$_PI" in *[!0-9A-Fa-f]*) _PI="" ;; esac
+			[ "${#_PI}" -eq 32 ] || _PI=$(printf '%s' "$_PL" | jsonfilter -e '@.payload.data[0].iccid' 2>/dev/null)
 			if [ -n "$_PI" ]; then
 				logger -t 5gmodem "esim: $_PI is the only profile - enabling it automatically"
 				_PR=$(do_lpac 60 profile enable "$_PI")

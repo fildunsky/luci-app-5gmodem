@@ -63,8 +63,59 @@ _active_is_mm() {
 	_ams="$_TGT_SEC"
 	_amif=$(uci -q get "$CFG.$_ams.network")
 	[ -n "$_amif" ] || _amif=$(uci -q get "$CFG.@5gmodem[0].network")
-	[ "$(uci -q get "network.$_amif.proto")" = "modemmanager" ]
+	_ampr=$(uci -q get "network.$_amif.proto")
+	[ "$_ampr" = "modemmanager" ] && return 0
+	proto_in proxy "$_ampr" && _mm_ready "$_amp"
 }
+
+_mm_ready() {
+	[ -n "$1" ] || return 1
+	_mr_f="/tmp/5gmodem_smsmm_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+	_mr_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	case "$_mr_now" in ''|*[!0-9]*) _mr_now=0 ;; esac
+	_mr_old=""; _mr_t=0
+	[ -f "$_mr_f" ] && read -r _mr_old _mr_t < "$_mr_f"
+	case "$_mr_t" in ''|*[!0-9]*) _mr_t=0 ;; esac
+	if [ -n "$_mr_old" ] && [ "$_mr_t" -le "$_mr_now" ] && [ $((_mr_now - _mr_t)) -lt 15 ]; then
+		[ "$_mr_old" = 1 ]
+		return
+	fi
+	_mr_v=0
+	if command -v mmcli >/dev/null 2>&1 && mm_owns_path "$1"; then
+		_mr_i=$("$RES/modemswitch.sh" mmindex "$1" 2>/dev/null)
+		case "$_mr_i" in
+			''|*[!0-9]*) ;;
+			*)
+				case "$(mmcli -m "$_mr_i" -K 2>/dev/null | sed -n 's/^modem\.generic\.state *: *//p' | head -1)" in
+					enabled|searching|registered|connecting|connected|disconnecting) _mr_v=1 ;;
+				esac ;;
+		esac
+	fi
+	printf '%s %s\n' "$_mr_v" "$_mr_now" > "$_mr_f" 2>/dev/null
+	if [ "$_mr_v" != "$_mr_old" ]; then
+		if [ "$_mr_v" = 1 ]; then
+			logger -t 5gmodem "smsbridge: modem $1 is ready in ModemManager - SMS through ModemManager"
+		else
+			logger -t 5gmodem "smsbridge: modem $1 is not ready in ModemManager - SMS over the AT port"
+		fi
+	fi
+	[ "$_mr_v" = 1 ]
+}
+
+_port_proxy_mm() {
+	[ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] || return 1
+	_ppm_p=$(tty_usbpath "$1" 2>/dev/null)
+	[ -n "$_ppm_p" ] || return 1
+	_ppm_if=$(uci -q get "$CFG.$(secname "$_ppm_p").network")
+	proto_in proxy "$(uci -q get "network.$_ppm_if.proto")" || return 1
+	_mm_ready "$_ppm_p"
+}
+
+if [ -z "$MM_MODEM_PATH" ] && [ -n "$_TGT_PATH" ]; then
+	_tp_if=$(uci -q get "$CFG.$_TGT_SEC.network")
+	[ -n "$_tp_if" ] || _tp_if=$(uci -q get "$CFG.@5gmodem[0].network")
+	proto_in mm "$(uci -q get "network.$_tp_if.proto")" && export MM_MODEM_PATH="$_TGT_PATH"
+fi
 
 # ТРАНСПОРТ ВЫБИРАЕТ ФЛАГ, И ЭТО ПРОВЕРЕНО ЖЕЛЕЗОМ.
 #
@@ -159,8 +210,12 @@ _list_add() {
 		grep -qxF "$_k" "$_la_f" 2>/dev/null || echo "$_k" >> "$_la_f"
 	done
 	[ -f "$_la_f" ] || : > "$_la_f" 2>/dev/null
-	if [ "$(wc -l 2>/dev/null < "$_la_f" || echo 0)" -gt "$SEEN_MAX" ]; then
-		tail -n "$SEEN_MAX" "$_la_f" > "$_la_f.tmp" 2>/dev/null && mv "$_la_f.tmp" "$_la_f"
+	_la_max=$(uci -q get "$CFG.sms.archive_limit")
+	case "$_la_max" in ''|*[!0-9]*) _la_max=0 ;; esac
+	[ "${#_la_max}" -le 4 ] && [ "$_la_max" -le 2000 ] || _la_max=2000
+	_la_max=$((SEEN_MAX + _la_max))
+	if [ "$(wc -l 2>/dev/null < "$_la_f" || echo 0)" -gt "$_la_max" ]; then
+		tail -n "$_la_max" "$_la_f" > "$_la_f.tmp" 2>/dev/null && mv "$_la_f.tmp" "$_la_f"
 	fi
 }
 
@@ -576,8 +631,16 @@ _port_is_mm() {   # $1 - порт
 _send_one() {   # $1 - порт, $2 - номер, $3 - текст, [$4 - fast|slow]
 	_so_port="$1"; _so_to="$2"; _so_txt="$3"
 	if [ "$4" = slow ]; then _so_tmm=60; _so_tat=45; else _so_tmm=20; _so_tat=15; fi
-	if _port_is_mm "$_so_port" && [ -x "$RES/sms_tool_mm" ]; then
-		if _sms_run "$_so_tmm" "$RES/sms_tool_mm" -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null; then
+	_so_mm=""; _so_mmp=""
+	if _port_is_mm "$_so_port"; then
+		_so_mm=1
+	elif _port_proxy_mm "$_so_port"; then
+		_so_mm=1; _so_mmp="$_ppm_p"
+	fi
+	if [ -n "$_so_mm" ] && [ -x "$RES/sms_tool_mm" ]; then
+		if [ -n "$_so_mmp" ]; then
+			MM_MODEM_PATH="$_so_mmp" _sms_run "$_so_tmm" "$RES/sms_tool_mm" -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null && return 0
+		elif _sms_run "$_so_tmm" "$RES/sms_tool_mm" -d "$_so_port" send "$_so_to" "$_so_txt" 2>/dev/null; then
 			return 0
 		fi
 		logger -t 5gmodem "smsbridge: MM send failed within ${_so_tmm}s, trying the AT port"

@@ -104,7 +104,7 @@ tele_write() {
 		LTE-A*) _md="4G+" ;;
 		LTE*)   _md="4G" ;;
 		*5G\ NSA*|*NSA*) _md="5G NSA" ;;
-		*5G\ SA*|NR5G*)  _md="5G SA" ;;
+		*5G\ SA*|NR5G*|5G\ NR*|5GNR*)  _md="5G SA" ;;
 		WCDMA*|UMTS*|HSPA*|HSDPA*|HSUPA*|3G*) _md="3G" ;;
 		GSM*|EDGE*|GPRS*|2G*) _md="2G" ;;
 		''|-) _md="" ;;

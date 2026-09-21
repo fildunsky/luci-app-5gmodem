@@ -373,7 +373,7 @@ LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
 # оставались в tmpfs навсегда: чистить их по маске некому, а на роутере с
 # 32-64 МБ ОЗУ мусор копится без верхней границы. Подоболочки трап не наследуют
 # (проверено под busybox ash), фоновые обновления не пострадают (аудит 12.09.2026).
-_cleanup_tmp() { rm -f /tmp/5gmodem_st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
+_cleanup_tmp() { [ -n "$_stp" ] && kill "$_stp" "$_stk" 2>/dev/null; rm -f /tmp/5gmodem_st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
 trap '_cleanup_tmp' EXIT
 trap 'exit 143' INT TERM HUP
 
@@ -706,7 +706,8 @@ if [ -n "$_PINNED" ]; then
 	# quirks.sh: хрупким прошивкам AT под MM не даём (пока владелец не включит
 	# mm_at=1), остальным - как в detect.sh, только при поднятой сессии.
 	if [ -n "$DEVICE" ] \
-	   && [ "$(printf '%s' "$_pin_rec" | jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ]; then
+	   && { [ "$(printf '%s' "$_pin_rec" | jsonfilter -e '@.owner' 2>/dev/null)" = "mm" ] \
+	        || proto_in proxy "$(uci -q get "network.$(uci -q get "5gmodem.$_hl_sec.network" 2>/dev/null).proto" 2>/dev/null)"; }; then
 		. "$RES/quirks.sh" 2>/dev/null
 		mm_at_allowed "$_POLL_AM" "$_hl_sec" || DEVICE=""
 		[ -n "$MM_AT_PORT" ] && DEVICE="$MM_AT_PORT"
@@ -811,8 +812,7 @@ if [ -z "$DEVICE" ]; then
 	# MM, detect.sh молчит), но метрики есть в mmcli. НЕ пугаем «Device not found»,
 	# а идём дальше: AT-вызовы станут no-op (обёртка sms_tool), а блок mmcli ниже
 	# наполнит карточку. Иначе весь блок Модем висел бы на плейсхолдерах.
-	_amp0=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-	_amp0_if=$(uci -q get "5gmodem.$(secname "$_amp0").network")
+	_amp0_if=$(uci -q get "5gmodem.$_hl_sec.network")
 	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ]; then
 		# САМОЛЕЧЕНИЕ: АКТИВНОГО НЕТ В СПИСКЕ МОДЕМОВ - ЗОВЁМ resolve.
 		#
@@ -961,6 +961,7 @@ sms_tool() {
 	done
 	kill -0 "$_stp" 2>/dev/null || wait "$_stp" 2>/dev/null
 	kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
+	_stp=""; _stk=""
 	if [ -n "$_stc" ] && _st_static_ok "$_stf"; then
 		# tmp+mv: конкурирующий читатель кэша не должен увидеть полфайла
 		cp "$_stf" "$_stc.$$" 2>/dev/null && mv "$_stc.$$" "$_stc" 2>/dev/null
@@ -1641,6 +1642,14 @@ if [ -n "$SIMID" ] && [ "$_PREV_IMSI" != "$SIMID" ]; then
 	rm -f "${STATIC_CACHE}"_* 2>/dev/null
 	printf '%s' "$SIMID" > "${STATIC_CACHE}.imsi"
 fi
+if [ -z "$SIMID" ] && [ -e "${STATIC_CACHE}.imsi" ]; then
+	case "$SIM_STATE" in
+		*[Nn][Oo][Tt]\ [Ii][Nn][Ss][Ee][Rr][Tt]*)
+			rm -f "${STATIC_CACHE}_cmd_CIMI" "${STATIC_CACHE}_cmd_CCID" "${STATIC_CACHE}_cmd_ICCID" \
+				"${STATIC_CACHE}_cmd_QCCID" "${STATIC_CACHE}_iccid" "${STATIC_CACHE}_ccid" \
+				"${STATIC_CACHE}.imsi" 2>/dev/null ;;
+	esac
+fi
 
 # ПЕРЕПОДБОР APN ПРИ СМЕНЕ СИМКИ - ПО ПЕРСИСТЕНТНОМУ КЛЮЧУ (IMSI в секции).
 #
@@ -1662,7 +1671,7 @@ if [ -n "$SIMID" ]; then
 	   && [ "$(uci -q get "5gmodem.$_apn_sec.apn_mode")" != "manual" ] \
 	   && [ "$(uci -q get "5gmodem.$_apn_sec.apn_imsi")" != "$SIMID" ]; then
 		_SIM_IF=$(uci -q get "5gmodem.$_apn_sec.network" 2>/dev/null)
-		[ -n "$_SIM_IF" ] || _SIM_IF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+		[ -n "$_SIM_IF" ] || [ "$_POLL_AM" != "$_ACT_AM" ] || _SIM_IF=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
 		# Дебаунс: опрос идёт раз в пару секунд, а autoapn — секунды. Без метки
 		# он запускался бы пачкой, пока первый не допишет apn_imsi.
 		#
@@ -2587,10 +2596,7 @@ _poll_chan_free() {
 	[ "$_POLL_AM" = "$(_active_path)" ] && return 0
 	_pcf_if=$(uci -q get "5gmodem.$(secname "$_POLL_AM" 2>/dev/null).network" 2>/dev/null)
 	[ -n "$_pcf_if" ] || return 0
-	case "$(uci -q get "network.$_pcf_if.proto" 2>/dev/null)" in
-		qmi|qmiraw|mbim) : ;;
-		*) return 0 ;;
-	esac
+	proto_in direct "$(uci -q get "network.$_pcf_if.proto" 2>/dev/null)" || return 0
 	case "$(ubus call "network.interface.$_pcf_if" status 2>/dev/null)" in
 		*'"up": true'*|*'"pending": true'*) return 1 ;;
 	esac
@@ -3036,7 +3042,7 @@ fi
 # порт есть). Иначе в карточке светился бы 192.168.43.x, а не адрес в сети.
 if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -n "$DEVICE" ]; then
 	_wan=$(sms_tool -d "$DEVICE" at "AT+CGPADDR" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CGPADDR: *[0-9]*, *"\([0-9.]*\)".*/\1/p' | grep -v '^0\.0\.0\.0$' | head -1)
+		| sed -n 's/^+CGPADDR: *[0-9]*, *"\([0-9.]*\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | grep -v '^0\.0\.0\.0$' | head -1)
 	[ -n "$_wan" ] && IPADDR="$_wan"
 fi
 

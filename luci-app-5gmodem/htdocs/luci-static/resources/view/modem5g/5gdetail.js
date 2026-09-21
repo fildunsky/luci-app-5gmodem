@@ -402,7 +402,7 @@ function loadSimSlots(cb) {
 	   если путь пуст). */
 	var _slArgs = [ 'status' ];
 	if (pageModemPath) { _slArgs.push('for=' + pageModemPath); }
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', _slArgs), '').then(function(out) {
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', _slArgs), '').then(forPage(function(out) {
 		slotsInflight = false;
 		var st = {};
 		try { st = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
@@ -496,7 +496,7 @@ function loadSimSlots(cb) {
 			}, [ s.label ]));
 		});
 		box.style.display = '';
-	}).catch(function(e) {
+	}, function() { if (cb) { cb(null); } })).catch(function(e) {
 		/* Сюда попадаем, когда сорвался сам вызов (rpcd занят, страница уходит).
 		   Без catch это был необработанный reject в консоли - «uncaught promise»,
 		   который видно, а понять по нему нечего. Флаг снимаем обязательно, иначе
@@ -1190,16 +1190,20 @@ function switchModemInPlace(path) {
 	/* Сброс состояния прежнего модема - иначе блоки показывали бы его данные. */
 	ifaceProtoIsMM = false;
 	mmIdx = '';
+	_inPlaceAt = Date.now();
+	foreignTicks = 0;
 	simSlotsSeen = false;
 	slotImsiSeen = null;
-	slotIdleTicks = 0;
+	slotIdleTicks = 1;
+	slotsInflight = false;
+	var _ssb = document.getElementById('simslotn');
+	if (_ssb) { _ssb.style.display = 'none'; _ssb.innerHTML = ''; _ssb.removeAttribute('data-sig'); }
 	resetStickyForModem();
 	histDraw(null);
 	if (typeof bandsui.resetForModem === 'function') { bandsui.resetForModem(); }
 	/* Индекс MM нового активного - для кнопок режимов/бендов (блок ленивый,
 	   к его раскрытию значение уже придёт). */
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
-		.then(function(idx) { mmIdx = String(idx || '').trim(); });
+	loadMmIdx();
 	/* Видимость вкладок eSIM/USSD зависит от модема - пересчитываем. */
 	if (modemtabs.refreshEsimTab) { modemtabs.refreshEsimTab(); }
 	if (modemtabs.refreshUssdTab) { modemtabs.refreshUssdTab(); }
@@ -1233,6 +1237,23 @@ function switchModemInPlace(path) {
    показывает не тот модем: перезагружаемся, как при клике по вкладке. Без этого
    счётчика страница молча замерла бы навсегда. */
 var foreignTicks = 0;
+var _inPlaceAt = 0;
+var _mmIdxAt = 0;
+
+function forPage(fn, onStale) {
+	var p = pageModemPath;
+	return function(v) {
+		if (p !== pageModemPath) { return onStale ? onStale(v) : undefined; }
+		return fn(v);
+	};
+}
+
+function loadMmIdx() {
+	var args = [ 'mmindex' ];
+	if (pageModemPath) { args.push(pageModemPath); }
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', args), '')
+		.then(forPage(function(idx) { mmIdx = String(idx || '').trim(); }));
+}
 
 
 /* ---- Сворачиваемые блоки страницы «Сеть» -------------------------------
@@ -2503,8 +2524,6 @@ function runDoctor(btn) {
 
 
 function applyMetrics(json) {
-	_lastJson = json;
-	updateSimpleLine(json);
 					/* СНИМОК ЧУЖОГО МОДЕМА НЕ ПРИМЕНЯЕМ.
 					   Метрики отдаёт активный модем из конфига, а страница
 					   показывает конкретный. Пока переключение вкладки не
@@ -2518,6 +2537,7 @@ function applyMetrics(json) {
 					var foreign = !!(json && (json.error === 'not_active'
 						|| (json.path && pageModemPath && json.path !== pageModemPath)));
 					if (foreign) {
+						if (Date.now() - _inPlaceAt < 20000) { return; }
 						if (++foreignTicks >= 3) {
 							foreignTicks = 0;
 							/* Перед перезагрузкой СБРАСЫВАЕМ запомненную вкладку:
@@ -2529,6 +2549,8 @@ function applyMetrics(json) {
 						return;
 					}
 					foreignTicks = 0;
+					_lastJson = json;
+					updateSimpleLine(json);
 					qualSetMode(json.mode);
 
 					/* Тик пришёл - порт свободен: запускаем отложенные
@@ -3081,12 +3103,16 @@ function applyMetrics(json) {
 					   модем), и false намертво гасил блок частот. Переход
 					   false->true снимает гейт и будит reveal mmcli-пути. */
 					if (json.iface_proto && json.iface_proto != '-') {
-						var _liveMM = ([ 'modemmanager', 'mbimp' ].indexOf(String(json.iface_proto).toLowerCase()) >= 0);
+						var _liveMM = mutil.isMMProto(json.iface_proto);
 						if (_liveMM && !ifaceProtoIsMM) {
 							ifaceProtoIsMM = true;
 							bandsui.ungate();
 						} else if (!_liveMM) {
 							ifaceProtoIsMM = false;
+						}
+						if (_liveMM && !mmIdx && Date.now() - _mmIdxAt > 15000) {
+							_mmIdxAt = Date.now();
+							loadMmIdx();
 						}
 					}
 
@@ -3150,7 +3176,7 @@ function applyMetrics(json) {
 							   меняются»: кнопки на экране есть, и текст «недоступно»
 							   противоречил бы им. Если не прочитаны вовсе - прежняя
 							   формулировка про недоступность. */
-							var _mbimpWait = (String(json.iface_proto || '').toLowerCase() === 'mbimp');
+							var _mbimpWait = mutil.isSharedProxyProto(json.iface_proto);
 							document.getElementById('bandnote-text').textContent = _mbimpWait
 								? _('ModemManager is still picking up the modem: bands and network mode unlock by themselves in a minute or two, the connection is not affected.')
 								: bandsui.isReadOnly()
@@ -3658,8 +3684,6 @@ simDialog: baseclass.extend({
 		   вечно (см. mutil.lsSweep): чистим то, к чему не обращались месяц. */
 		mutil.lsSweep([ 'bands5g2-', 'bands5g-', '5gmodem.esim.active', '5gmodem.ussd.supported',
 		                'netpri-pingstate', 'netpri-ssclash-', 'btninfo:' ], 30);
-		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), '')
-			.then(function(idx) { mmIdx = String(idx || '').trim(); });
 		/* Есть ли у корпуса светодиоды уровня сигнала. Спрашиваем СКРИПТ, а не
 		   сверяем имя платы: у совместимых устройств те же светодиоды бывают под
 		   другим board_name, а на LT300 иной ревизии их может не быть - и тогда
@@ -3734,6 +3758,7 @@ simDialog: baseclass.extend({
 				}
 			}
 			pageModemPath = String(_tabSel || _pk.path || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+			loadMmIdx();
 			/* Контекст для модуля диапазонов: всё, что ему нужно от страницы,
 			   передаётся явно - см. шапку bandsui.js. */
 			bandsui.init({
@@ -3743,6 +3768,7 @@ simDialog: baseclass.extend({
 				blockExpanded: blockExpanded,
 				/* ключ тёплого кэша блока частот - USB-путь модема страницы */
 				pagePath: function() { return pageModemPath; },
+				forPage: forPage,
 				getMmIdx: function() { return mmIdx; },
 				isMM: function() { return ifaceProtoIsMM; },
 				setMM: function(v) { ifaceProtoIsMM = !!v; }
@@ -3814,7 +3840,7 @@ simDialog: baseclass.extend({
 		   протокол данных, и у Compal под ModemManager там 'mbim' - флаг ложно
 		   оставался false, и блок частот прятался навсегда с подсказкой
 		   «переключите на MM» (хотя интерфейс уже на MM). */
-		ifaceProtoIsMM = ([ 'modemmanager', 'mbimp' ].indexOf(String(initjson.iface_proto || initjson.protocol || '').toLowerCase()) >= 0);
+		ifaceProtoIsMM = mutil.isMMProto(initjson.iface_proto || initjson.protocol);
 
 		// --- Синхронный разбор mmcli -K для строк режима/диапазонов ---
 		var mmHasModem = /current-modes/.test(mmK);

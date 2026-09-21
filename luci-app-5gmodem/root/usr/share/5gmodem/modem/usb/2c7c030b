@@ -1,5 +1,7 @@
 # Quectel EM06
 
+. "$RES/modem/usb/_quectel_common"
+
 QTEMP=$(sms_tool -d $DEVICE at "AT+QTEMP" | grep cpuss-usr)
 QTEMPEXTRACTED=$(echo "${QTEMP}" | awk -F[,:] '/^\+QTEMP/ {t=$2*1;if($3*1>t)t=$3*1;if($4*1>t)t=$4*1;printf "%d", t}')
 [ -n "${QTEMP}" ] && TEMP="${QTEMPEXTRACTED} &deg;C"
@@ -15,65 +17,15 @@ if [ -n "$T" ]; then
 	fi
 fi
 
-T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
-if [ "x$T" = "xLTE" ] || [ "x$T" = "x4G" ]; then
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14}')
-	T_DEC=$(printf "%d" "0x$T")
-	T_HEX=$T
-
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
-	case $T in
-		0) T1="1.4";;
-		1) T1="3";;
-		2) T1="5";;
-		3) T1="10";;
-		4) T1="15";;
-		5) T1="20";;
-		*) T1="";;
-	esac
-	# Полосы - отдельным полем BANDWIDTH, не внутри PBAND: легаси-формат
-	# «Bx DL: @.. UL: @..» ломал разрез диапазон/полоса во фронте (caSplitBand
-	# режет по « @»; живой случай EP06-E 19.08.2026, тот же формат был здесь).
-	_ULBW="$T1"
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13}')
-	case $T in
-		0) T1="1.4";;
-		1) T1="3";;
-		2) T1="5";;
-		3) T1="10";;
-		4) T1="15";;
-		5) T1="20";;
-		*) T1="";;
-	esac
-	if [ -n "$T1" ]; then
-		BANDWIDTH="$T1 MHz"
-		[ -n "$_ULBW" ] && [ "$_ULBW" != "$T1" ] && BANDWIDTH="$T1/$_ULBW MHz"
-	fi
-	PBAND="$MAINCUT"
-	
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9}')
-	PCI=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $10}')
-	EARFCN=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $17}')
-	RSSI=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $15}')
-	RSRP=$T
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
-	RSRQ=$T
-	# SINR уже в дБ (см. modem/usb/2c7c0306: по живым ответам QENG поле 0..25 и
-	# растёт с RSRP; «x*0.2-20» давало -15..-19 дБ на отличном сигнале).
-	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {v=$18; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
-	SINR=$T
-fi
+# Полосы - отдельным полем BANDWIDTH, не внутри PBAND: легаси-формат
+# «Bx DL: @.. UL: @..» ломал разрез диапазон/полоса во фронте (caSplitBand
+# режет по « @»; живой случай EP06-E 19.08.2026, тот же формат был здесь).
+# SINR уже в дБ (см. modem/usb/2c7c0306: по живым ответам QENG поле 0..25 и
+# растёт с RSRP; «x*0.2-20» давало -15..-19 дБ на отличном сигнале).
+_qc_qeng_bw
 
 # SPN - поле 4 (см. modem/usb/2c7c0306: поле 2 у старых прошивок «000 000»).
-T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $4}' | xargs)
-case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac
-[ -n "$T" ] || { T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $2}' | xargs); case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac; }
-if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
-	COPS="$T"
-fi
+_qc_spn4
 
 if [ "x$MODE_NUM" = "x7" ]; then
 	O=$(sms_tool -d $DEVICE at "AT+QCAINFO")
@@ -82,15 +34,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	if [ -n "$T" ]; then
 		B=$(echo $T | sed 's/.*LTE BAND \(.*\)/\1/')
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $4}')
-		case $T in
-			6) T1="1.4";;
-			15) T1="3";;
-			25) T1="5";;
-			50) T1="10";;
-			75) T1="15";;
-			100) T1="20";;
-			*) T1="?";;
-		esac
+		_qc_cbw T1 "$T" "?"
 		MODE="${MODE/LTE/LTE_A} / $(band4g ${B})"
 		S1BAND="$(band4g ${B}) @$T1 MHz"
 
@@ -99,62 +43,23 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $3}')
 		S1EARFCN="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $10}')
-		RSSI=$T
+		S1RSSI=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $8}')
-		RSRP=$T
+		S1RSRP=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $9}')
-		RSRQ=$T
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $11}' | awk '{printf "%.1f\n", $1*0.2-20}')
-		SINR=$T
+		S1RSRQ=$T
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {v=$11; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
+		S1SINR=$T
 	fi
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
 
 # Modem
-OF=$(sms_tool -d $DEVICE at "ati")
-DEVV=$(echo $OF | tr -s "\n"  | xargs)
-FW=$(echo $DEVV | awk -F 'Revision:' '{print $2}'| xargs)
-MODEL=$(echo $DEVV | awk -F 'ati|Revision:' '{print $1}'| xargs)
-if [ -z "$MODEL" ]
-then
-      MODEL=$(echo $DEVV | awk -F 'ati|Revision:' '{print $2}'| xargs)
-fi
+_qc_ati
 
-# International Mobile Equipment Identity (IMEI)
-O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
-NR_I=$(digits_of "$O" 15 17)
-if [ -n "$NR_I" ]; then
-	NR_IMEI="$NR_I"
-fi
+_qc_ids
 
-# International Mobile Subscriber Identity (IMSI)
-O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
-NR_C=$(digits_of "$O" 14 16)
-if [ -n "$NR_C" ]; then
-	NR_IMSI="$NR_C"
-fi
-
-#  Integrated Circuit Card Identifier (ICCID)
-O=$(sms_tool -d $DEVICE at "AT+QCCID")
-NR_D=$(echo "$O" | awk -F [:] '/^\+QCCID/{print $2}' | xargs)
-if [ -n "$NR_D" ]; then
-	NR_ICCID="$NR_D"
-fi
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
-PVCUT=$(echo $PV | awk -F 'Vendor=2c7c ProdID=030b' '{print $2}' | cut -c-1220)
-if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
-then
-    PROTO="qmi"
-elif echo "$PVCUT" | grep -q "Driver=cdc_mbim"
-then
-    PROTO="mbim"
-elif echo "$PVCUT" | grep -q "Driver=cdc_ether"
-then
-    PROTO="ecm"
-fi
+_qc_proto "Vendor=2c7c ProdID=030b" 1220
 
 . "$RES/modem/usb/_quectel_qrsrp"

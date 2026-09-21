@@ -181,7 +181,7 @@ function loadBands() {
 	     source=mmcli + pending - MM ещё собирает модем: держим последнее
 	                              известное, следующий опрос дорисует;
 	     source=vendor          - вендорный путь (bands.sh json). */
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ].concat(_bandsFor())), '{}').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ].concat(_bandsFor())), '{}').then(ctx.forPage(function(out) {
 		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
 		/* ОТВЕТА НЕТ - НИЧЕГО НЕ ТРОГАЕМ. fs.exec_direct отдаёт пустую строку,
 		   когда вызов не успел (rpcd занят, mmcli подтормаживает под опросом
@@ -195,7 +195,7 @@ function loadBands() {
 		if (j.pending) { return; }
 		applyMgmtMM(j);
 		_bandsRemember('mm', j);
-	});
+	}));
 }
 
 function ensureMmModeButtons() {
@@ -518,7 +518,7 @@ function renderCellLock(state) {
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-action',
 			'click': ui.createHandlerFn(this, function() {
-				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]), '')
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ].concat(_bandsFor().map(function(p) { return 'for=' + p; }))), '')
 					.then(function(out) {
 						var m = {}; try { m = JSON.parse(out) || {}; } catch (e) {}
 						var ear = m.earfcn, pci = m.pci;
@@ -587,7 +587,7 @@ function renderCellLock5g(state) {
 	cell.appendChild(E('button', {
 		'class': 'btn cbi-button cbi-button-action',
 		'click': ui.createHandlerFn(this, function() {
-			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ]), '')
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'json' ].concat(_bandsFor().map(function(p) { return 'for=' + p; }))), '')
 				.then(function(out) {
 					var m = {}; try { m = JSON.parse(out) || {}; } catch (e) {}
 					var ear = null, pci = null;
@@ -615,12 +615,12 @@ function nrC_hasEnabled(j) {
 
 function loadBandsModemband(force) {
 	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ].concat(_bandsFor())), '').then(function(out) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ].concat(_bandsFor())), '').then(ctx.forPage(function(out) {
 		var j = {};
 		var note = document.getElementById('bandnote');
 		try { j = JSON.parse(out) || {}; } catch (e) { if (note) { note.style.display = ''; } return; }
 		applyVendorJson(j);
-	});
+	}));
 }
 
 function applyVendorJson(j) {
@@ -1105,6 +1105,7 @@ function setNetMode(allowed, preferred, label) {
 		: (preferred ? [ 'setmodemm', allowed, preferred ] : [ 'setmodemm', allowed ]);
 	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
 		ui.hideModal();
+		if (res.code === 0 && /"error"/.test(String(res.stdout || ''))) { res.code = 1; }
 		if (res.code === 0) {
 			if (ui.addTimeLimitedNotification) {
 				ui.addTimeLimitedNotification(null, E('p', _('Network mode set: %s').format(label)), 5000, 'info');
@@ -1132,8 +1133,12 @@ function setNetModeAT(id, label) {
 	   bands.sh setmode - после записи и только когда профиль его требует. На
 	   SIM7600 AT+CNMP применяется вживую, а CFUN его откатывает, поэтому UI
 	   больше не дёргает reboot_modem.sh. */
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function() {
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
 		ui.hideModal();
+		if (res && typeof res.code === 'number' && res.code !== 0) {
+			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + String(res.stdout || res.stderr || '').trim()), 'error');
+			return;
+		}
 		if (ui.addTimeLimitedNotification) {
 			ui.addTimeLimitedNotification(null, E('p', _('Network mode set: %s').format(label)), 5000, 'info');
 		} else {
@@ -1149,8 +1154,12 @@ function setNetModeAT(id, label) {
 function setBands3gAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
 	// Реконнект (soft) делает САМ bands.sh в фоне после записи - как для setbands.
-	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function() {
+	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function(res) {
 		ui.hideModal();
+		if (res && typeof res.code === 'number' && res.code !== 0) {
+			ui.addNotification(null, E('p', _('Failed to set 3G bands') + ': ' + String(res.stdout || res.stderr || '').trim()), 'error');
+			return;
+		}
 		if (ui.addTimeLimitedNotification) {
 			ui.addTimeLimitedNotification(null, E('p', _('3G bands set: %s').format(label)), 5000, 'info');
 		} else {

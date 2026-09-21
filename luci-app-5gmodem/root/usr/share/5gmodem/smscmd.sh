@@ -117,6 +117,10 @@ _fresh_cmd() {   # $1 - метка времени сообщения
 STORE=$(_cfg storage); [ -n "$STORE" ] || STORE=SM
 
 DONE_MAX=300
+_dm_al=$(_cfg archive_limit)
+case "$_dm_al" in ''|*[!0-9]*) _dm_al=0 ;; esac
+[ "${#_dm_al}" -le 4 ] && [ "$_dm_al" -le 2000 ] || _dm_al=2000
+DONE_MAX=$((DONE_MAX + _dm_al))
 # Потолок ответа: SMS длинная не бесплатна, а вывод команды бывает километровым.
 ANS_MAX=600
 
@@ -234,6 +238,9 @@ $_o_grp
 "*) continue ;; esac
 		_o_seen_keys="$_o_seen_keys
 $_o_grp"
+
+		_o_c1=$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_i].content" 2>/dev/null)
+		grep -qxF "$(sms_cmd_key "$_o_s" "$_o_t" "$_o_c1")" "$_o_df" 2>/dev/null && continue
 
 		# Текст группы целиком + ключи всех её частей (их и помечаем).
 		_o_text=""; _o_keys=""

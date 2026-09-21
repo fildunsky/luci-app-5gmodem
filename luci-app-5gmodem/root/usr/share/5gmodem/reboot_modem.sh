@@ -224,6 +224,7 @@ fi
 # посреди чужого обмена, молча не сработает, а пользователь увидит "перезагружаю"
 # и ничего больше.
 . /usr/share/5gmodem/atlock.sh
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 # ...а значит очередь надо ДОЖДАТЬСЯ, а не просто попросить: at_lock возвращает
 # 1, если за отведённые секунды порт не освободился, и CFUN, посланный поверх
 # чужого обмена, ровно тем же способом «молча не срабатывает» (тот же отказ, что
@@ -274,6 +275,7 @@ if [ "$MODE" = "hard" ]; then
 	  # чтение карты не удаётся (нет прокси) - молча досиживаем потолок, этого
 	  # хватает на инициализацию. Не-QMI (device не cdc-wdm) окно пропускает.
 	  _rbd=$(uci -q get "network.$IF.device")
+	  proto_in uqmi "$(uci -q get "network.$IF.proto")" || _rbd=""
 	  case "$_rbd" in
 		/dev/cdc-wdm*)
 			_n=0
@@ -320,7 +322,13 @@ else
 	# глобального reload нет. ifup - фолбэк, если ubus-пути нет.
 	( sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
 		sleep 3
-		sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
+		_cf_n=0
+		while [ "$_cf_n" -lt 3 ]; do
+			_cf_n=$((_cf_n + 1))
+			sms_tool -d "$PORT" at "AT+CFUN=1" >/dev/null 2>&1
+			sleep 2
+			case "$(sms_tool -d "$PORT" at "AT+CFUN?" 2>/dev/null)" in *"+CFUN: 1"*) break ;; esac
+		done
 		at_unlock
 		[ -n "$IF" ] || exit 0
 		sleep 6

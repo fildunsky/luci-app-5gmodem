@@ -1,0 +1,2 @@
+## 4pda 1106442 #2545 (RM520N-GL, LTE B7+B7+B3+B1; log timestamps removed)
++QENG: "servingcell","NOCONN","LTE","FDD",250,11,4E23802,136,2850,7,5,5,A8CB,-100,-10,-68,0,8,150,-

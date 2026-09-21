@@ -1,0 +1,10 @@
+## без агрегации полоса должна идти отдельным BANDWIDTH, как в 2c7c0306; "DL: @15 MHz UL: @15 MHz" внутри PBAND ломает caSplitBand
+PBAND=B3 (1800 MHz)
+BANDWIDTH=15 MHz
+EARFCN=1425
+PCI=190
+RSRP=-72
+RSRQ=-12
+RSSI=-41
+SINR=13
+T_DEC=12324

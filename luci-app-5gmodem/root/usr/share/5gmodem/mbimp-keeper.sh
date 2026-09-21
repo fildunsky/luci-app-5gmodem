@@ -7,6 +7,7 @@ MM_SYNC_AT=$(( $(cut -d. -f1 /proc/uptime) - 120 ))
 PERIOD=20
 MM_FIX_N=0
 FAILS=0
+UNKNOWN=0
 
 [ -c "$DEV" ] || exit 1
 
@@ -20,8 +21,9 @@ probe() {
 	done
 	kill -9 "$_kp_p" 2>/dev/null
 	wait "$_kp_p" 2>/dev/null
-	_kp_r=1
+	_kp_r=2
 	grep -q "Activation state: 'activated'" "$_kp_o" 2>/dev/null && _kp_r=0
+	grep -qE "Activation state: '(deactivated|deactivating|unknown)'" "$_kp_o" 2>/dev/null && _kp_r=1
 	rm -f "$_kp_o"
 	return $_kp_r
 }
@@ -61,7 +63,7 @@ mm_enable() {
 		if [ "$(( _me_now - MM_SYNC_AT ))" -ge "$_me_gap" ]; then
 			MM_SYNC_AT=$_me_now
 			MM_FIX_N=$((MM_FIX_N + 1))
-			logger -t 5gmodem "mbimp: ModemManager assembled $_me_p without its MBIM port - re-reporting the ports (the data session is not touched)"
+			logger -t 5gmodem "MBIM+MM: ModemManager assembled $_me_p without its MBIM port - re-reporting the ports (the data session is not touched)"
 			mm_report remove
 			sleep 4
 			mm_report add
@@ -79,7 +81,7 @@ mm_enable() {
 	kill -9 "$_me_k" 2>/dev/null
 	wait "$_me_k" 2>/dev/null
 	rm -f /tmp/5gmodem_bands_* 2>/dev/null
-	logger -t 5gmodem "mbimp: enabled modem $_me_p in ModemManager (management only, the data session stays with interface $IFACE)"
+	logger -t 5gmodem "MBIM+MM: enabled modem $_me_p in ModemManager (management only, the data session stays with interface $IFACE)"
 }
 
 trap 'rm -f "/tmp/mbimp-keeper.$$.out" "/tmp/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
@@ -103,15 +105,21 @@ while :; do
 		wait $!
 		_kl_n=$((_kl_n + 1))
 	done
-	[ -c "$DEV" ] || { logger -t 5gmodem "mbimp: $DEV is gone - leaving interface $IFACE to netifd"; exit 1; }
-	if probe; then
-		FAILS=0
-		[ "$(cut -d. -f1 /proc/uptime)" -lt "$FAST_UNTIL" ] || mm_enable
-	else
-		FAILS=$((FAILS + 1))
-		if [ "$FAILS" -ge 2 ]; then
-			logger -t 5gmodem "mbimp: the data session on $DEV is no longer active - redialing interface $IFACE"
-			exit 1
-		fi
-	fi
+	[ -c "$DEV" ] || { logger -t 5gmodem "MBIM+MM: $DEV is gone - leaving interface $IFACE to netifd"; exit 1; }
+	probe
+	case $? in
+		0)
+			FAILS=0; UNKNOWN=0
+			[ "$(cut -d. -f1 /proc/uptime)" -lt "$FAST_UNTIL" ] || mm_enable ;;
+		1)
+			UNKNOWN=0
+			FAILS=$((FAILS + 1))
+			if [ "$FAILS" -ge 2 ]; then
+				logger -t 5gmodem "MBIM+MM: the data session on $DEV is no longer active - redialing interface $IFACE"
+				exit 1
+			fi ;;
+		*)
+			UNKNOWN=$((UNKNOWN + 1))
+			[ "$UNKNOWN" = 6 ] && logger -t 5gmodem "MBIM+MM: $DEV does not answer the session probe for 2 minutes - leaving the session alone" ;;
+	esac
 done

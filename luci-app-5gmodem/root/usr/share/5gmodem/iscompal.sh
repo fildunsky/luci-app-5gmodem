@@ -69,7 +69,9 @@ is_compal() {
 	# Явный, но ИСЧЕЗНУВШИЙ канал (переэнумерация) не подменяем: подмена
 	# спрашивала модель у СОСЕДА - отсутствующий Telit отвечал Compal'ом.
 	_ic_wdm_explicit="$_ic_wdm"
-	if [ -z "$_ic_wdm" ]; then
+	if [ -z "$_ic_wdm" ] && [ -n "$_ic_path" ]; then
+		_ic_wdm=$(/usr/share/5gmodem/modemswitch.sh wdm "$_ic_path" 2>/dev/null)
+	elif [ -z "$_ic_wdm" ]; then
 		_ic_wdm=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 		[ -c "$_ic_wdm" ] || _ic_wdm=/dev/cdc-wdm0
 	fi

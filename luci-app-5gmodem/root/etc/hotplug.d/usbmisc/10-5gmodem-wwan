@@ -26,6 +26,7 @@ esac
 
 . /lib/functions.sh
 . /lib/netifd/netifd-proto.sh
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 
 _wwan_mark() {
 	local cfg="$1"
@@ -34,7 +35,7 @@ _wwan_mark() {
 	config_get proto "$cfg" proto
 	# Только протоколы ЭТОГО пакета: остальные обслуживает 00_wwan.sh, и
 	# дублировать его нельзя - два обработчика на один интерфейс дают гонку.
-	[ "$proto" = qmiraw ] || return 0
+	proto_in own "$proto" && proto_in wdm "$proto" || return 0
 
 	config_get device "$cfg" device
 	config_get devpath "$cfg" devpath
@@ -42,7 +43,12 @@ _wwan_mark() {
 	# Секция без device (или с device по USB-пути) принимает ЛЮБОЙ узел: путь
 	# устройства qmiraw разбирает сам при дозвоне, а cdc-wdmN у него плавает
 	# после переэнумерации - привязываться к номеру узла тут нельзя.
-	if [ -n "$device" ] && [ -z "$devpath" ] && [ "$device" != "/dev/$DEVNAME" ]; then
+	if [ -n "$devpath" ]; then
+		local _ci _db
+		_ci="${DEVPATH%/usbmisc/*}"; _ci="${_ci##*/}"
+		_db="${devpath%/}"; _db="${_db##*/}"
+		[ -n "$_ci" ] && { [ "$_db" = "$_ci" ] || [ "$_db" = "${_ci%%:*}" ]; } || return 0
+	elif [ -n "$device" ] && [ "$device" != "/dev/$DEVNAME" ]; then
 		return 0
 	fi
 

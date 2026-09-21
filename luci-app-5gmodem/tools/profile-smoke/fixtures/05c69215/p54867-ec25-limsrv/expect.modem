@@ -1,0 +1,7 @@
+## SINR в QENG у EC25 уже в дБ (modem/usb/2c7c0125, сверка с AT+QCSQ); 14*0.2-20 = -17 при RSRQ -6 невозможно
+PCI=464
+EARFCN=6200
+RSRP=-85
+RSRQ=-6
+RSSI=-61
+SINR=14

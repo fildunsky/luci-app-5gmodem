@@ -233,7 +233,7 @@ _fm350_gtact_set() {
 # к соте, снял лишние диапазоны - а после обновления страницы снова включены все
 # (жалоба владельца RW350-GL-16 на Radxa, 17.09.2026). Сохранённый выбор лежит в
 # секции модема (save_band, пишет _persist_bands в bands.sh) - он и есть намерение.
-_fm350_reapply_bands() {
+_fm350_reapply_lte() {
     _rab_sv=""
     if command -v active_modem >/dev/null 2>&1; then
         _rab_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
@@ -265,6 +265,20 @@ _fm350_reapply_bands() {
     else
         _fm350_gtact_set "$(echo $CUR | tr ' ' ',')" '^[0-9]+$'
     fi
+}
+
+_fm350_reapply_bands() {
+    _fm350_reapply_lte
+    command -v active_modem >/dev/null 2>&1 || return
+    _rab_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+    [ "$_rab_sec" != "m_" ] || return
+    _rab_nr=$(uci -q get "5gmodem.$_rab_sec.save_band5gnsa")
+    [ -n "$_rab_nr" ] || _rab_nr=$(uci -q get "5gmodem.$_rab_sec.save_band5gsa")
+    case "$_rab_nr" in
+        ''|default) return ;;
+    esac
+    _fm350_rat_no_nr && return
+    setbands5gnsa "$_rab_nr" >/dev/null 2>&1
 }
 
 setbands() {
@@ -312,6 +326,10 @@ _fm350_rat_has_umts() {
     case "$(_fm350_act | cut -d, -f1)" in 1|4|16|20) return 0 ;; *) return 1 ;; esac
 }
 
+_fm350_rat_no_nr() {
+    case "$(_fm350_act | cut -d, -f1 | tr -d ' ')" in 1|2|4) return 0 ;; *) return 1 ;; esac
+}
+
 # Стиль 3G: mask = галочки (произвольный набор), combo = готовые комбинации
 # (Telit). json-билдер по этому флагу выбирает поля (supported3g/enabled3g либо
 # combos3g/current3g).
@@ -351,30 +369,18 @@ setbands3g() {
 }
 
 getsupportedbands5gsa() {
-    _fm350_no_nr && { echo "Unsupported"; return; }
-    _b=$(_fm350_caps nr)
-    [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
+    getsupportedbands5gnsa
 }
 
 getsupportedbands5gnsa() {
     _fm350_no_nr && { echo "Unsupported"; return; }
+    _fm350_rat_no_nr && { echo "Unsupported"; return; }
     _b=$(_fm350_caps nr)
     [ -n "$_b" ] && echo "$_b" || echo "$_DEFAULT_5G_BANDS"
 }
 
 getbands5gsa() {
-    _fm350_no_nr && { echo "Unsupported"; return; }
-    # +GTACT: 20,6,3,501,502,503,505,507,508,5020,5025,5028,5030,5038,5040,5041,5048,5066,5071,5077,5078,5079
-
-    O=$(sms_tool -d $_DEVICE at "AT+GTACT?")
-    BANDS=$(echo "$O" | awk -F: '/^\+GTACT:/{gsub(","," ");print $2}' | tr -d '\r')
-    for BAND in $BANDS; do
-        case $BAND in ''|*[!0-9]*) continue ;; esac
-        if [ $BAND -gt 500 ] && [ $BAND -lt 5100 ]; then
-            echo -n "$(echo "$BAND" | sed 's/^50//g') "
-        fi
-    done
-    echo ""
+    getbands5gnsa
 }
 
 getbands5gnsa() {
@@ -394,23 +400,7 @@ getbands5gnsa() {
 
 
 setbands5gsa() {
-    _fm350_no_nr && return 1
-    BANDS="$1"
-
-    T=""
-    if [ "$BANDS" = "default" ]; then
-        T="0"
-    else
-        for BAND in $BANDS; do
-            case $BAND in
-                ''|*[!0-9]*) continue ;;
-            esac
-            [ -n "$T" ] && T="${T},"
-            T="${T}50${BAND}"
-        done
-    fi
-
-    [ -n "$T" ] && _fm350_gtact_set "$T" '^5[0-9]+$' '9p'
+    setbands5gnsa "$@"
 }
 
 setbands5gnsa() {

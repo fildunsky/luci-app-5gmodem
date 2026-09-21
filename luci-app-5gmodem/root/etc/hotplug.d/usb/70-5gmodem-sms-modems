@@ -25,14 +25,14 @@
 if [ -z "$ACTION" ]; then
 	for d in /sys/bus/usb/devices/*; do
 		[ -f "$d/idVendor" ] || continue
-		[ "$(cat "$d/idVendor")" = "05c6" ] || continue
+		_vid=$(cat "$d/idVendor")
 		_pid=$(cat "$d/idProduct")
 		# 9025 здесь тоже: при установке пакета модем уже воткнут, и без него
 		# порты появились бы только после перезагрузки.
-		case "$_pid" in 9025|90d5|90d6) ;; *) continue ;; esac
+		case "$_vid:$_pid" in 05c6:9025|05c6:90d5|05c6:90d6|1e2d:00b7) ;; *) continue ;; esac
 		ACTION="add"; DEVTYPE="usb_device"
 		# hotplug's $PRODUCT strips the vendor's leading zero (5c6, not 05c6)
-		PRODUCT="5c6/$_pid/0"
+		PRODUCT="$(printf '%x' "0x$_vid")/$(printf '%x' "0x$_pid")/0"
 		DEVPATH="${d#/sys}"
 		break
 	done
@@ -57,6 +57,14 @@ case "$PRODUCT" in
 		# этой композиции другая, и generic даёт урезанные порты.
 		WANTID="05c6:9025"
 		;;
+	1e2d/b7/*)
+		_p=$(cat "/sys$DEVPATH/product" 2>/dev/null)
+		_m=$(cat "/sys$DEVPATH/manufacturer" 2>/dev/null)
+		case "$_p$_m" in
+			*VOS_5G*|*RXM-G1*|*RXMG1*|*SG500M2*|*Tri?Cascade*) WANTID="1e2d:00b7" ;;
+			*) exit 0 ;;
+		esac
+		;;
 	5c6/90d5/*)
 		_p=$(cat "/sys$DEVPATH/product" 2>/dev/null)
 		_m=$(cat "/sys$DEVPATH/manufacturer" 2>/dev/null)
@@ -70,18 +78,18 @@ esac
 
 _HOLD_IF=""
 if command -v qmicli >/dev/null 2>&1 && [ -f /usr/share/5gmodem/lib.sh ]; then
+	. /usr/share/5gmodem/lib.sh 2>/dev/null
 	_h_sec="m_$(printf '%s' "${DEVPATH##*/}" | sed 's/[^A-Za-z0-9]/_/g')"
 	_h_if=$(uci -q get "5gmodem.$_h_sec.network" 2>/dev/null)
 	if [ -n "$_h_if" ] && [ "$(uci -q get "network.$_h_if.auto" 2>/dev/null)" != "0" ]; then
-		case "$(uci -q get "network.$_h_if.proto" 2>/dev/null)" in
-			mbim|qmi|qmiraw)
-				case "$(ubus call "network.interface.$_h_if" status 2>/dev/null)" in
-					*'"autostart": true'*)
-						ifdown "$_h_if" 2>/dev/null
-						_HOLD_IF="$_h_if"
-						logger -t 5gmodem "sms-routes: interface $_h_if held until the SMS routes of ${DEVPATH##*/} are set" ;;
-				esac ;;
-		esac
+		if proto_in direct "$(uci -q get "network.$_h_if.proto" 2>/dev/null)"; then
+			case "$(ubus call "network.interface.$_h_if" status 2>/dev/null)" in
+				*'"autostart": true'*)
+					ifdown "$_h_if" 2>/dev/null
+					_HOLD_IF="$_h_if"
+					logger -t 5gmodem "sms-routes: interface $_h_if held until the SMS routes of ${DEVPATH##*/} are set" ;;
+			esac
+		fi
 	fi
 fi
 
@@ -95,7 +103,10 @@ fi
 	# usual rc.local "echo ... > .../generic/new_id" hack.
 	# Драйвер выбирает общая таблица (usbports.sh) - раньше он был вписан здесь
 	# и разошёлся с 20-compal-t99w175.
-	/usr/share/5gmodem/usbports.sh bind "${WANTID%%:*}" "${WANTID##*:}"
+	case "$WANTID" in
+		1e2d:00b7) ;;
+		*) /usr/share/5gmodem/usbports.sh bind "${WANTID%%:*}" "${WANTID##*:}" ;;
+	esac
 
 	# The package config may not exist yet on the very first boot (the
 	# uci-defaults script may run after coldplug) - create the section
@@ -147,11 +158,19 @@ fi
 			. /usr/share/5gmodem/lib.sh 2>/dev/null
 			QMI_TARGET_PATH="${DEVPATH##*/}"
 			if command -v qmicli_p >/dev/null 2>&1; then
-				for c in 0 1 2 3 none; do
-					qmicli_p "$WDM" \
-						--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \
-						>/dev/null 2>&1
+				_rt_try=0
+				while [ "$_rt_try" -lt 6 ]; do
+					_rt_try=$((_rt_try + 1))
+					for c in 0 1 2 3 none; do
+						qmicli_p "$WDM" \
+							--wms-set-routes="type=point,class=$c,storage=uim,receipt-action=store-and-notify" \
+							>/dev/null 2>&1
+					done
+					_rt_n=$(qmicli_p "$WDM" --wms-get-routes 2>/dev/null | grep -c "Storage Type: 'uim'")
+					[ "${_rt_n:-0}" -ge 5 ] && break
+					sleep 5
 				done
+				[ "${_rt_n:-0}" -ge 5 ] || logger -t 5gmodem "sms-routes: ${DEVPATH##*/} did not accept the SIM storage routes (${_rt_n:-0} of 5)"
 			fi
 		fi
 	fi

@@ -6,6 +6,7 @@
 'require uci';
 'require view';
 'require view.modem5g.modemtabs as modemtabs';
+'require view.modem5g.mutil as mutil';
 'require sms-tool-5gm.editors as editors';
 'require sms-tool-5gm.smssettings as smssettings';
 
@@ -597,19 +598,37 @@ return view.extend({
 				return Promise.reject(_('No modems found by ModemManager (mmcli -L)'));
 			if (ids.length === 1)
 				return ids[0];
-			// Несколько модемов (напр. внутренний + USB): раньше брался ПЕРВЫЙ,
-			// а он мог быть выключен (disabled) -> USSD падал с "modem not enabled
-			// yet". Выбираем модем в самом «рабочем» состоянии: connected >
-			// registered > enabled, пропуская disabled/locked.
-			var rank = { connected: 4, registered: 3, searching: 2, enabled: 1 };
-			return Promise.all(ids.map(function(id) {
-				return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', id, '--timeout=8', '-K' ]), {}).then(function(r) {
-					var s = (((r && r.stdout) || '').match(/generic\.state\s*:\s*(\S+)/) || [])[1] || '';
-					return { id: id, r: (rank[s] || 0) };
+			return L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), {}).then(function(ar) {
+				var act = ((ar && ar.stdout) || '').trim();
+				if (ids.indexOf(act) >= 0)
+					return act;
+				// Несколько модемов (напр. внутренний + USB): раньше брался ПЕРВЫЙ,
+				// а он мог быть выключен (disabled) -> USSD падал с "modem not enabled
+				// yet". Выбираем модем в самом «рабочем» состоянии: connected >
+				// registered > enabled, пропуская disabled/locked.
+				var rank = { connected: 4, registered: 3, searching: 2, enabled: 1 };
+				return Promise.all(ids.map(function(id) {
+					return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', id, '--timeout=8', '-K' ]), {}).then(function(r) {
+						var s = (((r && r.stdout) || '').match(/generic\.state\s*:\s*(\S+)/) || [])[1] || '';
+						return { id: id, r: (rank[s] || 0) };
+					});
+				})).then(function(list) {
+					list.sort(function(a, b) { return b.r - a.r; });
+					return list[0].id;
 				});
-			})).then(function(list) {
-				list.sort(function(a, b) { return b.r - a.r; });
-				return list[0].id;
+			});
+		});
+	},
+
+	getProxyModemNumber: function() {
+		var ready = { enabled: 1, searching: 1, registered: 1, connecting: 1, connected: 1, disconnecting: 1 };
+		return L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mmindex' ]), {}).then(function(res) {
+			var id = ((res && res.stdout) || '').trim();
+			if (!/^\d+$/.test(id))
+				return null;
+			return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', id, '--timeout=8', '-K' ]), {}).then(function(r) {
+				var s = (((r && r.stdout) || '').match(/generic\.state\s*:\s*(\S+)/) || [])[1] || '';
+				return ready[s] ? id : null;
 			});
 		});
 	},
@@ -621,6 +640,7 @@ return view.extend({
 		   тот, кто этим занимается: ussd.sh и handleCommand соответственно.
 		   Здесь нужен лишь выбор транспорта. */
 		let get_via_mm = uci.get('5gmodem', 'sms', 'ussd_via_mm');
+		let via_proxy = false;
 		/* Флаг ussd_via_mm - ГЛОБАЛЬНЫЙ, а транспорт у каждого модема свой:
 		   взведённый ради MM-модема (Compal), он гнал в mmcli и USSD AT-модема
 		   после смены активного (Telit «разучился» и USSD). Флаг = «MM-путь
@@ -631,7 +651,11 @@ return view.extend({
 			var _ams = 'm_' + _amp.replace(/[^A-Za-z0-9]/g, '_');
 			var _amif = uci.get('5gmodem', _ams, 'network') ||
 				uci.get('5gmodem', '@5gmodem[0]', 'network');
-			if (_amif && uci.get('network', _amif, 'proto') !== 'modemmanager') {
+			var _ampr = _amif ? uci.get('network', _amif, 'proto') : null;
+			if (mutil.isSharedProxyProto(_ampr)) {
+				via_proxy = true;
+			}
+			else if (_amif && !mutil.isMMProto(_ampr)) {
 				get_via_mm = '0';
 			}
 		}
@@ -647,8 +671,15 @@ return view.extend({
 		   No port is needed in this mode. */
 		if (get_via_mm == '1') {
 			let self = this;
-			return this.getMMModemNumber()
+			return (via_proxy ? this.getProxyModemNumber() : this.getMMModemNumber())
 				.then(function(modemNum) {
+					if (modemNum == null) {
+						if (!port) {
+							ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
+							return false;
+						}
+						return self.handleUssdScript(ussd);
+					}
 					// Интерактивная USSD-сессия: если сеть ждёт ответ
 					// (открытая сессия) - шлём respond, иначе initiate.
 					var arg = self.ussdSessionActive

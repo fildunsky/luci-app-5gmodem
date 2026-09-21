@@ -1,0 +1,2 @@
+## 4pda 994474 #1840 (EP06, EP06ELAR04A01M4G, TDD B38 без агрегации)
++QENG: "servingcell","NOCONN","LTE","TDD",250,35,1FE9134,48,37900,38,5,5,BFF,-98,-7,-70,21,-

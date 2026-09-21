@@ -1,0 +1,10 @@
+## 4pda 994474 #1055
++QENG: "neighbourcell intra","LTE",1301,199,-11,-103,-72,0,-,-,-,-,-
++QENG: "neighbourcell intra","LTE",1301,192,-16,-110,-87,0,-,-,-,-,-
++QENG: "neighbourcell intra","LTE",1301,334,-19,-113,-86,0,-,-,-,-,-
++QENG: "neighbourcell intra","LTE",1301,16,-20,-116,-89,0,-,-,-,-,-
++QENG: "neighbourcell intra","LTE",1301,15,-20,-118,-89,0,-,-,-,-,-
++QENG: "neighbourcell inter","LTE",3300,51,-8,-108,-91,0,-,-,-,-
++QENG: "neighbourcell inter","LTE",3300,353,-19,-121,-91,0,-,-,-,-
++QENG: "neighbourcell inter","LTE",3300,191,-20,-117,-85,0,-,-,-,-
++QENG: "neighbourcell inter","LTE",3300,146,-20,-123,-91,0,-,-,-,-

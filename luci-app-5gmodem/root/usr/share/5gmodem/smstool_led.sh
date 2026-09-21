@@ -69,7 +69,7 @@ handle_old_format() {
     MEM=$(uci -q get 5gmodem.sms.storage)
     debug_log "MEM (storage): $MEM"
     
-    STX=$(/usr/share/5gmodem/smsbridge.sh status "$MEM" "$DEV" 2>/dev/null | cut -c23-27)
+    STX=$(/usr/share/5gmodem/smsbridge.sh status "$MEM" "$DEV" 2>/dev/null | sed -n 's/.*used: *\([0-9]*\).*/\1/p' | head -1)
     debug_log "STX (raw cut): '$STX'"
     
     SMS=$(echo $STX | tr -dc '0-9')
