@@ -567,6 +567,23 @@ function addTelegramForwarding(s) {
 	o.depends('tg_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };
 
+	o = s.option(form.Value, 'tg_iface', _('Interface for Telegram'),
+		_('Network interface the router uses to reach Telegram, e.g. a VPN tunnel (WireGuard, AmneziaWG) when the carrier blocks Telegram. Auto: the direct path, then the SSClash proxy.'));
+	o.value('', _('Auto'));
+	o.depends('tg_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+	o.load = function(section_id) {
+		var self = this;
+		return L.resolveDefault(uci.load('network')).then(function() {
+			(uci.sections('network', 'interface') || []).forEach(function(i) {
+				var n = i['.name'];
+				if (!n || n === 'loopback' || self.keylist.indexOf(n) >= 0) { return; }
+				self.value(n, i.proto ? n + ' (' + i.proto + ')' : n);
+			});
+			return form.Value.prototype.load.call(self, section_id);
+		});
+	};
+
 	o = s.option(form.Button, '_tgchatid', _('Find Chat ID'),
 		_('Uses the SAVED token: write to the bot first, then save the form and press this.'));
 	o.inputtitle = _('Find');
@@ -589,7 +606,7 @@ function addTelegramForwarding(s) {
 				   попасть. Без расшифровки человек шёл проверять токен,
 				   который тут ни при чём. */
 				var msg = (j.error === 'noreply')
-					? _('Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Start SSClash (or route the router through a VPN) and try again.')
+					? _('Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Choose your VPN tunnel in "Interface for Telegram" or start SSClash, save and try again.')
 					: _('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'));
 				ui.addNotification(null, E('p', {}, msg), 'error');
 				return;

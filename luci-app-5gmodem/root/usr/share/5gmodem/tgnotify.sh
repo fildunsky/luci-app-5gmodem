@@ -35,6 +35,7 @@ TG_TOKEN=$(_cfg tg_token)
 TG_CHAT=$(_cfg tg_chat)
 TG_INT=$(_cfg tg_interval); case "$TG_INT" in ''|*[!0-9]*) TG_INT=60 ;; esac
 TG_CMD=$(_cfg tg_commands)
+TG_IFACE=$(_cfg tg_iface)
 # ОКНО «ПЕРВОЙ ВСТРЕЧИ» С МОДЕМОМ, ЧАСЫ. Модем, которого бот видит впервые, не
 # должен вываливать в чат всю память SIM - но и молчать про свежие сообщения
 # неправильно: человек только что воткнул модем и ждёт, что бот заработает.
@@ -132,9 +133,24 @@ _tg_direct_dead() {
 	[ $((_td_n - _td_t)) -lt 600 ]
 }
 
+_tg_ifdev() {
+	[ -n "$TG_IFACE" ] || return 1
+	_ti_d=$(ubus call "network.interface.$TG_IFACE" status 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
+	[ -n "$_ti_d" ] || _ti_d="$TG_IFACE"
+	[ -d "/sys/class/net/$_ti_d" ] || return 1
+	printf '%s' "$_ti_d"
+}
+
 _tg_curl() {   # аргументы curl без -s/-m
 	_tc_u="$1"; shift
 	_tc_o=""
+	_tc_if=$(_tg_ifdev)
+	if [ -n "$_tc_if" ]; then
+		_tc_o=$(printf 'url = "%s"\n' "$_tc_u" | curl -s -m 20 --interface "$_tc_if" -K - "$@" 2>&1)
+		case "$_tc_o" in
+			*'"ok":'*) printf '%s' "$_tc_o"; return 0 ;;
+		esac
+	fi
 	if ! _tg_direct_dead; then
 		# 8 c, не 20: живой прямой путь отвечает за секунды, а на закрытом
 		# каждая лишняя секунда - это висящая кнопка и замёрзший тик.

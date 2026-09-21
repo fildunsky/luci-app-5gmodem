@@ -4195,9 +4195,6 @@ msgstr "无"
 msgid "Update available"
 msgstr "有可用更新"
 
-msgid "Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Start SSClash (or route the router through a VPN) and try again."
-msgstr "路由器无法访问 Telegram：直连被运营商封锁，且未找到可用的代理隧道。请启动 SSClash（或让路由器通过 VPN 上网）后重试。"
-
 msgid "Reset cell lock"
 msgstr "重置小区锁定"
 
@@ -5644,3 +5641,12 @@ msgstr "ModemManager 仍在识别调制解调器：频段和网络模式将在�
 
 msgid "The browser keeps outdated files of this page. Clear the browser cache (Ctrl+Shift+R) and reload the page."
 msgstr "浏览器仍保留此页面的旧文件。请清除浏览器缓存（Ctrl+Shift+R）后重新加载页面。"
+
+msgid "Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Choose your VPN tunnel in \"Interface for Telegram\" or start SSClash, save and try again."
+msgstr "路由器无法访问 Telegram：直连被运营商封锁，且未找到可用的代理隧道。请在“Telegram 接口”中选择您的 VPN 隧道，或启动 SSClash，保存后重试。"
+
+msgid "Interface for Telegram"
+msgstr "Telegram 接口"
+
+msgid "Network interface the router uses to reach Telegram, e.g. a VPN tunnel (WireGuard, AmneziaWG) when the carrier blocks Telegram. Auto: the direct path, then the SSClash proxy."
+msgstr "路由器访问 Telegram 所用的网络接口，例如运营商封锁 Telegram 时使用的 VPN 隧道（WireGuard、AmneziaWG）。自动：先直连，再通过 SSClash 代理。"

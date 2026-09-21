@@ -3631,9 +3631,6 @@ msgstr "TLS: サーバーが対応していれば STARTTLS を使う"
 msgid "Telegram bot"
 msgstr "Telegram ボット"
 
-msgid "Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Start SSClash (or route the router through a VPN) and try again."
-msgstr "ルーターから Telegram に接続できません: 直接の経路は事業者にブロックされており、動作するプロキシトンネルも見つかりませんでした。SSClash を起動する (またはルーターを VPN 経由にする) してから、もう一度お試しください。"
-
 msgid "Telegram returned no chats. Write any message to the bot and press the button again."
 msgstr "Telegram からチャットが返ってきませんでした。ボットに何かメッセージを送ってから、もう一度ボタンを押してください。"
 
@@ -5518,3 +5515,12 @@ msgstr "ModemManager がモデムを認識中です。バンドとネットワ�
 
 msgid "The browser keeps outdated files of this page. Clear the browser cache (Ctrl+Shift+R) and reload the page."
 msgstr "ブラウザがこのページの古いファイルを保持しています。ブラウザのキャッシュを消去 (Ctrl+Shift+R) して、ページを再読み込みしてください。"
+
+msgid "Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Choose your VPN tunnel in \"Interface for Telegram\" or start SSClash, save and try again."
+msgstr "ルーターから Telegram に接続できません: 直接の経路は事業者にブロックされており、動作するプロキシトンネルも見つかりませんでした。「Telegram 用インターフェース」で VPN トンネルを選ぶか SSClash を起動し、保存してからもう一度お試しください。"
+
+msgid "Interface for Telegram"
+msgstr "Telegram 用インターフェース"
+
+msgid "Network interface the router uses to reach Telegram, e.g. a VPN tunnel (WireGuard, AmneziaWG) when the carrier blocks Telegram. Auto: the direct path, then the SSClash proxy."
+msgstr "ルーターが Telegram に接続するときに使うネットワークインターフェース。事業者が Telegram をブロックしている場合は VPN トンネル (WireGuard、AmneziaWG など) を選びます。自動: 直接の経路、次に SSClash プロキシ。"
