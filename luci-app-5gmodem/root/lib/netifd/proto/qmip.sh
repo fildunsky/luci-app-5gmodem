@@ -425,10 +425,6 @@ proto_qmip_setup() {
 		ubus call network add_dynamic "$(json_dump)"
 	}
 
-	if [ -z "$mtu" ]; then
-		mtu=$(_qmip_v 'MTU' "$cfg4")
-		[ -n "$mtu" ] || mtu=$(_qmip_v 'MTU' "$cfg6")
-	fi
 	case "$mtu" in
 		''|*[!0-9]*) ;;
 		*) [ "$mtu" -ge 576 ] && { echo "QMI+MM[$$] Setting MTU of $ifname to $mtu"; ip link set "$ifname" mtu "$mtu" 2>/dev/null; } ;;
