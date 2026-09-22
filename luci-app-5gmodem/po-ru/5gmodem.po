@@ -5718,3 +5718,9 @@ msgstr "Сетевой интерфейс, через который роуте�
 
 msgid "SIM not detected: reinsert the card"
 msgstr "SIM не видна: переставьте карту"
+
+msgid "Change network mode"
+msgstr "Смена режима сети"
+
+msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
+msgstr "Модем сейчас работает в %s, а режим «%s» эту технологию не включает. Если другой сети здесь нет, связь пропадёт."

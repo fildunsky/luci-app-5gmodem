@@ -27,7 +27,9 @@ esac
 
 # Аппаратная перезагрузка модема по питанию через GPIO платы (например
 # modem_power у Huasifei WH3000; у части плат - 4g/5g1/5g2). Работает независимо
-# от AT: снимаем питание слота (value=1), пауза, возвращаем (value=0); интерфейс
+# от AT: снимаем питание слота (значение, обратное текущему), пауза, возвращаем
+# прежнее - полярность у плат разная (у KuWfi T960 modem_power=1 это «подано», у
+# WH3000 наоборот); интерфейс
 # поднимается ~1 мин. На WH3000 это питает ТОЛЬКО M.2-слот (USB-модем не трогает).
 # Список известных имён GPIO сброса/питания модема (по target/.../03_gpio_switches).
 # modem_reset - ПО ПЛАТАМ. У Teltonika RUT2xx/RUT9xx это настоящая reset-линия
@@ -194,7 +196,23 @@ if [ "$MODE" = power ]; then
 	# свой 30-секундный таймаут, и UI показывал «ошибка XHR», хотя питание уже
 	# было переключено (ровно этот симптом и наблюдался). С отвязанными
 	# дескрипторами ubus file exec отвечает мгновенно (проверено на роутере).
-	( echo 1 > "$GP" 2>/dev/null; sleep 5; echo 0 > "$GP" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
+	_pg_on=$(cat "$GP" 2>/dev/null)
+	case "$_pg_on" in 0|1) ;; *) _pg_on=0 ;; esac
+	_pg_off=$((1 - _pg_on))
+	_pg_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
+	(
+		echo "$_pg_off" > "$GP" 2>/dev/null
+		sleep 5
+		echo "$_pg_on" > "$GP" 2>/dev/null
+		[ -n "$_pg_path" ] || exit 0
+		_pg_n=0
+		while [ "$_pg_n" -lt 40 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
+			sleep 1; _pg_n=$((_pg_n + 1))
+		done
+		[ -e "/sys/bus/usb/devices/$_pg_path" ] && exit 0
+		echo "$_pg_off" > "$GP" 2>/dev/null
+		logger -t 5gmodem "power: $_pg_path did not come back with $G=$_pg_on - left it at $_pg_off"
+	) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
 	sleep 1
 	exit 0

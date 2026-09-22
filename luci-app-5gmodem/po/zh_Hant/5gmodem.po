@@ -5619,3 +5619,9 @@ msgstr "路由器訪問 Telegram 所用的網路介面，例如運營商封鎖 T
 
 msgid "SIM not detected: reinsert the card"
 msgstr "未偵測到 SIM：請重新插入卡"
+
+msgid "Change network mode"
+msgstr "變更網路模式"
+
+msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
+msgstr "數據機目前工作在 %s，而模式「%s」不包含它。如果此處沒有其他可用網路，連線將中斷。"

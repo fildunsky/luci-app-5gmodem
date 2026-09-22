@@ -1089,9 +1089,30 @@ function resetBands() {
 	return applyBands();
 }
 
-function setNetMode(allowed, preferred, label) {
+function setNetMode(allowed, preferred, label, confirmed) {
 	if (!ctx.getMmIdx()) {   // см. ctx.getMmIdx(): иначе режим уехал бы соседнему модему
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
+		return Promise.resolve();
+	}
+	/* Режим без технологии, на которой модем СЕЙЧАС работает, оставляет роутер
+	   без связи: в месте без 5G кнопка «5G» уводит модем в сеть, где он не
+	   регистрируется вовсе (issue #37). Решение за человеком - спрашиваем. */
+	var _cur = String((window._lastJson || {}).mode || '');
+	var _need = /NR|5G/i.test(_cur) ? '5g'
+		: /LTE|4G/i.test(_cur) ? '4g'
+		: /WCDMA|UMTS|HSPA|3G/i.test(_cur) ? '3g' : '';
+	if (!confirmed && _need && String(allowed || '').split('|').indexOf(_need) < 0) {
+		ui.showModal(_('Change network mode'), [
+			E('p', {}, _('The modem is on %s right now, and mode "%s" does not include it. If the network has nothing else here, the connection will drop.').format(_cur, label)),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
+					ui.hideModal();
+					setNetMode(allowed, preferred, label, true);
+				} }, _('Apply'))
+			])
+		]);
 		return Promise.resolve();
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));

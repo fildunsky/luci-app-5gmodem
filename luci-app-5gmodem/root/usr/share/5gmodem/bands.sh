@@ -1339,12 +1339,13 @@ if [ "x$1" != "xjson" ]; then
 		# порт «не найден», и страница не показывала ничего, хотя ModemManager
 		# знал и списки диапазонов, и режим).
 		mgmtinfo) : ;;
+		setmodemm) : ;;
 		set*)
 			# Явная запись у хрупкой прошивки под MM - разрешаем (см. _MM_AT_STATIC).
 			[ -n "$_MM_AT_STATIC$_NOAT_STATIC" ] && [ -n "$_DEVICE" ] && [ -c "$_DEVICE" ] && _PORT_OK=1
 			if [ "$_PORT_OK" != "1" ]; then
-				echo "Port not found, quitting..."
-				exit 0
+				echo '{"error":"port not found"}'
+				exit 1
 			fi
 			;;
 		*)
