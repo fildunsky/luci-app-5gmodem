@@ -208,6 +208,10 @@ proto_mbimp_setup() {
 	local reg="" ok=0
 	n=0
 	while :; do
+		if [ "$(_mbimp_field 'Software radio state' "$(_mbimp_cli 10 --query-radio-state)")" = "off" ]; then
+			echo "MBIM+MM[$$] Radio is off - turning it on"
+			_mbimp_cli 20 --set-radio-state=on >/dev/null 2>&1
+		fi
 		out=$(_mbimp_cli 20 --query-registration-state)
 		reg=$(_mbimp_field 'Register state' "$out")
 		case "$reg" in

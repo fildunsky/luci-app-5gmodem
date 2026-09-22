@@ -800,7 +800,8 @@ if [ -n "$DEVICE" ]; then
 		_pok=1
 	fi
 fi
-[ -n "$DEVICE" ] && [ -z "$_pok" ] && ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
+[ -n "$DEVICE" ] && [ -z "$_pok" ] && [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" != "1" ] \
+	&& ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
 if [ -z "$DEVICE" ]; then
 	# Порт не ответил на atprobe. Это ЧАСТО ЛОЖНО: порт на миг занят/медленный
 	# (особенно на слабом мобильном заходе, где всё грузится разом) или модем
@@ -3132,6 +3133,14 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 				home-sms-only)    REG=6 ;;
 				roaming-sms-only) REG=7 ;;
 				idle)             REG=0 ;;
+			esac
+		fi
+		if [ -z "$REG" ]; then
+			case "$(_mmv "modem.generic.state"):$(_mmv "modem.generic.state-failed-reason"):$(_mmv "modem.generic.unlock-required")" in
+				failed:sim-missing:*) REG="SIM not inserted" ;;
+				failed:sim-error:*)   REG="SIM failure" ;;
+				locked:*:sim-pin)     REG="SIM PIN required" ;;
+				locked:*:sim-puk)     REG="SIM PUK required" ;;
 			esac
 		fi
 		[ -z "$MODE" ]    && MODE=$(_mmv "modem.generic.access-technologies.value[1]" | tr 'a-z' 'A-Z')

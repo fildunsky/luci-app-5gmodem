@@ -2785,8 +2785,16 @@ function applyMetrics(json) {
 						// "GigSky | Tele2"), а иконку рисуем от ДОМАШНЕГО оператора.
 						var _roam = (json.roaming == '1') || json.registration == '5' || json.registration == '7';
 						var _iconName = _visited;
+						var _simProb = {
+							'SIM not inserted': _('SIM not detected: reinsert the card'),
+							'SIM PIN required': _('SIM PIN required'),
+							'SIM PUK required': _('SIM PUK required'),
+							'SIM failure': _('SIM failure'),
+							'SIM busy': _('SIM busy'),
+							'SIM wrong': _('SIM wrong')
+						}[String(json.registration || '')];
 						if (_visited.length <= 1) {
-							view.textContent = '-';
+							view.textContent = _simProb || '-';
 						} else if (_roam && _home.length > 1 &&
 						           checkOperatorName(_home).toLowerCase() !== checkOperatorName(_visited).toLowerCase()) {
 							view.textContent = checkOperatorName(_home) + ' | ' + checkOperatorName(_visited);

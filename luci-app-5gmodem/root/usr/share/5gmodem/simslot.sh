@@ -248,6 +248,12 @@ fi
 # в списке их не было - и слоты снова читались из MM, т.е. неверно. Плюс для
 # 05c6:9025 проверка по дескриптору бесполезна (там generic "HSUSB Device").
 # Теперь признак один на все композиции - см. iscompal.sh.
+_SLOT_NOAT=""
+if [ "$1" != set ] && bg_at_off "$_AP"; then
+	_SLOT_NOAT=1
+	at_query() { return 1; }
+	sms_tool() { return 1; }
+fi
 . /usr/share/5gmodem/iscompal.sh
 if is_compal "$_AP" "" "$(uci -q get "5gmodem.$_SEC.at_port")"; then
 	MI=""
@@ -927,7 +933,8 @@ live_port() {
 	return 1
 }
 
-D=$(live_port)
+D=""
+[ -n "$_SLOT_NOAT" ] || D=$(live_port)
 # Опрос SIM-слотов делит порт с опросом метрик: без очереди AT+GTDUALSIM?
 # возвращал ответ чужой команды, и слот определялся неверно.
 . /usr/share/5gmodem/atlock.sh

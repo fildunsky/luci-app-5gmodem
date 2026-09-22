@@ -5715,3 +5715,6 @@ msgstr "Интерфейс для Telegram"
 
 msgid "Network interface the router uses to reach Telegram, e.g. a VPN tunnel (WireGuard, AmneziaWG) when the carrier blocks Telegram. Auto: the direct path, then the SSClash proxy."
 msgstr "Сетевой интерфейс, через который роутер ходит в Telegram, например VPN-туннель (WireGuard, AmneziaWG), если оператор блокирует Telegram. Авто: прямой путь, затем прокси SSClash."
+
+msgid "SIM not detected: reinsert the card"
+msgstr "SIM не видна: переставьте карту"

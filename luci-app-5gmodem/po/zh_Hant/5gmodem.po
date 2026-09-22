@@ -5616,3 +5616,6 @@ msgstr "Telegram 介面"
 
 msgid "Network interface the router uses to reach Telegram, e.g. a VPN tunnel (WireGuard, AmneziaWG) when the carrier blocks Telegram. Auto: the direct path, then the SSClash proxy."
 msgstr "路由器訪問 Telegram 所用的網路介面，例如運營商封鎖 Telegram 時使用的 VPN 隧道（WireGuard、AmneziaWG）。自動：先直連，再透過 SSClash 代理。"
+
+msgid "SIM not detected: reinsert the card"
+msgstr "未偵測到 SIM：請重新插入卡"
