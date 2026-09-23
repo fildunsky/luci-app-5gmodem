@@ -431,6 +431,16 @@ uplink_verdict() {
 		echo "probe via $_uv_ldev: NO INTERNET - traffic goes into a hole"
 		echo "  (an uplink with an address but no way out looks healthy to the kernel:"
 		echo "   the route is there, so nothing will switch away on its own)"
+		_uv_act=$("$RES/modemswitch.sh" mmindex 2>/dev/null)
+		_uv_endc=""
+		[ -n "$_uv_act" ] && command -v mmcli >/dev/null 2>&1 \
+			&& mmcli -m "$_uv_act" -K 2>/dev/null \
+			| grep -q "access-technologies.value\[2\] *: *5gnr" && _uv_endc=1
+		if [ -n "$_uv_endc" ]; then
+			echo "  the modem runs LTE with 5G NR added (NSA): a broken NR leg gives exactly this"
+			echo "  picture - an address that never carries packets. Try the 4G mode button, or"
+			echo "  switch off NR bands one by one on the Frequency management page."
+		fi
 		if [ "$_uv_en" != "1" ]; then
 			echo "  the internet watchdog is OFF - nobody is there to notice"
 		elif [ "$_uv_fo" != "1" ]; then
@@ -2356,11 +2366,26 @@ report() {
 	# шага гарантированно упрутся в "no AT port", отняв минуты. Человек с двумя
 	# T99W175 (30.07) именно на этом месте решил, что диагностика повисла.
 	_ES_SKIP=""
+	_es_sec="m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	_es_if=$(uci -q get "5gmodem.$_es_sec.network" 2>/dev/null)
+	[ -n "$_es_if" ] || _es_if=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+	_es_sl=$("$RES/simslot.sh" status 2>/dev/null)
+	_es_act=$(printf '%s' "$_es_sl" | jsonfilter -e '@.active' 2>/dev/null)
+	_es_lab=""
+	[ -n "$_es_act" ] && _es_lab=$(printf '%s' "$_es_sl" \
+		| jsonfilter -e "@.slots[@.id=\"$_es_act\"].label" 2>/dev/null)
 	if [ ! -x /usr/bin/lpac ]; then
 		_ES_SKIP="lpac is not installed"
 	elif [ "$("$RES/esim.sh" apduinfo 2>/dev/null | sed -n 's/^selected APDU backend: //p')" = "at" ] \
 	     && [ -z "$("$RES/registry.sh" active 2>/dev/null | jsonfilter -e '@.tty[*]' 2>/dev/null)" ]; then
 		_ES_SKIP="APDU transport is at, but the active modem has no tty at all"
+	elif [ "$(uci -q get "network.$_es_if.proto" 2>/dev/null)" = "modemmanager" ] \
+	     && ifstatus "$_es_if" 2>/dev/null | grep -q '"up": true'; then
+		if [ -n "$_es_lab" ] && [ "${_es_lab#*eSIM}" = "$_es_lab" ]; then
+			_ES_SKIP="slot $_es_act ($_es_lab) is active, so the eUICC is unreachable anyway, and reading it would take the channel from ModemManager and drop this live connection - switch to the eSIM slot, stop the interface and collect the report again"
+		else
+			_ES_SKIP="reading the eUICC takes the channel from ModemManager and would drop this live connection - stop the modem interface and collect the report again, or read the chip on the eSIM page"
+		fi
 	fi
 	if [ -n "$_ES_SKIP" ]; then
 		run 5 "eSIM: status/profiles/notifications" echo "skipped: $_ES_SKIP"
