@@ -932,10 +932,13 @@ function stInit() {
    может отличить «сторож увёл трафик» от «сторож видит дыру и молчит». */
 var _hfo = null;   // null - слежение выключено/ответа ещё не было
 
+var _npEmptyStreak = 0;
+var _npRecheck = null;
+
 function loadList() {
-	return L.resolveDefault(fs.exec_direct(BIN, [ 'list' ]), '[]').then(function(out) {
-		var arr = [];
-		try { arr = JSON.parse(out || '[]') || []; } catch (e) {}
+	return L.resolveDefault(fs.exec_direct(BIN, [ 'list' ]), '').then(function(out) {
+		var arr = [], ok = false;
+		try { arr = JSON.parse(out || ''); ok = Array.isArray(arr); } catch (e) {}
 		arr = Array.isArray(arr) ? arr : [];
 		arr = arr.filter(function(o) {
 			if (o && o.event != null) { _hfo = (String(o.failover) === '1'); return false; }
@@ -946,8 +949,23 @@ function loadList() {
 		   не дожидаясь этого XHR. Иначе панель появлялась через ~0.4 c НАД
 		   уже нарисованным блоком «Модем» и сдвигала его рывком. */
 		if (arr.length) {
+			_npEmptyStreak = 0;
 			try { window.localStorage.setItem('netpri-last', JSON.stringify(arr)); } catch (e) {}
+		} else if (ok) {
+			/* ПУСТО ПО-НАСТОЯЩЕМУ. Кэш последнего списка лежит в localStorage, а тот
+			   привязан к АДРЕСУ, не к роутеру: по 192.168.x.1 за одним адресом живут
+			   разные платы, и warm-render показывал чужой аплинк (Wi-Fi STA на плате
+			   без Wi-Fi) вечно - липкость не давала пустому ответу его стереть. Но
+			   разовое [] бывает и законно (перезагрузка active_modem), поэтому
+			   стираем только после второго подтверждения подряд. */
+			_npEmptyStreak++;
+			if (_npEmptyStreak >= 2) {
+				try { window.localStorage.removeItem('netpri-last'); } catch (e) {}
+			} else if (_npRecheck) {
+				window.setTimeout(_npRecheck, 3000);
+			}
 		}
+		arr._ok = ok;
 		return arr;
 	});
 }
@@ -1736,7 +1754,7 @@ return baseclass.extend({
 			// НЕ убираем блок на пустом ответе: при переключении модема (перезагрузка
 			// active_modem) netpri.sh list на миг может вернуть [], и блок мигал/пропадал.
 			// Просто перерисовываем при наличии данных; последнее содержимое «липкое».
-			if (list && list.length) { redraw(list); }
+			if (list && (list.length || (list._ok && _npEmptyStreak >= 2))) { redraw(list); }
 		};
 		/* Сначала флаги видимости виджетов, потом отрисовка - иначе на первый
 		   кадр показали бы отключённые виджеты. uci.load обычно уже в кэше
@@ -1760,7 +1778,8 @@ return baseclass.extend({
 			   карточки YouTube/SSClash/спидтеста не появились бы. Дальше apply
 			   держит содержимое «липким» (пустые ответы не стирают). */
 			redraw(lastList());
-			L.resolveDefault(loadList()).then(apply);
+			_npRecheck = function() { L.resolveDefault(loadList()).then(apply); };
+			_npRecheck();
 			if (_widgets.speedtest) { stInit(); }
 			if (_widgets.status) { pingInit(); }
 			if (_widgets.services) {
@@ -1875,7 +1894,9 @@ return baseclass.extend({
 			var cached = lastList();
 			if (cached.length || extra) {
 				var b = mk(cached);
-				loadList().then(function(l) { if (l && l.length) { b.redraw(l); } });
+				loadList().then(function(l) {
+					if (l && (l.length || (l._ok && _npEmptyStreak >= 2))) { b.redraw(l); }
+				});
 				return b.wrap;
 			}
 			return loadList().then(function(list) {
