@@ -97,8 +97,8 @@ function vendor(m) {
    Тот же список ведётся в netpri.sh (model_for) для «Приоритета интернета». */
 var MODEL_BY_VIDPID = {
 	'2c7c:0121': 'EC21',    '2c7c:0125': 'EC25',   '2c7c:0296': 'BG96',
-	'2c7c:0306': 'EP06',    '2c7c:0512': 'EG12',   '2c7c:0620': 'EM060K',
-	'2c7c:0800': 'RM500Q',  '2c7c:0801': 'RM520N', '2c7c:0900': 'RG500Q'
+	'2c7c:0306': 'EP06',    '2c7c:0512': 'EG12',   '2c7c:0620': 'EM160R',
+	'2c7c:0800': 'RM500Q',  '2c7c:0801': 'RM520N', '2c7c:0900': 'RM500U'
 };
 
 /* clean up the raw USB product string into a readable model. The Compal exposes

@@ -1,0 +1,2 @@
+## FUjr/QModem testcases/quectel/unisoc/rm500u-cnv-49196729 (RM500UCNVCAR03A12M2G, raw AT dump)
++CME ERROR: 4

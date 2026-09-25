@@ -70,7 +70,7 @@ fi
 # Живой ответ (сокращённо):
 #   CURR_MODE:LTE / BAND:40 / LTE_BANDWIDTH:100 / DL CHANNEL:38750
 #   RSSI:-66 / RSRP:-103 / RSRQ:-16.0 / SINR:110 / SNR:2 / TM:4 / VOLTE:0
-# SINR приходит в десятых (110 = 11.0 дБ) - рядом лежащий SNR:2 это подтверждает.
+# SINR приходит шкалой v/5-20 (110 = 2.0 дБ) - рядом лежащий SNR:2 это подтверждает.
 C=$(sms_tool -d $DEVICE at "AT+SGCELLINFOEX?" 2>/dev/null | tr -d '\r')
 if [ -n "$C" ]; then
 	# _sg <ИМЯ> - значение поля по имени
@@ -98,7 +98,7 @@ if [ -n "$C" ]; then
 	T=$(_sg "RSRP"); case "$T" in -*) RSRP="$T" ;; esac
 	T=$(_sg "RSRQ"); case "$T" in -*) RSRQ="$T" ;; esac
 	T=$(_sg "SINR")
-	[ -n "$T" ] && [ "$T" != "0" ] && SINR=$(awk -v v="$T" 'BEGIN{printf "%.1f", v/10}')
+	[ -n "$T" ] && [ "$T" != "0" ] && SINR=$(awk -v v="$T" 'BEGIN{printf "%.1f", v/5-20}')
 	# TM - режим передачи. TM4 и выше означают пространственное мультиплексирование,
 	# то есть работающий MIMO; в вебе это поле называется pmimo.
 	T=$(_sg "TM"); [ -n "$T" ] && [ "$T" != "0" ] && PMIMO="TM$T"

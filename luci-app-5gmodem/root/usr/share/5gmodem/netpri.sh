@@ -737,10 +737,10 @@ MF_EOF
 		2c7c:0296) echo "Quectel BG96"; return ;;
 		2c7c:0306) echo "Quectel EP06"; return ;;
 		2c7c:0512) echo "Quectel EG12"; return ;;
-		2c7c:0620) echo "Quectel EM060K"; return ;;
+		2c7c:0620) echo "Quectel EM160R"; return ;;
 		2c7c:0800) echo "Quectel RM500Q"; return ;;
 		2c7c:0801) echo "Quectel RM520N"; return ;;
-		2c7c:0900) echo "Quectel RG500Q"; return ;;
+		2c7c:0900) echo "Quectel RM500U"; return ;;
 		2c7c:6005) echo "Quectel EC200A"; return ;;
 		2dee:4d57) echo "MeigLink SLM770A"; return ;;
 	esac

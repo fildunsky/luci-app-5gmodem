@@ -1,0 +1,2 @@
+## FUjr/QModem testcases/quectel/unisoc/rm500u-cnv-49196729 (RM500UCNVCAR03A12M2G, raw AT dump)
++QNWPREFCFG: "lte_band",1:3:5:8:34:38:39:40:41

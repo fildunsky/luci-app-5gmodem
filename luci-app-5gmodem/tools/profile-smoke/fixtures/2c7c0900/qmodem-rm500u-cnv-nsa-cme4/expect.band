@@ -1,0 +1,5 @@
+getbands=1 3 5 8 34 38 39 40 41
+getbands5gsa=1 3 5 8 28 41 77 78 79
+getsupportedbands5gnsa=Unsupported
+getbands5gnsa=Unsupported
+getmode=0

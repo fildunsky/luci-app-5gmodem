@@ -10,3 +10,15 @@ getinfo() {
 # +QNWPREFCFG: "lte_band",1:3:7:8:20:28:38
 
 . $RES/_quectel_common2
+
+getsupportedbands5gnsa() {
+	echo "Unsupported"
+}
+
+getbands5gnsa() {
+	echo "Unsupported"
+}
+
+setbands5gnsa() {
+	echo "Unsupported"
+}

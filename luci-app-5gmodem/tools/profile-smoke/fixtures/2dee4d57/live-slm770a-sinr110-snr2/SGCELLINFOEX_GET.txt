@@ -1,0 +1,13 @@
+## our live SLM770A-R capture quoted in modem/usb/2dee4d57 (abridged there): SINR:110 next to SNR:2
++SGCELLINFOEX:
+CURR_MODE:LTE
+BAND:40
+LTE_BANDWIDTH:100
+DL CHANNEL:38750
+RSSI:-66
+RSRP:-103
+RSRQ:-16.0
+SINR:110
+SNR:2
+TM:4
+VOLTE:0
