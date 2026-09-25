@@ -1,0 +1,2 @@
+## Quectel EG06xK&Ex120K&EM060K Series AT Commands Manual V1.0.0, 5.17.2 example
++QNWPREFCFG: "lte_band",1:2:3:4:5:7:8:12:13:14:17:18:19:20:25:26:28:29:30:32:34:38:39:40:41:42:66:71

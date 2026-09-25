@@ -60,6 +60,8 @@ _qc_ati
 
 _qc_ids
 
-_qc_proto "Vendor=2c7c ProdID=030b" 1220
+_PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
+_PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
+_qc_proto "Vendor=${_PV_V:-2c7c} ProdID=${_PV_P:-030b}" 1220
 
 . "$RES/modem/usb/_quectel_qrsrp"

@@ -1,0 +1,9 @@
+. "$RES/1bc71070"
+
+getinfo() {
+	if [ -z "$_MODEL" ] && _port_ok; then
+		_MODEL=$(sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+			| grep -oE "FE[0-9]+[A-Za-z0-9-]*" | head -1)
+	fi
+	echo "Telit ${_MODEL:-FE990}"
+}

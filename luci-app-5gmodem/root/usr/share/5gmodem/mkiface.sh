@@ -797,7 +797,7 @@ case "$REQ" in
 					# UIM отвечает illegal на исправную карту и netifd передёргивает ей
 					# питание по кругу. Радио до проверок SIM включает только наш qmiraw
 					# (системный qmi.sh чужой, его не правим).
-					1bc7:1070) logger -t 5gmodem "mkiface: $_mki_vp - Telit FN990 QMI: proto=qmiraw (radio on before SIM checks)"; PROTO="qmiraw" ;;
+					1bc7:1070|1bc7:1077|1bc7:1080) logger -t 5gmodem "mkiface: $_mki_vp - Telit FN990 QMI: proto=qmiraw (radio on before SIM checks)"; PROTO="qmiraw" ;;
 					*)
 						# Прочие QMI: на qmiraw, только если модем НАТИВНО в raw-ip. Стоковый qmi
 						# в raw-ip раздаёт адрес DHCP'ом (в raw-ip ненадёжно) - адрес есть, а

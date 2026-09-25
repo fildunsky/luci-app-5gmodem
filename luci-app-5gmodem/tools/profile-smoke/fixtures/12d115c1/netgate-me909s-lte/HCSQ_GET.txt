@@ -1,0 +1,2 @@
+## ME909s ^HCSQ sample (Netgate forum topics 122565/168445, quoted in the modem gap research 2026-09-26)
+^HCSQ: "LTE",20,18,106,12

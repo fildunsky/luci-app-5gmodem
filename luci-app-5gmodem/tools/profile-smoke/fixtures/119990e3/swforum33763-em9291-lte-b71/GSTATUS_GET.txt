@@ -1,0 +1,20 @@
+## forum.sierrawireless.com t/33763 post #1 (EM9291, SWIX65C_02.17.08.00, single carrier)
+!GSTATUS: 
+Current Time:  1289		Temperature: 30
+Reset Counter: 1		Mode:        ONLINE         
+System mode:   LTE        	PS state:    Attached     
+LTE band:      B71    		LTE bw:      5 MHz   
+LTE Rx chan:   68811		LTE Tx chan: 133347
+EMM state:     Registered     	Normal Service 
+RRC state:     RRC Idle        
+IMS reg state: NOT REGISTERED  	IMS mode:    Normal       
+IMS Srv State: UNKNOWN SMS,UNKNOWN VoIP
+
+PCC Rx0 RSSI:  -82.1		PCC Rx0 RSRP:  -113.3
+PCC Rx1 RSSI:  -94.3		PCC Rx1 RSRP:  -128.6
+PCC Tx Power:  ---		TAC:         55ef (21999)
+RSRQ (dB):     -17.2		Cell ID:     023D833D (37585725)
+SINR (dB):     -8.2
+
+NR5G band:       ---		NR5G bw:         ---		
+NR5G Tx Power:   ---		NR5G Tx chan:    ---		

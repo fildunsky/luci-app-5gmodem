@@ -1,0 +1,2 @@
+## ME909s ^CHIPTEMP sample (same research note)
+^CHIPTEMP: 304,304,65535,27,65535
