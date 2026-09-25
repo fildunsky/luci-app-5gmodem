@@ -23,3 +23,4 @@ S1SINR=11
 S1RSSI=-80
 TAC_DEC=43211
 CID_DEC=81934338
+NEIGHBORS={"band":"7","earfcn":"2850","pci":"136","rsrp":"-100","rsrq":"-10","rssi":"-68","serving":true},{"band":"7","earfcn":"3048","pci":"136","rsrp":"-101","rsrq":"-11","rssi":"-80","serving":false},{"band":"7","earfcn":"3048","pci":"137","rsrp":"-105","rsrq":"-15","rssi":"-80","serving":false},{"band":"3","earfcn":"1424","pci":"16","rsrp":"-89","rsrq":"-11","rssi":"-69","serving":false},{"band":"1","earfcn":"200","pci":"136","rsrp":"-98","rsrq":"-16","rssi":"-73","serving":false},{"band":"1","earfcn":"200","pci":"95","rsrp":"-94","rsrq":"-12","rssi":"-73","serving":false}

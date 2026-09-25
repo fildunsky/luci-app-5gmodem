@@ -1,0 +1,4 @@
+## Quectel EG06xK&Ex120K&EM060K Series AT Commands Manual V1.0.0, AT+QENG="neighbourcell" example
++QENG: "neighbourcell intra","LTE",38950,276,-3,-88,-65,0,37,7,16,6,44
++QENG: "neighbourcell inter","LTE",39148,-,-,-,-,-,37,0,30,7,-,-,-,-
++QENG: "neighbourcell inter","LTE",37900,-,-,-,-,-,0,0,30,6,-,-,-,-

@@ -11,3 +11,4 @@ RSRP=-103
 RSRQ=-12
 SINR=16
 T_DEC=21477
+NEIGHBORS={"band":"3","earfcn":"1301","pci":"199","rsrp":"-103","rsrq":"-11","rssi":"-72","serving":true},{"band":"3","earfcn":"1301","pci":"192","rsrp":"-110","rsrq":"-16","rssi":"-87","serving":false},{"band":"3","earfcn":"1301","pci":"334","rsrp":"-113","rsrq":"-19","rssi":"-86","serving":false},{"band":"3","earfcn":"1301","pci":"16","rsrp":"-116","rsrq":"-20","rssi":"-89","serving":false},{"band":"3","earfcn":"1301","pci":"15","rsrp":"-118","rsrq":"-20","rssi":"-89","serving":false},{"band":"7","earfcn":"3300","pci":"51","rsrp":"-108","rsrq":"-8","rssi":"-91","serving":false},{"band":"7","earfcn":"3300","pci":"353","rsrp":"-121","rsrq":"-19","rssi":"-91","serving":false},{"band":"7","earfcn":"3300","pci":"191","rsrp":"-117","rsrq":"-20","rssi":"-85","serving":false},{"band":"7","earfcn":"3300","pci":"146","rsrp":"-123","rsrq":"-20","rssi":"-91","serving":false}

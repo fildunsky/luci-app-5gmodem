@@ -106,6 +106,8 @@ if [ -n "$T" ]; then
 	_qc_scc_lte "?"
 fi
 
+_qc_neighbours
+
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE_A,LTE-A,' | sed 's,LTE-A B,LTE-A | B,')
 
 # Modem

@@ -53,6 +53,8 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	fi
 fi
 
+_qc_neighbours
+
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
 
 # Modem
