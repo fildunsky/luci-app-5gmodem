@@ -1194,16 +1194,22 @@ _arch_files() {   # $1 - каталог; имена в порядке номер
 # начинается никогда. Одночастные сообщения пишутся вообще без заголовка, то
 # есть в точности прежним форматом.
 _arch_read() {   # $1 - файл; заполняет _A_TS _A_FROM _A_TEXT _A_PART _A_TOTAL _A_REF
-	_A_TS=""; _A_FROM=""; _A_TEXT=""; _A_PART=""; _A_TOTAL=""; _A_REF=""
+	_A_TS=""; _A_FROM=""; _A_TEXT=""; _A_PART=""; _A_TOTAL=""; _A_REF=""; _A_TZ=""
 	{
 		IFS= read -r _A_TS
-		case "$_A_TS" in
-			'#p='*)
-				_arh=${_A_TS#\#p=}
-				_A_PART=${_arh%%/*}; _arh=${_arh#*/}
-				_A_TOTAL=${_arh%%/*}; _A_REF=${_arh#*/}
-				IFS= read -r _A_TS ;;
-		esac
+		while :; do
+			case "$_A_TS" in
+				'#p='*)
+					_arh=${_A_TS#\#p=}
+					_A_PART=${_arh%%/*}; _arh=${_arh#*/}
+					_A_TOTAL=${_arh%%/*}; _A_REF=${_arh#*/}
+					IFS= read -r _A_TS ;;
+				'#tz='*)
+					_A_TZ=${_A_TS#\#tz=}
+					IFS= read -r _A_TS ;;
+				*) break ;;
+			esac
+		done
 		IFS= read -r _A_FROM
 		# ОТПРАВИТЕЛЬ БЕЗ СЫРОГО CR. В архив он попадал как «beeline\r», recv
 		# отдавал его так же, а ключ «виденного» (seen) строится через _nd_jesc,
@@ -1249,6 +1255,7 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		_ampt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].part" 2>/dev/null)
 		_amtt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].total" 2>/dev/null)
 		_amrf=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].reference" 2>/dev/null)
+		_amtz=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].tz" 2>/dev/null)
 		_ami=$((_ami + 1))
 		# НЕРАЗОБРАННОЕ СООБЩЕНИЕ НЕ АРХИВИРУЕМ. sms_tool на битом PDU отдаёт
 		# запись с полем error и пустыми отправителем/текстом (воспроизведено на
@@ -1274,12 +1281,16 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		_amhave=0
 		for _amf in "$_amd"/*."$_amk"; do [ -f "$_amf" ] && _amhave=$((_amhave + 1)); done
 		[ "$_amseen" -le "$_amhave" ] && continue
+		_amhd=""
+		case "$_amtz" in local) _amhd='#tz=local' ;; esac
 		case "$_ampt$_amtt" in
 			''|*[!0-9]*)
-				printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
+				{ [ -n "$_amhd" ] && printf '%s\n' "$_amhd"
+				  printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc"; } > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
 			*)
-				printf '#p=%s/%s/%s\n%s\n%s\n%s' "$_ampt" "$_amtt" "${_amrf:-0}" \
-					"$_amt" "$_ams" "$_amc" > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
+				{ [ -n "$_amhd" ] && printf '%s\n' "$_amhd"
+				  printf '#p=%s/%s/%s\n%s\n%s\n%s' "$_ampt" "$_amtt" "${_amrf:-0}" \
+					"$_amt" "$_ams" "$_amc"; } > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
 		esac
 		_amnext=$((_amnext + 1))
 	done
@@ -1319,6 +1330,7 @@ _arch_json() {
 		json_add_int index "$_A_IDX"
 		json_add_string sender "$_A_FROM"
 		json_add_string timestamp "$_A_TS"
+		[ -n "$_A_TZ" ] && json_add_string tz "$_A_TZ"
 		json_add_string content "$_A_TEXT"
 		# Поля мультипарта отдаём ТОЛЬКО когда они есть: у одночастного
 		# сообщения их не было и в живом ответе sms_tool, а «total: 1» на пустом

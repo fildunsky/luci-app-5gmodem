@@ -460,7 +460,7 @@ function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
 	var text = String(item.content || '').replace(/\s+/g, ' ').trim();
-	var when = sms_localtime(item.timestamp);
+	var when = (item.tz === 'local') ? String(item.timestamp || '') : sms_localtime(item.timestamp);
 
 	/* Новизну решаем ЗДЕСЬ, при постройке карточки: список перерисовывается
 	   целиком на каждом обновлении, и класс иначе слетал бы вместе с ней. */
@@ -1351,6 +1351,7 @@ return view.extend({
 												return {
 													sender: first.sender,
 													timestamp: first.timestamp,
+													tz: first.tz,
 													total: first.total,
 													index: parts.map(function(p) { return p.index; }).join('-'),
 													content: text,

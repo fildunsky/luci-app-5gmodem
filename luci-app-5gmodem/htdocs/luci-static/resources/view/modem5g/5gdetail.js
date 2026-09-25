@@ -1188,6 +1188,7 @@ function resetStickyForModem() {
 function switchModemInPlace(path) {
 	if (!path || path === pageModemPath) { return; }
 	pageModemPath = String(path);
+	_histSeedAt = 0;
 	try { window.sessionStorage.setItem('5gm-tab', pageModemPath); } catch (e) {}
 	/* Сброс состояния прежнего модема - иначе блоки показывали бы его данные. */
 	ifaceProtoIsMM = false;
@@ -1358,6 +1359,52 @@ function histPush(json) {
 	h.p.push(pt);
 	while (h.p.length > HIST_CAP || (h.p.length && h.p[0][0] < now - HIST_SPAN)) { h.p.shift(); }
 	try { window.sessionStorage.setItem('5gm-hist', JSON.stringify(st)); } catch (e) {}
+}
+/* ЛЕНТА С РОУТЕРА. Точки кладёт сам опрос при каждом свежем снимке
+   (5gmodem.sh hist), поэтому новая вкладка и перезагрузка страницы видят
+   последние 10 минут сразу, а не с нуля. И если снимок приходит странице
+   несвежим (age >= 30, браузер такие точки отбрасывает), лента всё равно
+   наполняется - роутер видел каждый свежий снимок сам. Время точки приходит
+   ВОЗРАСТОМ: часы роутера без RTC и часы браузера расходятся. */
+var _histSeedAt = 0;
+function histSeed() {
+	if (!_histOn) { return Promise.resolve(); }
+	_histSeedAt = Date.now();
+	var key = String(pageModemPath || '-');
+	var args = [ 'hist' ];
+	if (pageModemPath) { args.push(pageModemPath); }
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', args), '[]').then(function(out) {
+		var arr = [];
+		try { arr = JSON.parse(out || '[]') || []; } catch (e) {}
+		if (!Array.isArray(arr) || !arr.length || key !== String(pageModemPath || '-')) { return; }
+		var st = histStore(), h = st[key] || (st[key] = { c: '', p: [] });
+		var now = Date.now() / 1000, ck = '', pts = [];
+		arr.forEach(function(r) {
+			if (!Array.isArray(r) || typeof r[0] !== 'number') { return; }
+			var pt = [ Math.round((now - r[0]) * 10) / 10, histNum(r[1]), histNum(r[2]),
+				sinrUnmeasured(r[3], r[2]) ? null : histNum(r[3]), histNum(r[4]), '' ];
+			var pci = histId(r[5]), ear = histId(r[6]);
+			if (pci && ear) {
+				var k2 = pci + '/' + ear;
+				if (ck && ck !== k2) {
+					var band = histId(mutil.caSplitBand(r[7]).band).replace(/\s*\(.*$/, '');
+					pt[5] = (band || ('EARFCN ' + ear)) + ' · PCI ' + pci;
+				}
+				ck = k2;
+			}
+			pts.push(pt);
+		});
+		var merged = pts.concat(h.p).sort(function(a, b) { return a[0] - b[0]; }), res = [];
+		merged.forEach(function(p) {
+			var l = res[res.length - 1];
+			if (l && p[0] - l[0] < 3) { if (!l[5] && p[5]) { l[5] = p[5]; } return; }
+			res.push(p);
+		});
+		h.p = res.filter(function(p) { return p[0] > now - HIST_SPAN; }).slice(-HIST_CAP);
+		if (!h.c && ck) { h.c = ck; }
+		try { window.sessionStorage.setItem('5gm-hist', JSON.stringify(st)); } catch (e) {}
+		histDraw(window._lastJson || null);
+	});
 }
 function histSvg(tag, attrs) {
 	var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -2640,6 +2687,7 @@ function applyMetrics(json) {
 					histShow(true);
 					histPush(json);
 					histDraw(json);
+					if (Date.now() - _histSeedAt > 30000) { histSeed(); }
 
 					/* Строки, которых у ЭТОГО КЛАССА МОДЕМОВ не бывает, убираем
 					   совсем. У модемов без AT-портов (HiLink) веб-API не отдаёт

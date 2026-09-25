@@ -2198,6 +2198,17 @@ report() {
 	# делят Thales и прототип Compal, у которых РАЗНЫЕ пути управления.
 	run 20 "Band management: path" "$RES/bands.sh" mgmtinfo
 	run 25 "Band management: what the app sees" "$RES/bands.sh" getinfo
+	run 10 "Current metrics (what the card shows)" sh -c '
+		. /usr/share/5gmodem/lib.sh 2>/dev/null
+		p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+		k=$(snap_key "$p")
+		f="/tmp/5gmodem_metrics_$k.json"
+		[ -s "$f" ] || { echo "no snapshot yet - open the Network page once and collect the report again"; exit 0; }
+		t=$(cat "/tmp/5gmodem_metrics_$k.stamp" 2>/dev/null)
+		case "$t" in ""|*[!0-9]*) ;; *) echo "snapshot age: $(( $(uptime_s) - t )) s" ;; esac
+		sed -e "s/^{//" -e "s/}\$//" -e "s/,\"/\n\"/g" "$f"
+		echo
+	'
 	# QMI-ДОПОЛНЕНИЯ. У модема без AT-порта (или под ModemManager) текущий
 	# диапазон, полоса и RSRP приходят ТОЛЬКО отсюда, и когда в карточке стоит
 	# голое «4G» без подробностей, вопрос ровно один: qmicli вообще есть и что он

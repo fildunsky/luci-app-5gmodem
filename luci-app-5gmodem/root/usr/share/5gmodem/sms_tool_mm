@@ -138,6 +138,7 @@ recv)
 			json_add_int index "$IDX"
 			json_add_string sender "$NUM"
 			json_add_string timestamp "$TS"
+			json_add_string tz local
 			json_add_string content "$TEXT"
 			json_close_object
 		else

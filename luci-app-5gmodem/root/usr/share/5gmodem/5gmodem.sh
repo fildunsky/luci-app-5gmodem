@@ -328,6 +328,7 @@ _ACT_AM="$_POLL_AM"
 case "$1" in
 	cached) _pm_arg="$3" ;;
 	peek)   _pm_arg="$2" ;;
+	hist)   _pm_arg="$2" ;;
 	*)      _pm_arg="" ;;
 esac
 # Страница шлёт его в виде "for=<path>" (контракт был, но бэкенд его НЕ РАЗБИРАЛ
@@ -364,6 +365,7 @@ fi
 # Через общую snap_key (lib.sh): формат тот же, но формула теперь одна на всех -
 # её же использует подогрев снимков в sessionwatch.sh.
 _MKEY=$(snap_key "$_POLL_AM")
+HIST="/tmp/5gmodem_hist_$_MKEY"
 CACHE="/tmp/5gmodem_metrics_$_MKEY.json"
 STAMP="/tmp/5gmodem_metrics_$_MKEY.stamp"
 LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
@@ -516,6 +518,24 @@ if [ -n "$_WANT" ]; then
 		printf '{"error":"not_active","path":"%s","want":"%s"}\n' "$_POLL_AM" "$_WANT"
 		exit 0
 	fi
+fi
+
+# hist: лента сигнала для блока «История» страницы «Сеть» - точки, которые
+# опрос сам кладёт при каждом СВЕЖЕМ снимке (см. публикацию в конце). Раньше
+# ленту копил только браузер в sessionStorage вкладки: новая вкладка или
+# перезагрузка страницы начинали с пустоты, а если снимок отдавался
+# несвежим (возраст >= 30 c), браузер не клал ни одной точки вовсе. Время
+# отдаём ВОЗРАСТОМ точки: часы роутера без RTC и часы браузера расходятся.
+if [ "$1" = "hist" ]; then
+	_hn=$(uptime_s)
+	[ -s "$HIST" ] || { echo '[]'; exit 0; }
+	awk -v now="$_hn" 'BEGIN { printf "[" }
+		{ a = now - $1; if (a < 0 || a > 600) next
+		  pb = ""; for (i = 8; i <= NF; i++) pb = pb (pb == "" ? "" : " ") $i
+		  gsub(/["\\]/, "", pb)
+		  printf "%s[%d,\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\",\"%s\"]", (n++ ? "," : ""), a, $2, $3, $4, $5, $6, $7, pb }
+		END { print "]" }' "$HIST"
+	exit 0
 fi
 
 # peek: отдать последний снимок ЛЮБОГО возраста (честный возраст в "age") или
@@ -3653,6 +3673,17 @@ if [ -s "$_TMP" ] && jsonfilter -i "$_TMP" -e '@.modem' >/dev/null 2>&1; then
 	cat "$_TMP"
 	mv "$_TMP" "$CACHE"      # атомарно: читатель видит либо старый снимок, либо новый
 	uptime_s > "$STAMP"
+	case "$RSRP$RSRQ$SINR$RSSI" in
+		''|-|--|---|----) ;;
+		*)
+			_hv() { case "$1" in ''|*[!0-9.-]*) printf -- '-' ;; *) printf '%s' "$1" ;; esac; }
+			printf '%s %s %s %s %s %s %s %s\n' "$(uptime_s)" "$(_hv "$RSRP")" "$(_hv "$RSRQ")" \
+				"$(_hv "$SINR")" "$(_hv "$RSSI")" "$(_hv "$PCI")" "$(_hv "$EARFCN")" "${PBAND:--}" >> "$HIST" 2>/dev/null
+			if [ "$(wc -l < "$HIST" 2>/dev/null)" -gt 260 ] 2>/dev/null; then
+				tail -n 240 "$HIST" > "$HIST.$$" 2>/dev/null && mv -f "$HIST.$$" "$HIST"
+			fi
+			;;
+	esac
 	# OWNER не нужен: имя $CACHE закодировано путём модема (_MKEY), снимок по
 	# определению принадлежит текущему модему - чужого не прочитаешь.
 else

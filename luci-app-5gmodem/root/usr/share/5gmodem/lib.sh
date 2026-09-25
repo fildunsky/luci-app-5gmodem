@@ -199,6 +199,7 @@ purge_path_caches() {   # $1 - usb-путь
 	      "/tmp/5gmodem_portok_$(snap_key "$1" 2>/dev/null)" 2>/dev/null
 	[ -n "$_ppc_k" ] && rm -f \
 		"/tmp/5gmodem_metrics_$_ppc_k.json" "/tmp/5gmodem_metrics_$_ppc_k.stamp" \
+		"/tmp/5gmodem_hist_$_ppc_k" \
 		"/tmp/5gmodem_slot_$_ppc_k" "/tmp/5gmodem_slot_$_ppc_k.t" \
 		"/tmp/5gmodem_imei_none_$_ppc_k" \
 		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* \
@@ -1158,6 +1159,8 @@ model_alias() {   # $1 - сырое имя; печатает нормализо�
 		# заголовок карточки. Оставляем модель и признак eSIM (решение владельца).
 		*DW5821e*[Ee][Ss][Ii][Mm]*) echo "Dell DW5821e eSIM" ;;
 		*DW5821e*) echo "Dell DW5821e" ;;
+		L8[0-9]0*" LTE Module") echo "Fibocom ${1% LTE Module}" ;;
+		*" LTE Module") echo "${1% LTE Module}" ;;
 		*) echo "$1" ;;
 	esac
 }
