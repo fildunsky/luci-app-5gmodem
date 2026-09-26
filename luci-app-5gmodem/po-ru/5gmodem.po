@@ -5790,3 +5790,21 @@ msgstr "мощность сигнала · хорошо от %d dBm"
 
 msgid "signal-to-noise · good from %d dB"
 msgstr "сигнал/шум · хорошо от %d dB"
+
+msgid "Arrange blocks"
+msgstr "Расставить блоки"
+
+msgid "Reset order"
+msgstr "Сбросить порядок"
+
+msgid "Done"
+msgstr "Готово"
+
+msgid "Hide"
+msgstr "Скрыть"
+
+msgid "Drag to move, or use the arrow keys"
+msgstr "Перетащите или двигайте стрелками на клавиатуре"
+
+msgid "Could not save the block order"
+msgstr "Не удалось сохранить порядок блоков"

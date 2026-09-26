@@ -264,3 +264,21 @@ msgstr ""
 
 msgid "signal-to-noise · good from %d dB"
 msgstr ""
+
+msgid "Arrange blocks"
+msgstr ""
+
+msgid "Reset order"
+msgstr ""
+
+msgid "Done"
+msgstr ""
+
+msgid "Hide"
+msgstr ""
+
+msgid "Drag to move, or use the arrow keys"
+msgstr ""
+
+msgid "Could not save the block order"
+msgstr ""

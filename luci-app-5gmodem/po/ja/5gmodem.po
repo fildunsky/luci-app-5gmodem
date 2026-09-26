@@ -5599,3 +5599,21 @@ msgstr "信号の電力 · %d dBm 以上で良好"
 
 msgid "signal-to-noise · good from %d dB"
 msgstr "信号対雑音比 · %d dB 以上で良好"
+
+msgid "Arrange blocks"
+msgstr "ブロックを並べ替え"
+
+msgid "Reset order"
+msgstr "順序をリセット"
+
+msgid "Done"
+msgstr "完了"
+
+msgid "Hide"
+msgstr "隠す"
+
+msgid "Drag to move, or use the arrow keys"
+msgstr "ドラッグするか矢印キーで移動"
+
+msgid "Could not save the block order"
+msgstr "ブロックの順序を保存できませんでした"

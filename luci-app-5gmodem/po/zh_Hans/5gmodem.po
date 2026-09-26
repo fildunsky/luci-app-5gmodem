@@ -5725,3 +5725,21 @@ msgstr "信号电平 · %d dBm 起为良好"
 
 msgid "signal-to-noise · good from %d dB"
 msgstr "信噪比 · %d dB 起为良好"
+
+msgid "Arrange blocks"
+msgstr "排列区块"
+
+msgid "Reset order"
+msgstr "重置顺序"
+
+msgid "Done"
+msgstr "完成"
+
+msgid "Hide"
+msgstr "隐藏"
+
+msgid "Drag to move, or use the arrow keys"
+msgstr "拖动或使用方向键移动"
+
+msgid "Could not save the block order"
+msgstr "无法保存区块顺序"
