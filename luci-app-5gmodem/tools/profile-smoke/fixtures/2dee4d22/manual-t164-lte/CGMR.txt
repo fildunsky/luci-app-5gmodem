@@ -1,0 +1,2 @@
+## synthetic: "+CGMR: " prefix as QModem vendor/meig.sh base_info strips it
++CGMR: SRM825_V1.0.0

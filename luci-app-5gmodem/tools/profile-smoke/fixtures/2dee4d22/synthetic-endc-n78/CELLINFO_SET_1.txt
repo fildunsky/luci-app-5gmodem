@@ -1,0 +1,2 @@
+## synthetic: EN-DC line, LTE part in the Table 164 order, NR part at fields 30-37 (rsrp,rsrq,sinr,band,arfcn,bw,pci,scs) as in 5G-Modem-Support meig.sh meig_cell_info "LTE-NR"
+^CELLINFO: LTE-NR,FDD LTE,250,01,123456789,101,482253,21,7011,3,100,1300,19300,-60,-88,-10,150,10,19,100,12,5,3,9,0,0,0,0,0,-95,-11,125,78,636666,100,512,1

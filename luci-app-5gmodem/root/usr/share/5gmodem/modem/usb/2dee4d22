@@ -1,0 +1,96 @@
+_mg_first() {
+	printf '%s\n' "$1" | tr -d '\r' | sed 's/^+CGM[MR]: *//' | awk '
+		/^AT/ { next }
+		/^[+^]/ { next }
+		/^(OK|ERROR)$/ { next }
+		/^[[:space:]]*$/ { next }
+		{ print; exit }
+	'
+}
+
+_MG_M=$(_mg_first "$(at_static meig_cgmm "AT+CGMM" '[A-Za-z0-9]')")
+case "$_MG_M" in
+	'') : ;;
+	[Mm][Ee][Ii][Gg]*) MODEL="$_MG_M" ;;
+	*) MODEL="MeigLink $_MG_M" ;;
+esac
+_MG_F=$(_mg_first "$(at_static meig_cgmr "AT+CGMR" '[A-Za-z0-9]')")
+[ -n "$_MG_F" ] && FW="$_MG_F"
+
+_MG_T=$(sms_tool -d $DEVICE at "AT+TEMP" 2>/dev/null | tr -d '\r')
+T=$(printf '%s\n' "$_MG_T" | sed -n 's/^+TEMP: *"cpu0-0-usr", *"\{0,1\}\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1)
+[ -n "$T" ] || T=$(printf '%s\n' "$_MG_T" | sed -n 's/^+TEMP: *"cpuss-[0-9]*-usr", *"\{0,1\}\(-\{0,1\}[0-9][0-9]*\).*/\1/p' | head -1)
+[ -n "$T" ] && TEMP="$T &deg;C"
+
+if [ "$REGOK" = "1" ]; then
+	_MG_C=$(sms_tool -d $DEVICE at "AT^CELLINFO=1" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^\^CELLINFO: *//p' | grep -v '^"' | head -1)
+	_MG_V=$(printf '%s\n' "$_MG_C" | awk -F, '
+		function n(v) { gsub(/[ "]/, "", v); return (v ~ /^-?[0-9]+(\.[0-9]+)?$/) ? v : "" }
+		function s(v) { v = n(v); if (v == "" || v + 0 < 0 || v + 0 > 250) return ""; return sprintf("%.1f", v / 5 - 20) }
+		function b(v) { v = n(v); if (v == "" || v !~ /^[0-9]+$/ || v + 0 < 1 || v + 0 > 600) return ""; return v }
+		function p(v) { v = n(v); if (v == "" || v !~ /^[0-9]+$/ || v + 0 > 1007) return ""; return v }
+		function w(v) { v = n(v); if (v == "6") return "1.4"; if (v == "15") return "3"; if (v == "25") return "5"; if (v == "50") return "10"; if (v == "75") return "15"; if (v == "100") return "20"; return "" }
+		NF >= 17 {
+			r = $1; gsub(/[ "]/, "", r)
+			if (r == "LTE" || r == "eMTC" || r == "NB-IoT" || r == "LTE-NR") {
+				o = r "|" p($6) "|" n($7) "|" b($10) "|" w($11) "|" n($12) "|" n($14) "|" n($15) "|" n($16) "|" s($17)
+				o = o "|" n($19) "|" n($20) "|" n($21) "|" n($22) "|" n($23)
+				if (r == "LTE-NR" && NF >= 34) o = o "|" b($33) "|" n($34) "|" p($36) "|" n($30) "|" n($31) "|" s($32)
+				else o = o "||||||"
+				print o
+			} else if (r == "5G") {
+				print r "|" p($6) "||" b($8) "||" n($12) "|" n($14) "|" n($15) "|" n($16) "|" s($17) "|||||||||||"
+			}
+			exit
+		}')
+	if [ -n "$_MG_V" ]; then
+		IFS='|' read -r _mg_r _mg_pci _mg_enb _mg_band _mg_bw _mg_ch _mg_rssi _mg_rsrp _mg_rsrq _mg_sinr \
+			_mg_cat _mg_pl _mg_cqi _mg_tx _mg_tm _mg_nb _mg_nch _mg_npci _mg_nrsrp _mg_nrsrq _mg_nsinr <<EOF
+$_MG_V
+EOF
+		[ -n "$_mg_pci" ] && PCI="$_mg_pci"
+		[ -n "$_mg_ch" ] && EARFCN="$_mg_ch"
+		case "$_mg_rssi" in -*) RSSI="$_mg_rssi" ;; esac
+		case "$_mg_rsrp" in -*) RSRP="$_mg_rsrp" ;; esac
+		case "$_mg_rsrq" in -*) RSRQ="$_mg_rsrq" ;; esac
+		[ -n "$_mg_sinr" ] && SINR="$_mg_sinr"
+		if [ "$_mg_r" = "5G" ]; then
+			if [ -n "$_mg_band" ]; then
+				PBAND="$(band5g $_mg_band)"
+				MODE="5G SA | $PBAND"
+			else
+				MODE="5G SA"
+			fi
+		else
+			[ -n "$_mg_enb" ] && [ "$_mg_enb" != "0" ] && ENBID="$_mg_enb"
+			[ -n "$_mg_bw" ] && BANDWIDTH="$_mg_bw MHz"
+			[ -n "$_mg_cat" ] && [ "$_mg_cat" != "0" ] && UECAT="$_mg_cat"
+			[ -n "$_mg_pl" ] && PATHLOSS="$_mg_pl dB"
+			[ -n "$_mg_cqi" ] && [ "$_mg_cqi" != "0" ] && CQI="$_mg_cqi"
+			[ -n "$_mg_tx" ] && TXPOWER="$_mg_tx"
+			[ -n "$_mg_tm" ] && [ "$_mg_tm" != "0" ] && PMIMO="TM$_mg_tm"
+			case "$_mg_r" in
+				eMTC) _mg_t="LTE-M" ;;
+				NB-IoT) _mg_t="NB-IoT" ;;
+				*) _mg_t="LTE" ;;
+			esac
+			if [ "$_mg_r" = "LTE-NR" ] && [ -n "$_mg_nb" ]; then
+				_mg_t="5G NSA"
+				S1BAND="$(band5g $_mg_nb)"
+				[ -n "$_mg_npci" ] && S1PCI="$_mg_npci"
+				[ -n "$_mg_nch" ] && S1EARFCN="$_mg_nch"
+				case "$_mg_nrsrp" in -*) S1RSRP="$_mg_nrsrp" ;; esac
+				case "$_mg_nrsrq" in -*) S1RSRQ="$_mg_nrsrq" ;; esac
+				[ -n "$_mg_nsinr" ] && S1SINR="$_mg_nsinr"
+			fi
+			if [ -n "$_mg_band" ]; then
+				PBAND="$(band4g $_mg_band)"
+				MODE="$_mg_t | $PBAND"
+				[ -n "$S1BAND" ] && MODE="$MODE + $S1BAND"
+			else
+				MODE="$_mg_t"
+			fi
+		fi
+	fi
+fi

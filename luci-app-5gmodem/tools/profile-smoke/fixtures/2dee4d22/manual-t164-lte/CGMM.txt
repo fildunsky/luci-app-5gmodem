@@ -1,0 +1,2 @@
+## synthetic: bare model line after the echo, as QModem vendor/meig.sh base_info reads it (sed -n 2p)
+SRM825

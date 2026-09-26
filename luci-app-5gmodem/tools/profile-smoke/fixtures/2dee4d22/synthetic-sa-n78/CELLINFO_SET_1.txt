@@ -1,0 +1,2 @@
+## synthetic: SA line in the "5G" order of QModem vendor/meig.sh and 5G-Modem-Support meig.sh (pci 6, band 8, dl arfcn 12, rssi 14, rsrp 15, rsrq 16, sinr 17)
+^CELLINFO: 5G,TDD,250,01,5566778899,300,7011,78,100,30,1,636666,636666,-70,-90,-12,140,0

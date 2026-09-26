@@ -1,0 +1,2 @@
+## synthetic: ^CELLINFO CSV assembled from the MeiG SLM750-R2.0/SLM820/SLM828 AT Commands Manual V2.6 Table 164 values (+SGCELLINFOEX, SINR:134 next to SNR:6), field order as in QModem vendor/meig.sh cell_info and 5G-Modem-Support meig.sh
+^CELLINFO: LTE,TDD LTE,460,00,17760257,343,69376,1,37107,3,100,504990,504990,-65,-93,-9,134,6,16,255,-,3,1,-,1,-,0,0,0
