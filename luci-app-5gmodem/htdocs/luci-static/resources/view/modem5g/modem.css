@@ -3035,5 +3035,6 @@ body.sc-simple .tg-arr-strip { display: none !important; }
 body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: none !important; }
 
 @media (max-width: 700px) {
-  #rebootn > td.tg-rb-pad { display: none !important; }
+  #rebootn > td.tg-rb-pad,
+  #doctorlogn > td.tg-rb-pad { display: none !important; }
 }

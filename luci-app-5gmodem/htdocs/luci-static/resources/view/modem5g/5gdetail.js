@@ -2397,7 +2397,8 @@ function buildSimpleUI() {
 		]);
 		rb.parentNode.insertBefore(drow, rb.nextSibling);
 		rb.parentNode.insertBefore(E('tr', { 'id': 'doctorlogn', 'class': 'tr' }, [
-			E('td', { 'class': 'td left', 'colspan': '2' }, [
+			E('td', { 'class': 'td left tg-rb-pad', 'width': '33%' }, []),
+			E('td', { 'class': 'td left' }, [
 				E('div', { 'id': 'doctor-log',
 					'style': 'display:none; font-size:92%; line-height:1.75; opacity:.9' })
 			])
