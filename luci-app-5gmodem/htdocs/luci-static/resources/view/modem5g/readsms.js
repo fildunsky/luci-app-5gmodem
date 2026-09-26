@@ -69,12 +69,12 @@ function sms_parse_status(res) {
      empty   - прочитали, сообщений нет;
      error   - прочитать не удалось. Показанное НЕ трогаем: устаревший список
                честнее пустого экрана, а следующий тик перечитает. */
-var SMS_WIDE = '(min-width: 1100px)';
 var SMS_ROW = 4;
 function smsMasonry(list) {
 	if (!list) { return; }
-	var wide = window.matchMedia && window.matchMedia(SMS_WIDE).matches;
-	var gap = wide ? (parseFloat(getComputedStyle(list).columnGap) || 0) : 0;
+	var cs = getComputedStyle(list);
+	var wide = cs.display === 'grid';
+	var gap = wide ? (parseFloat(cs.columnGap) || 0) : 0;
 	Array.prototype.forEach.call(list.children, function(el) {
 		if (!wide) { el.style.gridRowEnd = ''; return; }
 		var h = el.getBoundingClientRect().height;
