@@ -98,7 +98,8 @@ function vendor(m) {
 var MODEL_BY_VIDPID = {
 	'2c7c:0121': 'EC21',    '2c7c:0125': 'EC25',   '2c7c:0296': 'BG96',
 	'2c7c:0306': 'EP06',    '2c7c:0512': 'EG12',   '2c7c:0620': 'EM160R',
-	'2c7c:0800': 'RM500Q',  '2c7c:0801': 'RM520N', '2c7c:0900': 'RM500U'
+	'2c7c:0800': 'RM500Q',  '2c7c:0801': 'RM520N', '2c7c:0900': 'RM500U',
+	'2c7c:0901': 'EC200U',  '2c7c:0700': 'BG95',   '2c7c:0203': 'BG95-M3'
 };
 
 /* clean up the raw USB product string into a readable model. The Compal exposes
