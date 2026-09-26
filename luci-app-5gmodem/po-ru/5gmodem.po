@@ -5754,3 +5754,39 @@ msgstr "Таблица лучших сот запоминает, где сигн
 
 msgid "When the numbers stop improving, fix the antenna in the best position."
 msgstr "Когда цифры перестанут улучшаться, закрепите антенну в лучшем положении."
+
+msgid "%d more bands supported by the modem, %d of them enabled"
+msgstr "Ещё диапазонов, которые поддерживает модем: %d, из них включено: %d"
+
+msgid "(%d enabled)"
+msgstr "(включено: %d)"
+
+msgid "Hide bands not used by operators in this country"
+msgstr "Скрыть диапазоны, которые операторы этой страны не используют"
+
+msgid "Show fewer"
+msgstr "Свернуть"
+
+msgid "Signal quality. On LTE %d dB or better is excellent, below %d dB is poor; on 5G below %d dB is poor."
+msgstr "Качество сигнала. В LTE %d дБ и лучше — отлично, ниже %d дБ — плохо; в 5G плохо ниже %d дБ."
+
+msgid "Signal strength received from the cell tower. On LTE and 5G %d dBm or better is excellent, below %d dBm is poor."
+msgstr "Уровень сигнала, принятого от базовой станции. В LTE и 5G %d дБм и лучше — отлично, ниже %d дБм — плохо."
+
+msgid "Signal-to-noise ratio. On LTE and 5G %d dB or better is excellent, below %d dB is poor."
+msgstr "Отношение сигнал/шум. В LTE и 5G %d дБ и выше — отлично, ниже %d дБ — плохо."
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below."
+msgstr "Модем есть на шине USB, но его AT-порт не отвечает: он занят или модем завис. Если это надолго, перезагрузите модем кнопками «Перезагрузить модем» ниже."
+
+msgid "Total power received in the channel, including noise and interference. On LTE %d dBm or better is excellent, below %d dBm is poor."
+msgstr "Суммарная мощность в канале, включая шум и помехи. В LTE %d дБм и лучше — отлично, ниже %d дБм — плохо."
+
+msgid "cell quality · good from %d dB"
+msgstr "качество соты · хорошо от %d dB"
+
+msgid "signal power · good from %d dBm"
+msgstr "мощность сигнала · хорошо от %d dBm"
+
+msgid "signal-to-noise · good from %d dB"
+msgstr "сигнал/шум · хорошо от %d dB"

@@ -5563,3 +5563,39 @@ msgstr "ベストセルの表は電波が最も強かった場所を記録しま
 
 msgid "When the numbers stop improving, fix the antenna in the best position."
 msgstr "数値が良くならなくなったら、最も良い位置でアンテナを固定してください。"
+
+msgid "%d more bands supported by the modem, %d of them enabled"
+msgstr "モデムが対応するその他のバンド: %d 個 (うち有効: %d 個)"
+
+msgid "(%d enabled)"
+msgstr "(有効: %d)"
+
+msgid "Hide bands not used by operators in this country"
+msgstr "この国の事業者が使っていないバンドを隠す"
+
+msgid "Show fewer"
+msgstr "折りたたむ"
+
+msgid "Signal quality. On LTE %d dB or better is excellent, below %d dB is poor; on 5G below %d dB is poor."
+msgstr "信号品質。LTE では %d dB 以上が優秀、%d dB 未満は不良です。5G では %d dB 未満が不良です。"
+
+msgid "Signal strength received from the cell tower. On LTE and 5G %d dBm or better is excellent, below %d dBm is poor."
+msgstr "基地局から受信した信号強度。LTE と 5G では %d dBm 以上が優秀、%d dBm 未満は不良です。"
+
+msgid "Signal-to-noise ratio. On LTE and 5G %d dB or better is excellent, below %d dB is poor."
+msgstr "信号対雑音比。LTE と 5G では %d dB 以上が優秀、%d dB 未満は不良です。"
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below."
+msgstr "モデムは USB バス上にありますが、AT ポートが応答しません。ポートが使用中か、モデムが停止しています。この状態が続く場合は、下の「モデムを再起動」のボタンでモデムを再起動してください。"
+
+msgid "Total power received in the channel, including noise and interference. On LTE %d dBm or better is excellent, below %d dBm is poor."
+msgstr "チャネル内で受信した電力の合計 (雑音と干渉を含む)。LTE では %d dBm 以上が優秀、%d dBm 未満は不良です。"
+
+msgid "cell quality · good from %d dB"
+msgstr "セルの品質 · %d dB 以上で良好"
+
+msgid "signal power · good from %d dBm"
+msgstr "信号の電力 · %d dBm 以上で良好"
+
+msgid "signal-to-noise · good from %d dB"
+msgstr "信号対雑音比 · %d dB 以上で良好"

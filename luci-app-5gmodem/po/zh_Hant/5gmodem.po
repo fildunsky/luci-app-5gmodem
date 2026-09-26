@@ -5655,3 +5655,39 @@ msgstr "最佳細胞表會記住訊號最強的位置；點擊某一列即可將
 
 msgid "When the numbers stop improving, fix the antenna in the best position."
 msgstr "當數值不再改善時，將天線固定在最佳位置。"
+
+msgid "%d more bands supported by the modem, %d of them enabled"
+msgstr "數據機還支援 %d 個頻段，其中已啟用 %d 個"
+
+msgid "(%d enabled)"
+msgstr "(已啟用 %d)"
+
+msgid "Hide bands not used by operators in this country"
+msgstr "隱藏本國電信業者未使用的頻段"
+
+msgid "Show fewer"
+msgstr "收合"
+
+msgid "Signal quality. On LTE %d dB or better is excellent, below %d dB is poor; on 5G below %d dB is poor."
+msgstr "訊號品質。LTE 下 %d dB 以上為優，低於 %d dB 為差；5G 下低於 %d dB 為差。"
+
+msgid "Signal strength received from the cell tower. On LTE and 5G %d dBm or better is excellent, below %d dBm is poor."
+msgstr "從基地台接收到的訊號強度。LTE 和 5G 下 %d dBm 以上為優，低於 %d dBm 為差。"
+
+msgid "Signal-to-noise ratio. On LTE and 5G %d dB or better is excellent, below %d dB is poor."
+msgstr "訊噪比。LTE 和 5G 下 %d dB 以上為優，低於 %d dB 為差。"
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below."
+msgstr "數據機在 USB 匯流排上，但其 AT 連接埠沒有回應：連接埠被占用或數據機卡住。如果持續如此，請用下方「重啟數據機」中的按鈕重啟數據機。"
+
+msgid "Total power received in the channel, including noise and interference. On LTE %d dBm or better is excellent, below %d dBm is poor."
+msgstr "信道內接收到的總功率，包括噪聲和幹擾。LTE 下 %d dBm 以上為優，低於 %d dBm 為差。"
+
+msgid "cell quality · good from %d dB"
+msgstr "小區質量 · %d dB 起為良好"
+
+msgid "signal power · good from %d dBm"
+msgstr "訊號電平 · %d dBm 起為良好"
+
+msgid "signal-to-noise · good from %d dB"
+msgstr "信噪比 · %d dB 起為良好"

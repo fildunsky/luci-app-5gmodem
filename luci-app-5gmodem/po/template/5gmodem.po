@@ -228,3 +228,39 @@ msgstr ""
 
 msgid "If at least one target responds"
 msgstr ""
+
+msgid "%d more bands supported by the modem, %d of them enabled"
+msgstr ""
+
+msgid "(%d enabled)"
+msgstr ""
+
+msgid "Hide bands not used by operators in this country"
+msgstr ""
+
+msgid "Show fewer"
+msgstr ""
+
+msgid "Signal quality. On LTE %d dB or better is excellent, below %d dB is poor; on 5G below %d dB is poor."
+msgstr ""
+
+msgid "Signal strength received from the cell tower. On LTE and 5G %d dBm or better is excellent, below %d dBm is poor."
+msgstr ""
+
+msgid "Signal-to-noise ratio. On LTE and 5G %d dB or better is excellent, below %d dB is poor."
+msgstr ""
+
+msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below."
+msgstr ""
+
+msgid "Total power received in the channel, including noise and interference. On LTE %d dBm or better is excellent, below %d dBm is poor."
+msgstr ""
+
+msgid "cell quality · good from %d dB"
+msgstr ""
+
+msgid "signal power · good from %d dBm"
+msgstr ""
+
+msgid "signal-to-noise · good from %d dB"
+msgstr ""
