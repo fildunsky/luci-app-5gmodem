@@ -1245,10 +1245,10 @@ function loadMmIdx() {
    реестр onBlockExpand). */
 var onBlockExpand = {};
 function blockExpanded(key) {
-	try { return localStorage.getItem('5gm-blk-' + key) === '1'; } catch (e) { return false; }
+	try { return localStorage.getItem('5gm-blk-' + key) !== '0'; } catch (e) { return true; }
 }
 function collapsibleSection(key, titleText, content, extraAttrs) {
-	var expanded = blockExpanded(key);   // по умолчанию свёрнут
+	var expanded = blockExpanded(key);   // по умолчанию раскрыт
 	var chev = E('span', { 'style': 'display:inline-flex;transition:transform .15s ease;transform:rotate(' + (expanded ? '180' : '0') + 'deg)' });
 	chev.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
 	/* РАСКРЫТИЕ - АНИМАЦИЕЙ ВЫСОТЫ, А НЕ display:none.
@@ -2354,6 +2354,7 @@ function buildSimpleUI() {
 		'body.sc-simple #modem-info-block table.table tr#rebootn { display:table-row !important; }' +
 		'#doctorn { display:none; }' +
 		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
+		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
 		'body.sc-simple #apnline, body.sc-simple #stale-mark { display:none !important; }' +
 		'body.sc-simple #mode .tginfo-freq:not(.tginfo-dist) { display:none !important; }' +
@@ -2620,6 +2621,7 @@ function applyMetrics(json) {
 					var _cell = document.querySelector('[data-blk="cell"]');
 					var _freq = document.querySelector('[data-blk="freq"]');
 					var _ttl = document.querySelector('[data-blk="ttl"]');
+					var _rbb = document.getElementById('modem-reboot-block');
 					noModemRemember(_noModem && !_onbus);
 					if (_noModem) {
 						if (_mib) { _mib.style.display = 'none'; }
@@ -2631,6 +2633,7 @@ function applyMetrics(json) {
 						   там кнопка ребута по питанию, которой его можно оживить. УБРАН
 						   совсем - прячем и его (ребутить нечего), остаётся чистый скелет. */
 						if (_freq) { _freq.style.display = _onbus ? '' : 'none'; }
+						if (_rbb) { _rbb.style.display = _onbus ? '' : 'none'; }
 						if (!_none && _mib && _mib.parentNode) {
 							_none = buildNoModemBlock();
 							_mib.parentNode.insertBefore(_none, _mib);
@@ -2652,7 +2655,7 @@ function applyMetrics(json) {
 							   порт сейчас молчит (занят или завис), а не телефон. */
 							_ns.textContent = !_onbus ? _('No modem connected')
 								: (String(json.hasports) === '1')
-									? _('The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management.')
+									? _('The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below.')
 									: _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');
 						}
 						if (_none) { _none.style.display = ''; }
@@ -2662,6 +2665,7 @@ function applyMetrics(json) {
 					if (_mib) { _mib.style.display = ''; }
 					if (_cell) { _cell.style.display = ''; }
 					if (_freq) { _freq.style.display = ''; }
+					if (_rbb) { _rbb.style.display = ''; }
 					if (_ttl) { _ttl.style.display = ''; }
 					histShow(true);
 					histPush(json);
@@ -3844,7 +3848,7 @@ simDialog: baseclass.extend({
 				}
 				if (document.getElementById('modem-none-block')) { return; }
 				_mib.style.display = 'none';
-				[ '[data-blk="cell"]', '[data-blk="freq"]', '[data-blk="ttl"]', '[data-blk="hist"]' ].forEach(function(sel) {
+				[ '[data-blk="cell"]', '[data-blk="freq"]', '[data-blk="ttl"]', '[data-blk="hist"]', '#modem-reboot-block' ].forEach(function(sel) {
 					var el = document.querySelector(sel);
 					if (el) { el.style.display = 'none'; }
 				});
@@ -4192,158 +4196,8 @@ simDialog: baseclass.extend({
 			]),
 			]),
 
-			/* Второй блок - управление частотами (сворачиваемый) */
-			collapsibleSection('freq', _('Frequency management'), [
+			E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-reboot-block' }, [
 			E('table', { 'class': 'table' }, [
-				E('tr', { 'class': 'tr', 'id': 'modeswn', 'style': msStyle }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Network mode')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'modesw-btns' },
-						/* Комбинации только из supported-списка этой прошивки:
-						   чистых "4g"/"4g,5g" она не умеет - всегда с 2g/3g. */
-						[
-							[ _('Auto'), '2g|3g|4g|5g', '5g' ],
-							[ '2G', '2g', '' ],
-							[ '3G', '3g', '' ],
-							[ '4G', '3g|4g', '4g' ],
-							[ '4G+5G', '3g|4g|5g', '5g' ],
-							[ '5G', '3g|5g', '5g' ]
-						].map(L.bind(function(mdef) {
-							return E('button', {
-								'class': 'btn cbi-button' + (modeActive(mdef[1], mdef[2]) ? ' tg-current' : ''),
-								'data-allowed': mdef[1],
-								'data-preferred': mdef[2],
-								'click': ui.createHandlerFn(this, function() {
-									return bandsui.setNetMode(mdef[1], mdef[2], mdef[0]);
-								})
-							}, mdef[0]);
-						}, this))
-					),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'bands2gn', 'style': 'display:none' }, [
-						E('td', { 'class': 'td left', 'width': '33%' }, [ _('2G bands')]),
-						E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-2g' }, [ '-' ]),
-						]),
-				E('tr', { 'class': 'tr', 'id': 'bands3gn', 'style': has3g ? msStyle : 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('3G bands')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-3g' },
-						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'utran-') : [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'bandsn', 'style': msStyle }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('4G bands')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-lte' },
-						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'eutran-') : [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'bands5gn', 'style': msStyle }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G bands')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-nr' },
-						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'ngran-') : [ '-' ]),
-					]),
-				/* Привязка к соте - ниже диапазонов намеренно: тот же механизм
-				   чтения-записи через профиль, и порядок получается от общего к
-				   частному (сначала диапазон, потом конкретная сота внутри него).
-				   Строка скрыта, пока bands.sh не сообщит, что модем это умеет. */
-				/* Режим 5G в модеме - ВЫШЕ диапазонов и привязки намеренно: это
-				   предусловие для них. Если 5G выключен в прошивке, выбор
-				   диапазонов n-й и привязка к соте бесполезны, а причина ничем
-				   себя не выдаёт. Строка скрыта, пока профиль не сообщит, что
-				   модем умеет этим управлять. */
-				E('tr', { 'class': 'tr', 'id': 'caenn', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Carrier aggregation')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'caen-cell' }, [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'mode5gn', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G in modem')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'mode5g-cell' }, [ '-' ]),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'celllockn', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell lock')]),
-					E('td', { 'class': 'td left tginfo-modesw', 'id': 'celllock-cell' }, [ '-' ]),
-					]),
-				/* Постоянная подсказка над «Применить» для модемов, у которых смена
-				   диапазонов кратко разрывает соединение (FM350: GTACT рвёт PDP,
-				   proto переподнимает - IP пропадает на ~15-20 c). Флаг bandwarn
-				   приходит из bands.sh (задан в профиле _fibocom_fm350_common);
-				   строку показывает bandsui.loadBandsModemband(). */
-				E('tr', { 'class': 'tr', 'id': 'bandwarnn', 'style': 'display:none' }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
-					E('td', { 'class': 'td left tginfo-modesw' }, [
-						E('div', { 'class': 'cbi-value-description' }, _('Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem.'))
-					]),
-					]),
-				E('tr', { 'class': 'tr', 'id': 'bandsactn', 'style': msStyle }, [
-					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
-					E('td', { 'class': 'td left tginfo-modesw' }, [
-						E('button', {
-							'class': 'btn cbi-button cbi-button-action important',
-							'click': ui.createHandlerFn(this, function() { return bandsui.applyBands(); })
-						}, _('Apply')),
-						' ',
-						E('button', {
-							'class': 'btn cbi-button',
-							'data-tooltip': _('Enable all supported bands'),
-							'click': ui.createHandlerFn(this, function() { return bandsui.resetBands(); })
-						}, _('All bands'))
-					]),
-					]),
-				/* Пояснение, когда управление диапазонами недоступно (напр.
-				   Compal RXM-G1 в режиме umbim/uqmi: у прошивки нет AT-команд
-				   бенд-лока, а mmcli выключен). Показывается из
-				   bandsui.loadBandsModemband(), когда ни mmcli, ни modemband не дали
-				   списка бендов. */
-				E('tr', { 'class': 'tr', 'id': 'bandnote', 'style': 'display:none' }, [
-					/* Первая колонка пустая: подсказка относится ко всему блоку, а
-					   не к отдельному параметру, но вёрстку таблицы ломать нельзя -
-					   плашка должна стоять во ВТОРОЙ колонке, как значения строк. */
-					E('td', { 'class': 'td left', 'width': '33%' }, ' '),
-					E('td', { 'class': 'td left' }, [
-						/* Стандартная информационная плашка LuCI, а не курсивный
-						   текст: это статусное сообщение, и выглядеть оно должно
-						   так же, как остальные сообщения интерфейса. */
-						E('div', { 'class': 'alert-message info' }, [
-							E('p', { 'id': 'bandnote-text', 'style': 'margin:0' },
-								_('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.')),
-							/* Кнопка ПЕРЕКЛЮЧАЕТ САМА, а не ведёт на вкладку «Модем»:
-							   отправлять человека делать это руками - лишний шаг. */
-							E('div', { 'style': 'margin-top:.6em' }, [
-								E('button', {
-									'id': 'bandnote-mm-btn',
-									'class': 'btn cbi-button cbi-button-action',
-									'click': function(ev) {
-										ev.preventDefault();
-										bandsui.switchToModemManager(ev.target);
-									}
-								}, _('Switch to ModemManager')),
-								/* Альтернатива для Fibocom L850/L860 (Intel XMM). Держим на
-								   будущее: у них бенды работают нативно (и в MBIM), поэтому
-								   в норме bandnote вообще не показывается. Кнопка всплывёт
-								   лишь если родной режим бенды не отдал (xmm_capable=1 и
-								   интерфейс не xmm). */
-								E('button', {
-									'id': 'bandnote-xmm-btn',
-									'class': 'btn cbi-button cbi-button-action',
-									'style': 'display:none',
-									'click': function(ev) {
-										ev.preventDefault();
-										bandsui.switchToXmm(ev.target);
-									}
-								}, _('Switch to XMM')),
-								/* HiLink-модему НЕ нужен ModemManager - ему нужен режим
-								   Debug (AT-порты). Показываем эту кнопку вместо MM, когда
-								   backend=hilink: она через autosetup переключает в debug,
-								   сохраняя соединение. */
-								E('button', {
-									'id': 'bandnote-dbg-btn',
-									'class': 'btn cbi-button cbi-button-action',
-									'style': 'display:none',
-									'click': function(ev) {
-										ev.preventDefault();
-										switchToDebug(ev.target);
-									}
-								}, _('Switch to Debug mode'))
-							])
-						])
-					]),
-					]),
 				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
 				   modemmanager), независимо от доступности управления бендами. */
 				E('tr', { 'class': 'tr', 'id': 'rebootn' }, [
@@ -4375,30 +4229,6 @@ simDialog: baseclass.extend({
 					]),
 			]),
 			]),
-
-			/* Блок фиксации TTL / hop-limit - на такой же плашке (collapsibleSection),
-			   как остальные блоки страницы; по умолчанию свёрнут. Скрывается
-			   настройкой «Отображать Фиксацию TTL» (см. showTtl). */
-			showTtl ? collapsibleSection('ttl', _('TTL fixing'), [
-				(function() {
-					var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
-					return E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.2em 0' }, [
-						E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
-							E('span', { 'style': 'opacity:.8' }, _('TTL IPv4 (in / out)')),
-							mkin('ttl4in', def4), ' / ', mkin('ttl4out', def4)
-						]),
-						has6 ? E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
-							E('span', { 'style': 'opacity:.8' }, _('Hop Limit IPv6 (in / out)')),
-							mkin('ttl6in', def6), ' / ', mkin('ttl6out', def6)
-						]) : '',
-						E('button', {
-							'class': 'btn cbi-button cbi-button-action important',
-							'style': 'white-space:nowrap',
-							'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
-						}, _('Apply'))
-					]);
-				}).call(this)
-			]) : '',
 
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [
@@ -4618,6 +4448,185 @@ simDialog: baseclass.extend({
 						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, '')
 				])
 			]),
+
+			/* Второй блок - управление частотами (сворачиваемый) */
+			collapsibleSection('freq', _('Frequency management'), [
+			E('table', { 'class': 'table' }, [
+				E('tr', { 'class': 'tr', 'id': 'modeswn', 'style': msStyle }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Network mode')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'modesw-btns' },
+						/* Комбинации только из supported-списка этой прошивки:
+						   чистых "4g"/"4g,5g" она не умеет - всегда с 2g/3g. */
+						[
+							[ _('Auto'), '2g|3g|4g|5g', '5g' ],
+							[ '2G', '2g', '' ],
+							[ '3G', '3g', '' ],
+							[ '4G', '3g|4g', '4g' ],
+							[ '4G+5G', '3g|4g|5g', '5g' ],
+							[ '5G', '3g|5g', '5g' ]
+						].map(L.bind(function(mdef) {
+							return E('button', {
+								'class': 'btn cbi-button' + (modeActive(mdef[1], mdef[2]) ? ' tg-current' : ''),
+								'data-allowed': mdef[1],
+								'data-preferred': mdef[2],
+								'click': ui.createHandlerFn(this, function() {
+									return bandsui.setNetMode(mdef[1], mdef[2], mdef[0]);
+								})
+							}, mdef[0]);
+						}, this))
+					),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'bands2gn', 'style': 'display:none' }, [
+						E('td', { 'class': 'td left', 'width': '33%' }, [ _('2G bands')]),
+						E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-2g' }, [ '-' ]),
+						]),
+				E('tr', { 'class': 'tr', 'id': 'bands3gn', 'style': has3g ? msStyle : 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('3G bands')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-3g' },
+						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'utran-') : [ '-' ]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'bandsn', 'style': msStyle }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('4G bands')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-lte' },
+						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'eutran-') : [ '-' ]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'bands5gn', 'style': msStyle }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G bands')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'bands-nr' },
+						mmHasModem ? bandsui.buildBandButtons(mmSup, mmCur, 'ngran-') : [ '-' ]),
+					]),
+				/* Привязка к соте - ниже диапазонов намеренно: тот же механизм
+				   чтения-записи через профиль, и порядок получается от общего к
+				   частному (сначала диапазон, потом конкретная сота внутри него).
+				   Строка скрыта, пока bands.sh не сообщит, что модем это умеет. */
+				/* Режим 5G в модеме - ВЫШЕ диапазонов и привязки намеренно: это
+				   предусловие для них. Если 5G выключен в прошивке, выбор
+				   диапазонов n-й и привязка к соте бесполезны, а причина ничем
+				   себя не выдаёт. Строка скрыта, пока профиль не сообщит, что
+				   модем умеет этим управлять. */
+				E('tr', { 'class': 'tr', 'id': 'caenn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Carrier aggregation')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'caen-cell' }, [ '-' ]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'mode5gn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('5G in modem')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'mode5g-cell' }, [ '-' ]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'celllockn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Cell lock')]),
+					E('td', { 'class': 'td left tginfo-modesw', 'id': 'celllock-cell' }, [ '-' ]),
+					]),
+				/* Постоянная подсказка над «Применить» для модемов, у которых смена
+				   диапазонов кратко разрывает соединение (FM350: GTACT рвёт PDP,
+				   proto переподнимает - IP пропадает на ~15-20 c). Флаг bandwarn
+				   приходит из bands.sh (задан в профиле _fibocom_fm350_common);
+				   строку показывает bandsui.loadBandsModemband(). */
+				E('tr', { 'class': 'tr', 'id': 'bandwarnn', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
+					E('td', { 'class': 'td left tginfo-modesw' }, [
+						E('div', { 'class': 'cbi-value-description' }, _('Changing bands briefly drops the connection: the IP disappears for ~15–20 seconds and comes back automatically. This is normal for this modem.'))
+					]),
+					]),
+				E('tr', { 'class': 'tr', 'id': 'bandsactn', 'style': msStyle }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ '' ]),
+					E('td', { 'class': 'td left tginfo-modesw' }, [
+						E('button', {
+							'class': 'btn cbi-button cbi-button-action important',
+							'click': ui.createHandlerFn(this, function() { return bandsui.applyBands(); })
+						}, _('Apply')),
+						' ',
+						E('button', {
+							'class': 'btn cbi-button',
+							'data-tooltip': _('Enable all supported bands'),
+							'click': ui.createHandlerFn(this, function() { return bandsui.resetBands(); })
+						}, _('All bands'))
+					]),
+					]),
+				/* Пояснение, когда управление диапазонами недоступно (напр.
+				   Compal RXM-G1 в режиме umbim/uqmi: у прошивки нет AT-команд
+				   бенд-лока, а mmcli выключен). Показывается из
+				   bandsui.loadBandsModemband(), когда ни mmcli, ни modemband не дали
+				   списка бендов. */
+				E('tr', { 'class': 'tr', 'id': 'bandnote', 'style': 'display:none' }, [
+					/* Первая колонка пустая: подсказка относится ко всему блоку, а
+					   не к отдельному параметру, но вёрстку таблицы ломать нельзя -
+					   плашка должна стоять во ВТОРОЙ колонке, как значения строк. */
+					E('td', { 'class': 'td left', 'width': '33%' }, ' '),
+					E('td', { 'class': 'td left' }, [
+						/* Стандартная информационная плашка LuCI, а не курсивный
+						   текст: это статусное сообщение, и выглядеть оно должно
+						   так же, как остальные сообщения интерфейса. */
+						E('div', { 'class': 'alert-message info' }, [
+							E('p', { 'id': 'bandnote-text', 'style': 'margin:0' },
+								_('Band and network-mode switching is unavailable for this modem in the current interface mode. Switch the interface to ModemManager (in the modem settings) to manage bands.')),
+							/* Кнопка ПЕРЕКЛЮЧАЕТ САМА, а не ведёт на вкладку «Модем»:
+							   отправлять человека делать это руками - лишний шаг. */
+							E('div', { 'style': 'margin-top:.6em' }, [
+								E('button', {
+									'id': 'bandnote-mm-btn',
+									'class': 'btn cbi-button cbi-button-action',
+									'click': function(ev) {
+										ev.preventDefault();
+										bandsui.switchToModemManager(ev.target);
+									}
+								}, _('Switch to ModemManager')),
+								/* Альтернатива для Fibocom L850/L860 (Intel XMM). Держим на
+								   будущее: у них бенды работают нативно (и в MBIM), поэтому
+								   в норме bandnote вообще не показывается. Кнопка всплывёт
+								   лишь если родной режим бенды не отдал (xmm_capable=1 и
+								   интерфейс не xmm). */
+								E('button', {
+									'id': 'bandnote-xmm-btn',
+									'class': 'btn cbi-button cbi-button-action',
+									'style': 'display:none',
+									'click': function(ev) {
+										ev.preventDefault();
+										bandsui.switchToXmm(ev.target);
+									}
+								}, _('Switch to XMM')),
+								/* HiLink-модему НЕ нужен ModemManager - ему нужен режим
+								   Debug (AT-порты). Показываем эту кнопку вместо MM, когда
+								   backend=hilink: она через autosetup переключает в debug,
+								   сохраняя соединение. */
+								E('button', {
+									'id': 'bandnote-dbg-btn',
+									'class': 'btn cbi-button cbi-button-action',
+									'style': 'display:none',
+									'click': function(ev) {
+										ev.preventDefault();
+										switchToDebug(ev.target);
+									}
+								}, _('Switch to Debug mode'))
+							])
+						])
+					]),
+					]),
+			]),
+			]),
+
+			/* Блок фиксации TTL / hop-limit - на такой же плашке (collapsibleSection),
+			   как остальные блоки страницы; по умолчанию свёрнут. Скрывается
+			   настройкой «Отображать Фиксацию TTL» (см. showTtl). */
+			showTtl ? collapsibleSection('ttl', _('TTL fixing'), [
+				(function() {
+					var mkin = function(id, ph) { return E('input', { 'id': id, 'class': 'cbi-input-text', 'type': 'text', 'inputmode': 'numeric', 'maxlength': '3', 'style': 'width:3.5em;text-align:center', 'placeholder': ph, 'value': ttlv(id) }); };
+					return E('div', { 'style': 'display:flex;flex-wrap:wrap;align-items:center;gap:.35em .9em;padding:.2em 0' }, [
+						E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+							E('span', { 'style': 'opacity:.8' }, _('TTL IPv4 (in / out)')),
+							mkin('ttl4in', def4), ' / ', mkin('ttl4out', def4)
+						]),
+						has6 ? E('span', { 'style': 'display:inline-flex;align-items:center;gap:.35em' }, [
+							E('span', { 'style': 'opacity:.8' }, _('Hop Limit IPv6 (in / out)')),
+							mkin('ttl6in', def6), ' / ', mkin('ttl6out', def6)
+						]) : '',
+						E('button', {
+							'class': 'btn cbi-button cbi-button-action important',
+							'style': 'white-space:nowrap',
+							'click': ui.createHandlerFn(this, function() { return applyTTL(has6); })
+						}, _('Apply'))
+					]);
+				}).call(this)
+			]) : '',
 
 			_histOn ? collapsibleSection('hist', _('History'), [ histBuild() ]) : ''
 		]);
