@@ -1282,7 +1282,7 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		for _amf in "$_amd"/*."$_amk"; do [ -f "$_amf" ] && _amhave=$((_amhave + 1)); done
 		[ "$_amseen" -le "$_amhave" ] && continue
 		_amhd=""
-		case "$_amtz" in local) _amhd='#tz=local' ;; esac
+		case "$_amtz" in local) _amhd='#tz=local' ;; [+-][0-9]*) _amhd="#tz=$_amtz" ;; esac
 		case "$_ampt$_amtt" in
 			''|*[!0-9]*)
 				{ [ -n "$_amhd" ] && printf '%s\n' "$_amhd"
@@ -1410,8 +1410,56 @@ _arch_wipe() {
 	rm -f "$(_arch_dir)"/*.* 2>/dev/null
 }
 
+_pdu_tz() {
+	awk '
+	function hx(c) { return index("0123456789ABCDEF", toupper(c)) - 1 }
+	function by(s, i) { return hx(substr(s, 2 * i + 1, 1)) * 16 + hx(substr(s, 2 * i + 2, 1)) }
+	{
+		if (match($0, /"index":[0-9]+/) == 0) next
+		ix = substr($0, RSTART + 8, RLENGTH - 8)
+		if (match($0, /"content":"[0-9A-Fa-f]+/) == 0) next
+		pdu = substr($0, RSTART + 11, RLENGTH - 11)
+		n = length(pdu) / 2
+		if (n < 12) next
+		o = 1 + by(pdu, 0)
+		if (o + 2 >= n) next
+		if (by(pdu, o) % 4 != 0) next
+		oa = by(pdu, o + 1)
+		o = o + 3 + int((oa + 1) / 2) + 2
+		if (o + 7 > n) next
+		t = by(pdu, o + 6)
+		q = (t % 8) * 10 + int(t / 16)
+		if (q > 56 || int(t / 16) > 9) next
+		m = q * 15
+		if (int(t / 8) % 2 == 1) m = -m
+		printf "%s %s%d\n", ix, (m < 0 ? "-" : "+"), (m < 0 ? -m : m)
+	}'
+}
+
+_tz_tag() {
+	_tt_j="$1"
+	case "$(_smstool)" in */sms_tool_mm) printf '%s' "$_tt_j"; return ;; esac
+	case "$_tt_j" in *'"index":'*) ;; *) printf '%s' "$_tt_j"; return ;; esac
+	_tt_c="/tmp/5gmodem_smstz_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+	_tt_sig=$(printf '%s' "$_tt_j" | jsonfilter -e '@.msg[*].index' -e '@.msg[*].timestamp' 2>/dev/null | tr '\n' ' ' | md5sum | cut -c1-16)
+	if [ "$(head -n 1 "$_tt_c" 2>/dev/null)" != "#$_tt_sig" ]; then
+		_tt_raw=$(_sms_run 45 $(_smstool) -d "$PORT" -r -j $_STORE_ARG recv 2>/dev/null | tr '{' '\n' | _pdu_tz)
+		if [ -n "$_tt_raw" ]; then
+			printf '#%s\n%s\n' "$_tt_sig" "$_tt_raw" > "$_tt_c.$$" 2>/dev/null && mv -f "$_tt_c.$$" "$_tt_c"
+		fi
+	fi
+	[ -s "$_tt_c" ] || { printf '%s' "$_tt_j"; return; }
+	_tt_sed=""
+	while read -r _tt_i _tt_z; do
+		case "$_tt_i$_tt_z" in *[!0-9+-]*|'') continue ;; esac
+		_tt_sed="$_tt_sed;s/{\"index\":$_tt_i,/{\"index\":$_tt_i,\"tz\":\"$_tt_z\",/"
+	done < "$_tt_c"
+	[ -n "$_tt_sed" ] || { printf '%s' "$_tt_j"; return; }
+	printf '%s' "$_tt_j" | sed "${_tt_sed#;}"
+}
+
 _arch_live_json() {
-	_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j $_STORE_ARG recv 2>/dev/null | utf8_fix
+	_tz_tag "$(_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j $_STORE_ARG recv 2>/dev/null | utf8_fix)"
 }
 
 # ===== СЛИВ В ПАМЯТЬ РОУТЕРА =====
@@ -1932,7 +1980,7 @@ case "$BOX" in
 			_arch_json
 			exit 0
 		fi
-		_rv_j=$(_sms_run 45 $(_smstool) "$@" recv | utf8_fix)
+		_rv_j=$(_tz_tag "$(_sms_run 45 $(_smstool) "$@" recv | utf8_fix)")
 		[ -n "$_AT_INH" ] || at_unlock
 		_kb_out "$_rv_j"
 		exit 0 ;;

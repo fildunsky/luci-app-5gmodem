@@ -1787,6 +1787,23 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   margin: 0;
 }
 
+@media (min-width: 1100px) {
+  #smsList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(max(360px, calc((100% - 1.2em) / 3)), 1fr));
+    gap: .6em;
+    align-items: start;
+  }
+  #smsList > :not(.sms-card) {
+    grid-column: 1 / -1;
+  }
+  #smsList .sms-card,
+  #smsList .sms-card:last-child {
+    margin-bottom: 0;
+    align-self: start;
+  }
+}
+
 /* Выделено - как .netpri-btn.active, то есть как кнопка на hover у темы: одна
    акцентная рамка, без заливки и без внутренней обводки.
    pointer-events:none из netpri НЕ берём: активную кнопку там нельзя нажать
@@ -1832,6 +1849,7 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   line-height: 1.35;
   text-align: left;
   overflow-wrap: anywhere;
+  word-break: normal;
   white-space: normal;
 }
 

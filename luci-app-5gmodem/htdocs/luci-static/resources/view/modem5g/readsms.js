@@ -221,10 +221,12 @@ function sms_cache_load() {
    пользователя SMS показывалось на 3 часа назад. Переводим в местное время
    ЗДЕСЬ: браузер знает пояс пользователя, а он совпадает с поясом роутера
    или даже точнее (пользователь мог уехать). Формат сохраняем. */
-function sms_localtime(ts) {
+function sms_localtime(ts, tz) {
+	var off = /^[+-]\d{1,4}$/.test(String(tz == null ? '' : tz)) ? parseInt(tz, 10) : null;
+	if (off === null) { return String(ts || ''); }
 	var m = String(ts || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
 	if (!m) { return ts; }
-	var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+	var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) - off * 60000);
 	if (isNaN(d.getTime())) { return ts; }
 	var p = function(n) { return (n < 10 ? '0' : '') + n; };
 	return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
@@ -460,7 +462,7 @@ function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
 	var text = String(item.content || '').replace(/\s+/g, ' ').trim();
-	var when = (item.tz === 'local') ? String(item.timestamp || '') : sms_localtime(item.timestamp);
+	var when = sms_localtime(item.timestamp, item.tz);
 
 	/* Новизну решаем ЗДЕСЬ, при постройке карточки: список перерисовывается
 	   целиком на каждом обновлении, и класс иначе слетал бы вместе с ней. */
