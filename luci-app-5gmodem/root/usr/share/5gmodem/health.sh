@@ -116,13 +116,24 @@ _ev() {
 # Секция модема, владеющего интерфейсом: по network= и непустому path (парковки
 # и осиротевшие секции без path не годятся - лечить нечего).
 sec_for_iface_h() {
+	_sfs_first=""; _sfs_live=""; _sfs_imei=""
+	_sfs_want=$(uci -q get "network.$1.modem_imei")
 	for _sfs in $(uci show "$CFG" 2>/dev/null | sed -n "s/^5gmodem\.\([^.]*\)=modem\$/\1/p"); do
 		[ "$(uci -q get "$CFG.$_sfs.network")" = "$1" ] || continue
-		[ -n "$(uci -q get "$CFG.$_sfs.path")" ] || continue
-		printf '%s\n' "$_sfs"
-		return 0
+		_sfs_p=$(uci -q get "$CFG.$_sfs.path")
+		[ -n "$_sfs_p" ] || continue
+		[ -n "$_sfs_first" ] || _sfs_first="$_sfs"
+		[ -e "/sys/bus/usb/devices/$_sfs_p" ] || continue
+		[ -n "$_sfs_live" ] || _sfs_live="$_sfs"
+		if [ -n "$_sfs_want" ] && [ "$(uci -q get "$CFG.$_sfs.imei")" = "$_sfs_want" ]; then
+			_sfs_imei="$_sfs"
+			break
+		fi
 	done
-	return 1
+	_sfs="${_sfs_imei:-${_sfs_live:-$_sfs_first}}"
+	[ -n "$_sfs" ] || return 1
+	printf '%s\n' "$_sfs"
+	return 0
 }
 
 # Wi-Fi-аплинк? Судим по КОНФИГУ беспроводки (wifi-iface с network=<имя>),
@@ -298,7 +309,11 @@ judge() {
 			# вместе с лестницей стираем и её маркеры-спутники: они живут
 			# ровно один эпизод, а после подчистки призраков (см. round)
 			# переживали бы его и портили следующий (аудит 12.09.2026)
-			rm -f "$HDIR/$_j_if.heal" "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" \
+			_j_hl=0
+			[ -f "$HDIR/$_j_if.heal" ] && read -r _ _j_hl _ < "$HDIR/$_j_if.heal"
+			case "$_j_hl" in ''|*[!0-9]*) _j_hl=0 ;; esac
+			[ $(( $(uptime_s) - _j_hl )) -ge 900 ] && rm -f "$HDIR/$_j_if.heal"
+			rm -f "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" \
 				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
@@ -309,6 +324,12 @@ judge() {
 		else
 			_ev "link $_j_if went down (missed $_j_f/$H_FAILN pings)"
 		fi
+	fi
+	if [ "$_j_new" = up ] && [ "$_j_st" = up ] && [ -f "$HDIR/$_j_if.heal" ]; then
+		_j_hl=0
+		read -r _ _j_hl _ < "$HDIR/$_j_if.heal"
+		case "$_j_hl" in ''|*[!0-9]*) _j_hl=0 ;; esac
+		[ $(( $(uptime_s) - _j_hl )) -ge 900 ] && rm -f "$HDIR/$_j_if.heal"
 	fi
 	printf '%s %s %s %s %s\n' "$_j_new" "$_j_f" "$_j_o" "${_j_lms:-0}" "$_j_since" > "$HDIR/$_j_if.tmp" \
 		&& mv "$HDIR/$_j_if.tmp" "$HDIR/$_j_if"
@@ -707,10 +728,15 @@ sim_absent() {   # $1 - секция, $2 - usb-путь
 	# AT-модем: короткий CPIN через общую очередь к порту
 	_sa_at=$(uci -q get "$CFG.$1.at_port")
 	[ -n "$_sa_at" ] && [ -e "$_sa_at" ] || return 1
-	_sa_o=$(at_query "$_sa_at" "AT+CPIN?" 3 2>/dev/null)
-	case "$_sa_o" in
-		*"not inserted"*|*"CME ERROR: 10"*|*"SIM failure"*|*"SIM_ABSENT"*) return 0 ;;
+	case "$(readlink -f "/sys/class/tty/${_sa_at##*/}/device" 2>/dev/null)" in
+		*"/$2:"*) ;;
+		*) return 1 ;;
 	esac
+	_sa_o=$(at_query "$_sa_at" "AT+CPIN?" 3 2>/dev/null | tr -d '\r')
+	case "$_sa_o" in
+		*"not inserted"*|*"SIM_ABSENT"*) return 0 ;;
+	esac
+	printf '%s\n' "$_sa_o" | grep -qx '+CME ERROR: 10' && return 0
 	return 1
 }
 
@@ -746,7 +772,23 @@ heal() {
 		fi
 		return 0
 	fi
-	[ "$_h_cnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
+	_h_dmax=0
+	for _h_f in "$HDIR"/*; do
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
+		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
+		[ "$_h_st" = down ] || continue
+		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
+		[ "$_h_since" -gt "$_h_dmax" ] && _h_dmax="$_h_since"
+	done
+	_h_dcnt=0
+	for _h_f in "$HDIR"/*; do
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
+		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
+		[ "$_h_st" = down ] || continue
+		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
+		[ $((_h_dmax - _h_since)) -le 300 ] && _h_dcnt=$((_h_dcnt + 1))
+	done
+	[ "$_h_dcnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
 	for _h_f in "$HDIR"/*; do
 		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch) continue ;; esac
 		_h_if="${_h_f##*/}"
@@ -1179,6 +1221,12 @@ heal() {
 		# AT-порт нужен и ступени 2 (CFUN), и гварду поиска ниже - берём один
 		# раз; переменная цикла, без сброса тащила бы порт ПРОШЛОГО модема.
 		_h_at=$(uci -q get "$CFG.$_h_sec.at_port")
+		if [ -n "$_h_at" ] && [ -n "$_h_path" ]; then
+			case "$(readlink -f "/sys/class/tty/${_h_at##*/}/device" 2>/dev/null)" in
+				*"/$_h_path:"*) ;;
+				*) _h_at="" ;;
+			esac
+		fi
 		if [ "$_h_next" = 2 ] && [ -z "$_h_hilink" ]; then
 			if [ -z "$_h_at" ] || [ ! -e "$_h_at" ]; then
 				if [ "$_h_cap" -ge 3 ]; then _h_next=3; else _h_next=1; fi

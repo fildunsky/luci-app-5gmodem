@@ -30,7 +30,8 @@ _gone_dir=/tmp/5gmodem/netdev-gone
 for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
 	_match=0
-	[ "$(uci -q get network."$_if".device)" = "$INTERFACE" ] && _match=1
+	[ -z "$(uci -q get network."$_if".usbpath)$(uci -q get network."$_if".modem_path)" ] \
+		&& [ "$(uci -q get network."$_if".device)" = "$INTERFACE" ] && _match=1
 	if [ "$_match" = 0 ]; then
 		for _up in $(uci -q get network."$_if".usbpath) $(uci -q get network."$_if".modem_path); do
 			for _n in /sys/bus/usb/devices/"$_up":*/net/*; do
@@ -68,5 +69,6 @@ for _if in $(uci -q show network 2>/dev/null \
 	# Сохранённые диапазоны применяет САМ прото fibocom.sh перед дозвоном (раз за
 	# загрузку, race-free против любого триггера setup) - здесь их НЕ трогаем:
 	# отдельный hotplug гонку с авто-рестартом netifd по появлению eth2 не выигрывал.
+	( . /lib/netifd/netifd-proto.sh; proto_set_available "$_if" 1 ) >/dev/null 2>&1
 	( ifup "$_if" ) >/dev/null 2>&1 </dev/null &
 done

@@ -435,6 +435,7 @@ proto_qmiraw_setup() {
 		cid_6=$(uqmi -s -d "$device" -t 1000 --get-client-id wds)
 		if ! [ "$cid_6" -eq "$cid_6" ] 2> /dev/null; then
 			echo "Unable to obtain client ID"
+			[ -n "$pdh_4" ] && qmi_wds_stop "$cid_4" "$pdh_4"
 			proto_notify_error "$interface" NO_CID
 			return 1
 		fi
@@ -457,6 +458,7 @@ proto_qmiraw_setup() {
 		if ! [ "$pdh_6" -eq "$pdh_6" ] 2> /dev/null; then
 			echo "Unable to connect IPv6"
 			uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_6" --release-client-id wds > /dev/null 2>&1
+			[ -n "$pdh_4" ] && qmi_wds_stop "$cid_4" "$pdh_4"
 			proto_notify_error "$interface" CALL_FAILED
 			return 1
 		fi
@@ -466,6 +468,7 @@ proto_qmiraw_setup() {
 		[ "$connstat" == '"connected"' ] || {
 			echo "No data link!"
 			uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_6" --release-client-id wds > /dev/null 2>&1
+			[ -n "$pdh_4" ] && qmi_wds_stop "$cid_4" "$pdh_4"
 			proto_notify_error "$interface" CALL_FAILED
 			return 1
 		}

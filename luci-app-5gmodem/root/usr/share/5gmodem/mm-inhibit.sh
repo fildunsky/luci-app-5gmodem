@@ -141,7 +141,7 @@ inhibit_pass() {
 	[ -n "$_am" ] && "$RES/qmi-recover.sh" recover "$_am" >/dev/null 2>&1
 	# Держать MM запущенным ради ОТСУТСТВУЮЩЕГО модема незачем - именно он
 	# при старте и хватает чужие модемы. Решение принимает mmneed.sh.
-	"$RES/mmneed.sh" apply >/dev/null 2>&1
+	"$RES/mmneed.sh" grace >/dev/null 2>&1
 }
 
 # MM видит модем на пути $1, а его modemmanager-интерфейс лежит -> поднять.

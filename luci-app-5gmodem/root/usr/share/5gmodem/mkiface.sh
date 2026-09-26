@@ -130,10 +130,18 @@ stamp_iface() {
 # интерфейс никогда не перехватывает default-маршрут у соседей.
 _def_metric() {
 	if [ "$(uci -q get 5gmodem.@5gmodem[0].mwan3_metrics)" = "1" ]; then
-		echo 20
+		_dm_v=20
 	else
-		echo 110
+		_dm_v=110
 	fi
+	_dm_z=$(uci -q show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	for _dm_n in $([ -n "$_dm_z" ] && uci -q get "firewall.$_dm_z.network"); do
+		[ "$_dm_n" = "$IF" ] && continue
+		_dm_m=$(uci -q get "network.$_dm_n.metric")
+		case "$_dm_m" in ''|*[!0-9]*) continue ;; esac
+		[ $((_dm_m + 10)) -gt "$_dm_v" ] && _dm_v=$((_dm_m + 10))
+	done
+	echo "$_dm_v"
 }
 
 set_apn_opt() {
@@ -471,6 +479,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# uci). Безусловное metric=20 ниже сбрасывало порядок аплинков при каждом
 		# пересоздании интерфейса (смена SIM, hotplug, кнопка) - сохраняем, как APN.
 		OLDMETRIC=$(uci -q get "network.$IF.metric")
+		OLDAUTH=$(uci -q get "network.$IF.auth")
+		OLDUSER=$(uci -q get "network.$IF.username")
+		OLDPASS=$(uci -q get "network.$IF.password")
+		OLDDNS=$(uci -q get "network.$IF.dns")
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -589,6 +601,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# it primary.
 		uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 		[ -n "$OLDROAM" ] && uci set "network.$IF.allow_roaming=$OLDROAM"
+		[ -n "$OLDAUTH" ] && uci set "network.$IF.auth=$OLDAUTH"
+		[ -n "$OLDUSER" ] && uci set "network.$IF.username=$OLDUSER"
+		[ -n "$OLDPASS" ] && uci set "network.$IF.password=$OLDPASS"
+		[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
 		uci commit network
 
 

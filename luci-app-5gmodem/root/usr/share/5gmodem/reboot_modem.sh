@@ -200,18 +200,30 @@ if [ "$MODE" = power ]; then
 	case "$_pg_on" in 0|1) ;; *) _pg_on=0 ;; esac
 	_pg_off=$((1 - _pg_on))
 	_pg_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
+	_pg_was=0
+	[ -n "$_pg_path" ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] && _pg_was=1
 	(
 		echo "$_pg_off" > "$GP" 2>/dev/null
 		sleep 5
 		echo "$_pg_on" > "$GP" 2>/dev/null
 		[ -n "$_pg_path" ] || exit 0
+		[ "$_pg_was" = 1 ] && exit 0
 		_pg_n=0
-		while [ "$_pg_n" -lt 40 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
+		while [ "$_pg_n" -lt 120 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
 			sleep 1; _pg_n=$((_pg_n + 1))
 		done
 		[ -e "/sys/bus/usb/devices/$_pg_path" ] && exit 0
 		echo "$_pg_off" > "$GP" 2>/dev/null
-		logger -t 5gmodem "power: $_pg_path did not come back with $G=$_pg_on - left it at $_pg_off"
+		_pg_n=0
+		while [ "$_pg_n" -lt 120 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
+			sleep 1; _pg_n=$((_pg_n + 1))
+		done
+		if [ -e "/sys/bus/usb/devices/$_pg_path" ]; then
+			logger -t 5gmodem "power: $_pg_path came back with $G=$_pg_off - left it at $_pg_off"
+			exit 0
+		fi
+		echo "$_pg_on" > "$GP" 2>/dev/null
+		logger -t 5gmodem "power: $_pg_path did not come back with either value of $G - restored $_pg_on"
 	) >/dev/null 2>&1 </dev/null &
 	echo "{\"success\":true,\"mode\":\"power\",\"gpio\":\"$G\"}"
 	sleep 1

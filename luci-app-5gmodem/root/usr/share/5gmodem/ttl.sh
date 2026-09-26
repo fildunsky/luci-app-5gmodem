@@ -103,12 +103,12 @@ apply)
 			# сервера), а мы правим ttl УХОДЯЩИХ, и снаружи его видит только
 			# оператор. Со счётчиком достаточно посмотреть, растут ли пакеты.
 			[ -n "$T4I" ] && echo "		iifname \"$DEV\" counter ip ttl set $T4I"
-			[ -n "$T6I" ] && echo "		iifname \"$DEV\" counter ip6 hoplimit set $T6I"
+			[ -n "$T6I" ] && echo "		iifname \"$DEV\" meta l4proto != ipv6-icmp counter ip6 hoplimit set $T6I"
 			echo "	}"
 			echo "	chain postrouting {"
 			echo "		type filter hook postrouting priority mangle; policy accept;"
 			[ -n "$T4O" ] && echo "		oifname \"$DEV\" counter ip ttl set $T4O"
-			[ -n "$T6O" ] && echo "		oifname \"$DEV\" counter ip6 hoplimit set $T6O"
+			[ -n "$T6O" ] && echo "		oifname \"$DEV\" meta l4proto != ipv6-icmp counter ip6 hoplimit set $T6O"
 			echo "	}"
 			echo "}"
 		} > "$TMP"
@@ -142,14 +142,14 @@ apply)
 				echo "	chain ingress {"
 				echo "		type filter hook ingress device \"$DEV\" priority -300; policy accept;"
 				[ -n "$T4I" ] && echo "		meta protocol ip counter ip ttl set $T4I"
-				[ -n "$T6I" ] && echo "		meta protocol ip6 counter ip6 hoplimit set $T6I"
+				[ -n "$T6I" ] && echo "		meta protocol ip6 meta l4proto != ipv6-icmp counter ip6 hoplimit set $T6I"
 				echo "	}"
 			fi
 			if [ -n "$T4O$T6O" ]; then
 				echo "	chain egress {"
 				echo "		type filter hook egress device \"$DEV\" priority 0; policy accept;"
 				[ -n "$T4O" ] && echo "		meta protocol ip counter ip ttl set $T4O"
-				[ -n "$T6O" ] && echo "		meta protocol ip6 counter ip6 hoplimit set $T6O"
+				[ -n "$T6O" ] && echo "		meta protocol ip6 meta l4proto != ipv6-icmp counter ip6 hoplimit set $T6O"
 				echo "	}"
 			fi
 			echo "}"

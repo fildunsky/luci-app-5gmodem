@@ -750,12 +750,16 @@ fi
 if [ -n "$DEVICE" ] && at_dialer_busy "$DEVICE"; then
 	_age=$(_snapshot_age)
 	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
+	echo '{}'
+	exit 0
 fi
 if [ -n "$DEVICE" ] && ! at_lock "$DEVICE" 10; then
 	_age=$(_snapshot_age)
 	[ -n "$_age" ] && { serve_cache "$_age"; exit 0; }
 	# Снимка нет вовсе (первый запуск) - опрашиваем без блокировки: пустая
 	# страница хуже, чем данные с риском смешения.
+	echo '{}'
+	exit 0
 fi
 
 # ПОРТ ДОЛЖЕН ПРИНАДЛЕЖАТЬ ЭТОМУ МОДЕМУ.
@@ -851,7 +855,7 @@ if [ -z "$DEVICE" ]; then
 		   && ! "$RES/listmodems.sh" | jsonfilter -e '@[*].path' 2>/dev/null | grep -qxF "$_POLL_AM"; then
 			printf '%s' "$_sh_now" > "$_sh_mark" 2>/dev/null
 			logger -t 5gmodem "active modem \"$_POLL_AM\" is missing from the list - re-evaluating (resolve)"
-			( "$RES/modemswitch.sh" resolve >/dev/null 2>&1 & ) </dev/null
+			( unset _AT_LOCK_HELD; exec 7>&- 8>&- 9>&-; "$RES/modemswitch.sh" resolve >/dev/null 2>&1 & ) </dev/null
 		fi
 		_age=$(_snapshot_age)
 		[ -n "$_age" ] && [ "$_age" -lt 30 ] && { serve_cache "$_age"; exit 0; }

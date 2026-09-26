@@ -1328,7 +1328,7 @@ usbcomp_verdict() {
 			[ -f "$_uc_if/bInterfaceNumber" ] || continue
 			_uc_drv=$(basename "$(readlink -f "$_uc_if/driver" 2>/dev/null)" 2>/dev/null)
 			case "$_uc_drv" in
-				option1|usb_serial_generic|generic|option)
+				option1|usb_serial_generic|usbserial_generic|generic|option)
 					_uc_stolen="$_uc_stolen
    $_uc_p  $_uc_v:$_uc_i  interface $_uc_num held by driver $_uc_drv" ;;
 			esac

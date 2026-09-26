@@ -695,9 +695,9 @@ _bands_set_bg() {
 		_sbg_how="$1"; shift
 		case "$_sbg_how" in
 			band)      _band_write "$@" ;;
-			after)     "$@" && { _bands_flush; _bands_after_write; } ;;
-			mode)      "$@" && { _persist_mode "$2"; _bands_flush; _bands_after_write; } ;;
-			reconnect) "$@"; _bands_flush; _reconnect_iface ;;
+			after)     "$@" && { _bands_flush; at_unlock; _bands_after_write; } ;;
+			mode)      "$@" && { _persist_mode "$2"; _bands_flush; at_unlock; _bands_after_write; } ;;
+			reconnect) "$@"; _bands_flush; at_unlock; _reconnect_iface ;;
 			*)         "$@" ;;
 		esac
 		_bands_flush

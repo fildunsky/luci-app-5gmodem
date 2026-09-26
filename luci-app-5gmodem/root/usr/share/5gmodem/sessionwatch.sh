@@ -277,7 +277,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			[ -n "$_path" ] && [ -e "/sys/bus/usb/devices/$_path/idVendor" ] || return 0
 			# ЗАВИСШИЕ uqmi СНИМАЕМ ДО ВСЕГО ОСТАЛЬНОГО, включая проверку pending:
 			# именно они и держат netifd в бесконечном дозвоне, занимая канал.
-			[ "$_proto" = qmi ] && _kill_stuck_uqmi "$(uci -q get "network.$_if.device")"
+			proto_in uqmi "$_proto" && _kill_stuck_uqmi "$(uci -q get "network.$_if.device")"
 			# NETIFD УЖЕ РАБОТАЕТ - НЕ МЕШАЕМ. В состоянии pending идёт дозвон, и
 			# наш down/up оборвал бы его на полпути: получилась бы гонка двух
 			# «подъёмщиков» вместо восстановления.
@@ -320,7 +320,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				# бесконечно (наблюдалось дважды на живом Quectel EP06 05.08.2026,
 				# оба раза лечилось руками). Гасим сеть перед подъёмом - это
 				# штатная операция uqmi, при свободном канале она безопасна.
-				if [ "$_proto" = qmi ]; then
+				if proto_in uqmi "$_proto"; then
 					_swd=$(uci -q get "network.$_if.device")
 					case "$_swd" in
 						/dev/*)
@@ -745,10 +745,17 @@ case "$1" in
 				if proto_in direct "$(uci -q get "network.$_ps_if.proto" 2>/dev/null)"; then
 					if pidof mbim-proxy >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1; then
 						if ubus call "network.interface.$_ps_if" status 2>/dev/null | grep -q '"up": true'; then
-							_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
-							killall mbim-proxy 2>/dev/null
-							killall qmi-proxy 2>/dev/null
-							( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+							if pgrep -x lpac >/dev/null 2>&1 \
+							   || pgrep -x qmicli >/dev/null 2>&1 \
+							   || pgrep -x mbimcli >/dev/null 2>&1 \
+							   || ! _stray_ok; then
+								:
+							else
+								_log "a stray proxy sits on a direct channel ($_ps_if) - killing mbim/qmi-proxy and redialing"
+								killall mbim-proxy 2>/dev/null
+								killall qmi-proxy 2>/dev/null
+								( sleep 2; ifup "$_ps_if" ) >/dev/null 2>&1 </dev/null &
+							fi
 						elif ! pgrep -x lpac >/dev/null 2>&1 \
 						   && ! pgrep -x qmicli >/dev/null 2>&1 \
 						   && ! pgrep -x mbimcli >/dev/null 2>&1 \

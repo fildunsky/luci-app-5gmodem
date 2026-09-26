@@ -197,7 +197,7 @@ fi
 # AT!LTEINFO? добирает то, чего нет в GSTATUS: SINR вторичных несущих (секция
 # CA SCell) и СОСЕДНИЕ СОТЫ (Serving/IntraFreq/InterFreq) - на kernel-прото
 # qmi/mbim канал QMI занят netifd, и обычный источник соседей (cell-location-
-# info) недоступен, LTEINFO - единственный путь (разбор Dmitry Korotkov,
+# info) недоступен, LTEINFO - единственный путь (разбор владельца EM9190,
 # 18.08.2026). Одна команда на опрос, тот же ответ разбирается дважды.
 _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
 case "$_LI" in

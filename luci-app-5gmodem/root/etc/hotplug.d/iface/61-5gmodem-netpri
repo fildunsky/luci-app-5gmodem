@@ -1,0 +1,5 @@
+[ "$ACTION" = ifup ] || exit 0
+[ -n "$INTERFACE" ] || exit 0
+[ -x /usr/share/5gmodem/netpri.sh ] || exit 0
+( exec >/dev/null 2>&1 </dev/null; sleep 3; /usr/share/5gmodem/netpri.sh reapply "$INTERFACE" ) &
+exit 0

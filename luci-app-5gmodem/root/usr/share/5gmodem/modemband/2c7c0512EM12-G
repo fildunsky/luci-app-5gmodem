@@ -22,5 +22,5 @@ setbands() {
 	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
 
 	HEX=$(bandstohex "$BANDS")
-	[ "$HEX" != "0" ] && sms_tool -d $_DEVICE at "AT+QCFG=\"band\",0,$HEX,1"
+	[ "$HEX" != "0" ] && sms_tool -d $_DEVICE at "AT+QCFG=\"band\",0,$HEX,0,1"
 }

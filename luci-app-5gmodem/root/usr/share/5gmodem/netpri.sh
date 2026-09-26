@@ -1642,6 +1642,29 @@ set)
 	echo '{"result":"ok","active":"'"$CH"'","changed":'"$_np_changed"',"mode":"live-route"}'
 	;;
 
+reapply)
+	_ra_n="$2"
+	[ -n "$_ra_n" ] || exit 0
+	_ra_en=$(uci -q get 5gmodem.health.enabled)
+	[ "$(uci -q get 5gmodem.@5gmodem[0].widget_netpri)" = "0" ] && _ra_en=0
+	[ "$_ra_en" = "1" ] && exit 0
+	case " $(wan_nets) " in *" $_ra_n "*) ;; *) exit 0 ;; esac
+	_ra_m=$(uci -q get "network.$_ra_n.metric")
+	case "$_ra_m" in ''|*[!0-9]*) exit 0 ;; esac
+	_ra_d=$(ifup_state "$_ra_n" '@["l3_device"]'); [ -n "$_ra_d" ] || exit 0
+	exec 9>"/tmp/5gmodem_health.lock"
+	flock 9
+	_devs=""
+	for n in $(wan_nets); do
+		[ -n "$n" ] || continue
+		_d=$(ifup_state "$n" '@["l3_device"]'); [ -n "$_d" ] || continue
+		case " $_devs " in *" $_d "*) continue ;; esac
+		_devs="$_devs $_d"
+	done
+	_rerank_default_route "$_ra_n" "$_ra_m" "$_ra_d" "$_devs"
+	_rerank_iface_routes "$_ra_d" "$_ra_m" "$_ra_n"
+	;;
+
 worder)
 	# worder <ключ> ... - порядок ПРАВЫХ карточек (пинги, службы, спидтест).
 	#

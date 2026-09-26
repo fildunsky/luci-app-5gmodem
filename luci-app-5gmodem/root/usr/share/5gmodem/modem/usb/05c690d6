@@ -9,8 +9,12 @@
 # Multi-modem: target the ACTIVE modem (by USB path), not "any" / the first
 # cdc-wdm - otherwise with two modems mmcli/qmicli read the WRONG modem (bands,
 # signal, everything). Fall back to any / cdc-wdm0 for the single-modem case.
-_MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
-_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null); [ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
+_MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex $_POLL_AM 2>/dev/null)
+_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm $_POLL_AM 2>/dev/null)
+if [ -z "$_POLL_AM" ]; then
+	[ -n "$_MMIDX" ] || _MMIDX=any
+	[ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
+fi
 
 # QMI-over-MBIM: этот профиль обслуживает Compal и в MBIM (05c6:90d6), и в QMI
 # (1e2d:00b7, 05c6:9025 - см. вызывающие профили). На MBIM-устройстве qmicli
@@ -85,8 +89,15 @@ if [ "$_MM_OK" = "1" ]; then
 	_MM_LOC=$(mmcli -m "$_MMIDX" --location-get -K 2>/dev/null)
 	_MM_TAC=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
 	_MM_CID=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
-	if [ -z "$_MM_TAC$_MM_CID" ]; then
-		mmcli -m "$_MMIDX" --location-enable-3gpp >/dev/null 2>&1 &
+	if [ -z "$_MM_TAC$_MM_CID" ] && [ -n "$_MMIDX" ]; then
+		_MM_LS="/tmp/5gmodem_mmloc_${_MKEY:-x}"
+		_MM_LN=$(cut -d. -f1 /proc/uptime)
+		_MM_LW=$(cat "$_MM_LS" 2>/dev/null)
+		case "$_MM_LW" in ''|*[!0-9]*) _MM_LW=0 ;; esac
+		if [ $((_MM_LN - _MM_LW)) -ge 300 ] || [ "$_MM_LW" -gt "$_MM_LN" ]; then
+			echo "$_MM_LN" > "$_MM_LS"
+			( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; mmcli -m "$_MMIDX" --location-enable-3gpp ) </dev/null &
+		fi
 	fi
 	case "$_MM_TAC" in
 		''|--|0|000000) [ -n "$LAC_HEX" ] && { TAC_HEX="$LAC_HEX"; TAC_DEC="$LAC_DEC"; } ;;

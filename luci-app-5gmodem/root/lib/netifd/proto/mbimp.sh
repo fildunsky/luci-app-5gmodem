@@ -160,7 +160,7 @@ proto_mbimp_setup() {
 	syspath="$(readlink -f "/sys/class/usbmisc/$devname/device/" || readlink -f "/sys/class/wwan/$devname/device/")"
 	ifname="$(ls "$syspath"/net 2>/dev/null | head -n 1)"
 	[ -n "$ifname" ] || { proto_set_available "$interface" 0; _mbimp_fail "$interface" NO_IFNAME "Failed to find the network interface of $device"; return 1; }
-	[ -n "$apn" ] || { _mbimp_fail "$interface" NO_APN "No APN specified"; return 1; }
+	[ -n "$apn" ] || { _mbimp_fail "$interface" NO_APN "No APN specified" block; return 1; }
 
 	[ -n "$delay" ] && sleep "$delay"
 	[ -n "$timeout" ] || timeout=30
@@ -224,6 +224,10 @@ proto_mbimp_setup() {
 		[ "$n" -ge "$timeout" ] && break
 		sleep 3
 	done
+	if [ "$ok" = 2 ]; then
+		_mbimp_fail "$interface" ROAMING_NOT_ALLOWED "Registered in $reg, but roaming is not allowed" block
+		return 1
+	fi
 	if [ "$ok" != 1 ]; then
 		_mbimp_fail "$interface" NO_REGISTRATION "Registration failed (state: ${reg:-no answer})"
 		return 1

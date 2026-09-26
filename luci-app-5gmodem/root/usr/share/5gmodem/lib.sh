@@ -1387,9 +1387,9 @@ qmicli_p() {
 		# больше некуда. Живой прокси отвечает за доли секунды, так что 6 c с
 		# запасом отличают «занят» от «мёртв».
 		_qp_w=20; [ -n "$_qp_direct" ] && _qp_w=6
-		qmicli -d "$_qp_dev" -p $_qp_mb "$@" > "$_qp_o" 2>/dev/null 9>&- &
+		qmicli -d "$_qp_dev" -p $_qp_mb "$@" > "$_qp_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_qp_pid=$!
-		( sleep "$_qp_w"; kill -9 "$_qp_pid" 2>/dev/null ) >/dev/null 2>&1 9>&- &
+		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_qp_w"; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
 		_qp_k=$!
 		# Опрос вместо голого wait: qmicli в D-state на мёртвом cdc-wdm
 		# неубиваем, wait висел бы вечно (класс бага - atprobe/at_query).
@@ -1409,9 +1409,9 @@ qmicli_p() {
 	# Прокси не ответил (или пропущен как заведомо мёртвый), а канал свободен -
 	# читаем напрямую (см. выше).
 	if [ ! -s "$_qp_o" ] && [ -n "$_qp_direct" ] && qmi_channel_free; then
-		qmicli -d "$_qp_dev" $_qp_mb "$@" > "$_qp_o" 2>/dev/null 9>&- &
+		qmicli -d "$_qp_dev" $_qp_mb "$@" > "$_qp_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_qp_pid=$!
-		( sleep 20; kill -9 "$_qp_pid" 2>/dev/null ) >/dev/null 2>&1 9>&- &
+		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep 20; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
 		_qp_k=$!
 		sleep_tick_init
 		_qp_i=0; _qp_max2=$(( 21 * _TICKS_PER_SEC ))

@@ -20,6 +20,14 @@
 RES=/usr/share/5gmodem
 
 # Пул исчерпан?  $1 = cdc-wdm.  0 = да (исчерпан).
+_qr_recent() {
+	[ -f "$1" ] || return 1
+	_qr_w=$(cat "$1" 2>/dev/null)
+	_qr_n=$(cut -d. -f1 /proc/uptime)
+	case "$_qr_w" in ''|*[!0-9]*) return 1 ;; esac
+	[ "$_qr_w" -le "$_qr_n" ] && [ $((_qr_n - _qr_w)) -lt 180 ]
+}
+
 qmi_pool_exhausted() {
 	[ -n "$1" ] && [ -e "$1" ] || return 1
 	# -p: спрашиваем через прокси (свой клиент не плодим). Ключа -t у qmicli
@@ -76,13 +84,13 @@ qmi_pool_recover() {
 	[ -n "$_trig" ] || return 1
 	# Защита от цикла сбросов: маркер в /tmp (переживает до перезагрузки).
 	_mk="/tmp/5gmodem_qmirecover_$(printf '%s' "$_qp" | tr -c 'A-Za-z0-9' _)"
-	[ -n "$(find "$_mk" -mmin -3 2>/dev/null)" ] && return 1
+	_qr_recent "$_mk" && return 1
 	# Живой AT-порт этого модема для сброса.
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		at_query "$_t" "AT" 5 | grep -q "OK" || continue
 		logger -t 5gmodem "$_trig on $_qp - resetting the modem (AT+CFUN=1,1 on $_t)"
-		touch "$_mk" 2>/dev/null
+		cut -d. -f1 /proc/uptime > "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
 		return 0
 	done
@@ -99,13 +107,13 @@ qmi_pool_recover() {
 qmi_force_reset() {   # $1 - usb-путь, $2 - причина для журнала
 	_fr_p="$1"; [ -n "$_fr_p" ] || return 1
 	_mk="/tmp/5gmodem_qmirecover_$(printf '%s' "$_fr_p" | tr -c 'A-Za-z0-9' _)"
-	[ -n "$(find "$_mk" -mmin -3 2>/dev/null)" ] && return 1
+	_qr_recent "$_mk" && return 1
 	_lm=$("$RES/listmodems.sh" 2>/dev/null)
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_fr_p\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		at_query "$_t" "AT" 5 | grep -q "OK" || continue
 		logger -t 5gmodem "${2:-reset needed} on $_fr_p - resetting the modem (AT+CFUN=1,1 on $_t)"
-		touch "$_mk" 2>/dev/null
+		cut -d. -f1 /proc/uptime > "$_mk" 2>/dev/null
 		at_query "$_t" "AT+CFUN=1,1" 5 >/dev/null 2>&1
 		return 0
 	done

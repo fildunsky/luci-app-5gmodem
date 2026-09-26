@@ -128,7 +128,7 @@ _rescue_rmnet() {   # $1 - vid, $2 - pid, $3 - номер интерфейса �
 			# ADB так и оставались у option (VOS 5G / SG500M2-X, полевой отчёт
 			# 13.09.2026, ядро 25.12).
 			case "$_rr_drv" in
-				option|option1|usb_serial_generic|generic)
+				option|option1|usb_serial_generic|usbserial_generic|generic)
 					_rr_if=$(basename "$_rr_i")
 					echo "$_rr_if" > "$_rr_i/driver/unbind" 2>/dev/null
 					# ПРИВЯЗЫВАЕМ АДРЕСНО, А НЕ ЧЕРЕЗ drivers_probe.
@@ -185,7 +185,7 @@ _release_adb() {   # $1 - vid, $2 - pid
 			# без него ADB-интерфейс оставался последовательным портом
 			# (VOS 5G / SG500M2-X, полевой отчёт 13.09.2026).
 			case "$_ra_drv" in
-				option|option1|usb_serial_generic|generic)
+				option|option1|usb_serial_generic|usbserial_generic|generic)
 					_ra_if=$(basename "$_ra_i")
 					echo "$_ra_if" > "$_ra_i/driver/unbind" 2>/dev/null
 					logger -t 5gmodem-usbports "released ADB interface $_ra_if from $_ra_drv (it is not a serial port)"
@@ -332,7 +332,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 			[ "$_bp_cls" = "ff" ] && continue
 			_bp_idrv=$(basename "$(readlink -f "$_bp_i/driver" 2>/dev/null)" 2>/dev/null)
 			case "$_bp_idrv" in
-				option1|"usb_serial_generic"|generic)
+				option|option1|"usb_serial_generic"|usbserial_generic|generic)
 					_bp_if=$(basename "$_bp_i")
 					echo "$_bp_if" > "$_bp_i/driver/unbind" 2>/dev/null
 					echo "$_bp_if" > /sys/bus/usb/drivers_probe 2>/dev/null

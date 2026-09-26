@@ -430,12 +430,15 @@ proto_fibocom_setup() {
 
 	local dial="$atport"
 	if [ -z "$dial" ] && [ -n "$usbpath" ]; then
-		dial=$(_fibocom_atport "$usbpath" "$(uci -q get 5gmodem.@5gmodem[0].at_port)")
+		local own_at
+		own_at=$(uci -q get "5gmodem.m_$(printf '%s' "$usbpath" | sed 's/[^A-Za-z0-9]/_/g').at_port")
+		[ -n "$own_at" ] || own_at=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		dial=$(_fibocom_atport "$usbpath" "$own_at")
 	fi
 	if [ -z "$dial" ]; then
 		echo "fibocom[$$] no AT port found at path \"$usbpath\" (neither ttyUSB nor ttyACM answered AT)"
 		proto_notify_error "$interface" NO_AT_PORT
-		proto_set_available "$interface" 0
+		sleep 10
 		return 1
 	fi
 
@@ -568,7 +571,9 @@ proto_fibocom_setup() {
 	# bands) or 3 if it already matched (fast path is fine).
 	local bands_changed=0
 	local bmark="/tmp/5gmodem_bandsprep_$interface"
-	if [ ! -e "$bmark" ] && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != "0" ]; then
+	local bdev
+	bdev=$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)
+	if { [ ! -e "$bmark" ] || [ "$(cat "$bmark" 2>/dev/null)" != "$bdev" ]; } && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != "0" ]; then
 		local bsec="" bs bpath
 		for bs in $(uci -q show 5gmodem 2>/dev/null \
 				| sed -n 's/^\(5gmodem\.m_[0-9A-Za-z_]*\)\.network=.*/\1/p'); do
@@ -586,7 +591,7 @@ proto_fibocom_setup() {
 			# двойной подъём). Прото - единственный, кто трогает бенды на дозвоне.
 			: > "/tmp/5gmodem_bandrestore_$interface" 2>/dev/null
 		fi
-		touch "$bmark" 2>/dev/null
+		echo "$bdev" > "$bmark" 2>/dev/null
 	fi
 
 	# FAST PATH: if the PDP context is ALREADY active with a valid address, reuse
@@ -686,7 +691,9 @@ proto_fibocom_setup() {
 		# подняв IPV4V6 поверх активного IPV4-контекста, fast path переиспользовал бы
 		# IPv4-only bearer и IPv6 не появился бы НИКОГДА (модем сам IPv4->IPv4v6 не
 		# апгрейдит). apn пуст = роуминг: там APN не сверяем, но тип PDP - да.
-		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdptype" ]; then
+		local pdp_ok="$pdptype"
+		[ "$(cat "/tmp/5gmodem_fibo_pdpalt_$interface" 2>/dev/null)" = "$pdptype>$cur_pdp" ] && pdp_ok="$cur_pdp"
+		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdp_ok" ]; then
 			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 				| sed -n 's/.*+CGPADDR: *1,//p' | tr ',' '\n' | tr -d '" ' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
 			[ "$ip" = "0.0.0.0" ] && ip=""
@@ -730,6 +737,7 @@ proto_fibocom_setup() {
 			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IP"
 			echo "fibocom[$$] no IP with $pdptype, retrying $alt"
 			ip=$(_fibocom_activate "$dial" "$alt" "$apn")
+			[ -n "$ip" ] && echo "$pdptype>$alt" > "/tmp/5gmodem_fibo_pdpalt_$interface"
 		fi
 	fi
 	if [ -z "$ip" ]; then
