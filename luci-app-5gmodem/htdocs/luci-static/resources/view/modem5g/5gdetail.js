@@ -2354,7 +2354,9 @@ function buildSimpleUI() {
 		'body.sc-simple [data-blk="ttl"], body.sc-simple [data-blk="hist"] { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#rebootn { display:table-row !important; }' +
-		'body:not(.sc-simple) #doctorn { display:none !important; }' +
+		'body:not(.sc-simple) #doctorn, body:not(.sc-simple) #doctorlogn { display:none !important; }' +
+		'body.sc-simple #modem-reboot-block table.table tr#doctorlogn:has(#doctor-log[style*="display:none"]),' +
+		'body.sc-simple #modem-reboot-block table.table tr#doctorlogn:has(#doctor-log[style*="display: none"]) { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
@@ -2386,15 +2388,20 @@ function buildSimpleUI() {
 	   Появляется под шапкой карточки, гаснет вместе с причиной. */
 	var rb = document.getElementById('rebootn');
 	if (rb && rb.parentNode && !document.getElementById('doctorn')) {
-		rb.parentNode.insertBefore(E('tr', { 'id': 'doctorn', 'class': 'tr' }, [
-			E('td', { 'class': 'td left', 'width': '33%' }, [ _('Internet not working?') ]),
-			E('td', { 'class': 'td left' }, [
+		var drow = E('tr', { 'id': 'doctorn', 'class': 'tr' }, [
+			E('td', { 'class': 'td left', 'width': '33%', 'style': 'vertical-align:middle' }, [ _('Internet not working?') ]),
+			E('td', { 'class': 'td left tginfo-modesw', 'style': 'vertical-align:middle' }, [
 				E('button', { 'class': 'btn cbi-button cbi-button-action',
-					'click': function(ev) { runDoctor(ev.target); } }, _('Check and fix')),
-				E('div', { 'id': 'doctor-log',
-					'style': 'display:none; margin-top:.5em; font-size:92%; line-height:1.75; opacity:.9' })
+					'click': function(ev) { runDoctor(ev.target); } }, _('Check and fix'))
 			])
-		]), rb.nextSibling);
+		]);
+		rb.parentNode.insertBefore(drow, rb.nextSibling);
+		rb.parentNode.insertBefore(E('tr', { 'id': 'doctorlogn', 'class': 'tr' }, [
+			E('td', { 'class': 'td left', 'colspan': '2' }, [
+				E('div', { 'id': 'doctor-log',
+					'style': 'display:none; font-size:92%; line-height:1.75; opacity:.9' })
+			])
+		]), drow.nextSibling);
 	}
 	var gen = mib.querySelector('.tginfo-general');
 	if (gen) {
