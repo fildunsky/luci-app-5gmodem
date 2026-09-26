@@ -1,0 +1,2 @@
+## Quectel EC200A-EL dump EC200AELLAR01A05M16 (same ASR AT+QCFG="band" dialect, see modemband/2c7c6005)
++QCFG: "band",0xd0,0x1a0080800d5

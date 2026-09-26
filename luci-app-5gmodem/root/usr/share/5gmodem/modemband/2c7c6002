@@ -1,0 +1,5 @@
+. "$RES/2c7c6026"
+
+getinfo() {
+	echo "Quectel EC200S-CN"
+}
