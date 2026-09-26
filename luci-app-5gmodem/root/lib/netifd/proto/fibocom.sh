@@ -84,9 +84,13 @@ _fibocom_cops_mode() {
 # Пусто - модем не ответил. Коды: 1/6/9 - зарегистрирован дома, 5/7/10 - роуминг,
 # 0/2/3/4/8 - сети нет (2 - ищет, 3 - отказано, 8 - только экстренные).
 _fibocom_reg() {
-	local p="$1" r
+	local p="$1" r r5
 	r=$(sms_tool -d "$p" at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	case "$r" in 1|5|6|7|9|10) echo "$r"; return ;; esac
+	r5=$(sms_tool -d "$p" at "AT+C5GREG?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+C5GREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+	case "$r5" in 1|5|6|7|9|10) echo "$r5"; return ;; esac
 	[ -n "$r" ] || r=$(sms_tool -d "$p" at "AT+CREG?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
 	echo "$r"
@@ -145,7 +149,7 @@ _fibocom_activate() {
 		fi
 		sleep 2
 		ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
+			| sed -n 's/.*+CGPADDR: *1,//p' | tr ',' '\n' | tr -d '" ' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
 		[ -n "$ip" ] && [ "$ip" != "0.0.0.0" ] && {
 			# XMM: привязать первый NCM-канал к контексту и стартовать данные -
 			# без этого адрес есть, а кадры в NCM не ходят (суть xmm.sh).
@@ -684,7 +688,7 @@ proto_fibocom_setup() {
 		# апгрейдит). apn пуст = роуминг: там APN не сверяем, но тип PDP - да.
 		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdptype" ]; then
 			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-				| sed -n 's/.*+CGPADDR: *1,"\([0-9.]\{7,\}\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
+				| sed -n 's/.*+CGPADDR: *1,//p' | tr ',' '\n' | tr -d '" ' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
 			[ "$ip" = "0.0.0.0" ] && ip=""
 			# СВЕРЯЕМ, ЧТО МОДЕМ ВООБЩЕ ПРИКРЕПЛЁН К ПАКЕТНОЙ СЕТИ.
 			#

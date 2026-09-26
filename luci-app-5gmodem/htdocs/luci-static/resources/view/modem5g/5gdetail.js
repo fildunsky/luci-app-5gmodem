@@ -616,6 +616,7 @@ function gl(term) {
 			'RI': _('Transmission rank: how many parallel data streams the network is really sending. 1 means SISO, 2 means MIMO 2x2.'),
 			'UE category': _('LTE speed category of the modem.'),
 			'Max speed': _('What the modem itself can do. Not the speed of the current connection.'),
+			'Operator limit': _('Speed ceiling the operator set for this connection (AMBR) and its QoS class (QCI). A low value explains a slow connection with a good signal.'),
 			'VoLTE': _('Voice calls over the LTE network, without falling back to 3G.'),
 			'Band': _('LTE frequency band.'),
 			'BW': _('Channel bandwidth: wider is faster.'),
@@ -649,6 +650,9 @@ var CELL_ROWS = [
 	{ id: 'maxrate',  text: function(j) {
 		var d = mutil.cellVal(j.maxdl), u = mutil.cellVal(j.maxul);
 		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps')) : ''; } },
+	{ id: 'ambr',     text: function(j) {
+		var d = mutil.cellVal(j.ambrdl), u = mutil.cellVal(j.ambrul), q = mutil.cellVal(j.qci);
+		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps') + (q ? ' · QCI ' + q : '')) : ''; } },
 	{ id: 'volte',    text: function(j) { return mutil.cellVal(j.volte); } },
 	/* pband всегда видим (базовая строка таблицы): только текст. */
 	{ id: 'pband', always: true, text: function(j) {
@@ -4483,6 +4487,10 @@ simDialog: baseclass.extend({
 				E('tr', { 'id': 'maxraten', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('Max speed') ]),
 					E('td', { 'class': 'td left', 'id': 'maxrate' }, [ '-' ]),
+					]),
+				E('tr', { 'id': 'ambrn', 'class': 'tr', 'style': 'display:none' }, [
+					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('Operator limit') ]),
+					E('td', { 'class': 'td left', 'id': 'ambr' }, [ '-' ]),
 					]),
 				E('tr', { 'id': 'volten', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ gl('VoLTE') ]),

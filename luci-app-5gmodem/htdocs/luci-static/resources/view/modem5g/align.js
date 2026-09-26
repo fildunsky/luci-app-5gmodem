@@ -341,7 +341,9 @@ return view.extend({
 			'.al-sli{display:flex;align-items:center;gap:10px;margin:6px 0}' +
 			'.al-sli label{min-width:180px;font-weight:600;font-size:14px}' +
 			'.al-sli input[type=range]{flex:1;max-width:240px}' +
-			'.al-sndbtn{font-size:15px;font-weight:700;padding:8px 16px}';
+			'.al-sndbtn{font-size:15px;font-weight:700;padding:8px 16px}' +
+			'.al-intro{border-left:3px solid var(--tg-accent,#0095ff);background:rgba(128,128,128,.08);border-radius:6px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.5}' +
+			'.al-intro p{margin:0 0 6px}.al-intro ol{margin:4px 0 0 20px;padding:0}.al-intro li{margin:2px 0}';
 		var style = E('style', { type: 'text/css' }, css);
 
 		var bs = E('span'), sec = E('span'), earfcn = E('span'), mode = E('span');
@@ -564,7 +566,19 @@ return view.extend({
 		};
 		document.addEventListener('visibilitychange', function() { if (document.hidden) stopAudio(); });
 
-		var root = E('div', {}, [ style, E('h2', {}, _('Antenna alignment')), topBar, metricSec, mimoSec, logSec, chartSec, soundSec ]);
+		var intro = E('div', { class: 'al-intro' }, [
+			E('p', {}, [ E('strong', {}, _('What alignment is for.')), ' ',
+				_('An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse.') ]),
+			E('p', {}, E('strong', {}, _('How to use it:'))),
+			E('ol', {}, [
+				E('li', {}, _('Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step.')),
+				E('li', {}, _('Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction.')),
+				E('li', {}, _('Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better.')),
+				E('li', {}, _('The table of best cells remembers where the signal was strongest; click a row to make that cell the target.')),
+				E('li', {}, _('When the numbers stop improving, fix the antenna in the best position.'))
+			])
+		]);
+		var root = E('div', {}, [ style, E('h2', {}, _('Antenna alignment')), intro, topBar, metricSec, mimoSec, logSec, chartSec, soundSec ]);
 
 		renderTable();
 		modemtabs.attach();

@@ -199,7 +199,7 @@ purge_path_caches() {   # $1 - usb-путь
 	      "/tmp/5gmodem_portok_$(snap_key "$1" 2>/dev/null)" 2>/dev/null
 	[ -n "$_ppc_k" ] && rm -f \
 		"/tmp/5gmodem_metrics_$_ppc_k.json" "/tmp/5gmodem_metrics_$_ppc_k.stamp" \
-		"/tmp/5gmodem_hist_$_ppc_k" \
+		"/tmp/5gmodem_hist_$_ppc_k" "/tmp/5gmodem_ambr_$_ppc_k" \
 		"/tmp/5gmodem_slot_$_ppc_k" "/tmp/5gmodem_slot_$_ppc_k.t" \
 		"/tmp/5gmodem_imei_none_$_ppc_k" \
 		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* \

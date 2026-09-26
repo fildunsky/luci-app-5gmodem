@@ -2239,8 +2239,20 @@ report() {
 		# БЕЗ ФЛАГА ПРОКСИ. Он поднимал qmi-proxy, тот оставался жить после отчёта,
 		# и следующий круг sessionwatch убивал его как сироту вместе с дозвоном.
 		# Канал выше проверен свободным - идём напрямую и демона не плодим.
-		echo "--- rf-band-info ---"; qmicli -d "$W" $MB --nas-get-rf-band-info 2>&1 | head -20
-		echo "--- signal-info ---";  qmicli -d "$W" $MB --nas-get-signal-info 2>&1 | head -20'
+		PX=""
+		case "$MB" in
+			--device-open-mbim) pidof mbim-proxy >/dev/null 2>&1 && PX="-p" ;;
+			*) pidof qmi-proxy >/dev/null 2>&1 && PX="-p" ;;
+		esac
+		_qi=$(uci -q get "5gmodem.$(secname "$(uci -q get 5gmodem.@5gmodem[0].active_modem)").network" 2>/dev/null)
+		[ -n "$_qi" ] || _qi=$(uci -q get 5gmodem.@5gmodem[0].network 2>/dev/null)
+		if [ -z "$PX" ] && command -v proto_in >/dev/null 2>&1 \
+		   && proto_in mm "$(uci -q get "network.$_qi.proto" 2>/dev/null)"; then
+			echo "the channel belongs to ModemManager and no shared proxy is running - opening it directly would drop the connection, skipped"
+			exit 0
+		fi
+		echo "--- rf-band-info ---"; qmicli -d "$W" $MB $PX --nas-get-rf-band-info 2>&1 | head -20
+		echo "--- signal-info ---";  qmicli -d "$W" $MB $PX --nas-get-signal-info 2>&1 | head -20'
 	# МОДЕМ БЕЗ AT-ПОРТОВ - ЕГО НАДО СПРАШИВАТЬ ПО HTTP, А НЕ МОЛЧАТЬ.
 	#
 	# У свистка с веб-интерфейсом (HiLink: ZTE, Huawei и родня) нет ни tty, ни

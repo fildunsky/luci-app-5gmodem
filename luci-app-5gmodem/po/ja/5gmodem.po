@@ -5533,3 +5533,33 @@ msgstr "ネットワークモードの変更"
 
 msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
 msgstr "モデムは現在 %s で動作していますが、モード「%s」にはそれが含まれていません。ここで他に使えるネットワークがなければ、接続は切れます。"
+
+msgid "Operator limit"
+msgstr "事業者の上限"
+
+msgid "Speed ceiling the operator set for this connection (AMBR) and its QoS class (QCI). A low value explains a slow connection with a good signal."
+msgstr "この接続に事業者が設定した速度の上限 (AMBR) と QoS クラス (QCI)。値が低いと、電波が良くても通信が遅い理由になります。"
+
+msgid "What alignment is for."
+msgstr "アンテナ調整の目的。"
+
+msgid "An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse."
+msgstr "屋外アンテナや指向性アンテナは、基地局を正確に向いているときに最もよく働きます。このページは数秒ごとに電波をリアルタイムで表示するので、アンテナを回すとすぐに良くなったか悪くなったかがわかります。"
+
+msgid "How to use it:"
+msgstr "使い方:"
+
+msgid "Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step."
+msgstr "アンテナは数度ずつゆっくり回し、1 ステップごとに数回の測定を待ってください。"
+
+msgid "Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction."
+msgstr "まず SINR を見てください。速度を決めるのは SINR です。RSRP と RSRQ は方向の確認に役立ちます。"
+
+msgid "Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better."
+msgstr "音をオンにすると、画面を見なくても電波を追えます。クリック音が速いほど良い状態です。"
+
+msgid "The table of best cells remembers where the signal was strongest; click a row to make that cell the target."
+msgstr "ベストセルの表は電波が最も強かった場所を記録します。行をクリックするとそのセルが目標になります。"
+
+msgid "When the numbers stop improving, fix the antenna in the best position."
+msgstr "数値が良くならなくなったら、最も良い位置でアンテナを固定してください。"

@@ -5625,3 +5625,33 @@ msgstr "變更網路模式"
 
 msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
 msgstr "數據機目前工作在 %s，而模式「%s」不包含它。如果此處沒有其他可用網路，連線將中斷。"
+
+msgid "Operator limit"
+msgstr "業者限速"
+
+msgid "Speed ceiling the operator set for this connection (AMBR) and its QoS class (QCI). A low value explains a slow connection with a good signal."
+msgstr "業者為此連線設定的速率上限 (AMBR) 及其 QoS 等級 (QCI)。數值偏低可以解釋訊號良好但網速慢的原因。"
+
+msgid "What alignment is for."
+msgstr "天線校準的用途。"
+
+msgid "An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse."
+msgstr "室外天線或定向天線精確對準基地台時效果最好。此頁面每隔幾秒即時顯示訊號，轉動天線時可以立刻看到訊號變好還是變差。"
+
+msgid "How to use it:"
+msgstr "使用方法："
+
+msgid "Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step."
+msgstr "緩慢轉動天線，每次幾度，每轉一步後等待幾次測量。"
+
+msgid "Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction."
+msgstr "首先看 SINR：它決定速率。RSRP 和 RSRQ 用於確認方向。"
+
+msgid "Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better."
+msgstr "開啟聲音即可不看螢幕追蹤訊號：喀噠聲越快，訊號越好。"
+
+msgid "The table of best cells remembers where the signal was strongest; click a row to make that cell the target."
+msgstr "最佳細胞表會記住訊號最強的位置；點擊某一列即可將該細胞設為目標。"
+
+msgid "When the numbers stop improving, fix the antenna in the best position."
+msgstr "當數值不再改善時，將天線固定在最佳位置。"

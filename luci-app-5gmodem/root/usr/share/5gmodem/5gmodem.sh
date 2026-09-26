@@ -1912,7 +1912,7 @@ _sanv S1RSSI S2RSSI S3RSSI S4RSSI RI
 _sanv PMIMO PMOD S1MIMO S1MOD S2MIMO S2MOD
 _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
-_sanv MAXDL MAXUL
+_sanv MAXDL MAXUL AMBRDL AMBRUL QCI
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
 _sanv _SN_ALIAS _SN_CPORT BS_DIST
 cat <<EOF
@@ -2028,6 +2028,9 @@ cat <<EOF
 "uecat":"${_J_UECAT}",
 "maxdl":"${_J_MAXDL}",
 "maxul":"${_J_MAXUL}",
+"ambrdl":"${_J_AMBRDL}",
+"ambrul":"${_J_AMBRUL}",
+"qci":"${_J_QCI}",
 "cqi":"${_J_CQI}",
 "ri":"${_J_RI}",
 "volte":"${_J_VOLTE}",
@@ -2148,6 +2151,11 @@ fi
 if [ -e /usr/bin/sms_tool ]; then
 	REGOK=0
 	[ "x$REG" == "x1" ] || [ "x$REG" == "x5" ] || [ "x$REG" == "x6" ] || [ "x$REG" == "x7" ] && REGOK=1
+	if [ "$REGOK" = 0 ] && [ -n "$DEVICE" ]; then
+		_r5=$(sms_tool -d "$DEVICE" at "AT+C5GREG?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+C5GREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
+		case "$_r5" in 1|5) REG="$_r5"; REGOK=1 ;; esac
+	fi
 	# VIDPID нужен ДО tty: у modemmanager-модема DEVICE пуст (порт у MM), а
 	# профиль всё равно обязан подключиться - Compal, например, читает метрики
 	# mmcli/qmicli и без AT-порта. Берём vid:pid из sysfs по USB-пути активного
@@ -3063,7 +3071,7 @@ fi
 # порт есть). Иначе в карточке светился бы 192.168.43.x, а не адрес в сети.
 if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -n "$DEVICE" ]; then
 	_wan=$(sms_tool -d "$DEVICE" at "AT+CGPADDR" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CGPADDR: *[0-9]*, *"\([0-9.]*\)".*/\1/p' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | grep -v '^0\.0\.0\.0$' | head -1)
+		| sed -n 's/^+CGPADDR: *[0-9]*, *//p' | tr ',' '\n' | tr -d '" ' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | grep -v '^0\.0\.0\.0$' | head -1)
 	[ -n "$_wan" ] && IPADDR="$_wan"
 fi
 
@@ -3655,6 +3663,36 @@ fi
 # 1 Мбит/с; по порогам своей технологии те же цифры дают 27 %. Разбор и пороги -
 # в sig_percent (lib.sh). CSQ остаётся там, где он законен: 2G и модемы, не
 # отдающие ничего кроме него.
+AMBRDL=""; AMBRUL=""; QCI=""
+if [ -n "$DEVICE" ] && [ "$REGOK" = 1 ]; then
+	_AM_F="/tmp/5gmodem_ambr_$_MKEY"
+	_AM_T=0; _AM_IP=""
+	[ -s "$_AM_F" ] && read -r _AM_T _AM_IP AMBRDL AMBRUL QCI < "$_AM_F"
+	case "$_AM_T" in ''|*[!0-9]*) _AM_T=0 ;; esac
+	if [ "$_AM_IP" != "${IPADDR:--}" ] || [ $(( $(uptime_s) - _AM_T )) -ge 300 ]; then
+		AMBRDL=""; AMBRUL=""; QCI=""
+		for _AM_C in $(sms_tool -d "$DEVICE" at "AT+CGACT?" 2>/dev/null | tr -d '\r' \
+			| sed -n 's/^+CGACT: *\([0-9]*\), *1.*/\1/p' | head -3); do
+			_AM_R=$(sms_tool -d "$DEVICE" at "AT+CGEQOSRDP=$_AM_C" 2>/dev/null | tr -d '\r' \
+				| sed -n 's/^+CGEQOSRDP: *//p' | head -1)
+			_AM_V=$(printf '%s' "$_AM_R" | awk -F, '{ gsub(/[ "]/, "")
+				if ($7 ~ /^[0-9]+$/ && $8 ~ /^[0-9]+$/ && $7 > 0 && $7 < 100000000)
+					printf "%.0f %.0f %s", $7 / 1000, $8 / 1000, $2 }')
+			[ -n "$_AM_V" ] || continue
+			read -r _AM_D _AM_U _AM_Q <<-EOF
+			$_AM_V
+			EOF
+			if [ -z "$AMBRDL" ] || [ "$_AM_D" -gt "$AMBRDL" ]; then
+				AMBRDL="$_AM_D"; AMBRUL="$_AM_U"; QCI="$_AM_Q"
+			fi
+		done
+		printf '%s %s %s %s %s\n' "$(uptime_s)" "${IPADDR:--}" "${AMBRDL:--}" "${AMBRUL:--}" "${QCI:--}" > "$_AM_F" 2>/dev/null
+	fi
+	[ "$AMBRDL" = "-" ] && AMBRDL=""
+	[ "$AMBRUL" = "-" ] && AMBRUL=""
+	[ "$QCI" = "-" ] && QCI=""
+fi
+
 _sig_pct=$(sig_percent "$MODE" "$RSRP" "$RSRQ" "$SINR" "$RSCP" "$ECIO" "$RSSI")
 [ -n "$_sig_pct" ] && CSQ_PER="$_sig_pct"
 

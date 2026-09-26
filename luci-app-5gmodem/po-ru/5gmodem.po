@@ -5724,3 +5724,33 @@ msgstr "Смена режима сети"
 
 msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
 msgstr "Модем сейчас работает в %s, а режим «%s» эту технологию не включает. Если другой сети здесь нет, связь пропадёт."
+
+msgid "Operator limit"
+msgstr "Лимит оператора"
+
+msgid "Speed ceiling the operator set for this connection (AMBR) and its QoS class (QCI). A low value explains a slow connection with a good signal."
+msgstr "Потолок скорости, который оператор задал для этого подключения (AMBR), и его класс QoS (QCI). Низкое значение объясняет медленный интернет при хорошем сигнале."
+
+msgid "What alignment is for."
+msgstr "Зачем нужна юстировка."
+
+msgid "An outdoor or directional antenna works best when it points precisely at a base station. This page shows the signal live, every few seconds, so you can turn the antenna and see at once whether it got better or worse."
+msgstr "Уличная или направленная антенна работает лучше всего, когда точно смотрит на базовую станцию. Эта страница показывает сигнал вживую, каждые несколько секунд: поворачиваете антенну и сразу видите, стало лучше или хуже."
+
+msgid "How to use it:"
+msgstr "Как пользоваться:"
+
+msgid "Turn the antenna slowly, a few degrees at a time, and wait for a couple of readings after each step."
+msgstr "Поворачивайте антенну медленно, на несколько градусов за раз, и после каждого шага дождитесь пары замеров."
+
+msgid "Watch SINR first: it decides the speed. RSRP and RSRQ help confirm the direction."
+msgstr "Смотрите прежде всего на SINR: от него зависит скорость. RSRP и RSRQ помогают убедиться в направлении."
+
+msgid "Turn on the sound to follow the signal without looking at the screen: the faster the clicks, the better."
+msgstr "Включите звук, чтобы следить за сигналом, не глядя на экран: чем чаще щелчки, тем лучше."
+
+msgid "The table of best cells remembers where the signal was strongest; click a row to make that cell the target."
+msgstr "Таблица лучших сот запоминает, где сигнал был сильнее всего; нажмите на строку, чтобы сделать эту соту целью."
+
+msgid "When the numbers stop improving, fix the antenna in the best position."
+msgstr "Когда цифры перестанут улучшаться, закрепите антенну в лучшем положении."
