@@ -1791,7 +1791,9 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   #smsList {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(max(360px, calc((100% - 1.2em) / 3)), 1fr));
-    gap: .6em;
+    grid-auto-rows: 4px;
+    column-gap: .6em;
+    row-gap: 0;
     align-items: start;
   }
   #smsList > :not(.sms-card) {

@@ -69,6 +69,40 @@ function sms_parse_status(res) {
      empty   - прочитали, сообщений нет;
      error   - прочитать не удалось. Показанное НЕ трогаем: устаревший список
                честнее пустого экрана, а следующий тик перечитает. */
+var SMS_WIDE = '(min-width: 1100px)';
+var SMS_ROW = 4;
+function smsMasonry(list) {
+	if (!list) { return; }
+	var wide = window.matchMedia && window.matchMedia(SMS_WIDE).matches;
+	var gap = wide ? (parseFloat(getComputedStyle(list).columnGap) || 0) : 0;
+	Array.prototype.forEach.call(list.children, function(el) {
+		if (!wide) { el.style.gridRowEnd = ''; return; }
+		var h = el.getBoundingClientRect().height;
+		el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((h + gap) / SMS_ROW));
+	});
+}
+function smsMasonryWatch(list) {
+	var queued = false;
+	var run = function() {
+		if (queued) { return; }
+		queued = true;
+		window.setTimeout(function() { queued = false; smsMasonry(list); }, 0);
+	};
+	var ro = window.ResizeObserver ? new ResizeObserver(run) : null;
+	if (ro) { ro.observe(list); }
+	var watchKids = function() {
+		if (!ro) { return; }
+		Array.prototype.forEach.call(list.children, function(el) { ro.observe(el); });
+	};
+	if (window.MutationObserver) {
+		new MutationObserver(function() { watchKids(); run(); }).observe(list, { childList: true });
+	}
+	window.addEventListener('resize', run);
+	watchKids();
+	run();
+	return list;
+}
+
 function smsSetState(state, opts) {
 	var list = document.getElementById('smsList');
 	if (!list) { return null; }
@@ -1664,7 +1698,7 @@ return view.extend({
 			/* Ряд действий - НАД списком, но ПОД шапкой вкладки (выбор
 			   хранилища и полоса занятости): «Обновить» под рукой без прокрутки
 			   всей переписки, а настройки хранилища остаются наверху. */
-			E('div', { 'id': 'smsList' }),
+			smsMasonryWatch(E('div', { 'id': 'smsList' })),
 		]);
 
 		/* Кнопки ЗА пределами cbi-section - как на вкладке «Исходящие»: ряд
