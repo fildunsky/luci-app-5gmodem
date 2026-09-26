@@ -106,6 +106,11 @@ T_TH0="Normal"; T_TH1="Warm"; T_TH2="Hot"; T_TH3="Critical"
 T_REGCS="CS reg.";
 T_KIB="KiB"; T_MIB="MiB"; T_GIB="GiB"; T_TIB="TiB"
 T_RXDIV_4="on, 4RX";        T_RXDIV_2="on (2RX)";   T_RXDIV_OFF="off"
+T_TAB_ENG="Engineering";    T_NEIGH="neighbours";   T_MODELOG="mode log"
+T_NOSERVICE="no service";   T_NODATA="no modem data"
+T_CC_ON="on";               T_CC_STBY="standby"
+T_K_SAVE="dump";            T_SAVED="saved to"
+T_TS_NET="Net";   T_TS_CELL="Cell";  T_TS_MODEM="Modem"; T_TS_AT="AT";  T_TS_ENG="Eng"
 
 case "$_lang" in
 	ru)
@@ -161,6 +166,11 @@ case "$_lang" in
 		T_REGCS="Рег. CS"
 		T_KIB="КиБ"; T_MIB="МиБ"; T_GIB="ГиБ"; T_TIB="ТиБ"
 		T_RXDIV_4="вкл, 4RX";       T_RXDIV_2="вкл (2RX)";  T_RXDIV_OFF="выкл"
+		T_TAB_ENG="Инженерный";     T_NEIGH="соседи";       T_MODELOG="журнал режима"
+		T_NOSERVICE="нет сети";     T_NODATA="нет данных модема"
+		T_CC_ON="вкл";              T_CC_STBY="ожидание"
+		T_K_SAVE="выгрузить";       T_SAVED="сохранено в"
+		T_TS_NET="Сеть";  T_TS_CELL="Сота";  T_TS_MODEM="Модем"; T_TS_AT="AT";  T_TS_ENG="Инж"
 		;;
 esac
 
@@ -171,9 +181,16 @@ command -v jsonfilter >/dev/null 2>&1 || { echo "$T_ERR_NOJF" >&2; exit 1; }
 ESC=$(printf '\033')
 TABCH=$(printf '\t')
 BSCH=$(printf '\010')
-C_RST="${ESC}[0m";  C_DIM="${ESC}[2m";   C_B="${ESC}[1m"
+C_RST="${ESC}[0m";  C_DIM="${ESC}[90m";  C_B="${ESC}[1m"
 C_GRN="${ESC}[32m"; C_YEL="${ESC}[33m";  C_RED="${ESC}[31m"
 C_CYA="${ESC}[36m"; C_BLU="${ESC}[34m"
+case "$TERM" in
+	*256color*|*truecolor*|*kitty*|alacritty*|foot*|wezterm*)
+		C_DIM="${ESC}[38;5;245m"
+		C_Q1="${ESC}[38;5;41m"; C_Q2="${ESC}[38;5;149m"; C_Q3="${ESC}[38;5;220m"; C_Q4="${ESC}[38;5;203m" ;;
+	*)
+		C_Q1="${ESC}[92m"; C_Q2="${ESC}[32m"; C_Q3="${ESC}[33m"; C_Q4="${ESC}[31m" ;;
+esac
 
 DATA="/tmp/5gtop.$$"
 # файл, куда пишет ход теста speedtest.sh (тот же, что читает веб-страница)
@@ -223,7 +240,7 @@ cleanup() {
 		"$SMSFILE" "$SMSFILE.tmp" "$SMSFILE.raw" "$SMSFILE.raw.fix" "$SMSBUSY" \
 		"$ESFILE" "$ESFILE.tmp" "$ESBUSY" "$DATA.wrap" "$DATA.hint" \
 		"$DATA.out" "$DATA.out.ussd" "$DATA.out.at" "$DATA.outbusy.ussd" "$DATA.outbusy.at" \
-		"$DATA.owrap" "$DLBUSY" "$DATA.dlog"
+		"$DATA.owrap" "$DLBUSY" "$DATA.dlog" "$DATA.scr" "$DATA.eng" "$DATA.engl"
 	printf '%s[%d;1H%s[?25h%s\n' "$ESC" "$ROW_END" "$ESC" "$C_RST"
 	stty "$STTY_SAVE" 2>/dev/null
 	exit 0
@@ -322,7 +339,22 @@ _bytes_l10n() {
 
 # Длина в СИМВОЛАХ: wc -m в busybox считает байты (без locale), а кириллица и
 # псевдографика в UTF-8 занимают по 2-3 байта - подписи и рамки разъезжались.
-clen() { printf '%s' "$1" | tr -d '\200-\277' | wc -c; }
+clen() {
+	_cs="$1"; _cx=0
+	while :; do
+		case "$_cs" in
+			*"$ESC["*) ;;
+			*) break ;;
+		esac
+		_cp="${_cs%%"$ESC["*}"; _cq="${_cs#*"$ESC["}"
+		_ca="${_cq%%[!0-9;]*}"; _cq="${_cq#"$_ca"}"
+		_cf="${_cq%"${_cq#?}"}"; _cq="${_cq#?}"
+		[ "$_cf" = C ] && case "$_ca" in ''|*[!0-9]*) _cx=$((_cx + 1)) ;; *) _cx=$((_cx + _ca)) ;; esac
+		_cs="$_cp$_cq"
+	done
+	[ -n "$_cs" ] || { printf '%s' "$_cx"; return; }
+	printf '%s' "$(( $(printf '%s' "$_cs" | tr -d '\200-\277' | wc -c) + _cx ))"
+}
 
 # ГЛИФЫ ШКАЛ. Блочные символы читаются с одного взгляда - видно не только
 # «сколько», но и форму. Считаются как один знак: clen отбрасывает продолжения
@@ -360,21 +392,34 @@ clr() { [ "$1" -gt 0 ] 2>/dev/null && printf '%s[%dX' "$ESC" "$1"; }
 # fit() обрезает и ставит "~" - для подписи это правильно, колонка не должна
 # разъезжаться. Но текст сообщения обрезать нельзя: на узком экране от него
 # оставался огрызок. Слово шире строки рвём принудительно, иначе разбор зациклится.
+UCUT_AWK='
+function ulen(s,   t, n) { t = s; n = gsub(/[\200-\277]/, "", t); return length(s) - n }
+function ucut(s, w,   i, c, n, o) {
+	n = 0; o = ""
+	for (i = 1; i <= length(s); i++) {
+		c = substr(s, i, 1)
+		if (c !~ /[\200-\277]/) { if (n >= w) break; n++ }
+		o = o c
+	}
+	return o
+}
+'
 wrap() {
-	printf '%s' "$1" | awk -v w="$2" '
+	printf '%s' "$1" | awk -v w="$2" "$UCUT_AWK"'
 	{
 		line = ""
 		n = split($0, word, " ")
 		for (i = 1; i <= n; i++) {
 			t = word[i]
 			if (t == "") continue
-			while (length(t) > w) {
+			while (ulen(t) > w) {
 				if (line != "") { print line; line = "" }
-				print substr(t, 1, w)
-				t = substr(t, w + 1)
+				h = ucut(t, w)
+				print h
+				t = substr(t, length(h) + 1)
 			}
 			if (line == "") { line = t }
-			else if (length(line) + 1 + length(t) <= w) { line = line " " t }
+			else if (ulen(line) + 1 + ulen(t) <= w) { line = line " " t }
 			else { print line; line = t }
 		}
 		if (line != "") print line
@@ -391,7 +436,7 @@ wrap() {
 fit() {
 	_s="$1"; _w="$2"; _l=$(clen "$_s")
 	if [ "$_l" -gt "$_w" ]; then
-		_s=$(printf '%s' "$_s" | cut -c1-$((_w - 1)))
+		_s=$(printf '%s' "$_s" | awk -v w=$((_w - 1)) "$UCUT_AWK"'{ print ucut($0, w) }')
 		printf '%s~' "$_s"; _l=$(clen "$_s~")
 	else
 		printf '%s' "$_s"
@@ -400,6 +445,12 @@ fit() {
 	_n=$(( _w - _l ))
 	[ "$_n" -gt 0 ] && printf '%s[%dX%s[%dC' "$ESC" "$_n" "$ESC" "$_n"
 	return 0
+}
+
+band_fit() {
+	_bf="$1"
+	[ "$(clen "$_bf")" -gt "$2" ] && _bf=$(printf '%s' "$_bf" | sed 's/ *([^)]*)//g')
+	fit "$_bf" "$2"
 }
 
 qcolor() {
@@ -523,7 +574,7 @@ box_top() {
 	_bn=$(( ${W:-78} - 5 - $(clen "$_bt") ))
 	[ "$_bn" -lt 0 ] && _bn=0
 	printf '%s%s%s %s %s%s\n' "$C_B$C_YEL" "$GL_LINE$GL_LINE" "$C_RST$C_B$C_YEL" "$_bt" \
-		"$(printf '%s' "$C_DIM"; rep "$GL_LINE" "$_bn")" "$C_RST"
+		"$(printf '%s' "$C_RST$C_DIM"; rep "$GL_LINE" "$_bn")" "$C_RST"
 }
 box_mid()  { printf '\n'; }
 box_end()  { printf '\n'; }
@@ -588,7 +639,7 @@ frame() {
 	_ent=""
 	[ "$HAS_STTY" = 1 ] || _ent=" ${C_DIM}(+Enter)${C_RST}"
 	_kslot=""
-	[ "$SLOT_CNT" -gt 1 ] && _kslot="\nk	$T_K_SLOT"
+	[ "$SLOT_CNT" -gt 1 ] && _kslot=$(printf '\nk\t%s' "$T_K_SLOT")
 	keyhint "t	$T_K_TEST
 1-3	$T_K_PRI$_kslot
 +/-	$T_K_WIDTH"
@@ -611,7 +662,7 @@ frame() {
 # действительно есть: на модеме без неё вкладка вела бы на пустой экран и
 # только путала. Проверяем ОДИН раз при запуске - esim.sh status кэширует
 # ответ, но сам вызов может уйти в порт, а делать это на каждом кадре нельзя.
-TAB_IDS="net cell modem sms ussd at"
+TAB_IDS="net cell modem sms ussd at eng"
 if [ -x /usr/share/5gmodem/esim.sh ]; then
 	# СНАЧАЛА ГОТОВЫЙ ОТВЕТ. esim.sh сам кэширует состояние по USB-пути модема;
 	# если файл есть, читаем его мгновенно. Опрос лезет в порт и занимает
@@ -619,7 +670,7 @@ if [ -x /usr/share/5gmodem/esim.sh ]; then
 	# вкладок неправильно, это было заметно на глаз.
 	_esc="/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)"
 	if [ -s "$_esc" ]; then
-		grep -q '"available":1' "$_esc" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at"
+		grep -q '"available":1' "$_esc" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at eng"
 	else
 		( /usr/share/5gmodem/esim.sh status > /tmp/5gtop.es.$$ 2>/dev/null ) &
 		_esp=$!; _esn=0
@@ -628,7 +679,7 @@ if [ -x /usr/share/5gmodem/esim.sh ]; then
 			[ "$_esn" -ge 3 ] && { kill "$_esp" 2>/dev/null; break; }
 			sleep 1
 		done
-		grep -q '"available":1' "/tmp/5gtop.es.$$" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at"
+		grep -q '"available":1' "/tmp/5gtop.es.$$" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at eng"
 		rm -f "/tmp/5gtop.es.$$"
 	fi
 fi
@@ -655,6 +706,7 @@ tab_name() {
 		esim)  printf '%s' "$T_TAB_ESIM" ;;
 		ussd)  printf '%s' "$T_TAB_USSD" ;;
 		at)    printf '%s' "$T_TAB_AT" ;;
+		eng)   printf '%s' "$T_TAB_ENG" ;;
 		*)    printf '%s' "$1" ;;
 	esac
 }
@@ -672,6 +724,7 @@ tab_key() {
 		esim)  printf 'e' ;;
 		ussd)  printf 'u' ;;
 		at)    printf 'a' ;;
+		eng)   printf 'g' ;;
 	esac
 }
 
@@ -706,26 +759,43 @@ hl_name() {   # $1 название, $2 клавиша, $3 цвет назван
 	}'
 }
 
+tab_short() {
+	case "$1" in
+		net)   printf '%s' "$T_TS_NET" ;;
+		cell)  printf '%s' "$T_TS_CELL" ;;
+		modem) printf '%s' "$T_TS_MODEM" ;;
+		at)    printf '%s' "$T_TS_AT" ;;
+		eng)   printf '%s' "$T_TS_ENG" ;;
+		*)     tab_name "$1" ;;
+	esac
+}
+
 # Полоса разделов: активный - ярко, остальные приглушены.
-bar_tabs() {
+bar_tabs_line() {
 	printf ' '
 	_i=0
 	for _t in $TAB_IDS; do
 		_i=$((_i + 1))
 		if [ "$_i" = "$TAB" ]; then
-			printf '%s  ' "$(hl_name "$(tab_name "$_t")" "$(tab_key "$_t")" "$C_CYA$C_B")"
+			printf '%s  ' "$(hl_name "$($1 "$_t")" "$(tab_key "$_t")" "$C_CYA$C_B")"
 		else
-			printf '%s  ' "$(hl_name "$(tab_name "$_t")" "$(tab_key "$_t")" "$C_DIM")"
+			printf '%s  ' "$(hl_name "$($1 "$_t")" "$(tab_key "$_t")" "$C_DIM")"
 		fi
 	done
-	printf '\n'
+}
+bar_tabs() {
+	_btl=$(bar_tabs_line tab_name); _btl="${_btl%  }"
+	if [ "$(clen "$_btl")" -gt "$TW" ]; then
+		_btl=$(bar_tabs_line tab_short); _btl="${_btl%  }"
+	fi
+	printf '%s\n' "$_btl"
 	[ "${_tight:-0}" = 1 ] || printf '\n'   # воздух между полосой вкладок и первым блоком
 }
 
 # Полоса модемов: активный отмечен маркером. Список берём из конфига (он же
 # источник для веб-вкладок), поэтому порядок и имена совпадают с браузером.
 bar_modems() {
-	[ "$MCOUNT" -gt 0 ] || { printf '\n'; return; }
+	[ "$MCOUNT" -gt 0 ] || { printf '\n'; [ "${_tight:-0}" = 1 ] || printf '\n'; return; }
 	_cur=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	printf ' '
 	# Два ОДИНАКОВЫХ модема дают одинаковое имя модели, и в полосе получались
@@ -884,12 +954,12 @@ draw_cell() {
 	# --- агрегация: PCC + до четырёх SCC, столбцами как в таблице веба ---
 	_row=$((_row + 7))
 	lab $((_row)) 2 '' 0 "${C_DIM}$(pad 'CC' 6)$(pad "$T_BAND" 20)$(pad 'PCI' 8)$(pad 'EARFCN' 10)$(pad 'RSRP' 8)$(pad 'MIMO' 6)$(pad 'MOD' 8)${C_RST}" 68
-	at $((_row+1)) 2 "$(pad 'PCC' 6)$(pad "$(v pband)" 20)$(pad "$(v pci)" 8)$(pad "$(v earfcn)" 10)$(pad "$(v rsrp)" 8)$(pad "$(v pmimo)" 6)$(pad "$(v pmod)" 8)"
+	at $((_row+1)) 2 "$(pad 'PCC' 6)$(band_fit "$(v pband)" 19) $(fit "$(v pci)" 7) $(fit "$(v earfcn)" 9) $(fit "$(v rsrp)" 7) $(fit "$(v pmimo)" 5) $(fit "$(v pmod)" 8)"
 	_i=1
 	while [ "$_i" -le 3 ]; do
 		_b=$(v "s${_i}band")
 		if [ -n "$_b" ] && [ "$_b" != "-" ]; then
-			at $((_row+1+_i)) 2 "$(pad "SCC$_i" 6)$(pad "$_b" 20)$(pad "$(v "s${_i}pci")" 8)$(pad "$(v "s${_i}earfcn")" 10)$(pad "$(v "s${_i}rsrp")" 8)$(pad "$(v "s${_i}mimo")" 6)$(pad "$(v "s${_i}mod")" 8)"
+			at $((_row+1+_i)) 2 "$(pad "SCC$_i" 6)$(band_fit "$_b" 19) $(fit "$(v "s${_i}pci")" 7) $(fit "$(v "s${_i}earfcn")" 9) $(fit "$(v "s${_i}rsrp")" 7) $(fit "$(v "s${_i}mimo")" 5) $(fit "$(v "s${_i}mod")" 8)"
 		else
 			at $((_row+1+_i)) 2 "$(pad '' 68)"
 		fi
@@ -902,6 +972,7 @@ draw_cell() {
 	_i=0
 	for _ap in $(v antports); do
 		[ "$_i" -ge 3 ] && break
+		[ "$_ap" = "-" ] && continue
 		_pn=$(printf '%s' "$_ap" | cut -d: -f1)
 		_pr=$(printf '%s' "$_ap" | cut -d: -f2)
 		_pq=$(printf '%s' "$_ap" | cut -d: -f3)
@@ -960,15 +1031,15 @@ draw_cell_narrow() {
 	_w=$((W - 14))
 	# Сдвиги строк для крошечного экрана: без пустых строк между блоками
 	# сигнал поднимается на одну, агрегация - на две и теряет третью строку.
-	_o1=0; _o2=0; _rmax=24
-	[ "$TINY" = 1 ] && { _o1=1; _o2=2; _rmax=21; }
-	_n() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$1" "$C_DIM" "$(pad "$2" 11)" "$C_RST" "$3"; }
+	_o1=0; _o2=0; _rmax=24; _o0=2
+	[ "$TINY" = 1 ] && { _o1=1; _o2=2; _rmax=21; _o0=0; }
+	_n() { printf '%s[%d;2H%s%s%s%s' "$ESC" "$(($1 + _o0))" "$C_DIM" "$(pad "$2" 11)" "$C_RST" "$3"; }
 	_n 5  "$T_LAC"      "$(fit "$(v lac_hex) / $(v lac_dec)" $_w)"
 	_n 6  "$T_CID"      "$(fit "$(v cid_hex) / $(v cid_dec)" $_w)"
 	_n 7  "$T_TAC"      "$(fit "$(v tac_hex) / $(v tac_dec)" $_w)"
 	_n 8  "$T_ENB"      "$(fit "$(v enbid)" $_w)"
 	_n 9  'PCI/EARFCN'  "$(fit "$(v pci) / $(v earfcn)" $_w)"
-	_n 10 "$T_BAND"     "$(fit "$(v pband)" $_w)"
+	_n 10 "$T_BAND"     "$(band_fit "$(v pband)" $_w)"
 	_n 11 "$T_BW"       "$(fit "$(v bandwidth)" $_w)"
 	_n 12 "$T_CQI"      "$(fit "$(v cqi)  $T_UECAT $(v uecat)" $_w)"
 
@@ -1084,20 +1155,20 @@ draw_sms() {
 			# оставался огрызок с "~". Строк на сообщение не больше трёх, иначе
 			# одна длинная SMS вытеснила бы все остальные.
 			_ln=0
-			wrap "$_tx" $((W - 6)) | while read -r _wl; do
-				[ "$_ln" -ge "$SMS_TEXT_LINES" ] && break
-				printf '%s\n' "$_wl"
-				_ln=$((_ln + 1))
-			done > "$DATA.wrap"
+			wrap "$_tx" $((W - 6)) > "$DATA.wrap"
+			_wn=$(grep -c '' "$DATA.wrap")
 			while read -r _wl; do
+				[ "$_ln" -ge "$SMS_TEXT_LINES" ] && break
 				[ "$_r" -gt $((6 + SMS_ROWS)) ] && break
+				_ln=$((_ln + 1))
+				[ "$_ln" = "$SMS_TEXT_LINES" ] && [ "$_wn" -gt "$_ln" ] && _wl="$_wl ~"
 				at $_r 4 "$(fit "$_wl" $((W - 6)))"
 				_r=$((_r + 1))
 			done < "$DATA.wrap"
 			_r=$((_r + 1))
 			_n=$((_n + 1))
 		done < "$SMSFILE"
-		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=6; }
+		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_NOSMS" $((W - 6)))${C_RST}"; _r=8; }
 	fi
 	# гасим остаток блока, иначе от прошлого кадра останутся хвосты
 	while [ "$_r" -le $((6 + SMS_ROWS)) ]; do
@@ -1129,7 +1200,7 @@ Enter	$T_ESIM_ADD
 }
 
 draw_esim() {
-	_r=5
+	_r=7
 	# Идёт загрузка - показываем ход вместо списка: список сейчас всё равно
 	# неактуален, а человеку важно видеть, что процесс не завис.
 	if [ -f "$DLBUSY" ]; then
@@ -1140,11 +1211,11 @@ draw_esim() {
 			| sed -n 's/.*"message"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
 			| tail -6 > "$DATA.dlog" 2>/dev/null
 		while read -r _dl; do
-			[ "$_r" -gt $((4 + ESIM_ROWS)) ] && break
+			[ "$_r" -gt $((6 + ESIM_ROWS)) ] && break
 			at $_r 4 "${C_DIM}$(fit "$_dl" $((W - 6)))${C_RST}"
 			_r=$((_r + 1))
 		done < "$DATA.dlog"
-		while [ "$_r" -le $((4 + ESIM_ROWS)) ]; do
+		while [ "$_r" -le $((6 + ESIM_ROWS)) ]; do
 			at $_r 4 "$(fit '' $((W - 6)))"
 			_r=$((_r + 1))
 		done
@@ -1166,7 +1237,7 @@ draw_esim() {
 			[ -n "$_nk" ] && [ "$_nk" != "null" ] || \
 				_nk=$(jsonfilter -i "$ESFILE" -e "@.profiles.payload.data[$_n].serviceProviderName" 2>/dev/null)
 			[ -n "$_nk" ] && [ "$_nk" != "null" ] || _nk="$_ic"
-			[ "$_r" -gt $((4 + ESIM_ROWS)) ] && break
+			[ "$_r" -gt $((6 + ESIM_ROWS)) ] && break
 			if [ "$_st" = "enabled" ]; then
 				_mk="${C_GRN}*${C_RST}"; _nm="${C_B}${_nk}${C_RST}"; _sf="${C_GRN}${T_ESIM_ON}${C_RST}"
 			else
@@ -1175,9 +1246,9 @@ draw_esim() {
 			at $_r 4 "$_mk ${C_YEL}$((_n + 1))${C_RST} $(pad "$_nm" 28)${C_DIM}$(pad "$_ic" $((W - 46)))${C_RST}$_sf"
 			_r=$((_r + 1)); _n=$((_n + 1))
 		done
-		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"; _r=6; }
+		[ "$_n" = 0 ] && { at 7 4 "${C_DIM}$(fit "$T_ESIM_NA" $((W - 6)))${C_RST}"; _r=8; }
 	fi
-	while [ "$_r" -le $((4 + ESIM_ROWS)) ]; do
+	while [ "$_r" -le $((6 + ESIM_ROWS)) ]; do
 		at $_r 4 "$(fit '' $((W - 6)))"
 		_r=$((_r + 1))
 	done
@@ -1236,7 +1307,7 @@ frame_at()   { frame_console "$T_TAB_AT"   "$T_ENTER_AT"; }
 
 # Показать ответ модема из OUTFILE, перенося длинные строки.
 draw_console() {
-	_r=5
+	_r=7
 	if [ -f "$OUTBUSY" ]; then
 		at $_r 4 "${C_YEL}$(fit "$T_SENDING" $((W - 6)))${C_RST}"
 		_r=$((_r + 1))
@@ -1248,12 +1319,12 @@ draw_console() {
 			wrap "$_ol" $((W - 6))
 		done > "$DATA.owrap"
 		while read -r _ol; do
-			[ "$_r" -gt $((4 + CON_ROWS)) ] && break
+			[ "$_r" -gt $((6 + CON_ROWS)) ] && break
 			at $_r 4 "$(fit "$_ol" $((W - 6)))"
 			_r=$((_r + 1))
 		done < "$DATA.owrap"
 	fi
-	while [ "$_r" -le $((4 + CON_ROWS)) ]; do
+	while [ "$_r" -le $((6 + CON_ROWS)) ]; do
 		at $_r 4 "$(fit '' $((W - 6)))"
 		_r=$((_r + 1))
 	done
@@ -1261,6 +1332,323 @@ draw_console() {
 
 draw_ussd() { OUTFILE="$DATA.out.ussd"; OUTBUSY="$DATA.outbusy.ussd"; draw_console; }
 draw_at()   { OUTFILE="$DATA.out.at";   OUTBUSY="$DATA.outbusy.at";   draw_console; }
+
+ENG_KEYS="error modem operator_name operator_mcc operator_mnc tac_dec enbid bs_distance registration pband bandwidth pci earfcn rsrp rsrq sinr rssi pmimo pmod"
+for _i in 1 2 3 4; do
+	for _f in band pci earfcn rsrp rsrq sinr rssi mimo mod state; do ENG_KEYS="$ENG_KEYS s$_i$_f"; done
+done
+ENG_ROWS=16
+ENG_MSG=""; ENG_MSGN=0
+ENG_ARROW="→"
+[ "${TOP_ASCII:-0}" = 1 ] && ENG_ARROW="->"
+ENG_FILE="/tmp/5gtop-console.txt"
+
+mlog_path() {
+	MLOG="/tmp/5gtop_modelog_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9\n' '_')"
+}
+mlog_path
+
+modelog_update() {
+	[ -s "$DATA" ] || return 0
+	M_error=""; M_mode=""; M_registration=""; M_pband=""
+	M_s1band=""; M_s1state=""; M_s2band=""; M_s2state=""
+	M_s3band=""; M_s3state=""; M_s4band=""; M_s4state=""
+	eval "$(jsonfilter -i "$DATA" -e 'M_error=@.error' -e 'M_mode=@.mode' \
+		-e 'M_registration=@.registration' -e 'M_pband=@.pband' \
+		-e 'M_s1band=@.s1band' -e 'M_s1state=@.s1state' -e 'M_s2band=@.s2band' -e 'M_s2state=@.s2state' \
+		-e 'M_s3band=@.s3band' -e 'M_s3state=@.s3state' -e 'M_s4band=@.s4band' -e 'M_s4state=@.s4state' 2>/dev/null)"
+	[ -z "$M_error" ] || return 0
+	_ml=$(printf '%s\n' "$M_mode" "$M_registration" "$M_pband" \
+		"$M_s1band" "$M_s1state" "$M_s2band" "$M_s2state" \
+		"$M_s3band" "$M_s3state" "$M_s4band" "$M_s4state" | awk \
+		-v last="$(tail -n 1 "$MLOG" 2>/dev/null)" -v now="$(date '+%Y-%m-%d %H:%M:%S')" '
+		function bn(b,   a) { split(b, a, " "); return a[1] }
+		NR == 1 { mode = $0 }
+		NR == 2 { reg = $0 }
+		NR == 3 { pb = $0 }
+		NR >= 4 && NR % 2 == 0 { sb[NR] = $0 }
+		NR >= 5 && NR % 2 == 1 { ss[NR - 1] = $0 }
+		END {
+			tech = mode; sub(/[|].*$/, "", tech); gsub(/^ +| +$/, "", tech)
+			if (tech == "-") tech = ""
+			if (pb == "" || pb == "-") {
+				if (reg !~ /^[0234]$/) exit
+				sig = "-"
+			} else {
+				n = 1; bl = bn(pb)
+				for (i = 4; i <= 10; i += 2)
+					if (sb[i] != "" && sb[i] != "-" && ss[i] != "deactivated") { bl = bl "+" bn(sb[i]); n++ }
+				sig = (n > 1) ? (tech " " n "CA (" bl ")") : (tech " " bl)
+				gsub(/^ +/, "", sig)
+			}
+			split(last, a, "|")
+			if (last != "" && sig == a[3]) exit
+			print now "|" a[3] "|" sig
+		}')
+	[ -n "$_ml" ] || return 0
+	printf '%s\n' "$_ml" >> "$MLOG"
+	[ "$(wc -l < "$MLOG")" -gt 60 ] && tail -n 40 "$MLOG" > "$MLOG.$$" && mv "$MLOG.$$" "$MLOG"
+	return 0
+}
+
+ENG_AWK='
+function sp(n,   o) { o = ""; while (n-- > 0) o = o " "; return o }
+function val(k,   v) { v = (k in D) ? D[k] : ""; if (v == "-" || v == "null") v = ""; return v }
+function num(s) {
+	sub(/^[ \t]+/, "", s); sub(/[^0-9.+-].*$/, "", s)
+	return (s ~ /^[+-]?[0-9]+([.][0-9]+)?$/) ? s : ""
+}
+function lv(k, v, nr) {
+	v += 0
+	if (k == "rsrp") { if (v >= -80) return 1; if (v >= -90) return 2; if (v >= -100) return 3; return 4 }
+	if (k == "rsrq" && nr) { if (v >= -10) return 1; if (v >= -13) return 2; if (v >= -15) return 3; return 4 }
+	if (k == "rsrq") { if (v >= -10) return 1; if (v >= -15) return 2; if (v >= -20) return 3; return 4 }
+	if (k == "sinr") { if (v >= 20) return 1; if (v >= 13) return 2; if (v >= 0) return 3; return 4 }
+	if (k == "rssi") { if (v > -65) return 1; if (v > -75) return 2; if (v > -85) return 3; return 4 }
+	return 0
+}
+function qc(k, v, nr,   l) {
+	l = lv(k, v, nr)
+	if (l == 1) return q1 v cr
+	if (l == 2) return q2 v cr
+	if (l == 3) return q3 v cr
+	return q4 v cr
+}
+function bname(b,   a, n, d) {
+	split(b, a, " "); n = a[1]
+	if (n ~ /^[Bn][0-9]+$/) return n
+	if (match(b, /[Bb][Aa][Nn][Dd] *[0-9]+/)) {
+		d = substr(b, RSTART, RLENGTH); gsub(/[^0-9]/, "", d)
+		return ((b ~ /NR|5G/) ? "n" : "B") d
+	}
+	return n
+}
+function blab(b, fb,   n, bw) {
+	n = bname(b); bw = ""
+	if (index(b, " @")) bw = substr(b, index(b, " @") + 2)
+	else if (fb != "") bw = fb
+	sub(/ .*$/, "", bw); sub(/MHz$/, "", bw)
+	if (bw !~ /^[0-9]+([.][0-9]+)?$/) return n
+	return (length(n) < 3 ? n sp(3 - length(n)) : n) "@" bw
+}
+function trip(a, b, c, nr,   last) {
+	MP = ""; MC = ""
+	last = (c != "") ? 3 : (b != "") ? 2 : (a != "") ? 1 : 0
+	if (last >= 1) { if (a != "") { MP = a; MC = qc("rsrp", a, nr) } else { MP = "?"; MC = cd "?" cr } }
+	if (last >= 2) {
+		MP = MP "/"; MC = MC cd "/" cr
+		if (b != "") { MP = MP b; MC = MC qc("rsrq", b, nr) } else { MP = MP "?"; MC = MC cd "?" cr }
+	}
+	if (last >= 3) { MP = MP "/" c; MC = MC cd "/" cr qc("sinr", c, nr) }
+}
+function cc(lab, b, fb, e, p, rp, rq, sn, rs, mi, mo, st,   bl, nr, ep) {
+	NC++
+	bl = blab(b, fb); nr = (bl ~ /^n[0-9]/)
+	FP[NC, 1] = lab; FC[NC, 1] = ca lab cr
+	FP[NC, 2] = bl; FC[NC, 2] = bl
+	ep = (e != "" && p != "") ? e "/" p : (e != "") ? e : (p != "") ? "/" p : ""
+	FP[NC, 3] = ep; FC[NC, 3] = ep
+	trip(num(rp), num(rq), num(sn), nr); FP[NC, 4] = MP; FC[NC, 4] = MC
+	if (mi ~ /^[0-9]+$/) mi = mi "L"
+	FP[NC, 5] = mi; FC[NC, 5] = mi
+	FP[NC, 6] = mo; FC[NC, 6] = mo
+	if (st == "activated" || st == "on") { FP[NC, 7] = ton; FC[NC, 7] = ton }
+	else if (st == "deactivated") { FP[NC, 7] = tsb; FC[NC, 7] = cd tsb cr }
+	else { FP[NC, 7] = st; FC[NC, 7] = st }
+	rs = num(rs)
+	if (rs != "") { FP[NC, 8] = "RSSI " rs; FC[NC, 8] = cd "RSSI " cr qc("rssi", rs, nr) }
+	else { FP[NC, 8] = ""; FC[NC, 8] = "" }
+}
+function out(p, c) { if (NO >= R) return; NO++; sub(/ +$/, "", p); print p "\t" c cr }
+function sep(t,   s) { s = ln ln ln ln " " t " " ln ln ln ln; out(s, cd s) }
+BEGIN { split("6 8 12 18 6 8 10 0", MINW, " ") }
+/^K / { k = substr($0, 3); i = index(k, "="); D[substr(k, 1, i - 1)] = substr(k, i + 1); next }
+/^[{]/ { NBL[++NN] = $0; next }
+/^[0-9]/ { LOG[++NL] = $0; next }
+function jget(s, k,   r) {
+	if (!match(s, "\"" k "\": *\"?[^\",}]*")) return ""
+	r = substr(s, RSTART, RLENGTH); sub(/^[^:]*: */, "", r); gsub(/"/, "", r); sub(/ +$/, "", r)
+	return r
+}
+END {
+	split(now, NW, " ")
+	HN = 0; HP[++HN] = NW[2]
+	if (val("modem") != "") HP[++HN] = val("modem")
+	op = val("operator_name"); gsub(/&amp;/, "\\&", op)
+	pl = (val("operator_mcc") != "" && val("operator_mnc") != "") ? val("operator_mcc") "-" val("operator_mnc") : ""
+	if (pl != "" && op != "") HP[++HN] = pl " " op
+	else if (pl op != "") HP[++HN] = pl op
+	if (val("tac_dec") != "") HP[++HN] = "TAC " val("tac_dec")
+	if (val("enbid") != "") HP[++HN] = "eNB " val("enbid")
+	d = num(val("bs_distance")) + 0
+	if (d > 0) HP[++HN] = "TA ~" ((d < 100) ? int(d) " m" : sprintf("%.1f km", d / 1000))
+	h = ""; hl = 0
+	for (i = 1; i <= HN; i++) {
+		if (h != "" && ulen(h) + 2 + ulen(HP[i]) > W && hl == 0) { out(h, cd h); h = ""; hl = 1 }
+		h = (h == "") ? HP[i] : h "  " HP[i]
+	}
+	if (ulen(h) > W) h = ucut(h, W)
+	out(h, cd h)
+
+	NC = 0
+	if (val("error") == "" && val("pband") != "")
+		cc("PCC", val("pband"), val("bandwidth"), val("earfcn"), val("pci"), val("rsrp"), val("rsrq"), val("sinr"), val("rssi"), val("pmimo"), val("pmod"), "on")
+	for (i = 1; i <= 4 && val("error") == ""; i++) {
+		s = "s" i
+		if (val(s "band") == "") continue
+		cc("SCC" i, val(s "band"), "", val(s "earfcn"), val(s "pci"), val(s "rsrp"), val(s "rsrq"), val(s "sinr"), val(s "rssi"), val(s "mimo"), val(s "mod"), val(s "state"))
+	}
+	if (NC == 0) {
+		if (wt) m = tcol
+		else if (val("error") != "") m = tnd " (" val("error") ")"
+		else if (val("registration") ~ /^[0234]$/) m = tns
+		else m = tnd
+		out(ucut(m, W), cd ucut(m, W))
+	}
+	for (c = 1; c <= 8; c++) {
+		CW[c] = 0
+		for (r = 1; r <= NC; r++) if (ulen(FP[r, c]) + 2 > CW[c]) CW[c] = ulen(FP[r, c]) + 2
+		if (CW[c] > 0 && CW[c] < MINW[c]) CW[c] = MINW[c]
+	}
+	split("1 2 3 4 7 5 6 8", PRI, " ")
+	x = 0
+	for (i = 1; i <= 8; i++) {
+		c = PRI[i]; USE[c] = 0
+		if (CW[c] == 0) continue
+		if (x + CW[c] - 2 > W) continue
+		USE[c] = 1; x += CW[c]
+	}
+	for (r = 1; r <= NC; r++) {
+		p = ""; q = ""
+		for (c = 1; c <= 8; c++) {
+			if (!USE[c]) continue
+			l = ulen(FP[r, c])
+			p = p FP[r, c] sp(CW[c] - l); q = q FC[r, c] sp(CW[c] - l)
+		}
+		out(p, q)
+	}
+
+	nn = 0
+	for (i = 1; i <= NN; i++) {
+		s = NBL[i]
+		if (jget(s, "serving") ~ /^(1|true)$/) continue
+		b = jget(s, "band"); if (b ~ /^[0-9]+$/) b = "B" b
+		e = jget(s, "earfcn"); p = jget(s, "pci")
+		ep = (e != "" && p != "") ? e "/" p : e p
+		nr = (b ~ /^n[0-9]/)
+		trip(num(jget(s, "rsrp")), num(jget(s, "rsrq")), "", nr)
+		nn++
+		np = sprintf("%-5s", b) sprintf("%-12s", ep) MP
+		nc = sprintf("%-5s", b) sprintf("%-12s", ep) MC
+		NP[nn] = np; NQ[nn] = nc
+	}
+	per = int((W + 3) / 31); if (per < 1) per = 1
+	nbl = int((nn + per - 1) / per); if (nbl > 2) nbl = 2
+	rem = R - NO
+	if (nn > 0 && rem >= 2) {
+		k = nbl
+		if (NL > 0 && rem - 1 - k < 2) k = rem - 3
+		if (k < 1) k = 1
+		if (k > rem - 1) k = rem - 1
+		sep(tn)
+		j = 1
+		for (r = 1; r <= k; r++) {
+			p = ""; q = ""
+			for (c = 1; c <= per && j <= nn; c++) {
+				pd = (c < per && j < nn) ? sp(31 - ulen(NP[j])) : ""
+				p = p NP[j] pd; q = q NQ[j] pd; j++
+			}
+			if (ulen(p) > W) { p = ucut(p, W); q = p }
+			out(p, q)
+		}
+	}
+	rem = R - NO
+	if (NL > 0 && rem >= 2) {
+		sep(tl)
+		for (i = NL; i >= 1 && NO < R; i--) {
+			split(LOG[i], a, "|"); split(a[1], t, " ")
+			ts = (t[1] == NW[1]) ? t[2] : substr(t[1], 6) " " substr(t[2], 1, 5)
+			o = (a[2] == "-") ? tns : a[2]; n = (a[3] == "-") ? tns : a[3]
+			p = ts "  " ((o != "") ? o " " ar " " : "") n
+			q = cd ts cr "  " ((o != "") ? o " " cd ar cr " " : "") n
+			if (ulen(p) > W) { p = ucut(p, W); q = p }
+			out(p, q)
+		}
+	}
+}'
+
+eng_lines() {
+	_ew="$1"; _eh="$2"; _ewt=0
+	[ -n "$J" ] || _ewt=1
+	set --
+	for _ek in $ENG_KEYS; do
+		eval "E_$_ek=''"
+		set -- "$@" -e "E_$_ek=@.$_ek"
+	done
+	[ -n "$J" ] && eval "$(printf '%s' "$J" | jsonfilter "$@" 2>/dev/null)"
+	{
+		for _ek in $ENG_KEYS; do
+			eval "_ev=\$E_$_ek"
+			printf 'K %s=%s\n' "$_ek" "$_ev"
+		done
+		[ -n "$J" ] && printf '%s' "$J" | jsonfilter -e '@.neighbors[*]' 2>/dev/null
+		[ -s "$MLOG" ] && tail -n 40 "$MLOG"
+	} | tr '\r\t' '  ' | awk -v W="$_ew" -v R="$_eh" -v now="$(date '+%Y-%m-%d %H:%M:%S')" \
+		-v q1="$C_Q1" -v q2="$C_Q2" -v q3="$C_Q3" -v q4="$C_Q4" \
+		-v cd="$C_DIM" -v ca="$C_CYA" -v cr="$C_RST" -v ln="$GL_LINE" -v ar="$ENG_ARROW" \
+		-v tn="$T_NEIGH" -v tl="$T_MODELOG" -v tns="$T_NOSERVICE" -v tnd="$T_NODATA" \
+		-v ton="$T_CC_ON" -v tsb="$T_CC_STBY" -v tcol="$T_COLLECTING" -v wt="$_ewt" "$UCUT_AWK$ENG_AWK"
+}
+
+frame_eng() {
+	printf '%s[2J%s[H' "$ESC" "$ESC"
+	printf ' %s%s5gtop%s\n' "$C_B" "$C_CYA" "$C_RST"
+	_tight="$TINY"; bar_modems; bar_tabs; _tight=0
+	box_top "$T_TAB_ENG"
+	_i=0
+	while [ "$_i" -lt "$ENG_ROWS" ]; do box_mid; _i=$((_i + 1)); done
+	[ "$TINY" = 1 ] || box_end
+	if [ "$TINY" = 1 ]; then
+		keyhint "d	$T_K_SAVE"
+	else
+		keyhint "d	$T_K_SAVE
++/-	$T_K_WIDTH"
+	fi
+	ROW_END=$((ENG_ROWS + 8))
+	[ "$TINY" = 1 ] && ROW_END=22
+}
+
+draw_eng() {
+	_et=7; [ "$TINY" = 1 ] && _et=5
+	_er=$ENG_ROWS; _em=""
+	if [ "$ENG_MSGN" -gt 0 ]; then
+		_em="$ENG_MSG"; ENG_MSGN=$((ENG_MSGN - 1)); _er=$((_er - 1))
+	fi
+	eng_lines $((W - 1)) "$_er" > "$DATA.engl" 2>/dev/null
+	: > "$DATA.eng"
+	_r=$_et
+	while IFS="$TABCH" read -r _ep _ec; do
+		[ "$_r" -ge $((_et + _er)) ] && break
+		at "$_r" 2 "$_ec$C_RST$ESC[K"
+		printf '%s\n' "$_ep" >> "$DATA.eng"
+		_r=$((_r + 1))
+	done < "$DATA.engl"
+	while [ "$_r" -lt $((_et + ENG_ROWS)) ]; do
+		at "$_r" 1 "$ESC[K"
+		_r=$((_r + 1))
+	done
+	[ -n "$_em" ] && at $((_et + ENG_ROWS - 1)) 2 "${C_YEL}$(fit "$_em" $((W - 1)))${C_RST}"
+	return 0
+}
+
+eng_save() {
+	if { date '+%Y-%m-%d %H:%M:%S'; cat "$DATA.eng"; } > "$ENG_FILE" 2>/dev/null; then
+		ENG_MSG="$T_SAVED $ENG_FILE"
+	else
+		ENG_MSG="$ENG_FILE: error"
+	fi
+	ENG_MSGN=5
+}
 
 # ВВОД СТРОКИ. Единственное место, где чтение БЕЗ таймаута допустимо и нужно:
 # оно происходит по явному нажатию Enter, человек в этот момент набирает текст,
@@ -1456,8 +1844,9 @@ draw() {
 	#    разделы): всё сдвинуто на 2 относительно старой раскладки.
 	_sg=$(v signal)
 	at 7  4  "$(pad "${C_DIM}[${C_RST}$(sigbars "$_sg")${C_DIM}]${C_RST} ${C_B}${_sg}%${C_RST}" 25)"
-	at 8  4  "${C_DIM}$(pad "$(v modem)" 25)${C_RST}"
-	at 9  4  "${C_CYA}$(pad "$(ca_compact)" 25)${C_RST}"
+	at 8  4  "${C_DIM}$(fit "$(v modem)" 25)${C_RST}"
+	at 9  4  "${C_CYA}$(fit "$(ca_compact)" 25)${C_RST}"
+	_vw=$((TW - 65)); [ "$_vw" -lt 12 ] && _vw=12; [ "$_vw" -gt 40 ] && _vw=40
 
 	lab 7  30 "$T_OPERATOR" 10 "$(fit "$(_operator_plmn)" 16)" 16
 	_r=$(v registration)
@@ -1468,7 +1857,7 @@ draw() {
 		*) _rs="${C_YEL}${T_NOREG}${C_RST}" ;;
 	esac
 	lab 8  30 "$T_STATUS"   10 "$_rs" 16
-	lab 9  30 "$T_PHONE"  10 "${C_DIM}$(_phone_or_loc)${C_RST}" 16
+	lab 9  30 "$T_PHONE"  10 "${C_DIM}$(fit "$(_phone_or_loc)" 16)${C_RST}" 16
 	# Слот SIM: у модемов с двумя слотами показываем ещё и то, что переключение
 	# доступно клавишей - иначе о нём никак не догадаться.
 	_sl=$(v simslot)
@@ -1478,38 +1867,38 @@ draw() {
 	# Режим БЕЗ диапазона: профиль дописывает его в MODE ради веба, где отдельной
 	# строки нет, а здесь она есть - иначе значение вылезает за рамку.
 	_md=$(v mode); _md=${_md%% | *}
-	lab 7  57 "$T_MODE"    9 "${C_CYA}${_md}${C_RST}" 12
-	lab 8  57 'IP'       9 "${C_GRN}$(v ipaddr)${C_RST}" 12
+	lab 7  57 "$T_MODE"    9 "${C_CYA}$(fit "$_md" $_vw)${C_RST}" $_vw
+	lab 8  57 'IP'       9 "${C_GRN}$(fit "$(v ipaddr)" $_vw)${C_RST}" $_vw
 	# IPv6 - только если оператор его выдал: у большинства российских сетей его
 	# нет, и пустая строка была бы про отсутствующее.
 	_v6=$(g ipaddr6)
 	[ -n "$_v6" ] && [ "$_v6" != "-" ] && lab 9 57 'IPv6' 9 "${C_GRN}$(fit "$_v6" 12)${C_RST}" 12
-	lab 9  57 "$T_TIME"    9 "$(uptime_str)" 12
+	lab 9  57 "$T_TIME"    9 "$(fit "$(uptime_str)" $_vw)" $_vw
 	# Единицу дописываем ТОЛЬКО если её нет: часть профилей уже отдаёт "56.0 °C",
 	# и без этой проверки получалось "56.0 °C C".
 	_t=$(v mtemp)
 	case "$_t" in *C|-) : ;; *) _t="$_t °C" ;; esac
-	lab 10  57 "$T_TEMP"    9 "$(_temp_cell_plain "$_t")" 12
-	lab 11  57 "$T_TRAFFIC"   9 "${C_DIM}v $(_bytes_l10n "$(v rx)")${C_RST}" 12
-	at 12  66 "${C_DIM}$(pad "^ $(_bytes_l10n "$(v tx)")" 12)${C_RST}"
+	lab 10  57 "$T_TEMP"    9 "$(fit "$(_temp_cell_plain "$_t")" $_vw)" $_vw
+	lab 11  57 "$T_TRAFFIC"   9 "${C_DIM}$(fit "v $(_bytes_l10n "$(v rx)")" $_vw)${C_RST}" $_vw
+	at 12  66 "${C_DIM}$(fit "^ $(_bytes_l10n "$(v tx)")" $_vw)${C_RST}"
 
 	# ── Блок «Сота / Сигнал» (строки 10-14). Тоже три колонки.
 	_a=$(v rsrp); _b=$(v rsrq); _c=$(v sinr)
 	_e=$(v rssi)
-	at 16 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(pad "$_a" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrp "$_a" 12)${C_DIM}]${C_RST}"
-	at 17 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(pad "$_b" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrq "$_b" 12)${C_DIM}]${C_RST}"
-	at 18 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(pad "$_c" 6)${C_RST}${C_DIM}[${C_RST}$(mbar sinr "$_c" 12)${C_DIM}]${C_RST}"
-	at 19 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(pad "$_e" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rssi "$_e" 12)${C_DIM}]${C_RST}"
+	at 16 4  "${C_DIM}RSRP${C_RST} $(qcolor rsrp "$_a")$(fit "$_a" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrp "$_a" 12)${C_DIM}]${C_RST}"
+	at 17 4  "${C_DIM}RSRQ${C_RST} $(qcolor rsrq "$_b")$(fit "$_b" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rsrq "$_b" 12)${C_DIM}]${C_RST}"
+	at 18 4  "${C_DIM}SINR${C_RST} $(qcolor sinr "$_c")$(fit "$_c" 6)${C_RST}${C_DIM}[${C_RST}$(mbar sinr "$_c" 12)${C_DIM}]${C_RST}"
+	at 19 4  "${C_DIM}RSSI${C_RST} $(qcolor rssi "$_e")$(fit "$_e" 6)${C_RST}${C_DIM}[${C_RST}$(mbar rssi "$_e" 12)${C_DIM}]${C_RST}"
 
-	lab 16 30 "$T_BAND" 10 "$(v pband)" 16
-	lab 17 30 "$T_BW"   10 "$(v bandwidth)" 16
-	lab 18 30 'PCI'      10 "$(v pci)" 16
-	lab 19 30 'EARFCN'   10 "$(v earfcn)" 16
+	lab 16 30 "$T_BAND" 10 "$(band_fit "$(v pband)" 16)" 16
+	lab 17 30 "$T_BW"   10 "$(fit "$(v bandwidth)" 16)" 16
+	lab 18 30 'PCI'      10 "$(fit "$(v pci)" 16)" 16
+	lab 19 30 'EARFCN'   10 "$(fit "$(v earfcn)" 16)" 16
 
-	lab 16 57 "$T_ENB"  10 "$(v enbid)" 11
-	lab 17 57 'TAC'      10 "$(v tac_dec)" 11
-	lab 18 57 'MIMO'     10 "$(v pmimo)" 11
-	lab 19 57 'VoLTE'    10 "$(v volte)" 11
+	lab 16 57 "$T_ENB"  10 "$(fit "$(v enbid)" $((_vw - 1)))" $((_vw - 1))
+	lab 17 57 'TAC'      10 "$(fit "$(v tac_dec)" $((_vw - 1)))" $((_vw - 1))
+	lab 18 57 'MIMO'     10 "$(fit "$(v pmimo)" $((_vw - 1)))" $((_vw - 1))
+	lab 19 57 'VoLTE'    10 "$(fit "$(v volte)" $((_vw - 1)))" $((_vw - 1))
 
 	# ── Блок «Скорость». Тот же speedtest.sh, что и кнопка в вебе: он пишет ход
 	#    теста в JSON-файл, а мы его читаем - своего замера нет, значит и цифры
@@ -1589,11 +1978,11 @@ draw() {
 			_mt=$(printf '%s' "$_np" | jsonfilter -e "@[$_n].metric" 2>/dev/null)
 			_idx=$((_n + 1))
 			if [ "$_n" = "$_act" ]; then
-				_mk="${C_GRN}>${C_RST}"; _nm="${C_B}${_lb}${C_RST}"
+				_mk="${C_GRN}>${C_RST}"; _nm="${C_B}$(fit "$_lb" 21)${C_RST} "
 			else
-				_mk="${C_DIM} ${C_RST}"; _nm="${C_DIM}${_lb}${C_RST}"
+				_mk="${C_DIM} ${C_RST}"; _nm="${C_DIM}$(fit "$_lb" 21)${C_RST} "
 			fi
-			at "$_row" 4 "$_mk ${C_DIM}${_idx}${C_RST} $(pad "$_nm" 22)${C_DIM}$(pad "$_sb" 22)${C_RST}$(pad "${_ipa:--}" 18)"
+			at "$_row" 4 "$_mk ${C_DIM}${_idx}${C_RST} ${_nm}${C_DIM}$(fit "$_sb" 21)${C_RST} $(fit "${_ipa:--}" 18)"
 			_row=$((_row + 1)); _n=$((_n + 1))
 		done
 	else
@@ -1612,7 +2001,7 @@ draw() {
 		_sb=$(v "s${_i}band")
 		[ "$_sb" = "-" ] && continue
 		[ "$_ar" -gt 32 ] && break
-		at "$_ar" 4 "${C_DIM}SCC${_i}${C_RST} $(pad "$_sb" 26)${C_DIM}PCI${C_RST} $(pad "$(v s${_i}pci)" 8)${C_DIM}EARFCN${C_RST} $(pad "$(v s${_i}earfcn)" 10)"
+		at "$_ar" 4 "${C_DIM}SCC${_i}${C_RST} $(band_fit "$_sb" 25) ${C_DIM}PCI${C_RST} $(fit "$(v s${_i}pci)" 8)${C_DIM}EARFCN${C_RST} $(fit "$(v s${_i}earfcn)" 10)"
 		_ar=$((_ar + 1)); _any=1
 	done
 	[ "$_any" = 0 ] && { at 31 4 "${C_DIM}$(pad "$T_NOCA" 60)${C_RST}"; _ar=32; }
@@ -1726,6 +2115,15 @@ apply_width() {
 	[ "$NARROW" = 1 ] && [ "$TH" -gt 0 ] && [ "$TH" -lt 30 ] && TINY=1
 	# Список SMS: 14 строк входят в 22 вместе с шапкой и подсказкой.
 	[ "$TINY" = 1 ] && SMS_ROWS=14 || SMS_ROWS=$SMS_ROWS_DEF
+	if [ "$TINY" = 1 ]; then
+		ENG_ROWS=17
+	elif [ "$TH" -gt 0 ]; then
+		ENG_ROWS=$((TH - 10))
+		[ "$ENG_ROWS" -lt 8 ] && ENG_ROWS=8
+		[ "$ENG_ROWS" -gt 40 ] && ENG_ROWS=40
+	else
+		ENG_ROWS=16
+	fi
 }
 TH=$(term_height)
 apply_width
@@ -1766,23 +2164,19 @@ sms_merge() {
 		# появлялся почти через минуту. Текст запрашиваем ПОСЛЕДНИМ: если внутри
 		# него есть переводы строк, они просто добавятся в хвост, и мы соберём
 		# всё, что после пятой строки.
-		_all=$(jsonfilter -i "$_raw" \
-			-e "@.msg[$_n].sender" -e "@.msg[$_n].timestamp" \
-			-e "@.msg[$_n].reference" -e "@.msg[$_n].part" \
-			-e "@.msg[$_n].total" -e "@.msg[$_n].content" 2>/dev/null)
-		_sn=$(printf '%s\n' "$_all" | sed -n 1p)
-		[ -n "$_sn" ] || break
-		_ts=$(printf '%s\n' "$_all" | sed -n 2p)
-		_rf=$(printf '%s\n' "$_all" | sed -n 3p)
-		_pt=$(printf '%s\n' "$_all" | sed -n 4p)
-		_tt=$(printf '%s\n' "$_all" | sed -n 5p)
+		S_i=""; S_s=""; S_t=""; S_r=""; S_p=""; S_o=""; S_c=""
+		eval "$(jsonfilter -i "$_raw" -e "S_i=@.msg[$_n].index" \
+			-e "S_s=@.msg[$_n].sender" -e "S_t=@.msg[$_n].timestamp" \
+			-e "S_r=@.msg[$_n].reference" -e "S_p=@.msg[$_n].part" \
+			-e "S_o=@.msg[$_n].total" -e "S_c=@.msg[$_n].content" 2>/dev/null)"
+		[ -n "$S_i$S_s$S_t$S_c" ] || break
+		_sn="$S_s"; _ts="$S_t"; _rf="$S_r"; _pt="$S_p"; _tt="$S_o"
 		# Хвост (6-я строка и дальше) - текст. Переводы строк внутри него
 		# заменяем пробелами; завершающий уже снят подстановкой $( ).
-		_tx=$(printf '%s\n' "$_all" | sed -n '6,$p' | tr '\n\t' '  ')
 		# Декодер sms_tool заменяет U+0080..U+00FF на «замещающий символ» (U+FFFD).
 		# Операторы ставят там в основном пробелы, поэтому меняем на пробел -
 		# ровно как веб-страница, чтобы текст читался одинаково.
-		_tx=$(printf '%s' "$_tx" | sed 's/\xef\xbf\xbd/ /g; s/[[:space:]]*$//')
+		_tx=$(printf '%s' "$S_c" | tr '\n\t\r' '   ' | sed 's/\xef\xbf\xbd/ /g')
 		case "$_tt" in ''|*[!0-9]*) _tt=1 ;; esac
 		case "$_pt" in ''|*[!0-9]*) _pt=1 ;; esac
 		# одиночные держим порознь по индексу, иначе два разных сообщения от
@@ -1797,8 +2191,9 @@ sms_merge() {
 	done | awk -F'\t' '
 		{
 			key = $1; part = $2 + 0
-			if (!(key in seen)) { seen[key] = 1; order[++cnt] = key; snd[key] = $3; tim[key] = $4 }
-			txt[key SUBSEP part] = $5
+			if (!(key in seen)) { seen[key] = 1; order[++cnt] = key; snd[key] = $3 }
+			pk = key SUBSEP part
+			if (!(pk in txt) || $4 >= pts[pk]) { txt[pk] = $5; pts[pk] = $4 }
 			if (part > maxp[key]) maxp[key] = part
 			if ($6 + 0 > tot[key]) tot[key] = $6 + 0
 		}
@@ -1806,17 +2201,25 @@ sms_merge() {
 			# порядок сообщений сохраняем ПО ПЕРВОМУ ПОЯВЛЕНИЮ: sms_tool отдаёт
 			# их в нужном порядке, и пересортировка сломала бы его
 			for (i = 1; i <= cnt; i++) {
-				k = order[i]; out = ""; have = 0
-				for (p = 1; p <= maxp[k]; p++) {
-					if ((k SUBSEP p) in txt) { out = out txt[k SUBSEP p]; have++ }
+				k = order[i]; out = ""; have = 0; fp = -1
+				for (p = 0; p <= maxp[k]; p++) {
+					if ((k SUBSEP p) in txt) { out = out txt[k SUBSEP p]; have++; if (fp < 0) fp = p }
 				}
+				gsub(/^ +| +$/, "", out)
 				# ЧАСТЕЙ МЕНЬШЕ, ЧЕМ ЗАЯВЛЕНО. Такое бывает не по нашей вине:
 				# на ПЕРЕПОЛНЕННОЙ SIM хвост длинного сообщения просто не
 				# помещается (наблюдалось: 3 части из 5 при 15/15). Молча
 				# показать обрывок нельзя - человек решит, что это мы обрезали.
-				if (tot[k] > 0 && have < tot[k]) out = out sprintf(" [%d/%d]", have, tot[k])
-				printf "%s\t%s\t%s\n", snd[k], tim[k], out
+				if (tot[k] > 1 && have < tot[k]) out = out sprintf(" [%d/%d]", have, tot[k])
+				sk[i] = pts[k SUBSEP fp]
+				row[i] = snd[k] "\t" sk[i] "\t" out
+				ix[i] = i
 			}
+			for (i = 2; i <= cnt; i++) {
+				j = i
+				while (j > 1 && sk[ix[j - 1]] < sk[ix[j]]) { t = ix[j]; ix[j] = ix[j - 1]; ix[j - 1] = t; j-- }
+			}
+			for (i = 1; i <= cnt; i++) print row[ix[i]]
 		}'
 }
 
@@ -1868,7 +2271,7 @@ fetch() {
 	  # остальные читают снимок. Открытая рядом веб-страница больше не удваивает
 	  # нагрузку на AT-порт - раньше вдвоём они замедляли опрос втрое.
 	  $SRC cached "$INTERVAL" > "$DATA.tmp" 2>/dev/null
-	  [ -s "$DATA.tmp" ] && mv "$DATA.tmp" "$DATA"
+	  [ -s "$DATA.tmp" ] && mv "$DATA.tmp" "$DATA" && modelog_update
 	  # Приоритеты тянем ТЕМ ЖЕ фоновым проходом: netpri.sh list стоит ~1.7 c,
 	  # в секундном цикле отрисовки это заметно подвесило бы экран.
 	  /usr/share/5gmodem/netpri.sh list > "$NPFILE.tmp" 2>/dev/null
@@ -1965,7 +2368,7 @@ switch_modem() {
 	# Команда называется switch. Раньше здесь стояло "set" - такой ветки в
 	# modemswitch.sh нет, скрипт молча завершался, и клавиша m не делала НИЧЕГО.
 	/usr/share/5gmodem/modemswitch.sh switch "$_path" >/dev/null 2>&1
-	rm -f "$DATA"; J=""; fetch
+	rm -f "$DATA"; J=""; mlog_path; fetch
 }
 
 if [ "$TTY" = 1 ]; then
@@ -1988,6 +2391,7 @@ render_frame() {
 		esim)  frame_esim; fetch_esim ;;
 		ussd)  frame_ussd ;;
 		at)    frame_at ;;
+		eng)   frame_eng ;;
 		*)     frame ;;
 	esac
 }
@@ -1999,8 +2403,21 @@ render_draw() {
 		esim)  draw_esim ;;
 		ussd)  draw_ussd ;;
 		at)    draw_at ;;
+		eng)   draw_eng ;;
 		*)     draw ;;
 	esac
+}
+
+NEED_FRAME=1
+WINCH=0
+paint() {
+	if [ "$NEED_FRAME" = 1 ]; then
+		NEED_FRAME=0
+		{ render_frame; render_draw; } > "$DATA.scr" 2>/dev/null
+	else
+		render_draw > "$DATA.scr" 2>/dev/null
+	fi
+	cat "$DATA.scr"
 }
 
 # ИЗМЕНЕНИЕ РАЗМЕРА ОКНА. Ширину брали ОДИН РАЗ при старте, а SIGWINCH не ловили
@@ -2010,21 +2427,19 @@ render_draw() {
 # 5gtop запоминал промежуточную ширину и жил с ней до перезапуска.
 # Перерисовываем ЦЕЛИКОМ и с явной очисткой: не все каркасы чистят экран сами
 # (frame_ussd/frame_at рисуют поверх), а после сужения мусор остаётся именно там.
-_on_winch() {
+_on_winch() { WINCH=1; }
+_winch_apply() {
 	[ "$TW_FIXED" = 1 ] && return 0
 	_ww=$(term_width)
 	case "$_ww" in ''|*[!0-9]*) return 0 ;; esac
 	_hh=$(term_height)
 	[ "$_ww" = "$TW" ] && [ "$_hh" = "$TH" ] && return 0
 	TW="$_ww"; TH="$_hh"; apply_width
-	printf '%s[2J%s[H' "$ESC" "$ESC"
-	render_frame
-	render_draw
+	NEED_FRAME=1
 	return 0
 }
 trap _on_winch WINCH
 
-render_frame
 fetch
 # Если стартовали сразу на вкладке с фоновым чтением - запускаем его немедленно,
 # не дожидаясь первого тика: иначе на экране висело "читаю сообщения..." дольше,
@@ -2037,7 +2452,8 @@ _since=0
 _tick=0
 while :; do
 	[ -f "$DATA" ] && J=$(cat "$DATA" 2>/dev/null)
-	render_draw
+	[ "$WINCH" = 1 ] && { WINCH=0; _winch_apply; }
+	paint
 
 	if [ "$TTY" = 1 ]; then
 		# ЗАЩИТА ОТ ХОЛОСТОГО ЦИКЛА. read -t 1 задуман и как пауза, и как чтение
@@ -2067,11 +2483,12 @@ while :; do
 				_since=0
 				;;
 			t|T) /usr/share/5gmodem/speedtest.sh start >/dev/null 2>&1 ;;
+			d|D) [ "$(tab_id "$TAB")" = eng ] && eng_save ;;
 			# Слот SIM - только там, где их больше одного (см. switch_slot).
 			k|K) switch_slot ;;
 			# ПРЯМОЙ ПЕРЕХОД НА ВКЛАДКУ буквой из её названия - она подсвечена в
 			# полосе, поэтому запоминать нечего.
-			n|N|c|C|m|M|s|S|e|E|u|U|a|A)
+			n|N|c|C|m|M|s|S|e|E|u|U|a|A|g|G)
 				_want=""
 				for _t in $TAB_IDS; do
 					case "$_k" in
@@ -2082,9 +2499,10 @@ while :; do
 						[Ee]) [ "$(tab_key "$_t")" = 'e' ] && _want="$_t" ;;
 						[Uu]) [ "$(tab_key "$_t")" = 'u' ] && _want="$_t" ;;
 						[Aa]) [ "$(tab_key "$_t")" = 'a' ] && _want="$_t" ;;
+						[Gg]) [ "$(tab_key "$_t")" = 'g' ] && _want="$_t" ;;
 					esac
 				done
-				[ -n "$_want" ] && { TAB=$(tab_num "$_want"); render_frame; }
+				[ -n "$_want" ] && { TAB=$(tab_num "$_want"); NEED_FRAME=1; }
 				;;
 			# ЦИФРЫ КОНТЕКСТНЫЕ: на «Сети» это приоритет интернета, на eSIM - выбор
 			# профиля. Так один и тот же ряд клавиш обслуживает оба экрана, и ничего
@@ -2097,22 +2515,22 @@ while :; do
 				;;
 			# Tab - следующий МОДЕМ. Прежняя m ушла под вкладку «Modem»; Tab по
 			# смыслу подходит - переключение между равноправными объектами.
-			"$TABCH") switch_modem; render_frame; _since=0 ;;
+			"$TABCH") switch_modem; NEED_FRAME=1; _since=0 ;;
 			# Enter - ввод строки, но ТОЛЬКО на консольных вкладках: на остальных
 			# вводить нечего, и перехват Enter там только сбивал бы с толку.
 			"" | "$(printf '\015')")
 				case "$(tab_id "$TAB")" in
 				ussd)
 					read_line "$T_ENTER_USSD"
-					render_frame; send_console ussd "$_RL"
+					NEED_FRAME=1; send_console ussd "$_RL"
 					;;
 				esim)
 					read_line "$T_ESIM_ADD"
-					render_frame; esim_download "$_RL"
+					NEED_FRAME=1; esim_download "$_RL"
 					;;
 				at)
 					read_line "$T_ENTER_AT"
-					render_frame; send_console at "$_RL"
+					NEED_FRAME=1; send_console at "$_RL"
 					;;
 				esac
 				;;
@@ -2121,14 +2539,14 @@ while :; do
 			"$BSCH"|$(printf '\177'))
 				TAB=$((TAB + 1))
 				[ "$TAB" -gt "$(tab_count)" ] && TAB=1
-				render_frame
+				NEED_FRAME=1
 				;;
 			# Подгонка ширины на ходу. Шаг 4: заметно, но не скачками. '=' принимаем
 			# как '+', чтобы не требовать Shift.
-			+|=) TW=$((TW + 4)); apply_width; render_frame ;;
-			-|_) TW=$((TW - 4)); apply_width; render_frame ;;
+			+|=) TW=$((TW + 4)); apply_width; NEED_FRAME=1 ;;
+			-|_) TW=$((TW - 4)); apply_width; NEED_FRAME=1 ;;
 		esac
-		[ "$(date +%s)" = "$_t0" ] && sleep 1
+		[ "$NEED_FRAME" = 1 ] || { [ "$(date +%s)" = "$_t0" ] && sleep 1; }
 	else
 		sleep 1
 	fi
