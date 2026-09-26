@@ -4196,7 +4196,7 @@ simDialog: baseclass.extend({
 			]),
 			]),
 
-			E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-reboot-block' }, [
+			collapsibleSection('reboot', _('Restart modem'), [
 			E('table', { 'class': 'table' }, [
 				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
 				   modemmanager), независимо от доступности управления бендами. */
@@ -4228,7 +4228,7 @@ simDialog: baseclass.extend({
 					]),
 					]),
 			]),
-			]),
+			], { 'id': 'modem-reboot-block' }),
 
 			collapsibleSection('cell', _('Cell / Signal Information'), [
 			E('table', { 'class': 'table' }, [
