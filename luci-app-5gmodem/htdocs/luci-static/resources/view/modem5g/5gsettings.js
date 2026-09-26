@@ -440,13 +440,6 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 
-		o = disp.option(ListDropdown, 'net_layout', _('Network page layout'),
-			_('Tiles lay the blocks of the Network page out as a grid: "Edit layout" on the page reorders them by dragging and hides the ones you do not need. The layout is stored on the router. Classic by default.'));
-		o.value('classic', _('Classic'));
-		o.value('tiles', _('Tiles (experimental)'));
-		o.default = 'classic';
-		o.rmempty = false;
-
 		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
 			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
 		o.default = '1';
