@@ -5617,3 +5617,6 @@ msgstr "ドラッグするか矢印キーで移動"
 
 msgid "Could not save the block order"
 msgstr "ブロックの順序を保存できませんでした"
+
+msgid "Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?"
+msgstr "こんにちは！このアプリへのお礼を、この番号宛てにSBPでT-Bankへ送りたいのですが、よろしいですか？"

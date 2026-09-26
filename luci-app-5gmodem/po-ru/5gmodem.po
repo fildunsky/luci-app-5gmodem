@@ -5808,3 +5808,6 @@ msgstr "Перетащите или двигайте стрелками на к�
 
 msgid "Could not save the block order"
 msgstr "Не удалось сохранить порядок блоков"
+
+msgid "Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?"
+msgstr "Привет! Хочу отправить по СБП на Т-Банк благодарность за программу на этот номер. Можно?"

@@ -373,6 +373,21 @@ return view.extend({
 		let ov = document.getElementById('phonenumber');
 		ov.value = '';
 		ov.value = smsBookW ? String(smsBookW.getValue() || '') : '';
+
+		let tx = document.getElementById('smstext');
+		if (!tx) { return; }
+		let thanks = _('Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?');
+		let pick = smsBook.filter(function(b) { return b.code === ov.value; })[0];
+		let isAuthor = pick && /^t\.me\/openwrt_fun$/i.test(String(pick.name || '').trim());
+		let cur = tx.value;
+		if (isAuthor && cur.trim() === '') {
+			tx.value = thanks;
+		} else if (!isAuthor && cur === thanks) {
+			tx.value = '';
+		} else {
+			return;
+		}
+		tx.dispatchEvent(new Event('input', { bubbles: true }));
 	},
 
 	handleModemChange: function(ev) {

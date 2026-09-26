@@ -5743,3 +5743,6 @@ msgstr "拖动或使用方向键移动"
 
 msgid "Could not save the block order"
 msgstr "无法保存区块顺序"
+
+msgid "Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?"
+msgstr "你好！我想通过 SBP 向这个号码的 T-Bank 账户转一笔款，感谢这个程序。可以吗？"

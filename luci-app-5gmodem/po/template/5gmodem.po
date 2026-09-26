@@ -282,3 +282,6 @@ msgstr ""
 
 msgid "Could not save the block order"
 msgstr ""
+
+msgid "Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?"
+msgstr ""

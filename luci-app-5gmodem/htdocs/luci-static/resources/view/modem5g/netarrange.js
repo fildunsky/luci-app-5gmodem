@@ -5,7 +5,7 @@
 'require ui';
 
 var BIN = '/usr/share/5gmodem/setopt.sh';
-var KEYS = [ 'net', 'conn', 'restart', 'cell', 'freq', 'ttl', 'hist' ];
+var KEYS = [ 'net', 'conn', 'freq', 'ttl', 'restart', 'cell', 'hist' ];
 var FIXED = { conn: true };
 var BLK = { restart: 'reboot', cell: 'cell', freq: 'freq', ttl: 'ttl', hist: 'hist' };
 var SVG_GRIP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>';
