@@ -1,0 +1,2 @@
+## 3ginfo-lite 1bbb0196 comment: observed on Qualcomm 4108
++CEREG: 2,1,"A989","D0","A9EE06",7

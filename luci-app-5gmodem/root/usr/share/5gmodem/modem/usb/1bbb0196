@@ -1,0 +1,84 @@
+MODEL="Qualcomm 9207"
+PROTO="rndis"
+
+_q92_val() {
+	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r' | grep -vE '^(AT|OK|ERROR|$)' | head -1
+}
+
+_q92_triples() {
+	echo "$1" | tr -d '\r' | sed -n 's/^\$QCRSR[PQ][[:space:]]*:[[:space:]]*//p' | head -1 | tr -d '" ' \
+		| awk -F, '{for (i = 1; i + 2 <= NF; i += 3) print $i "|" $(i+1) "|" $(i+2)}'
+}
+
+T=$(_q92_val 'AT+GMR' | xargs)
+[ -n "$T" ] && FW="$T"
+T=$(_q92_val 'AT+GSN' | tr -cd '0-9')
+[ -n "$T" ] && NR_IMEI="$T"
+T=$(_q92_val 'AT+CIMI' | tr -cd '0-9')
+[ -n "$T" ] && NR_IMSI="$T"
+T=$(sms_tool -d "$DEVICE" at 'AT+ICCID' 2>/dev/null | tr -d '\r' | sed -n 's/^+\{0,1\}ICCID:[[:space:]]*//p' | head -1 | tr -cd '0-9A-Fa-f')
+[ -n "$T" ] && NR_ICCID="$T"
+
+O=$(sms_tool -d "$DEVICE" at 'AT+CEREG=2;+CEREG?' 2>/dev/null | tr -d '\r' | grep '^+CEREG:' | head -1)
+Q1=$(echo "$O" | awk -F'"' '{print $2}' | tr 'a-f' 'A-F' | tr -cd '0-9A-F')
+Q2=$(echo "$O" | awk -F'"' '{print $4}' | tr 'a-f' 'A-F' | tr -cd '0-9A-F')
+Q3=$(echo "$O" | awk -F'"' '{print $6}' | tr 'a-f' 'A-F' | tr -cd '0-9A-F')
+if [ -n "$Q1" ]; then
+	T_HEX="$Q1"
+	TAC_HEX="$Q1"
+	TAC_DEC=$(printf '%d' 0x"$Q1" 2>/dev/null)
+	T_DEC="$TAC_DEC"
+fi
+[ -n "$Q3" ] || Q3="$Q2"
+if [ -n "$Q3" ]; then
+	CID_HEX="$Q3"
+	CID_DEC=$(printf '%d' 0x"$Q3" 2>/dev/null)
+fi
+
+O=$(sms_tool -d "$DEVICE" at 'AT$QCRSRP?' 2>/dev/null)
+_q92_n=0
+_q92_s=0
+while IFS='|' read -r _q92_pci _q92_e _q92_v; do
+	[ -n "$_q92_pci" ] || continue
+	_q92_n=$((_q92_n + 1))
+	if [ "$_q92_n" = 1 ]; then
+		[ -n "$_q92_v" ] && RSRP="$_q92_v"
+		[ -n "$_q92_pci" ] && PCI="$_q92_pci"
+		if [ -n "$_q92_e" ]; then
+			EARFCN="$_q92_e"
+			B=$(earfcn2band "$_q92_e")
+			[ -n "$B" ] && PBAND="$(band4g "$B")"
+		fi
+		continue
+	fi
+	[ "$_q92_s" -lt 4 ] || break
+	[ -n "$PCI" ] && [ "$_q92_pci" = "$PCI" ] && [ -n "$_q92_e" ] && [ "$_q92_e" != "$EARFCN" ] || continue
+	_q92_s=$((_q92_s + 1))
+	B=$(earfcn2band "$_q92_e")
+	TBAND=""
+	[ -n "$B" ] && TBAND="$(band4g "$B")"
+	case "$_q92_s" in
+		1) S1BAND="$TBAND"; S1PCI="$_q92_pci"; S1EARFCN="$_q92_e" ;;
+		2) S2BAND="$TBAND"; S2PCI="$_q92_pci"; S2EARFCN="$_q92_e" ;;
+		3) S3BAND="$TBAND"; S3PCI="$_q92_pci"; S3EARFCN="$_q92_e" ;;
+		4) S4BAND="$TBAND"; S4PCI="$_q92_pci"; S4EARFCN="$_q92_e" ;;
+	esac
+done <<EOT
+$(_q92_triples "$O")
+EOT
+
+O=$(sms_tool -d "$DEVICE" at 'AT$QCRSRQ?' 2>/dev/null)
+T=$(_q92_triples "$O" | head -1 | cut -d'|' -f3)
+[ -n "$T" ] && RSRQ="$T"
+
+O=$(sms_tool -d "$DEVICE" at 'AT$QCSQ' 2>/dev/null | tr -d '\r' | sed -n 's/^\$QCSQ[[:space:]]*:[[:space:]]*//p' | head -1 | tr -d ' ')
+QSIR=$(echo "$O" | cut -d, -f3)
+QPATH=$(echo "$O" | cut -d, -f4)
+case "$QSIR:$QPATH" in
+	*[!0-9:-]*|:*|*:) ;;
+	*)
+		if [ "$QSIR" -ge -10 ] 2>/dev/null && [ "$QSIR" -le 20 ] && [ "$QPATH" -ge 46 ] && [ "$QPATH" -le 148 ]; then
+			SINR="$QSIR"
+		fi
+		;;
+esac

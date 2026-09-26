@@ -9,6 +9,6 @@
 # USB (по умолчанию модуль встаёт голой сетевой картой ECM). Обе операции
 # делает тот же coldplug, поэтому обработчик один.
 case "$PRODUCT" in
-	5c6/*|05c6/*|3f0/*|03f0/*|413c/81d8/*|1bc7/1911/*) /etc/init.d/5gmodem-usbports start >/dev/null 2>&1 & ;;
+	5c6/*|05c6/*|3f0/*|03f0/*|413c/81d8/*|1bc7/1911/*|2c7c/6004/*|1bbb/196/*) /etc/init.d/5gmodem-usbports start >/dev/null 2>&1 & ;;
 esac
 exit 0

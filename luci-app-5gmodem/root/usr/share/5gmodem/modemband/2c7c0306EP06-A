@@ -1,0 +1,8 @@
+_DEVICE=""
+_DEFAULT_LTE_BANDS="2 4 5 7 12 13 25 26 29 30 66"
+
+getinfo() {
+	echo "Quectel EP06-A"
+}
+
+. $RES/_quectel_common

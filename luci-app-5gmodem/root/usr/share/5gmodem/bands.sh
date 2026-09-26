@@ -1122,10 +1122,31 @@ if [ -n "$_AMP" ]; then
 				''|*[!A-Za-z0-9_.-]*) _mdl="" ;;
 			esac
 			if [ -n "$_mdl" ]; then
+				_nf=0
 				for _f in "$RES/$_AVIDPID$_mdl"*; do
 					[ -e "$_f" ] || continue
-					_found=$(basename "$_f"); break
+					_nf=$((_nf + 1))
+					[ -n "$_found" ] || _found=$(basename "$_f")
 				done
+				if [ "$_nf" -gt 1 ]; then
+					_rev=$(sms_tool -d "$_atp" at "AT+CGMR" 2>/dev/null | tr -d '\r' \
+						| grep -vE '^(AT|OK|ERROR|$)' | head -1 | sed 's/^Revision://' | tr -d ' ')
+					_best=""; _bl=0
+					for _f in "$RES/$_AVIDPID$_mdl"-*; do
+						[ -e "$_f" ] || continue
+						_sfx=${_f##*/$_AVIDPID$_mdl-}
+						case "$_rev" in
+							"$_mdl$_sfx"*)
+								[ "${#_sfx}" -gt "$_bl" ] && { _best=$(basename "$_f"); _bl=${#_sfx}; }
+								;;
+						esac
+					done
+					if [ -n "$_best" ]; then
+						_found="$_best"
+					elif [ -e "$RES/$_AVIDPID$_mdl-E" ]; then
+						_found="$_AVIDPID$_mdl-E"
+					fi
+				fi
 			fi
 		fi
 	fi

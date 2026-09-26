@@ -1,0 +1,2 @@
+## obsy/modemband 2cb70a05 getinfo format
++CGMM: "FG621-EA"

@@ -28,7 +28,7 @@ for SEC in $(uci -q show 5gmodem 2>/dev/null \
 	VIDPID=$(uci -q get "5gmodem.$SEC.vidpid")
 	[ -n "$VIDPID" ] || continue
 	case "$VIDPID" in
-		12d1:*) continue ;;
+		12d1:*|1bbb:0196) continue ;;
 	esac
 	uci -q delete "5gmodem.$SEC.kind"
 	# netdev держал сетевую карту, по которой модем и был опознан ошибочно,

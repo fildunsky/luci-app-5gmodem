@@ -346,7 +346,7 @@ save_to() {
 # структурный признак в is_hilink (сетевая карта без AT-порта и cdc-wdm).
 # 1f01 сюда НЕ входит намеренно: это режим CD-ROM до usb_modeswitch, сети у него
 # ещё нет.
-HILINK_IDS="12d1:14dc 12d1:14db"
+HILINK_IDS="12d1:14dc 12d1:14db 1bbb:0196"
 
 
 

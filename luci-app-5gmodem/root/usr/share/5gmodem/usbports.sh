@@ -29,6 +29,7 @@ driver_for() {   # $1 - vid, $2 - pid
 		# option те же интерфейсы отзываются сразу - AT живёт на If#2.
 		03f0:9d1d) echo "option1" ;;
 		413c:81d8|1bc7:1911) echo "option1" ;;
+		2c7c:6004|1bbb:0196) echo "option1" ;;
 		# Всё остальное - generic. Это касается и Compal RXM-G1 (90d5 и 90d6),
 		# и T99W175 в 90d5.
 		#
@@ -54,6 +55,7 @@ newid_for() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
 		05c6:9091) echo "$1 $2 ff" ;;
 		413c:81d8|1bc7:1911) echo "$1 $2 ff" ;;
+		2c7c:6004|1bbb:0196) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
 	esac
 }
@@ -89,7 +91,7 @@ data_iface_for() {   # $1 - vid, $2 - pid
 # упирается в занятый интерфейс.
 _has_adb_iface() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
-		05c6:9025|05c6:9091|05c6:90d5) return 0 ;;
+		05c6:9025|05c6:9091|05c6:90d5|1bbb:0196) return 0 ;;
 		*)                   return 1 ;;
 	esac
 }
@@ -310,6 +312,10 @@ bind_ports() {   # $1 - vid, $2 - pid
 		sleep 1
 		_rescue_data "$1" "$2"
 	fi
+	if [ "$1:$2" = "1bbb:0196" ]; then
+		sleep 1
+		_release_adb "$1" "$2"
+	fi
 
 	[ "$_bp_haswdm" = 1 ] || return 0
 	# Хирургия после привязки при живом канале: не-ff интерфейсы (CDC comm/data,
@@ -396,7 +402,7 @@ coldplug() {
 				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
-			413c:81d8|1bc7:1911) bind_ports "$_cp_v" "$_cp_p" ;;
+			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.
 			05c6:9063) pick_config "$_cp_d" 3 ;;
 			# HP lt4120 (Foxconn T77W595) отдаёт три конфигурации:

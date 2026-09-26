@@ -1,0 +1,2 @@
+## 3ginfo-lite 1bbb0196 comment: firmware 1 [May 01 2016], PATHLOSS=0 placeholder
+$QCSQ :-84,-2,0,0,-86
