@@ -839,7 +839,9 @@ _add_default_route() {   # $1 - iface, $2 - метрика
 	fi
 	if [ -n "$_gw4" ] && [ "$_gw4" != "0.0.0.0" ]; then
 		route_add_default -4 "$_dev" "$2" "$_gw4" "$_ta4"
-	elif is_p2p_dev "$_dev"; then
+	elif is_p2p_dev "$_dev" \
+		|| [ -n "$(ifup_state "$1" '@.route[@.target="0.0.0.0"].target')" ] \
+		|| [ -n "$(ifup_state "${1}_4" '@.route[@.target="0.0.0.0"].target')" ]; then
 		# on-link default (сотовый point-to-point) - обязателен scope link.
 		route_add_default -4 "$_dev" "$2" "" "$_ta4"
 	else
