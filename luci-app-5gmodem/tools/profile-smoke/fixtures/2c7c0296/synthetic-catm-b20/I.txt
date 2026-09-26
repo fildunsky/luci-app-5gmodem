@@ -1,0 +1,4 @@
+## synthetic: ATI layout as parsed by _qc_ati
+Quectel
+BG96
+Revision: BG96MAR02A07M1G

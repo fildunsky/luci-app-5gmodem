@@ -1,0 +1,2 @@
+## synthetic: BG96 CAT-M serving cell in the field order QModem vendor/quectel.sh cell_info uses for "LTE"|"CAT-M"|"CAT-NB" (is_tdd,mcc,mnc,cellid,pcid,earfcn,band,ul_bw,dl_bw,tac,rsrp,rsrq,rssi,sinr,...)
++QENG: "servingcell","NOCONN","CAT-M","FDD",250,01,1A2D001,187,6300,20,5,5,1B58,-97,-12,-68,9,-

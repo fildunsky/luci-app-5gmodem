@@ -1,0 +1,2 @@
+## synthetic: +QSPN layout as parsed by _qc_spn4
++QSPN: "MTS RUS","MTS","MTS",0,"25001"

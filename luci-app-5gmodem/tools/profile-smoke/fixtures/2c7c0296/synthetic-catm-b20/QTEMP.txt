@@ -1,0 +1,2 @@
+## synthetic: three sensors, EC25-style +QTEMP
++QTEMP: 31,33,30

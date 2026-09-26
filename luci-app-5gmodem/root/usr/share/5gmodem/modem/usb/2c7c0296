@@ -1,0 +1,68 @@
+. "$RES/modem/usb/_quectel_common"
+
+O=$(sms_tool -d $DEVICE at "at+qtemp")
+T=$(echo "$O" | tr -d '\r' | awk '
+	/^\+QTEMP:/ {
+		s = $0; sub(/^\+QTEMP:/, "", s)
+		n = split(s, a, /[^0-9-]+/)
+		for (i = 1; i <= n; i++) if (a[i] ~ /^[0-9]+$/ && a[i] + 0 > 0 && a[i] + 0 < 120 && a[i] + 0 > m) m = a[i] + 0
+	}
+	END { if (m) print m }')
+[ -n "$T" ] && TEMP="$T &deg;C"
+
+if [ "$REGOK" = "1" ]; then
+	O=$(sms_tool -d $DEVICE at "at+qeng=\"servingcell\";+qspn")
+	_BG_V=$(echo "$O" | tr -d '\r' | awk -F[,:] '
+		function n(v) { gsub(/[ "]/, "", v); return (v ~ /^-?[0-9]+$/) ? v : "" }
+		/^\+QENG:/ {
+			r = $4; gsub(/[ "]/, "", r)
+			t = $14; gsub(/[ "]/, "", t); if (t !~ /^[0-9A-Fa-f]+$/) t = ""
+			print r "|" n($9) "|" n($10) "|" n($11) "|" n($13) "|" t "|" n($15) "|" n($16) "|" n($17) "|" n($18)
+			exit
+		}')
+	if [ -n "$_BG_V" ]; then
+		IFS='|' read -r _bg_r _bg_pci _bg_ch _bg_band _bg_bw _bg_tac _bg_rsrp _bg_rsrq _bg_rssi _bg_sinr <<EOF
+$_BG_V
+EOF
+		case "$_bg_r" in
+			LTE|4G) _bg_t="LTE" ;;
+			CAT-M|CAT-M1|eMTC) _bg_t="LTE-M" ;;
+			CAT-NB|CAT-NB1|NBIoT|NB-IoT) _bg_t="NB-IoT" ;;
+			*) _bg_t="" ;;
+		esac
+		if [ -n "$_bg_t" ]; then
+			case "$_bg_pci" in ''|*[!0-9]*) : ;; *) [ "$_bg_pci" -le 503 ] && PCI="$_bg_pci" ;; esac
+			[ -n "$_bg_ch" ] && EARFCN="$_bg_ch"
+			case "$_bg_rsrp" in -*) RSRP="$_bg_rsrp" ;; esac
+			case "$_bg_rsrq" in -*) RSRQ="$_bg_rsrq" ;; esac
+			case "$_bg_rssi" in -*) RSSI="$_bg_rssi" ;; esac
+			[ -n "$_bg_sinr" ] && SINR="$_bg_sinr"
+			if [ -n "$_bg_tac" ]; then
+				T_HEX="$_bg_tac"
+				T_DEC=$(printf "%d" "0x$_bg_tac" 2>/dev/null)
+			fi
+			if [ "$_bg_t" != "NB-IoT" ]; then
+				_qc_lbw T1 "$_bg_bw" ""
+				[ -n "$T1" ] && BANDWIDTH="$T1 MHz"
+			fi
+			case "$_bg_band" in
+				''|*[!0-9]*) MODE="$_bg_t" ;;
+				*)
+					PBAND="$(band4g $_bg_band)"
+					MODE="$_bg_t | $PBAND"
+					;;
+			esac
+		fi
+	fi
+	_qc_spn4
+fi
+
+_qc_ids
+
+_qc_ati
+
+case "$VIDPID" in
+	usb/2c7c[0-9a-f][0-9a-f][0-9a-f][0-9a-f]) _BG_P="${VIDPID#usb/2c7c}" ;;
+	*) _BG_P="0296" ;;
+esac
+_qc_proto "Vendor=2c7c ProdID=$_BG_P" 1220

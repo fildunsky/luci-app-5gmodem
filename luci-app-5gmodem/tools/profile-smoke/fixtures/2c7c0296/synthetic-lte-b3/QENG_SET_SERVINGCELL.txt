@@ -1,0 +1,2 @@
+## 4pda 994474 #1840 layout (EP06), reused to check the plain "LTE" branch
++QENG: "servingcell","NOCONN","LTE","FDD",250,35,1FE9134,48,1300,3,5,5,BFF,-98,-7,-70,21,-

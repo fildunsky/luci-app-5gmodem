@@ -1,0 +1,2 @@
+## synthetic: BG96 CAT-NB serving cell, same field order (QModem vendor/quectel.sh cell_info)
++QENG: "servingcell","CONNECT","CAT-NB","FDD",250,99,0B3C21A,72,3590,8,0,0,2EE1,-108,-10,-90,3,-
