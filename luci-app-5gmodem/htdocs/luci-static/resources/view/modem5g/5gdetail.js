@@ -4203,7 +4203,8 @@ simDialog: baseclass.extend({
 				/* Перезагрузка модема - доступна ВСЕГДА (и в mbim, и в
 				   modemmanager), независимо от доступности управления бендами. */
 				E('tr', { 'class': 'tr', 'id': 'rebootn' }, [
-					E('td', { 'class': 'td left tginfo-modesw', 'colspan': '2' }, [
+					E('td', { 'class': 'td left tg-rb-pad', 'width': '33%' }, []),
+					E('td', { 'class': 'td left tginfo-modesw' }, [
 						E('button', {
 							'class': 'btn cbi-button cbi-button-remove',
 							'data-tooltip': _('Radio restart (CFUN=4→1): quickly re-registers on the network without re-enumerating USB. Try this first.'),

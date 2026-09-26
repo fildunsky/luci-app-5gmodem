@@ -3033,3 +3033,7 @@ body.sc-simple .tg-arr-strip { display: none !important; }
 .tg-arr-edit > .tg-arr-off > h3 > :not(.tg-arr-ctl) { opacity: .4; }
 .tg-arr-edit > .tg-arr-lift { outline-style: solid; outline-width: 2px; box-shadow: 0 6px 18px rgba(0,0,0,.18); }
 body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: none !important; }
+
+@media (max-width: 700px) {
+  #rebootn > td.tg-rb-pad { display: none !important; }
+}
