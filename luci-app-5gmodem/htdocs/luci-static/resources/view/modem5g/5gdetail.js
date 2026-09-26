@@ -15,6 +15,7 @@
 'require tools.widgets as widgets';
 'require view.modem5g.healthform as healthform';
 'require view.modem5g.fresh as fresh';
+'require view.modem5g.netarrange as netarrange';
 
 /*
 	Copyright 2021-2025 Rafał Wabik - IceG - From eko.one.pl forum
@@ -191,7 +192,7 @@ var MODEM_BUSY_MIN_MS = 8000;
    прогрессбаром спиннер не показываем - ход видно по полосе. */
 var _modemBusyBarTimer = null;
 function setModemBusy(msg, progressSec) {
-	var block = document.querySelector('.cbi-section.tginfo');
+	var block = document.getElementById('modem-info-block') || document.querySelector('.cbi-section.tginfo');
 	if (!block) { return; }
 	var txt = msg || _('The modem is restarting…');
 	var txtCls = progressSec ? '' : 'spinning';
@@ -2336,6 +2337,7 @@ function simpleOn() {
 function applySimpleVis() {
 	var on = simpleOn();
 	document.body.classList.toggle('sc-simple', on);
+	netarrange.simple(on);
 	var cb = document.getElementById('sc-switch');
 	if (cb) { cb.classList.toggle('on', on); }
 }
@@ -3722,7 +3724,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4633,11 +4635,13 @@ simDialog: baseclass.extend({
 		}, o, this);
 
 		return m.render().then(function(node) {
+			try { netarrange.prepare(node); } catch (e) {}
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);
 			// простой режим: карточка-ответ и переключатель (прототип UX-аудита)
 			window.setTimeout(buildSimpleUI, 0);
+			window.setTimeout(function() { try { netarrange.attach(); } catch (e) {} }, 0);
 			return node;
 		});
 	},
