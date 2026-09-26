@@ -1,0 +1,4 @@
+. "$RES/modem/usb/2c7c6026"
+
+PROTO=""
+_qc_proto "Vendor=2c7c ProdID=0901" 1220

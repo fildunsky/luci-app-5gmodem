@@ -1,0 +1,2 @@
+## synthetic: +QNWINFO layout parsed by the EC200T profile
++QNWINFO: "FDD LTE","25001","LTE BAND 3",1602

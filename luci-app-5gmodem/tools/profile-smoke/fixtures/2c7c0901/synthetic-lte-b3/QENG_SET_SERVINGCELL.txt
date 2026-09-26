@@ -1,0 +1,2 @@
+## synthetic: EC200U serving cell in the common Quectel LTE field order (QModem vendor/quectel.sh cell_info, EC200U is in its "unisoc" list and goes through the same parser)
++QENG: "servingcell","NOCONN","LTE","FDD",250,01,5E39A0B,302,1602,3,5,5,5A27,-89,-6,-61,20,48
