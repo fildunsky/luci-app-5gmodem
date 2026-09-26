@@ -1,0 +1,14 @@
+. "$RES/modem/usb/2c7c0620"
+
+if [ -z "$PROTO" ]; then
+	case "${DEVICE##*/}" in
+		wwan*)
+			_MPFX=$(printf '%s' "${DEVICE##*/}" | sed 's/at[0-9]*$//')
+			if [ -n "$_MPFX" ]; then
+				[ -e "/dev/${_MPFX}mbim0" ] && PROTO="mbim"
+				[ -z "$PROTO" ] && [ -e "/dev/${_MPFX}qmi0" ] && PROTO="qmi"
+			fi
+			[ -z "$PROTO" ] && PROTO="mbim"
+			;;
+	esac
+fi
