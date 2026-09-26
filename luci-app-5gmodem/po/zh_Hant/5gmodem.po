@@ -5710,5 +5710,5 @@ msgstr "拖曳或使用方向鍵移動"
 msgid "Could not save the block order"
 msgstr "無法儲存區塊順序"
 
-msgid "Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?"
-msgstr "你好！我想透過 SBP 向這個號碼的 T-Bank 帳戶轉一筆款，感謝這個程式。可以嗎？"
+msgid "Hi! I really like your app. How can I thank you?"
+msgstr "你好！我非常喜歡你的程式，我該怎麼感謝你呢？"

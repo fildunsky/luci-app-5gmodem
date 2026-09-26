@@ -376,7 +376,7 @@ return view.extend({
 
 		let tx = document.getElementById('smstext');
 		if (!tx) { return; }
-		let thanks = _('Hi! I would like to send a thank-you for the app to this number via SBP to T-Bank. Is that OK?');
+		let thanks = _('Hi! I really like your app. How can I thank you?');
 		let pick = smsBook.filter(function(b) { return b.code === ov.value; })[0];
 		let isAuthor = pick && /^t\.me\/openwrt_fun$/i.test(String(pick.name || '').trim());
 		let cur = tx.value;
