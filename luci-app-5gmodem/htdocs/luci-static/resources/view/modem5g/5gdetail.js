@@ -2354,7 +2354,7 @@ function buildSimpleUI() {
 		'body.sc-simple [data-blk="ttl"], body.sc-simple [data-blk="hist"] { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#rebootn { display:table-row !important; }' +
-		'#doctorn { display:none; }' +
+		'body:not(.sc-simple) #doctorn { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
