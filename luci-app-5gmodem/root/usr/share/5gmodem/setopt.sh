@@ -109,6 +109,32 @@ simpleview)
 	uci -q set "5gmodem.@5gmodem[0].simple_view=$(_norm01 "$2")"
 	uci -q commit 5gmodem
 	;;
+tiles)
+	shift
+	_to=""
+	_th=""
+	for _tk in "$@"; do
+		_tn=${_tk#-}
+		case "$_tn" in
+			net|conn|restart|sig|cell|hist|ttl|ca|freq) ;;
+			*) continue ;;
+		esac
+		case " $_to " in *" $_tn "*) continue ;; esac
+		_to="${_to:+$_to }$_tn"
+		[ "$_tk" = "-$_tn" ] && _th="${_th:+$_th }$_tn"
+	done
+	if [ -n "$_to" ]; then
+		uci -q set "5gmodem.@5gmodem[0].tiles_order=$_to"
+	else
+		uci -q delete "5gmodem.@5gmodem[0].tiles_order" 2>/dev/null
+	fi
+	if [ -n "$_th" ]; then
+		uci -q set "5gmodem.@5gmodem[0].tiles_hidden=$_th"
+	else
+		uci -q delete "5gmodem.@5gmodem[0].tiles_hidden" 2>/dev/null
+	fi
+	uci -q commit 5gmodem
+	;;
 # reconnect - передозвон интерфейса активного модема («кнопка-доктор», ступень 1).
 # В фоне с отвязкой дескрипторов: rpcd ждёт EOF, а ifup может занять десятки
 # секунд (та же грабля, что в reboot_modem power).
@@ -148,7 +174,7 @@ menuflush)
 	rm -f /tmp/luci-indexcache* 2>/dev/null
 	;;
 *)
-	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|mmat <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|applyset|menuflush}" >&2
+	echo "usage: $0 {roaming <path> <0|1>|atdebug <path> <0|1>|mmat <path> <0|1>|dnsfb <path> <0|1> [servers]|simpleview <0|1>|tiles [key|-key]...|applyset|menuflush}" >&2
 	exit 1
 	;;
 esac

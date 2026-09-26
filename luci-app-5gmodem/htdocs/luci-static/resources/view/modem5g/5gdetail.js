@@ -15,6 +15,7 @@
 'require tools.widgets as widgets';
 'require view.modem5g.healthform as healthform';
 'require view.modem5g.fresh as fresh';
+'require view.modem5g.nettiles as nettiles';
 
 /*
 	Copyright 2021-2025 Rafał Wabik - IceG - From eko.one.pl forum
@@ -3722,7 +3723,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform, nettiles ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4633,6 +4634,9 @@ simDialog: baseclass.extend({
 		}, o, this);
 
 		return m.render().then(function(node) {
+			if (nettiles.enabled()) {
+				try { nettiles.build(node, { collapsibleSection: collapsibleSection }); } catch (e) {}
+			}
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);

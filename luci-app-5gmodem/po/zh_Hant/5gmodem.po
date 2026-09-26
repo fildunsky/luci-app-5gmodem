@@ -5691,3 +5691,48 @@ msgstr "訊號電平 · %d dBm 起為良好"
 
 msgid "signal-to-noise · good from %d dB"
 msgstr "信噪比 · %d dB 起為良好"
+
+msgid "Network page layout"
+msgstr "「網路」頁面版面"
+
+msgid "Tiles lay the blocks of the Network page out as a grid: \"Edit layout\" on the page reorders them by dragging and hides the ones you do not need. The layout is stored on the router. Classic by default."
+msgstr "磚塊版面會將「網路」頁面的各個區塊排成網格：在頁面上點選「編輯版面」即可拖曳排序並隱藏不需要的區塊。版面儲存在路由器上。預設為經典版面。"
+
+msgid "Classic"
+msgstr "經典"
+
+msgid "Tiles (experimental)"
+msgstr "磚塊（實驗性）"
+
+msgid "Signal"
+msgstr "信號"
+
+msgid "Cell information"
+msgstr "小區信息"
+
+msgid "Carriers and neighbours"
+msgstr "載波與鄰區"
+
+msgid "Could not save the layout"
+msgstr "無法儲存版面"
+
+msgid "Done"
+msgstr "完成"
+
+msgid "Drag tiles by their header to reorder them. Hidden tiles stay here as outlines."
+msgstr "拖曳磚塊標題即可調整順序。隱藏的磚塊會以輪廓形式留在這裡。"
+
+msgid "Edit layout"
+msgstr "編輯版面"
+
+msgid "Hidden"
+msgstr "已隱藏"
+
+msgid "Hide"
+msgstr "隱藏"
+
+msgid "No data right now"
+msgstr "目前沒有資料"
+
+msgid "Reset layout"
+msgstr "重設版面"

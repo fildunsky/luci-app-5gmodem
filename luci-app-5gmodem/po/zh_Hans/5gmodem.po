@@ -5725,3 +5725,48 @@ msgstr "信号电平 · %d dBm 起为良好"
 
 msgid "signal-to-noise · good from %d dB"
 msgstr "信噪比 · %d dB 起为良好"
+
+msgid "Network page layout"
+msgstr "“网络”页面布局"
+
+msgid "Tiles lay the blocks of the Network page out as a grid: \"Edit layout\" on the page reorders them by dragging and hides the ones you do not need. The layout is stored on the router. Classic by default."
+msgstr "磁贴布局将“网络”页面的各个区块排成网格：在页面上点击“编辑布局”即可拖动排序并隐藏不需要的区块。布局保存在路由器上。默认为经典布局。"
+
+msgid "Classic"
+msgstr "经典"
+
+msgid "Tiles (experimental)"
+msgstr "磁贴（实验性）"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "Cell information"
+msgstr "小区信息"
+
+msgid "Carriers and neighbours"
+msgstr "载波与邻区"
+
+msgid "Could not save the layout"
+msgstr "无法保存布局"
+
+msgid "Done"
+msgstr "完成"
+
+msgid "Drag tiles by their header to reorder them. Hidden tiles stay here as outlines."
+msgstr "拖动磁贴标题即可调整顺序。隐藏的磁贴会以轮廓形式留在这里。"
+
+msgid "Edit layout"
+msgstr "编辑布局"
+
+msgid "Hidden"
+msgstr "已隐藏"
+
+msgid "Hide"
+msgstr "隐藏"
+
+msgid "No data right now"
+msgstr "当前没有数据"
+
+msgid "Reset layout"
+msgstr "重置布局"
