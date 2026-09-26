@@ -686,11 +686,50 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
    выглядели обрубком и на десктопе, и на мобильном; стандартный отступ от края
    даёт паддинг самой ячейки). Пустая часть - РОВНАЯ СЕРАЯ ПОЛОСА, как у мелких
    полосок дополнительных метрик (.metric-bar), вместо обводки темы. */
-#csq, #rssi, #rsrp, #rsrq, #sinr {
+#csq.cbi-progressbar, #rssi.cbi-progressbar, #rsrp.cbi-progressbar, #rsrq.cbi-progressbar, #sinr.cbi-progressbar {
   max-width: none;
   border: none;
   box-shadow: none;
   background: var(--tg-track);
+}
+.tg-mbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  width: 100%;
+  min-height: 20px;
+}
+.tg-mbar-t {
+  flex: 1 1 120px;
+  min-width: 80px;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--tg-track);
+  overflow: hidden;
+}
+.tg-mbar-fill {
+  width: 0;
+  height: 100%;
+  border-radius: 5px;
+  transition: width .4s ease-out;
+}
+.tg-mbar-v {
+  flex: 0 0 auto;
+  min-width: 130px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.tg-mbar-v small {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tg-mbar-fill { transition: none; }
 }
 .tginfo-modesw .cbi-button {
   margin: 2px 6px 2px 0;

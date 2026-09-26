@@ -47,26 +47,8 @@
    жёлтый, хотя число то же (жалоба 18.09.2026). Теперь пороги, уровни, цвета и
    длина заливки берутся отсюда везде.
    edges = [худшее, гр1, гр2, гр3, лучшее]: Слабый / Средний / Хороший / Отличный. */
-var QUAL_T = {
-	lte:  { rsrp: [ -128, -118, -108, -98 ], rsrq: [ -20, -17, -14, -11 ], sinr: [ -3, 1, 5, 13 ] },
-	nr:   { rsrp: [ -110, -90, -80, -65 ], rsrq: [ -31, -19, -17, -14 ], sinr: [ -5, 5, 15, 30 ] },
-	umts: { rscp: [ -115, -105, -95, -85 ], ecio: [ -24, -14, -6, 1 ], rssi: [ -107, -103, -97, -89 ] },
-	gsm:  { rssi: [ -107, -103, -97, -89 ] }
-};
-var QUAL_EDGES = {
-	csq:  [ 0,    10,   15,  20,  31  ],
-	rssi: [ -113, -100, -85, -70, -55 ]
-};
 var _qualRat = 'lte';
-function qualRat(mode) {
-	var m = String(mode == null ? '' : mode).toLowerCase();
-	if (/nsa/.test(m)) { return 'lte'; }
-	if (/5g|nr/.test(m)) { return 'nr'; }
-	if (/lte|4g/.test(m)) { return 'lte'; }
-	if (/umts|hspa|wcdma|3g/.test(m)) { return 'umts'; }
-	if (/gsm|edge|gprs|2g/.test(m)) { return 'gsm'; }
-	return 'lte';
-}
+var qualRat = mutil.qualRat;
 function qualSetMode(mode) {
 	if (mode != null && mode !== '' && mode !== '-') { _qualRat = qualRat(mode); }
 	return _qualRat;
@@ -74,32 +56,11 @@ function qualSetMode(mode) {
 function qualBandRat(band) {
 	return /^\s*n\d/.test(String(band == null ? '' : band)) ? 'nr' : _qualRat;
 }
-function qualEdges(key, rat) {
-	var tab = QUAL_T[rat || _qualRat] || QUAL_T.lte;
-	var t = tab[key];
-	if (!t && key === 'csq' && tab.rssi) {
-		t = tab.rssi.map(function(x) { return (x + 113) / 2; });
-	}
-	if (!t && !QUAL_EDGES[key]) { t = QUAL_T.lte[key] || QUAL_T.umts[key]; }
-	if (!t) { return QUAL_EDGES[key] || null; }
-	return [ t[0] - (t[1] - t[0]), t[1], t[2], t[3], t[3] + (t[3] - t[2]) ];
-}
 function sinrUnmeasured(sinr, rsrq) {
 	var s = String(sinr == null ? '' : sinr).trim(), q = String(rsrq == null ? '' : rsrq).trim();
 	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(s) || parseFloat(s) !== 0) { return false; }
 	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(q)) { return false; }
 	return parseFloat(q) >= -14;
-}
-/* Уровень 0..3 и доля шкалы 0..100 (кусочно-линейно по четвертям). */
-function qualLevelPct(edges, vn) {
-	if (vn <= edges[0]) { return [ 0, 0 ]; }
-	if (vn >= edges[4]) { return [ 3, 100 ]; }
-	for (var i = 0; i < 4; i++) {
-		if (vn < edges[i + 1]) {
-			return [ i, Math.round(25 * i + 25 * (vn - edges[i]) / (edges[i + 1] - edges[i])) ];
-		}
-	}
-	return [ 3, 100 ];
 }
 /* Имена уровней для таблиц: red / orange / yellow / green = 0..3. */
 var QUAL_NAMES = [ 'red', 'orange', 'yellow', 'green' ];
@@ -111,15 +72,14 @@ var CA_GRAD = {
 	green:  'linear-gradient(90deg, #2fb885, #34d399)'
 };
 function caQuality(key, v, rat) {
-	var e = qualEdges(key, rat), n = parseFloat(v);
-	if (!e || isNaN(n)) { return null; }
-	return QUAL_NAMES[qualLevelPct(e, n)[0]];
+	var l = mutil.qualLevel(key, v, rat || _qualRat);
+	return l == null ? null : QUAL_NAMES[l];
 }
 /* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
 function metricPct(key, v, rat) {
-	var e = qualEdges(key, rat), n = parseFloat(v);
-	if (!e || isNaN(n)) { return null; }
-	var pc = qualLevelPct(e, n)[1];
+	if (caQuality(key, v, rat) == null) { return null; }
+	var pc = mutil.qualPct(key, v, rat || _qualRat);
+	if (pc == null) { return null; }
 	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
 }
 var _QUAL_BG = [
@@ -132,41 +92,55 @@ function _qualLabel(lvl) {
 	return [ _('Poor'), _('Fair'), _('Good'), _('Excellent') ][lvl];
 }
 /* Единица метрики - в подпись, чтобы «-19.0» читалось однозначно. */
-function metricBar(id, rawVal, unit, edges) {
+function metricBarEl(id) {
+	if (IS_PROTON) {
+		return E('div', { 'id': id, 'class': 'cbi-progressbar', 'title': '-' }, E('div'));
+	}
+	return E('div', { 'id': id, 'class': 'tg-mbar', 'title': '-' }, [
+		E('div', { 'class': 'tg-mbar-t' }, E('div', { 'class': 'tg-mbar-fill' })),
+		E('div', { 'class': 'tg-mbar-v' }, '-')
+	]);
+}
+function metricBar(id, rawVal, unit, key, rat) {
 	var pg = document.querySelector('#' + id);
 	if (!pg || !pg.firstElementChild) { return; }
-	var pf = pg.firstElementChild;
-	pg.style.width = '100%';   /* длину ограничивает CSS max-width (.tginfo) */
+	var pf = pg.querySelector('.tg-mbar-fill') || pg.firstElementChild;
+	var tv = pg.querySelector('.tg-mbar-v');
+	if (!tv) { pg.style.width = '100%'; }   /* длину ограничивает CSS max-width (.tginfo) */
 
 	var vn = parseFloat(rawVal);
 	if (rawVal == null || rawVal === '' || rawVal === '-' || isNaN(vn)) {
 		pf.style.width = '0%';
 		pf.style.background = 'rgba(128,128,128,.35)';
 		pg.setAttribute('title', '—');
+		if (tv) { tv.textContent = '—'; }
 		return;
 	}
 
-	/* Уровень (0..3) и ширина - общей функцией (см. QUAL_EDGES). */
-	var lp = qualLevelPct(edges, vn), lvl = lp[0], pc = lp[1];
-	pf.style.width = pc + '%';
+	var r = rat || _qualRat;
+	var lvl = mutil.qualLevel(key, vn, r), pc = mutil.qualPct(key, vn, r);
+	if (lvl == null) { lvl = 0; }
+	if (pc == null) { pc = 0; }
+	pf.style.width = (pc < 3 ? 3 : pc) + '%';
 	pf.style.background = _QUAL_BG[lvl];
 	/* Единицу берём из vn (число), НЕ из rawVal: вызыватели передают значение уже
 	   с единицей ("-97 dBm"), и добавление unit к rawVal давало "-97 dBm dBm". */
-	pg.setAttribute('title', vn + (unit ? (' ' + unit) : '') + ' | ' + _qualLabel(lvl));
+	var vt = vn + (unit ? (' ' + unit) : '');
+	pg.setAttribute('title', vt + ' | ' + _qualLabel(lvl));
+	if (tv) {
+		tv.textContent = '';
+		tv.appendChild(document.createTextNode(vt));
+		tv.appendChild(E('small', { 'style': 'color:' + CA_COLOR[QUAL_NAMES[lvl]] }, _qualLabel(lvl)));
+	}
 }
 
-/* Пороги по общепринятым уровням сигнала LTE (те же, что подсвечивают значения
-   в CA-таблице - см. caQuality). Крайние edges - разумные пределы шкалы. */
-function csq_bar(v)  { metricBar('csq',  v, '',    qualEdges('csq'));  }
-function rssi_bar(v) { metricBar('rssi', v, 'dBm', qualEdges('rssi')); }
-function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', qualEdges('rsrp')); }
-function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  qualEdges('rsrq')); }
-function sinr_bar(v) { metricBar('sinr', v, 'dB',  qualEdges('sinr')); }
-/* 3G: RSCP (сила кода, dBm) и Ec/No (качество, dB). Пороги по общепринятым
-   уровням UMTS: RSCP хуже -105 = плохо, лучше -75 = отлично; Ec/No хуже -16 =
-   плохо, лучше -6 = отлично. */
-function rscp_bar(v) { metricBar('rscp', v, 'dBm', qualEdges('rscp', 'umts')); }
-function ecio_bar(v) { metricBar('ecio', v, 'dB',  qualEdges('ecio', 'umts')); }
+function csq_bar(v)  { metricBar('csq',  v, '',    'csq');  }
+function rssi_bar(v) { metricBar('rssi', v, 'dBm', 'rssi'); }
+function rsrp_bar(v) { metricBar('rsrp', v, 'dBm', 'rsrp'); }
+function rsrq_bar(v) { metricBar('rsrq', v, 'dB',  'rsrq'); }
+function sinr_bar(v) { metricBar('sinr', v, 'dB',  'sinr'); }
+function rscp_bar(v) { metricBar('rscp', v, 'dBm', 'rscp', 'umts'); }
+function ecio_bar(v) { metricBar('ecio', v, 'dB',  'ecio', 'umts'); }
 
 /* Телефонный ярлык технологии: LTE->4G, LTE-A->4G+, HSPA->H+, HSDPA/HSUPA->H,
    UMTS/WCDMA->3G, EDGE->E, GPRS/GSM->2G, 5G остаётся 5G. Меняем ТОЛЬКО ведущий
@@ -597,11 +571,12 @@ function SIMdata(data) {
 var _GLOSS = null;
 function gl(term) {
 	if (!_GLOSS) {
+		var QT = mutil.QUAL_T;
 		_GLOSS = {
-			'RSRP': _('Signal strength received from the cell tower. On LTE -98 dBm or better is excellent, below -118 dBm is poor. 5G is graded on its own, stricter scale.'),
-			'RSRQ': _('Signal quality. On LTE -11 dB or better is excellent, below -17 dB is poor.'),
-			'SINR': _('Signal-to-noise ratio. On LTE 13 dB or better is excellent, below 1 dB is poor.'),
-			'RSSI': _('Total power received in the channel, including noise and interference.'),
+			'RSRP': _('Signal strength received from the cell tower. On LTE and 5G %d dBm or better is excellent, below %d dBm is poor.').format(QT.lte.rsrp[2], QT.lte.rsrp[0]),
+			'RSRQ': _('Signal quality. On LTE %d dB or better is excellent, below %d dB is poor; on 5G below %d dB is poor.').format(QT.lte.rsrq[2], QT.lte.rsrq[0], QT.nr.rsrq[0]),
+			'SINR': _('Signal-to-noise ratio. On LTE and 5G %d dB or better is excellent, below %d dB is poor.').format(QT.lte.sinr[2], QT.lte.sinr[0]),
+			'RSSI': _('Total power received in the channel, including noise and interference. On LTE %d dBm or better is excellent, below %d dBm is poor.').format(QT.lte.rssi[2], QT.lte.rssi[0]),
 			'CSQ': _('Signal quality index reported by the modem: 0-31, higher is better.'),
 			'TAC': _('Tracking area code: a group of cells of the operator network.'),
 			'LAC': _('Location area code in 2G/3G networks.'),
@@ -3743,7 +3718,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(20801, [ bandsui, extip, modemtabs, mutil, netpri, healthform ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4502,60 +4477,35 @@ simDialog: baseclass.extend({
 					gl('CSQ'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal Strength)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'csq',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('csq'))
 					]),
 				E('tr', { 'id': 'rssin', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					gl('RSSI'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Received Signal Strength Indicator)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'rssi',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('rssi'))
 					]),
 				E('tr', { 'id': 'rsrpn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					gl('RSRP'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Receive Power)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'rsrp',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('rsrp'))
 					]),
 				E('tr', { 'id': 'sinrn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					gl('SINR'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Signal to Interference plus Noise Ratio)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'sinr',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('sinr'))
 					]),
 				E('tr', { 'id': 'rsrqn', 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					gl('RSRQ'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Reference Signal Received Quality)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'rsrq',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('rsrq'))
 					]),
 				// 3G-метрики. Спрятаны по умолчанию; показываются только на UMTS/HSPA
 				// (строку включает наличие json.rscp / json.ecio в рендере выше).
@@ -4564,24 +4514,14 @@ simDialog: baseclass.extend({
 					_('RSCP'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(Received Signal Code Power, 3G)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'rscp',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('rscp'))
 					]),
 				E('tr', { 'id': 'ection', 'class': 'tr', 'style': 'display:none' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [
 					_('Ec/No'),
 					E('div', { 'class': 'tg-sublabel' }, [ _('(chip energy to noise ratio, 3G)') ]),
 					]),
-					E('td', { 'class': 'td' }, E('div', {
-							'id': 'ecio',
-							'class': 'cbi-progressbar',
-							'title': '-'
-							}, E('div')
-						))
+					E('td', { 'class': 'td' }, metricBarEl('ecio'))
 					]),
 				E('tr', { 'class': 'tr' }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Primary band (PCC) | PCI & EARFCN')]),

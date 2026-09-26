@@ -281,6 +281,47 @@ function lsSweep(prefixes, maxAgeDays) {
 	lsIdxWrite(idx);
 }
 
+var QUAL_T = {
+	lte:  { rsrp: [ -100, -90, -80 ], rsrq: [ -20, -15, -10 ], sinr: [ 0, 13, 20 ], rssi: [ -85, -75, -65 ] },
+	nr:   { rsrp: [ -100, -90, -80 ], rsrq: [ -15, -13, -10 ], sinr: [ 0, 13, 20 ], rssi: [ -85, -75, -65 ] },
+	umts: { rscp: [ -105, -95, -85 ], ecio: [ -15, -10, -6 ], rssi: [ -103, -97, -89 ] },
+	gsm:  { rssi: [ -103, -97, -89 ] }
+};
+var QUAL_WIN = {
+	rsrp: [ -120, -70 ], rsrq: [ -20, -3 ], sinr: [ -5, 30 ], rssi: [ -100, -50 ],
+	csq: [ 0, 31 ], rscp: [ -120, -75 ], ecio: [ -24, 0 ]
+};
+function qualRat(mode) {
+	var m = String(mode == null ? '' : mode).toLowerCase();
+	if (/nsa/.test(m)) { return 'lte'; }
+	if (/5g|nr/.test(m)) { return 'nr'; }
+	if (/lte|4g/.test(m)) { return 'lte'; }
+	if (/umts|hspa|wcdma|3g/.test(m)) { return 'umts'; }
+	if (/gsm|edge|gprs|2g/.test(m)) { return 'gsm'; }
+	return 'lte';
+}
+function qualThresholds(key, rat) {
+	var tab = QUAL_T[rat] || QUAL_T.lte;
+	if (key === 'csq') {
+		var r = tab.rssi || QUAL_T.lte.rssi;
+		return r.map(function(x) { return (x + 113) / 2; });
+	}
+	return tab[key] || QUAL_T.lte[key] || QUAL_T.umts[key] || null;
+}
+function qualLevel(key, v, rat) {
+	var t = qualThresholds(key, rat), n = parseFloat(v);
+	if (!t || isNaN(n)) { return null; }
+	var l = 0;
+	for (var i = 0; i < t.length; i++) { if (n >= t[i]) { l = i + 1; } }
+	return l;
+}
+function qualPct(key, v, rat) {
+	var w = QUAL_WIN[key], n = parseFloat(v);
+	if (!w || isNaN(n)) { return null; }
+	var pc = Math.round(100 * (n - w[0]) / (w[1] - w[0]));
+	return pc < 0 ? 0 : (pc > 100 ? 100 : pc);
+}
+
 /* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
    буквы. Пусто, если код не 2 латинские буквы. */
 function flagEmoji(cc) {
@@ -290,7 +331,12 @@ function flagEmoji(cc) {
 }
 
 return baseclass.extend({
-	API: 20801,
+	API: 30001,
+	QUAL_T: QUAL_T,
+	qualRat: qualRat,
+	qualThresholds: qualThresholds,
+	qualLevel: qualLevel,
+	qualPct: qualPct,
 	flagEmoji: flagEmoji,
 	ratLabel: ratLabel,
 	formatModeDisplay: formatModeDisplay,
