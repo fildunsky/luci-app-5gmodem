@@ -59,6 +59,97 @@ function _bandsOpStart(args, msg) {
 	});
 }
 
+var BAND_KIND = { 'bands-lte': 'lte', 'bands-nr': 'nr', 'bands-3g': 'umts', 'bands-2g': 'gsm' };
+var _bandReg = null;
+var _bandAct = null;
+var _bandFilterSig = '';
+
+function _bandNum(b) {
+	return parseInt(String(b == null ? '' : b).replace(/\D+/g, ''), 10);
+}
+
+function _bandActive(j) {
+	var out = { lte: {}, nr: {} };
+	[ 'mode', 'pband', 's1band', 's2band', 's3band', 's4band' ].forEach(function(k) {
+		var v = String((j || {})[k] == null ? '' : j[k]), re = /(?:^|[^A-Za-z0-9])([Bn])(\d+)(?![0-9])/g, m;
+		while ((m = re.exec(v))) { (m[1] === 'n' ? out.nr : out.lte)[m[2]] = true; }
+	});
+	return out;
+}
+
+var _bandMoreMem = {};
+function _bandMoreOpen(id) {
+	if (_bandMoreMem[id] != null) { return _bandMoreMem[id]; }
+	try { return window.localStorage.getItem('5gm-bandsmore-' + id) === '1'; } catch (e) { return false; }
+}
+
+function bandFilter(id) {
+	var cont = document.getElementById(id);
+	if (!cont) { return; }
+	var chip = cont.querySelector('.tg-bandmore');
+	var btns = Array.prototype.slice.call(cont.querySelectorAll('button[data-band]'));
+	btns.forEach(function(b) {
+		if (!b.hasAttribute('data-on0')) { b.setAttribute('data-on0', b.classList.contains('cbi-button-action') ? '1' : '0'); }
+	});
+	var reg = _bandReg || mutil.bandRegion(window._lastJson);
+	var rel = reg ? reg.bands[BAND_KIND[id]] : null;
+	var extra = [];
+	if (rel && rel.length && btns.length) {
+		var aa = _bandAct || _bandActive(window._lastJson);
+		var act = (id === 'bands-nr') ? aa.nr : (id === 'bands-lte') ? aa.lte : {};
+		var on0 = btns.filter(function(b) { return b.getAttribute('data-on0') === '1'; }).length;
+		var wide = on0 >= Math.ceil(btns.length * 0.8);
+		extra = btns.filter(function(b) {
+			var n = _bandNum(b.getAttribute('data-band'));
+			if (isNaN(n) || rel.indexOf(n) >= 0 || act[n]) { return false; }
+			return wide || (b.getAttribute('data-on0') !== '1' && !b.classList.contains('cbi-button-action'));
+		});
+	}
+	var open = _bandMoreOpen(id);
+	btns.forEach(function(b) { b.classList.toggle('tg-band-hidden', !open && extra.indexOf(b) >= 0); });
+	var onHidden = extra.filter(function(b) { return b.classList.contains('cbi-button-action'); }).length;
+	var sig = extra.length ? ((open ? 'o' : 'c') + '|' + extra.length + '|' + onHidden) : '';
+	if (chip && chip.getAttribute('data-sig') === sig && cont.lastElementChild === chip) { return; }
+	if (chip) { chip.parentNode.removeChild(chip); }
+	if (!sig) { return; }
+	var toggle = function(ev) {
+		if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') { return; }
+		ev.preventDefault();
+		_bandMoreMem[id] = !_bandMoreOpen(id);
+		try { window.localStorage.setItem('5gm-bandsmore-' + id, _bandMoreMem[id] ? '1' : '0'); } catch (e) {}
+		bandFilter(id);
+	};
+	cont.appendChild(E('span', {
+		'class': 'tg-bandmore' + (open ? ' open' : ''),
+		'role': 'button',
+		'tabindex': '0',
+		'data-sig': sig,
+		'aria-expanded': open ? 'true' : 'false',
+		'title': open ? _('Hide bands not used by operators in this country')
+			: _('%d more bands supported by the modem, %d of them enabled').format(extra.length, onHidden),
+		'click': toggle,
+		'keydown': toggle
+	}, open ? [ _('Show fewer') ]
+		: [ '+' + extra.length, onHidden ? E('small', {}, _('(%d enabled)').format(onHidden)) : '' ]));
+}
+
+function bandFilterAll() {
+	Object.keys(BAND_KIND).forEach(bandFilter);
+}
+
+function bandFilterTick(json) {
+	if (!json || typeof json !== 'object' || json.error || !json.modem) { return; }
+	var hasMcc = [ json.home_mcc, json.operator_mcc ].some(function(v) { return /^\d{3}$/.test(String(v == null ? '' : v).trim()); })
+		|| /^\d{6,}$/.test(String(json.imsi == null ? '' : json.imsi).trim());
+	if (hasMcc) { _bandReg = mutil.bandRegion(json); }
+	var a = _bandActive(json);
+	if (Object.keys(a.lte).length || Object.keys(a.nr).length || !_bandAct) { _bandAct = a; }
+	var sig = (_bandReg ? _bandReg.mcc : '') + '|' + Object.keys(_bandAct.lte).sort().join(',') + '|' + Object.keys(_bandAct.nr).sort().join(',');
+	if (sig === _bandFilterSig) { return; }
+	_bandFilterSig = sig;
+	bandFilterAll();
+}
+
 function buildBandButtons(supported, current, prefix) {
 	var numsort = function(a, b) { return parseInt(a.replace(/\D+/g, ''), 10) - parseInt(b.replace(/\D+/g, ''), 10); };
 	return supported.filter(function(b) { return b.indexOf(prefix) == 0; }).sort(numsort).map(function(b) {
@@ -79,11 +170,12 @@ function buildBandButtons(supported, current, prefix) {
 function renderBandToggles(contId, bands, current, prefix) {
 	var cont = document.getElementById(contId);
 	if (!cont) { return; }
-	if (ctx.sameRender(cont, prefix + '|' + bands.join(',') + '|' + current.join(','))) { return; }
+	if (ctx.sameRender(cont, prefix + '|' + bands.join(',') + '|' + current.join(','))) { bandFilter(contId); return; }
 	cont.innerHTML = '';
 	buildBandButtons(bands, current, prefix).forEach(function(btn) {
 		cont.appendChild(btn);
 	});
+	bandFilter(contId);
 }
 
 function clear3gRow() {
@@ -825,6 +917,7 @@ function applyVendorJson(j) {
 			modeRow.style.display = 'none';
 		}
 		applyBandsReadOnly();
+		bandFilterAll();
 		_bandsRemember('vendor', j);
 }
 
@@ -1211,6 +1304,7 @@ function pollTick() {
 /* Смена ЖЕЛЕЗА в том же разъёме (сигнатура модель+vidpid из снимка метрик):
    всё bands-состояние принадлежит конкретному модему - сбрасываем и перечитываем. */
 function hwTick(json) {
+	bandFilterTick(json);
 	var hw = String(json.modem || '') + '|' + String(json.vidpid || '');
 	if (hw !== '|' && window.__hwSig && window.__hwSig !== hw) {
 		bandsReadOnly = false; bandsTakeover = false;
@@ -1267,6 +1361,7 @@ return baseclass.extend({
 	   путь (см. warmKey), поэтому тёплый старт нового модема подтянется сам. */
 	resetForModem: function() {
 		_bandsWarmed = false; _bandsPollN = 0; _bandsRetry = 0;
+		_bandReg = null; _bandAct = null; _bandFilterSig = '';
 		_bandsAfterBusy = false; _has3gMM = false;
 		bandsReadOnly = false; bandsTakeover = false;
 		bandsStaticNote = false;

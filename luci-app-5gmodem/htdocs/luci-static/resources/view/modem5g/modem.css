@@ -767,6 +767,41 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
   box-sizing: border-box;
 }
 
+.tginfo-modesw .tg-band-hidden {
+  display: none !important;
+}
+.tginfo-modesw .tg-bandmore {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 6px 2px 0;
+  padding: 4px 10px;
+  min-height: 28px;
+  box-sizing: border-box;
+  border: 1px dashed var(--tg-muted);
+  border-radius: var(--tg-radius);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  vertical-align: middle;
+  cursor: pointer;
+  user-select: none;
+  color: inherit;
+  background: transparent;
+}
+.tginfo-modesw .tg-bandmore:hover,
+.tginfo-modesw .tg-bandmore:focus-visible {
+  border-color: var(--tg-accent);
+  color: var(--tg-accent);
+  outline: none;
+}
+.tginfo-modesw .tg-bandmore small {
+  font-size: 12px;
+  font-weight: normal;
+  opacity: .75;
+}
+
 /* ЗАЩИТА ОТ ЗАМЕРА ТАБЛИЦ ТЕМОЙ proton2025.
    Тема (custom-pages.js, measureNaturalTableWidth) на каждое изменение DOM
    замеряет «натуральную» ширину таблиц: временно ставит ячейкам

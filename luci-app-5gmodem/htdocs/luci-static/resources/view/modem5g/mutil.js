@@ -322,6 +322,18 @@ function qualPct(key, v, rat) {
 	return pc < 0 ? 0 : (pc > 100 ? 100 : pc);
 }
 
+var BAND_REGION = {
+	'250': { lte: [ 1, 3, 7, 8, 20, 38, 40 ], nr: [ 1, 3, 7, 38, 40, 79 ], umts: [ 1, 8 ], gsm: [ 900, 1800 ] }
+};
+function bandRegion(json) {
+	var j = json || {};
+	var pick = function(v) { var s = String(v == null ? '' : v).trim(); return /^\d{3}$/.test(s) ? s : ''; };
+	var mcc = pick(j.home_mcc);
+	if (!mcc) { var im = String(j.imsi == null ? '' : j.imsi).trim(); if (/^\d{6,}$/.test(im)) { mcc = im.slice(0, 3); } }
+	if (!mcc) { mcc = pick(j.operator_mcc); }
+	return (mcc && BAND_REGION[mcc]) ? { mcc: mcc, bands: BAND_REGION[mcc] } : null;
+}
+
 /* Emoji-флаг из 2-буквенного кода страны (RU -> 🇷🇺): две regional indicator
    буквы. Пусто, если код не 2 латинские буквы. */
 function flagEmoji(cc) {
@@ -337,6 +349,7 @@ return baseclass.extend({
 	qualThresholds: qualThresholds,
 	qualLevel: qualLevel,
 	qualPct: qualPct,
+	bandRegion: bandRegion,
 	flagEmoji: flagEmoji,
 	ratLabel: ratLabel,
 	formatModeDisplay: formatModeDisplay,
