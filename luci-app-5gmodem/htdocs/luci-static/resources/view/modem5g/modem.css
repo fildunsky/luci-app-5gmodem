@@ -3347,3 +3347,6 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
     justify-content: center;
   }
 }
+@media (max-width: 700px) {
+  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

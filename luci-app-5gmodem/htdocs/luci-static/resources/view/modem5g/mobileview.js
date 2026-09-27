@@ -158,7 +158,7 @@ function markMhz() {
 }
 
 return baseclass.extend({
-	API: 30001,
+	API: 30200,
 
 	prepare: function(root) {
 		st = null;
