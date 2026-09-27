@@ -112,6 +112,7 @@ TB=$(echo "$TBX" | cut -d ',' -f3-3 )
 TDL=$(echo "$TBX" | cut -d ',' -f6-6 )
 case "$TDL" in
 	''|*[!0-9]*) DL="" ;;
+	1400) DL=1.4 ;;
 	*) DL=$((TDL / 1000)) ;;
 esac
 
@@ -126,7 +127,12 @@ ULBW=""
 DLBW=""
 [ -n "$DL" ] && DLBW="DL: @$DL MHz"
 
-PBAND="$(band4g $TB "") $DLBW $ULBW"
+PBAND=""
+case "$TB" in
+	''|*[!0-9]*) ;;
+	*) PBAND="$(band4g $TB "")"
+	   [ -n "$DL" ] && PBAND="$PBAND @$DL MHz" ;;
+esac
 EARFCN=$(echo "$TBX" | cut -d ',' -f4-4 )
 PCI="-"
 

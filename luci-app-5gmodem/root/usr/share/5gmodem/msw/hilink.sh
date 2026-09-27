@@ -32,7 +32,7 @@ is_hilink() {   # $1 - usb-путь
 	# goform (hilink.sh, ветка zte). В debug-композиции у них появляются AT-
 	# порты, и структурная проверка корректно уводит их обычным путём.
 	case "$_ih_id" in
-		12d1:*|05c6:90b4|19d2:*)
+		12d1:*|05c6:90b4|19d2:*|15a9:*)
 			_ih_j=$("$RES/listmodems.sh" 2>/dev/null)
 			_ih_tty=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)
 			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
@@ -211,6 +211,7 @@ _ad_hastty() {   # $1 - usb-путь
 try_at_debug() {   # $1 - usb-путь
 	_ad_sec=$(secname "$1")
 	[ "$(uci -q get "$CFG.$_ad_sec.at_debug")" = "0" ] && return 1
+	case "$(modem_vidpid "$1")" in 15a9:*) return 1 ;; esac
 	# Уже с портами - ничего не делаем.
 	[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && return 1
 	# ЖДЁМ ГОТОВНОСТИ ВЕБ-API. Сразу после подключения (cdrom -> HiLink) веб-сервер

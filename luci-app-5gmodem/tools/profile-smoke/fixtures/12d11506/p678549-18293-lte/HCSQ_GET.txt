@@ -1,0 +1,2 @@
+## 4pda topic 678549 (Huawei E8372) post #18293: atc "AT^HCSQ?" in the modem shell
+^HCSQ:"LTE",62,63,176,32

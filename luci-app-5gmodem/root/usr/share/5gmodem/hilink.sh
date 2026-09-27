@@ -342,7 +342,8 @@ _vidpid_for() {
 zte_metrics_json() {
 	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	_a=$(_addr_for "$_HLP") || return 1
-	_r=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
+	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band"
+	_r=$(_zte_get "$_a" "$_zm_cmd")
 	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
 	# Huawei-ветки: вызывающий отдаст прошлый снимок).
 	case "$_r" in
@@ -361,7 +362,7 @@ zte_metrics_json() {
 	# Логинимся и переспрашиваем ОДИН раз; не вышло - работаем с тем, что есть.
 	case "$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)" in
 		'') if _zte_login "$_a" >/dev/null 2>&1; then
-			_r2=$(_zte_get "$_a" "modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version")
+			_r2=$(_zte_get "$_a" "$_zm_cmd")
 			case "$_r2" in *modem_main_state*|*ppp_status*) _r="$_r2" ;; esac
 		   fi ;;
 	esac
@@ -383,6 +384,12 @@ zte_metrics_json() {
 	_cid_hex=$(_zj "$_r" cell_id)
 	_cid=""; [ -n "$_cid_hex" ] && _cid=$(printf '%d' "0x$_cid_hex" 2>/dev/null)
 	_lac=$(_zj "$_r" lac_code)
+	_zenb=""
+	case "$_ntype" in *LTE*) [ -n "$_cid" ] && _zenb=$(( _cid >> 8 )) ;; esac
+	_zpci=$(_zj "$_r" lte_pci | tr -cd '0-9')
+	_zband=$(_zj "$_r" lte_band | tr -cd '0-9')
+	[ -n "$_zband" ] || _zband=$(_zj "$_r" wan_active_band | sed -n 's/^LTE[^0-9]*\([0-9][0-9]*\).*/\1/p')
+	_zpband=""; [ -n "$_zband" ] && _zpband="B$_zband"
 	_mcc=$(_zj "$_r" rmcc); [ -n "$_mcc" ] || _mcc=$(_zj "$_r" hmcc)
 	_mnc=$(_zj "$_r" rmnc); [ -n "$_mnc" ] || _mnc=$(_zj "$_r" hmnc)
 	_wanip=$(_zj "$_r" wan_ipaddr)
@@ -425,9 +432,90 @@ zte_metrics_json() {
 	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
 	printf '"cid_dec":"%s","cid_hex":"%s","lac_hex":"%s",' "$_cid" "$_cid_hex" "$_lac"
+	printf '"pci":"%s","pband":"%s","enbid":"%s",' "$_zpci" "$_zpband" "$_zenb"
 	printf '"ipaddr":"%s",' "$_wanip"
 	printf '"csq":"%s",' "$_csq"
 	printf '"conn_status":"%s"' "$_pps"
+	printf '}\n'
+}
+
+_yota_get() {
+	_yg_src=$(_srcip_for "" "$1")
+	curl -s --max-time 6 ${_yg_src:+--interface "$_yg_src"} -A "$UA" "http://$1/status" 2>/dev/null | tr -d '\r'
+}
+
+_yv() { printf '%s\n' "$1" | sed -n "s|^$2=||p" | head -1; }
+
+yota_metrics_json() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 1
+	_r=$(_yota_get "$_a")
+	case "$_r" in *InterfaceType=*) ;; *) return 1 ;; esac
+	_model=$(_yv "$_r" DeviceName)
+	_fw=$(_yv "$_r" FirmwareVersion)
+	_state=$(_yv "$_r" State)
+	_itype=$(_yv "$_r" InterfaceType)
+	_imei=$(_yv "$_r" 3GPP.IMEI | tr -cd '0-9')
+	_imsi=$(_yv "$_r" 3GPP.IMSI | tr -cd '0-9')
+	_phone=$(_yv "$_r" 3GPP.MSISDN)
+	_rsrp=$(_yv "$_r" 3GPP.RSRP | tr -cd '0-9.-')
+	_rsrq=$(_yv "$_r" 3GPP.RSRQ | tr -cd '0-9.-')
+	_sinr=$(_yv "$_r" 3GPP.SINR | tr -cd '0-9.-')
+	_rssi=$(_yv "$_r" 3GPP.RSSI | tr -cd '0-9.-')
+	_mcc=$(_yv "$_r" 3GPP.MCC | tr -cd '0-9')
+	_mnc=$(_yv "$_r" 3GPP.MNC | tr -cd '0-9')
+	_cid_hex=$(_yv "$_r" 3GPP.CI | tr -cd '0-9A-Fa-f')
+	_lac=$(_yv "$_r" 3GPP.LAC | tr -cd '0-9A-Fa-f')
+	_roam=$(_yv "$_r" 3GPP.RoamingStatus)
+	_op=$(_yv "$_r" 3GPP.SPN)
+	_cid=""; _enb=""
+	if [ -n "$_cid_hex" ]; then
+		_cid=$(printf '%d' "0x$_cid_hex" 2>/dev/null)
+		[ -n "$_cid" ] && _enb=$(( _cid >> 8 ))
+	fi
+	_num="$_mcc$_mnc"
+	if [ ${#_num} -ge 5 ]; then
+		_dbop=$(awk -F';' -v k="$_num" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null \
+			| head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')
+		[ -n "$_dbop" ] && _op="$_dbop"
+	fi
+	_obr=$(opname_brand "$_imsi") && _op="$_obr"
+	_mode=""
+	case "$_itype" in lte|LTE) _mode="LTE" ;; esac
+	_pct=$(sig_percent "$_mode" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
+	_reg=0
+	if [ "$_state" = "Connected" ]; then
+		[ "$_roam" = "1" ] && _reg=5 || _reg=1
+	fi
+	_csq=""
+	case "$_rssi" in
+		-[0-9]*)
+			_ri=${_rssi%%.*}
+			_csq=$(( ( _ri + 113 ) / 2 ))
+			[ "$_csq" -lt 0 ] && _csq=0
+			[ "$_csq" -gt 31 ] && _csq=31
+			;;
+	esac
+	case "$_model" in *[Yy][Oo][Tt][Aa]*|"") ;; *) _model="Yota $_model" ;; esac
+	[ -n "$_model" ] || _model="Yota"
+	printf '{'
+	printf '"backend":"hilink",'
+	printf '"cport":"%s",' "$_a"
+	printf '"protocol":"HiLink (web API)",'
+	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"imei":"%s","imsi":"%s","iccid":"",' "$_imei" "$_imsi"
+	printf '"firmware":"%s","phone":"%s",' "$(jsafe "$_fw")" "$(jsafe "$_phone")"
+	printf '"operator_name":"%s",' "$(jsafe "$_op")"
+	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
+	printf '"registration":"%s",' "$_reg"
+	printf '"mode":"%s",' "$_mode"
+	printf '"signal":"%s",' "$_pct"
+	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
+		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
+	printf '"cid_dec":"%s","cid_hex":"%s","lac_hex":"%s",' "$_cid" "$_cid_hex" "$_lac"
+	printf '"enbid":"%s",' "$_enb"
+	printf '"csq":"%s",' "$_csq"
+	printf '"conn_status":"%s"' "$(jsafe "$_state")"
 	printf '}\n'
 }
 
@@ -437,7 +525,10 @@ zte_metrics_json() {
 metrics_json() {
 	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
-	case "$(_vidpid_for "$_HLP")" in 19d2:*) zte_metrics_json "$_HLP"; return $? ;; esac
+	case "$(_vidpid_for "$_HLP")" in
+		19d2:*) zte_metrics_json "$_HLP"; return $? ;;
+		15a9:*) yota_metrics_json "$_HLP"; return $? ;;
+	esac
 	_inf=$(api_get /api/device/information "$_HLP")
 	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
 	# сессию и повторил на пустой ответ). Если ВСЁ РАВНО пусто - модем недоступен:
@@ -517,6 +608,18 @@ metrics_json() {
 		# Разложение LTE ECI: старшие 20 бит - базовая станция, младшие 8 - сектор.
 		_enb=$(( _cid >> 8 ))
 		_sect=$(( _cid & 255 ))
+	fi
+
+	_lband=$(printf '%s' "$_sig" | xval band | tr -cd '0-9')
+	_learfcn=$(printf '%s' "$_sig" | xval earfcn | sed -n 's/^[^0-9]*\([0-9][0-9]*\).*/\1/p')
+	_ldlbw=$(printf '%s' "$_sig" | xval dlbandwidth | tr -cd '0-9.')
+	_lpband=""; _lbw=""
+	if [ -n "$_lband" ]; then
+		_lpband="B$_lband"
+		if [ -n "$_ldlbw" ]; then
+			_lbw="$_ldlbw MHz"
+			_lpband="$_lpband @$_lbw"
+		fi
 	fi
 
 	_up=$(printf '%s' "$_tr" | xval CurrentUpload)
@@ -620,6 +723,7 @@ metrics_json() {
 	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
 	printf '"pci":"%s",' "$_pci"
+	printf '"pband":"%s","earfcn":"%s","bandwidth":"%s",' "$_lpband" "$_learfcn" "$_lbw"
 	printf '"cid_dec":"%s","cid_hex":"%s",' "$_cid" "$_cid_hex"
 	printf '"enbid":"%s","sector":"%s",' "$_enb" "$_sect"
 	printf '"ipaddr":"%s",' "$_wanip"
@@ -1266,7 +1370,10 @@ case "$1" in
 		# не Huawei - вдруг ZTE goform (MF79 и родня)
 		_r=$(_zte_get "$_a" modem_main_state)
 		case "$_r" in
-			*modem_main_state*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a" ;;
+			*modem_main_state*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a"; exit 0 ;;
+		esac
+		case "$(_yota_get "$_a")" in
+			*InterfaceType=*) printf '{"hilink":1,"addr":"%s","classify":"yota"}\n' "$_a" ;;
 			*) printf '{"hilink":0,"addr":"%s"}\n' "$_a" ;;
 		esac
 		;;

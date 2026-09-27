@@ -1,0 +1,2 @@
+## 4pda topic 582284 (Huawei E3372) post #21133: AT^HCSQ? on WCDMA
+^HCSQ:"WCDMA",60,49,43
