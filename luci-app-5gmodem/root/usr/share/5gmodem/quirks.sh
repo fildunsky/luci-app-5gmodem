@@ -426,7 +426,8 @@ mm_at_allowed() {
 	_maa_if=$(uci -q get "5gmodem.$2.network" 2>/dev/null)
 	case "$(uci -q get "network.$_maa_if.proto" 2>/dev/null)" in
 		mbimp)
-			ubus call "network.interface.$_maa_if" status 2>/dev/null | grep -q '"up": true'
+			ubus call "network.interface.$_maa_if" status 2>/dev/null | grep -q '"up": true' && return 0
+			[ -s "/tmp/5gmodem_mbimp_sim_$_maa_if" ]
 			return $? ;;
 	esac
 	command -v mmcli >/dev/null 2>&1 || return 1

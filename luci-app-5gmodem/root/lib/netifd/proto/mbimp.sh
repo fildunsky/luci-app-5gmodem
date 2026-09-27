@@ -188,6 +188,7 @@ proto_mbimp_setup() {
 	if [ "$(_mbimp_field 'PIN state' "$out")" = "locked" ]; then
 		case "$(_mbimp_field 'PIN type' "$out")" in
 			pin1|puk1|'')
+				echo device-locked > "/tmp/5gmodem_mbimp_sim_$interface"
 				_mbimp_fail "$interface" PIN_FAILED "PIN required" block
 				return 1 ;;
 		esac
@@ -198,8 +199,11 @@ proto_mbimp_setup() {
 	while :; do
 		out=$(_mbimp_cli 20 --query-subscriber-ready-status)
 		ready=$(_mbimp_field 'Ready state' "$out")
-		[ "$ready" = "initialized" ] && break
+		[ "$ready" = "initialized" ] && { rm -f "/tmp/5gmodem_mbimp_sim_$interface"; break; }
 		n=$((n + 3))
+		[ "$n" -ge "$timeout" ] && case "$ready" in
+			sim-not-inserted|bad-sim|device-locked|failure) echo "$ready" > "/tmp/5gmodem_mbimp_sim_$interface" ;;
+		esac
 		[ "$n" -ge "$timeout" ] && { _mbimp_fail "$interface" NO_SUBSCRIBER "Subscriber init failed (${ready:-no answer})"; return 1; }
 		sleep 3
 	done

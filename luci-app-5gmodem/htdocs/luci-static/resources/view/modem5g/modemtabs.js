@@ -19,6 +19,9 @@
 	if (/\/argon\//.test(document.querySelector('link[href*="cascade.css"]') ? document.querySelector('link[href*="cascade.css"]').href : '')) {
 		document.documentElement.classList.add('tg-theme-argon');
 	}
+	if (/\/cyberpunk\//.test(document.querySelector('link[href*="cascade.css"]') ? document.querySelector('link[href*="cascade.css"]').href : '')) {
+		document.documentElement.classList.add('tg-theme-cyberpunk');
+	}
 	if (document.getElementById('tg-modem-css')) { return; }
 	var l = document.createElement('link');
 	l.id = 'tg-modem-css';

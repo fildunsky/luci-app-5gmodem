@@ -1086,7 +1086,7 @@ return view.extend({
 
 					])
 				]),
-			E('div', { 'class': 'right', 'style': 'margin-bottom: 14px;' }, [
+			E('div', { 'class': 'right tg-ussdopts', 'style': 'margin-bottom: 14px;' }, [
 				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;' }, [
 					E('input', {
 						'id': 'history-full',
@@ -1099,7 +1099,7 @@ return view.extend({
 					}),
 					E('span', { 'style': 'vertical-align:middle' }, _('Keep the previous reply when sending a new USSD'))
 				]),
-				E('span', { 'style': 'display:inline-block;width:1.5em' }),
+				E('span', { 'class': 'tg-ussdgap', 'style': 'display:inline-block;width:1.5em' }),
 				E('label', { 'class': 'cbi-checkbox', 'style': 'display:inline-flex !important;align-items:center !important;gap:6px;vertical-align:middle;height:auto !important;min-height:0 !important;line-height:1.4;' }, [
 					E('input', {
 						'id': 'reverse-replies',
@@ -1112,20 +1112,18 @@ return view.extend({
 					E('span', { 'style': 'vertical-align:middle' }, _('Newest replies first'))
 				])
 			]),
-				E('div', { 'class': 'right' }, [
+				E('div', { 'class': 'right tg-actrow' }, [
 					E('button', {
 						'class': 'cbi-button',
 						'click': ui.createHandlerFn(this, function() {
 							new editors.ussdCodesManagerDialog(_('USSD templates')).show();
 						})
 					}, [ _('USSD templates') ]),
-					'\xa0\xa0\xa0',
 					E('button', {
 						'class': 'cbi-button cbi-button-remove',
 						'id': 'clr',
 						'click': ui.createHandlerFn(this, 'handleClear')
 					}, [ _('Clear form') ]),
-					'\xa0\xa0\xa0',
 					E('button', {
 						'class': 'cbi-button cbi-button-action important',
 						'id': 'execute',

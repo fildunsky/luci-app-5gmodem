@@ -830,16 +830,8 @@ msgstr "из"
 msgid "selected messages"
 msgstr "выбранных сообщений"
 
-msgid ""
-"The package requires user configuration. <br /><br /><b>The following need "
-"to be set:</b> <ul><li>1. All ports for communication with the modem.</"
-"li><li>2. Additional options specific to the given modem (for handling USSD "
-"codes).</li><li> 3. Notification LED (optional).</li><li><ul>"
-msgstr ""
-"Пакет требует конфигурации пользователем. <br /><br /><b>Необходимо "
-"настроить:</b> <ul><li>1. Все порты для связи с модемом.</li><li>2. "
-"Дополнительные опции, специфичные для данного модема (для обработки USSD-"
-"кодов).</li><li> 3. Светодиод уведомлений (опционально).</li><li><ul>"
+msgid "The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>"
+msgstr "Пакет требует конфигурации пользователем. <br /><br /><b>Необходимо настроить:</b> <ol><li>Все порты для связи с модемом.</li><li>Дополнительные опции, специфичные для данного модема (для обработки USSD-кодов).</li><li>Светодиод уведомлений (опционально).</li></ol>"
 
 msgid ""
 "Any change in the area from which SMS messages will be read requires "
@@ -5597,7 +5589,7 @@ msgid "History"
 msgstr "История"
 
 msgid "Each metric has its own scale. The dashed line is the average; a thin vertical line marks a cell or band change. Point at a chart to read the value."
-msgstr "У каждой метрики своя шкала. Пунктир — среднее; тонкая вертикальная черта отмечает смену соты или диапазона. Наведите на график, чтобы увидеть значение."
+msgstr "У каждой метрики своя шкала. Пунктир — среднее; тонкая вертикальная черта отмечает смену соты или диапазона. Коснитесь графика или наведите на него, чтобы увидеть значение."
 
 msgid "avg"
 msgstr "сред."
@@ -5811,3 +5803,19 @@ msgstr "Не удалось сохранить порядок блоков"
 
 msgid "Hi! I really like your app. How can I thank you?"
 msgstr "Привет! Хочу отправить по СБП на Т-Банк благодарность за программу на этот номер. Можно?"
+
+msgid "Signal"
+msgstr "Сигнал"
+
+msgid "More"
+msgstr "Ещё"
+
+msgid "Carriers"
+msgstr "Несущие"
+
+msgid "New mobile view"
+msgstr "Новый мобильный вид"
+
+msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
+msgstr "На телефоне страница «Сеть» получает строку сводки, вкладки и плитки сигнала. Выключите, чтобы вернуть прежний вид."
+

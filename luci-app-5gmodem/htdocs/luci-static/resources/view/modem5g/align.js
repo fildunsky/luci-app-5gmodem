@@ -298,6 +298,7 @@ return view.extend({
 			'.al-sli label{min-width:180px;font-weight:600;font-size:14px}' +
 			'.al-sli input[type=range]{flex:1;max-width:240px}' +
 			'.al-sndbtn{font-size:15px;font-weight:700;padding:8px 16px}' +
+			'@media (max-width:600px){.al-sli label{min-width:0;flex:0 0 38%}.al-sli input[type=range]{min-width:0}.al-rx{grid-template-columns:48px repeat(4,1fr)}}' +
 			'.al-intro{border-left:3px solid var(--tg-accent,#0095ff);background:rgba(128,128,128,.08);border-radius:6px;padding:10px 14px;margin:0 0 12px;font-size:14px;line-height:1.5}' +
 			'.al-intro p{margin:0 0 6px}.al-intro ol{margin:4px 0 0 20px;padding:0}.al-intro li{margin:2px 0}';
 		var style = E('style', { type: 'text/css' }, css);

@@ -339,17 +339,18 @@ function trafficTable(data, labels) {
 		rows.push(E('tr', { 'class': 'tr' }, [
 			E('td', { 'class': 'td', 'style': 'width:1%' },
 				[ trafficIcon(parts[0], lab, (labels || {})['op.' + parts[0]]) ]),
-			E('td', { 'class': 'td' }, [ prettyTrafficLabel(lab) ]),
-			E('td', { 'class': 'td' }, [ fmtMonth(parts[1]) ]),
-			E('td', { 'class': 'td' }, [ fmtBytes(rx) ]),
-			E('td', { 'class': 'td' }, [ fmtBytes(tx) ]),
-			E('td', { 'class': 'td' }, [ fmtBytes(rx + tx) ]),
+			E('td', { 'class': 'td', 'data-title': _('SIM card') }, [ prettyTrafficLabel(lab) ]),
+			E('td', { 'class': 'td', 'data-title': _('Month') }, [ fmtMonth(parts[1]) ]),
+			E('td', { 'class': 'td', 'data-title': _('Received') }, [ fmtBytes(rx) ]),
+			E('td', { 'class': 'td', 'data-title': _('Sent') }, [ fmtBytes(tx) ]),
+			E('td', { 'class': 'td', 'data-title': _('Total') }, [ fmtBytes(rx + tx) ]),
 			E('td', { 'class': 'td', 'style': 'width:1%' }, [
 				/* Маленький крестик в круге, а не кнопка-корзина (решение
 				   владельца): это чистка строки, ей незачем выглядеть тяжелее
 				   самих данных. Свои стили вместо классов кнопок - темы дают
 				   кнопкам крупные поля и рамки. */
 				E('button', {
+					'class': 'tg-trdel',
 					'title': _('Delete this row'),
 					'style': 'width:20px;height:20px;padding:0;border-radius:50%;' +
 					         'border:1px solid rgba(128,128,128,.45);background:transparent;' +
@@ -578,8 +579,10 @@ return view.extend({
 						}
 					}),
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [ _('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats') ]),
-						E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
+						E('div', {}, [
+							_('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats'),
+							E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
+						])
 					])
 				])
 			]),

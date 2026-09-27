@@ -560,6 +560,7 @@ return view.extend({
 													: fileName.replace(/\.user$/, '').toUpperCase();
 												
 												return E('label', {
+													'class': 'tg-atfile',
 													'style': 'margin-right: 15px; display:inline-flex;align-items:center;gap:6px;vertical-align:middle;',
 													'data-tooltip': _('Select file with AT commands to load')
 												}, [
@@ -656,20 +657,18 @@ return view.extend({
 						]),
 					])
 				]),
-				E('div', { 'class': 'right' }, [
+				E('div', { 'class': 'right tg-actrow' }, [
 					E('button', {
 						'class': 'cbi-button',
 						'click': ui.createHandlerFn(this, function() {
 							new editors.atCommandsManagerDialog(_('AT templates')).show();
 						})
 					}, [ _('AT templates') ]),
-					'\xa0\xa0\xa0',
 					E('button', {
 						'class': 'cbi-button cbi-button-remove',
 						'id': 'clr',
 						'click': ui.createHandlerFn(this, 'handleClear')
 					}, [ _('Clear form') ]),
-					'\xa0\xa0\xa0',
 					E('button', {
 						'class': 'cbi-button cbi-button-action important',
 						'id': 'execute',

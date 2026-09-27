@@ -285,3 +285,19 @@ msgstr ""
 
 msgid "Hi! I really like your app. How can I thank you?"
 msgstr ""
+
+msgid "Signal"
+msgstr ""
+
+msgid "More"
+msgstr ""
+
+msgid "Carriers"
+msgstr ""
+
+msgid "New mobile view"
+msgstr ""
+
+msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
+msgstr ""
+

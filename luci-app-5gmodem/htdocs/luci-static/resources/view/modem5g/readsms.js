@@ -1095,10 +1095,7 @@ return view.extend({
 		/* ОДИН попап на страницу: напоминание тикало каждый опрос и множилось
    до бесконечности (поймано владельцем на Compal) */
 		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
- 			ui.addNotification(null, E('p', _('The package requires user configuration. \
-					<br /><br /><b>The following need to be set:</b> \
-					<ul><li>1. All ports for communication with the modem.</li><li>2. Additional options specific to the given modem (for handling USSD codes).</li><li> \
-					3. Notification LED (optional).</li><li><ul>')), 'info');
+ 			ui.addNotification(null, E('p', _('The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>')), 'info');
 		}
 		
 		var led = uci.get('5gmodem', 'sms', 'smsled');

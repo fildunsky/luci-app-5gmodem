@@ -4545,12 +4545,8 @@ msgstr "「受信メッセージ」タブに表示されない SMS も含めて�
 msgid "Saving SMS messages to a file failed. Please try again."
 msgstr "SMS メッセージのファイル保存に失敗しました。もう一度お試しください。"
 
-msgid ""
-"The package requires user configuration. <br /><br /><b>The following need "
-"to be set:</b> <ul><li>1. All ports for communication with the modem.</"
-"li><li>2. Additional options specific to the given modem (for handling USSD "
-"codes).</li><li> 3. Notification LED (optional).</li><li><ul>"
-msgstr "このパッケージは初期設定が必要です。<br /><br /><b>次の項目を設定してください:</b> <ul><li>1. モデムとの通信ポートすべて。</li><li>2. 使用するモデム固有の追加オプション (USSD コードの処理用)。</li><li> 3. 通知 LED (任意)。</li><li><ul>"
+msgid "The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>"
+msgstr "このパッケージは初期設定が必要です。<br /><br /><b>次の項目を設定してください:</b> <ol><li>モデムとの通信ポートすべて。</li><li>使用するモデム固有の追加オプション (USSD コードの処理用)。</li><li>通知 LED (任意)。</li></ol>"
 
 msgid "The tab allows users to support the package."
 msgstr "このタブからパッケージの開発を支援できます。"
@@ -5620,3 +5616,19 @@ msgstr "ブロックの順序を保存できませんでした"
 
 msgid "Hi! I really like your app. How can I thank you?"
 msgstr "こんにちは！あなたのアプリがとても気に入っています。どうすればお礼ができますか？"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "More"
+msgstr "その他"
+
+msgid "Carriers"
+msgstr "キャリア"
+
+msgid "New mobile view"
+msgstr "新しいモバイル表示"
+
+msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
+msgstr "スマートフォンでは「ネットワーク」ページに概要バー、タブ、信号タイルが表示されます。オフにすると以前のレイアウトに戻ります。"
+

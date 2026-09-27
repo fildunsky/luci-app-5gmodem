@@ -113,22 +113,19 @@ function bandFilter(id) {
 	if (chip) { chip.parentNode.removeChild(chip); }
 	if (!sig) { return; }
 	var toggle = function(ev) {
-		if (ev.type === 'keydown' && ev.key !== 'Enter' && ev.key !== ' ') { return; }
 		ev.preventDefault();
 		_bandMoreMem[id] = !_bandMoreOpen(id);
 		try { window.localStorage.setItem('5gm-bandsmore-' + id, _bandMoreMem[id] ? '1' : '0'); } catch (e) {}
 		bandFilter(id);
 	};
-	cont.appendChild(E('span', {
-		'class': 'tg-bandmore' + (open ? ' open' : ''),
-		'role': 'button',
-		'tabindex': '0',
+	cont.appendChild(E('button', {
+		'class': 'btn cbi-button tg-bandmore' + (open ? ' open' : ''),
+		'type': 'button',
 		'data-sig': sig,
 		'aria-expanded': open ? 'true' : 'false',
 		'title': open ? _('Hide bands not used by operators in this country')
 			: _('%d more bands supported by the modem, %d of them enabled').format(extra.length, onHidden),
-		'click': toggle,
-		'keydown': toggle
+		'click': toggle
 	}, open ? [ _('Show fewer') ]
 		: [ '+' + extra.length, onHidden ? E('small', {}, _('(%d enabled)').format(onHidden)) : '' ]));
 }
@@ -978,7 +975,7 @@ function applyBandsReadOnly() {
 	[ 'bands-lte', 'bands-nr', 'bands-3g', 'bands-2g', 'modesw-btns' ].forEach(function(id) {
 		var c = document.getElementById(id);
 		if (!c) { return; }
-		c.querySelectorAll('button').forEach(function(b) {
+		c.querySelectorAll('button:not(.tg-bandmore)').forEach(function(b) {
 			b.disabled = ro;
 			b.style.opacity = ro ? '.55' : '';
 			b.style.cursor = ro ? 'not-allowed' : '';
@@ -1176,7 +1173,7 @@ function applyBands() {
 
 function resetBands() {
 	if (bandSource == 'modemband') { return applyBandsModemband(true); }
-	document.querySelectorAll('#bands-3g .cbi-button, #bands-lte .cbi-button, #bands-nr .cbi-button').forEach(function(b) {
+	document.querySelectorAll('#bands-3g button[data-band], #bands-lte button[data-band], #bands-nr button[data-band]').forEach(function(b) {
 		b.classList.add('cbi-button-action', 'important');
 	});
 	return applyBands();

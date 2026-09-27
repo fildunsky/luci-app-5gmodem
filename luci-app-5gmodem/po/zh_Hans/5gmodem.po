@@ -634,15 +634,8 @@ msgstr "在"
 msgid "selected messages"
 msgstr "所选消息中"
 
-msgid ""
-"The package requires user configuration. <br /><br /><b>The following need "
-"to be set:</b> <ul><li>1. All ports for communication with the modem.</"
-"li><li>2. Additional options specific to the given modem (for handling USSD "
-"codes).</li><li> 3. Notification LED (optional).</li><li><ul>"
-msgstr ""
-"该软件包需要用户配置。<br /><br /><b>需要设置：</b> <ul><li>1. 所有与调制解调"
-"器通信的端口。</li><li>2. 针对给定调制解调器的附加选项（用于处理USSD代码）。"
-"</li><li> 3. 通知LED（可选）。</li><li><ul>"
+msgid "The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>"
+msgstr "该软件包需要用户配置。<br /><br /><b>需要设置：</b> <ol><li>所有与调制解调器通信的端口。</li><li>针对给定调制解调器的附加选项（用于处理USSD代码）。</li><li>通知LED（可选）。</li></ol>"
 
 msgid ""
 "Any change in the area from which SMS messages will be read requires "
@@ -5746,3 +5739,19 @@ msgstr "无法保存区块顺序"
 
 msgid "Hi! I really like your app. How can I thank you?"
 msgstr "你好！我非常喜欢你的程序，我该怎么感谢你呢？"
+
+msgid "Signal"
+msgstr "信号"
+
+msgid "More"
+msgstr "更多"
+
+msgid "Carriers"
+msgstr "载波"
+
+msgid "New mobile view"
+msgstr "新版移动视图"
+
+msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
+msgstr "在手机上，“网络”页面会显示摘要栏、标签页和信号卡片。关闭即可恢复旧布局。"
+

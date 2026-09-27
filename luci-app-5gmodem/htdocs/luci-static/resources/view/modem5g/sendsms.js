@@ -684,7 +684,7 @@ return view.extend({
 
 					])
 				]),
-				E('div', { 'class': 'right' }, [
+				E('div', { 'class': 'right tg-actrow' }, [
 					E('button', {
 						'class': 'cbi-button',
 						'click': ui.createHandlerFn(this, function() {
@@ -695,13 +695,11 @@ return view.extend({
 							});
 						})
 					}, [ _('Manage contacts') ]),
-					'\xa0\xa0\xa0',
 					E('button', {
 						'class': 'cbi-button cbi-button-remove',
 						'id': 'clr',
 						'click': ui.createHandlerFn(this, 'handleClear')
 					}, [ _('Clear form') ]),
-					'\xa0\xa0\xa0',
 						E('span', { 'class': 'diag-action' }, [
 							group ? new ui.ComboButton('send', {
 								'send': '%s %s'.format(_('Send'), _('to number')),

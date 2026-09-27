@@ -16,6 +16,7 @@
 'require view.modem5g.healthform as healthform';
 'require view.modem5g.fresh as fresh';
 'require view.modem5g.netarrange as netarrange';
+'require view.modem5g.mobileview as mobileview';
 
 /*
 	Copyright 2021-2025 Rafał Wabik - IceG - From eko.one.pl forum
@@ -2590,6 +2591,7 @@ function applyMetrics(json) {
 					foreignTicks = 0;
 					_lastJson = json;
 					updateSimpleLine(json);
+					try { mobileview.tick(json); } catch (e) {}
 					qualSetMode(json.mode);
 
 					/* Тик пришёл - порт свободен: запускаем отложенные
@@ -2910,7 +2912,14 @@ function applyMetrics(json) {
 						}
 						else {
 						sv.style.visibility = "visible";
-						view.textContent = json.registration;
+						view.textContent = ({
+							'SIM not inserted': _('SIM not inserted'),
+							'SIM PIN required': _('SIM PIN required'),
+							'SIM PUK required': _('SIM PUK required'),
+							'SIM failure': _('SIM failure'),
+							'SIM busy': _('SIM busy'),
+							'SIM wrong': _('SIM wrong')
+						})[String(json.registration)] || json.registration;
 						if (json.registration == '0') { 
 							view.textContent = _('Not registered');
 						}
@@ -3732,7 +3741,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30001, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4644,6 +4653,7 @@ simDialog: baseclass.extend({
 
 		return m.render().then(function(node) {
 			try { netarrange.prepare(node); } catch (e) {}
+			try { mobileview.prepare(node); } catch (e) {}
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);

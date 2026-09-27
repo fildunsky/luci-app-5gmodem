@@ -440,6 +440,11 @@ return view.extend({
 		o.default = '0';
 		o.rmempty = false;
 
+		o = disp.option(form.Flag, 'mobile_view', _('New mobile view'),
+			_('On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back.'));
+		o.default = '1';
+		o.rmempty = false;
+
 		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
 			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
 		o.default = '1';
