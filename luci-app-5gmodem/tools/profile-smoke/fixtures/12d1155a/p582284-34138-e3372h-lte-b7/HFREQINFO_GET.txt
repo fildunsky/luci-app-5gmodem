@@ -1,0 +1,2 @@
+## 4pda topic 582284 (Huawei E3372) post #34297: atc at^HFREQINFO? on the same stick, band 7, DL EARFCN 2850, 20 MHz
+^HFREQINFO:0,6,7,2850,26300,20000,20850,25100,20000

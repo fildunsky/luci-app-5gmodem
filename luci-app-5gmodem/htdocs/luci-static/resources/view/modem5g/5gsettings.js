@@ -902,6 +902,7 @@ return view.extend({
 				profile: _('has answered as a modem before'),
 				forced:  _('returned to modems by hand'),
 				bridge:  _('USB-to-serial adapter'),
+				service: _('modem in a flashing or boot mode'),
 				ignored: _('excluded by hand'),
 				none:    _('no modem driver and no modem network interface')
 			}[d.why];

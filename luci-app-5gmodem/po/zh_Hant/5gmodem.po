@@ -5049,6 +5049,9 @@ msgstr "用簡訊傳送第一欄中的詞——路由器就會執行第二欄中
 msgid "USB-to-serial adapter"
 msgstr "USB 轉序列埠轉換器"
 
+msgid "modem in a flashing or boot mode"
+msgstr "處於刷機或開機載入模式的數據機"
+
 msgid "What to run"
 msgstr "要執行什麼"
 

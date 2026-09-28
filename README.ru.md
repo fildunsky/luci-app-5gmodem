@@ -113,6 +113,12 @@ MBIM: менеджер пакетов удалит эти пакеты как о
 - Foxconn T99W373 / Thales MV32-W (Snapdragon X62) — диапазоны LTE, 5G NSA, 5G SA и WCDMA, привязка к соте, режим сети, режим 5G, полные метрики сот и антенн
 - Другие модемы на Altair ALT3100 / ALT3800 (USB-вендор 216f): Yota 4G LTE (Swift WLTUBA-107), NTmore JMR814 — профиль NTLM-500, работает, когда свисток отдаёт AT-порт
 
+### Заведены по отчётам с форума 4pda
+Железа у меня нет: профили сделаны по ответам свистков и страницам состояния, которые владельцы выкладывали на 4pda.
+- Huawei E3372h в режиме свистка «Gateway NCM» прошивки HiLink (USB 12d1:155a) — профиль E3372 по AT: сигнал, диапазон, EARFCN, температура
+- Свистки Yota без AT-портов: Gemtek WLTUBA-107/115 и WLTUBQ-108 (USB 15a9:002d, 15a9:003a), Yota LU150 на GCT GDM7240 (USB 1076:8002) — сигнал, сота и данные SIM со страницы состояния самого свистка
+- Режимы прошивки и загрузчика (Qualcomm EDL и аварийный дамп, игольный режим и fastboot у Huawei, Sierra QDL, MediaTek BootROM, порт обновления Alcatel) больше не показываются модемами
+
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### USB-свистки без AT-портов (HiLink)

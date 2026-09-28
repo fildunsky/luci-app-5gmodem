@@ -106,6 +106,12 @@ opkg install luci-i18n-base-ja
 - Foxconn T99W373 / Thales MV32-W（Snapdragon X62）— LTE、5G NSA、5G SA、WCDMA の各バンド、セルロック、ネットワークモード、5G モード、セルとアンテナの全メトリクス
 - その他の Altair ALT3100 / ALT3800 モデム（USB ベンダー 216f）: Yota 4G LTE（Swift WLTUBA-107）、NTmore JMR814 — スティックが AT ポートを見せる場合は常に NTLM-500 のプロファイルを使います
 
+### 4pda フォーラムの報告をもとに追加したもの
+手元に実機はありません。所有者が 4pda フォーラムに投稿したスティックの応答やステータスページをもとにしています。
+- HiLink ファームウェアの「Gateway NCM」スティックモードの Huawei E3372h（USB 12d1:155a）— E3372 の AT プロファイル: 信号、バンド、EARFCN、温度
+- AT ポートのない Yota スティック: Gemtek WLTUBA-107/115 と WLTUBQ-108（USB 15a9:002d、15a9:003a）、GCT GDM7240 の Yota LU150（USB 1076:8002）— スティック自身のステータスページから信号、セル、SIM の情報を取得
+- 書き込みモードとブートモード（Qualcomm EDL とクラッシュダンプ、Huawei のニードル/fastboot モード、Sierra QDL、MediaTek BootROM、Alcatel のアップデートポート）はモデムとして表示されなくなりました
+
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### AT ポートを持たない USB スティック（HiLink）

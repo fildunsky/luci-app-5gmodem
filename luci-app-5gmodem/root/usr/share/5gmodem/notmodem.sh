@@ -27,6 +27,7 @@
 #     роутеру именно через такой мост и других портов у него нет: список выше
 #     тогда прячет настоящий модем.
 NOT_MODEM_VIDPIDS="1a86:7522 1a86:7523 1a86:55d3 0403:6001 0403:6010 0403:6011 0403:6014 0403:6015 10c4:ea60 10c4:ea70 10c4:ea71 067b:2303 067b:23a3 067b:23c3"
+NOT_MODEM_SERVICE="05c6:9008 05c6:900e 19d2:9008 12d1:1443 12d1:36dd 1199:9078 1199:9090 0e8d:0003 1bbb:007a"
 
 # Обе ручки читаем ОДИН раз на процесс: is_not_modem зовётся на каждое USB-
 # устройство, а listmodems.sh за одну загрузку страницы запускается шесть раз -
@@ -46,7 +47,7 @@ is_not_modem() {
 	for _nm in $NOT_MODEM_FORCE; do
 		[ "$1" = "$_nm" ] && return 1
 	done
-	for _nm in $NOT_MODEM_VIDPIDS $NOT_MODEM_EXTRA; do
+	for _nm in $NOT_MODEM_VIDPIDS $NOT_MODEM_SERVICE $NOT_MODEM_EXTRA; do
 		[ "$1" = "$_nm" ] && return 0
 	done
 	return 1
@@ -57,9 +58,16 @@ is_not_modem() {
 # модемом) или в modem_vidpid (вернуть то, что прячем сами).
 is_not_modem_builtin() {
 	case "$1" in *:*) ;; *) return 1 ;; esac
-	for _nm in $NOT_MODEM_VIDPIDS; do
+	for _nm in $NOT_MODEM_VIDPIDS $NOT_MODEM_SERVICE; do
 		[ "$1" = "$_nm" ] && return 0
 	done
+	return 1
+}
+
+is_not_modem_service() {
+	case " $NOT_MODEM_SERVICE " in
+		*" $1 "*) return 0 ;;
+	esac
 	return 1
 }
 
@@ -127,7 +135,13 @@ usb_is_modem() {
 	done
 	if is_not_modem "$_im_v:$_im_p"; then
 		IM_DETAIL=""
-		is_not_modem_builtin "$_im_v:$_im_p" && IM_WHY=bridge || IM_WHY=ignored
+		if is_not_modem_service "$_im_v:$_im_p"; then
+			IM_WHY=service
+		elif is_not_modem_builtin "$_im_v:$_im_p"; then
+			IM_WHY=bridge
+		else
+			IM_WHY=ignored
+		fi
 		return 1
 	fi
 

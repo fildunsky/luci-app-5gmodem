@@ -1,0 +1,2 @@
+## 4pda topic 582284 (Huawei E3372) post #34138: atc AT^HCSQ? on E3372h HiLink firmware, good-speed state
+^HCSQ:"LTE",56,49,101,26

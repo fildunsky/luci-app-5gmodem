@@ -5144,6 +5144,9 @@ msgstr "Пришлите в SMS слово из первого столбца - 
 msgid "USB-to-serial adapter"
 msgstr "переходник USB-UART"
 
+msgid "modem in a flashing or boot mode"
+msgstr "модем в режиме прошивки или загрузчика"
+
 msgid "What to run"
 msgstr "Что выполнить"
 

@@ -5080,6 +5080,9 @@ msgstr "用短信发送第一列中的词——路由器就会执行第二列中
 msgid "USB-to-serial adapter"
 msgstr "USB 转串口适配器"
 
+msgid "modem in a flashing or boot mode"
+msgstr "处于刷机或引导模式的调制解调器"
+
 msgid "What to run"
 msgstr "要执行什么"
 

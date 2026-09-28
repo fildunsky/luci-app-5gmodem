@@ -97,6 +97,12 @@ No hardware and no reports for these yet: the profiles follow the vendors' AT co
 - Foxconn T99W373 / Thales MV32-W (Snapdragon X62) — bands for LTE, 5G NSA, 5G SA and WCDMA, cell lock, network mode, 5G mode, full cell and antenna metrics
 - Other Altair ALT3100 / ALT3800 modems (USB vendor 216f): Yota 4G LTE (Swift WLTUBA-107), NTmore JMR814 — the NTLM-500 profile, used whenever the stick exposes an AT port
 
+### Added from 4pda forum reports
+No hardware here: the profiles follow the stick replies and status pages that owners posted on the 4pda forum.
+- Huawei E3372h in the HiLink "Gateway NCM" stick mode (USB 12d1:155a) — the E3372 AT profile: signal, band, EARFCN, temperature
+- Yota sticks without AT ports: Gemtek WLTUBA-107/115 and WLTUBQ-108 (USB 15a9:002d, 15a9:003a), Yota LU150 on GCT GDM7240 (USB 1076:8002) — signal, cell and SIM data from the stick's own status page
+- Flashing and boot modes (Qualcomm EDL and crash dump, Huawei needle and fastboot modes, Sierra QDL, MediaTek BootROM, the Alcatel updater port) are no longer shown as modems
+
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-02-52" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### USB sticks with no AT ports (HiLink)

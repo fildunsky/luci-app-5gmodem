@@ -1,0 +1,2 @@
+## 4pda topic 582284 (Huawei E3372) post #8844: AT^CHIPTEMP? on E3372h with HiLink firmware 22.315
+^CHIPTEMP: 316,316,65535,27,65535

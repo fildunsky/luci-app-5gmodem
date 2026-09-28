@@ -191,7 +191,7 @@ done
 # От чужих устройств защищают две проверки ниже: нет ни tty, ни wdm И нет ни
 # одного интерфейса класса ff. У настоящего модема-стика ff есть всегда (из него
 # и делаются ttyUSB), у сетевой карты - никогда.
-_HILINK_VENDORS="12d1 19d2 1bbb 2001 0421 1546 2020 05c6"
+_HILINK_VENDORS="12d1 19d2 1bbb 2001 0421 1546 2020 05c6 1076"
 for _nd in /sys/class/net/*; do
 	[ -e "$_nd/device" ] || continue
 	_dev=$(readlink -f "$_nd/device" 2>/dev/null)

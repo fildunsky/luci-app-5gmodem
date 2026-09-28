@@ -1849,6 +1849,9 @@ msgstr "アプリが判断できない USB デバイスです (モデムデー�
 msgid "USB-to-serial adapter"
 msgstr "USB シリアル変換アダプタ"
 
+msgid "modem in a flashing or boot mode"
+msgstr "書き込みモードまたはブートモードのモデム"
+
 msgid "Update available"
 msgstr "更新があります"
 

@@ -110,6 +110,12 @@ opkg install luci-i18n-base-zh-cn
 - Foxconn T99W373 / Thales MV32-W（Snapdragon X62）—— LTE、5G NSA、5G SA 与 WCDMA 频段，锁定小区，网络模式，5G 模式，完整的小区与天线指标
 - 其他 Altair ALT3100 / ALT3800 调制解调器（USB 厂商 216f）：Yota 4G LTE（Swift WLTUBA-107）、NTmore JMR814 —— 沿用 NTLM-500 的配置文件，上网棒提供 AT 端口时生效
 
+### 依据 4pda 论坛报告添加的型号
+我手上没有这些硬件：配置文件依据机主在 4pda 论坛发布的上网棒应答和状态页面编写。
+- HiLink 固件“Gateway NCM”上网棒模式下的 Huawei E3372h（USB 12d1:155a）—— 沿用 E3372 的 AT 配置文件：信号、频段、EARFCN、温度
+- 没有 AT 端口的 Yota 上网棒：Gemtek WLTUBA-107/115 与 WLTUBQ-108（USB 15a9:002d、15a9:003a），基于 GCT GDM7240 的 Yota LU150（USB 1076:8002）—— 从上网棒自带的状态页面读取信号、小区和 SIM 信息
+- 刷机与引导模式（Qualcomm EDL 与崩溃转储、Huawei 针刺与 fastboot 模式、Sierra QDL、MediaTek BootROM、Alcatel 升级端口）不再显示为调制解调器
+
 <img width="1960" height="1474" alt="截图" src="https://github.com/user-attachments/assets/0bd100f7-780f-47e3-98a4-9729bf29ee8b" />
 
 ### 没有 AT 端口的 USB 上网卡（HiLink）

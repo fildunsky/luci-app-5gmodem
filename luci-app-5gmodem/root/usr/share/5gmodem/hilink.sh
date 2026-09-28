@@ -527,7 +527,7 @@ metrics_json() {
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
 	case "$(_vidpid_for "$_HLP")" in
 		19d2:*) zte_metrics_json "$_HLP"; return $? ;;
-		15a9:*) yota_metrics_json "$_HLP"; return $? ;;
+		15a9:*|1076:8002) yota_metrics_json "$_HLP"; return $? ;;
 	esac
 	_inf=$(api_get /api/device/information "$_HLP")
 	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
