@@ -176,7 +176,7 @@ _iface_label() {
 _collect_ping() {
 	for _cp_f in /tmp/5gmodem_health/*; do
 		[ -f "$_cp_f" ] || continue
-		case "$_cp_f" in */.t|*.heal|*.demoted|*.nosim|*.last_event) continue ;; esac
+		case "${_cp_f##*/}" in .*|*.*) continue ;; esac
 		_cp_if="${_cp_f##*/}"
 		read -r _cp_st _ _ _cp_ms _ 2>/dev/null < "$_cp_f" || continue
 		# «down» пишем нулём: разрыв в графике должен быть виден, а не сглажен

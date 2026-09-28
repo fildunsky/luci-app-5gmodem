@@ -655,6 +655,11 @@ _restore_stolen() {
 				# (тот же разбор, что в health.sh).
 				curl -s --max-time 8 --interface "if!$L3" -o /dev/null \
 					http://ip-api.com/line/?fields=query 2>/dev/null && continue
+				_wl_ok=""
+				for _wl_t in $(uci -q get 5gmodem.health.restricted_targets || echo 77.88.55.242 5.255.255.242); do
+					curl -sk --max-time 5 --interface "if!$L3" -o /dev/null "https://$_wl_t/" 2>/dev/null && { _wl_ok=1; break; }
+				done
+				[ -n "$_wl_ok" ] && continue
 			fi
 			_dead="нет связи через $L3"
 		fi

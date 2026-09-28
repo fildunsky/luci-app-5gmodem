@@ -1784,6 +1784,13 @@ set_sms_storage() {   # $1 - at-порт
 		# место. В периодических опросах так делать нельзя - см. smsbridge.sh.
 		_ss_me=$(sms_tool -d "$_ss_at" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 		_ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+		_ss_try=0
+		while [ -n "$_ss_stg" ] && [ "$_ss_try" -lt 2 ] && { [ -z "$_ss_me" ] || [ -z "$_ss_sm" ]; } && [ -n "$_ss_me$_ss_sm" ]; do
+			_ss_try=$((_ss_try + 1))
+			sleep 3
+			[ -n "$_ss_me" ] || _ss_me=$(sms_tool -d "$_ss_at" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+			[ -n "$_ss_sm" ] || _ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
+		done
 		if   [ "${_ss_me:-0}" -gt "${_ss_sm:-0}" ] 2>/dev/null; then _ss_new=ME
 		elif [ "${_ss_sm:-0}" -gt "${_ss_me:-0}" ] 2>/dev/null; then _ss_new=SM
 		elif [ -n "$_ss_me" ]; then _ss_new=ME     # равны или неизвестны - ME

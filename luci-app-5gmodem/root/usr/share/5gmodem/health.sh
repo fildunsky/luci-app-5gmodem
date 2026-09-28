@@ -49,6 +49,9 @@ H_EN=$(conf enabled)
 [ "$(uci -q get "$CFG.@5gmodem[0].widget_netpri")" = "0" ] && H_EN=0
 H_INT=$(conf interval);  case "$H_INT" in ''|*[!0-9]*) H_INT=30 ;; esac
 H_TGT=$(conf targets);   [ -n "$H_TGT" ] || H_TGT="77.88.8.8 1.1.1.1"
+H_RTGT=$(conf restricted_targets)
+[ -n "$H_RTGT" ] || H_RTGT="77.88.55.242 5.255.255.242 87.240.132.72 155.212.204.5"
+[ "$(conf restricted)" = "0" ] && H_RTGT=""
 H_FAILN=$(conf fail_n);  case "$H_FAILN" in ''|*[!0-9]*) H_FAILN=3 ;; esac
 H_OKN=$(conf ok_n);      case "$H_OKN" in ''|*[!0-9]*) H_OKN=5 ;; esac
 H_FO=$(conf failover)
@@ -214,7 +217,7 @@ iface_dev() {
 # отдаём в H_MS. Таймауты - средствами самого ping (-W): busybox timeout не
 # имеет, и внешний сторож тут не нужен.
 probe_dev() {
-	_pd_dev="$1"; H_MS=""
+	_pd_dev="$1"; H_MS=""; H_RESTR=""
 	for _pd_t in $H_TGT; do
 		_pd_o=$(ping -I "$_pd_dev" -c 1 -W 2 "$_pd_t" 2>/dev/null)
 		# FAKE-IP (clash/ssclash, 198.18.0.0/15): доменная цель разрешилась в
@@ -258,7 +261,41 @@ probe_dev() {
 				return 0 ;;
 		esac
 	done
-	return 1
+	probe_restricted "$_pd_dev"
+}
+
+probe_restricted() {
+	[ -n "$H_RTGT" ] || return 1
+	mkdir -p "$HDIR"
+	_pr_pids=""; _pr_n=0
+	for _pr_t in $H_RTGT; do
+		case "$_pr_t" in *[!0-9.]*) continue ;; esac
+		_pr_n=$((_pr_n + 1))
+		(
+			_pr_c=$(curl -s -m 3 --interface "if!$1" -o /dev/null -w '%{time_connect}' "https://$_pr_t/" 2>/dev/null)
+			case "$_pr_c" in ''|0|0.000000) ;; *) printf '%s\n' "$_pr_c" > "$HDIR/.rp.$$.$_pr_n" ;; esac
+		) </dev/null >/dev/null 2>&1 9>&- &
+		_pr_pids="$_pr_pids $!"
+	done
+	[ -n "$_pr_pids" ] || return 1
+	wait $_pr_pids 2>/dev/null
+	_pr_c=$(cat "$HDIR"/.rp.$$.* 2>/dev/null | head -n 1)
+	rm -f "$HDIR"/.rp.$$.* 2>/dev/null
+	[ -n "$_pr_c" ] || return 1
+	H_MS=$(printf '%s' "$_pr_c" | awk '{printf "%d", $1 * 1000}')
+	H_RESTR=1
+	return 0
+}
+
+restricted_mark() {
+	if [ -n "$H_RESTR" ]; then
+		[ -f "$HDIR/.restricted_$1" ] && return 0
+		: > "$HDIR/.restricted_$1"
+		_ev "link $1: only whitelisted services answer (restricted network) - kept as alive, no healing"
+	elif [ -f "$HDIR/.restricted_$1" ]; then
+		rm -f "$HDIR/.restricted_$1"
+		_ev "link $1: full internet is back"
+	fi
 }
 
 # Интернет через локальный прокси (clash)? Отвечает на вопрос «есть ли инет
@@ -392,7 +429,7 @@ round() {
 			fi
 			continue
 		fi
-		if probe_dev "$_r_dev"; then judge "$_r_n" 1 "$H_MS"; else judge "$_r_n" 0 ""; fi
+		if probe_dev "$_r_dev"; then judge "$_r_n" 1 "$H_MS"; restricted_mark "$_r_n"; else judge "$_r_n" 0 ""; fi
 	done
 	# ПОДЧИСТКА ПРИЗРАКОВ. Интерфейс мог исчезнуть из wan-зоны насовсем
 	# (hilink при смене композиции пересоздаёт его под ДРУГИМ именем - живой
@@ -589,6 +626,22 @@ _dns_demote() {   # $1 - имена мёртвых линков через пр�
 	_ev "dropped DNS servers of the dead link(s):$1 - the resolver list follows the traffic now"
 }
 
+_dns_restore() {
+	_dr_f=/tmp/resolv.conf.d/resolv.conf.auto
+	[ -f "$_dr_f" ] || return 0
+	grep -qE "^# Interface $1(_4)?\$" "$_dr_f" && return 0
+	_dr_ns=$(printf '%s' "$_HDUMP" | jsonfilter -e "@.interface[@.interface=\"$1\"]['dns-server'][*]" 2>/dev/null)
+	_dr_n="$1"
+	if [ -z "$_dr_ns" ]; then
+		_dr_ns=$(printf '%s' "$_HDUMP" | jsonfilter -e "@.interface[@.interface=\"${1}_4\"]['dns-server'][*]" 2>/dev/null)
+		_dr_n="${1}_4"
+	fi
+	[ -n "$_dr_ns" ] || return 0
+	{ printf '# Interface %s\n' "$_dr_n"; printf 'nameserver %s\n' $_dr_ns; } >> "$_dr_f" 2>/dev/null
+	killall -HUP dnsmasq 2>/dev/null
+	_ev "returned DNS servers of $1"
+}
+
 # Применить/снять штрафы по текущим вердиктам. Вызывается после каждого круга.
 enforce() {
 	_e_anyup=""; _e_cnt=0; _e_min=""; _e_dead=""
@@ -651,6 +704,7 @@ enforce() {
 			# якорь $ тут не срабатывал никогда (см. разбор выше у _e_cur).
 			if ip -4 route show default $(_rt4_args "$_e_if") 2>/dev/null | grep -E " dev $_e_dev( |$)" | grep -qE "metric $((_e_base + PEN))( |$)"; then
 				_ev "$_e_if - restoring priority (metric $_e_base)"
+				[ "$_e_st" = up ] && _dns_restore "$_e_if"
 			fi
 			_e_target=$_e_base
 		fi

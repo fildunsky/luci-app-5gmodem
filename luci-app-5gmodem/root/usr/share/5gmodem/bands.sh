@@ -778,8 +778,11 @@ case "$1" in restorebands) _bands_flush ;; esac
 # Обёртка, а не правка веток вывода: реальный json печатает штатный код ниже,
 # запущенный как 'jsonrefresh'; здесь мы только кэшируем его вывод и решаем,
 # идти ли в порт. Кэшируем лишь валидный JSON ('{...}'); ошибку/пусто - нет.
-_BJ_REFRESH=""
-[ "$1" = "jsonrefresh" ] && { _BJ_REFRESH=1; set -- json; }
+_BJ_REFRESH=""; _BJ_FORCE=""
+if [ "$1" = "jsonrefresh" ]; then
+	if [ -n "$_BJ_INNER" ]; then _BJ_REFRESH=1; else _BJ_FORCE=1; fi
+	set -- json
+fi
 if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	_BJAM=$(active_modem)
 	_BJF="/tmp/5gmodem_bands_$_BJAM"
@@ -815,7 +818,11 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 		_BJTTL=15
 	fi
 	grep -q '"nolive": *1' "$_BJF" 2>/dev/null && _BJTTL=15
-	if [ -s "$_BJF" ] && [ -n "$_BJT" ] \
+	_bj_idok() {
+		[ -s "$_BJF" ] && [ "$_BJP" = "$(cat "$_BJF.p" 2>/dev/null)" ] \
+		   && { _bjc=$(cat "$_BJF.m" 2>/dev/null); [ -z "$_BJMDL" ] || [ -z "$_bjc" ] || [ "$_BJMDL" = "$_bjc" ]; }
+	}
+	if [ -z "$_BJ_FORCE" ] && [ -s "$_BJF" ] && [ -n "$_BJT" ] \
 	   && [ "$_BJP" = "$(cat "$_BJF.p" 2>/dev/null)" ] \
 	   && { [ -z "$_BJMDL" ] || [ -z "$_BJCM" ] || [ "$_BJMDL" = "$_BJCM" ]; } \
 	   && [ "$(( $(cut -d. -f1 /proc/uptime) - _BJT ))" -lt "$_BJTTL" ]; then
@@ -828,7 +835,28 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	# кэш-промах (первое открытие/протух) - считаем сейчас, синхронно, и кэшируем
 	# Путь передаём дальше: дочерний jsonrefresh читает active_modem заново, и без
 	# аргумента он собрал бы данные АКТИВНОГО модема под ключом выбранной вкладки.
-	_o=$("$0" jsonrefresh ${BANDS_ACTIVE_MODEM:+"$BANDS_ACTIVE_MODEM"} 2>/dev/null)
+	_bj_t0=$(cut -d. -f1 /proc/uptime)
+	while ! mkdir "$_BJF.lk" 2>/dev/null; do
+		_bj_now=$(cut -d. -f1 /proc/uptime)
+		_bj_lt=$(cat "$_BJF.lk/t" 2>/dev/null)
+		case "$_bj_lt" in ''|*[!0-9]*) _bj_lt="$_bj_now" ;; esac
+		if [ $((_bj_now - _bj_lt)) -ge 120 ]; then rm -rf "$_BJF.lk"; continue; fi
+		if [ ! -d "$_BJF.lk" ]; then
+			_bj_ct=$(cat "$_BJF.t" 2>/dev/null)
+			case "$_bj_ct" in ''|*[!0-9]*) _bj_ct=0 ;; esac
+			[ "$_bj_ct" -ge "$_bj_t0" ] && _bj_idok && { cat "$_BJF"; exit 0; }
+			continue
+		fi
+		if [ $((_bj_now - _bj_t0)) -ge 20 ]; then
+			if _bj_idok; then cat "$_BJF"; else echo '{}'; fi
+			exit 0
+		fi
+		sleep 1
+	done
+	cut -d. -f1 /proc/uptime > "$_BJF.lk/t"
+	trap 'rm -rf "$_BJF.lk"' EXIT
+	trap 'exit 143' INT TERM HUP
+	_o=$(_BJ_INNER=1 "$0" jsonrefresh ${BANDS_ACTIVE_MODEM:+"$BANDS_ACTIVE_MODEM"} 2>/dev/null)
 	# ГОНКА АКТИВНОГО МОДЕМА. Имя файла ($_BJF) взято из active_modem ВЫШЕ, а
 	# jsonrefresh - ОТДЕЛЬНЫЙ процесс, читающий active_modem ЗАНОВО. Если между
 	# этими чтениями пользователь переключил вкладку модема (это переписывает
@@ -1406,6 +1434,10 @@ _mt_traffic_ok() {
 	[ -n "$_mtt_t" ] || _mtt_t="77.88.8.8 1.1.1.1"
 	for _mtt_h in $_mtt_t; do
 		ping -I "$_mtt_dev" -c 1 -W 2 "$_mtt_h" >/dev/null 2>&1 && return 0
+	done
+	command -v curl >/dev/null 2>&1 || return 1
+	for _mtt_h in $(uci -q get 5gmodem.health.restricted_targets || echo 77.88.55.242 5.255.255.242); do
+		curl -sk -m 4 --interface "if!$_mtt_dev" -o /dev/null "https://$_mtt_h/" 2>/dev/null && return 0
 	done
 	return 1
 }
