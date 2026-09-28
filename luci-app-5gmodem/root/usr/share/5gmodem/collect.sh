@@ -1442,7 +1442,9 @@ radio_verdict() {   # $1 - АТ-порт
 		    echo "    leaves behind: the image was written, the QCN stayed from another branch."
 		    echo "    The radio will not come up in this state and no setting cures it."
 		    echo "    The cure is to restore a QCN of the matching firmware version (QFIL ->"
-		    echo "    QCN Backup Restore), ideally the backup taken from THIS module." ;;
+		    echo "    QCN Backup Restore), ideally the backup taken from THIS module."
+		    echo "    Foxconn T99W373/MV32-W often arrives in this state: only T99W373_Recovery"
+		    echo "    (Full Restore over ADB) cures it, a normal reflash does not." ;;
 		'') echo "CFUN could not be read (the port is busy or the modem is silent)" ;;
 		*)  echo "CFUN=$_rv - NOT full functionality, CFUN=1 is expected: data may not work" ;;
 	esac

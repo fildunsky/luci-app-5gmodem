@@ -20,9 +20,9 @@ channeltoband()
     echo "2"
   elif [ $1 -ge 1200 ] && [ $1 -le 1949 ]; then
     echo "3"
-  elif [ $1 -ge 1950] && [ $1 -le 2399 ]; then
+  elif [ $1 -ge 1950 ] && [ $1 -le 2399 ]; then
     echo "4"
-  elif [ $1 -ge 2400] && [ $1 -le 2469 ]; then
+  elif [ $1 -ge 2400 ] && [ $1 -le 2649 ]; then
     echo "5"
   elif [ $1 -ge 2750 ] && [ $1 -le 3449 ]; then
     echo "7"
@@ -240,9 +240,9 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			if [ -n "$T" ] && [ "x$T" != "x0" ]; then
 				S2B=$(band4g $T)
 				if [ -z "$BWS2" ]; then
-					S2BAND="S2B"
+					S2BAND="$S2B"
 				else
-					S2BAND="S2B @${BWS2} MHz"
+					S2BAND="$S2B @${BWS2} MHz"
 				fi
 				MODE="$MODE / $S2B"
 			fi
@@ -256,7 +256,7 @@ if [ "x$MODE_NUM" = "x7" ]; then
 				fi
 				MODE="$MODE / $S3B"
 			fi
-			T=$(echo "$O" | awk -F[,:] '/^\+XLEC:/{print $13}')
+			T=$(echo "$O" | awk -F[,:] '/^\+XLEC:/{gsub(/\r/,""); print $13}')
 			if [ -n "$T" ] && [ "x$T" != "x0" ]; then
 				S4B=$(band4g $T)
 				if [ -z "$BWS4" ]; then
@@ -329,6 +329,7 @@ IFS="
 	IDX=1
 	LINES=$(echo "$O" | grep "+XMCI: 5")
 	for LINE in $LINES; do
+		[ "$IDX" -lt "$CELLS" ] 2>/dev/null || break
 		T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 5/{print $7}' | xargs)
 		if [ -n "$T" ]; then
 			case $IDX in

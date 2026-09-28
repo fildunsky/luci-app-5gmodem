@@ -41,7 +41,7 @@ esac
 # TAC в ^DEBUG? - ДЕСЯТИЧНЫЙ (по выборке из восьми живых ответов на форуме ни
 # одного шестнадцатеричного знака: 5090, 27889, 40108, 8004, 177, 7814). Раньше
 # читался как hex, и в карточку уходил чужой TAC (0x5090 = 20624 вместо 5090).
-T=$(echo "$O1" | awk '/^TAC:/ {print $2}' | tr -cd '0-9')
+T=$(echo "$O1" | awk '/^TAC:/ {print $2; exit}' | tr -cd '0-9')
 # 0 и 65535 - сентинелы «нет сети» (живые логи: TAC: 0, TAC: 65535), не TAC.
 case "$T" in 0|65535) T="" ;; esac
 if [ -n "$T" ]; then
@@ -65,9 +65,9 @@ T=$(_dbg_val RSRP)
 [ -n "$T" ] && RSRP=$T
 T=$(_dbg_val RSRQ)
 [ -n "$T" ] && RSRQ=$T
-T=$(echo "$O" | awk '/^RS-SINR/ {print $2}' | sed 's/dB//')
+T=$(echo "$O" | awk '/^RS-SINR/ {print $2; exit}' | sed 's/dB//')
 [ -n "$T" ] && SINR=$T
-T=$(echo "$O" | awk '/^RS-SNR/ {print $2}' | sed 's/dB//')
+T=$(echo "$O" | awk '/^RS-SNR/ {print $2; exit}' | sed 's/dB//')
 [ -n "$T" ] && SINR=$T
 # SNR > SINR
 
@@ -95,6 +95,11 @@ T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *CQI: *//p' | head -n 1)")
 [ -n "$T" ] && CQI="$T"
 T=$(_dbg_num "$(echo "$O" | sed -n 's/^ *Tx Pwr: *//p' | head -n 1)")
 [ -n "$T" ] && TXPOWER="$T dBm"
+if [ -z "$_DBG_3G" ]; then
+	case "$(echo "$O1" | sed -n 's/^ *STATUS: *//p' | head -n 1)" in
+		*DEREGISTERED*) RSRP=""; RSRQ=""; RSSI=""; SINR=""; RI=""; CQI=""; PMIMO="" ;;
+	esac
+fi
 
 # АНТЕННЫЕ ПОРТЫ - ИЗ ТОГО ЖЕ ОТВЕТА, лишних запросов к порту ноль.
 # LTE (#39275, #49016): «RSRP: -82.5dBm rx_diversity: 15 (-83.6dBm,-82.5dBm,
@@ -164,24 +169,25 @@ if [ -n "$_DBG_3G" ]; then
 	[ -n "$T" ] && [ -z "$PCI" ] && PCI="$T"
 fi
 
-T=$(echo "$O1" | awk '/^BAND:/ {print $2}')
+T=$(echo "$O1" | awk '/^BAND:/ {print $2; exit}')
 # В 3G «BAND: 80» - не номер LTE-диапазона, через band4g не гоняем.
 if [ -n "$T" ] && [ -z "$_DBG_3G" ]; then
 	B=$(band4g $T)
 	PBAND="$B"
 	MODE="$MODE $B"
 fi
-T=$(echo "$O1" | awk '/^BW:/ {print $2}')
+T=$(echo "$O1" | awk '/^BW:/ {print $2; exit}')
 [ -n "$T" ] && [ -n "$PBAND" ] && PBAND="$PBAND @$T MHz"
-T=$(echo "$O1" | awk -F[\(\)] '/^eNB ID\(PCI\)/ {print $4}')
+T=$(echo "$O1" | awk -F[\(\)] '/^eNB ID\(PCI\)/ {print $4; exit}')
 # «eNB ID(PCI): 0-0(0)» и 4294967295 - сентинелы без регистрации.
-case "$(echo "$O1" | awk '/^eNB ID\(PCI\)/ {print $3}')" in 0-0\(0\)|4294967295*) T="" ;; esac
+case "$(echo "$O1" | awk '/^eNB ID\(PCI\)/ {print $3; exit}')" in 0-0\(0\)|4294967295*|-1-*) T="" ;; esac
 [ -n "$T" ] && PCI="$T"
-T=$(echo "$O1" | awk '/^EARFCN/ {print $2}' | xargs)
+T=$(echo "$O1" | awk '/^EARFCN/ {print $2; exit}' | xargs)
 # В 3G канал называется «Active channel (DL): <UARFCN>».
 [ -n "$T" ] || T=$(echo "$O1" | sed -n 's/^Active channel (DL): *\([0-9][0-9]*\).*/\1/p' | head -n 1)
 if [ -n "$T" ]; then
 	EARFCN="$(echo $T | cut -f1 -d/)"
+	case "$EARFCN" in -*) EARFCN="" ;; esac
 #	addon 34 "EARFCN DL" "$(echo $T | cut -f1 -d/)"
 #	addon 34 "EARFCN UL" "$(echo $T | cut -f2 -d/)"
 fi

@@ -380,7 +380,7 @@ return view.extend({
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
 			console.error('Error loading AT commands file:', err);
-			ui.addNotification(null, E('p', _('Error loading AT commands file: ') + selectedFile), 'error');
+			ui.addNotification(null, E('p', _('Error loading AT commands file:') + ' ' + selectedFile), 'error');
 		});
 	},
 

@@ -28,7 +28,7 @@ setbands() {
 	fi
 	if [ "$HEX" != "0" ]; then
 		O=$(sms_tool -d $_DEVICE at "at^syscfgex?")
-		MODE=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
+		MODE=$(echo "$O" | awk -F[:,] '/^\^SYSCFGEX:/{print $2; exit}' | xargs)
 		sms_tool -d $_DEVICE at "at^syscfgex=\"${MODE:-030201}\",3FFFFFFF,2,4,$HEX,,"
 	fi
 }

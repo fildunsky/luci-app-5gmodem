@@ -1,0 +1,23 @@
+## 4pda 1086317 #953 (T99W175, заглушка lte_snr:-20.0 у вторичных несущих)
+RAT:LTE
+mcc:250,mnc:02
+lte_cell_id:201067878
+lte_tac:7814
+lte_tx_pwr:-33.0dBm
+lte_ant_rsrp:rx_diversity:15 (-256.0dBm,-75.3dBm,-256.0dBm,-256.0dBm)
+pcell: lte_band:1 lte_band_width:10.0MHz
+channel:200 pci:146
+lte_rsrp:-75.3dBm,rsrq:-8.0dB
+lte_rssi:-51.9dBm,lte_snr:19.8dB
+scell: lte_band:7 lte_band_width:20.0MHz
+channel:2850 pci:54
+lte_rsrp:-78.6dBm,rsrq:-9.0dB
+lte_rssi:-60.0dBm,lte_snr:-20.0dB
+scell: lte_band:7 lte_band_width:20.0MHz
+channel:3048 pci:54
+lte_rsrp:-74.4dBm,rsrq:-8.4dB
+lte_rssi:-57.2dBm,lte_snr:-20.0dB
+scell: lte_band:3 lte_band_width:10.0MHz
+channel:1596 pci:381
+lte_rsrp:-76.4dBm,rsrq:-10.2dB
+lte_rssi:-57.3dBm,lte_snr:-20.0dB

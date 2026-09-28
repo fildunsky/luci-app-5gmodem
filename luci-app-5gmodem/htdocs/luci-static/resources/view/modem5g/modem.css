@@ -3168,7 +3168,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   body.tg-mv:not(.sc-simple) .tg-mv-h { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
   body.tg-mv:not(.sc-simple) .tg-mv-h em { font-style: normal; font-weight: 400; opacity: .7; }
   body.tg-mv:not(.sc-simple) .tg-mv-car { display: grid; grid-template-columns: 46px 1fr auto; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--tg-track); font-size: 13px; }
-  body.tg-mv:not(.sc-simple) .tg-mv-car:first-of-type { border-top: 0; }
+  body.tg-mv:not(.sc-simple) .tg-mv-h + .tg-mv-car { border-top: 0; }
   body.tg-mv:not(.sc-simple) .tg-mv-t { font-size: 11px; letter-spacing: .06em; opacity: .65; }
   body.tg-mv:not(.sc-simple) .tg-mv-r { font-weight: 700; font-variant-numeric: tabular-nums; }
 

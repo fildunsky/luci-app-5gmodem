@@ -218,7 +218,7 @@ eval "$(printf '%s\n' "$_DBG" | awk '
 			if (k == "lte_rsrp" || k == "rsrp")      rp[sec] = v
 			else if (k == "lte_rsrq" || k == "rsrq") rq[sec] = v
 			else if (k == "lte_rssi" || k == "rssi") rs[sec] = v
-			else if (k == "lte_snr"  || k == "snr")  sr[sec] = v
+			else if ((k == "lte_snr" || k == "snr") && v + 0 != 0 && v + 0 > -20) sr[sec] = v
 		}
 	}
 	END {

@@ -1,0 +1,23 @@
+## 4pda 444921 #2907 (EM7565 Generic, метка SSC вместо SCC)
+!GSTATUS:
+Current Time:  1042             Temperature: 28
+Reset Counter: 2                Mode:        ONLINE
+System mode:   LTE              PS state:    Attached
+LTE band:      B7               LTE bw:      20 MHz
+LTE Rx chan:   3048             LTE Tx chan: 21048
+LTE SSC1 state:INACTIVE         LTE SSC1 band: B7
+LTE SSC1 bw  : 20 MHz           LTE SSC1 chan: 2850
+LTE SSC2 state:NOT ASSIGNED
+LTE SSC3 state:NOT ASSIGNED
+LTE SSC4 state:NOT ASSIGNED
+EMM state:     Registered       Normal Service
+RRC state:     RRC Connected
+IMS reg state: No Srv
+
+PCC RxM RSSI:  -61              PCC RxM RSRP:  -93
+PCC RxD RSSI:  -62              PCC RxD RSRP:  -94
+SCC1 RxM RSSI: -75              SCC1 RxM RSRP: -94
+SCC1 RxD RSSI: -75              SCC1 RxD RSRP: -94
+Tx Power:      --               TAC:         14a0 (5280)
+RSRQ (dB):     -10.9            Cell ID:     08077505 (134706437)
+SINR (dB):      9.0

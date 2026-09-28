@@ -44,13 +44,13 @@ _SG=$(printf '%s\n' "$_SG_RAW" | awk '
 	/^System mode/           { put("SYSMODE", after("System mode")) }
 	/^LTE band/              { put("PBAND",  after("LTE band")); put("PBW", after("LTE bw")) }
 	/^LTE Rx chan/           { put("PEARFCN", after("LTE Rx chan")) }
-	/^LTE SCC[0-9] state/    { n = substr($0, 8, 1)
+	/^LTE S[CS]C[0-9] state/ { n = substr($0, 8, 1)
 	                           put("S" n "STATE", after("state"))
 	                           put("S" n "BAND",  after("band")) }
-	/^LTE SCC[0-9] bw/       { n = substr($0, 8, 1)
+	/^LTE S[CS]C[0-9] bw/    { n = substr($0, 8, 1)
 	                           put("S" n "BW",     after("bw"))
 	                           c = after("Rx chan")
-	                           if (c == "") c = after("SCC" n " chan")
+	                           if (c == "") c = after(substr($0, 5, 3) n " chan")
 	                           put("S" n "EARFCN", c) }
 	/^PCC Rx[0-9MD] RSSI/    { c = substr($0, 7, 1)
 	                           i = (c == "M") ? 0 : ((c == "D") ? 1 : c)
@@ -60,6 +60,7 @@ _SG=$(printf '%s\n' "$_SG_RAW" | awk '
 	/^SCC[0-9] Rx[0-9MD] RSSI/ { n = substr($0, 4, 1); c = substr($0, 8, 1)
 	                           best("S" n "RSRP", after("SCC" n " Rx" c " RSRP")) }
 	/^PCC Tx Power/          { put("TXPWR", after("PCC Tx Power")) }
+	/^Tx Power/              { put("TXPWR", after("Tx Power")) }
 	/TAC/                    { put("TACHEX", after("TAC", 1)); put("TACDEC", after("TAC", 2)) }
 	/Cell ID/                { put("CIDHEX", after("Cell ID", 1)); put("CIDDEC", after("Cell ID", 2)) }
 	/^RSRQ/                  { put("RSRQ", after("RSRQ")) }

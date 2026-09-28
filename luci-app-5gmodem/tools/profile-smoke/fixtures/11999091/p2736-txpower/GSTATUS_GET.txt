@@ -1,0 +1,20 @@
+## 4pda 444921 #2736 (EM7565 01.14.13.00, Tx Power без префикса PCC; форум схлопнул выравнивание)
+!GSTATUS:
+Current Time: 949 Temperature: 46
+Reset Counter: 2 Mode: ONLINE
+System mode: LTE PS state: Attached
+LTE band: B3 LTE bw: 15 MHz
+LTE Rx chan: 1425 LTE Tx chan: 19425
+LTE SCC1 state:NOT ASSIGNED
+LTE SCC2 state:NOT ASSIGNED
+LTE SCC3 state:NOT ASSIGNED
+LTE SCC4 state:NOT ASSIGNED
+EMM state: Registered Normal Service
+RRC state: RRC Connected
+IMS reg state: No Srv
+
+PCC RxM RSSI: -51 PCC RxM RSRP: -84
+PCC RxD RSSI: -51 PCC RxD RSRP: -84
+Tx Power: 2 TAC: 3011 (12305)
+RSRQ (dB): -14.0 Cell ID: 03a24320 (60965664)
+SINR (dB): 0.4

@@ -38,8 +38,15 @@ S=$(uci -q get "$SEC.save_band")$(uci -q get "$SEC.save_band5gnsa")$(uci -q get 
 # перезагрузки. Без него был бы риск петли: restore -> CFUN -> _reconnect_iface
 # делает ubus down/up -> снова ifup -> снова restore. Маркер ставим ДО запуска.
 M="/tmp/5gmodem_bandrestore_$INTERFACE"
-[ -e "$M" ] && exit 0
-: > "$M"
+D=$(cat "/sys/bus/usb/devices/$MPATH/devnum" 2>/dev/null)
+if [ -e "$M" ]; then
+	O=$(cat "$M" 2>/dev/null)
+	if [ -z "$O" ] || [ "$O" = "$D" ]; then
+		echo "$D" > "$M"
+		exit 0
+	fi
+fi
+echo "$D" > "$M"
 
 # В фоне с отвязкой дескрипторов: hotplug не должен ждать CFUN-цикл и реконнект
 # (это десятки секунд). BANDS_ACTIVE_MODEM прицеливает bands.sh на ИМЕННО этот

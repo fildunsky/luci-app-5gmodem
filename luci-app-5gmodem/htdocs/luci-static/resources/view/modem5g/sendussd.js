@@ -583,7 +583,7 @@ return view.extend({
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
 			console.error('Error loading USSD file:', err);
-			ui.addNotification(null, E('p', _('Error loading USSD codes file: ') + selectedFile), 'error');
+			ui.addNotification(null, E('p', _('Error loading USSD codes file:') + ' ' + selectedFile), 'error');
 		});
 	},
 
@@ -713,7 +713,7 @@ return view.extend({
 					});
 				})
 				.catch(function(err) {
-					ui.addNotification(null, E('p', [ _('Failed to detect modem: ') + String(err) ]), 'danger');
+					ui.addNotification(null, E('p', [ _('Failed to detect modem:') + ' ' + String(err) ]), 'danger');
 				});
 		}
 

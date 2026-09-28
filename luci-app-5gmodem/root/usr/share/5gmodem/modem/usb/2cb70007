@@ -7,9 +7,9 @@ convertchannel() {
     newband=2
   elif [ $1 -ge 1200 ] && [ $1 -le 1949 ]; then
     newband=3
-  elif [ $1 -ge 1950] && [ $1 -le 2399 ]; then
+  elif [ $1 -ge 1950 ] && [ $1 -le 2399 ]; then
     newband=4
-  elif [ $1 -ge 2400] && [ $1 -le 2469 ]; then
+  elif [ $1 -ge 2400 ] && [ $1 -le 2649 ]; then
     newband=5
   elif [ $1 -ge 2750 ] && [ $1 -le 3449 ]; then
     newband=7

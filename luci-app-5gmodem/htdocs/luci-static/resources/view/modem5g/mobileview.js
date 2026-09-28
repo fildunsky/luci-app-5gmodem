@@ -157,6 +157,15 @@ function markMhz() {
 	});
 }
 
+function clearSig() {
+	if (!st) { return; }
+	st.hist = {};
+	st.tiles.innerHTML = '';
+	st.tiles.hidden = true;
+	st.cars.innerHTML = '';
+	st.cars.hidden = true;
+}
+
 return baseclass.extend({
 	API: 30200,
 
@@ -189,10 +198,17 @@ return baseclass.extend({
 		tagChildren();
 	},
 
+	reset: function() {
+		if (st && st.host.isConnected) { clearSig(); tagChildren(); }
+	},
+
 	tick: function(json) {
 		if (st && st.host.isConnected) { markMhz(); window.setTimeout(markMhz, 0); }
 		if (!st || !st.host.isConnected || !json || json.error) {
-			if (st && st.host.isConnected) { tagChildren(); }
+			if (st && st.host.isConnected) {
+				if (json && json.error && json.error !== 'busy' && !json.modem) { clearSig(); }
+				tagChildren();
+			}
 			return;
 		}
 		render(json);

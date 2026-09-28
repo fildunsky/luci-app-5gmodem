@@ -157,7 +157,15 @@ _fibocom_activate() {
 				# Индекс ACM берём из имени порта дозвона: XDATACHANNEL привязывает
 				# КОНКРЕТНЫЙ ACM к NCM-каналу, а в режиме 11 роутерный AT-порт - ACM2
 				# (форум: живые логи и с /USBCDC/0, и с /USBCDC/2; ревью 12.09.2026).
-				_xdc=$(printf '%s' "$dial" | sed -n 's/.*ttyACM\([0-9][0-9]*\)$/\1/p'); [ -n "$_xdc" ] || _xdc=0
+				_xdc=""; _xk=0
+				for _xi in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+					for _xt in /sys/bus/usb/devices/$usbpath:1.$_xi/tty/ttyACM*; do
+						[ -e "$_xt" ] || continue
+						[ "/dev/${_xt##*/}" = "$dial" ] && _xdc=$_xk
+						_xk=$((_xk + 1))
+					done
+				done
+				[ -n "$_xdc" ] || _xdc=$(printf '%s' "$dial" | sed -n 's/.*ttyACM\([0-9][0-9]*\)$/\1/p'); [ -n "$_xdc" ] || _xdc=0
 				sms_tool -d "$dial" at "AT+XDATACHANNEL=1,1,\"/USBCDC/$_xdc\",\"/USBHS/NCM/0\",2,1" >/dev/null 2>&1
 				sms_tool -d "$dial" at "AT+CGDATA=\"M-RAW_IP\",1" >/dev/null 2>&1
 			fi

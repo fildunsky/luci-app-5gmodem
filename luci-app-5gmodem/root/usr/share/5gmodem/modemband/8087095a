@@ -121,7 +121,7 @@ setbands() {
 
 	if [ -n "$T" ]; then
 		O=$(sms_tool -d $_DEVICE at "at+xact?")
-		MODE=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
+		MODE=$(echo "$O" | awk -F[:,] '/^\+XACT:/{print $2; exit}' | xargs)
 		# 3G-хвост сохраняем: запись только LTE-списка стирала бы 3G-диапазоны.
 		_G3=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0<100 && $i+0>0) s=s (s==""?"":",") $i} print s}')
 		[ "$T" = "0" ] || { [ -n "$_G3" ] && T="${_G3},${T}"; }
@@ -145,9 +145,9 @@ _ch2band() {
 	elif [ "$1" -ge 5850 ] && [ "$1" -le 5999 ]; then echo 18
 	elif [ "$1" -ge 6000 ] && [ "$1" -le 6149 ]; then echo 19
 	elif [ "$1" -ge 6150 ] && [ "$1" -le 6449 ]; then echo 20
-	elif [ "$1" -ge 6600 ] && [ "$1" -le 7399 ]; then echo 66
+	elif [ "$1" -ge 66436 ] && [ "$1" -le 67335 ]; then echo 66
 	elif [ "$1" -ge 9210 ] && [ "$1" -le 9659 ]; then echo 28
-	elif [ "$1" -ge 9870 ] && [ "$1" -le 9919 ]; then echo 30
+	elif [ "$1" -ge 9770 ] && [ "$1" -le 9869 ]; then echo 30
 	elif [ "$1" -ge 37750 ] && [ "$1" -le 38249 ]; then echo 38
 	elif [ "$1" -ge 38250 ] && [ "$1" -le 38649 ]; then echo 39
 	elif [ "$1" -ge 38650 ] && [ "$1" -le 39649 ]; then echo 40

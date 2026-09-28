@@ -54,7 +54,7 @@ setbands() {
 	fi
 	if [ "$HEX" != "0" ]; then
 		O=$(sms_tool -d $_DEVICE at "at^syscfgex?")
-		MODE=$(echo "$O" | awk -F[:,] '{print $2}' | xargs)
+		MODE=$(echo "$O" | awk -F[:,] '/^\^SYSCFGEX:/{print $2; exit}' | xargs)
 		sms_tool -d $_DEVICE at "at^syscfgex=\"${MODE:-030201}\",3FFFFFFF,2,4,$HEX,,"
 	fi
 }
@@ -75,7 +75,7 @@ getmode() {
 	_no=$(sms_tool -d $_DEVICE at "at^syscfgex?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^\^SYSCFGEX: *"\([0-9]*\)".*/\1/p' | head -1)
 	case "$_no" in
-		00|*0300*|03) echo 4 ;;   # чистый 4G или предпочтение 4G
+		*0300*|03) echo 4 ;;
 		02) echo 2 ;;             # только 3G
 		01) echo 8 ;;             # только 2G
 		"") echo "" ;;
@@ -97,5 +97,5 @@ setmode() {
 		4) _no="03" ;;     # только 4G
 		*) return 1 ;;
 	esac
-	sms_tool -d $_DEVICE at "at^syscfgex=\"$_no\",$_band,1,2,$_lte,,"
+	sms_tool -d $_DEVICE at "at^syscfgex=\"$_no\",$_band,2,4,$_lte,,"
 }

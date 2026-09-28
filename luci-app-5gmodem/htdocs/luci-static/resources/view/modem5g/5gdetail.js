@@ -1185,6 +1185,7 @@ function switchModemInPlace(path) {
 	resetStickyForModem();
 	histDraw(null);
 	if (typeof bandsui.resetForModem === 'function') { bandsui.resetForModem(); }
+	if (typeof mobileview.reset === 'function') { try { mobileview.reset(); } catch (e) {} }
 	/* Индекс MM нового активного - для кнопок режимов/бендов (блок ленивый,
 	   к его раскрытию значение уже придёт). */
 	loadMmIdx();
@@ -4066,7 +4067,7 @@ simDialog: baseclass.extend({
 				window.__5gmInPlaceSwitch = function(p) { switchModemInPlace(p); };
 
 		} catch (err) {
-				ui.addNotification(null, E('p', _('Error: ') + err.message), 'error');
+				ui.addNotification(null, E('p', _('Error:') + ' ' + err.message), 'error');
 				}
 		}
 
