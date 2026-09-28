@@ -492,7 +492,7 @@ function refresh() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30200, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30201, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

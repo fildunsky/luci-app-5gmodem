@@ -65,7 +65,7 @@ function withFlag(ip, cc) {
 }
 
 return baseclass.extend({
-	API: 30200,
+	API: 30201,
 	/* Читает флаги; опрос заводится ОДИН на страницу, при первом watch(). */
 	init: function() {
 		if (_inited) { return _inited; }
