@@ -236,7 +236,7 @@ function legendItem(name, idx) {
 	return E('span', { 'style': 'display:inline-flex; align-items:center; gap:.35em' }, [
 		E('span', { 'style': 'width:12px; height:3px; border-radius:2px; display:inline-block; background:'
 			+ LINE_COLORS[idx % LINE_COLORS.length] }),
-		E('span', {}, name)
+		E('span', {}, [ name ])
 	]);
 }
 

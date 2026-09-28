@@ -608,7 +608,7 @@ function addTelegramForwarding(s) {
 				var msg = (j.error === 'noreply')
 					? _('Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Choose your VPN tunnel in "Interface for Telegram" or start SSClash, save and try again.')
 					: _('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'));
-				ui.addNotification(null, E('p', {}, msg), 'error');
+				ui.addNotification(null, E('p', {}, [ msg ]), 'error');
 				return;
 			}
 			/* Имена Telegram отдаёт в \uXXXX - без раскодирования в уведомлении
@@ -638,9 +638,9 @@ function addTelegramForwarding(s) {
 					.then(function(o) {
 						var r = {};
 						try { r = JSON.parse(o || '{}'); } catch (e) {}
-						ui.addNotification(null, E('p', {}, r.ok
+						ui.addNotification(null, E('p', {}, [ r.ok
 							? _('Chat ID found and saved: %s (%s)').format(id, name || '')
-							: _('Chat ID found: %s - but saving failed, press Save manually').format(id)),
+							: _('Chat ID found: %s - but saving failed, press Save manually').format(id) ]),
 							r.ok ? 'info' : 'warning');
 					});
 			};
@@ -689,7 +689,7 @@ function addTelegramForwarding(s) {
 				ui.addNotification(null, E('p', {}, _('Test message sent')), 'info');
 			} else {
 				ui.addNotification(null, E('p', {},
-					_('Failed to send: %s').format(j.error || _('check the token, chat ID and the router internet connection'))), 'error');
+					[ _('Failed to send: %s').format(j.error || _('check the token, chat ID and the router internet connection')) ]), 'error');
 			}
 		});
 	};

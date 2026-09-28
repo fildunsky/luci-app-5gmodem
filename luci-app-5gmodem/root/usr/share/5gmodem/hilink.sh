@@ -774,8 +774,15 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 	#      поэтому Content собираем до закрывающего тега, а не берём одной строкой.
 	printf '%s' "$_r" | tr -d '\r' | awk '
 		BEGIN { printf "{\"msg\":["; first = 1; inc = 0 }
-		function esc(v) {
-			gsub(/\\/, "\\\\", v); gsub(/"/, "\\\"", v)
+		function esc(v,   o, i, c) {
+			o = ""
+			for (i = 1; i <= length(v); i++) {
+				c = substr(v, i, 1)
+				if (c == "\\") o = o "\\\\"
+				else if (c == "\"") o = o "\\\""
+				else o = o c
+			}
+			v = o
 			gsub(/\t/, " ", v); gsub(/\n/, " ", v)
 			return v
 		}
@@ -795,7 +802,7 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 			next
 		}
 		/<\/Message>/ {
-			if (idx == "") next
+			if (idx == "" || idx ~ /[^0-9]/) next
 			if (!first) printf ",\n"; first = 0
 			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", idx, esc(ph), esc(dt), esc(txt)
 		}
@@ -867,8 +874,15 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 			}
 			return v
 		}
-		function jesc(v) {
-			gsub(/\\/, "\\\\", v); gsub(/"/, "\\\"", v)
+		function jesc(v,   o, i, c) {
+			o = ""
+			for (i = 1; i <= length(v); i++) {
+				c = substr(v, i, 1)
+				if (c == "\\") o = o "\\\\"
+				else if (c == "\"") o = o "\\\""
+				else o = o c
+			}
+			v = o
 			gsub(/\t/, " ", v); gsub(/\n/, " ", v); gsub(/\r/, "", v)
 			return v
 		}
@@ -915,7 +929,7 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 			n = split(s, rec, /\},[ ]*\{/)
 			for (k = 1; k <= n; k++) {
 				id = fld(rec[k], "id")
-				if (id == "") continue
+				if (id == "" || id ~ /[^0-9]/) continue
 				tag = fld(rec[k], "tag") + 0
 				if (box == "out") { if (tag != 2 && tag != 3) continue }
 				else              { if (tag != 0 && tag != 1) continue }

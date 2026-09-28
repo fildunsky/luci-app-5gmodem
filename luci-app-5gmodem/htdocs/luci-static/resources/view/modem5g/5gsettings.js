@@ -61,7 +61,7 @@ function updSetVer(id, label, ver) {
 	if (!e) { return; }
 	e.textContent = '';
 	e.appendChild(document.createTextNode(label + ': '));
-	e.appendChild(E('strong', {}, ver));
+	e.appendChild(E('strong', {}, [ String(ver == null ? '' : ver) ]));
 }
 function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
 /* Локализация кодов ошибок обновления. Спец-случай asset_pending: тег релиза уже

@@ -298,7 +298,7 @@ function sms_linkify(text) {
 				ev.preventDefault();
 				window.open(ev.currentTarget.href, '_blank', 'noopener');
 			}
-		}, url));
+		}, [ url ]));
 		last = m.index + url.length;
 	}
 	if (last < text.length) { out.push(document.createTextNode(text.slice(last))); }

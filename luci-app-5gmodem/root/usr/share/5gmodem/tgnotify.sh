@@ -451,6 +451,7 @@ chatid() {
 			if (match($0, /"title":"[^"]*"/)) { ttl = substr($0, RSTART + 9, RLENGTH - 10) }
 			else if (match($0, /"first_name":"[^"]*"/)) { ttl = substr($0, RSTART + 14, RLENGTH - 15) }
 			else if (match($0, /"username":"[^"]*"/)) { ttl = substr($0, RSTART + 12, RLENGTH - 13) }
+			sub(/\\+$/, "", ttl)
 			if (id != "" && !(id in seen)) {
 				seen[id] = 1
 				out = out (n++ ? "," : "") "{\"id\":\"" id "\",\"name\":\"" ttl "\",\"type\":\"" typ "\"}"
@@ -740,7 +741,12 @@ $(_tg_list)" ;;
 						_co_ans=$(printf '%s' "$_co_out" \
 							| jsonfilter -e '@.output' 2>/dev/null)
 						_tg_reply "${_co_ans:-OK}"
-						_log "chat command: ${_co_txt%% *}" ;;
+						_co_lw=${_co_txt%% *}
+						_co_sc=$(_cfg cmd_secret)
+						if [ -n "$_co_sc" ] && [ "$(printf '%s' "$_co_lw" | tr 'A-Z' 'a-z')" = "$(printf '%s' "$_co_sc" | tr 'A-Z' 'a-z')" ]; then
+							_co_lw=$(printf '%s' "$_co_txt" | awk '{print $2; exit}')
+						fi
+						_log "chat command: $_co_lw" ;;
 					*'"error":"secret"'*)
 						_tg_reply "Перед командой нужен защитный код." ;;
 					*'"error":"disabled"'*)

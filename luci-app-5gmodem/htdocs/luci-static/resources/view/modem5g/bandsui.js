@@ -1094,7 +1094,7 @@ function applyBandsModemband(reset, confirmed) {
 		try { d = JSON.parse(String((res && res.stdout) || '').trim()); } catch (e) { d = null; }
 		if (!d || !d.id) {
 			var why = String((res && (res.stdout || res.stderr)) || '').trim();
-			ui.addNotification(null, E('p', _('Failed to set bands') + (why ? ': ' + why : '')), 'error');
+			ui.addNotification(null, E('p', [ _('Failed to set bands') + (why ? ': ' + why : '') ]), 'error');
 			return;
 		}
 		if (d.state === 'done') {
@@ -1156,7 +1156,7 @@ function applyBands() {
 	   наши читатели, поэтому MM применяет диапазоны спокойно. */
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
-			ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '')), 'error');
+			ui.addNotification(null, E('p', [ _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
 			return;
 		}
 		if (ui.addTimeLimitedNotification) {
@@ -1230,7 +1230,7 @@ function setNetMode(allowed, preferred, label, confirmed) {
 			   ревью №10) - подсветку освежает наш же loadBands */
 			[ 2000, 8000, 16000, 25000 ].forEach(function(t) { window.setTimeout(loadBands, t); });
 		} else {
-			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '')), 'error');
+			ui.addNotification(null, E('p', [ _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
 		}
 	}).catch(function(err) {
 		ui.hideModal();
@@ -1247,7 +1247,7 @@ function setNetModeAT(id, label) {
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
-			ui.addNotification(null, E('p', _('Failed to set network mode') + ': ' + String(res.stdout || res.stderr || '').trim()), 'error');
+			ui.addNotification(null, E('p', [ _('Failed to set network mode') + ': ' + String(res.stdout || res.stderr || '').trim() ]), 'error');
 			return;
 		}
 		if (ui.addTimeLimitedNotification) {
@@ -1268,7 +1268,7 @@ function setBands3gAT(id, label) {
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
-			ui.addNotification(null, E('p', _('Failed to set 3G bands') + ': ' + String(res.stdout || res.stderr || '').trim()), 'error');
+			ui.addNotification(null, E('p', [ _('Failed to set 3G bands') + ': ' + String(res.stdout || res.stderr || '').trim() ]), 'error');
 			return;
 		}
 		if (ui.addTimeLimitedNotification) {

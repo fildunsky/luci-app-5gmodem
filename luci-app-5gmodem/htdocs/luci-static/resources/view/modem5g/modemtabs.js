@@ -388,7 +388,7 @@ function ghostBar() {
 				             : L.resource(it.usb ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
-			E('span', {}, it.label || _('Modem'))
+			E('span', {}, [ it.label || _('Modem') ])
 		]);
 	}));
 }
@@ -778,7 +778,7 @@ function tabsBar(modems, active) {
 				'width': 16, 'height': 16, 'alt': '',
 				'title': m.operator || ''
 			}),
-			E('span', { 'class': 'modemtab-name' }, labels[i]),
+			E('span', { 'class': 'modemtab-name' }, [ labels[i] ]),
 			/* КАРАНДАШ ПО НАВЕДЕНИЮ - переименование вкладки.
 			   Своё имя нужно, когда модемы одинаковые: два EP06 с одним
 			   оператором различить в ряду нечем. По клику подпись превращается в

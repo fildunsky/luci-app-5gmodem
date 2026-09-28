@@ -341,7 +341,7 @@ _q5_c5greg() {
 		CID_HEX=""
 		TAC_DEC=""
 	fi
-	eval $(echo "$O" | "$@" -F[,] '/^\+C5GREG/ {gsub(/[[:space:]"]+/,"");printf "T=\"%d\";TAC_HEX=\"%X\";CID_HEX=\"%s\";TAC_DEC=\"%d\";MODE_NUM=\"%d\"", $2, "0x"$3, $4, "0x"$3, $5}')
+	eval $(echo "$O" | "$@" -F[,] '/^\+C5GREG/ {gsub(/[[:space:]"]+/,"");gsub(/[^0-9A-Fa-f]/,"",$4);printf "T=\"%d\";TAC_HEX=\"%X\";CID_HEX=\"%s\";TAC_DEC=\"%d\";MODE_NUM=\"%d\"", $2, "0x"$3, $4, "0x"$3, $5}')
 	case "$T" in
 		0*) REG="0";;
 		1*) REG="1";;

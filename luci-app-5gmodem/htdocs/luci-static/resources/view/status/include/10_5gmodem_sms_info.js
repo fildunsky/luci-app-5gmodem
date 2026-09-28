@@ -378,7 +378,7 @@ return baseclass.extend({
 				'style': 'padding:4px 6px;font-weight:normal;font-size:13px;cursor:pointer;',
 				'click': onHeaderClick
 			}, [
-				E('span', { 'class': 'modem-name-truncate', 'title': modemName }, truncatedName)
+				E('span', { 'class': 'modem-name-truncate', 'title': modemName }, [ truncatedName ])
 			]),
 			E('div', { 
 				'class': 'ifacebox-body',
@@ -403,7 +403,7 @@ return baseclass.extend({
 									' ',
 									operator,
 									E('br'),
-									E('small', { 'style': 'font-size:10px;' }, technology)
+									E('small', { 'style': 'font-size:10px;' }, [ technology ])
 								])
 							])
 						]),
@@ -596,7 +596,7 @@ return baseclass.extend({
 							'click': onHeaderClick
 						}, [
 							E('span', { 'class': 'modem-name-truncate', 'title': modem.modemName || _('Modem') },
-								modem.modemName || (_('Modem') + ': ' + modem.index))
+								[ modem.modemName || (_('Modem') + ': ' + modem.index) ])
 						]),
 						E('div', {
 							'class': 'ifacebox-body',
