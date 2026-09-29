@@ -1299,6 +1299,9 @@ usbcomp_verdict() {
 	echo "----- AT port present, data channel missing? (verdict) -----"
 	_uc_found=""
 	_uc_stolen=""
+	_uc_free=""
+	_uc_vids=""
+	_uc_newid=""
 	for _uc_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 		case "$_uc_p" in *-*) ;; *) continue ;; esac
 		_uc_d="/sys/bus/usb/devices/$_uc_p"
@@ -1319,6 +1322,16 @@ usbcomp_verdict() {
 		[ -z "$_uc_wdm" ] && [ -z "$_uc_net" ] || continue
 		_uc_found="$_uc_found
    $_uc_p  $_uc_v:$_uc_i"
+		_uc_vids="$_uc_vids $_uc_v"
+		for _uc_if in "$_uc_d":*; do
+			[ -f "$_uc_if/bInterfaceClass" ] || continue
+			[ -e "$_uc_if/driver" ] && continue
+			[ "$(cat "$_uc_if/bInterfaceClass")" = "ff" ] || continue
+			[ "$(cat "$_uc_if/bNumEndpoints" 2>/dev/null)" = "03" ] || continue
+			_uc_free="$_uc_free
+   $_uc_p  $_uc_v:$_uc_i  interface ${_uc_if##*.} (vendor class, 3 endpoints) has no driver"
+			_uc_newid="$_uc_v $_uc_i"
+		done
 		# Канал в композиции есть, но им владеет usb-serial - значит его увели.
 		_uc_num=$("$RES/usbports.sh" dataif "$_uc_v" "$_uc_i" 2>/dev/null)
 		[ -n "$_uc_num" ] || continue
@@ -1360,6 +1373,26 @@ usbcomp_verdict() {
 		echo "  the app sets the ports up on its own."
 		return
 	fi
+	if [ -n "$_uc_free" ]; then
+		echo ""
+		echo "An interface that looks like a data channel is left without a driver:"
+		printf '%s\n' "$_uc_free" | sed '/^[[:space:]]*$/d'
+		echo "  The kernel does not know this vid:pid. Check by hand, until reboot:"
+		echo "    echo \"$_uc_newid\" > /sys/bus/usb/drivers/qmi_wwan/new_id"
+		echo "  If cdc-wdm appears but QMI does not answer, the modem itself does not"
+		echo "  route data to USB (e.g. firmware set up for PCIe) - see its dmesg."
+		return
+	fi
+	case "$_uc_vids" in
+		*2c7c*|*1e0e*) ;;
+		*)
+			echo "  The USB composition carries no data channel. Switch the modem to a"
+			echo "  composition with QMI, MBIM or NCM (a vendor AT command, then power-cycle"
+			echo "  the modem). Which commands exist depends on the vendor and the firmware;"
+			echo "  do not guess - check AT+CLAC or the modem's documentation."
+			return
+			;;
+	esac
 	echo "  The USB composition carries no data channel. The cure is a vendor command"
 	echo "  in the AT console, after which the modem must be POWER-CYCLED:"
 	# «usbnet должен быть 0» - неверный совет: композиций с каналом данных две,
@@ -1927,6 +1960,32 @@ _sum_verdict() {
 	# модем на шине?
 	_sv_mod=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[0].model' 2>/dev/null)
 	if [ -z "$_sv_mod" ]; then
+		_sv_raw=""
+		for _sv_d in /sys/bus/usb/devices/*; do
+			[ -f "$_sv_d/idVendor" ] || continue
+			[ "$(cat "$_sv_d/bDeviceClass" 2>/dev/null)" = "09" ] && continue
+			_sv_ff=""; _sv_drv=""
+			for _sv_i in "$_sv_d"/"${_sv_d##*/}":*; do
+				[ -f "$_sv_i/bInterfaceClass" ] || continue
+				[ "$(cat "$_sv_i/bInterfaceClass")" = "ff" ] && _sv_ff=1
+				[ -e "$_sv_i/driver" ] || continue
+				case "$(basename "$(readlink "$_sv_i/driver")")" in
+					usbfs|usb-storage|uas) ;;
+					*) _sv_drv=1 ;;
+				esac
+			done
+			[ -n "$_sv_ff" ] && [ -z "$_sv_drv" ] || continue
+			_sv_raw="$_sv_raw $(cat "$_sv_d/idVendor"):$(cat "$_sv_d/idProduct") $(cat "$_sv_d/product" 2>/dev/null)
+"
+		done
+		if [ -n "$_sv_raw" ]; then
+			echo "A MODEM-LIKE DEVICE IS ON THE USB BUS, BUT NO DRIVER HAS TAKEN IT:"
+			printf '%s' "$_sv_raw" | sed '/^$/d; s/^ */    /'
+			echo "  It has no AT port and no control channel (cdc-wdm/net), so the app"
+			echo "  cannot see it. Usually the modem is in a debug/unknown USB composition;"
+			echo "  switch it back to its normal mode. See 'USB devices' below."
+			return
+		fi
 		echo "NO MODEM FOUND on the USB bus. Check the power and the connection;"
 		echo "if the modem sits in an M.2 slot, see the 'bootloader mode' section below."
 		return

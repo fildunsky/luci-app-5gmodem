@@ -1,80 +1,101 @@
 # Fibocom L850-GL
 
-convertchannel() {
-  if [ $1 -ge 0 ] && [ $1 -le 599 ]; then
-    newband=1
-  elif [ $1 -ge 600 ] && [ $1 -le 1199 ]; then
-    newband=2
-  elif [ $1 -ge 1200 ] && [ $1 -le 1949 ]; then
-    newband=3
-  elif [ $1 -ge 1950 ] && [ $1 -le 2399 ]; then
-    newband=4
-  elif [ $1 -ge 2400 ] && [ $1 -le 2649 ]; then
-    newband=5
-  elif [ $1 -ge 2750 ] && [ $1 -le 3449 ]; then
-    newband=7
-  elif [ $1 -ge 3450 ] && [ $1 -le 3799 ]; then
-    newband=8
-  elif [ $1 -ge 6150 ] && [ $1 -le 6449 ]; then
-    newband=20
-  elif [ $1 -ge 9210 ] && [ $1 -le 9659 ]; then
-    newband=28
-  elif [ $1 -ge 9870 ] && [ $1 -le 9919 ]; then
-    newband=31
-  elif [ $1 -ge 37750 ] && [ $1 -le 38249 ]; then
-    newband=38
-  elif [ $1 -ge 38650 ] && [ $1 -le 39649 ]; then
-    newband=40
-  else
-    newband=0
-  fi
-}
-
 O=$(sms_tool -d $DEVICE at "at+xlec?;+rsrp?;+rsrq?;+xmci=1")
 # СНИМОК БАТЧА ДЛЯ БЛОКА СОСЕДЕЙ В КОНЦЕ ФАЙЛА. $O ниже переиспользуется под
 # CGSN/CIMI/CCID, и к моменту разбора XMCI в нём лежит уже ICCID.
 _XMCI_RAW="$O"
   
-T=$(echo "$O" | awk -F [:_] '/\+XLEC:/{gsub("\r",""); print $4}' | awk -F [:,] '{print $1}')
-if [ -n "$T" ]; then
-	case $T in
-		*"1"*) MODE="${MODE} "$(band4g 1 "");;
-		*"2"*) MODE="${MODE} "$(band4g 2 "");;
-		*"3"*) MODE="${MODE} "$(band4g 3 "");;
-		*"4"*) MODE="${MODE} "$(band4g 4 "");;
-		*"5"*) MODE="${MODE} "$(band4g 5 "");;
-		*"7"*) MODE="${MODE} "$(band4g 7 "");;
-		*"8"*) MODE="${MODE} "$(band4g 8 "");;
-		*"12"*) MODE="${MODE} "$(band4g 12 "");;
-		*"13"*) MODE="${MODE} "$(band4g 13 "");;
-		*"14"*) MODE="${MODE} "$(band4g 14 "");;
-		*"17"*) MODE="${MODE} "$(band4g 17 "");;
-		*"18"*) MODE="${MODE} "$(band4g 18 "");;
-		*"19"*) MODE="${MODE} "$(band4g 19 "");;
-		*"20"*) MODE="${MODE} "$(band4g 20 "");;
-		*"21"*) MODE="${MODE} "$(band4g 21 "");;
-		*"25"*) MODE="${MODE} "$(band4g 25 "");;
-		*"26"*) MODE="${MODE} "$(band4g 26 "");;
-		*"28"*) MODE="${MODE} "$(band4g 28 "");;
-		*"29"*) MODE="${MODE} "$(band4g 29 "");;
-		*"30"*) MODE="${MODE} "$(band4g 30 "");;
-		*"32"*) MODE="${MODE} "$(band4g 32 "");;
-		*"34"*) MODE="${MODE} "$(band4g 34 "");;
-		*"38"*) MODE="${MODE} "$(band4g 38 "");;
-		*"39"*) MODE="${MODE} "$(band4g 39 "");;
-		*"40"*) MODE="${MODE} "$(band4g 40 "");;
-		*"41"*) MODE="${MODE} "$(band4g 41 "");;
-		*"42"*) MODE="${MODE} "$(band4g 42 "");;
-		*"43"*) MODE="${MODE} "$(band4g 43 "");;
-		*"46"*) MODE="${MODE} "$(band4g 46 "");;
-		*"48"*) MODE="${MODE} "$(band4g 48 "");;
-		*"66"*) MODE="${MODE} "$(band4g 66 "");;
-		*"71"*) MODE="${MODE} "$(band4g 71 "");;
-		*) MODE="${MODE} ${T}";;
-	esac
-fi
+eval "$(printf '%s\n' "$O" | tr -d '\r' | awk -F, '
+	function e2b(e) {
+		if (e < 0) return ""
+		if (e <= 599) return 1;   if (e <= 1199) return 2
+		if (e <= 1949) return 3;  if (e <= 2399) return 4
+		if (e <= 2649) return 5
+		if (e >= 2750 && e <= 3449) return 7
+		if (e >= 3450 && e <= 3799) return 8
+		if (e >= 5010 && e <= 5179) return 12
+		if (e >= 5180 && e <= 5279) return 13
+		if (e >= 5730 && e <= 5849) return 17
+		if (e >= 6150 && e <= 6449) return 20
+		if (e >= 8040 && e <= 8689) return 25
+		if (e >= 9210 && e <= 9659) return 28
+		if (e >= 9770 && e <= 9869) return 30
+		if (e >= 9870 && e <= 9919) return 31
+		if (e >= 37750 && e <= 38249) return 38
+		if (e >= 38650 && e <= 39649) return 40
+		if (e >= 39650 && e <= 41589) return 41
+		if (e >= 66436 && e <= 67335) return 66
+		if (e >= 68586 && e <= 68935) return 71
+		return ""
+	}
+	function hex2dec(h,   i, c, n) {
+		gsub(/^0[xX]/, "", h); h = toupper(h); n = 0
+		if (h == "" || h ~ /[^0-9A-F]/) return -1
+		for (i = 1; i <= length(h); i++) {
+			c = index("0123456789ABCDEF", substr(h, i, 1))
+			n = n * 16 + c - 1
+		}
+		return n
+	}
+	function bwmhz(c) {
+		if (c == "0") return "1.4"; if (c == "1") return "3"; if (c == "2") return "5"
+		if (c == "3") return "10";  if (c == "4") return "15"; if (c == "5") return "20"
+		return ""
+	}
+	function num(v) { gsub(/[^0-9.-]/, "", v); return v }
+	/^\+XLEC:/ {
+		s = $0; sub(/^\+XLEC:[ ]*/, "", s); gsub(/ /, "", s)
+		n = split(s, x, ","); hasx = 1; nc = x[2] + 0
+		for (i = 1; i <= nc; i++) bw[i] = x[2 + i]
+		for (i = 3 + nc; i <= n; i++) {
+			v = x[i]
+			if (v ~ /^BAND_LTE_/) { gsub(/[^0-9]/, "", v); if (pb == "") pb = v; else sb[++ns] = v + 0; continue }
+			if (v ~ /^[0-9]+$/ && v + 0 > 0) sb[++ns] = v + 0
+		}
+	}
+	/^\+RSRP:/ {
+		s = $0; sub(/^\+RSRP:[ ]*/, "", s); gsub(/ /, "", s)
+		m = split(s, r, ",")
+		for (i = 1; i + 1 <= m; i += 3) { nr++; rp[nr] = r[i] + 0; re[nr] = r[i + 1] + 0; rv[nr] = r[i + 2] }
+	}
+	/^\+RSRQ:/ {
+		s = $0; sub(/^\+RSRQ:[ ]*/, "", s); gsub(/ /, "", s)
+		m = split(s, r, ",")
+		for (i = 1; i + 1 <= m; i += 3) { nq++; qp[nq] = r[i] + 0; qe[nq] = r[i + 1] + 0; qv[nq] = r[i + 2] }
+	}
+	/^\+XMCI: *4,/ {
+		s = $0; gsub(/"/, "", s); gsub(/ /, "", s); split(s, f, ",")
+		xp = hex2dec(f[6]); xe = hex2dec(f[7])
+	}
+	END {
+		if (hasx && nc < 1) exit
+		pci = ""; ear = ""
+		if (xp >= 0 && xp <= 503 && xe > 0 && xe <= 262143) { pci = xp; ear = xe }
+		else if (nr >= 1) { pci = rp[1]; ear = re[1] }
+		for (i = 1; i <= nr; i++) if (pci != "" && rp[i] == pci && re[i] == ear) { used[i] = 1; if (rv[i] != "") printf "SRSRP=%.0f\n", rv[i]; break }
+		for (i = 1; i <= nq; i++) if (pci != "" && qp[i] == pci && qe[i] == ear) { if (qv[i] != "") printf "SRSRQ=%.0f\n", qv[i]; break }
+		if (pb == "" && ear != "") pb = e2b(ear)
+		printf "PB=%s\nPBW=%s\nPCI=%s\nEARFCN=%s\n", num(pb), num(bwmhz(bw[1])), num(pci), num(ear)
+		k = 0
+		for (j = 1; j < nc && j <= 4; j++) {
+			b = (j <= ns) ? sb[j] : ""; hit = 0
+			for (i = 1; i <= nr; i++) {
+				if (used[i] || re[i] == ear || busy[re[i]]) continue
+				if (b != "" && e2b(re[i]) != b) continue
+				used[i] = 1; busy[re[i]] = 1; hit = i; break
+			}
+			if (b == "" && hit) b = e2b(re[hit])
+			if (b == "" && !hit) continue
+			k++
+			printf "SB%d=%s\nSBW%d=%s\n", k, num(b), k, num(bwmhz(bw[j + 1]))
+			if (hit) printf "SPCI%d=%s\nSEARFCN%d=%s\n", k, num(rp[hit]), k, num(re[hit])
+		}
+		printf "NSCC=%d\n", k
+	}
+')"
 
 RSRP=$(echo "$O" | awk -F [:,] '/\+RSRP:/{printf "%.0f\n", $4}')
+[ -n "$SRSRP" ] && RSRP="$SRSRP"
 
 BWDL=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r","",$4); print $4}')
 		case $BWDL in
@@ -102,139 +123,28 @@ else
 fi
 
 RSRQ=$(echo "$O" | awk -F [:,] '/\+RSRQ:/{printf "%.0f\n", $4}')
+[ -n "$SRSRQ" ] && RSRQ="$SRSRQ"
 SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); if ($13+0 != 255) printf "%.0f\n", $13/4+5}')   # 255 = нет данных (форум), иначе «69 дБ»
 
-LTE_Cx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{print $3}')
-case "$LTE_Cx" in ''|*[!0-9]*) LTE_Cx=1 ;; esac
-LTE_CA=$(($LTE_Cx -1))
-
-# LTE-A - ТОЛЬКО ПРИ РЕАЛЬНОЙ АГРЕГАЦИИ (в XLEC больше одной соты). Раньше тут
-# стояло [ -n "LTE_CA" ] - ЛИТЕРАЛ без $, истина всегда, - и ветка с
-# MODE="LTE-A | ..." выполнялась при любом ответе XLEC: одна несущая B3
-# показывалась как «4G+» (живой отчёт L850, 03.08.2026). Одна сота уходит в
-# фолбэк ниже - он честно пишет «LTE | B3» и сам заполняет PBAND/PCI/EARFCN.
-if [ "$LTE_CA" -ge 1 ]; then
-
-case $LTE_CA in
-    1*) 
-    CAx=$(echo "$O" | awk -F [:,] '/\+RSRP:/{print $6}')
-    BWCx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "$5}')
-    ;;
-    2*) 
-    CAx=$(echo "$O" | awk -F [:,] '/\+RSRP:/{print $6" "$9}')
-    BWCx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "$5" "$6}');;
-    3*)
-    CAx=$(echo "$O" | awk -F [:,] '/\+RSRP:/{print $6" "$9" "$12}')
-    BWCx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "$5" "$6" "$7}')
-    ;;
-    4*) 
-    CAx=$(echo "$O" | awk -F [:,] '/\+RSRP:/{print $6" "$9" "$12" "$15}')
-    BWCx=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "$5" "$6" "$7" "$8}')
-    ;;
-esac
-
-CA_BAND=""
-for sca in $CAx; do
-    convertchannel $sca 2> /dev/null
-    BAND="$(band4g $newband "")"
-    CA_BAND=$CA_BAND' / '$BAND
-    CABANDx=$CABANDx','$newband
-done
-MODE="LTE-A | $(band4g $T "")${CA_BAND}"
-
-S1=$(echo "$CABANDx" | awk -F [,] '/\,/{print $2" "}' | sed 's/ //g')
-S2=$(echo "$CABANDx" | awk -F [,] '/\,/{print $3" "}' | sed 's/ //g')
-S3=$(echo "$CABANDx" | awk -F [,] '/\,/{print $4" "}' | sed 's/ //g')
-S4=$(echo "$CABANDx" | awk -F [,] '/\,/{print $5" "}' | sed 's/ //g')
-
-BWCA=0
-BWCA_INFO=""
-for T3 in $BWCx; do
-	case $T3 in
-		1*) T5="3";;
-		2*) T5="5";;
-		3*) T5="10";;
-		4*) T5="15";;
-		5*) T5="20";;
-		*) T5="0";;
-	esac
-BWCA=$(($BWCA+$T5))
-[[ -z ${BWCA_INFO} ]] && BWCA_INFO="${T5}" || BWCA_INFO="${BWCA_INFO},${T5}"
+if [ -n "$PB" ]; then
+	PBAND="$(band4g $PB "")"
+	[ -n "$PBW" ] && PBAND="$PBAND @$PBW MHz"
+	MODE="LTE | $(band4g $PB "")"
+fi
+_k=1
+while [ "$_k" -le "${NSCC:-0}" ]; do
+	eval "_b=\$SB$_k _w=\$SBW$_k _p=\$SPCI$_k _e=\$SEARFCN$_k"
+	_sb="$(band4g $_b "")"
+	MODE="${MODE/LTE |/LTE-A |} / $_sb"
+	[ -n "$_w" ] && _sb="$_sb @$_w MHz"
+	eval "S${_k}BAND=\"\$_sb\" S${_k}PCI=\"\$_p\" S${_k}EARFCN=\"\$_e\""
+	_k=$((_k + 1))
 done
 
-BW1=$(echo "$BWCA_INFO" | awk -F [,] '/\,/{print $2" "}')
-BW2=$(echo "$BWCA_INFO" | awk -F [,] '/\,/{print $3" "}')
-BW3=$(echo "$BWCA_INFO" | awk -F [,] '/\,/{print $4" "}')
-BW4=$(echo "$BWCA_INFO" | awk -F [,] '/\,/{print $5" "}')
-
-T2=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "}')
-	case $T2 in
-		1*) T4="3";;
-		2*) T4="5";;
-		3*) T4="10";;
-		4*) T4="15";;
-		5*) T4="20";;
-		0*) T4="1.4";;
-		*) T4="0";;
-	esac
-
-	if [ -n "$T4" ]; then
-		PBAND="$(band4g $T "") @$T4 MHz"
-		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {gsub(/ /,"",$2); print $2}')
-		EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $3}')
-	fi
-
-if [ -n "$S1" ]; then
-S1BAND="$(band4g $S1 "") @$BW1 MHz"
-S1PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $5}')
-S1EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $6}')
-fi
-if [ -n "$S2" ]; then
-S2BAND="$(band4g $S2 "") @$BW2 MHz"
-S2PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $8}')
-S2EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $9}')
-fi
-if [ -n "$S3" ]; then
-S3BAND="$(band4g $S3 "") @$BW3 MHz"
-S3PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $11}')
-S3EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $12}')
-fi
-if [ -n "$S4" ]; then
-S4BAND="$(band4g $S4 "") @$BW4 MHz"
-S4PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $14}')
-S4EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $15}')
-fi
-
-
-fi
-
-if [[ "$MODE" != *"LTE-A"* ]]; then
-   if [ -n "$T" ]; then
-    	MODE="LTE | $(band4g $T "")"
-
-	T2=$(echo "$O" | awk -F [:,] '/\+XLEC:/{gsub("\r",""); print $4" "}')
-	case $T2 in
-		1*) T4="3";;
-		2*) T4="5";;
-		3*) T4="10";;
-		4*) T4="15";;
-		5*) T4="20";;
-		0*) T4="1.4";;
-		*) T4="0";;
-	esac
-
-	if [ -n "$T4" ]; then
-		PBAND="$(band4g $T "") @$T4 MHz"
-		PCI=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {gsub(/ /,"",$2); print $2}')
-		EARFCN=$(echo "$O" | awk -F[,:] '/^\+RSRP:/ {print $3}')
-	fi
-  fi
-fi
-
-# CA/SCC этот профиль строит по XLEC + AT+RSRP? (доп. соты RSRP? = SCC), как эталон
-# modemfeed/modeminfo scripts/INTEL: это УСТОЯВШАЯСЯ конвенция для L850/L860, не баг.
-# Раньше я ошибочно «чинил» её через XMCI type-4 и уводил доп. соты в neighbors[] -
-# откатил. Соседей отдельно не строим: доп. соты идут как SCC.
+# Основная сота - из XMCI: 4 (первая запись RSRP? не обязательно обслуживающая),
+# диапазоны SCC - из хвоста XLEC (пустые места там нули), PCI/EARFCN SCC - из RSRP?
+# по совпадению диапазона. Прошивки без BAND_LTE_ в XLEC (частый случай на 4pda)
+# получают диапазоны по EARFCN.
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g')
 

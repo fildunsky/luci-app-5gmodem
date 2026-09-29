@@ -598,7 +598,8 @@ function renderCellLock(state) {
 					_('Removing the lock - the modem restarts, connection drops for a while...'));
 			})
 		}, [ (locked ? _('Unlock') : _('Reset cell lock')) ]));
-	} else {
+	}
+	if (!locked) {
 		/* Соту берём В МОМЕНТ НАЖАТИЯ, а не при отрисовке. Раньше кнопка читала
 		   последний снимок метрик, но эта строка рисуется при раскрытии блока
 		   диапазонов - опрос метрик к тому времени мог ещё не пройти, и кнопка
@@ -627,6 +628,10 @@ function renderCellLock(state) {
 	// это и так ясно по кнопке «Привязать к текущей соте».
 	if (locked) {
 		cell.appendChild(E('span', { 'style': 'margin-left:.6em' }, txt));
+	} else if (unlockable) {
+		cell.appendChild(E('span', {
+			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
+		}, txt));
 	}
 
 	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после

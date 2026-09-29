@@ -55,6 +55,21 @@ O=$(sms_tool -d $DEVICE at "AT+XLEC?;+XMCI=1;+XCCINFO=1;+XCCINFO?")
 # Снимок батча для блока соседей в конце файла: $O ниже переиспользуется под
 # CGSN/CIMI/CCID (та же история, что в профиле 2cb70007).
 _XMCI_RAW="$O"
+O=$(printf '%s\n' "$O" | tr -d '\r' | awk -F, '
+	/^\+XLEC:/ {
+		s = $0; sub(/^\+XLEC:[ ]*/, "", s); gsub(/ /, "", s)
+		n = split(s, x, ","); nc = x[2] + 0; out = x[1] "," x[2]; k = 0; z = 0; seen = 0
+		for (i = 3; i <= n; i++) {
+			v = x[i]
+			if (v ~ /^BAND_LTE_/) { sub(/^BAND_LTE_+/, "BAND_LTE_", v); seen = 1; out = out "," v; continue }
+			if (seen && v == "0") { z++; continue }
+			out = out "," v
+		}
+		while (z-- > 0) out = out ",0"
+		print "+XLEC: " out; next
+	}
+	{ print }
+')
 
 if [ "x$MODE_NUM" = "x7" ]; then
 	T=$(echo "$O" | awk -F[,:] '/^\+XCCINFO:/{print $11}' | xargs)

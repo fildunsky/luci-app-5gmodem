@@ -3229,48 +3229,48 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   body.tg-mv:not(.sc-simple) .tg-arr-host > [data-mv="top"] { order: 0; }
   body.tg-mv:not(.sc-simple) .tg-arr-host > .tg-mv-tabs { order: 1; }
 
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-general {
+  body.tg-mv #modem-info-block .tginfo-general {
     display: grid;
     grid-template-columns: auto auto minmax(0, 1fr);
     gap: 8px 0;
     align-items: stretch;
     padding: 0;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block #signal,
-  body.tg-mv:not(.sc-simple) #modem-info-block #simv,
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-status,
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-info,
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-right {
+  body.tg-mv #modem-info-block #signal,
+  body.tg-mv #modem-info-block #simv,
+  body.tg-mv #modem-info-block .tginfo-status,
+  body.tg-mv #modem-info-block .tginfo-info,
+  body.tg-mv #modem-info-block .tginfo-right {
     background: rgba(128,128,128,.08);
     margin: 0;
     padding: 10px 12px;
     box-sizing: border-box;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block #signal {
+  body.tg-mv #modem-info-block #signal {
     grid-column: 1; grid-row: 1;
     border-radius: var(--tg-radius-lg) 0 0 var(--tg-radius-lg);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     padding-right: 6px;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block #simv {
+  body.tg-mv #modem-info-block #simv {
     grid-column: 2; grid-row: 1;
     display: flex; align-items: center; justify-content: center;
     padding-left: 6px; padding-right: 6px;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-status {
+  body.tg-mv #modem-info-block .tginfo-status {
     grid-column: 3; grid-row: 1;
     border-radius: 0 var(--tg-radius-lg) var(--tg-radius-lg) 0;
     justify-content: center;
     min-width: 0;
     padding-left: 6px;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-status > * { white-space: normal; overflow-wrap: anywhere; }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-info {
+  body.tg-mv #modem-info-block .tginfo-status > * { white-space: normal; overflow-wrap: anywhere; }
+  body.tg-mv #modem-info-block .tginfo-info {
     grid-column: 1 / -1;
     border-radius: var(--tg-radius-lg);
     opacity: 1;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-right {
+  body.tg-mv #modem-info-block .tginfo-right {
     grid-column: 1 / -1;
     border-radius: var(--tg-radius-lg);
     display: flex;
@@ -3280,34 +3280,34 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
     justify-content: space-between;
     gap: 8px 14px;
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-right > * { margin: 0 !important; }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-simslot .cbi-button { font-size: 13px !important; line-height: 18px !important; padding: 5px 12px !important; }
+  body.tg-mv #modem-info-block .tginfo-right > * { margin: 0 !important; }
+  body.tg-mv #modem-info-block .tginfo-simslot .cbi-button { font-size: 13px !important; line-height: 18px !important; padding: 5px 12px !important; }
 
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-row {
+  body.tg-mv .netpribar .netpri-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-row > .netpri-btn {
+  body.tg-mv .netpribar .netpri-row > .netpri-btn {
     margin: 0 !important;
     min-width: 0;
     width: auto;
     padding: .45em .6em;
   }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-sub { display: none; }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-row > .netpri-st { grid-column: span 2; }
+  body.tg-mv .netpribar .netpri-btn .netpri-sub { display: none; }
+  body.tg-mv .netpribar .netpri-btn .netpri-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.tg-mv .netpribar .netpri-row > .netpri-st { grid-column: span 2; }
 }
 @media (max-width: 700px) {
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-row > .netpri-btn { align-items: flex-start !important; text-align: left !important; }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-name { gap: .3em; }
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  body.tg-mv .netpribar .netpri-row > .netpri-btn { align-items: flex-start !important; text-align: left !important; }
+  body.tg-mv .netpribar .netpri-btn .netpri-name { gap: .3em; }
+  body.tg-mv .netpribar .netpri-btn .netpri-name > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 }
 @media (max-width: 700px) {
-  body.tg-mv:not(.sc-simple) #modem-info-block #signal { justify-content: center; gap: 4px; }
-  body.tg-mv:not(.sc-simple) #modem-info-block #signal > br { display: none; }
-  body.tg-mv:not(.sc-simple) #modem-info-block #signal > img { display: block; }
-  body.tg-mv:not(.sc-simple) #modem-info-block #mode .tg-mv-mhz { display: none; }
+  body.tg-mv #modem-info-block #signal { justify-content: center; gap: 4px; }
+  body.tg-mv #modem-info-block #signal > br { display: none; }
+  body.tg-mv #modem-info-block #signal > img { display: block; }
+  body.tg-mv #modem-info-block #mode .tg-mv-mhz { display: none; }
 }
 html.tg-theme-cyberpunk #modesw-btns .cbi-button,
 html.tg-theme-cyberpunk .tginfo-simslot .cbi-button {
@@ -3335,10 +3335,10 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
   border-style: dashed !important;
 }
 @media (min-width: 520px) and (max-width: 700px) {
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-general {
+  body.tg-mv #modem-info-block .tginfo-general {
     grid-template-columns: auto auto minmax(7em, max-content) minmax(0, 1fr);
   }
-  body.tg-mv:not(.sc-simple) #modem-info-block .tginfo-info {
+  body.tg-mv #modem-info-block .tginfo-info {
     grid-column: 4;
     grid-row: 1;
     margin-left: 8px;
@@ -3348,5 +3348,5 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
   }
 }
 @media (max-width: 700px) {
-  body.tg-mv:not(.sc-simple) .netpribar .netpri-btn .netpri-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body.tg-mv .netpribar .netpri-btn .netpri-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }

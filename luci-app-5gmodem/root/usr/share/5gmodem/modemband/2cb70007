@@ -163,7 +163,7 @@ _ch2band() {
 # «unlockable»: страница покажет кнопку «Отвязать» даже когда состояние
 # неизвестно. Иначе снять привязку из интерфейса нечем - а она может оставить
 # модем без связи (живой случай 05.08.2026: снимали тремя AT-командами по SSH).
-# Снятие безопасно и когда привязки нет: freq_lock(...,0,...) просто ничего не меняет.
+# Снятие безопасно и когда привязки нет: заводские значения просто остаются заводскими.
 _CELLLOCK_WRITEONLY=1
 
 getcelllock() {
@@ -173,12 +173,14 @@ getcelllock() {
 # setcelllock off | arfcn <earfcn> | cell <earfcn> <pci>
 # at@sic:freq_lock($sim=0,$rat=3,$band,$enable,$earfcn,$pci). Применяется ТОЛЬКО через
 # режим полёта (CFUN=4 -> CFUN=1), иначе привязка не встаёт - как у FM350. enable=0
-# снимает (нули в остальных полях годятся, проверено). Реконнект делает bands.sh.
+# снимает; частоту и PCI пишем заводскими (4294967295, 65535): модем хранит их в NVM,
+# и нули там = PCI 0, с которым модем уходит в 3G (4pda). Диапазон модем не
+# проверяет, поэтому неизвестный отдаём как 255. Реконнект делает bands.sh.
 setcelllock() {
 	case "$1" in
 		off)
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
-			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,0,0,0,0)" >/dev/null 2>&1; sleep 1
+			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,255,0,4294967295,65535)" >/dev/null 2>&1; sleep 1
 			sms_tool -d $_DEVICE at "AT+CFUN=15" >/dev/null 2>&1; sleep 6   # CFUN=15, не 1: см. 8087095a (вечный поиск сети после freq_lock)
 			;;
 		arfcn|cell)
@@ -187,7 +189,7 @@ setcelllock() {
 			# PCI=0 модем понимает буквально и уходит из LTE в 3G (форум,
 			# ревью 12.09.2026). Раньше «привязать к частоте» слала именно 0.
 			case "$_PC" in ''|*[!0-9]*|0) _PC=65535 ;; esac
-			_B=$(_ch2band "$_AR"); [ "$_B" = 0 ] && return
+			_B=$(_ch2band "$_AR"); case "$_B" in ""|0) _B=255 ;; esac
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
 			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,$_B,1,$_AR,$_PC)" >/dev/null 2>&1; sleep 1
 			sms_tool -d $_DEVICE at "AT+CFUN=15" >/dev/null 2>&1; sleep 6   # CFUN=15, не 1: см. 8087095a (вечный поиск сети после freq_lock)
