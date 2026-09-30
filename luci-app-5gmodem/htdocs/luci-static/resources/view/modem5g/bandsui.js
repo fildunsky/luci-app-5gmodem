@@ -136,7 +136,7 @@ function bandFilterAll() {
 
 function bandFilterTick(json) {
 	if (!json || typeof json !== 'object' || json.error || !json.modem) { return; }
-	var hasMcc = [ json.home_mcc, json.operator_mcc ].some(function(v) { return /^\d{3}$/.test(String(v == null ? '' : v).trim()); })
+	var hasMcc = [ json.home_mcc, json.operator_mcc ].some(function(v) { return (/^\d{3}$/).test(String(v == null ? '' : v).trim()); })
 		|| /^\d{6,}$/.test(String(json.imsi == null ? '' : json.imsi).trim());
 	if (hasMcc) { _bandReg = mutil.bandRegion(json); }
 	var a = _bandActive(json);

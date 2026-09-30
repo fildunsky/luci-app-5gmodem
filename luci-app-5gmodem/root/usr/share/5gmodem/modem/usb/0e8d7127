@@ -706,7 +706,7 @@ TM=$(echo "$OT" | awk 'BEGIN{m=-999}
 	/\+ETHERMAL:/ {
 		s = $0; sub(/^.*\+ETHERMAL:/, "", s)
 		n = split(s, a, ",")
-		if (n >= 2) { v = a[2] + 0; if (v > -40 && v < 150 && v > m) m = v }
+		if (n >= 2) { v = a[2] + 0; if (v > -40 && v < 120 && v > m) m = v }
 	}
 	END { if (m > -999) printf "%.1f", m }' | xargs)
 # ФИЛЬТР СБОЙНЫХ ЗАМЕРОВ. Датчик FM350 изредка отдаёт неправдоподобное значение:

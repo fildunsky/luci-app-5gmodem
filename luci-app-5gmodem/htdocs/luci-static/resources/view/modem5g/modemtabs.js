@@ -315,8 +315,19 @@ function applyGateTabs() {
 		var stt = sid ? String(uci.get('5gmodem', sid, 'show_stats') || '') : '';
 		gateHideRule('align-tab-hide', 'align', al !== '1');
 		gateHideRule('stats-tab-hide', 'stats', stt === '0');
+		try {
+			localStorage.setItem('5gmodem.gate.align', al === '1' ? '1' : '0');
+			localStorage.setItem('5gmodem.gate.stats', stt === '0' ? '0' : '1');
+		} catch (e) {}
 	});
 }
+
+(function() {
+	try {
+		if (localStorage.getItem('5gmodem.gate.align') !== '1') { gateHideRule('align-tab-hide', 'align', true); }
+		if (localStorage.getItem('5gmodem.gate.stats') === '0') { gateHideRule('stats-tab-hide', 'stats', true); }
+	} catch (e) {}
+})();
 
 function applyUssdTabVisibility() {
 	return L.resolveDefault(uci.load('5gmodem'))
@@ -421,7 +432,7 @@ var TABS_CACHE = '5gmodem.modemtabs';
    Признак - вендор 12d1: по наличию сетевой карты это НЕ определить, у
    M.2-модулей с ECM-дозвоном (FM350) она тоже есть, и значок уезжал им тоже. */
 function isUsbStick(m) {
-	return /^12d1:/i.test((m && m.vidpid) || '');
+	return (/^12d1:/i).test((m && m.vidpid) || '');
 }
 
 /* ЗНАЧОК ОПЕРАТОРА ВМЕСТО ЗНАЧКА ЖЕЛЕЗА.

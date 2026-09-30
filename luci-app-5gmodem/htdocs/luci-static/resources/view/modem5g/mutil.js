@@ -413,7 +413,7 @@ var BAND_MCC = {
 };
 function bandRegion(json) {
 	var j = json || {};
-	var pick = function(v) { var s = String(v == null ? '' : v).trim(); return /^\d{3}$/.test(s) ? s : ''; };
+	var pick = function(v) { var s = String(v == null ? '' : v).trim(); return (/^\d{3}$/).test(s) ? s : ''; };
 	var cands = [ pick(j.operator_mcc) ];
 	if (!cands[0]) {
 		cands = [ pick(j.home_mcc) ];

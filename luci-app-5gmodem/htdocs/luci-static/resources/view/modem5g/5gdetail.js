@@ -56,7 +56,7 @@ function qualSetMode(mode) {
 	return _qualRat;
 }
 function qualBandRat(band) {
-	return /^\s*n\d/.test(String(band == null ? '' : band)) ? 'nr' : _qualRat;
+	return (/^\s*n\d/).test(String(band == null ? '' : band)) ? 'nr' : _qualRat;
 }
 function sinrUnmeasured(sinr, rsrq) {
 	var s = String(sinr == null ? '' : sinr).trim(), q = String(rsrq == null ? '' : rsrq).trim();
@@ -2130,12 +2130,12 @@ function fillAntPorts(raw, rxdiv) {
 	   AT!GSTATUS? отдаёт RSRP и RSSI, а RSRQ - только общий по соте), поэтому
 	   поле может быть пустым; строка годится, если есть хоть один уровень. */
 	var rows = String(raw || '').trim().split(/\s+/).filter(function(l) {
-		return /^\d+:(-?\d+(\.\d+)?)?:(-?\d+(\.\d+)?)?(:(-?\d+(\.\d+)?)?)?$/.test(l)
+		return (/^\d+:(-?\d+(\.\d+)?)?:(-?\d+(\.\d+)?)?(:(-?\d+(\.\d+)?)?)?$/).test(l)
 			&& /:-?\d/.test(l);
 	});
 	/* Колонка RSSI появляется только там, где модем её отдал: у остальных она
 	   была бы столбцом прочерков. */
-	var hasRssi = rows.some(function(l) { return /^[^:]*:[^:]*:[^:]*:-?\d/.test(l); });
+	var hasRssi = rows.some(function(l) { return (/^[^:]*:[^:]*:[^:]*:-?\d/).test(l); });
 	/* Блок, который УЖЕ показывали, не прячем: пустой antports почти всегда
 	   означает коллизию на порту, а не исчезновение антенн. Правило то же, что
 	   в setRowVisible - иначе целая секция схлопывается и уводит прокрутку. */
@@ -3030,7 +3030,7 @@ function applyMetrics(json) {
 								         : (json.rxdiv === '2rx') ? _('Receive diversity: on (2RX)')
 								         : _('Receive diversity: off - the second antenna is not used');
 							} else {
-								var _apRows = String(json.antports || '').trim().split(/\s+/).filter(function(l) { return /:-?\d/.test(l); });
+								var _apRows = String(json.antports || '').trim().split(/\s+/).filter(function(l) { return (/:-?\d/).test(l); });
 								if (_apRows.length) {
 									var _apOn = _apRows.filter(function(l) {
 										var m = l.match(/^\d+:(-?\d+)/);
