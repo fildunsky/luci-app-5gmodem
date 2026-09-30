@@ -481,7 +481,7 @@ return view.extend({
 				var add = function(list, pfx, label) {
 					if (!list) return;
 					var bs = String(list).trim().split(/\s+/).filter(function(b) {
-						return /^[0-9]+$/.test(b);
+						return (/^[0-9]+$/).test(b);
 					});
 					if (bs.length) {
 						parts.push({ label: label, bands: bs.map(function(b) { return pfx + b; }).join(' ') });

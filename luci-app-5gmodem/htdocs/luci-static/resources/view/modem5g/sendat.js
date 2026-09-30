@@ -42,7 +42,7 @@ function atChain(cmds) {
    ЛЕГАСИ читается тоже, чтобы ничьи существующие .user не сломались:
        Название ➜ AT-команда   (стрелка '➜'/'→'/'->')
        Название;AT-команда */
-function isAtLine(s) { return /^at/i.test(String(s || '').trim()); }
+function isAtLine(s) { return (/^at/i).test(String(s || '').trim()); }
 
 function parseLegacyLine(s) {
 	var m = s.match(/^(.*?)\s*(?:➜|→|->)\s*(.*)$/);
