@@ -3742,7 +3742,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30201, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30202, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
