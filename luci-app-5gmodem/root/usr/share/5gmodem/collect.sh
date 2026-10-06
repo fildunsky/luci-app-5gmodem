@@ -480,6 +480,13 @@ dns_verdict() {
 	echo "--- local resolver (as clients see it) ---"
 	cap 8 nslookup ya.ru 127.0.0.1 2>&1 | head -8
 	echo "--- upstreams: whose they are and whether they answer ---"
+	_dv_static=""
+	for _dv_i in $(uci -q show network 2>/dev/null | sed -n 's/^network\.\([^.=]*\)=interface$/\1/p'); do
+		for _dv_x in $(uci -q get "network.$_dv_i.dns" 2>/dev/null); do
+			_dv_static="$_dv_static $_dv_x:$_dv_i"
+		done
+	done
+	_dv_dead=""
 	if [ -s "$_dv_auto" ]; then
 		# resolv.conf.auto пишет netifd, комментарием над серверами - чей они
 		# интерфейс. По нему и раскладываем ответственность.
@@ -491,22 +498,40 @@ dns_verdict() {
 				*) continue ;;
 			esac
 			_dv_s="$_dv_b"
+			_dv_man=""
+			case " $_dv_static " in *" $_dv_s:"*) _dv_man=1 ;; esac
 			case "$(cap 6 nslookup ya.ru "$_dv_s" 2>&1)" in
 				*"Address"*[0-9]*) _dv_r="answers" ;;
-				*) _dv_r="NO ANSWER (did the query leave through the wrong uplink?)" ;;
+				*)
+					if [ -n "$_dv_man" ]; then
+						_dv_r="NO ANSWER"
+						_dv_dead="$_dv_dead $_dv_s"
+					else
+						_dv_r="NO ANSWER (did the query leave through the wrong uplink?)"
+					fi ;;
 			esac
+			[ -n "$_dv_man" ] && _dv_r="$_dv_r [set by hand]"
 			printf '  %-16s from %-8s - %s\n' "$_dv_s" "$_dv_if" "$_dv_r"
 		done < "$_dv_auto"
 	else
 		echo "  $_dv_auto is empty or missing"
 	fi
-	_dv_n=$(grep -c "^nameserver" "$_dv_auto" 2>/dev/null)
-	case "$_dv_n" in ''|*[!0-9]*) _dv_n=0 ;; esac
-	[ "$_dv_n" -gt 3 ] && {
-		echo "  $_dv_n servers - these are resolvers of DIFFERENT carriers at once."
+	_dv_nif=$(grep "^# Interface" "$_dv_auto" 2>/dev/null | sort -u | grep -c .)
+	case "$_dv_nif" in ''|*[!0-9]*) _dv_nif=0 ;; esac
+	[ "$_dv_nif" -gt 1 ] && {
+		echo "  $_dv_nif interfaces supply DNS servers at once - resolvers of DIFFERENT uplinks."
 		echo "  A query to a foreign one leaves via another uplink's default route, and that"
 		echo "  uplink drops it: to clients it looks like 'sites load every other time'."
 	}
+	if [ -n "$_dv_dead" ]; then
+		echo "  PROBLEM: DNS servers set by hand do not answer:$_dv_dead"
+		echo "  They come from the 'dns' option of the interface - the app writes it with"
+		echo "  'Fallback DNS' in the modem settings. dnsmasq keeps sending queries to them,"
+		echo "  and clients get no answers even though the carrier's own DNS works."
+		echo "  When the carrier restricts traffic to a whitelist, foreign resolvers"
+		echo "  (8.8.8.8, 1.1.1.1) are blocked. Turn 'Fallback DNS' off, or use"
+		echo "  77.88.8.8 77.88.8.1 there."
+	fi
 	echo "--- DNS rebind protection ---"
 	_dv_rb=$(logread 2>/dev/null | grep -i "rebind" | tail -20)
 	if [ -n "$_dv_rb" ]; then
@@ -2031,7 +2056,20 @@ _sum_verdict() {
 	case "$_sv_st" in
 		down) echo "There is an address ($_sv_ip), but the internet through the modem DOES NOT ANSWER probes."
 		      echo "See the sections 'Who holds the internet' and 'DNS'." ;;
-		up)   echo "All good: the modem is online, address $_sv_ip, probes go through." ;;
+		up)
+			case "$(cap 8 nslookup ya.ru 127.0.0.1 2>&1)" in
+				*"Name:"*)
+					echo "All good: the modem is online, address $_sv_ip, probes go through." ;;
+				*)
+					echo "The modem is online (address $_sv_ip, probes by IP go through),"
+					echo "but the router's DNS DOES NOT ANSWER - sites will not open."
+					_sv_dns=$(uci -q get "network.$_sv_if.dns" 2>/dev/null)
+					if [ -n "$_sv_dns" ]; then
+						echo "DNS servers set by hand on $_sv_if: $_sv_dns ('Fallback DNS')."
+						echo "If they are blocked, turn 'Fallback DNS' off or use 77.88.8.8 77.88.8.1."
+					fi
+					echo "See the section 'DNS: resolving and rebind'." ;;
+			esac ;;
 		*)    echo "The modem is online, address $_sv_ip. No watchdog checks yet" \
 		      "(monitoring is off, or the router has just booted)." ;;
 	esac

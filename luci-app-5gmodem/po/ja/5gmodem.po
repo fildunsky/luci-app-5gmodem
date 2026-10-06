@@ -379,11 +379,11 @@ msgstr "本体の LED に表示"
 msgid "Signal level indicator"
 msgstr "信号レベル表示"
 
-msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default."
-msgstr "事業者やモデムによっては、DNS サーバーなしで接続されることがあります (IP は付くのにサイトが開かない)。その場合はオンにして下に DNS サーバーを入力すると、事業者の DNS (提供されていれば) に加えてモデムインターフェースに設定されます。既定はオフです。"
+msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default. When the carrier restricts traffic to a whitelist, foreign DNS servers (8.8.8.8, 1.1.1.1) are blocked and nothing resolves - use 77.88.8.8 77.88.8.1."
+msgstr "事業者やモデムによっては、DNS サーバーなしで接続されることがあります (IP は付くのにサイトが開かない)。その場合はオンにして下に DNS サーバーを入力すると、事業者の DNS (提供されていれば) に加えてモデムインターフェースに設定されます。既定はオフです。 事業者がホワイトリスト方式で通信を制限している場合、海外の DNS (8.8.8.8、1.1.1.1) はブロックされ名前解決できません。77.88.8.8 77.88.8.1 を使ってください。"
 
-msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
-msgstr "スペース区切りで入力 (例: \"1.1.1.1 8.8.8.8\")。"
+msgid "Space-separated, e.g. \"77.88.8.8 77.88.8.1\"."
+msgstr "スペース区切りで入力 (例: \"77.88.8.8 77.88.8.1\")。"
 
 msgid "Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears."
 msgstr "この種のモデムは通常 Web 画面しか持たず、TAC・バンド・EARFCN・USSD は分かりません。このモードではシリアルポートも出し、ネットワークカードとインターネット接続を保ったまま他のモデムと同じように制御できます。モードはモデムの再起動で元に戻るため、モデムが現れるたびに適用し直します。"
