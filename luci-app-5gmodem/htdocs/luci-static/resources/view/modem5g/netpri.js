@@ -620,6 +620,7 @@ function updatePingCard(host) {
 		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_pDot(st)); d.title = _pTip(st, info);
 	});
 	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _pMs(st); });
+	npFitRow();
 }
 /* ПРОКРУТКА ЦИФРЫ ПИНГА (запрос владельца): значение не прыгает, а быстро
    «пробегает» от прежнего к новому - тот же приём, что у живого числа
@@ -837,6 +838,7 @@ function updateSvcCard(service) {
 	});
 	document.querySelectorAll(sel + ' .netpri-sub').forEach(function(el) { el.textContent = _sTop(r); });
 	document.querySelectorAll(sel + ' .netpri-ip').forEach(function(el) { el.textContent = _sBottom(r); });
+	npFitRow();
 }
 /* Все сервисные точки (generic-сервисы + ветки SSClash) опрашиваются ОДНИМ
    вызовом netpri.sh svcall на тик вместо N параллельных exec_direct: каждый
@@ -1674,7 +1676,7 @@ function buildBar(list, redraw) {
 			]));
 		}
 	}
-	var rowEl = E('div', { 'class': 'netpri-row' }, btns);
+	var rowEl = E('div', { 'class': 'netpri-row' + (_npTwoCol ? ' netpri-2col' : '') }, btns);
 	/* перетаскивание карточек-аплинков - только когда виджет приоритета включён */
 	if (_widgets.netpri) { _npEnableReorder(rowEl, redraw); }
 	/* Правые виджеты тасуются между собой независимо от аплинков. */
@@ -1689,7 +1691,38 @@ function buildBar(list, redraw) {
 	   родителя, ни унаследованного цвета, и getComputedStyle врёт. */
 	window.setTimeout(npSyncTheme, 0);
 	npWatchTheme();
+	npWatchFit();
 	return _bar;
+}
+
+var _npTwoCol = false;
+var _npFitHooked = false;
+function npFitRow() {
+	document.querySelectorAll('.netpribar .netpri-row').forEach(function(row) {
+		if (!row.isConnected) { return; }
+		row.classList.remove('netpri-2col');
+		var two = false;
+		if (window.getComputedStyle(row).display === 'grid') {
+			row.querySelectorAll('.netpri-btn:not(.netpri-st) .netpri-name, .netpri-btn:not(.netpri-st) .netpri-name > span:last-child, .netpri-btn:not(.netpri-st) .netpri-ip').forEach(function(el) {
+				if (el.scrollWidth > el.clientWidth + 1) { two = true; }
+			});
+		}
+		row.classList.toggle('netpri-2col', two);
+		_npTwoCol = two;
+	});
+}
+function npWatchFit() {
+	window.requestAnimationFrame(npFitRow);
+	window.setTimeout(npFitRow, 0);
+	if (_npFitHooked) { return; }
+	_npFitHooked = true;
+	var pend = false;
+	window.addEventListener('resize', function() {
+		if (pend) { return; }
+		pend = true;
+		window.requestAnimationFrame(function() { pend = false; npFitRow(); });
+	});
+	try { document.fonts.ready.then(npFitRow); } catch (e) {}
 }
 
 /* ТЕМУ ПЕРЕСПРАШИВАЕМ, А НЕ ЗАПОМИНАЕМ ОДИН РАЗ.
