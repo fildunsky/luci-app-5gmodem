@@ -779,6 +779,16 @@ usb_flap_verdict() {
 	# Отвалы именно этого устройства, а не любые в системе.
 	_uf_n=$(logread 2>/dev/null | grep -c "usb $_uf_p: USB disconnect")
 	echo "USB re-connects in the current log: $_uf_n"
+	_uf_vp="$(cat "$_uf_d/idVendor" 2>/dev/null):$(cat "$_uf_d/idProduct" 2>/dev/null)"
+	case "$_uf_vp" in
+		413c:81d7|413c:81e0|0489:e0b4|0489:e0b5)
+			if [ "${_uf_n:-0}" -ge 2 ]; then
+				echo "NOTE for Snapdragon X20 modules (T77W968 / DW5821e): if the drops come when"
+				echo "the carrier adds or removes aggregated carriers, the cause is often edited"
+				echo "carrier files (NV 00028874, removed carrier policy) on second-hand modules,"
+				echo "not power. Restoring the stock files or reflashing the firmware cures it."
+			fi ;;
+	esac
 	# И ПО ВСЕМ ОСТАЛЬНЫМ УСТРОЙСТВАМ ТОЖЕ. Скакать может СОСЕДНИЙ модем, а не
 	# активный: живой отчёт с двумя модемами - активный Fibocom работал ровно, а
 	# Compal на 2-1.3 перечислялся заново каждые полторы секунды (80+ раз за

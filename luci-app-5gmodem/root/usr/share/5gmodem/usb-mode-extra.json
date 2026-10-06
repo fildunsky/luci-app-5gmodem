@@ -1,0 +1,8 @@
+{
+	"messages" : [ ],
+	"devices" : {
+		"19d2:0542": { "*": { "t_vendor": 6610, "t_product": [ 1381 ], "mode": "StandardEject", "msg": [ ] } },
+		"19d2:0548": { "*": { "t_vendor": 6610, "t_product": [ 1381 ], "mode": "StandardEject", "msg": [ ] } },
+		"19d2:0564": { "*": { "t_vendor": 6610, "t_product": [ 1381 ], "mode": "StandardEject", "msg": [ ] } }
+	}
+}

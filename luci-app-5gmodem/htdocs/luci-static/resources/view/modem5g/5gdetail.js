@@ -2021,7 +2021,11 @@ function connStageText(json) {
 	var en = parseInt(json.usb_enum, 10);
 	if (en > 1) { tail = ' ' + _('(#%d)').format(en); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
-	if (reg == '3') { return _('Registration denied'); }
+	if (reg == '3') {
+		var mcc = String(json.imsi || json.operator_mcc || '').trim().slice(0, 3);
+		if (mcc == '250' || mcc == '432') { return _('Registration denied (some module firmware blocks networks of this country - check the firmware version)'); }
+		return _('Registration denied');
+	}
 	if (json.no_at == '1' && (reg == '' || reg == '-')) { return _('Establishing connection…') + tail; }
 	if (reg != '1' && reg != '5') {                 // ещё не зарегистрирован
 		return (hasSig ? _('Searching for network…') : _('Initialising modem…')) + tail;

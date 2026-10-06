@@ -444,13 +444,13 @@ _yota_get() {
 	curl -s --max-time 6 ${_yg_src:+--interface "$_yg_src"} -A "$UA" "http://$1/status" 2>/dev/null | tr -d '\r'
 }
 
-_yv() { printf '%s\n' "$1" | sed -n "s|^$2=||p" | head -1; }
+_yv() { printf '%s\n' "$1" | sed -n "s|^$2[[:space:]]*=[[:space:]]*||p" | head -1; }
 
 yota_metrics_json() {
 	_HLP=$(_hl_path "$1")
 	_a=$(_addr_for "$_HLP") || return 1
 	_r=$(_yota_get "$_a")
-	case "$_r" in *InterfaceType=*) ;; *) return 1 ;; esac
+	case "$_r" in *InterfaceType*=*) ;; *) return 1 ;; esac
 	_model=$(_yv "$_r" DeviceName)
 	_fw=$(_yv "$_r" FirmwareVersion)
 	_state=$(_yv "$_r" State)
@@ -484,9 +484,12 @@ yota_metrics_json() {
 	case "$_itype" in lte|LTE) _mode="LTE" ;; esac
 	_pct=$(sig_percent "$_mode" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
 	_reg=0
-	if [ "$_state" = "Connected" ]; then
-		[ "$_roam" = "1" ] && _reg=5 || _reg=1
-	fi
+	case "$_state" in
+		Connected|"Подключено"*) _reg=1 ;;
+		Disconnected*|"Отключено"*|"") ;;
+		*) [ -n "$_rsrp" ] && _reg=1 ;;
+	esac
+	[ "$_reg" = 1 ] && [ "$_roam" = "1" ] && _reg=5
 	_csq=""
 	case "$_rssi" in
 		-[0-9]*)
@@ -519,6 +522,95 @@ yota_metrics_json() {
 	printf '}\n'
 }
 
+_ng_at() {
+	command -v nc >/dev/null 2>&1 || return 1
+	{ printf 'ATE0\r\n%s\r\n' "$2"; sleep 2; } | timeout 6 nc "$1" 5510 2>/dev/null | tr -d '\r'
+}
+
+netgear_metrics_json() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 1
+	_ng_g=$(_ng_at "$_a" 'AT!GSTATUS?')
+	case "$_ng_g" in *GSTATUS*) ;; *) return 1 ;; esac
+	_ng_i=$(_ng_at "$_a" 'ATI')
+	_ng_kv=$(printf '%s\n' "$_ng_g" | awk '
+		function val(lbl,   p, s) {
+			p = index($0, lbl); if (p == 0) return ""
+			s = substr($0, p + length(lbl))
+			sub(/^[ \t]*:[ \t]*/, "", s); sub(/[ \t]+[A-Z][A-Za-z ]*:.*$/, "", s); sub(/[ \t]+$/, "", s)
+			return (s == "---" || s == "--") ? "" : s
+		}
+		/^PCC:/      { sec = "P"; next }
+		/^SCC[0-9]:/ { sec = "S" substr($0, 4, 1); next }
+		/^System mode:/ { print "SYSMODE=" val("System mode") }
+		/^Mode:|[ \t]Mode:/ { print "STATE=" val("Mode") }
+		sec != "" && /^LTE band:/         { print sec "BAND=" val("LTE band") }
+		sec != "" && /^LTE bw:/           { v = val("LTE bw"); sub(/[ \t]*MHz.*/, "", v); print sec "BW=" v }
+		sec != "" && /^LTE Rx chan:/      { print sec "EARFCN=" val("LTE Rx chan") }
+		sec != "" && /^RSSI \(dBm\):/     { print sec "RSSI=" val("RSSI (dBm)") }
+		sec != "" && /^RSRP \(dBm\):/     { print sec "RSRP=" val("RSRP (dBm)") }
+		sec != "" && /^RSRQ \(dB\):/      { print sec "RSRQ=" val("RSRQ (dB)") }
+		sec != "" && /^RSSNR \(dB\):/     { print sec "SINR=" val("RSSNR (dB)") }
+		sec != "" && /^Tx Power \(dBm\):/ { print sec "TXPWR=" val("Tx Power (dBm)") }
+		sec != "" && /^LTE Cell ID:/      { print sec "CID=" val("LTE Cell ID") }
+		sec != "" && /^Physical Cell ID:/ { print sec "PCI=" val("Physical Cell ID") }
+		sec != "" && /^TAC:/              { print sec "TAC=" val("TAC") }
+	')
+	_ngv() { printf '%s\n' "$_ng_kv" | sed -n "s|^$1=||p" | head -1; }
+	_ngn() { printf '%s' "$1" | sed -n 's/^\(-\{0,1\}[0-9][0-9]*\(\.[0-9]*\)\{0,1\}\).*/\1/p'; }
+	_ngb() { _b=$(printf '%s' "$1" | tr -cd '0-9'); [ -n "$_b" ] || return 0; [ -n "$2" ] && echo "B$_b @$2 MHz" || echo "B$_b"; }
+	_rsrp=$(_ngn "$(_ngv PRSRP)"); _rsrq=$(_ngn "$(_ngv PRSRQ)")
+	_sinr=$(_ngn "$(_ngv PSINR)"); _rssi=$(_ngn "$(_ngv PRSSI)")
+	_pbw=$(_ngn "$(_ngv PBW)")
+	_pband=$(_ngb "$(_ngv PBAND)" "$_pbw")
+	_earfcn=$(_ngn "$(_ngv PEARFCN)"); _pci=$(_ngn "$(_ngv PPCI)")
+	_cid=$(_ngn "$(_ngv PCID)"); _cid_hex=""; _enb=""
+	[ -n "$_cid" ] && { _cid_hex=$(printf '%X' "$_cid" 2>/dev/null); _enb=$(( _cid >> 8 )); }
+	_tac=$(_ngn "$(_ngv PTAC)"); _tac_hex=""
+	[ -n "$_tac" ] && _tac_hex=$(printf '%X' "$_tac" 2>/dev/null)
+	_tx=$(_ngn "$(_ngv PTXPWR)")
+	_mode=""; [ "$(_ngv SYSMODE)" = "LTE" ] && _mode="LTE"
+	_sc=""
+	for _n in 1 2 3 4; do
+		_sb=$(_ngb "$(_ngv S${_n}BAND)" "$(_ngn "$(_ngv S${_n}BW)")")
+		[ -n "$_sb" ] || continue
+		_mode="LTE-A"
+		_sc="$_sc\"s${_n}band\":\"$_sb\",\"s${_n}earfcn\":\"$(_ngn "$(_ngv S${_n}EARFCN)")\",\"s${_n}pci\":\"$(_ngn "$(_ngv S${_n}PCI)")\",\"s${_n}rsrp\":\"$(_ngn "$(_ngv S${_n}RSRP)")\",\"s${_n}rsrq\":\"$(_ngn "$(_ngv S${_n}RSRQ)")\",\"s${_n}rssi\":\"$(_ngn "$(_ngv S${_n}RSSI)")\","
+	done
+	_model=$(printf '%s\n' "$_ng_i" | sed -n 's/^Model:[[:space:]]*//p' | head -1)
+	_fw=$(printf '%s\n' "$_ng_i" | sed -n 's/^Revision:[[:space:]]*//p' | head -1)
+	_imei=$(printf '%s\n' "$_ng_i" | sed -n 's/^IMEI:[[:space:]]*//p' | head -1 | tr -cd '0-9')
+	case "$_model" in [Nn][Ee][Tt][Gg][Ee][Aa][Rr]*|"") ;; *) _model="Netgear $_model" ;; esac
+	[ -n "$_model" ] || _model="Netgear"
+	_pct=$(sig_percent "LTE" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
+	_reg=0; [ "$(_ngv STATE)" = "ONLINE" ] && [ -n "$_mode" ] && _reg=1
+	_csq=""
+	case "$_rssi" in
+		-[0-9]*) _ri=${_rssi%%.*}; _csq=$(( ( _ri + 113 ) / 2 ))
+		         [ "$_csq" -lt 0 ] && _csq=0; [ "$_csq" -gt 31 ] && _csq=31 ;;
+	esac
+	printf '{'
+	printf '"backend":"hilink",'
+	printf '"cport":"%s:5510",' "$_a"
+	printf '"protocol":"AT over TCP (Netgear)",'
+	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"imei":"%s","imsi":"","iccid":"",' "$_imei"
+	printf '"firmware":"%s","phone":"",' "$(jsafe "$_fw")"
+	printf '"registration":"%s",' "$_reg"
+	printf '"mode":"%s",' "$_mode"
+	printf '"signal":"%s",' "$_pct"
+	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' "$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
+	printf '"pci":"%s","pband":"%s","earfcn":"%s",' "$_pci" "$_pband" "$_earfcn"
+	printf '"bandwidth":"%s",' "${_pbw:+$_pbw MHz}"
+	printf '"cid_dec":"%s","cid_hex":"%s","enbid":"%s",' "$_cid" "$_cid_hex" "$_enb"
+	printf '"tac_dec":"%s","tac_hex":"%s",' "$_tac" "$_tac_hex"
+	printf '"txpower":"%s",' "${_tx:+$_tx dBm}"
+	printf '%s' "$_sc"
+	printf '"csq":"%s",' "$_csq"
+	printf '"conn_status":"%s"' "$(jsafe "$(_ngv STATE)")"
+	printf '}\n'
+}
+
 # --- метрики В НАШЕМ ФОРМАТЕ -------------------------------------------------
 #
 # Ключи те же, что у 5gmodem.sh: страницы не должны знать, кем добыты данные.
@@ -526,8 +618,10 @@ metrics_json() {
 	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
 	case "$(_vidpid_for "$_HLP")" in
+		19d2:0565) yota_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
 		19d2:*) zte_metrics_json "$_HLP"; return $? ;;
 		15a9:*|1076:8002) yota_metrics_json "$_HLP"; return $? ;;
+		0846:68e1) netgear_metrics_json "$_HLP"; return $? ;;
 	esac
 	_inf=$(api_get /api/device/information "$_HLP")
 	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
@@ -1376,6 +1470,15 @@ case "$1" in
 	# Есть ли у этого модема веб-API (и отвечает ли он).
 	probe)
 		_a=$(_addr_for "$2") || { echo '{"hilink":0}'; exit 0; }
+		_pv=$(_vidpid_for "$2")
+		[ -n "$_pv" ] || _pv="$(cat "/sys/bus/usb/devices/$2/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$2/idProduct" 2>/dev/null)"
+		if [ "$_pv" = "0846:68e1" ]; then
+			case "$(_ng_at "$_a" ATI)" in
+				*OK*) printf '{"hilink":1,"addr":"%s","classify":"netgear"}\n' "$_a" ;;
+				*) printf '{"hilink":0,"addr":"%s"}\n' "$_a" ;;
+			esac
+			exit 0
+		fi
 		_r=$(api_get /api/device/basic_information "$2")
 		case "$_r" in
 			*'<classify>'*) printf '{"hilink":1,"addr":"%s","classify":"%s"}\n' \
@@ -1387,7 +1490,7 @@ case "$1" in
 			*modem_main_state*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a"; exit 0 ;;
 		esac
 		case "$(_yota_get "$_a")" in
-			*InterfaceType=*) printf '{"hilink":1,"addr":"%s","classify":"yota"}\n' "$_a" ;;
+			*InterfaceType*=*) printf '{"hilink":1,"addr":"%s","classify":"yota"}\n' "$_a" ;;
 			*) printf '{"hilink":0,"addr":"%s"}\n' "$_a" ;;
 		esac
 		;;

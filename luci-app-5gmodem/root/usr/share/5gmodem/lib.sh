@@ -1791,7 +1791,9 @@ set_sms_storage() {   # $1 - at-порт
 			[ -n "$_ss_me" ] || _ss_me=$(sms_tool -d "$_ss_at" -s ME status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 			[ -n "$_ss_sm" ] || _ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 		done
-		if   [ "${_ss_me:-0}" -gt "${_ss_sm:-0}" ] 2>/dev/null; then _ss_new=ME
+		_ss_vp=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g').vidpid")
+		if   [ "$_ss_vp" = "19d2:1485" ]; then _ss_new=MT
+		elif [ "${_ss_me:-0}" -gt "${_ss_sm:-0}" ] 2>/dev/null; then _ss_new=ME
 		elif [ "${_ss_sm:-0}" -gt "${_ss_me:-0}" ] 2>/dev/null; then _ss_new=SM
 		elif [ -n "$_ss_me" ]; then _ss_new=ME     # равны или неизвестны - ME
 		elif [ -n "$_ss_sm" ]; then _ss_new=SM     # ответило только SM

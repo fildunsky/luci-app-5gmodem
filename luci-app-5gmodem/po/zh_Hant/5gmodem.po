@@ -5727,3 +5727,8 @@ msgstr "新版行動檢視"
 msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
 msgstr "在手機上，「網路」頁面會顯示摘要列、分頁和訊號卡片。關閉即可恢復舊版面。"
 
+msgid "SIM card and modem memory (MT)"
+msgstr "SIM 卡和模塊存儲 (MT)"
+
+msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
+msgstr "註冊被拒絕（部分模塊韌體會封鎖該國家的網路，請檢查韌體版本）"
