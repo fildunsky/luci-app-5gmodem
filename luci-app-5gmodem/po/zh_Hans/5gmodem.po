@@ -4461,8 +4461,8 @@ msgstr "有未读短信——打开收件箱"
 msgid "Fallback DNS"
 msgstr "备用 DNS"
 
-msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default."
-msgstr "部分运营商/模块拨号成功后不下发 DNS 服务器：有 IP 但网页打不开。开启此项并在下方填写 DNS 服务器，会将其添加到模块接口上，与运营商下发的 DNS（如有）并存。默认关闭。"
+msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default. When the carrier restricts traffic to a whitelist, foreign DNS servers (8.8.8.8, 1.1.1.1) are blocked and nothing resolves - use 77.88.8.8 77.88.8.1."
+msgstr "部分运营商/模块拨号成功后不下发 DNS 服务器：有 IP 但网页打不开。开启此项并在下方填写 DNS 服务器，会将其添加到模块接口上，与运营商下发的 DNS（如有）并存。默认关闭。如果运营商只放行白名单流量，境外 DNS（8.8.8.8、1.1.1.1）会被封锁，域名无法解析——请使用 77.88.8.8 77.88.8.1。"
 
 msgid "DNS servers"
 msgstr "DNS 服务器"
@@ -4936,8 +4936,8 @@ msgstr "机器人已连接，可以接收消息。若要从聊天中发送短信
 msgid "Icons"
 msgstr "图标"
 
-msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
-msgstr "以空格分隔，例如“1.1.1.1 8.8.8.8”。"
+msgid "Space-separated, e.g. \"77.88.8.8 77.88.8.1\"."
+msgstr "以空格分隔，例如“77.88.8.8 77.88.8.1”。"
 
 msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
 msgstr "eSIM 芯片所在的 SIM 卡槽。“自动”跟随模块中当前激活的卡槽。如果芯片可读但配置文件列表始终为空（例如卡槽 1 中的可插拔 eSIM），请明确指定。"

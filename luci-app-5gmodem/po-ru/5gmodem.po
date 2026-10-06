@@ -4608,14 +4608,14 @@ msgstr "Непрочитанные SMS — открыть Входящие"
 msgid "Fallback DNS"
 msgstr "Запасной DNS"
 
-msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default."
-msgstr "Часть операторов/модемов поднимает связь без DNS-серверов: IP есть, а сайты не открываются. Включите и впишите DNS ниже — они добавятся на интерфейс модема в дополнение к DNS оператора, если тот пришёл. По умолчанию выключено."
+msgid "Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default. When the carrier restricts traffic to a whitelist, foreign DNS servers (8.8.8.8, 1.1.1.1) are blocked and nothing resolves - use 77.88.8.8 77.88.8.1."
+msgstr "Часть операторов/модемов поднимает связь без DNS-серверов: IP есть, а сайты не открываются. Включите и впишите DNS ниже — они добавятся на интерфейс модема в дополнение к DNS оператора, если тот пришёл. По умолчанию выключено. Если оператор пускает трафик только по белому списку, зарубежные DNS (8.8.8.8, 1.1.1.1) заблокированы и имена не резолвятся - используйте 77.88.8.8 77.88.8.1."
 
 msgid "DNS servers"
 msgstr "DNS-серверы"
 
-msgid "Space-separated, e.g. \"1.1.1.1 8.8.8.8\"."
-msgstr "Через пробел, напр. «1.1.1.1 8.8.8.8»."
+msgid "Space-separated, e.g. \"77.88.8.8 77.88.8.1\"."
+msgstr "Через пробел, напр. «77.88.8.8 77.88.8.1»."
 
 msgid "QMI Cellular (raw-ip)"
 msgstr "Сотовый QMI (raw-ip)"

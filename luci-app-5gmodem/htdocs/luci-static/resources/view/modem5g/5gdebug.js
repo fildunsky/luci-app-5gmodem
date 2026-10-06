@@ -1409,7 +1409,7 @@ return view.extend({
 		   сразу (setopt dnsfb -> network reload, без ре-дозвона) и переживает
 		   пересоздание интерфейса (mkiface сохраняет OLDDNS). */
 		o = s.option(form.Flag, '_dns_fallback', _('Fallback DNS'),
-			_('Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default.'));
+			_('Some operators/modems bring the modem up without DNS servers: you get an IP but sites do not open. Turn this on and enter the DNS servers below to add them to the modem interface, on top of the operator DNS if it was provided. Off by default. When the carrier restricts traffic to a whitelist, foreign DNS servers (8.8.8.8, 1.1.1.1) are blocked and nothing resolves - use 77.88.8.8 77.88.8.1.'));
 		o.default = '0';
 		o.rmempty = false;
 		var dnsApplied = null;
@@ -1441,9 +1441,9 @@ return view.extend({
 		o.remove = function() {};
 
 		o = s.option(form.Value, '_dns_servers', _('DNS servers'),
-			_('Space-separated, e.g. "1.1.1.1 8.8.8.8".'));
+			_('Space-separated, e.g. "77.88.8.8 77.88.8.1".'));
 		o.depends('_dns_fallback', '1');
-		o.placeholder = '1.1.1.1 8.8.8.8';
+		o.placeholder = '77.88.8.8 77.88.8.1';
 		o.rmempty = false;
 		o.write = function(section_id, value) {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
