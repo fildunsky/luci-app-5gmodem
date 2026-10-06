@@ -436,7 +436,7 @@ function flagEmoji(cc) {
 }
 
 return baseclass.extend({
-	API: 30202,
+	API: 30203,
 	QUAL_T: QUAL_T,
 	qualRat: qualRat,
 	qualThresholds: qualThresholds,
