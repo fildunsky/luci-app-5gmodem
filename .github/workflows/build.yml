@@ -186,7 +186,8 @@ jobs:
           MISSING=0
           for WANT in "luci-app-5gmodem-$V-r$R.apk" "luci-app-5gmodem-lite-$V-r$R.apk" \
                       "luci-app-5gmodem_$V-r${R}_all.ipk" "luci-app-5gmodem-lite_$V-r${R}_all.ipk" \
-                      "luci-i18n-5gmodem-zh-cn.apk" "luci-i18n-5gmodem-zh-cn.ipk"; do
+                      "luci-i18n-5gmodem-zh-cn.apk" "luci-i18n-5gmodem-zh-cn.ipk" \
+                      "luci-i18n-5gmodem-vi.apk" "luci-i18n-5gmodem-vi.ipk"; do
             if printf '%s\n' "$NAMES" | grep -qxF "$WANT"; then
               echo "ok      $WANT"
             else
@@ -211,13 +212,13 @@ jobs:
             [ "$CODE" = 200 ] || FAIL=1
           done
           [ "$FAIL" = 0 ] || { echo "::error::a README link does not resolve - not committing"; exit 1; }
-          if git diff --quiet -- README.md README.ru.md README.zh-CN.md README.ja.md; then
+          if git diff --quiet -- README.md README.ru.md README.zh-CN.md README.ja.md README.vi.md; then
             echo "README links already point at $TAG"
             exit 0
           fi
           git config user.name "Fil Dunsky"
           git config user.email "filipp.dunsky@gmail.com"
-          git commit -m "README: install links for $TAG" -- README.md README.ru.md README.zh-CN.md README.ja.md
+          git commit -m "README: install links for $TAG" -- README.md README.ru.md README.zh-CN.md README.ja.md README.vi.md
           for TRY in 1 2 3; do
             git push origin HEAD:master && exit 0
             git pull --rebase origin master

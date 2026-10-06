@@ -1,6 +1,6 @@
 # luci-app-5gmodem
 
-*[English](README.md) · [Русская версия](README.ru.md) · [简体中文](README.zh-CN.md)*
+*[English](README.md) · [Русская версия](README.ru.md) · [简体中文](README.zh-CN.md) · [Tiếng Việt](README.vi.md)*
 
 OpenWrt 上で 4G/5G モデムを扱うための LuCI アプリです。[`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite)、[`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js)、および `modemband` の一部を 1 つのアプリにまとめています。
 
@@ -53,6 +53,18 @@ opkg install luci-i18n-base-ja
 フラッシュ容量の小さい機器（一式がまったく入らない 8 MB の MT7628 ボードなど）向けに、リリースには別途 **`-lite.apk`** があります。こちらが必要とするのは `sms-tool` だけです。メトリクス、SMS、USSD、バンド制御、AT コンソールはすべて動作しますが、QMI/MBIM のインターフェースプロトコルと `mmcli` 経由の電話番号取得は使えません。QMI または MBIM でモデムを動かしているルーターに、lite ビルドを上書き更新として使わないでください。パッケージマネージャーがそれらのパッケージを不要と判断して削除してしまいます。
 
 > **自作のサービスからアプリのデータを取り出したい場合は?** スマートホーム、外部ディスプレイ、他人のダッシュボード、手書きのスクリプト — すべて 1 か所にまとまっています: [テレメトリ: メトリクスの取得方法](docs/telemetry.md)。フィールド形式、利用側との取り決め、そして 4 つの配信方法（ファイル、SSH、MQTT、HTTP）を説明しています。
+
+## モデムが動かない、または未対応の場合
+
+診断レポートを送ってください。新しいモデムの追加や不具合の修正はこれをもとに行います。
+
+1. LuCI で **モデム → 5G モデム → モデム** を開き、**診断レポート** の **ログを収集** を押します。ファイルがパソコンにダウンロードされます。ページが開かない場合は、SSH で次を実行し、ルーターからファイルを取り出してください:
+   ```sh
+   /usr/share/5gmodem/collect.sh run > /tmp/5gmodem-diag.txt
+   ```
+2. [issue を作成](../../issues/new)し、モデムの型番と症状を書いてファイルを添付してください。
+
+レポートには IMEI、IMSI、ICCID、通信事業者名が含まれますが、パスワードや Wi-Fi キーは含まれません。識別子を公開したくない場合は、添付前にファイルから消してください。
 
 ## 機能
 
