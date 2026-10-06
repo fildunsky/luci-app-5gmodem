@@ -5827,3 +5827,6 @@ msgstr "SIM-карта и память модема (MT)"
 
 msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
 msgstr "Регистрация отклонена (часть прошивок модулей блокирует сети этой страны - проверьте версию прошивки)"
+
+msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
+msgstr "Пока модем привязан к одной соте, он обычно отключает агрегацию частот, и скорость может упасть."
