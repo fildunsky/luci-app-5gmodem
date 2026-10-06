@@ -1926,7 +1926,7 @@ var _powerRebootMode = 'power';
 function rebootModemPower() {
 	/* Без confirm и без попапа - модем сейчас пропадёт по питанию: сразу
 	   плашка с прогрессбаром на блоке «Модем», pollData снимет по возвращении. */
-	setModemBusy(_('The modem is restarting…'), 75);
+	setModemBusy(_('The modem is restarting…'), 120);
 	return fs.exec('/usr/share/5gmodem/reboot_modem.sh', [ _powerRebootMode ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		if (d.success === false) {
@@ -1935,9 +1935,9 @@ function rebootModemPower() {
 			return;
 		}
 		if (ui.addTimeLimitedNotification)
-			ui.addTimeLimitedNotification(null, E('p', _('The modem is power-cycling. This can take a minute.')), 8000, 'info');
+			ui.addTimeLimitedNotification(null, E('p', _('The modem is power-cycling. This can take up to 3 minutes; if it does not come back, the app retries by itself.')), 8000, 'info');
 		else
-			ui.addNotification(null, E('p', _('The modem is power-cycling. This can take a minute.')), 'info');
+			ui.addNotification(null, E('p', _('The modem is power-cycling. This can take up to 3 minutes; if it does not come back, the app retries by itself.')), 'info');
 	}).catch(function(err) {
 		clearModemBusy(true);
 		ui.addNotification(null, E('p', _('Failed to power-cycle the modem') + ': ' + (err.message || err)), 'error');

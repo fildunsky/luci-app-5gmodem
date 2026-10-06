@@ -1039,8 +1039,8 @@ msgstr "モデムの AT ポートが使用中です。もう一度お試しく�
 msgid "The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, power-cycle the modem in Frequency management."
 msgstr "モデムは USB バス上にありますが、AT ポートが応答しません: 使用中か、モデムが固まっています。続く場合は「周波数の管理」でモデムの電源を入れ直してください。"
 
-msgid "The modem is power-cycling. This can take a minute."
-msgstr "モデムの電源を入れ直しています。1 分ほどかかることがあります。"
+msgid "The modem is power-cycling. This can take up to 3 minutes; if it does not come back, the app retries by itself."
+msgstr "モデムの電源を入れ直しています。最大 3 分かかることがあります。戻らない場合はアプリが自動で再試行します。"
 
 msgid "The modem is restarting after the SIM switch…"
 msgstr "SIM の切り替え後、モデムを再起動しています…"
