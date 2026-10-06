@@ -3350,3 +3350,15 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
 @media (max-width: 700px) {
   body.tg-mv .netpribar .netpri-btn .netpri-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+@media (max-width: 700px) {
+  body.tg-mv .netpribar .netpri-row { gap: 5px; }
+  body.tg-mv .netpribar .netpri-row.netpri-2col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  body.tg-mv .netpribar .netpri-row > .netpri-btn { padding: .4em .5em; }
+  body.tg-mv .netpribar .netpri-btn .netpri-name { font-size: .9em; padding-left: 6px; margin-left: -6px; }
+  body.tg-mv .netpribar .netpri-btn .netpri-ip { font-size: .72em; }
+  body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-ic,
+  body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-ssclash-ic,
+  body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingbadge,
+  body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingico,
+  body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingico svg { width: 14px; height: 14px; }
+}
