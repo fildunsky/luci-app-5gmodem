@@ -5635,3 +5635,8 @@ msgstr "新しいモバイル表示"
 msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
 msgstr "スマートフォンでは「ネットワーク」ページに概要バー、タブ、信号タイルが表示されます。オフにすると以前のレイアウトに戻ります。"
 
+msgid "SIM card and modem memory (MT)"
+msgstr "SIM カードとモデムメモリ (MT)"
+
+msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
+msgstr "登録が拒否されました (一部のモジュールファームウェアはこの国のネットワークをブロックします。ファームウェアのバージョンを確認してください)"

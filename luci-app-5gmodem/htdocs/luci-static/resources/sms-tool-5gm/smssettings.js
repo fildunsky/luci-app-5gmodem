@@ -151,6 +151,7 @@ function addReceiveIncoming(s) {
 		_('Both reading and receiving: the modem is told to put new incoming messages here as well. A modem that cannot receive into the chosen storage keeps its own, and this setting is corrected to match - the list always shows the box the messages actually land in. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own.'));
 	o.value('SM', _('SIM card'));
 	o.value('ME', _('Modem memory'));
+	o.value('MT', _('SIM card and modem memory (MT)'));
 	o.default = 'SM';
 	o.rmempty = false;
 	/* РУЧНОЙ ВЫБОР ВЫШЕ АВТОМАТИЧЕСКОГО. Автовыбор хранилища (set_sms_storage

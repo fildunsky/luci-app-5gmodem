@@ -1,0 +1,16 @@
+#!/bin/sh
+
+[ "$ACTION" = "add" ] || exit 0
+[ "$DEVTYPE" = "usb_device" ] || exit 0
+case "$PRODUCT" in
+	19d2/542/*|19d2/548/*|19d2/564/*) ;;
+	*) exit 0 ;;
+esac
+X=/usr/share/5gmodem/usb-mode-extra.json
+[ -f "$X" ] || exit 0
+command -v usbmode >/dev/null 2>&1 || exit 0
+_id="19d2:$(printf '%04x' "0x$(echo "$PRODUCT" | cut -d/ -f2)")"
+grep -q "\"$_id\"" /etc/usb-mode.json 2>/dev/null && exit 0
+logger -t 5gmodem "usbmode: $_id is a ZTE CD-ROM start mode unknown to usb-modeswitch - ejecting"
+usbmode -s -c "$X" >/dev/null 2>&1
+exit 0

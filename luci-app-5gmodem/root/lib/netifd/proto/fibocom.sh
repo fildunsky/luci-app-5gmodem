@@ -80,6 +80,16 @@ _fibocom_cops_mode() {
 		| sed -n 's/^+COPS: *\([0-9]\).*/\1/p' | head -1
 }
 
+_fibocom_why() {
+	local p="$1" xmm="$2" ceer sn
+	ceer=$(sms_tool -d "$p" at "AT+CEER" 2>/dev/null | tr -d '\r' | sed -n 's/^+CEER: *//p' | head -1)
+	[ -n "$ceer" ] && echo "fibocom[$$] modem reports the last failure: +CEER: $ceer"
+	[ "$xmm" = 1 ] || return 0
+	sn=$(sms_tool -d "$p" at "AT+CFSN?" 2>/dev/null | tr -d '\r' | sed -n 's/^+CFSN: *//p' | head -1 | tr -d '"')
+	[ -n "$sn" ] && return 0
+	echo "fibocom[$$] the module serial number (AT+CFSN?) is EMPTY - an XMM module with a wiped serial is refused by the network; do not write it yourself, the serial can be set only once"
+}
+
 # Состояние регистрации в сети: печатает <stat> из +CEREG, иначе из +CREG.
 # Пусто - модем не ответил. Коды: 1/6/9 - зарегистрирован дома, 5/7/10 - роуминг,
 # 0/2/3/4/8 - сети нет (2 - ищет, 3 - отказано, 8 - только экстренные).
@@ -549,6 +559,7 @@ proto_fibocom_setup() {
 			# SIM, неоплаченный тариф или заблокированный IMEI. Повторять бесполезно,
 			# поэтому здесь перезапуск блокируем - как в роуминге.
 			echo "fibocom[$$] network refused registration (+CEREG stat 3) - SIM/subscription/IMEI"
+			_fibocom_why "$dial" "$IS_XMM"
 			_fib_unlock
 			proto_notify_error "$interface" REGISTRATION_DENIED
 			proto_block_restart "$interface"
@@ -559,6 +570,7 @@ proto_fibocom_setup() {
 			# сигнал может вернуться сам, и интерфейс обязан подняться без участия
 			# человека. Цикл ожидания выше держит повтор примерно раз в минуту.
 			echo "fibocom[$$] no network registration (+CEREG stat \"${_reg:-no answer}\") after ${_rw}s"
+			_fibocom_why "$dial" "$IS_XMM"
 			_fib_unlock
 			proto_notify_error "$interface" NOT_REGISTERED
 			return 1

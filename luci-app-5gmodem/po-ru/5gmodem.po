@@ -5822,3 +5822,8 @@ msgstr "Новый мобильный вид"
 msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
 msgstr "На телефоне страница «Сеть» получает строку сводки, вкладки и плитки сигнала. Выключите, чтобы вернуть прежний вид."
 
+msgid "SIM card and modem memory (MT)"
+msgstr "SIM-карта и память модема (MT)"
+
+msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
+msgstr "Регистрация отклонена (часть прошивок модулей блокирует сети этой страны - проверьте версию прошивки)"

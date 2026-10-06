@@ -40,11 +40,11 @@ AT+ICCID
 # Current USB composition
 AT+USBCOMP?
 
-# Compal MBIM 05c6:90d5
+# User mode, usually MBIM (90d5, 90d6 or 9063 - depends on the firmware)
 AT+USBCOMP=USER
 
-# Compal QMI 05c6:9025
+# RNDIS mode (on some firmware it comes up as QMI 9025 instead)
 AT+USBCOMP=RNDIS
 
-# Compal QMI 1e2d:00b7
+# Debug mode, usually QMI (1e2d:00b7 or 05c6:9091 - depends on the firmware)
 AT+USBCOMP=DEBUG

@@ -5758,3 +5758,8 @@ msgstr "新版移动视图"
 msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
 msgstr "在手机上，“网络”页面会显示摘要栏、标签页和信号卡片。关闭即可恢复旧布局。"
 
+msgid "SIM card and modem memory (MT)"
+msgstr "SIM 卡和模块存储 (MT)"
+
+msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
+msgstr "注册被拒绝（部分模块固件会屏蔽该国家的网络，请检查固件版本）"
