@@ -201,13 +201,56 @@ if [ "$MODE" = power ]; then
 	_pg_off=$((1 - _pg_on))
 	_pg_path=$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)
 	_pg_was=0
-	[ -n "$_pg_path" ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] && _pg_was=1
+	_pg_dn=""
+	[ -n "$_pg_path" ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] && {
+		_pg_was=1
+		_pg_dn=$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)
+	}
+	_pg_back() {
+		[ -e "/sys/bus/usb/devices/$_pg_path" ] || return 1
+		[ "$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)" != "$_pg_dn" ]
+	}
+	_pg_wait() {
+		_pg_w=0
+		while [ "$_pg_w" -lt "$1" ]; do
+			_pg_back && return 0
+			sleep 1; _pg_w=$((_pg_w + 1))
+		done
+		_pg_back
+	}
 	(
 		echo "$_pg_off" > "$GP" 2>/dev/null
 		sleep 5
 		echo "$_pg_on" > "$GP" 2>/dev/null
 		[ -n "$_pg_path" ] || exit 0
-		[ "$_pg_was" = 1 ] && exit 0
+		if [ "$_pg_was" = 1 ]; then
+			_pg_wait 180 && exit 0
+			logger -t 5gmodem "power: $_pg_path did not return within 180 s - powering the slot off for 15 s"
+			echo "$_pg_off" > "$GP" 2>/dev/null
+			sleep 15
+			echo "$_pg_on" > "$GP" 2>/dev/null
+			if _pg_wait 240; then
+				logger -t 5gmodem "power: $_pg_path came back after the long power-off"
+				exit 0
+			fi
+			_pg_pd=$(_usb_port_dir "$_pg_path")
+			_pg_pp=$(readlink -f "$_pg_pd/peer" 2>/dev/null)
+			if [ -w "$_pg_pd/disable" ]; then
+				logger -t 5gmodem "power: $_pg_path still missing - resetting its USB port"
+				[ -n "$_pg_pp" ] && echo 1 > "$_pg_pp/disable" 2>/dev/null
+				echo 1 > "$_pg_pd/disable" 2>/dev/null
+				sleep 3
+				[ -n "$_pg_pp" ] && echo 0 > "$_pg_pp/disable" 2>/dev/null
+				sleep 2
+				echo 0 > "$_pg_pd/disable" 2>/dev/null
+				if _pg_wait 90; then
+					logger -t 5gmodem "power: $_pg_path came back after the USB port reset"
+					exit 0
+				fi
+			fi
+			logger -p daemon.err -t 5gmodem "power: $_pg_path did not come back after the power cycle, a long power-off and a USB port reset - reboot the router"
+			exit 0
+		fi
 		_pg_n=0
 		while [ "$_pg_n" -lt 120 ] && [ ! -e "/sys/bus/usb/devices/$_pg_path" ]; do
 			sleep 1; _pg_n=$((_pg_n + 1))

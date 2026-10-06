@@ -2988,8 +2988,8 @@ msgstr "路由跃点数——数值越大优先级越低"
 msgid "Stable USB topology path of the modem (managed by the 5G Modem app)"
 msgstr "调制解调器的稳定 USB 拓扑路径（由 5G 调制解调器应用管理）"
 
-msgid "The modem is power-cycling. This can take a minute."
-msgstr "调制解调器正在断电重启，可能需要一分钟。"
+msgid "The modem is power-cycling. This can take up to 3 minutes; if it does not come back, the app retries by itself."
+msgstr "调制解调器正在断电重启，最多可能需要 3 分钟；如果没有恢复，程序会自动重试。"
 
 msgid "This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose."
 msgstr "此调制解调器自行维持连接，并通过自带网卡以 DHCP 分配地址。此按钮用于创建（或重建）该 DHCP 接口——无需选择拨号协议。"

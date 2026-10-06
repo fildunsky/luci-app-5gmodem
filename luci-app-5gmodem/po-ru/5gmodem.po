@@ -3050,8 +3050,8 @@ msgstr "Метрика маршрута — большее значение оз
 msgid "Stable USB topology path of the modem (managed by the 5G Modem app)"
 msgstr "Стабильный путь модема в топологии USB (управляется приложением 5G Modem)"
 
-msgid "The modem is power-cycling. This can take a minute."
-msgstr "Питание модема перезапускается. Это может занять минуту."
+msgid "The modem is power-cycling. This can take up to 3 minutes; if it does not come back, the app retries by itself."
+msgstr "Питание модема перезапускается. Это может занять до 3 минут; если модем не вернётся, приложение повторит попытку само."
 
 msgid "This modem holds the connection itself and hands out an address over DHCP on its own network card. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose."
 msgstr "Этот модем держит соединение сам и раздаёт адрес по DHCP на своей сетевой карте. Кнопка создаёт (или пересоздаёт) этот DHCP-интерфейс — протокол дозвона выбирать не нужно."
