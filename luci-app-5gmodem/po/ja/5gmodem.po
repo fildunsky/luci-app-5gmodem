@@ -5640,3 +5640,6 @@ msgstr "SIM カードとモデムメモリ (MT)"
 
 msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
 msgstr "登録が拒否されました (一部のモジュールファームウェアはこの国のネットワークをブロックします。ファームウェアのバージョンを確認してください)"
+
+msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
+msgstr "1 つのセルに固定している間は、通常キャリアアグリゲーションが無効になり、速度が落ちることがあります。"

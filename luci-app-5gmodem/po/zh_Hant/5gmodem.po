@@ -5732,3 +5732,6 @@ msgstr "SIM 卡和模塊存儲 (MT)"
 
 msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
 msgstr "註冊被拒絕（部分模塊韌體會封鎖該國家的網路，請檢查韌體版本）"
+
+msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
+msgstr "鎖定到單個小區期間，模塊通常會停用載波聚合，速度可能下降。"

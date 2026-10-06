@@ -642,6 +642,13 @@ function renderCellLock(state) {
 			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
 		}, _('(after modem restart the lock stays in effect, but the modem reports it as off)')));
 	}
+	cell.appendChild(_cellLockCaNote());
+}
+
+function _cellLockCaNote() {
+	return E('div', {
+		'style': 'opacity:.65; font-size:90%; margin-top:.3em'
+	}, _('While locked to one cell the modem usually stops carrier aggregation, so the speed may drop.'));
 }
 
 /* ПРИВЯЗКА К СОТЕ 5G - ОТДЕЛЬНАЯ СТРОКА, а не флаг в строке 4G: у прошивки это
@@ -671,6 +678,7 @@ function renderCellLock5g(state) {
 		}, [ _('Unlock') ]));
 		cell.appendChild(E('span', { 'style': 'margin-left:.6em' },
 			_('Locked to cell: ARFCN %s, PCI %s').format(parts[1], parts[2])));
+		cell.appendChild(_cellLockCaNote());
 		return;
 	}
 
@@ -701,6 +709,7 @@ function renderCellLock5g(state) {
 				});
 		})
 	}, [ _('Lock to current 5G cell') ]));
+	cell.appendChild(_cellLockCaNote());
 }
 
 function nrC_hasEnabled(j) {
@@ -1333,7 +1342,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30203,
+	API: 30204,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
