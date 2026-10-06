@@ -1,6 +1,6 @@
 # luci-app-5gmodem
 
-*[Русская версия](README.ru.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)*
+*[Русская версия](README.ru.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md)*
 
 A LuCI app for 4G/5G modems on OpenWrt. It merges [`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite), [`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js) and some pieces of `modemband` into a single app.
 
@@ -43,6 +43,18 @@ For low-flash devices (MT7628 boards with 8 MB, where the full set will not inst
 > in one place: [Telemetry: how to consume the metrics](docs/telemetry.md).
 > Field format, the consumer contract, and four delivery options - file, SSH,
 > MQTT, HTTP.
+
+## Modem not working or not supported?
+
+Send a diagnostic report: that is how new modems get added and bugs get fixed.
+
+1. In LuCI open **Modem → 5G Modem → Modem**, find **Diagnostic report** and press **Collect logs** - the file downloads to your computer. If the page does not open, run this over SSH and copy the file from the router:
+   ```sh
+   /usr/share/5gmodem/collect.sh run > /tmp/5gmodem-diag.txt
+   ```
+2. [Open an issue](../../issues/new) with the modem model and what goes wrong, and attach the file.
+
+The report contains the IMEI, IMSI, ICCID and the carrier name, but no passwords or Wi-Fi keys. If you do not want to publish the identifiers, blank them out in the file before attaching.
 
 ## Features
 

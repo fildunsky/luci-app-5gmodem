@@ -1,6 +1,6 @@
 # luci-app-5gmodem
 
-*[English](README.md) · [Русская версия](README.ru.md) · [日本語](README.ja.md)*
+*[English](README.md) · [Русская версия](README.ru.md) · [日本語](README.ja.md) · [Tiếng Việt](README.vi.md)*
 
 OpenWrt 上的 4G/5G 调制解调器 LuCI 管理应用。它把 [`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite)、[`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js) 以及 `modemband` 的部分功能合并成一个应用。
 
@@ -56,6 +56,18 @@ opkg install luci-i18n-base-zh-cn
 > **要用自己的服务从本应用取数据？** 智能家居、外接显示屏、第三方仪表盘、自写脚本，
 > 全部集中在一处说明：[遥测：如何获取指标](docs/telemetry.md)。
 > 其中有字段格式、使用方须遵守的规则，以及四种取数方式——文件、SSH、MQTT、HTTP。
+
+## 调制解调器不工作或不受支持？
+
+请发送诊断报告：我们靠它添加新的调制解调器并修复错误。
+
+1. 在 LuCI 中打开 **调制解调器 → 5G 调制解调器 → 调制解调器**，找到 **诊断报告**，点击 **收集日志**，文件会下载到电脑。如果页面打不开，请通过 SSH 执行以下命令，再从路由器取回文件：
+   ```sh
+   /usr/share/5gmodem/collect.sh run > /tmp/5gmodem-diag.txt
+   ```
+2. [创建 issue](../../issues/new)，写明调制解调器型号和问题现象，并附上该文件。
+
+报告包含 IMEI、IMSI、ICCID 和运营商名称，但不包含密码和 Wi-Fi 密钥。如不想公开这些标识，请在附上之前将其从文件中抹去。
 
 ## 功能
 
