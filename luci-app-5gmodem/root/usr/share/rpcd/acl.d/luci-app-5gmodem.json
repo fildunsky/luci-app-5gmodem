@@ -37,6 +37,8 @@
 				"/usr/share/5gmodem/mm-inhibit.sh": [ "exec" ],
 				"/usr/share/5gmodem/setopt.sh": [ "exec" ],
 				"/usr/share/5gmodem/collect.sh": [ "exec" ],
+				"/usr/share/5gmodem/userfiles.sh": [ "exec" ],
+				"/bin/cat /sys/kernel/debug/usb/devices": [ "exec" ],
 				"/usr/share/5gmodem/check.gcom": [ "exec" ],
 				"/usr/share/5gmodem/info.gcom": [ "exec" ],
 				"/usr/bin/mmcli": [ "exec" ],
@@ -45,11 +47,6 @@
 				"/etc/init.d/cron": [ "exec" ],
 				"/usr/share/5gmodem/smstool_led.sh": [ "exec" ],
 				"/usr/share/5gmodem/sms_led.sh": [ "exec" ],
-				"/bin/sh": [ "exec" ],
-				"/bin/cat": [ "exec" ],
-				"/bin/tar": [ "exec" ],
-				"/bin/mkdir": [ "exec" ],
-				"/bin/rm": [ "exec" ],
 				"/sys/class/leds": [ "list" ],
 				"/dev": [ "list" ],
 				"/usr/bin/opkg list-installed": [ "exec" ],
@@ -86,7 +83,6 @@
 		"write": {
 			"cgi-io": [ "upload" ],
 			"file": {
-				"/bin/cat": [ "exec" ],
 				"/usr/share/5gmodem/ttl.sh": [ "exec" ],
 				"/usr/share/5gmodem/mkiface.sh": [ "exec" ],
 				"/usr/share/5gmodem/mmneed.sh": [ "exec" ],
@@ -118,12 +114,9 @@
 				"/usr/share/5gmodem/mm-inhibit.sh": [ "exec" ],
 				"/usr/share/5gmodem/setopt.sh": [ "exec" ],
 				"/usr/share/5gmodem/collect.sh": [ "exec" ],
+				"/usr/share/5gmodem/userfiles.sh": [ "exec" ],
 				"/bin/sh -x /usr/share/5gmodem/5gmodem.sh": [ "exec" ],
 				"/bin/ls /dev": [ "exec" ],
-				"/bin/chmod": [ "exec" ],
-				"/bin/rm": [ "exec" ],
-				"/bin/tar": [ "exec" ],
-				"/bin/mkdir": [ "exec" ],
 				"/etc/init.d/cron restart": [ "exec" ],
 				"/etc/modemdefine": [ "write" ],
 				"/etc/5gmodem": [ "write" ],
@@ -142,7 +135,7 @@
 				"/etc/5gmodem/modem/ussdcodes/*": [ "write" ],
 				"/etc/5gmodem/modem/ussdcodes.user": [ "write" ]
 			},
-			"uci": [ "5gmodem", "modemdefine", "network", "firewall" ],
+			"uci": [ "5gmodem", "modemdefine", "network" ],
 			"ubus": {
 				"file": [ "read", "write", "remove", "exec" ],
 				"uci": [ "commit" ]

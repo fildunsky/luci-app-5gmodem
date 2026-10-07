@@ -13,6 +13,17 @@
 	tabs can open them too.
 */
 
+var USERFILES = '/usr/share/5gmodem/userfiles.sh';
+
+function ufKind(dir) {
+	return String(dir).replace(/\/+$/, '').replace(/^.*\//, '');
+}
+
+function ufFile(action, path) {
+	var m = String(path).match(/^(.*)\/([^\/]+)$/);
+	return [ action, ufKind(m ? m[1] : ''), m ? m[2] : '' ];
+}
+
 function popTimeout(a, message, timeout, severity) {
     ui.addTimeLimitedNotification(a, message, timeout, severity);
 }
@@ -143,7 +154,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 	},
 
 	loadFileList: function() {
-		return fs.exec('/bin/sh', ['-c', 'ls ' + this.baseDir + '/*.user 2>/dev/null || true'])
+		return fs.exec(USERFILES, ['list', ufKind(this.baseDir)])
 			.then(function(res) {
 				let files = (res.stdout || '').trim().split('\n').filter(f => f);
 				let fileNames = files.map(f => f.replace(this.baseDir + '/', ''));
@@ -329,7 +340,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 									} else if (name === '_load_gz') {
 										let tmpPath = '/tmp/ussdcodes_upload.tar.gz';
 										ui.uploadFile(tmpPath).then(function() {
-												return fs.exec('/bin/tar', ['-xzf', tmpPath, '-C', self.baseDir]);
+												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
 												if (res.code !== 0) {
 													ui.addNotification(null, E('p', {}, _('Failed to extract archive') + ': ' + (res.stderr || '')), 'error');
@@ -355,7 +366,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 											});
 									} else if (name === '_save_gz') {
 										let tmpGz = '/tmp/ussdcodes.tar.gz';
-										fs.exec('/bin/tar', ['-czf', tmpGz, '-C', self.baseDir, '.'])
+										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {
 													ui.addNotification(null, E('p', {}, _('Failed to create archive') + ': ' + (res.stderr || '')), 'error');
@@ -434,12 +445,12 @@ let ussdCodesManagerDialog = baseclass.extend({
 
 		let filePath = this.baseDir + '/' + fileName;
 
-		fs.exec('/bin/sh', ['-c', 'mkdir -p ' + this.baseDir])
+		fs.exec(USERFILES, ['mkdir', ufKind(this.baseDir)])
 			.then(function() {
 				return fs.write(filePath, '');
 			}.bind(this))
 			.then(function() {
-				return fs.exec('/bin/chmod', ['644', filePath]);
+				return fs.exec(USERFILES, ufFile('chmod', filePath));
 			})
 			.then(function() {
 				popTimeout(null, E('p', {}, _('File created successfully')), 5000, 'info');
@@ -477,7 +488,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 
 		let filePath = this.baseDir + '/' + fileName;
 
-		fs.exec('/bin/rm', ['-f', filePath])
+		fs.exec(USERFILES, ufFile('rm', filePath))
 			.then(function() {
 				popTimeout(null, E('p', {}, _('File deleted successfully')), 5000, 'info');
 				
@@ -505,7 +516,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 		}
 
 		let self = this;
-		fs.exec('/bin/sh', ['-c', 'rm -f ' + this.baseDir + '/*.user'])
+		fs.exec(USERFILES, ['rmall', ufKind(this.baseDir)])
 			.then(function() {
 				popTimeout(null, E('p', {}, _('All files deleted successfully')), 5000, 'info');
 
@@ -560,7 +571,7 @@ let atCommandsManagerDialog = baseclass.extend({
 	},
 
 	loadFileList: function() {
-		return fs.exec('/bin/sh', ['-c', 'ls ' + this.baseDir + '/*.user 2>/dev/null || true'])
+		return fs.exec(USERFILES, ['list', ufKind(this.baseDir)])
 			.then(function(res) {
 				let files = (res.stdout || '').trim().split('\n').filter(f => f);
 				let fileNames = files.map(f => f.replace(this.baseDir + '/', ''));
@@ -746,7 +757,7 @@ let atCommandsManagerDialog = baseclass.extend({
 									} else if (name === '_load_gz') {
 										let tmpPath = '/tmp/atcmmds_upload.tar.gz';
 										ui.uploadFile(tmpPath).then(function() {
-												return fs.exec('/bin/tar', ['-xzf', tmpPath, '-C', self.baseDir]);
+												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
 												if (res.code !== 0) {
 													ui.addNotification(null, E('p', {}, _('Failed to extract archive') + ': ' + (res.stderr || '')), 'error');
@@ -772,7 +783,7 @@ let atCommandsManagerDialog = baseclass.extend({
 											});
 									} else if (name === '_save_gz') {
 										let tmpGz = '/tmp/atcmmds.tar.gz';
-										fs.exec('/bin/tar', ['-czf', tmpGz, '-C', self.baseDir, '.'])
+										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {
 													ui.addNotification(null, E('p', {}, _('Failed to create archive') + ': ' + (res.stderr || '')), 'error');
@@ -851,12 +862,12 @@ let atCommandsManagerDialog = baseclass.extend({
 
 		let filePath = this.baseDir + '/' + fileName;
 
-		fs.exec('/bin/sh', ['-c', 'mkdir -p ' + this.baseDir])
+		fs.exec(USERFILES, ['mkdir', ufKind(this.baseDir)])
 			.then(function() {
 				return fs.write(filePath, '');
 			}.bind(this))
 			.then(function() {
-				return fs.exec('/bin/chmod', ['644', filePath]);
+				return fs.exec(USERFILES, ufFile('chmod', filePath));
 			})
 			.then(function() {
 				popTimeout(null, E('p', {}, _('File created successfully')), 5000, 'info');
@@ -894,7 +905,7 @@ let atCommandsManagerDialog = baseclass.extend({
 
 		let filePath = this.baseDir + '/' + fileName;
 
-		fs.exec('/bin/rm', ['-f', filePath])
+		fs.exec(USERFILES, ufFile('rm', filePath))
 			.then(function() {
 				popTimeout(null, E('p', {}, _('File deleted successfully')), 5000, 'info');
 				
@@ -922,7 +933,7 @@ let atCommandsManagerDialog = baseclass.extend({
 		}
 
 		let self = this;
-		fs.exec('/bin/sh', ['-c', 'rm -f ' + this.baseDir + '/*.user'])
+		fs.exec(USERFILES, ['rmall', ufKind(this.baseDir)])
 			.then(function() {
 				popTimeout(null, E('p', {}, _('All files deleted successfully')), 5000, 'info');
 

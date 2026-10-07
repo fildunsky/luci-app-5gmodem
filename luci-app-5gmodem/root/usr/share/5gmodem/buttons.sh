@@ -393,6 +393,7 @@ run)
 	fi
 
 	_cmd=$(uci -q get "$CFG.$_s.$_st")
+	[ -n "$_cmd" ] && ! cmd_allowed "$_cmd" && _cmd=''
 
 	if [ "$_ct" = "conditional" ]; then
 		# УСЛОВНАЯ: сервис берём ИЗ САМОЙ КОМАНДЫ (отдельного поля больше нет,
