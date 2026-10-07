@@ -1532,7 +1532,7 @@ return view.extend({
 			// роутере), поэтому здесь НЕ вызываем uci.save() - иначе LuCI
 			// поднимал баннер «не сохранено» и требовал нажать «Применить».
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg ]).then(function(res) {
+			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg, 'user' ]).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}

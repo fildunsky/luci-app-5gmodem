@@ -166,6 +166,7 @@ PDPARG="$4"
 # дефолт по прото (см. ниже). Нужно, чтобы снятая пользователем галка не затиралась
 # безусловным дефолтом при создании QMI/MBIM-интерфейса.
 MMEXCLARG="$5"
+USERARG="$6"
 
 # Записать тип PDP интерфейса $1. Имя опции и РЕГИСТР значения отличаются у
 # разных прото: atc ждёт pdp=IPV4V6 (верхний), fibocom - pdptype=IPV4V6,
@@ -697,6 +698,7 @@ case "$REQ" in
 		# каждом ЯВНОМ выборе; swap_cleanup чистит его при смене железа в
 		# разъёме, так что чужому модему он не достанется.
 		_mki_saved=$(uci -q get "5gmodem.$MSEC.iface_proto" 2>/dev/null)
+		[ "$USERARG" = user ] && _mki_saved=""
 		if [ -n "$_mki_saved" ] && [ "$_mki_saved" != "auto" ] \
 		   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
 			PROTO="$_mki_saved"

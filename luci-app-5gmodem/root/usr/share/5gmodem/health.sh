@@ -95,6 +95,18 @@ H_HEALWIFI=$(conf heal_wifi); [ "$H_HEALWIFI" = "0" ] || H_HEALWIFI=1
 # Состав wan-зоны за круг не меняется, а спрашивают его трижды (round дважды,
 # event один раз) - и каждый раз это два процесса. Считаем один раз.
 _WANNETS=""; _WANNETS_DONE=""
+fw_zone_check() {
+	[ "$(cat "$HDIR/$1.fwdev" 2>/dev/null)" = "$2" ] && return 0
+	_fz_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	case " $(uci -q get "firewall.$_fz_z.network") " in *" $1 "*) ;; *) return 0 ;; esac
+	_fz_c=$(nft list chain inet fw4 input 2>/dev/null) || return 0
+	[ -n "$_fz_c" ] || return 0
+	echo "$2" > "$HDIR/$1.fwdev"
+	case "$_fz_c" in *"\"$2\""*) return 0 ;; esac
+	_ev "firewall has no rules for $2 ($1) - reloading it so LAN clients get internet"
+	( /etc/init.d/firewall reload ) >/dev/null 2>&1 </dev/null 9>&- &
+}
+
 wan_nets() {
 	if [ -z "$_WANNETS_DONE" ]; then
 		_WANNETS_DONE=1
@@ -429,7 +441,7 @@ round() {
 			fi
 			continue
 		fi
-		if probe_dev "$_r_dev"; then judge "$_r_n" 1 "$H_MS"; restricted_mark "$_r_n"; else judge "$_r_n" 0 ""; fi
+		if probe_dev "$_r_dev"; then judge "$_r_n" 1 "$H_MS"; restricted_mark "$_r_n"; fw_zone_check "$_r_n" "$_r_dev"; else judge "$_r_n" 0 ""; fi
 	done
 	# ПОДЧИСТКА ПРИЗРАКОВ. Интерфейс мог исчезнуть из wan-зоны насовсем
 	# (hilink при смене композиции пересоздаёт его под ДРУГИМ именем - живой

@@ -15,6 +15,35 @@ AT+GTACT=?
 # Serving cell and neighbours
 AT+GTCCINFO?
 
+# Carrier aggregation: PCC/SCC, bandwidth, MIMO, modulation
+AT+GTCAINFO?
+
+# Signal quality (RSRP, RSRQ, RSSI)
+AT+CESQ
+
+# Radio connection state (RRC connected / idle)
+AT+CSCON?
+
+## Network and data
+
+# Operator and selection mode
+AT+COPS?
+
+# LTE registration state
+AT+CEREG?
+
+# APN profiles
+AT+CGDCONT?
+
+# Connection parameters of profile 1 (IP, gateway, DNS, MTU)
+AT+CGCONTRDP=1
+
+# DNS servers of profile 1
+AT+GTDNS=1
+
+# Data context state
+AT+CGACT?
+
 ## Temperature
 
 # Temperature
@@ -25,11 +54,20 @@ AT+ETHERMAL?
 # USB composition
 AT+GTUSBMODE?
 
+# Receive paths in use (main / AUX / MIMO)
+AT+GTRXPATHEN?
+
 # SIM slots
 AT+GTDUALSIM?
 
 # ICCID
 AT+ICCID
+
+# SIM state (ready, PIN, PUK)
+AT+CPIN?
+
+# IMSI
+AT+CIMI
 
 ## Firmware
 
