@@ -162,6 +162,7 @@ _find_cmd() {   # $1 - первое слово сообщения; печата�
 _run_cmd() {   # $1 - секция, $2 - отправитель, $3 - хвост после ключевого слова, $4 - весь текст
 	_rc_ex=$(uci -q get "$1.exec")
 	[ -n "$_rc_ex" ] || return 1
+	cmd_allowed "$_rc_ex" || return 1
 	_rc_ans=$(uci -q get "$1.answer")
 	_rc_txt=$(uci -q get "$1.answer_text")
 	_rc_dly=$(uci -q get "$1.delay")
@@ -382,6 +383,7 @@ chat)
 	_ccs=$(_find_cmd "$_cword") || { echo '{"error":"no such command"}'; exit 1; }
 	_cex=$(uci -q get "$_ccs.exec")
 	[ -n "$_cex" ] || { echo '{"error":"no such command"}'; exit 1; }
+	cmd_allowed "$_cex" || { echo '{"error":"command refused by policy"}'; exit 1; }
 	_ctxt=$(uci -q get "$_ccs.answer_text")
 	_cdly=$(uci -q get "$_ccs.delay")
 	case "$_cdly" in ''|*[!0-9]*) _cdly=0 ;; esac
@@ -413,8 +415,10 @@ test)
 	MPATH=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	MPORT=$(_cfg readport)
 	if _cs=$(_find_cmd "$2"); then
+		_tex=$(uci -q get "$_cs.exec")
+		cmd_allowed "$_tex" || { echo '{"error":"command refused by policy"}'; exit 1; }
 		_out=$(SMS_FROM="test" SMS_ARGS="$3" SMS_TEXT="$2 $3" \
-			sh -c "$(uci -q get "$_cs.exec")" 2>&1 | head -c "$ANS_MAX")
+			sh -c "$_tex" 2>&1 | head -c "$ANS_MAX")
 		printf '{"result":"ok","output":"%s"}\n' \
 			"$(printf '%s' "$_out" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')"
 	else

@@ -2032,3 +2032,10 @@ extra_uplink_nets() {
 		printf '%s\n' "$_eu_if"
 	done
 }
+
+cmd_allowed() {
+	[ -x /usr/libexec/5gmodem/cmd-policy ] || return 0
+	/usr/libexec/5gmodem/cmd-policy "$1" >/dev/null 2>&1 && return 0
+	logger -t 5gmodem "command refused by policy: $(printf '%s' "$1" | head -c 120)"
+	return 1
+}
