@@ -193,6 +193,26 @@ set_pdp_opt() {
 
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
 
+_mk_if_ok() {
+	case "$1" in ''|*[!A-Za-z0-9_]*) return 1 ;; esac
+	uci -q get "network.$1" >/dev/null 2>&1 || return 0
+	[ "$(uci -q get "network.$1")" = interface ] || return 1
+	[ -n "$(uci -q get "network.$1.modem_path")$(uci -q get "network.$1.modem_imei")" ] && return 0
+	case "$(uci -q get "network.$1.proto")" in
+		mbim|mbimp|qmi|qmiraw|qmip|ncm|xmm|atc|wwan|3g|modemmanager|fibocom|quectel) return 0 ;;
+	esac
+	uci show 5gmodem 2>/dev/null | grep -q "\.network='$1'\$" && return 0
+	return 1
+}
+_mk_guard_if() {
+	_mk_if_ok "$1" && return 0
+	logger -t 5gmodem-mkiface "refusing interface name '$1': not a valid name or a network section that does not belong to a modem"
+	IF="$1"
+	json "invalid interface name" "" ""
+	exit 1
+}
+_mk_guard_if "$IF"
+
 # ---- подготовка kernel-прото (qmi/mbim) -------------------------------------
 # Диагностика живого EC21 (см. ниже) показала цепочку, из-за которой модем
 # оставался без интернета НАВСЕГДА, хотя сам был полностью исправен:
@@ -484,6 +504,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		OLDUSER=$(uci -q get "network.$IF.username")
 		OLDPASS=$(uci -q get "network.$IF.password")
 		OLDDNS=$(uci -q get "network.$IF.dns")
+		_mk_guard_if "$IF"
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -991,6 +1012,7 @@ OLDEPS_IPT=$(uci -q get "network.$IF.init_iptype")
 OLDEPS_AUTH=$(uci -q get "network.$IF.init_allowedauth")
 OLDEPS_USER=$(uci -q get "network.$IF.init_username")
 OLDEPS_PASS=$(uci -q get "network.$IF.init_password")
+_mk_guard_if "$IF"
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
