@@ -176,7 +176,7 @@ if [ -n "$T1" ]; then
   T=$_F11
   if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
-      4) [ "$T" -ge -100 ] && [ "$T" -le 100 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", $1/2 }');;
+      4) [ "$T" -ge -100 ] && [ "$T" -le 100 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", $1 }');;
       9) [ "$T" -ge 0 ] && [ "$T" -le 127 ] && SINR=$(echo "$T" | awk '{printf "%0.1f", ($1-45)/2-1 }');;
     esac
   fi

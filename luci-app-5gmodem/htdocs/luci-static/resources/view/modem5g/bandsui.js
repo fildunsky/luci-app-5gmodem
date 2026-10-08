@@ -1342,7 +1342,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30205,
+	API: 30206,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
