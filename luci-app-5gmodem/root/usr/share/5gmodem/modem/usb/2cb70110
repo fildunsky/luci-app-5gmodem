@@ -1,0 +1,75 @@
+# Fibocom NL668-EAU (MBIM)
+
+. "$RES/modem/usb/15081001"
+
+O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?" | tr -d '\r')
+
+T1=$(echo "$O" | grep -E "^1,4," | head -1)
+if [ -n "$T1" ]; then
+	_oIFS=$IFS; IFS=','; set -- $T1; IFS=$_oIFS
+	_F5=$5; _F7=$7; _F8=$8; _F9=$9; _F10=${10}; _F11=${11}; _F13=${13}; _F14=${14}
+	if [ -n "$_F5" ]; then
+		T_HEX=$_F5
+		T_DEC=$(printf "%d" "0x$_F5" 2>/dev/null)
+	fi
+	[ -n "$_F7" ] && EARFCN=$_F7
+	[ -n "$_F8" ] && PCI=$_F8
+	T=$(printf '%s' "$_F9" | tr -cd '0-9')
+	[ -n "$T" ] && [ "$T" -gt 100 ] && T=$((T - 100))
+	[ -n "$T" ] && [ "$T" -ge 1 ] 2>/dev/null || T=$(earfcn2band "$EARFCN")
+	if [ -n "$T" ]; then
+		PBAND="$(band4g $T)"
+		case "$MODE" in
+			*"|"*) ;;
+			LTE*) MODE="$MODE | $PBAND" ;;
+		esac
+	fi
+	case "$_F10" in
+		6) BANDWIDTH="1.4 MHz" ;;
+		15) BANDWIDTH="3 MHz" ;;
+		25) BANDWIDTH="5 MHz" ;;
+		50) BANDWIDTH="10 MHz" ;;
+		75) BANDWIDTH="15 MHz" ;;
+		100) BANDWIDTH="20 MHz" ;;
+	esac
+	if [ "$_F11" -ge -100 ] 2>/dev/null && [ "$_F11" -le 100 ]; then
+		SINR=$(echo "$_F11" | awk '{printf "%0.1f", $1/2}')
+	fi
+	if [ "$_F13" -ge 0 ] 2>/dev/null && [ "$_F13" -le 97 ]; then
+		RSRP=$((_F13 - 141))
+	fi
+	if [ "$_F14" -ge 0 ] 2>/dev/null && [ "$_F14" -le 34 ]; then
+		RSRQ=$(echo "$_F14" | awk '{printf "%0.1f", $1/2-20}')
+	fi
+fi
+
+if [ -z "$RSSI" ] || [ "$RSSI" = "-" ]; then
+	if [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
+		RSSI=$((2 * CSQ - 113))
+	fi
+fi
+
+NEIGHBORS=$(echo "$O" | awk -F, '
+	function lvl(v, base) {
+		if (v == "" || v + 0 != v || v == 255 || v < 0 || v > 97) return ""
+		return v + base
+	}
+	function half(v) {
+		if (v == "" || v + 0 != v || v == 255 || v < 0 || v > 34) return ""
+		return sprintf("%.1f", v / 2 - 20)
+	}
+	/^[12],4,/ {
+		srv = ($1 == 1) ? 1 : 0
+		band = ""
+		if (srv) {
+			band = $9; gsub(/[^0-9]/, "", band)
+			if (band + 0 > 100) band = band - 100
+			rsrp = lvl($13, -141); rsrq = half($14)
+		} else {
+			rsrp = lvl($11, -141); rsrq = half($12)
+		}
+		if ($8 == "") next
+		printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
+			(n++ ? "," : ""), band, $7, $8, rsrp, rsrq, srv
+	}
+')
