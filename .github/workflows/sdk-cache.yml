@@ -1,0 +1,34 @@
+name: SDK cache
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - .github/scripts/fetch-sdk.sh
+      - .github/workflows/sdk-cache.yml
+      - .github/workflows/build.yml
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  warm:
+    name: ${{ matrix.ver }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        ver: [ 25.12.5, 24.10.8 ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find SDK
+        id: sdk
+        run: CHECK_ONLY=1 .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
+      - name: Cache SDK
+        uses: actions/cache@v4
+        with:
+          path: sdk/sdk.tar
+          key: sdk-${{ steps.sdk.outputs.sdk_sum }}
+      - name: Download SDK
+        run: .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
