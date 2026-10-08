@@ -1010,7 +1010,7 @@ if [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" = "1" ]; then
 	_MM_OWNS=1
 	_SN_NOAT=1
 	DEVICE=""
-elif [ -n "$DEVICE" ]; then
+else
 	_mo_if=$(uci -q get "5gmodem.$_hl_sec.network")
 	if [ "$(uci -q get "network.$_mo_if.proto" 2>/dev/null)" != modemmanager ] \
 	   && mm_owns_path "$_POLL_AM"; then

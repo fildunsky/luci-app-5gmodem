@@ -1984,7 +1984,7 @@ msgid "Update"
 msgstr "Обновление"
 
 msgid "Check for updates"
-msgstr "Проверить обновления"
+msgstr "Проверить обновление"
 
 msgid "Install update"
 msgstr "Установить обновление"

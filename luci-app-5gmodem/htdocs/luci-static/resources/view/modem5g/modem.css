@@ -3362,3 +3362,4 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
   body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingico,
   body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingico svg { width: 14px; height: 14px; }
 }
+[data-page^="admin-modem-5gmodem"] .spinning::before { box-sizing: border-box; }
