@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Keep luci-app-5gmodem's ports/interfaces valid across modem add/remove and
 # reboots. ttyUSB / cdc-wdm numbering is NOT stable - when a modem is plugged,
@@ -30,7 +31,7 @@ mkdir -p /tmp/5gmodem 2>/dev/null
 # Кэш listmodems.sh недействителен СРАЗУ: модем появился/исчез. Сбрасываем до
 # всякого sleep, чтобы никто не успел прочитать устаревший список (у кэша есть
 # и TTL-страховка, но она грубее - см. listmodems.sh).
-rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
+rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
 
 # Пометка «нужна пересборка». Ставим ДО попытки взять лок: если работа уже идёт,
 # держатель увидит флаг и повторит - событие не потеряется.

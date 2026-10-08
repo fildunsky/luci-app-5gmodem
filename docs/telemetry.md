@@ -4,7 +4,7 @@
 метриками активного модема в единый файл:
 
 ```
-/tmp/5gmodem_tele.json
+/tmp/5gmodem/tele.json
 {"sig":67,"oper":"T-Mobile","rsrp":-104,"rsrq":-11,"sinr":14,"temp":34,"band":"B3","mode":"4G","ping":88,"rx":5865635,"tx":112640,"sms":0}
 ```
 
@@ -62,15 +62,15 @@
   строго.
 
 Сейчас в файл попадает **активный модем**. Для мультимодемных конфигураций
-формат зарезервирован (`/tmp/5gmodem_tele_<usb-путь>.json`), но пока не пишется.
+формат зарезервирован (`/tmp/5gmodem/tele_<usb-путь>.json`), но пока не пишется.
 
 ## Файл-приложение: детали соты (только локально)
 
-Рядом пишется второй файл — `/tmp/5gmodem_tele_cell.json` — с деталями
+Рядом пишется второй файл — `/tmp/5gmodem/tele_cell.json` — с деталями
 обслуживающей соты для локальных экранов и страниц:
 
 ```
-/tmp/5gmodem_tele_cell.json
+/tmp/5gmodem/tele_cell.json
 {"pci":1,"earfcn":1000,"enb":100001,"cid":10000001,"tac":10001,"apn":"internet","wan_ip":"203.0.113.10","modem":"Quectel EC21"}
 ```
 
@@ -221,16 +221,16 @@ uci commit 5gmodem
 
 | Кто | Пишет | Куда |
 |---|---|---|
-| 5gmodem | `sig oper rsrp rsrq sinr band ca mode temp ping rx tx sms cc` (+ адреса при `publish_ip=1`) | `/tmp/5gmodem_tele.json` |
+| 5gmodem | `sig oper rsrp rsrq sinr band ca mode temp ping rx tx sms cc` (+ адреса при `publish_ip=1`) | `/tmp/5gmodem/tele.json` |
 | Ваш агрегатор | всё остальное | свой файл |
 
 ## Чего читать не надо
 
-Рядом в `/tmp` лежит внутренний снимок метрик — `/tmp/5gmodem_metrics_<путь>.json`.
+Рядом в `/tmp` лежит внутренний снимок метрик — `/tmp/5gmodem/metrics_<путь>.json`.
 Его находят и начинают разбирать, а потом удивляются, что «путь другой и поля
 называются иначе». Так и есть: это не интерфейс, а рабочий файл приложения.
 
-* **Имя зависит от USB-пути модема** (`/tmp/5gmodem_metrics_2_1_4.json`,
+* **Имя зависит от USB-пути модема** (`/tmp/5gmodem/metrics_2_1_4.json`,
   `..._1_2.json`) и меняется, стоит переставить модем в другой порт.
 * **Поля внутренние и длинные** — `signal`, `operator_name`, `mtemp`, `enbid`,
   `cid_dec`, `conn_time_sec`. Мы переименовываем их, когда это удобно коду.
@@ -238,17 +238,17 @@ uci commit 5gmodem
   (да, с HTML-сущностью), `"rx":"7.2 KiB"`, `conn_time` строкой «0d, 00:22:35».
 * Никакого обещания совместимости у него нет и не будет.
 
-Всё, что нужно потребителю, есть в `/tmp/5gmodem_tele.json` каноническими
+Всё, что нужно потребителю, есть в `/tmp/5gmodem/tele.json` каноническими
 именами и числами: `sig`, `oper`, `rsrp`, `rsrq`, `sinr`, `band`, `ca`, `mode`,
-`temp`, `ping`, `rx`, `tx`, `sms`. Детали соты — в `/tmp/5gmodem_tele_cell.json`.
+`temp`, `ping`, `rx`, `tx`, `sms`. Детали соты — в `/tmp/5gmodem/tele_cell.json`.
 
 ## Способ 1: локальный файл (дисплеи, скрипты на самом роутере)
 
-Просто читайте `/tmp/5gmodem_tele.json`. Разбор — `jsonfilter`:
+Просто читайте `/tmp/5gmodem/tele.json`. Разбор — `jsonfilter`:
 
 ```sh
-jsonfilter -i /tmp/5gmodem_tele.json -e '@.sig'      # 67
-jsonfilter -i /tmp/5gmodem_tele.json -e '@.mode'     # 4G
+jsonfilter -i /tmp/5gmodem/tele.json -e '@.sig'      # 67
+jsonfilter -i /tmp/5gmodem/tele.json -e '@.mode'     # 4G
 ```
 
 Файл может не содержать поля (см. «нет данных — нет ключа») — проверяйте
@@ -257,7 +257,7 @@ jsonfilter -i /tmp/5gmodem_tele.json -e '@.mode'     # 4G
 ## Способ 2: по SSH (чужой дашборд, самописный опрос с другой машины)
 
 ```sh
-ssh root@192.168.1.1 cat /tmp/5gmodem_tele.json
+ssh root@192.168.1.1 cat /tmp/5gmodem/tele.json
 ```
 
 Одна команда — один дешёвый `cat`. Никаких вызовов rpcd и наших скриптов.
@@ -300,7 +300,7 @@ retain — переживают перезапуск HA.
 (дисплей в LAN умеет только HTTP GET), отдайте его uhttpd-ом вручную:
 
 ```sh
-ln -s /tmp/5gmodem_tele.json /www/tele.json
+ln -s /tmp/5gmodem/tele.json /www/tele.json
 ```
 
 и заберите `http://192.168.1.1/tele.json`. Помните: файл станет виден всем в

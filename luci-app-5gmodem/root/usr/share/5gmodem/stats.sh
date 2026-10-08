@@ -4,7 +4,7 @@
 #
 # ЧТО СОБИРАЕМ
 #   ping   - RTT каждого аплинка. Источник бесплатный: сторож (health.sh) и так
-#            меряет его каждый круг и кладёт в /tmp/5gmodem_health/<iface>
+#            меряет его каждый круг и кладёт в /tmp/5gmodem/health/<iface>
 #            (поле ms). Своих проб НЕ делаем - лишний трафик и лишние процессы.
 #   signal - уровень сигнала модемов из последнего снимка метрик (поле signal,
 #            проценты 0-100) - тоже готовое, без похода в порт.
@@ -13,7 +13,7 @@
 #            месячный аккумулятор: <год-месяц> -> rx tx.
 #
 # ГДЕ ХРАНИМ
-#   /tmp/5gmodem_stats/       - кольцевые ряды (RAM, быстро, не жжёт флеш).
+#   /tmp/5gmodem/stats/       - кольцевые ряды (RAM, быстро, не жжёт флеш).
 #                               Это ВСЕГДА рабочая копия и единственный источник
 #                               правды на время работы.
 #   при persist=1 - ещё и на диск, раз в час (см. flush):
@@ -37,7 +37,7 @@
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
-DIR=/tmp/5gmodem_stats
+DIR=/tmp/5gmodem/stats
 # Запасной каталог (внутренняя память). Он же основной, пока не задан свой путь.
 PDIR_DEF=/etc/5gmodem/stats
 RING_MAX=1440
@@ -174,7 +174,7 @@ _iface_label() {
 
 # Ряды пингов - из состояния сторожа: "state fails oks ms since".
 _collect_ping() {
-	for _cp_f in /tmp/5gmodem_health/*; do
+	for _cp_f in /tmp/5gmodem/health/*; do
 		[ -f "$_cp_f" ] || continue
 		case "${_cp_f##*/}" in .*|*.*) continue ;; esac
 		_cp_if="${_cp_f##*/}"

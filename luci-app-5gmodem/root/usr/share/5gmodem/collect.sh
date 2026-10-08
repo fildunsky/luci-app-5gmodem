@@ -6,7 +6,7 @@
 #   collect.sh status  -> {"state":"running|done|idle","progress":"<шаг>"}
 #   collect.sh run     -> собрать синхронно (для консоли/отладки)
 #
-# Результат: /tmp/5gmodem-diag.txt (обычный текст, его забирает браузер).
+# Результат: /tmp/5gmodem/diag.txt (обычный текст, его забирает браузер).
 #
 # ПОЧЕМУ ФОН. Сбор идёт десятки секунд (одни AT-команды на молчащем порту дают
 # по 6 c каждая), а rpcd убивает вызов на 30-й секунде - синхронный сбор давал
@@ -24,16 +24,16 @@ RES="/usr/share/5gmodem"
 # (esim.sh) - в этом режиме они уступают и отвечают «занято».
 ESIM_READONLY=1
 export ESIM_READONLY
-OUT="/tmp/5gmodem-diag.txt"
-LOCK="/tmp/5gmodem-diag.lock"
-STEP="/tmp/5gmodem-diag.step"
+OUT="/tmp/5gmodem/diag.txt"
+LOCK="/tmp/5gmodem/diag.lock"
+STEP="/tmp/5gmodem/diag.step"
 
 # ЧЕРНОВИК ТЕКУЩЕГО ОТЧЁТА. Разделы, которым нужно посмотреть на УЖЕ СОБРАННОЕ
 # (расшифровка кодов +CME), раньше читали готовый $OUT - а он в этот момент ещё
 # пишется (start) или не пишется вовсе (run, отчёт идёт в stdout), и в разбор
 # попадал ЧУЖОЙ отчёт недельной давности. Пишем свою копию по мере сбора
 # (аудит 12.09.2026).
-SESS="/tmp/.5gmodem-diag-sess.$$"
+SESS="/tmp/5gmodem/.diag-sess.$$"
 export SESS
 
 # Команда с ограничением по времени. Без него sms_tool на занятом/молчащем порту
@@ -43,7 +43,7 @@ run() {   # run <timeout> <заголовок> <команда...>
 	_t="$1"; _title="$2"; shift 2
 	echo ""
 	echo "----- $_title -----"
-	_tmp="/tmp/.diag.$$"
+	_tmp="/tmp/5gmodem/.diag.$$"
 	( "$@" ) > "$_tmp" 2>&1 &
 	_p=$!
 	( sleep "$_t"; kill -9 "$_p" 2>/dev/null ) >/dev/null 2>&1 &
@@ -228,7 +228,7 @@ policyrouting_verdict() {
 # проекта: на ней я дважды «сломал» живой стенд ложными пробами).
 cap() {   # cap <секунды> <команда...>
 	_c_t="$1"; shift
-	_c_f="/tmp/.diagcap.$$"
+	_c_f="/tmp/5gmodem/.diagcap.$$"
 	( "$@" ) > "$_c_f" 2>&1 &
 	_c_p=$!
 	( sleep "$_c_t"; kill -9 "$_c_p" 2>/dev/null ) >/dev/null 2>&1 &
@@ -366,7 +366,7 @@ uplink_verdict() {
 		_uv_d=$(_uv_get "$_uv_n" '.l3_device')
 		_uv_ip=$(_uv_get "$_uv_n" '["ipv4-address"][0].address')
 		_uv_h="-"
-		[ -f "/tmp/5gmodem_health/$_uv_n" ] && read -r _uv_h _ _ _ _ 2>/dev/null < "/tmp/5gmodem_health/$_uv_n"
+		[ -f "/tmp/5gmodem/health/$_uv_n" ] && read -r _uv_h _ _ _ _ 2>/dev/null < "/tmp/5gmodem/health/$_uv_n"
 		# «ЕСТЬ АДРЕС» И «МОЖЕТ НЕСТИ ТРАФИК» - РАЗНЫЕ ВЕЩИ. Линк с адресом, но
 		# без шлюза (DHCP не прислал option router) выглядел в этом списке
 		# здоровым - и человек не понимал, почему приоритет на него не
@@ -453,8 +453,8 @@ uplink_verdict() {
 
 	echo "--- internet watchdog ---"
 	echo "settings: ${_uv_cfg:-(no answer)}"
-	if [ -d /tmp/5gmodem_health ]; then
-		for _uv_f in /tmp/5gmodem_health/*; do
+	if [ -d /tmp/5gmodem/health ]; then
+		for _uv_f in /tmp/5gmodem/health/*; do
 			[ -f "$_uv_f" ] || continue
 			case "$_uv_f" in */.t) continue ;; esac
 			printf '  %s: %s\n' "${_uv_f##*/}" "$(cat "$_uv_f" 2>/dev/null | head -1)"
@@ -702,7 +702,7 @@ apn_verdict() {
 	[ -n "$_av_if" ] || { echo "the modem interface is not configured - this check does not apply"; return 0; }
 	_av_cur=$(uci -q get "network.$_av_if.apn")
 	echo "APN on the interface: ${_av_cur:-(empty)}"
-	_av_imsi=$(printf '%s' "$(cat /tmp/5gmodem_snapshot_* 2>/dev/null | head -c 4000)" \
+	_av_imsi=$(printf '%s' "$(cat /tmp/5gmodem/snapshot_* 2>/dev/null | head -c 4000)" \
 		| sed -n 's/.*"imsi":"\([0-9]\{6,\}\)".*/\1/p' | head -1)
 	[ -n "$_av_imsi" ] || _av_imsi=$(uci -q show 5gmodem 2>/dev/null \
 		| sed -n "s/^5gmodem\.m_[^.]*\.apn_imsi='\([0-9]*\)'$/\1/p" | head -1)
@@ -1017,7 +1017,7 @@ usb_unconfigured_verdict() {
 	for _uu_b in $_uu_bad; do
 		_uu_k=$(printf '%s' "$_uu_b" | tr -c 'A-Za-z0-9' '_')
 		{ [ -f "/var/run/5gmodem-mm-inhibit/$_uu_k.rebindfail" ] || \
-		  [ -f "/tmp/5gmodem_mmrebind_$_uu_k" ]; } && _uu_rb=1
+		  [ -f "/tmp/5gmodem/mmrebind_$_uu_k" ]; } && _uu_rb=1
 	done
 	if [ -n "$_uu_rb" ]; then
 		echo "NOTE: the app RECENTLY re-bound this USB device"
@@ -1615,8 +1615,8 @@ at_conn_verdict() {   # $1 - AT-порт
 					# выдан, наружу не проходит ничего, кроме DNS оператора).
 					# Состояние берём у того же сторожа, что и общий вердикт.
 					_ac_hst=""
-					[ -f "/tmp/5gmodem_health/$_ac_if" ] \
-						&& read -r _ac_hst _ _ _ _ 2>/dev/null < "/tmp/5gmodem_health/$_ac_if"
+					[ -f "/tmp/5gmodem/health/$_ac_if" ] \
+						&& read -r _ac_hst _ _ _ _ 2>/dev/null < "/tmp/5gmodem/health/$_ac_if"
 					if [ "$_ac_hst" = down ]; then
 						echo "    the modem DID connect: address $_ac_up on interface $_ac_if."
 						echo "    So the dial-up is not the problem - the packets are lost further on."
@@ -2061,8 +2061,8 @@ _sum_verdict() {
 	fi
 	# есть адрес и маршрут - спросим сторожа, ходят ли пакеты
 	_sv_st=""
-	[ -n "$_sv_if" ] && [ -f "/tmp/5gmodem_health/$_sv_if" ] \
-		&& read -r _sv_st _ _ _ _ 2>/dev/null < "/tmp/5gmodem_health/$_sv_if"
+	[ -n "$_sv_if" ] && [ -f "/tmp/5gmodem/health/$_sv_if" ] \
+		&& read -r _sv_st _ _ _ _ 2>/dev/null < "/tmp/5gmodem/health/$_sv_if"
 	case "$_sv_st" in
 		down) echo "There is an address ($_sv_ip), but the internet through the modem DOES NOT ANSWER probes."
 		      echo "See the sections 'Who holds the internet' and 'DNS'." ;;
@@ -2311,9 +2311,9 @@ report() {
 		. /usr/share/5gmodem/lib.sh 2>/dev/null
 		p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 		k=$(snap_key "$p")
-		f="/tmp/5gmodem_metrics_$k.json"
+		f="/tmp/5gmodem/metrics_$k.json"
 		[ -s "$f" ] || { echo "no snapshot yet - open the Network page once and collect the report again"; exit 0; }
-		t=$(cat "/tmp/5gmodem_metrics_$k.stamp" 2>/dev/null)
+		t=$(cat "/tmp/5gmodem/metrics_$k.stamp" 2>/dev/null)
 		case "$t" in ""|*[!0-9]*) ;; *) echo "snapshot age: $(( $(uptime_s) - t )) s" ;; esac
 		sed -e "s/^{//" -e "s/}\$//" -e "s/,\"/\n\"/g" "$f"
 		echo
@@ -2570,7 +2570,7 @@ report() {
 	# либо ещё пишется, либо (режим run) не пишется совсем (аудит 12.09.2026).
 	run 10 "+CME ERROR codes seen in this report" sh -c '
 		. /usr/share/5gmodem/cme.sh
-		_cme_t="/tmp/.diag-cme.$$"
+		_cme_t="/tmp/5gmodem/.diag-cme.$$"
 		{ cat "$SESS" 2>/dev/null; logread 2>/dev/null | tail -200; } \
 			| grep -oE "CME ERROR: *[0-9]+" | grep -oE "[0-9]+" | sort -un | while read -r c; do
 				t=$(cme_text "$c" 2>/dev/null) || t="(not in the reference table)"

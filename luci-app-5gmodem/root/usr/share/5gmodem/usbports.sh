@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Единственное место, где композиция USB сопоставляется драйверу usb-serial.
 #
@@ -270,7 +271,7 @@ bind_ports() {   # $1 - vid, $2 - pid
 			# Hotplug зовёт нас на КАЖДЫЙ интерфейс композиции и на каждый tty -
 			# одна загрузка давала десяток одинаковых строк. Пишем раз на
 			# устройство за загрузку (метка в tmpfs).
-			_bp_once="/tmp/5gmodem_usbports_${_bp_d##*/}.hasports"
+			_bp_once="/tmp/5gmodem/usbports_${_bp_d##*/}.hasports"
 			if [ ! -f "$_bp_once" ]; then
 				: > "$_bp_once" 2>/dev/null
 				logger -t 5gmodem-usbports "$1:$2 already has ports - leaving the binding alone"

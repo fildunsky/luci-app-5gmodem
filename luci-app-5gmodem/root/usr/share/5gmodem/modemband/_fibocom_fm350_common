@@ -27,7 +27,7 @@ _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 3
 # Кэшируем в /tmp: за один опрос страницы функции supported зовутся трижды
 # (LTE + 5G SA + 5G NSA), а лишний AT-запрос конкурирует за общий порт.
 _fm350_caps() {   # $1 = lte | nr ; печатает список диапазонов или пусто
-    _cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    _cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
     if [ ! -s "$_cf" ]; then
         sms_tool -d $_DEVICE at "AT+GTACT=?" 2>/dev/null | tr -d '\r' \
             | grep -o '([^)]*)' > "$_cf.$$" 2>/dev/null
@@ -75,7 +75,7 @@ _fm350_caps() {   # $1 = lte | nr ; печатает список диапазо
 # Пока возможности не прочитаны (порт молчит) - ведём себя по-старому.
 _fm350_no_nr() {   # 0 = модуль точно без 5G
     _fm350_caps lte >/dev/null 2>&1 || return 1
-    _nn_cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    _nn_cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
     [ -s "$_nn_cf" ] || return 1
     [ -z "$(_fm350_caps nr)" ]
 }
@@ -181,7 +181,7 @@ _fm350_gtact_set() {
     [ -n "$_gs_p1" ] && [ -z "$(echo "$_gs_line" | cut -d, -f3)" ] && _gs_dup="$_gs_rat,$_gs_p1,$_gs_p1"
     if [ "$1" = "0" ]; then
         _fm350_caps lte >/dev/null 2>&1
-        _gs_cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+        _gs_cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
         _gs_want=""
         [ -s "$_gs_cf" ] && _gs_want=$(sed -n "$3" "$_gs_cf" | tr -d '()' \
             | tr ',' '\n' | grep -E "$2" | sort -n | xargs)
@@ -254,7 +254,7 @@ _fm350_reapply_lte() {
     [ -n "$CUR" ] || return
 
     _fm350_caps lte >/dev/null 2>&1   # заодно наполнит кэш возможностей
-    _cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    _cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
     ALL=""
     # группы теста: 5 - UMTS, 6 - LTE, 9 - NR (см. _fm350_caps)
     [ -s "$_cf" ] && ALL=$(sed -n '5p;6p;9p' "$_cf" | tr -d '()' | tr ',' '\n' \

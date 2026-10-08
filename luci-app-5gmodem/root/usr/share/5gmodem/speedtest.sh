@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Router-side speed test over the ACTIVE uplink - i.e. wherever the internet
 # actually goes from (the default route). That is exactly what the "Internet
@@ -27,7 +28,7 @@
 #   speedtest_ip_url  public-IP service   (default: api.ipify.org)
 #   speedtest_secs    per-phase time cap  (default 15)
 
-CACHE="/tmp/5gmodem_speedtest.json"
+CACHE="/tmp/5gmodem/speedtest.json"
 URL_DEFAULT="internetometer"     # зонды Яндекс-Интернетометра, см. YA_* ниже
 UPURL_DEFAULT="internetometer"   # то же и для отдачи
 # Запасной источник на случай, когда список зондов не пришёл. Здесь был Tele2
@@ -217,14 +218,14 @@ start)
 	[ -n "$YAIPURL" ] || YAIPURL="https://yandex.ru/internet/api/v0/ip"
 	SERVICE=$(_service_name)
 
-	rm -f /tmp/5gmodem_st_stop /tmp/5gmodem_st_ip.* /tmp/5gmodem_st_cc.* /tmp/5gmodem_st_loc.* 2>/dev/null
+	rm -f /tmp/5gmodem/st_stop /tmp/5gmodem/st_ip.* /tmp/5gmodem/st_cc.* /tmp/5gmodem/st_loc.* 2>/dev/null
 	_write "{\"running\":1,\"service\":\"$SERVICE\",\"live_down\":0}"
 
 	# ФОН с отвязкой дескрипторов - редирект ИМЕННО на подоболочке, иначе rpcd
 	# досидит до 30 c таймаута, пока curl качает (грабли из reboot_modem/collect).
 	(
-		PROG="/tmp/5gmodem_st_prog.$$"
-		RESF="/tmp/5gmodem_st_res.$$"
+		PROG="/tmp/5gmodem/st_prog.$$"
+		RESF="/tmp/5gmodem/st_res.$$"
 		: > "$PROG"; : > "$RESF"
 
 		# --- ПУБЛИЧНЫЙ IP + КОД СТРАНЫ (для флага) - ПАРАЛЛЕЛЬНО замеру ---
@@ -235,8 +236,8 @@ start)
 		# замером, результат кладёт в файлы - циклы семплирования подхватывают
 		# их на каждом тике. Ценой небольшой честности запроса (geo делит канал
 		# с замером), но старт цифр важнее.
-		GEOIP="/tmp/5gmodem_st_ip.$$"; GEOCC="/tmp/5gmodem_st_cc.$$"
-		GEOLOC="/tmp/5gmodem_st_loc.$$"
+		GEOIP="/tmp/5gmodem/st_ip.$$"; GEOCC="/tmp/5gmodem/st_cc.$$"
+		GEOLOC="/tmp/5gmodem/st_loc.$$"
 		: > "$GEOIP"; : > "$GEOCC"; : > "$GEOLOC"
 		(
 			# СНАЧАЛА - БЫСТРЫЙ ИСТОЧНИК, И СРАЗУ В ФАЙЛ. Зарубежные geo-сервисы
@@ -364,7 +365,7 @@ start)
 		# каждой итерации - остаток фазы, и общее время не разъезжается.
 		(
 			while :; do
-				[ -f /tmp/5gmodem_st_stop ] && break
+				[ -f /tmp/5gmodem/st_stop ] && break
 				_dl_left=$(( SECS - ($(cut -d. -f1 /proc/uptime) - _DL_T0) ))
 				[ "$_dl_left" -ge 2 ] || break
 				curl -A 5gmodem-speedtest -o /dev/null --max-time "$_dl_left" \
@@ -468,11 +469,11 @@ start)
 
 		# Пользователь остановил тест (повторный клик по карточке): выходим тихо,
 		# показав, что успели намерить.
-		if [ -f /tmp/5gmodem_st_stop ]; then
+		if [ -f /tmp/5gmodem/st_stop ]; then
 			[ -n "$PUB" ] || PUB=$(cat "$GEOIP" 2>/dev/null)
 			[ -n "$CC" ]  || CC=$(cat "$GEOCC" 2>/dev/null)
 			[ -n "$IPLOC" ] || IPLOC=$(cat "$GEOLOC" 2>/dev/null)
-			rm -f "$GEOIP" "$GEOCC" "$GEOLOC" /tmp/5gmodem_st_stop
+			rm -f "$GEOIP" "$GEOCC" "$GEOLOC" /tmp/5gmodem/st_stop
 			_write "{\"running\":0,\"ok\":0,\"cancelled\":1,\"service\":\"$SERVICE\",\"down_mbps\":$DMBPS,\"pub_ip\":\"${PUB}\",\"cc\":\"${CC}\",\"ts\":$(date +%s 2>/dev/null)}"
 			exit 0
 		fi
@@ -487,7 +488,7 @@ start)
 		# сотовой (CGNAT) молчит. Поэтому шлём подряд, пока не истечёт $SECS;
 		# провалы на передоговоре TCP между POST'ами съедает макс-семплинг,
 		# в итог идёт максимум из (семплы, лучшая среди POST'ов средняя).
-		UPROG="/tmp/5gmodem_st_uprog.$$"; URES="/tmp/5gmodem_st_ures.$$"
+		UPROG="/tmp/5gmodem/st_uprog.$$"; URES="/tmp/5gmodem/st_ures.$$"
 		: > "$UPROG"; : > "$URES"
 		(
 			_up_t0=$(cut -d. -f1 /proc/uptime)
@@ -499,7 +500,7 @@ start)
 			# отсчёта (короткий разгон TCP) гасится макс-агрегацией остальных.
 			_up_sz=262144; _up_n=1
 			while :; do
-				[ -f /tmp/5gmodem_st_stop ] && break
+				[ -f /tmp/5gmodem/st_stop ] && break
 				_up_now=$(cut -d. -f1 /proc/uptime)
 				_up_left=$(( SECS - (_up_now - _up_t0) ))
 				[ "$_up_left" -ge 2 ] || break
@@ -593,7 +594,7 @@ stop)
 	# проверяют), а замерные curl'ы убиваем сразу по маркеру в User-Agent -
 	# точечно, чужие curl процессы не трогаем. Итоговый JSON пишет сам тест
 	# («показать, что успели»), либо, если он уже мёртв, чистим running здесь.
-	touch /tmp/5gmodem_st_stop 2>/dev/null
+	touch /tmp/5gmodem/st_stop 2>/dev/null
 	kill $(pgrep -f 5gmodem-speedtest) 2>/dev/null
 	sleep 1
 	grep -q '"running":1' "$CACHE" 2>/dev/null && \

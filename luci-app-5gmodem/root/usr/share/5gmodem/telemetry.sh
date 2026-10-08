@@ -1,6 +1,7 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 # Телеметрия по единой канонической схеме (docs/telemetry.md): плоский JSON с
-# каноническими короткими полями в /tmp/5gmodem_tele.json. Источник - ГОТОВЫЙ
+# каноническими короткими полями в /tmp/5gmodem/tele.json. Источник - ГОТОВЫЙ
 # снимок метрик активного модема: ни одного нового запроса к модему этот файл
 # не порождает, писать его дёшево. Смысл файла - одна точка, откуда умный дом,
 # внешние дисплеи и чужие дашборды забирают данные, НЕ дёргая rpcd и наши
@@ -12,7 +13,7 @@
 # и трафик. Файл можно отдавать наружу, не подумав дважды.
 #
 # Вербы:
-#   write     - собрать и атомарно переписать /tmp/5gmodem_tele.json
+#   write     - собрать и атомарно переписать /tmp/5gmodem/tele.json
 #   publish   - write + отправить в MQTT (нужен mosquitto_pub и настроенный
 #               брокер в uci 5gmodem.tele)
 #   discovery - опубликовать HA-автообнаружение (retain), один раз после
@@ -21,9 +22,9 @@
 
 CFG=5gmodem
 EXTIP=/usr/share/5gmodem/extip.sh
-TELE=/tmp/5gmodem_tele.json
-TELE_CELL=/tmp/5gmodem_tele_cell.json
-PREV=/tmp/5gmodem_tele.prev
+TELE=/tmp/5gmodem/tele.json
+TELE_CELL=/tmp/5gmodem/tele_cell.json
+PREV=/tmp/5gmodem/tele.prev
 
 _g() { uci -q get "$CFG.tele.$1"; }
 
@@ -33,7 +34,7 @@ tele_enabled() { [ "$(_g enabled)" != "0" ]; }
 # --- Значение из снимка метрик ------------------------------------------------
 _AM=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 _KEY=$(echo "$_AM" | tr -c 'A-Za-z0-9' '_')
-_SNAP="/tmp/5gmodem_metrics_${_KEY}.json"
+_SNAP="/tmp/5gmodem/metrics_${_KEY}.json"
 
 _jf() { jsonfilter -i "$_SNAP" -e "@.$1" 2>/dev/null; }
 
@@ -117,8 +118,8 @@ tele_write() {
 	_net=""
 	[ -n "$_fresh" ] && _net=$(_jf iface)
 	[ -n "$_net" ] || _net=$(uci -q get "$CFG.@5gmodem[0].network")
-	if [ -n "$_net" ] && [ -f "/tmp/5gmodem_health/$_net" ]; then
-		read -r _hs _hf _ho _hms _hsince < "/tmp/5gmodem_health/$_net"
+	if [ -n "$_net" ] && [ -f "/tmp/5gmodem/health/$_net" ]; then
+		read -r _hs _hf _ho _hms _hsince < "/tmp/5gmodem/health/$_net"
 		[ "$_hs" = "up" ] && _num ping "$(_int "$_hms")"
 	fi
 
@@ -149,7 +150,7 @@ tele_write() {
 
 	# sms - непрочитанные, из зеркала для внешних программ (обновляется тем же
 	# сторожем не чаще раза в минуту).
-	_sc=$(jsonfilter -i /tmp/5gmodem_sms_new.json -e '@.count' 2>/dev/null)
+	_sc=$(jsonfilter -i /tmp/5gmodem/sms_new.json -e '@.count' 2>/dev/null)
 	_num sms "$(_int "$_sc")"
 
 	# ВНЕШНИЙ АДРЕС - ЧЕРЕЗ ТОТ ЖЕ ИНТЕРФЕЙС, ЧТО И МОДЕМ. Обычный запрос ушёл

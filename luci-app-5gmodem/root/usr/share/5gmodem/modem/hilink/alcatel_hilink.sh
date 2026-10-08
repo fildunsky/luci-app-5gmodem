@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # (c) 2010-2021 Cezary Jackiewicz <cezary@eko.one.pl>
 #
@@ -10,18 +11,18 @@ IP=$1
 [ -e /usr/bin/wget ] || exit 0
 
 getvaluen() {
-	echo $(sed 's!.*"'$2'":\([^,]*\).*!\1!g' /tmp/$1)
+	echo $(sed 's!.*"'$2'":\([^,]*\).*!\1!g' /tmp/5gmodem/$1)
 }
 
 getvalue() {
-	echo $(sed 's!.*"'$2'":"\([^"]*\).*!\1!g' /tmp/$1)
+	echo $(sed 's!.*"'$2'":"\([^"]*\).*!\1!g' /tmp/5gmodem/$1)
 }
 
 rand=`awk 'BEGIN{srand();print int(rand()*(99000-1000))+1000 }'`
 
 files="getWanInfo getImgInfo getSysteminfo"
 for f in $files; do
-	wget -t 3 -O /tmp/$f "http://$IP/goform/$f?rand=$rand" >/dev/null 2>&1
+	wget -t 3 -O /tmp/5gmodem/$f "http://$IP/goform/$f?rand=$rand" >/dev/null 2>&1
 done
 
 MODEN=$(getvaluen getWanInfo "network_type")
@@ -58,6 +59,6 @@ echo MODEL="Alcatel $MODEL"
 
 if [ "x$2" != "xdebug" ]; then
 	for f in $files; do
-		rm /tmp/$f
+		rm /tmp/5gmodem/$f
 	done
 fi

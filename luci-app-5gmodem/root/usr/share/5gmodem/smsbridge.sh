@@ -70,7 +70,7 @@ _active_is_mm() {
 
 _mm_ready() {
 	[ -n "$1" ] || return 1
-	_mr_f="/tmp/5gmodem_smsmm_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
+	_mr_f="/tmp/5gmodem/smsmm_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"
 	_mr_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 	case "$_mr_now" in ''|*[!0-9]*) _mr_now=0 ;; esac
 	_mr_old=""; _mr_t=0
@@ -452,7 +452,7 @@ _kb_out() {
 case "$1" in
 	newdump)
 		# НЕПРОЧИТАННЫЕ ВХОДЯЩИЕ В JSON для внешних программ (файл-зеркало
-		# /tmp/5gmodem_sms_new.json, пишет sessionwatch раз в круг). «Новое» =
+		# /tmp/5gmodem/sms_new.json, пишет sessionwatch раз в круг). «Новое» =
 		# сообщение из recv, чей ключ sender|timestamp ещё НЕ в seen - ровно то,
 		# что подсвечивает страница «Входящие» и шлёт Telegram. Обходим ВСЕ модемы
 		# (как tgnotify): у каждого свой seen (sms_seen.<путь>), в каждой записи -
@@ -523,7 +523,7 @@ case "$1" in
 		# (SIM у обычных модемов, архив у MM), так что переживает перезагрузку - после
 		# бута первый круг sessionwatch наполнит его заново. for=<путь> - считать
 		# только этот модем (его вкладка); без аргумента - по всем.
-		_ncf="/tmp/5gmodem_sms_new.json"
+		_ncf="/tmp/5gmodem/sms_new.json"
 		_nc_for=""
 		for _nc_a in "$@"; do case "$_nc_a" in for=*) _nc_for="${_nc_a#for=}" ;; esac; done
 		[ -f "$_ncf" ] || { echo 0; exit 0; }
@@ -807,7 +807,7 @@ _q_send_one() {   # $1 - файл
 			| sed -n "s|.*device: *||p" | head -1 | tr -d " '")
 		if [ -n "$_qs_uid" ]; then
 			logger -t 5gmodem "smsbridge: last attempt - borrowing the modem from ModemManager for the send"
-			( mmcli --inhibit-device="$_qs_uid" >/dev/null 2>&1 & echo $! > /tmp/5gmodem_sms_inhibit.pid ) 
+			( mmcli --inhibit-device="$_qs_uid" >/dev/null 2>&1 & echo $! > /tmp/5gmodem/sms_inhibit.pid ) 
 			_qs_w=0
 			while [ "$_qs_w" -lt 15 ]; do
 				mmcli -L 2>/dev/null | grep -q "/Modem/" || break
@@ -815,8 +815,8 @@ _q_send_one() {   # $1 - файл
 			done
 			_send_one "$_qs_port" "$_qs_to" "$_qs_txt" slow
 			_qs_rc=$?
-			kill "$(cat /tmp/5gmodem_sms_inhibit.pid 2>/dev/null)" 2>/dev/null
-			rm -f /tmp/5gmodem_sms_inhibit.pid
+			kill "$(cat /tmp/5gmodem/sms_inhibit.pid 2>/dev/null)" 2>/dev/null
+			rm -f /tmp/5gmodem/sms_inhibit.pid
 			logger -t 5gmodem "smsbridge: modem returned to ModemManager (send $([ "$_qs_rc" = 0 ] && echo succeeded || echo failed))"
 		fi
 	fi
@@ -929,7 +929,7 @@ case "$BOX" in
 	*)      STORE="$2"; PORT="$3" ;;
 esac
 
-_DJ_FILE="/tmp/5gmodem_smsdel_$(printf '%s' "$_TGT_PATH" | tr -c 'A-Za-z0-9' '_').json"
+_DJ_FILE="/tmp/5gmodem/smsdel_$(printf '%s' "$_TGT_PATH" | tr -c 'A-Za-z0-9' '_').json"
 _DJ_OK=""; _DJ_FAIL=""; _DJ_DONE=0; _DJ_TOTAL=0
 
 _dj_pid() {
@@ -1079,7 +1079,7 @@ if [ "$BOX" = delete-run ]; then _AT_LOCKED=1; else at_lock "$PORT" 15; _AT_LOCK
 # «-s ME» (хранилище не прочиталось), которая у FM350 уводит приём на SIM.
 # Живой отчёт 14.09.2026 (FM350-GL, 2.5.1): «sms_tool -s ME status» в
 # D-состоянии на ttyUSB3, порт метрик занят восемь минут подряд.
-_ST_CACHE="/tmp/5gmodem_smsstatus_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+_ST_CACHE="/tmp/5gmodem/smsstatus_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
 if [ "$BOX" = status ] && [ "$_AT_LOCKED" != 0 ] && ! _via_mm; then
 	cat "$_ST_CACHE" 2>/dev/null
 	exit 0
@@ -1440,7 +1440,7 @@ _tz_tag() {
 	_tt_j="$1"
 	case "$(_smstool)" in */sms_tool_mm) printf '%s' "$_tt_j"; return ;; esac
 	case "$_tt_j" in *'"index":'*) ;; *) printf '%s' "$_tt_j"; return ;; esac
-	_tt_c="/tmp/5gmodem_smstz_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+	_tt_c="/tmp/5gmodem/smstz_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
 	_tt_sig=$(printf '%s' "$_tt_j" | jsonfilter -e '@.msg[*].index' -e '@.msg[*].timestamp' 2>/dev/null | tr '\n' ' ' | md5sum | cut -c1-16)
 	if [ "$(head -n 1 "$_tt_c" 2>/dev/null)" != "#$_tt_sig" ]; then
 		_tt_raw=$(_sms_run 45 $(_smstool) -d "$PORT" -r -j $_STORE_ARG recv 2>/dev/null | tr '{' '\n' | _pdu_tz)
@@ -1612,7 +1612,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 	# ящик всё-таки заполняется; молчать о них нельзя, но и круг сторожа
 	# засорять незачем. Раз в час, с подсказкой, где смотреть подробности.
 	if [ "$_ap_stuck" -gt 0 ]; then
-		_ap_mk=/tmp/5gmodem_arch_stuck.stamp
+		_ap_mk=/tmp/5gmodem/arch_stuck.stamp
 		_ap_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 		_ap_prev=$(cat "$_ap_mk" 2>/dev/null)
 		case "$_ap_prev" in ''|*[!0-9]*) _ap_prev=0 ;; esac
@@ -1642,7 +1642,7 @@ recv|unseen|sent|status|dump|archive-run|archive-why)
 	# ВСЕ модемы (SMS_MODEM=<путь>): без этой проверки круг бота по соседнему
 	# модему переписал бы настройку активного его хранилищем.
 	if ! _via_mm && [ "$_TGT_PATH" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ]; then
-		_cs_mark="/tmp/5gmodem_cpms_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+		_cs_mark="/tmp/5gmodem/cpms_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
 		# Отметка ставится ПО УСПЕХУ, а не по факту попытки: порт мог быть занят
 		# опросом метрик, и «сходили один раз» означало бы промолчать до
 		# перезагрузки. Но и вечно долбиться нельзя - молчащий модем стоил бы

@@ -90,7 +90,7 @@ if [ "$_MM_OK" = "1" ]; then
 	_MM_TAC=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
 	_MM_CID=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
 	if [ -z "$_MM_TAC$_MM_CID" ] && [ -n "$_MMIDX" ]; then
-		_MM_LS="/tmp/5gmodem_mmloc_${_MKEY:-x}"
+		_MM_LS="/tmp/5gmodem/mmloc_${_MKEY:-x}"
 		_MM_LN=$(cut -d. -f1 /proc/uptime)
 		_MM_LW=$(cat "$_MM_LS" 2>/dev/null)
 		case "$_MM_LW" in ''|*[!0-9]*) _MM_LW=0 ;; esac

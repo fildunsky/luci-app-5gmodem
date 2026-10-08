@@ -76,7 +76,7 @@ return view.extend({
 				return E('div', { 'style': 'color:' + color }, [ ln.length ? ln : ' ' ]);
 			});
 			dom.content(document.getElementById('preout'), spans);
-			fs.write('/tmp/debug_result.txt', [ res.stdout || '' ]);
+			fs.write('/tmp/5gmodem/debug_result.txt', [ res.stdout || '' ]);
 		}).catch(function(err) {
 			ui.addNotification(null, E('p', [ err ]))
 		}).finally(function() {
@@ -110,11 +110,11 @@ return view.extend({
 		viewbc.style.display = 'none';
 		var viewbd = document.getElementById('download');
 		viewbd.style.display = 'none';
-		fs.write('/tmp/debug_result.txt', '');
+		fs.write('/tmp/5gmodem/debug_result.txt', '');
 	},
 
 	handleDownload: function(ev) {
-		return L.resolveDefault(fs.read_direct('/tmp/debug_result.txt'), null).then(function (res) {
+		return L.resolveDefault(fs.read_direct('/tmp/5gmodem/debug_result.txt'), null).then(function (res) {
 				if (res) {
 					var link = E('a', {
 						'download': 'debug_result.txt',
@@ -1644,7 +1644,7 @@ return view.extend({
 						});
 					}
 					if (st.state !== 'done') { throw new Error(_('Collecting logs failed')); }
-					return fs.read_direct('/tmp/5gmodem-diag.txt', 'blob');
+					return fs.read_direct('/tmp/5gmodem/diag.txt', 'blob');
 				});
 			};
 

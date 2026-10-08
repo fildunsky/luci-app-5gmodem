@@ -60,7 +60,7 @@ _ALT_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
 # %MEAS="8" отдаёт все четыре одной строкой. Сборка без него (в руководстве
 # LI17x тип 8 есть не во всех редакциях) получает те же уровни четырьмя
 # одиночными запросами - негативный кэш держит выбор до перезагрузки роутера.
-_ALT_NO8="/tmp/5gmodem_alt_nomeas8_$_ALT_KEY"
+_ALT_NO8="/tmp/5gmodem/alt_nomeas8_$_ALT_KEY"
 if [ ! -f "$_ALT_NO8" ]; then
 	_ALT_Q=$(_alt_at 'AT%MEAS="8"')
 	_ALT_V=$(_alt_in "$(_alt_kv "$_ALT_Q" RSRP)" -140 -44); [ -n "$_ALT_V" ] && RSRP="$_ALT_V"
@@ -185,7 +185,7 @@ esac
 # --- Температура, мощность передатчика, потери на трассе ---------------------
 # Меняются медленно, а порт у модуля один на всё: опрос раз в 30 c, между
 # ними - прошлое значение. Иначе каждый тик страницы стоил бы ещё трёх обменов.
-_ALT_SLOW="/tmp/5gmodem_alt_slow_$_ALT_KEY"
+_ALT_SLOW="/tmp/5gmodem/alt_slow_$_ALT_KEY"
 _ALT_NOW=$(cut -d. -f1 /proc/uptime)
 _ALT_TS=$(sed -n '1p' "$_ALT_SLOW" 2>/dev/null)
 case "$_ALT_TS" in ''|*[!0-9]*) _ALT_TS=0 ;; esac
@@ -226,7 +226,7 @@ fi
 # CellID больше 503 - это уже глобальный идентификатор, а не PCI: такую строку
 # не показываем, выдумывать PCI не из чего.
 # НЕГАТИВНЫЙ КЭШ: сборка без типа 97 платила бы лишним обменом на каждом опросе.
-_ALT_NON="/tmp/5gmodem_alt_nonbr_$_ALT_KEY"
+_ALT_NON="/tmp/5gmodem/alt_nonbr_$_ALT_KEY"
 if [ -z "$NEIGHBORS" ] && [ ! -f "$_ALT_NON" ]; then
 	_ALT_N=$(_alt_at 'AT%MEAS="97"')
 	case "$_ALT_N" in

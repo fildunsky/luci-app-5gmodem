@@ -90,7 +90,7 @@ observe() {
 	_u0=$(ifstatus "$IFACE" | jsonfilter -e '@.uptime')
 	_end=$(( $(now) + _dur ))
 	while :; do
-		_st=$(cat "/tmp/5gmodem_health/$IFACE" 2>/dev/null)
+		_st=$(cat "/tmp/5gmodem/health/$IFACE" 2>/dev/null)
 		_up=$(ifstatus "$IFACE" | jsonfilter -e '@.uptime')
 		_m=$(ip -4 route show default dev "$DEV" 2>/dev/null | sed -n 's/.*metric \([0-9]*\).*/\1/p' | head -n 1)
 		_dns=$(grep -c "Interface $IFACE" /tmp/resolv.conf.d/resolv.conf.auto 2>/dev/null)

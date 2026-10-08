@@ -386,7 +386,7 @@ run)
 	_dbc=$(uci -q get "$CFG.$_s.debounce")
 	case "$_dbc" in ''|*[!0-9]*) _dbc=0 ;; esac
 	if [ "$_dbc" -gt 0 ]; then
-		_m="/tmp/5gmodem_btndbc_${_s}_$_st"
+		_m="/tmp/5gmodem/btndbc_${_s}_$_st"
 		_now=$(cut -d. -f1 /proc/uptime 2>/dev/null); case "$_now" in ''|*[!0-9]*) _now=0 ;; esac
 		_last=$(cat "$_m" 2>/dev/null); case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
 		[ "$_last" -gt 0 ] && [ "$((_now - _last))" -lt "$_dbc" ] && exit 0

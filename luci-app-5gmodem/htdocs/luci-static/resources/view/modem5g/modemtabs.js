@@ -488,7 +488,7 @@ function tabsCacheLoad() {
 }
 
 /* СЛЕЖЕНИЕ ЗА ПОЯВЛЕНИЕМ/ИСЧЕЗНОВЕНИЕМ МОДЕМА - БЕЗ ЗАПУСКА СКРИПТОВ.
-   listmodems.sh держит готовый JSON в /tmp/5gmodem_listmodems.cache, а
+   listmodems.sh держит готовый JSON в /tmp/5gmodem/listmodems.cache, а
    hotplug-хук (etc/hotplug.d/usb/71-5gmodem-resolve) при add/remove модема
    сбрасывает этот кэш сразу и пересобирает через 5 секунд, когда порты
    устоялись. Значит браузеру не нужно ничего исполнять: достаточно ЧИТАТЬ
@@ -496,7 +496,7 @@ function tabsCacheLoad() {
    изменился, перечитать состояние целиком (listmodems + active) и перерисовать
    ряд. В покое опрос не стоит почти ничего, а вставленный модем появляется
    сам, без перезагрузки страницы. */
-var LIST_CACHE = '/tmp/5gmodem_listmodems.cache';
+var LIST_CACHE = '/tmp/5gmodem/listmodems.cache';
 
 /* Сигнатура состава модемов. Кроме пути включает ЖЕЛЕЗО (vid:pid + модель +
    оператор): модем меняют в ТОТ ЖЕ разъём, и по одному лишь пути такая замена

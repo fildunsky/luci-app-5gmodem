@@ -18,7 +18,7 @@ sample() {
 		[ "$_age" -gt 60 ] && _old=$((_old + 1))
 	done
 	_rp=$(for _p in $(pidof rpcd); do awk '/VmRSS/ {print $2}' /proc/$_p/status; done | awk '{s+=$1} END {print s+0}')
-	_tf=$(ls /tmp/5gmodem_st.* /tmp/stand-test.* 2>/dev/null | wc -l)
+	_tf=$(ls /tmp/5gmodem/st.* /tmp/stand-test.* 2>/dev/null | wc -l)
 	_tmp=$(df /tmp | awk 'NR==2 {print $3}')
 	_ld=$(cut -d' ' -f1 /proc/loadavg)
 	echo "S t=$(cut -d. -f1 /proc/uptime) up=$_isup ifup=$_up memavail=$_av procs=$_pr zombies=$_zo sms_tool=$_st sms_tool_old=$_old rpcd_rss=$_rp tmpfiles=$_tf tmpused=$_tmp load=$_ld"

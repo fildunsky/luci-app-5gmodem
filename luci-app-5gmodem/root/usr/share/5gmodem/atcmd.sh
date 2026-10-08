@@ -68,7 +68,7 @@ if [ "$_rc" = 2 ]; then
 	logger -t 5gmodem "atcmd: queue for $PORT busy for over 8s - running the user command without it"
 	# Сами берём порт мимо очереди: at_query с занятым локом сюда уже не пустит.
 	# Ограничено по времени: зависший модем иначе держал бы порт до таймаута rpcd.
-	_ac_o=$(mktemp /tmp/5gmodem_atcmd.XXXXXX 2>/dev/null) || _ac_o="/tmp/5gmodem_atcmd.$$"
+	_ac_o=$(mktemp /tmp/5gmodem/atcmd.XXXXXX 2>/dev/null) || _ac_o="/tmp/5gmodem/atcmd.$$"
 	sms_tool -d "$PORT" at "$CMD" > "$_ac_o" 2>/dev/null &
 	_ac_p=$!
 	( sleep "$(( ${TMO:-8} + 1 ))"; kill "$_ac_p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _ac_k=$!

@@ -32,7 +32,7 @@ qmi_pool_exhausted() {
 	[ -n "$1" ] && [ -e "$1" ] || return 1
 	# -p: спрашиваем через прокси (свой клиент не плодим). Ключа -t у qmicli
 	# нет, на занятом канале он виснет - ограничиваем временем сами.
-	_qpe_o="/tmp/5gmodem_qmipool.$$"
+	_qpe_o="/tmp/5gmodem/qmipool.$$"
 	qmicli -p -d "$1" --nas-get-serving-system >"$_qpe_o" 2>&1 </dev/null &
 	_qpe_p=$!
 	_qpe_n=0
@@ -83,7 +83,7 @@ qmi_pool_recover() {
 	[ -z "$_trig" ] && _mm_failed_unknowncaps "$_qp" && _trig="MM failed: unknown-capabilities"
 	[ -n "$_trig" ] || return 1
 	# Защита от цикла сбросов: маркер в /tmp (переживает до перезагрузки).
-	_mk="/tmp/5gmodem_qmirecover_$(printf '%s' "$_qp" | tr -c 'A-Za-z0-9' _)"
+	_mk="/tmp/5gmodem/qmirecover_$(printf '%s' "$_qp" | tr -c 'A-Za-z0-9' _)"
 	_qr_recent "$_mk" && return 1
 	# Живой AT-порт этого модема для сброса.
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
@@ -106,7 +106,7 @@ qmi_pool_recover() {
 # поднимается с первой попытки.
 qmi_force_reset() {   # $1 - usb-путь, $2 - причина для журнала
 	_fr_p="$1"; [ -n "$_fr_p" ] || return 1
-	_mk="/tmp/5gmodem_qmirecover_$(printf '%s' "$_fr_p" | tr -c 'A-Za-z0-9' _)"
+	_mk="/tmp/5gmodem/qmirecover_$(printf '%s' "$_fr_p" | tr -c 'A-Za-z0-9' _)"
 	_qr_recent "$_mk" && return 1
 	_lm=$("$RES/listmodems.sh" 2>/dev/null)
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_fr_p\"].tty[*]" 2>/dev/null); do

@@ -1,3 +1,4 @@
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 # Общие помощники. Подключается через "." (не запускается).
 #
 # ЗАЧЕМ. Две операции повторялись по всему коду и уже начали расходиться:
@@ -156,7 +157,7 @@ serial_of() {
 # ICCID), SIM-слоты, диапазоны, QMI-дополнения. Ключ - физический разъём, а он
 # при замене модема тот же. Итог: в новый модем приезжает чужое. Живой случай
 # 01.08.2026: в порт вместо eSIM-модема воткнули SIM7100E, и карточка показывала
-# у него ДВЕ симки и eSIM - из файла `/tmp/5gmodem_slots_1-1.3`, оставшегося от
+# у него ДВЕ симки и eSIM - из файла `/tmp/5gmodem/slots_1-1.3`, оставшегося от
 # предшественника (свежий опрос честно отвечал «слотов нет»). Тем же путём
 # приходили чужие диапазоны, пока кэш bands не сбросишь руками.
 #
@@ -192,26 +193,26 @@ purge_path_caches() {   # $1 - usb-путь
 	# не попадает.
 	_ppc_k=$(snap_key "$1" 2>/dev/null)
 	_ppc_k2=$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')
-	rm -f "/tmp/5gmodem_slots_$1" "/tmp/5gmodem_slots_$1.t" \
-	      "/tmp/5gmodem_bands_$1" "/tmp/5gmodem_bands_$1.t" "/tmp/5gmodem_bands_$1.p" \
-	      "/tmp/5gmodem_qmirecover_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)" \
-	      "/tmp/5gmodem_autoapn_m_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)"* \
-	      "/tmp/5gmodem_portok_$(snap_key "$1" 2>/dev/null)" 2>/dev/null
+	rm -f "/tmp/5gmodem/slots_$1" "/tmp/5gmodem/slots_$1.t" \
+	      "/tmp/5gmodem/bands_$1" "/tmp/5gmodem/bands_$1.t" "/tmp/5gmodem/bands_$1.p" \
+	      "/tmp/5gmodem/qmirecover_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)" \
+	      "/tmp/5gmodem/autoapn_m_$(printf '%s' "$1" | tr -c 'A-Za-z0-9' _)"* \
+	      "/tmp/5gmodem/portok_$(snap_key "$1" 2>/dev/null)" 2>/dev/null
 	[ -n "$_ppc_k" ] && rm -f \
-		"/tmp/5gmodem_metrics_$_ppc_k.json" "/tmp/5gmodem_metrics_$_ppc_k.stamp" \
-		"/tmp/5gmodem_hist_$_ppc_k" "/tmp/5gmodem_ambr_$_ppc_k" \
-		"/tmp/5gmodem_slot_$_ppc_k" "/tmp/5gmodem_slot_$_ppc_k.t" \
-		"/tmp/5gmodem_imei_none_$_ppc_k" \
-		"/tmp/5gmodem_static_$_ppc_k"* "/tmp/5gmodem_qmi_$_ppc_k".* \
-		"/tmp/5gmodem_atca_$_ppc_k" "/tmp/5gmodem_atca_$_ppc_k".* \
-		"/tmp/5gmodem_hilink_metrics_$_ppc_k" "/tmp/5gmodem_hilink_metrics_$_ppc_k".* \
-		"/tmp/5gmodem_atport_$_ppc_k" "/tmp/5gmodem_atport_$_ppc_k".neg 2>/dev/null
-	[ -n "$_ppc_k2" ] && rm -f "/tmp/5gmodem_mmowns_$_ppc_k2" "/tmp/5gmodem_mmports_$_ppc_k2" 2>/dev/null
+		"/tmp/5gmodem/metrics_$_ppc_k.json" "/tmp/5gmodem/metrics_$_ppc_k.stamp" \
+		"/tmp/5gmodem/hist_$_ppc_k" "/tmp/5gmodem/ambr_$_ppc_k" \
+		"/tmp/5gmodem/slot_$_ppc_k" "/tmp/5gmodem/slot_$_ppc_k.t" \
+		"/tmp/5gmodem/imei_none_$_ppc_k" \
+		"/tmp/5gmodem/static_$_ppc_k"* "/tmp/5gmodem/qmi_$_ppc_k".* \
+		"/tmp/5gmodem/atca_$_ppc_k" "/tmp/5gmodem/atca_$_ppc_k".* \
+		"/tmp/5gmodem/hilink_metrics_$_ppc_k" "/tmp/5gmodem/hilink_metrics_$_ppc_k".* \
+		"/tmp/5gmodem/atport_$_ppc_k" "/tmp/5gmodem/atport_$_ppc_k".neg 2>/dev/null
+	[ -n "$_ppc_k2" ] && rm -f "/tmp/5gmodem/mmowns_$_ppc_k2" "/tmp/5gmodem/mmports_$_ppc_k2" 2>/dev/null
 	[ -n "$_ppc_k2" ] && rm -f \
-		"/tmp/5gmodem_metrics_$_ppc_k2.json" "/tmp/5gmodem_metrics_$_ppc_k2.stamp" \
-		"/tmp/5gmodem_slot_$_ppc_k2" "/tmp/5gmodem_slot_$_ppc_k2.t" \
-		"/tmp/5gmodem_imei_none_$_ppc_k2" \
-		"/tmp/5gmodem_static_$_ppc_k2"* "/tmp/5gmodem_qmi_$_ppc_k2".* 2>/dev/null
+		"/tmp/5gmodem/metrics_$_ppc_k2.json" "/tmp/5gmodem/metrics_$_ppc_k2.stamp" \
+		"/tmp/5gmodem/slot_$_ppc_k2" "/tmp/5gmodem/slot_$_ppc_k2.t" \
+		"/tmp/5gmodem/imei_none_$_ppc_k2" \
+		"/tmp/5gmodem/static_$_ppc_k2"* "/tmp/5gmodem/qmi_$_ppc_k2".* 2>/dev/null
 	logger -t 5gmodem "caches for path $1 purged (a different modem is in the port)"
 	return 0
 }
@@ -665,7 +666,7 @@ iface_up() {   # $1 - интерфейс
 	# при восстановлении переиспользовать нельзя - сессия может быть мёртвой,
 	# хотя модем считает её активной (залипание после смены региона). Маркер
 	# читает и удаляет сам прото; для остальных протоколов он безвреден.
-	printf '%s' "$(date +%s 2>/dev/null)" > "/tmp/5gmodem_fibo_cold_$1" 2>/dev/null
+	printf '%s' "$(date +%s 2>/dev/null)" > "/tmp/5gmodem/fibo_cold_$1" 2>/dev/null
 	ubus call network.interface down "{\"interface\":\"$1\"}" >/dev/null 2>&1
 	# ПАУЗА ОБЯЗАТЕЛЬНА, И ПОДЪЁМ НАДО ПРОВЕРИТЬ. netifd разбирает down
 	# асинхронно: пришедший впритык up он теряет, и интерфейс остаётся лежать с
@@ -1034,7 +1035,7 @@ drop_dial_port() {
 mm_owns_path() {   # $1 - usb-путь; код 0 = владеет MM
 	[ -n "$1" ] || return 1
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 1
-	_mo_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mo_c="/tmp/5gmodem/mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 	_mo_v=""
 	if [ -s "$_mo_c" ] && [ -n "$(find "$_mo_c" -mmin -1 2>/dev/null)" ]; then
 		read -r _mo_v 2>/dev/null < "$_mo_c"
@@ -1365,7 +1366,7 @@ qmicli_p() {
 		{ exec 9>&-; } 2>/dev/null
 		return 1
 	fi
-	_qp_bad="/tmp/5gmodem_qmiproxy_bad.${_qp_dev##*/}"
+	_qp_bad="/tmp/5gmodem/qmiproxy_bad.${_qp_dev##*/}"
 	_qp_now=$(cut -d. -f1 /proc/uptime)
 	_qp_skip=""
 	if [ -n "$_qp_direct" ] && [ -f "$_qp_bad" ]; then
@@ -1378,7 +1379,7 @@ qmicli_p() {
 	# mktemp, а не $$: в подоболочке `( ... ) &` $$ остаётся PID родителя, и фон
 	# делил файл ответа с одновременным вызовом в родителе (аудит 12.09.2026,
 	# группа 2, №6). Осиротевшие при kill подметает _sweep_tmp сторожа.
-	_qp_o=$(mktemp /tmp/5gmodem_qmicli.XXXXXX 2>/dev/null) || _qp_o="/tmp/5gmodem_qmicli.$$.$(date +%s)"
+	_qp_o=$(mktemp /tmp/5gmodem/qmicli.XXXXXX 2>/dev/null) || _qp_o="/tmp/5gmodem/qmicli.$$.$(date +%s)"
 	# Для qmi-интерфейса пробу через прокси пропускаем совсем (см. выше).
 	[ "$_qp_proto" = "qmi" ] && _qp_skip=1
 	proto_in direct "$_qp_proto" && [ -n "$_qp_direct" ] && _qp_skip=1
@@ -1599,7 +1600,7 @@ at_query() {
 	# Ограничение времени: sms_tool своего не имеет. Сторож ЗАКРЫВАЕТ унаследованные
 	# дескрипторы - иначе он держит stdout вызывающего, и читатель ждёт EOF лишние
 	# секунды уже после того, как ответ готов (эти грабли стоили 1.4 c на опрос).
-	_aq_o=$(mktemp /tmp/5gmodem_atq.XXXXXX 2>/dev/null) || _aq_o="/tmp/5gmodem_atq.$$.$(date +%s)"   # см. _qp_o
+	_aq_o=$(mktemp /tmp/5gmodem/atq.XXXXXX 2>/dev/null) || _aq_o="/tmp/5gmodem/atq.$$.$(date +%s)"   # см. _qp_o
 	# 8>&- 9>&- ОБЯЗАТЕЛЬНЫ: fd 8 - это flock на самом порту (atlock.sh), и дети
 	# наследуют его. Без закрытия killer-подоболочка ДЕРЖАЛА порт до конца своего
 	# sleep ПОСЛЕ выхода at_query - следующий at_lock ждал до 6-8 c. Тот же урок
@@ -1647,7 +1648,7 @@ sms_cmd_key() {   # $1 - отправитель, $2 - время, $3 - текс�
 # ИДЕНТИФИКАТОР SIM-КАРТЫ (ICCID) по usb-пути модема - из снимка метрик, без
 # единого обращения к модему. Пусто, если снимка нет или карта не прочиталась.
 sms_card_id() {   # $1 - usb-путь
-	_sci=$(jsonfilter -e '@.iccid' < "/tmp/5gmodem_metrics_$(snap_key "$1").json" 2>/dev/null \
+	_sci=$(jsonfilter -e '@.iccid' < "/tmp/5gmodem/metrics_$(snap_key "$1").json" 2>/dev/null \
 		| tr -cd '0-9')
 	[ ${#_sci} -ge 10 ] || return 1
 	printf '%s' "$_sci"

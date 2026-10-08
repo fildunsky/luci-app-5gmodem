@@ -321,7 +321,7 @@ modem_imei() {   # $1 - usb-путь
 			return 1
 		fi
 	fi
-	_mi_nc="/tmp/5gmodem_imei_none_$(snap_key "$1")"
+	_mi_nc="/tmp/5gmodem/imei_none_$(snap_key "$1")"
 	_mi_now=$(uptime_s)
 	_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \
 		| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')

@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # sms_tool-compatible wrapper around ModemManager (mmcli).
 #
@@ -90,7 +91,7 @@ list_paths() {
 # /tmp and are keyed by MM index - both reset together on reboot - and count
 # uptime, so a clock jump cannot make a fresh object look old.
 STALE_RX_SECS=120
-RX_MARK_DIR=/tmp/5gmodem_smsrx
+RX_MARK_DIR=/tmp/5gmodem/smsrx
 cleanup_stale_rx() {
 	NOW=$(cut -d. -f1 /proc/uptime)
 	mkdir -p "$RX_MARK_DIR" 2>/dev/null

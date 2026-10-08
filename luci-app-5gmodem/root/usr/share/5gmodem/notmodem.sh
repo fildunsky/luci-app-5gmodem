@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # УСТРОЙСТВА, КОТОРЫЕ МОДЕМАМИ НЕ ЯВЛЯЮТСЯ (по vid:pid).
 #
@@ -349,7 +350,7 @@ case "$0" in
 				fi
 				uci -q commit 5gmodem
 				# кэши списка модемов держат прежний состав устройств
-				rm -f /tmp/5gmodem_listmodems.* /tmp/luci-indexcache* 2>/dev/null
+				rm -f /tmp/5gmodem/listmodems.* /tmp/luci-indexcache* 2>/dev/null
 				echo ok
 				;;
 			scan)

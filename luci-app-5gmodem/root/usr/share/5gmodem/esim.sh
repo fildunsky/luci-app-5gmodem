@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Управление eSIM (eUICC) активного модема через lpac (SGP.22).
 #
@@ -29,7 +30,7 @@ RES="/usr/share/5gmodem"
 # в tmpfs навсегда остаются res/loop/mloop/at/wdmprobe - утечка памяти при каждом
 # открытии вкладки на молчащем lpac. Порог 30 минут: самая долгая живая операция
 # (загрузка профиля) укладывается в 10 минут сторожа. (аудит 12.09.2026)
-find /tmp -maxdepth 1 -name '5gmodem_esim_*.[0-9]*' -mmin +30 -exec rm -f {} + 2>/dev/null
+find /tmp/5gmodem -maxdepth 1 -name 'esim_*.[0-9]*' -mmin +30 -exec rm -f {} + 2>/dev/null
 
 # lpac бинарь: 2.3.x кладёт его в /usr/lib/lpac/lpac + driver-плагины в
 # /usr/lib/lpac/driver (loader находит их по LPAC_DRIVER_HOME - наш патч, т.к.
@@ -71,12 +72,12 @@ BRIDGE="/usr/share/5gmodem/esim-apdu-bridge.sh"
 # активный модем менялся, find_port проверял ЧУЖОЙ закэшированный порт: на нём
 # открывался eUICC ДРУГОГО модема, и односимочный SIM7600 объявлялся с eSIM,
 # потому что рядом стоял FM350 с настоящей eUICC на /dev/ttyUSB1.
-PORTCACHE="/tmp/5gmodem_esim_port_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')"
+PORTCACHE="/tmp/5gmodem/esim_port_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9' '_')"
 # Живой лог операции: мост дописывает сюда строки прогресса ПО МЕРЕ их прихода,
 # UI читает его во время спиннера. Переживает неудачу - нужен для диагностики.
-LIVELOG="/tmp/5gmodem_esim_progress.log"
+LIVELOG="/tmp/5gmodem/esim_progress.log"
 GSMACERT="/usr/share/5gmodem/certs/gsma-ci.pem"
-CACACHE="/tmp/5gmodem_esim_ca.pem"
+CACACHE="/tmp/5gmodem/esim_ca.pem"
 
 # HTTP-бэкенд lpac: auto|curl|bridge (см. шапку esim-apdu-bridge.sh).
 #   curl   - встроенный в lpac. С mbedTLS не берёт SM-DP+ с сертификатами GSMA CI.
@@ -226,8 +227,8 @@ _mm_owns_channel() {
 # 90 с без eSIM-обращений - список+включение+обновление идут в одно окно, а не
 # по обрыву связи на каждый вызов. Цена захвата - ~1-2 минуты без интернета
 # через модем; UI предупреждает и просит явное согласие.
-_ESIM_INH_PID=/tmp/5gmodem_esim_mminh.pid
-_ESIM_INH_T=/tmp/5gmodem_esim_mminh.t
+_ESIM_INH_PID=/tmp/5gmodem/esim_mminh.pid
+_ESIM_INH_T=/tmp/5gmodem/esim_mminh.t
 _mm_inh_held() { [ -f "$_ESIM_INH_PID" ] && kill -0 "$(cat "$_ESIM_INH_PID" 2>/dev/null)" 2>/dev/null; }
 _mm_inh_touch() { cut -d. -f1 /proc/uptime > "$_ESIM_INH_T" 2>/dev/null; }
 # MM сейчас держит какой-нибудь узел модема (tty/cdc-wdm)? Пока держит - он
@@ -422,7 +423,7 @@ euicc_probe_wdm() {
 	_pwtry=0
 	while [ "$_pwtry" -lt 2 ]; do
 		_pwtry=$((_pwtry + 1))
-		_pwo="/tmp/5gmodem_esim_wdmprobe.$$"
+		_pwo="/tmp/5gmodem/esim_wdmprobe.$$"
 		rm -f "$_pwo"
 		( env $_pw LPAC_HTTP="$(http_local_drv)" "$LPAC" chip info >"$_pwo" 2>/dev/null ) &
 		_pwp=$!
@@ -533,11 +534,11 @@ _mbim_uim_slot() {
 			# enable страница вечно крутила «читаю профили», хотя консоль с
 			# явным слотом работала (тот же живой кейс, вторая серия).
 			_c=""
-			[ -z "$(find /tmp/5gmodem_esim_actslot -mmin +60 2>/dev/null)" ] \
-				&& _c=$(cat /tmp/5gmodem_esim_actslot 2>/dev/null)
+			[ -z "$(find /tmp/5gmodem/esim_actslot -mmin +60 2>/dev/null)" ] \
+				&& _c=$(cat /tmp/5gmodem/esim_actslot 2>/dev/null)
 			case "$_c" in ''|*[!0-9]*) echo 2 ;; *) echo "$_c" ;; esac ;;
 		*)
-			printf '%s' "$_v" > /tmp/5gmodem_esim_actslot 2>/dev/null
+			printf '%s' "$_v" > /tmp/5gmodem/esim_actslot 2>/dev/null
 			echo "$_v" ;;
 	esac
 }
@@ -648,7 +649,7 @@ _mbim_use_proxy() {   # $1 - узел cdc-wdm
 		| grep -q '"up": true'; then
 		echo 1; return
 	fi
-	_upc="/tmp/5gmodem_esim_proxyok"
+	_upc="/tmp/5gmodem/esim_proxyok"
 	if [ -s "$_upc" ] && [ -z "$(find "$_upc" -mmin +2 2>/dev/null)" ]; then
 		cat "$_upc"; return
 	fi
@@ -707,7 +708,7 @@ run_lpac() {
 		# нему же решаем, откатывать ли mapping (см. _mbim_skipmap).
 		_MSKIP=$(_mbim_skipmap "$_MDEV")
 		_MHTTP=$(http_local_drv)
-		_MR="/tmp/5gmodem_esim_res.$$"; rm -f "$_MR"
+		_MR="/tmp/5gmodem/esim_res.$$"; rm -f "$_MR"
 		if [ "$_MHTTP" = "stdio" ]; then
 			# HTTP=stdio ЗНАЧИТ «ES9+ делает внешний мост через stdin/stdout».
 			# Здесь lpac запускался НАПРЯМУЮ, без моста: локальным операциям
@@ -720,7 +721,7 @@ run_lpac() {
 			# Ставим мост в пайплайн - APDU по-прежнему нативный mbim (его ветка
 			# в мосте не срабатывает), мост обслуживает только HTTP и пишет
 			# прогресс/итог.
-			_MLOOP="/tmp/5gmodem_esim_mloop.$$"
+			_MLOOP="/tmp/5gmodem/esim_mloop.$$"
 			rm -f "$_MLOOP"; mkfifo "$_MLOOP" 2>/dev/null
 			sh "$BRIDGE" /dev/null "$_MR" "$(ca_bundle)" "$LIVELOG" < "$_MLOOP" \
 				| env LPAC_APDU=mbim LPAC_APDU_MBIM_DEVICE="$_MDEV" \
@@ -776,8 +777,8 @@ run_lpac() {
 		for _c in 1 2 3 4 5 6 7 8; do at_bounded "$PORT" "AT+CCHC=$_c" 2 >/dev/null; done
 		;;
 	esac
-	_RES="/tmp/5gmodem_esim_res.$$"
-	_LOOP="/tmp/5gmodem_esim_loop.$$"
+	_RES="/tmp/5gmodem/esim_res.$$"
+	_LOOP="/tmp/5gmodem/esim_loop.$$"
 	rm -f "$_RES" "$_LOOP"; mkfifo "$_LOOP" 2>/dev/null
 	# Зеркальный пайплайн: мост читает запросы lpac из FIFO (loop), пишет ответы в
 	# pipe -> stdin lpac; stdout lpac -> loop -> stdin моста. Мост выходит на "lpa"
@@ -828,7 +829,7 @@ run_lpac() {
 # AT-команда с ограничением по времени (sms_tool сам таймаута не имеет и на
 # молчащем порту висит ~35 c). Возвращает ответ без CR.
 at_bounded() {
-	_ao="/tmp/5gmodem_esim_at.$$"
+	_ao="/tmp/5gmodem/esim_at.$$"
 	sms_tool -d "$1" at "$2" > "$_ao" 2>/dev/null &
 	_ap=$!
 	# fd отвязаны ОТ ПОДОБОЛОЧКИ: иначе осиротевший `sleep` держит stdout
@@ -940,7 +941,7 @@ esim_active() {   # AT+SIMTYPE: 1 = ESIM
 	case "$(readlink -f "/sys/class/usbmisc/${_ea_w##*/}/device/driver" 2>/dev/null)" in
 		*/cdc_mbim) _ea_mb="--device-open-mbim" ;;
 	esac
-	_ea_c="/tmp/5gmodem_esim_act_$(printf '%s' "$_ea_w" | tr -c 'A-Za-z0-9' '_')"
+	_ea_c="/tmp/5gmodem/esim_act_$(printf '%s' "$_ea_w" | tr -c 'A-Za-z0-9' '_')"
 	if ! pidof ModemManager >/dev/null 2>&1 && _wdm_owned_by_netifd "$_ea_w"; then
 		[ "$(cat "$_ea_c" 2>/dev/null)" = 0 ] && return 1
 		return 0
@@ -1281,7 +1282,7 @@ download-bg)
 	# сразу), итог (многострочный O) пишем в файл; фронт опрашивает download-status.
 	# Так же поступает EasyLPAC: cmd.Run() без таймаута ждёт медленный eUICC.
 	[ -n "$2" ] || { echo '{"started":0,"error":"no code"}'; exit 0; }
-	_DLRES="/tmp/5gmodem_esim_dlresult"
+	_DLRES="/tmp/5gmodem/esim_dlresult"
 	if [ -f "$_DLRES.running" ]; then
 		_wp=$(cat "$_DLRES.running" 2>/dev/null)
 		[ -n "$_wp" ] && [ -d "/proc/$_wp" ] && { echo '{"started":0,"busy":1}'; exit 0; }
@@ -1301,7 +1302,7 @@ download-status)
 	# Идемпотентно: идёт -> {"dlstate":"running"}; готово -> отдаём итог O (многостроч-
 	# ный, НЕ удаляем - почистит следующий download-bg); нет ничего -> {"dlstate":"idle"};
 	# воркер умер без итога -> lpa-ошибка.
-	_DLRES="/tmp/5gmodem_esim_dlresult"
+	_DLRES="/tmp/5gmodem/esim_dlresult"
 	[ -f "$_DLRES" ] && { cat "$_DLRES"; exit 0; }
 	if [ -f "$_DLRES.running" ]; then
 		_wp=$(cat "$_DLRES.running" 2>/dev/null)
@@ -1331,7 +1332,7 @@ setshow)
 	esac
 	uci -q commit 5gmodem
 	# Кэш статуса протух - при возврате в «авто» надо переспросить.
-	rm -f "/tmp/5gmodem_esimstat_$_AP" 2>/dev/null
+	rm -f "/tmp/5gmodem/esimstat_$_AP" 2>/dev/null
 	echo '{"result":"ok"}'
 	exit 0
 	;;
@@ -1356,7 +1357,7 @@ setapdu)
 		*)                       uci -q delete "5gmodem.@5gmodem[0].esim_apdu" 2>/dev/null ;;
 	esac
 	uci -q commit 5gmodem
-	rm -f /tmp/5gmodem_esimstat_* 2>/dev/null
+	rm -f /tmp/5gmodem/esimstat_* 2>/dev/null
 	echo '{"result":"ok"}'
 	exit 0
 	;;
@@ -1383,7 +1384,7 @@ setslot)
 			;;
 	esac
 	uci -q commit lpac
-	rm -f /tmp/5gmodem_esimstat_* /tmp/5gmodem_esim_actslot 2>/dev/null
+	rm -f /tmp/5gmodem/esimstat_* /tmp/5gmodem/esim_actslot 2>/dev/null
 	echo '{"result":"ok"}'
 	exit 0
 	;;
@@ -1450,8 +1451,8 @@ recheck)
 	# который при первой пробе молчал, навсегда остался бы «без eSIM».
 	# Снимаем и кэш статуса, и кэш eUICC-порта - второй мог указывать на порт,
 	# исчезнувший при переперечислении.
-	rm -f "/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
-	      "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
+	rm -f "/tmp/5gmodem/esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
+	      "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" \
 	      "$PORTCACHE" 2>/dev/null
 	exec "$0" status-probe
 	;;
@@ -1461,7 +1462,7 @@ dump-cached)
 	# dump освежает его следом. Кэш пишет сам dump (только валидный результат)
 	# и стирают операции (enable/disable/delete/download) и recheck.
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
-	[ -n "$_AP" ] && [ -s "/tmp/5gmodem_esimdump_$_AP" ] && { cat "/tmp/5gmodem_esimdump_$_AP"; exit 0; }
+	[ -n "$_AP" ] && [ -s "/tmp/5gmodem/esimdump_$_AP" ] && { cat "/tmp/5gmodem/esimdump_$_AP"; exit 0; }
 	echo '{}'
 	exit 0
 	;;
@@ -1514,7 +1515,7 @@ status-cached)
 	_ES_FORCE=$(uci -q get "5gmodem.$_es_sec.esim_show")
 	[ "$_ES_FORCE" = "0" ] && { echo '{"available":0,"active":0,"forced":1}'; exit 0; }
 	[ -x "$LPAC" ] || { echo '{"available":0,"active":0,"reason":"nolpac"}'; exit 0; }
-	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
+	_SCACHE="/tmp/5gmodem/esimstat_$_AP"
 	_scache_get "$_SCACHE" && exit 0
 	echo '{"unknown":1}'
 	exit 0
@@ -1523,7 +1524,7 @@ status-probe)
 	AVAIL=0; ACTIVE=0
 	_AP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	_es_sec="m_$(echo "$_AP" | sed 's/[^A-Za-z0-9]/_/g')"
-	_SCACHE="/tmp/5gmodem_esimstat_$_AP"
+	_SCACHE="/tmp/5gmodem/esimstat_$_AP"
 	# КАНАЛ ЗАНЯТ СОЕДИНЕНИЕМ - НЕ ПРОБУЕМ И НЕ ХОРОНИМ ЧИП.
 	#
 	# Пока интерфейс поднят, узлом cdc-wdm владеет umbim, и выбор бэкенда
@@ -1752,7 +1753,7 @@ if [ -z "$_esim_may_disrupt" ]; then
 fi
 
 # ---- всё остальное: под замком (у eUICC один логический канал) ---------------
-LOCK="/tmp/5gmodem_esim.lock"
+LOCK="/tmp/5gmodem/esim.lock"
 if ! mkdir "$LOCK" 2>/dev/null; then
 	# ЗАМОК-СИРОТА. Страницу закрыли/перезагрузили посреди операции - процесс
 	# умер, а каталог остался, и до 6 минут ВСЁ отвечало busy («eUICC не
@@ -1872,7 +1873,7 @@ _uplink_restore() {
 # eSIM оставлял в памяти файл (а _LOOP/_MLOOP - ещё и FIFO) навсегда. Глоб ловит
 # res/loop/mloop/at/wdmprobe - все они кончаются на PID этого процесса.
 # (аудит 12.09.2026)
-trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null; rm -f /tmp/5gmodem_esim_*.$$ 2>/dev/null' EXIT INT TERM HUP
+trap '_uplink_restore; rm -rf "$LOCK" 2>/dev/null; rm -f /tmp/5gmodem/esim_*.$$ 2>/dev/null' EXIT INT TERM HUP
 
 case "$1" in
 	download|enable|disable|delete|nickname|flush|notif|notifications|dump-free) _uplink_release ;;
@@ -2000,30 +2001,30 @@ dump-free|dump)
 	if [ -n "$_AP" ] && printf '%s' "$_OUT" \
 	   | jsonfilter -e '@.profiles.payload.code' 2>/dev/null | grep -qx 0; then
 		# Чип ответил - старый приговор «чипа нет» больше не имеет силы.
-		printf '{"available":1,"active":1}\n' > "/tmp/5gmodem_esimstat_$_AP"
-		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_esimstat_$_AP.t"
-		printf '%s\n' "$_OUT" > "/tmp/5gmodem_esimdump_$_AP.tmp" \
-			&& mv "/tmp/5gmodem_esimdump_$_AP.tmp" "/tmp/5gmodem_esimdump_$_AP"
+		printf '{"available":1,"active":1}\n' > "/tmp/5gmodem/esimstat_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem/esimstat_$_AP.t"
+		printf '%s\n' "$_OUT" > "/tmp/5gmodem/esimdump_$_AP.tmp" \
+			&& mv "/tmp/5gmodem/esimdump_$_AP.tmp" "/tmp/5gmodem/esimdump_$_AP"
 	fi
 	echo "$_OUT"
 	;;
 enable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
-	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+	rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile enable "$2"); flush_notifications
 	esim_reset_after_switch_maybe "$O"
 	_ers_echo "$O"
 	;;
 disable)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
-	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+	rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile disable "$2"); flush_notifications
 	esim_reset_after_switch_maybe "$O"
 	_ers_echo "$O"
 	;;
 delete)
 	[ -n "$2" ] || { err "no iccid"; exit 0; }
-	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+	rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	O=$(do_lpac 60 profile delete "$2"); flush_notifications; echo "$O"
 	;;
 nickname)
@@ -2032,12 +2033,12 @@ nickname)
 	;;
 download)
 	[ -n "$2" ] || { err "no activation code"; exit 0; }
-	rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+	rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 	: > "$LIVELOG"
 	# es9err (тело ES9+-ошибки с кодами GSMA) чистим ОДИН РАЗ до запуска: bridge
 	# допишет его при неудаче и НЕ трогает на старте, чтобы ошибка пережила retry
 	# внутри do_lpac. Убираем файл прошлой попытки, чтобы не прицепить чужие коды.
-	_ERRFILE="/tmp/5gmodem_esim_res.$$.es9err"
+	_ERRFILE="/tmp/5gmodem/esim_res.$$.es9err"
 	rm -f "$_ERRFILE"
 	# Сторож 600 c (не 240): eUICC FM350 медленный на крипто-Store-Data, а фонового
 	# режима 60-секундный потолок uhttpd больше не режет (см. download-bg).
@@ -2123,7 +2124,7 @@ download)
 			sleep 5
 			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_cur" >/dev/null 2>&1
 			sleep 8
-			rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+			rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 		fi
 	fi
 	flush_notifications
@@ -2150,7 +2151,7 @@ download)
 				_PR=$(do_lpac 60 profile enable "$_PI")
 				flush_notifications
 				esim_reset_after_switch_maybe "$_PR"
-				rm -f "/tmp/5gmodem_esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
+				rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 			fi
 		fi
 	fi

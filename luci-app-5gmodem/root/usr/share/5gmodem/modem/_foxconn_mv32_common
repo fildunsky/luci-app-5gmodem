@@ -57,7 +57,7 @@ _MTV=$(printf '%s\n' "$_MT" | awk '
 # «тепло/горячо» ничего не говорит, она даёт только номер ступени.
 # НЕГАТИВНЫЙ КЭШ: команда вендорная, и на сборке без неё каждый опрос платил бы
 # лишним обменом с портом, который делят дозвон, метрики и SMS.
-_MTC="/tmp/5gmodem_nothermlvl_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+_MTC="/tmp/5gmodem/nothermlvl_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 if [ -z "$THERM" ] && [ ! -f "$_MTC" ]; then
 	_MTL=$(_mv32_at "THERM_LVL?")
 	case "$_MTL" in
@@ -393,7 +393,7 @@ fi
 # порядку: в живых выводах порядок совпадал не всегда.
 # НЕГАТИВНЫЙ КЭШ: у части прошивок команд нет, и тогда каждый опрос платил бы
 # двумя заведомо пустыми обменами с портом.
-_MVC="/tmp/5gmodem_novzw_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+_MVC="/tmp/5gmodem/novzw_$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 if [ -z "$NEIGHBORS" ] && [ ! -f "$_MVC" ]; then
 	_MVP=$(_mv32_at "VZWRSRP?")
 	case "$_MVP" in

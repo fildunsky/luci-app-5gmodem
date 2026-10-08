@@ -262,7 +262,7 @@ _mm_fix_atonly() {   # $1 - usb-путь
 	_fstate=$(printf '%s\n' "$_fk" | sed -n 's/^modem\.generic\.state *: *//p')
 	case "$_fstate" in connected|connecting|disconnecting) return 0 ;; esac
 	# анти-цикл: не чаще раза в 5 минут на модем
-	_fmark="/tmp/5gmodem_mmfix_$(printf '%s' "$_fp" | tr -c 'A-Za-z0-9' '_')"
+	_fmark="/tmp/5gmodem/mmfix_$(printf '%s' "$_fp" | tr -c 'A-Za-z0-9' '_')"
 	_fnow=$(cut -d. -f1 /proc/uptime)
 	# Маркера НЕТ - чинить можно. Раньше здесь стоял _flast=0, и сразу после
 	# загрузки (uptime < 300) разница uptime-0 оказывалась меньше порога, то есть
@@ -552,7 +552,7 @@ mm_recover_missing() {
 			if [ -z "$_rb_first" ]; then
 				printf '%s' "$_rb_now" > "$_rb_mk" 2>/dev/null
 			elif [ "$((_rb_now - _rb_first))" -ge 150 ]; then
-				_rb_cd="/tmp/5gmodem_mmrebind_$_rb_key"
+				_rb_cd="/tmp/5gmodem/mmrebind_$_rb_key"
 				_rb_last=$(cat "$_rb_cd" 2>/dev/null)
 				case "$_rb_last" in ''|*[!0-9]*) _rb_last="" ;; esac
 				if [ -z "$_rb_last" ] || [ "$((_rb_now - _rb_last))" -ge 300 ]; then

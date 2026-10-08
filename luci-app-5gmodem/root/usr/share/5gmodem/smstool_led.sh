@@ -5,7 +5,7 @@
 # Licensed to the GNU General Public License v3.0.
 #
 
-DEBUG_FILE="/tmp/my_newsms_log"
+DEBUG_FILE="/tmp/5gmodem/my_newsms_log"
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 

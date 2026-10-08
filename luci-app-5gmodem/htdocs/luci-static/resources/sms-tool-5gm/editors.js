@@ -338,7 +338,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 										link.click();
 										URL.revokeObjectURL(link.href);
 									} else if (name === '_load_gz') {
-										let tmpPath = '/tmp/ussdcodes_upload.tar.gz';
+										let tmpPath = '/tmp/5gmodem/ussdcodes_upload.tar.gz';
 										ui.uploadFile(tmpPath).then(function() {
 												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
@@ -365,7 +365,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 												ui.addNotification(null, E('p', {}, _('Upload error') + ': ' + e.message), 'error');
 											});
 									} else if (name === '_save_gz') {
-										let tmpGz = '/tmp/ussdcodes.tar.gz';
+										let tmpGz = '/tmp/5gmodem/ussdcodes.tar.gz';
 										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {
@@ -755,7 +755,7 @@ let atCommandsManagerDialog = baseclass.extend({
 										link.click();
 										URL.revokeObjectURL(link.href);
 									} else if (name === '_load_gz') {
-										let tmpPath = '/tmp/atcmmds_upload.tar.gz';
+										let tmpPath = '/tmp/5gmodem/atcmmds_upload.tar.gz';
 										ui.uploadFile(tmpPath).then(function() {
 												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
@@ -782,7 +782,7 @@ let atCommandsManagerDialog = baseclass.extend({
 												ui.addNotification(null, E('p', {}, _('Upload error') + ': ' + e.message), 'error');
 											});
 									} else if (name === '_save_gz') {
-										let tmpGz = '/tmp/atcmmds.tar.gz';
+										let tmpGz = '/tmp/5gmodem/atcmmds.tar.gz';
 										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {

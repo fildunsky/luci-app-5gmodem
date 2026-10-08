@@ -67,7 +67,7 @@ _strip_ext_bands() {
 # Модель кэшируем: каждый лишний AT-запрос конкурирует с опросом метрик на общем
 # порту, а при коллизии ответы перепутываются.
 _model() {
-	_mf="/tmp/5gmodem_telit_model_$(basename "$_DEVICE" 2>/dev/null)"
+	_mf="/tmp/5gmodem/telit_model_$(basename "$_DEVICE" 2>/dev/null)"
 	if [ -s "$_mf" ]; then cat "$_mf"; return; fi
 	# ATI на LM960 отдаёт "332" (код продукта Telit) - бесполезен, имя даёт CGMM.
 	sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \

@@ -153,7 +153,7 @@ function pollInstall(tries) {
 		return;
 	}
 	window.setTimeout(function() {
-		L.resolveDefault(fs.read_direct('/tmp/5gmodem_update.json'), '').then(function(txt) {
+		L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), '').then(function(txt) {
 			txt = String(txt || '').trim();
 			if (!txt) { pollInstall(tries + 1); return; }
 			var d = {}; try { d = JSON.parse(txt); } catch (e) { pollInstall(tries + 1); return; }
@@ -183,7 +183,7 @@ function installUpdate() {
 	   вставшего пакета (14.09.2026). Поэтому на ошибке запроса смотрим файл:
 	   установка идёт или уже закончилась - ждём и показываем её итог. */
 	var fallback = function(errText) {
-		return L.resolveDefault(fs.read_direct('/tmp/5gmodem_update.json'), '').then(function(txt) {
+		return L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), '').then(function(txt) {
 			var st = {}; try { st = JSON.parse(String(txt || '').trim() || '{}'); } catch (e) {}
 			if (st.running || st.success != null) { pollInstall(0); return; }
 			updSet('upd-status', errText);

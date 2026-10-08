@@ -87,7 +87,7 @@ Báo cáo có chứa IMEI, IMSI, ICCID và tên nhà mạng, nhưng không có m
 - **Nút cập nhật cơ sở dữ liệu APN** — làm mới cơ sở dữ liệu nhà mạng toàn cầu (GNOME MBPI + AOSP) mà không cần cài lại ứng dụng.
 - **Tự động nhận diện cổng** — cổng AT và giao diện mạng được nhận diện tự động; có thể đặt thủ công.
 - **USB modem không có cổng AT** (Huawei HiLink và các loại tương tự) cũng được hỗ trợ — xem bên dưới.
-- **Telemetry cho nhà thông minh** — một tệp JSON phẳng tại `/tmp/5gmodem_tele.json` (tín hiệu, nhà mạng, chế độ, gộp sóng mang, tốc độ, số SMS) cùng tùy chọn xuất bản qua MQTT với tự động nhận diện Home Assistant; xem [docs/telemetry.md](docs/telemetry.md).
+- **Telemetry cho nhà thông minh** — một tệp JSON phẳng tại `/tmp/5gmodem/tele.json` (tín hiệu, nhà mạng, chế độ, gộp sóng mang, tốc độ, số SMS) cùng tùy chọn xuất bản qua MQTT với tự động nhận diện Home Assistant; xem [docs/telemetry.md](docs/telemetry.md).
 - **`5gtop`** — bảng điều khiển trong terminal với cùng dữ liệu, dành cho khi bạn đang ở SSH chứ không phải trong trình duyệt.
 
 

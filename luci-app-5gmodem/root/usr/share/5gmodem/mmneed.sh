@@ -106,7 +106,7 @@ case "$1" in
 		;;
 	apply|grace|"")
 		if mm_needed; then
-			rm -f /tmp/5gmodem_mmneed_idle
+			rm -f /tmp/5gmodem/mmneed_idle
 			# Запускаем, но НЕ перезапускаем работающий: restart роняет MM на
 			# минуту-две (гонка за имя в D-Bus) и рвёт связь у тех, кем он правит.
 			if ! _running; then
@@ -118,14 +118,14 @@ case "$1" in
 			_mi_ok=1
 			if [ "$1" = grace ]; then
 				_mi_now=$(cut -d. -f1 /proc/uptime)
-				_mi_was=$(cat /tmp/5gmodem_mmneed_idle 2>/dev/null)
+				_mi_was=$(cat /tmp/5gmodem/mmneed_idle 2>/dev/null)
 				case "$_mi_was" in
-					''|*[!0-9]*) echo "$_mi_now" > /tmp/5gmodem_mmneed_idle; _mi_ok=0 ;;
+					''|*[!0-9]*) echo "$_mi_now" > /tmp/5gmodem/mmneed_idle; _mi_ok=0 ;;
 					*) [ "$_mi_was" -le "$_mi_now" ] && [ $((_mi_now - _mi_was)) -lt 300 ] && _mi_ok=0 ;;
 				esac
 			fi
 			if [ "$_mi_ok" = 1 ] && _running; then
-				rm -f /tmp/5gmodem_mmneed_idle
+				rm -f /tmp/5gmodem/mmneed_idle
 				/etc/init.d/modemmanager stop >/dev/null 2>&1
 				/etc/init.d/modemmanager disable >/dev/null 2>&1
 				logger -t 5gmodem "ModemManager stopped: no connected modem is managed by it"

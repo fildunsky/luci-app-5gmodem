@@ -59,7 +59,7 @@ case "$RSSI" in ''|-) [ -n "$_EM_RXLEV" ] && RSSI=$((_EM_RXLEV - 110)) ;; esac
 _EM_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
 _EM_DN=""
 [ -n "$_POLL_AM" ] && _EM_DN=$(cat "/sys/bus/usb/devices/$_POLL_AM/devnum" 2>/dev/null)
-_EM_MARK="/tmp/5gmodem_em7345_noxmci_$_EM_KEY"
+_EM_MARK="/tmp/5gmodem/em7345_noxmci_$_EM_KEY"
 _EM_X=""
 if [ "$(cat "$_EM_MARK" 2>/dev/null)" != "${_EM_DN:-x}" ]; then
 	_EM_X=$(_em_at 'AT+XMCI=1')

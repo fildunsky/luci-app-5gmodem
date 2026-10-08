@@ -106,7 +106,7 @@ fi
 # опрос платил бы двумя заведомо пустыми AT-запросами в порт, который делят
 # дозвон и метрики. Один раз получили ERROR - больше не спрашиваем (кэш в
 # /tmp, то есть до перезагрузки).
-_VNC="/tmp/5gmodem_novzw_$(echo "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+_VNC="/tmp/5gmodem/novzw_$(echo "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 if [ -z "$NEIGHBORS" ] && [ ! -f "$_VNC" ]; then
 	_VP=$(sms_tool -d $DEVICE at "AT+VZWRSRP?" 2>/dev/null | tr -d '\r')
 	case "$_VP" in

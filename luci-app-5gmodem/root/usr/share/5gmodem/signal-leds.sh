@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Индикатор уровня сигнала на светодиодах корпуса (Cudy LT300 и совместимые).
 #
@@ -25,7 +26,7 @@ RES=/usr/share/5gmodem
 CFG=5gmodem
 
 # Каталог светодиодов можно переопределить - нужно для проверки логики без
-# самого устройства (LEDS_DIR=/tmp/fakeleds signal-leds.sh once).
+# самого устройства (LEDS_DIR=/tmp/5gmodem/fakeleds signal-leds.sh once).
 LEDS_DIR="${LEDS_DIR:-/sys/class/leds}"
 
 # Имена светодиодов LT300. Список задаётся в конфиге, если у устройства они

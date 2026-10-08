@@ -82,7 +82,7 @@ opkg install luci-i18n-base-ja
 - **APN データベース更新ボタン** — アプリを再インストールせずに、世界の事業者データベース（GNOME MBPI + AOSP）を更新します。
 - **ポートの自動検出** — AT ポートとネットワークインターフェースを自動で検出します。手動設定も可能です。
 - **AT ポートを持たない USB スティック**（Huawei HiLink とその仲間）にも対応しています。詳しくは後述します。
-- **スマートホーム向けテレメトリ** — `/tmp/5gmodem_tele.json` にフラットな JSON（信号、事業者、モード、アグリゲーション、速度、SMS 件数）を出力し、Home Assistant の自動検出に対応した MQTT 配信も任意で行えます。[docs/telemetry.md](docs/telemetry.md) を参照してください。
+- **スマートホーム向けテレメトリ** — `/tmp/5gmodem/tele.json` にフラットな JSON（信号、事業者、モード、アグリゲーション、速度、SMS 件数）を出力し、Home Assistant の自動検出に対応した MQTT 配信も任意で行えます。[docs/telemetry.md](docs/telemetry.md) を参照してください。
 - **`5gtop`** — ブラウザではなく SSH で作業しているとき向けの、同じデータを表示するターミナルダッシュボード。
 
 ## 動作確認済み:

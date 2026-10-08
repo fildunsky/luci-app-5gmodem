@@ -301,7 +301,7 @@ setbands3g() {
 # шаблоне нет (та же ловушка, что расписана у 3G ниже).
 # (ревью 13.09.2026, форум 4pda)
 _bp_sup() {   # $1 - метка RAT в ответе (LTE / NR5G)
-	_bs_f="/tmp/5gmodem_bpsup_$1_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_bs_f="/tmp/5gmodem/bpsup_$1_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_bs_c=$(cat "$_bs_f" 2>/dev/null)
 	[ -n "$_bs_c" ] && { echo "$_bs_c"; return; }
 	_bs_l=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r' \

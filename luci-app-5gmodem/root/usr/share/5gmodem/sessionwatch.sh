@@ -203,7 +203,7 @@ _sw_sim_ready() {   # $1 - интерфейс
 			case "$_ssr_st" in *'"illegal"'*) _ssr_bad=1 ;; esac ;;
 		*) _ssr_bad=1 ;;
 	esac
-	_ssr_f="/tmp/5gmodem_sw_sim_$_ssr_if"
+	_ssr_f="/tmp/5gmodem/sw_sim_$_ssr_if"
 	if [ -z "$_ssr_bad" ]; then
 		rm -f "$_ssr_f" 2>/dev/null
 		return 0
@@ -218,7 +218,7 @@ _sw_sim_ready() {   # $1 - интерфейс
 
 # Переподнять интерфейс, если не дёргали его совсем недавно.
 _revive() {   # $1 - интерфейс, $2 - причина для журнала
-	_rv_f="/tmp/5gmodem_sw_last_$1"
+	_rv_f="/tmp/5gmodem/sw_last_$1"
 	_rv_now=$(_now)
 	_rv_prev=$(cat "$_rv_f" 2>/dev/null)
 	case "$_rv_prev" in
@@ -284,7 +284,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			case "$_sw_st" in *'"pending": true'*) return 0 ;; esac
 			# Двух кругов подряд достаточно: одиночный промах бывает в момент
 			# штатного передозвона, а ждать дольше незачем - связи всё равно нет.
-			_dflag="/tmp/5gmodem_sw_down_$_if"
+			_dflag="/tmp/5gmodem/sw_down_$_if"
 			if [ -f "$_dflag" ]; then
 				rm -f "$_dflag"
 				# ДЕРЕГИСТРИРОВАН КОМАНДОЙ - ДОЗВОН НЕ ПОЛУЧИТСЯ НИКОГДА.
@@ -297,7 +297,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				# свободном от дозвонщика порте.
 				if [ -n "$_port" ] && ! at_dialer_busy "$_port"; then
 					if proto_in at "$_proto"; then
-						_swcf="/tmp/5gmodem_sw_cops_$_if"
+						_swcf="/tmp/5gmodem/sw_cops_$_if"
 						_swnow=$(_now)
 						_swlast=$(cat "$_swcf" 2>/dev/null)
 						case "$_swlast" in ''|*[!0-9]*) _swlast=0 ;; esac
@@ -340,7 +340,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			fi
 			return 0 ;;
 	esac
-	rm -f "/tmp/5gmodem_sw_down_$_if" "/tmp/5gmodem_sw_sim_$_if" 2>/dev/null
+	rm -f "/tmp/5gmodem/sw_down_$_if" "/tmp/5gmodem/sw_sim_$_if" 2>/dev/null
 
 	if _kernel_proto "$_proto"; then
 		# АДРЕС ИЩЕМ И У ДЕТЕЙ. У qmi/mbim родительский интерфейс адреса НЕ
@@ -379,7 +379,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			# Ждём три круга подряд: одиночный такой такт бывает в момент
 			# нормального дозвона, когда адрес ещё не доехал до netifd.
 			if [ "$_iip" = "connected" ]; then
-				_qf="/tmp/5gmodem_sw_qmistuck_$_if"
+				_qf="/tmp/5gmodem/sw_qmistuck_$_if"
 				_qn=$(cat "$_qf" 2>/dev/null); case "$_qn" in ''|*[!0-9]*) _qn=0 ;; esac
 				_qn=$((_qn + 1)); printf '%s' "$_qn" > "$_qf" 2>/dev/null
 				if [ "$_qn" -ge 3 ]; then
@@ -411,7 +411,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 					# QMI) поднимает адрес без ресета (проверено: SIM7100E 14.08.2026,
 					# raw-ip переживает передозвон - uqmi-откат в 802.3 модем игнорит).
 					# Пробуем ОДИН раз за эпизод; не помогло - падаем в ресет ниже.
-					_qrf="/tmp/5gmodem_sw_rawiptry_$_if"
+					_qrf="/tmp/5gmodem/sw_rawiptry_$_if"
 					if [ ! -f "$_qrf" ] && [ -f /lib/netifd/proto/qmiraw.sh ] \
 					   && [ "$(uci -q get "network.$_if.proto")" = qmi ]; then
 						: > "$_qrf"
@@ -432,11 +432,11 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				fi
 			fi
 		fi
-		[ -n "$_iip" ] && [ "$_iip" != "connected" ] && rm -f "/tmp/5gmodem_sw_qmistuck_$_if" "/tmp/5gmodem_sw_rawiptry_$_if" 2>/dev/null
+		[ -n "$_iip" ] && [ "$_iip" != "connected" ] && rm -f "/tmp/5gmodem/sw_qmistuck_$_if" "/tmp/5gmodem/sw_rawiptry_$_if" 2>/dev/null
 		if [ -z "$_iip" ]; then
 			# Второй раз подряд - только тогда действуем: одиночный пропуск
 			# бывает в момент нормального передозвона.
-			_flag="/tmp/5gmodem_sw_noip_$_if"
+			_flag="/tmp/5gmodem/sw_noip_$_if"
 			if [ -f "$_flag" ]; then
 				rm -f "$_flag"
 				_revive "$_if" "поднят ($_proto), но без адреса"
@@ -444,7 +444,7 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 				: > "$_flag"
 			fi
 		else
-			rm -f "/tmp/5gmodem_sw_noip_$_if" 2>/dev/null
+			rm -f "/tmp/5gmodem/sw_noip_$_if" 2>/dev/null
 		fi
 		return 0
 	fi
@@ -495,7 +495,7 @@ check_once() {
 	# Чей ход делать AT-проверку в этом цикле. Счётчик в /tmp: он должен
 	# переживать отдельные вызовы `once`, но не перезагрузку - после неё порядок
 	# заново, и это нормально.
-	_turnf=/tmp/5gmodem_sw_turn
+	_turnf=/tmp/5gmodem/sw_turn
 	_turn=$(cat "$_turnf" 2>/dev/null)
 	case "$_turn" in ''|*[!0-9]*) _turn=0 ;; esac
 
@@ -583,8 +583,8 @@ EOF
 		_wif=$(uci -q get "$CFG.$_wsec.network")
 		[ -n "$_wif" ] && [ "$(uci -q get "network.$_wif.proto")" = "modemmanager" ] && continue
 		_wk=$(snap_key "$_wp")
-		[ -s "/tmp/5gmodem_metrics_$_wk.json" ] || { _wlist="$_wlist $_wp"; continue; }
-		_wt=$(cat "/tmp/5gmodem_metrics_$_wk.stamp" 2>/dev/null)
+		[ -s "/tmp/5gmodem/metrics_$_wk.json" ] || { _wlist="$_wlist $_wp"; continue; }
+		_wt=$(cat "/tmp/5gmodem/metrics_$_wk.stamp" 2>/dev/null)
 		case "$_wt" in
 			''|*[!0-9]*) _wlist="$_wlist $_wp"; continue ;;
 		esac
@@ -595,7 +595,7 @@ EOF
 	[ "$_wn" -gt 0 ] || return 0
 	# Свой счётчик, отдельный от AT-хода проверки сессии: там список другой (без
 	# MM-модемов), и делить один счётчик значило бы пропускать модемы.
-	_wtf=/tmp/5gmodem_sw_warm
+	_wtf=/tmp/5gmodem/sw_warm
 	_wt=$(cat "$_wtf" 2>/dev/null)
 	case "$_wt" in ''|*[!0-9]*) _wt=0 ;; esac
 	_wk=$(( _wt % _wn )); _wj=0; _wpick=""
@@ -617,7 +617,7 @@ warm_active() {
 	[ -n "$_wba" ] || return 0
 	usb_path_present "$_wba" || return 0
 	bg_at_off "$_wba" && return 0
-	_wbt=$(cat "/tmp/5gmodem_metrics_$(snap_key "$_wba").stamp" 2>/dev/null)
+	_wbt=$(cat "/tmp/5gmodem/metrics_$(snap_key "$_wba").stamp" 2>/dev/null)
 	case "$_wbt" in ''|*[!0-9]*) _wbt=0 ;; esac
 	[ "$(( $(uptime_s) - _wbt ))" -ge "$(( _wb - 10 ))" ] || return 0
 	POLL_MODEM="$_wba" "$RES/5gmodem.sh" json >/dev/null 2>&1
@@ -633,7 +633,7 @@ warm_active() {
 # Закрыли страницу - маркер протухает за 15 c, сбор останавливается сам.
 # SW_BG=1 не даёт нашему же вызову продлевать маркер (иначе вечный цикл).
 _page_refresh() {
-	_pr_t=$(cat /tmp/5gmodem_page_active 2>/dev/null)
+	_pr_t=$(cat /tmp/5gmodem/page_active 2>/dev/null)
 	case "$_pr_t" in ''|*[!0-9]*) return 0 ;; esac
 	[ $(( $(_now) - _pr_t )) -lt 15 ] || return 0
 	_pr_ap=$(active_path)
@@ -645,7 +645,7 @@ _page_refresh() {
 	# в snap_key (lib.sh): не-алфавитно-цифровое в подчёркивание; printf без
 	# перевода строки давал бы ключ без хвостового «_», поэтому echo.
 	_pr_k=$(echo "$_pr_ap" | tr -c 'A-Za-z0-9' '_')
-	_pr_sm=$(cat "/tmp/5gmodem_metrics_${_pr_k}.stamp" 2>/dev/null)
+	_pr_sm=$(cat "/tmp/5gmodem/metrics_${_pr_k}.stamp" 2>/dev/null)
 	case "$_pr_sm" in
 		''|*[!0-9]*) ;;
 		*) [ $(( $(_now) - _pr_sm )) -lt 7 ] && return 0 ;;
@@ -666,25 +666,25 @@ _page_refresh() {
 # вида больше десяти минут быть неоткуда - самый долгий владелец (загрузка
 # профиля eSIM) укладывается в минуты, а опрос - в секунды.
 _sweep_tmp() {
-	find /tmp -maxdepth 1 \( \
-		-name '5gmodem_st.[0-9]*' -o -name '5gmodem_atq.*' \
-		-o -name '5gmodem_qmicli.*' -o -name '5gmodem_providers.[0-9]*' \
-		-o -name '5gmodem_bounded.*' \
-		-o -name '.atprobe.[0-9]*' -o -name '5gmodem_listmodems.cache.tmp.[0-9]*' \
-		-o -name '5gmodem_uim.[0-9]*' -o -name '5gmodem_ttl.[0-9]*.nft' \
-		-o -name '5gmodem_metrics_*.p[0-9]*' \
+	find /tmp/5gmodem -maxdepth 1 \( \
+		-name 'st.[0-9]*' -o -name 'atq.*' \
+		-o -name 'qmicli.*' -o -name 'providers.[0-9]*' \
+		-o -name 'bounded.*' \
+		-o -name '.atprobe.[0-9]*' -o -name 'listmodems.cache.tmp.[0-9]*' \
+		-o -name 'uim.[0-9]*' -o -name 'ttl.[0-9]*.nft' \
+		-o -name 'metrics_*.p[0-9]*' \
 		-o -name '.tgcidr.*' \
 		-o -name 'mbimp.[0-9]*.out' -o -name 'mbimp-keeper.[0-9]*.out' \
-		-o -name '5gmodem_fcc.[0-9]*' -o -name '5gmodem_qmipool.[0-9]*' \
+		-o -name 'fcc.[0-9]*' -o -name 'qmipool.[0-9]*' \
 	\) -mmin +10 -exec rm -f {} + 2>/dev/null
 	# eSIM - ОТДЕЛЬНЫМ ПОРОГОМ: сторож загрузки профиля живёт 600 с, и десять
 	# минут снесли бы файл ответа у ЖИВОЙ загрузки перед самым финалом («timeout»
 	# на ровном месте). Тридцать минут, как в esim.sh (аудит 12.09.2026, группа 3).
-	find /tmp -maxdepth 1 \( \
-		-name '5gmodem_esim_hreq.[0-9]*' -o -name '5gmodem_esim_hbody.[0-9]*' \
-		-o -name '5gmodem_esim_hhdr.[0-9]*' -o -name '5gmodem_esim_res.[0-9]*' \
-		-o -name '5gmodem_esim_wdmprobe.[0-9]*' -o -name '5gmodem_esim_mloop.[0-9]*' \
-		-o -name '5gmodem_esim_loop.[0-9]*' -o -name '5gmodem_esim_at.[0-9]*' \
+	find /tmp/5gmodem -maxdepth 1 \( \
+		-name 'esim_hreq.[0-9]*' -o -name 'esim_hbody.[0-9]*' \
+		-o -name 'esim_hhdr.[0-9]*' -o -name 'esim_res.[0-9]*' \
+		-o -name 'esim_wdmprobe.[0-9]*' -o -name 'esim_mloop.[0-9]*' \
+		-o -name 'esim_loop.[0-9]*' -o -name 'esim_at.[0-9]*' \
 	\) -mmin +30 -exec rm -f {} + 2>/dev/null
 }
 
@@ -698,8 +698,8 @@ case "$1" in
 		# проверяем один раз: есть интерфейс на fibocom/qmiraw, а netifd прото
 		# не знает -> принудительная регистрация (register_proto сам рестартует
 		# сеть только в этом случае, см. его гарды).
-		if [ ! -f /tmp/5gmodem_protoguard ]; then
-			: > /tmp/5gmodem_protoguard
+		if [ ! -f /tmp/5gmodem/protoguard ]; then
+			: > /tmp/5gmodem/protoguard
 			( sleep 45
 			  _pg_h=$(ubus call network get_proto_handlers 2>/dev/null)
 			  for _pg_p in fibocom qmiraw; do
@@ -719,7 +719,7 @@ case "$1" in
 		# адрес не получал вовсе. Ограничитель разрывает такую петлю: если
 		# прокси действительно сирота, следующая попытка всё равно случится.
 		_stray_ok() {
-			_so_f=/tmp/5gmodem_straykill
+			_so_f=/tmp/5gmodem/straykill
 			_so_now=$(cut -d. -f1 /proc/uptime)
 			_so_last=$(cat "$_so_f" 2>/dev/null)
 			case "$_so_last" in ''|*[!0-9]*) _so_last=0 ;; esac
@@ -818,7 +818,7 @@ case "$1" in
 						|| { _sh_noreg=1; break; }
 				done
 				if [ -n "$_sh_noreg" ]; then
-					_sh_f=/tmp/5gmodem_sw_autoreg
+					_sh_f=/tmp/5gmodem/sw_autoreg
 					_sh_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 					_sh_last=$(cat "$_sh_f" 2>/dev/null)
 					case "$_sh_last" in ''|*[!0-9]*) _sh_last=0 ;; esac
@@ -875,15 +875,15 @@ case "$1" in
 			_ucd_l=$(uci -q changes 5gmodem 2>/dev/null)
 			if [ -n "$_ucd_l" ]; then
 				_ucd=$(printf '%s' "$_ucd_l" | md5sum | cut -d' ' -f1)
-				if [ "$(cat /tmp/5gmodem_ucidelta 2>/dev/null)" = "$_ucd" ]; then
+				if [ "$(cat /tmp/5gmodem/ucidelta 2>/dev/null)" = "$_ucd" ]; then
 					uci -q commit 5gmodem 2>/dev/null && \
 						_log "committed a stale staged 5gmodem delta (the settings page could not finish its own commit)"
-					rm -f /tmp/5gmodem_ucidelta
+					rm -f /tmp/5gmodem/ucidelta
 				else
-					printf '%s' "$_ucd" > /tmp/5gmodem_ucidelta
+					printf '%s' "$_ucd" > /tmp/5gmodem/ucidelta
 				fi
 			else
-				rm -f /tmp/5gmodem_ucidelta
+				rm -f /tmp/5gmodem/ucidelta
 			fi
 			# Пересылка новых SMS в Telegram - последней: она ходит в СЕТЬ и в
 			# AT-порт за списком сообщений, поэтому пусть сначала отработают
@@ -895,7 +895,7 @@ case "$1" in
 			# за списком, поэтому не чаще раза в 60 c (мгновенность тут не нужна).
 			# Пишем атомарно (.tmp + mv).
 			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
-			_smw_prev=$(cat /tmp/5gmodem_sms_new.stamp 2>/dev/null)
+			_smw_prev=$(cat /tmp/5gmodem/sms_new.stamp 2>/dev/null)
 			case "$_smw_prev" in ''|*[!0-9]*) _smw_prev=0 ;; esac
 			# Частота - sms.mirror_interval (с), 0 = не читать вовсе. Модем с
 			# запретом фонового AT (bg_at_off, lib.sh) не читаем никогда.
@@ -903,9 +903,9 @@ case "$1" in
 			case "$_smw_iv" in ''|*[!0-9]*) _smw_iv=60 ;; esac
 			if [ "$_smw_iv" -gt 0 ] && ! bg_at_off \
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
-				printf '%s' "$_smw_now" > /tmp/5gmodem_sms_new.stamp 2>/dev/null
-				"$RES/smsbridge.sh" newdump > /tmp/5gmodem_sms_new.json.tmp 2>/dev/null \
-					&& mv /tmp/5gmodem_sms_new.json.tmp /tmp/5gmodem_sms_new.json 2>/dev/null
+				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
+				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
+					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null
 			fi
 			# КОМАНДЫ ПО SMS - строго ПОСЛЕ бота и ДО слива. Порядок важен:
 			# слив удаляет из модема только то, что уже обработано и ботом, и
@@ -923,10 +923,10 @@ case "$1" in
 			# слив теперь тоже. Реже, чем активного: каждый обход - это AT-запрос
 			# списка сообщений в чужой порт, а круг сторожа тут всего полминуты.
 			_ar_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
-			_ar_prev=$(cat /tmp/5gmodem_arch_all.stamp 2>/dev/null)
+			_ar_prev=$(cat /tmp/5gmodem/arch_all.stamp 2>/dev/null)
 			case "$_ar_prev" in ''|*[!0-9]*) _ar_prev=0 ;; esac
 			if [ "$((_ar_now - _ar_prev))" -ge 300 ]; then
-				printf '%s' "$_ar_now" > /tmp/5gmodem_arch_all.stamp 2>/dev/null
+				printf '%s' "$_ar_now" > /tmp/5gmodem/arch_all.stamp 2>/dev/null
 				_ar_act=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 				_ar_list=$("$RES/listmodems.sh" 2>/dev/null)
 				for _ar_p in $("$RES/registry.sh" paths 2>/dev/null); do

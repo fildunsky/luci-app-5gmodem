@@ -158,7 +158,7 @@ fi
 # до ~12 c) утаскивал его в свою транзакцию. Берём тот же замок, что и пиннинг
 # ниже, и коммитим сами (аудит 12.09.2026).
 if [ -n "$ACTP" ] && [ -c "$ACTP" ]; then
-	if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
+	if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
 		uci -q delete 5gmodem.@5gmodem[0].at_port
 		uci -q commit 5gmodem 2>/dev/null
 		flock -u 6
@@ -172,7 +172,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# рабочего порта (напр. 3-го) давал ~8 c НА КАЖДЫЙ вызов detect.sh (а его
 	# за загрузку страницы зовут несколько раз). Один раз найденный порт
 	# кэшируем; проверка живого порта - это одна быстрая atprobe (~0.5 c).
-	ATCACHE="/tmp/5gmodem_atport_$(echo "$AMP" | tr -c 'A-Za-z0-9' '_')"
+	ATCACHE="/tmp/5gmodem/atport_$(echo "$AMP" | tr -c 'A-Za-z0-9' '_')"
 	CP=$(cat "$ATCACHE" 2>/dev/null)
 	# Проверку кэша НЕ делаем через atprobe: на MM-модеме atprobe шлёт AT на
 	# порт, которым владеет ModemManager, и ждёт ~4 c (это и был весь тормоз
@@ -202,7 +202,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# щупает ОДИН; остальные не пилят модем параллельно (это и множило задержку на
 	# два модема) и сразу отдают пусто - следующий цикл опроса возьмёт запиненный
 	# порт. Лок неблокирующий; освобождается при выходе процесса.
-	exec 7>"/tmp/5gmodem_detect.lock" 2>/dev/null
+	exec 7>"/tmp/5gmodem/detect.lock" 2>/dev/null
 	flock -n 7 2>/dev/null || { echo ""; exit 0; }
 	# TWO-PASS. Сначала ищем НАСТОЯЩИЙ MODEM-порт (отвечает на AT+CGMM моделью) -
 	# у многопортовых модемов (FM350 = 7 ttyUSB) на голый "AT" отвечает и часть
@@ -232,9 +232,9 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 				# (ревью, баг №7); пиннинг повторится следующим вызовом.
 				# ДЕСКРИПТОР ОТДЕЛЬНЫЙ (6, а не 7): переоткрытие fd 7 закрывает
 				# прежний OFD и НЕЗАМЕТНО снимает гвард от «стада», взятый выше
-				# на /tmp/5gmodem_detect.lock - тот же капкан, что запрещён в
+				# на /tmp/5gmodem/detect.lock - тот же капкан, что запрещён в
 				# atlock.sh (ревью, баг №13) (аудит 12.09.2026).
-				if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
+				if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
 					uci -q set 5gmodem.@5gmodem[0].at_port="$T"
 					uci -q commit 5gmodem 2>/dev/null
 					flock -u 6
@@ -253,7 +253,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 fi
 
 # from temporary config
-MODEMFILE=/tmp/modem
+MODEMFILE=/tmp/5gmodem/modem
 touch $MODEMFILE
 DEVICE=$(cat $MODEMFILE)
 if [ -n "$DEVICE" ]; then

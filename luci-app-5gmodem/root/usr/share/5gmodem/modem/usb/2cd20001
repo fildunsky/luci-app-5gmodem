@@ -53,9 +53,9 @@ _MT_V=$(_mt_rsrq "$_MT_Q"); [ -n "$_MT_V" ] && RSRQ="$_MT_V"
 _MT_KEY=$(printf '%s' "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')
 _MT_DN=""
 [ -n "$_POLL_AM" ] && _MT_DN=$(cat "/sys/bus/usb/devices/$_POLL_AM/devnum" 2>/dev/null)
-if [ "$(cat "/tmp/5gmodem_r11e_eem_$_MT_KEY" 2>/dev/null)" != "${_MT_DN:-x}" ]; then
+if [ "$(cat "/tmp/5gmodem/r11e_eem_$_MT_KEY" 2>/dev/null)" != "${_MT_DN:-x}" ]; then
 	_mt_at 'AT+EEMOPT=1' >/dev/null
-	printf '%s' "${_MT_DN:-x}" > "/tmp/5gmodem_r11e_eem_$_MT_KEY" 2>/dev/null
+	printf '%s' "${_MT_DN:-x}" > "/tmp/5gmodem/r11e_eem_$_MT_KEY" 2>/dev/null
 fi
 
 _MT_TAC=""; _MT_PCI=""; _MT_E=""; _MT_B=""; _MT_BW=""; _MT_CI=""

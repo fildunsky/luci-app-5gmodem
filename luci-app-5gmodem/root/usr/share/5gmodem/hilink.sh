@@ -24,7 +24,7 @@
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
-CACHE_DIR=/tmp
+CACHE_DIR=/tmp/5gmodem
 UA="5gmodem"
 . "$RES/lib.sh"   # opname_brand - бренд MVNO по IMSI
 
@@ -85,7 +85,7 @@ _addr_for() {
 
 # --- сессия ------------------------------------------------------------------
 
-_sess_file() { echo "$CACHE_DIR/5gmodem_hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"; }
+_sess_file() { echo "$CACHE_DIR/hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"; }
 
 # Обновить пару сессия/токен. Печатает "SID<TAB>TOK".
 _sess_new() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-путь
@@ -290,7 +290,7 @@ _zte_b64() {   # base64 без внешних зависимостей, если
 }
 
 _zte_login() {   # $1 - адрес; печатает stok
-	_zl_f="$CACHE_DIR/5gmodem_ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"
+	_zl_f="$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"
 	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +5 2>/dev/null)" ]; then
 		cat "$_zl_f"; return 0
 	fi
@@ -312,7 +312,7 @@ _zte_login() {   # $1 - адрес; печатает stok
 
 _zte_get() {   # $1 - адрес, $2 - список cmd через запятую
 	_zg_src=$(_srcip_for "" "$1")
-	_zg_tok=$(cat "$CACHE_DIR/5gmodem_ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
+	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
@@ -351,7 +351,7 @@ zte_metrics_json() {
 		*)  # НЕ МОЛЧА. Раньше отказ API выглядел как «метрик просто нет», и
 		    # разобраться по отчёту было нельзя: ни строки в журнале, ни следа.
 		    # Пишем ОДИН раз на загрузку (маркер в /tmp), чтобы не залить лог.
-		    _zm_m="/tmp/5gmodem_zteapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
+		    _zm_m="/tmp/5gmodem/zteapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
 		    if [ ! -f "$_zm_m" ]; then
 			: > "$_zm_m"
 			logger -t 5gmodem "hilink(zte): $_a did not answer goform_get_cmd_process (first 120 chars: $(printf '%s' "$_r" | tr '\n' ' ' | head -c 120))"

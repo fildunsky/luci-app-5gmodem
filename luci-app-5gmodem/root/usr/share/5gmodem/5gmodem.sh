@@ -365,17 +365,17 @@ fi
 # Через общую snap_key (lib.sh): формат тот же, но формула теперь одна на всех -
 # её же использует подогрев снимков в sessionwatch.sh.
 _MKEY=$(snap_key "$_POLL_AM")
-HIST="/tmp/5gmodem_hist_$_MKEY"
-CACHE="/tmp/5gmodem_metrics_$_MKEY.json"
-STAMP="/tmp/5gmodem_metrics_$_MKEY.stamp"
-LOCKDIR="/tmp/5gmodem_poll_$_MKEY.lock"
+HIST="/tmp/5gmodem/hist_$_MKEY"
+CACHE="/tmp/5gmodem/metrics_$_MKEY.json"
+STAMP="/tmp/5gmodem/metrics_$_MKEY.stamp"
+LOCKDIR="/tmp/5gmodem/poll_$_MKEY.lock"
 
 # ВРЕМЯНКИ ПО PID УБИРАЕМ ПРИ ЛЮБОМ ВЫХОДЕ, А НЕ ТОЛЬКО ПРИ НОРМАЛЬНОМ.
 # rpcd рубит вызов на 30-й секунде, и ответы sms_tool с недописанным снимком
 # оставались в tmpfs навсегда: чистить их по маске некому, а на роутере с
 # 32-64 МБ ОЗУ мусор копится без верхней границы. Подоболочки трап не наследуют
 # (проверено под busybox ash), фоновые обновления не пострадают (аудит 12.09.2026).
-_cleanup_tmp() { [ -n "$_stp" ] && kill "$_stp" "$_stk" 2>/dev/null; rm -f /tmp/5gmodem_st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
+_cleanup_tmp() { [ -n "$_stp" ] && kill "$_stp" "$_stk" 2>/dev/null; rm -f /tmp/5gmodem/st.$$.* "$CACHE.p$$" "$CACHE.$$" 2>/dev/null; }
 trap '_cleanup_tmp' EXIT
 trap 'exit 143' INT TERM HUP
 
@@ -545,7 +545,7 @@ fi
 # пусть фронт видит, что данные древние.
 if [ "$1" = "peek" ]; then
 	if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
-		[ -s "/tmp/5gmodem_hilink_metrics_$_MKEY" ] && cat "/tmp/5gmodem_hilink_metrics_$_MKEY" || echo '{}'
+		[ -s "/tmp/5gmodem/hilink_metrics_$_MKEY" ] && cat "/tmp/5gmodem/hilink_metrics_$_MKEY" || echo '{}'
 		exit 0
 	fi
 	_age=$(_snapshot_age) && { serve_cache "$_age"; exit 0; }
@@ -569,7 +569,7 @@ fi
 if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
 	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
 	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
-	_hl_cache="/tmp/5gmodem_hilink_metrics_$_MKEY"
+	_hl_cache="/tmp/5gmodem/hilink_metrics_$_MKEY"
 	_hl_ttl="${2:-5}"
 	case "$_hl_ttl" in ''|*[!0-9]*) _hl_ttl=5 ;; esac
 	# ШТАМП ПРОВЕРЯЕМ, КАК ВСЕ ОСТАЛЬНЫЕ ЧИСЛА ИЗ ФАЙЛОВ. «|| echo 0» спасает
@@ -618,7 +618,7 @@ if [ "$1" = "cached" ]; then
 	# почти всегда попадает в готовый кэш, не запуская сбор. Свой же вызов
 	# сборщика маркер НЕ обновляет (SW_BG=1), иначе цикл кормил бы сам себя
 	# и сбор не останавливался бы никогда после закрытия страницы.
-	[ -z "$SW_BG" ] && uptime_s > /tmp/5gmodem_page_active 2>/dev/null
+	[ -z "$SW_BG" ] && uptime_s > /tmp/5gmodem/page_active 2>/dev/null
 	_ttl="${2:-15}"
 	case "$_ttl" in ''|*[!0-9]*) _ttl=15 ;; esac
 	_age=$(_snapshot_age)
@@ -814,7 +814,7 @@ fi
 # ядра, живёт 30 c и стирается, если ядро вылетело по сторожу - следующий
 # опрос пробует честно. Ключ - тот же _MKEY, порт в маркере сверяем: после
 # переперечисления USB имя tty могло уехать к другому устройству.
-PORTOK="/tmp/5gmodem_portok_$_MKEY"
+PORTOK="/tmp/5gmodem/portok_$_MKEY"
 _pok=""
 if [ -n "$DEVICE" ]; then
 	read -r _pok_port _pok_t 2>/dev/null < "$PORTOK"
@@ -848,7 +848,7 @@ if [ -z "$DEVICE" ]; then
 		# нечем - страница залипает на пустой карточке (живой случай 03.08.2026).
 		# resolve эту ситуацию разбирает мгновенно, поэтому зовём его сами - но не
 		# чаще раза в минуту, чтобы опрос не превратился в его вызыватель.
-		_sh_mark=/tmp/5gmodem_selfresolve
+		_sh_mark=/tmp/5gmodem/selfresolve
 		_sh_now=$(cut -d. -f1 /proc/uptime)
 		_sh_last=$(cat "$_sh_mark" 2>/dev/null); case "$_sh_last" in ''|*[!0-9]*) _sh_last=0 ;; esac
 		if [ -n "$_POLL_AM" ] && [ "$((_sh_now - _sh_last))" -ge 60 ] \
@@ -959,7 +959,7 @@ sms_tool() {
 		_st_drop_ok < "$_stc"
 		return 0
 	fi
-	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem_st.$$.$_st_n"
+	_st_n=$((_st_n + 1)); _stf="/tmp/5gmodem/st.$$.$_st_n"
 	# ЗАКРЫВАЕМ fd лока (8) и хотплаг-лока (9) и у sms_tool, и у сторожа: обоим
 	# нужен только сам serial-порт (-d), а НЕ файл блокировки. Иначе они держат
 	# его OFD, и осиротевший `sleep` сторожа продолжает держать лок ещё до 8 c
@@ -1331,7 +1331,7 @@ esac
 # IMSI уже в батче (+CIMI отдаёт его отдельной строкой из одних цифр).
 SIMID=$(echo "$O" | tr -d '\r' | grep -xE '[0-9]{14,16}' | head -1)
 
-OPCACHE="/tmp/5gmodem_operator"
+OPCACHE="/tmp/5gmodem/operator"
 if [ -n "$COPS" ] && echo "$COPS" | grep -qE '^[0-9 ]+$'; then
 	CACHED=""
 	if [ -n "$SIMID" ] && [ -f "$OPCACHE" ] && [ "$(cut -f1 "$OPCACHE")" = "$SIMID" ]; then
@@ -1355,7 +1355,7 @@ fi
 # как на SIM записано настоящее "T-Mobile". Кэшируем по IMSI (не читаем CRSM
 # каждый раз, но при замене SIM перечитываем); если модем не умеет CRSM или
 # IMSI не прочитался - тихо пропускаем.
-SPNCACHE="/tmp/5gmodem_spn"
+SPNCACHE="/tmp/5gmodem/spn"
 SPN=""
 if [ -n "$SIMID" ] && [ -f "$SPNCACHE" ] && [ "$(cut -f1 "$SPNCACHE")" = "$SIMID" ]; then
 	SPN=$(cut -f2- "$SPNCACHE")
@@ -1403,7 +1403,7 @@ fi
 
 
 # operator location from temporary config
-LOCATIONFILE=/tmp/location
+LOCATIONFILE=/tmp/5gmodem/location
 if [ -e "$LOCATIONFILE" ]; then
 	touch $LOCATIONFILE
 	LOC=$(cat $LOCATIONFILE)
@@ -1413,12 +1413,12 @@ if [ -e "$LOCATIONFILE" ]; then
 				rm $LOCATIONFILE
 				LOC=$(awk -F[\;] '/^'$COPS_NUM';/ {print $2}' $RES/mccmnc.dat)
 				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/location
+					echo "$LOC" > /tmp/5gmodem/location
 				fi
 			else
 				LOC=$(awk -F[\;] '/^'$COPS_NUM';/ {print $2}' $RES/mccmnc.dat)
 				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/location
+					echo "$LOC" > /tmp/5gmodem/location
 				fi
 			fi
 	fi
@@ -1430,9 +1430,9 @@ else
     		*) 
         		if [ -n "$LOC" ]; then
             			LOC=$(awk -F[\;] '/^'"$COPS_MCC$COPS_MNC"';/ {print $2}' $RES/mccmnc.dat)
-            			echo "$LOC" > /tmp/location
+            			echo "$LOC" > /tmp/5gmodem/location
         		else
-            			echo "-" > /tmp/location
+            			echo "-" > /tmp/5gmodem/location
         		fi
         	;;
 	esac
@@ -1626,7 +1626,7 @@ _STKEY=$(tty_usbpath "$DEVICE" 2>/dev/null | tr -d '\n' | tr -c 'A-Za-z0-9' '_')
 # активный: иначе подогрев соседа порол кэш статики активного (ревью)
 [ -n "$_STKEY" ] || _STKEY=$(printf '%s' "${_POLL_AM:-$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)}" | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
-STATIC_CACHE="/tmp/5gmodem_static_$_STKEY"
+STATIC_CACHE="/tmp/5gmodem/static_$_STKEY"
 # РОУМИНГ ВНУТРИ СТРАНЫ - НЕ РОУМИНГ.
 #
 # Модем считает роумингом любую сеть, чей код не совпадает с домашним кодом
@@ -1704,7 +1704,7 @@ if [ -n "$SIMID" ]; then
 		# смог» (роуминг, APN не найден, ни оператора ни IMSI) apn_imsi не пишут,
 		# и с минутным дебаунсом сравнение расходилось ВЕЧНО: в логе zbt «смена
 		# SIM (IMSI) на modem» шла сутками, каждый круг - AT-запросы к модему.
-		_apn_stamp="/tmp/5gmodem_autoapn_$_apn_sec"
+		_apn_stamp="/tmp/5gmodem/autoapn_$_apn_sec"
 		_apn_wait=1
 		[ -f "$_apn_stamp.gaveup" ] && _apn_wait=30
 		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +$_apn_wait 2>/dev/null)" ]; }; then
@@ -1715,7 +1715,7 @@ if [ -n "$SIMID" ]; then
 			# карты его не трогала, и до пяти минут страница показывала прежний
 			# тип SIM (живой случай: eSIM осталась подписью после установки
 			# физической симки). Смена IMSI - точный признак, и мы её уже поймали.
-			rm -f "/tmp/5gmodem_slots_$_POLL_AM" "/tmp/5gmodem_slots_$_POLL_AM.t" 2>/dev/null
+			rm -f "/tmp/5gmodem/slots_$_POLL_AM" "/tmp/5gmodem/slots_$_POLL_AM.t" 2>/dev/null
 			# unset _AT_LOCK_HELD + закрыть fd лока: этот фон ОТДЕЛЯЕТСЯ и может
 			# взять at_lock уже ПОСЛЕ нашего выхода - он должен захватывать лок
 			# сам, а не думать, что его держит (уже мёртвый) предок.
@@ -2232,7 +2232,7 @@ done
 # данные другого модема под этим ключом.
 _qmi_refresh() {
 	_qr_k="$1"; _qr_w="$2"
-	_qr_p="/tmp/5gmodem_qmi_$_qr_k"
+	_qr_p="/tmp/5gmodem/qmi_$_qr_k"
 	[ -c "$_qr_w" ] || return 0
 
 	# Один вызов rf-band-info на всё: полоса, а в 3G ещё и активный диапазон
@@ -2448,7 +2448,7 @@ _at_ca_supplement() {
 	case "$MODE" in
 		*GSM*|*GPRS*|*EDGE*|*UMTS*|*WCDMA*|*HSPA*|*HSDPA*|*HSUPA*|*2G*|*3G*) return 0 ;;
 	esac
-	_ac_p="/tmp/5gmodem_atca_$_MKEY"
+	_ac_p="/tmp/5gmodem/atca_$_MKEY"
 	_ac_now=$(uptime_s)
 	_ac_ts=$(cat "$_ac_p.t" 2>/dev/null)
 	case "$_ac_ts" in ''|*[!0-9]*) _ac_ts=0 ;; esac
@@ -2672,7 +2672,7 @@ _qmi_supplement() {
 	# него и работает.
 	qmi_channel_free || return 0
 	_poll_chan_free || return 0
-	_QS_P="/tmp/5gmodem_qmi_$_MKEY"
+	_QS_P="/tmp/5gmodem/qmi_$_MKEY"
 
 	# ПАСПОРТНАЯ СКОРОСТЬ МОДУЛЯ - ЧИТАЕМ ОДИН РАЗ ЗА ЗАГРУЗКУ.
 	#
@@ -2694,7 +2694,7 @@ _qmi_supplement() {
 	if [ -z "$MAXDL" ]; then
 		_QS_IM=$(uci -q get "5gmodem.$(secname "$_POLL_AM").imei" 2>/dev/null | tr -cd '0-9')
 		if [ -n "$_QS_IM" ]; then
-			_QS_MR="/tmp/5gmodem_maxrate_$_QS_IM"
+			_QS_MR="/tmp/5gmodem/maxrate_$_QS_IM"
 			if [ -s "$_QS_MR" ]; then
 				read -r MAXDL MAXUL < "$_QS_MR"
 			else
@@ -3214,7 +3214,7 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 		# заметный процесс (см. пояснение у _qmi_refresh).
 		case "$FW" in ''|--) FW="" ;; esac
 		if [ -z "$FW" ] && [ -n "$IMEI" ]; then
-			_fwc="/tmp/5gmodem_fw_$IMEI"
+			_fwc="/tmp/5gmodem/fw_$IMEI"
 			if [ -s "$_fwc" ]; then
 				read -r FW < "$_fwc"
 			else
@@ -3458,7 +3458,7 @@ esac
 # simslot.sh при переключении сбрасывает кэш сам - иначе UI минуту показывал бы
 # старый слот сразу после переключения.
 if [ -z "$SSIM" ] || [ "$SSIM" = "-" ]; then
-	_slot_c="/tmp/5gmodem_slot_$_STKEY"
+	_slot_c="/tmp/5gmodem/slot_$_STKEY"
 	_slot_age=""
 	if [ -s "$_slot_c" ]; then
 		_slot_t=$(cat "${_slot_c}.t" 2>/dev/null)
@@ -3618,7 +3618,7 @@ _OPNAME="$COPS"
 _OPNAME=$(operator_clean "$_OPNAME")
 if [ -n "$SEC" ] && [ -n "$_OPNAME" ] && ! echo "$_OPNAME" | grep -qE '^[0-9 ]*$'; then
 	OPIF=$(op_cache_iface)
-	[ -n "$OPIF" ] && printf '%s' "$_OPNAME" > "/tmp/5gmodem_op_$OPIF" 2>/dev/null
+	[ -n "$OPIF" ] && printf '%s' "$_OPNAME" > "/tmp/5gmodem/op_$OPIF" 2>/dev/null
 fi
 
 # ПРОЦЕНТ СИГНАЛА ИЗ RSRP/SINR/RSRQ, КОГДА +CSQ БЕСПОЛЕЗЕН.
@@ -3669,7 +3669,7 @@ fi
 # отдающие ничего кроме него.
 AMBRDL=""; AMBRUL=""; QCI=""
 if [ -n "$DEVICE" ] && [ "$REGOK" = 1 ]; then
-	_AM_F="/tmp/5gmodem_ambr_$_MKEY"
+	_AM_F="/tmp/5gmodem/ambr_$_MKEY"
 	_AM_T=0; _AM_IP=""
 	[ -s "$_AM_F" ] && read -r _AM_T _AM_IP AMBRDL AMBRUL QCI < "$_AM_F"
 	case "$_AM_T" in ''|*[!0-9]*) _AM_T=0 ;; esac

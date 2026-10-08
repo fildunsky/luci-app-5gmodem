@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Bounded AT probe. Exit 0 if the given tty answers within ~2 seconds, else 1.
 #
@@ -39,7 +40,7 @@ tty_no_at "$D" && exit 1
 CMD="AT"
 [ "$MODE" = "model" ] && CMD="AT+CGMM"
 
-OUT="/tmp/.atprobe.$$"
+OUT="/tmp/5gmodem/.atprobe.$$"
 # УБИРАЕМ ВРЕМЯНКУ И ПРИ УБИЙСТВЕ, А НЕ ТОЛЬКО НА ШТАТНОМ ВЫХОДЕ. Холодный
 # детект многопортового модема (FM350 - 7 tty) rpcd рубит на 30-й секунде, и
 # файл оставался в tmpfs навсегда: маску .atprobe.* никто не чистит, а на

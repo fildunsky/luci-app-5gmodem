@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # СНЯТИЕ ВРЕДНЫХ ПРАВИЛ usb_modeswitch.
 #
@@ -116,7 +117,7 @@ _reprobe() {   # $1 - vid:pid
 		# Канал данных на месте - значит ломать нечего. Перебираем маски
 		# НАПРЯМУЮ: `set --` затирает позиционные параметры, и $1 (vid:pid)
 		# после него превращался в путь - в журнал уходил мусор вместо ID.
-		_rp_mem="/tmp/5gmodem_lastcfg_$(echo "$1" | tr -d ':')"
+		_rp_mem="/tmp/5gmodem/lastcfg_$(echo "$1" | tr -d ':')"
 		for _rp_x in "$_rp_d"/*/net/* "$_rp_d"/*/usbmisc/cdc-wdm* "$_rp_d"/*/cdc-wdm*; do
 			# ЗАПОМИНАЕМ РАБОЧУЮ КОНФИГУРАЦИЮ, пока модем здоров. Восстанавливать
 			# «последнюю по номеру» неверно в общем случае: у DW5821e рабочая
@@ -156,7 +157,7 @@ _reprobe() {   # $1 - vid:pid
 		# НЕ ЧАЩЕ РАЗА В 5 МИНУТ. hotplug дёргается на каждое событие шины, а
 		# пересборка конфигурации - операция заметная: без ограничителя мы бы
 		# устроили модему карусель.
-		_rp_st="/tmp/5gmodem_reprobe_$(echo "$1" | tr -d ':')"
+		_rp_st="/tmp/5gmodem/reprobe_$(echo "$1" | tr -d ':')"
 		if [ -f "$_rp_st" ] && [ -z "$(find "$_rp_st" -mmin +5 2>/dev/null)" ]; then
 			return 0
 		fi
