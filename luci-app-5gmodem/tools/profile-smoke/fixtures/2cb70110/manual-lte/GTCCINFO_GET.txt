@@ -1,0 +1,8 @@
+## synthetic, field layout from FIBOCOM NL668 AT Commands User Manual V3.5.14, 10.1.14
++GTCCINFO:
+LTE service cell:
+1,4,250,01,1A2B,5F3C21,1300,123,103,100,24,50,45,22
+LTE neighbor cell:
+2,4,250,01,1A2B,5F3C22,6300,77,100,40,35,15
+
+OK
