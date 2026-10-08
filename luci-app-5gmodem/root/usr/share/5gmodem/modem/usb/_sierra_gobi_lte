@@ -205,7 +205,7 @@ fi
 # это занятый порт (для Sierra штатно), и запирать из-за него команду навсегда
 # было бы хуже, чем спросить ещё раз.
 # (ревью 13.09.2026, форум 4pda)
-_LINC="/tmp/5gmodem_nolteinfo_$(echo "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+_LINC="/tmp/5gmodem/nolteinfo_$(echo "${DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 # Условие «мы в LTE» - то же, что у разбора GSTATUS выше: +COPS мог промолчать
 # (порт делит ModemManager), и тогда технологию знает только сам ответ модема.
 if [ -z "$NEIGHBORS" ] && { [ "x$MODE_NUM" = "x7" ] || [ "$_sysmode" = "LTE" ]; } && [ ! -f "$_LINC" ]; then

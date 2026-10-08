@@ -6,7 +6,7 @@ _DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в пр
 # ERROR, маска - пусто, и кнопки диапазонов исчезали без строки в журнале.
 # Пробуем A710, затем F710; сработавший пароль помним до перезагрузки.
 _sierra_cnd() {
-	_sc_f="/tmp/5gmodem_sierra_cnd_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_sc_f="/tmp/5gmodem/sierra_cnd_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_sc_p=$(cat "$_sc_f" 2>/dev/null)
 	for _sc_try in ${_sc_p:+"$_sc_p"} A710 F710; do
 		sms_tool -d $_DEVICE at "AT!ENTERCND=\"$_sc_try\"" >/dev/null 2>&1

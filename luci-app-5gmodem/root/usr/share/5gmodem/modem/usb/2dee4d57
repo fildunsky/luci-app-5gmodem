@@ -22,7 +22,7 @@
 # Кэш держим САМИ, а не через at_static: тот объявлен в 5gmodem.sh НИЖЕ места,
 # где подключается профиль, и на момент нашего запуска ещё не существует
 # (проверено: модель пропала из вывода). Инвалидация - по смене tty модема.
-_MC="/tmp/5gmodem_meig_ati_$(basename "$DEVICE")"
+_MC="/tmp/5gmodem/meig_ati_$(basename "$DEVICE")"
 if [ -s "$_MC" ]; then
 	_I=$(cat "$_MC")
 else

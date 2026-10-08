@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 # Внешний (публичный) адрес роутера - тот, каким его видит интернет.
 #
 # Зачем: адрес на интерфейсе и адрес, с которого роутер реально ходит наружу,
@@ -27,8 +28,8 @@
 #   extip.sh flush         - выбросить все кэши
 #   extip.sh probe <url> [4|6] [ua] - разовая проверка сервиса для настроек
 
-CACHE="/tmp/5gmodem_extip.json"
-LOCK="/tmp/5gmodem_extip.lock"
+CACHE="/tmp/5gmodem/extip.json"
+LOCK="/tmp/5gmodem/extip.lock"
 DEV=""
 
 URL4_DEFAULT="http://ip-api.com/line/?fields=countryCode,query"
@@ -87,8 +88,8 @@ _setscope() {
 	[ -n "$DEV" ] && [ "$DEV" = "$(_defdev)" ] && DEV=""
 	if [ -n "$DEV" ]; then
 		_sfx=$(printf '%s' "$DEV" | tr -c 'A-Za-z0-9_.-' '_')
-		CACHE="/tmp/5gmodem_extip_$_sfx.json"
-		LOCK="/tmp/5gmodem_extip_$_sfx.lock"
+		CACHE="/tmp/5gmodem/extip_$_sfx.json"
+		LOCK="/tmp/5gmodem/extip_$_sfx.lock"
 	fi
 }
 
@@ -196,7 +197,7 @@ _spawn() {
 case "$1" in
 get)
 	if ! _enabled; then
-		rm -f /tmp/5gmodem_extip.json /tmp/5gmodem_extip_*.json 2>/dev/null
+		rm -f /tmp/5gmodem/extip.json /tmp/5gmodem/extip_*.json 2>/dev/null
 		echo '{"enabled":0}'
 		exit 0
 	fi
@@ -224,7 +225,7 @@ now)
 	echo
 	;;
 flush)
-	rm -f /tmp/5gmodem_extip.json /tmp/5gmodem_extip_*.json 2>/dev/null
+	rm -f /tmp/5gmodem/extip.json /tmp/5gmodem/extip_*.json 2>/dev/null
 	echo '{"ok":1}'
 	;;
 probe)

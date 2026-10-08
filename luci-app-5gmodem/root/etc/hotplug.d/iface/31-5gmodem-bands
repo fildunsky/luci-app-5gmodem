@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 # Восстановить сохранённый выбор диапазонов ПОСЛЕ того, как модемный интерфейс
 # поднялся.
 #
@@ -37,7 +38,7 @@ S=$(uci -q get "$SEC.save_band")$(uci -q get "$SEC.save_band5gnsa")$(uci -q get 
 # НЕ БОЛЬШЕ ОДНОЙ попытки на интерфейс за загрузку. Маркер в /tmp живёт до
 # перезагрузки. Без него был бы риск петли: restore -> CFUN -> _reconnect_iface
 # делает ubus down/up -> снова ifup -> снова restore. Маркер ставим ДО запуска.
-M="/tmp/5gmodem_bandrestore_$INTERFACE"
+M="/tmp/5gmodem/bandrestore_$INTERFACE"
 D=$(cat "/sys/bus/usb/devices/$MPATH/devnum" 2>/dev/null)
 if [ -e "$M" ]; then
 	O=$(cat "$M" 2>/dev/null)

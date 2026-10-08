@@ -1374,7 +1374,7 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
 /* Ряд «конвертик непрочитанных SMS + переключатель слотов» в одну строку. */
 .tginfo-simslot-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* Конвертик показывается, когда у ПРОСМАТРИВАЕМОГО модема есть непрочитанные
-   входящие (JS updateSmsEnvelope из зеркала /tmp/5gmodem_sms_new.json). Цвет -
+   входящие (JS updateSmsEnvelope из зеркала /tmp/5gmodem/sms_new.json). Цвет -
    акцент темы; currentColor уносит его и в SVG. Клик - на вкладку «Входящие». */
 .tg-smsenv {
   display: inline-flex;

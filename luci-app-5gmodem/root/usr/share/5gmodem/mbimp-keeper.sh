@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 
 DEV="$1"
 IFACE="$2"
@@ -12,7 +13,7 @@ UNKNOWN=0
 [ -c "$DEV" ] || exit 1
 
 probe() {
-	_kp_o="/tmp/mbimp-keeper.$$.out"
+	_kp_o="/tmp/5gmodem/mbimp-keeper.$$.out"
 	mbimcli -p -d "$DEV" --query-connection-state=0 > "$_kp_o" 2>&1 </dev/null &
 	_kp_p=$!
 	_kp_n=0
@@ -80,13 +81,13 @@ mm_enable() {
 	done
 	kill -9 "$_me_k" 2>/dev/null
 	wait "$_me_k" 2>/dev/null
-	rm -f /tmp/5gmodem_bands_* 2>/dev/null
+	rm -f /tmp/5gmodem/bands_* 2>/dev/null
 	logger -t 5gmodem "MBIM+MM: enabled modem $_me_p in ModemManager (management only, the data session stays with interface $IFACE)"
 }
 
-trap 'rm -f "/tmp/mbimp-keeper.$$.out" "/tmp/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
+trap 'rm -f "/tmp/5gmodem/mbimp-keeper.$$.out" "/tmp/5gmodem/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
 
-KICK="/tmp/mbimp-keeper.$IFACE.kick"
+KICK="/tmp/5gmodem/mbimp-keeper.$IFACE.kick"
 FAST_UNTIL=0
 rm -f "$KICK"
 

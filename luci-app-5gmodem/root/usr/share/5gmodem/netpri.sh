@@ -319,7 +319,7 @@ _svc_json() {
 	# при любой установке переписывается, поэтому кэш старше неё - недействителен.
 	_sv_ver=""
 	if [ -n "$1" ]; then
-		_sv_vf="/tmp/5gmodem_svcver_$1"
+		_sv_vf="/tmp/5gmodem/svcver_$1"
 		_sv_db=/lib/apk/db/installed
 		[ -f "$_sv_db" ] || _sv_db=/usr/lib/opkg/status
 		if [ -s "$_sv_vf" ] && [ ! "$_sv_db" -nt "$_sv_vf" ]; then
@@ -527,22 +527,22 @@ operator_cached() {
 	# симки: у T-Mobile (MVNO на Tele2) API отдаёт "Tele2", тогда как главная
 	# карточка честно показывала "T-Mobile". Разбор MVNO по коду из IMSI умеет
 	# только основной опрос - он и должен быть первым источником.
-	if [ -f "/tmp/5gmodem_op_$1" ] && [ -s "/tmp/5gmodem_op_$1" ]; then
-		operator_clean "$(cat "/tmp/5gmodem_op_$1")"; return
+	if [ -f "/tmp/5gmodem/op_$1" ] && [ -s "/tmp/5gmodem/op_$1" ]; then
+		operator_clean "$(cat "/tmp/5gmodem/op_$1")"; return
 	fi
 	# ЗДЕСЬ НЕ ХОДИМ В СЕТЬ. Функция обязана быть мгновенной - её зовёт "list"
 	# на каждой загрузке страницы. Раньше ветка HiLink делала HTTP-запрос к
 	# модему, и открытие «Сети» упиралось в него на секунды. Запрос перенесён в
 	# operator_probe (фоновый refresh), сюда остался только чтение кэша.
-	# ПРИОРИТЕТ у имени от ОСНОВНОГО опроса (5gmodem.sh пишет /tmp/5gmodem_op_<iface>):
+	# ПРИОРИТЕТ у имени от ОСНОВНОГО опроса (5gmodem.sh пишет /tmp/5gmodem/op_<iface>):
 	# только он разбирает UCS2, mccmnc.dat и MVNO. Наш operator_probe знает лишь
 	# имя СЕТИ, поэтому раньше в «Приоритете интернета» появлялся «Tele2 RU» там,
 	# где главная карточка честно показывала «T-Mobile»: probe писал свой кэш, а
 	# он проверялся ПЕРВЫМ и затенял точное имя.
-	if [ -s "/tmp/5gmodem_op_$1" ]; then operator_clean "$(cat "/tmp/5gmodem_op_$1")"; return; fi
+	if [ -s "/tmp/5gmodem/op_$1" ]; then operator_clean "$(cat "/tmp/5gmodem/op_$1")"; return; fi
 	# Фолбэк - собственный кэш probe: основной опрос ведёт файл только для
 	# АКТИВНОГО модема, а в списке показываются все.
-	cf="/tmp/netpri_op_$1"
+	cf="/tmp/5gmodem/netpri_op_$1"
 	if [ -f "$cf" ] && [ -z "$(find "$cf" -mmin +30 2>/dev/null)" ]; then
 		operator_clean "$(cat "$cf")"; return
 	fi
@@ -564,7 +564,7 @@ operator_probe() {
 		_op_n=$(/usr/share/5gmodem/hilink.sh json "$_op_p" 2>/dev/null \
 			| jsonfilter -e '@.operator_name' 2>/dev/null)
 		[ -n "$_op_n" ] || _op_n=$(uci5g_get "$_op_sec" model)
-		[ -n "$_op_n" ] && printf '%s' "$_op_n" > "/tmp/netpri_op_$i"
+		[ -n "$_op_n" ] && printf '%s' "$_op_n" > "/tmp/5gmodem/netpri_op_$i"
 		return
 	fi
 	# MM-модемы: имя оператора берём из mmcli (AT+COPS конфликтует с
@@ -597,7 +597,7 @@ operator_probe() {
 			_mc=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.3gpp\.operator-code *: *//p' | head -1)
 			[ "$_mc" = "--" ] && _mc=""
 			[ -n "$nm" ] && [ "$nm" != "--" ] && {
-				printf '%s' "$(opname_pretty "$_mc" "$nm")" > "/tmp/netpri_op_$i"; return; }
+				printf '%s' "$(opname_pretty "$_mc" "$nm")" > "/tmp/5gmodem/netpri_op_$i"; return; }
 		fi
 		# ИМЕНИ НЕТ - НА ЭТОМ И ЗАКАНЧИВАЕМ. Раньше отсюда проваливались в перебор
 		# AT-портов ниже, и это било по самому больному: у модема под MM порты
@@ -656,7 +656,7 @@ operator_probe() {
 		else
 			name=$(opname_pretty "$num" "$name")
 		fi
-		[ -n "$name" ] && { printf '%s' "$name" > "/tmp/netpri_op_$i"; return; }
+		[ -n "$name" ] && { printf '%s' "$name" > "/tmp/5gmodem/netpri_op_$i"; return; }
 	done
 }
 
@@ -1377,8 +1377,8 @@ list)
 		# uci-снимка, без подпроцессов: list зовётся каждые 5 c. Нет файла или
 		# слежение выключено - поля нет, страница точку не рисует.
 		_np_h=""
-		if [ "$_HEALTH_ON" = "1" ] && [ -f "/tmp/5gmodem_health/$n" ]; then
-			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs 2>/dev/null < "/tmp/5gmodem_health/$n"; then
+		if [ "$_HEALTH_ON" = "1" ] && [ -f "/tmp/5gmodem/health/$n" ]; then
+			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs 2>/dev/null < "/tmp/5gmodem/health/$n"; then
 				# Линк без устройства (gone) показываем - карточка обязана
 				# пережить переэнумерацию при лечении; прячем, когда ничего не
 				# поднимается дольше грейс-периода. Грейс зависит от контекста:
@@ -1386,14 +1386,14 @@ list)
 				# это минуты), лечения нет - предположение «он перезагружается»
 				# быстро теряет силу, две минуты и хватит.
 				_np_gr=120
-				[ -f "/tmp/5gmodem_health/$n.heal" ] && _np_gr=600
+				[ -f "/tmp/5gmodem/health/$n.heal" ] && _np_gr=600
 				if [ "$_np_hst" = "gone" ] && [ $(( _NOW_S - ${_np_hs:-0} )) -gt "$_np_gr" ]; then
 					continue
 				fi
 				_np_h=",\"health\":\"$_np_hst\",\"hms\":${_np_hms:-0}"
 				# идёт лечение - карточка рисует статус реанимации
-				if [ -f "/tmp/5gmodem_health/$n.heal" ] \
-				   && read -r _np_hstep _np_hlast _np_hn 2>/dev/null < "/tmp/5gmodem_health/$n.heal"; then
+				if [ -f "/tmp/5gmodem/health/$n.heal" ] \
+				   && read -r _np_hstep _np_hlast _np_hn 2>/dev/null < "/tmp/5gmodem/health/$n.heal"; then
 					# КАКАЯ ИМЕННО ЛЕСТНИЦА ЛЕЧИТ ЭТОТ ЛИНК.
 					#
 					# Ступени у них РАЗНЫЕ (см. health.sh): у модема - ifup,
@@ -1430,8 +1430,8 @@ list)
 	# отрисовки карточек (и берёт из него failover для предупреждения).
 	if [ "$first" != 1 ] && [ "$_HEALTH_ON" = "1" ]; then
 		_np_ev=""
-		[ -s /tmp/5gmodem_health/.last_event ] && \
-			read -r _np_ev < /tmp/5gmodem_health/.last_event 2>/dev/null
+		[ -s /tmp/5gmodem/health/.last_event ] && \
+			read -r _np_ev < /tmp/5gmodem/health/.last_event 2>/dev/null
 		printf ',{"event":"%s","failover":%s}' "$(json_esc "$_np_ev")" \
 			"$([ "$_HEALTH_FO" = "1" ] && echo 1 || echo 0)"
 	fi
@@ -1469,7 +1469,7 @@ list)
 	# but at most once a minute so page polls don't pile up probes on a modem whose
 	# operator can't be read.
 	if [ "$NEEDREFRESH" = 1 ]; then
-		stamp=/tmp/netpri_refresh
+		stamp=/tmp/5gmodem/netpri_refresh
 		if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +1 2>/dev/null)" ]; then
 			: > "$stamp"
 			# ДЕСКРИПТОРЫ ОТВЯЗЫВАЕМ ОТ ПОДОБОЛОЧКИ, а не от команды внутри.
@@ -1534,13 +1534,13 @@ op)
 	# страница открывается редко, в отличие от list, который дёргается поллом.
 	I="${2:-$(uci -q get 5gmodem.@5gmodem[0].network)}"; [ -n "$I" ] || I=modem
 	if [ "$3" = fresh ]; then
-		# Сбрасываем ТОЛЬКО свой кэш. Файл /tmp/5gmodem_op_<iface> принадлежит
+		# Сбрасываем ТОЛЬКО свой кэш. Файл /tmp/5gmodem/op_<iface> принадлежит
 		# ОСНОВНОМУ опросу (5gmodem.sh) и содержит имя, разобранное со всей
 		# логикой: UCS2, mccmnc.dat и, главное, MVNO (сеть Tele2 25020 -> бренд
 		# «Т-Мобайл»). Наш operator_probe этого не умеет и вернул бы имя СЕТИ -
 		# именно так в «Приоритете интернета» появлялся Tele2 вместо Т-Мобайла,
 		# тогда как главная карточка показывала верно.
-		rm -f "/tmp/netpri_op_$I"
+		rm -f "/tmp/5gmodem/netpri_op_$I"
 		# Чтобы имя было и верным, и свежим (после смены SIM), просим основной
 		# опрос перечитать модем - он и обновит свой кэш. Только для АКТИВНОГО
 		# модема: 5gmodem.sh опрашивает именно его, и для другого интерфейса это
@@ -1550,7 +1550,7 @@ op)
 		# опрос, и открытие «Приоритета интернета» на фоне открытой страницы
 		# давало ровно ту конкуренцию, из-за которой опрос замедлялся втрое.
 		if [ "$I" = "$(uci -q get 5gmodem.@5gmodem[0].network)" ]; then
-			rm -f "/tmp/5gmodem_op_$I"
+			rm -f "/tmp/5gmodem/op_$I"
 			/usr/share/5gmodem/5gmodem.sh cached 10 >/dev/null 2>&1
 		fi
 	fi
@@ -1593,7 +1593,7 @@ set)
 	done
 	# ручной выбор пользователя снимает метку «оставлен в конце» у ожившего
 	# линка (сторож, политика failback=demote) - порядок теперь снова его
-	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
+	rm -f /tmp/5gmodem/health/*.demoted 2>/dev/null
 	# ДАЖЕ ПРИ CHANGED=0 живые маршруты переустанавливаем: uci мог совпадать,
 	# а реальная таблица - нет (штрафная метрика сторожа). Ранний выход делал
 	# клик по аплинку «несработавшим» до следующего круга сторожа (ревью №12).
@@ -1657,7 +1657,7 @@ reapply)
 	_ra_m=$(uci -q get "network.$_ra_n.metric")
 	case "$_ra_m" in ''|*[!0-9]*) exit 0 ;; esac
 	_ra_d=$(ifup_state "$_ra_n" '@["l3_device"]'); [ -n "$_ra_d" ] || exit 0
-	exec 9>"/tmp/5gmodem_health.lock"
+	exec 9>"/tmp/5gmodem/health.lock"
 	flock 9
 	_devs=""
 	for n in $(wan_nets); do
@@ -1780,7 +1780,7 @@ order)
 	[ -n "$_ord" ] || { echo '{"error":"no valid interfaces"}'; exit 1; }
 	# перетаскивание = пользователь заново задал порядок: метки «оставлен в
 	# конце» от сторожа (failback=demote) больше не действуют
-	rm -f /tmp/5gmodem_health/*.demoted 2>/dev/null
+	rm -f /tmp/5gmodem/health/*.demoted 2>/dev/null
 	note_foreign_uci network "netpri order"
 	_rank=$(_metric_base)
 	# uci-метрики по рангу с шагом 10 от переключаемой базы (см. пояснение в
@@ -1862,7 +1862,7 @@ ping)
 		if [ -n "$_tr_f" ] && [ -z "$(find "$_tr_f" -mtime +30 2>/dev/null)" ]; then
 			return 0
 		fi
-		( _tr_t="/tmp/.tgcidr.$$"
+		( _tr_t="/tmp/5gmodem/.tgcidr.$$"
 		  curl -fsSL -m 20 https://core.telegram.org/resources/cidr.txt -o "$_tr_t" 2>/dev/null || {
 		  	rm -f "$_tr_t"; exit 0; }
 		  if awk '

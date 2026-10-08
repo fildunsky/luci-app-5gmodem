@@ -23,9 +23,9 @@ PKG_LITE="luci-app-5gmodem-lite"
 # нужно на случай, когда пакет не установлен вовсе.
 PKG="$PKG_FULL"
 I18N="luci-i18n-5gmodem-ru"
-TMP=/tmp
-STATUS=/tmp/5gmodem_update.json
-LOCK=/tmp/5gmodem_update.pid
+TMP=/tmp/5gmodem
+STATUS=/tmp/5gmodem/update.json
+LOCK=/tmp/5gmodem/update.pid
 
 json_esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 

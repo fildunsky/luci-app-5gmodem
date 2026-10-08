@@ -23,8 +23,8 @@
 #   listmodems.sh              - обычный вызов (может отдать кэш)
 #   listmodems.sh --refresh    - пересобрать и обновить кэш (зовёт hotplug-хук)
 
-CACHE=/tmp/5gmodem_listmodems.cache
-STAMP=/tmp/5gmodem_listmodems.stamp
+CACHE=/tmp/5gmodem/listmodems.cache
+STAMP=/tmp/5gmodem/listmodems.stamp
 TTL=8   # секунд; страховка, если hotplug-инвалидация не сработала
 
 uptime_s() {
@@ -420,15 +420,15 @@ PORTREC_EOF
 	[ -z "$model" ] && [ -n "$vid" ] && [ ! -f "$n/product" ] && model="$vid:$pid"
 	model=$(esc "$model")
 	# ОПЕРАТОР ЭТОГО МОДЕМА - для значка сети на вкладке (у кого какая SIM).
-	# Берём из кэша, который пишет основной опрос (/tmp/5gmodem_op_<iface>, тот же
+	# Берём из кэша, который пишет основной опрос (/tmp/5gmodem/op_<iface>, тот же
 	# источник, что у «Приоритета интернета»): модем не трогаем вовсе, а для
 	# НЕАКТИВНЫХ модемов это единственный доступный источник - их AT-порты никто
 	# не опрашивает. Пусто, пока модем ни разу не опрашивался.
 	_opname=""
 	_opif=$(uci -q get "5gmodem.$_sec.network" 2>/dev/null)
-	[ -n "$_opif" ] && [ -s "/tmp/5gmodem_op_$_opif" ] && \
-		_opname=$(esc "$(cat "/tmp/5gmodem_op_$_opif" 2>/dev/null | tr -d '\n')")
-	# ЗАПАСНОЙ ИСТОЧНИК - КЭШ «ПРИОРИТЕТА ИНТЕРНЕТА» (/tmp/netpri_op_<iface>).
+	[ -n "$_opif" ] && [ -s "/tmp/5gmodem/op_$_opif" ] && \
+		_opname=$(esc "$(cat "/tmp/5gmodem/op_$_opif" 2>/dev/null | tr -d '\n')")
+	# ЗАПАСНОЙ ИСТОЧНИК - КЭШ «ПРИОРИТЕТА ИНТЕРНЕТА» (/tmp/5gmodem/netpri_op_<iface>).
 	# У HiLink-модема AT-порта может не быть вовсе, и основной опрос его имя не
 	# пишет - зато netpri спрашивает веб-API модема в фоне и кладёт ответ в СВОЙ
 	# файл. Читали мы только первый, поэтому у таких модемов operator оставался
@@ -438,8 +438,8 @@ PORTREC_EOF
 	# UCS2, mccmnc.dat и подменяет хост-сеть брендом MVNO. netpri знает лишь имя
 	# сети, и ставить его первым значило бы показывать «Tele2 RU» там, где
 	# карточка честно пишет «T-Mobile».
-	[ -z "$_opname" ] && [ -n "$_opif" ] && [ -s "/tmp/netpri_op_$_opif" ] && \
-		_opname=$(esc "$(cat "/tmp/netpri_op_$_opif" 2>/dev/null | tr -d '\n')")
+	[ -z "$_opname" ] && [ -n "$_opif" ] && [ -s "/tmp/5gmodem/netpri_op_$_opif" ] && \
+		_opname=$(esc "$(cat "/tmp/5gmodem/netpri_op_$_opif" 2>/dev/null | tr -d '\n')")
 	[ -n "$OUT" ] && OUT="$OUT,"
 	# net[] - сетевые имена у модемов без портов; по нему интерфейс отличает
 	# HiLink от обычного и не предлагает для него AT-возможности.

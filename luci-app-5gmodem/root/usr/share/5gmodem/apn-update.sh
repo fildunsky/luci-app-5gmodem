@@ -26,7 +26,7 @@ URL=$(uci -q get 5gmodem.@5gmodem[0].apn_db_url)
 # писал «download failed», но зовут его только руками, и увидеть это было негде.
 [ -n "$URL" ] || URL="https://raw.githubusercontent.com/DarthAnwalt/openwrt-apn-autoconfig/main/apn-autoconfig-providers/files/usr/share/apn-autoconfig/providers.tsv"
 
-_tmp="/tmp/5gmodem_providers.$$"
+_tmp="/tmp/5gmodem/providers.$$"
 
 # Через общую лестницу net_fetch (lib.sh): прямая попытка, при неудаче -
 # повтор через локальный clash/mihomo (белые списки оператора режут прямые

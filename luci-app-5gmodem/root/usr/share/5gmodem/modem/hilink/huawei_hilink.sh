@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # (c) 2010-2021 Cezary Jackiewicz <cezary@eko.one.pl>
 #
@@ -9,22 +10,22 @@ IP=$1
 [ -z "$IP" ] && exit 0
 [ -e /usr/bin/wget ] || exit 0
 getvaluen() {
-	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/$1 | sed 's/[^0-9]//g')
+	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/5gmodem/$1 | sed 's/[^0-9]//g')
 }
 
 getvaluens() {
-	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/$1 | sed 's/[^0-9-]//g')
+	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/5gmodem/$1 | sed 's/[^0-9-]//g')
 }
 
 getvalue() {
-	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/$1)
+	echo $(awk -F[\<\>] '/<'$2'>/ {print $3}' /tmp/5gmodem/$1)
 }
 
 cookie=$(mktemp)
-/usr/bin/wget -t 25 -O /tmp/webserver-token "http://$IP/api/webserver/token" >/dev/null 2>&1
+/usr/bin/wget -t 25 -O /tmp/5gmodem/webserver-token "http://$IP/api/webserver/token" >/dev/null 2>&1
 token=$(getvaluen webserver-token token)
 if [ -z "$token" ]; then
-	/usr/bin/wget -t 25 -O /tmp/webserver-token "http://$IP/api/webserver/SesTokInfo" >/dev/null 2>&1
+	/usr/bin/wget -t 25 -O /tmp/5gmodem/webserver-token "http://$IP/api/webserver/SesTokInfo" >/dev/null 2>&1
 	sesinfo=$(getvalue webserver-token SesInfo)
 fi
 if [ -z "$sesinfo" ]; then
@@ -35,11 +36,11 @@ files="device/signal monitoring/status net/current-plmn net/signal-para device/i
 for f in $files; do
 	nf=$(echo $f | sed 's!/!-!g')
 	if [ -n "$token" ]; then
-		/usr/bin/wget -t 3 -O /tmp/$nf "http://$IP/api/$f" --header "__RequestVerificationToken: $token" >/dev/null 2>&1
+		/usr/bin/wget -t 3 -O /tmp/5gmodem/$nf "http://$IP/api/$f" --header "__RequestVerificationToken: $token" >/dev/null 2>&1
 	elif [ -n "$sesinfo" ]; then
-		/usr/bin/wget -t 3 -O /tmp/$nf "http://$IP/api/$f" --header "Cookie: $sesinfo" >/dev/null 2>&1
+		/usr/bin/wget -t 3 -O /tmp/5gmodem/$nf "http://$IP/api/$f" --header "Cookie: $sesinfo" >/dev/null 2>&1
 	else
-		/usr/bin/wget -t 3 -O /tmp/$nf "http://$IP/api/$f" --load-cookies=$cookie >/dev/null 2>&1
+		/usr/bin/wget -t 3 -O /tmp/5gmodem/$nf "http://$IP/api/$f" --load-cookies=$cookie >/dev/null 2>&1
 	fi
 done
 
@@ -186,7 +187,7 @@ if [[ $COPSA =~ ^[0-9]+$ ]]; then
 fi
 
 # operator location from temporary config
-LOCATIONFILE=/tmp/location
+LOCATIONFILE=/tmp/5gmodem/location
 if [ -e "$LOCATIONFILE" ]; then
 	touch $LOCATIONFILE
 	LOC=$(cat $LOCATIONFILE)
@@ -196,12 +197,12 @@ if [ -e "$LOCATIONFILE" ]; then
 				rm $LOCATIONFILE
 				LOC=$(awk -F[\;] '/^'$COPSA';/ {print $2}' $RES/mccmnc.dat)
 				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/location
+					echo "$LOC" > /tmp/5gmodem/location
 				fi
 			else
 				LOC=$(awk -F[\;] '/^'$COPSA';/ {print $2}' $RES/mccmnc.dat)
 				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/location
+					echo "$LOC" > /tmp/5gmodem/location
 				fi
 			fi
 	fi
@@ -209,18 +210,18 @@ else
 	if [[ "$COPS_MCC$COPS_MNC" =~ ^[0-9]+$ ]]; then
 		if [ -n "$LOC" ]; then
 			LOC=$(awk -F[\;] '/^'$COPS_MCC$COPS_MNC';/ {print $2}' $RES/mccmnc.dat)
-				echo "$LOC" > /tmp/location
+				echo "$LOC" > /tmp/5gmodem/location
 			else
-				echo "-" > /tmp/location
+				echo "-" > /tmp/5gmodem/location
 		fi
 	fi
 fi
 
 LAC_HEX=$(getvalue net-signal-para Lac)
 if [ -z "$LAC_HEX" ]; then
-	/usr/bin/wget -t 3 -O /tmp/add-param "http://$IP/config/deviceinformation/add_param.xml" > /dev/null 2>&1
+	/usr/bin/wget -t 3 -O /tmp/5gmodem/add-param "http://$IP/config/deviceinformation/add_param.xml" > /dev/null 2>&1
 	LAC_HEX=$(getvalue add-param lac)
-	rm /tmp/add-param
+	rm /tmp/5gmodem/add-param
 fi
 if [ -z "$LAC_HEX" ]
 then

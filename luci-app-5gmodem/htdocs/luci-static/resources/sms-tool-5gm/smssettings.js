@@ -244,10 +244,10 @@ function addReceiveIncoming(s) {
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'dump', '', portES ]))
 				.then(function(res) {
 					if (!res) return;
-					fs.write('/tmp/mysms.txt', res.trim().replace(/\r\n/g, '\n') + '\n');
-					fs.stat('/tmp/mysms.txt').then(function () {
+					fs.write('/tmp/5gmodem/mysms.txt', res.trim().replace(/\r\n/g, '\n') + '\n');
+					fs.stat('/tmp/5gmodem/mysms.txt').then(function () {
 						if (confirm(_('Save sms to txt file?'))) {
-							L.resolveDefault(fs.read_direct('/tmp/mysms.txt'), null).then(function (restxt) {
+							L.resolveDefault(fs.read_direct('/tmp/5gmodem/mysms.txt'), null).then(function (restxt) {
 								if (restxt) {
 									L.ui.showModal(_('Saving...'), [
 										E('p', { 'class': 'spinning' }, _('Please wait, saving the SMS messages to a text file'))

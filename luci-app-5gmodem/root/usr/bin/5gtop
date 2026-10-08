@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # 5gtop - страница «Сеть» из LuCI, но в терминале.
 #
@@ -192,9 +193,9 @@ case "$TERM" in
 		C_Q1="${ESC}[92m"; C_Q2="${ESC}[32m"; C_Q3="${ESC}[33m"; C_Q4="${ESC}[31m" ;;
 esac
 
-DATA="/tmp/5gtop.$$"
+DATA="/tmp/5gmodem/5gtop.$$"
 # файл, куда пишет ход теста speedtest.sh (тот же, что читает веб-страница)
-STFILE="/tmp/5gmodem_speedtest.json"
+STFILE="/tmp/5gmodem/speedtest.json"
 NPFILE="$DATA.np"
 
 # Индекс АКТИВНОГО аплинка в списке приоритетов.
@@ -668,19 +669,19 @@ if [ -x /usr/share/5gmodem/esim.sh ]; then
 	# если файл есть, читаем его мгновенно. Опрос лезет в порт и занимает
 	# секунды - платить их на КАЖДОМ запуске утилиты только ради состава
 	# вкладок неправильно, это было заметно на глаз.
-	_esc="/tmp/5gmodem_esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)"
+	_esc="/tmp/5gmodem/esimstat_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)"
 	if [ -s "$_esc" ]; then
 		grep -q '"available":1' "$_esc" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at eng"
 	else
-		( /usr/share/5gmodem/esim.sh status > /tmp/5gtop.es.$$ 2>/dev/null ) &
+		( /usr/share/5gmodem/esim.sh status > /tmp/5gmodem/5gtop.es.$$ 2>/dev/null ) &
 		_esp=$!; _esn=0
 		while kill -0 "$_esp" 2>/dev/null; do
 			_esn=$((_esn + 1))
 			[ "$_esn" -ge 3 ] && { kill "$_esp" 2>/dev/null; break; }
 			sleep 1
 		done
-		grep -q '"available":1' "/tmp/5gtop.es.$$" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at eng"
-		rm -f "/tmp/5gtop.es.$$"
+		grep -q '"available":1' "/tmp/5gmodem/5gtop.es.$$" 2>/dev/null && TAB_IDS="net cell modem sms esim ussd at eng"
+		rm -f "/tmp/5gmodem/5gtop.es.$$"
 	fi
 fi
 # Стартовый раздел можно задать переменной: TAB=2 5gtop. Нужно и для проверки
@@ -1341,10 +1342,10 @@ ENG_ROWS=16
 ENG_MSG=""; ENG_MSGN=0
 ENG_ARROW="→"
 [ "${TOP_ASCII:-0}" = 1 ] && ENG_ARROW="->"
-ENG_FILE="/tmp/5gtop-console.txt"
+ENG_FILE="/tmp/5gmodem/5gtop-console.txt"
 
 mlog_path() {
-	MLOG="/tmp/5gtop_modelog_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9\n' '_')"
+	MLOG="/tmp/5gmodem/5gtop_modelog_$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null | tr -c 'A-Za-z0-9\n' '_')"
 }
 mlog_path
 
@@ -2321,7 +2322,7 @@ switch_slot() {
 # Compal, показывался только Compal).
 _present=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
 	| jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
-[ -n "$_present" ] || _present=$(jsonfilter -i /tmp/5gmodem_listmodems.cache -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+[ -n "$_present" ] || _present=$(jsonfilter -i /tmp/5gmodem/listmodems.cache -e '@[*].path' 2>/dev/null | tr '\n' ' ')
 MODEMS=""
 for _sec in $(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\(m_[^.]*\)\.path=.*/\1/p'); do
 	_sp=$(uci -q get "5gmodem.$_sec.path")

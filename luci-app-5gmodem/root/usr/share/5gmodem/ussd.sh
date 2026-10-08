@@ -27,8 +27,8 @@
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
-ST=/tmp/5gmodem_ussd.json
-LOCK=/tmp/5gmodem_ussd.lock
+ST=/tmp/5gmodem/ussd.json
+LOCK=/tmp/5gmodem/ussd.lock
 
 . "$RES/lib.sh" 2>/dev/null
 . "$RES/atlock.sh" 2>/dev/null
@@ -269,10 +269,10 @@ _st running starting
 		case "$_cd" in ''|auto) : ;; *) set -- "$@" -c "$_cd" ;; esac
 
 		at_lock "$PORT" 20 2>/dev/null
-		OUT=$(sms_tool "$@" ussd "$CODE" 2>/tmp/5gmodem_ussd.err)
+		OUT=$(sms_tool "$@" ussd "$CODE" 2>/tmp/5gmodem/ussd.err)
 		at_unlock 2>/dev/null
-		ERR=$(cat /tmp/5gmodem_ussd.err 2>/dev/null)
-		rm -f /tmp/5gmodem_ussd.err
+		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
+		rm -f /tmp/5gmodem/ussd.err
 		[ -n "$OUT" ]
 	}
 

@@ -82,10 +82,10 @@ _mv32_pick() {   # $1 - RAT, $2 - Enable|Disable; ответ на stdin
 # подоболочке, - переменную-кэш между ними не передать. А чтений восемь
 # (4G/5G NSA/5G SA/3G, каждое дважды), и без кэша это восемь походов в порт, за
 # который дерутся дозвон, метрики и SMS. Кэш короткий (5 c) и лежит под
-# префиксом /tmp/5gmodem_bands_* - тем самым, который set*-вербы уже чистят
+# префиксом /tmp/5gmodem/bands_* - тем самым, который set*-вербы уже чистят
 # после записи, так что «применил и вижу старое» здесь появиться неоткуда.
 _mv32_bp() {
-	_m32_c="/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_m32_c="/tmp/5gmodem/bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	if [ -s "$_m32_c" ]; then
 		_m32_ts=$(cat "$_m32_c.t" 2>/dev/null)
 		case "$_m32_ts" in
@@ -150,8 +150,8 @@ _mv32_setbands() {   # $1 - RAT, $2 - список бендов через пр�
 		return
 	fi
 	_m32_l=$(_mv32_csv "$2") || return 1
-	rm -f "/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')" \
-		"/tmp/5gmodem_bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_').t" 2>/dev/null
+	rm -f "/tmp/5gmodem/bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')" \
+		"/tmp/5gmodem/bands_mv32bp_$(printf '%s' "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_').t" 2>/dev/null
 	_m32_w=$(_mv32_at "BAND_PREF=$1,2,$_m32_l")
 	case "$_m32_w" in
 		*ERROR*) logger -t 5gmodem "band_pref($1): firmware rejected the write \"BAND_PREF=$1,2,$_m32_l\": $(printf '%s' "$_m32_w" | tr '\n' ' ' | head -c 120)"

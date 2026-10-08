@@ -97,7 +97,7 @@ _persist_bands() {
 	# вешают PDP-контекст ("context won't activate"), и модем остаётся без сети -
 	# ровно этот регресс и наблюдался при смене бендов из UI.
 	_pb_if=$(uci -q get "5gmodem.$_pb_sec.network")
-	[ -n "$_pb_if" ] && : > "/tmp/5gmodem_bandrestore_$_pb_if" 2>/dev/null
+	[ -n "$_pb_if" ] && : > "/tmp/5gmodem/bandrestore_$_pb_if" 2>/dev/null
 }
 
 # То же для РЕЖИМА СЕТИ: у Quectel RM520N прошивка после перезагрузки сама
@@ -114,7 +114,7 @@ _persist_mode() {
 	esac
 	uci -q commit 5gmodem
 	_pm_if=$(uci -q get "5gmodem.$_pm_sec.network")
-	[ -n "$_pm_if" ] && : > "/tmp/5gmodem_bandrestore_$_pm_if" 2>/dev/null
+	[ -n "$_pm_if" ] && : > "/tmp/5gmodem/bandrestore_$_pm_if" 2>/dev/null
 }
 
 hextobands() {
@@ -624,7 +624,7 @@ _reconnect_iface() {
 	# Это НАМЕРЕННЫЙ реконнект (смена 5G-режима/cell-lock/восстановление бендов), а
 	# не холодный boot-attach. Ставим restore-маркер, чтобы порождённый нами ifup не
 	# разбудил restorebands с лишним CFUN поверх (двойной CFUN вешает PDP FM350).
-	: > "/tmp/5gmodem_bandrestore_$_ri_if" 2>/dev/null
+	: > "/tmp/5gmodem/bandrestore_$_ri_if" 2>/dev/null
 	# Ждём именно РЕГИСТРАЦИИ: поднять интерфейс раньше - значит получить отказ
 	# и уйти в паузу netifd, то есть сделать хуже, чем ничего.
 	_ri_n=0
@@ -677,7 +677,7 @@ _bands_live() {
 	case "$_BANDS_APPLY_LIVE" in 1|reconnect) return 0 ;; *) return 1 ;; esac
 }
 _bands_kick() {
-	[ -n "$_MBIMP_IFACE" ] && : > "/tmp/${_MBIMP_KIND:-mbimp}-keeper.$_MBIMP_IFACE.kick"
+	[ -n "$_MBIMP_IFACE" ] && : > "/tmp/5gmodem/${_MBIMP_KIND:-mbimp}-keeper.$_MBIMP_IFACE.kick"
 }
 _bands_after_write() {
 	_bands_kick
@@ -688,7 +688,7 @@ _bands_after_write() {
 	esac
 }
 _bands_flush() {
-	rm -f /tmp/5gmodem_bands_* 2>/dev/null
+	rm -f /tmp/5gmodem/bands_* 2>/dev/null
 }
 _bands_set_bg() {
 	(
@@ -785,7 +785,7 @@ if [ "$1" = "jsonrefresh" ]; then
 fi
 if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 	_BJAM=$(active_modem)
-	_BJF="/tmp/5gmodem_bands_$_BJAM"
+	_BJF="/tmp/5gmodem/bands_$_BJAM"
 	_BJT=$(cat "$_BJF.t" 2>/dev/null)
 	case "$_BJT" in ''|*[!0-9]*) _BJT="" ;; esac
 	# ПРОТОКОЛ ИНТЕРФЕЙСА - часть валидности кэша, а не только время. От него
@@ -883,7 +883,7 @@ if [ "$1" = "json" ] && [ -z "$_BJ_REFRESH" ]; then
 fi
 
 _sa_resfile() {
-	printf '/tmp/5gmodem_bandapply_%s.res\n' "$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	printf '/tmp/5gmodem/bandapply_%s.res\n' "$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 }
 _sa_islist() {
 	case "$1" in
@@ -1274,7 +1274,7 @@ if [ "$_PORT_OK" = 1 ]; then
 		[ -n "$_bo_if" ] || _bo_if=$(uci -q get 5gmodem.@5gmodem[0].network)
 		if [ "$(uci -q get "network.$_bo_if.proto" 2>/dev/null)" != "modemmanager" ] \
 		   && pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1; then
-			_bo_c="/tmp/5gmodem_mmowns_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
+			_bo_c="/tmp/5gmodem/mmowns_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
 			if [ -s "$_bo_c" ] && [ -n "$(find "$_bo_c" -mmin -1 2>/dev/null)" ]; then
 				_bo_v=$(cat "$_bo_c" 2>/dev/null)
 			else
@@ -1530,11 +1530,11 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 # дозвона (отчёт #24, Quectel RM551E-GL). Теперь задание отдаёт очередь порта,
 # ждёт немного и перезапускает, только если после него запись не началась;
 # иначе перезапуск делает последнее. Флаг pending переносит успех записи.
-_BW_TOK=/tmp/5gmodem_bandapply.tok
-_BW_PEND=/tmp/5gmodem_bandapply.pending
+_BW_TOK=/tmp/5gmodem/bandapply.tok
+_BW_PEND=/tmp/5gmodem/bandapply.pending
 _bw_serial_lock() {
 	_bsl_f=/var/lock/5gmodem_bandwrite.lock
-	[ -d /var/lock ] || _bsl_f=/tmp/5gmodem_bandwrite.lock
+	[ -d /var/lock ] || _bsl_f=/tmp/5gmodem/bandwrite.lock
 	touch "$_bsl_f" 2>/dev/null || return 0
 	exec 7>"$_bsl_f"
 	_bsl_n=0
@@ -1782,7 +1782,7 @@ case $1 in
 			done
 			uci -q commit 5gmodem
 			_sa_if=$(uci -q get "5gmodem.$_sa_sec.network")
-			[ -n "$_sa_if" ] && : > "/tmp/5gmodem_bandrestore_$_sa_if" 2>/dev/null
+			[ -n "$_sa_if" ] && : > "/tmp/5gmodem/bandrestore_$_sa_if" 2>/dev/null
 		fi
 		_needs_mm_takeover && _SA_TAKEOVER=1
 		_sa_res_write running

@@ -159,7 +159,7 @@ setmode() {
 # ровно то, ради чего в bands.sh есть uci-штамп и restorebands.
 # (ревью 13.09.2026, форум 4pda)
 _qnl_key() {
-	_qk_f="/tmp/5gmodem_qnwlock_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_qk_f="/tmp/5gmodem/qnwlock_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_qk_v=$(cat "$_qk_f" 2>/dev/null)
 	case "$_qk_v" in
 		common/4g|common/lte|none) echo "$_qk_v"; return ;;
@@ -251,7 +251,7 @@ setcelllock() {
 # AT-запросов в порт, который делят метрики и дозвон.
 # (ревью 13.09.2026, форум 4pda)
 _q256_key() {
-	_qq_f="/tmp/5gmodem_q256_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
+	_qq_f="/tmp/5gmodem/q256_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_qq_v=$(cat "$_qq_f" 2>/dev/null)
 	case "$_qq_v" in
 		dl_256qam|256qam|none) echo "$_qq_v"; return ;;

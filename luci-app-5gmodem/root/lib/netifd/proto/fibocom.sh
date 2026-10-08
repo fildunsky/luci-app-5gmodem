@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # netifd protocol handler: "fibocom"
 #
@@ -129,7 +130,7 @@ _fibocom_auth() {
 	# он меняется при каждой переэнумерации (= ребуте модема)
 	[ -n "$interface" ] && [ -n "$usbpath" ] && \
 		cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null \
-			> "/tmp/fibocom_authed_$interface" 2>/dev/null
+			> "/tmp/5gmodem/fibocom_authed_$interface" 2>/dev/null
 }
 
 # Define APN with a given PDP type, (re)activate the default PDP context and echo
@@ -242,7 +243,7 @@ _r11e_ready() {   # $1 - порт
 _r11e_prepare() {   # $1 - порт, $2 - тип PDP, $3 - APN, $4 - интерфейс
 	local dev="$1" key mark a s cl o
 	key="$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)|$2|$3|$auth|$(printf '%s|%s' "$username" "$password" | md5sum | cut -c1-16)"
-	mark="/tmp/5gmodem_r11e_prep_$4"
+	mark="/tmp/5gmodem/r11e_prep_$4"
 	[ "$(cat "$mark" 2>/dev/null)" = "$key" ] && return 0
 	if ! _r11e_ready "$dev"; then
 		echo "fibocom[$$] R11e-LTE: $dev does not answer AT - default bearer not configured"
@@ -266,7 +267,7 @@ _r11e_prepare() {   # $1 - порт, $2 - тип PDP, $3 - APN, $4 - интер�
 	esac
 	_r11e_at "$dev" 'AT+CFUN=1' >/dev/null
 	printf '%s' "$key" > "$mark" 2>/dev/null
-	[ "$a" != 0 ] && cat "/sys/bus/usb/devices/$usbpath/devnum" > "/tmp/fibocom_authed_$interface" 2>/dev/null
+	[ "$a" != 0 ] && cat "/sys/bus/usb/devices/$usbpath/devnum" > "/tmp/5gmodem/fibocom_authed_$interface" 2>/dev/null
 	R11E_CYCLED=1
 }
 
@@ -590,7 +591,7 @@ proto_fibocom_setup() {
 	# if it rewrote the mask (then we MUST cold-dial, the old bearer is on the wrong
 	# bands) or 3 if it already matched (fast path is fine).
 	local bands_changed=0
-	local bmark="/tmp/5gmodem_bandsprep_$interface"
+	local bmark="/tmp/5gmodem/bandsprep_$interface"
 	local bdev
 	bdev=$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)
 	if { [ ! -e "$bmark" ] || [ "$(cat "$bmark" 2>/dev/null)" != "$bdev" ]; } && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != "0" ]; then
@@ -609,7 +610,7 @@ proto_fibocom_setup() {
 			# восстановление на ifup (31-5gmodem-bands) его же маркером - иначе оно
 			# на поднявшемся интерфейсе сделало бы ВТОРОЙ реконнект (тот самый
 			# двойной подъём). Прото - единственный, кто трогает бенды на дозвоне.
-			: > "/tmp/5gmodem_bandrestore_$interface" 2>/dev/null
+			: > "/tmp/5gmodem/bandrestore_$interface" 2>/dev/null
 		fi
 		echo "$bdev" > "$bmark" 2>/dev/null
 	fi
@@ -644,8 +645,8 @@ proto_fibocom_setup() {
 	# Всё остальное (переключение приоритета, обычный ifup) идёт быстрым путём -
 	# он и нужен, чтобы переключение было мгновенным и без разрыва.
 	local net_plmn net_was net_f cold_f
-	net_f="/tmp/5gmodem_fibo_plmn_$interface"
-	cold_f="/tmp/5gmodem_fibo_cold_$interface"
+	net_f="/tmp/5gmodem/fibo_plmn_$interface"
+	cold_f="/tmp/5gmodem/fibo_cold_$interface"
 	net_plmn=$(sms_tool -d "$dial" at "AT+COPS?" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+COPS:.*,"\([0-9]\{5,6\}\)".*/\1/p' | head -1)
 	net_was=$(cat "$net_f" 2>/dev/null)
@@ -666,7 +667,7 @@ proto_fibocom_setup() {
 		pap|chap|both)
 			if [ -n "$username" ]; then
 				_au_now=$(cat "/sys/bus/usb/devices/$usbpath/devnum" 2>/dev/null)
-				_au_was=$(cat "/tmp/fibocom_authed_$interface" 2>/dev/null)
+				_au_was=$(cat "/tmp/5gmodem/fibocom_authed_$interface" 2>/dev/null)
 				if [ -z "$_au_was" ] || [ "$_au_now" != "$_au_was" ]; then
 					echo "fibocom[$$] modem was re-enumerated - PAP/CHAP authorization lost, cold dial"
 					bands_changed=1
@@ -712,7 +713,7 @@ proto_fibocom_setup() {
 		# IPv4-only bearer и IPv6 не появился бы НИКОГДА (модем сам IPv4->IPv4v6 не
 		# апгрейдит). apn пуст = роуминг: там APN не сверяем, но тип PDP - да.
 		local pdp_ok="$pdptype"
-		[ "$(cat "/tmp/5gmodem_fibo_pdpalt_$interface" 2>/dev/null)" = "$pdptype>$cur_pdp" ] && pdp_ok="$cur_pdp"
+		[ "$(cat "/tmp/5gmodem/fibo_pdpalt_$interface" 2>/dev/null)" = "$pdptype>$cur_pdp" ] && pdp_ok="$cur_pdp"
 		if { [ -z "$apn" ] || [ "$cur_apn" = "$apn" ]; } && [ "$cur_pdp" = "$pdp_ok" ]; then
 			ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
 				| sed -n 's/.*+CGPADDR: *1,//p' | tr ',' '\n' | tr -d '" ' | grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
@@ -757,7 +758,7 @@ proto_fibocom_setup() {
 			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IP"
 			echo "fibocom[$$] no IP with $pdptype, retrying $alt"
 			ip=$(_fibocom_activate "$dial" "$alt" "$apn")
-			[ -n "$ip" ] && echo "$pdptype>$alt" > "/tmp/5gmodem_fibo_pdpalt_$interface"
+			[ -n "$ip" ] && echo "$pdptype>$alt" > "/tmp/5gmodem/fibo_pdpalt_$interface"
 		fi
 	fi
 	if [ -z "$ip" ]; then

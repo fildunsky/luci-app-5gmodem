@@ -45,7 +45,7 @@ TG_FIRSTH=$(_cfg tg_first_hours); case "$TG_FIRSTH" in ''|*[!0-9]*) TG_FIRSTH=24
 STORE=$(_cfg storage); [ -n "$STORE" ] || STORE=SM
 PORT=$(_cfg readport)
 
-STAMP=/tmp/5gmodem_tg_last
+STAMP=/tmp/5gmodem/tg_last
 # Номер последнего разобранного апдейта. НА ФЛЕШЕ: после перезагрузки роутера
 # команды из чата не должны выполниться повторно - «отправь SMS» дважды это не
 # то же самое, что дважды показать страницу.
@@ -53,7 +53,7 @@ OFFSET=/etc/5gmodem/tg_offset
 # Отметка «в чат уже объяснили, как отправлять». На флеше: приглашение должно
 # прийти ОДИН раз за всё время, а не после каждой перезагрузки.
 ANNOUNCED=/etc/5gmodem/tg_announced
-LASTLOG=/tmp/5gmodem_tg_result
+LASTLOG=/tmp/5gmodem/tg_result
 
 _log() { logger -t 5gmodem "telegram: $*"; }
 
@@ -125,7 +125,7 @@ _tg_proxy_port() {
 # Отметка «прямой путь мёртв»: без неё КАЖДЫЙ вызов (а тик шлёт и опрашивает
 # каждые ~30 c) сжигал бы таймаут прямой попытки впустую. TTL 10 минут: смена
 # аплинка на туннельный снимет блокировку - и мы это заметим.
-_TG_DDEAD=/tmp/5gmodem_tg_direct_dead
+_TG_DDEAD=/tmp/5gmodem/tg_direct_dead
 _tg_direct_dead() {
 	_td_t=$(cat "$_TG_DDEAD" 2>/dev/null)
 	case "$_td_t" in ''|*[!0-9]*) return 1 ;; esac

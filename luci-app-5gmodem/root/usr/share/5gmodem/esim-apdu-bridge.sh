@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # lpac stdio backend: APDU -> eUICC по AT (+CCHO/+CGLA/+CCHC) через sms_tool,
 # и (опционально) HTTP -> ES9+ через wget/OpenSSL.
@@ -117,9 +118,9 @@ while IFS= read -r line; do
 			# --- ES9+ через wget/OpenSSL (см. шапку: mbedTLS не тянет GSMA CI) ---
 			url=$(printf '%s' "$line" | jsonfilter -e '@.payload.url' 2>/dev/null)
 			tx=$(printf '%s' "$line" | jsonfilter -e '@.payload.tx' 2>/dev/null)
-			_rq="/tmp/5gmodem_esim_hreq.$$"
-			_rb="/tmp/5gmodem_esim_hbody.$$"
-			_rh="/tmp/5gmodem_esim_hhdr.$$"
+			_rq="/tmp/5gmodem/esim_hreq.$$"
+			_rb="/tmp/5gmodem/esim_hbody.$$"
+			_rh="/tmp/5gmodem/esim_hhdr.$$"
 			# Заголовки -> позиционные параметры: в них есть пробелы, склеивать
 			# в строку нельзя. IFS сохраняем - снаружи крутится read с IFS=''.
 			set --

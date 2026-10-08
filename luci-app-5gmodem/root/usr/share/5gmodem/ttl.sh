@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # Apply fixed TTL / hop-limit on the modem network interface.
 # Usage:
@@ -90,7 +91,7 @@ apply)
 	# Идиома «объявить - flush - объявить с правилами» атомарно заменяет
 	# содержимое и работает и на первом запуске, и на повторном.
 	if [ -n "$DEV" ] && [ -n "$T4I$T4O$T6I$T6O" ]; then
-		TMP="/tmp/5gmodem_ttl.$$.nft"
+		TMP="/tmp/5gmodem/ttl.$$.nft"
 		{
 			echo "table inet modem5g_ttl"
 			echo "flush table inet modem5g_ttl"
@@ -133,7 +134,7 @@ apply)
 		# официальных сборках есть); нет его - остаются правила выше и запись в
 		# журнале. Аппаратный оффлоад (PPE) USB-модемы не ускоряет: до них пакет
 		# в любом случае доходит через процессор.
-		TMPD="/tmp/5gmodem_ttl_dev.$$.nft"
+		TMPD="/tmp/5gmodem/ttl_dev.$$.nft"
 		{
 			echo "table netdev modem5g_ttl_dev"
 			echo "delete table netdev modem5g_ttl_dev"

@@ -18,7 +18,7 @@ getsupportedbands() {
 }
 
 _fm350_no_nr() {
-    _nn_cf="/tmp/5gmodem_fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
+    _nn_cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
     case "$(_fg_model)" in
         *FG6*) _fm350_caps lte >/dev/null 2>&1; return 0 ;;
     esac

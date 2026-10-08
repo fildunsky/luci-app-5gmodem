@@ -193,6 +193,20 @@ set_pdp_opt() {
 
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
 
+MK_KEEP_OPTS="defaultroute peerdns delegate ip4table ip6table"
+_mk_keep_save() {
+	MK_KEEP=""
+	for _mk_o in $MK_KEEP_OPTS; do
+		_mk_v=$(uci -q get "network.$1.$_mk_o") || continue
+		MK_KEEP="$MK_KEEP $_mk_o=$_mk_v"
+	done
+}
+_mk_keep_restore() {
+	for _mk_kv in $MK_KEEP; do
+		uci -q set "network.$1.${_mk_kv%%=*}=${_mk_kv#*=}"
+	done
+}
+
 _mk_if_ok() {
 	case "$1" in ''|*[!A-Za-z0-9_]*) return 1 ;; esac
 	uci -q get "network.$1" >/dev/null 2>&1 || return 0
@@ -231,7 +245,7 @@ _mk_guard_if "$IF"
 # а uqmi не соблюдает свой -t. Возвращает вывод; при зависании убивает процесс.
 run_bounded() {   # $1 = секунды, далее команда
 	_lim="$1"; shift
-	_out=$(mktemp /tmp/5gmodem_bounded.XXXXXX 2>/dev/null) || _out="/tmp/5gmodem_bounded.$$.$(date +%s)"
+	_out=$(mktemp /tmp/5gmodem/bounded.XXXXXX 2>/dev/null) || _out="/tmp/5gmodem/bounded.$$.$(date +%s)"
 	rm -f "$_out"
 	( "$@" >"$_out" 2>&1 ) &
 	_p=$!
@@ -505,6 +519,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		OLDPASS=$(uci -q get "network.$IF.password")
 		OLDDNS=$(uci -q get "network.$IF.dns")
 		_mk_guard_if "$IF"
+		_mk_keep_save "$IF"
 		uci -q delete "network.$IF" 2>/dev/null
 		uci set "network.$IF=interface"
 
@@ -627,6 +642,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ -n "$OLDUSER" ] && uci set "network.$IF.username=$OLDUSER"
 		[ -n "$OLDPASS" ] && uci set "network.$IF.password=$OLDPASS"
 		[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
+		_mk_keep_restore "$IF"
 		uci commit network
 
 
@@ -1013,6 +1029,7 @@ OLDEPS_AUTH=$(uci -q get "network.$IF.init_allowedauth")
 OLDEPS_USER=$(uci -q get "network.$IF.init_username")
 OLDEPS_PASS=$(uci -q get "network.$IF.init_password")
 _mk_guard_if "$IF"
+_mk_keep_save "$IF"
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
@@ -1086,6 +1103,7 @@ uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
 # в network.<iface>.dns - здесь мы лишь ПЕРЕНОСИМ его через пересоздание
 # интерфейса. По умолчанию фолбэк выключен, автоматически ничего не ставим.
 [ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
+_mk_keep_restore "$IF"
 uci commit network
 
 # ПЕРЕЗАГРУЗИТЬ КОНФИГ netifd - ОБЯЗАТЕЛЬНО, И ИМЕННО ЗДЕСЬ.

@@ -17,7 +17,7 @@
 # для точек здоровья на карточках. Переключение штрафным маршрутом и лестница
 # лечения - следующие этапы, поверх этого же состояния.
 #
-# Состояние: /tmp/5gmodem_health/<iface> = "state fails oks ms since"
+# Состояние: /tmp/5gmodem/health/<iface> = "state fails oks ms since"
 #   state - up|down|unknown, since - uptime_s последней СМЕНЫ state,
 #   ms - время последнего успешного пинга. Файлы переживают выключение слежения
 #   (протухшие точки честнее прятать в status, а не терять историю).
@@ -29,7 +29,7 @@
 RES="/usr/share/5gmodem"
 . "$RES/lib.sh"
 
-HDIR=/tmp/5gmodem_health
+HDIR=/tmp/5gmodem/health
 CFG=5gmodem
 
 # ОДИННАДЦАТЬ НАСТРОЕК ЧИТАЮТСЯ ИЗ ОДНОЙ СЕКЦИИ - БЕРЁМ ЕЁ ОДНИМ СНИМКОМ.
@@ -749,7 +749,7 @@ enforce() {
 #     временное (переэнумерация после нашей же перезагрузки);
 #   - ожил - лестница сбрасывается (см. judge), следующее падение с нуля.
 #
-# Состояние: /tmp/5gmodem_health/<iface>.heal = "step last_uptime attempts"
+# Состояние: /tmp/5gmodem/health/<iface>.heal = "step last_uptime attempts"
 
 HEAL_COOLDOWN=$(conf heal_cooldown); case "$HEAL_COOLDOWN" in ''|*[!0-9]*) HEAL_COOLDOWN=300 ;; esac
 HEAL_MAX=6
@@ -829,11 +829,11 @@ heal() {
 	# здоровому модему с живым интернетом. Проверка через прокси дорогая
 	# (curl), поэтому только на редком пути «ни одного живого вердикта».
 	if [ -z "$_h_anyup" ] && [ "$_h_cnt" -ge 1 ] && [ "$H_PG" = "1" ] && probe_proxy; then
-		_pg_last=$(cat /tmp/5gmodem_health.fwguard 2>/dev/null)
+		_pg_last=$(cat /tmp/5gmodem/health.fwguard 2>/dev/null)
 		case "$_pg_last" in ''|*[!0-9]*) _pg_last=0 ;; esac
 		_pg_now=$(uptime_s)
 		if [ $((_pg_now - _pg_last)) -ge 1800 ] || [ "$_pg_now" -lt "$_pg_last" ]; then
-			uptime_s > /tmp/5gmodem_health.fwguard
+			uptime_s > /tmp/5gmodem/health.fwguard
 			_ev "all links fail direct probes, but the internet works via the local proxy - probes look firewall-blocked, healing suspended"
 		fi
 		return 0
@@ -918,7 +918,7 @@ heal() {
 			_h_multi=""
 			if [ "$(wifi_sta_count "$_h_if")" -gt 1 ]; then
 				_h_multi=1
-				_h_mw="/tmp/5gmodem_health.multi.$_h_if"
+				_h_mw="/tmp/5gmodem/health.multi.$_h_if"
 				_h_mwt=$(cat "$_h_mw" 2>/dev/null)
 				case "$_h_mwt" in ''|*[!0-9]*) _h_mwt=0 ;; esac
 				_h_mnow=$(uptime_s)
@@ -1182,9 +1182,9 @@ heal() {
 			# снимка метрик; протухший снимок решения не меняет.
 			_h_2g=""
 			_h_mk=$(echo "$_h_path" | tr -c 'A-Za-z0-9' '_')
-			_h_ms="/tmp/5gmodem_metrics_${_h_mk}.json"
+			_h_ms="/tmp/5gmodem/metrics_${_h_mk}.json"
 			if [ -s "$_h_ms" ]; then
-				_h_mst=$(cat "/tmp/5gmodem_metrics_${_h_mk}.stamp" 2>/dev/null)
+				_h_mst=$(cat "/tmp/5gmodem/metrics_${_h_mk}.stamp" 2>/dev/null)
 				case "$_h_mst" in
 					''|*[!0-9]*) ;;
 					*) if [ $(( $(uptime_s) - _h_mst )) -le 300 ]; then
@@ -1378,7 +1378,7 @@ _teardown() {
 # один раз (rm -rf HDIR делает последующие заходы мгновенными no-op).
 _off_cleanup() {
 	[ -d "$HDIR" ] || exit 0
-	exec 9>"/tmp/5gmodem_health.lock"
+	exec 9>"/tmp/5gmodem/health.lock"
 	flock 9
 	_teardown
 	exit 0
@@ -1397,7 +1397,7 @@ tick)
 	# ОДИН КРУГ ЗА РАЗ. Фоновый tick и once со страницы могут пересечься, и
 	# тогда штрафы одного круга перетирают восстановление другого (поймано
 	# вживую при обкатке). tick при занятом замке просто пропускает ход.
-	exec 9>"/tmp/5gmodem_health.lock"
+	exec 9>"/tmp/5gmodem/health.lock"
 	flock -n 9 || exit 0
 	round
 	enforce
@@ -1417,7 +1417,7 @@ once)
 	# круга не читает, она перечитывает состояние следующим опросом
 	# (аудит 12.09.2026).
 	( exec >/dev/null 2>&1 </dev/null
-	  exec 9>"/tmp/5gmodem_health.lock"
+	  exec 9>"/tmp/5gmodem/health.lock"
 	  flock 9
 	  round
 	  enforce
@@ -1434,7 +1434,7 @@ event)
 	[ "$H_EN" = "1" ] || exit 0
 	case " $(wan_nets) " in *" $2 "*) ;; *) exit 0 ;; esac
 	mkdir -p "$HDIR"
-	exec 9>"/tmp/5gmodem_health.lock"
+	exec 9>"/tmp/5gmodem/health.lock"
 	flock 9
 	round
 	enforce

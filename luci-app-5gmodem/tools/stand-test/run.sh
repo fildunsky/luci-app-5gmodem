@@ -138,7 +138,7 @@ if [ -n "$WL" ]; then
 			T=$((secs + 180)) ssh_ "sh -s observe $secs 30" < "$HERE/stand/whitelist.sh" > "$OUT/whitelist/$mode.txt"
 			T=60 ssh_ "sh -s disarm" < "$HERE/stand/whitelist.sh" | rep
 			python3 "$HERE/wljudge.py" "$mode" "$OUT/whitelist/$mode.txt" | rep
-			T=400 ssh_ 'i=0; while [ $i -lt 60 ]; do s=$(cut -d" " -f1 /tmp/5gmodem_health/$(uci -q get 5gmodem.@5gmodem[0].network) 2>/dev/null); [ "$s" = up ] && break; sleep 5; i=$((i+1)); done; sleep 35; echo "R health=$s dns_listed=$(grep -c "^# Interface $(uci -q get 5gmodem.@5gmodem[0].network)" /tmp/resolv.conf.d/resolv.conf.auto)"' >> "$OUT/whitelist/$mode.txt"
+			T=400 ssh_ 'i=0; while [ $i -lt 60 ]; do s=$(cut -d" " -f1 /tmp/5gmodem/health/$(uci -q get 5gmodem.@5gmodem[0].network) 2>/dev/null); [ "$s" = up ] && break; sleep 5; i=$((i+1)); done; sleep 35; echo "R health=$s dns_listed=$(grep -c "^# Interface $(uci -q get 5gmodem.@5gmodem[0].network)" /tmp/resolv.conf.d/resolv.conf.auto)"' >> "$OUT/whitelist/$mode.txt"
 			python3 "$HERE/wljudge.py" "$mode" "$OUT/whitelist/$mode.txt" recovery | rep
 		done
 	else

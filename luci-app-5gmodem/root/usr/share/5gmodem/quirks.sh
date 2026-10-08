@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 #
 # База проверенных особенностей модемов (quirks).
 #
@@ -288,7 +289,7 @@ mm_at_fragile() {
 
 # Индекс модема в ModemManager по usb-пути, минутный кэш общий с mm_owns_path.
 _mm_index_cached() {
-	_mic_c="/tmp/5gmodem_mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mic_c="/tmp/5gmodem/mmowns_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 	_mic_i=""
 	if [ -s "$_mic_c" ] && [ -n "$(find "$_mic_c" -mmin -1 2>/dev/null)" ]; then
 		read -r _mic_i < "$_mic_c" 2>/dev/null
@@ -322,7 +323,7 @@ _mm_index_cached() {
 # Модем с одним AT-портом, любой другой модем и модем не под MM не затронуты.
 # $1 - usb-путь, $2 - секция, $3 - vid:pid. Печатает /dev/tty... или ничего.
 _mm_ports_cached() {   # $1 - usb-путь, $2 - индекс MM
-	_mpc_c="/tmp/5gmodem_mmports_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mpc_c="/tmp/5gmodem/mmports_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 	if [ -s "$_mpc_c" ] && [ -n "$(find "$_mpc_c" -mmin -1 2>/dev/null)" ]; then
 		cat "$_mpc_c" 2>/dev/null
 		return 0
@@ -359,7 +360,7 @@ mm_dedicated_at() {
 		_mda_t=$(echo "$_mda_at" | tail -n 1)
 		set -- "$1" "$2" "$3" $(_tty_ifnum "$_mda_t")
 		[ "$4" = "$1" ] && [ -n "$5" ] || return 0
-		if exec 6>/tmp/5gmodem_ucitx.lock 2>/dev/null && flock -n 6; then
+		if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
 			uci -q set "5gmodem.$2.mm_at_if=$5"
 			uci -q set "5gmodem.$2.mm_at_vp=$3"
 			uci -q commit 5gmodem 2>/dev/null
@@ -427,7 +428,7 @@ mm_at_allowed() {
 	case "$(uci -q get "network.$_maa_if.proto" 2>/dev/null)" in
 		mbimp)
 			ubus call "network.interface.$_maa_if" status 2>/dev/null | grep -q '"up": true' && return 0
-			[ -s "/tmp/5gmodem_mbimp_sim_$_maa_if" ]
+			[ -s "/tmp/5gmodem/mbimp_sim_$_maa_if" ]
 			return $? ;;
 	esac
 	command -v mmcli >/dev/null 2>&1 || return 1

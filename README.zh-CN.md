@@ -85,7 +85,7 @@ opkg install luci-i18n-base-zh-cn
 - **APN 数据库更新按钮**——无需重装应用即可刷新全球运营商数据库（GNOME MBPI + AOSP）。
 - **端口自动检测**——自动识别 AT 端口和网络接口；也可手动指定。
 - 支持**没有 AT 端口的 USB 上网卡**（华为 HiLink 及同类）——见下文。
-- **智能家居遥测**——`/tmp/5gmodem_tele.json` 中的扁平 JSON（信号、运营商、制式、载波聚合、速率、未读短信数），可选 MQTT 发布并支持 Home Assistant 自动发现；见 [docs/telemetry.md](docs/telemetry.md)。
+- **智能家居遥测**——`/tmp/5gmodem/tele.json` 中的扁平 JSON（信号、运营商、制式、载波聚合、速率、未读短信数），可选 MQTT 发布并支持 Home Assistant 自动发现；见 [docs/telemetry.md](docs/telemetry.md)。
 - **`5gtop`**——终端仪表盘，SSH 下无浏览器时使用，数据与网页一致。
 
 

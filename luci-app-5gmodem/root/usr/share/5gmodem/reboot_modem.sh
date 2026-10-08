@@ -210,6 +210,18 @@ if [ "$MODE" = power ]; then
 		[ -e "/sys/bus/usb/devices/$_pg_path" ] || return 1
 		[ "$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)" != "$_pg_dn" ]
 	}
+	_pg_kick() {
+		_pg_pd=$(_usb_port_dir "$_pg_path")
+		[ -w "$_pg_pd/disable" ] || return 1
+		_pg_pp=$(readlink -f "$_pg_pd/peer" 2>/dev/null)
+		[ -n "$_pg_pp" ] && echo 1 > "$_pg_pp/disable" 2>/dev/null
+		echo 1 > "$_pg_pd/disable" 2>/dev/null
+		sleep 3
+		[ -n "$_pg_pp" ] && echo 0 > "$_pg_pp/disable" 2>/dev/null
+		sleep 2
+		echo 0 > "$_pg_pd/disable" 2>/dev/null
+		return 0
+	}
 	_pg_wait() {
 		_pg_w=0
 		while [ "$_pg_w" -lt "$1" ]; do
@@ -224,31 +236,27 @@ if [ "$MODE" = power ]; then
 		echo "$_pg_on" > "$GP" 2>/dev/null
 		[ -n "$_pg_path" ] || exit 0
 		if [ "$_pg_was" = 1 ]; then
-			_pg_wait 180 && exit 0
-			logger -t 5gmodem "power: $_pg_path did not return within 180 s - powering the slot off for 15 s"
+			_pg_wait 60 && exit 0
+			if _pg_kick; then
+				logger -t 5gmodem "power: $_pg_path did not return within 60 s - reset its USB port"
+				if _pg_wait 150; then
+					logger -t 5gmodem "power: $_pg_path came back after the USB port reset"
+					exit 0
+				fi
+			elif _pg_wait 120; then
+				exit 0
+			fi
+			logger -t 5gmodem "power: $_pg_path still missing - powering the slot off for 15 s"
 			echo "$_pg_off" > "$GP" 2>/dev/null
 			sleep 15
 			echo "$_pg_on" > "$GP" 2>/dev/null
+			sleep 20
+			_pg_kick
 			if _pg_wait 240; then
 				logger -t 5gmodem "power: $_pg_path came back after the long power-off"
 				exit 0
 			fi
-			_pg_pd=$(_usb_port_dir "$_pg_path")
-			_pg_pp=$(readlink -f "$_pg_pd/peer" 2>/dev/null)
-			if [ -w "$_pg_pd/disable" ]; then
-				logger -t 5gmodem "power: $_pg_path still missing - resetting its USB port"
-				[ -n "$_pg_pp" ] && echo 1 > "$_pg_pp/disable" 2>/dev/null
-				echo 1 > "$_pg_pd/disable" 2>/dev/null
-				sleep 3
-				[ -n "$_pg_pp" ] && echo 0 > "$_pg_pp/disable" 2>/dev/null
-				sleep 2
-				echo 0 > "$_pg_pd/disable" 2>/dev/null
-				if _pg_wait 90; then
-					logger -t 5gmodem "power: $_pg_path came back after the USB port reset"
-					exit 0
-				fi
-			fi
-			logger -p daemon.err -t 5gmodem "power: $_pg_path did not come back after the power cycle, a long power-off and a USB port reset - reboot the router"
+			logger -p daemon.err -t 5gmodem "power: $_pg_path did not come back after the power cycle, USB port resets and a long power-off - reboot the router"
 			exit 0
 		fi
 		_pg_n=0
@@ -387,7 +395,7 @@ else
 	# не холодный boot-attach: гасим восстановление диапазонов на порождённый нами
 	# ifup, иначе 31-5gmodem-bands сделал бы лишний CFUN поверх (двойной CFUN подряд
 	# вешает PDP-контекст FM350).
-	[ -n "$IF" ] && : > "/tmp/5gmodem_bandrestore_$IF" 2>/dev/null
+	[ -n "$IF" ] && : > "/tmp/5gmodem/bandrestore_$IF" 2>/dev/null
 	# ВЕСЬ ЦИКЛ - В ФОНЕ, ОДНОЙ ПОДОБОЛОЧКОЙ (аудит 12.09.2026).
 	# 1) Синхронным он не мог быть по той же причине, что и ветки power/hard:
 	#    у sms_tool нет своего таймаута, и на занятом или подвисающем порту

@@ -12,7 +12,7 @@ sms_tool() {
 DEVICE="$SMOKE_DEV"
 _POLL_AM="9-9"
 MODEM_PATH="9-9"
-STATIC_CACHE="$SMOKE_WORK/tmp/5gmodem_static_smoke"
+STATIC_CACHE="$SMOKE_WORK/tmp/5gmodem/static_smoke"
 REGOK=1
 REG=1
 CSQ=20

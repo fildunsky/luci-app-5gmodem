@@ -48,7 +48,7 @@ _RR_PATH1=""; _RR_REC1=""
 _RR_PATH2=""; _RR_REC2=""
 _reg_rec() {   # $1 - usb-путь
 	[ -n "$1" ] || return 0
-	_rr_s=$(cat /tmp/5gmodem_listmodems.stamp 2>/dev/null)
+	_rr_s=$(cat /tmp/5gmodem/listmodems.stamp 2>/dev/null)
 	# Штамп сменился - вся память недействительна.
 	if [ "$_rr_s" != "$_RR_STAMP" ]; then
 		_RR_STAMP="$_rr_s"; _RR_PATH1=""; _RR_REC1=""; _RR_PATH2=""; _RR_REC2=""
@@ -368,7 +368,7 @@ _esim_state() {   # $1 - секция, $2 - USB-путь
 		1) echo "forced-yes"; return ;;
 		0) echo "forced-no";  return ;;
 	esac
-	_ec="/tmp/5gmodem_esimstat_$2"
+	_ec="/tmp/5gmodem/esimstat_$2"
 	[ -s "$_ec" ] || return 0
 	if grep -q '"available":1' "$_ec" 2>/dev/null; then echo "yes"; else echo "no"; fi
 }
@@ -430,7 +430,7 @@ smsopt)
 	if [ "$_st_ch" = 1 ]; then
 		_so_p=$(uci -q get 5gmodem.sms.readport)
 		[ -n "$_so_p" ] || _so_p=$(uci -q get 5gmodem.sms.atport)
-		rm -f /tmp/5gmodem_cpms_* 2>/dev/null
+		rm -f /tmp/5gmodem/cpms_* 2>/dev/null
 		# В ФОНЕ И С ОТВЯЗАННЫМИ fd: AT-обмен занимает секунды, а страница ждёт
 		# ответа этого вызова (см. reboot_modem.sh про висящие пайпы rpcd).
 		[ -c "$_so_p" ] && ( sms_apply_cpms "$_so_p" "$_st_v" ) >/dev/null 2>&1 </dev/null &
@@ -656,7 +656,7 @@ switch)
 	fi
 
 	# drop the cached AT port so detect.sh re-resolves for the new modem
-	rm -f /tmp/modem
+	rm -f /tmp/5gmodem/modem
 
 	# PRE-WARM. Страница после переключения тянет метрики,
 	# слоты, диапазоны и оператора - у НОВОГО модема их кэши холодные, и первое
@@ -683,7 +683,7 @@ switch)
 	# Теперь: pid пишет РОДИТЕЛЬ сразу ($! = setsid-лидер группы), убийство -
 	# только если группа жива И это наш прогрев (маркер в cmdline), уборку
 	# файла делает ребёнок ТОЛЬКО если файл всё ещё про него.
-	_pw=/tmp/5gmodem_prewarm.pid
+	_pw=/tmp/5gmodem/prewarm.pid
 	_pwold=$(cat "$_pw" 2>/dev/null)
 	case "$_pwold" in *[!0-9]*|'') ;; *)
 		if kill -0 "$_pwold" 2>/dev/null \
@@ -695,7 +695,7 @@ switch)
 	  # 5gmodem_prewarm - маркер для проверки перед kill
 	  /usr/share/5gmodem/simslot.sh status >/dev/null 2>&1
 	  /usr/share/5gmodem/bands.sh   json   >/dev/null 2>&1
-	  [ "$(cat /tmp/5gmodem_prewarm.pid 2>/dev/null)" = "$$" ] && rm -f /tmp/5gmodem_prewarm.pid
+	  [ "$(cat /tmp/5gmodem/prewarm.pid 2>/dev/null)" = "$$" ] && rm -f /tmp/5gmodem/prewarm.pid
 	' 5gmodem_prewarm >/dev/null 2>&1 </dev/null &
 	echo $! > "$_pw" 
 
@@ -940,7 +940,7 @@ autoapn)
 	# каждые 2.5 минуты сутками, с AT-запросами на каждый круг). Метку ставим при
 	# сдаче, снимаем при успехе; триггер по ней ждёт полчаса вместо минуты.
 	# Файл в /tmp намеренно: после перезагрузки попытка честно повторяется.
-	_am_gv="/tmp/5gmodem_autoapn_${_am_sec}.gaveup"
+	_am_gv="/tmp/5gmodem/autoapn_${_am_sec}.gaveup"
 	_apn_giveup() { [ -n "$_am_sec" ] && : > "$_am_gv" 2>/dev/null; }
 	_apn_done()   { [ -n "$_am_sec" ] && rm -f "$_am_gv" 2>/dev/null; }
 	# ОПРАШИВАЕМ МОДЕМА-ХОЗЯИНА этого интерфейса, а не активного. Без POLL_MODEM
@@ -1281,7 +1281,7 @@ resolve)
 	# коммитят тот же общий стейджинг /tmp/.uci - полусобранное состояние
 	# уезжало в конфиг (ревью, баг №7). Замок сериализует resolve'ы между
 	# собой, а сторонние писатели (detect) при занятом замке пропускают ход.
-	exec 7>/tmp/5gmodem_ucitx.lock
+	exec 7>/tmp/5gmodem/ucitx.lock
 	flock 7
 	note_foreign_uci network "modemswitch resolve"
 	note_foreign_uci firewall "modemswitch resolve"
@@ -1743,7 +1743,8 @@ resolve)
 		fi
 	fi
 	uci -q commit "$CFG"
-	rm -f /tmp/modem
+	[ -n "$IF" ] && uci -q get "network.$IF" >/dev/null 2>&1 && ( fix_iface_proto "$IF" ) 7>&-
+	rm -f /tmp/5gmodem/modem
 	# УБОРКА - ФОНОМ И ПОСЛЕ ВСЕГО. Правила у неё строгие (интерфейс без хозяина
 	# либо парковка старше park_ttl_days, по умолчанию 30 дней), но трогает она
 	# конфиг, поэтому идёт последней и не задерживает ответ hotplug'у. Выключается
@@ -1791,7 +1792,7 @@ setalias)
 	fi
 	uci -q commit "$CFG"
 	# Список модемов кэшируется - сбрасываем, иначе вкладка покажет старое имя.
-	rm -f /tmp/5gmodem_listmodems.cache 2>/dev/null
+	rm -f /tmp/5gmodem/listmodems.cache 2>/dev/null
 	printf '{"ok":1,"alias":"%s"}\n' "$_sa_name"
 	;;
 
@@ -1816,7 +1817,7 @@ wdmdrv)
 wdm)
 	# cdc-wdm узел модема: с аргументом - ПО ПУТИ, без - активного. Безадресный
 	# вызов в адресном опросе метрик писал QMI-дополнения (агрегация, диапазон,
-	# соседи, сигнал) ЧУЖОГО модема в липкие файлы /tmp/5gmodem_qmi_<ключ>
+	# соседи, сигнал) ЧУЖОГО модема в липкие файлы /tmp/5gmodem/qmi_<ключ>
 	# опрашиваемого - и они раздавались каждым снимком («карточка Telit
 	# показывала агрегации Compal», 31.07.2026).
 	wdm_for_path "${2:-$(active_path)}"

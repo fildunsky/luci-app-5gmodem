@@ -174,7 +174,7 @@ _BQ=""
 _bandq() {
 	[ -n "$_BQ" ] && return 0
 	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 0
-	_BQ_F="/tmp/5gmodem_bands_bandq_${_DEVICE##*/}"
+	_BQ_F="/tmp/5gmodem/bands_bandq_${_DEVICE##*/}"
 	if [ -s "$_BQ_F" ]; then
 		_BQ=$(cat "$_BQ_F")
 		return 0
@@ -227,7 +227,7 @@ _SDP=""
 _sdpref() {
 	[ -n "$_SDP" ] && return 0
 	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 0
-	_SDP_F="/tmp/5gmodem_bands_sdpref_${_DEVICE##*/}"
+	_SDP_F="/tmp/5gmodem/bands_sdpref_${_DEVICE##*/}"
 	if [ -s "$_SDP_F" ]; then
 		_SDP=$(cat "$_SDP_F")
 		return 0
@@ -362,7 +362,7 @@ _band_apply() {   # $1 - 4G, $2 - 5G NSA, $3 - 5G SA, $4 - 3G (списки ди
 		00|"") ;;
 		*) logger -t 5gmodem "EM9190: both a custom band set and network mode $_ba_r are set - the vendor advises against combining them (return one to auto)" ;;
 	esac
-	rm -f "/tmp/5gmodem_bands_bandq_${_DEVICE##*/}" 2>/dev/null
+	rm -f "/tmp/5gmodem/bands_bandq_${_DEVICE##*/}" 2>/dev/null
 	return "$_ba_fail"
 }
 
@@ -373,7 +373,7 @@ _band_default() {
 	[ -n "$_DEVICE" ] && [ -e "$_DEVICE" ] || return 1
 	_entercnd
 	sms_tool -d $_DEVICE at "AT!BAND=00" >/dev/null 2>&1
-	rm -f "/tmp/5gmodem_bands_bandq_${_DEVICE##*/}" 2>/dev/null
+	rm -f "/tmp/5gmodem/bands_bandq_${_DEVICE##*/}" 2>/dev/null
 }
 
 # --- Интерфейс bands.sh ------------------------------------------------------

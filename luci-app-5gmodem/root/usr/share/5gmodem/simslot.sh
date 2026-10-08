@@ -57,10 +57,10 @@ fi
 # статусы (5gmodem_esimstat_*) - без чистки вкладка eSIM ещё час подсвечивала
 # ПРЕЖНИЙ слот активным (живой случай ZBT + MV31-W 18.08.2026: работал от SIM1,
 # синим горела eSIM).
-[ "$1" = "set" ] && rm -f /tmp/5gmodem_slot_* /tmp/5gmodem_slots_* \
-	/tmp/5gmodem_bandsprep_* /tmp/5gmodem_bandrestore_* \
-	/tmp/5gmodem_metrics_* /tmp/5gmodem_esim_actslot \
-	/tmp/5gmodem_esimstat_* 2>/dev/null
+[ "$1" = "set" ] && rm -f /tmp/5gmodem/slot_* /tmp/5gmodem/slots_* \
+	/tmp/5gmodem/bandsprep_* /tmp/5gmodem/bandrestore_* \
+	/tmp/5gmodem/metrics_* /tmp/5gmodem/esim_actslot \
+	/tmp/5gmodem/esimstat_* 2>/dev/null
 # Снапшот-кэш метрик ключуется по USB-пути модема, а НЕ по SIM: при eSIM<->SIM путь
 # тот же, и cache-first fast-path отдавал бы СТАРЫЙ снимок (оператор, сота, ID
 # базовой станции от прежней SIM), пока не пройдёт полный опрос - у пользователя
@@ -107,7 +107,7 @@ fi
 # а оно чистит кэш), а обновление на каждый показ грузило бы порт впустую. Ключ
 # кэша - тот же сырой путь модема, что у веток ниже.
 if [ "$1" = "status" ] && [ -z "$_REFRESH" ]; then
-	_SF="/tmp/5gmodem_slots_$_ss_am"
+	_SF="/tmp/5gmodem/slots_$_ss_am"
 	_SFT=$(cat "$_SF.t" 2>/dev/null)
 	_SNOW=$(cut -d. -f1 /proc/uptime)
 	_SFRESH=""
@@ -185,13 +185,13 @@ _AP="$_TGT"
 # Состав слотов и активный слот меняются лишь когда их переключает пользователь
 # (ветка set сама чистит кэш) или когда меняется модем (ключ кэша - его
 # USB-путь). Держать ответ полминуты безопасно, а страница перестаёт ждать.
-if [ "$1" != "set" ] && [ -n "$_AP" ] && [ -s "/tmp/5gmodem_slots_$_AP" ]; then
-	_sc_t=$(cat "/tmp/5gmodem_slots_$_AP.t" 2>/dev/null)
+if [ "$1" != "set" ] && [ -n "$_AP" ] && [ -s "/tmp/5gmodem/slots_$_AP" ]; then
+	_sc_t=$(cat "/tmp/5gmodem/slots_$_AP.t" 2>/dev/null)
 	case "$_sc_t" in
 		''|*[!0-9]*) : ;;
 		*) _sc_age=$(( $(cut -d. -f1 /proc/uptime) - _sc_t ))
 		   if [ "$_sc_age" -ge 0 ] && [ "$_sc_age" -lt 30 ]; then
-			cat "/tmp/5gmodem_slots_$_AP"; exit 0
+			cat "/tmp/5gmodem/slots_$_AP"; exit 0
 		   fi ;;
 	esac
 fi
@@ -315,7 +315,7 @@ _at_slot_set() {   # $1 - целевой слот (1..N); 0 = переключе
 	done
 	[ "$_as_ok" = 1 ] || return 1
 	logger -t 5gmodem "SIM slot switched to $1 via AT$_as_cmd"
-	rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+	rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 	# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
 	( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 	  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
@@ -390,7 +390,7 @@ if [ -n "$MI" ]; then
 		# под MM разрешён. Модем без этой команды запоминаем на 10 минут, чтобы не
 		# слать в него ERROR-запросы при каждом обновлении страницы.
 		if [ "${N:-0}" -le 1 ] 2>/dev/null && [ "$_SVIA" = qmi ] && [ -n "$(mm_at_fragile "$_AVIDPID")" ]; then
-			_nsw="/tmp/5gmodem_noswslot_$(echo "$_AP" | tr -c 'A-Za-z0-9' '_')"
+			_nsw="/tmp/5gmodem/noswslot_$(echo "$_AP" | tr -c 'A-Za-z0-9' '_')"
 			if [ -z "$(find "$_nsw" -mmin -10 2>/dev/null)" ]; then
 				SLOT_AT_PORT=$(_slot_at_mm)
 				if [ -n "$SLOT_AT_PORT" ] && [ -c "$SLOT_AT_PORT" ]; then
@@ -405,17 +405,17 @@ if [ -n "$MI" ]; then
 						case "$(at_query "$SLOT_AT_PORT" "AT^switch_slot?" 6 2>/dev/null)" in
 							*ERROR*) : > "$_nsw" ;;
 							*)
-								if grep -q '"id":"2"' "/tmp/5gmodem_slots_$_ss_am" 2>/dev/null; then
-									cat "/tmp/5gmodem_slots_$_ss_am"
+								if grep -q '"id":"2"' "/tmp/5gmodem/slots_$_ss_am" 2>/dev/null; then
+									cat "/tmp/5gmodem/slots_$_ss_am"
 									exit 0
 								fi ;;
 						esac
 					fi
 					if [ -n "$_mswa" ]; then
 						printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}\n' "$_mswa" \
-							> "/tmp/5gmodem_slots_$_ss_am"
-						cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_ss_am.t"
-						cat "/tmp/5gmodem_slots_$_ss_am"
+							> "/tmp/5gmodem/slots_$_ss_am"
+						cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_ss_am.t"
+						cat "/tmp/5gmodem/slots_$_ss_am"
 						exit 0
 					fi
 				fi
@@ -425,9 +425,9 @@ if [ -n "$MI" ]; then
 			_SP1=$(echo "$K" | sed -n 's/^modem\.generic\.sim-slots\.value\[1\] *: *//p')
 			_PR1=1; case "$_SP1" in ''|'/'|'--') _PR1=0 ;; esac
 			printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"%s"}],"active":"1"}\n' "$_PR1" \
-				> "/tmp/5gmodem_slots_$_ss_am"
-			cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_ss_am.t"
-			cat "/tmp/5gmodem_slots_$_ss_am"
+				> "/tmp/5gmodem/slots_$_ss_am"
+			cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_ss_am.t"
+			cat "/tmp/5gmodem/slots_$_ss_am"
 			exit 0
 		fi
 		if [ -n "$N" ] && [ "$N" -ge 2 ] 2>/dev/null; then
@@ -522,7 +522,7 @@ if [ -n "$MI" ]; then
 			# ИЗ КЭША (чтобы не ждать канал по 20 c), и под MM кэш оставался
 			# пустым навсегда - вкладка получала пустой список и прятала кнопки
 			# слотов, хотя refresh руками отрабатывал верно.
-			_MMC="/tmp/5gmodem_slots_$_ss_am"
+			_MMC="/tmp/5gmodem/slots_$_ss_am"
 			printf '{"type":"","slots":[%s],"active":"%s"}\n' "$OUT" "$ACT" > "$_MMC"
 			cut -d. -f1 /proc/uptime > "$_MMC.t"
 			cat "$_MMC"
@@ -582,9 +582,9 @@ if [ -n "$_FRAG" ] && [ -z "$MI" ]; then
 			esac
 			if [ -n "$_fr_a" ]; then
 				printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}\n' "$_fr_a" \
-					> "/tmp/5gmodem_slots_$_AP"
-				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
-				cat "/tmp/5gmodem_slots_$_AP"
+					> "/tmp/5gmodem/slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_AP.t"
+				cat "/tmp/5gmodem/slots_$_AP"
 				exit 0
 			fi
 		fi
@@ -629,7 +629,7 @@ if [ "$_VIA" = simdet ]; then
 			echo '{"error":"switch failed"}'; exit 0
 		fi
 		logger -t 5gmodem "SIM slot switched to $2 via AT#SIMDET"
-		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+		rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 		( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 		  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
 		  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
@@ -646,13 +646,13 @@ if [ "$_VIA" = simdet ]; then
 				_sd_p1=""; _sd_p2=""
 				if [ "$_sd_a" = 1 ]; then _sd_p1=",\"present\":\"$_sd_p\""; else _sd_p2=",\"present\":\"$_sd_p\""; fi
 				_sd_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1"%s},{"id":"2","label":"SIM2"%s}],"active":"%s"}' "$_sd_p1" "$_sd_p2" "$_sd_a")
-				printf '%s\n' "$_sd_out" > "/tmp/5gmodem_slots_$_AP"
-				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+				printf '%s\n' "$_sd_out" > "/tmp/5gmodem/slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_AP.t"
 				printf '%s\n' "$_sd_out"
 				exit 0 ;;
 		esac
-		if [ -s "/tmp/5gmodem_slots_$_AP" ]; then
-			cat "/tmp/5gmodem_slots_$_AP"; exit 0
+		if [ -s "/tmp/5gmodem/slots_$_AP" ]; then
+			cat "/tmp/5gmodem/slots_$_AP"; exit 0
 		fi
 	fi
 	_VIA=qmi
@@ -695,8 +695,8 @@ if [ "$_VIA" = qmi ]; then
 			esac
 			if [ -n "$_swf_a" ]; then
 				_swf_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}' "$_swf_a")
-				printf '%s\n' "$_swf_out" > "/tmp/5gmodem_slots_$_AP"
-				cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+				printf '%s\n' "$_swf_out" > "/tmp/5gmodem/slots_$_AP"
+				cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_AP.t"
 				printf '%s\n' "$_swf_out"
 				exit 0
 			fi
@@ -714,7 +714,7 @@ if [ "$_VIA" = qmi ]; then
 	# у Compal это ломало и данные, и управление диапазонами. С -p клиент держит
 	# ПРОКСИ, а не наш процесс: убийство qmicli пул не трогает.
 	_q() {
-		_qo="/tmp/5gmodem_uim.$$"
+		_qo="/tmp/5gmodem/uim.$$"
 		qmicli_p "$_WDM" "$@" > "$_qo" 2>&1 &
 		_qp=$!
 		( sleep 20; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
@@ -731,7 +731,7 @@ if [ "$_VIA" = qmi ]; then
 		# по AT слот переключился с первого раза, когда QMI не отвечал вовсе).
 		_at_slot_set "$2" && exit 0
 		if _q --uim-switch-slot="$2" 2>/dev/null | grep -qi "success"; then
-			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+			rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 			# смена слота = другая SIM: интерфейс надо переподнять (см. slot_redial)
 			( sleep 5; /usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
 			  _IF=$(uci -q get "5gmodem.$_ss_sec.network")
@@ -854,7 +854,7 @@ if [ "$_VIA" = qmi ]; then
 			   _MBS="" ;;
 		esac
 		if [ -n "$_MBS" ]; then
-			_CACHE="/tmp/5gmodem_slots_$_AP"
+			_CACHE="/tmp/5gmodem/slots_$_AP"
 			printf '{"type":"","slots":[%s],"active":"%s"}\n' "$_MBS" "$_MACT" > "$_CACHE"
 			cut -d. -f1 /proc/uptime > "$_CACHE.t"
 			cat "$_CACHE"
@@ -874,7 +874,7 @@ if [ "$_VIA" = qmi ]; then
 			[ -n "$_OUT" ] && _OUT="$_OUT,"
 			_OUT="$_OUT{\"id\":\"$_i\",\"label\":\"$_L\",\"present\":\"$_P\"}"
 		done
-		_CACHE="/tmp/5gmodem_slots_$_AP"
+		_CACHE="/tmp/5gmodem/slots_$_AP"
 		if [ -n "$_OUT" ] && [ -n "$_ACT" ]; then
 			printf '{"type":"","slots":[%s],"active":"%s"}\n' "$_OUT" "$_ACT" > "$_CACHE"
 			cut -d. -f1 /proc/uptime > "$_CACHE.t"   # метка для cache-first fast-path
@@ -949,8 +949,8 @@ if [ -z "$D" ]; then
 	# или порт занят метриками. Для status это НЕ «слотов нет» - отдаём последний
 	# валидный ответ, иначе кнопки SIM/eSIM просто исчезают на ровном месте
 	# (этот ранний выход стоял ДО кэша и обходил его). Для set - честная ошибка.
-	if [ "$1" != "set" ] && [ -s "/tmp/5gmodem_slots_$_AP" ]; then
-		cat "/tmp/5gmodem_slots_$_AP"; exit 0
+	if [ "$1" != "set" ] && [ -s "/tmp/5gmodem/slots_$_AP" ]; then
+		cat "/tmp/5gmodem/slots_$_AP"; exit 0
 	fi
 	echo '{"error":"no device"}'; exit 0
 fi
@@ -1006,7 +1006,7 @@ if [ "$_VIA" = uims ]; then
 		if echo "$O" | grep -q "ERROR"; then
 			echo '{"error":"switch failed"}'
 		else
-			rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+			rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 			( slot_redial ) >/dev/null 2>&1 </dev/null &
 			echo '{"result":"ok"}'
 		fi
@@ -1022,8 +1022,8 @@ if [ "$_VIA" = uims ]; then
 			*) echo '{"type":"","slots":[],"active":""}'; exit 0 ;;
 		esac
 		_uo=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"eSIM","present":"1"}],"active":"%s"}' "$_uact")
-		printf '%s\n' "$_uo" > "/tmp/5gmodem_slots_$_AP"
-		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+		printf '%s\n' "$_uo" > "/tmp/5gmodem/slots_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_AP.t"
 		printf '%s\n' "$_uo"
 		;;
 	esac
@@ -1067,7 +1067,7 @@ if [ "$_VIA" = quimslot ]; then
 		if [ -n "$_qi_a" ] && [ "$_qi_a" != "$2" ]; then
 			echo '{"error":"switch failed"}'; exit 0
 		fi
-		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"
+		rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 		logger -t 5gmodem "SIM slot switched to $2 via AT+QUIMSLOT"
 		# fds отвязаны ОТ ПОДОБОЛОЧКИ - см. пояснение у ветки ниже.
 		( slot_redial ) >/dev/null 2>&1 </dev/null &
@@ -1080,8 +1080,8 @@ if [ "$_VIA" = quimslot ]; then
 			*)  # Порт занят/команда не ответила. Для status это НЕ «слотов
 			    # нет»: отдаём последний валидный ответ, иначе кнопки SIM
 			    # пропадают на ровном месте.
-			    if [ -s "/tmp/5gmodem_slots_$_AP" ]; then
-				cat "/tmp/5gmodem_slots_$_AP"; exit 0
+			    if [ -s "/tmp/5gmodem/slots_$_AP" ]; then
+				cat "/tmp/5gmodem/slots_$_AP"; exit 0
 			    fi
 			    echo '{"type":"","slots":[],"active":""}'; exit 0 ;;
 		esac
@@ -1094,15 +1094,15 @@ if [ "$_VIA" = quimslot ]; then
 		# Одна команда в уже занятый нами порт - дешевле CCHO/APDU-пробинга.
 		_qi_l2="SIM2"
 		_qi_es=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
-			"/tmp/5gmodem_esimstat_$_TGT" 2>/dev/null)
+			"/tmp/5gmodem/esimstat_$_TGT" 2>/dev/null)
 		if [ "$_qi_es" != 1 ] && esim_capable "$_AVIDPID" "$_APROD"; then
 			at_query "$D" "AT+QESIM=\"eid\"" 6 2>/dev/null \
 				| grep -q '"eid",[0-9]' && _qi_es=1
 		fi
 		[ "$_qi_es" = 1 ] && _qi_l2="eSIM"
 		_qi_out=$(printf '{"type":"","slots":[{"id":"1","label":"SIM1","present":"1"},{"id":"2","label":"%s","present":"1"}],"active":"%s"}' "$_qi_l2" "$_qi_act")
-		printf '%s\n' "$_qi_out" > "/tmp/5gmodem_slots_$_AP"
-		cut -d. -f1 /proc/uptime > "/tmp/5gmodem_slots_$_AP.t"
+		printf '%s\n' "$_qi_out" > "/tmp/5gmodem/slots_$_AP"
+		cut -d. -f1 /proc/uptime > "/tmp/5gmodem/slots_$_AP.t"
 		printf '%s\n' "$_qi_out"
 		;;
 	esac
@@ -1133,7 +1133,7 @@ set)
 	if echo "$O" | grep -q "ERROR"; then
 		echo '{"error":"switch failed"}'
 	else
-		rm -f "/tmp/5gmodem_slots_$_AP" "/tmp/5gmodem_slots_$_AP.t"   # активный слот изменился - кэш недействителен
+		rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"   # активный слот изменился - кэш недействителен
 		# fds отвязаны ОТ ПОДОБОЛОЧКИ: иначе она держит пайпы rpcd все ~120 с
 		# ожидания модема, и XHR из UI упадёт по таймауту (см. reboot_modem.sh).
 		( slot_redial ) >/dev/null 2>&1 </dev/null &
@@ -1183,7 +1183,7 @@ set)
 		# фолбэком) и есть eSIM (eUICC на нём). Ключ кэша - как в esim.sh (сырой
 		# active_modem).
 		_ESAV=$(sed -n 's/.*"available": *\([0-9]\).*/\1/p' \
-			"/tmp/5gmodem_esimstat_$_TGT" 2>/dev/null)
+			"/tmp/5gmodem/esimstat_$_TGT" 2>/dev/null)
 		# ЗАМКНУТЫЙ КРУГ: КЭША НЕ БУДЕТ, ПОКА АКТИВНА ФИЗИЧЕСКАЯ SIM.
 		#
 		# Одного кэша мало. Пока активен слот физической карты, ISD-R eUICC
@@ -1236,7 +1236,7 @@ set)
 	# то нет кнопок слотов совсем (пустой slots), то кнопки есть, но ни одна не
 	# подсвечена (пустой active, когда GTDUALSIM? не ответил, а GTDUALSIM=? успел).
 	# Пустой ответ теперь заменяем последним валидным; кэш сбрасывает ветка set.
-	_CACHE="/tmp/5gmodem_slots_$_AP"
+	_CACHE="/tmp/5gmodem/slots_$_AP"
 	_SJSON="{\"type\":\"$TYPE\",\"slots\":[$OUT],\"active\":\"$ACT\"}"
 	if [ -n "$OUT" ] && [ -n "$ACT" ]; then
 		printf '%s\n' "$_SJSON" > "$_CACHE"

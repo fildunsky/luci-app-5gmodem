@@ -1,4 +1,5 @@
 #!/bin/sh
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 
 BASE=/etc/5gmodem/modem
 
@@ -42,9 +43,9 @@ rmall)
 	rm -f -- "$DIR"/*.user
 	;;
 import)
-	SRC="/tmp/${KIND}_upload.tar.gz"
+	SRC="/tmp/5gmodem/${KIND}_upload.tar.gz"
 	[ -f "$SRC" ] || die "no archive"
-	T=$(mktemp -d /tmp/5gmodem-userfiles.XXXXXX) || die "no tmp"
+	T=$(mktemp -d /tmp/5gmodem/userfiles.XXXXXX) || die "no tmp"
 	if ! tar -xzf "$SRC" -C "$T"; then
 		rm -rf "$T"
 		die "Failed to extract archive"
@@ -62,7 +63,7 @@ import)
 	;;
 export)
 	mkdir -p "$DIR"
-	tar -czf "/tmp/$KIND.tar.gz" -C "$DIR" .
+	tar -czf "/tmp/5gmodem/$KIND.tar.gz" -C "$DIR" .
 	;;
 *)
 	die "usage: userfiles.sh list|mkdir|chmod|rm|rmall|import|export <atcmmds|ussdcodes> [name]"

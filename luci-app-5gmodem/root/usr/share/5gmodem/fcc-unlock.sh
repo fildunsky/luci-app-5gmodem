@@ -45,7 +45,7 @@ send_auth() {   # $1 - узел /dev/cdc-wdmN, $2 - предел ожидани�
 		*/cdc_mbim) _sa_mb="--device-open-mbim" ;;
 	esac
 	case "$1" in *mbim*) _sa_mb="--device-open-mbim" ;; esac
-	_sa_out="/tmp/5gmodem_fcc.$$"
+	_sa_out="/tmp/5gmodem/fcc.$$"
 	qmicli $_sa_px $_sa_mb -d "$1" --dms-foxconn-set-fcc-authentication=0 > "$_sa_out" 2>&1 &
 	_sa_p=$!
 	_sa_n=0
@@ -103,7 +103,7 @@ kernel)
 	VP="$(cat "/sys/bus/usb/devices/$P/idVendor"):$(cat "/sys/bus/usb/devices/$P/idProduct")"
 	is_foxconn_x20 "$VP" || exit 0
 	DEVNUM=$(cat "/sys/bus/usb/devices/$P/devnum" 2>/dev/null)
-	MARK="/tmp/5gmodem_fcc_$(printf '%s' "$P" | tr -c 'A-Za-z0-9' '_')_$DEVNUM"
+	MARK="/tmp/5gmodem/fcc_$(printf '%s' "$P" | tr -c 'A-Za-z0-9' '_')_$DEVNUM"
 	[ -f "$MARK" ] && exit 0
 	[ -f "$MARK.run" ] && kill -0 "$(cat "$MARK.run" 2>/dev/null)" 2>/dev/null && exit 0
 	for _om in "${MARK%_*}"_[0-9]*; do

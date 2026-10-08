@@ -35,7 +35,7 @@ setup_one_modem() {
 		# переэнумерации 14dc->1566 сетевая карта та же (eth3), но интерфейс
 		# переподхватываем, чтобы аренда восстановилась без задержки.
 		if try_at_debug "$P"; then
-			rm -f /tmp/5gmodem_listmodems.cache /tmp/5gmodem_listmodems.stamp 2>/dev/null
+			rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
 			_hnet=$(hilink_netdev "$P")
 			[ -n "$_hnet" ] && setup_hilink "$P" "$_hnet" >/dev/null
 		fi

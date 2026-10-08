@@ -72,7 +72,7 @@ The report contains the IMEI, IMSI, ICCID and the carrier name, but no passwords
 - **APN database update button** — refresh the world operator database (GNOME MBPI + AOSP) without reinstalling the app.
 - **Port auto-detect** — the AT port and network interface are detected automatically; can be set manually.
 - **USB sticks that have no AT ports** (Huawei HiLink and relatives) are supported too — see below.
-- **Telemetry for smart homes** — a flat JSON at `/tmp/5gmodem_tele.json` (signal, operator, mode, aggregation, rates, SMS count) plus optional MQTT publishing with Home Assistant auto-discovery; see [docs/telemetry.md](docs/telemetry.md).
+- **Telemetry for smart homes** — a flat JSON at `/tmp/5gmodem/tele.json` (signal, operator, mode, aggregation, rates, SMS count) plus optional MQTT publishing with Home Assistant auto-discovery; see [docs/telemetry.md](docs/telemetry.md).
 - **`5gtop`** — a terminal dashboard with the same data, for when you are on SSH and not in a browser.
 
 

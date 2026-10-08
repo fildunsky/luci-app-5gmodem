@@ -101,7 +101,7 @@ _fn_sinr() {
 if [ -n "$DEVICE" ] && [ -c "$DEVICE" ]; then
 
 _FN_KEY="${_MKEY:-$(basename "$DEVICE" 2>/dev/null)}"
-_FN_SKIP="/tmp/5gmodem_fn990_skip_$_FN_KEY"
+_FN_SKIP="/tmp/5gmodem/fn990_skip_$_FN_KEY"
 _FN_NOW=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 case "$_FN_NOW" in ''|*[!0-9]*) _FN_NOW=0 ;; esac
 
@@ -391,7 +391,7 @@ _FN_V=$(sms_tool -d "$DEVICE" at "AT+CGMR" 2>/dev/null | tr -d '\r' \
 # РАСКЛАДКА СТРОКИ НА FN990 ЖИВЬЁМ НЕ ПРОВЕРЕНА, поэтому берём только строки
 # известной формы (RSRP + Id + EARFCN): чужой формат даст пустой список, а не
 # мусор в таблице.
-_FN_NB_F="/tmp/5gmodem_moni_fn_$_FN_KEY"
+_FN_NB_F="/tmp/5gmodem/moni_fn_$_FN_KEY"
 _FN_NB_AGE=999
 if [ -f "$_FN_NB_F.t" ]; then
 	_FN_NB_T=$(cat "$_FN_NB_F.t" 2>/dev/null)
