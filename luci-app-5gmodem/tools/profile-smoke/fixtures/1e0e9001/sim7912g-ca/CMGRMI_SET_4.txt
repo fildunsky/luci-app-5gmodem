@@ -1,0 +1,7 @@
+## synthetic, CA_SCELL layout as parsed by ROOter simcomdata.sh: earfcn,?,band,bw_idx,?,pci,...,active
+AT+CMGRMI=4
++CMGRMI: Serving_Cell,250,11,9023,42600619,19,3048,7
++CMGRMI: CA_SCELL,1602,0,3,5,0,282,0,0,0,0,0,1
++CMGRMI: CA_SCELL,0,0,0,0,0,0,0,0,0,0,0,0
+
+OK
