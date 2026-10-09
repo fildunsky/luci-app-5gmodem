@@ -21,6 +21,8 @@ _SIM7100_LTE_BANDS="1 3 7 8 20 38 40"
 #   qmicli --dms-get-band-capabilities -> LTE bands: '1, 3, 5, 7, 8, 20, 38, 40, 41'
 # Проверено на живом SIMCOM_SIM7600E-H (ревизия LE11B11SIM7600M22).
 _SIM7600_LTE_BANDS="1 3 5 7 8 20 38 40 41"
+_SIM7906_LTE_BANDS="1 3 5 7 8 20 28 38 40 41"
+_SIM7912_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 38 40 41 66"
 
 # СМЕНА ДИАПАЗОНОВ ПРИМЕНЯЕТСЯ ВЖИВУЮ, ПЕРЕЗАПУСК РАДИО НЕ НУЖЕН И ВРЕДЕН.
 # Оба механизма SIMCOM (AT+CNBP у 7100/7600, AT+CSYSSEL у 8200) - это band
@@ -54,13 +56,27 @@ _is_7600() {
 }
 
 # ветка «команды как у 7100»: сам 7100 или любой 7600
+_is_79xx() {
+	case "$(_model)" in *7906*|*7912*) return 0 ;; esac
+	return 1
+}
 _is_cnbp_family() {
-	_is_7100 || _is_7600
+	_is_7100 || _is_7600 || _is_79xx
 }
 
 # набор бендов активной модели
 _lte_bands_for_model() {
-	if _is_7600; then echo "$_SIM7600_LTE_BANDS"; else echo "$_SIM7100_LTE_BANDS"; fi
+	case "$(_model)" in
+		*7912*) echo "$_SIM7912_LTE_BANDS" ;;
+		*7906*) echo "$_SIM7906_LTE_BANDS" ;;
+		*7600*) echo "$_SIM7600_LTE_BANDS" ;;
+		*) echo "$_SIM7100_LTE_BANDS" ;;
+	esac
+}
+_cnbp_lte_tail() {
+	_lt_h=$(printf '%s' "$1" | tr -d '\r ' | sed 's/^\(0x\)*//')
+	[ "${#_lt_h}" -gt 32 ] && _lt_h=$(printf '%s' "$_lt_h" | sed 's/.*\(.\{32\}\)$/\1/')
+	echo "0x$_lt_h"
 }
 
 # 8200-family defaults (only used on the non-7100 branch)
@@ -76,7 +92,7 @@ _is_7100() {
 getinfo() {
 	if _is_7100; then
 		echo "SIMCOM SIM7100E"
-	elif _is_7600; then
+	elif _is_7600 || _is_79xx; then
 		# точное имя из кэша: SIMCOM_SIM7600E-H -> "SIMCOM SIM7600E-H"
 		echo "SIMCOM $(_model | sed 's/^SIMCOM_//')"
 	else
@@ -105,6 +121,7 @@ getbands() {
 		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
 		HEX=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}')
 		[ -n "$HEX" ] || { echo ""; return; }
+		HEX=$(_cnbp_lte_tail "$HEX")
 		ALL=$(hextobands "$HEX")
 		SUP=$(_lte_bands_for_model)
 		OUT=""
@@ -133,7 +150,11 @@ setbands() {
 		LTEHEX=$(bandstohex "$BANDS")
 		[ -n "$LTEHEX" ] && [ "$LTEHEX" != "0" ] || return 1
 		# the modem wants a full 16-hex-digit (64-bit) value
-		LTEHEX=$(printf "%016s" "$LTEHEX" | tr ' ' 0)
+		if _is_79xx; then
+			LTEHEX=$(printf "%064s" "$LTEHEX" | tr ' ' 0)
+		else
+			LTEHEX=$(printf "%016s" "$LTEHEX" | tr ' ' 0)
+		fi
 
 		# CNBP write takes TWO parameters: <mode>,<lte_mask>. The LTE selection
 		# is the SECOND field (a 3-parameter write is silently ignored on this
@@ -141,7 +162,7 @@ setbands() {
 		# mask. Applying the change (radio restart) is done by the caller
 		# (reboot_modem.sh), so no disruptive CFUN cycle here.
 		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
-		MODE=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | sed 's/^+CNBP://' | awk -F, '{print $1}')
+		MODE=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | sed 's/^+CNBP://' | awk -F, '{print $1}' | sed 's/^0x0x/0x/')
 		[ -n "$MODE" ] || MODE=0x0002000000400180
 		sms_tool -d $_DEVICE at "AT+CNBP=$MODE,0x$LTEHEX"
 	else
@@ -180,19 +201,28 @@ _SIM7100_3G_BANDS="1 8"
 # SIM7600E-H: GSM 900/1800, UMTS B1/B5/B8 (паспорт модуля).
 _SIM7600_2G_BANDS="900 1800"
 _SIM7600_3G_BANDS="1 5 8"
+_SIM7906_3G_BANDS="1 5 8"
+_SIM7912_3G_BANDS="1 2 4 5 6 8"
 
 # частота GSM -> номер бита; номер бенда WCDMA -> номер бита
 _cnbp_bit_2g() { case "$1" in 900) echo 8 ;; 1800) echo 7 ;; 850) echo 19 ;; 1900) echo 21 ;; *) echo "" ;; esac; }
 _cnbp_bit_3g() { case "$1" in 1) echo 22 ;; 2) echo 23 ;; 3) echo 24 ;; 4) echo 25 ;; 5) echo 26 ;; 6) echo 27 ;; 7) echo 48 ;; 8) echo 49 ;; 9) echo 50 ;; *) echo "" ;; esac; }
 
 _2g_bands_for_model() { if _is_7600; then echo "$_SIM7600_2G_BANDS"; else echo "$_SIM7100_2G_BANDS"; fi; }
-_3g_bands_for_model() { if _is_7600; then echo "$_SIM7600_3G_BANDS"; else echo "$_SIM7100_3G_BANDS"; fi; }
+_3g_bands_for_model() {
+	case "$(_model)" in
+		*7912*) echo "$_SIM7912_3G_BANDS" ;;
+		*7906*) echo "$_SIM7906_3G_BANDS" ;;
+		*7600*) echo "$_SIM7600_3G_BANDS" ;;
+		*) echo "$_SIM7100_3G_BANDS" ;;
+	esac
+}
 
 # Первая маска CNBP как список «номеров» для hextobands/bandstohex диспетчера
 # (там номер = бит + 1, и арифметика 64-битная - своей писать не надо).
 _cnbp_mode_hex() {
 	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' \
-		| sed 's/^+CNBP://' | awk -F, '{print $1}'
+		| sed 's/^+CNBP://' | awk -F, '{print $1}' | sed 's/^0x0x/0x/'
 }
 _cnbp_lte_hex() {
 	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}'
@@ -248,11 +278,13 @@ setbands3g() {
 }
 
 getsupportedbands2g() {
+	_is_79xx && { echo "Unsupported"; return; }
 	_is_cnbp_family || { echo "Unsupported"; return; }
 	_2g_bands_for_model
 }
 
 getbands2g() {
+	_is_79xx && { echo "Unsupported"; return; }
 	_is_cnbp_family || { echo "Unsupported"; return; }
 	_g2_nums=$(hextobands "$(_cnbp_mode_hex)")
 	_g2_out=""
@@ -264,6 +296,7 @@ getbands2g() {
 }
 
 setbands2g() {
+	_is_79xx && { echo "Unsupported"; return; }
 	_is_cnbp_family || { echo "Unsupported"; return; }
 	_s2_want="$1"
 	[ "$_s2_want" = "default" ] && _s2_want=$(_2g_bands_for_model)
@@ -291,6 +324,7 @@ setbands2g() {
 
 getsupportedmodes() {
 	_is_cnbp_family || { echo "Unsupported"; return; }
+	_is_79xx && { echo "2:Auto 14:3G 38:4G 54:3G+4G"; return; }
 	echo "2:Auto 13:2G 14:3G 38:4G 19:2G+3G"
 }
 

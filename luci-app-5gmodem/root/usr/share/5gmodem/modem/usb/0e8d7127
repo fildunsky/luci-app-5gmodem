@@ -379,6 +379,7 @@ T_4G_MODE=""
 T_4G_PBAND=""
 T_4G_PCI=""
 T_4G_EARFCN=""
+T_4G_PRSRP=""
 
 T_5G_MODE=""
 T_5G_PBAND=""
@@ -428,6 +429,8 @@ for LINE in $LINES; do
       T_4G_EARFCN="$T_EARFCN"
       T_4G_MIMO="$T_MIMO"
       T_4G_MOD="$T_MOD"
+      eval T_4G_PRSRP=\${$#}
+      T_4G_PRSRP=$(printf '%s' "$T_4G_PRSRP" | tr -cd '0-9-')
     elif [ "$T_BAND" -gt "500" ]; then
       T_BAND=$(echo "$T_BAND" | sed 's/^50//')
       T_5G_MODE="$(band5g ${T_BAND}) + "
@@ -557,6 +560,27 @@ for LINE in $LINES; do
 
   IDX=$((IDX + 1))
 done
+
+case "$T_4G_PRSRP" in
+  -[0-9]*)
+    _cp_n=0; _cp_same=0; _cp_other=0
+    for _cp_i in 1 2 3 4; do
+      eval _cp_r=\$S${_cp_i}RSRP
+      eval _cp_p=\$S${_cp_i}PCI
+      _cp_r=$(printf '%s' "$_cp_r" | tr -d '\r')
+      [ -n "$_cp_r" ] || continue
+      _cp_n=$((_cp_n + 1))
+      [ "$_cp_r" = "$T_4G_PRSRP" ] && _cp_same=$((_cp_same + 1))
+      [ "$_cp_p" != "$PCI" ] && _cp_other=1
+    done
+    if [ "$_cp_n" -ge 2 ] && [ "$_cp_same" = "$_cp_n" ] && [ "$_cp_other" = 1 ]; then
+      for _cp_i in 1 2 3 4; do
+        eval _cp_p=\$S${_cp_i}PCI
+        [ "$_cp_p" != "$PCI" ] && eval S${_cp_i}RSRP=""
+      done
+    fi
+    ;;
+esac
 
 T_4G_MODE=$(echo "$T_4G_MODE" | sed 's/ [\/\+] $//')
 T_5G_MODE=$(echo "$T_5G_MODE" | sed 's/ [\/\+] $//')

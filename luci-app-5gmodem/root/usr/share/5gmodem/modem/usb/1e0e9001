@@ -9,7 +9,7 @@ if [ -n "$MODELB" ]; then
 	MODEL="$(echo $MODELB | sed 's,_, ,')"
 fi
 
-if echo "$MODEL" | grep -qE "7100|7500|7600"; then
+if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 	# ==============================================================================
 	# РАЗБОР CPSI ДЛЯ SIM7100 / SIM7500 / SIM7600 (одинаковый формат LTE)
 	# ==============================================================================
@@ -89,12 +89,21 @@ if echo "$MODEL" | grep -qE "7100|7500|7600"; then
 				20) PBAND="B20 (FDD 800 MHz)" ;;
 				38) PBAND="B38 (TDD 2600 MHz)" ;;
 				40) PBAND="B40 (TDD 2300 MHz)" ;;
+				*[0-9]) PBAND="$(band4g "$B_NUM")" ;;
 			esac
 			MODE="LTE | $PBAND"
 		fi
 		
 		# EARFCN (8-е поле)
 		EARFCN=$(echo "$T1" | awk -F, '{print $8}' | xargs)
+		case "$(echo "$T1" | awk -F, '{print $9}' | xargs)" in
+			0) BANDWIDTH="1.4 MHz" ;;
+			1) BANDWIDTH="3 MHz" ;;
+			2) BANDWIDTH="5 MHz" ;;
+			3) BANDWIDTH="10 MHz" ;;
+			4) BANDWIDTH="15 MHz" ;;
+			5) BANDWIDTH="20 MHz" ;;
+		esac
 
 		# ID СОТЫ - ИЗ CPSI, А НЕ ИЗ CREG.
 		#
@@ -163,21 +172,23 @@ else
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $7}')
 			[ -n "$T" ] && PCI=$T
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $8}')
+			B_NUM=""
 			if [ -n "$T" ]; then
-				PBAND="$(band4g ${T/EUTRAN-BAND/})"
-				MODE="$MODE $(band4g ${T/EUTRAN-BAND/})"
+				B_NUM=${T/EUTRAN-BAND/}
+				PBAND="$(band4g $B_NUM)"
+				MODE="$MODE $(band4g $B_NUM)"
 			fi
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $9}')
 			[ -n "$T" ] && EARFCN=$T
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $10}')
 			if [ -n "$T" ]; then
 				DLBW="DL: @$T MHz"
-				PBAND="$(band4g ${T/EUTRAN-BAND/}) $DLBW"
+				PBAND="$(band4g $B_NUM) $DLBW"
 			fi
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $11}')
 			if [ -n "$T" ]; then
 				ULBW="UL: @$T MHz"
-				PBAND="$(band4g ${T/EUTRAN-BAND/}) $DLBW $ULBW"
+				PBAND="$(band4g $B_NUM) $DLBW $ULBW"
 			fi
 			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $12/10}')
 			[ -n "$T" ] && RSRQ=$T
