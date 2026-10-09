@@ -149,6 +149,34 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 		S2BAND="-"; S2PCI="-"; S2EARFCN="-"
 		S3BAND="-"; S3PCI="-"; S3EARFCN="-"
 		S4BAND="-"; S4PCI="-"; S4EARFCN="-"
+
+		case "$MODEL" in
+			*7906*|*7912*)
+				_CA=$(sms_tool -d $DEVICE at "AT+CMGRMI=4" 2>/dev/null | tr -d '\r' | grep -i '^+CMGRMI: *CA_SCELL,')
+				_ci=0
+				_cm=""
+				while IFS=, read -r _c0 _cear _c2 _cband _cbw _c5 _cpci _crest; do
+					[ "${_crest##*,}" = "1" ] || continue
+					case "$_cear$_cband$_cpci" in ''|*[!0-9]*) continue ;; esac
+					_ci=$((_ci + 1))
+					[ "$_ci" -le 4 ] || break
+					_cb="$(band4g "$_cband")"
+					_cw=""
+					case "$_cbw" in
+						0) _cw="1.4" ;; 1) _cw="3" ;; 2) _cw="5" ;;
+						3) _cw="10" ;; 4) _cw="15" ;; 5) _cw="20" ;;
+					esac
+					_cm="$_cm + $_cb"
+					[ -n "$_cw" ] && _cb="$_cb @$_cw MHz"
+					eval "S${_ci}BAND=\$_cb; S${_ci}PCI=\$_cpci; S${_ci}EARFCN=\$_cear; S${_ci}STATE=activated"
+				done <<EOF_CA
+$_CA
+EOF_CA
+				if [ "$_ci" -gt 0 ] && [ -n "$PBAND" ]; then
+					MODE="LTE-A | $PBAND$_cm"
+				fi
+				;;
+		esac
 	fi
 
 else

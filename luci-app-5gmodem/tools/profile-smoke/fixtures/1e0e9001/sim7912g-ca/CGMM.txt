@@ -1,0 +1,5 @@
+## user diag
+AT+CGMM
+SIMCOM_SIM7912G-M2
+
+OK

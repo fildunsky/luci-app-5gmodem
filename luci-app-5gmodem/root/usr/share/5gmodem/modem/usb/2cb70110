@@ -12,10 +12,24 @@ if [ -n "$T1" ]; then
 		T_HEX=$_F5
 		T_DEC=$(printf "%d" "0x$_F5" 2>/dev/null)
 	fi
-	[ -n "$_F7" ] && EARFCN=$_F7
-	[ -n "$_F8" ] && PCI=$_F8
 	T=$(printf '%s' "$_F9" | tr -cd '0-9')
 	[ -n "$T" ] && [ "$T" -gt 100 ] && T=$((T - 100))
+	_NL_HX=0
+	case "$_F7$_F8" in *[A-Fa-f]*) _NL_HX=1 ;; esac
+	if [ "$_NL_HX" = 0 ] && [ "$_F8" -gt 503 ] 2>/dev/null; then
+		_NL_HX=1
+	fi
+	if [ "$_NL_HX" = 0 ] && [ -n "$T" ] && [ -n "$_F7" ]; then
+		_nl_d=$(earfcn2band "$_F7")
+		_nl_h=$(earfcn2band "$(printf '%d' "0x$_F7" 2>/dev/null)")
+		[ "$_nl_d" != "$T" ] && [ "$_nl_h" = "$T" ] && _NL_HX=1
+	fi
+	if [ "$_NL_HX" = 1 ]; then
+		[ -n "$_F7" ] && _F7=$(printf '%d' "0x$_F7" 2>/dev/null)
+		[ -n "$_F8" ] && _F8=$(printf '%d' "0x$_F8" 2>/dev/null)
+	fi
+	[ -n "$_F7" ] && EARFCN=$_F7
+	[ -n "$_F8" ] && PCI=$_F8
 	[ -n "$T" ] && [ "$T" -ge 1 ] 2>/dev/null || T=$(earfcn2band "$EARFCN")
 	if [ -n "$T" ]; then
 		PBAND="$(band4g $T)"
@@ -49,7 +63,16 @@ if [ -z "$RSSI" ] || [ "$RSSI" = "-" ]; then
 	fi
 fi
 
-NEIGHBORS=$(echo "$O" | awk -F, '
+NEIGHBORS=$(echo "$O" | awk -F, -v hx="${_NL_HX:-0}" '
+	function h2d(v,   i, c, n) {
+		n = 0; v = toupper(v)
+		for (i = 1; i <= length(v); i++) {
+			c = index("0123456789ABCDEF", substr(v, i, 1))
+			if (c == 0) return v
+			n = n * 16 + c - 1
+		}
+		return n
+	}
 	function lvl(v, base) {
 		if (v == "" || v + 0 != v || v == 255 || v < 0 || v > 97) return ""
 		return v + base
@@ -69,7 +92,9 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 			rsrp = lvl($11, -141); rsrq = half($12)
 		}
 		if ($8 == "") next
+		ea = $7; pc = $8
+		if (hx == 1 || (ea pc) ~ /[A-Fa-f]/) { ea = h2d(ea); pc = h2d(pc) }
 		printf "%s{\"band\":\"%s\",\"earfcn\":\"%s\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%s}",
-			(n++ ? "," : ""), band, $7, $8, rsrp, rsrq, srv
+			(n++ ? "," : ""), band, ea, pc, rsrp, rsrq, srv
 	}
 ')

@@ -1,0 +1,3 @@
+## live, same modem
++GTACT: 10,3,2,103
+OK
