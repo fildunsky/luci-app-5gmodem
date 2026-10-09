@@ -1033,6 +1033,7 @@ _mk_keep_save "$IF"
 uci -q delete "network.$IF" 2>/dev/null
 uci set "network.$IF=interface"
 uci set "network.$IF.proto=$PROTO"
+[ -f "/lib/netifd/proto/$PROTO.sh" ] || logger -t 5gmodem "mkiface: protocol $PROTO has no handler on this router (/lib/netifd/proto/$PROTO.sh is missing) - the interface will not come up until its package is installed (mbim: umbim, qmi: uqmi)"
 uci set "network.$IF.device=$IDEV"
 set_apn_opt "$IF" "$OLDAPN"
 case "$PROTO" in

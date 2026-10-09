@@ -76,6 +76,18 @@ at() {   # at <порт> <команда> - одна AT-команда с тай
 #   Failed to attach to network / mbim message timeout - у части модемов
 #     (Dell DW5821e / Foxconn T77W968) umbim просто не поднимает PDP-контекст,
 #     тогда как ModemManager с тем же модемом и SIM работает.
+proto_pkg() {
+	case "$1" in
+		mbim) echo "umbim" ;;
+		qmi) echo "uqmi" ;;
+		modemmanager) echo "modemmanager luci-proto-modemmanager" ;;
+		ncm) echo "comgt-ncm" ;;
+		3g) echo "comgt" ;;
+		xmm) echo "xmm-modem" ;;
+		atc) echo "atc" ;;
+		*) echo "$1" ;;
+	esac
+}
 mbim_verdict() {
 	echo ""
 	echo "----- Why MBIM did not come up (verdict) -----"
@@ -83,6 +95,12 @@ mbim_verdict() {
 	[ -n "$_mv_if" ] || { echo "the modem interface is not configured"; return; }
 	[ "$(uci -q get "network.$_mv_if.proto")" = mbim ] || {
 		echo "the interface does not run mbim - this check does not apply"; return; }
+	if [ ! -f /lib/netifd/proto/mbim.sh ]; then
+		echo "PROBLEM: the mbim protocol handler is NOT INSTALLED (/lib/netifd/proto/mbim.sh is missing)."
+		echo "  netifd cannot dial at all: the interface shows proto 'none' and NO_DEVICE."
+		echo "  WHAT TO DO: install the umbim package (opkg install umbim / apk add umbim), then ifup $_mv_if"
+		return
+	fi
 	# ТРЕТЬЯ ЛОВУШКА - ПРОТОКОЛ НЕ ТОТ, ЧТО У УЗЛА. cdc-wdm под драйвером
 	# qmi_wwan говорит по QMI: umbim в него шлёт MBIM-кадры и вечно получает
 	# «mbim message timeout», цикл retry выглядит как мёртвый модем (живой
@@ -871,6 +889,10 @@ usb_flap_verdict() {
 			if (t !~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]$/) return -1
 			split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3]
 		}
+		/healing .*(rebooting the module|power-cycling)/ {
+			s = t2s($4); if (s < 0) next
+			hs = s; hhave = 1; next
+		}
 		/poll of .* is stuck/ {
 			s = t2s($4); if (s < 0) next
 			st = s; have = 1
@@ -882,7 +904,11 @@ usb_flap_verdict() {
 			d = $0; sub(/.*usb /, "", d); sub(/:.*/, "", d)
 			n++
 			g = now - st
-			if (have && g >= 0 && g <= 120) {
+			hg = now - hs
+			if (hhave && hg >= 0 && hg <= 30) {
+				own++
+				line[n] = sprintf("  %s  usb %-8s our watchdog rebooted the module %d s before the drop", $4, d, hg)
+			} else if (have && g >= 0 && g <= 120) {
 				pre++
 				line[n] = sprintf("  %s  usb %-8s polling of %s stalled %d s before the drop", $4, d, port, g)
 			} else {
@@ -894,7 +920,10 @@ usb_flap_verdict() {
 			print "recent drops (time, device, what happened right before):"
 			start = n - 7; if (start < 1) start = 1
 			for (i = start; i <= n; i++) print line[i]
-			if (pre >= 2 && pre * 2 >= n) {
+			if (own == n) {
+				print "  EVERY DROP WAS OUR OWN WATCHDOG REBOOTING THE MODULE (healing) - not power or the cable."
+				print "  Look at why the connection was considered dead: the section Why the modem does not connect."
+			} else if (pre >= 2 && pre * 2 >= n) {
 				print "  OUR OWN MODEM POLLING STALLED BEFORE MOST OF THE DROPS."
 				print "  Check this before blaming power: the metric AT commands may be what"
 				print "  knocks the module over. Experiment: /etc/init.d/5gmodem-sessionwatch stop,"
@@ -963,6 +992,11 @@ usb_flap_verdict() {
 	# Штатный переезд из режима накопителя разобран выше - пугать нечем.
 	[ -n "$_uf_msw" ] && return
 	[ "${_uf_n:-0}" -ge 1 ] || return
+	_uf_own=$(logread 2>/dev/null | grep -cE "healing .*(rebooting the module|power-cycling)")
+	if [ "${_uf_own:-0}" -ge "$_uf_n" ] 2>/dev/null; then
+		echo "Every re-enumeration follows a module reboot by our own watchdog - this is not a power problem."
+		return
+	fi
 	echo "PROBLEM: the device disappeared from the bus and re-enumerated."
 	echo "If this happens SHORTLY AFTER attaching to the network, it is almost certainly"
 	echo "a power shortage: the modem draws peak current while transmitting, and the"
@@ -2050,6 +2084,16 @@ _sum_verdict() {
 			echo "otherwise see 'Why the modem does not connect' and the netifd log."
 			return
 		fi
+		_sv_pr=$(uci -q get "network.$_sv_if.proto")
+		case "$_sv_pr" in
+			''|static|none|dhcp) ;;
+			*)
+				if [ ! -f "/lib/netifd/proto/$_sv_pr.sh" ]; then
+					echo "The modem was found, but the interface protocol '$_sv_pr' is NOT INSTALLED -"
+					echo "netifd has nothing to dial with. Install: $(proto_pkg "$_sv_pr")"
+					return
+				fi ;;
+		esac
 		echo "The modem was found, but it HAS NO ADDRESS - the connection never came up."
 		echo "See the sections 'Why the modem does not connect' and 'APN vs. the database'."
 		return

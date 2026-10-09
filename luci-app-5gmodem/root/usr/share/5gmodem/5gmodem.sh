@@ -838,7 +838,9 @@ if [ -z "$DEVICE" ]; then
 	# а идём дальше: AT-вызовы станут no-op (обёртка sms_tool), а блок mmcli ниже
 	# наполнит карточку. Иначе весь блок Модем висел бы на плейсхолдерах.
 	_amp0_if=$(uci -q get "5gmodem.$_hl_sec.network")
-	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ]; then
+	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ] \
+	   && [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" != "1" ] \
+	   && ! mm_owns_path "$_POLL_AM"; then
 		# САМОЛЕЧЕНИЕ: АКТИВНОГО НЕТ В СПИСКЕ МОДЕМОВ - ЗОВЁМ resolve.
 		#
 		# Переоценку активного делает hotplug, но он срабатывает не всегда: об
