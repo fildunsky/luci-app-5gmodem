@@ -849,6 +849,13 @@ return view.extend({
 		   возвращает прежние 10, 20, 30... - соглашение mwan3. Читают её
 		   netpri.sh (_metric_base) и mkiface.sh (метрика нового интерфейса).
 		   Без depends: метрики аплинков существуют и при выключенном виджете. */
+		o = exp.option(ListDropdown, 'netonly', _('Network-only mode'),
+			_('Keeps uplink priorities, the internet watchdog, statistics and the Telegram bot, and turns off everything that serves a modem: polling, SMS, ModemManager control, USB port binding. Automatic: on when the router has no USB and no PCIe modem.'));
+		o.value('', _('Automatic'));
+		o.value('1', _('On'));
+		o.value('0', _('Off'));
+		o.default = '';
+
 		o = exp.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
 			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
 		o.default = '0';

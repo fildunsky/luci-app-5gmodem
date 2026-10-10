@@ -31,6 +31,7 @@ export SW_BG=1
 
 . "$RES/atlock.sh" 2>/dev/null
 . "$RES/lib.sh" 2>/dev/null   # active_path
+. "$RES/netonly.sh" 2>/dev/null
 
 _log() { logger -t 5gmodem "sessionwatch: $*"; }
 
@@ -807,7 +808,9 @@ case "$1" in
 			if [ "$_sweep_n" -ge 10 ]; then _sweep_n=0; _sweep_tmp; fi
 			# Реестр собираем ОДИН раз за круг и отдаём обеим задачам: они смотрят
 			# на одно и то же состояние, а сборка стоит дороже самих проверок.
-			_reg_refresh
+			_SW_NETONLY=""
+			netonly_active && _SW_NETONLY=1
+			if [ -n "$_SW_NETONLY" ]; then _REG_FLAT=""; else _reg_refresh; fi
 			# САМОЛЕЧЕНИЕ РЕГИСТРАЦИИ. Модем есть в реестре, но НЕ заведён нами -
 			# карточка без имени и SIM-данных, а recv/метрики бьют по пустой цели.
 			# Причины не ловятся штатным триггером на буте (USB-hotplug):
@@ -838,7 +841,7 @@ case "$1" in
 					"$RES/modemswitch.sh" resolve >/dev/null 2>&1
 				fi
 			fi
-			check_once
+			[ -n "$_SW_NETONLY" ] || check_once
 			# Освежение и МЕЖДУ обязанностями: фаза обязанностей длится 10-20 c,
 			# и без этих вызовов снимок успевал протухнуть - половина тиков
 			# страницы снова собирала сама (замер 06.08.2026: тики 1.9-2.4 c
@@ -846,8 +849,8 @@ case "$1" in
 			_page_refresh
 			# Подогрев ПОСЛЕ проверки сессии, а не вместо: восстановление связи
 			# важнее тёплой карточки, и порт (если он один) достанется сначала ей.
-			warm_snapshots
-			warm_active
+			[ -n "$_SW_NETONLY" ] || warm_snapshots
+			[ -n "$_SW_NETONLY" ] || warm_active
 			_page_refresh
 			# Сторож интернета - последним: он ходит в СЕТЬ (ping), а не в порт,
 			# и с проверкой сессии за AT-порт не конкурирует. Включён ли он и не
