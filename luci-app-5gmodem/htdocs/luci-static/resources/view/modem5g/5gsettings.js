@@ -389,6 +389,17 @@ return view.extend({
 				return String(uci.get('5gmodem', sid0(), k) || '') !== _gateWas[k];
 			});
 		}
+		function _gateAfterAutosave() {
+			if (!_gateChanged()) { return; }
+			var noWas = _gateWas.netonly;
+			_gateOpts.forEach(function(k) {
+				_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
+			});
+			modemtabs.refreshGateTabs();
+			if (_gateWas.netonly !== noWas) {
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null);
+			}
+		}
 
 		var _mSaveOrig = m.save.bind(m);
 		m.save = function() {
@@ -1057,6 +1068,7 @@ return view.extend({
 				m.parse()
 					.then(function() { return uci.save(); })
 					.then(applyOwn)
+					.then(_gateAfterAutosave)
 					.catch(function() {});
 			}, 400);
 		};
