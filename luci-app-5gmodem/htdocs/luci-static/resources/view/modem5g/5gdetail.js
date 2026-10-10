@@ -1597,7 +1597,7 @@ function renderDebugBtn(json) {
 	var head = document.getElementById('modemname');
 	if (!head) { return; }
 	var btn = document.getElementById('dbgmode-btn');
-	if (json.backend !== 'hilink') { if (btn) { btn.remove(); } return; }
+	if (json.backend !== 'hilink' || !hilinkHasDebug(json) || HL_DEBUG_ON[String(json.vidpid || '')]) { if (btn) { btn.remove(); } return; }
 	if (btn) { return; }
 	head.appendChild(E('button', {
 		'id': 'dbgmode-btn',
@@ -1615,6 +1615,50 @@ function renderDebugBtn(json) {
 			reloadWhenDebugReady();
 		})
 	}, _('debug')));
+}
+
+var HL_DEBUG_ON = { '19d2:0581': 1 };
+var HL_DEBUG_CAN = { '19d2:1557': 1, '19d2:0581': 1 };
+
+function hilinkHasDebug(json) {
+	var vp = String(json.vidpid || '');
+	return !vp || vp.indexOf('12d1:') === 0 || !!HL_DEBUG_CAN[vp];
+}
+
+function renderWebPassHint(json) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var el = document.getElementById('webpass-hint');
+	if (json.backend !== 'hilink' || json.web_auth !== 'fail') { if (el) { el.remove(); } return; }
+	if (el) { return; }
+	head.appendChild(E('a', {
+		'id': 'webpass-hint',
+		'class': 'webpass-hint',
+		'href': L.url('admin/modem/5gmodem/diagnostics'),
+		'title': _('The modem asks for its web password - enter it on the Modem page')
+	}, _('Password needed')));
+}
+
+function renderBattery(json) {
+	var box = document.getElementById('battn');
+	if (!box) { return; }
+	var b = parseInt(json.battery, 10);
+	if (isNaN(b) || b < 0 || b > 100) { box.style.display = 'none'; return; }
+	var chg = json.battery_charging === '1';
+	var key = b + ':' + (chg ? 1 : 0);
+	box.title = chg ? _('Modem battery, charging') : _('Modem battery');
+	box.style.display = '';
+	if (box.getAttribute('data-k') === key) { return; }
+	box.setAttribute('data-k', key);
+	var w = Math.max(1, Math.round(15 * b / 100));
+	var col = chg ? '#2fb344' : (b <= 15 ? '#d9534f' : 'currentColor');
+	var svg = '<svg class="tg-batt-ico" viewBox="0 0 24 14" width="24" height="14" fill="none">'
+		+ '<rect x="1" y="1" width="19" height="12" rx="2.5" stroke="currentColor" stroke-width="1.6"></rect>'
+		+ '<rect x="21.2" y="4.5" width="1.8" height="5" rx=".8" fill="currentColor"></rect>'
+		+ '<rect x="3" y="3" width="' + w + '" height="8" rx="1.2" fill="' + col + '"></rect>'
+		+ (chg ? '<path d="M11.6 2.2 8 7.6h2.9L9.9 11.8l3.9-5.6h-2.9z" fill="#fff" stroke="#1d7a2f" stroke-width=".5" stroke-linejoin="round"></path>' : '')
+		+ '</svg>';
+	box.innerHTML = svg + '<span id="batt">' + b + '%</span>';
 }
 
 /* ЧИП ТЕКУЩЕГО ПРОТОКОЛА в правом краю заголовка «Модем». Нужен для тестов:
@@ -1764,7 +1808,7 @@ function reloadWhenDebugReady(tries) {
 	if (pageModemPath) { _rdArgs.push('for=' + pageModemPath); }
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _rdArgs), '').then(function(out) {
 		var ready = false;
-		try { var j = JSON.parse(out || '{}'); ready = (String(j.backend || '').toLowerCase() !== 'hilink') && (j.at_debug === '1'); } catch (e) {}
+		try { var j = JSON.parse(out || '{}'); ready = ((String(j.backend || '').toLowerCase() !== 'hilink') && (j.at_debug === '1')) || !!HL_DEBUG_ON[String(j.vidpid || '')]; } catch (e) {}
 		if (ready || tries >= 18) { window.location.reload(); }
 		else { window.setTimeout(function() { reloadWhenDebugReady(tries + 1); }, 3000); }
 	});
@@ -3119,6 +3163,10 @@ function applyMetrics(json) {
 						var _nt = document.getElementById('modemname-text');
 						if (_nt && _nt.textContent !== _nm) { _nt.textContent = _nm; }
 						renderDebugBtn(json);
+						renderWebPassHint(json);
+						renderBattery(json);
+						var _rr = document.getElementById('rb-radio-btn');
+						if (_rr) { _rr.style.display = (json.backend === 'hilink') ? 'none' : ''; }
 						renderProtoChip(json);
 						/* ПОСЛЕ чипа - иначе окажется правее него (см. renderVidPid). */
 						renderVidPid(json);
@@ -3198,6 +3246,8 @@ function applyMetrics(json) {
 						var mmBtn = document.getElementById('bandnote-mm-btn');
 						var xmmBtn = document.getElementById('bandnote-xmm-btn');
 						var dbgBtn = document.getElementById('bandnote-dbg-btn');
+						var freqBlk = document.querySelector('[data-blk="freq"]');
+						if (freqBlk) { freqBlk.style.display = (isHilink && !hilinkHasDebug(json)) ? 'none' : ''; }
 						if (bandsui.isTakeover()) {
 							/* Kernel-прото + mmcli-профиль (Compal в MBIM): менять
 							   диапазоны МОЖНО - приложение само временно захватит MM.
@@ -4206,6 +4256,7 @@ simDialog: baseclass.extend({
 						})(),
 						E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
 					]),
+					E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
 					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
 							E('img', { 'src': L.resource('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
@@ -4233,6 +4284,7 @@ simDialog: baseclass.extend({
 					E('td', { 'class': 'td left tg-rb-pad', 'width': '33%' }, []),
 					E('td', { 'class': 'td left tginfo-modesw' }, [
 						E('button', {
+							'id': 'rb-radio-btn',
 							'class': 'btn cbi-button cbi-button-remove',
 							'data-tooltip': _('Radio restart (CFUN=4→1): quickly re-registers on the network without re-enumerating USB. Try this first.'),
 							'click': ui.createHandlerFn(this, function() { return rebootModem(false); })

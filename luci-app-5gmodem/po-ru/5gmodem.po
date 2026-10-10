@@ -3063,7 +3063,7 @@ msgid "VoLTE"
 msgstr "VoLTE"
 
 msgid "debug"
-msgstr "отладка"
+msgstr "Debug"
 
 msgid "eSIM"
 msgstr "eSIM"
@@ -5836,3 +5836,26 @@ msgstr "Только приоритеты интернета"
 
 msgid "For a router without a modem: keeps uplink priorities, the internet watchdog, statistics, buttons and the Telegram bot, and turns off everything that serves a modem - polling, SMS, ModemManager control, USB port binding. Modem tabs and settings are hidden."
 msgstr "Для роутера без модема: оставляет приоритеты интернета, сторож связи, статистику, кнопки и Telegram-бота и выключает всё, что обслуживает модем, - опрос, SMS, управление ModemManager, привязку USB-портов. Вкладки и настройки модема скрываются."
+
+msgid "Modem web password"
+msgstr "Пароль веб-интерфейса модема"
+
+
+
+
+
+
+msgid "Modem battery"
+msgstr "Батарея модема"
+
+msgid "Modem battery, charging"
+msgstr "Батарея модема, заряжается"
+
+msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
+msgstr "Пароль от собственного веб-интерфейса модема. С ним роутер читает сигнал, заряд батареи и SMS и может перезагрузить модем. Оставьте пустым, если у модема нет пароля."
+
+msgid "The modem asks for its web password - enter it on the Modem page"
+msgstr "Модем просит пароль веб-интерфейса - введите его на странице «Модем»"
+
+msgid "Password needed"
+msgstr "Нужен пароль"

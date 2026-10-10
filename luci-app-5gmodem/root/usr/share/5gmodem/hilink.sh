@@ -276,9 +276,13 @@ conn_up() { [ "$1" = "901" ]; }
 # Пароль берём из настроек модема (uci ...web_pass), по умолчанию admin - он
 # стоит на большинстве свистков. Сессию (cookie stok) кэшируем на 5 минут:
 # логин на каждый опрос - лишний запрос в модем каждые несколько секунд.
+_web_pass() {
+	uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+		| sed 's/[^A-Za-z0-9]/_/g').web_pass"
+}
+
 _zte_pass() {
-	_zp=$(uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
-		| sed 's/[^A-Za-z0-9]/_/g').web_pass")
+	_zp=$(_web_pass "$1")
 	[ -n "$_zp" ] && { printf '%s' "$_zp"; return; }
 	printf 'admin'
 }
@@ -346,20 +350,124 @@ _vidpid_for() {
 	uci -q get "$CFG.m_$(echo "$_vf_p" | sed 's/[^A-Za-z0-9]/_/g').vidpid"
 }
 
-tenda_metrics_json() {
-	_HLP=$(_hl_path "$1")
-	_a=$(_addr_for "$_HLP") || return 1
-	_tm_f="/tmp/5gmodem/tendaapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
-	if [ -f "$_tm_f" ] && [ -z "$(find "$_tm_f" -mmin +10 2>/dev/null)" ] && [ "$(cat "$_tm_f")" = 0 ]; then
+_tk() { echo "$1" | tr -c 'A-Za-z0-9' '_'; }
+
+_tenda_raw() {
+	_tr_src=$(_srcip_for "" "$1")
+	_tr_c=$(cat "$CACHE_DIR/tendaauth_$(_tk "$1")" 2>/dev/null)
+	curl -s --max-time 6 ${_tr_src:+--interface "$_tr_src"} -A "$UA" \
+		${_tr_c:+-b "password=$_tr_c"} \
+		"http://$1/goform/getModules?modules=$2" 2>/dev/null
+}
+
+_tenda_on() {
+	_to_f="$CACHE_DIR/tendaapi_$(_tk "$1")"
+	if [ -f "$_to_f" ] && [ -z "$(find "$_to_f" -mmin +10 2>/dev/null)" ]; then
+		[ "$(cat "$_to_f")" = 1 ] && return 0
 		return 1
 	fi
-	_tm_src=$(_srcip_for "" "$_a")
-	_r=$(curl -s --max-time 6 ${_tm_src:+--interface "$_tm_src"} -A "$UA" \
-		"http://$_a/goform/getModules?modules=deviceInfo,connectStatus,apnConfig" 2>/dev/null)
-	case "$_r" in
-		*'"deviceInfo"'*) printf '1' > "$_tm_f" ;;
-		*) printf '0' > "$_tm_f"; return 1 ;;
+	_to_r=$(_tenda_raw "$1" deviceInfo)
+	case "$_to_r" in
+		'') return 2 ;;
+		*'"deviceInfo"'*|*'"errCode":1000'*|*'"errCode":"1000"'*) printf '1' > "$_to_f"; return 0 ;;
 	esac
+	printf '0' > "$_to_f"
+	return 1
+}
+
+_tenda_login() {
+	_tl_f="$CACHE_DIR/tendaauth_$(_tk "$1")"
+	_tl_bad="$_tl_f.fail"
+	if [ -f "$_tl_bad" ] && [ -z "$(find "$_tl_bad" -mmin +15 2>/dev/null)" ]; then
+		return 1
+	fi
+	_tl_p=$(_web_pass "$2")
+	if [ -n "$_tl_p" ]; then
+		_tl_src=$(_srcip_for "" "$1")
+		_tl_r=$(curl -s -i --max-time 8 ${_tl_src:+--interface "$_tl_src"} -A "$UA" \
+			-H "Content-Type: application/json; charset=UTF-8" \
+			-d "{\"userName\":\"admin\",\"password\":\"$(printf '%s' "$_tl_p" | md5sum | cut -d' ' -f1)\"}" \
+			"http://$1/login/Auth" 2>/dev/null | tr -d '\r')
+		case "$_tl_r" in *'"errCode"'*) ;; *) return 2 ;; esac
+		case "$_tl_r" in
+			*'"errCode":0'*|*'"errCode":"0"'*)
+				_tl_c=$(printf '%s\n' "$_tl_r" | sed -n 's/^[Ss]et-[Cc]ookie: *password=\([^;[:space:]]*\).*/\1/p' | head -1)
+				if [ -n "$_tl_c" ]; then
+					rm -f "$_tl_bad"
+					printf '%s' "$_tl_c" > "$_tl_f"
+					printf '%s' "$_tl_c"
+					return 0
+				fi ;;
+		esac
+	fi
+	if [ ! -f "$_tl_bad" ]; then
+		if [ -n "$_tl_p" ]; then
+			logger -t 5gmodem "hilink(tenda): login to $1 failed - wrong web password? Not retrying for 15 minutes so the stick does not lock its web login"
+		else
+			logger -t 5gmodem "hilink(tenda): $1 asks for its web password - set it on the Network page (key button in the modem card)"
+		fi
+	fi
+	: > "$_tl_bad"
+	return 1
+}
+
+_tenda_denied() {
+	case "$1" in *'"errCode":1000'*|*'"errCode":"1000"'*) return 0 ;; esac
+	return 1
+}
+
+_tenda_get() {
+	_tg_r=$(_tenda_raw "$1" "$2")
+	if _tenda_denied "$_tg_r"; then
+		rm -f "$CACHE_DIR/tendaauth_$(_tk "$1")"
+		_tenda_login "$1" "$3" >/dev/null && _tg_r=$(_tenda_raw "$1" "$2")
+	fi
+	printf '%s' "$_tg_r"
+}
+
+_tenda_post() {
+	_tp_src=$(_srcip_for "" "$1")
+	_tp_c=$(cat "$CACHE_DIR/tendaauth_$(_tk "$1")" 2>/dev/null)
+	curl -s --max-time 8 ${_tp_src:+--interface "$_tp_src"} -A "$UA" \
+		${_tp_c:+-b "password=$_tp_c"} \
+		-H "Content-Type: application/json; charset=UTF-8" \
+		-d "$3" "http://$1/goform/setModules?modules=$2" 2>/dev/null
+}
+
+_tenda_set() {
+	_ts_r=$(_tenda_post "$1" "$2" "$3")
+	case "$_ts_r" in *'"errCode"'*) ;; *) _ts_r="" ;; esac
+	if [ -z "$_ts_r" ] || _tenda_denied "$_ts_r"; then
+		rm -f "$CACHE_DIR/tendaauth_$(_tk "$1")"
+		_tenda_login "$1" "$4" >/dev/null && _ts_r=$(_tenda_post "$1" "$2" "$3")
+	fi
+	printf '%s' "$_ts_r"
+}
+
+_tenda_ok() {
+	case "$1" in *'"errCode":0'*|*'"errCode":"0"'*) return 0 ;; esac
+	return 1
+}
+
+_is_tenda() {
+	_it_a=$(_addr_for "$(_hl_path "$1")") || return 1
+	_tenda_on "$_it_a"
+}
+
+tenda_metrics_json() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 2
+	_tenda_on "$_a"
+	case $? in 1) return 1 ;; 2) return 2 ;; esac
+	_r=$(_tenda_get "$_a" "deviceInfo,connectStatus,batteryInfo,networkConfig" "$_HLP")
+	[ -n "$_r" ] || return 2
+	if _tenda_denied "$_r"; then
+		[ -f "$CACHE_DIR/tendaauth_$(_tk "$_a").fail" ] || return 2
+		printf '{"backend":"hilink","cport":"%s","protocol":"HiLink (web API)",' "$_a"
+		printf '"modem":"Tenda","web_auth":"fail","registration":"","signal":"","conn_status":""}\n'
+		return 0
+	fi
+	case "$_r" in *'"deviceInfo"'*) ;; *) return 2 ;; esac
 	_tj() { printf '%s' "$_r" | jsonfilter -e "@.deviceInfo.$1" 2>/dev/null; }
 	_net=$(_tj mobileNetwork)
 	case "$_net" in
@@ -385,23 +493,39 @@ tenda_metrics_json() {
 		_csq=$(( ( _rssi + 113 ) / 2 ))
 		[ "$_csq" -lt 0 ] && _csq=0; [ "$_csq" -gt 31 ] && _csq=31
 	fi
+	_bat=$(printf '%s' "$_r" | jsonfilter -e '@.batteryInfo.battery' 2>/dev/null | tr -cd '0-9')
+	_chg=$(printf '%s' "$_r" | jsonfilter -e '@.batteryInfo.isCharge' 2>/dev/null)
+	[ "$_chg" = true ] && _chg=1 || _chg=0
+	_ctime=$(printf '%s' "$_r" | jsonfilter -e '@.networkConfig.networkInfo.connectTime' 2>/dev/null | tr -cd '0-9')
+	[ "$_reg" = 1 ] || _ctime=""
+	_ct_str="-"
+	if [ -n "$_ctime" ]; then
+		_ct_str=$(printf "%dd, %02d:%02d:%02d" \
+			$(( _ctime / 86400 )) $(( _ctime / 3600 % 24 )) \
+			$(( _ctime / 60 % 60 )) $(( _ctime % 60 )))
+	fi
 	_model="Tenda $(_tj productName)"
 	printf '{'
 	printf '"backend":"hilink",'
 	printf '"cport":"%s",' "$_a"
-	printf '"protocol":"HiLink (web API)",'
+	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
 	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"web_auth":"%s",' "$([ -s "$CACHE_DIR/tendaauth_$(_tk "$_a")" ] && echo ok || echo open)"
 	printf '"imei":"%s","imsi":"%s","iccid":"%s",' "$(_tj IMEI)" "$(_tj IMSI)" "$(_tj ICCID)"
 	printf '"firmware":"%s","phone":"",' "$(jsafe "$(_tj softwareVersion)")"
 	printf '"operator_name":"%s",' "$(jsafe "$(_tj profileName)")"
 	printf '"operator_mcc":"","operator_mnc":"",'
 	printf '"registration":"%s",' "$_reg"
-	printf '"mode":"%s",' "$(jsafe "$_ntype")"
+	_tmode="$_ntype"
+	[ "$_ntype" = LTE ] && [ -n "$_tpband" ] && _tmode="LTE $_tpband"
+	printf '"mode":"%s",' "$(jsafe "$_tmode")"
 	printf '"signal":"%s",' "$_pct"
 	printf '"rsrp":"%s","rsrq":"","sinr":"%s","rssi":"%s",' "$_rsrp" "$_sinr" "$_rssi"
 	printf '"cid_dec":"","cid_hex":"","lac_hex":"",'
 	printf '"pci":"","pband":"%s","enbid":"",' "$_tpband"
 	printf '"ipaddr":"%s",' "$(_tj wanIp)"
+	printf '"battery":"%s","battery_charging":"%s",' "$_bat" "$_chg"
+	[ -n "$_ctime" ] && printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "$_ctime"
 	printf '"csq":"%s",' "$_csq"
 	printf '"conn_status":"%s"' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
 	printf '}\n'
@@ -488,14 +612,16 @@ zte_metrics_json() {
 	printf '{'
 	printf '"backend":"hilink",'
 	printf '"cport":"%s",' "$_a"
-	printf '"protocol":"HiLink (web API)",'
+	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
 	printf '"modem":"%s",' "$(jsafe "$_model")"
 	printf '"imei":"%s","imsi":"%s","iccid":"%s",' "$_imei" "$_imsi" "$_iccid"
 	printf '"firmware":"%s","phone":"%s",' "$(jsafe "$_fw")" "$(jsafe "$_phone")"
 	printf '"operator_name":"%s",' "$(jsafe "$_op")"
 	printf '"operator_mcc":"%s","operator_mnc":"%s",' "$_mcc" "$_mnc"
 	printf '"registration":"%s",' "$_reg"
-	printf '"mode":"%s",' "$(jsafe "$_ntype")"
+	_zmode="$_ntype"
+	case "$_ntype" in *LTE*) [ -n "$_zpband" ] && _zmode="$_ntype $_zpband" ;; esac
+	printf '"mode":"%s",' "$(jsafe "$_zmode")"
 	printf '"signal":"%s",' "$_pct"
 	printf '"rsrp":"%s","rsrq":"%s","sinr":"%s","rssi":"%s",' \
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
@@ -572,7 +698,7 @@ yota_metrics_json() {
 	printf '{'
 	printf '"backend":"hilink",'
 	printf '"cport":"%s",' "$_a"
-	printf '"protocol":"HiLink (web API)",'
+	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
 	printf '"modem":"%s",' "$(jsafe "$_model")"
 	printf '"imei":"%s","imsi":"%s","iccid":"",' "$_imei" "$_imsi"
 	printf '"firmware":"%s","phone":"%s",' "$(jsafe "$_fw")" "$(jsafe "$_phone")"
@@ -687,7 +813,10 @@ metrics_json() {
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
 	case "$(_vidpid_for "$_HLP")" in
 		19d2:0565) yota_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
-		19d2:*) tenda_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
+		19d2:*)
+			tenda_metrics_json "$_HLP"
+			case $? in 0) return 0 ;; 2) return 1 ;; esac
+			zte_metrics_json "$_HLP"; return $? ;;
 		15a9:*|1076:8002) yota_metrics_json "$_HLP"; return $? ;;
 		0846:68e1) netgear_metrics_json "$_HLP"; return $? ;;
 	esac
@@ -869,7 +998,7 @@ metrics_json() {
 	# сам факт того, что модемом правит его прошивка, а не мы. Без них в блоке
 	# стояли прочерки.
 	printf '"cport":"%s",' "$(_addr_for "$_HLP" 2>/dev/null)"
-	printf '"protocol":"HiLink (web API)",'
+	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
 	printf '"modem":"%s",' "$(jsafe "$_model")"
 	printf '"imei":"%s",' "$_imei"
 	printf '"imsi":"%s",' "$_imsi"
@@ -1203,6 +1332,73 @@ zte_sms_delete() {   # $1 - индекс, $2 - usb-путь
 		*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_zx_r" result)" ;;
 	esac
 }
+_tenda_sms_conv() {
+	awk '
+		function fld(r, k,   v) {
+			if (match(r, "\"" k "\":\"[^\"]*\"")) {
+				v = substr(r, RSTART, RLENGTH); sub("^\"" k "\":\"", "", v); sub("\"$", "", v); return v
+			}
+			if (match(r, "\"" k "\":[a-z0-9]+")) {
+				v = substr(r, RSTART, RLENGTH); sub("^\"" k "\":", "", v); return v
+			}
+			return ""
+		}
+		{
+			n = split($0, rec, "{")
+			printf "{\"messages\":["
+			first = 1; ph = ""
+			for (k = 1; k <= n; k++) {
+				if (rec[k] ~ /"list":/) { ph = fld(rec[k], "phone"); continue }
+				id = fld(rec[k], "id")
+				if (id == "" || id ~ /[^0-9]/) continue
+				if (fld(rec[k], "isSend") == "true") tag = (fld(rec[k], "status") == "false") ? 3 : 2
+				else tag = (fld(rec[k], "isRead") == "true") ? 1 : 0
+				t = fld(rec[k], "time") + 0
+				if (!first) printf ","; first = 0
+				printf "{\"id\":\"%s\",\"number\":\"%s\",\"tag\":\"%d\",\"date\":\"%s\",\"content\":\"%s\"}", \
+					id, ph, tag, strftime("%y,%m,%d,%H,%M,%S", t), fld(rec[k], "content")
+			}
+			print "]}"
+		}'
+}
+
+tenda_sms_list() {
+	_ts_p=$(_hl_path "$2")
+	_ts_a=$(_addr_for "$_ts_p") || { echo '{"msg":[]}'; return 1; }
+	_ts_r=$(_tenda_get "$_ts_a" smsList "$_ts_p")
+	case "$_ts_r" in
+		*'"smsList"'*) ;;
+		*) echo '{"msg":[]}'; return 1 ;;
+	esac
+	printf '%s' "$_ts_r" | tr -d '\r\n' | _tenda_sms_conv | _zte_sms_parse "${1:-in}"
+}
+
+tenda_sms_count() {
+	_tc_n=$(tenda_sms_list in "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	printf '<LocalInbox>%s</LocalInbox><LocalMaxInbox>100</LocalMaxInbox>\n' "${_tc_n:-0}"
+}
+
+tenda_sms_send() {
+	[ -n "$1" ] && [ -n "$2" ] || { echo '{"error":"no number or text"}'; return 1; }
+	_td_p=$(_hl_path "$3")
+	_td_a=$(_addr_for "$_td_p") || { echo '{"success":false}'; return 1; }
+	_td_n=$(printf '%s' "$1" | tr -cd '0-9+')
+	_td_e=UNICODE
+	printf '%s' "$2" | grep -q '[^ -~]' || _td_e=GSM7_default
+	_td_r=$(_tenda_set "$_td_a" sendSms \
+		"{\"sendSms\":{\"phone\":\"$_td_n\",\"content\":\"$(_zte_ucs2hex "$2")\",\"encode_type\":\"$_td_e\",\"id\":\"-1\",\"time\":\"$(date +%s)\"}}" "$_td_p")
+	if _tenda_ok "$_td_r"; then echo '{"success":true}'; else
+		printf '{"success":false,"code":"%s"}\n' "$(_zj "$_td_r" errCode)"; fi
+}
+
+tenda_sms_delete() {
+	_tx_p=$(_hl_path "$2")
+	_tx_a=$(_addr_for "$_tx_p") || { echo '{"success":false}'; return 1; }
+	_tx_r=$(_tenda_set "$_tx_a" delSmsList "{\"delSmsList\":{\"idList\":[\"$(printf '%s' "$1" | tr -cd '0-9')\"]}}" "$_tx_p")
+	if _tenda_ok "$_tx_r"; then echo '{"success":true}'; else
+		printf '{"success":false,"code":"%s"}\n' "$(_zj "$_tx_r" errCode)"; fi
+}
+
 # --- USSD --------------------------------------------------------------------
 #
 # У этого класса модемов USSD работает через API, а не AT: в /api/global/
@@ -1579,7 +1775,13 @@ case "$1" in
 		esac ;;
 	reboot)
 		case "$(_vidpid_for "$2")" in
-			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=REBOOT_DEVICE" >/dev/null ;;
+			19d2:*)
+				_a=$(_addr_for "$2") || exit 0
+				if _tenda_on "$_a"; then
+					_tenda_set "$_a" deviceAction '{"deviceAction":{"action":"0"}}' "$2" >/dev/null
+				else
+					_zte_set "$_a" "goformId=REBOOT_DEVICE" >/dev/null
+				fi ;;
 			*) api_post /api/device/control "<Control>1</Control>" "$2" ;;
 		esac ;;
 	# Переключить композицию USB.
@@ -1598,6 +1800,22 @@ case "$1" in
 			normal|0) _m=0 ;;
 			*) echo '{"error":"mode must be debug or normal"}'; exit 0 ;;
 		esac
+		case "$(_vidpid_for "$3")" in
+			19d2:*)
+				_a=$(_addr_for "$(_hl_path "$3")") || { echo '{"success":false,"code":"noaddr"}'; exit 0; }
+				_r=$(_zte_set "$_a" "goformId=SET_DEVICE_MODE&debug_enable=$_m")
+				case "$_r" in
+					*successfully*)
+						if _tenda_on "$_a"; then
+							_tenda_set "$_a" deviceAction '{"deviceAction":{"action":"0"}}' "$3" >/dev/null
+						else
+							_zte_set "$_a" "goformId=REBOOT_DEVICE" >/dev/null
+						fi
+						printf '{"success":true,"mode":"%s","reboot":1}\n' "$2" ;;
+					*) printf '{"success":false,"code":"%s"}\n' "$(_zj "$_r" result)" ;;
+				esac
+				exit 0 ;;
+		esac
 		_r=$(api_post /api/device/mode "<mode>$_m</mode>" "$3")
 		case "$_r" in
 			*'<response>OK</response>'*) printf '{"success":true,"mode":"%s"}\n' "$2" ;;
@@ -1607,19 +1825,19 @@ case "$1" in
 	# У ZTE-стика своё SMS-хранилище за goform (см. блок «SMS у ZTE»), у
 	# остальных - Huawei-XML. Развилка та же, что у connect/reboot.
 	smsread)     case "$(_vidpid_for "$3")" in
-			19d2:*) zte_sms_list "${2:-in}" "$3" ;;
+			19d2:*) if _is_tenda "$3"; then tenda_sms_list "${2:-in}" "$3"; else zte_sms_list "${2:-in}" "$3"; fi ;;
 			*) sms_list "${2:-in}" "$3" ;;
 		esac ;;
 	smscount)    case "$(_vidpid_for "$2")" in
-			19d2:*) zte_sms_count "$2" ;;
+			19d2:*) if _is_tenda "$2"; then tenda_sms_count "$2"; else zte_sms_count "$2"; fi ;;
 			*) api_get /api/sms/sms-count "$2" ;;
 		esac ;;
 	smssend)     case "$(_vidpid_for "$4")" in
-			19d2:*) zte_sms_send "$2" "$3" "$4" ;;
+			19d2:*) if _is_tenda "$4"; then tenda_sms_send "$2" "$3" "$4"; else zte_sms_send "$2" "$3" "$4"; fi ;;
 			*) sms_send "$2" "$3" "$4" ;;
 		esac ;;
 	smsdel)      case "$(_vidpid_for "$3")" in
-			19d2:*) zte_sms_delete "$2" "$3" ;;
+			19d2:*) if _is_tenda "$3"; then tenda_sms_delete "$2" "$3"; else zte_sms_delete "$2" "$3"; fi ;;
 			*) sms_delete "$2" "$3" ;;
 		esac ;;
 	ussd)        hl_ussd "$2" "$3" ;;

@@ -485,6 +485,7 @@ _hl_sec=$(secname "$_POLL_AM")
 export QMI_TARGET_PATH="$_POLL_AM"
 _hl_at=$(uci -q get "5gmodem.$_hl_sec.at_port")
 [ -n "$_hl_at" ] && [ -c "$_hl_at" ] && _hl_at="yes" || _hl_at=""
+hl_web_metrics "$_hl_sec" && _hl_at=""
 
 # АДРЕСНЫЙ ЗАПРОС: for=<usb-путь> - «метрики ИМЕННО ЭТОГО модема».
 #

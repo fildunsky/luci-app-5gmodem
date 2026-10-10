@@ -970,7 +970,8 @@ _bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
 # API же (net-mode) меняет диапазоны, НЕ трогая композицию - debug сохраняется.
 #
 # Метрики/SMS/USSD этой ветки не касаются: они идут своим путём (AT в debug).
-if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ]; then
+if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
+   && ! case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in 19d2:*) true ;; *) false ;; esac; then
 	_HL=/usr/share/5gmodem/hilink.sh
 	# Полный список поддерживаемых диапазонов API не отдаёт - только текущую
 	# маску. Но когда модем в debug, его знает AT-профиль. Читаем оттуда ОДИН РАЗ

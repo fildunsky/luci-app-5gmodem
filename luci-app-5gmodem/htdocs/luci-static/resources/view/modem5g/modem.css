@@ -1430,6 +1430,29 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   opacity: 0.85;
   white-space: nowrap;
 }
+.webpass-hint {
+  float: right;
+  font-size: .72rem;
+  font-weight: normal;
+  font-family: inherit;
+  color: #d9534f;
+  border: 1px solid #d9534f;
+  border-radius: 5px;
+  padding: .05em .45em;
+  margin-left: .8em;
+  position: relative;
+  top: .25em;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.tginfo-batt {
+  line-height: 1;
+}
+.tginfo-batt .tg-batt-ico {
+  display: block;
+  flex: none;
+}
+#batt,
 #temp {
   /* Цифры температуры - жирным моноширинным, чуть меньше окружающего текста:
      в моноширинном значение не дёргается при смене (45.2 -> 45.9). */

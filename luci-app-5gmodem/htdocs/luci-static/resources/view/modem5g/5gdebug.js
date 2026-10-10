@@ -1137,8 +1137,34 @@ return view.extend({
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 			if (!p) { return false; }
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sc, 'kind') === 'hilink'
+				&& /^(12d1:|19d2:1557$|19d2:0581$)/.test(String(uci.get('5gmodem', sc, 'vidpid') || '12d1:'));
+		})();
+		var webPassHl = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return false; }
+			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			return uci.get('5gmodem', sc, 'kind') === 'hilink';
 		})();
+		if (webPassHl) {
+		o = s.option(form.Value, '_web_pass', _('Modem web password'),
+			_('The password of the modem\'s own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password.'));
+		o.password = true;
+		o.rmempty = false;
+		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
+			return fs.exec('/usr/share/5gmodem/modemswitch.sh',
+				[ 'webpass', String(p), 'set', String(value || '') ]).catch(function() {});
+		};
+		o.load = function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return ''; }
+			var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
+			return uci.get('5gmodem', sec, 'web_pass') || '';
+		};
+		o.remove = function(section_id) { return this.write(section_id, ''); };
+		}
 		if (atDebugHl) {
 		o = s.option(form.Flag, '_at_debug', _('AT ports (debug mode)'),
 			_('Such a modem normally exposes only its web interface: no TAC, no band, no EARFCN, no USSD. In this mode it also shows serial ports and is driven like any other modem, keeping its network card and internet. The mode is reset when the modem reboots, so it is applied again every time the modem appears.'));
@@ -1829,7 +1855,7 @@ return view.extend({
 
 		   ТОЛЬКО простые настройки. Интерфейс/порт/протокол/APN ПЕРЕСОЗДАЮТ
 		   интерфейс (mkiface) - их мгновенно дёргать нельзя, они на общей кнопке. */
-		var _instant = { '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_web_pass': 1, '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		var _instLast = {};
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }
