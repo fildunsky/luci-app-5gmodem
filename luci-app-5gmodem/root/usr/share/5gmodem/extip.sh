@@ -128,6 +128,7 @@ _parsecc() {
 # промолчать, чем показать в карточке модема адрес соседнего аплинка.
 _fetch() {
 	_fu="$1"; _ff="$2"; _fa="$3"
+	case "$_fu" in http://*|https://*) ;; *) return 1 ;; esac
 	if command -v curl >/dev/null 2>&1; then
 		set -- -"$_ff" -s -L --max-time "$TMO"
 		[ -n "$DEV" ] && set -- "$@" --interface "$DEV"

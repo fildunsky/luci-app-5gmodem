@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.2.11
+PKG_VERSION:=3.2.12
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -56,6 +56,13 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 [ -n "$${IPKG_INSTROOT}" ] || {
+	for _5gm_f in /etc/hotplug.d/*/*5gmodem*.apk-new /etc/hotplug.d/*/*5gmodem*-opkg; do
+		[ -f "$$_5gm_f" ] || continue
+		case "$$_5gm_f" in
+			*.apk-new) mv -f "$$_5gm_f" "$${_5gm_f%.apk-new}" 2>/dev/null ;;
+			*-opkg) mv -f "$$_5gm_f" "$${_5gm_f%-opkg}" 2>/dev/null ;;
+		esac
+	done
 	_5gm_upgrade=0
 	[ -n "$$(uci -q get 5gmodem.@5gmodem[0].widgets_seeded 2>/dev/null)" ] && _5gm_upgrade=1
 	_5gm_svc() {

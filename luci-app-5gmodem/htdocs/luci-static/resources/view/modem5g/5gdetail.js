@@ -1714,12 +1714,12 @@ function renderApnLine(json) {
 	var mono = 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
 	var row = [
 		E('strong', {}, 'APN: '),
-		E('span', { 'style': mono }, apn || _('default'))
+		E('span', { 'style': mono }, [ apn || _('default') ])
 	];
 	/* APN и тип адреса - в ОДНУ строку через разделитель. */
 	if (pdp) {
 		row.push(E('span', { 'style': 'opacity:.6; margin:0 .4em;' }, '|'));
-		row.push(E('span', { 'style': mono }, pdp));
+		row.push(E('span', { 'style': mono }, [ pdp ]));
 	}
 	el.appendChild(E('div', {}, row));
 }
