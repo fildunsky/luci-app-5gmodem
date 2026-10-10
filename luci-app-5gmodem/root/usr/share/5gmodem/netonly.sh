@@ -2,14 +2,7 @@
 [ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 
 netonly_active() {
-	case "$(uci -q get 5gmodem.@5gmodem[0].netonly)" in
-		1) return 0 ;;
-		0) return 1 ;;
-	esac
-	for _no_d in /sys/bus/usb/devices/usb* /sys/class/wwan/* /sys/bus/mhi/devices/*; do
-		[ -e "$_no_d" ] && return 1
-	done
-	return 0
+	[ "$(uci -q get 5gmodem.@5gmodem[0].netonly)" = "1" ]
 }
 
 NETONLY_SVCS="5gmodem-mm-inhibit 5gmodem-usbports 5gmodem-leds 5gmodem-sms-notify"

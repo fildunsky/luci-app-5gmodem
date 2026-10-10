@@ -5831,14 +5831,8 @@ msgstr "Регистрация отклонена (часть прошивок �
 msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
 msgstr "Пока модем привязан к одной соте, он обычно отключает агрегацию частот, и скорость может упасть."
 
-msgid "Network-only mode"
+msgid "Internet priorities only"
 msgstr "Только приоритеты интернета"
 
-msgid "Keeps uplink priorities, the internet watchdog, statistics and the Telegram bot, and turns off everything that serves a modem: polling, SMS, ModemManager control, USB port binding. Automatic: on when the router has no USB and no PCIe modem."
-msgstr "Оставляет приоритеты интернета, сторож связи, статистику и Telegram-бота и выключает всё, что обслуживает модем: опрос, SMS, управление ModemManager, привязку USB-портов. «Автоматически» - включается, если на роутере нет USB и модема на PCIe."
-
-msgid "Automatic"
-msgstr "Автоматически"
-
-msgid "On"
-msgstr "Включено"
+msgid "For a router without a modem: keeps uplink priorities, the internet watchdog, statistics, buttons and the Telegram bot, and turns off everything that serves a modem - polling, SMS, ModemManager control, USB port binding. Modem tabs and settings are hidden."
+msgstr "Для роутера без модема: оставляет приоритеты интернета, сторож связи, статистику, кнопки и Telegram-бота и выключает всё, что обслуживает модем, - опрос, SMS, управление ModemManager, привязку USB-портов. Вкладки и настройки модема скрываются."

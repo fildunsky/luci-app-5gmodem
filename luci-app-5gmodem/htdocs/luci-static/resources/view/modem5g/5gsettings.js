@@ -375,7 +375,7 @@ return view.extend({
 		   Юстировку, а вкладки нет» (отчёт пользователя 25.08.2026).
 		   Поэтому запоминаем исходные значения и после сохранения
 		   перезагружаем страницу, если хоть одно изменилось. */
-		var _gateOpts = [ 'align_enabled', 'show_stats' ];
+		var _gateOpts = [ 'align_enabled', 'show_stats', 'netonly' ];
 		var _gateWas = {};
 		_gateOpts.forEach(function(k) {
 			_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
@@ -435,10 +435,16 @@ return view.extend({
 			_('Everyday options of the Network page and modem behaviour'));
 		disp.anonymous = true;
 
+		o = disp.option(form.Flag, 'netonly', _('Internet priorities only'),
+			_('For a router without a modem: keeps uplink priorities, the internet watchdog, statistics, buttons and the Telegram bot, and turns off everything that serves a modem - polling, SMS, ModemManager control, USB port binding. Modem tabs and settings are hidden.'));
+		o.default = '0';
+		o.rmempty = false;
+
 		o = disp.option(form.Flag, 'simple_view', _('Simple view of the Network page'),
 			_('Show only the essentials: modem name, signal, status lamp and the restart button. Expert blocks (bands, cell info, TTL, interface details) are hidden. Off by default.'));
 		o.default = '0';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		o = disp.option(form.Flag, 'mobile_view', _('New mobile view'),
 			_('On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back.'));
@@ -454,11 +460,13 @@ return view.extend({
 			_('Show the collapsible "History" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
 			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* Вкладка «Юстировка» ВЫКЛЮЧЕНА по умолчанию - нужна не всем. Пункт меню
 		   появляется/исчезает по этому ключу (menu.d, depends.uci), как у
@@ -709,6 +717,7 @@ return view.extend({
 			_('Show the "TTL fixing" block on the Network page.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* ОДИН ключ на всё: и сбор рядов, и вкладку. Два отдельных выключателя
 		   («собирать» на странице + «показывать» здесь) давали бессмысленное
@@ -720,6 +729,7 @@ return view.extend({
 			_('Live signal metrics and a tone for aiming an external antenna.'));
 		o.default = '0';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* ВНЕШНИЙ АДРЕС. Адрес на интерфейсе и адрес, с которого роутер виден
 		   интернету, совпадают далеко не всегда: у сотовой это CGNAT оператора,
@@ -849,13 +859,6 @@ return view.extend({
 		   возвращает прежние 10, 20, 30... - соглашение mwan3. Читают её
 		   netpri.sh (_metric_base) и mkiface.sh (метрика нового интерфейса).
 		   Без depends: метрики аплинков существуют и при выключенном виджете. */
-		o = exp.option(ListDropdown, 'netonly', _('Network-only mode'),
-			_('Keeps uplink priorities, the internet watchdog, statistics and the Telegram bot, and turns off everything that serves a modem: polling, SMS, ModemManager control, USB port binding. Automatic: on when the router has no USB and no PCIe modem.'));
-		o.value('', _('Automatic'));
-		o.value('1', _('On'));
-		o.value('0', _('Off'));
-		o.default = '';
-
 		o = exp.option(form.Flag, 'mwan3_metrics', _('mwan3-compatible metrics'),
 			_('Uplink metrics start at 10 (10, 20, 30...) as mwan3 expects. When off they start at 100 (100, 110, 120...), leaving 1-99 free for tunnels. Takes effect on the next priority change.'));
 		o.default = '0';
@@ -960,6 +963,7 @@ return view.extend({
 		});
 		o = exp.option(form.DummyValue, '_blacklist', _('Device blacklist'),
 			_('USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately.'));
+		o.depends({ netonly: '1', '!reverse': true });
 		o.render = function(option_index, section_id) {
 			return E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Device blacklist')),
