@@ -397,7 +397,8 @@ return view.extend({
 			});
 			modemtabs.refreshGateTabs();
 			if (_gateWas.netonly !== noWas) {
-				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null);
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null)
+					.then(function() { window.location.reload(); });
 			}
 		}
 
