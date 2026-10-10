@@ -108,6 +108,7 @@ Tôi đã bổ sung tính năng mới cho các modem này (so với 3ginfo và m
 - HP lt4120 / Foxconn T77W595 (Snapdragon X5)
 - Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
+- Tenda MF6 (Mi-Fi dùng ZTE ZX297520V3, USB 19d2:1557) — tín hiệu, pin, SMS và khởi động lại qua web API; băng tần và chế độ mạng qua AT ở debug mode
 - Các USB Android giá rẻ Qualcomm MDM9600 / MDM9610 (PIXLINK, ALEKA UV310 và các loại tương tự), kể cả chế độ "chỉ modem" (QMI) của chúng
 - Nhiều modem khác chưa được kiểm tra, nhưng sẽ hỗ trợ mọi modem mà các bản fork gốc hỗ trợ.
 
@@ -118,6 +119,8 @@ Tôi không sở hữu các modem này. Chủ sở hữu đã gửi log và kế
 - Foxconn T99W373 — gộp sóng mang ở 5G NSA
 - NTmore NTLM-500 (Altair ALT3800, từ router gia đình Skylink H1) — tín hiệu, ô phục vụ và ô lân cận, mức tín hiệu theo từng ăng-ten, nhiệt độ, công suất phát, suy hao đường truyền, chọn băng tần
 - Tri Cascade VOS 5G / SG500M2-X (Compal RXM-G1, USB 05c6:9091, ModemManager qua QMI) — được nhận diện theo model, nên giao diện được dựng trên `proto=modemmanager` thay vì đường `uqmi` mà firmware của nó không phục vụ; giao diện ADB được giải phóng khỏi driver serial. Hạn chế đã biết: các tuyến mặc định IPv6 theo nguồn (`default from …`) vẫn do netifd quản lý và không được tính năng ưu tiên internet sắp xếp lại
+- Fibocom NL668-EAU (USB 2cb7:0110) — tín hiệu và thông tin cell, băng tần LTE, chế độ mạng kể cả 2G
+- SIMCom SIM7906 / SIM7912 (USB 1e0e:9001) — tín hiệu, băng tần, carrier aggregation
 
 ### Bổ sung theo tài liệu của nhà sản xuất
 Chưa có phần cứng và chưa có báo cáo cho các modem này: các profile dựa theo hướng dẫn lệnh AT của nhà sản xuất và đã được đối chiếu với các câu trả lời mẫu in trong đó. Rất hoan nghênh log từ chủ sở hữu.
@@ -153,6 +156,12 @@ giao tiếp.
 Băng tần và chế độ mạng của USB loại này được thay đổi qua API của nó thay vì
 `AT^SYSCFGEX`: đường AT khiến modem bỏ cấu hình USB composition và thoát
 khỏi debug mode.
+
+USB dùng chip ZTE (Tenda MF6 và các loại tương tự) thì khác: debug mode được bật
+bằng một lệnh web và vẫn giữ sau khi khởi động lại, còn băng tần được đặt qua AT
+(`AT+ZLTEBAND`) — web API của chúng không có cài đặt băng tần. Nếu giao diện web
+của USB có mật khẩu, hãy nhập ở trang Modem: không có mật khẩu, các USB này không
+trả về gì cả.
 
 ## Nút bấm
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-03-18" src="https://github.com/user-attachments/assets/60a6dce9-6723-45ae-99f0-2c0ae4b7e725" />

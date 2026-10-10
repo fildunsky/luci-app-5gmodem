@@ -106,6 +106,7 @@ opkg install luci-i18n-base-zh-cn
 - HP lt4120 / Foxconn T77W595（Snapdragon X5）
 - Sierra Wireless EM9190
 - Huawei E3372（HiLink）
+- Tenda MF6（基于 ZTE ZX297520V3 的随身 Wi-Fi，USB 19d2:1557）—— 通过其 Web API 读取信号、电量、短信并可重启；调试模式下通过 AT 设置频段和网络制式
 - 高通 MDM9600 / MDM9610 平台的廉价 Android 上网棒（PIXLINK、ALEKA UV310 及同类），包括其“纯调制解调器”（QMI）模式
 - 更多型号未逐一测试，但上游分支支持的调制解调器均应可用。
 
@@ -116,6 +117,8 @@ opkg install luci-i18n-base-zh-cn
 - Foxconn T99W373 —— 5G NSA 下的载波聚合
 - NTmore NTLM-500（Altair ALT3800，来自 Skylink H1 家用路由器）—— 信号、服务小区与邻区、各天线电平、温度、发射功率、路径损耗、频段选择
 - Tri Cascade VOS 5G / SG500M2-X（Compal RXM-G1，USB 05c6:9091，通过 QMI 使用 ModemManager）—— 按型号识别，接口使用 `proto=modemmanager`，不再走该固件不支持的 `uqmi` 路径；ADB 接口会从串口驱动上解绑。已知限制：带源前缀的 IPv6 默认路由（`default from …`）仍由 netifd 管理，“上网优先级”不会重新排序
+- Fibocom NL668-EAU（USB 2cb7:0110）—— 信号与小区信息、LTE 频段、网络制式（含 2G）
+- SIMCom SIM7906 / SIM7912（USB 1e0e:9001）—— 信号、频段、载波聚合
 
 ### 依据厂商文档添加的型号
 这些设备我手上没有，也暂无用户反馈：配置文件依据厂商 AT 命令手册编写，并用手册中的示例应答做过验证。欢迎机主提供日志。
@@ -141,6 +144,8 @@ opkg install luci-i18n-base-zh-cn
 - 如果上网卡支持串口模式（华为称为*调试模式*），应用会自动切换过去，之后像普通调制解调器一样使用——TAC、频段、EARFCN、USSD 和 AT 控制台由此而来。该模式在上网卡重启后会丢失，应用会在每次出现时重新应用。若不希望自动切换，调制解调器设置中有开关。
 
 这类上网卡的频段和网络制式通过其 API 修改，而不是 `AT^SYSCFGEX`：走 AT 路径会导致上网卡重置 USB 组合并退出调试模式。
+
+基于 ZTE 芯片的上网卡（Tenda MF6 等）情况不同：调试模式通过一条 Web 命令开启，重启后仍保留；频段通过 AT（`AT+ZLTEBAND`）设置，因为这类上网卡的 Web API 没有频段设置。如果上网卡的 Web 界面设有密码，请在“调制解调器”页面填写——没有密码，这类上网卡不返回任何数据。
 
 ## 按钮
 <img width="1960" height="1474" alt="截图" src="https://github.com/user-attachments/assets/60a6dce9-6723-45ae-99f0-2c0ae4b7e725" />
