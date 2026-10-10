@@ -3363,3 +3363,10 @@ html.tg-theme-cyberpunk .tginfo-simslot .cbi-button.tg-slot-empty {
   body.tg-mv .netpribar .netpri-btn .netpri-name .netpri-pingico svg { width: 14px; height: 14px; }
 }
 [data-page^="admin-modem-5gmodem"] .spinning::before { box-sizing: border-box; }
+
+body.sc-netonly #modem-info-block,
+body.sc-netonly #modem-none-block,
+body.sc-netonly #modem-reboot-block,
+body.sc-netonly [data-blk],
+body.sc-netonly .tg-mv-tabs,
+body.sc-netonly .tg-mv-sig { display: none !important; }
