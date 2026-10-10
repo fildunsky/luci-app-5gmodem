@@ -93,6 +93,7 @@ I've added new features to them (compared to 3ginfo and modemband)
 - HP lt4120 / Foxconn T77W595 (Snapdragon X5)
 - Sierra Wireless EM9190
 - Huawei E3372 (HiLink)
+- Tenda MF6 (ZTE ZX297520V3 Mi-Fi, USB 19d2:1557) — signal, battery, SMS and reboot over its web API; bands and network mode over AT in debug mode
 - Cheap Qualcomm MDM9600 / MDM9610 Android sticks (PIXLINK, ALEKA UV310 and relatives), including their "modem only" (QMI) mode
 - Many more untested, but should support all the modems handled by the upstream forks.
 
@@ -103,6 +104,8 @@ I do not own these. Their owners sent logs and AT output, and the fixes shipped:
 - Foxconn T99W373 — carrier aggregation in 5G NSA
 - NTmore NTLM-500 (Altair ALT3800, from the Skylink H1 home router) — signal, serving and neighbour cells, per-antenna levels, temperature, TX power, path loss, band selection
 - Tri Cascade VOS 5G / SG500M2-X (Compal RXM-G1, USB 05c6:9091, ModemManager over QMI) — recognised by model, so the interface is built on `proto=modemmanager` instead of the `uqmi` path its firmware does not serve; the ADB interface is released from the serial driver. Known limitation: source-specific IPv6 defaults (`default from …`) stay with netifd and are not re-ranked by the internet-priority feature
+- Fibocom NL668-EAU (USB 2cb7:0110) — signal and cell metrics, LTE bands, network mode including 2G
+- SIMCom SIM7906 / SIM7912 (USB 1e0e:9001) — signal, bands, carrier aggregation
 
 ### Added from vendor documentation
 No hardware and no reports for these yet: the profiles follow the vendors' AT command guides and were checked against the sample answers printed in them. Logs from owners are welcome.
@@ -138,6 +141,11 @@ The app handles them anyway:
 Bands and network mode for such a stick are changed through its API rather than
 `AT^SYSCFGEX`: the AT route makes the modem drop its USB composition and fall
 out of debug mode.
+
+ZTE-based sticks (Tenda MF6 and relatives) are different: debug mode is switched on
+by a web command and survives reboots, and bands are set over AT (`AT+ZLTEBAND`)
+— their web API has no band settings. If the stick's web interface has a
+password, enter it on the Modem page: without it these sticks give out nothing.
 
 ## Buttons
 <img width="1960" height="1474" alt="Screenshot From 2026-07-30 07-03-18" src="https://github.com/user-attachments/assets/60a6dce9-6723-45ae-99f0-2c0ae4b7e725" />
