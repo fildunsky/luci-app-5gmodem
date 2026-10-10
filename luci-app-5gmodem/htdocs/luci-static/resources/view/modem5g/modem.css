@@ -3369,4 +3369,6 @@ body.sc-netonly #modem-none-block,
 body.sc-netonly #modem-reboot-block,
 body.sc-netonly [data-blk],
 body.sc-netonly .tg-mv-tabs,
-body.sc-netonly .tg-mv-sig { display: none !important; }
+body.sc-netonly .tg-mv-sig,
+body.sc-netonly .tg-simple-toggle,
+body.sc-netonly #sc-advice { display: none !important; }
