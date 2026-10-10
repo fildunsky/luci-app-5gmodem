@@ -1724,6 +1724,7 @@ sms_cpms_state() {   # $1 - at-порт
 #
 # Usage: st=$(sms_apply_cpms <at-порт> <SM|ME|...>)
 sms_apply_cpms() {
+	hl_web_port "$1" && return 1
 	_cp_p="$1"; _cp_s="$2"
 	[ -n "$_cp_p" ] && [ -c "$_cp_p" ] || return 1
 	case "$_cp_s" in ''|*[!A-Za-z]*) return 1 ;; esac
@@ -1772,6 +1773,7 @@ sms_apply_cpms() {
 set_sms_storage() {   # $1 - at-порт
 	_ss_at="$1"
 	[ -n "$_ss_at" ] && [ -e "$_ss_at" ] || return 0
+	hl_web_port "$_ss_at" && return 0
 	command -v sms_tool >/dev/null 2>&1 || return 0
 	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
 
@@ -2039,5 +2041,20 @@ cmd_allowed() {
 	[ -x /usr/libexec/5gmodem/cmd-policy ] || return 0
 	/usr/libexec/5gmodem/cmd-policy "$1" >/dev/null 2>&1 && return 0
 	logger -t 5gmodem "command refused by policy: $(printf '%s' "$1" | head -c 120)"
+	return 1
+}
+
+hl_web_metrics() {
+	case "$(uci -q get "5gmodem.$1.vidpid")" in
+		19d2:0581) return 0 ;;
+	esac
+	return 1
+}
+
+hl_web_port() {
+	[ -n "$1" ] || return 1
+	for _hwp_s in $(uci -q show 5gmodem 2>/dev/null | grep -F ".at_port='$1'" | cut -d. -f2); do
+		hl_web_metrics "$_hwp_s" && return 0
+	done
 	return 1
 }

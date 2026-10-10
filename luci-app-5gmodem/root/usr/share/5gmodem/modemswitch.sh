@@ -1796,6 +1796,29 @@ setalias)
 	printf '{"ok":1,"alias":"%s"}\n' "$_sa_name"
 	;;
 
+webpass)
+	_wp_p="$2"
+	[ -n "$_wp_p" ] || { echo '{"error":"no path"}'; exit 0; }
+	_wp_sec="m_$(echo "$_wp_p" | sed 's/[^A-Za-z0-9]/_/g')"
+	uci -q get "$CFG.$_wp_sec" >/dev/null 2>&1 || { echo '{"error":"no section"}'; exit 0; }
+	case "$3" in
+		get)
+			if [ -n "$(uci -q get "$CFG.$_wp_sec.web_pass")" ]; then echo '{"set":1}'; else echo '{"set":0}'; fi
+			exit 0 ;;
+		set)
+			_wp_v="$4"
+			if [ -z "$_wp_v" ]; then
+				uci -q delete "$CFG.$_wp_sec.web_pass" 2>/dev/null
+			else
+				uci -q set "$CFG.$_wp_sec.web_pass=$_wp_v"
+			fi
+			uci -q commit "$CFG"
+			rm -f /tmp/5gmodem/tendaauth_* /tmp/5gmodem/ztestok_* /tmp/5gmodem/tendaapi_* 2>/dev/null
+			echo '{"ok":1}' ;;
+		*) echo '{"error":"usage: webpass <path> get|set [password]"}' ;;
+	esac
+	;;
+
 mmindex)
 	# ModemManager index. Без аргумента - АКТИВНОГО модема (управление
 	# диапазонами/режимом всегда о нём), с аргументом - модема по USB-пути.

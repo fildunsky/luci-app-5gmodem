@@ -53,6 +53,7 @@ _mm_excluded() {
 		0) return 1 ;;
 		1) return 0 ;;
 	esac
+	[ "$(uci -q get "$CFG.$SEC.kind")" = hilink ] && return 0
 	_is_kernel_proto "$(_proto_for_path "$1")"
 }
 

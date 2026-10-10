@@ -994,7 +994,7 @@ esac
 # описывает активного, и свисток-сосед пошёл бы по AT-ветке с чужим портом.
 _sb_p=$(uci -q get "5gmodem.$_TGT_SEC.at_port")
 [ -n "$_sb_p" ] || _sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
-if [ "$(_active_kind)" = "hilink" ] && ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }; then
+if [ "$(_active_kind)" = "hilink" ] && { hl_web_metrics "$_TGT_SEC" || ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }; }; then
 	case "$BOX" in
 		sent) "$RES/hilink.sh" smsread out "$_TGT_PATH" ;;
 		status)

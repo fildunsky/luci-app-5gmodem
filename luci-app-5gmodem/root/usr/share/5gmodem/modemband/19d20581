@@ -1,0 +1,100 @@
+_DEVICE=""
+_BANDS_APPLY_LIVE=1
+
+getinfo() {
+	echo "ZTE ZX297520V3"
+}
+
+_zx_mask() {
+	sms_tool -d $_DEVICE at "at+$1?" 2>/dev/null | tr -d '\r' \
+		| sed -n "s/^+$2: *//p" | head -1 | tr -d ' '
+}
+
+_zx_bands() {
+	echo "$1" | awk -F, '{
+		o = ""
+		for (i = 1; i <= 8 && i <= NF; i++) {
+			v = $i + 0
+			for (b = 0; b < 8; b++) {
+				if (int(v / 2 ^ b) % 2) o = o (o == "" ? "" : " ") ((i - 1) * 8 + b + 1)
+			}
+		}
+		print o
+	}'
+}
+
+getsupportedbands() {
+	_zx_bands "$(_zx_mask zlteamtband ZLTEAMTBAND)"
+}
+
+getbands() {
+	_zb_cur=$(_zx_bands "$(_zx_mask zlteband ZLTEBAND)")
+	_zb_sup=" $(getsupportedbands) "
+	_zb_out=""
+	for _zb_b in $_zb_cur; do
+		case "$_zb_sup" in *" $_zb_b "*) _zb_out="$_zb_out${_zb_out:+ }$_zb_b" ;; esac
+	done
+	echo "$_zb_out"
+}
+
+setbands() {
+	BANDS="$1"
+	[ "$BANDS" = "default" ] && BANDS=$(getsupportedbands)
+	_zs_m=$(echo "$BANDS" | awk '{
+		for (k = 1; k <= 8; k++) m[k] = 0
+		for (i = 1; i <= NF; i++) {
+			n = $i - 1
+			if (n < 0 || n >= 64) continue
+			k = int(n / 8) + 1
+			m[k] += 2 ^ (n % 8)
+		}
+		s = 0
+		for (k = 1; k <= 8; k++) s += m[k]
+		if (s == 0) exit
+		printf "%d,%d,%d,%d,%d,%d,%d,%d", m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]
+	}')
+	[ -n "$_zs_m" ] || return 1
+	sms_tool -d $_DEVICE at "at+cfun=0" >/dev/null 2>&1
+	_zs_o=$(sms_tool -d $_DEVICE at "at+zlteband=$_zs_m" 2>&1)
+	sms_tool -d $_DEVICE at "at+cfun=1" >/dev/null 2>&1
+	case "$_zs_o" in *ERROR*|*"No response"*) echo "$_zs_o"; return 1 ;; esac
+	return 0
+}
+
+_MODES="1:Авто 8:2G 2:3G 4:4G"
+
+getsupportedmodes() {
+	echo "$_MODES"
+}
+
+_zx_sys() {
+	sms_tool -d $_DEVICE at "at^sysconfig?" 2>/dev/null | tr -d '\r ' \
+		| sed -n 's/^\^SYSCONFIG://p' | head -1
+}
+
+getmode() {
+	case "$(_zx_sys | cut -d, -f1)" in
+		17) echo 4 ;;
+		14) echo 2 ;;
+		13) echo 8 ;;
+		"") echo "" ;;
+		*) echo 1 ;;
+	esac
+}
+
+setmode() {
+	_zm_r=$(_zx_sys)
+	_zm_o=$(echo "$_zm_r" | cut -d, -f2); [ -n "$_zm_o" ] || _zm_o=12
+	_zm_g=$(echo "$_zm_r" | cut -d, -f3); [ -n "$_zm_g" ] || _zm_g=1
+	_zm_d=$(echo "$_zm_r" | cut -d, -f4); [ -n "$_zm_d" ] || _zm_d=2
+	case "$1" in
+		1) _zm_m=2 ;;
+		8) _zm_m=13 ;;
+		2) _zm_m=14 ;;
+		4) _zm_m=17 ;;
+		*) return 1 ;;
+	esac
+	_zm_x=$(sms_tool -d $_DEVICE at "at^sysconfig=$_zm_m,$_zm_o,$_zm_g,$_zm_d" 2>&1)
+	case "$_zm_x" in *ERROR*|*"No response"*) echo "$_zm_x"; return 1 ;; esac
+	return 0
+}
