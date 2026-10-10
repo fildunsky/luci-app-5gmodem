@@ -38,7 +38,8 @@ mm_needed() {
 	# (bands.sh mmtakeover, флаг <path>.pause) - MM нужен, пока пауза держится,
 	# иначе служба остановила бы его прямо посреди операции.
 	for _pf in "$RUN"/*.pause; do [ -e "$_pf" ] && return 0; done
-	_present=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+	_present=""
+	_present_done=""
 	_mm_iface_seen=""
 	for _if in $(uci -q show network 2>/dev/null \
 			| sed -n "s/^network\.\([^.]*\)\.proto='\?modemmanager'\?\$/\1/p"); do
@@ -52,6 +53,10 @@ mm_needed() {
 		esac
 		# 2) Устройство задано иначе (или не задано) - спрашиваем профиль.
 		_p=$(_path_for_iface "$_if")
+		if [ -z "$_present_done" ]; then
+			_present=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+			_present_done=1
+		fi
 		if [ -n "$_p" ]; then
 			case " $_present " in *" $_p "*) return 0 ;; esac
 			continue
@@ -76,6 +81,9 @@ mm_needed() {
 	# модем - MM оставляем. Остановка MM - только оптимизация (освободить каналы
 	# kernel-прото модемам), ошибиться в сторону «оставить» дёшево, в сторону
 	# «выключить» - дорого.
+	if [ -n "$_mm_iface_seen" ] && [ -z "$_present_done" ]; then
+		_present=$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null | tr '\n' ' ')
+	fi
 	if [ -n "$_mm_iface_seen" ] && [ -n "$(echo $_present)" ]; then
 		return 0
 	fi
@@ -94,8 +102,7 @@ _mbimp_ifaces() {
 # аргументов, строка не совпадала, и «не работает» выходило у живой службы:
 # stop не вызывался, MM держал модем и после band-takeover (модем «без IP»).
 _running() {
-	/etc/init.d/modemmanager running >/dev/null 2>&1 && return 0
-	ps w 2>/dev/null | grep -q '[M]odemManager'
+	pidof ModemManager >/dev/null 2>&1
 }
 
 case "$1" in
