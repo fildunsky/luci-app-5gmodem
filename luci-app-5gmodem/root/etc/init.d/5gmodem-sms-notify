@@ -9,6 +9,8 @@ STOP=01
 
 
 start_service() {
+	. /usr/share/5gmodem/netonly.sh
+	netonly_active && return 0
     procd_open_instance
     procd_set_param command /bin/sh "/usr/share/5gmodem/sms_led.sh"
     procd_close_instance

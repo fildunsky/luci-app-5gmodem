@@ -2336,6 +2336,9 @@ var _simpleOverride = null;
 var _advSticky = false;
 var _lastJson = null;
 var _docRun = false;
+function netOnlyOn() {
+	return uci.get('5gmodem', '@5gmodem[0]', 'netonly') === '1';
+}
 function simpleOn() {
 	if (_simpleOverride !== null) { return _simpleOverride; }
 	return uci.get('5gmodem', '@5gmodem[0]', 'simple_view') === '1';
@@ -3856,13 +3859,15 @@ simDialog: baseclass.extend({
 
 	render: function(res) {
 		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		var _netOnly = netOnlyOn();
+		document.body.classList.toggle('sc-netonly', _netOnly);
 		/* Роутер, живущий без модемов (память tgm-nomodem): пунктирную карточку
 		   ставим СРАЗУ, не дожидаясь первого тика метрик - иначе при каждом
 		   заходе секунду-другую мигал бы обычный блок с прочерками. Ждём
 		   появления блока в DOM коротким циклом: render отдаёт дерево, а
 		   вставляет его LuCI чуть позже. Ошиблись (модем всё же есть) - первый
 		   же тик applyMetrics вернёт всё на место и снимет флаг. */
-		if (noModemRemembered()) {
+		if (!_netOnly && noModemRemembered()) {
 			var _nmTry = 0;
 			var _nmTick = function() {
 				var _mib = document.getElementById('modem-info-block');
@@ -4064,7 +4069,7 @@ simDialog: baseclass.extend({
 						   удваивал запросы и гонки перерисовки. */
 					});
 				};
-				poll.add(pollTickFn);
+				if (!_netOnly) { poll.add(pollTickFn); }
 				/* ОБРАБОТЧИК ПЕРЕКЛЮЧЕНИЯ МОДЕМА БЕЗ ПЕРЕЗАГРУЗКИ (см. modemtabs).
 				   Регистрируем ТОЛЬКО на странице детали - другие страницы
 				   (SMS/USSD/настройки) его не ставят и переключаются reload'ом. */
@@ -4082,7 +4087,7 @@ simDialog: baseclass.extend({
 		   заполненной (значения, иконки, соты, CA), первый тик лишь освежит.
 		   Пустой peek ({} - модем ни разу не опрашивался) не применяем:
 		   затирать скелет нулями хуже честных прочерков. */
-		if (initjson && (initjson.modem || initjson.signal)) {
+		if (!_netOnly && initjson && (initjson.modem || initjson.signal)) {
 			window.setTimeout(function() { applyMetrics(initjson); }, 0);
 		}
 
@@ -4658,7 +4663,7 @@ simDialog: baseclass.extend({
 
 		return m.render().then(function(node) {
 			try { netarrange.prepare(node); } catch (e) {}
-			try { mobileview.prepare(node); } catch (e) {}
+			if (!netOnlyOn()) { try { mobileview.prepare(node); } catch (e) {} }
 			// после вставки DOM показать кнопку перезагрузки по питанию, если у
 			// платы есть соответствующий GPIO (setTimeout - дать LuCI прикрепить узел)
 			window.setTimeout(initPowerBtn, 0);

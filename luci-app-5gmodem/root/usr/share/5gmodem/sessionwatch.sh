@@ -31,6 +31,7 @@ export SW_BG=1
 
 . "$RES/atlock.sh" 2>/dev/null
 . "$RES/lib.sh" 2>/dev/null   # active_path
+. "$RES/netonly.sh" 2>/dev/null
 
 _log() { logger -t 5gmodem "sessionwatch: $*"; }
 
@@ -275,6 +276,14 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			esac
 			# Модема на шине нет - поднимать нечего, этим занимается resolve.
 			[ -n "$_path" ] && [ -e "/sys/bus/usb/devices/$_path/idVendor" ] || return 0
+			if [ -n "$_proto" ] && [ ! -f "/lib/netifd/proto/$_proto.sh" ]; then
+				if [ ! -f "/tmp/5gmodem/sw_noproto_$_if" ]; then
+					: > "/tmp/5gmodem/sw_noproto_$_if"
+					_log "$_if: protocol $_proto is not installed - not restarting the interface"
+				fi
+				return 0
+			fi
+			rm -f "/tmp/5gmodem/sw_noproto_$_if"
 			# ЗАВИСШИЕ uqmi СНИМАЕМ ДО ВСЕГО ОСТАЛЬНОГО, включая проверку pending:
 			# именно они и держат netifd в бесконечном дозвоне, занимая канал.
 			proto_in uqmi "$_proto" && _kill_stuck_uqmi "$(uci -q get "network.$_if.device")"
@@ -799,7 +808,9 @@ case "$1" in
 			if [ "$_sweep_n" -ge 10 ]; then _sweep_n=0; _sweep_tmp; fi
 			# Реестр собираем ОДИН раз за круг и отдаём обеим задачам: они смотрят
 			# на одно и то же состояние, а сборка стоит дороже самих проверок.
-			_reg_refresh
+			_SW_NETONLY=""
+			netonly_active && _SW_NETONLY=1
+			if [ -n "$_SW_NETONLY" ]; then _REG_FLAT=""; else _reg_refresh; fi
 			# САМОЛЕЧЕНИЕ РЕГИСТРАЦИИ. Модем есть в реестре, но НЕ заведён нами -
 			# карточка без имени и SIM-данных, а recv/метрики бьют по пустой цели.
 			# Причины не ловятся штатным триггером на буте (USB-hotplug):
@@ -830,7 +841,7 @@ case "$1" in
 					"$RES/modemswitch.sh" resolve >/dev/null 2>&1
 				fi
 			fi
-			check_once
+			[ -n "$_SW_NETONLY" ] || check_once
 			# Освежение и МЕЖДУ обязанностями: фаза обязанностей длится 10-20 c,
 			# и без этих вызовов снимок успевал протухнуть - половина тиков
 			# страницы снова собирала сама (замер 06.08.2026: тики 1.9-2.4 c
@@ -838,8 +849,8 @@ case "$1" in
 			_page_refresh
 			# Подогрев ПОСЛЕ проверки сессии, а не вместо: восстановление связи
 			# важнее тёплой карточки, и порт (если он один) достанется сначала ей.
-			warm_snapshots
-			warm_active
+			[ -n "$_SW_NETONLY" ] || warm_snapshots
+			[ -n "$_SW_NETONLY" ] || warm_active
 			_page_refresh
 			# Сторож интернета - последним: он ходит в СЕТЬ (ping), а не в порт,
 			# и с проверкой сессии за AT-порт не конкурирует. Включён ли он и не
@@ -901,7 +912,7 @@ case "$1" in
 			# запретом фонового AT (bg_at_off, lib.sh) не читаем никогда.
 			_smw_iv=$(uci -q get 5gmodem.sms.mirror_interval)
 			case "$_smw_iv" in ''|*[!0-9]*) _smw_iv=60 ;; esac
-			if [ "$_smw_iv" -gt 0 ] && ! bg_at_off \
+			if [ -n "$_REG_FLAT" ] && [ "$_smw_iv" -gt 0 ] && ! bg_at_off \
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
 				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
@@ -911,6 +922,7 @@ case "$1" in
 			# слив удаляет из модема только то, что уже обработано и ботом, и
 			# командами, - иначе сообщение с командой исчезло бы, ни разу не
 			# выполнившись. Выключено - выходит на первой строке.
+			if [ -n "$_REG_FLAT" ]; then
 			bg_at_off || "$RES/smscmd.sh" run >/dev/null 2>&1
 			# СЛИВ В ПАМЯТЬ РОУТЕРА. Здесь же и последний шаг разбора входящих:
 			# перенести в архив и освободить слоты модема (у FM350 их всего
@@ -944,6 +956,7 @@ case "$1" in
 			# Досылка отложенных исходящих: одно сообщение за круг, под общей
 			# очередью к порту. Пусто - выходит мгновенно.
 			"$RES/smsbridge.sh" queue-run >/dev/null 2>&1
+			fi
 			# Телеметрия для умного дома/внешних дисплеев: плоский JSON из УЖЕ
 			# СОБРАННОГО снимка метрик (ни одного запроса к модему) + MQTT,
 			# если настроен брокер. Дешёвый шаг, выключается tele.enabled=0.

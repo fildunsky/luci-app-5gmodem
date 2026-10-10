@@ -375,7 +375,7 @@ return view.extend({
 		   Юстировку, а вкладки нет» (отчёт пользователя 25.08.2026).
 		   Поэтому запоминаем исходные значения и после сохранения
 		   перезагружаем страницу, если хоть одно изменилось. */
-		var _gateOpts = [ 'align_enabled', 'show_stats' ];
+		var _gateOpts = [ 'align_enabled', 'show_stats', 'netonly' ];
 		var _gateWas = {};
 		_gateOpts.forEach(function(k) {
 			_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
@@ -388,6 +388,18 @@ return view.extend({
 			return _gateOpts.some(function(k) {
 				return String(uci.get('5gmodem', sid0(), k) || '') !== _gateWas[k];
 			});
+		}
+		function _gateAfterAutosave() {
+			if (!_gateChanged()) { return; }
+			var noWas = _gateWas.netonly;
+			_gateOpts.forEach(function(k) {
+				_gateWas[k] = String(uci.get('5gmodem', sid0(), k) || '');
+			});
+			modemtabs.refreshGateTabs();
+			if (_gateWas.netonly !== noWas) {
+				return L.resolveDefault(fs.exec('/usr/share/5gmodem/setopt.sh', [ 'applyset' ]), null)
+					.then(function() { window.location.reload(); });
+			}
 		}
 
 		var _mSaveOrig = m.save.bind(m);
@@ -435,15 +447,22 @@ return view.extend({
 			_('Everyday options of the Network page and modem behaviour'));
 		disp.anonymous = true;
 
+		o = disp.option(form.Flag, 'netonly', _('Internet priorities only'),
+			_('For a router without a modem: keeps uplink priorities, the internet watchdog, statistics, buttons and the Telegram bot, and turns off everything that serves a modem - polling, SMS, ModemManager control, USB port binding. Modem tabs and settings are hidden.'));
+		o.default = '0';
+		o.rmempty = false;
+
 		o = disp.option(form.Flag, 'simple_view', _('Simple view of the Network page'),
 			_('Show only the essentials: modem name, signal, status lamp and the restart button. Expert blocks (bands, cell info, TTL, interface details) are hidden. Off by default.'));
 		o.default = '0';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		o = disp.option(form.Flag, 'mobile_view', _('New mobile view'),
 			_('On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
 			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
@@ -454,11 +473,13 @@ return view.extend({
 			_('Show the collapsible "History" block on the Network page: RSRP, RSRQ, SINR and RSSI over the last 10 minutes. It is drawn from the data the page already polls and adds no load on the modem.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		o = disp.option(form.Flag, 'save_bands', _('Remember bands after reboot'),
 			_('Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* Вкладка «Юстировка» ВЫКЛЮЧЕНА по умолчанию - нужна не всем. Пункт меню
 		   появляется/исчезает по этому ключу (menu.d, depends.uci), как у
@@ -709,6 +730,7 @@ return view.extend({
 			_('Show the "TTL fixing" block on the Network page.'));
 		o.default = '1';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* ОДИН ключ на всё: и сбор рядов, и вкладку. Два отдельных выключателя
 		   («собирать» на странице + «показывать» здесь) давали бессмысленное
@@ -720,6 +742,7 @@ return view.extend({
 			_('Live signal metrics and a tone for aiming an external antenna.'));
 		o.default = '0';
 		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
 
 		/* ВНЕШНИЙ АДРЕС. Адрес на интерфейсе и адрес, с которого роутер виден
 		   интернету, совпадают далеко не всегда: у сотовой это CGNAT оператора,
@@ -953,6 +976,7 @@ return view.extend({
 		});
 		o = exp.option(form.DummyValue, '_blacklist', _('Device blacklist'),
 			_('USB devices the app is not sure about - they are missing from its modem database. Tick one to drop it from the app: no tab, no AT probing, no place in internet priority. Applied immediately.'));
+		o.depends({ netonly: '1', '!reverse': true });
 		o.render = function(option_index, section_id) {
 			return E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Device blacklist')),
@@ -1045,6 +1069,7 @@ return view.extend({
 				m.parse()
 					.then(function() { return uci.save(); })
 					.then(applyOwn)
+					.then(_gateAfterAutosave)
 					.catch(function() {});
 			}, 400);
 		};
