@@ -294,6 +294,10 @@ _zte_login() {   # $1 - адрес; печатает stok
 	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +5 2>/dev/null)" ]; then
 		cat "$_zl_f"; return 0
 	fi
+	_zl_bad="$_zl_f.fail"
+	if [ -f "$_zl_bad" ] && [ -z "$(find "$_zl_bad" -mmin +15 2>/dev/null)" ]; then
+		return 1
+	fi
 	_zl_src=$(_srcip_for "" "$1")
 	_zl_h=$(curl -s -i --max-time 8 ${_zl_src:+--interface "$_zl_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
@@ -303,10 +307,13 @@ _zte_login() {   # $1 - адрес; печатает stok
 		"http://$1/goform/goform_set_cmd_process" 2>/dev/null)
 	_zl_t=$(printf '%s' "$_zl_h" | sed -n 's/.*[Ss]et-[Cc]ookie: *stok=\([^;[:space:]]*\).*/\1/p' | head -1)
 	if [ -n "$_zl_t" ]; then
+		rm -f "$_zl_bad"
 		printf '%s' "$_zl_t" > "$_zl_f"
 		printf '%s' "$_zl_t"
 		return 0
 	fi
+	[ -f "$_zl_bad" ] || logger -t 5gmodem "hilink(zte): login to $1 failed - not retrying for 15 minutes so the stick does not lock its web login; set the web password in the modem section (web_pass)"
+	: > "$_zl_bad"
 	return 1
 }
 
@@ -337,6 +344,67 @@ _vidpid_for() {
 	_vf_p="$1"
 	[ -n "$_vf_p" ] || _vf_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	uci -q get "$CFG.m_$(echo "$_vf_p" | sed 's/[^A-Za-z0-9]/_/g').vidpid"
+}
+
+tenda_metrics_json() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 1
+	_tm_f="/tmp/5gmodem/tendaapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
+	if [ -f "$_tm_f" ] && [ -z "$(find "$_tm_f" -mmin +10 2>/dev/null)" ] && [ "$(cat "$_tm_f")" = 0 ]; then
+		return 1
+	fi
+	_tm_src=$(_srcip_for "" "$_a")
+	_r=$(curl -s --max-time 6 ${_tm_src:+--interface "$_tm_src"} -A "$UA" \
+		"http://$_a/goform/getModules?modules=deviceInfo,connectStatus,apnConfig" 2>/dev/null)
+	case "$_r" in
+		*'"deviceInfo"'*) printf '1' > "$_tm_f" ;;
+		*) printf '0' > "$_tm_f"; return 1 ;;
+	esac
+	_tj() { printf '%s' "$_r" | jsonfilter -e "@.deviceInfo.$1" 2>/dev/null; }
+	_net=$(_tj mobileNetwork)
+	case "$_net" in
+		4G*|LTE*) _ntype="LTE" ;;
+		5G*) _ntype="5G" ;;
+		3G*) _ntype="UMTS" ;;
+		2G*) _ntype="GSM" ;;
+		*) _ntype="$_net" ;;
+	esac
+	_rsrp=$(_tj RSRP | tr -cd '0-9-')
+	_sinr=$(_tj SINR | tr -cd '0-9.-')
+	_rssi=$(_tj RSSI | tr -cd '0-9-')
+	_bars=$(_tj signalStrength | tr -cd '0-9')
+	_pct=""; [ -n "$_bars" ] && _pct=$(( _bars * 20 )) && [ "$_pct" -gt 100 ] && _pct=100
+	_sp=$(sig_percent "$_ntype" "$_rsrp" "" "$_sinr" "" "" "$_rssi")
+	[ -n "$_sp" ] && _pct="$_sp"
+	_tb=$(_tj networkFrequencyBand | sed -n 's/.*[Bb]and *\([0-9][0-9]*\).*/\1/p')
+	_tpband=""; [ -n "$_tb" ] && _tpband="B$_tb"
+	_reg=0
+	[ "$(printf '%s' "$_r" | jsonfilter -e '@.connectStatus.status' 2>/dev/null)" = "1" ] && _reg=1
+	_csq=""
+	if [ -n "$_rssi" ]; then
+		_csq=$(( ( _rssi + 113 ) / 2 ))
+		[ "$_csq" -lt 0 ] && _csq=0; [ "$_csq" -gt 31 ] && _csq=31
+	fi
+	_model="Tenda $(_tj productName)"
+	printf '{'
+	printf '"backend":"hilink",'
+	printf '"cport":"%s",' "$_a"
+	printf '"protocol":"HiLink (web API)",'
+	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"imei":"%s","imsi":"%s","iccid":"%s",' "$(_tj IMEI)" "$(_tj IMSI)" "$(_tj ICCID)"
+	printf '"firmware":"%s","phone":"",' "$(jsafe "$(_tj softwareVersion)")"
+	printf '"operator_name":"%s",' "$(jsafe "$(_tj profileName)")"
+	printf '"operator_mcc":"","operator_mnc":"",'
+	printf '"registration":"%s",' "$_reg"
+	printf '"mode":"%s",' "$(jsafe "$_ntype")"
+	printf '"signal":"%s",' "$_pct"
+	printf '"rsrp":"%s","rsrq":"","sinr":"%s","rssi":"%s",' "$_rsrp" "$_sinr" "$_rssi"
+	printf '"cid_dec":"","cid_hex":"","lac_hex":"",'
+	printf '"pci":"","pband":"%s","enbid":"",' "$_tpband"
+	printf '"ipaddr":"%s",' "$(_tj wanIp)"
+	printf '"csq":"%s",' "$_csq"
+	printf '"conn_status":"%s"' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
+	printf '}\n'
 }
 
 zte_metrics_json() {
@@ -619,7 +687,7 @@ metrics_json() {
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
 	case "$(_vidpid_for "$_HLP")" in
 		19d2:0565) yota_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
-		19d2:*) zte_metrics_json "$_HLP"; return $? ;;
+		19d2:*) tenda_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
 		15a9:*|1076:8002) yota_metrics_json "$_HLP"; return $? ;;
 		0846:68e1) netgear_metrics_json "$_HLP"; return $? ;;
 	esac
