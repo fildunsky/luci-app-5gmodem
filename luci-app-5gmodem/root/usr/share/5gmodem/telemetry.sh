@@ -23,6 +23,7 @@
 CFG=5gmodem
 EXTIP=/usr/share/5gmodem/extip.sh
 TELE=/tmp/5gmodem/tele.json
+TSNAP=/tmp/5gmodem/tele.snapcache
 TELE_CELL=/tmp/5gmodem/tele_cell.json
 PREV=/tmp/5gmodem/tele.prev
 
@@ -78,7 +79,11 @@ tele_write() {
 		esac
 	fi
 
-	if [ -n "$_fresh" ]; then
+	_tc_hit=""
+	if [ -n "$_fresh" ] && [ -s "$TSNAP" ] && [ "$(sed -n 1p "$TSNAP")" = "$_st" ]; then
+		_tc_hit=1
+		_J=$(sed -n 2p "$TSNAP")
+	elif [ -n "$_fresh" ]; then
 	_num sig  "$(_int "$(_jf signal)")"
 	_str oper "$(_jf operator_name | sed 's/^-$//')"
 	_num rsrp "$(_int "$(_jf rsrp)")"
@@ -112,6 +117,7 @@ tele_write() {
 	esac
 	_str mode "$_md"
 
+	_tc_main="$_J"
 	fi   # _fresh
 
 	# ping - последний замер сторожа по интерфейсу модема (4-е поле state-файла).
@@ -216,7 +222,9 @@ tele_write() {
 	# HTTP-рецепт), а cid/tac/enb локализуют положение, wan_ip - приватный
 	# адрес. Файл-приложение наружу не публикуется никем по договорённости.
 	_J=""
-	if [ -n "$_fresh" ]; then
+	if [ -n "$_tc_hit" ]; then
+		_J=$(sed -n 3p "$TSNAP")
+	elif [ -n "$_fresh" ]; then
 		_num pci    "$(_int "$(_jf pci)")"
 		_num earfcn "$(_int "$(_jf earfcn)")"
 		_num enb    "$(_int "$(_jf enbid)")"
@@ -224,10 +232,6 @@ tele_write() {
 		_num tac    "$(_int "$(_jf tac_dec)")"
 		_str apn    "$(_jf iface_apn | sed 's/^-$//')"
 		_str wan_ip "$(_jf ipaddr | sed 's/^-$//')"
-		# Внешний адрес - здесь же и по той же причине, что wan_ip: он
-		# маршрутизируемый. Спрошен через интерфейс модема (см. выше).
-		_str ext_ip  "$_te_xip"
-		_str ext_ip6 "$_te_xip6"
 		_str modem  "$(_jf modem | sed 's/^-$//')"
 		# Полный набор для локальной страницы «Сота/Модем» (запрос экрана
 		# Almond, 20.08.2026): числа - числами, витринные строки (полоса,
@@ -281,6 +285,11 @@ tele_write() {
 		_nb=$(grep -o '"neighbors":\[[^]]*\]' "$_SNAP" 2>/dev/null | head -1)
 		_nb=${_nb#\"neighbors\":}
 		case "$_nb" in \[*\]) [ "$_nb" != "[]" ] && _J="$_J${_J:+,}\"nbrs\":$_nb" ;; esac
+		printf '%s\n%s\n%s\n' "$_st" "$_tc_main" "$_J" > "$TSNAP.tmp" && mv "$TSNAP.tmp" "$TSNAP"
+	fi
+	if [ -n "$_fresh" ]; then
+		_str ext_ip  "$_te_xip"
+		_str ext_ip6 "$_te_xip6"
 	fi
 	printf '{%s}\n' "$_J" > "$TELE_CELL.tmp" && mv "$TELE_CELL.tmp" "$TELE_CELL"
 }
