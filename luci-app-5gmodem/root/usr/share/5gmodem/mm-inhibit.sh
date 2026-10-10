@@ -703,6 +703,11 @@ stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/nul
 	_last_pid=""
 	_n=99                       # первый проход - сразу
 	while :; do
+		if [ ! -x /usr/sbin/ModemManager ]; then
+			_last_pid=""; _n=99
+			sleep 3
+			continue
+		fi
 		_pid=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null | head -1)
 		if [ "$_pid" != "$_last_pid" ] || [ "$_n" -ge 5 ]; then
 			_last_pid="$_pid"

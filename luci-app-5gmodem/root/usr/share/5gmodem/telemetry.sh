@@ -366,6 +366,7 @@ _refresh_snap() {
 	_rf=$(_g refresh); case "$_rf" in ''|*[!0-9]*) _rf=120 ;; esac
 	[ "$_rf" = "0" ] && return 0
 	[ -n "$_AM" ] || return 0
+	[ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || return 0
 	_rs_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 	case "$_rs_st" in
 		*[!0-9]*) _rs_st=0 ;;
