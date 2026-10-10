@@ -1972,6 +1972,7 @@ svc_running() {   # $1 - имя сервиса; код 0 = работает
 
 route_add_default() {
 	_rad_f="$1"; _rad_d="$2"; _rad_m="$3"; _rad_gw="$4"; _rad_t="$5"
+	RAD_METRIC=""
 	[ "$_rad_f" = "-4" ] && [ -n "$_rad_gw" ] && \
 		ip -4 route add "$_rad_gw" dev "$_rad_d" $_rad_t 2>/dev/null
 	_rad_i=0
@@ -1979,10 +1980,10 @@ route_add_default() {
 		_rad_mx=$((_rad_m + _rad_i))
 		if [ -n "$_rad_gw" ]; then
 			_rad_e=$(ip "$_rad_f" route add default via "$_rad_gw" dev "$_rad_d" \
-				metric "$_rad_mx" $_rad_t 2>&1) && return 0
+				metric "$_rad_mx" $_rad_t 2>&1) && { RAD_METRIC=$_rad_mx; return 0; }
 		else
 			_rad_e=$(ip "$_rad_f" route add default dev "$_rad_d" \
-				metric "$_rad_mx" scope link $_rad_t 2>&1) && return 0
+				metric "$_rad_mx" scope link $_rad_t 2>&1) && { RAD_METRIC=$_rad_mx; return 0; }
 		fi
 		case "$_rad_e" in *"File exists"*) ;; *) break ;; esac
 		# «File exists» НЕ ЗНАЧИТ «метрику занял чужой». Ровно такой же маршрут
@@ -2000,12 +2001,12 @@ route_add_default() {
 			| grep -E " dev $_rad_d( |$)" \
 			| grep -E " metric $_rad_mx( |$)")
 		if [ -n "$_rad_gw" ]; then
-			printf '%s\n' "$_rad_x" | grep -Fq " via $_rad_gw " && return 0
+			printf '%s\n' "$_rad_x" | grep -Fq " via $_rad_gw " && { RAD_METRIC=$_rad_mx; return 0; }
 		else
 			# on-link: нужна строка БЕЗ via - иначе на той же метрике стоит
 			# чужой маршрут со шлюзом, и это действительно конфликт.
 			printf '%s\n' "$_rad_x" | grep -q '^default ' \
-				&& ! printf '%s\n' "$_rad_x" | grep -q ' via ' && return 0
+				&& ! printf '%s\n' "$_rad_x" | grep -q ' via ' && { RAD_METRIC=$_rad_mx; return 0; }
 		fi
 		_rad_i=$((_rad_i + 1))
 		# Съехали с задуманной метрики - это стоит увидеть в журнале: значит

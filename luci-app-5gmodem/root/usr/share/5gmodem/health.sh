@@ -537,6 +537,7 @@ _move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - им
 				# новый не встал; про сорвавшееся добавление route_add_default
 				# пишет в журнал (метрики разные, конфликта между ними нет).
 				route_add_default "$_fam" "$1" "$2" "$_gw" "$_mt_a" || continue
+				[ "$RAD_METRIC" = "$_cm" ] && continue
 				ip "$_fam" route del default dev "$1" metric "$_cm" $_mt_a 2>/dev/null
 			done
 		done
@@ -574,7 +575,8 @@ _rt6_args() {
 
 _ensure_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - имя сети
 	_ed_a=$(_rt4_args "$3")
-	if ! ip -4 route show default $_ed_a 2>/dev/null | grep -qE " dev $1( |$)"; then
+	if ! ip -4 route show default $_ed_a 2>/dev/null | grep -qE " dev $1( |$)" \
+	   && ip -4 addr show dev "$1" 2>/dev/null | grep -q ' inet '; then
 		if _ed_gw=$(_nd_gw "$3" "0.0.0.0" _4); then
 			[ "$_ed_gw" = "0.0.0.0" ] && _ed_gw=""
 			route_add_default -4 "$1" "$2" "$_ed_gw" "$_ed_a" && \
@@ -582,7 +584,8 @@ _ensure_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - и
 		fi
 	fi
 	_ed_a6=$(_rt6_args "$3")
-	if ! ip -6 route show default $_ed_a6 2>/dev/null | grep -qE " dev $1( |$)"; then
+	if ! ip -6 route show default $_ed_a6 2>/dev/null | grep -qE " dev $1( |$)" \
+	   && ip -6 addr show dev "$1" scope global 2>/dev/null | grep -q ' inet6 '; then
 		if _ed_gw6=$(_nd_gw "$3" "::" _6); then
 			[ "$_ed_gw6" = "::" ] && _ed_gw6=""
 			[ -n "$_ed_gw6" ] && route_add_default -6 "$1" "$2" "$_ed_gw6" "$_ed_a6" && \
@@ -1328,9 +1331,10 @@ heal() {
 				| sed -n 's/.*+CREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 			if [ "$_h_reg" = "2" ]; then
 				_h_ss=$(cat "$HDIR/$_h_if.srch" 2>/dev/null)
-				case "$_h_ss" in ''|*[!0-9]*) _h_ss=$(uptime_s); printf '%s' "$_h_ss" > "$HDIR/$_h_if.srch" ;; esac
+				_h_snew=""
+				case "$_h_ss" in ''|*[!0-9]*) _h_ss=$(uptime_s); printf '%s' "$_h_ss" > "$HDIR/$_h_if.srch"; _h_snew=1 ;; esac
 				if [ $(( $(uptime_s) - _h_ss )) -lt 720 ]; then
-					_ev "healing $_h_if: modem is searching for a network - postponing the attempt"
+					[ -n "$_h_snew" ] && _ev "healing $_h_if: modem is searching for a network - postponing healing for up to 12 minutes"
 					continue
 				fi
 			else
@@ -1378,7 +1382,7 @@ _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
 		[ -f "$_td_f" ] || continue
-		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.last_event) continue ;; esac
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto|*.last_event) continue ;; esac
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue

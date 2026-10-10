@@ -85,6 +85,8 @@ proto_pkg() {
 		3g) echo "comgt" ;;
 		xmm) echo "xmm-modem" ;;
 		atc) echo "atc" ;;
+		quectel) echo "quectel-cm" ;;
+		fibocom|mbimp|qmiraw) echo "luci-app-5gmodem (reinstall it - this handler ships with the app)" ;;
 		*) echo "$1" ;;
 	esac
 }
@@ -796,6 +798,7 @@ usb_flap_verdict() {
 	esac
 	# Отвалы именно этого устройства, а не любые в системе.
 	_uf_n=$(logread 2>/dev/null | grep -c "usb $_uf_p: USB disconnect")
+	_uf_if=$(uci -q get "5gmodem.$(secname "$_uf_p").network" 2>/dev/null)
 	echo "USB re-connects in the current log: $_uf_n"
 	_uf_vp="$(cat "$_uf_d/idVendor" 2>/dev/null):$(cat "$_uf_d/idProduct" 2>/dev/null)"
 	case "$_uf_vp" in
@@ -884,12 +887,13 @@ usb_flap_verdict() {
 	# двух наблюдаемых шли через 16 и 22 с после подвисшего опроса, и выяснять
 	# это пришлось вручную - человека просили останавливать службы и следить за
 	# логом. Теперь ответ виден прямо в отчёте.
-	[ -n "$_uf_msw" ] || logread 2>/dev/null | awk '
+	[ -n "$_uf_msw" ] || logread 2>/dev/null | awk -v ap="$_uf_p" -v aif="$_uf_if" '
 		function t2s(t,   a) {
 			if (t !~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]$/) return -1
 			split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3]
 		}
 		/healing .*(rebooting the module|power-cycling)/ {
+			if (aif == "" || index($0, "healing " aif ":") == 0) next
 			s = t2s($4); if (s < 0) next
 			hs = s; hhave = 1; next
 		}
@@ -905,7 +909,7 @@ usb_flap_verdict() {
 			n++
 			g = now - st
 			hg = now - hs
-			if (hhave && hg >= 0 && hg <= 30) {
+			if (d == ap && hhave && hg >= 0 && hg <= 30) {
 				own++
 				line[n] = sprintf("  %s  usb %-8s our watchdog rebooted the module %d s before the drop", $4, d, hg)
 			} else if (have && g >= 0 && g <= 120) {
@@ -992,8 +996,18 @@ usb_flap_verdict() {
 	# Штатный переезд из режима накопителя разобран выше - пугать нечем.
 	[ -n "$_uf_msw" ] && return
 	[ "${_uf_n:-0}" -ge 1 ] || return
-	_uf_own=$(logread 2>/dev/null | grep -cE "healing .*(rebooting the module|power-cycling)")
-	if [ "${_uf_own:-0}" -ge "$_uf_n" ] 2>/dev/null; then
+	_uf_own=$(logread 2>/dev/null | awk -v ap="$_uf_p" -v aif="$_uf_if" '
+		function t2s(t,   a) {
+			if (t !~ /^[0-9][0-9]:[0-9][0-9]:[0-9][0-9]$/) return -1
+			split(t, a, ":"); return a[1] * 3600 + a[2] * 60 + a[3]
+		}
+		aif != "" && index($0, "healing " aif ":") && /rebooting the module|power-cycling/ { hs = t2s($4); next }
+		index($0, "usb " ap ": USB disconnect") {
+			n++; g = t2s($4) - hs
+			if (hs != "" && g >= 0 && g <= 30) own++
+		}
+		END { print (n > 0 && own == n) ? 1 : 0 }')
+	if [ "$_uf_own" = 1 ]; then
 		echo "Every re-enumeration follows a module reboot by our own watchdog - this is not a power problem."
 		return
 	fi
