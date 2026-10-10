@@ -388,6 +388,8 @@ case "$1" in
 	# tick - вызов из цикла сторожа: с настроенным брокером публикуем,
 	# без него просто обновляем файл.
 	tick)      tele_enabled || exit 0
+	           [ -n "$_AM" ] || exit 0
+	           [ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || exit 0
 	           _refresh_snap
 	           if _mqtt_args >/dev/null 2>&1; then tele_publish; else tele_write; fi ;;
 	write)     tele_enabled && tele_write ;;
