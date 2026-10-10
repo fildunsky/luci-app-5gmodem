@@ -172,7 +172,8 @@ for (const pg of PAGES) {
 		const t0 = Date.now();
 		await cmd('Page.navigate', { url: `http://${host}${pg.path}` });
 		await sleep(WAIT);
-		const m = await ev(probe(pg.keys)) || {};
+		const netonly = pg.name === 'detail' && await ev(`document.body.classList.contains('sc-netonly')`);
+		const m = await ev(probe(netonly ? ['.netpri-mount'] : pg.keys)) || {};
 		const secs = (Date.now() - t0) / 1000;
 		const tag = `page.${pg.name}.${width}`;
 		const shot = await cmd('Page.captureScreenshot', { format: 'jpeg', quality: 60 });
@@ -199,7 +200,8 @@ for (const pg of PAGES) {
 		line(res, tag, secs, [...problems, ...warns].join('; ') || `nodes=${m.viewNodes} calls=${cur.calls.length}`);
 		fs.writeFileSync(`${outdir}/${pg.name}-${width}.calls.txt`, cur.calls.join('\n') + '\n');
 
-		if (pg.doctor && width === widths[widths.length - 1]) {
+		if (netonly && width === widths[widths.length - 1]) line('SKIP', 'page.detail.doctor-check', 0, 'network-only mode: no modem card');
+		else if (pg.doctor && width === widths[widths.length - 1]) {
 			cur.blocked = [];
 			const r = await ev(`(async () => {
 				const b = [...document.querySelectorAll('#doctorn button, #doctorn .cbi-button')][0];

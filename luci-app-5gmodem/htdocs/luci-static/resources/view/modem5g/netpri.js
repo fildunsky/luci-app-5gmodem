@@ -579,7 +579,8 @@ function pingBadge(info) {
 }
 function _pDot(st) { return (st && st.done) ? (st.ok ? 'on' : 'off') : 'unknown'; }
 function _pMs(st) {
-	return (st && st.done && st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : ('— ' + _('ms'));
+	if (!(st && st.done)) { return '\u00a0'; }
+	return (st.ok && st.ms != null) ? (st.ms + ' ' + _('ms')) : ('— ' + _('ms'));
 }
 function _pTip(st, info) {
 	/* why=dns: адрес сервиса не принадлежит его официальным сетям - резолвер

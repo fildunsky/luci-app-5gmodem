@@ -421,8 +421,18 @@ _collect_signal() {
 # Трафик: дельты счётчиков устройства -> месячный аккумулятор по интерфейсу.
 # Счётчик уехал вниз (ребут/пересоздание) - дельту не берём, просто
 # перезапоминаем базу: иначе месяц получил бы отрицательное или гигантское число.
+_traffic_ifaces() {
+	_ti_f=/tmp/5gmodem/stats_ifaces
+	if [ ! -f "$_ti_f" ] || [ -n "$(find "$_ti_f" -mmin +5 2>/dev/null)" ]; then
+		"$RES/netpri.sh" list 2>/dev/null | jsonfilter -e '@[*].iface' 2>/dev/null > "$_ti_f.$$" \
+			&& mv "$_ti_f.$$" "$_ti_f"
+		rm -f "$_ti_f.$$"
+	fi
+	cat "$_ti_f" 2>/dev/null
+}
+
 _collect_traffic() {
-	for _ct_if in $("$RES/netpri.sh" list 2>/dev/null | jsonfilter -e '@[*].iface' 2>/dev/null); do
+	for _ct_if in $(_traffic_ifaces); do
 		[ -n "$_ct_if" ] || continue
 		_ct_dev=$(ubus call network.interface."$_ct_if" status 2>/dev/null \
 			| jsonfilter -e '@.l3_device' 2>/dev/null)

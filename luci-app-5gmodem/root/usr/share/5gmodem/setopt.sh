@@ -152,6 +152,7 @@ reconnect)
 applyset)
 	uci -q commit 5gmodem
 	rm -f /tmp/luci-indexcache* 2>/dev/null
+	( exec 1000>&- 7>&- 8>&- 9>&-; /usr/share/5gmodem/netonly.sh apply ) >/dev/null 2>&1 </dev/null &
 	# ХРАНИЛИЩЕ SMS ДОКЛАДЫВАЕМ МОДЕМУ. Выбор в конфиге сам по себе меняет только
 	# ЧТЕНИЕ (sms_tool -s шлёт mem1); куда лягут НОВЫЕ входящие, решает mem3 той
 	# же +CPMS - его выставляет sms_apply_cpms. Без этого шага человек выбирает

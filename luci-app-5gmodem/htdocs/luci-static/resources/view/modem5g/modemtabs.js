@@ -304,6 +304,14 @@ function gateHideRule(id, sub, on) {
 	}
 }
 
+var NETONLY_TABS = [ 'esim', 'diagnostics', 'align', 'readsms', 'sendsms', 'sendussd', 'sendat' ];
+
+function netonlyHideTabs(on) {
+	NETONLY_TABS.forEach(function(sub) {
+		gateHideRule('netonly-' + sub + '-hide', sub, on);
+	});
+}
+
 /* Галочки читаем из uci. Пустое значение у «Юстировки» - выключено (вкладка
    для тех, кто её осознанно включил), у «Статистики» - включено (сбор идёт по
    умолчанию, и прятать её у всех было бы регрессом). */
@@ -313,11 +321,14 @@ function applyGateTabs() {
 		var sid = (ss && ss[0]) ? ss[0]['.name'] : null;
 		var al = sid ? String(uci.get('5gmodem', sid, 'align_enabled') || '') : '';
 		var stt = sid ? String(uci.get('5gmodem', sid, 'show_stats') || '') : '';
-		gateHideRule('align-tab-hide', 'align', al !== '1');
+		var no = sid ? String(uci.get('5gmodem', sid, 'netonly') || '') : '';
+		gateHideRule('align-tab-hide', 'align', al !== '1' || no === '1');
 		gateHideRule('stats-tab-hide', 'stats', stt === '0');
+		netonlyHideTabs(no === '1');
 		try {
 			localStorage.setItem('5gmodem.gate.align', al === '1' ? '1' : '0');
 			localStorage.setItem('5gmodem.gate.stats', stt === '0' ? '0' : '1');
+			localStorage.setItem('5gmodem.gate.netonly', no === '1' ? '1' : '0');
 		} catch (e) {}
 	});
 }
@@ -326,6 +337,7 @@ function applyGateTabs() {
 	try {
 		if (localStorage.getItem('5gmodem.gate.align') !== '1') { gateHideRule('align-tab-hide', 'align', true); }
 		if (localStorage.getItem('5gmodem.gate.stats') === '0') { gateHideRule('stats-tab-hide', 'stats', true); }
+		if (localStorage.getItem('5gmodem.gate.netonly') === '1') { netonlyHideTabs(true); }
 	} catch (e) {}
 })();
 

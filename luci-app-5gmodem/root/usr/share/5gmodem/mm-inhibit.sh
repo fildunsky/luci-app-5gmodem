@@ -138,7 +138,15 @@ inhibit_pass() {
 	# исчерпании сбрасываем его (AT+CFUN=1,1, не чаще раза в 3 мин). Дёшево - один
 	# qmicli -p за проход; для не-QMI модема (FM350) helper молча выходит.
 	_am=$(uci -q get "$CFG.@5gmodem[0].active_modem")
-	[ -n "$_am" ] && "$RES/qmi-recover.sh" recover "$_am" >/dev/null 2>&1
+	if [ -n "$_am" ]; then
+		read -r _qr_up _qr_rest < /proc/uptime
+		_qr_up=${_qr_up%%.*}
+		case "$_QR_LAST" in ''|*[!0-9]*) _QR_LAST=0 ;; esac
+		if [ $((_qr_up - _QR_LAST)) -ge 120 ] || [ "$_qr_up" -lt "$_QR_LAST" ]; then
+			_QR_LAST=$_qr_up
+			"$RES/qmi-recover.sh" recover "$_am" >/dev/null 2>&1
+		fi
+	fi
 	# Держать MM запущенным ради ОТСУТСТВУЮЩЕГО модема незачем - именно он
 	# при старте и хватает чужие модемы. Решение принимает mmneed.sh.
 	"$RES/mmneed.sh" grace >/dev/null 2>&1
@@ -703,6 +711,11 @@ stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/nul
 	_last_pid=""
 	_n=99                       # первый проход - сразу
 	while :; do
+		if [ ! -x /usr/sbin/ModemManager ]; then
+			_last_pid=""; _n=99
+			sleep 3
+			continue
+		fi
 		_pid=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null | head -1)
 		if [ "$_pid" != "$_last_pid" ] || [ "$_n" -ge 5 ]; then
 			_last_pid="$_pid"

@@ -31,5 +31,6 @@ getsupportedmodes() {
     case "$_sm_r" in *" 1 "*) _sm_o="$_sm_o 1:3G" ;; esac
     case "$_sm_r" in *" 4 "*) _sm_o="$_sm_o 4:3G+4G" ;; esac
     case "$_sm_r" in *" 2 "*) _sm_o="$_sm_o 2:4G" ;; esac
+    case "$_sm_r" in *" 0 "*) _sm_o="$_sm_o 0:2G" ;; esac
     echo ${_sm_o:-2:4G}
 }
