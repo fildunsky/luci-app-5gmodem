@@ -294,6 +294,7 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 			if (srv) rsrp = lvl($11, -121); else rsrp = lvl($15, -121)
 		}
 		if (pci == "") next
+		if (!srv && (pci !~ /^[0-9]+$/ || pci + 0 > (rat == 9 ? 1007 : (rat == 4 ? 503 : 511)))) next
 		if (arfcn + 0 > 0 && (srv || arfcn !~ /0$/)) known[arfcn + 0] = 1
 		r++
 		rw_rat[r] = rat; rw_srv[r] = srv; rw_band[r] = band; rw_arfcn[r] = arfcn
@@ -377,6 +378,7 @@ LINES=$(echo "$O" | grep -E '^PCC:')
 
 T_4G_MODE=""
 T_4G_PBAND=""
+T_4G_NRB=""
 T_4G_PCI=""
 T_4G_EARFCN=""
 T_4G_PRSRP=""
@@ -425,6 +427,7 @@ for LINE in $LINES; do
       T_BAND=$((T_BAND - 100))
       T_4G_MODE="$(band4g ${T_BAND}) + "
       T_4G_PBAND="$(band4g ${T_BAND})${DBW}"
+      T_4G_NRB="$T_DBW"
       T_4G_PCI="$T_PCI"
       T_4G_EARFCN="$T_EARFCN"
       T_4G_MIMO="$T_MIMO"
@@ -657,6 +660,16 @@ if [ -z "$RSRP" ]; then
 		''|255|*[!0-9]*) : ;;
 		*) RSRP=$((CE_RSRP - 141)) ;;
 	esac
+fi
+
+case "$T_4G_NRB" in
+  6) _NRB_DB=7.8 ;; 15) _NRB_DB=11.8 ;; 25) _NRB_DB=14.0 ;;
+  50) _NRB_DB=17.0 ;; 75) _NRB_DB=18.8 ;; 100) _NRB_DB=20.0 ;;
+  *) _NRB_DB="" ;;
+esac
+if [ -n "$_NRB_DB" ] && [ -n "$T_4G_PBAND" ] && [ -n "$RSRP" ] && [ -n "$RSRQ" ]; then
+  _WB=$(awk -v p="$RSRP" -v q="$RSRQ" -v n="$_NRB_DB" 'BEGIN { r = p - q + n; if (r >= -120 && r <= -25) printf "%.0f", r }')
+  [ -n "$_WB" ] && RSSI="$_WB"
 fi
 
 # Signal bar НЕ из сырого AT+CSQ: он RSSI-based и на FM350 узкополосный - читает

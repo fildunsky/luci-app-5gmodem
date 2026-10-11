@@ -202,7 +202,7 @@ getmode() {
 		fi
 	fi
 	case "$AL" in
-		*2g*3g*4g*5g*) echo 1 ;;
+		*2g*3g*4g*5g*|3g,4g,5g) echo 1 ;;
 		3g,4g)         echo 3 ;;
 		4g,5g)         echo 5 ;;
 		3g)            echo 2 ;;

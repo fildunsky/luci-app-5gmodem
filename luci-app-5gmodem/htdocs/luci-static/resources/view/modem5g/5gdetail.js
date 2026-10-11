@@ -73,8 +73,8 @@ var CA_GRAD = {
 	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
 	green:  'linear-gradient(90deg, #2fb885, #34d399)'
 };
-function caQuality(key, v, rat) {
-	var l = mutil.qualLevel(key, v, rat || _qualRat);
+function caQuality(key, v, rat, cap) {
+	var l = mutil.qualLevel(key, v, rat || _qualRat, cap);
 	return l == null ? null : QUAL_NAMES[l];
 }
 /* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
@@ -121,18 +121,19 @@ function metricBar(id, rawVal, unit, key, rat) {
 
 	var r = rat || _qualRat;
 	var lvl = mutil.qualLevel(key, vn, r), pc = mutil.qualPct(key, vn, r);
-	if (lvl == null) { lvl = 0; }
 	if (pc == null) { pc = 0; }
 	pf.style.width = (pc < 3 ? 3 : pc) + '%';
-	pf.style.background = _QUAL_BG[lvl];
+	pf.style.background = (lvl == null) ? 'rgba(128,128,128,.45)' : _QUAL_BG[lvl];
 	/* Единицу берём из vn (число), НЕ из rawVal: вызыватели передают значение уже
 	   с единицей ("-97 dBm"), и добавление unit к rawVal давало "-97 dBm dBm". */
 	var vt = vn + (unit ? (' ' + unit) : '');
-	pg.setAttribute('title', vt + ' | ' + _qualLabel(lvl));
+	pg.setAttribute('title', (lvl == null) ? vt : (vt + ' | ' + _qualLabel(lvl)));
 	if (tv) {
 		tv.textContent = '';
 		tv.appendChild(document.createTextNode(vt));
-		tv.appendChild(E('small', { 'style': 'color:' + CA_COLOR[QUAL_NAMES[lvl]] }, _qualLabel(lvl)));
+		if (lvl != null) {
+			tv.appendChild(E('small', { 'style': 'color:' + CA_COLOR[QUAL_NAMES[lvl]] }, _qualLabel(lvl)));
+		}
 	}
 }
 
@@ -763,10 +764,10 @@ var IS_PROTON = (function() {
    $4 (text) - необязательная подпись: у антенных портов значение с единицами
    ("-114 dBm"), у CA и соседей - голое число. Оценку и длину считаем по САМОМУ
    значению ($3), не по подписи. IS_PROTON постоянен в сессии, режим не мешаем. */
-function paintMetricCell(td, key, v, text, rat) {
+function paintMetricCell(td, key, v, text, rat, cap) {
 	var has = (v != null && v !== '' && v !== '-');
 	var txt = has ? String(text != null ? text : v) : '-';
-	var col = has ? caQuality(key, v, rat) : null;
+	var col = has ? caQuality(key, v, rat, cap) : null;
 	var pc  = col ? metricPct(key, v, rat) : null;
 
 	if (IS_PROTON) {
@@ -880,7 +881,7 @@ function renderNeighbors(json) {
 		/* Уровни - через общую точку: полоски/цвета/пороги как в CA и антеннах. */
 		paintMetricCell(td[4], 'rsrp', c.rsrp);
 		paintMetricCell(td[5], 'rsrq', c.rsrq);
-		paintMetricCell(td[6], 'rssi', c.rssi);
+		paintMetricCell(td[6], 'rssi', c.rssi, null, undefined, c.rsrq);
 		if (td[7]) { nbLockCell(td[7], c, serving); }
 	}
 }
@@ -973,7 +974,7 @@ function renderCaTable(json) {
 	function paintCell(td, key, c) {
 		/* Метрики - через общую точку: там же решается, как их показывать в
 		   текущей теме (см. paintMetricCell). */
-		if (isMetric[key]) { paintMetricCell(td, key, c[key], null, qualBandRat(c.band)); return; }
+		if (isMetric[key]) { paintMetricCell(td, key, c[key], null, qualBandRat(c.band), c.rsrq); return; }
 		td.textContent = txt(c[key]);
 		td.style.color = '';
 		td.style.fontWeight = '';
@@ -2258,13 +2259,13 @@ function fillAntPorts(raw, rxdiv) {
 		   к цвету добавляется полоска, а на proton2025 значение уезжает внутрь
 		   неё. Иначе три таблицы с одинаковыми по смыслу уровнями выглядели бы
 		   по-разному на одной странице. */
-		var paint = function(cell, key, v, text) {
-			paintMetricCell(cell, key, v, text);
+		var paint = function(cell, key, v, text, cap) {
+			paintMetricCell(cell, key, v, text, undefined, cap);
 		};
 		if (td[1]) { paint(td[1], 'rsrp', p[1], p[1] + ' dBm'); }
 		if (td[2]) { paint(td[2], 'rsrq', p[2], p[2] + ' dB'); }
 		var stCell = 3;
-		if (hasRssi) { if (td[3]) { paint(td[3], 'rssi', p[3], p[3] + ' dBm'); } stCell = 4; }
+		if (hasRssi) { if (td[3]) { paint(td[3], 'rssi', p[3], p[3] + ' dBm', p[2]); } stCell = 4; }
 		if (td[stCell]) {
 			td[stCell].textContent = st;
 			td[stCell].style.color = col ? CA_COLOR[col] : '';
@@ -3431,6 +3432,7 @@ function applyMetrics(json) {
 						}
 					}
 
+					mutil.qualRssiCap(json.rsrq);
 					if (document.getElementById('rssi')) {
 						var view = document.getElementById("rssi");
 						/* СНИМОК БЕЗ МЕТРИК ОСТАВЛЯЕМ КАК ЕСТЬ. Занятый порт отдаёт
@@ -3799,7 +3801,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30206, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30207, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

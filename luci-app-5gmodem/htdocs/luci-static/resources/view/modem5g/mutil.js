@@ -282,8 +282,8 @@ function lsSweep(prefixes, maxAgeDays) {
 }
 
 var QUAL_T = {
-	lte:  { rsrp: [ -100, -90, -80 ], rsrq: [ -20, -15, -10 ], sinr: [ 0, 13, 20 ], rssi: [ -85, -75, -65 ] },
-	nr:   { rsrp: [ -100, -90, -80 ], rsrq: [ -15, -13, -10 ], sinr: [ 0, 13, 20 ], rssi: [ -85, -75, -65 ] },
+	lte:  { rsrp: [ -110, -100, -90 ], rsrq: [ -17, -13, -10 ], sinr: [ 0, 10, 20 ], rssi: [ -85, -75, -65 ] },
+	nr:   { rsrp: [ -115, -105, -95 ], rsrq: [ -15, -13, -10 ], sinr: [ 0, 10, 20 ], rssi: [ -85, -75, -65 ] },
 	umts: { rscp: [ -105, -95, -85 ], ecio: [ -15, -10, -6 ], rssi: [ -103, -97, -89 ] },
 	gsm:  { rssi: [ -103, -97, -89 ] }
 };
@@ -308,11 +308,22 @@ function qualThresholds(key, rat) {
 	}
 	return tab[key] || QUAL_T.lte[key] || QUAL_T.umts[key] || null;
 }
-function qualLevel(key, v, rat) {
+var _rssiCapRsrq = null;
+function qualRssiCap(rsrq) {
+	var n = parseFloat(rsrq);
+	_rssiCapRsrq = isNaN(n) ? null : n;
+}
+function qualLevel(key, v, rat, rsrq) {
 	var t = qualThresholds(key, rat), n = parseFloat(v);
 	if (!t || isNaN(n)) { return null; }
 	var l = 0;
 	for (var i = 0; i < t.length; i++) { if (n >= t[i]) { l = i + 1; } }
+	var rr = QUAL_T[rat] ? rat : 'lte';
+	if (key === 'rssi' && (rr === 'lte' || rr === 'nr')) {
+		var q = (rsrq != null && rsrq !== '' && rsrq !== '-') ? rsrq : _rssiCapRsrq;
+		var lq = (q == null) ? null : qualLevel('rsrq', q, rr);
+		if (lq != null && lq < l) { l = lq; }
+	}
 	return l;
 }
 function qualPct(key, v, rat) {
@@ -436,11 +447,12 @@ function flagEmoji(cc) {
 }
 
 return baseclass.extend({
-	API: 30206,
+	API: 30207,
 	QUAL_T: QUAL_T,
 	qualRat: qualRat,
 	qualThresholds: qualThresholds,
 	qualLevel: qualLevel,
+	qualRssiCap: qualRssiCap,
 	qualPct: qualPct,
 	bandRegion: bandRegion,
 	flagEmoji: flagEmoji,

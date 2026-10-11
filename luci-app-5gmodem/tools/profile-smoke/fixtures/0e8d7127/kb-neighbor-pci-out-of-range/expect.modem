@@ -1,0 +1,2 @@
+PCI=87
+NEIGHBORS={"band":"1","earfcn":"75","pci":"87","rsrp":"-103","rsrq":"-10.0","rssi":"","serving":1},{"band":"2","earfcn":"755","pci":"503","rsrp":"-112","rsrq":"-11.0","rssi":"","serving":0}

@@ -285,28 +285,45 @@ proto_mbimp_setup() {
 	zone="$(fw3 -q network "$interface" 2>/dev/null)"
 
 	echo "MBIM+MM[$$] Setting up $ifname"
-	proto_init_update "$ifname" 1
-	proto_send_update "$interface"
 
 	[ -z "$dhcp" ] && dhcp="auto"
 	[ -z "$dhcpv6" ] && dhcpv6="auto"
 
-	local a s v4addr v6addr
+	local a s v4addr v6addr v4static="" v6static="" gw
 	[ "$iptype" != "ipv6" ] && {
 		v4addr=$(_mbimp_ipcfg "$cfg" 4 "IP [")
+		[ -n "$v4addr" ] && [ "$dhcp" != 1 ] && v4static=1
+	}
+	[ "$iptype" != "ipv4" ] && {
+		v6addr=$(_mbimp_ipcfg "$cfg" 6 "IP [")
+		[ -n "$v6addr" ] && [ "$dhcpv6" != 1 ] && v6static=1
+	}
+
+	proto_init_update "$ifname" 1
+	if [ -n "$v4static" ]; then
+		for a in $v4addr; do
+			case "$a" in */*) proto_add_ipv4_address "${a%/*}" "${a#*/}" ;; *) proto_add_ipv4_address "$a" 32 ;; esac
+		done
+		gw=$(_mbimp_ipcfg "$cfg" 4 "Gateway" | head -n 1)
+		proto_add_ipv4_route "0.0.0.0" 0 "$gw"
+		[ "$peerdns" = 0 ] || for s in $(_mbimp_ipcfg "$cfg" 4 "DNS ["); do proto_add_dns_server "$s"; done
+	fi
+	if [ -n "$v6static" ]; then
+		for a in $v6addr; do
+			case "$a" in */*) proto_add_ipv6_address "${a%/*}" "${a#*/}"; proto_add_ipv6_prefix "$a" ;; *) proto_add_ipv6_address "$a" 128 ;; esac
+		done
+		gw=$(_mbimp_ipcfg "$cfg" 6 "Gateway" | head -n 1)
+		proto_add_ipv6_route "::" 0 "$gw"
+		[ "$peerdns" = 0 ] || for s in $(_mbimp_ipcfg "$cfg" 6 "DNS ["); do proto_add_dns_server "$s"; done
+	fi
+	proto_send_update "$interface"
+
+	[ "$iptype" != "ipv6" ] && [ -z "$v4static" ] && [ "$dhcp" != 0 ] && {
+		echo "MBIM+MM[$$] Starting DHCP on $ifname"
 		json_init
 		json_add_string name "${interface}_4"
 		json_add_string ifname "@$interface"
-		if [ -n "$v4addr" ] && [ "$dhcp" != 1 ]; then
-			json_add_string proto "static"
-			json_add_array ipaddr
-			for a in $v4addr; do json_add_string "" "$a"; done
-			json_close_array
-			json_add_string gateway "$(_mbimp_ipcfg "$cfg" 4 "Gateway" | head -n 1)"
-		elif [ "$dhcp" != 0 ]; then
-			echo "MBIM+MM[$$] Starting DHCP on $ifname"
-			json_add_string proto "dhcp"
-		fi
+		json_add_string proto "dhcp"
 		[ "$peerdns" = 0 -a "$dhcp" != 1 ] || {
 			json_add_array dns
 			for s in $(_mbimp_ipcfg "$cfg" 4 "DNS ["); do json_add_string "" "$s"; done
@@ -319,27 +336,15 @@ proto_mbimp_setup() {
 		ubus call network add_dynamic "$(json_dump)"
 	}
 
-	[ "$iptype" != "ipv4" ] && {
-		v6addr=$(_mbimp_ipcfg "$cfg" 6 "IP [")
+	[ "$iptype" != "ipv4" ] && [ -z "$v6static" ] && [ "$dhcpv6" != 0 ] && {
+		echo "MBIM+MM[$$] Starting DHCPv6 on $ifname"
 		json_init
 		json_add_string name "${interface}_6"
 		json_add_string ifname "@$interface"
-		if [ -n "$v6addr" ] && [ "$dhcpv6" != 1 ]; then
-			json_add_string proto "static"
-			json_add_array ip6addr
-			for a in $v6addr; do json_add_string "" "$a"; done
-			json_close_array
-			json_add_array ip6prefix
-			for a in $v6addr; do json_add_string "" "$a"; done
-			json_close_array
-			json_add_string ip6gw "$(_mbimp_ipcfg "$cfg" 6 "Gateway" | head -n 1)"
-		elif [ "$dhcpv6" != 0 ]; then
-			echo "MBIM+MM[$$] Starting DHCPv6 on $ifname"
-			json_add_string proto "dhcpv6"
-			json_add_string extendprefix 1
-			[ "$delegate" = "0" ] && json_add_boolean delegate "0"
-			[ "$sourcefilter" = "0" ] && json_add_boolean sourcefilter "0"
-		fi
+		json_add_string proto "dhcpv6"
+		json_add_string extendprefix 1
+		[ "$delegate" = "0" ] && json_add_boolean delegate "0"
+		[ "$sourcefilter" = "0" ] && json_add_boolean sourcefilter "0"
 		[ "$peerdns" = 0 -a "$dhcpv6" != 1 ] || {
 			json_add_array dns
 			for s in $(_mbimp_ipcfg "$cfg" 6 "DNS ["); do json_add_string "" "$s"; done

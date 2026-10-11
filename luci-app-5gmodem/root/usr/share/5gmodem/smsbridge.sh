@@ -585,6 +585,14 @@ case "$1" in
 		# хранить, дальше отметка бесполезна.
 		echo '{"success":true}'
 		exit 0 ;;
+	markread)
+		shift
+		if [ "$(_active_kind)" = "hilink" ] && [ -n "$1" ]; then
+			"$RES/hilink.sh" smsmarkread "$*" "$_TGT_PATH"
+		else
+			echo '{"success":true}'
+		fi
+		exit 0 ;;
 	tg-add)
 		shift
 		_tg_migrate
