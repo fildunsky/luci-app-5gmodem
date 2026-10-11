@@ -71,7 +71,7 @@ _model() {
 	if [ -s "$_mf" ]; then cat "$_mf"; return; fi
 	# ATI на LM960 отдаёт "332" (код продукта Telit) - бесполезен, имя даёт CGMM.
 	sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
-		| grep -oE "LM[0-9]+[A-Za-z0-9-]*" | head -1 | tee "$_mf"
+		| grep -oE "L[MN][0-9]+[A-Za-z0-9-]*" | head -1 | tee "$_mf"
 }
 
 getinfo() {

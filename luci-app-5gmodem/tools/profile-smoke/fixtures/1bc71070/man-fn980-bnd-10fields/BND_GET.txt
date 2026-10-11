@@ -1,0 +1,3 @@
+## same layout as BND_TEST, current selection = everything
+#BND: 0,21,A7E2BB0F38DF,42,81A0090808D7,7042,3,10009000047,6042,0
+OK

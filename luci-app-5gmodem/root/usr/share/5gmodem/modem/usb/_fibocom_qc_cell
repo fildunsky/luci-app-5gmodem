@@ -1,0 +1,157 @@
+_fb_band() {
+	case "$1" in ''|*[!0-9]*) return ;; esac
+	if [ "$1" -gt 500 ]; then
+		band5g "${1#50}"
+	elif [ "$1" -gt 100 ] && [ "$1" -lt 200 ]; then
+		band4g $(($1 - 100))
+	fi
+}
+
+_fb_bw() {
+	case "$1" in ''|*[!0-9]*) return ;; esac
+	if [ "$1" -gt 500 ]; then
+		case "$2" in 0) echo 5 ;; [1-9]|[1-9][0-9]|[1-4][0-9][0-9]) echo "$2" ;; esac
+	else
+		case "$2" in 6) echo 1.4 ;; 15) echo 3 ;; 25) echo 5 ;; 50) echo 10 ;; 75) echo 15 ;; 100) echo 20 ;; esac
+	fi
+}
+
+_fb_cbw() {
+	if [ -n "$_FB_NRBW5" ] && [ "$1" -gt 500 ] 2>/dev/null && [ "$2" -gt 0 ] 2>/dev/null; then
+		echo $(($2 / 5))
+	else
+		echo "$2"
+	fi
+}
+
+_fb_dbm() {
+	case "$1" in -[3-9][0-9]|-1[0-5][0-9]) echo "$1" ;; esac
+}
+
+_fb_cell() {
+	_fb_rp=""; _fb_rq=""; _fb_sn=""
+	_oIFS=$IFS; IFS=','; set -- $1; IFS=$_oIFS
+	case "$2" in
+		4)
+			[ "${11}" -ge -100 ] 2>/dev/null && [ "${11}" -le 100 ] && _fb_sn=$(awk -v v="${11}" 'BEGIN{printf "%0.1f", v/2}')
+			[ "${13}" -ge 0 ] 2>/dev/null && [ "${13}" -le 97 ] && _fb_rp=$((${13} - 141))
+			[ "${14}" -ge 0 ] 2>/dev/null && [ "${14}" -le 34 ] && _fb_rq=$(awk -v v="${14}" 'BEGIN{printf "%0.1f", (v-34)/2-3}')
+			;;
+		9)
+			[ "${11}" -ge 0 ] 2>/dev/null && [ "${11}" -le 127 ] && _fb_sn=$(awk -v v="${11}" 'BEGIN{printf "%0.1f", (v-47)/2}')
+			[ "${13}" -ge 0 ] 2>/dev/null && [ "${13}" -le 126 ] && _fb_rp=$((${13} - 157))
+			[ "${14}" -ge 0 ] 2>/dev/null && [ "${14}" -le 126 ] && _fb_rq=$(awk -v v="${14}" 'BEGIN{printf "%0.1f", (v-87)/2}')
+			;;
+	esac
+}
+
+_fb_n=0
+_fb_slot() {
+	_fb_n=$((_fb_n + 1))
+	[ "$_fb_n" -le 4 ] || return 0
+	eval "S${_fb_n}BAND=\$1; S${_fb_n}PCI=\$2; S${_fb_n}EARFCN=\$3; S${_fb_n}STATE=\$4; S${_fb_n}RSRP=\$5; S${_fb_n}RSRQ=\$6; S${_fb_n}SINR=\$7"
+}
+
+_fb_lte=$(echo "$O" | grep -E '^1,4,' | head -1)
+_fb_nr=$(echo "$O" | grep -E '^1,9,' | head -1)
+_fb_srv="$_fb_lte"
+[ -n "$_fb_srv" ] || _fb_srv="$_fb_nr"
+
+_FB4=""
+_FB5=""
+_fb_nrleg=""
+
+if [ -n "$_fb_srv" ]; then
+	_oIFS=$IFS; IFS=','; set -- $_fb_srv; IFS=$_oIFS
+	case "$5" in ''|*[!0-9A-Fa-f]*) ;; *) T_HEX=$5; T_DEC=$(printf "%d" "0x$5" 2>/dev/null) ;; esac
+	[ -n "$7" ] && EARFCN=$7
+	[ -n "$8" ] && PCI=$8
+	_fb_b=$(_fb_band "$9")
+	_fb_w=$(_fb_bw "$9" "${10}")
+	if [ -n "$_fb_b" ]; then
+		PBAND="$_fb_b"
+		[ -n "$_fb_w" ] && PBAND="$_fb_b @$_fb_w MHz"
+		case "$2" in 4) _FB4="$_fb_b" ;; *) _FB5="$_fb_b" ;; esac
+	fi
+	_fb_cell "$_fb_srv"
+	[ -n "$_fb_rp" ] && RSRP=$_fb_rp
+	[ -n "$_fb_rq" ] && RSRQ=$_fb_rq
+	[ -n "$_fb_sn" ] && SINR=$_fb_sn
+fi
+
+if [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
+	RSSI=$((2 * CSQ - 113))
+fi
+
+IFS="
+"
+for LINE in $(echo "$O" | grep -E '^PCC: ?[0-9]'); do
+	_oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
+	_fb_b=$(_fb_band "$2")
+	[ -n "$_fb_b" ] || continue
+	_fb_w=$(_fb_bw "$2" "$(_fb_cbw "$2" "$5")")
+	_fb_bf="$_fb_b"
+	[ -n "$_fb_w" ] && _fb_bf="$_fb_b @$_fb_w MHz"
+	if [ "$2" -gt 500 ] && [ -n "$_fb_lte" ]; then
+		_fb_cell "$_fb_nr"
+		[ -n "$_fb_rp" ] || _fb_rp=$(eval "_fb_dbm \"\${$#}\"")
+		_fb_nrleg="$_fb_bf|$3|$4|$_fb_rp|$_fb_rq|$_fb_sn"
+		_FB5="$_fb_b"
+	elif [ "$2" -gt 500 ]; then
+		PBAND="$_fb_bf"; PCI=$3; EARFCN=$4; _FB5="$_fb_b"
+	else
+		PBAND="$_fb_bf"; PCI=$3; EARFCN=$4; _FB4="$_fb_b"
+	fi
+done
+
+for LINE in $(echo "$O" | grep -E '^SCC ?[0-9]+: ?[0-9]'); do
+	_oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
+	_fb_st=$2
+	_fb_b=$(_fb_band "$4")
+	[ -n "$_fb_b" ] || continue
+	_fb_w=$(_fb_bw "$4" "$(_fb_cbw "$4" "$7")")
+	_fb_bf="$_fb_b"
+	[ -n "$_fb_w" ] && _fb_bf="$_fb_b @$_fb_w MHz"
+	_fb_rp=$(eval "_fb_dbm \"\${$#}\"")
+	if [ "$_fb_st" = 2 ]; then
+		if [ "$4" -gt 500 ]; then
+			_FB5="${_FB5:+$_FB5 + }$_fb_b"
+		else
+			_FB4="${_FB4:+$_FB4 + }$_fb_b"
+		fi
+		_fb_slot "$_fb_bf" "$5" "$6" activated "$_fb_rp" "" ""
+	else
+		_fb_slot "$_fb_bf" "$5" "$6" deactivated "$_fb_rp" "" ""
+	fi
+done
+
+if [ -z "$_fb_nrleg" ] && [ -n "$_fb_lte" ] && [ -n "$_fb_nr" ]; then
+	_oIFS=$IFS; IFS=','; set -- $_fb_nr; IFS=$_oIFS
+	_fb_b=$(_fb_band "$9")
+	if [ -n "$_fb_b" ]; then
+		_fb_w=$(_fb_bw "$9" "${10}")
+		_fb_bf="$_fb_b"
+		[ -n "$_fb_w" ] && _fb_bf="$_fb_b @$_fb_w MHz"
+		_fb_cell "$_fb_nr"
+		_fb_nrleg="$_fb_bf|$8|$7|$_fb_rp|$_fb_rq|$_fb_sn"
+		_FB5="$_fb_b"
+	fi
+fi
+IFS=" 	
+"
+
+if [ -n "$_fb_nrleg" ]; then
+	_oIFS=$IFS; IFS='|'; set -- $_fb_nrleg; IFS=$_oIFS
+	_fb_slot "$1" "$2" "$3" activated "$4" "$5" "$6"
+fi
+
+if [ -n "$_FB4" ] && [ -n "$_FB5" ]; then
+	MODE="5G NSA | $_FB4 / $_FB5"
+elif [ -n "$_FB5" ]; then
+	MODE="5G SA | $_FB5"
+elif [ -n "$_FB4" ]; then
+	case "$_FB4" in
+		*" + "*) MODE="LTE-A | $_FB4" ;;
+		*) MODE="LTE | $_FB4" ;;
+	esac
+fi

@@ -10,12 +10,54 @@ _sierra_cnd() {
 	_sc_p=$(cat "$_sc_f" 2>/dev/null)
 	for _sc_try in ${_sc_p:+"$_sc_p"} A710 F710; do
 		sms_tool -d $_DEVICE at "AT!ENTERCND=\"$_sc_try\"" >/dev/null 2>&1
-		case "$(sms_tool -d $_DEVICE at 'AT!BAND?' 2>/dev/null)" in
-			*[0-9a-fA-F][0-9a-fA-F],*) printf '%s' "$_sc_try" > "$_sc_f" 2>/dev/null; return 0 ;;
-		esac
+		if sms_tool -d $_DEVICE at 'AT!BAND?' 2>/dev/null | grep -q '[0-9A-Fa-f]\{16\}'; then
+			printf '%s' "$_sc_try" > "$_sc_f" 2>/dev/null; return 0
+		fi
 	done
 	logger -t 5gmodem "sierra: AT!ENTERCND rejected both A710 and F710 on $_DEVICE - band control unavailable (custom password?)"
 	return 1
+}
+
+_sierra_lte_hex() {
+	printf '%s\n' "$1" | tr -d '\r' | awk -v want="$2" '
+		function cols(s,   n, w, i, nm) {
+			n = split(s, w, /[ ,]+/)
+			for (i = 1; i <= n; i++) {
+				if (w[i] == "Mask") {
+					c++; nm = name; name = ""
+					if (w[i + 1] ~ /^[0-9]$/) { nm = nm w[i + 1]; i++ }
+					col[c] = nm
+				} else if (w[i] != "Band" && w[i] != "Index" && w[i] != "Name" && w[i] != "") name = name w[i]
+			}
+		}
+		function masks(s,   n, t, i) {
+			n = split(s, t, /[ ,]+/)
+			for (i = 1; i <= n; i++) if (t[i] ~ /^[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]$/) m[++k] = t[i]
+		}
+		function emit(   j, l1, l2) {
+			l1 = ""; l2 = ""
+			if (c) {
+				for (j = 1; j <= k; j++) {
+					if ((col[j] == "L" || col[j] == "L1") && l1 == "") l1 = m[j]
+					else if (col[j] == "L2") l2 = m[j]
+				}
+			} else {
+				l1 = m[2]; if (k >= 4) l2 = m[4]
+			}
+			if (l1 != "") printf "0x%s%s\n", l2, l1
+			done = 1
+		}
+		done { next }
+		pend {
+			if ($0 ~ /^[ \t]*[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]([ \t]+[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f])*[ \t]*$/) { masks($0); emit(); next }
+			emit(); next
+		}
+		/Band Mask/ && !k { cols($0); next }
+		/^[0-9a-fA-F][0-9a-fA-F],/ {
+			if (want == "all" && $0 !~ /^00,/) next
+			masks($0); pend = 1; next
+		}
+		END { if (pend && !done) emit() }'
 }
 
 getinfo() {
@@ -25,15 +67,15 @@ getinfo() {
 getsupportedbands() {
 	_sierra_cnd || return 1
 	O=$(sms_tool -d $_DEVICE at 'AT!BAND=?')
-	HEX=$(echo "$O" | awk '/^00, All bands/{printf "0x%s\n", $5}')
-	[ "$HEX" = "0x" ] || hextobands "$HEX"
+	HEX=$(_sierra_lte_hex "$O" all)
+	if [ -n "$HEX" ] && [ "$HEX" != "0x" ]; then hextobands "$HEX"; fi
 }
 
 getbands() {
 	_sierra_cnd || return 1
 	O=$(sms_tool -d $_DEVICE at 'AT!BAND?')
-	HEX=$(echo "$O" | awk -F, '/^[0-9a-fA-F][0-9a-fA-F],/{print $3}' | awk '{printf "0x%s\n", $2}')
-	[ "$HEX" = "0x" ] || hextobands "$HEX"
+	HEX=$(_sierra_lte_hex "$O" cur)
+	if [ -n "$HEX" ] && [ "$HEX" != "0x" ]; then hextobands "$HEX"; fi
 }
 
 setbands() {

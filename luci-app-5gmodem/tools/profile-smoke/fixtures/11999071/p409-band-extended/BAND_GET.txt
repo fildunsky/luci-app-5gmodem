@@ -1,0 +1,4 @@
+## 4pda 444921#409 (EM7455, 9x30), after AT!ENTERCND
+Index, Name, GW Band Mask L Band Mask TDS Band Mask
+00, All bands                     0002000007C00000 00000100130818DF 0000000000000000
+OK

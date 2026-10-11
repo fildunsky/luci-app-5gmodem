@@ -1,0 +1,5 @@
+S1BAND=B7 (2600 MHz) @20 MHz
+S1STATE=activated
+S2BAND=B1 (2100 MHz) @15 MHz
+S2STATE=deactivated
+MODE=LTE-A | B3 (1800 MHz) + B7 (2600 MHz)

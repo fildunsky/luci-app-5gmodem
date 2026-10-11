@@ -9,7 +9,7 @@ O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qcainfo;+qeng=\"servingcell\";+qspn")
 _qc_spn2
 
 if [ "x$MODE_NUM" = "x7" ]; then
-	echo "$O" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE-A |"
+	_qc_act "$O" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE-A |"
 fi
 
 T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{print $5}')
@@ -17,7 +17,7 @@ if [ -n "$T" ]; then
 	B=$(echo $T | sed 's/"LTE BAND \(.*\)"/\1/')
 	MODE="$MODE $(band4g ${B})"
 
-	T1=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{gsub(" ", "-");print $5}')
+	T1=$(_qc_act "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{gsub(" ", "-");print $5}')
 	if [ -n "$T1" ]; then
 		for T in $T1; do
 			B=$(echo $T | sed 's/"LTE-BAND-\(.*\)"/\1/')

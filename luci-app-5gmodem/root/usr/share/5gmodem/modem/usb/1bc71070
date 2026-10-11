@@ -173,6 +173,27 @@ if [ -n "$_FN_C" ]; then
 		*) [ "$_FN_RQ" -ge 1 ] && [ "$_FN_RQ" -le 34 ] && \
 			RSRQ=$(awk -v n="$_FN_RQ" 'BEGIN { printf "%.1f", n * 0.5 - 19.5 }' | sed 's/\.0$//') ;;
 	esac
+	case "$RSRP" in
+		''|-)
+			_FN_SQ=$(printf '%s' "$_FN_C" | cut -d, -f7 | tr -dc '0-9')
+			_FN_SP=$(printf '%s' "$_FN_C" | cut -d, -f8 | tr -dc '0-9')
+			_FN_SS=$(printf '%s' "$_FN_C" | cut -d, -f9 | tr -dc '0-9')
+			case "$_FN_SP" in
+				''|0|255) ;;
+				*) [ "$_FN_SP" -le 126 ] && RSRP=$(( _FN_SP - 157 )) ;;
+			esac
+			case "$_FN_SQ" in
+				''|0|255) ;;
+				*) [ "$_FN_SQ" -le 126 ] && \
+					RSRQ=$(awk -v n="$_FN_SQ" 'BEGIN { printf "%.1f", n * 0.5 - 43.5 }' | sed 's/\.0$//') ;;
+			esac
+			case "$_FN_SS" in
+				''|0|255) ;;
+				*) [ "$_FN_SS" -le 127 ] && \
+					SINR=$(awk -v n="$_FN_SS" 'BEGIN { printf "%.1f", n * 0.5 - 23.5 }' | sed 's/\.0$//') ;;
+			esac
+			;;
+	esac
 fi
 
 # RSSI отдельной командой НЕ добираем: +CSQ уже пришёл в общей цепочке
@@ -211,7 +232,7 @@ _FN_NR=$(printf '%s\n' "$O" | awk '
 _FN_CA=$(printf '%s\n' "$O" | awk '
 	/^#CAINFOEXT:/ { rat = ($0 ~ /LTE/) ? "LTE" : ""; next }
 	rat == "LTE" && /^(PCC|SCC[0-9]*)-/ {
-		bc = ch = bw = pci = rsrp = rsrq = rssi = sinr = "-"
+		bc = ch = bw = pci = rsrp = rsrq = rssi = sinr = st = "-"
 		if (match($0, /BandClass:[ ]*[0-9]+/))   bc   = substr($0, RSTART + 11, RLENGTH - 11) + 0
 		if (match($0, /RX_CH:[ ]*[0-9]+/))       ch   = substr($0, RSTART + 6,  RLENGTH - 6) + 0
 		if (match($0, /DL_BW:[ ]*[0-9]+/))       bw   = substr($0, RSTART + 6,  RLENGTH - 6) + 0
@@ -220,12 +241,14 @@ _FN_CA=$(printf '%s\n' "$O" | awk '
 		if (match($0, /RSRQ:[ ]*-?[0-9]+/))      rsrq = substr($0, RSTART + 5,  RLENGTH - 5) + 0
 		if (match($0, /RSSI:[ ]*-?[0-9]+/))      rssi = substr($0, RSTART + 5,  RLENGTH - 5) + 0
 		if (match($0, /SINR:[ ]*-?[0-9]+/))      sinr = substr($0, RSTART + 5,  RLENGTH - 5) + 0
-		printf "%s:%s:%s:%s:%s:%s:%s:%s\n", bc, ch, bw, pci, rsrp, rsrq, rssi, sinr
+		if (match($0, /STATE:[ ]*[0-9]+/))       st   = substr($0, RSTART + 6,  RLENGTH - 6) + 0
+		printf "%s:%s:%s:%s:%s:%s:%s:%s:%s\n", bc, ch, bw, pci, rsrp, rsrq, rssi, sinr, st
 	}
 ')
 
 if [ -n "$_FN_CA" ]; then
 	_FN_I=0
+	_FN_ACT=0
 	_FN_MODE=""
 	_FN_SIFS="$IFS"; IFS='
 '
@@ -239,6 +262,7 @@ if [ -n "$_FN_CA" ]; then
 		_fn_rq=$(printf '%s' "$_fn_l" | cut -d: -f6)
 		_fn_rs=$(printf '%s' "$_fn_l" | cut -d: -f7)
 		_fn_sn=$(printf '%s' "$_fn_l" | cut -d: -f8)
+		_fn_st=$(printf '%s' "$_fn_l" | cut -d: -f9)
 		IFS='
 '
 		# НЕСУЩАЯ БЕЗ КАНАЛА - НЕ НЕСУЩАЯ. Руководство: у недействительной SCC
@@ -271,17 +295,22 @@ if [ -n "$_FN_CA" ]; then
 			[ -n "$_fn_rs" ] && RSSI="$_fn_rs"
 			[ -n "$_fn_sn" ] && SINR="$_fn_sn"
 			_FN_MODE="| $_fn_b"
+			_FN_ACT=1
 		else
-			_FN_MODE="$_FN_MODE + $_fn_b"
+			_fn_ss="activated"
+			case "$_fn_st" in
+				''|-|2) _FN_MODE="$_FN_MODE + $_fn_b"; _FN_ACT=$(( _FN_ACT + 1 )) ;;
+				*) _fn_ss="deactivated"; _fn_sn="" ;;
+			esac
 			case "$_FN_I" in
 				1) S1BAND="$_fn_bf"; S1EARFCN="$_fn_ch"; S1PCI="$_fn_pci"
-				   S1RSRP="$_fn_rp"; S1RSRQ="$_fn_rq"; S1SINR="$_fn_sn"; S1STATE="activated" ;;
+				   S1RSRP="$_fn_rp"; S1RSRQ="$_fn_rq"; S1SINR="$_fn_sn"; S1STATE="$_fn_ss" ;;
 				2) S2BAND="$_fn_bf"; S2EARFCN="$_fn_ch"; S2PCI="$_fn_pci"
-				   S2RSRP="$_fn_rp"; S2RSRQ="$_fn_rq"; S2SINR="$_fn_sn"; S2STATE="activated" ;;
+				   S2RSRP="$_fn_rp"; S2RSRQ="$_fn_rq"; S2SINR="$_fn_sn"; S2STATE="$_fn_ss" ;;
 				3) S3BAND="$_fn_bf"; S3EARFCN="$_fn_ch"; S3PCI="$_fn_pci"
-				   S3RSRP="$_fn_rp"; S3RSRQ="$_fn_rq"; S3SINR="$_fn_sn"; S3STATE="activated" ;;
+				   S3RSRP="$_fn_rp"; S3RSRQ="$_fn_rq"; S3SINR="$_fn_sn"; S3STATE="$_fn_ss" ;;
 				4) S4BAND="$_fn_bf"; S4EARFCN="$_fn_ch"; S4PCI="$_fn_pci"
-				   S4RSRP="$_fn_rp"; S4RSRQ="$_fn_rq"; S4SINR="$_fn_sn"; S4STATE="activated" ;;
+				   S4RSRP="$_fn_rp"; S4RSRQ="$_fn_rq"; S4SINR="$_fn_sn"; S4STATE="$_fn_ss" ;;
 			esac
 		fi
 		_FN_I=$(( _FN_I + 1 ))
@@ -292,7 +321,7 @@ if [ -n "$_FN_CA" ]; then
 		# (несущих больше одной) или обычный LTE.
 		if [ "$_FN_NR" = 1 ]; then
 			_FN_TECH="5G NSA"
-		elif [ "$_FN_I" -gt 1 ]; then
+		elif [ "$_FN_ACT" -gt 1 ]; then
 			_FN_TECH="LTE-A"
 		else
 			_FN_TECH="LTE"
@@ -313,7 +342,7 @@ fi
 # одинаковым форматом ответа. Всё - из УЖЕ полученной цепочки, лишних заходов
 # в порт нет.
 _FN_V=$(printf '%s\n' "$O" | sed -n 's/^#CQI: *\([0-9]\{1,\}\).*/\1/p' | head -1)
-[ -n "$_FN_V" ] && CQI="$_FN_V"
+[ -n "$_FN_V" ] && [ "$_FN_V" != 31 ] && CQI="$_FN_V"
 
 # Датчиков несколько - берём МАКСИМУМ: честнее показать самую горячую точку
 # модуля, чем средний или случайно первый датчик.
@@ -430,6 +459,7 @@ if [ "$_FN_NB_AGE" -ge 30 ] 2>/dev/null && [ "$_FN_NB_OK" = 1 ]; then
 	for _fn_nb in $_FN_NB_OUT; do
 		case "$_fn_nb" in *RSRP*) ;; *) continue ;; esac
 		IFS="$_FN_SIFS"
+		_fn_nb=$(printf '%s' "$_fn_nb" | sed 's/ NR_.*//')
 		# Id у соседей Telit печатает ШЕСТНАДЦАТЕРИЧНЫМ PCI.
 		_fn_ph=$(printf '%s' "$_fn_nb" | sed -n 's/.*Id:\([0-9A-Fa-f]*\).*/\1/p')
 		if [ -n "$_fn_ph" ]; then

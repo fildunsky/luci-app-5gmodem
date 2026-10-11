@@ -1,0 +1,2 @@
+## synthetic per RG50xQ manual 5.21: LTE PCC only, NR leg not listed
++QCAINFO: "PCC",1650,100,"LTE BAND 3",1,12,-99,-12,-67,11

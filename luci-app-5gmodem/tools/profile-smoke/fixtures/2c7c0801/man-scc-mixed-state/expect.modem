@@ -1,0 +1,5 @@
+MODE=LTE-A | B7 (2600 MHz) + B3 (1800 MHz)
+S1STATE=deactivated
+S2STATE=activated
+S3STATE=deactivated
+S2BAND=B3 (1800 MHz) @15 MHz

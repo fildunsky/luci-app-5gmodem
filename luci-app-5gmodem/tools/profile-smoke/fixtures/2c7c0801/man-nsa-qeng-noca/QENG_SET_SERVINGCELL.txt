@@ -1,0 +1,4 @@
+## Quectel RG50xQ/RM5xxQ AT manual V1.2 5.20 example (EN-DC)
++QENG: "servingcell","NOCONN"
++QENG: "LTE","FDD",460,01,5F1EA15,12,1650,3,5,5,DE10,-99,-12,-67,11,9,230,-
++QENG:"NR5G-NSA",460,01,747,-71,13,-11,627264,78,12,1
