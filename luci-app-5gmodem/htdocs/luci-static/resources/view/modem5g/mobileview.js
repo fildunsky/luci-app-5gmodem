@@ -121,6 +121,7 @@ function esc(s) {
 
 function render(j) {
 	var rat = mutil.qualRat(j.mode);
+	mutil.qualRssiCap(j.rsrq);
 	var cs = carriers(j);
 	var defs = (rat === 'umts')
 		? [ [ 'rscp', 'RSCP', 'dBm', j.rscp ], [ 'ecio', 'Ec/Io', 'dB', j.ecio ], [ 'rssi', 'RSSI', 'dBm', j.rssi ] ]
@@ -167,7 +168,7 @@ function clearSig() {
 }
 
 return baseclass.extend({
-	API: 30206,
+	API: 30207,
 
 	prepare: function(root) {
 		st = null;

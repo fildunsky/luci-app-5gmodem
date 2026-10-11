@@ -219,7 +219,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30206, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(30207, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();
@@ -486,6 +486,7 @@ return view.extend({
 			setMetric(mSinr, isNaN(sinr) ? null : sinr.toFixed(1), arrow);
 			setMetric(mRsrp, isNaN(rsrp) ? null : rsrp);
 			setMetric(mRsrq, isNaN(rsrq) ? null : rsrq);
+			mutil.qualRssiCap(isNaN(rsrq) ? null : rsrq);
 			setMetric(mRssi, (rssiRaw == null || rssiRaw === '') ? null : parseInt(rssiRaw, 10));
 
 			var enb = (j.enbid != null && j.enbid !== '' && j.enbid !== '-') ? String(j.enbid) : '';

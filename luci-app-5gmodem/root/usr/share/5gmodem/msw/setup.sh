@@ -64,6 +64,7 @@ setup_one_modem() {
 		_tnet=$(hilink_netdev "$P")
 		if [ -n "$_tnet" ]; then
 			setup_hilink "$P" "$_tnet" tether >/dev/null
+			( exec 1000>&- 7>&- 8>&- 9>&-; tether_web_recheck "$P" "$_tnet" ) >/dev/null 2>&1 </dev/null &
 		else
 			logger -t 5gmodem "tether: $P looks like USB tethering but has no network device yet"
 		fi

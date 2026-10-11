@@ -785,6 +785,24 @@ fw_zone_verdict() {
 # часами без единого события, в другом (линк high-speed) отваливается через
 # 10 секунд ПОСЛЕ установления соединения, то есть ровно когда пошёл трафик и
 # вырос ток.
+netifd_crash_verdict() {
+	_nc_n=0
+	for _nc_f in /tmp/netifd.*.core /tmp/core.netifd* /tmp/netifd.core; do
+		[ -f "$_nc_f" ] || continue
+		_nc_n=$((_nc_n + 1))
+	done
+	if [ "$_nc_n" = 0 ]; then
+		echo "no netifd crash dumps in /tmp - netifd did not crash since boot (or core dumps are off)"
+		return 0
+	fi
+	echo "PROBLEM: netifd crashed $_nc_n time(s) since boot (core dumps in /tmp):"
+	ls -l /tmp/netifd.*.core /tmp/core.netifd* /tmp/netifd.core 2>/dev/null | awk '{ print "  " $6, $7, $8, $9 }'
+	echo "  Every crash restarts ALL networking (LAN, Wi-Fi, uplinks). A known trigger on OpenWrt 25.12"
+	echo "  (netifd 2026-02-26, fixed upstream in 2026-07) is taking down an interface whose address lives"
+	echo "  on a dynamic child <iface>_4/_6 (qmi, mbim): the child is freed while netifd still uses it."
+	echo "  Interfaces of this app on mbimp no longer use such children; other protocols still do."
+}
+
 usb_flap_verdict() {
 	_uf_p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	[ -n "$_uf_p" ] || { echo "no active modem is selected"; return; }
@@ -2375,6 +2393,13 @@ report() {
 		case "$t" in ""|*[!0-9]*) ;; *) echo "snapshot age: $(( $(uptime_s) - t )) s" ;; esac
 		sed -e "s/^{//" -e "s/}\$//" -e "s/,\"/\n\"/g" "$f"
 		echo
+		mt=$(jsonfilter -i "$f" -e "@.mtemp" 2>/dev/null | sed -n "s/^\([0-9][0-9]*\).*/\1/p")
+		if [ -n "$mt" ] && [ "$mt" -ge 110 ] 2>/dev/null; then
+			echo "TEMPERATURE: the modem reports $mt C. No modem works at that temperature (they shut down near 100 C),"
+			echo "  so this is almost certainly a false sensor reading. On Foxconn T99W640 it is a known firmware fault:"
+			echo "  the module believes it is overheating and drops its registration every ~20 seconds."
+			echo "  Check the modem by touch; if it is only warm, the sensor or its calibration is at fault, not cooling."
+		fi
 	'
 	# QMI-ДОПОЛНЕНИЯ. У модема без AT-порта (или под ModemManager) текущий
 	# диапазон, полоса и RSRP приходят ТОЛЬКО отсюда, и когда в карточке стоит
@@ -2606,6 +2631,7 @@ report() {
 	# (живой симптом: пинга до роутера нет, инет есть). Если тут что-то есть -
 	# вот оно и есть главная улика.
 	run 10 "Uncommitted uci changes (landmines)" sh -c 'uci changes 2>/dev/null | head -40 | sed -E "s/^([^=]*(token|secret|pass|psk|pincode|\\.pin|\\.puk)[^=]*|[^=]*[._]key\\+?)=.*/\\1='"'"'<hidden>'"'"'/"; [ -z "$(uci changes 2>/dev/null)" ] && echo "(empty - no landmines)"'
+	run 10 "netifd crashes (verdict)" netifd_crash_verdict
 	run 10 "USB power and stability (verdict)" usb_flap_verdict
 	run 10 "On the bus but unconfigured? (verdict)" usb_unconfigured_verdict
 	run 15 "Did usb_modeswitch break the composition? (verdict)" usbmode_verdict

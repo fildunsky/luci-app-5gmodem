@@ -186,6 +186,26 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	echo "$_hif"
 }
 
+tether_web_recheck() {   # $1 - usb-путь, $2 - сетевое имя
+	_tw_n=0
+	while [ "$_tw_n" -lt 12 ]; do
+		sleep 5
+		_tw_n=$((_tw_n + 1))
+		usb_path_present "$1" || return 0
+		[ "$(uci -q get "$CFG.$(secname "$1").kind")" = tether ] || return 0
+		_tw_r=$("$RES/hilink.sh" probe "$1" 2>/dev/null)
+		case "$_tw_r" in
+			*'"hilink":1'*)
+				_tw_c=$(printf '%s' "$_tw_r" | jsonfilter -e '@.classify' 2>/dev/null)
+				[ "$_tw_c" = zte ] && uci -q set "$CFG.$(secname "$1").hl_api=zte"
+				setup_hilink "$1" "$2" hilink >/dev/null
+				rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
+				logger -t 5gmodem "tether: $1 answers a modem web API (${_tw_c:-unknown}) - it is a stick, not a phone"
+				return 0 ;;
+		esac
+	done
+}
+
 # Перевести HiLink-модем в режим с AT-портами (у Huawei это «debug mode»).
 #
 # ЗАЧЕМ. В обычном режиме такой модем отдаёт только веб-API, где нет ни TAC, ни

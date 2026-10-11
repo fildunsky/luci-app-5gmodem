@@ -86,7 +86,7 @@ msgid "Very weak"
 msgstr "Очень слабый"
 
 msgid "Excellent"
-msgstr "Отлично"
+msgstr "Отличный"
 
 msgid "Mid cell"
 msgstr "Удовлетворительно"

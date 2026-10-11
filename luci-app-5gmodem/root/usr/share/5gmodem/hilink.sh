@@ -308,7 +308,7 @@ _zte_login() {   # $1 - адрес; печатает stok
 		-H "X-Requested-With: XMLHttpRequest" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		-d "isTest=false&goformId=LOGIN&password=$(_zte_b64 "$(_zte_pass)")" \
-		"http://$1/goform/goform_set_cmd_process" 2>/dev/null)
+		"http://$1/$(_zte_setpath "$1")" 2>/dev/null)
 	_zl_t=$(printf '%s' "$_zl_h" | sed -n 's/.*[Ss]et-[Cc]ookie: *stok=\([^;[:space:]]*\).*/\1/p' | head -1)
 	if [ -n "$_zl_t" ]; then
 		rm -f "$_zl_bad"
@@ -321,6 +321,27 @@ _zte_login() {   # $1 - адрес; печатает stok
 	return 1
 }
 
+_zte_paths() {
+	_zp_f="$CACHE_DIR/ztepath_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"
+	if [ -s "$_zp_f" ] && [ -z "$(find "$_zp_f" -mmin +30 2>/dev/null)" ]; then
+		cat "$_zp_f"; return 0
+	fi
+	_zp_src=$(_srcip_for "" "$1")
+	for _zp_b in "goform/goform_get_cmd_process goform/goform_set_cmd_process" "reqproc/proc_get reqproc/proc_post"; do
+		_zp_r=$(curl -s --max-time 5 ${_zp_src:+--interface "$_zp_src"} -A "$UA" \
+			-H "Referer: http://$1/index.html" \
+			-H "X-Requested-With: XMLHttpRequest" \
+			"http://$1/${_zp_b%% *}?isTest=false&multi_data=1&cmd=modem_main_state" 2>/dev/null)
+		case "$_zp_r" in
+			*modem_main_state*) printf '%s' "$_zp_b" > "$_zp_f"; printf '%s' "$_zp_b"; return 0 ;;
+		esac
+	done
+	printf 'goform/goform_get_cmd_process goform/goform_set_cmd_process'
+}
+
+_zte_getpath() { _zgp=$(_zte_paths "$1"); printf '%s' "${_zgp%% *}"; }
+_zte_setpath() { _zsp=$(_zte_paths "$1"); printf '%s' "${_zsp##* }"; }
+
 _zte_get() {   # $1 - адрес, $2 - список cmd через запятую
 	_zg_src=$(_srcip_for "" "$1")
 	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
@@ -328,7 +349,7 @@ _zte_get() {   # $1 - адрес, $2 - список cmd через запяту�
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
 		${_zg_tok:+-b "stok=$_zg_tok"} \
-		"http://$1/goform/goform_get_cmd_process?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
+		"http://$1/$(_zte_getpath "$1")?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
 }
 
 _zte_set() {   # $1 - адрес, $2 - тело goformId=...
@@ -338,7 +359,7 @@ _zte_set() {   # $1 - адрес, $2 - тело goformId=...
 		-H "X-Requested-With: XMLHttpRequest" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		-d "isTest=false&$2" \
-		"http://$1/goform/goform_set_cmd_process" 2>/dev/null
+		"http://$1/$(_zte_setpath "$1")" 2>/dev/null
 }
 
 _zj() { printf '%s' "$1" | jsonfilter -e "@.$2" 2>/dev/null; }
@@ -348,6 +369,15 @@ _vidpid_for() {
 	_vf_p="$1"
 	[ -n "$_vf_p" ] || _vf_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	uci -q get "$CFG.m_$(echo "$_vf_p" | sed 's/[^A-Za-z0-9]/_/g').vidpid"
+}
+
+_api_vid() {
+	_av_p="$1"
+	[ -n "$_av_p" ] || _av_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	if [ "$(uci -q get "$CFG.m_$(echo "$_av_p" | sed 's/[^A-Za-z0-9]/_/g').hl_api")" = zte ]; then
+		echo "19d2:web"; return 0
+	fi
+	_vidpid_for "$_av_p"
 }
 
 _tk() { echo "$1" | tr -c 'A-Za-z0-9' '_'; }
@@ -546,7 +576,7 @@ zte_metrics_json() {
 		    _zm_m="/tmp/5gmodem/zteapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
 		    if [ ! -f "$_zm_m" ]; then
 			: > "$_zm_m"
-			logger -t 5gmodem "hilink(zte): $_a did not answer goform_get_cmd_process (first 120 chars: $(printf '%s' "$_r" | tr '\n' ' ' | head -c 120))"
+			logger -t 5gmodem "hilink(zte): $_a did not answer $(_zte_getpath "$_a") (first 120 chars: $(printf '%s' "$_r" | tr '\n' ' ' | head -c 120))"
 		    fi
 		    return 1 ;;
 	esac
@@ -811,7 +841,7 @@ netgear_metrics_json() {
 metrics_json() {
 	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
-	case "$(_vidpid_for "$_HLP")" in
+	case "$(_api_vid "$_HLP")" in
 		19d2:0565) yota_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
 		19d2:*)
 			tenda_metrics_json "$_HLP"
@@ -1391,6 +1421,16 @@ tenda_sms_send() {
 		printf '{"success":false,"code":"%s"}\n' "$(_zj "$_td_r" errCode)"; fi
 }
 
+tenda_sms_markread() {
+	_tr_p=$(_hl_path "$2")
+	_tr_a=$(_addr_for "$_tr_p") || { echo '{"success":false}'; return 1; }
+	_tr_ids=$(printf '%s' "$1" | tr -c '0-9' ' ' | awk '{ for (i = 1; i <= NF; i++) printf "%s\"%s\"", (i > 1 ? "," : ""), $i }')
+	[ -n "$_tr_ids" ] || { echo '{"success":true}'; return 0; }
+	_tr_r=$(_tenda_set "$_tr_a" viewSms "{\"viewSms\":{\"id\":[$_tr_ids]}}" "$_tr_p")
+	if _tenda_ok "$_tr_r"; then echo '{"success":true}'; else
+		printf '{"success":false,"code":"%s"}\n' "$(_zj "$_tr_r" errCode)"; fi
+}
+
 tenda_sms_delete() {
 	_tx_p=$(_hl_path "$2")
 	_tx_a=$(_addr_for "$_tx_p") || { echo '{"success":false}'; return 1; }
@@ -1764,17 +1804,17 @@ case "$1" in
 	# Подключить/отключить передачу данных. У ZTE - goform, best-effort
 	# (часть прошивок требует веб-логина; отказ безвреден).
 	connect)
-		case "$(_vidpid_for "$2")" in
+		case "$(_api_vid "$2")" in
 			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=CONNECT_NETWORK" >/dev/null ;;
 			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>1</dataswitch>" "$2" ;;
 		esac ;;
 	disconnect)
-		case "$(_vidpid_for "$2")" in
+		case "$(_api_vid "$2")" in
 			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=DISCONNECT_NETWORK" >/dev/null ;;
 			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>0</dataswitch>" "$2" ;;
 		esac ;;
 	reboot)
-		case "$(_vidpid_for "$2")" in
+		case "$(_api_vid "$2")" in
 			19d2:*)
 				_a=$(_addr_for "$2") || exit 0
 				if _tenda_on "$_a"; then
@@ -1800,7 +1840,7 @@ case "$1" in
 			normal|0) _m=0 ;;
 			*) echo '{"error":"mode must be debug or normal"}'; exit 0 ;;
 		esac
-		case "$(_vidpid_for "$3")" in
+		case "$(_api_vid "$3")" in
 			19d2:*)
 				_a=$(_addr_for "$(_hl_path "$3")") || { echo '{"success":false,"code":"noaddr"}'; exit 0; }
 				_r=$(_zte_set "$_a" "goformId=SET_DEVICE_MODE&debug_enable=$_m")
@@ -1824,21 +1864,25 @@ case "$1" in
 		;;
 	# У ZTE-стика своё SMS-хранилище за goform (см. блок «SMS у ZTE»), у
 	# остальных - Huawei-XML. Развилка та же, что у connect/reboot.
-	smsread)     case "$(_vidpid_for "$3")" in
+	smsread)     case "$(_api_vid "$3")" in
 			19d2:*) if _is_tenda "$3"; then tenda_sms_list "${2:-in}" "$3"; else zte_sms_list "${2:-in}" "$3"; fi ;;
 			*) sms_list "${2:-in}" "$3" ;;
 		esac ;;
-	smscount)    case "$(_vidpid_for "$2")" in
+	smscount)    case "$(_api_vid "$2")" in
 			19d2:*) if _is_tenda "$2"; then tenda_sms_count "$2"; else zte_sms_count "$2"; fi ;;
 			*) api_get /api/sms/sms-count "$2" ;;
 		esac ;;
-	smssend)     case "$(_vidpid_for "$4")" in
+	smssend)     case "$(_api_vid "$4")" in
 			19d2:*) if _is_tenda "$4"; then tenda_sms_send "$2" "$3" "$4"; else zte_sms_send "$2" "$3" "$4"; fi ;;
 			*) sms_send "$2" "$3" "$4" ;;
 		esac ;;
-	smsdel)      case "$(_vidpid_for "$3")" in
+	smsdel)      case "$(_api_vid "$3")" in
 			19d2:*) if _is_tenda "$3"; then tenda_sms_delete "$2" "$3"; else zte_sms_delete "$2" "$3"; fi ;;
 			*) sms_delete "$2" "$3" ;;
+		esac ;;
+	smsmarkread) case "$(_api_vid "$3")" in
+			19d2:*) if _is_tenda "$3"; then tenda_sms_markread "$2" "$3"; else echo '{"success":true}'; fi ;;
+			*) echo '{"success":true}' ;;
 		esac ;;
 	ussd)        hl_ussd "$2" "$3" ;;
 	getbands)    hl_getbands "$2" ;;

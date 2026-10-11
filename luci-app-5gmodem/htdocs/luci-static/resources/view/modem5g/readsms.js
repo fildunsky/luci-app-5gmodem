@@ -442,6 +442,17 @@ function sms_seen_add(keys) {
 	return sms_seen_exec([ 'seen-add' ].concat(keys));
 }
 
+function sms_modem_markread(cards) {
+	var ids = [];
+	cards.forEach(function(c) {
+		String(c.getAttribute('data-index') || '').split('-').forEach(function(i) {
+			if (/^\d+$/.test(i)) { ids.push(i); }
+		});
+	});
+	if (!ids.length) { return Promise.resolve(); }
+	return sms_seen_exec([ 'markread' ].concat(ids));
+}
+
 /* ПЕРВЫЙ ЗАПУСК НЕ ПОДСВЕЧИВАЕМ. Сообщения могли прийти когда угодно, и залить
    весь список метками «новое» было бы враньём: просто запоминаем то, что есть. */
 function sms_seen_sync(list) {
@@ -467,7 +478,9 @@ function sms_update_newcount() {
 
 function sms_mark_all_read() {
 	var keys = [];
-	document.querySelectorAll('.sms-card.sms-new').forEach(function(c) {
+	var cards = Array.prototype.slice.call(document.querySelectorAll('.sms-card.sms-new'));
+	sms_modem_markread(cards);
+	cards.forEach(function(c) {
 		/* data-keys - ВСЕ части письма (см. sms_msg_keys); data-key оставлен
 		   для карточек из старого кэша в localStorage. */
 		(c.dataset.keys ? c.dataset.keys.split('\n') : [ c.dataset.key ])
@@ -548,6 +561,7 @@ function sms_make_card(item, iconSrc, hide) {
 		if (card.classList.contains('sms-new')) {
 			card.classList.remove('sms-new');
 			sms_seen_add(keys);
+			sms_modem_markread([ card ]);
 			sms_update_newcount();
 		}
 		sms_set_selected(card, !card.classList.contains('selected'));
@@ -731,7 +745,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30206, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30207, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
