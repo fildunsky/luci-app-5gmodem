@@ -233,7 +233,13 @@ getdevicevendorproduct() {
 			if [ -e $T/vendor ] && [ -e $T/device ]; then
 				V=$(cat $T/vendor)
 				D=$(cat $T/device)
-				echo "pci/${V/0x/}${D/0x/}"
+				S=$(cat $T/subsystem_vendor 2>/dev/null)
+				S=${S#0x}
+				if [ -n "$S" ] && [ -e "$RES/modem/pci/${V/0x/}${D/0x/}_$S" ]; then
+					echo "pci/${V/0x/}${D/0x/}_$S"
+				else
+					echo "pci/${V/0x/}${D/0x/}"
+				fi
 			fi
 			;;
 		'ttyACM'*)
@@ -2565,6 +2571,7 @@ _at_ca_supplement() {
 					}
 					/^#CAINFOEXT:/ { rat = ($0 ~ /LTE/) ? "LTE" : ""; next }
 					rat == "LTE" && /BandClass:/ {
+						if ($0 ~ /^[ ]*SCC/ && match($0, /STATE:[ ]*[0-9]+/) && substr($0, RSTART + 6, RLENGTH - 6) + 0 != 2) next
 						if (!match($0, /BandClass:[ ]*[0-9]+/)) next
 						bc = substr($0, RSTART + 10, RLENGTH - 10) + 0
 						ch = 0

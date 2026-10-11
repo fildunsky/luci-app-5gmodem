@@ -153,18 +153,33 @@ setbands5gnsa() {
 	_write_pair 5 "$(_lomask "$_BS")" "$(_himask "$_BS")"
 }
 
+_sa_lo() {
+	_sn=$(_capN)
+	[ "$_sn" -gt 0 ] 2>/dev/null || _sn=$(_nowN)
+	if [ "$_sn" -ge 10 ] 2>/dev/null; then
+		case "$(getinfo)" in *FN980*) echo 8; return ;; esac
+		_s7=$(_capf 7); _s8=$(_capf 8)
+		case "$_s7$_s8" in *[!0-9A-Fa-f]*) ;; *)
+			if [ -n "$_s8" ] && [ "$_s8" != 0 ] && [ "$((0x${_s7:-0}))" -le 255 ] 2>/dev/null; then
+				echo 8; return
+			fi ;;
+		esac
+	fi
+	echo 7
+}
+
 getsupportedbands5gsa() {
-	_B=$(_read_cap_pair 7)
+	_B=$(_read_cap_pair "$(_sa_lo)")
 	[ -n "$_B" ] || { _port_ok && return; echo "$_DEFAULT_5GSA_BANDS"; }
 	echo "$_B"
 }
 
-getbands5gsa() { _read_pair 7; }
+getbands5gsa() { _read_pair "$(_sa_lo)"; }
 
 setbands5gsa() {
 	_BS="$1"
 	[ "$_BS" = "default" ] && _BS="$(getsupportedbands5gsa)"
-	_write_pair 7 "$(_lomask "$_BS")" "$(_himask "$_BS")"
+	_write_pair "$(_sa_lo)" "$(_lomask "$_BS")" "$(_himask "$_BS")"
 }
 
 # --- Режимы сети (+WS46, 3GPP 27.007) ----------------------------------------

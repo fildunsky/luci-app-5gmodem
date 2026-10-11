@@ -1,0 +1,4 @@
+## FG150/FM150 AT manual 9.1.14 syntax (NR service cell)
++GTCCINFO:
+NR service cell:
+1,9,250,01,1A2B,0ABCDEF12,634080,301,5078,100,60,90,90,70

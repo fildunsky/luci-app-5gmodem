@@ -1,0 +1,22 @@
+# Fibocom FM150 / FG150 / NL952 / FM160 (Qualcomm)
+_DEVICE=""
+
+. $RES/_fibocom_fm350_common
+
+_BANDS_APPLY_LIVE=
+_BAND_RECONNECT_WARN=
+
+setmode() {
+    M="$1"
+    case "$M" in
+        ''|*[!0-9]*) return ;;
+    esac
+    case "$M" in
+        20) A="20,6,3" ;;
+        17) A="17,6" ;;
+        16) A="16,6" ;;
+        4)  A="4,3" ;;
+        *)  A="$M" ;;
+    esac
+    sms_tool -d $_DEVICE at "AT+GTACT=$A"
+}

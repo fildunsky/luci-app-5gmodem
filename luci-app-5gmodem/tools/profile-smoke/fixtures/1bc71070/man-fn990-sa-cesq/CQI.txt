@@ -1,0 +1,2 @@
+## FN980 AT manual 3.2.11.56: 31 = unknown
+#CQI: 31,10

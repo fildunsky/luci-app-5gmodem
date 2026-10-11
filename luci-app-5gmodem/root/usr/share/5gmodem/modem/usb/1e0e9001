@@ -180,58 +180,80 @@ EOF_CA
 	fi
 
 else
-	# ==============================================================================
-	# ОРИГИНАЛЬНЫЙ ФОЛЛБЕК ДЛЯ SIM8200EA-M2 / SIM7906
-	# ==============================================================================
 	OT=$(sms_tool -d $DEVICE at "AT+CPMUTEMP")
 	T=$(echo "$OT" | awk -F[,:] '/^\+CPMUTEMP: / {print $2}' | xargs)
 	[ -n "$T" ] && TEMP="$T &deg;C"
 
-	O=$(sms_tool -d $DEVICE at "AT+CPSI?")
+	O=$(sms_tool -d $DEVICE at "AT+CPSI?" | tr -d '\r')
 
-	case $MODE_NUM in
-		7)
-			MODE="LTE |"
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $5}')
-			if [ -n "$T" ]; then
-				TAC_DEC=$(printf "%d" "$T")
-				TAC_HEX="${T/0x/}"
-			fi
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $7}')
-			[ -n "$T" ] && PCI=$T
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $8}')
-			B_NUM=""
-			if [ -n "$T" ]; then
-				B_NUM=${T/EUTRAN-BAND/}
-				PBAND="$(band4g $B_NUM)"
-				MODE="$MODE $(band4g $B_NUM)"
-			fi
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $9}')
-			[ -n "$T" ] && EARFCN=$T
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $10}')
-			if [ -n "$T" ]; then
-				DLBW="DL: @$T MHz"
-				PBAND="$(band4g $B_NUM) $DLBW"
-			fi
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $11}')
-			if [ -n "$T" ]; then
-				ULBW="UL: @$T MHz"
-				PBAND="$(band4g $B_NUM) $DLBW $ULBW"
-			fi
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $12/10}')
-			[ -n "$T" ] && RSRQ=$T
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $13/10}')
-			[ -n "$T" ] && RSRP=$T
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $14/10}')
-			[ -n "$T" ] && RSSI=$T
-			T=$(echo "$O" | awk -F[,:] '/^\+CPSI: LTE/ {print $15}' | xargs)
-			[ -n "$T" ] && SINR=$T
+	_sc_d10() {
+		case "$1" in ''|*[!0-9-]*) return ;; esac
+		awk -v v="$1" 'BEGIN{printf "%g", v/10}'
+	}
+	_sc_nbw() {
+		case "$1" in
+			0) echo 5 ;; 1) echo 10 ;; 2) echo 15 ;; 3) echo 20 ;; 4) echo 25 ;; 5) echo 30 ;;
+			6) echo 35 ;; 7) echo 40 ;; 8) echo 45 ;; 9) echo 50 ;; 10) echo 60 ;; 11) echo 70 ;;
+			12) echo 80 ;; 13) echo 90 ;; 14) echo 100 ;; 15) echo 200 ;; 16) echo 400 ;;
+		esac
+	}
+
+	_sc_l=$(echo "$O" | grep -m1 '^+CPSI: LTE,')
+	_sc_n=$(echo "$O" | grep -m1 '^+CPSI: NR5G_NSA,')
+	_sc_s=$(echo "$O" | grep -m1 '^+CPSI: NR5G_SA,')
+	_SC4=""
+	_SC5=""
+
+	if [ -n "$_sc_l" ]; then
+		_oIFS=$IFS; IFS=','; set -- $_sc_l; IFS=$_oIFS
+		case "$4" in 0x*) TAC_HEX="${4#0x}"; TAC_DEC=$(printf "%d" "$4" 2>/dev/null) ;; esac
+		[ -n "$6" ] && PCI=$6
+		[ -n "$8" ] && EARFCN=$8
+		B_NUM=${7#EUTRAN-BAND}
+		case "$B_NUM" in ''|*[!0-9]*) ;; *) _SC4="$(band4g $B_NUM)"; PBAND="$_SC4" ;; esac
+		case "$9" in
+			0) BANDWIDTH="1.4 MHz" ;; 1) BANDWIDTH="3 MHz" ;; 2) BANDWIDTH="5 MHz" ;;
+			3) BANDWIDTH="10 MHz" ;; 4) BANDWIDTH="15 MHz" ;; 5) BANDWIDTH="20 MHz" ;;
+		esac
+		T=$(_sc_d10 "${11}"); [ -n "$T" ] && RSRQ=$T
+		T=$(_sc_d10 "${12}"); [ -n "$T" ] && RSRP=$T
+		T=$(_sc_d10 "${13}"); [ -n "$T" ] && RSSI=$T
+		case "${14}" in ''|*[!0-9-]*) ;; *) SINR=${14} ;; esac
+	fi
+
+	if [ -n "$_sc_n" ]; then
+		_oIFS=$IFS; IFS=','; set -- $_sc_n; IFS=$_oIFS
+		B=${3#NR5G_BAND}
+		case "$B" in ''|*[!0-9]*) ;; *)
+			_SC5="$(band5g $B)"
+			_sc_w=$(_sc_nbw "$9")
+			S1BAND="$_SC5"
+			[ -n "$_sc_w" ] && S1BAND="$_SC5 @$_sc_w MHz"
+			S1PCI=$2; S1EARFCN=$4; S1STATE="activated"
+			S1RSRP=$(_sc_d10 "$5"); S1RSRQ=$(_sc_d10 "$6"); S1SINR=$(_sc_d10 "$7")
 			;;
-		11) MODE="5G SA";;
-		13) MODE="5G NSA";;
-	esac
+		esac
+	fi
 
-	MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
+	if [ -n "$_sc_s" ]; then
+		_oIFS=$IFS; IFS=','; set -- $_sc_s; IFS=$_oIFS
+		case "$4" in 0x*) TAC_HEX="${4#0x}"; TAC_DEC=$(printf "%d" "$4" 2>/dev/null) ;; esac
+		[ -n "$6" ] && PCI=$6
+		[ -n "$8" ] && EARFCN=$8
+		B=${7#NR5G_BAND}
+		case "$B" in ''|*[!0-9]*) ;; *) _SC5="$(band5g $B)"; PBAND="$_SC5" ;; esac
+		T=$(_sc_d10 "$9"); [ -n "$T" ] && RSRP=$T
+		T=$(_sc_d10 "${10}"); [ -n "$T" ] && RSRQ=$T
+		T=$(_sc_d10 "${11}"); [ -n "$T" ] && SINR=$T
+	fi
+
+	if [ -n "$_SC4" ] && [ -n "$_SC5" ]; then
+		MODE="5G NSA | $_SC4 / $_SC5"
+	elif [ -n "$_SC5" ]; then
+		MODE="5G SA | $_SC5"
+	elif [ -n "$_SC4" ]; then
+		MODE="LTE | $_SC4"
+	fi
 fi
 
 # ==============================================================================

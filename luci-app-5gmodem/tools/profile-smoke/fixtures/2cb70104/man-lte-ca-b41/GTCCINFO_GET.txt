@@ -1,0 +1,6 @@
+## FG150/FM150 AT manual 9.1.14 syntax (LTE B41 serving)
++GTCCINFO:
+LTE service cell:
+1,4,250,01,1A2B,0ABCDEF,40340,77,141,100,20,60,60,20
+LTE neighbor cell:
+2,4,250,01,1A2B,0ABCDEF,40340,78,100,55,55,15

@@ -1,0 +1,2 @@
+## FN990 AT manual 3.3.23 syntax: NR SA, LTE fields 255
++CESQ: 99,99,255,255,255,255,80,90,70

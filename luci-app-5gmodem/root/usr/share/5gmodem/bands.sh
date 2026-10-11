@@ -1125,7 +1125,9 @@ if [ -n "$_AMP" ]; then
 	# легаси-путь ниже (он берёт Product= из debugfs). Теперь оба пути ищут
 	# одинаково. Модель точнее, поэтому она в приоритете.
 	_found=""
-	for _cand in "$_AVIDPID$_APROD" "$_AVIDPID"; do
+	_ASUB=$(cat "/sys/bus/pci/devices/${_AMP##*/}/subsystem_vendor" 2>/dev/null)
+	_ASUB=${_ASUB#0x}
+	for _cand in "${_ASUB:+${_AVIDPID}_$_ASUB}" "$_AVIDPID$_APROD" "$_AVIDPID"; do
 		[ -n "$_cand" ] || continue
 		[ -e "$RES/$_cand" ] || continue
 		_found="$_cand"; break

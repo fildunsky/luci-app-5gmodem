@@ -807,6 +807,9 @@ usb_flap_verdict() {
 	_uf_p=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 	[ -n "$_uf_p" ] || { echo "no active modem is selected"; return; }
 	_uf_d="/sys/bus/usb/devices/$_uf_p"
+	_uf_k=$(logread 2>/dev/null)
+	_uf_dm=$(dmesg 2>/dev/null)
+	[ "$(printf '%s\n' "$_uf_dm" | grep -c 'USB disconnect')" -gt "$(printf '%s\n' "$_uf_k" | grep -c 'USB disconnect')" ] && _uf_k="$_uf_dm"
 	_uf_sp=$(cat "$_uf_d/speed" 2>/dev/null)
 	_uf_pw=$(cat "$_uf_d/bMaxPower" 2>/dev/null)
 	echo "link: ${_uf_sp:-?} Mbit/s, requested current: ${_uf_pw:-?}"
@@ -815,7 +818,7 @@ usb_flap_verdict() {
 		5000|10000) echo "this is USB 3.x SuperSpeed - the port supplies up to 900 mA" ;;
 	esac
 	# Отвалы именно этого устройства, а не любые в системе.
-	_uf_n=$(logread 2>/dev/null | grep -c "usb $_uf_p: USB disconnect")
+	_uf_n=$(printf '%s\n' "$_uf_k" | grep -c "usb $_uf_p: USB disconnect")
 	_uf_if=$(uci -q get "5gmodem.$(secname "$_uf_p").network" 2>/dev/null)
 	echo "USB re-connects in the current log: $_uf_n"
 	_uf_vp="$(cat "$_uf_d/idVendor" 2>/dev/null):$(cat "$_uf_d/idProduct" 2>/dev/null)"
@@ -832,7 +835,7 @@ usb_flap_verdict() {
 	# активный: живой отчёт с двумя модемами - активный Fibocom работал ровно, а
 	# Compal на 2-1.3 перечислялся заново каждые полторы секунды (80+ раз за
 	# минуту), и по разделам отчёта это выглядело просто как «модема нет».
-	logread 2>/dev/null | sed -n 's/.*usb \([0-9][^:]*\): USB disconnect.*/\1/p' \
+	printf '%s\n' "$_uf_k" | sed -n 's/.*usb \([0-9][^:]*\): USB disconnect.*/\1/p' \
 		| sort | uniq -c | sort -rn | while read -r _c _d; do
 			[ "$_d" = "$_uf_p" ] && continue
 			echo "  neighbouring device $_d: $_c re-connects"
@@ -849,7 +852,7 @@ usb_flap_verdict() {
 	# искать неисправное питание. Признак переезда - энумерация НУЛЕВОГО
 	# интерфейса как mass storage: в рабочей композиции этих свистков остаётся
 	# CD-ROM, но уже на другом номере интерфейса.
-	_uf_ms=$(logread 2>/dev/null | grep -c "usb-storage $_uf_p:1\.0: USB Mass Storage device detected")
+	_uf_ms=$(printf '%s\n' "$_uf_k" | grep -c "usb-storage $_uf_p:1\.0: USB Mass Storage device detected")
 	_uf_msw=""
 	if [ "${_uf_ms:-0}" -ge 1 ] && [ "${_uf_ms:-0}" -ge "${_uf_n:-0}" ]; then
 		_uf_msw=1
@@ -870,7 +873,7 @@ usb_flap_verdict() {
 	# рабочей композицией и вернулся через загрузчик (drop.log того же человека:
 	# на 688-й секунде отвал, Preloader, через 20 c модем и минута без связи).
 	# Штатный старт отличаем по времени ядра: первые 120 c после загрузки роутера.
-	_uf_pl=$(logread 2>/dev/null | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
+	_uf_pl=$(printf '%s\n' "$_uf_k" | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
 		| sed -n 's/.*\[ *\([0-9]*\)\.[0-9]*\] usb .*/\1/p')
 	_uf_plb=0; _uf_plr=0
 	for _t in $_uf_pl; do
@@ -883,7 +886,7 @@ usb_flap_verdict() {
 	fi
 	if [ "$_uf_plr" -ge 1 ]; then
 		echo "PROBLEM: the module REBOOTED ITSELF $_uf_plr time(s) while working (left the bus and came back through MT65xx Preloader):"
-		logread 2>/dev/null | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
+		printf '%s\n' "$_uf_k" | grep "usb $_uf_p: New USB device found, idVendor=0e8d, idProduct=2000" \
 			| awk '{ if (match($0, /\[ *[0-9]+\./)) { t = substr($0, RSTART + 1, RLENGTH - 2) + 0; if (t >= 120) print "  " $1, $2, $3, $4, $5 } }'
 		if logread 2>/dev/null | grep -qE '5gmodem.*(CFUN=1,1|power-cycled|rebooting the module)'; then
 			echo "  our healing did reset a module in this log - compare the times above with those lines."
@@ -989,13 +992,13 @@ usb_flap_verdict() {
 	#
 	# Наш прежний вердикт в такой ситуации уверенно советовал блок питания и
 	# кабель, то есть отправлял человека не туда. Проверяем это ПЕРВЫМ.
-	if logread 2>/dev/null | grep -qE "HC died|Host halt failed|host controller not responding"; then
+	if printf '%s\n' "$_uf_k" | grep -qE "HC died|Host halt failed|host controller not responding"; then
 		echo "PROBLEM: the USB CONTROLLER itself (xHCI) died, not the modem."
-		logread 2>/dev/null | grep -oE "(xhci[^:]*): (HC died[^,]*|Host halt failed, -[0-9]+|xHCI host controller not responding[^,]*)" | tail -3
+		printf '%s\n' "$_uf_k" | grep -oE "(xhci[^:]*): (HC died[^,]*|Host halt failed, -[0-9]+|xHCI host controller not responding[^,]*)" | tail -3
 		echo "The sign: ALL devices disappeared AT ONCE and the bus never came back until"
 		echo "a reboot. This is NOT a power shortage - a brownout drops a single device"
 		echo "and leaves error -71 / device descriptor read in the log."
-		logread 2>/dev/null | grep -qE "NETDEV WATCHDOG.*(rndis|cdc|usb)" && {
+		printf '%s\n' "$_uf_k" | grep -qE "NETDEV WATCHDOG.*(rndis|cdc|usb)" && {
 			echo "Right before the controller died, TRANSMIT hung in the network driver"
 			echo "(NETDEV WATCHDOG, transmit queue timed out) - it is the kernel trying to"
 			echo "reset the endpoint that finishes the controller off."

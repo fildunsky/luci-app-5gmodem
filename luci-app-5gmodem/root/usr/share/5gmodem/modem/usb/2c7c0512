@@ -6,7 +6,7 @@
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
-T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | sort -r | head -n1 | xargs)
+T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $3}' | tr -d '"' | sort -rn | head -n1 | xargs)
 [ -n "$T" ] && TEMP="$T &deg;C"
 
 if [ "$REGOK" = "1" ]; then
@@ -16,7 +16,7 @@ O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qcainfo;+qeng=\"servingcell\";+qspn")
 _qc_spn2
 
 if [ "x$MODE_NUM" = "x7" ]; then
-	echo "$O" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE-A"
+	_qc_act "$O" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE-A"
 
 	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $4}' | xargs)
 	if [ "x$T" = "xLTE" ]; then

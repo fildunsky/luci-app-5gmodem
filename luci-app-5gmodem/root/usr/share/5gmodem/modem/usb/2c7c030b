@@ -2,9 +2,7 @@
 
 . "$RES/modem/usb/_quectel_common"
 
-QTEMP=$(sms_tool -d $DEVICE at "AT+QTEMP" | grep cpuss-usr)
-QTEMPEXTRACTED=$(echo "${QTEMP}" | awk -F[,:] '/^\+QTEMP/ {t=$2*1;if($3*1>t)t=$3*1;if($4*1>t)t=$4*1;printf "%d", t}')
-[ -n "${QTEMP}" ] && TEMP="${QTEMPEXTRACTED} &deg;C"
+_qc_temp3n
 
 O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qeng=\"servingcell\";+qspn")
 
@@ -30,25 +28,26 @@ _qc_spn4
 if [ "x$MODE_NUM" = "x7" ]; then
 	O=$(sms_tool -d $DEVICE at "AT+QCAINFO")
 	
-	T=$(echo "$O" | awk -F[,] '/^\+QCAINFO: "scc"/{print $4}' | xargs)
+	T=$(echo "$O" | awk -F[,] '/^\+QCAINFO: "(scc|SCC)"/{print $4}' | xargs)
 	if [ -n "$T" ]; then
 		B=$(echo $T | sed 's/.*LTE BAND \(.*\)/\1/')
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $4}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $4}')
 		_qc_cbw T1 "$T" "?"
-		MODE="${MODE/LTE/LTE_A} / $(band4g ${B})"
+		_qc_sst 1 "$(echo "$O" | grep -m1 -E '^\+QCAINFO: "(scc|SCC)"')"
+		[ "$S1STATE" = activated ] && MODE="${MODE/LTE/LTE_A} / $(band4g ${B})"
 		S1BAND="$(band4g ${B}) @$T1 MHz"
 
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $7}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $7}')
 		S1PCI="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $3}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $3}')
 		S1EARFCN="$T"
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $10}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $10}')
 		S1RSSI=$T
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $8}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $8}')
 		S1RSRP=$T
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {print $9}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {print $9}')
 		S1RSRQ=$T
-		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "scc"/ {v=$11; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
+		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/ {v=$11; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
 		S1SINR=$T
 	fi
 fi

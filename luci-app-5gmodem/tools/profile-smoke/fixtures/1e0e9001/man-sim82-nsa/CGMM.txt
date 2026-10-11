@@ -1,0 +1,5 @@
+## synthetic
+AT+CGMM
+SIMCOM_SIM8200EA-M2
+
+OK

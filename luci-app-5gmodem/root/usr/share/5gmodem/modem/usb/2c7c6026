@@ -4,7 +4,7 @@
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
 
-T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $2}' | sort -r | head -n1 | xargs)
+T=$(echo "$O" | awk -F[,:] '/^\+QTEMP/ {print $2}' | tr -d '"' | sort -rn | head -n1 | xargs)
 if [ -n "$T" ]; then
 	TEMP="$T &deg;C"
 fi

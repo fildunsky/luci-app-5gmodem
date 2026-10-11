@@ -1,0 +1,4 @@
+## Quectel EM1x0R/RG50x AT manual 12.5 syntax: +QTEMP:"<sensor>","<temp>"
++QTEMP:"cpuss-0-usr","45"
++QTEMP:"mdmq6-0-usr","47"
++QTEMP:"modem-lte-sub6-pa1","41"

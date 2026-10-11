@@ -1,0 +1,4 @@
+## !BAND Basic reply (no engineering password): 4pda EM9190 thread, [EM74] !BAND description
+Index, Name
+00, All bands
+OK

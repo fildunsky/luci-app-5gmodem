@@ -14,7 +14,7 @@
 # #CQI добавлен в ту же цепочку, а не отдельным вызовом: команды в одной строке
 # идут одним обменом с портом, лишней задержки нет (проверено на LM960A18 -
 # отвечает "#CQI: 11").
-O=$(sms_tool -d $DEVICE at "at#tempsens=2;#tmlvl?;#lrxdiv?;#rxdiv?;#4rxdis?;#ltecat?;#servinfo;#rfsts;#laps;#cqi;#cainfo?")
+O=$(sms_tool -d $DEVICE at "at#tempsens=2;#lrxdiv?;#rxdiv?;#servinfo;#rfsts;#laps;#cainfo?;#tmlvl?;#4rxdis?;#ltecat?;#cqi")
 
 # SINR в #CAINFO - НЕ децибелы, а ИНДЕКС 0..250 (руководство 80568ST10869A
 # Rev.7, стр. 264: "<sinr>: Measured SINR. This value is mapped to dB.
@@ -243,7 +243,7 @@ MODE=$(echo "$MODE" | sed 's, / , + ,g')
 # "Telit #BND: 0,18,A7E0BB0F38DF,42" - это эхо ответа bands.sh.
 # grep по шаблону модели отсекает такое сразу: у Telit это LM<цифры><буквы>.
 _M=$(sms_tool -d "$DEVICE" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
-	| grep -oE 'LM[0-9]{3,4}[A-Za-z0-9-]*' | head -1)
+	| grep -oE 'L[MN][0-9]{3,4}[A-Za-z0-9-]*' | head -1)
 [ -n "$_M" ] && MODEL="Telit $_M"
 _F=$(sms_tool -d "$DEVICE" at "AT+CGMR" 2>/dev/null | tr -d '\r' | grep -vE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
 [ -n "$_F" ] && FW="$_F"

@@ -199,6 +199,15 @@ _qc_qeng_bw() {
 	fi
 }
 
+_qc_act() {
+	printf '%s\n' "$1" | tr -d '\r' | awk -F, '!(/^\+QCAINFO: "(scc|SCC)"/ && $4 ~ /LTE BAND/ && ($5 == "0" || $5 == "1"))'
+}
+
+_qc_sst() {
+	_qc_sst_v=$(printf '%s' "$2" | tr -d '\r' | awk -F, '$4 ~ /LTE BAND/ && ($5 == "0" || $5 == "1") {print "deactivated"; exit} {print "activated"}')
+	_qc_s "$1" STATE "$_qc_sst_v"
+}
+
 _qc_scc_lte() {
 	IDX=1
 	LINES=$(echo "$O" | grep -E "^\+QCAINFO: \"(scc|SCC)\"")
@@ -207,7 +216,8 @@ _qc_scc_lte() {
 		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $5}')
 		B=$(echo $T | sed 's/"LTE BAND \(.*\)"/\1/')
 		T2=$(band4g ${B})
-		[ "$2" = mode ] && MODE="$MODE / $T2"
+		_qc_sst $IDX "$LINE"
+		[ "$2" = mode ] && [ "$_qc_sst_v" = activated ] && MODE="$MODE / $T2"
 		T3=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $4}')
 		_qc_cbw T4 "$T3" "$1"
 		if [ -z "$T4" ]; then
@@ -427,13 +437,14 @@ _sccsig() {   # $1 - номер несущей, дальше rsrp rsrq rssi sinr
 
 _q5_core() {
 	_q5_f="$*"
+	_q5_oa=$(_qc_act "$O")
 
 	case "$MODE_NUM" in
 		7*)
 			if _q5_on mb; then
 				MODE="LTE |"
-				echo "$O" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE_A"
-			elif echo "$O" | grep -q -i "+QCAINFO.*SCC"; then
+				echo "$_q5_oa" | grep -q -i "+QCAINFO.*SCC" && MODE="LTE_A"
+			elif echo "$_q5_oa" | grep -q -i "+QCAINFO.*SCC"; then
 				MODE="LTE-A |"
 			fi
 			;;
@@ -450,7 +461,7 @@ _q5_core() {
 
 					_q5_ots
 
-					if echo "$O" | grep -q -i "+QCAINFO.*SCC"; then
+					if echo "$_q5_oa" | grep -q -i "+QCAINFO.*SCC"; then
 						MODE="LTE-A |"
 
 						_q5_ots
@@ -479,7 +490,7 @@ _q5_core() {
 				;;
 		esac
 
-		T1=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{gsub(" ", "-");print $5}')
+		T1=$(echo "$_q5_oa" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{gsub(" ", "-");print $5}')
 		if [ -n "$T1" ]; then
 			for T in $T1; do
 				case $T in
@@ -597,7 +608,10 @@ _q5_core() {
 				;;
 		esac
 		T3=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{print $4}')
-		_qc_cbwp T4 "$T3" ""
+		case $T in
+			*"LTE BAND"*) _qc_cbwp T4 "$T3" "" ;;
+			*) _qc_nbw T4 "$T3" "" ;;
+		esac
 		if [ -z "$T4" ]; then
 			PBAND="$T2"
 				if [ -n "$DBW" ]; then
@@ -643,6 +657,7 @@ _q5_core() {
 				*"LTE BAND"*)
 					B=$(echo $T | sed 's/"LTE BAND \(.*\)"/\1/')
 					T2=$(band4g ${B})
+					_qc_sst $IDX "$LINE"
 					_qc_cbwp T4 "$T3" ""
 					T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $3}' | xargs)
 					[ -n "$T5" ] && _qc_s $IDX EARFCN "$T5"
@@ -732,6 +747,49 @@ _q5_core() {
 			IDX=$((IDX + 1))
 		done
 	fi
+
+	_q5_nsa=$(echo "$O" | tr -d '\r' | grep -m1 -E '^\+QENG: ?"NR5G-NSA"')
+	[ -n "$_q5_nsa" ] && _q5_nsaleg "$_q5_nsa"
+}
+
+_q5_lvl() {
+	case "$2" in ''|-|*[!0-9.-]*) eval "$1=''" ;; *) eval "$1=\$2" ;; esac
+}
+
+_q5_nsaleg() {
+	_oIFS=$IFS; IFS=','; set -- $1; IFS=$_oIFS
+	_qn_b=$9
+	case "$_qn_b" in ''|*[!0-9]*) return 0 ;; esac
+	_qn_i=0
+	_qn_f=0
+	for _qn_k in 1 2 3 4; do
+		eval "_qn_v=\$S${_qn_k}BAND"
+		case "$_qn_v" in
+			"n$_qn_b "*|"n$_qn_b") _qn_i=$_qn_k; break ;;
+			''|-) [ "$_qn_f" = 0 ] && _qn_f=$_qn_k ;;
+		esac
+	done
+	if [ "$_qn_i" = 0 ]; then
+		[ "$_qn_f" = 0 ] && return 0
+		_qn_i=$_qn_f
+		_qc_nbw _qn_w "${10}" ""
+		_qn_t="$(band5g $_qn_b)"
+		if [ -n "$_qn_w" ]; then
+			_qc_s $_qn_i BAND "$_qn_t @$_qn_w MHz"
+		else
+			_qc_s $_qn_i BAND "$_qn_t"
+		fi
+		_qc_s $_qn_i EARFCN "$8"
+		_qc_s $_qn_i PCI "$4"
+		case "$MODE" in
+			*"5G NSA"*) ;;
+			*"|"*) MODE="5G NSA |${MODE#*|} / $_qn_t" ;;
+		esac
+	fi
+	_qc_s $_qn_i STATE activated
+	_q5_lvl _qn_v "$5"; _qc_s $_qn_i RSRP "$_qn_v"
+	_q5_lvl _qn_v "$6"; _qc_s $_qn_i SINR "$_qn_v"
+	_q5_lvl _qn_v "$7"; _qc_s $_qn_i RSRQ "$_qn_v"
 }
 
 _qc_neighbours() {
