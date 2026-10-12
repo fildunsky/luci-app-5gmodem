@@ -1284,7 +1284,6 @@ resolve)
 	exec 7>/tmp/5gmodem/ucitx.lock
 	flock 7
 	note_foreign_uci network "modemswitch resolve"
-	note_foreign_uci firewall "modemswitch resolve"
 	# Re-resolve ports/devices for all PRESENT modems by their STABLE USB path.
 	# ttyUSB numbering shifts when a modem is added/removed or on reboot, so a
 	# pinned ttyUSB goes stale ("Bad file descriptor", no data). Run on boot
