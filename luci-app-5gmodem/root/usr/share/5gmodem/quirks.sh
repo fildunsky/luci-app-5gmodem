@@ -347,7 +347,7 @@ mm_dedicated_at() {
 	[ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] || return 0
 	[ "$(uci -q get "5gmodem.$2.no_at" 2>/dev/null)" = "1" ] && return 0
 	_mda_nif=$(uci -q get "5gmodem.$2.network")
-	[ "$(uci -q get "network.$_mda_nif.proto" 2>/dev/null)" = "modemmanager" ] || return 0
+	case "$(uci -q get "network.$_mda_nif.proto" 2>/dev/null)" in modemmanager|mbimp) ;; *) return 0 ;; esac
 	command -v mmcli >/dev/null 2>&1 || return 0
 	_mda_i=$(_mm_index_cached "$1")
 	[ -n "$_mda_i" ] || return 0
@@ -397,7 +397,8 @@ mm_tty_reserved() {
 	[ -n "$(mm_at_fragile "$_mtr_vp")" ] || return 1
 	[ "$(uci -q get "5gmodem.$_mtr_s.no_at" 2>/dev/null)" = "1" ] && return 1
 	_mtr_nif=$(uci -q get "5gmodem.$_mtr_s.network")
-	[ "$(uci -q get "network.$_mtr_nif.proto" 2>/dev/null)" = "modemmanager" ]
+	case "$(uci -q get "network.$_mtr_nif.proto" 2>/dev/null)" in modemmanager|mbimp) return 0 ;; esac
+	return 1
 }
 
 # $1 - usb-путь, $2 - секция. Код 0 = AT-порт брать можно, 1 = нельзя (MM ещё

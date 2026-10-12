@@ -314,6 +314,11 @@ utf8_fix() {
 note_foreign_uci() {
 	_nf=$(uci changes "$1" 2>/dev/null | head -20)
 	[ -n "$_nf" ] || return 0
+	_nf_s="/tmp/5gmodem/foreign_uci.$1"
+	_nf_h=$(printf '%s' "$_nf" | md5sum | cut -c1-32)
+	[ "$(cat "$_nf_s" 2>/dev/null)" = "$_nf_h" ] && return 0
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	printf '%s' "$_nf_h" > "$_nf_s" 2>/dev/null
 	logger -t 5gmodem "$2: FOREIGN staged uci changes in $1 - committing them along: $(printf '%s' "$_nf" | tr '\n' '; ' | head -c 400)"
 }
 
