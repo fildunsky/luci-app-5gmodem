@@ -63,7 +63,7 @@ _service_name() {
 	_u="$1"
 	[ -n "$_u" ] || _u=$(uci -q get 5gmodem.@5gmodem[0].speedtest_url)
 	[ -n "$_u" ] || _u="$URL_DEFAULT"
-	[ "$_u" = internetometer ] && { echo "Интернетометр"; return; }
+	[ "$_u" = internetometer ] && { echo "Internetometer"; return; }
 	_h=$(echo "$_u" | sed -e 's#^[a-zA-Z]*://##' -e 's#/.*##' -e 's#:.*##')
 	case "$_h" in
 		*yandex*)     echo "Yandex" ;;

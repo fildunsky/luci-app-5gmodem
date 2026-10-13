@@ -4951,10 +4951,10 @@ msgstr "luồng, tối đa ~1 GB"
 msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. Pick a preset (approx. size shown) or enter your own."
 msgstr "URL cho bài kiểm tra tải xuống. Tệp LỚN HƠN giúp tốc độ tăng dần trong bài kiểm tra ~15 giây; tệp nhỏ kết thúc sớm và cho kết quả thấp. Chọn mẫu có sẵn (hiển thị kích thước gần đúng) hoặc nhập của bạn."
 
-msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "Nguồn cho bài kiểm tra tải xuống. \"Интернетометр\" hỏi Yandex nút CDN gần nhất trước mỗi lần chạy, đây là lựa chọn tốt nhất qua mạng di động Nga; nó cũng đặt điểm cuối tải lên nếu bạn chưa tự chọn. Với URL thường, tệp LỚN HƠN giúp tốc độ tăng dần trong bài kiểm tra ~15 giây. Nguồn đặt tại Nga (Selectel/Yandex/Tele2) hoạt động qua mạng di động Nga; Cloudflare/Hetzner có thể bị chặn ở đó. Hiển thị kích thước gần đúng."
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "Điểm cuối nhận nội dung POST, cho bài kiểm tra tải lên. \"Интернетометр\" dùng một nút trong cùng danh sách thăm dò với nguồn tải xuống, và có thể chọn riêng ở đây. Điểm cuối đặt tại Nga (Rostelecom/Yandex) hoạt động qua mạng di động Nga; máy chủ vẫn đọc nội dung kể cả khi trả lời 404/403, nên tốc độ vẫn được đo."
 
 msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
@@ -5386,7 +5386,7 @@ msgstr "MBIM+MM (proxy dùng chung, ModemManager để quản lý)"
 msgid "Deleted: %d, not deleted: %d"
 msgstr "Đã xóa: %d, không xóa được: %d"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
 msgstr "Điểm cuối nhận nội dung POST, cho bài kiểm tra tải lên. \"Интернетометр\" dùng một nút trong cùng danh sách thăm dò với nguồn tải xuống, và có thể chọn riêng ở đây. Chỉ tính các lần tải lên mà máy chủ nhận đầy đủ: điểm cuối cắt ngang việc truyền sớm sẽ không cho kết quả tải lên nào."
 
 msgid "The previous deletion is still running, try again in a minute"

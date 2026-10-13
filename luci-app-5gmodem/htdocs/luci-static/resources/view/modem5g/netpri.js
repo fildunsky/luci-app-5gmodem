@@ -187,10 +187,16 @@ function stSpeedContent() {
 	return [ pair(dlNode, 'cdown'), sep(), pair(ulNode, 'cup'), unit() ];
 }
 
+function stServiceLabel(s) {
+	if (s == 'Internetometer' || s == 'Интернетометр')
+		return _('Internetometer');
+	return s || _('Speed test');
+}
+
 /* три строки карточки: сервис (сверху), скорость (центр), публичный IP (снизу) */
 function stCardInner() {
 	return [
-		E('span', { 'class': 'netpri-sub' }, _st.service || _('Speed test')),
+		E('span', { 'class': 'netpri-sub' }, stServiceLabel(_st.service)),
 		E('span', { 'class': 'netpri-name netpri-st-speed' }, stSpeedContent()),
 		_st.ip ? E('span', {
 			'class': 'netpri-ip',
@@ -1766,7 +1772,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30207,
+	API: 30208,
 	/* Смонтировать блок ВНУТРИ контента страницы (под под-вкладками, как обычный
 	   элемент вьюхи). Возвращает контейнер СРАЗУ (синхронно), наполняется асинхронно
 	   и живёт своим поллом. Так блок виден на всех темах и на мобильном - в отличие

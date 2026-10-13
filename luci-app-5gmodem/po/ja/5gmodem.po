@@ -5037,10 +5037,10 @@ msgstr "ストリーム、最大約 1 GB"
 msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. Pick a preset (approx. size shown) or enter your own."
 msgstr "ダウンロードテストに使う URL です。ファイルが大きいほど、約 15 秒のテスト中に速度が上がりきります。小さいファイルは途中で終わってしまい、低い値になります。プリセット (おおよそのサイズを表示) を選ぶか、独自の URL を入力してください。"
 
-msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "ダウンロードテストの取得元です。「Интернетометр」は実行のたびに Yandex へ最寄りの CDN ノードを問い合わせるため、ロシアのモバイル回線では最適です。アップロード先を自分で選んでいない場合は、それも併せて設定されます。通常の URL の場合、ファイルが大きいほど約 15 秒のテスト中に速度が上がりきります。ロシア国内にある取得元 (Selectel / Yandex / Tele2) はロシアのモバイル回線から利用できますが、Cloudflare や Hetzner は遮断されることがあります。おおよそのサイズを表示しています。"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "アップロードテスト用に POST の本文を受け取るエンドポイントです。「Интернетометр」はダウンロード元と同じ探索リストのノードを使い、ここで単独に選ぶこともできます。ロシア国内のエンドポイント (Rostelecom / Yandex) はロシアのモバイル回線から利用できます。サーバーが 404/403 を返す場合でも本文は読み取るため、速度は測定できます。"
 
 msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
@@ -5476,7 +5476,7 @@ msgstr "MBIM+MM (共有プロキシ、管理は ModemManager)"
 msgid "Deleted: %d, not deleted: %d"
 msgstr "削除: %d 件、未削除: %d 件"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
 msgstr "アップロード測定用に POST 本文を受け付けるエンドポイント。「Интернетометр」はダウンロード元と同じプローブ一覧のノードを使い、ここで個別に選べます。サーバーが全体を受信したアップロードだけを集計します。転送を途中で打ち切るエンドポイントではアップロード値は出ません。"
 
 msgid "The previous deletion is still running, try again in a minute"

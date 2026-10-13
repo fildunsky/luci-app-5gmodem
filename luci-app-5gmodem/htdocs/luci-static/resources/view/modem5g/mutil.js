@@ -291,6 +291,23 @@ var QUAL_WIN = {
 	rsrp: [ -120, -70 ], rsrq: [ -20, -3 ], sinr: [ -5, 30 ], rssi: [ -100, -50 ],
 	csq: [ 0, 31 ], rscp: [ -120, -75 ], ecio: [ -24, 0 ]
 };
+var QUAL_COLOR = [ '#d95c5c', '#d97a3c', '#7fae3a', '#2fb885' ];
+var QUAL_GRAD = [
+	'linear-gradient(90deg, #d95c5c, #f87171)',
+	'linear-gradient(90deg, #d97a3c, #fb923c)',
+	'linear-gradient(90deg, #7fae3a, #a3cf4f)',
+	'linear-gradient(90deg, #2fb885, #34d399)'
+];
+function ratFill(mode) {
+	var m = String(mode == null ? '' : mode).trim().toLowerCase();
+	if (!m || m === '-') { return 'none'; }
+	if (/nsa|5g\s*\|\s*4g/.test(m)) { return 'nsa'; }
+	if (/5g|\bnr/.test(m)) { return 'sa'; }
+	if (/lte|4g/.test(m)) { return 'lte'; }
+	if (/umts|hs[dpu]?pa|wcdma|td-scdma|3g|\bh\+?\b/.test(m)) { return 'umts'; }
+	if (/gsm|edge|gprs|2g/.test(m)) { return 'gsm'; }
+	return 'none';
+}
 function qualRat(mode) {
 	var m = String(mode == null ? '' : mode).toLowerCase();
 	if (/nsa/.test(m)) { return 'lte'; }
@@ -326,10 +343,26 @@ function qualLevel(key, v, rat, rsrq) {
 	}
 	return l;
 }
-function qualPct(key, v, rat) {
+function qualPct(key, v, rat, rsrq) {
 	var w = QUAL_WIN[key], n = parseFloat(v);
 	if (!w || isNaN(n)) { return null; }
-	var pc = Math.round(100 * (n - w[0]) / (w[1] - w[0]));
+	var t = qualThresholds(key, rat);
+	var pc;
+	if (!t || t.length !== 3) {
+		pc = 100 * (n - w[0]) / (w[1] - w[0]);
+	} else {
+		var pts = [ Math.min(w[0], t[0] - (t[1] - t[0])), t[0], t[1], t[2], Math.max(w[1], t[2] + (t[2] - t[1])) ];
+		if (n <= pts[0]) { pc = 0; }
+		else if (n >= pts[4]) { pc = 100; }
+		else {
+			for (var i = 0; i < 4; i++) {
+				if (n < pts[i + 1]) { pc = 25 * i + 25 * (n - pts[i]) / (pts[i + 1] - pts[i]); break; }
+			}
+		}
+		var lvl = qualLevel(key, n, rat, rsrq);
+		if (lvl != null) { pc = Math.max(lvl * 25 + 1, Math.min(lvl * 25 + 25, pc)); }
+	}
+	pc = Math.round(pc);
 	return pc < 0 ? 0 : (pc > 100 ? 100 : pc);
 }
 
@@ -447,8 +480,11 @@ function flagEmoji(cc) {
 }
 
 return baseclass.extend({
-	API: 30207,
+	API: 30208,
 	QUAL_T: QUAL_T,
+	QUAL_COLOR: QUAL_COLOR,
+	QUAL_GRAD: QUAL_GRAD,
+	ratFill: ratFill,
 	qualRat: qualRat,
 	qualThresholds: qualThresholds,
 	qualLevel: qualLevel,
