@@ -75,13 +75,9 @@ function sinrUnmeasured(sinr, rsrq) {
 }
 /* Имена уровней для таблиц: red / orange / yellow / green = 0..3. */
 var QUAL_NAMES = [ 'red', 'orange', 'yellow', 'green' ];
-var CA_COLOR = { red: '#d95c5c', orange: '#d97a3c', yellow: '#c99a3f', green: '#2fb885' };
-var CA_GRAD = {
-	red:    'linear-gradient(90deg, #d95c5c, #f87171)',
-	orange: 'linear-gradient(90deg, #d97a3c, #fb923c)',
-	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
-	green:  'linear-gradient(90deg, #2fb885, #34d399)'
-};
+var _QC = mutil.QUAL_COLOR || [], _QG = mutil.QUAL_GRAD || [];
+var CA_COLOR = { red: _QC[0], orange: _QC[1], yellow: _QC[2], green: _QC[3] };
+var CA_GRAD = { red: _QG[0], orange: _QG[1], yellow: _QG[2], green: _QG[3] };
 function caQuality(key, v, rat) {
 	var l = mutil.qualLevel(key, v, rat || _qualRat);
 	return l == null ? null : QUAL_NAMES[l];
@@ -219,7 +215,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30207, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(30208, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();

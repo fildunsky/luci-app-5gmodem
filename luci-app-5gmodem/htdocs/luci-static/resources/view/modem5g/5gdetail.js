@@ -66,13 +66,9 @@ function sinrUnmeasured(sinr, rsrq) {
 }
 /* Имена уровней для таблиц: red / orange / yellow / green = 0..3. */
 var QUAL_NAMES = [ 'red', 'orange', 'yellow', 'green' ];
-var CA_COLOR = { red: '#d95c5c', orange: '#d97a3c', yellow: '#c99a3f', green: '#2fb885' };
-var CA_GRAD = {
-	red:    'linear-gradient(90deg, #d95c5c, #f87171)',
-	orange: 'linear-gradient(90deg, #d97a3c, #fb923c)',
-	yellow: 'linear-gradient(90deg, #c99a3f, #e6b84c)',
-	green:  'linear-gradient(90deg, #2fb885, #34d399)'
-};
+var _QC = mutil.QUAL_COLOR || [], _QG = mutil.QUAL_GRAD || [];
+var CA_COLOR = { red: _QC[0], orange: _QC[1], yellow: _QC[2], green: _QC[3] };
+var CA_GRAD = { red: _QG[0], orange: _QG[1], yellow: _QG[2], green: _QG[3] };
 function caQuality(key, v, rat, cap) {
 	var l = mutil.qualLevel(key, v, rat || _qualRat, cap);
 	return l == null ? null : QUAL_NAMES[l];
@@ -84,12 +80,7 @@ function metricPct(key, v, rat) {
 	if (pc == null) { return null; }
 	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
 }
-var _QUAL_BG = [
-	'linear-gradient(90deg, #d95c5c, #f87171)',   /* 0 Слабый  - красный */
-	'linear-gradient(90deg, #d97a3c, #fb923c)',   /* 1 Средний - оранжевый */
-	'linear-gradient(90deg, #c99a3f, #e6b84c)',   /* 2 Хороший - жёлтый */
-	'linear-gradient(90deg, #2fb885, #34d399)'    /* 3 Отличный - зелёный */
-];
+var _QUAL_BG = _QG;
 function _qualLabel(lvl) {
 	return [ _('Poor'), _('Fair'), _('Good'), _('Excellent') ][lvl];
 }
@@ -1140,6 +1131,8 @@ function resetStickyForModem() {
 	}
 	var mv = document.getElementById('mode');
 	if (mv) { mv.textContent = '-'; mv.removeAttribute('data-mh'); }
+	var _mibR = document.getElementById('modem-info-block');
+	if (_mibR) { _mibR.removeAttribute('data-rat'); }
 	var nbw = document.getElementById('nb-comp');
 	if (nbw) {
 		drop(nbw);
@@ -2475,7 +2468,8 @@ function buildSimpleUI() {
 		'class': 'tg-simple-toggle',
 		'style': 'display:flex; justify-content:flex-end; align-items:center; gap:.5em;'
 			+ 'font-size:90%; opacity:.85; cursor:pointer; user-select:none',
-		'click': function() {
+		'click': function(ev) {
+			if (ev && ev.target && ev.target.closest && ev.target.closest('.tg-updbar')) { return; }
 			_simpleOverride = !simpleOn();
 			fs.exec('/usr/share/5gmodem/setopt.sh',
 				[ 'simpleview', _simpleOverride ? '1' : '0' ]).catch(function() {});
@@ -2492,7 +2486,47 @@ function buildSimpleUI() {
 		E('span', { 'id': 'sc-switch', 'class': 'btnsw btnsw-sm' }),
 		E('span', {}, _('Simple view'))
 	]), mib.nextSibling);
+	buildUpdBar(mib.nextSibling);
 	applySimpleVis();
+}
+
+var _upd = null;
+function updSec() {
+	return parseInt(L.env.pollinterval, 10) || 5;
+}
+function buildUpdBar(row) {
+	if (!row || document.getElementById('tg-updbar')) { return; }
+	var time = E('b', {}, '');
+	var bar = E('i');
+	var box = E('span', { 'id': 'tg-updbar', 'class': 'tg-updbar', 'hidden': true,
+		'title': _('Time of the latest modem data; the bar runs until the next update') }, [
+		E('em'), E('span', {}, _('Updated')), time,
+		E('span', { 'class': 'tg-upd-cd' }, bar)
+	]);
+	row.insertBefore(box, row.firstChild);
+	_upd = { box: box, time: time, bar: bar };
+}
+function updBarTick(json) {
+	if (!_upd || !_upd.box.isConnected || !json || json.error) { return; }
+	var age = parseInt(json.age, 10) || 0;
+	var at = Date.now() - age * 1000;
+	if (_upd.at && Math.abs(at - _upd.at) < 2500) { return; }
+	if (_upd.at) {
+		var gap = (at - _upd.at) / 1000;
+		if (gap > 1 && gap < 60) { _upd.period = _upd.period ? (_upd.period * 0.6 + gap * 0.4) : gap; }
+	}
+	_upd.at = at;
+	var d = new Date(at);
+	var p2 = function(n) { return (n < 10 ? '0' : '') + n; };
+	_upd.time.textContent = p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+	_upd.box.hidden = false;
+	var left = Math.max(0.3, (_upd.period || updSec()) - age);
+	var b = _upd.bar;
+	b.style.transition = 'none';
+	b.style.width = '100%';
+	void b.offsetWidth;
+	b.style.transition = 'width ' + left.toFixed(1) + 's linear';
+	b.style.width = '0%';
 }
 function updateSimpleLine(json) {
 	var lamp = document.getElementById('sc-lamp');
@@ -2645,6 +2679,7 @@ function applyMetrics(json) {
 					_lastJson = json;
 					updateSimpleLine(json);
 					try { mobileview.tick(json); } catch (e) {}
+					updBarTick(json);
 					qualSetMode(json.mode);
 
 					/* Тик пришёл - порт свободен: запускаем отложенные
@@ -3004,6 +3039,8 @@ function applyMetrics(json) {
 					if (document.getElementById('mode')) {
 						var view = document.getElementById("mode");
 						var mv = String(json.mode || '').trim();
+						var _mibR = document.getElementById('modem-info-block');
+						if (_mibR && mutil.ratFill) { _mibR.setAttribute('data-rat', mutil.ratFill(mv)); }
 						if (mv && mv != '-') {
 							// валидный режим -> показать (частоты в скобках отдельным span).
 							// Телефонный ярлык + единый вид "4G | B1 (2100 MHz)".
@@ -3016,9 +3053,10 @@ function applyMetrics(json) {
 							   ОБЫЧНЫМ текстом СНАРУЖИ кнопки. Оборачиваем бенды ДО частот,
 							   чтобы regex частот не задел сгенерированные span'ы. */
 							var _mh = mtext
-								.replace(/\b([Bn])(\d+)\b/g,
-									'<span class="btn cbi-button cbi-button-action important tginfo-band" title="' +
-										_('Active carrier: this band is carrying your data right now') + '">$1$2</span>')
+								.replace(/\b([Bn])(\d+)\b/g, function(_m, _bl, _bn) {
+									return '<span class="btn cbi-button cbi-button-action important tginfo-band' + (_bl === 'n' ? ' tginfo-band-nr' : '') + '" title="' +
+										_('Active carrier: this band is carrying your data right now') + '">' + _bl + _bn + '</span>';
+								})
 								.replace(/\(([^)]*)\)/g, '<span class="tginfo-freq">($1)</span>')
 								.replace(/\|/g, '<span style="font-weight:normal;opacity:.65">|</span>');
 								/* Расстояние до соты по Timing Advance - в конец строки агрегации,
@@ -3801,7 +3839,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30207, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30208, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
