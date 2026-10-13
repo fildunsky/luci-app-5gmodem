@@ -3174,11 +3174,11 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   body.tg-mv:not(.sc-simple) .tg-mv-spark { width: 100%; height: 18px; display: block; }
   body.tg-mv:not(.sc-simple) .tg-mv-spark polyline { fill: none; stroke: var(--tg-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   body.tg-mv:not(.sc-simple) .tg-mv-good .tg-mv-w, body.tg-mv:not(.sc-simple) .tg-mv-r.tg-mv-good { color: #1f9a6c; }
-  body.tg-mv:not(.sc-simple) .tg-mv-ok .tg-mv-w, body.tg-mv:not(.sc-simple) .tg-mv-r.tg-mv-ok { color: #a77a1c; }
+  body.tg-mv:not(.sc-simple) .tg-mv-ok .tg-mv-w, body.tg-mv:not(.sc-simple) .tg-mv-r.tg-mv-ok { color: #5f8f1f; }
   body.tg-mv:not(.sc-simple) .tg-mv-warn .tg-mv-w, body.tg-mv:not(.sc-simple) .tg-mv-r.tg-mv-warn { color: #c46a2c; }
   body.tg-mv:not(.sc-simple) .tg-mv-bad .tg-mv-w, body.tg-mv:not(.sc-simple) .tg-mv-r.tg-mv-bad { color: #c24848; }
   body.tg-mv:not(.sc-simple) .tg-mv-good .tg-mv-meter i { background: #2fb885; }
-  body.tg-mv:not(.sc-simple) .tg-mv-ok .tg-mv-meter i { background: #c99a3f; }
+  body.tg-mv:not(.sc-simple) .tg-mv-ok .tg-mv-meter i { background: #7fae3a; }
   body.tg-mv:not(.sc-simple) .tg-mv-warn .tg-mv-meter i { background: #d97a3c; }
   body.tg-mv:not(.sc-simple) .tg-mv-bad .tg-mv-meter i { background: #d95c5c; }
 
@@ -3395,3 +3395,185 @@ body.sc-netonly .tg-mv-tabs,
 body.sc-netonly .tg-mv-sig,
 body.sc-netonly .tg-simple-toggle,
 body.sc-netonly #sc-advice { display: none !important; }
+
+#modem-info-block[data-rat] {
+  --tg-rat-bg: linear-gradient(125deg, #3a404b 0%, #5a626f 55%, #7a828f 100%);
+  background: var(--tg-rat-bg) !important;
+  background-origin: border-box !important;
+  background-repeat: no-repeat !important;
+  border-color: transparent !important;
+  box-shadow: 0 14px 34px -20px rgba(25, 50, 95, .6);
+  color: #fff;
+}
+#modem-info-block[data-rat="sa"]   { --tg-rat-bg: linear-gradient(125deg, #102e66 0%, #2459a8 55%, #3f8ad8 100%); }
+#modem-info-block[data-rat="nsa"]  { --tg-rat-bg: linear-gradient(125deg, #08503a 0%, #158a5e 55%, #2cb27d 100%); }
+#modem-info-block[data-rat="lte"]  { --tg-rat-bg: linear-gradient(125deg, #34580c 0%, #5f8f1f 55%, #85b532 100%); }
+#modem-info-block[data-rat="umts"] { --tg-rat-bg: linear-gradient(125deg, #7a330c 0%, #b65d22 55%, #dc8441 100%); }
+#modem-info-block[data-rat="gsm"]  { --tg-rat-bg: linear-gradient(125deg, #7a2240 0%, #b44766 55%, #d96a8b 100%); }
+#modem-info-block[data-rat] .tginfo-general { text-shadow: 0 1px 2px rgba(0, 0, 0, .18); }
+#modem-info-block[data-rat] > h3,
+#modem-info-block[data-rat] #signal,
+#modem-info-block[data-rat] .tginfo-status,
+#modem-info-block[data-rat] .tginfo-info,
+#modem-info-block[data-rat] .tginfo-right,
+#modem-info-block[data-rat] .tg-mv-badge {
+  color: #fff !important;
+}
+#modem-info-block[data-rat] > h3 { border-color: rgba(255, 255, 255, .2) !important; }
+#modem-info-block[data-rat] .tginfo-status *,
+#modem-info-block[data-rat] .tginfo-info *:not(.btn),
+#modem-info-block[data-rat] #apnline,
+#modem-info-block[data-rat] #apnline * { color: inherit !important; }
+#modem-info-block[data-rat] .tg-proto-badge { color: #fff !important; border-color: rgba(255, 255, 255, .45) !important; background: transparent !important; }
+#modem-info-block[data-rat] #proto-chip {
+  opacity: 1 !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, .5) !important;
+  background: rgba(255, 255, 255, .14) !important;
+}
+#modem-info-block[data-rat] .tginfo-vidpid { opacity: .85 !important; color: #fff !important; }
+#modem-info-block[data-rat] #stale-mark { opacity: 1 !important; }
+#modem-info-block[data-rat] #sc-line {
+  align-items: center;
+  gap: .45em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f2733 !important;
+  text-shadow: none;
+  opacity: 1 !important;
+}
+#modem-info-block[data-rat] #sc-line * { color: inherit !important; }
+#modem-info-block[data-rat] #stale-mark img { filter: brightness(0) invert(1); width: 14px !important; height: 14px !important; }
+#modem-info-block[data-rat] #signal img,
+#modem-info-block[data-rat] .tginfo-conn img { filter: brightness(0) invert(1); }
+#modem-info-block[data-rat] .tginfo-info .tginfo-band.btn {
+  background: rgba(255, 255, 255, .22) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  color: #fff !important;
+}
+#modem-info-block[data-rat] .tginfo-info .tginfo-band.btn.tginfo-band-nr {
+  background: rgba(255, 255, 255, .95) !important;
+  color: #1f2733 !important;
+}
+#modem-info-block[data-rat] .tginfo-simslot .cbi-button {
+  background: rgba(255, 255, 255, .14) !important;
+  border-color: rgba(255, 255, 255, .35) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  color: #fff !important;
+}
+#modem-info-block[data-rat] .tginfo-simslot .cbi-button.tg-current {
+  background: #fff !important;
+  border-color: #fff !important;
+  color: #1f2733 !important;
+}
+#modem-info-block[data-rat] #tempn {
+  opacity: 1;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1f2733 !important;
+}
+.tg-mv-badge { display: none; }
+
+@media (max-width: 700px) {
+  body.tg-mv #modem-info-block .tginfo-general {
+    grid-template-columns: auto auto auto minmax(0, 1fr);
+  }
+  body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) {
+    grid-column: 1; grid-row: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1px; min-width: 58px; padding: 8px 6px; box-sizing: border-box;
+    border-radius: var(--tg-radius-lg) 0 0 var(--tg-radius-lg);
+    background: rgba(128, 128, 128, .08);
+  }
+  body.tg-mv #modem-info-block .tg-mv-badge b { font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+  body.tg-mv #modem-info-block .tg-mv-badge small { font-size: 10px; font-weight: 700; letter-spacing: .04em; opacity: .9; white-space: nowrap; }
+  body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ #signal { grid-column: 2; grid-row: 1; border-radius: 0; padding-left: 8px; padding-right: 4px; }
+  body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ #simv { grid-column: 3; border-radius: 0; }
+  body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ .tginfo-status {
+    grid-column: 4;
+    border-radius: 0 var(--tg-radius-lg) var(--tg-radius-lg) 0;
+  }
+  body.tg-mv #modem-info-block #signal medium { font-size: 11px; font-weight: 700; }
+  body.tg-mv #modem-info-block[data-rat] #signal,
+  body.tg-mv #modem-info-block[data-rat] #simv,
+  body.tg-mv #modem-info-block[data-rat] .tginfo-status,
+  body.tg-mv #modem-info-block[data-rat] .tginfo-info,
+  body.tg-mv #modem-info-block[data-rat] .tginfo-right,
+  body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) {
+    background: rgba(255, 255, 255, .1);
+  }
+  body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) { background: rgba(255, 255, 255, .16); }
+
+  body.tg-mv:not(.sc-simple) .tg-mv-simcard {
+    display: flex; flex-direction: column; gap: 8px;
+    margin: 0 0 10px; padding: 10px 12px;
+    border: 1px solid var(--border-color-medium, var(--tg-track));
+    border-radius: var(--tg-radius-lg);
+    background: var(--background-color-high, transparent);
+  }
+  body.tg-mv:not(.sc-simple) .tg-mv-simcard[hidden] { display: none !important; }
+  body.tg-mv .tg-mv-simcard .tginfo-simslot {
+    display: flex !important; gap: 4px; padding: 4px;
+    border-radius: 10px; background: var(--tg-track);
+  }
+  body.tg-mv .tg-mv-simcard .tginfo-simslot .cbi-button {
+    flex: 1; margin: 0 !important; min-height: 40px !important;
+    font-size: 13px !important; line-height: 18px !important; padding: 8px 12px !important;
+    border: 0 !important; border-radius: 8px !important;
+    background: transparent !important; box-shadow: none !important; color: inherit !important;
+  }
+  body.tg-mv .tg-mv-simcard .tginfo-simslot .cbi-button.tg-current {
+    background: var(--tg-accent) !important; color: #fff !important;
+  }
+  body.tg-mv .tg-mv-simcard .tginfo-simslot .cbi-button.tg-slot-empty { opacity: .6; }
+
+  body.tg-mv:not(.sc-simple) .tg-mv-sect { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+  body.tg-mv:not(.sc-simple) .tg-mv-sect[hidden] { display: none; }
+  body.tg-mv:not(.sc-simple) .tg-mv-cc {
+    display: flex; flex-direction: column; gap: 8px;
+    margin: 0 0 10px; padding: 10px 12px 12px;
+    border: 1px solid var(--border-color-medium, var(--tg-track));
+    border-radius: var(--tg-radius-lg);
+    background: var(--background-color-high, transparent);
+  }
+  body.tg-mv:not(.sc-simple) .tg-mv-cc[hidden] { display: none; }
+  body.tg-mv:not(.sc-simple) .tg-mv-cc .tg-mv-tiles { margin: 0; }
+  body.tg-mv:not(.sc-simple) .tg-mv-tiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.tg-mv:not(.sc-simple) .tg-mv-tiles3 .tg-mv-v { font-size: 18px; }
+  body.tg-mv:not(.sc-simple) .tg-mv-cch { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  body.tg-mv:not(.sc-simple) .tg-mv-bp {
+    font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 6px;
+    color: #3b82f6; background: rgba(59, 130, 246, .15);
+  }
+  body.tg-mv:not(.sc-simple) .tg-mv-bp-nr { color: #8b5cf6; background: rgba(139, 92, 246, .16); }
+  body.tg-mv:not(.sc-simple) .tg-mv-cct { font-size: 12px; opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  body.tg-mv:not(.sc-simple) .tg-mv-car { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
+  body.tg-mv:not(.sc-simple) .tg-mv-car:first-child { border-top: 0; }
+  body.tg-mv:not(.sc-simple) .tg-mv-cv { font-size: 12px; font-weight: 600; white-space: nowrap; }
+
+}
+@media (min-width: 520px) and (max-width: 700px) {
+  body.tg-mv #modem-info-block .tginfo-general {
+    grid-template-columns: auto auto auto minmax(7em, max-content) minmax(0, 1fr);
+  }
+  body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ .tginfo-info { grid-column: 5; }
+}
+
+.tg-simple-toggle { flex-wrap: wrap; }
+.tg-updbar {
+  order: -1;
+  margin-right: auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; cursor: default;
+}
+.tg-updbar[hidden] { display: none !important; }
+.tg-updbar em { width: 7px; height: 7px; border-radius: 50%; background: #2fb885; box-shadow: 0 0 0 3px rgba(47, 184, 133, .18); }
+.tg-updbar b { font-variant-numeric: tabular-nums; }
+body.sc-simple .tg-updbar { display: none !important; }
+.tg-upd-cd { width: 44px; height: 3px; border-radius: 2px; background: var(--tg-track); overflow: hidden; }
+.tg-upd-cd i { display: block; height: 100%; width: 0; background: var(--tg-accent); }

@@ -5286,10 +5286,10 @@ msgstr "路由器到哪裡去問自己的位址從外面看是什麼樣。測速
 msgid "The address is public: the interface has exactly what the internet sees%s"
 msgstr "位址是公網的：接口上就是網際網路看到的那個%s"
 
-msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "下載測試的資料來源。「Интернетометр」會在每次測試前向 Yandex 查詢最近的 CDN 節點，在俄羅斯行動網路下這是最佳選擇；如果您沒有自行選擇上傳端點，它也會一併設定。對於一般 URL，檔案越大，速度越能在約 15 秒的測試中充分提升。俄羅斯境內代管的資料來源（Selectel/Yandex/Tele2）可在俄羅斯行動網路下使用；Cloudflare/Hetzner 在當地可能遭到封鎖。旁邊顯示的是大約檔案大小。"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "用於上傳測試的端點，需接受 POST 請求內容。「Интернетометр」使用與下載資料來源相同探測清單中的節點，也可在此單獨選擇。俄羅斯境內代管的端點（Rostelecom/Yandex）可在俄羅斯行動網路下使用；即使伺服器回應 404/403，也會讀取請求內容，因此仍能測出速度。"
 
 msgid "public demo"
@@ -5568,7 +5568,7 @@ msgstr "MBIM+MM（共用代理，由 ModemManager 管理）"
 msgid "Deleted: %d, not deleted: %d"
 msgstr "已刪除：%d，未刪除：%d"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
 msgstr "用於上傳測試、可接收 POST 內文的端點。「Интернетометр」使用與下載來源相同探測清單中的節點，也可在此單獨選擇。只計算伺服器完整接收的上傳：提前中斷傳輸的端點不會給出上傳數值。"
 
 msgid "The previous deletion is still running, try again in a minute"

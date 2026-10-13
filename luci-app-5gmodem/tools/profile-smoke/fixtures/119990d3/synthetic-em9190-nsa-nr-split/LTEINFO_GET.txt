@@ -1,0 +1,5 @@
+!LTEINFO: 
+Serving:   EARFCN MCC MNC   TAC      CID Bd D U SNR PCI  RSRQ   RSRP   RSSI RXLV
+           1300   452  04 21999 37585725  3 5 5   0 241 -11.5  -88.4  -60.1   52
+
+OK

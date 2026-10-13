@@ -272,7 +272,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30207, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30208, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -658,11 +658,11 @@ return view.extend({
 		sts.anonymous = true;
 
 		o = sts.option(form.Value, 'speedtest_url', _('Download source'),
-			_('Source for the download test. "Интернетометр" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown.'));
+			_('Source for the download test. "Internetometer" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown.'));
 		/* Значение-МАРКЕР, а не адрес: у зондов Интернетометра адреса сессионные
 		   (внутри mid/sid), поэтому их нельзя записать в настройку - скрипт
 		   берёт список сам перед каждым замером. */
-		o.value('internetometer', 'Интернетометр (Yandex CDN)');
+		o.value('internetometer', _('Internetometer (Yandex CDN)'));
 		o.value('https://speedtest.selectel.ru/1GB', 'Selectel — RU (~1 ' + _('GB') + ')');
 		o.value('http://mirror.yandex.ru/archlinux/iso/latest/archlinux-x86_64.iso', 'Yandex — RU (~1 ' + _('GB') + ')');
 		o.value('http://speedtest.tele2.net/1GB.zip', 'Tele2 (~1 ' + _('GB') + ')');
@@ -688,8 +688,8 @@ return view.extend({
 		};
 
 		o = sts.option(form.Value, 'speedtest_up_url', _('Upload endpoint'),
-			_('Endpoint that accepts a POST body, for the upload test. "Интернетометр" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all.'));
-		o.value('internetometer', 'Интернетометр (Yandex CDN)');
+			_('Endpoint that accepts a POST body, for the upload test. "Internetometer" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all.'));
+		o.value('internetometer', _('Internetometer (Yandex CDN)'));
 		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
 		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
 		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex - RU (' + _('works over cellular') + ')');

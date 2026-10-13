@@ -1,0 +1,23 @@
+## synthetic: EM9190 NSA with NR5G RSRP/RSRQ/SINR on separate lines
+!GSTATUS: 
+Current Time:  5120		Temperature: 41
+Reset Counter: 1		Mode:        ONLINE         
+System mode:   ENDC       	PS state:    Attached     
+LTE band:      B3     		LTE bw:      20 MHz  
+LTE Rx chan:   1300		LTE Tx chan: 19300
+LTE CA state:  INACTIVE
+EMM state:     Registered     	Normal Service 
+RRC state:     RRC Connected  
+
+PCC Rx0 RSSI:  -60.1		PCC Rx0 RSRP:  -88.4
+PCC Rx1 RSSI:  -63.0		PCC Rx1 RSRP:  -91.2
+PCC Tx Power:  5.0		TAC:         55ef (21999)
+RSRQ (dB):     -11.5		Cell ID:     023D833D (37585725)
+SINR (dB):     12.4
+
+NR5G band:       n78		NR5G bw:         100 MHz		
+NR5G Rx chan:    636666
+NR5G RSRP (dBm): -85.0		NR5G RSRQ (dB):  -11.0
+NR5G SINR (dB):  17.5
+
+OK

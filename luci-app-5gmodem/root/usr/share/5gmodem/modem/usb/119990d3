@@ -65,9 +65,12 @@ _SG=$(printf '%s\n' "$_SG_RAW" | awk '
 	/Cell ID/                { put("CIDHEX", after("Cell ID", 1)); put("CIDDEC", after("Cell ID", 2)) }
 	/^RSRQ/                  { put("RSRQ", after("RSRQ")) }
 	/^SINR/                  { put("SINR", after("SINR")) }
-	/^NR5G band/             { put("NRBAND", after("NR5G band")); put("NRBW", after("NR5G bw")) }
-	/^NR5G Rx chan/          { put("NREARFCN", after("NR5G Rx chan")); put("NRRSRP", after("NR5G RSRP")) }
-	/^NR5G RSRQ/             { put("NRRSRQ", after("NR5G RSRQ")); put("NRSINR", after("NR5G SINR")) }
+	/NR5G band/              { put("NRBAND", after("NR5G band")) }
+	/NR5G bw/                { put("NRBW", after("NR5G bw")) }
+	/NR5G Rx chan/           { put("NREARFCN", after("NR5G Rx chan")) }
+	/NR5G RSRP/              { put("NRRSRP", after("NR5G RSRP")) }
+	/NR5G RSRQ/              { put("NRRSRQ", after("NR5G RSRQ")) }
+	/NR5G SINR/              { put("NRSINR", after("NR5G SINR")) }
 
 	END {
 		for (k in V) print k " " V[k]
@@ -240,6 +243,10 @@ _LINB=$(printf '%s\n' "$_LI" | awk '
 	}
 ')
 [ -n "$_LINB" ] && NEIGHBORS="$_LINB"
+if [ -z "$PCI" ] || [ "$PCI" = "-" ]; then
+	_li_pci=$(printf '%s\n' "$_LI" | awk '/^Serving:/ { s = 1; next } s && NF >= 14 && $1 ~ /^[0-9]+$/ { print $10; exit }')
+	[ -n "$_li_pci" ] && PCI="$_li_pci"
+fi
 
 # SINR вторичных LTE-несущих - секция CA SCell того же ответа: GSTATUS по SCC
 # отдаёт только RSRP/RSSI, а фронт поля s<n>sinr уже читает.
@@ -279,12 +286,12 @@ fi
 # значение по +COPS, и присвоение пустой строки стёрло бы его - в карточке
 # оставался бы прочерк вместо «4G».
 case "$_SYSMODE" in
-	'')    ;;
+	'')    [ -n "$_NRBAND" ] && MODE="5G NSA" ;;
 	ENDC)  [ -n "$_NRBAND" ] && MODE="5G NSA" || MODE="LTE" ;;
 	NR5G|SA|ENDC_SA) MODE="5G SA" ;;
-	LTE)   MODE="LTE" ;;
+	LTE)   [ -n "$_NRBAND" ] && MODE="5G NSA" || MODE="LTE" ;;
 	WCDMA|HSPA|UMTS) MODE="WCDMA" ;;
-	*)     MODE="$_SYSMODE" ;;
+	*)     [ -n "$_NRBAND" ] && MODE="5G NSA" || MODE="$_SYSMODE" ;;
 esac
 [ "$MODE" = "LTE" ] && [ "$_CANUM" -gt 0 ] && MODE="LTE-A"
 if [ -n "$_SYSMODE" ] && [ -n "$PBAND" ]; then

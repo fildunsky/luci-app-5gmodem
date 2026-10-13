@@ -3661,10 +3661,14 @@ if [ -z "$CSQ" ] && [ -n "$RSSI" ]; then
 	_csq_r=${RSSI%%.*}
 	case "$_csq_r" in
 		-[0-9]*)
-			if [ "$_csq_r" -ge -113 ] 2>/dev/null && [ "$_csq_r" -le -51 ] 2>/dev/null; then
+			if [ "$_csq_r" -ge -51 ] 2>/dev/null; then
+				CSQ=31
+			elif [ "$_csq_r" -ge -113 ] 2>/dev/null; then
 				CSQ=$(( (_csq_r + 113) / 2 ))
-				[ -z "$CSQ_PER" ] && CSQ_PER=$(( CSQ * 100 / 31 ))
-			fi ;;
+			else
+				CSQ=0
+			fi
+			[ -z "$CSQ_PER" ] && CSQ_PER=$(( CSQ * 100 / 31 )) ;;
 	esac
 fi
 

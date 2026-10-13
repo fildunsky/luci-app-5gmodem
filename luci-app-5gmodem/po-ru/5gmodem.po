@@ -3107,7 +3107,7 @@ msgstr "стрим"
 msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "URL файла для теста загрузки. БОЛЬШОЙ файл даёт скорости разогнаться за ~15 с теста; маленький кончается раньше и занижает результат. РФ-хостинг (Selectel/Yandex/Tele2) работает через сотовую РФ; Cloudflare/Hetzner там могут быть заблокированы. Рядом примерный размер."
 
-msgid "Source for the download test. \"Интернетометр\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "Источник для теста загрузки. «Интернетометр» перед каждым замером спрашивает у Яндекса ближайший узел CDN - через сотовую РФ это лучший выбор; он же задаёт и точку отдачи, если вы не выбрали её сами. Для обычной ссылки: БОЛЬШОЙ файл даёт скорости разогнаться за ~15 с теста. РФ-хостинг (Selectel/Yandex/Tele2) работает через сотовую РФ; Cloudflare/Hetzner там могут быть заблокированы. Рядом примерный размер."
 
 msgid "No response from modem"
@@ -3116,7 +3116,7 @@ msgstr "Модем не ответил"
 msgid "Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "Эндпойнт, принимающий POST-тело, для теста отдачи. РФ-хостинг (Rostelecom/Yandex) работает через сотовую РФ; сервер читает тело даже при ответе 404/403, поэтому скорость всё равно измеряется."
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "Эндпойнт, принимающий POST-тело, для теста отдачи. «Интернетометр» берёт узел из того же списка зондов, что и источник загрузки, и его можно выбрать здесь отдельно. РФ-хостинг (Rostelecom/Yandex) работает через сотовую РФ; сервер читает тело даже при ответе 404/403, поэтому скорость всё равно измеряется."
 
 msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
@@ -5663,7 +5663,7 @@ msgstr "MBIM+MM (общий прокси, ModemManager для управлени
 msgid "Deleted: %d, not deleted: %d"
 msgstr "Удалено: %d, не удалено: %d"
 
-msgid "Endpoint that accepts a POST body, for the upload test. \"Интернетометр\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
 msgstr "Адрес, принимающий тело POST, для замера отдачи. «Интернетометр» берёт узел из того же списка проб, что и источник загрузки, и его можно выбрать здесь отдельно. Считаются только отправки, которые сервер принял целиком: адрес, обрывающий передачу в начале, цифры отдачи не даёт вовсе."
 
 msgid "The previous deletion is still running, try again in a minute"
@@ -5859,3 +5859,15 @@ msgstr "Модем просит пароль веб-интерфейса - вв�
 
 msgid "Password needed"
 msgstr "Нужен пароль"
+
+msgid "Internetometer"
+msgstr "Интернетометр"
+
+msgid "Internetometer (Yandex CDN)"
+msgstr "Интернетометр (Yandex CDN)"
+
+msgid "Updated"
+msgstr "Обновлено"
+
+msgid "Time of the latest modem data; the bar runs until the next update"
+msgstr "Время последних данных от модема; полоска идёт до следующего обновления"
