@@ -336,6 +336,32 @@ snap_key() {   # $1 - usb-путь
 	printf '%s' "$_sk"
 }
 
+sms_fwd_info() {   # $1 - usb-путь модема; задаёт SFI_OP, SFI_PHONE, SFI_HOST, SFI_MODEL
+	_sfh_s=m_$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')
+	SFI_MODEL=$(uci -q get "5gmodem.$_sfh_s.model")
+	[ -n "$SFI_MODEL" ] || SFI_MODEL=$(uci -q get "5gmodem.$_sfh_s.product")
+	_sfh_j="/tmp/5gmodem/metrics_$(snap_key "$1").json"
+	SFI_PHONE=$(jsonfilter -e '@.phone' 2>/dev/null < "$_sfh_j")
+	SFI_OP=$(jsonfilter -e '@.operator_name' 2>/dev/null < "$_sfh_j")
+	case "$SFI_OP" in -|--) SFI_OP="" ;; esac
+	case "$SFI_PHONE" in +[0-9]*|[0-9]*) ;; *) SFI_PHONE="" ;; esac
+	SFI_HOST=$(uci -q get system.@system[0].hostname)
+}
+
+sms_fwd_head() {   # $1 - usb-путь модема, $2 - отправитель
+	sms_fwd_info "$1"
+	_sfh_o="SMS"
+	[ -n "$2" ] && _sfh_o="$_sfh_o $2"
+	_sfh_t="$SFI_OP${SFI_OP:+${SFI_PHONE:+ }}$SFI_PHONE"
+	if [ -n "$_sfh_t" ]; then
+		[ -n "$2" ] && _sfh_o="$_sfh_o →"
+		_sfh_o="$_sfh_o $_sfh_t"
+	fi
+	[ -n "$SFI_HOST" ] && _sfh_o="$_sfh_o · $SFI_HOST"
+	[ -n "$SFI_MODEL" ] && _sfh_o="$_sfh_o ($SFI_MODEL)"
+	printf '%s' "$_sfh_o"
+}
+
 # Секунды аптайма БЕЗ подпроцесса. Раньше повсюду звался `cut -d. -f1
 # /proc/uptime` - по замеру это 21 спавн на ОДИН опрос метрик (циклы, штампы
 # кэшей). read из /proc + подстановка делают то же ядерными средствами.

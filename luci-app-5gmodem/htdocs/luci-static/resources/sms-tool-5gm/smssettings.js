@@ -454,6 +454,11 @@ function addEmailForwarding(s) {
 	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
+	o = s.option(form.Flag, 'forward_sms_mail_hostname', _('Add router name'),
+		_('Subject: SMS sender, then the SIM operator and number, router name and modem, e.g. "SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)".'));
+	o.depends('forward_sms_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
 	o = s.option(form.Value, 'forward_sms_mail_sender', _('Sender'));
 	o.description = _('E-mail address of the sender');
 	o.depends('forward_sms_enabled', '1');
@@ -585,6 +590,11 @@ function addTelegramForwarding(s) {
 		});
 	};
 
+	o = s.option(form.Flag, 'tg_hostname', _('Add router name'),
+		_('Message header: SMS sender, then the SIM operator and number, router name and modem, e.g. "SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)". Helps when several routers send to one chat.'));
+	o.depends('tg_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
 	o = s.option(form.Button, '_tgchatid', _('Find Chat ID'),
 		_('Uses the SAVED token: write to the bot first, then save the form and press this.'));
 	o.inputtitle = _('Find');
@@ -671,6 +681,8 @@ function addTelegramForwarding(s) {
 	o.value('900', _('15 min'));
 	o.default = '60';
 	o.depends('tg_enabled', '1');
+	o.depends('ntfy_enabled', '1');
+	o.depends('hook_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Flag, 'tg_commands', _('Allow sending SMS from the chat'),
@@ -694,6 +706,82 @@ function addTelegramForwarding(s) {
 			}
 		});
 	};
+}
+
+function addPushTest(s, ch, dep) {
+	var o = s.option(form.Button, '_' + ch + 'test', _('Test delivery'),
+		_('Sends a test message with the SAVED settings - save the form first.'));
+	o.inputtitle = _('Send test message');
+	o.inputstyle = 'apply';
+	o.depends(dep, '1');
+	o.onclick = function() {
+		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'test', ch ]).then(function(out) {
+			var j = {};
+			try { j = JSON.parse(out || '{}'); } catch (e) {}
+			if (j.ok) {
+				ui.addNotification(null, E('p', {}, _('Test message sent')), 'info');
+			} else {
+				ui.addNotification(null, E('p', {},
+					[ _('Failed to send: %s').format(j.error || _('check the address and the router internet connection')) ]), 'error');
+			}
+		});
+	};
+}
+
+function addNtfyForwarding(s) {
+	var o;
+
+	o = s.option(form.Flag, 'ntfy_enabled', _('ntfy notifications'),
+		_('Forwards every new incoming SMS to an ntfy topic (ntfy.sh or your own server). Subscribe to the topic in the ntfy app on the phone.'));
+	o.rmempty = false;
+
+	o = s.option(form.Value, 'ntfy_server', _('ntfy server'));
+	o.placeholder = 'https://ntfy.sh';
+	o.depends('ntfy_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Value, 'ntfy_topic', _('Topic'),
+		_('Anyone who knows the topic name on ntfy.sh can read it - pick a long, hard to guess name.'));
+	o.datatype = 'and(minlength(1),maxlength(64))';
+	o.validate = function(section_id, value) {
+		return (!value || /^[A-Za-z0-9_-]+$/.test(value)) ? true : _('Only Latin letters, digits, "-" and "_"');
+	};
+	o.depends('ntfy_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Value, 'ntfy_token', _('Access token'),
+		_('Only for protected topics, e.g. tk_...'));
+	o.password = true;
+	o.depends('ntfy_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	addPushTest(s, 'ntfy', 'ntfy_enabled');
+}
+
+function addWebhookForwarding(s) {
+	var o;
+
+	o = s.option(form.Flag, 'hook_enabled', _('Webhook'),
+		_('Sends every new incoming SMS as a JSON POST request: title, sender, time, text, router, modem, operator, phone, path. Suits Home Assistant, n8n, Gotify proxies and your own scripts.'));
+	o.rmempty = false;
+
+	o = s.option(form.Value, 'hook_url', _('URL'));
+	o.placeholder = 'https://example.com/hook';
+	o.validate = function(section_id, value) {
+		return (!value || /^https?:\/\/\S+$/.test(value)) ? true : _('Expecting an http:// or https:// address');
+	};
+	o.depends('hook_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	o = s.option(form.Value, 'hook_header', _('Extra header'),
+		_('Optional, one header in the form Name: value, e.g. Authorization: Bearer secret'));
+	o.validate = function(section_id, value) {
+		return (!value || /^[A-Za-z0-9-]+:\s*\S/.test(value)) ? true : _('Expecting Name: value');
+	};
+	o.depends('hook_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
+	addPushTest(s, 'hook', 'hook_enabled');
 }
 
 function addSendOptions(s) {
@@ -877,7 +965,7 @@ function addSmsCommands(s) {
 }
 
 var GROUPS = {
-	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); addTelegramForwarding(s); addSmsCommands(s); },
+	receive: function(s) { addReceiveIncoming(s); addNotifications(s); addEmailForwarding(s); addTelegramForwarding(s); addNtfyForwarding(s); addWebhookForwarding(s); addSmsCommands(s); },
 	send:    addSendOptions,
 	ussd:    addUssdOptions
 };

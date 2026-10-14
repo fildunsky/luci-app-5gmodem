@@ -42,6 +42,15 @@ TG_IFACE=$(_cfg tg_iface)
 # Компромисс: шлём то, что пришло за последние N часов, остальное помечаем
 # виденным молча. 0 - прежнее поведение (не слать ничего).
 TG_FIRSTH=$(_cfg tg_first_hours); case "$TG_FIRSTH" in ''|*[!0-9]*) TG_FIRSTH=24 ;; esac
+TG_HOST=$(_cfg tg_hostname)
+NTFY_EN=$(_cfg ntfy_enabled)
+NTFY_SRV=$(_cfg ntfy_server); [ -n "$NTFY_SRV" ] || NTFY_SRV=https://ntfy.sh
+NTFY_SRV=${NTFY_SRV%/}
+NTFY_TOPIC=$(_cfg ntfy_topic)
+NTFY_TOKEN=$(_cfg ntfy_token)
+HOOK_EN=$(_cfg hook_enabled)
+HOOK_URL=$(_cfg hook_url)
+HOOK_HDR=$(_cfg hook_header)
 STORE=$(_cfg storage); [ -n "$STORE" ] || STORE=SM
 PORT=$(_cfg readport)
 
@@ -54,6 +63,8 @@ OFFSET=/etc/5gmodem/tg_offset
 # прийти ОДИН раз за всё время, а не после каждой перезагрузки.
 ANNOUNCED=/etc/5gmodem/tg_announced
 LASTLOG=/tmp/5gmodem/tg_result
+NTFYLOG=/tmp/5gmodem/ntfy_result
+HOOKLOG=/tmp/5gmodem/hook_result
 
 _log() { logger -t 5gmodem "telegram: $*"; }
 
@@ -62,6 +73,71 @@ _ready() {
 	[ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] || return 1
 	command -v curl >/dev/null 2>&1 || return 1
 	return 0
+}
+
+_ntfy_ready() {
+	[ "$NTFY_EN" = "1" ] && [ -n "$NTFY_TOPIC" ] || return 1
+	command -v curl >/dev/null 2>&1
+}
+
+_hook_ready() {
+	[ "$HOOK_EN" = "1" ] && [ -n "$HOOK_URL" ] || return 1
+	command -v curl >/dev/null 2>&1
+}
+
+_chs() {
+	_ready && printf 'tg '
+	_ntfy_ready && printf 'ntfy '
+	_hook_ready && printf 'hook '
+	return 0
+}
+
+_js() {
+	printf '%s' "$1" | tr -d '\r' | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | awk '
+		BEGIN { ORS=""; printf "\"" }
+		{ if (NR>1) printf "\\n"; printf "%s", $0 }
+		END { printf "\"" }'
+}
+
+_http_rc() {   # $1 - код ответа HTTP; 0 - принято, 2 - отказ именно этому сообщению, 1 - повторить
+	case "$1" in
+		2??) return 0 ;;
+		408|425|429) return 1 ;;
+		4??) return 2 ;;
+	esac
+	return 1
+}
+
+_ntfy_send() {   # $1 - заголовок, $2 - текст
+	_ns_j=$(printf '{"topic":%s,"title":%s,"message":%s}' "$(_js "$NTFY_TOPIC")" \
+		"$(_js "$(printf '%s' "$1" | utf8_fix)")" "$(_js "$(printf '%s' "$2" | utf8_fix)")")
+	if [ -n "$NTFY_TOKEN" ]; then
+		_ns_c=$(printf 'header = "Authorization: Bearer %s"\n' "$NTFY_TOKEN" | curl -s -m 20 -o "$NTFYLOG" -w '%{http_code}' -K - \
+			-H 'Content-Type: application/json' --data-binary "$_ns_j" "$NTFY_SRV" 2>/dev/null)
+	else
+		_ns_c=$(curl -s -m 20 -o "$NTFYLOG" -w '%{http_code}' \
+			-H 'Content-Type: application/json' --data-binary "$_ns_j" "$NTFY_SRV" 2>/dev/null)
+	fi
+	[ "$_ns_c" = 000 ] && printf 'no reply from %s' "$NTFY_SRV" > "$NTFYLOG" 2>/dev/null
+	case "$_ns_c" in 2??) printf 'ok' > "$NTFYLOG" 2>/dev/null ;; esac
+	_http_rc "$_ns_c"
+}
+
+_hook_send() {   # $1 - заголовок, $2 - отправитель, $3 - время, $4 - текст, $5 - usb-путь
+	sms_fwd_info "$5"
+	_hs_j=$(printf '{"title":%s,"sender":%s,"time":%s,"text":%s,"router":%s,"modem":%s,"operator":%s,"phone":%s,"path":%s}' \
+		"$(_js "$(printf '%s' "$1" | utf8_fix)")" "$(_js "$2")" "$(_js "$3")" "$(_js "$(printf '%s' "$4" | utf8_fix)")" \
+		"$(_js "$SFI_HOST")" "$(_js "$SFI_MODEL")" "$(_js "$SFI_OP")" "$(_js "$SFI_PHONE")" "$(_js "$5")")
+	if [ -n "$HOOK_HDR" ]; then
+		_hs_c=$(printf 'header = "%s"\n' "$(printf '%s' "$HOOK_HDR" | sed 's/\\/\\\\/g; s/"/\\"/g')" | curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' -K - \
+			-H 'Content-Type: application/json' --data-binary "$_hs_j" "$HOOK_URL" 2>/dev/null)
+	else
+		_hs_c=$(curl -s -m 20 -o "$HOOKLOG" -w '%{http_code}' \
+			-H 'Content-Type: application/json' --data-binary "$_hs_j" "$HOOK_URL" 2>/dev/null)
+	fi
+	[ "$_hs_c" = 000 ] && printf 'no reply from %s' "${HOOK_URL%%\?*}" > "$HOOKLOG" 2>/dev/null
+	case "$_hs_c" in 2??) printf 'ok' > "$HOOKLOG" 2>/dev/null ;; esac
+	_http_rc "$_hs_c"
 }
 
 # КОДИРОВКУ ЧИНИТ МОСТ (smsbridge -> utf8_fix в lib.sh), здесь остаётся
@@ -193,8 +269,16 @@ _tg_send() {   # $1 - текст
 	return 1
 }
 
-_tk_mark() {
-	SMS_MODEM="$1" "$RES/smsbridge.sh" tg-add "$2" >/dev/null 2>&1
+_tk_head() {
+	if [ "$TG_HOST" = 1 ]; then
+		sms_fwd_head "$_tk_path" "$_tk_snd"
+	else
+		printf 'SMS %s%s' "$_tk_snd" "$_tk_tag"
+	fi
+}
+
+_tk_mark() {   # $1 - usb-путь, $2 - ключ, $3 - канал
+	SMS_MODEM="$1" "$RES/smsbridge.sh" list-add "${3:-tg}" "$2" >/dev/null 2>&1
 	SMS_MODEM="$1" "$RES/smsbridge.sh" seen-add "$2" >/dev/null 2>&1
 }
 
@@ -234,7 +318,9 @@ _tg_name() {
 }
 
 tick() {
-	_ready || return 0
+	_TK_CHS=$(_chs)
+	[ -n "$_TK_CHS" ] || return 0
+	_tk_dead=""
 	# Свой предохранитель по времени: сторож зовёт нас каждые 30 c, а лезть в
 	# AT-порт за списком сообщений так часто незачем.
 	read -r _tk_now _ < /proc/uptime
@@ -281,17 +367,22 @@ _tk_fresh() {
 	[ $(( $(date -u +%s) - _tf_e )) -lt $((TG_FIRSTH * 3600)) ]
 }
 
-_tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нельзя (Telegram недоступен)
+_tk_one() {   # $1 - usb-путь модема; 1 = все каналы недоступны
 	_tk_path="$1"
 	_tg_has_sms "$_tk_path" || return 0
 	# Фоновый AT к этому модему запрещён владельцем (bg_at_off, lib.sh):
 	# бот его входящие не читает - иначе запрет терял бы смысл.
 	[ "$(uci -q get "$CFG.$(_tg_sec "$_tk_path").kind")" = "hilink" ] \
 		|| ! bg_at_off "$_tk_path" || return 0
+	_tk_live=""
+	for _tk_c in $_TK_CHS; do
+		case " $_tk_dead " in *" $_tk_c "*) ;; *) _tk_live="$_tk_live,$_tk_c" ;; esac
+	done
+	[ -n "$_tk_live" ] || return 1
 	_tk_port=$(_tg_port "$_tk_path")
-	_tk_msgs=$(SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" unseen tg "$STORE" "$_tk_port" 2>/dev/null)
+	_tk_msgs=$(SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" unseen "${_tk_live#,}," "$STORE" "$_tk_port" 2>/dev/null)
 	[ -n "$_tk_msgs" ] || return 0
-	_tk_first=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.first' 2>/dev/null)
+	_tk_firsts=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.first' 2>/dev/null)
 	_tk_gn=$(printf '%s' "$_tk_msgs" | jsonfilter -e '@.sms[*].have' 2>/dev/null | wc -l)
 	case "$_tk_gn" in ''|*[!0-9]*) return 0 ;; esac
 	# Подпись модема ставим, только когда их несколько: с одним она лишний шум.
@@ -307,16 +398,12 @@ _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нел
 	_tk_skipped=0
 	_tk_g=0
 	while [ "$_tk_g" -lt "$_tk_gn" ]; do
-		_tk_snd=""; _tk_ts=""; _tk_txt=""; _tk_key=""; _tk_have=""; _tk_tot=""
+		_tk_snd=""; _tk_ts=""; _tk_txt=""; _tk_key=""; _tk_have=""; _tk_tot=""; _tk_miss=""
 		eval "$(printf '%s' "$_tk_msgs" | jsonfilter -e "_tk_snd=@.sms[$_tk_g].sender" \
 			-e "_tk_ts=@.sms[$_tk_g].time" -e "_tk_txt=@.sms[$_tk_g].text" \
 			-e "_tk_key=@.sms[$_tk_g].key" -e "_tk_have=@.sms[$_tk_g].have" \
-			-e "_tk_tot=@.sms[$_tk_g].total" 2>/dev/null)"
+			-e "_tk_tot=@.sms[$_tk_g].total" -e "_tk_miss=@.sms[$_tk_g].miss" 2>/dev/null)"
 		_tk_g=$((_tk_g + 1))
-		# Уже видели - пропускаем (ключ тот же, что считает страница). В список
-		# виденного дописываем и то, что отправили В ЭТОМ круге: у длинной SMS
-		# все части несут ОДИН ключ, а список прочитан до цикла - без этого
-		# сообщение из шести частей улетало в чат шестью кусками.
 		[ -n "$_tk_key" ] || continue
 		# ДЛИННАЯ SMS - СОБИРАЕМ ЦЕЛИКОМ. Модем отдаёт её частями (part/total), и
 		# читать в чате «...ерь баланс» без начала невозможно. Порядок берём по
@@ -329,88 +416,72 @@ _tk_one() {   # $1 - usb-путь модема; 1 = дальше идти нел
 					_tk_txt="$_tk_txt [$_tk_have/$_tk_tot]"
 				fi ;;
 		esac
-		if [ "$_tk_first" = "1" ]; then
-			# ПЕРВАЯ ВСТРЕЧА С МОДЕМОМ. Старое обещанное правило - «ничего не
-			# слать» - целиком верно только для памяти, набитой за год. Свежие
-			# сообщения человек ждёт: он воткнул модем минуту назад. Поэтому
-			# окно TG_FIRSTH часов: что новее - уходит в чат обычным путём (код
-			# ниже), что старше - помечаем виденным молча.
-			#
-			# Метку времени sms_tool печатает в UTC и игнорирует $TZ (проверено),
-			# поэтому и сравниваем в UTC. Не разобралось - считаем старым: лучше
-			# промолчать, чем высыпать архив.
-			# Окно 0 при первой встрече означает «не слать ничего»: память
-			# могла копиться год, и высыпать её в чат нельзя. Неразобранную
-			# метку тоже считаем старой - лучше промолчать, чем высыпать архив.
-			_tk_old=1
-			[ "$TG_FIRSTH" != 0 ] && _tk_fresh "$_tk_ts" old && _tk_old=""
-			if [ -n "$_tk_old" ]; then
-				_tk_mark "$_tk_path" "$_tk_key"
-				_tk_n=$((_tk_n + 1))
-				continue
-			fi
-		fi
-		# СТАРОЕ СООБЩЕНИЕ НЕ ПЕРЕСЫЛАЕМ И НА ЗНАКОМОМ МОДЕМЕ.
-		#
-		# Окно возраста работало только при первой встрече с модемом - то есть
-		# ровно один раз, пока нет файла «виденного». Но пачка ранее не виденных
-		# сообщений появляется и позже, и самый обычный способ - СМЕНИТЬ SIM:
-		# модем тот же, файл виденного на месте, а в памяти карты лежит её
-		# собственная переписка за месяцы. Живой случай 02.09.2026 (FM350,
-		# переключение eSIM -> физическая SIM): в чат ушли 50 сообщений, самые
-		# старые - январские. То же самое даёт очистка памяти модема и
-		# перестановка карты из телефона.
-		#
-		# Уведомитель существует ради СВЕЖИХ сообщений: то, что старше окна,
-		# помечаем виденным молча - оно останется в «Входящих» и в архиве.
-		# Неразобранную метку здесь считаем свежей (в отличие от первой встречи):
-		# на знакомом модеме это скорее странный формат у нового сообщения, чем
-		# архив, а потерять уведомление хуже, чем прислать лишнее.
-		if ! _tk_fresh "$_tk_ts" fresh; then
-			_tk_mark "$_tk_path" "$_tk_key"
-			_tk_skipped=$((_tk_skipped + 1))
-			continue
-		fi
-		_tg_send "SMS $_tk_snd$_tk_tag
-$_tk_ts
-
-$_tk_txt"
-		case "$?" in
-			0)
-				_tk_mark "$_tk_path" "$_tk_key"
-				_tk_n=$((_tk_n + 1)) ;;
-			2)
-				# ТЕЛЕГРАМ ОТКАЗАЛСЯ ИМЕННО ОТ ЭТОГО ТЕКСТА. Повторять нечего, а
-				# держать им очередь нельзя - следом стоят нормальные сообщения.
-				# Человеку шлём хотя бы факт: от кого и когда, чтобы он открыл
-				# «Входящие» и прочитал глазами.
-				_log "Telegram rejected the message from $_tk_snd ($_tk_ts): $(cat "$LASTLOG" 2>/dev/null | head -c 120)"
-				_tg_send "SMS $_tk_snd$_tk_tag
+		for _tk_c in $_tk_miss; do
+			case " $_tk_dead " in *" $_tk_c "*) continue ;; esac
+			case " $_tk_firsts " in
+				*" $_tk_c "*)
+					if [ "$TG_FIRSTH" = 0 ] || ! _tk_fresh "$_tk_ts" old; then
+						_tk_mark "$_tk_path" "$_tk_key" "$_tk_c"
+						continue
+					fi ;;
+				*)
+					if ! _tk_fresh "$_tk_ts" fresh; then
+						_tk_mark "$_tk_path" "$_tk_key" "$_tk_c"
+						_tk_skipped=$((_tk_skipped + 1))
+						continue
+					fi ;;
+			esac
+			_tk_deliver "$_tk_c"
+			case "$?" in
+				0)
+					_tk_mark "$_tk_path" "$_tk_key" "$_tk_c"
+					_tk_n=$((_tk_n + 1)) ;;
+				2)
+					_log "$_tk_c rejected the message from $_tk_snd ($_tk_ts): $(_tk_lastlog "$_tk_c" | head -c 120)"
+					[ "$_tk_c" = tg ] && _tg_send "$(_tk_head)
 $_tk_ts
 
 (текст не принят Telegram - откройте «Входящие» на роутере)" >/dev/null 2>&1
-				_tk_mark "$_tk_path" "$_tk_key" ;;
-			*)
-				# Не доставили - НЕ помечаем и прекращаем ВЕСЬ круг: если лежит
-				# сеть, остальным модемам в этом круге тоже не уйдёт. Сообщение
-				# остаётся в памяти модема и в «невиденных» - следующий круг
-				# попробует снова. Это и есть очередь недоставленного: терять
-				# нечего, пока сообщение не подтверждено Телеграмом.
-				_log "not delivered ($(cat "$LASTLOG" 2>/dev/null | head -c 120))"
-				return 1 ;;
-		esac
+					_tk_mark "$_tk_path" "$_tk_key" "$_tk_c" ;;
+				*)
+					_log "$_tk_c: not delivered ($(_tk_lastlog "$_tk_c" | head -c 120))"
+					_tk_dead="$_tk_dead $_tk_c" ;;
+			esac
+		done
 	done
-	[ "$_tk_first" = "1" ] && SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" tg-add >/dev/null 2>&1
-	# Молчаливый пропуск объясняем в журнале: иначе «сообщения есть, а бот
-	# молчит» выглядит поломкой. Пишем только когда что-то пропустили.
-	[ "$_tk_first" != "1" ] && [ "$_tk_skipped" -gt 0 ] && \
+	for _tk_c in $_tk_firsts; do
+		case " $_tk_dead " in *" $_tk_c "*) continue ;; esac
+		SMS_MODEM="$_tk_path" "$RES/smsbridge.sh" list-add "$_tk_c" >/dev/null 2>&1
+	done
+	[ "$_tk_skipped" -gt 0 ] && \
 		_log "$(_tg_name "$_tk_path"): $_tk_skipped message(s) older than ${TG_FIRSTH}h marked seen without forwarding (SIM swap or a wiped modem memory)"
-	if [ "$_tk_first" = "1" ] && [ "$_tk_n" -gt 0 ]; then
-		_log "first encounter with modem $(_tg_name "$_tk_path"): processed $_tk_n messages (newer than ${TG_FIRSTH}h go to the chat, older ones are silently marked seen)"
-	elif [ "$_tk_n" -gt 0 ]; then
-		_log "messages forwarded: $_tk_n ($(_tg_name "$_tk_path"))"
-	fi
-	return 0
+	[ "$_tk_n" -gt 0 ] && _log "messages forwarded: $_tk_n ($(_tg_name "$_tk_path"))"
+	for _tk_c in $_TK_CHS; do
+		case " $_tk_dead " in *" $_tk_c "*) ;; *) return 0 ;; esac
+	done
+	return 1
+}
+
+_tk_lastlog() {
+	case "$1" in
+		ntfy) cat "$NTFYLOG" 2>/dev/null ;;
+		hook) cat "$HOOKLOG" 2>/dev/null ;;
+		*) cat "$LASTLOG" 2>/dev/null ;;
+	esac
+}
+
+_tk_deliver() {   # $1 - канал
+	case "$1" in
+		tg) _tg_send "$(_tk_head)
+$_tk_ts
+
+$_tk_txt" ;;
+		ntfy) _ntfy_send "$(sms_fwd_head "$_tk_path" "$_tk_snd")" "$_tk_ts
+
+$_tk_txt" ;;
+		hook) _hook_send "$(sms_fwd_head "$_tk_path" "$_tk_snd")" "$_tk_snd" "$_tk_ts" "$_tk_txt" "$_tk_path" ;;
+		*) return 2 ;;
+	esac
 }
 
 # CHAT ID БЕЗ РУЧНОЙ ВОЗНИ.
@@ -768,11 +839,34 @@ case "$1" in
 	chatid) chatid ;;
 	setchat) setchat "$2" ;;
 	test)
+		_te_m=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+		case "$2" in
+			ntfy|hook)
+				if [ "$2" = ntfy ]; then _ntfy_ready; else _hook_ready; fi || {
+					echo '{"ok":false,"error":"not configured"}'; exit 0; }
+				_te_h="$(sms_fwd_head "$_te_m" "")"
+				if [ "$2" = ntfy ]; then
+					_ntfy_send "$_te_h" "Проверка связи: уведомления о входящих SMS с роутера включены."
+				else
+					_hook_send "$_te_h" "" "$(date -u '+%Y-%m-%d %H:%M')" "Проверка связи: уведомления о входящих SMS с роутера включены." "$_te_m"
+				fi
+				if [ "$?" = 0 ]; then
+					echo '{"ok":true}'
+				else
+					printf '{"ok":false,"error":"%s"}\n' "$(_tk_lastlog "$2" | tr -d '"\\\n' | head -c 180)"
+				fi
+				exit 0 ;;
+		esac
 		if ! _ready; then
 			echo '{"ok":false,"error":"not configured"}'
 			exit 0
 		fi
-		if _tg_send "Проверка связи: уведомления о входящих SMS с роутера включены."; then
+		_te_t="Проверка связи: уведомления о входящих SMS с роутера включены."
+		[ "$TG_HOST" = 1 ] && _te_t="$(sms_fwd_head "$_te_m" "")
+$(date '+%Y-%m-%d %H:%M')
+
+$_te_t"
+		if _tg_send "$_te_t"; then
 			echo '{"ok":true}'
 		else
 			printf '{"ok":false,"error":"%s"}\n' "$(cat "$LASTLOG" 2>/dev/null | tr -d '"\\' | head -c 180)"

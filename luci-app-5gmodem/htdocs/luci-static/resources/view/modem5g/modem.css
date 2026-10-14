@@ -3576,3 +3576,18 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
 body.sc-simple .tg-updbar { display: none !important; }
 .tg-upd-cd { width: 44px; height: 3px; border-radius: 2px; background: var(--tg-track); overflow: hidden; }
 .tg-upd-cd i { display: block; height: 100%; width: 0; background: var(--tg-accent); }
+
+[data-page^="admin-modem-5gmodem"] .cbi-value:has(> .cbi-value-field > .cbi-checkbox) { align-items: flex-start !important; }
+[data-page^="admin-modem-5gmodem"] .cbi-value:has(> .cbi-value-field > .cbi-checkbox) > .cbi-value-title {
+  padding-top: 0 !important; padding-bottom: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important;
+  line-height: 20px !important;
+}
+[data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .cbi-checkbox) { align-items: flex-start !important; }
+[data-page^="admin-modem-5gmodem"] .cbi-value-field > .cbi-checkbox {
+  height: 20px !important; min-height: 20px !important; align-items: center;
+  margin-top: 0 !important; margin-bottom: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important;
+}
+[data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .cbi-checkbox) > .cbi-value-description {
+  line-height: 20px !important;
+}
+html.tg-theme-argon [data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .cbi-checkbox) > .cbi-value-description { padding-top: 0 !important; }
