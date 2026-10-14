@@ -3423,7 +3423,7 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
 #modem-info-block[data-rat] .tg-mv-badge {
   color: #fff !important;
 }
-#modem-info-block[data-rat] > h3 { border-color: rgba(255, 255, 255, .2) !important; }
+#modem-info-block[data-rat] > h3 { border-color: rgba(255, 255, 255, .2) !important; background: transparent !important; box-shadow: none !important; }
 #modem-info-block[data-rat] .tginfo-status *,
 #modem-info-block[data-rat] .tginfo-info *:not(.btn),
 #modem-info-block[data-rat] #apnline,
