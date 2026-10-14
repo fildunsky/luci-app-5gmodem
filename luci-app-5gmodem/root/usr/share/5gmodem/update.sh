@@ -93,6 +93,12 @@ version_gt() {
 }
 
 case "$1" in
+version)
+	PM=$(pkgman)
+	PKG=$(detect_pkg "$PM")
+	printf '{"current":"%s"}\n' "$(json_esc "$(installed_version "$PM")")"
+	;;
+
 check)
 	PM=$(pkgman)
 	PKG=$(detect_pkg "$PM")

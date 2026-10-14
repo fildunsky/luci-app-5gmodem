@@ -202,6 +202,23 @@ _tg_migrate() {
 	: > "$TG_MIG" 2>/dev/null
 }
 
+_list_file() {   # $1 - канал: tg | seen | ntfy | hook
+	case "$1" in
+		tg) _tg_file ;;
+		seen|'') _seen_file ;;
+		*)
+			_lf_p=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
+			[ -n "$_lf_p" ] && echo "$SEEN_DIR/sms_$1.$_lf_p" || echo "$SEEN_DIR/sms_$1" ;;
+	esac
+}
+
+_fwd_lists() {
+	[ "$(uci -q get "$CFG.sms.tg_enabled")" = 1 ] && printf 'tg '
+	[ "$(uci -q get "$CFG.sms.ntfy_enabled")" = 1 ] && printf 'ntfy '
+	[ "$(uci -q get "$CFG.sms.hook_enabled")" = 1 ] && printf 'hook '
+	return 0
+}
+
 _list_add() {
 	_la_f="$1"; shift
 	mkdir -p "$SEEN_DIR" 2>/dev/null
@@ -422,12 +439,62 @@ _kb_unseen() {
 	printf ']}\n'
 }
 
+_kb_unseen_multi() {   # $1 - каналы через запятую
+	_um_names=$(printf '%s' "$1" | tr ',' ' ')
+	_um_first=""
+	for _um_n in $_um_names; do
+		_um_f=$(_list_file "$_um_n")
+		[ -f "$_um_f" ] || _um_first="$_um_first $_um_n"
+		_kb_list_load "$_um_f"
+		eval "_um_L_$_um_n=\$_KB_LIST"
+	done
+	printf '{"first":%s,"sms":[' "$(_nd_jesc "${_um_first# }")"
+	_ku_i=1; _ku_any=0
+	while [ "$_ku_i" -le "$_kb_n" ]; do
+		eval "_ku_g=\$_kb_g$_ku_i"
+		if [ -n "$_ku_g" ]; then
+			_um_miss=""
+			for _um_n in $_um_names; do
+				eval "_KB_LIST=\$_um_L_$_um_n"
+				_kb_known "$_ku_i" || _um_miss="$_um_miss $_um_n"
+			done
+			if [ -n "$_um_miss" ]; then
+				eval "_ku_k=\$_kb_k$_ku_i; _ku_s=\$_kb_s$_ku_i; _ku_t=\$_kb_t$_ku_i; _ku_o=\$_kb_o$_ku_i; _ku_m=\$_kb_gm$_ku_i"
+				if [ -n "$_ku_m" ]; then
+					eval "_ku_c=\$_kb_gt$_ku_i; _ku_h=\$_kb_gh$_ku_i; _ku_t=\$_kb_gf$_ku_i"
+				else
+					eval "_ku_c=\$_kb_c$_ku_i"
+					_ku_h=1; _ku_o=1
+				fi
+				_ku_c=$(printf '%s' "$_ku_c" | utf8_fix)
+				[ "$_ku_any" = 0 ] || printf ','
+				_ku_any=1
+				printf '{"sender":%s,"time":%s,"text":%s,"key":%s,"have":%s,"total":%s,"miss":%s}' \
+					"$(_nd_jesc "$_ku_s")" "$(_nd_jesc "$_ku_t")" "$(_nd_jesc "$_ku_c")" \
+					"$(_nd_jesc "$_ku_k")" "$_ku_h" "$_ku_o" "$(_nd_jesc "${_um_miss# }")"
+			fi
+		fi
+		_ku_i=$((_ku_i + 1))
+	done
+	printf ']}\n'
+}
+
+_kb_unseen_ul() {
+	case "$UL" in
+		tg) _tg_migrate; _kb_unseen "$(_tg_file)" ;;
+		seen|'') _kb_unseen "$(_seen_file)" ;;
+		*)
+			case ",$UL," in *,tg,*) _tg_migrate ;; esac
+			_kb_unseen_multi "$UL" ;;
+	esac
+}
+
 _kb_out() {
 	if [ "$BOX" = unseen ]; then
 		[ -n "$1" ] || return 0
 		_kb_feed_json "$1"
 		_kb_build
-		if [ "$UL" = tg ]; then _tg_migrate; _kb_unseen "$(_tg_file)"; else _kb_unseen "$(_seen_file)"; fi
+		_kb_unseen_ul
 		return 0
 	fi
 	_ko_j="$1"
@@ -597,6 +664,16 @@ case "$1" in
 		shift
 		_tg_migrate
 		_list_add "$(_tg_file)" "$@"
+		echo '{"success":true}'
+		exit 0 ;;
+	fwdhead)
+		sms_fwd_head "$_TGT_PATH" "$2"
+		echo
+		exit 0 ;;
+	list-add)
+		_la_n="$2"; shift 2
+		[ "$_la_n" = tg ] && _tg_migrate
+		_list_add "$(_list_file "$_la_n")" "$@"
 		echo '{"success":true}'
 		exit 0 ;;
 	seen-reset)
@@ -1531,7 +1608,7 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 	case "$_apn" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_apn" -gt 0 ] || return 0
 
-	_ap_tg=$(uci -q get "$CFG.sms.tg_enabled")
+	_ap_chs=$(_fwd_lists)
 	_ap_cmd=$(uci -q get "$CFG.sms.cmd_enabled")
 	_ap_sf=$(_seen_file)
 	_ap_df=$(sms_cmd_done_file "$_TGT_PATH")
@@ -1571,19 +1648,29 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 
 		# 2) бот уже доставил?
 		_ap_wait=0
-		if [ "$_ap_tg" = "1" ] && [ "$_ap_late" = 0 ]; then
+		if [ -n "$_ap_chs" ] && [ "$_ap_late" = 0 ]; then
 			if [ "$_ap_kb" = 0 ]; then
 				_kb_n=0
 				_kb_feed_arch
 				_kb_build
 				_tg_migrate
-				_kb_list_load "$(_tg_file)"
+				for _ap_c in $_ap_chs; do
+					_kb_list_load "$(_list_file "$_ap_c")"
+					eval "_ap_L_$_ap_c=\$_KB_LIST"
+				done
 				_ap_kb=1
 			fi
 			_ap_fn=${_ap_have##*/}; _ap_fn=${_ap_fn%%.*}
 			_ap_kn=""
 			case "$_ap_fn" in ''|*[!0-9]*) ;; *) eval "_ap_kn=\$_kb_ix$_ap_fn" ;; esac
-			{ [ -n "$_ap_kn" ] && _kb_known "$_ap_kn"; } || _ap_wait=1
+			if [ -n "$_ap_kn" ]; then
+				for _ap_c in $_ap_chs; do
+					eval "_KB_LIST=\$_ap_L_$_ap_c"
+					_kb_known "$_ap_kn" || { _ap_wait=1; break; }
+				done
+			else
+				_ap_wait=1
+			fi
 		fi
 		if [ "$_ap_wait" = 1 ]; then
 			_ap_stuck=$((_ap_stuck + 1))
@@ -1982,7 +2069,7 @@ case "$BOX" in
 				[ -n "$_AT_INH" ] || at_unlock
 				_kb_feed_arch
 				_kb_build
-				if [ "$UL" = tg ]; then _tg_migrate; _kb_unseen "$(_tg_file)"; else _kb_unseen "$(_seen_file)"; fi
+				_kb_unseen_ul
 				exit 0
 			fi
 			_arch_json
