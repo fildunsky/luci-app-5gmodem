@@ -5928,3 +5928,15 @@ msgstr "Нужно в виде Имя: значение"
 
 msgid "check the address and the router internet connection"
 msgstr "проверьте адрес и подключение роутера к интернету"
+
+msgid "Colored modem card"
+msgstr "Цветная карточка модема"
+
+msgid "Tint the Modem card on the Network page by network technology: purple for 5G, blue for 4G, green for 3G, pink for 2G. Turn off to get the previous plain card back."
+msgstr "Заливать карточку модема на странице «Сеть» цветом по технологии сети: фиолетовый для 5G, синий для 4G, зелёный для 3G, розовый для 2G. Выключите, чтобы вернуть прежнюю простую карточку."
+
+msgid "Carrier aggregation: %d carriers combined, %d MHz in total"
+msgstr "Агрегация несущих: объединено %d, общая полоса %d МГц"
+
+msgid "Carrier aggregation: %d carriers combined"
+msgstr "Агрегация несущих: объединено %d"

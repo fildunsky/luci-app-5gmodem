@@ -1245,6 +1245,22 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
   opacity: 1;
   overflow-wrap: anywhere;
 }
+.tginfo-band-idle { opacity: .45; }
+.tginfo-ca {
+  display: inline-block;
+  margin-left: .35em;
+  padding: 0 .45em;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-size: .8em;
+  font-weight: 800;
+  line-height: 1.5;
+  vertical-align: middle;
+  cursor: help;
+}
+h4 .tginfo-ca { margin-left: .6em; font-size: .75em; }
+html:not(.tg-boxed-sec) .tginfo-info .tginfo-band.btn { line-height: 1.15 !important; padding-top: .2em !important; padding-bottom: 0 !important; }
+html:not(.tg-boxed-sec) .tginfo-ca { line-height: 1.3; padding-top: .2em; }
 /* частоты в скобках - без жирного, мельче и на 30% серее основного текста */
 .tginfo-info .tginfo-freq {
   font-weight: normal;
@@ -2440,11 +2456,11 @@ pre.atcommand-output.has-output::after {
   background: rgba(128, 128, 128, .18) !important;
 }
   .tg-theme-argon .modemtabs-bar .modemtab {
-  background: rgba(128, 128, 128, .12) !important;
+  background: linear-gradient(rgba(128, 128, 128, .12), rgba(128, 128, 128, .12)) var(--background-color, #000) !important;
   border: 1px solid rgba(128, 128, 128, .26) !important;
 }
   .tg-theme-argon .modemtabs-bar .modemtab:hover {
-  background: rgba(128, 128, 128, .18) !important;
+  background: linear-gradient(rgba(128, 128, 128, .18), rgba(128, 128, 128, .18)) var(--background-color, #000) !important;
 }
   /* Карточки сообщений - той же заливкой, что карточки «Приоритета интернета»:
      в тёмной схеме они иначе сливаются с фоном списка. */
@@ -3304,6 +3320,9 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
     gap: 8px 14px;
   }
   body.tg-mv #modem-info-block .tginfo-right > * { margin: 0 !important; }
+  body.tg-mv #modem-info-block .tginfo-right { justify-content: flex-start; }
+  body.tg-mv #modem-info-block .tginfo-simslot-row { display: contents; }
+  body.tg-mv #modem-info-block .tginfo-right > #apnline { margin-left: auto !important; }
   body.tg-mv #modem-info-block .tginfo-simslot .cbi-button { font-size: 13px !important; line-height: 18px !important; padding: 5px 12px !important; }
 
   body.tg-mv .netpribar .netpri-row {
@@ -3397,7 +3416,7 @@ body.sc-netonly .tg-simple-toggle,
 body.sc-netonly #sc-advice { display: none !important; }
 
 #modem-info-block[data-rat] {
-  --tg-rat-bg: linear-gradient(125deg, #3a404b 0%, #5a626f 55%, #7a828f 100%);
+  --tg-rat-bg: linear-gradient(125deg, #2a2f37 0%, #474e59 55%, #5f6672 100%);
   background: var(--tg-rat-bg) !important;
   background-origin: border-box !important;
   background-repeat: no-repeat !important;
@@ -3409,11 +3428,16 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
   padding: 16px 20px 18px !important;
   border-radius: 14px !important;
 }
-#modem-info-block[data-rat="sa"]  { --tg-rat-bg: linear-gradient(125deg, #2e1a73 0%, #5233a8 55%, #7a56d4 100%); }
-#modem-info-block[data-rat="nsa"]  { --tg-rat-bg: linear-gradient(125deg, #3d2290 0%, #3f4cc0 55%, #2f86dc 100%); }
-#modem-info-block[data-rat="lte"]  { --tg-rat-bg: linear-gradient(125deg, #1550b0 0%, #2b7ae0 55%, #4ea6f2 100%); }
-#modem-info-block[data-rat="umts"] { --tg-rat-bg: linear-gradient(125deg, #0a5a40 0%, #1a8a62 55%, #2fb885 100%); }
-#modem-info-block[data-rat="gsm"]  { --tg-rat-bg: linear-gradient(125deg, #7a2240 0%, #b44766 55%, #d96a8b 100%); }
+html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
+  padding: 16px 20px 18px;
+  border: 1px solid var(--border-color-medium, rgba(128, 128, 128, .35));
+  border-radius: 14px;
+}
+#modem-info-block[data-rat="sa"]  { --tg-rat-bg: linear-gradient(125deg, #24125e 0%, #432894 55%, #6a45c6 100%); --tg-rat-ink: #432894; }
+#modem-info-block[data-rat="nsa"]  { --tg-rat-bg: linear-gradient(125deg, #2c1873 0%, #3540a8 55%, #1d65b0 100%); --tg-rat-ink: #1554b4; }
+#modem-info-block[data-rat="lte"]  { --tg-rat-bg: linear-gradient(125deg, #0b3580 0%, #1554b4 55%, #1a69c2 100%); --tg-rat-ink: #1554b4; }
+#modem-info-block[data-rat="umts"] { --tg-rat-bg: linear-gradient(125deg, #053a29 0%, #0c5e42 55%, #137552 100%); --tg-rat-ink: #0c5e42; }
+#modem-info-block[data-rat="gsm"]  { --tg-rat-bg: linear-gradient(125deg, #5a1530 0%, #93304f 55%, #b33a5e 100%); --tg-rat-ink: #93304f; }
 #modem-info-block[data-rat] .tginfo-general { text-shadow: 0 1px 2px rgba(0, 0, 0, .18); }
 #modem-info-block[data-rat] > h3,
 #modem-info-block[data-rat] #signal,
@@ -3432,10 +3456,9 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
 #modem-info-block[data-rat] #proto-chip {
   opacity: 1 !important;
   color: #fff !important;
-  border-color: rgba(255, 255, 255, .5) !important;
-  background: rgba(255, 255, 255, .14) !important;
+  border-color: rgba(255, 255, 255, .6) !important;
+  background: transparent !important;
 }
-#modem-info-block[data-rat] .tginfo-vidpid { opacity: .85 !important; color: #fff !important; }
 #modem-info-block[data-rat] #stale-mark { opacity: 1 !important; }
 #modem-info-block[data-rat] #sc-line {
   align-items: center;
@@ -3452,19 +3475,46 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
 #modem-info-block[data-rat] #signal img,
 #modem-info-block[data-rat] .tginfo-conn img { filter: brightness(0) invert(1); }
 #modem-info-block[data-rat] .tginfo-info .tginfo-band.btn {
-  background: rgba(255, 255, 255, .22) !important;
-  border-color: transparent !important;
+  background: #fff !important;
+  border-color: #fff !important;
   box-shadow: none !important;
   text-shadow: none !important;
+  color: #1554b4 !important;
+}
+#modem-info-block[data-rat] .tginfo-info .tginfo-band.btn.tginfo-band-nr { color: #432894 !important; }
+#modem-info-block[data-rat] .tginfo-info .tginfo-band.btn.tginfo-band-idle {
+  opacity: 1 !important;
+  background: transparent !important;
+  border: 1px dashed rgba(255, 255, 255, .75) !important;
   color: #fff !important;
 }
-#modem-info-block[data-rat] .tginfo-info .tginfo-band.btn.tginfo-band-nr {
-  background: rgba(255, 255, 255, .95) !important;
-  color: #1f2733 !important;
+#modem-info-block[data-rat="umts"] .tginfo-info .tginfo-band.btn:not(.tginfo-band-idle),
+#modem-info-block[data-rat="gsm"] .tginfo-info .tginfo-band.btn:not(.tginfo-band-idle) { color: var(--tg-rat-ink) !important; }
+#modem-info-block[data-rat] #sim,
+#modem-info-block[data-rat] #phone,
+#modem-info-block[data-rat] #location,
+#modem-info-block[data-rat] .tginfo-info,
+#modem-info-block[data-rat] .tginfo-freq,
+#modem-info-block[data-rat] #apnline,
+#modem-info-block[data-rat] #modemvidpid,
+#modem-info-block[data-rat] #battn,
+#modem-info-block[data-rat] #sc-advice { opacity: 1 !important; color: rgba(255, 255, 255, .88) !important; }
+#modem-info-block[data-rat] #mode,
+#modem-info-block[data-rat] #operator,
+#modem-info-block[data-rat] #conndur,
+#modem-info-block[data-rat] .tginfo-locip { color: #fff !important; }
+#modem-info-block[data-rat] #modc { opacity: 1 !important; }
+#modem-info-block[data-rat] .tg-smsenv {
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tg-rat-ink, #474e59);
 }
 #modem-info-block[data-rat] .tginfo-simslot .cbi-button {
-  background: rgba(255, 255, 255, .14) !important;
-  border-color: rgba(255, 255, 255, .35) !important;
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, .6) !important;
   box-shadow: none !important;
   text-shadow: none !important;
   color: #fff !important;
@@ -3476,11 +3526,11 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
 }
 #modem-info-block[data-rat] #tempn {
   opacity: 1;
-  padding: 1px 9px;
-  border-radius: 999px;
-  background: #fff;
-  color: #1f2733 !important;
+  background: transparent;
+  color: #fff !important;
 }
+#modem-info-block[data-rat] #tempn * { color: inherit !important; }
+#modem-info-block[data-rat] #tempn img { filter: brightness(0) invert(1); }
 .tg-mv-badge { display: none; }
 
 @media (max-width: 700px) {
@@ -3495,7 +3545,7 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
     background: rgba(128, 128, 128, .08);
   }
   body.tg-mv #modem-info-block .tg-mv-badge b { font-size: 24px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
-  body.tg-mv #modem-info-block .tg-mv-badge small { font-size: 10px; font-weight: 700; letter-spacing: .04em; opacity: .9; white-space: nowrap; }
+  body.tg-mv #modem-info-block .tg-mv-badge small { font-size: 10px; font-weight: 700; letter-spacing: .04em; line-height: 1.2; text-align: center; opacity: .9; white-space: pre; }
   body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ #signal { grid-column: 2; grid-row: 1; border-radius: 0; padding-left: 8px; padding-right: 4px; }
   body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ #simv { grid-column: 3; border-radius: 0; }
   body.tg-mv #modem-info-block .tg-mv-badge:not([hidden]) ~ .tginfo-status {
@@ -3512,9 +3562,9 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
   body.tg-mv #modem-info-block[data-rat] .tginfo-info,
   body.tg-mv #modem-info-block[data-rat] .tginfo-right,
   body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) {
-    background: rgba(255, 255, 255, .1);
+    background: rgba(0, 0, 0, .12);
   }
-  body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) { background: rgba(255, 255, 255, .16); }
+  body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) { background: rgba(0, 0, 0, .2); }
 
   body.tg-mv:not(.sc-simple) .tg-mv-simcard {
     display: flex; flex-direction: column; gap: 8px;
@@ -3571,7 +3621,6 @@ html:not(.tg-boxed-sec) #modem-info-block[data-rat] {
   font-size: 12px; cursor: default;
 }
 .tg-updbar[hidden] { display: none !important; }
-.tg-updbar em { width: 7px; height: 7px; border-radius: 50%; background: #2fb885; box-shadow: 0 0 0 3px rgba(47, 184, 133, .18); }
 .tg-updbar b { font-variant-numeric: tabular-nums; }
 body.sc-simple .tg-updbar { display: none !important; }
 .tg-upd-cd { width: 44px; height: 3px; border-radius: 2px; background: var(--tg-track); overflow: hidden; }

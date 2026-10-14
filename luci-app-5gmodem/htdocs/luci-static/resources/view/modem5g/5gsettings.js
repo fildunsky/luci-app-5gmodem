@@ -471,6 +471,12 @@ return view.extend({
 		o.rmempty = false;
 		o.depends({ netonly: '1', '!reverse': true });
 
+		o = disp.option(form.Flag, 'rat_card', _('Colored modem card'),
+			_('Tint the Modem card on the Network page by network technology: purple for 5G, blue for 4G, green for 3G, pink for 2G. Turn off to get the previous plain card back.'));
+		o.default = '1';
+		o.rmempty = false;
+		o.depends({ netonly: '1', '!reverse': true });
+
 		o = disp.option(form.Flag, 'show_stats', _('Collect statistics'),
 			_('Collects uplink latency, signal, temperature and monthly traffic, and shows the "Statistics" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself.'));
 		o.default = '1';

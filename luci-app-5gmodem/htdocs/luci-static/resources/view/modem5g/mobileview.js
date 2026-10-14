@@ -153,7 +153,7 @@ function techBadge(j, cs) {
 	else if (k === 'lte') { sub = /lte-a|4g\+/i.test(m) || cs.length > 1 ? 'LTE-A' : 'LTE'; }
 	else if (k === 'umts') { sub = (/hspa\+?|hsdpa|hsupa/i.exec(m) || [ 'WCDMA' ])[0].toUpperCase(); }
 	else if (k === 'gsm') { sub = /edge/i.test(m) ? 'EDGE' : 'GSM'; }
-	if ((k === 'nsa' || k === 'lte' || k === 'sa') && cs.length > 1) { sub += ' · ' + cs.length + 'CA'; }
+	if ((k === 'nsa' || k === 'lte' || k === 'sa') && cs.length > 1) { sub += '\n' + cs.length + 'CA'; }
 	st.badge.firstChild.textContent = big;
 	st.badge.lastChild.textContent = sub;
 	st.badge.hidden = false;

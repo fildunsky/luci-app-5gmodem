@@ -902,6 +902,25 @@ function nbLockCell(td, c, serving) {
 	}, [ '🔒' ]));
 }
 
+function caSummary(json) {
+	var n = 0, bw = 0;
+	var mhz = function(v) { var m = String(v || '').match(/(\d+(?:\.\d+)?)\s*MHz/i); return m ? parseFloat(m[1]) : 0; };
+	var p = String(json.pband || '').trim();
+	if (p && p !== '-') { n++; bw += mhz(mutil.caSplitBand(p).bw) || mhz(json.bandwidth); }
+	for (var i = 1; i <= 4; i++) {
+		var b = String(json['s' + i + 'band'] || '').trim();
+		if (!b || b === '-' || /deactiv|inactiv/i.test(String(json['s' + i + 'state'] || ''))) { continue; }
+		n++;
+		bw += mhz(mutil.caSplitBand(b).bw);
+	}
+	return { n: n, bw: Math.round(bw) };
+}
+
+function caTip(ca) {
+	return ca.bw ? _('Carrier aggregation: %d carriers combined, %d MHz in total').format(ca.n, ca.bw)
+		: _('Carrier aggregation: %d carriers combined').format(ca.n);
+}
+
 function renderCaTable(json) {
 	var tbl = document.getElementById('ca-table');
 	var sec = document.getElementById('ca-comp');
@@ -909,6 +928,13 @@ function renderCaTable(json) {
 	// Данные по компонентам, разложенные по ключу CC (PCC/SCC1..4).
 	var data = {};
 	var hasPcc = json.pband && json.pband != '-';
+	var caSum = document.getElementById('ca-sum');
+	if (caSum) {
+		var ca = caSummary(json);
+		var caTxt = ca.n > 1 ? ca.n + 'CA' + (ca.bw ? ' · ' + ca.bw + ' MHz' : '') : '';
+		if (caSum.textContent !== caTxt) { caSum.textContent = caTxt; caSum.title = ca.n > 1 ? caTip(ca) : ''; }
+		caSum.style.display = caTxt ? '' : 'none';
+	}
 	if (hasPcc) {
 		var p = mutil.caSplitBand(json.pband);
 		/* Полосу большинство модемов пишет прямо в строку диапазона, и mutil.caSplitBand
@@ -2500,7 +2526,7 @@ function buildUpdBar(row) {
 	var bar = E('i');
 	var box = E('span', { 'id': 'tg-updbar', 'class': 'tg-updbar', 'hidden': true,
 		'title': _('Time of the latest modem data; the bar runs until the next update') }, [
-		E('em'), E('span', {}, _('Updated')), time,
+		E('span', {}, _('Updated')), time,
 		E('span', { 'class': 'tg-upd-cd' }, bar)
 	]);
 	row.insertBefore(box, row.firstChild);
@@ -3040,7 +3066,10 @@ function applyMetrics(json) {
 						var view = document.getElementById("mode");
 						var mv = String(json.mode || '').trim();
 						var _mibR = document.getElementById('modem-info-block');
-						if (_mibR && mutil.ratFill) { _mibR.setAttribute('data-rat', mutil.ratFill(mv)); }
+						if (_mibR && mutil.ratFill) {
+							if (uci.get('5gmodem', '@5gmodem[0]', 'rat_card') === '0') { _mibR.removeAttribute('data-rat'); }
+							else { _mibR.setAttribute('data-rat', mutil.ratFill(mv)); }
+						}
 						if (mv && mv != '-') {
 							// валидный режим -> показать (частоты в скобках отдельным span).
 							// Телефонный ярлык + единый вид "4G | B1 (2100 MHz)".
@@ -3096,7 +3125,7 @@ function applyMetrics(json) {
 							if (_inact.length) {
 								_mh += _inact.map(function(b) {
 									return ' <span style="font-weight:normal;opacity:.65">+</span>' +
-										'<span class="btn cbi-button tginfo-band" style="opacity:.45"' +
+										'<span class="btn cbi-button tginfo-band tginfo-band-idle"' +
 										' title="' + _('Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows') + '">' + b + '</span>';
 								}).join('');
 							}
@@ -3129,6 +3158,10 @@ function applyMetrics(json) {
 									_mimoTxt = 'RX ' + _apOn + '/' + _apRows.length;
 									_mimoTip = _('Receive chains: %d of %d antenna ports hear the network (details in the Antenna ports table)').format(_apOn, _apRows.length);
 								}
+							}
+							var _ca = caSummary(json);
+							if (_ca.n > 1) {
+								_mh += ' <span class="tginfo-ca" title="' + caTip(_ca) + '">' + _ca.n + 'CA</span>';
 							}
 							if (_mimoTxt) {
 								_mh += ' <span class="tginfo-freq" style="cursor:help" title="' + _mimoTip + '">' + _mimoTxt + '</span>';
@@ -4488,7 +4521,7 @@ simDialog: baseclass.extend({
 				   метрики. Обёртка #ca-comp прячется, когда нет подключения (см.
 				   renderCaTable), скрывая только CA-таблицу внутри блока. */
 				E('div', { 'id': 'ca-comp', 'style': 'display:none;margin-top:.6em' }, [
-					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Carrier aggregation (per component)')),
+					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, [ _('Carrier aggregation (per component)'), E('span', { 'class': 'tginfo-ca', 'id': 'ca-sum', 'style': 'display:none' }, []) ]),
 					E('table', { 'class': 'table', 'id': 'ca-table' }, [
 					E('tr', { 'class': 'tr table-titles ca-head' }, [
 						E('th', { 'class': 'th left' }, [ gl('CC') ]),
