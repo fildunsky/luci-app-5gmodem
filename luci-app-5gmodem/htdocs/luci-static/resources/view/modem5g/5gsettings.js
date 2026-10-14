@@ -210,6 +210,13 @@ function installUpdate() {
    не нужна - файл лежит в пакете, и к релизу мы подтягиваем свежий сами. */
 var APNBIN = '/usr/share/5gmodem/apn-update.sh';
 
+function updVersion() {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/update.sh', [ 'version' ]), '{}').then(function(out) {
+		var d = {}; try { d = JSON.parse(out || '{}'); } catch (e) {}
+		if (d.current) { updSet('upd-current', d.current); }
+	});
+}
+
 function apnVersion() {
 	return L.resolveDefault(fs.exec_direct(APNBIN, [ 'version' ]), '{}').then(function(out) {
 		var d = {}; try { d = JSON.parse(out || '{}'); } catch (e) {}
@@ -1092,6 +1099,7 @@ return view.extend({
 			});
 			/* Версию установленной базы APN показываем СРАЗУ (чтение файла, без
 			   сети) - «Проверить» ходит наружу и остаётся действием пользователя. */
+			updVersion();
 			apnVersion();
 			/* Кнопкам «+» - полное название в подсказку: сами они лаконичны
 			   намеренно, но при наведении должно быть ясно, что добавляется. */

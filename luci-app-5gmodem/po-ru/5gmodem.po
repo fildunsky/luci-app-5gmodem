@@ -5871,3 +5871,60 @@ msgstr "Обновлено"
 
 msgid "Time of the latest modem data; the bar runs until the next update"
 msgstr "Время последних данных от модема; полоска идёт до следующего обновления"
+
+msgid "Add router name"
+msgstr "Добавлять имя роутера"
+
+msgid "Message header: SMS sender, then the SIM operator and number, router name and modem, e.g. \"SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)\". Helps when several routers send to one chat."
+msgstr "Шапка сообщения: отправитель SMS, затем оператор и номер SIM, имя роутера и модем, например «SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)». Удобно, когда в один чат пишут несколько роутеров."
+
+msgid "Subject: SMS sender, then the SIM operator and number, router name and modem, e.g. \"SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)\"."
+msgstr "Тема письма: отправитель SMS, затем оператор и номер SIM, имя роутера и модем, например «SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)»."
+
+msgid "ntfy notifications"
+msgstr "Уведомления ntfy"
+
+msgid "Forwards every new incoming SMS to an ntfy topic (ntfy.sh or your own server). Subscribe to the topic in the ntfy app on the phone."
+msgstr "Пересылает каждое новое входящее SMS в топик ntfy (ntfy.sh или свой сервер). Подпишитесь на топик в приложении ntfy на телефоне."
+
+msgid "ntfy server"
+msgstr "Сервер ntfy"
+
+msgid "Topic"
+msgstr "Топик"
+
+msgid "Anyone who knows the topic name on ntfy.sh can read it - pick a long, hard to guess name."
+msgstr "На ntfy.sh топик может читать любой, кто знает его имя, - выберите длинное и трудно угадываемое."
+
+msgid "Only Latin letters, digits, \"-\" and \"_\""
+msgstr "Только латинские буквы, цифры, «-» и «_»"
+
+msgid "Access token"
+msgstr "Токен доступа"
+
+msgid "Only for protected topics, e.g. tk_..."
+msgstr "Только для защищённых топиков, например tk_..."
+
+msgid "Webhook"
+msgstr "Webhook"
+
+msgid "Sends every new incoming SMS as a JSON POST request: title, sender, time, text, router, modem, operator, phone, path. Suits Home Assistant, n8n, Gotify proxies and your own scripts."
+msgstr "Отправляет каждое новое входящее SMS POST-запросом с JSON: title, sender, time, text, router, modem, operator, phone, path. Подходит для Home Assistant, n8n, прокси к Gotify и своих скриптов."
+
+msgid "URL"
+msgstr "URL"
+
+msgid "Expecting an http:// or https:// address"
+msgstr "Нужен адрес http:// или https://"
+
+msgid "Extra header"
+msgstr "Дополнительный заголовок"
+
+msgid "Optional, one header in the form Name: value, e.g. Authorization: Bearer secret"
+msgstr "Необязательно, один заголовок вида Имя: значение, например Authorization: Bearer secret"
+
+msgid "Expecting Name: value"
+msgstr "Нужно в виде Имя: значение"
+
+msgid "check the address and the router internet connection"
+msgstr "проверьте адрес и подключение роутера к интернету"

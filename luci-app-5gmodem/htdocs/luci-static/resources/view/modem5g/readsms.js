@@ -825,6 +825,23 @@ return view.extend({
 		    
 		    var emailSubject = '';
 		    var emailBody = '';
+		    var withHost = uci.get('5gmodem', 'sms', 'forward_sms_mail_hostname') === '1';
+		    var head = function(sender) {
+			    return sms_seen_exec([ 'fwdhead', sender ]).then(function(out) {
+				    return String(out || '').trim();
+			    });
+		    };
+
+		    if (withHost) {
+			    var parts = checked.map(function(card) {
+				    var d = card.dataset;
+				    return (d.timestamp || '').trim() + (checked.length > 1 ? ' - ' + (d.sender || '').trim() : '') + '\n' + (d.message || '').trim();
+			    });
+			    var sender = checked.length === 1 ? (checked[0].dataset.sender || '').trim() : '';
+			    return head(sender).then(function(h) {
+				    self.showEmailModal(h || ('SMS ' + sender).trim(), parts.join('\n\n'));
+			    });
+		    }
 
 		    if (checked.length === 1) {
 			    var d = checked[0].dataset;
