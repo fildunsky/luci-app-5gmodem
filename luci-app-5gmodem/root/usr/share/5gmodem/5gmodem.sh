@@ -561,6 +561,35 @@ if [ "$1" = "peek" ]; then
 	exit 0
 fi
 
+if [ -n "$_POLL_AM" ] \
+   && { [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = tether ] || is_iphone "$_POLL_AM"; }; then
+	if [ "$(_active_onbus)" != 1 ]; then
+		printf '{"error":"Device not found","onbus":"0","path":"%s","tether":"%s","tether_state":"gone"}\n' \
+			"$_POLL_AM" "$(tether_os "$_POLL_AM")"
+		exit 0
+	fi
+	_tj_os=$(tether_os "$_POLL_AM")
+	if [ "$_tj_os" = iphone ]; then
+		usbmuxd_ensure >/dev/null 2>&1
+		_tj_st=$(iphone_state "$_POLL_AM")
+		_tj_nd=$(iphone_netdev "$_POLL_AM")
+	else
+		_tj_nd=""
+		for _tj_n in /sys/bus/usb/devices/"$_POLL_AM":*/net/*; do
+			[ -e "$_tj_n" ] && { _tj_nd="${_tj_n##*/}"; break; }
+		done
+		_tj_st=ready; [ -n "$_tj_nd" ] || _tj_st=no_netdev
+	fi
+	_tj_if=$(uci -q get "5gmodem.$_hl_sec.network")
+	_tj_ip=""
+	[ -n "$_tj_if" ] && _tj_ip=$(ubus call "network.interface.$_tj_if" status 2>/dev/null \
+		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	_tj_nm=$(cat "/sys/bus/usb/devices/$_POLL_AM/product" 2>/dev/null | tr -d '"\\')
+	printf '{"error":"Device not found","onbus":"1","path":"%s","tether":"%s","tether_state":"%s","tether_name":"%s","netdev":"%s","iface":"%s","ipaddr":"%s"}\n' \
+		"$_POLL_AM" "$_tj_os" "$_tj_st" "$_tj_nm" "$_tj_nd" "$_tj_if" "$_tj_ip"
+	exit 0
+fi
+
 # ЗАХВАТ MM (bands.sh mmtakeover): пока держится пауза инхибиции ЭТОГО модема,
 # ModemManager заново пере-пробит его, а наш опрос по тому же cdc-wdm/AT-порту
 # конкурировал бы и растягивал пере-пробу за таймаут (наблюдалось: при открытой

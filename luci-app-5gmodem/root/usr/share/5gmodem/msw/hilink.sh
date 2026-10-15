@@ -55,6 +55,7 @@ is_hilink() {   # $1 - usb-путь
 # порта управления. Обоснование выбора именно RNDIS - в listmodems.sh.
 is_tether() {   # $1 - usb-путь
 	[ "$(uci -q get "$CFG.$(secname "$1").kind")" = "tether" ] && return 0
+	is_iphone "$1" && return 0
 	_it_d="/sys/bus/usb/devices/$1"
 	[ -f "$_it_d/idVendor" ] || return 1
 	for _it_p in "$_it_d"/*:*/ttyUSB* "$_it_d"/*:*/tty/tty* "$_it_d"/*:*/usbmisc/*; do
@@ -67,6 +68,34 @@ is_tether() {   # $1 - usb-путь
 		esac
 	done
 	return 1
+}
+
+tether_netdev() {   # $1 - usb-путь
+	if is_iphone "$1"; then iphone_netdev "$1"; else hilink_netdev "$1"; fi
+}
+
+ucitx_take() {
+	_ut_n=0
+	exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null || return 1
+	while ! flock -n 6 2>/dev/null; do
+		_ut_n=$((_ut_n + 1))
+		[ "$_ut_n" -ge 20 ] && { logger -t 5gmodem "ucitx: lock is busy for 20 s - writing without it"; return 1; }
+		sleep 1
+	done
+	return 0
+}
+
+ucitx_drop() {
+	flock -u 6 2>/dev/null
+	exec 6>&- 2>/dev/null
+}
+
+iface_user_off() {   # $1 - интерфейс
+	[ "$(uci -q get "network.$1.disabled")" = 1 ] && return 0
+	[ "$(uci -q get "network.$1.auto")" = 0 ] || return 1
+	[ "$(uci -q get "network.$1.modem_swapped")" = 1 ] && return 1
+	[ "$(uci -q get "network.$1.modem_parked")" = 1 ] && return 1
+	return 0
 }
 
 # Сетевая карта HiLink-модема (eth*/usb* через cdc_ether), если есть.
@@ -83,8 +112,11 @@ hilink_netdev() {   # $1 - usb-путь
 # по DHCP. Роутеру остаётся обычный dhcp-клиент на его сетевой карте.
 setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - вид (hilink|tether)
 	_hp="$1"; _hd="$2"; _hkind="${3:-hilink}"
+	ucitx_take; _h_lk=$?
 	_hsec=$(ensure_section "$_hp")
 	uci -q set "$CFG.$_hsec.kind=$_hkind"
+	_htos=""
+	[ "$_hkind" = tether ] && _htos=$(tether_os "$_hp") && uci -q set "$CFG.$_hsec.tether=$_htos"
 	uci -q set "$CFG.$_hsec.netdev=$_hd"
 	_hif=$(uci -q get "$CFG.$_hsec.network")
 	# ВОЗВРАТ МОДЕМА. Секцию мог очистить swap_cleanup (его вытеснили из порта),
@@ -101,6 +133,8 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	fi
 	# СНИМОК ДО ПРАВОК - ЧТОБЫ НЕ ДЁРГАТЬ ЖИВОЙ ИНТЕРФЕЙС ЗРЯ (см. ifup в конце).
 	_h_pre=$(uci -q show "network.$_hif" 2>/dev/null)
+	_h_off=""
+	[ -n "$_h_pre" ] && iface_user_off "$_hif" && _h_off=1
 	uci -q set "network.$_hif=interface"
 	uci -q set "network.$_hif.proto=dhcp"
 	uci -q set "network.$_hif.device=$_hd"
@@ -120,8 +154,16 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	[ -n "$(uci -q get "network.$_hif.metric")" ] || uci -q set "network.$_hif.metric=20"
 	# Модем вернулся: снимаем «спящее» состояние, выставленное при вытеснении
 	# (auto=0), и метку пересоздания от старых конфигов.
-	uci -q delete "network.$_hif.auto" 2>/dev/null
+	[ -n "$_h_off" ] || uci -q delete "network.$_hif.auto" 2>/dev/null
+	uci -q delete "network.$_hif.modem_swapped" 2>/dev/null
 	uci -q delete "network.$_hif.modem_stale" 2>/dev/null
+	if [ "$_hkind" = tether ]; then
+		uci -q set "network.$_hif.modem_kind=tether"
+		uci -q set "network.$_hif.modem_tether=$_htos"
+	else
+		uci -q delete "network.$_hif.modem_kind" 2>/dev/null
+		uci -q delete "network.$_hif.modem_tether" 2>/dev/null
+	fi
 	# ШТАМП ВЛАДЕЛЬЦА. mkiface его ставит, а мы идём мимо mkiface (у HiLink нет
 	# ни AT-порта, ни cdc-wdm - дозваниваться некуда), и интерфейс оставался
 	# ничьим. Из-за этого его нельзя было опознать как свой при следующем
@@ -130,6 +172,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	# Штампуем И IMEI: по одному лишь пути два разных модема в одном разъёме
 	# неразличимы (см. lib.sh). HiLink в переходных композициях IMEI может не
 	# отдать - тогда останется только путь, как раньше.
+	uci -q commit network
 	stamp_iface_owner "$_hif" "$_hp"
 	# ЗОНА ФАЕРВОЛА. Без неё интерфейс остаётся «серым»: не в wan, значит нет ни
 	# NAT, ни разрешающих правил - клиенты в интернет не выходят, хотя у самого
@@ -154,6 +197,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	drop_stale_ifaces "$_hp" "$_hif"
 	uci -q set "$CFG.$_hsec.iface_proto=dhcp"
 	uci -q commit "$CFG"
+	[ "$_h_lk" = 0 ] && ucitx_drop
 	# ПОДНИМАЕМ ТОЛЬКО ЕСЛИ ЕСТЬ ЧТО ПОДНИМАТЬ.
 	#
 	# Функция зовётся на КАЖДЫЙ круг хотплага, а свисток при включении проходит
@@ -177,7 +221,9 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 					[ "$_h_pre" = "$_h_post" ] && _h_skip=1 ;;
 			esac ;;
 	esac
-	if [ -n "$_h_skip" ]; then
+	if [ -n "$_h_off" ]; then
+		logger -t 5gmodem "$_hkind: $_hp ($_hd) -> interface $_hif is turned off by the user - device updated, not bringing it up"
+	elif [ -n "$_h_skip" ]; then
 		logger -t 5gmodem "$_hkind: $_hp ($_hd) is already up on interface $_hif - leaving it alone"
 	else
 		ifup "$_hif" >/dev/null 2>&1

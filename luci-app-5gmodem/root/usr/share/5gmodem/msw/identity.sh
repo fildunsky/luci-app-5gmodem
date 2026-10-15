@@ -220,6 +220,7 @@ swap_cleanup() {   # $1 = usb path, $2 = section
 	   && iface_owned_by "$_oif" "$1" "$_oimei"; then
 		ifdown "$_oif" >/dev/null 2>&1
 		uci -q set "network.$_oif.auto=0"
+		uci -q set "network.$_oif.modem_swapped=1"
 		_ostamp=$(uci -q get "network.$_oif.modem_imei")
 		if [ -n "$_ostamp" ]; then
 			logger -t 5gmodem "swap: interface '$_oif' kept for modem IMEI $_ostamp (auto=0 until it returns)"
