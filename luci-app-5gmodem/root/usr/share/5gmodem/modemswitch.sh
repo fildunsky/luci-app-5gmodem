@@ -1778,7 +1778,7 @@ setalias)
 	_sa_name=$(printf '%s' "$*" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 	# ДЛИНУ ОГРАНИЧИВАЕМ: имя рисуется во вкладке и в карточках приоритета, и
 	# «поэма» там растянула бы весь ряд. Режем молча - это подпись, а не данные.
-	_sa_name=$(printf '%s' "$_sa_name" | awk 'BEGIN { for (n = 128; n < 192; n++) cb[sprintf("%c", n)] = 1 }
+	_sa_name=$(printf '%s' "$_sa_name" | LC_ALL=C awk 'BEGIN { for (n = 128; n < 192; n++) cb[sprintf("%c", n)] = 1 }
 		{ o = ""; k = 0; L = length($0)
 		  for (i = 1; i <= L; i++) { b = substr($0, i, 1); if (!(b in cb)) { if (k == 32) break; k++ }; o = o b }
 		  printf "%s", o; exit }')

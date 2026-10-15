@@ -562,7 +562,7 @@ if [ "$1" = "peek" ]; then
 fi
 
 if [ -n "$_POLL_AM" ] \
-   && { [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = tether ] || is_iphone "$_POLL_AM"; }; then
+   && { is_iphone "$_POLL_AM" || { [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = tether ] && ! known_modem_path "$_POLL_AM"; }; }; then
 	if [ "$(_active_onbus)" != 1 ]; then
 		printf '{"error":"Device not found","onbus":"0","path":"%s","tether":"%s","tether_state":"gone"}\n' \
 			"$_POLL_AM" "$(tether_os "$_POLL_AM")"

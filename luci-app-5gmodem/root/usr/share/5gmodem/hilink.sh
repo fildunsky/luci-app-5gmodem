@@ -1294,7 +1294,7 @@ zte_sms_count() {   # $1 - usb-путь
 
 # UTF-8 -> UCS2 hex для отправки (тот же разбор UTF-8, что в smspdu.sh).
 _zte_ucs2hex() {
-	printf '%s' "$1" | awk '
+	printf '%s' "$1" | LC_ALL=C awk '
 		BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i; body = ""; nl = 0 }
 		{ body = (nl++ ? body "\n" $0 : $0) }
 		END {

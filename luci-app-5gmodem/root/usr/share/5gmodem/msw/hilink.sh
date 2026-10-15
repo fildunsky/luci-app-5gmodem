@@ -54,20 +54,26 @@ is_hilink() {   # $1 - usb-путь
 # Признак строго структурный, без списка вендоров: RNDIS-функция и ни одного
 # порта управления. Обоснование выбора именно RNDIS - в listmodems.sh.
 is_tether() {   # $1 - usb-путь
-	[ "$(uci -q get "$CFG.$(secname "$1").kind")" = "tether" ] && return 0
 	is_iphone "$1" && return 0
+	known_modem_path "$1" && return 1
+	[ "$(uci -q get "$CFG.$(secname "$1").kind")" = "tether" ] && return 0
 	_it_d="/sys/bus/usb/devices/$1"
 	[ -f "$_it_d/idVendor" ] || return 1
 	for _it_p in "$_it_d"/*:*/ttyUSB* "$_it_d"/*:*/tty/tty* "$_it_d"/*:*/usbmisc/*; do
 		[ -e "$_it_p" ] && return 1
 	done
+	_it_cdc=""
 	for _it_i in "$_it_d"/*:*; do
 		[ -f "$_it_i/bInterfaceClass" ] || continue
 		case "$(cat "$_it_i/bInterfaceClass" 2>/dev/null)/$(cat "$_it_i/bInterfaceSubClass" 2>/dev/null)/$(cat "$_it_i/bInterfaceProtocol" 2>/dev/null)" in
 			ef/04/01|e0/01/03) return 0 ;;
+			02/0d/*|02/06/*) _it_cdc=1 ;;
 		esac
 	done
-	return 1
+	[ -n "$_it_cdc" ] || return 1
+	read -r _it_v < "$_it_d/idVendor"
+	tether_cdc_vid "$_it_v" || return 1
+	hilink_netdev "$1" >/dev/null
 }
 
 tether_netdev() {   # $1 - usb-путь
@@ -132,7 +138,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 		done
 	fi
 	# СНИМОК ДО ПРАВОК - ЧТОБЫ НЕ ДЁРГАТЬ ЖИВОЙ ИНТЕРФЕЙС ЗРЯ (см. ifup в конце).
-	_h_pre=$(uci -q show "network.$_hif" 2>/dev/null)
+	_h_pre=$(uci -q show "network.$_hif" 2>/dev/null | grep -v "\.modem_tether=")
 	_h_off=""
 	[ -n "$_h_pre" ] && iface_user_off "$_hif" && _h_off=1
 	uci -q set "network.$_hif=interface"
@@ -211,7 +217,7 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	# Правило простое: интерфейс уже поднят на ТОМ ЖЕ устройстве и в конфиге
 	# ничего не изменилось - трогать нечего. Любая правка конфига или лежащий
 	# интерфейс по-прежнему требуют ifup.
-	_h_post=$(uci -q show "network.$_hif" 2>/dev/null)
+	_h_post=$(uci -q show "network.$_hif" 2>/dev/null | grep -v "\.modem_tether=")
 	_h_live=$(ubus call "network.interface.$_hif" status 2>/dev/null)
 	_h_skip=""
 	case "$_h_live" in

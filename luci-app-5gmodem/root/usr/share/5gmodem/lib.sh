@@ -260,11 +260,43 @@ iphone_state() {   # $1 - usb-путь
 	echo no_hotspot
 }
 
+android_vid() {   # $1 - idVendor
+	case "$1" in
+		04e8|18d1|2717|22d9|2a70|2d95|0bb4|1004|22b8|17ef|0b05|0fce|054c|2a45|2ae5|2e04|2e17|\
+		1ebf|2b4c|2b0e|2a96|1bbb|109b|0482|04dd|2970|1d9c|2a47|3360|271d|2c3f|10a9|1f53|2116|\
+		24e3|2340|201e|1949|2a48|0502|339b|0a9d|04b7) return 0 ;;
+	esac
+	return 1
+}
+
+known_modem_path() {   # $1 - usb-путь
+	_km_d="/sys/bus/usb/devices/$1"
+	[ -n "$1" ] && [ -f "$_km_d/idVendor" ] || return 1
+	read -r _km_v < "$_km_d/idVendor"
+	_km_p=""
+	[ -f "$_km_d/idProduct" ] && read -r _km_p < "$_km_d/idProduct"
+	[ -e "/usr/share/5gmodem/modem/usb/$_km_v$_km_p" ] && return 0
+	case "$_km_v" in
+		1e0e|2c7c|2cb7|1508|1bc7|1199|0f3d|413c|03f0|0489|105b|8087|1e2d|2dee|216f|2cd2|1286|1690|2020|33f8|1410|0af0|1c9e) return 0 ;;
+	esac
+	return 1
+}
+
+tether_cdc_vid() {   # $1 - idVendor
+	case "$1" in 17ef|0b05|0502|1949|04b7) return 1 ;; esac
+	android_vid "$1"
+}
+
 tether_os() {   # $1 - usb-путь
 	if is_iphone "$1"; then echo iphone; return 0; fi
+	if [ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ]; then
+		read -r _to_v < "/sys/bus/usb/devices/$1/idVendor"
+		if android_vid "$_to_v"; then echo android; else echo phone; fi
+		return 0
+	fi
 	_to_s=$(uci -q get "5gmodem.$(secname "$1").tether")
 	[ -n "$_to_s" ] && { echo "$_to_s"; return 0; }
-	echo android
+	echo phone
 }
 
 purge_path_caches() {   # $1 - usb-путь
@@ -315,7 +347,7 @@ purge_path_caches() {   # $1 - usb-путь
 # iconv в OpenWrt по умолчанию нет, поэтому awk побайтно: busybox awk работает
 # с байтами, что здесь и нужно.
 utf8_fix() {
-	awk '
+	LC_ALL=C awk '
 		BEGIN { for (n = 1; n < 256; n++) o[sprintf("%c", n)] = n
 			MK = sprintf("%c%cffff", 195, 191)     # маркер мусора: ÿ + "ffff"
 			MKJ = sprintf("%cu00ffffff", 92) }     # он же в JSON-экранировке: ÿ + "ffff"

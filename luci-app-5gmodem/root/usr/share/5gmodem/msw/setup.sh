@@ -81,6 +81,17 @@ setup_one_modem() {
 	fi
 
 	SEC=$(ensure_section "$P")
+	if [ "$(uci -q get "$CFG.$SEC.kind")" = tether ]; then
+		uci -q delete "$CFG.$SEC.kind"
+		uci -q delete "$CFG.$SEC.tether"
+		_tni=$(uci -q get "$CFG.$SEC.network")
+		if [ -n "$_tni" ] && [ "$(uci -q get "network.$_tni.modem_kind")" = tether ]; then
+			uci -q delete "network.$_tni.modem_kind"
+			uci -q delete "network.$_tni.modem_tether"
+			uci -q commit network
+		fi
+		logger -t 5gmodem "tether: $P is a known modem - phone mark removed"
+	fi
 
 	# АКТИВНОСТЬ НЕ ОТБИРАЕМ. Свежевоткнутый модем настраиваем, но активным
 	# делаем только если действующего активного нет или он пропал с шины:
