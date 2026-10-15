@@ -957,6 +957,10 @@ case "$1" in
 			# очередью к порту. Пусто - выходит мгновенно.
 			"$RES/smsbridge.sh" queue-run >/dev/null 2>&1
 			fi
+			for _ipw in /sys/bus/usb/devices/*-*; do
+				case "$_ipw" in *:*) continue ;; esac
+				is_iphone "${_ipw##*/}" && { usbmuxd_ensure >/dev/null 2>&1; break; }
+			done
 			# Телеметрия для умного дома/внешних дисплеев: плоский JSON из УЖЕ
 			# СОБРАННОГО снимка метрик (ни одного запроса к модему) + MQTT,
 			# если настроен брокер. Дешёвый шаг, выключается tele.enabled=0.

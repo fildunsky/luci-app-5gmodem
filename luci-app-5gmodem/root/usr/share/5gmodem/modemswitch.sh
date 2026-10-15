@@ -741,7 +741,8 @@ mkhilink)
 		is_tether "$_p" || { echo '{"error":"not a hilink modem"}'; exit 0; }
 		_k=tether
 	fi
-	_d=$(hilink_netdev "$_p") || { echo '{"error":"no network card"}'; exit 0; }
+	if [ "$_k" = tether ]; then _d=$(tether_netdev "$_p"); else _d=$(hilink_netdev "$_p"); fi
+	[ -n "$_d" ] || { echo '{"error":"no network card"}'; exit 0; }
 	_r=$(setup_hilink "$_p" "$_d" "$_k")
 	printf '{"success":true,"iface":"%s","netdev":"%s"}\n' "$_r" "$_d"
 	exit 0
@@ -927,6 +928,9 @@ autoapn)
 	# выбор хранится в самом интерфейсе - переписать значит потерять. Подсказку
 	# с найденным APN страница показывает и так, применить её - одна кнопка.
 	_am_sec=$(sec_for_iface "$IFACE")
+	case "$(uci -q get "$CFG.$_am_sec.kind")" in
+		tether|hilink) exit 0 ;;
+	esac
 	if [ "$(uci -q get "$CFG.$_am_sec.apn_mode")" = "manual" ]; then
 		logger -t 5gmodem "autoapn: $IFACE is in manual mode, leaving the APN alone"
 		exit 0
@@ -1256,7 +1260,7 @@ autosetup)
 			# Телефону он не подходит и подняться уже не может, а autosetup
 			# считал такой модем настроенным и молча проходил мимо.
 			if is_tether "$_p"; then
-				_tn=$(hilink_netdev "$_p")
+				_tn=$(tether_netdev "$_p")
 				_tok=0
 				[ -n "$_n" ] && [ "$(uci -q get "network.$_n.proto")" = dhcp ] \
 					&& [ -n "$_tn" ] \
@@ -1538,7 +1542,8 @@ resolve)
 		_sl_p=$(uci -q get "$CFG.$SEC.path")
 		[ -n "$_sl_p" ] && echo " $PRESENT " | grep -q " $_sl_p " || continue
 		[ "$(uci -q get "network.$_sl_if.auto")" = "0" ] || continue
-		uci -q delete "network.$_sl_if.auto"; _sl_chg=1
+		[ "$(uci -q get "$CFG.$SEC.kind")" = tether ] && iface_user_off "$_sl_if" && continue
+		uci -q delete "network.$_sl_if.auto"; uci -q delete "network.$_sl_if.modem_swapped"; _sl_chg=1
 		# ПРИВЯЗКУ К ЖЕЛЕЗУ ОСВЕЖАЕМ ПРИ ПРОБУЖДЕНИИ.
 		#
 		# Интерфейс проснувшегося модема мы намеренно не пересоздаём (в нём

@@ -61,10 +61,19 @@ setup_one_modem() {
 	# приходят как RNDIS, но у них есть веб-морда, и они должны остаться
 	# HiLink-ветке.
 	if is_tether "$P"; then
-		_tnet=$(hilink_netdev "$P")
+		is_iphone "$P" && usbmuxd_ensure
+		_tnet=$(tether_netdev "$P")
 		if [ -n "$_tnet" ]; then
 			setup_hilink "$P" "$_tnet" tether >/dev/null
-			( exec 1000>&- 7>&- 8>&- 9>&-; tether_web_recheck "$P" "$_tnet" ) >/dev/null 2>&1 </dev/null &
+			is_iphone "$P" || ( exec 1000>&- 6>&- 7>&- 8>&- 9>&-; tether_web_recheck "$P" "$_tnet" ) >/dev/null 2>&1 </dev/null &
+		elif is_iphone "$P"; then
+			ucitx_take; _t_lk=$?
+			_tsec=$(ensure_section "$P")
+			uci -q set "$CFG.$_tsec.kind=tether"
+			uci -q set "$CFG.$_tsec.tether=iphone"
+			uci -q commit "$CFG"
+			[ "$_t_lk" = 0 ] && ucitx_drop
+			logger -t 5gmodem "iphone: $P is connected without a network device ($(iphone_state "$P")) - waiting for Trust and Personal Hotspot"
 		else
 			logger -t 5gmodem "tether: $P looks like USB tethering but has no network device yet"
 		fi
@@ -153,6 +162,7 @@ setup_one_modem() {
 		# до/после. Снимок ДО любых правок: ниже адрес устройства переписывается.
 		_fp_was="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")|$(uci -q get "network.$_ex.devpath")"
 		uci -q delete "network.$_ex.auto" 2>/dev/null
+		uci -q delete "network.$_ex.modem_swapped" 2>/dev/null
 		stamp_iface_owner "$_ex" "$P"
 		follow_iface_device "$_ex" "$P"
 		fix_iface_proto "$_ex"

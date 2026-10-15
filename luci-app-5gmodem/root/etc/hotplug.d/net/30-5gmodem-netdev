@@ -26,6 +26,19 @@
 case "$ACTION" in add|remove) ;; *) exit 0 ;; esac
 _gone_dir=/tmp/5gmodem/netdev-gone
 
+_tt_kick=""
+if [ "$ACTION" = add ]; then
+	_tt_d=$(readlink -f "/sys/class/net/$INTERFACE/device" 2>/dev/null)
+	while [ -n "$_tt_d" ] && [ "$_tt_d" != / ] && [ ! -f "$_tt_d/idVendor" ]; do _tt_d="${_tt_d%/*}"; done
+	[ -f "$_tt_d/idVendor" ] && [ "$(cat "$_tt_d/idVendor" 2>/dev/null)" = 05ac ] && _tt_kick=1
+else
+	uci -q show network 2>/dev/null | grep -q "\.device='$INTERFACE'\$" \
+		&& uci -q show network 2>/dev/null | grep -q "\.modem_tether='iphone'\$" && _tt_kick=1
+fi
+if [ -n "$_tt_kick" ] && [ -x /etc/hotplug.d/usb/71-5gmodem-resolve ]; then
+	ACTION=add DEVTYPE=usb_device /etc/hotplug.d/usb/71-5gmodem-resolve >/dev/null 2>&1 </dev/null
+fi
+
 # Найти fibocom-интерфейс(ы), которым принадлежит это устройство: по полю device
 # или по usbpath (устройство под тем же USB-путём).
 for _if in $(uci -q show network 2>/dev/null \
