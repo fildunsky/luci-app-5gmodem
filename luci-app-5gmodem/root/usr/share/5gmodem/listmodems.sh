@@ -261,6 +261,21 @@ for _nd in /sys/class/net/*; do
 	PORTREC="${PORTREC}${NCNT} net $(basename "$_nd")${NL}"
 done
 
+command -v is_iphone >/dev/null 2>&1 && for _ad in /sys/bus/usb/devices/*; do
+	case "${_ad##*/}" in *:*|usb*) continue ;; esac
+	[ -f "$_ad/idVendor" ] || continue
+	read -r _adv < "$_ad/idVendor"
+	[ "$_adv" = 05ac ] || continue
+	is_iphone "${_ad##*/}" || continue
+	_adr=$(readlink -f "$_ad" 2>/dev/null)
+	[ -n "$_adr" ] || continue
+	case " $NODES " in *" $_adr "*) continue ;; esac
+	NCNT=$((NCNT + 1))
+	NODES="$NODES $_adr"
+	_adn=$(iphone_netdev "${_ad##*/}")
+	[ -n "$_adn" ] && PORTREC="${PORTREC}${NCNT} net ${_adn}${NL}"
+done
+
 # --- Известные устройства С СЕТЬЮ, но БЕЗ модемных портов (телефон) ----------
 #
 # Телефон в режиме USB-модема - сетевая карта: ни tty, ни cdc-wdm, по портам он
@@ -466,7 +481,17 @@ PORTREC_EOF
 		fi
 	fi
 	_alias=$(esc "$_alias")
-	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]}"
+	_tx=""
+	if [ "$vid" = 05ac ] && command -v is_iphone >/dev/null 2>&1 && is_iphone "$path"; then
+		_tx=",\"tether\":\"iphone\",\"tether_state\":\"$(iphone_state "$path")\""
+	else
+		case "$_UCISNAP" in
+			*"5gmodem.$_sec.kind='tether'"*)
+				_txs=ready; [ -n "$nets" ] || _txs=no_netdev
+				_tx=",\"tether\":\"android\",\"tether_state\":\"$_txs\"" ;;
+		esac
+	fi
+	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]$_tx}"
 done
 OUT="[$OUT]"
 

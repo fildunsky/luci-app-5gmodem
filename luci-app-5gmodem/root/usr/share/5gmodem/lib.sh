@@ -184,6 +184,89 @@ usb_path_present() {   # $1 - usb-путь; код 0 = устройство на
 	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ]
 }
 
+is_iphone() {   # $1 - usb-путь
+	_ii_d="/sys/bus/usb/devices/$1"
+	[ -n "$1" ] && [ -f "$_ii_d/idVendor" ] || return 1
+	read -r _ii_v < "$_ii_d/idVendor"
+	[ "$_ii_v" = 05ac ] || return 1
+	_ii_p=""
+	[ -f "$_ii_d/idProduct" ] && read -r _ii_p < "$_ii_d/idProduct"
+	case "$_ii_p" in 129[0-9a-f]|12a[0-9a-f]) return 0 ;; esac
+	for _ii_i in "$_ii_d"/*:*/driver; do
+		[ -e "$_ii_i" ] || continue
+		case "$(readlink "$_ii_i" 2>/dev/null)" in */ipheth) return 0 ;; esac
+	done
+	return 1
+}
+
+iphone_netdev() {   # $1 - usb-путь
+	_in_f=""
+	for _in_n in /sys/bus/usb/devices/"$1":*/net/*; do
+		[ -e "$_in_n" ] || continue
+		case "$(readlink "${_in_n%/net/*}/driver" 2>/dev/null)" in
+			*/ipheth) echo "${_in_n##*/}"; return 0 ;;
+		esac
+		[ -n "$_in_f" ] || _in_f="${_in_n##*/}"
+	done
+	[ -n "$_in_f" ] || return 1
+	echo "$_in_f"
+}
+
+usbmuxd_installed() {
+	[ -x /usr/sbin/usbmuxd ] || command -v usbmuxd >/dev/null 2>&1
+}
+
+ipheth_available() {
+	[ -d /sys/module/ipheth ] && return 0
+	for _ia_k in /lib/modules/*/ipheth.ko; do
+		[ -e "$_ia_k" ] && return 0
+	done
+	return 1
+}
+
+usbmuxd_ensure() {
+	usbmuxd_installed || return 1
+	pidof usbmuxd >/dev/null 2>&1 && return 0
+	if [ -x /etc/init.d/usbmuxd ]; then
+		/etc/init.d/usbmuxd start >/dev/null 2>&1
+	else
+		( exec 1000>&- 6>&- 7>&- 8>&- 9>&-; usbmuxd >/dev/null 2>&1 ) </dev/null &
+	fi
+	logger -t 5gmodem "iphone: usbmuxd was not running - started"
+	return 0
+}
+
+iphone_paired() {   # $1 - usb-путь
+	[ -f "/sys/bus/usb/devices/$1/serial" ] || return 1
+	read -r _ipp_s < "/sys/bus/usb/devices/$1/serial"
+	for _ipp_f in /etc/lockdown/*.plist /var/lib/lockdown/*.plist; do
+		[ -e "$_ipp_f" ] || continue
+		_ipp_b="${_ipp_f##*/}"; _ipp_b="${_ipp_b%.plist}"
+		[ "$(echo "$_ipp_b" | tr -d '-' | tr 'a-f' 'A-F')" = "$(echo "$_ipp_s" | tr -d '-' | tr 'a-f' 'A-F')" ] && return 0
+	done
+	return 1
+}
+
+iphone_state() {   # $1 - usb-путь
+	usbmuxd_installed || { echo no_usbmuxd; return 0; }
+	ipheth_available || { echo no_driver; return 0; }
+	_is_n=$(iphone_netdev "$1")
+	_is_c=""
+	if [ -n "$_is_n" ]; then
+		_is_c=$(cat "/sys/class/net/$_is_n/carrier" 2>/dev/null)
+		[ "$_is_c" = 1 ] && { echo ready; return 0; }
+	fi
+	iphone_paired "$1" || { echo need_trust; return 0; }
+	echo no_hotspot
+}
+
+tether_os() {   # $1 - usb-путь
+	if is_iphone "$1"; then echo iphone; return 0; fi
+	_to_s=$(uci -q get "5gmodem.$(secname "$1").tether")
+	[ -n "$_to_s" ] && { echo "$_to_s"; return 0; }
+	echo android
+}
+
 purge_path_caches() {   # $1 - usb-путь
 	[ -n "$1" ] || return 0
 	# ДВА ФОРМАТА КЛЮЧА, И ОБА ЖИВЫЕ. snap_key даёт "1_1_3_" (с хвостовым

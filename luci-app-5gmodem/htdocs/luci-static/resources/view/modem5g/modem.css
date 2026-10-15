@@ -1259,8 +1259,10 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
   cursor: help;
 }
 h4 .tginfo-ca { margin-left: .6em; font-size: .75em; }
-html:not(.tg-boxed-sec) .tginfo-info .tginfo-band.btn { line-height: 1.15 !important; padding-top: .2em !important; padding-bottom: 0 !important; }
-html:not(.tg-boxed-sec) .tginfo-ca { line-height: 1.3; padding-top: .2em; }
+@supports (text-box: trim-both cap alphabetic) {
+  html:not(.tg-boxed-sec) .tginfo-info .tginfo-band.btn,
+  html:not(.tg-boxed-sec) .tginfo-ca { text-box: trim-both cap alphabetic; padding-top: .32em !important; padding-bottom: .32em !important; }
+}
 /* частоты в скобках - без жирного, мельче и на 30% серее основного текста */
 .tginfo-info .tginfo-freq {
   font-weight: normal;

@@ -5940,3 +5940,21 @@ msgstr "Агрегация несущих: объединено %d, общая �
 
 msgid "Carrier aggregation: %d carriers combined"
 msgstr "Агрегация несущих: объединено %d"
+
+msgid "iPhone shares internet over USB."
+msgstr "iPhone раздаёт интернет по USB."
+
+msgid "Address: %s."
+msgstr "Адрес: %s."
+
+msgid "Signal, operator and SMS are not available from an iPhone."
+msgstr "Уровень сигнала, оператор и SMS с iPhone недоступны."
+
+msgid "iPhone is connected but does not share internet. Turn on Personal Hotspot on the iPhone."
+msgstr "iPhone подключён, но интернет не раздаёт. Включите на нём «Режим модема»."
+
+msgid "iPhone is connected. To use it as a USB modem, install the usbmuxd and kmod-usb-net-ipheth packages."
+msgstr "iPhone подключён. Чтобы он работал как USB-модем, установите пакеты usbmuxd и kmod-usb-net-ipheth."
+
+msgid "iPhone is connected. Unlock it, tap Trust on the iPhone and turn on Personal Hotspot."
+msgstr "iPhone подключён. Разблокируйте его, нажмите «Доверять» и включите «Режим модема»."

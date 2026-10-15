@@ -2554,6 +2554,24 @@ function updBarTick(json) {
 	b.style.transition = 'width ' + left.toFixed(1) + 's linear';
 	b.style.width = '0%';
 }
+function tetherText(json) {
+	if (json.tether !== 'iphone') {
+		return _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');
+	}
+	switch (json.tether_state) {
+	case 'ready':
+		return _('iPhone shares internet over USB.') + (json.ipaddr ? ' ' + _('Address: %s.').format(json.ipaddr) : '')
+			+ ' ' + _('Signal, operator and SMS are not available from an iPhone.');
+	case 'no_hotspot':
+		return _('iPhone is connected but does not share internet. Turn on Personal Hotspot on the iPhone.');
+	case 'no_usbmuxd':
+	case 'no_driver':
+		return _('iPhone is connected. To use it as a USB modem, install the usbmuxd and kmod-usb-net-ipheth packages.');
+	default:
+		return _('iPhone is connected. Unlock it, tap Trust on the iPhone and turn on Personal Hotspot.');
+	}
+}
+
 function updateSimpleLine(json) {
 	var lamp = document.getElementById('sc-lamp');
 	var text = document.getElementById('sc-text');
@@ -2565,6 +2583,7 @@ function updateSimpleLine(json) {
 	if (regOk && hasIp)   { st = 'on';      txt = _('Internet is working'); }
 	else if (regOk)       { st = 'unknown'; txt = _('Registered on the network, connecting…'); }
 	else if (reg === '7') { st = 'unknown'; txt = _('SMS only — no data connection'); }
+	else if (json.tether) { st = (json.tether_state === 'ready') ? 'on' : 'unknown'; txt = tetherText(json); }
 	else if (!json.modem || json.modem === '-') { st = 'off'; txt = _('No modem found') + ' — ' + _('Plug the modem into USB — setup is automatic'); }
 	else { st = 'off'; txt = _('No network') + ' — ' + _('Check the SIM card and the antennas'); }
 	if (json.no_at == '1' && (reg === '' || reg === '-') && json.modem && json.modem !== '-') {
@@ -2758,8 +2777,9 @@ function applyMetrics(json) {
 						/* ЗАЛИП (на шине, не отвечает) - оставляем «Управление частотами»:
 						   там кнопка ребута по питанию, которой его можно оживить. УБРАН
 						   совсем - прячем и его (ребутить нечего), остаётся чистый скелет. */
-						if (_freq) { _freq.style.display = _onbus ? '' : 'none'; }
-						if (_rbb) { _rbb.style.display = _onbus ? '' : 'none'; }
+						var _ctl = _onbus && !json.tether;
+						if (_freq) { _freq.style.display = _ctl ? '' : 'none'; }
+						if (_rbb) { _rbb.style.display = _ctl ? '' : 'none'; }
 						if (!_none && _mib && _mib.parentNode) {
 							_none = buildNoModemBlock();
 							_mib.parentNode.insertBefore(_none, _mib);
@@ -2780,6 +2800,7 @@ function applyMetrics(json) {
 							/* hasports=1: у устройства есть свои AT-порты - это модем, чей
 							   порт сейчас молчит (занят или завис), а не телефон. */
 							_ns.textContent = !_onbus ? _('No modem connected')
+								: json.tether ? tetherText(json)
 								: (String(json.hasports) === '1')
 									? _('The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below.')
 									: _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');

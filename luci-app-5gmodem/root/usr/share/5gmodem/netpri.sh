@@ -1419,6 +1419,10 @@ list)
 			[ -n "$_np_ld" ] || _np_ld=$(ifup_state "${n}_4" '@["l3_device"]')
 			[ "$_np_ld" = "$_LIVE_DEV" ] && _np_h="$_np_h,\"live\":1"
 		fi
+		if [ -n "$_np_s" ] && [ "$(uci5g_get "$_np_s" kind)" = tether ]; then
+			_np_to=$(uci5g_get "$_np_s" tether)
+			_np_h="$_np_h,\"tether\":\"${_np_to:-android}\""
+		fi
 		[ "$first" = 1 ] || printf ','
 		first=0
 		printf '{"iface":"%s","type":"%s","sub":"%s","label":"%s","ip":"%s","metric":%s%s}' \
