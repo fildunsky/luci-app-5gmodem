@@ -248,13 +248,21 @@ for _nd in /sys/class/net/*; do
 		[ -e "$_tp" ] && { _tskip=1; break; }
 	done
 	[ "$_tskip" = 1 ] && continue
+	_tkm=0
+	command -v known_modem_path >/dev/null 2>&1 && known_modem_path "${_dev##*/}" && _tkm=1
 	_trndis=0
 	for _if in "$_dev"/*:*; do
 		[ -f "$_if/bInterfaceClass" ] || continue
 		case "$(cat "$_if/bInterfaceClass" 2>/dev/null)/$(cat "$_if/bInterfaceSubClass" 2>/dev/null)/$(cat "$_if/bInterfaceProtocol" 2>/dev/null)" in
 			ef/04/01|e0/01/03) _trndis=1; break ;;
+			02/0d/*|02/06/*) _trndis=2 ;;
 		esac
 	done
+	if [ "$_trndis" = 2 ]; then
+		_trndis=$_tkm
+		read -r _tcv < "$_dev/idVendor"
+		command -v tether_cdc_vid >/dev/null 2>&1 && tether_cdc_vid "$_tcv" && _trndis=1
+	fi
 	[ "$_trndis" = 1 ] || continue
 	NCNT=$((NCNT + 1))
 	NODES="$NODES $_dev"
@@ -487,8 +495,11 @@ PORTREC_EOF
 	else
 		case "$_UCISNAP" in
 			*"5gmodem.$_sec.kind='tether'"*)
-				_txs=ready; [ -n "$nets" ] || _txs=no_netdev
-				_tx=",\"tether\":\"android\",\"tether_state\":\"$_txs\"" ;;
+				if ! { command -v known_modem_path >/dev/null 2>&1 && known_modem_path "$path"; }; then
+					_txs=ready; [ -n "$nets" ] || _txs=no_netdev
+					_txo=phone; command -v tether_os >/dev/null 2>&1 && _txo=$(tether_os "$path")
+					_tx=",\"tether\":\"$_txo\",\"tether_state\":\"$_txs\""
+				fi ;;
 		esac
 	fi
 	OUT="$OUT{\"path\":\"$path\",\"vidpid\":\"$vid:$pid\",\"product\":\"$prod\",\"model\":\"$model\",\"alias\":\"$_alias\",\"serial\":\"$(esc "$(serial_of "$n")")\",\"operator\":\"$_opname\",\"tty\":[$ttys],\"wdm\":[$wdms],\"net\":[$nets]$_tx}"

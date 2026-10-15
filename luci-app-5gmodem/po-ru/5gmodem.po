@@ -5941,6 +5941,18 @@ msgstr "Агрегация несущих: объединено %d, общая �
 msgid "Carrier aggregation: %d carriers combined"
 msgstr "Агрегация несущих: объединено %d"
 
+msgid "Phone"
+msgstr "Телефон"
+
+msgid "%s shares internet over USB."
+msgstr "%s раздаёт интернет по USB."
+
+msgid "Signal, operator and SMS are not available from a phone."
+msgstr "Уровень сигнала, оператор и SMS с телефона недоступны."
+
+msgid "%s is connected but does not share internet. Turn on USB tethering on the phone."
+msgstr "%s подключён, но интернет не раздаёт. Включите на телефоне «USB-модем»."
+
 msgid "iPhone shares internet over USB."
 msgstr "iPhone раздаёт интернет по USB."
 
