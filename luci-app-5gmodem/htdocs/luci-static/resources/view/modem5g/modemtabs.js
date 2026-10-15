@@ -476,6 +476,7 @@ function operatorTabIcon(name) {
 	return null;
 }
 function tabIconSrc(m, opIcon) {
+	if (!opIcon && m && m.tether) { opIcon = 'op-sim'; }
 	if (opIcon) { return L.resource('icons/5gmodem/' + opIcon + '.png'); }
 	return L.resource(isUsbStick(m) ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg');
 }
@@ -487,7 +488,7 @@ function tabsCacheSave(modems, active) {
 			/* usb сохраняем, чтобы в заготовке (до ответа listmodems) значок был
 			   сразу правильным и не подменялся на глазах. */
 			return { label: lbl[i], active: (m.path === active), usb: isUsbStick(m),
-			         op: operatorTabIcon(m.operator) };
+			         op: operatorTabIcon(m.operator) || (m.tether ? 'op-sim' : null) };
 		})));
 	} catch (e) {}
 }

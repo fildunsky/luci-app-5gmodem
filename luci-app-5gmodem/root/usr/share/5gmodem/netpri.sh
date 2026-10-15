@@ -1419,9 +1419,15 @@ list)
 			[ -n "$_np_ld" ] || _np_ld=$(ifup_state "${n}_4" '@["l3_device"]')
 			[ "$_np_ld" = "$_LIVE_DEV" ] && _np_h="$_np_h,\"live\":1"
 		fi
-		if [ -n "$_np_s" ] && [ "$(uci5g_get "$_np_s" kind)" = tether ]; then
-			_np_to=$(uci5g_get "$_np_s" tether)
-			_np_h="$_np_h,\"tether\":\"${_np_to:-android}\""
+		_np_tp=""
+		[ -n "$_np_s" ] && _np_tp=$(uci5g_get "$_np_s" path)
+		if [ -n "$_np_s" ] && [ "$(uci5g_get "$_np_s" kind)" = tether ] && ! known_modem_path "$_np_tp"; then
+			if [ -n "$_np_tp" ]; then
+				_np_to=$(tether_os "$_np_tp")
+			else
+				_np_to=$(uci5g_get "$_np_s" tether)
+			fi
+			_np_h="$_np_h,\"tether\":\"${_np_to:-phone}\""
 		fi
 		[ "$first" = 1 ] || printf ','
 		first=0

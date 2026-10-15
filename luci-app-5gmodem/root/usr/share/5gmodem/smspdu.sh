@@ -30,7 +30,7 @@ _TXT="$3"
 # UTF-8 означает символ вне ASCII, а из ASCII в GSM-7 не входят только несколько
 # знаков, которые модем и сам заменит - гадать за него не будем.
 needucs2() {
-	printf '%s' "$1" | awk '
+	printf '%s' "$1" | LC_ALL=C awk '
 		BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i; rc = 1 }
 		{ line = $0
 		  for (i = 1; i <= length(line); i++) {
@@ -87,7 +87,7 @@ encode() {
 	read -r _e_up _ < /proc/uptime
 	_e_ref=$(( ${_e_up%%.*} % 256 ))
 
-	printf '%s' "$_e_txt" | awk -v dlen="$_e_dlen" -v toa="$_e_toa" -v digits="$_e_digits" -v ref="$_e_ref" '
+	printf '%s' "$_e_txt" | LC_ALL=C awk -v dlen="$_e_dlen" -v toa="$_e_toa" -v digits="$_e_digits" -v ref="$_e_ref" '
 		BEGIN {
 			for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i
 			body = ""

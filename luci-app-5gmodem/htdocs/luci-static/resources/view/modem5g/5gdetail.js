@@ -2556,7 +2556,12 @@ function updBarTick(json) {
 }
 function tetherText(json) {
 	if (json.tether !== 'iphone') {
-		return _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');
+		var nm = (json.tether_name && json.tether_name !== '-') ? json.tether_name : _('Phone');
+		if (json.tether_state === 'ready') {
+			return _('%s shares internet over USB.').format(nm) + (json.ipaddr ? ' ' + _('Address: %s.').format(json.ipaddr) : '')
+				+ ' ' + _('Signal, operator and SMS are not available from a phone.');
+		}
+		return _('%s is connected but does not share internet. Turn on USB tethering on the phone.').format(nm);
 	}
 	switch (json.tether_state) {
 	case 'ready':
