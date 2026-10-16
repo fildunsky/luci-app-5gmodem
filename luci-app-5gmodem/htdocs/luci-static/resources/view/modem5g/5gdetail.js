@@ -2887,7 +2887,7 @@ function applyMetrics(json) {
 				// Антенные порты: данные уже в json, лишних запросов нет.
 				fillAntPorts(json.antports, json.rxdiv);
 
-					var icon, wicon, ticon, t;
+					var wicon, ticon, t;
 					var wicon = L.resource('icons/5gmodem/cloading.svg');
 					var ticon = L.resource('icons/5gmodem/ctime.svg');
 					var dicon = L.resource('icons/5gmodem/cdown.svg');   // скачивание (rx)
@@ -2901,33 +2901,23 @@ function applyMetrics(json) {
 					// иначе "-" (нет данных) проваливался в else -> полная
 					// зелёная шкала при 0%.
 					var p = parseInt(json.signal, 10);
-					var level;
 					if (isNaN(p) || p < 0)
-					p = 0;
-					if (p === 0) {
-						level = 'none';
-					} else if (p < 20) {
-						level = 'poor';
-					} else if (p < 40) {
-						level = 'fair';
-					} else if (p < 60) {
-						level = 'medium';
-					} else if (p < 80) {
-						level = 'high';
-					} else {
-						level = 'excellent';
+						p = 0;
+
+					var sgv = document.getElementById('signal');
+					if (sgv) {
+						var sgi = sgv.querySelector('svg.tg-sig');
+						if (!sgi) {
+							sgv.textContent = '';
+							sgv.appendChild(mutil.signalSvg(p));
+							sgv.appendChild(E('br'));
+							sgv.appendChild(E('medium', {}, p + '%'));
+						} else {
+							mutil.signalSet(sgi, p);
+							var sgm = sgv.querySelector('medium');
+							if (sgm) { sgm.textContent = p + '%'; }
+						}
 					}
-
-					var view = document.getElementById('signal');
-
-					if (view) {
-						var svg = view.querySelector('svg');
-						var medium = view.querySelector('medium');
-						svg.setAttribute('data-signal', level);
-						// иконка сверху, проценты под ней
-						medium.innerHTML = p + '%';
-					}
-
 
 					if (document.getElementById('connst')) {
 						var view = document.getElementById("connst");
@@ -3905,7 +3895,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30208, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30209, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4296,23 +4286,9 @@ simDialog: baseclass.extend({
 			/* Компактная строка состояния: слева иконка уровня сигнала с
 			   процентами, затем иконка SIM, три строки статуса (регистрация /
 			   оператор / страна) и температура модема справа. */
-				E('div', { class: 'tginfo-general' }, [
-					(function () {
-						var _signal = E('div', {
-							class: 'tginfo-signal',
-							id: 'signal',
-						});
-						_signal.innerHTML =
-							'<svg width="48" height="32" viewBox="0 0 48 32" xmlns="http://w3.org" data-signal="none">' +
-							'<rect class="bar bar-1" x="3" y="24" width="7" height="6" rx="1.8" fill="currentColor"></rect>' +
-							'<rect class="bar bar-2" x="12" y="18" width="7" height="12" rx="1.8" fill="currentColor"></rect>' +
-							'<rect class="bar bar-3" x="21" y="12" width="7" height="18" rx="1.8" fill="currentColor"></rect>' +
-							'<rect class="bar bar-4" x="30" y="6" width="7" height="24" rx="1.8" fill="currentColor"></rect>' +
-							'<rect class="bar bar-5" x="39" y="2" width="7" height="28" rx="1.8" fill="currentColor"></rect>' +
-							'</svg>' +
-							'<medium id="signal-value">0%</medium>';
-						return _signal;
-					})(),
+			E('div', { 'class': 'tginfo-general' }, [
+				E('div', { 'class': 'tginfo-signal', 'id': 'signal' }, [ '-' ]),
+
 				E('span', {
 					'title': null,
 					'id': 'simv',

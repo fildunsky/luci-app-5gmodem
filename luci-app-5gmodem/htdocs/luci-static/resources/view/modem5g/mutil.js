@@ -479,8 +479,45 @@ function flagEmoji(cc) {
 	return String.fromCodePoint(0x1F1E6 + cc.charCodeAt(0) - 65, 0x1F1E6 + cc.charCodeAt(1) - 65);
 }
 
+var SIG_BARS = [ [ 3.1, 24.4 ], [ 11.5, 18.8 ], [ 19.9, 13.6 ], [ 28, 8.1 ], [ 36.4, 2.4 ] ];
+function signalStep(p) {
+	p = parseInt(p, 10);
+	if (isNaN(p) || p <= 0) { return 0; }
+	return p < 20 ? 1 : p < 40 ? 2 : p < 60 ? 3 : p < 80 ? 4 : 5;
+}
+function signalSet(svg, p) {
+	var st = signalStep(p);
+	svg.setAttribute('data-step', String(st));
+	svg.style.color = QUAL_COLOR[st < 3 ? 0 : st - 2];
+	var r = svg.querySelectorAll('rect');
+	for (var i = 0; i < r.length; i++) { r[i].setAttribute('fill-opacity', i < st ? '1' : '0.35'); }
+	return svg;
+}
+function signalSvg(p) {
+	var ns = 'http://www.w3.org/2000/svg';
+	var svg = document.createElementNS(ns, 'svg');
+	svg.setAttribute('class', 'tg-sig');
+	svg.setAttribute('viewBox', '0 0 48 32');
+	svg.setAttribute('width', '48');
+	svg.setAttribute('height', '32');
+	svg.setAttribute('aria-hidden', 'true');
+	SIG_BARS.forEach(function(b) {
+		var r = document.createElementNS(ns, 'rect');
+		r.setAttribute('x', String(b[0]));
+		r.setAttribute('y', String(b[1]));
+		r.setAttribute('width', '6.9');
+		r.setAttribute('height', String(Math.round((29.8 - b[1]) * 10) / 10));
+		r.setAttribute('rx', '1.9');
+		r.setAttribute('fill', 'currentColor');
+		svg.appendChild(r);
+	});
+	return signalSet(svg, p);
+}
+
 return baseclass.extend({
-	API: 30208,
+	API: 30209,
+	signalSvg: signalSvg,
+	signalSet: signalSet,
 	QUAL_T: QUAL_T,
 	QUAL_COLOR: QUAL_COLOR,
 	QUAL_GRAD: QUAL_GRAD,

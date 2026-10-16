@@ -977,21 +977,10 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
 .tginfo .table .td {
   overflow-wrap: anywhere;
 }
-#signal svg {
+#signal img,
+#signal .tg-sig {
   width: 36px;
   height: 36px;
-}
-#signal svg[data-signal='poor'] rect:nth-child(-n + 1), 
-#signal svg[data-signal='fair'] rect:nth-child(-n + 2), 
-#signal svg[data-signal='medium'] rect:nth-child(-n + 3), 
-#signal svg[data-signal='high'] rect:nth-child(-n + 4), #signal svg[data-signal='excellent'] rect {
-    fill-opacity: 1;
-}
-
-#signal svg .bar {
-    fill: currentColor;
-    fill-opacity: 0.25;
-    transition: fill-opacity 0.4s ease;
 }
 #signal medium {
   display: block;
@@ -1367,7 +1356,6 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   align-items: flex-end;
   gap: 4px;
 }
-
 /* маленькие кнопки переключения SIM-слота */
 /* Переключатели SIM - маленькие чипы, а не полноразмерные кнопки. Размер
    задаём В ПИКСЕЛЯХ, а не в процентах: font-size:80% считается от шрифта
@@ -3363,7 +3351,8 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 @media (max-width: 700px) {
   body.tg-mv #modem-info-block #signal { justify-content: center; gap: 4px; }
   body.tg-mv #modem-info-block #signal > br { display: none; }
-  body.tg-mv #modem-info-block #signal > img { display: block; }
+  body.tg-mv #modem-info-block #signal > img,
+  body.tg-mv #modem-info-block #signal > .tg-sig { display: block; }
   body.tg-mv #modem-info-block #mode .tg-mv-mhz { display: none; }
 }
 html.tg-theme-cyberpunk #modesw-btns .cbi-button,
@@ -3489,6 +3478,7 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 #modem-info-block[data-rat] #stale-mark img { filter: brightness(0) invert(1); width: 14px !important; height: 14px !important; }
 #modem-info-block[data-rat] #signal img,
 #modem-info-block[data-rat] .tginfo-conn img { filter: brightness(0) invert(1); }
+#modem-info-block[data-rat] #signal .tg-sig { color: #fff !important; }
 #modem-info-block[data-rat] .tginfo-info .tginfo-band.btn {
   background: #fff !important;
   border-color: #fff !important;
