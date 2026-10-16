@@ -55,7 +55,7 @@ function _bandsOpStart(args, msg) {
 		_bandsAfterBusy = false;
 		ctx.clearModemBusy(true);
 		var why = String(res.stdout || res.stderr || '').trim();
-		ui.addNotification(null, E('p', _('Failed to set network mode') + (why ? ': ' + why : '')), 'error');
+		ui.addNotification(null, E('p', [ _('Failed to set network mode') + (why ? ': ' + why : '') ]), 'error');
 	});
 }
 
@@ -496,7 +496,7 @@ function render5gMode(state) {
 
 	cell.appendChild(E('span', {
 		'style': full ? 'margin-right:.6em' : 'margin-right:.6em; color:#e58a00'
-	}, txt));
+	}, [ txt ]));
 	if (full) { return; }
 
 	cell.appendChild(E('span', {
@@ -572,7 +572,7 @@ function renderCellLock(state) {
 	// без проверки на живом модеме мы её не даём). Кнопки нет - показываем только
 	// состояние и прямо говорим почему: молчаливо неработающая кнопка хуже её отсутствия.
 	if (parts[parts.length - 1] === 'readonly') {
-		cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, txt));
+		cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, [ txt ]));
 		if (locked) {
 			cell.appendChild(E('span', {
 				'style': 'opacity:.65; font-size:90%'
@@ -627,11 +627,11 @@ function renderCellLock(state) {
 	// Состояние - ПОСЛЕ кнопки и ТОЛЬКО когда привязан: «Не привязан» не пишем,
 	// это и так ясно по кнопке «Привязать к текущей соте».
 	if (locked) {
-		cell.appendChild(E('span', { 'style': 'margin-left:.6em' }, txt));
+		cell.appendChild(E('span', { 'style': 'margin-left:.6em' }, [ txt ]));
 	} else if (unlockable) {
 		cell.appendChild(E('span', {
 			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
-		}, txt));
+		}, [ txt ]));
 	}
 
 	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после
@@ -677,7 +677,7 @@ function renderCellLock5g(state) {
 			})
 		}, [ _('Unlock') ]));
 		cell.appendChild(E('span', { 'style': 'margin-left:.6em' },
-			_('Locked to cell: ARFCN %s, PCI %s').format(parts[1], parts[2])));
+			[ _('Locked to cell: ARFCN %s, PCI %s').format(parts[1], parts[2]) ]));
 		cell.appendChild(_cellLockCaNote());
 		return;
 	}
@@ -1207,7 +1207,7 @@ function setNetMode(allowed, preferred, label, confirmed) {
 		: /WCDMA|UMTS|HSPA|3G/i.test(_cur) ? '3g' : '';
 	if (!confirmed && _need && String(allowed || '').split('|').indexOf(_need) < 0) {
 		ui.showModal(_('Change network mode'), [
-			E('p', {}, _('The modem is on %s right now, and mode "%s" does not include it. If the network has nothing else here, the connection will drop.').format(_cur, label)),
+			E('p', {}, [ _('The modem is on %s right now, and mode "%s" does not include it. If the network has nothing else here, the connection will drop.').format(_cur, label) ]),
 			E('div', { 'class': 'right' }, [
 				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
 				' ',

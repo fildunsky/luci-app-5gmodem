@@ -365,7 +365,7 @@ return view.extend({
 					if (isT) { st.target = null; LS.d('target'); speak(_('Target cleared')); }
 					else { st.target = { enb: e.enb, pci: e.pci }; LS.sj('target', st.target); speak(_('Target') + ' ' + e.enb + ' ' + _('sector') + ' ' + e.pci); }
 					renderTable();
-				} }, [ E('td', {}, String(start + i + 1)), E('td', {}, String(e.enb)), E('td', {}, String(e.pci)), rsrpTd, sinrTd, E('td', { class: 'al-hint' }, e.time || '--') ]);
+				} }, [ E('td', {}, String(start + i + 1)), E('td', {}, [ String(e.enb) ]), E('td', {}, [ String(e.pci) ]), rsrpTd, sinrTd, E('td', { class: 'al-hint' }, [ String(e.time || '--') ]) ]);
 			}));
 		}
 
