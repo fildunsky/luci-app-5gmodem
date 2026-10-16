@@ -2148,10 +2148,10 @@ function updateSimIcon(name) {
 	if (!si) { return; }
 	var want;
 	if (name == null || String(name).length < 1 || String(name) == '-') {
-		want = L.resource('icons/5gmodem/op-nosim.png');   // модем ещё грузится / нет SIM
+		want = L.resource('icons/5gmodem/op-nosim.svg');   // модем ещё грузится / нет SIM
 	} else {
 		var ic = mutil.operatorIcon(name);
-		want = ic ? L.resource('icons/5gmodem/' + ic + '.png') : L.resource('icons/5gmodem/op-sim.png');
+		want = ic ? L.resource('icons/5gmodem/' + ic + '.svg') : L.resource('icons/5gmodem/op-sim.svg');
 	}
 	if (si.getAttribute('src') != want) { si.setAttribute('src', want); }
 }
@@ -4298,12 +4298,16 @@ simDialog: baseclass.extend({
 					}),
 				}, [
 					E('div', { 'class': 'cbi-tooltip-container' }, [
-						E('img', {
-							'id': 'simicon',
-							'src': L.resource('icons/5gmodem/op-nosim.png'),
-							'title': _(''),
-							'class': 'middle',
-						}),
+						E('div', {
+							'class': 'tginfo-sim',
+							'style': "background-image:url('/luci-static/resources/icons/5gmodem/op-sim-template.svg')"
+						}, [
+							E('img', {
+								'id': 'simicon',
+								'src': '',
+								'title': _(''),
+							}),
+					]),
 						/* id ОБЯЗАТЕЛЕН: раньше подсказка строилась ровно один раз,
 						   при отрисовке страницы, и навсегда оставалась с теми
 						   значениями, что были известны в тот момент - то есть с
