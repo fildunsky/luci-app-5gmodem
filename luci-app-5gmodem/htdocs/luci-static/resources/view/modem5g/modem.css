@@ -977,7 +977,8 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
 .tginfo .table .td {
   overflow-wrap: anywhere;
 }
-#signal img {
+#signal img,
+#signal .tg-sig {
   width: 36px;
   height: 36px;
 }
@@ -3350,7 +3351,8 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 @media (max-width: 700px) {
   body.tg-mv #modem-info-block #signal { justify-content: center; gap: 4px; }
   body.tg-mv #modem-info-block #signal > br { display: none; }
-  body.tg-mv #modem-info-block #signal > img { display: block; }
+  body.tg-mv #modem-info-block #signal > img,
+  body.tg-mv #modem-info-block #signal > .tg-sig { display: block; }
   body.tg-mv #modem-info-block #mode .tg-mv-mhz { display: none; }
 }
 html.tg-theme-cyberpunk #modesw-btns .cbi-button,
@@ -3476,6 +3478,7 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 #modem-info-block[data-rat] #stale-mark img { filter: brightness(0) invert(1); width: 14px !important; height: 14px !important; }
 #modem-info-block[data-rat] #signal img,
 #modem-info-block[data-rat] .tginfo-conn img { filter: brightness(0) invert(1); }
+#modem-info-block[data-rat] #signal .tg-sig { color: #fff !important; }
 #modem-info-block[data-rat] .tginfo-info .tginfo-band.btn {
   background: #fff !important;
   border-color: #fff !important;

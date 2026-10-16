@@ -5,6 +5,7 @@
 'require uci';
 'require poll';
 'require ui';
+'require view.modem5g.mutil as mutil';
 
 /*
 	Copyright 2026 Rafał Wabik - IceG - From eko.one.pl forum
@@ -274,23 +275,6 @@ return baseclass.extend({
 		});
 	},
 
-	getSignalIcon: function(quality) {
-		let icon;
-		if (quality <= 0)
-			icon = L.resource('icons/5gmodem/mobile-signal-000-000.svg');
-		else if (quality < 20)
-			icon = L.resource('icons/5gmodem/mobile-signal-000-020.svg');
-		else if (quality < 40)
-			icon = L.resource('icons/5gmodem/mobile-signal-020-040.svg');
-		else if (quality < 60)
-			icon = L.resource('icons/5gmodem/mobile-signal-040-060.svg');
-		else if (quality < 80)
-			icon = L.resource('icons/5gmodem/mobile-signal-060-080.svg');
-		else
-			icon = L.resource('icons/5gmodem/mobile-signal-080-100.svg');
-		return icon;
-	},
-
 	formatMode: function(modeRaw) {
 		if (!modeRaw || modeRaw.length <= 1 || modeRaw === '-') {
 			return '-';
@@ -333,7 +317,10 @@ return baseclass.extend({
 			truncatedName = modemName.substring(0, 22) + '...';
 		}
 		
-		let signalIcon = this.getSignalIcon(signalQuality);
+		let signalIcon = mutil.signalSvg(signalQuality);
+		signalIcon.style.width = '28px';
+		signalIcon.style.height = '28px';
+		signalIcon.style.verticalAlign = 'middle';
 		let smsIconUrl = L.resource('icons/5gmodem/newdelsms.png');
 		
 		if (!hasFullData) {
@@ -395,10 +382,7 @@ return baseclass.extend({
 								'title': '%s: %d%%'.format(_('Signal Quality'), signalQuality),
 								'style': 'display:inline-block;'
 							}, [
-								E('img', { 
-									'src': signalIcon,
-									'style': 'width:28px;height:28px;vertical-align:middle;'
-								}),
+								signalIcon,
 								E('span', { 'style': 'vertical-align:middle;font-size:12px;' }, [
 									' ',
 									operator,
