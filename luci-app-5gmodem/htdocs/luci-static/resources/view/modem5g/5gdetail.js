@@ -2887,7 +2887,7 @@ function applyMetrics(json) {
 				// Антенные порты: данные уже в json, лишних запросов нет.
 				fillAntPorts(json.antports, json.rxdiv);
 
-					var icon, wicon, ticon, t;
+					var wicon, ticon, t;
 					var wicon = L.resource('icons/5gmodem/cloading.svg');
 					var ticon = L.resource('icons/5gmodem/ctime.svg');
 					var dicon = L.resource('icons/5gmodem/cdown.svg');   // скачивание (rx)
@@ -2903,23 +2903,20 @@ function applyMetrics(json) {
 					var p = parseInt(json.signal, 10);
 					if (isNaN(p) || p < 0)
 						p = 0;
-					if (p == 0)
-						icon = L.resource('icons/5gmodem/mobile-signal-000-000.svg');
-					else if (p < 20)
-						icon = L.resource('icons/5gmodem/mobile-signal-000-020.svg');
-					else if (p < 40)
-						icon = L.resource('icons/5gmodem/mobile-signal-020-040.svg');
-					else if (p < 60)
-						icon = L.resource('icons/5gmodem/mobile-signal-040-060.svg');
-					else if (p < 80)
-						icon = L.resource('icons/5gmodem/mobile-signal-060-080.svg');
-					else
-						icon = L.resource('icons/5gmodem/mobile-signal-080-100.svg');
 
-					if (document.getElementById('signal')) {
-						var view = document.getElementById("signal");
-						// иконка сверху, проценты под ней
-						view.innerHTML = String.format('<img src="%s"/><br/><medium>%d%%</medium>', icon, p);
+					var sgv = document.getElementById('signal');
+					if (sgv) {
+						var sgi = sgv.querySelector('svg.tg-sig');
+						if (!sgi) {
+							sgv.textContent = '';
+							sgv.appendChild(mutil.signalSvg(p));
+							sgv.appendChild(E('br'));
+							sgv.appendChild(E('medium', {}, p + '%'));
+						} else {
+							mutil.signalSet(sgi, p);
+							var sgm = sgv.querySelector('medium');
+							if (sgm) { sgm.textContent = p + '%'; }
+						}
 					}
 
 					if (document.getElementById('connst')) {
@@ -3898,7 +3895,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30208, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30209, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
