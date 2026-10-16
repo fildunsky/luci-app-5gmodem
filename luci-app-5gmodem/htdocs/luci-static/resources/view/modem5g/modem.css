@@ -977,9 +977,21 @@ html.tg-fixcheck input[type="radio"]:checked::after { background: currentColor; 
 .tginfo .table .td {
   overflow-wrap: anywhere;
 }
-#signal img {
+#signal svg {
   width: 36px;
   height: 36px;
+}
+#signal svg[data-signal='poor'] rect:nth-child(-n + 1), 
+#signal svg[data-signal='fair'] rect:nth-child(-n + 2), 
+#signal svg[data-signal='medium'] rect:nth-child(-n + 3), 
+#signal svg[data-signal='high'] rect:nth-child(-n + 4), #signal svg[data-signal='excellent'] rect {
+    fill-opacity: 1;
+}
+
+#signal svg .bar {
+    fill: currentColor;
+    fill-opacity: 0.25;
+    transition: fill-opacity 0.4s ease;
 }
 #signal medium {
   display: block;
@@ -1355,6 +1367,7 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   align-items: flex-end;
   gap: 4px;
 }
+
 /* маленькие кнопки переключения SIM-слота */
 /* Переключатели SIM - маленькие чипы, а не полноразмерные кнопки. Размер
    задаём В ПИКСЕЛЯХ, а не в процентах: font-size:80% считается от шрифта

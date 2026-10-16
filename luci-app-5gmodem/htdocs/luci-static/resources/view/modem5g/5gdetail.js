@@ -2901,26 +2901,33 @@ function applyMetrics(json) {
 					// иначе "-" (нет данных) проваливался в else -> полная
 					// зелёная шкала при 0%.
 					var p = parseInt(json.signal, 10);
+					var level;
 					if (isNaN(p) || p < 0)
-						p = 0;
-					if (p == 0)
-						icon = L.resource('icons/5gmodem/mobile-signal-000-000.svg');
-					else if (p < 20)
-						icon = L.resource('icons/5gmodem/mobile-signal-000-020.svg');
-					else if (p < 40)
-						icon = L.resource('icons/5gmodem/mobile-signal-020-040.svg');
-					else if (p < 60)
-						icon = L.resource('icons/5gmodem/mobile-signal-040-060.svg');
-					else if (p < 80)
-						icon = L.resource('icons/5gmodem/mobile-signal-060-080.svg');
-					else
-						icon = L.resource('icons/5gmodem/mobile-signal-080-100.svg');
-
-					if (document.getElementById('signal')) {
-						var view = document.getElementById("signal");
-						// иконка сверху, проценты под ней
-						view.innerHTML = String.format('<img src="%s"/><br/><medium>%d%%</medium>', icon, p);
+					p = 0;
+					if (p === 0) {
+						level = 'none';
+					} else if (p < 20) {
+						level = 'poor';
+					} else if (p < 40) {
+						level = 'fair';
+					} else if (p < 60) {
+						level = 'medium';
+					} else if (p < 80) {
+						level = 'high';
+					} else {
+						level = 'excellent';
 					}
+
+					var view = document.getElementById('signal');
+
+					if (view) {
+						var svg = view.querySelector('svg');
+						var medium = view.querySelector('medium');
+						svg.setAttribute('data-signal', level);
+						// иконка сверху, проценты под ней
+						medium.innerHTML = p + '%';
+					}
+
 
 					if (document.getElementById('connst')) {
 						var view = document.getElementById("connst");
@@ -4289,9 +4296,23 @@ simDialog: baseclass.extend({
 			/* Компактная строка состояния: слева иконка уровня сигнала с
 			   процентами, затем иконка SIM, три строки статуса (регистрация /
 			   оператор / страна) и температура модема справа. */
-			E('div', { 'class': 'tginfo-general' }, [
-				E('div', { 'class': 'tginfo-signal', 'id': 'signal' }, [ '-' ]),
-
+				E('div', { class: 'tginfo-general' }, [
+					(function () {
+						var _signal = E('div', {
+							class: 'tginfo-signal',
+							id: 'signal',
+						});
+						_signal.innerHTML =
+							'<svg width="48" height="32" viewBox="0 0 48 32" xmlns="http://w3.org" data-signal="none">' +
+							'<rect class="bar bar-1" x="3" y="24" width="7" height="6" rx="1.8" fill="currentColor"></rect>' +
+							'<rect class="bar bar-2" x="12" y="18" width="7" height="12" rx="1.8" fill="currentColor"></rect>' +
+							'<rect class="bar bar-3" x="21" y="12" width="7" height="18" rx="1.8" fill="currentColor"></rect>' +
+							'<rect class="bar bar-4" x="30" y="6" width="7" height="24" rx="1.8" fill="currentColor"></rect>' +
+							'<rect class="bar bar-5" x="39" y="2" width="7" height="28" rx="1.8" fill="currentColor"></rect>' +
+							'</svg>' +
+							'<medium id="signal-value">0%</medium>';
+						return _signal;
+					})(),
 				E('span', {
 					'title': null,
 					'id': 'simv',
