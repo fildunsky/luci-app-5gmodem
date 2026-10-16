@@ -944,7 +944,7 @@ return view.extend({
 		    } else {
 			    contentArea.innerHTML = '';
 			    contentArea.style.display = 'none';
-			    ui.addNotification(null, E('p', _('Failed to forward message: %s').format(response.error || 'Unknown error')), 'error');
+			    ui.addNotification(null, E('p', [ _('Failed to forward message: %s').format(response.error || 'Unknown error') ]), 'error');
 		    }
 	    }).catch(function(err) {
 		    contentArea.innerHTML = '';

@@ -743,7 +743,7 @@ return view.extend({
 							_('The modem control channel is busy with the active connection, so the profile list cannot be read right now. Disconnect the modem interface (or switch to another SIM) to manage profiles.')));
 					} else {
 						meta.appendChild(E('span', { 'style': 'color:#d95c5c' },
-							_('eUICC is not responding (%s). Try Refresh in a few seconds.').format(_m)));
+							[ _('eUICC is not responding (%s). Try Refresh in a few seconds.').format(_m) ]));
 					}
 				}
 				return;

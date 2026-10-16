@@ -1936,7 +1936,7 @@ function mapPinButton(c4, label) {
 		'style': 'margin:0;',
 		'title': _('View the tower on the 4cells.ru map'),
 		'click': function() { window.open(c4.url, '_blank', 'noopener'); }
-	}, '\u{1F4CD}' + label);
+	}, [ '\u{1F4CD}' + label ]);
 }
 
 
