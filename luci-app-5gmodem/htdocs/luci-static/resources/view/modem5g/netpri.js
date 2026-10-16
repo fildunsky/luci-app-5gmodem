@@ -551,7 +551,7 @@ function ssClashBtn(kind) {
 		'click': function() { if (_npSwallowClick()) { return; } window.open(url, '_blank', 'noopener'); }
 	}, [
 		svcRankEl(ic),
-		E('span', { 'class': 'netpri-sub' }, st.version || br.name),
+		E('span', { 'class': 'netpri-sub' }, [ String(st.version || br.name) ]),
 		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, br.name) ]),
 		E('span', { 'class': 'netpri-ip' }, host)
 	]);
@@ -833,9 +833,9 @@ function svcCard(service) {
 	var sic = svcIcon(service);
 	return E('button', attrs, [
 		svcRankEl(sic),
-		E('span', { 'class': 'netpri-sub' }, _sTop(r)),
+		E('span', { 'class': 'netpri-sub' }, [ String(_sTop(r)) ]),
 		E('span', { 'class': 'netpri-name' }, [ dot, sic, E('span', {}, [ svcName(service) ]) ]),
-		E('span', { 'class': 'netpri-ip' }, _sBottom(r))
+		E('span', { 'class': 'netpri-ip' }, [ String(_sBottom(r)) ])
 	]);
 }
 function updateSvcCard(service) {
