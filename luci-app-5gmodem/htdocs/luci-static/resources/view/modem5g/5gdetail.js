@@ -2181,6 +2181,7 @@ function fillAntPorts(raw, rxdiv) {
 		if (rxdiv === '4rx')      { txt = _('Receive diversity: on, 4 receivers (4RX)'); }
 		else if (rxdiv === '2rx') { txt = _('Receive diversity: on (2RX)'); }
 		else if (rxdiv === 'off') { txt = _('Receive diversity: off - the second antenna is not used'); red = true; }
+		else if (rxdiv === 'noant') { txt = _('Receive diversity: on, but the second antenna is not connected'); red = true; }
 		if (txt) {
 			rxl.style.display = '';
 			/* Именно color, а не cssText: опрос идёт раз в несколько секунд, и
@@ -3163,6 +3164,9 @@ function applyMetrics(json) {
 							if (_pm >= 1 && _pm <= 4) {
 								_mimoTxt = 'MIMO ' + _pm + '×' + _pm;
 								_mimoTip = _('Transmission rank: the network is sending %d parallel data streams right now').format(_pm);
+							} else if (json.rxdiv === 'noant') {
+								_mimoTxt = 'RX 1';
+								_mimoTip = _('Receive diversity: on, but the second antenna is not connected');
 							} else if (json.rxdiv === '4rx' || json.rxdiv === '2rx' || json.rxdiv === 'off') {
 								/* rxdiv надёжнее подсчёта портов: Telit отдаёт в
 								   #LAPS два порта, хотя приёмников четыре - счёт по

@@ -147,6 +147,7 @@ for _wpt in /sys/class/wwan/*; do
 	while [ -n "$_wdev" ] && [ "$_wdev" != "/" ] && [ "$_wdev" != "/sys" ]; do
 		[ -f "$_wdev/idVendor" ] && break
 		if [ -e "/sys/bus/pci/devices/${_wdev##*/}" ]; then _wpci="$_wdev"; break; fi
+		if [ -d "$_wdev/remoteproc" ]; then _wpci="$_wdev"; break; fi
 		_wdev="${_wdev%/*}"
 	done
 	[ -n "$_wpci" ] || continue
@@ -350,7 +351,13 @@ for n in $NODES; do
 		vid=$(cat "$n/vendor" 2>/dev/null); vid="${vid#0x}"
 		pid=$(cat "$n/device" 2>/dev/null); pid="${pid#0x}"
 	fi
+	_soc=""
+	if [ -z "$vid" ] && [ -d "$n/remoteproc" ] && command -v soc_modem_vidpid >/dev/null 2>&1; then
+		_soc=1
+		vid=$(soc_modem_vidpid); pid="${vid#*:}"; vid="${vid%%:*}"
+	fi
 	prod=$(esc "$(cat "$n/product" 2>/dev/null)")
+	[ -n "$_soc" ] && prod=$(esc "$(soc_modem_model)")
 	# Порты этого модема - из плоского списка (см. сбор выше). Кавычки для JSON
 	# навешиваются здесь же; в путях /dev и именах сетевых устройств кавычек и
 	# пробелов не бывает (имена даёт ядро).
@@ -440,6 +447,7 @@ PORTREC_EOF
 	# У PCI/MHI-узла строки product нет вовсе - до первого опроса вкладка была
 	# без имени. Ключ vid:pid, как у generic-дескриптора; настоящее имя придёт
 	# из секции после AT+CGMM. (ревью 13.09.2026)
+	[ -z "$model" ] && [ -n "$_soc" ] && model="$prod"
 	[ -z "$model" ] && [ -n "$vid" ] && [ ! -f "$n/product" ] && model="$vid:$pid"
 	model=$(esc "$model")
 	# ОПЕРАТОР ЭТОГО МОДЕМА - для значка сети на вкладке (у кого какая SIM).

@@ -1201,7 +1201,7 @@ return view.extend({
 		   момент получения данных, а сообщения появлялись через пару секунд - и
 		   выглядело, будто всё загрузилось, но пусто. */
 		function doRefresh(updateCount, busy) {
-			if (busy) { showLoading(); }
+			if (busy) { showLoading(); window._smsForceRender = true; }
 			var p = doRefreshInner(updateCount);
 			if (!p || typeof p.then != 'function') { hideLoading(); return Promise.resolve(); }
 			return p.then(function(r) { hideLoading(); return r; },
@@ -1314,6 +1314,12 @@ return view.extend({
 										smsSetState('error');
 										return;
 									}
+									if (!json.length && u > 0 && document.querySelector('#smsList .sms-card')) { return; }
+									var _sig = [ storeL, smsM, hide, direct, algo, res2 ].join('\u0001');
+									if (!window._smsForceRender && _sig === window._smsLastSig
+									    && document.querySelector('#smsList .sms-card')) { return; }
+									window._smsForceRender = false;
+									window._smsLastSig = _sig;
 									/* Контейнер под карточки берём У МОДЕЛИ - она же его и
 									   очищает, ровно здесь и только когда данные разобраны. */
 									table = smsSetState('list');

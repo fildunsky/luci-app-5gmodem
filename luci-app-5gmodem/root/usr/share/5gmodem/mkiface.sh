@@ -740,6 +740,9 @@ case "$REQ" in
 		   && [ -f "/lib/netifd/proto/$_mki_saved.sh" ]; then
 			PROTO="$_mki_saved"
 			logger -t 5gmodem "mkiface: auto -> saved user choice ($_mki_saved)"
+		elif soc_modem_node "$AMP" >/dev/null && [ -f /lib/netifd/proto/modemmanager.sh ]; then
+			PROTO="modemmanager"
+			logger -t 5gmodem "mkiface: $AMP is a built-in SoC modem - driving via ModemManager"
 		else
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
@@ -953,6 +956,7 @@ if [ "$PROTO" = modemmanager ]; then
 		IDEV=$(dirname "$IDEV")
 	done
 	[ -f "$IDEV/idVendor" ] || IDEV=""
+	[ -n "$IDEV" ] || IDEV=$(soc_modem_node "$AMP")
 elif proto_in wdm "$PROTO"; then
 	# control channel over the cdc-wdm node
 	IDEV="$DEV"

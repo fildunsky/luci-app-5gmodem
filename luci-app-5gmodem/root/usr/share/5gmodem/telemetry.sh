@@ -375,7 +375,7 @@ _refresh_snap() {
 	_rf=$(_g refresh); case "$_rf" in ''|*[!0-9]*) _rf=120 ;; esac
 	[ "$_rf" = "0" ] && return 0
 	[ -n "$_AM" ] || return 0
-	[ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || return 0
+	[ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || [ -d "/sys/bus/platform/devices/${_AM##*/}/remoteproc" ] || return 0
 	_rs_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 	case "$_rs_st" in
 		*[!0-9]*) _rs_st=0 ;;
@@ -398,7 +398,7 @@ case "$1" in
 	# без него просто обновляем файл.
 	tick)      tele_enabled || exit 0
 	           [ -n "$_AM" ] || exit 0
-	           [ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || exit 0
+	           [ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || [ -d "/sys/bus/platform/devices/${_AM##*/}/remoteproc" ] || exit 0
 	           _refresh_snap
 	           if _mqtt_args >/dev/null 2>&1; then tele_publish; else tele_write; fi ;;
 	write)     tele_enabled && tele_write ;;
