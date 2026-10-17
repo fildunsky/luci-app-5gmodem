@@ -282,13 +282,13 @@ function trafficIcon(key, label, opName) {
 		   вариантом - в ней оператор есть, только если был известен в момент
 		   записи. */
 		f = mutil.operatorIcon(opName || '') || mutil.operatorIcon(label) || 'op-sim';
-		f = 'icons/5gmodem/' + f + '.png';
+		f = 'icons/5gmodem/' + f + '.svg';
 	} else if (/^(wwan|wlan|phy|wifi)/i.test(String(key || ''))) {
 		f = 'icons/5gmodem/cwifi.svg';
 	} else if (/^(wan|eth|lan)/i.test(String(key || ''))) {
 		f = 'icons/5gmodem/cwan.svg';
 	} else {
-		f = 'icons/5gmodem/op-sim.png';
+		f = 'icons/5gmodem/op-sim.svg';
 	}
 	return E('img', { 'src': L.resource(f), 'width': 18, 'height': 18, 'alt': '',
 		'style': 'display:block' });

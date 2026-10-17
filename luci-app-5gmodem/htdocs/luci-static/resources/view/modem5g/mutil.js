@@ -175,6 +175,9 @@ function operatorIcon(name) {
 	/* KT (Korea Telecom, бренд olleh, MCC 450). Имя приходит коротким «KT» -
 	   матчим как отдельный токен, чтобы не ловить «kt» внутри других слов. */
 	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
+	if (n.indexOf('o2 - de') >= 0) {
+		return 'op-o2-de';
+	}
 	return null;
 }
 
