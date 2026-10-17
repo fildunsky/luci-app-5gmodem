@@ -279,7 +279,7 @@ var SIZE_LABEL={s:'S',w:'W',t:'T',l:'L'};
 function cl(v,a,b){v=Math.round(v);return v<a?a:v>b?b:v;}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 /* Иконка оператора из наших ресурсов (та же таблица, что в netpri.js). Нет -
-   вернём null (тогда возьмём op-sim.png - готовая иконка сим-карты). */
+   вернём null (тогда возьмём op-sim.svg - готовая иконка сим-карты). */
 function operatorIcon(name){
   var n=(name||'').toLowerCase();
   if(n.indexOf('t-mobile')>=0||n.indexOf('tinkoff')>=0||n.indexOf('t-bank')>=0||n.indexOf('т-мобайл')>=0||n.indexOf('т-банк')>=0||n.indexOf('t-mob')>=0)return 'op-tbank';
@@ -293,7 +293,7 @@ function operatorIcon(name){
   if(n.indexOf('tattelecom')>=0||n.indexOf('таттелеком')>=0||n.indexOf('летай')>=0)return 'op-tattelecom';
   return null;
 }
-function opImg(rawop){var oi=operatorIcon(rawop)||'op-sim';return '<img class="mc-opic" src="/luci-static/resources/icons/'+oi+'.png" alt="">';}
+function opImg(rawop){var oi=operatorIcon(rawop)||'op-sim';return '<img class="mc-opic" src="/luci-static/resources/icons/'+oi+'.svg" alt="">';}
 /* Стандартная иконка уровня сигнала (mobile-signal-*.svg) по проценту. */
 function sigIconSrc(p){p=+p;var f=(p<=0)?'000-000':(p<20)?'000-020':(p<40)?'020-040':(p<60)?'040-060':(p<80)?'060-080':'080-100';
   return '/luci-static/resources/icons/mobile-signal-'+f+'.svg';}
@@ -436,7 +436,7 @@ function mcField(f,fi){
   var lva=lv?' data-level="'+lv+'"':'';var disp=f.disp||'text';if(disp==='big')disp='text';
   var body;
   if(disp==='simop'||disp==='simcard'){
-    var img=(disp==='simcard')?'<img class="mc-opic" src="/luci-static/resources/icons/op-sim.png" alt="">':opImg(raw('operator_name'));
+    var img=(disp==='simcard')?'<img class="mc-opic" src="/luci-static/resources/icons/op-sim.svg" alt="">':opImg(raw('operator_name'));
     body=(sz==='q')
       ? '<span class="mc-lbl">'+name+'</span><div class="mc-op only-ic">'+img+'</div>'
       : '<span class="mc-lbl">'+name+'</span><div class="mc-op">'+img+'<span class="opn">'+v.t+'</span></div>';
