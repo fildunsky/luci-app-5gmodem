@@ -971,7 +971,7 @@ _bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
 #
 # Метрики/SMS/USSD этой ветки не касаются: они идут своим путём (AT в debug).
 if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
-   && ! case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in 19d2:*) true ;; *) false ;; esac \
+   && ! case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in 19d2:*|05c6:90b4) true ;; *) false ;; esac \
    && [ "$(uci -q get "5gmodem.$_bs_sec.hl_api")" != zte ]; then
 	_HL=/usr/share/5gmodem/hilink.sh
 	# Полный список поддерживаемых диапазонов API не отдаёт - только текущую
@@ -2414,6 +2414,7 @@ case $1 in
 		# заново - IP на ~15-20 c пропадает). Флаг задаётся в самом профиле
 		# (_BAND_RECONNECT_WARN=1), чтобы не хардкодить модель в вебе.
 		[ -n "$_BAND_RECONNECT_WARN" ] && json_add_boolean bandwarn 1
+		[ -n "$_BAND_MODES_ONLY" ] && json_add_int nobandctl 1
 		json_dump
 		;;
 	"help")

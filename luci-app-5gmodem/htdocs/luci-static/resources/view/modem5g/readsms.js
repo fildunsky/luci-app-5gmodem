@@ -745,7 +745,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30209, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30210, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

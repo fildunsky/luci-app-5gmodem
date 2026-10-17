@@ -38,6 +38,7 @@ is_hilink() {   # $1 - usb-путь
 			_ih_wdm=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].wdm[*]" 2>/dev/null)
 			_ih_net=$(printf '%s' "$_ih_j" | jsonfilter -e "@[@.path=\"$1\"].net[*]" 2>/dev/null)
 			[ -z "$_ih_tty" ] && [ -z "$_ih_wdm" ] && [ -n "$_ih_net" ] && return 0
+			[ "$_ih_id" = 05c6:90b4 ] && [ -z "$_ih_wdm" ] && [ -n "$_ih_net" ] && return 0
 			;;
 	esac
 	return 1
@@ -122,7 +123,11 @@ setup_hilink() {   # $1 - usb-путь, $2 - сетевое имя (eth3), $3 - 
 	_hsec=$(ensure_section "$_hp")
 	uci -q set "$CFG.$_hsec.kind=$_hkind"
 	_htos=""
-	[ "$_hkind" = tether ] && _htos=$(tether_os "$_hp") && uci -q set "$CFG.$_hsec.tether=$_htos"
+	if [ "$_hkind" = tether ]; then
+		_htos=$(tether_os "$_hp") && uci -q set "$CFG.$_hsec.tether=$_htos"
+	else
+		uci -q delete "$CFG.$_hsec.tether" 2>/dev/null
+	fi
 	uci -q set "$CFG.$_hsec.netdev=$_hd"
 	_hif=$(uci -q get "$CFG.$_hsec.network")
 	# ВОЗВРАТ МОДЕМА. Секцию мог очистить swap_cleanup (его вытеснили из порта),

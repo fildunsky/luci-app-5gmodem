@@ -518,7 +518,7 @@ function signalSvg(p) {
 }
 
 return baseclass.extend({
-	API: 30209,
+	API: 30210,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,

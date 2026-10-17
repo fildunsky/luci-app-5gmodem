@@ -27,7 +27,7 @@ var profilesView = null;
    переведён в режим с AT-портами и ведётся обычным путём. */
 function modeSuffix(j) {
 	if (j.backend === 'hilink') { return ' (HiLink)'; }
-	if (j.at_debug === '1') { return ' (Debug)'; }
+	if (j.at_debug === '1' && j.at_native !== '1') { return ' (Debug)'; }
 	return '';
 }
 
@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30209, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30210, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
