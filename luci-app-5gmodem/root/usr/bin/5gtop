@@ -106,7 +106,7 @@ T_RXDIV="RX diversity";     T_THROTTLE="Throttling";
 T_TH0="Normal"; T_TH1="Warm"; T_TH2="Hot"; T_TH3="Critical"
 T_REGCS="CS reg.";
 T_KIB="KiB"; T_MIB="MiB"; T_GIB="GiB"; T_TIB="TiB"
-T_RXDIV_4="on, 4RX";        T_RXDIV_2="on (2RX)";   T_RXDIV_OFF="off"
+T_RXDIV_4="on, 4RX";        T_RXDIV_2="on (2RX)";   T_RXDIV_OFF="off";  T_RXDIV_NOANT="no 2nd antenna"
 T_TAB_ENG="Engineering";    T_NEIGH="neighbours";   T_MODELOG="mode log"
 T_NOSERVICE="no service";   T_NODATA="no modem data"
 T_CC_ON="on";               T_CC_STBY="standby"
@@ -166,7 +166,7 @@ case "$_lang" in
 		T_TH0="В норме"; T_TH1="Тёплый"; T_TH2="Горячий"; T_TH3="Критично"
 		T_REGCS="Рег. CS"
 		T_KIB="КиБ"; T_MIB="МиБ"; T_GIB="ГиБ"; T_TIB="ТиБ"
-		T_RXDIV_4="вкл, 4RX";       T_RXDIV_2="вкл (2RX)";  T_RXDIV_OFF="выкл"
+		T_RXDIV_4="вкл, 4RX";       T_RXDIV_2="вкл (2RX)";  T_RXDIV_OFF="выкл";  T_RXDIV_NOANT="нет 2-й антенны"
 		T_TAB_ENG="Инженерный";     T_NEIGH="соседи";       T_MODELOG="журнал режима"
 		T_NOSERVICE="нет сети";     T_NODATA="нет данных модема"
 		T_CC_ON="вкл";              T_CC_STBY="ожидание"
@@ -990,6 +990,7 @@ draw_cell() {
 			4rx) _rdt="$T_RXDIV_4"; _rdc="$C_GRN" ;;
 			2rx) _rdt="$T_RXDIV_2"; _rdc="$C_GRN" ;;
 			off) _rdt="$T_RXDIV_OFF"; _rdc="$C_RED" ;;
+			noant) _rdt="$T_RXDIV_NOANT"; _rdc="$C_RED" ;;
 			*)   _rdt="$_rd"; _rdc="" ;;
 		esac
 		lab $((_row + 4)) 2 "$T_RXDIV" 14 "${_rdc}$(fit "$_rdt" 20)${C_RST}" 20

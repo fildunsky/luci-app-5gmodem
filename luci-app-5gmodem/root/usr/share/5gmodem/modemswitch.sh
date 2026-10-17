@@ -129,7 +129,7 @@ at_probe() {
 detect_at() {
 	for t in "$@"; do
 		[ -e "$t" ] || continue
-		case "$t" in /dev/ttyUSB*|/dev/ttyACM*) ;; *) continue ;; esac
+		case "$t" in /dev/ttyUSB*|/dev/ttyACM*|/dev/wwan*at*) ;; *) continue ;; esac
 		if at_probe "$t"; then echo "$t"; return 0; fi
 	done
 	return 1
@@ -140,8 +140,14 @@ mm_index_for_path() {
 	[ -n "$1" ] || return 1
 	command -v mmcli >/dev/null 2>&1 || return 1
 	for m in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
-		d=$(mmcli -m "$m" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p' | xargs)
+		_mk=$(mmcli -m "$m" -K 2>/dev/null)
+		d=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.generic\.device *: *//p' | xargs)
 		case "$d" in */"$1") echo "$m"; return 0 ;; esac
+		case "$d" in
+			/*) ;;
+			*) d=$(printf '%s\n' "$_mk" | sed -n 's/^modem\.generic\.physdev *: *//p' | xargs)
+			   case "$d" in */"$1") echo "$m"; return 0 ;; esac ;;
+		esac
 	done
 	return 1
 }
@@ -209,11 +215,17 @@ at_for_path() {
 	_afp_at=$(_reg_rec "$1" | jsonfilter -e '@.at_port' 2>/dev/null)
 	_afp_list=""
 	[ -n "$_afp_at" ] && [ "$_afp_at" != "$_afp_skip" ] && _afp_list="$_afp_at"
+	_afp_rest=""
 	for _afp_t in $(modem_ttys "$1"); do
 		[ "$_afp_t" = "$_afp_skip" ] && continue
 		[ "$_afp_t" = "$_afp_at" ] && continue
-		_afp_list="$_afp_list $_afp_t"
+		if soc_modem_node "$1" >/dev/null; then
+			_afp_rest="$_afp_t $_afp_rest"
+		else
+			_afp_rest="$_afp_rest $_afp_t"
+		fi
 	done
+	_afp_list="$_afp_list $_afp_rest"
 	detect_at $_afp_list
 }
 

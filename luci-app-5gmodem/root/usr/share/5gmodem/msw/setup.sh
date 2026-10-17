@@ -195,6 +195,11 @@ setup_one_modem() {
 				esac
 				;;
 		esac
+		if [ "$(active_path)" = "$P" ] && proto_in mm "$_pr" \
+		   && uci -q get "$CFG.sms" >/dev/null 2>&1 && [ -z "$(uci -q get "$CFG.sms.sms_via_mm")" ]; then
+			uci -q set "$CFG.sms.sms_via_mm=1"
+			uci -q set "$CFG.sms.ussd_via_mm=1"
+		fi
 		uci -q commit "$CFG"
 		"$RES/ensureports.sh" >/dev/null 2>&1
 		# ПОДНЯТЬ ИНТЕРФЕЙС СРАЗУ. Мы только что сняли «спящее» auto=0, но netifd
@@ -210,11 +215,14 @@ setup_one_modem() {
 		# (живой случай 31.07.2026: Telit воткнули - FM350 передёрнулся на 6 с).
 		# Подхваченную секцию netifd уже знает: обычно хватает чистого ifup.
 		_fp_now="$(uci -q get "network.$_ex.proto")|$(uci -q get "network.$_ex.device")|$(uci -q get "network.$_ex.devpath")"
+		_fp_up=0
 		if [ "$_fp_was" != "$_fp_now" ] \
 		   || ! ubus -S call "network.interface.$_ex" status >/dev/null 2>&1; then
 			ubus call network reload >/dev/null 2>&1
+		elif [ "$(ubus -S call "network.interface.$_ex" status 2>/dev/null | jsonfilter -e '@.up' 2>/dev/null)" = true ]; then
+			_fp_up=1
 		fi
-		ifup "$_ex" >/dev/null 2>&1
+		[ "$_fp_up" = 1 ] || ifup "$_ex" >/dev/null 2>&1
 		logger -t 5gmodem "autosetup: $P -> adopted existing $_ex"
 		# APN проверяем И ДЛЯ ПОДХВАЧЕННОГО интерфейса. Раньше подбор вызывался
 		# только при создании нового, и унаследованный интерфейс навсегда

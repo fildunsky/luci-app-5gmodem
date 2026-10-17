@@ -230,7 +230,9 @@ getdevicevendorproduct() {
 		'wwan'*'at'*)
 			devpath="$(readlink -f /sys/class/wwan/$devname/device)"
 			T=${devpath%/*/*/*}
-			if [ -e $T/vendor ] && [ -e $T/device ]; then
+			if [ -d "${devpath%/wwan/*}/remoteproc" ]; then
+				echo "soc/$(soc_modem_vidpid | tr -d :)"
+			elif [ -e $T/vendor ] && [ -e $T/device ]; then
 				V=$(cat $T/vendor)
 				D=$(cat $T/device)
 				S=$(cat $T/subsystem_vendor 2>/dev/null)
@@ -1886,6 +1888,7 @@ _snap_prepare() {
 	read -r _SN_VID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idVendor"
 	read -r _SN_PID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idProduct"
 	_SN_VIDPID="$_SN_VID:$_SN_PID"
+	[ -n "$_SN_VID" ] || [ -z "$_POLL_AM" ] || _SN_VIDPID=$(uci -q get "5gmodem.$(secname "$_POLL_AM").vidpid")
 
 	_SN_IFPROTO=$(uci -q get "network.$SEC.proto")
 	_SN_APN=$(uci -q get "network.$SEC.apn")
@@ -2207,6 +2210,8 @@ if [ -e /usr/bin/sms_tool ]; then
 	# модема; tty-путь - для остальных, как раньше.
 	if [ -n "$DEVICE" ]; then
 		VIDPID=$(getdevicevendorproduct $DEVICE)
+	elif soc_modem_node "$_POLL_AM" >/dev/null; then
+		VIDPID="soc/$(soc_modem_vidpid | tr -d :)"
 	elif [ -r "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
 		VIDPID="usb/$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor")$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct")"
 	else
@@ -2315,9 +2320,11 @@ _qmi_refresh() {
 	# «цепи не мерили» от «цепи мертвы» по одному значению нельзя.
 	_qr_rxd=""
 	_qr_an=$(printf '%s' "$_qr_ant" | wc -w)
-	case "$_qr_an" in
-		2)   _qr_rxd="2rx" ;;
-		3|4) _qr_rxd="4rx" ;;
+	_qr_live=$(printf '%s' "$_qr_ant" | tr ' ' '\n' | awk -F: '$2 + 0 > -130' | wc -l)
+	case "$_qr_an:$_qr_live" in
+		*:2)       _qr_rxd="2rx" ;;
+		*:3|*:4)   _qr_rxd="4rx" ;;
+		[2-4]:1)   _qr_rxd="noant" ;;
 	esac
 	[ -n "$_qr_tx" ] && _qr_tx="$_qr_tx dBm"
 

@@ -432,6 +432,15 @@ iface_for_path() {
 		[ -n "$_dev" ] || _dev=$(ifup_state_dev "$_if")
 		[ -n "$_dev" ] || continue
 		_p=""
+		if [ "$(uci -q get "network.$_if.proto")" = modemmanager ]; then
+			case "$_dev" in
+				/sys/*) _p="${_dev##*/}" ;;
+				*) _p=$(mmcli --modem="$_dev" -K 2>/dev/null | sed -n 's/^modem\.generic\.physdev *: *//p' | head -1)
+				   _p="${_p##*/}" ;;
+			esac
+			[ -n "$_p" ] && [ "$_p" = "$_want" ] && { echo "$_if"; return 0; }
+			continue
+		fi
 		case "$_dev" in
 			/dev/cdc-wdm*)
 				_p=$(readlink -f "/sys/class/usbmisc/$(basename "$_dev")/device" 2>/dev/null)

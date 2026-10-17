@@ -1,0 +1,4 @@
+. "$RES/modem/usb/05c690b4"
+MODEL=$(soc_modem_model)
+T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
+[ -n "$T" ] && TEMP="$T &deg;C"
