@@ -1019,7 +1019,7 @@ function typeIcon(o) {
 	if (o.type === 'modem') {
 		var oi = mutil.operatorIcon(o.label);
 		return E('img', {
-			'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.png'),
+			'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg'),
 			'width': 16, 'height': 16, 'alt': ''
 		});
 	}
@@ -1056,7 +1056,7 @@ function rankEl(idx, o) {
 		var src = null;
 		if (o && o.type === 'modem') {
 			var oi = mutil.operatorIcon(o.label);
-			src = L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.png');
+			src = L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg');
 		} else if (o && o.type === 'wifi') {
 			src = L.resource('icons/5gmodem/cwifi.svg');
 		} else if (o && o.type === 'wan') {
