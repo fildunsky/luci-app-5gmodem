@@ -407,7 +407,7 @@ function ghostBar() {
 		}, [
 			E('img', {
 				'class': 'modemtab-ic',
-				'src': it.op ? L.resource('icons/5gmodem/' + it.op + '.png')
+				'src': it.op ? L.resource('icons/5gmodem/' + it.op + '.svg')
 				             : L.resource(it.usb ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
@@ -477,7 +477,7 @@ function operatorTabIcon(name) {
 }
 function tabIconSrc(m, opIcon) {
 	if (!opIcon && m && m.tether) { opIcon = 'op-sim'; }
-	if (opIcon) { return L.resource('icons/5gmodem/' + opIcon + '.png'); }
+	if (opIcon) { return L.resource('icons/5gmodem/' + opIcon + '.svg'); }
 	return L.resource(isUsbStick(m) ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg');
 }
 
