@@ -4298,16 +4298,12 @@ simDialog: baseclass.extend({
 					}),
 				}, [
 					E('div', { 'class': 'cbi-tooltip-container' }, [
-						E('div', {
-							'class': 'tginfo-sim',
-							'style': "background-image:url('/luci-static/resources/icons/5gmodem/op-sim-template.svg')"
-						}, [
-							E('img', {
-								'id': 'simicon',
-								'src': '',
-								'title': _(''),
-							}),
-					]),
+						E('img', {
+							'id': 'simicon',
+							'src': L.resource('icons/5gmodem/op-nosim.svg'),
+							'title': _(''),
+							'class': 'middle',
+						}),
 						/* id ОБЯЗАТЕЛЕН: раньше подсказка строилась ровно один раз,
 						   при отрисовке страницы, и навсегда оставалась с теми
 						   значениями, что были известны в тот момент - то есть с

@@ -1014,7 +1014,7 @@ function activeIface(list) {
 
 /* per-type icon from the app's icon set (modem / Wi-Fi / WAN); null for the rest.
    Для модема - как в главном блоке SIM: иконка ОПЕРАТОРА, если он определён
-   (o.label несёт имя оператора), иначе простая SIM-карта (op-sim.png). */
+   (o.label несёт имя оператора), иначе простая SIM-карта (op-sim.svg). */
 function typeIcon(o) {
 	if (o.type === 'modem') {
 		var oi = mutil.operatorIcon(o.label);
