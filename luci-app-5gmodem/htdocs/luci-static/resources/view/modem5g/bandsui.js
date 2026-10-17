@@ -338,6 +338,15 @@ function applyMgmtMM(j) {
 		render256qam(null);
 		renderUlca(null);
 		ensureMmModeButtons();
+		var has2 = bandsOther.some(function(b) { return /^(egsm|dcs|pcs|g850|g450|g480|g750|g380|g410|g710|g810)$/.test(b); });
+		var techOk = { '2g': has2, '3g': sup3.length > 0, '4g': sup4.length > 0, '5g': sup5.length > 0 };
+		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
+			var al = (b.getAttribute('data-allowed') || '').split('|');
+			var isAuto = (al.length == 4 && b.getAttribute('data-preferred') == '5g');
+			var main = al.length == 1 ? al : al.slice(1);
+			var ok = isAuto || main.every(function(t) { return techOk[t] !== false; });
+			b.style.display = ok ? '' : 'none';
+		});
 		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
 		   а не из живых current-modes: конфиг не мигает на передозвоне и
 		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */

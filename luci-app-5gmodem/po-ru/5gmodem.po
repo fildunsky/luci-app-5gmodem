@@ -2851,6 +2851,9 @@ msgstr "Разнесённый приём: включён (2RX)"
 msgid "Receive diversity: off - the second antenna is not used"
 msgstr "Разнесённый приём выключен — вторая антенна не используется"
 
+msgid "Receive diversity: on, but the second antenna is not connected"
+msgstr "Разнесённый приём включён, но вторая антенна не подключена"
+
 msgid "eSIM tab"
 msgstr "Вкладка eSIM"
 

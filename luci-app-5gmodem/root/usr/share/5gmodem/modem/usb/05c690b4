@@ -16,7 +16,7 @@ NR_D=$(echo "$O" | sed -n 's/^ICCID: *\([0-9A-Fa-f]*\).*/\1/p' | head -1)
 [ -n "$NR_D" ] && NR_ICCID="$NR_D"
 
 _UFI_SM=$(uci -q get "5gmodem.m_$(echo "$_POLL_AM" | sed 's/[^A-Za-z0-9]/_/g').save_mode")
-if [ -n "$_UFI_SM" ] && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != 0 ]; then
+if [ -n "$_UFI_SM" ] && [ -e "/sys/bus/usb/devices/$_POLL_AM" ] && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != 0 ]; then
 	O=$(sms_tool -d $DEVICE at 'AT$QCNSP?' | tr -d '\r ' | sed -n 's/^\$QCNSP:\([0-9]*\),.*/\1/p' | head -1)
 	if [ "$O" = 10 ]; then
 		case "$_UFI_SM" in

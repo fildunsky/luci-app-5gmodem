@@ -181,7 +181,24 @@ usb_path_present() {   # $1 - usb-путь; код 0 = устройство на
 	# PCI/MHI-модуль (RM520N-GLAP, T99W175 на PCIe) в списке модемов идёт под
 	# путём PCI-устройства; для него USB-проверка всегда «нет на шине», и
 	# автонастройка молча его пропускала. (ревью 13.09.2026)
-	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ]
+	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ] || soc_modem_node "$1" >/dev/null
+}
+
+soc_modem_node() {
+	_smn_d="/sys/bus/platform/devices/${1##*/}"
+	[ -n "$1" ] && [ -d "$_smn_d/remoteproc" ] || return 1
+	readlink -f "$_smn_d"
+}
+
+soc_modem_vidpid() {
+	_smv_m=$(tr -cd '0-9' < /sys/devices/soc0/machine 2>/dev/null | cut -c1-4)
+	printf '05c6:%s\n' "${_smv_m:-0000}"
+}
+
+soc_modem_model() {
+	_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | sed 's/ *4G Modem Stick$//; s/ *Modem Stick$//')
+	[ -n "$_smm_m" ] || _smm_m=$(cat /sys/devices/soc0/machine 2>/dev/null)
+	printf '%s\n' "$_smm_m"
 }
 
 is_iphone() {   # $1 - usb-путь
@@ -1232,6 +1249,16 @@ tty_usbpath() {
 	# без AT-порта становился одинаковым («tty»), то есть данные разных модемов
 	# складывались в один файл - ровно та беда, ради которой ключ и вводился.
 	[ -n "$1" ] || return 1
+	_tp=$(readlink -f "/sys/class/wwan/$(basename "$1")/device" 2>/dev/null)
+	if [ -n "$_tp" ]; then
+		while [ -n "$_tp" ] && [ "$_tp" != /sys ]; do
+			if [ -d "$_tp/remoteproc" ] || [ -e "/sys/bus/pci/devices/${_tp##*/}" ]; then
+				echo "${_tp##*/}"; return 0
+			fi
+			[ -f "$_tp/idVendor" ] && break
+			_tp=${_tp%/*}
+		done
+	fi
 	_tp=$(readlink -f "/sys/class/tty/$(basename "$1")/device" 2>/dev/null) || return 1
 	[ -n "$_tp" ] || return 1
 	_tp=${_tp%/*}
