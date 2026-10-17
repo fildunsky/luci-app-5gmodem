@@ -23,7 +23,7 @@ driver_for() {   # $1 - vid, $2 - pid
 		# Сам порты не отдаёт вовсе, а нумерация отличается от 90d5.
 		05c6:9025) echo "option1" ;;
 		# Android-палки MDM9600/9610 в режиме «только модем» (см. newid_for).
-		05c6:9091) echo "option1" ;;
+		05c6:9091|05c6:90b4) echo "option1" ;;
 		# HP lt4120 (Foxconn T77W595) в QMI-композиции. Порты generic здесь
 		# МЁРТВЫЕ: привязка проходит, четыре ttyUSB появляются, и все четыре на
 		# «ATI» отвечают «No response from modem» (стенд, 08.09.2026). После
@@ -55,7 +55,7 @@ driver_for() {   # $1 - vid, $2 - pid
 # канал спасает адресная хирургия _rescue_rmnet ниже.
 newid_for() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
-		05c6:9091) echo "$1 $2 ff" ;;
+		05c6:9091|05c6:90b4) echo "$1 $2 ff" ;;
 		413c:81d8|1bc7:1911) echo "$1 $2 ff" ;;
 		2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
@@ -93,7 +93,7 @@ data_iface_for() {   # $1 - vid, $2 - pid
 # упирается в занятый интерфейс.
 _has_adb_iface() {   # $1 - vid, $2 - pid
 	case "$1:$2" in
-		05c6:9025|05c6:9091|05c6:90d5|1bbb:0196|2cb7:0110|19d2:0581) return 0 ;;
+		05c6:9025|05c6:9091|05c6:90b4|05c6:90d5|1bbb:0196|2cb7:0110|19d2:0581) return 0 ;;
 		*)                   return 1 ;;
 	esac
 }
@@ -403,7 +403,7 @@ coldplug() {
 			ACTION=add DEVTYPE=usb_device DEVPATH="$(readlink -f "$_cp_d" | sed 's#^/sys##')" \
 				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
-			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091) bind_ports "$_cp_v" "$_cp_p" ;;
+			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091|05c6:90b4) bind_ports "$_cp_v" "$_cp_p" ;;
 			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581) bind_ports "$_cp_v" "$_cp_p" ;;
 			# Заводской Compal RXM-G1: ECM по умолчанию не работает, нужен MBIM.
 			05c6:9063) pick_config "$_cp_d" 3 ;;

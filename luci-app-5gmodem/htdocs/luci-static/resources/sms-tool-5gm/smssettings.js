@@ -1001,7 +1001,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30209,
+	API: 30210,
 	/*
 		Build a collapsible settings panel for a group as a native
 		<details>/<summary> disclosure (arrow indicates it expands).

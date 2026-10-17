@@ -756,6 +756,17 @@ function applyVendorJson(j) {
 			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
 			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
 			if (note) { note.style.display = ctx.isMM() ? 'none' : ''; }
+			bandsStaticNote = !!j.nobandctl;
+			if (note && j.nobandctl) {
+				var nt3 = document.getElementById('bandnote-text');
+				var nb3 = document.getElementById('bandnote-mm-btn');
+				var modesOnly = !j.error && renderNetModes(j);
+				if (nt3) { nt3.textContent = modesOnly ? _('This modem does not let the router change bands. Only the network mode can be switched.') : _('This modem does not let the router change bands or network mode.'); }
+				if (nb3) { nb3.style.display = 'none'; }
+				note.style.display = '';
+				if (modesOnly) { bandsReadOnly = false; applyBandsReadOnly(); }
+				return;
+			}
 			if (ctx.isMM() && _revealTries < _revealTriesMax) {
 				_revealTries++;
 				window.setTimeout(revealMgmtWhenReady, 1500);
@@ -903,33 +914,38 @@ function applyVendorJson(j) {
 			if (!supNsa.length && nrRow) { nrRow.style.display = 'none'; }
 		}
 
-		// Режим сети (2G/3G/4G) через AT+CNMP (bands.sh getmode/setmode) - для
-		// модемов не под ModemManager, где mmcli-переключатель недоступен.
-		var modeRow = document.getElementById('modeswn');
-		var modeC = document.getElementById('modesw-btns');
-		if (modeC && j.modes && j.modes.length) {
-			/* Видимость строки и перерисовка кнопок - РАЗНЫЕ вещи: строку
-			   показываем всегда, когда режимы есть, а кнопки пересобираем только
-			   при изменении (иначе контейнер пустеет каждый тик и браузер
-			   обрезает scrollTop - см. sameRender). */
-			if (!ctx.sameRender(modeC, String(j.currentmode) + '|' + j.modes.map(function(m){ return m.id; }).join(','))) {
-				modeC.innerHTML = '';
-				mutil.sortNetModes(j.modes).forEach(function(m) {
-					var on = (String(j.currentmode) === String(m.id));
-					modeC.appendChild(E('button', {
-						'class': 'btn cbi-button' + (on ? ' tg-current' : ''),
-						'data-mode': String(m.id),
-						'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
-					}, m.label));
-				});
-			}
-			if (modeRow) { modeRow.style.display = ''; }
-		} else if (modeRow) {
-			modeRow.style.display = 'none';
-		}
+		renderNetModes(j);
 		applyBandsReadOnly();
 		bandFilterAll();
 		_bandsRemember('vendor', j);
+}
+
+function renderNetModes(j) {
+	// Режим сети (2G/3G/4G) через AT+CNMP (bands.sh getmode/setmode) - для
+	// модемов не под ModemManager, где mmcli-переключатель недоступен.
+	var modeRow = document.getElementById('modeswn');
+	var modeC = document.getElementById('modesw-btns');
+	if (modeC && j.modes && j.modes.length) {
+		/* Видимость строки и перерисовка кнопок - РАЗНЫЕ вещи: строку
+		   показываем всегда, когда режимы есть, а кнопки пересобираем только
+		   при изменении (иначе контейнер пустеет каждый тик и браузер
+		   обрезает scrollTop - см. sameRender). */
+		if (!ctx.sameRender(modeC, String(j.currentmode) + '|' + j.modes.map(function(m){ return m.id; }).join(','))) {
+			modeC.innerHTML = '';
+			mutil.sortNetModes(j.modes).forEach(function(m) {
+				var on = (String(j.currentmode) === String(m.id));
+				modeC.appendChild(E('button', {
+					'class': 'btn cbi-button' + (on ? ' tg-current' : ''),
+					'data-mode': String(m.id),
+					'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
+				}, [ m.label ]));
+			});
+		}
+		if (modeRow) { modeRow.style.display = ''; }
+	} else if (modeRow) {
+		modeRow.style.display = 'none';
+	}
+	return !!(j.modes && j.modes.length);
 }
 
 function switchToModemManager(btn) {
@@ -1342,7 +1358,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30209,
+	API: 30210,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

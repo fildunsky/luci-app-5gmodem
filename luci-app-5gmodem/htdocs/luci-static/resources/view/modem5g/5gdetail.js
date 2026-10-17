@@ -3252,7 +3252,7 @@ function applyMetrics(json) {
 						var _nm = _al ? _al
 							: ((json.modem && json.modem.length > 1) ? json.modem : _('Modem'));
 						if (json.backend === 'hilink') { _nm += ' (HiLink)'; }
-						else if (json.at_debug === '1') { _nm += ' (Debug)'; }
+						else if (json.at_debug === '1' && json.at_native !== '1') { _nm += ' (Debug)'; }
 						/* Обновляем ТОЛЬКО текстовый span - правые элементы
 						   (чип, кнопка debug) при этом не трогаются. */
 						var _nt = document.getElementById('modemname-text');
@@ -3895,7 +3895,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30209, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30210, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

@@ -125,7 +125,7 @@ def main():
     if b:
         res('PASS' if re.match(r'^/dev/tty\w+$', b['out'].strip()) else 'FAIL', 'modems.detect', b['t'], b['out'][:60])
     jcheck(bl, 'resolve', 'modems.resolve', lambda d: d.get('result') in ('resolved', 'ok', 'unchanged') and d.get('active') == act)
-    jcheck(bl, 'bands_json', 'bands.json', lambda d: len(d.get('supported') or []) > 0 and len(d.get('modes') or []) > 0 and d.get('currentmode') not in (None, ''))
+    jcheck(bl, 'bands_json', 'bands.json', lambda d: d.get('nobandctl') == 1 or (len(d.get('supported') or []) > 0 and len(d.get('modes') or []) > 0 and d.get('currentmode') not in (None, '')))
     jcheck(bl, 'bands_mgmtinfo', 'bands.mgmtinfo', lambda d: isinstance(d, dict))
     jcheck(bl, 'simslot', 'sim.slot', lambda d: len(d.get('slots') or []) > 0 and d.get('active') not in (None, ''))
     b = bl.get('sms_status')

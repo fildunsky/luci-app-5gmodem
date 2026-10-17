@@ -1896,6 +1896,8 @@ _snap_prepare() {
 
 	_SN_KIND=$(uci -q get "5gmodem.$_hl_sec.kind")
 	[ "$_SN_KIND" = "hilink" ] && _SN_ATDBG=1 || _SN_ATDBG=0
+	_SN_ATNAT=0
+	[ "$_SN_ATDBG" = 1 ] && [ "$(uci -q get "5gmodem.$_hl_sec.vidpid")" = 05c6:90b4 ] && _SN_ATNAT=1
 
 	_SN_MMX=$(uci -q get "5gmodem.$_hl_sec.mm_exclude")
 	case "$_SN_MMX" in
@@ -2008,6 +2010,7 @@ cat <<EOF
 "imsi":"${_J_NR_IMSI}",
 "iccid":"${_J_NR_ICCID}",
 "at_debug":"$_SN_ATDBG",
+"at_native":"$_SN_ATNAT",
 "lac_dec":"${_J_LAC_DEC}",
 "lac_hex":"${_J_LAC_HEX}",
 "tac_dec":"${_J_TAC_DEC}",

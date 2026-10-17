@@ -1,0 +1,113 @@
+MODEL="UFI003 (MSM8916)"
+
+O=$(sms_tool -d $DEVICE at "AT+CGMR" | xargs)
+FW=$(echo "$O" | sed 's/^AT+CGMR *//; s/ *OK$//')
+
+O=$(sms_tool -d $DEVICE at "AT+CGSN")
+NR_I=$(digits_of "$O" 15 17)
+[ -n "$NR_I" ] && NR_IMEI="$NR_I"
+
+O=$(sms_tool -d $DEVICE at "AT+CIMI")
+NR_C=$(digits_of "$O" 14 16)
+[ -n "$NR_C" ] && NR_IMSI="$NR_C"
+
+O=$(sms_tool -d $DEVICE at "AT+ICCID")
+NR_D=$(echo "$O" | sed -n 's/^ICCID: *\([0-9A-Fa-f]*\).*/\1/p' | head -1)
+[ -n "$NR_D" ] && NR_ICCID="$NR_D"
+
+_UFI_SM=$(uci -q get "5gmodem.m_$(echo "$_POLL_AM" | sed 's/[^A-Za-z0-9]/_/g').save_mode")
+if [ -n "$_UFI_SM" ] && [ "$(uci -q get 5gmodem.@5gmodem[0].save_bands)" != 0 ]; then
+	O=$(sms_tool -d $DEVICE at 'AT$QCNSP?' | tr -d '\r ' | sed -n 's/^\$QCNSP:\([0-9]*\),.*/\1/p' | head -1)
+	if [ "$O" = 10 ]; then
+		case "$_UFI_SM" in
+			1) T=0 ;;
+			2) T=2 ;;
+			4) T=6 ;;
+			8) T=1 ;;
+			*) T="" ;;
+		esac
+		if [ -n "$T" ]; then
+			sms_tool -d $DEVICE at "AT\$QCNSP=$T,0,3" >/dev/null 2>&1
+			rm -f /tmp/5gmodem/bands_* 2>/dev/null
+			logger -t 5gmodem "UFI003 $_POLL_AM: network mode reset by the stick, saved mode restored"
+		fi
+	fi
+fi
+
+sms_tool -d $DEVICE at "AT+CEREG=2" >/dev/null 2>&1
+O=$(sms_tool -d $DEVICE at "AT+CEREG?")
+sms_tool -d $DEVICE at "AT+CEREG=0" >/dev/null 2>&1
+O1=$(echo "$O" | grep '^+CEREG: 2,' | head -1)
+T=$(echo "$O1" | cut -d, -f3 | tr -cd '0-9A-Fa-f')
+if [ -n "$T" ]; then
+	TAC_HEX=$(echo "$T" | tr 'a-f' 'A-F')
+	TAC_DEC=$(printf '%d' "0x$T" 2>/dev/null)
+fi
+T=$(echo "$O1" | awk -F, '{ for (i = 4; i <= NF; i++) { g = $i; gsub(/[" ]/, "", g); if (length(g) >= 5) { print g; exit } } }' | tr -cd '0-9A-Fa-f')
+if [ -n "$T" ]; then
+	CID_HEX=$(echo "$T" | tr 'a-f' 'A-F')
+	CID_DEC=$(printf '%d' "0x$T" 2>/dev/null)
+	[ -n "$CID_DEC" ] && ENBID=$(( CID_DEC >> 8 ))
+fi
+
+T=$(echo "$O1" | awk -F, '{ print $NF }' | tr -cd '0-9')
+if [ "$T" = 7 ]; then
+	MODE="LTE |"
+else
+	O=$(sms_tool -d $DEVICE at 'AT$QCSYSMODE?' | grep -v -e '^AT' -e '^OK' | xargs)
+	case "$O" in
+		LTE*) MODE="LTE |" ;;
+		WCDMA*|HSPA*|UMTS*) MODE="WCDMA" ;;
+		GSM*|EDGE*|GPRS*) MODE="GSM" ;;
+	esac
+fi
+
+O=$(sms_tool -d $DEVICE at 'AT$QCRSRP?' | sed -n 's/^\$QCRSRP: *//p' | head -1 | tr -d '"\r')
+if [ -n "$O" ] && [ "$MODE" = "LTE |" ]; then
+	O2=$(echo "$O" | awk -F, '{ for (i = 1; i + 2 <= NF; i += 3) print $i, $(i+1), $(i+2) }')
+	O3=$(sms_tool -d $DEVICE at 'AT$QCRSRQ?' | sed -n 's/^\$QCRSRQ: *//p' | head -1 | tr -d '"\r' | awk -F, '{ for (i = 1; i + 2 <= NF; i += 3) print $i "_" $(i+1), $(i+2) + 0 }')
+	NEIGHBORS=""
+	PV=1
+	while read -r T T1 IDX; do
+		[ -n "$T1" ] || continue
+		_UFI_B=$(earfcn2band "$T1")
+		_UFI_Q=$(echo "$O3" | awk -v k="${T}_$T1" '$1 == k { print $2; exit }')
+		_UFI_R=$(awk -v v="$IDX" 'BEGIN { printf "%.1f", v }')
+		if [ -n "$PV" ]; then
+			PCI="$T"; EARFCN="$T1"
+			[ -n "$_UFI_B" ] && { PBAND="$(band4g "$_UFI_B")"; MODE="$MODE $(band4g "$_UFI_B")"; }
+			RSRP=$(awk -v v="$IDX" 'BEGIN { printf "%d", v }')
+			[ -n "$_UFI_Q" ] && RSRQ="$_UFI_Q"
+			NEIGHBORS="{\"band\":\"$_UFI_B\",\"earfcn\":\"$T1\",\"pci\":\"$T\",\"rsrp\":\"$_UFI_R\",\"rsrq\":\"$_UFI_Q\",\"rssi\":\"\",\"serving\":1}"
+			PV=""
+		else
+			NEIGHBORS="$NEIGHBORS,{\"band\":\"$_UFI_B\",\"earfcn\":\"$T1\",\"pci\":\"$T\",\"rsrp\":\"$_UFI_R\",\"rsrq\":\"$_UFI_Q\",\"rssi\":\"\",\"serving\":0}"
+		fi
+	done <<EOF_NB
+$O2
+EOF_NB
+fi
+[ "$MODE" = "LTE |" ] && MODE="LTE"
+
+if [ "${MODE%% *}" = "LTE" ]; then
+	T=$(sms_tool -d $DEVICE at 'AT$QCSQ' | sed -n 's/^\$QCSQ *: *//p' | head -1 | tr -d '\r' | awk -F, '{ print $5 + 0 }')
+	[ "$T" -lt -25 ] 2>/dev/null && [ "$T" -ge -121 ] && RSSI="$T"
+fi
+
+if command -v adb >/dev/null 2>&1; then
+	_UFI_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/serial" 2>/dev/null)
+	if [ -n "$_UFI_P" ]; then
+		O=$(adb -s "$_UFI_P" shell 'for z in /sys/class/thermal/thermal_zone*; do case $(cat $z/type) in tsens*) echo "TZ $(cat $z/temp)";; esac; done; dumpsys telephony.registry' 2>/dev/null | tr -d '\r')
+		T=$(echo "$O" | awk '$1 == "TZ" && $2 ~ /^-?[0-9]+$/ { v = $2; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
+		[ -n "$T" ] && TEMP="$T &deg;C"
+		O1=$(echo "$O" | sed -n 's/.*mSignalStrength=SignalStrength: //p' | head -1)
+		if [ -n "$O1" ] && [ "${MODE%% *}" = "LTE" ]; then
+			T=$(echo "$O1" | awk '{ print $10 }')
+			[ -n "$RSRQ" ] || { [ "$T" -lt 0 ] 2>/dev/null && [ "$T" -gt -40 ] && RSRQ="$T"; }
+			T=$(echo "$O1" | awk '{ print $11 }')
+			[ "$T" -ge -200 ] 2>/dev/null && [ "$T" -le 300 ] && [ "$T" != -120 ] && SINR=$(awk -v v="$T" 'BEGIN { printf "%.1f", v / 10 }')
+			T=$(echo "$O1" | awk '{ print $9 }')
+			[ -n "$RSRP" ] || { [ "$T" -lt 0 ] 2>/dev/null && [ "$T" -gt -150 ] && RSRP="$T"; }
+		fi
+	fi
+fi

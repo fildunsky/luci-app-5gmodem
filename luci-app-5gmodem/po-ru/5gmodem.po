@@ -5970,3 +5970,9 @@ msgstr "iPhone подключён. Чтобы он работал как USB-м�
 
 msgid "iPhone is connected. Unlock it, tap Trust on the iPhone and turn on Personal Hotspot."
 msgstr "iPhone подключён. Разблокируйте его, нажмите «Доверять» и включите «Режим модема»."
+
+msgid "This modem does not let the router change bands or network mode."
+msgstr "Этот модем не даёт роутеру менять диапазоны и режим сети."
+
+msgid "This modem does not let the router change bands. Only the network mode can be switched."
+msgstr "Этот модем не даёт роутеру менять диапазоны. Переключается только режим сети."

@@ -1,0 +1,52 @@
+_DEVICE=""
+
+_BANDS_APPLY_LIVE=1
+_BAND_MODES_ONLY=1
+_NSP_CAP=""
+
+getinfo() {
+	echo "UFI003 (MSM8916)"
+}
+
+_nsp_cap() {
+	if [ -z "$_NSP_CAP" ] && [ -n "$_DEVICE" ] && [ -e "$_DEVICE" ]; then
+		_NSP_CAP=$(sms_tool -d $_DEVICE at 'AT$QCNSP=?' 2>/dev/null | tr -d '\r ' \
+			| sed -n 's/^\$QCNSP:(\([0-9,]*\)).*/\1/p' | head -1 | tr ',' ' ')
+	fi
+	printf '%s' "${_NSP_CAP:-0 1 2 6}"
+}
+
+_nsp_of() {
+	case "$1" in
+		1) echo 0 ;;
+		2) echo 2 ;;
+		4) echo 6 ;;
+		8) echo 1 ;;
+	esac
+}
+
+getsupportedmodes() {
+	_o=""
+	for _p in 1:Auto 2:3G 4:4G 8:2G; do
+		_n=$(_nsp_of "${_p%%:*}")
+		for _s in $(_nsp_cap); do
+			[ "$_s" = "$_n" ] && _o="$_o $_p"
+		done
+	done
+	echo "${_o# }"
+}
+
+getmode() {
+	_M=$(sms_tool -d $_DEVICE at 'AT$QCNSP?' 2>/dev/null | tr -d '\r ' \
+		| sed -n 's/^\$QCNSP:\([0-9]*\),.*/\1/p' | head -1)
+	for _i in 1 2 4 8; do
+		[ "$(_nsp_of "$_i")" = "$_M" ] && { echo "$_i"; return; }
+	done
+	echo "${_M:+n$_M}"
+}
+
+setmode() {
+	_N=$(_nsp_of "$1")
+	[ -n "$_N" ] || return 1
+	sms_tool -d $_DEVICE at "AT\$QCNSP=$_N,0,3"
+}
