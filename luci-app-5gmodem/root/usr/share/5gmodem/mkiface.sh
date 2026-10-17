@@ -1067,6 +1067,7 @@ case "$PROTO" in
 		# ipv4v6, и оба адреса приходят одной сессией (Compal RXM-G1 / SG500M2-X
 		# на МегаФоне, полевой отчёт 14.09.2026). Явный выбор (custom) не трогаем.
 		[ "$(uci -q get "network.$IF.iptype")" = "ipv4v6" ] \
+			&& ! soc_modem_node "$AMP" >/dev/null \
 			&& [ -z "$(uci -q get "network.$IF.init_epsbearer")" ] \
 			&& uci set "network.$IF.init_epsbearer=default"
 		;;

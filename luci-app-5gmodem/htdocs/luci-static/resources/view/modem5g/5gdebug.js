@@ -1407,7 +1407,9 @@ return view.extend({
 			   (см. mkiface.sh): без init_epsbearer обработчик сбрасывает его, модем
 			   прикрепляется только с IPv4, и IPv6 не поднимается. Явный выбор
 			   (custom) не трогаем. */
-			if (proto === 'modemmanager' && v6 && !uci.get('network', mIfName, 'init_epsbearer')) {
+			var _socmm = /^qcom-soc$|\.remoteproc$/.test(String(uci.get('network', mIfName, 'device') || ''))
+				|| /\.remoteproc$/.test(String(uci.get('network', mIfName, 'modem_path') || ''));
+			if (proto === 'modemmanager' && v6 && !_socmm && !uci.get('network', mIfName, 'init_epsbearer')) {
 				uci.set('network', mIfName, 'init_epsbearer', 'default');
 			}
 			if ((uci.get('network', mIfName, opt) || '') === val) { return; }
