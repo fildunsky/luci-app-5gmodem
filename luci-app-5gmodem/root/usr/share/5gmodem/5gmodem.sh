@@ -1892,7 +1892,15 @@ _snap_prepare() {
 
 	_SN_IFPROTO=$(uci -q get "network.$SEC.proto")
 	_SN_APN=$(uci -q get "network.$SEC.apn")
-	_SN_PDP="$(uci -q get "network.$SEC.pdptype")$(uci -q get "network.$SEC.pdp")$(uci -q get "network.$SEC.iptype")"
+	case "$_SN_IFPROTO" in
+		modemmanager) _SN_PDK="iptype pdptype pdp" ;;
+		*) _SN_PDK="pdptype pdp iptype" ;;
+	esac
+	_SN_PDP=""
+	for _SN_K in $_SN_PDK; do
+		_SN_PDP=$(uci -q get "network.$SEC.$_SN_K")
+		[ -n "$_SN_PDP" ] && break
+	done
 	[ "$(uci -q get "network.$SEC.allow_roaming")" = "1" ] && _SN_ROAMOK=1 || _SN_ROAMOK=0
 
 	pgrep ModemManager >/dev/null 2>&1 && _SN_MMRUN=1 || _SN_MMRUN=0

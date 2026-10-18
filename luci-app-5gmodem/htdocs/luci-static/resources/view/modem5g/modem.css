@@ -3102,6 +3102,9 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 @media (max-width: 700px) {
   #modemip6 { font-size: max(12px, .78em); }
   .tginfo-vidpid { font-size: 12px; }
+  #modemname > #proto-chip { top: 8px !important; }
+  #modemname > .tginfo-vidpid { top: 9px; }
+  #modemname > #stale-mark, #modemname > #usbflap-warn { top: 10px !important; }
   .tginfo .tg-sublabel { font-size: max(12px, .76em); }
   #signal medium { font-size: max(12px, .7em); }
   .tginfo-info .tginfo-freq { font-size: max(12px, .8em); }
@@ -3354,6 +3357,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   body.tg-mv #modem-info-block #signal > img,
   body.tg-mv #modem-info-block #signal > .tg-sig { display: block; }
   body.tg-mv #modem-info-block #mode .tg-mv-mhz { display: none; }
+  body.tg-mv #modem-info-block #mode .tginfo-ca { display: none; }
 }
 html.tg-theme-cyberpunk #modesw-btns .cbi-button,
 html.tg-theme-cyberpunk .tginfo-simslot .cbi-button {
@@ -3571,14 +3575,14 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
   }
   body.tg-mv #modem-info-block[data-rat] .tg-mv-badge:not([hidden]) { background: rgba(0, 0, 0, .2); }
 
-  body.tg-mv:not(.sc-simple) .tg-mv-simcard {
+  body.tg-mv .tg-mv-simcard {
     display: flex; flex-direction: column; gap: 8px;
     margin: 0 0 10px; padding: 10px 12px;
     border: 1px solid var(--border-color-medium, var(--tg-track));
     border-radius: var(--tg-radius-lg);
     background: var(--background-color-high, transparent);
   }
-  body.tg-mv:not(.sc-simple) .tg-mv-simcard[hidden] { display: none !important; }
+  body.tg-mv .tg-mv-simcard[hidden] { display: none !important; }
   body.tg-mv .tg-mv-simcard .tginfo-simslot { display: flex !important; gap: 8px; }
   body.tg-mv .tg-mv-simcard .tginfo-simslot .cbi-button {
     flex: 1; margin: 0 !important; min-height: 40px !important;
@@ -3588,6 +3592,8 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 
   body.tg-mv:not(.sc-simple) .tg-mv-sect { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin: 0 0 8px; }
   body.tg-mv:not(.sc-simple) .tg-mv-sect[hidden] { display: none; }
+  body.tg-mv.sc-simple .tg-mv-simcard > .tg-mv-sect { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+  body.tg-mv.sc-simple .tg-mv-simcard > .tg-mv-sect[hidden] { display: none; }
   body.tg-mv:not(.sc-simple) .tg-mv-cc {
     display: flex; flex-direction: column; gap: 8px;
     margin: 0 0 10px; padding: 10px 12px 12px;
