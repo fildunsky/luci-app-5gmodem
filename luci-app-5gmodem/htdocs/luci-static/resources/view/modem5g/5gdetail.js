@@ -877,7 +877,7 @@ function renderNeighbors(json) {
 	}
 }
 
-/* Кнопка 🔒 в строке соседа: привязать модем к ЭТОЙ соте (EARFCN+PCI) одним
+/* Кнопка-замок в строке соседа: привязать модем к ЭТОЙ соте (EARFCN+PCI) одним
    кликом. Показываем только если модем умеет ПИСАТЬ привязку (bandsui знает по
    celllock-состоянию) и это НЕ обслуживающая сота. Backend/плашка/реконнект -
    те же, что у кнопки «Привязать к текущей соте» в блоке диапазонов. */
@@ -894,12 +894,14 @@ function nbLockCell(td, c, serving) {
 	var key = ear + ':' + pci;
 	if (td.getAttribute('data-lk') === key) { return; }
 	td.setAttribute('data-lk', key);
-	dom.content(td, E('button', {
+	var btn = E('button', {
 		'class': 'btn cbi-button cbi-button-action',
-		'style': 'padding:1px 9px',
+		'style': 'padding:1px 9px;display:inline-flex;align-items:center;justify-content:center',
 		'title': _('Lock to this cell (EARFCN %s, PCI %s)').format(ear, pci),
 		'click': function(ev) { ev.preventDefault(); bandsui.lockCell(ear, pci); }
-	}, [ '🔒' ]));
+	});
+	btn.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:block"><rect x="5" y="11" width="14" height="10" rx="1"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4M12 15v2"></path></svg>';
+	dom.content(td, btn);
 }
 
 function caSummary(json) {
@@ -2121,7 +2123,7 @@ function updateUsbFlapWarn(json) {
 		w = E('span', {
 			'id': 'usbflap-warn', 'title': txt,
 			'style': 'float:right;opacity:.85;display:inline-flex;align-items:center;' +
-			         'position:relative;top:.38rem;margin-left:.8em'
+			         'position:relative;top:.25rem;margin-left:.8em'
 		}, [
 			E('img', {
 				'src': L.resource('icons/5gmodem/cwarn.svg'), 'title': txt, 'alt': '⚠',
@@ -3444,7 +3446,7 @@ function applyMetrics(json) {
 							   чипов (замечено пользователем). Значение общее с
 							   ними, чтобы середины совпадали. */
 							'style': 'float:right;opacity:.55;display:inline-flex;align-items:center;' +
-							         'position:relative;top:.38rem;margin-left:.8em'
+							         'position:relative;top:.25rem;margin-left:.8em'
 						}, [
 							E('img', {
 								'src': L.resource('icons/5gmodem/cloading.svg'), 'title': txt, 'alt': '⌛',
