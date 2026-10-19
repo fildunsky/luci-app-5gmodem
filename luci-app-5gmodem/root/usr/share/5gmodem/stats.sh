@@ -361,6 +361,16 @@ _mdm_reconcile() {
 }
 
 # Уровень сигнала активного модема из последнего снимка (без похода в порт).
+_peek() {
+	_pk_v="_PKJ_$(secname "$1")"
+	case "$_pk_v" in *[!A-Za-z0-9_]*) _PK_J=$("$RES/5gmodem.sh" peek "$1" 2>/dev/null); return 0 ;; esac
+	eval "_PK_J=\${$_pk_v-x}"
+	eval "_pk_set=\${$_pk_v+1}"
+	[ -n "$_pk_set" ] && return 0
+	_PK_J=$("$RES/5gmodem.sh" peek "$1" 2>/dev/null)
+	eval "$_pk_v=\$_PK_J"
+}
+
 _collect_signal() {
 	# ВСЕ модемы, а не только активный: ряд соседа копится из его снимка
 	# (подогрев sessionwatch их обновляет), иначе на графике одна линия и
@@ -369,7 +379,7 @@ _collect_signal() {
 	# в легенде ни о чём не говорит.
 	for _cs_p in $_MDM_PATHS; do
 		[ -n "$_cs_p" ] || continue
-		_cs_j=$("$RES/5gmodem.sh" peek "$_cs_p" 2>/dev/null)
+		_peek "$_cs_p"; _cs_j="$_PK_J"
 		[ -n "$_cs_j" ] || continue
 		_cs_age=$(printf '%s' "$_cs_j" | jsonfilter -e '@.age' 2>/dev/null)
 		case "$_cs_age" in
@@ -463,7 +473,7 @@ _collect_traffic() {
 		_ct_sec=$(sec_for_iface "$_ct_if" 2>/dev/null)
 		_ct_path=$(uci -q get "$CFG.$_ct_sec.path" 2>/dev/null)
 		if [ -n "$_ct_path" ]; then
-			_ct_snap=$("$RES/5gmodem.sh" peek "$_ct_path" 2>/dev/null)
+			_peek "$_ct_path"; _ct_snap="$_PK_J"
 			_ct_icc=$(printf '%s' "$_ct_snap" | jsonfilter -e '@.iccid' 2>/dev/null | tr -cd '0-9')
 			if [ -n "$_ct_icc" ]; then
 				_ct_key="sim-$_ct_icc"
@@ -557,9 +567,18 @@ _flush() {
 # во внутренней памяти, а пока она была - на ней. Правило слияния - «больше
 # побеждает», счётчики монотонные (см. шапку).
 _restore() {
-	_merge_from "$PDIR_DEF"
+	if [ ! -f "$DIR/.restored" ]; then
+		_merge_from "$PDIR_DEF"
+		: > "$DIR/.restored"
+	fi
 	_rs_w=$(_pdir_want)
-	[ "$_rs_w" = "$PDIR_DEF" ] || { _dir_live "$_rs_w" 1 && _merge_from "$_rs_w"; }
+	[ "$_rs_w" = "$PDIR_DEF" ] && return 0
+	_rs_k="$DIR/.restored_$(printf '%s' "$_rs_w" | tr -c 'A-Za-z0-9' '_')"
+	[ -f "$_rs_k" ] && return 0
+	if _dir_live "$_rs_w" 1; then
+		_merge_from "$_rs_w"
+		: > "$_rs_k"
+	fi
 	return 0
 }
 

@@ -162,16 +162,16 @@ bandstohex() {
 	HSUM=0
 	for BAND in $BANDS; do
 		case $BAND in
-			''|*[!0-9]*) continue ;;
+			''|0|*[!0-9]*) continue ;;
 		esac
 		if [ $BAND -gt 64 ]; then
 			B=$((BAND - 1 - 64))
 			POW=$((2 ** $B))
-			HSUM=$((HSUM + POW))
+			HSUM=$((HSUM | POW))
 		else
 			B=$((BAND - 1))
 			POW=$((2 ** $B))
-			SUM=$((SUM + POW))
+			SUM=$((SUM | POW))
 		fi
 	done
 	if [ $HSUM -eq 0 ]; then

@@ -128,7 +128,7 @@ return view.extend({
 				/* Параметр ошибки обязателен: обработчик был объявлен БЕЗ него, и
 				   err в теле оказывался несуществующей переменной - вместо
 				   сообщения о сбое выходил ReferenceError. (аудит 12.09.2026) */
-				ui.addNotification(null, E('p', {}, _('Download error') + ': ' + ((err && err.message) || err)));
+				ui.addNotification(null, E('p', {}, [ _('Download error') + ': ' + ((err && err.message) || err) ]));
 		});
 
 	},
@@ -444,7 +444,7 @@ return view.extend({
 						]) : ''
 					]),
 					/* Тип адреса - у ПРАВОГО края, под APN (см. коммент выше). */
-					E('span', { 'style': 'opacity:.8; flex:0 0 auto' }, pdpNice)
+					E('span', { 'style': 'opacity:.8; flex:0 0 auto' }, [ pdpNice ])
 				])
 			]);
 
@@ -456,7 +456,7 @@ return view.extend({
 				var mrow = E('div', { 'style': 'font-size:80%; margin-top:.3em' }, []);
 				marks.forEach(function(m, i) {
 					if (i) { mrow.appendChild(document.createTextNode(' · ')); }
-					mrow.appendChild(E('span', { 'style': 'color:' + m.color }, m.txt));
+					mrow.appendChild(E('span', { 'style': 'color:' + m.color }, [ m.txt ]));
 				});
 				card.appendChild(mrow);
 			} else if (anyMarks) {
@@ -469,7 +469,7 @@ return view.extend({
 			if (p.iface_shared) {
 				card.appendChild(E('div', {
 					'style': 'font-size:80%; color:#e58a00; margin-top:.3em'
-				}, _('shares interface %s with another profile').format(p.iface)));
+				}, [ _('shares interface %s with another profile').format(p.iface) ]));
 			}
 
 			/* Сохранённые диапазоны (настройка «Запоминать диапазоны после
@@ -540,9 +540,9 @@ return view.extend({
 		var self = this;
 		var lines = [ E('p', {}, [ _('Delete the profile of %s?').format(p.model || p.path) ]) ];
 		if (p.iface && !p.iface_shared) {
-			lines.push(E('p', {}, _('Its network interface "%s" will be removed too.').format(p.iface)));
+			lines.push(E('p', {}, [ _('Its network interface "%s" will be removed too.').format(p.iface) ]));
 		} else if (p.iface_shared) {
-			lines.push(E('p', {}, _('The interface "%s" stays: another profile uses it.').format(p.iface)));
+			lines.push(E('p', {}, [ _('The interface "%s" stays: another profile uses it.').format(p.iface) ]));
 		}
 		if (p.present) {
 			lines.push(E('p', { 'style': 'color:#e58a00' },
@@ -939,7 +939,7 @@ return view.extend({
 		var mForeignIf = mSec ? (uci.get('5gmodem', mSec, 'foreign_iface') || '') : '';
 		if (mForeignIf) {
 			ui.addNotification(null, E('p', {}, [
-				E('strong', {}, _('Interface “%s” was created for a different modem').format(mForeignIf)), ' ',
+				E('strong', {}, [ _('Interface “%s” was created for a different modem').format(mForeignIf) ]), ' ',
 				_('It is bound to this modem only because the kernel reused the device node, so its settings (APN in particular) may belong to the previous modem and SIM. Create the interface anew below - the APN is filled from the operator detected right now.')
 			]), 'warning');
 		}
@@ -1507,14 +1507,14 @@ return view.extend({
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.success) {
-					ui.addNotification(null, E('p', _('Interface "%s" created (DHCP on %s), bringing it up…').format(out.iface, out.netdev)), 'info');
+					ui.addNotification(null, E('p', [ _('Interface "%s" created (DHCP on %s), bringing it up…').format(out.iface, out.netdev) ]), 'info');
 					if (profilesView) { profilesView.loadProfiles(); }
 				} else {
 					ui.addNotification(null, E('p', _('No HiLink network card found to create an interface for')), 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();
-				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
+				ui.addNotification(null, E('p', [ _('Failed to create the modem interface') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
 		} else {
@@ -1565,7 +1565,7 @@ return view.extend({
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 				if (out.result == 'created') {
-					ui.addNotification(null, E('p', _('Interface "%s" created (%s), bringing it up…').format(out.iface, mutil.protoLabel(out.proto))), 'info');
+					ui.addNotification(null, E('p', [ _('Interface "%s" created (%s), bringing it up…').format(out.iface, mutil.protoLabel(out.proto)) ]), 'info');
 					// The Modem Information block is rendered once and not polled, so
 					// its protocol badge would keep showing the OLD protocol (e.g. mbim)
 					// until a manual page reload. Update it to the new protocol now.
@@ -1583,12 +1583,12 @@ return view.extend({
 					var _mkWhy = (out.result && out.result !== 'created')
 						? _('backend said "%s" for protocol "%s"').format(out.result, mutil.protoLabel(out.proto) || '?')
 						: ((res && res.stderr) ? String(res.stderr).slice(0, 200) : _('empty backend reply'));
-					ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + _mkWhy + '. ' +
-						_('Details are in the system log (logread, tag 5gmodem).')), 'error');
+					ui.addNotification(null, E('p', [ _('Failed to create the modem interface') + ': ' + _mkWhy + '. ' +
+						_('Details are in the system log (logread, tag 5gmodem).') ]), 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();
-				ui.addNotification(null, E('p', _('Failed to create the modem interface') + ': ' + (err.message || err)), 'error');
+				ui.addNotification(null, E('p', [ _('Failed to create the modem interface') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
 		} /* if activeIsHilink … else - кнопка создания интерфейса */
@@ -1618,7 +1618,7 @@ return view.extend({
 				if (n) { window.setTimeout(function() { window.location.reload(); }, 1200); }
 			}).catch(function(err) {
 				ui.hideModal();
-				ui.addNotification(null, E('p', _('Failed to forget disconnected modems') + ': ' + (err.message || err)), 'error');
+				ui.addNotification(null, E('p', [ _('Failed to forget disconnected modems') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
 
@@ -1695,7 +1695,7 @@ return view.extend({
 				ui.addNotification(null, E('p', _('The report has been downloaded. Attach it to your bug report.')), 'info');
 			}).catch(function(err) {
 				ui.hideModal();
-				ui.addNotification(null, E('p', _('Collecting logs failed') + ': ' + (err.message || err)), 'error');
+				ui.addNotification(null, E('p', [ _('Collecting logs failed') + ': ' + (err.message || err) ]), 'error');
 			});
 		};
 

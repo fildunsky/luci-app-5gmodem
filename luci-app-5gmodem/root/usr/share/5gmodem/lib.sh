@@ -498,7 +498,7 @@ sms_fwd_head() {   # $1 - usb-путь модема, $2 - отправитель
 # /proc/uptime` - по замеру это 21 спавн на ОДИН опрос метрик (циклы, штампы
 # кэшей). read из /proc + подстановка делают то же ядерными средствами.
 uptime_s() {
-	read -r _us _ < /proc/uptime
+	IFS=' ' read -r _us _ < /proc/uptime
 	printf '%s\n' "${_us%%.*}"
 }
 
@@ -1218,6 +1218,7 @@ alias_for_path() {   # $1 - usb-путь; печатает имя или нич�
 	[ -n "$1" ] || return 0
 	_af_sec=$(secname "$1")
 	_af_snap=$(uci -q show 5gmodem 2>/dev/null)
+	case "$_af_snap" in *".alias="*) : ;; *) return 0 ;; esac
 	_af_im=$(printf '%s\n' "$_af_snap" \
 		| sed -n "s/^5gmodem\.$_af_sec\.imei='\(.*\)'\$/\1/p" | head -1)
 	if [ -n "$_af_im" ]; then

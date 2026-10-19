@@ -92,26 +92,28 @@ FAST_UNTIL=0
 rm -f "$KICK"
 
 while :; do
-	_kl_now=$(cut -d. -f1 /proc/uptime)
+	IFS=' ' read -r _kl_now _ < /proc/uptime; _kl_now=${_kl_now%%.*}
 	_kl_wait=$PERIOD
 	[ "$_kl_now" -lt "$FAST_UNTIL" ] && _kl_wait=3
 	_kl_n=0
 	while [ "$_kl_n" -lt "$_kl_wait" ]; do
 		if [ -e "$KICK" ]; then
 			rm -f "$KICK"
-			FAST_UNTIL=$(( $(cut -d. -f1 /proc/uptime) + 60 ))
+			IFS=' ' read -r _kl_k _ < /proc/uptime
+			FAST_UNTIL=$(( ${_kl_k%%.*} + 60 ))
 			break
 		fi
-		sleep 1 &
+		sleep 2 &
 		wait $!
-		_kl_n=$((_kl_n + 1))
+		_kl_n=$((_kl_n + 2))
 	done
 	[ -c "$DEV" ] || { logger -t 5gmodem "MBIM+MM: $DEV is gone - leaving interface $IFACE to netifd"; exit 1; }
 	probe
 	case $? in
 		0)
 			FAILS=0; UNKNOWN=0
-			[ "$(cut -d. -f1 /proc/uptime)" -lt "$FAST_UNTIL" ] || mm_enable ;;
+			IFS=' ' read -r _kl_u _ < /proc/uptime
+			[ "${_kl_u%%.*}" -lt "$FAST_UNTIL" ] || mm_enable ;;
 		1)
 			UNKNOWN=0
 			FAILS=$((FAILS + 1))

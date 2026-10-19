@@ -583,7 +583,7 @@ return view.extend({
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
 			console.error('Error loading USSD file:', err);
-			ui.addNotification(null, E('p', _('Error loading USSD codes file:') + ' ' + selectedFile), 'error');
+			ui.addNotification(null, E('p', [ _('Error loading USSD codes file:') + ' ' + selectedFile ]), 'error');
 		});
 	},
 
@@ -807,8 +807,7 @@ return view.extend({
 		
 		if (newModem && newModem.comm_port) {
 			uci.set('5gmodem', 'sms', 'ussdport', newModem.comm_port);
-			uci.save();
-			uci.apply().then(function() {
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'smsopt', 'ussdport=' + newModem.comm_port ]), null).then(function() {
 				let modemText = document.querySelector('.modem-display-text');
 				if (modemText) {
 					let label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');
@@ -921,9 +920,9 @@ return view.extend({
 					   описывает лишь последний выбранный модем и мог остаться от
 					   предыдущего: баннер обещал уход в 3G и возврат, а скрипт
 					   слал запрос как есть (аудит 12.09.2026). */
-					E('p', {}, (uci.get('5gmodem', ussd3gSection, 'ussd_3g') == '1')
+					E('p', {}, [ (uci.get('5gmodem', ussd3gSection, 'ussd_3g') == '1')
 						? _('The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds.').format(ussdRat)
-						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings below.').format(ussdRat))
+						: _('The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable "Switch the modem to 3G for USSD" in the settings below.').format(ussdRat) ])
 				]) : '',
 				E('div', { 'class': 'cbi-section tgpage' }, [
 					E('div', { 'class': 'cbi-section-node' }, [

@@ -380,7 +380,7 @@ return view.extend({
 			if (cmdInput) cmdInput.value = '';
 		}).catch(function(err) {
 			console.error('Error loading AT commands file:', err);
-			ui.addNotification(null, E('p', _('Error loading AT commands file:') + ' ' + selectedFile), 'error');
+			ui.addNotification(null, E('p', [ _('Error loading AT commands file:') + ' ' + selectedFile ]), 'error');
 		});
 	},
 
@@ -407,8 +407,7 @@ return view.extend({
 		
 		if (newModem && newModem.comm_port) {
 			uci.set('5gmodem', 'sms', 'atport', newModem.comm_port);
-			uci.save();
-			uci.apply().then(function() {
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'smsopt', 'atport=' + newModem.comm_port ]), null).then(function() {
 				let modemText = document.querySelector('.modem-display-text');
 				if (modemText) {
 					let label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');

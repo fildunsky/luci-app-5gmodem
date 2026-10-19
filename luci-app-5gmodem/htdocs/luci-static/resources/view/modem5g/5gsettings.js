@@ -836,12 +836,12 @@ return view.extend({
 				if (d.ok == 1) {
 					return E('div', {}, [
 						E('span', { 'class': 'extip-res-fam' }, fam + ': '),
-						E('span', {}, extip.withFlag(d.ip, d.cc)),
-						d.src ? E('span', { 'class': 'extip-res-src' }, ' - ' + d.src) : ''
+						E('span', {}, [ extip.withFlag(d.ip, d.cc) ]),
+						d.src ? E('span', { 'class': 'extip-res-src' }, [ ' - ' + d.src ]) : ''
 					]);
 				}
 				return E('div', { 'class': 'extip-res-bad' },
-					fam + ': ' + _('no answer from %s').format(d.src || '?'));
+					[ fam + ': ' + _('no answer from %s').format(d.src || '?') ]);
 			};
 			btn.disabled = true;
 			dom.content(box, E('div', { 'class': 'extip-res-wait' }, _('Checking…')));
@@ -984,7 +984,8 @@ return view.extend({
 				});
 				fs.exec('/usr/share/5gmodem/notmodem.sh',
 					[ 'setblack', ign.join(' '), force.join(' ') ])
-					.then(function() { window.location.reload(); });
+					.then(function() { window.location.reload(); })
+					.catch(function(e) { ui.addNotification(null, E('p', [ String((e && e.message) || e) ]), 'error'); });
 			}, 600);
 		});
 		o = exp.option(form.DummyValue, '_blacklist', _('Device blacklist'),

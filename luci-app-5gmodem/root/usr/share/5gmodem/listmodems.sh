@@ -28,7 +28,7 @@ STAMP=/tmp/5gmodem/listmodems.stamp
 TTL=8   # секунд; страховка, если hotplug-инвалидация не сработала
 
 uptime_s() {
-	read -r _us _ < /proc/uptime
+	IFS=' ' read -r _us _ < /proc/uptime
 	printf '%s\n' "${_us%%.*}"
 }
 
@@ -36,8 +36,8 @@ if [ "$1" = "--refresh" ]; then
 	rm -f "$CACHE" "$STAMP"
 elif [ -s "$CACHE" ]; then
 	# find -mmin умеет только минуты, поэтому возраст считаем по /proc/uptime
-	_now=$(uptime_s)
-	_then=$(cat "$STAMP" 2>/dev/null)
+	IFS=' ' read -r _now _ < /proc/uptime; _now="${_now%%.*}"
+	_then=""; read -r _then 2>/dev/null < "$STAMP"
 	case "$_then" in ''|*[!0-9]*) _then="" ;; esac
 	if [ -n "$_then" ] && [ "$((_now - _then))" -ge 0 ] && [ "$((_now - _then))" -lt "$TTL" ]; then
 		cat "$CACHE"

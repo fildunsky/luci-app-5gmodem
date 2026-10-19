@@ -244,12 +244,13 @@ function addReceiveIncoming(s) {
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'dump', '', portES ]))
 				.then(function(res) {
 					if (!res) return;
-					fs.write('/tmp/5gmodem/mysms.txt', res.trim().replace(/\r\n/g, '\n') + '\n');
-					fs.stat('/tmp/5gmodem/mysms.txt').then(function () {
+					return fs.write('/tmp/5gmodem/mysms.txt', res.trim().replace(/\r\n/g, '\n') + '\n').then(function() {
+						return fs.stat('/tmp/5gmodem/mysms.txt');
+					}).then(function () {
 						if (confirm(_('Save sms to txt file?'))) {
 							L.resolveDefault(fs.read_direct('/tmp/5gmodem/mysms.txt'), null).then(function (restxt) {
 								if (restxt) {
-									L.ui.showModal(_('Saving...'), [
+									ui.showModal(_('Saving...'), [
 										E('p', { 'class': 'spinning' }, _('Please wait, saving the SMS messages to a text file'))
 									]);
 									let link = E('a', {
@@ -259,13 +260,15 @@ function addReceiveIncoming(s) {
 									window.setTimeout(function() {
 										link.click();
 										URL.revokeObjectURL(link.href);
-										L.hideModal();
-									}, 2000).finally();
+										ui.hideModal();
+									}, 2000);
 								} else {
 									ui.addNotification(null, E('p', {}, _('Saving the SMS messages to a file failed. Please try again.')));
 								}
 							});
 						}
+					}).catch(function() {
+						ui.addNotification(null, E('p', {}, [ _('Saving the SMS messages to a file failed. Please try again.') ]));
 					});
 				});
 		});
@@ -281,7 +284,7 @@ function addReceiveIncoming(s) {
 				let portFD = uci.get('5gmodem', 'sms', 'readport');
 				/* smsbridge.sh знает про транспорт (AT или ModemManager) и берёт
 				   очередь к порту - в отличие от прямого вызова бинаря. */
-				fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', '', portFD ]);
+				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', '', portFD ]), null);
 			});
 		}
 	};
@@ -293,7 +296,7 @@ function addNotifications(s) {
 	o = s.option(form.Flag, 'lednotify', _('Notify about new messages'),
 		_('The LED signals a new message. Before enabling this, configure and save the SMS reading port, the inbox check interval and the notification LED.'));
 	o.rmempty = false;
-	o.default = true;
+	o.default = '0';
 	o.write = function(section_id, value) {
 		return uci.load('5gmodem').then(function() {
 			let storeL = uci.get('5gmodem', 'sms', 'storage');
@@ -312,8 +315,7 @@ function addNotifications(s) {
 					if (!res) return;
 					let total = res.substring(res.indexOf('total'));
 					let t = total.replace(/[^\d.]/g, '');
-					let used = res.substring(17, res.indexOf('total'));
-					let u = used.replace(/[^\d.]/g, '');
+					let u = (res.match(/used:\s*(\d+)/i) || [])[1] || '';
 
 					if (value == '1') {
 						return update_sms_count_for_modem_sync(u, portR).then(function(updatedValue) {
@@ -389,8 +391,8 @@ function addNotifications(s) {
 	o.load = function(section_id) {
 		return L.resolveDefault(fs.list('/sys/class/leds'), []).then(L.bind(function(leds) {
 			if (leds.length > 0) {
-				leds.sort((a, b) => a.name > b.name);
-				leds.forEach(e => o.value(e.name));
+				leds.sort((a, b) => a.name < b.name ? -1 : (a.name > b.name ? 1 : 0));
+				leds.forEach(e => { if ((o.keylist || []).indexOf(e.name) < 0) { o.value(e.name); } });
 			}
 			return this.super('load', [section_id]);
 		}, this));
@@ -604,7 +606,7 @@ function addTelegramForwarding(s) {
 		var self = this;
 		/* Любой сбой обязан быть ВИДЕН: молчащая кнопка неотличима от сломанной. */
 		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'chatid' ]).catch(function(e) {
-			ui.addNotification(null, E('p', {}, _('Could not query Telegram: %s').format(e && e.message || e)), 'error');
+			ui.addNotification(null, E('p', {}, [ _('Could not query Telegram: %s').format(e && e.message || e) ]), 'error');
 			return '';
 		}).then(function(out) {
 			if (!out) { return; }

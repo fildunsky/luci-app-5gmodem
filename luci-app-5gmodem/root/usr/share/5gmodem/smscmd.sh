@@ -37,6 +37,7 @@ _cfg() { uci -q get "$CFG.sms.$1" 2>/dev/null; }
 _log() { logger -t 5gmodem "sms-команды: $*"; }
 
 CMD_EN=$(_cfg cmd_enabled)
+[ "$1" = run ] && [ "$CMD_EN" != 1 ] && exit 0
 CMD_WL=$(_cfg cmd_whitelist_only); [ -n "$CMD_WL" ] || CMD_WL=1
 CMD_SECRET=$(_cfg cmd_secret)
 # СРОК ГОДНОСТИ КОМАНДЫ (часы; 0 - без ограничения).
@@ -202,6 +203,18 @@ _answer() {   # $1 - номер, $2 - текст
 	SMS_MODEM="$MPATH" "$RES/smsbridge.sh" send "$1" "$2" "$MPORT" >/dev/null 2>&1
 }
 
+_o_nltrim() {
+	eval "_ont_v=\$$1"
+	while :; do
+		case "$_ont_v" in
+			*"
+") _ont_v=${_ont_v%?} ;;
+			*) break ;;
+		esac
+	done
+	eval "$1=\$_ont_v"
+}
+
 # --- круг по одному модему ---------------------------------------------------
 _one() {   # $1 - usb-путь
 	MPATH="$1"
@@ -227,10 +240,21 @@ _one() {   # $1 - usb-путь
 	# иначе команда, не поместившаяся в одну часть, не совпала бы ни с чем, а
 	# части остались бы навсегда необработанными - и слив в память роутера из-за
 	# них никогда не удалил бы их из модема.
+	_o_ids=""
+	for _o_i in $_o_idx; do
+		case "$_o_i" in ''|*[!0-9]*) continue ;; esac
+		_o_s=""; _o_t=""; _o_c=""
+		eval "$(printf '%s' "$_o_msgs" | jsonfilter -e "_o_s=@.msg[@.index=$_o_i].sender" \
+			-e "_o_t=@.msg[@.index=$_o_i].timestamp" -e "_o_c=@.msg[@.index=$_o_i].content" 2>/dev/null)"
+		_o_nltrim _o_s; _o_nltrim _o_t; _o_nltrim _o_c
+		eval "_o_S$_o_i=\$_o_s; _o_T$_o_i=\$_o_t; _o_C$_o_i=\$_o_c"
+		_o_ids="$_o_ids $_o_i"
+	done
+	_o_idx="$_o_ids"
+
 	_o_seen_keys=""
 	for _o_i in $_o_idx; do
-		_o_s=$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_i].sender" 2>/dev/null)
-		_o_t=$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_i].timestamp" 2>/dev/null)
+		eval "_o_s=\$_o_S$_o_i; _o_t=\$_o_T$_o_i"
 		_o_grp="$_o_s|$_o_t"
 		case "
 $_o_seen_keys
@@ -240,15 +264,16 @@ $_o_grp
 		_o_seen_keys="$_o_seen_keys
 $_o_grp"
 
-		_o_c1=$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_i].content" 2>/dev/null)
+		eval "_o_c1=\$_o_C$_o_i"
 		grep -qxF "$(sms_cmd_key "$_o_s" "$_o_t" "$_o_c1")" "$_o_df" 2>/dev/null && continue
 
 		# Текст группы целиком + ключи всех её частей (их и помечаем).
 		_o_text=""; _o_keys=""
 		for _o_j in $_o_idx; do
-			[ "$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_j].sender" 2>/dev/null)" = "$_o_s" ] || continue
-			[ "$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_j].timestamp" 2>/dev/null)" = "$_o_t" ] || continue
-			_o_c=$(printf '%s' "$_o_msgs" | jsonfilter -e "@.msg[@.index=$_o_j].content" 2>/dev/null)
+			eval "_o_js=\$_o_S$_o_j; _o_jt=\$_o_T$_o_j"
+			[ "$_o_js" = "$_o_s" ] || continue
+			[ "$_o_jt" = "$_o_t" ] || continue
+			eval "_o_c=\$_o_C$_o_j"
 			_o_text="$_o_text$_o_c"
 			_o_keys="$_o_keys $(sms_cmd_key "$_o_s" "$_o_t" "$_o_c")"
 		done
@@ -389,7 +414,7 @@ chat)
 	case "$_cdly" in ''|*[!0-9]*) _cdly=0 ;; esac
 	[ "$_cdly" -gt 300 ] 2>/dev/null && _cdly=300
 	_log "из чата: $_cword -> $_cex"
-	_cjson() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' '; }
+	_cjson() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\000-\037' ' '; }
 	if [ "$_cdly" -gt 0 ]; then
 		(
 			exec >/dev/null 2>&1 </dev/null
@@ -420,7 +445,7 @@ test)
 		_out=$(SMS_FROM="test" SMS_ARGS="$3" SMS_TEXT="$2 $3" \
 			sh -c "$_tex" 2>&1 | head -c "$ANS_MAX")
 		printf '{"result":"ok","output":"%s"}\n' \
-			"$(printf '%s' "$_out" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ')"
+			"$(printf '%s' "$_out" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\000-\037' ' ')"
 	else
 		echo '{"error":"no such command"}'
 		exit 1
