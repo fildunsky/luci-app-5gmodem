@@ -575,6 +575,7 @@ start)
 	) >/dev/null 2>&1 </dev/null &
 
 	echo "{\"running\":1,\"service\":\"$SERVICE\"}"
+	sleep 1
 	;;
 status)
 	# БИТЫЙ КЭШ ВЫБРАСЫВАЕМ, А НЕ ОТДАЁМ. Испорченный файл мог остаться от

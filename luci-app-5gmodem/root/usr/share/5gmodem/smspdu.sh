@@ -84,7 +84,7 @@ encode() {
 	# Ссылка на набор частей: одна на сообщение, лишь бы отличалась от соседних.
 	# Берём младший байт от секунд аптайма - часы роутера могут быть не выставлены,
 	# а /proc/uptime есть всегда.
-	read -r _e_up _ < /proc/uptime
+	IFS=' ' read -r _e_up _ < /proc/uptime
 	_e_ref=$(( ${_e_up%%.*} % 256 ))
 
 	printf '%s' "$_e_txt" | LC_ALL=C awk -v dlen="$_e_dlen" -v toa="$_e_toa" -v digits="$_e_digits" -v ref="$_e_ref" '
@@ -102,14 +102,14 @@ encode() {
 			while (i <= n) {
 				c = ord[substr(body, i, 1)]
 				if (c < 0x80) { cp = c; i += 1 }
-				else if (c >= 0xC0 && c < 0xE0) {
+				else if (c >= 0xC0 && c < 0xE0 && i + 1 <= n) {
 					cp = (c - 0xC0) * 64 + (ord[substr(body, i + 1, 1)] - 0x80); i += 2
 				}
-				else if (c >= 0xE0 && c < 0xF0) {
+				else if (c >= 0xE0 && c < 0xF0 && i + 2 <= n) {
 					cp = (c - 0xE0) * 4096 + (ord[substr(body, i + 1, 1)] - 0x80) * 64 \
 					     + (ord[substr(body, i + 2, 1)] - 0x80); i += 3
 				}
-				else if (c >= 0xF0) {
+				else if (c >= 0xF0 && i + 3 <= n) {
 					cp = (c - 0xF0) * 262144 + (ord[substr(body, i + 1, 1)] - 0x80) * 4096 \
 					     + (ord[substr(body, i + 2, 1)] - 0x80) * 64 \
 					     + (ord[substr(body, i + 3, 1)] - 0x80); i += 4

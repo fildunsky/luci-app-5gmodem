@@ -75,10 +75,11 @@ function smsMasonry(list) {
 	var cs = getComputedStyle(list);
 	var wide = cs.display === 'grid';
 	var gap = wide ? (parseFloat(cs.columnGap) || 0) : 0;
-	Array.prototype.forEach.call(list.children, function(el) {
-		if (!wide) { el.style.gridRowEnd = ''; return; }
-		var h = el.getBoundingClientRect().height;
-		el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((h + gap) / SMS_ROW));
+	var kids = Array.prototype.slice.call(list.children);
+	if (!wide) { kids.forEach(function(el) { el.style.gridRowEnd = ''; }); return; }
+	var hs = kids.map(function(el) { return el.getBoundingClientRect().height; });
+	kids.forEach(function(el, i) {
+		el.style.gridRowEnd = 'span ' + Math.max(1, Math.ceil((hs[i] + gap) / SMS_ROW));
 	});
 }
 function smsMasonryWatch(list) {
@@ -95,7 +96,15 @@ function smsMasonryWatch(list) {
 		Array.prototype.forEach.call(list.children, function(el) { ro.observe(el); });
 	};
 	if (window.MutationObserver) {
-		new MutationObserver(function() { watchKids(); run(); }).observe(list, { childList: true });
+		new MutationObserver(function(recs) {
+			if (ro) {
+				recs.forEach(function(r) {
+					Array.prototype.forEach.call(r.removedNodes, function(n) { if (n.nodeType === 1) { ro.unobserve(n); } });
+				});
+			}
+			watchKids();
+			run();
+		}).observe(list, { childList: true });
 	}
 	window.addEventListener('resize', run);
 	watchKids();
@@ -248,6 +257,13 @@ function sms_cache_save(list, u, t) {
 function sms_cache_load() {
 	try { return JSON.parse(window.localStorage.getItem(sms_cache_key()) || 'null'); }
 	catch (e) { return null; }
+}
+
+function sms_ts_num(ts) {
+	var s = String(ts || '');
+	var n = Date.parse(s);
+	if (isNaN(n)) { n = Date.parse(s.replace(' ', 'T')); }
+	return isNaN(n) ? 0 : n;
 }
 
 /* Время SMS: sms_tool печатает его в UTC и ИГНОРИРУЕТ $TZ (проверено на
@@ -785,6 +801,7 @@ return view.extend({
 		
 		if (newModem && newModem.comm_port) {
 			sms_persist({ 'readport': newModem.comm_port }).then(function() {
+				sms_seen_load().then(function() { window._smsForceRender = true; });
 				var modemText = document.querySelector('.modem-display-text');
 				if (modemText) {
 					var label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');
@@ -897,7 +914,7 @@ return view.extend({
 			    'style': 'width: 100% !important; height: 30vh; min-height: 250px;',
 			    'wrap': 'off',
 			    'spellcheck': 'false'
-		    }, defaultBody),
+		    }, [ defaultBody ]),
 		    E('div', { 'class': 'right' }, [
 			    E('button', {
 				    'class': 'btn',
@@ -949,7 +966,7 @@ return view.extend({
 	    }).catch(function(err) {
 		    contentArea.innerHTML = '';
 		    contentArea.style.display = 'none';
-		    ui.addNotification(null, E('p', _('Error: %s').format(err.message)), 'error');
+		    ui.addNotification(null, E('p', [ _('Error: %s').format(err && err.message) ]), 'error');
 	    });
     },
 
@@ -1031,8 +1048,8 @@ return view.extend({
 				hideProgress();
 				if (!document.querySelector('.sms-card')) { smsSetState('empty'); }
 				if (kept) {
-					ui.addNotification(null, E('p', _('Deleted: %d, not deleted: %d').format(gone, kept) +
-						' - ' + reasons.join('; ')), 'error');
+					ui.addNotification(null, E('p', [ _('Deleted: %d, not deleted: %d').format(gone, kept) +
+						' - ' + reasons.join('; ') ]), 'error');
 					if (typeof viewSelf._doRefresh == 'function') { viewSelf._doRefresh(false, true); return; }
 				}
 				return L.resolveDefault(fs.exec_direct(bridge, [ 'status', storeL, portR ]), '')
@@ -1315,7 +1332,7 @@ return view.extend({
 										return;
 									}
 									if (!json.length && u > 0 && document.querySelector('#smsList .sms-card')) { return; }
-									var _sig = [ storeL, smsM, hide, direct, algo, res2 ].join('\u0001');
+									var _sig = [ storeL, portR, smsM, hide, direct, algo, res2 ].join('\u0001');
 									if (!window._smsForceRender && _sig === window._smsLastSig
 									    && document.querySelector('#smsList .sms-card')) { return; }
 									window._smsForceRender = false;
@@ -1429,7 +1446,9 @@ return view.extend({
 													kp: pkp
 												};
 											});
-											result.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+											result.forEach(function(o) { o._ts = sms_ts_num(o.timestamp); });
+											result.sort(function(a, b) { return b._ts - a._ts; });
+											result.forEach(function(o) { delete o._ts; });
 													if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
 															var Lres = L.resource('icons/5gmodem/cmessage.svg');
 
@@ -1461,16 +1480,14 @@ return view.extend({
 									if (smsM == "0") {
 									
 										/* Sorting messages by delivery time */
-										var sortbyTime = json.sort((function (a, b) { return new Date(b.timestamp) - new Date(a.timestamp) }));
-
-										/* Sorting messages by parts */
-										var sortedData = sortbyTime.sort((a, b) => {
-    										if (a.timestamp === b.timestamp && a.sender === b.sender && a.total === b.total) {
-        											return a.part - b.part;
-    										} else {
-        											return 0;
-    										}
+										json.forEach(function(o) { o._ts = sms_ts_num(o.timestamp); });
+										var sortedData = json.sort(function(a, b) {
+											if (a._ts !== b._ts) { return b._ts - a._ts; }
+											var sa = String(a.sender || ''), sb = String(b.sender || '');
+											if (sa !== sb) { return sa < sb ? -1 : 1; }
+											return (a.part || 0) - (b.part || 0);
 										});
+										json.forEach(function(o) { delete o._ts; });
 
 										if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
 

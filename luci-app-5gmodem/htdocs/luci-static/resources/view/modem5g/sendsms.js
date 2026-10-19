@@ -129,9 +129,9 @@ return view.extend({
 			.replace(/ž/g, 'z').replace(/Ž/g, 'Z')
 			// SPECIAL
 			.replace(/–/g, '-').replace(/—/g, '-')
-			.replace(/'/g, '\'').replace(/'/g, '\'')
-			.replace(/"/g, '"').replace(/"/g, '"')
-			.replace(/„/g, '"').replace(/"/g, '"')
+			.replace(/\u2018/g, '\'').replace(/\u2019/g, '\'')
+			.replace(/\u201C/g, '"').replace(/\u201D/g, '"')
+			.replace(/„/g, '"').replace(/\u201F/g, '"')
 			.replace(/«/g, '"').replace(/»/g, '"')
 			.replace(/…/g, '...').replace(/·/g, '.')
 			.replace(/•/g, '*').replace(/‣/g, '*')
@@ -413,8 +413,7 @@ return view.extend({
 		
 		if (newModem && newModem.comm_port) {
 			uci.set('5gmodem', 'sms', 'sendport', newModem.comm_port);
-			uci.save();
-			uci.apply().then(function() {
+			L.resolveDefault(fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'smsopt', 'sendport=' + newModem.comm_port ]), null).then(function() {
 				let modemText = document.querySelector('.modem-display-text');
 				if (modemText) {
 					let label = newModem.modem + (newModem.user_desc ? ' (' + newModem.user_desc + ')' : '');

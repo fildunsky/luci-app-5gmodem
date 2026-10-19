@@ -175,7 +175,7 @@ send)
 	# mmcli key='value' syntax: a single quote inside the text breaks the
 	# parser - replace it with a typographic apostrophe
 	case "$TEXT" in
-		*"'"*) TEXT=$(printf '%s' "$TEXT" | sed "s/'/\xe2\x80\x99/g") ;;
+		*"'"*) _AP=$(printf '\342\200\231'); TEXT=$(printf '%s' "$TEXT" | sed "s/'/$_AP/g") ;;
 	esac
 
 	OUT=$(mmcli -m "$MMIDX" --messaging-create-sms="text='$TEXT',number='$PHONE'" 2>&1)

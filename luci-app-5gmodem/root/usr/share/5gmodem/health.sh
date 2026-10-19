@@ -96,12 +96,14 @@ H_HEALWIFI=$(conf heal_wifi); [ "$H_HEALWIFI" = "0" ] || H_HEALWIFI=1
 # event один раз) - и каждый раз это два процесса. Считаем один раз.
 _WANNETS=""; _WANNETS_DONE=""
 fw_zone_check() {
-	[ "$(cat "$HDIR/$1.fwdev" 2>/dev/null)" = "$2" ] && return 0
+	_fz_o=""
+	read -r _fz_o 2>/dev/null < "$HDIR/.fwdev_$1"
+	[ "$_fz_o" = "$2" ] && return 0
 	_fz_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	case " $(uci -q get "firewall.$_fz_z.network") " in *" $1 "*) ;; *) return 0 ;; esac
 	_fz_c=$(nft list chain inet fw4 input 2>/dev/null) || return 0
 	[ -n "$_fz_c" ] || return 0
-	echo "$2" > "$HDIR/$1.fwdev"
+	echo "$2" > "$HDIR/.fwdev_$1"
 	case "$_fz_c" in *"\"$2\""*) return 0 ;; esac
 	_ev "firewall has no rules for $2 ($1) - reloading it so LAN clients get internet"
 	( /etc/init.d/firewall reload ) >/dev/null 2>&1 </dev/null 9>&- &
@@ -302,11 +304,19 @@ probe_restricted() {
 restricted_mark() {
 	if [ -n "$H_RESTR" ]; then
 		[ -f "$HDIR/.restricted_$1" ] && return 0
+		if [ ! -f "$HDIR/.restricted_p_$1" ]; then
+			: > "$HDIR/.restricted_p_$1"
+			return 0
+		fi
+		rm -f "$HDIR/.restricted_p_$1"
 		: > "$HDIR/.restricted_$1"
 		_ev "link $1: only whitelisted services answer (restricted network) - kept as alive, no healing"
-	elif [ -f "$HDIR/.restricted_$1" ]; then
-		rm -f "$HDIR/.restricted_$1"
-		_ev "link $1: full internet is back"
+	else
+		rm -f "$HDIR/.restricted_p_$1"
+		if [ -f "$HDIR/.restricted_$1" ]; then
+			rm -f "$HDIR/.restricted_$1"
+			_ev "link $1: full internet is back"
+		fi
 	fi
 }
 
@@ -386,6 +396,7 @@ judge() {
 
 round() {
 	mkdir -p "$HDIR"
+	ucinet_snapshot
 	# штамп круга - здесь, а не только в tick: age в status обязан отражать
 	# ЛЮБОЙ круг (once с страницы - тоже круг), иначе точки выглядят протухшими
 	uptime_s > "$HDIR/.t"
@@ -394,12 +405,13 @@ round() {
 		# IPv6-спутники не проверяем: приоритет и здоровье - свойства линка,
 		# а не семейства адресов (правило то же, что в netpri.sh list)
 		case "$_r_n" in
-			*6) _r_p=$(uci -q get "network.$_r_n.proto")
+			*6) _r_p=$(ucinet_get "$_r_n" proto)
 			    case "$_r_p" in dhcpv6|6in4|6to4|6rd) continue ;; esac ;;
 		esac
 		_r_dev=$(iface_dev "$_r_n")
 		[ -n "$_r_dev" ] || _r_dev=$(iface_dev "${_r_n}_4")
 		if [ -z "$_r_dev" ]; then
+			rm -f "$HDIR/.fwdev_$_r_n"
 			# Устройства нет - это отдельное состояние «gone», а не удаление
 			# следа: карточка на странице обязана ПЕРЕЖИТЬ переэнумерацию
 			# (перезагрузка модуля лестницей - это десятки секунд без
@@ -487,7 +499,7 @@ PEN=1000
 
 # метрика линка по конфигу пользователя (его порядок); пусто = 0
 base_metric() {
-	_bm=$(uci -q get "network.$1.metric"); case "$_bm" in ''|*[!0-9]*) _bm=0 ;; esac
+	_bm=$(ucinet_get "$1" metric); case "$_bm" in ''|*[!0-9]*) _bm=0 ;; esac
 	printf '%s' "$_bm"
 }
 
@@ -495,7 +507,7 @@ base_metric() {
 # ip4table); пусто = main. Как в netpri.sh: default такого интерфейса живёт в
 # его таблице, и правка main его не касалась (issue #12).
 _rt4_args() {
-	_r4=$(uci -q get "network.$1.ip4table" 2>/dev/null)
+	_r4=$(ucinet_get "$1" ip4table)
 	[ -n "$_r4" ] && printf 'table %s' "$_r4"
 }
 
@@ -506,9 +518,9 @@ _rt4_args() {
 _move_defaults() {   # $1 - dev, $2 - желаемая метрика, $3 - имя сети
 	for _fam in -4 -6; do
 		if [ "$_fam" = "-4" ]; then
-			_mt_l="$(uci -q get "network.$3.ip4table" 2>/dev/null)"
+			_mt_l="$(ucinet_get "$3" ip4table)"
 		else
-			_mt_l="$(uci -q get "network.$3.ip6table" 2>/dev/null) $(uci -q get "network.${3}6.ip6table" 2>/dev/null) $(uci -q get "network.${3}_6.ip6table" 2>/dev/null)"
+			_mt_l="$(ucinet_get "$3" ip6table) $(ucinet_get "${3}6" ip6table) $(ucinet_get "${3}_6" ip6table)"
 		fi
 		_mt_seen=""
 		for _mt in "" $_mt_l; do
@@ -566,9 +578,9 @@ _nd_gw() {   # $1 - сеть, $2 - цель ("0.0.0.0"/"::"), $3 - суффик�
 }
 
 _rt6_args() {
-	for _r6 in "$(uci -q get "network.$1.ip6table" 2>/dev/null)" \
-			"$(uci -q get "network.${1}6.ip6table" 2>/dev/null)" \
-			"$(uci -q get "network.${1}_6.ip6table" 2>/dev/null)"; do
+	for _r6 in "$(ucinet_get "$1" ip6table)" \
+			"$(ucinet_get "${1}6" ip6table)" \
+			"$(ucinet_get "${1}_6" ip6table)"; do
 		[ -n "$_r6" ] && { printf 'table %s' "$_r6"; return 0; }
 	done
 }

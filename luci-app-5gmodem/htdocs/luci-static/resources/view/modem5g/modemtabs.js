@@ -523,6 +523,8 @@ function pathsSig(list) {
 }
 
 function watchModems(bar, sig) {
+	if (bar._watched) { return; }
+	bar._watched = true;
 	poll.add(function() {
 		return L.resolveDefault(fs.read(LIST_CACHE), '').then(function(txt) {
 			var list = [];

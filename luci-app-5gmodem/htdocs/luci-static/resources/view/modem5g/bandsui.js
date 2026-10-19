@@ -222,7 +222,7 @@ function warmRenderBands() {
 	   и несовпадение - повод выбросить кэш, а не рисовать чужие диапазоны. */
 	var mdl = '';
 	try {
-		var ap = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		var ap = (ctx.pagePath && ctx.pagePath()) || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
 		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
 	} catch (e) {}
 	/* БЕЗ ПОДТВЕРЖДЁННОГО ХОЗЯИНА КЭШ НЕ РИСУЕМ ВОВСЕ. Прежняя сверка
@@ -247,7 +247,7 @@ function warmRenderBands() {
 function _bandsRemember(t, j) {
 	var mdl = '';
 	try {
-		var ap = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		var ap = (ctx.pagePath && ctx.pagePath()) || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
 		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
 	} catch (e) {}
 	try { window.localStorage.setItem(_bandsKey(), JSON.stringify({ t: t, j: j, m: mdl })); } catch (e) {}
@@ -1333,8 +1333,11 @@ function onModemBusyCleared() {
 }
 
 /* Тик опроса метрик: освежать блок частот раз в ~3 тика. */
+var _bandsPollBusy = false;
 function pollTick() {
-	if ((_bandsPollN = (_bandsPollN + 1) % 3) === 0) { loadBands(); }
+	if ((_bandsPollN = (_bandsPollN + 1) % 3) !== 0 || _bandsPollBusy) { return; }
+	_bandsPollBusy = true;
+	Promise.resolve(loadBands()).catch(function() {}).then(function() { _bandsPollBusy = false; });
 }
 
 /* Смена ЖЕЛЕЗА в том же разъёме (сигнатура модель+vidpid из снимка метрик):

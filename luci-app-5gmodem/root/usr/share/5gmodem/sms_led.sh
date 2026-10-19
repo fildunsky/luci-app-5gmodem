@@ -12,12 +12,12 @@ TM=$(($TX * 60))
 
 while [ 1 ]; do 
 	LED=$(uci -q get 5gmodem.sms.lednotify)
-	if [ $LED == "1" ]; then
+	if [ "$LED" = "1" ]; then
     	sleep $TM
 		/usr/share/5gmodem/smstool_led.sh >/dev/null 2>&1 &
 		continue
 	fi
-	sleep 1
+	sleep 30
 done
  
 exit 0

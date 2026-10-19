@@ -55,7 +55,7 @@ let phonebookEditorDialog = baseclass.extend({
 				'style': 'width:100% !important; height:50vh; min-height:300px;',
 				'wrap': 'off',
 				'spellcheck': 'false'
-			}, this.content.trim()),
+			}, [ this.content.trim() ]),
 			E('p', {'style': 'margin-top: 10px; font-size: 12px; color: var(--text-color-secondary)'}),
 
 			E('div', {'style': 'display: flex; justify-content: space-between; align-items: center; margin-top: 10px;'}, [
@@ -85,7 +85,7 @@ let phonebookEditorDialog = baseclass.extend({
 											let targetPath = '/etc/5gmodem/modem/phonebook.user';
 											fs.write(targetPath, content)
 												.then(function() {
-													popTimeout(null, E('p', {}, _('File uploaded and saved to') + ' ' + targetPath), 5000, 'info');
+													popTimeout(null, E('p', {}, [ _('File uploaded and saved to') + ' ' + targetPath ]), 5000, 'info');
 													return fs.read(targetPath);
 												})
 												.then(function(savedContent) {
@@ -95,7 +95,7 @@ let phonebookEditorDialog = baseclass.extend({
 													}
 												})
 												.catch(function(e) {
-													ui.addNotification(null, E('p', {}, _('Unable to upload file') + ': ' + e.message), 'error');
+													ui.addNotification(null, E('p', {}, [ _('Unable to upload file') + ': ' + e.message ]), 'error');
 												});
 										};
 										reader.readAsText(file);
@@ -127,11 +127,11 @@ let phonebookEditorDialog = baseclass.extend({
 							
 							fs.write('/etc/5gmodem/modem/phonebook.user', newContent)
 								.then(function() {
-									popTimeout(null, E('p', {}, _('Phonebook saved successfully')), 5000, 'info');
+									popTimeout(null, E('p', {}, [ _('Phonebook saved successfully') ]), 5000, 'info');
 									ui.hideModal();
 								})
 								.catch(function(e) {
-									ui.addNotification(null, E('p', {}, _('Unable to save the file') + ': ' + e.message), 'error');
+									ui.addNotification(null, E('p', {}, [ _('Unable to save the file') + ': ' + e.message ]), 'error');
 								});
 						})
 					}, _('Save'))
@@ -212,7 +212,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 								}
 							}, [
 								E('option', {'value': ''}, _('-- Select file --'))
-							].concat(data.files.map(f => E('option', {'value': f}, f))))
+							].concat(data.files.map(f => E('option', {'value': f}, [ f ]))))
 						])
 					]),
 					E('div', {'class': 'cbi-value'}, [
@@ -265,7 +265,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 					'wrap': 'off',
 					'spellcheck': 'false',
 					'placeholder': _('Select or create a file to edit...')
-				}, data.content),
+				}, [ data.content ]),
 
 				E('div', {'style': 'display: flex; justify-content: space-between; align-items: center; margin-top: 10px;'}, [
 					E('div', {}, [
@@ -297,7 +297,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 												let targetPath = self.baseDir + '/' + fileName;
 												fs.write(targetPath, content)
 													.then(function() {
-														popTimeout(null, E('p', {}, _('File uploaded and saved to') + ' ' + targetPath), 5000, 'info');
+														popTimeout(null, E('p', {}, [ _('File uploaded and saved to') + ' ' + targetPath ]), 5000, 'info');
 														self.currentFile = fileName;
 														return self.loadFileList();
 													})
@@ -320,7 +320,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 														if (textarea) textarea.value = savedContent;
 													})
 													.catch(function(e) {
-														ui.addNotification(null, E('p', {}, _('Unable to upload file') + ': ' + e.message), 'error');
+														ui.addNotification(null, E('p', {}, [ _('Unable to upload file') + ': ' + e.message ]), 'error');
 													});
 											};
 											reader.readAsText(file);
@@ -343,11 +343,11 @@ let ussdCodesManagerDialog = baseclass.extend({
 												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
 												if (res.code !== 0) {
-													ui.addNotification(null, E('p', {}, _('Failed to extract archive') + ': ' + (res.stderr || '')), 'error');
+													ui.addNotification(null, E('p', {}, [ _('Failed to extract archive') + ': ' + (res.stderr || '') ]), 'error');
 													return;
 												}
 												return fs.remove(tmpPath).then(function() {
-													popTimeout(null, E('p', {}, _('Archive extracted to') + ' ' + self.baseDir), 5000, 'info');
+													popTimeout(null, E('p', {}, [ _('Archive extracted to') + ' ' + self.baseDir ]), 5000, 'info');
 													return self.loadFileList();
 												}).then(function(files) {
 													let select = document.getElementById('ussd_file_select');
@@ -362,14 +362,14 @@ let ussdCodesManagerDialog = baseclass.extend({
 													}
 												});
 											}).catch(function(e) {
-												ui.addNotification(null, E('p', {}, _('Upload error') + ': ' + e.message), 'error');
+												ui.addNotification(null, E('p', {}, [ _('Upload error') + ': ' + e.message ]), 'error');
 											});
 									} else if (name === '_save_gz') {
 										let tmpGz = '/tmp/5gmodem/ussdcodes.tar.gz';
 										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {
-													ui.addNotification(null, E('p', {}, _('Failed to create archive') + ': ' + (res.stderr || '')), 'error');
+													ui.addNotification(null, E('p', {}, [ _('Failed to create archive') + ': ' + (res.stderr || '') ]), 'error');
 													return;
 												}
 												return L.resolveDefault(fs.read_direct(tmpGz, 'blob'), null).then(function(blob) {
@@ -380,12 +380,12 @@ let ussdCodesManagerDialog = baseclass.extend({
 														link.click();
 														URL.revokeObjectURL(link.href);
 													} else {
-														ui.addNotification(null, E('p', {}, _('Failed to read archive')), 'error');
+														ui.addNotification(null, E('p', {}, [ _('Failed to read archive') ]), 'error');
 													}
 													return fs.remove(tmpGz);
 												});
 											}).catch(function(e) {
-												ui.addNotification(null, E('p', {}, _('Error') + ': ' + e.message), 'error');
+												ui.addNotification(null, E('p', {}, [ _('Error') + ': ' + e.message ]), 'error');
 											});
 									}
 								},
@@ -417,16 +417,18 @@ let ussdCodesManagerDialog = baseclass.extend({
 	},
 
 	loadFileContent: function(fileName) {
+		let self = this;
 		let filePath = this.baseDir + '/' + fileName;
 		fs.read(filePath)
 			.then(function(content) {
+				if (self.currentFile !== fileName) { return; }
 				let textarea = document.getElementById('ussd_modal_editor');
 				if (textarea) {
 					textarea.value = content || '';
 				}
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to load file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to load file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -435,7 +437,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 		let fileName = input.value.trim();
 
 		if (!fileName) {
-			ui.addNotification(null, E('p', {}, _('Please enter a file name')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please enter a file name') ]), 'warning');
 			return;
 		}
 
@@ -453,12 +455,12 @@ let ussdCodesManagerDialog = baseclass.extend({
 				return fs.exec(USERFILES, ufFile('chmod', filePath));
 			})
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File created successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File created successfully') ]), 5000, 'info');
 				this.currentFile = fileName;
 				input.value = '';
 				
 				let select = document.getElementById('ussd_file_select');
-				let option = E('option', {'value': fileName, 'selected': 'selected'}, fileName);
+				let option = E('option', {'value': fileName, 'selected': 'selected'}, [ fileName ]);
 				select.appendChild(option);
 				select.value = fileName;
 				
@@ -469,7 +471,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 				}
 			}.bind(this))
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to create file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to create file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -478,7 +480,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 		let fileName = select.value;
 
 		if (!fileName) {
-			ui.addNotification(null, E('p', {}, _('Please select a file to delete')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please select a file to delete') ]), 'warning');
 			return;
 		}
 
@@ -490,9 +492,9 @@ let ussdCodesManagerDialog = baseclass.extend({
 
 		fs.exec(USERFILES, ufFile('rm', filePath))
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File deleted successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File deleted successfully') ]), 5000, 'info');
 				
-				let option = select.querySelector('option[value="' + fileName + '"]');
+				let option = Array.prototype.find.call(select.options, function(o) { return o.value === fileName; });
 				if (option) {
 					option.remove();
 				}
@@ -506,7 +508,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 				}
 			}.bind(this))
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to delete file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to delete file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -518,7 +520,7 @@ let ussdCodesManagerDialog = baseclass.extend({
 		let self = this;
 		fs.exec(USERFILES, ['rmall', ufKind(this.baseDir)])
 			.then(function() {
-				popTimeout(null, E('p', {}, _('All files deleted successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('All files deleted successfully') ]), 5000, 'info');
 
 				let select = document.getElementById('ussd_file_select');
 				if (select) {
@@ -534,13 +536,13 @@ let ussdCodesManagerDialog = baseclass.extend({
 				}
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to delete files') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to delete files') + ': ' + e.message ]), 'error');
 			});
 	},
 
 	saveFile: function() {
 		if (!this.currentFile) {
-			ui.addNotification(null, E('p', {}, _('Please select or create a file first')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please select or create a file first') ]), 'warning');
 			return;
 		}
 
@@ -550,10 +552,10 @@ let ussdCodesManagerDialog = baseclass.extend({
 
 		fs.write(filePath, content)
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File saved successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File saved successfully') ]), 5000, 'info');
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to save file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to save file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -629,7 +631,7 @@ let atCommandsManagerDialog = baseclass.extend({
 								}
 							}, [
 								E('option', {'value': ''}, _('-- Select file --'))
-							].concat(data.files.map(f => E('option', {'value': f}, f))))
+							].concat(data.files.map(f => E('option', {'value': f}, [ f ]))))
 						])
 					]),
 					E('div', {'class': 'cbi-value'}, [
@@ -682,7 +684,7 @@ let atCommandsManagerDialog = baseclass.extend({
 					'wrap': 'off',
 					'spellcheck': 'false',
 					'placeholder': _('Select or create a file to edit...')
-				}, data.content),
+				}, [ data.content ]),
 
 				E('div', {'style': 'display: flex; justify-content: space-between; align-items: center; margin-top: 10px;'}, [
 					E('div', {}, [
@@ -714,7 +716,7 @@ let atCommandsManagerDialog = baseclass.extend({
 												let targetPath = self.baseDir + '/' + fileName;
 												fs.write(targetPath, content)
 													.then(function() {
-														popTimeout(null, E('p', {}, _('File uploaded and saved to') + ' ' + targetPath), 5000, 'info');
+														popTimeout(null, E('p', {}, [ _('File uploaded and saved to') + ' ' + targetPath ]), 5000, 'info');
 														self.currentFile = fileName;
 														return self.loadFileList();
 													})
@@ -737,7 +739,7 @@ let atCommandsManagerDialog = baseclass.extend({
 														if (textarea) textarea.value = savedContent;
 													})
 													.catch(function(e) {
-														ui.addNotification(null, E('p', {}, _('Unable to upload file') + ': ' + e.message), 'error');
+														ui.addNotification(null, E('p', {}, [ _('Unable to upload file') + ': ' + e.message ]), 'error');
 													});
 											};
 											reader.readAsText(file);
@@ -760,11 +762,11 @@ let atCommandsManagerDialog = baseclass.extend({
 												return fs.exec(USERFILES, ['import', ufKind(self.baseDir)]);
 											}).then(function(res) {
 												if (res.code !== 0) {
-													ui.addNotification(null, E('p', {}, _('Failed to extract archive') + ': ' + (res.stderr || '')), 'error');
+													ui.addNotification(null, E('p', {}, [ _('Failed to extract archive') + ': ' + (res.stderr || '') ]), 'error');
 													return;
 												}
 												return fs.remove(tmpPath).then(function() {
-													popTimeout(null, E('p', {}, _('Archive extracted to') + ' ' + self.baseDir), 5000, 'info');
+													popTimeout(null, E('p', {}, [ _('Archive extracted to') + ' ' + self.baseDir ]), 5000, 'info');
 													return self.loadFileList();
 												}).then(function(files) {
 													let select = document.getElementById('at_file_select');
@@ -779,14 +781,14 @@ let atCommandsManagerDialog = baseclass.extend({
 													}
 												});
 											}).catch(function(e) {
-												ui.addNotification(null, E('p', {}, _('Upload error') + ': ' + e.message), 'error');
+												ui.addNotification(null, E('p', {}, [ _('Upload error') + ': ' + e.message ]), 'error');
 											});
 									} else if (name === '_save_gz') {
 										let tmpGz = '/tmp/5gmodem/atcmmds.tar.gz';
 										fs.exec(USERFILES, ['export', ufKind(self.baseDir)])
 											.then(function(res) {
 												if (res.code !== 0) {
-													ui.addNotification(null, E('p', {}, _('Failed to create archive') + ': ' + (res.stderr || '')), 'error');
+													ui.addNotification(null, E('p', {}, [ _('Failed to create archive') + ': ' + (res.stderr || '') ]), 'error');
 													return;
 												}
 												return L.resolveDefault(fs.read_direct(tmpGz, 'blob'), null).then(function(blob) {
@@ -797,12 +799,12 @@ let atCommandsManagerDialog = baseclass.extend({
 														link.click();
 														URL.revokeObjectURL(link.href);
 													} else {
-														ui.addNotification(null, E('p', {}, _('Failed to read archive')), 'error');
+														ui.addNotification(null, E('p', {}, [ _('Failed to read archive') ]), 'error');
 													}
 													return fs.remove(tmpGz);
 												});
 											}).catch(function(e) {
-												ui.addNotification(null, E('p', {}, _('Error') + ': ' + e.message), 'error');
+												ui.addNotification(null, E('p', {}, [ _('Error') + ': ' + e.message ]), 'error');
 											});
 									}
 								},
@@ -834,16 +836,18 @@ let atCommandsManagerDialog = baseclass.extend({
 	},
 
 	loadFileContent: function(fileName) {
+		let self = this;
 		let filePath = this.baseDir + '/' + fileName;
 		fs.read(filePath)
 			.then(function(content) {
+				if (self.currentFile !== fileName) { return; }
 				let textarea = document.getElementById('at_modal_editor');
 				if (textarea) {
 					textarea.value = content || '';
 				}
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to load file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to load file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -852,7 +856,7 @@ let atCommandsManagerDialog = baseclass.extend({
 		let fileName = input.value.trim();
 
 		if (!fileName) {
-			ui.addNotification(null, E('p', {}, _('Please enter a file name')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please enter a file name') ]), 'warning');
 			return;
 		}
 
@@ -870,12 +874,12 @@ let atCommandsManagerDialog = baseclass.extend({
 				return fs.exec(USERFILES, ufFile('chmod', filePath));
 			})
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File created successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File created successfully') ]), 5000, 'info');
 				this.currentFile = fileName;
 				input.value = '';
 				
 				let select = document.getElementById('at_file_select');
-				let option = E('option', {'value': fileName, 'selected': 'selected'}, fileName);
+				let option = E('option', {'value': fileName, 'selected': 'selected'}, [ fileName ]);
 				select.appendChild(option);
 				select.value = fileName;
 				
@@ -886,7 +890,7 @@ let atCommandsManagerDialog = baseclass.extend({
 				}
 			}.bind(this))
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to create file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to create file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -895,7 +899,7 @@ let atCommandsManagerDialog = baseclass.extend({
 		let fileName = select.value;
 
 		if (!fileName) {
-			ui.addNotification(null, E('p', {}, _('Please select a file to delete')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please select a file to delete') ]), 'warning');
 			return;
 		}
 
@@ -907,9 +911,9 @@ let atCommandsManagerDialog = baseclass.extend({
 
 		fs.exec(USERFILES, ufFile('rm', filePath))
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File deleted successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File deleted successfully') ]), 5000, 'info');
 				
-				let option = select.querySelector('option[value="' + fileName + '"]');
+				let option = Array.prototype.find.call(select.options, function(o) { return o.value === fileName; });
 				if (option) {
 					option.remove();
 				}
@@ -923,7 +927,7 @@ let atCommandsManagerDialog = baseclass.extend({
 				}
 			}.bind(this))
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to delete file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to delete file') + ': ' + e.message ]), 'error');
 			});
 	},
 
@@ -935,7 +939,7 @@ let atCommandsManagerDialog = baseclass.extend({
 		let self = this;
 		fs.exec(USERFILES, ['rmall', ufKind(this.baseDir)])
 			.then(function() {
-				popTimeout(null, E('p', {}, _('All files deleted successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('All files deleted successfully') ]), 5000, 'info');
 
 				let select = document.getElementById('at_file_select');
 				if (select) {
@@ -951,13 +955,13 @@ let atCommandsManagerDialog = baseclass.extend({
 				}
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to delete files') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to delete files') + ': ' + e.message ]), 'error');
 			});
 	},
 
 	saveFile: function() {
 		if (!this.currentFile) {
-			ui.addNotification(null, E('p', {}, _('Please select or create a file first')), 'warning');
+			ui.addNotification(null, E('p', {}, [ _('Please select or create a file first') ]), 'warning');
 			return;
 		}
 
@@ -967,10 +971,10 @@ let atCommandsManagerDialog = baseclass.extend({
 
 		fs.write(filePath, content)
 			.then(function() {
-				popTimeout(null, E('p', {}, _('File saved successfully')), 5000, 'info');
+				popTimeout(null, E('p', {}, [ _('File saved successfully') ]), 5000, 'info');
 			})
 			.catch(function(e) {
-				ui.addNotification(null, E('p', {}, _('Unable to save file') + ': ' + e.message), 'error');
+				ui.addNotification(null, E('p', {}, [ _('Unable to save file') + ': ' + e.message ]), 'error');
 			});
 	},
 
