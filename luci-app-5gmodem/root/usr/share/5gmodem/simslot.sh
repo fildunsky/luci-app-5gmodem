@@ -322,6 +322,7 @@ _at_slot_set() {   # $1 - целевой слот (1..N); 0 = переключе
 	  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
 	) >/dev/null 2>&1 </dev/null &
 	echo '{"result":"ok"}'
+	sleep 1
 	return 0
 }
 
@@ -635,6 +636,7 @@ if [ "$_VIA" = simdet ]; then
 		  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
 		) >/dev/null 2>&1 </dev/null &
 		echo '{"result":"ok"}'
+		sleep 1
 		exit 0
 	fi
 	if [ -n "$_sd_at" ]; then
@@ -738,6 +740,7 @@ if [ "$_VIA" = qmi ]; then
 			  [ -n "$_IF" ] && { ifdown "$_IF"; sleep 2; ifup "$_IF"; }
 			) >/dev/null 2>&1 </dev/null &
 			echo '{"result":"ok"}'
+			sleep 1
 		else
 			echo '{"error":"switch failed"}'
 		fi
@@ -1009,6 +1012,7 @@ if [ "$_VIA" = uims ]; then
 			rm -f "/tmp/5gmodem/slots_$_AP" "/tmp/5gmodem/slots_$_AP.t"
 			( slot_redial ) >/dev/null 2>&1 </dev/null &
 			echo '{"result":"ok"}'
+			sleep 1
 		fi
 		;;
 	*)
@@ -1072,6 +1076,7 @@ if [ "$_VIA" = quimslot ]; then
 		# fds отвязаны ОТ ПОДОБОЛОЧКИ - см. пояснение у ветки ниже.
 		( slot_redial ) >/dev/null 2>&1 </dev/null &
 		echo '{"result":"ok"}'
+		sleep 1
 		;;
 	*)
 		_qi_act=$(_qi_read)
@@ -1138,6 +1143,7 @@ set)
 		# ожидания модема, и XHR из UI упадёт по таймауту (см. reboot_modem.sh).
 		( slot_redial ) >/dev/null 2>&1 </dev/null &
 		echo '{"result":"ok"}'
+		sleep 1
 	fi
 	;;
 *)

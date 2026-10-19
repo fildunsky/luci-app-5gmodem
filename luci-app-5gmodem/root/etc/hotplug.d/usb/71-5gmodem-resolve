@@ -62,6 +62,6 @@ touch /tmp/5gmodem/resolve.pending
 		# переподключения (номера tty сдвигаются, старое значение указывает в никуда).
 		/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
 	done
-) 9>/tmp/5gmodem/resolve.lock &
+) 9>/tmp/5gmodem/resolve.lock >/dev/null 2>&1 </dev/null &
 
 exit 0

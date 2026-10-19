@@ -145,6 +145,7 @@ reconnect)
 	_ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
 	[ -n "$_ifn" ] || exit 0
 	( ifdown "$_ifn"; sleep 2; ifup "$_ifn" ) >/dev/null 2>&1 </dev/null &
+	sleep 1
 	;;
 # applyset - мгновенные Настройки: страница сохраняет без кнопки «Применить».
 # Staged-дельты rpcd лежат в общем /tmp/.uci (uci -c не песочница), поэтому
@@ -169,6 +170,7 @@ applyset)
 	# восьми секунд - ровно столько, чтобы человек решил, что настройка не
 	# сработала, и полез щёлкать снова.
 	rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
+	sleep 1
 	;;
 # menuflush - сбросить кэш дерева меню LuCI (/tmp/luci-indexcache*). Нужно после
 # смены галочек, которые гейтят вкладки через menu.d depends.uci (align_enabled):

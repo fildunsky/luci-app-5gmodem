@@ -361,8 +361,8 @@ if [ -n "$POLL_MODEM" ]; then
 			# расхождение, отвечал not_active, страница перезагружалась и
 			# строилась по активному. Так «обе вкладки показывали один модем»
 			# (31.07.2026, Compal+Telit). sysfs детерминирован: воткнут - есть.
-			if "$RES/registry.sh" paths 2>/dev/null | grep -qx "$POLL_MODEM" \
-			   || [ -d "/sys/bus/usb/devices/$POLL_MODEM" ]; then
+			if [ -d "/sys/bus/usb/devices/$POLL_MODEM" ] \
+			   || "$RES/registry.sh" paths 2>/dev/null | grep -qx "$POLL_MODEM"; then
 				_POLL_AM="$POLL_MODEM"
 				_PINNED=1
 			fi
@@ -439,8 +439,11 @@ serve_cache() {
 	case "$_sc_al" in
 		*\\*|*\"*) _sc_al=$(printf '%s' "$_sc_al" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g') ;;
 	esac
+	case "$_sc_al" in
+		*[\&\|\\]*) _sc_al=$(printf '%s' "$_sc_al" | sed 's/[&|\\]/\\&/g') ;;
+	esac
 	sed -e "s/\"age\":\"[0-9]*\"/\"age\":\"$_a\"/" \
-		-e "s|^\"alias\":\".*\",$|\"alias\":\"$(printf '%s' "$_sc_al" | sed 's/[&|\\]/\\&/g')\",|" \
+		-e "s|^\"alias\":\".*\",$|\"alias\":\"$_sc_al\",|" \
 		"$CACHE" 2>/dev/null || cat "$CACHE"
 }
 
@@ -448,7 +451,8 @@ _snapshot_age() {   # возраст снимка в секундах, либо 
 	[ -s "$CACHE" ] || return 1
 	# Владельца проверять НЕ НУЖНО: файл снимка назван по пути активного модема
 	# (_MKEY), значит это по определению снимок ИМЕННО текущего модема.
-	_n=$(uptime_s); _t=$(cat "$STAMP" 2>/dev/null)
+	IFS=' ' read -r _n _ < /proc/uptime; _n="${_n%%.*}"
+	_t=""; read -r _t 2>/dev/null < "$STAMP"
 	case "$_t" in ''|*[!0-9]*) return 1 ;; esac
 	_a=$((_n - _t)); [ "$_a" -ge 0 ] || return 1
 	printf '%s' "$_a"
@@ -494,6 +498,7 @@ export QMI_TARGET_PATH="$_POLL_AM"
 _hl_at=$(uci -q get "5gmodem.$_hl_sec.at_port")
 [ -n "$_hl_at" ] && [ -c "$_hl_at" ] && _hl_at="yes" || _hl_at=""
 hl_web_metrics "$_hl_sec" && _hl_at=""
+_hl_kind=$(uci -q get "5gmodem.$_hl_sec.kind")
 
 # АДРЕСНЫЙ ЗАПРОС: for=<usb-путь> - «метрики ИМЕННО ЭТОГО модема».
 #
@@ -553,7 +558,7 @@ fi
 # не дожидаясь опроса. Возраст 9999 - снимок есть, а штамп потерян (ребут):
 # пусть фронт видит, что данные древние.
 if [ "$1" = "peek" ]; then
-	if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
+	if [ "$_hl_kind" = "hilink" ] && [ -z "$_hl_at" ]; then
 		[ -s "/tmp/5gmodem/hilink_metrics_$_MKEY" ] && cat "/tmp/5gmodem/hilink_metrics_$_MKEY" || echo '{}'
 		exit 0
 	fi
@@ -564,7 +569,7 @@ if [ "$1" = "peek" ]; then
 fi
 
 if [ -n "$_POLL_AM" ] \
-   && { is_iphone "$_POLL_AM" || { [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = tether ] && ! known_modem_path "$_POLL_AM"; }; }; then
+   && { is_iphone "$_POLL_AM" || { [ "$_hl_kind" = tether ] && ! known_modem_path "$_POLL_AM"; }; }; then
 	if [ "$(_active_onbus)" != 1 ]; then
 		printf '{"error":"Device not found","onbus":"0","path":"%s","tether":"%s","tether_state":"gone"}\n' \
 			"$_POLL_AM" "$(tether_os "$_POLL_AM")"
@@ -604,7 +609,7 @@ if [ -f "/var/run/5gmodem-mm-inhibit/${_POLL_AM}.pause" ]; then
 	exit 0
 fi
 
-if [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = "hilink" ] && [ -z "$_hl_at" ]; then
+if [ "$_hl_kind" = "hilink" ] && [ -z "$_hl_at" ]; then
 	# Кэш у этого пути свой: запрос по HTTP дешевле AT-опроса, но дёргать модем
 	# на каждый чих всё равно не стоит - страница опрашивает метрики раз в 2 c.
 	_hl_cache="/tmp/5gmodem/hilink_metrics_$_MKEY"
@@ -862,7 +867,8 @@ if [ -n "$DEVICE" ]; then
 		_pok=1
 	fi
 fi
-[ -n "$DEVICE" ] && [ -z "$_pok" ] && [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" != "1" ] \
+_hl_noat=$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)
+[ -n "$DEVICE" ] && [ -z "$_pok" ] && [ "$_hl_noat" != "1" ] \
 	&& ! "$RES/atprobe.sh" "$DEVICE" && DEVICE=""
 if [ -z "$DEVICE" ]; then
 	# Порт не ответил на atprobe. Это ЧАСТО ЛОЖНО: порт на миг занят/медленный
@@ -877,7 +883,7 @@ if [ -z "$DEVICE" ]; then
 	# наполнит карточку. Иначе весь блок Модем висел бы на плейсхолдерах.
 	_amp0_if=$(uci -q get "5gmodem.$_hl_sec.network")
 	if [ "$(uci -q get "network.$_amp0_if.proto" 2>/dev/null)" != modemmanager ] \
-	   && ! { [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" = "1" ] && [ "$(_active_onbus)" = 1 ]; } \
+	   && ! { [ "$_hl_noat" = "1" ] && [ "$(_active_onbus)" = 1 ]; } \
 	   && ! mm_owns_path "$_POLL_AM"; then
 		# САМОЛЕЧЕНИЕ: АКТИВНОГО НЕТ В СПИСКЕ МОДЕМОВ - ЗОВЁМ resolve.
 		#
@@ -946,6 +952,10 @@ _st_ident_cmd() {   # $*: аргументы вызова -> печатает и
 	case " $* " in *" at "*) : ;; *) return 0 ;; esac
 	eval "_stq=\${$#}"
 	case "$_stq" in *";"*|*"@"*) return 0 ;; esac
+	case "$_stq" in
+		*[Gg][Mm][IiMmRr]*|*[Gg][Ss][Nn]*|*[Ii][Mm][Ii]*|*[Cc][Ii][Dd]*|*[Gg][Tt][Pp][Kk][Gg]*) : ;;
+		*) return 0 ;;
+	esac
 	_stn_c=$(printf '%s' "$_stq" | tr 'a-z' 'A-Z' | sed 's/^AT//; s/^[+#]//; s/[? ]*$//')
 	case "$_stn_c" in
 		CGMI|GMI|CGMM|GMM|CGMR|GMR|CGSN|GSN|CIMI|CCID|ICCID|QCCID|GTPKGVER)
@@ -988,13 +998,15 @@ _st_static_ok() {   # $1 - файл ответа
 	return 0
 }
 _st_n=0
+if (sleep 0.0) 2>/dev/null; then _sts=0.05; else _sts=1; fi
 sms_tool() {
 	# Нет AT-порта (modemmanager-модем: им рулит MM, detect.sh для него молчит) ->
 	# AT-вызовы бессмысленны и опасны (пустой -d ломает разбор аргументов). No-op;
 	# метрики такого модема берутся из mmcli (см. блок ниже по коду).
 	[ -n "$DEVICE" ] || return 0
-	_stc=$(_st_static_key "$@")
 	_sti=$(_st_ident_cmd "$@")
+	_stc=""
+	[ -n "$STATIC_CACHE" ] && [ -n "$_sti" ] && _stc="${STATIC_CACHE}_cmd_$_sti"
 	if [ -n "$_stc" ] && [ -s "$_stc" ]; then
 		_st_drop_ok < "$_stc"
 		return 0
@@ -1007,7 +1019,6 @@ sms_tool() {
 	# первый холодный опрос 1 c, каждый следующий 8-9 c).
 	/usr/bin/sms_tool "$@" > "$_stf" 2>/dev/null 8>&- 9>&- &
 	_stp=$!
-	( exec 8>&- 9>&-; sleep 8; kill "$_stp" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _stk=$!
 	# НЕ голый wait - ровно тот же класс, что вылечен в atprobe.sh: порт, повесивший
 	# sms_tool в D-state, не берёт kill сторожа, и wait ждал бы ВЕЧНО. А обёртку за
 	# один опрос зовут десятки раз, так что зависал весь вызов: rpcd рубит его на
@@ -1019,13 +1030,15 @@ sms_tool() {
 	# десятке AT-запросов за опрос это разница между четвертью секунды и двумя.
 	# Дробный sleep есть не во всех busybox: проба sleep 0.0 валидна только на
 	# FANCY_SLEEP, без него шаг - целая секунда с пересчётом потолка (аудит 12.09.2026).
-	if (sleep 0.0) 2>/dev/null; then _sts=0.05; _stmax=200; else _sts=1; _stmax=10; fi
-	_stw=0
-	while kill -0 "$_stp" 2>/dev/null && [ "$_stw" -lt "$_stmax" ]; do
-		_stw=$((_stw + 1)); sleep "$_sts"
+	IFS=' ' read -r _stu _ < /proc/uptime; _st0="${_stu%.*}${_stu#*.}"
+	_stkd=""
+	while kill -0 "$_stp" 2>/dev/null; do
+		sleep "$_sts"
+		IFS=' ' read -r _stu _ < /proc/uptime; _stw=$(( ${_stu%.*}${_stu#*.} - _st0 ))
+		[ "$_stw" -ge 1000 ] && break
+		[ -z "$_stkd" ] && [ "$_stw" -ge 800 ] && { kill "$_stp" 2>/dev/null; _stkd=1; }
 	done
 	kill -0 "$_stp" 2>/dev/null || wait "$_stp" 2>/dev/null
-	kill "$_stk" 2>/dev/null; wait "$_stk" 2>/dev/null
 	_stp=""; _stk=""
 	if [ -n "$_stc" ] && _st_static_ok "$_stf"; then
 		# tmp+mv: конкурирующий читатель кэша не должен увидеть полфайла
@@ -1046,7 +1059,7 @@ sms_tool() {
 # полный запрет AT-опроса для хрупких прошивок.
 _MM_OWNS=""
 _SN_NOAT=""
-if [ "$(uci -q get "5gmodem.$_hl_sec.no_at" 2>/dev/null)" = "1" ]; then
+if [ "$_hl_noat" = "1" ]; then
 	_MM_OWNS=1
 	_SN_NOAT=1
 	DEVICE=""
@@ -1150,22 +1163,23 @@ getpath() {
 
 # --- modemdefine - WAN config ---
 CONFIG=modemdefine
-MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
-if [[ $MODEMZ -gt 1 ]]; then
+MODEMZ=0
+[ -f /etc/config/$CONFIG ] && MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
+if [ "$MODEMZ" -gt 1 ]; then
 	SEC=$(uci -q get modemdefine.@general[0].main_network)
 fi
-if [[ $MODEMZ -eq 0 ]]; then
+if [ "$MODEMZ" -eq 0 ]; then
 	# Интерфейс берём У СЕКЦИИ АКТИВНОГО МОДЕМА, а глобальный ключ - только
 	# запасной путь. Эти два значения могут разойтись (глобальный обновляет
 	# switch, но не всякий, кто трогает active_modem), и тогда метрики показывали
 	# IP ЧУЖОГО модема: наблюдалось - активен FM350, а в карточке его адрес
 	# 192.168.43.2 от соседнего Huawei.
-	SEC=$(uci -q get "5gmodem.$(secname "$_POLL_AM").network")
+	SEC=$(uci -q get "5gmodem.$_hl_sec.network")
 	# Откат на глобальный интерфейс - ТОЛЬКО без пиновки: глобальный ключ описывает
 	# активный модем, и подставлять его цели нельзя (см. POLL_MODEM выше).
 	[ -n "$SEC" ] || [ -n "$_PINNED" ] || SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
 fi
-if [[ $MODEMZ -eq 1 ]]; then
+if [ "$MODEMZ" -eq 1 ]; then
 	SEC=$(uci -q get modemdefine.@modemdefine[0].network)
 fi
 
@@ -1217,6 +1231,7 @@ TX="-"
 # Один вызов ifstatus на интерфейс (раньше его дёргали ~6 раз - каждый
 # отдельный ubus-запрос ~0.5с = основной тормоз опроса). Парсим всё отсюда.
 SECSTATUS=$(ifstatus "$SEC" 2>/dev/null)
+_SECST_FOR="$SEC"
 NETUP=$(echo "$SECSTATUS" | grep "\"up\": true")
 if [ -n "$NETUP" ]; then
 
@@ -1299,10 +1314,21 @@ if [ -n "$TCOPS" ] && [ $(( ${#TCOPS} % 4 )) -eq 0 ] && echo "$TCOPS" | grep -qE
 fi
 [ "x$TCOPS" != "x" ] && { COPS="$TCOPS"; COPS_FROM_MODEM=1; }
 
+_MCC_K="-"; _MCC_N=""; _MCC_L=""
+_mcc_row() {
+	[ "$1" = "$_MCC_K" ] && return 0
+	_MCC_K="$1"; _MCC_N=""; _MCC_L=""
+	case "$1" in ''|*[!0-9]*) return 0 ;; esac
+	_mcc_r=$(awk -F';' -v c="$1" '$1 "" == c "" { n = n " " $3; if (!f) { l = $2; f = 1 } }
+		END { gsub(/[ \t\r\n]+/, " ", n); sub(/^ /, "", n); sub(/ $/, "", n); printf "%s;%s", l, n }' "$RES/mccmnc.dat" 2>/dev/null)
+	_MCC_L="${_mcc_r%%;*}"; _MCC_N="${_mcc_r#*;}"
+}
+
 if [ -z "$COPS" ]; then
 	if [ -n "$COPS_NUM" ]; then
-		COPS=$(awk -F[\;] '/^'$COPS_NUM';/ {print $3}' $RES/mccmnc.dat | xargs)
-		LOC=$(awk -F[\;] '/^'$COPS_NUM';/ {print $2}' $RES/mccmnc.dat)
+		_mcc_row "$COPS_NUM"
+		COPS="$_MCC_N"
+		LOC="$_MCC_L"
 	fi
 fi
 [ -z "$COPS" ] && COPS=$COPS_NUM
@@ -1348,8 +1374,9 @@ case "$COPS" in
         if [ "$COPS" = "$isp_num" ] || [ "$COPS" = "$isp_numws" ] || \
            [ "$COPS" = "$isp_rev" ] || [ "$COPS" = "$isp_revws" ]; then
             if [ -n "$isp" ]; then
-                COPS=$(awk -F[\;] '/^'"$isp"';/ {print $3}' $RES/mccmnc.dat | xargs)
-                LOC=$(awk -F[\;] '/^'"$isp"';/ {print $2}' $RES/mccmnc.dat)
+                _mcc_row "$isp"
+                COPS="$_MCC_N"
+                LOC="$_MCC_L"
             fi
         fi
 	;;
@@ -1371,22 +1398,24 @@ esac
 # IMSI уже в батче (+CIMI отдаёт его отдельной строкой из одних цифр).
 SIMID=$(echo "$O" | tr -d '\r' | grep -xE '[0-9]{14,16}' | head -1)
 
-OPCACHE="/tmp/5gmodem/operator"
+OPCACHE="/tmp/5gmodem/operator_$SIMID"
+_opc_v=""
+[ -n "$SIMID" ] && [ -f "$OPCACHE" ] && IFS= read -r _opc_v 2>/dev/null < "$OPCACHE"
 if [ -n "$COPS" ] && echo "$COPS" | grep -qE '^[0-9 ]+$'; then
 	CACHED=""
-	if [ -n "$SIMID" ] && [ -f "$OPCACHE" ] && [ "$(cut -f1 "$OPCACHE")" = "$SIMID" ]; then
-		CACHED=$(cut -f2- "$OPCACHE")
+	if [ -n "$SIMID" ]; then
+		CACHED="$_opc_v"
 	fi
 	if [ -n "$CACHED" ]; then
 		COPS="$CACHED"
 	elif [ -n "$COPS_NUM" ]; then
-		NAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
+		_mcc_row "$COPS_NUM"; NAME="$_MCC_N"
 		[ -n "$NAME" ] && COPS="$NAME"
 	fi
 elif [ "$COPS_FROM_MODEM" = "1" ] && [ -n "$SIMID" ] && [ -n "$COPS" ]; then
 	# запоминаем только имя, полученное от самого модема (не из mccmnc.dat),
 	# иначе кэш затёрся бы хост-сетью Tele2 при первом же мусорном чтении
-	printf '%s\t%s\n' "$SIMID" "$COPS" > "$OPCACHE"
+	[ "$_opc_v" = "$COPS" ] || printf '%s\n' "$COPS" > "$OPCACHE"
 fi
 
 # Имя оператора с SIM (EF_SPN, файл 6F46) - самое надёжное брендовое имя
@@ -1395,10 +1424,12 @@ fi
 # как на SIM записано настоящее "T-Mobile". Кэшируем по IMSI (не читаем CRSM
 # каждый раз, но при замене SIM перечитываем); если модем не умеет CRSM или
 # IMSI не прочитался - тихо пропускаем.
-SPNCACHE="/tmp/5gmodem/spn"
+SPNCACHE="/tmp/5gmodem/spn_$SIMID"
 SPN=""
-if [ -n "$SIMID" ] && [ -f "$SPNCACHE" ] && [ "$(cut -f1 "$SPNCACHE")" = "$SIMID" ]; then
-	SPN=$(cut -f2- "$SPNCACHE")
+if [ -n "$SIMID" ] && [ -s "$SPNCACHE" ]; then
+	IFS= read -r SPN 2>/dev/null < "$SPNCACHE"
+elif [ -n "$SIMID" ] && [ -f "$SPNCACHE.none" ] && [ -z "$(find "$SPNCACHE.none" -mmin +4 2>/dev/null)" ]; then
+	:
 else
 	# Ответ CRSM у разных модемов: с кавычками ("...") у Compal, БЕЗ кавычек у
 	# Telit LM960 (+CRSM: 144,0,00542D...). Убираем кавычки и берём hex после
@@ -1407,7 +1438,8 @@ else
 	# после запятых, и sed ниже (hex сразу за третьей запятой) без этого не
 	# матчился - SPN на FM350 всегда выходил пустым, и бренд/имя eSIM-профиля
 	# (напр. "GigSky") подменялся IMSI-фолбэком.
-	SPNHEX=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r" ' \
+	_spn_raw=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r" ')
+	SPNHEX=$(printf '%s\n' "$_spn_raw" \
 		| sed -n 's/.*+CRSM:[^,]*,[^,]*,\([0-9A-Fa-f][0-9A-Fa-f]*\).*/\1/p')
 	if [ -n "$SPNHEX" ]; then
 		# первый байт - условие отображения, пропускаем; далее имя (GSM7/ASCII)
@@ -1419,7 +1451,12 @@ else
 			v=$((0x$b))   # busybox ash не понимает 16#, используем 0x
 			[ "$v" -ge 32 ] && [ "$v" -lt 127 ] && printf "\\$(printf '%03o' "$v")"
 		done)
-		[ -n "$SPN" ] && [ -n "$SIMID" ] && printf '%s\t%s\n' "$SIMID" "$SPN" > "$SPNCACHE"
+		[ -n "$SPN" ] && [ -n "$SIMID" ] && printf '%s\n' "$SPN" > "$SPNCACHE"
+	fi
+	if [ -z "$SPN" ] && [ -n "$SIMID" ]; then
+		case "$_spn_raw" in
+			*+CRSM:*|*ERROR*) : > "$SPNCACHE.none" 2>/dev/null ;;
+		esac
 	fi
 fi
 # Определяем брендовое имя из SPN (если осмысленное). НЕ присваиваем COPS
@@ -1433,7 +1470,7 @@ if [ -n "$SPN" ] && ! echo "$SPN" | grep -qE '^[0-9 ]*$'; then
 	# ("beeline" -> "Beeline"). Если отличается - это MVNO, оставляем SPN
 	# ("T-Mobile" вместо хост-сети "Tele2").
 	MCCNAME=""
-	[ -n "$COPS_NUM" ] && MCCNAME=$(awk -F[\;] '/^'"$COPS_NUM"';/ {print $3}' "$RES/mccmnc.dat" | xargs)
+	[ -n "$COPS_NUM" ] && { _mcc_row "$COPS_NUM"; MCCNAME="$_MCC_N"; }
 	if [ -n "$MCCNAME" ] && [ "$(echo "$SPN" | tr 'A-Z' 'a-z')" = "$(echo "$MCCNAME" | tr 'A-Z' 'a-z')" ]; then
 		SPN_NAME="$MCCNAME"
 	else
@@ -1445,36 +1482,30 @@ fi
 # operator location from temporary config
 LOCATIONFILE=/tmp/5gmodem/location
 if [ -e "$LOCATIONFILE" ]; then
-	touch $LOCATIONFILE
-	LOC=$(cat $LOCATIONFILE)
+	LOC=""; IFS= read -r LOC 2>/dev/null < "$LOCATIONFILE"
 	if [ -n "$LOC" ]; then
-		LOC=$(cat $LOCATIONFILE)
-			if [[ $LOC == "-" ]]; then
-				rm $LOCATIONFILE
-				LOC=$(awk -F[\;] '/^'$COPS_NUM';/ {print $2}' $RES/mccmnc.dat)
-				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/5gmodem/location
-				fi
-			else
-				LOC=$(awk -F[\;] '/^'$COPS_NUM';/ {print $2}' $RES/mccmnc.dat)
-				if [ -n "$LOC" ]; then
-					echo "$LOC" > /tmp/5gmodem/location
-				fi
-			fi
+		_loc_prev="$LOC"
+		if [ "$LOC" = "-" ]; then
+			rm -f "$LOCATIONFILE"
+			_loc_prev=""
+		fi
+		_mcc_row "$COPS_NUM"; LOC="$_MCC_L"
+		if [ -n "$LOC" ] && [ "$LOC" != "$_loc_prev" ]; then
+			echo "$LOC" > /tmp/5gmodem/location
+		fi
 	fi
 else
 	case "$COPS_MCC$COPS_MNC" in
-    		*[!0-9]* | '')
-        	# Non-numeric characters or is blank
-        	;;
-    		*) 
-        		if [ -n "$LOC" ]; then
-            			LOC=$(awk -F[\;] '/^'"$COPS_MCC$COPS_MNC"';/ {print $2}' $RES/mccmnc.dat)
-            			echo "$LOC" > /tmp/5gmodem/location
-        		else
-            			echo "-" > /tmp/5gmodem/location
-        		fi
-        	;;
+		*[!0-9]* | '')
+			;;
+		*)
+			if [ -n "$LOC" ]; then
+				_mcc_row "$COPS_MCC$COPS_MNC"; LOC="$_MCC_L"
+				echo "$LOC" > /tmp/5gmodem/location
+			else
+				echo "-" > /tmp/5gmodem/location
+			fi
+			;;
 	esac
 fi
 
@@ -1622,7 +1653,7 @@ if echo "x$CONF_DEVICE" | grep -q "192.168."; then
 	# switch, но не всякий, кто трогает active_modem), и тогда метрики показывали
 	# IP ЧУЖОГО модема: наблюдалось - активен FM350, а в карточке его адрес
 	# 192.168.43.2 от соседнего Huawei.
-	SEC=$(uci -q get "5gmodem.$(secname "$_POLL_AM").network")
+	SEC=$(uci -q get "5gmodem.$_hl_sec.network")
 	# Откат на глобальный интерфейс - ТОЛЬКО без пиновки: глобальный ключ описывает
 	# активный модем, и подставлять его цели нельзя (см. POLL_MODEM выше).
 	[ -n "$SEC" ] || [ -n "$_PINNED" ] || SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
@@ -1888,7 +1919,7 @@ _snap_prepare() {
 	read -r _SN_VID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idVendor"
 	read -r _SN_PID 2>/dev/null < "/sys/bus/usb/devices/$_POLL_AM/idProduct"
 	_SN_VIDPID="$_SN_VID:$_SN_PID"
-	[ -n "$_SN_VID" ] || [ -z "$_POLL_AM" ] || _SN_VIDPID=$(uci -q get "5gmodem.$(secname "$_POLL_AM").vidpid")
+	[ -n "$_SN_VID" ] || [ -z "$_POLL_AM" ] || _SN_VIDPID=$(uci -q get "5gmodem.$_hl_sec.vidpid")
 
 	_SN_IFPROTO=$(uci -q get "network.$SEC.proto")
 	_SN_APN=$(uci -q get "network.$SEC.apn")
@@ -2684,7 +2715,7 @@ _at_ca_supplement() {
 _poll_chan_free() {
 	[ -n "$_POLL_AM" ] || return 0
 	[ "$_POLL_AM" = "$(_active_path)" ] && return 0
-	_pcf_if=$(uci -q get "5gmodem.$(secname "$_POLL_AM" 2>/dev/null).network" 2>/dev/null)
+	_pcf_if=$(uci -q get "5gmodem.$_hl_sec.network" 2>/dev/null)
 	[ -n "$_pcf_if" ] || return 0
 	proto_in direct "$(uci -q get "network.$_pcf_if.proto" 2>/dev/null)" || return 0
 	case "$(ubus call "network.interface.$_pcf_if" status 2>/dev/null)" in
@@ -2709,7 +2740,14 @@ _qmi_supplement() {
 	# мультимодеме: у модема без своего cdc-wdm (напр. FM350 в RNDIS) он подсовывал
 	# канал СОСЕДА, и соседние соты Telit писались в файл FM350. modemswitch.sh wdm
 	# и так отдаёт пусто для такого модема - нет своего wdm, QMI-дополнений нет.
-	_QS_WDM=$(/usr/share/5gmodem/modemswitch.sh wdm "$_POLL_AM" 2>/dev/null)
+	_QS_WDM=""
+	if [ -n "$_POLL_AM" ]; then
+		[ -n "$_own_rec" ] || _own_rec=$("$RES/listmodems.sh" 2>/dev/null)
+		for _qs_w in $(printf '%s' "$_own_rec" | jsonfilter -e "@[@.path=\"$_POLL_AM\"].wdm[*]" 2>/dev/null); do
+			case "$_qs_w" in /dev/wwan*at*) continue ;; esac
+			_QS_WDM="$_qs_w"; break
+		done
+	fi
 	[ -c "$_QS_WDM" ] || return 0
 
 	# КАНАЛ cdc-wdm ЧУЖОЙ, ЕСЛИ ИНТЕРФЕЙС НА proto=qmi.
@@ -2749,7 +2787,7 @@ _qmi_supplement() {
 	# и путь отдал бы новому модулю чужие цифры. Без известного IMEI просто
 	# пропускаем - он появится следующим опросом.
 	if [ -z "$MAXDL" ]; then
-		_QS_IM=$(uci -q get "5gmodem.$(secname "$_POLL_AM").imei" 2>/dev/null | tr -cd '0-9')
+		_QS_IM=$(uci -q get "5gmodem.$_hl_sec.imei" 2>/dev/null | tr -cd '0-9')
 		if [ -n "$_QS_IM" ]; then
 			_QS_MR="/tmp/5gmodem/maxrate_$_QS_IM"
 			if [ -s "$_QS_MR" ]; then
@@ -3113,7 +3151,11 @@ esac
 # modemmanager, qmi and plain static alike. ubus children are a fallback.
 # IP-блок читает СВЕЖИЙ статус интерфейса (SECSTATUS считается раньше, до
 # финализации SEC для некоторых конфигов, и мог быть для другого/пустого SEC).
-IFSTAT=$(ifstatus "$SEC" 2>/dev/null)
+if [ "$SEC" = "$_SECST_FOR" ]; then
+	IFSTAT="$SECSTATUS"
+else
+	IFSTAT=$(ifstatus "$SEC" 2>/dev/null)
+fi
 L3DEV=$(echo "$IFSTAT" | awk -F\" '/l3_device/ {print $4; exit}')
 IPADDR=""
 IPADDR6=""
@@ -3149,19 +3191,21 @@ IFPROTO=$(uci -q get "network.$SEC.proto")
 VISITED_COPS="$COPS"
 HOME_MCC=""; HOME_MNC=""; HOME_OP=""
 if [ -n "$SIMID" ] && [ "${#SIMID}" -ge 5 ]; then
-	HOME_MCC=$(printf '%s' "$SIMID" | cut -c1-3)
-	_hm3=$(printf '%s' "$SIMID" | cut -c4-6)
-	_hm2=$(printf '%s' "$SIMID" | cut -c4-5)
+	HOME_MCC="${SIMID:0:3}"
+	_hm3="${SIMID:3:3}"
+	_hm2="${SIMID:3:2}"
 	# MNC 2 или 3 цифры - пробуем 6-значный ключ, затем 5-значный.
-	if grep -q "^${HOME_MCC}${_hm3};" "$RES/mccmnc.dat" 2>/dev/null; then
-		HOME_MNC="$_hm3"
-	else
-		HOME_MNC="$_hm2"
-	fi
 	# tr -d '\r': mccmnc.dat в CRLF. Соседние чтения спасает `xargs`, а здесь его
 	# нет - и домашний оператор уезжал в карточку с возвратом каретки на конце.
-	HOME_OP=$(awk -F';' '$1=="'"${HOME_MCC}${HOME_MNC}"'"{print $3; exit}' "$RES/mccmnc.dat" \
-		| tr -d '\r')
+	_hm_r=$(awk -F';' -v a="${HOME_MCC}${_hm3}" -v b="${HOME_MCC}${_hm2}" '
+		$1 "" == a "" && !fa { fa = 1; na = $3 }
+		$1 "" == b "" && !fb { fb = 1; nb = $3 }
+		END { gsub(/\r/, "", na); gsub(/\r/, "", nb); if (fa) printf "3;%s", na; else printf "2;%s", nb }' "$RES/mccmnc.dat" 2>/dev/null)
+	case "$_hm_r" in
+		3\;*) HOME_MNC="$_hm3" ;;
+		*)    HOME_MNC="$_hm2" ;;
+	esac
+	HOME_OP="${_hm_r#?;}"
 fi
 # Имя из профиля eSIM (SPN) - высший приоритет, перебивает IMSI-фолбэк.
 [ -n "$SPN_NAME" ] && HOME_OP="$SPN_NAME"
@@ -3197,7 +3241,8 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 	# другой вкладки) в его снимок и кэш оператора уезжали данные активного -
 	# «оба модема показывают одного оператора» (issue #10 и живой стенд с
 	# Compal+Telit под MM). Путь опрашиваемого известен всегда - передаём его.
-	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
+	_MI="$_pf_mi"
+	[ -n "$_MI" ] || _MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
 	if [ -n "$_MI" ]; then
 		_MK=$(mmcli -m "$_MI" -K 2>/dev/null)
 		_mmv() { _v=$(printf '%s\n' "$_MK" | grep -F "$1 " | head -1 | sed 's/^[^:]*:[[:space:]]*//'); [ "$_v" = "--" ] && _v=""; printf '%s' "$_v"; }
@@ -3327,9 +3372,13 @@ if [ -z "$PHONE" ] && command -v mmcli >/dev/null 2>&1; then
 	# другой вкладки) в его снимок и кэш оператора уезжали данные активного -
 	# «оба модема показывают одного оператора» (issue #10 и живой стенд с
 	# Compal+Telit под MM). Путь опрашиваемого известен всегда - передаём его.
-	_MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
+	if [ -z "$_MI" ]; then
+		_MK=""
+		mm_owns_path "$_POLL_AM" && _MI=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_POLL_AM" 2>/dev/null)
+	fi
 	if [ -n "$_MI" ]; then
-		PHONE=$(mmcli -m "$_MI" -K 2>/dev/null \
+		[ -n "$_MK" ] || _MK=$(mmcli -m "$_MI" -K 2>/dev/null)
+		PHONE=$(printf '%s\n' "$_MK" \
 			| sed -n 's/^modem\.generic\.own-numbers[^:]*:[[:space:]]*//p' \
 			| tr -d ' ' | grep -E '^[+]?[0-9]{5,}$' | head -1)
 	fi
@@ -3353,7 +3402,8 @@ fi
 # сверка вендора ниже остаются) - это нормально: оно детерминированное, из
 # дескриптора, а если позже AT-чтение даст более точное - перезапишет.
 if [ -z "$MODEL" ] && [ -n "$_POLL_AM" ]; then
-	MODEL=$("$RES/listmodems.sh" 2>/dev/null \
+	[ -n "$_own_rec" ] || _own_rec=$("$RES/listmodems.sh" 2>/dev/null)
+	MODEL=$(printf '%s' "$_own_rec" \
 		| jsonfilter -e "@[@.path=\"$_POLL_AM\"].model" 2>/dev/null | head -1)
 fi
 
@@ -3361,7 +3411,7 @@ AMP_SEC=""
 # Из ЗАХВАЧЕННОГО значения (см. _POLL_AM выше), а не читаем active_modem заново -
 # иначе AMP_SEC мог бы указывать на другой модем, чем тот, что дал NR_IMEI.
 _amp="$_POLL_AM"
-[ -n "$_amp" ] && AMP_SEC=$(secname "$_amp")
+[ -n "$_amp" ] && AMP_SEC="$_hl_sec"
 # Валидаторы имени модели (_model_sane / _model_vendor_ok) переехали в lib.sh:
 # их использует и modemswitch.sh, дозаполняя модель НЕактивным модемам.
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] \
@@ -3375,8 +3425,9 @@ fi
 # в режиме USB-модема побыл активным, и опрос записал ему модель FM350.
 # Путь берём из $_POLL_AM: переменной AMP в этом файле нет вовсе (она живёт в
 # detect.sh/modemswitch.sh), поэтому гвард молча не срабатывал (аудит 12.09.2026).
+[ -z "$MODEL" ] || [ -z "$_POLL_AM" ] || [ -n "$_own_rec" ] || _own_rec=$("$RES/listmodems.sh" 2>/dev/null)
 if [ -n "$MODEL" ] && [ -n "$_POLL_AM" ] \
-   && ! "$RES/listmodems.sh" 2>/dev/null \
+   && ! printf '%s' "$_own_rec" \
 	| jsonfilter -e "@[@.path=\"$_POLL_AM\"].tty[0]" -e "@[@.path=\"$_POLL_AM\"].wdm[0]" 2>/dev/null \
 	| grep -q .; then
 	MODEL=""
@@ -3779,9 +3830,10 @@ if [ -s "$_TMP" ] && jsonfilter -i "$_TMP" -e '@.modem' >/dev/null 2>&1; then
 	case "$RSRP$RSRQ$SINR$RSSI" in
 		''|-|--|---|----) ;;
 		*)
-			_hv() { case "$1" in ''|*[!0-9.-]*) printf -- '-' ;; *) printf '%s' "$1" ;; esac; }
-			printf '%s %s %s %s %s %s %s %s\n' "$(uptime_s)" "$(_hv "$RSRP")" "$(_hv "$RSRQ")" \
-				"$(_hv "$SINR")" "$(_hv "$RSSI")" "$(_hv "$PCI")" "$(_hv "$EARFCN")" "${PBAND:--}" >> "$HIST" 2>/dev/null
+			_hv() { case "$1" in ''|*[!0-9.-]*) _hvo="$_hvo -" ;; *) _hvo="$_hvo $1" ;; esac; }
+			IFS=' ' read -r _hvo _ < /proc/uptime; _hvo="${_hvo%%.*}"
+			_hv "$RSRP"; _hv "$RSRQ"; _hv "$SINR"; _hv "$RSSI"; _hv "$PCI"; _hv "$EARFCN"
+			printf '%s %s\n' "$_hvo" "${PBAND:--}" >> "$HIST" 2>/dev/null
 			if [ "$(wc -l < "$HIST" 2>/dev/null)" -gt 260 ] 2>/dev/null; then
 				tail -n 240 "$HIST" > "$HIST.$$" 2>/dev/null && mv -f "$HIST.$$" "$HIST"
 			fi

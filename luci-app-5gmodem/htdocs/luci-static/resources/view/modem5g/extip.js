@@ -46,7 +46,8 @@ function tick() {
 			.then(function(out) {
 				var d = {};
 				try { d = JSON.parse(out || '{}'); } catch (e) { return; }
-				var st = scope(k);
+				var st = _scopes[k];
+				if (!st) { return; }
 				if ((d.ip || '') !== st.ip || (d.ip6 || '') !== st.ip6 || (d.cc || '') !== st.cc) {
 					changed = true;
 				}

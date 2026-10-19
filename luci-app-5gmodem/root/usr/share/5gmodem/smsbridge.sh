@@ -25,6 +25,11 @@
 RES=/usr/share/5gmodem
 CFG=5gmodem
 
+if [ "$1" = queue-run ]; then
+	for _qe in /etc/5gmodem/smsq/*.sms; do [ -f "$_qe" ] && break; _qe=""; done
+	[ -n "$_qe" ] || exit 0
+fi
+
 # utf8_fix: чиним latin1-байты sms_tool ОДИН раз, на выходе моста - см. ниже.
 . "$RES/lib.sh" 2>/dev/null
 
@@ -130,6 +135,12 @@ _via_mm() {
 	[ "$(uci -q get 5gmodem.sms.sms_via_mm)" = "1" ] \
 		&& [ -x /usr/share/5gmodem/sms_tool_mm ] && _active_is_mm
 }
+
+if [ "$1" = archive-run ] && [ "$(_active_kind)" != hilink ] && _via_mm \
+   && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; then
+	echo '{"result":"mm"}'
+	exit 0
+fi
 
 _smstool() {
 	if _via_mm; then
@@ -631,16 +642,12 @@ case "$1" in
 			exit 0
 		fi
 		printf '{"first":0,"keys":['
-		_n=0
-		while IFS= read -r _k; do
-			[ -n "$_k" ] || continue
-			[ "$_n" = 0 ] || printf ','
-			# КЛЮЧ ЭКРАНИРУЕМ. В нём имя отправителя, а буквенное имя с кавычкой
-			# или слэшем ломало ВЕСЬ JSON: страница и бот получали пустой список
-			# виденного и слали всё заново каждым кругом (аудит 12.09.2026).
-			_nd_jesc "$_k"
-			_n=$((_n+1))
-		done < "$_sf"
+		# КЛЮЧ ЭКРАНИРУЕМ. В нём имя отправителя, а буквенное имя с кавычкой
+		# или слэшем ломало ВЕСЬ JSON: страница и бот получали пустой список
+		# виденного и слали всё заново каждым кругом (аудит 12.09.2026).
+		tr -d '\r' < "$_sf" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | awk '
+			BEGIN { ORS = "" }
+			$0 != "" { if (n++) printf ","; printf "\"%s\"", $0 }'
 		printf ']}\n'
 		exit 0 ;;
 	seen-add)
@@ -1244,6 +1251,18 @@ _arch_dir() {
 	[ -n "$_ad" ] && echo "$SEEN_DIR/sms_arch.$_ad" || echo "$SEEN_DIR/sms_arch"
 }
 
+_nl_trim() {
+	eval "_ntr_v=\$$1"
+	while :; do
+		case "$_ntr_v" in
+			*"
+") _ntr_v=${_ntr_v%?} ;;
+			*) break ;;
+		esac
+	done
+	eval "$1=\$_ntr_v"
+}
+
 _arch_key() {   # $1 - отправитель, $2 - время, $3 - текст
 	printf '%s|%s|%s' "$1" "$2" "$3" | md5sum | cut -c1-16
 }
@@ -1333,14 +1352,13 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 	_amnext=$(_arch_next "$_amd")
 	_ami=0
 	while [ "$_ami" -lt "$_amn" ]; do
-		_amx=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].index" 2>/dev/null)
-		_ams=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].sender" 2>/dev/null)
-		_amt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].timestamp" 2>/dev/null)
-		_amc=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].content" 2>/dev/null)
-		_ampt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].part" 2>/dev/null)
-		_amtt=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].total" 2>/dev/null)
-		_amrf=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].reference" 2>/dev/null)
-		_amtz=$(printf '%s' "$_amj" | jsonfilter -e "@.msg[$_ami].tz" 2>/dev/null)
+		_amx=""; _ams=""; _amt=""; _amc=""; _ampt=""; _amtt=""; _amrf=""; _amtz=""
+		eval "$(printf '%s' "$_amj" | jsonfilter \
+			-e "_amx=@.msg[$_ami].index" -e "_ams=@.msg[$_ami].sender" \
+			-e "_amt=@.msg[$_ami].timestamp" -e "_amc=@.msg[$_ami].content" \
+			-e "_ampt=@.msg[$_ami].part" -e "_amtt=@.msg[$_ami].total" \
+			-e "_amrf=@.msg[$_ami].reference" -e "_amtz=@.msg[$_ami].tz" 2>/dev/null)"
+		_nl_trim _ams; _nl_trim _amt; _nl_trim _amc
 		_ami=$((_ami + 1))
 		# НЕРАЗОБРАННОЕ СООБЩЕНИЕ НЕ АРХИВИРУЕМ. sms_tool на битом PDU отдаёт
 		# запись с полем error и пустыми отправителем/текстом (воспроизведено на
@@ -1615,10 +1633,11 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 
 	_ap_i=0; _ap_del=0; _ap_stuck=0; _ap_late_n=0; _ap_kb=0
 	while [ "$_ap_i" -lt "$_apn" ]; do
-		_ap_x=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].index" 2>/dev/null)
-		_ap_s=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].sender" 2>/dev/null)
-		_ap_t=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].timestamp" 2>/dev/null)
-		_ap_c=$(printf '%s' "$1" | jsonfilter -e "@.msg[$_ap_i].content" 2>/dev/null)
+		_ap_x=""; _ap_s=""; _ap_t=""; _ap_c=""
+		eval "$(printf '%s' "$1" | jsonfilter \
+			-e "_ap_x=@.msg[$_ap_i].index" -e "_ap_s=@.msg[$_ap_i].sender" \
+			-e "_ap_t=@.msg[$_ap_i].timestamp" -e "_ap_c=@.msg[$_ap_i].content" 2>/dev/null)"
+		_nl_trim _ap_s; _nl_trim _ap_t; _nl_trim _ap_c
 		_ap_i=$((_ap_i + 1))
 		case "$_ap_x" in ''|*[!0-9]*) continue ;; esac
 		# Номер из диапазона архива - сообщения в модеме уже нет, удалять нечего.
@@ -1654,9 +1673,9 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 				_kb_feed_arch
 				_kb_build
 				_tg_migrate
-				for _ap_c in $_ap_chs; do
-					_kb_list_load "$(_list_file "$_ap_c")"
-					eval "_ap_L_$_ap_c=\$_KB_LIST"
+				for _ap_ch in $_ap_chs; do
+					_kb_list_load "$(_list_file "$_ap_ch")"
+					eval "_ap_L_$_ap_ch=\$_KB_LIST"
 				done
 				_ap_kb=1
 			fi
@@ -1664,8 +1683,8 @@ _arch_purge() {   # $1 - живой JSON от sms_tool
 			_ap_kn=""
 			case "$_ap_fn" in ''|*[!0-9]*) ;; *) eval "_ap_kn=\$_kb_ix$_ap_fn" ;; esac
 			if [ -n "$_ap_kn" ]; then
-				for _ap_c in $_ap_chs; do
-					eval "_KB_LIST=\$_ap_L_$_ap_c"
+				for _ap_ch in $_ap_chs; do
+					eval "_KB_LIST=\$_ap_L_$_ap_ch"
 					_kb_known "$_ap_kn" || { _ap_wait=1; break; }
 				done
 			else

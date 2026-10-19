@@ -717,7 +717,13 @@ stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/nul
 			sleep 3
 			continue
 		fi
-		_pid=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null | head -1)
+		_pid=""
+		if [ -n "$_last_pid" ]; then
+			_pc=""
+			read -r _pc 2>/dev/null < "/proc/$_last_pid/comm"
+			[ "$_pc" = ModemManager ] && _pid="$_last_pid"
+		fi
+		[ -n "$_pid" ] || _pid=$(pidof ModemManager 2>/dev/null)
 		if [ "$_pid" != "$_last_pid" ] || [ "$_n" -ge 5 ]; then
 			_last_pid="$_pid"
 			_n=0

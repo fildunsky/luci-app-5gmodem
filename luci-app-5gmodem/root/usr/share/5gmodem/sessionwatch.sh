@@ -167,7 +167,7 @@ _ctx_active() {
 #      бесконечно, мешая и себе, и соседям.
 COOLDOWN=180
 
-_now() { cut -d' ' -f1 /proc/uptime | cut -d. -f1; }
+_now() { IFS=' ' read -r _nw_u _ < /proc/uptime; printf '%s\n' "${_nw_u%%.*}"; }
 
 # КАРТА В ОТКАЗЕ - ПОДНИМАТЬ ИНТЕРФЕЙС НЕЛЬЗЯ, ЭТО КОРМИТ ПЕТЛЮ.
 #
@@ -642,7 +642,8 @@ warm_active() {
 # Закрыли страницу - маркер протухает за 15 c, сбор останавливается сам.
 # SW_BG=1 не даёт нашему же вызову продлевать маркер (иначе вечный цикл).
 _page_refresh() {
-	_pr_t=$(cat /tmp/5gmodem/page_active 2>/dev/null)
+	_pr_t=""
+	read -r _pr_t 2>/dev/null < /tmp/5gmodem/page_active
 	case "$_pr_t" in ''|*[!0-9]*) return 0 ;; esac
 	[ $(( $(_now) - _pr_t )) -lt 15 ] || return 0
 	_pr_ap=$(active_path)
@@ -905,6 +906,8 @@ case "$1" in
 			# обновляется этим циклом, но НЕ каждый круг: newdump ходит в AT-порт
 			# за списком, поэтому не чаще раза в 60 c (мгновенность тут не нужна).
 			# Пишем атомарно (.tmp + mv).
+			_sw_bgo=""
+			[ -n "$_REG_FLAT" ] && bg_at_off && _sw_bgo=1
 			_smw_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
 			_smw_prev=$(cat /tmp/5gmodem/sms_new.stamp 2>/dev/null)
 			case "$_smw_prev" in ''|*[!0-9]*) _smw_prev=0 ;; esac
@@ -912,7 +915,7 @@ case "$1" in
 			# запретом фонового AT (bg_at_off, lib.sh) не читаем никогда.
 			_smw_iv=$(uci -q get 5gmodem.sms.mirror_interval)
 			case "$_smw_iv" in ''|*[!0-9]*) _smw_iv=60 ;; esac
-			if [ -n "$_REG_FLAT" ] && [ "$_smw_iv" -gt 0 ] && ! bg_at_off \
+			if [ -n "$_REG_FLAT" ] && [ "$_smw_iv" -gt 0 ] && [ -z "$_sw_bgo" ] \
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
 				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
@@ -923,11 +926,11 @@ case "$1" in
 			# командами, - иначе сообщение с командой исчезло бы, ни разу не
 			# выполнившись. Выключено - выходит на первой строке.
 			if [ -n "$_REG_FLAT" ]; then
-			bg_at_off || "$RES/smscmd.sh" run >/dev/null 2>&1
+			[ -n "$_sw_bgo" ] || "$RES/smscmd.sh" run >/dev/null 2>&1
 			# СЛИВ В ПАМЯТЬ РОУТЕРА. Здесь же и последний шаг разбора входящих:
 			# перенести в архив и освободить слоты модема (у FM350 их всего
 			# десять - см. _arch_purge). Выключено - выходит на первой строке.
-			bg_at_off || "$RES/smsbridge.sh" archive-run >/dev/null 2>&1
+			[ -n "$_sw_bgo" ] || "$RES/smsbridge.sh" archive-run >/dev/null 2>&1
 			# ОСТАЛЬНЫЕ МОДЕМЫ - ТОЖЕ, но раз в пять минут. Слив ходил только к
 			# активному, а сообщения приходят на каждую SIM: у человека с двумя
 			# модемами ящик неактивного заполнялся до отказа при включённой

@@ -63,10 +63,17 @@ gpio_export() {
 
 # Выход ставим записью high/low в direction: так уровень и направление
 # меняются одной операцией, без короткого нуля на ножке.
+_rd() {
+	_rd_v=""
+	read -r _rd_v 2>/dev/null < "$1"
+}
+
 gpio_out() {
 	gpio_export "$1" || return 1
-	if [ "$(cat "$SYSGPIO/gpio$1/direction" 2>/dev/null)" = "out" ]; then
-		[ "$(cat "$SYSGPIO/gpio$1/value" 2>/dev/null)" = "$2" ] && return 0
+	_rd "$SYSGPIO/gpio$1/direction"
+	if [ "$_rd_v" = "out" ]; then
+		_rd "$SYSGPIO/gpio$1/value"
+		[ "$_rd_v" = "$2" ] && return 0
 		echo "$2" > "$SYSGPIO/gpio$1/value" 2>/dev/null
 	else
 		[ "$2" = 1 ] && _go_l=high || _go_l=low
@@ -75,17 +82,21 @@ gpio_out() {
 }
 
 gpio_get() {
-	cat "$SYSGPIO/gpio$1/value" 2>/dev/null
+	_rd "$SYSGPIO/gpio$1/value"
+	printf '%s' "$_rd_v"
 }
 
 # Датчик: 0 - антенна есть, 1 - нет, пусто - прочитать нельзя (ножка занята
 # или не переведена в GPIO в DTS этой сборки).
 detect_read() {
 	gpio_export "$1" || return 0
-	[ "$(cat "$SYSGPIO/gpio$1/direction" 2>/dev/null)" = "in" ] \
+	_rd "$SYSGPIO/gpio$1/direction"
+	[ "$_rd_v" = "in" ] \
 		|| echo in > "$SYSGPIO/gpio$1/direction" 2>/dev/null
-	[ "$(cat "$SYSGPIO/gpio$1/direction" 2>/dev/null)" = "in" ] || return 0
-	case "$(gpio_get "$1")" in
+	_rd "$SYSGPIO/gpio$1/direction"
+	[ "$_rd_v" = "in" ] || return 0
+	_rd "$SYSGPIO/gpio$1/value"
+	case "$_rd_v" in
 		0) echo 0 ;;
 		1) echo 1 ;;
 	esac

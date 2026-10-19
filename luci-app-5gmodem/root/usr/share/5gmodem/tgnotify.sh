@@ -31,6 +31,9 @@ CFG=5gmodem
 _cfg() { uci -q get "$CFG.sms.$1" 2>/dev/null; }
 
 TG_EN=$(_cfg tg_enabled)
+if [ "$1" = tick ] && [ "$TG_EN" != 1 ]; then
+	[ "$(_cfg ntfy_enabled)" = 1 ] || [ "$(_cfg hook_enabled)" = 1 ] || exit 0
+fi
 TG_TOKEN=$(_cfg tg_token)
 TG_CHAT=$(_cfg tg_chat)
 TG_INT=$(_cfg tg_interval); case "$TG_INT" in ''|*[!0-9]*) TG_INT=60 ;; esac
@@ -205,7 +208,7 @@ _TG_DDEAD=/tmp/5gmodem/tg_direct_dead
 _tg_direct_dead() {
 	_td_t=$(cat "$_TG_DDEAD" 2>/dev/null)
 	case "$_td_t" in ''|*[!0-9]*) return 1 ;; esac
-	read -r _td_n _ < /proc/uptime; _td_n=${_td_n%%.*}
+	IFS=' ' read -r _td_n _ < /proc/uptime; _td_n=${_td_n%%.*}
 	[ $((_td_n - _td_t)) -lt 600 ]
 }
 
@@ -234,7 +237,7 @@ _tg_curl() {   # аргументы curl без -s/-m
 		case "$_tc_o" in
 			*'"ok":'*) rm -f "$_TG_DDEAD" 2>/dev/null; printf '%s' "$_tc_o"; return 0 ;;
 		esac
-		read -r _tc_n _ < /proc/uptime; printf '%s' "${_tc_n%%.*}" > "$_TG_DDEAD" 2>/dev/null
+		IFS=' ' read -r _tc_n _ < /proc/uptime; printf '%s' "${_tc_n%%.*}" > "$_TG_DDEAD" 2>/dev/null
 	fi
 	_tc_pp=$(_tg_proxy_port)
 	if [ -n "$_tc_pp" ] && [ "$_tc_pp" != "0" ]; then
@@ -323,7 +326,7 @@ tick() {
 	_tk_dead=""
 	# Свой предохранитель по времени: сторож зовёт нас каждые 30 c, а лезть в
 	# AT-порт за списком сообщений так часто незачем.
-	read -r _tk_now _ < /proc/uptime
+	IFS=' ' read -r _tk_now _ < /proc/uptime
 	_tk_now=${_tk_now%%.*}
 	_tk_prev=$(cat "$STAMP" 2>/dev/null)
 	case "$_tk_prev" in ''|*[!0-9]*) _tk_prev=0 ;; esac

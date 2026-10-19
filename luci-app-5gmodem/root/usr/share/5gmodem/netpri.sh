@@ -1996,9 +1996,9 @@ ping)
 			else
 				# без curl - хотя бы факт доступности (wget-spider) и грубое
 				# время по /proc/uptime (шаг 10 мс)
-				_t0=$(awk '{printf "%d", $1 * 100}' /proc/uptime)
+				_t0=$(awk '{printf "%.0f", $1 * 100}' /proc/uptime)
 				if wget -q --spider -T 4 "https://$_h/" 2>/dev/null; then
-					_t1=$(awk '{printf "%d", $1 * 100}' /proc/uptime)
+					_t1=$(awk '{printf "%.0f", $1 * 100}' /proc/uptime)
 					printf '{"ok":1,"ms":%s,"via":"http"}\n' "$(( (_t1 - _t0) * 10 ))"
 				else
 					echo '{"ok":0,"via":"http"}'

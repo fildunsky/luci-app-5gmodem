@@ -431,7 +431,7 @@ return view.extend({
 					'class': 'btn cbi-button esim-refresh',
 					/* Обновить рядом с EID справа. Без спиннера на кнопке (решение
 					   владельца): обратную связь даёт пометка «обновляется» у EID. */
-					'click': function(ev) { ev.preventDefault(); self.reload(); }
+					'click': function(ev) { ev.preventDefault(); self._reloadOnce(); }
 				}, [ _('Refresh') ]),
 			]));
 			body.appendChild(E('table', { 'class': 'table', 'id': 'esim-profiles' }, [
@@ -480,7 +480,7 @@ return view.extend({
 			   так что устаревший список после них сюда не попадёт. */
 			esimExec([ 'dump-cached' ]).then(function(d) { applyDump(d); });
 			// первичная загрузка данных eUICC
-			window.setTimeout(function() { self.reload(); }, 300);
+			window.setTimeout(function() { self._reloadOnce(); }, 300);
 		}
 	},
 
@@ -543,7 +543,7 @@ return view.extend({
 			'2':    _('Slot 2')
 		}, { id: 'esim-slot-sel', sort: [ 'auto', '1', '2' ] });
 		var slotSel = slotW.render();
-		fs.exec_direct(ESIM, [ 'getslot' ]).then(function(out) {
+		L.resolveDefault(fs.exec_direct(ESIM, [ 'getslot' ]), '').then(function(out) {
 			try { slotW.setValue(String(JSON.parse(out).slot || 'auto')); } catch (e) {}
 		});
 
@@ -673,6 +673,13 @@ return view.extend({
 		this._waitT0 = null;
 		var b = document.querySelector('.esim-wait');
 		if (b && b.parentNode) { b.parentNode.removeChild(b); }
+	},
+
+	_reloadOnce: function() {
+		var self = this;
+		if (self._reloadP) { return self._reloadP; }
+		self._reloadP = Promise.resolve(self.reload()).finally(function() { self._reloadP = null; });
+		return self._reloadP;
 	},
 
 	reload: function(tries) {

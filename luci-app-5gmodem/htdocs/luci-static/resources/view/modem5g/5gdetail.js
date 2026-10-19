@@ -355,12 +355,12 @@ function updateSmsEnvelope() {
 	if (!document.getElementById('smsenv')) { return; }
 	var _args = [ 'newcount' ];
 	if (pageModemPath) { _args.push('for=' + pageModemPath); }
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', _args), '').then(function(out) {
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', _args), '').then(forPage(function(out) {
 		var n = parseInt((out || '').replace(/[^0-9]/g, ''), 10);
 		var env = document.getElementById('smsenv');
 		if (!env) { return; }
 		env.style.display = (n > 0) ? '' : 'none';
-	});
+	}));
 }
 
 var slotsInflight = false;
@@ -2703,6 +2703,12 @@ function runDoctor(btn) {
 }
 
 
+function _escTxt(v) {
+	return String(v == null ? '' : v).replace(/[&<>"]/g, function(c) {
+		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+	});
+}
+
 function applyMetrics(json) {
 					/* СНИМОК ЧУЖОГО МОДЕМА НЕ ПРИМЕНЯЕМ.
 					   Метрики отдаёт активный модем из конфига, а страница
@@ -2953,7 +2959,7 @@ function applyMetrics(json) {
 							+ '<span class="tginfo-connstatus">' + _msg + '</span>';
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(_connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + mutil.localizeBytes(json.rx) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + mutil.localizeBytes(json.tx);
+						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(_connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + _escTxt(mutil.localizeBytes(json.rx)) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + _escTxt(mutil.localizeBytes(json.tx));
 						}
 					}
 

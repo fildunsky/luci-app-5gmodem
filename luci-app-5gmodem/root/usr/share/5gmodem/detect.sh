@@ -60,7 +60,8 @@ if [ -n "$_dt_am" ]; then
 fi
 
 CONFIG=modemdefine
-MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
+MODEMZ=0
+[ -f /etc/config/$CONFIG ] && MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
 if [ -n "$MODEMZ" ]; then
 
 	if [ "$MODEMZ" -eq 0 ]; then

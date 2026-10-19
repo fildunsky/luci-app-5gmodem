@@ -416,7 +416,17 @@ smsopt)
 		case "$_k" in
 			readport|sendport|ussdport|atport)
 				[ -z "$_v" ] || is_devpath "$_v" || continue ;;
-			sms_count|sms_count_index|information|mergesms|mergesms_auto)
+			sms_count|sms_count_index)
+				_okc=1
+				for _t in $_v; do
+					case "$_t" in
+						dfm[0-9]*_[0-9]*) case "${_t#dfm}" in *[!0-9_]*|*_*_*|_*|*_) _okc="" ;; esac ;;
+						*) is_num "$_t" || _okc="" ;;
+					esac
+				done
+				[ -n "$_okc" ] || continue
+				_v=$(echo $_v) ;;
+			information|mergesms|mergesms_auto)
 				[ -z "$_v" ] || is_num "$_v" || continue ;;
 			storage)
 				case "$_v" in *[!A-Za-z]*) continue ;; esac ;;

@@ -1107,6 +1107,12 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 			gsub(/\t/, " ", v); gsub(/\n/, " ", v)
 			return v
 		}
+		function xdec(v) {
+			gsub(/&lt;/, "<", v); gsub(/&gt;/, ">", v)
+			gsub(/&quot;/, "\"", v); gsub(/&apos;|&#39;/, "\047", v)
+			gsub(/&amp;/, "\\&", v)
+			return v
+		}
 		/<Message>/  { idx=""; ph=""; txt=""; dt=""; inc=0 }
 		/<Index>/    { v=$0; sub(/.*<Index>/, "", v); sub(/<\/Index>.*/, "", v); idx=v }
 		/<Phone>/    { v=$0; sub(/.*<Phone>/, "", v); sub(/<\/Phone>.*/, "", v); ph=v }
@@ -1125,7 +1131,7 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 		/<\/Message>/ {
 			if (idx == "" || idx ~ /[^0-9]/) next
 			if (!first) printf ",\n"; first = 0
-			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", idx, esc(ph), esc(dt), esc(txt)
+			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", idx, esc(xdec(ph)), esc(dt), esc(xdec(txt))
 		}
 		END { print "]}" }'
 }

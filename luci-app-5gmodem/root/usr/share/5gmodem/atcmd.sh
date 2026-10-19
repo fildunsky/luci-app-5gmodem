@@ -72,7 +72,13 @@ if [ "$_rc" = 2 ]; then
 	sms_tool -d "$PORT" at "$CMD" > "$_ac_o" 2>/dev/null &
 	_ac_p=$!
 	( sleep "$(( ${TMO:-8} + 1 ))"; kill "$_ac_p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _ac_k=$!
-	wait "$_ac_p" 2>/dev/null; kill "$_ac_k" 2>/dev/null; wait "$_ac_k" 2>/dev/null
+	sleep_tick_init
+	_ac_i=0; _ac_max=$(( (${TMO:-8} + 2) * _TICKS_PER_SEC ))
+	while kill -0 "$_ac_p" 2>/dev/null && [ "$_ac_i" -lt "$_ac_max" ]; do
+		_ac_i=$((_ac_i + 1)); sleep "$_SLEEP_TICK"
+	done
+	kill -0 "$_ac_p" 2>/dev/null || wait "$_ac_p" 2>/dev/null
+	kill "$_ac_k" 2>/dev/null; wait "$_ac_k" 2>/dev/null
 	tr -d '\r' < "$_ac_o"; rm -f "$_ac_o"
 fi
 exit 0
