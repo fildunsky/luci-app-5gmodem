@@ -956,7 +956,9 @@ if [ "$PROTO" = modemmanager ]; then
 		IDEV=$(dirname "$IDEV")
 	done
 	[ -f "$IDEV/idVendor" ] || IDEV=""
-	[ -n "$IDEV" ] || IDEV=$(soc_modem_node "$AMP")
+	if [ -z "$IDEV" ] && soc_modem_node "$AMP" >/dev/null; then
+		IDEV=qcom-soc
+	fi
 elif proto_in wdm "$PROTO"; then
 	# control channel over the cdc-wdm node
 	IDEV="$DEV"
