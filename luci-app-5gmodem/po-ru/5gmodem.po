@@ -5956,6 +5956,21 @@ msgstr "Уровень сигнала, оператор и SMS с телефон
 msgid "%s is connected but does not share internet. Turn on USB tethering on the phone."
 msgstr "%s подключён, но интернет не раздаёт. Включите на телефоне «USB-модем»."
 
+msgid "A router shares internet over USB."
+msgstr "Роутер раздаёт интернет по USB."
+
+msgid "This router got the address %s from it."
+msgstr "Этот роутер получил от него адрес %s."
+
+msgid "Open its admin page (%s)"
+msgstr "Открыть его админку (%s)"
+
+msgid "Signal, operator and SMS are managed on that router."
+msgstr "Сигнал, оператор и SMS доступны на самом этом роутере."
+
+msgid "A router is connected over USB but has not given an address yet."
+msgstr "Роутер подключён по USB, но адрес пока не выдал."
+
 msgid "iPhone shares internet over USB."
 msgstr "iPhone раздаёт интернет по USB."
 
@@ -5979,3 +5994,84 @@ msgstr "Этот модем не даёт роутеру менять диапа
 
 msgid "This modem does not let the router change bands. Only the network mode can be switched."
 msgstr "Этот модем не даёт роутеру менять диапазоны. Переключается только режим сети."
+
+msgid "Telemetry"
+msgstr "Телеметрия"
+
+msgid "A small JSON file with the modem signal, operator, band and traffic for a smart home, an external display or another router. It never contains IMEI, IMSI, ICCID or cell IDs, and the phone number only if you turn it on below."
+msgstr "Небольшой JSON-файл с сигналом модема, оператором, диапазоном и трафиком для умного дома, внешнего дисплея или другого роутера. В нём никогда нет IMEI, IMSI, ICCID и идентификаторов соты, а номер телефона - только если включить его ниже."
+
+msgid "Export telemetry"
+msgstr "Экспорт телеметрии"
+
+msgid "Keep /tmp/5gmodem/tele.json up to date. It is written from the metrics the app already collects and sends no extra requests to the modem."
+msgstr "Поддерживать /tmp/5gmodem/tele.json в актуальном виде. Файл пишется из уже собранных метрик и лишних запросов к модему не делает."
+
+msgid "Publish over HTTP"
+msgstr "Отдавать по HTTP"
+
+msgid "Serve the file at %s. Anyone on the LAN can read it without a password. Another router with this app that gets internet from this one over USB will then show its signal and operator."
+msgstr "Отдавать файл по адресу %s. Прочитать его сможет любой в локальной сети без пароля. Другой роутер с этой программой, получающий интернет от этого по USB, тогда покажет его сигнал и оператора."
+
+msgid "Include addresses"
+msgstr "Включать адреса"
+
+msgid "Add the carrier address and the external address to the published file and to MQTT. Off by default: a stream of addresses with timestamps is a log of when the address changed and when the router was on."
+msgstr "Добавлять адрес от оператора и внешний адрес в публикуемый файл и в MQTT. По умолчанию выключено: поток адресов со штампами времени - это журнал того, когда менялся адрес и когда роутер был включён."
+
+msgid "MQTT broker"
+msgstr "MQTT-брокер"
+
+msgid "Address of the broker. Leave empty to keep MQTT off. Needs the mosquitto-client package."
+msgstr "Адрес брокера. Пусто - MQTT выключен. Нужен пакет mosquitto-client."
+
+msgid "MQTT port"
+msgstr "Порт MQTT"
+
+msgid "MQTT user"
+msgstr "Пользователь MQTT"
+
+msgid "MQTT password"
+msgstr "Пароль MQTT"
+
+msgid "Device name"
+msgstr "Имя устройства"
+
+msgid "Used in the MQTT topic and in Home Assistant. Empty - the router hostname."
+msgstr "Используется в топике MQTT и в Home Assistant. Пусто - имя хоста роутера."
+
+msgid "MQTT topic"
+msgstr "Топик MQTT"
+
+msgid "Empty - 5gmodem/ followed by the device name. The state is published to the topic with /state appended."
+msgstr "Пусто - 5gmodem/ и имя устройства. Состояние публикуется в этот топик с добавкой /state."
+
+msgid "Home Assistant"
+msgstr "Home Assistant"
+
+msgid "Announce the sensors to Home Assistant over MQTT discovery. Save the broker settings first."
+msgstr "Объявить сенсоры в Home Assistant через MQTT discovery. Сначала сохраните настройки брокера."
+
+msgid "Announce sensors"
+msgstr "Объявить сенсоры"
+
+msgid "Sending…"
+msgstr "Отправка…"
+
+msgid "mosquitto_pub is not installed: install the mosquitto-client-nossl package."
+msgstr "mosquitto_pub не установлен: поставьте пакет mosquitto-client-nossl."
+
+msgid "The broker is not saved yet: press Save first."
+msgstr "Брокер ещё не сохранён: сначала нажмите «Сохранить»."
+
+msgid "The broker did not accept the announcement."
+msgstr "Брокер не принял объявление."
+
+msgid "Sensors announced. They appear in Home Assistant under MQTT devices."
+msgstr "Сенсоры объявлены. Они появятся в Home Assistant среди MQTT-устройств."
+
+msgid "Include the phone number"
+msgstr "Включать номер телефона"
+
+msgid "Add the SIM phone number to the published file and to MQTT, so that a router getting internet from this one over USB shows it too. Off by default: anyone on the LAN and everyone with access to the broker will see the number."
+msgstr "Добавлять номер SIM в публикуемый файл и в MQTT, чтобы его показывал и роутер, получающий интернет от этого по USB. По умолчанию выключено: номер увидят все в локальной сети и все, у кого есть доступ к брокеру."
