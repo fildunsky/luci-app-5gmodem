@@ -291,6 +291,10 @@ check_one() {   # $1 - путь, $2 - интерфейс, $3 - прото, $4 - 
 			# наш down/up оборвал бы его на полпути: получилась бы гонка двух
 			# «подъёмщиков» вместо восстановления.
 			case "$_sw_st" in *'"pending": true'*) return 0 ;; esac
+			if [ "$_proto" = modemmanager ] && case "$_sw_st" in *DISCONNECT_FAILED*) true ;; *) false ;; esac; then
+				mm_ghost_bearer "$_if" "$("$RES/modemswitch.sh" mmindex "$_path" 2>/dev/null)"
+				[ $? = 1 ] || return 0
+			fi
 			# Двух кругов подряд достаточно: одиночный промах бывает в момент
 			# штатного передозвона, а ждать дольше незачем - связи всё равно нет.
 			_dflag="/tmp/5gmodem/sw_down_$_if"
