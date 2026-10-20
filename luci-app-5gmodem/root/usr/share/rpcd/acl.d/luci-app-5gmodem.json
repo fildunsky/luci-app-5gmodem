@@ -37,6 +37,7 @@
 				"/usr/share/5gmodem/mm-inhibit.sh": [ "exec" ],
 				"/usr/share/5gmodem/setopt.sh": [ "exec" ],
 				"/usr/share/5gmodem/collect.sh": [ "exec" ],
+				"/usr/share/5gmodem/telemetry.sh": [ "exec" ],
 				"/usr/share/5gmodem/userfiles.sh": [ "exec" ],
 				"/bin/cat /sys/kernel/debug/usb/devices": [ "exec" ],
 				"/usr/share/5gmodem/check.gcom": [ "exec" ],
