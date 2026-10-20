@@ -333,7 +333,7 @@ _zte_paths() {
 			-H "X-Requested-With: XMLHttpRequest" \
 			"http://$1/${_zp_b%% *}?isTest=false&multi_data=1&cmd=modem_main_state" 2>/dev/null)
 		case "$_zp_r" in
-			*modem_main_state*) printf '%s' "$_zp_b" > "$_zp_f"; printf '%s' "$_zp_b"; return 0 ;;
+			*'"modem_main_state"'*) printf '%s' "$_zp_b" > "$_zp_f"; printf '%s' "$_zp_b"; return 0 ;;
 		esac
 	done
 	printf 'goform/goform_get_cmd_process goform/goform_set_cmd_process'
@@ -569,7 +569,7 @@ zte_metrics_json() {
 	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
 	# Huawei-ветки: вызывающий отдаст прошлый снимок).
 	case "$_r" in
-		*modem_main_state*|*ppp_status*) ;;
+		*'"modem_main_state"'*|*'"ppp_status"'*) ;;
 		*)  # НЕ МОЛЧА. Раньше отказ API выглядел как «метрик просто нет», и
 		    # разобраться по отчёту было нельзя: ни строки в журнале, ни следа.
 		    # Пишем ОДИН раз на загрузку (маркер в /tmp), чтобы не залить лог.
@@ -585,7 +585,7 @@ zte_metrics_json() {
 	case "$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)" in
 		'') if _zte_login "$_a" >/dev/null 2>&1; then
 			_r2=$(_zte_get "$_a" "$_zm_cmd")
-			case "$_r2" in *modem_main_state*|*ppp_status*) _r="$_r2" ;; esac
+			case "$_r2" in *'"modem_main_state"'*|*'"ppp_status"'*) _r="$_r2" ;; esac
 		   fi ;;
 	esac
 	_model="ZTE"
@@ -1797,7 +1797,7 @@ case "$1" in
 		# не Huawei - вдруг ZTE goform (MF79 и родня)
 		_r=$(_zte_get "$_a" modem_main_state)
 		case "$_r" in
-			*modem_main_state*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a"; exit 0 ;;
+			*'"modem_main_state"'*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a"; exit 0 ;;
 		esac
 		case "$(_yota_get "$_a")" in
 			*InterfaceType*=*) printf '{"hilink":1,"addr":"%s","classify":"yota"}\n' "$_a" ;;

@@ -299,7 +299,13 @@ known_modem_path() {   # $1 - usb-путь
 	return 1
 }
 
+usb_gadget_vid() {
+	case "$1" in 0525|1d6b) return 0 ;; esac
+	return 1
+}
+
 tether_cdc_vid() {   # $1 - idVendor
+	usb_gadget_vid "$1" && return 0
 	case "$1" in 17ef|0b05|0502|1949|04b7) return 1 ;; esac
 	android_vid "$1"
 }
@@ -308,7 +314,8 @@ tether_os() {   # $1 - usb-путь
 	if is_iphone "$1"; then echo iphone; return 0; fi
 	if [ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ]; then
 		read -r _to_v < "/sys/bus/usb/devices/$1/idVendor"
-		if android_vid "$_to_v"; then echo android; else echo phone; fi
+		if usb_gadget_vid "$_to_v"; then echo router
+		elif android_vid "$_to_v"; then echo android; else echo phone; fi
 		return 0
 	fi
 	_to_s=$(uci -q get "5gmodem.$(secname "$1").tether")
@@ -846,6 +853,33 @@ iface_up() {   # $1 - интерфейс
 			ubus call network.interface up "{\"interface\":\"$1\"}" >/dev/null 2>&1 ;;
 	esac
 	return 0
+}
+
+remote_tele() {
+	case "$1" in *[!0-9.]*|'') return 1 ;; esac
+	_rt_f="/tmp/5gmodem/rtele_$(echo "$1" | tr -c '0-9' '_')"
+	_rt_now=$(uptime_s)
+	_rt_t=$(cat "$_rt_f.t" 2>/dev/null)
+	case "$_rt_t" in ''|*[!0-9]*) _rt_t=0 ;; esac
+	_rt_ttl=10
+	[ -s "$_rt_f" ] || _rt_ttl=60
+	if [ "$_rt_t" -gt 0 ] && [ "$_rt_now" -ge "$_rt_t" ] && [ $((_rt_now - _rt_t)) -lt "$_rt_ttl" ]; then
+		cat "$_rt_f" 2>/dev/null
+		return 0
+	fi
+	mkdir -p /tmp/5gmodem
+	if command -v curl >/dev/null 2>&1; then
+		_rt_b=$(curl -s -f --max-time 3 "http://$1/cgi-bin/5gmodem-tele" 2>/dev/null)
+	else
+		_rt_b=$(wget -q -T 3 -O - "http://$1/cgi-bin/5gmodem-tele" 2>/dev/null)
+	fi
+	case "$_rt_b" in
+		'{'*'}') printf '%s' "$_rt_b" | jsonfilter -e '@' >/dev/null 2>&1 || _rt_b="" ;;
+		*) _rt_b="" ;;
+	esac
+	printf '%s' "$_rt_b" > "$_rt_f.tmp" && mv "$_rt_f.tmp" "$_rt_f"
+	printf '%s\n' "$_rt_now" > "$_rt_f.t"
+	printf '%s' "$_rt_b"
 }
 
 mm_ghost_bearer() {

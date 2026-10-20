@@ -1721,6 +1721,17 @@ function renderProtoChip(json) {
 	   важно не КАК поднят интерфейс, а что модемом правит его веб-API. */
 	var txt = (json.backend === 'hilink') ? 'HiLink'
 		: mutil.protoLabel(json.iface_proto || json.protocol);
+	var adm = document.getElementById('router-admin-link');
+	var gw = String(json.gateway || '');
+	if (json.tether === 'router' && /^\d{1,3}(\.\d{1,3}){3}$/.test(gw)) {
+		if (!adm) {
+			adm = routerAdminIcon(gw);
+			adm.id = 'router-admin-link';
+			head.insertBefore(adm, document.getElementById('modemname-text') || head.firstChild);
+		}
+		adm.href = 'http://' + gw + '/';
+		adm.title = _('Open its admin page (%s)').format(gw);
+	} else if (adm) { adm.remove(); }
 	if (!txt) { if (chip) { chip.remove(); } return; }
 	if (!chip) {
 		chip = E('span', {
@@ -2558,6 +2569,13 @@ function updBarTick(json) {
 	b.style.width = '0%';
 }
 function tetherText(json) {
+	if (json.tether === 'router') {
+		if (json.tether_state === 'ready') {
+			return _('A router shares internet over USB.') + (json.ipaddr ? ' ' + _('This router got the address %s from it.').format(json.ipaddr) : '')
+				+ ' ' + _('Signal, operator and SMS are managed on that router.');
+		}
+		return _('A router is connected over USB but has not given an address yet.');
+	}
 	if (json.tether !== 'iphone') {
 		var nm = (json.tether_name && json.tether_name !== '-') ? json.tether_name : _('Phone');
 		if (json.tether_state === 'ready') {
@@ -2578,6 +2596,20 @@ function tetherText(json) {
 	default:
 		return _('iPhone is connected. Unlock it, tap Trust on the iPhone and turn on Personal Hotspot.');
 	}
+}
+
+function routerAdminIcon(gw) {
+	var a = E('a', { 'href': 'http://' + gw + '/', 'target': '_blank', 'rel': 'noopener',
+		'title': _('Open its admin page (%s)').format(gw),
+		'style': 'display:inline-block; width:1.05em; height:1.05em; margin-right:.4em; vertical-align:-.12em; color:inherit;' });
+	a.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 13 5 5"/><path d="M17 13l2-8"/><circle cx="7.5" cy="16.5" r=".6" fill="currentColor"/><circle cx="10.5" cy="16.5" r=".6" fill="currentColor"/><path d="M14 16.5h3.5"/></svg>';
+	return a;
+}
+
+function tetherAdminLink(el, json) {
+	var gw = String(json.gateway || '');
+	if (json.tether !== 'router' || json.tether_state !== 'ready' || !/^\d{1,3}(\.\d{1,3}){3}$/.test(gw)) { return; }
+	el.insertBefore(routerAdminIcon(gw), el.firstChild);
 }
 
 function updateSimpleLine(json) {
@@ -2603,6 +2635,7 @@ function updateSimpleLine(json) {
 	}
 	lamp.className = 'netpri-svcdot ' + st;
 	text.textContent = txt;
+	if (json.tether) { tetherAdminLink(text, json); }
 	var adv = document.getElementById('sc-advice');
 	if (adv) {
 		/* «Слабо» - СТРОГО от той же метрики, что и иконка (проценты из CSQ).
@@ -2818,15 +2851,17 @@ function applyMetrics(json) {
 								: (String(json.hasports) === '1')
 									? _('The modem is on the USB bus, but its AT port is not answering: it is busy or the modem is stuck. If this lasts, restart the modem with the Restart modem buttons below.')
 									: _('A device is present on the USB bus, but it does not respond to AT commands. It looks like a mobile phone. It can share internet, but signal, operator and SMS management are unavailable.');
+							if (_onbus && json.tether) { tetherAdminLink(_ns, json); }
 						}
 						if (_none) { _none.style.display = ''; }
 						return;   /* метрики не заполняем - заполнять нечем */
 					}
 					if (_none) { _none.style.display = 'none'; }
 					if (_mib) { _mib.style.display = ''; }
-					if (_cell) { _cell.style.display = ''; }
-					if (_freq) { _freq.style.display = ''; }
-					if (_rbb) { _rbb.style.display = ''; }
+					var _remote = (json.backend === 'router');
+					if (_cell) { _cell.style.display = _remote ? 'none' : ''; }
+					if (_freq) { _freq.style.display = _remote ? 'none' : ''; }
+					if (_rbb) { _rbb.style.display = _remote ? 'none' : ''; }
 					if (_ttl) { _ttl.style.display = ''; }
 					histShow(true);
 					histPush(json);

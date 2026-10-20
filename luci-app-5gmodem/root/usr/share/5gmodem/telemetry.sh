@@ -8,9 +8,10 @@
 # скрипты (раньше внешние интеграции звали 5gmodem.sh по ssh - каждый вызов
 # форкал полный опрос).
 #
-# Приватность BY DESIGN: в файл не попадают IMEI, IMSI, ICCID, номер телефона
-# и координаты - только уровень/качество сигнала, оператор, режим, температура
-# и трафик. Файл можно отдавать наружу, не подумав дважды.
+# Приватность BY DESIGN: в файл не попадают IMEI, IMSI, ICCID и координаты,
+# номер телефона - только при tele.publish_phone=1. Остальное - уровень/качество
+# сигнала, оператор, режим, температура и трафик. Файл можно отдавать наружу,
+# не подумав дважды.
 #
 # Вербы:
 #   write     - собрать и атомарно переписать /tmp/5gmodem/tele.json
@@ -86,6 +87,7 @@ tele_write() {
 	elif [ -n "$_fresh" ]; then
 	_num sig  "$(_int "$(_jf signal)")"
 	_str oper "$(_jf operator_name | sed 's/^-$//')"
+	_str model "$(_jf modem | sed 's/^-$//')"
 	_num rsrp "$(_int "$(_jf rsrp)")"
 	_num rsrq "$(_int "$(_jf rsrq)")"
 	_num sinr "$(_int "$(_jf sinr)")"
@@ -191,6 +193,7 @@ tele_write() {
 		_str ext_ip  "$_te_xip"
 		_str ext_ip6 "$_te_xip6"
 	fi
+	[ -n "$_fresh" ] && [ "$(_g publish_phone)" = "1" ] && _str phone "$(_jf phone | tr -cd '+0-9')"
 
 	# ОСЕЧКА ОПРОСА НЕ ПУБЛИКУЕТСЯ. Сборщик метрик публикует снимок и с пустым
 	# сигнальным ядром - когда AT-порт в момент сбора был занят (странице это
@@ -330,13 +333,15 @@ tele_publish() {
 tele_discovery() {
 	_mqtt_args || { echo '{"error":"no broker configured or mosquitto_pub missing"}'; return 1; }
 	_disc() {   # $1 поле, $2 имя, $3 единица, $4 device_class (пусто = без него)
+		[ -z "$_disc_fail" ] || return 0
 		_cfg="{\"name\":\"$2\",\"state_topic\":\"$TOPIC/state\",\"value_template\":\"{{ value_json.$1 }}\""
 		[ -n "$3" ] && _cfg="$_cfg,\"unit_of_measurement\":\"$3\""
 		[ -n "$4" ] && _cfg="$_cfg,\"device_class\":\"$4\""
 		_cfg="$_cfg,\"availability_topic\":\"$TOPIC/available\",\"unique_id\":\"${DEVNAME}_$1\""
 		_cfg="$_cfg,\"device\":{\"identifiers\":[\"$DEVNAME\"],\"model\":\"luci-app-5gmodem\",\"manufacturer\":\"OpenWrt\"}}"
-		_mpub -r -t "homeassistant/sensor/${DEVID}_$1/config" -m "$_cfg" 2>/dev/null
+		_mpub -r -t "homeassistant/sensor/${DEVID}_$1/config" -m "$_cfg" 2>/dev/null || _disc_fail=1
 	}
+	_disc_fail=""
 	_disc sig  "Signal"        "%"    signal_strength
 	_disc rsrp "RSRP"          "dBm"  signal_strength
 	_disc rsrq "RSRQ"          "dB"   ""
@@ -357,6 +362,11 @@ tele_discovery() {
 		_disc wan_ip  "Carrier address"  "" ""
 		_disc ext_ip  "External address" "" ""
 		_disc ext_ip6 "External IPv6"    "" ""
+	fi
+	[ "$(_g publish_phone)" = "1" ] && _disc phone "Phone number" "" ""
+	if [ -n "$_disc_fail" ]; then
+		echo '{"error":"broker rejected the publish"}'
+		return 1
 	fi
 	echo '{"result":"ok"}'
 }
@@ -405,6 +415,14 @@ case "$1" in
 	publish)   tele_enabled && tele_publish ;;
 	discovery) tele_discovery ;;
 	show)      cat "$TELE" 2>/dev/null ;;
-	*) echo "usage: $0 {write|publish|discovery|show}" >&2; exit 1 ;;
+	status)    _st_cl=0; command -v mosquitto_pub >/dev/null 2>&1 && _st_cl=1
+	           _st_br=0; [ -n "$(_g mqtt_host)" ] && _st_br=1
+	           _st_age=""
+	           if [ -s "$TELE" ]; then
+	               _st_m=$(date -r "$TELE" +%s 2>/dev/null)
+	               [ -n "$_st_m" ] && _st_age=$(( $(date +%s) - _st_m ))
+	           fi
+	           printf '{"mqtt_client":%s,"broker":%s,"file_age":"%s"}\n' "$_st_cl" "$_st_br" "$_st_age" ;;
+	*) echo "usage: $0 {write|publish|discovery|show|status}" >&2; exit 1 ;;
 esac
 exit 0

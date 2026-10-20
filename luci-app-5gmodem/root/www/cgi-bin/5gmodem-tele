@@ -1,0 +1,8 @@
+#!/bin/sh
+
+if [ "$(uci -q get 5gmodem.tele.http)" != 1 ] || [ ! -s /tmp/5gmodem/tele.json ]; then
+	printf 'Status: 404 Not Found\r\nContent-Type: text/plain\r\n\r\nnot published\n'
+	exit 0
+fi
+printf 'Content-Type: application/json\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\n\r\n'
+cat /tmp/5gmodem/tele.json

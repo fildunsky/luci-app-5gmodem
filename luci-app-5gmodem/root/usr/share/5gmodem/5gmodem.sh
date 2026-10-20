@@ -588,12 +588,79 @@ if [ -n "$_POLL_AM" ] \
 		_tj_st=ready; [ -n "$_tj_nd" ] || _tj_st=no_netdev
 	fi
 	_tj_if=$(uci -q get "5gmodem.$_hl_sec.network")
-	_tj_ip=""
-	[ -n "$_tj_if" ] && _tj_ip=$(ubus call "network.interface.$_tj_if" status 2>/dev/null \
-		| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+	_tj_ip=""; _tj_gw=""
+	if [ -n "$_tj_if" ]; then
+		_tj_js=$(ubus call "network.interface.$_tj_if" status 2>/dev/null)
+		_tj_ip=$(printf '%s' "$_tj_js" | jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		[ "$_tj_os" = router ] && _tj_gw=$(printf '%s' "$_tj_js" \
+			| jsonfilter -e '@.route[@.target="0.0.0.0"].nexthop' 2>/dev/null | head -1)
+	fi
 	_tj_nm=$(cat "/sys/bus/usb/devices/$_POLL_AM/product" 2>/dev/null | tr -d '"\\')
-	printf '{"error":"Device not found","onbus":"1","path":"%s","tether":"%s","tether_state":"%s","tether_name":"%s","netdev":"%s","iface":"%s","ipaddr":"%s"}\n' \
-		"$_POLL_AM" "$_tj_os" "$_tj_st" "$_tj_nm" "$_tj_nd" "$_tj_if" "$_tj_ip"
+	if [ "$_tj_os" = router ] && [ "$_tj_st" = ready ] && [ -n "$_tj_gw" ]; then
+		_rt=$(remote_tele "$_tj_gw")
+		_rt_rsrp=$(printf '%s' "$_rt" | jsonfilter -e '@.rsrp' 2>/dev/null)
+		_rt_op=$(printf '%s' "$_rt" | jsonfilter -e '@.oper' 2>/dev/null)
+		if [ -n "$_rt_rsrp$_rt_op" ]; then
+			_rt_md=$(printf '%s' "$_rt" | jsonfilter -e '@.mode' 2>/dev/null)
+			_rt_bd=$(printf '%s' "$_rt" | jsonfilter -e '@.band' 2>/dev/null)
+			_rt_ca=$(printf '%s' "$_rt" | jsonfilter -e '@.ca' 2>/dev/null)
+			_rt_tp=$(printf '%s' "$_rt" | jsonfilter -e '@.temp' 2>/dev/null)
+			_rt_ml=$(printf '%s' "$_rt" | jsonfilter -e '@.model' 2>/dev/null | tr -d '"\\')
+			_rt_ph=$(printf '%s' "$_rt" | jsonfilter -e '@.phone' 2>/dev/null | tr -cd '+0-9')
+			_rt_pr=dhcp
+			for _rt_i in /sys/bus/usb/devices/"$_POLL_AM":*; do
+				[ -f "$_rt_i/bInterfaceClass" ] || continue
+				case "$(cat "$_rt_i/bInterfaceClass")/$(cat "$_rt_i/bInterfaceSubClass")/$(cat "$_rt_i/bInterfaceProtocol")" in
+					02/0d/*) _rt_pr=ncm; break ;;
+					02/06/*) _rt_pr=ecm; break ;;
+					ef/04/01|e0/01/03) _rt_pr=rndis; break ;;
+				esac
+			done
+			case "$_rt_md" in
+				4G) _rt_md=LTE ;; 4G+) _rt_md=LTE-A ;; 3G) _rt_md=WCDMA ;; 2G) _rt_md=GSM ;;
+			esac
+			[ -n "$_rt_bd" ] && _rt_md="${_rt_md:+$_rt_md | }${_rt_ca:-$_rt_bd}"
+			_rt_ct=$(printf '%s' "$_tj_js" | jsonfilter -e '@.uptime' 2>/dev/null)
+			_rt_cts="-"; _rt_ctsn="-"; _rt_cto="-"
+			case "$_rt_ct" in
+				''|*[!0-9]*) ;;
+				*) _rt_cto="$_rt_ct"
+				   _rt_cts=$(printf "%dd, %02d:%02d:%02d" $((_rt_ct / 86400)) $((_rt_ct / 3600 % 24)) $((_rt_ct / 60 % 60)) $((_rt_ct % 60)))
+				   _rt_ctsn=$(date "+%Y%m%d%H%M%S" -d "@$(($(date +%s) - _rt_ct))") ;;
+			esac
+			_rt_rx="-"; _rt_tx="-"
+			_rt_l3=$(printf '%s' "$_tj_js" | jsonfilter -e '@.l3_device' 2>/dev/null)
+			if [ -n "$_rt_l3" ]; then
+				_rt_x=$(ifconfig "$_rt_l3" 2>/dev/null | awk -F[\(\)] '/bytes/ {printf "%s|%s",$2,$4}')
+				[ -n "$_rt_x" ] && { _rt_rx="${_rt_x%%|*}"; _rt_tx="${_rt_x##*|}"; }
+			fi
+			_rt_tmp="$CACHE.r$$"
+			printf '{"backend":"router","protocol":"%s","iface_proto":"%s","path":"%s","vidpid":"%s:%s","modem":"%s","operator_name":"%s","registration":"1","mode":"%s","pband":"%s","signal":"%s","rsrp":"%s","rsrq":"%s","sinr":"%s","mtemp":"%s","phone":"%s","conn_time":"%s","conn_time_sec":"%s","conn_time_since":"%s","rx":"%s","tx":"%s","iface":"%s","ipaddr":"%s","tether":"router","tether_state":"ready","gateway":"%s","netdev":"%s"}\n' \
+				"$_rt_pr" "$_rt_pr" "$_POLL_AM" "$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)" "$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)" \
+				"${_rt_ml:-$_tj_nm}" "$(printf '%s' "$_rt_op" | tr -d '"\\')" "$_rt_md" "${_rt_bd:--}" \
+				"$(printf '%s' "$_rt" | jsonfilter -e '@.sig' 2>/dev/null)" "$_rt_rsrp" \
+				"$(printf '%s' "$_rt" | jsonfilter -e '@.rsrq' 2>/dev/null)" \
+				"$(printf '%s' "$_rt" | jsonfilter -e '@.sinr' 2>/dev/null)" \
+				"${_rt_tp:+$_rt_tp &deg;C}" "${_rt_ph:--}" "$_rt_cts" "$_rt_cto" "$_rt_ctsn" "$_rt_rx" "$_rt_tx" "$_tj_if" "${_tj_ip:--}" "$_tj_gw" "$_tj_nd" > "$_rt_tmp"
+			cat "$_rt_tmp"
+			if jsonfilter -i "$_rt_tmp" -e '@.modem' >/dev/null 2>&1; then
+				mv "$_rt_tmp" "$CACHE" && uptime_s > "$STAMP"
+				_rt_opc=$(operator_clean "$_rt_op")
+				[ -n "$_tj_if" ] && [ -n "$_rt_opc" ] && printf '%s' "$_rt_opc" > "/tmp/5gmodem/op_$_tj_if" 2>/dev/null
+				_rt_vp="$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)"
+				if [ -n "$_rt_ml" ] && { [ "$(uci -q get "5gmodem.$_hl_sec.model")" != "$_rt_ml" ] || [ "$(uci -q get "5gmodem.$_hl_sec.model_vp")" != "$_rt_vp" ]; }; then
+					uci -q set "5gmodem.$_hl_sec.model=$_rt_ml"
+					uci -q set "5gmodem.$_hl_sec.model_vp=$_rt_vp"
+					uci -q commit 5gmodem
+					rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
+				fi
+			fi
+			rm -f "$_rt_tmp"
+			exit 0
+		fi
+	fi
+	printf '{"error":"Device not found","onbus":"1","path":"%s","tether":"%s","tether_state":"%s","tether_name":"%s","netdev":"%s","iface":"%s","ipaddr":"%s","gateway":"%s"}\n' \
+		"$_POLL_AM" "$_tj_os" "$_tj_st" "$_tj_nm" "$_tj_nd" "$_tj_if" "$_tj_ip" "$_tj_gw"
 	exit 0
 fi
 
