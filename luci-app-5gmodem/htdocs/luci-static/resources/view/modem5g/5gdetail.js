@@ -2448,6 +2448,8 @@ function buildSimpleUI() {
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
 		'body.sc-simple #apnline { display:none !important; }' +
+		'body.sc-simple #modemname > #stale-mark { font-size:.78rem; line-height:1.4; height:1.4em; top:.35em !important; }' +
+		'body.sc-simple #modem-info-block[data-rat] #stale-mark { height:calc(1.4em + 4px); }' +
 		'body.sc-simple #mode .tginfo-freq:not(.tginfo-dist) { display:none !important; }' +
 		'body.sc-simple #modemname { border-bottom:none !important; box-shadow:none !important; }' +
 		'#sc-line { display:none; }' +
@@ -3474,6 +3476,7 @@ function applyMetrics(json) {
 							? _('Data has not been updated for %d s (shown from the last snapshot)').format(age)
 							: _('Data has not been updated for %d min (shown from the last snapshot)').format(Math.round(age / 60));
 						if (mark) {
+							if (mark.nextElementSibling) { head.appendChild(mark); }
 							mark.title = txt;
 							var mi = mark.querySelector('img');
 							if (mi) { mi.title = txt; }

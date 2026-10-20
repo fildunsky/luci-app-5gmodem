@@ -3513,14 +3513,7 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 #modem-info-block[data-rat] #conndur,
 #modem-info-block[data-rat] .tginfo-locip { color: #fff !important; }
 #modem-info-block[data-rat] #modc { opacity: 1 !important; }
-#modem-info-block[data-rat] .tg-smsenv {
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--tg-rat-ink, #474e59);
-}
+#modem-info-block[data-rat] .tg-smsenv { color: #fff; }
 #modem-info-block[data-rat] .tginfo-simslot .cbi-button {
   background: transparent !important;
   border-color: rgba(255, 255, 255, .6) !important;
