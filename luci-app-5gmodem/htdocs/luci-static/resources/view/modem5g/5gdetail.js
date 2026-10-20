@@ -2447,7 +2447,7 @@ function buildSimpleUI() {
 		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
-		'body.sc-simple #apnline, body.sc-simple #stale-mark { display:none !important; }' +
+		'body.sc-simple #apnline { display:none !important; }' +
 		'body.sc-simple #mode .tginfo-freq:not(.tginfo-dist) { display:none !important; }' +
 		'body.sc-simple #modemname { border-bottom:none !important; box-shadow:none !important; }' +
 		'#sc-line { display:none; }' +
