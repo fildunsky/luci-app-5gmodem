@@ -840,7 +840,7 @@ case "$REQ" in
 			# строит нерабочим - поэтому ТОЛЬКО когда это НЕ Compal.
 			05c6:90d5)
 				if [ -f /lib/netifd/proto/modemmanager.sh ] && ! is_compal "$AMP" "$DEV"; then
-					logger -t 5gmodem "mkiface: 05c6:90d5 (MV31-W/T99W175, not Compal) - driving via ModemManager"
+					logger -t 5gmodem "mkiface: 05c6:90d5 (Foxconn T99W175/T99W373, not Compal) - driving via ModemManager"
 					PROTO="modemmanager"
 				fi
 				;;

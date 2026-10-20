@@ -1779,7 +1779,20 @@ mm_fail_verdict() {   # $1 - АТ-порт (для модемов вне MM)
 		_mf_sim=$(printf '%s\n' "$_mf_k" | sed -n 's/^modem\.generic\.sim *: *//p' | head -1)
 		echo "### modem $_mf_i (${_mf_d##*/}): state $_mf_s"
 		case "$_mf_s" in
-			connected) echo "    normal - the connection is established" ;;
+			connected)
+				_mf_if=$(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)\.device='\(.*\)'$/\1 \2/p" \
+					| while read -r _mf_s1 _mf_d1; do [ "$_mf_d1" = "$_mf_d" ] && echo "$_mf_s1"; done | head -1)
+				_mf_ifs=""
+				[ -n "$_mf_if" ] && _mf_ifs=$(ifstatus "$_mf_if" 2>/dev/null)
+				case "$_mf_ifs" in
+					''|*'"up": true'*) echo "    normal - the connection is established" ;;
+					*DISCONNECT_FAILED*)
+						echo "    PROBLEM: ModemManager says 'connected', but interface $_mf_if is DOWN."
+						echo "    A disconnect failed, MM kept a dead bearer and refuses every new connect"
+						echo "    ('Operation not allowed while modem is connected'). Only a modem reset clears it:"
+						echo "    mmcli -m $_mf_i --reset, wait a minute, then ifup $_mf_if." ;;
+					*) echo "    ModemManager says 'connected', but interface $_mf_if is down - see the netifd log below" ;;
+				esac ;;
 			registered|enabled) echo "    the radio is ready but there is no data session: check the APN and netifd" ;;
 			failed)
 				case "$_mf_r" in
