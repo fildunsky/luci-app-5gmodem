@@ -732,6 +732,94 @@ return view.extend({
 		};
 
 
+		var tel = m.section(form.NamedSection, 'tele', 'tele', _('Telemetry'),
+			_('A small JSON file with the modem signal, operator, band and traffic for a smart home, an external display or another router. It never contains IMEI, IMSI, ICCID or cell IDs, and the phone number only if you turn it on below.'));
+		tel.addremove = false;
+
+		o = tel.option(form.Flag, 'enabled', _('Export telemetry'),
+			_('Keep /tmp/5gmodem/tele.json up to date. It is written from the metrics the app already collects and sends no extra requests to the modem.'));
+		o.default = '1';
+		o.rmempty = false;
+
+		o = tel.option(form.Flag, 'http', _('Publish over HTTP'),
+			_('Serve the file at %s. Anyone on the LAN can read it without a password. Another router with this app that gets internet from this one over USB will then show its signal and operator.')
+				.format('http://' + window.location.hostname + '/cgi-bin/5gmodem-tele'));
+		o.default = '0';
+		o.rmempty = false;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Flag, 'publish_ip', _('Include addresses'),
+			_('Add the carrier address and the external address to the published file and to MQTT. Off by default: a stream of addresses with timestamps is a log of when the address changed and when the router was on.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Flag, 'publish_phone', _('Include the phone number'),
+			_('Add the SIM phone number to the published file and to MQTT, so that a router getting internet from this one over USB shows it too. Off by default: anyone on the LAN and everyone with access to the broker will see the number.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'mqtt_host', _('MQTT broker'),
+			_('Address of the broker. Leave empty to keep MQTT off. Needs the mosquitto-client package.'));
+		o.datatype = 'host';
+		o.placeholder = '192.168.1.10';
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'mqtt_port', _('MQTT port'));
+		o.datatype = 'port';
+		o.placeholder = '1883';
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'mqtt_user', _('MQTT user'));
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'mqtt_pass', _('MQTT password'));
+		o.password = true;
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'name', _('Device name'),
+			_('Used in the MQTT topic and in Home Assistant. Empty - the router hostname.'));
+		o.datatype = 'and(minlength(1),maxlength(32))';
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Value, 'mqtt_topic', _('MQTT topic'),
+			_('Empty - 5gmodem/ followed by the device name. The state is published to the topic with /state appended.'));
+		o.rmempty = true;
+		o.depends('enabled', '1');
+
+		o = tel.option(form.Button, '__tele_disc', _('Home Assistant'),
+			_('Announce the sensors to Home Assistant over MQTT discovery. Save the broker settings first.'));
+		o.inputtitle = _('Announce sensors');
+		o.inputstyle = 'apply';
+		o.depends('enabled', '1');
+		o.onclick = function(ev) {
+			var btn = ev.target;
+			var fld = (btn.closest && btn.closest('.cbi-value-field')) || btn.parentNode;
+			var box = fld.querySelector('.tele-res');
+			if (!box) { box = E('div', { 'class': 'tele-res' }); fld.appendChild(box); }
+			btn.disabled = true;
+			dom.content(box, E('div', {}, _('Sending…')));
+			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/telemetry.sh', [ 'status' ]), '{}')
+				.then(function(st) {
+					var j = {};
+					try { j = JSON.parse(st || '{}'); } catch (e) {}
+					if (String(j.mqtt_client) !== '1') { return { err: _('mosquitto_pub is not installed: install the mosquitto-client-nossl package.') }; }
+					if (String(j.broker) !== '1') { return { err: _('The broker is not saved yet: press Save first.') }; }
+					return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/telemetry.sh', [ 'discovery' ]), '')
+						.then(function(r) { return (String(r).indexOf('"ok"') >= 0) ? { ok: 1 } : { err: _('The broker did not accept the announcement.') }; });
+				}).then(function(r) {
+					dom.content(box, E('div', { 'style': r.ok ? '' : 'color:#c0392b' },
+						r.ok ? _('Sensors announced. They appear in Home Assistant under MQTT devices.') : r.err));
+					btn.disabled = false;
+				});
+		};
+
 		/* «Для экспертов» - НАМЕРЕННО ПОСЛЕДНЯЯ секция (UX-аудит, P6): редкие
 		   и тонкие опции не должны стоять вперемешку с ежедневными - пользователь
 		   не отличал «сломает интернет» от «поменяет цвет карточки». */
