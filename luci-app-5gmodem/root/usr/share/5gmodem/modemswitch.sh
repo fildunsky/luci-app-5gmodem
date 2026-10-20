@@ -1417,7 +1417,11 @@ resolve)
 		A=""
 		_pin=$(uci -q get "$CFG.$SEC.at_port")
 		if [ "$_RG_QUIET" != 1 ] && [ -n "$_pin" ] && [ -e "$_pin" ] && modem_ttys "$P" | grep -qxF "$_pin"; then
-			"$RES/atprobe.sh" "$_pin" >/dev/null 2>&1 && A="$_pin"
+			if [ "$(uci -q get "$CFG.@5gmodem[0].auto_port")" = 0 ]; then
+				A="$_pin"
+			else
+				"$RES/atprobe.sh" "$_pin" >/dev/null 2>&1 && A="$_pin"
+			fi
 		fi
 		_try=0
 		while [ -z "$A" ] && [ "$_try" -lt 6 ]; do

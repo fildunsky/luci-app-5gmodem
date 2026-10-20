@@ -530,7 +530,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		# it a silent default caused deregistration/port churn on multi-modem
 		# setups. Opt-in keeps auto-detection predictable.
 		FPROTO=fibocom
-		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && FPROTO=xmm
+		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && [ -z "$OLDUSER" ] && FPROTO=xmm
 		[ "$REQ" = atc ] && [ -f /lib/netifd/proto/atc.sh ] && FPROTO=atc
 
 		# ИСКЛЮЧЕНИЕ ИЗ ЭТОГО ПРАВИЛА - INTEL XMM (вендор 8087: Fibocom L850,
@@ -548,7 +548,10 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		_mki_xvp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
 		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } \
 		   && { [ "${_mki_xvp%%:*}" = "8087" ] || [ "$_mki_xvp" = "2cb7:000b" ]; }; then
-			if [ -f /lib/netifd/proto/xmm.sh ]; then
+			if [ -f /lib/netifd/proto/xmm.sh ] && [ -n "$OLDUSER" ]; then
+				FPROTO=fibocom
+				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - setting proto=fibocom (PAP/CHAP login set, xmm.sh drops it)"
+			elif [ -f /lib/netifd/proto/xmm.sh ]; then
 				# Установленный пакет xmm-modem уважаем: работающие на нём
 				# установки не трогаем.
 				FPROTO=xmm

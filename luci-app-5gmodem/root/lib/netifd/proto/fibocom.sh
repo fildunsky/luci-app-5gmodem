@@ -119,13 +119,29 @@ _fibocom_reg() {
 # 17.08.2026: наш usbpower-подъём после клина -> fast path переиспользовал
 # неавторизованный bearer -> IP есть, трафик в дыру).
 _fibocom_auth() {
-	local dial="$1"
+	local dial="$1" am=0 out
 	case "$auth" in
-		pap)  sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		chap) sms_tool -d "$dial" at "AT+CGAUTH=1,2,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		both) sms_tool -d "$dial" at "AT+CGAUTH=1,1,\"$username\",\"$password\"" >/dev/null 2>&1 ;;
-		*)    sms_tool -d "$dial" at "AT+CGAUTH=1,0" >/dev/null 2>&1 ;;
+		pap|both) am=1 ;;
+		chap)     am=2 ;;
 	esac
+	if [ "$IS_XMM" = 1 ]; then
+		if [ "$am" = 0 ]; then
+			out=$(sms_tool -d "$dial" at 'AT+XGAUTH=1,0,"",""' 2>&1)
+		else
+			out=$(sms_tool -d "$dial" at "AT+XGAUTH=1,$am,\"$username\",\"$password\"" 2>&1)
+		fi
+		case "$out" in
+			*ERROR*) echo "fibocom[$$] AT+XGAUTH rejected, trying AT+CGAUTH" ;;
+			*) out="" ;;
+		esac
+	fi
+	if [ "$IS_XMM" != 1 ] || [ -n "$out" ]; then
+		if [ "$am" = 0 ]; then
+			sms_tool -d "$dial" at "AT+CGAUTH=1,0" >/dev/null 2>&1
+		else
+			sms_tool -d "$dial" at "AT+CGAUTH=1,$am,\"$username\",\"$password\"" >/dev/null 2>&1
+		fi
+	fi
 	# маркер «этой инкарнации модема авторизация послана»: ключ - USB devnum,
 	# он меняется при каждой переэнумерации (= ребуте модема)
 	[ -n "$interface" ] && [ -n "$usbpath" ] && \
