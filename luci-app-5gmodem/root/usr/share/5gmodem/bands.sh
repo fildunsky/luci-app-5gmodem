@@ -1499,7 +1499,7 @@ _mm_takeover_run() {  # $1 - функция записи (setbands/setbands5gnsa
 	fi
 	# 4) снимаем паузу -> служба инхибирует обратно, mmneed гасит MM
 	"$_R/mm-inhibit.sh" resume "$_mt_path" 2>/dev/null
-	"$_R/mmneed.sh" apply >/dev/null 2>&1
+	"$_R/mmneed.sh" apply now >/dev/null 2>&1
 	_mt_i=0
 	while [ "$_mt_i" -lt 20 ]; do
 		mmcli -L 2>/dev/null | grep -q "/Modem/" || break

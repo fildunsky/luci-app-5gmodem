@@ -131,7 +131,10 @@ case "$1" in
 					*) [ "$_mi_was" -le "$_mi_now" ] && [ $((_mi_now - _mi_was)) -lt 300 ] && _mi_ok=0 ;;
 				esac
 			fi
+			[ "$2" != now ] && [ "$(cut -d. -f1 /proc/uptime)" -lt 300 ] && _mi_ok=0
 			if [ "$_mi_ok" = 1 ] && _running; then
+				sleep 3
+				mm_needed && exit 0
 				rm -f /tmp/5gmodem/mmneed_idle
 				/etc/init.d/modemmanager stop >/dev/null 2>&1
 				/etc/init.d/modemmanager disable >/dev/null 2>&1

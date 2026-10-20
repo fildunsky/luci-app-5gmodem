@@ -2660,6 +2660,8 @@ report() {
 	run 20 "Log: ModemManager" sh -c "logread 2>/dev/null | grep -i modemmanager | tail -80"
 	run 20 "Log: netifd/interfaces" sh -c "logread 2>/dev/null | grep -iE 'netifd|wwan|qmi|mbim|fibocom' | tail -80"
 	run 20 "Log: kernel (USB)" sh -c "dmesg 2>/dev/null | grep -iE 'usb|option|qmi_wwan|cdc_|reset' | tail -60"
+	run 20 "Log: USB devices since boot" sh -c "dmesg 2>/dev/null | grep -E 'usb [0-9]+-[0-9.]+: (new .*USB device|USB disconnect|New USB device found)|generic converter' | head -60"
+	run 20 "Log: fastboot rescue and ModemManager start/stop" sh -c "logread 2>/dev/null | grep -E 'fastboot-rescue|ModemManager (started|stopped)' | tail -40"
 	run 20 "Log: the whole tail" sh -c "logread 2>/dev/null | tail -120"
 
 	# Расшифровка кодов +CME ERROR, попавшихся ВЫШЕ по отчёту и в журнале.
