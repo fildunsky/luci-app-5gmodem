@@ -370,13 +370,14 @@ proto_fibocom_init_config() {
 	proto_config_add_string "password"
 	proto_config_add_int "metric"
 	proto_config_add_boolean "allow_roaming"
+	proto_config_add_boolean "sourcefilter"
 	proto_config_add_defaults
 }
 
 proto_fibocom_setup() {
 	local interface="$1"
-	local usbpath modem_path device atport apn pdptype metric
-	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming auth username password
+	local usbpath modem_path device atport apn pdptype metric sourcefilter
+	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming auth username password sourcefilter
 
 	[ -n "$apn" ] || apn="internet"
 	[ -n "$pdptype" ] || pdptype="IPV4"
@@ -853,6 +854,7 @@ proto_fibocom_setup() {
 			json_add_string ifname "@$interface"
 			json_add_string proto "dhcpv6"
 			json_add_string extendprefix 1
+			[ "$sourcefilter" = "0" ] && json_add_boolean sourcefilter "0"
 			proto_add_dynamic_defaults
 			[ -n "$zone6" ] && json_add_string zone "$zone6"
 			json_close_object
