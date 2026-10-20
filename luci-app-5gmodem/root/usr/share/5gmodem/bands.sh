@@ -960,7 +960,20 @@ _bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
 # Без очереди к порту она перемешивалась с опросом метрик, и маска читалась
 # частично: именно так «Все диапазоны» иногда оставляли модем на одном бенде.
 . /usr/share/5gmodem/atlock.sh
-[ -n "$_bs_at" ] && at_lock "$_bs_at" 15
+if [ -n "$_bs_at" ] && ! at_lock "$_bs_at" 15 && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" != hilink ]; then
+	case "$1" in
+		mgmtinfo|getmode|getsupportedmodes|getcelllock|applyresult) : ;;
+		restorebands) at_lock "$_bs_at" 45 || logger -t 5gmodem "bands: port $_bs_at still busy, restoring bands without the queue" ;;
+		json)
+			_bs_cf="/tmp/5gmodem/bands_$_bs_am"
+			[ -s "$_bs_cf" ] && { cat "$_bs_cf"; exit 0; }
+			echo "AT port $_bs_at is busy"
+			exit 1 ;;
+		*)
+			echo "AT port $_bs_at is busy, try again later"
+			exit 1 ;;
+	esac
+fi
 # ДИАПАЗОНЫ HiLink-МОДЕМА - ВСЕГДА ЧЕРЕЗ ЕГО API, даже в режиме debug.
 #
 # Почему НЕ через AT-профиль: у Huawei смена диапазонов по AT (at^syscfgex)
