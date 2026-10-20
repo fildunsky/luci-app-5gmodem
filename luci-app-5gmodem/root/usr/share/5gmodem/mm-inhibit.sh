@@ -196,6 +196,7 @@ _mm_ifup_if_down() {
 				case "$(ifstatus "$_mif" 2>/dev/null)" in
 					*'"up": true'*|*'"pending": true'*) rm -f "$_lk"; exit 0 ;;
 				esac
+				mm_ghost_bearer "$_mif" "$J"; [ $? = 1 ] || { rm -f "$_lk"; exit 0; }
 				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
 				: > "$_lk"          # отметить старт попытки - от него считаем cooldown
 				ifup "$_mif"

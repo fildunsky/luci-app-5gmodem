@@ -848,6 +848,35 @@ iface_up() {   # $1 - интерфейс
 	return 0
 }
 
+mm_ghost_bearer() {
+	[ -n "$1" ] && [ -n "$2" ] || return 1
+	command -v mmcli >/dev/null 2>&1 || return 1
+	_gb_st=$(ifstatus "$1" 2>/dev/null) || return 1
+	case "$_gb_st" in *'"up": true'*|*'"pending": true'*) return 1 ;; esac
+	case "$_gb_st" in *'"DISCONNECT_FAILED"'*) ;; *) return 1 ;; esac
+	[ "$(mmcli -m "$2" -K 2>/dev/null | sed -n 's/^modem\.generic\.state *: *//p' | head -1)" = connected ] || return 1
+	_gb_f="/tmp/5gmodem/mmghost.$1"
+	_gb_now=$(uptime_s)
+	_gb_t=$(cat "$_gb_f" 2>/dev/null)
+	case "$_gb_t" in ''|*[!0-9]*) _gb_t=0 ;; esac
+	[ "$_gb_t" -gt 0 ] && [ "$_gb_now" -ge "$_gb_t" ] && [ $((_gb_now - _gb_t)) -lt 600 ] && return 2
+	mkdir -p /tmp/5gmodem
+	printf '%s\n' "$_gb_now" > "$_gb_f"
+	_gb_at=$(uci -q get "5gmodem.$(sec_for_iface "$1").at_port")
+	logger -t 5gmodem "$1: ModemManager is stuck in 'connected' with a bearer the modem refuses to disconnect - resetting the modem"
+	(
+		mmcli -m "$2" --reset >/dev/null 2>&1 & _gb_p=$!
+		( sleep 40; kill "$_gb_p" 2>/dev/null ) >/dev/null 2>&1 & _gb_w=$!
+		wait "$_gb_p"; _gb_rc=$?
+		kill "$_gb_w" 2>/dev/null
+		if [ "$_gb_rc" != 0 ] && [ -n "$_gb_at" ] && [ -c "$_gb_at" ]; then
+			logger -t 5gmodem "$1: mmcli --reset failed - rebooting the module over AT"
+			/usr/share/5gmodem/reboot_modem.sh hard "$_gb_at"
+		fi
+	) >/dev/null 2>&1 </dev/null 9>&- &
+	return 0
+}
+
 # Путь активного модема (короткая обёртка - зовётся почти везде).
 active_path() {
 	# Через снимок, если он взят (реестр печатает признак active в КАЖДОЙ записи,

@@ -1294,6 +1294,12 @@ heal() {
 							  kill "$_h_mew" 2>/dev/null ) >/dev/null 2>&1 </dev/null 9>&- &
 						fi
 						continue ;;
+					connected)
+						mm_ghost_bearer "$_h_if" "$_h_mmi"
+						case $? in
+							0) _ev "healing $_h_if: ModemManager stuck in 'connected' after a failed disconnect - modem reset"; continue ;;
+							2) continue ;;
+						esac ;;
 				esac
 			fi
 		fi
