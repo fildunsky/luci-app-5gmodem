@@ -101,7 +101,7 @@ MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,
 OF=$(sms_tool -d $DEVICE at "ati")
 DEVV=$(echo $OF | tr -s "\n"  | xargs)
 FWA=$(sms_tool -d $DEVICE at "AT+GMR" | tr -s "\n"  | xargs)
-FW=$(echo $FWA | cut -c 8-)
+FW=$(echo $FWA | sed 's/^.*AT+GMR *//' | xargs)
 
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n"  | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n"  | xargs)

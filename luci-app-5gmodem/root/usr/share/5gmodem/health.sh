@@ -406,7 +406,9 @@ round() {
 		# а не семейства адресов (правило то же, что в netpri.sh list)
 		case "$_r_n" in
 			*6) _r_p=$(ucinet_get "$_r_n" proto)
-			    case "$_r_p" in dhcpv6|6in4|6to4|6rd) continue ;; esac ;;
+			    [ -n "$_r_p" ] || _r_p=$(printf '%s' "$_HDUMP" \
+				| jsonfilter -e "@.interface[@.interface='$_r_n'].proto" 2>/dev/null | head -1)
+			    case "$_r_p" in dhcpv6|6in4|6to4|6rd) rm -f "$HDIR/$_r_n"; continue ;; esac ;;
 		esac
 		_r_dev=$(iface_dev "$_r_n")
 		[ -n "$_r_dev" ] || _r_dev=$(iface_dev "${_r_n}_4")
@@ -869,7 +871,16 @@ heal() {
 		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
 		[ $((_h_dmax - _h_since)) -le 300 ] && _h_dcnt=$((_h_dcnt + 1))
 	done
-	[ "$_h_dcnt" -gt 1 ] && [ -z "$_h_anyup" ] && return 0
+	if [ "$_h_dcnt" -gt 1 ] && [ -z "$_h_anyup" ]; then
+		_ad_last=$(cat /tmp/5gmodem/health.alldown 2>/dev/null)
+		case "$_ad_last" in ''|*[!0-9]*) _ad_last=0 ;; esac
+		_ad_now=$(uptime_s)
+		if [ $((_ad_now - _ad_last)) -ge 1800 ] || [ "$_ad_now" -lt "$_ad_last" ]; then
+			uptime_s > /tmp/5gmodem/health.alldown
+			_ev "all $_h_dcnt watched links went down together - looks like a common cause, not a modem fault: healing suspended"
+		fi
+		return 0
+	fi
 	for _h_f in "$HDIR"/*; do
 		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
 		_h_if="${_h_f##*/}"
