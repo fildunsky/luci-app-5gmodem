@@ -124,6 +124,29 @@ if [ "${LAC_DEC}" = "0" ]; then
 	LAC_HEX="-"
 fi 
 
+if command -v adb >/dev/null 2>&1 && [ -n "$_POLL_AM" ]; then
+	_zt_ser=$(cat "/sys/bus/usb/devices/$_POLL_AM/serial" 2>/dev/null)
+	_zt_c="/tmp/5gmodem/adbtemp_$(printf '%s' "$_POLL_AM" | tr -c 'A-Za-z0-9' '_')"
+	_zt_cmd='for i in 1 2 3 4; do echo "ant $i $(cfg get lte_rsrp_$i)"; done'
+	_zt_stale=""
+	if [ -z "$(find "$_zt_c" -mmin -1 2>/dev/null)" ]; then
+		_zt_stale=1
+		: > "$_zt_c"
+		_zt_cmd="$_zt_cmd"'; for z in /sys/class/thermal/thermal_zone*; do [ "$(cat $z/type)" = mdm_case_therm ] && echo "temp $(cat $z/temp)"; done'
+	fi
+	_zt_out=""
+	[ -n "$_zt_ser" ] && _zt_out=$(timeout 5 adb -s "$_zt_ser" shell "$_zt_cmd" 2>/dev/null | tr -d '\r')
+	[ -n "$_zt_stale" ] && printf '%s\n' "$_zt_out" | sed -n 's/^temp \([0-9]*\)$/\1/p' | head -1 > "$_zt_c"
+	_zt_v=$(cat "$_zt_c" 2>/dev/null)
+	case "$_zt_v" in ''|*[!0-9]*) ;; *) [ "$_zt_v" -gt 0 ] && [ "$_zt_v" -lt 150 ] && TEMP="$_zt_v &deg;C" ;; esac
+	case "$MODE" in
+		LTE*)
+			ANTPORTS=$(printf '%s\n' "$_zt_out" | awk '$1 == "ant" && $3 ~ /^-[0-9]+$/ {
+				printf "%s%d:%s:", (n++ ? " " : ""), $2 - 1, $3 }')
+			;;
+	esac
+fi
+
 # Firmware
 OF=$(sms_tool -d $DEVICE at "ati")
 DEVV=$(echo $OF | tr -s "\n"  | xargs)

@@ -246,6 +246,12 @@ return view.extend({
 	},
 
 	handleGo: function(ev, cbval) {
+		var self = this;
+		uci.unload('5gmodem');
+		return uci.load('5gmodem').then(function() { return self.handleGoNow(ev, cbval); });
+	},
+
+	handleGoNow: function(ev, cbval) {
 		let phn = document.getElementById('phonenumber').value.trim();
 		/* Префикс страны - НА ОТПРАВКЕ и только к 10-значному национальному
 		   номеру (9291067196 -> +79291067196). Раньше поле ПРЕДЗАПОЛНЯЛОСЬ

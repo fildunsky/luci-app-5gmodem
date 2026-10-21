@@ -20,6 +20,7 @@ PORT="$1"
 
 # drop_dial_port / secname
 . "$RES/lib.sh" 2>/dev/null
+. "$RES/quirks.sh" 2>/dev/null
 
 # ОТДЕЛЬНЫЙ ПОРТ ДЛЯ SMS, ЕСЛИ МОДЕМ ЕГО ДАЁТ.
 #
@@ -108,6 +109,12 @@ for _opt in readport sendport ussdport atport; do
 		CHANGED=1
 	fi
 done
+
+_SNDP=$(sms_send_port "$(uci -q get 5gmodem.@5gmodem[0].active_modem)")
+if [ -n "$_SNDP" ] && [ "$(uci -q get 5gmodem.sms.sendport)" != "$_SNDP" ]; then
+	uci -q set "5gmodem.sms.sendport=$_SNDP"
+	CHANGED=1
+fi
 
 [ "$CHANGED" = 1 ] && uci -q commit 5gmodem
 
