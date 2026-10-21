@@ -137,6 +137,7 @@ EOF
 	# Настройка устаревает (модем переставили, композиция сменилась), и именно на
 	# этом строились ошибки «не тот модем» - поэтому сверяем со списком портов.
 	_r_at=$(uci5g_get "$_r_s" at_port)
+	tty_poll_unsafe "$_r_at" && _r_at=""
 	if [ -n "$_r_at" ]; then
 		case " $_r_tty " in
 			*" $_r_at "*) : ;;
@@ -208,6 +209,7 @@ _flat() {
 		_f_pr=""
 		[ -n "$_f_if" ] && _f_pr=$(ucinet_get "$_f_if" proto)
 		_f_at=$(uci5g_get "$_f_s" at_port)
+		tty_poll_unsafe "$_f_at" && _f_at=""
 		if [ -n "$_f_at" ]; then
 			_f_t=$(_jq -e "@[@.path=\"$_f_p\"].tty[*]" | tr '\n' ' ')
 			case " $_f_t " in
