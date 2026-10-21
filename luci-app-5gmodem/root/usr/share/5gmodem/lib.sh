@@ -2015,6 +2015,7 @@ set_sms_storage() {   # $1 - at-порт
 	uci -q get 5gmodem.sms >/dev/null 2>&1 || return 0
 
 	_ss_stg=$(uci -q get 5gmodem.sms.storage)
+	_ss_alt=""
 
 	if [ "$(uci -q get 5gmodem.sms.storage_touched)" != 1 ]; then
 		# «used: N, total: M» - берём и то, и другое одним запросом.
@@ -2032,7 +2033,12 @@ set_sms_storage() {   # $1 - at-порт
 			[ -n "$_ss_sm" ] || _ss_sm=$(sms_tool -d "$_ss_at" -s SM status 2>/dev/null | sed -n 's/.*total:[ ]*\([0-9]\{1,\}\).*/\1/p' | head -1)
 		done
 		_ss_vp=$(uci -q get "5gmodem.m_$(uci -q get 5gmodem.@5gmodem[0].active_modem | sed 's/[^A-Za-z0-9]/_/g').vidpid")
+		[ "$_ss_vp" = "19d2:1485" ] || case "$_ss_stg" in
+			ME) [ -z "$_ss_me" ] && [ -n "$_ss_sm" ] && _ss_alt=SM ;;
+			SM) [ -z "$_ss_sm" ] && [ -n "$_ss_me" ] && _ss_alt=ME ;;
+		esac
 		if   [ "$_ss_vp" = "19d2:1485" ]; then _ss_new=MT
+		elif [ -n "$_ss_alt" ]; then _ss_new="$_ss_stg"
 		elif [ "${_ss_me:-0}" -gt "${_ss_sm:-0}" ] 2>/dev/null; then _ss_new=ME
 		elif [ "${_ss_sm:-0}" -gt "${_ss_me:-0}" ] 2>/dev/null; then _ss_new=SM
 		elif [ -n "$_ss_me" ]; then _ss_new=ME     # равны или неизвестны - ME
@@ -2049,7 +2055,15 @@ set_sms_storage() {   # $1 - at-порт
 	fi
 
 	[ -n "$_ss_stg" ] || return 0
-	_ss_st=$(sms_apply_cpms "$_ss_at" "$_ss_stg") || return 1
+	if ! _ss_st=$(sms_apply_cpms "$_ss_at" "$_ss_stg"); then
+		[ -n "$_ss_alt" ] || return 1
+		_ss_st=$(sms_apply_cpms "$_ss_at" "$_ss_alt") || return 1
+		uci -q set "5gmodem.sms.storage=$_ss_alt"
+		uci -q commit 5gmodem
+		logger -t 5gmodem \
+			"sms: хранилище выбрано автоматически - $_ss_alt ($_ss_stg не ответило и не принято модемом)"
+		_ss_stg="$_ss_alt"
+	fi
 	_ss_m3=${_ss_st##*|}
 	if [ -n "$_ss_m3" ] && [ "$_ss_m3" != "$_ss_stg" ]; then
 		uci -q set "5gmodem.sms.storage=$_ss_m3"
