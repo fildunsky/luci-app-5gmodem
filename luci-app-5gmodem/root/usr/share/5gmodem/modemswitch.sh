@@ -219,6 +219,7 @@ at_for_path() {
 	for _afp_t in $(modem_ttys "$1"); do
 		[ "$_afp_t" = "$_afp_skip" ] && continue
 		[ "$_afp_t" = "$_afp_at" ] && continue
+		tty_poll_unsafe "$_afp_t" && continue
 		if soc_modem_node "$1" >/dev/null; then
 			_afp_rest="$_afp_t $_afp_rest"
 		else
@@ -283,7 +284,7 @@ resolve_at_gate() {
 quiet_at_port() {
 	[ -n "$_RG_PORT" ] && [ -c "$_RG_PORT" ] && { echo "$_RG_PORT"; return 0; }
 	_qa_pin=$(uci -q get "$CFG.$2.at_port")
-	if [ -n "$_qa_pin" ] && [ -e "$_qa_pin" ] && modem_ttys "$1" | grep -qxF "$_qa_pin"; then
+	if [ -n "$_qa_pin" ] && [ -e "$_qa_pin" ] && ! tty_poll_unsafe "$_qa_pin" && modem_ttys "$1" | grep -qxF "$_qa_pin"; then
 		echo "$_qa_pin"; return 0
 	fi
 	_qa_if=$(uci -q get "$CFG.$2.at_if")
@@ -585,7 +586,7 @@ switch)
 	# fixes - so a plain tab switch needs no slow AT re-probe. Fall back to a
 	# full detect only when the saved port is gone or now belongs elsewhere.
 	SAVED=$(uci -q get "$CFG.$SEC.at_port")
-	if [ -n "$SAVED" ] && [ -e "$SAVED" ] && modem_ttys "$P" | grep -qxF "$SAVED"; then
+	if [ -n "$SAVED" ] && [ -e "$SAVED" ] && ! tty_poll_unsafe "$SAVED" && modem_ttys "$P" | grep -qxF "$SAVED"; then
 		ATP="$SAVED"
 	else
 		ATP=$(at_for_path "$P")
@@ -1416,7 +1417,7 @@ resolve)
 		# сдвигается, и тогда закрепление протухает.
 		A=""
 		_pin=$(uci -q get "$CFG.$SEC.at_port")
-		if [ "$_RG_QUIET" != 1 ] && [ -n "$_pin" ] && [ -e "$_pin" ] && modem_ttys "$P" | grep -qxF "$_pin"; then
+		if [ "$_RG_QUIET" != 1 ] && [ -n "$_pin" ] && [ -e "$_pin" ] && ! tty_poll_unsafe "$_pin" && modem_ttys "$P" | grep -qxF "$_pin"; then
 			if [ "$(uci -q get "$CFG.@5gmodem[0].auto_port")" = 0 ]; then
 				A="$_pin"
 			else
@@ -1455,7 +1456,7 @@ resolve)
 			# ЭТОМУ модему (значит, AT-проба просто столкнулась за порт); иначе
 			# чистим - пусто честнее чужого (см. инвариант в ветке switch).
 			SAVED=$(uci -q get "$CFG.$SEC.at_port")
-			if [ -n "$SAVED" ] && { [ ! -e "$SAVED" ] || ! modem_ttys "$P" | grep -qxF "$SAVED"; }; then
+			if [ -n "$SAVED" ] && { [ ! -e "$SAVED" ] || tty_poll_unsafe "$SAVED" || ! modem_ttys "$P" | grep -qxF "$SAVED"; }; then
 				uci -q delete "$CFG.$SEC.at_port" 2>/dev/null
 			fi
 		fi
@@ -1653,6 +1654,7 @@ resolve)
 	# apply the active modem's fresh AT port to the working config + SMS ports
 	SEC=$(secname "$AMP")
 	ATP=$(uci -q get "$CFG.$SEC.at_port")
+	tty_poll_unsafe "$ATP" && ATP=$(at_for_path "$AMP")
 	if [ -n "$ATP" ] && [ -e "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"

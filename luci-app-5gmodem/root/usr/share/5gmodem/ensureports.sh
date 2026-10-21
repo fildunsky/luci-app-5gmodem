@@ -66,7 +66,9 @@ pick_sms_port() {
 	return 1
 }
 
+_SNDP=$(sms_send_port "$(uci -q get 5gmodem.@5gmodem[0].active_modem)")
 SHARED=$(uci -q get 5gmodem.sms.shared_at_port)
+[ -n "$_SNDP" ] && SHARED=1
 if [ -z "$PORT" ] && [ "$SHARED" = 1 ]; then
 	_sh_at=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 	[ -c "$_sh_at" ] && PORT="$_sh_at"
@@ -104,13 +106,13 @@ for _opt in readport sendport ussdport atport; do
 	# значение живым - самолечение не срабатывало никогда (аудит 12.09.2026).
 	if [ -z "$_cur" ] || [ ! -c "$_cur" ] || \
 	   { [ "$SHARED" != 1 ] && [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; } || \
-	   { [ -n "$_DLP" ] && [ "$_cur" = "$_DLP" ] && [ "$PORT" != "$_DLP" ]; }; then
+	   { [ -n "$_DLP" ] && [ "$_cur" = "$_DLP" ] && [ "$PORT" != "$_DLP" ]; } || \
+	   { [ "$_opt" != sendport ] && [ -n "$_SNDP" ] && [ "$_cur" = "$_SNDP" ] && [ "$PORT" != "$_SNDP" ]; }; then
 		uci -q set "5gmodem.sms.$_opt=$PORT"
 		CHANGED=1
 	fi
 done
 
-_SNDP=$(sms_send_port "$(uci -q get 5gmodem.@5gmodem[0].active_modem)")
 if [ -n "$_SNDP" ] && [ "$(uci -q get 5gmodem.sms.sendport)" != "$_SNDP" ]; then
 	uci -q set "5gmodem.sms.sendport=$_SNDP"
 	CHANGED=1
