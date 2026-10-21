@@ -84,7 +84,7 @@ function esimUiCss() {}   /* стили в modem.css */
 function esimSimIcon(cls) {
 	return E('img', {
 		'class': cls || 'esim-simicon',
-		'src': L.resource('icons/5gmodem/csim_iface.svg'),
+		'src': mutil.icon('icons/5gmodem/csim_iface.svg'),
 		'alt': ''
 	});
 }
@@ -238,7 +238,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30210, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30211, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -458,7 +458,7 @@ return view.extend({
 						var f = document.getElementById('esim-qr-file');
 						if (f) { f.click(); }
 					}
-				}, [ E('img', { 'src': L.resource('icons/5gmodem/cqr.svg'), 'alt': _('QR') }) ]),
+				}, [ E('img', { 'src': mutil.icon('icons/5gmodem/cqr.svg'), 'alt': _('QR') }) ]),
 				E('input', {
 					'type': 'file', 'id': 'esim-qr-file', 'accept': 'image/*',
 					'style': 'display:none',
@@ -1286,7 +1286,7 @@ function renderProfiles(list) {
 			E('td', { 'class': 'td left' }, [
 				E('span', { 'class': 'esim-op' }, [
 					// Активный (enabled) профиль - иконка с «галочкой», остальные - обычная.
-					E('img', { 'src': L.resource(on ? 'icons/5gmodem/csim_active.svg' : 'icons/5gmodem/csim_iface.svg'), 'alt': '' }),
+					E('img', { 'src': mutil.icon(on ? 'icons/5gmodem/csim_active.svg' : 'icons/5gmodem/csim_iface.svg'), 'alt': '' }),
 					p.serviceProviderName || '-'
 				])
 			]),

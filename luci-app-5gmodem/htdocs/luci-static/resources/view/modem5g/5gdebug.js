@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30210, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30211, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -421,7 +421,7 @@ return view.extend({
 							mmRunning && p.mm_exclude === '1' ? E('img', {   /* СТРОГО '1': «не ноль»
 							   считал скрытым и модем БЕЗ флага - у чистого MM-модема
 							   висел призрак «MM спрятан сам от себя» (31.07.2026) */
-								'src': L.resource('icons/5gmodem/cghost.svg'),
+								'src': mutil.icon('icons/5gmodem/cghost.svg'),
 								'width': 12, 'height': 12, 'alt': '',
 								'title': _('hidden from ModemManager'),
 								'style': 'margin-right:.3em; opacity:.75; flex:0 0 auto'

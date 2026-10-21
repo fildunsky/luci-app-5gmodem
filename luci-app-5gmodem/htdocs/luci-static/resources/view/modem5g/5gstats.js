@@ -290,7 +290,7 @@ function trafficIcon(key, label, opName) {
 	} else {
 		f = 'icons/5gmodem/op-sim.svg';
 	}
-	return E('img', { 'src': L.resource(f), 'width': 18, 'height': 18, 'alt': '',
+	return E('img', { 'src': mutil.icon(f), 'width': 18, 'height': 18, 'alt': '',
 		'style': 'display:block' });
 }
 
@@ -492,7 +492,7 @@ function refresh() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30210, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30211, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
