@@ -1,0 +1,33 @@
+# AT templates — '## group' starts a section, a '# description' line describes
+# the command below it, and the command line is sent to the modem as-is.
+# '#' lines are never sent. Full help is in generic.user. Edit freely.
+
+## Signal and cell
+
+# Signal quality (RSRP, RSRQ, RSSI)
+AT+ZRSSI
+
+# Serving cell
+AT+ZCELLINFO?
+
+# Carrier aggregation
+AT+ZCAINFO?
+
+# Serving and neighbour cells
+AT$QCRSRP?
+
+# Network type and domain
+AT+ZPAS?
+
+## Network and bands
+
+# Network mode (read)
+AT+ZSNT?
+
+# Uplink aggregation (read)
+AT+ZULCA?
+
+## Radio control
+
+# Reboot the modem
+AT+CFUN=1,1

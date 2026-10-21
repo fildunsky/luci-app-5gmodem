@@ -133,6 +133,26 @@ proto_qmiraw_setup() {
 	local uninitialized_timeout=0
 	# timeout 3s for first call to avoid hanging uqmi
 	uqmi -d "$device" -t 3000 --get-pin-status > /dev/null 2>&1
+	local sim_wait=0 pin_out uim_out
+	while [ "$sim_wait" -lt 30 ]; do
+		[ -e "$device" ] || return 1
+		pin_out=$(uqmi -s -d "$device" -t 1000 --get-pin-status 2>&1)
+		case "$pin_out" in
+			*'"pin1_status":"not_initialized"'*) ;;
+			*'"pin1_status":"'*) break ;;
+		esac
+		uim_out=$(uqmi -s -d "$device" -t 1000 --uim-get-sim-state 2>&1)
+		case "$uim_out" in
+			*'"pin1_status":"not_initialized"'*) ;;
+			*'"pin1_status":"'*) break ;;
+		esac
+		case "$pin_out|$uim_out" in
+			*'Not supported'*'|'*'Not supported'*|*'Invalid QMI command'*'|'*'Invalid QMI command'*) break ;;
+		esac
+		sim_wait=$((sim_wait + 1))
+		sleep 1
+	done
+	[ "$sim_wait" -gt 0 ] && echo "Waited ${sim_wait}s for the SIM"
 	while uqmi -s -d "$device" -t 1000 --get-pin-status | grep '"UIM uninitialized"' > /dev/null; do
 		[ -e "$device" ] || return 1
 		if [ "$uninitialized_timeout" -lt "$timeout" -o "$timeout" = "0" ]; then
@@ -322,7 +342,10 @@ proto_qmiraw_setup() {
 
 	uqmi -s -d "$device" -t 1000 --sync > /dev/null 2>&1
 
-	uqmi -s -d "$device" -t 20000 --network-register > /dev/null 2>&1
+	case "$(uqmi -s -d "$device" -t 3000 --get-serving-system 2>/dev/null | jsonfilter -e '@.registration' 2>/dev/null)" in
+		registered|searching) ;;
+		*) uqmi -s -d "$device" -t 20000 --network-register > /dev/null 2>&1 ;;
+	esac
 
 	# PLMN selection must happen after the call to network-register
 	if [ -n "$mcc" -a -n "$mnc" ]; then

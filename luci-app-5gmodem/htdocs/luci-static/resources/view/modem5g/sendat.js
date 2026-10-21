@@ -172,6 +172,7 @@ function atFamilyFor(vp, model) {
 	if (vp.indexOf('2c7c:') === 0 || /quectel|^e[gmp]\d|^r[gm]5/.test(m)) { return 'quectel'; }
 	if (vp.indexOf('1e0e:') === 0 || /simcom|sim7/.test(m)) { return 'simcom'; }
 	if (vp.indexOf('12d1:') === 0 || /huawei/.test(m)) { return 'huawei'; }
+	if (vp === '19d2:1485' || vp === '19d2:1432' || vp === '19d2:1489' || vp === '19d2:1275' || /mf28/.test(m)) { return 'zte'; }
 	if (vp === '413c:81d7' || vp === '413c:81e0' || vp === '413c:81e4' || vp === '413c:81e6' || vp === '413c:81d8' || vp === '0489:e0b5' || vp === '0489:e0b4' || vp === '05c6:9025'
 		|| vp === '05c6:90d5' || vp.indexOf('1e2d:00b') === 0 || /t99w|t77w|dw58|mv31/.test(m)) { return 'qualcomm'; }
 	return null;

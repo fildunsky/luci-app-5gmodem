@@ -74,7 +74,7 @@ case "$MODE_NUM" in
 		if [ -n "$T" ]; then
 			T1=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO/ {print $6}' | xargs)
 			PBAND="$(band4g $T "") @$T1 MHz"
-			[ "x$MODE" = "xLTE BUnknown" ] && MODE="LTE $(band4g $T)"
+			case "$MODE" in "LTE BUnknown"|"LTE ") MODE="LTE $(band4g $T)" ;; esac
 			T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO/ {print $2}' | xargs)
 			[ -n "$T" ] && PCI="$T"
 			T=$(echo "$O" | awk -F[,:\;] '/^\+ZCAINFO/ {print $5}' | xargs)
@@ -128,7 +128,7 @@ fi
 OF=$(sms_tool -d $DEVICE at "ati")
 DEVV=$(echo $OF | tr -s "\n"  | xargs)
 FWA=$(sms_tool -d $DEVICE at "AT+GMR" | tr -s "\n"  | xargs)
-FW=$(echo $FWA | cut -c 8-)
+FW=$(echo $FWA | sed 's/^.*AT+GMR *//' | xargs)
 
 # Model
 MODELA=$(echo $DEVV | awk -F 'Revision: ' '{print $1}'| xargs)
@@ -142,11 +142,11 @@ SUB='MODULE'
 # именами давал «unknown operand», и ветка молча не срабатывала.
 case "$MODELD" in *"$SUB"*) _zte_sub=1 ;; *) _zte_sub=0 ;; esac
 if [ "$_zte_sub" = 1 ]; then
-MODELDCUT=$(echo $MODELD | awk -F 'CGMM |MODULE' '{print $2}'| xargs)
-MODEL="$MODELB "$MODELDCUT
+MODELDCUT=$(echo $MODELD | sed 's/.*CGMM *//; s/MODULE.*//' | xargs)
+MODEL=$(echo $MODELB $MODELDCUT)
 else
-MODELDCUT=$(echo $MODELD | cut -c 9-)
-MODEL="$MODELB "$MODELDCUT
+MODELDCUT=$(echo $MODELD | sed 's/.*CGMM *//' | xargs)
+MODEL=$(echo $MODELB $MODELDCUT)
 fi
 
 # International Mobile Equipment Identity (IMEI)

@@ -68,9 +68,33 @@ fmt_ts() {
 	date -D '%Y-%m-%dT%H:%M:%S' -d "$TS" +"$DATEFMT" 2>/dev/null || echo "$1"
 }
 
-list_paths() {
+load_paths() {
+	[ -n "$LP_DONE" ] && return 0
 	LIST=$(mmcli -m "$MMIDX" --messaging-list-sms -J 2>/dev/null) || return 1
-	jsonfilter -s "$LIST" -e '@["modem.messaging.sms"][*]' 2>/dev/null
+	LP_OUT=$(jsonfilter -s "$LIST" -e '@["modem.messaging.sms"][*]' 2>/dev/null)
+	LP_DONE=1
+}
+
+list_paths() {
+	load_paths || return 1
+	printf '%s\n' "$LP_OUT"
+}
+
+SMS_CACHE=/tmp/5gmodem/mmsms
+MMPID=$(pidof ModemManager 2>/dev/null | cut -d' ' -f1)
+mkdir -p "$SMS_CACHE" 2>/dev/null
+for _f in "$SMS_CACHE"/*; do
+	[ -f "$_f" ] || continue
+	case "${_f##*/}" in "$MMPID".*) ;; *) rm -f "$_f" ;; esac
+done
+
+sms_json() {
+	_sc="$SMS_CACHE/$MMPID.${1##*/}"
+	[ -n "$MMPID" ] && [ -s "$_sc" ] && { cat "$_sc"; return 0; }
+	_sj=$(mmcli -s "$1" -J 2>/dev/null) || return 1
+	[ -n "$MMPID" ] && [ "$(jsonfilter -s "$_sj" -e '@.sms.properties.state' 2>/dev/null)" = received ] \
+		&& printf '%s' "$_sj" > "$_sc" 2>/dev/null
+	printf '%s' "$_sj"
 }
 
 # Drop stale partial messages stuck in the "receiving" state. On this
@@ -96,7 +120,7 @@ cleanup_stale_rx() {
 	NOW=$(cut -d. -f1 /proc/uptime)
 	mkdir -p "$RX_MARK_DIR" 2>/dev/null
 	for P in $(list_paths); do
-		SJ=$(mmcli -s "$P" -J 2>/dev/null) || continue
+		SJ=$(sms_json "$P") || continue
 		STATE=$(jsonfilter -s "$SJ" -e '@.sms.properties.state' 2>/dev/null)
 		IDX=$(sms_index "$P")
 		if [ "$STATE" != "receiving" ]; then
@@ -119,13 +143,14 @@ cleanup_stale_rx() {
 case "$CMD" in
 
 recv)
+	load_paths
 	cleanup_stale_rx
 	[ "$JSONOUT" = "1" ] && {
 		json_init
 		json_add_array msg
 	}
 	for P in $(list_paths); do
-		SJ=$(mmcli -s "$P" -J 2>/dev/null) || continue
+		SJ=$(sms_json "$P") || continue
 		TYPE=$(jsonfilter -s "$SJ" -e '@.sms.properties["pdu-type"]' 2>/dev/null)
 		[ "$TYPE" = "deliver" ] || continue
 		STATE=$(jsonfilter -s "$SJ" -e '@.sms.properties.state' 2>/dev/null)
@@ -153,13 +178,14 @@ recv)
 	;;
 
 status)
+	load_paths
 	cleanup_stale_rx
 	# format and prefix width matter: readsms.js extracts the used count
 	# as substring(17, indexOf("total")) - "Storage type: MT," is exactly
 	# 17 characters
 	USED=0
 	for P in $(list_paths); do
-		SJ=$(mmcli -s "$P" -J 2>/dev/null) || continue
+		SJ=$(sms_json "$P") || continue
 		TYPE=$(jsonfilter -s "$SJ" -e '@.sms.properties["pdu-type"]' 2>/dev/null)
 		STATE=$(jsonfilter -s "$SJ" -e '@.sms.properties.state' 2>/dev/null)
 		[ "$TYPE" = "deliver" ] && [ "$STATE" = "received" ] && USED=$((USED + 1))
