@@ -1754,7 +1754,7 @@ function renderProtoChip(json) {
 		   текст протокола - в отдельном узле (обновляем только его). Фикс-размер под
 		   line-height чипа, чтобы появление иконки не растягивало строку. */
 		chip._ghost = E('img', {
-			'src': L.resource('icons/5gmodem/cghost.svg'), 'alt': '',
+			'src': mutil.icon('icons/5gmodem/cghost.svg'), 'alt': '',
 			'title': _('hidden from ModemManager'),
 			'style': 'width:11px; height:11px; margin-right:.3em; opacity:.8;'
 				+ 'vertical-align:-1px; display:none; pointer-events:none;'
@@ -2137,7 +2137,7 @@ function updateUsbFlapWarn(json) {
 			         'position:relative;top:.25rem;margin-left:.8em'
 		}, [
 			E('img', {
-				'src': L.resource('icons/5gmodem/cwarn.svg'), 'title': txt, 'alt': '⚠',
+				'src': mutil.icon('icons/5gmodem/cwarn.svg'), 'title': txt, 'alt': '⚠',
 				'style': 'width:13px;height:13px'
 			})
 		]);
@@ -2161,10 +2161,10 @@ function updateSimIcon(name) {
 	if (!si) { return; }
 	var want;
 	if (name == null || String(name).length < 1 || String(name) == '-') {
-		want = L.resource('icons/5gmodem/op-nosim.svg');   // модем ещё грузится / нет SIM
+		want = mutil.icon('icons/5gmodem/op-nosim.svg');   // модем ещё грузится / нет SIM
 	} else {
 		var ic = mutil.operatorIcon(name);
-		want = ic ? L.resource('icons/5gmodem/' + ic + '.svg') : L.resource('icons/5gmodem/op-sim.svg');
+		want = ic ? mutil.icon('icons/5gmodem/' + ic + '.svg') : mutil.icon('icons/5gmodem/op-sim.svg');
 	}
 	if (si.getAttribute('src') != want) { si.setAttribute('src', want); }
 }
@@ -2934,10 +2934,10 @@ function applyMetrics(json) {
 				fillAntPorts(json.antports, json.rxdiv);
 
 					var wicon, ticon, t;
-					var wicon = L.resource('icons/5gmodem/cloading.svg');
-					var ticon = L.resource('icons/5gmodem/ctime.svg');
-					var dicon = L.resource('icons/5gmodem/cdown.svg');   // скачивание (rx)
-					var uicon = L.resource('icons/5gmodem/cup.svg');     // загрузка (tx)
+					var wicon = mutil.icon('icons/5gmodem/cloading.svg');
+					var ticon = '<svg width="12" height="12" viewBox="0 0 128 128" style="vertical-align:-1px" aria-hidden="true"><path fill="#B0BEC5" d="M64,0C28.656,0,0,28.656,0,64s28.656,64,64,64s64-28.656,64-64S99.344,0,64,0z M64,120C33.125,120,8,94.875,8,64S33.125,8,64,8s56,25.125,56,56S94.875,120,64,120z"/><path fill="#03A9F4" d="M92.281,80.969L72,60.688V40c0-4.422-3.578-8-8-8s-8,3.578-8,8v27.313l24.969,24.969c3.125,3.133,8.188,3.133,11.313,0C95.414,89.156,95.414,84.092,92.281,80.969z"/></svg>';
+					var dicon = '<svg width="11" height="11" viewBox="0 0 52 52" style="vertical-align:-1px" aria-hidden="true"><path fill="#009955" d="M8.3,14h35.4c1,0,1.7,1.3,0.9,2.2L27.3,37.4c-0.6,0.8-1.9,0.8-2.5,0L7.3,16.2C6.6,15.3,7.2,14,8.3,14z"/></svg>';   // скачивание (rx)
+					var uicon = '<svg width="11" height="11" viewBox="0 0 52 52" style="vertical-align:-1px" aria-hidden="true"><path fill="#0099ff" d="M43.7,38H8.3c-1,0-1.7-1.3-0.9-2.2l17.3-21.2c0.6-0.8,1.9-0.8,2.5,0l17.5,21.2C45.4,36.7,44.8,38,43.7,38z"/></svg>';     // загрузка (tx)
 
 					// Мобильные иконки уровня сигнала (цветные "палочки":
 					// красный слабый -> зелёный сильный). Иконки luci
@@ -2996,7 +2996,7 @@ function applyMetrics(json) {
 							+ '<span class="tginfo-connstatus">' + _msg + '</span>';
 						}
 						else {
-						view.innerHTML = String.format('<img style="width: 12px; height: 12px; vertical-align: -1px;" src="%s"/>', ticon) + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(_connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : json.conn_time_sec) + '</span> | ' + '<img style="width:11px;height:11px;vertical-align:-1px" src="' + dicon + '"/>\u202f' + _escTxt(mutil.localizeBytes(json.rx)) + ' <img style="width:11px;height:11px;vertical-align:-1px" src="' + uicon + '"/>\u202f' + _escTxt(mutil.localizeBytes(json.tx));
+						view.innerHTML = ticon + ' ' + '<span id="conndur" style="font-variant-numeric:tabular-nums">' + mutil.formatDuration(_connBase ? _connBase.sec + Math.floor((Date.now() - _connBase.at) / 1000) : json.conn_time_sec) + '</span> | ' + dicon + '\u202f' + _escTxt(mutil.localizeBytes(json.rx)) + ' ' + uicon + '\u202f' + _escTxt(mutil.localizeBytes(json.tx));
 						}
 					}
 
@@ -3493,7 +3493,7 @@ function applyMetrics(json) {
 							         'position:relative;top:.25rem;margin-left:.8em'
 						}, [
 							E('img', {
-								'src': L.resource('icons/5gmodem/cloading.svg'), 'title': txt, 'alt': '⌛',
+								'src': mutil.icon('icons/5gmodem/cloading.svg'), 'title': txt, 'alt': '⌛',
 								'style': 'width:12px;height:12px'
 							})
 						]));
@@ -3945,7 +3945,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30210, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30211, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4350,7 +4350,7 @@ simDialog: baseclass.extend({
 					E('div', { 'class': 'cbi-tooltip-container' }, [
 						E('img', {
 							'id': 'simicon',
-							'src': L.resource('icons/5gmodem/op-nosim.svg'),
+							'src': mutil.icon('icons/5gmodem/op-nosim.svg'),
 							'title': _(''),
 							'class': 'middle',
 						}),
@@ -4405,7 +4405,7 @@ simDialog: baseclass.extend({
 					E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
 					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
-							E('img', { 'src': L.resource('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+							E('img', { 'src': mutil.icon('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
 						]),
 						E('span', { 'id': 'temp' }, [ '-' ]),
 					]),

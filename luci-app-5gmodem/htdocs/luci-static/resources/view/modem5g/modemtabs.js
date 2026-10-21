@@ -407,8 +407,8 @@ function ghostBar() {
 		}, [
 			E('img', {
 				'class': 'modemtab-ic',
-				'src': it.op ? L.resource('icons/5gmodem/' + it.op + '.svg')
-				             : L.resource(it.usb ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg'),
+				'src': it.op ? mutil.icon('icons/5gmodem/' + it.op + '.svg')
+				             : mutil.icon(it.usb ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg'),
 				'width': 16, 'height': 16, 'alt': ''
 			}),
 			E('span', {}, [ it.label || _('Modem') ])
@@ -477,8 +477,8 @@ function operatorTabIcon(name) {
 }
 function tabIconSrc(m, opIcon) {
 	if (!opIcon && m && m.tether) { opIcon = 'op-sim'; }
-	if (opIcon) { return L.resource('icons/5gmodem/' + opIcon + '.svg'); }
-	return L.resource(isUsbStick(m) ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg');
+	if (opIcon) { return mutil.icon('icons/5gmodem/' + opIcon + '.svg'); }
+	return mutil.icon(isUsbStick(m) ? 'icons/5gmodem/cusb.svg' : 'icons/5gmodem/cmodem.svg');
 }
 
 function tabsCacheSave(modems, active) {
@@ -859,7 +859,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30210,
+	API: 30211,
 	/* Шапка: только ряд вкладок выбора модема (если модемов > 1). Имя активного
 	   модема показывается заголовком блока «Общая информация» в самой вьюхе.
 	   Возвращает Promise<DOM|null>. null - если модем один/нет. */

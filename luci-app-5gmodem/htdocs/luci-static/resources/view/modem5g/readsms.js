@@ -761,7 +761,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30210, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30211, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1450,7 +1450,7 @@ return view.extend({
 											result.sort(function(a, b) { return b._ts - a._ts; });
 											result.forEach(function(o) { delete o._ts; });
 													if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
-															var Lres = L.resource('icons/5gmodem/cmessage.svg');
+															var Lres = mutil.icon('icons/5gmodem/cmessage.svg');
 
 															for (var i = 0; i < result.length; i++) {
 																table.appendChild(sms_make_card(result[i], Lres, hide));
@@ -1491,7 +1491,7 @@ return view.extend({
 
 										if (true) { /* рендер НЕ зависит от разбора счётчика (u): список уже прочитан */
 
-											var Lres = L.resource('icons/5gmodem/cmessage.svg');
+											var Lres = mutil.icon('icons/5gmodem/cmessage.svg');
 
 											for (var i = 0; i < sortedData.length; i++) {
 												table.appendChild(sms_make_card(sortedData[i], Lres, hide));
@@ -1572,7 +1572,7 @@ return view.extend({
 			/* Через модель: она запомнит выделение перед очисткой (важно, когда
 			   тёплый рендер приходит поверх уже показанного списка). */
 			table = smsSetState('list') || table;
-			var Lres = L.resource('icons/5gmodem/cmessage.svg');
+			var Lres = mutil.icon('icons/5gmodem/cmessage.svg');
 			for (var i = 0; i < c.list.length; i++) {
 				table.appendChild(sms_make_card(c.list[i], Lres, hide));
 			}

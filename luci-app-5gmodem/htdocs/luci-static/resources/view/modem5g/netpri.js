@@ -132,7 +132,7 @@ function stArrow(name) {
 	/* Направление в классе: по нему CSS пульсирует свечением ТОЛЬКО ту стрелку,
 	   чья фаза идёт (cdown = загрузка -> st-arrow-dl, cup = отдача -> st-arrow-ul). */
 	var dir = (name === 'cdown') ? ' st-arrow-dl' : (name === 'cup') ? ' st-arrow-ul' : '';
-	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': L.resource('icons/5gmodem/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
+	return E('img', { 'class': 'netpri-st-arrow' + dir, 'src': mutil.icon('icons/5gmodem/' + name + '.svg'), 'width': 11, 'height': 11, 'alt': '' });
 }
 
 /* содержимое средней строки (скорость) по фазе. Во время загрузки показываем
@@ -571,12 +571,12 @@ function pingBadge(info) {
 	if (info.img) {
 		if (info.plain) {
 			return E('span', { 'class': 'netpri-pingico' }, [
-				E('img', { 'src': L.resource('icons/5gmodem/' + info.img), 'width': 16, 'height': 16,
+				E('img', { 'src': mutil.icon('icons/5gmodem/' + info.img), 'width': 16, 'height': 16,
 					'alt': '', 'style': 'display:block;border-radius:4px' })
 			]);
 		}
 		return E('span', { 'class': 'netpri-pingbadge', 'style': 'background:#1b1f23' }, [
-			E('img', { 'src': L.resource('icons/5gmodem/' + info.img), 'width': 12, 'height': 12,
+			E('img', { 'src': mutil.icon('icons/5gmodem/' + info.img), 'width': 12, 'height': 12,
 				'alt': '', 'style': 'display:block' })
 		]);
 	}
@@ -783,7 +783,7 @@ function svcName(service) { return (SVC_KNOWN[service] && SVC_KNOWN[service].nam
 function svcIcon(service) {
 	var k = SVC_KNOWN[service];
 	if (k && k.img) {
-		return E('img', { 'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + k.img),
+		return E('img', { 'class': 'netpri-ic', 'src': mutil.icon('icons/5gmodem/' + k.img),
 			'width': 16, 'height': 16, 'alt': '' });
 	}
 	if (k && k.glyph) {
@@ -1019,7 +1019,7 @@ function typeIcon(o) {
 	if (o.type === 'modem') {
 		var oi = mutil.operatorIcon(o.label);
 		return E('img', {
-			'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg'),
+			'class': 'netpri-ic', 'src': mutil.icon('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg'),
 			'width': 16, 'height': 16, 'alt': ''
 		});
 	}
@@ -1028,7 +1028,7 @@ function typeIcon(o) {
 	      : null;
 	if (!f) { return null; }
 	return E('img', {
-		'class': 'netpri-ic', 'src': L.resource('icons/5gmodem/' + f),
+		'class': 'netpri-ic', 'src': mutil.icon('icons/5gmodem/' + f),
 		'width': 16, 'height': 16, 'alt': ''
 	});
 }
@@ -1056,11 +1056,11 @@ function rankEl(idx, o) {
 		var src = null;
 		if (o && o.type === 'modem') {
 			var oi = mutil.operatorIcon(o.label);
-			src = L.resource('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg');
+			src = mutil.icon('icons/5gmodem/' + (oi ? oi : 'op-sim') + '.svg');
 		} else if (o && o.type === 'wifi') {
-			src = L.resource('icons/5gmodem/cwifi.svg');
+			src = mutil.icon('icons/5gmodem/cwifi.svg');
 		} else if (o && o.type === 'wan') {
-			src = L.resource('icons/5gmodem/cwan.svg');
+			src = mutil.icon('icons/5gmodem/cwan.svg');
 		}
 		if (!src) { return ''; }
 		return E('img', { 'class': 'netpri-rank netpri-rank-ic', 'src': src,
@@ -1772,7 +1772,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30210,
+	API: 30211,
 	/* Смонтировать блок ВНУТРИ контента страницы (под под-вкладками, как обычный
 	   элемент вьюхи). Возвращает контейнер СРАЗУ (синхронно), наполняется асинхронно
 	   и живёт своим поллом. Так блок виден на всех темах и на мобильном - в отличие
