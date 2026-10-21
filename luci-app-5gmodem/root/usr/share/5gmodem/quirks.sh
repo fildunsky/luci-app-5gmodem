@@ -343,6 +343,20 @@ _tty_ifnum() {   # $1 - имя tty; печатает "<usb-путь> <bInterface
 	echo "$_ti_p $(cat "$_ti_d/bInterfaceNumber" 2>/dev/null)"
 }
 
+sms_send_port() {
+	[ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ] || return 1
+	case "$(cat "/sys/bus/usb/devices/$1/idVendor"):$(cat "/sys/bus/usb/devices/$1/idProduct")" in
+		0e8d:7127) _ssp_if=06 ;;
+		*) return 1 ;;
+	esac
+	for _ssp_t in /sys/class/tty/ttyUSB*; do
+		[ -e "$_ssp_t" ] || continue
+		[ "$(_tty_ifnum "${_ssp_t##*/}")" = "$1 $_ssp_if" ] || continue
+		[ -c "/dev/${_ssp_t##*/}" ] && { echo "/dev/${_ssp_t##*/}"; return 0; }
+	done
+	return 1
+}
+
 mm_dedicated_at() {
 	[ -n "$1" ] && [ -n "$2" ] && [ -n "$3" ] || return 0
 	[ "$(uci -q get "5gmodem.$2.no_at" 2>/dev/null)" = "1" ] && return 0
