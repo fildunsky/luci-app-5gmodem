@@ -65,6 +65,9 @@ jobs:
       - name: Download SDK
         run: .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
 
+      - name: Check embedded icons
+        run: python3 luci-app-5gmodem/tools/gen-icons.py --check
+
       - name: Build with OpenWrt SDK
         run: |
           mkdir -p built && chmod 777 built

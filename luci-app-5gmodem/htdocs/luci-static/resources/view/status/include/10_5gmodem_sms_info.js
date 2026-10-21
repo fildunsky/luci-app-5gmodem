@@ -321,7 +321,7 @@ return baseclass.extend({
 		signalIcon.style.width = '28px';
 		signalIcon.style.height = '28px';
 		signalIcon.style.verticalAlign = 'middle';
-		let smsIconUrl = L.resource('icons/5gmodem/newdelsms.png');
+		let smsIconUrl = mutil.icon('icons/5gmodem/newdelsms.png');
 		
 		if (!hasFullData) {
 			return E('div', { 

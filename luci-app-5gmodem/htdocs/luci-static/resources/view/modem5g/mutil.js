@@ -1,5 +1,6 @@
 'use strict';
 'require baseclass';
+'require view.modem5g.icons as icons';
 
 /* ОБЩИЕ УТИЛИТЫ БЕЗ СОСТОЯНИЯ - первый шаг распила 5gdetail.js (4180 строк).
    Сюда выносится только то, что не трогает ни DOM-состояние страницы, ни
@@ -518,7 +519,8 @@ function signalSvg(p) {
 }
 
 return baseclass.extend({
-	API: 30210,
+	icon: function(p) { return icons.url(p); },
+	API: 30211,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,
