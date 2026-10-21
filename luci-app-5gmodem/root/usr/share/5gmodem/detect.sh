@@ -148,7 +148,7 @@ _ACTM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 # «-c», а не «-e»: на месте пропавшего tty остаётся ФАНТОМНЫЙ обычный файл,
 # который создаёт sms_tool при обращении к мёртвому пути (разбор в atprobe.sh).
 # Ниже по файлу проверка кэша уже сделана через «-c» (аудит 12.09.2026).
-if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM"; then
+if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM" && ! tty_poll_unsafe "$ACTP"; then
 	echo "$ACTP"
 	exit 0
 fi
@@ -180,7 +180,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# загрузки). Достаточно, что tty жив (символьное устройство). Если модем
 	# переперечислился - tty исчезнет и кэш инвалидируется; смена функции того
 	# же номера редка, и тогда downstream-запрос сам вызовет пере-детект.
-	if [ -n "$CP" ] && [ -c "$CP" ] && tty_belongs "$CP" "$AMP"; then
+	if [ -n "$CP" ] && [ -c "$CP" ] && tty_belongs "$CP" "$AMP" && ! tty_poll_unsafe "$CP"; then
 		echo "$CP"
 		exit 0
 	fi

@@ -1232,15 +1232,27 @@ dial_port_for_path() {   # $1 - usb-путь; печатает tty дозвон�
 	printf '%s\n' "$_dpp_out"
 }
 
+tty_poll_unsafe() {
+	_tpu_d=$(readlink -f "/sys/class/tty/${1##*/}/device" 2>/dev/null)
+	[ -n "$_tpu_d" ] || return 1
+	[ -f "$_tpu_d/bInterfaceNumber" ] || _tpu_d=${_tpu_d%/*}
+	[ -f "$_tpu_d/bInterfaceNumber" ] || return 1
+	_tpu_u=${_tpu_d%/*}
+	case "$(cat "$_tpu_u/idVendor" 2>/dev/null):$(cat "$_tpu_u/idProduct" 2>/dev/null):$(cat "$_tpu_d/bInterfaceNumber" 2>/dev/null)" in
+		0e8d:7127:06) return 0 ;;
+	esac
+	return 1
+}
+
 # Убрать порт дозвона из списка кандидатов (см. dial_port_for_path).
 # Usage: drop_dial_port <usb-путь> <tty>...
 drop_dial_port() {
 	_ddp_p="$1"; shift
 	_ddp_skip=$(dial_port_for_path "$_ddp_p")
-	[ -n "$_ddp_skip" ] || { printf '%s\n' "$*"; return 0; }
 	_ddp_out=""
 	for _ddp_t in "$@"; do
-		[ "$_ddp_t" = "$_ddp_skip" ] && continue
+		[ -n "$_ddp_skip" ] && [ "$_ddp_t" = "$_ddp_skip" ] && continue
+		tty_poll_unsafe "$_ddp_t" && continue
 		_ddp_out="$_ddp_out $_ddp_t"
 	done
 	# ЕДИНСТВЕННЫЙ ПОРТ НЕ ОТБИРАЕМ. У композиции с одним tty исключение оставило
