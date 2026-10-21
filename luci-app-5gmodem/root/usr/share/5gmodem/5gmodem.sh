@@ -79,6 +79,7 @@ earfcn2band() {   # $1 - EARFCN; печатает номер диапазона 
 
 band4g() {
 # see https://en.wikipedia.org/wiki/LTE_frequency_bands
+	[ -n "$1" ] || return 0
 	echo -n "B${1}"
 	case "${1}" in
 		"1") echo " (2100 MHz)";;
@@ -144,6 +145,7 @@ band4g() {
 
 band5g() {
 # see https://en.wikipedia.org/wiki/5G_NR_frequency_bands
+	[ -n "$1" ] || return 0
 	echo -n "n${1}"
 	case "${1}" in
 		"1") echo " (2100 MHz)";;
@@ -3468,6 +3470,7 @@ fi
 # перестают расходиться. Такое имя может осесть и в секции (гейты _model_sane и
 # сверка вендора ниже остаются) - это нормально: оно детерминированное, из
 # дескриптора, а если позже AT-чтение даст более точное - перезапишет.
+[ -n "$(echo $MODEL)" ] || MODEL=""
 if [ -z "$MODEL" ] && [ -n "$_POLL_AM" ]; then
 	[ -n "$_own_rec" ] || _own_rec=$("$RES/listmodems.sh" 2>/dev/null)
 	MODEL=$(printf '%s' "$_own_rec" \

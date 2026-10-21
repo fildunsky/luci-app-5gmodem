@@ -1346,6 +1346,13 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 	_LIVE_MAP=" "
 	_AM_SEEN=" "
 	[ -n "$_amj" ] || return 0
+	_amst="/tmp/5gmodem/archmerge_${_amd##*/}"
+	_amsig=$( { printf '%s' "$_amj"; ls "$_amd"; } | md5sum | cut -c1-32)
+	if [ "$(sed -n 1p "$_amst" 2>/dev/null)" = "$_amsig" ]; then
+		_LIVE_MAP=$(sed -n 2p "$_amst")
+		[ -n "$_LIVE_MAP" ] || _LIVE_MAP=" "
+		return 0
+	fi
 	_amn=$(printf '%s' "$_amj" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
 	case "$_amn" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_amn" -gt 0 ] || return 0
@@ -1398,6 +1405,8 @@ _arch_merge() {   # $1 - живой JSON от sms_tool -j
 		_amnext=$((_amnext + 1))
 	done
 	_arch_trim "$_amd"
+	_amsig=$( { printf '%s' "$_amj"; ls "$_amd"; } | md5sum | cut -c1-32)
+	printf '%s\n%s\n' "$_amsig" "$_LIVE_MAP" > "$_amst" 2>/dev/null
 }
 
 # Индекс сообщения для выдачи: живой, если оно ещё в модеме, иначе архивный.

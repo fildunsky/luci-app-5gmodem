@@ -65,6 +65,11 @@ pick_sms_port() {
 	return 1
 }
 
+SHARED=$(uci -q get 5gmodem.sms.shared_at_port)
+if [ -z "$PORT" ] && [ "$SHARED" = 1 ]; then
+	_sh_at=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+	[ -c "$_sh_at" ] && PORT="$_sh_at"
+fi
 [ -n "$PORT" ] || PORT=$(pick_sms_port)
 [ -n "$PORT" ] || PORT=$("$RES/detect.sh" 2>/dev/null)
 
@@ -97,7 +102,7 @@ for _opt in readport sendport ussdport atport; do
 	# обычный файл (его создаёт любое чтение SMS/USSD), и «-e» считал протухшее
 	# значение живым - самолечение не срабатывало никогда (аудит 12.09.2026).
 	if [ -z "$_cur" ] || [ ! -c "$_cur" ] || \
-	   { [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; } || \
+	   { [ "$SHARED" != 1 ] && [ -n "$_ATP" ] && [ "$_cur" = "$_ATP" ] && [ "$PORT" != "$_ATP" ]; } || \
 	   { [ -n "$_DLP" ] && [ "$_cur" = "$_DLP" ] && [ "$PORT" != "$_DLP" ]; }; then
 		uci -q set "5gmodem.sms.$_opt=$PORT"
 		CHANGED=1

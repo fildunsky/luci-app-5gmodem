@@ -6075,3 +6075,15 @@ msgstr "Включать номер телефона"
 
 msgid "Add the SIM phone number to the published file and to MQTT, so that a router getting internet from this one over USB shows it too. Off by default: anyone on the LAN and everyone with access to the broker will see the number."
 msgstr "Добавлять номер SIM в публикуемый файл и в MQTT, чтобы его показывал и роутер, получающий интернет от этого по USB. По умолчанию выключено: номер увидят все в локальной сети и все, у кого есть доступ к брокеру."
+
+msgid "Signal quality (RSRP, RSRQ, RSSI)"
+msgstr "Качество сигнала (RSRP, RSRQ, RSSI)"
+
+msgid "Serving and neighbour cells"
+msgstr "Обслуживающая и соседние соты"
+
+msgid "Network type and domain"
+msgstr "Тип сети и домен"
+
+msgid "Uplink aggregation (read)"
+msgstr "Агрегация на отдачу (чтение)"

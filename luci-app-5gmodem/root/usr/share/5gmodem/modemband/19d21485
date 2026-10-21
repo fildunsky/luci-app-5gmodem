@@ -13,3 +13,100 @@ getinfo() {
 }
 
 . $RES/_zte_common
+
+_qcbp_now() {
+	sms_tool -d $_DEVICE at 'AT$QCBANDPREF?' 2>/dev/null | tr -d '\r' \
+		| grep -o '"[0-9]*\.' | tr -dc '0-9\n' | xargs
+}
+
+_qcbp_set() {
+	[ -n "$1" ] || return 1
+	sms_tool -d $_DEVICE at "AT\$QCBANDPREF=1,\"$(echo $1 | tr ' ' ',')\""
+}
+
+_qcbp_2g_idx() {
+	case "$1" in
+		1800) echo 8 ;; 900) echo "9 10" ;; 850) echo 24 ;; 1900) echo 26 ;;
+	esac
+}
+
+_qcbp_3g_idx() {
+	case "$1" in
+		1) echo 27 ;; 8) echo 34 ;;
+	esac
+}
+
+bands3g_style() { echo "mask"; }
+
+getsupportedbands3g() {
+	echo "1 8"
+}
+
+getbands3g() {
+	_g3_now=" $(_qcbp_now) "
+	_g3_out=""
+	for _b in 1 8; do
+		case "$_g3_now" in *" $(_qcbp_3g_idx $_b) "*) _g3_out="$_g3_out $_b" ;; esac
+	done
+	echo $_g3_out
+}
+
+setbands3g() {
+	_s3_want="$1"
+	[ "$_s3_want" = "default" ] && _s3_want="1 8"
+	_s3_list=""
+	for _i in $(_qcbp_now); do
+		case "$_i" in 27|34) ;; *) _s3_list="$_s3_list $_i" ;; esac
+	done
+	for _b in $_s3_want; do _s3_list="$_s3_list $(_qcbp_3g_idx $_b)"; done
+	_qcbp_set "$(echo $_s3_list | tr ' ' '\n' | sort -n | xargs)"
+}
+
+getsupportedbands2g() {
+	echo "900 1800 850 1900"
+}
+
+getbands2g() {
+	_g2_now=" $(_qcbp_now) "
+	_g2_out=""
+	for _b in 900 1800 850 1900; do
+		_g2_i=$(_qcbp_2g_idx $_b)
+		case "$_g2_now" in *" ${_g2_i%% *} "*) _g2_out="$_g2_out $_b" ;; esac
+	done
+	echo $_g2_out
+}
+
+setbands2g() {
+	_s2_want="$1"
+	[ "$_s2_want" = "default" ] && _s2_want="900 1800 850 1900"
+	_s2_list=""
+	for _i in $(_qcbp_now); do
+		case "$_i" in 8|9|10|24|26) ;; *) _s2_list="$_s2_list $_i" ;; esac
+	done
+	for _b in $_s2_want; do _s2_list="$_s2_list $(_qcbp_2g_idx $_b)"; done
+	_qcbp_set "$(echo $_s2_list | tr ' ' '\n' | sort -n | xargs)"
+}
+
+getsupportedmodes() {
+	echo "0:Auto 1:2G 2:3G 6:4G"
+}
+
+getmode() {
+	sms_tool -d $_DEVICE at "AT+ZSNT?" 2>/dev/null | tr -d '\r' \
+		| sed -n 's/^+ZSNT:[[:space:]]*\([0-9]*\).*/\1/p' | head -1
+}
+
+setmode() {
+	case "$1" in 0|1|2|6) ;; *) return 1 ;; esac
+	sms_tool -d $_DEVICE at "AT+ZSNT=$1,0,0"
+}
+
+setbands() {
+	BANDS="$1"
+	[ "$BANDS" = "default" ] && BANDS="$_DEFAULT_LTE_BANDS"
+	HEX=$(bandstohex "$BANDS")
+	[ "$HEX" != "0" ] || return
+	_sb_mode=$(getmode)
+	sms_tool -d $_DEVICE at "at+znlockband=1,0,$HEX,0"
+	[ -n "$_sb_mode" ] && [ "$_sb_mode" != 6 ] && setmode "$_sb_mode" >/dev/null
+}

@@ -4,7 +4,7 @@
 MODEL="Qualcomm CDMA Technologies MSM"
 
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR")
-FW=$(echo $FWA | cut -c 9- | sed s/"OK"// | xargs)
+FW=$(echo $FWA | sed 's/^.*AT+CGMR *//; s/OK$//' | xargs)
 
 # International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
