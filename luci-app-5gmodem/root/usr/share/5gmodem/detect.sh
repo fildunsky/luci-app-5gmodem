@@ -59,6 +59,17 @@ if [ -n "$_dt_am" ]; then
 	fi
 fi
 
+_dev_ok() {
+	if ! tty_poll_unsafe "$1" && ! poll_send_settle "$_dt_am" "$1"; then return 0; fi
+	if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
+		uci -q delete 5gmodem.@5gmodem[0].device
+		uci -q delete 5gmodem.@5gmodem[0].at_port
+		uci -q commit 5gmodem 2>/dev/null
+		flock -u 6
+	fi
+	return 1
+}
+
 CONFIG=modemdefine
 MODEMZ=0
 [ -f /etc/config/$CONFIG ] && MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
@@ -66,7 +77,7 @@ if [ -n "$MODEMZ" ]; then
 
 	if [ "$MODEMZ" -eq 0 ]; then
     		DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
-		if [ -n "$DEVICE" ]; then
+		if [ -n "$DEVICE" ] && _dev_ok "$DEVICE"; then
 			echo $DEVICE
 			exit 0
 		fi
@@ -114,7 +125,7 @@ getdevicepath() {
 
 # from config (manual selection always wins)
 DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
-if [ -n "$DEVICE" ]; then
+if [ -n "$DEVICE" ] && _dev_ok "$DEVICE"; then
 	echo $DEVICE
 	exit 0
 fi
@@ -148,7 +159,7 @@ _ACTM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 # «-c», а не «-e»: на месте пропавшего tty остаётся ФАНТОМНЫЙ обычный файл,
 # который создаёт sms_tool при обращении к мёртвому пути (разбор в atprobe.sh).
 # Ниже по файлу проверка кэша уже сделана через «-c» (аудит 12.09.2026).
-if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM" && ! tty_poll_unsafe "$ACTP"; then
+if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM" && ! tty_poll_unsafe "$ACTP" && ! poll_send_settle "$_ACTM" "$ACTP"; then
 	echo "$ACTP"
 	exit 0
 fi
@@ -180,7 +191,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# загрузки). Достаточно, что tty жив (символьное устройство). Если модем
 	# переперечислился - tty исчезнет и кэш инвалидируется; смена функции того
 	# же номера редка, и тогда downstream-запрос сам вызовет пере-детект.
-	if [ -n "$CP" ] && [ -c "$CP" ] && tty_belongs "$CP" "$AMP" && ! tty_poll_unsafe "$CP"; then
+	if [ -n "$CP" ] && [ -c "$CP" ] && tty_belongs "$CP" "$AMP" && ! tty_poll_unsafe "$CP" && ! poll_send_settle "$AMP" "$CP"; then
 		echo "$CP"
 		exit 0
 	fi
@@ -228,11 +239,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 				at) /usr/share/5gmodem/atprobe.sh "$T" || continue ;;
 				*) /usr/share/5gmodem/atprobe.sh "$T" model || continue ;;
 			esac
-			if [ "$MODE" = send ] && exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
-				uci -q set "5gmodem.$(secname "$AMP").poll_send_port=1"
-				uci -q commit 5gmodem 2>/dev/null
-				flock -u 6
-			fi
+			[ "$MODE" = send ] && poll_send_mark "$AMP"
 			rm -f "$NEG" 2>/dev/null
 			echo "$T" > "$ATCACHE"
 			# ПИННИМ порт в uci: переживает ребут, и следующий detect берёт

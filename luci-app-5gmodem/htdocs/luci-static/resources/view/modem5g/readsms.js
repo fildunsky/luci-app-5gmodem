@@ -321,6 +321,70 @@ function sms_linkify(text) {
 	return out;
 }
 
+var SMS_CODE_HINT = /код|code|парол|password|pin|otp|kod|验证码|mã/i;
+var SMS_CODE_RE = /(^|[A-Za-z]-|[^0-9A-Za-z+.,:\/])(\d{3}[ -]\d{3}|\d{4,8})(?![0-9]|[.,:\/-][0-9]|\s?(?:руб|р\.|₽|rub|usd|eur|%))/gi;
+
+function sms_copy_legacy(text) {
+	var ta = E('textarea', { 'readonly': '', 'style': 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;font-size:16px' });
+	ta.value = text;
+	document.body.appendChild(ta);
+	ta.focus();
+	ta.select();
+	ta.setSelectionRange(0, text.length);
+	var ok = false;
+	try { ok = document.execCommand('copy'); } catch (e) {}
+	document.body.removeChild(ta);
+	return ok;
+}
+
+function sms_copy_manual(text) {
+	var inp = E('input', { 'type': 'text', 'readonly': '', 'value': text, 'class': 'cbi-input-text', 'style': 'width:100%;font-size:1.4em;text-align:center' });
+	ui.showModal(_('Copy the code'), [
+		E('p', {}, [ _('The browser did not allow copying. Select the code and copy it:') ]),
+		inp,
+		E('div', { 'class': 'right' }, [ E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Close') ]) ])
+	]);
+	inp.focus();
+	inp.select();
+}
+
+function sms_copy_code(el) {
+	var code = el.getAttribute('data-code');
+	var done = function() {
+		el.classList.add('copied');
+		window.setTimeout(function() { el.classList.remove('copied'); }, 1500);
+	};
+	var legacy = function() { sms_copy_legacy(code) ? done() : sms_copy_manual(code); };
+	if (navigator.clipboard && window.isSecureContext) {
+		navigator.clipboard.writeText(code).then(done, legacy);
+	} else {
+		legacy();
+	}
+}
+
+function sms_codify(nodes, text) {
+	if (!SMS_CODE_HINT.test(text)) { return nodes; }
+	var out = [];
+	nodes.forEach(function(n) {
+		if (n.nodeType !== 3) { out.push(n); return; }
+		var s = n.nodeValue, last = 0, m;
+		SMS_CODE_RE.lastIndex = 0;
+		while ((m = SMS_CODE_RE.exec(s)) !== null) {
+			var at = m.index + m[1].length;
+			if (at > last) { out.push(document.createTextNode(s.slice(last, at))); }
+			out.push(E('span', {
+				'class': 'sms-code',
+				'role': 'button',
+				'title': _('Click to copy the code'),
+				'data-code': m[2].replace(/[ -]/g, '')
+			}, [ m[2] ]));
+			last = at + m[2].length;
+		}
+		if (last < s.length) { out.push(document.createTextNode(s.slice(last))); }
+	});
+	return out;
+}
+
 /* ===== НОВЫЕ (НЕПРОЧИТАННЫЕ) СООБЩЕНИЯ =====
    Статуса прочтения у модема не спросишь: sms_tool -j его не отдаёт, а
    AT+CMGL="ALL" помечает всё прочитанным при первом же чтении. Поэтому новизну
@@ -568,10 +632,12 @@ function sms_make_card(item, iconSrc, hide) {
 			]),
 			E('span', { 'class': 'sms-card-time' }, [ when ])
 		]),
-		E('div', { 'class': 'sms-card-text' }, sms_linkify(text))
+		E('div', { 'class': 'sms-card-text' }, sms_codify(sms_linkify(text), text))
 	]);
 
-	card.addEventListener('click', function() {
+	card.addEventListener('click', function(ev) {
+		var codeEl = ev.target.closest ? ev.target.closest('.sms-code') : null;
+		if (codeEl) { sms_copy_code(codeEl); }
 		/* Открыл - значит прочитал: снимаем метку с этого сообщения. Ждать
 		   отдельного нажатия «Прочитано» ради одного письма незачем. */
 		if (card.classList.contains('sms-new')) {
@@ -580,6 +646,7 @@ function sms_make_card(item, iconSrc, hide) {
 			sms_modem_markread([ card ]);
 			sms_update_newcount();
 		}
+		if (codeEl) { return; }
 		sms_set_selected(card, !card.classList.contains('selected'));
 		sms_update_selcount();
 	});
@@ -761,7 +828,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30211, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30212, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
