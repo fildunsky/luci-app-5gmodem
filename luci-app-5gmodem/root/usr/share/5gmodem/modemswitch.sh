@@ -527,7 +527,7 @@ ussdsupport)
 	# Берём registration_cs - статус ГОЛОСОВОГО домена. Поле registration для
 	# этого не годится: там "SMS only" НАМЕРЕННО подменён статусом данных,
 	# чтобы не пугать пользователя при живом интернете (см. 5gmodem.sh).
-	_snap=$("$RES/5gmodem.sh" cached 30 2>/dev/null)
+	_snap=$("$RES/5gmodem.sh" peek 2>/dev/null)
 	_reg=$(printf '%s' "$_snap" | jsonfilter -e '@.registration_cs' 2>/dev/null)
 	_smsonly=0
 	case "$_reg" in

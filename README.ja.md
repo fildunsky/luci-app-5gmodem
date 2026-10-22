@@ -1,6 +1,6 @@
 # luci-app-5gmodem
 
-*[English](README.md) · [Русская версия](README.ru.md) · [简体中文](README.zh-CN.md) · [Tiếng Việt](README.vi.md)*
+*[English](README.md) · [Русская версия](README.ru.md) · [简体中文](README.zh-CN.md) · [Tiếng Việt](README.vi.md) · [Bahasa Indonesia](README.id.md)*
 
 OpenWrt 上で 4G/5G モデムを扱うための LuCI アプリです。[`3ginfo-lite`](https://github.com/4IceG/luci-app-3ginfo-lite)、[`sms-tool-js`](https://github.com/4IceG/luci-app-sms-tool-js)、および `modemband` の一部を 1 つのアプリにまとめています。
 
