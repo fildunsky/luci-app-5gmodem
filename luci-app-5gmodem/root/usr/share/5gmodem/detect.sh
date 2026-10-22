@@ -154,12 +154,28 @@ tty_belongs() {   # tty_belongs <tty> <usb_path>
 	[ "$(tty_usbpath "$1")" = "$2" ]
 }
 
+_sec_port_fix() {
+	_spf_s="5gmodem.$(secname "$1").at_port"
+	_spf_v=$(uci -q get "$_spf_s")
+	[ "$_spf_v" = "$2" ] && return 0
+	[ -z "$_spf_v" ] || tty_poll_unsafe "$_spf_v" || return 0
+	uci -q set "$_spf_s=$2"
+}
+
 ACTP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
 _ACTM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 # «-c», а не «-e»: на месте пропавшего tty остаётся ФАНТОМНЫЙ обычный файл,
 # который создаёт sms_tool при обращении к мёртвому пути (разбор в atprobe.sh).
 # Ниже по файлу проверка кэша уже сделана через «-c» (аудит 12.09.2026).
 if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM" && ! tty_poll_unsafe "$ACTP" && ! poll_send_settle "$_ACTM" "$ACTP"; then
+	_dt_sp=""
+	[ -n "$_ACTM" ] && _dt_sp=$(uci -q get "5gmodem.$(secname "$_ACTM").at_port")
+	if [ -n "$_ACTM" ] && [ "$_dt_sp" != "$ACTP" ] && { [ -z "$_dt_sp" ] || tty_poll_unsafe "$_dt_sp"; } \
+	   && exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
+		_sec_port_fix "$_ACTM" "$ACTP"
+		uci -q commit 5gmodem 2>/dev/null
+		flock -u 6
+	fi
 	echo "$ACTP"
 	exit 0
 fi
@@ -256,6 +272,7 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 				# atlock.sh (ревью, баг №13) (аудит 12.09.2026).
 				if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
 					uci -q set 5gmodem.@5gmodem[0].at_port="$T"
+					_sec_port_fix "$AMP" "$T"
 					uci -q commit 5gmodem 2>/dev/null
 					flock -u 6
 				fi
