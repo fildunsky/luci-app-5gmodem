@@ -1239,7 +1239,9 @@ tty_poll_unsafe() {
 	[ -f "$_tpu_d/bInterfaceNumber" ] || return 1
 	_tpu_u=${_tpu_d%/*}
 	case "$(cat "$_tpu_u/idVendor" 2>/dev/null):$(cat "$_tpu_u/idProduct" 2>/dev/null):$(cat "$_tpu_d/bInterfaceNumber" 2>/dev/null)" in
-		0e8d:7127:06) return 0 ;;
+		0e8d:7127:06)
+			[ "$(uci -q get "5gmodem.$(secname "${_tpu_u##*/}").poll_send_port")" = 1 ] && return 1
+			return 0 ;;
 	esac
 	return 1
 }
