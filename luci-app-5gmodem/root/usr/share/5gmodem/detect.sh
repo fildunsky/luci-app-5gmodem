@@ -215,12 +215,24 @@ if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	# обязан быть другим (mkiface так его и выбирает: DIALPORT != METRIC_AT).
 	# Без этого старый конфиг, где at_port совпал с портом дозвона, чинился
 	# только руками (drop_dial_port в lib.sh).
-	TTYS=$(drop_dial_port "$AMP" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null))
-	for MODE in model at; do
-		for T in $TTYS; do
-			[ "$MODE" = model ] && { /usr/share/5gmodem/atprobe.sh "$T" model || continue; } \
-			                    || { /usr/share/5gmodem/atprobe.sh "$T" || continue; }
+	ALLT=$(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+		| jsonfilter -e "@[@.path=\"$AMP\"].tty[*]" 2>/dev/null)
+	TTYS=$(drop_dial_port "$AMP" $ALLT)
+	SENDT=""
+	for T in $ALLT; do tty_poll_unsafe "$T" && SENDT="$SENDT $T"; done
+	for MODE in model send at; do
+		LIST=$TTYS
+		[ "$MODE" = send ] && LIST=$SENDT
+		for T in $LIST; do
+			case "$MODE" in
+				at) /usr/share/5gmodem/atprobe.sh "$T" || continue ;;
+				*) /usr/share/5gmodem/atprobe.sh "$T" model || continue ;;
+			esac
+			if [ "$MODE" = send ] && exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
+				uci -q set "5gmodem.$(secname "$AMP").poll_send_port=1"
+				uci -q commit 5gmodem 2>/dev/null
+				flock -u 6
+			fi
 			rm -f "$NEG" 2>/dev/null
 			echo "$T" > "$ATCACHE"
 			# ПИННИМ порт в uci: переживает ребут, и следующий detect берёт

@@ -227,7 +227,15 @@ at_for_path() {
 		fi
 	done
 	_afp_list="$_afp_list $_afp_rest"
-	detect_at $_afp_list
+	detect_at $_afp_list && return 0
+	for _afp_t in $(modem_ttys "$1"); do
+		tty_poll_unsafe "$_afp_t" || continue
+		at_probe "$_afp_t" || continue
+		uci -q set "5gmodem.$(secname "$1").poll_send_port=1"
+		echo "$_afp_t"
+		return 0
+	done
+	return 1
 }
 
 
