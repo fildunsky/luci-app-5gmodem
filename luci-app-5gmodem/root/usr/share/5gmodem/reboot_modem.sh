@@ -233,12 +233,20 @@ if [ "$MODE" = power ]; then
 	(
 		echo "$_pg_off" > "$GP" 2>/dev/null
 		sleep 5
+		_pg_gone=1
+		[ "$_pg_was" = 1 ] && [ -e "/sys/bus/usb/devices/$_pg_path" ] \
+			&& [ "$(cat "/sys/bus/usb/devices/$_pg_path/devnum" 2>/dev/null)" = "$_pg_dn" ] && _pg_gone=0
 		echo "$_pg_on" > "$GP" 2>/dev/null
 		[ -n "$_pg_path" ] || exit 0
 		if [ "$_pg_was" = 1 ]; then
-			_pg_wait 60 && exit 0
+			if [ "$_pg_gone" = 1 ]; then
+				_pg_wait 150 && exit 0
+				_pg_why="did not return within 150 s"
+			else
+				_pg_why="stayed on the bus with $G off, $G does not power it"
+			fi
 			if _pg_kick; then
-				logger -t 5gmodem "power: $_pg_path did not return within 60 s - reset its USB port"
+				logger -t 5gmodem "power: $_pg_path $_pg_why - reset its USB port"
 				if _pg_wait 150; then
 					logger -t 5gmodem "power: $_pg_path came back after the USB port reset"
 					exit 0

@@ -1942,8 +1942,10 @@ fcclock_verdict() {   # $1 - АТ-порт
 	echo "Unlocking: AT+GTFCCLOCKGEN gives a challenge, from which a verification"
 	echo "code is computed (SHA256 of the challenge + vendor hash), then"
 	echo "AT+GTFCCLOCKVER=<code>. To remove it for good - AT+GTFCCLOCKMODE=0 and"
-	echo "re-plug the modem. The procedure is described in the ModemManager docs;"
-	echo "a step-by-step version is in docs/FM350-reference.md of our repository."
+	echo "re-plug the modem. For Lenovo modules the vendor hash is 3df8c719: the code"
+	echo "is the first 8 hex digits of SHA256 over the bytes of <challenge as 8 hex"
+	echo "digits>3df8c719, written in decimal. Reference: the ModemManager script"
+	echo "data/dispatcher-fcc-unlock/14c3 (gitlab.freedesktop.org/mobile-broadband/ModemManager)."
 	echo "The app does NOT do this by itself: unlocking is a one-off action by the"
 	echo "owner, and we do not want to reach into it from a web UI."
 }

@@ -1696,6 +1696,15 @@ function renderBattery(json) {
    последней, после renderDebugBtn/renderProtoChip.
    Вертикальную поправку берём ту же, что у чипа: у заголовка большой
    line-height, и без неё строка висела бы выше. */
+function chipBox(head) {
+	var box = document.getElementById('modemchips');
+	if (!box) {
+		box = E('span', { 'id': 'modemchips' });
+		head.appendChild(box);
+	}
+	return box;
+}
+
 function renderVidPid(json) {
 	var head = document.getElementById('modemname');
 	if (!head) { return; }
@@ -1708,7 +1717,8 @@ function renderVidPid(json) {
 			'class': 'tginfo-vidpid',
 			'title': _('USB vendor and product ID')
 		}, '');
-		head.appendChild(el);
+		var box = chipBox(head);
+		box.insertBefore(el, box.firstChild);
 	}
 	if (el.textContent !== vp) { el.textContent = vp; }
 }
@@ -1741,12 +1751,11 @@ function renderProtoChip(json) {
 			/* КОМПАКТНЫЙ. float наследовал большой line-height заголовка и бокс
 			   растягивался на всю строку - задаём СВОЙ маленький line-height и
 			   фикс-размер (.72rem), как у чипа в «Сохранённых профилях». */
-			'style': 'float:right; display:inline-block; line-height:1.4;'
+			'style': 'display:inline-block; line-height:1.4;'
 				+ 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;'
 				+ 'font-size:.72rem; border:1px solid rgba(128,128,128,.35); border-radius:5px;'
-				+ 'background:rgba(128,128,128,.1); padding:.05em .45em; margin-left:.8em;'
-				+ 'opacity:.7; white-space:nowrap; font-weight:normal;'
-				+ 'position:relative; top:.25em;',
+				+ 'background:rgba(128,128,128,.1); padding:.05em .45em;'
+				+ 'opacity:.7; white-space:nowrap; font-weight:normal;',
 			'title': _('Current interface protocol')
 		}, '');
 		/* Призрак «спрятан от ModemManager» - ВНУТРИ рамки чипа, слева от типа, как в
@@ -1762,7 +1771,7 @@ function renderProtoChip(json) {
 		chip._label = E('span', {}, '');
 		chip.appendChild(chip._ghost);
 		chip.appendChild(chip._label);
-		head.appendChild(chip);
+		chipBox(head).appendChild(chip);
 	}
 	if (chip._label.textContent !== txt) { chip._label.textContent = txt; }
 	/* Только когда MM работает (иначе прятаться не от кого) и модем реально скрыт
@@ -2150,7 +2159,7 @@ function updateUsbFlapWarn(json) {
 	/* Место - СЛЕВА от чипа vid:pid (просьба владельца). Флоаты укладываются
 	   справа налево в порядке DOM, поэтому «левее чипа» = «в DOM после него».
 	   На первом тике чипа может ещё не быть - тогда поправляем на следующем. */
-	var vp = document.getElementById('modemvidpid');
+	var vp = document.getElementById('modemchips');
 	if (vp && w.previousElementSibling !== vp) {
 		head.insertBefore(w, vp.nextSibling);
 	}
@@ -2446,7 +2455,7 @@ function buildSimpleUI() {
 		'body.sc-simple #modem-reboot-block table.table tr#doctorlogn:has(#doctor-log[style*="display: none"]) { display:none !important; }' +
 		'body.sc-simple #modem-info-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
-		'body.sc-simple #modemvidpid, body.sc-simple #proto-chip,' +
+		'body.sc-simple #modemchips,' +
 		'body.sc-simple #apnline { display:none !important; }' +
 		'body.sc-simple #modemname > #stale-mark { font-size:.78rem; line-height:1.4; height:1.4em; top:.35em !important; }' +
 		'body.sc-simple #modem-info-block[data-rat] #stale-mark { height:calc(1.4em + 4px); }' +
@@ -3945,7 +3954,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30212, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30213, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4682,22 +4691,24 @@ simDialog: baseclass.extend({
 				E('tr', { 'class': 'tr', 'id': 'modeswn', 'style': msStyle }, [
 					E('td', { 'class': 'td left', 'width': '33%' }, [ _('Network mode')]),
 					E('td', { 'class': 'td left tginfo-modesw', 'id': 'modesw-btns' },
-						/* Комбинации только из supported-списка этой прошивки:
-						   чистых "4g"/"4g,5g" она не умеет - всегда с 2g/3g. */
+						/* Комбинации с 3g - для прошивок без чистых "4g"/"5g";
+						   умеющим прошивкам их подменяет applyPureModes. */
 						[
 							[ _('Auto'), '2g|3g|4g|5g', '5g' ],
 							[ '2G', '2g', '' ],
 							[ '3G', '3g', '' ],
-							[ '4G', '3g|4g', '4g' ],
+							[ '4G', '3g|4g', '4g', '4g' ],
 							[ '4G+5G', '3g|4g|5g', '5g' ],
-							[ '5G', '3g|5g', '5g' ]
+							[ '5G', '3g|5g', '5g', '5g' ]
 						].map(L.bind(function(mdef) {
 							return E('button', {
 								'class': 'btn cbi-button' + (modeActive(mdef[1], mdef[2]) ? ' tg-current' : ''),
 								'data-allowed': mdef[1],
 								'data-preferred': mdef[2],
-								'click': ui.createHandlerFn(this, function() {
-									return bandsui.setNetMode(mdef[1], mdef[2], mdef[0]);
+								'data-pure': mdef[3] || '',
+								'click': ui.createHandlerFn(this, function(ev) {
+									var b = ev.currentTarget;
+									return bandsui.setNetMode(b.getAttribute('data-allowed'), b.getAttribute('data-preferred'), mdef[0]);
 								})
 							}, mdef[0]);
 						}, this))

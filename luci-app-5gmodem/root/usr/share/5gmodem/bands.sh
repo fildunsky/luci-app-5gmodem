@@ -1891,9 +1891,13 @@ case $1 in
 		# кладёт other в bandsOther и при «Применить» шлёт его в mmsetbands
 		# впереди выбранных: получалось "|eutran-3|eutran-7", mmcli отвергал
 		# пустое имя диапазона, и диапазоны не применялись вовсе. (аудит 12.09.2026)
-		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
+		_mi_modes=$(printf '%s\n' "$_mi_k" \
+			| sed -n 's/^modem\.generic\.supported-modes\.value\[[0-9]*\][[:space:]]*:[[:space:]]*allowed: \([^;]*\); preferred: \(.*\)$/\1:\2/p' \
+			| sed 's/, /|/g; s/.*/"&"/' | tr '\n' ',' | sed 's/,$//')
+		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","modes":[%s],"sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
 			"$(uci -q get "network.$_mi_if.allowedmode")" \
 			"$(uci -q get "network.$_mi_if.preferredmode")" \
+			"$_mi_modes" \
 			"$(_mi_arr "$_mi_sup" utran-)"  "$(_mi_arr "$_mi_cur" utran-)" \
 			"$(_mi_arr "$_mi_sup" eutran-)" "$(_mi_arr "$_mi_cur" eutran-)" \
 			"$(_mi_arr "$_mi_sup" ngran-)"  "$(_mi_arr "$_mi_cur" ngran-)" \

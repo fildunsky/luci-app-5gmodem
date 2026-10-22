@@ -1,21 +1,8 @@
 msgid ""
-msgstr ""
-"Language-Team: Rafał Wabik (IceG)\n"
-"Language: zh_Hant\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
+msgstr "Content-Type: text/plain; charset=UTF-8\n"
 
-# Translation: oldcat
-# https://github.com/oldcat618
-msgid "Information about 3G/4G/5G connection"
-msgstr "3G/4G/5G 信息"
-
-msgid "More information about the 5gmodem on the %seko.one.pl forum%s."
-msgstr "更多信息關於5gmodem請訪問%seko.one.pl%s 論壇."
-
-msgid "eko.one.pl forum"
-msgstr "forum eko.one.pl"
+msgid "Modem settings"
+msgstr "數據機設置"
 
 msgid "Details"
 msgstr "詳細信息"
@@ -65,8 +52,8 @@ msgstr "晶片溫度"
 msgid "Configuration 5gmodem"
 msgstr "5gmodem lite配置"
 
-msgid "Configuration panel for the 5gmodem application."
-msgstr "5gmodem lite應用程式的配置面板。"
+msgid "Configuration panel for the 5gmodem application"
+msgstr "5gmodem 應用的配置面板"
 
 msgid "Network"
 msgstr "網絡"
@@ -77,13 +64,8 @@ msgstr "IP位址/與數據機通信的埠"
 msgid "Protocol"
 msgstr "撥號方式"
 
-msgid ""
-"Select the appropriate settings. <br /> <br />Traditional modem. <br /> "
-"Select one of the available ttyUSBX ports.<br /> <br />HiLink modem. <br /> "
-"Enter the IP address 192.168.X.X under which the modem is available."
-msgstr ""
-"選擇適當的設置<br/><br/>傳統數據機<br/> 選擇一個可用的ttyUSBX埠 HiLink"
-"數據機<br/>輸入IP位址. 192.168.X.X 數據機在該X.X下可用."
+msgid "Select the appropriate settings. <br /> <br />Traditional modem. <br /> Select one of the available ttyUSBX ports.<br /> <br />HiLink modem. <br /> Enter the IP address 192.168.X.X under which the modem is available."
+msgstr "選擇適當的設置<br/><br/>傳統數據機<br/> 選擇一個可用的ttyUSBX埠 HiLink數據機<br/>輸入IP位址. 192.168.X.X 數據機在該X.X下可用."
 
 msgid "Very good"
 msgstr "最好"
@@ -118,6 +100,12 @@ msgstr "註冊"
 msgid "Registered (roaming)"
 msgstr "已註冊（漫遊）"
 
+msgid "Registered, only SMS"
+msgstr "已註冊,僅簡訊"
+
+msgid "Registered (roaming), only SMS"
+msgstr "已註冊(漫遊),僅簡訊"
+
 msgid "Searching.."
 msgstr "註冊中.."
 
@@ -139,9 +127,7 @@ msgstr "搜索"
 msgid "Search BTS using Cell ID"
 msgstr "使用小區ID搜索BTS"
 
-msgid ""
-"Hint: To set up a BTS search engine, all you have to do is select the "
-"dedicated website for your location."
+msgid "Hint: To set up a BTS search engine, all you have to do is select the dedicated website for your location."
 msgstr "提示：要設置 BTS 搜尋引擎，您只需選擇適合您所在位置的專用網站即可."
 
 msgid "BTS search settings"
@@ -150,35 +136,64 @@ msgstr "BTS搜索設置"
 msgid "Website to search for BTS"
 msgstr "搜索 BTS 的網站"
 
-msgid "Select a website for searching."
-msgstr "選擇要搜索的網站."
+msgid "Select a website for searching"
+msgstr "選擇用於搜索的網站"
 
 msgid "SIM Slot"
 msgstr "SIM插槽"
 
-msgid "Customizing the appearance of the package"
-msgstr "自定義外觀"
+msgid "Problem with registering to the network, check the SIM card"
+msgstr "網絡註冊出現問題,請檢查 SIM 卡"
 
-msgid ""
-"Hint: The settings below allow you to customize the appearance of the "
-"progress bars."
-msgstr "提示：下面的設置允許您自定義進度條的外觀."
+msgid "SIM PIN required"
+msgstr "需要 SIM PIN"
 
-msgid "The width of the progress bars"
-msgstr "進度條的寬度"
+msgid "SIM PUK required"
+msgstr "需要 SIM PUK"
 
-msgid "Select the width of the progress bars."
-msgstr "選擇進度條的寬度."
+msgid "SIM failure"
+msgstr "SIM 卡故障"
 
-msgid "Information read from the SIM card and device."
-msgstr "SIM卡信息及無線通訊模組信息."
+msgid "SIM busy"
+msgstr "SIM 卡忙"
+
+msgid "SIM wrong"
+msgstr "SIM 卡錯誤"
+
+msgid "SIM PIN2 required"
+msgstr "需要 SIM PIN2"
+
+msgid "SIM PUK2 required"
+msgstr "需要 SIM PUK2"
+
+msgid "There is a problem reading data from the modem. <br /><br /><b>Please check:</b> <ul><li>1. Modem availability in the system.</li><li>2. The correct installation of the SIM card in the modem.</li><li> 3. Port for communication with the modem.</li><li><ul>"
+msgstr "從數據機讀取數據時出現問題。<br /><br /><b>請檢查:</b> <ul><li>1. 系統中數據機是否可用。</li><li>2. SIM 卡是否正確安裝在數據機中。</li><li>3. 與數據機通信的埠。</li><li><ul>"
+
+msgid "There is a problem reading connection data. <br /><br /><b>Please check:</b> <ul><li>1. Connection of the modem to the internet, the correctness of the entered APN. Some modems need to force the APN on the modem using at commands to connect to internet.</li><li> 2. Check that the correct interface assigned to the modem is selected. The default name of the interface in the package is wan.</li><li><ul>"
+msgstr "讀取連接數據時出現問題。<br /><br /><b>請檢查:</b> <ul><li>1. 數據機是否已連接網際網路,輸入的 APN 是否正確。部分數據機需要通過 AT 命令強制設置 APN 才能連接網際網路。</li><li>2. 是否選擇了分配給數據機的正確接口。軟體包中接口的默認名稱為 wan。</li><li><ul>"
+
+msgid "Defined modems"
+msgstr "已定義的數據機"
+
+msgid "Interface for selecting user defined modems"
+msgstr "用於選擇用戶自定義數據機的界面"
+
+msgid "Modem selection menu"
+msgstr "數據機選擇菜單"
 
 msgid "SIM card menu"
 msgstr "SIM卡菜單"
 
-msgid ""
-"Execution of various commands to check the availability of the modem and "
-"eliminate errors in the data collected by the scripts."
+msgid "Information read from the SIM card and device"
+msgstr "從 SIM 卡和設備讀取的信息"
+
+msgid "Hint"
+msgstr "提示"
+
+msgid "CLICK ME TO SEE NEW MENU"
+msgstr "點擊此處查看新菜單"
+
+msgid "Execution of various commands to check the availability of the modem and eliminate errors in the data collected by the scripts."
 msgstr "執行相關命令檢查數據機是否可用並且手機相關錯誤信息."
 
 msgid "Check availability of ttyX ports"
@@ -189,6 +204,165 @@ msgstr "通過5gmodem腳本檢查"
 
 msgid "Show devices"
 msgstr "顯示設備"
+
+msgid "(Received Signal Strength Indicator)"
+msgstr "(接收信號強度指示)"
+
+msgid "(Reference Signal Receive Power)"
+msgstr "(參考信號接收功率)"
+
+msgid "(Reference Signal Received Quality)"
+msgstr "(參考信號接收質量)"
+
+msgid "(Signal Strength)"
+msgstr "(信號強度)"
+
+msgid "(Signal to Interference plus Noise Ratio)"
+msgstr "(信號與幹擾加噪聲比)"
+
+msgid "5gmodem"
+msgstr "5gmodem"
+
+msgid "CA band (SCC1)"
+msgstr "載波聚合頻段(SCC1)"
+
+msgid "CA band (SCC2)"
+msgstr "載波聚合頻段(SCC2)"
+
+msgid "CA band (SCC3)"
+msgstr "載波聚合頻段(SCC3)"
+
+msgid "CA band (SCC4)"
+msgstr "載波聚合頻段(SCC4)"
+
+msgid "CSQ"
+msgstr "CSQ"
+
+msgid "Cancel"
+msgstr "取消"
+
+msgid "Cell ID"
+msgstr "小區 ID"
+
+msgid "Clear"
+msgstr "清除"
+
+msgid "Close"
+msgstr "關閉"
+
+msgid "Debug"
+msgstr "調試"
+
+msgid "Diagnostics"
+msgstr "診斷"
+
+msgid "Download"
+msgstr "下載"
+
+msgid "Download error"
+msgstr "下載錯誤"
+
+msgid "Error:"
+msgstr "錯誤:"
+
+msgid "Interface"
+msgstr "接口"
+
+msgid "LAC"
+msgstr "LAC"
+
+msgid "Loading"
+msgstr "加載中"
+
+msgid "MCC MNC"
+msgstr "MCC MNC"
+
+msgid "Modem"
+msgstr "數據機"
+
+msgid "Modem IMEI"
+msgstr "數據機 IMEI"
+
+msgid "Network interface for Internet access"
+msgstr "用於訪問網際網路的網絡接口"
+
+msgid "Please select a port"
+msgstr "請選擇埠"
+
+msgid "Primary band (PCC) | PCI & EARFCN"
+msgstr "主頻段(PCC)| PCI & EARFCN"
+
+msgid "RSRP"
+msgstr "RSRP"
+
+msgid "RSRQ"
+msgstr "RSRQ"
+
+msgid "RSSI"
+msgstr "RSSI"
+
+msgid "SIM ICCID"
+msgstr "SIM ICCID"
+
+msgid "SIM IMSI"
+msgstr "SIM IMSI"
+
+msgid "SINR"
+msgstr "SINR"
+
+msgid "Save"
+msgstr "保存"
+
+msgid "Settings"
+msgstr "設定"
+
+msgid "TAC"
+msgstr "TAC"
+
+msgid "☰"
+msgstr "☰"
+
+msgid "Network mode"
+msgstr "網絡模式"
+
+msgid "Auto"
+msgstr "自動"
+
+msgid "Applying network mode..."
+msgstr "正在應用網絡模式..."
+
+msgid "Network mode set: %s"
+msgstr "網絡模式已設置:%s"
+
+msgid "Failed to set network mode"
+msgstr "設置網絡模式失敗"
+
+msgid "LTE bands"
+msgstr "LTE 頻段"
+
+msgid "5G bands"
+msgstr "5G 頻段"
+
+msgid "Apply"
+msgstr "應用"
+
+msgid "All bands"
+msgstr "全部頻段"
+
+msgid "Enable all supported bands"
+msgstr "啟用所有支持的頻段"
+
+msgid "Applying bands..."
+msgstr "正在應用頻段設置..."
+
+msgid "Bands set. The modem will reconnect."
+msgstr "頻段已設置,數據機將重新連接。"
+
+msgid "Failed to set bands"
+msgstr "設置頻段失敗"
+
+msgid "Select at least one band"
+msgstr "請至少選擇一個頻段"
 
 msgid "Messages"
 msgstr "簡訊訊息"
@@ -207,9 +381,6 @@ msgstr "已接收"
 
 msgid "Message"
 msgstr "訊息"
-
-msgid "Settings"
-msgstr "設定"
 
 msgid "AT"
 msgstr "AT指令"
@@ -274,46 +445,32 @@ msgstr "AT指令設定"
 msgid "Merge split messages"
 msgstr "合併拆分的訊息"
 
-msgid ""
-"Checking this option will make it easier to read the messages, but it will "
-"cause a discrepancy in the number of messages shown and received."
+msgid "Checking this option will make it easier to read the messages, but it will cause a discrepancy in the number of messages shown and received."
 msgstr "拆分的訊息將被合併。選取此選項將使閱讀簡訊更容易，但會導致顯示和接收的訊息數量不一致。"
 
 msgid "USSD sending port"
 msgstr "USSD代碼傳送埠"
 
-msgid "Sending USSD code in plain text"
-msgstr "以純文字形式傳送USSD代碼"
+msgid "Send USSD as plain text"
+msgstr "以純文本發送 USSD"
 
-msgid "Receive message without PDU decoding"
-msgstr "接收訊息而不進行PDU解碼"
+msgid "Get message without PDU decoding"
+msgstr "獲取消息時不進行 PDU 解碼"
 
-msgid ""
-"Send the USSD code in plain text. Command is not being coded to the PDU."
+msgid "Send the USSD code in plain text. Command is not being coded to the PDU."
 msgstr "以純文字形式傳送USSD代碼。指令不會被解碼為PDU。"
 
-msgid "Receive and display the message without decoding it as a PDU."
-msgstr "接收到的訊息將不進行PDU解碼而顯示。"
+msgid "Display the message without decoding it as a PDU."
+msgstr "顯示消息時不將其作為 PDU 解碼。"
 
 msgid "Explanation of number and prefix"
 msgstr "關於號碼和字首的說明"
 
-msgid ""
-"In the tab for sending SMSes, show an explanation of the prefix and the "
-"correct phone number."
-msgstr "在允許傳送簡訊的選項卡中顯示關於字首和正確電話號碼的說明。"
+msgid "In the tab for sending SMS, show an explanation of the prefix and the correct phone number."
+msgstr "在發送簡訊的標籤頁中,顯示關於前綴和正確電話號碼的說明。"
 
-msgid ""
-"The phone number should be preceded by the country prefix (for Poland it is "
-"48, without '+'). If the number is 5, 4 or 3 characters, it is treated as "
-"'short' and should not be preceded by a country prefix."
-msgstr "電話號碼前應加上國家字首（對於波蘭是48，不帶'+'號）。如果號碼是5、4或3個字元，則視為「短號碼」，不應加國家字首。"
-
-msgid ""
-"The phone number should be preceded by the country prefix (for Poland it is "
-"48, without +). If the number is 5, 4 or 3 characters, it is treated as.. "
-"short and should not be preceded by a country prefix."
-msgstr "電話號碼前應加上國家字首（對於波蘭是48，不帶+號）。如果號碼是5、4或3個字元，則視為短號碼，不應加國家字首。"
+msgid "The phone number should be preceded by the country prefix (e.g for Russia it is 7, without '+'). If the number is 3-5 characters long, it is treated as 'short' and should not be preceded by a country prefix."
+msgstr "電話號碼前應加國家前綴(例如俄羅斯為 7,不帶「+」)。如果號碼長度為 3-5 位,則視為「短號」,不應加國家前綴。"
 
 msgid "Add prefix to phone number"
 msgstr "為電話號碼新增字首"
@@ -333,8 +490,8 @@ msgstr "請指定要傳送的代碼"
 msgid "Please set the port for communication with the modem"
 msgstr "請指定與數據機通訊的埠"
 
-msgid "User AT commands"
-msgstr "使用者AT指令"
+msgid "AT templates"
+msgstr "AT 命令模板"
 
 msgid "Command to send"
 msgstr "要傳送的指令"
@@ -348,10 +505,7 @@ msgstr "傳送指令"
 msgid "Message storage area"
 msgstr "訊息儲存區域"
 
-msgid ""
-"Messages are stored in a specific location (for example, on the SIM card or "
-"modem memory), but other areas may also be available depending on the type "
-"of device."
+msgid "Messages are stored in a specific location (for example, on the SIM card or modem memory), but other areas may also be available depending on the type of device."
 msgstr "訊息儲存在特定位置（例如在SIM卡或數據機記憶體中），但根據裝置類型，也可能有其他區域可用。"
 
 msgid "SIM card"
@@ -384,26 +538,6 @@ msgstr "刪除所選訊息？"
 msgid "Delete all the messages?"
 msgstr "刪除所有訊息？"
 
-msgid ""
-"User interface for reading messages using sms-tool. More information about "
-"the sms-tool on the %seko.one.pl forum%s."
-msgstr "用於使用sms-tool讀取簡訊訊息的使用者介面。有關sms-tool程式的更多資訊，請訪問%seko.one.pl論壇%s。"
-
-msgid ""
-"User interface for sending messages using sms-tool. More information about "
-"the sms-tool on the %seko.one.pl forum%s."
-msgstr "用於使用sms-tool傳送簡訊訊息的使用者介面。有關sms-tool程式的更多資訊，請訪問%seko.one.pl論壇%s。"
-
-msgid ""
-"User interface for sending AT commands using sms-tool. More information "
-"about the sms-tool on the %seko.one.pl forum%s."
-msgstr "用於使用sms-tool傳送AT指令的使用者介面。有關sms-tool程式的更多資訊，請訪問%seko.one.pl論壇%s。"
-
-msgid ""
-"User interface for sending USSD codes using sms-tool. More information about "
-"the sms-tool on the %seko.one.pl forum%s."
-msgstr "用於使用sms-tool傳送USSD代碼的使用者介面。有關sms-tool程式的更多資訊，請訪問%seko.one.pl論壇%s。"
-
 msgid "Configuration sms-tool"
 msgstr "組態sms-tool"
 
@@ -416,18 +550,13 @@ msgstr "與數據機通訊的埠"
 msgid "Select one of the available ttyUSBX ports."
 msgstr "選擇一個可用的ttyUSBX埠。"
 
-msgid "Please select a port"
-msgstr "請選擇埠"
-
 msgid "User contacts"
 msgstr "使用者聯絡人"
 
 msgid "Enable group messaging"
 msgstr "啟用群組訊息"
 
-msgid ""
-"This option allows you to send one message to all contacts in the user's "
-"contact list."
+msgid "This option allows you to send one message to all contacts in the user's contact list."
 msgstr "此選項允許向使用者聯絡人清單中的所有聯絡人傳送一條訊息。"
 
 msgid "Message sending delay"
@@ -439,29 +568,19 @@ msgstr "[機器人] 訊息已傳送至號碼："
 msgid "User USSD codes"
 msgstr "使用者USSD代碼"
 
-msgid ""
-"Each line must have the following format: 'Contact name;phone number'. For "
-"user convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
-"phonebook.user</code>."
+msgid "Each line must have the following format: 'Contact name;phone number'. For user convenience, the file is saved to the location <code>/etc/5gmodem/modem/phonebook.user</code>."
 msgstr "每行必須具有以下格式：'聯絡人姓名;電話號碼'。為方便使用者，聯絡人儲存在檔案<code>/etc/5gmodem/modem/phonebook.user</code>中。"
 
-msgid ""
-"Each line must have the following format: 'At command description;AT "
-"command'. For user convenience, the file is saved to the location <code>/etc/"
-"modem/atcmmds.user</code>."
+msgid "Each line must have the following format: 'At command description;AT command'. For user convenience, the file is saved to the location <code>/etc/modem/atcmmds.user</code>."
 msgstr "每行必須具有以下格式：'AT指令描述;AT指令'。為方便使用者，指令儲存在檔案<code>/etc/5gmodem/modem/atcmmds.user</code>中。"
 
-msgid ""
-"Each line must have the following format: 'Code description;code'. For user "
-"convenience, the file is saved to the location <code>/etc/5gmodem/modem/"
-"ussdcodes.user</code>."
+msgid "Each line must have the following format: 'Code description;code'. For user convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes.user</code>."
 msgstr "每行必須具有以下格式：'代碼描述;代碼'。為方便使用者，代碼儲存在檔案<code>/etc/modem/ussdcodes.user</code>中。"
 
 msgid "Display new messages notification on login page"
 msgstr "在登入頁面上顯示新訊息通知"
 
-msgid ""
-"Display notification when new messages arrive in the selected message area."
+msgid "Display notification when new messages arrive in the selected message area."
 msgstr "當新訊息到達所選訊息區域時顯示通知。"
 
 msgid "new message"
@@ -533,17 +652,13 @@ msgstr "新訊息通知LED"
 msgid "Enable SMS notification LED on new message"
 msgstr "在新訊息時啟用簡訊通知LED"
 
-msgid ""
-"Enable notification LED when new messages arrive in the selected message "
-"area."
+msgid "Enable notification LED when new messages arrive in the selected message area."
 msgstr "當新訊息到達所選訊息區域時啟用通知LED。"
 
 msgid "Selected LED"
 msgstr "所選LED"
 
-msgid ""
-"Select an LED diode for new message notification. The selection is made from "
-"the available LEDs in the system."
+msgid "Select an LED diode for new message notification. The selection is made from the available LEDs in the system."
 msgstr "選擇用於新訊息通知的LED二極體。從系統中可用的LED中進行選擇。"
 
 msgid "Automatically select LED"
@@ -564,25 +679,19 @@ msgstr "設定LED閃爍間隔（秒）。"
 msgid "Flashing duration (in seconds)"
 msgstr "閃爍持續時間（秒）"
 
-msgid ""
-"Set the flashing duration (in seconds). Set to 0 for infinite duration (LED "
-"will flash until messages are marked as read)."
+msgid "Set the flashing duration (in seconds). Set to 0 for infinite duration (LED will flash until messages are marked as read)."
 msgstr "設定閃爍持續時間（秒）。設定為0表示無限持續時間（LED將閃爍直到訊息被標記為已讀）。"
 
 msgid "Please wait... Saving SMS messages to a text file."
 msgstr "請稍候...正在將簡訊訊息儲存到文字檔案。"
 
-msgid ""
-"This option allows to backup SMS messages or, for example, save messages "
-"that are not supported by the sms-tool."
+msgid "This option allows to backup SMS messages or, for example, save messages that are not supported by the sms-tool."
 msgstr "此選項允許備份簡訊訊息或例如儲存sms-tool不支援的訊息。"
 
 msgid "Delete all messages"
 msgstr "刪除所有訊息"
 
-msgid ""
-"This option allows you to delete all SMS messages when they are not visible "
-"in the 'Received Messages' tab."
+msgid "This option allows you to delete all SMS messages when they are not visible in the 'Received Messages' tab."
 msgstr "此選項允許在「已接收的訊息」選項卡中不可見時刪除所有簡訊訊息。"
 
 msgid "Saving SMS messages to a file failed. Please try again."
@@ -618,9 +727,7 @@ msgstr "所選訊息中"
 msgid "The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>"
 msgstr "該軟體套件需要使用者組態。<br /><br /><b>需要設定：</b> <ol><li>所有與數據機通訊的埠。</li><li>針對給定數據機的附加選項（用於處理USSD代碼）。</li><li>通知LED（選用）。</li></ol>"
 
-msgid ""
-"Any change in the area from which SMS messages will be read requires "
-"refreshing the messages"
+msgid "Any change in the area from which SMS messages will be read requires refreshing the messages"
 msgstr "讀取簡訊的區域發生任何變更都需要重新整理訊息"
 
 msgid "Characters remaining:"
@@ -638,9 +745,7 @@ msgstr "Unicode（70個字元）"
 msgid "GSM-7 encoding (160 characters)"
 msgstr "GSM-7編碼（160個字元）"
 
-msgid ""
-"Unicode encoding (70 characters), does not support sending national "
-"characters (in utf8) - only ascii"
+msgid "Unicode encoding (70 characters), does not support sending national characters (in utf8) - only ascii"
 msgstr "Unicode編碼（70個字元），不支援傳送國家字元（utf8格式）– 僅限ASCII"
 
 msgid "The tab allows users to support the package."
@@ -667,17 +772,13 @@ msgstr "在Github上開啟軟體套件討論"
 msgid "Open discussion"
 msgstr "開啟討論"
 
-msgid ""
-"Buy a coffee if you want to support the development of the project and the "
-"author"
+msgid "Buy a coffee if you want to support the development of the project and the author"
 msgstr "如果您想支援專案和作者的發展，請請喝杯咖啡"
 
 msgid "Buy a coffee"
 msgstr "請喝咖啡"
 
-msgid ""
-"Become a sponsor if you want to support the development of the project and "
-"the author"
+msgid "Become a sponsor if you want to support the development of the project and the author"
 msgstr "如果您想支援專案和作者的發展，請成為贊助商"
 
 msgid "Become a sponsor"
@@ -710,17 +811,17 @@ msgstr "選擇預定義的電子郵件設定或手動輸入設定。"
 msgid "Recipient"
 msgstr "收件人"
 
-msgid "E-mail address of the recipient."
-msgstr "收件人的電子郵件地址。"
+msgid "E-mail address of the recipient"
+msgstr "收件人電子郵件地址"
 
-msgid "E-mail address of the sender."
-msgstr "寄件人的電子郵件地址。"
+msgid "E-mail address of the sender"
+msgstr "發件人電子郵件地址"
 
 msgid "User"
 msgstr "使用者"
 
-msgid "Username for SMTP authentication."
-msgstr "SMTP身分驗證的使用者名稱。"
+msgid "Username for SMTP authentication"
+msgstr "SMTP 認證用戶名"
 
 msgid "Password"
 msgstr "密碼"
@@ -740,17 +841,16 @@ msgstr "SMTP伺服器埠"
 msgid "Security"
 msgstr "安全性"
 
-msgid "TLS: use STARTTLS if the server supports it."
-msgstr "TLS：如果伺服器支援，使用STARTTLS。"
+msgid "TLS: use STARTTLS if the server supports it"
+msgstr "TLS:如伺服器支持則使用 STARTTLS"
 
-msgid "SSL: SMTP over SSL."
-msgstr "SSL：透過SSL的SMTP。"
+msgid "SSL: SMTP over SSL"
+msgstr "SSL:通過 SSL 的 SMTP"
 
 msgid "Required Package"
 msgstr "必需的軟體套件"
 
-msgid ""
-"The SMS forwarding option requires the mailsend package to be installed."
+msgid "The SMS forwarding option requires the mailsend package to be installed."
 msgstr "簡訊轉發選項需要安裝mailsend軟體套件。"
 
 msgid "Check required packages"
@@ -816,9 +916,7 @@ msgstr "訊息內容："
 msgid "Subject and body cannot be empty"
 msgstr "主題和內容不能為空"
 
-msgid ""
-"Package mailsend is not installed. Please install it first using the "
-"Install... button below"
+msgid "Package mailsend is not installed. Please install it first using the Install... button below"
 msgstr "mailsend軟體套件未安裝。請先使用下面的「安裝...」按鈕進行安裝"
 
 msgid "Select modem"
@@ -893,16 +991,10 @@ msgstr "管理聯絡人"
 msgid "Edit User Contacts"
 msgstr "編輯使用者聯絡人"
 
-msgid ""
-"Each line must have the following format: 'Code description;code'. For user "
-"convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes/</"
-"code>."
+msgid "Each line must have the following format: 'Code description;code'. For user convenience, the file is saved to the location <code>/etc/5gmodem/modem/ussdcodes/</code>."
 msgstr "每行必須採用以下格式：'代碼描述;代碼'。為方便使用者，檔案儲存在<code>/etc/modem/ussdcodes/</code>位置。"
 
-msgid ""
-"Each line must have the following format: 'AT command description;AT "
-"command'. For user convenience, the file is saved to the location <code>/etc/"
-"modem/atcmmds/</code>."
+msgid "Each line must have the following format: 'AT command description;AT command'. For user convenience, the file is saved to the location <code>/etc/modem/atcmmds/</code>."
 msgstr "每行必須採用以下格式：'AT命令描述;AT命令'。為方便使用者，檔案儲存在<code>/etc/modem/atcmmds/</code>位置。"
 
 msgid "-- Select file --"
@@ -949,9 +1041,6 @@ msgstr "在狀態總覽頁面上顯示新訊息通知圖示。"
 
 msgid "Loading..."
 msgstr "載入中…"
-
-msgid "Modem"
-msgstr "數據機"
 
 msgid "Modems"
 msgstr "數據機"
@@ -1031,14 +1120,10 @@ msgstr "未找到通話紀錄"
 msgid "No matching call log entries found"
 msgstr "未找到符合的通話紀錄"
 
-msgid ""
-"User interface for viewing call logs. The log is collected by a background "
-"daemon."
+msgid "User interface for viewing call logs. The log is collected by a background daemon."
 msgstr "用於查看通話紀錄的使用者介面。紀錄由背景守護行程收集。"
 
-msgid ""
-"Call log daemon is disabled. Please enable it in the configuration to start "
-"collecting logs."
+msgid "Call log daemon is disabled. Please enable it in the configuration to start collecting logs."
 msgstr "通話紀錄守護行程已停用。請在設定中將其啟用以開始收集紀錄。"
 
 msgid "Filter call type"
@@ -1092,10 +1177,7 @@ msgstr "通話"
 msgid "Notification Settings"
 msgstr "通知設定"
 
-msgid ""
-"The LED informs about a new message. Before activating this function, please "
-"config and save the SMS reading port, time to check SMS inbox and select the "
-"notification LED."
+msgid "The LED informs about a new message. Before activating this function, please config and save the SMS reading port, time to check SMS inbox and select the notification LED."
 msgstr "LED 指示燈用於通知新訊息。在啟用此功能之前，請設定並儲存簡訊讀取連接埠、簡訊收件匣檢查時間並選擇通知 LED。"
 
 msgid "Check inbox every minute(s)"
@@ -1107,8 +1189,8 @@ msgstr "指定檢查收件匣的時間間隔（分鐘）。"
 msgid "Notification LED"
 msgstr "通知 LED"
 
-msgid "Select the notification LED."
-msgstr "選擇通知 LED。"
+msgid "Select the notification LED"
+msgstr "選擇通知 LED"
 
 msgid "Notify new messages"
 msgstr "新訊息通知"
@@ -1116,9 +1198,7 @@ msgstr "新訊息通知"
 msgid "Restart the inbox checking process every"
 msgstr "重新啟動收件匣檢查程序，每隔"
 
-msgid ""
-"The process will restart at the selected time interval. This will eliminate "
-"the delay in checking your inbox."
+msgid "The process will restart at the selected time interval. This will eliminate the delay in checking your inbox."
 msgstr "該程序將按選定的時間間隔重新啟動。這將消除檢查收件匣時的延遲。"
 
 msgid "4h"
@@ -1136,272 +1216,14 @@ msgstr "12小時"
 msgid "The diode is dedicated only to these notifications"
 msgstr "該指示燈僅用於此類通知"
 
-msgid ""
-"Select 'No' in case the router has only one LED or if the LED is multi-"
-"tasking. <br /><br /><b>Important</b> <br />This option requires LED to be "
-"defined in the system (if possible) to work properly. This requirement "
-"applies when the diode supports multiple tasks."
+msgid "Select 'No' in case the router has only one LED or if the LED is multi-tasking. <br /><br /><b>Important</b> <br />This option requires LED to be defined in the system (if possible) to work properly. This requirement applies when the diode supports multiple tasks."
 msgstr "如果路由器只有一個 LED 或 LED 是多功能的，請選擇「否」。<br /><br /><b>重要提示</b> <br />此選項要求在系統中定義 LED（如果可能）才能正常運作。當指示燈支援多個任務時，此要求適用。"
 
 msgid "Call Log Settings"
 msgstr "通話紀錄設定"
 
-msgid ""
-"Background process to log incoming and missed calls. <br /><br /"
-"><b>Important</b> <br />Option dedicated to Qualcomm modems that do not have "
-"internal call history memory and do not support the standard AT+CPBR "
-"command. Enabling this option adds a new tab. If dedicated tab does not "
-"appear, clear your browser cache and restart the router."
+msgid "Background process to log incoming and missed calls. <br /><br /><b>Important</b> <br />Option dedicated to Qualcomm modems that do not have internal call history memory and do not support the standard AT+CPBR command. Enabling this option adds a new tab. If dedicated tab does not appear, clear your browser cache and restart the router."
 msgstr "用於記錄來電和未接來電的背景程序。<br /><br /><b>重要</b> <br />此選項專為沒有內部通話記錄記憶體且不支援標準AT+CPBR指令的高通數據機所設計。啟用此選項將新增一個新分頁。如果專用分頁未出現，請清除瀏覽器快取並重新啟動路由器。"
-
-msgid "Modem settings"
-msgstr "數據機設置"
-
-msgid "Configuration panel for the 5gmodem application"
-msgstr "5gmodem 應用的配置面板"
-
-msgid "Registered, only SMS"
-msgstr "已註冊,僅簡訊"
-
-msgid "Registered (roaming), only SMS"
-msgstr "已註冊(漫遊),僅簡訊"
-
-msgid "Select a website for searching"
-msgstr "選擇用於搜索的網站"
-
-msgid "Problem with registering to the network, check the SIM card"
-msgstr "網絡註冊出現問題,請檢查 SIM 卡"
-
-msgid "SIM PIN required"
-msgstr "需要 SIM PIN"
-
-msgid "SIM PUK required"
-msgstr "需要 SIM PUK"
-
-msgid "SIM failure"
-msgstr "SIM 卡故障"
-
-msgid "SIM busy"
-msgstr "SIM 卡忙"
-
-msgid "SIM wrong"
-msgstr "SIM 卡錯誤"
-
-msgid "SIM PIN2 required"
-msgstr "需要 SIM PIN2"
-
-msgid "SIM PUK2 required"
-msgstr "需要 SIM PUK2"
-
-msgid "There is a problem reading data from the modem. <br /><br /><b>Please check:</b> <ul><li>1. Modem availability in the system.</li><li>2. The correct installation of the SIM card in the modem.</li><li> 3. Port for communication with the modem.</li><li><ul>"
-msgstr "從數據機讀取數據時出現問題。<br /><br /><b>請檢查:</b> <ul><li>1. 系統中數據機是否可用。</li><li>2. SIM 卡是否正確安裝在數據機中。</li><li>3. 與數據機通信的埠。</li><li><ul>"
-
-msgid "There is a problem reading connection data. <br /><br /><b>Please check:</b> <ul><li>1. Connection of the modem to the internet, the correctness of the entered APN. Some modems need to force the APN on the modem using at commands to connect to internet.</li><li> 2. Check that the correct interface assigned to the modem is selected. The default name of the interface in the package is wan.</li><li><ul>"
-msgstr "讀取連接數據時出現問題。<br /><br /><b>請檢查:</b> <ul><li>1. 數據機是否已連接網際網路,輸入的 APN 是否正確。部分數據機需要通過 AT 命令強制設置 APN 才能連接網際網路。</li><li>2. 是否選擇了分配給數據機的正確接口。軟體包中接口的默認名稱為 wan。</li><li><ul>"
-
-msgid "Defined modems"
-msgstr "已定義的數據機"
-
-msgid "Interface for selecting user defined modems"
-msgstr "用於選擇用戶自定義數據機的界面"
-
-msgid "Modem selection menu"
-msgstr "數據機選擇菜單"
-
-msgid "Information read from the SIM card and device"
-msgstr "從 SIM 卡和設備讀取的信息"
-
-msgid "Hint"
-msgstr "提示"
-
-msgid "CLICK ME TO SEE NEW MENU"
-msgstr "點擊此處查看新菜單"
-
-msgid "(Received Signal Strength Indicator)"
-msgstr "(接收信號強度指示)"
-
-msgid "(Reference Signal Receive Power)"
-msgstr "(參考信號接收功率)"
-
-msgid "(Reference Signal Received Quality)"
-msgstr "(參考信號接收質量)"
-
-msgid "(Signal Strength)"
-msgstr "(信號強度)"
-
-msgid "(Signal to Interference plus Noise Ratio)"
-msgstr "(信號與幹擾加噪聲比)"
-
-msgid "5gmodem"
-msgstr "5gmodem"
-
-msgid "CA band (SCC1)"
-msgstr "載波聚合頻段(SCC1)"
-
-msgid "CA band (SCC2)"
-msgstr "載波聚合頻段(SCC2)"
-
-msgid "CA band (SCC3)"
-msgstr "載波聚合頻段(SCC3)"
-
-msgid "CA band (SCC4)"
-msgstr "載波聚合頻段(SCC4)"
-
-msgid "CSQ"
-msgstr "CSQ"
-
-msgid "Cancel"
-msgstr "取消"
-
-msgid "Cell ID"
-msgstr "小區 ID"
-
-msgid "Clear"
-msgstr "清除"
-
-msgid "Close"
-msgstr "關閉"
-
-msgid "Debug"
-msgstr "調試"
-
-msgid "Diagnostics"
-msgstr "診斷"
-
-msgid "Download"
-msgstr "下載"
-
-msgid "Download error"
-msgstr "下載錯誤"
-
-msgid "Error:"
-msgstr "錯誤:"
-
-msgid "Interface"
-msgstr "接口"
-
-msgid "LAC"
-msgstr "LAC"
-
-msgid "Loading"
-msgstr "加載中"
-
-msgid "MCC MNC"
-msgstr "MCC MNC"
-
-msgid "Modem IMEI"
-msgstr "數據機 IMEI"
-
-msgid "Network interface for Internet access"
-msgstr "用於訪問網際網路的網絡接口"
-
-msgid "Primary band (PCC) | PCI & EARFCN"
-msgstr "主頻段(PCC)| PCI & EARFCN"
-
-msgid "RSRP"
-msgstr "RSRP"
-
-msgid "RSRQ"
-msgstr "RSRQ"
-
-msgid "RSSI"
-msgstr "RSSI"
-
-msgid "SIM ICCID"
-msgstr "SIM ICCID"
-
-msgid "SIM IMSI"
-msgstr "SIM IMSI"
-
-msgid "SINR"
-msgstr "SINR"
-
-msgid "Save"
-msgstr "保存"
-
-msgid "TAC"
-msgstr "TAC"
-
-msgid "☰"
-msgstr "☰"
-
-msgid "Network mode"
-msgstr "網絡模式"
-
-msgid "Auto"
-msgstr "自動"
-
-msgid "Applying network mode..."
-msgstr "正在應用網絡模式..."
-
-msgid "Network mode set: %s"
-msgstr "網絡模式已設置:%s"
-
-msgid "Failed to set network mode"
-msgstr "設置網絡模式失敗"
-
-msgid "LTE bands"
-msgstr "LTE 頻段"
-
-msgid "5G bands"
-msgstr "5G 頻段"
-
-msgid "Apply"
-msgstr "應用"
-
-msgid "All bands"
-msgstr "全部頻段"
-
-msgid "Enable all supported bands"
-msgstr "啟用所有支持的頻段"
-
-msgid "Applying bands..."
-msgstr "正在應用頻段設置..."
-
-msgid "Bands set. The modem will reconnect."
-msgstr "頻段已設置,數據機將重新連接。"
-
-msgid "Failed to set bands"
-msgstr "設置頻段失敗"
-
-msgid "Select at least one band"
-msgstr "請至少選擇一個頻段"
-
-msgid "Send USSD as plain text"
-msgstr "以純文本發送 USSD"
-
-msgid "Get message without PDU decoding"
-msgstr "獲取消息時不進行 PDU 解碼"
-
-msgid "Display the message without decoding it as a PDU."
-msgstr "顯示消息時不將其作為 PDU 解碼。"
-
-msgid "In the tab for sending SMS, show an explanation of the prefix and the correct phone number."
-msgstr "在發送簡訊的標籤頁中,顯示關於前綴和正確電話號碼的說明。"
-
-msgid "The phone number should be preceded by the country prefix (e.g for Russia it is 7, without '+'). If the number is 3-5 characters long, it is treated as 'short' and should not be preceded by a country prefix."
-msgstr "電話號碼前應加國家前綴(例如俄羅斯為 7,不帶「+」)。如果號碼長度為 3-5 位,則視為「短號」,不應加國家前綴。"
-
-msgid "AT templates"
-msgstr "AT 命令模板"
-
-msgid "E-mail address of the recipient"
-msgstr "收件人電子郵件地址"
-
-msgid "E-mail address of the sender"
-msgstr "發件人電子郵件地址"
-
-msgid "Username for SMTP authentication"
-msgstr "SMTP 認證用戶名"
-
-msgid "TLS: use STARTTLS if the server supports it"
-msgstr "TLS:如伺服器支持則使用 STARTTLS"
-
-msgid "SSL: SMTP over SSL"
-msgstr "SSL:通過 SSL 的 SMTP"
-
-msgid "Select the notification LED"
-msgstr "選擇通知 LED"
 
 msgid "/"
 msgstr "/"
@@ -1411,6 +1233,9 @@ msgstr "160"
 
 msgid "7Bit"
 msgstr "7Bit"
+
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> Name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
 
 msgid "Advanced (merges with sorting)"
 msgstr "高級(合併並排序)"
@@ -1805,6 +1630,9 @@ msgstr "進程按所選間隔重啟,以消除收件箱檢查的延遲"
 msgid "LED is dedicated only to these notifications"
 msgstr "LED 僅用於此類通知"
 
+msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> name"
+msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
+
 msgid "The mailsend package is not installed. Install it first using the Install… button below."
 msgstr "未安裝 mailsend 軟體包。請先使用下方的「安裝…」按鈕安裝。"
 
@@ -1864,6 +1692,9 @@ msgstr "7-bit"
 
 msgid "Use ModemManager instead of sms_tool to send USSD codes, for modems managed by ModemManager that do not handle +CUSD on the AT port properly (e.g. Compal RXM-G1 / Tri Cascade VOS_5G). Requires the modemmanager package. The USSD port setting is not used in this mode."
 msgstr "使用 ModemManager 而不是 sms_tool 發送 USSD 代碼,適用於由 ModemManager 管理、AT 埠上無法正確處理 +CUSD 的數據機(如 Compal RXM-G1 / Tri Cascade VOS_5G)。需要安裝 modemmanager 軟體包。此模式下 USSD 埠設置不生效。"
+
+msgid "User AT commands"
+msgstr "使用者AT指令"
 
 msgid "Receiving settings"
 msgstr "接收設置"
@@ -1946,6 +1777,12 @@ msgstr "創建數據機接口"
 msgid "Creating the modem interface..."
 msgstr "正在創建數據機接口..."
 
+msgid "Interface \"%s\" created (%s), bringing it up…"
+msgstr "已建立接口“%s”（%s），正在啟動…"
+
+msgid "Interface \"%s\" already exists — bringing it up."
+msgstr "接口“%s”已存在 — 正在啟動。"
+
 msgid "No modem found to create an interface for"
 msgstr "未找到可創建接口的數據機"
 
@@ -2003,6 +1840,9 @@ msgstr "USSD 會話進行中——輸入回復並按發送"
 msgid "Interface protocol"
 msgstr "接口協議"
 
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems)."
+msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。MBIM（核心 umbim）對 MBIM 模組最可靠，並會停用 ModemManager。選擇 ModemManager 則由 MM 管理模組（指標更豐富，但在部分模組上不穩定）。"
+
 msgid "Auto (detect)"
 msgstr "自動(檢測)"
 
@@ -2036,11 +1876,20 @@ msgstr "完全重啟數據機(CFUN=1,1)?它將重啟並在 USB 上重新枚舉�
 msgid "Restart the modem radio now? The connection will drop for a while."
 msgstr "現在重啟數據機射頻?連接將中斷一段時間。"
 
+msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem)."
+msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。只列出路由器上已安裝處理程式的協定。除 ModemManager 之外的任何協定都會停用 ModemManager：它們無法共用同一個模組。"
+
 msgid "Recreate modem interface"
 msgstr "重新創建數據機接口"
 
 msgid "Modem interface settings"
 msgstr "數據機接口設置"
+
+msgid "Live settings of the current modem interface \"%s\". Edit and press Save & Apply at the bottom; use \"Recreate\" above to rebuild it with the chosen protocol."
+msgstr "目前數據機接口“%s”的即時設定。修改後請點擊下方的“儲存並套用”；如需按所選協定重建，請使用上方的“重建”。"
+
+msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
+msgstr "數據機接口“%s”的目前設定。完整編輯請前往“網路 → 接口”頁面。"
 
 msgid "Modem %d"
 msgstr "數據機 %d"
@@ -2062,6 +1911,9 @@ msgstr "正在切換主上聯…"
 
 msgid "Show the internet-priority switcher"
 msgstr "顯示網際網路優先級切換器"
+
+msgid "Show the \"Internet priority\" bar on the Network page for quickly switching the primary uplink (modems / WAN / Wi-Fi)."
+msgstr "在“網路”頁面顯示“網際網路優先級”欄，用於快速切換主上行（數據機 / WAN / Wi-Fi）。"
 
 msgid "3G bands"
 msgstr "3G 頻段"
@@ -2131,6 +1983,9 @@ msgstr "eSIM 配置文件已下載"
 
 msgid "Delete eSIM profile"
 msgstr "刪除 eSIM 配置文件"
+
+msgid "Delete profile \"%s\" (%s)? This cannot be undone."
+msgstr "刪除設定檔“%s”（%s）？此操作無法復原。"
 
 msgid "Switch to the eSIM slot (SIM buttons in the header above) to manage eSIM profiles."
 msgstr "請切換到 eSIM 卡槽（使用上方標題欄中的 SIM 按鈕）以管理 eSIM 配置文件。"
@@ -2381,6 +2236,9 @@ msgstr "公網 IP 服務"
 msgid "Service that returns your public IP, checked over the modem. Pick a preset or enter your own; if it fails, the modem WAN IP is shown instead."
 msgstr "返回公網 IP 的服務，通過數據機查詢。可選預設或自行填寫；失敗時改為顯示數據機 WAN IP。"
 
+msgid "Settings for the speed-test button in the \"Internet priority\" block on the Network page. The test runs from the router over the active uplink."
+msgstr "“網路”頁面“網際網路優先級”區塊中測速按鈕的設定。測速從路由器出發，經目前使用中的上行進行。"
+
 msgid "Download source"
 msgstr "下載源"
 
@@ -2392,6 +2250,9 @@ msgstr "上傳端點"
 
 msgid "Service that returns your public IP. Pick a preset or enter your own; if it fails, the active uplink WAN IP is shown instead."
 msgstr "返回公網 IP 的服務。可選預設或自行填寫；失敗時改為顯示當前上聯的 WAN IP。"
+
+msgid "Operator changed to \"%s\" after switching the eSIM profile. The recommended APN is \"%s\" (current: \"%s\"). Open Modem Settings to apply it."
+msgstr "切換 eSIM 設定檔後電信業者已變為“%s”。建議的 APN 為“%s”（目前：“%s”）。請開啟數據機設定以套用。"
 
 msgid "Open Modem Settings"
 msgstr "打開數據機設置"
@@ -2416,6 +2277,9 @@ msgstr "lpac 內置 curl"
 
 msgid "Download transport saved"
 msgstr "下載傳輸方式已保存"
+
+msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
+msgstr "lpac 與電信業者伺服器（SM-DP+）通訊的方式。“自動”在可用時使用橋接。橋接能存取使用 GSMA CI 憑證的 SM-DP+ 伺服器——mbedTLS 建置中內建的 curl 無法處理這類憑證——並且會驗證憑證。"
 
 msgid "Country lookup"
 msgstr "國家查詢"
@@ -2636,6 +2500,9 @@ msgstr "讀取與頁面相同的快照——不會單獨輪詢數據機。立即
 msgid "Thresholds match the colours used on the Network page, so three LEDs and a green value mean the same thing"
 msgstr "閾值與「網絡」頁面所用顏色一致，因此三個 LED 全亮與綠色數值含義相同"
 
+msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
+msgstr "測速需要 curl 套件：請用“apk add curl”（或“opkg install curl”）安裝。它未隨應用一起打包——在 8 MB 快閃記憶體的路由器上 libcurl 的體積很可觀。"
+
 msgid "A different modem is now in this USB port"
 msgstr "此 USB 埠現在接入的是另一個數據機"
 
@@ -2674,6 +2541,12 @@ msgstr "刪除配置"
 
 msgid "Delete the profile of %s?"
 msgstr "刪除 %s 的配置？"
+
+msgid "Its network interface \"%s\" will be removed too."
+msgstr "它的網路接口“%s”也會一併刪除。"
+
+msgid "The interface \"%s\" stays: another profile uses it."
+msgstr "接口“%s”將保留：另一個設定檔正在使用它。"
 
 msgid "This modem is connected right now. It will be set up again from scratch."
 msgstr "此數據機當前已連接。它將被重新從頭設置。"
@@ -2786,6 +2659,9 @@ msgstr "接收分集：開啟（2RX）"
 msgid "Receive diversity: off - the second antenna is not used"
 msgstr "接收分集：關閉——第二根天線未使用"
 
+msgid "Receive diversity: on, but the second antenna is not connected"
+msgstr "接收分集：開啟，但第二根天線未連接"
+
 msgid "eSIM tab"
 msgstr "eSIM 標籤頁"
 
@@ -2846,6 +2722,9 @@ msgstr "APN"
 msgid "APN for the modem interface. Auto-filled from the detected operator; you can change it. Leave empty for the provider default."
 msgstr "數據機接口的 APN。已按檢測到的運營商自動填寫；可修改。留空則使用運營商默認值。"
 
+msgid "APN for the new operator may differ. Recommended: \"%s\" (current: \"%s\"). You are in manual APN mode - open Modem Settings to apply it."
+msgstr "新電信業者的 APN 可能不同。建議：“%s”（目前：“%s”）。您處於手動 APN 模式——請開啟數據機設定以套用。"
+
 msgid "AT command port used for dialing; auto-selected when empty"
 msgstr "用於撥號的 AT 命令埠；留空則自動選擇"
 
@@ -2870,6 +2749,9 @@ msgstr "Fibocom（AT 撥號）"
 msgid "IP Protocol"
 msgstr "IP 協議"
 
+msgid "IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to \"IPv4 only\" only if a modem has trouble with dual-stack."
+msgstr "數據機接口的 IP 類型。IPv4/IPv6 是穩妥的預設值：在僅 IPv4 的網路中模組只會協商 IPv4，而某些網路（例如 FM350 上的 Tele2）在僅 IPv4 時根本不會啟用資料內容。只有當模組在雙堆疊下出問題時才切換到“僅 IPv4”。"
+
 msgid "IPv4"
 msgstr "IPv4"
 
@@ -2884,6 +2766,9 @@ msgstr "IPv4+IPv6"
 
 msgid "IPv6"
 msgstr "IPv6"
+
+msgid "Interface \"%s\" created (DHCP on %s), bringing it up…"
+msgstr "已建立接口“%s”（%s 上的 DHCP），正在啟動…"
 
 msgid "Invalid APN provided"
 msgstr "提供的 APN 無效"
@@ -3014,11 +2899,17 @@ msgstr "流式"
 msgid "URL for the download test. A BIGGER file lets the speed ramp up over the ~15-second test; a small one finishes early and reads low. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
 msgstr "下載測速所用的 URL。文件越大，速度在約 15 秒的測試中越能充分提升；文件太小會提前結束，測得偏低。俄羅斯節點（Selectel/Yandex/Tele2）在俄羅斯行動網路中可用；Cloudflare/Hetzner 在當地可能被封鎖。已標註大致大小。"
 
+msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
+msgstr "下載測試的資料來源。「Internetometer」會在每次測試前向 Yandex 查詢最近的 CDN 節點，在俄羅斯行動網路下這是最佳選擇；如果您沒有自行選擇上傳端點，它也會一併設定。對於一般 URL，檔案越大，速度越能在約 15 秒的測試中充分提升。俄羅斯境內代管的資料來源（Selectel/Yandex/Tele2）可在俄羅斯行動網路下使用；Cloudflare/Hetzner 在當地可能遭到封鎖。旁邊顯示的是大約檔案大小。"
+
 msgid "No response from modem"
 msgstr "數據機無響應"
 
 msgid "Endpoint that accepts a POST body, for the upload test. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
 msgstr "上傳測速所用的、可接收 POST 請求體的端點。俄羅斯節點（Rostelecom/Yandex）在俄羅斯行動網路中可用；即使伺服器返回 404/403 也會讀取請求體，因此仍可測得速度。"
+
+msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
+msgstr "用於上傳測試的端點，需接受 POST 請求內容。「Internetometer」使用與下載資料來源相同探測清單中的節點，也可在此單獨選擇。俄羅斯境內代管的端點（Rostelecom/Yandex）可在俄羅斯行動網路下使用；即使伺服器回應 404/403，也會讀取請求內容，因此仍能測出速度。"
 
 msgid "Service that returns your public IP. If it also returns the country (like ip-api.com), a flag is shown next to the IP. If it fails, a backup service is queried, and only then the local uplink address is shown (without a flag)."
 msgstr "返回您公網 IP 的服務。若同時返回國家信息（如 ip-api.com），IP 旁會顯示國旗。若失敗則查詢備用服務，仍失敗時才顯示本地上行地址（不帶國旗）。"
@@ -3055,6 +2946,9 @@ msgstr "「網絡」頁面及數據機行為選項"
 
 msgid "Show TTL fixing"
 msgstr "顯示 TTL 修正"
+
+msgid "Show the \"TTL fixing\" block on the Network page."
+msgstr "在“網路”頁面顯示“TTL 修正”區塊。"
 
 msgid "Saved bands"
 msgstr "已保存的頻段"
@@ -3185,6 +3079,9 @@ msgstr "重啟後記住頻段"
 msgid "Re-apply your selected bands when the modem reconnects, so a modem that resets its band selection on reboot (e.g. FM350) keeps yours. Only modems that actually lost the selection are touched."
 msgstr "數據機重新連接時重新應用您選擇的頻段，使重啟後會重置頻段選擇的數據機（如 FM350）保持您的設置。僅對確實丟失了頻段選擇的數據機生效。"
 
+msgid "IP type for the modem interface. IPv4 is the default: on most networks/modems a dual-stack (IPv4/IPv6) context registers but never gets an address, while IPv4 gets one immediately. Switch to \"IPv4 and IPv6\" only if you need IPv6 and the modem supports it."
+msgstr "數據機接口的 IP 類型。預設為 IPv4：在大多數網路/數據機上，雙堆疊（IPv4/IPv6）內容可以註冊但始終拿不到地址，而 IPv4 會立即取得地址。只有在需要 IPv6 且數據機支援時，才切換到「IPv4 和 IPv6」。"
+
 msgid "Open the SSClash-Go admin panel in a new tab"
 msgstr "在新標籤頁中打開 SSClash-Go 管理面板"
 
@@ -3307,12 +3204,6 @@ msgstr "從上方命令菜單（▾）中選擇服務，會自動填入切換命
 
 msgid "Dismiss"
 msgstr "忽略"
-
-msgid "SSClash is running"
-msgstr "SSClash 正在運行"
-
-msgid "SSClash is stopped"
-msgstr "SSClash 已停止"
 
 msgid "Widgets"
 msgstr "小部件"
@@ -3659,6 +3550,9 @@ msgstr "AT 橋接（sms_tool）"
 msgid "eUICC access saved"
 msgstr "eUICC 訪問方式已保存"
 
+msgid "How lpac reaches the eSIM chip. \"Auto\" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT."
+msgstr "lpac 存取 eSIM 晶片的方式。“自動”為序列埠模組（FM350）選擇 AT，為透過 cdc-wdm 驅動的模組選擇 QMI/MBIM。對於 eUICC 無法透過 AT 存取的高通模組（T99W175 / MV31-W / DW5930e），請手動設為 QMI/MBIM。"
+
 msgid "These are status reports the modem sends to your operator (SM-DP+) after a profile is enabled, disabled or deleted. They normally go out on their own. If some are stuck here (e.g. there was no internet at the time), the safe choice is Send — it is harmless and just confirms the change. Remove only discards a report without sending it. If unsure, you can leave them or press Send all."
 msgstr "這些是配置文件在啟用、禁用或刪除後，數據機發送給運營商（SM-DP+）的狀態報告。通常會自動發出。若有報告滯留在此（例如當時沒有網絡連接），安全的做法是點「發送」——它無害，只是確認變更。「移除」則不發送、直接丟棄報告。不確定時可以保留，或點「全部發送」。"
 
@@ -3770,11 +3664,17 @@ msgstr "USSD 通過電路交換信道工作，而 LTE 沒有該信道。有些�
 msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel. The request will therefore switch the modem to 3G and switch it back - the connection drops for about twenty seconds."
 msgstr "數據機當前註冊在 %s，而 USSD 通過電路交換信道工作。因此請求會將數據機切換到 3G 並在完成後切回——連接會中斷約二十秒。"
 
+msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
+msgstr "數據機目前註冊在 %s，而 USSD 走電路交換通道，LTE 沒有這一通道。多數模組仍會回應；如果這台一直沉默，請在下方設定中啟用“USSD 時切換到 3G”。"
+
 msgid "Data has not been updated for %d s (shown from the last snapshot)"
 msgstr "數據已有 %d 秒未更新（顯示的是最後一次快照）"
 
 msgid "Data has not been updated for %d min (shown from the last snapshot)"
 msgstr "數據已有 %d 分鐘未更新（顯示的是最後一次快照）"
+
+msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
+msgstr "這台數據機由 ModemManager 管理，控制通道屬於 MM。在同一通道上再開一個 eSIM 工作階段可能導致模組韌體當機（在 T99W175 上實測：模組會重新啟動）。要管理 eSIM，請先在數據機設定中啟用“對 ModemManager 隱藏”（或變更接口協定），然後再回到此頁。"
 
 msgid "Internet is working (%s ms)"
 msgstr "網際網路正常（%s ms）"
@@ -3947,6 +3847,12 @@ msgstr "TB"
 msgid "Show statistics"
 msgstr "顯示統計"
 
+msgid "Adds the \"Statistics\" tab with charts of uplink latency, signal, temperature and monthly traffic."
+msgstr "新增“統計”分頁，顯示上行延遲、訊號、溫度和每月流量的圖表。"
+
+msgid "Collects uplink latency, signal, temperature and monthly traffic, and shows the \"Statistics\" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself."
+msgstr "蒐集上行延遲、訊號、溫度和每月流量，並在“統計”分頁中顯示圖表。資料序列保存在記憶體裡；每月流量可以在該分頁上設定為跨重新啟動保留。"
+
 msgid "Forward incoming messages to Telegram"
 msgstr "將收到的簡訊轉發到 Telegram"
 
@@ -4049,6 +3955,9 @@ msgstr "一個機器人負責雙向通信：它將每條新收到的簡訊轉發
 msgid "SMS can also be sent from a Telegram chat - set the bot up on the Inbox settings page."
 msgstr "也可以從 Telegram 聊天發送簡訊——請在收件箱設置頁面配置機器人。"
 
+msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Inbox settings page."
+msgstr "機器人已連線，可以接收訊息。若要從聊天中傳送簡訊，請在“收件匣”設定頁勾選“允許從聊天傳送簡訊”。"
+
 msgid "Sending from the chat is on - write to the bot:"
 msgstr "已開啟從聊天發送——給機器人發送："
 
@@ -4127,8 +4036,8 @@ msgstr "卡片背景"
 msgid "Priority number"
 msgstr "優先級編號"
 
-msgid "Interface icon"
-msgstr "接口圖標"
+msgid "Icons"
+msgstr "圖示"
 
 msgid "Large translucent mark on each uplink card"
 msgstr "每張上聯卡片上的大號半透明標記"
@@ -4436,6 +4345,9 @@ msgstr "部分運營商/模塊撥號成功後不下發 DNS 伺服器：有 IP �
 msgid "DNS servers"
 msgstr "DNS 伺服器"
 
+msgid "Space-separated, e.g. \"77.88.8.8 77.88.8.1\"."
+msgstr "以空格分隔，例如「77.88.8.8 77.88.8.1」。"
+
 msgid "QMI Cellular (raw-ip)"
 msgstr "QMI 蜂窩（raw-ip）"
 
@@ -4673,6 +4585,9 @@ msgstr "eUICC 卡槽"
 msgid "eUICC slot saved — refresh the profile list"
 msgstr "eUICC 卡槽已保存——請刷新配置文件列表"
 
+msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
+msgstr "eSIM 晶片所在的 SIM 卡槽。“自動”跟隨模組中目前啟用的卡槽。如果晶片可讀但設定檔清單始終為空（例如卡槽 1 中的可插拔 eSIM），請明確指定。"
+
 msgid "No data"
 msgstr "無數據"
 
@@ -4802,8 +4717,8 @@ msgstr "直接輸入號碼：10 位國內號碼會自動加上設置中的國家
 msgid "e.g. 9291067196 or a short number like 000100"
 msgstr "例如 9291067196，或 000100 這類短號碼"
 
-msgid "A link marked below never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
-msgstr "下方勾選的鏈路不會自動承載流量——需要使用時，點擊其卡片將它設為第一位。適合手機 Wi-Fi 熱點這類備用鏈路。"
+msgid "A link marked here never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
+msgstr "標記為此的鏈路不會自動承載流量——要使用它，請先點擊它的卡片把它設為主用。適合作為備用鏈路，例如連到手機的 Wi-Fi。"
 
 msgid "Use only manually"
 msgstr "僅手動使用"
@@ -4822,97 +4737,6 @@ msgstr "後端返回為空"
 
 msgid "Details are in the system log (logread, tag 5gmodem)."
 msgstr "詳情見系統日誌（logread，標籤 5gmodem）。"
-
-
-msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> Name"
-msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
-
-msgid "<abbr title=\"Light Emitting Diode\">LED</abbr> name"
-msgstr "<abbr title=\"Light Emitting Diode\">LED</abbr> 名稱"
-
-msgid "Interface \"%s\" created (%s), bringing it up…"
-msgstr "已建立接口“%s”（%s），正在啟動…"
-
-msgid "Interface \"%s\" already exists — bringing it up."
-msgstr "接口“%s”已存在 — 正在啟動。"
-
-msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). MBIM (kernel umbim) is the most reliable for MBIM modems and disables ModemManager. ModemManager enables MM to manage the modem (richer metrics, but flaky on some modems)."
-msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。MBIM（核心 umbim）對 MBIM 模組最可靠，並會停用 ModemManager。選擇 ModemManager 則由 MM 管理模組（指標更豐富，但在部分模組上不穩定）。"
-
-msgid "Protocol for the \"Create modem interface\" button. \"Auto\" picks it from the modem driver (recommended). Only the protocols whose handler is installed on the router are shown. Any non-ModemManager protocol disables ModemManager (they cannot share the modem)."
-msgstr "“建立數據機接口”按鈕使用的協定。“自動”按模組驅動選擇（建議）。只列出路由器上已安裝處理程式的協定。除 ModemManager 之外的任何協定都會停用 ModemManager：它們無法共用同一個模組。"
-
-msgid "Live settings of the current modem interface \"%s\". Edit and press Save & Apply at the bottom; use \"Recreate\" above to rebuild it with the chosen protocol."
-msgstr "目前數據機接口“%s”的即時設定。修改後請點擊下方的“儲存並套用”；如需按所選協定重建，請使用上方的“重建”。"
-
-msgid "Current settings of the modem interface \"%s\". Full editing is on the Network → Interfaces page."
-msgstr "數據機接口“%s”的目前設定。完整編輯請前往“網路 → 接口”頁面。"
-
-msgid "Show the \"Internet priority\" bar on the Network page for quickly switching the primary uplink (modems / WAN / Wi-Fi)."
-msgstr "在“網路”頁面顯示“網際網路優先級”欄，用於快速切換主上行（數據機 / WAN / Wi-Fi）。"
-
-msgid "Delete profile \"%s\" (%s)? This cannot be undone."
-msgstr "刪除設定檔“%s”（%s）？此操作無法復原。"
-
-msgid "Settings for the speed-test button in the \"Internet priority\" block on the Network page. The test runs from the router over the active uplink."
-msgstr "“網路”頁面“網際網路優先級”區塊中測速按鈕的設定。測速從路由器出發，經目前使用中的上行進行。"
-
-msgid "Operator changed to \"%s\" after switching the eSIM profile. The recommended APN is \"%s\" (current: \"%s\"). Open Modem Settings to apply it."
-msgstr "切換 eSIM 設定檔後電信業者已變為“%s”。建議的 APN 為“%s”（目前：“%s”）。請開啟數據機設定以套用。"
-
-msgid "How lpac talks to the operator server (SM-DP+). \"Auto\" uses the bridge when available. The bridge reaches SM-DP+ servers that present GSMA CI certificates, which the built-in curl cannot handle on mbedTLS builds, and it verifies the certificate."
-msgstr "lpac 與電信業者伺服器（SM-DP+）通訊的方式。“自動”在可用時使用橋接。橋接能存取使用 GSMA CI 憑證的 SM-DP+ 伺服器——mbedTLS 建置中內建的 curl 無法處理這類憑證——並且會驗證憑證。"
-
-msgid "Speed test needs the curl package: install it with \"apk add curl\" (or \"opkg install curl\"). It is not bundled - libcurl is noticeable on routers with 8 MB of flash."
-msgstr "測速需要 curl 套件：請用“apk add curl”（或“opkg install curl”）安裝。它未隨應用一起打包——在 8 MB 快閃記憶體的路由器上 libcurl 的體積很可觀。"
-
-msgid "Its network interface \"%s\" will be removed too."
-msgstr "它的網路接口“%s”也會一併刪除。"
-
-msgid "The interface \"%s\" stays: another profile uses it."
-msgstr "接口“%s”將保留：另一個設定檔正在使用它。"
-
-msgid "APN for the new operator may differ. Recommended: \"%s\" (current: \"%s\"). You are in manual APN mode - open Modem Settings to apply it."
-msgstr "新電信業者的 APN 可能不同。建議：“%s”（目前：“%s”）。您處於手動 APN 模式——請開啟數據機設定以套用。"
-
-msgid "IP type for the modem interface. IPv4/IPv6 is the safe default - on an IPv4-only network the modem just negotiates IPv4, while some networks (e.g. Tele2 on the FM350) will not activate the data context at all under IPv4-only. Switch to \"IPv4 only\" only if a modem has trouble with dual-stack."
-msgstr "數據機接口的 IP 類型。IPv4/IPv6 是穩妥的預設值：在僅 IPv4 的網路中模組只會協商 IPv4，而某些網路（例如 FM350 上的 Tele2）在僅 IPv4 時根本不會啟用資料內容。只有當模組在雙堆疊下出問題時才切換到“僅 IPv4”。"
-
-msgid "Interface \"%s\" created (DHCP on %s), bringing it up…"
-msgstr "已建立接口“%s”（%s 上的 DHCP），正在啟動…"
-
-msgid "Show the \"TTL fixing\" block on the Network page."
-msgstr "在“網路”頁面顯示“TTL 修正”區塊。"
-
-msgid "How lpac reaches the eSIM chip. \"Auto\" picks AT for serial modems (FM350) and QMI/MBIM for modems driven over cdc-wdm. Set QMI/MBIM manually for Qualcomm modems (T99W175 / MV31-W / DW5930e) whose eUICC is not reachable over AT."
-msgstr "lpac 存取 eSIM 晶片的方式。“自動”為序列埠模組（FM350）選擇 AT，為透過 cdc-wdm 驅動的模組選擇 QMI/MBIM。對於 eUICC 無法透過 AT 存取的高通模組（T99W175 / MV31-W / DW5930e），請手動設為 QMI/MBIM。"
-
-msgid "The modem is registered in %s now, and USSD runs over the circuit-switched channel, which LTE does not have. Many modems still answer; if this one stays silent, enable \"Switch the modem to 3G for USSD\" in the settings below."
-msgstr "數據機目前註冊在 %s，而 USSD 走電路交換通道，LTE 沒有這一通道。多數模組仍會回應；如果這台一直沉默，請在下方設定中啟用“USSD 時切換到 3G”。"
-
-msgid "This modem is managed by ModemManager, and its control channel belongs to MM. Opening a second eSIM session on the same channel can crash the modem firmware (seen live on T99W175 - the modem reboots). To manage eSIM, enable \"Hide from ModemManager\" in the modem settings (or switch the interface protocol), then come back here."
-msgstr "這台數據機由 ModemManager 管理，控制通道屬於 MM。在同一通道上再開一個 eSIM 工作階段可能導致模組韌體當機（在 T99W175 上實測：模組會重新啟動）。要管理 eSIM，請先在數據機設定中啟用“對 ModemManager 隱藏”（或變更接口協定），然後再回到此頁。"
-
-msgid "Adds the \"Statistics\" tab with charts of uplink latency, signal, temperature and monthly traffic."
-msgstr "新增“統計”分頁，顯示上行延遲、訊號、溫度和每月流量的圖表。"
-
-msgid "Collects uplink latency, signal, temperature and monthly traffic, and shows the \"Statistics\" tab with the charts. Series live in RAM; monthly traffic can be kept across reboots on the tab itself."
-msgstr "蒐集上行延遲、訊號、溫度和每月流量，並在“統計”分頁中顯示圖表。資料序列保存在記憶體裡；每月流量可以在該分頁上設定為跨重新啟動保留。"
-
-msgid "The bot is connected for incoming messages. To send SMS from the chat, tick \"Allow sending SMS from the chat\" on the Inbox settings page."
-msgstr "機器人已連線，可以接收訊息。若要從聊天中傳送簡訊，請在“收件匣”設定頁勾選“允許從聊天傳送簡訊”。"
-
-msgid "Icons"
-msgstr "圖示"
-
-msgid "Space-separated, e.g. \"77.88.8.8 77.88.8.1\"."
-msgstr "以空格分隔，例如「77.88.8.8 77.88.8.1」。"
-
-msgid "Which SIM slot holds the eSIM chip. \"Auto\" follows the slot that is currently active in the modem. Set it explicitly if the profile list stays empty while the chip is readable — e.g. a removable eSIM in slot 1."
-msgstr "eSIM 晶片所在的 SIM 卡槽。“自動”跟隨模組中目前啟用的卡槽。如果晶片可讀但設定檔清單始終為空（例如卡槽 1 中的可插拔 eSIM），請明確指定。"
-
-msgid "A link marked here never receives traffic automatically - to use it, make it first by clicking its card. Handy for a backup like Wi-Fi to your phone."
-msgstr "標記為此的鏈路不會自動承載流量——要使用它，請先點擊它的卡片把它設為主用。適合作為備用鏈路，例如連到手機的 Wi-Fi。"
 
 msgid "Both reading and receiving: the modem is told to put new incoming messages here as well. A modem that cannot receive into the chosen storage keeps its own, and this setting is corrected to match - the list always shows the box the messages actually land in. SIM cards hold only two or three dozen messages - once full, the operator stops delivering. Until you pick a value here, the app selects the larger storage of the two on its own."
 msgstr "既讀取也接收：會讓數據機把新收到的訊息也放到這裡。如果模組無法接收到所選儲存區，它會保留自己的儲存區，此設定也隨之修正——清單始終顯示訊息實際落入的位置。SIM 卡只能存二三十條訊息，存滿後電信業者就不再投遞。在您做出選擇之前，應用會自行選用兩者中較大的儲存區。"
@@ -5163,9 +4987,6 @@ msgstr "數據機初始化逾時"
 msgid "ModemManager"
 msgstr "ModemManager"
 
-msgid "Open the SSClash admin panel in a new tab"
-msgstr "在新分頁中開啟 SSClash 管理面板"
-
 msgid "Override MTU"
 msgstr "覆寫 MTU"
 
@@ -5265,6 +5086,18 @@ msgstr "國家"
 msgid "no answer from %s"
 msgstr "%s 沒有回應"
 
+msgid "public demo"
+msgstr "公開示範"
+
+msgid "Create interface (USB tethering)"
+msgstr "建立接口（USB 網路共用）"
+
+msgid "Recreate interface (USB tethering)"
+msgstr "重新建立接口（USB 網路共用）"
+
+msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
+msgstr "此手機透過 USB 分享網路，並透過 DHCP 分配位址。此按鈕用於建立（或重新建立）對應的 DHCP 接口——無需選擇撥號協議，也沒有數據機指標可讀取。"
+
 msgid "works over cellular"
 msgstr "在行動網路下可用"
 
@@ -5285,24 +5118,6 @@ msgstr "路由器到哪裡去問自己的位址從外面看是什麼樣。測速
 
 msgid "The address is public: the interface has exactly what the internet sees%s"
 msgstr "位址是公網的：接口上就是網際網路看到的那個%s"
-
-msgid "Source for the download test. \"Internetometer\" asks Yandex for the nearest CDN node before each run, which is the best choice over Russian cellular; it also sets the upload endpoint unless you picked one yourself. For a plain URL, a BIGGER file lets the speed ramp up over the ~15-second test. RU-hosted sources (Selectel/Yandex/Tele2) work over Russian cellular; Cloudflare/Hetzner may be blocked there. Approx. size shown."
-msgstr "下載測試的資料來源。「Интернетометр」會在每次測試前向 Yandex 查詢最近的 CDN 節點，在俄羅斯行動網路下這是最佳選擇；如果您沒有自行選擇上傳端點，它也會一併設定。對於一般 URL，檔案越大，速度越能在約 15 秒的測試中充分提升。俄羅斯境內代管的資料來源（Selectel/Yandex/Tele2）可在俄羅斯行動網路下使用；Cloudflare/Hetzner 在當地可能遭到封鎖。旁邊顯示的是大約檔案大小。"
-
-msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. RU-hosted endpoints (Rostelecom/Yandex) work over Russian cellular; the server reads the body even when it answers 404/403, so the speed is still measured."
-msgstr "用於上傳測試的端點，需接受 POST 請求內容。「Интернетометр」使用與下載資料來源相同探測清單中的節點，也可在此單獨選擇。俄羅斯境內代管的端點（Rostelecom/Yandex）可在俄羅斯行動網路下使用；即使伺服器回應 404/403，也會讀取請求內容，因此仍能測出速度。"
-
-msgid "public demo"
-msgstr "公開示範"
-
-msgid "Create interface (USB tethering)"
-msgstr "建立接口（USB 網路共用）"
-
-msgid "Recreate interface (USB tethering)"
-msgstr "重新建立接口（USB 網路共用）"
-
-msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
-msgstr "此手機透過 USB 分享網路，並透過 DHCP 分配位址。此按鈕用於建立（或重新建立）對應的 DHCP 接口——無需選擇撥號協議，也沒有數據機指標可讀取。"
 
 msgid "What the modem itself can do. Not the speed of the current connection."
 msgstr "數據機本身的能力，而非目前連線的速度。"
@@ -5345,6 +5160,9 @@ msgstr "請求遭拒絕：%s"
 
 msgid "Dangerous AT command"
 msgstr "危險的 AT 指令"
+
+msgid "This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back."
+msgstr "此指令可能會改變數據機的 USB 組合或永久停用其埠。在某些模組上它會移除所有 USB 埠，只有透過 EDL 重新刷機才能恢復。"
 
 msgid "Send anyway"
 msgstr "仍要傳送"
@@ -5569,7 +5387,7 @@ msgid "Deleted: %d, not deleted: %d"
 msgstr "已刪除：%d，未刪除：%d"
 
 msgid "Endpoint that accepts a POST body, for the upload test. \"Internetometer\" uses a node from the same probe list as the download source, and can be picked here on its own. Only uploads the server received in full are counted: an endpoint that cuts the transfer off early gives no upload figure at all."
-msgstr "用於上傳測試、可接收 POST 內文的端點。「Интернетометр」使用與下載來源相同探測清單中的節點，也可在此單獨選擇。只計算伺服器完整接收的上傳：提前中斷傳輸的端點不會給出上傳數值。"
+msgstr "用於上傳測試、可接收 POST 內文的端點。「Internetometer」使用與下載來源相同探測清單中的節點，也可在此單獨選擇。只計算伺服器完整接收的上傳：提前中斷傳輸的端點不會給出上傳數值。"
 
 msgid "The previous deletion is still running, try again in a minute"
 msgstr "上一次刪除仍在進行，請一分鐘後再試"
@@ -5735,3 +5553,261 @@ msgstr "註冊被拒絕（部分模塊韌體會封鎖該國家的網路，請檢
 
 msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
 msgstr "鎖定到單個小區期間，模塊通常會停用載波聚合，速度可能下降。"
+
+msgid "Internet priorities only"
+msgstr "僅網際網路優先級"
+
+msgid "For a router without a modem: keeps uplink priorities, the internet watchdog, statistics, buttons and the Telegram bot, and turns off everything that serves a modem - polling, SMS, ModemManager control, USB port binding. Modem tabs and settings are hidden."
+msgstr "適用於沒有數據機的路由器：保留上聯優先級、網際網路看門狗、統計、按鍵和 Telegram 機器人，並關閉所有為數據機服務的功能——輪詢、簡訊、ModemManager 控制、USB 埠綁定。數據機相關的分頁和設定將被隱藏。"
+
+msgid "Modem web password"
+msgstr "數據機網頁密碼"
+
+msgid "Modem battery"
+msgstr "數據機電池"
+
+msgid "Modem battery, charging"
+msgstr "數據機電池，充電中"
+
+msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
+msgstr "數據機自身網頁介面的密碼。有了它，路由器可以讀取訊號、電池、簡訊，並能重新啟動數據機。如果數據機沒有密碼，請留空。"
+
+msgid "The modem asks for its web password - enter it on the Modem page"
+msgstr "數據機要求輸入網頁密碼——請在「數據機」頁面輸入"
+
+msgid "Password needed"
+msgstr "需要密碼"
+
+msgid "Internetometer"
+msgstr "Internetometer"
+
+msgid "Internetometer (Yandex CDN)"
+msgstr "Internetometer（Yandex CDN）"
+
+msgid "Updated"
+msgstr "已更新"
+
+msgid "Time of the latest modem data; the bar runs until the next update"
+msgstr "最新數據機數據的時間；進度條會一直走到下次更新"
+
+msgid "Add router name"
+msgstr "添加路由器名稱"
+
+msgid "Message header: SMS sender, then the SIM operator and number, router name and modem, e.g. \"SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)\". Helps when several routers send to one chat."
+msgstr "訊息標題：簡訊寄件者，然後是 SIM 卡的電信業者和號碼、路由器名稱和數據機，例如「SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)」。當多台路由器發送到同一個聊天時很有用。"
+
+msgid "Subject: SMS sender, then the SIM operator and number, router name and modem, e.g. \"SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)\"."
+msgstr "主題：簡訊寄件者，然後是 SIM 卡的電信業者和號碼、路由器名稱和數據機，例如「SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)」。"
+
+msgid "ntfy notifications"
+msgstr "ntfy 通知"
+
+msgid "Forwards every new incoming SMS to an ntfy topic (ntfy.sh or your own server). Subscribe to the topic in the ntfy app on the phone."
+msgstr "將每則新收到的簡訊轉發到 ntfy 主題（ntfy.sh 或您自己的伺服器）。在手機的 ntfy 應用程式中訂閱該主題即可。"
+
+msgid "ntfy server"
+msgstr "ntfy 伺服器"
+
+msgid "Topic"
+msgstr "主題"
+
+msgid "Anyone who knows the topic name on ntfy.sh can read it - pick a long, hard to guess name."
+msgstr "任何知道 ntfy.sh 上主題名稱的人都能讀取它——請選擇一個較長、難以猜到的名稱。"
+
+msgid "Only Latin letters, digits, \"-\" and \"_\""
+msgstr "僅限拉丁字母、數字、\"-\" 和 \"_\""
+
+msgid "Access token"
+msgstr "存取權杖"
+
+msgid "Only for protected topics, e.g. tk_..."
+msgstr "僅用於受保護的主題，例如 tk_..."
+
+msgid "Webhook"
+msgstr "Webhook"
+
+msgid "Sends every new incoming SMS as a JSON POST request: title, sender, time, text, router, modem, operator, phone, path. Suits Home Assistant, n8n, Gotify proxies and your own scripts."
+msgstr "將每則新收到的簡訊以 JSON POST 請求發送：title、sender、time、text、router、modem、operator、phone、path。適用於 Home Assistant、n8n、Gotify 代理以及您自己的腳本。"
+
+msgid "URL"
+msgstr "URL"
+
+msgid "Expecting an http:// or https:// address"
+msgstr "需要 http:// 或 https:// 地址"
+
+msgid "Extra header"
+msgstr "額外標頭"
+
+msgid "Optional, one header in the form Name: value, e.g. Authorization: Bearer secret"
+msgstr "可選，一個標頭，格式為 Name: value，例如 Authorization: Bearer secret"
+
+msgid "Expecting Name: value"
+msgstr "需要 Name: value 格式"
+
+msgid "check the address and the router internet connection"
+msgstr "請檢查地址及路由器的網際網路連線"
+
+msgid "Colored modem card"
+msgstr "彩色數據機卡片"
+
+msgid "Tint the Modem card on the Network page by network technology: purple for 5G, blue for 4G, green for 3G, pink for 2G. Turn off to get the previous plain card back."
+msgstr "依網路技術為「網絡」頁面上的數據機卡片著色：5G 為紫色，4G 為藍色，3G 為綠色，2G 為粉紅色。關閉即可恢復原來的普通卡片。"
+
+msgid "Carrier aggregation: %d carriers combined, %d MHz in total"
+msgstr "載波聚合：合併 %d 個載波，總計 %d MHz"
+
+msgid "Carrier aggregation: %d carriers combined"
+msgstr "載波聚合：合併 %d 個載波"
+
+msgid "Phone"
+msgstr "手機"
+
+msgid "%s shares internet over USB."
+msgstr "%s 正透過 USB 共享網際網路。"
+
+msgid "Signal, operator and SMS are not available from a phone."
+msgstr "手機無法提供訊號、電信業者和簡訊資訊。"
+
+msgid "%s is connected but does not share internet. Turn on USB tethering on the phone."
+msgstr "%s 已連接，但未共享網際網路。請在手機上開啟 USB 網路共用。"
+
+msgid "A router shares internet over USB."
+msgstr "一台路由器正透過 USB 共享網際網路。"
+
+msgid "This router got the address %s from it."
+msgstr "本路由器從它取得了地址 %s。"
+
+msgid "Open its admin page (%s)"
+msgstr "開啟其管理頁面（%s）"
+
+msgid "Signal, operator and SMS are managed on that router."
+msgstr "訊號、電信業者和簡訊需在那台路由器上管理。"
+
+msgid "A router is connected over USB but has not given an address yet."
+msgstr "已透過 USB 連接一台路由器，但它尚未分配地址。"
+
+msgid "iPhone shares internet over USB."
+msgstr "iPhone 正透過 USB 共享網際網路。"
+
+msgid "Address: %s."
+msgstr "地址：%s。"
+
+msgid "Signal, operator and SMS are not available from an iPhone."
+msgstr "iPhone 無法提供訊號、電信業者和簡訊資訊。"
+
+msgid "iPhone is connected but does not share internet. Turn on Personal Hotspot on the iPhone."
+msgstr "iPhone 已連接，但未共享網際網路。請在 iPhone 上開啟個人熱點。"
+
+msgid "iPhone is connected. To use it as a USB modem, install the usbmuxd and kmod-usb-net-ipheth packages."
+msgstr "iPhone 已連接。若要將其用作 USB 數據機，請安裝 usbmuxd 和 kmod-usb-net-ipheth 套件。"
+
+msgid "iPhone is connected. Unlock it, tap Trust on the iPhone and turn on Personal Hotspot."
+msgstr "iPhone 已連接。請解鎖 iPhone，點選「信任」，並開啟個人熱點。"
+
+msgid "This modem does not let the router change bands or network mode."
+msgstr "此數據機不允許路由器更改頻段或網絡模式。"
+
+msgid "This modem does not let the router change bands. Only the network mode can be switched."
+msgstr "此數據機不允許路由器更改頻段，只能切換網絡模式。"
+
+msgid "Telemetry"
+msgstr "遙測"
+
+msgid "A small JSON file with the modem signal, operator, band and traffic for a smart home, an external display or another router. It never contains IMEI, IMSI, ICCID or cell IDs, and the phone number only if you turn it on below."
+msgstr "一個小型 JSON 檔案，包含數據機的訊號、電信業者、頻段和流量，供智慧家庭、外接顯示器或另一台路由器使用。它從不包含 IMEI、IMSI、ICCID 或基地台 ID，電話號碼也只有在您於下方開啟後才會包含。"
+
+msgid "Export telemetry"
+msgstr "匯出遙測"
+
+msgid "Keep /tmp/5gmodem/tele.json up to date. It is written from the metrics the app already collects and sends no extra requests to the modem."
+msgstr "保持 /tmp/5gmodem/tele.json 為最新。它根據本應用已收集的指標寫入，不會向數據機發送額外請求。"
+
+msgid "Publish over HTTP"
+msgstr "透過 HTTP 發布"
+
+msgid "Serve the file at %s. Anyone on the LAN can read it without a password. Another router with this app that gets internet from this one over USB will then show its signal and operator."
+msgstr "在 %s 提供該檔案。區域網路中的任何人都可以免密碼讀取。另一台安裝了本應用、透過 USB 從本路由器取得網際網路的路由器，將會顯示其訊號和電信業者。"
+
+msgid "Include addresses"
+msgstr "包含地址"
+
+msgid "Add the carrier address and the external address to the published file and to MQTT. Off by default: a stream of addresses with timestamps is a log of when the address changed and when the router was on."
+msgstr "將電信業者分配的地址和外部地址加入發布的檔案和 MQTT。預設關閉：帶時間戳的地址流就是一份記錄，顯示地址何時變更以及路由器何時開機。"
+
+msgid "MQTT broker"
+msgstr "MQTT 代理伺服器"
+
+msgid "Address of the broker. Leave empty to keep MQTT off. Needs the mosquitto-client package."
+msgstr "代理伺服器的地址。留空則不啟用 MQTT。需要 mosquitto-client 套件。"
+
+msgid "MQTT port"
+msgstr "MQTT 埠"
+
+msgid "MQTT user"
+msgstr "MQTT 使用者"
+
+msgid "MQTT password"
+msgstr "MQTT 密碼"
+
+msgid "Device name"
+msgstr "裝置名稱"
+
+msgid "Used in the MQTT topic and in Home Assistant. Empty - the router hostname."
+msgstr "用於 MQTT 主題和 Home Assistant。留空則使用路由器的主機名稱。"
+
+msgid "MQTT topic"
+msgstr "MQTT 主題"
+
+msgid "Empty - 5gmodem/ followed by the device name. The state is published to the topic with /state appended."
+msgstr "留空則為 5gmodem/ 加上裝置名稱。狀態會發布到附加 /state 的主題。"
+
+msgid "Home Assistant"
+msgstr "Home Assistant"
+
+msgid "Announce the sensors to Home Assistant over MQTT discovery. Save the broker settings first."
+msgstr "透過 MQTT discovery 向 Home Assistant 公告感測器。請先保存代理伺服器設定。"
+
+msgid "Announce sensors"
+msgstr "公告感測器"
+
+msgid "Sending…"
+msgstr "正在傳送…"
+
+msgid "mosquitto_pub is not installed: install the mosquitto-client-nossl package."
+msgstr "未安裝 mosquitto_pub：請安裝 mosquitto-client-nossl 套件。"
+
+msgid "The broker is not saved yet: press Save first."
+msgstr "代理伺服器尚未保存：請先按「保存」。"
+
+msgid "The broker did not accept the announcement."
+msgstr "代理伺服器未接受公告。"
+
+msgid "Sensors announced. They appear in Home Assistant under MQTT devices."
+msgstr "感測器已公告。它們會出現在 Home Assistant 的 MQTT 裝置中。"
+
+msgid "Include the phone number"
+msgstr "包含電話號碼"
+
+msgid "Add the SIM phone number to the published file and to MQTT, so that a router getting internet from this one over USB shows it too. Off by default: anyone on the LAN and everyone with access to the broker will see the number."
+msgstr "將 SIM 卡的電話號碼加入發布的檔案和 MQTT，讓透過 USB 從本路由器取得網際網路的路由器也能顯示它。預設關閉：區域網路中的任何人以及所有能存取代理伺服器的人都會看到該號碼。"
+
+msgid "Signal quality (RSRP, RSRQ, RSSI)"
+msgstr "訊號品質（RSRP、RSRQ、RSSI）"
+
+msgid "Serving and neighbour cells"
+msgstr "服務小區與鄰區"
+
+msgid "Network type and domain"
+msgstr "網路類型與域"
+
+msgid "Uplink aggregation (read)"
+msgstr "上行聚合（讀取）"
+
+msgid "Copy the code"
+msgstr "複製代碼"
+
+msgid "The browser did not allow copying. Select the code and copy it:"
+msgstr "瀏覽器不允許複製。請選取代碼並手動複製："
+
+msgid "Click to copy the code"
+msgstr "點擊複製代碼"

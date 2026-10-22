@@ -2357,8 +2357,18 @@ pre.atcommand-output.has-output::after {
    ПОРЯДКА вставки (см. renderVidPid), а не за счёт стилей.
    Свой line-height и вертикальная поправка - те же, что у чипа: заголовок
    задаёт крупный интерлиньяж, и без них строка встала бы выше чипа. */
-.tginfo-vidpid {
+#modemchips {
   float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: .8em;
+  white-space: nowrap;
+  margin-left: .8em;
+  line-height: 1.4;
+  position: relative;
+  top: .3rem;
+}
+.tginfo-vidpid {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Заметно мельче чипа протокола (.72rem), но всё же читаемо: вдвое (.36rem)
      оказалось за гранью - цифры сливались. */
@@ -2367,14 +2377,6 @@ pre.atcommand-output.has-output::after {
   line-height: 1.4;
   opacity: .5;
   white-space: nowrap;
-  margin-left: .8em;
-  position: relative;
-  /* Сдвиг В REM, а не в em: em считается от СВОЕГО размера шрифта, и после
-     уменьшения вдвое та же запись дала бы вдвое меньший сдвиг - строка уехала
-     бы вверх. В rem поправка не зависит от размера текста. Значение подобрано
-     так, чтобы середина строки совпала с серединой чипа: тот выше нас примерно
-     на пол-строки. */
-  top: .38rem;
 }
 
 /* ===== НОВЫЕ (НЕПРОЧИТАННЫЕ) СООБЩЕНИЯ =====
@@ -3120,8 +3122,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 @media (max-width: 700px) {
   #modemip6 { font-size: max(12px, .78em); }
   .tginfo-vidpid { font-size: 12px; }
-  #modemname > #proto-chip { top: 8px !important; }
-  #modemname > .tginfo-vidpid { top: 9px; }
+  #modemname > #modemchips { top: 8px; }
   #modemname > #stale-mark, #modemname > #usbflap-warn { top: 10px !important; }
   .tginfo .tg-sublabel { font-size: max(12px, .76em); }
   #signal medium { font-size: max(12px, .7em); }

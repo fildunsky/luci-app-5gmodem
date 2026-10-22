@@ -31,7 +31,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.5.19
+PKG_VERSION:=3.5.20
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -190,6 +190,8 @@ define Package/luci-app-5gmodem/prerm
 [ -n "$${IPKG_INSTROOT}" ] || rm -f /usr/lib/lua/luci/i18n/5gmodem.ru.lmo
 exit 0
 endef
+
+LUCI_LANG.id:=Bahasa Indonesia (Indonesian)
 
 include $(TOPDIR)/feeds/luci/luci.mk
 
