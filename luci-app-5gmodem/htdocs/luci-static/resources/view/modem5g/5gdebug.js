@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30213, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30214, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -157,18 +157,10 @@ return view.extend({
 			// установленные обработчики протоколов (luci-proto-*): по ним строим
 			// список доступных типов интерфейса для кнопки создания
 			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), []),
-			// карта портов -> модем (vid:pid, модель), чтобы подписать выпадашки
-			// портов: какой /dev/ttyUSB* какому модему принадлежит
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listports.sh'), '{}'),
 			/* Светодиоды уровня сигнала: есть ли они на этом устройстве.
 			   Читаем каталог, а не запускаем скрипт - путь /sys/class/leds
 			   разрешён в ACL, и лишнего процесса на открытие страницы нет. */
-			L.resolveDefault(fs.list('/sys/class/leds'), []),
-			/* Переключатель антенн корпуса (Notion R281 / Yota C300-1). Скрипт сам
-			   сверяет плату и контроллер GPIO и на чужом железе отвечает
-			   available:0 - тогда блока нет. */
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/antenna.sh', [ 'status' ]), ''),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'wdmdrv' ]), '')
+			L.resolveDefault(fs.list('/sys/class/leds'), [])
 		]);
 	},
 
@@ -623,6 +615,30 @@ return view.extend({
 		]);
 	},
 
+	fillPortLabels: function() {
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listports.sh'), '{}').then(function(out) {
+			var info = {};
+			try { info = JSON.parse(out || '{}') || {}; } catch (e) { return; }
+			document.querySelectorAll('.cbi-dropdown li[data-value^="/dev/"], select option[value^="/dev/"]').forEach(function(el) {
+				var full = el.getAttribute('data-value') || el.getAttribute('value');
+				var i = info[full];
+				var label = full;
+				if (i && i.product) { label = full + ' — ' + i.product + (i.vidpid ? ' (' + i.vidpid + ')' : ''); }
+				else if (i && i.vidpid && i.vidpid != ':') { label = full + ' — ' + i.vidpid; }
+				if (el.textContent !== label) { el.textContent = label; }
+			});
+		});
+	},
+
+	fillAntenna: function() {
+		var self = this;
+		L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/antenna.sh', [ 'status' ]), '').then(function(raw) {
+			var slot = document.getElementById('antenna-slot');
+			var blk = self.renderAntenna(raw);
+			if (slot && blk) { slot.appendChild(blk); }
+		});
+	},
+
 	renderAntenna: function(raw) {
 		var st = {};
 		try { st = JSON.parse(raw || '{}') || {}; } catch (e) { st = {}; }
@@ -735,20 +751,13 @@ return view.extend({
 		   Индекс 7 - последний элемент списка в load(). При одном индикаторе
 		   настройка «уровень тремя лампочками» бессмысленна, поэтому нужны все. */
 		var ledsAvail = (function() {
-			var names = (res[7] || []).map(function(e) { return e.name; });
+			var names = (res[6] || []).map(function(e) { return e.name; });
 			return [ 'white:signal1', 'white:signal2', 'white:signal3' ]
 				.every(function(n) { return names.indexOf(n) >= 0; });
 		})();
 
-		/* карта порт -> {vidpid, product} для подписи выпадашек портов */
-		var portInfo = {};
-		try { portInfo = JSON.parse(res[6] || '{}') || {}; } catch (e) {}
 		function portLabel(name) {
-			var full = '/dev/' + name;
-			var i = portInfo[full];
-			if (i && i.product) { return full + ' — ' + i.product + (i.vidpid ? ' (' + i.vidpid + ')' : ''); }
-			if (i && i.vidpid && i.vidpid != ':') { return full + ' — ' + i.vidpid; }
-			return full;
+			return '/dev/' + name;
 		}
 
 		/* Список установленных на роутере обработчиков протоколов (имена файлов
@@ -1887,7 +1896,7 @@ return view.extend({
 		});
 
 		var ledsBlock = this.renderLeds(ledsAvail);
-		var antennaBlock = this.renderAntenna(res[8]);
+		var antennaBlock = E('div', { 'id': 'antenna-slot' });
 		var self = this;
 		return Promise.resolve(m.render()).then(function(formNode) {
 			return E('div', {}, [
@@ -1906,7 +1915,11 @@ return view.extend({
 			/* Значения подставляем ПОСЛЕ того, как узел готов: до вставки в
 			   документ getElementById их не найдёт. Промис не возвращаем -
 			   страница не должна ждать эти данные, ради чего всё и делалось. */
-			window.setTimeout(function() { self.fillModemInfo(); }, 0);
+			window.setTimeout(function() {
+				self.fillModemInfo();
+				self.fillPortLabels();
+				self.fillAntenna();
+			}, 0);
 			return node;
 		});
 	}

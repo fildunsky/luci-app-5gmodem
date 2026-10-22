@@ -1662,7 +1662,14 @@ resolve)
 	# apply the active modem's fresh AT port to the working config + SMS ports
 	SEC=$(secname "$AMP")
 	ATP=$(uci -q get "$CFG.$SEC.at_port")
-	tty_poll_unsafe "$ATP" && ATP=$(at_for_path "$AMP")
+	if tty_poll_unsafe "$ATP"; then
+		ATP=$(at_for_path "$AMP")
+		if [ -n "$ATP" ]; then
+			uci -q set "$CFG.$SEC.at_port=$ATP"
+		else
+			uci -q delete "$CFG.$SEC.at_port"
+		fi
+	fi
 	if [ -n "$ATP" ] && [ -e "$ATP" ]; then
 		uci -q set "$CFG.@5gmodem[0].at_port=$ATP"
 		uci -q set "$CFG.@5gmodem[0].device=$ATP"
