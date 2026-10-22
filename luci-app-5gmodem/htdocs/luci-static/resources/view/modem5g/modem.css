@@ -1940,6 +1940,24 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   cursor: pointer;
 }
 
+.sms-card .sms-code {
+  display: inline-block;
+  padding: 0 .35em;
+  border: 1px dashed var(--tg-accent);
+  border-radius: 4px;
+  color: var(--tg-accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .04em;
+  cursor: copy;
+}
+.sms-card .sms-code.copied {
+  border-style: solid;
+}
+.sms-card .sms-code.copied::after {
+  content: " \2713";
+}
+
 /* Ряд действий: «Обновить» и «Переслать» слева, «Удалить» прижата вправо -
    как ряд приоритетов интернета со спидтестом на вкладке «Сеть». */
 .sms-actions {

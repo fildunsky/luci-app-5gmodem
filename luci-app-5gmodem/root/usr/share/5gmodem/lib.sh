@@ -1232,17 +1232,55 @@ dial_port_for_path() {   # $1 - usb-путь; печатает tty дозвон�
 	printf '%s\n' "$_dpp_out"
 }
 
-tty_poll_unsafe() {
+tty_send_if() {
 	_tpu_d=$(readlink -f "/sys/class/tty/${1##*/}/device" 2>/dev/null)
 	[ -n "$_tpu_d" ] || return 1
 	[ -f "$_tpu_d/bInterfaceNumber" ] || _tpu_d=${_tpu_d%/*}
 	[ -f "$_tpu_d/bInterfaceNumber" ] || return 1
 	_tpu_u=${_tpu_d%/*}
 	case "$(cat "$_tpu_u/idVendor" 2>/dev/null):$(cat "$_tpu_u/idProduct" 2>/dev/null):$(cat "$_tpu_d/bInterfaceNumber" 2>/dev/null)" in
-		0e8d:7127:06)
-			[ "$(uci -q get "5gmodem.$(secname "${_tpu_u##*/}").poll_send_port")" = 1 ] && return 1
-			return 0 ;;
+		0e8d:7127:06) _TPU_P=${_tpu_u##*/}; return 0 ;;
 	esac
+	return 1
+}
+
+tty_poll_unsafe() {
+	tty_send_if "$1" || return 1
+	_tpu_s=$(secname "$_TPU_P")
+	[ "$(uci -q get "5gmodem.$_tpu_s.poll_send_ok")" = 1 ] && return 1
+	[ -f "/tmp/5gmodem/pollsend_$_tpu_s" ] && return 1
+	return 0
+}
+
+poll_send_mark() {
+	_psm_s=$(secname "$1")
+	[ "$(uci -q get "5gmodem.$_psm_s.poll_send_ok")" = 1 ] && return 0
+	[ -f "/tmp/5gmodem/pollsend_$_psm_s" ] && return 0
+	cut -d. -f1 /proc/uptime > "/tmp/5gmodem/pollsend_$_psm_s" 2>/dev/null
+}
+
+poll_send_settle() {
+	tty_send_if "$2" || return 1
+	_pss_f="/tmp/5gmodem/pollsend_$(secname "$1")"
+	[ -f "$_pss_f" ] || return 1
+	_pss_a=$(cat "$_pss_f" 2>/dev/null); _pss_n=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+	case "$_pss_a" in ''|*[!0-9]*) _pss_a=0 ;; esac
+	case "$_pss_n" in ''|*[!0-9]*) return 1 ;; esac
+	[ $((_pss_n - _pss_a)) -ge 120 ] || return 1
+	for _pss_t in $(drop_dial_port "$1" $(/usr/share/5gmodem/listmodems.sh 2>/dev/null \
+			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null)); do
+		tty_send_if "$_pss_t" && continue
+		/usr/share/5gmodem/atprobe.sh "$_pss_t" model || continue
+		rm -f "$_pss_f"
+		return 0
+	done
+	if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
+		uci -q set "5gmodem.$(secname "$1").poll_send_ok=1"
+		uci -q delete "5gmodem.$(secname "$1").poll_send_port"
+		uci -q commit 5gmodem 2>/dev/null
+		flock -u 6
+		rm -f "$_pss_f"
+	fi
 	return 1
 }
 

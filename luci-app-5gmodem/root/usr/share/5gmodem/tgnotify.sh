@@ -250,11 +250,12 @@ _tg_curl() {   # аргументы curl без -s/-m
 	return 1
 }
 
-_tg_send() {   # $1 - текст
+_tg_send() {   # $1 - текст, $2 - parse_mode
 	_ts_t=$(printf '%s' "$1" | utf8_fix)
 	_ts_o=$(_tg_curl "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
 		--data-urlencode "chat_id=$TG_CHAT" \
 		--data-urlencode "text=$_ts_t" \
+		${2:+-d "parse_mode=$2"} \
 		-d "disable_web_page_preview=true")
 	case "$_ts_o" in
 		*'"ok":true'*) printf 'ok' > "$LASTLOG" 2>/dev/null; return 0 ;;
@@ -473,9 +474,49 @@ _tk_lastlog() {
 	esac
 }
 
+_tg_hesc() {
+	sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+}
+
+_tg_codes() {   # $1 - текст SMS; печатает HTML с <code>, если в нём есть код
+	printf '%s' "$1" | grep -qiE '(К|к)(О|о)(Д|д)|(П|п)(А|а)(Р|р)(О|о)(Л|л)|code|password|pin|otp|kod|验证码' || return 1
+	printf '%s' "$1" | _tg_hesc | LC_ALL=C awk '
+		{
+			if (NR > 1) printf "\n"
+			s = $0; out = ""; found = 0
+			while (match(s, /[0-9]+/)) {
+				p = RSTART; n = RLENGTH
+				pre = p > 1 ? substr(s, p - 1, 1) : ""
+				rest = substr(s, p + n)
+				ok = 0
+				if (n == 3 && rest ~ /^[ -][0-9][0-9][0-9]([^0-9]|$)/) { n = 7; rest = substr(s, p + n); ok = 1 }
+				else if (n >= 4 && n <= 8) ok = 1
+				if (pre ~ /[0-9A-Za-z+.,:\/]/) ok = 0
+				if (rest ~ /^[.,:\/-][0-9]/) ok = 0
+				r = tolower(rest); sub(/^ /, "", r)
+				if (r ~ /^(руб|р\.|₽|rub|usd|eur|%)/ || r ~ /^(Руб|РУБ)/) ok = 0
+				if (ok) { out = out substr(s, 1, p - 1) "<code>" substr(s, p, n) "</code>"; found = 1 }
+				else out = out substr(s, 1, p + n - 1)
+				s = substr(s, p + n)
+			}
+			printf "%s", out s
+			if (found) hit = 1
+		}
+		END { exit hit ? 0 : 1 }'
+}
+
 _tk_deliver() {   # $1 - канал
 	case "$1" in
-		tg) _tg_send "$(_tk_head)
+		tg)
+			if _tk_html=$(_tg_codes "$_tk_txt"); then
+				_tg_send "$(_tk_head | _tg_hesc)
+$_tk_ts
+
+$_tk_html" HTML
+				_tk_rc=$?
+				[ "$_tk_rc" = 2 ] || return "$_tk_rc"
+			fi
+			_tg_send "$(_tk_head)
 $_tk_ts
 
 $_tk_txt" ;;

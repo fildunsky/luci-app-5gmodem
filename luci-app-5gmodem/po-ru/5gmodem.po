@@ -6087,3 +6087,12 @@ msgstr "Тип сети и домен"
 
 msgid "Uplink aggregation (read)"
 msgstr "Агрегация на отдачу (чтение)"
+
+msgid "Copy the code"
+msgstr "Скопировать код"
+
+msgid "The browser did not allow copying. Select the code and copy it:"
+msgstr "Браузер не разрешил копирование. Выделите код и скопируйте его:"
+
+msgid "Click to copy the code"
+msgstr "Нажмите, чтобы скопировать код"
