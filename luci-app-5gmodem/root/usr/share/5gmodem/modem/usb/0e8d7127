@@ -710,8 +710,12 @@ MODELB=$(echo "$OB" | awk -F [:,] '/\+CGMI/{print $2}' | xargs)
 MODELBCUT=$(echo $MODELB | sed s/"Wireless Inc."//)
 MODEL=$(echo "$MODELBCUT $MODELA" | xargs)
 
-OF=$(at_static gmr "AT+GMR?")
+OF=$(at_static gmr "AT+GMR?" '\+GMR:')
 FW=$(echo "$OF" | awk -F[,:] '/\+GMR:/ {print $2}' | xargs)
+if [ -z "$FW" ]; then
+	OF=$(at_static gtpkgver "AT+GTPKGVER?" '\+GTPKGVER:')
+	FW=$(echo "$OF" | awk -F'"' '/\+GTPKGVER:/ {print $2}' | cut -d_ -f1 | xargs)
+fi
 
 # International Mobile Equipment Identity (IMEI)
 OAA=$(at_static cgsn "AT+CGSN?")

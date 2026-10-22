@@ -296,16 +296,34 @@ function ensureMmModeButtons() {
 		[ _('Auto'), '2g|3g|4g|5g', '5g' ],
 		[ '2G', '2g', '' ],
 		[ '3G', '3g', '' ],
-		[ '4G', '3g|4g', '4g' ],
+		[ '4G', '3g|4g', '4g', '4g' ],
 		[ '4G+5G', '3g|4g|5g', '5g' ],
-		[ '5G', '3g|5g', '5g' ]
+		[ '5G', '3g|5g', '5g', '5g' ]
 	].forEach(function(mdef) {
 		c.appendChild(E('button', {
 			'class': 'btn cbi-button',
 			'data-allowed': mdef[1],
 			'data-preferred': mdef[2],
-			'click': ui.createHandlerFn(this, function() { return setNetMode(mdef[1], mdef[2], mdef[0]); })
+			'data-pure': mdef[3] || '',
+			'click': ui.createHandlerFn(this, function(ev) {
+				var b = ev.currentTarget;
+				return setNetMode(b.getAttribute('data-allowed'), b.getAttribute('data-preferred'), mdef[0]);
+			})
 		}, mdef[0]));
+	});
+}
+
+function applyPureModes(modes) {
+	var pure = {};
+	(modes || []).forEach(function(m) {
+		var a = String(m).split(':')[0];
+		if (a && a.indexOf('|') < 0) { pure[a] = 1; }
+	});
+	document.querySelectorAll('#modesw-btns .cbi-button[data-pure]').forEach(function(b) {
+		var t = b.getAttribute('data-pure');
+		if (!t || !pure[t]) { return; }
+		b.setAttribute('data-allowed', t);
+		b.setAttribute('data-preferred', '');
 	});
 }
 
@@ -338,6 +356,7 @@ function applyMgmtMM(j) {
 		render256qam(null);
 		renderUlca(null);
 		ensureMmModeButtons();
+		applyPureModes(j.modes);
 		var has2 = bandsOther.some(function(b) { return /^(egsm|dcs|pcs|g850|g450|g480|g750|g380|g410|g710|g810)$/.test(b); });
 		var techOk = { '2g': has2, '3g': sup3.length > 0, '4g': sup4.length > 0, '5g': sup5.length > 0 };
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
@@ -1370,7 +1389,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30212,
+	API: 30213,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
