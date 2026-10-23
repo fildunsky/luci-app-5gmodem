@@ -153,7 +153,7 @@ function atFamilyFor(vp, model) {
 	vp = String(vp || '').toLowerCase();
 	var m = String(model || '').toLowerCase();
 	if (/compal|vos_5g|rxm|sg500/.test(m)) { return 'compal'; }
-	if (/fm350/.test(m) || vp.indexOf('0e8d:') === 0) { return 'fm350'; }
+	if (/fm350/.test(m) || vp.indexOf('0e8d:712') === 0) { return 'fm350'; }
 	if (/l850|l860/.test(m) || vp === '8087:095a' || vp === '413c:81d9') { return 'xmm'; }
 	/* Sierra Wireless EM7345 (1199:a001) - ярлык Sierra, внутри Intel XMM7160:
 	   «!»-команды Sierra ему не отвечают (AT!ENTERCND="A710" -> ERROR, форум
@@ -420,7 +420,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30214, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30600, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

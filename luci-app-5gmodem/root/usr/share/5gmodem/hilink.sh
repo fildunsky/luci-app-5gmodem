@@ -355,6 +355,7 @@ _zte_get() {   # $1 - адрес, $2 - список cmd через запяту�
 _zte_set() {   # $1 - адрес, $2 - тело goformId=...
 	_zs_src=$(_srcip_for "" "$1")
 	curl -s --max-time 8 ${_zs_src:+--interface "$_zs_src"} -A "$UA" \
+		${3:+-b "$3" -c "$3"} \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
@@ -564,7 +565,7 @@ tenda_metrics_json() {
 zte_metrics_json() {
 	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
 	_a=$(_addr_for "$_HLP") || return 1
-	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band"
+	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes"
 	_r=$(_zte_get "$_a" "$_zm_cmd")
 	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
 	# Huawei-ветки: вызывающий отдаст прошлый снимок).
@@ -589,6 +590,7 @@ zte_metrics_json() {
 		   fi ;;
 	esac
 	_model="ZTE"
+	case "$(_vidpid_for "$_HLP")" in 19d2:*|"") ;; *) _model="" ;; esac
 	_ntype=$(_zj "$_r" network_type)
 	_op=$(_zj "$_r" network_provider_fullname)
 	[ -n "$_op" ] || _op=$(_zj "$_r" network_provider)
@@ -597,12 +599,14 @@ zte_metrics_json() {
 	_rsrp=$(_zj "$_r" lte_rsrp | tr -cd '0-9-')
 	_rsrq=$(_zj "$_r" lte_rsrq | tr -cd '0-9.-')
 	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
-	_rssi=$(_zj "$_r" lte_rssi | tr -cd '0-9-')
+	_rssi=$(_zj "$_r" lte_rssi | grep -oE -- '-?[0-9]+' | head -1)
+	[ -n "$_rssi" ] && [ "$_rssi" = "$_rsrp" ] && _rssi=""
 	# Палочки прошивки - грубая шкала (шаг 20 %) и своя у каждого вендора.
 	# Есть метрики технологии - считаем по ним, как на обычном пути опроса.
 	_sp=$(sig_percent "$_ntype" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
 	[ -n "$_sp" ] && _pct="$_sp"
-	[ -n "$_rssi" ] || _rssi=$(_zj "$_r" rssi | tr -cd '0-9-')
+	[ -n "$_rssi" ] || _rssi=$(_zj "$_r" rssi | grep -oE -- '-?[0-9]+' | head -1)
+	[ -n "$_rssi" ] && [ "$_rssi" = "$_rsrp" ] && _rssi=""
 	_cid_hex=$(_zj "$_r" cell_id)
 	_cid=""; [ -n "$_cid_hex" ] && _cid=$(printf '%d' "0x$_cid_hex" 2>/dev/null)
 	_lac=$(_zj "$_r" lac_code)
@@ -627,7 +631,45 @@ zte_metrics_json() {
 	# Хвост «V1.0.0B02» приклеен вплотную, поэтому режем по «V» перед цифрой:
 	# из BD_XBKZMF79NV1.0.0B02 нужен MF79N, а не MF79NV.
 	_mfm=$(printf '%s' "$_fw" | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
-	[ -n "$_mfm" ] && _model="ZTE $_mfm"
+	[ -n "$_mfm" ] || _mfm=$(_zj "$_r" hardware_version | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
+	[ -n "$_mfm" ] && _model="${_model:+$_model }$_mfm"
+	_zbat=$(_zj "$_r" battery_vol_percent | tr -cd '0-9')
+	_zchg=$(_zj "$_r" battery_charging | tr -cd '0-9')
+	_zat_ok=""
+	case "$(_vidpid_for "$_HLP")" in
+		0e8d:2004|0e8d:2008)
+			_zat=$(mtk_cell "$_a" "$_HLP")
+			_zes=$(printf '%s\n' "$_zat" | sed -n 's/^+ECSQ: *//p' | head -1)
+			if [ -n "$_zes" ]; then
+				_zat_ok=1
+				read -r _zq1 _zq2 _zq3 <<ZQ_EOF
+$(printf '%s' "$_zes" | awk -F, '{
+					q=$6; p=$7; n=$9
+					printf "%s %s %s", (q<=0 && q>-200 ? sprintf("%.1f", q/4) : "-"), (p<0 && p>-700 ? sprintf("%.0f", p/4) : "-"), (n!=32767 && n>-200 && n<400 ? sprintf("%.1f", n/4) : "-") }')
+ZQ_EOF
+				[ "$_zq1" != "-" ] && _rsrq="$_zq1"
+				[ "$_zq2" != "-" ] && _rsrp="$_zq2"
+				[ "$_zq3" != "-" ] && _sinr="$_zq3"
+				_zcs=$(printf '%s\n' "$_zat" | sed -n 's/^+CSQ: *\([0-9]*\).*/\1/p' | head -1)
+				[ -n "$_zcs" ] && [ "$_zcs" -lt 99 ] && _rssi=$(( _zcs * 2 - 113 ))
+				_zec=$(printf '%s\n' "$_zat" | sed -n 's/^+ECELL: *//p' | head -1 | tr -d '"')
+				if [ -n "$_zec" ]; then
+					read -r _zc1 _zc2 _zc3 _zc4 _zc5 <<ZC_EOF
+$(printf '%s' "$_zec" | awk -F, '{ print $3, $4, $7, $5, $6 }')
+ZC_EOF
+					case "$_zc1" in ''|*[!0-9A-Fa-f]*|0FFFFFFF) ;; *)
+						_cid_hex="$_zc1"; _cid=$(printf '%d' "0x$_zc1" 2>/dev/null); _zenb=$(( _cid >> 8 )) ;;
+					esac
+					case "$_zc2" in ''|*[!0-9A-Fa-f]*|FFFF) ;; *) _lac="$_zc2" ;; esac
+					case "$_zc3" in ''|*[!0-9]*) ;; *) [ "$_zc3" -lt 504 ] && _zpci="$_zc3" ;; esac
+					case "$_zc4" in [0-9][0-9][0-9]) [ -n "$_mcc" ] || _mcc="$_zc4" ;; esac
+					case "$_zc5" in [0-9]|[0-9][0-9]|[0-9][0-9][0-9])
+						[ -n "$_mnc" ] || _mnc=$(printf '%02d' "$_zc5") ;; esac
+				fi
+				_sp=$(sig_percent "$_ntype" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
+				[ -n "$_sp" ] && _pct="$_sp"
+			fi ;;
+	esac
 	_pps=$(_zj "$_r" ppp_status)
 	_reg=0
 	if [ "$_pps" = "ppp_connected" ]; then
@@ -659,6 +701,21 @@ zte_metrics_json() {
 	printf '"pci":"%s","pband":"%s","enbid":"%s",' "$_zpci" "$_zpband" "$_zenb"
 	printf '"ipaddr":"%s",' "$_wanip"
 	printf '"csq":"%s",' "$_csq"
+	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_zbat" "$_zchg"
+	case "$(_vidpid_for "$_HLP")" in
+		0e8d:2004|0e8d:2008)
+			[ -n "$_zat_ok" ] || printf '"na":"csq rssi sinr rsrq pband",'
+			_ztm=$(mtk_temps "$_a" "$_HLP")
+			[ -n "$_ztm" ] && printf '"temps":"%s",' "$_ztm" ;;
+	esac
+	_zct=$(_zj "$_r" realtime_time | tr -cd '0-9')
+	if [ -n "$_zct" ] && [ "$_pps" = ppp_connected ]; then
+		printf '"conn_time":"%s","conn_time_sec":"%s",' "$(printf "%dd, %02d:%02d:%02d" \
+			$(( _zct / 86400 )) $(( _zct / 3600 % 24 )) $(( _zct / 60 % 60 )) $(( _zct % 60 )))" "$_zct"
+	fi
+	_zrx=$(_zj "$_r" realtime_rx_bytes | tr -cd '0-9')
+	_ztx=$(_zj "$_r" realtime_tx_bytes | tr -cd '0-9')
+	[ -n "$_zrx$_ztx" ] && printf '"rx":"%s","tx":"%s",' "$(_human "$_zrx")" "$(_human "$_ztx")"
 	printf '"conn_status":"%s"' "$_pps"
 	printf '}\n'
 }
@@ -1743,6 +1800,202 @@ hl_setbands2g() { _hl_setbands 2g "$1" "$2"; }
 
 # Режим сети (Auto/3G/4G) через API - как и диапазоны, НЕ роняет debug, в отличие
 # от AT^SYSCFGEX. NetworkMode: 00 авто, 02 только 3G, 03 только 4G.
+_zte_login_jar() {
+	_zlj_p=$(_zte_pass "$2")
+	if [ "$3" = 1 ]; then
+		_zlj_u=$(uci -q get "$CFG.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g').web_user")
+		_zlj_p="${_zlj_u:-admin}
+$_zlj_p"
+	fi
+	case "$(_zte_set "$1" "goformId=LOGIN&password=$(_zte_b64 "$_zlj_p" | sed 's/+/%2B/g; s/\//%2F/g; s/=/%3D/g')" \
+		"$CACHE_DIR/ztejar_$(_tk "$1")")" in
+		*'"result":"0"'*|*'"result":"4"'*) return 0 ;;
+	esac
+	return 1
+}
+
+_zte_post_auth() {
+	_zpa_j="$CACHE_DIR/ztejar_$(_tk "$1")"
+	_zpa_r=$(_zte_set "$1" "$2" "$_zpa_j")
+	case "$_zpa_r" in *'"success"'*) printf '%s' "$_zpa_r"; return 0 ;; esac
+	_zpa_jt=0; [ -z "$_zpa_r" ] && _zpa_jt=1
+	_zte_login_jar "$1" "$3" "$_zpa_jt" || return 1
+	_zpa_r=$(_zte_set "$1" "$2" "$_zpa_j")
+	printf '%s' "$_zpa_r"
+	case "$_zpa_r" in *'"success"'*) return 0 ;; esac
+	return 1
+}
+
+_adb_to() {
+	_at_t="$1"; shift
+	adb "$@" 2>/dev/null &
+	_at_p=$!
+	( sleep "$_at_t"; kill "$_at_p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+	_at_w=$!
+	wait "$_at_p" 2>/dev/null
+	kill "$_at_w" 2>/dev/null
+}
+
+_mtk_adb_on() {
+	_ma_s="$1:5555"
+	case "$(_adb_to 4 connect "$_ma_s")" in
+		*"connected to"*) [ "$(_adb_to 4 -s "$_ma_s" get-state)" = device ] && return 0 ;;
+	esac
+	_adb_to 4 disconnect "$_ma_s" >/dev/null
+	[ "$(uci -q get "$CFG.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g').hl_adb")" = 0 ] && return 1
+	_ma_f="$CACHE_DIR/mtkadb_$(_tk "$1")"
+	[ -f "$_ma_f" ] && [ -z "$(find "$_ma_f" -mmin +10 2>/dev/null)" ] && return 1
+	: > "$_ma_f"
+	_zte_login_jar "$1" "$2" 1 || return 1
+	_ma_j="$CACHE_DIR/ztejar_$(_tk "$1")"
+	_ma_src=$(_srcip_for "" "$1")
+	case "$(curl -s --max-time 8 ${_ma_src:+--interface "$_ma_src"} -A "$UA" -b "$_ma_j" -c "$_ma_j" \
+		-H "Referer: http://$1/index.html" "http://$1/adbWifiDebugForm.do?adb=1" 2>/dev/null)" in
+		*enabled*) logger -t 5gmodem "hilink(mtk): ADB over network enabled on $1 for temperatures" ;;
+		*) return 1 ;;
+	esac
+	sleep 2
+	case "$(_adb_to 4 connect "$_ma_s")" in *"connected to"*) ;; *) return 1 ;; esac
+	[ "$(_adb_to 4 -s "$_ma_s" get-state)" = device ]
+}
+
+_mtk_usock() {
+	_mu_s="$1:5555"; _mu_b=/usr/share/5gmodem/mtk/usock-armv7
+	[ -f "$_mu_b" ] || return 1
+	_mu_n=$(wc -c < "$_mu_b" | tr -cd '0-9')
+	[ "$(_adb_to 5 -s "$_mu_s" shell "toybox wc -c < /data/local/tmp/5gm-usock 2>/dev/null" | tr -cd '0-9')" = "$_mu_n" ] && return 0
+	_adb_to 8 -s "$_mu_s" push "$_mu_b" /data/local/tmp/5gm-usock >/dev/null
+	_adb_to 5 -s "$_mu_s" shell "chmod 755 /data/local/tmp/5gm-usock" >/dev/null
+	[ "$(_adb_to 5 -s "$_mu_s" shell "toybox wc -c < /data/local/tmp/5gm-usock 2>/dev/null" | tr -cd '0-9')" = "$_mu_n" ]
+}
+
+mtk_at() {
+	_ma_a="$1"; _ma_p="$2"; shift 2
+	command -v adb >/dev/null 2>&1 || return 1
+	_mtk_adb_on "$_ma_a" "$_ma_p" || return 1
+	_mtk_usock "$_ma_a" || return 1
+	_ma_c=""
+	for _ma_x in "$@"; do
+		_ma_c="$_ma_c/data/local/tmp/5gm-usock /dev/socket/rild-atci '$_ma_x' 3000;"
+	done
+	_adb_to 12 -s "$_ma_a:5555" shell "$_ma_c" | tr -d '\r' | grep -v '^$'
+}
+
+mtk_cell() {
+	_mc_f="$CACHE_DIR/mtkcell_$(_tk "$1")"
+	if [ -s "$_mc_f" ] && [ $(( $(date +%s) - $(date -r "$_mc_f" +%s 2>/dev/null || echo 0) )) -lt 8 ]; then
+		cat "$_mc_f"; return 0
+	fi
+	_mc_o=$(mtk_at "$1" "$2" AT+ECSQ AT+ECELL AT+CSQ)
+	case "$_mc_o" in *+ECSQ:*) printf '%s\n' "$_mc_o" > "$_mc_f" ;; esac
+	printf '%s\n' "$_mc_o"
+}
+
+_mtk_pbse() {
+	mtk_at "$1" "$2" "AT+EPBSE?" | sed -n 's/^+EPBSE: *//p' | head -1 | tr -d ' '
+}
+
+_mtk_lte_bands() {
+	awk -v f="$1" -v t="$2" 'BEGIN { o=""
+		for (i=0; i<32; i++) if (int(f/2^i)%2) o=o (o?" ":"") (i+1)
+		for (i=0; i<32; i++) if (int(t/2^i)%2) o=o (o?" ":"") (i+33)
+		print o }'
+}
+
+mtk_bandcap() {
+	_mb_s="$CFG.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g')"
+	_mb_c=$(uci -q get "$_mb_s.mtk_bandcap")
+	_mb_v=$(_mtk_pbse "$1" "$2")
+	[ -n "$_mb_v" ] || return 1
+	if [ -z "$_mb_c" ]; then
+		uci -q set "$_mb_s.mtk_bandcap=$_mb_v"; uci -q commit "$CFG"; _mb_c="$_mb_v"
+	else
+		_mb_n=$(printf '%s|%s' "$_mb_c" "$_mb_v" | awk -F'[|,]' '{ printf "%d,%d,%d,%d", or($1,$5), or($2,$6), or($3,$7), or($4,$8) }' 2>/dev/null)
+		if [ -n "$_mb_n" ] && [ "$_mb_n" != "$_mb_c" ]; then
+			uci -q set "$_mb_s.mtk_bandcap=$_mb_n"; uci -q commit "$CFG"; _mb_c="$_mb_n"
+		fi
+	fi
+	printf '%s|%s' "$_mb_c" "$_mb_v"
+}
+
+mtk_setbands() {
+	_a=$(_addr_for "$2") || { echo '{"success":false}'; return 1; }
+	_ms_cv=$(mtk_bandcap "$_a" "$2")
+	_ms_cap=${_ms_cv%%|*}; _ms_cur=${_ms_cv#*|}
+	[ -n "$_ms_cap" ] && [ -n "$_ms_cur" ] || { echo '{"success":false}'; return 1; }
+	_ms_g=$(echo "$_ms_cur" | cut -d, -f1); _ms_u=$(echo "$_ms_cur" | cut -d, -f2)
+	if [ "$1" = default ] || [ -z "$1" ]; then
+		_ms_f=$(echo "$_ms_cap" | cut -d, -f3); _ms_t=$(echo "$_ms_cap" | cut -d, -f4)
+	else
+		_ms_f=0; _ms_t=0
+		for _b in $(echo "$1" | tr ',' ' '); do
+			case "$_b" in ''|*[!0-9]*) continue ;; esac
+			if [ "$_b" -ge 1 ] && [ "$_b" -le 32 ]; then _ms_f=$(( _ms_f | (1 << (_b - 1)) ))
+			elif [ "$_b" -ge 33 ] && [ "$_b" -le 64 ]; then _ms_t=$(( _ms_t | (1 << (_b - 33)) )); fi
+		done
+		_ms_f=$(( _ms_f & $(echo "$_ms_cap" | cut -d, -f3) ))
+		_ms_t=$(( _ms_t & $(echo "$_ms_cap" | cut -d, -f4) ))
+		[ $(( _ms_f | _ms_t )) -gt 0 ] || { echo '{"success":false,"error":"no supported band"}'; return 1; }
+	fi
+	case "$(mtk_at "$_a" "$2" "AT+EPBSE=$_ms_g,$_ms_u,$_ms_f,$_ms_t")" in
+		*OK*) rm -f "$CACHE_DIR/mtkcell_$(_tk "$_a")"; echo '{"success":true}' ;;
+		*) echo '{"success":false}' ;;
+	esac
+}
+
+mtk_bands_json() {
+	_a=$(_addr_for "$1") || return 1
+	_mj_cv=$(mtk_bandcap "$_a" "$1")
+	_mj_cap=${_mj_cv%%|*}; _mj_cur=${_mj_cv#*|}
+	[ -n "$_mj_cap" ] || return 1
+	printf '%s|%s\n' "$(_mtk_lte_bands "$(echo "$_mj_cap" | cut -d, -f3)" "$(echo "$_mj_cap" | cut -d, -f4)")" \
+		"$(_mtk_lte_bands "$(echo "$_mj_cur" | cut -d, -f3)" "$(echo "$_mj_cur" | cut -d, -f4)")"
+}
+
+mtk_temps() {
+	_mt_f="$CACHE_DIR/mtktemps_$(_tk "$1")"
+	if [ -f "$_mt_f" ] && [ -z "$(find "$_mt_f" -mmin +1 2>/dev/null)" ]; then
+		cat "$_mt_f"; return 0
+	fi
+	command -v adb >/dev/null 2>&1 || return 1
+	_mt_o=""
+	_mtk_adb_on "$1" "$2" && _mt_o=$(_adb_to 6 -s "$1:5555" shell \
+		'for z in /sys/class/thermal/thermal_zone*; do echo "$(cat $z/type) $(cat $z/temp)"; done' | tr -d '\r' \
+		| awk '{ k=""
+			if ($1=="mtktspa") k="pa"; else if ($1=="mtktscpu") k="cpu"; else if ($1=="mtktswmt") k="wifi"
+			else if ($1=="mtktspmic") k="pmic"; else if ($1=="mtktsbattery") k="bat"; else if ($1=="mtktsAP") k="board"
+			if (k != "" && $2 ~ /^-?[0-9]+$/ && $2 > 0) printf "%s%s=%.1f", (n++ ? " " : ""), k, $2/1000 }')
+	printf '%s' "$_mt_o" > "$_mt_f"
+	printf '%s' "$_mt_o"
+}
+
+zte_getmode() {
+	_a=$(_addr_for "$1") || return 1
+	case "$(_zj "$(_zte_get "$_a" net_select)" net_select)" in
+		Only_LTE) echo 4 ;;
+		Only_WCDMA) echo 2 ;;
+		Only_GSM) echo 8 ;;
+		*) echo 1 ;;
+	esac
+}
+
+zte_setmode() {
+	case "$1" in
+		1) _zsm=NETWORK_auto ;;
+		8) _zsm=Only_GSM ;;
+		2) _zsm=Only_WCDMA ;;
+		4) _zsm=Only_LTE ;;
+		*) echo '{"error":"bad mode"}'; return 1 ;;
+	esac
+	_a=$(_addr_for "$2") || { echo '{"error":"no address"}'; return 1; }
+	_zsp=$(_zj "$(_zte_get "$_a" net_priority)" net_priority)
+	if _zte_post_auth "$_a" "goformId=SET_BEARER_PREFERENCE&BearerPreference=$_zsm%0A${_zsp:-LTE_preferred}" "$2" >/dev/null; then
+		echo '{"success":true}'
+	else
+		echo '{"success":false}'
+	fi
+}
+
 hl_getmode() {   # $1 - usb-путь; печатает id режима нашего формата (1/8/2/4)
 	_nm=$(api_get /api/net/net-mode "$1" | xval NetworkMode)
 	case "$_nm" in
@@ -1811,12 +2064,12 @@ case "$1" in
 	# (часть прошивок требует веб-логина; отказ безвреден).
 	connect)
 		case "$(_api_vid "$2")" in
-			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=CONNECT_NETWORK" >/dev/null ;;
+			19d2:*) _a=$(_addr_for "$2") && _zte_post_auth "$_a" "goformId=CONNECT_NETWORK" "$2" >/dev/null ;;
 			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>1</dataswitch>" "$2" ;;
 		esac ;;
 	disconnect)
 		case "$(_api_vid "$2")" in
-			19d2:*) _a=$(_addr_for "$2") && _zte_set "$_a" "goformId=DISCONNECT_NETWORK" >/dev/null ;;
+			19d2:*) _a=$(_addr_for "$2") && _zte_post_auth "$_a" "goformId=DISCONNECT_NETWORK" "$2" >/dev/null ;;
 			*) api_post /api/dialup/mobile-dataswitch "<dataswitch>0</dataswitch>" "$2" ;;
 		esac ;;
 	reboot)
@@ -1826,7 +2079,7 @@ case "$1" in
 				if _tenda_on "$_a"; then
 					_tenda_set "$_a" deviceAction '{"deviceAction":{"action":"0"}}' "$2" >/dev/null
 				else
-					_zte_set "$_a" "goformId=REBOOT_DEVICE" >/dev/null
+					_zte_post_auth "$_a" "goformId=REBOOT_DEVICE" "$2" >/dev/null
 				fi ;;
 			*) api_post /api/device/control "<Control>1</Control>" "$2" ;;
 		esac ;;
@@ -1901,6 +2154,10 @@ case "$1" in
 	setbands2g)  hl_setbands2g "$2" "$3" ;;
 	supbands2g)  hl_supbands2g "$2" ;;
 	getmode)     hl_getmode "$2" ;;
+	zgetmode)    zte_getmode "$2" ;;
+	mtkbands)    mtk_bands_json "$2" ;;
+	mtksetbands) mtk_setbands "$2" "$3" ;;
+	zsetmode)    zte_setmode "$2" "$3" ;;
 	setmode)     hl_setmode "$2" "$3" ;;
 	getroaming)  hl_getroaming "$2" ;;
 	setroaming)  hl_setroaming "$2" "$3" ;;

@@ -974,6 +974,63 @@ if [ -n "$_bs_at" ] && ! at_lock "$_bs_at" 15 && [ "$(uci -q get "5gmodem.$_bs_s
 			exit 1 ;;
 	esac
 fi
+if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = hilink ] \
+   && [ "$(uci -q get "5gmodem.$_bs_sec.hl_api")" = zte ]; then
+	_HL=/usr/share/5gmodem/hilink.sh
+	_bs_mtk=""
+	case "$(uci -q get "5gmodem.$_bs_sec.vidpid")" in 0e8d:2004|0e8d:2008) _bs_mtk=1 ;; esac
+	case "$1" in
+		json)
+			_bs_mb=""; [ -n "$_bs_mtk" ] && _bs_mb=$("$_HL" mtkbands "$_bs_am" 2>/dev/null)
+			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
+				"$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')" \
+				"$("$_HL" zgetmode "$_bs_am" 2>/dev/null | tr -cd '0-9')"
+			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			if [ -n "$_bs_mb" ]; then
+				printf '], "supported": ['
+				_f=1
+				for _b in ${_bs_mb%%|*}; do
+					[ "$_f" = 1 ] || printf ','
+					_f=0
+					printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
+				done
+				printf '], "enabled": [%s] }\n' "$(echo ${_bs_mb#*|} | tr ' ' ',')"
+			else
+				_bs_np=""
+				[ -n "$_bs_mtk" ] && [ ! -f /usr/share/5gmodem/mtk/usock-armv7 ] && _bs_np=', "needpkg": "5gmodem-mtk-at"'
+				printf '], "supported": [ ], "enabled": [ ], "nobandctl": 1%s }\n' "$_bs_np"
+			fi
+			exit 0 ;;
+		getbands)          [ -n "$_bs_mtk" ] && { _bs_mb=$("$_HL" mtkbands "$_bs_am"); echo "${_bs_mb#*|}"; }; exit 0 ;;
+		getsupportedbands) [ -n "$_bs_mtk" ] && { _bs_mb=$("$_HL" mtkbands "$_bs_am"); echo "${_bs_mb%%|*}"; }; exit 0 ;;
+		setbands)          [ -n "$_bs_mtk" ] && "$_HL" mtksetbands "$2" "$_bs_am"; _bands_flush; exit 0 ;;
+		getmode)           "$_HL" zgetmode "$_bs_am"; exit 0 ;;
+		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		setmode)           "$_HL" zsetmode "$2" "$_bs_am"; _bands_flush; exit 0 ;;
+		setall)
+			_sa_z() {
+				case "$("$_HL" "$2" "$3" "$_bs_am" 2>/dev/null)" in
+					*'"success":true'*) _SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\"" ;;
+					*) _sa_fail_add "$1" rejected "" ;;
+				esac
+			}
+			[ -z "$_SA_MODE" ] || _sa_z mode zsetmode "$_SA_MODE"
+			if [ -n "$_SA_LTE" ]; then
+				if [ -n "$_bs_mtk" ]; then _sa_z lte mtksetbands "$_SA_LTE"; else _sa_fail_add lte unsupported ""; fi
+			fi
+			[ -z "$_SA_3G" ] || _sa_fail_add 3g unsupported ""
+			[ -z "$_SA_2G" ] || _sa_fail_add 2g unsupported ""
+			[ -z "$_SA_NSA" ] || _sa_fail_add nsa unsupported ""
+			[ -z "$_SA_SA" ] || _sa_fail_add sa unsupported ""
+			_bands_flush
+			_sa_res_write running
+			_sa_res_write done
+			cat "$(_sa_resfile)" 2>/dev/null
+			exit 0 ;;
+		mgmtinfo)          echo '{"source":"vendor"}'; exit 0 ;;
+		*)                 echo "Unsupported"; exit 0 ;;
+	esac
+fi
 # ДИАПАЗОНЫ HiLink-МОДЕМА - ВСЕГДА ЧЕРЕЗ ЕГО API, даже в режиме debug.
 #
 # Почему НЕ через AT-профиль: у Huawei смена диапазонов по AT (at^syscfgex)

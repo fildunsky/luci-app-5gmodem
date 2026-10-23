@@ -626,8 +626,8 @@ var CELL_ROWS = [
 	/* pband всегда видим (базовая строка таблицы): только текст. */
 	{ id: 'pband', always: true, text: function(j) {
 		var b = mutil.cellVal(j.pband);
-		if (!b) { return '-'; }
 		var p = mutil.cellVal(j.pci), e = mutil.cellVal(j.earfcn);
+		if (!b) { return p ? ('- | ' + p + (e ? ' ' + e : '')) : '-'; }
 		return (p && e) ? (b + ' | ' + p + ' ' + e) : b; } },
 	/* eNB ID: на LTE/5G-NSA здесь кнопка 4cells (в ссылку уходит именно eNB).
 	   sameRender - чтобы не пересобирать кнопку на каждом тике (скролл-баг). */
@@ -1659,6 +1659,50 @@ function renderWebPassHint(json) {
 		'href': L.url('admin/modem/5gmodem/diagnostics'),
 		'title': _('The modem asks for its web password - enter it on the Modem page')
 	}, _('Password needed')));
+}
+
+var TEMP_SENSORS = [
+	[ 'pa', _('Radio amplifier'), '<path d="M12 11v10M8.5 21h7"/><circle cx="12" cy="9" r="1.6"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8M15.4 5.6a4.8 4.8 0 0 1 0 6.8M5.8 2.8a8.8 8.8 0 0 0 0 12.4M18.2 2.8a8.8 8.8 0 0 1 0 12.4"/>' ],
+	[ 'cpu', _('Processor'), '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>' ],
+	[ 'wifi', _('Wi-Fi'), '<path d="M2.5 9a14 14 0 0 1 19 0M5.8 12.4a9.2 9.2 0 0 1 12.4 0M9.1 15.8a4.4 4.4 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.2"/>' ],
+	[ 'pmic', _('Power controller'), '<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>' ],
+	[ 'bat', _('Battery'), '<rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4M10 9h4M10 13h4M10 17h4"/>' ],
+	[ 'board', _('Board'), '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v4M17 8v4h-4M7 16h10"/><circle cx="7" cy="8" r=".8"/><circle cx="17" cy="8" r=".8"/><circle cx="7" cy="16" r=".8"/>' ]
+];
+
+function renderTemps(json) {
+	var box = document.getElementById('tempsn');
+	if (!box) { return; }
+	var raw = String(json.temps || '').trim();
+	if (!raw || raw === '-') { box.style.display = 'none'; return; }
+	box.style.display = '';
+	if (box.getAttribute('data-k') === raw) { return; }
+	box.setAttribute('data-k', raw);
+	var v = {};
+	raw.split(/\s+/).forEach(function(p) { var kv = p.split('='); if (kv.length === 2) { v[kv[0]] = kv[1]; } });
+	box.innerHTML = '';
+	TEMP_SENSORS.forEach(function(s) {
+		if (v[s[0]] == null) { return; }
+		var t = parseFloat(v[s[0]]);
+		var chip = E('span', { 'class': 'tg-tchip', 'title': s[1] + ': ' + v[s[0]] + ' °C' });
+		chip.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + s[2] + '</svg>';
+		chip.appendChild(E('span', { 'class': 'tg-tval' }, Math.round(t) + '°'));
+		box.appendChild(chip);
+	});
+}
+
+function renderNa(json) {
+	var na = ' ' + String(json.na || '') + ' ';
+	var off = function(k) { return na.indexOf(' ' + k + ' ') >= 0; };
+	[ [ 'csq', 'csqn' ], [ 'rssi', 'rssin' ], [ 'sinr', 'sinrn' ], [ 'rsrq', 'rsrqn' ] ].forEach(function(r) {
+		var el = document.getElementById(r[1]);
+		if (el) { el.style.display = off(r[0]) ? 'none' : ''; }
+	});
+	var pb = document.getElementById('pband');
+	if (pb && pb.parentNode) { pb.parentNode.style.display = off('pband') ? 'none' : ''; }
+	document.querySelectorAll('.tg-hist-card[data-k]').forEach(function(c) {
+		c.style.display = off(c.getAttribute('data-k')) ? 'none' : '';
+	});
 }
 
 function renderBattery(json) {
@@ -3323,6 +3367,8 @@ function applyMetrics(json) {
 						renderDebugBtn(json);
 						renderWebPassHint(json);
 						renderBattery(json);
+						renderNa(json);
+						renderTemps(json);
 						var _rr = document.getElementById('rb-radio-btn');
 						if (_rr) { _rr.style.display = (json.backend === 'hilink') ? 'none' : ''; }
 						renderProtoChip(json);
@@ -3405,7 +3451,7 @@ function applyMetrics(json) {
 						var xmmBtn = document.getElementById('bandnote-xmm-btn');
 						var dbgBtn = document.getElementById('bandnote-dbg-btn');
 						var freqBlk = document.querySelector('[data-blk="freq"]');
-						if (freqBlk) { freqBlk.style.display = (isHilink && !hilinkHasDebug(json)) ? 'none' : ''; }
+						if (freqBlk) { freqBlk.style.display = (isHilink && !hilinkHasDebug(json) && json.hl_modes !== '1') ? 'none' : ''; }
 						if (bandsui.isTakeover()) {
 							/* Kernel-прото + mmcli-профиль (Compal в MBIM): менять
 							   диапазоны МОЖНО - приложение само временно захватит MM.
@@ -3425,7 +3471,7 @@ function applyMetrics(json) {
 								_('Band and network-mode management is not available in HiLink (web API) mode. Switch the modem to Debug mode (button below): it exposes AT ports for bands, network mode and USSD while keeping the connection.');
 							if (mmBtn) { mmBtn.style.display = 'none'; }
 							if (xmmBtn) { xmmBtn.style.display = 'none'; }
-							if (dbgBtn) { dbgBtn.style.display = ''; }
+							if (dbgBtn) { dbgBtn.style.display = hilinkHasDebug(json) ? '' : 'none'; }
 						} else if (xmmCap && !isXmm) {
 							document.getElementById('bandnote-text').textContent =
 								_('Band and network-mode management is not available in %s mode. Switch this modem to XMM mode (button below) to manage bands.').format(mutil.protoLabel(json.protocol));
@@ -3959,7 +4005,7 @@ simDialog: baseclass.extend({
 	   частот ленивый (свёрнут по умолчанию) - к его раскрытию индекс уже есть. */
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30214, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30600, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -4417,6 +4463,7 @@ simDialog: baseclass.extend({
 						E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
 					]),
 					E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
+					E('div', { 'class': 'tginfo-temp tginfo-temps', 'id': 'tempsn', 'style': 'display:none' }, []),
 					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
 						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
 							E('img', { 'src': mutil.icon('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })

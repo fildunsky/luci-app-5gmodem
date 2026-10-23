@@ -707,6 +707,15 @@ if [ "$_hl_kind" = "hilink" ] && [ -z "$_hl_at" ]; then
 			# штамп (аудит 12.09.2026).
 			cut -d. -f1 /proc/uptime > "$_hl_cache.t.tmp" && mv "$_hl_cache.t.tmp" "$_hl_cache.t"
 			printf '%s\n' "$_hl_out"
+			_hl_ml=$(printf '%s' "$_hl_out" | jsonfilter -e '@.modem' 2>/dev/null)
+			_hl_vp=$(uci -q get "5gmodem.$_hl_sec.vidpid")
+			if [ -n "$_hl_ml" ] && [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = hilink ] \
+			   && { [ "$(uci -q get "5gmodem.$_hl_sec.model")" != "$_hl_ml" ] || [ "$(uci -q get "5gmodem.$_hl_sec.model_vp")" != "$_hl_vp" ]; }; then
+				uci -q set "5gmodem.$_hl_sec.model=$_hl_ml"
+				uci -q set "5gmodem.$_hl_sec.model_vp=$_hl_vp"
+				uci -q commit 5gmodem
+				rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
+			fi
 			;;
 		# Web-API не ответил. КРАТКО (снимок свежее 30 c) - отдаём прошлый: пустой
 		# экран хуже слегка устаревших цифр, модем мог на миг подвиснуть. ДОЛЬШЕ -

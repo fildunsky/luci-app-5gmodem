@@ -1051,7 +1051,7 @@ _model_sane() {
 # разных производителей, и там расхождение имени с vid нормально.
 _vendor_by_vid() {
 	case "$1" in
-		0e8d:*|2cb7:*) echo fibocom ;;
+		0e8d:712*|2cb7:*) echo fibocom ;;
 		12d1:*)        echo huawei ;;
 		1bc7:*)        echo telit ;;
 		2c7c:*)        echo quectel ;;

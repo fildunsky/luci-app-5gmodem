@@ -86,7 +86,7 @@ _service_name() {
 _parse_ip() {
 	echo "$1" | grep -oE '(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9.]|$)' \
 		| grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' \
-		| awk -F. '$1<=255&&$2<=255&&$3<=255&&$4<=255{print; exit}'
+		| awk -F. '$1<=255&&$2<=255&&$3<=255&&$4<=255 && $1!=0&&$1!=10&&$1!=127&&$1<224 && !($1==169&&$2==254) && !($1==172&&$2>=16&&$2<=31) && !($1==192&&$2==168) && !($1==100&&$2>=64&&$2<=127) {print; exit}'
 }
 
 _parse_cc() {
@@ -215,7 +215,8 @@ start)
 	# Российский фолбэк адреса (см. ниже): единственный, что отвечает с сотовой
 	# в РФ. Настраивается на случай, если понадобится другой.
 	YAIPURL=$(uci -q get 5gmodem.@5gmodem[0].speedtest_ru_ip_url)
-	[ -n "$YAIPURL" ] || YAIPURL="https://yandex.ru/internet/api/v0/ip"
+	[ "$YAIPURL" = "https://yandex.ru/internet/api/v0/ip" ] && YAIPURL=""
+	[ -n "$YAIPURL" ] || YAIPURL="https://ipv4-internet.yandex.net/api/v0/ip"
 	SERVICE=$(_service_name)
 
 	rm -f /tmp/5gmodem/st_stop /tmp/5gmodem/st_ip.* /tmp/5gmodem/st_cc.* /tmp/5gmodem/st_loc.* 2>/dev/null
@@ -295,16 +296,17 @@ start)
 			# clash поднят http/mixed-порт - повторяем запрос через него.
 			# ВАЖНО: tproxy-порт для этого НЕ годится (это не HTTP-прокси), его
 			# намеренно не берём - на стенде только он и есть.
-			if [ -z "$_cc" ]; then
+			if [ -z "$_cc" ] && [ -n "$_pub" ] && [ "$_local" = 0 ]; then
+				_ccu=$(echo "$CCURL" | sed "s|{ip}|$_pub|g")
 				_pp=$(sed -n 's/^\(mixed-port\|port\) *: *\([0-9]*\).*/\2/p' \
 					/opt/clash/config.yaml /etc/clash/config.yaml 2>/dev/null | head -1)
 				if [ -n "$_pp" ] && [ "$_pp" != "0" ]; then
 					if [ -n "$GEOUA" ]; then
 						_cc=$(_parse_cc "$(curl --max-time 5 -s -A "$GEOUA" \
-							-x "http://127.0.0.1:$_pp" "$CCFALLBACK" 2>/dev/null)")
+							-x "http://127.0.0.1:$_pp" "$_ccu" 2>/dev/null)")
 					else
 						_cc=$(_parse_cc "$(curl --max-time 5 -s \
-							-x "http://127.0.0.1:$_pp" "$CCFALLBACK" 2>/dev/null)")
+							-x "http://127.0.0.1:$_pp" "$_ccu" 2>/dev/null)")
 					fi
 					[ -n "$_cc" ] && printf '%s' "$_cc" > "$GEOCC" 2>/dev/null
 				fi

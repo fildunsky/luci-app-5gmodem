@@ -758,7 +758,8 @@ MF_EOF
 			case "${vidpid%%:*}" in
 				2c7c) echo "Quectel"; return ;;
 				1bc7) echo "Telit"; return ;;
-				2cb7|0e8d) echo "Fibocom"; return ;;
+				2cb7) echo "Fibocom"; return ;;
+				0e8d) case "$vidpid" in 0e8d:712*) echo "Fibocom"; return ;; esac ;;
 				1e2d) echo "Cinterion"; return ;;
 				12d1) echo "Huawei"; return ;;
 				19d2) echo "ZTE"; return ;;
