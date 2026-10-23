@@ -94,16 +94,20 @@ _fibocom_why() {
 # Состояние регистрации в сети: печатает <stat> из +CEREG, иначе из +CREG.
 # Пусто - модем не ответил. Коды: 1/6/9 - зарегистрирован дома, 5/7/10 - роуминг,
 # 0/2/3/4/8 - сети нет (2 - ищет, 3 - отказано, 8 - только экстренные).
+# ПРОБЕЛЫ ПОСЛЕ ЗАПЯТЫХ ДОПУСТИМЫ (см. at_conn_verdict в collect.sh): Altair
+# ALT3800 (NTmore NTLM-500) ищет сеть с «+CEREG: 0,2», а зарегистрированным
+# отвечает «+CEREG: 2, 1, 4554, 000DB80B, 7». Шаблон без пробела давал пустоту
+# ровно при регистрации: «no answer» через 60 с и ifup по кругу (23.10.2026).
 _fibocom_reg() {
 	local p="$1" r r5
 	r=$(sms_tool -d "$p" at "AT+CEREG?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CEREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		| sed -n 's/^+CEREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 	case "$r" in 1|5|6|7|9|10) echo "$r"; return ;; esac
 	r5=$(sms_tool -d "$p" at "AT+C5GREG?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+C5GREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		| sed -n 's/^+C5GREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 	case "$r5" in 1|5|6|7|9|10) echo "$r5"; return ;; esac
 	[ -n "$r" ] || r=$(sms_tool -d "$p" at "AT+CREG?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^+CREG: *[0-9]*,\([0-9]*\).*/\1/p' | head -1)
+		| sed -n 's/^+CREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)
 	echo "$r"
 }
 
