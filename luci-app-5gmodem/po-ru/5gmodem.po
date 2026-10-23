@@ -2262,8 +2262,8 @@ msgstr "IPv4 и IPv6"
 msgid "Disconnected modems"
 msgstr "Отключённые модемы"
 
-msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
-msgstr "Убрать настройки, запомненные для модемов, которых больше нет (AT-порт, интерфейс, типы SIM-слотов). Устаревшая запись может скрыть рабочий модем из «Приоритета интернета», если оба претендуют на одно имя интерфейса."
+msgid "Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name."
+msgstr "Убрать настройки и интерфейсы модемов, которых больше нет, в том числе заменённых в том же разъёме. Следующий модем получит наименьшее свободное имя интерфейса."
 
 msgid "Forget disconnected modems"
 msgstr "Забыть отключённые модемы"

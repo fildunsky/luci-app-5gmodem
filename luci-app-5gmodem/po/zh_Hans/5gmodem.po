@@ -2071,8 +2071,8 @@ msgstr "IPv4 和 IPv6"
 msgid "Disconnected modems"
 msgstr "已断开的调制解调器"
 
-msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
-msgstr "移除为已断开连接的调制解调器保存的设置（AT 端口、接口、SIM 卡槽类型）。如果过期条目与正在工作的调制解调器占用同一接口名，可能会把它从互联网优先级中隐藏。"
+msgid "Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name."
+msgstr "移除为已断开连接的调制解调器（包括在同一插槽中被更换的）保存的设置和接口。下一个调制解调器将获得最小的空闲接口名。"
 
 msgid "Forget disconnected modems"
 msgstr "忘记已断开的调制解调器"

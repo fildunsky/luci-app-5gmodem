@@ -1762,11 +1762,11 @@ return view.extend({
 		   после добавления eSIM-профиля), и настройки терялись бы на ровном месте.
 		   Подмену модема на том же USB-порту приложение чистит само (см.
 		   swap_cleanup в modemswitch.sh) - эта кнопка для случая «модем убрали
-		   насовсем». Сама привязка модема и удаляется; интерфейс в network/firewall
-		   остаётся: он мог быть настроен вручную. */
+		   насовсем». Удаляются привязки и парковки отсутствующих модемов, затем
+		   их интерфейсы (cleanup apply: только наши, лежащие и без хозяина). */
 		o = s.option(form.Button, '_forget');
 		o.title = _('Disconnected modems');
-		o.description = _('Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name.');
+		o.description = _('Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name.');
 		o.inputtitle = _('Forget disconnected modems');
 		o.inputstyle = 'remove';
 		o.onclick = function() {

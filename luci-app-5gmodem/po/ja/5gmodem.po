@@ -2071,8 +2071,8 @@ msgstr "IPv4 と IPv6"
 msgid "Disconnected modems"
 msgstr "切断されたモデム"
 
-msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
-msgstr "接続されなくなったモデムについて記憶している設定 (AT ポート、インターフェース、SIM スロットの種類) を削除します。古い情報が残っていると、同じインターフェース名を名乗ったときに、動作中のモデムがインターネット優先度の一覧から隠れることがあります。"
+msgid "Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name."
+msgstr "接続されなくなったモデム (同じスロットで交換したモデムを含む) について記憶している設定とインターフェースを削除します。次のモデムには空いている最小のインターフェース名が割り当てられます。"
 
 msgid "Forget disconnected modems"
 msgstr "切断されたモデムの情報を削除"

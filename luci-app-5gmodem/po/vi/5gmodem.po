@@ -2071,8 +2071,8 @@ msgstr "IPv4 và IPv6"
 msgid "Disconnected modems"
 msgstr "Modem đã ngắt kết nối"
 
-msgid "Remove settings remembered for modems that are no longer connected (AT port, interface, SIM slot types). A stale entry can hide a working modem from Internet priority if both claim the same interface name."
-msgstr "Xóa các cài đặt đã ghi nhớ cho những modem không còn kết nối (cổng AT, giao diện, loại khe SIM). Một mục cũ có thể che mất modem đang hoạt động khỏi danh sách ưu tiên Internet nếu cả hai cùng dùng một tên giao diện."
+msgid "Remove settings and interfaces remembered for modems that are no longer connected, including modems replaced in the same slot. The next modem then gets the lowest free interface name."
+msgstr "Xóa các cài đặt và giao diện đã ghi nhớ cho những modem không còn kết nối, kể cả modem đã được thay trong cùng khe. Modem tiếp theo sẽ nhận tên giao diện trống nhỏ nhất."
 
 msgid "Forget disconnected modems"
 msgstr "Quên các modem đã ngắt kết nối"
