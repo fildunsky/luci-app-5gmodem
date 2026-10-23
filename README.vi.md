@@ -110,6 +110,8 @@ Tôi đã bổ sung tính năng mới cho các modem này (so với 3ginfo và m
 - Huawei E3372 (HiLink)
 - Tenda MF6 (Mi-Fi dùng ZTE ZX297520V3, USB 19d2:1557) — tín hiệu, pin, SMS và khởi động lại qua web API; băng tần và chế độ mạng qua AT ở debug mode
 - Các USB Android giá rẻ Qualcomm MDM9600 / MDM9610 (PIXLINK, ALEKA UV310 và các loại tương tự), kể cả chế độ "chỉ modem" (QMI) của chúng
+- UFI003 (USB Android Qualcomm MSM8916, USB 05c6:90b4) — tín hiệu qua AT, nhiệt độ và SINR qua ADB, chế độ mạng; cùng thiết bị đó chạy OpenWrt thì modem tích hợp được điều khiển qua ModemManager (băng tần, chế độ mạng, SMS, chọn mạng thủ công)
+- MF932-M27 (bộ phát kiêm sạc dự phòng Android MediaTek MT6735, USB 0e8d:2004) — lưu lượng, thời gian kết nối, pin và chế độ mạng qua web API, sáu cảm biến nhiệt độ qua ADB; với gói tùy chọn `5gmodem-mtk-at` có thêm RSRQ, SINR, RSSI, thông tin trạm và chuyển băng tần LTE
 - Nhiều modem khác chưa được kiểm tra, nhưng sẽ hỗ trợ mọi modem mà các bản fork gốc hỗ trợ.
 
 ### Đã sửa theo báo cáo của người dùng
@@ -220,6 +222,17 @@ apk add /tmp/lpac.apk --allow-untrusted
 Phương thức truyền được chọn tự động theo giao thức của giao diện, nên thông thường bạn không cần đặt thủ công. Trên đường MBIM, eUICC truy cập được bất kể khe SIM nào đang hoạt động, nên SIM vật lý vẫn trực tuyến trong khi bạn làm việc với eSIM.
 
 `lpac` là phụ thuộc **tùy chọn** — thẻ eSIM chỉ xuất hiện khi nó đã được cài và có eUICC; phần còn lại của ứng dụng hoạt động không cần nó.
+
+## Bộ phát di động MediaTek: 5gmodem-mtk-at
+
+Các bộ phát di động Android dùng MediaTek MT6735 (MF932-M27, TianJie CPE903/905/906, KuWfi CPF9xx và tương tự) không cung cấp RSRQ, SINR, thông tin trạm và điều khiển băng tần trong giao diện web. Ứng dụng lấy chúng qua ADB và socket `rild-atci`, cần gói tùy chọn nhỏ `5gmodem-mtk-at`. Trình khách bên trong chạy trên bộ phát chứ không phải trên router, nên một gói `noarch` dùng được cho mọi nền tảng. Không có gói, thiết bị chỉ hiển thị RSRP, pin, nhiệt độ và chế độ mạng.
+
+```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/latest/download/5gmodem-mtk-at.apk > /tmp/mtk-at.apk
+apk add /tmp/mtk-at.apk --allow-untrusted
+```
+
+24.10.x: `5gmodem-mtk-at.ipk` + `opkg install`.
 
 ## Dựng từ mã nguồn
 

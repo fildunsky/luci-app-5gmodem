@@ -108,6 +108,8 @@ opkg install luci-i18n-base-zh-cn
 - Huawei E3372（HiLink）
 - Tenda MF6（基于 ZTE ZX297520V3 的随身 Wi-Fi，USB 19d2:1557）—— 通过其 Web API 读取信号、电量、短信并可重启；调试模式下通过 AT 设置频段和网络制式
 - 高通 MDM9600 / MDM9610 平台的廉价 Android 上网棒（PIXLINK、ALEKA UV310 及同类），包括其“纯调制解调器”（QMI）模式
+- UFI003（高通 MSM8916 安卓上网棒，USB 05c6:90b4）— 通过 AT 读取信号，通过 ADB 读取温度和 SINR，切换网络模式；同一上网棒刷 OpenWrt 后，板载调制解调器经 ModemManager 管理（频段、网络模式、短信、手动选网）
+- MF932-M27（MediaTek MT6735 安卓充电宝随身 Wi-Fi，USB 0e8d:2004）— 通过网页 API 显示流量、在线时长、电量和网络模式，通过 ADB 读取六个温度传感器；安装可选软件包 `5gmodem-mtk-at` 后还有 RSRQ、SINR、RSSI、小区信息和 LTE 频段切换
 - 更多型号未逐一测试，但上游分支支持的调制解调器均应可用。
 
 ### 依据用户反馈修复的型号
@@ -199,6 +201,17 @@ apk add /tmp/lpac.apk --allow-untrusted
 传输方式根据接口协议自动选择，通常无需手动设置。MBIM 路径下无论当前活动的是哪个 SIM 槽都能访问 eUICC，因此操作 eSIM 时物理 SIM 保持在线。
 
 `lpac` 是**可选**依赖——eSIM 标签页仅在安装了 lpac 且存在 eUICC 时出现；应用的其余部分无需它即可工作。
+
+## MediaTek 随身路由器：5gmodem-mtk-at
+
+基于 MediaTek MT6735 的安卓随身路由器（MF932-M27、TianJie CPE903/905/906、KuWfi CPF9xx 等）的网页界面不提供 RSRQ、SINR、小区信息和频段控制。本应用通过 ADB 和 `rild-atci` 套接字获取这些数据，需要安装可选的小软件包 `5gmodem-mtk-at`。其中的客户端运行在随身路由器上而不是你的路由器上，所以一个 `noarch` 软件包适用于所有平台。未安装时只显示 RSRP、电量、温度和网络模式。
+
+```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/latest/download/5gmodem-mtk-at.apk > /tmp/mtk-at.apk
+apk add /tmp/mtk-at.apk --allow-untrusted
+```
+
+24.10.x: `5gmodem-mtk-at.ipk` + `opkg install`.
 
 ## 从源码构建
 

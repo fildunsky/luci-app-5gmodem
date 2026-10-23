@@ -5862,3 +5862,24 @@ msgstr "Jaringan dipilih secara manual di tab Modem"
 
 msgid "manual"
 msgstr "manual"
+
+msgid "Radio amplifier"
+msgstr "Penguat radio"
+
+msgid "Processor"
+msgstr "Prosesor"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "Pengendali daya"
+
+msgid "Battery"
+msgstr "Baterai"
+
+msgid "Board"
+msgstr "Papan"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "Pasang paket %s untuk mengganti band serta melihat RSRQ, SINR, dan sel pada modem ini."

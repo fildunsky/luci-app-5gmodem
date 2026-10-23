@@ -5862,3 +5862,24 @@ msgstr "ネットワークは「モデム」タブで手動選択されていま
 
 msgid "manual"
 msgstr "手動"
+
+msgid "Radio amplifier"
+msgstr "無線アンプ"
+
+msgid "Processor"
+msgstr "プロセッサ"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "電源コントローラ"
+
+msgid "Battery"
+msgstr "バッテリー"
+
+msgid "Board"
+msgstr "基板"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "このモデムでバンドを切り替え、RSRQ・SINR・セル情報を表示するには %s パッケージをインストールしてください。"

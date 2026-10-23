@@ -108,6 +108,8 @@ Saya menambahkan fitur baru untuk modem-modem ini (dibandingkan dengan 3ginfo da
 - Huawei E3372 (HiLink)
 - Tenda MF6 (ZTE ZX297520V3 Mi-Fi, USB 19d2:1557) — sinyal, baterai, SMS, dan reboot melalui web API-nya; band dan mode jaringan melalui AT dalam mode debug
 - Stik Android Qualcomm MDM9600 / MDM9610 murah (PIXLINK, ALEKA UV310 dan sejenisnya), termasuk mode "modem only" (QMI)
+- UFI003 (stik Android Qualcomm MSM8916, USB 05c6:90b4) — sinyal lewat AT, suhu dan SINR lewat ADB, mode jaringan; juga stik yang sama dengan OpenWrt, modem bawaannya dikendalikan lewat ModemManager (band, mode jaringan, SMS, pemilihan jaringan manual)
+- MF932-M27 (Mi-Fi power bank Android MediaTek MT6735, USB 0e8d:2004) — trafik, lama koneksi, baterai, dan mode jaringan lewat web API, enam sensor suhu lewat ADB; dengan paket opsional `5gmodem-mtk-at` juga RSRQ, SINR, RSSI, info sel, dan pergantian band LTE
 - Masih banyak lagi yang belum diuji, tetapi seharusnya mendukung semua modem yang ditangani oleh fork upstream.
 
 ### Diperbaiki dari laporan pengguna
@@ -218,6 +220,17 @@ apk add /tmp/lpac.apk --allow-untrusted
 Transport dipilih otomatis berdasarkan protokol antarmuka, jadi biasanya Anda tidak perlu mengaturnya secara manual. Pada jalur MBIM, eUICC bisa dijangkau terlepas dari slot SIM mana yang aktif, sehingga SIM fisik tetap online selama Anda bekerja dengan eSIM.
 
 `lpac` adalah dependensi **opsional** — tab eSIM hanya muncul jika `lpac` terpasang dan ada eUICC; bagian lain aplikasi tetap berfungsi tanpanya.
+
+## Router saku MediaTek: 5gmodem-mtk-at
+
+Router saku Android berbasis MediaTek MT6735 (MF932-M27, TianJie CPE903/905/906, KuWfi CPF9xx dan sejenisnya) tidak menyediakan RSRQ, SINR, info sel, dan kontrol band di antarmuka webnya. Aplikasi mengambilnya lewat ADB dan soket `rild-atci`, untuk itu perlu paket opsional kecil `5gmodem-mtk-at`. Klien di dalamnya berjalan di router saku, bukan di router Anda, sehingga satu paket `noarch` cocok untuk semua platform. Tanpa paket ini hanya RSRP, baterai, suhu, dan mode jaringan yang tampil.
+
+```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/latest/download/5gmodem-mtk-at.apk > /tmp/mtk-at.apk
+apk add /tmp/mtk-at.apk --allow-untrusted
+```
+
+24.10.x: `5gmodem-mtk-at.ipk` + `opkg install`.
 
 ## Build dari sumber
 

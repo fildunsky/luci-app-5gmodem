@@ -5862,3 +5862,24 @@ msgstr "网络已在“调制解调器”选项卡中手动选择"
 
 msgid "manual"
 msgstr "手动"
+
+msgid "Radio amplifier"
+msgstr "射频功放"
+
+msgid "Processor"
+msgstr "处理器"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "电源管理芯片"
+
+msgid "Battery"
+msgstr "电池"
+
+msgid "Board"
+msgstr "主板"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "安装 %s 软件包即可在此调制解调器上切换频段并查看 RSRQ、SINR 和小区信息。"

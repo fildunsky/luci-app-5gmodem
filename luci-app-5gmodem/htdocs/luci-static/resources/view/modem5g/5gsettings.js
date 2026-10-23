@@ -279,7 +279,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30214, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30600, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -868,7 +868,7 @@ return view.extend({
 		o.value('https://icanhazip.com', 'icanhazip.com');
 		o.value('https://ident.me', 'ident.me');
 		o.value('https://ipinfo.io/ip', 'ipinfo.io');
-		o.value('https://yandex.ru/internet/api/v0/ip', 'Yandex - RU (' + _('works over cellular') + ')');
+		o.value('https://ipv4-internet.yandex.net/api/v0/ip', 'Yandex - RU (' + _('works over cellular') + ')');
 		o.default = 'http://ip-api.com/line/?fields=countryCode,query';
 		o.placeholder = 'http://ip-api.com/line/?fields=countryCode,query';
 		o.rmempty = true;
