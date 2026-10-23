@@ -2002,13 +2002,30 @@ forget)
 		if [ -n "$_if" ] && ifstatus "$_if" 2>/dev/null | grep -q '"up": true'; then
 			continue
 		fi
-		# интерфейс модема оставляем в network/firewall: он мог быть настроен
-		# вручную, а модем ещё вернётся. Забываем только НАШУ привязку.
+		# Интерфейс здесь не трогаем: ниже его уберёт cleanup apply, и только
+		# если он наш (штамп modem_path), не поднят и больше никем не числится.
+		uci -q delete "$CFG.$SEC"
+		N=$((N + 1))
+	done
+	_fg_ids=" "
+	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_[^.=]*\)=modem\$/\1/p"); do
+		case "$SEC" in m_park_*) continue ;; esac
+		_fg_ids="$_fg_ids$(uci -q get "$CFG.$SEC.imei") $(uci -q get "$CFG.$SEC.serial") "
+	done
+	for SEC in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\(m_park_[^.=]*\)=modem\$/\1/p"); do
+		_fg_m=$(uci -q get "$CFG.$SEC.imei")
+		_fg_s=$(uci -q get "$CFG.$SEC.serial")
+		[ -n "$_fg_m" ] && case "$_fg_ids" in *" $_fg_m "*) continue ;; esac
+		[ -n "$_fg_s" ] && case "$_fg_ids" in *" $_fg_s "*) continue ;; esac
 		uci -q delete "$CFG.$SEC"
 		N=$((N + 1))
 	done
 	[ "$N" -gt 0 ] && uci -q commit "$CFG"
-	printf '{"result":"ok","forgotten":%s}\n' "$N"
+	_fg_rm=""
+	[ "$N" -gt 0 ] && _fg_rm=$("$RES/modemswitch.sh" cleanup apply 2>/dev/null \
+		| jsonfilter -e '@.orphans[*].iface' 2>/dev/null | tr '\n' ' ')
+	_fg_rm=${_fg_rm% }
+	printf '{"result":"ok","forgotten":%s,"ifaces":"%s"}\n' "$N" "$_fg_rm"
 	;;
 
 xmm)
@@ -2068,6 +2085,7 @@ cleanup)
 	#     него есть хозяин, которого мы просто не распознали, - лучше оставить
 	#     мусор, чем оборвать связь.
 	_cl_apply=""; [ "$2" = apply ] && _cl_apply=1
+	[ -n "$_cl_apply" ] && note_foreign_uci network "modemswitch cleanup"
 	_cl_did=""
 	_cl_z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	# Все интерфейсы, которые числит за собой хоть одна секция (в т.ч. парковка).
@@ -2146,7 +2164,6 @@ cleanup)
 	if [ -n "$_cl_apply" ]; then
 		if [ -n "$_cl_did" ]; then
 			uci -q commit "$CFG"
-			note_foreign_uci network "modemswitch cleanup"
 			uci -q commit network
 			uci -q commit firewall
 		fi
