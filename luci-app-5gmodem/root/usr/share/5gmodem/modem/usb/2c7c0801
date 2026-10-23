@@ -1,5 +1,3 @@
-# Quectel RM520N-GL (2c7c:0801; RM521F-GL - по общему руководству AT-команд, свой PID в теме не подтверждён)
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -14,12 +12,6 @@ O=$(sms_tool -d $DEVICE at "at+qnwinfo;+qcainfo;+qeng=\"servingcell\";+qspn")
 
 _qc_spn2
 
-# ИДЕНТИФИКАТОР СОТЫ - ИЗ УЖЕ ПОЛУЧЕННОГО QENG, БЕЗ ВТОРОГО ЗАХОДА В ПОРТ.
-# Раньше поле бралось как 5-е по запятым - в сплошной раскладке
-# +QENG: "servingcell","NOCONN","LTE","FDD",250,11,4E23802,... это MCC (250),
-# и в карточку уезжала «сота 592». Раскладок две: сплошная (сота - 7-е поле)
-# и NSA-разнесённая +QENG: "LTE",... (сота - 5-е) (ревью RM520N 13.09.2026,
-# живой ответ с форума 4pda).
 if [ "$CID_HEX" = "0" ] || [ -z "$CID_HEX" ]; then
 	T=$(echo "$O" | tr -d '\r' | awk -F, '/^\+QENG: "servingcell",.*"LTE"/ {print $7; exit} /^\+QENG: "LTE",/ {print $5; exit}' | tr -cd '0-9A-Fa-f')
 	if [ -n "$T" ]; then
@@ -28,17 +20,10 @@ if [ "$CID_HEX" = "0" ] || [ -z "$CID_HEX" ]; then
 	fi
 fi
 
-
 _q5_core mb nrn qnw scclev
 
 fi
 
-# СОСЕДНИЕ СОТЫ - AT+QENG="neighbourcell", формат тот же, что у EP06:
-#   +QENG: "neighbourcell intra","LTE",<earfcn>,<pci>,<rsrq>,<rsrp>,<rssi>,...
-# (живой дамп RM520N с форума 4pda: intra 2850,136,-10,-100,-68 сходится с
-# обслуживающей сотой - 5-е поле RSRQ, 6-е RSRP). Разбор перенесён из
-# modem/usb/2c7c0306, таблица EARFCN->диапазон расширена до набора RM520N-GL
-# (ревью RM520N 13.09.2026). Обслуживающая сота в списке есть - помечаем её.
 _qc_neighbours
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE_A,LTE-A,' | sed 's,LTE-A B,LTE-A | B,')
@@ -48,11 +33,7 @@ if [ "${LAC_DEC}" = "0" ]; then
 	LAC_HEX="-"
 fi
 
-# Modem
 _qc_gmr_fw
-# ПОЛНЫЙ БИЛД - AT+QGMR?: RM520NGLAAR03A03M4G_01.201.01.201. Только по нему
-# видно ветку прошивки (R01A06 - без регионального блока, R03/«200/201/30x» -
-# с блоком РФ), AT+GMR отдаёт короткую ревизию (форум 4pda, ревью 13.09.2026).
 T=$(sms_tool -d $DEVICE at "AT+QGMR?" 2>/dev/null | tr -d '\r' | awk '/^[A-Z][A-Z0-9]+_[0-9][0-9.]*$/ {print; exit}')
 [ -n "$T" ] && FW="$T"
 
@@ -62,12 +43,6 @@ _qc_qslot
 
 _qc_ids_sed
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-# ДРАЙВЕР - ИЗ SYSFS СВОЕГО USB-ПУТИ. Разбор debugfs брал текст после ПЕРВОГО
-# «Vendor=2c7c ProdID=0801» и резал по 1290 символам: при двух одинаковых
-# модулях протокол приезжал от соседа, а без смонтированного debugfs не
-# определялся вовсе (ревью RM520N 13.09.2026). debugfs остаётся запасным.
 _QPROTO=""
 if [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
 	for _qi in "/sys/bus/usb/devices/$_POLL_AM":*/driver; do
@@ -93,5 +68,4 @@ if [ -z "$_QPROTO" ]; then
 fi
 [ -n "$_QPROTO" ] && PROTO="$_QPROTO"
                                                                                                                                                                                                                                          
-
 . "$RES/modem/usb/_quectel_qrsrp"

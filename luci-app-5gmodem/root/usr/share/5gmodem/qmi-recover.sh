@@ -1,25 +1,9 @@
 #!/bin/sh
-# Восстановление QMI-пула модема при исчерпании client-ID (ClientIdsExhausted).
-#
-# ЗАЧЕМ. У части модемов (Compal RXM-G1 / Qualcomm SDX55) пул QMI-клиентов
-# КРОШЕЧНЫЙ - замерено живьём ~6 на сервис NAS. Любая утечка (убитый по таймауту
-# ПРЯМОЙ QMI-вызов не освобождает свой CID; цикл failed-повторов ModemManager)
-# быстро его исчерпывает. После этого MM не может создать NAS-клиент, падает init
-# ('couldn't peek client for service nas' -> state=failed, 'unknown-capabilities'),
-# и у модема пропадают И данные, И управление диапазонами (у Compal бенды ставятся
-# ТОЛЬКО через MM). Освободить «повисшие» CID нельзя - их номера неизвестны, -
-# поэтому единственное лечение это СБРОС модема (AT+CFUN=1,1): после
-# переэнумерации пул чист, и MM инициализируется нормально.
-#
-# Основную утечку мы устранили, переведя свои QMI-вызовы на qmi-proxy (-p): убитый
-# proxy-вызов пул не трогает. Но при 6 слотах исчерпание всё равно возможно (чужой
-# код, повторы MM, подвисший proxy), поэтому держим ещё и это авто-восстановление.
 
-. /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
+. /usr/share/5gmodem/lib.sh 2>/dev/null
 
 RES=/usr/share/5gmodem
 
-# Пул исчерпан?  $1 = cdc-wdm.  0 = да (исчерпан).
 _qr_recent() {
 	[ -f "$1" ] || return 1
 	_qr_w=$(cat "$1" 2>/dev/null)
@@ -30,8 +14,6 @@ _qr_recent() {
 
 qmi_pool_exhausted() {
 	[ -n "$1" ] && [ -e "$1" ] || return 1
-	# -p: спрашиваем через прокси (свой клиент не плодим). Ключа -t у qmicli
-	# нет, на занятом канале он виснет - ограничиваем временем сами.
 	_qpe_o="/tmp/5gmodem/qmipool.$$"
 	qmicli -p -d "$1" --nas-get-serving-system >"$_qpe_o" 2>&1 </dev/null &
 	_qpe_p=$!
@@ -46,11 +28,7 @@ qmi_pool_exhausted() {
 	return $_qpe_rc
 }
 
-# MM держит модем на usb-пути $1 в состоянии failed из-за unknown-capabilities?
-# ВАЖНО: после исчерпания пула MM остаётся failed ДАЖЕ когда пул уже освободился -
-# сам init он не повторяет. Поэтому это ОТДЕЛЬНЫЙ триггер сброса помимо
-# qmi_pool_exhausted: только переэнумерация заставит MM переопросить модем начисто.
-_mm_failed_unknowncaps() {   # $1 = usb path
+_mm_failed_unknowncaps() {
 	command -v mmcli >/dev/null 2>&1 || return 1
 	for _i in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 		_d=$(mmcli -m "$_i" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
@@ -62,30 +40,20 @@ _mm_failed_unknowncaps() {   # $1 = usb path
 	return 1
 }
 
-# Сбросить модем, если пул исчерпан.  $1 = usb-путь.  Не чаще раза в 3 минуты.
 qmi_pool_recover() {
 	_qp="$1"; [ -n "$_qp" ] || return 1
-	# ТОЛЬКО ПОД MODEMMANAGER. Оба триггера - про MM (его init падает на
-	# пустом пуле), а проход mm-inhibit зовёт нас постоянно. На umbim/uqmi
-	# (proto mbim/qmi/qmiraw) наш qmicli -p поднимал вечный mbim-proxy или
-	# qmi-proxy поверх живой сессии: сторож убивал его и передозванивал, и так
-	# по кругу - связь рвалась каждые пару минут (2.5.7, MV31-W на mbim).
-	# До 2.5.7 вызов падал на несуществующем ключе -t и прокси не поднимал.
 	pgrep -f 'sbin/ModemManager' >/dev/null 2>&1 || return 1
 	QMI_TARGET_PATH="$_qp"
 	command -v qmi_channel_free >/dev/null 2>&1 && qmi_channel_free || return 1
 	_lm=$("$RES/listmodems.sh" 2>/dev/null)
 	_qw=$(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].wdm[0]" 2>/dev/null)
 	[ -n "$_qw" ] && [ -e "$_qw" ] || return 1
-	# Триггер сброса: пул исчерпан ЛИБО MM залип в failed/unknown-capabilities.
 	_trig=""
 	qmi_pool_exhausted "$_qw" && _trig="QMI-пул исчерпан"
 	[ -z "$_trig" ] && _mm_failed_unknowncaps "$_qp" && _trig="MM failed: unknown-capabilities"
 	[ -n "$_trig" ] || return 1
-	# Защита от цикла сбросов: маркер в /tmp (переживает до перезагрузки).
 	_mk="/tmp/5gmodem/qmirecover_$(printf '%s' "$_qp" | tr -c 'A-Za-z0-9' _)"
 	_qr_recent "$_mk" && return 1
-	# Живой AT-порт этого модема для сброса.
 	for _t in $(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].tty[*]" 2>/dev/null); do
 		[ -e "$_t" ] || continue
 		at_query "$_t" "AT" 5 | grep -q "OK" || continue
@@ -98,13 +66,7 @@ qmi_pool_recover() {
 	return 1
 }
 
-# СБРОС ПО ВНЕШНЕЙ ПРИЧИНЕ. Тот же приём (AT+CFUN=1,1 с кулдауном), но повод
-# приносит вызывающий. Нужен сторожу сессии: у SIM7100E живьём поймано
-# состояние «QMI говорит connected, адрес выдан по QMI, а канал не несёт ни
-# байта» - ifup его не лечит (сессия-то есть), лечит только переинициализация
-# модема. Проверено дважды на двух стендах: после сброса штатный DHCP-путь
-# поднимается с первой попытки.
-qmi_force_reset() {   # $1 - usb-путь, $2 - причина для журнала
+qmi_force_reset() {
 	_fr_p="$1"; [ -n "$_fr_p" ] || return 1
 	_mk="/tmp/5gmodem/qmirecover_$(printf '%s' "$_fr_p" | tr -c 'A-Za-z0-9' _)"
 	_qr_recent "$_mk" && return 1

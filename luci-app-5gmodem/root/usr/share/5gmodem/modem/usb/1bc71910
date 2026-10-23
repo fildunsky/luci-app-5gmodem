@@ -1,5 +1,3 @@
-# Telit LN940 (QMI) / Telit LN940 (MBIM) / HP lt4220 (MBIM) / HP lt4220 (QMI)
-
 O=$(sms_tool -D -d $DEVICE at "AT^CA_INFO?;^RFSTS?;+TEMP")
 
 TR=$(echo "$O" |grep -A2 RFSTS: | awk 'NR ==2{print $0}')
@@ -35,7 +33,6 @@ fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE_A,LTE-A ,')
 
-# Primary band
 T1=$(echo "$O" | awk '/PCC/{print $5}' | sed -e 's/LTE_//g' -e 's/.$//')
 if [ -n "$T1" ]; then
 	T2=$(echo "$O" | awk '/PCC/{print $8}' | sed -e 's/Band_width//g')
@@ -44,33 +41,23 @@ if [ -n "$T1" ]; then
 	PCI=$(echo "$TR" |awk -F [,] '{print $11}')
 fi
 
-# CA band (S1)
 T3=$(echo "$O" | awk '/SCC1/{print $5}' | sed -e 's/LTE_//g' -e 's/.$//')
 if [ -n "$T3" ]; then
 	T4=$(echo "$O" | awk '/SCC1/{print $8}' | sed -e 's/Band_width//g')
 	S1BAND="$(band4g ${T3/B/} "") @$T4 MHz"
-#	S1EARFCN=$(echo "$TR" |awk -F [,] '{print $2}')
-#	S1PCI=$(echo "$TR" |awk -F [,] '{print $11}')
 fi
 
-# CA band (S2)
 T5=$(echo "$O" | awk '/SCC2/{print $5}' | sed -e 's/LTE_//g' -e 's/.$//')
 if [ -n "$T5" ]; then
 	T6=$(echo "$O" | awk '/SCC2/{print $8}' | sed -e 's/Band_width//g')
 	S2BAND="$(band4g ${T5/B/} "") @$T6 MHz"
-#	S2EARFCN=$(echo "$TR" |awk -F [,] '{print $2}')
-#	S2PCI=$(echo "$TR" |awk -F [,] '{print $11}')
 fi
 
-# Temperature
 T=$(echo "$O" | awk -F [:] '/tsens_tz_sensor0:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
 	TEMP=$(echo "$T &deg;C")
 fi
 
-# Cell ID & LAC & TAC
-# ТОЛЬКО ЧИСЛО. Пустой LAC_DEC давал `printf "%X"` без аргумента - это «0», и
-# в карточке появлялся LAC 0 там, где модем его просто не отдал.
 case "$LAC_DEC" in
 	''|*[!0-9]*) ;;
 	*) LAC_HEX=$(printf "%X" "$LAC_DEC"); TAC_HEX=$LAC_HEX ;;
@@ -80,8 +67,6 @@ case "$CID_DEC" in
 	*) CID_HEX=$(printf "%X" "$CID_DEC") ;;
 esac
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=1bc7 ProdID=1910' '{print $2}' | cut -c-1220)
 
@@ -96,7 +81,6 @@ then
 	PROTO="ecm"
 fi
 
-# Model
 PVMODEL=$(echo $PV | awk -F 'Vendor=1bc7 ProdID=1910' '{print $2}' | cut -c-150)
 if [ -z "$MODEL" ]
 then
@@ -106,21 +90,18 @@ then
 	MODEL=$(echo "$MODELC" | awk '{for (i=1;i<=NF;i++) if (!a[$i]++) printf("%s%s",$i,FS)}{printf("\n")}')
 fi
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 NR_I=$(echo "$O" | awk -F " " '/GSN /{print $2}')
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | awk -F " " '/CIMI /{print $2}')
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-# Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID" | xargs)
 NR_D=$(echo "$O" | awk -F [:] '/ICCID: /{print $2}' | xargs)
 NR_D=$(echo "$NR_D" | tr ' ' '\n' | grep -E '^[0-9A-Fa-f]{18,22}$' | head -1)
@@ -128,7 +109,6 @@ if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# FW
 OF=$(sms_tool -d $DEVICE at "ati")
 DEV2=$(echo $OF | tr -s "\n" | xargs)
 FW=$(echo $DEV2 | awk -F 'Revision: | IMEI: ' '{print $2}' | cut -c-50)

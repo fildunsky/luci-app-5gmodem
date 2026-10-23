@@ -5883,3 +5883,30 @@ msgstr "主板"
 
 msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
 msgstr "安裝 %s 套件即可在此數據機上切換頻段並查看 RSRQ、SINR 和小區資訊。"
+
+msgid "Telegram API server"
+msgstr "Telegram API 伺服器"
+
+msgid "Leave empty for api.telegram.org. Your own server must forward the Bot API as is, e.g. an SNI proxy or a self-hosted Bot API server."
+msgstr "留空則使用 api.telegram.org。自建伺服器必須原樣轉發 Bot API，例如 SNI 代理或自建 Bot API 伺服器。"
+
+msgid "Expecting an address starting with http:// or https://"
+msgstr "位址必須以 http:// 或 https:// 開頭"
+
+msgid "Do not check the certificate"
+msgstr "不檢查憑證"
+
+msgid "Only for your own server: accept a self-signed or mismatching certificate."
+msgstr "僅限自建伺服器：接受自簽或不相符的憑證。"
+
+msgid "...plus power cycle (USB port or your script)"
+msgstr "...再斷電重啟（USB 埠或自訂指令碼）"
+
+msgid "Power script"
+msgstr "電源指令碼"
+
+msgid "Expecting an absolute path made of letters, digits and / . _ -"
+msgstr "必須是由字母、數字和 / . _ - 組成的絕對路徑"
+
+msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
+msgstr "適用於無法控制 USB 供電的板子：一個可執行檔，用於切斷並恢復數據機供電（例如切換 GPIO）。電源步驟會執行它來取代關閉 USB 埠，參數為介面、數據機 USB 路徑及其 AT 埠。輸出寫入系統日誌。"

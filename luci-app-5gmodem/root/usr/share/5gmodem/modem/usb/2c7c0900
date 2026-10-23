@@ -1,5 +1,3 @@
-# Quectel RM500U-CNV
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -25,7 +23,6 @@ if [ "${LAC_DEC}" = "0" ]; then
 	LAC_HEX="-"
 fi
 
-# Modem
 _qc_gmr_fw
 
 _qc_gmr_model

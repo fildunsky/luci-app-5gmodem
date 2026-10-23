@@ -1,15 +1,7 @@
-# Dell DW5811e Snapdragon X7 LTE (413c:81b6) = Sierra Wireless EM7455B: то же
-# железо MDM9x30 и тот же AT!GSTATUS?, что у 1199:9071. Файл был третьей копией
-# старого разбора и не получил ни одного из исправлений общего файла (ловушка
-# «INACTIVE» содержит «ACTIVE», уровень с вторичной несущей вместо обслуживающей,
-# канал только при агрегации, нет Cell ID/антенн/мощности) - ревью 12.09.2026
-# по форуму. Разбор общий, здесь только идентификация и протокол.
-
 O=$(sms_tool -d $DEVICE at "at!gstatus?")
 
 . "$RES/modem/usb/_sierra_gobi_lte"
 
-# Modem
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
@@ -20,29 +12,24 @@ MODELACUT=$(echo $MODELA | sed s/"AT+CGMM "//)
 MODELBCUT=$(echo $MODELB | sed s/"AT+CGMI "// | cut -f1 -d",")
 MODEL="$MODELBCUT "$MODELACUT
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F[,:] '/^ICCID: /{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=413c ProdID=81b6' '{print $2}' | cut -c-1290)
 

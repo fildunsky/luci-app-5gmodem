@@ -1,18 +1,5 @@
-# Foxconn T99W175 (FW 6.0.0.6)
-#
-# 05c6:9025 - QMI-композиция этого семейства. Идентификатор делят Foxconn
-# T99W175 и Compal RXM-G1 (новая прошивка), переведённый в QMI командой
-# AT+USBCOMP=debug. Прошивки НЕ совместимы: Compal не отвечает ни на ^TEMP?,
-# ни на ^DEBUG? (проверено на железе - пустой ответ), метрики и диапазоны у
-# него читаются через qmicli, см. 05c690d6.
-#
-# ВАЖНО: здесь, в отличие от 05c690d5 и 1e2d00b7, разводить по USB-дескриптору
-# НЕЛЬЗЯ - в этой композиции модем представляется generic-идентификатором
-# Qualcomm ("HSUSB Device"), без строк VOS_5G / Tri Cascade. Помощник это
-# учитывает: он проверяет ещё и МОДЕЛЬ (SG500M2-X) через QMI/MM/AT.
 . /usr/share/5gmodem/iscompal.sh
 if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm "${_POLL_AM:-$MODEM_PATH}" 2>/dev/null)" "$DEVICE"; then
-	# _IS_COMPAL=1 выставляем заранее - 05c690d6 его уважает и не детектит заново
 	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0
@@ -43,7 +30,6 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
-# Снимок ^DEBUG? для общего блока антенн (O ниже переиспользуется).
 _DBG="$O"
 
 case "$MODE_NUM" in
@@ -61,8 +47,6 @@ esac
 
 T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
-#	TAC_HEX=$(printf "%X" $T)
-#	TAC_DEC=$(printf "%d" "0x$T")
 
 	TAC_HEX=$(printf "%X" $T)
 	TAC_DEC="$T"
@@ -134,13 +118,9 @@ while true; do
 		fi
 	
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rsrp:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/rsrq:/ {print $4}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rssi:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/lte_snr:/ {print $4}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 
 	O1=$(echo "$O1" | sed '1,4d')
 done
@@ -182,19 +162,13 @@ if [ -n "$T" ]; then
 			esac
 		fi
 	T=$(echo "$O" | awk -F: '/^nr_rsrp:/ {print $2}' | cut -f1 -d" ")
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O" | awk -F: '/^nr_rsrq:/ {print $2}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O" | awk -F: '/^nr_snr:/ {print $2}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 fi
 
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
-
-
-# Modem
 
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
@@ -205,29 +179,23 @@ MODEL="$MODELBCUT "$MODELACUT
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=05c6 ProdID=9025' '{print $2}' | cut -c-1290)
@@ -242,5 +210,4 @@ then
     PROTO="ecm"
 fi
 
-# Антенные порты и соседние сектора - общий блок семейства (см. _qualcomm_sdx55_extras).
 . "$RES/modem/usb/_qualcomm_sdx55_extras"

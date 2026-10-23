@@ -1,21 +1,13 @@
 _DEVICE=""
-# Запись XACT применяется вживую, но РВЁТ PDP-сессию молча (проверено на живом
-# L850 31.07.2026: после цикла режимов/бендов IP остался, трафик умер). reconnect
-# заставляет bands.sh передозвониться после каждой записи.
 _BANDS_APPLY_LIVE="reconnect"
 
 getinfo() {
 	O=$(sms_tool -d $_DEVICE at "at+gmm")
-	# Только строка +GMM: без фильтра awk печатал $2 для эха, пустых строк и OK.
 	_NAME="Fibocom $(echo "$O" | awk -F, '/^\+GMM:/{gsub(/"/,""); gsub(/^ +| +$/,"",$2); print $2; exit}')"
 	echo "$_NAME"
 }
 
 getsupportedbands() {
-	# Список у модема: AT+XACT=? -> +XACT: (0-6),(0-2),0,1,2,4,5,8,101,102,...,166 -
-	# коды >100 это LTE-диапазоны (минус 100). Набор зависит от cust-файла прошивки
-	# (форум: в одних дампах есть 134/143/148/171, в других нет; B46 появляется
-	# вопреки документации) - статические списки ниже остаются откатом.
 	_XS=$(sms_tool -d $_DEVICE at "at+xact=?" 2>/dev/null | tr -d '\r' \
 		| awk -F: '/^\+XACT:/{print $2}' | tr ',' '\n' | tr -cd '0-9\n' \
 		| awk '$1>100 && $1<300 {print $1-100}' | sort -n | uniq | xargs)
@@ -34,8 +26,6 @@ getsupportedbands() {
 }
 
 getbands() {
-# +XACT: 4,2,1,1,2,4,5,8,101,102,103,104,105,107,108,112,113,114,117,118,119,120,125,126,128,129,130,132,138,139,140,141,142,146,166
-
 	O=$(sms_tool -d $_DEVICE at "at+xact?")
 	BANDS=$(echo "$O" | awk -F: '/^\+XACT:/{gsub(","," ");print $2}' | tr -d '\r')
 	for BAND in $BANDS; do
@@ -47,10 +37,6 @@ getbands() {
 	echo ""
 }
 
-# --- Режимы сети и 3G-диапазоны (AT+XACT) ------------------------------------
-# Формат XACT: rat,pref1,pref2,<бенды...>; rat: 1=3G, 2=4G, 4=3G+4G (2G-радио у
-# L850/L860 нет); бенды: 3G - номер как есть (1,2,4,5,8), LTE - 100+N.
-# Живой эталон (L850, 31.07.2026): +XACT: 4,2,1,1,2,4,5,8,101,...,166
 getsupportedmodes() {
 	echo "4:Auto 2:4G 1:3G"
 }
@@ -63,7 +49,6 @@ getmode() {
 setmode() {
 	_ID="$1"
 	case "$_ID" in 1|2|4) : ;; *) echo "Unsupported"; return 1 ;; esac
-	# Хвост бендов сохраняем: XACT без списка сбрасывает выбор диапазонов.
 	O=$(sms_tool -d $_DEVICE at "at+xact?")
 	T=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="") s=s (s==""?"":",") $i} print s}')
 	_PREF=""
@@ -122,14 +107,12 @@ setbands() {
 	if [ -n "$T" ]; then
 		O=$(sms_tool -d $_DEVICE at "at+xact?")
 		MODE=$(echo "$O" | awk -F[:,] '/^\+XACT:/{print $2; exit}' | xargs)
-		# 3G-хвост сохраняем: запись только LTE-списка стирала бы 3G-диапазоны.
 		_G3=$(echo "$O" | awk -F: '/^\+XACT:/{print $2}' | awk -F, '{s="";for(i=4;i<=NF;i++){gsub(/ /,"",$i); if($i!="" && $i+0<100 && $i+0>0) s=s (s==""?"":",") $i} print s}')
 		[ "$T" = "0" ] || { [ -n "$_G3" ] && T="${_G3},${T}"; }
 		sms_tool -d $_DEVICE at "at+xact=$MODE,,,$T"
 	fi
 }
 
-# EARFCN (DL) -> номер LTE-бенда (для at@sic:freq_lock band=<n>)
 _ch2band() {
 	case "$1" in ''|*[!0-9]*) echo 0; return ;; esac
 	if   [ "$1" -le 599 ];  then echo 1
@@ -156,30 +139,13 @@ _ch2band() {
 	fi
 }
 
-# Привязка к соте (Intel XMM: at@sic:freq_lock). Read-формы у freq_lock нет, поэтому
-# текущую привязку из модема НЕ читаем - отдаём "off", а bands.sh покажет то, что мы
-# сами ставили ("remembered"). Так строка всё равно видна с кнопкой «Привязать».
-# ПРИВЯЗКУ СТАВИМ, НО НЕ ЧИТАЕМ. Команды чтения у прошивки нет, поэтому
-# getcelllock всегда отвечает «off». Флаг говорит bands.sh отдать наружу пометку
-# «unlockable»: страница покажет кнопку «Отвязать» даже когда состояние
-# неизвестно. Иначе снять привязку из интерфейса нечем - а она может оставить
-# модем без связи (живой случай 05.08.2026: снимали тремя AT-командами по SSH).
-# Снятие безопасно и когда привязки нет: заводские значения просто остаются заводскими.
 _CELLLOCK_WRITEONLY=1
 
 getcelllock() {
 	echo "off"
 }
 
-# setcelllock off | arfcn <earfcn> | cell <earfcn> <pci>
-# at@sic:freq_lock($sim=0,$rat=3,$band,$enable,$earfcn,$pci). Применяется ТОЛЬКО через
-# режим полёта, иначе привязка не встаёт - как у FM350. enable=0 снимает; частоту и
-# PCI пишем заводскими (4294967295, 65535): модем хранит их в NVM, нули там = PCI 0,
-# с которым модем уходит в 3G (4pda). Неизвестный диапазон отдаём как 255. Завершать цикл НАДО AT+CFUN=15 (тихий полный
-# ресет Intel), а не CFUN=1: после freq_lock CFUN=1 поднимает радио в недосброшенном
-# состоянии и модем уходит в вечный поиск сети - живой случай 17.08.2026 (L860-GL-16,
-# fw 18601): CFUN=1 - вечный поиск, CFUN=15 - заработал. CFUN=15 может переэнумерировать
-# USB - порты поднимет наш сторож.
+# CFUN=15 and PCI 65535 are deliberate: see docs/subsystems/bands-profiles.md#intel-xmm-l850l860-atxact
 setcelllock() {
 	case "$1" in
 		off)
@@ -189,10 +155,8 @@ setcelllock() {
 			;;
 		arfcn|cell)
 			_AR="$2"; _PC="$3"; [ -n "$_AR" ] || return
-			# PCI=65535 - «любая сота на этой частоте» (агрегация сохраняется);
-			# PCI=0 модем понимает буквально и уходит из LTE в 3G (форум,
-			# ревью 12.09.2026). Раньше «привязать к частоте» слала именно 0.
-			case "$_PC" in ''|*[!0-9]*|0) _PC=65535 ;; esac
+			case "$_PC" in ''|*[!0-9]*) _PC=65535 ;; esac
+			[ "$1" = arfcn ] && _PC=65535
 			_B=$(_ch2band "$_AR"); case "$_B" in ""|0) _B=255 ;; esac
 			sms_tool -d $_DEVICE at "AT+CFUN=4" >/dev/null 2>&1; sleep 2
 			sms_tool -d $_DEVICE at "at@sic:freq_lock(0,3,$_B,1,$_AR,$_PC)" >/dev/null 2>&1; sleep 1

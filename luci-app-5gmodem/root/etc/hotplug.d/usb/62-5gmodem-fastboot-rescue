@@ -1,25 +1,5 @@
 #!/bin/sh
 [ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
-# Модем застрял в ЗАГРУЗЧИКЕ fastboot - вывести его в нормальный режим.
-#
-# ЗАЧЕМ. Часть модулей оказывается в fastboot не по воле пользователя: на
-# плате Huasifei WH3000 Pro (слот M.2) пин 67 прижат к земле, и DW5821e уходит
-# в загрузчик ПРИ КАЖДОЙ ЗАГРУЗКЕ роутера - без автокоманды модем не работает
-# вообще (живой отчёт 23.08.2026, 413c:81d6). Принцип «прошивочные режимы - не
-# наша зона» не нарушается: мы никого В загрузчик не переводим, только выводим
-# ИЗ него командой fastboot reboot - это штатный выход без записи чего-либо.
-#
-# EDL (05c6:9008) НЕ трогаем: это аварийный режим Qualcomm, fastboot-протокол
-# там не действует, а устройство в EDL часто держат намеренно для прошивки.
-#
-# Предохранители:
-#   - только композиция fastboot: единственный интерфейс ff/42/03 без драйвера
-#     (или известные vid:pid загрузчиков рядом с рабочими модемами);
-#   - не лезем, если на роутере уже работает чей-то fastboot/edl-процесс
-#     (человек прошивает модуль - вырвать устройство из-под него нельзя);
-#   - не чаще раза в 60 c и не больше 3 попыток на адрес за загрузку: если
-#     модуль возвращается в загрузчик мгновенно, бесконечный цикл не нужен;
-#   - выключатель: uci set 5gmodem.@5gmodem[0].fastboot_rescue='0'.
 
 [ "$ACTION" = "add" ] || exit 0
 [ "$DEVTYPE" = "usb_device" ] || exit 0
@@ -36,10 +16,6 @@ _id="$(cat "$_d/idVendor" 2>/dev/null):$(cat "$_d/idProduct" 2>/dev/null)"
 
 _is_fb=0
 case "$_id" in
-	# 413c:81e6 отсюда УБРАН: это рабочая MBIM-композиция DW5829e (81e4 - его
-	# eSIM-вариант; патч ядра от Foxconn, форум), а не загрузчик - исправному
-	# модему на каждый хотплаг уходил «fastboot reboot». Загрузчик 5829e ловится
-	# общим признаком ff/42/03 без драйвера ниже (ревью 12.09.2026).
 	413c:81e1|413c:81d6|1199:9070) _is_fb=1 ;;
 	*)
 		if [ "$(cat "$_d/bNumInterfaces" 2>/dev/null | tr -d ' ')" = "1" ]; then
@@ -55,7 +31,6 @@ case "$_id" in
 esac
 [ "$_is_fb" = "1" ] || exit 0
 
-# кто-то уже работает с загрузчиком - не вмешиваемся
 if ps w 2>/dev/null | grep -v grep | grep -qE '[f]astboot (flash|boot|erase|oem|update)|[e]dl(\.py)? '; then
 	logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but a flashing process is running - leaving it alone"
 	exit 0
@@ -72,12 +47,8 @@ case "$_cnt" in ''|*[!0-9]*) _cnt=0 ;; esac
 [ "$_cnt" -lt 3 ] || exit 0
 printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 
-# фоном: hotplug-обработчики обязаны отвечать быстро, а устройству нужно
-# несколько секунд, чтобы доподнять fastboot-стек
 (
 	sleep 3
-	# ПУТЬ 1 - бинарь fastboot, если пользователь его принёс (читает ответ
-	# устройства, надёжнее). Пакета в штатных фидах OpenWrt нет.
 	if command -v fastboot >/dev/null 2>&1; then
 		_ser=$(cat "$_d/serial" 2>/dev/null)
 		if [ -n "$_ser" ] && fastboot devices 2>/dev/null | grep -q "^$_ser"; then
@@ -91,15 +62,6 @@ printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 			exit 0
 		fi
 	fi
-	# ПУТЬ 2 - БЕЗ БИНАРЯ. Команда fastboot-протокола - это голая ASCII-строка
-	# одним bulk-transfer в OUT-endpoint (спецификация протокола: U-Boot
-	# doc/android/fastboot-protocol, Android fastboot/README). Такой transfer
-	# умеет usb-serial: биндим generic на единственный ff-интерфейс загрузчика
-	# (штатный new_id, как в usbports.sh), пишем «reboot» в появившийся tty -
-	# это и есть один bulk OUT. Ответ OKAY не читаем: устройство перезагружается.
-	# Динамический new_id живёт до перезагрузки роутера - безопасно: pid
-	# ЗАГРУЗЧИКА всегда отличается от pid рабочей композиции, рабочему модему
-	# этот бинд не достанется.
 	[ -d /sys/bus/usb-serial/drivers/generic ] || {
 		logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but neither the fastboot binary nor usb-serial-generic is available - cannot rescue"
 		exit 0

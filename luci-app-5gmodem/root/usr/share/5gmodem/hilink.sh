@@ -1,63 +1,22 @@
 #!/bin/sh
-#
-# Модемы без AT-портов, управляемые своим веб-интерфейсом (HiLink).
-#
-# ЗАЧЕМ ОТДЕЛЬНЫЙ БЭКЕНД. Huawei E3372h и родственные ему (ZTE, Alcatel и часть
-# D-Link) держат IP-стек сами и отдают роутеру обычную сетевую карту. У них НЕТ
-# ни AT-порта, ни cdc-wdm: sms_tool к ним неприменим в принципе, и весь наш
-# основной путь опроса для них не существует. Зато у них есть HTTP-API, где
-# лежит ровно то же самое - сигнал, оператор, режим сети, трафик, SMS.
-#
-# Этот скрипт - второй источник метрик рядом с AT. Отдаёт JSON В ТОМ ЖЕ ФОРМАТЕ,
-# что и 5gmodem.sh, чтобы страницы не знали, с каким классом модема имеют дело.
-#
-# --- ОБ АВТОРИЗАЦИИ ----------------------------------------------------------
-# Каждый запрос требует пары «сессия + токен» из /api/webserver/SesTokInfo.
-# Токен ОДНОРАЗОВЫЙ у операций записи и живёт недолго у чтения, поэтому кэшируем
-# на несколько секунд и перезапрашиваем при первой же ошибке, а не по таймеру:
-# так один лишний запрос вместо гадания о сроке жизни.
-#
-# --- ОБ АДРЕСЕ МОДЕМА --------------------------------------------------------
-# Модем - это шлюз по умолчанию на СВОЁЙ сетевой карте. Берём адрес оттуда, а не
-# из захардкоженного 192.168.8.1: у разных прошивок он разный (на проверенном
-# E3372h - 192.168.43.1), да и пользователь мог его сменить.
-
 RES=/usr/share/5gmodem
 CFG=5gmodem
 CACHE_DIR=/tmp/5gmodem
 UA="5gmodem"
-. "$RES/lib.sh"   # opname_brand - бренд MVNO по IMSI
+. "$RES/lib.sh"
 
-# --- адрес модема ------------------------------------------------------------
-
-# ПУТЬ, С КОТОРЫМ РАБОТАЕМ. Пустой аргумент = активный модем, но читать его
-# ЗАНОВО в каждой мелкой функции нельзя: опрос web-API длится десятки секунд (5
-# запросов по 6 c плюс сессия), а активный модем за это время меняется - его
-# переключает и пользователь, и сторож интернета. Живой отчёт 03.09.2026: опрос
-# стартовал на HiLink-стике, к моменту записи активным стал Foxconn T99W175 -
-# и модель с IMEI Huawei E3276 уехали в ЕГО секцию (в списке появился «второй
-# E3276»). Кто зовёт - тот и фиксирует путь один раз, вызовом этой функции.
 _hl_path() { [ -n "$1" ] && echo "$1" || uci -q get "$CFG.@5gmodem[0].active_modem"; }
 
-# Сетевая карта модема по usb-пути (или у активного, если путь не задан).
 _netdev_for() {
 	_p=$(_hl_path "$1")
 	[ -n "$_p" ] || return 1
 	_s="m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g')"
 	_d=$(uci -q get "$CFG.$_s.netdev")
 	[ -n "$_d" ] && { echo "$_d"; return 0; }
-	# в конфиге ещё нет - спросим у перечислителя
 	"$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_p\"].net[0]" 2>/dev/null
 }
 
-# НАШ адрес в подсети модема. Нужен, чтобы явно привязывать запросы к нему.
-#
-# ЗАЧЕМ. На карте модема может быть НЕСКОЛЬКО адресов: часть прошивок отдаёт
-# роутеру ещё и настоящий WAN-адрес (наблюдалось: eth3 = 100.81.31.131 и
-# 192.168.43.2 одновременно). Тогда ядро выбирает источником первый попавшийся,
-# модем видит чужую сеть и не отвечает - API молча замолкает. Поэтому источник
-# задаём сами, из той же подсети, где живёт модем.
-_srcip_for() {   # $1 - usb-путь, $2 - адрес модема
+_srcip_for() {
 	_dev=$(_netdev_for "$1") || return 1
 	_net="${2%.*}."
 	ip -4 addr show dev "$_dev" 2>/dev/null \
@@ -65,16 +24,12 @@ _srcip_for() {   # $1 - usb-путь, $2 - адрес модема
 		| grep "^$_net" | head -1
 }
 
-# Адрес модема = шлюз на его сетевой карте.
 _addr_for() {
 	_dev=$(_netdev_for "$1") || return 1
 	[ -n "$_dev" ] || return 1
 	_gw=$(ip route show dev "$_dev" 2>/dev/null \
 		| sed -n 's/^default via \([0-9.]*\).*/\1/p' | head -1)
 	if [ -z "$_gw" ]; then
-		# Интерфейс мог быть поднят без маршрута по умолчанию (метрика, политика
-		# маршрутизации). Тогда берём сеть карты и предполагаем .1 - так устроены
-		# все виденные прошивки.
 		_ip=$(ip -4 addr show dev "$_dev" 2>/dev/null \
 			| sed -n 's|.*inet \([0-9.]*\)/.*|\1|p' | head -1)
 		[ -n "$_ip" ] && _gw="${_ip%.*}.1"
@@ -83,12 +38,9 @@ _addr_for() {
 	echo "$_gw"
 }
 
-# --- сессия ------------------------------------------------------------------
-
 _sess_file() { echo "$CACHE_DIR/hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"; }
 
-# Обновить пару сессия/токен. Печатает "SID<TAB>TOK".
-_sess_new() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-путь
+_sess_new() {
 	_a="$1"; _d="$2"
 	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
 	_r=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
@@ -100,10 +52,8 @@ _sess_new() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-пу
 	printf '%s\t%s\n' "$_sid" "$_tok"
 }
 
-_sess_get() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-путь
+_sess_get() {
 	_f=$(_sess_file "$1")
-	# 10 секунд - компромисс: токен живёт дольше, но при записи он одноразовый,
-	# и слишком долгий кэш означал бы гарантированный промах на каждой команде.
 	if [ -s "$_f" ] && [ -z "$(find "$_f" -mmin +1 2>/dev/null)" ]; then
 		cat "$_f"
 		return 0
@@ -111,8 +61,7 @@ _sess_get() {   # $1 - адрес, $2 - сетевая карта, $3 - usb-пу
 	_sess_new "$1" "$2" "$3"
 }
 
-# GET к API. При ошибке сессии (125002/125003) обновляет её и повторяет ОДИН раз.
-api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема (необяз.)
+api_get() {
 	_ep="$1"
 	_a=$(_addr_for "$2") || return 1
 	_d=$(_netdev_for "$2") || return 1
@@ -122,10 +71,6 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	_out=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
 		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
 		"http://$_a$_ep" 2>/dev/null)
-	# Повторяем не только на кодах сессии, но и на ПУСТОМ ответе: часть прошивок на
-	# протухшую сессию отдаёт не 125003, а пустоту (или curl оборвался). Раньше
-	# пустой ответ уходил наверх как есть -> все поля бланк -> 5gmodem.sh кэшировал
-	# бланк поверх хорошего снимка. Обновляем сессию и пробуем ещё раз.
 	case "$_out" in
 		''|*'<code>125002</code>'*|*'<code>125003</code>'*|*'<code>125001</code>'*)
 			_s=$(_sess_new "$_a" "$_d" "$2") || return 1
@@ -138,8 +83,7 @@ api_get() {   # $1 - путь вида /api/..., $2 - usb-путь модема 
 	printf '%s' "$_out"
 }
 
-# POST к API (операции записи). Токен одноразовый - всегда берём свежий.
-api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
+api_post() {
 	_ep="$1"; _body="$2"
 	_a=$(_addr_for "$3") || return 1
 	_d=$(_netdev_for "$3") || return 1
@@ -153,50 +97,21 @@ api_post() {   # $1 - путь, $2 - тело XML, $3 - usb-путь
 		"http://$_a$_ep" 2>/dev/null
 }
 
-# Значение одного тега из ответа.
-#
-# ФОРМАТИРОВАНИЕ ОТВЕТА У РАЗНЫХ ЭНДПОИНТОВ РАЗНОЕ. monitoring/status приходит
-# «тег на строку», а dialup/connection - ВСЕ ТЕГИ В ОДНУ СТРОКУ. Прежняя версия
-# требовала тег на отдельной строке и на однострочном XML молча возвращала
-# пустоту: настройка роуминга читалась как «выключено» при включённой в модеме.
-# Поэтому сначала САМИ расставляем переводы строк перед каждым тегом, и разбор
-# перестаёт зависеть от того, как прошивка отформатировала ответ.
-#
-# tr -d '\r' ОБЯЗАТЕЛЕН: прошивка отдаёт CRLF, и без него якорь $ не совпадал.
 xval() {
-	# Разбиваем по тегам ЛИТЕРАЛЬНЫМ переводом строки: в busybox sed
-	# последовательность \n в ПРАВОЙ части не разворачивается в перевод строки
-	# (проверено - разбор молча ломался, все поля выходили пустыми).
 	tr -d '\r' | sed 's|<|\
 <|g' | sed -n "s|^<$1>\(.*\)\$|\1|p" | head -1
 }
 
-# Значение, безопасное для вставки в JSON: убираем управляющие символы и
-# экранируем кавычки со слэшем. Один сбойный байт ломает разбор ВСЕГО ответа на
-# странице, а выглядит это как «данных нет» - искать потом долго.
 jsafe() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
-# Значение, безопасное для вставки в XML запроса. Экранирование в файле было
-# только на ЧТЕНИЕ ответов; текст пользователя со знаком «&» или «<» делал
-# документ невалидным, и прошивка отвечала кодом ошибки вместо OK - выглядело
-# как «SMS не отправляется», причём стабильно (аудит 12.09.2026).
 _xesc() { printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'; }
 
-# ДАННЫЕ В РОУМИНГЕ у HiLink-модема.
-#
-# Настройка живёт в /api/dialup/connection, поле RoamAutoConnectEnable - это
-# ровно тот тумблер, что есть в веб-админке модема. Отдельного «состояния» тут
-# нет: прошивка сама решает, дозваниваться ли, зарегистрировавшись в роуминге.
-#
-# ВАЖНО про запись: прошивка принимает ТОЛЬКО ПОЛНЫЙ набор полей. Пошлёшь одно
-# RoamAutoConnectEnable - остальные обнулятся (MTU станет 0, автодозвон
-# выключится). Поэтому сперва читаем текущие, потом переписываем одно поле.
-hl_getroaming() {   # $1 - usb-путь
+hl_getroaming() {
 	_gr=$(api_get /api/dialup/connection "$1" 2>/dev/null | xval RoamAutoConnectEnable)
 	case "$_gr" in 1) echo 1 ;; *) echo 0 ;; esac
 }
 
-hl_setroaming() {   # $1 - usb-путь, $2 - 0|1
+hl_setroaming() {
 	case "$2" in 0|1) : ;; *) echo '{"error":"value must be 0 or 1"}'; return 0 ;; esac
 	_sr_cur=$(api_get /api/dialup/connection "$1" 2>/dev/null)
 	_sr_idle=$(printf '%s' "$_sr_cur" | xval MaxIdelTime);   [ -n "$_sr_idle" ] || _sr_idle=0
@@ -213,10 +128,6 @@ hl_setroaming() {   # $1 - usb-путь, $2 - 0|1
 	esac
 }
 
-# --- расшифровка кодов -------------------------------------------------------
-
-# CurrentNetworkType. Коды взяты из ответов прошивки и общеизвестного списка
-# Huawei; неизвестные отдаём числом, а не выдумываем название.
 nettype_name() {
 	case "$1" in
 		0)  echo "-" ;;
@@ -239,8 +150,6 @@ nettype_name() {
 	esac
 }
 
-# Байты в человекочитаемый вид - теми же единицами, что показывает ifconfig
-# (MiB/GiB), чтобы у двух классов модемов трафик выглядел одинаково.
 _human() {
 	_b="$1"
 	case "$_b" in ''|*[!0-9]*) echo "-"; return ;; esac
@@ -255,27 +164,8 @@ _human() {
 	fi
 }
 
-# ConnectionStatus -> есть ли соединение. 901 = подключено.
 conn_up() { [ "$1" = "901" ]; }
 
-# --- ZTE (MF79 и родня): goform-API ------------------------------------------
-#
-# У ZTE-стиков не Huawei-XML, а /goform/goform_get_cmd_process с JSON-ответом.
-# Два обязательных заголовка: Referer на index.html и X-Requested-With - без
-# них прошивка отвечает {"result":"failure"} (проверено сообществом на MF79U).
-# Чтение метрик доступно без логина; операции записи (подключение, ребут) на
-# части прошивок требуют сессии - шлём best-effort, отказ безвреден.
-# ВХОД В ВЕБ-ИНТЕРФЕЙС МОДЕМА - БЕЗ НЕГО ПОЛОВИНА ПОЛЕЙ ПУСТА.
-#
-# Живой разбор (MF79N, прошивка BD_XBKZMF79N, 24.08.2026): без сессии goform
-# честно отвечает, но заполняет ЛИШЬ общедоступное - состояние модема, тип
-# сети, оператора и шкалу сигнала. Уровни (rsrp/rsrq/snr), сота, IMSI, ICCID,
-# WAN-адрес приходят ПУСТЫМИ строками, а не отсутствуют - поэтому и выглядело
-# как «метрики не работают». После входа те же ключи наполняются.
-#
-# Пароль берём из настроек модема (uci ...web_pass), по умолчанию admin - он
-# стоит на большинстве свистков. Сессию (cookie stok) кэшируем на 5 минут:
-# логин на каждый опрос - лишний запрос в модем каждые несколько секунд.
 _web_pass() {
 	uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
 		| sed 's/[^A-Za-z0-9]/_/g').web_pass"
@@ -287,13 +177,13 @@ _zte_pass() {
 	printf 'admin'
 }
 
-_zte_b64() {   # base64 без внешних зависимостей, если их нет
+_zte_b64() {
 	if command -v base64 >/dev/null 2>&1; then printf '%s' "$1" | base64 | tr -d '\n'; return; fi
 	if command -v openssl >/dev/null 2>&1; then printf '%s' "$1" | openssl base64 | tr -d '\n'; return; fi
 	printf '%s' "$1"
 }
 
-_zte_login() {   # $1 - адрес; печатает stok
+_zte_login() {
 	_zl_f="$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"
 	if [ -s "$_zl_f" ] && [ -z "$(find "$_zl_f" -mmin +5 2>/dev/null)" ]; then
 		cat "$_zl_f"; return 0
@@ -342,7 +232,7 @@ _zte_paths() {
 _zte_getpath() { _zgp=$(_zte_paths "$1"); printf '%s' "${_zgp%% *}"; }
 _zte_setpath() { _zsp=$(_zte_paths "$1"); printf '%s' "${_zsp##* }"; }
 
-_zte_get() {   # $1 - адрес, $2 - список cmd через запятую
+_zte_get() {
 	_zg_src=$(_srcip_for "" "$1")
 	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
@@ -352,7 +242,7 @@ _zte_get() {   # $1 - адрес, $2 - список cmd через запяту�
 		"http://$1/$(_zte_getpath "$1")?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
 }
 
-_zte_set() {   # $1 - адрес, $2 - тело goformId=...
+_zte_set() {
 	_zs_src=$(_srcip_for "" "$1")
 	curl -s --max-time 8 ${_zs_src:+--interface "$_zs_src"} -A "$UA" \
 		${3:+-b "$3" -c "$3"} \
@@ -365,7 +255,6 @@ _zte_set() {   # $1 - адрес, $2 - тело goformId=...
 
 _zj() { printf '%s' "$1" | jsonfilter -e "@.$2" 2>/dev/null; }
 
-# vid:pid модема по usb-пути (или активного) - для развилки Huawei/ZTE
 _vidpid_for() {
 	_vf_p="$1"
 	[ -n "$_vf_p" ] || _vf_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
@@ -563,17 +452,13 @@ tenda_metrics_json() {
 }
 
 zte_metrics_json() {
-	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
+	_HLP=$(_hl_path "$1")
 	_a=$(_addr_for "$_HLP") || return 1
 	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes"
 	_r=$(_zte_get "$_a" "$_zm_cmd")
-	# Пустой или отказный ответ - НЕ печатаем бланк (правило то же, что у
-	# Huawei-ветки: вызывающий отдаст прошлый снимок).
 	case "$_r" in
 		*'"modem_main_state"'*|*'"ppp_status"'*) ;;
-		*)  # НЕ МОЛЧА. Раньше отказ API выглядел как «метрик просто нет», и
-		    # разобраться по отчёту было нельзя: ни строки в журнале, ни следа.
-		    # Пишем ОДИН раз на загрузку (маркер в /tmp), чтобы не залить лог.
+		*)
 		    _zm_m="/tmp/5gmodem/zteapi_$(echo "$_a" | tr -c 'A-Za-z0-9' '_')"
 		    if [ ! -f "$_zm_m" ]; then
 			: > "$_zm_m"
@@ -581,8 +466,6 @@ zte_metrics_json() {
 		    fi
 		    return 1 ;;
 	esac
-	# Пустые уровни при живом соединении = мы не авторизованы (см. _zte_login).
-	# Логинимся и переспрашиваем ОДИН раз; не вышло - работаем с тем, что есть.
 	case "$(_zj "$_r" lte_rsrp)$(_zj "$_r" rssi)" in
 		'') if _zte_login "$_a" >/dev/null 2>&1; then
 			_r2=$(_zte_get "$_a" "$_zm_cmd")
@@ -601,8 +484,6 @@ zte_metrics_json() {
 	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
 	_rssi=$(_zj "$_r" lte_rssi | grep -oE -- '-?[0-9]+' | head -1)
 	[ -n "$_rssi" ] && [ "$_rssi" = "$_rsrp" ] && _rssi=""
-	# Палочки прошивки - грубая шкала (шаг 20 %) и своя у каждого вендора.
-	# Есть метрики технологии - считаем по ним, как на обычном пути опроса.
 	_sp=$(sig_percent "$_ntype" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
 	[ -n "$_sp" ] && _pct="$_sp"
 	[ -n "$_rssi" ] || _rssi=$(_zj "$_r" rssi | grep -oE -- '-?[0-9]+' | head -1)
@@ -624,12 +505,6 @@ zte_metrics_json() {
 	_iccid=$(_zj "$_r" iccid)
 	_fw=$(_zj "$_r" wa_inner_version)
 	_phone=$(_zj "$_r" msisdn)
-	# МОДЕЛЬ ИЗ СТРОКИ ПРОШИВКИ. У вендорских сборок она не начинается с «MF»:
-	# живой пример - «BD_XBKZMF79NV1.0.0B02», где модель зашита в середину.
-	# Вытаскиваем подстроку MF<цифры><буквы> откуда угодно, иначе останется
-	# просто «ZTE».
-	# Хвост «V1.0.0B02» приклеен вплотную, поэтому режем по «V» перед цифрой:
-	# из BD_XBKZMF79NV1.0.0B02 нужен MF79N, а не MF79NV.
 	_mfm=$(printf '%s' "$_fw" | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
 	[ -n "$_mfm" ] || _mfm=$(_zj "$_r" hardware_version | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
 	[ -n "$_mfm" ] && _model="${_model:+$_model }$_mfm"
@@ -892,12 +767,8 @@ netgear_metrics_json() {
 	printf '}\n'
 }
 
-# --- метрики В НАШЕМ ФОРМАТЕ -------------------------------------------------
-#
-# Ключи те же, что у 5gmodem.sh: страницы не должны знать, кем добыты данные.
 metrics_json() {
-	_HLP=$(_hl_path "$1")   # ФИКСИРУЕМ путь один раз - см. _hl_path
-	# ZTE-стики (MF79 и родня) говорят по goform, а не по Huawei-XML
+	_HLP=$(_hl_path "$1")
 	case "$(_api_vid "$_HLP")" in
 		19d2:0565) yota_metrics_json "$_HLP" || zte_metrics_json "$_HLP"; return $? ;;
 		19d2:*)
@@ -908,12 +779,6 @@ metrics_json() {
 		0846:68e1) netgear_metrics_json "$_HLP"; return $? ;;
 	esac
 	_inf=$(api_get /api/device/information "$_HLP")
-	# Первый запрос - индикатор живости API/сессии (api_get внутри уже обновил
-	# сессию и повторил на пустой ответ). Если ВСЁ РАВНО пусто - модем недоступен:
-	# НЕ печатаем бланк-JSON (иначе 5gmodem.sh закэшировал бы его поверх хорошего
-	# снимка и страница показала бы прочерки) и не тратим время на остальные 4
-	# запроса по 6-12 c каждый. Возврат без вывода -> вызывающий отдаст прошлый
-	# снимок, как при любом другом сбое json.
 	[ -n "$_inf" ] || return 1
 	_st=$(api_get /api/monitoring/status "$_HLP")
 	_sig=$(api_get /api/device/signal "$_HLP")
@@ -921,8 +786,6 @@ metrics_json() {
 	_plmn=$(api_get /api/net/current-plmn "$_HLP")
 
 	_model=$(printf '%s' "$_inf" | xval DeviceName)
-	# API отдаёт только модель ("E3372") без производителя. Дописываем его по
-	# VID устройства - в заголовке "Huawei E3372" читается однозначно.
 	_vid=$(uci -q get "$CFG.m_$(echo "${_HLP:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
 		| sed 's/[^A-Za-z0-9]/_/g').vidpid" | cut -d: -f1)
 	case "$_vid" in
@@ -936,38 +799,20 @@ metrics_json() {
 		"$_vend"*|"") ;;
 		*) [ -n "$_vend" ] && _model="$_vend $_model" ;;
 	esac
-	# Пометку класса в САМО ИМЯ не добавляем: имя расходится по вкладкам, кнопкам
-	# и карточкам профилей, где она была бы шумом. Класс отдаём отдельным полем
-	# (backend), а показываем его только там, где он к месту.
 	_imei=$(printf '%s' "$_inf" | xval Imei)
 	_imsi=$(printf '%s' "$_inf" | xval Imsi)
 	_iccid=$(printf '%s' "$_inf" | xval Iccid)
 	_fw=$(printf '%s' "$_inf" | xval SoftwareVersion)
-	# Номер SIM у этого API ЕСТЬ - поле Msisdn. Основной путь берёт его из
-	# AT+CNUM и кладёт в "phone"; кладём туда же, чтобы страница не различала.
 	_phone=$(printf '%s' "$_inf" | xval Msisdn)
 
 	_cs=$(printf '%s' "$_st" | xval ConnectionStatus)
-	# «Палочки» лежат то в SignalStrength, то в SignalIcon - зависит от прошивки.
-	# На проверенном E3372h (22.300.09) первое ПУСТОЕ, а второе заполнено, из-за
-	# чего процент сигнала не считался вовсе. Берём то, что есть.
 	_sigbars=$(printf '%s' "$_st" | xval SignalStrength)
 	[ -n "$_sigbars" ] || _sigbars=$(printf '%s' "$_st" | xval SignalIcon)
 	_maxbars=$(printf '%s' "$_st" | xval maxsignal)
 	_ntype=$(printf '%s' "$_st" | xval CurrentNetworkType)
 	_wanip=$(printf '%s' "$_st" | xval WanIPAddress)
 	_sim=$(printf '%s' "$_st" | xval SimStatus)
-	# РОУМИНГ: СОСТОЯНИЕ, А НЕ НАСТРОЙКА.
-	#
-	# Здесь читался RoamingStatus - и это оказалось поле НЕ ПРО ТО. У Huawei в
-	# monitoring/status RoamingStatus - это НАСТРОЙКА «разрешён ли роуминг» (тот
-	# самый тумблер из веб-админки), а фактическое состояние лежит в cellroam.
-	# Живьём на стенде: RoamingStatus=1 (роуминг разрешён), cellroam=0 (модем
-	# дома, Tele2 на симке Tele2) - и страница рисовала значок роуминга при
-	# домашней сети.
 	_roam=$(printf '%s' "$_st" | xval cellroam)
-	# Настройку отдаём отдельным полем - на ней строится тумблер «данные в
-	# роуминге» для этого класса модемов.
 	_roamset=$(printf '%s' "$_st" | xval RoamingStatus)
 
 	_rsrp=$(printf '%s' "$_sig" | xval rsrp | tr -cd '0-9-')
@@ -975,15 +820,10 @@ metrics_json() {
 	_sinr=$(printf '%s' "$_sig" | xval sinr | tr -cd '0-9.-')
 	_rssi=$(printf '%s' "$_sig" | xval rssi | tr -cd '0-9-')
 	_pci=$(printf '%s' "$_sig" | xval pci)
-	# cell_id у этого API - ДЕСЯТИЧНЫЙ. Проверено арифметикой: 93540375 < 2^28,
-	# то есть укладывается в 28-битный LTE Cell Identity, а как шестнадцатеричное
-	# то же число дало бы 2471756661 - вдвое больше допустимого. Раньше я клал
-	# его в cid_hex, и страница, ожидающая пару dec+hex, показывала прочерк.
 	_cid=$(printf '%s' "$_sig" | xval cell_id | tr -cd '0-9')
 	_cid_hex=""; _enb=""; _sect=""
 	if [ -n "$_cid" ]; then
 		_cid_hex=$(printf '%X' "$_cid" 2>/dev/null)
-		# Разложение LTE ECI: старшие 20 бит - базовая станция, младшие 8 - сектор.
 		_enb=$(( _cid >> 8 ))
 		_sect=$(( _cid & 255 ))
 	fi
@@ -1009,30 +849,13 @@ metrics_json() {
 	_mcc=""; _mnc=""
 	_num=$(printf '%s' "$_plmn" | xval Numeric | tr -cd '0-9')
 	if [ ${#_num} -ge 5 ]; then _mcc=${_num%${_num#???}}; _mnc=${_num#???}; fi
-	# ИМЯ ИЗ НАШЕЙ БАЗЫ, если код сети известен. Прошивки пишут его кто во что
-	# горазд ("MegaFon RUS", "MTS RUS"), и рядом с AT-путём, который берёт имя из
-	# mccmnc.dat, получался разнобой: в одном месте "Megafon", в другом
-	# "MegaFon RUS". База - единый источник написания.
 	if [ -n "$_num" ]; then
-		# tr -d '\r' ОБЯЗАТЕЛЕН: строки mccmnc.dat в формате CRLF, и возврат
-		# каретки попадал ПРЯМО В JSON ("Megafon\r"). jsonfilter такое глотает,
-		# а JSON.parse в браузере - нет: обе страницы молча оставались пустыми.
 		_dbop=$(awk -F';' -v k="$_num" '$1 == k { print $3 }' "$RES/mccmnc.dat" 2>/dev/null \
 			| head -1 | tr -d '\r' | sed 's/[[:space:]]*$//')
 		[ -n "$_dbop" ] && _op="$_dbop"
 	fi
-	# Выверенный бренд MVNO из apn.list по IMSI - последним словом. У HiLink нет
-	# доступа к SPN, а web-API отдаёт хост-оператора (Tele2); наш список знает,
-	# что за кодом 250-62 стоит T-Mobile. Пусто - оставляем имя из web-API/базы.
 	_obr=$(opname_brand "$_imsi") && _op="$_obr"
 
-	# Процент сигнала. У этих модемов есть готовые «палочки» (0..maxsignal) -
-	# берём их, а не пересчитываем из RSRP: прошивка знает свою антенну лучше.
-	# ТРИАДА ГЛАВНЕЕ RSSI И «ПАЛОЧЕК» - тот же порядок, что и на обычном пути
-	# опроса (sig_percent в lib.sh): RSSI меряет всю полосу вместе с помехой и
-	# на краю соты завышает уровень, а палочек всего пять и рисует их каждый
-	# вендор по-своему. Запасные пути остаются для LTE-модемов, которые кроме
-	# RSSI не отдают ничего: шкала 3GPP -113 дБм = 0 %, -51 дБм = 100 %.
 	_pct=$(sig_percent "$(nettype_name "$_ntype")" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
 	if [ -z "$_pct" ] && [ -n "$_rssi" ]; then
 		_pct=$(( ( _rssi + 113 ) * 100 / 62 ))
@@ -1043,21 +866,9 @@ metrics_json() {
 		_pct=$(( _sigbars * 100 / _maxbars ))
 	fi
 
-	# ЗАПОМИНАЕМ модель и IMEI в профиле. У обычных модемов это делает AT-опрос,
-	# а у HiLink их взять больше неоткуда: без этого в секции оставались данные
-	# ПРЕДЫДУЩЕГО модема на том же USB-пути (наблюдалось: у Huawei значились имя
-	# и IMEI от FM350). Пишем только при расхождении - uci не любит лишних правок,
-	# а метрики опрашиваются постоянно.
 	if [ -n "$_imei" ] || [ -n "$_model" ]; then
-		# Путь ЗАФИКСИРОВАН на входе (_hl_path) - активный модем здесь заново не
-		# читаем: между стартом опроса и этой строкой проходят десятки секунд.
 		_hsec="m_$(echo "$_HLP" | sed 's/[^A-Za-z0-9]/_/g')"
 		_ch=0
-		# ВТОРОЙ РУБЕЖ: секция должна быть HiLink-овой. Ответ web-API принадлежит
-		# модему, которым правит его собственная прошивка; если путь всё же указал
-		# на обычный модем (композиция без kind), имя и IMEI там заведомо чужие.
-		# Сами значения НЕ чистим - они ещё уходят в JSON карточки; запрещаем
-		# только запись в конфиг.
 		_hlwr=1
 		[ "$(uci -q get "$CFG.$_hsec.kind")" = "hilink" ] || {
 			logger -t 5gmodem "hilink: $_hsec is not a HiLink modem - not writing model/IMEI from the web API"
@@ -1065,14 +876,12 @@ metrics_json() {
 		}
 		[ "$_hlwr" = 1 ] && [ -n "$_model" ] && [ "$(uci -q get "$CFG.$_hsec.model")" != "$_model" ] && {
 			uci -q set "$CFG.$_hsec.model=$_model"
-			# Штамп железа - см. пояснение в modemswitch.sh (resolve).
 			uci -q set "$CFG.$_hsec.model_vp=$(uci -q get "$CFG.$_hsec.vidpid")"; _ch=1; }
 		[ "$_hlwr" = 1 ] && [ -n "$_imei" ] && [ "$(uci -q get "$CFG.$_hsec.imei")" != "$_imei" ] && {
 			uci -q set "$CFG.$_hsec.imei=$_imei"; _ch=1; }
 		[ "$_ch" = "1" ] && uci -q commit "$CFG"
 	fi
 
-	# Регистрация в терминах основного пути: 1 - дома, 5 - роуминг, 0 - нет.
 	_reg=0
 	if conn_up "$_cs"; then
 		[ "$_roam" = "1" ] && _reg=5 || _reg=1
@@ -1080,10 +889,6 @@ metrics_json() {
 
 	printf '{'
 	printf '"backend":"hilink",'
-	# Поля блока «Информация о модеме»: у обычного модема это AT-порт и протокол
-	# интерфейса. У HiLink «порт связи» - это адрес его веб-API, а протокол -
-	# сам факт того, что модемом правит его прошивка, а не мы. Без них в блоке
-	# стояли прочерки.
 	printf '"cport":"%s",' "$(_addr_for "$_HLP" 2>/dev/null)"
 	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
 	printf '"modem":"%s",' "$(jsafe "$_model")"
@@ -1105,11 +910,6 @@ metrics_json() {
 	printf '"cid_dec":"%s","cid_hex":"%s",' "$_cid" "$_cid_hex"
 	printf '"enbid":"%s","sector":"%s",' "$_enb" "$_sect"
 	printf '"ipaddr":"%s",' "$_wanip"
-	# ФОРМАТ КАК У ОСНОВНОГО ПУТИ, иначе страница показывает сырые числа.
-	# Он отдаёт conn_time строкой "0d, 00:02:59", conn_time_sec - секундами,
-	# а трафик - человекочитаемым "112.9 MiB" (берёт готовую строку у ifconfig).
-	# Наблюдалось: у HiLink стояли "3462" и "4254912" - время не читалось, а
-	# байты выглядели как случайное число.
 	_ct_str="-"
 	if [ -n "$_ctime" ] && [ "$_ctime" -ge 0 ] 2>/dev/null; then
 		_ct_str=$(printf "%dd, %02d:%02d:%02d" \
@@ -1118,8 +918,6 @@ metrics_json() {
 	fi
 	printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "${_ctime:-0}"
 	printf '"rx":"%s","tx":"%s",' "$(_human "$_down")" "$(_human "$_up")"
-	# CSQ у API нет, но он однозначно выводится из RSSI по таблице 3GPP 27.007:
-	# 0 = -113 dBm, шаг 2 dBm, 31 = -51 dBm. Это пересчёт, а не выдуманное число.
 	_csq=""
 	if [ -n "$_rssi" ]; then
 		_csq=$(( ( _rssi + 113 ) / 2 ))
@@ -1131,25 +929,11 @@ metrics_json() {
 	printf '}\n'
 }
 
-# --- SMS ---------------------------------------------------------------------
-#
-# У этих модемов SMS живут в самом модеме и достаются тем же API. Формат вывода
-# делаем как у sms_tool -j: страницы разбирают его одинаково независимо от того,
-# добыты сообщения по AT или по HTTP. Объект {"msg":[...]}, ключи те же.
-# reference/part/total у API нет - многочастные сообщения прошивка склеивает
-# сама, поэтому ставим 1/1: для страницы это одно цельное сообщение.
-# BoxType: 1 - входящие, 2 - исходящие.
-sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
+sms_list() {
 	case "$1" in out) _box=2 ;; *) _box=1 ;; esac
 	_r=$(api_post /api/sms/sms-list \
 		"<PageIndex>1</PageIndex><ReadCount>50</ReadCount><BoxType>$_box</BoxType>\
 <SortType>0</SortType><Ascending>0</Ascending><UnreadPreferred>0</UnreadPreferred>" "$2")
-	# Разбор. Две ловушки, обе поймались на живом модеме:
-	#   1. Запись выдавать надо по </Message>, а НЕ по <Smstat>: этот тег идёт
-	#      ПЕРВЫМ в блоке, и выдача по нему давала пустую первую запись и сдвиг
-	#      всех остальных на одну.
-	#   2. Текст бывает МНОГОСТРОЧНЫМ (перевод строки внутри SMS - обычное дело),
-	#      поэтому Content собираем до закрывающего тега, а не берём одной строкой.
 	printf '%s' "$_r" | tr -d '\r' | awk '
 		BEGIN { printf "{\"msg\":["; first = 1; inc = 0 }
 		function esc(v,   o, i, c) {
@@ -1193,11 +977,10 @@ sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
 		END { print "]}" }'
 }
 
-sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
+sms_send() {
 	_n="$1"; _t="$2"
 	[ -n "$_n" ] && [ -n "$_t" ] || { echo '{"error":"no number or text"}'; return 1; }
 	_d=$(date '+%Y-%m-%d %H:%M:%S')
-	# Длину считаем по ИСХОДНОМУ тексту: прошивке важен он, а не его запись в XML.
 	_r=$(api_post /api/sms/send-sms \
 		"<Index>-1</Index><Phones><Phone>$(_xesc "$_n")</Phone></Phones><Sca></Sca>\
 <Content>$(_xesc "$_t")</Content><Length>${#_t}</Length><Reserved>1</Reserved><Date>$_d</Date>" "$3")
@@ -1207,7 +990,7 @@ sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
 	esac
 }
 
-sms_delete() {   # $1 - индекс, $2 - usb-путь
+sms_delete() {
 	_r=$(api_post /api/sms/delete-sms "<Index>$1</Index>" "$2")
 	case "$_r" in
 		*'<response>OK</response>'*) echo '{"success":true}' ;;
@@ -1215,38 +998,11 @@ sms_delete() {   # $1 - индекс, $2 - usb-путь
 	esac
 }
 
-
-# --- SMS у ZTE (goform) ------------------------------------------------------
-#
-# У ZTE-стика Huawei-эндпоинтов /api/sms/* нет вовсе: сообщения лежат за тем же
-# goform, что и метрики. Отличий от Huawei три, и все три надо учесть.
-#
-#   1. ТЕКСТ И НОМЕР ПРИХОДЯТ HEX-ОМ UCS2 (UTF-16BE), а не готовой строкой:
-#      «Привет» - это 041F04400438043204350442. Декодируем сами (iconv на
-#      роутере нет) - подробности у _zte_sms_parse.
-#   2. ЯЩИК ЗАДАЁТСЯ НЕ ЗАПРОСОМ, А ПОЛЕМ tag: 0/1 - входящие (прочитанное и
-#      непрочитанное), 2/3 - исходящие (отправленное и не отправленное),
-#      4 - черновик. Просим весь список и раскладываем сами.
-#   3. ДАТА - «yy,mm,dd,hh,mm,ss,+tz» в местном времени модема.
-#
-# ПРОЧИТАННЫМИ НЕ ПОМЕЧАЕМ. У goform есть SET_MSG_READ, но ставить эту метку при
-# каждом показе страницы нельзя: наш же телеграм-мост шлёт уведомления только о
-# новых сообщениях, и опережающая отметка их гасит (то же правило, что и для
-# AT-ветки). Метку ставит только сам пользователь, читая сообщение.
-_zte_sms_fetch() {   # $1 - адрес, $2 - хранилище (1 - модем, 0 - SIM)
+_zte_sms_fetch() {
 	_zte_get "$1" "sms_data_total&page=0&data_per_page=100&mem_store=$2&tags=10&order_by=order%20by%20id%20desc"
 }
 
-# Разбор списка. Ответ приходит ОДНОЙ строкой, объекты внутри "messages" плоские
-# (вложенных скобок нет), поэтому режем по «},{» - это надёжнее и в разы дешевле,
-# чем звать jsonfilter по разу на каждое поле каждого сообщения.
-#
-# КИРИЛЛИЦУ ОТДАЁМ JSON-ЭКРАНИРОВАНИЕМ «\uXXXX», а не собранными байтами UTF-8.
-# Кодовая единица UCS2 - это ровно то, что стоит после \u, поэтому перекодировать
-# нечего: ни таблицы байтов, ни догадок о локали awk (у busybox она C и байты
-# сырые, у awk на рабочей станции - нет; на этом уже спотыкались). Суррогатная
-# пара эмодзи так и уезжает парой \u - JSON.parse и jsonfilter соберут её сами.
-_zte_sms_parse() {   # $1 - ящик (in|out)
+_zte_sms_parse() {
 	awk -v box="$1" '
 		BEGIN { printf "{\"msg\":["; first = 1 }
 		function hv(s,   i, d, v) {
@@ -1270,8 +1026,6 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 			gsub(/\t/, " ", v); gsub(/\n/, " ", v); gsub(/\r/, "", v)
 			return v
 		}
-		# hex UCS2 -> готовая к подстановке в JSON строка. Не похоже на UCS2 -
-		# отдаём как есть: часть прошивок пишет короткую латиницу открытым текстом.
 		function ucs2(h,   i, u, out) {
 			if (h == "" || length(h) % 4 != 0 || h ~ /[^0-9A-Fa-f]/) return jesc(h)
 			out = ""
@@ -1286,10 +1040,6 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 			}
 			return out
 		}
-		# НОМЕР ДЕКОДИРУЕМ ОСТОРОЖНЕЕ ТЕКСТА. «9000» - это и валидный hex, и живой
-		# короткий номер; спутать их нельзя. У любой ASCII-строки в UCS2 каждая
-		# кодовая единица начинается с «00», у десятичного номера - почти никогда,
-		# поэтому требуем именно этот признак.
 		function ucs2num(h) {
 			if (h ~ /^(00[0-9A-Fa-f][0-9A-Fa-f])+$/ && length(h) >= 8) return ucs2(h)
 			return jesc(h)
@@ -1300,7 +1050,6 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 			sub("^\"" k "\":\"", "", v); sub("\"$", "", v)
 			return v
 		}
-		# «26,09,07,12,30,00,+12» -> «2026-09-07 12:30:00»
 		function zdate(d,   p, n) {
 			n = split(d, p, ",")
 			if (n < 6) return d
@@ -1326,27 +1075,21 @@ _zte_sms_parse() {   # $1 - ящик (in|out)
 		END { print "]}" }'
 }
 
-zte_sms_list() {   # $1 - ящик (in|out), $2 - usb-путь
+zte_sms_list() {
 	_zs_p=$(_hl_path "$2")
 	_zs_a=$(_addr_for "$_zs_p") || { echo '{"msg":[]}'; return 1; }
 	_zs_r=$(_zte_sms_fetch "$_zs_a" 1)
-	# Без сессии прошивка отвечает отказом или пустотой - логинимся и повторяем
-	# (тот же приём, что и у метрик: гадать о сроке жизни сессии дороже).
 	case "$_zs_r" in
 		*'"messages"'*) ;;
 		*) _zte_login "$_zs_a" >/dev/null 2>&1 && _zs_r=$(_zte_sms_fetch "$_zs_a" 1) ;;
 	esac
-	# ПУСТО В ПАМЯТИ МОДЕМА - СМОТРИМ НА SIM. Прошивки расходятся в том, какое
-	# хранилище считать основным, а пустой ящик выглядит одинаково.
 	case "$_zs_r" in
 		*'"messages":[]'*|*'"messages": []'*|'') _zs_r=$(_zte_sms_fetch "$_zs_a" 0) ;;
 	esac
 	printf '%s' "$_zs_r" | tr -d '\r\n' | _zte_sms_parse "${1:-in}"
 }
 
-# Ёмкость ящика. Отдаём В ФОРМАТЕ HUAWEI: разбор в smsbridge.sh один на оба
-# семейства, и плодить там развилку ради двух чисел незачем.
-zte_sms_count() {   # $1 - usb-путь
+zte_sms_count() {
 	_zc_a=$(_addr_for "$(_hl_path "$1")") || return 1
 	_zc_r=$(_zte_get "$_zc_a" "sms_capacity_info")
 	_zc_u=$(_zj "$_zc_r" sms_nv_rev_total)
@@ -1355,7 +1098,6 @@ zte_sms_count() {   # $1 - usb-путь
 		"${_zc_u:-0}" "${_zc_m:-100}"
 }
 
-# UTF-8 -> UCS2 hex для отправки (тот же разбор UTF-8, что в smspdu.sh).
 _zte_ucs2hex() {
 	printf '%s' "$1" | LC_ALL=C awk '
 		BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i; body = ""; nl = 0 }
@@ -1387,7 +1129,6 @@ _zte_ucs2hex() {
 		}'
 }
 
-# Метка времени в формате прошивки: «yy;mm;dd;hh;mm;ss;+<четверти часа>».
 _zte_smstime() {
 	_zt_z=$(date +%z 2>/dev/null)
 	_zt_s="+"; _zt_q=0
@@ -1402,7 +1143,7 @@ _zte_smstime() {
 	printf '%s;%s%s' "$(date '+%y;%m;%d;%H;%M;%S')" "$_zt_s" "$_zt_q"
 }
 
-zte_sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
+zte_sms_send() {
 	[ -n "$1" ] && [ -n "$2" ] || { echo '{"error":"no number or text"}'; return 1; }
 	_zd_a=$(_addr_for "$(_hl_path "$3")") || { echo '{"success":false}'; return 1; }
 	_zte_login "$_zd_a" >/dev/null 2>&1
@@ -1416,7 +1157,7 @@ zte_sms_send() {   # $1 - номер, $2 - текст, $3 - usb-путь
 	esac
 }
 
-zte_sms_delete() {   # $1 - индекс, $2 - usb-путь
+zte_sms_delete() {
 	_zx_a=$(_addr_for "$(_hl_path "$2")") || { echo '{"success":false}'; return 1; }
 	_zte_login "$_zx_a" >/dev/null 2>&1
 	_zx_r=$(_zte_set "$_zx_a" "goformId=DELETE_SMS&msg_id=$1;&notCallback=true")
@@ -1502,19 +1243,10 @@ tenda_sms_delete() {
 		printf '{"success":false,"code":"%s"}\n' "$(_zj "$_tx_r" errCode)"; fi
 }
 
-# --- USSD --------------------------------------------------------------------
-#
-# У этого класса модемов USSD работает через API, а не AT: в /api/global/
-# module-switch у проверенного E3372h стоит ussd_enabled=1.
-#
-# Порядок такой: отправить запрос, дождаться готовности ответа (модем отвечает
-# не мгновенно - сеть думает секунды), забрать ответ, закрыть сессию. Без
-# закрытия следующий запрос упрётся в «сессия занята».
-hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
+hl_ussd() {
 	_code="$1"
 	[ -n "$_code" ] || { echo '{"error":"no code"}'; return 1; }
 
-	# Незакрытая сессия с прошлого раза - закрываем, иначе отправка не пройдёт.
 	api_post /api/ussd/release "" "$2" >/dev/null 2>&1
 
 	_r=$(api_post /api/ussd/send \
@@ -1524,9 +1256,6 @@ hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
 		*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)"; return 1 ;;
 	esac
 
-	# Ждём ответа. Пока он не готов, API отвечает кодом 111019 - это НЕ ошибка,
-	# а «ещё обрабатывается». 30 секунд: на живом МегаФоне ответ не пришёл и за
-	# это время, так что таймаут тут - штатный исход, а не поломка.
 	_n=0
 	while [ "$_n" -lt 30 ]; do
 		sleep 1
@@ -1534,8 +1263,6 @@ hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
 		_c=$(printf '%s' "$_g" | xval content)
 		if [ -n "$_c" ]; then
 			api_post /api/ussd/release "" "$2" >/dev/null 2>&1
-			# Экранируем то, что сломало бы JSON, и склеиваем строки: ответ
-			# оператора бывает многострочным.
 			_c=$(printf '%s' "$_c" | tr -d '\r' | tr '\n' ' ' \
 				| sed 's/\\/\\\\/g; s/"/\\"/g')
 			printf '{"success":true,"content":"%s"}\n' "$_c"
@@ -1548,14 +1275,6 @@ hl_ussd() {   # $1 - код (*100#), $2 - usb-путь
 	return 1
 }
 
-# --- диапазоны ---------------------------------------------------------------
-#
-# Читаются и МЕНЯЮТСЯ через /api/net/net-mode. LTEBand - шестнадцатеричная
-# битовая маска: бит 0 = B1, бит 1 = B2 и так далее. Проверено на живом модеме:
-# 800C5 = B1, B3, B7, B8, B20 (1 + 4 + 64 + 128 + 524288 = 0x800C5).
-#
-# Маска 3FFFFFFF в NetworkBand означает «все» - её и ставим, когда пользователь
-# снимает ограничение, а не перечисляем диапазоны поимённо.
 _hl_hexsplit() {
 	_hx=$(printf '%s' "$1" | tr -d '\r\n')
 	case "$_hx" in 0[xX]*) _hx=${_hx#??} ;; esac
@@ -1584,7 +1303,7 @@ _hl_lte_all() {
 	return 0
 }
 
-_mask_to_bands() {   # $1 - hex-маска; печатает номера диапазонов через пробел
+_mask_to_bands() {
 	_hl_hexsplit "$1" || return 1
 	_i=0; _out=""
 	while [ "$_i" -lt 32 ]; do
@@ -1599,7 +1318,7 @@ _mask_to_bands() {   # $1 - hex-маска; печатает номера диа
 	echo "$_out" | xargs
 }
 
-_bands_to_mask() {   # $1 - номера через пробел; печатает hex-маску
+_bands_to_mask() {
 	_mlo=0; _mhi=0
 	for _b in $1; do
 		case "$_b" in ''|*[!0-9]*) continue ;; esac
@@ -1650,7 +1369,6 @@ hl_getbands() {
 	_r=$(api_get /api/net/net-mode "$1")
 	_lte=$(printf '%s' "$_r" | xval LTEBand)
 	[ -n "$_lte" ] || return 1
-	# 3FFFFFFF (и подобные «все биты») - ограничения нет.
 	if _hl_lte_all "$_lte"; then
 		_gb=$(hl_supbands "$1")
 		[ -n "$_gb" ] || _gb=$(uci -q get "$CFG.m_$(echo "$(_hl_path "$1")" | sed 's/[^A-Za-z0-9]/_/g').band_full" \
@@ -1662,7 +1380,7 @@ hl_getbands() {
 	_mask_to_bands "$_lte"
 }
 
-hl_setbands() {   # $1 - номера диапазонов или "default", $2 - usb-путь
+hl_setbands() {
 	_cur=$(api_get /api/net/net-mode "$2")
 	_nm=$(printf '%s' "$_cur" | xval NetworkMode)
 	[ -n "$_nm" ] || _nm="03"
@@ -1681,49 +1399,35 @@ hl_setbands() {   # $1 - номера диапазонов или "default", $2 
 	esac
 }
 
-# --- ДИАПАЗОНЫ 2G/3G через NetworkBand ---------------------------------------
-# NetworkBand - hex-маска 2G/3G-бендов (LTE - отдельно в LTEBand). Биты Huawei НЕ
-# последовательны, часть - в расширенном диапазоне (>32 бит). Значения ПРОВЕРЕНЫ
-# на живом E3372: net-mode-list дал комбо-маску 2000000400380 (= B1|B8|GSM900|
-# GSM1800), рекомбинация сошлась точно; проба NetworkBand=400000 увела модем на 3G
-# 2100 (mode=2, HSPA+). ВНИМАНИЕ: B8 - бит 49 (0x2000000000000), а НЕ 0x2000000 из
-# «стандартных» таблиц - потому и выверяли на железе.
-#
-# «БЕЗ ОГРАНИЧЕНИЙ». В Auto прошивка отдаёт NetworkBand=3FFFFFFF (все младшие 30
-# бит), но это НЕ включает расширенные биты (B8=49). Трактуем такой mask как «все
-# поддерживаемые бенды доступны» - в UI все галочки стоят (интуитивно), а не B8
-# внезапно снятый. Реальное ограничение (напр. только B1) 3FFFFFFF никогда не даст.
 _hl_nb_all() { [ $(( ($1 & 0x3FFFFFFF) == 0x3FFFFFFF )) -eq 1 ]; }
 
-_umts_bit() {   # WCDMA номер -> hex-бит NetworkBand
+_umts_bit() {
 	case "$1" in
-		1) echo 400000 ;;            # B1 2100 IMT (проверено)
-		2) echo 800000 ;;            # B2 1900 PCS
-		5) echo 4000000 ;;           # B5 850 CLR
-		8) echo 2000000000000 ;;     # B8 900 (расширенный бит 49, проверено)
+		1) echo 400000 ;;
+		2) echo 800000 ;;
+		5) echo 4000000 ;;
+		8) echo 2000000000000 ;;
 		*) echo "" ;;
 	esac
 }
-_gsm_bit() {    # GSM частота (МГц) -> hex-бит NetworkBand
+_gsm_bit() {
 	case "$1" in
-		900)  echo 300 ;;            # GSM900 (проверено в комбо-маске)
-		1800) echo 80 ;;            # GSM1800 (проверено)
-		850)  echo 80000 ;;         # GSM850
-		1900) echo 200000 ;;        # GSM1900 PCS
+		900)  echo 300 ;;
+		1800) echo 80 ;;
+		850)  echo 80000 ;;
+		1900) echo 200000 ;;
 		*) echo "" ;;
 	esac
 }
-# Бит бенда данного RAT (2g|3g).
 _hl_bandbit() { [ "$1" = 3g ] && _umts_bit "$2" || _gsm_bit "$2"; }
 
-_umts_roman() {   # римская часть WCDMA BC<...> -> номер
+_umts_roman() {
 	case "$1" in
 		I) echo 1 ;; II) echo 2 ;; IV) echo 4 ;; V) echo 5 ;;
 		VI) echo 6 ;; VIII) echo 8 ;; *) echo "" ;;
 	esac
 }
 
-# Поддерживаемые бенды RAT из net-mode-list. 3g -> номера (1 8), 2g -> частоты (900 1800).
 hl_supbands3g() {
 	api_get /api/net/net-mode-list "$1" 2>/dev/null | grep -oE 'WCDMA BC[IVX]+' | sed 's/WCDMA BC//' \
 		| while read -r _rn; do _n=$(_umts_roman "$_rn"); [ -n "$_n" ] && echo "$_n"; done | sort -nu | xargs
@@ -1732,8 +1436,6 @@ hl_supbands2g() {
 	api_get /api/net/net-mode-list "$1" 2>/dev/null | grep -oE 'GSM[0-9]+' | sed 's/GSM//' | sort -nu | xargs
 }
 
-# Комбо-маска ВСЕХ поддерживаемых 2G/3G-бит (BandList, БЕЗ LTE) - число. Модем
-# принимает NetworkBand только в пределах набора; строим маску строго из него.
 hl_supmask3g() {
 	_mm=0
 	for _x in $(api_get /api/net/net-mode-list "$1" 2>/dev/null | sed 's/<LTEBandList>.*//' \
@@ -1743,7 +1445,6 @@ hl_supmask3g() {
 	echo "$_mm"
 }
 
-# Биты выбранных бендов RAT ($1=2g|3g, далее номера/частоты).
 _hl_ratmask() {
 	_rm=0; _rt="$1"; shift
 	for _b in "$@"; do
@@ -1753,7 +1454,6 @@ _hl_ratmask() {
 	echo "$_rm"
 }
 
-# Включённые бенды RAT ($1=2g|3g, $2=путь). «Без ограничений» -> все поддерживаемые.
 _hl_getbands() {
 	_rt="$1"; _p="$2"
 	_nb=$(api_get /api/net/net-mode "$_p" | xval NetworkBand)
@@ -1770,9 +1470,6 @@ _hl_getbands() {
 hl_getbands3g() { _hl_getbands 3g "$1"; }
 hl_getbands2g() { _hl_getbands 2g "$1"; }
 
-# Задать бенды RAT: сохраняем биты ДРУГОГО RAT (при «без ограничений» - ВСЕ его
-# поддерживаемые, иначе только реально включённые), ставим выбранные ЭТОГО RAT;
-# LTEBand/NetworkMode не трогаем. $1=2g|3g, $2=номера|default, $3=путь.
 _hl_setbands() {
 	_rt="$1"; _selarg="$2"; _p="$3"
 	_cur=$(api_get /api/net/net-mode "$_p")
@@ -1798,8 +1495,6 @@ _hl_setbands() {
 hl_setbands3g() { _hl_setbands 3g "$1" "$2"; }
 hl_setbands2g() { _hl_setbands 2g "$1" "$2"; }
 
-# Режим сети (Auto/3G/4G) через API - как и диапазоны, НЕ роняет debug, в отличие
-# от AT^SYSCFGEX. NetworkMode: 00 авто, 02 только 3G, 03 только 4G.
 _zte_login_jar() {
 	_zlj_p=$(_zte_pass "$2")
 	if [ "$3" = 1 ]; then
@@ -1828,7 +1523,7 @@ _zte_post_auth() {
 
 _adb_to() {
 	_at_t="$1"; shift
-	adb "$@" 2>/dev/null &
+	_5GM_ADB=1 adb "$@" 2>/dev/null &
 	_at_p=$!
 	( sleep "$_at_t"; kill "$_at_p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 	_at_w=$!
@@ -1836,12 +1531,31 @@ _adb_to() {
 	kill "$_at_w" 2>/dev/null
 }
 
+_adb_foreign() {
+	for _af_p in $(pgrep -x adb 2>/dev/null); do
+		tr '\0' ' ' < "/proc/$_af_p/cmdline" 2>/dev/null | grep -q -- "$1" || continue
+		tr '\0' '\n' < "/proc/$_af_p/environ" 2>/dev/null | grep -qx '_5GM_ADB=1' && continue
+		return 0
+	done
+	return 1
+}
+
 _mtk_adb_on() {
 	_ma_s="$1:5555"
-	case "$(_adb_to 4 connect "$_ma_s")" in
-		*"connected to"*) [ "$(_adb_to 4 -s "$_ma_s" get-state)" = device ] && return 0 ;;
+	_adb_foreign "$_ma_s" && return 1
+	case "$(_adb_to 4 devices)" in
+		*"$_ma_s	device"*) return 0 ;;
+		*"$_ma_s	"*) return 1 ;;
 	esac
-	_adb_to 4 disconnect "$_ma_s" >/dev/null
+	_ma_r=$(_adb_to 6 connect "$_ma_s")
+	case "$_ma_r" in
+		*"connected to"*)
+			sleep 1
+			case "$(_adb_to 4 devices)" in *"$_ma_s	device"*) return 0 ;; esac
+			return 1 ;;
+		*refused*|*"unable to connect"*|*"failed to connect"*) ;;
+		*) return 1 ;;
+	esac
 	[ "$(uci -q get "$CFG.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g').hl_adb")" = 0 ] && return 1
 	_ma_f="$CACHE_DIR/mtkadb_$(_tk "$1")"
 	[ -f "$_ma_f" ] && [ -z "$(find "$_ma_f" -mmin +10 2>/dev/null)" ] && return 1
@@ -1855,8 +1569,10 @@ _mtk_adb_on() {
 		*) return 1 ;;
 	esac
 	sleep 2
-	case "$(_adb_to 4 connect "$_ma_s")" in *"connected to"*) ;; *) return 1 ;; esac
-	[ "$(_adb_to 4 -s "$_ma_s" get-state)" = device ]
+	case "$(_adb_to 6 connect "$_ma_s")" in *"connected to"*) ;; *) return 1 ;; esac
+	sleep 1
+	case "$(_adb_to 4 devices)" in *"$_ma_s	device"*) return 0 ;; esac
+	return 1
 }
 
 _mtk_usock() {
@@ -1887,7 +1603,10 @@ mtk_cell() {
 		cat "$_mc_f"; return 0
 	fi
 	_mc_o=$(mtk_at "$1" "$2" AT+ECSQ AT+ECELL AT+CSQ)
-	case "$_mc_o" in *+ECSQ:*) printf '%s\n' "$_mc_o" > "$_mc_f" ;; esac
+	case "$_mc_o" in
+		*+ECSQ:*) printf '%s\n' "$_mc_o" > "$_mc_f" ;;
+		*) [ -s "$_mc_f" ] && [ -z "$(find "$_mc_f" -mmin +10 2>/dev/null)" ] && _mc_o=$(cat "$_mc_f") ;;
+	esac
 	printf '%s\n' "$_mc_o"
 }
 
@@ -1965,7 +1684,11 @@ mtk_temps() {
 			if ($1=="mtktspa") k="pa"; else if ($1=="mtktscpu") k="cpu"; else if ($1=="mtktswmt") k="wifi"
 			else if ($1=="mtktspmic") k="pmic"; else if ($1=="mtktsbattery") k="bat"; else if ($1=="mtktsAP") k="board"
 			if (k != "" && $2 ~ /^-?[0-9]+$/ && $2 > 0) printf "%s%s=%.1f", (n++ ? " " : ""), k, $2/1000 }')
-	printf '%s' "$_mt_o" > "$_mt_f"
+	if [ -n "$_mt_o" ]; then
+		printf '%s' "$_mt_o" > "$_mt_f"
+	elif [ -s "$_mt_f" ] && [ -z "$(find "$_mt_f" -mmin +10 2>/dev/null)" ]; then
+		_mt_o=$(cat "$_mt_f")
+	fi
 	printf '%s' "$_mt_o"
 }
 
@@ -1996,7 +1719,7 @@ zte_setmode() {
 	fi
 }
 
-hl_getmode() {   # $1 - usb-путь; печатает id режима нашего формата (1/8/2/4)
+hl_getmode() {
 	_nm=$(api_get /api/net/net-mode "$1" | xval NetworkMode)
 	case "$_nm" in
 		03) echo 4 ;;
@@ -2007,7 +1730,7 @@ hl_getmode() {   # $1 - usb-путь; печатает id режима наше�
 	esac
 }
 
-hl_setmode() {   # $1 - id (1/8/2/4), $2 - usb-путь
+hl_setmode() {
 	case "$1" in
 		1) _nm="00" ;;
 		8) _nm="01" ;;
@@ -2015,7 +1738,6 @@ hl_setmode() {   # $1 - id (1/8/2/4), $2 - usb-путь
 		4) _nm="03" ;;
 		*) echo '{"error":"bad mode"}'; return 1 ;;
 	esac
-	# Диапазоны сохраняем как есть - меняем только тип сети.
 	_cur=$(api_get /api/net/net-mode "$2")
 	_nb=$(printf '%s' "$_cur" | xval NetworkBand); [ -n "$_nb" ] || _nb="3FFFFFFF"
 	_lte=$(printf '%s' "$_cur" | xval LTEBand); [ -n "$_lte" ] || _lte="7FFFFFFFFFFFFFFF"
@@ -2027,10 +1749,7 @@ hl_setmode() {   # $1 - id (1/8/2/4), $2 - usb-путь
 	esac
 }
 
-# --- команды -----------------------------------------------------------------
-
 case "$1" in
-	# Есть ли у этого модема веб-API (и отвечает ли он).
 	probe)
 		_a=$(_addr_for "$2") || { echo '{"hilink":0}'; exit 0; }
 		_pv=$(_vidpid_for "$2")
@@ -2047,7 +1766,6 @@ case "$1" in
 			*'<classify>'*) printf '{"hilink":1,"addr":"%s","classify":"%s"}\n' \
 				"$_a" "$(printf '%s' "$_r" | xval classify)" ; exit 0 ;;
 		esac
-		# не Huawei - вдруг ZTE goform (MF79 и родня)
 		_r=$(_zte_get "$_a" modem_main_state)
 		case "$_r" in
 			*'"modem_main_state"'*) printf '{"hilink":1,"addr":"%s","classify":"zte"}\n' "$_a"; exit 0 ;;
@@ -2060,8 +1778,6 @@ case "$1" in
 	json|metrics) metrics_json "$2" ;;
 	addr)        _addr_for "$2" ;;
 	get)         api_get "$2" "$3" ;;
-	# Подключить/отключить передачу данных. У ZTE - goform, best-effort
-	# (часть прошивок требует веб-логина; отказ безвреден).
 	connect)
 		case "$(_api_vid "$2")" in
 			19d2:*) _a=$(_addr_for "$2") && _zte_post_auth "$_a" "goformId=CONNECT_NETWORK" "$2" >/dev/null ;;
@@ -2083,16 +1799,6 @@ case "$1" in
 				fi ;;
 			*) api_post /api/device/control "<Control>1</Control>" "$2" ;;
 		esac ;;
-	# Переключить композицию USB.
-	#
-	# ЗАЧЕМ. Часть HiLink-модемов умеет отдавать последовательные AT-порты - в
-	# их админке это называется debug mode. После переключения модем перестаёт
-	# быть «только веб-интерфейс» и становится обычным: появляются TAC, диапазон,
-	# EARFCN, USSD и AT-консоль, то есть всё, чего у веб-API нет.
-	# Проверено на E3372: 12d1:14dc -> 12d1:1566, шесть портов за 10 секунд.
-	#
-	# АВТОМАТИЧЕСКИ ЭТОГО НЕ ДЕЛАЕМ: смена композиции меняет поведение модема и
-	# может отключить его веб-интерфейс. Решение за пользователем.
 	mode)
 		case "$2" in
 			debug|1) _m=1 ;;
@@ -2121,8 +1827,6 @@ case "$1" in
 			*) printf '{"success":false,"code":"%s"}\n' "$(printf '%s' "$_r" | xval code)" ;;
 		esac
 		;;
-	# У ZTE-стика своё SMS-хранилище за goform (см. блок «SMS у ZTE»), у
-	# остальных - Huawei-XML. Развилка та же, что у connect/reboot.
 	smsread)     case "$(_api_vid "$3")" in
 			19d2:*) if _is_tenda "$3"; then tenda_sms_list "${2:-in}" "$3"; else zte_sms_list "${2:-in}" "$3"; fi ;;
 			*) sms_list "${2:-in}" "$3" ;;

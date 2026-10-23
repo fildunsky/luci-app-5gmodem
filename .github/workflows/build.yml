@@ -1,18 +1,5 @@
 name: Build packages
 
-# The package is PKGARCH:=all (arch-independent), so ONE build per package
-# format is enough for every device:
-#   - a 24.10 SDK produces the .ipk (that branch still defaults to opkg)
-#   - a 25.12 SDK produces the .apk (the format current releases use)
-# On a version tag (v*) the artifacts are attached to a DRAFT GitHub Release,
-# and only the publish job - after BOTH builds succeeded and every package is
-# attached - makes the release public and points the README install links at
-# it. Until that moment "latest" (README links, the in-app updater, the
-# releases/latest API) keeps serving the previous, complete release, so there
-# is no window in which the install command or the update button hits a 404.
-# A failed build leaves the draft unpublished and everything on the old version.
-# The workflow can also be run manually from the Actions tab (no release then).
-
 on:
   push:
     tags:
@@ -30,15 +17,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # ЧТО ЗДЕСЬ ДВА РАЗНЫХ ПОЛЯ. sdk - это ТЕГ ОБРАЗА openwrt/sdk, его
-        # нельзя писать произвольно: значение уходит в переменную ARCH, и
-        # действие тянет по нему контейнер (нет такого тега - сборка падает
-        # сразу). label - только подпись задания в списке Actions, чтобы с
-        # первого взгляда было видно ветку и формат пакета. slug - то же для
-        # имён артефактов: там пробелы и скобки нежелательны.
-        #
-        # x86_64 - это только СБОРЩИК: пакет arch-independent и ставится на
-        # любое железо.
         include:
           - sdk: x86_64-25.12.5
             ver: 25.12.5
@@ -79,8 +57,6 @@ jobs:
           mkdir -p built && chmod 777 built
           docker run --rm -v "$PWD":/feed -v "$PWD/sdk":/sdk:ro -v "$PWD/built":/artifacts openwrt/sdk:${{ matrix.sdk }} bash /feed/.github/scripts/fast-build.sh
 
-      # If the build failed, surface the ACTUAL error (the toplevel "Error 2"
-      # is useless; the real one is the first failing package's compile log).
       - name: Show failing build log
         if: failure()
         run: |
@@ -107,16 +83,7 @@ jobs:
       - name: Collect packages
         run: |
           mkdir -p out
-          # grab the app AND its translation subpackages (luci-i18n-5gmodem-*)
           find built/ -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} out/ \;
-          # У языковых пакетов версия из luci.mk - хеш коммита в имени файла,
-          # оно меняется каждый релиз и на него нельзя дать постоянную ссылку в
-          # README. ПЕРЕИМЕНОВЫВАЕМ в стабильное имя (luci-i18n-5gmodem-
-          # <lang>.apk/.ipk). Раньше клали копию РЯДОМ, и в релизе висели два
-          # побайтово одинаковых файла на каждый язык - восемь активов вместо
-          # четырёх, и человек не понимал, какой из них брать (замечание
-          # владельца 25.08.2026). Версия пакета от переименования не теряется:
-          # она внутри метаданных, менеджер её видит.
           for f in out/5gmodem-mtk-at[-_]*; do
             [ -e "$f" ] || continue
             case "$f" in
@@ -143,13 +110,6 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-      # Upload with the gh CLI, NOT softprops/action-gh-release: that action
-      # publishes a reused draft after uploading unless told otherwise, and with
-      # two matrix jobs the first one would make the release public while the
-      # other format was still building. `gh release upload` never changes the
-      # draft state. The draft normally exists already (created with the notes
-      # before the tag is pushed); if not, create an empty one - `|| view`
-      # covers the other matrix job having created it a moment earlier.
       - name: Attach to draft release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -181,9 +141,6 @@ jobs:
           ref: master
           fetch-depth: 0
 
-      # Every package the READMEs and the updater point at must be there, or the
-      # release stays a draft - publishing half a release is exactly the bug
-      # this job exists to prevent.
       - name: Check attached packages
         run: |
           set -e

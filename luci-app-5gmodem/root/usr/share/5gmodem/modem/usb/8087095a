@@ -1,5 +1,3 @@
-# Fibocom L860
-
 bandwidth() {
 	case $1 in
 		0) echo "1.4";;
@@ -43,7 +41,6 @@ channeltoband()
   fi
 }
 
-
 O=$(sms_tool -d $DEVICE at "AT+MTSM=1")
 
 T=$(echo "$O" | awk -F: '/^\+MTSM:/ {print $2}' | xargs)
@@ -52,8 +49,6 @@ T=$(echo "$O" | awk -F: '/^\+MTSM:/ {print $2}' | xargs)
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "AT+XLEC?;+XMCI=1;+XCCINFO=1;+XCCINFO?")
-# Снимок батча для блока соседей в конце файла: $O ниже переиспользуется под
-# CGSN/CIMI/CCID (та же история, что в профиле 2cb70007).
 _XMCI_RAW="$O"
 O=$(printf '%s\n' "$O" | tr -d '\r' | awk -F, '
 	/^\+XLEC:/ {
@@ -289,7 +284,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		PCI="$(printf "%d" "$T")"
 		T=$(echo "$O" | awk -F[,:] '/^\+XMCI: 4/{print $8}' | xargs)
 		if [ "$T" != "0xFFFFFFFF" ]; then
-			# EARFCN DL
 			EARFCN="$(printf "%d" "$T")"
 			if [ -z "$PB" ]; then
 				T1=$(channeltoband $(printf "%d" "$T"))
@@ -303,7 +297,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			fi
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^\+XMCI: 4/{print $9}' | xargs)
-#		[ "$T" != "0xFFFFFFFF" ] && addon 34 "EARFCN UL" "$(printf "%d" "$T")"
 		T=$(echo "$O" | awk -F[,:] '/^\+XMCI: 4/{print $11}')
 		if [ "$T" != "255" ]; then
 			RSRP="$((-141 + T))"
@@ -327,15 +320,8 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			fi
 		fi
 		T=$(echo "$O" | awk -F[,:] '/^\+XMCI: 4/{print $12}')
-		# Шкала XMCI для RSRQ - интеловская (raw-45)/2: сверено живьём на L850
-		# (XMCI rsrq=16 против AT+RSRQ? = -14.50), той же формулой считаются
-		# соседи ниже; прежнее -20+raw/2 давало -12 на тех же данных.
 		[ "$T" != "255" ] && RSRQ=$(awk "BEGIN{printf \"%.1f\", ($T-45)/2}")
-		# SNR
-#		T=$(echo "$O" | awk -F[,:] '/^\+XMCI: 4/{print $13}')
-#		[ "$T" != "255" ] && SNR="$T"
-		# SINR
-		SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); if ($13+0 != 255) printf "%.0f\n", $13/4+5}')   # 255 = нет данных (форум), иначе «69 дБ»
+		SINR=$(echo "$O" | awk -F [:,] '/\+XMCI: 4/{gsub(/"/,""); if ($13+0 != 255) printf "%.0f\n", $13/4+5}')
 	fi
 
 IFS="
@@ -356,7 +342,6 @@ IFS="
 			esac
 			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 5/{print $8}' | xargs)
 			if [ "$T" != "0xFFFFFFFF" ]; then
-				# EARFCN DL
 				case $IDX in
 				       1) S1EARFCN="$(printf "%d" "$T")";;
 				       2) S2EARFCN="$(printf "%d" "$T")";;
@@ -415,14 +400,6 @@ IFS="
 						;;
 				esac
 			fi
-#			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 5/{print $9}' | xargs)
-#			[ "$T" != "0xFFFFFFFF" ] && addon $((POS + 4)) "(S${IDX}) EARFCN UL" "$(printf "%d" "$T")"
-#			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 5/{print $11}')
-#			[ "$T" != "255" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$((-141 + T)) dBm"
-#			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 5/{print $12}')
-#			[ "$T" != "255" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$((-20 + T/2)) dB"
-#			T=$(echo "$LINE" | awk -F[,:] '/^\+XMCI: 4/{print $13}')
-#			[ "$T" != "255" ] && addon $((POS + 8)) "(S${IDX}) SNR" "$T dB"
 			IDX=$((IDX + 1))
 			[ "$IDX" -ge "$CELLS" ] && break
 			POS=$((POS + 10))
@@ -432,24 +409,8 @@ fi
 
 fi
 
-# --- Антенные порты (Intel errc) ---------------------------------------------
-# ВНИМАНИЕ: CA/SCC этот профиль строит по XLEC + AT+RSRP? (как эталон modemfeed/
-# modeminfo scripts/INTEL: lte_ca=XLEC[3]-1, SCC-бенды из доп. сот RSRP?). Это
-# УСТОЯВШАЯСЯ конвенция для L850/L860, не баг - раньше я ошибочно «чинил» её через
-# XMCI type-4, откатил. Соседей отдельно НЕ строим: доп. соты идут как SCC.
-# Ниже - только антенны (RSRP/RSRQ по RX0/RX1), это независимая добавка.
-
-# Антенные порты (errc): RSRP/RSRQ по RX0/RX1 -> antports (как в 2cb70007). Только
-# целиком (оба порта), иначе таблица на странице скачет по высоте.
 _ANT=$(sms_tool -d $DEVICE at "at@errc:pcell_scell_measurement_info()" 2>/dev/null)
 if echo "$_ANT" | grep -q 'rsrp\['; then
-	# ДО ЧЕТЫРЁХ ТРАКТОВ, А НЕ ДВА. Прежний разбор брал rsrp[a,b] - написан с
-	# L850, у которого приёмных цепей две. У L860 в connected-состоянии прошивка
-	# отдаёт ЧЕТЫРЕ значения (живой дамп 03.08.2026, ttyACM3 под нагрузкой:
-	# rsrp[-75.75,-78.50,-75.75,-78.50]), и пользователь с четырьмя антеннами
-	# видел в таблице половину. В idle и у L850 значений два - это норма, не баг.
-	# -32768 - интеловский маркер «нет данных» (виден в imbal того же дампа),
-	# такие тракты пропускаем.
 	_ant_rnd() { [ -n "$1" ] && awk "BEGIN{printf \"%.0f\", $1}" 2>/dev/null; }
 	_rl=$(echo "$_ANT" | sed -n 's/.*rsrp\[\([^]]*\)\].*/\1/p' | head -1)
 	_ql=$(echo "$_ANT" | sed -n 's/.*rsrq\[\([^]]*\)\].*/\1/p' | head -1)
@@ -468,8 +429,6 @@ if echo "$_ANT" | grep -q 'rsrp\['; then
 		_an=$((_an + 1))
 		_ai=$((_ai + 1))
 	done
-	# Меньше двух трактов - не показываем ничего (прежнее правило «только
-	# целиком»: таблица не должна скакать по высоте от тика к тику).
 	if [ "$_an" -lt 2 ]; then
 		ANTPORTS=""
 	elif [ "$_an" -ge 4 ]; then
@@ -480,24 +439,11 @@ if echo "$_ANT" | grep -q 'rsrp\['; then
 	fi
 fi
 
-# Приводим к единому виду с остальными профилями: внутренний маркер LTE_A ->
-# "LTE-A |" (человекочитаемо, без подчёркивания), а разделитель компонентов
-# агрегации "/" -> "+". Раньше здесь была только замена "/"->"+", и в UI висело
-# сырое "LTE_A B3 + B3" (подчёркивание, как у приятеля на L850).
 MODE=$(echo $MODE | sed "s/LTE_A/LTE-A |/g" | sed 's,/,+,g')
 
-# Modem
 FWA=$(sms_tool -d $DEVICE at "AT+GTPKGVER?" | xargs)
 FW=$(echo "$FWA" | cut -d ":" -f2 | xargs)
 
-# Имя модели. У L850 ВКЛЮЧЕНО эхо команд (ATE1) и нестандартные форматы ответов:
-#   AT+CGMI -> "+CGMI: Fibocom L850 LTE Module"
-#   AT+CGMM -> '+CGMM: "L850 LTE Module","L850"'
-# Старый cut/sed тащил в имя эхо команды и префикс: в UI имя модема показывалось
-# как "+CGMI: Fibocom L850 LTE Module", а при коллизии на общем AT-порту - как
-# "AT+GTDUALSIM?"; в конфиг оседало "AT  4". _atval берёт СОДЕРЖАТЕЛЬНУЮ строку
-# ответа: пропускает эхо (строки AT...), OK/ERROR и пустые, снимает префикс
-# "+CMD:" и кавычки.
 _atval() {
 	printf '%s\n' "$1" | tr -d '\r' | awk '
 		{ sub(/^[ \t]+/,""); sub(/[ \t]+$/,"") }
@@ -505,12 +451,10 @@ _atval() {
 		{ sub(/^\+[A-Za-z0-9]+:[ \t]*/,""); gsub(/"/,""); print; exit }'
 }
 MANUF=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMI')")
-# CGMM после снятия кавычек: 'L850 LTE Module,L850' -> берём последний (короткий) токен.
 CGMM_V=$(_atval "$(sms_tool -d $DEVICE at 'AT+CGMM')")
 SHORT=$(echo "$CGMM_V" | awk -F',' '{print $NF}' | xargs)
 [ -n "$SHORT" ] || SHORT="$CGMM_V"
 if [ -n "$MANUF" ]; then
-	# не дублируем модель, если она уже входит в строку производителя
 	case "$MANUF" in
 		*"$SHORT"*) MODEL="$MANUF" ;;
 		*)          MODEL="$MANUF $SHORT" ;;
@@ -520,29 +464,24 @@ else
 fi
 MODEL=$(echo "$MODEL" | xargs)
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+CCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\+CCID: /{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCAX=$(echo $PV | awk -F"Vendor=8087 ProdID=07f9" '{print $2}')
 PVCA=$(echo "$PVCAX" | cut -c-2453)
@@ -583,17 +522,6 @@ if [ -n "$PVCB" ]; then
 	esac
 fi
 
-
-# ===== СОСЕДНИЕ СОТЫ (AT+XMCI) ==============================================
-#
-# Тот же разбор, что в профиле MBIM-композиции этого модема (2cb70007), - XMCI
-# у XMM одинаков в обеих композициях. Строки: тип 4 - обслуживающая, тип 5 -
-# соседняя; PCI и EARFCN шестнадцатеричные. Пересчёт уровней сверен с
-# интеловскими счётчиками на живом L850: AT+RSRP? -> -104.00 при XMCI rsrp=37
-# (37-141), AT+RSRQ? -> -14.50 при rsrq=16 ((16-45)/2).
-#
-# Дополнительные несущие (SCC) сюда НЕ попадают: они приходят через XLEC и
-# показываются в таблице агрегации, соседи - отдельные строки типа 5.
 _XN=$(printf '%s' "$_XMCI_RAW" | tr -d '\r' | awk -F, '
 	function hex2dec(h,   i, c, n) {
 		gsub(/^0[xX]/, "", h); h = toupper(h); n = 0
@@ -614,7 +542,6 @@ _XN=$(printf '%s' "$_XMCI_RAW" | tr -d '\r' | awk -F, '
 			(n++ ? "," : ""), earfcn, pci, rsrp - 141, (rsrq - 45) / 2
 	}
 ')
-# Диапазон - через channeltoband диспетчера: в ЭТОМ профиле она есть.
 if [ -n "$_XN" ]; then
 	_XN_FIX=""
 	_SIFS_XN="$IFS"; IFS='

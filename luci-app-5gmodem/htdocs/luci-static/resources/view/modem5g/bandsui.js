@@ -5,32 +5,18 @@
 'require uci';
 'require view.modem5g.mutil as mutil';
 
-/* УПРАВЛЕНИЕ ЧАСТОТАМИ И РЕЖИМОМ СЕТИ - второй шаг распила 5gdetail.js.
-   Кластер владеет СВОИМ состоянием (источник данных mmcli/modemband, гейты,
-   ретраи, takeover) - оно всё переехало сюда и снаружи больше не видно.
-   Наружу торчит узкое API (см. return внизу), а всё, что модулю нужно от
-   страницы (плашка занятости, sameRender, индекс MM, флаг MM-прото), приходит
-   через init(ctx). Флаг MM-прото остался у страницы (его читает и каденция
-   опроса) - модуль ходит через ctx.isMM()/ctx.setMM(). */
-
 var ctx = null;
 
 var _bandsAfterBusy = false;
 
-var _bandsRetry = 0;   // попытки дочитать enabled, если модем ответил не сразу   // после снятия плашки перечитать блок диапазонов
+var _bandsRetry = 0;
 
 var _bandsRetryMax = 3;
 
 var _has3gMM = false;
 
-var _bandsPollN = 0;   // счётчик для редкого авто-освежения блока диапазонов в опросе
+var _bandsPollN = 0;
 
-/* ПОТОЛОК ПОПЫТОК ДОЖДАТЬСЯ БЕНДОВ ОТ MM. Пустой список у MM-модема бывает
-   штатно и НАВСЕГДА (FM350 под MM бендов не отдаёт вовсе - см. bands.sh), а
-   пере-опрос планировался без счётчика: раскрытый блок «Управление частотами»
-   бесконечно, каждые 1.5 c, гонял bands.sh mgmtinfo (это ещё mmcli) и bands.sh
-   json. Счётчик сбрасывается, как только бенды наконец пришли.
-   (аудит 12.09.2026) */
 var _revealTries = 0;
 
 var _revealTriesMax = 10;
@@ -181,16 +167,6 @@ function clear3gRow() {
 	if (r3) { r3.style.display = 'none'; }
 }
 
-/* ТЁПЛЫЙ РЕНДЕР БЕЗ ОЖИДАНИЯ БЭКЕНДА. После распила блок частот заполнялся
-   только по цепочке mgmtinfo -> (json) - два последовательных вызова, и при
-   переключении вкладок модемов карточка секунды стояла пустой (поймано
-   владельцем). Последний УСПЕШНЫЙ набор данных каждого модема сохраняется в
-   localStorage (ключ - USB-путь) и рисуется мгновенно при первом заходе;
-   живой ответ затем подтверждает или молча поправляет - рендеры идемпотентны
-   (sameRender), идентичные данные не перерисовываются и не мигают. */
-/* Путь ВЫБРАННОЙ вкладки для читающих вербов bands.sh: блок частот перестаёт
-   зависеть от active_modem, и рассинхрон вкладки с активным модемом больше не
-   показывает чужие диапазоны (31.07.2026). */
 function _bandsFor() {
 	var p = (ctx.pagePath && ctx.pagePath()) || '';
 	return p ? [ p ] : [];
@@ -198,17 +174,8 @@ function _bandsFor() {
 
 var _bandsWarmed = false;
 function _bandsKey() {
-	/* КЛЮЧ ВКЛЮЧАЕТ АКТИВНЫЙ МОДЕМ. Без него тёплый кэш был общим на страницу, и
-	   после смены вкладки блок «Управление частотами» рисовал диапазоны ПРЕЖНЕГО
-	   модема, пока не придут свежие (живой случай 31.07.2026: карточка Telit
-	   показывала бенды Compal). uci уже загружен страницей; при отсутствии
-	   значения ведём себя как раньше. */
 	var am = '';
 	try { am = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || ''; } catch (e) {}
-	/* Суффикс версии обесценивает ОТРАВЛЕННЫЕ записи, сделанные до фикса
-	   адресации mmcli (в них под ключом одного модема лежали данные другого).
-	   Жёсткая перезагрузка страницы localStorage НЕ чистит, поэтому иначе они
-	   продолжали бы рисоваться вечно. */
 	return 'bands5g2-' + ((ctx.pagePath && ctx.pagePath()) || '') + (am ? ('-' + am) : '');
 }
 function warmRenderBands() {
@@ -217,22 +184,11 @@ function warmRenderBands() {
 	var c = null;
 	try { c = JSON.parse(window.localStorage.getItem(_bandsKey()) || 'null'); } catch (e) {}
 	if (!c || !c.j) { return; }
-	/* СВЕРКА ХОЗЯИНА. Ключа с путём модема мало: запись могла быть сделана, когда
-	   бэкенд ещё отдавал чужие данные под этим путём. Модель модема лежит рядом,
-	   и несовпадение - повод выбросить кэш, а не рисовать чужие диапазоны. */
 	var mdl = '';
 	try {
 		var ap = (ctx.pagePath && ctx.pagePath()) || uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
 		mdl = uci.get('5gmodem', 'm_' + ap.replace(/[^A-Za-z0-9]/g, '_'), 'model') || '';
 	} catch (e) {}
-	/* БЕЗ ПОДТВЕРЖДЁННОГО ХОЗЯИНА КЭШ НЕ РИСУЕМ ВОВСЕ. Прежняя сверка
-	   пропускала кэш, когда одна из сторон пуста (модель ещё не прочитана
-	   страницей) - и после замены модема в том же разъёме блок рисовал
-	   диапазоны и «Режим 5G» ПРЕЖНЕГО модема. Живые ответы должны были молча
-	   поправить, но при вечно занятом порте (цикл дозвона xmm) они не
-	   приходят никогда - чужой рендер прилипал (живой отчёт 09.08.2026:
-	   L850 показывал 5G SA+NSA от жившего тут раньше FM350). Пустая карточка
-	   на долю секунды честнее чужих данных. */
 	if (!mdl || !c.m || c.m !== mdl) {
 		if (mdl && c.m && c.m !== mdl) {
 			try { window.localStorage.removeItem(_bandsKey()); } catch (e) {}
@@ -255,30 +211,10 @@ function _bandsRemember(t, j) {
 }
 
 function loadBands() {
-	// Модульный опрос: пока блок «Управление частотами» свёрнут, НЕ дёргаем
-	// бэкенд (это ускоряет загрузку). Данные подтянутся при раскрытии
-	// (см. onBlockExpand['freq']).
 	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }
 	warmRenderBands();
-	/* ЕДИНАЯ ТОЧКА ИСТИНЫ - bands.sh mgmtinfo. Бэкенд сам решает, каким путём
-	   управляется модем (mmcli или вендорный), фронт только рисует ответ.
-	   Раньше решение принималось здесь: страница парсила mmcli, жонглировала
-	   bandSource/bandsGated/reveal-циклами - и любая проверка, промахнувшаяся
-	   на переходном состоянии (модем пересоздаётся в MM, mmcli пуст секунду),
-	   прятала блок «то есть, то нет» до перезагрузки страницы. Ответы:
-	     source=mmcli + списки  - рисуем тумблеры, режим из КОНФИГА;
-	     source=mmcli + pending - MM ещё собирает модем: держим последнее
-	                              известное, следующий опрос дорисует;
-	     source=vendor          - вендорный путь (bands.sh json). */
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ].concat(_bandsFor())), '{}').then(ctx.forPage(function(out) {
 		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
-		/* ОТВЕТА НЕТ - НИЧЕГО НЕ ТРОГАЕМ. fs.exec_direct отдаёт пустую строку,
-		   когда вызов не успел (rpcd занят, mmcli подтормаживает под опросом
-		   метрик). Раньше пустой ответ означал "source не mmcli" и страница
-		   уходила на ВЕНДОРНЫЙ путь: тот перерисовывал тумблеры своими данными,
-		   а на следующем тике mmcli отвечал - и всё возвращалось. Отсюда
-		   мигание всего ряда 4G/5G («то все выбраны, то ни одного») и слетающая
-		   подсветка режима: до неё в вендорной ветке дело просто не доходило. */
 		if (!j.source) { return; }
 		if (j.source != 'mmcli') { return loadBandsModemband(); }
 		if (j.pending) { return; }
@@ -331,7 +267,7 @@ function applyMgmtMM(j) {
 		bandSource = 'mmcli';
 		bandsReadOnly = false; bandsTakeover = false;
 		bandsStaticNote = false;
-		_revealTries = 0;   // дождались mmcli - счётчик ожидания обнуляем
+		_revealTries = 0;
 		var note = document.getElementById('bandnote');
 		if (note) { note.style.display = 'none'; }
 		var sup3 = j.sup3g || [], sup4 = j.sup4g || [], sup5 = j.sup5g || [];
@@ -344,11 +280,6 @@ function applyMgmtMM(j) {
 		var show = function(id, on) { var e = document.getElementById(id); if (e) { e.style.display = on ? '' : 'none'; } };
 		show('modeswn', true); show('bands3gn', sup3.length); show('bandsn', sup4.length);
 		show('bands5gn', sup5.length); show('bandsactn', true);
-		/* 5G-режим (SA/NSA), CA-enabled и cell-lock - ВЕНДОРНЫЕ строки (их считает
-		   AT-путь, bands.sh json). Путь MM их не заполняет - и ОБЯЗАН скрыть:
-		   иначе при переключении с 5G-модема (FM350, вендорный путь) на MM-модем
-		   (напр. SIMCom SIM7100E - LTE, вовсе без 5G) строка «Режим 5G: Включён
-		   (SA + NSA)» оставалась висеть от прежнего модема. */
 		render5gMode(null);
 		renderCaEnabled(null);
 		renderCellLock(null);
@@ -366,9 +297,6 @@ function applyMgmtMM(j) {
 			var ok = isAuto || main.every(function(t) { return techOk[t] !== false; });
 			b.style.display = ok ? '' : 'none';
 		});
-		/* Подсветка режима - из КОНФИГА (allowedmode/preferredmode интерфейса),
-		   а не из живых current-modes: конфиг не мигает на передозвоне и
-		   показывает именно ВЫБОР пользователя. Пустой конфиг = Авто. */
 		var am = (j.allowedmode || '').split('|').filter(function(x) { return x; }).sort().join('|') || '2g|3g|4g|5g';
 		var pm = j.allowedmode ? (j.preferredmode || '') : '5g';
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
@@ -378,14 +306,13 @@ function applyMgmtMM(j) {
 		});
 }
 
-var bandSource = 'mmcli';   // 'mmcli' | 'modemband'
+var bandSource = 'mmcli';
 
 var bandsReadOnly = false;
 
 var bandsTakeover = false;
 
 function buildBandButtonsNum(supported, enabled, btype) {
-	// 2G-бенды у Huawei называются по частоте (GSM900/1800), а не "B<n>".
 	var pfx = (btype == '2g') ? 'GSM ' : ((btype == 'lte' || btype == '3g') ? 'B' : 'n');
 	return (supported || []).map(function(n) {
 		n = parseInt(n, 10);
@@ -426,13 +353,6 @@ function renderCaEnabled(state, canSwitch) {
 	}
 }
 
-/* СТРОКИ, КОТОРЫХ В РАЗМЕТКЕ СТРАНИЦЫ НЕТ, - создаём на месте.
-   Таблицу «Управление частотами» строит 5gdetail, и у 256QAM, uplink CA и
-   5G-лока своих <tr> там нет. Дописывать их туда пришлось бы четырьмя правками
-   в чужом файле ради строк, которые и так показываются только по ответу
-   профиля; здесь же владелец у них один - этот модуль, который их и рисует.
-   Ищем существующую строку перед вставкой: рендер зовётся на каждый опрос.
-   (ревью 13.09.2026, форум 4pda) */
 function _ensureRow(id, cellId, label, afterId) {
 	var row = document.getElementById(id);
 	if (row) { return row; }
@@ -446,10 +366,6 @@ function _ensureRow(id, cellId, label, afterId) {
 	return row;
 }
 
-/* 256QAM: показываем ТОЛЬКО состояние и переключатель, без обещаний скорости.
-   По форуму прибавка видна лишь при SINR ~21 дБ и поддержке на БС, поэтому
-   «включено» - это факт о модеме, а не прогноз (#1209, #22649).
-   (ревью 13.09.2026, форум 4pda) */
 function render256qam(state) {
 	var row = _ensureRow('qam256n', 'qam256-cell', _('256QAM (download)'), 'caenn');
 	var cell = document.getElementById('qam256-cell');
@@ -475,9 +391,6 @@ function render256qam(state) {
 	}
 }
 
-/* Uplink CA: кнопка ТОЛЬКО когда выключено. Команды выключения у этого модуля
-   на форуме нет ни одной, поэтому обратного переключателя мы не рисуем - он
-   молча ничего бы не делал. (ревью 13.09.2026, форум 4pda) */
 function renderUlca(state) {
 	var row = _ensureRow('ulcan', 'ulca-cell', _('Uplink aggregation'), 'caenn');
 	var cell = document.getElementById('ulca-cell');
@@ -511,9 +424,6 @@ function render5gMode(state) {
 	row.style.display = '';
 	cell.innerHTML = '';
 
-	// Норма - SA и NSA вместе. Тогда строка просто отвечает на вопрос «а 5G-то
-	// включён?» и ничего не предлагает: кнопку показываем только когда есть что
-	// чинить, иначе она превращается в способ случайно себе навредить.
 	var full = (state === 'sa+nsa');
 	var txt = ({
 		'sa+nsa': _('Enabled (SA + NSA)'),
@@ -534,30 +444,17 @@ function render5gMode(state) {
 	cell.appendChild(E('button', {
 		'class': 'btn cbi-button cbi-button-apply',
 		'click': ui.createHandlerFn(this, function() {
-			/* Через resolveDefault: команда уходит в фон, но отказ самого rpcd
-			   (занят, таймаут) иначе всплывал необработанным. (аудит 12.09.2026) */
 			_bandsOpStart([ 'set5gmode', 'full' ], _('Enabling 5G — the modem is restarting its radio…'));
 		})
 	}, _('Enable 5G')));
 }
 
-/* Умеет ли ТЕКУЩИЙ модем ЗАПИСЫВАТЬ привязку к соте. Ставится в renderCellLock по
-   состоянию celllock; читают кнопки лока в строках соседей (5gdetail). */
 var _cellLockWritable = false;
 
-/* Общая точка запуска команды bands.sh с плашкой «модем перезагружается»: команда
-   уходит в фон (цикл режима полёта дольше таймаута rpcd), плашка снимается по
-   факту возвращения модема (clearModemBusy). Используют и cell-lock-строка, и
-   кнопки лока в таблице соседей. */
 function _runBands(args, msg) {
-	/* Через resolveDefault: команда фоновая, но отказ rpcd иначе оставался
-	   необработанным отказом промиса. (аудит 12.09.2026) */
 	_bandsOpStart(args, msg);
 }
 
-/* Привязать к КОНКРЕТНОЙ соте (EARFCN+PCI) - зовётся из строки соседа. Модем сам
-   не обязан быть на этой соте: setcelllock даёт earfcn+pci, и прошивка камперит
-   туда (Quectel QNWLOCK / Fibocom EMMCHLCK|^CELLLOCK / Intel freq_lock). */
 function lockCell(ear, pci) {
 	if (!ear || ear === '-' || pci == null || pci === '' || pci === '-') {
 		ui.addNotification(null, E('p', _('Cell EARFCN/PCI unknown yet - try again in a few seconds')), 'warning');
@@ -579,11 +476,6 @@ function renderCellLock(state) {
 
 	var parts = String(state).split(' ');
 	var locked = (parts[0] === 'cell' || parts[0] === 'arfcn');
-	/* «unlockable» - модем умеет СТАВИТЬ привязку, но не умеет её читать
-	   (Intel XMM и родня). Состояние неизвестно, и без этой пометки кнопка
-	   «Отвязать» не появлялась вовсе: снять привязку из интерфейса было нечем,
-	   а она способна оставить модем без связи. Снятие безопасно и вхолостую,
-	   поэтому кнопку показываем всегда. */
 	var unlockable = (parts[parts.length - 1] === 'unlockable');
 	var txt;
 	if (!locked) {
@@ -595,10 +487,6 @@ function renderCellLock(state) {
 		txt = _('Locked to frequency: EARFCN %s').format(parts[1]);
 	}
 
-	// Профиль умеет ЧИТАТЬ привязку, но не менять её (T99W175: запись через
-	// AT^LTE_LOCK переживает перезагрузку и снимается только вручную, поэтому
-	// без проверки на живом модеме мы её не даём). Кнопки нет - показываем только
-	// состояние и прямо говорим почему: молчаливо неработающая кнопка хуже её отсутствия.
 	if (parts[parts.length - 1] === 'readonly') {
 		cell.appendChild(E('span', { 'style': 'margin-right:.6em' }, [ txt ]));
 		if (locked) {
@@ -611,14 +499,7 @@ function renderCellLock(state) {
 
 	var run = _runBands;
 
-	// СНАЧАЛА КНОПКА (действие), затем состояние («к чему привязан») - единый порядок
-	// для всех модемов.
 	if (locked || unlockable) {
-		/* При НЕИЗВЕСТНОМ состоянии (unlockable без locked) кнопка зовётся
-		   иначе: голое «Unlock» читалось как «модем привязан к соте» - человек
-		   шёл искать несуществующую привязку (живой отчёт 09.08.2026, L850).
-		   «Сбросить привязку» честнее: это страховочное действие, безопасное и
-		   вхолостую. */
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-reset',
 			'click': ui.createHandlerFn(this, function() {
@@ -628,11 +509,6 @@ function renderCellLock(state) {
 		}, [ (locked ? _('Unlock') : _('Reset cell lock')) ]));
 	}
 	if (!locked) {
-		/* Соту берём В МОМЕНТ НАЖАТИЯ, а не при отрисовке. Раньше кнопка читала
-		   последний снимок метрик, но эта строка рисуется при раскрытии блока
-		   диапазонов - опрос метрик к тому времени мог ещё не пройти, и кнопка
-		   оставалась заблокированной без объяснений. Свежий запрос заодно
-		   гарантирует, что привязываемся к ТЕКУЩЕЙ соте, а не к устаревшей. */
 		cell.appendChild(E('button', {
 			'class': 'btn cbi-button cbi-button-action',
 			'click': ui.createHandlerFn(this, function() {
@@ -652,8 +528,6 @@ function renderCellLock(state) {
 		}, [ _('Lock to current cell') ]));
 	}
 
-	// Состояние - ПОСЛЕ кнопки и ТОЛЬКО когда привязан: «Не привязан» не пишем,
-	// это и так ясно по кнопке «Привязать к текущей соте».
 	if (locked) {
 		cell.appendChild(E('span', { 'style': 'margin-left:.6em' }, [ txt ]));
 	} else if (unlockable) {
@@ -662,9 +536,6 @@ function renderCellLock(state) {
 		}, [ txt ]));
 	}
 
-	// Привязка есть, но САМ МОДЕМ о ней не сообщает - так ведёт себя FM350 после
-	// перезагрузки. Показываем запомненное значение и сразу объясняем расхождение,
-	// иначе пользователь увидит «привязана», проверит модем и решит, что мы врём.
 	if (parts[parts.length - 1] === 'remembered') {
 		cell.appendChild(E('span', {
 			'style': 'opacity:.65; font-size:90%; margin-left:.6em'
@@ -679,12 +550,6 @@ function _cellLockCaNote() {
 	}, _('While locked to one cell the modem usually stops carrier aggregation, so the speed may drop.'));
 }
 
-/* ПРИВЯЗКА К СОТЕ 5G - ОТДЕЛЬНАЯ СТРОКА, а не флаг в строке 4G: у прошивки это
-   разные команды с независимым состоянием (T99W175: AT^LTE_LOCK и
-   AT^NR5G_LOCK), модем может быть привязан по 4G и свободен по 5G. Одна строка
-   на двоих показывала бы одну привязку вместо двух и снимала бы не ту.
-   Строка появляется, только если профиль ответил не «Unsupported».
-   (ревью 13.09.2026, форум 4pda) */
 function renderCellLock5g(state) {
 	var row = _ensureRow('celllock5gn', 'celllock5g-cell', _('5G cell lock'), 'celllockn');
 	var cell = document.getElementById('celllock5g-cell');
@@ -710,10 +575,6 @@ function renderCellLock5g(state) {
 		return;
 	}
 
-	/* НЕСУЩУЮ БЕРЁМ В МОМЕНТ НАЖАТИЯ. Отдельного поля «ARFCN/PCI соты 5G» в
-	   метриках нет: в NSA это ВТОРИЧНАЯ несущая, и живёт она в s1..s4 рядом с
-	   LTE-несущими. Ищем среди них ту, у которой диапазон начинается на «n» -
-	   иначе привязали бы 5G к номеру LTE-канала. */
 	cell.appendChild(E('button', {
 		'class': 'btn cbi-button cbi-button-action',
 		'click': ui.createHandlerFn(this, function() {
@@ -745,7 +606,7 @@ function nrC_hasEnabled(j) {
 }
 
 function loadBandsModemband(force) {
-	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }   // модульный опрос
+	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ force ? 'jsonrefresh' : 'json' ].concat(_bandsFor())), '').then(ctx.forPage(function(out) {
 		var j = {};
 		var note = document.getElementById('bandnote');
@@ -756,10 +617,6 @@ function loadBandsModemband(force) {
 
 function applyVendorJson(j) {
 		var note = document.getElementById('bandnote');
-		// Считаем управление доступным, только если список поддерживаемых бендов
-		// НЕПУСТ. Раньше проверяли !j.supported, но bands.sh отдаёт пустой массив
-		// [] (напр. Compal в mbim: mmcli выключен), а ![] === false, и код шёл
-		// рисовать строки бендов с прочерком вместо пояснения.
 		render5gMode(j.mode5g);
 		renderCaEnabled(j.ca_enabled, j.ca_switch);
 		renderCellLock(j.celllock);
@@ -770,19 +627,10 @@ function applyVendorJson(j) {
 		               (j.supported5gnsa && j.supported5gnsa.length) ||
 		               (j.supported5gsa && j.supported5gsa.length);
 		if (j.error || !hasBands) {
-			// Транзитный пустой ответ (bands.sh иногда конкурирует с опросом метрик
-			// за AT-порт FM350): если бенды уже загружены по modemband-пути, НЕ
-			// сносим блок - иначе строки «Режим сети»/диапазоны моргают на каждый
-			// опрос (и re-reveal их снова показывает).
 			if (bandSource == 'modemband') { return; }
-			// Ни mmcli, ни вендорные AT-команды не дали список диапазонов.
 			[ 'modeswn', 'bands2gn', 'bands3gn', 'bandsn', 'bands5gn', 'bandsactn', 'bandwarnn' ].forEach(function(id) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
 			});
-			// Пояснение «переключите на ModemManager» показываем ТОЛЬКО если
-			// интерфейс НЕ modemmanager. В режиме modemmanager пустой список -
-			// это временно (mmcli не готов, модем пересоздаётся), а не «нельзя
-			// управлять»: mmcli-путь заполнит бенды сам, ждём следующий опрос.
 			if (note) { note.style.display = ctx.isMM() ? 'none' : ''; }
 			bandsStaticNote = !!j.nobandctl;
 			if (note && j.nobandctl) {
@@ -802,19 +650,11 @@ function applyVendorJson(j) {
 			}
 			return;
 		}
-		/* READ-ONLY: состояние читается, но применить его нельзя без ModemManager.
-		   Показываем ПРИВЫЧНЫЕ кнопки с подсветкой текущих диапазонов, только
-		   неактивными, и оставляем подсказку с кнопкой переключения. Раньше в
-		   этом случае bands.sh отдавал пустые списки и блок подменялся текстом -
-		   пользователь не видел даже того, что реально включено в модеме. */
-		_revealTries = 0;   // бенды пришли - счётчик ожидания обнуляем
+		_revealTries = 0;
 		bandsReadOnly = !!j.readonly;
 		bandsTakeover = !!j.takeover;
 		bandsStaticNote = !!(j.mm_at_static || j.noat_static);
 		if (note) { note.style.display = (bandsReadOnly || bandsTakeover) ? '' : 'none'; }
-		/* AT под ModemManager выключен для хрупкой прошивки (T77W968/DW5821e):
-		   кнопки работают, но текущий выбор модема не читается - подсветки нет.
-		   Плашка объясняет это и не предлагает «переключиться на MM» (он уже). */
 		if (note && j.mm_at_static) {
 			var nt = document.getElementById('bandnote-text');
 			var nb = document.getElementById('bandnote-mm-btn');
@@ -822,8 +662,6 @@ function applyVendorJson(j) {
 			if (nb) { nb.style.display = 'none'; }
 			note.style.display = '';
 		}
-		/* Запрет фонового AT (no_at) - та же картина по другой причине: выбор
-		   модема не читается, но «Применить» работает (issue #28). */
 		if (note && j.noat_static) {
 			var nt2 = document.getElementById('bandnote-text');
 			var nb2 = document.getElementById('bandnote-mm-btn');
@@ -832,20 +670,9 @@ function applyVendorJson(j) {
 			note.style.display = '';
 		}
 		bandSource = 'modemband';
-		/* Диапазоны 3G у modemband-модемов - ВЫПАДАЮЩИЙ СПИСОК, а не галочки.
-		   У LTE прошивка принимает битовую маску (любой набор), а у 3G - номер
-		   ГОТОВОЙ КОМБИНАЦИИ из таблицы модема (Telit: 2-е поле #BND). Набрать
-		   произвольный набор нельзя, поэтому галочки тут врали бы: пользователь
-		   снял бы одну, а модем применил бы совсем другой набор. Бэкенд отдаёт
-		   combos3g=[{id,label}] + current3g; профиль без 3G их не отдаёт вовсе -
-		   тогда строку прячем, как раньше. */
 		var row3g = document.getElementById('bands3gn');
 		var c3g = document.getElementById('bands-3g');
 		if (c3g && j.supported3g && j.supported3g.length) {
-			/* MASK-стиль (FM350): галочки произвольного набора, как LTE/NR -
-			   применяются общей кнопкой «Применить», а не по клику. Подписи "B1"
-			   (без частоты, как у LTE), «Авто» не нужна: все галочки = без
-			   ограничения. */
 			if (row3g) { row3g.style.display = ''; }
 			var sup3g = j.supported3g.map(function(o) { return o.band; });
 			var en3g = j.enabled3g || [];
@@ -855,14 +682,8 @@ function applyVendorJson(j) {
 			}
 		} else if (c3g && j.combos3g && j.combos3g.length) {
 			if (row3g) { row3g.style.display = ''; }
-			/* Пересобираем ТОЛЬКО при изменении (см. sameRender). Строку при этом
-			   показываем всегда - видимость и перерисовка это разные вещи. */
 			if (!ctx.sameRender(c3g, String(j.current3g) + '|' + j.combos3g.map(function(o){ return o.id; }).join(','))) {
 			c3g.innerHTML = '';
-			/* Кнопки как у «Режима сети», а НЕ как у LTE: там переключатели (можно
-			   отметить любой набор), а комбинация 3G выбирается РОВНО ОДНА - клик
-			   сразу применяет её. Подписи длинные («2100 + 1900 + 850») - это
-			   нормально, ряд переносится. */
 			j.combos3g.forEach(function(o) {
 				var on = (String(j.current3g) === String(o.id));
 				c3g.appendChild(E('button', {
@@ -873,15 +694,9 @@ function applyVendorJson(j) {
 			});
 			}
 		} else if (row3g && !_has3gMM) {
-			/* Прячем ТОЛЬКО когда 3G не даёт ни один источник. Если mmcli отдал
-			   utran-диапазоны, строка уже наполнена рабочими тумблерами - гасить
-			   её из-за того, что у AT-профиля нет своих 3G-комбинаций, нельзя. */
 			row3g.style.display = 'none';
 		}
 
-		/* 2G (GSM) диапазоны - галочки (mask-стиль), подписи "GSM 900/1800".
-		   supported2g/enabled2g отдают HiLink-ветка bands.sh (Huawei E3372) и
-		   общий JSON-билдер AT-профилей (первый - Quectel EC21, qcfg="band"). */
 		var row2g = document.getElementById('bands2gn');
 		var c2g = document.getElementById('bands-2g');
 		if (c2g && j.supported2g && j.supported2g.length) {
@@ -904,22 +719,10 @@ function applyVendorJson(j) {
 		[ 'bandsn', 'bands5gn', 'bandsactn' ].forEach(function(id) {
 			var e = document.getElementById(id); if (e) { e.style.display = ''; }
 		});
-		// Постоянная подсказка о кратком обрыве при смене диапазонов - только для
-		// модемов, чей профиль выставил bandwarn (FM350: GTACT рвёт PDP).
 		var warnRow = document.getElementById('bandwarnn');
 		if (warnRow) { warnRow.style.display = j.bandwarn ? '' : 'none'; }
 
-		/* ГОНКА НА ТОРМОЗНОМ МОДЕМЕ. loadBandsModemband вызывается по раскрытию
-		   блока ОДИН раз. Если модем не успел отдать enabled (старый E3372 отвечает
-		   на at^syscfgex? не сразу), supported приходит, а enabled пуст - кнопки
-		   рисуются невыделенными и застревают, пока блок не свернуть-развернуть.
-		   Есть поддерживаемые, но ни одного включённого - почти наверняка неполный
-		   ответ: перечитываем через 1.5 с. Настоящий "все выключено" редок, а
-		   лишний перезапрос дёшев. */
 		if (supLte.length && !enLte.length && !nrC_hasEnabled(j)) {
-			// Не вечно: у модема, где ВСЕ LTE-диапазоны реально выключены, пустой
-			// enabled - это правда, а не гонка. Обычный потолок - три попытки; после
-			// перевода на ModemManager он временно поднят (см. _bandsRetryMax).
 			if ((_bandsRetry = (_bandsRetry || 0) + 1) <= _bandsRetryMax) {
 				window.setTimeout(loadBandsModemband, 1500);
 			}
@@ -934,12 +737,10 @@ function applyVendorJson(j) {
 		var nrRow = document.getElementById('bands5gn');
 		var nrC = document.getElementById('bands-nr');
 		if (nrC) {
-			// перерисовка - только при изменении (см. sameRender)
 			if (!ctx.sameRender(nrC, supNsa.join(',') + '|' + enNsa.join(','))) {
 				nrC.innerHTML = '';
 				if (supNsa.length) { buildBandButtonsNum(supNsa, enNsa, 'nsa').forEach(function(b) { nrC.appendChild(b); }); }
 			}
-			// видимость - отдельно от перерисовки: нет 5G, значит строки нет
 			if (!supNsa.length && nrRow) { nrRow.style.display = 'none'; }
 		}
 
@@ -950,15 +751,9 @@ function applyVendorJson(j) {
 }
 
 function renderNetModes(j) {
-	// Режим сети (2G/3G/4G) через AT+CNMP (bands.sh getmode/setmode) - для
-	// модемов не под ModemManager, где mmcli-переключатель недоступен.
 	var modeRow = document.getElementById('modeswn');
 	var modeC = document.getElementById('modesw-btns');
 	if (modeC && j.modes && j.modes.length) {
-		/* Видимость строки и перерисовка кнопок - РАЗНЫЕ вещи: строку
-		   показываем всегда, когда режимы есть, а кнопки пересобираем только
-		   при изменении (иначе контейнер пустеет каждый тик и браузер
-		   обрезает scrollTop - см. sameRender). */
 		if (!ctx.sameRender(modeC, String(j.currentmode) + '|' + j.modes.map(function(m){ return m.id; }).join(','))) {
 			modeC.innerHTML = '';
 			mutil.sortNetModes(j.modes).forEach(function(m) {
@@ -986,15 +781,6 @@ function switchToModemManager(btn) {
 			ctx.setMM(true);
 			bandsReadOnly = false;
 			bandsTakeover = false;
-			/* MM поднимается не мгновенно (перезапуск службы + регистрация
-			   модема), поэтому не дёргаем bands.sh в ту же секунду - иначе
-			   получим пустой список и блок мигнёт «нет диапазонов».
-			   Одной отложенной попытки МАЛО: модем появляется в mmcli через
-			   десятки секунд, а обычный потолок ретраев (3 x 1.5 c) выходил
-			   раньше - кнопки диапазонов так и оставались невыделенными до
-			   перезагрузки страницы. Поднимаем потолок на это переключение:
-			   20 x 1.5 c ~ 30 c, чего хватает на перечисление модема в MM.
-			   Как только диапазоны прочитаны, потолок сам вернётся к трём. */
 			_bandsRetry = 0;
 			_bandsRetryMax = 20;
 			window.setTimeout(loadBandsModemband, 3000);
@@ -1088,14 +874,11 @@ function _applyWatch(w) {
 	}, 3000);
 }
 
-/* Применить/сбросить диапазоны через modemband */
 function applyBandsModemband(reset, confirmed) {
 	if (_applyBusy && _applyBusy.key === _applyKeyNow() && Date.now() < _applyBusy.until) {
 		ui.addNotification(null, E('p', _('The previous band change is still being applied - wait until the modem reconnects.')), 'info');
 		return Promise.resolve();
 	}
-	/* TAKEOVER: запись потребует временно отдать модем ModemManager'у и передёрнуть
-	   интерфейс - связь на ~минуту прервётся. Предупреждаем и ждём подтверждения. */
 	if (bandsTakeover && !confirmed) {
 		ui.showModal(_('Change bands'), [
 			E('p', {}, _('To change bands the app briefly hands this modem to ModemManager, applies the change and reconnects. The connection will drop for up to a minute.')),
@@ -1115,7 +898,6 @@ function applyBandsModemband(reset, confirmed) {
 	if (!reset) {
 		document.querySelectorAll('#bands-lte .cbi-button-action').forEach(function(b) { lte.push(b.getAttribute('data-band')); });
 		document.querySelectorAll('#bands-nr .cbi-button-action').forEach(function(b) { nsa.push(b.getAttribute('data-band')); });
-		// 3G/2G только в mask-стиле (data-btype): combos/utran применяются иначе.
 		document.querySelectorAll('#bands-3g .cbi-button-action[data-btype="3g"]').forEach(function(b) { three.push(b.getAttribute('data-band')); });
 		document.querySelectorAll('#bands-2g .cbi-button-action[data-btype="2g"]').forEach(function(b) { two.push(b.getAttribute('data-band')); });
 		if (!lte.length && !nsa.length && !three.length && !two.length) {
@@ -1123,31 +905,17 @@ function applyBandsModemband(reset, confirmed) {
 			return Promise.resolve();
 		}
 	}
-	/* Индикатор ожидания здесь НЕ показываем. Правило общее для всего блока:
-	   ждать показываем только там, где перезапуск модема ДЕЙСТВИТЕЛЬНО
-	   происходит и его вызываем мы сами (см. applyBands - там reboot_modem.sh).
-	   На этих модемах маска применяется живьём, радио не уходит, и плашка просто
-	   висела бы положенный минимум в 8 секунд на пустом месте - ровно это и
-	   наблюдалось. Модалка была тем же злом, только ещё и блокирующим. */
 	var hasLte = document.querySelector('#bands-lte .cbi-button') != null;
 	var hasNsa = document.querySelector('#bands-nr .cbi-button') != null;
-	// 3G/2G-маска присутствует только когда есть галочные кнопки (data-btype).
 	var hasThree = document.querySelector('#bands-3g [data-btype="3g"]') != null;
 	var hasTwo = document.querySelector('#bands-2g [data-btype="2g"]') != null;
 	var args = [ 'setall' ];
 	if (hasLte && (reset || lte.length)) { args.push('lte=' + (reset ? 'default' : lte.join(' '))); }
 	if (hasNsa && (reset || nsa.length)) { args.push('nsa=' + (reset ? 'default' : nsa.join(' '))); }
-	// Снятие ВСЕХ 3G/2G-галочек не применяем (пустой набор = no-op у API/GTACT;
-	// чтобы выключить RAT целиком - режим сети).
 	if (hasThree && (reset || three.length)) { args.push('3g=' + (reset ? 'default' : three.join(' '))); }
 	if (hasTwo && (reset || two.length)) { args.push('2g=' + (reset ? 'default' : two.join(' '))); }
 	if (args.length < 2) { return Promise.resolve(); }
 	var key = _applyKeyNow();
-	// Перезапуск радио модема (CFUN=4->1) ТЕПЕРЬ ДЕЛАЕТ САМ bands.sh - внутри той
-	// же фоновой подоболочки, СТРОГО ПОСЛЕ записи маски. Раньше reboot дёргали
-	// отсюда, но setbands фоновая и возвращается мгновенно: перезапуск обгонял
-	// запись, модем поднимался на старом наборе, и отключённый диапазон
-	// оставался активным (воспроизведено на SIM7600: снятый B7 не отключался).
 	return fs.exec('/usr/share/5gmodem/bands.sh', args).then(function(res) {
 		var d = null;
 		try { d = JSON.parse(String((res && res.stdout) || '').trim()); } catch (e) { d = null; }
@@ -1162,21 +930,13 @@ function applyBandsModemband(reset, confirmed) {
 			_applyBusy = d.takeover ? { key: key, until: Date.now() + 300000 } : null;
 			_applyWatch({ id: String(d.id), key: key, left: d.takeover ? 100 : 40, told: false });
 		}
-		/* Читаем МИМО кэша: setbands только что сменил маску, а обычный json
-		   отдал бы прежний снимок (кэш живёт 300 c) - именно так таблица и
-		   показывала старый набор диапазонов ещё десятки секунд. */
 		return loadBandsModemband(true);
 	}).catch(function(err) {
 		ui.addNotification(null, E('p', _('Failed to set bands') + ': ' + (err.message || err)), 'error');
 	});
 }
 
-/* Подсветить активную кнопку режима сети по выводу mmcli -K */
-
 function revealMgmtWhenReady(tries) {
-	/* Оставлен как совместимая обёртка: единый loadBands (mgmtinfo) сам решает,
-	   показывать ли ряды и каким путём. Прежний reveal-цикл с собственным
-	   парсингом mmcli конфликтовал с загрузчиками (показывал/прятал наперегонки). */
 	return loadBands();
 }
 
@@ -1190,29 +950,10 @@ function applyBands() {
 		ui.addNotification(null, E('p', _('Select at least one band')), 'error');
 		return Promise.resolve();
 	}
-	/* Плашка вместо модалки - то же поведение, что у modemband-ветки выше и у
-	   привязки к соте: страница остаётся рабочей, а ожидание заканчивается по
-	   ФАКТУ возвращения модема, а не по угаданным секундам. */
-	/* Без цели в MM запись ушла бы в ЧУЖОЙ модем - это опаснее, чем ничего не
-	   сделать. */
 	if (!ctx.getMmIdx()) {
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
 		return Promise.resolve();
 	}
-	/* БЕЗ ПЛАШКИ И БЕЗ РЕСТАРТА РАДИО.
-	   Здесь ModemManager-путь: mmcli применяет набор ЖИВЬЁМ за ~0.1 c, модем
-	   остаётся connected (замерено на Compal - соединение и интерфейс не
-	   вздрагивают, модем сам перецепляется на разрешённые частоты). Рестарт
-	   радио тут был мёртвым кодом: AT-порт MM-модема нам не принадлежит, и
-	   reboot_modem.sh неизменно отвечал «AT port not found». Плашка же честно
-	   ждала «возвращения модема», которого не происходило, - отсюда чёрный
-	   прямоугольник на полминуты вместо карточки. Просто применяем и
-	   перечитываем блок. */
-	/* ЧЕРЕЗ bands.sh, А НЕ ГОЛЫЙ mmcli. Канал у модема под ModemManager один, и в
-	   него же ходит наш опрос метрик; прямой вызов mmcli попадал в занятый канал
-	   и отваливался «couldn't set selection preference: Transaction timed out»,
-	   утаскивая за собой модем. bands.sh берёт ту же очередь на устройство, что и
-	   наши читатели, поэтому MM применяет диапазоны спокойно. */
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', [ _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
@@ -1221,8 +962,6 @@ function applyBands() {
 		if (ui.addTimeLimitedNotification) {
 			ui.addTimeLimitedNotification(null, E('p', _('Bands applied, refreshing…')), 4000, 'info');
 		}
-		/* Мимо кэша: набор только что изменился. Небольшая пауза - модему нужен
-		   момент, чтобы отдать новый current-bands. */
 		window.setTimeout(loadBands, 1200);
 		window.setTimeout(loadBands, 4000);
 	}).catch(function(err) {
@@ -1239,13 +978,10 @@ function resetBands() {
 }
 
 function setNetMode(allowed, preferred, label, confirmed) {
-	if (!ctx.getMmIdx()) {   // см. ctx.getMmIdx(): иначе режим уехал бы соседнему модему
+	if (!ctx.getMmIdx()) {
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
 		return Promise.resolve();
 	}
-	/* Режим без технологии, на которой модем СЕЙЧАС работает, оставляет роутер
-	   без связи: в месте без 5G кнопка «5G» уводит модем в сеть, где он не
-	   регистрируется вовсе (issue #37). Решение за человеком - спрашиваем. */
 	var _cur = String((window._lastJson || {}).mode || '');
 	var _need = /NR|5G/i.test(_cur) ? '5g'
 		: /LTE|4G/i.test(_cur) ? '4g'
@@ -1265,11 +1001,6 @@ function setNetMode(allowed, preferred, label, confirmed) {
 		return Promise.resolve();
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
-	/* Через bands.sh setmodemm, а НЕ голый mmcli: смена режима рвёт регистрацию,
-	   netifd передозванивается и сбрасывал бы режимы в «авто» (выбранный 3G
-	   слетал через 10 секунд). setmodemm пишет allowedmode/preferredmode в
-	   конфиг интерфейса - прото передаёт их при каждом дозвоне, выбор держится.
-	   «Авто» = default: опции удаляются, модем возвращается к полному набору. */
 	var isAuto = (allowed == '2g|3g|4g|5g' && preferred == '5g');
 	var args = isAuto ? [ 'setmodemm', 'default' ]
 		: (preferred ? [ 'setmodemm', allowed, preferred ] : [ 'setmodemm', allowed ]);
@@ -1282,11 +1013,6 @@ function setNetMode(allowed, preferred, label, confirmed) {
 			} else {
 				ui.addNotification(null, E('p', _('Network mode set: %s').format(label)), 'info');
 			}
-			/* Смена режима = передёргивание интерфейса (~10-20 c): одного
-			   раннего обновления не хватало - mgmtinfo отвечал pending, и
-			   подсветка оставалась пустой. Несколько заходов покрывают всё окно. */
-			/* updateModeButtons живёт в 5gdetail и здесь не виден (был ReferenceError,
-			   ревью №10) - подсветку освежает наш же loadBands */
 			[ 2000, 8000, 16000, 25000 ].forEach(function(t) { window.setTimeout(loadBands, t); });
 		} else {
 			ui.addNotification(null, E('p', [ _('Failed to set network mode') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
@@ -1299,10 +1025,6 @@ function setNetMode(allowed, preferred, label, confirmed) {
 
 function setNetModeAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
-	/* Перезапуск радио (если он вообще нужен этому модему) теперь делает сам
-	   bands.sh setmode - после записи и только когда профиль его требует. На
-	   SIM7600 AT+CNMP применяется вживую, а CFUN его откатывает, поэтому UI
-	   больше не дёргает reboot_modem.sh. */
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
@@ -1323,7 +1045,6 @@ function setNetModeAT(id, label) {
 
 function setBands3gAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying 3G bands...')));
-	// Реконнект (soft) делает САМ bands.sh в фоне после записи - как для setbands.
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands3g', String(id) ]).then(function(res) {
 		ui.hideModal();
 		if (res && typeof res.code === 'number' && res.code !== 0) {
@@ -1342,17 +1063,12 @@ function setBands3gAT(id, label) {
 	});
 }
 
-/* --- ИНТЕГРАЦИОННЫЕ ТОЧКИ (вызываются из 5gdetail) ------------------------- */
-
-/* Модем вернулся из «занят» (clearModemBusy): перечитать блок ТЕМ ЖЕ путём,
-   которым он был заполнен, минуя кэш - состояние радио только что менялось. */
 function onModemBusyCleared() {
 	if (!_bandsAfterBusy) { return; }
 	_bandsAfterBusy = false;
 	if (bandSource === 'modemband') { loadBandsModemband(true); } else { loadBands(); }
 }
 
-/* Тик опроса метрик: освежать блок частот раз в ~3 тика. */
 var _bandsPollBusy = false;
 function pollTick() {
 	if ((_bandsPollN = (_bandsPollN + 1) % 3) !== 0 || _bandsPollBusy) { return; }
@@ -1360,8 +1076,6 @@ function pollTick() {
 	Promise.resolve(loadBands()).catch(function() {}).then(function() { _bandsPollBusy = false; });
 }
 
-/* Смена ЖЕЛЕЗА в том же разъёме (сигнатура модель+vidpid из снимка метрик):
-   всё bands-состояние принадлежит конкретному модему - сбрасываем и перечитываем. */
 function hwTick(json) {
 	bandFilterTick(json);
 	var hw = String(json.modem || '') + '|' + String(json.vidpid || '');
@@ -1379,18 +1093,15 @@ function hwTick(json) {
 	if (hw !== '|') { window.__hwSig = hw; }
 }
 
-/* Переход прото в modemmanager (ловит applyMetrics): разбудить mmcli-путь. */
 function ungate() {
-	_revealTries = 0;   // смена прото на modemmanager - повод ждать бенды заново
+	_revealTries = 0;
 	window.setTimeout(revealMgmtWhenReady, 500);
 }
 
-/* Диапазоны ДРУГИХ RAT из mmcli-ветки рендера: applyBands обязан сохранять их
-   при записи (mmcli принимает полный список). */
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30600,
+	API: 30700,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
@@ -1414,10 +1125,6 @@ return baseclass.extend({
 	isTakeover: function() { return bandsTakeover; },
 	isReadOnly: function() { return bandsReadOnly; },
 	isStaticNote: function() { return bandsStaticNote; },
-	/* Сброс состояния под НОВЫЙ модем при переключении вкладки БЕЗ перезагрузки
-	   страницы (in-place): все модульные флаги завязаны на конкретный модем и
-	   без сброса блок частот показывал бы данные прежнего. warm-ключ включает
-	   путь (см. warmKey), поэтому тёплый старт нового модема подтянется сам. */
 	resetForModem: function() {
 		_bandsWarmed = false; _bandsPollN = 0; _bandsRetry = 0;
 		_bandReg = null; _bandAct = null; _bandFilterSig = '';
@@ -1433,9 +1140,6 @@ return baseclass.extend({
 		});
 		window.__hwSig = null;
 		window.setTimeout(loadBands, 300);
-		/* Вендорные строки прежнего модема гасим СРАЗУ при переключении, не
-		   дожидаясь данных нового: иначе «Режим 5G / CA / cell-lock» от FM350
-		   мигают на вкладке следующего модема, пока не придёт его ответ. */
 		render5gMode(null); renderCaEnabled(null); renderCellLock(null);
 	}
 });

@@ -1,5 +1,3 @@
-# Sierra Wireless EM9xxx PCIe/MHI
-
 . "$RES/modem/usb/119990d3"
 
 if [ -z "$PROTO" ]; then

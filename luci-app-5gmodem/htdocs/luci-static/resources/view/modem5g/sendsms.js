@@ -11,11 +11,6 @@
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
 
-/* СПИСОК КОНТАКТОВ - ОДИН ИСТОЧНИК ДЛЯ ВИДЖЕТА И ДЛЯ РАССЫЛКИ.
-   Список рисуется ui.Dropdown'ом (единый вид списков в программе), а у него нет
-   ни .value, ни .options - раньше рассылка «всем» перебирала <option> прямо в
-   DOM. Держим разобранные пары «имя - номер» здесь: виджет строится из них, и
-   рассылка идёт по ним же, в том же порядке. */
 var smsBook = [];
 var smsBookW = null;
 
@@ -25,28 +20,19 @@ var smsBookW = null;
 	Licensed to the GNU General Public License v3.0.
 */
 
-/* Binary used for SMS operations: on modems managed by ModemManager
-   (MBIM/QMI, e.g. Compal RXM-G1) sms_tool on the AT port never sees
-   incoming messages and cannot send - use the mmcli wrapper instead.
-   The sms_via_mm option is set by the hotplug script (by VID:PID) or
-   by the user. */
-/* Выбор бинаря (sms_tool / sms_tool_mm) переехал в smsbridge.sh: транспорт -
-   забота моста, страница про него больше не знает. */
-
 return view.extend({
 
 	isUnicode: function(text) {
-		// Chars GSM-7
 		const gsm7chars = '@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !"#¤%&\'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà';
 		const gsm7extended = '^{}\\[~]|€';
 		
 		for (let i = 0; i < text.length; i++) {
 			let char = text.charAt(i);
 			if (gsm7chars.indexOf(char) === -1 && gsm7extended.indexOf(char) === -1) {
-				return true; // None GSM-7
+				return true;
 			}
 		}
-		return false; // All GSM-7
+		return false;
 	},
 
 	getGSM7Length: function(text) {
@@ -82,7 +68,6 @@ return view.extend({
 
 	normalizeToGSM7: function(text) {
 		return text
-			// PL
 			.replace(/ą/g, 'a').replace(/Ą/g, 'A')
 			.replace(/ć/g, 'c').replace(/Ć/g, 'C')
 			.replace(/ę/g, 'e').replace(/Ę/g, 'E')
@@ -92,7 +77,6 @@ return view.extend({
 			.replace(/ś/g, 's').replace(/Ś/g, 'S')
 			.replace(/ż/g, 'z').replace(/Ż/g, 'Z')
 			.replace(/ź/g, 'z').replace(/Ź/g, 'Z')
-			// EU
 			.replace(/á/g, 'a').replace(/Á/g, 'A')
 			.replace(/â/g, 'a').replace(/Â/g, 'A')
 			.replace(/ã/g, 'a').replace(/Ã/g, 'A')
@@ -127,7 +111,6 @@ return view.extend({
 			.replace(/ý/g, 'y').replace(/Ý/g, 'Y')
 			.replace(/ÿ/g, 'y').replace(/Ÿ/g, 'Y')
 			.replace(/ž/g, 'z').replace(/Ž/g, 'Z')
-			// SPECIAL
 			.replace(/–/g, '-').replace(/—/g, '-')
 			.replace(/\u2018/g, '\'').replace(/\u2019/g, '\'')
 			.replace(/\u201C/g, '"').replace(/\u201D/g, '"')
@@ -145,7 +128,6 @@ return view.extend({
 			.replace(/≤/g, '<=').replace(/≥/g, '>=')
 			.replace(/←/g, '<-').replace(/→/g, '->')
 			.replace(/↑/g, '^').replace(/↓/g, 'v')
-			// Emoji, etc.
 			.replace(/[\u{1F600}-\u{1F64F}]/gu, ':)')
 			.replace(/[\u{1F300}-\u{1F5FF}]/gu, '')
 			.replace(/[\u{1F680}-\u{1F6FF}]/gu, '')
@@ -157,18 +139,9 @@ return view.extend({
 			.replace(/[\u{1FA70}-\u{1FAFF}]/gu, '')
 			.replace(/[\u{2600}-\u{26FF}]/gu, '')
 			.replace(/[\u{2700}-\u{27BF}]/gu, '')
-			// UNSUPPORTED
 			.replace(/[^\x00-\x7F@£$¥èéùìòÇØøÅåΔΦΓΛΩΠΨΣΘΞÆæßÉ¡¤§¿äöñüà^{}\\[\]~|€]/g, '');
 	},
 
-	/* СЧЁТЧИК НЕ РЕЖЕТ ТЕКСТ.
-	   Раньше обработчик ввода перезаписывал поле обрезком в 70 (UCS2) или 160
-	   (GSM-7) символов: длинное сообщение, набранное или вставленное целиком,
-	   молча теряло хвост - а отправка длинного текста поддерживается. Мост
-	   нарезает UCS2 по 67 кодовых единиц с UDH конкатенации (smspdu.sh), латиницу
-	   многочастно собирает сам sms_tool. Поэтому значение поля не трогаем, а
-	   показываем либо остаток символов в одной части, либо «длина · число частей»
-	   (аудит 12.09.2026). */
 	counterText: function(text) {
 		let uni = this.isUnicode(text);
 		let len = uni ? this.getUnicodeLength(text) : this.getGSM7Length(text);
@@ -200,8 +173,6 @@ return view.extend({
 		let encodingType = ev.target.value;
 		let counter = document.getElementById('counter');
 		
-		/* Смена кодировки текст тоже НЕ обрезает - только приводит его к GSM-7,
-		   если выбран этот алфавит (аудит 12.09.2026). */
 		if (encodingType === 'gsm7') {
 			textarea.value = this.normalizeToGSM7(text);
 		}
@@ -211,10 +182,6 @@ return view.extend({
 
 	handleCommand: function(exec, args) {
 		let buttons = document.querySelectorAll('.cbi-button');
-		/* ЗАПОМИНАЕМ ИСХОДНОЕ СОСТОЯНИЕ КАЖДОЙ КНОПКИ. Снимать disabled со ВСЕХ
-		   кнопок документа нельзя: ниже на той же странице живёт панель настроек
-		   SMS, где часть кнопок выключена осознанно, - после отправки они
-		   становились нажимаемыми (аудит 12.09.2026). */
 		let wasDisabled = [];
 
 		for (let i = 0; i < buttons.length; i++) {
@@ -253,31 +220,14 @@ return view.extend({
 
 	handleGoNow: function(ev, cbval) {
 		let phn = document.getElementById('phonenumber').value.trim();
-		/* Префикс страны - НА ОТПРАВКЕ и только к 10-значному национальному
-		   номеру (9291067196 -> +79291067196). Раньше поле ПРЕДЗАПОЛНЯЛОСЬ
-		   префиксом, и сервисный номер уезжал как 7000100: модем честно слал
-		   «в никуда», а «SMS отправлено» выглядело ложью (живой случай
-		   МегаФон 000100, 20.08.2026). Короткие сервисные номера (любой
-		   длины, не равной 10) уходят как есть - как у sms_tool в консоли. */
 		if (uci.get('5gmodem', 'sms', 'prefix') == '1' && /^\d{10}$/.test(phn)) {
 			let pn = String(uci.get('5gmodem', 'sms', 'pnumber') || '').replace(/[^0-9+]/g, '');
 			phn = pn + phn;
 		}
 		let port = uci.get('5gmodem', 'sms', 'sendport');
-		/* Пауза между сообщениями группы. Значения в конфиге может не быть
-		   вовсе - тогда без запасного нуля получилось бы NaN, и setTimeout ниже
-		   молча выродился бы в нулевую задержку. */
 		let dx = (uci.get('5gmodem', 'sms', 'delay') || 0) * 1000;
 		let get_smstxt = document.getElementById('smstext').value;
 
-		/* РЕЖИМ ОТПРАВКИ РЕШАЕТ ЗНАЧЕНИЕ ВИДЖЕТА, А НЕ НАДПИСЬ НА КНОПКЕ.
-		   Раньше сравнивали innerText комбо-кнопки со строкой _('Send to number'),
-		   а подпись собирается совсем из других строк - _('Send') + ' ' +
-		   _('to number'). В любом переводе, кроме английского, сравнение
-		   промахивалось, и «отправить на номер» уходило в рассылку ПО ВСЕЙ
-		   телефонной книге (аудит 12.09.2026). ui.ComboButton передаёт выбранное
-		   значение вторым аргументом обработчика; у обычной кнопки (рассылка
-		   выключена) его нет - это всегда одиночная отправка. */
 		if (cbval !== 'sendg')
 		{
 				if ( phn.length < 3 )
@@ -319,12 +269,6 @@ return view.extend({
 				else {
 				   		let xs = smsBook;
 
-						/* Журнал рассылки - СВОЯ переменная. Раньше строки копились в
-						   `res.stdout`, а `res` в этой функции не существует вовсе (это
-						   имя параметра колбэка в handleCommand): рассылка падала с
-						   ReferenceError ещё до первого сообщения, причём синхронно -
-						   то есть мимо .finally(), и кнопка «Отправить» навсегда
-						   оставалась заблокированной и крутящейся (аудит 12.09.2026). */
     						let log = '';
 							let out = document.querySelector('.smscommand-output');
 							out.style.display = '';
@@ -363,7 +307,6 @@ return view.extend({
 
 		document.getElementById('counter').innerHTML = '160';
 
-		// Reset to GSM-7
 		let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 		if (gsm7Radio) gsm7Radio.checked = true;
 
@@ -431,7 +374,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30600, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30700, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -443,7 +386,7 @@ return view.extend({
 	},
 
 	render: function (loadResults) {
-		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		modemtabs.attach();
 		var self = this;
 		return Promise.resolve(this.renderMain(loadResults)).then(function(main) {
 			return smssettings.panel('send').then(function(panel) {
@@ -468,13 +411,6 @@ return view.extend({
 	if ( uci.get('5gmodem', 'sms', 'prefix') == '1' ) {	
 		prefixnum = uci.get('5gmodem', 'sms', 'pnumber');
 	}
-	/* Подсказка о формате номера - ВНУТРИ страницы, а не через
-	   ui.addNotification. Тот рисует ГЛОБАЛЬНЫЙ баннер поверх всего документа:
-	   он перекрывал вкладки модемов и меню приложения и висел там, пока его не
-	   закроют. Для постоянной справки по полю это неверный инструмент -
-	   уведомления существуют для событий («сообщение отправлено»), а не для
-	   текста, который должен просто быть на странице. Показываем так же, как
-	   предупреждение о USSD: обычной плашкой в потоке. */
 	let showNumberHint = (uci.get('5gmodem', 'sms', 'information') == '1');
 	
 		let info = _('User interface for sending messages using sms-tool').format('');
@@ -503,17 +439,8 @@ return view.extend({
 							'class': 'cbi-button cbi-button-neutral',
 							'type': 'button',
 							'click': function(ev) {
-								/* Закрыли - значит подсказка больше не нужна: гасим её
-								   НАВСЕГДА. Плашку убираем сразу, не дожидаясь записи в
-								   конфиг: ответ на клик должен быть мгновенным, а если
-								   запись почему-то не удастся, подсказка вернётся при
-								   следующем заходе - это безопаснее, чем наоборот. */
 								let b = ev.currentTarget.closest('.sms-hint');
 								if (b && b.parentNode) { b.parentNode.removeChild(b); }
-								/* Пишем через скрипт, а НЕ uci.set/uci.save: последний кладёт
-								   правку в сессионный стейджинг LuCI, и наверху повисает
-								   «непринятые изменения» с кнопкой «Применить». Для закрытия
-								   подсказки это неуместно - пользователь ничего не настраивал. */
 								fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'hidenumberhint' ]);
 							}
 						}, [ _('Close') ])
@@ -642,12 +569,6 @@ return view.extend({
 						E('div', { 'class': 'cbi-value' }, [
 							E('label', { 'class': 'cbi-value-title' }, [ _('Message text') ]),
 							E('div', { 'class': 'cbi-value-field' }, [
-							/* Счётчик лежит ВНУТРИ поля ввода (правый нижний угол), а не строкой
-							   под ним: подпись «Осталось символов: 160» занимала целую строку ради
-							   числа, которое нужно лишь боковым зрением. Обёртка нужна для
-							   позиционирования: внутрь textarea вложить ничего нельзя, поэтому
-							   счётчик кладём ПОВЕРХ, а место под него освобождаем нижним отступом
-							   самого поля. */
 							E('div', { 'class': 'smstext-wrap' }, [
 							E('textarea', {
 								'id': 'smstext',
@@ -664,7 +585,6 @@ return view.extend({
 												let ovtxt = document.getElementById('smstext');
 												ovtxt.value = '';
 												document.getElementById('counter').innerHTML = '160';
-												// Reset to GSM-7
 												let gsm7Radio = document.querySelector('input[name="encoding_type"][value="gsm7"]');
 												if (gsm7Radio) gsm7Radio.checked = true;
 												document.getElementById('smstext').focus();

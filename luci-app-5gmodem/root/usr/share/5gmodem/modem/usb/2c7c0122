@@ -1,5 +1,3 @@
-# Quectel RM551E-GL
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -27,7 +25,6 @@ if [ "${LAC_DEC}" = "0" ]; then
 	LAC_HEX="-"
 fi 
 
-# Modem
 GETNFO=$(gcom -d $DEVICE -s /usr/share/5gmodem/vendorproduct.gcom)
 FW=$(echo "$GETNFO" | awk -F [:] '/^\+CGMR:/{print $2}' | xargs)
 
@@ -37,27 +34,21 @@ MODEL="$MVENDOR "$MPRODUCT
 
 _qc_qslot
 
-# International Mobile Equipment Identity (IMEI)
 NR_I=$(echo "$GETNFO" | awk -F [:] '/^\+CGSN:/{print $2}' | xargs)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 NR_C=$(echo "$GETNFO" | awk -F [:] '/^\+CIMI:/{print $2}' | xargs)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 NR_D=$(echo "$GETNFO" | awk -F [:] '/^\+ICCID: /{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
-# профиля («Vendor=2c7c ProdID=0801»), скопированная вместе с кодом, и протокол у этого
-# модема не определялся никогда.
 _PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
 _PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
 _PV_ID="Vendor=${_PV_V:-2c7c} ProdID=${_PV_P:-0801}"

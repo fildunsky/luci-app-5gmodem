@@ -1,43 +1,16 @@
 #!/bin/sh
 [ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
-#
-# SimCom modems on USB id 1e0e:9001. This id is shared by several models, so we
-# branch on the model reported by AT+CGMM:
-#   - SIM7100E / SIM7600 : LTE, 4G only. Bands via AT+CNBP (GSM,UMTS,LTE hex
-#                 masks), mode (2G/3G/4G) via AT+CNMP. No 5G.
-#   - SIM8200 / SIM7906 and similar: 5G, bands via AT+CSYSSEL.
-#
-# _DEVICE is a sane default; bands.sh overrides it with the app's detected AT
-# port before calling any function here.
 
-_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+_DEVICE=""
 
-# SIM7100E hardware band capability (LTE FDD B1/B3/B7/B8/B20, TDD B38/B40).
 _SIM7100_LTE_BANDS="1 3 7 8 20 38 40"
 
-# SIM7600E-H. Диапазоны взяты не из маски AT+CNBP (там стоит «разрешено всё»,
-# 40 бит - это ПРЕДПОЧТЕНИЕ, а не возможности железа) и не из даташита, а у
-# самого модема по QMI:
-#   qmicli --dms-get-band-capabilities -> LTE bands: '1, 3, 5, 7, 8, 20, 38, 40, 41'
-# Проверено на живом SIMCOM_SIM7600E-H (ревизия LE11B11SIM7600M22).
 _SIM7600_LTE_BANDS="1 3 5 7 8 20 38 40 41"
 _SIM7906_LTE_BANDS="1 3 5 7 8 20 28 38 40 41"
 _SIM7912_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 38 40 41 66"
 
-# СМЕНА ДИАПАЗОНОВ ПРИМЕНЯЕТСЯ ВЖИВУЮ, ПЕРЕЗАПУСК РАДИО НЕ НУЖЕН И ВРЕДЕН.
-# Оба механизма SIMCOM (AT+CNBP у 7100/7600, AT+CSYSSEL у 8200) - это band
-# PREFERENCE, который модем применяет сам за секунды: проверено на SIM7600E-H,
-# запись CNBP без B7 увела его с B7 на B3 без единого перезапуска. А CFUN=4->1,
-# наоборот, ОТКАТЫВАЕТ волатильную маску к прежней. Поэтому bands.sh, увидев этот
-# флаг, перезапуск пропускает (см. ветку setbands там).
 _BANDS_APPLY_LIVE=1
 
-# Модель модема (AT+CGMM), КЭШИРОВАННАЯ в /tmp.
-# Кэш обязателен: определение модели зовётся из каждой функции, а getbands - ещё
-# и в цикле по бендам. Без кэша это десятки AT-запросов на одно чтение, причём по
-# порту, за который конкурируют метрики. Модель у устройства не меняется, а /tmp
-# чистится при перезагрузке - инвалидация не нужна. Ключ - имя порта: у второго
-# модема он свой.
 _model() {
 	_mf="/tmp/5gmodem/simcom_model_$(basename "$_DEVICE" 2>/dev/null)"
 	if [ -s "$_mf" ]; then cat "$_mf"; return; fi
@@ -45,17 +18,11 @@ _model() {
 		| grep -o "SIM[0-9][0-9A-Za-z_-]*" | head -1 | tee "$_mf"
 }
 
-# Семейство SIM7600 (7600E/7600E-H/7600G и т.п.): командный набор тот же, что у
-# SIM7100 - CNBP для бендов, CNMP для режима. Команд SIM8200 (AT+CSYSSEL) у него
-# НЕТ: проверено на живом модеме, ответ пустой. Раньше 7600 не подходил ни под
-# одну ветку и сваливался в 8200-ветку - слал CSYSSEL в никуда, показывал пустые
-# бенды и назывался «SIM8200EA-M2».
 _is_7600() {
 	case "$(_model)" in *7600*) return 0 ;; esac
 	return 1
 }
 
-# ветка «команды как у 7100»: сам 7100 или любой 7600
 _is_79xx() {
 	case "$(_model)" in *7906*|*7912*) return 0 ;; esac
 	return 1
@@ -64,7 +31,6 @@ _is_cnbp_family() {
 	_is_7100 || _is_7600 || _is_79xx
 }
 
-# набор бендов активной модели
 _lte_bands_for_model() {
 	case "$(_model)" in
 		*7912*) echo "$_SIM7912_LTE_BANDS" ;;
@@ -79,7 +45,6 @@ _cnbp_lte_tail() {
 	echo "0x$_lt_h"
 }
 
-# 8200-family defaults (only used on the non-7100 branch)
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
 _DEFAULT_5GSA_BANDS="1 2 3 5 7 8 12 14 20 28 38 40 41 48 66 71 77 78"
@@ -93,14 +58,11 @@ getinfo() {
 	if _is_7100; then
 		echo "SIMCOM SIM7100E"
 	elif _is_7600 || _is_79xx; then
-		# точное имя из кэша: SIMCOM_SIM7600E-H -> "SIMCOM SIM7600E-H"
 		echo "SIMCOM $(_model | sed 's/^SIMCOM_//')"
 	else
 		echo "SIMCOM SIM8200EA-M2"
 	fi
 }
-
-# ---- 4G bands ----
 
 getsupportedbands() {
 	if _is_cnbp_family; then
@@ -112,12 +74,6 @@ getsupportedbands() {
 
 getbands() {
 	if _is_cnbp_family; then
-		# AT+CNBP? -> <mode>,<lte_mask>,<extra> ; the 2nd field is the LTE band
-		# bitmask (bit N-1 = band N) - the writable/effective LTE selection.
-		# (The 3rd field is not the band selection; writing it has no effect.)
-		# Decode with the dispatcher's 64-bit-safe helper and keep only bands
-		# this hardware supports, so the UI (whose checkboxes are the supported
-		# set) shows them consistently.
 		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
 		HEX=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}')
 		[ -n "$HEX" ] || { echo ""; return; }
@@ -143,24 +99,14 @@ setbands() {
 	if _is_cnbp_family; then
 		[ "$BANDS" = "default" ] && BANDS=$(_lte_bands_for_model)
 
-		# build the 64-bit LTE hex mask (bit N-1 = band N) with the dispatcher's
-		# helper - replaces the old hand-rolled nibble math, which miscomputed
-		# the mask (e.g. the full default came out as 0xA0000080C05 instead of
-		# 0xA0000800C5), so a reset left several bands unselected.
 		LTEHEX=$(bandstohex "$BANDS")
 		[ -n "$LTEHEX" ] && [ "$LTEHEX" != "0" ] || return 1
-		# the modem wants a full 16-hex-digit (64-bit) value
 		if _is_79xx; then
 			LTEHEX=$(printf "%064s" "$LTEHEX" | tr ' ' 0)
 		else
 			LTEHEX=$(printf "%016s" "$LTEHEX" | tr ' ' 0)
 		fi
 
-		# CNBP write takes TWO parameters: <mode>,<lte_mask>. The LTE selection
-		# is the SECOND field (a 3-parameter write is silently ignored on this
-		# firmware). Preserve the current <mode> (GSM/UMTS) field and set the LTE
-		# mask. Applying the change (radio restart) is done by the caller
-		# (reboot_modem.sh), so no disruptive CFUN cycle here.
 		O=$(sms_tool -d $_DEVICE at "AT+CNBP?")
 		MODE=$(echo "$O" | grep "^+CNBP:" | tr -d '\r ' | sed 's/^+CNBP://' | awk -F, '{print $1}' | sed 's/^0x0x/0x/')
 		[ -n "$MODE" ] || MODE=0x0002000000400180
@@ -179,32 +125,13 @@ setbands() {
 	fi
 }
 
-# ---- 2G/3G bands: ПЕРВАЯ маска AT+CNBP ------------------------------------
-#
-# У CNBP две маски: <mode> (GSM+WCDMA) и <lte_mode> (LTE). Мы годами правили
-# только вторую, поэтому в UI у SimCom были одни LTE-диапазоны - 3G и 2G не
-# «потерялись», их просто никогда не было (в git история профиля это видно).
-#
-# БИТЫ ПЕРВОЙ МАСКИ. Позиции GSM даны в руководстве SIMCOM (7 = DCS_1800,
-# 8 = EGSM_900, 9 = PGSM_900), позиции WCDMA - стандартные для band preference
-# Qualcomm. Проверено на живом SIM7100E: его ЗАВОДСКАЯ маска
-# 0x0002000000400180 = биты 7, 8, 22 и 49, то есть ровно паспортный набор
-# аппарата - GSM 1800 + GSM 900 и WCDMA B1 + B8. Это и есть подтверждение
-# соответствия «22 = WCDMA B1, 49 = WCDMA B8».
-#
-# ВНИМАНИЕ: прошивка НЕ фильтрует неподдерживаемые биты - записанную маску она
-# принимает как есть (проверено: записал все биты 7-27 и 48-50, прочитал их же).
-# Значит опираться на «что модем оставил» нельзя, и список возможностей мы
-# держим сами, по паспорту модели.
 _SIM7100_2G_BANDS="900 1800"
 _SIM7100_3G_BANDS="1 8"
-# SIM7600E-H: GSM 900/1800, UMTS B1/B5/B8 (паспорт модуля).
 _SIM7600_2G_BANDS="900 1800"
 _SIM7600_3G_BANDS="1 5 8"
 _SIM7906_3G_BANDS="1 5 8"
 _SIM7912_3G_BANDS="1 2 4 5 6 8"
 
-# частота GSM -> номер бита; номер бенда WCDMA -> номер бита
 _cnbp_bit_2g() { case "$1" in 900) echo 8 ;; 1800) echo 7 ;; 850) echo 19 ;; 1900) echo 21 ;; *) echo "" ;; esac; }
 _cnbp_bit_3g() { case "$1" in 1) echo 22 ;; 2) echo 23 ;; 3) echo 24 ;; 4) echo 25 ;; 5) echo 26 ;; 6) echo 27 ;; 7) echo 48 ;; 8) echo 49 ;; 9) echo 50 ;; *) echo "" ;; esac; }
 
@@ -218,8 +145,6 @@ _3g_bands_for_model() {
 	esac
 }
 
-# Первая маска CNBP как список «номеров» для hextobands/bandstohex диспетчера
-# (там номер = бит + 1, и арифметика 64-битная - своей писать не надо).
 _cnbp_mode_hex() {
 	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' \
 		| sed 's/^+CNBP://' | awk -F, '{print $1}' | sed 's/^0x0x/0x/'
@@ -228,8 +153,7 @@ _cnbp_lte_hex() {
 	sms_tool -d $_DEVICE at "AT+CNBP?" | grep "^+CNBP:" | tr -d '\r ' | awk -F, '{print $2}'
 }
 
-# Записать первую маску, сохранив LTE-половину нетронутой.
-_cnbp_write_mode() {   # $1 - список «номеров» (бит+1)
+_cnbp_write_mode() {
 	_cw_hex=$(bandstohex "$1")
 	[ -n "$_cw_hex" ] && [ "$_cw_hex" != "0" ] || return 1
 	_cw_hex=$(printf "%016s" "$_cw_hex" | tr ' ' 0)
@@ -261,7 +185,6 @@ setbands3g() {
 	_s3_want="$1"
 	[ "$_s3_want" = "default" ] && _s3_want=$(_3g_bands_for_model)
 	_s3_nums=$(hextobands "$(_cnbp_mode_hex)")
-	# гасим ВСЕ известные биты WCDMA, 2G-половину не трогаем
 	_s3_keep=""
 	for _n in $_s3_nums; do
 		_s3_drop=""
@@ -307,7 +230,6 @@ setbands2g() {
 		for _b in 900 1800 850 1900; do
 			[ "$((_n - 1))" = "$(_cnbp_bit_2g "$_b")" ] && _s2_drop=1
 		done
-		# бит 9 (PGSM_900) - подмножество EGSM_900, гасим вместе с 900
 		[ "$((_n - 1))" = 9 ] && _s2_drop=1
 		[ -n "$_s2_drop" ] || _s2_keep="$_s2_keep $_n"
 	done
@@ -318,10 +240,6 @@ setbands2g() {
 	_cnbp_write_mode "$_s2_keep" || echo "ERROR: empty band mask"
 }
 
-# ---- network mode (2G/3G/4G) via AT+CNMP, SIM7100 only ----
-# CNMP values on SIM7100E: 2=Auto, 13=GSM only, 14=WCDMA only, 19=GSM+WCDMA,
-# 38=LTE only. Reported as "id:label" pairs so the UI can render buttons.
-
 getsupportedmodes() {
 	_is_cnbp_family || { echo "Unsupported"; return; }
 	_is_79xx && { echo "2:Auto 14:3G 38:4G 54:3G+4G"; return; }
@@ -331,12 +249,6 @@ getsupportedmodes() {
 getmode() {
 	_is_cnbp_family || { echo "Unsupported"; return; }
 	_m=$(sms_tool -d $_DEVICE at "AT+CNMP?" | awk -F: '/^\+CNMP:/{gsub(/[^0-9]/,"",$2);print $2}' | head -1)
-	# ПРОШИВКА ОТДАЁТ 1 ДЛЯ АВТО. По руководству (V1.01) значений <1 нет:
-	# valid - 2=Auto, 13, 14, 38, 19… Но обе живые SIMCOM-прошивки на стенде
-	# возвращают "+CNMP: 1" в автоматическом режиме (подтверждено на двух
-	# модемах). Раньше это "1" не совпадало ни с одной кнопкой, и режим
-	# выглядел «не выбран». Приводим к 2 (Auto): при явном выборе режима CNMP
-	# отдаёт конкретное значение (13/14/38…), и подмена не срабатывает.
 	[ "$_m" = "1" ] && _m=2
 	echo "$_m"
 }
@@ -349,9 +261,6 @@ setmode() {
 	esac
 	sms_tool -d $_DEVICE at "AT+CNMP=$M"
 }
-
-# ---- 5G: not present on SIM7100 (must return "Unsupported", NOT empty, so the
-# dispatcher/UI hides the 5G sections entirely) ----
 
 getsupportedbands5gnsa() {
 	_is_cnbp_family && { echo "Unsupported"; return; }

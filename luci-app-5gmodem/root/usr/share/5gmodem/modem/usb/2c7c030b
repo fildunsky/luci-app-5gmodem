@@ -1,5 +1,3 @@
-# Quectel EM06
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -15,14 +13,8 @@ if [ -n "$T" ]; then
 	fi
 fi
 
-# Полосы - отдельным полем BANDWIDTH, не внутри PBAND: легаси-формат
-# «Bx DL: @.. UL: @..» ломал разрез диапазон/полоса во фронте (caSplitBand
-# режет по « @»; живой случай EP06-E 19.08.2026, тот же формат был здесь).
-# SINR уже в дБ (см. modem/usb/2c7c0306: по живым ответам QENG поле 0..25 и
-# растёт с RSRP; «x*0.2-20» давало -15..-19 дБ на отличном сигнале).
 _qc_qeng_bw
 
-# SPN - поле 4 (см. modem/usb/2c7c0306: поле 2 у старых прошивок «000 000»).
 _qc_spn4
 
 if [ "x$MODE_NUM" = "x7" ]; then
@@ -56,7 +48,6 @@ _qc_neighbours
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
 
-# Modem
 _qc_ati
 
 _qc_ids

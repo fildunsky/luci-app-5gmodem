@@ -1,6 +1,4 @@
 #!/bin/sh /etc/rc.common
-# Следит за сессией данных: сеть могла пересоздать её с новым адресом, а netifd
-# об этом не узнаёт. См. /usr/share/5gmodem/sessionwatch.sh.
 
 START=96
 USE_PROCD=1

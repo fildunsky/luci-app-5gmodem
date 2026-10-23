@@ -3,11 +3,7 @@
 'require fs';
 'require ui';
 
-/* ОБЩИЙ CSS ПРИЛОЖЕНИЯ. Дублируется из modemtabs.js НАМЕРЕННО: эта страница
-   вкладки модемов не показывает и modemtabs не требует, а без загрузчика
-   осталась бы вообще без оформления (проверено - страница «Кнопки» так и
-   поехала). Тянуть сюда целый модуль ради одного link'а было бы хуже.
-   Ставится ПОСЛЕ директив require: код между ними обрывает их разбор. */
+// duplicated from modemtabs.js on purpose, see docs/subsystems/ui.md#shared-css-and-theme-probes
 (function() {
 	if (document.getElementById('tg-modem-css')) { return; }
 	var l = document.createElement('link');
@@ -18,13 +14,6 @@
 	document.head.appendChild(l);
 })();
 
-/* РИСУЕТ ЛИ ТЕМА СЕКЦИЮ КАРТОЧКОЙ? proton2025 и argon дают .cbi-section рамку,
-   фон или тень - внутри такой плашки содержимому нужен отступ. bootstrap секцию
-   не обрамляет вовсе, и тот же отступ висел пустым полем слева и справа от
-   карточек (замечено владельцем 14.09.2026). Проверяем НАСТОЯЩИМ элементом в
-   контейнере страницы (правило темы может быть привязано к нему), один раз и до
-   отрисовки. Класс на <html> включает отступы в modem.css. Дублируется в
-   buttons.js: та страница этот модуль не грузит. */
 (function() {
 	function run() {
 		var de = document.documentElement;
@@ -47,13 +36,6 @@
 	if (document.body) { run(); }
 	else { document.addEventListener('DOMContentLoaded', run); }
 })();
-
-
-/* Вкладка «Кнопки»: автоопределение железных кнопок (имя из linux,code, тип из
-   linux,input-type: EV_SW=переключатель, EV_KEY=кнопка) и привязка команды.
-   Кнопка - имя-плашка в тема-стиле; переключатель - тумблер. Команда в
-   терминальном поле (стиль AT/USSD) с выпадашкой шаблонов и анимацией печати.
-   Debounce гасит дребезг у долгих сервисов. Бэкенд - buttons.sh. */
 
 function detect() {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'detect' ]).then(function(res) {
@@ -89,8 +71,6 @@ function delBinding(name) {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'del', name ]);
 }
 
-/* Имя цвета светодиода (из label) -> CSS-цвет для точки. Нет цвета в имени -
-   нейтральный серо-жёлтый, чтобы точка всё равно читалась как «лампочка». */
 var LED_CSS = {
 	red:'#e5484d', green:'#2ea043', blue:'#4b8bf5', white:'#e8ecf1', amber:'#f5a623',
 	orange:'#fb923c', yellow:'#eab308', cyan:'#22d3ee', purple:'#a855f7',
@@ -98,7 +78,6 @@ var LED_CSS = {
 };
 function ledColor(c) { return LED_CSS[String(c || '').toLowerCase()] || '#c9c982'; }
 
-/* Разбор сохранённой спецификации "имя=1 имя=0 ..." -> { имя: '1'|'0' }. */
 function parseLedSpec(spec) {
 	var map = {};
 	String(spec || '').trim().split(/\s+/).forEach(function(kv) {
@@ -111,9 +90,6 @@ function parseLedSpec(spec) {
 	return map;
 }
 
-/* Сетка светодиодов для одного состояния кнопки. Каждый диод - чип с цветной
-   точкой; клик перебирает три состояния: «не трогать» -> «включить» ->
-   «выключить». Возвращает узел и getSpec() -> строка "имя=1 имя=0". */
 function ledGrid(leds, savedSpec) {
 	var initial = parseLedSpec(savedSpec);
 	var chips = [];
@@ -160,24 +136,15 @@ function ledGrid(leds, savedSpec) {
 	return { node: wrap, getSpec: getSpec, leds: leds };
 }
 
-/* Пресеты команд. У ПРОСТОЙ моментальной кнопки (type='button') - полный набор,
-   включая переключение сервиса одним нажатием. У ПЕРЕКЛЮЧАТЕЛЯ (type='switch')
-   каждое положение стабильно, поэтому предлагаем старт (нажато) / стоп (отжато).
-   Диоды настраиваются отдельно (LED-сетка). */
 var PRESETS_COMMON = [
 	{ label: _('Reboot the modem'), cmd: '/usr/share/5gmodem/reboot_modem.sh soft' },
 	{ label: _('Switch SIM slot'), cmd: '/usr/share/5gmodem/simslot.sh set 1' }
 ];
-/* Простая команда: одноразовые действия. Переключения сервиса тут НЕТ - оно
-   принадлежит условной команде (по решению владельца). */
 var PRESETS_SIMPLE = [
 	{ label: _('Start service'), cmd: '/usr/share/5gmodem/buttons.sh svc start ssclash' },
 	{ label: _('Stop service'),  cmd: '/usr/share/5gmodem/buttons.sh svc stop ssclash' },
 	{ label: _('Restart service'), cmd: '/etc/init.d/ssclash restart' }
 ].concat(PRESETS_COMMON);
-/* Условная: терминал - для НЕОБЯЗАТЕЛЬНОЙ доп. команды (сам сервис задаётся
-   отдельным полем). Здесь же доступен и toggle - если пользователь хочет
-   вписать своё. */
 var PRESETS_COND = [
 	{ label: _('Toggle service (on/off)'), cmd: '/usr/share/5gmodem/buttons.sh svc toggle ssclash' }
 ].concat(PRESETS_COMMON);
@@ -204,8 +171,6 @@ function cmdField(value, presetList) {
 	var menu = E('div', { 'class': 'btnmenu' });
 	var body = E('div', { 'class': 'btnterm-body' }, [ input ]);
 	var term = E('div', { 'class': 'btnterm' }, [ E('div', { 'class': 'btnterm-hd' }, 'sh'), body ]);
-	/* Меню пресетов перестраиваемо: при смене типа команды (простая/условная)
-	   набор пресетов разный. */
 	function fillMenu(list) {
 		menu.innerHTML = '';
 		(list || []).forEach(function(p) {
@@ -232,8 +197,6 @@ function toggleWidget(on, small) {
 	return E('span', { 'class': 'btnsw' + (small ? ' btnsw-sm' : '') + (on ? ' on' : '') });
 }
 
-/* Компактный виджет кнопки (mode + код). state - нажата/отжата (вид из CSS
-   .hpressed/.hreleased). Кликабельность вешает вызывающий (buttonCard). */
 function widget(b, state) {
 	var cls = 'btn cbi-button btnhead-card'
 		+ (state === 'pressed' ? ' hpressed' : ' hreleased');
@@ -243,8 +206,6 @@ function widget(b, state) {
 	]);
 }
 
-/* Стандартный закрываемый информер. Крестик прячет его и запоминает выбор в
-   localStorage по ключу - при следующих заходах не мозолит глаза. */
 function infoBox(key, text) {
 	var box = E('div', { 'class': 'btninfo' }, [
 		E('span', {}, text),
@@ -258,7 +219,6 @@ function infoBox(key, text) {
 	return box;
 }
 
-/* Сегментированный тумблер: [Простая | Условная]. get() -> выбранное. */
 function segmented(opts, value, onChange) {
 	var wrap = E('div', { 'class': 'btnseg' });
 	var btns = [];
@@ -277,11 +237,6 @@ function segmented(opts, value, onChange) {
 	return { node: wrap, get: function() { return wrap.getAttribute('data-val'); } };
 }
 
-/* Один блок-состояние (нажата / отжата, либо два положения переключателя).
-   Самодостаточен: LED-сетка + команда + своя кнопка «Сохранить». debounce у
-   кнопки общий - его вход передаётся снаружи, и Save любого блока его пишет. */
-/* Блок «Светодиоды в этом состоянии»: подпись + ссылка «проверить» + сетка.
-   Ставится ПОД полем команды (см. renderButton). */
 function ledsBlock(labelText, grid) {
 	var preview = grid.leds && grid.leds.length ? E('span', {
 		'class': 'ledprev', 'title': _('Apply this LED combination now to check it'),
@@ -304,9 +259,6 @@ function flashSaved(status) { status.textContent = _('Saved'); status.style.colo
 function flashCleared(status) { status.textContent = _('Cleared'); status.style.color = '';
 	window.setTimeout(function() { status.textContent = ''; }, 2500); }
 
-/* Пресеты условной команды = переключение КАЖДОГО сервиса роутера (сервис
-   подставляется прямо в команду терминала - отдельного поля «имя сервиса»
-   больше нет, чтобы две сущности не путались). */
 function condPresets(services) {
 	return (services || []).map(function(s) {
 		return { label: _('Toggle service') + ' · ' + s,
@@ -314,9 +266,6 @@ function condPresets(services) {
 	}).concat(PRESETS_COMMON);
 }
 
-/* Панель настройки ОДНОГО состояния. Тип команды тумблером; терминал виден
-   всегда; для простой - статичные диоды, для условной - диоды на «запущен»/
-   «остановлен» (сервис задаётся из выпадашки прямо в команде). */
 function statePanel(b, leds, state, services) {
 	var ct0 = (b['ct_' + state] === 'conditional') ? 'conditional' : 'simple';
 	var cPre = condPresets(services);
@@ -350,7 +299,6 @@ function statePanel(b, leds, state, services) {
 	var node = E('div', { 'style': 'margin-top:.3em' }, [
 		E('div', { 'class': 'btncmd-label', 'style': 'margin-bottom:.2em' }, _('Command type:')),
 		seg.node,
-		/* Терминал ВСЕГДА виден - можно вписать свой скрипт при любом типе. */
 		E('label', { 'class': 'btncmd-label', 'style': 'margin-top:.6em' }, _('Command:')),
 		cmd.node,
 		simpleLeds,
@@ -367,11 +315,6 @@ function statePanel(b, leds, state, services) {
 	return { node: node, getVals: getVals };
 }
 
-/* Карточка одной кнопки.
-   - Моментальная: один виджет-кнопка, клик листает нажата/отжата (одна панель).
-   - Переключатель: ОБА положения сразу (вкл/выкл), у каждого свой тумблер-
-     заголовок; дизайн тот же, что у кнопки, только виджет - переключатель.
-   Общий debounce, одна кнопка «Сохранить» (оба состояния) и «Удалить». */
 function buttonCard(b, leds, services, onDelete) {
 	var isSwitch = (b.type === 'switch');
 	var card = E('div', { 'class': 'btncard' });
@@ -390,8 +333,6 @@ function buttonCard(b, leds, services, onDelete) {
 	var rPanel = statePanel(b, leds, 'released', services);
 
 	if (isSwitch) {
-		/* Оба положения сразу. Подпись - строкой, переключатель под ней (иначе
-		   текст наезжал на виджет). */
 		card.appendChild(E('div', {}, [
 			E('div', { 'class': 'btnstate-lbl' }, _('Switch ON')),
 			toggleWidget(true, false) ]));
@@ -402,7 +343,6 @@ function buttonCard(b, leds, services, onDelete) {
 			toggleWidget(false, false) ]));
 		card.appendChild(rPanel.node);
 	} else {
-		/* Моментальная: клик по виджету листает нажата/отжата. */
 		var state = 'pressed';
 		var widgetWrap = E('div', { 'class': 'btnwidget',
 			'title': _('Click the button to switch between its pressed and released state') });
@@ -428,16 +368,6 @@ function buttonCard(b, leds, services, onDelete) {
 
 	var save = E('button', { 'class': 'btn cbi-button cbi-button-save',
 		'click': ui.createHandlerFn(this, function() {
-			/* СОХРАНЯЕМ ПО ОЧЕРЕДИ, А НЕ ЗАЛПОМ.
-			   Каждый вызов buttons.sh set/setleds делает свой `uci set` в дельту
-			   и тут же `uci commit`, а commit читает дельту и ОБНУЛЯЕТ её: правка
-			   соседнего процесса, попавшая между чтением и обнулением, терялась -
-			   поле молча не сохранялось, а форма рисовала «Сохранено» (Promise.all
-			   успешен). Плюс два setleds параллельно перезапускали /etc/init.d/led
-			   внахлёст. Складываем ФУНКЦИИ и выполняем цепочкой (аудит 12.09.2026).
-			   Поле btntype не пишем: его никто не читает - ни обработчик события
-			   (buttons.sh run), ни форма (тип берётся из DTS, b.type), - а каждое
-			   сохранение стоило лишнего цикла uci commit, то есть записи во флеш. */
 			var ops = [ function() { return setField(b.name, 'debounce', dbc.value); } ];
 			[ [ 'pressed', pPanel ], [ 'released', rPanel ] ].forEach(function(pair) {
 				var st = pair[0], v = pair[1].getVals();
@@ -491,8 +421,6 @@ return view.extend({
 		body.appendChild(list);
 		body.appendChild(addWrap);
 
-		/* «Настроена» = задано хоть что-то. Такие показываем сразу, остальные -
-		   доступны к добавлению своим чипом «+ имя». */
 		var CFG_KEYS = [ 'cmd_pressed', 'cmd_released', 'ct_pressed', 'ct_released',
 			'leds_pressed', 'leds_released', 'ledson_pressed', 'ledsoff_pressed',
 			'ledson_released', 'ledsoff_released' ];
@@ -506,8 +434,6 @@ return view.extend({
 			list.appendChild(renderButton(b, leds, services, function(name) { shown[name] = false; refreshAdd(); }));
 			refreshAdd();
 		}
-		/* По ОТДЕЛЬНОМУ чипу на каждую ненастроенную кнопку: «+ mode», «+ wps»,
-		   «+ switch»… - клик добавляет именно её. */
 		function refreshAdd() {
 			addWrap.innerHTML = '';
 			var avail = assignable.filter(function(b) { return !shown[b.name]; });

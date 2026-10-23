@@ -5883,3 +5883,30 @@ msgstr "Papan"
 
 msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
 msgstr "Pasang paket %s untuk mengganti band serta melihat RSRQ, SINR, dan sel pada modem ini."
+
+msgid "Telegram API server"
+msgstr "Server API Telegram"
+
+msgid "Leave empty for api.telegram.org. Your own server must forward the Bot API as is, e.g. an SNI proxy or a self-hosted Bot API server."
+msgstr "Kosongkan untuk api.telegram.org. Server Anda harus meneruskan Bot API apa adanya, misalnya proxy SNI atau server Bot API sendiri."
+
+msgid "Expecting an address starting with http:// or https://"
+msgstr "Diharapkan alamat yang diawali http:// atau https://"
+
+msgid "Do not check the certificate"
+msgstr "Jangan periksa sertifikat"
+
+msgid "Only for your own server: accept a self-signed or mismatching certificate."
+msgstr "Hanya untuk server Anda sendiri: terima sertifikat self-signed atau yang tidak cocok."
+
+msgid "...plus power cycle (USB port or your script)"
+msgstr "...plus siklus daya (port USB atau skrip Anda)"
+
+msgid "Power script"
+msgstr "Skrip daya"
+
+msgid "Expecting an absolute path made of letters, digits and / . _ -"
+msgstr "Diharapkan path absolut dari huruf, angka, dan / . _ -"
+
+msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
+msgstr "Untuk papan tanpa kontrol daya USB: berkas eksekusi yang memutus dan memulihkan daya modem (misalnya mengubah GPIO). Langkah daya menjalankannya sebagai pengganti mematikan port USB, dengan argumen antarmuka, path USB modem, dan port AT-nya. Keluarannya masuk ke log sistem."

@@ -1,5 +1,3 @@
-# Telit LE910-EUG
-
 O=$(sms_tool -d $DEVICE at "at#servinfo")
 
 case "$MODE_NUM" in

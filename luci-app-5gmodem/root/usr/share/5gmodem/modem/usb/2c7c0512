@@ -1,7 +1,3 @@
-# Quectel EG18-EA
-# Quectel EM12-G
-# Quectel EM160R-GL
-
 . "$RES/modem/usb/_quectel_common"
 
 O=$(sms_tool -d $DEVICE at "at+qtemp")
@@ -56,7 +52,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
 		[ -n "$T" ] && RSRQ="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {v=$18; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
 		[ -n "$T" ] && SINR="$T"
 	else
 		B=$(echo $T | sed 's/"LTE BAND \(.*\)"/\1/')
@@ -80,7 +75,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{print $9}')
 		[ -n "$T" ] && RSRQ="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{v=$11; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
 		[ -n "$T" ] && SINR="$T"
 
 IFS="
@@ -92,12 +86,10 @@ fi
 
 fi
 
-
 _qc_neighbours
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE_A,LTE-A,' | sed 's,LTE-A B,LTE-A | B,')
 
-# Modem
 OF=$(sms_tool -d $DEVICE at "ati")
 DEVV=$(echo $OF | tr -s "\n"  | xargs)
 FWA=$(sms_tool -d $DEVICE at "AT+GMR" | tr -s "\n"  | xargs)

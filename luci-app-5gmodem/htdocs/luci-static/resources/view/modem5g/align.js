@@ -16,16 +16,6 @@ function loadCss() {
 	probeCheckmark();
 }
 
-/* СЛОМАНА ЛИ У ТЕМЫ ГАЛОЧКА - СПРАШИВАЕМ У БРАУЗЕРА, А НЕ ЧИНИМ ВСЛЕПУЮ.
-   Одна из тем рисует галочку маской, а цвет заливки берёт из --fg-color, который
-   при минификации превращается в невалидный calc: заливка становится прозрачной
-   и отмеченный чекбокс выглядит снятым. Лечилось это правилом
-   «background: currentColor» для ВСЕХ тем - и в proton2025 оно закрасило
-   собственную, здоровую галочку темы (жалоба владельца 04.09.2026: «галочки
-   стали уродские»).
-   Теперь проверяем по факту: если у ::after есть маска и есть содержимое, а
-   заливка прозрачная - это та самая поломка, и только тогда вешаем класс, под
-   который заскоплено правило в modem.css. */
 function probeCheckmark() {
 	if (document.documentElement.hasAttribute('data-tg-checkprobe')) { return; }
 	document.documentElement.setAttribute('data-tg-checkprobe', '1');
@@ -45,7 +35,6 @@ function probeCheckmark() {
 		box.remove();
 		if (broken) { document.documentElement.classList.add('tg-fixcheck'); }
 	};
-	/* Ждём, пока тема применит свой CSS: до этого ::after ещё пуст у всех. */
 	if (document.body) { setTimeout(run, 0); }
 	else { document.addEventListener('DOMContentLoaded', function() { setTimeout(run, 0); }); }
 }
@@ -56,12 +45,6 @@ var IS_PROTON = (function() {
 	return !!document.querySelector('link[href*="proton2025"]');
 })();
 
-/* ОДНА ШКАЛА ДЛЯ ВСЕХ ПОЛОСОК. Основные полоски считались по четырём уровням с
-   одними порогами, а таблицы (агрегация, соседние соты, антенны) - по трём с
-   другими: RSSI -66 dBm сверху был «Отлично» (зелёный), а в строке агрегации -
-   жёлтый, хотя число то же (жалоба 18.09.2026). Теперь пороги, уровни, цвета и
-   длина заливки берутся отсюда везде.
-   edges = [худшее, гр1, гр2, гр3, лучшее]: Слабый / Средний / Хороший / Отличный. */
 var _qualRat = 'lte';
 function qualSetMode(mode) {
 	if (mode != null && mode !== '' && mode !== '-') { _qualRat = mutil.qualRat(mode); }
@@ -73,7 +56,6 @@ function sinrUnmeasured(sinr, rsrq) {
 	if (!/^-?[0-9]+(\.[0-9]+)?( ?dB)?$/.test(q)) { return false; }
 	return parseFloat(q) >= -14;
 }
-/* Имена уровней для таблиц: red / orange / yellow / green = 0..3. */
 var QUAL_NAMES = [ 'red', 'orange', 'yellow', 'green' ];
 var _QC = mutil.QUAL_COLOR || [], _QG = mutil.QUAL_GRAD || [];
 var CA_COLOR = { red: _QC[0], orange: _QC[1], yellow: _QC[2], green: _QC[3] };
@@ -82,12 +64,11 @@ function caQuality(key, v, rat) {
 	var l = mutil.qualLevel(key, v, rat || _qualRat);
 	return l == null ? null : QUAL_NAMES[l];
 }
-/* Доля шкалы для ДЛИНЫ полоски в таблицах - та же, что у основных полосок. */
 function metricPct(key, v, rat) {
 	if (caQuality(key, v, rat) == null) { return null; }
 	var pc = mutil.qualPct(key, v, rat || _qualRat);
 	if (pc == null) { return null; }
-	return pc < 4 ? 4 : pc;       /* нулевую полоску не видно вовсе */
+	return pc < 4 ? 4 : pc;
 }
 function paintMetricCell(td, key, v, text, rat) {
 	var has = (v != null && v !== '' && v !== '-');
@@ -178,22 +159,8 @@ function drawChart(canvas, series, opts) {
 	});
 }
 
-/* ДОПУСК СВЕЖЕСТИ = ВЫБРАННЫЙ ИНТЕРВАЛ, А НЕ ЖЁСТКИЕ ЧЕТЫРЕ СЕКУНДЫ.
-   Здесь стояло `cached 4`, и поле «Интервал» врало: оно меняло частоту
-   ВОПРОСОВ, а бэкенд всё равно отдавал снимок, пока тому меньше четырёх
-   секунд. Поставив 2 с, человек получал те же цифры дважды и ждал обновления
-   6-7 секунд - крутить антенну по такой обратной связи невозможно (жалоба
-   пользователя 26.08.2026). Теперь просим ровно ту свежесть, которую он
-   выбрал: снимок старше - бэкенд опросит модем.
-   Пол в одну секунду: возраст снимка считается целыми секундами по
-   /proc/uptime, дробный допуск там смысла не имеет. */
 function fetchSnapshot(ttl) {
 	var t = Math.max(1, Math.round(Number(ttl) || 4));
-	/* СНИМОК ПРОСИМ У МОДЕМА ЭТОЙ ВКЛАДКИ. Без for=<путь> бэкенд всегда
-	   отвечал про активный модем: на вкладке соседа каждый тик приходил
-	   чужой снимок, apply() его отбрасывал, а через три тика страница
-	   стирала выбор вкладки (общий ключ 5gm-tab) и начинала рисовать чужие
-	   метрики под подсвеченной вкладкой (аудит 12.09.2026). */
 	var a = [ 'cached', String(t) ];
 	if (pageModemPath) { a.push('for=' + pageModemPath); }
 	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', a), '').then(function(out) {
@@ -215,7 +182,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30600, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(30700, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();
@@ -334,9 +301,6 @@ return view.extend({
 		var pageInfo = E('span', { class: 'al-hint' }, '');
 		var btnPrev = E('button', { class: 'btn cbi-button', click: function() { if (st.page > 0) { st.page--; renderTable(); } } }, '◀');
 		var btnNext = E('button', { class: 'btn cbi-button', click: function() { var tp = Math.ceil(st.cells.length / st.pageSize); if (st.page < tp - 1) { st.page++; renderTable(); } } }, '▶');
-		/* ЛИСТАЛКА - ТОЛЬКО КОГДА ЕСТЬ ЧТО ЛИСТАТЬ. Строка «Стр. 1/1 (7)» под
-		   таблицей из семи строк - чистый шум; прячем её целиком, а не одни
-		   стрелки. */
 		var pager = E('div', { style: 'display:flex;gap:8px;align-items:center;justify-content:center;margin-top:8px' }, [ btnPrev, pageInfo, btnNext ]);
 		var btnReset = E('button', { class: 'btn cbi-button cbi-button-negative', click: function() { st.cells = []; st.page = 0; st.target = null; LS.d('celllog'); LS.d('target'); renderTable(); speak(_('Log cleared')); } }, _('Clear the log'));
 		var logSec = E('div', { class: 'cbi-section' }, [
@@ -408,11 +372,6 @@ return view.extend({
 		} });
 		var sndBtn = E('button', { class: 'btn cbi-button al-sndbtn', click: function() {
 			au.on = !au.on; LS.s('sndon', au.on ? '1' : '0'); paintSndBtn();
-			/* Темп щелчков берём ОТТУДА, ГДЕ ОН ЖИВЁТ - из au. Поля curSinr у st нет
-			   вовсе, и включение звука записывало в au.curSinr ноль: щелчки шли
-			   раз в секунду (как при SINR=0) до следующего применённого тика -
-			   то есть ровно в тот момент, когда обратную связь включили
-			   (аудит 12.09.2026). */
 			if (au.on) { ac(); speak(_('Sound on')); geiger(au.curSinr || 0); } else { stopAudio(); }
 		} });
 		function paintSndBtn() { dom.content(sndBtn, au.on ? [ '🔊 ', _('Sound: on') ] : [ '🔇 ', _('Sound: off') ]); sndBtn.classList.toggle('cbi-button-positive', au.on); }
@@ -430,9 +389,6 @@ return view.extend({
 				if (r && r.rsrp != null && !isNaN(parseFloat(r.rsrp))) vals.push(parseFloat(r.rsrp));
 			}
 			var n = vals.length;
-			/* Нет ни одного измеренного порта - это «неизвестно», а не «нуль
-			   приёмных цепей»: у модемов без ANTPORTS страница писала «MIMO: 0x0»
-			   вместо исходного прочерка (аудит 12.09.2026). */
 			mimoTitle.textContent = 'MIMO: ' + (n ? (n + 'x' + n) : '--');
 			if (n >= 2) {
 				var d = Math.round((Math.max.apply(null, vals) - Math.min.apply(null, vals)) * 10) / 10;
@@ -462,9 +418,6 @@ return view.extend({
 			st.foreignN = 0;
 			qualSetMode(j.mode);
 			var sinr = sinrUnmeasured(j.sinr, j.rsrq) ? NaN : parseFloat(j.sinr), rsrp = parseInt(j.rsrp, 10), rsrq = parseInt(j.rsrq, 10);
-			/* Раньше при отсутствии rssi сюда подставлялся j.signal - а это
-			   процент уровня, не дБм: поле RSSI показывало «-64» рядом с
-			   «33» и оба выглядели как измерения. Нет rssi - пишем прочерк. */
 			var rssiRaw = (j.rssi != null && j.rssi !== '') ? j.rssi : '';
 			var online = !isNaN(rsrp) || !isNaN(sinr) || !!(j.modem && j.modem.length > 1);
 			st.online = online;
@@ -501,10 +454,6 @@ return view.extend({
 		function tick() {
 			if (!root.isConnected) { clearInterval(st.timer); stopAudio(); return; }
 			if (document.hidden) return;
-			/* НЕ НАКЛАДЫВАЕМ ЗАПРОСЫ ДРУГ НА ДРУГА. На коротком интервале опрос
-			   модема может не уложиться в тик, и без этой защиты запросы копились
-			   бы очередью в rpcd - а он рвёт вызов на 30-й секунде («ошибка XHR»).
-			   Пропущенный тик безвреден: следующий возьмёт те же свежие данные. */
 			if (st.busy) return;
 			st.busy = true;
 			fetchSnapshot(st.interval).then(function(j) {

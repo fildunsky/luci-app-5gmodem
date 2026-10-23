@@ -1,5 +1,3 @@
-# Fibocom NL668-EAU (MBIM)
-
 . "$RES/modem/usb/15081001"
 
 O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?" | tr -d '\r')

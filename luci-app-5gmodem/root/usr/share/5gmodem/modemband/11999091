@@ -1,10 +1,5 @@
-_DEVICE=""   # порт задаёт bands.sh (uci at_port / detect.sh); в профиле НЕ прибиваем — на мультимодеме это порт другого модема
+_DEVICE=""
 
-# ИНЖЕНЕРНЫЙ ПАРОЛЬ НЕ ВСЕГДА A710: у Fujitsu-брендированных EM7455 - F710, а на
-# модулях с однажды неверно сменённым паролем не подходит ни один (форум,
-# ревью 12.09.2026). Раньше ответ ENTERCND уходил в /dev/null, AT!BAND? давал
-# ERROR, маска - пусто, и кнопки диапазонов исчезали без строки в журнале.
-# Пробуем A710, затем F710; сработавший пароль помним до перезагрузки.
 _sierra_cnd() {
 	_sc_f="/tmp/5gmodem/sierra_cnd_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_sc_p=$(cat "$_sc_f" 2>/dev/null)
@@ -115,6 +110,7 @@ setbands() {
 			if [ -n "$_SI" ]; then
 				sms_tool -d $_DEVICE at 'AT!BAND='$_SI
 				sms_tool -d $_DEVICE at 'AT!RESET'
+				: > "/tmp/5gmodem/selfreset.$$" 2>/dev/null
 			else
 				logger -t 5gmodem "sierra: AT!BAND slot write rejected on $_DEVICE - bands not changed, no reset"
 			fi
@@ -122,30 +118,6 @@ setbands() {
 	fi
 }
 
-# --- Режим сети (AT!SELRAT) --------------------------------------------------
-#
-# Селектора режима у EM7455/EM7565 не было вовсе: bands.sh без getsupportedmodes
-# отдаёт "Unsupported" и прячет строку, хотя команда у этих модулей есть.
-#
-# НАБОР КОРОЧЕ, ЧЕМ У X55 (там же 5G-режимы, см. 119990d3). Живой AT!SELRAT=?
-# с модуля 9x30 (#487) - всё остальное «Not Supported»:
-#   00, Automatic | 01, UMTS 3G Only | 06, LTE Only | 11, UMTS and LTE Only
-# Ответ на чтение - «!SELRAT: 00, Automatic» (#409, #487, #761, #2205, #2507),
-# но бывает и «!SELRAT: Unknown RAT mode. Use AT!SELRAT to set band.» с хвостом
-# из hex-строк (#2951) - поэтому номер ПРОВЕРЯЕМ, а не берём как есть: без
-# проверки в селектор уезжал бы кусок фразы.
-# ИДЕНТИФИКАТОРЫ ДВУЗНАЧНЫЕ («00», а не «0») намеренно - ровно в таком виде их
-# принимает команда, и ровно так их печатает чтение; страница сверяет строки.
-#
-# ЗАПИСЬ СВЕРЯЕМ ПО ФАКТУ. Форум расходится: на EM7565 команда отвечает OK, а
-# режим не меняется (#2944), на части экземпляров «=06» даёт ERROR при
-# заявленной поддержке (#489, #490 - признак урезанной модификации). Молчаливое
-# «применено» там, где ничего не применилось, хуже отказа.
-# ПРАВА: AT!SELRAT требует инженерного режима - в теме её всегда шлют после
-# AT!ENTERCND (#455, #804, #3154), для этого рядом уже есть _sierra_cnd().
-# ОДНОВРЕМЕННО ограничивать !BAND и !SELRAT вендор не советует - то же
-# предупреждение стоит у X55-профиля.
-# (ревью 13.09.2026, форум 4pda)
 _SIERRA_MODES="00:Auto 01:3G 06:4G 11:3G+4G"
 
 getsupportedmodes() {
@@ -180,7 +152,6 @@ setmode() {
 			logger -t 5gmodem "selrat: firmware rejected AT!SELRAT=$_sm (cut-down module?): $(echo "$_sm_o" | tr '\n' ' ' | head -c 120)"
 			return 1 ;;
 	esac
-	# Сверка: «OK без эффекта» на этих модулях - штатная жалоба темы.
 	[ "$(getmode)" = "$_sm" ] && return 0
 	logger -t 5gmodem "selrat: modem answered OK but AT!SELRAT? still reports another mode - the firmware ignored the write"
 	return 1

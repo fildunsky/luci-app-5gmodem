@@ -13,18 +13,10 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
-
-
-/* ВЫБОР БИНАРЯ ПЕРЕЕХАЛ В smsbridge.sh. Раньше виджет сам решал, звать sms_tool
-   или sms_tool_mm, и исполнял бинарь напрямую - для этого в ACL был разрешён exec
-   на /usr/bin/sms_tool, а через него из браузера уходили любые аргументы. Теперь
-   транспорт выбирает скрипт (он же знает про очередь к порту), а виджету
-   достаточно глагола. Формат ответа тот же - строка «Storage type: …». */
-
 return baseclass.extend({
 	title: _('Modems'),
 
-	checkInterval: 12, // 12 × 5s = 60s
+	checkInterval: 12,
 
 	restoreAlignmentSettings() {
 		let alignment = localStorage.getItem('luci-modem-tiles-alignment');

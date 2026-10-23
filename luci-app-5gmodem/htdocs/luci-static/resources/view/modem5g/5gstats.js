@@ -8,12 +8,6 @@
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
 
-/* ВКЛАДКА «СТАТИСТИКА».
-   Ряды копит stats.sh (RTT аплинков из сторожа, уровень сигнала из снимка
-   метрик, помесячный трафик по интерфейсам). Здесь только отрисовка: свой
-   минимальный canvas-рендер, без внешних библиотек - страница обязана
-   работать на роутере без интернета и не тянуть CDN. */
-
 var BIN = '/usr/share/5gmodem/stats.sh';
 
 var _state = { list: null, series: {}, traffic: null };
@@ -24,26 +18,14 @@ function callStats(args) {
 	});
 }
 
-/* Цвет линии по индексу ряда: различимы и в светлой, и в тёмной теме. */
 var LINE_COLORS = [ '#2b8a3e', '#1c7ed6', '#e8590c', '#7048e8', '#c92a2a' ];
 
-/* Минимальный график: сетка, ось значений, линия. Точки приходят как [t, v],
-   t - uptime в секундах (растёт), поэтому ось X строим по относительному
-   времени «сколько минут назад». */
 function hexToRgba(hex, a) {
 	var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
 	if (!m) { return hex; }
 	return 'rgba(' + parseInt(m[1], 16) + ',' + parseInt(m[2], 16) + ',' + parseInt(m[3], 16) + ',' + a + ')';
 }
 
-/* Отрисовка графика. Приёмы подсмотрены в luci-app-bandix и адаптированы:
-   - размер канвы считаем в ФИЗИЧЕСКИХ пикселях (devicePixelRatio), иначе на
-     экранах с масштабированием линии и подписи мылятся;
-   - под линией мягкая градиентная заливка - величина читается «объёмом», а не
-     только положением;
-   - геометрия расчёта сохраняется на самом элементе (__chart), чтобы обработчик
-     мыши мог перевести координату курсора обратно в точку ряда и показать
-     значения без перерисовки логики. */
 function drawChart(canvas, series, opts) {
 	opts = opts || {};
 	var dpr = window.devicePixelRatio || 1;
@@ -74,8 +56,6 @@ function drawChart(canvas, series, opts) {
 	if (vmax === vmin) { vmax = vmin + 1; }
 	var pad = (vmax - vmin) * 0.12;
 	vmax += pad; if (!opts.zeroBase) { vmin -= pad; }
-	/* Фиксированная шкала (проценты 0..100): рамка не должна дышать от данных,
-	   иначе «полшкалы» перестаёт значить «половину возможного». */
 	if (opts.min != null) { vmin = opts.min; }
 	if (opts.max != null) { vmax = opts.max; }
 
@@ -104,15 +84,6 @@ function drawChart(canvas, series, opts) {
 		var pts = s.points || [];
 		if (!pts.length) { return; }
 		var col = LINE_COLORS[idx % LINE_COLORS.length];
-		/* Заливка под линией у КАЖДОГО ряда. При нескольких рядах делаем её
-		   слабее, иначе перекрытия мешают читать график. */
-		/* ГЕОМЕТРИЯ ЗАЛИВКИ И ЛИНИИ - ОДНА И ТА ЖЕ. Заливка строилась ломаной,
-		   а линия рисуется сглаженной кривой: пути расходились, и градиент
-		   вылезал за линию на изломах. Общий помощник кладёт в путь ровно те же
-		   квадратичные сегменты, что и штрих. */
-		/* Сглаживание квадратичными сегментами через середины отрезков: линия
-		   мягкая, но форму данных держит плотнее кубического сплайна (тот при
-		   резких перепадах уходил «резиной» за пределы точек). */
 		var tracePath = function() {
 			for (var q = 0; q < pts.length; q++) {
 				var qpx = x(pts[q][0]), qpy = y(pts[q][1]);
@@ -148,7 +119,6 @@ function drawChart(canvas, series, opts) {
 		padL: padL, padT: padT, innerW: innerW, innerH: innerH, W: W, H: H,
 		fmt: opts.fmt, opts: opts, dark: dark };
 
-	/* курсор: вертикаль + значения всех рядов в этой точке */
 	if (canvas.__hoverX != null) {
 		var hx = canvas.__hoverX;
 		if (hx >= padL && hx <= W - padR) {
@@ -192,9 +162,6 @@ function drawChart(canvas, series, opts) {
 function chartCanvas(id, height) {
 	return E('canvas', { 'id': id,
 		'style': 'width:100%; height:' + (height || 190) + 'px; display:block; cursor:crosshair',
-		/* Перерисовка курсора обязана идти С ТЕМИ ЖЕ опциями, что и штатная
-		   отрисовка: раньше здесь собирался урезанный набор (fmt+zeroBase), и
-		   фиксированная шкала процентов слетала бы при первом движении мыши. */
 		'mousemove': function(ev) {
 			var r = ev.target.getBoundingClientRect();
 			ev.target.__hoverX = ev.clientX - r.left;
@@ -240,10 +207,6 @@ function legendItem(name, idx) {
 	]);
 }
 
-/* Байты -> человеческий вид: «1.2 ГБ», «860 МБ», «12.4 КБ», «512 Б».
-   mutil.localizeBytes только ПЕРЕВОДИТ готовые единицы (KiB -> КиБ) и сырое
-   число ей скормить нельзя - в таблице висели голые байты. Считаем по 1024
-   (как принято для объёма) и подписываем короткими единицами. */
 function fmtBytes(n) {
 	n = Number(n) || 0;
 	var units = [ _('B'), _('KB'), _('MB'), _('GB'), _('TB') ];
@@ -253,10 +216,6 @@ function fmtBytes(n) {
 	return n.toFixed(d) + ' ' + units[i];
 }
 
-/* Месяц по-человечески: "2026-08" -> "Август, 2026" (запрос владельца).
-   Название берём у самого браузера с его локалью - собственный словарь месяцев
-   пришлось бы переводить и поддерживать, а Intl уже знает все языки. Первую
-   букву поднимаем: в русской локали месяц приходит строчным. */
 function fmtMonth(ym) {
 	var m = /^(\d{4})-(\d{2})$/.exec(String(ym || ''));
 	if (!m) { return String(ym || ''); }
@@ -268,19 +227,9 @@ function fmtMonth(ym) {
 	return name + ', ' + m[1];
 }
 
-/* ЗНАЧОК СТРОКИ ТРАФИКА. Трафик копится либо по SIM-карте (ключ "sim-<iccid>"),
-   либо по интерфейсу - у старых записей и у не-модемных линков. Для карты берём
-   иконку оператора, как в «Приоритете интернета»; для линка судим по имени:
-   беспроводная станция - Wi-Fi, проводной - WAN. Не опознали - нейтральная
-   иконка SIM, она же запасная у оператора без своей. */
 function trafficIcon(key, label, opName) {
 	var f;
 	if (/^sim-/.test(String(key || ''))) {
-		/* Имя оператора приходит ОТДЕЛЬНЫМ ярлыком (labels["op.<ключ>"]) и
-		   запоминается за картой на роутере: снимок отдаёт оператора не всегда,
-		   а значок должен быть постоянным. Подпись строки берём запасным
-		   вариантом - в ней оператор есть, только если был известен в момент
-		   записи. */
 		f = mutil.operatorIcon(opName || '') || mutil.operatorIcon(label) || 'op-sim';
 		f = 'icons/5gmodem/' + f + '.svg';
 	} else if (/^(wwan|wlan|phy|wifi)/i.test(String(key || ''))) {
@@ -294,47 +243,28 @@ function trafficIcon(key, label, opName) {
 		'style': 'display:block' });
 }
 
-/* НОМЕР ТЕЛЕФОНА В ПОДПИСИ - В ТОМ ЖЕ ВИДЕ, ЧТО В КАРТОЧКЕ МОДЕМА.
-   Бэкенд склеивает подпись как «<оператор> <номер>» и номер отдаёт сырым
-   (+79654688753). Форматируем ту же цифровую часть тем же mutil.formatPhone,
-   иначе в одном интерфейсе соседствуют два написания одного номера. */
 function prettyTrafficLabel(label) {
 	var s = String(label || '');
-	/* Ряд без подписи приходит СЫРЫМ КЛЮЧОМ «sim-8970...»: подпись потерялась
-	   (напр. симка вынута, а её ярлык не пережил ребут на старой версии).
-	   Показываем «ICCID: 8970...» - так же сборщик подписывает карты без
-	   номера, и когда номер появится, строка с тем же ключом просто сменит
-	   подпись, не теряя истории. */
 	var m = s.match(/^sim-(\d{6,})$/);
 	if (m) { return 'ICCID: ' + m[1]; }
-	/* ICCID в подписи длиннее телефона и попал бы под телефонную маску -
-	   не форматируем такие строки. */
 	if (/ICCID:/.test(s)) { return s; }
 	return s.replace(/\+?\d[\d\s()-]{9,}\d/, function(m2) { return mutil.formatPhone(m2); });
 }
 
-/* Таблица помесячного трафика: ключи приходят как "<sim|iface>|<YYYY-MM>". */
 function trafficTable(data, labels) {
 	var rows = [ E('tr', { 'class': 'tr table-titles' }, [
-		/* Колонка значка - без заголовка: подпись «значок» ничего не добавляет,
-		   а ширину съедает. */
 		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ]),
 		E('th', { 'class': 'th' }, [ _('SIM card') ]),
 		E('th', { 'class': 'th' }, [ _('Month') ]),
 		E('th', { 'class': 'th' }, [ _('Received') ]),
 		E('th', { 'class': 'th' }, [ _('Sent') ]),
 		E('th', { 'class': 'th' }, [ _('Total') ]),
-		/* Колонка корзины - без заголовка, как у значка. */
 		E('th', { 'class': 'th', 'style': 'width:1%' }, [ '' ])
 	]) ];
 	var keys = Object.keys(data || {}).sort();
 	keys.forEach(function(k) {
 		var parts = k.split('|'), v = data[k] || {};
 		var rx = parseInt(v.rx, 10) || 0, tx = parseInt(v.tx, 10) || 0;
-		/* Строка озаглавлена SIM-картой (оператор и номер, если карта его
-		   отдала) - трафик тарифицирует оператор, а не модем. Ключи вида
-		   "sim-<iccid>" несут свою подпись; старые записи, накопленные по
-		   интерфейсу, показываем как раньше - по имени линка. */
 		var lab = (labels || {})[parts[0]] || (labels || {})['ping.' + parts[0]] || parts[0];
 		rows.push(E('tr', { 'class': 'tr' }, [
 			E('td', { 'class': 'td', 'style': 'width:1%' },
@@ -345,10 +275,6 @@ function trafficTable(data, labels) {
 			E('td', { 'class': 'td', 'data-title': _('Sent') }, [ fmtBytes(tx) ]),
 			E('td', { 'class': 'td', 'data-title': _('Total') }, [ fmtBytes(rx + tx) ]),
 			E('td', { 'class': 'td', 'style': 'width:1%' }, [
-				/* Маленький крестик в круге, а не кнопка-корзина (решение
-				   владельца): это чистка строки, ей незачем выглядеть тяжелее
-				   самих данных. Свои стили вместо классов кнопок - темы дают
-				   кнопкам крупные поля и рамки. */
 				E('button', {
 					'class': 'tg-trdel',
 					'title': _('Delete this row'),
@@ -372,9 +298,6 @@ function trafficTable(data, labels) {
 	return E('table', { 'class': 'table' }, rows);
 }
 
-/* Удаление строки отчёта. Свежая строка активного аплинка возродится со
-   следующим тиком (счёт пойдёт заново с нуля) - это ожидаемо; строки вынутых
-   карт и старых месяцев уходят насовсем, поэтому короткое подтверждение. */
 function forgetTrafficRow(btn, key, month) {
 	if (!confirm(_('Delete this traffic row? This cannot be undone.'))) { return; }
 	btn.disabled = true;
@@ -392,8 +315,6 @@ function forgetTrafficRow(btn, key, month) {
 
 function redraw() {
 	var lst = _state.list || {};
-	/* Пинги: по ряду на аплинк, все в одном полотне - так видно, какой линк
-	   проседает относительно других. */
 	var lab = lst.labels || {};
 	var pingSeries = (lst.ping || []).map(function(n) {
 		return { name: lab['ping.' + n] || n, points: (_state.series['ping.' + n] || []) };
@@ -406,9 +327,6 @@ function redraw() {
 	var sigSeries = (lst.signal || []).map(function(n) {
 		return { name: lab['signal.' + n] || n.replace(/_/g, ' '), points: (_state.series['signal.' + n] || []) };
 	});
-	/* Сигнал приходит в процентах (поле signal снимка, та же величина, что у
-	   планки на главной) - шкала жёсткая 0..100, чтобы высота линии читалась
-	   как «сколько от максимума», а не плясала от разброса данных. */
 	var c2 = document.getElementById('chart-signal');
 	if (c2) { drawChart(c2, sigSeries, { min: 0, max: 100, fmt: function(v) { return Math.round(v) + '%'; } }); }
 	var l2 = document.getElementById('chart-signal-legend');
@@ -445,9 +363,6 @@ function redraw() {
 	if (tc) {
 		var wasHidden = (tc.style.display === 'none');
 		tc.style.display = tempSeries.length ? '' : 'none';
-		/* Пока карточка скрыта, у канвы нулевая ширина - рисовать в неё
-		   бессмысленно. Стала видимой - перерисовываем сразу, не дожидаясь
-		   следующего тика, иначе на графике висит «Данных пока нет». */
 		if (wasHidden && tempSeries.length && c3) {
 			drawChart(c3, tempSeries, { fmt: function(v) { return Math.round(v) + ' °C'; } });
 		}
@@ -457,10 +372,6 @@ function redraw() {
 	if (tt) { tt.innerHTML = ''; tt.appendChild(trafficTable(_state.traffic, lab)); }
 }
 
-/* Забрать списки рядов и сами точки. Рядов немного (по одному на аплинк),
-   поэтому тянем их параллельно одним заходом. */
-/* Строка «куда реально пишем». Отдельной функцией: её же зовёт обработчик поля
-   пути (общий refresh перерисовывает только графики, но не блок настроек). */
 function pathNowText(lst) {
 	lst = lst || {};
 	if (!lst.persist) { return _('Storing is off - data lives in RAM until the next reboot.'); }
@@ -492,7 +403,7 @@ function refresh() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30600, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30700, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -506,9 +417,6 @@ return view.extend({
 		var lst = (res && res[1]) || {};
 		_state.list = lst;
 
-		/* ПОЛОСЫ ВКЛАДОК ЗДЕСЬ НЕТ. Статистика общая для всей системы (ряды по
-		   всем аплинкам и модемам сразу), выбирать «текущий» модем незачем -
-		   переключатель только сбивал бы с толку. */
 		var head = E('div');
 
 		var controls = E('div', { 'class': 'cbi-section tg5g' }, [
@@ -517,8 +425,6 @@ return view.extend({
 				E('label', { 'class': 'cbi-value-title' }, [ _('Keep monthly traffic across reboots') ]),
 				E('div', { 'class': 'cbi-value-field' }, [
 					(function() {
-						/* Галочка - ui.Checkbox, как везде: голый <input> в темах
-						   рисуется по-своему. Пояснение справа даёт tg-flag. */
 						var w = new ui.Checkbox(lst.persist ? '1' : '0', { id: 'st-persist' });
 						var n = w.render();
 						n.addEventListener('widget-change', function() {
@@ -555,11 +461,6 @@ return view.extend({
 						[ _('With the page closed the modem is not polled, so the signal charts stop. This polls the active modem on a timer to keep them going. Modems with background AT polling switched off are skipped.') ])
 				])
 			]),
-			/* КУДА ПИШЕМ. Пустое поле = внутренняя память роутера; свой путь
-			   нужен тем, у кого в роутер воткнута флешка и хочется полный лог,
-			   а не только месячные итоги. Строка ниже показывает РЕАЛЬНЫЙ
-			   каталог: если флешку выдернули, запись идёт в запасной, и
-			   человек должен это видеть, а не узнавать через месяц. */
 			E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, [ _('Where to store') ]),
 				E('div', { 'class': 'cbi-value-field' }, [
@@ -619,9 +520,6 @@ return view.extend({
 			])
 		]);
 
-		/* СВОЙ ТИК ПРИ ОТКРЫТОЙ СТРАНИЦЕ. Фоновый сборщик ходит раз в 30 c
-		   (шаг sessionwatch) - для «живого» графика этого мало. Пока страница
-		   открыта, дёргаем сбор сами каждые 10 c: точки те же, просто чаще. */
 		refresh();
 		poll.add(function() {
 			return callStats([ 'tick' ]).then(refresh);

@@ -80,17 +80,10 @@ var pkg = {
 			window.open(L.url(uri) + q, '_blank', 'noopener');
 		});
 	},
-	/* Менеджер пакетов ищем ПРОВЕРКОЙ НАЛИЧИЯ файла, а не попыткой запуска.
-	   Прежний вариант дёргал три пути подряд, полагаясь на .catch. На прошивках
-	   с apk первых двух нет, и каждый заход на страницу писал в консоль браузера
-	   по два «POST /cgi-bin/cgi-exec 404 (Executable not found)». Работать это не
-	   мешало (срабатывал третий путь), но пугало и маскировало настоящие ошибки:
-	   отменить уже отправленный XHR из JS нельзя, консоль пишет их сама.
-	   fs.stat отвечает обычным RPC-ответом и следа в консоли не оставляет. */
 	checkPackages: function() {
 		var candidates = [
-			'/usr/libexec/package-manager-call',  /* apk и свежие сборки */
-			'/usr/bin/opkg',                      /* классический opkg */
+			'/usr/libexec/package-manager-call',
+			'/usr/bin/opkg',
 			'/usr/libexec/opkg-call'
 		];
 
@@ -138,8 +131,6 @@ var emailProviders = {
 	'interia':    { name: 'interia.pl',                    smtp: 'poczta.interia.pl',    port: '465', security: 'ssl' }
 };
 
-/* ---- option builders per group -------------------------------------- */
-
 function addReceiveIncoming(s) {
 	var o;
 
@@ -154,21 +145,11 @@ function addReceiveIncoming(s) {
 	o.value('MT', _('SIM card and modem memory (MT)'));
 	o.default = 'SM';
 	o.rmempty = false;
-	/* РУЧНОЙ ВЫБОР ВЫШЕ АВТОМАТИЧЕСКОГО. Автовыбор хранилища (set_sms_storage
-	   в msw/iface.sh) отступает, увидев этот флаг: иначе он переставлял бы
-	   значение при каждом переключении модема, и выбор человека не жил бы до
-	   следующей перезагрузки. Пишется ТОЛЬКО при изменении - LuCI зовёт write()
-	   лишь когда значение формы разошлось с конфигом. */
 	o.write = function(section_id, value) {
 		uci.set('5gmodem', 'sms', 'storage_touched', '1');
 		return form.ListValue.prototype.write.apply(this, [section_id, value]);
 	};
 
-	/* --- Перенос входящих в память роутера ---------------------------------
-	   Память для входящих у модема крошечная, а у части модемов её нет вовсе:
-	   FM350 на AT+CPMS=? отвечает ("SM"),("SM"),("SM") - только SIM, десять
-	   слотов. Заполнились - оператор больше ничего не доставит. Перенос к себе
-	   снимает потолок совсем. */
 	o = s.option(form.Flag, 'archive', _('Keep messages in router memory'),
 		_('Copy incoming messages to the router and show them from there. Modem storage is tiny - some modems have no memory of their own at all and can only use the SIM card, where a couple of dozen slots fill up and the operator stops delivering. Messages are kept on flash and survive a reboot.'));
 	o.default = '0';
@@ -196,12 +177,7 @@ function addReceiveIncoming(s) {
 	o.value('Simple', _('Simple (merge without sorting)'));
 	o.value('Advanced', _('Advanced (merge with sorting)'));
 	o.depends('mergesms', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
+	/* see docs/subsystems/sms.md#settings-keep-hidden */
 	o.remove = function() { return Promise.resolve(); };
 	o.default = 'Simple';
 	o.rmempty = false;
@@ -215,12 +191,6 @@ function addReceiveIncoming(s) {
 	o.value('Start', _('From beginning to end'));
 	o.value('End', _('From end to beginning'));
 	o.depends('algorithm', 'Advanced');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 	o.default = 'Start';
 	o.rmempty = false;
@@ -236,11 +206,6 @@ function addReceiveIncoming(s) {
 	o.onclick = function() {
 		return uci.load('5gmodem').then(function() {
 			let portES = uci.get('5gmodem', 'sms', 'readport');
-			/* Через smsbridge.sh, а не бинарь sms_tool: в ACL больше нет exec на
-			   /usr/bin/sms_tool, потому что через него из браузера уходили любые
-			   аргументы. Заодно ушёл и мусор - строка '2>/dev/null' раньше
-			   передавалась sms_tool КАК АРГУМЕНТ (это не шелл, перенаправление
-			   тут не работает). */
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'dump', '', portES ]))
 				.then(function(res) {
 					if (!res) return;
@@ -282,8 +247,6 @@ function addReceiveIncoming(s) {
 		if (confirm(_('Delete all the messages?'))) {
 			return uci.load('5gmodem').then(function() {
 				let portFD = uci.get('5gmodem', 'sms', 'readport');
-				/* smsbridge.sh знает про транспорт (AT или ModemManager) и берёт
-				   очередь к порту - в отличие от прямого вызова бинаря. */
 				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'delete', 'all', '', portFD ]), null);
 			});
 		}
@@ -308,8 +271,6 @@ function addNotifications(s) {
 				return form.Flag.prototype.write.apply(this, [section_id, value]);
 			}
 
-			/* Формат вывода тот же (строка «Storage type: …, used: N, total: M»),
-			   её и разбирает код ниже - smsbridge.sh отдаёт её без изменений. */
 			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', [ 'status', storeL, portR ]))
 				.then(function(res) {
 					if (!res) return;
@@ -322,12 +283,6 @@ function addNotifications(s) {
 							uci.set('5gmodem', 'sms', 'sms_count', updatedValue);
 							uci.set('5gmodem', 'sms', 'lednotify', '1');
 							let PTR = uci.get('5gmodem', 'sms', 'prestart');
-							/* Через smscron.sh. Раньше страница читала /etc/crontabs/root
-							   целиком, фильтровала строки и записывала обратно - для этого
-							   в ACL было право `write` на crontab, то есть возможность
-							   положить туда любую команду от root. Скрипт трогает ТОЛЬКО
-							   нашу строку, проверяет интервал и сам перезапускает cron и
-							   уведомитель. */
 							return uci.save().then(function() {
 								return fs.exec_direct('/usr/share/5gmodem/smscron.sh', [ 'on', String(PTR) ]);
 							});
@@ -336,8 +291,6 @@ function addNotifications(s) {
 
 					if (value == '0') {
 						uci.set('5gmodem', 'sms', 'lednotify', '0');
-						/* см. выше: снятие расписания тоже через smscron.sh - он уберёт
-						   только нашу строку и остановит уведомитель. */
 						return uci.save().then(function() {
 							return fs.exec_direct('/usr/share/5gmodem/smscron.sh', [ 'off' ]);
 						}).then(function() {
@@ -426,12 +379,6 @@ function addEmailForwarding(s) {
 		o.value(key, emailProviders[key].name);
 	o.default = 'custom';
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 	o.onchange = function(ev, section_id, value) {
 		var provider = emailProviders[value] || emailProviders['custom'];
@@ -448,12 +395,6 @@ function addEmailForwarding(s) {
 	o = s.option(form.Value, 'forward_sms_mail_recipient', _('Recipient'));
 	o.description = _('E-mail address of the recipient');
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Flag, 'forward_sms_mail_hostname', _('Add router name'),
@@ -464,58 +405,28 @@ function addEmailForwarding(s) {
 	o = s.option(form.Value, 'forward_sms_mail_sender', _('Sender'));
 	o.description = _('E-mail address of the sender');
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_user', _('User'));
 	o.description = _('Username for SMTP authentication');
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_password', _('Password'));
 	o.description = _('App password / password for SMTP authentication');
 	o.password = true;
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_smtp', _('SMTP server'));
 	o.description = _('Hostname or IP address of the SMTP server');
 	o.datatype = 'host';
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'forward_sms_mail_smtp_port', _('SMTP server port'));
 	o.datatype = 'port';
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.ListValue, 'forward_sms_mail_security', _('Security'));
@@ -526,12 +437,6 @@ function addEmailForwarding(s) {
 	o.value('ssl', 'SSL');
 	o.default = 'tls';
 	o.depends('forward_sms_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.DummyValue, '_mailsend_status', _('mailsend package'));
@@ -550,10 +455,6 @@ function addEmailForwarding(s) {
 	};
 }
 
-/* ПЕРЕСЫЛКА ВХОДЯЩИХ В TELEGRAM.
-   Работает поверх той же отметки «виденное», что подсвечивает страницу
-   «Входящие» (smsbridge.sh seen), поэтому бот и страница не спорят о том, что
-   человек уже читал. Доставку делает tgnotify.sh из цикла сторожа. */
 function addTelegramForwarding(s) {
 	var o;
 
@@ -565,9 +466,6 @@ function addTelegramForwarding(s) {
 		_('Token issued by @BotFather, e.g. 123456789:AA...'));
 	o.password = true;
 	o.depends('tg_enabled', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ - как и в почтовой пересылке: LuCI удаляет
-	   опции со скрытыми зависимостями, и токен пропадал бы при каждом
-	   временном выключении. */
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'tg_chat', _('Chat ID'),
@@ -592,6 +490,20 @@ function addTelegramForwarding(s) {
 		});
 	};
 
+	o = s.option(form.Value, 'tg_api_url', _('Telegram API server'),
+		_('Leave empty for api.telegram.org. Your own server must forward the Bot API as is, e.g. an SNI proxy or a self-hosted Bot API server.'));
+	o.placeholder = 'https://api.telegram.org';
+	o.datatype = 'string';
+	o.validate = function(section_id, value) {
+		if (!value || /^https?:\/\/[^\s"']+$/.test(value)) { return true; }
+		return _('Expecting an address starting with http:// or https://');
+	};
+	o.depends('tg_enabled', '1');
+
+	o = s.option(form.Flag, 'tg_api_insecure', _('Do not check the certificate'),
+		_('Only for your own server: accept a self-signed or mismatching certificate.'));
+	o.depends({ tg_enabled: '1', tg_api_url: /.+/ });
+
 	o = s.option(form.Flag, 'tg_hostname', _('Add router name'),
 		_('Message header: SMS sender, then the SIM operator and number, router name and modem, e.g. "SMS 900 → MTS +79001234567 · OpenWrt (Quectel EC25)". Helps when several routers send to one chat.'));
 	o.depends('tg_enabled', '1');
@@ -604,7 +516,6 @@ function addTelegramForwarding(s) {
 	o.depends('tg_enabled', '1');
 	o.onclick = function(ev, section_id) {
 		var self = this;
-		/* Любой сбой обязан быть ВИДЕН: молчащая кнопка неотличима от сломанной. */
 		return fs.exec_direct('/usr/share/5gmodem/tgnotify.sh', [ 'chatid' ]).catch(function(e) {
 			ui.addNotification(null, E('p', {}, [ _('Could not query Telegram: %s').format(e && e.message || e) ]), 'error');
 			return '';
@@ -613,19 +524,12 @@ function addTelegramForwarding(s) {
 			var j = {};
 			try { j = JSON.parse(out || '{}'); } catch (e) {}
 			if (!j.ok) {
-				/* «noreply» - сеть молчит на прямом пути И через прокси: у
-				   операторов РФ прямой доступ к Telegram закрыт, и без
-				   работающего SSClash (или VPN-аплинка) роутеру туда не
-				   попасть. Без расшифровки человек шёл проверять токен,
-				   который тут ни при чём. */
 				var msg = (j.error === 'noreply')
 					? _('Telegram is not reachable from the router: the direct path is blocked by the carrier and no working proxy tunnel was found. Choose your VPN tunnel in "Interface for Telegram" or start SSClash, save and try again.')
 					: _('Could not query Telegram: %s').format(j.error || _('check the token and the router internet connection'));
 				ui.addNotification(null, E('p', {}, [ msg ]), 'error');
 				return;
 			}
-			/* Имена Telegram отдаёт в \uXXXX - без раскодирования в уведомлении
-			   вместо «Фил» показывалось бы «\u0424\u0438\u043b». */
 			var unesc = function(v) {
 				return String(v || '').replace(/\\u([0-9a-fA-F]{4})/g, function(m, h) {
 					return String.fromCharCode(parseInt(h, 16));
@@ -639,11 +543,6 @@ function addTelegramForwarding(s) {
 					_('Telegram returned no chats. Write any message to the bot and press the button again.')), 'info');
 				return;
 			}
-			/* Один чат - подставляем сразу, несколько - даём выбрать: у человека
-			   бывает и личный чат, и канал, и по одному ID их не различить. */
-			/* Подставляем в поле И СРАЗУ ПИШЕМ В КОНФИГ. Одна подстановка живёт
-			   до первого «Сохранить», и после «Найти» конфиг оставался пустым -
-			   ровно то, что сбивает с толку. */
 			var fill = function(id, name) {
 				var f = self.map.lookupOption('tg_chat', section_id);
 				if (f && f[0]) { f[0].getUIElement(section_id).setValue(id); }
@@ -789,10 +688,6 @@ function addWebhookForwarding(s) {
 function addSendOptions(s) {
 	var o;
 
-	/* ПОДСКАЗКА ПРО БОТА - БЕЗ ДУБЛИРОВАНИЯ НАСТРОЕК.
-	   Бот один, токен один, чат один, поэтому форма живёт только во «Входящих».
-	   Здесь - строка состояния: человек узнаёт о возможности ровно там, где
-	   собрался отправлять сообщение, но настраивает в одном месте. */
 	o = s.option(form.DummyValue, '_tginfo', _('Telegram bot'));
 	o.rawhtml = true;
 	o.cfgvalue = function() {
@@ -840,20 +735,9 @@ function addSendOptions(s) {
 		return _('Enter a number between 3 and 59');
 	};
 	o.depends('sendingroup', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ. Поле скрыто, пока выключен родительский
-	   переключатель, а LuCI удаляет из конфига опции с невыполненными
-	   зависимостями - введённое пользователем пропадало молча. Особенно неприятно
-	   с доступом к почте: выключил пересылку на минуту, включил - вводи пароль,
-	   сервер и порт заново. Значения сохраняем; поведение становится
-	   предсказуемым - настройка живёт, пока её не изменили. */
 	o.remove = function() { return Promise.resolve(); };
 	o.datatype = 'range(3, 59)';
 
-	/* Галка «показывать подсказку о формате номера» убрана: подсказка нужна
-	   один раз, и отдельная настройка ради неё - лишняя сущность. Теперь ею
-	   управляет кнопка «Закрыть» на самой подсказке (см. sendsms.js): закрыл -
-	   больше не появляется. Опция information в конфиге остаётся тем же
-	   признаком, просто выставляется кнопкой, а не здесь. */
 }
 
 function addUssdOptions(s) {
@@ -870,10 +754,6 @@ function addUssdOptions(s) {
 	o = s.option(form.Flag, 'ussd_3g', _('Switch the modem to 3G for USSD'),
 		_('USSD runs over the circuit-switched channel, which LTE does not have. Some modems handle this themselves; others answer nothing until the modem is actually in 3G. With this option the request switches the modem to 3G and switches it back - about twenty seconds without a connection. It is enabled automatically for modems already known to need it.'));
 	o.rmempty = false;
-	/* ЗАПОМИНАЕМ ВЫБОР У МОДЕМА, а не только в общей настройке. Галка одна на
-	   приложение, а нужна она не всем: при переключении модема modemswitch.sh
-	   выставляет её по базе проверенных, и без этой записи выбор пользователя
-	   терялся бы на первом же переключении. Секция модема главнее базы. */
 	o.write = function(section_id, value) {
 		uci.set('5gmodem', section_id, 'ussd_3g', value);
 		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
@@ -891,12 +771,6 @@ function addUssdOptions(s) {
 	o.rmempty = false;
 }
 
-/* ---- команды по SMS --------------------------------------------------------
-   Последний работающий канал управления, когда сети нет: канал лёг, адрес
-   сменился, туннель не поднялся - а SMS доходит. Поэтому выключено по
-   умолчанию и с белым списком номеров: команду присылает кто угодно, кто знает
-   номер симки. Текст в командную строку НЕ подставляется, хвост после
-   ключевого слова уходит в переменную окружения SMS_ARGS (см. smscmd.sh). */
 function addSmsCommands(s) {
 	var o;
 
@@ -915,34 +789,20 @@ function addSmsCommands(s) {
 		_('Compared by the last ten digits, so +7…, 8… and 7… are the same number.'));
 	o.placeholder = '+79001234567';
 	o.depends('cmd_whitelist_only', '1');
-	/* НЕ СТИРАТЬ ПРИ ВЫКЛЮЧЕНИИ - как у остальных зависимых полей на этой
-	   странице: выключил белый список на минуту, включил - список номеров
-	   пришлось бы набирать заново. */
 	o.remove = function() { return Promise.resolve(); };
 
-	/* ЗАЩИТНЫЙ КОД - ОТДЕЛЬНО ОТ СЛОВА КОМАНДЫ. Их постоянно путают: слово
-	   («reboot») говорит, ЧТО сделать, и секретом быть не может - оно записано
-	   в настройках и очевидно с первого взгляда. Кода по умолчанию нет: пока
-	   защита - только доверенные номера, а номер отправителя подделывается. */
 	o = s.option(form.Value, 'cmd_secret', _('Security code'),
 		_('The FIRST word of the message, before the command word: "%s" runs the command named "reboot" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged.').format('secret reboot'));
 	o.placeholder = _('empty - no code');
 	o.depends('cmd_enabled', '1');
-	/* УДАЛЯТЬ КОД РАЗРЕШЕНО. Здесь стояла заглушка remove(), и она делала
-	   ровно обратное задуманному: LuCI на ПУСТОМ поле зовёт не write(), а
-	   remove(), поэтому очистить код было физически нельзя - старое значение
-	   возвращалось после каждого сохранения (жалоба 04.09.2026). А описание
-	   выше прямо обещает «пусто - кода нет». */
 
+	/* see docs/subsystems/notifications.md#security-code */
 	var cv = s.option(form.SectionValue, '__smscmds', form.TableSection, 'smscmd');
 	cv.depends('cmd_enabled', '1');
 	var cs = cv.subsection;
 	cs.anonymous = true;
 	cs.addremove = true;
 	cs.addbtntitle = '+';
-	/* ПОДПИСИ КОЛОНОК - ОДНОЙ СТРОКОЙ НАД ТАБЛИЦЕЙ. В таблице описание каждой
-	   опции рисуется отдельной строкой под заголовками и занимает больше места,
-	   чем сами поля (проверено на стенде: пять абзацев над пустым списком). */
 	cs.nodescriptions = true;
 	cs.description = _('Send the word from the first column in an SMS - the router runs what is in the second. The word is matched without case, anything after it reaches the command as SMS_ARGS. A command that kills the connection (reboot, modem power cycle) needs a delay: the reply is then sent BEFORE the command runs, which is the only way it can be sent at all.');
 
@@ -1003,12 +863,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30600,
-	/*
-		Build a collapsible settings panel for a group as a native
-		<details>/<summary> disclosure (arrow indicates it expands).
-		Returns a Promise resolving to the DOM node.
-	*/
+	API: 30700,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

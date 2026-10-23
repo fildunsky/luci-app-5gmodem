@@ -1,27 +1,5 @@
 #!/bin/sh
 [ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
-# Переподнять модемный интерфейс, когда его СЕТЕВОЕ УСТРОЙСТВО (eth* RNDIS/ECM)
-# ПОЯВЛЯЕТСЯ - у FM350 и подобных оно регистрируется на ~20 c ПОЗЖЕ старта netifd.
-#
-# ЗАЧЕМ. netifd дёргает setup fibocom-интерфейса на раннем старте, когда eth2 ещё
-# нет: прото отдаёт NETDEV_MISSING и делает proto_block_restart - интерфейс встаёт
-# НАМЕРТВО. Когда eth2 наконец появляется, netifd сам его НЕ поднимает (у прото
-# no_device=1, устройство он не отслеживает), и `ubus ... up` блок не снимает.
-# Модем так и висит без IP - а заодно НЕ наступает ifup, на котором висит
-# восстановление сохранённых диапазонов (31-5gmodem-bands). Ловим появление
-# устройства и делаем ifup сами: он снимает блок, повторяет дозвон, и следом
-# отрабатывает restore.
-#
-# В net-hotplug $INTERFACE = имя netdev (eth2), НЕ uci-интерфейс (ср.
-# /etc/hotplug.d/iface, где $INTERFACE - имя сети). $ACTION = add|remove.
-#
-# ПРОПАЖА УСТРОЙСТВА ПОД ПОДНЯТЫМ ИНТЕРФЕЙСОМ. Модем, перезагрузившийся сам
-# (FM350/RW350 уходят с шины, проходят загрузчик MT65xx Preloader и через
-# 20 c возвращаются), уносит eth2, а интерфейс для netifd остаётся «up»: прото
-# с no_device=1 пропажу не видит. Проверка «уже поднят» ниже пропускала такое
-# возвращение, и связь поднимал только сторож по трём пропущенным пингам -
-# через минуту (живой отчёт 17.09.2026, RW350-GL на Radxa Cubie A5E). Метка
-# пропажи ставится на remove и снимается ближайшим add.
 [ -n "$INTERFACE" ] || exit 0
 case "$ACTION" in add|remove) ;; *) exit 0 ;; esac
 _gone_dir=/tmp/5gmodem/netdev-gone
@@ -39,8 +17,6 @@ if [ -n "$_tt_kick" ] && [ -x /etc/hotplug.d/usb/71-5gmodem-resolve ]; then
 	ACTION=add DEVTYPE=usb_device /etc/hotplug.d/usb/71-5gmodem-resolve >/dev/null 2>&1 </dev/null
 fi
 
-# Найти fibocom-интерфейс(ы), которым принадлежит это устройство: по полю device
-# или по usbpath (устройство под тем же USB-путём).
 for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
 	_match=0
@@ -67,8 +43,6 @@ for _if in $(uci -q show network 2>/dev/null \
 		continue
 	fi
 
-	# Уже поднят и устройство не пропадало - не трогаем (мигнуло на штатном
-	# реконнекте самого прото).
 	if [ -e "$_gone_dir/$_if" ]; then
 		rm -f "$_gone_dir/$_if"
 		logger -t 5gmodem "netdev: $INTERFACE is back after the modem left the bus - reconnecting $_if"
@@ -76,13 +50,6 @@ for _if in $(uci -q show network 2>/dev/null \
 		[ "$_st" = "true" ] && continue
 	fi
 
-	# ifup (а не `ubus up`): интерфейс мог быть заблокирован proto_block_restart
-	# после NETDEV_MISSING, и только ifup снимает блок и повторяет дозвон. В фоне
-	# с отвязкой дескрипторов: hotplug не должен ждать дозвон.
-	#
-	# Сохранённые диапазоны применяет САМ прото fibocom.sh перед дозвоном (раз за
-	# загрузку, race-free против любого триггера setup) - здесь их НЕ трогаем:
-	# отдельный hotplug гонку с авто-рестартом netifd по появлению eth2 не выигрывал.
 	( . /lib/netifd/netifd-proto.sh; proto_set_available "$_if" 1 ) >/dev/null 2>&1
 	( ifup "$_if" ) >/dev/null 2>&1 </dev/null &
 done

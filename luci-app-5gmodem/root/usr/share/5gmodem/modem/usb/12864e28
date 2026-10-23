@@ -1,30 +1,16 @@
-# Marvell PXA1826 (ASR) - 1286:4e28: Notion R281 / R291, МегаФон C300-1 и его
-# близнец Yota C300-1. Модем встроен в роутер, отдаёт RNDIS и ttyACM.
-#
-# ПРОШИВКА ZTE-ОБРАЗНАЯ. Уровни, сота и агрегация - те же +ZRSSI, +ZCELLINFO?,
-# +ZCAINFO?, что у ZTE MF286R (19d2:1489, тоже ASR), идентификация - вендорские
-# *READVER, *MRD_IMEI?, *ICCID?. Основа - профиль 3ginfo-lite под этот
-# идентификатор, присланный в копилку 10.09.2026; разбор переписан, три его
-# дефекта исправлены (см. ниже). Модема в руках не было.
-#
-# РАСКЛАДКА +ZCAINFO? - по исходному профилю, где она проверена владельцем: поля
-# режутся по «,», «:» и «;» (несущие разделены «;»), первичная несущая -
-# «pci,band,tac,earfcn,ширина», каждая вторичная - «pci,?,band,earfcn,ширина».
 [ -n "$DEVICE" ] && [ -c "$DEVICE" ] || return 0
 
 _asr_at() {
 	sms_tool -d "$DEVICE" at "$1" 2>/dev/null | tr -d '\r'
 }
 
-# Склейка одним заходом, как у ZTE. Не ответила (прошивка не приняла цепочку
-# или её оборвала ошибка одной из команд) - те же три запроса по одному.
 O=$(_asr_at "AT+ZRSSI;+ZCELLINFO?;+ZCAINFO?")
 case "$O" in
 	*ZRSSI:*) ;;
 	*) O=$(_asr_at "AT+ZRSSI"; _asr_at "AT+ZCELLINFO?"; _asr_at "AT+ZCAINFO?") ;;
 esac
 
-_asr_in() {   # $1 - число, $2 - нижняя граница, $3 - верхняя
+_asr_in() {
 	case "$1" in ''|*[!0-9.-]*) return ;; esac
 	awk -v v="$1" -v lo="$2" -v hi="$3" 'BEGIN { v += 0; if (v >= lo && v <= hi) print v }'
 }
@@ -52,7 +38,6 @@ if [ "$_ASR_LTE" = 0 ]; then
 			;;
 	esac
 else
-	# +ZRSSI: <rsrp>,<rsrq>,<rssi>,<sinr>
 	eval "$(printf '%s\n' "$O" | awk -F'[,:]' '
 		/^\+ZRSSI/ {
 			for (i = 2; i <= 5; i++) { v[i] = $i; gsub(/[^0-9.-]/, "", v[i]) }
@@ -64,8 +49,6 @@ else
 	_ASR_V=$(_asr_in "$_ASR_S" -120 -20);  [ -n "$_ASR_V" ] && RSSI="$_ASR_V"
 	_ASR_V=$(_asr_in "$_ASR_N" -20 50);    [ -n "$_ASR_V" ] && SINR="$_ASR_V"
 
-	# Несущие +ZCAINFO по строке на каждую: «p|s pci band earfcn ширина».
-	# Нули у этой прошивки означают «поля нет», а не нулевой PCI.
 	_ASR_CA=$(printf '%s\n' "$O" | awk -F'[,:;]' '
 		function n(x) { gsub(/[^0-9.]/, "", x); return x }
 		/^\+ZCAINFO/ {
@@ -125,11 +108,6 @@ else
 	done
 	IFS="$_ASR_SIFS"
 
-	# ЯРЛЫК - ПО ФАКТУ ВТОРИЧНОЙ НЕСУЩЕЙ, А НЕ ПО AcT=9. Исходный профиль брал
-	# агрегацию только при AcT=9 - это не код агрегации ни в одном стандарте,
-	# и при другой нумерации прошивки вторая несущая молча терялась.
-	# «+» между ВСЕМИ несущими: исходное `sed 's,/,+,'` меняло только первый
-	# разделитель.
 	if [ -n "$_ASR_M" ]; then
 		if [ "$_ASR_I" -gt 0 ]; then
 			MODE="LTE-A | $_ASR_M"
@@ -142,7 +120,6 @@ else
 	fi
 fi
 
-# --- Кто это и какая прошивка ------------------------------------------------
 _asr_first() {
 	printf '%s\n' "$1" | awk '
 		/^AT/ { next }
@@ -157,9 +134,6 @@ _ASR_V=$(_asr_at "AT*READVER" | sed -n 's/^release_version[[:space:]]*:[[:space:
 _ASR_MA=$(_asr_first "$(_asr_at "AT+CGMI")")
 _ASR_MB=$(_asr_first "$(_asr_at "AT+CGMM")")
 [ -n "$_ASR_MB" ] && MODEL=$(printf '%s %s' "$_ASR_MA" "$_ASR_MB" | xargs)
-# ИМЯ ИЗ ВЕРСИИ ПРОШИВКИ. Сам модуль представляется безлико - «+CGMI: "Marvell"»,
-# «+CGMM: "LINUX"» (живой Yota C300-1, 11.09.2026), а оператор и модель зашиты
-# в release_version: «P29M29HYOTA_C300-1_SC62_CP_V002».
 case "$_ASR_MA $_ASR_MB" in
 	*[Mm]arvell*|*LINUX*)
 		_ASR_OP=$(printf '%s' "$FW" | grep -oE 'YOTA|MEGAFON|NOTION|MTS|BEELINE' | head -1)
@@ -172,9 +146,6 @@ case "$_ASR_MA $_ASR_MB" in
 		;;
 esac
 
-# IMEI: запас на *MRD_IMEI? - когда AT+GSN молчит. В исходном профиле проверка
-# стояла как `[ -z "NR_I" ]` (строка, а не переменная), и запас не срабатывал
-# никогда.
 _ASR_V=$(digits_of "$(_asr_at "AT+GSN")" 15 17)
 [ -n "$_ASR_V" ] || _ASR_V=$(digits_of "$(_asr_at "AT*MRD_IMEI?")" 15 17)
 [ -n "$_ASR_V" ] && NR_IMEI="$_ASR_V"
@@ -185,8 +156,6 @@ _ASR_V=$(digits_of "$(_asr_at "AT+CIMI")" 14 16)
 _ASR_V=$(_asr_at "AT*ICCID?" | sed -n 's/^\*ICCID:[[:space:]]*//p' | head -1 | tr -cd '0-9A-Fa-f')
 [ -n "$_ASR_V" ] && NR_ICCID="$_ASR_V"
 
-# Протокол - по драйверу интерфейса из sysfs, а не по debugfs с прибитым
-# идентификатором: debugfs смонтирован не везде.
 if [ -z "$PROTO" ] && [ -n "$_POLL_AM" ] && [ -d "/sys/bus/usb/devices/$_POLL_AM" ]; then
 	for _asr_if in "/sys/bus/usb/devices/$_POLL_AM":*; do
 		[ -e "$_asr_if/driver" ] || continue

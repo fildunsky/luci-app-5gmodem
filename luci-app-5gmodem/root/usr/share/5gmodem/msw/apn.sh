@@ -1,18 +1,4 @@
-# Подбор APN по оператору/PLMN/IMSI/ICCID.
-#
-# Часть modemswitch.sh (см. его шапку): сорсится им, самостоятельно НЕ
-# запускается. Все функции перенесены 1:1 при распиле большого файла.
-
-# Подобрать APN по оператору. $1 - имя оператора, $2 - код сети (MCC-MNC).
-# Сперва по ИМЕНИ: у MVNO оно своё, а код принадлежит хосту сети (SIM Сбера
-# работает на Tele2 и отдаёт её PLMN, но APN нужен сберовский).
-# Понижение регистра, пригодное для кириллицы.
-#
-# tr 'A-ZА-Я' 'a-zа-я' НЕ РАБОТАЕТ: busybox tr обрабатывает БАЙТЫ, а кириллица в
-# UTF-8 двухбайтовая. Проверено на роутере - "Тинькофф" превращался в
-# "\xd0\xa2инь\xd0\xbaофф"-подобный мусор, и все кириллические образцы в
-# apn.list (т-мобайл, тинькоф, сбер, газпром) не могли совпасть НИКОГДА.
-# sed работает с UTF-8 последовательностями как с литералами, поэтому годится.
+# busybox tr is byte-wise and breaks UTF-8 Cyrillic; see docs/subsystems/autosetup.md#apn-selection
 _tolower() {
 	printf '%s' "$1" | tr 'A-Z' 'a-z' | sed \
 		-e 's/А/а/g;s/Б/б/g;s/В/в/g;s/Г/г/g;s/Д/д/g;s/Е/е/g;s/Ё/ё/g' \
@@ -22,16 +8,7 @@ _tolower() {
 		-e 's/Ы/ы/g;s/Ь/ь/g;s/Э/э/g;s/Ю/ю/g;s/Я/я/g'
 }
 
-# Порядок поиска APN. Сперва код ИЗ SIM (у MVNO он собственный), затем имя,
-# затем код зарегистрированной сети. Так MVNO получает свой APN, а обычная
-# симка - прежний результат: её код в IMSI и в сети совпадает.
-# ПОДБОР APN. Три слоя, от точного к широкому:
-#   1) наши переопределения (apn.list) по коду сети из SIM - для РФ-MVNO,
-#      которые мы выверили руками (T-Mobile -> tt и т.п.);
-#   2) МИРОВАЯ база providers.tsv по IMSI/ICCID со скорингом специфичности -
-#      1459 операторов, покрывает почти любую симку, включая MVNO;
-#   3) наши по имени оператора - последний резерв.
-apn_pick() {   # $1 - имя, $2 - PLMN сети, $3 - список PLMN из IMSI, $4 - IMSI, $5 - ICCID
+apn_pick() {
 	for _sp in $3; do
 		_a=$(apn_lookup "" "$_sp") && { echo "$_a"; return 0; }
 	done
@@ -39,14 +16,8 @@ apn_pick() {   # $1 - имя, $2 - PLMN сети, $3 - список PLMN из IM
 	apn_lookup "$1" "$2"
 }
 
-# Подбор из мировой базы providers.tsv (формат и метод скоринга взяты из проекта
-# apn-autoconfig, данные - GNOME MBPI + AOSP, см. licenses/PROVIDERS-NOTICE.txt).
-# Матч по MCC-MNC (из префикса IMSI), маске IMSI и маске ICCID; выигрывает самая
-# специфичная строка. operator_id пуст - сопоставляем по префиксу IMSI, чтобы у
-# MVNO подобрать APN его ДОМАШНЕГО кода, а не гостевой сети.
-apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
-	# Скачанная кнопкой база лежит в /etc (переживает обновление приложения),
-	# пакетная - в /usr/share. Свежая главнее; нет её - работаем с пакетной.
+# providers.tsv format and scoring follow apn-autoconfig; data from GNOME MBPI + AOSP, see licenses/PROVIDERS-NOTICE.txt
+apn_db_lookup() {
 	_db=/etc/5gmodem/providers.tsv
 	[ -s "$_db" ] || _db="$RES/providers.tsv"
 	[ -f "$_db" ] || return 1
@@ -54,7 +25,6 @@ apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
 	_dbapn=$(awk -F '\t' -v imsi="$1" -v iccid="$2" '
 		function wildcard(v) { return v == "-" || v == "*" || v == "" }
 		function starts(s, p) { return substr(s, 1, length(p)) == p }
-		# Маска: цифры сверяем, "x" - любой символ.
 		function dmatch(value, pattern,   i, e, a) {
 			if (length(value) < length(pattern)) return 0
 			for (i = 1; i <= length(pattern); i++) {
@@ -67,8 +37,6 @@ apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
 		{
 			mccmnc=$1; imsi_p=$2; iccid_p=$3; apn=$7; priority=$8
 			if (apn ~ /[";\\]/ || apn ~ /[[:cntrl:]]/) next
-			# 440-11 это Rakuten Mobile, а в исходной базе к нему прилипли APN
-			# docomo (mopera) - при равном счёте они выигрывали по алфавиту.
 			if (mccmnc == "44011" && apn ~ /^mopera\./) next
 			if (!wildcard(mccmnc) && !starts(imsi, mccmnc)) next
 			if (!wildcard(imsi_p) && !dmatch(imsi, imsi_p)) next
@@ -78,8 +46,6 @@ apn_db_lookup() {   # $1 - IMSI, $2 - ICCID
 			if (!wildcard(imsi_p)) s += 200 + length(imsi_p)
 			if (!wildcard(iccid_p)) s += 200 + length(iccid_p)
 			if (priority !~ /^[0-9]+$/) priority=100
-			# Инверсный счёт фиксированной ширины: сортировка переносима на любом
-			# busybox, самый специфичный (и с меньшим priority) окажется первым.
 			printf "%06d\t%06d\t%s\n", 999999 - s, priority, apn
 		}
 	' "$_db" | sort | head -1 | cut -f3)

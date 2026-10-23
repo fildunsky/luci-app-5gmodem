@@ -1,7 +1,3 @@
-# Dell DW5930e
-# Foxconn T99W175
-# Thales Cinterion MV31-W
-
 O=$(sms_tool -d $DEVICE at "AT^TEMP?")
 
 T=$(echo "$O" | awk '/^TSENS: / {gsub("C","",$2); print $2}')
@@ -27,7 +23,6 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
-# Снимок ^DEBUG? для общего блока антенн (O ниже переиспользуется).
 _DBG="$O"
 
 case "$MODE_NUM" in
@@ -45,8 +40,6 @@ esac
 
 T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
-#	TAC_HEX=$(printf "%X" $T)
-#	TAC_DEC=$(printf "%d" "0x$T")
 
 	TAC_HEX=$(printf "%X" $T)
 	TAC_DEC="$T"
@@ -118,13 +111,9 @@ while true; do
 		fi
 	
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rsrp:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/rsrq:/ {print $4}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rssi:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/lte_snr:/ {print $4}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 
 	O1=$(echo "$O1" | sed '1,4d')
 done
@@ -166,19 +155,13 @@ if [ -n "$T" ]; then
 			esac
 		fi
 	T=$(echo "$O" | awk -F: '/^nr_rsrp:/ {print $2}' | cut -f1 -d" ")
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O" | awk -F: '/^nr_rsrq:/ {print $2}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O" | awk -F: '/^nr_snr:/ {print $2}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 fi
 
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
-
-
-# Modem
 
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
@@ -189,33 +172,24 @@ MODEL="$MODELBCUT "$MODELACUT
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-
-# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
-# профиля («Vendor=1e2d ProdID=00b3»), скопированная вместе с кодом, и протокол у этого
-# модема не определялся никогда.
 _PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
 _PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
 _PV_ID="Vendor=${_PV_V:-1e2d} ProdID=${_PV_P:-00b3}"
@@ -232,5 +206,4 @@ then
     PROTO="ecm"
 fi
 
-# Антенные порты и соседние сектора - общий блок семейства (см. _qualcomm_sdx55_extras).
 . "$RES/modem/usb/_qualcomm_sdx55_extras"

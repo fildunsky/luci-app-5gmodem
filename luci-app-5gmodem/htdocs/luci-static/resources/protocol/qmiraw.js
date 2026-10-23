@@ -3,12 +3,6 @@
 'require form';
 'require network';
 
-// LuCI protocol handler for the "qmiraw" netifd proto shipped by
-// luci-app-5gmodem (stock qmi with raw-ip data format and static addressing
-// from get-current-settings - for modems whose 802.3/DHCP path yields an
-// address but no traffic, e.g. SIMCom SIM7100E, Telit LM960). Without this
-// handler the Network > Interfaces page shows the interface as "unsupported".
-
 var callFileList = rpc.declare({
 	object: 'file',
 	method: 'list',

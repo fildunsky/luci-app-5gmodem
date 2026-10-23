@@ -1,5 +1,1 @@
-# 1e2d:00b8 - Thales/Cinterion MV31-W
-#
-# Логика общая для всех композиций этого модема, см. _qualcomm_sdx55_common:
-# режим USB меняет нумерацию портов и драйвер, но не набор AT-команд.
 . $RES/_qualcomm_sdx55_common

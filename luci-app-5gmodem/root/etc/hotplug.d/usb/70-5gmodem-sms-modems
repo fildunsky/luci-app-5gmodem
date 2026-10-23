@@ -1,37 +1,12 @@
 #!/bin/sh
-#
-# luci-app-sms-tool-js: auto-configure ports for known modems by USB VID:PID.
-# Fills in ONLY empty options - never overrides the user's manual choice.
-#
-# Compal RXM-G1 (custom firmware, reports itself as
-# "Tri Cascade Inc. VOS_5G", revision contains RXMG1), VID:PID 05c6:90d6.
-# The AT port (usually /dev/ttyUSB1 on the stock composition) is not
-# hardcoded but probed: the DIAG port does not answer "AT", the AT port
-# replies OK. The firmware supports the full SMS command set
-# (+CMGF/+CMGL/+CMGS/...) and +CUSD (confirmed via an AT$QCCLAC dump),
-# but the modem is managed by ModemManager over MBIM, which captures all
-# messaging - so both SMS and USSD are switched to the mmcli-based path
-# (sms_via_mm/ussd_via_mm). Can be disabled in the app settings.
-#
-# Ordering matters: the mmcli flags and the WMS route fix do NOT depend
-# on the AT port, so they are applied first and unconditionally. On the
-# first boot after flashing the AT probe used to fail (ModemManager holds
-# the ports while probing them itself, and the first boot is slow), and
-# an early exit left the flags unset.
 
-# Manual invocation (no hotplug env, e.g. from uci-defaults at install
-# time): scan the bus for an already-connected Compal and synthesize the
-# hotplug variables so the same body runs without waiting for a reboot.
 if [ -z "$ACTION" ]; then
 	for d in /sys/bus/usb/devices/*; do
 		[ -f "$d/idVendor" ] || continue
 		_vid=$(cat "$d/idVendor")
 		_pid=$(cat "$d/idProduct")
-		# 9025 здесь тоже: при установке пакета модем уже воткнут, и без него
-		# порты появились бы только после перезагрузки.
 		case "$_vid:$_pid" in 05c6:9025|05c6:90d5|05c6:90d6|1e2d:00b7) ;; *) continue ;; esac
 		ACTION="add"; DEVTYPE="usb_device"
-		# hotplug's $PRODUCT strips the vendor's leading zero (5c6, not 05c6)
 		PRODUCT="$(printf '%x' "0x$_vid")/$(printf '%x' "0x$_pid")/0"
 		DEVPATH="${d#/sys}"
 		break
@@ -41,20 +16,13 @@ fi
 [ "$ACTION" = "add" ] || exit 0
 [ "$DEVTYPE" = "usb_device" ] || exit 0
 
-# The Compal RXM-G1 firmware uses the unique id 05c6:90d6, but the early
-# prototype still reports the old 05c6:90d5 - which is ALSO used by the
-# Foxconn T99W175. Only treat 90d5 as the Compal when the USB descriptor
-# says so (Tri Cascade / VOS_5G); otherwise leave the T99W175 alone.
 WANTID=""
+# hotplug $PRODUCT has no leading zeros, see docs/subsystems/device-detection.md#usb70-5gmodem-sms-modems
 case "$PRODUCT" in
 	5c6/90d6/*)
 		WANTID="05c6:90d6"
 		;;
 	5c6/9025/*)
-		# T99W175 в режиме QMI. Сам порты НЕ отдаёт: без привязки ttyUSB*
-		# не появляются вовсе, а значит нет ни метрик, ни SMS, ни USSD.
-		# Драйвер здесь option1, а НЕ generic (как у 90d5): нумерация портов в
-		# этой композиции другая, и generic даёт урезанные порты.
 		WANTID="05c6:9025"
 		;;
 	1e2d/b7/*)
@@ -93,24 +61,13 @@ if command -v qmicli >/dev/null 2>&1 && [ -f /usr/share/5gmodem/lib.sh ]; then
 	fi
 fi
 
-# Everything below runs detached: tty ports show up after the usb_device event
 (
 	trap '[ -n "$_HOLD_IF" ] && ifup "$_HOLD_IF" 2>/dev/null' EXIT
-	# This modem does NOT expose its serial (AT/DIAG) ports on its own - the
-	# kernel only creates cdc-wdm0 (MBIM). Bind the generic usb-serial driver
-	# by VID:PID so ttyUSB* appear, which the AT metrics / SMS / USSD paths
-	# need. Idempotent (new_id can be written repeatedly). This removes the
-	# usual rc.local "echo ... > .../generic/new_id" hack.
-	# Драйвер выбирает общая таблица (usbports.sh) - раньше он был вписан здесь
-	# и разошёлся с 20-compal-t99w175.
 	case "$WANTID" in
 		1e2d:00b7) ;;
 		*) /usr/share/5gmodem/usbports.sh bind "${WANTID%%:*}" "${WANTID##*:}" ;;
 	esac
 
-	# The package config may not exist yet on the very first boot (the
-	# uci-defaults script may run after coldplug) - create the section
-	# instead of bailing out.
 	if ! uci -q get 5gmodem.sms >/dev/null; then
 		touch /etc/config/5gmodem
 		uci -q set 5gmodem.sms=sms >/dev/null || exit 0
@@ -121,29 +78,12 @@ fi
 			uci set "5gmodem.sms.$1=$2"
 	}
 
-	# --- Stage 1: SMS and USSD via ModemManager (no port needed) ---
 	if command -v mmcli >/dev/null 2>&1; then
 		set_if_empty ussd_via_mm '1'
 		set_if_empty sms_via_mm '1'
 	fi
 	uci commit 5gmodem
 
-	# --- Stage 2: WMS route fix (no AT port needed either) ---
-	# The factory WMS routes of this firmware store incoming messages in
-	# NV, where MBIM/ModemManager cannot read them - a message either
-	# hangs forever in the "receiving" state with no text, or is silently
-	# lost. Redirect classes 1-3 and none to the SIM (uim) - then
-	# ModemManager receives messages correctly (verified on real
-	# hardware). The routes survive a ModemManager restart, but we set
-	# them on every device appearance in case they reset on a modem
-	# power cycle. The cdc-wdm node may show up a few seconds after the
-	# usb_device event.
-	# Узел ищем СТРОГО ПОД ЭТИМ УСТРОЙСТВОМ ($DEVPATH), а не первым попавшимся
-	# /dev/cdc-wdm*: на роутере с двумя модемами первым в системе может стоять
-	# СОСЕД (он же занял cdc-wdm0), и маршруты WMS уходили бы ему - соседу молча
-	# переводили входящие на хранение в SIM, а этот модем оставался с заводскими
-	# маршрутами. Порядок появления узлов на буте тоже не определён. Привязка по
-	# usb-пути - та же, что в mm-inhibit.sh (аудит 12.09.2026).
 	if command -v qmicli >/dev/null 2>&1; then
 		for try in 1 2 3 4 5 6; do
 			WDM=""
@@ -179,10 +119,8 @@ fi
 		_HOLD_IF=""
 	fi
 
-	# --- Stage 3: AT port probing ---
 	command -v sms_tool >/dev/null || exit 0
 
-	# vid:pid of the usb device owning a given ttyUSBx
 	tty_vidpid() {
 		p=$(readlink -f "/sys/class/tty/$1/device" 2>/dev/null)
 		while [ -n "$p" ] && [ "$p" != "/" ]; do
@@ -195,17 +133,12 @@ fi
 	}
 
 	ATPORT=""
-	# Up to 8 attempts over ~40s: the ports may take a while to appear,
-	# and during (the slow first) boot the AT port is briefly held by
-	# ModemManager probing it.
 	for try in 1 2 3 4 5 6 7 8; do
 		sleep 5
 		for tty in /sys/class/tty/ttyUSB*; do
 			[ -e "$tty" ] || continue
 			t="${tty##*/}"
 			[ "$(tty_vidpid "$t")" = "$WANTID" ] || continue
-			# the DIAG port stays silent and trips the 5s sms_tool
-			# timeout, the AT port answers OK
 			if sms_tool -d "/dev/$t" at "AT" >/dev/null 2>&1; then
 				ATPORT="/dev/$t"
 				break 2
@@ -221,9 +154,6 @@ fi
 	set_if_empty atport "$ATPORT"
 
 	uci commit 5gmodem
-# stdin отвязываем вместе с выводом, как во всех остальных фонах проекта:
-# подоболочка живёт до 40 секунд и незачем ей держать унаследованный канал
-# (аудит 12.09.2026)
 ) >/dev/null 2>&1 </dev/null &
 
 exit 0
