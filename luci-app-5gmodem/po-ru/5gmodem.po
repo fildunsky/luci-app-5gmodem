@@ -6096,3 +6096,54 @@ msgstr "Браузер не разрешил копирование. Выдел�
 
 msgid "Click to copy the code"
 msgstr "Нажмите, чтобы скопировать код"
+
+msgid "Network selection"
+msgstr "Выбор сети"
+
+msgid "Pick the operator network by hand instead of letting the modem choose. The search takes 1-3 minutes."
+msgstr "Выбрать сеть оператора вручную, а не оставлять выбор модему. Поиск сетей занимает 1-3 минуты."
+
+msgid "Automatic"
+msgstr "Автоматически"
+
+msgid "Find networks"
+msgstr "Найти сети"
+
+msgid "Return to automatic if this network is lost"
+msgstr "Вернуться к автовыбору, если эта сеть пропала"
+
+msgid "current"
+msgstr "текущая"
+
+msgid "forbidden"
+msgstr "запрещена"
+
+msgid "Choose a network"
+msgstr "Выберите сеть"
+
+msgid "No networks yet - press \"Find networks\""
+msgstr "Сетей пока нет - нажмите «Найти сети»"
+
+msgid "Saved. The modem is switching networks, this can take up to a minute."
+msgstr "Сохранено. Модем переходит на сеть, это может занять до минуты."
+
+msgid "Could not apply the network selection"
+msgstr "Не удалось применить выбор сети"
+
+msgid "Searching for networks (%d s). The connection may drop meanwhile."
+msgstr "Идёт поиск сетей (%d с). Связь в это время может пропадать."
+
+msgid "The modem found no networks"
+msgstr "Модем не нашёл ни одной сети"
+
+msgid "The modem port is busy, try again in a minute"
+msgstr "Порт модема занят, попробуйте через минуту"
+
+msgid "The search failed"
+msgstr "Поиск не удался"
+
+msgid "The network is selected manually on the Modem tab"
+msgstr "Сеть выбрана вручную на вкладке «Модем»"
+
+msgid "manual"
+msgstr "вручную"

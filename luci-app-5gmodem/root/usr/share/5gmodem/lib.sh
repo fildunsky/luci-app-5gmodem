@@ -1896,20 +1896,34 @@ at_query() {
 	# давно записан в обёртке sms_tool основного опроса («первый опрос 1 c,
 	# каждый следующий 8-9 c») - я переизобрёл этот баг в at_query и поймал его
 	# замером: опрос №1 1.8 c, №2-3 по 6.7 c, спящие sleep с fd на ttyUSB2.
-	sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
-	_aq_pid=$!
-	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
-	# НЕ голый wait: sms_tool в D-state (вис в драйвере tty) не убивается
-	# сторожем, и wait висел бы вечно - rpcd 30 c, XHR error на страницах
-	# (T99W175 05c6:9025, 17.08.2026). Опрос с потолком таймаут+1 c;
-	# неубиваемого бросаем сиротой.
 	sleep_tick_init
-	_aq_i=0; _aq_max=$(( (${_aq_t:-8} + 1) * _TICKS_PER_SEC ))
-	while kill -0 "$_aq_pid" 2>/dev/null && [ "$_aq_i" -lt "$_aq_max" ]; do
-		_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
-	done
-	kill -0 "$_aq_pid" 2>/dev/null || wait "$_aq_pid" 2>/dev/null
-	kill "$_aq_w" 2>/dev/null; wait "$_aq_w" 2>/dev/null
+	if [ "$_TICKS_PER_SEC" = 1 ]; then
+		{
+			( sleep "$_aq_t" </dev/null & _aq_x=$!; trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo t ) &
+			echo $! > "$_aq_o.s"
+			( sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null </dev/null & _aq_x=$!
+			  trap 'kill $_aq_x; exit' TERM; wait $_aq_x; echo d ) &
+			echo $! > "$_aq_o.p"
+		} 2>/dev/null 7>&- 8>&- 9>&- | read -r _aq_r
+		kill "$(cat "$_aq_o.s" 2>/dev/null)" 2>/dev/null
+		_aq_pid=$(cat "$_aq_o.p" 2>/dev/null)
+		[ -n "$_aq_pid" ] && kill -0 "$_aq_pid" 2>/dev/null && kill "$_aq_pid" 2>/dev/null
+		rm -f "$_aq_o.s" "$_aq_o.p"
+	else
+		sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
+		_aq_pid=$!
+		( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
+		# НЕ голый wait: sms_tool в D-state (вис в драйвере tty) не убивается
+		# сторожем, и wait висел бы вечно - rpcd 30 c, XHR error на страницах
+		# (T99W175 05c6:9025, 17.08.2026). Опрос с потолком таймаут+1 c;
+		# неубиваемого бросаем сиротой.
+		_aq_i=0; _aq_max=$(( (${_aq_t:-8} + 1) * _TICKS_PER_SEC ))
+		while kill -0 "$_aq_pid" 2>/dev/null && [ "$_aq_i" -lt "$_aq_max" ]; do
+			_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
+		done
+		kill -0 "$_aq_pid" 2>/dev/null || wait "$_aq_pid" 2>/dev/null
+		kill "$_aq_w" 2>/dev/null; wait "$_aq_w" 2>/dev/null
+	fi
 
 	[ "$_aq_mine" = 1 ] && at_unlock 2>/dev/null
 	tr -d '\r' 2>/dev/null < "$_aq_o"
