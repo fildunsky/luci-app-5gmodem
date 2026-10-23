@@ -12,13 +12,13 @@ Ambil tautan `.apk` (OpenWrt 25.12.x) atau `.ipk` (24.10.x) dari halaman [Releas
 ### .apk (OpenWrt 25.12.x)
 ```sh
 apk update && apk add curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.6.0/luci-app-5gmodem-3.6.0-r1.apk > /tmp/luci-app-5gmodem.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.7.0/luci-app-5gmodem-3.7.0-r1.apk > /tmp/luci-app-5gmodem.apk
 apk add /tmp/luci-app-5gmodem.apk --allow-untrusted
 ```
 
 **Tampilan bahasa Indonesia**: pasang paket bahasa Indonesia untuk aplikasi ini. LuCI sendiri belum memiliki terjemahan bahasa Indonesia, jadi menu LuCI lainnya tetap berbahasa Inggris:
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.6.0/luci-i18n-5gmodem-id.apk > /tmp/luci-i18n-5gmodem-id.apk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.7.0/luci-i18n-5gmodem-id.apk > /tmp/luci-i18n-5gmodem-id.apk
 apk add /tmp/luci-i18n-5gmodem-id.apk --allow-untrusted
 ```
 Setelah itu pilih bahasanya di LuCI: Sistem → Sistem → Bahasa dan Gaya → Bahasa Indonesia.
@@ -37,13 +37,13 @@ rilis tersebut.
 ### .ipk (OpenWrt 24.10.x)
 ```sh
 opkg update && opkg install curl
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.6.0/luci-app-5gmodem_3.6.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.7.0/luci-app-5gmodem_3.7.0-r1_all.ipk > /tmp/luci-app-5gmodem.ipk
 opkg install /tmp/luci-app-5gmodem.ipk
 ```
 
 **Tampilan bahasa Indonesia**:
 ```sh
-curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.6.0/luci-i18n-5gmodem-id.ipk > /tmp/luci-i18n-5gmodem-id.ipk
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/download/v3.7.0/luci-i18n-5gmodem-id.ipk > /tmp/luci-i18n-5gmodem-id.ipk
 opkg install /tmp/luci-i18n-5gmodem-id.ipk
 ```
 
