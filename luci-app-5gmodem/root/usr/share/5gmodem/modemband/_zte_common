@@ -3,8 +3,6 @@ getsupportedbands() {
 }
 
 getbands() {
-# +ZNLOCKBAND: 80800c5,2000000680380
-
 	O=$(sms_tool -d $_DEVICE at "at+znlockband?")
 	HEX="0x"$(echo "$O" | tr -d '\r' | awk -F[:,] '/^\+ZNLOCKBAND:/{print $2; exit}' | xargs)
 	[ "$HEX" = "0x" ] || hextobands "$HEX"

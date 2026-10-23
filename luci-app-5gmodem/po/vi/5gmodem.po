@@ -5883,3 +5883,30 @@ msgstr "Bo mạch"
 
 msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
 msgstr "Cài gói %s để chuyển băng tần và xem RSRQ, SINR cùng thông tin trạm của modem này."
+
+msgid "Telegram API server"
+msgstr "Máy chủ Telegram API"
+
+msgid "Leave empty for api.telegram.org. Your own server must forward the Bot API as is, e.g. an SNI proxy or a self-hosted Bot API server."
+msgstr "Để trống để dùng api.telegram.org. Máy chủ riêng phải chuyển tiếp Bot API nguyên vẹn, ví dụ proxy SNI hoặc máy chủ Bot API tự dựng."
+
+msgid "Expecting an address starting with http:// or https://"
+msgstr "Cần địa chỉ bắt đầu bằng http:// hoặc https://"
+
+msgid "Do not check the certificate"
+msgstr "Không kiểm tra chứng chỉ"
+
+msgid "Only for your own server: accept a self-signed or mismatching certificate."
+msgstr "Chỉ cho máy chủ riêng: chấp nhận chứng chỉ tự ký hoặc không khớp."
+
+msgid "...plus power cycle (USB port or your script)"
+msgstr "...và ngắt cấp nguồn lại (cổng USB hoặc script riêng)"
+
+msgid "Power script"
+msgstr "Script nguồn"
+
+msgid "Expecting an absolute path made of letters, digits and / . _ -"
+msgstr "Cần đường dẫn tuyệt đối gồm chữ, số và / . _ -"
+
+msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
+msgstr "Cho bo mạch không điều khiển được nguồn USB: một tệp thực thi ngắt và cấp lại nguồn cho modem (ví dụ đảo GPIO). Bước nguồn chạy nó thay vì tắt cổng USB, với đối số là giao diện, đường dẫn USB của modem và cổng AT. Đầu ra được ghi vào nhật ký hệ thống."

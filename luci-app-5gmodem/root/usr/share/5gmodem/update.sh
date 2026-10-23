@@ -1,17 +1,5 @@
 #!/bin/sh
-#
-# Check for / install the latest luci-app-5gmodem release from GitHub.
-# Installs BOTH the app and its translation package (if a matching asset
-# exists). Prints a small JSON object.
-#
-# Usage:
-#   update.sh check     - compare installed vs latest release
-#   update.sh install   - download + install app (+ translation)
-#
 
-# Лестница обхода прокси (net_fetch) - из общей библиотеки: прямые запросы
-# роутера при белых списках мёртвы, а локальный clash их вывозит (запрос
-# владельца EM9190, 19.08.2026 - «апдейтер должен ходить как виджеты»).
 . /usr/share/5gmodem/lib.sh 2>/dev/null
 
 REPO="fildunsky/luci-app-5gmodem"
@@ -19,8 +7,6 @@ API="https://api.github.com/repos/$REPO/releases/latest"
 PAGE="https://github.com/$REPO/releases/latest"
 PKG_FULL="luci-app-5gmodem"
 PKG_LITE="luci-app-5gmodem-lite"
-# Имя выбирается по факту установки (см. detect_pkg). Значение по умолчанию
-# нужно на случай, когда пакет не установлен вовсе.
 PKG="$PKG_FULL"
 I18N="luci-i18n-5gmodem-ru"
 TMP=/tmp/5gmodem
@@ -35,18 +21,9 @@ pkgman() {
 	echo ""
 }
 
-# КАКОЙ ВАРИАНТ УСТАНОВЛЕН.
-#
-# Пакетов два: полный и облегчённый (см. Makefile). Обновлять нужно ТЕМ ЖЕ
-# вариантом, и это не косметика:
-#   - полный на роутер с 8 МБ флеша просто не поместится;
-#   - облегчённый на роутер с работающим QMI/MBIM-модемом снесёт qmi-utils и
-#     modemmanager как осиротевшие, и связь пропадёт.
-# Поэтому имя пакета определяем, а не предполагаем.
 detect_pkg() {
 	case "$1" in
 	apk)
-		# apk info печатает ЧИСТЫЕ имена, по одному на строку
 		apk info 2>/dev/null | grep -qx "$PKG_LITE" && { echo "$PKG_LITE"; return; }
 		;;
 	opkg)
@@ -69,19 +46,10 @@ latest_tag() {
 	api_json | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
 }
 
-# asset_url <basename> <ext>  - browser_download_url of a matching asset.
-# ВАЖНО: якоримся на ИМЯ ФАЙЛА ассета ('/<basename>-<цифра версии>...ext'), а НЕ
-# на подстроку в любом месте URL. Иначе имя репозитория в пути
-# (github.com/<user>/luci-app-5gmodem/releases/...) совпадает у КАЖДОГО ассета, и
-# жадный .* в sed выбирал ПОСЛЕДНИЙ .apk (i18n-пакет, напр. zh-tw). Установка
-# i18n не меняла версию главного пакета -> ложное «версия осталась 1.2.3».
 asset_url() {
-	# разделитель имя-версия: apk = '-' (luci-app-5gmodem-1.2.5), ipk = '_'
-	# (luci-app-5gmodem_1.2.5) -> допускаем оба через [-_].
 	api_json | sed -n 's|.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*/'"$1"'[-_][0-9][^"]*\.'"$2"'\)".*|\1|p' | head -n1
 }
 
-# version_gt <a> <b>  - prints 1 if a > b else 0 (numeric, dot-separated)
 version_gt() {
 	awk -v a="$1" -v b="$2" 'BEGIN{
 		n=split(a,x,"."); m=split(b,y,".");
@@ -115,62 +83,32 @@ check)
 		printf '{"success":false,"error":"Could not reach GitHub","pm":"%s","current":"%s"}\n' "$PM" "$(json_esc "$CUR")"
 		exit 0
 	fi
-	# variant отдаём наружу: интерфейс показывает, какой пакет стоит, и человек
-	# видит, ЧЕМ именно он обновится.
 	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s"}\n' \
 		"$PM" "$PKG" "$([ "$PKG" = "$PKG_LITE" ] && echo lite || echo full)" \
 		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE"
 	;;
 
 install)
-	# The download + install of two packages over a modem link can take longer
-	# than the LuCI RPC/XHR timeout, so we run it in the background, write the
-	# result to a status file, and let the UI poll 'update.sh status'.
-	# ВТОРАЯ УСТАНОВКА ПОВЕРХ ИДУЩЕЙ - НЕ ЗАПУСКАЕМ. Обе писали итог в один
-	# файл, вторая упиралась в занятую базу apk и затирала успех первой ошибкой
-	# «Install failed» (живой случай 14.09.2026: XHR error на первом нажатии,
-	# повторное нажатие - ошибка, хотя пакет встал). Идёт - отвечаем «запущено»,
-	# страница просто продолжает ждать итог прежней.
 	if [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
 		echo '{"started":true,"already":true}'
 		exit 0
 	fi
 	rm -f "$STATUS" "$STATUS.tmp"
-	# ФАЙЛ ПРОГРЕССА СОЗДАЁМ СРАЗУ, А НЕ В КОНЦЕ.
-	#
-	# Страница опрашивает именно ФАЙЛ (звать update.sh нельзя - он сам
-	# подменяется при обновлении), и пока файла нет, каждый опрос уходит в
-	# cgi-download за несуществующим путём. Ошибки в интерфейсе от этого не
-	# было - L.resolveDefault её гасит, - но браузер честно печатал в консоль
-	# «404 (Failed to stat requested path)» раз в 4 секунды всю установку.
-	# Выглядит как поломка, хотя обновление идёт нормально.
-	#
-	# Признак «идёт установка» при этом не теряется: сейчас его давало
-	# ОТСУТСТВИЕ файла, теперь - его содержимое, а страница уже умеет читать
-	# running (см. pollInstall). Итог перезапишется через tmp+mv, как и раньше.
 	echo '{"running":true}' > "$STATUS"
 	echo '{"started":true}'
 	(
 		do_install() {
 			PM=$(pkgman)
 			[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; return; }
-			# Тот же вариант, что уже стоит: подмена полного на облегчённый (и
-			# наоборот) сломала бы роутер - см. detect_pkg.
 			PKG=$(detect_pkg "$PM")
 			case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
 
 			PREV=$(installed_version "$PM")
 
-			# The Russian translation is now BUNDLED into the main package (its .lmo
-			# is deployed by the package's postinst), so it is no longer downloaded
-			# here. Other languages stay as separate packages, unaffected.
 			INSTALLED=""
 			for BASE in "$PKG"; do
 				URL=$(asset_url "$BASE" "$EXT")
 				if [ -z "$URL" ]; then
-					# Тег релиза уже есть, а .apk-ассета ещё нет: CI не докатил сборку.
-					# Отдаём СТАБИЛЬНЫЙ КОД (UI локализует), а не техническую строку -
-					# для человека это «подождите, пакет ещё собирается».
 					echo '{"success":false,"error":"asset_pending"}'; return
 				fi
 				F="$TMP/$BASE.$EXT"
@@ -178,9 +116,6 @@ install)
 				if ! net_fetch 90 "$URL" "$F"; then
 					echo '{"success":false,"error":"Download failed for '"$BASE"'"}'; return
 				fi
-				# ВЕРСИЯ ИЗ ИМЕНИ АССЕТА (luci-app-5gmodem-2.5.5-r1.apk,
-				# luci-app-5gmodem_2.5.5-r1_all.ipk) - чтобы отличить настоящий
-				# провал от ненулевого кода при уже вставшем пакете.
 				_want=$(basename "$URL" | sed -n 's/^.*[-_]\([0-9][0-9.]*\)-r[0-9][0-9]*[._].*$/\1/p')
 				if [ "$PM" = apk ]; then
 					apk add --allow-untrusted "$F" >/dev/null 2>&1; _rc=$?
@@ -198,10 +133,6 @@ install)
 				INSTALLED="$INSTALLED $BASE"
 			done
 
-			# Retire the obsolete standalone luci-i18n-5gmodem-ru left over from
-			# older installs (the app now carries the Russian .lmo itself). Best
-			# effort - a no-op if it isn't installed. Removing it also deletes the
-			# .lmo it used to own, so re-deploy the bundled copy right after.
 			case "$PM" in
 				apk)  apk del "$I18N" >/dev/null 2>&1 ;;
 				opkg) opkg remove "$I18N" >/dev/null 2>&1 ;;
@@ -212,19 +143,7 @@ install)
 
 			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
 			CUR=$(installed_version "$PM")
-			# Verify the version actually changed. opkg/apk return 0 even when the
-			# downloaded package has the SAME version as installed (e.g. a release
-			# whose asset was built/labelled with an OLD version) - which used to
-			# report a silent "success" while nothing changed. Surface that.
 			if [ -n "$PREV" ] && [ "$CUR" = "$PREV" ]; then
-				# ПЕРЕУСТАНОВКА ТОЙ ЖЕ ВЕРСИИ - НЕ ПОЛОМКА.
-				#
-				# Проверка ниже ловит настоящий случай: релиз обещает новую
-				# версию, а в ассете лежит старая. Но она срабатывала и на
-				# СОВПАДЕНИИ версий, то есть на обычной переустановке текущей -
-				# и человек получал «релиз собран неправильно, пересоберите» там,
-				# где всё в порядке. Отличаем по свежему тегу: версия равна
-				# последней - это переустановка, и она удалась.
 				_up_lat=$(latest_tag); _up_lat=${_up_lat#v}
 				if [ -n "$_up_lat" ] && [ "$_up_lat" = "$CUR" ]; then
 					printf '{"success":true,"installed":"%s","current":"%s","reinstalled":1}\n' \
@@ -236,23 +155,14 @@ install)
 				printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
 			fi
 		}
-		# write to a temp file and move into place only when done, so
-		# 'status' can tell "running" (no final file yet) from "finished"
-		# PID ИМЕННО ПОДШЕЛЛА: $$ в нём - PID родителя, который уже вышел.
-		# read встроенный, /proc/self здесь - сам подшелл.
+		# $$ is the parent here, see docs/subsystems/misc.md#updatesh
 		read -r _upid _ < /proc/self/stat 2>/dev/null
 		echo "$_upid" > "$LOCK" 2>/dev/null
 		do_install > "$STATUS.tmp" 2>/dev/null
 		mv "$STATUS.tmp" "$STATUS"
 		rm -f "$LOCK"
 	) >/dev/null 2>&1 </dev/null &
-	# ПАУЗА ПЕРЕД ВЫХОДОМ ОБЯЗАТЕЛЬНА. rpcd (file exec) теряет выход скрипта,
-	# если тот завершается мгновенно после запуска фонового потомка: ответ не
-	# уходит, запрос висит до таймаута rpcd в 30 с, и страница показывает XHR
-	# error. Замер на OpenWrt 25.12.5 через `ubus call file exec`: без паузы
-	# висло примерно каждое второе обращение, с `sleep 1` - шесть из шести
-	# ответили за секунду (14.09.2026). Страница вдобавок страхуется чтением
-	# файла состояния (5gsettings.js).
+	# see docs/subsystems/misc.md#updatesh (rpcd loses fast exit with a background child)
 	sleep 1
 	exit 0
 	;;

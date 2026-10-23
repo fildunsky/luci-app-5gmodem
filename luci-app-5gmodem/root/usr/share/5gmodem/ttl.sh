@@ -1,22 +1,10 @@
 #!/bin/sh
-[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
-#
-# Apply fixed TTL / hop-limit on the modem network interface.
-# Usage:
-#   ttl.sh apply   - rebuild our own nft table (inet modem5g_ttl) from uci
-#   ttl.sh get     - print current values + detected device as JSON
-#
-# TTL values live in uci: 5gmodem.@5gmodem[0].{ttl4in,ttl4out,ttl6in,ttl6out}
-# Empty value = leave that direction/family untouched.
-#
 
+[ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
 CFG=5gmodem
-# Файл СТАРОГО механизма (инклюд fw4). Больше НЕ пишется - только удаляется:
-# он ломал сборку fw4 на холодном старте, подробности в ветке apply.
 NFT=/etc/nftables.d/10-5gmodem-ttl.nft
 
 modem_iface() {
-	# configured interface first, then the first control-proto interface
 	I=$(uci -q get $CFG.@5gmodem[0].network)
 	if [ -z "$I" ]; then
 		for P in modemmanager qmi mbim ncm wwan; do
@@ -33,7 +21,6 @@ l3dev() {
 
 case "$1" in
 set)
-	# ttl.sh set <ttl4in> <ttl4out> <ttl6in> <ttl6out>  (empty = off)
 	for f in ttl4in:2 ttl4out:3 ttl6in:4 ttl6out:5; do
 		k=${f%%:*}; n=${f##*:}; eval v="\$$n"
 		case "$v" in ''|*[!0-9]*) uci -q delete $CFG.@5gmodem[0].$k;; *) uci set $CFG.@5gmodem[0].$k="$v";; esac
@@ -46,11 +33,6 @@ get)
 	DEV=$(l3dev "$IFACE")
 	DEF4=$(sysctl -n net.ipv4.ip_default_ttl 2>/dev/null); [ -n "$DEF4" ] || DEF4=64
 	DEF6=$(sysctl -n net.ipv6.conf.all.hop_limit 2>/dev/null); [ -n "$DEF6" ] || DEF6=64
-	# Сколько пакетов реально прошло через наши правила: 0 при заданном TTL =
-	# правило есть, но трафик мимо (не то устройство/интерфейс не поднят).
-	# Считаем ТОЛЬКО СВОЮ таблицу: по всему рулсету в счётчик попадали чужие
-	# правила подмены TTL (свой инклюд fw4, другой пакет), и индикатор показывал
-	# «правила работают» даже когда нашей таблицы нет вовсе (аудит 12.09.2026).
 	HITS=$( { nft list table inet modem5g_ttl; nft list table netdev modem5g_ttl_dev; } 2>/dev/null | awk '/ttl set|hoplimit set/ {
 		for (i = 1; i <= NF; i++) if ($i == "packets") { s += $(i + 1); break } } END { print s + 0 }')
 	printf '{"iface":"%s","device":"%s","def4":"%s","def6":"%s","hits":"%s","ttl4in":"%s","ttl4out":"%s","ttl6in":"%s","ttl6out":"%s"}\n' \
@@ -69,27 +51,11 @@ apply)
 	T6I=$(uci -q get $CFG.@5gmodem[0].ttl6in)
 	T6O=$(uci -q get $CFG.@5gmodem[0].ttl6out)
 
-	# СТАРЫЙ МЕХАНИЗМ (инклюд fw4) ЛОМАЛ ФАЕРВОЛ НА БУТЕ - убираем его файл.
-	#
-	# fw4 в 25.12 ставит пользовательские инклюды РАНЬШЕ объявлений собственных
-	# чейнов. Наш инклюд объявлял «chain mangle_prerouting { правило }» БЕЗ
-	# type/hook: на свежесозданной таблице (холодный старт) nft заводил его
-	# ОБЫЧНЫМ чейном, а когда ниже по файлу fw4 объявлял его же базовым - падал
-	# с «Chain of type "filter" is not supported» и nft отвергал ВЕСЬ рулсет.
-	# Роутер оставался вовсе без таблицы fw4: masquerade нет, «на роутере инет
-	# есть, на клиентах нет». Тумблер TTL выкл/вкл «лечил», потому что при
-	# перезагрузке БЕЗ инклюда таблица создавалась, а поверх ЖИВОЙ таблицы
-	# слияние проходит (flush table не трогает типы чейнов) - до следующего
-	# ребута. Воспроизведено на стенде, подтверждено минимальным t4.nft.
 	if [ -f "$NFT" ]; then
 		rm -f "$NFT"
 		fw4 reload >/dev/null 2>&1
 	fi
 
-	# Правила живут в СВОЕЙ таблице (как у clash): не зависят от порядка сборки
-	# fw4 и переживают его перезагрузки (fw4 чистит только table inet fw4).
-	# Идиома «объявить - flush - объявить с правилами» атомарно заменяет
-	# содержимое и работает и на первом запуске, и на повторном.
 	if [ -n "$DEV" ] && [ -n "$T4I$T4O$T6I$T6O" ]; then
 		TMP="/tmp/5gmodem/ttl.$$.nft"
 		{
@@ -98,11 +64,6 @@ apply)
 			echo "table inet modem5g_ttl {"
 			echo "	chain prerouting {"
 			echo "		type filter hook prerouting priority mangle; policy accept;"
-			# counter в правиле - НЕ украшение: без него «работает ли TTL» нельзя
-			# ни увидеть, ни доказать. Проверять пингом с роутера бесполезно -
-			# ping показывает TTL ОТВЕТНОГО пакета (сколько хопов осталось от
-			# сервера), а мы правим ttl УХОДЯЩИХ, и снаружи его видит только
-			# оператор. Со счётчиком достаточно посмотреть, растут ли пакеты.
 			[ -n "$T4I" ] && echo "		iifname \"$DEV\" counter ip ttl set $T4I"
 			[ -n "$T6I" ] && echo "		iifname \"$DEV\" meta l4proto != ipv6-icmp counter ip6 hoplimit set $T6I"
 			echo "	}"
@@ -120,20 +81,6 @@ apply)
 		fi
 		rm -f "$TMP"
 
-		# УСКОРЕННЫЕ СОЕДИНЕНИЯ (flow offloading) ИДУТ МИМО prerouting/postrouting.
-		#
-		# С включённым «Software/Hardware flow offloading» fw4 кладёт во flowtable
-		# все устройства зон, модемное тоже, и после установления соединения
-		# пакеты пересылает хук ingress flowtable - в обход прероутинга и
-		# построутинга, то есть и правил выше. TTL правился только у первых
-		# пакетов каждого соединения, остальные уходили оператору с TTL-1, и
-		# «фикс TTL не работает» (жалобы 18.09.2026). Поэтому дублируем правила
-		# на хуки САМОГО УСТРОЙСТВА: egress видит каждый исходящий пакет, в том
-		# числе ускоренный, ingress с приоритетом раньше flowtable (у fw4 он 0) -
-		# каждый входящий. Для этого нужен netdev-хук ядра (NETFILTER_EGRESS, в
-		# официальных сборках есть); нет его - остаются правила выше и запись в
-		# журнале. Аппаратный оффлоад (PPE) USB-модемы не ускоряет: до них пакет
-		# в любом случае доходит через процессор.
 		TMPD="/tmp/5gmodem/ttl_dev.$$.nft"
 		{
 			echo "table netdev modem5g_ttl_dev"
@@ -169,7 +116,7 @@ apply)
 	;;
 
 *)
-	echo "usage: $0 apply|get" >&2
+	echo "usage: $0 apply|get|set <ttl4in> <ttl4out> <ttl6in> <ttl6out>" >&2
 	exit 1
 	;;
 esac

@@ -1,36 +1,11 @@
 #!/bin/sh
-#
-# КАРТА ПОРТОВ: устройство на шине -> его tty -> IMEI, прочитанный С ЭТОГО tty.
-#
-# ЗАЧЕМ. Когда на роутере два одинаковых модуля (один vid:pid), разобрать по
-# отчёту, что чему принадлежит, было нельзя: привязку «порт -> модем» строит наш
-# же listmodems.sh, и если бы она врала, отчёт врал бы вместе с ней - проверить
-# нечем. Живой случай: два Thales MV31-W отдали ОДИН И ТОТ ЖЕ IMEI, и по отчёту
-# невозможно было отличить «клонированный IMEI на двух модулях» от «наша
-# привязка портов ошиблась и мы дважды прочитали один модем».
-#
-# Поэтому здесь ВСЁ берётся напрямую из sysfs, минуя наш код:
-#   - устройства: /sys/bus/usb/devices/<путь> (idVendor/idProduct/serial)
-#   - порты: из интерфейсов ЭТОГО устройства (<путь>:*/ttyUSB*)
-#   - IMEI: AT+CGSN, прочитанный с портов ИМЕННО этого устройства
-# USB-серийник печатается рядом: он различает два одинаковых модуля даже когда
-# всё остальное совпадает.
-#
-# Вывод заканчивается вердиктом, чтобы не пришлось сверять числа глазами:
-#   - разные устройства с одинаковым IMEI -> прямо сказано, что это дубликат;
-#   - у устройства нет ни одного отвечающего порта -> тоже сказано.
-#
-# ЧИТАЕМ АККУРАТНО. Порт может быть занят опросом метрик, поэтому берём
-# at_lock (короткое ожидание) и опрашиваем НЕ БОЛЬШЕ двух портов на устройство:
-# AT-порт у модемов из первых, а полный перебор на 4 модемах стоил бы десятки
-# секунд и мешал бы работе.
 
 RES=/usr/share/5gmodem
 [ -r "$RES/atlock.sh" ] && . "$RES/atlock.sh"
-[ -r "$RES/lib.sh" ] && . "$RES/lib.sh"   # at_query: очередь + таймаут
+[ -r "$RES/lib.sh" ] && . "$RES/lib.sh"
 . "$RES/noatports.sh"
 
-_pm_imei() {   # $1 - tty; печатает IMEI либо пусто
+_pm_imei() {
 	command -v at_lock >/dev/null 2>&1 && { at_lock "$1" 5 2>/dev/null || return 1; }
 	_pm_i=$(at_query "$1" "AT+CGSN" 6 \
 		| grep -xE '[0-9]{14,16}' | head -1)
@@ -39,18 +14,17 @@ _pm_imei() {   # $1 - tty; печатает IMEI либо пусто
 	printf '%s' "$_pm_i"
 }
 
-_pm_seen=""      # "imei:путь imei:путь ..." - для поиска дубликатов
+_pm_seen=""
 _pm_dupes=""
 
 for _pm_d in /sys/bus/usb/devices/*; do
-	case "$_pm_d" in *:*) continue ;; esac          # интерфейсы, а не устройства
+	case "$_pm_d" in *:*) continue ;; esac
 	[ -f "$_pm_d/idVendor" ] || continue
 	_pm_path=$(basename "$_pm_d")
-	case "$_pm_path" in usb*) continue ;; esac      # корневые хабы
+	case "$_pm_path" in usb*) continue ;; esac
 	_pm_vid=$(cat "$_pm_d/idVendor" 2>/dev/null)
 	_pm_pid=$(cat "$_pm_d/idProduct" 2>/dev/null)
 
-	# порты ЭТОГО устройства
 	_pm_ttys=""
 	for _pm_if in "$_pm_d"/*:*; do
 		[ -d "$_pm_if" ] || continue
@@ -58,17 +32,14 @@ for _pm_d in /sys/bus/usb/devices/*; do
 			[ -e "$_pm_t" ] && _pm_ttys="$_pm_ttys $(basename "$_pm_t")"
 		done
 	done
-	# управляющие узлы (для полноты картины)
 	_pm_wdm=""
 	for _pm_w in "$_pm_d"/*:*/usbmisc/cdc-wdm* "$_pm_d"/*:*/usbmisc/wdm*; do
 		[ -e "$_pm_w" ] && _pm_wdm="$_pm_wdm $(basename "$_pm_w")"
 	done
-	# сетевые карты (HiLink и подобные)
 	_pm_net=""
 	for _pm_n in "$_pm_d"/*:*/net/*; do
 		[ -e "$_pm_n" ] && _pm_net="$_pm_net $(basename "$_pm_n")"
 	done
-	# устройство без единого модемного узла - не модем, пропускаем
 	[ -n "$_pm_ttys$_pm_wdm$_pm_net" ] || continue
 
 	echo "### $_pm_path  [$_pm_vid:$_pm_pid]  serial=$(cat "$_pm_d/serial" 2>/dev/null || echo '-')"
@@ -96,7 +67,6 @@ for _pm_d in /sys/bus/usb/devices/*; do
 		continue
 	fi
 
-	# дубликат IMEI у ДРУГОГО устройства?
 	for _pm_e in $_pm_seen; do
 		case "$_pm_e" in
 			"$_pm_imei_dev":*)

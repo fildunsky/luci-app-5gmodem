@@ -1,12 +1,3 @@
-# Foxconn T99W175 (FW 6.0.0.6)
-#
-# The 05c6:90d5 id is shared with an early Compal RXM-G1 prototype that
-# still reports the old id (later moved to the unique 05c6:90d6). They
-# need completely different handling, so when the attached device is
-# actually the Compal, hand over to the 90d6 profile and skip the T99W175
-# logic below. Опознание - через ОБЩИЙ помощник (iscompal.sh): раньше здесь
-# стояла своя проверка только по debugfs, которая молча проваливалась на
-# сборках без смонтированной debugfs.
 . /usr/share/5gmodem/iscompal.sh
 if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm "${_POLL_AM:-$MODEM_PATH}" 2>/dev/null)" "$DEVICE"; then
 	_IS_COMPAL=1
@@ -39,10 +30,6 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
-# СНИМОК ВЫВОДА ^DEBUG? ДЛЯ БЛОКОВ НИЖЕ. Переменную O файл переиспользует под
-# другие команды (AT+CGSN, AT+CIMI, AT+ICCID), и к концу файла в ней лежит
-# ICCID, а не отладка. Антенный блок читал именно её - и молча не находил
-# ничего: у пользователя таблица уровней по входам не появлялась (24.08.2026).
 _DBG="$O"
 
 case "$MODE_NUM" in
@@ -60,8 +47,6 @@ esac
 
 T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
-#	TAC_HEX=$(printf "%X" $T)
-#	TAC_DEC=$(printf "%d" "0x$T")
 
 	TAC_HEX=$(printf "%X" $T)
 	TAC_DEC="$T"
@@ -133,13 +118,9 @@ while true; do
 		fi
 	
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rsrp:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/rsrq:/ {print $4}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rssi:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/lte_snr:/ {print $4}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 
 	O1=$(echo "$O1" | sed '1,4d')
 done
@@ -181,19 +162,13 @@ if [ -n "$T" ]; then
 			esac
 		fi
 	T=$(echo "$O" | awk -F: '/^nr_rsrp:/ {print $2}' | cut -f1 -d" ")
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O" | awk -F: '/^nr_rsrq:/ {print $2}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O" | awk -F: '/^nr_snr:/ {print $2}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 fi
 
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
-
-
-# Modem
 
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
@@ -204,29 +179,23 @@ MODEL="$MODELBCUT "$MODELACUT
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=05c6 ProdID=90d5' '{print $2}' | cut -c-1290)
@@ -241,6 +210,4 @@ then
     PROTO="ecm"
 fi
 
-# Антенные порты и соседние сектора - общий блок семейства (см.
-# _qualcomm_sdx55_extras): тот же код служит и 9025, и 1e2d:*, и PCIe.
 . "$RES/modem/usb/_qualcomm_sdx55_extras"

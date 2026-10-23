@@ -1,8 +1,3 @@
-# Quectel RG500Q-EA
-# Quectel RG502Q-EA
-# Quectel RM500Q-GL
-# Quectel RM502Q-AE
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -30,7 +25,6 @@ if [ "${LAC_DEC}" = "0" ]; then
 	LAC_HEX="-"
 fi
 
-# Modem
 _qc_gmr_fw
 
 _qc_gmr_model

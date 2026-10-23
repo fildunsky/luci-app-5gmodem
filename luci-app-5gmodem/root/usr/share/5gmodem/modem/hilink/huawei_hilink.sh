@@ -44,8 +44,6 @@ for f in $files; do
 	fi
 done
 
-# Protocol
-# Driver=qmi_wwan & Driver=cdc_mbim & Driver=cdc_ether & Driver=huawei_cdc_ncm
 PV=$(cat /sys/kernel/debug/usb/devices)
 PVCUT=$(echo $PV | awk -F 'Vendor=12d1 ProdID=' '{print $2}' | cut -c-1108)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
@@ -186,7 +184,6 @@ if [[ $COPSA =~ ^[0-9]+$ ]]; then
 	LOC=$(awk -F[\;] '/^'$COPSA';/ {print $2}' $RES/mccmnc.dat)
 fi
 
-# operator location from temporary config
 LOCATIONFILE=/tmp/5gmodem/location
 if [ -e "$LOCATIONFILE" ]; then
 	touch $LOCATIONFILE
@@ -246,4 +243,3 @@ fi
 
 rm $cookie
 break
-

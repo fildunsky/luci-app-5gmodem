@@ -1,28 +1,9 @@
-# ==========================================================================
-# Compal RXM-G1 (model "SG500M2-X") switched to QMI/debug mode reports the SAME
-# USB id 1e2d:00b7 as the Foxconn T99W175 / Dell DW5930e / Thales MV31-W below,
-# so tell them apart by the model. The Compal exposes NO AT signal commands
-# (AT+CSQ / AT^TEMP? / AT^DEBUG? are empty) - read metrics via qmicli instead.
-# Operator / registration / TAC / CID / firmware still come from the framework
-# over AT (AT+COPS / +CREG / +CGMR work on this modem).
-# ==========================================================================
-# ЕДИНАЯ реализация метрик Compal живёт в 05c690d6 - здесь только развод по
-# модели и делегирование. Раньше тут лежала УРЕЗАННАЯ копия той же логики, и она
-# успела разойтись с оригиналом: в ней не было ни уровня троттлинга (+CEITHERM),
-# ни агрегации несущих, ни 5G-полей. Именно этим и объяснялось, почему в
-# композиции QMI пропадало «тепловое состояние», исправно работавшее в MBIM.
-# Копия по определению отстаёт от оригинала - поэтому её тут больше нет.
-# _IS_COMPAL=1 выставляем заранее: 05c690d6 его уважает и не детектит повторно.
 . /usr/share/5gmodem/iscompal.sh
 if is_compal "${_POLL_AM:-$MODEM_PATH}" "$(/usr/share/5gmodem/modemswitch.sh wdm "${_POLL_AM:-$MODEM_PATH}" 2>/dev/null)" "$DEVICE"; then
 	_IS_COMPAL=1
 	. "$RES/modem/usb/05c690d6"
 	return 0 2>/dev/null || exit 0
 fi
-
-# Dell DW5930e
-# Foxconn T99W175
-# Thales Cinterion MV31-W
 
 O=$(sms_tool -d $DEVICE at "AT^TEMP?")
 
@@ -49,7 +30,6 @@ fi
 if [ "$REGOK" = "1" ]; then
 
 O=$(sms_tool -d $DEVICE at "at^debug?")
-# Снимок ^DEBUG? для общего блока антенн (O ниже переиспользуется).
 _DBG="$O"
 
 case "$MODE_NUM" in
@@ -61,12 +41,6 @@ case "$MODE_NUM" in
 		MODE="5G SA |"
 		;;
 	"13")
-		# AcT=13 - ЗАЯВКА EN-DC, а не работающий 5G: Билайн раздаёт её на
-		# голом LTE, и в карточке красовалось «5G» при единственной несущей
-		# B3 - а после принудительного «только 4G» человек не мог даже
-		# убедиться, что режим применился (живой отчёт 08.08.2026). Ярлык -
-		# по факту NR-несущей в ^debug: тот же урок, что у FM350 (AcT=13)
-		# и EM9190 (System mode: ENDC).
 		if echo "$O" | grep -q "^nr_band:"; then
 			MODE="5G NSA |"
 		elif echo "$O" | grep -q "scell:"; then
@@ -79,8 +53,6 @@ esac
 
 T=$(echo "$O" | awk -F: '/^lte_tac:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
-#	TAC_HEX=$(printf "%X" $T)
-#	TAC_DEC=$(printf "%d" "0x$T")
 
 	TAC_HEX=$(printf "%X" $T)
 	TAC_DEC="$T"
@@ -152,13 +124,9 @@ while true; do
 		fi
 	
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rsrp:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/rsrq:/ {print $4}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O2" | awk -F[:,] '/^lte_rssi:/ {print $2}')
-#	[ -n "$T" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "${T/dBm/} dBm"
 	T=$(echo "$O2" | awk -F[:,] '/lte_snr:/ {print $4}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 
 	O1=$(echo "$O1" | sed '1,4d')
 done
@@ -200,25 +168,14 @@ if [ -n "$T" ]; then
 			esac
 		fi
 	T=$(echo "$O" | awk -F: '/^nr_rsrp:/ {print $2}' | cut -f1 -d" ")
-#	[ -n "$T" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "${T/dBm/} dBm"
 	T=$(echo "$O" | awk -F: '/^nr_rsrq:/ {print $2}' | xargs)
-#	[ -n "$T" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "${T/dB/} dB"
 	T=$(echo "$O" | awk -F: '/^nr_snr:/ {print $2}' | xargs)
-#	[ -n "$T" ] && [ "$T" != "NA" ] && addon $((POS + 8)) "(S${IDX}) SNR" "${T/dB/} dB"
 fi
 
 fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
-
-# Modem
-
-# ПЕРВАЯ ОСМЫСЛЕННАЯ СТРОКА ОТВЕТА - остальное мусор. У этого модуля эхо
-# включено с завода, а батч ядра подписывает +CREG=2/+CEREG=2 - и их URC
-# прилетают ПОСРЕДИ чужого чтения. Прежний разбор склеивал всё в одну строку,
-# и в имени модема оседали обрывки команд: «Thales AT MV31-W AT +CREG: 0
-# +CEREG: 0» (живой отчёт 08.08.2026).
 _mv_first_clean() {
 	printf '%s\n' "$1" | tr -d '\r' | awk '
 		/^AT/ { next }
@@ -236,29 +193,23 @@ MODEL="$MODELBCUT $MODELACUT"
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(digits_of "$O" 15 17)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(digits_of "$O" 14 16)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=1e2d ProdID=00b7' '{print $2}' | cut -c-1290)
@@ -273,5 +224,4 @@ then
     PROTO="ecm"
 fi
 
-# Антенные порты и соседние сектора - общий блок семейства (см. _qualcomm_sdx55_extras).
 . "$RES/modem/usb/_qualcomm_sdx55_extras"

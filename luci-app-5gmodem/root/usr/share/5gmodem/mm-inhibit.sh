@@ -1,25 +1,8 @@
 #!/bin/sh
-#
-# Keep ModemManager OFF our kernel-proto modems on systems where the udev
-# ID_MM_DEVICE_IGNORE rule can't apply - e.g. routers using libudev-zero, which
-# provides the libudev API but runs no udevd and processes no /etc/udev rules.
-# There MM grabs a kernel-proto modem (qmi/mbim/xmm/atc/fibocom/...), fails to
-# manage it (the kernel owns the netdev), and then keeps re-probing its AT ports,
-# colliding with our metrics reads -> the whole info page flickers.
-#
-# mmcli --inhibit releases a modem from MM and holds it released for as long as
-# the mmcli process lives. So we run one background inhibitor per kernel-proto
-# modem and keep them alive. Self-heals across MM restarts (the inhibitor's DBus
-# drop makes MM re-add the modem; the next loop re-inhibits it) and modem
-# re-plugs. Modems on the 'modemmanager' protocol are NEVER inhibited - MM must
-# manage those. On systems WITH working udev the kernel-proto modems aren't
-# visible to MM at all, so this simply finds nothing to do (harmless).
-#
-# Runs as a small procd service (see /etc/init.d/5gmodem-mm-inhibit).
 
-. /usr/share/5gmodem/lib.sh 2>/dev/null   # at_query: очередь к порту + таймаут
-. /usr/share/5gmodem/iscompal.sh 2>/dev/null   # is_compal: Compal только под MM
-. /usr/share/5gmodem/quirks.sh 2>/dev/null     # mm_tty_reserved: выделенный AT-порт
+. /usr/share/5gmodem/lib.sh 2>/dev/null
+. /usr/share/5gmodem/iscompal.sh 2>/dev/null
+. /usr/share/5gmodem/quirks.sh 2>/dev/null
 
 RES=/usr/share/5gmodem
 CFG=5gmodem
@@ -30,7 +13,6 @@ _is_kernel_proto() {
 	proto_in nomm "$1"
 }
 
-# effective protocol of the modem at usb path $1: real iface proto, else remembered
 _proto_for_path() {
 	SEC="m_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 	IF=$(uci -q get "$CFG.$SEC.network")
@@ -41,12 +23,6 @@ _proto_for_path() {
 	uci -q get "$CFG.$SEC.iface_proto"
 }
 
-# Надо ли прятать модем на usb-пути $1 от ModemManager?
-# Управляется галкой в настройках модема: 5gmodem.m_<path>.mm_exclude
-#   1     - прятать; 0 - НЕ прятать (пользователь осознанно отдал модем MM);
-#   пусто - умолчание: прячем всё, что работает на kernel-прото.
-# Отключать бывает нужно: у MM богаче управление (режимы сети, 3G-бенды), и на
-# части модемов оно полнее нашего qmi/AT-пути.
 _mm_excluded() {
 	SEC="m_$(echo "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 	case "$(uci -q get "$CFG.$SEC.mm_exclude")" in
@@ -57,18 +33,9 @@ _mm_excluded() {
 	_is_kernel_proto "$(_proto_for_path "$1")"
 }
 
-# one pass: inhibit every kernel-proto modem currently visible in MM
-#
-# ВАЖНО: если модем ВИДЕН в `mmcli -L`, значит инхибиция на него сейчас НЕ
-# действует - у работающей инхибиции MM модем не показывает вовсе. Поэтому сам
-# факт попадания сюда означает, что держатель (если он есть) бесполезен.
 inhibit_pass() {
 	command -v mmcli >/dev/null 2>&1 || return 0
 
-	# УБОРКА ДЕРЖАТЕЛЕЙ ОТСУТСТВУЮЩИХ МОДЕМОВ. Модем вынули - его pid-файл
-	# инхибиции оставался навсегда (живой случай 31.07.2026: 1-1.3.pid после
-	# извлечения Telit) и при возвращении железки давал бы гонку со свежим
-	# держателем. Нет пути в sysfs - держателю жить незачем.
 	for _ip_pf in "$RUN"/*.pid; do
 		[ -f "$_ip_pf" ] || continue
 		_ip_p="${_ip_pf##*/}"; _ip_p="${_ip_p%.pid}"
@@ -77,10 +44,6 @@ inhibit_pass() {
 		rm -f "$_ip_pf"
 	done
 
-	# Инхибиция регистрируется по D-Bus и умирает ВМЕСТЕ с процессом MM (проверено:
-	# после рестарта MM держатель жив, а модем снова захвачен). Поэтому следим за
-	# pid'ом самого MM: сменился - все держатели устарели, снимаем их немедленно,
-	# не дожидаясь таймаутов, иначе модем останется открытым и у qmi отберут канал.
 	_cur=$(pgrep -f '/usr/sbin/ModemManager' 2>/dev/null | head -1)
 	_prev=$(cat "$RUN/.mmpid" 2>/dev/null)
 	if [ -n "$_cur" ] && [ "$_cur" != "$_prev" ]; then
@@ -95,12 +58,9 @@ inhibit_pass() {
 	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 		DEV=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 		[ -n "$DEV" ] || continue
-		PATHID=$(basename "$DEV")                 # e.g. 1-1.3
+		PATHID=$(basename "$DEV")
 		case "$PATHID" in *-*) ;; *) continue ;; esac
-		_mm_excluded "$PATHID" || continue        # modemmanager-прото / галка снята
-		# ПАУЗА захвата (bands.sh mmtakeover): смена диапазонов на kernel-прото
-		# временно отдаёт ЭТОТ модем ModemManager'у. Пока флаг есть - держатель
-		# снимаем и модем НЕ инхибируем; остальные модемы инхибируются как обычно.
+		_mm_excluded "$PATHID" || continue
 		if [ -f "$RUN/$PATHID.pause" ]; then
 			pf="$RUN/$PATHID.pid"
 			[ -f "$pf" ] && { kill "$(cat "$pf" 2>/dev/null)" 2>/dev/null; rm -f "$pf"; }
@@ -108,36 +68,19 @@ inhibit_pass() {
 		fi
 		pf="$RUN/$PATHID.pid"
 		if [ -f "$pf" ] && kill -0 "$(cat "$pf" 2>/dev/null)" 2>/dev/null; then
-			# Держатель жив, но модем всё равно виден -> инхибиция не работает.
-			# Даём ей минуту (она срабатывает не мгновенно), потом пересоздаём:
-			# так лечится главный баг - держатель, зацепившийся за УСТАРЕВШИЙ
-			# индекс. Индекс меняется при каждом рестарте MM, а `kill -0` при этом
-			# по-прежнему говорит "процесс жив", и старый код считал, что всё в
-			# порядке, - модем оставался у MM (у qmi отбирался канал -> нет IP).
 			[ -z "$(find "$pf" -mmin +1 2>/dev/null)" ] && continue
 			kill "$(cat "$pf" 2>/dev/null)" 2>/dev/null
 			rm -f "$pf"
 		fi
-		# Держим инхибицию по СТАБИЛЬНОМУ идентификатору устройства (sysfs-путь
-		# из modem.generic.device), а НЕ по индексу -m: индекс живёт только до
-		# следующего рестарта MM.
 		setsid mmcli --inhibit-device="$DEV" >/dev/null 2>&1 &
 		echo $! > "$pf"
-		# Модем был ВИДЕН в MM - значит MM успел его забрать. Помечаем: на
-		# следующем проходе проверим, не остался ли он без сессии данных.
 		: > "$RUN/$PATHID.stolen"
 	done
-	# reap inhibitors whose process has exited (modem gone / MM restarted)
 	for pf in "$RUN"/*.pid; do
 		[ -f "$pf" ] || continue
 		kill -0 "$(cat "$pf" 2>/dev/null)" 2>/dev/null || rm -f "$pf"
 	done
 	_restore_stolen
-	# QMI-пул client-ID мог исчерпаться (утечки убитых прямых вызовов, повторы MM):
-	# у Compal/SDX55 он ~6, и тогда MM не инициализирует модем ('unknown-capabilities')
-	# - нет ни данных, ни управления бендами. Проверяем активный модем и при
-	# исчерпании сбрасываем его (AT+CFUN=1,1, не чаще раза в 3 мин). Дёшево - один
-	# qmicli -p за проход; для не-QMI модема (FM350) helper молча выходит.
 	_am=$(uci -q get "$CFG.@5gmodem[0].active_modem")
 	if [ -n "$_am" ]; then
 		read -r _qr_up _qr_rest < /proc/uptime
@@ -148,40 +91,17 @@ inhibit_pass() {
 			"$RES/qmi-recover.sh" recover "$_am" >/dev/null 2>&1
 		fi
 	fi
-	# Держать MM запущенным ради ОТСУТСТВУЮЩЕГО модема незачем - именно он
-	# при старте и хватает чужие модемы. Решение принимает mmneed.sh.
 	"$RES/mmneed.sh" grace >/dev/null 2>&1
 }
 
-# MM видит модем на пути $1, а его modemmanager-интерфейс лежит -> поднять.
-#
-# netifd на буте поднимает modemmanager-интерфейс РАНЬШЕ, чем MM встаёт на D-Bus,
-# не находит модем ("Device not managed by ModemManager"), кладёт интерфейс и
-# БОЛЬШЕ НЕ ПРОБУЕТ. Кроме нас поднять его некому. Ждём появления ИМЕННО этого
-# модема в mmcli (события ему только что переотправлены), затем ifup - в фоне и
-# под гардом от параллельных подъёмов одного интерфейса.
 _mm_ifup_if_down() {
-	# local ОБЯЗАТЕЛЕН: без него _p/_sec/... утекают в главный цикл сервиса, а его
-	# счётчик _n делит имя с нашими переменными -> "$((_n+1))" над строкой роняет
-	# шелл (procd crash-loop, модем без IP на буте). Проверено трейсом на стенде.
 	local _p _sec _mif _lk
 	_p="$1"
 	_sec="m_$(echo "$_p" | sed 's/[^A-Za-z0-9]/_/g')"
 	_mif=$(uci -q get "$CFG.$_sec.network"); [ -n "$_mif" ] || return 0
 	[ "$(uci -q get "network.$_mif.proto")" = modemmanager ] || return 0
-	ifstatus "$_mif" 2>/dev/null | grep -q '"up": true' && return 0   # уже поднят
-	# ИДЁТ ПОДЪЁМ - ТОЖЕ НЕ ТРОГАЕМ. После обрыва сессии MM-хотплаг сам делает
-	# ifup, и несколько секунд интерфейс висит в pending, пока MM коннектит.
-	# Наш ifup в этот момент - teardown посреди коннекта («couldn't load bearer
-	# path: disconnecting anyway»), и круг начинается заново. Живой отчёт
-	# 16.09.2026: T99W175 + Verizon, интерфейс гонялся по кругу каждые 20-40 с.
+	ifstatus "$_mif" 2>/dev/null | grep -q '"up": true' && return 0
 	ifstatus "$_mif" 2>/dev/null | grep -q '"pending": true' && return 0
-	# ГАРД от параллельных подъёмов + COOLDOWN: лок держится всё время попытки
-	# (ожидание MM + ifup + добор коннекта), чтобы НЕ дёргать ifup повторно, пока
-	# MM ещё коннектит. Повторный ifup делает teardown->setup и ПЕРЕБИВАЕТ коннект
-	# (thrash: модем гоняется registered<->disabling и IP не встаёт - наблюдалось).
-	# Порог staleness щедрый (>5 мин) - только страховка от умершего waiter'а;
-	# в норме waiter снимает лок сам, закончив (успех или добор-таймаут).
 	_lk="$RUN/$_p.ifup"
 	[ -f "$_lk" ] && [ -z "$(find "$_lk" -mmin +5 2>/dev/null)" ] && return 0
 	: > "$_lk"
@@ -191,17 +111,13 @@ _mm_ifup_if_down() {
 			for J in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 				_jd=$(mmcli -m "$J" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 				[ "$(basename "$_jd" 2>/dev/null)" = "$_p" ] || continue
-				# Ждали модем до двух минут - за это время интерфейс мог подняться
-				# или начать подниматься сам. Проверяем ещё раз прямо перед ifup.
 				case "$(ifstatus "$_mif" 2>/dev/null)" in
 					*'"up": true'*|*'"pending": true'*) rm -f "$_lk"; exit 0 ;;
 				esac
 				mm_ghost_bearer "$_mif" "$J"; [ $? = 1 ] || { rm -f "$_lk"; exit 0; }
 				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
-				: > "$_lk"          # отметить старт попытки - от него считаем cooldown
+				: > "$_lk"
 				ifup "$_mif"
-				# Не дёргаем повторно, пока идёт коннект: ждём up до 90с. Поднялся -
-				# готово; нет - отпускаем лок, следующий проход попробует заново.
 				_c=0
 				while [ "$_c" -lt 90 ]; do
 					ifstatus "$_mif" 2>/dev/null | grep -q '"up": true' && break
@@ -215,50 +131,14 @@ _mm_ifup_if_down() {
 	) >/dev/null 2>&1 </dev/null &
 }
 
-# ЗЕРКАЛО inhibit_pass для modemmanager-прото: вернуть MM модем(ы), которые он
-# ПОТЕРЯЛ на буте, и ПОДНЯТЬ их интерфейсы.
-#
-# На системах без рабочего udev (libudev-zero) MM НЕ сканирует уже существующие
-# устройства при старте - живёт только на hotplug-событиях. При загрузке порты
-# модема (cdc-wdm/ttyUSB/wwan) появляются РАНЬШЕ, чем MM встаёт на D-Bus, события
-# летят в пустоту ("Couldn't report kernel event: couldn't find the ModemManager
-# process in the bus"), а netifd ещё раньше кладёт интерфейс. Итог: модем БЕЗ IP.
-# ПРОВЕРЕНО на Compal (Hiveton, MM 1.24): переотправка add-событий ПОСЛЕ подъёма MM
-# -> модем появляется (Modem/N). Идемпотентно.
-#
-# ВАЖНО: чиним КАЖДЫЙ присутствующий modemmanager-модем, а не только активный -
-# без IP на буте оставался каждый (в multi-modem раньше чинился лишь active_modem).
-# И обязательно ДЕЛАЕМ ifup: без него модем появлялся в MM, но интерфейс, снесённый
-# netifd, так и лежал.
-# МОДЕМ СОБРАН БЕЗ КОНТРОЛ-ПОРТА (AT-only) - ПЕРЕСОБРАТЬ.
-#
-# ЗАЧЕМ. События портов приходят раньше, чем ModemManager готов их принять
-# (libudev-zero не отдаёт coldplug, а наш new_id-бинд добавляет порты ещё
-# позже). Если к моменту сборки модема MM не знал про cdc-wdm, он собирает его
-# AT-only: primary становится ttyUSB, сетевой интерфейс числится ignored, и
-# дата-беарер не поднимается НИКОГДА - connect падает с MobileEquipment.Unknown
-# «No cause information available». Ребут не лечит: на следующем буте та же
-# гонка. Воспроизведено на Compal RXM-G1 (05c6:90d6) после подключения второго
-# модема - и повторяется после каждой перезагрузки.
-#
-# mm_recover_missing этот случай НЕ покрывал: он репортит порты, только когда
-# модема в MM нет вовсе, а тут объект есть - просто неполный.
-#
-# Досыл события мало: MM не добавляет контрол-порт к УЖЕ собранному модему.
-# Нужно, чтобы он забыл объект - поэтому передёргиваем само USB-устройство
-# (unbind/bind), а затем объявляем порты в правильном порядке: сперва
-# контрол-порт, потом сеть, потом tty. Проверено на живом модеме: primary
-# становится cdc-wdm0 (mbim), wwan0 - (net), модем сразу connected.
-_mm_fix_atonly() {   # $1 - usb-путь
+_mm_fix_atonly() {
 	local _fp="$1" _fw _fwdm _fi I _d _fk _fstate _fmark _fnow _flast _fwait
 	command -v mmcli >/dev/null 2>&1 || return 0
-	# контрол-порт есть в СИСТЕМЕ? (иначе модем честно AT-only, чинить нечего)
 	_fwdm=""
 	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
 		[ -e "$_fw" ] && { _fwdm="$_fw"; break; }
 	done
 	[ -n "$_fwdm" ] || return 0
-	# найти объект модема в MM по стабильному sysfs-пути
 	_fi=""
 	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 		_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
@@ -266,17 +146,11 @@ _mm_fix_atonly() {   # $1 - usb-путь
 	done
 	[ -n "$_fi" ] || return 0
 	_fk=$(mmcli -m "$_fi" -K 2>/dev/null)
-	# контрол-порт уже у модема - всё в порядке
 	printf '%s\n' "$_fk" | grep -qE '^modem\.generic\.ports\.value\[[0-9]+\] *: *[A-Za-z0-9-]+ \((mbim|qmi)\)' && return 0
-	# рабочее соединение НЕ рвём (на всякий случай - у AT-only его быть не может)
 	_fstate=$(printf '%s\n' "$_fk" | sed -n 's/^modem\.generic\.state *: *//p')
 	case "$_fstate" in connected|connecting|disconnecting) return 0 ;; esac
-	# анти-цикл: не чаще раза в 5 минут на модем
 	_fmark="/tmp/5gmodem/mmfix_$(printf '%s' "$_fp" | tr -c 'A-Za-z0-9' '_')"
 	_fnow=$(cut -d. -f1 /proc/uptime)
-	# Маркера НЕТ - чинить можно. Раньше здесь стоял _flast=0, и сразу после
-	# загрузки (uptime < 300) разница uptime-0 оказывалась меньше порога, то есть
-	# анти-цикл глушил фикс ровно в то окно, ради которого он и написан.
 	_flast=$(cat "$_fmark" 2>/dev/null); case "$_flast" in ''|*[!0-9]*) _flast="" ;; esac
 	[ -n "$_flast" ] && [ "$((_fnow - _flast))" -lt 300 ] && return 0
 	printf '%s' "$_fnow" > "$_fmark" 2>/dev/null
@@ -285,26 +159,12 @@ _mm_fix_atonly() {   # $1 - usb-путь
 	return 0
 }
 
-# ПЕРЕПРИВЯЗКА USB-УСТРОЙСТВА - НАСТОЯЩИЙ HOTPLUG ВМЕСТО РУЧНОГО РЕПОРТА.
-#
-# mmcli --report-kernel-event сообщает MM ИМЯ узла, но не даёт свойств, которые
-# на нормальной системе приносит udev. С libudev-zero этого не хватает: MM
-# добавляет порты и тут же признаёт их неопознанными -
-#   [plugin/generic] could not grab port cdc-wdm1: unhandled port type
-#   [base-manager] couldn't create modem ...: Failed to find primary AT port
-# - и модем не собирается ВООБЩЕ. unbind/bind рождает честные события ядра, и
-# тот же модем собирается с первого раза (проверено на стенде 01.08.2026:
-# после трёх безуспешных репортов - «modem successfully created»).
-_mm_rebind() {   # $1 - usb-путь
+_mm_rebind() {
 	local _rb_p="$1" _fw _fwait
 	printf '%s' "$_rb_p" > /sys/bus/usb/drivers/usb/unbind 2>/dev/null
 	sleep 4
 	printf '%s' "$_rb_p" > /sys/bus/usb/drivers/usb/bind 2>/dev/null
 	_fp="$_rb_p"
-	# ЖДЁМ ФАКТА, А НЕ СЕКУНД. Переэнумерация этого модуля занимает ~20-30 c
-	# (у него ещё и наш new_id-бинд ttyUSB следом), а фиксированный sleep 8
-	# уходил вперёд: события уходили в MM до появления узлов, и модем пропадал
-	# из MM совсем. Ждём сам контрол-порт, максимум 40 c.
 	_fw=""; _fwait=0
 	while [ "$_fwait" -lt 40 ]; do
 		for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
@@ -312,10 +172,6 @@ _mm_rebind() {   # $1 - usb-путь
 		done
 		_fw=""; sleep 2; _fwait=$((_fwait + 2))
 	done
-	# Контрол-порт не вернулся = переэнумерация провалилась (обычно
-	# `can't set config #1, error -71`): устройство осталось без конфигурации и
-	# само не выйдет. Возвращаем ПРОВАЛ - вызывающий это заметит и не будет
-	# долбить unbind/bind по кругу.
 	[ -n "$_fw" ] || { logger -t 5gmodem "rebuild of $_fp: control port did not come back within ${_fwait}s"; return 1; }
 	sleep 3
 	for _fw in /sys/bus/usb/devices/"$_fp":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$_fp":*/usbmisc/wdm*; do
@@ -335,13 +191,6 @@ _mm_rebind() {   # $1 - usb-путь
 	_mm_ifup_if_down "$_fp"
 }
 
-# MM СЕЙЧАС ОПРАШИВАЕТ ЭТО УСТРОЙСТВО? Истина, если ModemManager держит открытым
-# любой tty/cdc-wdm этого usb-пути - значит идёт нативный опрос портов (probe:
-# AT open port ...), и рвать устройство перепривязкой ПОСРЕДИ опроса нельзя.
-# Сигнал без разбора логов: смотрим дескрипторы MM. $1 - usb-путь.
-# _compal_mm_only <usb_path> <sysfs cdc-wdm node> <vid:pid> <run key>
-# 0 = НЕ Compal (запасной путь разрешён), 1 = Compal RXM-G1 / SG500M2-X.
-# Инверсия нарочно: вызов читается как «если не только-MM - предлагаем qmi».
 _compal_mm_only() {
 	local _cm_path="$1" _cm_wdm="$2" _cm_vp="$3" _cm_key="$4" _cm_dev="" _cm_at=""
 	[ -f "$RUN/$_cm_key.compal" ] && return 1
@@ -380,67 +229,28 @@ _mm_probing() {
 }
 
 mm_recover_missing() {
-	# local ОБЯЗАТЕЛЕН: цикл `for _n in .../net/*` ниже делит имя _n со счётчиком
-	# главного цикла сервиса - без local он утекал и ронял шелл на арифметике
-	# (см. _mm_ifup_if_down).
 	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm _wdm_node _wdm_drv _sw_pro _sw_vp
 	command -v mmcli >/dev/null 2>&1 || return 0
-	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0   # демон должен быть жив
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 		case "$_rp" in *-*) ;; *) continue ;; esac
-		[ "$(_proto_for_path "$_rp")" = modemmanager ] || continue  # только modemmanager-прото
-		# уже собран в MM? сверяем по СТАБИЛЬНОМУ sysfs-пути (basename == usb path)
+		[ "$(_proto_for_path "$_rp")" = modemmanager ] || continue
 		_seen=0
 		for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 			_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 			[ "$(basename "$_d" 2>/dev/null)" = "$_rp" ] && { _seen=1; break; }
 		done
 		if [ "$_seen" = 0 ]; then
-			# ЕСЛИ РЕПОРТ УЖЕ НЕ ПОМОГ - ПЕРЕПРИВЯЗЫВАЕМ УСТРОЙСТВО.
-			#
-			# Ручной --report-kernel-event с libudev-zero часто бесполезен: MM
-			# добавляет порты, но не может их классифицировать («unhandled port
-			# type», «Failed to find primary AT port») и модем не собирает. На
-			# стенде 01.08.2026 три круга репортов подряд не дали ничего, а
-			# unbind/bind собрал модем с первого раза. Поэтому: первый круг -
-			# дешёвый репорт, а если через время модема в MM всё ещё нет -
-			# настоящий hotplug. Кулдаун 5 минут на модем, как у пересборки
-			# AT-only: перепривязка это десятки секунд переэнумерации.
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
 			_rb_mk="$RUN/$_rb_key.missing"
 			_rb_fail="$RUN/$_rb_key.rebindfail"
 			_rb_now=$(cut -d. -f1 /proc/uptime)
-			# ПЕРЕПРИВЯЗКА УЖЕ ПРОВАЛИЛАСЬ (устройство не вернулось, обычно
-			# `can't set config #1, error -71`) - БОЛЬШЕ НЕ ТРОГАЕМ. Повторные
-			# unbind/bind такое не воскрешают, выводит из него только
-			# ОБЕСТОЧИВАНИЕ. Флаг снимется, когда модем всё же соберётся, или на
-			# ребуте (RUN в tmpfs). Ждём человека - не молотим.
 			[ -f "$_rb_fail" ] && continue
-			# МОДЕМ С ЖИВЫМ QMI-КАНАЛОМ (cdc-wdm) - НЕ ПЕРЕПРИВЯЗЫВАЕМ ВОВСЕ.
-			# Если MM его не собрал (libudev-zero: ВСЕ порты «unhandled port type»,
-			# «Failed to find primary AT port»), rebind не поможет: у части железа
-			# (ZBT-Z8102AX + Genesys hub) unbind/bind роняет устройство в
-			# `can't set config #1, error -71`, и модем гибнет до обесточивания.
-			# А у такого модема ЕСТЬ QMI - он поднимается по uqmi БЕЗ ModemManager
-			# (именно так он и работал без нашей программы). Правильный выход -
-			# прото QMI, а НЕ разрушительный rebind. Сюда попадаем, только когда MM
-			# модем не собрал (_seen=0): у нормально собранного cdc-wdm-модема
-			# (напр. Compal под MM) этой ветки нет. Логируем один раз.
 			_has_wdm=""; _wdm_node=""
 			for _w in /sys/bus/usb/devices/"$_rp":*/usbmisc/cdc-wdm* \
 				/sys/bus/usb/devices/"$_rp":*/usbmisc/wdm*; do
 				[ -e "$_w" ] && { _has_wdm=1; _wdm_node="$_w"; break; }
 			done
-			# ПРОТОКОЛ ЗАПАСНОГО ПУТИ - ПО ДРАЙВЕРУ УЗЛА, А НЕ "ВСЕГДА QMI".
-			# Наличие cdc-wdm ещё не значит QMI: у cdc_mbim узел ровно такой же, и
-			# uqmi на нём говорит в пустоту - netifd сыпал "Request timed out",
-			# "Failed to parse message data" и "SIM in illegal state - Power-cycling
-			# SIM", интерфейс навсегда pending, адреса нет. Так ломались MBIM-
-			# композиции, которые мы САМИ ведём через ModemManager: T99W175/MV31-W
-			# (05c6:90d5) и DW5821e/T77W968 (413c:81e0, 0489:e0b5). Хуже того,
-			# mkiface записывал qmi в iface_proto секции, и дальше это значение
-			# считалось ВЫБОРОМ ПОЛЬЗОВАТЕЛЯ - авто-детект и вендорные исключения
-			# больше не срабатывали никогда.
 			_wdm_drv=""
 			[ -n "$_wdm_node" ] && _wdm_drv=$(basename "$(readlink -f "${_wdm_node%/usbmisc/*}/driver" 2>/dev/null)" 2>/dev/null)
 			case "$_wdm_drv" in
@@ -451,21 +261,6 @@ mm_recover_missing() {
 			_sw_vp=""
 			[ -f "/sys/bus/usb/devices/$_rp/idVendor" ] && \
 				_sw_vp="$(cat "/sys/bus/usb/devices/$_rp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_rp/idProduct" 2>/dev/null)"
-			# MBIM-МОДУЛИ, КОТОРЫЕ МЫ ВЕДЁМ ЧЕРЕЗ MM НАМЕРЕННО, ЗАПАСНОГО ПУТИ НЕ
-			# ИМЕЮТ. У DW5821e/T77W968 (413c:81d7, 413c:81e0, 0489:e0b5) и
-			# MV31-W/T99W175 в MBIM-композиции (05c6:90d5) umbim либо не поднимает
-			# сессию, либо даёт адрес без трафика - ровно поэтому mkiface и уводит
-			# их на modemmanager. Переключить такой модем на mbim значит променять
-			# «MM ещё не собрал» на «не работает никогда». А MM их не собирает
-			# чаще всего временно: гонка с libudev-zero на загрузке лечится сама
-			# следующим кругом. Ждём MM и ничего не ломаем.
-			# QMI-композиций (05c6:9025) это не касается: там запасной путь живой
-			# и как раз он спасал молчащие AT-порты.
-			# DW5821e / T77W968 - ТОЛЬКО MM И В QMI-КОМПОЗИЦИИ. mkiface ведёт его на
-			# modemmanager в обеих композициях (в QMI у модуля сессия есть, трафика
-			# нет), а запасной путь ниже, не дождавшись MM, переключал интерфейс на
-			# qmi и прятал модем от MM: полевой отчёт 14.09.2026 (413c:81e0 на
-			# WH3000) - proto=qmi, mm_exclude=1 и сбросы USB.
 			case "$_sw_pro:$_sw_vp" in
 				qmi:413c:81d7|qmi:413c:81e0|qmi:413c:81e4|qmi:413c:81e6|qmi:413c:81d8|qmi:0489:e0b5|qmi:0489:e0b4|qmi:1bc7:1911)
 					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
@@ -487,24 +282,7 @@ mm_recover_missing() {
 				esac
 			fi
 			if [ -n "$_has_wdm" ]; then
-				# Драйвер узла не опознан - переключать не на что, но и перепривязка
-				# тут по-прежнему под запретом (см. выше): просто не трогаем модем.
 				[ -n "$_sw_pro" ] || continue
-				# COMPAL RXM-G1 / SG500M2-X В QMI-КОМПОЗИЦИИ - ТОЛЬКО ПОД MM. У этой
-				# прошивки uqmi не открывает сервисы («Failed to connect to
-				# service»), и mkiface ради того и уводит его на modemmanager. Но
-				# сюда модем попадает ДО того, как MM его соберёт (на NanoPi R3S
-				# сборка занимала 35 c после привязки портов, полевой отчёт
-				# 13.09.2026), и запасной путь предлагал, а на втором проходе МОГ
-				# переключить интерфейс обратно на qmi - в неработающий протокол.
-				# Опознание то же, что в mkiface: по ПУТИ (не по vid:pid - 05c6:9091
-				# носят и чужие Qualcomm), по узлу cdc-wdm и по модели через AT.
-				# AT-порт даём только вендору 05c6 и только когда MM его НЕ
-				# опрашивает: параллельный читатель крадёт у MM ответы, и тот
-				# помечает порт «unhandled» - ровно та поломка, от которой лечим.
-				# Положительный ответ запоминаем на загрузку (модель за это время
-				# не меняется), отрицательный переспрашиваем: на первом проходе
-				# порт мог быть занят.
 				if [ "$_sw_pro" = "qmi" ] && ! _compal_mm_only "$_rp" "$_wdm_node" "$_sw_vp" "$_rb_key"; then
 					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
 						: > "$RUN/$_rb_key.mmonly" 2>/dev/null
@@ -520,12 +298,6 @@ mm_recover_missing() {
 					logger -t 5gmodem "modem $_rp: ModemManager could not assemble it (no primary AT port), but it DOES have a control channel (cdc-wdm, driver $_wdm_drv) - switch the interface to proto $_sw_pro. NOT rebinding: it risks killing the device (config #1 error -71)."
 					continue
 				fi
-				# ВТОРОЙ ПРОХОД: MM жив, опрос этого устройства закончен, а модема
-				# в MM так и нет. Совет из лога пользователи не читают - интерфейс
-				# на modemmanager остаётся в NO_DEVICE навсегда (Netcore N60 Pro +
-				# T99W175 05c6:9025, 17.08.2026: AT-порты немые, MM бессилен, QMI
-				# живой). При автоматическом выборе протокола переключаем сами;
-				# ручной выбор не трогаем. Однократно за загрузку (флаг в tmpfs).
 				[ -f "$RUN/$_rb_key.qmiswitch" ] && continue
 				pidof ModemManager >/dev/null 2>&1 || continue
 				_mm_probing "$_rp" && continue
@@ -542,17 +314,9 @@ mm_recover_missing() {
 				[ "$(uci -q get "network.$_sw_if.proto")" = "modemmanager" ] || continue
 				: > "$RUN/$_rb_key.qmiswitch" 2>/dev/null
 				logger -t 5gmodem "modem $_rp: MM never assembled it and the protocol is on auto - switching interface $_sw_if to proto $_sw_pro (cdc-wdm driver $_wdm_drv)"
-				# MKIFACE_AUTOFALLBACK: это ВЫНУЖДЕННЫЙ прото, а не выбор человека -
-				# в iface_proto его писать нельзя (см. mkiface.sh).
 				MKIFACE_AUTOFALLBACK=1 "$RES/mkiface.sh" "$_sw_if" "$_sw_pro" >/dev/null 2>&1
 				continue
 			fi
-			# MM СЕЙЧАС ОПРАШИВАЕТ ПОРТЫ - НЕ МЕШАЕМ. На медленном модеме с
-			# россыпью tty нативный опрос MM идёт по 1-2 минуты. Раньше мы били
-			# через фиксированные 60 c и рвали устройство ПОСРЕДИ опроса -
-			# unbind/bind ловил `error -71`, и модем оставался без конфигурации
-			# совсем (живой отчёт ZBT-Z8102AX, 12.08.2026). Пока MM держит любой
-			# порт устройства - отсчёт сбрасываем в ноль.
 			if _mm_probing "$_rp"; then
 				printf '%s' "$_rb_now" > "$_rb_mk" 2>/dev/null
 				continue
@@ -570,15 +334,12 @@ mm_recover_missing() {
 					rm -f "$_rb_mk" 2>/dev/null
 					logger -t 5gmodem "MM did not assemble modem $_rp after event replay - rebinding the device"
 					if ! _mm_rebind "$_rp"; then
-						# Устройство не вернулось после unbind/bind - дальше долбить
-						# бессмысленно и вредно. Ставим флаг и говорим прямо.
 						: > "$_rb_fail" 2>/dev/null
 						logger -t 5gmodem "rebind of $_rp did NOT bring the device back (usually config #1 error -71) - POWER OFF the router; the modem may need proto QMI instead of ModemManager"
 					fi
 					continue
 				fi
 			fi
-			# объекта нет -> переотправляем MM add-события всех портов USB-устройства
 			for _if in /sys/bus/usb/devices/"$_rp":*; do
 				[ -d "$_if" ] || continue
 				for _t in "$_if"/ttyUSB* "$_if"/tty/ttyUSB* "$_if"/tty/tty*; do
@@ -594,75 +355,41 @@ mm_recover_missing() {
 				done
 			done
 		fi
-		# Модем В MM ЕСТЬ, но собран без контрол-порта - пересобрать (см. функцию).
 		[ "$_seen" = 1 ] && {
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
 			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" "$RUN/$_rb_key.compal" 2>/dev/null
 			_mm_fix_atonly "$_rp"
 		}
-		# MM (вот-вот) видит модем -> поднять его интерфейс, если лежит.
 		_mm_ifup_if_down "$_rp"
 	done
 }
 
-# Поднять модем, у которого MM отобрал и разорвал сессию данных.
-#
-# ЗАЧЕМ. Захватив чужой модем, MM снимает регистрацию и выключает его
-# ("state changed (registered -> disabling)" -> "disabled modem"). Запрет,
-# наложенный следом, возвращает нам модем, но НЕ восстанавливает соединение, и
-# поднять его некому. Наблюдалось вживую на FM350: netifd держал up=true со
-# СТАРЫМ адресом и маршрутом "default dev eth2 scope link" в никуда, интернета
-# не было, метрики показывали один диапазон - и ничто в интерфейсе не намекало
-# на причину.
 _restore_stolen() {
 	for mf in "$RUN"/*.stolen; do
 		[ -f "$mf" ] || continue
-		# Даём запрету время лечь: сразу после mmcli модем ещё возвращается в
-		# наши руки, и спрашивать его рано.
 		[ -z "$(find "$mf" -mmin +1 2>/dev/null)" ] && continue
 		PATHID=$(basename "$mf" .stolen)
 		rm -f "$mf"
 		SEC="m_$(echo "$PATHID" | sed 's/[^A-Za-z0-9]/_/g')"
 		IF=$(uci -q get "$CFG.$SEC.network")
 		[ -n "$IF" ] || continue
-		# Правду о сессии знает МОДЕМ, а не netifd - см. пояснение выше.
-		# Спрашиваем ДВУМЯ независимыми способами, потому что ни один не
-		# самодостаточен:
-		#   AT+CGACT? - точен, но порт может молчать (он занят нашим же опросом
-		#     метрик, а после встряски со стороны MM ещё и перенумеровывается);
-		#     именно это и наблюдалось - в момент разрыва порт не отвечал вовсе.
-		#   ping через интерфейс - не зависит от AT-портов, но отвечает на вопрос
-		#     "есть ли связь", а не "жив ли контекст".
-		# Действуем, только если ЕСТЬ положительное доказательство разрыва.
 		_dead=""
 		ATP=$(uci -q get "$CFG.$SEC.at_port")
 		if [ -n "$ATP" ] && [ -c "$ATP" ] && command -v sms_tool >/dev/null 2>&1; then
-			# at_query: очередь к порту и таймаут. Этот вызов идёт из петли, живущей
-			# всё время работы демона, и без очереди он конкурировал с опросом метрик.
 			RAW=$(at_query "$ATP" "AT+CGACT?" 6)
 			if echo "$RAW" | grep -q "OK"; then
-				# Порт ответил - верим ему.
 				echo "$RAW" | grep -qE '\+CGACT: *[0-9]+, *1' && continue
 				_dead="контекст не активен"
 			fi
 		fi
 		if [ -z "$_dead" ]; then
-			# Порт промолчал. Проверяем связь через сам интерфейс.
 			L3=$(ubus call "network.interface.$IF" status 2>/dev/null \
 				| jsonfilter -e '@.l3_device' 2>/dev/null)
 			[ -n "$L3" ] || continue
-			# 77.88.8.8 (Яндекс), а не 8.8.8.8 - последний недоступен в РФ.
 			ping -c 2 -W 4 -I "$L3" 77.88.8.8 >/dev/null 2>&1 && continue
-			# Вне России Яндекс может не отвечать - вторая цель, как у сторожа.
 			ping -c 2 -W 4 -I "$L3" 1.1.1.1 >/dev/null 2>&1 && continue
-			# ПИНГА МАЛО. У части операторов ICMP закрыт наглухо, и молчание на
-			# пинг не значит отсутствия связи: проверено на живом МегаФоне -
-			# 100% потерь пакетов, при этом HTTP отвечает за 0.4 с. Полагаться
-			# на один пинг значило бы регулярно рвать рабочее соединение.
 			if command -v curl >/dev/null 2>&1; then
-				# if! - строго устройство: без префикса curl при неудаче
-				# привязывается к АДРЕСУ, и проба уходит по чужому маршруту
-				# (тот же разбор, что в health.sh).
+				# see docs/subsystems/health-and-recovery.md#curl-interface-if-prefix
 				curl -s --max-time 8 --interface "if!$L3" -o /dev/null \
 					http://ip-api.com/line/?fields=query 2>/dev/null && continue
 				_wl_ok=""
@@ -681,9 +408,6 @@ _restore_stolen() {
 }
 
 case "$1" in
-# set-exclude <секция модема> <0|1> - переключатель из настроек модема.
-# Пишем флаг и СРАЗУ применяем: при включении прячем модем от MM, при выключении
-# снимаем держателя, чтобы MM подхватил модем без перезагрузки.
 set-exclude)
 	[ -n "$2" ] || exit 0
 	uci -q set "$CFG.$2.mm_exclude=${3:-1}"
@@ -697,21 +421,12 @@ set-exclude)
 	fi
 	;;
 once)  inhibit_pass; mm_recover_missing ;;
-# Пауза/снятие инхибиции ОДНОГО модема (usb-путь $2) на время захвата MM под
-# смену диапазонов. pause снимает держателя сразу, чтобы MM подхватил модем без
-# ожидания; resume убирает флаг - следующий проход инхибирует обратно.
 pause)   [ -n "$2" ] && { mkdir -p "$RUN"; : > "$RUN/$2.pause"; pf="$RUN/$2.pid"; [ -f "$pf" ] && { kill "$(cat "$pf" 2>/dev/null)" 2>/dev/null; rm -f "$pf"; }; } ;;
 resume)  [ -n "$2" ] && rm -f "$RUN/$2.pause" ;;
 stop)  for pf in "$RUN"/*.pid; do [ -f "$pf" ] && kill "$(cat "$pf")" 2>/dev/null; rm -f "$pf"; done ;;
 *)
-	# Реагируем на СТАРТ MM сразу, а не по общему таймеру. Пока запрет не лёг,
-	# MM успевает захватить и выключить чужой модем - при 15-секундном цикле это
-	# окно почти гарантированно ловится (проверено: MM поднялся ради соседнего
-	# модема на proto=modemmanager и по дороге выключил FM350).
-	# Дорогой проход (mmcli -L, по процессу на модем) делаем по-прежнему раз в
-	# ~15 с, а между ними только дешёвый pgrep.
 	_last_pid=""
-	_n=99                       # первый проход - сразу
+	_n=99
 	while :; do
 		if [ ! -x /usr/sbin/ModemManager ]; then
 			_last_pid=""; _n=99

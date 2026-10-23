@@ -1,13 +1,4 @@
 #!/bin/sh
-# Point every install link in the six READMEs at release <version>-r<release>.
-#
-# Called by the publish job of build.yml ONLY after all packages are attached
-# and the draft release is published - until then the links keep pointing at
-# the previous release, which is still downloadable. Bumping them by hand in
-# the release commit left a 15-20 minute window in which the README install
-# command returned 404.
-#
-# Usage: readme-links.sh <version> <pkg_release>     e.g. readme-links.sh 2.4.65 1
 set -eu
 
 V="$1"

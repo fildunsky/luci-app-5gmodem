@@ -1,23 +1,4 @@
 #!/bin/sh
-#
-# FCC-разблокировка Dell DW5821e / Foxconn T77W968 (Snapdragon X20):
-# 413c:81d7, 413c:81e0, 0489:e0b5, 0489:e0b4.
-#
-# Прошивка ждёт от хоста QMI-команду Foxconn «FCC authentication» и без неё не
-# включает радио, а по полевому отчёту 14.09.2026 (WH3000, 413c:81e0) ещё и
-# сбрасывает USB примерно раз в пять минут. Незаблокированный модем команду
-# просто подтверждает или отвечает ошибкой - перезагрузки она не вызывает.
-#
-# ДВА РЕЖИМА.
-#   fcc-unlock.sh <dbus-путь> <порт>...   - так зовёт ModemManager из
-#       /etc/ModemManager/fcc-unlock.d/<vid:pid>. MM делает это ТОЛЬКО когда
-#       модем отказал во включении радио (MM_CORE_ERROR_RETRY), один раз на
-#       попытку. Штатный скрипт Foxconn («105b») сюда не годится: он ищет порт
-#       MBIM, а в QMI-композиции у модуля лишь cdc-wdm на qmi_wwan - и выходил
-#       с кодом 2, ничего не отправив.
-#   fcc-unlock.sh kernel <usb-путь>       - интерфейс на qmi/mbim, ModemManager
-#       модемом не занимается. Шлём один раз на каждое появление модема на
-#       шине (ключ - номер устройства на шине, он меняется при переподключении).
 
 LOGTAG=5gmodem
 FOXCONN_IDS="413c:81d7 413c:81e0 413c:81e4 413c:81e6 413c:81d8 0489:e0b5 0489:e0b4"
@@ -27,14 +8,7 @@ is_foxconn_x20() {
 	return 1
 }
 
-# Команду даём через прокси (-p), только если он уже нужен: канал держит
-# ModemManager или прокси уже запущен кем-то ещё. Без MM свой прокси остаётся
-# жить после qmicli, сторож sessionwatch видит «прокси на прямом канале» и
-# передозванивает только что поднятый интерфейс - находка у владельца
-# DW5821e 413c:81e0 17.09.2026. У cdc_mbim-узла канал открывается только с
-# --device-open-mbim. qmicli на занятом канале умеет висеть бесконечно -
-# ограничиваем временем сами.
-send_auth() {   # $1 - узел /dev/cdc-wdmN, $2 - предел ожидания, с
+send_auth() {
 	command -v qmicli >/dev/null 2>&1 || { echo "qmicli is not installed"; return 2; }
 	_sa_px=""
 	if pidof ModemManager >/dev/null 2>&1 || pidof qmi-proxy >/dev/null 2>&1 || pidof mbim-proxy >/dev/null 2>&1; then
@@ -59,21 +33,19 @@ send_auth() {   # $1 - узел /dev/cdc-wdmN, $2 - предел ожидани�
 	echo "$_sa_txt"
 	case "$_sa_txt" in
 		*[Ss]uccessfully*) return 0 ;;
-		# Команда до модема дошла, но он её не знает или не нуждается в ней -
-		# повторять бессмысленно.
 		*InvalidQmiCommand*|*[Nn]ot\ supported*|*NotSupported*|*InvalidOperation*) return 3 ;;
 	esac
 	return 1
 }
 
-wdm_of_path() {   # $1 - usb-путь
+wdm_of_path() {
 	for _wp in /sys/bus/usb/devices/"$1":*/usbmisc/cdc-wdm* /sys/bus/usb/devices/"$1":*/usbmisc/wdm*; do
 		[ -e "$_wp" ] && { echo "/dev/${_wp##*/}"; return 0; }
 	done
 	return 1
 }
 
-radio_already_on() {   # $1 - usb-путь
+radio_already_on() {
 	_ro_sec=$(secname "$1")
 	_ro_if=$(uci -q get "5gmodem.$_ro_sec.network")
 	_ro_st=""
@@ -116,7 +88,6 @@ kernel)
 	_try=0
 	while [ "$_try" -lt 15 ]; do
 		_try=$((_try + 1))
-		# Модем переподключился - этот запуск уже не про него.
 		[ "$(cat "/sys/bus/usb/devices/$P/devnum" 2>/dev/null)" = "$DEVNUM" ] || break
 		WHY=$(radio_already_on "$P"); RC=$?
 		if [ "$RC" = 0 ]; then
@@ -127,6 +98,7 @@ kernel)
 			sleep 3; continue
 		fi
 		W=$(wdm_of_path "$P")
+		OUT="no control channel (cdc-wdm) found for $P"
 		if [ -n "$W" ] && [ -c "$W" ]; then
 			OUT=$(send_auth "$W" 15); RC=$?
 			if [ "$RC" = 0 ]; then
@@ -145,7 +117,6 @@ kernel)
 	;;
 esac
 
-# Режим ModemManager: $1 - dbus-путь модема, дальше имена портов управления.
 [ $# -ge 2 ] || exit 1
 shift
 PORT=""
@@ -155,7 +126,6 @@ for _p in "$@"; do
 	esac
 done
 [ -n "$PORT" ] || exit 2
-# MM ждёт скрипт не дольше 5 с (MAX_FCC_UNLOCK_EXEC_TIME_SECS) - укладываемся.
 OUT=$(send_auth "/dev/$PORT" 4); RC=$?
 logger -t "$LOGTAG" "fcc: ModemManager requested FCC unlock on $PORT - rc $RC: $OUT"
 [ "$RC" = 3 ] && exit 0

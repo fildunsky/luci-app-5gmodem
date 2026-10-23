@@ -1,19 +1,5 @@
 #!/bin/sh
 [ -d /tmp/5gmodem ] || mkdir -p /tmp/5gmodem 2>/dev/null
-#
-# sms_tool-compatible wrapper around ModemManager (mmcli).
-#
-# For modems managed by ModemManager over MBIM/QMI (e.g. Compal RXM-G1 /
-# "Tri Cascade Inc. VOS_5G", 05c6:90d6): incoming SMS are captured by
-# ModemManager and never show up in the AT storages (+CMGL), so the
-# regular sms_tool reads nothing. Sending over the AT port (+CMGS) is
-# also unreliable on such firmwares. This wrapper accepts the same
-# arguments as sms_tool (subset: recv/status/send/delete, flags
-# -s/-d/-f/-j) and prints output in the same format, so
-# luci-app-sms-tool-js works with it without markup changes. The binary
-# is selected via the uci option 5gmodem.sms.sms_via_mm
-# (set by the hotplug script or by the user).
-#
 . /usr/share/libubox/jshn.sh
 
 DATEFMT="%Y-%m-%d %H:%M"
@@ -26,7 +12,6 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 		-f) DATEFMT="$2"; shift 2 ;;
 		-j) JSONOUT=1; shift ;;
-		# port and storage are meaningless here - ModemManager owns the modem
 		-s|-d|-b|-c|-p|-t|-C) shift 2 ;;
 		-*) shift ;;
 		*)
@@ -42,25 +27,13 @@ done
 
 command -v mmcli >/dev/null 2>&1 || { echo "mmcli not found" >&2; exit 1; }
 
-# КАКОМУ МОДЕМУ АДРЕСОВАТЬ. Раньше здесь всюду стояло «mmcli -m "$MMIDX"» -
-# «какой-нибудь модем». С одним MM-модемом это неотличимо от правильного,
-# а с двумя ломается молча: у человека с парой T99W175 (30.07) «any»
-# попадал в модем БЕЗ SIM - список SMS пуст, отправка в никуда, «SMS не
-# работают» без единой ошибки. Тот же класс бага уже чинили в detect.sh
-# и modemswitch.sh. Индекс берём по активному модему (sysfs-путь ->
-# индекс MM); «any» остаётся только фолбэком, когда резолв не смог -
-# то есть ровно в старом одномодемном случае.
-# MM_MODEM_PATH задаёт цель явно (обход всех модемов ботом Telegram); пусто -
-# прежнее поведение, индекс активного модема.
 MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex ${MM_MODEM_PATH:+"$MM_MODEM_PATH"} 2>/dev/null)
 case "$MMIDX" in ''|*[!0-9]*) MMIDX=any ;; esac
 
-# SMS object path -> index
 sms_index() {
 	echo "${1##*/}"
 }
 
-# mmcli ISO timestamp (2026-07-09T22:22:55+03:00) -> DATEFMT
 fmt_ts() {
 	TS="${1%%+*}"
 	TS="${TS%%-[0-9][0-9]:[0-9][0-9]}"
@@ -97,23 +70,6 @@ sms_json() {
 	printf '%s' "$_sj"
 }
 
-# Drop stale partial messages stuck in the "receiving" state. On this
-# firmware ModemManager sometimes fails to assemble a multipart SMS over
-# MBIM (e.g. operator messages with an alphanumeric sender): the object
-# hangs in "receiving" forever and, worse, BLOCKS reception of all
-# subsequent messages - they are silently lost. Deleting the stub
-# unblocks reception (verified on real hardware). A healthy multipart
-# assembles within seconds, so anything in "receiving" older than
-# STALE_RX_SECS is garbage; if the timestamp cannot be parsed, the stub
-# is treated as stale too.
-#
-# "Stale" is measured from when WE first saw the object stuck, not from the
-# message timestamp. The timestamp is when the SENDER sent it: messages that
-# the modem hands over from storage after a reboot are hours or days old, so
-# comparing against it declared them stale on sight and deleted them the
-# moment they blinked through the "receiving" state. First-seen marks live in
-# /tmp and are keyed by MM index - both reset together on reboot - and count
-# uptime, so a clock jump cannot make a fresh object look old.
 STALE_RX_SECS=120
 RX_MARK_DIR=/tmp/5gmodem/smsrx
 cleanup_stale_rx() {
@@ -180,9 +136,6 @@ recv)
 status)
 	load_paths
 	cleanup_stale_rx
-	# format and prefix width matter: readsms.js extracts the used count
-	# as substring(17, indexOf("total")) - "Storage type: MT," is exactly
-	# 17 characters
 	USED=0
 	for P in $(list_paths); do
 		SJ=$(sms_json "$P") || continue
@@ -198,8 +151,6 @@ send)
 	TEXT="$A2"
 	[ -n "$PHONE" ] && [ -n "$TEXT" ] || { echo "sms not sent, command error" >&2; exit 1; }
 
-	# mmcli key='value' syntax: a single quote inside the text breaks the
-	# parser - replace it with a typographic apostrophe
 	case "$TEXT" in
 		*"'"*) _AP=$(printf '\342\200\231'); TEXT=$(printf '%s' "$TEXT" | sed "s/'/$_AP/g") ;;
 	esac
@@ -209,12 +160,10 @@ send)
 	[ -n "$P" ] || { echo "sms not sent, command error" >&2; echo "$OUT" >&2; exit 1; }
 
 	if ERR=$(mmcli -s "$P" --send 2>&1); then
-		# same success line as sms_tool (incl. the 'sucessfully' typo)
+		# see docs/subsystems/sms.md#success-line
 		echo "sms sent sucessfully: $(sms_index "$P")"
-		# sms_tool does not keep sent messages - clean up the MM object
 		mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
 	else
-		# do not accumulate drafts
 		mmcli -m "$MMIDX" --messaging-delete-sms="$(sms_index "$P")" >/dev/null 2>&1
 		CODE=$(printf '%s' "$ERR" | sed -n 's/.*Error\.\([^:]*\):.*/\1/p' | head -1)
 		[ -n "$CODE" ] || CODE=$(printf '%s' "$ERR" | head -1)

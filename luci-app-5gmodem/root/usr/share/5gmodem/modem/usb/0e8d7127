@@ -1,6 +1,3 @@
-# Fibocom modems with ProdID=0e8d +GTUSBMODE: 41
-# Fibocom FM350-GL
-
 convert_bw() {
   case "${1}" in
     "6") echo "1.4 MHz";;
@@ -23,8 +20,6 @@ convert_bw() {
   esac
 }
 
-# Модуляция из GTCAINFO (<dl_modulation>/<ul_modulation>, мануал 11.1.16):
-# 0 BPSK, 1 QPSK, 2 16QAM, 3 64QAM, 4 256QAM, 5 1024QAM, 6 UNKNOWN.
 convert_mod() {
   case "${1}" in
     "0") echo "BPSK";;
@@ -37,8 +32,6 @@ convert_mod() {
   esac
 }
 
-# This FM350-GL firmware's GTCCINFO does NOT carry a band field, so derive the
-# LTE band from the serving EARFCN (E-UTRA DL channel, 3GPP TS 36.101 Table 5.7.3-1).
 earfcn2band() {
 	[ -n "$1" ] || return
 	e=$1
@@ -76,16 +69,6 @@ earfcn2band() {
 	fi
 }
 
-# ОДИН БАТЧ НА ВЕСЬ ОПРОС. Порядок в склейке ЗНАЧИМ: если модем упрётся в
-# неизвестную ему команду, всё, что стоит правее, не ответит. Поэтому сначала
-# три команды, на которых держатся метрики, и только потом вендорские
-# дополнения. GTRXPATHEN в склейке подтверждён живым выводом
-# `AT+EPRATL?;+E5GOPT?;+GTRXPATHEN?` - ответили все три (#10284).
-# AT+ECELL ИЗ ОПРОСА УБРАН. Добавленный в 2.5.0 запасной источник соты и TAC
-# совпал по времени с жалобой «порт метрик занят минутами, sms_tool висит в
-# D-состоянии, страница пишет, что модем не отвечает» (FM350-GL на 2.5.1,
-# 14.09.2026); до 2.5.0 так не глючило. Каждый опрос ради одного редко пустого
-# поля того не стоит - CID/TAC по-прежнему приходят из +CREG каркаса.
 O=$(sms_tool -d $DEVICE at "AT+GTCCINFO?;+GTCAINFO?;+CESQ;+GTRXPATHEN?")
 
 case "$MODE_NUM" in
@@ -97,39 +80,14 @@ case "$MODE_NUM" in
   11*) 
        MODE="5G SA |"
        ;;
-  # AcT=13 - ЭТО «МОДЕМ УМЕЕТ EN-DC», А НЕ «СЕЙЧАС ЕСТЬ 5G».
-  #
-  # По 27.007 значение 13 означает E-UTRA + NR dual connectivity, и раньше мы
-  # печатали по нему «5G NSA» безусловно. На сети, где 5G нет вовсе, получалась
-  # ложь: живой стенд 07.08.2026, Билайн - `+COPS: 0,2,"25099",13`, при этом
-  # `+C5GREG: 0` (в 5G не зарегистрирован), в GTCCINFO единственная строка с
-  # rat=4 (LTE), а в агрегации B8 + B3 - две ЧЕТВЁРОЧНЫЕ несущие. Карточка
-  # показывала «5G», хотя честный ответ - «4G+».
-  #
-  # Поэтому ярлык решаем ПОСЛЕ разбора несущих (см. ниже, где известны
-  # T_5G_*): есть хоть одна NR-несущая - «5G NSA», нет - обычная LTE-логика.
   13*) NSA_CLAIM=1
        ;;
 esac
 
 T_MODE=""
 
-# serving cell = first GTCCINFO data row (index 1). Row layout per the FM350
-# AT manual (V2.10, 11.1.15), подтверждено живым выводом (EARFCN=3400 у B7,
-# PCI=366 <= 503):
-#   idx,rat,mcc,mnc,TAC(hex),CellID(hex),EARFCN,PCI,band,bw,SINR,rxlev,RSRP,RSRQ
-# ВАЖНО: в унаследованном коде $7/$8 были перепутаны (PCI<->EARFCN). Из-за
-# этого при пустом GTCAINFO (RRC idle) fallback считал бэнд из PCI как из
-# EARFCN и pband прыгал (B1<->B3) на каждый переход idle<->active.
-# Без -A3: GTCCINFO печатает и до десяти соседей на каждый RAT, порядок RAT не
-# гарантирован - обслуживающая LTE/NR-строка уезжала за границу трёх строк, и
-# весь блок метрик пропадал на этом опросе (ревью 12.09.2026). Шаблон ^1,[49],
-# в пределах ответа уникален.
 T1=$(echo "$O" | grep -E "^1,[49]," | head -1)
 if [ -n "$T1" ]; then
-  # Поля CSV-строки - ОДНИМ разбором через IFS, а не awk на каждое: этот блок
-  # выполняется на каждом опросе, и восемь awk стоили ~8 форков впустую
-  # (замер 06.08.2026: сбор FM350 1.4 c чистого CPU, 41 awk на проход).
   _oIFS=$IFS; IFS=','; set -- $T1; IFS=$_oIFS
   _F2=$2; _F5=$5; _F7=$7; _F8=$8; _F9=$9; _F11=${11}; _F13=${13}; _F14=${14}
   T_RAT=$_F2
@@ -146,8 +104,6 @@ if [ -n "$T1" ]; then
   if [ -n "$T" ]; then
     PCI=$T
   fi
-  # band: prefer an explicit field ($9, index+100) if the firmware ever provides
-  # one; otherwise derive it from the EARFCN (this unit leaves $9 empty).
   T=$_F9
   if [ -n "$T" ]; then
     case $T_RAT in
@@ -170,9 +126,6 @@ if [ -n "$T1" ]; then
       MODE="$MODE $(band4g $T)"
     fi
   fi
-  # Метрики берём ТОЛЬКО в допустимых по мануалу диапазонах (11.1.15): при
-  # реинициализации прошивка шлёт мусор (напр. rssnr=8192 -> «SINR 4096.0 dB»
-  # растягивал таблицу в горизонтальный скролл и дёргал страницу).
   T=$_F11
   if [ -n "$T" -a "$T" -ne "255" ] 2>/dev/null; then
     case $T_RAT in
@@ -199,24 +152,6 @@ if [ -n "$T1" ]; then
   fi
 fi
 
-# СОСЕДНИЕ СОТЫ - ИЗ ТОГО ЖЕ ОТВЕТА, БЕЗ ЕДИНОЙ ЛИШНЕЙ КОМАНДЫ.
-#
-# GTCCINFO отдаёт и обслуживающую соту (строка с 1 в начале), и соседей (2) -
-# до десяти на каждый RAT. Раньше строки соседей просто выбрасывались, хотя
-# таблица «Соседние соты» на странице «Сеть» уже есть и ждёт поле neighbors
-# (её заполняет QMI-путь у Qualcomm-модемов, см. _qr_nb в 5gmodem.sh). Формат
-# объекта повторяем оттуда ОДИН В ОДИН: значения строками, serving - 0/1.
-#
-# ПЕРЕСЧЁТ ТОТ ЖЕ, ЧТО У ОБСЛУЖИВАЮЩЕЙ ВЫШЕ: rsrp = idx-141 (LTE) / idx-157
-# (NR), rsrq = -20 + idx/2. Проверено на живом FM350: idx 40 -> -101 dBm,
-# столько же показывает карточка.
-#
-# РАСКЛАДКА ПОЛЕЙ РАЗНАЯ У ОБСЛУЖИВАЮЩЕЙ И СОСЕДА (руководство 11.1.15):
-#   LTE обслуживающая: ...,earfcn,pci,band,bw,sinr,rxlev,rsrp,rsrq   (14)
-#   LTE сосед:         ...,earfcn,pci,bw,rxlev,rsrp,rsrq             (12)
-# Плюс <band> прошивка заполняет ТОЛЬКО в RRC-connected и со смещением +100,
-# поэтому для соседей диапазон считаем из EARFCN - тем же расчётом, что и
-# earfcn2band выше (в awk он свой, иначе пришлось бы звать shell на строку).
 NEIGHBORS=$(echo "$O" | awk -F, '
 	function e2b(e) {
 		if (e == "" || e + 0 != e) return ""
@@ -252,8 +187,6 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 		if (e >= 68586 && e <= 68935) return 71
 		return ""
 	}
-	# «Нет данных» прошивка кодирует 255 (а SINR ещё и мусором при
-	# реинициализации) - такие поля отдаём пустыми, страница покажет прочерк.
 	function lvl(v, base,   x) {
 		if (v == "" || v + 0 != v || v == 255) return ""
 		x = v + 0
@@ -274,8 +207,6 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 		next
 	}
 	/^[12],[249],/ {
-		# sms_tool отдаёт строки с CR - без чистки ПОСЛЕДНЕЕ поле (rsrq) уходит
-		# в проверки как "16\r" и молча отбрасывается: в таблице был прочерк.
 		gsub(/\r/, "")
 		srv = ($1 == 1) ? 1 : 0
 		rat = $2 + 0
@@ -290,7 +221,6 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 			else     {            rsrp = lvl($11, -157); rsrq = half($12, -43.5) }
 			sub(/^50/, "", band)
 		} else {
-			# WCDMA: уровень тут RSCP (idx-121), диапазона в строке нет.
 			if (srv) rsrp = lvl($11, -121); else rsrp = lvl($15, -121)
 		}
 		if (pci == "") next
@@ -315,45 +245,23 @@ NEIGHBORS=$(echo "$O" | awk -F, '
 	}
 ')
 
-# 3G (UMTS/HSPA): нет строки GTCCINFO с RAT 4/9, значит T1 пуст. Метрики берём из
-# СТАНДАРТНОГО +CESQ (3GPP TS 27.007 8.69). FM350 расширяет +CESQ полями NR, но
-# первые шесть остаются rxlev,ber,rscp,ecno,rsrq,rsrp. На WCDMA rsrq/rsrp = 255,
-# а rscp/ecno несут реальный сигнал. НЕ трогаем CSQ: на 3G он честно совпадает с
-# RSCP (в отличие от LTE, где мы правили его через RSRP).
 if [ -z "$T1" ]; then
   _CE=$(echo "$O" | grep -E '^\+CESQ:' | head -1 | sed 's/^+CESQ:[[:space:]]*//')
   if [ -n "$_CE" ]; then
     _RSCP=$(echo "$_CE" | awk -F, '{print $3}' | tr -d ' ')
     _ECNO=$(echo "$_CE" | awk -F, '{print $4}' | tr -d ' ')
-    # rscp: 0..96 -> -121+n dBm; 255 = недоступно
     if [ -n "$_RSCP" ] && [ "$_RSCP" -ge 0 ] && [ "$_RSCP" -le 96 ] 2>/dev/null; then
       RSCP=$((_RSCP - 121))
     fi
-    # ecno: 0..49 -> -24 + 0.5n dB; 255 = недоступно
     if [ -n "$_ECNO" ] && [ "$_ECNO" -ge 0 ] && [ "$_ECNO" -le 49 ] 2>/dev/null; then
       ECIO=$(echo "$_ECNO" | awk '{printf "%0.1f", -24 + $1/2}')
     fi
   fi
-  # RSSI на 3G из CSQ (строки GTCCINFO нет, а поле выше заполняется только в LTE-ветке)
   if [ -n "$RSCP" ] && [ "$CSQ" -ge 0 ] 2>/dev/null && [ "$CSQ" -le 31 ]; then
     RSSI=$((2 * CSQ - 113))
   fi
 fi
 
-# АНТЕННЫ (RX-ПУТИ) - ИЗ ТОГО ЖЕ ОТВЕТА, БЕЗ ЛИШНЕЙ КОМАНДЫ.
-#
-# `AT+GTRXPATHEN?` -> `+GTRXPATHEN: 3,15` (живые ответы: #806, #2451, #3294,
-# #10284). Первое поле - RAT (1 UMTS, 3 LTE, 15 NR-RAN), второе - БИТОВАЯ
-# МАСКА включённых цепей: 1 main, 2 aux/DG, 4 mimo main, 8 mimo aux, 15 - все
-# четыре (выписка из мануала, #6908; то же словами в #3281).
-#
-# УРОВНЕЙ ПО ЦЕПЯМ FM350 НЕ ОТДАЁТ ВОВСЕ: команда только включает и выключает
-# пути, отдельных RSRP по антеннам в теме нет ни у кого. Поэтому ANTPORTS
-# ("порт:rsrp:rsrq") оставляем пустым - страница скроет таблицу, - и
-# заполняем только вердикт разнесённого приёма. Именно его не хватает при
-# самой частой жалобе темы «скорость вдвое ниже обещанной»: работа на двух
-# цепях из четырёх ровно вдвое режет приём (#1519, #9726).
-# (ревью 13.09.2026, форум 4pda)
 _RXP=$(echo "$O" | tr -d '\r' | sed -n 's/^+GTRXPATHEN:[[:space:]]*[0-9]*,\([0-9]*\).*/\1/p' | head -1)
 case "$_RXP" in
 	''|*[!0-9]*) ;;
@@ -389,22 +297,11 @@ T_5G_PCI=""
 T_5G_EARFCN=""
 
 for LINE in $LINES; do
-  # Поля - одним IFS-разбором вместо шести awk (строки уже отобраны grep выше;
-  # первый элемент после ":" - band, разделители и ":", и ",").
   _oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
   T_BAND=$2
   T_PCI=$3
   T_EARFCN=$4
   T_DBW=$5
-  # PCC: у ЭТОЙ прошивки на одно поле больше, чем в мануале (лишний ul_bw):
-  #   band,pci,earfcn,dl_bw,ul_bw,dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp
-  # (живой пример: PCC:107,366,3400,50,50,1,1,1,1,-104). Значит слои MIMO
-  # (DL) = $7, модуляция (DL) = $9. MIMO валиден только в 1..4 (0/255 = нет
-  # передачи) - иначе прочерк и для MIMO, и для модуляции.
-  # Раскладку выбираем ПО ЧИСЛУ ПОЛЕЙ: формат GTCAINFO менялся между прошивками
-  # (форум), и на прошивке без ul_bw в MIMO попадал dl_mod (1..4 проходит
-  # валидацию) - показывались чужие слои (ревью 12.09.2026). 11 полей с
-  # заголовком - с ul_bw (MIMO $7, модуляция $9), 10 - по мануалу ($6, $8).
   if [ "$#" -ge 11 ] || { [ "$#" -eq 10 ] && [ "${6:-0}" -gt 4 ] 2>/dev/null; }; then
     T_MIMO=$7
     T_MOD=$(convert_mod "$9")
@@ -462,15 +359,11 @@ elif [ -n "$T_5G_PBAND" ]; then
   PMOD="$T_5G_MOD"
 fi
 
-
 IFS="
 "
 IDX=1
 LINES=$(echo "$O" | grep -E '^SCC\s?[0-9]:2,')
 for LINE in $LINES; do
-  # Один IFS-разбор на несущую вместо шести awk. Прежний awk заодно сверял
-  # индекс строки с ожидаемым ($IDX) - сверяем так же, из самой строки:
-  # не совпал - поля пустые, строка пропускается, IDX ниже всё равно шагнёт.
   _oIFS=$IFS; IFS=':,'; set -- $LINE; IFS=$_oIFS
   _lidx="${1#SCC}"; _lidx="${_lidx# }"
   if [ "$_lidx" = "$IDX" ]; then
@@ -528,10 +421,6 @@ for LINE in $LINES; do
     esac
   fi
 
-  # Per-SCC RSRP (LTE): GTCAINFO SCC field $13 is ALREADY in dBm (255 = n/a).
-  # Field mapping confirmed against modemdata's FM350 (0e8d7127) parser. LTE SCC
-  # rows don't carry per-carrier RSRQ/SINR (modemdata doesn't emit them either);
-  # those exist only for 5G-NSA SCC (via GTCCINFO), added separately below.
   T=$_S13
   if [ -n "$T" ] && [ "$T" != "255" ] && [ "$T" -le -40 ] 2>/dev/null && [ "$T" -ge -157 ] 2>/dev/null; then
     case $IDX in
@@ -543,10 +432,6 @@ for LINE in $LINES; do
     esac
   fi
 
-  # SCC ровно по мануалу (11.1.16): state,ul_cfg,band,pci,earfcn,dl_bw,ul_bw,
-  # dl_mimo,ul_mimo,dl_mod,ul_mod,rsrp -> MIMO (DL) = $9, модуляция (DL) = $11.
-  # mimo=0/255 значит "по SCC сейчас ничего не передаётся" (простой) - тогда
-  # прочерк и для MIMO, и для модуляции (mod=0/BPSK там просто заглушка).
   T_SMIMO=$_S9
   case "$T_SMIMO" in
     1|2|3|4)
@@ -620,20 +505,12 @@ if [ -n "$T_4G_PBAND" -a -n "$T_5G_PBAND" ]; then
   fi
 fi
 
-# ЯРЛЫК ТЕХНОЛОГИИ ДЛЯ EN-DC - ПО ФАКТУ, А НЕ ПО ЗАЯВКЕ (см. AcT=13 выше).
-# Приписываем спереди, а не присваиваем: в fallback-ветке GTCCINFO в $MODE уже
-# может лежать бэнд, и присваивание его бы стёрло.
 if [ -n "$NSA_CLAIM" ]; then
   if [ -n "$T_5G_MODE" ] || [ -n "$T_5G_PBAND" ]; then
     MODE="5G NSA |"
   elif echo "$O" | grep -q -E '^SCC'; then
-    # NR-несущей нет, но LTE-несущих несколько - это ровно «4G+» (в UI ярлык
-    # LTE-A так и переводится).
     MODE="LTE-A |"
   else
-    # Одна несущая: обычная LTE. Ставим ярлык ЯВНО - каркас 5gmodem.sh для
-    # незнакомого ему AcT=13 кладёт в MODE прочерк, и без этой ветки в карточку
-    # уезжало «- B8 (900 MHz)».
     MODE="LTE |"
   fi
 fi
@@ -649,11 +526,6 @@ if [ -z "$T_MODE" ]; then
   fi
 fi
 
-# GTCCINFO doesn't always return its serving-cell row in a given poll (handover,
-# CA changes, a busy port), which used to leave RSRP empty for that one poll and
-# made the bar drop to the pessimistic AT+CSQ value (~25%) - a visible flicker.
-# Fall back to AT+CESQ, which reports the standardized RSRP directly and reliably:
-#   +CESQ: rxlev,ber,rscp,ecno,rsrq,rsrp   (rsrp 0..97 -> dBm = rsrp-141; 255=n/a)
 if [ -z "$RSRP" ]; then
 	CE_RSRP=$(echo "$O" | tr -d '\r' | sed -n 's/.*+CESQ:[[:space:]]*//p' | head -1 | awk -F, '{print $6}')
 	case "$CE_RSRP" in
@@ -672,27 +544,7 @@ if [ -n "$_NRB_DB" ] && [ -n "$T_4G_PBAND" ] && [ -n "$RSRP" ] && [ -n "$RSRQ" ]
   [ -n "$_WB" ] && RSSI="$_WB"
 fi
 
-# Signal bar НЕ из сырого AT+CSQ: он RSSI-based и на FM350 узкополосный - читает
-# ~8..9 (=26%) даже при приличном LTE, а другие модемы в той же точке дают 70%+.
-# Но и один RSRP врёт в ОБЕ стороны: сильный RSRP при плохих SINR/RSRQ (шум,
-# загрузка соты) - это ПЛОХОЕ соединение, а бар по RSRP рисовал бы «полно»
-# (живой пример: RSRP -107, но SINR 1 дБ и RSRQ -15 дБ - реально слабо, а прежняя
-# формула (RSRP+150)*5/3 давала 71%). Поэтому считаем ВЗВЕШЕННО из того, что
-# отдаёт +CESQ/GTCCINFO: сила (RSRP) 50% + качество SINR 30% + RSRQ 20%.
-# Отсутствующие метрики исключаем и перенормируем веса (на LTE без SINR - только
-# RSRP+RSRQ и т.д.). Шкалы по 3GPP TS 36.133:
-#   RSRP  -130..-80 дБм -> 0..100  (перцептивно ~2%/дБ в рабочем диапазоне)
-#   SINR   -10..20  дБ  -> 0..100  (>=20 отлично, ~13 хорошо, 0 средне)
-#   RSRQ   -20..-3   дБ  -> 0..100  (>=-10 хорошо)
-# Так бар отражает РЕАЛЬНОЕ качество, а не только силу, и убирает и «занижение»
-# сырого CSQ, и «завышение» чистого RSRP. Кэшируем последний хороший процент,
-# чтобы редкий опрос без GTCCINFO/CESQ не уронил бар к пессимистичному CSQ.
 SIGCACHE="/tmp/5gmodem/fm350_sig_${DEVICE##*/}"
-# FM350 занижает сырой +CSQ - но теперь это общее правило, а не исключение:
-# метрики своей технологии главнее CSQ у всех модемов (sig_percent в lib.sh,
-# центральный расчёт в 5gmodem.sh). Здесь оставлен только КЭШ последнего
-# хорошего процента: редкий опрос без GTCCINFO/CESQ иначе уронил бы бар к
-# пессимистичному CSQ.
 if [ -n "$RSRP" ]; then
 	CSQ_PER=$(sig_percent "$MODE" "$RSRP" "$RSRQ" "$SINR")
 	CSQ=$(( 31 * CSQ_PER / 100 ))
@@ -702,7 +554,6 @@ elif [ -f "$SIGCACHE" ] && [ -z "$(find "$SIGCACHE" -mmin +2 2>/dev/null)" ]; th
 	[ -n "$CSQ_PER" ] && CSQ=$(( 31 * CSQ_PER / 100 ))
 fi
 
-# Modem
 OA=$(at_static cgmm "AT+CGMM?")
 MODELA=$(echo "$OA" | awk -F [:,] '/\+CGMM/{print $2}' | xargs)
 OB=$(at_static cgmi "AT+CGMI?")
@@ -717,32 +568,15 @@ if [ -z "$FW" ]; then
 	FW=$(echo "$OF" | awk -F'"' '/\+GTPKGVER:/ {print $2}' | cut -d_ -f1 | xargs)
 fi
 
-# International Mobile Equipment Identity (IMEI)
 OAA=$(at_static cgsn "AT+CGSN?")
 NR_IMEI=$(echo "$OAA" | awk -F[,:] '/\+CGSN:/ {print $2}' | xargs)
 
-# International Mobile Subscriber Identity (IMSI)
 [ -n "$SIMID" ] && NR_IMSI="$SIMID" || NR_IMSI=$(at_static cimi "AT+CIMI?" | awk -F [,:] '/\+CIMI:/ {print $2}' | xargs)
 
-# Integrated Circuit Card Identifier (ICCID)
 OCC=$(at_static iccid "AT+ICCID")
 NR_ICCID=$(echo "$OCC" | awk -F [,:] '/\+ICCID:/ {print $2}' | xargs)
 
-# Temp. Во время реинициализации (смена SIM-слота, ресет) сенсоры ETHERMAL
-# отдают заглушки (32767=0x7FFF, -127, -28479 и т.п.) - без фильтра в шапке
-# светилось "32767.0 °C". Берём только правдоподобные значения.
-# Берём МАКСИМУМ по сенсорам, а НЕ среднее: у FM350 несколько зон (PA, XO,
-# baseband...), и «холодная» зона (~25 °C, ambient) в среднем роняла показание -
-# оттого температура иногда внезапно проваливалась до 25° и на след. тик
-# возвращалась к 55°. Максимум = температура самого горячего узла, это и есть
-# осмысленная «температура модема», и она устойчива к разбросу зон.
 OT=$(sms_tool -d "$DEVICE" at "AT+ETHERMAL?")
-# Поля отсчитываем ОТ МАРКЕРА "+ETHERMAL:", а не от начала строки. Раньше awk
-# просто делил всю строку по запятым и брал второе поле - и если ответы двух
-# читателей порта слипались в одну строку (например "+CSQ: 25, 99" и следом
-# хвост "+ETHERMAL: ..."), вторым полем оказывалось число из ЧУЖОГО ответа.
-# Отсюда и брались внезапные 25 °C вместо 54. Отрезав всё до маркера, разбор
-# перестаёт зависеть от того, что прилипло слева.
 TM=$(echo "$OT" | awk 'BEGIN{m=-999}
 	/\+ETHERMAL:/ {
 		s = $0; sub(/^.*\+ETHERMAL:/, "", s)
@@ -750,25 +584,9 @@ TM=$(echo "$OT" | awk 'BEGIN{m=-999}
 		if (n >= 2) { v = a[2] + 0; if (v > -40 && v < 120 && v > m) m = v }
 	}
 	END { if (m > -999) printf "%.1f", m }' | xargs)
-# ФИЛЬТР СБОЙНЫХ ЗАМЕРОВ. Датчик FM350 изредка отдаёт неправдоподобное значение:
-# в потоке ровных 53-57 проскакивает 25, причём это НЕ ошибка разбора - модем так
-# и отвечает: "+ETHERMAL: 3, 25, 23, ..." при том, что секунду назад было 53.
-# Поймать это можно только физикой: модуль не остывает на 30 градусов за пять
-# секунд. Поэтому резкий скачок вниз принимаем лишь если он ПОДТВЕРДИЛСЯ
-# следующим замером - настоящее остывание даёт серию низких значений, а сбой
-# одиночный. Так мы не залипаем на старом значении, когда модем правда остыл.
 _TF="/tmp/5gmodem/temp_$(basename "$DEVICE")"
 if [ -n "$TM" ]; then
-	# Формат файла: <последнее_значение> <счётчик_отклонений> <время>
-	# Средние поля ВСЕГДА непустые: read схлопывает подряд идущие пробелы, и при
-	# пустом поле время уезжало в соседнюю переменную - фильтр считал данные
-	# протухшими и молча выключался.
 	_prev=""; _cnt=0; _ptime=0
-	# IFS ЗАДАЁМ ЯВНО. Выше в этом же профиле IFS переводится в перевод строки
-	# для разбора сот, и он действует до конца скрипта - пробел перестаёт быть
-	# разделителем, и read клал ВСЮ строку в первую переменную. Время не
-	# читалось, фильтр считал данные протухшими и молча отключался: в модели
-	# он работал, а на живом модеме нет.
 	[ -f "$_TF" ] && IFS=' ' read -r _prev _cnt _ptime < "$_TF" 2>/dev/null
 	case "$_ptime" in ''|*[!0-9]*) _ptime=0 ;; esac
 	case "$_cnt" in ''|*[!0-9]*) _cnt=0 ;; esac
@@ -778,16 +596,11 @@ if [ -n "$TM" ]; then
 	if [ -n "$_prev" ] && [ "$((_now - _ptime))" -lt 120 ]; then
 		_d=$(awk -v a="$TM" -v b="$_prev" 'BEGIN{d=a-b; if(d<0)d=-d; printf "%d", d}')
 		if [ "$_d" -gt 15 ]; then
-			# ТРИ подряд, а не два. Датчик FM350 выдаёт сбойное значение сериями:
-			# в потоке ровных 53-55 приходит 25, и подтверждения со второго раза
-			# оказалось мало - выброс повторялся дважды и проскакивал. Настоящее
-			# остывание на 30 градусов длится десятки секунд, поэтому три опроса
-			# подряд оно переживёт, а сбойная серия из двух - нет.
 			_new=$((_cnt + 1))
 			if [ "$_new" -ge 3 ]; then
-				_use="$TM"; _new=0     # подтвердилось - принимаем
+				_use="$TM"; _new=0
 			else
-				_use="$_prev"          # ещё не верим, показываем прежнее
+				_use="$_prev"
 			fi
 		fi
 	fi
@@ -795,13 +608,6 @@ if [ -n "$TM" ]; then
 	TEMP="$_use &deg;C"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-
-# СЕТЕВАЯ КАРТА - ТОЛЬКО ЭТОГО МОДЕМА. Раньше порт, которого нет в sysfs (модем
-# отвалился посреди опроса), давал пустой BASE, `grep ""` совпадал с КАЖДЫМ
-# интерфейсом роутера, и протокол брался по драйверу чужой карты. А без
-# границы «/» путь 1-1 совпадал и с соседним модемом на 1-1.2.
 TTY=$(basename "$DEVICE")
 devpath=$(readlink -f "/sys/class/tty/$TTY/device" 2>/dev/null)
 BASE=""

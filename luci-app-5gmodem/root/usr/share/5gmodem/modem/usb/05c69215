@@ -1,6 +1,3 @@
-# Quectel EC20-E
-# Quectel EC25
-
 . "$RES/modem/usb/_quectel_common"
 
 OCT=$(sms_tool -d $DEVICE at "at+qtemp")
@@ -56,7 +53,6 @@ fi
 
 _qc_ids
 
-# Modem
 _qc_ati
 
 _qc_proto "Vendor=05c6 ProdID=9215" 1220

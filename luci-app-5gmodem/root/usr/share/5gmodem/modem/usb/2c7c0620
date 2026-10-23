@@ -1,5 +1,3 @@
-# Quectel EM160R-GL
-
 . "$RES/modem/usb/_quectel_common"
 
 _qc_temp3n
@@ -33,7 +31,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 			T_DEC=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 			T_HEX=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
-#		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 		SINR=$T
 
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $17; exit}' | xargs)
@@ -110,7 +107,6 @@ _qc_neighbours
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE_A,LTE-A,' | sed 's,LTE-A B,LTE-A | B,')
 
-# Modem
 _qc_gmr_fw
 
 _qc_gmr_model
@@ -120,6 +116,5 @@ _qc_qslot
 _qc_ids
 
 _qc_proto "Vendor=2c7c ProdID=0620" 1220
-
 
 . "$RES/modem/usb/_quectel_qrsrp"

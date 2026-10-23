@@ -16,11 +16,6 @@
 	Licensed to the GNU General Public License v3.0.
 */
 
-/* Склейка нескольких AT-команд ОДНОЙ строки в валидную цепочку по V.250/27.007:
-   префикс "AT" допустим один раз в начале, у последующих РАСШИРЕННЫХ команд
-   (+ ^ $ * #) его снимаем. Так пользователь пишет привычно
-   "AT+CPBS="ON";AT+CNUM", а модем получает верное "AT+CPBS="ON";+CNUM" (иначе -
-   "No response"/"NO CARRIER"). У базовых (ATI, ATZ) префикс не трогаем. */
 function atChain(cmds) {
 	return cmds.map(function(c, i) {
 		c = String(c).trim();
@@ -28,20 +23,6 @@ function atChain(cmds) {
 	}).join(';');
 }
 
-/* ФОРМАТ ФАЙЛА AT-ШАБЛОНОВ - человеко-понятный, ОПИСАНИЕ КОММЕНТАРИЕМ НАД
-   КОМАНДОЙ (см. шапку в самих файлах etc/5gmodem/modem/atcmmds/):
-
-       ## Раздел               - заголовок группы в выпадающем списке
-       # Что делает команда    - описание (msgid, переводится через _())
-       AT+CSQ                   - сама команда: уходит в модем КАК ЕСТЬ
-                                  (несколько через ';' - в одной AT-сессии)
-       <пустая строка>          - разделитель; сбрасывает «висящее» описание
-
-   Описание берётся из строки '#' НЕПОСРЕДСТВЕННО над командой. '##' - раздел.
-
-   ЛЕГАСИ читается тоже, чтобы ничьи существующие .user не сломались:
-       Название ➜ AT-команда   (стрелка '➜'/'→'/'->')
-       Название;AT-команда */
 function isAtLine(s) { return (/^at/i).test(String(s || '').trim()); }
 
 function parseLegacyLine(s) {
@@ -53,8 +34,6 @@ function parseLegacyLine(s) {
 		var code = atChain(parts);
 		return code ? { name: (name || code), code: code } : null;
 	}
-	/* "имя;команда" - старый бесстрелочный вид; только если строка НЕ сама
-	   AT-команда (иначе это новый формат с цепочкой через ';'). */
 	if (s.indexOf(';') >= 0 && !isAtLine(s)) {
 		var f = s.split(';');
 		var c2 = atChain(f.slice(1));
@@ -63,16 +42,6 @@ function parseLegacyLine(s) {
 	return null;
 }
 
-/* ОПАСНЫЕ КОМАНДЫ - ТОЛЬКО ПОСЛЕ ПОДТВЕРЖДЕНИЯ.
-   Консоль отправляет в модем что угодно, и это правильно, но часть вендорных
-   команд необратима без вскрытия корпуса: AT+QPCIE="adb",1 у PCIe-варианта
-   Quectel RM520N гасит ВСЕ порты USB сразу и насовсем - дальше модем оживает
-   только через EDL и перепрошивку (три независимых случая на форуме). Смена
-   композиции (usbcfg / data_interface / pcie/mode) и уход в fastboot тоже
-   способны увести модем в режим, в котором роутер его не видит вовсе.
-   ЧТЕНИЕ НЕ ТРОГАЕМ: предупреждать на AT+QCFG="usbnet" без значения незачем -
-   именно чтение композиции и советует диагностика. Поэтому в шаблонах записи
-   обязательна запятая с аргументом. (ревью RM520N 13.09.2026, форум 4pda) */
 var DANGEROUS_AT = [
 	/\+QPCIE\s*=\s*"adb"/i,
 	/\+QCFG\s*=\s*"usbcfg"\s*,/i,
@@ -87,12 +56,8 @@ function isDangerousAt(cmd) {
 	return DANGEROUS_AT.some(function(re) { return re.test(s); });
 }
 
-/* Перевод подписи/раздела: msgid из файла -> текущий язык. Своя (не из каталога)
-   строка вернётся как есть - пользовательские команды показываем как написаны. */
 function tr(s) { return s ? _(s) : s; }
 
-/* Разбор ВСЕГО файла в упорядоченный список:
-   {type:'section', name} | {type:'cmd', name, code}. */
 function parseTemplates(content) {
 	var out = [], desc = null;
 	String(content || '').split('\n').forEach(function(raw) {
@@ -113,14 +78,10 @@ function parseTemplates(content) {
 	return out;
 }
 
-/* Текст пункта: описание + сама команда - видно, что именно уйдёт в модем. */
 function templateLabel(t) {
 	return (t.name === t.code) ? t.code : (t.name + ' → ' + t.code);
 }
 
-/* Наполнить <select> пунктами файла: плейсхолдер, разделы -> <optgroup>,
-   команды -> <option>. ОДИН строитель на оба места (первичный рендер и смена
-   файла) - раньше цикл был скопирован дважды и расходился. */
 function fillTemplateSelect(sel, content) {
 	if (!sel) { return; }
 	sel.innerHTML = '';
@@ -142,30 +103,13 @@ function fillTemplateSelect(sel, content) {
 	});
 }
 
-/* СЕМЕЙНЫЙ ФАЙЛ AT-ШАБЛОНОВ ПО АКТИВНОМУ МОДЕМУ (запрос владельца): раньше
-   один смешанный шаблон предлагал вендорные команды всем подряд - новичок жал
-   команду не своего модема, получал ERROR и думал, что сломана программа.
-   Ключуем как профили modem/usb: точный vid:pid, затем вендор, затем модель.
-   05c6:90d5/9025 двусмысленны (Foxconn T99W175 или прототип Compal - один ID)
-   - различаем по модели, тем же признаком, что iscompal.sh. Нет уверенного
-   совпадения - null, останется generic. */
 function atFamilyFor(vp, model) {
 	vp = String(vp || '').toLowerCase();
 	var m = String(model || '').toLowerCase();
 	if (/compal|vos_5g|rxm|sg500/.test(m)) { return 'compal'; }
 	if (/fm350/.test(m) || vp.indexOf('0e8d:712') === 0) { return 'fm350'; }
 	if (/l850|l860/.test(m) || vp === '8087:095a' || vp === '413c:81d9') { return 'xmm'; }
-	/* Sierra Wireless EM7345 (1199:a001) - ярлык Sierra, внутри Intel XMM7160:
-	   «!»-команды Sierra ему не отвечают (AT!ENTERCND="A710" -> ERROR, форум
-	   4pda #731/#2405-2407), поэтому подсказки Qualcomm/Sierra тут были бы
-	   заведомо чужими. Файл отдельный, а не общий xmm: у L850/L860 половина
-	   команд фибокомовские (AT+GTPKGVER, AT+GTDUALSIM, at@nvm) - для 7160 это
-	   такой же чужой набор (ревью EM7345 13.09.2026). */
 	if (vp === '1199:a001' || /em7345/.test(m)) { return 'xmm7160'; }
-	/* 1e2d:00b3/00b7/00b8/00b9 - штатные Thales-композиции самого T99W175/MV31-W
-	   (AT^CUSTOMER=14/16/33), не Compal: настоящий Compal уже отсечён по модели
-	   строкой выше. Прежде владелец самой ходовой конфигурации (customer 14,
-	   00B3) получал чужие AT+USBCOMP/AT+CEISWITCHSIM (ревью 12.09.2026). */
 	if (vp === '05c6:90d6') { return 'compal'; }
 	if (vp === '1bc7:1910' || vp === '1bc7:1911') { return 'qualcomm'; }
 	if (vp.indexOf('1bc7:') === 0 || /telit|lm9/.test(m)) { return 'telit'; }
@@ -178,22 +122,12 @@ function atFamilyFor(vp, model) {
 	return null;
 }
 
-/* Путь к файлу шаблона: семейные лежат в atcmmds/, личный («Мои команды») -
-   легаси-файл atcmmds.user в корне, в списке он представлен именем "__user__". */
 function atFilePath(name) {
 	return (name === '__user__') ? '/etc/5gmodem/modem/atcmmds.user'
 	                             : '/etc/5gmodem/modem/atcmmds/' + name;
 }
 
 
-/* Вывод в стиле блока кода современных md-редакторов - как на странице
-   диагностики 5gmodem. Цвета фиксированные, одинаковы в любой теме.
-   Шапка с меткой делается через ::before, чтобы не менять логику
-   показа/скрытия самого <pre>. */
-/* «Печатающийся терминал»: выводим ответ ПОСИМВОЛЬНО, с мигающим курсором в
-   конце. Уважаем prefers-reduced-motion (там сразу целиком). Скорость подгоняем
-   под длину - длинный дамп не должен печататься минуту. Предыдущую анимацию
-   отменяем, если пришёл новый ответ. */
 function typewrite(el, text) {
 	el.classList.add('has-output');
 	if (el._twTimer) { clearInterval(el._twTimer); el._twTimer = null; }
@@ -203,7 +137,7 @@ function typewrite(el, text) {
 	}
 	el.textContent = '';
 	var i = 0, n = text.length;
-	var step = Math.max(1, Math.ceil(n / 90));   // весь вывод ~ за 1.3 c
+	var step = Math.max(1, Math.ceil(n / 90));
 	el._twTimer = setInterval(function() {
 		if (i >= n) { clearInterval(el._twTimer); el._twTimer = null; return; }
 		el.textContent += text.slice(i, i + step);
@@ -215,9 +149,6 @@ function typewrite(el, text) {
 return view.extend({
 	viewName: 'sendat',
 	
-	/* Выбор файла запоминается ПО МОДЕМУ (vid:pid), а не глобально: иначе выбор
-	   для FM350 «прилипал» бы к L850 после смены вкладки, и автоподбор по
-	   семейству никогда не срабатывал бы. */
 	restoreSettingsFromLocalStorage: function() {
 		try {
 			let selectedFile = localStorage.getItem('luci-app-' + this.viewName
@@ -257,15 +188,10 @@ return view.extend({
 			else {
 				var _text = (res.stdout || '') +
 					((res.stderr && res.stdout) ? '\n' : '') + (res.stderr || '');
-				/* Модем промолчал (sms_tool отдал пусто - порт занят/подвис/убит по
-				   таймауту): показываем сообщение, а не пустой мигающий курсор. */
 				typewrite(out, _text.trim() ? _text : _('No response from modem'));
 			}
 
 		}).catch(function(err) {
-			/* res здесь недоступен - он в области then выше. Прежняя проверка на
-			   него ссылалась, из-за чего исключение внутри then превращалось в
-			   ReferenceError и настоящая ошибка терялась молча. */
 			ui.addNotification(null, E('p', [ err ]));
 		}).finally(function() {
 			for (let i = 0; i < buttons.length; i++)
@@ -277,9 +203,6 @@ return view.extend({
 	handleGo: function(ev, confirmed) {
 		let atcmd = document.getElementById('cmdvalue').value;
 		let port = uci.get('5gmodem', 'sms', 'atport');
-		/* Фолбэк - AT-порт секции АКТИВНОГО модема: у MM-модема (Compal) легаси
-		   sms.atport пуст, а рабочий порт в его секции есть - консоль писала
-		   «укажите порт» при живом ttyUSB (поймано владельцем). */
 		if (!port) {
 			var _ap = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '').replace(/[^A-Za-z0-9]/g, '_');
 			if (_ap) { port = uci.get('5gmodem', 'm_' + _ap, 'at_port') || ''; }
@@ -298,26 +221,10 @@ return view.extend({
 			return false;
 			}
 			else {
-			/* Через atcmd.sh, а не бинарь sms_tool напрямую. Раньше в ACL был
-			   разрешён exec на /usr/bin/sms_tool, то есть из браузера уходили
-			   ЛЮБЫЕ аргументы - и `send`, и `delete all`, и чужой /dev/*.
-			   Проверить их на роутере в таком виде нельзя: фильтр был бы в
-			   странице, а страница выполняется у пользователя. Теперь порт,
-			   форма команды и принадлежность порта модему проверяются на
-			   роутере. Произвольная команда при этом остаётся - консоль AT для
-			   этого и нужна. */
-			/* ТАЙМАУТ ЗАДАЁМ ЯВНО. Без третьего аргумента скрипт ждёт
-			   очереди к порту до 25 с и только потом выполняет команду, а
-			   браузер рвёт вызов ubus на 20-й: пользователь получал голое
-			   «Request timeout» вместо ответа, хотя команда к модему уже
-			   ушла (аудит 12.09.2026). */
-			/* Необратимая команда - спрашиваем ДО отправки (см. DANGEROUS_AT).
-			   Отмена ничего не шлёт и оставляет набранное в поле. */
 			if (!confirmed && isDangerousAt(atcmd)) {
 				var self = this;
 				ui.showModal(_('Dangerous AT command'), [
 					E('p', {}, _('This command can change the modem composition or disable its ports for good. On some modules it removes all USB ports, and only reflashing over EDL brings them back.')),
-					/* Команду показываем ТЕКСТОМ, без разбора: она пришла из поля ввода. */
 					E('p', {}, E('strong', {}, [ atcmd ])),
 					E('div', { 'class': 'right' }, [
 						E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Cancel') ]),
@@ -351,9 +258,6 @@ return view.extend({
 	},
 
 	handleCopy: function(ev) {
-		/* ПУСТОЙ ВЫБОР ПОЛЕ НЕ ТРОГАЕТ. При первом раскрытии списка выбран
-		   плейсхолдер со значением '', и обработчик стирал уже набранную
-		   команду - вместе с показанным ответом модема (аудит 12.09.2026). */
 		let x = document.getElementById('tk').value;
 		if (!x) { return; }
 
@@ -373,9 +277,6 @@ return view.extend({
 		this.saveSettingsToLocalStorage(selectedFile);
 
 		return fs.read_direct(atFilePath(selectedFile)).then(function(content) {
-			/* Плейсхолдер + разделы + команды строит общий fillTemplateSelect.
-			   Плейсхолдер нужен, чтобы выбор ПЕРВОЙ команды тоже давал change
-			   (иначе она уже "выбрана" и повторный клик не применяется). */
 			fillTemplateSelect(selectElement, content);
 			let cmdInput = document.getElementById('cmdvalue');
 			if (cmdInput) cmdInput.value = '';
@@ -420,14 +321,10 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30600, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30700, [ editors, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
-		/* Фолбэк-порт для MM-модема: его секция БЕЗ at_port намеренно (порт
-		   принадлежит ModemManager), но физические tty есть - берём ВТОРОЙ
-		   AT-порт активного модема из listmodems (первый обычно занят MM).
-		   atcmd.sh на роутере всё равно сверит принадлежность порта модему. */
 		window._sendatLmPort = '';
 		return Promise.all([
 			L.resolveDefault(fs.read_direct('/etc/5gmodem/modem/atcmmds.user'), null),
@@ -435,8 +332,6 @@ return view.extend({
 			uci.load('5gmodem'),
 			L.resolveDefault(uci.load('defmodems'))
 		]).then(function(res) {
-			/* СТРОГО ПОСЛЕ uci.load: active_modem иначе читался до загрузки
-			   конфига (undefined) и фолбэк не наполнялся никогда */
 			return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh', []), '[]').then(function(out) {
 				try {
 					var act = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
@@ -444,8 +339,6 @@ return view.extend({
 						if (m.path === act && m.tty && m.tty.length) {
 							window._sendatLmPort = m.tty[0];
 						}
-						/* vid:pid и модель активного модема - для автовыбора
-						   семейного файла AT-шаблонов (см. atFamilyFor). */
 						if (m.path === act) {
 							window._sendatLmVp = String(m.vidpid || '').toLowerCase();
 							window._sendatLmModel = String(m.model || '');
@@ -458,7 +351,7 @@ return view.extend({
 	},
 
 	render: function (loadResults) {
-		modemtabs.attach();  /* theme-agnostic modem switcher bar */
+		modemtabs.attach();
 
 	let info = _('User interface for sending AT commands using sms-tool').format('');
 	
@@ -482,8 +375,6 @@ return view.extend({
 		let userFiles = atFiles.filter(function(file) {
 			return file.type === 'file' && file.name && file.name.match(/\.user$/);
 		});
-		/* Порядок кнопок: GENERIC первым (нужен всем), дальше семейные по
-		   алфавиту, личный «Мои команды» - последним отдельным пунктом. */
 		userFiles.sort(function(a, b) {
 			var ga = (a.name === 'generic.user') ? 0 : 1;
 			var gb = (b.name === 'generic.user') ? 0 : 1;
@@ -527,9 +418,6 @@ return view.extend({
 						}.bind(this))(),
 						(function() {
 							if (userFiles.length > 0) {
-								/* Приоритет выбора файла: явный выбор пользователя ДЛЯ
-								   ЭТОГО модема (localStorage по vid:pid) -> семейный
-								   файл активного модема -> generic -> первый в списке. */
 								let savedFile = this.restoreSettingsFromLocalStorage();
 								let fam = atFamilyFor(window._sendatLmVp, window._sendatLmModel);
 								let fileToLoad = userFiles[0].name;
@@ -588,10 +476,6 @@ return view.extend({
 								E('select', {
 										'id': 'tk',
 										'class': 'cbi-input-select tg-field',
-										/* Только 'change'. Обработчик на 'mousedown' срабатывал
-										   на ПОПЫТКЕ заглянуть в список и переписывал поле ввода
-										   значением селекта - набранная команда пропадала ещё до
-										   выбора (аудит 12.09.2026). */
 										'change': ui.createHandlerFn(this, 'handleCopy')
 									    },
 									(function() {
@@ -603,8 +487,6 @@ return view.extend({
 										if (!content || !content.trim()) {
 											return [E('option', { 'value': '' }, _('No AT commands available'))];
 										}
-										/* Разделы -> <optgroup>, команды -> <option>; тот же
-										   разбор, что и в fillTemplateSelect (см. parseTemplates). */
 										let nodes = [ E('option', { 'value': '', 'disabled': true, 'selected': true }, '—') ];
 										let group = null;
 										parseTemplates(content).forEach(function(it) {
@@ -637,10 +519,6 @@ return view.extend({
 												execBtn.click();
 											}
 										}
-									 /* ОЧИСТКА ПОЛЯ - ТОЛЬКО С CTRL ИЛИ SHIFT. Голый [Delete]
-									    стирал команду целиком: поставить курсор в середину
-									    длинной команды и убрать один символ было невозможно
-									    (аудит 12.09.2026). */
 									 if (ev.keyCode === 46 && (ev.ctrlKey || ev.shiftKey))
 										{
 										ev.preventDefault();

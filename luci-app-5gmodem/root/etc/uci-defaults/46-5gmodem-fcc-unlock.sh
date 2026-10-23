@@ -1,9 +1,4 @@
 #!/bin/sh
-# luci-app-5gmodem: FCC-разблокировка Dell DW5821e / Foxconn T77W968 под
-# ModemManager. MM берёт скрипты из /etc/ModemManager/fcc-unlock.d/<vid:pid> и
-# зовёт их только когда модем отказал во включении радио. Ссылку ставим, если
-# своей у пользователя нет; чужую не трогаем. MM перечитывает каталог при каждой
-# попытке - перезапускать его не нужно.
 
 D=/etc/ModemManager/fcc-unlock.d
 S=/usr/share/5gmodem/fcc-unlock.sh

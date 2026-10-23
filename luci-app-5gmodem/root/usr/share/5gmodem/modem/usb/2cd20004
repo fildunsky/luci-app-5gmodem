@@ -1,5 +1,3 @@
-# Mikrotik R11e-LTE6
-
 O=$(sms_tool -d $DEVICE at "at+cesq;+zcainfo?;+zpas?;+zcellinfo?")
 T=$(echo "$O" | awk -F[,:] '/^\+CESQ/ {print $2}' | xargs)
 if [ -n "$T" ]; then
@@ -56,7 +54,6 @@ esac
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed "s/LTE_A/LTE-A | /g")
 
-# Modem
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR"//)
 
@@ -66,33 +63,27 @@ MODELACUT=$(echo $MODELA | awk -F [:] '/^\+CGMM:/{print $2}' | xargs)
 MODELBCUT=$(echo $MODELB | awk -F [:] '/^\+CGMI:/{print $2}' | xargs)
 MODEL="$MODELBCUT "$MODELACUT
 
-# LAC & TAC
 T_HEX=$LAC_HEX
 T_DEC=$LAC_DEC
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O"  | sed s/"AT+CGSN"//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI"//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT*ICCID?")
 NR_D=$(echo "$O" | awk -F [:] '/^\*ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=2cd2 ProdID=0004' '{print $2}' | cut -c-1220)
 if echo "$PVCUT" | grep -q "Driver=rndis_host"

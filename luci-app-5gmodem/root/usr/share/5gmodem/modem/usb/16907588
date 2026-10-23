@@ -1,5 +1,3 @@
-# ASKEY WWHC050
-
 O=$(sms_tool -d $DEVICE at "at\$qcai?;+ccputemp;+cgcelli;+cgnws")
 T=$(echo "$O" | awk 'BEGIN{FS="BEARER:"}/^\+CGCELLI/{print $2}' | awk 'BEGIN{FS=","}{print $1}')
 
@@ -107,26 +105,6 @@ if [ -n "$T" ]; then
 		RSSI="$RSSI / "${T##*:}" dBm"
 	fi
 fi
-#T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $6}')
-#if [ -n "$T" ]; then
-#	SINR=${T##*:}
-#	T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $15}')
-#	if [ -n "$T" ]; then
-#		SINR="$SINR / "${T##*:}" dB"
-#	fi
-#	[ -n "$ADDON" ] && ADDON="$ADDON,"
-#	ADDON="$ADDON"'{"SINR":"'$SINR'"}'
-#fi
-#T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $8}')
-#if [ -n "$T" ]; then
-#	BW=${T##*:}" MHz"
-#	T=$(echo "$O" | awk -F[,] '/^\$QCAI/{print $17}')
-#	if [ -n "$T" ]; then
-#		BW="$BW / "${T##*:}" MHz"
-#	fi
-#	[ -n "$ADDON" ] && ADDON="$ADDON,"
-#	ADDON="$ADDON"'{"BW":"'$BW'"}'
-#fi
 
 T=$(echo "$O" | awk -F[:] '/^\+CCPUTEMP/ {print $2}' | xargs)
 if [ -n "$T" ]; then
