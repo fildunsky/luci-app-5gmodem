@@ -1162,7 +1162,9 @@ fi
 # остаётся пустым), поэтому судить о занятости порта по этой переменной нельзя -
 # ветка send ниже так и не срабатывала (аудит 12.09.2026).
 _AT_INH="$_AT_LOCK_HELD"
-if [ "$BOX" = delete-run ]; then _AT_LOCKED=1; else at_lock "$PORT" 15; _AT_LOCKED=$?; fi
+if [ "$BOX" = delete-run ]; then _AT_LOCKED=1
+elif ! _via_mm && at_long_busy "$PORT"; then _AT_LOCKED=1
+else at_lock "$PORT" 15; _AT_LOCKED=$?; fi
 
 # СЧЁТЧИК ПРИ ЗАНЯТОМ ПОРТУ - ИЗ ПОСЛЕДНЕГО ОТВЕТА, А НЕ ИЗ МОДЕМА. Правило
 # «не дождались очереди - идём всё равно» написано ради чтения сообщений: их
@@ -1185,6 +1187,10 @@ fi
 # фон + сторож, дескрипторы порта у сторожа закрыты.
 _sms_run() {   # $1 - таймаут (с), дальше - команда
 	_sr_t="$1"; shift
+	if [ "$_AT_LOCK_HELD" != "$(basename "$PORT")" ] && command -v at_long_busy >/dev/null 2>&1 \
+	   && ! _via_mm && at_long_busy "$PORT"; then
+		return 1
+	fi
 	"$@" 2>/dev/null &
 	_sr_p=$!
 	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_sr_t"; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
@@ -1771,7 +1777,7 @@ recv|unseen|sent|status|dump|archive-run|archive-why)
 		# перезагрузки. Но и вечно долбиться нельзя - молчащий модем стоил бы
 		# по AT-таймауту каждому кругу бота, поэтому попыток три.
 		_cs_st=$(cat "$_cs_mark" 2>/dev/null)
-		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ]; then
+		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ] && ! at_long_busy "$PORT"; then
 			if set_sms_storage "$PORT" 2>/dev/null; then
 				printf 'ok' > "$_cs_mark"
 				# Настройку могли поправить под факт - читаем ту, что вышла.
@@ -1798,7 +1804,7 @@ _store_pick() {
 	_STORE_ARG=""
 	[ -n "$STORE" ] || return 0
 	_STORE_ARG="-s $STORE"
-	if ! _via_mm && [ -c "$PORT" ]; then
+	if ! _via_mm && [ -c "$PORT" ] && ! at_long_busy "$PORT"; then
 		case "$(sms_cpms_state "$PORT" 2>/dev/null)" in
 			"$STORE|"*) _STORE_ARG="" ;;
 			?*) sms_apply_cpms "$PORT" "$STORE" >/dev/null 2>&1 && _STORE_ARG="" ;;

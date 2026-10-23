@@ -98,3 +98,27 @@ at_unlock() {
 	unset _AT_LOCK_HELD
 	return 0
 }
+
+at_long_begin() {
+	_alb_f="/tmp/5gmodem/atlong_$(basename "$1")"
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	read -r _alb_pid _ < /proc/self/stat
+	printf '%s\n' "$_alb_pid" > "$_alb_f" 2>/dev/null
+}
+
+at_long_end() {
+	rm -f "/tmp/5gmodem/atlong_$(basename "$1")" 2>/dev/null
+}
+
+at_long_busy() {
+	[ -n "$1" ] || return 1
+	_alw_f="/tmp/5gmodem/atlong_$(basename "$1")"
+	[ -f "$_alw_f" ] || return 1
+	read -r _alw_pid < "$_alw_f" 2>/dev/null
+	if [ -n "$_alw_pid" ] && kill -0 "$_alw_pid" 2>/dev/null \
+	   && [ -n "$(find "$_alw_f" -mmin -6 2>/dev/null)" ]; then
+		return 0
+	fi
+	rm -f "$_alw_f" 2>/dev/null
+	return 1
+}

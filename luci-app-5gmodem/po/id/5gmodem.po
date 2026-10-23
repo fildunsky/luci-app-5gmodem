@@ -5811,3 +5811,54 @@ msgstr "Browser tidak mengizinkan penyalinan. Pilih kode lalu salin:"
 
 msgid "Click to copy the code"
 msgstr "Klik untuk menyalin kode"
+
+msgid "Network selection"
+msgstr "Pemilihan jaringan"
+
+msgid "Pick the operator network by hand instead of letting the modem choose. The search takes 1-3 minutes."
+msgstr "Pilih jaringan operator secara manual alih-alih membiarkan modem memilih. Pencarian memakan waktu 1-3 menit."
+
+msgid "Automatic"
+msgstr "Otomatis"
+
+msgid "Find networks"
+msgstr "Cari jaringan"
+
+msgid "Return to automatic if this network is lost"
+msgstr "Kembali ke otomatis jika jaringan ini hilang"
+
+msgid "current"
+msgstr "saat ini"
+
+msgid "forbidden"
+msgstr "terlarang"
+
+msgid "Choose a network"
+msgstr "Pilih jaringan"
+
+msgid "No networks yet - press \"Find networks\""
+msgstr "Belum ada jaringan - tekan \"Cari jaringan\""
+
+msgid "Saved. The modem is switching networks, this can take up to a minute."
+msgstr "Tersimpan. Modem sedang berpindah jaringan, ini bisa memakan waktu hingga satu menit."
+
+msgid "Could not apply the network selection"
+msgstr "Tidak dapat menerapkan pemilihan jaringan"
+
+msgid "Searching for networks (%d s). The connection may drop meanwhile."
+msgstr "Mencari jaringan (%d dtk). Koneksi mungkin terputus selama itu."
+
+msgid "The modem found no networks"
+msgstr "Modem tidak menemukan jaringan"
+
+msgid "The modem port is busy, try again in a minute"
+msgstr "Port modem sedang sibuk, coba lagi dalam satu menit"
+
+msgid "The search failed"
+msgstr "Pencarian gagal"
+
+msgid "The network is selected manually on the Modem tab"
+msgstr "Jaringan dipilih secara manual di tab Modem"
+
+msgid "manual"
+msgstr "manual"

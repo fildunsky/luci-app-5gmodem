@@ -558,6 +558,150 @@ return view.extend({
 		]));
 	},
 
+	renderNetsel: function() {
+		var p = String(uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
+		var NS = '/usr/share/5gmodem/netsel.sh';
+		var st = { mode: 'auto', plmn: '', act: '', fallback: '1', backend: '', name: '' };
+		var nets = [];
+		var polling = false;
+		var parse = function(out) {
+			try { return JSON.parse(String(out || '').trim() || '{}'); } catch (e) { return {}; }
+		};
+		var modeSel = E('select', { 'class': 'cbi-input-select' }, [
+			E('option', { 'value': 'auto' }, _('Automatic')),
+			E('option', { 'value': 'manual' }, _('Manual'))
+		]);
+		var netSel = E('select', { 'class': 'cbi-input-select', 'style': 'width:auto; flex:0 1 auto; min-width:0; max-width:100%' });
+		var scanBtn = E('button', { 'class': 'cbi-button cbi-button-action', 'type': 'button' }, _('Find networks'));
+		var fbChk = E('input', { 'type': 'checkbox', 'style': 'margin:0 .5em 0 0' });
+		var fbLbl = E('label', { 'style': 'display:inline-flex; align-items:center; gap:.4em' },
+			[ fbChk, _('Return to automatic if this network is lost') ]);
+		var stat = E('div', { 'style': 'margin-top:4px' });
+		var manualBox = E('div', { 'style': 'display:none; flex-direction:column; align-items:flex-start; gap:.5em; margin-top:.5em' }, [
+			E('div', { 'style': 'display:flex; flex-wrap:wrap; gap:.5em; align-items:center' }, [ netSel, scanBtn ]),
+			fbLbl, stat
+		]);
+		var root = E('div', {}, [ modeSel, manualBox ]);
+		var row = function() { return root.closest ? root.closest('.cbi-value') : null; };
+		var label = function(n) {
+			var t = (n.name || n.plmn) + ' (' + n.plmn + ')';
+			if (n.tech) { t += ' ' + n.tech; }
+			if (n.stat === 'current') { t += ' - ' + _('current'); }
+			else if (n.stat === 'forbidden') { t += ' - ' + _('forbidden'); }
+			return t;
+		};
+		var fillNets = function() {
+			var want = st.plmn ? st.plmn + '|' + (st.act || '') : '';
+			var opts = [ E('option', { 'value': '' }, nets.length ? _('Choose a network') : _('No networks yet - press "Find networks"')) ];
+			var seen = false;
+			nets.forEach(function(n) {
+				var v = n.plmn + '|' + (n.act || '');
+				if (v === want) { seen = true; }
+				opts.push(E('option', { 'value': v }, label(n)));
+			});
+			if (want && !seen) {
+				opts.splice(1, 0, E('option', { 'value': want }, label({ plmn: st.plmn, name: st.name,
+					tech: '', stat: '' })));
+			}
+			dom.content(netSel, opts);
+			netSel.value = want;
+		};
+		var show = function() {
+			modeSel.value = st.mode;
+			manualBox.style.display = (st.mode === 'manual') ? 'flex' : 'none';
+			fbChk.checked = (st.fallback !== '0');
+			fbLbl.style.display = (st.backend === 'mm') ? 'none' : '';
+			fillNets();
+		};
+		var apply = function() {
+			var args;
+			if (modeSel.value === 'auto') { args = [ 'set', p, 'auto' ]; }
+			else {
+				var v = String(netSel.value || '');
+				if (!v) { return Promise.resolve(); }
+				var pa = v.split('|');
+				st.plmn = pa[0]; st.act = pa[1] || '';
+				args = [ 'set', p, 'manual', st.plmn, st.act || '-', fbChk.checked ? '1' : '0' ];
+			}
+			st.mode = modeSel.value;
+			stat.textContent = _('Saved. The modem is switching networks, this can take up to a minute.');
+			return fs.exec(NS, args).catch(function() {
+				stat.textContent = _('Could not apply the network selection');
+			});
+		};
+		var poll = function(started) {
+			polling = true;
+			scanBtn.disabled = true;
+			return L.resolveDefault(fs.exec_direct(NS, [ 'result', p ]), '').then(function(out) {
+				var r = parse(out);
+				if (r.state === 'running') {
+					var sec = Math.max(0, Math.round((Date.now() - started) / 1000));
+					stat.textContent = _('Searching for networks (%d s). The connection may drop meanwhile.').format(sec);
+					window.setTimeout(function() { poll(started); }, 3000);
+					return;
+				}
+				polling = false;
+				scanBtn.disabled = false;
+				if (r.state === 'done') {
+					nets = Array.isArray(r.networks) ? r.networks : [];
+					stat.textContent = nets.length ? '' : _('The modem found no networks');
+					fillNets();
+				} else if (r.state === 'error') {
+					stat.textContent = (r.error === 'busy') ? _('The modem port is busy, try again in a minute')
+						: _('The search failed') + (r.error && r.error !== 'timeout' ? ': ' + r.error : '');
+				}
+			});
+		};
+		var scan = function() {
+			if (polling) { return; }
+			var started = Date.now();
+			stat.textContent = _('Searching for networks (%d s). The connection may drop meanwhile.').format(0);
+			scanBtn.disabled = true;
+			return L.resolveDefault(fs.exec_direct(NS, [ 'scan', p ]), '').then(function() {
+				window.setTimeout(function() { poll(started); }, 3000);
+			});
+		};
+		modeSel.addEventListener('change', function() {
+			if (modeSel.value === 'auto') {
+				manualBox.style.display = 'none';
+				apply();
+				return;
+			}
+			manualBox.style.display = 'flex';
+			if (st.plmn) { apply(); }
+			else if (!nets.length) { scan(); }
+		});
+		netSel.addEventListener('change', apply);
+		fbChk.addEventListener('change', function() { if (netSel.value) { apply(); } });
+		scanBtn.addEventListener('click', function(ev) { ev.preventDefault(); scan(); });
+		window.setTimeout(function() {
+			var r0 = row();
+			if (r0) { r0.style.display = 'none'; }
+		}, 0);
+		window.setTimeout(function() {
+			if (!p) { return; }
+			Promise.all([
+				L.resolveDefault(fs.exec_direct(NS, [ 'get', p ]), ''),
+				L.resolveDefault(fs.exec_direct(NS, [ 'result', p ]), '')
+			]).then(function(res) {
+				var g = parse(res[0]), r = parse(res[1]);
+				if (!g.backend || g.backend === 'none') { return; }
+				st.backend = g.backend;
+				st.mode = (g.mode === 'manual') ? 'manual' : 'auto';
+				st.plmn = g.plmn || '';
+				st.act = g.act || '';
+				st.fallback = g.fallback || '1';
+				st.name = g.name || '';
+				if (r.state === 'done' && Array.isArray(r.networks)) { nets = r.networks; }
+				show();
+				var r1 = row();
+				if (r1) { r1.style.display = ''; }
+				if (r.state === 'running') { poll(Date.now()); }
+			});
+		}, 1200);
+		return root;
+	},
+
 	renderLeds: function(ledsAvail) {
 		if (!ledsAvail) { return ''; }
 
@@ -1320,6 +1464,16 @@ return view.extend({
 			return (ifn && uci.get('network', ifn, 'allow_roaming') === '1') ? '1' : '0';
 		};
 		o.remove = function() {};
+		}
+
+		if (!activeIsHilink) {
+		var nsView = this;
+		o = s.option(form.DummyValue, '_netsel', _('Network selection'),
+			_('Pick the operator network by hand instead of letting the modem choose. The search takes 1-3 minutes.'));
+		o.cfgvalue = function() { return ''; };
+		o.write = function() {};
+		o.remove = function() {};
+		o.renderWidget = function() { return nsView.renderNetsel(); };
 		}
 
 		o = s.option(form.Flag, '_mm_exclude', _('Hide from ModemManager'),

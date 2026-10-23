@@ -5811,3 +5811,54 @@ msgstr "浏览器不允许复制。请选中代码并复制："
 
 msgid "Click to copy the code"
 msgstr "点击复制代码"
+
+msgid "Network selection"
+msgstr "网络选择"
+
+msgid "Pick the operator network by hand instead of letting the modem choose. The search takes 1-3 minutes."
+msgstr "手动选择运营商网络，而不是由调制解调器自动选择。搜索需要 1-3 分钟。"
+
+msgid "Automatic"
+msgstr "自动"
+
+msgid "Find networks"
+msgstr "搜索网络"
+
+msgid "Return to automatic if this network is lost"
+msgstr "此网络丢失时恢复自动选择"
+
+msgid "current"
+msgstr "当前"
+
+msgid "forbidden"
+msgstr "禁止"
+
+msgid "Choose a network"
+msgstr "选择网络"
+
+msgid "No networks yet - press \"Find networks\""
+msgstr "暂无网络 - 请点击“搜索网络”"
+
+msgid "Saved. The modem is switching networks, this can take up to a minute."
+msgstr "已保存。调制解调器正在切换网络，可能需要一分钟。"
+
+msgid "Could not apply the network selection"
+msgstr "无法应用网络选择"
+
+msgid "Searching for networks (%d s). The connection may drop meanwhile."
+msgstr "正在搜索网络（%d 秒）。期间连接可能中断。"
+
+msgid "The modem found no networks"
+msgstr "调制解调器未找到任何网络"
+
+msgid "The modem port is busy, try again in a minute"
+msgstr "调制解调器端口忙，请一分钟后重试"
+
+msgid "The search failed"
+msgstr "搜索失败"
+
+msgid "The network is selected manually on the Modem tab"
+msgstr "网络已在“调制解调器”选项卡中手动选择"
+
+msgid "manual"
+msgstr "手动"
