@@ -59,17 +59,6 @@ proto_qmiraw_setup() {
 
 	if [ -n "$devpath" ]; then
 		local usbmisc_or_wwan_path
-		# For usbmisc:
-		# /sys/devices/platform/1e1c0000.xhci/usb1/1-2/1-2:1.4/usbmisc/cdc-wdm0
-		# Numbers after ":" are the configuration and interface number
-		# of the connected modem. There can be multiple interfaces but
-		# there will only be a single interface that provides the
-		# control channel device. Therefore, check also /*/usbmisc to
-		# allow specifying the USB port number the modem is directly
-		# connected to.
-		# For wwan:
-		# /sys/devices/platform/soc/11280000.pcie/pci0003:00/0003:00:00.0/0003:01:00.0/wwan/wwan0/wwan0qmi0
-		# /sys/devices/platform/soc/11280000.pcie/pci0003:00/0003:00:00.0/0003:01:00.0/mhi0/wwan/wwan0/wwan0qmi0
 		for usbmisc_or_wwan_path in \
 		    "$devpath"/usbmisc/cdc-wdm* \
 		    "$devpath"/*/usbmisc/cdc-wdm* \
@@ -113,15 +102,7 @@ proto_qmiraw_setup() {
 		/sbin/ip link set dev $ifname mtu $mtu
 	}
 
-	# РАДИО ДО ПРОВЕРОК SIM. Модем может перечислиться с выключенным радио
-	# (AT+CFUN=0, «низкое потребление»). В этом состоянии UIM отвечает illegal на
-	# ИСПРАВНУЮ карту, и ниже включается петля power-cycle: карта так и не
-	# инициализируется, интерфейс не поднимается (разбор на Telit FN990A28,
-	# netifd: «SIM in illegal state - Power-cycling SIM»; вручную лечилось
-	# AT+CFUN=1). Online выставляется и ниже по коду - но уже ПОСЛЕ проверок SIM,
-	# то есть слишком поздно. Здесь то же самое средствами QMI и до них. Если
-	# радио уже включено, ничего не делаем и не теряем время; ответ «не
-	# поддерживается» (пусто) - тоже повод попробовать, команда безобидная.
+	# see docs/subsystems/interfaces.md#qmiraw
 	local opmode
 	opmode=$(uqmi -s -d "$device" -t 3000 --get-device-operating-mode 2>/dev/null | tr -d '"')
 	if [ "$opmode" != "online" ]; then
@@ -131,7 +112,6 @@ proto_qmiraw_setup() {
 
 	echo "Waiting for SIM initialization"
 	local uninitialized_timeout=0
-	# timeout 3s for first call to avoid hanging uqmi
 	uqmi -d "$device" -t 3000 --get-pin-status > /dev/null 2>&1
 	local sim_wait=0 pin_out uim_out
 	while [ "$sim_wait" -lt 30 ]; do
@@ -166,32 +146,13 @@ proto_qmiraw_setup() {
 		fi
 	done
 
-	# Check if UIM application is stuck in illegal state
-	#
-	# ПУСТОЙ ОТВЕТ - НЕ ТО ЖЕ САМОЕ, ЧТО «illegal».
-	#
-	# Апстримная логика (и наш форк вслед за ней) считала отсутствующее поле
-	# card_application_state признаком нерабочей карты и передёргивала ей
-	# питание. Но пустой ответ приходит и просто потому, что UIM ЕЩЁ НЕ ГОТОВ
-	# на ранней стадии дозвона: карта исправна, ответ будет через секунду. Мы
-	# же гасили ей питание - и получали ту самую петлю power-cycle, из-за
-	# которой модем не регистрировался в сети (наш разбор «SIM illegal:
-	# восстановление»; в апстриме то же лечат в openwrt/openwrt#24868 на
-	# ZTE MF287 и BroadMobi BM806C).
-	#
-	# Поэтому три разных случая вместо двух:
-	#   - ответа нет (UIM не готов) - ЖДЁМ в пределах общего таймаута и
-	#     сдаёмся без питания: SIM_NOT_INITIALIZED;
-	#   - состояние ЯВНО illegal - как и раньше, передёргиваем питание;
-	#   - всё остальное - выходим, карта готова.
-	# Имя ошибки берём существующее (SIM_NOT_INITIALIZED) - новых строк для
-	# перевода не заводим, и вердикт совпадёт с апстримным, когда PR примут.
 	local uim_state_timeout=0
 	local uim_unavail_timeout=0
 	while true; do
 		json_load "$(uqmi -s -d "$device" -t 2000 --uim-get-sim-state)"
 		json_get_var card_application_state card_application_state
 
+		# empty state means UIM not ready, not illegal; see docs/subsystems/interfaces.md#qmiraw
 		if [ -z "$card_application_state" ]; then
 			[ -e "$device" ] || return 1
 			if [ "$uim_unavail_timeout" -lt "$timeout" ] || [ "$timeout" = "0" ]; then
@@ -205,11 +166,9 @@ proto_qmiraw_setup() {
 			return 1
 		fi
 
-		# Try to power-cycle the SIM card to recover from this state
 		if [ "$card_application_state" = "illegal" ]; then
 			echo "SIM in illegal state - Power-cycling SIM"
 
-			# Try to reset SIM application
 			uqmi -d "$device" -t 1000 --uim-power-off --uim-slot 1
 			sleep 3
 			uqmi -d "$device" -t 1000 --uim-power-on --uim-slot 1
@@ -220,7 +179,6 @@ proto_qmiraw_setup() {
 				continue
 			fi
 
-			# Recovery failed
 			proto_notify_error "$interface" SIM_ILLEGAL_STATE
 			proto_block_restart "$interface"
 			return 1
@@ -316,14 +274,11 @@ proto_qmiraw_setup() {
 		fi
 	fi
 
-	# Cleanup current state if any
 	uqmi -s -d "$device" -t 1000 --stop-network 0xffffffff --autoconnect > /dev/null 2>&1
 	uqmi -s -d "$device" -t 1000 --set-ip-family ipv6 --stop-network 0xffffffff --autoconnect > /dev/null 2>&1
 
-	# Go online
 	uqmi -s -d "$device" -t 1000 --set-device-operating-mode online > /dev/null 2>&1
 
-	# Set IP format
 	uqmi -s -d "$device" -t 1000 --set-data-format raw-ip > /dev/null 2>&1
 	uqmi -s -d "$device" -t 1000 --wda-set-data-format raw-ip > /dev/null 2>&1
 	json_load "$(uqmi -s -d "$device" -t 1000 --wda-get-data-format)"
@@ -347,7 +302,6 @@ proto_qmiraw_setup() {
 		*) uqmi -s -d "$device" -t 20000 --network-register > /dev/null 2>&1 ;;
 	esac
 
-	# PLMN selection must happen after the call to network-register
 	if [ -n "$mcc" -a -n "$mnc" ]; then
 		uqmi -s -d "$device" -t 1000 --set-plmn --mcc "$mcc" --mnc "$mnc" > /dev/null 2>&1 || {
 			echo "Unable to set PLMN"
@@ -360,7 +314,6 @@ proto_qmiraw_setup() {
 	[ -n "$modes" ] && {
 		uqmi -s -d "$device" -t 1000 --set-network-modes "$modes" > /dev/null 2>&1
 		sleep 3
-		# Scan network to not rely on registration-timeout after RAT change
 		uqmi -s -d "$device" -t 30000 --network-scan > /dev/null 2>&1
 	}
 
@@ -388,7 +341,6 @@ proto_qmiraw_setup() {
 			fi
 			echo "Network registration failed, registration timeout reached"
 		else
-			# registration_state is 'registration_denied' or 'unknown' or ''
 			echo "Network registration failed (reason: '$registration_state')"
 		fi
 
@@ -396,19 +348,15 @@ proto_qmiraw_setup() {
 		return 1
 	done
 
-
 	echo "Starting network $interface"
 
 	pdptype="$(echo "$pdptype" | awk '{print tolower($0)}')"
 
 	[ "$pdptype" = "ip" -o "$pdptype" = "ipv6" -o "$pdptype" = "ipv4v6" ] || pdptype="ip"
 
-	# Configure PDP type and APN for profile 1.
-	# In case GGSN rejects IPv4v6 PDP, modem might not be able to
-	# establish a non-LTE data session.
 	profile_pdptype="$pdptype"
 	[ "$profile_pdptype" = "ip" ] && profile_pdptype="ipv4"
-	uqmi -s -d "$device" -t 1000 --modify-profile "3gpp,1" --apn "$apn" --pdp-type "$profile_pdptype" > /dev/null 2>&1
+	uqmi -s -d "$device" -t 1000 --modify-profile "3gpp,${profile:-1}" --apn "$apn" --pdp-type "$profile_pdptype" > /dev/null 2>&1
 
 	if [ "$pdptype" = "ip" ]; then
 		[ -z "$autoconnect" ] && autoconnect=1
@@ -436,7 +384,6 @@ proto_qmiraw_setup() {
 			${password:+--password $password} \
 			${autoconnect:+--autoconnect})
 
-		# pdh_4 is a numeric value on success
 		if ! [ "$pdh_4" -eq "$pdh_4" ] 2> /dev/null; then
 			echo "Unable to connect IPv4"
 			uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_4" --release-client-id wds > /dev/null 2>&1
@@ -444,7 +391,6 @@ proto_qmiraw_setup() {
 			return 1
 		fi
 
-		# Check data connection state
 		connstat=$(uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_4" --get-data-status)
 		[ "$connstat" == '"connected"' ] || {
 			echo "No data link!"
@@ -477,7 +423,6 @@ proto_qmiraw_setup() {
 			${password:+--password $password} \
 			${autoconnect:+--autoconnect})
 
-		# pdh_6 is a numeric value on success
 		if ! [ "$pdh_6" -eq "$pdh_6" ] 2> /dev/null; then
 			echo "Unable to connect IPv6"
 			uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_6" --release-client-id wds > /dev/null 2>&1
@@ -486,7 +431,6 @@ proto_qmiraw_setup() {
 			return 1
 		fi
 
-		# Check data connection state
 		connstat=$(uqmi -s -d "$device" -t 1000 --set-client-id wds,"$cid_6" --set-ip-family ipv6 --get-data-status)
 		[ "$connstat" == '"connected"' ] || {
 			echo "No data link!"
@@ -548,7 +492,6 @@ proto_qmiraw_setup() {
 			json_add_string proto "dhcpv6"
 			[ -n "$ip6table" ] && json_add_string ip6table "$ip6table"
 			proto_add_dynamic_defaults
-			# RFC 7278: Extend an IPv6 /64 Prefix to LAN
 			json_add_string extendprefix 1
 			[ "$delegate" = "0" ] && json_add_boolean delegate "0"
 			[ "$sourcefilter" = "0" ] && json_add_boolean sourcefilter "0"

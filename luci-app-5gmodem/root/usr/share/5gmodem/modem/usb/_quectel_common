@@ -92,10 +92,6 @@ _qc_spn2() {
 	fi
 }
 
-# +QSPN: <FNN>,<SNN>,<SPN>,<alphabet>,<RPLMN>. Брали поле 2 (FNN) - на старых
-# прошивках при ограниченном сервисе там «000 000» (форум: «+QSPN: "000 000",
-# "000 000","beCloud",0,"000000"»), и это затирало имя, уже найденное по +COPS?.
-# Берём SPN (поле 4, как у EC25/EG25), при пустом - FNN; цифровой мусор не имя.
 _qc_spn4() {
 	T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $4}' | xargs)
 	case "$T" in ''|*[!0-9\ ]*) : ;; *) T="" ;; esac
@@ -142,17 +138,11 @@ _qc_ec25_lte() {
 		RSRP="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
 		RSRQ="$T"
-		# Поле SINR в QENG="servingcell" у EC21/EC25 уже в дБ (сверено с AT+QCSQ:
-		# QENG SINR=2 ≈ QCSQ 112 -> 112/5-20 = 2.4 дБ). Прежняя формула *0.2-20
-		# давала абсурдные ~-19 дБ на рабочем соединении.
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18}' | xargs)
 		SINR="$T"
 	fi
 
-	T=$(echo "$O" | awk -F[,:] '/^\+QSPN/ {print $4}' | xargs)
-	if [ -n "$T" ]; then
-		COPS="$T"
-	fi
+	_qc_spn4
 }
 
 _qc_qeng_bw() {
@@ -162,12 +152,6 @@ _qc_qeng_bw() {
 		T_DEC=$(printf "%d" "0x$T")
 		T_HEX=$T
 
-		# Полосы - ОТДЕЛЬНЫМ полем BANDWIDTH, а не внутри PBAND. Легаси-формат
-		# «B3 DL: @20 MHz UL: @20 MHz» ломал фронт: caSplitBand режет строку по
-		# « @», и таблица несущих показывала «B3 (1800 MHz) DL:» в колонке
-		# диапазона и «20 MHz UL:» в колонке полосы с пустотой после двоеточий
-		# (живой случай EP06-E, 19.08.2026). UL-полосу показываем только когда
-		# она отличается от DL (на FDD они совпадают почти всегда).
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $12}')
 		_qc_lbw T1 "$T" ""
 		_ULBW="$T1"
@@ -189,11 +173,6 @@ _qc_qeng_bw() {
 		RSRP=$T
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $16}')
 		RSRQ=$T
-		# SINR В QENG="servingcell" УЖЕ В ДЕЦИБЕЛАХ. Прежняя формула 0.2*x*10-20 (= 2x-20)
-		# не была ни «1/5 дБ» из мануала EC25, ни живым замером; по 23 живым ответам
-		# QENG с форума поле лежит в 0..25 и растёт вместе с RSRP (-114 → 6, -67 → 25) -
-		# это дБ как есть, ровно как сверено на EC25 (modem/usb/2c7c0125) по AT+QCSQ.
-		# Со сдвигом карточка занижала SINR на 4-14 дБ и решение «256QAM нельзя».
 		T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {v=$18; gsub(/[^0-9-]/,"",v); if(v ~ /^-?[0-9]+$/) print v; exit}')
 		SINR=$T
 	fi
@@ -229,14 +208,6 @@ _qc_scc_lte() {
 		[ -n "$T" ] && _qc_s $IDX EARFCN "$T"
 		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $7}')
 		[ -n "$T" ] && _qc_s $IDX PCI "$T"
-#		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $10}')
-#		addon $((POS + 5)) "(S${IDX}) RSSI" "$T dBm"
-#		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}')
-#		addon $((POS + 6)) "(S${IDX}) RSRP" "$T dBm"
-#		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}')
-#		addon $((POS + 7)) "(S${IDX}) RSRQ" "$T dB"
-#		T=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{printf "%.1f\n", $11/5-20}' | xargs)
-#		addon $((POS + 8)) "(S${IDX}) SINR" "$T dB"
 
 		IDX=$((IDX + 1))
 	done
@@ -267,7 +238,6 @@ _qc_gmr_model() {
 }
 
 _qc_qslot() {
-	# Slot SIM
 	O=$(sms_tool -d $DEVICE at "AT+QUIMSLOT?")
 	T=$(echo "$O" | awk -F [:] '/^\+QUIMSLOT/{print $2}' | xargs)
 	if [ -n "$T" ]; then
@@ -276,7 +246,6 @@ _qc_qslot() {
 }
 
 _qc_iccid() {
-	#  Integrated Circuit Card Identifier (ICCID)
 	O=$(sms_tool -d $DEVICE at "AT+QCCID")
 	NR_D=$(echo "$O" | awk -F [:] '/^\+QCCID/{print $2}' | xargs)
 	if [ -n "$NR_D" ]; then
@@ -285,14 +254,12 @@ _qc_iccid() {
 }
 
 _qc_ids() {
-	# International Mobile Equipment Identity (IMEI)
 	O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 	NR_I=$(digits_of "$O" 15 17)
 	if [ -n "$NR_I" ]; then
 		NR_IMEI="$NR_I"
 	fi
 
-	# International Mobile Subscriber Identity (IMSI)
 	O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 	NR_C=$(digits_of "$O" 14 16)
 	if [ -n "$NR_C" ]; then
@@ -303,14 +270,12 @@ _qc_ids() {
 }
 
 _qc_ids_sed() {
-	# International Mobile Equipment Identity (IMEI)
 	O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 	NR_I=$(echo "$O" | sed s/"AT+GSN "//)
 	if [ -n "$NR_I" ]; then
 		NR_IMEI="$NR_I"
 	fi
 
-	# International Mobile Subscriber Identity (IMSI)
 	O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 	NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 	if [ -n "$NR_C" ]; then
@@ -321,8 +286,6 @@ _qc_ids_sed() {
 }
 
 _qc_proto() {
-	# Protocol
-	# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 	PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 	PVCUT=$(echo $PV | awk -F "$1" '{print $2}' | cut -c-$2)
 	if echo "$PVCUT" | grep -q "Driver=qmi_wwan"
@@ -343,7 +306,6 @@ _qc_proto() {
 _q5_c5greg() {
 	O=$(sms_tool -d $DEVICE at "at+c5greg=2;+c5greg?")
 
-	# C5GREG
 	if [ "$1" = reset ]; then
 		shift
 		T=""
@@ -362,7 +324,6 @@ _q5_c5greg() {
 	esac
 	[ "x$REG" = "x1" ] || [ "x$REG" = "x5" ] && REGOK=1
 
-	[ "$TAC_DEC" != "0" ]
 	[ -n "$CID_HEX" ] && CID_DEC=$(printf "%d" "0x${CID_HEX}")
 }
 
@@ -375,7 +336,6 @@ _q5_on() {
 
 _q5_ots() {
 	OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
-#	OTS=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 	SINR=$OTS
 
 	TDX=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $14; exit}')
@@ -388,7 +348,6 @@ _q5_lte() {
 	_q5_v=$(case "$T" in ''|*[!0-9A-Fa-f]*) ;; *) printf "%d" "0x$T";; esac)
 	eval "${6}_DEC=\$_q5_v; ${6}_HEX=\$T"
 	T=$(echo "$1" | awk -F[,:] -v f="$3" '/^\+QENG:/ {print $f; exit}' | awk '{v=$1; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/ && v+0 >= -30 && v+0 <= 50) print v; exit}')
-#	T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $18; exit}' | xargs)
 	SINR="$T"
 	T=$(echo "$1" | awk -F[,:] -v f="$4" '/^\+QENG:/ {print $f; exit}')
 	_qc_lbwp T1 "$T" ""
@@ -398,26 +357,7 @@ _q5_lte() {
 	[ -n "$T1" ] && DLBW="DL: @$T1 MHz"
 }
 
-# УРОВНИ ПО КАЖДОЙ ВТОРИЧНОЙ НЕСУЩЕЙ.
-#
-# QCAINFO отдаёт их прямо в строке SCC, а код читал и выбрасывал: присвоения
-# оставались от давно удалённого API `addon` (закомментированные строки).
-# На форуме нормой считаются 3-5 несущих («1+1+3+3+78», 5 несущих на 85 МГц -
-# #1145, #1398-1401, #2377, #2656), и без уровней таблица агрегации отвечала
-# на вопрос «какая полоса» и молчала о том, живая ли она вообще.
-#
-# Раскладка LTE SCC подтверждена пятью независимыми живыми дампами
-# (#487, #1364, #2378, #2383, #2545):
-#   "SCC",<earfcn>,<bw>,"LTE BAND n",<state>,<pci>,<rsrp>,<rsrq>,<rssi>,
-#         <sinr>[,<ul_cfg>,<ul_bw>,<ul_earfcn>]
-# При разборе через -F[,:] это поля $3,$4,$5,$6,$7,$8,$9,$10,$11 - те самые,
-# что уже брал код для earfcn/pci. Хвост после SINR прошивка заполняет
-# прочерками («,0,-,-»), поэтому каждое значение проверяем на число и на
-# физичный диапазон, иначе в карточку уедет «-».
-# (ревью 13.09.2026, форум 4pda)
-_sccnum() {   # $1 - имя переменной, $2 - значение, $3 - минимум, $4 - максимум
-	# Пишем через eval, а не через echo в $(...): подстановка команды - это
-	# ещё один форк на каждое из четырёх значений каждой несущей.
+_sccnum() {
 	eval "$1=''"
 	case "$2" in
 		''|'-'|*[!0-9-]*) return;;
@@ -426,7 +366,7 @@ _sccnum() {   # $1 - имя переменной, $2 - значение, $3 - м
 	[ "$2" -le "$4" ] 2>/dev/null || return
 	eval "$1=\$2"
 }
-_sccsig() {   # $1 - номер несущей, дальше rsrp rsrq rssi sinr
+_sccsig() {
 	case "$1" in
 		1) S1RSRP="$2"; S1RSRQ="$3"; S1RSSI="$4"; S1SINR="$5";;
 		2) S2RSRP="$2"; S2RSRQ="$3"; S2RSSI="$4"; S2SINR="$5";;
@@ -545,8 +485,6 @@ _q5_core() {
 				CID_HEX=$T
 				CID_DEC=$(printf "%d" "0x${CID_HEX}")
 			fi
-#			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $9; exit}')
-#			[ -n "$T" ] && PCI="$T"
 			T=$(echo "$O" | awk -F[,:] '/^\+QENG:/ {print $13; exit}')
 			_qc_nbw BW "$T" ""
 			[ -n "$BW" ] && DBW="@$BW MHz"
@@ -637,10 +575,6 @@ _q5_core() {
 			T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{print $9}')
 			[ -n "$T" ] && RSRQ="$T"
 			if _q5_on scclev; then
-				# SINR - ИЗ QCAINFO, а не из QENG: у SDX62 поле SINR обслуживающей соты
-				# в QENG отдаёт 0, тогда как последнее поле PCC в QCAINFO той же сессии
-				# показывает 8 дБ (живой дамп с форума 4pda, ревью RM520N 13.09.2026).
-				# Целые дБ как есть; QENG остаётся запасным вариантом выше.
 				T=$(echo "$O" | awk -F[,:] '/^\+QCAINFO: "(pcc|PCC)"/{v=$11; gsub(/[^0-9-]/,"",v); if (v ~ /^-?[0-9]+$/) print v; exit}')
 				[ -n "$T" ] && SINR="$T"
 			fi
@@ -666,11 +600,6 @@ _q5_core() {
 					[ -n "$T5" ] && _qc_s $IDX PCI "$T5"
 
 					if _q5_on scclev; then
-						# Четыре уровня - ОДНИМ awk, а не четырьмя: цикл крутится на
-						# каждом опросе по числу несущих (до пяти), и прежние три awk
-						# на несущую стоили полтора десятка форков впустую. Пустое поле
-						# заменяем прочерком ПРЯМО В AWK: без этого два пробела подряд
-						# схлопнулись бы при разборе и уровни уехали бы на поле влево.
 						T5=$(echo "$LINE" | tr -d '\r' | awk -F[,:] '{
 							for (i = 8; i <= 11; i++) printf "%s%s", ($i == "" ? "-" : $i), (i < 11 ? " " : "\n")
 						}')
@@ -682,13 +611,10 @@ _q5_core() {
 						_sccsig "$IDX" "$_S_RSRP" "$_S_RSRQ" "$_S_RSSI" "$_S_SINR"
 					else
 						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $10}' | xargs)
-#						[ -n "$T5" ] && addon $((POS + 5)) "(S${IDX}) RSSI" "$T5 dBm"
 
 						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}' | xargs)
-#						[ -n "$T5" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
 
 						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}' | xargs)
-#						[ -n "$T5" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
 					fi
 					;;
 				*"NR5G BAND"*)
@@ -705,35 +631,19 @@ _q5_core() {
 						fi
 
 						if _q5_on scclev; then
-							# УРОВНЕЙ ПО NR-НЕСУЩЕЙ НЕ ЗАПОЛНЯЕМ. В теме нет ни одного
-							# живого дампа QCAINFO в SA, где у строки NR5G были бы
-							# уровни: закомментированные $8/$9 пришли из чужого кода и
-							# сверить их не с чем. Угадывать позиции - значит рисовать
-							# чужой RSRP (ревью 13.09.2026, форум 4pda).
 							:
 						else
 							T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}')
-#							[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
 							T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $9}')
-#							[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
 						fi
 					else
 						T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $6}' | xargs)
 						[ -n "$T5" ] && _qc_s $IDX PCI "$T5"
 						if _q5_on scclev; then
-							# NR-НЕСУЩАЯ В NSA УРОВНЕЙ НЕ НЕСЁТ ВОВСЕ. Единственный
-							# живой дамп такой строки в теме - `+QCAINFO: "SCC",643320,
-							# 12,"NR5G BAND 78",145` (#487): пять полей, дальше ничего.
-							# Поэтому заполняем только то, что там есть, - ARFCN, полосу
-							# и PCI (выше), а RSRP/RSRQ/RSSI/SINR оставляем пустыми:
-							# уровни 5G в NSA приходится смотреть по LTE-якорю.
-							# (ревью 13.09.2026, форум 4pda)
 							:
 						else
 							T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $7}')
-#							[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 6)) "(S${IDX}) RSRP" "$T5 dBm"
 							T5=$(echo "$LINE" | awk -F[,:] '/^\+QCAINFO: "(scc|SCC)"/{print $8}')
-#							[ -n "$T5" ] && [ "$T5" != "-" ] && addon $((POS + 7)) "(S${IDX}) RSRQ" "$T5 dB"
 						fi
 					fi
 					;;

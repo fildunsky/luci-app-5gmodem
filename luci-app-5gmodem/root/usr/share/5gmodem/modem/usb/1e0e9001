@@ -1,8 +1,5 @@
 #!/bin/sh
 
-# ==============================================================================
-# ПЕРВИЧНОЕ ОПРЕДЕЛЕНИЕ МОДЕЛИ УСТРОЙСТВА
-# ==============================================================================
 OL=$(sms_tool -d $DEVICE at "AT+CGMM")
 MODELB=$(echo "$OL" | sed s/"AT+CGMM"// | tr -s "\n" | xargs)
 if [ -n "$MODELB" ]; then
@@ -10,36 +7,18 @@ if [ -n "$MODELB" ]; then
 fi
 
 if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
-	# ==============================================================================
-	# РАЗБОР CPSI ДЛЯ SIM7100 / SIM7500 / SIM7600 (одинаковый формат LTE)
-	# ==============================================================================
-	# SIM7600E-H сюда НЕ ПОПАДАЛ (в модели нет "7100") и проваливался в ветку
-	# SIM8200 ниже, где CPSI разбирается через -F[,:]. Двоеточие в "+CPSI:"
-	# добавляет лишнее поле, и ВСЕ индексы съезжают на один: band читался из
-	# поля PCI ("366" -> B3), earfcn - из band, а DL/UL - из соседних чисел.
-	# Отсюда и расхождение: главный MODE говорил "LTE | B7", а карточка PCC -
-	# "B3 (1800 MHz)" с мусорными "@3 MHz". Разбор -F, ниже совпадает с форматом
-	# LTE из руководства (V1.01): band=поле 7, earfcn=8, RSRP=12/10, RSSI=13/10.
 	
-	# Температура (удаляем \r и пробелы)
 	OT=$(sms_tool -d $DEVICE at "AT+CPMUTEMP")
 	T=$(echo "$OT" | awk -F: '/^\+CPMUTEMP:/ {print $2}' | tr -d '\r' | xargs)
 	[ -n "$T" ] && TEMP="$T &deg;C"
 
-	# Запрос информации о сети
 	O=$(sms_tool -d $DEVICE at "AT+CPSI?")
 	
-	# Берем строго строку, содержащую +CPSI:
 	T1=$(echo "$O" | grep "+CPSI:" | tr -d '\r')
 
-	# СИСТЕМА - ПЕРВОЕ ПОЛЕ. Раскладка колонок у GSM/WCDMA другая, и прежний
-	# безусловный LTE-разбор на GSM-строке брал уровень сигнала как номер
-	# диапазона - карточка показывала бессмысленный «B-86» без единой метрики
-	# (живой случай 20.08.2026: SIM7100E ночью свалился с LTE на EGSM 900).
 	_SYS=$(echo "$T1" | sed 's/^+CPSI: *//' | awk -F, '{print $1}' | xargs)
 
 	if [ -n "$T1" ] && [ "$_SYS" = "GSM" ]; then
-		# +CPSI: GSM,Online,<MCC-MNC>,<LAC>,<CellID>,<bsic+band>,<RSSI>,...
 		MODE="GSM"
 		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
 		if [ -n "$T" ]; then
@@ -48,14 +27,11 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 		fi
 		T=$(echo "$T1" | awk -F, '{print $5}' | xargs)
 		case "$T" in *[!0-9]*|'') ;; *) CID_DEC="$T"; CID_HEX=$(printf '%X' "$T" 2>/dev/null) ;; esac
-		# «34 EGSM 900» - подпись диапазона без выдуманного Bx
 		_gb=$(echo "$T1" | awk -F, '{print $6}' | sed 's/^[0-9]* *//' | xargs)
 		[ -n "$_gb" ] && { PBAND="$_gb"; MODE="GSM | $_gb"; }
 		T=$(echo "$T1" | awk -F, '{print $7}' | xargs)
 		case "$T" in -*[0-9]*) RSSI="$T" ;; esac
 	elif [ -n "$T1" ] && [ "$_SYS" = "WCDMA" ]; then
-		# Раскладку WCDMA-строки без живого образца не угадываем: берём только
-		# совпадающие у всех систем поля (LAC/CID) и честный ярлык режима.
 		MODE="WCDMA"
 		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
 		if [ -n "$T" ]; then
@@ -65,20 +41,16 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 		T=$(echo "$T1" | awk -F, '{print $5}' | xargs)
 		case "$T" in *[!0-9]*|'') ;; *) CID_DEC="$T"; CID_HEX=$(printf '%X' "$T" 2>/dev/null) ;; esac
 	elif [ -n "$T1" ]; then
-		# TAC (4-е поле, например: 0x0088)
 		T=$(echo "$T1" | awk -F, '{print $4}' | xargs)
 		if [ -n "$T" ]; then
 			TAC_HEX=$(echo "$T" | sed 's/0x//g')
 			TAC_DEC=$(printf "%d" "0x$TAC_HEX" 2>/dev/null)
 		fi
 		
-		# PCI (6-е поле)
 		PCI=$(echo "$T1" | awk -F, '{print $6}' | xargs)
 
-		# Основной диапазон (PCC) (7-е поле, например: EUTRAN-BAND 3)
 		T=$(echo "$T1" | awk -F, '{print $7}' | xargs)
 		if [ -n "$T" ]; then
-			# Безопасное удаление букв и пробелов без ключа -e, чтобы не ломать JSON
 			B_NUM=$(echo "$T" | sed 's/EUTRAN-BAND//g' | tr -d ' ' | tr -d '\r' | tr -d '\n')
 			PBAND="B${B_NUM}"
 			case "$B_NUM" in
@@ -94,7 +66,6 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 			MODE="LTE | $PBAND"
 		fi
 		
-		# EARFCN (8-е поле)
 		EARFCN=$(echo "$T1" | awk -F, '{print $8}' | xargs)
 		case "$(echo "$T1" | awk -F, '{print $9}' | xargs)" in
 			0) BANDWIDTH="1.4 MHz" ;;
@@ -105,13 +76,6 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 			5) BANDWIDTH="20 MHz" ;;
 		esac
 
-		# ID СОТЫ - ИЗ CPSI, А НЕ ИЗ CREG.
-		#
-		# Каркас берёт CID из `+CREG`/`+CEREG`, а SIM7100E кладёт туда НОЛЬ:
-		# «+CREG: 2,1,E936,0». Из-за этого в карточке был «ID соты 0» и не
-		# появлялась кнопка карты сот (ей нужен настоящий идентификатор). Тот же
-		# ответ `+CPSI` даёт его пятым полем в ДЕСЯТИЧНОМ виде (231794689 =
-		# 0xDD0E801) - оттуда и берём, если каркас остался с нулём.
 		T=$(echo "$T1" | awk -F, '{print $5}' | xargs)
 		case "$T" in
 			''|*[!0-9]*) ;;
@@ -122,7 +86,6 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 			   fi ;;
 		esac
 
-		# Сигналы
 		T=$(echo "$T1" | awk -F, '{print $11}' | xargs)
 		[ -n "$T" ] && RSRQ=$(echo "$T" | awk '{printf "%0.1f", $1/10}')
 		
@@ -132,19 +95,9 @@ if echo "$MODEL" | grep -qE "7100|7500|7600|7906|7912"; then
 		T=$(echo "$T1" | awk -F, '{print $13}' | xargs)
 		[ -n "$T" ] && RSSI=$(echo "$T" | awk '{printf "%0.1f", $1/10}')
 		
-		# SINR (14-е поле) - ПО ФОРМУЛЕ ИЗ ДОКУМЕНТАЦИИ SIMCOM.
-		#
-		# В `+CPSI` это поле называется RSSNR, и мануал (SIM7000 Series AT
-		# Command Manual V1.04, раздел AT+CPSI) даёт пересчёт прямым текстом:
-		#   SINR = 2 * <RSSNR> - 20, диапазон SINR от -20 до 30.
-		# Здесь стояло «минус 10» - откуда, неизвестно, но занижало примерно на
-		# десять децибел. Сверка с QMI на живом SIM7100E 07.08.2026 (пять пар
-		# подряд): RSSNR 19 -> формула 18 при QMI 19.0; 22 -> 24 при QMI 20.2;
-		# прежний вариант давал 9 и 12 соответственно.
 		T=$(echo "$T1" | awk -F, '{print $14}' | xargs)
 		[ -n "$T" ] && SINR=$((2 * T - 20))
 		
-		# Обязательные переменные агрегации, чтобы JSON не оставался пустым
 		S1BAND="-"; S1PCI="-"; S1EARFCN="-"
 		S2BAND="-"; S2PCI="-"; S2EARFCN="-"
 		S3BAND="-"; S3PCI="-"; S3EARFCN="-"
@@ -256,9 +209,6 @@ else
 	fi
 fi
 
-# ==============================================================================
-# ОБЩИЙ БЛОК ДЛЯ ИНФОРМАЦИИ О МОДЕМЕ
-# ==============================================================================
 OF=$(sms_tool -d $DEVICE at "AT+CGMR")
 FWA=$(echo "$OF" | awk -F [:] '/^\+CGMR: /{print $2}' | xargs)
 if [ -n "$FWA" ]; then

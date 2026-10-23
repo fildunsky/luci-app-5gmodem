@@ -1,5 +1,3 @@
-# BroadMobi BM806U (DLINK DWR-921 C1)
-
 if [ "x$MODE_NUM" = "x7" ]; then
 
 	O=$(sms_tool -d $DEVICE at "AT+BMTCELLINFO")
@@ -32,7 +30,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 	T=$(echo "$O" | awk -F[,:] '/^EARFCN_DL:/ {print $2}' | xargs)
 	if [ -n "$T" ] && [ "x$T" != "x0" ]; then
 		EARFCN="$T"
-#		EARFCN DL="$T"
 	fi
 	T=$(echo "$O" | awk -F[,:] '/^EARFCN_UL:/ {print $2}' | xargs)
 	if [ -n "$T" ] && [ "x$T" != "x0" ]; then
@@ -41,7 +38,6 @@ if [ "x$MODE_NUM" = "x7" ]; then
 
 fi
 
-# Modem
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
@@ -51,30 +47,24 @@ MODELACUT=$(echo $MODELA | sed s/"AT+CGMM "//)
 MODELBCUT=$(echo $MODELB | sed s/"AT+CGMI "//)
 MODEL="$MODELBCUT "$MODELACUT
 
-
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID: /{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PVCUT=$(echo $PV | awk -F 'Vendor=2020 ProdID=2033' '{print $2}' | cut -c-1290)
 if echo "$PVCUT" | grep -q "Driver=qmi_wwan"

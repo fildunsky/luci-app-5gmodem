@@ -2,11 +2,9 @@
 # Copyright 2023-2026 Rafał Wabik (IceG) - From eko.one.pl forum
 # Licensed to the GNU General Public License v3.0.
 
-
 USE_PROCD=1
 START=95
 STOP=01
-
 
 start_service() {
 	. /usr/share/5gmodem/netonly.sh
@@ -16,23 +14,11 @@ start_service() {
     procd_close_instance
 }
 
-
 service_triggers()
 {
         procd_add_reload_trigger "5gmodem"
 }
 
-
-# СЛУЖБУ ГАСИТ PROCD, РУЧНОГО УБИЙЦЫ ЗДЕСЬ БЫТЬ НЕ ДОЛЖНО. Прежний цикл искал
-# в `ps` строку «5gmodem-sms-notify», а сама служба запущена как
-# «/bin/sh /usr/share/5gmodem/sms_led.sh» - этой строки в её командной строке
-# нет. Первым и единственным совпадением оказывался СОБСТВЕННЫЙ init-скрипт
-# (/bin/sh /etc/init.d/5gmodem-sms-notify stop), и kill -9 убивал оболочку
-# rc.common посреди stop_service: до procd_kill дело не доходило, экземпляр
-# оставался в procd, а sms_led.sh продолжал работать. По той же причине не
-# доживал до start_service и restart. rc.common сам зовёт procd_kill после
-# stop_service, а restart - это stop+start (restart_service он не вызывает
-# вовсе, это была мёртвая ветка) (аудит 12.09.2026).
 stop_service() {
 	return 0
 }

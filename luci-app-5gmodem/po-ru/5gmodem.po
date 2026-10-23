@@ -6168,3 +6168,30 @@ msgstr "Плата"
 
 msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
 msgstr "Установите пакет %s, чтобы переключать диапазоны и видеть RSRQ, SINR и соту этого модема."
+
+msgid "Telegram API server"
+msgstr "Сервер Telegram API"
+
+msgid "Leave empty for api.telegram.org. Your own server must forward the Bot API as is, e.g. an SNI proxy or a self-hosted Bot API server."
+msgstr "Пусто — api.telegram.org. Свой сервер должен пропускать Bot API как есть, например SNI-прокси или собственный сервер Bot API."
+
+msgid "Expecting an address starting with http:// or https://"
+msgstr "Нужен адрес, начинающийся с http:// или https://"
+
+msgid "Do not check the certificate"
+msgstr "Не проверять сертификат"
+
+msgid "Only for your own server: accept a self-signed or mismatching certificate."
+msgstr "Только для своего сервера: принимать самоподписанный или несовпадающий сертификат."
+
+msgid "...plus power cycle (USB port or your script)"
+msgstr "...и передёрнуть питание (USB-порт или свой скрипт)"
+
+msgid "Power script"
+msgstr "Скрипт питания"
+
+msgid "Expecting an absolute path made of letters, digits and / . _ -"
+msgstr "Нужен абсолютный путь из букв, цифр и / . _ -"
+
+msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
+msgstr "Для плат без управления питанием USB: исполняемый файл, который снимает и возвращает питание модема (например, дёргает GPIO). Ступень «питание» запускает его вместо отключения USB-порта и передаёт аргументами интерфейс, USB-путь модема и его AT-порт. Вывод скрипта пишется в системный журнал."

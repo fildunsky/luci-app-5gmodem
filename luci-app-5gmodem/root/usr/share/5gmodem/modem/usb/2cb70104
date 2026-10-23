@@ -1,12 +1,9 @@
-# Fibocom FM150-AE / FG150 / NL952
-
 OA=$(sms_tool -d $DEVICE at "AT+CGMM?")
 case "$OA" in *FM16*|*FM19*) _FB_NRBW5=1 ;; esac
 O=$(sms_tool -d $DEVICE at "at+gtccinfo?;+gtcainfo?" | tr -d '\r')
 
 . "$RES/modem/usb/_fibocom_qc_cell"
 
-# Modem
 MODELA=$(echo "$OA" | awk -F [:,] '/\+CGMM/{print $2}' | xargs)
 OB=$(sms_tool -d $DEVICE at "AT+CGMI?")
 MODELB=$(echo "$OB" | awk -F [:,] '/\+CGMI/{print $2}' | xargs)
@@ -16,32 +13,21 @@ MODEL=$(echo $MODELBCUT $MODELA)
 OF=$(sms_tool -d $DEVICE at "AT+GMR?")
 FW=$(echo "$OF" | awk -F[,:] '/\+GMR:/ {print $2}' | xargs)
 
-# International Mobile Equipment Identity (IMEI)
 OAA=$(sms_tool -d $DEVICE at "AT+CGSN?")
 NR_IMEI=$(echo "$OAA" | awk -F[,:] '/\+CGSN:/ {print $2}' | xargs)
 
-# International Mobile Subscriber Identity (IMSI)
 OBB=$(sms_tool -d $DEVICE at "AT+CIMI?")
 NR_IMSI=$(echo "$OBB" | awk -F [,:] '/\+CIMI:/ {print $2}' | xargs)
 
-# Integrated Circuit Card Identifier (ICCID)
 OCC=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_ICCID=$(echo "$OCC" | awk -F [,:] '/\+ICCID:/ {print $2}' | xargs)
 
-# Temp
 OT=$(sms_tool -d $DEVICE at "AT+MTSM=1")
 TM=$(echo "$OT" | awk '/\+MTSM:/{print $2}')
 if [ -n "$TM" ]; then
 	TEMP="$TM &deg;C"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
-
-# СЕТЕВАЯ КАРТА - ТОЛЬКО ЭТОГО МОДЕМА. Раньше порт, которого нет в sysfs (модем
-# отвалился посреди опроса), давал пустой BASE, `grep ""` совпадал с КАЖДЫМ
-# интерфейсом роутера, и протокол брался по драйверу чужой карты. А без
-# границы «/» путь 1-1 совпадал и с соседним модемом на 1-1.2.
 TTY=$(basename "$DEVICE")
 devpath=$(readlink -f "/sys/class/tty/$TTY/device" 2>/dev/null)
 BASE=""

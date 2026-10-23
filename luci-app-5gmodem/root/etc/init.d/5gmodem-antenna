@@ -1,7 +1,4 @@
 #!/bin/sh /etc/rc.common
-#
-# Режим антенн корпуса Notion R281 / Yota C300-1 (см. antenna.sh). На других
-# платах служба ничего не делает.
 
 START=96
 STOP=10

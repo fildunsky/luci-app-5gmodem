@@ -1,40 +1,4 @@
-# Compal RXM-G1 (custom firmware, VID:PID 05c6:90d6, reports via mmcli as
-# "Tri Cascade Inc. VOS_5G", revision contains "RXMG1") - driven through
-# ModemManager (mmcli --set-current-bands) instead of AT, since this
-# firmware exposes NO LTE/NR band-lock AT command at all (confirmed via
-# AT$QCCLAC + AT$QCBANDPREF=? on this exact unit: only legacy 2G/3G/WLAN
-# indices exist, nothing touching LTE/NR bands).
-#
-# IMPORTANT - read before relying on setbands()/setbands5gnsa() below:
-#   - mmcli's own author has warned that playing with --set-current-bands
-#     is risky and not something to do casually; there is also at least
-#     one public report of mmcli segfaulting on --set-current-bands with
-#     a Qualcomm/QMI modem. This has worked correctly in testing on this
-#     specific unit/firmware, but a bad combination on different hardware
-#     could in principle leave the modem in a state that needs a reboot
-#     (or, in the worst case reported elsewhere, worse) to recover from.
-#   - --set-current-bands REPLACES the modem's entire band list, across
-#     ALL technologies (3G/4G/5G) at once - it is not "set only the LTE
-#     bands and leave everything else alone". To avoid silently disabling
-#     3G/5G when the person only meant to change LTE bands (or vice
-#     versa), setbands()/setbands5gnsa() below read the CURRENT full band
-#     list first, keep every band belonging to other technologies as-is,
-#     and only replace the eutran-*/ngran-* portion being targeted.
-
-# _DEVICE НЕ задаём намеренно. У этой прошивки нет ни одной рабочей AT-команды
-# управления, и ни один её ttyUSB не отвечает на голый AT (проверено на живом
-# модеме: ttyUSB7/ttyUSB9 молчат, у ttyUSB8 даже нет device-node). Раньше здесь
-# стоял _DEVICE=/dev/ttyUSB1 - порт ЧУЖОГО модема (FM350): bands.sh считал по нему
-# _PORT_OK=1 и «доказывал» работоспособность Compal наличием порта соседа.
-# Управляемость теперь определяется доступностью mmcli (см. _BAND_VIA в bands.sh).
-#
-# Транспорт управления диапазонами/режимом: "mmcli" - только через ModemManager
-# (у этой прошивки НЕТ AT-команд бенд-лока, см. шапку). bands.sh по этому флагу
-# понимает, что на kernel-прото (mbim/qmi) бендами управлять НЕЛЬЗЯ, и вместо
-# неработающих кнопок UI покажет подсказку «переключите интерфейс на ModemManager».
 _BAND_VIA=mmcli
-# Multi-modem: read/set bands on the ACTIVE modem, not "any" (with two modems
-# "mmcli -m "$_MMIDX"" hits the wrong one -> both tabs show/set the same bands).
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex 2>/dev/null); [ -n "$_MMIDX" ] || _MMIDX=any
 _DEFAULT_LTE_BANDS="1 2 3 4 5 7 8 12 13 14 17 18 19 20 25 26 28 29 30 32 34 38 39 40 41 42 43 46 48 66 71"
 _DEFAULT_5GNSA_BANDS="1 2 3 5 7 8 12 14 20 25 28 38 40 41 48 66 71 77 78 79"
@@ -43,17 +7,6 @@ getinfo() {
 	echo "Compal RXM-G1"
 }
 
-# --- Фолбэк ЧТЕНИЯ через qmicli (без ModemManager) ---------------------------
-# Когда интерфейс на kernel-протоколе (proto=qmi/mbim), mm-inhibit.sh намеренно
-# прячет модем от ModemManager - иначе MM и uqmi дерутся за канал cdc-wdm.
-# mmcli тогда пуст, но ЧИТАТЬ диапазоны при этом можно напрямую по QMI:
-# --nas-get-system-selection-preference отдаёт и LTE-, и NR-предпочтения
-# (проверено на живом Compal в композиции QMI).
-# ЗАПИСЬ так не сделать: в этой сборке libqmi у --nas-set-system-selection-preference
-# нет TLV предпочтения диапазонов (только режимы и выбор сети), а отдельной
-# опции установки бендов в CLI нет вовсе. Поэтому setbands*/setmode остаются на
-# mmcli, а bands.sh в этом случае помечает состояние readonly - UI показывает
-# кнопки неактивными вместо тех, что молча ничего не делают.
 _QWDM=$(/usr/share/5gmodem/modemswitch.sh wdm 2>/dev/null)
 [ -c "$_QWDM" ] || _QWDM=/dev/cdc-wdm0
 
@@ -66,7 +19,6 @@ _qmi_ssp() {
 	qmicli -d "$_QWDM" -p --nas-get-system-selection-preference 2>/dev/null
 }
 
-# $1 - метка строки в выводе qmicli, $2 - префикс в формате mmcli
 _qmi_bands_of() {
 	echo "$_SSP" | sed -n "s/^[[:space:]]*$1: *'\([^']*\)'.*/\1/p" | head -1 \
 		| tr ',' ' ' | tr ' ' '\n' | while read -r _b; do
@@ -77,24 +29,18 @@ _qmi_bands_of() {
 _qmi_current_bands() {
 	_SSP=$(_qmi_ssp)
 	[ -n "$_SSP" ] || return 0
-	# extended - надмножество обычного LTE-списка (в нём есть B46/48/66/71)
 	_l=$(_qmi_bands_of "LTE band preference (extended)" "eutran-")
 	[ -n "$_l" ] || _l=$(_qmi_bands_of "LTE band preference" "eutran-")
 	_n=$(_qmi_bands_of "NR5G NSA band preference" "ngran-")
 	echo "$_l $_n" | xargs
 }
 
-# Единая точка чтения текущих диапазонов: через неё идут getbands,
-# getbands5gnsa и _mm_other_bands, поэтому фолбэк достаточно вписать здесь.
 _mm_current_bands() {
 	_r=$(mmcli -m "$_MMIDX" -K 2>/dev/null | awk -F': *' '/^modem\.generic\.current-bands\.value/{print $2}' | xargs)
 	[ -n "$_r" ] || _r=$(_qmi_current_bands)
 	echo "$_r"
 }
 
-# returns the modem's full current band list, MINUS any band matching
-# the given prefix (e.g. "eutran-" or "ngran-") - used to preserve other
-# technologies' bands when changing just one technology's bands
 _mm_other_bands() {
 	PREFIX="$1"
 	for B in $(_mm_current_bands); do
@@ -115,10 +61,6 @@ _mm_join_pipe() {
 }
 
 getsupportedbands() {
-	# СТАТИЧНЫЙ список из конфига (а не из mmcli): кнопки диапазонов должны
-	# показываться ВСЕГДА, даже когда mmcli завис/не отдаёт бенды - иначе на
-	# зависшем модеме их не восстановить через приложение. Текущий выбор
-	# (подсветку) даёт живой getbands() ниже; применение - setbands() через mmcli.
 	echo "$_DEFAULT_LTE_BANDS"
 }
 
@@ -151,20 +93,11 @@ setbands() {
 }
 
 getsupportedbands5gnsa() {
-	# СТАТИЧНЫЙ список из конфига (см. getsupportedbands): кнопки 5G-диапазонов
-	# показываем всегда, независимо от доступности mmcli.
 	echo "$_DEFAULT_5GNSA_BANDS"
 }
 
-# ---- Режим сети (2G/3G/4G/5G) --------------------------------------------
-# У этой прошивки нет AT-переключения RAT, поэтому режим ставим через
-# ModemManager (--set-allowed-modes/--set-preferred-mode). Список режимов
-# СТАТИЧНЫЙ (из конфига) - кнопки видны всегда, пока управление доступно
-# (см. _BAND_VIA + гейт в bands.sh), даже если модем сейчас молчит: это путь
-# восстановления модема, ушедшего в режим, где нет сети.
 _MODES="1:Auto 2:3G 3:3G+4G 4:4G 5:4G+5G 6:5G"
 
-# id -> "<allowed> <preferred>" для mmcli
 _mm_modes_for_id() {
 	case "$1" in
 		1) echo "2g|3g|4g|5g 5g" ;;
@@ -181,7 +114,6 @@ getsupportedmodes() {
 }
 
 getmode() {
-	# "modem.generic.current-modes : allowed: 3g, 4g, 5g; preferred: 5g"
 	AL=""
 	_MP=$(_qmi_ssp | sed -n "s/^[[:space:]]*Mode preference: *'\([^']*\)'.*/\1/p" | head -1)
 	if [ -z "$_MP" ]; then
@@ -189,8 +121,6 @@ getmode() {
 			| sed -n 's/^modem\.generic\.current-modes *: *//p' | head -1 \
 			| sed -n 's/.*allowed: *\([^;]*\).*/\1/p' | tr -d ' ')
 	fi
-	# Нет mmcli (интерфейс на uqmi/umbim) - читаем режим по QMI и приводим к
-	# тому же виду "2g,3g,4g,5g", который разбирает case ниже.
 	if [ -z "$AL" ]; then
 		if [ -n "$_MP" ]; then
 			_a=""
@@ -241,7 +171,6 @@ setmode() {
 		mmcli -m "$_MMIDX" --set-allowed-modes="$M"
 	fi
 }
-
 
 getbands5gnsa() {
 	for B in $(_mm_current_bands); do

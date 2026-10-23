@@ -1,10 +1,4 @@
 #!/bin/sh
-# luci-app-5gmodem: двухстековым интерфейсам ModemManager - начальный EPS-носитель
-# по параметрам интерфейса (init_epsbearer=default). Без него штатный
-# modemmanager.sh очищает начальный носитель, модем прикрепляется только с IPv4
-# и IPv6 не поднимается (см. mkiface.sh). Только proto=modemmanager с
-# iptype=ipv4v6 и без своей политики; сеть не перезапускаем - опция вступит в
-# силу со следующим подключением интерфейса.
 
 soc_iface() {
 	case "$(uci -q get "network.$1.device")" in qcom-soc|*.remoteproc) return 0 ;; esac

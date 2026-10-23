@@ -1,4 +1,3 @@
-# Fibocom FM150 / FG150 / NL952 / FM160 (Qualcomm)
 _DEVICE=""
 
 . $RES/_fibocom_fm350_common

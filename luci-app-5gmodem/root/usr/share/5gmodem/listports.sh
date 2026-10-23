@@ -1,16 +1,5 @@
 #!/bin/sh
-#
-# List modem serial / control ports with the USB device that owns each one
-# (vid:pid, product name, USB topology path). The UI uses this to LABEL the
-# AT-port drop-downs so it is clear which /dev/ttyUSB* belongs to which modem
-# when several modems are connected at once.
-#
-# Output: a JSON object  { "<port>": {"vidpid","product","path"}, ... }
-#
 
-# Тот же фильтр «это не модем», что и в listmodems.sh: переходник USB-UART не
-# должен предлагаться в выпадающих списках AT-порта - выбрав его, пользователь
-# получил бы AT-команды в консоль соседней железки.
 [ -r /usr/share/5gmodem/notmodem.sh ] && . /usr/share/5gmodem/notmodem.sh
 
 esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -20,7 +9,6 @@ printf '{'
 for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -e "$t" ] || continue
 	b=$(basename "$t")
-	# walk up from the char device to the usb_device node (has idVendor)
 	p=$(readlink -f "/sys/class/tty/$b/device" 2>/dev/null)
 	[ -n "$p" ] || p=$(readlink -f "/sys/class/usbmisc/$b/device" 2>/dev/null)
 	[ -n "$p" ] || p=$(readlink -f "/sys/class/net/$b/device" 2>/dev/null)
@@ -28,8 +16,6 @@ for t in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
 	[ -f "$p/idVendor" ] || continue
 	vid=$(cat "$p/idVendor" 2>/dev/null)
 	pid=$(cat "$p/idProduct" 2>/dev/null)
-	# Не модем (переходник USB-UART, счётчик, принтер) - его порт не должен
-	# попадать в выпадающие списки AT-портов. Признаки - см. notmodem.sh.
 	command -v usb_is_modem >/dev/null 2>&1 && ! usb_is_modem "$p" && continue
 	prod=$(esc "$(cat "$p/product" 2>/dev/null)")
 	path=$(basename "$p" 2>/dev/null)

@@ -2,11 +2,6 @@
 'require form';
 'require network';
 
-// LuCI protocol handler for the "fibocom" netifd proto shipped by
-// luci-app-5gmodem (AT-dialed RNDIS/ECM modems such as Fibocom FM350-GL that
-// ModemManager cannot drive). Without this handler the Network > Interfaces
-// page shows the interface as "unsupported" and it flickers out of the list.
-
 network.registerPatternVirtual(/^fibocom-.+$/);
 network.registerErrorCode('NO_NETDEV',      _('No usbnet device found for the modem'));
 network.registerErrorCode('NO_AT_PORT',     _('No AT control port found'));
@@ -78,8 +73,6 @@ return network.registerProtocol('fibocom', {
 		o.value('IPV4V6', _('IPv4+IPv6'));
 		o.value('IPV6', _('IPv6'));
 
-		// These are managed by the 5G Modem app (mkiface.sh) - declared here so
-		// editing the interface in LuCI does not drop them on save.
 		o = s.taboption('advanced', form.Value, 'usbpath', _('USB path'),
 			_('Stable USB topology path of the modem (managed by the 5G Modem app)'));
 

@@ -1,12 +1,7 @@
-# Sierra Wireless EM7455 / MC7455 / EM7430 / MC7430 - generic-PID 1199:9071
-# (MDM9x30). EM7305/MC7305 живут на 1199:9041 (свой файл), DW5811e - на 413c:81b6.
-
 O=$(sms_tool -d $DEVICE at "at!gstatus?")
 
-# Разбор GSTATUS - общий с остальными Sierra на Gobi/Snapdragon (см. файл).
 . "$RES/modem/usb/_sierra_gobi_lte"
 
-# Modem
 FWA=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -s "\n" | xargs)
 FW=$(echo $FWA | sed s/"AT+CGMR "//)
 
@@ -17,32 +12,25 @@ MODELACUT=$(echo $MODELA | sed s/"AT+CGMM "//)
 MODELBCUT=$(echo $MODELB | sed s/"AT+CGMI "// | cut -f1 -d",")
 MODEL="$MODELBCUT "$MODELACUT
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+CGSN" | xargs)
 NR_I=$(echo "$O" | sed s/"AT+CGSN "//)
 if [ -n "$NR_I" ]; then
         NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(echo "$O" | sed s/"AT+CIMI "//)
 if [ -n "$NR_C" ]; then
         NR_IMSI="$NR_C"
 fi
 
-#  Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F[,:] '/^ICCID: /{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
         NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices)
-# ID берём у ОПРАШИВАЕМОГО устройства: профиль делят несколько vid:pid (тонкие
-# файлы-сателлиты), а с прибитым ProdID под чужим ID протокол не определялся.
 _PVID="1199"; _PPID="9071"
 if [ -n "$_POLL_AM" ] && [ -f "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
 	_PVID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)

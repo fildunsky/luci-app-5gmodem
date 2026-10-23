@@ -1,7 +1,3 @@
-# ZTE MF286
-# ZTE MF286A
-
-
 O=$(sms_tool -d $DEVICE at "at+zrssi;+zcellinfo?;+zcainfo?")
 
 case "$MODE_NUM" in
@@ -77,29 +73,24 @@ MODELDCUT=$(echo $MODELD | cut -c 9-)
 
 MODEL="$MODELB "$MODELDCUT
 
-# International Mobile Equipment Identity (IMEI)
 O=$(sms_tool -d $DEVICE at "AT+GSN" | xargs)
 NR_I=$(digits_of "$O" 15 17)
 if [ -n "$NR_I" ]; then
 	NR_IMEI="$NR_I"
 fi
 
-# International Mobile Subscriber Identity (IMSI)
 O=$(sms_tool -d $DEVICE at "AT+CIMI" | xargs)
 NR_C=$(digits_of "$O" 14 16)
 if [ -n "$NR_C" ]; then
 	NR_IMSI="$NR_C"
 fi
 
-# Integrated Circuit Card Identifier (ICCID)
 O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 if [ -n "$NR_D" ]; then
 	NR_ICCID="$NR_D"
 fi
 
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices 2>/dev/null)
 PV85=$(echo $PV | awk -F 'Vendor=19d2 ProdID=1485' '{print $2}' | cut -c-1220)
 if [ -n "$PV85" ]; then
@@ -127,8 +118,3 @@ if [ -n "$PV32" ]; then
     PROTO="ecm"
     fi
 fi
-
-#T=$(echo "$O" | awk -F[,:] '/^\+ZDON/ {print $2}' | xargs)
-#if [ -n "$T" ] && [ -z "$FORCE_PLMN" ]; then
-#       COPS="$T"
-#fi

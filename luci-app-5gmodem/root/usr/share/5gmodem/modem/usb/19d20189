@@ -1,5 +1,3 @@
-# ZTE MF28D/MF290
-
 O=$(sms_tool -d $DEVICE at "at+zrssi?;+zcellinfo?")
 
 case "$MODE_NUM" in
@@ -23,10 +21,7 @@ case "$MODE_NUM" in
 		RSRP="$T"
 		T=$(echo "$O" | awk -F[,:] '/^\+ZRSSI/ {print $3}' | xargs)
 		RSRQ="$T"
-#		T=$(echo "$O" | awk -F[,:] '/^\+ZRSSI/ {print $5}' | xargs)
-#		[ -n "$ADDON" ] && ADDON="$ADDON,"
 		SINR="$T"
-#		ADDON="$ADDON"'{"SINR":"'$T' dB"}'
 		T=$(echo "$O" | awk -F[,:\;] '/^\+ZCELLINFO/ {print $3}' | xargs)
 		if [ -n "$T" ]; then
 			PCI="$T"

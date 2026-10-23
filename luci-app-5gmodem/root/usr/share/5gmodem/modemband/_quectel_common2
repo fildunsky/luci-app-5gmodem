@@ -1,23 +1,13 @@
-# ЗАПИСЬ ДИАПАЗОНОВ ПРИМЕНЯЕТСЯ ВЖИВУЮ. Мануал Quectel на RM5x0N/RG5x0F
-# (5.24.2-5.24.5) про lte_band, nsa_nr5g_band, nr5g_band и mode_pref: «The
-# command takes effect immediately». Проверено на RM551E-GL (отчёт #24): смена
-# NSA 77<->78 без реконнекта, сессия данных жива, NR-нога уходит и приходит за
-# секунды. Модели 2c7c:0800 (SDX55) это не проверяли - их профили ставят
-# reconnect после подключения этого файла.
 _BANDS_APPLY_LIVE=1
 
-# Запись одного списка: неизменённый не пишем (NVM модема), результат сверяем
-# обратным чтением - sms_tool at на успешную запись иногда не печатает ничего.
-# 0 - записано (или прочитать назад не удалось), 1 - нечего писать или модем
-# ответил другим списком.
 _qnw_norm() {
 	echo "$1" | tr ': ' '\n\n' | grep -E '^[0-9]+$' | sort -n | tr '\n' ':' | sed 's/:$//'
 }
-_qnw_read() {   # $1 - ключ
+_qnw_read() {
 	_qnw_norm "$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"$1\"" 2>/dev/null \
 		| awk -F, '/^\+QNWPREFCFG:/{print $2}' | tr -d '\r ')"
 }
-_qnw_write() {   # $1 - ключ (lte_band ...), $2 - список через «:»
+_qnw_write() {
 	_qw_want=$(_qnw_norm "$2")
 	[ -n "$_qw_want" ] || return 1
 	[ "$(_qnw_read "$1")" = "$_qw_want" ] && return 1
@@ -33,8 +23,6 @@ getsupportedbands() {
 }
 
 getbands() {
-# +QNWPREFCFG: "lte_band",1:3:7:8:20:28:38
-
 	O=$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"lte_band\"")
 	echo "$O" | awk -F, '/^\+QNWPREFCFG:/{gsub(":"," ");print $2}' | tr -d '\r'
 }
@@ -60,8 +48,6 @@ getsupportedbands5gnsa() {
 }
 
 getbands5gnsa() {
-# +QNWPREFCFG: "nsa_nr5g_band",1:2:3:5:7:8:12:20:25:28:38:40:41:48:66:71:77:78:79
-
 	O=$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"nsa_nr5g_band\"")
 	echo "$O" | awk -F, '/^\+QNWPREFCFG:/{gsub(":"," ");print $2}' | xargs
 }
@@ -87,8 +73,6 @@ getsupportedbands5gsa() {
 }
 
 getbands5gsa() {
-# +QNWPREFCFG: "nr5g_band",1:2:3:5:7:8:12:20:25:28:38:40:41:48:66:71:77:78:79
-
 	O=$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"nr5g_band\"")
 	echo "$O" | awk -F, '/^\+QNWPREFCFG:/{gsub(":"," ");print $2}' | xargs
 }
@@ -109,28 +93,10 @@ setbands5gsa() {
 	_qnw_write nr5g_band "$T"
 }
 
-# --- Привязка к соте (LTE) ---------------------------------------------------
-#
-# ПОЧЕМУ ЗДЕСЬ. У 5G-Quectel привязки не было вовсе, хотя команда в прошивке
-# есть и на форуме ею пользуются:
-#   AT+QNWLOCK="common/4g"                - показать текущий лок
-#   AT+QNWLOCK="common/4g",1,<earfcn>,<pci> - привязать к одной соте
-#   AT+QNWLOCK="common/4g",0              - снять
-#   AT+QNWLOCK="save_ctrl",1,1            - чтобы лок пережил перезагрузку
-# Привязка К ЧАСТОТЕ этой командой не выражается: EARFCN и PCI - обязательная
-# пара, а PCI=0 модем понял бы буквально. Поэтому вариант "arfcn" отклоняем
-# ответом "Unsupported" - bands.sh по нему снимет запомненный выбор, и страница
-# не покажет привязку, которой в модеме нет.
-# 5G-лок (common/5g) НЕ делаем: подтверждённого применения нет, только форма
-# ответа на AT+QNWLOCK=?.
-# ЖИВОГО ДАМПА ЧТЕНИЯ НЕТ - разбираем осторожно: не разобрали, значит молчим
-# ("Unsupported"), а не показываем пустую привязку с нерабочей кнопкой.
-# (ревью RM520N 13.09.2026, форум 4pda)
 getcelllock() {
 	_gcl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\"" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+QNWLOCK: *"common\/4g", *//p' | head -1)
 	[ -n "$_gcl_o" ] || { echo "Unsupported"; return; }
-	# Первое поле - число залоченных сот: 0 = лока нет.
 	_gcl_n=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$1); print $1}')
 	case "$_gcl_n" in
 		''|*[!0-9]*) echo "Unsupported"; return ;;
@@ -140,11 +106,9 @@ getcelllock() {
 	_gcl_pc=$(echo "$_gcl_o" | awk -F, '{gsub(/ /,"",$3); print $3}')
 	case "$_gcl_ar" in ''|*[!0-9]*) echo "off"; return ;; esac
 	case "$_gcl_pc" in ''|*[!0-9]*) echo "off"; return ;; esac
-	# Сот может быть до трёх - показываем первую: контракт знает одну.
 	echo "cell $_gcl_ar $_gcl_pc"
 }
 
-# setcelllock off | cell <earfcn> <pci>  (контракт bands.sh)
 setcelllock() {
 	case "$1" in
 		off)
@@ -156,7 +120,6 @@ setcelllock() {
 			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",1,$2,$3" 2>&1 | tr -d '\r')
 			;;
 		arfcn)
-			# Формы «только частота» у QNWLOCK нет - см. комментарий выше.
 			echo "Unsupported"; return 1 ;;
 		*) return 1 ;;
 	esac
@@ -165,27 +128,15 @@ setcelllock() {
 			logger -t 5gmodem "celllock: firmware rejected QNWLOCK: $(echo "$_scl_o" | tr '\n' ' ' | head -c 120)"
 			echo "Unsupported"; return 1 ;;
 	esac
-	# Без save_ctrl привязка живёт только до перезагрузки модуля.
 	sms_tool -d $_DEVICE at "at+qnwlock=\"save_ctrl\",1,1" >/dev/null 2>&1
 	return 0
 }
 
-# --- Режим сети (RAT) --------------------------------------------------------
-#
-# AT+QNWPREFCFG="mode_pref" -> +QNWPREFCFG: "mode_pref",AUTO. Набор EC2x
-# (at+qcfg="nwscanmode", см. _quectel_common) этим модемам не подходит, поэтому
-# селектор режима у 5G-Quectel был пуст.
-# ЗНАЧЕНИЯ СЛОВЕСНЫЕ, А НАРУЖУ ОТДАЁМ ЧИСЛА: в списке режимов bands.sh пара
-# «id:подпись» режется по первому двоеточию, и id «LTE:NR5G» разорвало бы пару -
-# подписью стало бы «NR5G». Слова прошивки держим внутри профиля.
-# 5G-only (NR5G) на форуме не встречается, но он есть в наборе команд и может
-# вернуться при чтении - поэтому в списке он тоже есть.
-# (ревью RM520N 13.09.2026, форум 4pda)
 getsupportedmodes() {
 	echo "0:Auto 1:3G 2:4G 3:4G+5G 4:5G"
 }
 
-_qmode_word() {   # id -> слово прошивки
+_qmode_word() {
 	case "$1" in
 		0) echo "AUTO" ;;
 		1) echo "WCDMA" ;;
@@ -198,7 +149,6 @@ _qmode_word() {   # id -> слово прошивки
 getmode() {
 	_gm=$(sms_tool -d $_DEVICE at "at+qnwprefcfg=\"mode_pref\"" 2>/dev/null | tr -d '\r' \
 		| sed -n 's/^+QNWPREFCFG: *"mode_pref", *//p' | head -1 | tr -d ' ')
-	# Порядок веток важен: LTE:NR5G содержит и LTE, и NR5G.
 	case "$_gm" in
 		AUTO*)   echo 0 ;;
 		*NR5G*)  case "$_gm" in *LTE*) echo 3 ;; *) echo 4 ;; esac ;;

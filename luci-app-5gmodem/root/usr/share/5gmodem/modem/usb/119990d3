@@ -1,17 +1,3 @@
-# Sierra Wireless EM9190
-
-# AT!GSTATUS? отдаёт ВСЁ одним ответом: температуру, режим, несущие PCC/SCC1..3
-# с полосой и каналом, уровни по КАЖДОМУ приёмному тракту (Rx0..Rx3), TAC,
-# Cell ID и секцию NR5G. Раньше здесь стояло около тридцати отдельных вызовов
-# awk по одному и тому же тексту; разбираем один раз и отдаём готовые пары
-# «ключ значение». Значения от модема в шелл не выполняются (никакого eval) -
-# читаются как данные.
-# ОТВЕТ РВЁТСЯ, КОГДА ПОРТ ДЕЛИМ С ModemManager. У этого модуля MM держит
-# ttyUSB0 своим AT-портом и опрашивает его сам; наш at!gstatus? тогда приходит
-# оборванным на полуслове - явление описано владельцем EM9190 и на десктопном
-# Linux, и на OpenWrt. Признак целого ответа - завершающее OK/ERROR: без него
-# читаем ещё раз, прежде чем разбирать. Обрывок НЕ портит данные (разбор идёт
-# по меткам, чего нет - того не трогаем), но и толку от него нет.
 _SG_RAW=$(sms_tool -d $DEVICE at "at!gstatus?" 2>/dev/null | tr -d '\r')
 case "$_SG_RAW" in
 	*OK*|*ERROR*) ;;
@@ -19,10 +5,6 @@ case "$_SG_RAW" in
 esac
 
 _SG=$(printf '%s\n' "$_SG_RAW" | awk '
-	# Значение после метки: метка ищется ПОДСТРОКОЙ (не регулярным выражением -
-	# в метках есть скобки вида "NR5G RSRP (dBm)"), затем пропускаются
-	# необязательная скобка с единицами и двоеточие. $2 - какой по счёту токен
-	# нужен: у TAC и Cell ID в строке идут hex и (dec).
 	function after(lbl, k,   p, s, a, n) {
 		p = index($0, lbl)
 		if (p == 0) return ""
@@ -36,8 +18,6 @@ _SG=$(printf '%s\n' "$_SG_RAW" | awk '
 		return (s == "---" || s == "--") ? "" : s
 	}
 	function put(k, v) { if (v != "") V[k] = v }
-	# Лучший из приёмных трактов: у модема их до четырёх, и в общую метрику идёт
-	# сильнейший - именно его отдаёт QMI как RSRP соты (сверено с signal-info).
 	function best(k, v) { if (v != "" && (!(k in V) || v + 0 > V[k] + 0)) V[k] = v }
 
 	/Temperature/            { put("TEMP",   after("Temperature")) }
@@ -78,14 +58,11 @@ _SG=$(printf '%s\n' "$_SG_RAW" | awk '
 	}
 ')
 
-# Значение по ключу - в $_V. Ключей здесь четыре десятка, и подстановка команд
-# на каждый ($(...)) стоила бы столько же форков на КАЖДЫЙ опрос; разбор уже
-# сделан, осталось пройти по готовым парам.
 _sg() {
 	_V=""
 	_sg_o=$IFS; IFS='
 '
-	set -f            # ответ модема - данные, а не шаблон имён файлов
+	set -f
 	for _sg_l in $_SG; do
 		case "$_sg_l" in
 			"$1 "*) _V=${_sg_l#* }; break ;;
@@ -120,8 +97,6 @@ _sg RSRQ; T=$_V;  [ -n "$T" ] && RSRQ="$T"
 _sg SINR; T=$_V;  [ -n "$T" ] && SINR="$T"
 _sg TXPWR; T=$_V; [ -n "$T" ] && TXPOWER="$T dBm"
 
-# Первичная несущая. Полосу кладём и отдельным полем: страница берёт её оттуда,
-# когда в строке диапазона её нет.
 _sg PBAND; T=$_V
 if [ -n "$T" ]; then
 	_sg PBW; T1=$_V
@@ -133,9 +108,6 @@ if [ -n "$T" ]; then
 fi
 _sg PEARFCN; T=$_V; [ -n "$T" ] && EARFCN="$T"
 
-# АНТЕННЫЕ ПОРТЫ. Формат общий с Telit #LAPS - "порт:rsrp:rsrq[:rssi]". RSRQ по
-# трактам модем не даёт (только общий по соте), поэтому поле пустое, а RSSI
-# наоборот есть - он и показывает, приёмник с антенной или без неё.
 ANTPORTS=""
 for _ap in 0 1 2 3; do
 	_sg "ANT$_ap"; T=$_V
@@ -145,11 +117,6 @@ for _ap in 0 1 2 3; do
 	ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_ap:${T%:*}::${T#*:}"
 done
 
-# ДОПОЛНИТЕЛЬНЫЕ НЕСУЩИЕ. Модем перечисляет их даже когда сеть их только
-# сконфигурировала, но не включила (state INACTIVE): такие показываем - их
-# видно и они объясняют, почему скорость не растёт, - но за работающую
-# агрегацию НЕ выдаём. Прежний разбор ловил "ACTIVE" подстрокой и потому считал
-# активными ВСЕ, включая INACTIVE.
 _CANUM=0
 _CABANDS=""
 _HAVE_LTE_SCC=""
@@ -177,8 +144,6 @@ for _cc in 1 2 3 4; do
 	esac
 done
 
-# NR-несущая в EN-DC занимает первый СВОБОДНЫЙ слот SCC - так же, как у Fibocom:
-# таблица агрегации одна на обе технологии, отдельного места под 5G в ней нет.
 if [ -n "$_NRBAND" ]; then
 	_nb="$(band5g ${_NRBAND#n})"
 	_sg NRBW; T1=$_V
@@ -198,26 +163,13 @@ if [ -n "$_NRBAND" ]; then
 	fi
 fi
 
-# AT!LTEINFO? добирает то, чего нет в GSTATUS: SINR вторичных несущих (секция
-# CA SCell) и СОСЕДНИЕ СОТЫ (Serving/IntraFreq/InterFreq) - на kernel-прото
-# qmi/mbim канал QMI занят netifd, и обычный источник соседей (cell-location-
-# info) недоступен, LTEINFO - единственный путь (разбор владельца EM9190,
-# 18.08.2026). Одна команда на опрос, тот же ответ разбирается дважды.
 _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r')
 case "$_LI" in
 	*OK*|*ERROR*) ;;
 	*) _LI=$(sms_tool -d $DEVICE at "at!lteinfo?" 2>/dev/null | tr -d '\r') ;;
 esac
 
-# Соседи. Формат ответа - таблицы с шапками; колонки числовые:
-#   Serving:   EARFCN MCC MNC TAC CID Bd D U SNR PCI RSRQ RSRP RSSI RXLV (14)
-#   IntraFreq: PCI RSRQ RSRP RSSI RXLV (5) - частота и бенд как у serving
-#   InterFreq: EARFCN ThrL ThrH Prio PCI RSRQ RSRP RSSI RXLV (9) - бенд неизвестен
-# JSON собирается в формате QMI-пути (см. 5gmodem.sh _qr_nb): каркас берёт
-# NEIGHBORS профиля, а QMI-фолбэк заполняет только пустое.
 _LINB=$(printf '%s\n' "$_LI" | awk '
-	# Обслуживающая сота есть и в IntraFreq (та же частота) - без отсева она
-	# шла в таблицу дважды, второй раз «соседом» с кнопкой лока (ревью 13.09.2026).
 	function emit(bd, ef, pc, rq, rp, rs, sv,   key) {
 		if (pc == "" || pc !~ /^[0-9]+$/) return
 		key = ef "_" pc
@@ -248,10 +200,6 @@ if [ -z "$PCI" ] || [ "$PCI" = "-" ]; then
 	[ -n "$_li_pci" ] && PCI="$_li_pci"
 fi
 
-# SINR вторичных LTE-несущих - секция CA SCell того же ответа: GSTATUS по SCC
-# отдаёт только RSRP/RSSI, а фронт поля s<n>sinr уже читает.
-# Строка секции: EARFCN SCID Bd ST D U Mdl Mul PCI RSRP RSSI SINR (12 колонок).
-# Привязка к слоту - по EARFCN (уникален на несущую), запасной путь - по SCID.
 if [ -n "$_HAVE_LTE_SCC" ]; then
 	_LIMAP=$(printf '%s\n' "$_LI" | awk \
 		-v e1="$S1EARFCN" -v e2="$S2EARFCN" -v e3="$S3EARFCN" -v e4="$S4EARFCN" '
@@ -279,12 +227,6 @@ $_LIMAP
 EOF
 fi
 
-# ЯРЛЫК ТЕХНОЛОГИИ - ПО ФАКТУ НЕСУЩИХ. Модем пишет ENDC, как только сеть
-# разрешила двойное подключение, - но пока NR-несущей нет, это обычная LTE
-# (тот же урок, что с AcT=13 у Fibocom).
-# Молчащий порт (занят, коллизия) ярлык НЕ ТРОГАЕТ: каркас уже положил в $MODE
-# значение по +COPS, и присвоение пустой строки стёрло бы его - в карточке
-# оставался бы прочерк вместо «4G».
 case "$_SYSMODE" in
 	'')    [ -n "$_NRBAND" ] && MODE="5G NSA" ;;
 	ENDC)  [ -n "$_NRBAND" ] && MODE="5G NSA" || MODE="LTE" ;;
@@ -299,14 +241,7 @@ if [ -n "$_SYSMODE" ] && [ -n "$PBAND" ]; then
 	[ -n "$_NRBAND" ] && MODE="$MODE + $(band5g ${_NRBAND#n})"
 fi
 
-# Modem
-
-
-# Protocol
-# DRIVER=QMI_WWAN & DRIVER=CDC_MBIM & DRIVER=CDC_ETHER
 PV=$(cat /sys/kernel/debug/usb/devices)
-# ID берём у ОПРАШИВАЕМОГО устройства: профиль делят несколько vid:pid (тонкие
-# файлы-сателлиты), а с прибитым ProdID под чужим ID протокол не определялся.
 _PVID="1199"; _PPID="90d3"
 if [ -n "$_POLL_AM" ] && [ -f "/sys/bus/usb/devices/$_POLL_AM/idVendor" ]; then
 	_PVID=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)

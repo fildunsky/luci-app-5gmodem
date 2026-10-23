@@ -1,14 +1,3 @@
-# 05c6:90d6 Compal RXM-G1 on a custom firmware
-# (reports as "Tri Cascade Inc. VOS_5G" to AT+CGMI/CGMM,
-# revision string contains "RXMG1") -> driven through ModemManager
-# (mmcli) + qmicli over QMI instead of raw AT,
-# since AT round-trips here are far slower than asking the already-
-# running ModemManager daemon / qmi-proxy (confirmed on this exact
-# unit: ~25ms per mmcli/qmicli call vs ~100-300ms per AT command)
-
-# Multi-modem: target the ACTIVE modem (by USB path), not "any" / the first
-# cdc-wdm - otherwise with two modems mmcli/qmicli read the WRONG modem (bands,
-# signal, everything). Fall back to any / cdc-wdm0 for the single-modem case.
 _MMIDX=$(/usr/share/5gmodem/modemswitch.sh mmindex $_POLL_AM 2>/dev/null)
 _WDM=$(/usr/share/5gmodem/modemswitch.sh wdm $_POLL_AM 2>/dev/null)
 if [ -z "$_POLL_AM" ]; then
@@ -16,30 +5,15 @@ if [ -z "$_POLL_AM" ]; then
 	[ -n "$_WDM" ] || _WDM=/dev/cdc-wdm0
 fi
 
-# QMI-over-MBIM: этот профиль обслуживает Compal и в MBIM (05c6:90d6), и в QMI
-# (1e2d:00b7, 05c6:9025 - см. вызывающие профили). На MBIM-устройстве qmicli
-# должен открывать канал в mbim-режиме. Новые libqmi (25.12 = 1.36) это
-# авто-детектят, и всё работает без флага, но на 24.10 (1.34) авто-детект слабее -
-# ставим --device-open-mbim ЯВНО. КРИТИЧНО добавлять его ТОЛЬКО для cdc_mbim: на
-# qmi_wwan (QMI-композиции) этот флаг сломал бы открытие устройства. Драйвер
-# берём из /sys самого cdc-wdm - не зависит от того, жив ли ModemManager.
 _MBIM_OPT=""
 case "$(readlink -f "/sys/class/usbmisc/${_WDM##*/}/device/driver" 2>/dev/null)" in
 	*/cdc_mbim) _MBIM_OPT="--device-open-mbim" ;;
 esac
 
-# _IS_COMPAL может быть выставлен ВЫЗЫВАЮЩИМ профилем (см. 05c69025): в тех
-# композициях модем представляется generic-идентификатором Qualcomm, и там
-# вызывающий уже опознал его сам. Своё детектирование тогда не нужно.
 [ "$_IS_COMPAL" = "1" ] || _IS_COMPAL=0
 _MM_OK=0
 if command -v mmcli >/dev/null 2>&1; then
 	_MM_K=$(mmcli -m "$_MMIDX" -K 2>/dev/null)
-	# И ПО МОДЕЛИ (SG500M2-X), а не только по строке прошивки RXMG1: у ПРОТОТИПА
-	# (1e2d:00b7) revision пуст ("--"), RXMG1 в дампе нет вовсе - _MM_OK оставался
-	# нулём, и весь mmcli-путь ниже (TAC/CID через --location-get, IMEI, модель)
-	# не выполнялся. AT-фолбэк ему не замена: под ModemManager AT-порт нам не
-	# принадлежит, и в карточке «Информация о соте» пустовали TAC/Cell ID.
 	case "$_MM_K" in
 		*RXMG1*|*SG500M2-X*)
 			_IS_COMPAL=1
@@ -47,23 +21,12 @@ if command -v mmcli >/dev/null 2>&1; then
 			;;
 	esac
 fi
-# umbim/uqmi mode: ModemManager is disabled, so mmcli returns nothing and
-# _MM_OK stays 0. Still recognise the Compal so the rich qmicli/AT path below
-# runs instead of falling through to the T99W175 "at^debug?" branch (which this
-# firmware does not answer -> empty bands). Опознание - через ОБЩИЙ помощник
-# (iscompal.sh): он сам переберёт дескриптор (в двух местах - debugfs может быть
-# не смонтирована) и модель через QMI/mmcli/AT для композиций, где дескриптор
-# generic. Блок mmcli выше оставлен как есть: _MM_K и _MM_OK нужны и сами по
-# себе - это признак того, что через mmcli вообще можно работать.
 if [ "$_IS_COMPAL" = "0" ]; then
 	. /usr/share/5gmodem/iscompal.sh
 	is_compal "" "$_WDM" "$DEVICE" && _IS_COMPAL=1
 fi
 
 if [ "$_IS_COMPAL" = "1" ]; then
-# ========================================================================
-# Compal RXM-G1 (custom firmware) - driven via mmcli/qmicli, not AT
-# ========================================================================
 
 _QMICLI_OK=0
 command -v qmicli >/dev/null 2>&1 && _QMICLI_OK=1
@@ -72,20 +35,7 @@ if [ "$_QMICLI_OK" = 1 ] && [ "$_MM_OK" != "1" ]; then
 	command -v _poll_chan_free >/dev/null 2>&1 && ! _poll_chan_free && _QMICLI_OK=0
 fi
 
-# --- General modem info, TAC, Cell ID, MCC/MNC ---
 if [ "$_MM_OK" = "1" ]; then
-	# ModemManager running: pull it all from one mmcli call
-	# TAC/CID берём из mmcli ТОЛЬКО если он их реально отдал. Раньше присваивание
-	# шло безусловно: когда сбор локации в MM выключен (modem.location.3gpp.tac
-	# пуст или "--"), значения, уже разобранные фреймворком из AT+CREG,
-	# ЗАТИРАЛИСЬ пустышкой - в снимке появлялось tac_dec="-" при живом lac_dec=136.
-	# Для LTE поле LAC из +CREG И ЕСТЬ TAC, поэтому оно же служит фолбэком.
-	# TAC/CID отдаёт ТОЛЬКО --location-get: в общий дамп -K (modem show) ключи
-	# modem.location.3gpp.* НЕ входят - раньше парсили _MM_K и всегда получали
-	# пусто. Сбор локации к тому же по умолчанию ВЫКЛЮЧЕН: если значений нет -
-	# включаем однократно (фоном, вызов дёшев и идемпотентен), данные появятся
-	# со следующего опроса. Проверено на живом RXM-G1: tac/cid совпадают с тем,
-	# что в MBIM-режиме давал разбор +CREG.
 	_MM_LOC=$(mmcli -m "$_MMIDX" --location-get -K 2>/dev/null)
 	_MM_TAC=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.tac/{print $2}' | xargs)
 	_MM_CID=$(echo "$_MM_LOC" | awk -F': *' '/^modem\.location\.3gpp\.cid/{print $2}' | xargs)
@@ -105,7 +55,7 @@ if [ "$_MM_OK" = "1" ]; then
 		       TAC_HEX=$(echo "$_MM_TAC" | tr 'a-f' 'A-F') ;;
 	esac
 	case "$_MM_CID" in
-		''|--) : ;;   # оставляем то, что разобрал фреймворк
+		''|--) : ;;
 		*)     CID_DEC=$(printf "%d" "0x$_MM_CID" 2>/dev/null)
 		       CID_HEX=$(echo "$_MM_CID" | tr 'a-f' 'A-F') ;;
 	esac
@@ -115,36 +65,22 @@ if [ "$_MM_OK" = "1" ]; then
 
 	MODELREV=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.revision/{print $2}' | xargs)
 	MODELNAME=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.model/{print $2}' | xargs)
-	# "--" у mmcli означает «поля нет» (у прототипа revision пуст) - в карточку
-	# такое писать нельзя, там появлялась «Прошивка: --».
 	case "$MODELREV" in --|'') MODELREV="" ;; esac
 	case "$MODELNAME" in --) MODELNAME="" ;; esac
 	FW="$MODELREV"
 else
-	# umbim/uqmi mode: ModemManager is off, so use plain AT for the info.
-	# TAC/CID come from the +CEREG/+CREG already parsed by 5gmodem.sh
-	# (TAC/TAC_HEX, LAC/CID_HEX) - leave those as-is.
 	NR_IMEI=$(at_static imei "AT+CGSN" | sed 's/^AT+CGSN //' | tr -dc '0-9')
-	# take the response line only - drop the echoed command, OK/ERROR and blanks
-	# (the old sed left "AT+CGMM" in the name because the echo ends in \r, not a
-	# space, so "^AT+CGMM " never matched -> "Compal RXM-G1 (AT+CGMM SG500M2-X)").
 	MODELNAME=$(at_static model "AT+CGMM" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
 	FW=$(at_static fw "AT+CGMR" | tr -d '\r' | grep -viE '^AT\+|^OK$|^ERROR|^$' | head -1 | xargs)
 fi
-# modem.generic.model reports the generic chipset platform name
-# ("VOS_5G") on this firmware, not the actual modem model - override
-# with the real name, keep the platform name alongside for reference.
 MODEL="Compal RXM-G1"
 
-# IMSI/ICCID are not exposed over the modem.3gpp.* keys on this MM
-# version - keep using AT for just these two (cheap single commands)
 [ -n "$SIMID" ] && NR_IMSI="$SIMID"
 
 O=$(at_static iccid "AT+ICCID")
 NR_D=$(echo "$O" | awk -F[:] '/ICCID:/{print $2}' | xargs)
 [ -n "$NR_D" ] && NR_ICCID="$NR_D"
 
-# --- Protocol, from mmcli's own driver report instead of /sys parsing ---
 DRV=$(echo "$_MM_K" | awk -F': *' '/^modem\.generic\.drivers\.value/{print $2}' | xargs | tr '[:upper:]' '[:lower:]')
 case "$DRV" in
 	*qmi_wwan*) PROTO="qmi";;
@@ -157,22 +93,8 @@ if [ "$REGOK" = "1" ]; then
 	if [ "x$MODE_NUM" = "x7" ]; then
 
 		if [ "$_QMICLI_OK" = "1" ]; then
-			# --- Carrier aggregation via QMI (richer than +LCAINFO: also
-			# gives PCI/EARFCN/bandwidth per carrier, and activation state) ---
 			OCA=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-lte-cphy-ca-info 2>/dev/null)
 
-			# АГРЕГАЦИЯ ЗАСЧИТЫВАЕТСЯ ТОЛЬКО ПО АКТИВНОЙ НЕСУЩЕЙ.
-			#
-			# Здесь стояло «есть блок Secondary Cell -> LTE-A», но QMI перечисляет
-			# и СКОНФИГУРИРОВАННЫЕ несущие в состоянии deactivated: на стенде
-			# модем в одиночном B3 отдавал три SCC (B40/B7/B1), все deactivated, а
-			# карточка показывала «4G+ | B3 / B40 / B7 / B1» - ровно тот же ложный
-			# 4G+, что чинили у L850. Признак активности - State: activated (у
-			# части прошивок поле отсутствует вовсе: тогда считаем активной, как
-			# было, иначе потеряли бы агрегацию на них).
-			# Активной считается SCC со State: activated; несущие без поля State
-			# вовсе (старые прошивки его не отдают) тоже считаем активными -
-			# иначе потеряли бы агрегацию на них. Решаем ДО сборки строки MODE.
 			_CA_ACTIVE=0
 			if echo "$OCA" | grep -q "^Secondary Cell"; then
 				if echo "$OCA" | grep -q "State:"; then
@@ -202,10 +124,6 @@ if [ "$REGOK" = "1" ]; then
 					f')
 				[ -z "$SBLOCK" ] && continue
 
-				# СОСТОЯНИЕ НЕСУЩЕЙ. activated - работает; deactivated - только
-				# сконфигурирована (её показываем в таблице компонентов, но за
-				# агрегацию НЕ считаем, см. _CA_ACTIVE). Нет поля - считаем
-				# активной (старые прошивки его не отдают).
 				_SST=$(echo "$SBLOCK" | sed -n "s/.*State: '\([a-z]*\)'.*/\1/p" | head -1)
 				case "$_SST" in
 					deactivated) : ;;
@@ -216,31 +134,16 @@ if [ "$REGOK" = "1" ]; then
 				if [ -n "$T" ]; then
 					B4=$(band4g "$T")
 					_SBW=$(echo "$SBLOCK" | sed -n "s/.*DL Bandwidth: '\([0-9]*\)'.*/\1/p" | head -1)
-					# ДВА ВИДА ОДНОЙ СТРОКИ.
-					# Для ТАБЛИЦЫ полоса идёт через " @": фронт отделяет её в свою
-					# колонку (mutil.caSplitBand), и на экране "@" не видно.
-					# Для КАРТОЧКИ полосу кладём ВНУТРЬ скобки с частотой -
-					# "B40 (2300 MHz @20)": там строку рисует replace по скобкам,
-					# и всё в них становится мелким серым (.tginfo-freq). Снаружи
-					# скобки "@20" смотрелось чужеродно рядом с частотой.
 					_B4M="$B4"
 					if [ -n "$_SBW" ]; then
 						_B4M=$(echo "$B4" | sed "s/)\$/ @$_SBW)/")
 						[ "$_B4M" = "$B4" ] && _B4M="$B4 (@$_SBW)"
 						B4="$B4 @$_SBW MHz"
 					fi
-					# В заголовок карточки идут ТОЛЬКО активные несущие: иначе
-					# «4G+ | B3 / B40 / B7 / B1» при одиночном B3 (см. выше).
 					[ "$_SST" = "deactivated" ] || MODE="$MODE / $_B4M"
 				else
 					B4=""
 				fi
-				# ПОДРОБНОСТИ ПО КАЖДОЙ SCC (запрос владельца): PCI и EARFCN у
-				# QMI есть для каждой несущей, а мы брали только диапазон - в
-				# таблице «CA по компонентам» у SCC стояли прочерки. Полей для
-				# сигнала по SCC у этого модема нет ни в одной команде (QMI
-				# отдаёт RSRP/RSRQ/SNR только для serving), поэтому там честный
-				# прочерк и остаётся.
 				_SPCI=$(echo "$SBLOCK" | sed -n "s/.*Physical Cell ID: '\([0-9]*\)'.*/\1/p" | head -1)
 				_SEAR=$(echo "$SBLOCK" | sed -n "s/.*RX Channel: '\([0-9]*\)'.*/\1/p" | head -1)
 
@@ -254,7 +157,6 @@ if [ "$REGOK" = "1" ]; then
 				IDX=$((IDX + 1))
 			done
 
-			# --- Signal: RSSI/RSRQ/RSRP/SNR via QMI (PCC) ---
 			OSIG=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-signal-info 2>/dev/null)
 			LTEBLOCK=$(echo "$OSIG" | awk '/^LTE:/{f=1; next} /^5G:|^$/{f=0} f')
 			T=$(echo "$LTEBLOCK" | sed -n "s/.*RSSI: '\(-\?[0-9.]*\).*/\1/p")
@@ -267,7 +169,6 @@ if [ "$REGOK" = "1" ]; then
 			[ -n "$T" ] && SINR="$T"
 
 		else
-			# --- qmicli not installed: fall back to AT for CA + signal ---
 			O=$(sms_tool -d $DEVICE at "at+lcainfo")
 
 			CAEN=$(echo "$O" | awk -F: '/CA enable/ {gsub(/[[:space:]\r]/,"",$2); print $2}')
@@ -328,39 +229,9 @@ if [ "$REGOK" = "1" ]; then
 		fi
 	fi
 
-	# --- 5G NSA / SA (and LTE carrier aggregation) ---
-	# The MODE_NUM=7 block above only covers plain LTE. For 5G the serving
-	# band never got filled and the UI showed just "LTE"/"-".
-	#
-	# The technology label comes from ModemManager's ACTIVE access
-	# technologies (authoritative), not from a single rf-band-info entry
-	# (which lists only the LTE anchor when the NR carrier is momentarily
-	# idle) and not from +COPS AcT (Beeline reports AcT=13 EN-DC even on
-	# pure LTE): lte + 5gnr -> 5G NSA, 5gnr only -> 5G SA, lte only -> LTE
-	# (LTE-A when more than one LTE band is aggregated). This fixes 5G being
-	# shown as "LTE", and forcing 4G correctly falls back to "LTE".
-	# Условие расширено: раньше блок был заперт под MODE_NUM=13/11 (5G), а
-	# MODE_NUM берётся из поля AcT строки +COPS. На прошивке Compal gcom/info.gcom
-	# НЕ отдаёт +COPS вовсе -> MODE_NUM пуст -> блок не выполнялся ни разу, и в UI
-	# оставалось голое "LTE" без диапазонов. Ветка MODE_NUM=7 тут тоже не помощник:
-	# её источник --nas-get-lte-cphy-ca-info отвечает QMI error 74
-	# 'InformationUnavailable'. Рабочий источник один - --nas-get-rf-band-info
-	# (отдаёт 'eutran-N'/'ngran-N' + Active Channel), поэтому пробуем его всегда,
-	# когда qmicli жив, а диапазонов в MODE ещё нет. HAS_LTE/HAS_NR ниже ставятся
-	# по самим band class'ам, так что пустой ATECH (MM выключен) не мешает.
-	# rf-band-info нужен ДВУМ потребителям: агрегации диапазонов ниже (она под
-	# условием на MODE_NUM) и метрикам канала/передатчика, которые актуальны
-	# ВСЕГДА. Поэтому сам запрос вынесен из условия - иначе на обычном LTE, где
-	# диапазоны в MODE уже проставлены, блок пропускался целиком и ширина канала,
-	# мощность передатчика и eNB ID молча оставались пустыми (так и было).
 	ORF=""
 	if [ "$_QMICLI_OK" = "1" ]; then
 		ORF=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-rf-band-info 2>/dev/null)
-		# Ширину канала, мощность передатчика, eNB ID и соседние соты здесь
-		# больше НЕ собираем: запросы generic (QMI NAS), отвечают одинаково у
-		# любого вендора - проверено на Compal и Telit, - поэтому переехали во
-		# фреймворк (_qmi_supplement в 5gmodem.sh) и достаются всем профилям.
-		# Копия здесь однажды уже разошлась с оригиналом, повторять не будем.
 	fi
 
 	if [ "$_QMICLI_OK" = "1" ] && { [ "x$MODE_NUM" = "x13" ] || [ "x$MODE_NUM" = "x11" ] \
@@ -369,14 +240,12 @@ if [ "$REGOK" = "1" ]; then
 		HAS_LTE=0; HAS_NR=0
 		echo " $ATECH " | grep -q " lte "  && HAS_LTE=1
 		echo " $ATECH " | grep -q " 5gnr " && HAS_NR=1
-		# all aggregated LTE bands (unique, keep order)
 		LSTR=""
 		for NUM in $(echo "$ORF" | sed -n "s/.*Active Band Class: *'eutran-\([0-9]*\)'.*/\1/p" | awk '!s[$0]++'); do
 			HAS_LTE=1
 			BL=$(band4g "$NUM"); [ -z "$PBAND" ] && PBAND="$BL"
 			LSTR="${LSTR}${LSTR:+ + }${BL}"
 		done
-		# NR bands, when the NR carrier is actually aggregating
 		NSTR=""
 		for NUM in $(echo "$ORF" | sed -n "s/.*Active Band Class: *'ngran-\([0-9]*\)'.*/\1/p" | awk '!n[$0]++'); do
 			HAS_NR=1
@@ -392,13 +261,6 @@ if [ "$REGOK" = "1" ]; then
 		else TECH=""
 		fi
 
-		# 5G ЗАЯВЛЕН, НО НЕСУЩЕЙ НЕТ (частый случай у Билайна: сеть объявляет
-		# EN-DC, телефон рисует 5G, а трафик целиком идёт по LTE-якорю).
-		# Признак: технология 5G NSA, но NR-диапазона в rf-band-info нет И
-		# 5G-блок signal-info пуст/сентинель (-32768 = «нет данных»). В этом
-		# случае помечаем диапазон явно как 4G - «5G NSA | 4G B3 (1800 MHz)»:
-		# 5G не прячем (сеть его действительно объявила), но видно, что несущая
-		# LTE-шная. Заработает NR - строка сама станет «5G NSA | n78 + B3».
 		NR_LIVE=0
 		[ -n "$NSTR" ] && NR_LIVE=1
 		if [ "$HAS_NR" = "1" ] && [ "$NR_LIVE" = "0" ] && [ "$_QMICLI_OK" = "1" ]; then
@@ -418,7 +280,6 @@ if [ "$REGOK" = "1" ]; then
 		T=$(echo "$ORF" | sed -n "s/.*Active Channel: *'\([0-9]*\)'.*/\1/p" | head -1)
 		[ -z "$EARFCN" ] && [ -n "$T" ] && EARFCN="$T"
 
-		# Signal (LTE block for NSA anchor; guard so existing values win)
 		if [ -z "$RSRP" ]; then
 			OSIG=$(qmicli -d "$_WDM" -p $_MBIM_OPT --nas-get-signal-info 2>/dev/null)
 			LB=$(echo "$OSIG" | awk '/^LTE:/{f=1;next} /^5G:|^$/{f=0} f')
@@ -429,25 +290,12 @@ if [ "$REGOK" = "1" ]; then
 		fi
 	fi
 
-	# --- Запасной путь по AT: ModemManager выключен И qmicli недоступен -------
-	# Тогда всё выше не отработало и сигнал остался пустым. Прошивка отдаёт его
-	# своими $QC-командами ТРОЙКАМИ <pci>,<earfcn>,"<знач>": первая тройка -
-	# обслуживающая сота, дальше соседи. Берём первую.
-	#   AT$QCRSRP? -> $QCRSRP: 386,1275,"-114.30",050,550,"-122.40",171,3300,"-122.20"
-	#   AT$QCRSRQ? -> $QCRSRQ: 386,1275,"-20.00",...
-	# Порядок полей проверен по диапазонам: PCI <= 503, поэтому 1275 может быть
-	# только EARFCN (band 3), а 386 - PCI. Соседи подтверждают: 050/550 и 171/3300.
-	# PCI qmicli не отдаёт ВООБЩЕ (nas-get-signal-info его не содержит), поэтому
-	# $QCRSRP? спрашиваем и на обычном пути - но только когда есть что заполнять,
-	# и одним вызовом на оба поля. Без qmicli тем же ответом закрываем и RSRP.
 	_QC_LTE=1
 	case "$MODE" in
 		*UMTS*|*HSPA*|*HSDPA*|*HSUPA*|*WCDMA*|*GSM*|*EDGE*|*GPRS*|3G*|2G*) _QC_LTE=0 ;;
 	esac
 	if [ "$_QC_LTE" = 1 ] && { [ -z "$RSRP" ] || [ -z "$PCI" ]; }; then
 		_QR=$(sms_tool -d $DEVICE at 'AT$QCRSRP?' 2>/dev/null | tr -d '\r')
-		# Ведущие нули срезаем sed'ом, а НЕ через $((10#$T)): base#number - башизм,
-		# busybox ash на нём падает с "arithmetic syntax error".
 		T=$(echo "$_QR" | sed -n 's/^\$QCRSRP: *0*\([0-9][0-9]*\),.*/\1/p' | head -1)
 		[ -z "$PCI" ] && [ -n "$T" ] && PCI="$T"
 		T=$(echo "$_QR" | sed -n 's/^\$QCRSRP: *[0-9]*, *0*\([0-9][0-9]*\),.*/\1/p' | head -1)
@@ -468,20 +316,10 @@ fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE-A B,LTE-A | B,')
 
-# --- Тепловое состояние: градусов у этой прошивки НЕТ ----------------------
-# AT^TEMP? (ветка T99W175 ниже) она не отвечает вовсе - поле температуры всегда
-# оставалось пустым. Спросили сам модем, что он умеет (AT$QCCLAC, 365 команд):
-# тепловая ровно одна - +CEITHERM, и та отдаёт УРОВЕНЬ троттлинга 0-3
-# (AT+CEITHERM=? -> "1.pa:0-3 2.pa_fr1:0-3 3.modem:0-3 4.mmw0..3:0-3"), а не °C.
-# Отдаём ОТДЕЛЬНЫМ полем: выдавать уровень за градусы нельзя. Берём сенсор
-# "modem" - он про сам модем, а не про PA/mmWave-антенны.
 _OT=$(sms_tool -d $DEVICE at "AT+CEITHERM?" 2>/dev/null)
 THERM=$(echo "$_OT" | awk -F: '/modem level/ {gsub(/[^0-9]/, "", $2); print $2; exit}')
 
 else
-# ========================================================================
-# Foxconn T99W175 (FW 6.0.0.6) - stock branch, unchanged from upstream
-# ========================================================================
 
 O=$(sms_tool -d $DEVICE at "AT^TEMP?")
 
@@ -642,7 +480,6 @@ fi
 
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g'| sed 's,LTE B,LTE | B,')
 
-# Modem
 MODELA=$(sms_tool -d $DEVICE at "AT+CGMM" | tr -s "\n" | xargs)
 MODELB=$(sms_tool -d $DEVICE at "AT+CGMI" | tr -s "\n" | xargs)
 MODELACUT=$(echo $MODELA | sed s/"AT+CGMM "//)
@@ -664,9 +501,6 @@ O=$(sms_tool -d $DEVICE at "AT+ICCID")
 NR_D=$(echo "$O" | awk -F [:] '/^\ICCID:/{print $2}' | xargs)
 [ -n "$NR_D" ] && NR_ICCID="$NR_D"
 
-# Идентификатор - СВОЙ, из sysfs активного модема. Здесь стояла строка чужого
-# профиля («Vendor=05c6 ProdID=90d5»), скопированная вместе с кодом, и протокол у этого
-# модема не определялся никогда.
 _PV_V=$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)
 _PV_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/idProduct" 2>/dev/null)
 _PV_ID="Vendor=${_PV_V:-05c6} ProdID=${_PV_P:-90d5}"
