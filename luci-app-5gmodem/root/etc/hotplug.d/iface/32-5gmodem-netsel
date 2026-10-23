@@ -1,0 +1,15 @@
+#!/bin/sh
+[ "$ACTION" = ifup ] || exit 0
+
+CFG=5gmodem
+SEC=""
+for _s in $(uci -q show $CFG 2>/dev/null | sed -n 's/^\('$CFG'\.m_[0-9A-Za-z_]*\)\.netsel=manual$/\1/p'); do
+	[ "$(uci -q get "$_s.network")" = "$INTERFACE" ] || continue
+	SEC="$_s"; break
+done
+[ -n "$SEC" ] || exit 0
+
+MPATH=$(uci -q get "$SEC.path")
+[ -n "$MPATH" ] || exit 0
+
+( exec 1000>&- 7>&- 8>&- 9>&-; sleep 15; /usr/share/5gmodem/netsel.sh reapply "$MPATH" ) >/dev/null 2>&1 </dev/null &

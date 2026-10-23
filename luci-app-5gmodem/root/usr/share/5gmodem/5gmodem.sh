@@ -1684,7 +1684,7 @@ fi
 # Технология из PS-домена: +CEREG=2 отдаёт AcT последним полем, а +CREG (CS) на
 # LTE-only сети часто пуст.
 if [ -z "$MODE_NUM" ] || [ "x$MODE_NUM" = "x0" ]; then
-	_ceact=$(echo "$O" | tr -d '\r' | awk -F, '/^\+CEREG: *[0-9]+,[15],/ {gsub(/[^0-9]/,"",$5); print $5; exit}')
+	_ceact=$(echo "$O" | tr -d '\r' | awk -F, '/^\+CEREG: *[0-9]+, *[15] *,/ {gsub(/[^0-9]/,"",$5); print $5; exit}')
 	case "$_ceact" in [0-9]|1[0-9]) MODE_NUM="$_ceact" ;; esac
 fi
 case "$MODE_NUM" in

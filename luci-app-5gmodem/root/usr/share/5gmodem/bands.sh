@@ -632,7 +632,7 @@ _reconnect_iface() {
 	case "$_ri_t0" in ''|*[!0-9]*) _ri_t0=0 ;; esac
 	while [ "$_ri_n" -lt 40 ]; do
 		case "$(_ri_cereg | tr -d '\r' \
-			| sed -n 's/^+CEREG: *//p' | cut -d, -f2)" in
+			| sed -n 's/^+CEREG: *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)" in
 			1|5) break ;;
 		esac
 		sleep 2

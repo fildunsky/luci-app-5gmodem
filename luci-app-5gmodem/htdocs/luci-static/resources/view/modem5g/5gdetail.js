@@ -3037,6 +3037,11 @@ function applyMetrics(json) {
 						} else {
 							view.textContent = checkOperatorName(_visited);
 						}
+						if (_visited.length > 1 && json.path && uci.get('5gmodem',
+							'm_' + String(json.path).replace(/[^A-Za-z0-9]/g, '_'), 'netsel') === 'manual') {
+							view.appendChild(E('span', { 'class': 'tg-netsel',
+								'title': _('The network is selected manually on the Modem tab') }, _('manual')));
+						}
 						updateSimIcon(_iconName);
 						/* Подсказка на иконке симки - вместе с самой иконкой, но
 						   ТОЛЬКО при изменении: пересборка на каждом тике роняла
