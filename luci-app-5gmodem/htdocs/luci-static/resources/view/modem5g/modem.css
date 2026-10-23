@@ -1492,6 +1492,28 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   font-weight: 700;
   font-size: 90%;
 }
+.tginfo-temps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: .3em .75em;
+  line-height: 1;
+}
+.tg-tchip {
+  display: inline-flex;
+  align-items: center;
+  gap: .2em;
+  cursor: default;
+}
+.tg-tchip svg {
+  display: block;
+  flex: none;
+}
+.tg-tval {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: 90%;
+}
 .tginfo-temp .tginfo-thermo {
   display: inline-flex;
   align-items: center;
@@ -3542,6 +3564,7 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 #modem-info-block[data-rat] #apnline,
 #modem-info-block[data-rat] #modemvidpid,
 #modem-info-block[data-rat] #battn,
+#modem-info-block[data-rat] #tempsn,
 #modem-info-block[data-rat] #sc-advice { opacity: 1 !important; color: rgba(255, 255, 255, .88) !important; }
 #modem-info-block[data-rat] #mode,
 #modem-info-block[data-rat] #operator,

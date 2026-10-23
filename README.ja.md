@@ -104,6 +104,8 @@ opkg install luci-i18n-base-ja
 - Huawei E3372（HiLink）
 - Tenda MF6（ZTE ZX297520V3 搭載の Mi-Fi、USB 19d2:1557）— Web API 経由で信号、バッテリー、SMS、再起動。デバッグモードでは AT 経由でバンドとネットワークモード
 - 安価な Qualcomm MDM9600 / MDM9610 の Android スティック（PIXLINK、ALEKA UV310 とその仲間）。「モデムのみ」（QMI）モードを含みます。
+- UFI003（Qualcomm MSM8916 の Android スティック、USB 05c6:90b4）— AT で信号、ADB で温度と SINR、ネットワークモード切替。OpenWrt を入れた同じスティックでは内蔵モデムを ModemManager 経由で制御（バンド、ネットワークモード、SMS、手動ネットワーク選択）
+- MF932-M27（MediaTek MT6735 の Android モバイルバッテリー型 Mi-Fi、USB 0e8d:2004）— Web API で通信量・接続時間・バッテリー・ネットワークモード、ADB で 6 つの温度センサー。オプションの `5gmodem-mtk-at` パッケージで RSRQ・SINR・RSSI・セル情報・LTE バンド切替も
 - 他にも多数は未確認ですが、派生元のフォークが扱うモデムはすべて動作するはずです。
 
 ### 利用者からの報告で修正したもの
@@ -194,6 +196,17 @@ apk add /tmp/lpac.apk --allow-untrusted
 転送方式はインターフェースのプロトコルから自動的に選ばれるため、通常は手で設定する必要はありません。MBIM 経路では、どの SIM スロットが有効かにかかわらず eUICC にアクセスできるので、eSIM を操作している間も物理 SIM は接続を維持したままです。
 
 `lpac` は**任意**の依存パッケージです。eSIM タブは `lpac` がインストールされ、かつ eUICC が存在する場合にのみ表示されます。それ以外の機能は `lpac` なしで動作します。
+
+## MediaTek ポケットルーター: 5gmodem-mtk-at
+
+MediaTek MT6735 搭載の Android ポケットルーター（MF932-M27、TianJie CPE903/905/906、KuWfi CPF9xx など）は Web 画面で RSRQ・SINR・セル情報・バンド制御を提供しません。本アプリは ADB と `rild-atci` ソケット経由でこれらを取得するため、小さなオプションパッケージ `5gmodem-mtk-at` が必要です。中のクライアントはルーターではなくポケットルーター上で動くので、`noarch` パッケージ 1 つで全プラットフォームに対応します。未導入時は RSRP・バッテリー・温度・ネットワークモードのみ表示されます。
+
+```sh
+curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/latest/download/5gmodem-mtk-at.apk > /tmp/mtk-at.apk
+apk add /tmp/mtk-at.apk --allow-untrusted
+```
+
+24.10.x: `5gmodem-mtk-at.ipk` + `opkg install`.
 
 ## ソースからのビルド
 

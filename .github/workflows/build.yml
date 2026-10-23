@@ -65,6 +65,12 @@ jobs:
       - name: Download SDK
         run: .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
 
+      - name: Build the MediaTek pocket-router AT client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-arm-linux-gnueabihf
+          ./5gmodem-mtk-at/build-usock.sh
+
       - name: Check embedded icons
         run: python3 luci-app-5gmodem/tools/gen-icons.py --check
 
@@ -111,6 +117,13 @@ jobs:
           # четырёх, и человек не понимал, какой из них брать (замечание
           # владельца 25.08.2026). Версия пакета от переименования не теряется:
           # она внутри метаданных, менеджер её видит.
+          for f in out/5gmodem-mtk-at[-_]*; do
+            [ -e "$f" ] || continue
+            case "$f" in
+              *.apk) mv -v "$f" out/5gmodem-mtk-at.apk ;;
+              *.ipk) mv -v "$f" out/5gmodem-mtk-at.ipk ;;
+            esac
+          done
           for f in out/luci-i18n-5gmodem-*; do
             [ -e "$f" ] || continue
             base=$(basename "$f")
@@ -183,7 +196,8 @@ jobs:
                       "luci-app-5gmodem_$V-r${R}_all.ipk" "luci-app-5gmodem-lite_$V-r${R}_all.ipk" \
                       "luci-i18n-5gmodem-zh-cn.apk" "luci-i18n-5gmodem-zh-cn.ipk" \
                       "luci-i18n-5gmodem-vi.apk" "luci-i18n-5gmodem-vi.ipk" \
-                      "luci-i18n-5gmodem-id.apk" "luci-i18n-5gmodem-id.ipk"; do
+                      "luci-i18n-5gmodem-id.apk" "luci-i18n-5gmodem-id.ipk" \
+                      "5gmodem-mtk-at.apk" "5gmodem-mtk-at.ipk"; do
             if printf '%s\n' "$NAMES" | grep -qxF "$WANT"; then
               echo "ok      $WANT"
             else

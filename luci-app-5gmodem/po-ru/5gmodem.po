@@ -6147,3 +6147,24 @@ msgstr "Сеть выбрана вручную на вкладке «Модем�
 
 msgid "manual"
 msgstr "вручную"
+
+msgid "Radio amplifier"
+msgstr "Усилитель радиотракта"
+
+msgid "Processor"
+msgstr "Процессор"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "Контроллер питания"
+
+msgid "Battery"
+msgstr "Батарея"
+
+msgid "Board"
+msgstr "Плата"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "Установите пакет %s, чтобы переключать диапазоны и видеть RSRQ, SINR и соту этого модема."

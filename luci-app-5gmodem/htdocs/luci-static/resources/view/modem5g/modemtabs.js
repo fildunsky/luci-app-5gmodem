@@ -79,6 +79,7 @@ function vendor(m) {
 	var pr = String((m && m.product) || '');
 	if (/VOS_5G|RXMG1/i.test(pr)) { return 'Compal'; }
 	var vid = String((m && m.vidpid) || '').split(':')[0].toLowerCase();
+	if (vid === '0e8d' && !/^0e8d:712/i.test(String(m.vidpid))) { return ''; }
 	/* 05c6 НАМЕРЕННО не в карте: это vid Qualcomm, общий для Compal RXM-G1,
 	   Foxconn T99W175, Dell DW5930e и Thales MV31-W. Слепой 05c6->Compal врал
 	   («Compal Generic Mobile Broadband Adapter» на T99W175). Настоящий Compal
@@ -859,7 +860,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30214,
+	API: 30600,
 	/* Шапка: только ряд вкладок выбора модема (если модемов > 1). Имя активного
 	   модема показывается заголовком блока «Общая информация» в самой вьюхе.
 	   Возвращает Promise<DOM|null>. null - если модем один/нет. */

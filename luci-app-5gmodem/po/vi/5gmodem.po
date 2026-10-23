@@ -5862,3 +5862,24 @@ msgstr "Mạng được chọn thủ công ở thẻ Modem"
 
 msgid "manual"
 msgstr "thủ công"
+
+msgid "Radio amplifier"
+msgstr "Bộ khuếch đại vô tuyến"
+
+msgid "Processor"
+msgstr "Bộ xử lý"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "Bộ điều khiển nguồn"
+
+msgid "Battery"
+msgstr "Pin"
+
+msgid "Board"
+msgstr "Bo mạch"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "Cài gói %s để chuyển băng tần và xem RSRQ, SINR cùng thông tin trạm của modem này."

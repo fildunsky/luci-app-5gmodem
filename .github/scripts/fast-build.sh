@@ -24,9 +24,10 @@ echo "::endgroup::"
 
 echo "::group::feeds install"
 ./scripts/feeds install -p modem -f luci-app-5gmodem 2>&1 | tail -40
+./scripts/feeds install -p modem -f 5gmodem-mtk-at 2>&1 | tail -5
 echo "::endgroup::"
 
-KEEP=" luci-app-5gmodem luci-base lua csstidy luasrcdiet ucode "
+KEEP=" luci-app-5gmodem 5gmodem-mtk-at luci-base lua csstidy luasrcdiet ucode "
 echo "::group::prune dependencies (only build-time tools stay)"
 for d in package/feeds/*/*; do
 	[ -L "$d" ] || continue
@@ -41,6 +42,7 @@ grep -E "5gmodem|^CONFIG_ALL" .config || true
 echo "::endgroup::"
 
 make -j"$(nproc)" V=w package/luci-app-5gmodem/compile
+make -j"$(nproc)" V=w package/5gmodem-mtk-at/compile
 
 mkdir -p /artifacts
 find bin/ -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} /artifacts/ \;

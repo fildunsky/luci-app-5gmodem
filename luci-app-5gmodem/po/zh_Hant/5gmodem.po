@@ -5862,3 +5862,24 @@ msgstr "網路已在「數據機」分頁中手動選擇"
 
 msgid "manual"
 msgstr "手動"
+
+msgid "Radio amplifier"
+msgstr "射頻功放"
+
+msgid "Processor"
+msgstr "處理器"
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Power controller"
+msgstr "電源管理晶片"
+
+msgid "Battery"
+msgstr "電池"
+
+msgid "Board"
+msgstr "主板"
+
+msgid "Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem."
+msgstr "安裝 %s 套件即可在此數據機上切換頻段並查看 RSRQ、SINR 和小區資訊。"

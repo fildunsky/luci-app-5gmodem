@@ -790,6 +790,7 @@ function applyVendorJson(j) {
 				var nb3 = document.getElementById('bandnote-mm-btn');
 				var modesOnly = !j.error && renderNetModes(j);
 				if (nt3) { nt3.textContent = modesOnly ? _('This modem does not let the router change bands. Only the network mode can be switched.') : _('This modem does not let the router change bands or network mode.'); }
+				if (nt3 && j.needpkg) { nt3.textContent = _('Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem.').format(j.needpkg); }
 				if (nb3) { nb3.style.display = 'none'; }
 				note.style.display = '';
 				if (modesOnly) { bandsReadOnly = false; applyBandsReadOnly(); }
@@ -1389,7 +1390,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30214,
+	API: 30600,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
