@@ -251,6 +251,10 @@ iface_for_path() {
 	_want="$1"; [ -n "$_want" ] || return 1
 	for _if in $(uci show network 2>/dev/null | sed -n "s/^network\.\([^.=]*\)=interface\$/\1/p"); do
 		case "$_if" in loopback|lan|wan6) continue ;; esac
+		if [ "$(uci -q get "network.$_if.proto")" = ccmni ]; then
+			[ "$_want" = ccci ] && { echo "$_if"; return 0; }
+			continue
+		fi
 		_dev=$(uci -q get "network.$_if.device")
 		[ -n "$_dev" ] || _dev=$(ifup_state_dev "$_if")
 		[ -n "$_dev" ] || continue

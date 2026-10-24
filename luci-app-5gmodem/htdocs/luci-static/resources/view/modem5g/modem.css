@@ -907,6 +907,10 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
 .tginfo-batt {
   line-height: 1;
 }
+.tginfo-batt .tg-batt-wrap {
+  display: inline-flex;
+  flex: none;
+}
 .tginfo-batt .tg-batt-ico {
   display: block;
   flex: none;

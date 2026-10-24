@@ -20,11 +20,57 @@ INTERVAL=$(uci -q get "$CFG.@5gmodem[0].signal_leds_interval")
 case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=15 ;; esac
 [ "$INTERVAL" -lt 5 ] && INTERVAL=5
 
-leds_present() {
+RGB_NAMES=$(uci -q get "$CFG.@5gmodem[0].signal_leds_rgb")
+[ -n "$RGB_NAMES" ] || RGB_NAMES="red green blue"
+
+bars_present() {
 	for _l in $LED_NAMES; do
 		[ -w "$LEDS_DIR/$_l/brightness" ] || return 1
 	done
 	return 0
+}
+
+rgb_present() {
+	set -- $RGB_NAMES
+	[ $# = 3 ] || return 1
+	for _l in "$@"; do
+		[ -w "$LEDS_DIR/$_l/brightness" ] || return 1
+	done
+	return 0
+}
+
+STYLE=$(uci -q get "$CFG.@5gmodem[0].signal_leds_style")
+case "$STYLE" in
+	bars) ;;
+	rgb) ;;
+	*) if bars_present; then STYLE=bars; elif rgb_present; then STYLE=rgb; else STYLE=bars; fi ;;
+esac
+
+leds_present() {
+	if [ "$STYLE" = rgb ]; then rgb_present; else bars_present; fi
+}
+
+RGB_LAST=""
+
+rgb_set() {
+	[ "$1" = "$RGB_LAST" ] && return 0
+	RGB_LAST="$1"
+	set -- $RGB_NAMES "$1"
+	for _l in "$1" "$2" "$3"; do
+		printf 'none' > "$LEDS_DIR/$_l/trigger" 2>/dev/null
+		printf '0' > "$LEDS_DIR/$_l/brightness" 2>/dev/null
+	done
+	case "$4" in
+		blue)  printf '%s' "$(led_max "$3")" > "$LEDS_DIR/$3/brightness" 2>/dev/null ;;
+		green) printf '%s' "$(led_max "$2")" > "$LEDS_DIR/$2/brightness" 2>/dev/null ;;
+		redblink)
+			if printf 'timer' > "$LEDS_DIR/$1/trigger" 2>/dev/null; then
+				printf '500' > "$LEDS_DIR/$1/delay_on" 2>/dev/null
+				printf '500' > "$LEDS_DIR/$1/delay_off" 2>/dev/null
+			else
+				printf '%s' "$(led_max "$1")" > "$LEDS_DIR/$1/brightness" 2>/dev/null
+			fi ;;
+	esac
 }
 
 led_max() {
@@ -34,6 +80,10 @@ led_max() {
 }
 
 set_leds() {
+	if [ "$STYLE" = rgb ]; then
+		[ "$1" = 0 ] && rgb_set off
+		return
+	fi
 	_want="$1"; _i=0
 	for _l in $LED_NAMES; do
 		_i=$((_i + 1))
@@ -72,7 +122,24 @@ leds_for_metric() {
 	esac
 }
 
+update_rgb() {
+	_j=$(SW_BG=1 "$RES/5gmodem.sh" cached $((INTERVAL + 5)) 2>/dev/null)
+	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
+	_mode=$(printf '%s' "$_j" | jsonfilter -e '@.mode' 2>/dev/null)
+	_ip=$(printf '%s' "$_j" | jsonfilter -e '@.ipaddr' 2>/dev/null)
+	case "$_reg" in
+		1|5)
+			case "$_mode" in
+				LTE*|*LTE*|5G*|*NR*)
+					case "$_ip" in ''|-) rgb_set redblink ;; *) rgb_set blue ;; esac ;;
+				*) rgb_set green ;;
+			esac ;;
+		*) rgb_set redblink ;;
+	esac
+}
+
 update_once() {
+	[ "$STYLE" = rgb ] && { update_rgb; return; }
 	_j=$(SW_BG=1 "$RES/5gmodem.sh" cached $((INTERVAL + 5)) 2>/dev/null)
 	_reg=$(printf '%s' "$_j" | jsonfilter -e '@.registration' 2>/dev/null)
 
@@ -93,7 +160,11 @@ update_once() {
 case "$1" in
 detect)
 	if leds_present; then
-		printf '{"available":1,"leds":"%s"}\n' "$LED_NAMES"
+		if [ "$STYLE" = rgb ]; then
+			printf '{"available":1,"style":"rgb","leds":"%s"}\n' "$RGB_NAMES"
+		else
+			printf '{"available":1,"style":"bars","leds":"%s"}\n' "$LED_NAMES"
+		fi
 	else
 		printf '{"available":0}\n'
 	fi

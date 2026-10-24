@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+
+START=19
+USE_PROCD=1
+
+SOCK=/dev/socket/rild-atci
+BIN=/usr/share/5gmodem/mtk/usock-armv7
+
+start_service() {
+	[ -d /sys/kernel/ccci ] && [ -x "$BIN" ] || return 0
+	if [ ! -e /dev/pts/ptmx ]; then
+		mkdir -p /dev/pts
+		mount -t devpts devpts /dev/pts 2>/dev/null
+	fi
+	procd_open_instance
+	procd_set_param command "$BIN" -b "$SOCK" /dev/ttyMTK0
+	procd_set_param respawn 3600 5 0
+	procd_close_instance
+	(
+		for i in $(seq 1 60); do
+			[ -S "$SOCK" ] && break
+			sleep 2
+		done
+		sleep 10
+		rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp
+		/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+	) </dev/null >/dev/null 2>&1 &
+}

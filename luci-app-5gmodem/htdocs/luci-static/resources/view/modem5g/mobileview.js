@@ -232,7 +232,7 @@ function clearSig() {
 }
 
 return baseclass.extend({
-	API: 30700,
+	API: 30800,
 
 	prepare: function(root) {
 		st = null;
