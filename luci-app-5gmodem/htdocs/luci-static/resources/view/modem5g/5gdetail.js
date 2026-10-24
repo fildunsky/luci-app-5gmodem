@@ -1214,6 +1214,13 @@ function chipBox(head) {
 	return box;
 }
 
+function alignToChips(el, top) {
+	var cb = document.getElementById('modemchips');
+	var h = cb ? cb.offsetHeight : 0;
+	el.style.top = h ? getComputedStyle(cb).top : top;
+	el.style.height = h ? h + 'px' : '';
+}
+
 function renderVidPid(json) {
 	var head = document.getElementById('modemname');
 	if (!head) { return; }
@@ -1503,6 +1510,7 @@ function updateUsbFlapWarn(json) {
 	if (vp && w.previousElementSibling !== vp) {
 		head.insertBefore(w, vp.nextSibling);
 	}
+	alignToChips(w, '.25rem');
 }
 
 function updateSimIcon(name) {
@@ -2446,9 +2454,10 @@ function applyMetrics(json) {
 							mark.title = txt;
 							var mi = mark.querySelector('img');
 							if (mi) { mi.title = txt; }
+							alignToChips(mark, '.25rem');
 							return;
 						}
-						head.appendChild(E('span', {
+						mark = head.appendChild(E('span', {
 							'id': 'stale-mark', 'title': txt,
 							'style': 'float:right;opacity:.55;display:inline-flex;align-items:center;' +
 							         'position:relative;top:.25rem;margin-left:.8em'
@@ -2458,6 +2467,7 @@ function applyMetrics(json) {
 								'style': 'width:12px;height:12px'
 							})
 						]));
+						alignToChips(mark, '.25rem');
 					}());
 
 					if (document.getElementById('temp')) {
@@ -2809,7 +2819,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30800, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30801, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

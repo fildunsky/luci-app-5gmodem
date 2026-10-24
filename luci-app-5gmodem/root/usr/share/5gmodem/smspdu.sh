@@ -105,7 +105,7 @@ encode() {
 					if (pair[u] == 1 && cnt + 2 > per) break
 					ud = ud units[u]; u++; cnt++
 				}
-				udlen = cnt * 2                      # октеты полезной нагрузки
+				udlen = cnt * 2                      # payload octets
 				if (total > 1) {
 					udh = sprintf("050003%02X%02X%02X", ref, total, p)
 					fo = "51"                        # SMS-SUBMIT + VP + UDHI
@@ -125,5 +125,5 @@ encode() {
 case "$1" in
 	needucs2) needucs2 "$2"; exit $? ;;
 	encode)   encode "$_NUM" "$_TXT"; exit $? ;;
-	*) echo "usage: $0 needucs2 <текст> | encode <номер> <текст>" >&2; exit 2 ;;
+	*) echo "usage: $0 needucs2 <text> | encode <number> <text>" >&2; exit 2 ;;
 esac

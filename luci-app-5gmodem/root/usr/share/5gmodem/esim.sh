@@ -10,7 +10,7 @@ if [ -x /usr/lib/lpac/lpac ]; then
 	export LPAC_DRIVER_HOME="/usr/lib/lpac"
 elif [ -x /usr/bin/lpac ]; then
 	LPAC="/usr/bin/lpac"
-	[ -e /usr/lib/lpac/lpac ] || LPAC_BROKEN="обёртка /usr/bin/lpac есть, но самого бинаря /usr/lib/lpac/lpac нет: установка lpac испорчена (обычно - патченый пакет ставили поверх официального). Лечится: apk del lpac; rm -rf /usr/lib/lpac /usr/bin/lpac; установить заново"
+	[ -e /usr/lib/lpac/lpac ] || LPAC_BROKEN="/usr/bin/lpac wrapper exists but /usr/lib/lpac/lpac is missing: broken lpac install (usually a patched package over the official one). Fix: apk del lpac; rm -rf /usr/lib/lpac /usr/bin/lpac; reinstall"
 elif [ -x /usr/lib/lpac ]; then
 	LPAC="/usr/lib/lpac"
 else

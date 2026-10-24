@@ -379,7 +379,7 @@ _restore_stolen() {
 			RAW=$(at_query "$ATP" "AT+CGACT?" 6)
 			if echo "$RAW" | grep -q "OK"; then
 				echo "$RAW" | grep -qE '\+CGACT: *[0-9]+, *1' && continue
-				_dead="контекст не активен"
+				_dead="context is not active"
 			fi
 		fi
 		if [ -z "$_dead" ]; then
@@ -398,7 +398,7 @@ _restore_stolen() {
 				done
 				[ -n "$_wl_ok" ] && continue
 			fi
-			_dead="нет связи через $L3"
+			_dead="no connectivity via $L3"
 		fi
 		logger -t 5gmodem "MM took over $PATHID and left it without a data session ($_dead) - bringing up $IF"
 		ifdown "$IF" >/dev/null 2>&1

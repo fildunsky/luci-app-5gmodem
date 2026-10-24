@@ -718,7 +718,7 @@ _send_pdu() {
 	[ -n "$_sp_port" ] && [ -c "$_sp_port" ] || { echo "no port" >&2; return 2; }
 
 	if _port_is_mm "$_sp_port"; then
-		_SP_LASTERR="портом владеет ModemManager: кириллица через AT недоступна"
+		_SP_LASTERR="the port is owned by ModemManager: Cyrillic over AT is unavailable"
 		logger -t 5gmodem "smsbridge: $_sp_port is under ModemManager - PDU path skipped"
 		return 3
 	fi
@@ -756,7 +756,7 @@ _send_pdu() {
 			   _sp_ceer=$(_sms_run 8 $(_smstool) -d "$_sp_port" at "AT+CEER" 2>/dev/null \
 				| tr -d '\r' | grep -iE "CEER|ERROR" | head -1)
 			   logger -t 5gmodem "smsbridge: a PDU part did not go out ($_sp_cmd, number \"$2\", len=$_sp_len): ${_sp_ans:-no answer}${_sp_ceer:+ | $_sp_ceer}"
-			   _SP_LASTERR="${_sp_ans:-нет ответа от модема}" ;;
+			   _SP_LASTERR="${_sp_ans:-no answer from modem}" ;;
 		esac
 	done <<PARTS_EOF
 $_sp_parts
@@ -1225,8 +1225,8 @@ _ap_why() {
 }
 
 _arch_purge() {
-	if [ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ]; then
-		_ap_why '-' "освобождение слотов выключено настройкой"
+	if [ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && ! _fwd_del_on; then
+		_ap_why '-' "slot purge is disabled in settings"
 		return 0
 	fi
 	_apd=$(_arch_dir)
@@ -1252,7 +1252,7 @@ _arch_purge() {
 		[ "$_ap_x" -ge "$ARCH_BASE" ] 2>/dev/null && continue
 		if [ -z "$_ap_s$_ap_c" ]; then
 			_ap_stuck=$((_ap_stuck + 1))
-			_ap_why "$_ap_x" "PDU не разобран - в архив не попало"
+			_ap_why "$_ap_x" "PDU not parsed, not archived"
 			continue
 		fi
 
@@ -1261,7 +1261,7 @@ _arch_purge() {
 		for _apf in "$_apd"/*."$_ap_k"; do [ -f "$_apf" ] && { _ap_have="$_apf"; break; }; done
 		if [ -z "$_ap_have" ]; then
 			_ap_stuck=$((_ap_stuck + 1))
-			_ap_why "$_ap_x" "ещё не в архиве"
+			_ap_why "$_ap_x" "not archived yet"
 			continue
 		fi
 
@@ -1295,20 +1295,20 @@ _arch_purge() {
 		fi
 		if [ "$_ap_wait" = 1 ]; then
 			_ap_stuck=$((_ap_stuck + 1))
-			_ap_why "$_ap_x" "ждём отправки в Telegram (крайний срок ${ARCH_GRACE_MIN} мин)"
+			_ap_why "$_ap_x" "waiting for Telegram delivery (deadline ${ARCH_GRACE_MIN} min)"
 			continue
 		fi
 
 		if [ "$_ap_cmd" = "1" ] && [ "$_ap_late" = 0 ] \
 		   && ! grep -qxF "$(sms_cmd_key "$_ap_s" "$_ap_t" "$_ap_c")" "$_ap_df" 2>/dev/null; then
 			_ap_stuck=$((_ap_stuck + 1))
-			_ap_why "$_ap_x" "ждём круга команд по SMS (крайний срок ${ARCH_GRACE_MIN} мин)"
+			_ap_why "$_ap_x" "waiting for the SMS commands pass (deadline ${ARCH_GRACE_MIN} min)"
 			continue
 		fi
 
 		[ "$_ap_late" = 1 ] && _ap_late_n=$((_ap_late_n + 1))
 		if [ -n "$_AP_WHY" ]; then
-			_ap_why "$_ap_x" "готово к удалению"
+			_ap_why "$_ap_x" "ready to delete"
 			continue
 		fi
 		MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_ap_x" >/dev/null 2>&1 \
@@ -1316,9 +1316,9 @@ _arch_purge() {
 	done
 	[ -n "$_AP_WHY" ] && return 0
 	if [ "$_ap_del" -gt 0 ]; then
-		logger -t 5gmodem "sms: в память роутера перенесено и удалено из модема сообщений: $_ap_del"
+		logger -t 5gmodem "sms: messages moved to router storage and deleted from the modem: $_ap_del"
 		[ "$_ap_late_n" -gt 0 ] && logger -t 5gmodem \
-			"sms: из них по крайнему сроку (бот или команды так и не отчитались): $_ap_late_n"
+			"sms: of them by deadline (bot or commands never confirmed): $_ap_late_n"
 	fi
 	if [ "$_ap_stuck" -gt 0 ]; then
 		_ap_mk=/tmp/5gmodem/arch_stuck.stamp
@@ -1327,9 +1327,62 @@ _arch_purge() {
 		case "$_ap_prev" in ''|*[!0-9]*) _ap_prev=0 ;; esac
 		if [ "$((_ap_now - _ap_prev))" -ge 3600 ]; then
 			printf '%s' "$_ap_now" > "$_ap_mk" 2>/dev/null
-			logger -t 5gmodem "sms: в модеме осталось сообщений, которые пока нельзя удалить: $_ap_stuck (почему - smsbridge.sh archive-why)"
+			logger -t 5gmodem "sms: messages left in the modem that cannot be deleted yet: $_ap_stuck (see smsbridge.sh archive-why)"
 		fi
 	fi
+	return 0
+}
+
+_fwd_del_on() { [ "$(uci -q get "$CFG.sms.fwd_delete")" = 1 ]; }
+
+_fwd_purge() {
+	_fwd_del_on || return 0
+	_fp_chs=$(_fwd_lists)
+	if [ -z "$_fp_chs" ]; then
+		_ap_why '-' "no forwarding channel is enabled"
+		return 0
+	fi
+	_kb_n=0
+	_kb_feed_json "$1"
+	[ "$_kb_n" -gt 0 ] || return 0
+	_kb_build
+	_tg_migrate
+	for _fp_ch in $_fp_chs; do
+		_kb_list_load "$(_list_file "$_fp_ch")"
+		eval "_fp_L_$_fp_ch=\$_KB_LIST"
+	done
+	_fp_cmd=$(uci -q get "$CFG.sms.cmd_enabled")
+	_fp_df=$(sms_cmd_done_file "$_TGT_PATH")
+	_fp_i=1; _fp_del=0
+	while [ "$_fp_i" -le "$_kb_n" ]; do
+		eval "_fp_x=\$_kb_x$_fp_i; _fp_f=\$_kb_f$_fp_i; _fp_t=\$_kb_t$_fp_i; _fp_c=\$_kb_c$_fp_i"
+		_fp_n=$_fp_i
+		_fp_i=$((_fp_i + 1))
+		case "$_fp_x" in ''|*[!0-9]*) continue ;; esac
+		[ "$_fp_x" -ge "$ARCH_BASE" ] 2>/dev/null && continue
+		_fp_wait=0
+		for _fp_ch in $_fp_chs; do
+			eval "_KB_LIST=\$_fp_L_$_fp_ch"
+			_kb_known "$_fp_n" || { _fp_wait=1; break; }
+		done
+		if [ "$_fp_wait" = 1 ]; then
+			_ap_why "$_fp_x" "waiting for forwarding"
+			continue
+		fi
+		if [ "$_fp_cmd" = 1 ] \
+		   && ! grep -qxF "$(sms_cmd_key "$_fp_f" "$_fp_t" "$_fp_c")" "$_fp_df" 2>/dev/null; then
+			_ap_why "$_fp_x" "waiting for the SMS commands pass"
+			continue
+		fi
+		if [ -n "$_AP_WHY" ]; then
+			_ap_why "$_fp_x" "forwarded, ready to delete"
+			continue
+		fi
+		MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_fp_x" >/dev/null 2>&1 \
+			&& _fp_del=$((_fp_del + 1))
+	done
+	[ "$_fp_del" -gt 0 ] && [ -z "$_AP_WHY" ] && \
+		logger -t 5gmodem "sms: forwarded messages deleted from the modem: $_fp_del"
 	return 0
 }
 
@@ -1402,9 +1455,10 @@ case "$BOX" in
 		[ -n "$_st_out" ] && printf '%s\n' "$_st_out"
 		exit $_st_rc ;;
 	archive-run)
-		_arch_on || { echo '{"result":"off"}'; exit 0; }
-		if _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; then
-			echo '{"result":"mm"}'; exit 0
+		if ! _arch_on || { _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; }; then
+			_fwd_del_on || { _arch_on && echo '{"result":"mm"}' || echo '{"result":"off"}'; exit 0; }
+			_fwd_purge "$(_arch_live_json)"
+			echo '{"result":"ok"}'; exit 0
 		fi
 		_ar_j=$(_arch_live_json)
 		_arch_merge "$_ar_j"
@@ -1412,27 +1466,34 @@ case "$BOX" in
 		echo '{"result":"ok"}'
 		exit 0 ;;
 	archive-why)
-		echo "модем:        ${_TGT_PATH:-?}"
-		echo "порт:         ${PORT:-?}"
-		echo "хранилище:    ${STORE:-$(uci -q get "$CFG.sms.storage")}"
-		echo "через MM:     $(_via_mm && echo да || echo нет)"
-		echo "архив:        $(_arch_on && echo включён || echo выключен)"
-		echo "слив слотов:  $([ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && echo выключен || echo включён)"
-		echo "Telegram:     $([ "$(uci -q get "$CFG.sms.tg_enabled")" = "1" ] && echo включён || echo выключен)"
-		echo "команды SMS:  $([ "$(uci -q get "$CFG.sms.cmd_enabled")" = "1" ] && echo включены || echo выключены)"
+		echo "modem:        ${_TGT_PATH:-?}"
+		echo "port:         ${PORT:-?}"
+		echo "storage:      ${STORE:-$(uci -q get "$CFG.sms.storage")}"
+		echo "via MM:       $(_via_mm && echo yes || echo no)"
+		echo "archive:      $(_arch_on && echo on || echo off)"
+		echo "slot purge:   $([ "$(uci -q get "$CFG.sms.archive_purge")" = "0" ] && echo off || echo on)"
+		echo "Telegram:     $([ "$(uci -q get "$CFG.sms.tg_enabled")" = "1" ] && echo on || echo off)"
+		echo "SMS commands: $([ "$(uci -q get "$CFG.sms.cmd_enabled")" = "1" ] && echo on || echo off)"
+		echo "fwd delete:   $(_fwd_del_on && echo on || echo off)"
+		if _fwd_del_on && { ! _arch_on || { _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; }; }; then
+			echo
+			_AP_WHY=1
+			_fwd_purge "$(_arch_live_json)"
+			exit 0
+		fi
 		if ! _arch_on; then
 			echo
-			echo "Архив выключен - сообщения остаются в модеме. Настройки -> SMS -> «Хранить сообщения в памяти роутера»."
+			echo "Archive is off: messages stay in the modem. Settings -> SMS -> \"Keep messages in router storage\"."
 			exit 0
 		fi
 		if _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; then
 			echo
-			echo "Модем работает через ModemManager, а галочка «Хранить сообщения в памяти роутера» не стоит: слоты не освобождаются."
+			echo "The modem runs under ModemManager and \"Keep messages in router storage\" is off: slots are not freed."
 			exit 0
 		fi
 		_aw_j=$(_arch_live_json)
-		echo "в архиве:     $(_arch_count)"
-		echo "в модеме:     $(printf '%s' "$_aw_j" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)"
+		echo "archived:     $(_arch_count)"
+		echo "in modem:     $(printf '%s' "$_aw_j" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)"
 		echo
 		_arch_merge "$_aw_j"
 		_AP_WHY=1
@@ -1550,7 +1611,7 @@ case "$BOX" in
 		if [ "$_AT_LOCKED" != 0 ] || \
 			{ [ -n "$_AT_LOCK_HELD" ] && [ "$_AT_LOCK_HELD" != "$(basename "$PORT")" ]; }; then
 			if _q_enqueue "$SND_TO" "$SND_TXT" "$PORT"; then
-				echo "sms queued: порт сейчас занят, отправлю при первой возможности"
+				echo "sms queued: port is busy, will send when possible"
 				exit 0
 			fi
 		fi
@@ -1563,7 +1624,7 @@ case "$BOX" in
 			exit 0
 		fi
 		if _q_enqueue "$SND_TO" "$SND_TXT" "$PORT"; then
-			echo "sms queued: не удалось отправить сейчас, отправлю при первой возможности"
+			echo "sms queued: sending failed now, will retry when possible"
 			exit 0
 		fi
 		echo "sms sending failed"

@@ -125,7 +125,7 @@ check_one() {
 	case "$_sw_st" in
 		*'"up": true'*) : ;;
 		*)
-			_swwhy="лежит, а автозапуск включён"
+			_swwhy="down while autostart is on"
 			case "$_sw_st" in
 				*'"autostart": true'*) : ;;
 				*)
@@ -134,7 +134,7 @@ check_one() {
 					[ -n "$_swerr" ] || return 0
 					[ "$(uci -q get "network.$_if.auto")" = "0" ] && return 0
 					[ "$(uci -q get "network.$_if.disabled")" = "1" ] && return 0
-					_swwhy="лежит с ошибкой протокола ($_swerr)"
+					_swwhy="down with protocol error ($_swerr)"
 					;;
 			esac
 			[ -n "$_path" ] && [ -e "/sys/bus/usb/devices/$_path/idVendor" ] || return 0
@@ -235,7 +235,7 @@ check_one() {
 								_log "$_if: frame format mismatch (driver raw_ip=$_qraw, modem $_qfmt) - inbound traffic is being dropped" ;;
 						esac
 						_log "$_if: QMI says connected but no address for $_qn cycles - reinitializing the modem"
-						"$RES/qmi-recover.sh" reset "$_path" "канал не поднялся ($_if)" >/dev/null 2>&1
+						"$RES/qmi-recover.sh" reset "$_path" "channel did not come up ($_if)" >/dev/null 2>&1
 					fi
 				fi
 			fi
@@ -245,7 +245,7 @@ check_one() {
 			_flag="/tmp/5gmodem/sw_noip_$_if"
 			if [ -f "$_flag" ]; then
 				rm -f "$_flag"
-				_revive "$_if" "поднят ($_proto), но без адреса"
+				_revive "$_if" "up ($_proto) but without an address"
 			else
 				: > "$_flag"
 			fi
@@ -265,12 +265,12 @@ check_one() {
 	_iip=$(_iface_ip "$_if")
 
 	if [ "$_act" = "0" ]; then
-		_revive "$_if" "контекст данных погас (CGACT=0)"
+		_revive "$_if" "data context went down (CGACT=0)"
 		return 0
 	fi
 
 	if [ -n "$_mip" ] && [ -n "$_iip" ] && [ "$_mip" != "$_iip" ]; then
-		_revive "$_if" "адрес сменился ($_iip -> $_mip)"
+		_revive "$_if" "address changed ($_iip -> $_mip)"
 		return 0
 	fi
 	return 0

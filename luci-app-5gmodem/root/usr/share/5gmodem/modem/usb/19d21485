@@ -132,7 +132,7 @@ if command -v adb >/dev/null 2>&1 && [ -n "$_POLL_AM" ]; then
 		_zt_cmd="$_zt_cmd"'; for z in /sys/class/thermal/thermal_zone*; do [ "$(cat $z/type)" = mdm_case_therm ] && echo "temp $(cat $z/temp)"; done'
 	fi
 	_zt_out=""
-	[ -n "$_zt_ser" ] && _zt_out=$(timeout 5 adb -s "$_zt_ser" shell "$_zt_cmd" 2>/dev/null | tr -d '\r')
+	[ -n "$_zt_ser" ] && _zt_out=$(timeout 5 adb -s "$_zt_ser" shell "$_zt_cmd" 2>/dev/null 1000>&- 6>&- 7>&- 8>&- 9>&- | tr -d '\r')
 	[ -n "$_zt_stale" ] && printf '%s\n' "$_zt_out" | sed -n 's/^temp \([0-9]*\)$/\1/p' | head -1 > "$_zt_c"
 	_zt_v=$(cat "$_zt_c" 2>/dev/null)
 	case "$_zt_v" in ''|*[!0-9]*) ;; *) [ "$_zt_v" -gt 0 ] && [ "$_zt_v" -lt 150 ] && TEMP="$_zt_v &deg;C" ;; esac

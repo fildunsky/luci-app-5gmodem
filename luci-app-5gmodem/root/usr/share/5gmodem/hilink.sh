@@ -1524,7 +1524,7 @@ _zte_post_auth() {
 
 _adb_to() {
 	_at_t="$1"; shift
-	_5GM_ADB=1 adb "$@" 2>/dev/null &
+	_5GM_ADB=1 adb "$@" 2>/dev/null 1000>&- 6>&- 7>&- 8>&- 9>&- &
 	_at_p=$!
 	( sleep "$_at_t"; kill "$_at_p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 	_at_w=$!

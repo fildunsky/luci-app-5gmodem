@@ -15,9 +15,9 @@ _GNUWGET=""
 wget --version 2>/dev/null | head -1 | grep -q "GNU Wget" && _GNUWGET=1
 if [ -z "$_GNUWGET" ] && [ -n "$LIVELOG" ]; then
 	if command -v curl >/dev/null 2>&1; then
-		_wnote="GNU wget (wget-ssl) не найден - HTTP через curl; если SM-DP+ не откроется по TLS, установите wget-ssl"
+		_wnote="GNU wget (wget-ssl) not found, using curl for HTTP; if SM-DP+ fails over TLS, install wget-ssl"
 	else
-		_wnote="нет ни GNU wget (wget-ssl), ни curl - HTTP к SM-DP+ невозможен, установите wget-ssl"
+		_wnote="neither GNU wget (wget-ssl) nor curl found, SM-DP+ is unreachable; install wget-ssl"
 	fi
 	printf '%s {"type":"httpx","payload":{"note":"%s"}}\n' \
 		"$(date '+%H:%M:%S' 2>/dev/null)" "$_wnote" >> "$LIVELOG" 2>/dev/null
@@ -76,14 +76,14 @@ while IFS= read -r line; do
 				_why=$(grep -iE 'failed|error|unable|refused|timed|denied|certificate|resolve' "$_rh" 2>/dev/null \
 					| grep -vE '^ *--|^ *-[a-zA-Z], ' \
 					| tail -2 | tr '\n' ' ' | tr -d '\r')
-				[ -n "$_why" ] || _why="транспорт не ответил (DNS/TLS/таймаут)"
+				[ -n "$_why" ] || _why="transport did not answer (DNS/TLS/timeout)"
 				[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","transport":"failed","why":"%s"}}\n' \
 					"$(date '+%H:%M:%S' 2>/dev/null)" "$url" "$(printf '%s' "$_why" | tr '"' "'")" >> "$LIVELOG"
 			else
 				if [ -s "$_rb" ] && [ "$(hexdump -v -n 2 -e '/1 "%02x"' "$_rb" 2>/dev/null)" = "1f8b" ]; then
 					if gzip -dc "$_rb" > "$_rb.un" 2>/dev/null && [ -s "$_rb.un" ]; then
 						mv "$_rb.un" "$_rb"
-						[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","note":"gzip распакован"}}\n' \
+						[ -n "$LIVELOG" ] && printf '%s {"type":"httpx","payload":{"url":"%s","note":"gzip decoded"}}\n' \
 							"$(date '+%H:%M:%S' 2>/dev/null)" "$url" >> "$LIVELOG"
 					fi
 					rm -f "$_rb.un"
@@ -123,7 +123,7 @@ while IFS= read -r line; do
 			r=$(sms_tool -d "$PORT" at "AT+CCHO=\"$param\"" 2>/dev/null | tr -d '\r')
 			c=$(printf '%s' "$r" | sed -n 's/^+CCHO: *\([0-9][0-9]*\).*/\1/p' | head -1)
 			[ -n "$c" ] || c=$(printf '%s' "$r" | grep -E '^[0-9]+$' | head -1)
-			[ -n "$LIVELOG" ] && printf '%s TRACE CCHO повтор после чистки каналов -> ch=%s\n' \
+			[ -n "$LIVELOG" ] && printf '%s TRACE CCHO retry after closing channels -> ch=%s\n' \
 				"$(date '+%H:%M:%S' 2>/dev/null)" "${c:--1}" >> "$LIVELOG"
 		fi
 		CH="$c"
@@ -147,7 +147,7 @@ while IFS= read -r line; do
 			"$(date '+%H:%M:%S' 2>/dev/null)" "$CH" "${#param}" "$param" "$out" \
 			"$(printf '%s' "$_cgla_out" | tr '\n' ' ')" >> "$LIVELOG"
 		if [ -z "$out" ]; then
-			[ -n "$LIVELOG" ] && printf '%s {"type":"apdux","payload":{"note":"чип не ответил на APDU (канал %s, %s символов) - порт занят или модем переэнумерировался"}}\n' \
+			[ -n "$LIVELOG" ] && printf '%s {"type":"apdux","payload":{"note":"chip did not answer APDU (channel %s, %s chars): port busy or modem re-enumerated"}}\n' \
 				"$(date '+%H:%M:%S' 2>/dev/null)" "$CH" "${#param}" >> "$LIVELOG"
 			printf '{"type":"apdu","payload":{"ecode":-1}}\n'
 		else

@@ -2436,7 +2436,7 @@ if [ -n "$AMP_SEC" ] && [ -n "$NR_IMEI" ] && [ "$(_active_path)" = "$_POLL_AM" ]
 			   && [ "$(uci -q get "network.$_own_if.modem_path")" = "$_POLL_AM" ] \
 			   && [ "$(uci -q get "network.$_own_if.modem_imei")" != "$NR_IMEI" ]; then
 				logger -t 5gmodem "interface $_own_if was owned by IMEI $(uci -q get "network.$_own_if.modem_imei") - correcting to $NR_IMEI"
-				note_foreign_uci network "опрос: штамп IMEI"
+				note_foreign_uci network "poll: IMEI stamp"
 				uci -q set "network.$_own_if.modem_imei=$NR_IMEI"
 				uci -q commit network
 			fi

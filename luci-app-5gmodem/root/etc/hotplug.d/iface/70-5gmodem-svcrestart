@@ -36,10 +36,10 @@ done
 	while [ "$_i" -lt 30 ]; do
 		for _t in 77.88.8.8 1.1.1.1; do
 			if ping -c 1 -W 2 -I "$DEV" "$_t" >/dev/null 2>&1; then
-				_ok=1; _via="через $DEV"; break
+				_ok=1; _via="via $DEV"; break
 			fi
 			if ping -c 1 -W 2 "$_t" >/dev/null 2>&1; then
-				_ok=1; _via="общим маршрутом"; break
+				_ok=1; _via="via the default route"; break
 			fi
 		done
 		[ "$_ok" = 1 ] && break
@@ -58,7 +58,7 @@ done
 			[ $((_up - _prev)) -lt 120 ] && [ "$_up" -ge "$_prev" ] && continue
 		fi
 		printf '%s' "$_up" > "$_st"
-		logger -t 5gmodem "аплинк $INTERFACE ($DEV) понёс трафик $_via - перезапускаю $_n"
+		logger -t 5gmodem "uplink $INTERFACE ($DEV) carries traffic $_via, restarting $_n"
 		/etc/init.d/"$_n" restart
 	done
 ) &

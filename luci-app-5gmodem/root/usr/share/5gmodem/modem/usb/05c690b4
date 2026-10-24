@@ -97,7 +97,7 @@ fi
 if command -v adb >/dev/null 2>&1; then
 	_UFI_P=$(cat "/sys/bus/usb/devices/$_POLL_AM/serial" 2>/dev/null)
 	if [ -n "$_UFI_P" ]; then
-		O=$(adb -s "$_UFI_P" shell 'for z in /sys/class/thermal/thermal_zone*; do case $(cat $z/type) in tsens*) echo "TZ $(cat $z/temp)";; esac; done; dumpsys telephony.registry' 2>/dev/null | tr -d '\r')
+		O=$(adb -s "$_UFI_P" shell 'for z in /sys/class/thermal/thermal_zone*; do case $(cat $z/type) in tsens*) echo "TZ $(cat $z/temp)";; esac; done; dumpsys telephony.registry' 2>/dev/null 1000>&- 6>&- 7>&- 8>&- 9>&- | tr -d '\r')
 		T=$(echo "$O" | awk '$1 == "TZ" && $2 ~ /^-?[0-9]+$/ { v = $2; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
 		[ -n "$T" ] && TEMP="$T &deg;C"
 		O1=$(echo "$O" | sed -n 's/.*mSignalStrength=SignalStrength: //p' | head -1)

@@ -771,7 +771,7 @@ elif [ "$PROTO" = xmm ] || [ "$PROTO" = atc ]; then
 				sleep 5; _xr_n=$((_xr_n + 5))
 			done
 			[ "$_xr_n" -ge 90 ] && logger -t 5gmodem-mkiface \
-				"$IF ($PROTO): регистрации нет за 90c - поднимаю интерфейс как есть"
+				"$IF ($PROTO): no registration in 90 s, bringing the interface up anyway"
 		fi
 		ifup "$IF"
 	) >/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &

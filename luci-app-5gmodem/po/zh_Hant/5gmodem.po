@@ -5916,3 +5916,9 @@ msgstr "數據機狀態指示燈"
 
 msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
 msgstr "藍色：LTE 且已連線。綠色：已註冊 3G 或 2G。紅色閃爍：無服務或未連線。立即生效，無需儲存。"
+
+msgid "Delete from the modem after forwarding"
+msgstr "轉發後從數據機刪除"
+
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgstr "當所有已啟用的管道（Telegram、ntfy、Webhook）都已送達，且（如已啟用）SMS 指令已檢查後，訊息將從數據機中刪除。未開啟「在路由器記憶體中保存訊息」時，它也會從收件匣中消失。"
