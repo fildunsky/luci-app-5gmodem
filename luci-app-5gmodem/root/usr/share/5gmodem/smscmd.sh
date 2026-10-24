@@ -6,7 +6,7 @@ CFG=5gmodem
 . "$RES/lib.sh" 2>/dev/null
 
 _cfg() { uci -q get "$CFG.sms.$1" 2>/dev/null; }
-_log() { logger -t 5gmodem "sms-команды: $*"; }
+_log() { logger -t 5gmodem "sms-commands: $*"; }
 
 CMD_EN=$(_cfg cmd_enabled)
 [ "$1" = run ] && [ "$CMD_EN" != 1 ] && exit 0
@@ -105,7 +105,7 @@ _run_cmd() {
 	case "$_rc_dly" in ''|*[!0-9]*) _rc_dly=0 ;; esac
 	[ "$_rc_dly" -gt 300 ] 2>/dev/null && _rc_dly=300
 
-	_log "от $2: $(uci -q get "$1.keyword") -> $_rc_ex"
+	_log "from $2: $(uci -q get "$1.keyword") -> $_rc_ex"
 
 	if [ "$_rc_dly" -gt 0 ]; then
 		[ "$_rc_ans" = "1" ] && _answer "$2" "${_rc_txt:-OK}"
@@ -217,7 +217,7 @@ $_o_grp"
 		sync 2>/dev/null
 
 		if [ "$_o_first" = 0 ] && ! _fresh_cmd "$_o_t"; then
-			_log "пропущено: сообщению от $_o_s больше ${CMD_MAXAGE} ч (${_o_t}) - команды из старой переписки не выполняем"
+			_log "skipped: message from $_o_s is older than ${CMD_MAXAGE} h (${_o_t}), old commands are not run"
 		elif [ "$_o_first" = 0 ]; then
 			_o_body="$_o_text"
 			if [ -n "$CMD_SECRET" ]; then
@@ -233,9 +233,9 @@ $_o_grp"
 			_o_rest=$(printf '%s' "$_o_body" | awk '{ $1=""; sub(/^[ \t]+/,""); print; exit }')
 			if _o_cs=$(_find_cmd "$_o_word"); then
 				if ! _allowed "$_o_s"; then
-					_log "отклонено: номер $_o_s не в белом списке"
+					_log "rejected: number $_o_s is not whitelisted"
 				elif ! _cool_ok "$_o_word"; then
-					_log "пропущено: «$_o_word» уже выполнялась меньше ${CMD_COOLDOWN} c назад (дубль сообщения)"
+					_log "skipped: \"$_o_word\" ran less than ${CMD_COOLDOWN} s ago (duplicate message)"
 				else
 					_cool_mark "$_o_word"
 					_run_cmd "$_o_cs" "$_o_s" "$_o_rest" "$_o_text"
@@ -247,7 +247,7 @@ $_o_grp"
 	if [ "$(wc -l 2>/dev/null < "$_o_df" || echo 0)" -gt "$DONE_MAX" ]; then
 		tail -n "$DONE_MAX" "$_o_df" > "$_o_df.tmp" 2>/dev/null && mv "$_o_df.tmp" "$_o_df"
 	fi
-	[ "$_o_first" = 1 ] && _log "первая встреча с этой SIM (модем $MPATH): её сообщения помечены обработанными, команды не выполнялись"
+	[ "$_o_first" = 1 ] && _log "first time seeing this SIM (modem $MPATH): its messages marked as handled, no commands run"
 	return 0
 }
 
@@ -295,7 +295,7 @@ chat)
 	_cdly=$(uci -q get "$_ccs.delay")
 	case "$_cdly" in ''|*[!0-9]*) _cdly=0 ;; esac
 	[ "$_cdly" -gt 300 ] 2>/dev/null && _cdly=300
-	_log "из чата: $_cword -> $_cex"
+	_log "from chat: $_cword -> $_cex"
 	_cjson() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\000-\037' ' '; }
 	if [ "$_cdly" -gt 0 ]; then
 		(

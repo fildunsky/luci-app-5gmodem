@@ -706,7 +706,7 @@ if [ "$_bs_am" = ccci ]; then
 			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
 				"$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')" \
 				"$("$_HL" mtkgetmode ccci 2>/dev/null | tr -cd '0-9')"
-			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			printf '{"id":"1","label":"Auto"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
 			if [ -n "$_bs_mb" ]; then
 				printf '], "supported": ['
 				_f=1
@@ -727,7 +727,7 @@ if [ "$_bs_am" = ccci ]; then
 		getsupportedbands) _bs_mb=$("$_HL" mtkbands ccci); echo "${_bs_mb%%|*}"; exit 0 ;;
 		setbands)          "$_HL" mtksetbands "$2" ccci; _bands_flush; exit 0 ;;
 		getmode)           "$_HL" mtkgetmode ccci; exit 0 ;;
-		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		getsupportedmodes) echo "1:Auto 8:2G 2:3G 4:4G"; exit 0 ;;
 		setmode)           "$_HL" mtksetmode "$2" ccci; _bands_flush; exit 0 ;;
 		setbands3g)        "$_HL" mtksetbands3g "$2" ccci; _bands_flush; exit 0 ;;
 		setbands2g)        "$_HL" mtksetbands2g "$2" ccci; _bands_flush; exit 0 ;;
@@ -779,7 +779,7 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
 				"$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')" \
 				"$("$_HL" zgetmode "$_bs_am" 2>/dev/null | tr -cd '0-9')"
-			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			printf '{"id":"1","label":"Auto"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
 			if [ -n "$_bs_mb" ]; then
 				printf '], "supported": ['
 				_f=1
@@ -802,7 +802,7 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 		getsupportedbands) [ -n "$_bs_mtk" ] && { _bs_mb=$("$_HL" mtkbands "$_bs_am"); echo "${_bs_mb%%|*}"; }; exit 0 ;;
 		setbands)          [ -n "$_bs_mtk" ] && "$_HL" mtksetbands "$2" "$_bs_am"; _bands_flush; exit 0 ;;
 		getmode)           "$_HL" zgetmode "$_bs_am"; exit 0 ;;
-		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		getsupportedmodes) echo "1:Auto 8:2G 2:3G 4:4G"; exit 0 ;;
 		setmode)           "$_HL" zsetmode "$2" "$_bs_am"; _bands_flush; exit 0 ;;
 		setbands3g)        [ -n "$_bs_mtk" ] && "$_HL" mtksetbands3g "$2" "$_bs_am"; _bands_flush; exit 0 ;;
 		setbands2g)        [ -n "$_bs_mtk" ] && "$_HL" mtksetbands2g "$2" "$_bs_am"; _bands_flush; exit 0 ;;
@@ -856,7 +856,7 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
 			_cm=$(printf '%s' "$_cm" | tr -d '\\"\r\n')
 			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
 				"$_bs_mdl" "$_cm"
-			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			printf '{"id":"1","label":"Auto"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
 			printf '], "supported": ['
 			_f=1
 			for _b in $_sup; do
@@ -890,7 +890,7 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
 		getbands)          echo "$_en"; exit 0 ;;
 		getsupportedbands) echo "$_sup"; exit 0 ;;
 		getmode)           "$_HL" getmode "$_bs_am"; exit 0 ;;
-		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		getsupportedmodes) echo "1:Auto 8:2G 2:3G 4:4G"; exit 0 ;;
 		setbands)
 			"$_HL" setbands "$2" "$_bs_am"
 			( unset _AT_LOCK_HELD; sleep 8; /usr/share/5gmodem/modemswitch.sh autosetup "$_bs_am" ) >/dev/null 2>&1 </dev/null 8>&- &

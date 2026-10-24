@@ -49,7 +49,7 @@ qmi_pool_recover() {
 	_qw=$(printf '%s' "$_lm" | jsonfilter -e "@[@.path=\"$_qp\"].wdm[0]" 2>/dev/null)
 	[ -n "$_qw" ] && [ -e "$_qw" ] || return 1
 	_trig=""
-	qmi_pool_exhausted "$_qw" && _trig="QMI-пул исчерпан"
+	qmi_pool_exhausted "$_qw" && _trig="QMI client pool exhausted"
 	[ -z "$_trig" ] && _mm_failed_unknowncaps "$_qp" && _trig="MM failed: unknown-capabilities"
 	[ -n "$_trig" ] || return 1
 	_mk="/tmp/5gmodem/qmirecover_$(printf '%s' "$_qp" | tr -c 'A-Za-z0-9' _)"
@@ -87,5 +87,5 @@ case "$1" in
 	check)   qmi_pool_exhausted "$2" && echo exhausted || echo ok ;;
 	recover) qmi_pool_recover "$2" ;;
 	reset)   qmi_force_reset "$2" "$3" ;;
-	*) echo "usage: $0 {check <cdc-wdm>|recover <usb-path>|reset <usb-path> [причина]}" >&2; exit 1 ;;
+	*) echo "usage: $0 {check <cdc-wdm>|recover <usb-path>|reset <usb-path> [reason]}" >&2; exit 1 ;;
 esac

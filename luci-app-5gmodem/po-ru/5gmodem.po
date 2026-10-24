@@ -6201,3 +6201,9 @@ msgstr "Индикатор состояния модема"
 
 msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
 msgstr "Синий: LTE и подключение установлено. Зелёный: регистрация в 3G или 2G. Мигающий красный: нет сети или нет подключения. Применяется сразу, сохранять не нужно."
+
+msgid "Delete from the modem after forwarding"
+msgstr "Удалять из модема после пересылки"
+
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgstr "Сообщение удаляется из модема, когда все включённые каналы (Telegram, ntfy, вебхук) его доставили, а команды по SMS, если включены, его проверили. Без «Хранить сообщения в памяти роутера» оно пропадает и из «Входящих»."

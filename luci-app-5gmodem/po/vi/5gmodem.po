@@ -5916,3 +5916,9 @@ msgstr "Đèn trạng thái modem"
 
 msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
 msgstr "Xanh dương: LTE và đã kết nối. Xanh lá: đăng ký 3G hoặc 2G. Đỏ nhấp nháy: không có sóng hoặc chưa kết nối. Áp dụng ngay, không cần Lưu."
+
+msgid "Delete from the modem after forwarding"
+msgstr "Xóa khỏi modem sau khi chuyển tiếp"
+
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgstr "Tin nhắn bị xóa khỏi modem khi mọi kênh đã bật (Telegram, ntfy, webhook) đã gửi xong và, nếu bật, lệnh SMS đã kiểm tra nó. Nếu không bật \"Lưu tin nhắn trong bộ nhớ router\", tin nhắn cũng biến mất khỏi Hộp thư đến."

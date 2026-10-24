@@ -7,7 +7,7 @@ var HBIN = '/usr/share/5gmodem/health.sh';
 var NBIN = '/usr/share/5gmodem/netpri.sh';
 
 return baseclass.extend({
-	API: 30800,
+	API: 30801,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),

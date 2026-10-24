@@ -2139,7 +2139,6 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   #modemip6 { font-size: max(12px, .78em); }
   .tginfo-vidpid { font-size: 12px; }
   #modemname > #modemchips { top: 8px; }
-  #modemname > #stale-mark, #modemname > #usbflap-warn { top: 10px !important; }
   .tginfo .tg-sublabel { font-size: max(12px, .76em); }
   #signal medium { font-size: max(12px, .7em); }
   .tginfo-info .tginfo-freq { font-size: max(12px, .8em); }
