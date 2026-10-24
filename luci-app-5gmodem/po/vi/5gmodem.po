@@ -5910,3 +5910,9 @@ msgstr "Cần đường dẫn tuyệt đối gồm chữ, số và / . _ -"
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "Cho bo mạch không điều khiển được nguồn USB: một tệp thực thi ngắt và cấp lại nguồn cho modem (ví dụ đảo GPIO). Bước nguồn chạy nó thay vì tắt cổng USB, với đối số là giao diện, đường dẫn USB của modem và cổng AT. Đầu ra được ghi vào nhật ký hệ thống."
+
+msgid "Modem status LED"
+msgstr "Đèn trạng thái modem"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "Xanh dương: LTE và đã kết nối. Xanh lá: đăng ký 3G hoặc 2G. Đỏ nhấp nháy: không có sóng hoặc chưa kết nối. Áp dụng ngay, không cần Lưu."

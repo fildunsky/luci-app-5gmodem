@@ -5910,3 +5910,9 @@ msgstr "必须是由字母、数字和 / . _ - 组成的绝对路径"
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "适用于无法控制 USB 供电的板子：一个可执行文件，用于切断并恢复调制解调器供电（例如切换 GPIO）。电源步骤会运行它来代替关闭 USB 端口，参数为接口、调制解调器 USB 路径及其 AT 端口。输出写入系统日志。"
+
+msgid "Modem status LED"
+msgstr "调制解调器状态指示灯"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "蓝色：LTE 且已连接。绿色：已注册 3G 或 2G。红色闪烁：无服务或未连接。立即生效，无需保存。"

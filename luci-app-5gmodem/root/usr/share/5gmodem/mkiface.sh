@@ -276,6 +276,34 @@ if [ -n "$AMP" ]; then
 	fi
 fi
 
+if [ "$AMP" = ccci ]; then
+	[ -f /lib/netifd/proto/ccmni.sh ] || { json error ccmni ""; exit 1; }
+	_mk_cc=$(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.proto='\?ccmni'\?\$/\1/p" | head -1)
+	[ -n "$_mk_cc" ] && IF="$_mk_cc"
+	if [ "$(uci -q get "network.$IF.proto")" != ccmni ]; then
+		OLDMETRIC=$(uci -q get "network.$IF.metric")
+		_mk_guard_if "$IF"
+		uci -q delete "network.$IF" 2>/dev/null
+		uci set "network.$IF=interface"
+		uci set "network.$IF.proto=ccmni"
+		uci set "network.$IF.ifname=ccmni0"
+		uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
+		uci commit network
+		_fw_zone_add "$IF"
+	fi
+	if [ "$_IS_ACTIVE" = 1 ]; then
+		uci -q set "5gmodem.@5gmodem[0].network=$IF"
+		uci -q set "5gmodem.@5gmodem[0].iface_proto=ccmni"
+	fi
+	uci -q set "5gmodem.$MSEC.network=$IF"
+	uci -q set "5gmodem.$MSEC.iface_proto=ccmni"
+	stamp_iface "$IF" "$AMP"
+	uci -q commit 5gmodem
+	ifup "$IF" >/dev/null 2>&1
+	json created ccmni ccmni0
+	exit 0
+fi
+
 if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] || [ "$REQ" = fibocom ] || [ "$REQ" = atc ] || [ "$REQ" = xmm ]; }; then
 	FNET=""
 	for n in /sys/bus/usb/devices/$AMP:*/net/*; do

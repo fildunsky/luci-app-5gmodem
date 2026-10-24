@@ -6195,3 +6195,9 @@ msgstr "Нужен абсолютный путь из букв, цифр и / . 
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "Для плат без управления питанием USB: исполняемый файл, который снимает и возвращает питание модема (например, дёргает GPIO). Ступень «питание» запускает его вместо отключения USB-порта и передаёт аргументами интерфейс, USB-путь модема и его AT-порт. Вывод скрипта пишется в системный журнал."
+
+msgid "Modem status LED"
+msgstr "Индикатор состояния модема"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "Синий: LTE и подключение установлено. Зелёный: регистрация в 3G или 2G. Мигающий красный: нет сети или нет подключения. Применяется сразу, сохранять не нужно."

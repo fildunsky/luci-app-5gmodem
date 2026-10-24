@@ -215,6 +215,9 @@ band5g() {
 getdevicevendorproduct() {
 	devname="$(basename $1)"
 	case "$devname" in
+		'ttyMTK'*)
+			echo "soc/$(soc_modem_vidpid | tr -d :)"
+			;;
 		'wwan'*'at'*)
 			devpath="$(readlink -f /sys/class/wwan/$devname/device)"
 			T=${devpath%/*/*/*}
@@ -783,6 +786,9 @@ fi
 getpath() {
 	devname="$(basename $1)"
 	case "$devname" in
+	'ttyMTK'*)
+		P=/sys/kernel/ccci
+		;;
 	'wwan'*'at'*)
 		devpath="$(readlink -f /sys/class/wwan/$devname/device)"
 		P=${devpath%/*/*/*}
@@ -1342,7 +1348,7 @@ _sanv S3MIMO S3MOD S4MIMO S4MOD BANDWIDTH ENBID
 _sanv PATHLOSS TXPOWER UECAT CQI VOLTE RSCP
 _sanv MAXDL MAXUL AMBRDL AMBRUL QCI
 _sanv ECIO RSRP RSRQ RSSI SINR _SN_CONNST
-_sanv _SN_ALIAS _SN_CPORT BS_DIST
+_sanv _SN_ALIAS _SN_CPORT BS_DIST TEMPS BATTERY BATTERY_CHG
 # no comments inside this heredoc: they would end up in the JSON
 cat <<EOF
 {
@@ -1360,6 +1366,9 @@ cat <<EOF
 "alias":"${_J__SN_ALIAS}",
 "vidpid":"${_J__SN_VIDPID}",
 "mtemp":"${_J_TEMP}",
+"temps":"${_J_TEMPS}",
+"battery":"${_J_BATTERY}",
+"battery_charging":"${_J_BATTERY_CHG}",
 "mtherm":"${_J_THERM}",
 "antports":"${_J_ANTPORTS}",
 "rxdiv":"${_J_RXDIV}",

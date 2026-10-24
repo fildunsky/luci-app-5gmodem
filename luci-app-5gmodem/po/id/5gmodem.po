@@ -5910,3 +5910,9 @@ msgstr "Diharapkan path absolut dari huruf, angka, dan / . _ -"
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "Untuk papan tanpa kontrol daya USB: berkas eksekusi yang memutus dan memulihkan daya modem (misalnya mengubah GPIO). Langkah daya menjalankannya sebagai pengganti mematikan port USB, dengan argumen antarmuka, path USB modem, dan port AT-nya. Keluarannya masuk ke log sistem."
+
+msgid "Modem status LED"
+msgstr "LED status modem"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "Biru: LTE dan koneksi aktif. Hijau: terdaftar di 3G atau 2G. Merah berkedip: tidak ada layanan atau tidak terhubung. Langsung berlaku, tidak perlu Simpan."

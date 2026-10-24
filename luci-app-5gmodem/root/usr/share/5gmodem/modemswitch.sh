@@ -66,7 +66,7 @@ at_probe() {
 detect_at() {
 	for t in "$@"; do
 		[ -e "$t" ] || continue
-		case "$t" in /dev/ttyUSB*|/dev/ttyACM*|/dev/wwan*at*) ;; *) continue ;; esac
+		case "$t" in /dev/ttyUSB*|/dev/ttyACM*|/dev/wwan*at*|/dev/ttyMTK*) ;; *) continue ;; esac
 		if at_probe "$t"; then echo "$t"; return 0; fi
 	done
 	return 1
@@ -570,6 +570,7 @@ autoapn)
 	case "$(uci -q get "$CFG.$_am_sec.kind")" in
 		tether|hilink) exit 0 ;;
 	esac
+	[ "$(uci -q get "network.$IFACE.proto")" = ccmni ] && exit 0
 	if [ "$(uci -q get "$CFG.$_am_sec.apn_mode")" = "manual" ]; then
 		logger -t 5gmodem "autoapn: $IFACE is in manual mode, leaving the APN alone"
 		exit 0

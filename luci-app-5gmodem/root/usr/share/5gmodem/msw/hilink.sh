@@ -192,6 +192,7 @@ _ad_hastty() {
 try_at_debug() {
 	_ad_sec=$(secname "$1")
 	[ "$(uci -q get "$CFG.$_ad_sec.at_debug")" = "0" ] && return 1
+	hl_brovi "$_ad_sec" && return 1
 	case "$(modem_vidpid "$1")" in 15a9:*|1076:8002|0846:68e1) return 1 ;; esac
 	[ -n "$("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$1\"].tty[0]" 2>/dev/null)" ] && return 1
 	_ad_w=0
@@ -200,6 +201,13 @@ try_at_debug() {
 		sleep 3
 		_ad_w=$((_ad_w + 1))
 	done
+	if [ -z "$(uci -q get "$CFG.$_ad_sec.model")" ]; then
+		case "$("$RES/hilink.sh" devname "$1" 2>/dev/null)" in
+			*-325*)
+				logger -t 5gmodem "hilink: $1 is a Brovi -325 (ASR), its debug AT port is silent - staying on the web API"
+				return 1 ;;
+		esac
+	fi
 	_ad_ok=""
 	_ad_t=0
 	while [ "$_ad_t" -lt 3 ]; do

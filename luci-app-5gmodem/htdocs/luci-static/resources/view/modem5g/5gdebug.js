@@ -114,7 +114,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30700, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30800, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -569,8 +569,10 @@ return view.extend({
 			L.resolveDefault(fs.exec('/usr/share/5gmodem/signal-leds.sh', [ 'metric', selW.getValue() ]), {});
 		});
 
+		var rgb = ledsAvail === 'rgb';
+
 		return E('div', { 'class': 'cbi-section tg5g' }, [
-			E('h3', {}, _('Signal level indicator')),
+			E('h3', {}, rgb ? _('Modem status LED') : _('Signal level indicator')),
 			E('div', { 'class': 'cbi-value tg-flag' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('Show on the case LEDs')),
 				E('div', { 'class': 'cbi-value-field' }, [
@@ -584,10 +586,11 @@ return view.extend({
 						return n;
 					})(),
 					E('div', { 'class': 'cbi-value-description' },
-						_('Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed.'))
+						rgb ? _('Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed.')
+							: _('Reads the same snapshot as the pages - the modem is not polled separately. Applies immediately, no Save needed.'))
 				])
 			]),
-			E('div', { 'class': 'cbi-value' }, [
+			rgb ? '' : E('div', { 'class': 'cbi-value' }, [
 				E('label', { 'class': 'cbi-value-title' }, _('LED metric')),
 				E('div', { 'class': 'cbi-value-field' }, [
 					sel,
@@ -716,8 +719,10 @@ return view.extend({
 		var devs = res[1] || [];
 		var ledsAvail = (function() {
 			var names = (res[6] || []).map(function(e) { return e.name; });
-			return [ 'white:signal1', 'white:signal2', 'white:signal3' ]
-				.every(function(n) { return names.indexOf(n) >= 0; });
+			var has = function(l) { return l.every(function(n) { return names.indexOf(n) >= 0; }); };
+			if (has([ 'white:signal1', 'white:signal2', 'white:signal3' ])) { return 'bars'; }
+			if (has([ 'red', 'green', 'blue' ])) { return 'rgb'; }
+			return false;
 		})();
 
 		function portLabel(name) {

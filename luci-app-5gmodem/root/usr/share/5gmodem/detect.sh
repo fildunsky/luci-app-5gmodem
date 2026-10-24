@@ -68,6 +68,9 @@ fi
 getdevicepath() {
 	devname="$(basename $1)"
 	case "$devname" in
+	'ttyMTK'*)
+		echo /sys/kernel/ccci
+		;;
 	'wwan'*'at'*)
 		devpath="$(readlink -f /sys/class/wwan/$devname/device)"
 		echo ${devpath%/*/*/*}
@@ -188,7 +191,7 @@ if [ -n "$DEVICE" ]; then
 	exit 0
 fi
 
-DEVICES=$(find /dev -name "ttyUSB*" -o -name "ttyACM*" -o -name "wwan*at*" | sort -r)
+DEVICES=$(find /dev -name "ttyUSB*" -o -name "ttyACM*" -o -name "wwan*at*" -o -name "ttyMTK*" | sort -r)
 WAN=$(uci -q get network.wan.device)
 if [ -e "$WAN" ]; then
 	DEVPATH=$(getdevicepath "$WAN")

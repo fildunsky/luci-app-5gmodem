@@ -301,3 +301,8 @@ msgstr ""
 msgid "On phones the Network page gets a summary bar, tabs and signal tiles. Turn off to get the previous layout back."
 msgstr ""
 
+msgid "Modem status LED"
+msgstr ""
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr ""

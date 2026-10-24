@@ -90,18 +90,39 @@ usb_path_present() {
 	[ -e "/sys/bus/usb/devices/$1" ] || [ -e "/sys/bus/pci/devices/${1##*/}" ] || soc_modem_node "$1" >/dev/null
 }
 
+mtk_soc_modem() {
+	[ -d /sys/kernel/ccci ] && [ -S /dev/socket/rild-atci ]
+}
+
 soc_modem_node() {
+	if [ "$1" = ccci ]; then
+		mtk_soc_modem || return 1
+		echo /sys/kernel/ccci
+		return 0
+	fi
 	_smn_d="/sys/bus/platform/devices/${1##*/}"
 	[ -n "$1" ] && [ -d "$_smn_d/remoteproc" ] || return 1
 	readlink -f "$_smn_d"
 }
 
 soc_modem_vidpid() {
+	if mtk_soc_modem; then
+		_smv_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | tr -cd '0-9' | cut -c1-4)
+		[ -n "$_smv_m" ] || _smv_m=$(sed -n 's/^Hardware[^:]*: *[A-Za-z]*//p' /proc/cpuinfo 2>/dev/null | tr -cd '0-9' | cut -c1-4)
+		printf '0e8d:%s\n' "${_smv_m:-0000}"
+		return
+	fi
 	_smv_m=$(tr -cd '0-9' < /sys/devices/soc0/machine 2>/dev/null | cut -c1-4)
 	printf '05c6:%s\n' "${_smv_m:-0000}"
 }
 
 soc_modem_model() {
+	if mtk_soc_modem; then
+		_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null)
+		[ -n "$_smm_m" ] || _smm_m=$(sed -n 's/^Hardware[^:]*: *//p' /proc/cpuinfo 2>/dev/null | head -1)
+		printf 'MediaTek %s\n' "${_smm_m:-SoC}"
+		return
+	fi
 	_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | sed 's/ *4G Modem Stick$//; s/ *Modem Stick$//')
 	[ -n "$_smm_m" ] || _smm_m=$(cat /sys/devices/soc0/machine 2>/dev/null)
 	printf '%s\n' "$_smm_m"
@@ -875,6 +896,7 @@ alias_for_path() {
 
 tty_usbpath() {
 	[ -n "$1" ] || return 1
+	case "${1##*/}" in ttyMTK*) echo ccci; return 0 ;; esac
 	_tp=$(readlink -f "/sys/class/wwan/$(basename "$1")/device" 2>/dev/null)
 	if [ -n "$_tp" ]; then
 		while [ -n "$_tp" ] && [ "$_tp" != /sys ]; do
@@ -1076,7 +1098,7 @@ is_numlist() {
 is_devpath() {
 	case "$1" in
 		*..*|*[!A-Za-z0-9/._-]*) return 1 ;;
-		/dev/ttyUSB[0-9]*|/dev/ttyACM[0-9]*|/dev/cdc-wdm[0-9]*|/dev/wwan[0-9]*) return 0 ;;
+		/dev/ttyUSB[0-9]*|/dev/ttyACM[0-9]*|/dev/cdc-wdm[0-9]*|/dev/wwan[0-9]*|/dev/ttyMTK[0-9]*) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -1422,11 +1444,18 @@ cmd_allowed() {
 	return 1
 }
 
+hl_brovi() {
+	case "$(uci -q get "5gmodem.$1.model")" in
+		*E33[0-9][0-9]*-325*|*E33[0-9][0-9]s-325*) return 0 ;;
+	esac
+	return 1
+}
+
 hl_web_metrics() {
 	case "$(uci -q get "5gmodem.$1.vidpid")" in
 		19d2:0581) return 0 ;;
 	esac
-	return 1
+	hl_brovi "$1"
 }
 
 hl_web_port() {

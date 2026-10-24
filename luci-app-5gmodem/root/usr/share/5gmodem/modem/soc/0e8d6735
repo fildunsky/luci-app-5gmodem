@@ -1,0 +1,168 @@
+MODEL=$(soc_modem_model)
+
+_mtk_keep() {
+	_mk_f="/tmp/5gmodem/mtk_$1"
+	if [ -n "$2" ]; then
+		printf '%s\n' "$2" > "$_mk_f"
+		printf '%s' "$2"
+	elif [ -s "$_mk_f" ] && [ -z "$(find "$_mk_f" -mmin +1 2>/dev/null)" ]; then
+		cat "$_mk_f"
+	fi
+}
+
+O=$(sms_tool -d $DEVICE at "AT+CGMR" | tr -d '\r' | sed -n 's/^+CGMR: *//p' | head -1)
+[ -n "$O" ] && FW="${O%%,*}"
+
+O=$(sms_tool -d $DEVICE at "AT+CGSN")
+T=$(digits_of "$O" 15 17)
+[ -n "$T" ] && NR_IMEI="$T"
+
+O=$(sms_tool -d $DEVICE at "AT+CIMI")
+T=$(digits_of "$O" 14 16)
+[ -n "$T" ] && NR_IMSI="$T"
+
+O=$(sms_tool -d $DEVICE at "AT+ICCID" | tr -d '\r' | sed -n 's/^+ICCID: *\([0-9A-Fa-f]*\).*/\1/p' | head -1)
+O=$(printf '%s' "$O" | sed 's/[Ff]*$//')
+[ -n "$O" ] && NR_ICCID="$O"
+
+O=$(sms_tool -d $DEVICE at "AT+ERAT?" | tr -d '\r' | sed -n 's/^+ERAT: *\([0-9]*\).*/\1/p' | head -1)
+case "$O" in
+	3|4|5|6|7) MODE="LTE" ;;
+	2) MODE="UMTS" ;;
+	0|1) MODE="GSM" ;;
+esac
+
+O=$(sms_tool -d $DEVICE at "AT+ECSQ" | tr -d '\r' | sed -n 's/^+ECSQ: *//p' | head -1)
+case "$O" in *,-[0-9]*) ;; *) O="" ;; esac
+O=$(_mtk_keep ecsq "$O")
+if [ -n "$O" ] && [ "$MODE" = LTE ]; then
+	eval "$(printf '%s' "$O" | awk -F, '{
+		q = $6; p = $7; n = $9
+		if (q <= 0 && q > -200) printf "RSRQ=%.1f\n", q / 4
+		if (p < 0 && p > -700) printf "RSRP=%.0f\n", p / 4
+		if (n != 32767 && n > -200 && n < 400) printf "SINR=%.1f\n", n / 4
+	}')"
+fi
+
+case "$CSQ" in ''|*[!0-9]*) ;; *) [ "$CSQ" -lt 99 ] && RSSI=$(( CSQ * 2 - 113 )) ;; esac
+
+O=$(sms_tool -d $DEVICE at "AT+ECELL" | tr -d '\r"' | sed -n 's/^+ECELL: *//p' | head -1)
+case "$O" in [1-9],*) ;; *) O="" ;; esac
+O=$(_mtk_keep ecell "$O")
+if [ -n "$O" ]; then
+	_MTK_C=$(printf '%s' "$O" | awk -F, '{
+		n = $1 + 0; o = ""
+		for (i = 0; i < n; i++) {
+			b = 2 + i * 13
+			if (b + 9 > NF) break
+			pci = $(b + 5); r = $(b + 8); q = $(b + 9)
+			if (pci !~ /^[0-9]+$/ || pci + 0 > 503) continue
+			rp = (r < 0 && r > -700) ? sprintf("%.0f", r / 4) : ""
+			rq = (q <= 0 && q > -200) ? sprintf("%.1f", q / 4) : ""
+			sv = (i == 0 && $(b + 1) != "0FFFFFFF") ? 1 : 0
+			if (sv) printf "S %s %s %s %s %s %s\n", $(b + 1), $(b + 2), $(b + 3), $(b + 4), pci, rp
+			o = o (o == "" ? "" : ",") sprintf("{\"band\":\"\",\"earfcn\":\"\",\"pci\":\"%s\",\"rsrp\":\"%s\",\"rsrq\":\"%s\",\"rssi\":\"\",\"serving\":%d}", pci, rp, rq, sv)
+		}
+		printf "N %s\n", o
+	}')
+	read -r T T1 T2 _ _ T3 _ <<EOF_MTK
+$(printf '%s\n' "$_MTK_C" | grep '^S ')
+EOF_MTK
+	case "$T1" in ''|*[!0-9A-Fa-f]*) ;; *)
+		CID_HEX=$(echo "$T1" | tr 'a-f' 'A-F'); CID_DEC=$(printf '%d' "0x$T1" 2>/dev/null)
+		[ -n "$CID_DEC" ] && ENBID=$(( CID_DEC >> 8 )) ;;
+	esac
+	case "$T2" in ''|*[!0-9A-Fa-f]*|FFFF) ;; *)
+		TAC_HEX=$(echo "$T2" | tr 'a-f' 'A-F'); TAC_DEC=$(printf '%d' "0x$T2" 2>/dev/null) ;;
+	esac
+	[ -n "$T3" ] && PCI="$T3"
+	T=$(printf '%s\n' "$_MTK_C" | sed -n 's/^N //p')
+	[ -n "$T" ] && NEIGHBORS="$T"
+fi
+
+_MTK_EI=$(sms_tool -d $DEVICE at "AT+EINFO?" | tr -d '\r' | sed -n 's/^+EINFO: *\([0-9]*\).*/\1/p' | head -1)
+case "$_MTK_EI" in
+	''|*[!0-9]*) _MTK_EI="" ;;
+	*) if [ $(( _MTK_EI & 4 )) != 0 ]; then
+		_MTK_EI=$(( _MTK_EI & ~4 ))
+		sms_tool -d $DEVICE at "AT+EINFO=$_MTK_EI" >/dev/null 2>&1
+	fi ;;
+esac
+if [ "$MODE" = LTE ] && [ -n "$PCI" ] && [ -x /system/bin/logcat ]; then
+	O=""
+	if [ -n "$_MTK_EI" ] && ! awk -v p="$PCI" '$1 == p { f = 1 } END { exit !f }' /tmp/5gmodem/mtk_earfcn 2>/dev/null; then
+		sms_tool -d $DEVICE at "AT+EINFO=$(( _MTK_EI | 4 ))" >/dev/null 2>&1
+		sleep 2
+		sms_tool -d $DEVICE at "AT+EINFO=$_MTK_EI" >/dev/null 2>&1
+		O=$(env -u LD_PRELOAD /system/bin/logcat -b radio -d -t 2000 2>/dev/null | sed -n 's/.*AT< +ECELLINFO: *1, *[0-9]*, *\([0-9A-Fa-f]*\).*/\1/p' | tail -1)
+	fi
+	if [ -n "$O" ]; then
+		_MTK_NP=$(printf '%s' "$NEIGHBORS" | tr '}' '\n' | grep '"serving":0' | sed -n 's/.*"pci":"\([0-9]*\)".*/\1/p' | xargs)
+		_MTK_L=$(printf '%s' "$O" | awk -v pci="$PCI" -v np="$_MTK_NP" '
+			function h(s, i, v, c) { v = 0; for (i = 1; i <= length(s); i++) { c = index("0123456789ABCDEF", toupper(substr(s, i, 1))) - 1; if (c < 0) return -1; v = v * 16 + c } return v }
+			function le(s, o, n, i, r) { r = ""; for (i = n - 1; i >= 0; i--) r = r substr(s, o + i * 2, 2); return h(r) }
+			{
+				e = le($0, 25, 4); p = le($0, 49, 4)
+				if (p == pci && e > 0 && e < 70000) print "S", e
+				n = split(np, w, " ")
+				for (k = 1; k <= n; k++) want[w[k]] = 1
+				for (i = 57; i + 11 <= length($0); i += 2) {
+					p = le($0, i + 8, 2)
+					if (!(p in want) || (p in seen)) continue
+					e = le($0, i, 4)
+					if (e > 0 && e < 65536) { print "N", p, e; seen[p] = 1 }
+				}
+			}')
+		_MTK_E=$(printf '%s\n' "$_MTK_L" | sed -n 's/^S //p' | head -1)
+		if [ -n "$_MTK_E" ]; then
+			{ printf 'S %s %s\n' "$PCI" "$_MTK_E"; printf '%s\n' "$_MTK_L" | grep '^N '; } > /tmp/5gmodem/mtk_nb.$$ 2>/dev/null
+			{ sed 's/^[SN] //' /tmp/5gmodem/mtk_nb.$$; cat /tmp/5gmodem/mtk_earfcn 2>/dev/null; } \
+				| awk '!s[$1]++' | head -32 > /tmp/5gmodem/mtk_earfcn.$$ && mv /tmp/5gmodem/mtk_earfcn.$$ /tmp/5gmodem/mtk_earfcn
+			sed -i '/^S /d' /tmp/5gmodem/mtk_nb.$$
+			while read -r _ _MTK_P _MTK_X; do
+				_MTK_B=$(earfcn2band "$_MTK_X")
+				[ -n "$_MTK_B" ] || continue
+				NEIGHBORS=$(printf '%s' "$NEIGHBORS" | sed "s/\"band\":\"\",\"earfcn\":\"\",\"pci\":\"$_MTK_P\"/\"band\":\"$_MTK_B\",\"earfcn\":\"$_MTK_X\",\"pci\":\"$_MTK_P\"/")
+			done < /tmp/5gmodem/mtk_nb.$$
+			rm -f /tmp/5gmodem/mtk_nb.$$
+		fi
+	fi
+	if [ -z "$EARFCN" ] || [ "$EARFCN" = "-" ]; then
+		T1=$(awk -v p="$PCI" '$1 == p { print $2; exit }' /tmp/5gmodem/mtk_earfcn 2>/dev/null)
+		if [ -n "$T1" ]; then
+			_MTK_E="$T1"
+			EARFCN="$_MTK_E"
+			T=$(earfcn2band "$_MTK_E")
+			if [ -n "$T" ]; then
+				PBAND="$(band4g "$T")"
+				MODE="LTE $(band4g "$T")"
+				NEIGHBORS=$(printf '%s' "$NEIGHBORS" | sed "s/\"band\":\"\",\"earfcn\":\"\",\"pci\":\"$PCI\"/\"band\":\"$T\",\"earfcn\":\"$_MTK_E\",\"pci\":\"$PCI\"/")
+			fi
+		fi
+	fi
+	for _MTK_P in $(printf '%s' "$NEIGHBORS" | tr '}' '\n' | grep '"band":"","earfcn":""' | sed -n 's/.*"pci":"\([0-9]*\)".*/\1/p'); do
+		_MTK_X=$(awk -v p="$_MTK_P" '$1 == p { print $2; exit }' /tmp/5gmodem/mtk_earfcn 2>/dev/null)
+		_MTK_B=$(earfcn2band "$_MTK_X")
+		[ -n "$_MTK_B" ] || continue
+		NEIGHBORS=$(printf '%s' "$NEIGHBORS" | sed "s/\"band\":\"\",\"earfcn\":\"\",\"pci\":\"$_MTK_P\"/\"band\":\"$_MTK_B\",\"earfcn\":\"$_MTK_X\",\"pci\":\"$_MTK_P\"/")
+	done
+fi
+
+O=$(cat /sys/class/power_supply/battery/capacity 2>/dev/null)
+case "$O" in ''|*[!0-9]*) ;; *)
+	BATTERY="$O"
+	case "$(cat /sys/class/power_supply/battery/status 2>/dev/null)" in
+		Charging) BATTERY_CHG=1 ;;
+		*) BATTERY_CHG=0 ;;
+	esac ;;
+esac
+
+TEMPS=$(for z in /sys/class/thermal/thermal_zone*; do
+	[ -r "$z/type" ] && echo "$(cat "$z/type" 2>/dev/null) $(cat "$z/temp" 2>/dev/null)"
+done | awk '{ k = ""
+	if ($1 == "mtktspa") k = "pa"; else if ($1 == "mtktscpu") k = "cpu"; else if ($1 == "mtktswmt") k = "wifi"
+	else if ($1 == "mtktspmic") k = "pmic"; else if ($1 == "mtktsbattery") k = "bat"; else if ($1 == "mtktsAP") k = "board"
+	if (k != "" && $2 ~ /^-?[0-9]+$/ && $2 > 0) printf "%s%s=%.1f", (n++ ? " " : ""), k, $2 / 1000 }')
+T=$(printf '%s' "$TEMPS" | tr ' ' '\n' | sed -n 's/^pa=//p')
+[ -n "$T" ] || T=$(printf '%s' "$TEMPS" | tr ' ' '\n' | sed -n 's/^cpu=//p')
+[ -n "$T" ] && TEMP="${T%.*} &deg;C"

@@ -5910,3 +5910,9 @@ msgstr "英数字と / . _ - だけの絶対パスを入力してください"
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "USB 電源を制御できないボード向け: モデムの電源を切って戻す実行ファイル (GPIO の切り替えなど)。電源ステップは USB ポートを切る代わりにこれを実行し、インターフェース、モデムの USB パス、AT ポートを引数として渡します。出力はシステムログに記録されます。"
+
+msgid "Modem status LED"
+msgstr "モデム状態LED"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "青: LTEで接続中。緑: 3Gまたは2Gに登録。赤の点滅: 圏外または未接続。すぐに適用され、保存は不要です。"

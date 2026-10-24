@@ -1202,7 +1202,7 @@ function renderBattery(json) {
 		+ '<rect x="3" y="3" width="' + w + '" height="8" rx="1.2" fill="' + col + '"></rect>'
 		+ (chg ? '<path d="M11.6 2.2 8 7.6h2.9L9.9 11.8l3.9-5.6h-2.9z" fill="#fff" stroke="#1d7a2f" stroke-width=".5" stroke-linejoin="round"></path>' : '')
 		+ '</svg>';
-	box.innerHTML = svg + '<span id="batt">' + b + '%</span>';
+	box.innerHTML = '<span class="tg-batt-wrap">' + svg + '</span><span id="batt">' + b + '%</span>';
 }
 
 function chipBox(head) {
@@ -2809,7 +2809,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30700, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30800, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

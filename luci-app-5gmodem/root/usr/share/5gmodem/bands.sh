@@ -685,6 +685,74 @@ fi
 _bs_am=$(active_modem)
 _bs_sec="m_$(echo "$_bs_am" | sed 's/[^A-Za-z0-9]/_/g')"
 _bs_at=$(uci -q get "5gmodem.$_bs_sec.at_port")
+_mtk_rat_json() {
+	_mrj=$("$_HL" "mtkbands$1" "$2" 2>/dev/null)
+	_mrj_s=${_mrj%%|*}
+	[ -n "$_mrj_s" ] || return 0
+	printf ', "supported%s": [' "$1"
+	_f=1
+	for _b in $_mrj_s; do
+		[ "$_f" = 1 ] || printf ','
+		_f=0
+		printf '{"band":%s}' "$_b"
+	done
+	printf '], "enabled%s": [%s]' "$1" "$(echo ${_mrj#*|} | tr ' ' ',')"
+}
+if [ "$_bs_am" = ccci ]; then
+	_HL=/usr/share/5gmodem/hilink.sh
+	case "$1" in
+		json)
+			_bs_mb=$("$_HL" mtkbands ccci 2>/dev/null)
+			printf '{ "modem": "%s", "currentmode": "%s", "modes": [' \
+				"$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')" \
+				"$("$_HL" mtkgetmode ccci 2>/dev/null | tr -cd '0-9')"
+			printf '{"id":"1","label":"Авто"},{"id":"8","label":"2G"},{"id":"2","label":"3G"},{"id":"4","label":"4G"}'
+			if [ -n "$_bs_mb" ]; then
+				printf '], "supported": ['
+				_f=1
+				for _b in ${_bs_mb%%|*}; do
+					[ "$_f" = 1 ] || printf ','
+					_f=0
+					printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
+				done
+				printf '], "enabled": [%s]' "$(echo ${_bs_mb#*|} | tr ' ' ',')"
+				_mtk_rat_json 3g ccci
+				_mtk_rat_json 2g ccci
+				printf ' }\n'
+			else
+				printf '], "supported": [ ], "enabled": [ ], "nobandctl": 1 }\n'
+			fi
+			exit 0 ;;
+		getbands)          _bs_mb=$("$_HL" mtkbands ccci); echo "${_bs_mb#*|}"; exit 0 ;;
+		getsupportedbands) _bs_mb=$("$_HL" mtkbands ccci); echo "${_bs_mb%%|*}"; exit 0 ;;
+		setbands)          "$_HL" mtksetbands "$2" ccci; _bands_flush; exit 0 ;;
+		getmode)           "$_HL" mtkgetmode ccci; exit 0 ;;
+		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
+		setmode)           "$_HL" mtksetmode "$2" ccci; _bands_flush; exit 0 ;;
+		setbands3g)        "$_HL" mtksetbands3g "$2" ccci; _bands_flush; exit 0 ;;
+		setbands2g)        "$_HL" mtksetbands2g "$2" ccci; _bands_flush; exit 0 ;;
+		setall)
+			_sa_z() {
+				case "$("$_HL" "$2" "$3" ccci 2>/dev/null)" in
+					*'"success":true'*) _SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\"" ;;
+					*) _sa_fail_add "$1" rejected "" ;;
+				esac
+			}
+			[ -z "$_SA_MODE" ] || _sa_z mode mtksetmode "$_SA_MODE"
+			[ -z "$_SA_LTE" ] || _sa_z lte mtksetbands "$_SA_LTE"
+			[ -z "$_SA_3G" ] || _sa_z 3g mtksetbands3g "$_SA_3G"
+			[ -z "$_SA_2G" ] || _sa_z 2g mtksetbands2g "$_SA_2G"
+			[ -z "$_SA_NSA" ] || _sa_fail_add nsa unsupported ""
+			[ -z "$_SA_SA" ] || _sa_fail_add sa unsupported ""
+			_bands_flush
+			_sa_res_write running
+			_sa_res_write done
+			cat "$(_sa_resfile)" 2>/dev/null
+			exit 0 ;;
+		mgmtinfo)          echo '{"source":"vendor"}'; exit 0 ;;
+		*)                 echo "Unsupported"; exit 0 ;;
+	esac
+fi
 . /usr/share/5gmodem/atlock.sh
 if [ -n "$_bs_at" ] && ! at_lock "$_bs_at" 15 && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" != hilink ]; then
 	case "$1" in
@@ -720,7 +788,10 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 					_f=0
 					printf '{"band":%s,"txt":"B%s"}' "$_b" "$_b"
 				done
-				printf '], "enabled": [%s] }\n' "$(echo ${_bs_mb#*|} | tr ' ' ',')"
+				printf '], "enabled": [%s]' "$(echo ${_bs_mb#*|} | tr ' ' ',')"
+				_mtk_rat_json 3g "$_bs_am"
+				_mtk_rat_json 2g "$_bs_am"
+				printf ' }\n'
 			else
 				_bs_np=""
 				[ -n "$_bs_mtk" ] && [ ! -f /usr/share/5gmodem/mtk/usock-armv7 ] && _bs_np=', "needpkg": "5gmodem-mtk-at"'
@@ -733,6 +804,8 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 		getmode)           "$_HL" zgetmode "$_bs_am"; exit 0 ;;
 		getsupportedmodes) echo "1:Авто 8:2G 2:3G 4:4G"; exit 0 ;;
 		setmode)           "$_HL" zsetmode "$2" "$_bs_am"; _bands_flush; exit 0 ;;
+		setbands3g)        [ -n "$_bs_mtk" ] && "$_HL" mtksetbands3g "$2" "$_bs_am"; _bands_flush; exit 0 ;;
+		setbands2g)        [ -n "$_bs_mtk" ] && "$_HL" mtksetbands2g "$2" "$_bs_am"; _bands_flush; exit 0 ;;
 		setall)
 			_sa_z() {
 				case "$("$_HL" "$2" "$3" "$_bs_am" 2>/dev/null)" in
@@ -744,8 +817,12 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 			if [ -n "$_SA_LTE" ]; then
 				if [ -n "$_bs_mtk" ]; then _sa_z lte mtksetbands "$_SA_LTE"; else _sa_fail_add lte unsupported ""; fi
 			fi
-			[ -z "$_SA_3G" ] || _sa_fail_add 3g unsupported ""
-			[ -z "$_SA_2G" ] || _sa_fail_add 2g unsupported ""
+			if [ -n "$_SA_3G" ]; then
+				if [ -n "$_bs_mtk" ]; then _sa_z 3g mtksetbands3g "$_SA_3G"; else _sa_fail_add 3g unsupported ""; fi
+			fi
+			if [ -n "$_SA_2G" ]; then
+				if [ -n "$_bs_mtk" ]; then _sa_z 2g mtksetbands2g "$_SA_2G"; else _sa_fail_add 2g unsupported ""; fi
+			fi
 			[ -z "$_SA_NSA" ] || _sa_fail_add nsa unsupported ""
 			[ -z "$_SA_SA" ] || _sa_fail_add sa unsupported ""
 			_bands_flush
