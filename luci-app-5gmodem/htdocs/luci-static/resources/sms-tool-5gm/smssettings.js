@@ -586,6 +586,14 @@ function addTelegramForwarding(s) {
 	o.depends('hook_enabled', '1');
 	o.remove = function() { return Promise.resolve(); };
 
+	o = s.option(form.Flag, 'fwd_delete', _('Delete from the modem after forwarding'),
+		_('A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without "Keep messages in router memory" it then disappears from the Inbox too.'));
+	o.default = '0';
+	o.depends('tg_enabled', '1');
+	o.depends('ntfy_enabled', '1');
+	o.depends('hook_enabled', '1');
+	o.remove = function() { return Promise.resolve(); };
+
 	o = s.option(form.Flag, 'tg_commands', _('Allow sending SMS from the chat'),
 		_('The bot accepts commands from the chat above: /sms &lt;number&gt; &lt;text&gt; sends an SMS, /status shows the modem state. Commands are accepted ONLY from the configured Chat ID - the bot itself is reachable by anyone who knows its name.'));
 	o.depends('tg_enabled', '1');
@@ -863,7 +871,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30800,
+	API: 30801,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

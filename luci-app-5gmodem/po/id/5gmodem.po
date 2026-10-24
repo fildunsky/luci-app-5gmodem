@@ -5916,3 +5916,9 @@ msgstr "LED status modem"
 
 msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
 msgstr "Biru: LTE dan koneksi aktif. Hijau: terdaftar di 3G atau 2G. Merah berkedip: tidak ada layanan atau tidak terhubung. Langsung berlaku, tidak perlu Simpan."
+
+msgid "Delete from the modem after forwarding"
+msgstr "Hapus dari modem setelah diteruskan"
+
+msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgstr "Pesan dihapus dari modem setelah semua saluran yang aktif (Telegram, ntfy, webhook) mengirimkannya dan, jika aktif, perintah SMS sudah memeriksanya. Tanpa \"Simpan pesan di memori router\", pesan juga hilang dari Kotak Masuk."

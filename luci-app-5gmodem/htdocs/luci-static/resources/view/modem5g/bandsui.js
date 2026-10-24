@@ -761,8 +761,8 @@ function renderNetModes(j) {
 				modeC.appendChild(E('button', {
 					'class': 'btn cbi-button' + (on ? ' tg-current' : ''),
 					'data-mode': String(m.id),
-					'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, m.label); }
-				}, [ m.label ]));
+					'click': function(ev) { ev.preventDefault(); setNetModeAT(m.id, _(m.label)); }
+				}, [ _(m.label) ]));
 			});
 		}
 		if (modeRow) { modeRow.style.display = ''; }
@@ -1101,7 +1101,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30800,
+	API: 30801,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

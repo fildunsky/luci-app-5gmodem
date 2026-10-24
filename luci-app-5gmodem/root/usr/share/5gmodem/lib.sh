@@ -281,8 +281,8 @@ purge_path_caches() {
 utf8_fix() {
 	LC_ALL=C awk '
 		BEGIN { for (n = 1; n < 256; n++) o[sprintf("%c", n)] = n
-			MK = sprintf("%c%cffff", 195, 191)     # маркер мусора: ÿ + "ffff"
-			MKJ = sprintf("%cu00ffffff", 92) }     # он же в JSON-экранировке: ÿ + "ffff"
+			MK = sprintf("%c%cffff", 195, 191)     # junk marker: ÿ + "ffff"
+			MKJ = sprintf("%cu00ffffff", 92) }     # same, JSON-escaped
 		function cont(str, i,   b) { b = o[substr(str, i, 1)]; return (b >= 128 && b < 192) }
 		function hx(s,   i, c, v, d) {
 			v = 0
@@ -1233,14 +1233,14 @@ sms_apply_cpms() {
 	_cp_st=$(sms_cpms_state "$_cp_p") || return 1
 	_cp_m1=${_cp_st%%|*}; _cp_m3=${_cp_st##*|}
 	if [ "$_cp_m1" != "$_cp_s" ]; then
-		logger -t 5gmodem "sms: модем не принял хранилище $_cp_s (осталось $_cp_st)"
+		logger -t 5gmodem "sms: modem rejected storage $_cp_s (still $_cp_st)"
 		return 1
 	fi
 	if [ "$_cp_m3" != "$_cp_s" ]; then
 		logger -t 5gmodem \
-			"sms: чтение переведено на $_cp_s, но входящие модем кладёт в $_cp_m3"
+			"sms: reading switched to $_cp_s, but the modem stores incoming in $_cp_m3"
 	else
-		logger -t 5gmodem "sms: хранилище $_cp_s применено к модему (чтение и приём)"
+		logger -t 5gmodem "sms: storage $_cp_s applied to the modem (read and receive)"
 	fi
 	printf '%s|%s\n' "$_cp_m1" "$_cp_m3"
 }
@@ -1282,7 +1282,7 @@ set_sms_storage() {
 			uci -q set "5gmodem.sms.storage=$_ss_new"
 			uci -q commit 5gmodem
 			logger -t 5gmodem \
-				"sms: хранилище выбрано автоматически - $_ss_new (ME=${_ss_me:-?}, SM=${_ss_sm:-?})"
+				"sms: storage auto-selected: $_ss_new (ME=${_ss_me:-?}, SM=${_ss_sm:-?})"
 			_ss_stg="$_ss_new"
 		fi
 	fi
@@ -1294,7 +1294,7 @@ set_sms_storage() {
 		uci -q set "5gmodem.sms.storage=$_ss_alt"
 		uci -q commit 5gmodem
 		logger -t 5gmodem \
-			"sms: хранилище выбрано автоматически - $_ss_alt ($_ss_stg не ответило и не принято модемом)"
+			"sms: storage auto-selected: $_ss_alt ($_ss_stg did not answer and was rejected by the modem)"
 		_ss_stg="$_ss_alt"
 	fi
 	_ss_m3=${_ss_st##*|}
@@ -1302,7 +1302,7 @@ set_sms_storage() {
 		uci -q set "5gmodem.sms.storage=$_ss_m3"
 		uci -q commit 5gmodem
 		logger -t 5gmodem \
-			"sms: хранилище поправлено на $_ss_m3 - принимать в $_ss_stg модем не умеет"
+			"sms: storage corrected to $_ss_m3: the modem cannot receive into $_ss_stg"
 		sms_apply_cpms "$_ss_at" "$_ss_m3" >/dev/null 2>&1
 	fi
 	return 0
