@@ -1363,7 +1363,24 @@ _store_pick() {
 		esac
 	fi
 }
-[ "$BOX" = delete-run ] || _store_pick
+_cnmi_fix() {
+	_via_mm && return 0
+	[ -c "$PORT" ] || return 0
+	case "$(uci -q get "$CFG.$_TGT_SEC.vidpid")" in
+		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4) ;;
+		*) return 0 ;;
+	esac
+	_cf_mk="/tmp/5gmodem/cnmi_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
+	[ -f "$_cf_mk" ] && [ -z "$(find "$_cf_mk" -mmin +1 2>/dev/null)" ] && return 0
+	at_long_busy "$PORT" && return 0
+	: > "$_cf_mk"
+	case "$(sms_tool -d "$PORT" at "AT+CNMI?" 2>/dev/null | tr -d '\r ')" in
+		*"+CNMI:0,0"*)
+			sms_tool -d "$PORT" at "AT+CNMI=2,1,0,0,0" >/dev/null 2>&1
+			logger -t 5gmodem "sms: $PORT had CNMI 0,0 (reset by the modem), set 2,1,0,0,0 so incoming SMS are stored" ;;
+	esac
+}
+[ "$BOX" = delete-run ] || { _store_pick; _cnmi_fix; }
 
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$_STORE_ARG" ] && set -- $_STORE_ARG "$@"

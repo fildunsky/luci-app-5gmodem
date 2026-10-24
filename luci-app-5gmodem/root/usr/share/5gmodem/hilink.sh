@@ -25,6 +25,7 @@ _srcip_for() {
 }
 
 _addr_for() {
+	[ "$1" = ccci ] && { echo local; return 0; }
 	_dev=$(_netdev_for "$1") || return 1
 	[ -n "$_dev" ] || return 1
 	_gw=$(ip route show dev "$_dev" 2>/dev/null \
@@ -1587,6 +1588,12 @@ _mtk_usock() {
 
 mtk_at() {
 	_ma_a="$1"; _ma_p="$2"; shift 2
+	if [ "$_ma_a" = local ]; then
+		for _ma_x in "$@"; do
+			/usr/share/5gmodem/mtk/usock-armv7 /dev/socket/rild-atci "$_ma_x" 3000
+		done | tr -d '\r' | grep -v '^$'
+		return 0
+	fi
 	command -v adb >/dev/null 2>&1 || return 1
 	_mtk_adb_on "$_ma_a" "$_ma_p" || return 1
 	_mtk_usock "$_ma_a" || return 1
@@ -1671,6 +1678,85 @@ mtk_bands_json() {
 		"$(_mtk_lte_bands "$(echo "$_mj_cur" | cut -d, -f3)" "$(echo "$_mj_cur" | cut -d, -f4)")"
 }
 
+_mtk_rat_bits() {
+	case "$1" in
+		2g) echo "1:900 3:1800 4:1900 7:850" ;;
+		3g) echo "0:1 1:2 2:3 3:4 4:5 5:6 6:7 7:8 8:9 9:10 18:19" ;;
+	esac
+}
+
+_mtk_rat_list() {
+	_mrl_o=""
+	for _mrl_p in $(_mtk_rat_bits "$1"); do
+		[ $(( ($2 >> ${_mrl_p%%:*}) & 1 )) = 1 ] && _mrl_o="$_mrl_o ${_mrl_p#*:}"
+	done
+	echo $_mrl_o | tr ' ' '\n' | sort -n | xargs
+}
+
+_mtk_rat_field() {
+	case "$1" in 2g) echo 1 ;; 3g) echo 2 ;; esac
+}
+
+mtk_bands_rat() {
+	_a=$(_addr_for "$2") || return 1
+	_mr_cv=$(mtk_bandcap "$_a" "$2")
+	_mr_cap=${_mr_cv%%|*}; _mr_cur=${_mr_cv#*|}
+	[ -n "$_mr_cap" ] || return 1
+	_mr_f=$(_mtk_rat_field "$1")
+	printf '%s|%s\n' "$(_mtk_rat_list "$1" "$(echo "$_mr_cap" | cut -d, -f"$_mr_f")")" \
+		"$(_mtk_rat_list "$1" "$(echo "$_mr_cur" | cut -d, -f"$_mr_f")")"
+}
+
+mtk_setbands_rat() {
+	_a=$(_addr_for "$3") || { echo '{"success":false}'; return 1; }
+	_ms_cv=$(mtk_bandcap "$_a" "$3")
+	_ms_cap=${_ms_cv%%|*}; _ms_cur=${_ms_cv#*|}
+	[ -n "$_ms_cap" ] && [ -n "$_ms_cur" ] || { echo '{"success":false}'; return 1; }
+	_ms_f=$(_mtk_rat_field "$1")
+	_ms_c=$(echo "$_ms_cap" | cut -d, -f"$_ms_f")
+	if [ "$2" = default ] || [ -z "$2" ]; then
+		_ms_n=$_ms_c
+	else
+		_ms_n=0
+		for _b in $(echo "$2" | tr ',' ' '); do
+			for _ms_p in $(_mtk_rat_bits "$1"); do
+				[ "${_ms_p#*:}" = "$_b" ] && _ms_n=$(( _ms_n | (1 << ${_ms_p%%:*}) ))
+			done
+		done
+		_ms_n=$(( _ms_n & _ms_c ))
+		[ "$_ms_n" -gt 0 ] || { echo '{"success":false,"error":"no supported band"}'; return 1; }
+	fi
+	_ms_g=$(echo "$_ms_cur" | cut -d, -f1); _ms_u=$(echo "$_ms_cur" | cut -d, -f2)
+	_ms_l=$(echo "$_ms_cur" | cut -d, -f3); _ms_h=$(echo "$_ms_cur" | cut -d, -f4)
+	[ "$1" = 2g ] && _ms_g=$_ms_n || _ms_u=$_ms_n
+	case "$(mtk_at "$_a" "$3" "AT+EPBSE=$_ms_g,$_ms_u,$_ms_l,$_ms_h")" in
+		*OK*) rm -f "$CACHE_DIR/mtkcell_$(_tk "$_a")"; echo '{"success":true}' ;;
+		*) echo '{"success":false}' ;;
+	esac
+}
+
+mtk_getmode() {
+	case "$(mtk_at local "$1" "AT+ERAT?" | sed -n 's/^+ERAT: *[0-9]*, *[0-9]*, *\([0-9]*\).*/\1/p' | head -1)" in
+		3) echo 4 ;;
+		1) echo 2 ;;
+		0) echo 8 ;;
+		*) echo 1 ;;
+	esac
+}
+
+mtk_setmode() {
+	case "$1" in
+		4) _mm_r=3 ;;
+		2) _mm_r=1 ;;
+		8) _mm_r=0 ;;
+		*) _mm_r=6 ;;
+	esac
+	case "$(mtk_at local "$2" "AT+ERAT=$_mm_r,0")" in
+		*OK*) rm -f "$CACHE_DIR/mtkcell_$(_tk local)"; echo '{"success":true}' ;;
+		*) echo '{"success":false}' ;;
+	esac
+}
+
 mtk_temps() {
 	_mt_f="$CACHE_DIR/mtktemps_$(_tk "$1")"
 	if [ -f "$_mt_f" ] && [ -z "$(find "$_mt_f" -mmin +1 2>/dev/null)" ]; then
@@ -1750,6 +1836,7 @@ hl_setmode() {
 }
 
 case "$1" in
+	devname)     api_get /api/device/information "$2" 2>/dev/null | xval DeviceName ;;
 	probe)
 		_a=$(_addr_for "$2") || { echo '{"hilink":0}'; exit 0; }
 		_pv=$(_vidpid_for "$2")
@@ -1861,6 +1948,12 @@ case "$1" in
 	zgetmode)    zte_getmode "$2" ;;
 	mtkbands)    mtk_bands_json "$2" ;;
 	mtksetbands) mtk_setbands "$2" "$3" ;;
+	mtkgetmode)  mtk_getmode "$2" ;;
+	mtkbands3g)  mtk_bands_rat 3g "$2" ;;
+	mtkbands2g)  mtk_bands_rat 2g "$2" ;;
+	mtksetbands3g) mtk_setbands_rat 3g "$2" "$3" ;;
+	mtksetbands2g) mtk_setbands_rat 2g "$2" "$3" ;;
+	mtksetmode)  mtk_setmode "$2" "$3" ;;
 	zsetmode)    zte_setmode "$2" "$3" ;;
 	setmode)     hl_setmode "$2" "$3" ;;
 	getroaming)  hl_getroaming "$2" ;;

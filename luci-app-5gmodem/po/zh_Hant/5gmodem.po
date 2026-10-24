@@ -5910,3 +5910,9 @@ msgstr "必須是由字母、數字和 / . _ - 組成的絕對路徑"
 
 msgid "For boards without USB power control: an executable that cuts and restores the modem power (for example toggles a GPIO). The power step runs it instead of switching the USB port off, with the interface, the modem USB path and its AT port as arguments. Its output goes to the system log."
 msgstr "適用於無法控制 USB 供電的板子：一個可執行檔，用於切斷並恢復數據機供電（例如切換 GPIO）。電源步驟會執行它來取代關閉 USB 埠，參數為介面、數據機 USB 路徑及其 AT 埠。輸出寫入系統日誌。"
+
+msgid "Modem status LED"
+msgstr "數據機狀態指示燈"
+
+msgid "Blue: LTE and the connection is up. Green: registered on 3G or 2G. Blinking red: no service or no connection. Applies immediately, no Save needed."
+msgstr "藍色：LTE 且已連線。綠色：已註冊 3G 或 2G。紅色閃爍：無服務或未連線。立即生效，無需儲存。"

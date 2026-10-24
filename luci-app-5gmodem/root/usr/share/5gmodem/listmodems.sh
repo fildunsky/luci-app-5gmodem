@@ -103,6 +103,13 @@ for _wpt in /sys/class/wwan/*; do
 	esac
 done
 
+if [ -e /dev/ttyMTK0 ] && command -v soc_modem_node >/dev/null 2>&1 && soc_modem_node ccci >/dev/null; then
+	NCNT=$((NCNT + 1))
+	NODES="$NODES /sys/kernel/ccci"
+	PORTREC="${PORTREC}${NCNT} tty /dev/ttyMTK0${NL}"
+	[ -d /sys/class/net/ccmni0 ] && PORTREC="${PORTREC}${NCNT} net ccmni0${NL}"
+fi
+
 _HILINK_VENDORS="12d1 19d2 1bbb 2001 0421 1546 2020 05c6 1076 0846"
 for _nd in /sys/class/net/*; do
 	[ -e "$_nd/device" ] || continue
@@ -214,7 +221,7 @@ for n in $NODES; do
 		pid=$(cat "$n/device" 2>/dev/null); pid="${pid#0x}"
 	fi
 	_soc=""
-	if [ -z "$vid" ] && [ -d "$n/remoteproc" ] && command -v soc_modem_vidpid >/dev/null 2>&1; then
+	if [ -z "$vid" ] && { [ -d "$n/remoteproc" ] || [ "$n" = /sys/kernel/ccci ]; } && command -v soc_modem_vidpid >/dev/null 2>&1; then
 		_soc=1
 		vid=$(soc_modem_vidpid); pid="${vid#*:}"; vid="${vid%%:*}"
 	fi
