@@ -5922,3 +5922,12 @@ msgstr "Hapus dari modem setelah diteruskan"
 
 msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
 msgstr "Pesan dihapus dari modem setelah semua saluran yang aktif (Telegram, ntfy, webhook) mengirimkannya dan, jika aktif, perintah SMS sudah memeriksanya. Tanpa \"Simpan pesan di memori router\", pesan juga hilang dari Kotak Masuk."
+
+msgid "Follow network address changes"
+msgstr "Pantau perubahan alamat oleh jaringan"
+
+msgid "Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address."
+msgstr "Memeriksa sesi data setiap beberapa detik. Jika operator memutus sesi atau memberikan alamat baru (misalnya, menyambung ulang paksa setiap beberapa jam), antarmuka tersambung ulang dan mengambil alamat baru."
+
+msgid "From 5 to 3600 seconds"
+msgstr "Dari 5 hingga 3600 detik"

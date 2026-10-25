@@ -5922,3 +5922,12 @@ msgstr "轉發後從數據機刪除"
 
 msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
 msgstr "當所有已啟用的管道（Telegram、ntfy、Webhook）都已送達，且（如已啟用）SMS 指令已檢查後，訊息將從數據機中刪除。未開啟「在路由器記憶體中保存訊息」時，它也會從收件匣中消失。"
+
+msgid "Follow network address changes"
+msgstr "追蹤網路分配的位址變化"
+
+msgid "Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address."
+msgstr "每隔幾秒檢查一次資料工作階段。當電信業者中斷工作階段或分配新位址時（例如每隔幾小時強制重新連線），介面會重新連線並取得新位址。"
+
+msgid "From 5 to 3600 seconds"
+msgstr "5 到 3600 秒"

@@ -946,6 +946,7 @@ model_alias() {
 		*DW5821e*) echo "Dell DW5821e" ;;
 		L8[0-9]0*" LTE Module") echo "Fibocom ${1% LTE Module}" ;;
 		*" LTE Module") echo "${1% LTE Module}" ;;
+		*" Technologies Co.,Ltd. "*) echo "${1%% Technologies Co.,Ltd. *} ${1#* Technologies Co.,Ltd. }" ;;
 		*) echo "$1" ;;
 	esac
 }

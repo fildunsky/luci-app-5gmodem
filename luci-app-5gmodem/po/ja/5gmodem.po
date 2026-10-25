@@ -5922,3 +5922,12 @@ msgstr "転送後にモデムから削除"
 
 msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
 msgstr "有効なすべてのチャネル（Telegram、ntfy、Webhook）が配信し、有効な場合はSMSコマンドが確認した時点で、メッセージはモデムから削除されます。「ルーターのメモリにメッセージを保存」がオフの場合は受信トレイからも消えます。"
+
+msgid "Follow network address changes"
+msgstr "ネットワークによるアドレス変更を監視"
+
+msgid "Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address."
+msgstr "数秒ごとにデータセッションを確認します。オペレーターがセッションを切断したり新しいアドレスを割り当てたりした場合（例：数時間ごとの強制再接続）、インターフェースが再接続して新しいアドレスを取得します。"
+
+msgid "From 5 to 3600 seconds"
+msgstr "5～3600 秒"

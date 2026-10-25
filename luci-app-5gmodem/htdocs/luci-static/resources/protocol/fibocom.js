@@ -86,5 +86,15 @@ return network.registerProtocol('fibocom', {
 			_('Route metric - higher value means lower priority'));
 		o.datatype = 'uinteger';
 		o.placeholder = '0';
+
+		o = s.taboption('advanced', form.Flag, 'ipwatch', _('Follow network address changes'),
+			_('Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address.'));
+		o.default = o.disabled;
+
+		o = s.taboption('advanced', form.Value, 'ipwatch_interval', _('Check interval, s'),
+			_('From 5 to 3600 seconds'));
+		o.depends('ipwatch', '1');
+		o.datatype = 'range(5,3600)';
+		o.placeholder = '20';
 	}
 });

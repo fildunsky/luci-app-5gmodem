@@ -551,6 +551,12 @@ proto_fibocom_setup() {
 			echo "fibocom[$$] IPv6 ($ctx_pdp): brought up dhcpv6 interface ${interface}_6 (zone ${zone6:--})"
 			;;
 	esac
+
+	if [ "$IS_R11E" != 1 ] && [ "$(uci -q get "network.$interface.ipwatch")" = 1 ]; then
+		echo "fibocom[$$] following network address changes on $dial"
+		proto_run_command "$interface" /usr/share/5gmodem/fiboipwatch.sh \
+			"$interface" "$dial" "$ip" "$(uci -q get "network.$interface.ipwatch_interval")"
+	fi
 }
 
 proto_fibocom_teardown() {
