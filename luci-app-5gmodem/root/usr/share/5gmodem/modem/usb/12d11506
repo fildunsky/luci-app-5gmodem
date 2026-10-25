@@ -1,4 +1,8 @@
 O=$(sms_tool -d $DEVICE at "at^chiptemp?;^hcsq?;^iccid?")
+case "$O" in
+	*"^HCSQ:"*) ;;
+	*) O=$(sms_tool -d $DEVICE at "at^hcsq?") ;;
+esac
 
 T=$(echo "$O" | awk -F[,:] '/^\^HCSQ:/ {print $2}' | xargs)
 if [ -n "$T" ]; then
@@ -112,10 +116,32 @@ fi
       
 fi
 
+if [ -z "$PBAND" ] && [ "$_hl_kind" = hilink ]; then
+	_HS=$("$RES/hilink.sh" get /api/device/signal "$_POLL_AM" 2>/dev/null | tr -d '\r')
+	_HB=$(echo "$_HS" | sed -n 's|.*<band>\([0-9]*\)</band>.*|\1|p' | head -1)
+	if [ -n "$_HB" ]; then
+		_HW=$(echo "$_HS" | sed -n 's|.*<dlbandwidth>\([0-9.]*\)MHz</dlbandwidth>.*|\1|p' | head -1)
+		PBAND="$(band4g $_HB "")"
+		[ -n "$_HW" ] && { PBAND="$PBAND @$_HW MHz"; BANDWIDTH="$_HW MHz"; }
+		case "$MODE" in *LTE*) MODE="LTE | $(band4g $_HB "")" ;; esac
+		_HV=$(echo "$_HS" | sed -n 's|.*<earfcn>DL:\([0-9]*\).*|\1|p' | head -1)
+		[ -n "$_HV" ] && EARFCN="$_HV"
+		_HV=$(echo "$_HS" | sed -n 's|.*<pci>\([0-9]*\)</pci>.*|\1|p' | head -1)
+		[ -n "$_HV" ] && PCI="$_HV"
+		_HV=$(echo "$_HS" | sed -n 's|.*PPusch:\(-*[0-9]*\)dBm.*|\1|p' | head -1)
+		[ -n "$_HV" ] && TXPOWER="$_HV dBm"
+	fi
+	if [ -z "$NR_ICCID" ]; then
+		_HV=$("$RES/hilink.sh" get /api/device/information "$_POLL_AM" 2>/dev/null \
+			| sed -n 's|.*<Iccid>\([0-9A-Fa-f]*\)</Iccid>.*|\1|p' | head -1)
+		[ -n "$_HV" ] && NR_ICCID="$_HV"
+	fi
+fi
+
 T_HEX=$LAC_HEX
 T_DEC=$LAC_DEC
 
 T=$(echo "$O" | awk -F[,:] '/^\^CHIPTEMP/ {gsub(/[ \r]/,"");t=0;for(i=2;i<=NF;i++)if($i!=65535){if($i>100){$i=$i/10};if($i>t){t=$i}};printf "%.1f", t}')
-if [ "x$T" != "x0.0" ]; then
+if [ -n "$T" ] && [ "$T" != "0.0" ]; then
 	TEMP="$T &deg;C"
 fi
