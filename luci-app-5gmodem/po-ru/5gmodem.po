@@ -6207,3 +6207,12 @@ msgstr "Удалять из модема после пересылки"
 
 msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
 msgstr "Сообщение удаляется из модема, когда все включённые каналы (Telegram, ntfy, вебхук) его доставили, а команды по SMS, если включены, его проверили. Без «Хранить сообщения в памяти роутера» оно пропадает и из «Входящих»."
+
+msgid "Follow network address changes"
+msgstr "Следить за сменой адреса сетью"
+
+msgid "Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address."
+msgstr "Каждые несколько секунд проверяет сессию передачи данных. Если оператор разорвал сессию или выдал новый адрес (например, принудительно переподключает раз в несколько часов), интерфейс переподключается и получает новый адрес."
+
+msgid "From 5 to 3600 seconds"
+msgstr "От 5 до 3600 секунд"
