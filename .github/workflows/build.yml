@@ -46,7 +46,7 @@ jobs:
       - name: Build the MediaTek pocket-router AT client
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-arm-linux-gnueabihf
+          sudo apt-get install -y -qq gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
           ./5gmodem-mtk-at/build-usock.sh
 
       - name: Check embedded icons
