@@ -5575,8 +5575,8 @@ msgstr "モデムのバッテリー"
 msgid "Modem battery, charging"
 msgstr "モデムのバッテリー、充電中"
 
-msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
-msgstr "モデム自身の Web 画面のパスワードです。これがあると、ルーターは信号、バッテリー、SMS を読み取り、モデムを再起動できます。モデムにパスワードがない場合は空欄にしてください。"
+msgid "The password of the modem's own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems."
+msgstr "モデム自身の Web 画面のパスワードです（ユーザー admin）。これがあると、ルーターは信号、バッテリー、SMS を読み取り、モデムを再起動できます。空欄の場合は admin を使います。多くのモデムの工場出荷時のパスワードです。"
 
 msgid "The modem asks for its web password - enter it on the Modem page"
 msgstr "モデムが Web パスワードを求めています - モデムページで入力してください"
@@ -5965,8 +5965,6 @@ msgstr "パッケージマネージャーがアップデートをインストー
 msgid "The package was installed, but the version did not change. The release file looks broken."
 msgstr "パッケージはインストールされましたが、バージョンが変わりません。リリースファイルが壊れているようです。"
 
-msgid "What is new in %s"
-msgstr "%s の新機能"
 
 msgid "Downloading: %d of %d KB"
 msgstr "ダウンロード中: %d / %d KB"

@@ -1,6 +1,7 @@
 noat_iface() {
 	case "$1:$2:$3" in
 		2cd2:0001:02) return 0 ;;
+		1286:4e31:*) return 0 ;;
 	esac
 	return 1
 }

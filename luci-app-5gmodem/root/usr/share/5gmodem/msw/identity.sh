@@ -114,7 +114,7 @@ swap_cleanup() {
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
 	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2 \
 	         model_vp apn_plmn apn_imsi band_full save_band save_band5gnsa save_band5gsa save_mode \
-	         no_at mm_at mm_at_if mm_at_vp at_if ident_probe tether hl_api mtk_bandcap web_pass \
+	         no_at mm_at mm_at_if mm_at_vp at_if ident_probe tether hl_api mtk_bandcap web_pass web_user \
 	         want_proto at_debug netsel netsel_plmn netsel_fb netsel_act; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done

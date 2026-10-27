@@ -5575,8 +5575,8 @@ msgstr "數據機電池"
 msgid "Modem battery, charging"
 msgstr "數據機電池，充電中"
 
-msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
-msgstr "數據機自身網頁介面的密碼。有了它，路由器可以讀取訊號、電池、簡訊，並能重新啟動數據機。如果數據機沒有密碼，請留空。"
+msgid "The password of the modem's own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems."
+msgstr "數據機自身網頁介面的密碼（使用者 admin）。有了它，路由器可以讀取訊號、電量、簡訊，並能重新啟動數據機。留空表示 admin，這是大多數此類數據機的出廠密碼。"
 
 msgid "The modem asks for its web password - enter it on the Modem page"
 msgstr "數據機要求輸入網頁密碼——請在「數據機」頁面輸入"
@@ -5965,8 +5965,6 @@ msgstr "套件管理器無法安裝此更新。"
 msgid "The package was installed, but the version did not change. The release file looks broken."
 msgstr "套件已安裝，但版本沒有變化。發佈檔案可能有問題。"
 
-msgid "What is new in %s"
-msgstr "%s 新增內容"
 
 msgid "Downloading: %d of %d KB"
 msgstr "正在下載：%d / %d KB"

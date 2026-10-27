@@ -167,16 +167,16 @@ _human() {
 
 conn_up() { [ "$1" = "901" ]; }
 
-_web_pass() {
-	uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
-		| sed 's/[^A-Za-z0-9]/_/g').web_pass"
+_web_opt() {
+	_wo=$(uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+		| sed 's/[^A-Za-z0-9]/_/g').$2")
+	printf '%s' "${_wo:-admin}"
 }
 
-_zte_pass() {
-	_zp=$(_web_pass "$1")
-	[ -n "$_zp" ] && { printf '%s' "$_zp"; return; }
-	printf 'admin'
-}
+_web_user() { _web_opt "$1" web_user; }
+_web_pass() { _web_opt "$1" web_pass; }
+
+_zte_pass() { _web_pass "$1"; }
 
 _zte_b64() {
 	if command -v base64 >/dev/null 2>&1; then printf '%s' "$1" | base64 | tr -d '\n'; return; fi
@@ -303,31 +303,23 @@ _tenda_login() {
 		return 1
 	fi
 	_tl_p=$(_web_pass "$2")
-	if [ -n "$_tl_p" ]; then
-		_tl_src=$(_srcip_for "" "$1")
-		_tl_r=$(curl -s -i --max-time 8 ${_tl_src:+--interface "$_tl_src"} -A "$UA" \
-			-H "Content-Type: application/json; charset=UTF-8" \
-			-d "{\"userName\":\"admin\",\"password\":\"$(printf '%s' "$_tl_p" | md5sum | cut -d' ' -f1)\"}" \
-			"http://$1/login/Auth" 2>/dev/null | tr -d '\r')
-		case "$_tl_r" in *'"errCode"'*) ;; *) return 2 ;; esac
-		case "$_tl_r" in
-			*'"errCode":0'*|*'"errCode":"0"'*)
-				_tl_c=$(printf '%s\n' "$_tl_r" | sed -n 's/^[Ss]et-[Cc]ookie: *password=\([^;[:space:]]*\).*/\1/p' | head -1)
-				if [ -n "$_tl_c" ]; then
-					rm -f "$_tl_bad"
-					printf '%s' "$_tl_c" > "$_tl_f"
-					printf '%s' "$_tl_c"
-					return 0
-				fi ;;
-		esac
-	fi
-	if [ ! -f "$_tl_bad" ]; then
-		if [ -n "$_tl_p" ]; then
-			logger -t 5gmodem "hilink(tenda): login to $1 failed - wrong web password? Not retrying for 15 minutes so the stick does not lock its web login"
-		else
-			logger -t 5gmodem "hilink(tenda): $1 asks for its web password - set it on the Network page (key button in the modem card)"
-		fi
-	fi
+	_tl_src=$(_srcip_for "" "$1")
+	_tl_r=$(curl -s -i --max-time 8 ${_tl_src:+--interface "$_tl_src"} -A "$UA" \
+		-H "Content-Type: application/json; charset=UTF-8" \
+		-d "{\"userName\":\"$(_web_user "$2")\",\"password\":\"$(printf '%s' "$_tl_p" | md5sum | cut -d' ' -f1)\"}" \
+		"http://$1/login/Auth" 2>/dev/null | tr -d '\r')
+	case "$_tl_r" in *'"errCode"'*) ;; *) return 2 ;; esac
+	case "$_tl_r" in
+		*'"errCode":0'*|*'"errCode":"0"'*)
+			_tl_c=$(printf '%s\n' "$_tl_r" | sed -n 's/^[Ss]et-[Cc]ookie: *password=\([^;[:space:]]*\).*/\1/p' | head -1)
+			if [ -n "$_tl_c" ]; then
+				rm -f "$_tl_bad"
+				printf '%s' "$_tl_c" > "$_tl_f"
+				printf '%s' "$_tl_c"
+				return 0
+			fi ;;
+	esac
+	[ -f "$_tl_bad" ] || logger -t 5gmodem "hilink(tenda): login to $1 failed - wrong web password? Not retrying for 15 minutes so the stick does not lock its web login"
 	: > "$_tl_bad"
 	return 1
 }
@@ -373,6 +365,171 @@ _tenda_ok() {
 _is_tenda() {
 	_it_a=$(_addr_for "$(_hl_path "$1")") || return 1
 	_tenda_on "$_it_a"
+}
+
+_asr_ck() { echo "$CACHE_DIR/asrsid_$(_tk "$1")"; }
+
+_asr_md5() { printf '%s' "$1" | md5sum | cut -d' ' -f1; }
+
+_asr_cnonce() {
+	_acn=$(head -c 8 /dev/urandom 2>/dev/null | hexdump -v -e '/1 "%02x"' 2>/dev/null)
+	[ -n "$_acn" ] || _acn=$(_asr_md5 "$$$(date +%s)$RANDOM" | cut -c1-16)
+	printf '%s' "$_acn"
+}
+
+_asr_hdr() {
+	read -r _ah_n _ah_nc < "$(_asr_ck "$1")" 2>/dev/null
+	case "$_ah_nc" in ''|*[!0-9]*) _ah_nc=1 ;; esac
+	printf '%s %s\n' "$_ah_n" $((_ah_nc + 1)) > "$(_asr_ck "$1")"
+	_ah_nc=$(printf '%08x' "$_ah_nc")
+	_ah_cn=$(_asr_cnonce)
+	_ah_u=$(_web_user "$3")
+	_ah_h1=$(_asr_md5 "$_ah_u:Highwmg:$(_web_pass "$3")")
+	_ah_r=$(_asr_md5 "$_ah_h1:$_ah_n:$_ah_nc:$_ah_cn:auth:$(_asr_md5 "$2:/cgi/xml_action.cgi")")
+	printf 'Digest username="%s", realm="Highwmg", nonce="%s", uri="/cgi/xml_action.cgi", response="%s", qop=auth, nc=%s, cnonce="%s"' \
+		"$_ah_u" "$_ah_n" "$_ah_r" "$_ah_nc" "$_ah_cn"
+}
+
+_asr_login() {
+	_al_bad="$(_asr_ck "$1").fail"
+	if [ -f "$_al_bad" ] && [ -z "$(find "$_al_bad" -mmin +15 2>/dev/null)" ]; then
+		return 1
+	fi
+	_al_src=$(_srcip_for "$2" "$1")
+	_al_n=$(curl -s -o /dev/null -D - --max-time 6 ${_al_src:+--interface "$_al_src"} -A "$UA" "http://$1/login.cgi" 2>/dev/null \
+		| tr -d '\r' | sed -n 's/^[Ww][Ww][Ww]-[Aa]uthenticate:.*nonce="\([^"]*\)".*/\1/p' | head -1)
+	[ -n "$_al_n" ] || _al_n=1000
+	_al_u=$(_web_user "$2")
+	_al_h1=$(_asr_md5 "$_al_u:Highwmg:$(_web_pass "$2")")
+	for _al_v in "protected.cgi asr" "xml_action.cgi marvell"; do
+		_al_cn=$(_asr_cnonce)
+		_al_r=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cn:auth:$(_asr_md5 "GET:/cgi/${_al_v% *}")")
+		_al_cx=$(_asr_cnonce)
+		_al_rx=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cx:auth:$(_asr_md5 "GET:/cgi/xml_action.cgi")")
+		_al_b=$(curl -s -D "$CACHE_DIR/asrhdr" --max-time 8 ${_al_src:+--interface "$_al_src"} -A "$UA" \
+			-H "Authorization: Digest username=\"$_al_u\", realm=\"Highwmg\", nonce=\"$_al_n\", uri=\"/cgi/xml_action.cgi\", response=\"$_al_rx\", qop=auth, nc=00000001, cnonce=\"$_al_cx\"" \
+			-H "Cookie: CGISID=; projectConfig=0" -H "X-Requested-With: XMLHttpRequest" \
+			"http://$1/login.cgi?Action=Digest&username=$_al_u&realm=Highwmg&nonce=$_al_n&response=$_al_r&qop=auth&cnonce=$_al_cn&nc=00000001&temp=${_al_v#* }" 2>/dev/null)
+		_al_s=$(tr -d '\r' < "$CACHE_DIR/asrhdr" 2>/dev/null | sed -n 's/^[Ss]et-[Cc]ookie: *CGISID=\([^;[:space:]]*\).*/\1/p' | head -1)
+		rm -f "$CACHE_DIR/asrhdr"
+		case "$_al_b" in *'200 OK'*|*'first login'*) ;; *) [ -n "$_al_s" ] || continue ;; esac
+		rm -f "$_al_bad"
+		printf '%s 2\n' "$_al_n" > "$(_asr_ck "$1")"
+		printf '%s' "$_al_s" > "$(_asr_ck "$1").sid"
+		return 0
+	done
+	[ -f "$_al_bad" ] || logger -t 5gmodem "hilink(asr): login to $1 failed - wrong web password? Not retrying for 15 minutes"
+	: > "$_al_bad"
+	return 1
+}
+
+_asr_raw() {
+	_ar_src=$(_srcip_for "$5" "$1")
+	_ar_s=$(cat "$(_asr_ck "$1").sid" 2>/dev/null)
+	if [ "$2" = POST ]; then
+		curl -s --max-time 8 ${_ar_src:+--interface "$_ar_src"} -A "$UA" \
+			-H "Authorization: $(_asr_hdr "$1" POST "$5")" \
+			-H "Cookie: CGISID=$_ar_s; projectConfig=0" -H "csrftoken: ${_ar_s:-0}" \
+			-H "X-Requested-With: XMLHttpRequest" \
+			-H "Content-Type: application/x-www-form-urlencoded; charset=UTF-8" \
+			--data "$4" "http://$1/xml_action.cgi?method=set&module=duster&file=$3" 2>/dev/null
+	else
+		curl -s --max-time 8 ${_ar_src:+--interface "$_ar_src"} -A "$UA" \
+			-H "Authorization: $(_asr_hdr "$1" GET "$5")" \
+			-H "Cookie: CGISID=$_ar_s; projectConfig=0" -H "X-Requested-With: XMLHttpRequest" \
+			"http://$1/xml_action.cgi?method=get&module=duster&file=$3" 2>/dev/null
+	fi
+}
+
+_asr_call() {
+	[ -s "$(_asr_ck "$1")" ] || _asr_login "$1" "$5" || return 1
+	_ac_r=$(_asr_raw "$@")
+	case "$_ac_r" in
+		''|*UNAUTHORIZED*|*KICKOFF*|*'<title>'*)
+			rm -f "$(_asr_ck "$1")"
+			_asr_login "$1" "$5" || return 1
+			_ac_r=$(_asr_raw "$@") ;;
+	esac
+	[ -n "$_ac_r" ] || return 1
+	printf '%s' "$_ac_r" > "$CACHE_DIR/asrraw_$(_tk "$1")_$3" 2>/dev/null
+	printf '%s' "$_ac_r"
+}
+
+_asr_x() { printf '%s' "$1" | tr '\n' ' ' | sed -n "s|.*<$2>\\([^<]*\\)</$2>.*|\\1|p" | head -1; }
+
+asr_metrics_json() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 1
+	_r=$(_asr_call "$_a" GET status1 "" "$_HLP")
+	case "$_r" in *'<sysinfo>'*) ;; *) _r="" ;; esac
+	if [ -z "$_r" ]; then
+		[ -f "$(_asr_ck "$_a").fail" ] || return 1
+		printf '{"backend":"hilink","cport":"%s","protocol":"HiLink (web API)",' "$_a"
+		printf '"modem":"ASR MiFi","web_auth":"fail","registration":"","signal":"","conn_status":""}\n'
+		return 0
+	fi
+	_sm=$(_asr_x "$_r" sys_mode)
+	_raw=$(_asr_x "$_r" rssi | tr -cd '0-9')
+	_rsrp=""; _rssi=""; _csq=""; _ntype=""; _band=""
+	case "$_sm" in
+		17)
+			_ntype=LTE
+			[ -n "$_raw" ] && _rsrp=$((_raw - 140))
+			_band=$(_asr_x "$_r" Battery_charging | tr -cd '0-9')
+			;;
+		5)
+			_ntype=UMTS
+			[ -n "$_raw" ] && { _csq="$_raw"; _rssi=$((_raw * 2 - 113)); }
+			;;
+		3)
+			_ntype=GSM
+			[ -n "$_raw" ] && { _csq="$_raw"; _rssi=$((_raw * 2 - 113)); }
+			;;
+	esac
+	_reg=0
+	[ "$(_asr_x "$_r" wan_conn_status)" = connected ] && _reg=1
+	_ctime=$(_asr_x "$_r" curconntime | tr -cd '0-9')
+	[ "$_reg" = 1 ] || _ctime=""
+	_ct_str="-"
+	if [ -n "$_ctime" ]; then
+		_ct_str=$(printf "%dd, %02d:%02d:%02d" \
+			$(( _ctime / 86400 )) $(( _ctime / 3600 % 24 )) \
+			$(( _ctime / 60 % 60 )) $(( _ctime % 60 )))
+	fi
+	_op=$(_asr_x "$_r" network_name)
+	_pct=$(sig_percent "$_ntype" "$_rsrp" "" "" "" "" "$_rssi")
+	_hw=$(_asr_x "$_r" hardware_version)
+	_md=$(_asr_x "$_r" model_name)
+	_model="${_hw:-ASR MiFi}${_md:+ ($_md)}"
+	_bat=""; _chg=0
+	[ "$(_asr_x "$_r" Battery_connect)" = 1 ] && _bat=$(_asr_x "$_r" Battery_voltage | tr -cd '0-9')
+	[ "$(_asr_x "$_r" Battery_charge)" = 1 ] && _chg=1
+	_pband=""; [ -n "$_band" ] && [ "$_band" != 0 ] && _pband="B$_band"
+	_mode="$_ntype"; [ -n "$_pband" ] && _mode="$_ntype $_pband"
+	printf '{'
+	printf '"backend":"hilink",'
+	printf '"cport":"%s",' "$_a"
+	printf '"protocol":"HiLink (web API)","vidpid":"%s",' "$(_vidpid_for "$_HLP")"
+	printf '"modem":"%s",' "$(jsafe "$_model")"
+	printf '"web_auth":"ok",'
+	printf '"imei":"%s","imsi":"","iccid":"%s",' "$(_asr_x "$_r" IMEI | tr -cd '0-9')" "$(_asr_x "$_r" ICCID | tr -cd '0-9')"
+	printf '"firmware":"%s",' "$(jsafe "$(_asr_x "$_r" version_num)")"
+	printf '"phone":"%s",' "$(_asr_x "$_r" MSISDN | tr -cd '0-9+')"
+	printf '"operator_name":"%s",' "$(jsafe "$_op")"
+	printf '"operator_mcc":"","operator_mnc":"",'
+	printf '"registration":"%s",' "$_reg"
+	printf '"roaming":"%s",' "$([ "$(_asr_x "$_r" roaming)" = 1 ] && echo 1 || echo 0)"
+	printf '"mode":"%s",' "$(jsafe "$_mode")"
+	printf '"signal":"%s",' "$_pct"
+	printf '"rsrp":"%s","rsrq":"","sinr":"","rssi":"%s",' "$_rsrp" "$_rssi"
+	printf '"cid_dec":"","cid_hex":"","lac_hex":"",'
+	printf '"pci":"","pband":"%s","enbid":"",' "$_pband"
+	printf '"ipaddr":"%s",' "$(_asr_x "$_r" ipv4)"
+	printf '"battery":"%s","battery_charging":"%s",' "$_bat" "$_chg"
+	[ -n "$_ctime" ] && printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "$_ctime"
+	printf '"csq":"%s",' "$_csq"
+	printf '"conn_status":"%s"' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
+	printf '}\n'
 }
 
 tenda_metrics_json() {
@@ -785,6 +942,7 @@ metrics_json() {
 			zte_metrics_json "$_HLP"; return $? ;;
 		15a9:*|1076:8002) yota_metrics_json "$_HLP"; return $? ;;
 		0846:68e1) netgear_metrics_json "$_HLP"; return $? ;;
+		1286:4e31) asr_metrics_json "$_HLP"; return $? ;;
 	esac
 	_inf=$(api_get /api/device/information "$_HLP")
 	[ -n "$_inf" ] || return 1
@@ -1861,6 +2019,10 @@ case "$1" in
 		_a=$(_addr_for "$2") || { echo '{"hilink":0}'; exit 0; }
 		_pv=$(_vidpid_for "$2")
 		[ -n "$_pv" ] || _pv="$(cat "/sys/bus/usb/devices/$2/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$2/idProduct" 2>/dev/null)"
+		if [ "$_pv" = "1286:4e31" ]; then
+			printf '{"hilink":1,"addr":"%s","classify":"asr"}\n' "$_a"
+			exit 0
+		fi
 		if [ "$_pv" = "0846:68e1" ]; then
 			case "$(_ng_at "$_a" ATI)" in
 				*OK*) printf '{"hilink":1,"addr":"%s","classify":"netgear"}\n' "$_a" ;;
@@ -1883,6 +2045,12 @@ case "$1" in
 		esac
 		;;
 	json|metrics) metrics_json "$2" ;;
+	asr)
+		_a=$(_addr_for "$5") || exit 1
+		case "$2" in
+			get) _asr_call "$_a" GET "$3" "" "$5" ;;
+			set) _asr_call "$_a" POST "$3" "$4" "$5" ;;
+		esac ;;
 	addr)        _addr_for "$2" ;;
 	get)         api_get "$2" "$3" ;;
 	connect)

@@ -2,7 +2,7 @@
 
 Some USB modems run their own IP stack and give the router a plain network card: Huawei HiLink, ZTE/Tenda goform sticks, Yota, Alcatel, some D-Link, Android Mi-Fi devices. They have no AT port and no cdc-wdm, so `sms_tool` and the normal AT poll do not work with them. They do have an HTTP API with the same data: signal, operator, network mode, traffic and SMS. `root/usr/share/5gmodem/hilink.sh` is the second metrics backend next to the AT path. It prints JSON with **the same keys as `5gmodem.sh`**, so the pages do not need to know which kind of modem they show. The backend is identified by the `"backend":"hilink"` field and not by the model name. The model name appears on tabs, buttons and profile cards, where a class marker would be noise.
 
-Vendor details: [huawei-hilink.md](huawei-hilink.md), [zte-tenda.md](zte-tenda.md), [mediatek-mifi.md](mediatek-mifi.md). Netgear and Yota are covered below.
+Vendor details: [huawei-hilink.md](huawei-hilink.md), [zte-tenda.md](zte-tenda.md), [mediatek-mifi.md](mediatek-mifi.md), [asr-duster.md](asr-duster.md). Netgear and Yota are covered below.
 
 ## Dispatch
 
@@ -14,11 +14,16 @@ Vendor details: [huawei-hilink.md](huawei-hilink.md), [zte-tenda.md](zte-tenda.m
 | 19d2:* (and `hl_api=zte`, for example MediaTek 0e8d:2004) | `tenda_metrics_json`, then `zte_metrics_json` | Tenda `goform/getModules`, ZTE goform |
 | 15a9:*, 1076:8002 | `yota_metrics_json` | `GET /status` |
 | 0846:68e1 | `netgear_metrics_json` | AT over TCP, port 5510 |
+| 1286:4e31 | `asr_metrics_json` | ASR Duster `xml_action.cgi`, HTTP Digest |
 | everything else (12d1 Huawei, 1bbb Alcatel, ...) | Huawei XML | `/api/...` with SesTokInfo |
 
 `probe` returns `{"hilink":1,"addr":...,"classify":...}`. It tries Netgear `ATI` on 5510 for 0846:68e1, then Huawei `/api/device/basic_information` (`<classify>`), then ZTE `modem_main_state`, then Yota `/status`.
 
 The legacy scripts `modem/hilink/huawei_hilink.sh`, `alcatel_hilink.sh` and `zte.sh` are older 3ginfo-lite style collectors. They take the modem IP and print `+CSQ`-like lines from `/api/...`, `/goform/getWanInfo` and so on.
+
+## Web login defaults
+
+`_web_user` and `_web_pass` read `web_user` / `web_pass` from the modem section and fall back to `admin` / `admin`, the factory pair of nearly every web-API stick and Mi-Fi. Every backend that logs in (ZTE goform, Tenda, ASR Duster) takes its credentials from these two helpers. The password field on the Modem page shows `admin` as a placeholder; an empty field means the default.
 
 ## Fix the modem path once
 

@@ -5575,8 +5575,8 @@ msgstr "调制解调器电池"
 msgid "Modem battery, charging"
 msgstr "调制解调器电池，充电中"
 
-msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
-msgstr "调制解调器自身网页界面的密码。有了它，路由器可以读取信号、电池、短信，并能重启调制解调器。如果调制解调器没有密码，请留空。"
+msgid "The password of the modem's own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems."
+msgstr "调制解调器自身网页界面的密码（用户 admin）。有了它，路由器可以读取信号、电量、短信，并能重启调制解调器。留空表示 admin，这是大多数此类调制解调器的出厂密码。"
 
 msgid "The modem asks for its web password - enter it on the Modem page"
 msgstr "调制解调器需要网页密码——请在“调制解调器”页面中输入"
@@ -5965,8 +5965,6 @@ msgstr "软件包管理器无法安装此更新。"
 msgid "The package was installed, but the version did not change. The release file looks broken."
 msgstr "软件包已安装，但版本没有变化。发布文件可能有问题。"
 
-msgid "What is new in %s"
-msgstr "%s 新增内容"
 
 msgid "Downloading: %d of %d KB"
 msgstr "正在下载：%d / %d KB"
