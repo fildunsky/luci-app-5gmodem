@@ -21,7 +21,10 @@ case "$INTERVAL" in ''|*[!0-9]*) INTERVAL=15 ;; esac
 [ "$INTERVAL" -lt 5 ] && INTERVAL=5
 
 RGB_NAMES=$(uci -q get "$CFG.@5gmodem[0].signal_leds_rgb")
-[ -n "$RGB_NAMES" ] || RGB_NAMES="red green blue"
+if [ -z "$RGB_NAMES" ]; then
+	RGB_NAMES="red green blue"
+	[ ! -e "$LEDS_DIR/red" ] && [ -e "$LEDS_DIR/red:wan" ] && RGB_NAMES="red:wan green:wan blue:wan"
+fi
 
 bars_present() {
 	for _l in $LED_NAMES; do

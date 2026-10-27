@@ -3781,6 +3781,12 @@ msgstr "Chưa kết nối modem"
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Khắc phục Wi-Fi uplink khi bị mất"
 
+msgid "Release a cell lock when the network is lost"
+msgstr "Gỡ khóa cell khi mất mạng"
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr "Nếu modem không đăng ký được vào mạng trong 10 phút trong khi khóa cell hoặc tần số đặt ở đây đang bật, khóa sẽ được gỡ để modem có thể dùng bất kỳ cell nào. Khóa không được tự động đặt lại. Vẫn hoạt động khi tắt giám sát."
+
 msgid "If at least one target responds"
 msgstr "Nếu có ít nhất một đích phản hồi"
 
@@ -5931,3 +5937,54 @@ msgstr "Kiểm tra phiên dữ liệu sau mỗi vài giây. Khi nhà mạng ng�
 
 msgid "From 5 to 3600 seconds"
 msgstr "Từ 5 đến 3600 giây"
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr "Modem tích hợp MediaTek (CCMNI)"
+
+msgid "Registration timeout, s"
+msgstr "Thời gian chờ đăng ký, giây"
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr "eSIM đang dùng chưa có hồ sơ: hãy chuyển sang SIM vật lý hoặc tải hồ sơ về"
+
+msgid "As set in the modem"
+msgstr "Theo cài đặt trong modem"
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr "Không đủ dung lượng trống trong /tmp để tải bản cập nhật."
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr "Không tải được bản cập nhật từ GitHub. Hãy kiểm tra kết nối internet rồi thử lại."
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr "Quá trình tải bị gián đoạn, tệp chưa đầy đủ. Hãy thử lại."
+
+msgid "The package manager could not install the update."
+msgstr "Trình quản lý gói không cài được bản cập nhật."
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr "Gói đã được cài nhưng phiên bản không đổi. Có vẻ tệp phát hành bị lỗi."
+
+msgid "What is new in %s"
+msgstr "Có gì mới trong %s"
+
+msgid "Downloading: %d of %d KB"
+msgstr "Đang tải: %d / %d KB"
+
+msgid "Downloading: %d KB"
+msgstr "Đang tải: %d KB"
+
+msgid "Installing the package…"
+msgstr "Đang cài gói…"
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr "Đang hoàn tất: làm mới bản dịch và bộ nhớ đệm…"
+
+msgid "Preparing: reading the release…"
+msgstr "Đang chuẩn bị: đọc thông tin bản phát hành…"
+
+msgid "Lost contact with the router during the update."
+msgstr "Mất kết nối với router trong lúc cập nhật."
+
+msgid "Could not reach GitHub"
+msgstr "Không kết nối được GitHub"

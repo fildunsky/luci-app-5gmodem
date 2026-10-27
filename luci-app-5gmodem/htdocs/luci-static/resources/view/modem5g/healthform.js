@@ -7,7 +7,7 @@ var HBIN = '/usr/share/5gmodem/health.sh';
 var NBIN = '/usr/share/5gmodem/netpri.sh';
 
 return baseclass.extend({
-	API: 30801,
+	API: 30900,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),
@@ -83,6 +83,8 @@ return baseclass.extend({
 		});
 		var wWifi = cb(String(c.heal_wifi) === '1', 'hw-heal-wifi');
 		var hasWifi = uplinks.some(function(o) { return o.type === 'wifi'; }) || String(c.heal_wifi) === '1';
+		var wLr = cb(String(c.lock_release) !== '0', 'hw-lock-release');
+		var hasModem = healSel.length > 0 || String(c.lock_release) === '0';
 
 		var grpWatch = E('div', {}, [
 			row(_('Check interval, s'), wInt.render()),
@@ -108,6 +110,10 @@ return baseclass.extend({
 			row(_('Heal a modem while its link is down'), wHeal.render()),
 			grpHealTbl
 		]) : null;
+		var grpLr = hasModem ? E('div', {}, [
+			row(_('Release a cell lock when the network is lost'), wLr.render(),
+				_('If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off.'))
+		]) : null;
 		var grpWifi = hasWifi ? E('div', {}, [
 			row(_('Heal the Wi-Fi uplink while it is down'), wWifi.render())
 		]) : null;
@@ -115,7 +121,7 @@ return baseclass.extend({
 		var node = E('div', { 'class': 'hw-form' }, [
 			row(_('Enable watching'), wEn.render()),
 			grpWatch, grpFo
-		].concat(grpHeal ? [ grpHeal ] : []).concat(grpWifi ? [ grpWifi ] : []));
+		].concat(grpHeal ? [ grpHeal ] : []).concat(grpLr ? [ grpLr ] : []).concat(grpWifi ? [ grpWifi ] : []));
 
 		var deps = function() {
 			var en = wEn.isChecked();
@@ -145,6 +151,7 @@ return baseclass.extend({
 				'failover=' + (wFo.isChecked() ? '1' : '0'),
 				'healing=' + (healSel.length ? (wHeal.isChecked() ? '1' : '0') : (String(c.healing) === '1' ? '1' : '0')),
 				'heal_wifi=' + (hasWifi ? (wWifi.isChecked() ? '1' : '0') : (String(c.heal_wifi) === '1' ? '1' : '0')),
+				'lock_release=' + (hasModem ? (wLr.isChecked() ? '1' : '0') : (String(c.lock_release) === '0' ? '0' : '1')),
 				'failback=' + wFb.getValue(),
 				'interval=' + n(wInt, 30),
 				'targets=' + (tgt || '77.88.8.8 1.1.1.1'),

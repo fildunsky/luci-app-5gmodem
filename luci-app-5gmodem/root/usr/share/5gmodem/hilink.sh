@@ -552,6 +552,13 @@ ZC_EOF
 		if [ -n "$_mcc" ] && [ "$_mcc" = "$(_zj "$_r" hmcc)" ]; then _reg=1; else _reg=5; fi
 		[ -z "$(_zj "$_r" hmcc)" ] && _reg=1
 	fi
+	case "$(_zj "$_r" modem_main_state)" in
+		modem_waitpin) _reg="SIM PIN required" ;;
+		modem_waitpuk) _reg="SIM PUK required" ;;
+		modem_imsi_waitnck) _reg="Network personalization PIN required" ;;
+		modem_sim_undetected) _reg="SIM not inserted" ;;
+		modem_sim_destroy|modem_destroy) _reg="SIM failure" ;;
+	esac
 	_csq=""
 	if [ -n "$_rssi" ]; then
 		_csq=$(( ( _rssi + 113 ) / 2 ))
@@ -1589,8 +1596,21 @@ _mtk_usock() {
 mtk_at() {
 	_ma_a="$1"; _ma_p="$2"; shift 2
 	if [ "$_ma_a" = local ]; then
+		MTK_MODE=""; MTK_USOCK=/usr/share/5gmodem/mtk/usock-armv7
+		[ -f /usr/share/5gmodem/mtk/env.sh ] && . /usr/share/5gmodem/mtk/env.sh
+		if [ -n "$MTK_MODE" ] && [ "$MTK_MODE" != rild ]; then
+			_ma_d=$(uci -q get "$CFG.m_ccci.at_port")
+			[ -c "$_ma_d" ] || _ma_d=$MTK_AT
+			command -v at_lock >/dev/null 2>&1 || . "$RES/atlock.sh"
+			at_lock "$_ma_d" 15 || return 1
+			for _ma_x in "$@"; do
+				if sms_tool -d "$_ma_d" at "$_ma_x"; then echo OK; else echo ERROR; fi
+			done | tr -d '\r' | grep -v '^$'
+			at_unlock
+			return 0
+		fi
 		for _ma_x in "$@"; do
-			/usr/share/5gmodem/mtk/usock-armv7 /dev/socket/rild-atci "$_ma_x" 3000
+			"$MTK_USOCK" /dev/socket/rild-atci "$_ma_x" 3000
 		done | tr -d '\r' | grep -v '^$'
 		return 0
 	fi

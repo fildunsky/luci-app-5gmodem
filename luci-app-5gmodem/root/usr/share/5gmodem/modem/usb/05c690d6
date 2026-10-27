@@ -360,7 +360,13 @@ case "$MODE_NUM" in
 		MODE="5G SA |"
 		;;
 	"13")
-		MODE="5G NSA |"
+		if echo "$O" | grep -q "^nr_band:"; then
+			MODE="5G NSA |"
+		elif echo "$O" | grep -q "scell:"; then
+			MODE="LTE-A |"
+		else
+			MODE="LTE |"
+		fi
 		;;
 esac
 

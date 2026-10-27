@@ -3781,6 +3781,12 @@ msgstr "Tidak ada modem terhubung"
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Pulihkan uplink Wi-Fi saat mati"
 
+msgid "Release a cell lock when the network is lost"
+msgstr "Lepas kunci sel saat jaringan hilang"
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr "Jika modem tidak terdaftar di jaringan selama 10 menit sementara kunci sel atau frekuensi yang diatur di sini aktif, kunci dilepas agar modem dapat memakai sel mana pun. Kunci tidak dipasang lagi secara otomatis. Tetap berfungsi meski pemantauan dimatikan."
+
 msgid "If at least one target responds"
 msgstr "Jika setidaknya satu target merespons"
 
@@ -5931,3 +5937,54 @@ msgstr "Memeriksa sesi data setiap beberapa detik. Jika operator memutus sesi at
 
 msgid "From 5 to 3600 seconds"
 msgstr "Dari 5 hingga 3600 detik"
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr "Modem bawaan MediaTek (CCMNI)"
+
+msgid "Registration timeout, s"
+msgstr "Batas waktu registrasi, dtk"
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr "eSIM aktif tidak memiliki profil: beralih ke SIM fisik atau unduh profil"
+
+msgid "As set in the modem"
+msgstr "Sesuai pengaturan modem"
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr "Ruang kosong di /tmp tidak cukup untuk mengunduh pembaruan."
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr "Gagal mengunduh pembaruan dari GitHub. Periksa koneksi internet lalu coba lagi."
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr "Unduhan terputus: berkas tidak lengkap. Coba lagi."
+
+msgid "The package manager could not install the update."
+msgstr "Pengelola paket gagal memasang pembaruan."
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr "Paket terpasang, tetapi versinya tidak berubah. Berkas rilis tampaknya rusak."
+
+msgid "What is new in %s"
+msgstr "Yang baru di %s"
+
+msgid "Downloading: %d of %d KB"
+msgstr "Mengunduh: %d dari %d KB"
+
+msgid "Downloading: %d KB"
+msgstr "Mengunduh: %d KB"
+
+msgid "Installing the package…"
+msgstr "Memasang paket…"
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr "Menyelesaikan: memperbarui terjemahan dan cache…"
+
+msgid "Preparing: reading the release…"
+msgstr "Menyiapkan: membaca data rilis…"
+
+msgid "Lost contact with the router during the update."
+msgstr "Koneksi ke router terputus saat pembaruan."
+
+msgid "Could not reach GitHub"
+msgstr "Tidak dapat menghubungi GitHub"

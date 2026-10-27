@@ -279,6 +279,7 @@ fi
 if [ "$AMP" = ccci ]; then
 	[ -f /lib/netifd/proto/ccmni.sh ] || { json error ccmni ""; exit 1; }
 	_mk_cc=$(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.proto='\?ccmni'\?\$/\1/p" | head -1)
+	[ -n "$_mk_cc" ] || _mk_cc=$(uci -q show network 2>/dev/null | sed -n "s/^network\.\([^.]*\)\.\(device\|ifname\)='\?ccmni0'\?\$/\1/p" | head -1)
 	[ -n "$_mk_cc" ] && IF="$_mk_cc"
 	if [ "$(uci -q get "network.$IF.proto")" != ccmni ]; then
 		OLDMETRIC=$(uci -q get "network.$IF.metric")

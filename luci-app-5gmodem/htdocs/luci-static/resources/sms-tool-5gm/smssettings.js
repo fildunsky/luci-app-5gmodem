@@ -871,7 +871,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30801,
+	API: 30900,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

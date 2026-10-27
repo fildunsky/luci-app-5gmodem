@@ -4025,6 +4025,12 @@ msgstr "Модем не подключен"
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Лечить Wi-Fi-аплинк, пока он лежит"
 
+msgid "Release a cell lock when the network is lost"
+msgstr "Снимать привязку к соте при потере сети"
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr "Если модем 10 минут подряд не зарегистрирован в сети, а привязка к соте или частоте, поставленная здесь, включена, привязка снимается, и модем может выбрать любую соту. Обратно привязка сама не ставится. Работает и при выключенном наблюдении."
+
 msgid "If at least one target responds"
 msgstr "Если доступен хотя бы один адрес"
 
@@ -6216,3 +6222,54 @@ msgstr "Каждые несколько секунд проверяет сесс
 
 msgid "From 5 to 3600 seconds"
 msgstr "От 5 до 3600 секунд"
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr "Встроенный модем MediaTek (CCMNI)"
+
+msgid "Registration timeout, s"
+msgstr "Время ожидания регистрации, с"
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr "В активном eSIM нет профиля: переключитесь на физическую SIM или загрузите профиль"
+
+msgid "As set in the modem"
+msgstr "Как задано в модеме"
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr "Недостаточно свободного места в /tmp, чтобы скачать обновление."
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr "Не удалось скачать обновление с GitHub. Проверьте подключение к интернету и попробуйте снова."
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr "Скачивание прервалось, файл получен не полностью. Попробуйте снова."
+
+msgid "The package manager could not install the update."
+msgstr "Менеджер пакетов не смог установить обновление."
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr "Пакет установлен, но версия не изменилась. Похоже, файл релиза собран неправильно."
+
+msgid "What is new in %s"
+msgstr "Что нового в %s"
+
+msgid "Downloading: %d of %d KB"
+msgstr "Скачивание: %d из %d КБ"
+
+msgid "Downloading: %d KB"
+msgstr "Скачивание: %d КБ"
+
+msgid "Installing the package…"
+msgstr "Установка пакета…"
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr "Завершение: обновляются переводы и кэш…"
+
+msgid "Preparing: reading the release…"
+msgstr "Подготовка: читаем данные релиза…"
+
+msgid "Lost contact with the router during the update."
+msgstr "Во время обновления пропала связь с роутером."
+
+msgid "Could not reach GitHub"
+msgstr "Не удалось связаться с GitHub"

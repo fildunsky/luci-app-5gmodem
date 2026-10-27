@@ -160,7 +160,7 @@ mmk_imei() {
 resolve_at_gate() {
 	_RG_QUIET=0; _RG_NEVER=0; _RG_PORT=""; _RG_MM=""; _RG_MMK=""
 	_rg_frag=""
-	command -v mm_at_fragile >/dev/null 2>&1 && _rg_frag=$(mm_at_fragile "$(modem_vidpid "$1")")
+	command -v mm_at_fragile >/dev/null 2>&1 && _rg_frag=$(mm_at_fragile "$(modem_vidpid "$1")" "$1")
 	_rg_noat=$(uci -q get "$CFG.$2.no_at")
 	[ -n "$_rg_frag" ] || [ "$_rg_noat" = "1" ] || return 0
 	_RG_MM=$(mm_index_for_path "$1")

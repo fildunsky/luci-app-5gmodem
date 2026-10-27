@@ -91,7 +91,8 @@ usb_path_present() {
 }
 
 mtk_soc_modem() {
-	[ -d /sys/kernel/ccci ] && [ -S /dev/socket/rild-atci ]
+	[ -d /sys/kernel/ccci ] || return 1
+	[ -S /dev/socket/rild-atci ] || { [ ! -d /dev/socket ] && [ -c /dev/ttyC0 ]; }
 }
 
 soc_modem_node() {
@@ -107,7 +108,8 @@ soc_modem_node() {
 
 soc_modem_vidpid() {
 	if mtk_soc_modem; then
-		_smv_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | tr -cd '0-9' | cut -c1-4)
+		_smv_m=$(tr '\000' '\n' < /proc/device-tree/compatible 2>/dev/null | sed -n 's/^mediatek,[mM][tT]\([0-9]\{4\}\)$/\1/p' | head -1)
+		[ -n "$_smv_m" ] || _smv_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | tr -cd '0-9' | cut -c1-4)
 		[ -n "$_smv_m" ] || _smv_m=$(sed -n 's/^Hardware[^:]*: *[A-Za-z]*//p' /proc/cpuinfo 2>/dev/null | tr -cd '0-9' | cut -c1-4)
 		printf '0e8d:%s\n' "${_smv_m:-0000}"
 		return
@@ -123,7 +125,7 @@ soc_modem_model() {
 		printf 'MediaTek %s\n' "${_smm_m:-SoC}"
 		return
 	fi
-	_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | sed 's/ *4G Modem Stick$//; s/ *Modem Stick$//')
+	_smm_m=$(tr -d '\000' < /proc/device-tree/model 2>/dev/null | sed 's/ *4G Modem Stick$//; s/ *Modem Stick$//; s/ *4G Pocket Router$//')
 	[ -n "$_smm_m" ] || _smm_m=$(cat /sys/devices/soc0/machine 2>/dev/null)
 	printf '%s\n' "$_smm_m"
 }
@@ -1138,6 +1140,11 @@ sleep_tick_init() {
 at_query() {
 	_aq_p="$1"; _aq_c="$2"; _aq_t="${3:-8}"
 	[ -n "$_aq_p" ] && [ -c "$_aq_p" ] || return 1
+	case "${_aq_p##*/}" in
+		wwan*at*)
+			command -v tty_no_at >/dev/null 2>&1 || . /usr/share/5gmodem/noatports.sh
+			tty_no_at "$_aq_p" && return 1 ;;
+	esac
 	command -v sms_tool >/dev/null 2>&1 || return 1
 	if command -v is_atcmd >/dev/null 2>&1 && ! is_atcmd "$_aq_c"; then
 		logger -t 5gmodem "at_query: command rejected by validation"

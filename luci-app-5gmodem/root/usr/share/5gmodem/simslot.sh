@@ -125,7 +125,7 @@ fi
 if is_compal "$_AP" "" "$(uci -q get "5gmodem.$_SEC.at_port")"; then
 	MI=""
 fi
-_FRAG=$(mm_at_fragile "$_AVIDPID")
+_FRAG=$(mm_at_fragile "$_AVIDPID" "$_AP")
 
 _at_slot_cmd() {
 	for _asc_n in "^switch_slot" "+SWITCH_SLOT"; do
@@ -198,7 +198,7 @@ if [ -n "$MI" ]; then
 		N=$(echo "$K" | sed -n 's/^modem\.generic\.sim-slots\.length *: *//p' | tr -dc 0-9)
 		ACT=$(echo "$K" | sed -n 's/^modem\.generic\.primary-sim-slot *: *//p' | tr -dc 0-9)
 		OUT=""
-		if [ "${N:-0}" -le 1 ] 2>/dev/null && [ "$_SVIA" = qmi ] && [ -n "$(mm_at_fragile "$_AVIDPID")" ]; then
+		if [ "${N:-0}" -le 1 ] 2>/dev/null && [ "$_SVIA" = qmi ] && [ -n "$(mm_at_fragile "$_AVIDPID" "$_AP")" ]; then
 			_nsw="/tmp/5gmodem/noswslot_$(echo "$_AP" | tr -c 'A-Za-z0-9' '_')"
 			if [ -z "$(find "$_nsw" -mmin -10 2>/dev/null)" ]; then
 				SLOT_AT_PORT=$(_slot_at_mm)

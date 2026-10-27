@@ -3781,6 +3781,12 @@ msgstr "未連接數據機"
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Wi-Fi 上行鏈路斷開時進行修復"
 
+msgid "Release a cell lock when the network is lost"
+msgstr "網路遺失時解除基地台鎖定"
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr "如果在此處設定的基地台或頻點鎖定處於開啟狀態，而數據機連續 10 分鐘未註冊到網路，則解除鎖定，讓數據機可以使用任意基地台。鎖定不會自動重新設定。即使關閉監控也會生效。"
+
 msgid "If at least one target responds"
 msgstr "至少一個目標響應即可"
 
@@ -5931,3 +5937,54 @@ msgstr "每隔幾秒檢查一次資料工作階段。當電信業者中斷工作
 
 msgid "From 5 to 3600 seconds"
 msgstr "5 到 3600 秒"
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr "MediaTek 內建數據機 (CCMNI)"
+
+msgid "Registration timeout, s"
+msgstr "註冊逾時（秒）"
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr "目前的 eSIM 沒有設定檔：請切換到實體 SIM 卡或下載設定檔"
+
+msgid "As set in the modem"
+msgstr "沿用數據機中的設定"
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr "/tmp 空間不足，無法下載更新。"
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr "無法從 GitHub 下載更新。請檢查網路連線後重試。"
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr "下載中斷，檔案不完整。請重試。"
+
+msgid "The package manager could not install the update."
+msgstr "套件管理器無法安裝此更新。"
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr "套件已安裝，但版本沒有變化。發佈檔案可能有問題。"
+
+msgid "What is new in %s"
+msgstr "%s 新增內容"
+
+msgid "Downloading: %d of %d KB"
+msgstr "正在下載：%d / %d KB"
+
+msgid "Downloading: %d KB"
+msgstr "正在下載：%d KB"
+
+msgid "Installing the package…"
+msgstr "正在安裝套件…"
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr "正在完成：重新整理翻譯與快取…"
+
+msgid "Preparing: reading the release…"
+msgstr "正在準備：讀取發佈資訊…"
+
+msgid "Lost contact with the router during the update."
+msgstr "更新過程中與路由器的連線中斷。"
+
+msgid "Could not reach GitHub"
+msgstr "無法連線 GitHub"

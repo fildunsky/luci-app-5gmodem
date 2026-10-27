@@ -1002,7 +1002,7 @@ if [ -n "$SIMID" ] && [ -s "$SPNCACHE" ]; then
 	IFS= read -r SPN 2>/dev/null < "$SPNCACHE"
 elif [ -n "$SIMID" ] && [ -f "$SPNCACHE.none" ] && [ -z "$(find "$SPNCACHE.none" -mmin +4 2>/dev/null)" ]; then
 	:
-else
+elif [ -n "$SIMID" ]; then
 	_spn_raw=$(sms_tool -d "$DEVICE" at "AT+CRSM=176,28486,0,0,17" 2>/dev/null | tr -d '\r" ')
 	SPNHEX=$(printf '%s\n' "$_spn_raw" \
 		| sed -n 's/.*+CRSM:[^,]*,[^,]*,\([0-9A-Fa-f][0-9A-Fa-f]*\).*/\1/p')
@@ -1066,6 +1066,7 @@ T=$(echo "$O" | awk -F[,\ ] '/^\+CPIN:/ {print $0;exit}' | xargs)
 if [ -n "$T" ]; then
 	case "$T" in
 		"+CPIN: READY"|*PIN2*|*PUK2*) : ;;
+		*EMPTY_EUICC*) SIM_STATE="eSIM has no profile";;
 		*) SIM_STATE=$(echo "$T" | cut -f2 -d: | xargs);;
 	esac
 fi
@@ -1205,6 +1206,7 @@ if [ -n "$SIMID" ]; then
 		_apn_stamp="/tmp/5gmodem/autoapn_$_apn_sec"
 		_apn_wait=1
 		[ -f "$_apn_stamp.gaveup" ] && _apn_wait=30
+		[ "$(uci -q get "network.$_SIM_IF.proto" 2>/dev/null)" = ccmni ] && _SIM_IF=""
 		if [ -n "$_SIM_IF" ] && { [ ! -f "$_apn_stamp" ] || [ -n "$(find "$_apn_stamp" -mmin +$_apn_wait 2>/dev/null)" ]; }; then
 			: > "$_apn_stamp"
 			logger -t 5gmodem "SIM change (IMSI) on $_SIM_IF - re-selecting the APN"
@@ -1722,7 +1724,18 @@ _qmi_refresh() {
 	printf '%s' "$_qr_sig" > "$_qr_p.sig.tmp" && mv "$_qr_p.sig.tmp" "$_qr_p.sig"
 	printf '%s' "$_qr_lte" > "$_qr_p.lte.tmp" && mv "$_qr_p.lte.tmp" "$_qr_p.lte"
 	printf '%s' "$_qr_cell" > "$_qr_p.cell.tmp" && mv "$_qr_p.cell.tmp" "$_qr_p.cell"
-	printf '%s' "$_qr_dist" > "$_qr_p.dist.tmp" && mv "$_qr_p.dist.tmp" "$_qr_p.dist"
+	if [ -n "$_qr_dist" ]; then
+		printf '%s' "$_qr_dist" > "$_qr_p.dist.tmp" && mv "$_qr_p.dist.tmp" "$_qr_p.dist"
+		printf '%s' "$_qr_cell" > "$_qr_p.distc"
+	elif [ -z "$_qr_cell" ] || [ "$(cat "$_qr_p.distc" 2>/dev/null)" != "$_qr_cell" ]; then
+		rm -f "$_qr_p.dist" "$_qr_p.distc"
+	fi
+	if [ -z "$(find "$_qr_p.ntz" -mmin -10 2>/dev/null)" ]; then
+		_qr_tz=$(qmicli_p "$_qr_w" --nas-get-network-time 2>/dev/null | awk -F"'" '
+			/Timezone Offset:/ { tz = $2 }
+			END { if (tz ~ /^-?[0-9]+$/) print tz }')
+		printf '%s' "$_qr_tz" > "$_qr_p.ntz.tmp" && mv "$_qr_p.ntz.tmp" "$_qr_p.ntz"
+	fi
 	cut -d. -f1 /proc/uptime > "$_qr_p.t.tmp" && mv "$_qr_p.t.tmp" "$_qr_p.t"
 }
 
@@ -2330,6 +2343,9 @@ fi
 if [ -n "$MODEL" ] && [ -n "$AMP_SEC" ] && _model_sane "$MODEL"; then
 	[ "$(uci -q get "5gmodem.$AMP_SEC.model")" = "$MODEL" ] \
 	&& [ "$(uci -q get "5gmodem.$AMP_SEC.model_vp")" = "$(uci -q get "5gmodem.$AMP_SEC.vidpid")" ] || {
+		_mo=$(uci -q get "5gmodem.$AMP_SEC.model")
+		[ -n "$_mo" ] && [ "$(uci -q get "5gmodem.$AMP_SEC.product")" = "$_mo" ] \
+			&& uci -q set "5gmodem.$AMP_SEC.product=$MODEL"
 		uci -q set "5gmodem.$AMP_SEC.model=$MODEL"
 		uci -q set "5gmodem.$AMP_SEC.model_vp=$(uci -q get "5gmodem.$AMP_SEC.vidpid")"
 		uci -q commit 5gmodem
