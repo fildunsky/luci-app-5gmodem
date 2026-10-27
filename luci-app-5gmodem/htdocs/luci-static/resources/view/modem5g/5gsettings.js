@@ -45,27 +45,84 @@ function updSetVer(id, label, ver) {
 }
 function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
 function updErrText(e, fb) {
-	if (e === 'asset_pending')
+	switch (e) {
+	case 'asset_pending':
 		return _('The update is still building on the server. Please wait about 15-20 minutes and try again.');
+	case 'no_space':
+		return _('Not enough free space in /tmp to download the update.');
+	case 'download_failed':
+		return _('Could not download the update from GitHub. Check the internet connection and try again.');
+	case 'download_incomplete':
+		return _('The download was interrupted: the file is incomplete. Try again.');
+	case 'install_failed':
+		return _('The package manager could not install the update.');
+	case 'version_mismatch':
+		return _('The package was installed, but the version did not change. The release file looks broken.');
+	case 'Could not reach GitHub':
+		return _('Could not reach GitHub');
+	}
 	return e || fb;
+}
+
+var updTarget = '';
+
+function updNotesText(t) {
+	return String(t || '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+}
+
+function renderNotes(b64, ver, published, fresh) {
+	var box = document.getElementById('upd-notes');
+	if (!box) { return; }
+	var txt = '';
+	try { txt = decodeURIComponent(escape(atob(b64 || ''))); } catch (e) { txt = ''; }
+	box.innerHTML = '';
+	if (!txt.trim()) { box.style.display = 'none'; return; }
+	var body = E('div', { 'class': 'upd-notes-body' }), list = null;
+	txt.replace(/\r/g, '').split('\n').forEach(function(line) {
+		var l = line.trim();
+		if (!l) { list = null; return; }
+		var m = l.match(/^[-*+]\s+(.*)$/);
+		if (m) {
+			if (!list) { list = E('ul', {}); body.appendChild(list); }
+			list.appendChild(E('li', {}, [ updNotesText(m[1]) ]));
+			return;
+		}
+		list = null;
+		var h = l.match(/^#{1,6}\s+(.*)$/);
+		body.appendChild(h ? E('div', { 'class': 'upd-notes-h' }, [ updNotesText(h[1]) ]) : E('div', {}, [ updNotesText(l) ]));
+	});
+	var date = '';
+	if (published) { var d = new Date(published); if (!isNaN(d)) { date = ' · ' + d.toLocaleDateString(); } }
+	var det = E('details', { 'class': 'upd-notes' }, [
+		E('summary', {}, [ _('What is new in %s').format(ver || '—') + date ]),
+		body
+	]);
+	if (fresh) { det.setAttribute('open', 'open'); }
+	box.appendChild(det);
+	box.style.display = '';
 }
 
 function checkUpdate() {
 	updSet('upd-status', _('Checking the latest release…'));
 	updShow('upd-install', false);
+	updProgress(null);
 	var b = document.getElementById('upd-check'); if (b) { b.disabled = true; }
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		updSet('upd-current', d.current || '—');
 		var latest = String(d.latest || '').replace(/^v/i, '');
+		updTarget = latest;
 		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
 		if (!d.success) {
 			updSet('upd-status', updErrText(d.error, _('Could not check for updates')));
+			renderNotes('', '', '', false);
 		} else if (d.update_available == 1 || d.update_available === true) {
 			updShow('upd-install', true);
 			updSetVer('upd-status', _('Update available'), latest || '—');
+			renderNotes(d.notes, latest, d.published, true);
 		} else {
 			updSet('upd-status', _('You have the latest version'));
+			renderNotes(d.notes, latest, d.published, false);
 		}
 	}).catch(function(err) {
 		updSet('upd-status', _('Could not check for updates') + ' ' + (err.message || err));
@@ -77,6 +134,40 @@ function checkUpdate() {
 function updBusy(busy) {
 	var bi = document.getElementById('upd-install'), bc = document.getElementById('upd-check');
 	if (bi) { bi.disabled = busy; } if (bc) { bc.disabled = busy; }
+}
+
+function updKB(n) { return Math.round((+n || 0) / 1024); }
+
+function updProgress(d) {
+	var box = document.getElementById('upd-progress'), bar = document.getElementById('upd-bar');
+	if (!box || !bar) { return; }
+	if (!d) { box.style.display = 'none'; return; }
+	box.style.display = '';
+	var txt = '';
+	if (d.stage === 'download' && +d.total > 0) {
+		bar.max = +d.total; bar.value = Math.min(+d.done || 0, +d.total);
+		txt = _('Downloading: %d of %d KB').format(updKB(d.done), updKB(d.total));
+	} else if (d.stage === 'download') {
+		bar.removeAttribute('value');
+		txt = _('Downloading: %d KB').format(updKB(d.done));
+	} else if (d.stage === 'install') {
+		bar.removeAttribute('value');
+		txt = _('Installing the package…');
+	} else if (d.stage === 'finish') {
+		bar.removeAttribute('value');
+		txt = _('Finishing: refreshing translations and caches…');
+	} else {
+		bar.removeAttribute('value');
+		txt = _('Preparing: reading the release…');
+	}
+	updSet('upd-ptext', txt);
+}
+
+function updDetail(txt) {
+	var e = document.getElementById('upd-detail');
+	if (!e) { return; }
+	e.textContent = String(txt || '').trim();
+	e.style.display = e.textContent ? '' : 'none';
 }
 
 var CACHED_RES = [
@@ -98,7 +189,11 @@ function refreshResources() {
 	}));
 }
 
-function finishUpdate() {
+function finishUpdate(ver) {
+	updProgress(null);
+	updDetail('');
+	if (ver) { updSet('upd-current', ver); }
+	updShow('upd-install', false);
 	updSet('upd-status', _('Update installed. Refreshing resources…'));
 	refreshResources().then(function() {
 		updSet('upd-status', _('Update installed. Signing out to apply it…'));
@@ -111,54 +206,68 @@ function finishUpdate() {
 	});
 }
 
-function pollInstall(tries) {
-	tries = tries || 0;
-	if (tries > 75) {
-		updSet('upd-status', _('Update is taking too long. Check the connection and try again.'));
+function verifyInstalled(target) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/update.sh', [ 'version' ]), '{}').then(function(out) {
+		var d = {}; try { d = JSON.parse(out || '{}'); } catch (e) {}
+		var cur = String(d.current || '');
+		return (target && cur === String(target).replace(/^v/i, '')) ? cur : null;
+	});
+}
+
+function failInstall(msg, detail, target) {
+	return verifyInstalled(target).then(function(cur) {
+		if (cur) { finishUpdate(cur); return; }
+		updProgress(null);
+		updSet('upd-status', msg);
+		updDetail(detail);
 		updBusy(false);
-		return;
+	});
+}
+
+function pollInstall(tries, misses) {
+	tries = tries || 0;
+	misses = misses || 0;
+	if (tries > 300) {
+		return failInstall(_('Update is taking too long. Check the connection and try again.'), '', updTarget);
 	}
 	window.setTimeout(function() {
-		L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), '').then(function(txt) {
-			txt = String(txt || '').trim();
-			if (!txt) { pollInstall(tries + 1); return; }
-			var d = {}; try { d = JSON.parse(txt); } catch (e) { pollInstall(tries + 1); return; }
-			if (d.running) { pollInstall(tries + 1); return; }
-			if (d.success) {
-				updSet('upd-current', d.current || '—');
-				updShow('upd-install', false);
-				finishUpdate();
-			} else {
-				updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
+		L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), null).then(function(txt) {
+			if (txt == null) {
+				if (misses >= 30) {
+					return failInstall(_('Lost contact with the router during the update.'), '', updTarget);
+				}
+				return pollInstall(tries + 1, misses + 1);
 			}
-			updBusy(false);
+			var d = {}; try { d = JSON.parse(String(txt).trim() || '{}'); } catch (e) { return pollInstall(tries + 1, 0); }
+			if (d.target) { updTarget = d.target; }
+			if (d.running || (!d.success && !d.error)) {
+				updProgress(d);
+				return pollInstall(tries + 1, 0);
+			}
+			if (d.success) {
+				finishUpdate(d.current);
+				updBusy(false);
+				return;
+			}
+			return failInstall(updErrText(d.error, _('Failed to install the update')), d.detail, d.target || updTarget);
 		});
-	}, 4000);
+	}, 1000);
 }
 
 function installUpdate() {
 	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
 	updSet('upd-status', _('Installing the update…'));
+	updDetail('');
+	updProgress({ stage: 'prepare' });
 	updBusy(true);
-	var fallback = function(errText) {
-		return L.resolveDefault(fs.read_direct('/tmp/5gmodem/update.json'), '').then(function(txt) {
-			var st = {}; try { st = JSON.parse(String(txt || '').trim() || '{}'); } catch (e) {}
-			if (st.running || st.success != null) { pollInstall(0); return; }
-			updSet('upd-status', errText);
-			updBusy(false);
-		});
-	};
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
-		if (d.started) { pollInstall(0); return; }
 		if (d.error) {
-			updSet('upd-status', updErrText(d.error, _('Failed to install the update')));
-			updBusy(false);
-			return;
+			return failInstall(updErrText(d.error, _('Failed to install the update')), d.detail, updTarget);
 		}
-		return fallback(_('Failed to install the update'));
-	}).catch(function(err) {
-		return fallback(_('Failed to install the update') + ' ' + (err.message || err));
+		pollInstall(0, 0);
+	}).catch(function() {
+		pollInstall(0, 0);
 	});
 }
 
@@ -227,7 +336,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30801, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30900, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -274,6 +383,12 @@ return view.extend({
 						E('div', {}, [
 							E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
 							E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
+							E('div', { 'id': 'upd-progress', 'style': 'display:none;margin-top:6px' }, [
+								E('progress', { 'id': 'upd-bar', 'max': '100', 'style': 'width:100%;max-width:360px' }),
+								E('div', { 'id': 'upd-ptext', 'style': 'font-size:90%;opacity:.85' }, [])
+							]),
+							E('pre', { 'id': 'upd-detail', 'style': 'display:none;margin-top:6px;white-space:pre-wrap;font-size:85%;max-width:600px' }, []),
+							E('div', { 'id': 'upd-notes', 'style': 'display:none;margin-top:8px' }, []),
 						]),
 					]),
 				]),

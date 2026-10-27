@@ -2048,10 +2048,12 @@ function applyMetrics(json) {
 					if (_freq) { _freq.style.display = _remote ? 'none' : ''; }
 					if (_rbb) { _rbb.style.display = _remote ? 'none' : ''; }
 					if (_ttl) { _ttl.style.display = ''; }
-					histShow(true);
-					histPush(json);
-					histDraw(json);
-					if (Date.now() - _histSeedAt > 30000) { histSeed(); }
+					histShow(!_remote);
+					if (!_remote) {
+						histPush(json);
+						histDraw(json);
+						if (Date.now() - _histSeedAt > 30000) { histSeed(); }
+					}
 
 					if (json.backend === 'hilink') {
 						[ 'tacn', 'lacn', 'ca-comp' ].forEach(function(id) {
@@ -2127,7 +2129,9 @@ function applyMetrics(json) {
 							'SIM PUK required': _('SIM PUK required'),
 							'SIM failure': _('SIM failure'),
 							'SIM busy': _('SIM busy'),
-							'SIM wrong': _('SIM wrong')
+							'SIM wrong': _('SIM wrong'),
+							'eSIM has no profile': _('The active eSIM has no profile: switch to the physical SIM or download a profile'),
+							'Network personalization PIN required': _('Network personalization PIN required')
 						}[String(json.registration || '')];
 						if (_visited.length <= 1) {
 							view.textContent = _simProb || '-';
@@ -2198,7 +2202,9 @@ function applyMetrics(json) {
 							'SIM PUK required': _('SIM PUK required'),
 							'SIM failure': _('SIM failure'),
 							'SIM busy': _('SIM busy'),
-							'SIM wrong': _('SIM wrong')
+							'SIM wrong': _('SIM wrong'),
+							'eSIM has no profile': _('The active eSIM has no profile: switch to the physical SIM or download a profile'),
+							'Network personalization PIN required': _('Network personalization PIN required')
 						})[String(json.registration)] || json.registration;
 						if (json.registration == '0') { 
 							view.textContent = _('Not registered');
@@ -2402,7 +2408,7 @@ function applyMetrics(json) {
 						var xmmBtn = document.getElementById('bandnote-xmm-btn');
 						var dbgBtn = document.getElementById('bandnote-dbg-btn');
 						var freqBlk = document.querySelector('[data-blk="freq"]');
-						if (freqBlk) { freqBlk.style.display = (isHilink && !hilinkHasDebug(json) && json.hl_modes !== '1') ? 'none' : ''; }
+						if (freqBlk) { freqBlk.style.display = (json.backend === 'router' || (isHilink && !hilinkHasDebug(json) && json.hl_modes !== '1')) ? 'none' : ''; }
 						if (bandsui.isTakeover()) {
 							document.getElementById('bandnote-text').textContent =
 								_('Changing bands briefly interrupts the connection: the app hands the modem to ModemManager, applies the change and reconnects (up to a minute).');
@@ -2819,7 +2825,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30801, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30900, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -2979,6 +2985,9 @@ simDialog: baseclass.extend({
 				if (json.registration == 'SIM wrong') { 
 					ui.addNotification(null, E('p', _('SIM wrong')), 'info');
 				}
+				if (json.registration == 'Network personalization PIN required') {
+					ui.addNotification(null, E('p', _('Network personalization PIN required')), 'info');
+				}
 				if (json.registration == 'SIM PIN2 required') { 
 					ui.addNotification(null, E('p', _('SIM PIN2 required')), 'info');
 				}
@@ -3105,13 +3114,15 @@ simDialog: baseclass.extend({
 						})(),
 						E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
 					]),
-					E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
-					E('div', { 'class': 'tginfo-temp tginfo-temps', 'id': 'tempsn', 'style': 'display:none' }, []),
-					E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
-						E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
-							E('img', { 'src': mutil.icon('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+					E('div', { 'class': 'tginfo-envrow' }, [
+						E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
+						E('div', { 'class': 'tginfo-temp tginfo-temps', 'id': 'tempsn', 'style': 'display:none' }, []),
+						E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
+							E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
+								E('img', { 'src': mutil.icon('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
+							]),
+							E('span', { 'id': 'temp' }, [ '-' ]),
 						]),
-						E('span', { 'id': 'temp' }, [ '-' ]),
 					]),
 					E('div', { 'id': 'apnline',
 						'style': 'text-align:right; font-size:85%; opacity:.8; margin-top:auto; display:none;' }, []),

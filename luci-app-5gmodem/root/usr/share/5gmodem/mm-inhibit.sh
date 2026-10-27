@@ -229,7 +229,7 @@ _mm_probing() {
 }
 
 mm_recover_missing() {
-	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm _wdm_node _wdm_drv _sw_pro _sw_vp
+	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm _wdm_node _wdm_drv _sw_pro _sw_vp _mm_only _rb_n
 	command -v mmcli >/dev/null 2>&1 || return 0
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
@@ -258,7 +258,7 @@ mm_recover_missing() {
 				cdc_mbim) _sw_pro="mbim" ;;
 				*)        _sw_pro="" ;;
 			esac
-			_sw_vp=""
+			_sw_vp=""; _mm_only=""
 			[ -f "/sys/bus/usb/devices/$_rp/idVendor" ] && \
 				_sw_vp="$(cat "/sys/bus/usb/devices/$_rp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_rp/idProduct" 2>/dev/null)"
 			case "$_sw_pro:$_sw_vp" in
@@ -267,7 +267,7 @@ mm_recover_missing() {
 						: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 						logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to qmi, waiting for MM"
 					fi
-					continue
+					_mm_only=1
 					;;
 			esac
 			if [ "$_sw_pro" = "mbim" ]; then
@@ -277,11 +277,12 @@ mm_recover_missing() {
 							: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 							logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to mbim, waiting for MM"
 						fi
-						continue
+						[ "$_sw_vp" = 05c6:90d5 ] && continue
+						_mm_only=1
 						;;
 				esac
 			fi
-			if [ -n "$_has_wdm" ]; then
+			if [ -n "$_has_wdm" ] && [ -z "$_mm_only" ]; then
 				[ -n "$_sw_pro" ] || continue
 				if [ "$_sw_pro" = "qmi" ] && ! _compal_mm_only "$_rp" "$_wdm_node" "$_sw_vp" "$_rb_key"; then
 					if [ ! -f "$RUN/$_rb_key.mmonly" ]; then
@@ -330,6 +331,14 @@ mm_recover_missing() {
 				_rb_last=$(cat "$_rb_cd" 2>/dev/null)
 				case "$_rb_last" in ''|*[!0-9]*) _rb_last="" ;; esac
 				if [ -z "$_rb_last" ] || [ "$((_rb_now - _rb_last))" -ge 300 ]; then
+					_rb_n=$(cat "$RUN/$_rb_key.rebindn" 2>/dev/null)
+					case "$_rb_n" in ''|*[!0-9]*) _rb_n=0 ;; esac
+					if [ "$_rb_n" -ge 2 ]; then
+						: > "$_rb_fail" 2>/dev/null
+						logger -t 5gmodem "MM still did not assemble modem $_rp after $_rb_n rebinds - POWER-CYCLE the modem or the router"
+						continue
+					fi
+					printf '%s' "$((_rb_n + 1))" > "$RUN/$_rb_key.rebindn" 2>/dev/null
 					printf '%s' "$_rb_now" > "$_rb_cd" 2>/dev/null
 					rm -f "$_rb_mk" 2>/dev/null
 					logger -t 5gmodem "MM did not assemble modem $_rp after event replay - rebinding the device"
@@ -357,7 +366,7 @@ mm_recover_missing() {
 		fi
 		[ "$_seen" = 1 ] && {
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
-			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" "$RUN/$_rb_key.compal" 2>/dev/null
+			rm -f "$RUN/$_rb_key.missing" "$RUN/$_rb_key.rebindfail" "$RUN/$_rb_key.rebindn" "$RUN/$_rb_key.qmihint" "$RUN/$_rb_key.mmonly" "$RUN/$_rb_key.compal" 2>/dev/null
 			_mm_fix_atonly "$_rp"
 		}
 		_mm_ifup_if_down "$_rp"

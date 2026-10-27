@@ -226,6 +226,12 @@ msgstr ""
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr ""
 
+msgid "Release a cell lock when the network is lost"
+msgstr ""
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr ""
+
 msgid "If at least one target responds"
 msgstr ""
 
@@ -311,4 +317,55 @@ msgid "Delete from the modem after forwarding"
 msgstr ""
 
 msgid "A message is deleted from the modem once every enabled channel (Telegram, ntfy, webhook) has delivered it and, if enabled, the SMS commands have seen it. Without \"Keep messages in router memory\" it then disappears from the Inbox too."
+msgstr ""
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr ""
+
+msgid "Registration timeout, s"
+msgstr ""
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr ""
+
+msgid "As set in the modem"
+msgstr ""
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr ""
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr ""
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr ""
+
+msgid "The package manager could not install the update."
+msgstr ""
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr ""
+
+msgid "What is new in %s"
+msgstr ""
+
+msgid "Downloading: %d of %d KB"
+msgstr ""
+
+msgid "Downloading: %d KB"
+msgstr ""
+
+msgid "Installing the package…"
+msgstr ""
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr ""
+
+msgid "Preparing: reading the release…"
+msgstr ""
+
+msgid "Lost contact with the router during the update."
+msgstr ""
+
+msgid "Could not reach GitHub"
 msgstr ""

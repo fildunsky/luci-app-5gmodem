@@ -3781,6 +3781,12 @@ msgstr "モデムが接続されていません"
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "落ちている Wi-Fi の上り回線を修復"
 
+msgid "Release a cell lock when the network is lost"
+msgstr "ネットワークを失ったらセルロックを解除"
+
+msgid "If the modem stays without network registration for 10 minutes while a cell or frequency lock set here is on, the lock is removed so the modem can use any cell. The lock is not set again automatically. Works even when watching is off."
+msgstr "ここで設定したセルまたは周波数のロックが有効なまま、モデムが 10 分間ネットワークに登録されない場合、ロックを解除してモデムが任意のセルを使えるようにします。ロックは自動では再設定されません。監視がオフでも動作します。"
+
 msgid "If at least one target responds"
 msgstr "対象のどれか 1 つでも応答すれば"
 
@@ -5931,3 +5937,54 @@ msgstr "数秒ごとにデータセッションを確認します。オペレー
 
 msgid "From 5 to 3600 seconds"
 msgstr "5～3600 秒"
+
+msgid "MediaTek built-in modem (CCMNI)"
+msgstr "MediaTek 内蔵モデム (CCMNI)"
+
+msgid "Registration timeout, s"
+msgstr "登録タイムアウト (秒)"
+
+msgid "The active eSIM has no profile: switch to the physical SIM or download a profile"
+msgstr "アクティブな eSIM にプロファイルがありません。物理 SIM に切り替えるか、プロファイルをダウンロードしてください"
+
+msgid "As set in the modem"
+msgstr "モデムの設定どおり"
+
+msgid "Not enough free space in /tmp to download the update."
+msgstr "/tmp の空き容量が足りず、アップデートをダウンロードできません。"
+
+msgid "Could not download the update from GitHub. Check the internet connection and try again."
+msgstr "GitHub からアップデートをダウンロードできませんでした。インターネット接続を確認して、もう一度お試しください。"
+
+msgid "The download was interrupted: the file is incomplete. Try again."
+msgstr "ダウンロードが中断され、ファイルが不完全です。もう一度お試しください。"
+
+msgid "The package manager could not install the update."
+msgstr "パッケージマネージャーがアップデートをインストールできませんでした。"
+
+msgid "The package was installed, but the version did not change. The release file looks broken."
+msgstr "パッケージはインストールされましたが、バージョンが変わりません。リリースファイルが壊れているようです。"
+
+msgid "What is new in %s"
+msgstr "%s の新機能"
+
+msgid "Downloading: %d of %d KB"
+msgstr "ダウンロード中: %d / %d KB"
+
+msgid "Downloading: %d KB"
+msgstr "ダウンロード中: %d KB"
+
+msgid "Installing the package…"
+msgstr "パッケージをインストール中…"
+
+msgid "Finishing: refreshing translations and caches…"
+msgstr "仕上げ中: 翻訳とキャッシュを更新しています…"
+
+msgid "Preparing: reading the release…"
+msgstr "準備中: リリース情報を読み込んでいます…"
+
+msgid "Lost contact with the router during the update."
+msgstr "アップデート中にルーターとの接続が切れました。"
+
+msgid "Could not reach GitHub"
+msgstr "GitHub に接続できません"

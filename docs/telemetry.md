@@ -30,6 +30,10 @@
 | `ca` | строка | — | Активная агрегация: `B3+B7+n78` (PCC первым; поля нет, если несущая одна) |
 | `mode` | строка | — | `2G` / `3G` / `4G` / `4G+` / `5G NSA` / `5G SA` |
 | `temp` | int | °C | Температура модема |
+| `bat` | int | % | Заряд батареи (только у устройств с батареей) |
+| `chg` | int | 0/1 | Идёт зарядка |
+| `dist` | int | м | Расстояние до базовой станции по timing advance (последнее значение на текущей соте) |
+| `tz` | int | мин | Смещение местного времени от UTC по данным сети (NITZ, только QMI) |
 | `ping` | int | мс | Последний замер сторожа через интерфейс модема |
 | `rx`, `tx` | int | Б/с | Скорость: дельта счётчиков ядра между двумя записями файла |
 | `sms` | int | шт | Непрочитанные SMS |
@@ -237,7 +241,7 @@ uci commit 5gmodem
 
 | Кто | Пишет | Куда |
 |---|---|---|
-| 5gmodem | `sig oper model rsrp rsrq sinr band ca mode temp ping rx tx sms cc` (+ адреса при `publish_ip=1`, `phone` при `publish_phone=1`) | `/tmp/5gmodem/tele.json` |
+| 5gmodem | `sig oper model rsrp rsrq sinr band ca mode temp bat chg dist tz ping rx tx sms cc` (+ адреса при `publish_ip=1`, `phone` при `publish_phone=1`) | `/tmp/5gmodem/tele.json` |
 | Ваш агрегатор | всё остальное | свой файл |
 
 ## Чего читать не надо

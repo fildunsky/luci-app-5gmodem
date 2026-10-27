@@ -1,0 +1,148 @@
+_DEVICE=""
+
+getinfo() {
+	_al_m=$(sms_tool -d $_DEVICE at "AT+CGMM" 2>/dev/null | tr -d '\r' \
+		| grep -vE '^(AT|OK|ERROR|$)' | head -1 | xargs)
+	echo "Alcatel ${_al_m:-MW40V}"
+}
+
+_al_items() {
+	tr -d '\r' | grep -o '"[0-9][0-9]*\.[^"]*' | tr -d '"'
+}
+
+_al_cache() {
+	_ac_k="$_bs_sec"
+	[ -n "$_ac_k" ] || _ac_k="${_DEVICE##*/}"
+	echo "/tmp/5gmodem/qcbp_1bbb0196_$(echo "$_ac_k" | sed 's/[^A-Za-z0-9_]/_/g')"
+}
+
+_al_tab() {
+	_at_f=$(_al_cache)
+	[ -s "$_at_f" ] && { cat "$_at_f"; return 0; }
+	[ -n "$_DEVICE" ] && [ "$_PORT_OK" = 1 ] || return 0
+	_at_t=$(sms_tool -d $_DEVICE at 'AT$QCBANDPREF=?' 2>/dev/null | _al_items | awk -F. '
+		function roman(s,   v, i, c, n, p) {
+			v = 0; p = 0
+			for (i = length(s); i >= 1; i--) {
+				c = substr(s, i, 1)
+				n = (c == "I") ? 1 : (c == "V") ? 5 : (c == "X") ? 10 : (c == "L") ? 50 : 0
+				if (n == 0) return 0
+				if (n < p) v -= n; else { v += n; p = n }
+			}
+			return v
+		}
+		{
+			i = $1 + 0
+			n = toupper(substr($0, length($1) + 2))
+			if (n == "ANY") { print i " any 0"; next }
+			if (n ~ /LTE|E-?UTRA/) {
+				if (match(n, /(BAND|BC|B)_?[0-9]+/)) {
+					b = substr(n, RSTART, RLENGTH)
+					gsub(/[^0-9]/, "", b)
+					if (b + 0 > 0) print i " lte " (b + 0)
+				}
+				next
+			}
+			if (n ~ /^WCDMA_/) {
+				split(n, w, "_")
+				b = roman(w[2])
+				if (b > 0) print i " 3g " b
+				next
+			}
+			if (n ~ /^GSM_/) {
+				if (n ~ /1800/) print i " 2g 1800"
+				else if (n ~ /EGSM_900|PGSM_900|RGSM_900/) print i " 2g 900"
+				else if (n ~ /1900/) print i " 2g 1900"
+				else if (n ~ /850/) print i " 2g 850"
+			}
+		}')
+	[ -n "$_at_t" ] || return 0
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	printf '%s\n' "$_at_t" > "$_at_f" 2>/dev/null
+	printf '%s\n' "$_at_t"
+}
+
+_al_sup() {
+	_al_tab | awk -v k="$1" '$2 == k {print $3}' | sort -n | uniq | xargs
+}
+
+_al_now() {
+	[ -n "$_DEVICE" ] || return 0
+	_an_cur=$(sms_tool -d $_DEVICE at 'AT$QCBANDPREF?' 2>/dev/null | _al_items | cut -d. -f1 | xargs)
+	[ -n "$_an_cur" ] || return 0
+	_an_any=$(_al_tab | awk '$2 == "any" {print $1}' | head -1)
+	if [ -n "$_an_any" ] && echo " $_an_cur " | grep -q " $_an_any "; then
+		_al_tab | awk '$2 != "any" {print $1}' | sort -n | uniq | xargs
+		return 0
+	fi
+	echo "$_an_cur"
+}
+
+_al_get() {
+	_ag_now=" $(_al_now) "
+	[ "$_ag_now" = "  " ] && return 0
+	_al_tab | awk -v k="$1" -v now="$_ag_now" '$2 == k && index(now, " " $1 " ") {print $3}' \
+		| sort -n | uniq | xargs
+}
+
+_al_set() {
+	_as_kind="$1"
+	_as_want="$2"
+	[ "$_as_want" = "default" ] && _as_want=$(_al_sup "$_as_kind")
+	[ -n "$_as_want" ] || return 1
+	_as_now=$(_al_now)
+	[ -n "$_as_now" ] || return 1
+	_as_list=$(_al_tab | awk -v k="$_as_kind" -v now=" $_as_now " -v want=" $_as_want " '
+		$2 == "any" { next }
+		$2 == k { if (index(want, " " $3 " ")) print $1; next }
+		index(now, " " $1 " ") { print $1 }
+	' | sort -n | uniq | tr '\n' ',' | sed 's/,$//')
+	[ -n "$_as_list" ] || return 1
+	logger -t 5gmodem "bands: Alcatel QCBANDPREF $_as_kind -> $_as_list"
+	_as_o=$(sms_tool -d $_DEVICE at "AT\$QCBANDPREF=1,\"$_as_list\"" 2>&1)
+	case "$_as_o" in *ERROR*|*"No response"*) echo "$_as_o"; return 1 ;; esac
+	return 0
+}
+
+getsupportedbands() {
+	_gs_l=$(_al_sup lte)
+	[ -n "$_gs_l" ] && echo "$_gs_l" || echo "Unsupported"
+}
+
+getbands() {
+	[ -n "$(_al_sup lte)" ] || { echo "Unsupported"; return; }
+	_al_get lte
+}
+
+setbands() {
+	[ -n "$(_al_sup lte)" ] || { echo "Unsupported"; return 1; }
+	_al_set lte "$1"
+}
+
+bands3g_style() { echo "mask"; }
+
+getsupportedbands3g() {
+	_gs_3=$(_al_sup 3g)
+	[ -n "$_gs_3" ] && echo "$_gs_3" || echo "Unsupported"
+}
+
+getbands3g() {
+	_al_get 3g
+}
+
+setbands3g() {
+	_al_set 3g "$1"
+}
+
+getsupportedbands2g() {
+	_gs_2=$(_al_sup 2g)
+	[ -n "$_gs_2" ] && echo "$_gs_2" || echo "Unsupported"
+}
+
+getbands2g() {
+	_al_get 2g
+}
+
+setbands2g() {
+	_al_set 2g "$1"
+}

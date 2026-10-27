@@ -79,7 +79,25 @@ cancel)
 	_st idle ""
 	exit 0 ;;
 send) : ;;
-*) echo '{"error":"usage: send <code> | status | cancel"}'; exit 2 ;;
+mm)
+	case "$2" in ''|*[!0-9]*) echo '{"error":"bad modem"}'; exit 2 ;; esac
+	case "$3" in initiate|respond) : ;; *) echo '{"error":"bad mode"}'; exit 2 ;; esac
+	case "$4" in ''|*[!0-9*#+]*) echo '{"error":"bad code"}'; exit 2 ;; esac
+	command -v mmcli >/dev/null 2>&1 || { echo '{"error":"no mmcli"}'; exit 2; }
+	if command -v flock >/dev/null 2>&1; then
+		exec 9>"$LOCK" 2>/dev/null || true
+		flock -n 9 2>/dev/null || { echo '{"error":"busy"}'; exit 2; }
+	fi
+	_st running sending
+	(
+		OUT=$(mmcli -m "$2" --timeout=40 "--3gpp-ussd-$3=$4" 2>/tmp/5gmodem/ussd.err)
+		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
+		rm -f /tmp/5gmodem/ussd.err
+		_st done "" ',"out":"'"$(printf '%s' "$OUT" | base64 | tr -d '\n')"'","err":"'"$(printf '%s' "$ERR" | base64 | tr -d '\n')"'"'
+	) >/dev/null 2>&1 </dev/null &
+	cat "$ST"
+	exit 0 ;;
+*) echo '{"error":"usage: send <code> | mm <modem> initiate|respond <code> | status | cancel"}'; exit 2 ;;
 esac
 
 CODE="$2"

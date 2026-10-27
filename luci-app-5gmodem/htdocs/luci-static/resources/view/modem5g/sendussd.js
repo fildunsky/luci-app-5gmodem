@@ -514,6 +514,39 @@ return view.extend({
 		});
 	},
 
+	mmUssd: function(modemNum, mode, code) {
+		var self = this;
+		var buttons = document.querySelectorAll('.cbi-button');
+		for (var i = 0; i < buttons.length; i++)
+			buttons[i].setAttribute('disabled', 'true');
+		var dec = function(b) { try { return b ? atob(b) : ''; } catch (e) { return ''; } };
+		return fs.exec('/usr/share/5gmodem/ussd.sh', [ 'mm', modemNum, mode, code ]).then(function(r) {
+			var j = {};
+			try { j = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+			if (j.error)
+				return { stdout: '', stderr: _('The request was rejected: %s').format(String(j.error)) };
+			return new Promise(function(resolve) {
+				var left = 30, inflight = false, timer = null;
+				var tick = function() {
+					if (inflight) { return; }
+					inflight = true;
+					L.resolveDefault(fs.exec('/usr/share/5gmodem/ussd.sh', [ 'status' ]), {}).then(function(r) {
+						inflight = false;
+						var st = {};
+						try { st = JSON.parse((r && r.stdout) || '{}'); } catch (e) {}
+						if (st.status === 'running' && --left > 0) { return; }
+						if (timer) { clearInterval(timer); timer = null; }
+						self._ussdTimer = null;
+						resolve(st.status === 'done' ? { stdout: dec(st.out), stderr: dec(st.err) } : { stdout: '', stderr: '' });
+					});
+				};
+				timer = setInterval(tick, 2000);
+				self._ussdTimer = timer;
+				tick();
+			});
+		});
+	},
+
 	handleGo: function(ev) {
 		let ussd = document.getElementById('cmdvalue').value;
 		let port = uci.get('5gmodem', 'sms', 'ussdport');
@@ -549,13 +582,12 @@ return view.extend({
 						}
 						return self.handleUssdScript(ussd);
 					}
-					var arg = self.ussdSessionActive
-						? ('--3gpp-ussd-respond=' + ussd)
-						: ('--3gpp-ussd-initiate=' + ussd);
+					var mode = self.ussdSessionActive ? 'respond' : 'initiate';
 					return (!self.ussdSessionActive
 							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-cancel' ]), {})
 							: Promise.resolve())
-						.then(function() { return self.handleCommand('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=15', arg ]); })
+						.then(function() { return self.mmUssd(String(modemNum), mode, ussd); })
+						.then(function(res) { return self.handleCommand('/usr/bin/mmcli', [], res); })
 						.then(function() {
 						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-status' ]), {}).then(function(r) {
 							self.ussdSessionActive = /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');
@@ -666,7 +698,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30801, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30900, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

@@ -1,4 +1,33 @@
-. "$RES/modem/usb/05c690b4"
+[ -n "$DEVICE" ] && . "$RES/modem/usb/05c690b4"
 MODEL=$(soc_modem_model)
 T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
 [ -n "$T" ] && TEMP="$T &deg;C"
+_SOC_EXT=0
+for _SOC_PS in /sys/class/power_supply/*; do
+	case "$(cat "$_SOC_PS/type" 2>/dev/null)" in
+		USB|Mains) [ "$(cat "$_SOC_PS/online" 2>/dev/null)" = 1 ] && _SOC_EXT=1 ;;
+	esac
+done
+for _SOC_PS in /sys/class/power_supply/*; do
+	[ "$(cat "$_SOC_PS/type" 2>/dev/null)" = Battery ] || continue
+	O=$(cat "$_SOC_PS/capacity" 2>/dev/null)
+	case "$O" in
+		''|*[!0-9]*)
+			O=$(cat "$_SOC_PS/voltage_ocv" 2>/dev/null || cat "$_SOC_PS/voltage_now" 2>/dev/null)
+			O=$(awk -v u="$O" 'BEGIN {
+				if (u !~ /^[0-9]+$/ || u < 2500000) exit
+				n = split("3400 0 3600 5 3700 15 3750 30 3800 45 3850 55 3900 65 3950 75 4000 82 4100 92 4200 100", t, " ")
+				v = u / 1000
+				if (v <= t[1]) { print 0; exit }
+				for (i = 3; i <= n; i += 2) if (v <= t[i]) { printf "%d", t[i - 1] + (v - t[i - 2]) * (t[i + 1] - t[i - 1]) / (t[i] - t[i - 2]); exit }
+				print 100 }')
+			[ -n "$O" ] || continue ;;
+	esac
+	BATTERY="$O"
+	case "$(cat "$_SOC_PS/status" 2>/dev/null)" in
+		Charging) BATTERY_CHG=1 ;;
+		Full) BATTERY_CHG=0 ;;
+		*) BATTERY_CHG=$_SOC_EXT; [ "$O" -ge 100 ] && BATTERY_CHG=0 ;;
+	esac
+	break
+done
