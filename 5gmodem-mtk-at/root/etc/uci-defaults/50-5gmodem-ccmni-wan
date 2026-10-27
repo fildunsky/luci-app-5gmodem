@@ -1,0 +1,10 @@
+#!/bin/sh
+
+[ "$(uci -q get network.wan.device)" = "ccmni0" ] || exit 0
+case "$(uci -q get network.wan.proto)" in
+	""|none) ;;
+	*) exit 0 ;;
+esac
+uci -q set network.wan.proto='ccmni'
+uci -q commit network
+exit 0

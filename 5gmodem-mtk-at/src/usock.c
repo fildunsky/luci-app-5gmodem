@@ -8,6 +8,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <time.h>
+#include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -42,6 +43,58 @@ static int sock_open(const char *path)
 	return fd;
 }
 
+static int write_all(int fd, const char *b, int n)
+{
+	while (n > 0) {
+		int w = write(fd, b, n);
+
+		if (w < 0) {
+			if (errno == EINTR)
+				continue;
+			if (errno == EAGAIN)
+				return 0;
+			return -1;
+		}
+		b += w;
+		n -= w;
+	}
+	return 0;
+}
+
+static int end_open(const char *path)
+{
+	struct stat st;
+	char b[4096];
+	int fd;
+
+	if (stat(path, &st) < 0 || !S_ISCHR(st.st_mode))
+		return sock_open(path);
+	fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK);
+	if (fd < 0)
+		return -1;
+	while (read(fd, b, sizeof(b)) > 0)
+		;
+	fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+	return fd;
+}
+
+static void urc_log(const char *b, int n)
+{
+	const char *p = getenv("USOCK_URC");
+	struct stat st;
+	int fd, fl = O_WRONLY | O_CREAT | O_APPEND;
+
+	if (!p || !*p)
+		return;
+	if (stat(p, &st) == 0 && st.st_size > 65536)
+		fl |= O_TRUNC;
+	fd = open(p, fl, 0644);
+	if (fd < 0)
+		return;
+	write_all(fd, b, n);
+	close(fd);
+}
+
 static int sock_listen(const char *path)
 {
 	struct sockaddr_un a;
@@ -61,28 +114,22 @@ static int sock_listen(const char *path)
 	return fd;
 }
 
+static int poll_drain(int fd, char *b, int sz)
+{
+	fd_set rf;
+	struct timeval tv = { 0, 0 };
+
+	FD_ZERO(&rf);
+	FD_SET(fd, &rf);
+	if (select(fd + 1, &rf, NULL, NULL, &tv) <= 0)
+		return 0;
+	return read(fd, b, sz);
+}
+
 static int final_result(const char *s)
 {
 	return strstr(s, "\nOK") || strstr(s, "OK\r") == s || strstr(s, "ERROR") ||
 		strstr(s, "NO CARRIER");
-}
-
-static int write_all(int fd, const char *b, int n)
-{
-	while (n > 0) {
-		int w = write(fd, b, n);
-
-		if (w < 0) {
-			if (errno == EINTR)
-				continue;
-			if (errno == EAGAIN)
-				return 0;
-			return -1;
-		}
-		b += w;
-		n -= w;
-	}
-	return 0;
 }
 
 static int one_shot(int argc, char **argv)
@@ -91,26 +138,37 @@ static int one_shot(int argc, char **argv)
 	int fd, n, ms, al = 0;
 	fd_set rf;
 	struct timeval tv;
+	struct stat st;
 
 	ms = argc > 3 ? atoi(argv[3]) : 3000;
 	fd = -1;
 	if (!getenv("USOCK_DIRECT") && access(mux_path(), F_OK) == 0)
 		fd = sock_open(mux_path());
 	if (fd < 0)
-		fd = sock_open(argv[1]);
+		fd = end_open(argv[1]);
 	if (fd < 0) {
 		perror("connect");
 		return 1;
+	}
+	if (fstat(fd, &st) == 0 && S_ISCHR(st.st_mode)) {
+		for (n = 0; flock(fd, LOCK_EX | LOCK_NB) < 0 && n < 400; n++)
+			usleep(50000);
+		while (poll_drain(fd, buf, sizeof(buf)) > 0)
+			;
 	}
 	n = strlen(argv[2]);
 	if (n > (int)sizeof(buf) - 2)
 		n = sizeof(buf) - 2;
 	memcpy(buf, argv[2], n);
 	buf[n++] = '\r';
-	if (write_all(fd, buf, n) < 0) {
-		perror("write");
-		return 1;
+	for (al = 0; write_all(fd, buf, n) < 0; al++) {
+		if (errno != EIO || al >= 60) {
+			perror("write");
+			return 1;
+		}
+		usleep(50000);
 	}
+	al = 0;
 	for (;;) {
 		FD_ZERO(&rf);
 		FD_SET(fd, &rf);
@@ -249,9 +307,16 @@ static int bridge(const char *spath, const char *link)
 				}
 				continue;
 			}
-			if (owner < 0)
+			if (owner < 0) {
+				urc_log(buf, n);
 				continue;
+			}
 			write_all(s[owner].fd, buf, n);
+			if (n < (int)sizeof(buf)) {
+				buf[n] = 0;
+				if (strstr(buf, "+ECELLINFO"))
+					urc_log(buf, n);
+			}
 			last = time(NULL);
 			if (al + n < (int)sizeof(acc) - 1) {
 				memcpy(acc + al, buf, n);
@@ -324,7 +389,7 @@ static int bridge(const char *spath, const char *link)
 					continue;
 				}
 				if (r < 0)
-					r = sock_open(spath);
+					r = end_open(spath);
 				if (r < 0) {
 					write_all(p->fd, "\r\nERROR\r\n", 9);
 					p->il = 0;
