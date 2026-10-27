@@ -96,7 +96,7 @@ I've added new features to them (compared to 3ginfo and modemband)
 - Tenda MF6 (ZTE ZX297520V3 Mi-Fi, USB 19d2:1557) — signal, battery, SMS and reboot over its web API; bands and network mode over AT in debug mode
 - Cheap Qualcomm MDM9600 / MDM9610 Android sticks (PIXLINK, ALEKA UV310 and relatives), including their "modem only" (QMI) mode
 - UFI003 (Qualcomm MSM8916 Android stick, USB 05c6:90b4) — signal over AT, temperature and SINR over ADB, network mode; also the same stick running OpenWrt, whose on-board modem is driven through ModemManager (bands, network mode, SMS, manual network selection)
-- MF932-M27 (MediaTek MT6735 Android power-bank Mi-Fi, USB 0e8d:2004) — traffic, uptime, battery and network mode over the web API, six temperature sensors over ADB; with the optional `5gmodem-mtk-at` package also RSRQ, SINR, RSSI, cell data and LTE band switching
+- MediaTek MT6735 Android Mi-Fi (USB 0e8d:2004) — traffic, uptime, battery and network mode over the web API, six temperature sensors over ADB; with the optional `5gmodem-mtk-at` package also RSRQ, SINR, RSSI, cell data and LTE band switching
 - Many more untested, but should support all the modems handled by the upstream forks.
 
 ### Fixed from user reports
@@ -209,7 +209,7 @@ The transport is picked automatically from the interface protocol, so you normal
 
 ## MediaTek pocket routers: 5gmodem-mtk-at
 
-Android pocket routers on MediaTek MT6735 (MF932-M27, TianJie CPE903/905/906, KuWfi CPF9xx and relatives) hide RSRQ, SINR, the cell and band control from their web interface. The app reaches them over ADB and the `rild-atci` socket; for that it needs the small optional package `5gmodem-mtk-at`. The client inside runs on the pocket router, not on your router, so one `noarch` package fits every platform. Without it such a device shows RSRP, battery, temperatures and the network mode only.
+Android pocket routers on MediaTek MT6735 (TianJie CPE903/905/906, KuWfi CPF9xx and relatives) hide RSRQ, SINR, the cell and band control from their web interface. The app reaches them over ADB and the `rild-atci` socket; for that it needs the small optional package `5gmodem-mtk-at`. The client inside runs on the pocket router, not on your router, so one `noarch` package fits every platform. Without it such a device shows RSRP, battery, temperatures and the network mode only.
 
 ```sh
 curl -L https://github.com/fildunsky/luci-app-5gmodem/releases/latest/download/5gmodem-mtk-at.apk > /tmp/mtk-at.apk

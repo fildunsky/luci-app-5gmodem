@@ -1,6 +1,6 @@
 # MediaTek MT6735 Android Mi-Fi (ZTE-style goform)
 
-Some pocket Mi-Fi devices are small Android phones without a screen. One example is the MF932-M27 (model `MF932Q` in `hardware_version`). They run a goform web UI that copies ZTE's, on an Android/MediaTek base, and give the router RNDIS. `hilink.sh` reads them through the ZTE goform path (`hl_api=zte`). The missing radio metrics come from the MediaTek modem over ADB, through the `rild-atci` unix socket. The shared web-API architecture is in [web-api-sticks.md](web-api-sticks.md), and the goform details are in [zte-tenda.md](zte-tenda.md).
+Some pocket Mi-Fi devices are small Android phones without a screen. They run a goform web UI that copies ZTE's, on an Android/MediaTek base, and give the router RNDIS. `hilink.sh` reads them through the ZTE goform path (`hl_api=zte`). The missing radio metrics come from the MediaTek modem over ADB, through the `rild-atci` unix socket. The shared web-API architecture is in [web-api-sticks.md](web-api-sticks.md), and the goform details are in [zte-tenda.md](zte-tenda.md).
 
 ## Supported USB IDs
 
