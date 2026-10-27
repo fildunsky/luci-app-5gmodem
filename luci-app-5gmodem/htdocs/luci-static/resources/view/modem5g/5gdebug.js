@@ -992,8 +992,9 @@ return view.extend({
 		})();
 		if (webPassHl) {
 		o = s.option(form.Value, '_web_pass', _('Modem web password'),
-			_('The password of the modem\'s own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password.'));
+			_('The password of the modem\'s own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems.'));
 		o.password = true;
+		o.placeholder = 'admin';
 		o.rmempty = false;
 		o.write = function(section_id, value) {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
