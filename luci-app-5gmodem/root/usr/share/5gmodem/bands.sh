@@ -843,6 +843,8 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = "hilink" ] \
 		_bs_full=$(RES="/usr/share/5gmodem/modemband"; . "$RES/$(uci -q get "5gmodem.$_bs_sec.vidpid" | tr -d ':')" 2>/dev/null; _DEVICE="$_bs_at"; getsupportedbands 2>/dev/null)
 		[ -n "$_bs_full" ] && { uci -q set "5gmodem.$_bs_sec.band_full=$_bs_full"; uci -q commit 5gmodem; }
 	fi
+	[ -n "$_bs_full" ] || [ "$(uci -q get "5gmodem.$_bs_sec.vidpid")" != 1286:4e31 ] \
+		|| _bs_full=$("$_HL" supbands "$_bs_am" 2>/dev/null)
 	_en=$("$_HL" getbands "$_bs_am" 2>/dev/null)
 	_sup="$_bs_full"; [ -n "$_sup" ] || _sup="$_en"
 	case "$1" in

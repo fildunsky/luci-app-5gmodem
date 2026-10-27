@@ -176,6 +176,11 @@ _web_opt() {
 _web_user() { _web_opt "$1" web_user; }
 _web_pass() { _web_opt "$1" web_pass; }
 
+_web_set() {
+	uci -q get "$CFG.m_$(echo "${1:-$(uci -q get "$CFG.@5gmodem[0].active_modem")}" \
+		| sed 's/[^A-Za-z0-9]/_/g').web_pass" >/dev/null
+}
+
 _zte_pass() { _web_pass "$1"; }
 
 _zte_b64() {
@@ -383,11 +388,18 @@ _asr_hdr() {
 	printf '%s %s\n' "$_ah_n" $((_ah_nc + 1)) > "$(_asr_ck "$1")"
 	_ah_nc=$(printf '%08x' "$_ah_nc")
 	_ah_cn=$(_asr_cnonce)
-	_ah_u=$(_web_user "$3")
-	_ah_h1=$(_asr_md5 "$_ah_u:Highwmg:$(_web_pass "$3")")
+	read -r _ah_u _ah_p < "$(_asr_ck "$1").who" 2>/dev/null
+	[ -n "$_ah_u" ] || { _ah_u=$(_web_user "$3"); _ah_p=$(_web_pass "$3"); }
+	_ah_h1=$(_asr_md5 "$_ah_u:Highwmg:$_ah_p")
 	_ah_r=$(_asr_md5 "$_ah_h1:$_ah_n:$_ah_nc:$_ah_cn:auth:$(_asr_md5 "$2:/cgi/xml_action.cgi")")
 	printf 'Digest username="%s", realm="Highwmg", nonce="%s", uri="/cgi/xml_action.cgi", response="%s", qop=auth, nc=%s, cnonce="%s"' \
 		"$_ah_u" "$_ah_n" "$_ah_r" "$_ah_nc" "$_ah_cn"
+}
+
+_asr_nonce() {
+	_an=$(curl -s -o /dev/null -D - --max-time 6 ${2:+--interface "$2"} -A "$UA" "http://$1/login.cgi" 2>/dev/null \
+		| tr -d '\r' | sed -n 's/^[Ww][Ww][Ww]-[Aa]uthenticate:.*nonce="\([^"]*\)".*/\1/p' | head -1)
+	printf '%s' "${_an:-1000}"
 }
 
 _asr_login() {
@@ -396,28 +408,35 @@ _asr_login() {
 		return 1
 	fi
 	_al_src=$(_srcip_for "$2" "$1")
-	_al_n=$(curl -s -o /dev/null -D - --max-time 6 ${_al_src:+--interface "$_al_src"} -A "$UA" "http://$1/login.cgi" 2>/dev/null \
-		| tr -d '\r' | sed -n 's/^[Ww][Ww][Ww]-[Aa]uthenticate:.*nonce="\([^"]*\)".*/\1/p' | head -1)
-	[ -n "$_al_n" ] || _al_n=1000
-	_al_u=$(_web_user "$2")
-	_al_h1=$(_asr_md5 "$_al_u:Highwmg:$(_web_pass "$2")")
-	for _al_v in "protected.cgi asr" "xml_action.cgi marvell"; do
-		_al_cn=$(_asr_cnonce)
-		_al_r=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cn:auth:$(_asr_md5 "GET:/cgi/${_al_v% *}")")
-		_al_cx=$(_asr_cnonce)
-		_al_rx=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cx:auth:$(_asr_md5 "GET:/cgi/xml_action.cgi")")
-		_al_b=$(curl -s -D "$CACHE_DIR/asrhdr" --max-time 8 ${_al_src:+--interface "$_al_src"} -A "$UA" \
-			-H "Authorization: Digest username=\"$_al_u\", realm=\"Highwmg\", nonce=\"$_al_n\", uri=\"/cgi/xml_action.cgi\", response=\"$_al_rx\", qop=auth, nc=00000001, cnonce=\"$_al_cx\"" \
-			-H "Cookie: CGISID=; projectConfig=0" -H "X-Requested-With: XMLHttpRequest" \
-			"http://$1/login.cgi?Action=Digest&username=$_al_u&realm=Highwmg&nonce=$_al_n&response=$_al_r&qop=auth&cnonce=$_al_cn&nc=00000001&temp=${_al_v#* }" 2>/dev/null)
-		_al_s=$(tr -d '\r' < "$CACHE_DIR/asrhdr" 2>/dev/null | sed -n 's/^[Ss]et-[Cc]ookie: *CGISID=\([^;[:space:]]*\).*/\1/p' | head -1)
-		rm -f "$CACHE_DIR/asrhdr"
-		case "$_al_b" in *'200 OK'*|*'first login'*) ;; *) [ -n "$_al_s" ] || continue ;; esac
-		rm -f "$_al_bad"
-		printf '%s 2\n' "$_al_n" > "$(_asr_ck "$1")"
-		printf '%s' "$_al_s" > "$(_asr_ck "$1").sid"
-		return 0
-	done
+	if _web_set "$2"; then
+		_al_who="$(_web_user "$2") $(_web_pass "$2")"
+	else
+		_al_who="sysadmin sysadmin
+admin admin
+admin zimifi"
+	fi
+	printf '%s\n' "$_al_who" | while read -r _al_u _al_p; do
+		_al_h1=$(_asr_md5 "$_al_u:Highwmg:$_al_p")
+		for _al_v in "protected.cgi asr" "xml_action.cgi marvell"; do
+			_al_n=$(_asr_nonce "$1" "$_al_src")
+			_al_cn=$(_asr_cnonce)
+			_al_r=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cn:auth:$(_asr_md5 "GET:/cgi/${_al_v% *}")")
+			_al_cx=$(_asr_cnonce)
+			_al_rx=$(_asr_md5 "$_al_h1:$_al_n:00000001:$_al_cx:auth:$(_asr_md5 "GET:/cgi/xml_action.cgi")")
+			_al_b=$(curl -s -D "$CACHE_DIR/asrhdr" --max-time 8 ${_al_src:+--interface "$_al_src"} -A "$UA" \
+				-H "Authorization: Digest username=\"$_al_u\", realm=\"Highwmg\", nonce=\"$_al_n\", uri=\"/cgi/xml_action.cgi\", response=\"$_al_rx\", qop=auth, nc=00000001, cnonce=\"$_al_cx\"" \
+				-H "Cookie: CGISID=; projectConfig=0" -H "X-Requested-With: XMLHttpRequest" \
+				"http://$1/login.cgi?Action=Digest&username=$_al_u&realm=Highwmg&nonce=$_al_n&response=$_al_r&qop=auth&cnonce=$_al_cn&nc=00000001&temp=${_al_v#* }" 2>/dev/null)
+			_al_s=$(tr -d '\r' < "$CACHE_DIR/asrhdr" 2>/dev/null | sed -n 's/^[Ss]et-[Cc]ookie: *CGISID=\([^;[:space:]]*\).*/\1/p' | head -1)
+			rm -f "$CACHE_DIR/asrhdr"
+			case "$_al_b" in *'200 OK'*|*'first login'*) ;; *) [ -n "$_al_s" ] || continue ;; esac
+			rm -f "$_al_bad"
+			printf '%s 2\n' "$_al_n" > "$(_asr_ck "$1")"
+			printf '%s' "$_al_s" > "$(_asr_ck "$1").sid"
+			( umask 077; printf '%s %s\n' "$_al_u" "$_al_p" > "$(_asr_ck "$1").who" )
+			exit 0
+		done
+	done && [ -s "$(_asr_ck "$1")" ] && return 0
 	[ -f "$_al_bad" ] || logger -t 5gmodem "hilink(asr): login to $1 failed - wrong web password? Not retrying for 15 minutes"
 	: > "$_al_bad"
 	return 1
@@ -441,31 +460,213 @@ _asr_raw() {
 	fi
 }
 
+_asr_api() {
+	[ -s "$(_asr_ck "$1")" ] || _asr_login "$1" "$5" || return 1
+	_ap_src=$(_srcip_for "$5" "$1")
+	if [ "$2" = POST ]; then
+		curl -s --max-time 30 ${_ap_src:+--interface "$_ap_src"} -A "$UA" \
+			-H "Authorization: $(_asr_hdr "$1" POST "$5")" -H "X-Requested-With: XMLHttpRequest" \
+			-H "Content-Type: application/json" --data "$4" "http://$1/api/$3" 2>/dev/null
+	else
+		curl -s --max-time 10 ${_ap_src:+--interface "$_ap_src"} -A "$UA" \
+			-H "Authorization: $(_asr_hdr "$1" GET "$5")" -H "X-Requested-With: XMLHttpRequest" \
+			"http://$1/api/$3" 2>/dev/null
+	fi
+}
+
 _asr_call() {
 	[ -s "$(_asr_ck "$1")" ] || _asr_login "$1" "$5" || return 1
 	_ac_r=$(_asr_raw "$@")
-	case "$_ac_r" in
-		''|*UNAUTHORIZED*|*KICKOFF*|*'<title>'*)
-			rm -f "$(_asr_ck "$1")"
+	case "$2:$_ac_r" in
+		GET:|*UNAUTHORIZED*|*KICKOFF*|*'<title>'*)
+			rm -f "$(_asr_ck "$1")" "$(_asr_ck "$1").who"
 			_asr_login "$1" "$5" || return 1
 			_ac_r=$(_asr_raw "$@") ;;
 	esac
-	[ -n "$_ac_r" ] || return 1
+	[ -n "$_ac_r" ] || [ "$2" = POST ] || return 1
 	printf '%s' "$_ac_r" > "$CACHE_DIR/asrraw_$(_tk "$1")_$3" 2>/dev/null
 	printf '%s' "$_ac_r"
 }
 
 _asr_x() { printf '%s' "$1" | tr '\n' ' ' | sed -n "s|.*<$2>\\([^<]*\\)</$2>.*|\\1|p" | head -1; }
 
+_asr_smsx() {
+	printf '<?xml version="1.0" encoding="US-ASCII"?><RGW><message>%s</message></RGW>' "$1"
+}
+
+_asr_sms_map() { echo "$CACHE_DIR/asrsms_$(_tk "$1")"; }
+
+asr_sms_list() {
+	_al_p=$(_hl_path "$2")
+	_al_a=$(_addr_for "$_al_p") || { echo '{"msg":[]}'; return 1; }
+	case "${1:-in}" in
+		out) _al_fl=GET_SENT_SMS_LOCAL; _al_tag=2; _al_off=100000 ;;
+		*)   _al_fl=GET_RCV_SMS_LOCAL;  _al_tag=1; _al_off=0 ;;
+	esac
+	_al_map=$(_asr_sms_map "$_al_a")
+	touch "$_al_map"
+	grep -v " ${1:-in}\$" "$_al_map" > "$_al_map.n" 2>/dev/null
+	_al_pg=1; _al_tot=1; _al_all=""
+	while [ "$_al_pg" -le "$_al_tot" ] && [ "$_al_pg" -le 10 ]; do
+		_al_r=$(_asr_call "$_al_a" POST message \
+			"$(_asr_smsx "<flag><message_flag>$_al_fl</message_flag></flag><get_message><page_number>$_al_pg</page_number></get_message>")" "$_al_p")
+		case "$_al_r" in *'<message_list'*) ;; *) _al_r=$(_asr_call "$_al_a" GET message "" "$_al_p") ;; esac
+		_al_t=$(_asr_x "$_al_r" total_number | tr -cd '0-9')
+		[ -n "$_al_t" ] && _al_tot="$_al_t"
+		_al_all="$_al_all$(printf '%s' "$_al_r" | tr -d '\r\n' | sed 's|<Item |\n<Item |g' | grep '^<Item ')
+"
+		_al_pg=$((_al_pg + 1))
+	done
+	printf '%s' "$_al_all" | awk -v tag="$_al_tag" -v off="$_al_off" -v box="${1:-in}" -v map="$_al_map.n" '
+		function hv(c) { return index("0123456789abcdef", tolower(c)) - 1 }
+		function alnum(h,   i, n, nb, k, j, bit, sk, v, out, ok, cnt, hit, res) {
+			if (length(h) % 4 != 0 || h !~ /^(003[0-9A-Fa-f])+$/ || h !~ /003[A-Fa-f]/) return h
+			n = 0
+			for (i = 1; i <= length(h); i += 4) nb[n++] = hv(substr(h, i + 3, 1))
+			k = 0
+			for (i = 0; i < n; i++) for (j = 0; j < 4; j++) bit[k++] = int(nb[i] / (2 ^ j)) % 2
+			hit = 0
+			for (sk = 0; sk < 7; sk++) {
+				out = ""; ok = 1; cnt = 0
+				for (i = sk; i + 7 <= k; i += 7) {
+					v = 0
+					for (j = 0; j < 7; j++) v += bit[i + j] * (2 ^ j)
+					if (!(v >= 65 && v <= 90 || v >= 97 && v <= 122 || v >= 48 && v <= 57 || v == 32)) { ok = 0; break }
+					out = out sprintf("%04X", v); cnt++
+				}
+				if (ok && cnt >= 3) { hit++; res = out }
+			}
+			return hit == 1 ? res : h
+		}
+		function x(r, k,   v) {
+			if (!match(r, "<" k ">[^<]*</" k ">")) return ""
+			v = substr(r, RSTART, RLENGTH); sub("^<" k ">", "", v); sub("</" k ">$", "", v)
+			return v
+		}
+		BEGIN { printf "\"messages\":["; f = 1 }
+		/^<Item / {
+			raw = x($0, "index"); n = raw; gsub(/[^0-9]/, "", n)
+			if (n == "") next
+			id = n + off
+			print id, raw, box >> map
+			d = x($0, "received"); sub(/,[^,]*$/, "", d)
+			if (!f) printf ","; f = 0
+			printf "{\"id\":\"%s\",\"number\":\"%s\",\"date\":\"%s\",\"content\":\"%s\",\"tag\":\"%s\"}", id, alnum(x($0, "from")), d, x($0, "subject"), (box == "in" && x($0, "status") == "0") ? 1 : tag
+		}
+		END { print "]" }' | _zte_sms_parse "${1:-in}"
+	mv -f "$_al_map.n" "$_al_map" 2>/dev/null
+}
+
+asr_sms_count() {
+	_ac_n=$(asr_sms_list in "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
+	printf '<LocalInbox>%s</LocalInbox><LocalMaxInbox>100</LocalMaxInbox>\n' "${_ac_n:-0}"
+}
+
+_asr_sms_raw() {
+	sed -n "s/^$2 \([^ ]*\) .*/\1/p" "$(_asr_sms_map "$1")" 2>/dev/null | head -1
+}
+
+_asr_sms_box() {
+	case "$(sed -n "s/^$2 [^ ]* \(.*\)/\1/p" "$(_asr_sms_map "$1")" 2>/dev/null | head -1)" in
+		out) echo "2" ;;
+		*) echo "12" ;;
+	esac
+}
+
+asr_sms_delete() {
+	_ad_p=$(_hl_path "$2")
+	_ad_a=$(_addr_for "$_ad_p") || { echo '{"success":false}'; return 1; }
+	_ad_ids=""; _ad_tags=12
+	for _ad_i in $(printf '%s' "$1" | tr -c '0-9' ' '); do
+		_ad_r=$(_asr_sms_raw "$_ad_a" "$_ad_i")
+		[ -n "$_ad_r" ] || { asr_sms_list in "$_ad_p" >/dev/null; asr_sms_list out "$_ad_p" >/dev/null; _ad_r=$(_asr_sms_raw "$_ad_a" "$_ad_i"); }
+		[ -n "$_ad_r" ] || continue
+		_ad_tags=$(_asr_sms_box "$_ad_a" "$_ad_i")
+		_ad_ids="$_ad_ids$_ad_r,"
+	done
+	[ -n "$_ad_ids" ] || { echo '{"success":false,"error":"not found"}'; return 1; }
+	_asr_call "$_ad_a" POST message "$(_asr_smsx "<flag><message_flag>DELETE_SMS</message_flag><sms_cmd>6</sms_cmd></flag><get_message><tags>$_ad_tags</tags><mem_store>1</mem_store></get_message><set_message><delete_message_id>$_ad_ids</delete_message_id></set_message>")" "$_ad_p" >/dev/null
+	_asr_sms_wait "$_ad_a" "$_ad_p"
+}
+
+asr_sms_markread() {
+	_am_p=$(_hl_path "$2")
+	_am_a=$(_addr_for "$_am_p") || { echo '{"success":false}'; return 1; }
+	for _am_i in $(printf '%s' "$1" | tr -c '0-9' ' '); do
+		_am_r=$(_asr_sms_raw "$_am_a" "$_am_i")
+		[ -n "$_am_r" ] || continue
+		_asr_call "$_am_a" POST message "$(_asr_smsx "<flag><message_flag>SET_MSG_READ</message_flag><sms_cmd>7</sms_cmd></flag><get_message><tags>12</tags><mem_store>1</mem_store></get_message><set_message><read_message_id>$_am_r</read_message_id></set_message>")" "$_am_p" >/dev/null
+	done
+	echo '{"success":true}'
+}
+
+_asr_sms_wait() {
+	_aw_n=0
+	while [ "$_aw_n" -lt 10 ]; do
+		sleep 1
+		_aw_r=$(_asr_x "$(_asr_call "$1" GET message "" "$2")" sms_cmd_status_result)
+		case "$_aw_r" in
+			3) echo '{"success":true}'; return 0 ;;
+			1|'') ;;
+			*) printf '{"success":false,"code":"%s"}\n' "$_aw_r"; return 1 ;;
+		esac
+		_aw_n=$((_aw_n + 1))
+	done
+	echo '{"success":false,"error":"timeout"}'
+	return 1
+}
+
+asr_sms_send() {
+	[ -n "$1" ] && [ -n "$2" ] || { echo '{"error":"no number or text"}'; return 1; }
+	_as_p=$(_hl_path "$3")
+	_as_a=$(_addr_for "$_as_p") || { echo '{"success":false}'; return 1; }
+	_as_n=$(printf '%s' "$1" | tr -cd '0-9+')
+	_as_e=UNICODE
+	printf '%s' "$2" | grep -q '[^ -~]' || _as_e=GSM7_default
+	_as_tz=$(date +%z | awk '{ h = substr($0, 2, 2) + 0; printf "%s%d", (substr($0, 1, 1) == "-" ? "-" : "%2B"), h }')
+	_as_t="$(date '+%y %m %d %H %M %S' | awk '{ printf "%s,%d,%d,%d,%d,%d", $1, $2, $3, $4, $5, $6 }'),$_as_tz"
+	_asr_call "$_as_a" POST message "$(_asr_smsx "<flag><message_flag>SEND_SMS</message_flag><sms_cmd>4</sms_cmd></flag><send_save_message><contacts>$_as_n</contacts><content>$(_zte_ucs2hex "$2")</content><encode_type>$_as_e</encode_type><sms_time>$_as_t</sms_time></send_save_message>")" "$_as_p" >/dev/null
+	_asr_sms_wait "$_as_a" "$_as_p"
+}
+
+asr_json_metrics() {
+	_aj() { printf '%s' "$3" | jsonfilter -e "@.$1" 2>/dev/null; }
+	_r="$3"
+	_rsrp=$(_aj rsrp "" "$_r" | tr -cd '0-9-')
+	case "$_rsrp" in -*|'') ;; *) [ "$_rsrp" -le 97 ] && _rsrp=$((_rsrp - 140)) || _rsrp="" ;; esac
+	_sinr=$(_aj sinr "" "$_r" | tr -cd '0-9.-')
+	_reg=0; case "$(_aj status "" "$_r")" in [Cc]onnected) _reg=1 ;; esac
+	_ctime=$(_aj con_duration "" "$_r" | tr -cd '0-9'); [ "$_reg" = 1 ] || _ctime=""
+	_cid=$(_aj cell_id "" "$_r" | tr -cd '0-9')
+	_op=$(_aj reg_network_name "" "$_r"); [ -n "$_op" ] || _op=$(_aj sim_network_name "" "$_r")
+	_model=$(_aj device_name "" "$_r"); [ -n "$_model" ] || _model="ASR MiFi"
+	printf '{"backend":"hilink","cport":"%s","protocol":"HiLink (web API)","vidpid":"%s",' "$2" "$(_vidpid_for "$1")"
+	printf '"modem":"%s","web_auth":"ok",' "$(jsafe "$_model")"
+	printf '"imei":"%s","imsi":"%s","iccid":"%s",' "$(_aj IMEI "" "$_r" | tr -cd '0-9')" "$(_aj IMSI "" "$_r" | tr -cd '0-9')" "$(_aj iccid "" "$_r" | tr -cd '0-9')"
+	printf '"firmware":"%s","operator_name":"%s",' "$(jsafe "$(_aj fw_version "" "$_r")")" "$(jsafe "$_op")"
+	printf '"registration":"%s","mode":"LTE",' "$_reg"
+	printf '"signal":"%s","rsrp":"%s","sinr":"%s",' "$(sig_percent LTE "$_rsrp" "" "$_sinr" "" "" "")" "$_rsrp" "$_sinr"
+	printf '"cid_dec":"%s","cid_hex":"%s","enbid":"%s",' "$_cid" "$([ -n "$_cid" ] && printf '%X' "$_cid")" "$([ -n "$_cid" ] && echo $((_cid / 256)))"
+	printf '"ipaddr":"%s","hl_modes":"1",' "$(_aj ip_addr "" "$_r")"
+	[ -n "$_ctime" ] && printf '"conn_time_sec":"%s",' "$_ctime"
+	printf '"conn_status":"%s"}\n' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
+}
+
 asr_metrics_json() {
 	_HLP=$(_hl_path "$1")
 	_a=$(_addr_for "$_HLP") || return 1
 	_r=$(_asr_call "$_a" GET status1 "" "$_HLP")
-	case "$_r" in *'<sysinfo>'*) ;; *) _r="" ;; esac
+	case "$_r" in
+		*'<sysinfo>'*) ;;
+		*)
+			_r=$(_asr_call "$_a" GET json_status "" "$_HLP")
+			case "$_r" in '{'*) asr_json_metrics "$_HLP" "$_a" "$_r"; return $? ;; esac
+			_r="" ;;
+	esac
 	if [ -z "$_r" ]; then
 		[ -f "$(_asr_ck "$_a").fail" ] || return 1
 		printf '{"backend":"hilink","cport":"%s","protocol":"HiLink (web API)",' "$_a"
-		printf '"modem":"ASR MiFi","web_auth":"fail","registration":"","signal":"","conn_status":""}\n'
+		printf '"web_auth":"fail","registration":"","signal":"","conn_status":""}\n'
 		return 0
 	fi
 	_sm=$(_asr_x "$_r" sys_mode)
@@ -525,7 +726,7 @@ asr_metrics_json() {
 	printf '"cid_dec":"","cid_hex":"","lac_hex":"",'
 	printf '"pci":"","pband":"%s","enbid":"",' "$_pband"
 	printf '"ipaddr":"%s",' "$(_asr_x "$_r" ipv4)"
-	printf '"battery":"%s","battery_charging":"%s",' "$_bat" "$_chg"
+	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_bat" "$_chg"
 	[ -n "$_ctime" ] && printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "$_ctime"
 	printf '"csq":"%s",' "$_csq"
 	printf '"conn_status":"%s"' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
@@ -602,7 +803,7 @@ tenda_metrics_json() {
 	printf '"cid_dec":"","cid_hex":"","lac_hex":"",'
 	printf '"pci":"","pband":"%s","enbid":"",' "$_tpband"
 	printf '"ipaddr":"%s",' "$(_tj wanIp)"
-	printf '"battery":"%s","battery_charging":"%s",' "$_bat" "$_chg"
+	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_bat" "$_chg"
 	[ -n "$_ctime" ] && printf '"conn_time":"%s","conn_time_sec":"%s",' "$_ct_str" "$_ctime"
 	printf '"csq":"%s",' "$_csq"
 	printf '"conn_status":"%s"' "$([ "$_reg" = 1 ] && echo connected || echo disconnected)"
@@ -1513,6 +1714,9 @@ _hl_ltelist() {
 }
 
 hl_supbands() {
+	case "$(_api_vid "$(_hl_path "$1")")" in
+		1286:4e31) _a=$(_addr_for "$(_hl_path "$1")") && _asr_supbands "$_a" "$(_hl_path "$1")"; return $? ;;
+	esac
 	_sl=$(_hl_ltelist "$1")
 	[ -n "$_sl" ] || return 1
 	{
@@ -1531,7 +1735,54 @@ _hl_lte_allval() {
 	echo "7FFFFFFFFFFFFFFF"
 }
 
+_asr_supbands() {
+	_as_f="$CACHE_DIR/asrbands_$(_tk "$1")"
+	if [ ! -s "$_as_f" ] || [ -n "$(find "$_as_f" -mmin +1440 2>/dev/null)" ]; then
+		_as_src=$(_srcip_for "$2" "$1")
+		curl -s --max-time 8 ${_as_src:+--interface "$_as_src"} -A "$UA" \
+			"http://$1/html/internet/band_setting.html" 2>/dev/null \
+			| grep -oE 'id="band[0-9]+"' | tr -cd '0-9\n' | sort -nu | xargs > "$_as_f"
+	fi
+	cat "$_as_f"
+}
+
+asr_getbands() {
+	_HLP=$(_hl_path "$1")
+	_a=$(_addr_for "$_HLP") || return 1
+	_ag_sup=$(_asr_supbands "$_a" "$_HLP")
+	_ag_t=$(_asr_api "$_a" GET band/getType "" "$_HLP" | tr -cd '0-9')
+	if [ "$_ag_t" = 2 ]; then
+		_ag_l=$(_asr_api "$_a" GET band/getSetting "" "$_HLP" | tr -c '0-9' ' ' | xargs)
+		[ -n "$_ag_l" ] && { echo "$_ag_l"; return 0; }
+	fi
+	[ -n "$_ag_sup" ] || return 1
+	echo "$_ag_sup"
+}
+
+asr_setbands() {
+	_HLP=$(_hl_path "$2")
+	_a=$(_addr_for "$_HLP") || { echo '{"success":false,"error":"noaddr"}'; return 1; }
+	_asb_l=$(printf '%s' "$1" | tr -c '0-9' ' ' | xargs | tr ' ' ',')
+	_asb_sup=" $(_asr_supbands "$_a" "$_HLP") "
+	_asb_all=1
+	for _b in $_asb_sup; do
+		case ",$_asb_l," in *",$_b,"*) ;; *) _asb_all=0 ;; esac
+	done
+	if [ "$1" = default ] || [ -z "$_asb_l" ] || [ "$_asb_all" = 1 ]; then
+		_asr_api "$_a" POST band/updateType '{"band":"1"}' "$_HLP" >/dev/null
+		_asr_api "$_a" POST band/updateSetting '{"band":"250"}' "$_HLP" >/dev/null
+	else
+		for _b in $(printf '%s' "$_asb_l" | tr ',' ' '); do
+			case "$_asb_sup" in *" $_b "*) ;; *) echo '{"success":false,"error":"bad band"}'; return 1 ;; esac
+		done
+		_asr_api "$_a" POST band/updateType '{"band":"2"}' "$_HLP" >/dev/null
+		_asr_api "$_a" POST band/updateSetting "{\"band\":\"$_asb_l\"}" "$_HLP" >/dev/null
+	fi
+	echo '{"success":true}'
+}
+
 hl_getbands() {
+	case "$(_api_vid "$(_hl_path "$1")")" in 1286:4e31) asr_getbands "$1"; return $? ;; esac
 	_r=$(api_get /api/net/net-mode "$1")
 	_lte=$(printf '%s' "$_r" | xval LTEBand)
 	[ -n "$_lte" ] || return 1
@@ -1547,6 +1798,7 @@ hl_getbands() {
 }
 
 hl_setbands() {
+	case "$(_api_vid "$(_hl_path "$2")")" in 1286:4e31) asr_setbands "$1" "$2"; return $? ;; esac
 	_cur=$(api_get /api/net/net-mode "$2")
 	_nm=$(printf '%s' "$_cur" | xval NetworkMode)
 	[ -n "$_nm" ] || _nm="03"
@@ -1984,6 +2236,7 @@ zte_setmode() {
 }
 
 hl_getmode() {
+	case "$(_api_vid "$(_hl_path "$1")")" in 1286:4e31) echo 1; return 0 ;; esac
 	_nm=$(api_get /api/net/net-mode "$1" | xval NetworkMode)
 	case "$_nm" in
 		03) echo 4 ;;
@@ -1995,6 +2248,7 @@ hl_getmode() {
 }
 
 hl_setmode() {
+	case "$(_api_vid "$(_hl_path "$2")")" in 1286:4e31) echo '{"success":false,"error":"unsupported"}'; return 1 ;; esac
 	case "$1" in
 		1) _nm="00" ;;
 		8) _nm="01" ;;
@@ -2050,6 +2304,7 @@ case "$1" in
 		case "$2" in
 			get) _asr_call "$_a" GET "$3" "" "$5" ;;
 			set) _asr_call "$_a" POST "$3" "$4" "$5" ;;
+			api) _asr_api "$_a" GET "$3" "" "$5" ;;
 		esac ;;
 	addr)        _addr_for "$2" ;;
 	get)         api_get "$2" "$3" ;;
@@ -2103,22 +2358,27 @@ case "$1" in
 		esac
 		;;
 	smsread)     case "$(_api_vid "$3")" in
+			1286:4e31) asr_sms_list "${2:-in}" "$3" ;;
 			19d2:*) if _is_tenda "$3"; then tenda_sms_list "${2:-in}" "$3"; else zte_sms_list "${2:-in}" "$3"; fi ;;
 			*) sms_list "${2:-in}" "$3" ;;
 		esac ;;
 	smscount)    case "$(_api_vid "$2")" in
+			1286:4e31) asr_sms_count "$2" ;;
 			19d2:*) if _is_tenda "$2"; then tenda_sms_count "$2"; else zte_sms_count "$2"; fi ;;
 			*) api_get /api/sms/sms-count "$2" ;;
 		esac ;;
 	smssend)     case "$(_api_vid "$4")" in
+			1286:4e31) asr_sms_send "$2" "$3" "$4" ;;
 			19d2:*) if _is_tenda "$4"; then tenda_sms_send "$2" "$3" "$4"; else zte_sms_send "$2" "$3" "$4"; fi ;;
 			*) sms_send "$2" "$3" "$4" ;;
 		esac ;;
 	smsdel)      case "$(_api_vid "$3")" in
+			1286:4e31) asr_sms_delete "$2" "$3" ;;
 			19d2:*) if _is_tenda "$3"; then tenda_sms_delete "$2" "$3"; else zte_sms_delete "$2" "$3"; fi ;;
 			*) sms_delete "$2" "$3" ;;
 		esac ;;
 	smsmarkread) case "$(_api_vid "$3")" in
+			1286:4e31) asr_sms_markread "$2" "$3" ;;
 			19d2:*) if _is_tenda "$3"; then tenda_sms_markread "$2" "$3"; else echo '{"success":true}'; fi ;;
 			*) echo '{"success":true}' ;;
 		esac ;;

@@ -509,9 +509,25 @@ if [ "$_hl_kind" = "hilink" ] && [ -z "$_hl_at" ]; then
 	_hl_out=$("$RES/hilink.sh" json "$_POLL_AM" 2>/dev/null)
 	case "$_hl_out" in
 		'{'*)
+			case "$_hl_out" in
+				*'"rx":'*) ;;
+				*)
+					_hl_if=$(uci -q get "5gmodem.$_hl_sec.network")
+					_hl_l3=""
+					[ -n "$_hl_if" ] && _hl_l3=$(ifstatus "$_hl_if" 2>/dev/null | jsonfilter -e '@.l3_device' 2>/dev/null)
+					_hl_x=""
+					[ -n "$_hl_l3" ] && _hl_x=$(ifconfig "$_hl_l3" 2>/dev/null | awk -F[\(\)] '/bytes/ {printf "%s|%s",$2,$4}')
+					_hl_ifj=""
+					case "$_hl_out" in *'"iface":'*) ;; *) _hl_ifj="\"iface\":\"$_hl_if\"," ;; esac
+					[ -n "$_hl_x" ] && _hl_out="{\"rx\":\"${_hl_x%%|*}\",\"tx\":\"${_hl_x##*|}\",$_hl_ifj${_hl_out#\{}"
+					;;
+			esac
 			printf '%s\n' "$_hl_out" > "$_hl_cache.tmp" && mv "$_hl_cache.tmp" "$_hl_cache"
 			cut -d. -f1 /proc/uptime > "$_hl_cache.t.tmp" && mv "$_hl_cache.t.tmp" "$_hl_cache.t"
 			printf '%s\n' "$_hl_out"
+			_hl_on=$(printf '%s' "$_hl_out" | jsonfilter -e '@.operator_name' 2>/dev/null)
+			_hl_oi=$(uci -q get "5gmodem.$_hl_sec.network")
+			[ -n "$_hl_on" ] && [ -n "$_hl_oi" ] && printf '%s' "$_hl_on" > "/tmp/5gmodem/op_$_hl_oi" 2>/dev/null
 			_hl_ml=$(printf '%s' "$_hl_out" | jsonfilter -e '@.modem' 2>/dev/null)
 			_hl_vp=$(uci -q get "5gmodem.$_hl_sec.vidpid")
 			if [ -n "$_hl_ml" ] && [ "$(uci -q get "5gmodem.$_hl_sec.kind")" = hilink ] \
