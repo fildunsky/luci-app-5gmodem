@@ -26,6 +26,7 @@ is_manual() { case " $H_MAN " in *" $1 "*) return 0 ;; esac; return 1; }
 H_PG=$(conf proxy_guard); [ "$H_PG" = "0" ] || H_PG=1
 H_HEAL=$(conf healing); [ "$H_HEAL" = "0" ] || H_HEAL=1
 H_HEALWIFI=$(conf heal_wifi); [ "$H_HEALWIFI" = "0" ] || H_HEALWIFI=1
+H_LR=$(conf lock_release); [ "$H_LR" = "0" ] || H_LR=1
 H_PSCRIPT=$(conf power_script)
 case "$H_PSCRIPT" in /*[!A-Za-z0-9/._-]*|/) H_PSCRIPT="" ;; /*) ;; *) H_PSCRIPT="" ;; esac
 
@@ -851,6 +852,113 @@ heal() {
 	done
 }
 
+LOCK_RELEASE_MIN=600
+LOCK_CHECK_EVERY=60
+LOCK_GAP=300
+LOCK_RETRY=300
+
+_lg_reg() {
+	_lr_k=$(snap_key "$1")
+	_lr_t=$(cat "/tmp/5gmodem/metrics_$_lr_k.stamp" 2>/dev/null)
+	case "$_lr_t" in
+		''|*[!0-9]*) ;;
+		*)
+			_lr_age=$(( $(uptime_s) - _lr_t ))
+			if [ "$_lr_age" -ge 0 ] && [ "$_lr_age" -le 90 ]; then
+				case "$(jsonfilter -i "/tmp/5gmodem/metrics_$_lr_k.json" -e '@.registration' 2>/dev/null)" in
+					1|5) echo yes; return 0 ;;
+					0|2|3|4) echo no; return 0 ;;
+				esac
+			fi ;;
+	esac
+	if command -v mmcli >/dev/null 2>&1 && pidof ModemManager >/dev/null 2>&1; then
+		_lr_mi=$("$RES/modemswitch.sh" mmindex "$1" 2>/dev/null)
+		if [ -n "$_lr_mi" ]; then
+			case "$(mmcli -m "$_lr_mi" -K 2>/dev/null \
+				| sed -n 's/^modem\.3gpp\.registration-state *: *//p' | head -1)" in
+				home|roaming) echo yes ;;
+				idle|searching|denied) echo no ;;
+			esac
+			return 0
+		fi
+	fi
+	[ "$(uci -q get "$CFG.$2.kind")" = "hilink" ] && return 0
+	[ "$(uci -q get "$CFG.$2.no_at")" = "1" ] && return 0
+	_lr_at=$(uci -q get "$CFG.$2.at_port")
+	[ -n "$_lr_at" ] && [ -c "$_lr_at" ] || return 0
+	case "$(readlink -f "/sys/class/tty/${_lr_at##*/}/device" 2>/dev/null)" in
+		*"/$1:"*|*"/$1/"*) ;;
+		*) return 0 ;;
+	esac
+	at_dialer_busy "$_lr_at" && return 0
+	_lr_any=""
+	for _lr_c in CEREG C5GREG CREG; do
+		_lr_s=$(at_query "$_lr_at" "AT+$_lr_c?" 5 3 2>/dev/null | tr -d '\r' \
+			| sed -n "s/.*+$_lr_c: *[0-9]*, *\([0-9]*\).*/\1/p" | head -1)
+		case "$_lr_s" in
+			1|5) echo yes; return 0 ;;
+			0|2|3|4) _lr_any=1 ;;
+		esac
+	done
+	[ -n "$_lr_any" ] && echo no
+	return 0
+}
+
+_lg_save() {
+	printf '%s %s %s %s %s %s\n' "$_lg_chk" "$_lg_since" "$_lg_seen" "$_lg_try" "$_lg_done" "$_lg_vk" > "$_lg_f"
+}
+
+lock_guard() {
+	[ "$H_LR" = "1" ] || return 0
+	_lg_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	[ -n "$_lg_p" ] || return 0
+	_lg_sec="m_$(printf '%s' "$_lg_p" | sed 's/[^A-Za-z0-9]/_/g')"
+	_lg_f="/tmp/5gmodem/lockguard.$_lg_sec"
+	_lg_v=$(uci -q get "$CFG.$_lg_sec.celllock")
+	case "$_lg_v" in
+		arfcn\ *|cell\ *) ;;
+		*) rm -f "$_lg_f"; return 0 ;;
+	esac
+	_lg_vk=$(printf '%s' "$_lg_v" | tr -s ' ' '_')
+	_lg_chk=0; _lg_since=0; _lg_seen=0; _lg_try=0; _lg_done=0; _lg_was=""
+	[ -f "$_lg_f" ] && read -r _lg_chk _lg_since _lg_seen _lg_try _lg_done _lg_was < "$_lg_f"
+	case "$_lg_chk" in ''|*[!0-9]*) _lg_chk=0 ;; esac
+	case "$_lg_since" in ''|*[!0-9]*) _lg_since=0 ;; esac
+	case "$_lg_seen" in ''|*[!0-9]*) _lg_seen=0 ;; esac
+	case "$_lg_try" in ''|*[!0-9]*) _lg_try=0 ;; esac
+	if [ "$_lg_was" != "$_lg_vk" ]; then
+		_lg_chk=0; _lg_since=0; _lg_seen=0; _lg_try=0; _lg_done=0
+	fi
+	[ "$_lg_done" = "1" ] && return 0
+	_lg_now=$(uptime_s)
+	[ "$_lg_now" -lt "$_lg_chk" ] && _lg_chk=0
+	[ $((_lg_now - _lg_chk)) -ge "$LOCK_CHECK_EVERY" ] || return 0
+	_lg_chk="$_lg_now"
+	case "$(_lg_reg "$_lg_p" "$_lg_sec")" in
+		yes) _lg_since=0 ;;
+		no)
+			if [ "$_lg_since" = 0 ] || [ $((_lg_now - _lg_seen)) -gt "$LOCK_GAP" ]; then
+				_lg_since="$_lg_now"
+			fi
+			_lg_seen="$_lg_now" ;;
+	esac
+	_lg_save
+	[ "$_lg_since" -gt 0 ] && [ "$_lg_seen" = "$_lg_now" ] || return 0
+	[ $((_lg_now - _lg_since)) -ge "$LOCK_RELEASE_MIN" ] || return 0
+	[ "$_lg_try" -gt 0 ] && [ $((_lg_now - _lg_try)) -lt "$LOCK_RETRY" ] && return 0
+	_lg_try="$_lg_now"
+	_lg_o=$(BANDS_ACTIVE_MODEM="$_lg_p" "$RES/bands.sh" celllockrelease 2>/dev/null </dev/null 9>&-)
+	case "$_lg_o" in
+		*writeonly*|*Unsupported*|*"not remembered"*) _lg_done=1 ;;
+	esac
+	if [ -z "$(uci -q get "$CFG.$_lg_sec.celllock")" ]; then
+		rm -f "$_lg_f"
+		logger -t 5gmodem "lock guard: $_lg_p had no network registration for $(( (_lg_now - _lg_since) / 60 )) min with our lock ($(printf '%s' "$_lg_v" | sed 's/ *$//')) applied - lock released, it will not be re-applied automatically"
+		return 0
+	fi
+	_lg_save
+}
+
 _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
@@ -875,6 +983,7 @@ _off_cleanup() {
 
 case "$1" in
 tick)
+	lock_guard
 	[ "$H_EN" = "1" ] || _off_cleanup
 	mkdir -p "$HDIR"
 	_t_last=$(cat "$HDIR/.t" 2>/dev/null); case "$_t_last" in ''|*[!0-9]*) _t_last=0 ;; esac
@@ -914,8 +1023,8 @@ getconf)
 		[ -n "$(uci -q get "$CFG.$_gc_s.path")" ] || continue
 		_gc_heal="$_gc_heal,\"$_gc_n\":\"$(uci -q get "$CFG.$_gc_s.heal")\""
 	done
-	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"manual":"%s","proxy_guard":%s,"power_script":"%s","heal":{%s}}\n' \
-		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_MAN" "$H_PG" "$H_PSCRIPT" "${_gc_heal#,}"
+	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"manual":"%s","proxy_guard":%s,"lock_release":%s,"power_script":"%s","heal":{%s}}\n' \
+		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_MAN" "$H_PG" "$H_LR" "$H_PSCRIPT" "${_gc_heal#,}"
 	;;
 setheal)
 	case "$3" in ''|none|ifup|reboot|power) ;; *) echo '{"error":"bad level"}'; exit 1 ;; esac
@@ -934,7 +1043,7 @@ setconf)
 	for _sc in "$@"; do
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
-			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown|manual|proxy_guard) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown|manual|proxy_guard|lock_release) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
 			power_script)
 				case "$_sc_v" in
 					'') uci -q delete "$CFG.health.power_script" ;;

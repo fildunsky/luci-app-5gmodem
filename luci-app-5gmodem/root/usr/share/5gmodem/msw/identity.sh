@@ -86,6 +86,8 @@ swap_cleanup() {
 		uci -q delete "$CFG.$2.data_at_port" 2>/dev/null
 		uci -q delete "$CFG.$2.at_if" 2>/dev/null
 		uci -q delete "$CFG.$2.ident_probe" 2>/dev/null
+		uci -q delete "$CFG.$2.tether" 2>/dev/null
+		uci -q delete "$CFG.$2.netdev" 2>/dev/null
 		uci -q commit "$CFG"
 		return 0
 	fi
@@ -112,7 +114,8 @@ swap_cleanup() {
 	for o in at_port data_at_port network iface_proto imei serial celllock kind netdev \
 	         mm_exclude ussd_3g heal slot_type_0 slot_type_1 slot_type_2 \
 	         model_vp apn_plmn apn_imsi band_full save_band save_band5gnsa save_band5gsa save_mode \
-	         no_at mm_at mm_at_if mm_at_vp at_if ident_probe; do
+	         no_at mm_at mm_at_if mm_at_vp at_if ident_probe tether hl_api mtk_bandcap web_pass \
+	         want_proto at_debug netsel netsel_plmn netsel_fb netsel_act; do
 		uci -q delete "$CFG.$2.$o" 2>/dev/null
 	done
 	uci -q set "$CFG.$2.vidpid=$_new"
@@ -136,7 +139,7 @@ modem_imei() {
 		[ -n "$_mi" ] && { echo "$_mi"; return 0; }
 	fi
 	_mi_sec=$(secname "$1")
-	if command -v mm_at_fragile >/dev/null 2>&1 && [ -n "$(mm_at_fragile "$(modem_vidpid "$1")")" ] \
+	if command -v mm_at_fragile >/dev/null 2>&1 && [ -n "$(mm_at_fragile "$(modem_vidpid "$1")" "$1")" ] \
 	   && { [ -n "$_mi_mm" ] || [ "$(uci -q get "network.$(uci -q get "$CFG.$_mi_sec.network").proto" 2>/dev/null)" = "modemmanager" ]; }; then
 		mm_at_allowed "$1" "$_mi_sec" || return 1
 		if [ -n "$MM_AT_PORT" ]; then

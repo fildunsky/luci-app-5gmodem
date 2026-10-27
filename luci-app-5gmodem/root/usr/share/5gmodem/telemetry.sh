@@ -54,6 +54,10 @@ tele_write() {
 	_num rsrq "$(_int "$(_jf rsrq)")"
 	_num sinr "$(_int "$(_jf sinr)")"
 	_num temp "$(_int "$(_jf mtemp | sed 's/ *&deg;C//')")"
+	_num bat  "$(_int "$(_jf battery)")"
+	_num chg  "$(_int "$(_jf battery_charging)")"
+	_num dist "$(_int "$(_jf bs_distance)")"
+	_num tz   "$(_int "$(cat "/tmp/5gmodem/qmi_${_KEY}.ntz" 2>/dev/null)")"
 
 	_pb=$(_jf pband | grep -oE '^[Bn][0-9]+' | head -1)
 	_str band "$_pb"

@@ -1624,7 +1624,7 @@ report() {
 	echo "Router:    $(cat /tmp/sysinfo/model 2>/dev/null | head -1)"
 	echo "Firmware:  $(sed -n "s/^DISTRIB_DESCRIPTION='\(.*\)'/\1/p" /etc/openwrt_release 2>/dev/null | head -1)"
 	echo "Package:   $( (apk list -I 2>/dev/null || opkg list-installed 2>/dev/null) \
-		| sed -n 's/^\(luci-app-5gmodem[a-z-]*\)[ -]\([0-9][^ ]*\).*/\1 \2/p' | head -1)"
+		| sed -n 's/^\(luci-app-5gmodem[a-z-]*\)\( - \|-\)\([0-9][^ ]*\).*/\1 \3/p' | head -1)"
 	_sum_m=$("$RES/listmodems.sh" 2>/dev/null)
 	echo "Modem:     $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].model' 2>/dev/null) $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].vidpid' 2>/dev/null)"
 	echo "Operator:  $(printf '%s' "$_sum_m" | jsonfilter -e '@[0].operator' 2>/dev/null)"

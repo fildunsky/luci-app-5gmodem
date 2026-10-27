@@ -955,6 +955,8 @@ if [ -n "$_AMP" ]; then
 
 	if [ -z "$_found" ] && [ -n "$_AVIDPID" ]; then
 		_atp="$_bs_at"; [ -n "$_atp" ] || _atp=$(uci -q get 5gmodem.@5gmodem[0].at_port)
+		command -v tty_no_at >/dev/null 2>&1 || . /usr/share/5gmodem/noatports.sh
+		[ -n "$_atp" ] && tty_no_at "$_atp" && _atp=""
 		if [ -n "$_atp" ] && [ -e "$_atp" ]; then
 			_mdl=$(sms_tool -d "$_atp" at "AT+CGMM" 2>/dev/null | tr -d '\r' \
 				| grep -vE '^(AT|OK|ERROR|$)' | head -1 | tr -d ' ')
@@ -1095,6 +1097,17 @@ fi
 
 if [ "$_BAND_VIA" = "mmcli" ] && [ -n "$_bs_at$_DEVICE" ]; then
 	at_unlock
+fi
+
+if [ "$1" = "celllockrelease" ]; then
+	_clg_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	case "$(uci -q get "5gmodem.$_clg_sec.celllock")" in
+		arfcn\ *|cell\ *) : ;;
+		*) echo "not remembered"; exit 0 ;;
+	esac
+	[ "$_CELLLOCK_WRITEONLY" = "1" ] && { echo "writeonly"; exit 0; }
+	[ -n "$_PROFILE_LOADED" ] || { echo "Unsupported"; exit 0; }
+	set -- setcelllock off
 fi
 
 if [ "x$1" != "xjson" ]; then

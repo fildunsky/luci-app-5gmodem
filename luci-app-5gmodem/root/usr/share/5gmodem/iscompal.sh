@@ -6,6 +6,7 @@ is_compal() {
 	_ic_at="$3"
 
 	if [ -n "$_ic_path" ]; then
+		[ -d "/sys/bus/platform/devices/${_ic_path##*/}/remoteproc" ] && return 1
 		if [ -r "/sys/bus/usb/devices/$_ic_path/product" ]; then
 			case "$(cat "/sys/bus/usb/devices/$_ic_path/product" 2>/dev/null)" in
 				*VOS_5G*|*RXMG1*|*RXM-G1*|*SG500M2*) return 0 ;;

@@ -35,6 +35,7 @@ ussd_supported_for() {
 sim_slots_via() {
 	case "$2" in
 		1bc7:1040) echo simdet; return ;;
+		05c6:8916) echo none; return ;;
 		1bc7:1070|1bc7:1077|1bc7:1080) echo qmi; return ;;
 		0e8d:7127|0e8d:7126) echo gtdualsim; return ;;
 		1199:90d3|1199:90e3) echo uims; return ;;
@@ -82,8 +83,11 @@ esim_reset_after_switch() {
 
 mm_at_fragile() {
 	case "$1" in
-		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911) echo 1 ;;
+		413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911) echo 1; return ;;
 	esac
+	[ -n "$2" ] || return 0
+	[ -d "/sys/bus/platform/devices/${2##*/}/remoteproc" ] && { echo 1; return; }
+	[ "$(uci -q get "5gmodem.m_$(echo "$2" | sed 's/[^A-Za-z0-9]/_/g').at_fragile" 2>/dev/null)" = 1 ] && echo 1
 }
 
 _mm_index_cached() {
@@ -195,12 +199,13 @@ mm_at_allowed() {
 	_maa_vp=""
 	[ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ] && \
 		_maa_vp="$(cat "/sys/bus/usb/devices/$1/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$1/idProduct" 2>/dev/null)"
-	if [ -n "$(mm_at_fragile "$_maa_vp")" ]; then
+	_maa_fr=$(mm_at_fragile "$_maa_vp" "$1")
+	if [ -n "$_maa_fr" ] && [ -n "$_maa_vp" ]; then
 		MM_AT_PORT=$(mm_dedicated_at "$1" "$2" "$_maa_vp")
 		[ -n "$MM_AT_PORT" ] && return 0
 	fi
 	[ "$(uci -q get "5gmodem.$2.mm_at" 2>/dev/null)" = "1" ] && return 0
-	[ -n "$(mm_at_fragile "$_maa_vp")" ] && return 2
+	[ -n "$_maa_fr" ] && return 2
 	_maa_if=$(uci -q get "5gmodem.$2.network" 2>/dev/null)
 	case "$(uci -q get "network.$_maa_if.proto" 2>/dev/null)" in
 		mbimp)

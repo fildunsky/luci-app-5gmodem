@@ -6,6 +6,15 @@ noat_iface() {
 }
 
 tty_no_at() {
+	case "${1##*/}" in
+		wwan*at*)
+			_na_w=$(readlink -f "/sys/class/wwan/${1##*/}" 2>/dev/null)
+			case "$_na_w" in */*.remoteproc/*) ;; *) return 1 ;; esac
+			_na_w=${_na_w%%.remoteproc/*}.remoteproc
+			[ "$(uci -q get "5gmodem.m_$(echo "${_na_w##*/}" | sed 's/[^A-Za-z0-9]/_/g').mm_at" 2>/dev/null)" = 1 ] && return 1
+			pidof ModemManager >/dev/null 2>&1
+			return $? ;;
+	esac
 	_na_p=$(readlink -f "/sys/class/tty/${1##*/}/device" 2>/dev/null) || return 1
 	[ -r "$_na_p/bInterfaceNumber" ] || _na_p=${_na_p%/*}
 	[ -r "$_na_p/bInterfaceNumber" ] || return 1

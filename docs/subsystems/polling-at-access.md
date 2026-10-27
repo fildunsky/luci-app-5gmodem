@@ -210,6 +210,12 @@ addressed poll (`for=<path>`) took the AT port from the registry without any gat
 These modems get their card from mmcli; temperature/carriers come back with
 `mm_at=1`.
 
+`mm_at_fragile <vidpid> <path>` also marks as fragile:
+- SoC modems behind remoteproc (`/sys/bus/platform/devices/<path>/remoteproc`, Qualcomm MSM8916 `qcom-soc` and the like). On 27.10.2026, a direct AT probe of `wwan0at0/at1` with MM holding the modem crashed the MSS firmware twice (`smd_dsm_memcpy.c:297 Invalid packet size`).
+- Any modem whose section has `at_fragile=1` (`uci set 5gmodem.m_<path>.at_fragile=1`), for firmwares found to misbehave in the field.
+
+The card for these modems comes from mmcli and QMI through the MM proxy (`qmicli -p`).
+
 ### Dedicated AT port (`mm_dedicated_at`, `mm_tty_reserved`)
 
 DW5821e has two AT ports and MM grabs both; polling either one disrupts MM. Finding

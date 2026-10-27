@@ -921,6 +921,17 @@ body.sc-simple .tginfo-info .has-ext .tginfo-extsep {
   font-weight: 700;
   font-size: 90%;
 }
+.tginfo-envrow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: .3em .75em;
+  margin-left: auto;
+}
+.tginfo-envrow > .tginfo-temp {
+  margin-left: 0;
+}
 .tginfo-temps {
   display: flex;
   flex-wrap: wrap;
@@ -2361,9 +2372,10 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   body.tg-mv #modem-info-block .tginfo-right > * { margin: 0 !important; }
   body.tg-mv #modem-info-block .tginfo-right { justify-content: flex-start; }
   body.tg-mv #modem-info-block .tginfo-simslot-row { display: contents; }
+  body.tg-mv #modem-info-block .tginfo-envrow { display: contents; }
   body.tg-mv #modem-info-block .tginfo-right > #apnline { margin-left: auto !important; }
-  body.tg-mv #modem-info-block .tginfo-right:not(:has(> .tginfo-simslot-row > :not([style*="display: none"]):not([style*="display:none"]), > .tginfo-temp:not([style*="display: none"]):not([style*="display:none"]), > #apnline:not([style*="display: none"]):not([style*="display:none"]))),
-  body.tg-mv.sc-simple #modem-info-block .tginfo-right:not(:has(> .tginfo-simslot-row > :not([style*="display: none"]):not([style*="display:none"]), > .tginfo-temp:not([style*="display: none"]):not([style*="display:none"]))) { display: none !important; }
+  body.tg-mv #modem-info-block .tginfo-right:not(:has(> .tginfo-simslot-row > :not([style*="display: none"]):not([style*="display:none"]), > .tginfo-envrow > .tginfo-temp:not([style*="display: none"]):not([style*="display:none"]), > #apnline:not([style*="display: none"]):not([style*="display:none"]))),
+  body.tg-mv.sc-simple #modem-info-block .tginfo-right:not(:has(> .tginfo-simslot-row > :not([style*="display: none"]):not([style*="display:none"]), > .tginfo-envrow > .tginfo-temp:not([style*="display: none"]):not([style*="display:none"]))) { display: none !important; }
   body.tg-mv #modem-info-block .tginfo-simslot .cbi-button { font-size: 13px !important; line-height: 18px !important; padding: 5px 12px !important; }
 
   body.tg-mv .netpribar .netpri-row {
@@ -2681,3 +2693,25 @@ body.sc-simple .tg-updbar { display: none !important; }
   line-height: 20px !important;
 }
 html.tg-theme-argon [data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .cbi-checkbox) > .cbi-value-description { padding-top: 0 !important; }
+.upd-notes {
+  max-width: 640px;
+  border: 1px solid rgba(127, 127, 127, 0.3);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.upd-notes > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.upd-notes-body {
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.upd-notes-body ul {
+  margin: 4px 0 4px 1.2em;
+  padding: 0;
+}
+.upd-notes-h {
+  font-weight: 600;
+  margin-top: 6px;
+}

@@ -12,8 +12,13 @@ I18N="luci-i18n-5gmodem-ru"
 TMP=/tmp/5gmodem
 STATUS=/tmp/5gmodem/update.json
 LOCK=/tmp/5gmodem/update.pid
+APIC=/tmp/5gmodem/update-api.json
+LOG=/tmp/5gmodem/update.log
 
-json_esc() { echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+mkdir -p "$TMP" 2>/dev/null
+
+json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\r' | tr '\n\t' '  '; }
+b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
 pkgman() {
 	command -v apk >/dev/null 2>&1 && { echo apk; return; }
@@ -36,18 +41,23 @@ detect_pkg() {
 installed_version() {
 	case "$1" in
 	apk)  apk info -v 2>/dev/null | sed -n "s/^$PKG-\([0-9][0-9.]*\)-r[0-9].*/\1/p" | head -n1 ;;
-	opkg) opkg list-installed "$PKG" 2>/dev/null | sed -n "s/^$PKG - //p" | head -n1 ;;
+	opkg) opkg list-installed "$PKG" 2>/dev/null | sed -n "s/^$PKG - \([0-9][0-9.]*\).*/\1/p" | head -n1 ;;
 	esac
 }
 
-api_json() { net_fetch 15 "$API"; }
-
-latest_tag() {
-	api_json | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1
+api_json() {
+	if [ "$1" != fresh ] && [ -s "$APIC" ] && [ -n "$(find "$APIC" -mmin -5 2>/dev/null)" ]; then
+		cat "$APIC"; return 0
+	fi
+	_aj=$(net_fetch 15 "$API") || return 1
+	printf '%s' "$_aj" | jsonfilter -e '@.tag_name' >/dev/null 2>&1 || return 1
+	printf '%s' "$_aj" > "$APIC.tmp" && mv "$APIC.tmp" "$APIC"
+	printf '%s' "$_aj"
 }
 
-asset_url() {
-	api_json | sed -n 's|.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*/'"$1"'[-_][0-9][^"]*\.'"$2"'\)".*|\1|p' | head -n1
+asset_name() {
+	printf '%s' "$1" | jsonfilter -e '@.assets[*].name' 2>/dev/null \
+		| grep -E "^$2[-_][0-9][0-9.]*-r[0-9]+([-_.][a-z_]+)?\.$3\$" | head -n1
 }
 
 version_gt() {
@@ -60,6 +70,13 @@ version_gt() {
 	}'
 }
 
+st() {
+	printf '{"running":true,"stage":"%s","done":%s,"total":%s,"target":"%s"}\n' \
+		"$1" "${2:-0}" "${3:-0}" "$(json_esc "$TARGET")" > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+}
+
+fsize() { [ -f "$1" ] && wc -c < "$1" 2>/dev/null | tr -d ' ' || echo 0; }
+
 case "$1" in
 version)
 	PM=$(pkgman)
@@ -71,21 +88,24 @@ check)
 	PM=$(pkgman)
 	PKG=$(detect_pkg "$PM")
 	CUR=$(installed_version "$PM")
-	LAT=$(latest_tag)
-	LATV=${LAT#v}
-	AVAIL=0
-	if [ -n "$LATV" ] && [ -n "$CUR" ]; then
-		AVAIL=$(version_gt "$LATV" "$CUR")
-	elif [ -n "$LATV" ] && [ -z "$CUR" ]; then
-		AVAIL=1
-	fi
+	J=$(api_json fresh)
+	LAT=$(printf '%s' "$J" | jsonfilter -e '@.tag_name' 2>/dev/null)
 	if [ -z "$LAT" ]; then
 		printf '{"success":false,"error":"Could not reach GitHub","pm":"%s","current":"%s"}\n' "$PM" "$(json_esc "$CUR")"
 		exit 0
 	fi
-	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s"}\n' \
+	LATV=${LAT#v}
+	AVAIL=0
+	if [ -n "$CUR" ]; then
+		AVAIL=$(version_gt "$LATV" "$CUR")
+	else
+		AVAIL=1
+	fi
+	NOTES=$(printf '%s' "$J" | jsonfilter -e '@.body' 2>/dev/null)
+	PUB=$(printf '%s' "$J" | jsonfilter -e '@.published_at' 2>/dev/null)
+	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s","published":"%s","notes":"%s"}\n' \
 		"$PM" "$PKG" "$([ "$PKG" = "$PKG_LITE" ] && echo lite || echo full)" \
-		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE"
+		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE" "$(json_esc "$PUB")" "$(b64 "$NOTES")"
 	;;
 
 install)
@@ -93,46 +113,67 @@ install)
 		echo '{"started":true,"already":true}'
 		exit 0
 	fi
-	rm -f "$STATUS" "$STATUS.tmp"
-	echo '{"running":true}' > "$STATUS"
+	rm -f "$STATUS" "$STATUS.tmp" "$LOG"
+	echo '{"running":true,"stage":"prepare"}' > "$STATUS"
 	echo '{"started":true}'
 	(
+		fail() {
+			printf '{"success":false,"error":"%s","detail":"%s","current":"%s","target":"%s"}\n' \
+				"$(json_esc "$1")" "$(json_esc "$(tail -n 4 "$LOG" 2>/dev/null)")" \
+				"$(json_esc "$(installed_version "$PM")")" "$(json_esc "$TARGET")"
+		}
 		do_install() {
+			TARGET=""
 			PM=$(pkgman)
-			[ -n "$PM" ] || { echo '{"success":false,"error":"No package manager found"}'; return; }
+			[ -n "$PM" ] || { fail "No package manager found"; return; }
 			PKG=$(detect_pkg "$PM")
 			case "$PM" in apk) EXT=apk ;; opkg) EXT=ipk ;; esac
-
 			PREV=$(installed_version "$PM")
 
-			INSTALLED=""
-			for BASE in "$PKG"; do
-				URL=$(asset_url "$BASE" "$EXT")
-				if [ -z "$URL" ]; then
-					echo '{"success":false,"error":"asset_pending"}'; return
-				fi
-				F="$TMP/$BASE.$EXT"
-				rm -f "$F"
-				if ! net_fetch 90 "$URL" "$F"; then
-					echo '{"success":false,"error":"Download failed for '"$BASE"'"}'; return
-				fi
-				_want=$(basename "$URL" | sed -n 's/^.*[-_]\([0-9][0-9.]*\)-r[0-9][0-9]*[._].*$/\1/p')
-				if [ "$PM" = apk ]; then
-					apk add --allow-untrusted "$F" >/dev/null 2>&1; _rc=$?
-				else
-					opkg install --force-reinstall "$F" >/dev/null 2>&1; _rc=$?
-				fi
-				if [ "$_rc" != 0 ]; then
-					if [ -n "$_want" ] && [ "$(installed_version "$PM")" = "$_want" ]; then
-						logger -t 5gmodem "update: $PM returned $_rc, but $BASE $_want is installed - treating as success"
-					else
-						rm -f "$F"; echo '{"success":false,"error":"Install failed for '"$BASE"'"}'; return
-					fi
-				fi
-				rm -f "$F"
-				INSTALLED="$INSTALLED $BASE"
-			done
+			st prepare
+			J=$(api_json) || { fail "Could not reach GitHub"; return; }
+			NAME=$(asset_name "$J" "$PKG" "$EXT")
+			[ -n "$NAME" ] || { fail "asset_pending"; return; }
+			TARGET=$(printf '%s' "$NAME" | sed -n 's/^.*[-_]\([0-9][0-9.]*\)-r[0-9][0-9]*[-_.].*$/\1/p')
+			URL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].browser_download_url" 2>/dev/null)
+			TOTAL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].size" 2>/dev/null)
+			case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
+			[ -n "$URL" ] || { fail "asset_pending"; return; }
 
+			_free=$(df -k "$TMP" 2>/dev/null | awk 'NR==2 {print $4}')
+			case "$_free" in ''|*[!0-9]*) _free=0 ;; esac
+			if [ "$TOTAL" -gt 0 ] && [ "$_free" -gt 0 ] && [ $((_free * 1024)) -lt $((TOTAL * 2)) ]; then
+				fail "no_space"; return
+			fi
+
+			F="$TMP/$PKG.$EXT"
+			rm -f "$F"
+			st download 0 "$TOTAL"
+			( net_fetch 120 "$URL" "$F" && : > "$F.ok" ) >/dev/null 2>&1 </dev/null &
+			_dp=$!
+			while kill -0 "$_dp" 2>/dev/null; do
+				st download "$(fsize "$F")" "$TOTAL"
+				sleep 1
+			done
+			wait "$_dp" 2>/dev/null
+			if [ ! -f "$F.ok" ] || [ ! -s "$F" ]; then
+				rm -f "$F" "$F.ok"; fail "download_failed"; return
+			fi
+			rm -f "$F.ok"
+			_got=$(fsize "$F")
+			if [ "$TOTAL" -gt 0 ] && [ "$_got" != "$TOTAL" ]; then
+				rm -f "$F"; fail "download_incomplete"; return
+			fi
+
+			st install "$_got" "$TOTAL"
+			if [ "$PM" = apk ]; then
+				apk add --allow-untrusted "$F" >"$LOG" 2>&1; _rc=$?
+			else
+				opkg install --force-reinstall "$F" >"$LOG" 2>&1; _rc=$?
+			fi
+			rm -f "$F"
+
+			st finish "$_got" "$TOTAL"
 			case "$PM" in
 				apk)  apk del "$I18N" >/dev/null 2>&1 ;;
 				opkg) opkg remove "$I18N" >/dev/null 2>&1 ;;
@@ -140,29 +181,27 @@ install)
 			for _lmo in /usr/share/5gmodem/i18n/5gmodem.*.lmo; do
 				[ -f "$_lmo" ] && cp "$_lmo" /usr/lib/lua/luci/i18n/ 2>/dev/null
 			done
-
 			rm -rf /tmp/luci-indexcache* /tmp/luci-modulecache/* 2>/dev/null
+
 			CUR=$(installed_version "$PM")
-			if [ -n "$PREV" ] && [ "$CUR" = "$PREV" ]; then
-				_up_lat=$(latest_tag); _up_lat=${_up_lat#v}
-				if [ -n "$_up_lat" ] && [ "$_up_lat" = "$CUR" ]; then
-					printf '{"success":true,"installed":"%s","current":"%s","reinstalled":1}\n' \
-						"$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
-					return
-				fi
-				printf '{"success":false,"current":"%s","error":"Reinstalled but version stayed %s - the release asset looks mispackaged (rebuild/reupload it)"}\n' "$(json_esc "$CUR")" "$(json_esc "$CUR")"
-			else
-				printf '{"success":true,"installed":"%s","current":"%s"}\n' "$(json_esc "$(echo $INSTALLED)")" "$(json_esc "$CUR")"
+			if [ -n "$TARGET" ] && [ "$CUR" = "$TARGET" ]; then
+				[ "$_rc" = 0 ] || logger -t 5gmodem "update: $PM returned $_rc, but $PKG $TARGET is installed - treating as success"
+				printf '{"success":true,"current":"%s","previous":"%s","target":"%s"%s}\n' \
+					"$(json_esc "$CUR")" "$(json_esc "$PREV")" "$(json_esc "$TARGET")" \
+					"$([ "$PREV" = "$CUR" ] && echo ',"reinstalled":1')"
+				return
 			fi
+			if [ "$_rc" != 0 ]; then
+				fail "install_failed"; return
+			fi
+			fail "version_mismatch"
 		}
-		# $$ is the parent here, see docs/subsystems/misc.md#updatesh
 		read -r _upid _ < /proc/self/stat 2>/dev/null
 		echo "$_upid" > "$LOCK" 2>/dev/null
-		do_install > "$STATUS.tmp" 2>/dev/null
-		mv "$STATUS.tmp" "$STATUS"
+		do_install > "$STATUS.res" 2>/dev/null
+		mv "$STATUS.res" "$STATUS"
 		rm -f "$LOCK"
 	) >/dev/null 2>&1 </dev/null &
-	# see docs/subsystems/misc.md#updatesh (rpcd loses fast exit with a background child)
 	sleep 1
 	exit 0
 	;;
@@ -170,13 +209,15 @@ install)
 status)
 	if [ -s "$STATUS" ]; then
 		cat "$STATUS"
-	else
+	elif [ -f "$LOCK" ] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
 		echo '{"running":true}'
+	else
+		echo '{"idle":true}'
 	fi
 	;;
 
 *)
-	echo '{"success":false,"error":"usage: update.sh check|install|status"}'
+	echo '{"success":false,"error":"usage: update.sh version|check|install|status"}'
 	exit 1
 	;;
 esac

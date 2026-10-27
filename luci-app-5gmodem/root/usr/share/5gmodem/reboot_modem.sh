@@ -321,6 +321,16 @@ if [ "$MODE" = "hard" ] || [ -n "$_rb_sr" ]; then
 	  ubus call "network.interface.$_rb_mi" up >/dev/null 2>&1 || ifup "$_rb_mi" >/dev/null 2>&1
 	) >/dev/null 2>&1 </dev/null &
 	fi
+elif [ -n "$_rb_if" ] && [ "$(uci -q get "network.$_rb_if.proto")" = ccmni ]; then
+	IF="$_rb_if"
+	( ubus call "network.interface.$IF" down >/dev/null 2>&1
+		sms_tool -d "$PORT" at "AT+CFUN=0" >/dev/null 2>&1
+		sleep 2
+		sms_tool -d "$PORT" at "AT+CFUN=4" >/dev/null 2>&1
+		at_unlock
+		ubus call "network.interface.$IF" up >/dev/null 2>&1 || ifup "$IF" >/dev/null 2>&1
+	) >/dev/null 2>&1 </dev/null &
+	eval "exec $AT_LOCK_FD>&-"
 else
 	IF="$_rb_if"
 	[ -n "$IF" ] && : > "/tmp/5gmodem/bandrestore_$IF" 2>/dev/null

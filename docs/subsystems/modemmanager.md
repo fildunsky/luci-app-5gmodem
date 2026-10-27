@@ -47,6 +47,10 @@ With libudev-zero, MM does **not** scan existing devices at startup and lives on
 - A lock against parallel ups plus a cooldown. The lock is held for the whole attempt (MM wait + ifup + up to 90 s for the connect). A second ifup does teardown->setup and interrupts the connect: the modem swings registered<->disabling and never gets an IP. The stale-lock threshold (>5 min) only protects against a dead waiter. The state is checked again right before ifup, because the wait can last up to two minutes.
 - **`local` is mandatory** in this function and in `mm_recover_missing`. Without it, `_n` and the other variables leak into the service's main loop, whose counter is also `_n`. `$((_n+1))` on a string then crashes the shell: procd crash-loop, and no IP at boot (confirmed with a trace).
 
+### MM-only modules (DW5821e/T77W968 family)
+
+These modules are never switched to proto qmi/mbim (`.mmonly`). They still take the common path: event replay, then a rebind after 150 s, at most 2 rebinds (`.rebindn`), then `.rebindfail` with a power-cycle hint. Before 27.10.2026 the branch did `continue`. On a cold start the X20 firmware timed out MBIM init ("couldn't start initialization: Transaction timed out" -> "modem is unusable"), and MM never retried on its own. Nothing recovered the modem until a manual power-cycle, and a manual unbind/bind of the USB device brought it back. 05c6:90d5 (Compal) is still excluded from the rebind.
+
 ### Rebind instead of a manual report (`_mm_rebind`)
 
 `mmcli --report-kernel-event` gives MM the node name but none of the properties udev normally provides. With libudev-zero, MM adds the ports and immediately rejects them:

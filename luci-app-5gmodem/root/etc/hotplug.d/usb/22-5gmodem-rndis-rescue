@@ -1,0 +1,26 @@
+#!/bin/sh
+
+[ "$ACTION" = "add" ] || exit 0
+[ "$DEVTYPE" = "usb_device" ] || exit 0
+[ -n "$DEVPATH" ] || exit 0
+J=/etc/usb-mode.json
+_v=$(echo "$PRODUCT" | cut -d/ -f1); _p=$(echo "$PRODUCT" | cut -d/ -f2)
+_id="$(printf '%04x' "0x$_v"):$(printf '%04x' "0x$_p")"
+grep -q "\"$_id\": {" "$J" 2>/dev/null || exit 0
+_d="/sys$DEVPATH"
+_i="$_d/${_d##*/}:1.0"
+case "$(cat "$_i/bInterfaceClass" 2>/dev/null)/$(cat "$_i/bInterfaceSubClass" 2>/dev/null)/$(cat "$_i/bInterfaceProtocol" 2>/dev/null)" in
+	e0/01/03|ef/04/01) ;;
+	*) exit 0 ;;
+esac
+awk -v k="\"$_id\": {" '
+	!skip && index($0, k) { skip = 1; next }
+	skip { if ($0 ~ /^\t\t},?$/) skip = 0; next }
+	{ print }
+' "$J" > "$J.5gm" && jsonfilter -i "$J.5gm" -e '@.messages' >/dev/null 2>&1 && mv "$J.5gm" "$J" || { rm -f "$J.5gm"; exit 0; }
+logger -t 5gmodem "usbmode: $_id is an RNDIS device, not a CD-ROM - removed it from $J"
+(
+	sleep 2
+	[ -e "$_i/driver" ] || echo "${_i##*/}" > /sys/bus/usb/drivers/rndis_host/bind 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+exit 0
