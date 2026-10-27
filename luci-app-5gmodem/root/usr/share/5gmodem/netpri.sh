@@ -363,7 +363,6 @@ operator_probe() {
 		_op_p=$(uci5g_get "$_op_sec" path)
 		_op_n=$(/usr/share/5gmodem/hilink.sh json "$_op_p" 2>/dev/null \
 			| jsonfilter -e '@.operator_name' 2>/dev/null)
-		[ -n "$_op_n" ] || _op_n=$(uci5g_get "$_op_sec" model)
 		[ -n "$_op_n" ] && printf '%s' "$_op_n" > "/tmp/5gmodem/netpri_op_$i"
 		return
 	fi
