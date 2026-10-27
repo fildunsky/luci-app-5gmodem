@@ -44,6 +44,7 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 - [Telit (and HP lt4220)](modems/telit.md)
 - [Web-API sticks: `hilink.sh` architecture](modems/web-api-sticks.md)
 - [ZTE and Tenda: goform web API and AT profiles](modems/zte-tenda.md)
+- [ASR / Marvell Mi-Fi: Duster web API](modems/asr-duster.md)
 
 ## Other
 

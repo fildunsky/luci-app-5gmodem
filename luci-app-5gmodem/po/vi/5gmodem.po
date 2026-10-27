@@ -5575,8 +5575,8 @@ msgstr "Pin modem"
 msgid "Modem battery, charging"
 msgstr "Pin modem, đang sạc"
 
-msgid "The password of the modem's own web interface. With it the router reads signal, battery, SMS and can reboot the modem. Leave empty if the modem has no password."
-msgstr "Mật khẩu giao diện web riêng của modem. Với mật khẩu này, router đọc được tín hiệu, pin, SMS và có thể khởi động lại modem. Để trống nếu modem không có mật khẩu."
+msgid "The password of the modem's own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems."
+msgstr "Mật khẩu giao diện web riêng của modem (người dùng admin). Với nó, router đọc tín hiệu, pin, SMS và có thể khởi động lại modem. Để trống nghĩa là admin, mật khẩu xuất xưởng của hầu hết các modem loại này."
 
 msgid "The modem asks for its web password - enter it on the Modem page"
 msgstr "Modem yêu cầu mật khẩu web - hãy nhập trên trang Modem"
@@ -5965,8 +5965,6 @@ msgstr "Trình quản lý gói không cài được bản cập nhật."
 msgid "The package was installed, but the version did not change. The release file looks broken."
 msgstr "Gói đã được cài nhưng phiên bản không đổi. Có vẻ tệp phát hành bị lỗi."
 
-msgid "What is new in %s"
-msgstr "Có gì mới trong %s"
 
 msgid "Downloading: %d of %d KB"
 msgstr "Đang tải: %d / %d KB"

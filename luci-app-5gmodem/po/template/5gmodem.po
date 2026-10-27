@@ -346,8 +346,6 @@ msgstr ""
 msgid "The package was installed, but the version did not change. The release file looks broken."
 msgstr ""
 
-msgid "What is new in %s"
-msgstr ""
 
 msgid "Downloading: %d of %d KB"
 msgstr ""

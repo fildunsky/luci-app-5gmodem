@@ -70,35 +70,21 @@ function updNotesText(t) {
 	return String(t || '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 }
 
-function renderNotes(b64, ver, published, fresh) {
+function renderNotes(b64) {
 	var box = document.getElementById('upd-notes');
 	if (!box) { return; }
 	var txt = '';
 	try { txt = decodeURIComponent(escape(atob(b64 || ''))); } catch (e) { txt = ''; }
 	box.innerHTML = '';
-	if (!txt.trim()) { box.style.display = 'none'; return; }
-	var body = E('div', { 'class': 'upd-notes-body' }), list = null;
+	var body = E('div', { 'class': 'upd-notes' });
 	txt.replace(/\r/g, '').split('\n').forEach(function(line) {
 		var l = line.trim();
-		if (!l) { list = null; return; }
+		if (!l || /^#{1,6}\s/.test(l)) { return; }
 		var m = l.match(/^[-*+]\s+(.*)$/);
-		if (m) {
-			if (!list) { list = E('ul', {}); body.appendChild(list); }
-			list.appendChild(E('li', {}, [ updNotesText(m[1]) ]));
-			return;
-		}
-		list = null;
-		var h = l.match(/^#{1,6}\s+(.*)$/);
-		body.appendChild(h ? E('div', { 'class': 'upd-notes-h' }, [ updNotesText(h[1]) ]) : E('div', {}, [ updNotesText(l) ]));
+		body.appendChild(E('div', {}, [ m ? '- ' + updNotesText(m[1]) : updNotesText(l) ]));
 	});
-	var date = '';
-	if (published) { var d = new Date(published); if (!isNaN(d)) { date = ' · ' + d.toLocaleDateString(); } }
-	var det = E('details', { 'class': 'upd-notes' }, [
-		E('summary', {}, [ _('What is new in %s').format(ver || '—') + date ]),
-		body
-	]);
-	if (fresh) { det.setAttribute('open', 'open'); }
-	box.appendChild(det);
+	if (!body.childNodes.length) { box.style.display = 'none'; return; }
+	box.appendChild(body);
 	box.style.display = '';
 }
 
@@ -115,14 +101,14 @@ function checkUpdate() {
 		if (d.release_url) { var a = document.getElementById('upd-release'); if (a) { a.href = d.release_url; a.style.display = ''; } }
 		if (!d.success) {
 			updSet('upd-status', updErrText(d.error, _('Could not check for updates')));
-			renderNotes('', '', '', false);
+			renderNotes('');
 		} else if (d.update_available == 1 || d.update_available === true) {
 			updShow('upd-install', true);
 			updSetVer('upd-status', _('Update available'), latest || '—');
-			renderNotes(d.notes, latest, d.published, true);
+			renderNotes(d.notes);
 		} else {
 			updSet('upd-status', _('You have the latest version'));
-			renderNotes(d.notes, latest, d.published, false);
+			renderNotes('');
 		}
 	}).catch(function(err) {
 		updSet('upd-status', _('Could not check for updates') + ' ' + (err.message || err));
