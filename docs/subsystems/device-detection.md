@@ -231,8 +231,9 @@ Order of trust:
 
 Operator for the tab icon: first `/tmp/5gmodem/op_<iface>` from the main poller
 (it decodes UCS2, uses mccmnc.dat and replaces the host network with the MVNO
-brand), then `/tmp/5gmodem/netpri_op_<iface>` (HiLink modems without AT are
-only covered by netpri's web-API probe). Reversing the order would show
+brand), then `/tmp/5gmodem/netpri_op_<iface>`. The hilink branch of `5gmodem.sh` writes
+`op_<iface>` from the web API `operator_name` too, so HiLink modems get the tab icon from
+the first poll; netpri's own web-API probe never falls back to the model name. Reversing the order would show
 "Tele2 RU" where the card says "T-Mobile".
 
 ## Model name helpers (`lib.sh`)
