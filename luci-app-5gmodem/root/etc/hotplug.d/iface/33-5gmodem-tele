@@ -1,0 +1,18 @@
+#!/bin/sh
+[ "$ACTION" = ifup ] || exit 0
+[ -n "$INTERFACE" ] || exit 0
+[ -x /usr/share/5gmodem/telemetry.sh ] || exit 0
+
+CFG=5gmodem
+AM=$(uci -q get $CFG.@5gmodem[0].active_modem)
+[ -n "$AM" ] || exit 0
+SEC="$CFG.m_$(printf '%s' "$AM" | sed 's/[^A-Za-z0-9]/_/g')"
+case "$INTERFACE" in
+	"$(uci -q get $CFG.@5gmodem[0].network)"|"$(uci -q get "$SEC.network")") ;;
+	*) exit 0 ;;
+esac
+
+( exec 1000>&- 7>&- 8>&- 9>&- >/dev/null 2>&1 </dev/null
+  sleep 3
+  TELE_FORCE=1 /usr/share/5gmodem/telemetry.sh tick ) &
+exit 0

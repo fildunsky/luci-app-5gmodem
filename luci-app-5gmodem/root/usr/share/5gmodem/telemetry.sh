@@ -281,10 +281,10 @@ _refresh_snap() {
 	[ -e "/sys/bus/usb/devices/$_AM" ] || [ -e "/sys/bus/pci/devices/${_AM##*/}" ] || [ -d "/sys/bus/platform/devices/${_AM##*/}/remoteproc" ] || return 0
 	_rs_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 	case "$_rs_st" in
-		*[!0-9]*) _rs_st=0 ;;
-		'') _rs_st=0 ;;
+		*[!0-9]*) _rs_st="" ;;
 	esac
-	[ $(( $(cut -d. -f1 /proc/uptime) - _rs_st )) -ge "$_rf" ] || return 0
+	[ -n "$TELE_FORCE" ] || [ -z "$_rs_st" ] \
+		|| [ $(( $(cut -d. -f1 /proc/uptime) - _rs_st )) -ge "$_rf" ] || return 0
 	SW_BG=1 "$(dirname "$0")/5gmodem.sh" cached 60 "for=$_AM" >/dev/null 2>&1 &
 	_rs_p=$!
 	( sleep 25; kill "$_rs_p" 2>/dev/null ) >/dev/null 2>&1 &

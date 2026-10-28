@@ -1118,6 +1118,29 @@ return view.extend({
 		o.remove = function() {};
 		}
 
+		var ipwIf = (function() {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			var sc = p ? 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_') : '';
+			return (sc && uci.get('5gmodem', sc, 'network'))
+			       || uci.get('5gmodem', '@5gmodem[0]', 'network') || '';
+		})();
+		if (ipwIf && roamProto === 'fibocom') {
+		o = s.option(form.Flag, '_ipwatch', _('Follow network address changes'),
+			_('Checks the data session every few seconds. When the operator drops the session or assigns a new address (for example, a forced reconnect every few hours), the interface reconnects and takes the new address.'));
+		o.default = '0';
+		o.rmempty = false;
+		o.load = function() {
+			return uci.get('network', ipwIf, 'ipwatch') === '1' ? '1' : '0';
+		};
+		o.write = function(section_id, value) {
+			var v = (value === '1') ? '1' : '0';
+			if (v === (uci.get('network', ipwIf, 'ipwatch') === '1' ? '1' : '0')) { return; }
+			if (v === '1') { uci.set('network', ipwIf, 'ipwatch', '1'); }
+			else { uci.unset('network', ipwIf, 'ipwatch'); }
+		};
+		o.remove = function() {};
+		}
+
 		if (!activeIsHilink) {
 		var nsView = this;
 		o = s.option(form.DummyValue, '_netsel', _('Network selection'),
