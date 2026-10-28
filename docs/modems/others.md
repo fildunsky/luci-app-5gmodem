@@ -47,3 +47,9 @@ Identity only: fixed `MODEL`, `AT+CGMR`, `AT+GSN`, `AT+CIMI`, `AT+ICCID`.
 
 - Identity: `AT+CGMM?`, `AT+CGMI?`, `AT+GMR?`, `AT+CGSN?`, `AT+CIMI?`, `AT+ICCID`. Temperature: `AT+MTSM=1`.
 - `PROTO` is the driver of the network interface **under this modem's own USB path** (`/sys/class/tty/<tty>/device` → two levels up → `/sys/class/net/*` with that prefix and a trailing `/`). Before, a port missing from sysfs (the modem dropped off mid-poll) gave an empty base path, and `grep ""` matched every interface on the router, so the protocol came from someone else's card. Without the `/` boundary, path `1-1` also matched a neighbour modem on `1-1.2`.
+
+## Qualcomm MSM8916 SoC modem (`soc/05c68916`)
+
+Temperatures come from `/sys/class/thermal/thermal_zone*/{type,temp}` (milli-°C), matched by zone type, because zone numbers change between kernels. Mapping: `pa-thermal` PA, `cpu*-thermal` CPU (hottest zone), `pm8916-thermal` PMIC die, `battery-thermal` battery, `xo-thermal` board (the crystal next to the radio), `charger-thermal` charger. The profile publishes them as `temps` (`pa=.. bat=..`), and the page renders one badge per sensor. The main `mtemp` value is the PA. Without a PA zone it falls back to the hottest zone, which is usually the PMIC die (about 70 °C) and overstates the modem temperature.
+
+Battery: `status` Charging gives charging=1. Full and Not charging (stopped by the thermistor or the safety timer) give 0.

@@ -6169,6 +6169,9 @@ msgstr "Контроллер питания"
 msgid "Battery"
 msgstr "Батарея"
 
+msgid "Charger"
+msgstr "Контроллер заряда"
+
 msgid "Board"
 msgstr "Плата"
 

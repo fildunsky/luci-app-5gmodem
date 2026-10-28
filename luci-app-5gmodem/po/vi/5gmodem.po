@@ -5884,6 +5884,9 @@ msgstr "Bộ điều khiển nguồn"
 msgid "Battery"
 msgstr "Pin"
 
+msgid "Charger"
+msgstr "Bộ sạc"
+
 msgid "Board"
 msgstr "Bo mạch"
 

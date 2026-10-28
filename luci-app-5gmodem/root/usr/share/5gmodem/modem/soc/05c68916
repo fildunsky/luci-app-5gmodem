@@ -1,7 +1,18 @@
 [ -n "$DEVICE" ] && . "$RES/modem/usb/05c690b4"
 MODEL=$(soc_modem_model)
-T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
-[ -n "$T" ] && TEMP="$T &deg;C"
+TEMPS=$(for z in /sys/class/thermal/thermal_zone*; do
+	[ -r "$z/type" ] && echo "$(cat "$z/type" 2>/dev/null) $(cat "$z/temp" 2>/dev/null)"
+done | awk '$2 ~ /^-?[0-9]+$/ && $2 > 0 { k = ""
+	if ($1 == "pa-thermal") k = "pa"; else if ($1 ~ /^cpu[0-9-]*-thermal$/) k = "cpu"
+	else if ($1 == "pm8916-thermal") k = "pmic"; else if ($1 == "battery-thermal") k = "bat"
+	else if ($1 == "xo-thermal") k = "board"; else if ($1 == "charger-thermal") k = "charger"
+	if (k == "") next
+	if (!(k in v)) o[++n] = k
+	if (!(k in v) || $2 > v[k]) v[k] = $2 }
+	END { for (i = 1; i <= n; i++) printf "%s%s=%.1f", (i > 1 ? " " : ""), o[i], v[o[i]] / 1000 }')
+T=$(printf '%s' "$TEMPS" | tr ' ' '\n' | sed -n 's/^pa=//p')
+[ -n "$T" ] || T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
+[ -n "$T" ] && TEMP="${T%.*} &deg;C"
 _SOC_EXT=0
 for _SOC_PS in /sys/class/power_supply/*; do
 	case "$(cat "$_SOC_PS/type" 2>/dev/null)" in
@@ -26,7 +37,7 @@ for _SOC_PS in /sys/class/power_supply/*; do
 	BATTERY="$O"
 	case "$(cat "$_SOC_PS/status" 2>/dev/null)" in
 		Charging) BATTERY_CHG=1 ;;
-		Full) BATTERY_CHG=0 ;;
+		Full|'Not charging') BATTERY_CHG=0 ;;
 		*) BATTERY_CHG=$_SOC_EXT; [ "$O" -ge 100 ] && BATTERY_CHG=0 ;;
 	esac
 	break
