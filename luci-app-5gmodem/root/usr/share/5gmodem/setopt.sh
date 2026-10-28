@@ -19,6 +19,22 @@ roaming)
 	ubus call network reload >/dev/null 2>&1
 	ifup "$_ifn" >/dev/null 2>&1
 	;;
+ipwatch)
+	[ -n "$2" ] || exit 1
+	_sec=$(_sec_for_path "$2")
+	_ifn=$(uci -q get "5gmodem.$_sec.network")
+	[ -n "$_ifn" ] || _ifn=$(uci -q get 5gmodem.@5gmodem[0].network)
+	[ -n "$_ifn" ] || exit 1
+	note_foreign_uci network "setopt ipwatch"
+	if [ "$(_norm01 "$3")" = 1 ]; then
+		uci -q set "network.$_ifn.ipwatch=1"
+	else
+		uci -q delete "network.$_ifn.ipwatch"
+	fi
+	uci -q commit network
+	ubus call network reload >/dev/null 2>&1
+	ifup "$_ifn" >/dev/null 2>&1
+	;;
 atdebug)
 	[ -n "$2" ] || exit 1
 	_sec=$(_sec_for_path "$2")

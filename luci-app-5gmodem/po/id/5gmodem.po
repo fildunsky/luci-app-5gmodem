@@ -5959,6 +5959,9 @@ msgstr "Gagal mengunduh pembaruan dari GitHub. Periksa koneksi internet lalu cob
 msgid "The download was interrupted: the file is incomplete. Try again."
 msgstr "Unduhan terputus: berkas tidak lengkap. Coba lagi."
 
+msgid "The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again."
+msgstr "Manajer paket menolak memasang apa pun: /etc/apk/world mencantumkan %s, yang tidak dapat ditemukan apk (biasanya paket yang dipasang dari file). Jika paket itu sudah tidak terpasang, hapus barisnya dari /etc/apk/world; jika masih, pasang lagi dari filenya. Lalu coba pembaruan lagi."
+
 msgid "The package manager could not install the update."
 msgstr "Pengelola paket gagal memasang pembaruan."
 

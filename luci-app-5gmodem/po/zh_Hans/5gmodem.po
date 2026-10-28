@@ -5959,6 +5959,9 @@ msgstr "无法从 GitHub 下载更新。请检查网络连接后重试。"
 msgid "The download was interrupted: the file is incomplete. Try again."
 msgstr "下载中断，文件不完整。请重试。"
 
+msgid "The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again."
+msgstr "软件包管理器拒绝安装任何内容:/etc/apk/world 中列出了 %s,但 apk 找不到它(通常是从文件安装的软件包)。如果该软件包已不再安装,请从 /etc/apk/world 中删除对应行;否则请从文件重新安装。然后再次尝试更新。"
+
 msgid "The package manager could not install the update."
 msgstr "软件包管理器无法安装此更新。"
 

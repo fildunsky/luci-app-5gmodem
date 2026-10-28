@@ -5959,6 +5959,9 @@ msgstr "Không tải được bản cập nhật từ GitHub. Hãy kiểm tra k�
 msgid "The download was interrupted: the file is incomplete. Try again."
 msgstr "Quá trình tải bị gián đoạn, tệp chưa đầy đủ. Hãy thử lại."
 
+msgid "The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again."
+msgstr "Trình quản lý gói từ chối cài bất cứ thứ gì: /etc/apk/world có %s, nhưng apk không tìm thấy (thường là gói cài từ tệp). Nếu gói đó không còn được cài, hãy xóa dòng của nó khỏi /etc/apk/world; nếu còn, hãy cài lại từ tệp. Sau đó thử cập nhật lại."
+
 msgid "The package manager could not install the update."
 msgstr "Trình quản lý gói không cài được bản cập nhật."
 

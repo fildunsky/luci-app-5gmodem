@@ -6244,6 +6244,9 @@ msgstr "Не удалось скачать обновление с GitHub. Пр�
 msgid "The download was interrupted: the file is incomplete. Try again."
 msgstr "Скачивание прервалось, файл получен не полностью. Попробуйте снова."
 
+msgid "The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again."
+msgstr "Менеджер пакетов отказывается что-либо ставить: в /etc/apk/world указан %s, а apk его не находит (обычно это пакет, поставленный из файла). Если этого пакета уже нет, удалите его строку из /etc/apk/world, иначе поставьте его заново из файла. Затем повторите обновление."
+
 msgid "The package manager could not install the update."
 msgstr "Менеджер пакетов не смог установить обновление."
 

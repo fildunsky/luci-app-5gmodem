@@ -118,9 +118,22 @@ install)
 	echo '{"started":true}'
 	(
 		fail() {
-			printf '{"success":false,"error":"%s","detail":"%s","current":"%s","target":"%s"}\n' \
+			printf '{"success":false,"error":"%s","detail":"%s","current":"%s","target":"%s","pkgs":"%s"}\n' \
 				"$(json_esc "$1")" "$(json_esc "$(tail -n 4 "$LOG" 2>/dev/null)")" \
-				"$(json_esc "$(installed_version "$PM")")" "$(json_esc "$TARGET")"
+				"$(json_esc "$(installed_version "$PM")")" "$(json_esc "$TARGET")" "$(json_esc "$2")"
+		}
+		apk_world_blockers() {
+			awk '/^  [^ ].* \(no such package\):/ { n = $1; next }
+				n != "" && /required by: world\[/ { print n; n = ""; next }
+				/^  [^ ]/ { n = "" }' "$LOG" 2>/dev/null | sort -u | tr '\n' ' ' | sed 's/ $//'
+		}
+		apk_install() {
+			apk add --allow-untrusted "$F" >"$LOG" 2>&1 && return 0
+			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
+			[ -z "$(apk_world_blockers)" ] || return 1
+			logger -t 5gmodem "update: apk could not resolve dependencies - refreshing package lists and retrying"
+			apk update >/dev/null 2>&1
+			apk add --allow-untrusted "$F" >"$LOG" 2>&1
 		}
 		do_install() {
 			TARGET=""
@@ -167,7 +180,7 @@ install)
 
 			st install "$_got" "$TOTAL"
 			if [ "$PM" = apk ]; then
-				apk add --allow-untrusted "$F" >"$LOG" 2>&1; _rc=$?
+				apk_install; _rc=$?
 			else
 				opkg install --force-reinstall "$F" >"$LOG" 2>&1; _rc=$?
 			fi
@@ -192,6 +205,13 @@ install)
 				return
 			fi
 			if [ "$_rc" != 0 ]; then
+				if [ "$PM" = apk ]; then
+					_wb=$(apk_world_blockers)
+					if [ -n "$_wb" ]; then
+						logger -t 5gmodem "update: apk refuses any install - /etc/apk/world lists packages it cannot find: $_wb"
+						fail "world_broken" "$_wb"; return
+					fi
+				fi
 				fail "install_failed"; return
 			fi
 			fail "version_mismatch"
