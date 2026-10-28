@@ -4022,6 +4022,24 @@ msgstr "Открыть %s"
 msgid "No modem connected"
 msgstr "Модем не подключен"
 
+msgid "Turn the Wi-Fi client off while its network is out of range"
+msgstr "Выключать Wi-Fi-клиент, пока его сети нет рядом"
+
+msgid "With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch."
+msgstr "При одном радио точка доступа обязана стоять на канале Wi-Fi-клиента, поэтому клиент, который ищет пропавшую сеть, держит точку доступа выключенной. Через 30 с без связи клиент выключается, точка доступа работает на своём канале, интернет идёт через модем. Сканирование раз в 1,5 минуты включает клиент обратно, когда его сеть снова рядом. Устройства на точке доступа при каждом переключении отваливаются на несколько секунд."
+
+msgid "Wi-Fi client %s: %s"
+msgstr "Wi-Fi-клиент %s: %s"
+
+msgid "searching for the network"
+msgstr "ищет сеть"
+
+msgid "turned off"
+msgstr "выключен"
+
+msgid "turned off until its network is in range"
+msgstr "выключен, пока его сети нет рядом"
+
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Лечить Wi-Fi-аплинк, пока он лежит"
 

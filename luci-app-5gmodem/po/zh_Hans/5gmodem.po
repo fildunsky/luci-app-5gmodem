@@ -3778,6 +3778,24 @@ msgstr "打开 %s"
 msgid "No modem connected"
 msgstr "未连接调制解调器"
 
+msgid "Turn the Wi-Fi client off while its network is out of range"
+msgstr "网络不在范围内时关闭 Wi-Fi 客户端"
+
+msgid "With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch."
+msgstr "只有一个射频时,接入点必须与 Wi-Fi 客户端处于同一信道,因此搜索丢失网络的客户端会使接入点停止工作。无连接 30 秒后关闭客户端,接入点在自己的信道上工作,互联网经由调制解调器。每 1.5 分钟扫描一次,网络回到范围内时重新打开客户端。每次切换时接入点上的设备会断开几秒。"
+
+msgid "Wi-Fi client %s: %s"
+msgstr "Wi-Fi 客户端 %s:%s"
+
+msgid "searching for the network"
+msgstr "正在搜索网络"
+
+msgid "turned off"
+msgstr "已关闭"
+
+msgid "turned off until its network is in range"
+msgstr "已关闭,等待其网络回到范围内"
+
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Wi-Fi 上行链路断开时进行修复"
 

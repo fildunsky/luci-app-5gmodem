@@ -575,6 +575,8 @@ case "$1" in
 				is_iphone "${_ipw##*/}" && { usbmuxd_ensure >/dev/null 2>&1; break; }
 			done
 			"$RES/telemetry.sh" tick >/dev/null 2>&1
+			"$RES/stapark.sh" tick >/dev/null 2>&1
+			"$RES/mobile.sh" tick >/dev/null 2>&1
 		done
 		;;
 esac

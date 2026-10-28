@@ -45,6 +45,10 @@ case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
 case "$_cnt" in ''|*[!0-9]*) _cnt=0 ;; esac
 [ $((_now - _last)) -ge 60 ] || exit 0
 [ "$_cnt" -lt 3 ] || exit 0
+if ! command -v fastboot >/dev/null 2>&1 && [ ! -d /sys/bus/usb-serial/drivers/generic ]; then
+	logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, usb-serial-generic is not loaded yet - waiting for the boot-time retry"
+	exit 0
+fi
 printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 
 (
@@ -64,6 +68,7 @@ printf '%s %s\n' "$_now" $((_cnt + 1)) > "$_mark"
 	fi
 	[ -d /sys/bus/usb-serial/drivers/generic ] || {
 		logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but neither the fastboot binary nor usb-serial-generic is available - cannot rescue"
+		if [ "$_cnt" = 0 ]; then rm -f "$_mark"; else printf '%s %s\n' "$_last" "$_cnt" > "$_mark"; fi
 		exit 0
 	}
 	echo "${_id%%:*} ${_id##*:} ff" > /sys/bus/usb-serial/drivers/generic/new_id 2>/dev/null

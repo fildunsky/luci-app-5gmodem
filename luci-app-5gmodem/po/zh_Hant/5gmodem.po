@@ -3778,6 +3778,24 @@ msgstr "打開 %s"
 msgid "No modem connected"
 msgstr "未連接數據機"
 
+msgid "Turn the Wi-Fi client off while its network is out of range"
+msgstr "網路不在範圍內時關閉 Wi-Fi 用戶端"
+
+msgid "With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch."
+msgstr "只有一個射頻時,存取點必須與 Wi-Fi 用戶端處於同一頻道,因此搜尋遺失網路的用戶端會使存取點停止運作。無連線 30 秒後關閉用戶端,存取點在自己的頻道上運作,網際網路經由數據機。每 1.5 分鐘掃描一次,網路回到範圍內時重新開啟用戶端。每次切換時存取點上的裝置會中斷幾秒。"
+
+msgid "Wi-Fi client %s: %s"
+msgstr "Wi-Fi 用戶端 %s:%s"
+
+msgid "searching for the network"
+msgstr "正在搜尋網路"
+
+msgid "turned off"
+msgstr "已關閉"
+
+msgid "turned off until its network is in range"
+msgstr "已關閉,等待其網路回到範圍內"
+
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Wi-Fi 上行鏈路斷開時進行修復"
 

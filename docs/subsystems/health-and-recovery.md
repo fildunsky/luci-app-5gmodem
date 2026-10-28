@@ -142,6 +142,20 @@ The Wi-Fi uplink is detected from the wireless config (`wifi-iface` with `networ
 - **Step 2: rebuild only that radio** through `network.wireless` on ubus. The AP on it goes dark for a few seconds. This fixes the NO_DEVICE detach, which `REASSOCIATE` does not fix. `wifi up <radio>` cannot be used: `/sbin/wifi` calls `ubus call network reload` internally (`wifi_updown`) and so restarts every interface.
 - **Step 3: global `network reload`**, only when the radio rebuild failed **and** no other uplink is alive. An earlier version did this as step 2 and took down a working modem whenever Wi-Fi failed ("modem stopping network" in the log).
 
+## stapark.sh: Wi-Fi client parking (one radio)
+
+On a radio with one channel (`iw phy`: `#channels <= 1`, for example wcn36xx), the access point has to follow the channel of the station. When the station loses its network, wpa_supplicant scans every channel and the access point stays down until the network returns.
+
+With `5gmodem.health.sta_park=1`, `stapark.sh tick` runs every sessionwatch round:
+
+- A station that shares its radio with an enabled AP and has no link (`iw dev <sta> link` is not Connected) for `sta_park_wait` seconds (default 30) is parked: `wireless.<sec>.disabled=1` plus the marker `parked_by_5gmodem=1`, then commit and `ubus call network reload`. The access point comes up on its own channel, and the internet goes through the modem.
+- A parked station is looked for every `sta_park_scan` seconds (default 90, at least 30) with `iw dev <ap> scan ap-force`. The scan runs from the working access point, so it stays up. When the SSID (and the BSSID, if set) is seen, the marker and `disabled` are removed, and the station connects. The access point moves to the station's channel, and its devices drop for a few seconds.
+- When a station is re-enabled but never connects (wrong key, weak signal), the next scan interval doubles after each failure, up to 16 times `sta_park_scan`. Without this, the access point would switch channels every 1.5 minutes.
+- Only stations with the marker are touched. A station that the user disabled stays disabled. Turning the option off (or `stapark.sh off`) enables every parked station again.
+- The marker lives in the wireless config, so a parked station stays parked after a reboot until the scan finds its network.
+- The Wi-Fi uplink ladder skips an interface that has no enabled station. Without this rule it would "heal" the parked uplink by rebuilding the radio and take the access point down every cooldown.
+- `stapark.sh status` prints `{"enabled":..,"stations":[{"section","ssid","state"}]}`. The state is linked, searching, parked or off. The watchdog form shows it under the option.
+
 ## sessionwatch.sh: data session watchdog
 
 netifd brings an interface up once and then stops watching the session. If the network drops the session or recreates it with another address, the interface stays "up" with the old IP while traffic goes nowhere. Example: crossing into another macro-region, the operator handed out an address from another range (10.x -> 100.x), and only a manual ifup restored the connection.

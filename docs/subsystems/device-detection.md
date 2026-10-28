@@ -537,6 +537,15 @@ flashing); at most once per 60 s and 3 attempts per address per boot; switch
 list: it is the working MBIM composition of DW5829e (81e4 its eSIM variant),
 and a healthy modem got `fastboot reboot` on every hotplug.
 
+An attempt that has nothing to run on (no `fastboot` binary and no
+usb-serial-generic yet) does not count. On WH3000 Pro the modem enumerates at
+about 3 s and usb-serial-generic loads at about 10 s, and logd is not running
+yet either. The early hotplug used to write the throttle mark and fail
+silently, and then the 60 s throttle muted all six boot-time retries from
+`5gmodem-usbports` (`usbports.sh coldplug`, S50, every 5 s for 30 s). The
+modem stayed in fastboot until someone replugged it (user report, 3.9.2,
+2026-10-28).
+
 Path 1: a user-supplied `fastboot` binary (not in OpenWrt feeds). Path 2,
 without the binary: a fastboot command is a bare ASCII string in one bulk OUT
 transfer (U-Boot `doc/android/fastboot-protocol`, Android `fastboot/README`).

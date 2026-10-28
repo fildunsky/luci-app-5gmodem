@@ -26,6 +26,7 @@ is_manual() { case " $H_MAN " in *" $1 "*) return 0 ;; esac; return 1; }
 H_PG=$(conf proxy_guard); [ "$H_PG" = "0" ] || H_PG=1
 H_HEAL=$(conf healing); [ "$H_HEAL" = "0" ] || H_HEAL=1
 H_HEALWIFI=$(conf heal_wifi); [ "$H_HEALWIFI" = "0" ] || H_HEALWIFI=1
+H_STAPARK=$(conf sta_park); [ "$H_STAPARK" = "1" ] || H_STAPARK=0
 H_LR=$(conf lock_release); [ "$H_LR" = "0" ] || H_LR=1
 H_PSCRIPT=$(conf power_script)
 case "$H_PSCRIPT" in /*[!A-Za-z0-9/._-]*|/) H_PSCRIPT="" ;; /*) ;; *) H_PSCRIPT="" ;; esac
@@ -580,8 +581,10 @@ heal() {
 					fi
 				fi
 			fi
+			_h_stan=$(wifi_sta_count "$_h_if")
+			[ "$_h_stan" -gt 0 ] || continue
 			_h_multi=""
-			if [ "$(wifi_sta_count "$_h_if")" -gt 1 ]; then
+			if [ "$_h_stan" -gt 1 ]; then
 				_h_multi=1
 				_h_mw="/tmp/5gmodem/health.multi.$_h_if"
 				_h_mwt=$(cat "$_h_mw" 2>/dev/null)
@@ -1023,8 +1026,8 @@ getconf)
 		[ -n "$(uci -q get "$CFG.$_gc_s.path")" ] || continue
 		_gc_heal="$_gc_heal,\"$_gc_n\":\"$(uci -q get "$CFG.$_gc_s.heal")\""
 	done
-	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"manual":"%s","proxy_guard":%s,"lock_release":%s,"power_script":"%s","heal":{%s}}\n' \
-		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_MAN" "$H_PG" "$H_LR" "$H_PSCRIPT" "${_gc_heal#,}"
+	printf '{"enabled":%s,"interval":%s,"targets":"%s","fail_n":%s,"ok_n":%s,"failover":%s,"failback":"%s","healing":%s,"heal_wifi":%s,"sta_park":%s,"manual":"%s","proxy_guard":%s,"lock_release":%s,"power_script":"%s","heal":{%s}}\n' \
+		"${H_EN:-0}" "$H_INT" "$H_TGT" "$H_FAILN" "$H_OKN" "${H_FO:-0}" "$H_FB" "${H_HEAL:-0}" "${H_HEALWIFI:-0}" "$H_STAPARK" "$H_MAN" "$H_PG" "$H_LR" "$H_PSCRIPT" "${_gc_heal#,}"
 	;;
 setheal)
 	case "$3" in ''|none|ifup|reboot|power) ;; *) echo '{"error":"bad level"}'; exit 1 ;; esac
@@ -1043,7 +1046,7 @@ setconf)
 	for _sc in "$@"; do
 		_sc_k="${_sc%%=*}"; _sc_v="${_sc#*=}"
 		case "$_sc_k" in
-			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|heal_cooldown|manual|proxy_guard|lock_release) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
+			enabled|interval|targets|fail_n|ok_n|failover|failback|healing|heal_wifi|sta_park|heal_cooldown|manual|proxy_guard|lock_release) uci -q set "$CFG.health.$_sc_k=$_sc_v" ;;
 			power_script)
 				case "$_sc_v" in
 					'') uci -q delete "$CFG.health.power_script" ;;
