@@ -1,0 +1,16 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<mask id="mask0_eko" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="8" y="5" width="48" height="54">
+<path d="M17.75 5C12.3652 5 8 8.92869 8 13.775V50.225C8 55.0712 12.3652 59 17.75 59H46.25C51.6347 59 56 55.0712 56 50.225V24.6709C56 22.3437 54.9728 20.1117 53.1443 18.4661L41.0378 7.57013C39.2093 5.92451 36.7292 5 34.1435 5H17.75Z" fill="#A9A9A9"/>
+</mask>
+<g mask="url(#mask0_eko)">
+<rect x="7" y="4" width="50" height="56" fill="#0456A0"/>
+<mask id="stroke0_eko" fill="white">
+<path d="M17.75 5C12.3652 5 8 8.92869 8 13.775V50.225C8 55.0712 12.3652 59 17.75 59H46.25C51.6347 59 56 55.0712 56 50.225V24.6709C56 22.3437 54.9728 20.1117 53.1443 18.4661L41.0378 7.57013C39.2093 5.92451 36.7292 5 34.1435 5H17.75Z"/>
+</mask>
+<path d="M17.75 5C12.3652 5 8 8.92869 8 13.775V50.225C8 55.0712 12.3652 59 17.75 59H46.25C51.6347 59 56 55.0712 56 50.225V24.6709C56 22.3437 54.9728 20.1117 53.1443 18.4661L41.0378 7.57013C39.2093 5.92451 36.7292 5 34.1435 5H17.75Z" stroke-width="6" stroke="#A9A9A9" mask="url(#stroke0_eko)"/>
+<g transform="translate(32 34) scale(0.5) translate(-100 -99.5)" stroke="white" stroke-linecap="round" stroke-width="7.5">
+<path d="M81 95L100.5 102.5L120 95M88.5 118L100.5 103L112.5 118"/>
+<rect x="95.75" y="78.5" width="9" height="13" rx="4.5" fill="white" stroke="none"/>
+</g>
+</g>
+</svg>

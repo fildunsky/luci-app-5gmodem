@@ -538,13 +538,15 @@ list: it is the working MBIM composition of DW5829e (81e4 its eSIM variant),
 and a healthy modem got `fastboot reboot` on every hotplug.
 
 An attempt that has nothing to run on (no `fastboot` binary and no
-usb-serial-generic yet) does not count. On WH3000 Pro the modem enumerates at
-about 3 s and usb-serial-generic loads at about 10 s, and logd is not running
-yet either. The early hotplug used to write the throttle mark and fail
-silently, and then the 60 s throttle muted all six boot-time retries from
-`5gmodem-usbports` (`usbports.sh coldplug`, S50, every 5 s for 30 s). The
-modem stayed in fastboot until someone replugged it (user report, 3.9.2,
-2026-10-28).
+usb-serial-generic yet) does not count. The throttle only applies when a mark
+already exists: the old check `now - last >= 60` with no mark (`last=0`) muted
+every hotplug in the first minute of uptime. procd does not run hotplug.d before
+init, so the first chance is `5gmodem-usbports` (`usbports.sh coldplug`, S50,
+every 5 s for 30 s, uptime 21-51 s), and all six retries were dropped. The modem
+stayed in fastboot until someone replugged it (user report, 3.9.2, 2026-10-28;
+confirmed by a cold-boot trace). Only a cold power-on enters fastboot there: a
+soft reboot or a `modem_power` GPIO cycle does not. After `reboot` the modem
+returns as 81d7 in about 40 s.
 
 Path 1: a user-supplied `fastboot` binary (not in OpenWrt feeds). Path 2,
 without the binary: a fastboot command is a bare ASCII string in one bulk OUT

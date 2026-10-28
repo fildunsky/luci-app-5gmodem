@@ -5572,9 +5572,6 @@ msgstr "在手机上，“网络”页面会显示摘要栏、标签页和信号
 msgid "SIM card and modem memory (MT)"
 msgstr "SIM 卡和模块存储 (MT)"
 
-msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
-msgstr "注册被拒绝（部分模块固件会屏蔽该国家的网络，请检查固件版本）"
-
 msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
 msgstr "锁定到单个小区期间，模块通常会停用载波聚合，速度可能下降。"
 

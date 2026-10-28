@@ -5572,9 +5572,6 @@ msgstr "Di ponsel, halaman Jaringan mendapat bilah ringkasan, tab, dan ubin siny
 msgid "SIM card and modem memory (MT)"
 msgstr "Kartu SIM dan memori modem (MT)"
 
-msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
-msgstr "Pendaftaran ditolak (beberapa firmware modul memblokir jaringan negara ini - periksa versi firmware)"
-
 msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
 msgstr "Saat terkunci ke satu sel, modem biasanya menghentikan agregasi carrier, sehingga kecepatan dapat turun."
 

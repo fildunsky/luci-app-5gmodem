@@ -276,6 +276,10 @@ One round-trip: `AT+CPIN?;+CSQ;+COPS=3,0;+COPS?;+COPS=3,2;+COPS?;+CREG=2;+CREG?;
   COPS stays visited and `home_operator` carries the home brand; at home the brand
   (SPN, then `opname_brand` from apn.list) replaces the host network. Under MM IMSI
   is only known after the mmcli block, so `opname_brand` runs again there.
+- MVNOs that report the host PLMN and SPN (Ekomobile on MTS: 25001, "MTS RUS")
+  are told apart by APN: `opname_by_apn` matches the iface APN against
+  `opapn:<glob>:<name>` lines in apn.list, applied after `opname_brand`, at home
+  only.
 - `/tmp/5gmodem/op_<iface>` (read by `netpri.sh`) gets the home operator in
   roaming (the widget identifies the SIM, not the network). `op_cache_iface` only
   writes when the AT port belongs to the iface's modem; with no port it resolves
