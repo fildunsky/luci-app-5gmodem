@@ -340,6 +340,9 @@ msgstr ""
 msgid "The download was interrupted: the file is incomplete. Try again."
 msgstr ""
 
+msgid "The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again."
+msgstr ""
+
 msgid "The package manager could not install the update."
 msgstr ""
 
