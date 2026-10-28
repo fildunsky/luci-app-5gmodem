@@ -1145,6 +1145,7 @@ var TEMP_SENSORS = [
 	[ 'wifi', _('Wi-Fi'), '<path d="M2.5 9a14 14 0 0 1 19 0M5.8 12.4a9.2 9.2 0 0 1 12.4 0M9.1 15.8a4.4 4.4 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.2"/>' ],
 	[ 'pmic', _('Power controller'), '<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>' ],
 	[ 'bat', _('Battery'), '<rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4M10 9h4M10 13h4M10 17h4"/>' ],
+	[ 'charger', _('Charger'), '<path d="M9 2v5M15 2v5M6.5 7h11v4a5.5 5.5 0 0 1-11 0zM12 16.5V22"/>' ],
 	[ 'board', _('Board'), '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v4M17 8v4h-4M7 16h10"/><circle cx="7" cy="8" r=".8"/><circle cx="17" cy="8" r=".8"/><circle cx="7" cy="16" r=".8"/>' ]
 ];
 

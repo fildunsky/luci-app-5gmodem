@@ -5884,6 +5884,9 @@ msgstr "電源管理晶片"
 msgid "Battery"
 msgstr "電池"
 
+msgid "Charger"
+msgstr "充電器"
+
 msgid "Board"
 msgstr "主板"
 
