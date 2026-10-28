@@ -666,6 +666,18 @@ opname_brand() {
 	return 1
 }
 
+opname_by_apn() {
+	_oa_a=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+	[ -n "$_oa_a" ] || return 1
+	_oa_f="/usr/share/5gmodem/apn.list"
+	[ -f "$_oa_f" ] || return 1
+	while IFS=: read -r _t _pat _val; do
+		[ "$_t" = "opapn" ] && [ -n "$_pat" ] && [ -n "$_val" ] || continue
+		case "$_oa_a" in $_pat) echo "$_val"; return 0 ;; esac
+	done < "$_oa_f"
+	return 1
+}
+
 _model_sane() {
 	case "$1" in
 		AT+*|AT^*|AT$*|at+*|at^*) return 1 ;;

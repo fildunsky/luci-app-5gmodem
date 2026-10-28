@@ -43,7 +43,7 @@ _last=0; _cnt=0
 [ -f "$_mark" ] && read -r _last _cnt < "$_mark"
 case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
 case "$_cnt" in ''|*[!0-9]*) _cnt=0 ;; esac
-[ $((_now - _last)) -ge 60 ] || exit 0
+[ -f "$_mark" ] && [ $((_now - _last)) -lt 60 ] && exit 0
 [ "$_cnt" -lt 3 ] || exit 0
 if ! command -v fastboot >/dev/null 2>&1 && [ ! -d /sys/bus/usb-serial/drivers/generic ]; then
 	logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, usb-serial-generic is not loaded yet - waiting for the boot-time retry"

@@ -5572,9 +5572,6 @@ msgstr "Trên điện thoại, trang Mạng có thanh tóm tắt, các tab và �
 msgid "SIM card and modem memory (MT)"
 msgstr "Thẻ SIM và bộ nhớ modem (MT)"
 
-msgid "Registration denied (some module firmware blocks networks of this country - check the firmware version)"
-msgstr "Đăng ký bị từ chối (một số firmware mô-đun chặn mạng của quốc gia này - hãy kiểm tra phiên bản firmware)"
-
 msgid "While locked to one cell the modem usually stops carrier aggregation, so the speed may drop."
 msgstr "Khi khóa vào một cell, modem thường tắt gộp sóng (CA), nên tốc độ có thể giảm."
 
