@@ -1467,11 +1467,7 @@ function connStageText(json) {
 	var en = parseInt(json.usb_enum, 10);
 	if (en > 1) { tail = ' ' + _('(#%d)').format(en); }
 	if (/roaming.*not allowed|roaming_not_allowed/.test(cs)) { return _('Data roaming is off'); }
-	if (reg == '3') {
-		var mcc = String(json.imsi || json.operator_mcc || '').trim().slice(0, 3);
-		if (mcc == '250' || mcc == '432') { return _('Registration denied (some module firmware blocks networks of this country - check the firmware version)'); }
-		return _('Registration denied');
-	}
+	if (reg == '3') { return _('Registration denied'); }
 	if (json.no_at == '1' && (reg == '' || reg == '-')) { return _('Establishing connection…') + tail; }
 	if (reg != '1' && reg != '5') {
 		return (hasSig ? _('Searching for network…') : _('Initialising modem…')) + tail;
@@ -2826,7 +2822,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30903, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30904, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

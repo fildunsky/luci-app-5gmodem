@@ -79,6 +79,7 @@ plmn:250-62:tt
 # Мировая база providers.tsv тут устарела: 250-62 в ней ещё "Tinkoff Mobile",
 # а оператор ребрендился в T-Mobile - показываем наше выверенное имя.
 opname:250-62:T-Mobile
+opapn:ekomobile*:Ekomobile
 
 # --- зарубежные, которых чаще всего встречают в роуминге/travel-eSIM ---
 plmn:255-01:internet

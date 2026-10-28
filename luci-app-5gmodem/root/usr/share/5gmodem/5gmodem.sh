@@ -2237,6 +2237,7 @@ if [ "$IS_ROAMING" = "1" ]; then
 else
 	[ -n "$SPN_NAME" ] && COPS="$SPN_NAME"
 	_ob=$(opname_brand "$SIMID") && COPS="$_ob"
+	_ob=$(opname_by_apn "$(uci -q get "network.$SEC.apn")") && COPS="$_ob"
 	HOME_OP=""
 fi
 
@@ -2308,6 +2309,7 @@ if { [ "$IFPROTO" = modemmanager ] || [ -n "$_MM_OWNS" ]; } && command -v mmcli 
 		fi
 		if [ "$IS_ROAMING" != "1" ]; then
 			_ob_mm=$(opname_brand "${SIMID:-$NR_IMSI}") && COPS="$_ob_mm"
+			_ob_mm=$(opname_by_apn "$(uci -q get "network.$SEC.apn")") && COPS="$_ob_mm"
 		fi
 	fi
 fi

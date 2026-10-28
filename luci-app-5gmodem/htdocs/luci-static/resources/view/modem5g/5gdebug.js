@@ -6,6 +6,7 @@
 'require ui';
 'require uci';
 'require form';
+'require rpc';
 'require tools.widgets as widgets';
 'require view.modem5g.mutil as mutil';
 'require view.modem5g.fresh as fresh';
@@ -18,6 +19,26 @@
 
 
 var profilesView = null;
+
+var uciCommit = rpc.declare({
+	object: 'uci',
+	method: 'commit',
+	params: [ 'config' ],
+	expect: { '': {} }
+});
+
+function savePending(map) {
+	return Promise.resolve(map.save(null, true)).then(function() {
+		return uci.changes();
+	}).then(function(ch) {
+		var names = [];
+		for (var k in ch) { if ((ch[k] || []).length) { names.push(k); } }
+		return Promise.all(names.map(function(n) { return L.resolveDefault(uciCommit(n), null); }));
+	}).then(function() {
+		if (ui.changes && ui.changes.setIndicator) { ui.changes.setIndicator(0); }
+		return uci.unload([ 'network', '5gmodem' ]);
+	}).catch(function() {});
+}
 
 function modeSuffix(j) {
 	if (j.backend === 'hilink') { return ' (HiLink)'; }
@@ -114,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30903, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30904, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1303,7 +1324,9 @@ return view.extend({
 		o.inputstyle = 'apply';
 		o.onclick = function() {
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mkhilink' ]).then(function(res) {
+			return savePending(this.map).then(function() {
+				return fs.exec('/usr/share/5gmodem/modemswitch.sh', [ 'mkhilink' ]);
+			}).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
@@ -1351,7 +1374,9 @@ return view.extend({
 					if (mel) { var mv = String(mel.getValue()); if (mv === '0' || mv === '1') { mmArg = mv; } } }
 			} catch (e) {}
 			ui.showModal(null, E('p', { 'class': 'spinning' }, _('Creating the modem interface...')));
-			return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg, 'user' ]).then(function(res) {
+			return savePending(this.map).then(function() {
+				return fs.exec('/usr/share/5gmodem/mkiface.sh', [ 'modem', proto, apnArg, pdp, mmArg, 'user' ]);
+			}).then(function(res) {
 				ui.hideModal();
 				var out = {};
 				try { out = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}

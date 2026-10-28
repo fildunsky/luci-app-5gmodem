@@ -233,6 +233,13 @@ made `kernel_proto_prepare` spin forever.
   called through rpcd (`fs.exec`), which waits for EOF and fails with an XHR
   error after 30 s.
 
+## Unsaved form before recreate
+
+The Debug tab's "Recreate interface" buttons (mkiface and HiLink/tether) save
+the form first (`savePending`: `map.save(null, true)`, commit the changed
+configs, reset the changes indicator). Otherwise APN, auth and mode typed into
+the form were lost, and the new interface was built from the old config.
+
 ## netifd reload after recreate
 
 The interface section is deleted, rewritten and committed, but netifd's
