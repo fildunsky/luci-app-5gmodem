@@ -114,7 +114,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30901, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30902, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1133,10 +1133,13 @@ return view.extend({
 			return uci.get('network', ipwIf, 'ipwatch') === '1' ? '1' : '0';
 		};
 		o.write = function(section_id, value) {
+			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+			if (!p) { return; }
 			var v = (value === '1') ? '1' : '0';
-			if (v === (uci.get('network', ipwIf, 'ipwatch') === '1' ? '1' : '0')) { return; }
 			if (v === '1') { uci.set('network', ipwIf, 'ipwatch', '1'); }
 			else { uci.unset('network', ipwIf, 'ipwatch'); }
+			return fs.exec('/usr/share/5gmodem/setopt.sh',
+				[ 'ipwatch', String(p), v ]).catch(function() {});
 		};
 		o.remove = function() {};
 		}
@@ -1581,7 +1584,7 @@ return view.extend({
 			])
 		]);
 
-		var _instant = { '_web_pass': 1, '_roaming': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
+		var _instant = { '_web_pass': 1, '_roaming': 1, '_ipwatch': 1, '_mm_exclude': 1, '_mm_at': 1, '_no_at': 1, '_at_debug': 1, '_esim_show': 1 };
 		var _instLast = {};
 		(s.children || []).forEach(function(o) {
 			if (!o || !_instant[o.option]) { return; }

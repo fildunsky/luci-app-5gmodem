@@ -227,7 +227,8 @@ different IPv4) make it exit, and netifd reconnects the interface.
 
 The flag is shown in two places: Network → Interfaces → the modem interface → Advanced
 Settings, and the Modem tab (only for the fibocom proto). The interval is set only in
-Interfaces. The watcher starts on the next connect, so saving the flag reconnects the link.
+Interfaces. The watcher starts on the next connect, so the Modem tab saves the flag at once
+(`setopt.sh ipwatch`) and reconnects the link.
 
 ## qmi-recover.sh: QMI client-id pool exhaustion
 

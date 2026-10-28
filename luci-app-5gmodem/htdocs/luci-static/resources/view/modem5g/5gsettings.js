@@ -44,8 +44,10 @@ function updSetVer(id, label, ver) {
 	e.appendChild(E('strong', {}, [ String(ver == null ? '' : ver) ]));
 }
 function updShow(id, show) { var e = document.getElementById(id); if (e) { e.style.display = show ? '' : 'none'; } }
-function updErrText(e, fb) {
+function updErrText(e, fb, pk) {
 	switch (e) {
+	case 'world_broken':
+		return _('The package manager refuses to install anything: /etc/apk/world lists %s, which apk cannot find (usually a package installed from a file). If that package is no longer installed, delete its line from /etc/apk/world; otherwise install it again from its file. Then try the update again.').format(pk || '?');
 	case 'asset_pending':
 		return _('The update is still building on the server. Please wait about 15-20 minutes and try again.');
 	case 'no_space':
@@ -235,7 +237,7 @@ function pollInstall(tries, misses) {
 				updBusy(false);
 				return;
 			}
-			return failInstall(updErrText(d.error, _('Failed to install the update')), d.detail, d.target || updTarget);
+			return failInstall(updErrText(d.error, _('Failed to install the update'), d.pkgs), d.detail, d.target || updTarget);
 		});
 	}, 1000);
 }
@@ -322,7 +324,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30901, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30902, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
