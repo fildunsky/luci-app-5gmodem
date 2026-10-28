@@ -3778,6 +3778,24 @@ msgstr "Mở %s"
 msgid "No modem connected"
 msgstr "Chưa kết nối modem"
 
+msgid "Turn the Wi-Fi client off while its network is out of range"
+msgstr "Tắt máy khách Wi-Fi khi mạng của nó ngoài vùng phủ"
+
+msgid "With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch."
+msgstr "Với một sóng radio, điểm truy cập phải ở cùng kênh với máy khách Wi-Fi, nên máy khách đang tìm mạng bị mất sẽ làm điểm truy cập ngừng hoạt động. Sau 30 giây không có kết nối, máy khách bị tắt và điểm truy cập chạy trên kênh riêng, internet đi qua modem. Quét mỗi 1,5 phút sẽ bật lại máy khách khi mạng của nó trong vùng phủ. Các thiết bị trên điểm truy cập bị ngắt vài giây mỗi lần chuyển."
+
+msgid "Wi-Fi client %s: %s"
+msgstr "Máy khách Wi-Fi %s: %s"
+
+msgid "searching for the network"
+msgstr "đang tìm mạng"
+
+msgid "turned off"
+msgstr "đã tắt"
+
+msgid "turned off until its network is in range"
+msgstr "tắt cho đến khi mạng của nó trong vùng phủ"
+
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Khắc phục Wi-Fi uplink khi bị mất"
 
