@@ -3778,6 +3778,24 @@ msgstr "Buka %s"
 msgid "No modem connected"
 msgstr "Tidak ada modem terhubung"
 
+msgid "Turn the Wi-Fi client off while its network is out of range"
+msgstr "Matikan klien Wi-Fi selama jaringannya di luar jangkauan"
+
+msgid "With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch."
+msgstr "Dengan satu radio, titik akses harus berada di kanal klien Wi-Fi, sehingga klien yang mencari jaringan yang hilang membuat titik akses mati. Setelah 30 dtk tanpa koneksi, klien dimatikan dan titik akses bekerja di kanalnya sendiri, internet lewat modem. Pemindaian setiap 1,5 menit menyalakan klien lagi saat jaringannya dalam jangkauan. Perangkat di titik akses terputus beberapa detik pada setiap peralihan."
+
+msgid "Wi-Fi client %s: %s"
+msgstr "Klien Wi-Fi %s: %s"
+
+msgid "searching for the network"
+msgstr "mencari jaringan"
+
+msgid "turned off"
+msgstr "dimatikan"
+
+msgid "turned off until its network is in range"
+msgstr "dimatikan sampai jaringannya dalam jangkauan"
+
 msgid "Heal the Wi-Fi uplink while it is down"
 msgstr "Pulihkan uplink Wi-Fi saat mati"
 

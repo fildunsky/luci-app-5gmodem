@@ -5,9 +5,10 @@
 
 var HBIN = '/usr/share/5gmodem/health.sh';
 var NBIN = '/usr/share/5gmodem/netpri.sh';
+var PBIN = '/usr/share/5gmodem/stapark.sh';
 
 return baseclass.extend({
-	API: 30902,
+	API: 30903,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),
@@ -83,6 +84,9 @@ return baseclass.extend({
 		});
 		var wWifi = cb(String(c.heal_wifi) === '1', 'hw-heal-wifi');
 		var hasWifi = uplinks.some(function(o) { return o.type === 'wifi'; }) || String(c.heal_wifi) === '1';
+		var wPark = cb(String(c.sta_park) === '1', 'hw-sta-park');
+		var hasSta = hasWifi || String(c.sta_park) === '1';
+		var parkSt = E('div', { 'class': 'cbi-value-description', 'id': 'hw-sta-park-st' });
 		var wLr = cb(String(c.lock_release) !== '0', 'hw-lock-release');
 		var hasModem = healSel.length > 0 || String(c.lock_release) === '0';
 
@@ -118,10 +122,28 @@ return baseclass.extend({
 			row(_('Heal the Wi-Fi uplink while it is down'), wWifi.render())
 		]) : null;
 
+		var grpPark = hasSta ? E('div', {}, [
+			row(_('Turn the Wi-Fi client off while its network is out of range'), wPark.render(),
+				_('With one radio the access point has to stay on the channel of the Wi-Fi client, so a client that searches for a missing network keeps the access point down. After 30 s without a link the client is turned off and the access point works on its own channel, the internet goes through the modem. A scan every 1.5 minutes turns the client back on when its network is in range. Devices on the access point drop for a few seconds at each switch.')),
+			parkSt
+		]) : null;
+		var fillPark = function() {
+			if (!grpPark) { return; }
+			L.resolveDefault(fs.exec_direct(PBIN, [ 'status' ]), '{}').then(function(t) {
+				var d = {}; try { d = JSON.parse(t) || {}; } catch (e) {}
+				var lbl = { linked: _('connected'), searching: _('searching for the network'),
+					parked: _('turned off until its network is in range'), off: _('turned off') };
+				parkSt.textContent = (d.stations || []).map(function(st) {
+					return _('Wi-Fi client %s: %s').format(st.ssid || st.section, lbl[st.state] || st.state);
+				}).join(' · ');
+			});
+		};
+		fillPark();
+
 		var node = E('div', { 'class': 'hw-form' }, [
 			row(_('Enable watching'), wEn.render()),
 			grpWatch, grpFo
-		].concat(grpHeal ? [ grpHeal ] : []).concat(grpLr ? [ grpLr ] : []).concat(grpWifi ? [ grpWifi ] : []));
+		].concat(grpHeal ? [ grpHeal ] : []).concat(grpLr ? [ grpLr ] : []).concat(grpWifi ? [ grpWifi ] : []).concat(grpPark ? [ grpPark ] : []));
 
 		var deps = function() {
 			var en = wEn.isChecked();
@@ -151,6 +173,7 @@ return baseclass.extend({
 				'failover=' + (wFo.isChecked() ? '1' : '0'),
 				'healing=' + (healSel.length ? (wHeal.isChecked() ? '1' : '0') : (String(c.healing) === '1' ? '1' : '0')),
 				'heal_wifi=' + (hasWifi ? (wWifi.isChecked() ? '1' : '0') : (String(c.heal_wifi) === '1' ? '1' : '0')),
+				'sta_park=' + (hasSta ? (wPark.isChecked() ? '1' : '0') : '0'),
 				'lock_release=' + (hasModem ? (wLr.isChecked() ? '1' : '0') : (String(c.lock_release) === '0' ? '0' : '1')),
 				'failback=' + wFb.getValue(),
 				'interval=' + n(wInt, 30),
@@ -165,6 +188,7 @@ return baseclass.extend({
 				}));
 			}).then(function() {
 				L.resolveDefault(fs.exec(HBIN, [ 'once' ]), null);
+				if (hasSta) { L.resolveDefault(fs.exec(PBIN, [ 'tick' ]), null).then(fillPark); }
 			});
 		};
 		if (opts && opts.autosave) {
