@@ -217,6 +217,18 @@ If the interface runs on umbim/uqmi (proto mbim/qmi/qmiraw) and an mbim-proxy/qm
 - **Uncommitted 5gmodem uci delta.** The Settings page stages edits immediately (visible to everyone through `/tmp/.uci`), but the commit is a separate rpcd exec. If rpcd is busy and the user leaves the page, the commit is lost and the edit disappears after reboot (ZBT-Z8102AX, Aug 2026). A delta unchanged for two rounds is committed here. sessionwatch never stages 5gmodem edits itself.
 - SMS order: bot -> commands -> drain. The drain deletes from the modem only what both the bot and the command handler have processed. Non-active modems are drained every 5 minutes. The unread mirror for external programs (`sms.mirror_interval`, default 60 s, 0 = off) is written atomically. It is skipped for modems with `bg_at_off`.
 
+## fiboipwatch.sh: operator address changes (fibocom proto)
+
+Some operators drop the data session or hand out a new address every few hours while the
+modem keeps the old one on the interface. With `network.<iface>.ipwatch=1` the fibocom proto
+starts `fiboipwatch.sh` next to the session. Every `ipwatch_interval` seconds (default 20,
+range 5-3600) it asks `AT+CGACT?` and `AT+CGPADDR=1`. Two bad checks in a row (CGACT=0 or a
+different IPv4) make it exit, and netifd reconnects the interface.
+
+The flag is shown in two places: Network → Interfaces → the modem interface → Advanced
+Settings, and the Modem tab (only for the fibocom proto). The interval is set only in
+Interfaces. The watcher starts on the next connect, so saving the flag reconnects the link.
+
 ## qmi-recover.sh: QMI client-id pool exhaustion
 
 Some modems (Compal RXM-G1 / Qualcomm SDX55) have a tiny QMI client pool, measured at about 6 per NAS service. Any leak (a direct QMI call killed on timeout does not release its CID, or MM's retry loop on failure) exhausts it. MM then cannot create a NAS client and its init fails ("couldn't peek client for service nas" -> `state=failed`, `unknown-capabilities`). The modem loses both data and band control (Compal bands work only through MM). Leaked CIDs cannot be released because their numbers are unknown, so the only fix is `AT+CFUN=1,1`: after re-enumeration the pool is clean.
