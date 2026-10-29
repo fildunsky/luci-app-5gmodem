@@ -8,7 +8,7 @@ var NBIN = '/usr/share/5gmodem/netpri.sh';
 var PBIN = '/usr/share/5gmodem/stapark.sh';
 
 return baseclass.extend({
-	API: 30904,
+	API: 30905,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),

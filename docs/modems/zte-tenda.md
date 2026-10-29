@@ -7,6 +7,7 @@ ZTE sticks and Mi-Fi devices (MF79 family, MF8xx, Tenda MF6) without AT ports ar
 | USB ID | Model | Profile / backend | Metric sources |
 |---|---|---|---|
 | 19d2:* without AT (MF79U/MF79N, ...) | ZTE goform stick | `hilink.sh` `zte_metrics_json` | `goform_get_cmd_process?multi_data=1&cmd=...` |
+| 19d2:0558, 19d2:0536 (debug) | Olax MT80 (ZXIC ZX297520), CD-ROM 19d2:0548 | `hilink.sh` `zte_metrics_json`, bands `modemband/19d20581` | `reqproc/proc_get` with `nv_*` fields; AT on the first two vendor ports in debug |
 | 19d2:* with the Tenda API (Tenda MF6) | Tenda Mi-Fi | `hilink.sh` `tenda_metrics_json` | `goform/getModules?modules=deviceInfo,connectStatus,batteryInfo,networkConfig` |
 | 19d2:1485 | MF286D, MF289F | `modem/usb/19d21485` | `at+zrssi;+zcellinfo?;+zcainfo?`, `ati`, `AT+GMR` |
 | 19d2:1489 | MF286R (ASR) | `modem/usb/19d21489` | `at+zrssi;+zcellinfo?;+zcainfo?`, `AT*MRD_IMEI?`, `AT*ICCID?` |
@@ -28,6 +29,9 @@ ZTE sticks and Mi-Fi devices (MF79 family, MF8xx, Tenda MF6) without AT ports ar
 - Registration: `ppp_status=ppp_connected`. Roaming (5) when `rmcc` differs from `hmcc`.
 - Network mode: `net_select` is read, `SET_BEARER_PREFERENCE&BearerPreference=<mode>%0A<priority>` is written (`NETWORK_auto`, `Only_GSM`, `Only_WCDMA`, `Only_LTE`; priority from `net_priority`, default `LTE_preferred`).
 - Debug mode: `SET_DEVICE_MODE&debug_enable=1|0`, then a reboot.
+- **`nv_*` fallback (ZXIC, Olax MT80)**: `lte_rsrq`, `lte_snr`, `lte_pci` and `lac_code` stay empty or 0. The device's own web UI reads `nv_rsrp` (RSRP = v - 141), `nv_rsrq` ((v - 40) / 2), `nv_sinr` (dB), `nv_pci` and `nv_arfcn`, all readable without login; they are used only when the standard fields are empty. TAC comes from `tac_code` (decimal), MCC/MNC from `mcc`/`mnc` when `rmcc`/`hmcc` are empty. Firmware `MT80SX1.0_..._OLAX_...` gives the model "Olax MT80".
+- **Battery over ADB (`zx_battery`)**: when `battery_vol_percent` is empty and the device has an ADB interface (`ff/42`), read `/sys/class/power_supply/battery/voltage_now` (mV) and `nv get mmi_battery_voltage_line` over ADB by the USB serial, and interpolate the same way the screen app `zte_mifi` does (points at 0, 5, ... 100 %). Cached for a minute. While charging the voltage reads high, so the percent is optimistic.
+- Not available on MT80: per-antenna levels (`AT+ZEMSCIQ` carries serving and neighbour cells only), temperatures (`AT+GETPATEMP` and battery temp are raw ADC values without a known scale).
 
 ### ZTE SMS (goform)
 

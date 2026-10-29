@@ -464,7 +464,7 @@ case "$REQ" in
 		else
 		case "$DRV" in
 			cdc_mbim) PROTO="mbim" ;;
-			qmi_wwan) PROTO="qmi" ;;
+			qmi_wwan|qmi_wwan_[qfs]) PROTO="qmi" ;;
 			*)        PROTO="mbim" ;;
 		esac
 		_mki_vp=""
@@ -494,6 +494,13 @@ case "$REQ" in
 				fi
 				;;
 		esac
+			if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/qmiraw.sh ]; then
+				case "$DRV" in
+					qmi_wwan_[qfs])
+						logger -t 5gmodem "mkiface: $_mki_vp is on the vendor driver $DRV (fixed raw-ip): proto=qmiraw"
+						PROTO="qmiraw" ;;
+				esac
+			fi
 			if [ "$PROTO" = "qmi" ] && [ -f /lib/netifd/proto/qmiraw.sh ]; then
 				case "$_mki_vp" in
 					1e0e:*) logger -t 5gmodem "mkiface: $_mki_vp - SimCom QMI: proto=qmiraw (802.3 without DHCP)"; PROTO="qmiraw" ;;

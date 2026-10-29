@@ -403,7 +403,7 @@ function refresh() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30904, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30905, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -480,10 +480,8 @@ return view.extend({
 						}
 					}),
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [
-							_('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats'),
-							E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
-						])
+						_('Empty - the router\'s own memory (%s). A path on a USB drive also gets the chart series, not just monthly totals.').format(lst.path_default || '/etc/5gmodem/stats'),
+						E('div', { 'id': 'st-path-now', 'style': 'margin-top:4px' }, [ pathNowText(lst) ])
 					])
 				])
 			]),

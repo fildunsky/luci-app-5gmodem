@@ -1117,8 +1117,8 @@ function renderDebugBtn(json) {
 	}, _('debug')));
 }
 
-var HL_DEBUG_ON = { '19d2:0581': 1 };
-var HL_DEBUG_CAN = { '19d2:1557': 1, '19d2:0581': 1 };
+var HL_DEBUG_ON = { '19d2:0581': 1, '19d2:0536': 1 };
+var HL_DEBUG_CAN = { '19d2:1557': 1, '19d2:0581': 1, '19d2:0558': 1, '19d2:0536': 1 };
 
 function hilinkHasDebug(json) {
 	var vp = String(json.vidpid || '');
@@ -2822,7 +2822,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30904, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30905, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

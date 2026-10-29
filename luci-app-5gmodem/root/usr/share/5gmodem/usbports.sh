@@ -8,7 +8,7 @@ driver_for() {
 		03f0:9d1d) echo "option1" ;;
 		413c:81d8|1bc7:1911) echo "option1" ;;
 		2c7c:6004|1bbb:0196) echo "option1" ;;
-		2cb7:0110|19d2:0581) echo "option1" ;;
+		2cb7:0110|19d2:0581|19d2:0536) echo "option1" ;;
 		*)         echo "generic" ;;
 	esac
 }
@@ -17,7 +17,7 @@ newid_for() {
 	case "$1:$2" in
 		05c6:9091|05c6:90b4) echo "$1 $2 ff" ;;
 		413c:81d8|1bc7:1911) echo "$1 $2 ff" ;;
-		2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581) echo "$1 $2 ff" ;;
+		2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
 	esac
 }
@@ -33,7 +33,7 @@ data_iface_for() {
 
 _has_adb_iface() {
 	case "$1:$2" in
-		05c6:9025|05c6:9091|05c6:90b4|05c6:90d5|1bbb:0196|2cb7:0110|19d2:0581) return 0 ;;
+		05c6:9025|05c6:9091|05c6:90b4|05c6:90d5|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536) return 0 ;;
 		*)                   return 1 ;;
 	esac
 }
@@ -58,7 +58,7 @@ _rescue_rmnet() {
 					_rr_if=$(basename "$_rr_i")
 					echo "$_rr_if" > "$_rr_i/driver/unbind" 2>/dev/null
 					_rr_ok=0
-					for _rr_nat in qmi_wwan cdc_mbim cdc_ncm cdc_ether rndis_host; do
+					for _rr_nat in qmi_wwan qmi_wwan_q qmi_wwan_f qmi_wwan_s cdc_mbim cdc_ncm cdc_ether rndis_host; do
 						[ -d "/sys/bus/usb/drivers/$_rr_nat" ] || continue
 						echo "$_rr_if" > "/sys/bus/usb/drivers/$_rr_nat/bind" 2>/dev/null || continue
 						[ -e "$_rr_i/driver" ] || continue
@@ -150,7 +150,7 @@ bind_ports() {
 		sleep 1
 		_rescue_data "$1" "$2"
 	fi
-	if [ "$1:$2" = "1bbb:0196" ] || [ "$1:$2" = "2cb7:0110" ] || [ "$1:$2" = "19d2:0581" ]; then
+	if [ "$1:$2" = "1bbb:0196" ] || [ "$1:$2" = "2cb7:0110" ] || [ "$1:$2" = "19d2:0581" ] || [ "$1:$2" = "19d2:0536" ]; then
 		sleep 1
 		_release_adb "$1" "$2"
 	fi
@@ -205,7 +205,7 @@ coldplug() {
 				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091|05c6:90b4) bind_ports "$_cp_v" "$_cp_p" ;;
-			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581) bind_ports "$_cp_v" "$_cp_p" ;;
+			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536) bind_ports "$_cp_v" "$_cp_p" ;;
 			05c6:9063) pick_config "$_cp_d" 3 ;;
 			03f0:9d1d) pick_config "$_cp_d" 1; sleep 2; bind_ports "$_cp_v" "$_cp_p" ;;
 		esac
