@@ -2507,6 +2507,16 @@ html:not(.tg-boxed-sec) #modem-info-block:not([data-rat]) {
 #modem-info-block[data-rat] .tginfo-info *:not(.btn),
 #modem-info-block[data-rat] #apnline,
 #modem-info-block[data-rat] #apnline * { color: inherit !important; }
+#modem-info-block[data-rat] .cbi-tooltip,
+#modem-info-block[data-rat] .cbi-tooltip * {
+  color: #fff !important;
+  text-shadow: none !important;
+}
+#modem-info-block[data-rat] .cbi-tooltip {
+  background: var(--tg-rat-bg) !important;
+  border-color: transparent !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35) !important;
+}
 #modem-info-block[data-rat] .tg-proto-badge { color: #fff !important; border-color: rgba(255, 255, 255, .45) !important; background: transparent !important; }
 #modem-info-block[data-rat] #proto-chip {
   opacity: 1 !important;
