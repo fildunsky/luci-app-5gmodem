@@ -36,6 +36,7 @@ The web UI lives in `htdocs/luci-static/resources/view/modem5g/`. `5gdetail.js` 
 - The model parsed from `AT+CGMM` (`5gmodem.m_<path>.model`) wins over both. SimCom reports "SimTech, Incorporated", and `1e0e:9001` is shared by SIM7100/7600/8200.
 - A user alias (resolved by `listmodems`: bound to IMEI, falling back to the path section) beats any automatic name. Aliases are never de-duplicated.
 - When two automatic labels are identical, the USB path is appended to them. The path is tied to the physical port, so it stays the same across reboots.
+- The Modem tab offers MBIM+MM only when the active modem's cdc-wdm is on `cdc_mbim` (`modemswitch.sh wdmdrv`, result `res[7]` of `_load5g`). From 3.5.21 to 3.9.6 the call was missing and the check read the LED list, so the option was hidden for everyone not already on it.
 - The USB icon is shown for VID `12d1` (Huawei sticks). Having a netdev is not a usable sign, because M.2 ECM modules (FM350) have one too. An operator logo replaces the hardware icon once `listmodems` reports a recognised operator.
 - Labels are cached in localStorage, so the placeholder row drawn before any request matches the final text.
 

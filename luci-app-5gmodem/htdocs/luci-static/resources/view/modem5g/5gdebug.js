@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30906, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30907, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -150,7 +150,8 @@ return view.extend({
 			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(uci.load('network')),
 			L.resolveDefault(fs.list('/www/luci-static/resources/protocol'), []),
-			L.resolveDefault(fs.list('/sys/class/leds'), [])
+			L.resolveDefault(fs.list('/sys/class/leds'), []),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/modemswitch.sh', [ 'wdmdrv' ]), '')
 		]);
 	},
 
@@ -755,7 +756,7 @@ return view.extend({
 			var m = (f.name || '').match(/^([a-z0-9]+)\.js$/);
 			if (m) { protoAvail[m[1]] = true; }
 		});
-		var wdmDriver = String(res[res.length - 1] || '').trim();
+		var wdmDriver = String(res[7] || '').trim();
 		if (wdmDriver !== 'cdc_mbim' && uci.get('5gmodem', '@5gmodem[0]', 'iface_proto') !== 'mbimp') {
 			protoAvail['mbimp'] = false;
 		}
