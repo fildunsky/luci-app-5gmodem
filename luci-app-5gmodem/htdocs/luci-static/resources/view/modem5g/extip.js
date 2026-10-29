@@ -52,7 +52,7 @@ function withFlag(ip, cc) {
 }
 
 return baseclass.extend({
-	API: 30905,
+	API: 30906,
 	init: function() {
 		if (_inited) { return _inited; }
 		_inited = L.resolveDefault(uci.load('5gmodem')).then(function() {

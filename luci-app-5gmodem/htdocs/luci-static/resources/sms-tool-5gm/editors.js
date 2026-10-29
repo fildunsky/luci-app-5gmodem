@@ -984,7 +984,7 @@ let atCommandsManagerDialog = baseclass.extend({
 });
 
 return baseclass.extend({
-	API: 30905,
+	API: 30906,
 	phonebookEditorDialog: phonebookEditorDialog,
 	ussdCodesManagerDialog: ussdCodesManagerDialog,
 	atCommandsManagerDialog: atCommandsManagerDialog

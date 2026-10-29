@@ -480,6 +480,17 @@ case "$REQ" in
 			PROTO="modemmanager"
 			MKI_COMPAL_MM=1
 		fi
+		if [ "$PROTO" = "mbim" ] && [ "$DRV" = "cdc_mbim" ] && [ -f /lib/netifd/proto/mbimp.sh ] \
+		   && command -v mbimcli >/dev/null 2>&1; then
+			case "$_mki_vp" in
+				05c6:9063)
+					if is_compal "$AMP" "$DEV"; then
+						logger -t 5gmodem "mkiface: Compal RXM-G1 / SG500M2-X ($_mki_vp) on MBIM - dialling via mbimcli (proto mbimp, umbim fails to connect the bearer)"
+						PROTO="mbimp"
+					fi
+					;;
+			esac
+		fi
 		case "$_mki_vp" in
 			413c:81d7|413c:81e0|413c:81e4|413c:81e6|413c:81d8|0489:e0b5|0489:e0b4|1bc7:1911|05c6:9025|03f0:9d1d)
 				if [ -f /lib/netifd/proto/modemmanager.sh ]; then
