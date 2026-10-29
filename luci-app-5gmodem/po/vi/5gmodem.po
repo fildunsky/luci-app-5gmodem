@@ -1816,9 +1816,6 @@ msgstr "Không thể kiểm tra cập nhật"
 msgid "You have the latest version"
 msgstr "Bạn đang dùng phiên bản mới nhất"
 
-msgid "Download and install the latest version now?"
-msgstr "Tải xuống và cài đặt phiên bản mới nhất ngay bây giờ?"
-
 msgid "Installing the update…"
 msgstr "Đang cài đặt bản cập nhật…"
 

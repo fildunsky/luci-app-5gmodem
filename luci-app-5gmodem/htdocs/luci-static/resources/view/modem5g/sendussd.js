@@ -99,6 +99,7 @@ function typewrite(el, text) {
 		el.textContent = text;
 		return;
 	}
+	el._twText = text;
 	el.textContent = '';
 	var i = 0, n = text.length;
 	var step = Math.max(1, Math.ceil(n / 90));
@@ -526,7 +527,7 @@ return view.extend({
 			if (j.error)
 				return { stdout: '', stderr: _('The request was rejected: %s').format(String(j.error)) };
 			return new Promise(function(resolve) {
-				var left = 30, inflight = false, timer = null;
+				var left = 60, inflight = false, timer = null;
 				var tick = function() {
 					if (inflight) { return; }
 					inflight = true;
@@ -587,13 +588,21 @@ return view.extend({
 							? L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-cancel' ]), {})
 							: Promise.resolve())
 						.then(function() { return self.mmUssd(String(modemNum), mode, ussd); })
-						.then(function(res) { return self.handleCommand('/usr/bin/mmcli', [], res); })
+						.then(function(res) {
+							self._ussdFailed = !!(res && res.stderr && !res.stdout);
+							return self.handleCommand('/usr/bin/mmcli', [], res);
+						})
 						.then(function() {
 						return L.resolveDefault(fs.exec('/usr/bin/mmcli', [ '-m', modemNum, '--timeout=10', '--3gpp-ussd-status' ]), {}).then(function(r) {
-							self.ussdSessionActive = /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');
+							self.ussdSessionActive = !self._ussdFailed && /status:\s*(?:user-response|active)/.test((r && r.stdout) || '');
 							self.ussdModemNum = modemNum;
 							var out = document.querySelector('.ussdcommand-output');
 							if (self.ussdSessionActive && out) {
+								if (out._twTimer) {
+									clearInterval(out._twTimer);
+									out._twTimer = null;
+									out.textContent = out._twText || out.textContent;
+								}
 								out.innerText = (out.innerText || '') + '\n\n' + _('USSD session is active — type your reply and press Send');
 							}
 						});
@@ -698,7 +707,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30904, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30905, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

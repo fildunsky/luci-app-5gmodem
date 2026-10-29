@@ -208,6 +208,7 @@ try_at_debug() {
 				return 1 ;;
 		esac
 	fi
+	_ad_hastty "$1" && return 1
 	_ad_ok=""
 	_ad_t=0
 	while [ "$_ad_t" -lt 3 ]; do

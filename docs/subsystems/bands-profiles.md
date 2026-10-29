@@ -28,6 +28,7 @@ Each file in `root/usr/share/5gmodem/modemband/` is a shell profile named `<vidp
 | 1e0e9001 | SIMCom SIM7100E / SIM7600 / SIM8200 | |
 | 12d11506, 12d11566 | Huawei E3272/E3372/E3276 (1566 = debug mode with AT ports) | 12d11506 |
 | 2dee4d57 | MeigLink SLM770A-R | |
+| 19d20581, 19d20536 | ZTE ZX297520V3 debug mode (Olax MT80 = 0536), `AT+ZLTEBAND` byte mask | 19d20581 |
 | 12864e28 | ASR PXA1826: Notion R281/R291, MegaFon/Yota C300-1 | `_zte_common` |
 | 2cd20001 | MikroTik R11e-LTE (Marvell PXA1802) | |
 | 216f0041, 216f0043, 216f0044, 216f0047 | Altair ALT3100 / ALT3800 (Yota, NTLM-500) | `_altair_lte_common` |

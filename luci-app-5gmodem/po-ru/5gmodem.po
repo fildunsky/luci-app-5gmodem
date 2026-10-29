@@ -2007,9 +2007,6 @@ msgstr "Не удалось проверить обновления. Прове�
 msgid "You have the latest version"
 msgstr "Установлена последняя версия"
 
-msgid "Download and install the latest version now?"
-msgstr "Скачать и установить последнюю версию сейчас?"
-
 msgid "Installing the update…"
 msgstr "Установка обновления…"
 
