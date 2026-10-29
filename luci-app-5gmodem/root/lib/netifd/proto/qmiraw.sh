@@ -286,13 +286,17 @@ proto_qmiraw_setup() {
 
 	if [ "$dataformat" = "raw-ip" ]; then
 
-		[ -f /sys/class/net/$ifname/qmi/raw_ip ] || {
-			echo "Device only supports raw-ip mode but is missing this required driver attribute: /sys/class/net/$ifname/qmi/raw_ip"
-			return 1
-		}
-
-		echo "Device does not support 802.3 mode. Informing driver of raw-ip only for $ifname .."
-		echo "Y" > /sys/class/net/$ifname/qmi/raw_ip
+		if [ -f /sys/class/net/$ifname/qmi/raw_ip ]; then
+			echo "Device does not support 802.3 mode. Informing driver of raw-ip only for $ifname .."
+			echo "Y" > /sys/class/net/$ifname/qmi/raw_ip
+		else
+			case "$(basename "$(readlink -f "$devpath/driver")")" in
+				qmi_wwan_[qfs]) echo "Driver of $ifname is a vendor fork with fixed raw-ip, no raw_ip attribute needed" ;;
+				*)
+					echo "Device only supports raw-ip mode but is missing this required driver attribute: /sys/class/net/$ifname/qmi/raw_ip"
+					return 1 ;;
+			esac
+		fi
 	fi
 
 	uqmi -s -d "$device" -t 1000 --sync > /dev/null 2>&1

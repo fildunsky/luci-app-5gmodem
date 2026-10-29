@@ -1816,9 +1816,6 @@ msgstr "无法检查更新"
 msgid "You have the latest version"
 msgstr "当前已是最新版本"
 
-msgid "Download and install the latest version now?"
-msgstr "现在下载并安装最新版本?"
-
 msgid "Installing the update…"
 msgstr "正在安装更新…"
 

@@ -69,6 +69,42 @@ _wait_reg() {
 	return 1
 }
 
+_need3g() {
+	_u3_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
+	_u3_s="m_$(echo "$_u3_p" | sed 's/[^A-Za-z0-9]/_/g')"
+	_u3_n=$(uci -q get "$CFG.$_u3_s.ussd_3g" 2>/dev/null)
+	if [ -z "$_u3_n" ]; then
+		. "$RES/quirks.sh" 2>/dev/null
+		if command -v ussd_needs_3g_for >/dev/null 2>&1; then
+			_u3_n=$(ussd_needs_3g_for \
+				"$(uci -q get "$CFG.$_u3_s.model" 2>/dev/null)" \
+				"$(uci -q get "$CFG.$_u3_s.vidpid" 2>/dev/null)")
+		fi
+	fi
+	case "$_u3_n" in 1) echo 1 ;; *) echo 0 ;; esac
+}
+
+_mm_act() {
+	mmcli -m "$1" -K 2>/dev/null | sed -n 's/^modem\.generic\.access-technologies\.value\[[0-9]*\] *: *//p' | tr '\n' ' '
+}
+
+_mm_is_cs() {
+	case " $1" in *" gsm"*|*" gprs"*|*" edge"*|*" umts"*|*" hsdpa"*|*" hsupa"*|*" hspa"*) return 0 ;; esac
+	return 1
+}
+
+_mm_restore() {
+	_mr_al=$(printf '%s' "$2" | sed -n 's/^allowed: *\([^;]*\);.*/\1/p' | sed 's/, */|/g')
+	_mr_pr=$(printf '%s' "$2" | sed -n 's/.*preferred: *//p')
+	[ -n "$_mr_al" ] || return 0
+	case "$_mr_pr" in
+		''|none) mmcli -m "$1" --set-allowed-modes="$_mr_al" >/dev/null 2>&1 ;;
+		*) mmcli -m "$1" --set-allowed-modes="$_mr_al" --set-preferred-mode="$_mr_pr" >/dev/null 2>&1 ;;
+	esac
+	_mr_if=$(uci -q get "$CFG.$(secname "$(active_path)").network" 2>/dev/null)
+	[ -n "$_mr_if" ] && ifup "$_mr_if" >/dev/null 2>&1
+}
+
 case "$1" in
 status)
 	[ -f "$ST" ] && cat "$ST" || echo '{"status":"idle","stage":""}'
@@ -90,9 +126,33 @@ mm)
 	fi
 	_st running sending
 	(
+		MMSW=""
+		if [ "$3" = initiate ] && [ "$(_need3g)" = 1 ] && ! _mm_is_cs "$(_mm_act "$2")" \
+		   && mmcli -m "$2" -K 2>/dev/null | grep -q 'supported-modes\.value\[[0-9]*\] *: *allowed: 3g; preferred: none'; then
+			MMCM=$(mmcli -m "$2" -K 2>/dev/null | sed -n 's/^modem\.generic\.current-modes *: *//p')
+			_st running switching
+			if mmcli -m "$2" --set-allowed-modes=3g >/dev/null 2>&1; then
+				MMSW=1
+				trap '_mm_restore "$2" "$MMCM"' EXIT INT TERM
+				logger -t 5gmodem "ussd: modem $2 switched to 3G for the request (was: $MMCM)"
+				_w=0
+				while [ "$_w" -lt "$REG_WAIT" ]; do
+					sleep 2; _w=$((_w + 2))
+					_mm_is_cs "$(_mm_act "$2")" && break
+				done
+				_mm_is_cs "$(_mm_act "$2")" || logger -t 5gmodem "ussd: no 3G registration within ${REG_WAIT}s - sending the request as is"
+			fi
+			_st running sending
+		fi
 		OUT=$(mmcli -m "$2" --timeout=40 "--3gpp-ussd-$3=$4" 2>/tmp/5gmodem/ussd.err)
 		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
 		rm -f /tmp/5gmodem/ussd.err
+		if [ -n "$MMSW" ]; then
+			mmcli -m "$2" --timeout=8 --3gpp-ussd-cancel >/dev/null 2>&1
+			_st running restoring
+			_mm_restore "$2" "$MMCM"
+			trap - EXIT INT TERM
+		fi
 		_st done "" ',"out":"'"$(printf '%s' "$OUT" | base64 | tr -d '\n')"'","err":"'"$(printf '%s' "$ERR" | base64 | tr -d '\n')"'"'
 	) >/dev/null 2>&1 </dev/null &
 	cat "$ST"
@@ -183,18 +243,7 @@ _st running starting
 		[ -n "$OUT" ]
 	}
 
-	_u3_p=$(uci -q get "$CFG.@5gmodem[0].active_modem")
-	_u3_s="m_$(echo "$_u3_p" | sed 's/[^A-Za-z0-9]/_/g')"
-	NEED3G=$(uci -q get "$CFG.$_u3_s.ussd_3g" 2>/dev/null)
-	if [ -z "$NEED3G" ]; then
-		. "$RES/quirks.sh" 2>/dev/null
-		if command -v ussd_needs_3g_for >/dev/null 2>&1; then
-			NEED3G=$(ussd_needs_3g_for \
-				"$(uci -q get "$CFG.$_u3_s.model" 2>/dev/null)" \
-				"$(uci -q get "$CFG.$_u3_s.vidpid" 2>/dev/null)")
-		fi
-	fi
-	case "$NEED3G" in 1) : ;; *) NEED3G=0 ;; esac
+	NEED3G=$(_need3g)
 
 	if [ "$NEED3G" = "1" ] && ! _is_cs "$ACT" && [ -n "$MODE3G" ] && [ "$CUR" != "$MODE3G" ]; then
 		_st running switching ',"from":"'"$ACT"'","mode_was":"'"$CUR"'","mode_3g":"'"$MODE3G"'"'

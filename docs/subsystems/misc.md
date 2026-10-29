@@ -22,6 +22,8 @@ The "Settings" tab: application update, APN database update, Network page displa
 - `asset_pending` error: release tag exists but CI is still building the .apk; shown as "wait 15-20 minutes".
 - CACHED_RES must list *all* our JS/CSS: after update the new 5gdetail.js met an old cached bandsui.js (modules split out of 5gdetail/5gsettings), with inconsistent ctx (audit 2026-09-12). Resources are re-fetched with `cache: 'reload'`, then logout (re-issues ACLs).
 - Poll the result *file* /tmp/5gmodem/update.json every 4 s (up to ~5 min), never update.sh (it is replaced during install). The start request may never answer although installation proceeds (rpcd loses the exit of a script with a live background child, ~every second run on 25.12.5, and install restarts rpcd); on request error the status file is checked and polling continues, otherwise the user retried and got "Install failed" over an installed package (2026-09-14).
+- "Install update" starts at once, without a `confirm()` dialog: the button is shown only after a check found a newer release, so a second question added nothing.
+- Progress is an own bar (`.tg-updbar` / `.tg-updfill` in modem.css), not `<progress>`. Themes draw an indeterminate `<progress>` as a flat grey strip, and every stage except a sized download was indeterminate, so users saw no movement at all. The fill follows the stage: prepare 5 %, download 10-70 % by bytes, install 75 %, finish 92 %, done 100 %; it never moves back, and stripes run while a stage is in progress.
 
 ### APN database
 - Updated separately from the app and only manually: data changes between releases (new MVNOs), the packaged file is refreshed at release time. The installed version is read immediately (local file); "Check" goes online only on user action.

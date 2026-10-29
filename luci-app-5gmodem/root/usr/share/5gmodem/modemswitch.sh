@@ -222,7 +222,7 @@ save_to() {
 	uci -q commit "$CFG"
 }
 
-HILINK_IDS="12d1:14dc 12d1:14db 1bbb:0196 19d2:0581 1286:4e31"
+HILINK_IDS="12d1:14dc 12d1:14db 1bbb:0196 19d2:0581 19d2:0536 1286:4e31"
 
 _esim_state() {
 	_ee=$(uci -q get "$CFG.$1.esim_show")

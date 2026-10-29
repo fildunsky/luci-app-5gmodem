@@ -116,6 +116,12 @@ eth2; the MAC anchor is the real fix, this is a safety net).
      pending). Under MM the channel is shared through qmi-proxy.
    - 05c6:90d5 (MV31-W / T99W175 in MBIM) -> `modemmanager` unless it is the
      Compal prototype sharing this id.
+   - Vendor forks of qmi_wwan (`qmi_wwan_q` Quectel, `qmi_wwan_f` Fibocom,
+     `qmi_wwan_s` SimCom, shipped by QModem builds) -> `qmiraw`. They are
+     fixed raw-ip and have no `qmi/raw_ip` attribute, so stock qmi fails on
+     "missing this required driver attribute". All driver-name checks
+     (mkiface, fix_iface_proto, mm-inhibit, notmodem, usbports rescue,
+     collect) accept these names as `qmi_wwan`.
    - SimCom 1e0e:* on QMI -> `qmiraw` (no DHCP in 802.3: connected, RX=0).
    - Telit FN990 1bc7:1070/1077/1080 -> `qmiraw` (radio on before SIM checks).
    - Other QMI modems -> `qmiraw` only if the modem is natively raw-ip; stock qmi
@@ -332,6 +338,8 @@ without traffic (SimCom SIM7100E, Telit LM960, natively raw-ip QMI modems):
 `--set-data-format raw-ip` and `--wda-set-data-format raw-ip`, static addressing
 from `--get-current-settings`. Differences from upstream:
 
+- No `qmi/raw_ip` attribute is accepted when the driver is `qmi_wwan_q/_f/_s`:
+  these forks always run raw-ip.
 - Radio on before SIM checks. A modem can enumerate with the radio off
   (`AT+CFUN=0`); UIM then reports `illegal` for a good card and the illegal
   branch power-cycles it in a loop (Telit FN990A28: "SIM in illegal state -

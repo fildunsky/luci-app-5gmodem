@@ -300,6 +300,7 @@ function operatorTabIcon(name) {
 	var n = String(name || '').toLowerCase();
 	if (!n) { return null; }
 	if (n.indexOf('ekomobile') >= 0 || n.indexOf('eko mobile') >= 0 || n.indexOf('экомобайл') >= 0 || n.indexOf('эко мобайл') >= 0) { return 'op-ekomobile'; }
+	if (n.indexOf('dobrosim') >= 0 || n.indexOf('dobro sim') >= 0 || n.indexOf('dobrosvyaz') >= 0 || n.indexOf('добросим') >= 0 || n.indexOf('добросвязь') >= 0) { return 'op-dobrosim'; }
 	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
 	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
@@ -551,7 +552,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30904,
+	API: 30905,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {

@@ -128,6 +128,7 @@ function operatorIcon(name) {
 	var n = (name || '').toLowerCase();
 	if (/(^|[^0-9a-zа-яё])(t-mobile|tinkoff|t-bank|т-мобайл|т-банк|тинькофф)/.test(n)) { return 'op-tbank'; }
 	if (n.indexOf('ekomobile') >= 0 || n.indexOf('eko mobile') >= 0 || n.indexOf('экомобайл') >= 0 || n.indexOf('эко мобайл') >= 0) { return 'op-ekomobile'; }
+	if (n.indexOf('dobrosim') >= 0 || n.indexOf('dobro sim') >= 0 || n.indexOf('dobrosvyaz') >= 0 || n.indexOf('добросим') >= 0 || n.indexOf('добросвязь') >= 0) { return 'op-dobrosim'; }
 	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
 	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
 	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
@@ -471,7 +472,7 @@ function signalSvg(p) {
 
 return baseclass.extend({
 	icon: function(p) { return icons.url(p); },
-	API: 30904,
+	API: 30905,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,

@@ -166,13 +166,16 @@ fix_iface_proto() {
 	case "$_fp_drv" in
 		cdc_mbim) _fp_want="mbim" ;;
 		qmi_wwan) _fp_want="qmi" ;;
+		qmi_wwan_[qfs])
+			_fp_want="qmi"
+			[ -f /lib/netifd/proto/qmiraw.sh ] && _fp_want="qmiraw" ;;
 		*)        return ;;
 	esac
 	_fp_amp=$(basename "$(readlink -f "/sys/class/usbmisc/$(basename "$_fp_dev")/device/.." 2>/dev/null)" 2>/dev/null)
 	_fp_vp=""
 	[ -n "$_fp_amp" ] && [ -f "/sys/bus/usb/devices/$_fp_amp/idVendor" ] && \
 		_fp_vp="$(cat "/sys/bus/usb/devices/$_fp_amp/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_fp_amp/idProduct" 2>/dev/null)"
-	if [ "$_fp_pr" = "qmi" ] && [ "$_fp_drv" = "qmi_wwan" ] \
+	if [ "$_fp_pr" = "qmi" ] && [ "${_fp_drv%_[qfs]}" = "qmi_wwan" ] \
 	   && [ -f /lib/netifd/proto/modemmanager.sh ]; then
 		case "$_fp_vp" in
 			05c6:*)

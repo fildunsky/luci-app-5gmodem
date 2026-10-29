@@ -1816,9 +1816,6 @@ msgstr "更新を確認できませんでした"
 msgid "You have the latest version"
 msgstr "最新バージョンです"
 
-msgid "Download and install the latest version now?"
-msgstr "最新バージョンを今すぐダウンロードしてインストールしますか？"
-
 msgid "Installing the update…"
 msgstr "更新をインストール中…"
 

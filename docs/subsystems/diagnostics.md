@@ -170,6 +170,8 @@ on Yota) looks like "session and address, no traffic".
 Wrong APN is the most common "registered but no IP". Auto-selection does not overwrite an APN once
 it ran for this SIM (`apn_imsi` stamp), so a typo survives forever (APN `tt` instead of `m.tinkoff`,
 2026-08-05). The verdict compares the interface APN with `providers.tsv` for the PLMN.
+An APN that matches an `opapn:` brand in `apn.list` (`opname_by_apn`) is a virtual operator's own
+APN and is not flagged: Ekomobile on MTS 250-01 got "set internet.mts.ru" (2026-10-29).
 
 ### wan zone and NAT (fw_zone_verdict)
 

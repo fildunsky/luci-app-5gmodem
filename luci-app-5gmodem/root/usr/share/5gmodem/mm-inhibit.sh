@@ -254,7 +254,7 @@ mm_recover_missing() {
 			_wdm_drv=""
 			[ -n "$_wdm_node" ] && _wdm_drv=$(basename "$(readlink -f "${_wdm_node%/usbmisc/*}/driver" 2>/dev/null)" 2>/dev/null)
 			case "$_wdm_drv" in
-				qmi_wwan) _sw_pro="qmi" ;;
+				qmi_wwan|qmi_wwan_[qfs]) _sw_pro="qmi" ;;
 				cdc_mbim) _sw_pro="mbim" ;;
 				*)        _sw_pro="" ;;
 			esac

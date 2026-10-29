@@ -813,7 +813,7 @@ tenda_metrics_json() {
 zte_metrics_json() {
 	_HLP=$(_hl_path "$1")
 	_a=$(_addr_for "$_HLP") || return 1
-	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes"
+	_zm_cmd="modem_main_state,ppp_status,network_type,network_provider,network_provider_fullname,signalbar,lte_rsrp,lte_rsrq,lte_rssi,lte_snr,rssi,rscp,ecio,cell_id,lac_code,rmcc,rmnc,hmcc,hmnc,wan_ipaddr,imei,msisdn,sim_imsi,iccid,wa_inner_version,lte_pci,lte_band,wan_active_band,hardware_version,battery_vol_percent,battery_charging,realtime_time,realtime_rx_bytes,realtime_tx_bytes,nv_rsrp,nv_rsrq,nv_sinr,nv_pci,nv_arfcn,mcc,mnc,tac_code"
 	_r=$(_zte_get "$_a" "$_zm_cmd")
 	case "$_r" in
 		*'"modem_main_state"'*|*'"ppp_status"'*) ;;
@@ -843,6 +843,14 @@ zte_metrics_json() {
 	_sinr=$(_zj "$_r" lte_snr | tr -cd '0-9.-')
 	_rssi=$(_zj "$_r" lte_rssi | grep -oE -- '-?[0-9]+' | head -1)
 	[ -n "$_rssi" ] && [ "$_rssi" = "$_rsrp" ] && _rssi=""
+	case "$_ntype" in *LTE*)
+		_znv=$(_zj "$_r" nv_rsrp | tr -cd '0-9')
+		[ -z "$_rsrp" ] && [ -n "$_znv" ] && [ "$_znv" -gt 0 ] && [ "$_znv" -le 97 ] && _rsrp=$(( _znv - 141 ))
+		_znv=$(_zj "$_r" nv_rsrq | tr -cd '0-9')
+		[ -z "$_rsrq" ] && [ -n "$_znv" ] && [ "$_znv" -le 40 ] && _rsrq=$(awk -v v="$_znv" 'BEGIN { printf "%.1f", (v - 40) / 2 }')
+		_znv=$(_zj "$_r" nv_sinr | tr -cd '0-9-')
+		[ -z "$_sinr" ] && [ -n "$_znv" ] && _sinr="$_znv" ;;
+	esac
 	_sp=$(sig_percent "$_ntype" "$_rsrp" "$_rsrq" "$_sinr" "" "" "$_rssi")
 	[ -n "$_sp" ] && _pct="$_sp"
 	[ -n "$_rssi" ] || _rssi=$(_zj "$_r" rssi | grep -oE -- '-?[0-9]+' | head -1)
@@ -850,14 +858,22 @@ zte_metrics_json() {
 	_cid_hex=$(_zj "$_r" cell_id)
 	_cid=""; [ -n "$_cid_hex" ] && _cid=$(printf '%d' "0x$_cid_hex" 2>/dev/null)
 	_lac=$(_zj "$_r" lac_code)
+	case "$_lac" in ''|0|0000)
+		_ztac=$(_zj "$_r" tac_code | tr -cd '0-9')
+		[ -n "$_ztac" ] && [ "$_ztac" -gt 0 ] && _lac=$(printf '%X' "$_ztac") ;;
+	esac
 	_zenb=""
 	case "$_ntype" in *LTE*) [ -n "$_cid" ] && _zenb=$(( _cid >> 8 )) ;; esac
 	_zpci=$(_zj "$_r" lte_pci | tr -cd '0-9')
+	case "$_ntype" in *LTE*) [ -n "$_zpci" ] || _zpci=$(_zj "$_r" nv_pci | tr -cd '0-9') ;; esac
+	_zearfcn=""; case "$_ntype" in *LTE*) _zearfcn=$(_zj "$_r" nv_arfcn | tr -cd '0-9') ;; esac
 	_zband=$(_zj "$_r" lte_band | tr -cd '0-9')
 	[ -n "$_zband" ] || _zband=$(_zj "$_r" wan_active_band | sed -n 's/^LTE[^0-9]*\([0-9][0-9]*\).*/\1/p')
 	_zpband=""; [ -n "$_zband" ] && _zpband="B$_zband"
 	_mcc=$(_zj "$_r" rmcc); [ -n "$_mcc" ] || _mcc=$(_zj "$_r" hmcc)
 	_mnc=$(_zj "$_r" rmnc); [ -n "$_mnc" ] || _mnc=$(_zj "$_r" hmnc)
+	[ -n "$_mcc" ] || _mcc=$(_zj "$_r" mcc | tr -cd '0-9')
+	[ -n "$_mnc" ] || _mnc=$(_zj "$_r" mnc | tr -cd '0-9')
 	_wanip=$(_zj "$_r" wan_ipaddr)
 	_imei=$(_zj "$_r" imei)
 	_imsi=$(_zj "$_r" sim_imsi)
@@ -866,9 +882,13 @@ zte_metrics_json() {
 	_phone=$(_zj "$_r" msisdn)
 	_mfm=$(printf '%s' "$_fw" | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
 	[ -n "$_mfm" ] || _mfm=$(_zj "$_r" hardware_version | grep -oE 'MF[0-9]+[A-Za-z]*' | head -1 | sed 's/V$//')
+	case "$_fw" in
+		*_OLAX_*) _model="Olax"; [ -n "$_mfm" ] || _mfm=$(printf '%s' "$_fw" | grep -oE '^[A-Z]{1,4}[0-9]+' | head -1) ;;
+	esac
 	[ -n "$_mfm" ] && _model="${_model:+$_model }$_mfm"
 	_zbat=$(_zj "$_r" battery_vol_percent | tr -cd '0-9')
 	_zchg=$(_zj "$_r" battery_charging | tr -cd '0-9')
+	[ -n "$_zbat" ] || _zbat=$(zx_battery "$_HLP")
 	_zat_ok=""
 	case "$(_vidpid_for "$_HLP")" in
 		0e8d:2004|0e8d:2008)
@@ -940,6 +960,7 @@ ZC_EOF
 		"$_rsrp" "$_rsrq" "$_sinr" "$_rssi"
 	printf '"cid_dec":"%s","cid_hex":"%s","lac_hex":"%s",' "$_cid" "$_cid_hex" "$_lac"
 	printf '"pci":"%s","pband":"%s","enbid":"%s",' "$_zpci" "$_zpband" "$_zenb"
+	[ -n "$_zearfcn" ] && printf '"earfcn":"%s",' "$_zearfcn"
 	printf '"ipaddr":"%s",' "$_wanip"
 	printf '"csq":"%s",' "$_csq"
 	printf '"battery":"%s","battery_charging":"%s","hl_modes":"1",' "$_zbat" "$_zchg"
@@ -2206,6 +2227,37 @@ mtk_temps() {
 		_mt_o=$(cat "$_mt_f")
 	fi
 	printf '%s' "$_mt_o"
+}
+
+zx_battery() {
+	_zb_d="/sys/bus/usb/devices/$1"
+	_zb_s=$(cat "$_zb_d/serial" 2>/dev/null)
+	[ -n "$_zb_s" ] || return 1
+	_zb_i=""
+	for _zb_x in "$_zb_d":*; do
+		[ "$(cat "$_zb_x/bInterfaceClass" 2>/dev/null)/$(cat "$_zb_x/bInterfaceSubClass" 2>/dev/null)" = ff/42 ] && _zb_i=1
+	done
+	[ -n "$_zb_i" ] || return 1
+	_zb_f="$CACHE_DIR/zxbat_$(_tk "$1")"
+	if [ -f "$_zb_f" ] && [ -z "$(find "$_zb_f" -mmin +1 2>/dev/null)" ]; then
+		cat "$_zb_f"; return 0
+	fi
+	command -v adb >/dev/null 2>&1 || return 1
+	_adb_foreign "$_zb_s" && return 1
+	case "$(_adb_to 4 devices)" in *"$_zb_s	device"*) ;; *) return 1 ;; esac
+	_zb_o=$(_adb_to 6 -s "$_zb_s" shell \
+		'cat /sys/class/power_supply/battery/voltage_now; nv get mmi_battery_voltage_line' | tr -d '\r' \
+		| awk 'NR == 1 { v = $1 + 0 } NR == 2 { n = split($1, t, "+") }
+			END {
+				if (v < 2500 || v > 4500 || n < 2) exit
+				if (v <= t[1]) { print 0; exit }
+				if (v >= t[n]) { print 100; exit }
+				for (i = 2; i <= n; i++) if (v < t[i]) break
+				printf "%d", ((i - 2) + (v - t[i - 1]) / (t[i] - t[i - 1])) * 100 / (n - 1) + 0.5
+			}')
+	case "$_zb_o" in ''|*[!0-9]*) return 1 ;; esac
+	printf '%s' "$_zb_o" > "$_zb_f"
+	printf '%s' "$_zb_o"
 }
 
 zte_getmode() {

@@ -65,8 +65,8 @@ mbim_verdict() {
 	case "$_mv_dev" in
 		/dev/cdc-wdm*)
 			_mv_drv=$(basename "$(readlink -f "/sys/class/usbmisc/${_mv_dev##*/}/device/driver" 2>/dev/null)" 2>/dev/null)
-			if [ "$_mv_drv" = "qmi_wwan" ]; then
-				echo "PROBLEM: node $_mv_dev was created by the qmi_wwan driver (a QMI channel),"
+			if [ "${_mv_drv%_[qfs]}" = "qmi_wwan" ]; then
+				echo "PROBLEM: node $_mv_dev was created by the $_mv_drv driver (a QMI channel),"
 				echo "  but the interface protocol is mbim. MBIM will never speak here:"
 				echo "  you will get an endless 'mbim message timeout'."
 				echo "  WHAT TO DO: uci set network.$_mv_if.proto='qmi'; uci commit network; ifup $_mv_if"
@@ -523,6 +523,9 @@ apn_verdict() {
 	printf '%s\n' "$_av_db" | sed 's/^/    /'
 	if printf '%s\n' "$_av_db" | grep -q -- "-> *$_av_cur\$"; then
 		echo "  MATCHES - the APN comes from the database"
+	elif _av_brand=$(opname_by_apn "$_av_cur"); then
+		echo "  the APN belongs to $_av_brand, a virtual operator on this network:"
+		echo "  it is not in the host network's list, and that is expected - keep it."
 	else
 		echo "  DOES NOT MATCH. If there is no internet, start here: set an APN from"
 		echo "  the list above (Network -> Modem -> Connection settings) and bring the"

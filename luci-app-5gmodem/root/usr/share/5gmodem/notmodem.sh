@@ -38,7 +38,7 @@ is_not_modem_service() {
 	return 1
 }
 
-MODEM_DRIVERS="option qcserial sierra sierra_net usb_wwan qmi_wwan cdc_mbim cdc_ncm cdc_wdm huawei_cdc_ncm cdc_ether rndis_host cdc_subset qcaux GobiNet GobiSerial simcom_wwan"
+MODEM_DRIVERS="option qcserial sierra sierra_net usb_wwan qmi_wwan qmi_wwan_q qmi_wwan_f qmi_wwan_s cdc_mbim cdc_ncm cdc_wdm huawei_cdc_ncm cdc_ether rndis_host cdc_subset qcaux GobiNet GobiSerial simcom_wwan"
 
 CELL_VENDORS="12d1 19d2 2c7c 1e0e 1bc7 0e8d 2cb7 1e2d 2dee 05c6 1199 2020 1c9e 0af0 1bbb 2001 0421 1546 1782 1410 16d8 106c"
 

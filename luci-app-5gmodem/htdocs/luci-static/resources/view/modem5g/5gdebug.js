@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30904, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30905, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1003,7 +1003,7 @@ return view.extend({
 			if (!p) { return false; }
 			var sc = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
 			return uci.get('5gmodem', sc, 'kind') === 'hilink'
-				&& /^(12d1:|19d2:1557$|19d2:0581$)/.test(String(uci.get('5gmodem', sc, 'vidpid') || '12d1:'));
+				&& /^(12d1:|19d2:1557$|19d2:0581$|19d2:0558$|19d2:0536$)/.test(String(uci.get('5gmodem', sc, 'vidpid') || '12d1:'));
 		})();
 		var webPassHl = (function() {
 			var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');

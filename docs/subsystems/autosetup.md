@@ -291,7 +291,7 @@ own netdev.
 ## HiLink and phones (`msw/hilink.sh`)
 
 - `is_hilink`: explicit ids (`HILINK_IDS`: 12d1:14dc, 12d1:14db, 1bbb:0196,
-  19d2:0581; 1f01 is the CD-ROM mode before usb_modeswitch and has no network)
+  19d2:0581, 19d2:0536; 1f01 is the CD-ROM mode before usb_modeswitch and has no network)
   plus a structural rule for listed vendors: a netdev with no AT port and no
   cdc-wdm. A "has a netdev" heuristic was wrong: qmi_wwan creates wwan0, and
   Telit LM960 (1bc7:1040) was declared HiLink and became unconfigurable. Notes:
@@ -326,6 +326,12 @@ own netdev.
   under `tty/`) instead of rebuilding `listmodems` in a loop, which invalidated
   the shared cache twenty times. After success: one `listmodems --refresh` and
   `hilink.sh connect`, because data does not come back by itself.
+- A device that already has ttys is not switched again. For ZTE the switch is
+  `SET_DEVICE_MODE` plus `REBOOT_DEVICE`, so every hotplug rebooted a modem
+  already in debug. Olax MT80 (ZXIC, 19d2:0548 CD-ROM, 0558 normal, 0536 debug)
+  looped this way, and the WAN xHCI of ZTE MF286D died on each disconnect. The
+  0536 vendor ports (1.2-1.4) need `option1` new_id with class `ff`, like 0581;
+  AT is on the first two, 1.5 is ADB.
 
 ## APN selection
 

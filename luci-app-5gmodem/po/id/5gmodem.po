@@ -1816,9 +1816,6 @@ msgstr "Tidak dapat memeriksa pembaruan"
 msgid "You have the latest version"
 msgstr "Anda menggunakan versi terbaru"
 
-msgid "Download and install the latest version now?"
-msgstr "Unduh dan pasang versi terbaru sekarang?"
-
 msgid "Installing the update…"
 msgstr "Memasang pembaruan…"
 

@@ -127,27 +127,28 @@ function updBusy(busy) {
 function updKB(n) { return Math.round((+n || 0) / 1024); }
 
 function updProgress(d) {
-	var box = document.getElementById('upd-progress'), bar = document.getElementById('upd-bar');
-	if (!box || !bar) { return; }
+	var box = document.getElementById('upd-progress'), fill = document.getElementById('upd-fill');
+	if (!box || !fill) { return; }
 	if (!d) { box.style.display = 'none'; return; }
 	box.style.display = '';
-	var txt = '';
+	var txt = '', pct = 5;
 	if (d.stage === 'download' && +d.total > 0) {
-		bar.max = +d.total; bar.value = Math.min(+d.done || 0, +d.total);
+		pct = 10 + Math.round(60 * Math.min(+d.done || 0, +d.total) / +d.total);
 		txt = _('Downloading: %d of %d KB').format(updKB(d.done), updKB(d.total));
 	} else if (d.stage === 'download') {
-		bar.removeAttribute('value');
+		pct = 10;
 		txt = _('Downloading: %d KB').format(updKB(d.done));
 	} else if (d.stage === 'install') {
-		bar.removeAttribute('value');
+		pct = 75;
 		txt = _('Installing the package…');
 	} else if (d.stage === 'finish') {
-		bar.removeAttribute('value');
+		pct = 92;
 		txt = _('Finishing: refreshing translations and caches…');
 	} else {
-		bar.removeAttribute('value');
 		txt = _('Preparing: reading the release…');
 	}
+	var cur = parseFloat(fill.style.width) || 0;
+	fill.style.width = Math.max(cur, pct) + '%';
 	updSet('upd-ptext', txt);
 }
 
@@ -178,7 +179,8 @@ function refreshResources() {
 }
 
 function finishUpdate(ver) {
-	updProgress(null);
+	var fill = document.getElementById('upd-fill');
+	if (fill) { fill.style.width = '100%'; fill.classList.add('done'); }
 	updDetail('');
 	if (ver) { updSet('upd-current', ver); }
 	updShow('upd-install', false);
@@ -243,9 +245,10 @@ function pollInstall(tries, misses) {
 }
 
 function installUpdate() {
-	if (!confirm(_('Download and install the latest version now?'))) { return Promise.resolve(); }
 	updSet('upd-status', _('Installing the update…'));
 	updDetail('');
+	var fill = document.getElementById('upd-fill');
+	if (fill) { fill.style.width = '0'; fill.classList.remove('done'); }
 	updProgress({ stage: 'prepare' });
 	updBusy(true);
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
@@ -324,7 +327,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30904, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30905, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -368,16 +371,14 @@ return view.extend({
 						}, [ _('Release page') ]),
 					]),
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [
-							E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]) ]),
-							E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
-							E('div', { 'id': 'upd-progress', 'style': 'display:none;margin-top:6px' }, [
-								E('progress', { 'id': 'upd-bar', 'max': '100', 'style': 'width:100%;max-width:360px' }),
-								E('div', { 'id': 'upd-ptext', 'style': 'font-size:90%;opacity:.85' }, [])
-							]),
-							E('pre', { 'id': 'upd-detail', 'style': 'display:none;margin-top:6px;white-space:pre-wrap;font-size:85%;max-width:600px' }, []),
-							E('div', { 'id': 'upd-notes', 'style': 'display:none;margin-top:8px' }, []),
+						_('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]),
+						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
+						E('div', { 'id': 'upd-progress', 'style': 'display:none;margin-top:6px' }, [
+							E('div', { 'class': 'tg-updbar' }, [ E('div', { 'id': 'upd-fill', 'class': 'tg-updfill' }) ]),
+							E('div', { 'id': 'upd-ptext', 'style': 'font-size:90%;opacity:.85' }, [])
 						]),
+						E('pre', { 'id': 'upd-detail', 'style': 'display:none;margin-top:6px;white-space:pre-wrap;font-size:85%;max-width:600px' }, []),
+						E('div', { 'id': 'upd-notes', 'style': 'display:none;margin-top:8px' }, []),
 					]),
 				]),
 			]),
@@ -398,10 +399,8 @@ return view.extend({
 						}, [ _('Update the APN database') ]),
 					]),
 					E('div', { 'class': 'cbi-value-description' }, [
-						E('div', {}, [
-							E('div', {}, [ _('Current version') + ': ', E('strong', { 'id': 'apn-current' }, [ '—' ]) ]),
-							E('div', { 'id': 'apn-status', 'style': 'margin-top:4px' }, []),
-						]),
+						_('Current version') + ': ', E('strong', { 'id': 'apn-current' }, [ '—' ]),
+						E('div', { 'id': 'apn-status', 'style': 'margin-top:4px' }, []),
 					]),
 				]),
 			]),

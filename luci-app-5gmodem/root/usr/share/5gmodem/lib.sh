@@ -1473,7 +1473,7 @@ hl_brovi() {
 
 hl_web_metrics() {
 	case "$(uci -q get "5gmodem.$1.vidpid")" in
-		19d2:0581) return 0 ;;
+		19d2:0581|19d2:0536) return 0 ;;
 	esac
 	hl_brovi "$1"
 }
