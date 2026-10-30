@@ -126,30 +126,73 @@ function updBusy(busy) {
 
 function updKB(n) { return Math.round((+n || 0) / 1024); }
 
+var updBar = { pos: 0, floor: 0, cap: 0, text: '', timer: null };
+
+function updBarPaint() {
+	var fill = document.getElementById('upd-fill');
+	if (!fill) { return false; }
+	fill.style.width = updBar.pos.toFixed(1) + '%';
+	updSet('upd-ptext', Math.round(updBar.pos) + '%' + (updBar.text ? ' · ' + updBar.text : ''));
+	return true;
+}
+
+function updBarStop() {
+	if (updBar.timer) { window.clearInterval(updBar.timer); updBar.timer = null; }
+}
+
+function updBarTick() {
+	if (updBar.pos < updBar.floor) {
+		updBar.pos = Math.min(updBar.floor, updBar.pos + Math.max((updBar.floor - updBar.pos) * 0.2, 0.4));
+	} else if (updBar.pos < updBar.cap) {
+		updBar.pos += (updBar.cap - updBar.pos) * 0.02;
+	}
+	if (!updBarPaint()) { updBarStop(); }
+}
+
+function updBarReset() {
+	updBarStop();
+	updBar.pos = updBar.floor = updBar.cap = 0;
+	updBar.text = '';
+}
+
 function updProgress(d) {
-	var box = document.getElementById('upd-progress'), fill = document.getElementById('upd-fill');
-	if (!box || !fill) { return; }
-	if (!d) { box.style.display = 'none'; return; }
+	var box = document.getElementById('upd-progress');
+	if (!box) { return; }
+	if (!d) { updBarStop(); box.style.display = 'none'; return; }
 	box.style.display = '';
-	var txt = '', pct = 5;
+	var steps = [
+		[ '', 25, _('Unpacking the package…') ],
+		[ 'deps', 30, _('Refreshing package lists…') ],
+		[ 'services', 35, _('Restarting background services…') ],
+		[ 'system', 45, _('Applying system settings…') ],
+		[ 'network', 55, _('Reloading network settings…') ],
+		[ 'modems', 62, _('Checking modems and ports…') ],
+		[ 'protos', 80, _('Registering connection protocols…') ],
+		[ 'leds', 84, _('Starting LEDs and antenna control…') ],
+		[ 'cache', 90, _('Refreshing the page cache…') ]
+	];
+	var floor = 2, cap = 5, txt = _('Preparing: reading the release…');
 	if (d.stage === 'download' && +d.total > 0) {
-		pct = 10 + Math.round(60 * Math.min(+d.done || 0, +d.total) / +d.total);
+		floor = cap = 5 + 20 * Math.min(+d.done || 0, +d.total) / +d.total;
 		txt = _('Downloading: %d of %d KB').format(updKB(d.done), updKB(d.total));
 	} else if (d.stage === 'download') {
-		pct = 10;
+		floor = 5; cap = 24;
 		txt = _('Downloading: %d KB').format(updKB(d.done));
 	} else if (d.stage === 'install') {
-		pct = 75;
-		txt = _('Installing the package…');
+		var i = steps.length - 1;
+		while (i > 0 && steps[i][0] !== (d.step || '')) { i--; }
+		floor = steps[i][1];
+		cap = (i + 1 < steps.length ? steps[i + 1][1] : 95) - 1;
+		txt = steps[i][2];
 	} else if (d.stage === 'finish') {
-		pct = 92;
+		floor = 95; cap = 99;
 		txt = _('Finishing: refreshing translations and caches…');
-	} else {
-		txt = _('Preparing: reading the release…');
 	}
-	var cur = parseFloat(fill.style.width) || 0;
-	fill.style.width = Math.max(cur, pct) + '%';
-	updSet('upd-ptext', txt);
+	updBar.floor = Math.max(updBar.floor, floor);
+	updBar.cap = Math.max(updBar.cap, cap);
+	updBar.text = txt;
+	if (!updBar.timer) { updBar.timer = window.setInterval(updBarTick, 200); }
+	updBarPaint();
 }
 
 function updDetail(txt) {
@@ -180,7 +223,11 @@ function refreshResources() {
 
 function finishUpdate(ver) {
 	var fill = document.getElementById('upd-fill');
-	if (fill) { fill.style.width = '100%'; fill.classList.add('done'); }
+	updBarStop();
+	updBar.pos = updBar.floor = updBar.cap = 100;
+	updBar.text = '';
+	updBarPaint();
+	if (fill) { fill.classList.add('done'); }
 	updDetail('');
 	if (ver) { updSet('upd-current', ver); }
 	updShow('upd-install', false);
@@ -249,6 +296,7 @@ function installUpdate() {
 	updDetail('');
 	var fill = document.getElementById('upd-fill');
 	if (fill) { fill.style.width = '0'; fill.classList.remove('done'); }
+	updBarReset();
 	updProgress({ stage: 'prepare' });
 	updBusy(true);
 	return fs.exec('/usr/share/5gmodem/update.sh', [ 'install' ]).then(function(res) {
@@ -327,7 +375,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30908, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30909, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -370,16 +418,16 @@ return view.extend({
 							'style': 'display:none'
 						}, [ _('Release page') ]),
 					]),
-					E('div', { 'class': 'cbi-value-description' }, [
+					E('div', { 'class': 'cbi-value-description' }, [ E('div', { 'style': 'flex:1 1 auto;min-width:0' }, [
 						_('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]),
 						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
 						E('div', { 'id': 'upd-progress', 'style': 'display:none;margin-top:6px' }, [
-							E('div', { 'class': 'tg-updbar' }, [ E('div', { 'id': 'upd-fill', 'class': 'tg-updfill' }) ]),
+							E('div', { 'class': 'tg-updprog' }, [ E('div', { 'id': 'upd-fill', 'class': 'tg-updfill' }) ]),
 							E('div', { 'id': 'upd-ptext', 'style': 'font-size:90%;opacity:.85' }, [])
 						]),
 						E('pre', { 'id': 'upd-detail', 'style': 'display:none;margin-top:6px;white-space:pre-wrap;font-size:85%;max-width:600px' }, []),
 						E('div', { 'id': 'upd-notes', 'style': 'display:none;margin-top:8px' }, []),
-					]),
+					]) ]),
 				]),
 			]),
 			E('div', { 'class': 'cbi-value' }, [

@@ -5990,9 +5990,6 @@ msgstr "ダウンロード中: %d / %d KB"
 msgid "Downloading: %d KB"
 msgstr "ダウンロード中: %d KB"
 
-msgid "Installing the package…"
-msgstr "パッケージをインストール中…"
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr "仕上げ中: 翻訳とキャッシュを更新しています…"
 
@@ -6004,3 +6001,30 @@ msgstr "アップデート中にルーターとの接続が切れました。"
 
 msgid "Could not reach GitHub"
 msgstr "GitHub に接続できません"
+
+msgid "Unpacking the package…"
+msgstr "パッケージを展開中…"
+
+msgid "Refreshing package lists…"
+msgstr "パッケージリストを更新中…"
+
+msgid "Restarting background services…"
+msgstr "バックグラウンドサービスを再起動中…"
+
+msgid "Applying system settings…"
+msgstr "システム設定を適用中…"
+
+msgid "Reloading network settings…"
+msgstr "ネットワーク設定を再読み込み中…"
+
+msgid "Checking modems and ports…"
+msgstr "モデムとポートを確認中…"
+
+msgid "Registering connection protocols…"
+msgstr "接続プロトコルを登録中…"
+
+msgid "Starting LEDs and antenna control…"
+msgstr "LEDとアンテナ制御を起動中…"
+
+msgid "Refreshing the page cache…"
+msgstr "ページキャッシュを更新中…"
