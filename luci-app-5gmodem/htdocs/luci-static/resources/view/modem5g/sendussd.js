@@ -707,7 +707,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30908, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30909, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

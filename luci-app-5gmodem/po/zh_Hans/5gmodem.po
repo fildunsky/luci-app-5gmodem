@@ -5990,9 +5990,6 @@ msgstr "正在下载：%d / %d KB"
 msgid "Downloading: %d KB"
 msgstr "正在下载：%d KB"
 
-msgid "Installing the package…"
-msgstr "正在安装软件包…"
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr "正在完成：刷新翻译和缓存…"
 
@@ -6004,3 +6001,30 @@ msgstr "更新过程中与路由器的连接中断。"
 
 msgid "Could not reach GitHub"
 msgstr "无法连接 GitHub"
+
+msgid "Unpacking the package…"
+msgstr "正在解压软件包…"
+
+msgid "Refreshing package lists…"
+msgstr "正在刷新软件包列表…"
+
+msgid "Restarting background services…"
+msgstr "正在重启后台服务…"
+
+msgid "Applying system settings…"
+msgstr "正在应用系统设置…"
+
+msgid "Reloading network settings…"
+msgstr "正在重新加载网络设置…"
+
+msgid "Checking modems and ports…"
+msgstr "正在检查调制解调器和端口…"
+
+msgid "Registering connection protocols…"
+msgstr "正在注册连接协议…"
+
+msgid "Starting LEDs and antenna control…"
+msgstr "正在启动指示灯和天线控制…"
+
+msgid "Refreshing the page cache…"
+msgstr "正在刷新页面缓存…"

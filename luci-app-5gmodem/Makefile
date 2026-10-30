@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.9.8
+PKG_VERSION:=3.9.9
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -45,7 +45,12 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-antenna 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-btnleds 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-usbports 2>/dev/null
 chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
+_5gm_step() {
+	[ -f /tmp/5gmodem/update.pid ] && echo "$$1" > /tmp/5gmodem/update.step 2>/dev/null
+	return 0
+}
 [ -n "$${IPKG_INSTROOT}" ] || {
+	_5gm_step services
 	for _5gm_f in /etc/hotplug.d/*/*5gmodem*.apk-new /etc/hotplug.d/*/*5gmodem*-opkg; do
 		[ -f "$$_5gm_f" ] || continue
 		case "$$_5gm_f" in
@@ -73,6 +78,7 @@ chmod +x "$${IPKG_INSTROOT}"/etc/init.d/5gmodem-sessionwatch 2>/dev/null
 	_5gm_svc 5gmodem-usbports start
 	_5gm_svc 5gmodem-sessionwatch restart
 	_5gm_svc 5gmodem-btnleds start
+	_5gm_step system
 	modprobe rndis_host 2>/dev/null
 	modprobe cdc_ether 2>/dev/null
 	/usr/share/5gmodem/usbmode-fix.sh 2>/dev/null
@@ -93,12 +99,16 @@ done
 [ -n "$${IPKG_INSTROOT}" ] || {
 	rm -f /tmp/luci-indexcache*
 	rm -rf /tmp/luci-modulecache/
+	_5gm_step network
 	/etc/init.d/rpcd reload 2>/dev/null
 	ubus call network reload 2>/dev/null
+	_5gm_step modems
 	/usr/share/5gmodem/modemswitch.sh resolve 2>/dev/null
 	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
 	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+	_5gm_step protos
 	/usr/share/5gmodem/register_proto.sh >/dev/null 2>&1
+	_5gm_step leds
 	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" != "0" ]; then
 		/etc/init.d/5gmodem-leds enable 2>/dev/null
 		/etc/init.d/5gmodem-leds restart 2>/dev/null
@@ -107,6 +117,7 @@ done
 		/etc/init.d/5gmodem-antenna enable 2>/dev/null
 		/etc/init.d/5gmodem-antenna restart 2>/dev/null
 	fi
+	_5gm_step cache
 	_5gm_ts=$$(( 2114380800 + $$(date +%s) % 31536000 ))
 	find /www/luci-static/resources/view/modem5g \
 		/www/luci-static/resources/view/status \

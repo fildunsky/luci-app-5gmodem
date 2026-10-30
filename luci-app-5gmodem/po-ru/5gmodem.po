@@ -6275,9 +6275,6 @@ msgstr "Скачивание: %d из %d КБ"
 msgid "Downloading: %d KB"
 msgstr "Скачивание: %d КБ"
 
-msgid "Installing the package…"
-msgstr "Установка пакета…"
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr "Завершение: обновляются переводы и кэш…"
 
@@ -6289,3 +6286,30 @@ msgstr "Во время обновления пропала связь с роу
 
 msgid "Could not reach GitHub"
 msgstr "Не удалось связаться с GitHub"
+
+msgid "Unpacking the package…"
+msgstr "Распаковка пакета…"
+
+msgid "Refreshing package lists…"
+msgstr "Обновление списков пакетов…"
+
+msgid "Restarting background services…"
+msgstr "Перезапуск фоновых служб…"
+
+msgid "Applying system settings…"
+msgstr "Применение системных настроек…"
+
+msgid "Reloading network settings…"
+msgstr "Перечитывание настроек сети…"
+
+msgid "Checking modems and ports…"
+msgstr "Проверка модемов и портов…"
+
+msgid "Registering connection protocols…"
+msgstr "Регистрация протоколов подключения…"
+
+msgid "Starting LEDs and antenna control…"
+msgstr "Запуск индикаторов и управления антенной…"
+
+msgid "Refreshing the page cache…"
+msgstr "Обновление кэша страниц…"

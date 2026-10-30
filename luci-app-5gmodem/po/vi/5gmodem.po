@@ -5990,9 +5990,6 @@ msgstr "Đang tải: %d / %d KB"
 msgid "Downloading: %d KB"
 msgstr "Đang tải: %d KB"
 
-msgid "Installing the package…"
-msgstr "Đang cài gói…"
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr "Đang hoàn tất: làm mới bản dịch và bộ nhớ đệm…"
 
@@ -6004,3 +6001,30 @@ msgstr "Mất kết nối với router trong lúc cập nhật."
 
 msgid "Could not reach GitHub"
 msgstr "Không kết nối được GitHub"
+
+msgid "Unpacking the package…"
+msgstr "Đang giải nén gói…"
+
+msgid "Refreshing package lists…"
+msgstr "Đang làm mới danh sách gói…"
+
+msgid "Restarting background services…"
+msgstr "Đang khởi động lại dịch vụ nền…"
+
+msgid "Applying system settings…"
+msgstr "Đang áp dụng cài đặt hệ thống…"
+
+msgid "Reloading network settings…"
+msgstr "Đang tải lại cài đặt mạng…"
+
+msgid "Checking modems and ports…"
+msgstr "Đang kiểm tra modem và cổng…"
+
+msgid "Registering connection protocols…"
+msgstr "Đang đăng ký giao thức kết nối…"
+
+msgid "Starting LEDs and antenna control…"
+msgstr "Đang khởi động đèn LED và điều khiển ăng-ten…"
+
+msgid "Refreshing the page cache…"
+msgstr "Đang làm mới bộ nhớ đệm trang…"

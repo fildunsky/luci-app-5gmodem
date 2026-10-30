@@ -14,6 +14,7 @@ STATUS=/tmp/5gmodem/update.json
 LOCK=/tmp/5gmodem/update.pid
 APIC=/tmp/5gmodem/update-api.json
 LOG=/tmp/5gmodem/update.log
+STEP=/tmp/5gmodem/update.step
 
 mkdir -p "$TMP" 2>/dev/null
 
@@ -70,8 +71,8 @@ version_gt() {
 }
 
 st() {
-	printf '{"running":true,"stage":"%s","done":%s,"total":%s,"target":"%s"}\n' \
-		"$1" "${2:-0}" "${3:-0}" "$(json_esc "$TARGET")" > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
+	printf '{"running":true,"stage":"%s","done":%s,"total":%s,"target":"%s","step":"%s"}\n' \
+		"$1" "${2:-0}" "${3:-0}" "$(json_esc "$TARGET")" "$(json_esc "$4")" > "$STATUS.tmp" && mv "$STATUS.tmp" "$STATUS"
 }
 
 fsize() { [ -f "$1" ] && wc -c < "$1" 2>/dev/null | tr -d ' ' || echo 0; }
@@ -131,6 +132,7 @@ install)
 			grep -q 'unable to select packages' "$LOG" 2>/dev/null || return 1
 			[ -z "$(apk_world_blockers)" ] || return 1
 			logger -t 5gmodem "update: apk could not resolve dependencies - refreshing package lists and retrying"
+			echo deps > "$STEP"
 			apk update >/dev/null 2>&1
 			apk add --allow-untrusted "$F" >"$LOG" 2>&1
 		}
@@ -177,13 +179,25 @@ install)
 				rm -f "$F"; fail "download_incomplete"; return
 			fi
 
+			rm -f "$STEP" "$F.rc"
 			st install "$_got" "$TOTAL"
-			if [ "$PM" = apk ]; then
-				apk_install; _rc=$?
-			else
-				opkg install --force-reinstall "$F" >"$LOG" 2>&1; _rc=$?
-			fi
-			rm -f "$F"
+			(
+				if [ "$PM" = apk ]; then
+					apk_install
+				else
+					opkg install --force-reinstall "$F" >"$LOG" 2>&1
+				fi
+				echo $? > "$F.rc"
+			) >/dev/null 2>&1 </dev/null &
+			_ip=$!
+			while kill -0 "$_ip" 2>/dev/null; do
+				st install "$_got" "$TOTAL" "$(cat "$STEP" 2>/dev/null)"
+				sleep 1
+			done
+			wait "$_ip" 2>/dev/null
+			_rc=$(cat "$F.rc" 2>/dev/null)
+			[ -n "$_rc" ] || _rc=1
+			rm -f "$F" "$F.rc" "$STEP"
 
 			st finish "$_got" "$TOTAL"
 			case "$PM" in
