@@ -153,7 +153,7 @@ mm)
 			_mm_restore "$2" "$MMCM"
 			trap - EXIT INT TERM
 		fi
-		_st done "" ',"out":"'"$(printf '%s' "$OUT" | base64 | tr -d '\n')"'","err":"'"$(printf '%s' "$ERR" | base64 | tr -d '\n')"'"'
+		_st done "" ',"out":"'"$(_b64 "$OUT")"'","err":"'"$(_b64 "$ERR")"'"'
 	) >/dev/null 2>&1 </dev/null &
 	cat "$ST"
 	exit 0 ;;
@@ -263,7 +263,7 @@ _st running starting
 	SWITCHED=0
 	trap - EXIT INT TERM
 
-	_st done "" ',"out":"'"$(printf '%s' "$OUT" | base64 | tr -d '\n')"'","err":"'"$(printf '%s' "$ERR" | base64 | tr -d '\n')"'"'"$NOTE"
+	_st done "" ',"out":"'"$(_b64 "$OUT")"'","err":"'"$(_b64 "$ERR")"'"'"$NOTE"
 ) >/dev/null 2>&1 </dev/null &
 
 cat "$ST"

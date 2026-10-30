@@ -170,8 +170,10 @@ the partial emit `_SNAP_PREPARED` is reset because the profile may change config
 - `no_at=1` in the section: no AT at all (`_MM_OWNS=1`, `_SN_NOAT=1`).
 - `mm_owns_path` while the iface proto is not `modemmanager`: config can disagree
   with reality, and the old "AT unless proto=modemmanager" gate missed it.
-  DW5821e/T77W968 dropped the data session on every tab open (issue #13). Port is
-  cleared; the mmcli block fills the card.
+  DW5821e/T77W968 dropped the data session on every tab open (issue #13). The
+  port then goes through `mm_at_allowed` like everywhere else and is cleared only
+  when it refuses; the mmcli block fills the card either way. Until 3.9.8 it was
+  cleared unconditionally, so Compal under `mbimp` lost CEITHERM and `AT+BINFO`.
 
 ### Port did not answer `atprobe`
 
@@ -443,7 +445,9 @@ only empty fields are filled. Modems without cdc-wdm (FM350 RNDIS) skip it.
   constant: HP lt4120 Cat 4 and Quectel EC21 Cat 1 both say 100/50; WDS gave 150/50
   and 10/5). Directions by magnitude, not label: EC21 swaps TX/RX. Cached per IMEI
   (tmp files survive a modem swap in the same slot, a path key would give the new
-  module old numbers). awk `%.0f`, busybox `%d` is int32.
+  module old numbers). awk `%.0f`, busybox `%d` is int32. Queried and cached only
+  in LTE/5G: WDS reports the limits of the current RAT, and a Compal RXM-G1 polled
+  on 3G right after boot cached HSPA+ 42/6 while LTE gave 400/150.
 
 ## AT CA fallback (`_at_ca_supplement`)
 

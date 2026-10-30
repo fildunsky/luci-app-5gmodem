@@ -764,7 +764,12 @@ else
 	if [ "$(uci -q get "network.$_mo_if.proto" 2>/dev/null)" != modemmanager ] \
 	   && mm_owns_path "$_POLL_AM"; then
 		_MM_OWNS=1
-		DEVICE=""
+		. "$RES/quirks.sh" 2>/dev/null
+		if mm_at_allowed "$_POLL_AM" "$_hl_sec"; then
+			[ -n "$MM_AT_PORT" ] && DEVICE="$MM_AT_PORT"
+		else
+			DEVICE=""
+		fi
 	fi
 fi
 
@@ -1947,11 +1952,12 @@ _qmi_supplement() {
 
 	if [ -z "$MAXDL" ]; then
 		_QS_IM=$(uci -q get "5gmodem.$_hl_sec.imei" 2>/dev/null | tr -cd '0-9')
-		if [ -n "$_QS_IM" ]; then
-			_QS_MR="/tmp/5gmodem/maxrate_$_QS_IM"
-			if [ -s "$_QS_MR" ]; then
-				read -r MAXDL MAXUL < "$_QS_MR"
-			else
+		_QS_MR="/tmp/5gmodem/maxrate4_$_QS_IM"
+		if [ -n "$_QS_IM" ] && [ -s "$_QS_MR" ]; then
+			read -r MAXDL MAXUL < "$_QS_MR"
+		elif [ -n "$_QS_IM" ]; then
+			case "$MODE" in LTE*|5G*|NR*) _QS_RQ=1 ;; *) _QS_RQ="" ;; esac
+			if [ -n "$_QS_RQ" ]; then
 				_QS_RT=$(qmicli_p "$_QS_WDM" --wds-get-channel-rates 2>/dev/null | awk '
 					/Max (TX|RX) rate:/ {
 						v = $NF; sub(/bps$/, "", v); v += 0

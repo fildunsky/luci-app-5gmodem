@@ -18,7 +18,6 @@ LOG=/tmp/5gmodem/update.log
 mkdir -p "$TMP" 2>/dev/null
 
 json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\r' | tr '\n\t' '  '; }
-b64() { printf '%s' "$1" | base64 | tr -d '\n'; }
 
 pkgman() {
 	command -v apk >/dev/null 2>&1 && { echo apk; return; }
@@ -105,7 +104,7 @@ check)
 	PUB=$(printf '%s' "$J" | jsonfilter -e '@.published_at' 2>/dev/null)
 	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s","published":"%s","notes":"%s"}\n' \
 		"$PM" "$PKG" "$([ "$PKG" = "$PKG_LITE" ] && echo lite || echo full)" \
-		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE" "$(json_esc "$PUB")" "$(b64 "$NOTES")"
+		"$(json_esc "$CUR")" "$(json_esc "$LAT")" "$AVAIL" "$PAGE" "$(json_esc "$PUB")" "$(_b64 "$NOTES")"
 	;;
 
 install)

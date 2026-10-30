@@ -156,9 +156,28 @@ When MM is not running (umbim/uqmi mode), `qmicli` is used only if `qmi_channel_
 - `AT$QCRSRP?` / `AT$QCRSRQ?` return triples `<pci>,<earfcn>,"<val>"`, serving cell first, e.g. `$QCRSRP: 386,1275,"-114.30",050,550,"-122.40"`. The field order was checked against value ranges: PCI is at most 503, so 1275 can only be an EARFCN. PCI is not in any qmicli signal output, so `$QCRSRP?` is also asked on the normal path when PCI is empty. It is skipped in 2G/3G.
 - Leading zeros are stripped with sed, not `$((10#$T))`. `base#number` is a bashism, and busybox ash fails with "arithmetic syntax error".
 
+### Extra AT metrics (AT port present)
+
+When the poll has a tty AT port (90d6, not 9063), the profile reads `AT+BINFO`:
+
+- `downlink modulation num_layer` → `pmimo` (rank); layer 0 modulation → `pmod`. Both only while `num_layer > 0`: idle layers read `BPSK` or empty.
+- `PCC CQI` first codeword → `cqi` (0 skipped).
+- Without qmicli only: `tx_pwr` → TX power; `RXn rsrp` / `RXn power` → antenna ports (`-256` = idle chain, skipped), live chain count → `rxdiv`; `AT+LCAINFO` `SCC n Band:b RSRP:x dbm` → `SnRSRP` when the band matches `SnBAND`. With qmicli the QMI values win (they carry RSRQ per port).
+
+Under ModemManager the port is available only when `mm_at_allowed` agrees (`mbimp` with the iface up).
+
 ### Thermal state
 
 This firmware has no °C reading at all (`AT^TEMP?` returns nothing). Of the 365 commands in `AT$QCCLAC`, the only thermal one is `+CEITHERM`, which reports a **throttling level 0-3** (`AT+CEITHERM=?` → `1.pa:0-3 2.pa_fr1:0-3 3.modem:0-3 4.mmw0..3:0-3`). The `modem level` sensor goes into `THERM`, never `TEMP`.
+
+### Built-in APN profile blocks that APN
+
+The VOS_5G firmware can carry its own APN profile (`--ms-query-provisioned-contexts` shows it with `Source: 'modem'`, e.g. `INTERNET` IPv4v6). The modem attaches on that APN, and every MBIM connect to the same APN then fails with `MBIM status error: Failure`. This happens with any IP type and under umbim, mbimcli and ModemManager alike. Any other APN connects. The cause is the stick's own Linux (QCMAP): it auto-connects profile 1 for its ECM/RNDIS tethering, and the network allows one PDN on that APN. The fix is on the modem side:
+
+1. Switch the modem to RNDIS (Switch_Tool).
+2. Open its web UI at 192.168.225.1 → APN SETTINGS.
+3. Delete or change the profile.
+4. Switch back to MBIM.
 
 ## PCIe / MHI variants (`modem/pci/`)
 

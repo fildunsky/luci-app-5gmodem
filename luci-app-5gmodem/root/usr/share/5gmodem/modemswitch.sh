@@ -186,7 +186,8 @@ resolve_at_gate() {
 quiet_at_port() {
 	[ -n "$_RG_PORT" ] && [ -c "$_RG_PORT" ] && { echo "$_RG_PORT"; return 0; }
 	_qa_pin=$(uci -q get "$CFG.$2.at_port")
-	if [ -n "$_qa_pin" ] && [ -e "$_qa_pin" ] && ! tty_poll_unsafe "$_qa_pin" && modem_ttys "$1" | grep -qxF "$_qa_pin"; then
+	if [ -n "$_qa_pin" ] && [ -e "$_qa_pin" ] && ! tty_poll_unsafe "$_qa_pin" && modem_ttys "$1" | grep -qxF "$_qa_pin" \
+	   && [ "$_qa_pin" != "$(dial_port_for_path "$1")" ]; then
 		echo "$_qa_pin"; return 0
 	fi
 	_qa_if=$(uci -q get "$CFG.$2.at_if")
@@ -980,6 +981,13 @@ resolve)
 			uci -q set "$CFG.$SEC.at_port=$ATP"
 		else
 			uci -q delete "$CFG.$SEC.at_port"
+		fi
+	elif [ -n "$ATP" ] && [ "$ATP" = "$(dial_port_for_path "$AMP")" ]; then
+		_rs_alt=$(at_for_path "$AMP")
+		if [ -n "$_rs_alt" ] && [ "$_rs_alt" != "$ATP" ]; then
+			logger -t 5gmodem-resolve "modem $AMP: AT port $ATP is the dialer port, using $_rs_alt"
+			ATP="$_rs_alt"
+			uci -q set "$CFG.$SEC.at_port=$ATP"
 		fi
 	fi
 	if [ -n "$ATP" ] && [ -e "$ATP" ]; then

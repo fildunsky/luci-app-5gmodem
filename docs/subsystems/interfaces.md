@@ -104,11 +104,6 @@ eth2; the MAC anchor is the real fix, this is a safety net).
      hung processes). Compal identified this way also gets
      `force_connection=1`: its first attempt after boot often fails on removing
      the old bearer and netifd would not retry.
-   - Compal RXM-G1 in the factory MBIM composition 05c6:9063 (Tri Cascade
-     VOS_5G dongle) -> `mbimp` when mbimcli is installed: umbim registers and
-     attaches but fails "Failed to connect bearer" on every retry. mbimp dials
-     with mbimcli and needs no MM. Only 9063: Compal 90d5/90d6 work on `mbim`
-     and stay on it.
    - 413c:81d7, 413c:81e0, 0489:e0b5 (DW5821e / T77W968, eSIM variants) ->
      `modemmanager`: umbim fails ("Failed to attach to network", treats PIN2 as
      blocker -> PIN_FAILED, "Subscriber init failed"), quectel-CM gives IP with
