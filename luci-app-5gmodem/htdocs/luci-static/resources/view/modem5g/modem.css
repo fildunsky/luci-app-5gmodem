@@ -2708,8 +2708,8 @@ html.tg-theme-argon [data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .c
   line-height: 1.5;
 }
 
-.tg-updbar { width: 100%; max-width: 360px; height: 8px; border-radius: 4px; background: var(--tg-track); overflow: hidden; margin-bottom: 4px; }
-.tg-updfill { height: 100%; width: 0; border-radius: 4px; background-color: var(--tg-accent); background-image: linear-gradient(45deg, rgba(255,255,255,.28) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%, transparent); background-size: 16px 16px; animation: tg-updstripe .8s linear infinite; transition: width .5s ease; }
+.tg-updprog { width: 100%; max-width: 360px; height: 8px; border-radius: 4px; background: var(--tg-track); overflow: hidden; margin-bottom: 4px; }
+.tg-updfill { height: 100%; width: 0; border-radius: 4px; background-color: var(--tg-accent); background-image: linear-gradient(45deg, rgba(255,255,255,.28) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%, transparent); background-size: 16px 16px; animation: tg-updstripe .8s linear infinite; transition: width .25s linear; }
 .tg-updfill.done { animation: none; background-image: none; }
 @keyframes tg-updstripe { from { background-position: 0 0; } to { background-position: 16px 0; } }
 @media (prefers-reduced-motion: reduce) { .tg-updfill { animation: none; } }

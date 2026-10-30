@@ -5990,9 +5990,6 @@ msgstr "Mengunduh: %d dari %d KB"
 msgid "Downloading: %d KB"
 msgstr "Mengunduh: %d KB"
 
-msgid "Installing the package…"
-msgstr "Memasang paket…"
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr "Menyelesaikan: memperbarui terjemahan dan cache…"
 
@@ -6004,3 +6001,30 @@ msgstr "Koneksi ke router terputus saat pembaruan."
 
 msgid "Could not reach GitHub"
 msgstr "Tidak dapat menghubungi GitHub"
+
+msgid "Unpacking the package…"
+msgstr "Membongkar paket…"
+
+msgid "Refreshing package lists…"
+msgstr "Memperbarui daftar paket…"
+
+msgid "Restarting background services…"
+msgstr "Memulai ulang layanan latar belakang…"
+
+msgid "Applying system settings…"
+msgstr "Menerapkan pengaturan sistem…"
+
+msgid "Reloading network settings…"
+msgstr "Memuat ulang pengaturan jaringan…"
+
+msgid "Checking modems and ports…"
+msgstr "Memeriksa modem dan port…"
+
+msgid "Registering connection protocols…"
+msgstr "Mendaftarkan protokol koneksi…"
+
+msgid "Starting LEDs and antenna control…"
+msgstr "Memulai LED dan kontrol antena…"
+
+msgid "Refreshing the page cache…"
+msgstr "Memperbarui cache halaman…"

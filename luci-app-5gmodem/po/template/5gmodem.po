@@ -356,9 +356,6 @@ msgstr ""
 msgid "Downloading: %d KB"
 msgstr ""
 
-msgid "Installing the package…"
-msgstr ""
-
 msgid "Finishing: refreshing translations and caches…"
 msgstr ""
 
@@ -369,4 +366,31 @@ msgid "Lost contact with the router during the update."
 msgstr ""
 
 msgid "Could not reach GitHub"
+msgstr ""
+
+msgid "Unpacking the package…"
+msgstr ""
+
+msgid "Refreshing package lists…"
+msgstr ""
+
+msgid "Restarting background services…"
+msgstr ""
+
+msgid "Applying system settings…"
+msgstr ""
+
+msgid "Reloading network settings…"
+msgstr ""
+
+msgid "Checking modems and ports…"
+msgstr ""
+
+msgid "Registering connection protocols…"
+msgstr ""
+
+msgid "Starting LEDs and antenna control…"
+msgstr ""
+
+msgid "Refreshing the page cache…"
 msgstr ""
