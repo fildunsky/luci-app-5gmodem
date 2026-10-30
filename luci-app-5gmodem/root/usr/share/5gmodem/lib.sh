@@ -1485,3 +1485,19 @@ hl_web_port() {
 	done
 	return 1
 }
+
+_b64() {
+	if command -v base64 >/dev/null 2>&1; then printf '%s' "$1" | base64 | tr -d '\n'; return; fi
+	if command -v openssl >/dev/null 2>&1; then printf '%s' "$1" | openssl base64 | tr -d '\n'; return; fi
+	printf '%s' "$1" | hexdump -v -e '/1 "%u\n"' | awk '
+		BEGIN { t = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" }
+		{ b[n++] = $1 }
+		END {
+			for (i = 0; i < n; i += 3) {
+				x = b[i] * 65536 + (i + 1 < n ? b[i + 1] : 0) * 256 + (i + 2 < n ? b[i + 2] : 0)
+				o = o substr(t, int(x / 262144) % 64 + 1, 1) substr(t, int(x / 4096) % 64 + 1, 1)
+				o = o (i + 1 < n ? substr(t, int(x / 64) % 64 + 1, 1) : "=") (i + 2 < n ? substr(t, x % 64 + 1, 1) : "=")
+			}
+			printf "%s", o
+		}'
+}

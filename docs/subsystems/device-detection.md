@@ -782,6 +782,12 @@ simslot all used the dial port. Decided from the live interface config, not
 composition keeps its port (dial and polling share it by design, `at_lock`
 exists for that).
 
+A section `at_port` saved before the interface existed can still point at the
+dial port (2026-10-30, L860 #52: `at_port=ttyACM2` = xmm `device`, while polling
+used ttyACM0, so `simslot.sh` inside the poll was refused by `at_lock` every
+round). `modemswitch.sh resolve` replaces such a pin when `at_for_path` finds
+another port, and `quiet_at_port` does not return it.
+
 ### ModemManager ownership (`mm_owns_path`)
 
 By fact (modem listed by MM), not by interface proto, which can disagree with
