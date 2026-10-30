@@ -314,6 +314,54 @@ if [ "$REGOK" = "1" ]; then
 
 fi
 
+_CP_AT=0
+case "$DEVICE" in /dev/tty*) [ -c "$DEVICE" ] && _CP_AT=1 ;; esac
+if [ "$REGOK" = "1" ] && [ "$_QC_LTE" = 1 ] && [ "$_CP_AT" = 1 ]; then
+	[ -n "$OB" ] || OB=$(sms_tool -d $DEVICE at "at+binfo" 2>/dev/null)
+	OB=$(printf '%s\n' "$OB" | tr -d '\r')
+	case "$OB" in
+	*"LTE PCC INFO"*)
+		T=$(printf '%s\n' "$OB" | sed -n 's/^tx_pwr: *\(-\{0,1\}[0-9][0-9]*\) *dBm.*/\1/p' | head -1)
+		[ -z "$TXPOWER" ] && [ "$_QMICLI_OK" != 1 ] && [ -n "$T" ] && TXPOWER="$T dBm"
+		if [ -z "$ANTPORTS" ] && [ "$_QMICLI_OK" != 1 ]; then
+			_CP_N=0
+			for _CP_I in 0 1 2 3; do
+				_CP_R=$(printf '%s\n' "$OB" | sed -n "s/^RX$_CP_I rsrp: *\(-[0-9][0-9]*\) dBm.*/\1/p" | head -1)
+				case "$_CP_R" in ''|-256) continue ;; esac
+				_CP_P=$(printf '%s\n' "$OB" | sed -n "s/^RX$_CP_I power: *\(-[0-9][0-9]*\) dBm.*/\1/p" | head -1)
+				ANTPORTS="$ANTPORTS${ANTPORTS:+ }$_CP_I:$_CP_R::$_CP_P"
+				_CP_N=$((_CP_N + 1))
+			done
+			if [ -z "$RXDIV" ]; then
+				case "$_CP_N" in
+					1) RXDIV="off" ;;
+					2) RXDIV="2rx" ;;
+					3|4) RXDIV="4rx" ;;
+				esac
+			fi
+		fi
+		_CP_L=$(printf '%s\n' "$OB" | sed -n 's/^downlink modulation num_layer *\([0-9][0-9]*\).*/\1/p' | head -1)
+		if [ -n "$_CP_L" ] && [ "$_CP_L" -gt 0 ] 2>/dev/null; then
+			[ -z "$PMIMO" ] && PMIMO="$_CP_L"
+			T=$(printf '%s\n' "$OB" | sed -nE 's/^downlink modulation layer 0 +(QPSK|[0-9]+QAM) *$/\1/p' | head -1)
+			[ -z "$PMOD" ] && [ -n "$T" ] && PMOD="$T"
+		fi
+		T=$(printf '%s\n' "$OB" | sed -n 's/^PCC CQI *\([0-9][0-9]*\).*/\1/p' | head -1)
+		[ -z "$CQI" ] && [ -n "$T" ] && [ "$T" != 0 ] && CQI="$T"
+		;;
+	esac
+	if [ -n "$S1BAND" ] && [ -z "$S1RSRP" ] && [ "$_QMICLI_OK" != 1 ]; then
+		_CP_CA=$(sms_tool -d $DEVICE at "at+lcainfo" 2>/dev/null | tr -d '\r')
+		for _CP_I in 1 2 3 4; do
+			eval "_CP_B=\$S${_CP_I}BAND; _CP_R=\$S${_CP_I}RSRP"
+			[ -n "$_CP_B" ] && [ -z "$_CP_R" ] || continue
+			_CP_B=$(printf '%s' "$_CP_B" | sed -n 's/^B\([0-9][0-9]*\).*/\1/p')
+			_CP_R=$(printf '%s\n' "$_CP_CA" | sed -n "s/^SCC $_CP_I Band:$_CP_B RSRP:\(-[0-9][0-9]*\) dbm.*/\1/p" | head -1)
+			[ -n "$_CP_R" ] && eval "S${_CP_I}RSRP=\$_CP_R"
+		done
+	fi
+fi
+
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE-A B,LTE-A | B,')
 
 _OT=$(sms_tool -d $DEVICE at "AT+CEITHERM?" 2>/dev/null)
