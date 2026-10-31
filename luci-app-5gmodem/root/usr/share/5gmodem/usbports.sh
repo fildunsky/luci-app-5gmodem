@@ -9,6 +9,7 @@ driver_for() {
 		413c:81d8|1bc7:1911) echo "option1" ;;
 		2c7c:6004|1bbb:0196) echo "option1" ;;
 		2cb7:0110|19d2:0581|19d2:0536) echo "option1" ;;
+		3466:3301) echo "option1" ;;
 		*)         echo "generic" ;;
 	esac
 }
@@ -17,7 +18,7 @@ newid_for() {
 	case "$1:$2" in
 		05c6:9091|05c6:90b4) echo "$1 $2 ff" ;;
 		413c:81d8|1bc7:1911) echo "$1 $2 ff" ;;
-		2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536) echo "$1 $2 ff" ;;
+		2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536|3466:3301) echo "$1 $2 ff" ;;
 		*)         echo "$1 $2" ;;
 	esac
 }
@@ -205,7 +206,7 @@ coldplug() {
 				sh /etc/hotplug.d/usb/62-5gmodem-fastboot-rescue >/dev/null 2>&1 </dev/null
 		case "$_cp_v:$_cp_p" in
 			05c6:9025|05c6:90d5|05c6:90d6|05c6:9091|05c6:90b4) bind_ports "$_cp_v" "$_cp_p" ;;
-			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536) bind_ports "$_cp_v" "$_cp_p" ;;
+			413c:81d8|1bc7:1911|2c7c:6004|1bbb:0196|2cb7:0110|19d2:0581|19d2:0536|3466:3301) bind_ports "$_cp_v" "$_cp_p" ;;
 			05c6:9063) pick_config "$_cp_d" 3 ;;
 			03f0:9d1d) pick_config "$_cp_d" 1; sleep 2; bind_ports "$_cp_v" "$_cp_p" ;;
 		esac

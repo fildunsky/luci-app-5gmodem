@@ -20,6 +20,8 @@ tty_no_at() {
 	[ -r "$_na_p/bInterfaceNumber" ] || _na_p=${_na_p%/*}
 	[ -r "$_na_p/bInterfaceNumber" ] || return 1
 	_na_d=${_na_p%/*}
+	[ "$(cat "$_na_d/idVendor" 2>/dev/null):$(cat "$_na_d/idProduct" 2>/dev/null)" = 3466:3301 ] \
+		&& [ "$(cat "$_na_p/bInterfaceProtocol" 2>/dev/null)" != 12 ] && return 0
 	noat_iface "$(cat "$_na_d/idVendor" 2>/dev/null)" "$(cat "$_na_d/idProduct" 2>/dev/null)" \
 		"$(cat "$_na_p/bInterfaceNumber" 2>/dev/null)"
 }

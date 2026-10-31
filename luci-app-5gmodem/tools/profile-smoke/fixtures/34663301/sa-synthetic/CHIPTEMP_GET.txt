@@ -1,0 +1,3 @@
+## Synthetic: 12 sensors in tenths of a degree
+^CHIPTEMP: 412,398,65535,370,365,360,455,450,470,478,430,428
+OK

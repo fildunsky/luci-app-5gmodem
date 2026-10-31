@@ -1,0 +1,6 @@
+## Synthetic: field layout from the public MT5700M manager, not a live capture
+Manufacturer: TD Tech
+Model: MT5700M-CN
+Revision: 11.0.0.0
+IMEI: 000000000000000
+OK

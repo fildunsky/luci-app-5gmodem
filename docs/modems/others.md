@@ -53,3 +53,16 @@ Identity only: fixed `MODEL`, `AT+CGMR`, `AT+GSN`, `AT+CIMI`, `AT+ICCID`.
 Temperatures come from `/sys/class/thermal/thermal_zone*/{type,temp}` (milli-°C), matched by zone type, because zone numbers change between kernels. Mapping: `pa-thermal` PA, `cpu*-thermal` CPU (hottest zone), `pm8916-thermal` PMIC die, `battery-thermal` battery, `xo-thermal` board (the crystal next to the radio), `charger-thermal` charger. The profile publishes them as `temps` (`pa=.. bat=..`), and the page renders one badge per sensor. The main `mtemp` value is the PA. Without a PA zone it falls back to the hottest zone, which is usually the PMIC die (about 70 °C) and overstates the modem temperature.
 
 Battery: `status` Charging gives charging=1. Full and Not charging (stopped by the thermistor or the safety timer) give 0.
+
+## TD Tech MT5700M-CN (3466:3301, Balong 5000)
+
+Written from public sources without hardware; AT reply formats and the data path need confirmation on a real module.
+
+- USB only. In PCIe mode the module is a root complex, so a router cannot be its host. Default USB composition: NCM, DIAG, PCUI, Serial_B, Serial_C, GPS.
+- `option` has no entry for this ID: `usbports.sh` writes `3466 3301 ff` into `new_id`. Class `ff` leaves the CDC pair to `cdc_ncm`. `21-5gmodem-tdtech` binds on hotplug, `coldplug` at boot.
+- AT works on PCUI (`ff/06/12`). `tty_no_at` hides all other ports of this module from AT probes.
+- Autosetup makes `proto=fibocom` (no cdc-wdm). The TD Tech branch `_td_dial` dials with `AT^NDISDUP=1,1` and waits for `AT^NDISSTATQRY?`. `udhcpc -q` then takes one lease from the module (`ndisdhcp.sh`), and the address, gateway and DNS go on the interface as static values. No DHCP answer falls back to `AT+CGPADDR`.
+- If `AT^SETAUTODIAL?` reports auto dial is on, the modem owns the session: we do not touch APN or NDIS and do not change that setting. It is stored in the module.
+- `AT^CHIPTEMP?` returns 12 sensors in tenths of a degree; `TEMP` is the hottest valid one, 65535 means no reading.
+- Bands are not implemented, the module falls back to the generic behaviour.
+- Smoke fixtures `34663301/*-synthetic` are synthetic, not live captures.

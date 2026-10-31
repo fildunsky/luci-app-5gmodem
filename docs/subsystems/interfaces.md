@@ -75,6 +75,8 @@ eth2; the MAC anchor is the real fix, this is a safety net).
    - Before deciding "no cdc-wdm", sysfs is re-checked: the registry may lag the
      hotplug by a fraction of a second, and a Compal in 1e2d:00b7 (QMI) got
      `proto=fibocom` on wwan0.
+   - With `auto_port=0` a dial port the user set on `atc`/`xmm`/other dial-tty protos stays while it belongs to this modem: `ensure_iface` used to put `data_at_port` back on every `resolve` (boot, USB hotplug, package install).
+   - xmm (`xmm-modem` package) always binds the data channel to `/USBCDC/0` (`AT+XDATACHANNEL` in `xmm-connect.gcom`), so on 8087:095a (the only ID for which xmm.sh sends it; FM350 does not) it must dial on the ACM of interface 0 (`xmm_data_tty`, by interface number, ttyACM names can shift). 4pda: working xmm setups run on ttyACM0, ttyACM2 gives the 15-40 s disconnect loop. Picking any other answering port left an L850 on ttyACM2 without an address (one L860 report did get one there). Metrics move to another AT port (`xmm_other_at`) when they sat on the dial port.
    - For atc/xmm `device` is the AT dial port, not the netdev (xmm does
      `basename $device` and looks it up in `/sys/class/tty`; a netdev there gives
      "AT port not valid!" / "Device path not found!"). The dial port is chosen in

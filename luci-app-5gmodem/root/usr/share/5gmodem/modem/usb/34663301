@@ -1,0 +1,125 @@
+_td_val() {
+	awk -v v="$1" -v b="$2" -v s="$3" 'BEGIN {
+		if (v !~ /^[0-9]+$/ || v == 255) exit
+		printf "%g", b + v * s
+	}'
+}
+
+_TD_H=$(sms_tool -d "$DEVICE" at "AT^HCSQ?" 2>/dev/null | tr -d '\r" ' | sed -n 's/^\^HCSQ://p' | head -1)
+_TD_S=${_TD_H%%,*}
+_TD_F=$(echo "$_TD_H" | cut -d, -f2-)
+case "$_TD_S" in
+	NR)
+		MODE="5G SA"
+		_TD_RP=$(echo "$_TD_F" | cut -d, -f1)
+		_TD_SN=$(echo "$_TD_F" | cut -d, -f2)
+		_TD_RQ=$(echo "$_TD_F" | cut -d, -f3)
+		;;
+	LTE)
+		MODE="LTE"
+		_TD_RP=$(echo "$_TD_F" | cut -d, -f2)
+		_TD_SN=$(echo "$_TD_F" | cut -d, -f3)
+		_TD_RQ=$(echo "$_TD_F" | cut -d, -f4)
+		;;
+	WCDMA)
+		MODE="WCDMA"
+		_TD_RP=""; _TD_SN=""; _TD_RQ=""
+		;;
+	GSM)
+		MODE="GSM"
+		_TD_RP=""; _TD_SN=""; _TD_RQ=""
+		;;
+	*)
+		_TD_RP=""; _TD_SN=""; _TD_RQ=""
+		;;
+esac
+_TD_V=$(_td_val "$_TD_RP" -141 1)
+[ -n "$_TD_V" ] && RSRP="${_TD_V%.*}"
+_TD_V=$(_td_val "$_TD_SN" -20.2 0.2)
+[ -n "$_TD_V" ] && SINR="$_TD_V"
+_TD_V=$(_td_val "$_TD_RQ" -20 0.5)
+[ -n "$_TD_V" ] && RSRQ="$_TD_V"
+
+_TD_C=$(sms_tool -d "$DEVICE" at "AT^HFREQINFO?" 2>/dev/null | tr -d '\r" ' | awk -F, '
+	/^\^HFREQINFO:/ {
+		if ($2 != 6 && $2 != 7) next
+		for (i = 3; i + 6 <= NF; i += 7) {
+			if ($i !~ /^[0-9]+$/) continue
+			print $2, $i, $(i + 1), $(i + 3)
+		}
+	}')
+if [ -n "$_TD_C" ]; then
+	_TD_I=0; _TD_NR=0; _TD_LT=0; _TD_LIST=""
+	_TD_SAVE=$(printf '%s\n' "$_TD_C")
+	while read -r _td_r _td_b _td_ch _td_bw; do
+		[ -n "$_td_b" ] || continue
+		if [ "$_td_r" = 7 ]; then
+			_TD_NR=$((_TD_NR + 1)); _td_f=$(band5g "$_td_b"); _td_t="n$_td_b"
+		else
+			_TD_LT=$((_TD_LT + 1)); _td_f=$(band4g "$_td_b" ""); _td_t="B$_td_b"
+		fi
+		case "$_td_bw" in
+			''|*[!0-9]*) ;;
+			*) _td_f="$_td_f @$(awk -v b="$_td_bw" 'BEGIN { printf "%g", b / 1000 }') MHz" ;;
+		esac
+		_TD_LIST="$_TD_LIST${_TD_LIST:+ + }$_td_t"
+		case "$_TD_I" in
+			0) PBAND="$_td_f"; EARFCN="$_td_ch" ;;
+			1) S1BAND="$_td_f"; S1EARFCN="$_td_ch" ;;
+			2) S2BAND="$_td_f"; S2EARFCN="$_td_ch" ;;
+			3) S3BAND="$_td_f"; S3EARFCN="$_td_ch" ;;
+			4) S4BAND="$_td_f"; S4EARFCN="$_td_ch" ;;
+		esac
+		_TD_I=$((_TD_I + 1))
+	done <<TDEOF
+$_TD_SAVE
+TDEOF
+	if [ "$_TD_NR" -gt 0 ] && [ "$_TD_LT" -gt 0 ]; then
+		MODE="5G NSA $_TD_LIST"
+	elif [ "$_TD_NR" -gt 0 ]; then
+		MODE="5G SA $_TD_LIST"
+	elif [ "$_TD_LT" -gt 1 ]; then
+		MODE="LTE-A $_TD_LIST"
+	else
+		MODE="LTE $_TD_LIST"
+	fi
+	[ "$_TD_I" -gt 1 ] && _CA_FROM_PROFILE=1
+fi
+
+_TD_M=$(sms_tool -d "$DEVICE" at "AT^MONSC" 2>/dev/null | tr -d '\r" ' | sed -n 's/^\^MONSC://p' | head -1)
+case "${_TD_M%%,*}" in
+	NR)
+		_TD_V=$(echo "$_TD_M" | cut -d, -f7)
+		case "$_TD_V" in ''|*[!0-9]*) ;; *) PCI="$_TD_V" ;; esac
+		;;
+	LTE)
+		_TD_V=$(echo "$_TD_M" | cut -d, -f6)
+		case "$_TD_V" in ''|*[!0-9]*) ;; *) PCI="$_TD_V" ;; esac
+		;;
+esac
+
+_TD_V=$(sms_tool -d "$DEVICE" at "AT^CHIPTEMP?" 2>/dev/null | tr -d '\r ' | awk -F'[:,]' '
+	/^\^CHIPTEMP:/ {
+		for (i = 2; i <= NF; i++) {
+			if ($i !~ /^-?[0-9]+$/ || $i < -400 || $i > 1200) continue
+			if (!f || $i + 0 > m) { m = $i + 0; f = 1 }
+		}
+		if (f) printf "%.1f", m / 10
+		exit
+	}')
+[ -n "$_TD_V" ] && TEMP="$_TD_V &deg;C"
+
+_TD_A=$(sms_tool -d "$DEVICE" at "ATI" 2>/dev/null | tr -d '\r')
+_TD_V=$(echo "$_TD_A" | sed -n 's/^Model: *//p' | head -1)
+[ -n "$_TD_V" ] && MODEL="TD Tech $_TD_V"
+_TD_V=$(echo "$_TD_A" | sed -n 's/^Revision: *//p' | head -1)
+[ -n "$_TD_V" ] && FW="$_TD_V"
+_TD_V=$(echo "$_TD_A" | sed -n 's/^IMEI: *//p' | head -1)
+[ -n "$_TD_V" ] && NR_IMEI="$_TD_V"
+
+_TD_V=$(sms_tool -d "$DEVICE" at "AT+CIMI" 2>/dev/null | tr -d '\r' | grep -E '^[0-9]{6,}$' | head -1)
+[ -n "$_TD_V" ] && NR_IMSI="$_TD_V"
+_TD_V=$(sms_tool -d "$DEVICE" at "AT^ICCID?" 2>/dev/null | tr -d '\r ' | sed -n 's/^\^ICCID://p' | head -1)
+[ -n "$_TD_V" ] && NR_ICCID="$_TD_V"
+
+PROTO="ncm"

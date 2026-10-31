@@ -958,3 +958,7 @@ Order: ubus (instance with `"running": true`); a hand-written
 `status()`/`status_service()`; for procd without own status ubus is final; for
 the rest the `/etc/rc.d` enable symlink (the toggle pairs enable/disable with
 start/stop).
+
+## `usb/21-5gmodem-tdtech`
+
+Binds PCUI and other vendor ports of TD Tech 3466:3301 on hotplug through `usbports.sh bind`. See [others.md](../modems/others.md#td-tech-mt5700m-cn-34663301-balong-5000).

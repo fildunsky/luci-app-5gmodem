@@ -349,10 +349,11 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		if [ "$FPROTO" = atc ] || [ "$FPROTO" = xmm ]; then
 			METRIC_AT=$(_mk_atport)
 			DIALPORT=""
+			[ "$FPROTO" = xmm ] && DIALPORT=$(xmm_data_tty "$AMP")
 			_dp_gcom=""
 			[ "$FPROTO" = xmm ] && [ -f /etc/gcom/probeport.gcom ] \
 				&& command -v gcom >/dev/null 2>&1 && _dp_gcom=1
-			for DPMODE in model at; do
+			[ -n "$DIALPORT" ] || for DPMODE in model at; do
 				for t in /sys/bus/usb/devices/$AMP:*/ttyUSB* /sys/bus/usb/devices/$AMP:*/tty/ttyUSB* \
 				         /sys/bus/usb/devices/$AMP:*/ttyACM* /sys/bus/usb/devices/$AMP:*/tty/ttyACM*; do
 					[ -e "$t" ] || continue
@@ -370,6 +371,15 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 				[ -n "$DIALPORT" ] && break
 			done
 			[ -n "$DIALPORT" ] || DIALPORT="$METRIC_AT"
+			if [ "$FPROTO" = xmm ] && [ -n "$METRIC_AT" ] && [ "$METRIC_AT" = "$DIALPORT" ] \
+			   && _mk_alt=$(xmm_other_at "$AMP" "$DIALPORT"); then
+				logger -t 5gmodem-mkiface "xmm dials on $DIALPORT (data channel /USBCDC/0) - metrics moved to $_mk_alt"
+				[ -n "$MSEC" ] && uci -q set "5gmodem.$MSEC.at_port=$_mk_alt"
+				if [ "$_IS_ACTIVE" = 1 ]; then
+					uci -q set "5gmodem.@5gmodem[0].at_port=$_mk_alt"
+					uci -q set "5gmodem.@5gmodem[0].device=$_mk_alt"
+				fi
+			fi
 			uci set "network.$IF.proto=$FPROTO"
 			uci set "network.$IF.device=$DIALPORT"
 			set_apn_opt "$IF" "$OLDAPN"

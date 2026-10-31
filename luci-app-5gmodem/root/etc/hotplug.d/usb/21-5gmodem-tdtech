@@ -1,0 +1,6 @@
+#!/bin/sh
+
+[ "$ACTION" = "add" ] && [ "$DEVTYPE" = "usb_device" ] || exit 0
+case "$PRODUCT" in
+	3466/3301/*) /usr/share/5gmodem/usbports.sh bind 3466 3301 ;;
+esac
