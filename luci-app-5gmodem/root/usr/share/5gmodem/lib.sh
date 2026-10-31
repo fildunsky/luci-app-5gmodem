@@ -1501,3 +1501,24 @@ _b64() {
 			printf "%s", o
 		}'
 }
+
+xmm_data_tty() {
+	[ "$(cat "/sys/bus/usb/devices/$1/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$1/idProduct" 2>/dev/null)" = 8087:095a ] || return 1
+	for _xd_i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+		for _xd_t in /sys/bus/usb/devices/$1:1.$_xd_i/tty/ttyACM*; do
+			[ -e "$_xd_t" ] && { echo "/dev/${_xd_t##*/}"; return 0; }
+		done
+	done
+	return 1
+}
+
+xmm_other_at() {
+	for _xo_t in /sys/bus/usb/devices/$1:*/tty/ttyACM* /sys/bus/usb/devices/$1:*/ttyUSB* \
+	             /sys/bus/usb/devices/$1:*/tty/ttyUSB*; do
+		[ -e "$_xo_t" ] || continue
+		[ "/dev/${_xo_t##*/}" = "$2" ] && continue
+		/usr/share/5gmodem/atprobe.sh "/dev/${_xo_t##*/}" model >/dev/null 2>&1 || continue
+		echo "/dev/${_xo_t##*/}"; return 0
+	done
+	return 1
+}
