@@ -365,7 +365,7 @@ fi
 MODE=$(echo $MODE | sed 's,/,+,' | sed 's, / \(B[0-9]\), + \1,g' | sed 's,LTE B,LTE | B,' | sed 's,LTE-A B,LTE-A | B,')
 
 _OT=$(sms_tool -d $DEVICE at "AT+CEITHERM?" 2>/dev/null)
-THERM=$(echo "$_OT" | awk -F: '/modem level/ {gsub(/[^0-9]/, "", $2); print $2; exit}')
+THERM=$(echo "$_OT" | awk -F: '/ level:/ { v = $2; gsub(/[^0-9]/, "", v); if (v != "" && (m == "" || v + 0 > m)) m = v + 0 } END { if (m != "") print m }')
 
 else
 
