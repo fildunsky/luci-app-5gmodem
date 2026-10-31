@@ -88,7 +88,28 @@ ensure_iface() {
 		wdmdev)           NEW=$(wdm_for_path "$P") ;;
 		modemmanager)     NEW=$(readlink -f "/sys/bus/usb/devices/$P" 2>/dev/null) ;;
 		dialtty)
-			if [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
+			_dp_man=""
+			if [ "$(uci -q get "$CFG.@5gmodem[0].auto_port")" = 0 ] && [ -c "$CUR" ]; then
+				for t in /sys/bus/usb/devices/$P:*/ttyUSB* /sys/bus/usb/devices/$P:*/tty/ttyUSB* \
+				         /sys/bus/usb/devices/$P:*/ttyACM* /sys/bus/usb/devices/$P:*/tty/ttyACM*; do
+					[ "/dev/$(basename "$t")" = "$CUR" ] && { _dp_man=1; break; }
+				done
+			fi
+			if [ -n "$_dp_man" ]; then
+				NEW="$CUR"
+				[ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ] && uci -q set "$CFG.$SEC.data_at_port=$CUR"
+			elif [ "$PROTO" = xmm ] && _ei_x=$(xmm_data_tty "$P"); then
+				NEW="$_ei_x"
+				uci -q set "$CFG.$SEC.data_at_port=$NEW"
+				if [ "$(uci -q get "$CFG.$SEC.at_port")" = "$NEW" ] && _ei_a=$(xmm_other_at "$P" "$NEW"); then
+					logger -t 5gmodem-resolve "iface $IF: xmm dials on $NEW (data channel /USBCDC/0) - metrics moved to $_ei_a"
+					uci -q set "$CFG.$SEC.at_port=$_ei_a"
+					if [ "$(uci -q get "$CFG.@5gmodem[0].at_port")" = "$NEW" ]; then
+						uci -q set "$CFG.@5gmodem[0].at_port=$_ei_a"
+						uci -q set "$CFG.@5gmodem[0].device=$_ei_a"
+					fi
+				fi
+			elif [ -n "$(uci -q get "$CFG.$SEC.data_at_port")" ]; then
 				MET=$(uci -q get "$CFG.@5gmodem[0].at_port")
 				_rp_gcom=""
 				[ "$PROTO" = xmm ] && [ -f /etc/gcom/probeport.gcom ] \
