@@ -168,7 +168,7 @@ Under ModemManager the port is available only when `mm_at_allowed` agrees (`mbim
 
 ### Thermal state
 
-This firmware has no °C reading at all (`AT^TEMP?` returns nothing). Of the 365 commands in `AT$QCCLAC`, the only thermal one is `+CEITHERM`, which reports a **throttling level 0-3** (`AT+CEITHERM=?` → `1.pa:0-3 2.pa_fr1:0-3 3.modem:0-3 4.mmw0..3:0-3`). The `modem level` sensor goes into `THERM`, never `TEMP`.
+This firmware has no °C reading at all (`AT^TEMP?` returns nothing). Of the 365 commands in `AT$QCCLAC`, the only thermal one is `+CEITHERM`, which reports a **throttling level 0-3** (`AT+CEITHERM=?` → `1.pa:0-3 2.pa_fr1:0-3 3.modem:0-3 4.mmw0..3:0-3`). `THERM` is the highest level of all sensors (the PAs usually throttle first), never `TEMP`. All seven read 0 on an idle stand.
 
 ### Built-in APN profile blocks that APN
 
