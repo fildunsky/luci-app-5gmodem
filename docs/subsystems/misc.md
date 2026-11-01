@@ -60,6 +60,7 @@ The "Settings" tab: application update, APN database update, Network page displa
 
 ## update.sh
 `update.sh version|check|install|status` - checks and installs the latest luci-app-5gmodem release from the project GitHub releases. Prints JSON.
+- Release notes on GitHub stay in English. Translations are release assets `notes-<lang>.txt` for ru, id, ja, vi, zh_Hans and zh_Hant. `check <lang>` replaces the notes with the matching asset (first 8 KB); no asset or a failed download keeps the English text. The page takes the language from the `lang` attribute of the document.
 - Downloads go through net_fetch (lib.sh): direct requests from the router die behind carrier whitelists, the local clash gets through (2026-08-19: "the updater must fetch like the widgets do").
 - detect_pkg: two packages exist, full and lite (see Makefile); the update must use the installed variant. Full does not fit on an 8 MB flash router; lite over a working QMI/MBIM setup would remove qmi-utils and modemmanager as orphans and drop the link. `check` returns `variant` so the UI shows what will be installed.
 - asset_url anchors on the asset file name (`/<basename>[-_]<digit>...<ext>`): the repo name appears in every asset URL, and a greedy `.*` picked the last .apk (an i18n package such as zh-tw); installing it left the main version unchanged ("version stayed 1.2.3"). apk uses `-` before the version, ipk uses `_`.

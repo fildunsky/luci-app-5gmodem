@@ -1656,6 +1656,19 @@ report() {
 
 	collect "usb"
 	run 10 "USB devices" sh -c "lsusb 2>/dev/null || cat /sys/kernel/debug/usb/devices 2>/dev/null"
+	run 10 "PCI devices" sh -c '
+		_any=""
+		for _d in /sys/bus/pci/devices/*; do
+			[ -e "$_d" ] || continue
+			_any=1
+			_drv=$(readlink "$_d/driver" 2>/dev/null)
+			printf "%s class=%s id=%s:%s driver=%s\n" "${_d##*/}" \
+				"$(cat "$_d/class" 2>/dev/null)" "$(cat "$_d/vendor" 2>/dev/null)" \
+				"$(cat "$_d/device" 2>/dev/null)" "${_drv##*/}"
+		done
+		[ -n "$_any" ] || echo "no PCI devices"
+		echo "wwan ports: $(ls /sys/class/wwan 2>/dev/null | tr "\n" " ")"
+		echo "mhi devices: $(ls /sys/bus/mhi/devices 2>/dev/null | tr "\n" " ")"'
 	run 10 "Modem list" "$RES/listmodems.sh" --refresh
 	run 40 "Port map and IMEI (from sysfs)" "$RES/portmap.sh"
 	run 5  "Active modem" "$RES/modemswitch.sh" active
@@ -1966,6 +1979,7 @@ report() {
 	run 20 "Log: ModemManager" sh -c "logread 2>/dev/null | grep -i modemmanager | tail -80"
 	run 20 "Log: netifd/interfaces" sh -c "logread 2>/dev/null | grep -iE 'netifd|wwan|qmi|mbim|fibocom' | tail -80"
 	run 20 "Log: kernel (USB)" sh -c "dmesg 2>/dev/null | grep -iE 'usb|option|qmi_wwan|cdc_|reset' | tail -60"
+	run 20 "Log: kernel (PCIe)" sh -c "dmesg 2>/dev/null | grep -iE 'pcie|pci |mhi|wwan' | tail -40"
 	run 20 "Log: USB devices since boot" sh -c "dmesg 2>/dev/null | grep -E 'usb [0-9]+-[0-9.]+: (new .*USB device|USB disconnect|New USB device found)|generic converter' | head -60"
 	run 20 "Log: fastboot rescue and ModemManager start/stop" sh -c "logread 2>/dev/null | grep -E 'fastboot-rescue|ModemManager (started|stopped)' | tail -40"
 	run 20 "Log: the whole tail" sh -c "logread 2>/dev/null | tail -120"

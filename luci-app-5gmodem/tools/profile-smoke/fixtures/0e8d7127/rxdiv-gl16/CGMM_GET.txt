@@ -1,0 +1,2 @@
+## FM350-GL-16 model string
++CGMM: FM350-GL-16

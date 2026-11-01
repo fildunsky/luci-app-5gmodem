@@ -1340,7 +1340,7 @@ _snap_prepare() {
 
 	_SN_XMM=0
 	if [ -f /lib/netifd/proto/xmm.sh ] \
-	   && uci show 5gmodem 2>/dev/null | grep -qiE "vidpid='(2cb7:0007|8087:095a|413c:81d9)'|\.model='[^']*L8[56]0"; then
+	   && xmm_switch_ok "$_SN_VIDPID" "$(uci -q get "5gmodem.$_hl_sec.model")"; then
 		_SN_XMM=1
 	fi
 }

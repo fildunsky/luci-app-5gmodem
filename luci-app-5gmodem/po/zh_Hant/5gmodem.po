@@ -5119,8 +5119,8 @@ msgstr "重新建立接口（USB 網路共用）"
 msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
 msgstr "此手機透過 USB 分享網路，並透過 DHCP 分配位址。此按鈕用於建立（或重新建立）對應的 DHCP 接口——無需選擇撥號協議，也沒有數據機指標可讀取。"
 
-msgid "works over cellular"
-msgstr "在行動網路下可用"
+msgid "mobile"
+msgstr "行動網路"
 
 msgid "Shared with \"External IP\" - set it under \"For experts\""
 msgstr "與“外網 IP”共用 — 在“專家選項”中設定"

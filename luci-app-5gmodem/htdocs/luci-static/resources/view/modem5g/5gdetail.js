@@ -2822,7 +2822,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30910, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30911, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3331,10 +3331,10 @@ simDialog: baseclass.extend({
 
 				E('div', { 'id': 'antports-block', 'style': 'display:none;margin-top:.6em' }, [
 					E('h4', { 'style': 'margin:.2em 0 .4em 0' }, _('Antenna ports')),
-					E('table', { 'class': 'table', 'id': 'antports-table' }, []),
-					E('div', { 'id': 'rxdiv-line',
-						'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, '')
-				])
+					E('table', { 'class': 'table', 'id': 'antports-table' }, [])
+				]),
+				E('div', { 'id': 'rxdiv-line',
+					'style': 'display:none;font-size:90%;padding:.4em 0 0 0' }, '')
 			]),
 
 			collapsibleSection('freq', _('Frequency management'), [

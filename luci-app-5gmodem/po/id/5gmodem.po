@@ -5119,8 +5119,8 @@ msgstr "Buat ulang antarmuka (USB tethering)"
 msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
 msgstr "Ponsel ini membagikan internet melalui USB dan memberikan alamat melalui DHCP. Tombol ini membuat (atau membuat ulang) antarmuka DHCP tersebut - tidak ada protokol dial-up yang perlu dipilih, dan tidak ada metrik modem untuk dibaca."
 
-msgid "works over cellular"
-msgstr "berfungsi melalui seluler"
+msgid "mobile"
+msgstr "seluler"
 
 msgid "Shared with \"External IP\" - set it under \"For experts\""
 msgstr "Dipakai bersama dengan \"IP eksternal\" - atur di bawah \"Untuk ahli\""

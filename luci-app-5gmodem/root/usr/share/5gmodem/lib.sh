@@ -707,6 +707,18 @@ _vendor_by_vid() {
 		1e0e:*)        echo simcom ;;
 	esac
 }
+xmm_switch_ok() {
+	case "$1" in
+		2cb7:0007|8087:095a|413c:81d9) return 0 ;;
+		2cb7:*|8087:*|413c:*) ;;
+		*) return 1 ;;
+	esac
+	case "$2" in
+		*[Ll]8[56]0*) return 0 ;;
+	esac
+	return 1
+}
+
 _model_vendor_ok() {
 	_mv_want=$(_vendor_by_vid "$2")
 	[ -n "$_mv_want" ] || return 0

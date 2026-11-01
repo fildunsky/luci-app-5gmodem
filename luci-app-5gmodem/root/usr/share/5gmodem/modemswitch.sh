@@ -1219,6 +1219,13 @@ xmm)
 	A=$(uci -q get "$CFG.@5gmodem[0].at_port")
 	[ -n "$P" ] && [ -n "$A" ] || { echo '{"error":"no active modem"}'; exit 0; }
 	MSEC="m_$(echo "$P" | sed 's/[^A-Za-z0-9]/_/g')"
+	_xm_vp=$(modem_vidpid "$P")
+	[ -n "$_xm_vp" ] || _xm_vp=$(uci -q get "$CFG.$MSEC.vidpid")
+	if ! xmm_switch_ok "$_xm_vp" "$(uci -q get "$CFG.$MSEC.model")"; then
+		logger -t 5gmodem "xmm: refused for $P (${_xm_vp:-unknown vid:pid}) - not an Intel XMM modem"
+		echo '{"error":"not an XMM modem"}'
+		exit 0
+	fi
 	uci -q set "$CFG.$MSEC.want_proto=xmm"; uci -q commit "$CFG"
 	_xm_o=$(sms_tool -d "$A" at "AT+GTUSBMODE=0" 2>/dev/null | tr -d '\r')
 	case "$_xm_o" in
