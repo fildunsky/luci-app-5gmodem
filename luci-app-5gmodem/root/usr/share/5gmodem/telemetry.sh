@@ -286,7 +286,9 @@ _refresh_snap() {
 	esac
 	[ -n "$TELE_FORCE" ] || [ -z "$_rs_st" ] \
 		|| [ $(( $(cut -d. -f1 /proc/uptime) - _rs_st )) -ge "$_rf" ] || return 0
-	SW_BG=1 "$(dirname "$0")/5gmodem.sh" cached 60 "for=$_AM" >/dev/null 2>&1 &
+	_rs_ttl=60
+	[ -n "$TELE_FORCE" ] && _rs_ttl=0
+	SW_BG=1 "$(dirname "$0")/5gmodem.sh" cached "$_rs_ttl" "for=$_AM" >/dev/null 2>&1 &
 	_rs_p=$!
 	( sleep 25; kill "$_rs_p" 2>/dev/null ) >/dev/null 2>&1 &
 	_rs_w=$!

@@ -827,7 +827,7 @@ list)
 		ip=$(iface_ip "$n")
 		_np_dev=$(ucinet_get "$n" device)
 		case "$_np_dev" in
-			'') : ;;
+			''|qcom-soc) : ;;
 			/*) [ -e "$_np_dev" ] || [ -n "$ip" ] || continue ;;
 			*)  [ -e "/sys/class/net/$_np_dev" ] || [ -n "$ip" ] || continue ;;
 		esac
@@ -852,7 +852,7 @@ list)
 			if read -r _np_hst _np_hf _np_ho _np_hms _np_hs 2>/dev/null < "/tmp/5gmodem/health/$n"; then
 				_np_gr=120
 				[ -f "/tmp/5gmodem/health/$n.heal" ] && _np_gr=600
-				if [ "$_np_hst" = "gone" ] && [ $(( _NOW_S - ${_np_hs:-0} )) -gt "$_np_gr" ]; then
+				if [ "$_np_hst" = "gone" ] && [ "$t" != modem ] && [ $(( _NOW_S - ${_np_hs:-0} )) -gt "$_np_gr" ]; then
 					continue
 				fi
 				_np_h=",\"health\":\"$_np_hst\",\"hms\":${_np_hms:-0}"

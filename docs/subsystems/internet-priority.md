@@ -103,7 +103,7 @@ Order: user-defined name (resolved by `listmodems`, bound to IMEI) > model from 
 ## Health watchdog fields in `list`
 
 - Health comes from the watchdog state file and the uci snapshot, without subprocesses. No file or monitoring off: no field, no dot.
-- A link whose device is gone stays listed (it must survive re-enumeration during healing) and is hidden after a grace period: long while healing is in progress (a module reload ladder takes minutes), two minutes otherwise.
+- A link whose device is gone stays listed (it must survive re-enumeration during healing) and is hidden after a grace period: long while healing is in progress (a module reload ladder takes minutes), two minutes otherwise. A modem whose hardware is still present stays listed. The `qcom-soc` device of a SoC modem is a placeholder, so `list` does not look for it in `/sys/class/net`.
 - The ladder type is reported by the backend because steps differ (`health.sh`): modem: ifup, `AT+CFUN=1,1`, USB power; Wi-Fi: reconnect, station REASSOCIATE, radio rebuild, network reload; HiLink: second step via its API. The card used to print "AT+CFUN=1,1" for a Wi-Fi failure.
 - The failover switch state is included so the page can warn when the first-priority link has no internet and the watchdog is not allowed to move traffic (case: a Wi-Fi uplink attached to an AP without internet held all traffic over four working modems).
 

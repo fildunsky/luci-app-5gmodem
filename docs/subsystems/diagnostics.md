@@ -577,6 +577,9 @@ ssh, which forked a full poll each time. Verbs: `write`, `publish` (MQTT via `mo
   page closed and the snapshot stale, telemetry refreshes it itself through the same collector
   (serialised via LOCKDIR), at most every `tele.refresh` seconds (default 120, 0 disables), bounded
   to 25 s. A full collection is ~1.5 s CPU.
+- The ifup hook forces a new collection with cache TTL 0. With the usual TTL of 60 s, a snapshot
+  taken before registration was served again, and `oper`/`mode` stayed empty for about 100 s after
+  the interface came up. A registration change without ifup still waits for the next refresh.
 - `rx`/`tx` are rates from counter deltas between writes; the first write after start has none.
   Device change or counter wrap invalidates the point.
 - `mode` uses phone-style labels (4G / 4G+ / 5G NSA / 5G SA / 3G / 2G); `band` is the primary

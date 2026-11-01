@@ -70,7 +70,7 @@ sec_for_iface_h() {
 		_sfs_p=$(uci -q get "$CFG.$_sfs.path")
 		[ -n "$_sfs_p" ] || continue
 		[ -n "$_sfs_first" ] || _sfs_first="$_sfs"
-		[ -e "/sys/bus/usb/devices/$_sfs_p" ] || continue
+		usb_path_present "$_sfs_p" || continue
 		[ -n "$_sfs_live" ] || _sfs_live="$_sfs"
 		if [ -n "$_sfs_want" ] && [ "$(uci -q get "$CFG.$_sfs.imei")" = "$_sfs_want" ]; then
 			_sfs_imei="$_sfs"
@@ -289,7 +289,7 @@ round() {
 				_r_sec=$(sec_for_iface_h "$_r_n")
 				if [ -n "$_r_sec" ]; then
 					_r_pth=$(uci -q get "$CFG.$_r_sec.path")
-					if [ -n "$_r_pth" ] && [ -e "/sys/bus/usb/devices/$_r_pth" ] \
+					if usb_path_present "$_r_pth" \
 					   && [ "$(uci -q get "network.$_r_n.auto")" != "0" ] \
 					   && [ "$(uci -q get "network.$_r_n.disabled")" != "1" ]; then
 						printf 'gone 0 0 0 %s\n' "$(uptime_s)" > "$HDIR/$_r_n.tmp" \
@@ -489,6 +489,19 @@ STUCK_DOWN_MIN=900
 
 heal_cap() { case "$1" in none) echo 0 ;; ifup) echo 1 ;; power) echo 3 ;; *) echo 2 ;; esac }
 
+mm_registered_now() {
+	[ "$(printf '%s' "$_HDUMP" | jsonfilter \
+		-e "@.interface[@.interface=\"$1\"].errors[0].code" 2>/dev/null)" = MM_3GPP_OPERATOR_REGISTRATION_FAILED ] || return 1
+	[ "$(printf '%s' "$_HDUMP" | jsonfilter \
+		-e "@.interface[@.interface=\"$1\"].pending" 2>/dev/null)" = true ] && return 1
+	command -v mmcli >/dev/null 2>&1 || return 1
+	_mrn_s=$(sec_for_iface_h "$1") || return 1
+	_mrn_i=$("$RES/modemswitch.sh" mmindex "$(uci -q get "$CFG.$_mrn_s.path")" 2>/dev/null)
+	[ -n "$_mrn_i" ] || return 1
+	[ "$(mmcli -m "$_mrn_i" -K 2>/dev/null \
+		| sed -n 's/^modem\.generic\.state *: *//p' | head -1)" = registered ]
+}
+
 sim_absent() {
 	if [ "$(uci -q get "$CFG.$1.kind")" = "hilink" ]; then
 		_sa_ss=$("$RES/hilink.sh" json "$2" 2>/dev/null \
@@ -644,10 +657,12 @@ heal() {
 			continue
 		fi
 		case "$_h_st" in
-			down) ;;
+			down) _h_regnow="" ;;
 			gone)
 				case "$_h_since" in ''|*[!0-9]*) continue ;; esac
-				[ $(( $(uptime_s) - _h_since )) -ge "$GONE_HEAL_MIN" ] || continue ;;
+				_h_regnow=""
+				mm_registered_now "$_h_if" && _h_regnow=1
+				[ -n "$_h_regnow" ] || [ $(( $(uptime_s) - _h_since )) -ge "$GONE_HEAL_MIN" ] || continue ;;
 			*) continue ;;
 		esac
 		[ "$H_HEAL" = "1" ] || continue
@@ -673,7 +688,7 @@ heal() {
 		_h_path=$(uci -q get "$CFG.$_h_sec.path")
 		[ -n "$_h_path" ] || continue
 		_h_absent=""
-		if ! [ -e "/sys/bus/usb/devices/$_h_path" ]; then
+		if ! usb_path_present "$_h_path"; then
 			[ "$_h_cap" -ge 3 ] && [ "$_h_st" = gone ] || continue
 			_h_absent=1
 		fi
@@ -684,7 +699,9 @@ heal() {
 		case "$_h_n" in ''|*[!0-9]*) _h_n=0 ;; esac
 		[ "$_h_n" -lt "$HEAL_MAX" ] || continue
 		_h_now=$(uptime_s)
-		[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
+		if [ "$_h_st" != gone ] || { [ "$_h_last" != 0 ] && [ -z "$_h_regnow" ]; }; then
+			[ $((_h_now - _h_last)) -ge "$HEAL_COOLDOWN" ] || continue
+		fi
 		if [ -z "$_h_absent" ] && sim_absent "$_h_sec" "$_h_path"; then
 			if [ ! -f "$HDIR/$_h_if.nosim" ]; then
 				: > "$HDIR/$_h_if.nosim"
@@ -807,6 +824,10 @@ heal() {
 			if [ -z "$_h_at" ] || [ ! -e "$_h_at" ]; then
 				if [ "$_h_cap" -ge 3 ]; then _h_next=3; else _h_next=1; fi
 			fi
+		fi
+		if [ "$_h_next" = 3 ] && { [ -z "$H_PSCRIPT" ] || [ ! -x "$H_PSCRIPT" ]; } \
+		   && ! "$RES/reboot_modem.sh" hasusbpower "$_h_path" 2>/dev/null | grep -q '"method":"[a-z]'; then
+			_h_next=1
 		fi
 		if [ "$_h_next" -ge 2 ] && [ -z "$_h_hilink" ] && [ -n "$_h_at" ] && [ -e "$_h_at" ]; then
 			_h_reg=$(at_query "$_h_at" "AT+CEREG?" 5 3 2>/dev/null | tr -d '\r' \

@@ -5458,12 +5458,6 @@ msgstr "Giao diện mạng mà router dùng để truy cập Telegram, vd. đư�
 msgid "SIM not detected: reinsert the card"
 msgstr "Không phát hiện SIM: hãy lắp lại thẻ"
 
-msgid "Change network mode"
-msgstr "Đổi chế độ mạng"
-
-msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
-msgstr "Modem hiện đang ở %s, và chế độ \"%s\" không bao gồm nó. Nếu mạng ở đây không có gì khác, kết nối sẽ bị ngắt."
-
 msgid "Operator limit"
 msgstr "Giới hạn của nhà mạng"
 
@@ -6028,3 +6022,6 @@ msgstr "Đang khởi động đèn LED và điều khiển ăng-ten…"
 
 msgid "Refreshing the page cache…"
 msgstr "Đang làm mới bộ nhớ đệm trang…"
+
+msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
+msgstr "Mạng đã đóng phiên USSD mà không có phản hồi văn bản. Một số nhà mạng gửi trả lời qua SMS: hãy kiểm tra tin nhắn đến."

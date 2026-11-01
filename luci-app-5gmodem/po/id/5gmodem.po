@@ -5458,12 +5458,6 @@ msgstr "Antarmuka jaringan yang digunakan router untuk menjangkau Telegram, mis.
 msgid "SIM not detected: reinsert the card"
 msgstr "SIM tidak terdeteksi: pasang ulang kartu"
 
-msgid "Change network mode"
-msgstr "Ubah mode jaringan"
-
-msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
-msgstr "Modem saat ini berada di %s, dan mode \"%s\" tidak mencakupnya. Jika jaringan tidak menyediakan yang lain di sini, koneksi akan terputus."
-
 msgid "Operator limit"
 msgstr "Batas operator"
 
@@ -6028,3 +6022,6 @@ msgstr "Memulai LED dan kontrol antena…"
 
 msgid "Refreshing the page cache…"
 msgstr "Memperbarui cache halaman…"
+
+msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
+msgstr "Jaringan menutup sesi USSD tanpa balasan teks. Beberapa operator mengirim jawaban lewat SMS: periksa pesan masuk."

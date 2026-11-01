@@ -135,6 +135,10 @@ Single source of truth for how the block is driven: `{"source":"mmcli",...}` wit
 
 `setmodemm` writes `allowedmode`/`preferredmode` into the interface config and runs `ubus call network reload`. A live `--set-allowed-modes` was wrong both ways: narrowing (3G) worked until netifd re-dialed and the proto reset modes (back to auto after 10 s); widening (Auto) silently did nothing because nothing re-dialed. A plain down/up re-uses netifd's cached config with the old options; reload makes netifd re-read and restart the interface with the new ones. `default` deletes the options.
 
+The highlighted button follows MM's `current-modes` (`currentmode` in `mgmtinfo`), not the options: with no options the modem keeps whatever it stored, so showing "Auto" could hide an LTE-only modem. "Auto" is lit only when the current modes cover every technology the modem has bands for.
+
+MM derives the current capabilities of a multimode QMI modem from the stored mode preference. With preference `lte` it offers only `allowed: 4g`, `--set-allowed-modes` cannot widen that, and it re-reads the preference only when it starts. So when MM offers one mode while several capability sets exist, `mgmtinfo` reads the mode from `--nas-get-system-selection-preference` and `setmodemm` writes it with `--nas-set-system-selection-preference`, verified by reading back, with no reload. When MM offers several modes and "Auto" is pressed while the current modes do not cover the modem's technologies, `setmodemm` first widens them through MM and then reloads as usual: a proto that leaves modes alone without options would keep the narrow mode. The order in the argument sets the acquisition order, so LTE goes first unless another mode is preferred (`umts|lte` searches 3G first). This setting is stored in the modem.
+
 `setmodelive` is a synchronous mode change without radio restart for a short switch to 3G for USSD (`ussd.sh`). Single-RAT changes apply live (LM960 `AT+WS46=22` -> UTRAN in 5 s, FM350 `AT+GTACT=1` -> HSPA). The result is verified by reading back with retry: `sms_tool ... at` exits 0 even on ERROR, and `AT+WS46?` once stayed at 31 while "ok" was reported.
 
 ## HiLink modems
