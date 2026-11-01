@@ -93,8 +93,11 @@ _tombps() {
 }
 
 _geo() {
-	if [ -n "$GEOUA" ]; then curl --max-time "$1" -s -A "$GEOUA" "$2" 2>/dev/null
-	else curl --max-time "$1" -s "$2" 2>/dev/null; fi
+	_gt="$1"; _gu="$2"
+	set -- --max-time "$_gt" -s
+	[ -n "$GEOUA" ] && set -- "$@" -A "$GEOUA"
+	case "$_gu" in *-internet.yandex.net/*) set -- "$@" -H "Origin: https://yandex.ru" ;; esac
+	curl "$@" "$_gu" 2>/dev/null
 }
 
 case "$1" in

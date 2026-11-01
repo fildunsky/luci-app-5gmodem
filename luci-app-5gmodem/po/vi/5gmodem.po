@@ -5119,8 +5119,8 @@ msgstr "Tạo lại giao diện (USB tethering)"
 msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
 msgstr "Điện thoại này chia sẻ internet qua USB và cấp địa chỉ qua DHCP. Nút này tạo (hoặc tạo lại) giao diện DHCP đó - không có giao thức quay số để chọn, và không có số liệu modem để đọc."
 
-msgid "works over cellular"
-msgstr "hoạt động qua mạng di động"
+msgid "mobile"
+msgstr "di động"
 
 msgid "Shared with \"External IP\" - set it under \"For experts\""
 msgstr "Dùng chung với \"IP bên ngoài\" - đặt ở mục \"Dành cho chuyên gia\""

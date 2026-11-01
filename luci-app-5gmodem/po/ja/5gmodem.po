@@ -5119,8 +5119,8 @@ msgstr "インターフェースを再作成 (USB テザリング)"
 msgid "This phone shares the internet over USB and hands out an address over DHCP. The button creates (or recreates) that DHCP interface - there is no dial-up protocol to choose, and no modem metrics to read."
 msgstr "このスマートフォンは USB 経由でインターネットを共有し、DHCP でアドレスを配布します。このボタンはその DHCP インターフェースを作成 (または再作成) します。選ぶべきダイヤルアップのプロトコルはなく、読み取れるモデムの統計情報もありません。"
 
-msgid "works over cellular"
-msgstr "モバイル回線で使えます"
+msgid "mobile"
+msgstr "モバイル"
 
 msgid "Shared with \"External IP\" - set it under \"For experts\""
 msgstr "「外部 IP」と共通です - 「上級者向け」で設定してください"

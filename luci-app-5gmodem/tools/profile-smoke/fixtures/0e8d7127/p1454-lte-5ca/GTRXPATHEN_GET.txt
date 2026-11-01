@@ -1,0 +1,2 @@
+## 4pda 1057776 #2451 (reply format)
++GTRXPATHEN: 3,15

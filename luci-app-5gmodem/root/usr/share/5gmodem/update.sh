@@ -102,6 +102,15 @@ check)
 		AVAIL=1
 	fi
 	NOTES=$(printf '%s' "$J" | jsonfilter -e '@.body' 2>/dev/null)
+	case "$2" in
+		ru|id|ja|vi|zh_Hans|zh_Hant)
+			_nl_url=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='notes-$2.txt'].browser_download_url" 2>/dev/null)
+			if [ -n "$_nl_url" ]; then
+				_nl_txt=$(net_fetch 10 "$_nl_url" | head -c 8192)
+				[ -n "$_nl_txt" ] && NOTES="$_nl_txt"
+			fi
+			;;
+	esac
 	PUB=$(printf '%s' "$J" | jsonfilter -e '@.published_at' 2>/dev/null)
 	printf '{"success":true,"pm":"%s","package":"%s","variant":"%s","current":"%s","latest":"%s","update_available":%s,"release_url":"%s","published":"%s","notes":"%s"}\n' \
 		"$PM" "$PKG" "$([ "$PKG" = "$PKG_LITE" ] && echo lite || echo full)" \

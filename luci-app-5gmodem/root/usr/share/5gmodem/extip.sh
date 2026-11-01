@@ -87,6 +87,7 @@ _fetch() {
 		set -- -"$_ff" -s -L --max-time "$TMO"
 		[ -n "$DEV" ] && set -- "$@" --interface "$DEV"
 		[ -n "$_fa" ] && set -- "$@" -A "$_fa"
+		case "$_fu" in *-internet.yandex.net/*) set -- "$@" -H "Origin: https://yandex.ru" ;; esac
 		curl "$@" "$_fu" 2>/dev/null
 	else
 		[ -n "$DEV" ] && return 0
