@@ -5458,12 +5458,6 @@ msgstr "ルーターが Telegram に接続するときに使うネットワー�
 msgid "SIM not detected: reinsert the card"
 msgstr "SIM が認識されません: カードを挿し直してください"
 
-msgid "Change network mode"
-msgstr "ネットワークモードの変更"
-
-msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
-msgstr "モデムは現在 %s で動作していますが、モード「%s」にはそれが含まれていません。ここで他に使えるネットワークがなければ、接続は切れます。"
-
 msgid "Operator limit"
 msgstr "事業者の上限"
 
@@ -6028,3 +6022,6 @@ msgstr "LEDとアンテナ制御を起動中…"
 
 msgid "Refreshing the page cache…"
 msgstr "ページキャッシュを更新中…"
+
+msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
+msgstr "ネットワークはテキスト応答なしで USSD セッションを終了しました。SMS で応答する事業者もあります。受信メッセージを確認してください。"

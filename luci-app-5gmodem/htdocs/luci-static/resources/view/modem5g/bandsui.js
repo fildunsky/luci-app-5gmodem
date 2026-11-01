@@ -299,6 +299,16 @@ function applyMgmtMM(j) {
 		});
 		var am = (j.allowedmode || '').split('|').filter(function(x) { return x; }).sort().join('|') || '2g|3g|4g|5g';
 		var pm = j.allowedmode ? (j.preferredmode || '') : '5g';
+		var curParts = String(j.currentmode || '').split(':');
+		var curAllowed = curParts[0] ? curParts[0].split('|').sort() : [];
+		if (curAllowed.length && curAllowed.join('|') != (j.allowedmode || '').split('|').sort().join('|')) {
+			var curTop = [ '5g', '4g', '3g', '2g' ].filter(function(t) { return curAllowed.indexOf(t) >= 0; })[0];
+			var curPref = curParts[1] || 'none';
+			var coversAll = (curPref == 'none' || curPref == curTop)
+				&& Object.keys(techOk).every(function(t) { return !techOk[t] || curAllowed.indexOf(t) >= 0; });
+			am = coversAll ? '2g|3g|4g|5g' : curAllowed.join('|');
+			pm = coversAll ? '5g' : curPref;
+		}
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
 			var a = (b.getAttribute('data-allowed') || '').split('|').sort().join('|');
 			var on = (a == am && (pm == 'none' || (b.getAttribute('data-preferred') || '') == pm));
@@ -977,27 +987,9 @@ function resetBands() {
 	return applyBands();
 }
 
-function setNetMode(allowed, preferred, label, confirmed) {
+function setNetMode(allowed, preferred, label) {
 	if (!ctx.getMmIdx()) {
 		ui.addNotification(null, E('p', _('ModemManager does not manage this modem')), 'error');
-		return Promise.resolve();
-	}
-	var _cur = String((window._lastJson || {}).mode || '');
-	var _need = /NR|5G/i.test(_cur) ? '5g'
-		: /LTE|4G/i.test(_cur) ? '4g'
-		: /WCDMA|UMTS|HSPA|3G/i.test(_cur) ? '3g' : '';
-	if (!confirmed && _need && String(allowed || '').split('|').indexOf(_need) < 0) {
-		ui.showModal(_('Change network mode'), [
-			E('p', {}, [ _('The modem is on %s right now, and mode "%s" does not include it. If the network has nothing else here, the connection will drop.').format(_cur, label) ]),
-			E('div', { 'class': 'right' }, [
-				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
-				' ',
-				E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
-					ui.hideModal();
-					setNetMode(allowed, preferred, label, true);
-				} }, _('Apply'))
-			])
-		]);
 		return Promise.resolve();
 	}
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
@@ -1101,7 +1093,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 309092,
+	API: 30910,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

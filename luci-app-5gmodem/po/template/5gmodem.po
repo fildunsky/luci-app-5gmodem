@@ -394,3 +394,6 @@ msgstr ""
 
 msgid "Refreshing the page cache…"
 msgstr ""
+
+msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
+msgstr ""
