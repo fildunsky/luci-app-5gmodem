@@ -550,6 +550,10 @@ RAM. It uses the same backends (`5gmodem.sh cached`, `netpri.sh`, `speedtest.sh`
 - Profiles emit HTML entities for the web (`56.0 &deg;C`); they are decoded, and the unit is appended
   only when missing.
 
+## PCI in the report
+
+The report has a `PCI devices` section read from sysfs (class, vendor:device, driver, so `lspci` is not needed), the wwan and MHI nodes, and a `Log: kernel (PCIe)` section. They show whether a PCIe modem is on the bus and whether a driver took it.
+
 ## Telemetry (telemetry.sh)
 
 Writes `/tmp/5gmodem/tele.json`, a flat JSON in the canonical schema (`docs/telemetry.md` at the

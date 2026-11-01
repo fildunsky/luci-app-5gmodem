@@ -77,6 +77,7 @@ Verbs: `get [iface]` (instant: cache plus background refresh when stale), `now [
 - Fetching via a specific interface needs curl; `uclient-fetch` (present in every OpenWrt build, supports `-4/-6`, `-U`, timeout) has no interface binding, so without curl the interface channel stays empty rather than showing a neighbouring uplink's address.
 - `_spawn` detaches fds for the background refresh; a plain `&` kept the XHR open until rpcd's 30 s timeout.
 - IPv4 parsing validates octets (same reason as in speedtest.sh).
+- Yandex (`*-internet.yandex.net`) answers `"127.0.0.1"` unless the request has `Origin: https://yandex.ru`; `extip.sh` and `speedtest.sh` send it for these hosts only (checked 2026-11-01). Without curl the header cannot be sent, so this service reports no answer. The API is undocumented: if it returns loopback again, check the source by hand first.
 
 ## extip.js
 

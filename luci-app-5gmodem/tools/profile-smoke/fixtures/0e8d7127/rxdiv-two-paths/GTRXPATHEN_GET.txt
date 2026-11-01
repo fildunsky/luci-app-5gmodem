@@ -1,0 +1,2 @@
+## synthetic, reply format from 4pda 1057776 #2451
++GTRXPATHEN: 3,5

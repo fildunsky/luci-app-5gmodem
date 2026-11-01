@@ -568,6 +568,24 @@ if [ -z "$FW" ]; then
 	FW=$(echo "$OF" | awk -F'"' '/\+GTPKGVER:/ {print $2}' | cut -d_ -f1 | xargs)
 fi
 
+if [ "$RXDIV" = "4rx" ]; then
+	_RX_CAPS="/tmp/5gmodem/fm350_caps_$(basename "$DEVICE" 2>/dev/null)"
+	case "$MODEL" in
+		*-16*) RXDIV="2rx";;
+		*)
+			if [ -s "$_RX_CAPS" ] && ! sed -n '9p' "$_RX_CAPS" | grep -q '[0-9]'; then
+				RXDIV="2rx"
+			else
+				case "${PBAND%% *}" in
+					''|B1|B2|B3|B4|B7|B25|B30|B34|B38|B39|B40|B41|B42|B43|B48|B66) ;;
+					n1|n2|n3|n7|n25|n30|n38|n40|n41|n48|n66|n77|n78|n79) ;;
+					*) RXDIV="2rx";;
+				esac
+			fi
+			;;
+	esac
+fi
+
 OAA=$(at_static cgsn "AT+CGSN?")
 NR_IMEI=$(echo "$OAA" | awk -F[,:] '/\+CGSN:/ {print $2}' | xargs)
 

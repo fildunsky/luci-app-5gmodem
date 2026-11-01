@@ -90,12 +90,24 @@ function renderNotes(b64) {
 	box.style.display = '';
 }
 
+function updNotesLang() {
+	var l = String(document.documentElement.lang || '').toLowerCase().replace('_', '-');
+	if (!l) {
+		var m = String(document.body.className || '').match(/(?:^|\s)lang_(\S+)/);
+		l = m ? m[1].toLowerCase().replace('_', '-') : '';
+	}
+	if (/^zh-(tw|hk|mo|hant)/.test(l)) { return 'zh_Hant'; }
+	if (/^zh/.test(l)) { return 'zh_Hans'; }
+	l = l.split('-')[0];
+	return [ 'ru', 'id', 'ja', 'vi' ].indexOf(l) >= 0 ? l : '';
+}
+
 function checkUpdate() {
 	updSet('upd-status', _('Checking the latest release…'));
 	updShow('upd-install', false);
 	updProgress(null);
 	var b = document.getElementById('upd-check'); if (b) { b.disabled = true; }
-	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check' ]).then(function(res) {
+	return fs.exec('/usr/share/5gmodem/update.sh', [ 'check', updNotesLang() ]).then(function(res) {
 		var d = {}; try { d = JSON.parse((res && res.stdout) || '{}'); } catch (e) {}
 		updSet('upd-current', d.current || '—');
 		var latest = String(d.latest || '').replace(/^v/i, '');
@@ -375,7 +387,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30910, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30911, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -694,7 +706,7 @@ return view.extend({
 		o.value('internetometer', _('Internetometer (Yandex CDN)'));
 		o.value('https://speed.cloudflare.com/__up', 'Cloudflare');
 		o.value('https://speedtest.rt.ru/backend/empty.php', 'Rostelecom (LibreSpeed)');
-		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex - RU (' + _('works over cellular') + ')');
+		o.value('https://yandex.ru/internet/api/v1/upload', 'Yandex - RU (' + _('mobile') + ')');
 		o.value('https://librespeed.org/backend/empty.php', 'LibreSpeed (' + _('public demo') + ')');
 		o.value('https://www.librespeed.fi/backend/empty.php', 'LibreSpeed - Helsinki (Hetzner)');
 		o.default = 'internetometer';
@@ -831,7 +843,8 @@ return view.extend({
 		o.value('https://icanhazip.com', 'icanhazip.com');
 		o.value('https://ident.me', 'ident.me');
 		o.value('https://ipinfo.io/ip', 'ipinfo.io');
-		o.value('https://ipv4-internet.yandex.net/api/v0/ip', 'Yandex - RU (' + _('works over cellular') + ')');
+		o.value('https://ipv4-internet.yandex.net/api/v0/ip', 'Yandex - RU (' + _('mobile') + ')');
+		o.value('https://ip.beget.ru', 'Beget - RU (' + _('mobile') + ')');
 		o.default = 'http://ip-api.com/line/?fields=countryCode,query';
 		o.placeholder = 'http://ip-api.com/line/?fields=countryCode,query';
 		o.rmempty = true;

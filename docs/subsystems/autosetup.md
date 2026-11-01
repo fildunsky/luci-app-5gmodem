@@ -266,7 +266,9 @@ own netdev.
   modem.
 - `want_proto` (set by the `xmm` verb) is a one-shot marker: after
   `AT+GTUSBMODE=0` the modem re-enumerates and autosetup must set `xmm` instead
-  of the driver-derived `fibocom`.
+  of the driver-derived `fibocom`. The verb and the `xmm_capable` snapshot field
+  both go through `xmm_switch_ok` for the active modem, not for any modem ever
+  seen in the config: an FM350 must not get this command or the marker.
 - Adoption before creation: find the interface by IMEI first (kept for this
   hardware after a swap, or the modem moved ports), then by USB path for old
   configs, then reject it if `iface_owned_by` says it is pinned to other hardware
