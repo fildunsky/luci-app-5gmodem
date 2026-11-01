@@ -137,7 +137,7 @@ check_one() {
 					_swwhy="down with protocol error ($_swerr)"
 					;;
 			esac
-			[ -n "$_path" ] && [ -e "/sys/bus/usb/devices/$_path/idVendor" ] || return 0
+			usb_path_present "$_path" || return 0
 			if [ -n "$_proto" ] && [ ! -f "/lib/netifd/proto/$_proto.sh" ]; then
 				if [ ! -f "/tmp/5gmodem/sw_noproto_$_if" ]; then
 					: > "/tmp/5gmodem/sw_noproto_$_if"

@@ -1263,6 +1263,72 @@ _band_write() {
 }
 
 . /usr/share/5gmodem/lib.sh 2>/dev/null
+
+_mm_vals() {
+	printf '%s\n' "$1" | sed -n "s/^modem\.generic\.$2\.value\[[0-9]*\][[:space:]]*:[[:space:]]*//p"
+}
+
+_mm_qmi_dev() {
+	_mqd=$(_mm_vals "$1" ports | sed -n 's/ (qmi)$//p' | head -1)
+	[ -n "$_mqd" ] && [ -c "/dev/$_mqd" ] && echo "/dev/$_mqd"
+}
+
+_mm_narrowed() {
+	[ "$(_mm_vals "$1" supported-modes | wc -l)" = 1 ] && [ "$(_mm_vals "$1" supported-capabilities | wc -l)" -gt 1 ]
+}
+
+_ssp_tech() {
+	case "$1" in
+		gsm) echo 2g ;;
+		umts) echo 3g ;;
+		lte) echo 4g ;;
+		5gnr) echo 5g ;;
+	esac
+}
+
+_ssp_read() {
+	_sr_o=$(qmicli_p "$1" --nas-get-system-selection-preference) || return 1
+	_sr_m=$(printf '%s\n' "$_sr_o" | sed -n "s/.*Mode preference: '\(.*\)'.*/\1/p" | tr -d ',')
+	_sr_a=$(printf '%s\n' "$_sr_o" | sed -n "s/.*Acquisition order preference: '\(.*\)'.*/\1/p" | tr -d ',')
+	_sr_set=""
+	for _sr_t in $_sr_m; do
+		_sr_x=$(_ssp_tech "$_sr_t")
+		[ -n "$_sr_x" ] && _sr_set="$_sr_set $_sr_x"
+	done
+	_sr_set=$(echo $_sr_set | tr ' ' '\n' | sort | tr '\n' '|' | sed 's/|$//')
+	[ -n "$_sr_set" ] || return 1
+	_sr_p="none"
+	case "$_sr_set" in
+		*'|'*)
+			for _sr_t in $_sr_a; do
+				_sr_x=$(_ssp_tech "$_sr_t")
+				case "|$_sr_set|" in
+					*"|$_sr_x|"*) [ -n "$_sr_x" ] && { _sr_p="$_sr_x"; break; } ;;
+				esac
+			done ;;
+	esac
+	echo "$_sr_set:$_sr_p"
+}
+
+_ssp_write() {
+	_sw_arg=""
+	for _sw_t in "$3" 4g 5g 3g 2g; do
+		case "|$2|" in *"|$_sw_t|"*) ;; *) continue ;; esac
+		case "$_sw_t" in
+			2g) _sw_q=gsm ;;
+			3g) _sw_q=umts ;;
+			4g) _sw_q=lte ;;
+			5g) _sw_q=5gnr ;;
+		esac
+		case "|$_sw_arg|" in *"|$_sw_q|"*) continue ;; esac
+		_sw_arg="$_sw_arg${_sw_arg:+|}$_sw_q"
+	done
+	[ -n "$_sw_arg" ] || return 1
+	logger -t 5gmodem "setmodemm: QMI mode preference '$_sw_arg' on $1"
+	qmicli_p "$1" "--nas-set-system-selection-preference=$_sw_arg" | grep -q "set successfully" || return 1
+	_sw_want=$(echo "$2" | tr '|' '\n' | sort | tr '\n' '|' | sed 's/|$//')
+	[ "$(_ssp_read "$1" | cut -d: -f1)" = "$_sw_want" ]
+}
 if command -v is_num >/dev/null 2>&1; then
 	case "$1" in
 		setbands|setbands5gnsa|setbands5gsa|setbands3g|setbands2g)
@@ -1499,9 +1565,17 @@ case $1 in
 		_mi_modes=$(printf '%s\n' "$_mi_k" \
 			| sed -n 's/^modem\.generic\.supported-modes\.value\[[0-9]*\][[:space:]]*:[[:space:]]*allowed: \([^;]*\); preferred: \(.*\)$/\1:\2/p' \
 			| sed 's/, /|/g; s/.*/"&"/' | tr '\n' ',' | sed 's/,$//')
-		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","modes":[%s],"sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
+		_mi_curmode=$(printf '%s\n' "$_mi_k" \
+			| sed -n 's/^modem\.generic\.current-modes[[:space:]]*:[[:space:]]*allowed: \([^;]*\); preferred: \(.*\)$/\1:\2/p' \
+			| sed 's/, /|/g')
+		if _mm_narrowed "$_mi_k"; then
+			_mi_qd=$(_mm_qmi_dev "$_mi_k")
+			[ -n "$_mi_qd" ] && _mi_ssp=$(_ssp_read "$_mi_qd") && _mi_curmode="$_mi_ssp"
+		fi
+		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","currentmode":"%s","modes":[%s],"sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
 			"$(uci -q get "network.$_mi_if.allowedmode")" \
 			"$(uci -q get "network.$_mi_if.preferredmode")" \
+			"$_mi_curmode" \
 			"$_mi_modes" \
 			"$(_mi_arr "$_mi_sup" utran-)"  "$(_mi_arr "$_mi_cur" utran-)" \
 			"$(_mi_arr "$_mi_sup" eutran-)" "$(_mi_arr "$_mi_cur" eutran-)" \
@@ -1514,7 +1588,60 @@ case $1 in
 		logger -t 5gmodem "setmodemm: allowed='$2' preferred='$3' iface='$_smm_if'"
 		[ -n "$_smm_if" ] || { echo '{"error":"no iface"}'; exit 0; }
 		note_foreign_uci network "bands setmodemm"
-		if [ -z "$2" ] || [ "$2" = "default" ]; then
+		_smm_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(active_modem)" 2>/dev/null)
+		_smm_k=""
+		[ -n "$_smm_idx" ] && _smm_k=$(mmcli -m "$_smm_idx" -K 2>/dev/null)
+		_smm_dflt=""
+		[ -z "$2" ] || [ "$2" = "default" ] && _smm_dflt=1
+		if [ -n "$_smm_k" ]; then
+			_smm_caps=$(_mm_vals "$_smm_k" supported-capabilities | tr ',' '\n' | tr -d ' ')
+			_smm_b=$(_mm_vals "$_smm_k" supported-bands)
+			_smm_all=""; _smm_top=""
+			for _smm_t in 2g 3g 4g 5g; do
+				case "$_smm_t" in
+					2g) _smm_c=gsm-umts; _smm_re='^(egsm|dcs|pcs|g850|g450|g480|g750|g380|g410|g710|g810)$' ;;
+					3g) _smm_c=gsm-umts; _smm_re='^utran-' ;;
+					4g) _smm_c=lte; _smm_re='^eutran-' ;;
+					5g) _smm_c=5gnr; _smm_re='^ngran-' ;;
+				esac
+				printf '%s\n' "$_smm_caps" | grep -qx "$_smm_c" || continue
+				printf '%s\n' "$_smm_b" | grep -qE "$_smm_re" || continue
+				_smm_all="$_smm_all${_smm_all:+|}$_smm_t"
+				_smm_top="$_smm_t"
+			done
+			if _mm_narrowed "$_smm_k"; then
+				_smm_qd=$(_mm_qmi_dev "$_smm_k")
+				if [ -n "$_smm_qd" ]; then
+					_smm_want="$2"; _smm_wp="$3"
+					if [ -n "$_smm_dflt" ]; then
+						_smm_want="$_smm_all"; _smm_wp=4g
+					fi
+					if _ssp_write "$_smm_qd" "$_smm_want" "$_smm_wp"; then
+						uci -q delete "network.$_smm_if.allowedmode"
+						uci -q delete "network.$_smm_if.preferredmode"
+						uci -q commit network
+						echo '{"result":"ok"}'
+					else
+						echo '{"error":"the modem did not accept the mode"}'
+					fi
+					exit 0
+				fi
+			elif [ -n "$_smm_dflt" ]; then
+				_smm_now=$(printf '%s\n' "$_smm_k" | sed -n 's/^modem\.generic\.current-modes[[:space:]]*:[[:space:]]*allowed: \([^;]*\);.*/\1/p' | sed 's/, /|/g')
+				_smm_short=""
+				for _smm_t in $(echo "$_smm_all" | tr '|' ' '); do
+					case "|$_smm_now|" in *"|$_smm_t|"*) ;; *) _smm_short=1 ;; esac
+				done
+				if [ -n "$_smm_short" ]; then
+					if _mm_vals "$_smm_k" supported-modes | grep -qxF "allowed: $(echo "$_smm_all" | sed 's/|/, /g'); preferred: $_smm_top"; then
+						mmcli -m "$_smm_idx" --set-allowed-modes="$_smm_all" --set-preferred-mode="$_smm_top" >/dev/null 2>&1
+					else
+						mmcli -m "$_smm_idx" --set-allowed-modes=any >/dev/null 2>&1
+					fi
+				fi
+			fi
+		fi
+		if [ -n "$_smm_dflt" ]; then
 			uci -q delete "network.$_smm_if.allowedmode"
 			uci -q delete "network.$_smm_if.preferredmode"
 		else
@@ -1522,7 +1649,6 @@ case $1 in
 			_smm_pref="$3"
 			case "$2" in
 				*"|"*)
-					_smm_idx=$(/usr/share/5gmodem/modemswitch.sh mmindex "$(active_modem)" 2>/dev/null)
 					_smm_sup=""
 					[ -n "$_smm_idx" ] && _smm_sup=$(mmcli -m "$_smm_idx" -K 2>/dev/null \
 						| sed -n 's/^modem\.generic\.supported-modes\.value\[[0-9]*\][[:space:]]*:[[:space:]]*//p')

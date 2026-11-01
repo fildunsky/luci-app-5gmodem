@@ -5458,12 +5458,6 @@ msgstr "路由器訪問 Telegram 所用的網路介面，例如運營商封鎖 T
 msgid "SIM not detected: reinsert the card"
 msgstr "未偵測到 SIM：請重新插入卡"
 
-msgid "Change network mode"
-msgstr "變更網路模式"
-
-msgid "The modem is on %s right now, and mode \"%s\" does not include it. If the network has nothing else here, the connection will drop."
-msgstr "數據機目前工作在 %s，而模式「%s」不包含它。如果此處沒有其他可用網路，連線將中斷。"
-
 msgid "Operator limit"
 msgstr "業者限速"
 
@@ -6028,3 +6022,6 @@ msgstr "正在啟動指示燈與天線控制…"
 
 msgid "Refreshing the page cache…"
 msgstr "正在重新整理頁面快取…"
+
+msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
+msgstr "網路已關閉 USSD 工作階段且未傳回文字。部分電信業者透過簡訊傳送回覆：請查看收件匣。"

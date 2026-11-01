@@ -196,6 +196,8 @@ return view.extend({
 			} else {
 				let cut = res.stderr;
 				if ( cut.length > 2 ) {
+					if (cut.includes('USSD terminated by network'))
+						res.stdout = _('The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages.');
 					if (cut.includes('error: 0'))
 						res.stdout = _('Phone/Modem failure');
 					if (cut.includes('error: 1'))
@@ -707,7 +709,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(309092, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30910, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
