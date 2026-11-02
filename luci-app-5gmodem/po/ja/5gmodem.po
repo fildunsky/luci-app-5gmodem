@@ -6073,3 +6073,6 @@ msgstr "最新の config.yaml は config.yaml-backup に保存されます。復
 
 msgid "Service is restarting…"
 msgstr "サービスを再起動しています…"
+
+msgid "Restarting…"
+msgstr "再起動中…"

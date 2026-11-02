@@ -6073,3 +6073,6 @@ msgstr "Versi terakhir config.yaml disimpan dalam config.yaml-backup. Pilih conf
 
 msgid "Service is restarting…"
 msgstr "Layanan sedang dimulai ulang…"
+
+msgid "Restarting…"
+msgstr "Memulai ulang…"

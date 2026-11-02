@@ -6073,3 +6073,6 @@ msgstr "Phiên bản config.yaml mới nhất được lưu trong config.yaml-ba
 
 msgid "Service is restarting…"
 msgstr "Đang khởi động lại dịch vụ…"
+
+msgid "Restarting…"
+msgstr "Đang khởi động lại…"

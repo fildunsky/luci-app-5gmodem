@@ -55,38 +55,116 @@ ssc_profile_matches() {
 	' "$1" "$2"
 }
 
+ssc_saved_name() {
+	SAVED=
+	[ -f /opt/clash/.5gmodem-profile ] || return 0
+	IFS= read -r SAVED < /opt/clash/.5gmodem-profile
+	case "$SAVED" in */*) SAVED= ;; esac
+	return 0
+}
+
 ssc_profile_name() {
 	ACTIVE=config.yaml
-	if [ -f /opt/clash/.5gmodem-profile ]; then
-		IFS= read -r SAVED < /opt/clash/.5gmodem-profile
-		case "$SAVED" in ''|*/*|config.yaml) return ;; esac
-		if [ -f "/opt/clash/$SAVED" ] && ssc_profile_matches "/opt/clash/$SAVED" /opt/clash/config.yaml; then
-			ACTIVE=$SAVED
-		fi
+	ssc_saved_name
+	case "$SAVED" in ''|config.yaml) return ;; esac
+	if [ -f "/opt/clash/$SAVED" ] && ssc_profile_matches "/opt/clash/$SAVED" /opt/clash/config.yaml; then
+		ACTIVE=$SAVED
 	fi
+}
+
+ssc_go_active() {
+	GO_ACTIVE=
+	[ -f /opt/clash/.ssclash/active-profile ] || return 0
+	IFS= read -r GO_ACTIVE < /opt/clash/.ssclash/active-profile
+	case "$GO_ACTIVE" in */*|.*) GO_ACTIVE= ;; esac
+	return 0
+}
+
+ssc_valid_name() {
+	case "$2" in ''|*/*|.*) return 1 ;; esac
+	[ "$1" != legacy ] && return 0
+	case "$2" in *.yaml) return 0 ;; esac
+	return 1
+}
+
+ssc_source() {
+	if [ "$1" = go ]; then
+		echo "/opt/clash/configs/$2.yaml"
+	elif [ "$2" = config.yaml ]; then
+		echo /opt/clash/config.yaml-backup
+	else
+		echo "/opt/clash/$2"
+	fi
+}
+
+ssc_settings_file() {
+	[ "$1" = go ] && echo /opt/clash/.ssclash/settings || echo /opt/clash/settings
+}
+
+ssc_settings_mode() {
+	awk -F= '/^[[:space:]]*INTERFACE_MODE=/ { mode = $2 } END { print (mode == "explicit") ? "explicit" : "exclude" }' "$1"
+}
+
+ssc_core_stable() {
+	WAIT=0
+	while ! svc_running "$1" && [ "$WAIT" -lt 30 ]; do
+		sleep 1; WAIT=$((WAIT + 1))
+	done
+	svc_running "$1" || return 1
+	[ "$2" = 1 ] || return 0
+	WAIT=0
+	SEEN=
+	STREAK=0
+	while [ "$WAIT" -lt 30 ]; do
+		NOW=$(pidof clash)
+		KEPT=
+		for PID in $SEEN; do
+			case " $NOW " in *" $PID "*) KEPT="$KEPT $PID" ;; esac
+		done
+		if [ -n "$KEPT" ]; then
+			SEEN=$KEPT
+			STREAK=$((STREAK + 1))
+			[ "$STREAK" -lt 3 ] || return 0
+		else
+			SEEN=$NOW
+			STREAK=0
+		fi
+		sleep 1; WAIT=$((WAIT + 1))
+	done
+	return 1
 }
 
 case "$1" in
 profiles)
 	. /usr/share/libubox/jshn.sh
-	ssc_profile_name
 	json_init
-	json_add_string active "$ACTIVE"
-	json_add_array profiles
-	[ ! -f /opt/clash/config.yaml-backup ] || json_add_string "" config.yaml
-	for PROFILE in /opt/clash/*.yaml; do
-		[ -f "$PROFILE" ] && [ "$PROFILE" != /opt/clash/config.yaml ] || continue
-		ssc_router_profile "$PROFILE" || continue
-		json_add_string "" "${PROFILE##*/}"
-	done
+	if [ "$2" = go ]; then
+		ssc_go_active
+		json_add_string active "$GO_ACTIVE"
+		json_add_array profiles
+		for PROFILE in /opt/clash/configs/*.yaml; do
+			[ -f "$PROFILE" ] || continue
+			PROFILE=${PROFILE##*/}
+			json_add_string "" "${PROFILE%.yaml}"
+		done
+	else
+		ssc_profile_name
+		json_add_string active "$ACTIVE"
+		json_add_array profiles
+		[ ! -f /opt/clash/config.yaml-backup ] || json_add_string "" config.yaml
+		for PROFILE in /opt/clash/*.yaml; do
+			[ -f "$PROFILE" ] && [ "$PROFILE" != /opt/clash/config.yaml ] || continue
+			ssc_router_profile "$PROFILE" || continue
+			json_add_string "" "${PROFILE##*/}"
+		done
+	fi
 	json_close_array
 	json_dump
 	;;
 apply-profile)
 	ssc_present "$2" || { echo '{"error":"not_installed"}'; exit 1; }
-	case "$3" in ''|*/*|.*) echo '{"error":"invalid_profile"}'; exit 1 ;; esac
-	case "$3" in *.yaml) ;; *) echo '{"error":"invalid_profile"}'; exit 1 ;; esac
-	mkdir /opt/clash/.5gmodem-profile-lock 2>/dev/null || { echo '{"error":"busy"}'; exit 1; }
+	ssc_valid_name "$2" "$3" || { echo '{"error":"invalid_profile"}'; exit 1; }
+	mkdir /tmp/5gmodem-profile-lock 2>/dev/null || { echo '{"error":"busy"}'; exit 1; }
 	rm -f /tmp/5gmodem-profile-result.json
 	if command -v setsid >/dev/null 2>&1; then
 		setsid /bin/sh "$0" _profile-job "$2" "$3" >/dev/null 2>&1 </dev/null &
@@ -94,9 +172,10 @@ apply-profile)
 		/bin/sh "$0" _profile-job "$2" "$3" >/dev/null 2>&1 </dev/null &
 	fi
 	echo '{"ok":true,"pending":true}'
+	sleep 1
 	;;
 _profile-job)
-	trap 'rmdir /opt/clash/.5gmodem-profile-lock 2>/dev/null' EXIT
+	trap 'rmdir /tmp/5gmodem-profile-lock 2>/dev/null' EXIT
 	trap 'exit 1' HUP INT TERM
 	RESULT=$("$0" _apply-profile "$2" "$3")
 	[ -n "$RESULT" ] || RESULT='{"error":"apply_failed"}'
@@ -104,43 +183,64 @@ _profile-job)
 	mv -f /tmp/5gmodem-profile-result.json.new /tmp/5gmodem-profile-result.json
 	;;
 _apply-profile)
-	ssc_present "$2" || { echo '{"error":"not_installed"}'; exit 1; }
+	KIND=$2
 	PROFILE=$3
-	case "$PROFILE" in ''|*/*|.*) echo '{"error":"invalid_profile"}'; exit 1 ;; esac
-	case "$PROFILE" in *.yaml) ;; *) echo '{"error":"invalid_profile"}'; exit 1 ;; esac
-	SOURCE="/opt/clash/$PROFILE"
-	[ "$PROFILE" != config.yaml ] || SOURCE=/opt/clash/config.yaml-backup
+	ssc_present "$KIND" || { echo '{"error":"not_installed"}'; exit 1; }
+	ssc_valid_name "$KIND" "$PROFILE" || { echo '{"error":"invalid_profile"}'; exit 1; }
+	SOURCE=$(ssc_source "$KIND" "$PROFILE")
+	SETTINGS=$(ssc_settings_file "$KIND")
 	[ -f "$SOURCE" ] || { echo '{"error":"missing_profile"}'; exit 1; }
 	WORK=$(mktemp -d /opt/clash/.5gmodem-switch.XXXXXX) || exit 1
 	trap 'rm -rf "$WORK"' EXIT
 	trap 'exit 1' HUP INT TERM
 	cp "$SOURCE" "$WORK/new.yaml" || exit 1
-	if [ "$PROFILE" != config.yaml ] && ! ssc_router_profile "$WORK/new.yaml"; then
+	if [ "$KIND" = legacy ] && [ "$PROFILE" != config.yaml ] && ! ssc_router_profile "$WORK/new.yaml"; then
 		echo '{"error":"invalid_profile"}'; exit 1
 	fi
 	/opt/clash/bin/clash -t -d /opt/clash -f "$WORK/new.yaml" > "$WORK/check.log" 2>&1 || {
 		echo '{"error":"validation_failed"}'; exit 1;
 	}
+	if [ "$KIND" = go ]; then
+		ssc_go_active
+		CURRENT=$GO_ACTIVE
+		KEEPER=$(ssc_source go "$GO_ACTIVE")
+	else
+		ssc_saved_name
+		CURRENT=${SAVED:-config.yaml}
+		KEEPER=$(ssc_source legacy "$CURRENT")
+	fi
 	HAD_CONFIG=0
 	if [ -e /opt/clash/config.yaml ]; then
 		cp -p /opt/clash/config.yaml "$WORK/old.yaml" || exit 1
 		HAD_CONFIG=1
-	fi
-	ssc_profile_name
-	if [ "$HAD_CONFIG" = 1 ] && [ "$ACTIVE" = config.yaml ] && [ "$PROFILE" != config.yaml ]; then
-		cp -p "$WORK/old.yaml" "$WORK/backup.yaml" && chmod 600 "$WORK/backup.yaml" &&
-			mv -f "$WORK/backup.yaml" /opt/clash/config.yaml-backup || {
-			echo '{"error":"backup_failed"}'; exit 1;
-		}
+		if [ "$KIND" = legacy ] && [ "$CURRENT" = config.yaml ] && [ "$PROFILE" != config.yaml ]; then
+			cp -p "$WORK/old.yaml" "$WORK/backup.yaml" && chmod 600 "$WORK/backup.yaml" &&
+				mv -f "$WORK/backup.yaml" /opt/clash/config.yaml-backup || {
+				echo '{"error":"backup_failed"}'; exit 1;
+			}
+		elif [ ! -f "$KEEPER" ] || ! ssc_profile_matches "$KEEPER" "$WORK/old.yaml"; then
+			cp -p "$WORK/old.yaml" "$WORK/edited.yaml" && chmod 600 "$WORK/edited.yaml" &&
+				mv -f "$WORK/edited.yaml" /opt/clash/config.yaml-edited || {
+				echo '{"error":"backup_failed"}'; exit 1;
+			}
+		fi
 	fi
 	HAD_SETTINGS=0
-	if [ -e /opt/clash/settings ]; then
-		cp -p /opt/clash/settings "$WORK/old.settings" || exit 1
+	if [ -e "$SETTINGS" ]; then
+		cp -p "$SETTINGS" "$WORK/old.settings" || exit 1
 		HAD_SETTINGS=1
 	else
 		: > "$WORK/old.settings"
 	fi
-	MODE=$(ssc_interface_mode "$WORK/new.yaml")
+	OLD_MODE=$(ssc_settings_mode "$WORK/old.settings")
+	if [ "$CURRENT" = "$PROFILE" ]; then
+		MODE=$OLD_MODE
+	else
+		MODE=
+		[ ! -f "/opt/clash/.5gmodem-mode.$PROFILE" ] || IFS= read -r MODE < "/opt/clash/.5gmodem-mode.$PROFILE"
+		case "$MODE" in explicit|exclude) ;; *) MODE=$(ssc_interface_mode "$WORK/new.yaml") ;; esac
+	fi
+	cp -p "$WORK/old.settings" "$WORK/new.settings" || exit 1
 	awk -v mode="$MODE" '
 		/^[[:space:]]*INTERFACE_MODE=/ {
 			if (!written++) print "INTERFACE_MODE=" mode
@@ -149,9 +249,9 @@ _apply-profile)
 		{ print }
 		END { if (!written) print "INTERFACE_MODE=" mode }
 	' "$WORK/old.settings" > "$WORK/new.settings" || exit 1
-	chmod 600 "$WORK/new.yaml" "$WORK/new.settings"
+	chmod 600 "$WORK/new.yaml"
 	mv -f "$WORK/new.yaml" /opt/clash/config.yaml || exit 1
-	if ! mv -f "$WORK/new.settings" /opt/clash/settings; then
+	if ! mv -f "$WORK/new.settings" "$SETTINGS"; then
 		if [ "$HAD_CONFIG" = 1 ]; then
 			mv -f "$WORK/old.yaml" /opt/clash/config.yaml
 		else
@@ -159,24 +259,26 @@ _apply-profile)
 		fi
 		exit 1
 	fi
-	SVC=$(ssc_service "$2")
-	ACTION=restart
-	[ "$2" != legacy ] || ACTION=reload
-	if /etc/init.d/"$SVC" "$ACTION" > "$WORK/restart.log" 2>&1; then
-		WAIT=0
-		while ! svc_running "$SVC" && [ "$WAIT" -lt 30 ]; do
-			sleep 1; WAIT=$((WAIT + 1))
-		done
-		svc_running "$SVC"
-	else
-		false
+	if [ "$KIND" = go ]; then
+		printf '%s' "$PROFILE" > "$WORK/selected"
+		mv -f "$WORK/selected" /opt/clash/.ssclash/active-profile
 	fi
+	SVC=$(ssc_service "$KIND")
+	ACTION=restart
+	NEED_CORE=1
+	if [ "$KIND" = legacy ]; then
+		ACTION=reload
+	else
+		[ "$(cat /opt/clash/.ssclash/enabled 2>/dev/null)" = 1 ] || NEED_CORE=0
+	fi
+	/etc/init.d/"$SVC" "$ACTION" > "$WORK/restart.log" 2>&1 && ssc_core_stable "$SVC" "$NEED_CORE"
 	if [ "$?" != 0 ]; then
 		if [ "$HAD_SETTINGS" = 1 ]; then
-			mv -f "$WORK/old.settings" /opt/clash/settings
+			mv -f "$WORK/old.settings" "$SETTINGS"
 		else
-			rm -f /opt/clash/settings
+			rm -f "$SETTINGS"
 		fi
+		[ "$KIND" != go ] || printf '%s' "$CURRENT" > /opt/clash/.ssclash/active-profile
 		if [ "$HAD_CONFIG" = 1 ]; then
 			mv -f "$WORK/old.yaml" /opt/clash/config.yaml
 			/etc/init.d/"$SVC" restart > /dev/null 2>&1
@@ -185,8 +287,17 @@ _apply-profile)
 		fi
 		echo '{"error":"restart_failed"}'; exit 1
 	fi
-	printf '%s\n' "$PROFILE" > "$WORK/selected"
-	mv -f "$WORK/selected" /opt/clash/.5gmodem-profile || { echo '{"error":"save_failed"}'; exit 1; }
+	if [ "$CURRENT" != "$PROFILE" ]; then
+		if [ -e "$WORK/old.yaml" ] && [ "$OLD_MODE" != "$(ssc_interface_mode "$WORK/old.yaml")" ]; then
+			printf '%s\n' "$OLD_MODE" > "/opt/clash/.5gmodem-mode.$CURRENT"
+		else
+			rm -f "/opt/clash/.5gmodem-mode.$CURRENT"
+		fi
+	fi
+	if [ "$KIND" = legacy ]; then
+		printf '%s\n' "$PROFILE" > "$WORK/selected"
+		mv -f "$WORK/selected" /opt/clash/.5gmodem-profile || { echo '{"error":"save_failed"}'; exit 1; }
+	fi
 	echo '{"ok":true}'
 	;;
 detect)
@@ -230,7 +341,7 @@ status)
 	R=0
 	svc_running "$SVC" && R=1
 	SWITCHING=0
-	[ ! -d /opt/clash/.5gmodem-profile-lock ] || SWITCHING=1
+	[ ! -d /tmp/5gmodem-profile-lock ] || SWITCHING=1
 	RESULT='{}'
 	[ ! -f /tmp/5gmodem-profile-result.json ] || RESULT=$(cat /tmp/5gmodem-profile-result.json)
 	printf '{"running":%s,"switching":%s,"result":%s}\n' "$R" "$SWITCHING" "$RESULT"
