@@ -6310,3 +6310,51 @@ msgstr "Обновление кэша страниц…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "Сеть закрыла USSD-сессию без текстового ответа. Некоторые операторы присылают ответ в SMS: проверьте входящие."
+
+msgid "Select configuration"
+msgstr "Выбрать конфигурацию"
+
+msgid "Configuration switch failed"
+msgstr "Не удалось переключить конфигурацию"
+
+msgid "Apply and restart"
+msgstr "Применить и перезапустить"
+
+msgid "SSClash configuration"
+msgstr "Конфигурация SSClash"
+
+msgid "Active configuration"
+msgstr "Активная конфигурация"
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr "В /opt/clash/ не найдены профили YAML"
+
+msgid "SSClash is not installed"
+msgstr "SSClash не установлен"
+
+msgid "Invalid profile"
+msgstr "Недопустимый профиль"
+
+msgid "Profile does not exist"
+msgstr "Профиль не существует"
+
+msgid "A profile switch is already running"
+msgstr "Переключение профиля уже выполняется"
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr "Clash отклонил профиль; текущая конфигурация сохранена"
+
+msgid "Service restart failed; previous configuration restored"
+msgstr "Не удалось перезапустить службу; предыдущая конфигурация восстановлена"
+
+msgid "Profile applied, but its name could not be saved"
+msgstr "Профиль применён, но не удалось сохранить его имя"
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr "Не удалось создать резервную копию текущей конфигурации; переключение отменено"
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr "Последняя версия config.yaml сохраняется в config.yaml-backup. Для её восстановления выберите config.yaml."
+
+msgid "Service is restarting…"
+msgstr "Служба перезапускается…"

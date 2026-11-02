@@ -337,12 +337,13 @@ function ssclashInit(kind, redraw) {
 	if (st.present) { ssclashStatusInit(kind); }
 	if (_sscProbed[kind]) { return; }
 	_sscProbed[kind] = true;
+	if (kind !== 'nikki') { sscLoadProfiles(kind).catch(function() {}); }
 	L.resolveDefault(fs.exec_direct(PANEL_BRAND[kind].bin, [ 'detect', kind ]), '').then(function(out) {
 		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
 		if (j && j.present) {
 			_ssc[kind] = { present: true, port: (j.port || _sscDefault[kind].port),
 				scheme: (j.scheme || 'http'), version: (j.version || ''),
-				path: (j.path || _sscDefault[kind].path), kind: kind, running: st.running,
+				path: (j.path || _sscDefault[kind].path), kind: kind, running: st.running, switching: st.switching,
 				secret: (j.secret || '') };
 			sscCache(kind);
 			ssclashStatusInit(kind);
@@ -354,6 +355,113 @@ function ssclashInit(kind, redraw) {
 			if (_had && typeof redraw === 'function') { loadList().then(function(l) { redraw(l); }); }
 		}
 	});
+}
+
+var _sscProfiles = {};
+function sscHasProfiles(kind) {
+	return ((_sscProfiles[kind] || {}).profiles || []).filter(function(name) { return name !== 'config.yaml'; }).length > 1;
+}
+function sscProfileLabel(el, kind) {
+	var data = _sscProfiles[kind] || {};
+	var multiple = sscHasProfiles(kind);
+	el.textContent = multiple ? (data.active || 'config.yaml') : window.location.hostname;
+	el.title = multiple ? _('Select configuration') + ': ' + el.textContent : '';
+	el.style.cursor = multiple ? 'pointer' : '';
+	el.setAttribute('tabindex', multiple ? '0' : '-1');
+	if (multiple) { el.setAttribute('role', 'button'); }
+	else { el.removeAttribute('role'); }
+}
+function sscProfileLine(kind) {
+	function selectable() { return sscHasProfiles(kind); }
+	var line = E('span', { 'class': 'netpri-ip', 'data-sscprofile': kind,
+		'pointerdown': function(ev) { if (selectable()) { ev.stopPropagation(); } },
+		'click': function(ev) {
+			if (!selectable()) { return; }
+			ev.preventDefault(); ev.stopPropagation();
+			if (!_npSwallowClick()) { sscChooseProfile(kind); }
+		},
+		'keydown': function(ev) {
+			if (selectable() && (ev.key === 'Enter' || ev.key === ' ')) {
+				ev.preventDefault(); ev.stopPropagation(); sscChooseProfile(kind);
+			}
+		}
+	});
+	sscProfileLabel(line, kind);
+	return line;
+}
+function sscLoadProfiles(kind) {
+	return fs.exec_direct(PANEL_BRAND[kind].bin, [ 'profiles', kind ]).then(function(out) {
+		var data = JSON.parse(out);
+		_sscProfiles[kind] = data;
+		document.querySelectorAll('[data-sscprofile="' + kind + '"]').forEach(function(el) {
+			sscProfileLabel(el, kind);
+		});
+		return data;
+	});
+}
+function sscProfileError(code) {
+	var messages = {
+		not_installed: _('SSClash is not installed'),
+		invalid_profile: _('Invalid profile'),
+		missing_profile: _('Profile does not exist'),
+		busy: _('A profile switch is already running'),
+		validation_failed: _('Clash rejected the profile; current configuration was kept'),
+		restart_failed: _('Service restart failed; previous configuration restored'),
+		save_failed: _('Profile applied, but its name could not be saved'),
+		backup_failed: _('Could not back up the current configuration; switching cancelled')
+	};
+	return messages[code] || _('Configuration switch failed');
+}
+function sscChooseProfile(kind) {
+	if (_ssc[kind].switching) { return; }
+	sscLoadProfiles(kind).then(function(data) {
+		var select = E('select', { 'class': 'cbi-input-select',
+			'style': 'width:100%;min-width:0;max-width:100%;box-sizing:border-box' });
+		select.appendChild(E('option', { 'value': '' }, _('Select configuration')));
+		(data.profiles || []).forEach(function(name) {
+			select.appendChild(E('option', { 'value': name, 'selected': name === data.active ? '' : null }, name));
+		});
+		var apply = E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': function() {
+			if (!select.value) { return; }
+			_ssc[kind].switching = true;
+			_ssc[kind].dispatching = true;
+			_ssc[kind].switchStarted = Date.now();
+			updateSscDot(kind);
+			ui.hideModal();
+			apply.disabled = true; select.disabled = true; cancel.disabled = true;
+			apply.classList.add('spinning');
+			fs.exec(PANEL_BRAND[kind].bin, [ 'apply-profile', kind, select.value ]).then(function(reply) {
+				var result;
+				try { result = JSON.parse(reply.stdout || '{}'); } catch (e) { throw new Error(_('Configuration switch failed')); }
+				_ssc[kind].dispatching = false;
+				if (!result.ok) { throw new Error(sscProfileError(result.error)); }
+				return _svcAggTick();
+			}).catch(function(err) {
+				_ssc[kind].dispatching = false;
+				_ssc[kind].switching = false;
+				updateSscDot(kind);
+				ui.addNotification(null, E('p', err.message), 'error');
+			}).finally(function() {
+				apply.disabled = false; select.disabled = false; cancel.disabled = false;
+				apply.classList.remove('spinning');
+			});
+		} }, _('Apply and restart'));
+		var cancel = E('button', { 'class': 'btn cbi-button', 'click': ui.hideModal }, _('Cancel'));
+		[ cancel, apply ].forEach(function(button) {
+			button.style.cssText = 'margin:0;max-width:100%;white-space:normal;overflow-wrap:anywhere';
+		});
+		ui.showModal(_('SSClash configuration'), [
+			E('p', _('Active configuration') + ': ' + (data.active || 'config.yaml')),
+			E('p', _('The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml.')),
+			E('div', { 'style': 'display:flex;flex-direction:column;gap:1em;width:100%;min-width:0' }, [
+				E('div', { 'style': 'width:100%;min-width:0' }, [
+					(data.profiles || []).length ? select : E('p', _('No YAML profiles found in /opt/clash/'))
+				]),
+				E('div', { 'style': 'display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.5em;width:100%' }, [ cancel, apply ])
+			])
+		]);
+		apply.disabled = !(data.profiles || []).length;
+	}).catch(function(err) { ui.addNotification(null, E('p', err.message), 'error'); });
 }
 
 function ssClashBtn(kind) {
@@ -369,8 +477,8 @@ function ssClashBtn(kind) {
 	}
 	var ic = E('span', { 'class': 'netpri-ssclash-ic' });
 	ic.innerHTML = br.icon;
-	var dot = E('span', { 'class': 'netpri-svcdot ' + (st.running ? 'on' : 'off'),
-		'title': (st.running ? _('%s is running') : _('%s is stopped')).format(br.name) });
+	var dot = E('span', { 'class': 'netpri-svcdot' });
+	sscPaintDot(dot, st, br.name);
 	return E('button', {
 		'class': 'btn cbi-button netpri-btn netpri-ssclash',
 		'data-ssckind': kind,
@@ -381,7 +489,8 @@ function ssClashBtn(kind) {
 		svcRankEl(ic),
 		E('span', { 'class': 'netpri-sub' }, [ String(st.version || br.name) ]),
 		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, br.name) ]),
-		E('span', { 'class': 'netpri-ip' }, host)
+		kind === 'nikki' ? E('span', { 'class': 'netpri-ip' }, host) :
+		sscProfileLine(kind)
 	]);
 }
 
@@ -594,18 +703,29 @@ function updateSvcCard(service) {
 }
 var _svcAgg = { services: [], kinds: [], started: false };
 function _svcAggTick() {
+	var requestedAt = Date.now();
 	if (!_svcAgg.services.length && !_svcAgg.kinds.length) { return Promise.resolve(); }
 	/* '-' = empty list, see docs/subsystems/internet-priority.md#svcall-empty-list */
 	return L.resolveDefault(fs.exec_direct(BIN, [ 'svcall', _svcAgg.services.join(',') || '-', _svcAgg.kinds.join(',') || '-' ]), '').then(function(out) {
-		var j = {}; try { j = JSON.parse(out || '{}'); } catch (e) {}
+		var j; try { j = JSON.parse(out || '{}'); } catch (e) { return; }
 		_svcAgg.services.forEach(function(svc) {
 			var r = (j.svc || {})[svc] || {};
 			_svcState[svc] = { running: !!r.running, version: r.version || '', ip: r.ip || '' };
 			updateSvcCard(svc);
 		});
 		_svcAgg.kinds.forEach(function(kind) {
-			var r = (j.ssc || {})[kind] || {};
+			var r = (j.ssc || {})[kind];
+			if (!r || typeof r.running !== 'number' || _ssc[kind].dispatching ||
+				(_ssc[kind].switchStarted || 0) > requestedAt) { return; }
+			var finished = _ssc[kind].switching && !r.switching;
+			_ssc[kind].switching = !!r.switching;
 			_ssc[kind].running = !!r.running;
+			if (finished) {
+				sscLoadProfiles(kind).catch(function() {});
+				if (r.result && r.result.error) {
+					ui.addNotification(null, E('p', sscProfileError(r.result.error)), 'error');
+				}
+			}
 			sscCache(kind);
 			updateSscDot(kind);
 		});
@@ -626,13 +746,20 @@ function svcStatusInit(services) {
 	_svcAggStart();
 }
 
+function sscPaintDot(dot, st, name) {
+	dot.classList.remove('on', 'off');
+	dot.classList.add(st.running ? 'on' : 'off');
+	dot.title = st.switching ? _('Service is restarting…') :
+		(st.running ? _('%s is running') : _('%s is stopped')).format(name);
+	dot.style.background = st.switching ? '#d29922' : '';
+	dot.style.boxShadow = st.switching ? '0 0 5px 1px rgba(210,153,34,.85)' : '';
+	dot.style.animation = st.switching ? 'dot-breathe 1.1s ease-in-out infinite' : '';
+}
 function updateSscDot(kind) {
 	var st = _ssc[kind];
 	var nm = (PANEL_BRAND[kind] || PANEL_BRAND.go).name;
-	var cls = st.running ? 'on' : 'off';
-	var tip = (st.running ? _('%s is running') : _('%s is stopped')).format(nm);
 	document.querySelectorAll('.netpri-ssclash[data-ssckind="' + kind + '"] .netpri-svcdot').forEach(function(d) {
-		d.classList.remove('on', 'off'); d.classList.add(cls); d.title = tip;
+		sscPaintDot(d, st, nm);
 	});
 }
 function ssclashStatusInit(kind) {
@@ -1248,7 +1375,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30911,
+	API: 30912,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {

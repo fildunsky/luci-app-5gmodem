@@ -6025,3 +6025,51 @@ msgstr "Đang làm mới bộ nhớ đệm trang…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "Mạng đã đóng phiên USSD mà không có phản hồi văn bản. Một số nhà mạng gửi trả lời qua SMS: hãy kiểm tra tin nhắn đến."
+
+msgid "Select configuration"
+msgstr "Chọn cấu hình"
+
+msgid "Configuration switch failed"
+msgstr "Không thể chuyển cấu hình"
+
+msgid "Apply and restart"
+msgstr "Áp dụng và khởi động lại"
+
+msgid "SSClash configuration"
+msgstr "Cấu hình SSClash"
+
+msgid "Active configuration"
+msgstr "Cấu hình đang dùng"
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr "Không tìm thấy hồ sơ YAML trong /opt/clash/"
+
+msgid "SSClash is not installed"
+msgstr "SSClash chưa được cài đặt"
+
+msgid "Invalid profile"
+msgstr "Hồ sơ không hợp lệ"
+
+msgid "Profile does not exist"
+msgstr "Hồ sơ không tồn tại"
+
+msgid "A profile switch is already running"
+msgstr "Đang thực hiện chuyển hồ sơ"
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr "Clash từ chối hồ sơ; cấu hình hiện tại được giữ nguyên"
+
+msgid "Service restart failed; previous configuration restored"
+msgstr "Không thể khởi động lại dịch vụ; đã khôi phục cấu hình trước đó"
+
+msgid "Profile applied, but its name could not be saved"
+msgstr "Đã áp dụng hồ sơ nhưng không thể lưu tên"
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr "Không thể sao lưu cấu hình hiện tại; đã hủy chuyển đổi"
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr "Phiên bản config.yaml mới nhất được lưu trong config.yaml-backup. Chọn config.yaml để khôi phục."
+
+msgid "Service is restarting…"
+msgstr "Đang khởi động lại dịch vụ…"

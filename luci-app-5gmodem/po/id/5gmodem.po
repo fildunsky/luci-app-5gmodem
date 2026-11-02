@@ -6025,3 +6025,51 @@ msgstr "Memperbarui cache halaman…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "Jaringan menutup sesi USSD tanpa balasan teks. Beberapa operator mengirim jawaban lewat SMS: periksa pesan masuk."
+
+msgid "Select configuration"
+msgstr "Pilih konfigurasi"
+
+msgid "Configuration switch failed"
+msgstr "Gagal mengganti konfigurasi"
+
+msgid "Apply and restart"
+msgstr "Terapkan dan mulai ulang"
+
+msgid "SSClash configuration"
+msgstr "Konfigurasi SSClash"
+
+msgid "Active configuration"
+msgstr "Konfigurasi aktif"
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr "Tidak ada profil YAML di /opt/clash/"
+
+msgid "SSClash is not installed"
+msgstr "SSClash belum terpasang"
+
+msgid "Invalid profile"
+msgstr "Profil tidak valid"
+
+msgid "Profile does not exist"
+msgstr "Profil tidak ada"
+
+msgid "A profile switch is already running"
+msgstr "Pergantian profil sedang berlangsung"
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr "Clash menolak profil; konfigurasi saat ini dipertahankan"
+
+msgid "Service restart failed; previous configuration restored"
+msgstr "Gagal memulai ulang layanan; konfigurasi sebelumnya dipulihkan"
+
+msgid "Profile applied, but its name could not be saved"
+msgstr "Profil diterapkan, tetapi namanya tidak dapat disimpan"
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr "Tidak dapat mencadangkan konfigurasi saat ini; pergantian dibatalkan"
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr "Versi terakhir config.yaml disimpan dalam config.yaml-backup. Pilih config.yaml untuk memulihkannya."
+
+msgid "Service is restarting…"
+msgstr "Layanan sedang dimulai ulang…"
