@@ -6310,3 +6310,102 @@ msgstr "Обновление кэша страниц…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "Сеть закрыла USSD-сессию без текстового ответа. Некоторые операторы присылают ответ в SMS: проверьте входящие."
+
+msgid "Start AmneziaWG"
+msgstr "Запустить AmneziaWG"
+
+msgid "Stop AmneziaWG"
+msgstr "Остановить AmneziaWG"
+
+msgid "Start Passwall2"
+msgstr "Запустить Passwall2"
+
+msgid "Stop Passwall2"
+msgstr "Остановить Passwall2"
+
+msgid "Show SMS"
+msgstr "Показать SMS"
+
+msgid "Show SMS on GL-E750 display. Additional settings in \"Inbox\""
+msgstr "Показ SMS на дисплее GL-E750. Дополнительные настройки — во вкладке «Входящие»"
+
+msgid "Show Metrics"
+msgstr "Показать метрики"
+
+msgid "Output system metrics on GL-E750 display: bandwidth via WAN interface, number of connections, load, CPU usage, memory available"
+msgstr "Вывод метрик системы на дисплей GL-E750: скорость через WAN-интерфейс, число соединений, нагрузка, загрузка CPU, свободная память"
+
+msgid "Toggle Standby mode"
+msgstr "Переключить режим ожидания"
+
+msgid "Long press"
+msgstr "Долгое нажатие"
+
+msgid "Hold right button for 3 s."
+msgstr "Удерживайте правую кнопку 3 с."
+
+msgid "Double flip"
+msgstr "Двойное переключение"
+
+msgid "Flip switch and back to original position within 2 s."
+msgstr "Переключите и верните переключатель в исходное положение в течение 2 с."
+
+msgid "Show SMS mode"
+msgstr "Режим показа SMS"
+
+msgid "Show SMS mode activates if configured in 'Inbox'. Button actions below apply only to this mode."
+msgstr "Режим показа SMS включается, если настроен во вкладке «Входящие». Действия кнопок ниже работают только в этом режиме."
+
+msgid "Switch flip"
+msgstr "Переключение"
+
+msgid "Next page"
+msgstr "Следующая страница"
+
+msgid "Next message"
+msgstr "Следующее сообщение"
+
+msgid "Previous message"
+msgstr "Предыдущее сообщение"
+
+msgid "Replay message"
+msgstr "Показать сообщение заново"
+
+msgid "Mark all read and exit"
+msgstr "Отметить все прочитанными и выйти"
+
+msgid "Exit"
+msgstr "Выйти"
+
+msgid "Output new message(s) to GL-E750 display"
+msgstr "Выводить новые сообщения на дисплей GL-E750"
+
+msgid "Display is limited to Latin alphabet only. Translit will be used for Cyrillic symbols. E.g. Bud'te schastlivy!"
+msgstr "Дисплей поддерживает только латиницу. Кириллица выводится транслитом, например: Bud'te schastlivy!"
+
+msgid "Show only the last message"
+msgstr "Показывать только последнее сообщение"
+
+msgid "When off all unread SMS will be displayed cycling in the order of time received starting with the most recent."
+msgstr "Если выключено, все непрочитанные SMS показываются по кругу в порядке получения, начиная с самого нового."
+
+msgid "Time to display messages, seconds"
+msgstr "Время показа сообщений, секунд"
+
+msgid "Timer restarts on input. Configure actions in 'Buttons'."
+msgstr "Таймер перезапускается при каждом нажатии. Действия настраиваются в разделе «Кнопки»."
+
+msgid "Flash GL-E750 display"
+msgstr "Мигать дисплеем GL-E750"
+
+msgid "Flash display for (seconds)"
+msgstr "Мигать дисплеем, секунд"
+
+msgid "Show 'SMS' on a bright background flashing twice per second. Then new messages are shown if 'Output new message(s) to GL-E750 display' is on."
+msgstr "Показывает «SMS» на ярком фоне, мигая два раза в секунду. Затем выводятся новые сообщения, если включено «Выводить новые сообщения на дисплей GL-E750»."
+
+msgid "'CMD_OUTPUT &lt;number&gt;' in 'Reply text' will send command output truncated to specified number of characters (single SMS if omitted) and split between multiple messages if needed."
+msgstr "«CMD_OUTPUT &lt;число&gt;» в «Тексте ответа» отправит вывод команды, обрезанный до указанного числа символов (одно SMS, если число не указано), и при необходимости разобьёт его на несколько сообщений."
+
+msgid "Maximum: 670 characters (10 SMS)."
+msgstr "Максимум: 670 символов (10 SMS)."

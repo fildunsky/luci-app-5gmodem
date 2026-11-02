@@ -545,7 +545,9 @@ case "$1" in
 			   && [ "$((_smw_now - _smw_prev))" -ge "$_smw_iv" ]; then
 				printf '%s' "$_smw_now" > /tmp/5gmodem/sms_new.stamp 2>/dev/null
 				"$RES/smsbridge.sh" newdump > /tmp/5gmodem/sms_new.json.tmp 2>/dev/null \
-					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null
+					&& mv /tmp/5gmodem/sms_new.json.tmp /tmp/5gmodem/sms_new.json 2>/dev/null \
+					&& [ -x /usr/bin/mcu-switch ] \
+					&& { /usr/bin/mcu-switch sms new </dev/null >/dev/null 2>&1 & }
 			fi
 			if [ -n "$_REG_FLAT" ]; then
 			[ -n "$_sw_bgo" ] || "$RES/smscmd.sh" run >/dev/null 2>&1

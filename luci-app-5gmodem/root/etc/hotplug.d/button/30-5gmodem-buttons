@@ -3,5 +3,7 @@
 case "$ACTION" in pressed|released) ;; *) exit 0 ;; esac
 
 [ "$BUTTON" = "reset" ] && exit 0
+# GL-E750: /etc/rc.button/BTN_0 -> mcu-switch handles the slide switch (gestures, display)
+[ "$BUTTON" = "BTN_0" ] && [ -x /usr/bin/mcu-switch ] && exit 0
 
 ( /usr/share/5gmodem/buttons.sh run "$BUTTON" "$ACTION" "$SEEN" ) >/dev/null 2>&1 </dev/null &

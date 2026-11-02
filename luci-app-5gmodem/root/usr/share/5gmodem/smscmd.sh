@@ -66,6 +66,32 @@ case "$_dm_al" in ''|*[!0-9]*) _dm_al=0 ;; esac
 [ "${#_dm_al}" -le 4 ] && [ "$_dm_al" -le 2000 ] || _dm_al=2000
 DONE_MAX=$((DONE_MAX + _dm_al))
 ANS_MAX=600
+CO_MAX=670
+
+# UTF-8 aware: _u len | _u head <n>  (stdin)
+_u() {
+	awk -v m="$1" -v n="${2:-0}" 'BEGIN { RS = "\001"; for (i = 128; i < 192; i++) cont[sprintf("%c", i)] = 1 }
+	{ t = (NR > 1 ? t RS : "") $0 }
+	END { c = 0; for (i = 1; i <= length(t); i++) { if (!(substr(t, i, 1) in cont)) c++
+		if (m == "head" && c > n) { printf "%s", substr(t, 1, i - 1); exit } }
+		if (m == "head") printf "%s", t; else print c }'
+}
+
+# $1 answer text, $2 command output -> reply ('CMD_OUTPUT [n]' replaced by output)
+_reply() {
+	case "$1" in
+		*CMD_OUTPUT*) ;;
+		*) _rp=$(printf '%s' "$2" | head -c "$ANS_MAX"); printf '%s' "$1${1:+${_rp:+
+}}$_rp"; return ;;
+	esac
+	_rp_pre=${1%%CMD_OUTPUT*}; _rp_post=${1#*CMD_OUTPUT}
+	_rp_n=$(printf '%s' "$_rp_post" | sed -n '1s/^ *\([0-9]\{1,4\}\).*/\1/p')
+	[ -n "$_rp_n" ] && _rp_post=$(printf '%s' "$_rp_post" | sed '1s/^ *[0-9]*//')
+	[ -n "$_rp_n" ] || _rp_n=$((70 - $(printf '%s' "$_rp_pre$_rp_post" | _u len)))
+	[ "$_rp_n" -gt "$CO_MAX" ] && _rp_n=$CO_MAX
+	[ "$_rp_n" -lt 0 ] && _rp_n=0
+	printf '%s%s%s' "$_rp_pre" "$(printf '%s' "$2" | _u head "$_rp_n")" "$_rp_post"
+}
 
 _num10() {
 	_n=$(printf '%s' "$1" | tr -cd '0-9')
@@ -108,7 +134,7 @@ _run_cmd() {
 	_log "from $2: $(uci -q get "$1.keyword") -> $_rc_ex"
 
 	if [ "$_rc_dly" -gt 0 ]; then
-		[ "$_rc_ans" = "1" ] && _answer "$2" "${_rc_txt:-OK}"
+		[ "$_rc_ans" = "1" ] && _answer "$2" "$(_reply "${_rc_txt:-OK}" "")"
 		(
 			exec >/dev/null 2>&1 </dev/null
 			sleep "$_rc_dly"
@@ -119,9 +145,7 @@ _run_cmd() {
 
 	_rc_out=$(SMS_FROM="$2" SMS_ARGS="$3" SMS_TEXT="$4" sh -c "$_rc_ex" 2>&1)
 	if [ "$_rc_ans" = "1" ]; then
-		_rc_body="$_rc_txt"
-		[ -n "$_rc_out" ] && _rc_body="${_rc_body:+$_rc_body
-}$(printf '%s' "$_rc_out" | head -c "$ANS_MAX")"
+		_rc_body=$(_reply "$_rc_txt" "$_rc_out")
 		_answer "$2" "${_rc_body:-OK}"
 	fi
 	return 0
@@ -308,6 +332,7 @@ chat)
 	else
 		_cout=$(SMS_FROM="telegram" SMS_ARGS="$_crest" SMS_TEXT="$_ct" \
 			sh -c "$_cex" 2>&1 | head -c "$ANS_MAX")
+		case "$_ctxt" in *CMD_OUTPUT*) _cout=$(_reply "$_ctxt" "$_cout"); _ctxt= ;; esac
 		printf '{"result":"ok","output":"%s"}\n' \
 			"$(_cjson "${_ctxt:+$_ctxt }${_cout}")"
 	fi

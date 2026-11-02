@@ -84,11 +84,14 @@ _code_name() {
 	esac
 }
 
+_mcu() { [ -x /usr/bin/mcu-switch ] && case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in glinet,gl-e750*) ;; *) false ;; esac; }
+
 _dts_buttons() {
 	_force_key=0
 	case "$(cat /tmp/sysinfo/board_name 2>/dev/null)" in
 		huasifei,wh3000*) _force_key=1 ;;
 	esac
+	_mcu && printf 'power\tLong press\tbutton\n'
 	_dtb=/sys/firmware/devicetree/base
 	for _cf in "$_dtb"/*/compatible "$_dtb"/*/*/compatible; do
 		[ -f "$_cf" ] || continue
@@ -106,6 +109,7 @@ _dts_buttons() {
 				_ith=$(hexdump -v -e '/1 "%02x"' "${_b}linux,input-type" 2>/dev/null)
 				[ "$((0x${_ith:-0}))" = 5 ] && _type=switch
 			fi
+			[ "$_nm" = BTN_0 ] && _mcu && _type=switch
 			printf '%s\t%s\t%s\n' "$_nm" "$_lbl" "$_type"
 		done
 	done
@@ -115,19 +119,24 @@ _is_system() { [ "$1" = "reset" ]; }
 
 _json_esc() { sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
+# $1 command -> 0 on (service running / standby on), 1 off, 2 unknown
+_cond() {
+	case "$1" in *mcu-switch\ standby*) [ "$(uci -q get mcu.global.power_saveing)" = 1 ]; return ;; esac
+	_svc=$(printf '%s' "$1" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
+	[ -n "$_svc" ] || _svc=$(printf '%s' "$1" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
+	[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || return 2
+	_svc_running "$_svc" || return 1
+}
+
 _sync_leds_all() {
 	for _s in $(uci show "$CFG" 2>/dev/null | sed -n "s/^$CFG\.\([^.=]*\)=button\$/\1/p"); do
-		for _st in pressed released; do
+		for _st in pressed released double; do
 			[ "$(uci -q get "$CFG.$_s.ct_$_st")" = "conditional" ] || continue
-			_cmd=$(uci -q get "$CFG.$_s.$_st")
-			_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
-			[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
-			[ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ] || continue
-			if _svc_running "$_svc"; then
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
-			else
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
-			fi
+			_cond "$(uci -q get "$CFG.$_s.$_st")"
+			case $? in
+				0) _apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")" ;;
+				1) _apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")" ;;
+			esac
 		done
 	done
 }
@@ -135,7 +144,11 @@ _sync_leds_all() {
 case "$1" in
 detect)
 	_jf() { printf '%s' "$(uci -q get "$CFG.$1.$2" 2>/dev/null)" | _json_esc; }
-	printf '{"buttons":['
+	_mcu && printf '{"mcu":{"sms":%s,"flip":"%s","double":"%s","long":"%s"},' \
+		"$(uci -q get "$CFG.sms" >/dev/null && echo 1 || echo 0)" \
+		"$(_jf sms mcu_flip)" "$(_jf sms mcu_double)" "$(_jf sms mcu_long)"
+	_mcu || printf '{'
+	printf '"buttons":['
 	_f=1
 	_dts_buttons | sort -u | while IFS='	' read -r _name _label _type; do
 		[ -n "$_name" ] || continue
@@ -147,7 +160,7 @@ detect)
 		printf '{"name":"%s","label":"%s","type":"%s","default":%d,"btntype":"%s","debounce":"%s"' \
 			"$_name" "$(printf '%s' "$_label" | _json_esc)" "$_type" "$_def" \
 			"$(_jf "$_s" btntype)" "$(_jf "$_s" debounce)"
-		for _st in pressed released; do
+		for _st in pressed released double; do
 			printf ',"ct_%s":"%s","cmd_%s":"%s","svc_%s":"%s"' \
 				"$_st" "$(_jf "$_s" "ct_$_st")" \
 				"$_st" "$(_jf "$_s" "$_st")" \
@@ -175,7 +188,7 @@ services)
 	;;
 set)
 	[ -n "$2" ] || { echo '{"error":"no button"}'; exit 0; }
-	case "$3" in pressed|released|debounce|type_override|btntype|ct_pressed|ct_released|svc_pressed|svc_released) ;; *) echo '{"error":"bad field"}'; exit 0 ;; esac
+	case "$3" in pressed|released|double|debounce|type_override|btntype|ct_pressed|ct_released|ct_double|svc_pressed|svc_released|svc_double) ;; *) echo '{"error":"bad field"}'; exit 0 ;; esac
 	_s=$(_sid "$2")
 	uci -q get "$CFG.$_s" >/dev/null 2>&1 || uci -q set "$CFG.$_s=button"
 	uci -q set "$CFG.$_s.name=$2"
@@ -212,7 +225,7 @@ leds)
 	;;
 setleds)
 	[ -n "$2" ] || { echo '{"error":"no button"}'; exit 0; }
-	case "$3" in pressed|released|on_pressed|off_pressed|on_released|off_released) ;; *) echo '{"error":"bad action"}'; exit 0 ;; esac
+	case "$3" in pressed|released|double|on_pressed|off_pressed|on_released|off_released|on_double|off_double) ;; *) echo '{"error":"bad action"}'; exit 0 ;; esac
 	_s=$(_sid "$2")
 	uci -q get "$CFG.$_s" >/dev/null 2>&1 || uci -q set "$CFG.$_s=button"
 	uci -q set "$CFG.$_s.name=$2"
@@ -241,7 +254,7 @@ applyleds)
 	;;
 run)
 	[ -n "$2" ] || exit 0
-	case "$3" in pressed|released) ;; *) exit 0 ;; esac
+	case "$3" in pressed|released|double) ;; *) exit 0 ;; esac
 	_s=$(_sid "$2")
 	_st="$3"
 	_ct=$(uci -q get "$CFG.$_s.ct_$_st")
@@ -259,16 +272,12 @@ run)
 	[ -n "$_cmd" ] && ! cmd_allowed "$_cmd" && _cmd=''
 
 	if [ "$_ct" = "conditional" ]; then
-		_svc=$(printf '%s' "$_cmd" | sed -n 's/.*svc[[:space:]]\{1,\}[a-z]\{1,\}[[:space:]]\{1,\}\([A-Za-z0-9_.-]\{1,\}\).*/\1/p')
-		[ -n "$_svc" ] || _svc=$(printf '%s' "$_cmd" | sed -n 's#.*/etc/init.d/\([A-Za-z0-9_.-]\{1,\}\).*#\1#p')
 		[ "$_dbc" -gt 0 ] && echo "$_now" > "$_m" 2>/dev/null
-		if [ -n "$_svc" ] && [ -x "/etc/init.d/$_svc" ]; then
-			if _svc_running "$_svc"; then
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")"
-			else
-				_apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")"
-			fi
-		fi
+		_cond "$_cmd"
+		case $? in
+			0) _apply_leds "$(uci -q get "$CFG.$_s.leds_off_$_st")" ;;
+			1) _apply_leds "$(uci -q get "$CFG.$_s.leds_on_$_st")" ;;
+		esac
 		[ -n "$_cmd" ] && BUTTON="$2" ACTION="$_st" SEEN="$4" sh -c "$_cmd"
 		exit 0
 	fi
@@ -281,6 +290,14 @@ run)
 	;;
 syncleds)
 	_sync_leds_all
+	;;
+smsmode)
+	# GL-E750 display, Show SMS mode: smsmode <flip|double|long> <page|next|prev|replay|read|exit>
+	case "$2" in flip|double|long) ;; *) echo '{"error":"bad input"}'; exit 0 ;; esac
+	case "$3" in page|next|prev|replay|read|exit) ;; *) echo '{"error":"bad action"}'; exit 0 ;; esac
+	uci -q set "$CFG.sms.mcu_$2=$3"
+	uci -q commit "$CFG"
+	echo '{"ok":1}'
 	;;
 svc)
 	[ -n "$3" ] || { echo "usage: svc <toggle|start|stop|restart> <service>"; exit 1; }

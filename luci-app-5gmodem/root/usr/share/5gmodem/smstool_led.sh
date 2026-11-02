@@ -31,6 +31,7 @@ debug_log() {
 echo "=== START DEBUG $(date '+%Y-%m-%d %H:%M:%S') ===" > "$DEBUG_FILE"
 
 LEDX=$(uci -q get 5gmodem.sms.smsled)
+[ "$LEDX" = mcu ] && exit 0
 debug_log "LEDX: $LEDX"
 
 LEDT="/sys/class/leds/$LEDX/trigger"
