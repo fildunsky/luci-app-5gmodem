@@ -6358,3 +6358,6 @@ msgstr "Последняя версия config.yaml сохраняется в co
 
 msgid "Service is restarting…"
 msgstr "Служба перезапускается…"
+
+msgid "Restarting…"
+msgstr "Перезапуск…"

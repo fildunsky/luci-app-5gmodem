@@ -445,3 +445,6 @@ msgstr ""
 
 msgid "Service is restarting…"
 msgstr ""
+
+msgid "Restarting…"
+msgstr ""

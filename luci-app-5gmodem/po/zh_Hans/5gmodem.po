@@ -6073,3 +6073,6 @@ msgstr "最新的 config.yaml 保存在 config.yaml-backup 中，选择 config.y
 
 msgid "Service is restarting…"
 msgstr "服务正在重启…"
+
+msgid "Restarting…"
+msgstr "正在重启…"

@@ -359,17 +359,26 @@ function ssclashInit(kind, redraw) {
 
 var _sscProfiles = {};
 function sscHasProfiles(kind) {
-	return ((_sscProfiles[kind] || {}).profiles || []).filter(function(name) { return name !== 'config.yaml'; }).length > 1;
+	var data = _sscProfiles[kind] || {};
+	var profiles = data.profiles || [];
+	if (profiles.filter(function(name) { return name !== 'config.yaml'; }).length > 1) { return true; }
+	return profiles.indexOf('config.yaml') >= 0 && !!data.active && data.active !== 'config.yaml';
 }
 function sscProfileLabel(el, kind) {
 	var data = _sscProfiles[kind] || {};
 	var multiple = sscHasProfiles(kind);
-	el.textContent = multiple ? (data.active || 'config.yaml') : window.location.hostname;
-	el.title = multiple ? _('Select configuration') + ': ' + el.textContent : '';
+	var switching = !!(_ssc[kind] || {}).switching;
+	el.textContent = switching ? _('Restarting…') : (multiple ? (data.active || 'config.yaml') : window.location.hostname);
+	el.title = switching ? '' : (multiple ? _('Select configuration') + ': ' + el.textContent : '');
 	el.style.cursor = multiple ? 'pointer' : '';
 	el.setAttribute('tabindex', multiple ? '0' : '-1');
 	if (multiple) { el.setAttribute('role', 'button'); }
 	else { el.removeAttribute('role'); }
+}
+function sscRefreshLabels(kind) {
+	document.querySelectorAll('[data-sscprofile="' + kind + '"]').forEach(function(el) {
+		sscProfileLabel(el, kind);
+	});
 }
 function sscProfileLine(kind) {
 	function selectable() { return sscHasProfiles(kind); }
@@ -393,9 +402,7 @@ function sscLoadProfiles(kind) {
 	return fs.exec_direct(PANEL_BRAND[kind].bin, [ 'profiles', kind ]).then(function(out) {
 		var data = JSON.parse(out);
 		_sscProfiles[kind] = data;
-		document.querySelectorAll('[data-sscprofile="' + kind + '"]').forEach(function(el) {
-			sscProfileLabel(el, kind);
-		});
+		sscRefreshLabels(kind);
 		return data;
 	});
 }
@@ -423,6 +430,7 @@ function sscChooseProfile(kind) {
 		});
 		var apply = E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': function() {
 			if (!select.value) { return; }
+			var target = select.value;
 			_ssc[kind].switching = true;
 			_ssc[kind].dispatching = true;
 			_ssc[kind].switchStarted = Date.now();
@@ -430,16 +438,25 @@ function sscChooseProfile(kind) {
 			ui.hideModal();
 			apply.disabled = true; select.disabled = true; cancel.disabled = true;
 			apply.classList.add('spinning');
-			fs.exec(PANEL_BRAND[kind].bin, [ 'apply-profile', kind, select.value ]).then(function(reply) {
+			fs.exec(PANEL_BRAND[kind].bin, [ 'apply-profile', kind, target ]).then(function(reply) {
 				var result;
 				try { result = JSON.parse(reply.stdout || '{}'); } catch (e) { throw new Error(_('Configuration switch failed')); }
 				_ssc[kind].dispatching = false;
 				if (!result.ok) { throw new Error(sscProfileError(result.error)); }
 				return _svcAggTick();
+			}, function(err) {
+				_ssc[kind].dispatching = false;
+				return _svcAggTick().then(function() {
+					if (_ssc[kind].switching) { return; }
+					return sscLoadProfiles(kind).then(function(data) {
+						if (data.active !== target) { throw err; }
+					});
+				});
 			}).catch(function(err) {
 				_ssc[kind].dispatching = false;
 				_ssc[kind].switching = false;
 				updateSscDot(kind);
+				sscRefreshLabels(kind);
 				ui.addNotification(null, E('p', err.message), 'error');
 			}).finally(function() {
 				apply.disabled = false; select.disabled = false; cancel.disabled = false;
@@ -452,7 +469,7 @@ function sscChooseProfile(kind) {
 		});
 		ui.showModal(_('SSClash configuration'), [
 			E('p', _('Active configuration') + ': ' + (data.active || 'config.yaml')),
-			E('p', _('The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml.')),
+			kind === 'legacy' ? E('p', _('The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml.')) : '',
 			E('div', { 'style': 'display:flex;flex-direction:column;gap:1em;width:100%;min-width:0' }, [
 				E('div', { 'style': 'width:100%;min-width:0' }, [
 					(data.profiles || []).length ? select : E('p', _('No YAML profiles found in /opt/clash/'))
@@ -721,7 +738,7 @@ function _svcAggTick() {
 			_ssc[kind].switching = !!r.switching;
 			_ssc[kind].running = !!r.running;
 			if (finished) {
-				sscLoadProfiles(kind).catch(function() {});
+				sscLoadProfiles(kind).catch(function() { sscRefreshLabels(kind); });
 				if (r.result && r.result.error) {
 					ui.addNotification(null, E('p', sscProfileError(r.result.error)), 'error');
 				}
@@ -761,6 +778,7 @@ function updateSscDot(kind) {
 	document.querySelectorAll('.netpri-ssclash[data-ssckind="' + kind + '"] .netpri-svcdot').forEach(function(d) {
 		sscPaintDot(d, st, nm);
 	});
+	if (st.switching) { sscRefreshLabels(kind); }
 }
 function ssclashStatusInit(kind) {
 	if (_svcAgg.kinds.indexOf(kind) >= 0) { return; }
@@ -1375,7 +1393,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30912,
+	API: 30913,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
