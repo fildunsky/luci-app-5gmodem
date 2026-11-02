@@ -6025,3 +6025,51 @@ msgstr "正在重新整理頁面快取…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "網路已關閉 USSD 工作階段且未傳回文字。部分電信業者透過簡訊傳送回覆：請查看收件匣。"
+
+msgid "Select configuration"
+msgstr "選擇設定"
+
+msgid "Configuration switch failed"
+msgstr "設定切換失敗"
+
+msgid "Apply and restart"
+msgstr "套用並重新啟動"
+
+msgid "SSClash configuration"
+msgstr "SSClash 設定"
+
+msgid "Active configuration"
+msgstr "目前設定"
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr "在 /opt/clash/ 中找不到 YAML 設定檔"
+
+msgid "SSClash is not installed"
+msgstr "尚未安裝 SSClash"
+
+msgid "Invalid profile"
+msgstr "無效的設定檔"
+
+msgid "Profile does not exist"
+msgstr "設定檔不存在"
+
+msgid "A profile switch is already running"
+msgstr "正在切換設定檔"
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr "Clash 拒絕了此設定檔；已保留目前設定"
+
+msgid "Service restart failed; previous configuration restored"
+msgstr "服務重新啟動失敗；已還原先前設定"
+
+msgid "Profile applied, but its name could not be saved"
+msgstr "設定檔已套用，但無法儲存其名稱"
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr "無法備份目前設定；已取消切換"
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr "最新的 config.yaml 儲存在 config.yaml-backup 中，選擇 config.yaml 即可還原。"
+
+msgid "Service is restarting…"
+msgstr "服務正在重新啟動…"

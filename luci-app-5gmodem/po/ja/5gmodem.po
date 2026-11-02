@@ -6025,3 +6025,51 @@ msgstr "ページキャッシュを更新中…"
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr "ネットワークはテキスト応答なしで USSD セッションを終了しました。SMS で応答する事業者もあります。受信メッセージを確認してください。"
+
+msgid "Select configuration"
+msgstr "設定を選択"
+
+msgid "Configuration switch failed"
+msgstr "設定の切り替えに失敗しました"
+
+msgid "Apply and restart"
+msgstr "適用して再起動"
+
+msgid "SSClash configuration"
+msgstr "SSClash の設定"
+
+msgid "Active configuration"
+msgstr "使用中の設定"
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr "/opt/clash/ に YAML プロファイルが見つかりません"
+
+msgid "SSClash is not installed"
+msgstr "SSClash がインストールされていません"
+
+msgid "Invalid profile"
+msgstr "無効なプロファイル"
+
+msgid "Profile does not exist"
+msgstr "プロファイルが存在しません"
+
+msgid "A profile switch is already running"
+msgstr "プロファイルの切り替えは既に実行中です"
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr "Clash がプロファイルを拒否したため、現在の設定を維持しました"
+
+msgid "Service restart failed; previous configuration restored"
+msgstr "サービスの再起動に失敗したため、以前の設定を復元しました"
+
+msgid "Profile applied, but its name could not be saved"
+msgstr "プロファイルを適用しましたが、名前を保存できませんでした"
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr "現在の設定をバックアップできないため、切り替えを中止しました"
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr "最新の config.yaml は config.yaml-backup に保存されます。復元するには config.yaml を選択してください。"
+
+msgid "Service is restarting…"
+msgstr "サービスを再起動しています…"

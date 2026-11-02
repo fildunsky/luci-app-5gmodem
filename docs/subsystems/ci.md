@@ -10,6 +10,12 @@ In the matrix, `sdk` is the tag of the `openwrt/sdk` image and must exist (it be
 
 `5gmodem-mtk-at` is also `noarch`: its static ARMv7 client runs on the MediaTek pocket router, not on the router. The runner builds it with Ubuntu's `gcc-arm-linux-gnueabihf` (`5gmodem-mtk-at/build-usock.sh`) before the SDK step; the package Makefile only installs `files/usock-armv7` and disables `STRIP`, because the SDK would run the target architecture's strip on an ARM binary.
 
+## Preparing a release
+
+Bump `PKG_VERSION` in `luci-app-5gmodem/Makefile` and keep `PKG_RELEASE=1` for a new version. Update the shared LuCI module `API` values and `fresh.check()` version together so cached pages reload their dependencies. Run the relevant behavior checks, JavaScript/shell syntax checks, translation checks and embedded icon validation before committing.
+
+Use an English release body and attach separate UTF-8 translations named `notes-ru.txt`, `notes-id.txt`, `notes-ja.txt`, `notes-vi.txt`, `notes-zh_Hans.txt` and `notes-zh_Hant.txt` to the draft. These names match `update.sh check <language>`; each translated file must fit its 8192-byte limit. Create the draft with notes and translations before pushing the `v<version>` tag. The workflow reuses that draft and publishes it only after both package formats are ready. Do not update README install links before the packages have been published.
+
 ## Release flow without a 404 window
 
 On a `v*` tag each build attaches its packages to a **draft** release with `gh release upload`. Not `softprops/action-gh-release`: it publishes a reused draft after upload, so the first matrix job would make the release public while the other format is still building. If the draft does not exist yet, the job creates an empty one; `|| gh release view` covers the other job having just created it.

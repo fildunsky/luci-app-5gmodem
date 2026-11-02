@@ -397,3 +397,51 @@ msgstr ""
 
 msgid "The network closed the USSD session without a text reply. Some operators send the answer by SMS: check the incoming messages."
 msgstr ""
+
+msgid "Select configuration"
+msgstr ""
+
+msgid "Configuration switch failed"
+msgstr ""
+
+msgid "Apply and restart"
+msgstr ""
+
+msgid "SSClash configuration"
+msgstr ""
+
+msgid "Active configuration"
+msgstr ""
+
+msgid "No YAML profiles found in /opt/clash/"
+msgstr ""
+
+msgid "SSClash is not installed"
+msgstr ""
+
+msgid "Invalid profile"
+msgstr ""
+
+msgid "Profile does not exist"
+msgstr ""
+
+msgid "A profile switch is already running"
+msgstr ""
+
+msgid "Clash rejected the profile; current configuration was kept"
+msgstr ""
+
+msgid "Service restart failed; previous configuration restored"
+msgstr ""
+
+msgid "Profile applied, but its name could not be saved"
+msgstr ""
+
+msgid "Could not back up the current configuration; switching cancelled"
+msgstr ""
+
+msgid "The latest config.yaml is saved in config.yaml-backup and can be restored by selecting config.yaml."
+msgstr ""
+
+msgid "Service is restarting…"
+msgstr ""
