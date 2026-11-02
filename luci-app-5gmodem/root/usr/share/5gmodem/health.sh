@@ -242,7 +242,7 @@ judge() {
 			case "$_j_hl" in ''|*[!0-9]*) _j_hl=0 ;; esac
 			[ $(( $(uptime_s) - _j_hl )) -ge 900 ] && rm -f "$HDIR/$_j_if.heal"
 			rm -f "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" \
-				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch" "$HDIR/$_j_if.noproto"
+				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch" "$HDIR/$_j_if.radio" "$HDIR/$_j_if.noproto"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
 				_ev "link $_j_if is back - kept at the end (per settings)"
@@ -304,11 +304,11 @@ round() {
 	_r_zone=" $(wan_nets | tr '\n' ' ') "
 	for _r_f in "$HDIR"/*; do
 		[ -f "$_r_f" ] || continue
-		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		_r_bn="${_r_f##*/}"
 		case "$_r_zone" in
 			*" $_r_bn "*) ;;
-			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.nosim" \
+			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.radio" "$_r_f.nosim" \
 				"$_r_f.nodata" "$_r_f.mmoff" "$_r_f.on2g" "$_r_f.srch" "$_r_f.noproto" ;;
 		esac
 	done
@@ -435,7 +435,7 @@ _dns_restore() {
 enforce() {
 	_e_anyup=""; _e_cnt=0; _e_min=""; _e_dead=""
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_cnt=$((_e_cnt + 1))
 		[ "$_e_st" = up ] && _e_anyup=1
@@ -443,7 +443,7 @@ enforce() {
 		if [ -z "$_e_min" ] || [ "$_e_mm" -lt "$_e_min" ]; then _e_min="$_e_mm"; fi
 	done
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		_e_if="${_e_f##*/}"
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_dev=$(iface_dev "$_e_if"); [ -n "$_e_dev" ] || _e_dev=$(iface_dev "${_e_if}_4")
@@ -489,6 +489,22 @@ STUCK_DOWN_MIN=900
 
 heal_cap() { case "$1" in none) echo 0 ;; ifup) echo 1 ;; power) echo 3 ;; *) echo 2 ;; esac }
 
+RADIO_GAP=900
+
+heal_radio_off() {
+	[ -n "$2" ] && [ -e "$2" ] || return 1
+	[ "$(uci -q get "$CFG.@5gmodem[0].airplane")" = 1 ] && return 1
+	[ "$(uci -q get "network.$1.proto")" = ccmni ] && return 1
+	command -v tty_no_at >/dev/null 2>&1 || . "$RES/noatports.sh"
+	tty_no_at "$2" && return 1
+	_hr_t=$(cat "$HDIR/$1.radio" 2>/dev/null)
+	case "$_hr_t" in ''|*[!0-9]*) ;; *) [ $(( $(uptime_s) - _hr_t )) -ge "$RADIO_GAP" ] || return 1 ;; esac
+	case "$(at_query "$2" "AT+CFUN?" 6 3 2>/dev/null | tr -d '\r' | sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' | head -1)" in
+		0|4) return 0 ;;
+	esac
+	return 1
+}
+
 mm_registered_now() {
 	[ "$(printf '%s' "$_HDUMP" | jsonfilter \
 		-e "@.interface[@.interface=\"$1\"].errors[0].code" 2>/dev/null)" = MM_3GPP_OPERATOR_REGISTRATION_FAILED ] || return 1
@@ -533,7 +549,7 @@ heal() {
 	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
 	_h_cnt=0; _h_anyup=""
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _ < "$_h_f" || continue
 		_h_cnt=$((_h_cnt + 1))
 		[ "$_h_st" = up ] && _h_anyup=1
@@ -550,7 +566,7 @@ heal() {
 	fi
 	_h_dmax=0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		[ "$_h_st" = down ] || continue
 		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
@@ -558,7 +574,7 @@ heal() {
 	done
 	_h_dcnt=0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		[ "$_h_st" = down ] || continue
 		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
@@ -575,7 +591,7 @@ heal() {
 		return 0
 	fi
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
 		_h_if="${_h_f##*/}"
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		if [ "$H_HEALWIFI" = "1" ] && is_wifi_iface "$_h_if"; then
@@ -847,6 +863,14 @@ heal() {
 			fi
 		fi
 		_h_n=$((_h_n + 1))
+		if [ -z "$_h_absent" ] && [ -z "$_h_hilink" ] && [ -z "$_h_mmi" ] && heal_radio_off "$_h_if" "$_h_at"; then
+			_ev "healing $_h_if: radio is off - restarting it, AT+CFUN=4 then 1 ($_h_n/$HEAL_MAX)"
+			uptime_s > "$HDIR/$_h_if.radio"
+			( "$RES/reboot_modem.sh" soft "$_h_at" ) >/dev/null 2>&1 </dev/null 9>&- &
+			printf '%s %s %s\n' "$_h_step" "$_h_now" "$_h_n" > "$HDIR/$_h_if.heal"
+			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
+			continue
+		fi
 		case "$_h_next" in
 			1)
 				_ev "healing $_h_if: reconnecting the interface ($_h_n/$HEAL_MAX)"
@@ -987,7 +1011,7 @@ _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
 		[ -f "$_td_f" ] || continue
-		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.noproto|*.last_event) continue ;; esac
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto|*.last_event) continue ;; esac
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue

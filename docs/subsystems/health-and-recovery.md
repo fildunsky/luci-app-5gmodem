@@ -102,6 +102,12 @@ Safeguards:
 - Recovery resets the ladder.
 - **Truncated ladder file.** `read` on an empty file sets the variables to empty strings, and `[ "" -lt N ]` in busybox is a "bad number" error (exit 2). A `continue` would then freeze healing of that link forever, so empty fields are defaulted (Sep 2026 audit).
 
+### Radio off before any step
+
+At any `heal` level from `ifup` up, an attempt first asks `AT+CFUN?` on the modem's own AT port. If the answer is `0` or `4`, it runs the same action as the "Restart radio" button, `reboot_modem.sh soft` (`CFUN=4`, then `CFUN=1`, then reconnect), instead of the next ladder step. A plain reconnect cannot help here: the stock `mbim` handler fails with "Subscriber init failed" and retries forever.
+
+The attempt counts towards `HEAL_MAX` and does not advance the ladder. `<iface>.radio` limits it to once per `RADIO_GAP` (900 s) and is cleared on recovery, so a radio that refuses to turn on, such as with a hardware switch, still reaches the next step. Skipped for airplane mode, ModemManager-owned modems (`--enable` handles them), HiLink, `ccmni` (`CFUN=4` is normal between its sessions), ports that must not receive AT, and modems absent from the bus. `AT+CFUN=7` and other values are not treated as off.
+
 ### Guards before any step
 
 - **Common cause.** If several links are watched and all of them are down at once, the cause is almost certainly not the modems (dead probe targets, upstream router, regional operator outage). Rebooting every modem would only cause damage. A single link is always healed, because a one-modem router has nothing to compare against.
