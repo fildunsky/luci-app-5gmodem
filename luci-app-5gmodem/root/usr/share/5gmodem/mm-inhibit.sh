@@ -107,15 +107,21 @@ _mm_ifup_if_down() {
 	: > "$_lk"
 	(
 		_w=0
-		while [ "$_w" -lt 120 ]; do
+		while [ "$_w" -lt 300 ]; do
 			for J in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
 				_jd=$(mmcli -m "$J" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
 				[ "$(basename "$_jd" 2>/dev/null)" = "$_p" ] || continue
 				case "$(ifstatus "$_mif" 2>/dev/null)" in
 					*'"up": true'*|*'"pending": true'*) rm -f "$_lk"; exit 0 ;;
 				esac
+				case "$(mmcli -m "$J" -K 2>/dev/null | sed -n 's/^modem\.generic\.state *: *//p' | head -1)" in
+					initializing|enabling|connecting|disconnecting) continue ;;
+				esac
 				mm_ghost_bearer "$_mif" "$J"; [ $? = 1 ] || { rm -f "$_lk"; exit 0; }
-				logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)"
+				case "$(ifstatus "$_mif" 2>/dev/null)" in
+					*'"code": "MM_'*) logger -t 5gmodem "MM has modem $_p - bringing up interface $_mif again (netifd gave up after a failed connect)" ;;
+					*) logger -t 5gmodem "MM discovered modem $_p - bringing up interface $_mif (netifd tore it down at boot before MM started)" ;;
+				esac
 				: > "$_lk"
 				ifup "$_mif"
 				_c=0

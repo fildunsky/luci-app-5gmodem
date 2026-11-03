@@ -108,6 +108,10 @@ At any `heal` level from `ifup` up, an attempt first asks `AT+CFUN?` on the mode
 
 The attempt counts towards `HEAL_MAX` and does not advance the ladder. `<iface>.radio` limits it to once per `RADIO_GAP` (900 s) and is cleared on recovery, so a radio that refuses to turn on, such as with a hardware switch, still reaches the next step. Skipped for airplane mode, ModemManager-owned modems (`--enable` handles them), HiLink, `ccmni` (`CFUN=4` is normal between its sessions), ports that must not receive AT, and modems absent from the bus. `AT+CFUN=7` and other values are not treated as off.
 
+### ModemManager is busy
+
+If MM reports the modem as `initializing`, `enabling`, `connecting` or `disconnecting`, the attempt is postponed for up to 180 s (`<iface>.mmbusy`, logged once). A reconnect at that moment aborts MM's own work: on T99W175 the watchdog fired in the middle of `enabling` and both enables failed with "Operation aborted" (issue #61). After 180 s in the same state the ladder runs as usual. The marker is cleared as soon as the state changes and on recovery.
+
 ### Guards before any step
 
 - **Common cause.** If several links are watched and all of them are down at once, the cause is almost certainly not the modems (dead probe targets, upstream router, regional operator outage). Rebooting every modem would only cause damage. A single link is always healed, because a one-modem router has nothing to compare against.
