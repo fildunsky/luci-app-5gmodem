@@ -51,6 +51,7 @@ Order: ModemManager (proto `modemmanager`) -> vendor/AT per `sim_slots_via` (`si
 - Duplicate labels (two physical SIMs) revert to numeric `SIM<n>`.
 - One slot from MM is an answer: return it instead of probing a channel MM owns.
 - Empty or <2 slots from MM (MV31-W in MBIM) is not "no slots": fall through to MBIM/QMI via the proxy.
+- The direct MBIM fallback uses `mbimcli -p` whenever ModemManager or mbim-proxy runs (`pidof`). Without the proxy, mbimcli sends MBIM CLOSE on exit and the modem drops MM's data session while MM still reports `connected` (issue #64). Until 3.9.17 the check was `pgrep -f 'sbin/ModemManager$'`, which never matched a ModemManager started with arguments.
 - If MM gave no eSIM label and the node is `cdc_mbim`, ask `mbimcli -p --ms-query-slot-info-status=<n>` and relabel slots in an `*esim*` state (MV31-W under MM shows two unnamed slots).
 
 ### DW5821e / T77W968 (`mm_at_fragile`, 413c:81e0)
