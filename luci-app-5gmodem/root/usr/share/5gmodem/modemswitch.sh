@@ -651,6 +651,22 @@ autoapn)
 		for _c in $_sim_plmns; do _tmp="$_tmp ${_c%${_c#???}}-${_c#???}"; done
 		_sim_plmns="$_tmp"
 	fi
+	_am_cur=$(uci -q get "network.$IFACE.apn")
+	if [ -n "$_am_sec" ] && [ -n "$_am_cur" ] && [ ${#_imsi} -ge 6 ] \
+	   && [ -z "$(uci -q get "$CFG.$_am_sec.apn_imsi")" ]; then
+		_am_ip=$(ubus call network.interface."$IFACE" status 2>/dev/null \
+			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		[ -n "$_am_ip" ] || _am_ip=$(ubus call network.interface."${IFACE}_4" status 2>/dev/null \
+			| jsonfilter -e '@["ipv4-address"][0].address' 2>/dev/null)
+		if [ -n "$_am_ip" ]; then
+			[ -n "$_plmn" ] && uci -q set "$CFG.$_am_sec.apn_plmn=$_plmn"
+			uci -q set "$CFG.$_am_sec.apn_imsi=$_imsi"
+			uci -q commit "$CFG"
+			_apn_done
+			logger -t 5gmodem "autoapn: $IFACE is already connected with APN $_am_cur - keeping it for this SIM"
+			exit 0
+		fi
+	fi
 	if [ -z "$_op$_plmn" ] && [ ${#_imsi} -lt 6 ]; then
 		logger -t 5gmodem "autoapn: neither operator nor IMSI - skipping"
 		_apn_giveup

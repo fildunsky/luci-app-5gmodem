@@ -49,7 +49,7 @@ With libudev-zero, MM does **not** scan existing devices at startup and lives on
 
 ### MM-only modules (DW5821e/T77W968 family)
 
-These modules are never switched to proto qmi/mbim (`.mmonly`). They still take the common path: event replay, then a rebind after 150 s, at most 2 rebinds (`.rebindn`), then `.rebindfail` with a power-cycle hint. Before 27.10.2026 the branch did `continue`. On a cold start the X20 firmware timed out MBIM init ("couldn't start initialization: Transaction timed out" -> "modem is unusable"), and MM never retried on its own. Nothing recovered the modem until a manual power-cycle, and a manual unbind/bind of the USB device brought it back. 05c6:90d5 (Compal) is still excluded from the rebind.
+These modules are never switched to proto qmi/mbim (`.mmonly`). They still take the common path: event replay, then a rebind after 150 s, at most 2 rebinds (`.rebindn`), then `.rebindfail` with a power-cycle hint. Before 27.10.2026 the branch did `continue`. On a cold start the X20 firmware timed out MBIM init ("couldn't start initialization: Transaction timed out" -> "modem is unusable"), and MM never retried on its own. Nothing recovered the modem until a manual power-cycle, and a manual unbind/bind of the USB device brought it back. 05c6:90d5 is shared by Foxconn T99W175 and an early Compal RXM-G1 prototype. Only the Compal (USB product or manufacturer `VOS_5G`, `RXMG1`, `RXM-G1`, `Tri Cascade`) is still excluded from replay and rebind. Until 3.9.14 the whole ID was skipped, so a T99W175 that ModemManager missed at boot or after `CFUN=1,1` stayed unassembled until a manual MM restart (issue #61).
 
 ### Rebind instead of a manual report (`_mm_rebind`)
 

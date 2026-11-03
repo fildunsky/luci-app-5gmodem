@@ -1391,7 +1391,7 @@ recv|unseen|sent|status|dump|archive-run|archive-why)
 	if ! _via_mm && [ "$_TGT_PATH" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ]; then
 		_cs_mark="/tmp/5gmodem/cpms_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
 		_cs_st=$(cat "$_cs_mark" 2>/dev/null)
-		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ] && ! at_long_busy "$PORT"; then
+		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ] && ! at_long_busy "$PORT" && ! mm_assembling "$_TGT_PATH"; then
 			if set_sms_storage "$PORT" 2>/dev/null; then
 				printf 'ok' > "$_cs_mark"
 				_cs_eff=$(uci -q get "$CFG.sms.storage")
@@ -1409,7 +1409,7 @@ _store_pick() {
 	_STORE_ARG=""
 	[ -n "$STORE" ] || return 0
 	_STORE_ARG="-s $STORE"
-	if ! _via_mm && [ -c "$PORT" ] && ! at_long_busy "$PORT"; then
+	if ! _via_mm && [ -c "$PORT" ] && ! at_long_busy "$PORT" && ! mm_assembling "$_TGT_PATH"; then
 		case "$(sms_cpms_state "$PORT" 2>/dev/null)" in
 			"$STORE|"*) _STORE_ARG="" ;;
 			?*) sms_apply_cpms "$PORT" "$STORE" >/dev/null 2>&1 && _STORE_ARG="" ;;
