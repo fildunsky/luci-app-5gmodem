@@ -898,7 +898,8 @@ mm_owns_path() {
 
 mm_assembling() {
 	[ -n "$1" ] || return 1
-	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 1
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 \
+		|| /etc/init.d/modemmanager enabled 2>/dev/null || return 1
 	_ma_if=$(uci -q get "5gmodem.$(secname "$1").network")
 	[ -n "$_ma_if" ] || return 1
 	[ "$(uci -q get "network.$_ma_if.proto")" = modemmanager ] || return 1
@@ -1264,6 +1265,16 @@ sms_apply_cpms() {
 	_cp_p="$1"; _cp_s="$2"
 	[ -n "$_cp_p" ] && [ -c "$_cp_p" ] || return 1
 	case "$_cp_s" in ''|*[!A-Za-z]*) return 1 ;; esac
+	_cp_up=$(tty_usbpath "$_cp_p")
+	if [ -n "$_cp_up" ] && mm_assembling "$_cp_up"; then
+		_cp_w="/tmp/5gmodem/cpmswait_$(printf '%s' "$_cp_up" | tr -c 'A-Za-z0-9' '_')"
+		if [ ! -f "$_cp_w" ]; then
+			: > "$_cp_w" 2>/dev/null
+			logger -t 5gmodem "sms: storage $_cp_s postponed - ModemManager has not assembled modem $_cp_up yet"
+		fi
+		return 1
+	fi
+	rm -f "/tmp/5gmodem/cpmswait_$(printf '%s' "$_cp_up" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null
 
 	_cp_o=$(at_query "$_cp_p" "AT+CPMS=\"$_cp_s\",\"$_cp_s\",\"$_cp_s\"" 8)
 	case "$_cp_o" in

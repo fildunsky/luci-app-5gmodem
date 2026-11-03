@@ -99,6 +99,58 @@ _release_adb() {
 	done
 }
 
+_load_driver() {
+	[ "$1" = option1 ] || return 0
+	[ -w /sys/bus/usb-serial/drivers/option1/new_id ] && return 0
+	[ -n "$(find "/lib/modules/$(uname -r)" -name option.ko 2>/dev/null | head -1)" ] || return 1
+	modprobe option >/dev/null 2>&1 || insmod option >/dev/null 2>&1
+	_ld_n=0
+	while [ ! -w /sys/bus/usb-serial/drivers/option1/new_id ] && [ "$_ld_n" -lt 5 ]; do
+		sleep 1; _ld_n=$((_ld_n + 1))
+	done
+	[ -w /sys/bus/usb-serial/drivers/option1/new_id ]
+}
+
+_move_to_option() {
+	[ "$(driver_for "$1" "$2")" = option1 ] || return 0
+	_mv_id=""
+	_mv_dn=$(data_iface_for "$1" "$2")
+	for _mv_d in /sys/bus/usb/devices/*; do
+		[ -f "$_mv_d/idVendor" ] || continue
+		[ "$(cat "$_mv_d/idVendor" 2>/dev/null)" = "$1" ] || continue
+		[ "$(cat "$_mv_d/idProduct" 2>/dev/null)" = "$2" ] || continue
+		for _mv_i in "$_mv_d":*; do
+			[ -f "$_mv_i/bInterfaceClass" ] || continue
+			[ "$(cat "$_mv_i/bInterfaceClass" 2>/dev/null)" = ff ] || continue
+			[ "$(cat "$_mv_i/bInterfaceSubClass" 2>/dev/null)" = 42 ] && continue
+			if [ -n "$_mv_dn" ]; then
+				_mv_n=$(cat "$_mv_i/bInterfaceNumber" 2>/dev/null)
+				[ "$((0x${_mv_n:-ff}))" = "$_mv_dn" ] && continue
+			fi
+			case "$(basename "$(readlink -f "$_mv_i/driver" 2>/dev/null)" 2>/dev/null)" in
+				usb_serial_generic|usbserial_generic|generic) ;;
+				*) continue ;;
+			esac
+			_load_driver option1 || return 1
+			_mv_if=$(basename "$_mv_i")
+			echo "$_mv_if" > "$_mv_i/driver/unbind" 2>/dev/null
+			echo "$_mv_if" > /sys/bus/usb/drivers/option/bind 2>/dev/null
+			if [ ! -e "$_mv_i/driver" ] && [ -z "$_mv_id" ]; then
+				_mv_id=1
+				echo "$(newid_for "$1" "$2")" > /sys/bus/usb-serial/drivers/option1/new_id 2>/dev/null
+				sleep 1
+			fi
+			if [ -e "$_mv_i/driver" ]; then
+				logger -t 5gmodem-usbports "moved $_mv_if from usbserial_generic to option (its AT port needs option)"
+			else
+				echo "$_mv_if" > /sys/bus/usb/drivers_probe 2>/dev/null
+				logger -t 5gmodem-usbports "could not move $_mv_if to option - returned it to the kernel"
+			fi
+		done
+	done
+	return 0
+}
+
 bind_ports() {
 	[ -n "$1" ] && [ -n "$2" ] || return 1
 
@@ -122,6 +174,7 @@ bind_ports() {
 		[ "$(cat "$_bp_d/idProduct" 2>/dev/null)" = "$2" ] || continue
 		for _bp_t in "$_bp_d":*/ttyUSB* "$_bp_d":*/tty/ttyUSB*; do
 			[ -e "$_bp_t" ] || continue
+			_move_to_option "$1" "$2"
 			_bp_once="/tmp/5gmodem/usbports_${_bp_d##*/}.hasports"
 			if [ ! -f "$_bp_once" ]; then
 				: > "$_bp_once" 2>/dev/null
@@ -132,6 +185,7 @@ bind_ports() {
 	done
 
 	_bp_drv=$(driver_for "$1" "$2")
+	_load_driver "$_bp_drv"
 	_bp_path="/sys/bus/usb-serial/drivers/$_bp_drv/new_id"
 	if [ ! -w "$_bp_path" ] && [ "$_bp_drv" != "generic" ]; then
 		logger -t 5gmodem-usbports "no $_bp_drv driver for $1:$2 ($_bp_path missing) - falling back to generic"

@@ -420,6 +420,17 @@ distinguished by descriptor).
 - Preferred driver missing (lite images ship only `kmod-usb-serial`, not
   `kmod-usb-serial-option`): fall back to generic instead of exiting, otherwise
   someone else binds the ports and we get the two-`new_id` race again.
+  Before falling back, `_load_driver` runs `modprobe option` when `option.ko`
+  exists and waits up to 5 s. On x86 iStoreOS the modem came up at 21 s and
+  `option` loaded at 32 s, so a TD Tech MT5710 (3466:3301) got generic ports
+  that never answered AT (issues #59, #62).
+- Ports present, but on generic while the profile wants option1
+  (`_move_to_option`): every class-`ff` interface except ADB and the data
+  interface is unbound from generic and bound to `option`, writing option1's
+  `new_id` once if the bind is refused. An interface that `option` still
+  refuses goes back through `drivers_probe`. This runs on every hotplug call,
+  because generic keeps its `new_id` and takes the ports again after each
+  re-enumeration.
 - Log once per device per boot (hotplug calls per interface and per tty).
 
 ### Coldplug (`usbports.sh coldplug`, `init.d/5gmodem-usbports`)

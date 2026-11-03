@@ -2,16 +2,17 @@
 MODEL=$(soc_modem_model)
 TEMPS=$(for z in /sys/class/thermal/thermal_zone*; do
 	[ -r "$z/type" ] && echo "$(cat "$z/type" 2>/dev/null) $(cat "$z/temp" 2>/dev/null)"
-done | awk '$2 ~ /^-?[0-9]+$/ && $2 > 0 { k = ""
+done | awk '$2 ~ /^-?[0-9]+$/ && $2 > 0 && $2 <= 125000 { k = ""
 	if ($1 == "pa-thermal") k = "pa"; else if ($1 ~ /^cpu[0-9-]*-thermal$/) k = "cpu"
 	else if ($1 == "pm8916-thermal") k = "pmic"; else if ($1 == "battery-thermal") k = "bat"
 	else if ($1 == "xo-thermal") k = "board"; else if ($1 == "charger-thermal") k = "charger"
+	else if ($1 == "modem-thermal") k = "modem"
 	if (k == "") next
 	if (!(k in v)) o[++n] = k
 	if (!(k in v) || $2 > v[k]) v[k] = $2 }
 	END { for (i = 1; i <= n; i++) printf "%s%s=%.1f", (i > 1 ? " " : ""), o[i], v[o[i]] / 1000 }')
-T=$(printf '%s' "$TEMPS" | tr ' ' '\n' | sed -n 's/^pa=//p')
-[ -n "$T" ] || T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > m) m = v } END { if (m > 0) print m }')
+T=$(printf '%s' "$TEMPS" | tr ' ' '\n' | awk -F= 'NF == 2 && ($2 + 0 > m) { m = $2 + 0 } END { if (m > 0) print m }')
+[ -n "$T" ] || T=$(cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | awk '$1 ~ /^-?[0-9]+$/ { v = $1; if (v > 1000) v = int(v / 1000); if (v > 0 && v <= 125 && v > m) m = v } END { if (m > 0) print m }')
 [ -n "$T" ] && TEMP="${T%.*} &deg;C"
 _SOC_EXT=0
 for _SOC_PS in /sys/class/power_supply/*; do

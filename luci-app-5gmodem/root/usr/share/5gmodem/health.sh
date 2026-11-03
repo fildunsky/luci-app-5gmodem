@@ -242,7 +242,7 @@ judge() {
 			case "$_j_hl" in ''|*[!0-9]*) _j_hl=0 ;; esac
 			[ $(( $(uptime_s) - _j_hl )) -ge 900 ] && rm -f "$HDIR/$_j_if.heal"
 			rm -f "$HDIR/$_j_if.nosim" "$HDIR/$_j_if.nodata" \
-				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch" "$HDIR/$_j_if.radio" "$HDIR/$_j_if.noproto"
+				"$HDIR/$_j_if.mmoff" "$HDIR/$_j_if.on2g" "$HDIR/$_j_if.srch" "$HDIR/$_j_if.radio" "$HDIR/$_j_if.mmbusy" "$HDIR/$_j_if.noproto"
 			if [ "$H_FB" = "demote" ] && [ -n "$_j_wasdown" ]; then
 				: > "$HDIR/$_j_if.demoted"
 				_ev "link $_j_if is back - kept at the end (per settings)"
@@ -304,12 +304,12 @@ round() {
 	_r_zone=" $(wan_nets | tr '\n' ' ') "
 	for _r_f in "$HDIR"/*; do
 		[ -f "$_r_f" ] || continue
-		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		case "$_r_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		_r_bn="${_r_f##*/}"
 		case "$_r_zone" in
 			*" $_r_bn "*) ;;
 			*) rm -f "$_r_f" "$_r_f.heal" "$_r_f.demoted" "$_r_f.radio" "$_r_f.nosim" \
-				"$_r_f.nodata" "$_r_f.mmoff" "$_r_f.on2g" "$_r_f.srch" "$_r_f.noproto" ;;
+				"$_r_f.nodata" "$_r_f.mmoff" "$_r_f.on2g" "$_r_f.srch" "$_r_f.mmbusy" "$_r_f.noproto" ;;
 		esac
 	done
 }
@@ -435,7 +435,7 @@ _dns_restore() {
 enforce() {
 	_e_anyup=""; _e_cnt=0; _e_min=""; _e_dead=""
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_cnt=$((_e_cnt + 1))
 		[ "$_e_st" = up ] && _e_anyup=1
@@ -443,7 +443,7 @@ enforce() {
 		if [ -z "$_e_min" ] || [ "$_e_mm" -lt "$_e_min" ]; then _e_min="$_e_mm"; fi
 	done
 	for _e_f in "$HDIR"/*; do
-		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		_e_if="${_e_f##*/}"
 		read -r _e_st _ _ _ _ < "$_e_f" || continue
 		_e_dev=$(iface_dev "$_e_if"); [ -n "$_e_dev" ] || _e_dev=$(iface_dev "${_e_if}_4")
@@ -549,7 +549,7 @@ heal() {
 	[ "$H_HEAL" = "1" ] || [ "$H_HEALWIFI" = "1" ] || return 0
 	_h_cnt=0; _h_anyup=""
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _ < "$_h_f" || continue
 		_h_cnt=$((_h_cnt + 1))
 		[ "$_h_st" = up ] && _h_anyup=1
@@ -566,7 +566,7 @@ heal() {
 	fi
 	_h_dmax=0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		[ "$_h_st" = down ] || continue
 		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
@@ -574,7 +574,7 @@ heal() {
 	done
 	_h_dcnt=0
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		[ "$_h_st" = down ] || continue
 		case "$_h_since" in ''|*[!0-9]*) continue ;; esac
@@ -591,7 +591,7 @@ heal() {
 		return 0
 	fi
 	for _h_f in "$HDIR"/*; do
-		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto) continue ;; esac
+		[ -f "$_h_f" ] || continue; case "$_h_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
 		_h_if="${_h_f##*/}"
 		read -r _h_st _ _ _ _h_since < "$_h_f" || continue
 		if [ "$H_HEALWIFI" = "1" ] && is_wifi_iface "$_h_if"; then
@@ -801,6 +801,18 @@ heal() {
 				_h_mms=$(mmcli -m "$_h_mmi" -K 2>/dev/null \
 					| sed -n 's/^modem\.generic\.state *: *//p' | head -1)
 				case "$_h_mms" in
+					initializing|enabling|connecting|disconnecting) ;;
+					*) rm -f "$HDIR/$_h_if.mmbusy" ;;
+				esac
+				case "$_h_mms" in
+					initializing|enabling|connecting|disconnecting)
+						_h_mb=$(cat "$HDIR/$_h_if.mmbusy" 2>/dev/null)
+						case "$_h_mb" in
+							''|*[!0-9]*)
+								_h_mb=$(uptime_s); printf '%s' "$_h_mb" > "$HDIR/$_h_if.mmbusy"
+								_ev "healing $_h_if: ModemManager is busy with the modem ($_h_mms) - postponing healing for up to 3 minutes" ;;
+						esac
+						[ $(( $(uptime_s) - _h_mb )) -lt 180 ] && continue ;;
 					disabled|locked)
 						if [ ! -f "$HDIR/$_h_if.mmoff" ]; then
 							: > "$HDIR/$_h_if.mmoff"
@@ -1011,7 +1023,7 @@ _teardown() {
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
 	for _td_f in "$HDIR"/*; do
 		[ -f "$_td_f" ] || continue
-		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.noproto|*.last_event) continue ;; esac
+		case "$_td_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto|*.last_event) continue ;; esac
 		_td_if="${_td_f##*/}"
 		_td_dev=$(iface_dev "$_td_if"); [ -n "$_td_dev" ] || _td_dev=$(iface_dev "${_td_if}_4")
 		[ -n "$_td_dev" ] || continue
