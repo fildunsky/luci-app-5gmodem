@@ -478,7 +478,7 @@ if [ "$_VIA" = qmi ]; then
 						_mi=$((_mi + 1))
 					done
 					_MPX=""
-					pgrep -f 'sbin/ModemManager$' >/dev/null 2>&1 && _MPX="-p"
+					{ pidof ModemManager >/dev/null 2>&1 || pidof mbim-proxy >/dev/null 2>&1; } && _MPX="-p"
 					_umbim_owns_wdm "$_WDM" && _MPX="SKIP"
 					if [ "$_MPX" = "SKIP" ]; then
 						_MMAP=""
