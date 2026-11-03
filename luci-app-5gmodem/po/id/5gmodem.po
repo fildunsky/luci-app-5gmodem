@@ -3712,8 +3712,8 @@ msgstr "Alihkan lalu lintas ke tautan cadangan saat salah satunya mati"
 msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
 msgstr "Tautan yang punya alamat tetapi tanpa internet tidak akan melepaskan lalu lintas dengan sendirinya - pengawas koneksi memindahkan rute melewatinya, dan mengembalikannya saat tautan pulih. Metrik rute di pengaturan tidak diubah. Aktif secara bawaan."
 
-msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
-msgstr "Lalu lintas melewati %s, dan tidak ada internet di sana. Pengalihan otomatis nonaktif - pengawas koneksi melihat kegagalan tetapi tidak berbuat apa-apa."
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching to another link is off."
+msgstr "Lalu lintas melewati %s, dan tidak ada internet di sana. Pengalihan otomatis ke koneksi lain nonaktif."
 
 msgid "Turn switching on"
 msgstr "Aktifkan pengalihan"

@@ -3712,8 +3712,8 @@ msgstr "Chuyển lưu lượng sang kết nối dự phòng khi một kết nố
 msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
 msgstr "Kết nối có địa chỉ nhưng không có internet sẽ không tự nhường lưu lượng - bộ giám sát sẽ chuyển tuyến qua kết nối khác, và trả lại khi kết nối phục hồi. Metric tuyến trong cài đặt không bị thay đổi. Bật theo mặc định."
 
-msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
-msgstr "Lưu lượng đi qua %s, và trên đó không có internet. Tự động chuyển đổi đang tắt - bộ giám sát thấy lỗi nhưng không làm gì."
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching to another link is off."
+msgstr "Lưu lượng đi qua %s, và trên đó không có internet. Tự động chuyển sang kết nối khác đang tắt."
 
 msgid "Turn switching on"
 msgstr "Bật chuyển đổi"

@@ -883,6 +883,7 @@ heal() {
 			[ "$_h_n" -ge "$HEAL_MAX" ] && _ev "healing $_h_if: attempts exhausted - manual intervention needed"
 			continue
 		fi
+		[ "$_h_next" -ge 2 ] && rm -f "$HDIR/$_h_if.radio"
 		case "$_h_next" in
 			1)
 				_ev "healing $_h_if: reconnecting the interface ($_h_n/$HEAL_MAX)"

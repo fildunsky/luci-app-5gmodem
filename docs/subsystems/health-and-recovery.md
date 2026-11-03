@@ -106,7 +106,7 @@ Safeguards:
 
 At any `heal` level from `ifup` up, an attempt first asks `AT+CFUN?` on the modem's own AT port. If the answer is `0` or `4`, it runs the same action as the "Restart radio" button, `reboot_modem.sh soft` (`CFUN=4`, then `CFUN=1`, then reconnect), instead of the next ladder step. A plain reconnect cannot help here: the stock `mbim` handler fails with "Subscriber init failed" and retries forever.
 
-The attempt counts towards `HEAL_MAX` and does not advance the ladder. `<iface>.radio` limits it to once per `RADIO_GAP` (900 s) and is cleared on recovery, so a radio that refuses to turn on, such as with a hardware switch, still reaches the next step. Skipped for airplane mode, ModemManager-owned modems (`--enable` handles them), HiLink, `ccmni` (`CFUN=4` is normal between its sessions), ports that must not receive AT, and modems absent from the bus. `AT+CFUN=7` and other values are not treated as off.
+The attempt counts towards `HEAL_MAX` and does not advance the ladder. `<iface>.radio` limits it to once per `RADIO_GAP` (900 s) and is cleared on recovery and when the ladder reboots or power-cycles the module (a reset changes the radio state, so the gap no longer applies), so a radio that refuses to turn on, such as with a hardware switch, still reaches the next step. Skipped for airplane mode, ModemManager-owned modems (`--enable` handles them), HiLink, `ccmni` (`CFUN=4` is normal between its sessions), ports that must not receive AT, and modems absent from the bus. `AT+CFUN=7` and other values are not treated as off.
 
 ### ModemManager is busy
 
@@ -271,7 +271,7 @@ Some modems (Compal RXM-G1 / Qualcomm SDX55) have a tiny QMI client pool, measur
 ## reboot_modem.sh: modem reboot paths
 
 - `soft` (default): `AT+CFUN=4` -> `AT+CFUN=1`. Forces a new attach without USB re-enumeration, so MM keeps its MBIM port classification. Use it for re-register or applying bands.
-- `hard`: `AT+CFUN=1,1`. Full reset with re-enumeration. On MM-managed MBIM modems, MM may briefly misclassify the data port afterwards.
+- `hard`: `AT+CFUN=1,1`. Full reset with re-enumeration. On MM-managed MBIM modems, MM may briefly misclassify the data port afterwards. When the module returns, the restorer reads `AT+CFUN?` before re-upping the interface and sends `AT+CFUN=1` on 0 or 4 (not in airplane mode, not for `ccmni`). Some Unisoc MBIM modules (issue #56) boot with the radio off, and umbim never turns it on, so the dial failed at "Checking subscriber" after every reset and the ladder kept rebooting the module.
 - A first argument of `/dev/...` is accepted for backward compatibility (port, soft mode).
 - **Sierra Wireless (USB vendor 1199, except EM7345 1199:a001): both modes send `AT!ENTERCND` (cached profile password, then `A710`, then `F710`) and `AT!RESET`** and then follow the hard path without CFUN. On an EM9190 with kernel `mbim`, `CFUN=4/1` left MBIM answering nothing but timeouts until a manual reset. If the modem rejects `AT!RESET`, the usual CFUN path runs. For `mbim` interfaces the script does not force an ifup at re-enumeration: the MBIM channel needs ~30-45 s after the module reappears and the proto's own 15 s retry brings the link up; a watcher reconnects once only if the interface is still on its pre-reset session 60 s after the comeback. Every `soft` caller (band apply, buttons, healing) gets the full reset on Sierra.
 

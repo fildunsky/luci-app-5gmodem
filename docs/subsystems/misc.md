@@ -154,7 +154,7 @@ Sources, cheapest first: sysfs descriptor -> QMI model (~25 ms) -> ModemManager 
 - mbimp interfaces with a present cdc-wdm also need MM (shared proxy).
 - `_running` uses pidof: procd starts ModemManager without arguments, so the old grep for "ModemManager --" never matched; stop was never called and MM kept the modem after band takeover ("no IP").
 - apply never restarts a running MM: restart takes MM down for 1-2 min (D-Bus name race) and drops connections.
-- Stop is delayed: not within the first 300 s of uptime (unless `now`), `grace` requires 300 s of continuous "not needed" (stamp in /tmp/5gmodem/mmneed_idle), and the decision is re-checked after 3 s.
+- Stop is delayed: not within the first 300 s of uptime (unless `now`); `grace` and plain `apply` require 300 s of continuous "not needed" (stamp in /tmp/5gmodem/mmneed_idle), only `apply now` stops at once; the decision is re-checked after 3 s. The periodic `grace` from mm-inhibit.sh completes a delayed stop. Since 3.9.17 plain `apply` waits too: a modem that reset itself every ~30 s (issue #63) made `apply` stop MM on each USB disconnect and start it on each return, so MM re-probed the modem from scratch every cycle.
 - After stopping MM an orphaned mbim-proxy keeps cdc-wdm open (2026-08-03, alive since boot); umbim needs the node exclusively ("open the page - internet drops", manual fix was killall mbim-proxy). Killed only at MM stop (and only if no mbimp interface), not on every apply, since an eSIM MBIM probe may legitimately start it later. qmi-proxy is left alone: QMI multiplexes and our metrics use it.
 
 ## register_proto.sh
