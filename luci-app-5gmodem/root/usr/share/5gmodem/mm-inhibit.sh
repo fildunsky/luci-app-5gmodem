@@ -277,7 +277,11 @@ mm_recover_missing() {
 							: > "$RUN/$_rb_key.mmonly" 2>/dev/null
 							logger -t 5gmodem "modem $_rp ($_sw_vp): ModemManager has not assembled it (yet), but this module only works under MM - NOT switching the interface to mbim, waiting for MM"
 						fi
-						[ "$_sw_vp" = 05c6:90d5 ] && continue
+						if [ "$_sw_vp" = 05c6:90d5 ]; then
+							case "$(cat "/sys/bus/usb/devices/$_rp/product" "/sys/bus/usb/devices/$_rp/manufacturer" 2>/dev/null)" in
+								*VOS_5G*|*RXMG1*|*RXM-G1*|*Tri\ Cascade*) continue ;;
+							esac
+						fi
 						_mm_only=1
 						;;
 				esac

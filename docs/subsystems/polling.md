@@ -561,6 +561,8 @@ the simslot cache: only simslot's own `set` cleared it, a physical card swap kep
 the old SIM type for 5 min. The background `autoapn` unsets `_AT_LOCK_HELD` and
 closes the lock fd so it takes the lock itself after we exit.
 
+An empty `apn_imsi` also means the app has never seen this SIM, typically right after installation on a router that already works. If the interface (or its `_4` child) has an IPv4 address and a non-empty APN at that moment, `autoapn` keeps that APN, stamps `apn_imsi`/`apn_plmn` and stops, without `ifdown`. Before this, a working MVNO APN (US Mobile on AT&T, `ereseller`) was replaced by the database value and the link dropped. A stamped IMSI that differs still re-selects as before.
+
 ## Signal history
 
 On each published fresh snapshot with signal values, a line `uptime rsrp rsrq

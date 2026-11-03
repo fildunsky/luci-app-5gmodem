@@ -896,6 +896,15 @@ mm_owns_path() {
 	[ -n "$_mo_v" ] && [ "$_mo_v" != "none" ]
 }
 
+mm_assembling() {
+	[ -n "$1" ] || return 1
+	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 1
+	_ma_if=$(uci -q get "5gmodem.$(secname "$1").network")
+	[ -n "$_ma_if" ] || return 1
+	[ "$(uci -q get "network.$_ma_if.proto")" = modemmanager ] || return 1
+	! mm_owns_path "$1"
+}
+
 alias_for_path() {
 	[ -n "$1" ] || return 0
 	_af_sec=$(secname "$1")
