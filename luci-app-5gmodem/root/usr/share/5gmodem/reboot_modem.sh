@@ -285,6 +285,16 @@ if [ "$MODE" = "hard" ] || [ -n "$_rb_sr" ]; then
 	  while [ "$_n" -lt 100 ] && [ ! -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
 	  [ -e "/sys/bus/usb/devices/$_AMP" ] || exit 0
 	  sleep 8
+	  if [ "$(uci -q get 5gmodem.@5gmodem[0].airplane)" != 1 ] && [ "$(uci -q get "network.$IF.proto")" != ccmni ]; then
+		_n=0
+		while [ "$_n" -lt 10 ] && [ ! -c "$PORT" ]; do sleep 2; _n=$((_n + 1)); done
+		case "$(at_query "$PORT" "AT+CFUN?" 6 3 2>/dev/null | tr -d '\r' | sed -n 's/.*+CFUN: *\([0-9]*\).*/\1/p' | head -1)" in
+			0|4)
+				logger -t 5gmodem "reboot: $_AMP came back with the radio off - turning it on (AT+CFUN=1)"
+				at_query "$PORT" "AT+CFUN=1" 15 >/dev/null 2>&1
+				sleep 5 ;;
+		esac
+	  fi
 	  ubus call "network.interface.$IF" down >/dev/null 2>&1
 	  sleep 3
 	  _rbd=$(uci -q get "network.$IF.device")

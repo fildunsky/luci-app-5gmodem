@@ -3712,8 +3712,8 @@ msgstr "回線が落ちたら予備の回線に通信を切り替える"
 msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
 msgstr "アドレスはあるのにインターネットにつながらない回線は、自分からは通信を手放しません。監視機能が経路をその回線より後ろに回し、回線が戻ったら元に戻します。設定の経路メトリックは変更しません。既定はオンです。"
 
-msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
-msgstr "通信は %s を通っていますが、そこではインターネットにつながりません。自動切り替えがオフなので、監視機能は障害を検知しても何もしません。"
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching to another link is off."
+msgstr "通信は %s を通っていますが、そこではインターネットにつながりません。別の回線への自動切り替えはオフです。"
 
 msgid "Turn switching on"
 msgstr "切り替えをオンにする"

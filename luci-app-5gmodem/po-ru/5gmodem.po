@@ -3956,8 +3956,8 @@ msgstr "Переключать трафик на запасной линк пр�
 msgid "A link that has an address but no internet will not give the traffic up on its own - the watchdog moves the route past it, and brings it back when the link recovers. Route metrics in the settings stay untouched. On by default."
 msgstr "Линк с адресом, но без интернета сам трафик не уступит: маршрут через него уводит сторож и возвращает, когда линк оживает. Метрики в настройках при этом не меняются. По умолчанию включено."
 
-msgid "Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing."
-msgstr "Трафик идёт через %s, а интернета на нём нет. Переключение выключено - сторож видит провал и ничего не делает."
+msgid "Traffic goes through %s, and there is no internet on it. Automatic switching to another link is off."
+msgstr "Трафик идёт через %s, а интернета на нём нет. Автоматическое переключение на другой канал выключено."
 
 msgid "Turn switching on"
 msgstr "Включить переключение"

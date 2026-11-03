@@ -71,7 +71,7 @@ case "$1" in
 			fi
 		else
 			_mi_ok=1
-			if [ "$1" = grace ]; then
+			if [ "$2" != now ]; then
 				_mi_now=$(cut -d. -f1 /proc/uptime)
 				_mi_was=$(cat /tmp/5gmodem/mmneed_idle 2>/dev/null)
 				case "$_mi_was" in

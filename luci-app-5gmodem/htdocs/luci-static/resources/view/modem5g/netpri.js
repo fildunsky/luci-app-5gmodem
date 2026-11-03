@@ -1317,7 +1317,7 @@ function buildBar(list, redraw) {
 		if (_hfo === false && carrier && (carrier.health === 'down' || carrier.health === 'gone')) {
 			kids.push(E('div', { 'class': 'netpri-warn' }, [
 				E('span', { 'class': 'netpri-warn-ic' }, '⚠'),
-				_('Traffic goes through %s, and there is no internet on it. Automatic switching is off - the watchdog sees the failure and does nothing.').format(carrier.sub || carrier.iface),
+				_('Traffic goes through %s, and there is no internet on it. Automatic switching to another link is off.').format(carrier.sub || carrier.iface),
 				' ',
 				E('a', {
 					'href': '#',
@@ -1393,7 +1393,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30916,
+	API: 30917,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
