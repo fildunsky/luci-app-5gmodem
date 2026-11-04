@@ -3643,6 +3643,9 @@ msgstr "リクエストを送信中"
 msgid "Restoring the previous network mode"
 msgstr "元のネットワークモードに戻しています"
 
+msgid "The network dropped the request, trying again"
+msgstr "ネットワークがリクエストを切断しました。再試行しています"
+
 msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
 msgstr "モデムを 3G に切り替えられなかったため、リクエストを送信しませんでした: USSD には回線交換チャネルが必要です。"
 

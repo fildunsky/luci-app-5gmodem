@@ -387,7 +387,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30919, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30920, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -430,7 +430,7 @@ return view.extend({
 							'style': 'display:none'
 						}, [ _('Release page') ]),
 					]),
-					E('div', { 'class': 'cbi-value-description' }, [ E('div', { 'style': 'flex:1 1 auto;min-width:0' }, [
+					E('div', { 'style': 'margin-top:4px;font-size:90%' }, [ E('div', { 'style': 'flex:1 1 auto;min-width:0' }, [
 						_('Current version') + ': ', E('strong', { 'id': 'upd-current' }, [ '—' ]),
 						E('div', { 'id': 'upd-status', 'style': 'margin-top:4px' }, []),
 						E('div', { 'id': 'upd-progress', 'style': 'display:none;margin-top:6px' }, [

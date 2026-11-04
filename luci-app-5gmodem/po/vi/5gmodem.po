@@ -3643,6 +3643,9 @@ msgstr "Đang gửi yêu cầu"
 msgid "Restoring the previous network mode"
 msgstr "Đang khôi phục chế độ mạng trước đó"
 
+msgid "The network dropped the request, trying again"
+msgstr "Mạng đã ngắt yêu cầu, đang thử lại"
+
 msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
 msgstr "Không thể chuyển modem sang 3G nên yêu cầu chưa được gửi: USSD cần kênh chuyển mạch kênh."
 

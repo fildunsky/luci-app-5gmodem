@@ -3887,6 +3887,9 @@ msgstr "Отправляю запрос"
 msgid "Restoring the previous network mode"
 msgstr "Возвращаю прежний режим сети"
 
+msgid "The network dropped the request, trying again"
+msgstr "Сеть оборвала запрос, пробую ещё раз"
+
 msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
 msgstr "Не удалось перевести модем в 3G, запрос не отправлен: USSD ходит по каналу CS."
 

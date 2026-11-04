@@ -3643,6 +3643,9 @@ msgstr "正在發送請求"
 msgid "Restoring the previous network mode"
 msgstr "正在恢復之前的網絡模式"
 
+msgid "The network dropped the request, trying again"
+msgstr "網絡中斷了請求，正在重試"
+
 msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
 msgstr "無法將數據機切換到 3G，因此請求未發送：USSD 需要電路交換信道。"
 

@@ -362,6 +362,7 @@ return view.extend({
 			starting: _('Preparing the request…'),
 			switching: _('Switching the modem to 3G - USSD needs the circuit-switched channel'),
 			sending:   _('Sending the request'),
+			retrying:  _('The network dropped the request, trying again'),
 			restoring: _('Restoring the previous network mode')
 		};
 
@@ -709,7 +710,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30919, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30920, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
