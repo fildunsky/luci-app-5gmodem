@@ -72,7 +72,7 @@ netifd applies the interface metric to subnet routes as well (`10.31.67.0/24 dev
 
 ### Uplink type (`iface_type`)
 
-Modem detection comes before the Wi-Fi guess because a modem's `l3_device` can be `wwanN`. Wi-Fi is decided from the wireless config (same rule as `health.sh: is_wifi_iface`), not by the presence of a device: when the station drops the device disappears, the type became `other`, and the "Heal Wi-Fi" option vanished from the modal exactly when it was needed. A wired uplink with a different name (single-port LAN-DHCP, renamed wan) gets the wired card; only an interface actually named `wan` is labelled "WAN", others keep their real name.
+Modem detection comes before the Wi-Fi guess because a modem's `l3_device` can be `wwanN`. Wi-Fi is decided from the wireless config, not by the presence of a device: the interface is Wi-Fi only when a `wifi-iface` with `mode='sta'` lists it in `network` (a single value, a space-separated string or a uci list such as travelmate's `'trm_wwan' 'trmv6'`). Access points do not count: `lan` carries the router's own APs, and `lan` used as the uplink of a single-port router was shown as Wi-Fi. `health.sh: is_wifi_iface` still matches any `wifi-iface`; its Wi-Fi ladder skips interfaces without an enabled station instead. when the station drops the device disappears, the type became `other`, and the "Heal Wi-Fi" option vanished from the modal exactly when it was needed. A wired uplink with a different name (single-port LAN-DHCP, renamed wan) gets the wired card; only an interface actually named `wan` is labelled "WAN", others keep their real name.
 
 ### Model name (`model_for`)
 
