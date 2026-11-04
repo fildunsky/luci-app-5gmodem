@@ -319,10 +319,14 @@ _is_wifi_cfg() {
 		_WLD_DONE=1
 		_WLD=$(uci -q show wireless 2>/dev/null)
 	fi
-	case "$_WLD" in
-		*".network='$1'"*) return 0 ;;
-		*) return 1 ;;
-	esac
+	for _wc_s in $(printf '%s\n' "$_WLD" \
+		| sed -n "s/^wireless\.\([^.=]*\)\.network=\(.*\)$/\1 \2/p" | tr -d "'" \
+		| awk -v n="$1" '{for (i = 2; i <= NF; i++) if ($i == n) { print $1; break }}'); do
+		case "$_WLD" in
+			*"wireless.$_wc_s.mode='sta'"*) return 0 ;;
+		esac
+	done
+	return 1
 }
 
 iface_type() {
