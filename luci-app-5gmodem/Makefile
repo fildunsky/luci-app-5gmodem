@@ -21,7 +21,7 @@ LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.9.17
+PKG_VERSION:=3.9.18
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles
@@ -50,7 +50,6 @@ _5gm_step() {
 	return 0
 }
 [ -n "$${IPKG_INSTROOT}" ] || {
-	_5gm_step services
 	for _5gm_f in /etc/hotplug.d/*/*5gmodem*.apk-new /etc/hotplug.d/*/*5gmodem*-opkg; do
 		[ -f "$$_5gm_f" ] || continue
 		case "$$_5gm_f" in
@@ -58,32 +57,6 @@ _5gm_step() {
 			*-opkg) mv -f "$$_5gm_f" "$${_5gm_f%-opkg}" 2>/dev/null ;;
 		esac
 	done
-	_5gm_upgrade=0
-	[ -n "$$(uci -q get 5gmodem.@5gmodem[0].widgets_seeded 2>/dev/null)" ] && _5gm_upgrade=1
-	_5gm_svc() {
-		[ -x "/etc/init.d/$$1" ] || return 0
-		if [ ! -e "/etc/5gmodem/.svc/$$1" ]; then
-			mkdir -p /etc/5gmodem/.svc 2>/dev/null
-			: > "/etc/5gmodem/.svc/$$1" 2>/dev/null
-			[ "$$_5gm_upgrade" = 1 ] || /etc/init.d/$$1 enable 2>/dev/null
-		fi
-		if /etc/init.d/$$1 enabled 2>/dev/null; then
-			/etc/init.d/$$1 $$2 2>/dev/null
-		else
-			/etc/init.d/$$1 stop 2>/dev/null
-		fi
-		return 0
-	}
-	_5gm_svc 5gmodem-mm-inhibit restart
-	_5gm_svc 5gmodem-usbports start
-	_5gm_svc 5gmodem-sessionwatch restart
-	_5gm_svc 5gmodem-btnleds start
-	_5gm_step system
-	modprobe rndis_host 2>/dev/null
-	modprobe cdc_ether 2>/dev/null
-	/usr/share/5gmodem/usbmode-fix.sh 2>/dev/null
-	sh /etc/uci-defaults/5gmodem-rebind-allow.sh 2>/dev/null
-	sh /etc/uci-defaults/5gmodem-ttl-migrate.sh 2>/dev/null
 }
 [ -n "$${IPKG_INSTROOT}" ] || {
 	_ja_pkg=0
@@ -101,21 +74,12 @@ done
 	rm -rf /tmp/luci-modulecache/
 	_5gm_step network
 	/etc/init.d/rpcd reload 2>/dev/null
-	ubus call network reload 2>/dev/null
 	_5gm_step modems
-	/usr/share/5gmodem/modemswitch.sh resolve 2>/dev/null
-	/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
-	/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
-	_5gm_step protos
-	/usr/share/5gmodem/register_proto.sh >/dev/null 2>&1
-	_5gm_step leds
-	if [ "$$(uci -q get 5gmodem.@5gmodem[0].signal_leds)" != "0" ]; then
-		/etc/init.d/5gmodem-leds enable 2>/dev/null
-		/etc/init.d/5gmodem-leds restart 2>/dev/null
-	fi
-	if /usr/share/5gmodem/antenna.sh detect 2>/dev/null | grep -q '"available":1'; then
-		/etc/init.d/5gmodem-antenna enable 2>/dev/null
-		/etc/init.d/5gmodem-antenna restart 2>/dev/null
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	if command -v setsid >/dev/null 2>&1; then
+		setsid /usr/share/5gmodem/postinst-bg.sh </dev/null >/dev/null 2>&1 &
+	else
+		/usr/share/5gmodem/postinst-bg.sh </dev/null >/dev/null 2>&1 &
 	fi
 	_5gm_step cache
 	_5gm_ts=$$(( 2114380800 + $$(date +%s) % 31536000 ))

@@ -1393,7 +1393,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30917,
+	API: 30918,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
