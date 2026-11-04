@@ -3643,6 +3643,9 @@ msgstr "Mengirim permintaan"
 msgid "Restoring the previous network mode"
 msgstr "Memulihkan mode jaringan sebelumnya"
 
+msgid "The network dropped the request, trying again"
+msgstr "Jaringan memutus permintaan, mencoba lagi"
+
 msgid "Could not switch the modem to 3G, so the request was not sent: USSD needs the circuit-switched channel."
 msgstr "Tidak dapat mengalihkan modem ke 3G, sehingga permintaan tidak dikirim: USSD memerlukan kanal circuit-switched."
 

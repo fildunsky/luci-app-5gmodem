@@ -144,9 +144,20 @@ mm)
 			fi
 			_st running sending
 		fi
-		OUT=$(mmcli -m "$2" --timeout=40 "--3gpp-ussd-$3=$4" 2>/tmp/5gmodem/ussd.err)
-		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
-		rm -f /tmp/5gmodem/ussd.err
+		_try=0
+		while :; do
+			OUT=$(mmcli -m "$2" --timeout=40 "--3gpp-ussd-$3=$4" 2>/tmp/5gmodem/ussd.err)
+			ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
+			rm -f /tmp/5gmodem/ussd.err
+			[ "$3" = initiate ] && [ "$_try" -lt 2 ] || break
+			case "$ERR" in *Aborted*|*"terminated by network"*) : ;; *) break ;; esac
+			_try=$((_try + 1))
+			logger -t 5gmodem "ussd: network aborted the request, retry $_try"
+			_st running retrying
+			mmcli -m "$2" --timeout=8 --3gpp-ussd-cancel >/dev/null 2>&1
+			[ "$_try" = 2 ] && mmcli -m "$2" -e >/dev/null 2>&1
+			sleep 2
+		done
 		if [ -n "$MMSW" ]; then
 			mmcli -m "$2" --timeout=8 --3gpp-ussd-cancel >/dev/null 2>&1
 			_st running restoring
