@@ -965,6 +965,13 @@ fi
 [ -z "$COPS" ] && COPS=$COPS_NUM
 
 PHONE=$(echo "$O" | awk -F'"' '/^\+CNUM:/{for(i=1;i<=NF;i++){if($i ~ /^[+]?[0-9][0-9][0-9][0-9][0-9]+$/){print $i; exit}}}')
+case "$PHONE" in
+	00[0-9][0-9]00[0-9][0-9]*|+00[0-9][0-9]00[0-9][0-9]*)
+		PHONE=$(echo "$PHONE" | awk '{s=$0; p=""; if(substr(s,1,1)=="+"){p="+"; s=substr(s,2)}
+			if(length(s)%4 || s !~ /^(00[0-9][0-9])+$/){print $0; exit}
+			o=""; for(i=1;i<=length(s);i+=4){c=substr(s,i+2,2); if(c>="30" && c<="39") o=o (c-30); else exit} print p o}')
+		;;
+esac
 if [ -n "$PHONE" ] && [ "${PHONE#+}" = "$PHONE" ]; then
 	echo "$O" | grep '^+CNUM:' | grep -q ',145' && PHONE="+$PHONE"
 fi

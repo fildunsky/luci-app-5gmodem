@@ -193,9 +193,12 @@ _bp_sup() {
 	_bs_f="/tmp/5gmodem/bpsup_$1_$(echo "${_DEVICE##*/}" | tr -c 'A-Za-z0-9' '_')"
 	_bs_c=$(cat "$_bs_f" 2>/dev/null)
 	[ -n "$_bs_c" ] && { echo "$_bs_c"; return; }
-	_bs_l=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r' \
+	_bs_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r')
+	_bs_l=$(printf '%s\n' "$_bs_o" \
 		| awk -v rat="$1" '$0 ~ rat ",(Enable|Disable) *Bands" { p = index($0, ":"); if (p) print substr($0, p + 1) }' \
 		| tr ',' ' ' | tr -s ' ')
+	_bs_full=0
+	printf '%s\n' "$_bs_o" | grep -qE "$1,Disable *Bands" && printf '%s\n' "$_bs_o" | grep -q '^OK' && _bs_full=1
 	_bs_u=""
 	for _bs_b in $_bs_l; do
 		case "$_bs_b" in ''|*[!0-9]*) continue ;; esac
@@ -204,7 +207,7 @@ _bp_sup() {
 	done
 	_bs_u=$(printf '%s' "$_bs_u" | tr ' ' '\n' | sort -n | tr '\n' ' ' | sed 's/ *$//')
 	[ -n "$_bs_u" ] || return 0
-	printf '%s' "$_bs_u" > "$_bs_f" 2>/dev/null
+	[ "$_bs_full" = 1 ] && printf '%s' "$_bs_u" > "$_bs_f" 2>/dev/null
 	echo "$_bs_u"
 }
 

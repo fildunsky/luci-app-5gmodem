@@ -289,7 +289,8 @@ function applyMgmtMM(j) {
 		ensureMmModeButtons();
 		applyPureModes(j.modes);
 		var has2 = bandsOther.some(function(b) { return /^(egsm|dcs|pcs|g850|g450|g480|g750|g380|g410|g710|g810)$/.test(b); });
-		var techOk = { '2g': has2, '3g': sup3.length > 0, '4g': sup4.length > 0, '5g': sup5.length > 0 };
+		var inModes = function(t) { return (j.modes || []).some(function(m) { return String(m).split(':')[0].split('|').indexOf(t) >= 0; }); };
+		var techOk = { '2g': has2, '3g': sup3.length > 0 || inModes('3g'), '4g': sup4.length > 0 || inModes('4g'), '5g': sup5.length > 0 || inModes('5g') };
 		document.querySelectorAll('#modesw-btns .cbi-button').forEach(function(b) {
 			var al = (b.getAttribute('data-allowed') || '').split('|');
 			var isAuto = (al.length == 4 && b.getAttribute('data-preferred') == '5g');
@@ -1093,7 +1094,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30921,
+	API: 30922,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },
