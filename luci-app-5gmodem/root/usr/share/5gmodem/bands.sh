@@ -7,7 +7,7 @@
 #
 
 case "$1" in
-	json|jsonrefresh|mgmtinfo|getmode|getsupportedmodes|getcelllock|applyresult)
+	json|jsonrefresh|mgmtinfo|nratjson|getmode|getsupportedmodes|getcelllock|applyresult)
 		case "$2" in
 			'') : ;;
 			*[!0-9.:_-]*) : ;;
@@ -1537,6 +1537,14 @@ case $1 in
 	"setbands5gsa")
 		[ -n "$2" ] && { _persist_bands 5gsa "$2"; _bands_set_bg band setbands5gsa "$2"; }
 		;;
+	"nratjson")
+		_na_s=$(getsupportedbands5gnsa 2>/dev/null)
+		case "$_na_s" in ''|Unsupported) echo '{}'; exit 0 ;; esac
+		_na_e=$(getbands5gnsa 2>/dev/null)
+		printf '{"sup":[%s],"en":[%s]}\n' \
+			"$(printf '%s' "$_na_s" | tr -c '0-9' '\n' | grep . | sort -nu | tr '\n' ',' | sed 's/,$//')" \
+			"$(printf '%s' "$_na_e" | tr -c '0-9' '\n' | grep . | sort -nu | tr '\n' ',' | sed 's/,$//')"
+		;;
 	"mgmtinfo")
 		_mi_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 		_mi_if=$(uci -q get "5gmodem.$_mi_sec.network")
@@ -1572,7 +1580,13 @@ case $1 in
 			_mi_qd=$(_mm_qmi_dev "$_mi_k")
 			[ -n "$_mi_qd" ] && _mi_ssp=$(_ssp_read "$_mi_qd") && _mi_curmode="$_mi_ssp"
 		fi
-		printf '{"source":"mmcli","allowedmode":"%s","preferredmode":"%s","currentmode":"%s","modes":[%s],"sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
+		_mi_nrat=0
+		if [ -z "$(_mi_arr "$_mi_sup" ngran-)" ] && [ "$_BAND_VIA" != "mmcli" ] && [ "$_PORT_OK" = "1" ] \
+		   && command -v getbands5gnsa >/dev/null 2>&1; then
+			case "$_mi_modes" in *5g*) _mi_nrat=1 ;; esac
+		fi
+		printf '{"source":"mmcli","nrat":%s,"allowedmode":"%s","preferredmode":"%s","currentmode":"%s","modes":[%s],"sup3g":[%s],"cur3g":[%s],"sup4g":[%s],"cur4g":[%s],"sup5g":[%s],"cur5g":[%s],"other":[%s]}\n' \
+			"$_mi_nrat" \
 			"$(uci -q get "network.$_mi_if.allowedmode")" \
 			"$(uci -q get "network.$_mi_if.preferredmode")" \
 			"$_mi_curmode" \

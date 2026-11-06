@@ -218,9 +218,38 @@ function loadBands() {
 		if (!j.source) { return; }
 		if (j.source != 'mmcli') { return loadBandsModemband(); }
 		if (j.pending) { return; }
+		if (!j.nrat) { _nrAt = null; }
+		if (j.nrat && _nrAt) { j.nrSup = _nrAt.sup; j.nrEn = _nrAt.en; }
 		applyMgmtMM(j);
 		_bandsRemember('mm', j);
+		if (j.nrat) { return loadNrAt(j); }
 	}));
+}
+
+var _nrAt = null;
+
+function loadNrAt(j) {
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'nratjson' ].concat(_bandsFor())), '{}').then(ctx.forPage(function(out) {
+		var d = {}; try { d = JSON.parse(out) || {}; } catch (e) {}
+		if (bandSource != 'mmcli' || !(d.sup || []).length) { return; }
+		_nrAt = { sup: d.sup, en: d.en || [] };
+		j.nrSup = d.sup; j.nrEn = _nrAt.en;
+		renderNrAt(j);
+		_bandsRemember('mm', j);
+	}));
+}
+
+function renderNrAt(j) {
+	var nrC = document.getElementById('bands-nr');
+	var row = document.getElementById('bands5gn');
+	if (!nrC || !(j.nrSup || []).length) { return false; }
+	if (!ctx.sameRender(nrC, 'at|' + j.nrSup.join(',') + '|' + (j.nrEn || []).join(','))) {
+		nrC.innerHTML = '';
+		buildBandButtonsNum(j.nrSup, j.nrEn || [], 'nsa').forEach(function(b) { nrC.appendChild(b); });
+	}
+	if (row) { row.style.display = ''; }
+	bandFilter('bands-nr');
+	return true;
 }
 
 function ensureMmModeButtons() {
@@ -276,10 +305,12 @@ function applyMgmtMM(j) {
 		_has3gMM = sup3.length > 0;
 		renderBandToggles('bands-3g', sup3, cur, 'utran-');
 		renderBandToggles('bands-lte', sup4, cur, 'eutran-');
-		renderBandToggles('bands-nr', sup5, cur, 'ngran-');
+		var nrAt = !sup5.length && !!j.nrat && (j.nrSup || []).length > 0;
+		if (!nrAt) { renderBandToggles('bands-nr', sup5, cur, 'ngran-'); }
 		var show = function(id, on) { var e = document.getElementById(id); if (e) { e.style.display = on ? '' : 'none'; } };
 		show('modeswn', true); show('bands3gn', sup3.length); show('bandsn', sup4.length);
 		show('bands5gn', sup5.length); show('bandsactn', true);
+		if (nrAt) { renderNrAt(j); }
 		render5gMode(null);
 		renderCaEnabled(null);
 		renderCellLock(null);
@@ -953,10 +984,16 @@ function revealMgmtWhenReady(tries) {
 
 function applyBands() {
 	if (bandSource == 'modemband') { return applyBandsModemband(false); }
-	var sel = [];
+	var sel = [], nrSel = [];
+	var nrAt = document.querySelector('#bands-nr button[data-btype="nsa"]') != null;
 	document.querySelectorAll('#bands-3g .cbi-button-action, #bands-lte .cbi-button-action, #bands-nr .cbi-button-action').forEach(function(b) {
+		if (b.getAttribute('data-btype') == 'nsa') { nrSel.push(b.getAttribute('data-band')); return; }
 		sel.push(b.getAttribute('data-band'));
 	});
+	if (nrAt && !nrSel.length) {
+		ui.addNotification(null, E('p', _('Select at least one band')), 'error');
+		return Promise.resolve();
+	}
 	if (!sel.length) {
 		ui.addNotification(null, E('p', _('Select at least one band')), 'error');
 		return Promise.resolve();
@@ -968,6 +1005,13 @@ function applyBands() {
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'mmsetbands', bandsOther.concat(sel).filter(Boolean).join('|'), String(ctx.getMmIdx()) ]).then(function(res) {
 		if (res.code !== 0) {
 			ui.addNotification(null, E('p', [ _('Failed to set bands') + ': ' + (res.stderr || res.stdout || '') ]), 'error');
+			return false;
+		}
+		return nrAt ? fs.exec('/usr/share/5gmodem/bands.sh', [ 'setbands5gnsa', nrSel.join(' ') ]) : true;
+	}).then(function(res2) {
+		if (res2 === false) { return; }
+		if (res2 !== true && res2.code !== 0) {
+			ui.addNotification(null, E('p', [ _('Failed to set bands') + ': ' + (res2.stderr || res2.stdout || '') ]), 'error');
 			return;
 		}
 		if (ui.addTimeLimitedNotification) {
@@ -1094,7 +1138,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30922,
+	API: 30923,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

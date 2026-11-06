@@ -8,7 +8,7 @@ getinfo() {
 
 getbands() {
 	O=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?")
-	echo "$O" | awk -F: '/LTE,Enable.*Bands.*:/{gsub(",", " ");print $2}' | xargs
+	echo "$O" | tr -d '\r' | awk '/LTE,Enable *Bands/{ sub(/.*:/, ""); gsub(/[^0-9]+/, " "); print }' | xargs
 }
 
 setbands() {
@@ -55,7 +55,7 @@ setmode() {
 
 getbands5gnsa() {
 	O=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?")
-	echo "$O" | awk -F: '/NR5G,Enable.*Bands.*:/{gsub(",", " ");print $2}' | xargs
+	echo "$O" | tr -d '\r' | awk '/NR5G,Enable *Bands/{ sub(/.*:/, ""); gsub(/[^0-9]+/, " "); print }' | xargs
 }
 
 setbands5gnsa() {
@@ -195,7 +195,7 @@ _bp_sup() {
 	[ -n "$_bs_c" ] && { echo "$_bs_c"; return; }
 	_bs_o=$(sms_tool -d $_DEVICE at "AT^BAND_PREF?" 2>/dev/null | tr -d '\r')
 	_bs_l=$(printf '%s\n' "$_bs_o" \
-		| awk -v rat="$1" '$0 ~ rat ",(Enable|Disable) *Bands" { p = index($0, ":"); if (p) print substr($0, p + 1) }' \
+		| awk -v rat="$1" '$0 ~ rat ",(Enable|Disable) *Bands" { sub(/.*:/, ""); print }' \
 		| tr ',' ' ' | tr -s ' ')
 	_bs_full=0
 	printf '%s\n' "$_bs_o" | grep -qE "$1,Disable *Bands" && printf '%s\n' "$_bs_o" | grep -q '^OK' && _bs_full=1
