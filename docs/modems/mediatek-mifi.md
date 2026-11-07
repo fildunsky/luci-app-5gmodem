@@ -71,3 +71,19 @@ The section is `kind=hilink`, `hl_api=zte`. VID 0e8d is treated as Fibocom only 
 ## Temperatures
 
 `mtk_temps` reads `/sys/class/thermal/thermal_zone*/{type,temp}` (milli-°C) over ADB. Mapping: `mtktspa` PA, `mtktscpu` CPU, `mtktswmt` Wi-Fi, `mtktspmic` PMIC, `mtktsbattery` battery, `mtktsAP` board (`mtktsbtsmdpa` and `mtkts1-3` are ignored). Cached for 1 minute, with the last value kept for up to 10 minutes. It is published as `temps` (`pa=.. cpu=..`), and the page renders six sensor badges.
+
+## Optional helper installation
+
+The app's band note offers an Install button when the matching USB MTK device
+lacks `/usr/share/5gmodem/mtk/usock-armv7`. The dialog downloads the APK (OpenWrt
+25.12+) or IPK (24.10) directly from `dist/5gmodem-mtk-at` on master and tells the
+user to upload it in System → Software, then refresh the page. Installation is
+manual. There is no dependency on whichever app release happens to be latest.
+
+For a local built-in modem, `bands.sh mtk-package-needed` uses `mtk_soc_modem`
+(the CCCI node and a supported native socket/TTY layout), without probing the
+modem. The Network page displays the same prompt even before the optional
+service has created `/dev/ttyMTK0` and made the modem enumerable. Other hardware
+and devices with an executable helper do not get this local prompt.
+
+The helper distribution and rebuild rules are documented in [CI](../subsystems/ci.md#independent-mediatek-helper-packages).

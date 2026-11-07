@@ -6079,3 +6079,6 @@ msgstr "服务正在重启…"
 
 msgid "Restarting…"
 msgstr "正在重启…"
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr "下载适用于您的 OpenWrt 版本的软件包，在“系统 → 软件包”中上传，然后刷新此页面。"

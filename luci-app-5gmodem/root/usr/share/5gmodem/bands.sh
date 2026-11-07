@@ -6,6 +6,16 @@
 # (c) 2022-2024 modified by Rafał Wabik - IceG - From eko.one.pl forum
 #
 
+if [ "$1" = mtk-package-needed ]; then
+	. /usr/share/5gmodem/lib.sh
+	if mtk_soc_modem && [ ! -x /usr/share/5gmodem/mtk/usock-armv7 ]; then
+		echo 1
+	else
+		echo 0
+	fi
+	exit 0
+fi
+
 case "$1" in
 	json|jsonrefresh|mgmtinfo|nratjson|getmode|getsupportedmodes|getcelllock|applyresult)
 		case "$2" in
@@ -761,7 +771,9 @@ if [ "$_bs_am" = ccci ]; then
 				_mtk_rat_json 2g ccci
 				printf ' }\n'
 			else
-				printf '], "supported": [ ], "enabled": [ ], "nobandctl": 1 }\n'
+				_bs_np=""
+				[ -x /usr/share/5gmodem/mtk/usock-armv7 ] || _bs_np=', "needpkg": "5gmodem-mtk-at"'
+				printf '], "supported": [ ], "enabled": [ ], "nobandctl": 1%s }\n' "$_bs_np"
 			fi
 			exit 0 ;;
 		getbands)          _bs_mb=$("$_HL" mtkbands ccci); echo "${_bs_mb#*|}"; exit 0 ;;
@@ -835,7 +847,7 @@ if [ -n "$_bs_am" ] && [ -z "$_bs_at" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kin
 				printf ' }\n'
 			else
 				_bs_np=""
-				[ -n "$_bs_mtk" ] && [ ! -f /usr/share/5gmodem/mtk/usock-armv7 ] && _bs_np=', "needpkg": "5gmodem-mtk-at"'
+				[ -n "$_bs_mtk" ] && [ ! -x /usr/share/5gmodem/mtk/usock-armv7 ] && _bs_np=', "needpkg": "5gmodem-mtk-at"'
 				printf '], "supported": [ ], "enabled": [ ], "nobandctl": 1%s }\n' "$_bs_np"
 			fi
 			exit 0 ;;

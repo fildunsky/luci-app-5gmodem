@@ -657,6 +657,26 @@ function loadBandsModemband(force) {
 	}));
 }
 
+function mtkPackagePrompt() {
+	return E('span', {}, [
+		E('span', {}, [ _('Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem.').format('5gmodem-mtk-at') ]),
+		' ',
+		E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': function(ev) {
+			ev.preventDefault();
+			var url = 'https://raw.githubusercontent.com/fildunsky/luci-app-5gmodem/master/dist/5gmodem-mtk-at/5gmodem-mtk-at.';
+			ui.showModal('5gmodem-mtk-at', [
+				E('p', {}, [ _('Download the package for your OpenWrt version, upload it in System → Software, then refresh this page.') ]),
+				E('p', {}, [
+					E('a', { 'class': 'btn', 'href': url + 'apk', 'target': '_blank', 'rel': 'noopener' }, [ _('Download') + ' .apk (OpenWrt 25.12+)' ]),
+					' ',
+					E('a', { 'class': 'btn', 'href': url + 'ipk', 'target': '_blank', 'rel': 'noopener' }, [ _('Download') + ' .ipk (OpenWrt 24.10)' ])
+				]),
+				E('div', { 'class': 'right' }, [ E('button', { 'class': 'btn', 'click': ui.hideModal }, [ _('Close') ]) ])
+			]);
+		} }, [ _('Install…') ])
+	]);
+}
+
 function applyVendorJson(j) {
 		var note = document.getElementById('bandnote');
 		render5gMode(j.mode5g);
@@ -680,7 +700,7 @@ function applyVendorJson(j) {
 				var nb3 = document.getElementById('bandnote-mm-btn');
 				var modesOnly = !j.error && renderNetModes(j);
 				if (nt3) { nt3.textContent = modesOnly ? _('This modem does not let the router change bands. Only the network mode can be switched.') : _('This modem does not let the router change bands or network mode.'); }
-				if (nt3 && j.needpkg) { nt3.textContent = _('Install the %s package to switch bands and see RSRQ, SINR and the cell on this modem.').format(j.needpkg); }
+				if (nt3 && j.needpkg === '5gmodem-mtk-at') { nt3.textContent = ''; nt3.appendChild(mtkPackagePrompt()); }
 				if (nb3) { nb3.style.display = 'none'; }
 				note.style.display = '';
 				if (modesOnly) { bandsReadOnly = false; applyBandsReadOnly(); }
@@ -1139,6 +1159,7 @@ function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
 	API: 30925,
+	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },
 	loadBandsModemband: function(force) { return loadBandsModemband(force); },

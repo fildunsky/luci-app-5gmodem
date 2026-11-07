@@ -6364,3 +6364,6 @@ msgstr "Служба перезапускается…"
 
 msgid "Restarting…"
 msgstr "Перезапуск…"
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr "Скачайте пакет для вашей версии OpenWrt, загрузите его в разделе «Система → Программное обеспечение», затем обновите эту страницу."

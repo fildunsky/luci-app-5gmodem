@@ -6079,3 +6079,6 @@ msgstr "Layanan sedang dimulai ulang…"
 
 msgid "Restarting…"
 msgstr "Memulai ulang…"
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr "Unduh paket untuk versi OpenWrt Anda, unggah di Sistem → Perangkat Lunak, lalu muat ulang halaman ini."

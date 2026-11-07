@@ -448,3 +448,6 @@ msgstr ""
 
 msgid "Restarting…"
 msgstr ""
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr ""

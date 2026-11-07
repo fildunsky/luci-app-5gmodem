@@ -6079,3 +6079,6 @@ msgstr "Đang khởi động lại dịch vụ…"
 
 msgid "Restarting…"
 msgstr "Đang khởi động lại…"
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr "Tải gói phù hợp với phiên bản OpenWrt, tải lên trong Hệ thống → Phần mềm, rồi làm mới trang này."

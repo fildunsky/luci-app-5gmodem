@@ -1,0 +1,106 @@
+name: Update MediaTek helper packages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '5gmodem-mtk-at/**'
+      - '.github/workflows/build-mtk.yml'
+      - '.github/scripts/fast-build.sh'
+      - '.github/scripts/fetch-sdk.sh'
+      - '.github/scripts/mtk-dist.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mtk-dist
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      rebuild: ${{ steps.check.outputs.rebuild }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if python3 .github/scripts/mtk-dist.py check; then
+            echo 'rebuild=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'rebuild=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.rebuild == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - sdk: x86_64-25.12.5
+            ver: 25.12.5
+            ext: apk
+          - sdk: x86_64-24.10.8
+            ver: 24.10.8
+            ext: ipk
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find SDK
+        id: sdk
+        run: CHECK_ONLY=1 .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
+      - uses: actions/cache@v4
+        with:
+          path: sdk/sdk.tar
+          key: sdk-${{ steps.sdk.outputs.sdk_sum }}
+      - name: Download SDK
+        run: .github/scripts/fetch-sdk.sh ${{ matrix.ver }} x86/64 sdk
+      - name: Build clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-arm-linux-gnueabihf gcc-aarch64-linux-gnu
+          ./5gmodem-mtk-at/build-usock.sh
+      - name: Build package
+        run: |
+          mkdir -p built && chmod 777 built
+          docker run --rm -v "$PWD":/feed -v "$PWD/sdk":/sdk:ro -v "$PWD/built":/artifacts openwrt/sdk:${{ matrix.sdk }} bash /feed/.github/scripts/fast-build.sh 5gmodem-mtk-at
+          mkdir -p out
+          mapfile -t packages < <(find built -type f -name '5gmodem-mtk-at[-_]*.${{ matrix.ext }}')
+          [ "${#packages[@]}" = 1 ]
+          cp "${packages[0]}" out/5gmodem-mtk-at.${{ matrix.ext }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mtk-${{ matrix.ext }}
+          path: out/*
+          if-no-files-found: error
+
+  store:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mtk-*
+          merge-multiple: true
+          path: dist/5gmodem-mtk-at
+      - name: Record and store packages
+        run: |
+          python3 .github/scripts/mtk-dist.py write
+          git config user.name 'Fil Dunsky'
+          git config user.email 'filipp.dunsky@gmail.com'
+          git add dist/5gmodem-mtk-at
+          git diff --cached --quiet && exit 0
+          git commit -m 'Update MediaTek helper packages'
+          git fetch origin master
+          git rebase origin/master
+          python3 .github/scripts/mtk-dist.py check
+          git push origin HEAD:master
