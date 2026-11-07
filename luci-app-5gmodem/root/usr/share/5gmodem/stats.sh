@@ -26,11 +26,9 @@ _mounted() {
 
 _dir_live() {
 	[ -n "$1" ] || return 1
-	mkdir -p "$1" 2>/dev/null || return 1
 	[ "$2" = 1 ] && { _mounted "$1" || return 1; }
-	: > "$1/.wtest" 2>/dev/null || return 1
-	rm -f "$1/.wtest" 2>/dev/null
-	return 0
+	[ -d "$1" ] || mkdir -p "$1" 2>/dev/null || return 1
+	[ -w "$1" ]
 }
 
 _pdir_now() {
@@ -99,7 +97,6 @@ _push() {
 }
 
 _iface_label() {
-	[ -n "$_NP_SNAP" ] || _NP_SNAP=$("$RES/netpri.sh" list 2>/dev/null)
 	_il_s=$(printf '%s' "$_NP_SNAP" | jsonfilter -e "@[@.iface=\"$1\"].sub" 2>/dev/null | head -1)
 	_il_t=$(printf '%s' "$_NP_SNAP" | jsonfilter -e "@[@.iface=\"$1\"].type" 2>/dev/null | head -1)
 	case "$_il_t" in
@@ -118,6 +115,7 @@ _collect_ping() {
 		_push "ping.$_cp_if" "${_cp_ms:-0}"
 		_cp_mp=$(uci5g_get "$(sec_for_iface "$_cp_if")" path)
 		if [ ! -f "$DIR/ping.$_cp_if.label" ] || [ -n "$(find "$DIR/ping.$_cp_if.label" -mmin +10 2>/dev/null)" ]; then
+			[ "$_NP_SNAP_DONE" = 1 ] || { _NP_SNAP=$("$RES/netpri.sh" list 2>/dev/null); _NP_SNAP_DONE=1; }
 			_cp_w=$(_iface_label "$_cp_if")
 			[ -n "$_cp_mp" ] && _mdm_dup "$_cp_mp" && _cp_w="$_cp_w ($_cp_mp)"
 			_cp_l=""
@@ -477,6 +475,8 @@ mkdir -p "$DIR" 2>/dev/null
 case "$1" in
 tick)
 	_enabled || exit 0
+	exec 9>/tmp/5gmodem/stats.lock
+	flock -n 9 || exit 0
 	_restore
 	_mdm_init
 	_mdm_reconcile

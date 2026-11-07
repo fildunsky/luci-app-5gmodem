@@ -161,3 +161,26 @@ Bands are read and set through the device API (`LTEBand` mask in `/api/net/net-m
 - Writes: `setall` through `bands.sh`, never bare `mmcli`; reads after a write bypass the cache. No busy banner for live-applied masks (it hung for the 8 s minimum for nothing). The mmcli path applies live (~0.1 s on Compal, connection unaffected), so no radio restart and no banner. Mode buttons without the RAT the modem currently uses ask for confirmation (a "5G" click where there is no 5G leaves the router offline). Mode change through `setmodemm` refreshes several times over the ~10-20 s interface bounce.
 - Cell lock: the "lock to current cell" button reads the serving cell at click time (metrics may not have arrived when the row renders). 5G lock takes the carrier whose band starts with `n` from `s1..s4`. For `unlockable` without a known lock the button is labelled "Reset lock" (a bare "Unlock" made users look for a non-existent lock). Rows for 256QAM, uplink CA and 5G lock are created by this module because `5gdetail` does not have them.
 - Switching tabs in place resets module state and hides vendor rows of the previous modem immediately.
+
+## RM520N-GL QMI mode changes
+
+For RM520N-GL (2c7c:0801) bound to a QMI interface, manual `setmode` uses netifd's
+`modes` option when uqmi advertises `5gnr`. Mapping: Auto=`all`, 3G=`umts`,
+LTE=`lte`, LTE+NR=`lte,5gnr`, NR=`5gnr`. Other models, protocols, older uqmi and
+`setmodelive` keep the existing AT path. Both the selected modem identity and the
+interface ownership stamp must match.
+
+This adapts [stevenjoezhang's hardware-tested fix](https://github.com/stevenjoezhang/luci-app-5gmodem/commit/c10ab4434f402b2282efdb5791db9a8abee814f5):
+a live AT mode change could disconnect the data session while QMI remained up.
+The setting is committed and netifd reloads the changed configuration, allowing QMI
+to rebuild the session and apply the RAT preference. Reapplying the same value
+explicitly cycles only the bound interface because a reload has no configuration
+difference to act on. There is no network service restart in this path.
+
+Pending network edits reject the operation before writing anything, since UCI
+commit and reload would otherwise apply unrelated edits. Saved mode intent and
+the band-restore suppression marker are written before reload to prevent a second
+AT change from the ifup hook. Reload errors are returned to the caller with the
+committed preference retained for retry. Hardware evidence is the fork author's
+report; our regression tests cover dispatch, mapping and configuration handling.
+Ask the author to test the integrated version after its release.

@@ -26,6 +26,7 @@ function fire() {
 }
 
 function tick() {
+	if (document.hidden) { return Promise.resolve(); }
 	var keys = Object.keys(_scopes);
 	if (!keys.length) { return Promise.resolve(); }
 	var changed = false;
@@ -52,7 +53,7 @@ function withFlag(ip, cc) {
 }
 
 return baseclass.extend({
-	API: 30923,
+	API: 30924,
 	init: function() {
 		if (_inited) { return _inited; }
 		_inited = L.resolveDefault(uci.load('5gmodem')).then(function() {

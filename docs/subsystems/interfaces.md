@@ -430,3 +430,24 @@ from LuCI. It also registers the proto's error codes (`NO_NETDEV`,
   back blocked restarts forever. The first uplink of a boot is never suppressed.
 - All hooks run their work in a background subshell with fds detached, so
   hotplug does not wait for dialing, CFUN cycles, fw4 reloads or restarts.
+
+
+### Interface hook audit (2026-11-07)
+
+`32-5gmodem-netsel` accepts both quoted and unquoted `netsel=manual` values from UCI show output. The normal quoted value previously failed to match, so ifup did not schedule reapplication of an explicitly selected operator. Automatic operator selection is unaffected.
+
+The detached workers in `31-5gmodem-bands` and `70-5gmodem-svcrestart` close inherited descriptors 1000, 7, 8 and 9 and clear `_AT_LOCK_HELD`, matching the existing netsel/telemetry detach pattern. Their own work may wait for a modem or internet connectivity; that work must not retain the caller's lock descriptors. This does not defer protocol registration or require manual interface recreation, and is not presented as a reproduced root cause of issue #65.
+
+## Preserving user options when rebuilding
+
+`mkiface.sh` reuses the owned interface section. `_mk_reset_transport` removes
+transport selection, device paths, PDP/auth field variants and MM initial bearer
+fields before the selected protocol is configured. Generic and custom options
+remain untouched, including MTU, routing policies and DNS lists with their original
+UCI types. APN, credentials, roaming and metric retain the existing migration
+rules. QMI `modes` survives a QMI-to-QMI rebuild and is removed when changing
+protocols. This also applies to AT/usbnet and ccmni creation paths; fresh creation
+and automatic protocol registration/startup continue through the existing flow.
+
+Adapted from VoidInTheShell's interface-preservation work; its persistent stopped
+state and recovery policy changes are not included.

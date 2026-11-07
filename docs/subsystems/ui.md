@@ -184,3 +184,8 @@ The scroll jumps on proton2025 had several independent causes. Rules:
 - Saves run **sequentially**. Each `buttons.sh set/setleds` call does `uci set` plus `uci commit`, and commit clears the delta: a parallel write between read and clear was lost while `Promise.all` reported success. Two parallel `setleds` also restarted `/etc/init.d/led` on top of each other. `btntype` is not written, because nothing reads it and every commit is a flash write.
 
 - Bootstrap's help icon (`.cbi-value-description::before`, absolute, 1em) sits at the top of the first line box. With the 18 px line height of a 13 px description it was 2.5 px above the text. On our pages it is moved down by `calc((1lh - 1em) / 2)`, with `.19em` as a fallback for browsers without `lh`. Checkbox rows hide the icon (see the flag-row rules).
+
+
+## Hidden-tab background polling (2026-11-07 audit)
+
+Automatic metrics, inbox, statistics, uplink-list, ping/service-widget and external-IP polling returns immediately while `document.hidden` is true. The registered poll functions remain in place and resume at their normal interval when the page is visible. Explicit user actions and router-side sessionwatch, SMS forwarding and recovery continue to use their existing paths. This avoids keeping modems busy merely because a desktop or phone left a LuCI tab in the background.

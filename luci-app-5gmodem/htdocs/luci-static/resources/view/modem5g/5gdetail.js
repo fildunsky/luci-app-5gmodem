@@ -1208,19 +1208,24 @@ function renderBattery(json) {
 }
 
 function chipBox(head) {
-	var box = document.getElementById('modemchips');
-	if (!box) {
-		box = E('span', { 'id': 'modemchips' });
-		head.appendChild(box);
+	var meta = document.getElementById('modemmeta');
+	if (!meta) {
+		meta = E('span', { 'id': 'modemmeta' });
+		head.appendChild(meta);
 	}
+	var box = document.getElementById('modemchips');
+	if (!box) { box = E('span', { 'id': 'modemchips' }); }
+	if (box.parentNode !== meta) { meta.insertBefore(box, meta.firstChild); }
 	return box;
 }
 
-function alignToChips(el, top) {
-	var cb = document.getElementById('modemchips');
-	var h = cb ? cb.offsetHeight : 0;
-	el.style.top = h ? getComputedStyle(cb).top : top;
-	el.style.height = h ? h + 'px' : '';
+function placeStatusChip(el) {
+	var head = document.getElementById('modemname');
+	if (!head) { return; }
+	var box = chipBox(head), meta = box.parentNode;
+	if (el.id === 'stale-mark') {
+		if (el.nextSibling !== box) { meta.insertBefore(el, box); }
+	} else if (el.parentNode !== meta) { meta.appendChild(el); }
 }
 
 function renderVidPid(json) {
@@ -1490,8 +1495,7 @@ function updateUsbFlapWarn(json) {
 	if (!w) {
 		w = E('span', {
 			'id': 'usbflap-warn', 'title': txt,
-			'style': 'float:right;opacity:.85;display:inline-flex;align-items:center;' +
-			         'position:relative;top:.25rem;margin-left:.8em'
+			'class': 'tg-status-chip', 'style': 'opacity:.85'
 		}, [
 			E('img', {
 				'src': mutil.icon('icons/5gmodem/cwarn.svg'), 'title': txt, 'alt': '⚠',
@@ -1504,11 +1508,7 @@ function updateUsbFlapWarn(json) {
 		var wi = w.querySelector('img');
 		if (wi) { wi.title = txt; }
 	}
-	var vp = document.getElementById('modemchips');
-	if (vp && w.previousElementSibling !== vp) {
-		head.insertBefore(w, vp.nextSibling);
-	}
-	alignToChips(w, '.25rem');
+	placeStatusChip(w);
 }
 
 function updateSimIcon(name) {
@@ -1712,7 +1712,7 @@ function buildSimpleUI() {
 		'body.sc-simple #modem-reboot-block table.table tr#doctorn { display:table-row !important; }' +
 		'body.sc-simple #modemchips,' +
 		'body.sc-simple #apnline { display:none !important; }' +
-		'body.sc-simple #modemname > #stale-mark { font-size:.78rem; line-height:1.4; height:1.4em; top:.35em !important; }' +
+		'body.sc-simple #modemname #stale-mark { font-size:.78rem; line-height:1.4; height:1.4em; }' +
 		'body.sc-simple #modem-info-block[data-rat] #stale-mark { height:calc(1.4em + 4px); }' +
 		'body.sc-simple #mode .tginfo-freq:not(.tginfo-dist) { display:none !important; }' +
 		'body.sc-simple #modemname { border-bottom:none !important; box-shadow:none !important; }' +
@@ -2264,7 +2264,7 @@ function applyMetrics(json) {
 							}
 							if (_inact.length) {
 								_mh += _inact.map(function(b) {
-									return ' <span style="font-weight:normal;opacity:.65">+</span>' +
+									return ' <span style="font-weight:normal;opacity:.65">+</span> ' +
 										'<span class="btn cbi-button tginfo-band tginfo-band-idle"' +
 										' title="' + _('Standby carrier: the network has assembled this band into the aggregation but it is idle now - it activates when traffic grows') + '">' + b + '</span>';
 								}).join('');
@@ -2454,24 +2454,22 @@ function applyMetrics(json) {
 							? _('Data has not been updated for %d s (shown from the last snapshot)').format(age)
 							: _('Data has not been updated for %d min (shown from the last snapshot)').format(Math.round(age / 60));
 						if (mark) {
-							if (mark.nextElementSibling) { head.appendChild(mark); }
 							mark.title = txt;
 							var mi = mark.querySelector('img');
 							if (mi) { mi.title = txt; }
-							alignToChips(mark, '.25rem');
+							placeStatusChip(mark);
 							return;
 						}
 						mark = head.appendChild(E('span', {
 							'id': 'stale-mark', 'title': txt,
-							'style': 'float:right;opacity:.55;display:inline-flex;align-items:center;' +
-							         'position:relative;top:.25rem;margin-left:.8em'
+							'class': 'tg-status-chip', 'style': 'opacity:.55'
 						}, [
 							E('img', {
 								'src': mutil.icon('icons/5gmodem/cloading.svg'), 'title': txt, 'alt': '⌛',
 								'style': 'width:12px;height:12px'
 							})
 						]));
-						alignToChips(mark, '.25rem');
+						placeStatusChip(mark);
 					}());
 
 					if (document.getElementById('temp')) {
@@ -2823,7 +2821,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30923, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30924, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3002,6 +3000,7 @@ simDialog: baseclass.extend({
 			}
 
 			pollTickFn = function() {
+				if (document.hidden) { return Promise.resolve(); }
 				var _mArgs = [ 'cached', ifaceProtoIsMM ? '6' : '10' ];
 				if (pageModemPath) { _mArgs.push('for=' + pageModemPath); }
 				return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', _mArgs), '')

@@ -39,22 +39,24 @@ _addr_for() {
 	echo "$_gw"
 }
 
-_sess_file() { echo "$CACHE_DIR/hilink_$(echo "$1" | tr -c 'A-Za-z0-9' '_')"; }
+_sess_file() { echo "$CACHE_DIR/hilink_$(printf '%s_%s' "$1" "$2" | tr -c 'A-Za-z0-9' '_')"; }
 
 _sess_new() {
 	_a="$1"; _d="$2"
 	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_old_sid=$(cut -f1 "$(_sess_file "$_a" "$3")" 2>/dev/null)
 	_r=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
-		"http://$_a/api/webserver/SesTokInfo" 2>/dev/null)
+		-H "Cookie: $_old_sid" "http://$_a/api/webserver/SesTokInfo" 2>/dev/null)
 	_sid=$(echo "$_r" | sed -n 's|.*<SesInfo>\(.*\)</SesInfo>.*|\1|p')
 	_tok=$(echo "$_r" | sed -n 's|.*<TokInfo>\(.*\)</TokInfo>.*|\1|p')
 	[ -n "$_sid" ] && [ -n "$_tok" ] || return 1
-	printf '%s\t%s\n' "$_sid" "$_tok" > "$(_sess_file "$_a")"
+	(umask 077; printf '%s\t%s\n' "$_sid" "$_tok" > "$(_sess_file "$_a" "$3")")
+	chmod 600 "$(_sess_file "$_a" "$3")"
 	printf '%s\t%s\n' "$_sid" "$_tok"
 }
 
 _sess_get() {
-	_f=$(_sess_file "$1")
+	_f=$(_sess_file "$1" "$3")
 	if [ -s "$_f" ] && [ -z "$(find "$_f" -mmin +1 2>/dev/null)" ]; then
 		cat "$_f"
 		return 0
@@ -84,19 +86,89 @@ api_get() {
 	printf '%s' "$_out"
 }
 
-api_post() {
-	_ep="$1"; _body="$2"
-	_a=$(_addr_for "$3") || return 1
-	_d=$(_netdev_for "$3") || return 1
-	_s=$(_sess_new "$_a" "$_d" "$3") || return 1
+_hl_post_once() (
+	umask 077
+	_a="$1"; _d="$2"; _p="$3"; _ep="$4"; _body="$5"
+	_s=$(cat "$(_sess_file "$_a" "$_p")") || return 1
 	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
-	_src=$(_srcip_for "$3" "$_a"); [ -n "$_src" ] || _src="$_d"
-	curl -s --max-time 10 --interface "$_src" -A "$UA" \
-		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
+	_src=$(_srcip_for "$_p" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_hdr=$(mktemp "$CACHE_DIR/hlheaders.XXXXXX") || return 1
+	trap 'rm -f "$_hdr"' EXIT
+	_out=$(curl -s --max-time 10 --interface "$_src" -A "$UA" \
+		-D "$_hdr" -H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
+		-H "X-Requested-With: XMLHttpRequest" -H "Referer: http://$_a/html/smsinbox.html" \
+		-H "Content-Type: text/xml; charset=UTF-8" \
 		--data "<?xml version=\"1.0\" encoding=\"UTF-8\"?><request>$_body</request>" \
-		"http://$_a$_ep" 2>/dev/null
-}
+		"http://$_a$_ep" 2>/dev/null)
+	_rc=$?
+	_new_sid=$(tr -d '\r' < "$_hdr" | sed -n 's/^[Ss]et-[Cc]ookie: *\(SessionID=[^; ]*\).*/\1/p' | tail -1)
+	_new_tok=$(tr -d '\r' < "$_hdr" | awk -F ': *' 'tolower($1) ~ /^__requestverificationtoken(two|one)?$/ {v=$2} END {print v}')
+	[ -n "$_new_sid" ] && _sid="$_new_sid"
+	[ -n "$_new_tok" ] && _tok="$_new_tok"
+	printf '%s\t%s\n' "$_sid" "$_tok" > "$(_sess_file "$_a" "$_p")"
+	printf '%s' "$_out"
+	return "$_rc"
+)
+
+_hl_login() (
+	_a="$1"; _d="$2"; _p="$3"
+	_fail="$(_sess_file "$_a" "$_p").fail"
+	if [ -s "$_fail" ] && [ -z "$(find "$_fail" -mmin +15 2>/dev/null)" ]; then
+		cat "$_fail"; return 1
+	fi
+	_s=$(cat "$(_sess_file "$_a" "$_p")") || return 1
+	_sid=$(printf '%s' "$_s" | cut -f1); _tok=$(printf '%s' "$_s" | cut -f2)
+	_src=$(_srcip_for "$_p" "$_a"); [ -n "$_src" ] || _src="$_d"
+	_state=$(curl -s --max-time 6 --interface "$_src" -A "$UA" \
+		-H "Cookie: $_sid" -H "__RequestVerificationToken: $_tok" \
+		"http://$_a/api/user/state-login" 2>/dev/null)
+	_type=$(printf '%s' "$_state" | xval password_type)
+	_user=$(_web_user "$_p"); _pass=$(_web_pass "$_p")
+	command -v base64 >/dev/null 2>&1 || { echo '<error><code>base64_missing</code></error>'; return 1; }
+	case "$_type" in
+		4)
+			command -v sha256sum >/dev/null 2>&1 || { echo '<error><code>sha256_missing</code></error>'; return 1; }
+			_hash=$(printf '%s' "$_pass" | sha256sum | cut -d ' ' -f1 | tr -d '\n' | base64 | tr -d '\n')
+			_enc=$(printf '%s' "$_user$_hash$_tok" | sha256sum | cut -d ' ' -f1 | tr -d '\n' | base64 | tr -d '\n') ;;
+		''|0|3) _type=3; _enc=$(printf '%s' "$_pass" | base64 | tr -d '\n') ;;
+		*) echo '<error><code>unsupported_login_type</code></error>'; return 1 ;;
+	esac
+	_r=$(_hl_post_once "$_a" "$_d" "$_p" /api/user/login \
+		"<Username>$(_xesc "$_user")</Username><Password>$_enc</Password><password_type>$_type</password_type>")
+	if [ "$(printf '%s' "$_r" | xval response)" = OK ]; then
+		rm -f "$_fail"
+		return 0
+	fi
+	[ -n "$_r" ] || _r='<error><code>login_no_response</code></error>'
+	(umask 077; printf '%s' "$_r" > "$_fail")
+	logger -t 5gmodem "hilink(huawei): login to $_a failed; retry delayed for 15 minutes; check modem web password"
+	printf '%s' "$_r"
+	return 1
+)
+
+api_post() (
+	_ep="$1"; _body="$2"; _p="$3"
+	_a=$(_addr_for "$_p") || return 1
+	_d=$(_netdev_for "$_p") || return 1
+	_lock="$(_sess_file "$_a" "$_p").post.lock"
+	exec 7>"$_lock" || return 1
+	flock -n 7 || { echo '<error><code>busy</code></error>'; return 1; }
+	_s=$(_sess_new "$_a" "$_d" "$_p") || return 1
+	_out=$(_hl_post_once "$_a" "$_d" "$_p" "$_ep" "$_body")
+	case "$(printf '%s' "$_out" | xval code)" in
+		125001|125002|125003)
+			_s=$(_sess_new "$_a" "$_d" "$_p") || return 1
+			_out=$(_hl_post_once "$_a" "$_d" "$_p" "$_ep" "$_body") ;;
+	esac
+	if [ "$(printf '%s' "$_out" | xval code)" = 100003 ]; then
+		if _login=$(_hl_login "$_a" "$_d" "$_p"); then
+			_out=$(_hl_post_once "$_a" "$_d" "$_p" "$_ep" "$_body")
+		else
+			_out="$_login"
+		fi
+	fi
+	printf '%s' "$_out"
+)
 
 xval() {
 	tr -d '\r' | sed 's|<|\
@@ -1322,7 +1394,17 @@ sms_list() {
 	_r=$(api_post /api/sms/sms-list \
 		"<PageIndex>1</PageIndex><ReadCount>50</ReadCount><BoxType>$_box</BoxType>\
 <SortType>0</SortType><Ascending>0</Ascending><UnreadPreferred>0</UnreadPreferred>" "$2")
-	printf '%s' "$_r" | tr -d '\r' | awk '
+	_code=$(printf '%s' "$_r" | xval code)
+	if [ -n "$_code" ]; then
+		printf '{"error":"Huawei SMS API: %s"}\n' "$(jsafe "$_code")"
+		return 0
+	fi
+	case "$_r" in
+		*'<response>'*'</response>'*) ;;
+		*) echo '{"error":"Invalid or empty Huawei SMS response"}'; return 0 ;;
+	esac
+	printf '%s' "$_r" | tr -d '\r' | sed 's|<|\
+<|g' | awk '
 		BEGIN { printf "{\"msg\":["; first = 1; inc = 0 }
 		function esc(v,   o, i, c) {
 			o = ""
@@ -1342,22 +1424,21 @@ sms_list() {
 			gsub(/&amp;/, "\\&", v)
 			return v
 		}
-		/<Message>/  { idx=""; ph=""; txt=""; dt=""; inc=0 }
-		/<Index>/    { v=$0; sub(/.*<Index>/, "", v); sub(/<\/Index>.*/, "", v); idx=v }
-		/<Phone>/    { v=$0; sub(/.*<Phone>/, "", v); sub(/<\/Phone>.*/, "", v); ph=v }
-		/<Date>/     { v=$0; sub(/.*<Date>/, "", v); sub(/<\/Date>.*/, "", v); dt=v }
-		/<Content>/  {
-			v=$0; sub(/.*<Content>/, "", v)
-			if (v ~ /<\/Content>/) { sub(/<\/Content>.*/, "", v); txt=v }
-			else { txt=v; inc=1 }
+		/^<Message>/ { idx=""; ph=""; txt=""; dt=""; field=""; inc=0 }
+		/^<Index>/ { field="idx"; sub(/^<Index>/, "") }
+		/^<Phone>/ { field="ph"; sub(/^<Phone>/, "") }
+		/^<Date>/ { field="dt"; sub(/^<Date>/, "") }
+		/^<Content>/ { field="txt"; sub(/^<Content>/, "") }
+		/^<\/(Index|Phone|Date|Content)>/ { field="" }
+		field != "" {
+			if (field == "idx") idx = idx $0
+			else if (field == "ph") ph = ph $0
+			else if (field == "dt") dt = dt $0
+			else { if (inc) txt = txt "\n"; txt = txt $0; inc=1 }
 			next
 		}
-		inc == 1 {
-			if ($0 ~ /<\/Content>/) { v=$0; sub(/<\/Content>.*/, "", v); txt=txt " " v; inc=0 }
-			else { txt=txt " " $0 }
-			next
-		}
-		/<\/Message>/ {
+		/^<\/Message>/ {
+			inc=0
 			if (idx == "" || idx ~ /[^0-9]/) next
 			if (!first) printf ",\n"; first = 0
 			printf "{\"index\":%s,\"sender\":\"%s\",\"timestamp\":\"%s\",\"reference\":0,\"part\":1,\"total\":1,\"content\":\"%s\"}", idx, esc(xdec(ph)), esc(dt), esc(xdec(txt))

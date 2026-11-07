@@ -48,4 +48,6 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 
 ## Other
 
+- [Runtime and resource audit, 2026-11-07](audits/2026-11-07-runtime.md)
+- [Fork comparison, 2026-11-07](audits/2026-11-07-forks.md)
 - [Telemetry](telemetry.md)

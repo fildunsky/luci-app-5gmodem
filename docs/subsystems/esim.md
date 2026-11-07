@@ -230,3 +230,8 @@ HTTP bodies are hex both ways (`driver/http/stdio.c` in lpac). Usage: `esim-apdu
 ### QR decoding
 
 QR images are decoded entirely in the browser with jsQR (no zbar/quirc on the router, the image never leaves the browser). jsQR (256 KB) is loaded lazily on button press. It is UMD: if an AMD `define` is present globally it registers as a module instead of setting `window.jsQR`, so `define` is hidden while the script loads and restored afterwards. The file input is reset so selecting the same file again fires `change`.
+
+
+### AT lock failure (2026-11-07 audit)
+
+`run_lpac` stops with `port busy` if the AT/stdio bridge cannot acquire `at_lock`. It must not close logical channels or start lpac after a failed acquisition. Reusing a lock already owned by the caller remains supported.

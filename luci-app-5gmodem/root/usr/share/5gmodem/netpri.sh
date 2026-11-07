@@ -923,7 +923,7 @@ list)
 		if [ ! -f "$stamp" ] || [ -n "$(find "$stamp" -mmin +1 2>/dev/null)" ]; then
 			: > "$stamp"
 			# redirect the subshell itself, see docs/subsystems/internet-priority.md#background-refresh-and-rpcd
-			( /usr/share/5gmodem/netpri.sh refresh & ) >/dev/null 2>&1 </dev/null &
+			( unset _AT_LOCK_HELD; exec 7>&- 8>&- 9>&-; /usr/share/5gmodem/netpri.sh refresh & ) >/dev/null 2>&1 </dev/null &
 		fi
 	fi
 	;;

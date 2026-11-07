@@ -100,3 +100,8 @@ The data comes from `modemswitch.sh ussdsupport`, which is the sixth result of `
 ## Network closes the session without text
 
 Under ModemManager on MBIM, `MBIM_USSD_RESPONSE_TERMINATED_BY_NETWORK` becomes the error `USSD terminated by network`. It is not always a failure: Yota is reported to answer balance codes by SMS after such a request (4pda 1066668 #7405, 994474 #31580). The page says so and points at the incoming messages. Not confirmed on our own logs yet.
+
+
+## Busy AT ports (2026-11-07 audit)
+
+Cancellation and the AT worker honour failed `at_lock` acquisition. Cancellation returns `port busy` without writing `AT+CUSD=2` or resetting the state file. The worker reports the same error through the existing Base64 result fields; registration waits skip a busy port. If a RAT switch already happened, the restore path still runs. This is separate from the intentional SMS-read timeout fallback described in `sms.md`.

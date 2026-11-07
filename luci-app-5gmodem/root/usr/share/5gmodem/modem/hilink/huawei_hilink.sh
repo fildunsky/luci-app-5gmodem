@@ -136,7 +136,7 @@ case $MODEN in
 	*)  MODE="-";;
 esac
 
-if [ "x$MODE" = "xLTE" ] || [ "x$MODE" = "xNOSERVICE"]; then
+if [ "x$MODE" = "xLTE" ] || [ "x$MODE" = "xNOSERVICE" ]; then
 	RSRP=$(getvaluens device-signal rsrp)
 	SINR=$(getvaluens device-signal sinr)
 	RSRQ=$(getvaluens device-signal rsrq)

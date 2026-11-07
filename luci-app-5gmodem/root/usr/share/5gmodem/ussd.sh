@@ -57,7 +57,7 @@ _wait_reg() {
 	while [ "$_w" -lt "$REG_WAIT" ]; do
 		if [ "$_w" -lt 6 ]; then _s=1; else _s=3; fi
 		sleep "$_s"; _w=$((_w + _s))
-		at_lock "$1" 10 2>/dev/null
+		at_lock "$1" 10 2>/dev/null || continue
 		_a=$(_act "$1")
 		at_unlock 2>/dev/null
 		if [ "$2" = 1 ]; then
@@ -111,7 +111,11 @@ status)
 	exit 0 ;;
 cancel)
 	_p=$(_port)
-	[ -n "$_p" ] && { at_lock "$_p" 10 2>/dev/null; sms_tool -d "$_p" at 'AT+CUSD=2' >/dev/null 2>&1; at_unlock 2>/dev/null; }
+	if [ -n "$_p" ]; then
+		at_lock "$_p" 10 2>/dev/null || { echo '{"error":"port busy"}'; exit 2; }
+		sms_tool -d "$_p" at 'AT+CUSD=2' >/dev/null 2>&1
+		at_unlock 2>/dev/null
+	fi
 	_st idle ""
 	exit 0 ;;
 send) : ;;
@@ -195,7 +199,10 @@ _st running starting
 	MODE3G=$(_mode_3g)
 	CUR=$("$RES/bands.sh" getmode 2>/dev/null)
 	[ -n "$CUR" ] || { sleep 3; CUR=$("$RES/bands.sh" getmode 2>/dev/null); }
-	at_lock "$PORT" 15 2>/dev/null
+	at_lock "$PORT" 15 2>/dev/null || {
+		_st done "" ',"out":"","err":"'"$(_b64 'port busy')"'"'
+		exit 0
+	}
 	ACT=$(_act "$PORT")
 	at_unlock 2>/dev/null
 
@@ -246,7 +253,7 @@ _st running starting
 		_cd=$(uci -q get "$CFG.sms.coding")
 		case "$_cd" in ''|auto) : ;; *) set -- "$@" -c "$_cd" ;; esac
 
-		at_lock "$PORT" 20 2>/dev/null
+		at_lock "$PORT" 20 2>/dev/null || { OUT=""; ERR="port busy"; return 1; }
 		OUT=$(sms_tool "$@" ussd "$CODE" 2>/tmp/5gmodem/ussd.err)
 		at_unlock 2>/dev/null
 		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)

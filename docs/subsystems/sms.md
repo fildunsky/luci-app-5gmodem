@@ -230,3 +230,8 @@ With a string as the third argument, LuCI's `E(tag, props, 'string')` sets `inne
 - Parts: up to 70 UCS2 units fit a single message. With the 6-octet concatenation UDH, 134 of the 140 octets are left, which is 67 units per part. A surrogate pair (emoji) is never split across parts.
 - The concatenation reference is uptime seconds mod 256, since the router clock may not be set.
 - First octet: 0x11 (SUBMIT, relative VP) for a single part, 0x51 (adds UDHI) for multipart. PID 00, DCS 08, VP 0xAA. The length given to `AT+CMGS` counts octets without the leading SCA byte (`00`).
+
+
+### Lock policy regression coverage (2026-11-07 audit)
+
+The ordinary read-lock timeout fallback above is intentional and preserved: a failed `at_lock` alone must not suppress inbox reads. Long AT operations still suppress reads through `at_long_busy`. The PDU sender explicitly acquires the requested port's lock before encoding or writing; sending remains stricter than reading, including queue and fallback entry points. Offline regression tests cover both policies separately.

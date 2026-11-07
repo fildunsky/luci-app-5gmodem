@@ -49,6 +49,7 @@ The second cause of the "page slowly creeps up" bug was native scroll anchoring.
 - The CA table is fixed-layout with fixed column proportions, so it is always 100% wide and has no scrollbar. Values stay on one line, because band strings change length on reselection.
 - The signal icon has explicit dimensions, because it is recreated every poll.
 - Mobile (<700px): two-column "label | value" rows become a stacked label/value pair separated by lines. Action button cells stretch evenly, band button cells do not. The specificity has to match the `.td` rule. CA, neighbour and antenna tables have their own card layout using `data-l` labels through `::before`. Card cells are flex pairs with `nowrap` parts, so a value wraps as a whole.
+- Mobile Signal/Bands/Cell/More tabs use flex items with content-based widths and share the remaining space. Labels stay on one line at the existing 14px font size. Equal grid columns wrapped the final letter of Russian “Диапазоны” on narrow phones while shorter labels had spare space.
 - Priority rank digit and background icons: sizes come from font metrics measured on the live page (Inter 800). Opacity and blur are shared variables for all cards, with different values for light and dark (chosen by the `netpri-dark` class from `isDarkUI`, not by the OS scheme). Service icons are rendered as silhouettes at about 3× the uplink opacity, because their thin strokes carry less ink. `github.svg` is pure white and is darkened only on the light theme.
 - Speedtest: phase progress is drawn by `::before` using `--st-p`. Upload fills right to left. The current arrow pulses with `drop-shadow`, so the glow follows the SVG outline. The `st-wait` state pulses the border until real numbers arrive.
 - SMS cards copy `.netpri-btn` geometry. The `.netpribar` rules are scoped and do not apply on that page, so change both together.
@@ -57,3 +58,15 @@ The second cause of the "page slowly creeps up" bug was native scroll anchoring.
 - Degree unit: only the `C` is shrunk and raised, with `line-height: 0`.
 - The eSIM wait bar is centred with flex, not with `line-height = height`, because the theme font size broke the latter.
 - Buttons page toggle `.btnsw` must be `display: inline-block`. An inline span ignores width and height, and only the knob was visible.
+
+## Modem header status icons
+
+VID:PID/protocol chips and stale-data/USB-flap indicators share one floating
+inline-flex group (`modemmeta`). The group aligns them vertically and moves as
+one unit when the modem title wraps. Previously each indicator floated separately
+and copied a measured offset/height from the chips, so it could land above the
+row or on a separate line. Simple view hides the identifier chips while keeping
+status indicators visible. The stale-data hourglass is placed immediately before
+`modemchips`, to the left of VID:PID; the protocol remains after VID:PID.
+
+The standby-carrier separator includes whitespace after its plus span, before the dashed band badge, matching the spacing of active aggregation carriers.

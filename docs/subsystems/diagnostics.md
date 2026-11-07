@@ -620,11 +620,18 @@ Series for the Statistics tab: `ping` (RTT from the watchdog's state files
   (before the first write, so the stick's totals are not overwritten). Ring series go only to a
   removable path, never to internal flash.
 - SIM labels are persisted too (after reboot a removed card showed as raw `sim-8970...`, 2026-08-09),
-  only on real change, and never when persist is off: `_pdir_now` does mkdir plus a write probe, and
-  `_label` runs every tick, which was a flash write per minute and resurrected a deleted directory
+  only on real change, and never when persist is off. Older `_pdir_now` versions did mkdir plus a write probe;
+  `_label` runs every tick, which caused a flash write per minute and resurrected a deleted directory
   (audit 2026-09-12). `list` does no write probe either (it runs on every chart refresh).
 - `forget <key> <YYYY-MM>` deletes from /tmp, the persistent copy and the custom path; otherwise the
   hourly merge restores it. Disabling persist removes our files from `/etc` but never touches a custom
   directory.
 - The custom path from the browser must be absolute and free of spaces/metacharacters (it reaches
   mkdir/cp).
+
+
+## Runtime audit: telemetry and statistics (2026-11-07)
+
+The telemetry snapshot cache is keyed by snapshot path and uptime stamp together. Two modems can have the same stamp; the stamp alone reused the previous modem's signal and cell details after a switch. Negative snapshot ages are rejected, and stale snapshots no longer contribute the carrier IP when `publish_ip` is enabled. The exporter clears its field buffer on each write. Integer values use shell string handling (including leading-zero normalisation and large cell IDs); fractional values retain awk rounding. Plain strings avoid a sed process; quoted strings are escaped and control characters removed so the three-line cache stays intact.
+
+Statistics collectors from the page and sessionwatch share a nonblocking flock on `/tmp/5gmodem/stats.lock`. A concurrent tick exits, allowing the current collector to finish its counter update. Interface labels load `netpri.sh list` once in the collector's parent shell: loading it inside `_iface_label` lost the snapshot at every command substitution. Persistent-directory checks verify a custom mount before creating directories, then test directory writability without creating and deleting `.wtest` on flash. Actual data writes still happen at the existing persistence interval.

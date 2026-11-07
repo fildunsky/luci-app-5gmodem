@@ -175,3 +175,8 @@ Three independent branches, each with its own card, state, cache and poll (sever
 ## Speed-test card
 
 See `speedtest-extip.md`.
+
+
+### Detached refresh and inherited locks (2026-11-07 audit)
+
+The background operator refresh closes file descriptors 7, 8 and 9 and clears `_AT_LOCK_HELD` before launching its child. Otherwise a `netpri.sh list` called by a locked collector could keep the caller's flock alive after the collector exited, or falsely tell the child it owned an AT port whose descriptor had been closed.

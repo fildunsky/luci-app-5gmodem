@@ -3,7 +3,7 @@
 
 CFG=5gmodem
 SEC=""
-for _s in $(uci -q show $CFG 2>/dev/null | sed -n 's/^\('$CFG'\.m_[0-9A-Za-z_]*\)\.netsel=manual$/\1/p'); do
+for _s in $(uci -q show $CFG 2>/dev/null | sed -n "s/^\($CFG\.m_[0-9A-Za-z_]*\)\.netsel='\{0,1\}manual'\{0,1\}\$/\1/p"); do
 	[ "$(uci -q get "$_s.network")" = "$INTERFACE" ] || continue
 	SEC="$_s"; break
 done

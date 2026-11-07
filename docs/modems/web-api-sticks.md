@@ -74,3 +74,8 @@ These Netgear Aircard/Nighthawk sticks expose AT over TCP on `<addr>:5510`. `_ng
 ## USB composition switch (`hilink.sh mode debug|normal`)
 
 Some HiLink modems can expose serial AT ports (called "debug mode" in their web UI). After the switch the modem becomes a normal AT modem with TAC, band, EARFCN, USSD and an AT console. On an E3372: 12d1:14dc -> 12d1:1566, six ports in about 10 s. This is never done automatically, because it changes the modem's behaviour and can disable its web UI. Huawei uses `POST /api/device/mode <mode>1</mode>`. ZTE/Tenda use `goformId=SET_DEVICE_MODE&debug_enable=1` followed by a reboot (Tenda `deviceAction`, otherwise `REBOOT_DEVICE`).
+
+
+## Legacy ZTE address-based metrics fallback (2026-11-07 audit)
+
+`modem/hilink/zte.sh` is the older address-based fallback. The manufacturer and model are assigned as one quoted string, rather than executing the model as a command. MCC assignments use one equals sign, and the generated `+COPS` record uses `COPS_MCC` and `COPS_MNC`, matching the variables populated from the goform response. This does not change the primary ZTE backend in `hilink.sh`.

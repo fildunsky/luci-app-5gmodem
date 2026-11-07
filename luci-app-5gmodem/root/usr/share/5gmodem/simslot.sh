@@ -574,6 +574,14 @@ D=""
 . /usr/share/5gmodem/atlock.sh
 _LOCKED=1
 [ -n "$D" ] && { at_lock "$D" 10; _LOCKED=$?; }
+if [ -n "$D" ] && [ "$_LOCKED" != 0 ]; then
+	if [ "$1" != set ] && [ -s "/tmp/5gmodem/slots_$_AP" ]; then
+		cat "/tmp/5gmodem/slots_$_AP"
+	else
+		echo '{"error":"port busy"}'
+	fi
+	exit 0
+fi
 if [ -z "$D" ]; then
 	if [ "$1" != "set" ] && [ -s "/tmp/5gmodem/slots_$_AP" ]; then
 		cat "/tmp/5gmodem/slots_$_AP"; exit 0
