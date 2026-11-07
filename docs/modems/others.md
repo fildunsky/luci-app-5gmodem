@@ -59,7 +59,7 @@ Battery: `status` Charging gives charging=1. Full and Not charging (stopped by t
 Written from public sources without hardware; AT reply formats and the data path need confirmation on a real module.
 
 - USB only. In PCIe mode the module is a root complex, so a router cannot be its host. Default USB composition: NCM, DIAG, PCUI, Serial_B, Serial_C, GPS.
-- `option` has no entry for this ID: `usbports.sh` writes `3466 3301 ff` into `new_id`. Class `ff` leaves the CDC pair to `cdc_ncm`. `21-5gmodem-tdtech` binds on hotplug, `coldplug` at boot.
+- `usbports.sh` writes `3466 3301 ff` into `option`'s `new_id`. `21-5gmodem-tdtech` binds on hotplug, `coldplug` at boot. This class-only rule is insufficient for the vendor-specific NCM composition captured in [issue #68](https://github.com/fildunsky/luci-app-5gmodem/issues/68#issuecomment-6700237399): its network interface is also class `ff`, so it is not protected from serial binding. See the [investigation and next checks](../audits/2026-11-07-issue-68.md).
 - AT works on PCUI (`ff/06/12`). `tty_no_at` hides all other ports of this module from AT probes.
 - Autosetup makes `proto=fibocom` (no cdc-wdm). The TD Tech branch `_td_dial` dials with `AT^NDISDUP=1,1` and waits for `AT^NDISSTATQRY?`. `udhcpc -q` then takes one lease from the module (`ndisdhcp.sh`), and the address, gateway and DNS go on the interface as static values. No DHCP answer falls back to `AT+CGPADDR`.
 - If `AT^SETAUTODIAL?` reports auto dial is on, the modem owns the session: we do not touch APN or NDIS and do not change that setting. It is stored in the module.

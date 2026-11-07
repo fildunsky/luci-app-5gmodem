@@ -93,6 +93,28 @@ api_post /api/sms/sms-list '' path
             self.assertIn('error', self.parse(xml))
         self.assertEqual(self.parse('<response><Messages></Messages></response>'), {'msg': []})
 
+    def test_e5573_report_numeric_entities(self):
+        xml = '''<?xml version="1.0" encoding="utf-8"?>
+<response>
+ <Count>3</Count>
+ <Messages>
+  <Message><Smstat>0</Smstat><Index>40005</Index><Phone>RSCHS</Phone><Content>Текст сообщения.</Content><Date>2026-11-07 12:41:12</Date><SaveType>4</SaveType><SmsType>2</SmsType></Message>
+  <Message><Smstat>1</Smstat><Index>40004</Index><Phone>MTC</Phone><Content>текст
+
+&#x2F;&#x2F; сообщения&#x2F;мес, </Content><Date>2026-11-07 10:50:39</Date><SaveType>4</SaveType><SmsType>2</SmsType></Message>
+  <Message><Smstat>1</Smstat><Index>40003</Index><Phone>MTC</Phone><Content>текст сообщения&#x2F;0yKOQ6 </Content><Date>2026-11-07 09:23:40</Date><SaveType>4</SaveType><SmsType>2</SmsType></Message>
+ </Messages>
+</response>'''
+        messages = self.parse(xml)['msg']
+        self.assertEqual([m['index'] for m in messages], [40005, 40004, 40003])
+        self.assertEqual(messages[1]['content'], 'текст  // сообщения/мес, ')
+        self.assertEqual(messages[2]['content'], 'текст сообщения/0yKOQ6 ')
+
+    def test_xml_entities_decode_once(self):
+        text = '&#47; &#x2f; &#1046; &#x1F600; &amp;#47; &#38;lt; &#0; &#xD800;'
+        xml = '<response><Messages><Message><Index>1</Index><Content>' + text + '</Content></Message></Messages></response>'
+        self.assertEqual(self.parse(xml)['msg'][0]['content'], '/ / Ж 😀 &#47; &lt; &#0; &#xD800;')
+
     def test_login_and_session(self):
         for kind in ('3', '4'):
             password = 'pa$$word<&'
