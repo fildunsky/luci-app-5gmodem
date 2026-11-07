@@ -68,7 +68,7 @@ jobs:
           echo "src-link modem $GITHUB_WORKSPACE/feed" > feeds.conf
           cat feeds.conf.default >> feeds.conf 2>/dev/null || true
           ./scripts/feeds update -a >/dev/null
-          ./scripts/feeds install -a -p modem >/dev/null
+          ./scripts/feeds install -p modem -f luci-app-5gmodem >/dev/null
           make defconfig >/dev/null
           time make package/luci-app-5gmodem/compile -j"$(nproc)" V=w
 

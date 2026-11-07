@@ -6079,3 +6079,6 @@ msgstr "サービスを再起動しています…"
 
 msgid "Restarting…"
 msgstr "再起動中…"
+
+msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
+msgstr "お使いの OpenWrt バージョン用のパッケージをダウンロードし、「システム → ソフトウェア」でアップロードしてから、このページを更新してください。"

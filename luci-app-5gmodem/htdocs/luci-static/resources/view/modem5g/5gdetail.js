@@ -2831,14 +2831,15 @@ simDialog: baseclass.extend({
 			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(fs.list('/sys/class/leds'), []),
 			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/5gmodem.sh', [ 'peek' ]), '{}'),
-			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]')
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/listmodems.sh'), '[]'),
+			L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mtk-package-needed' ]), '0')
 		]).then(function(res) {
 			var _lmPaths = [];
 			try {
-				_lmPaths = (JSON.parse(res[res.length - 1] || '[]') || []).map(function(m) { return m.path; });
+				_lmPaths = (JSON.parse(res[3] || '[]') || []).map(function(m) { return m.path; });
 			} catch (e) {}
 			var _pk = {};
-			try { _pk = JSON.parse(res[res.length - 2] || '{}') || {}; } catch (e) {}
+			try { _pk = JSON.parse(res[2] || '{}') || {}; } catch (e) {}
 			var _tabSel = '';
 			try { _tabSel = window.sessionStorage.getItem('5gm-tab') || ''; } catch (e) {}
 			if (_tabSel) {
@@ -2867,7 +2868,7 @@ simDialog: baseclass.extend({
 				ledsAvail = [ 'white:signal1', 'white:signal2', 'white:signal3' ]
 					.every(function(n) { return names.indexOf(n) >= 0; });
 			} catch (e) {}
-			return [ String(res[2] || '{}'), '', null, '{}' ];
+			return [ String(res[2] || '{}'), '', null, '{}', String(res[4]).trim() === '1' ];
 		});
 	},
 
@@ -3037,6 +3038,8 @@ simDialog: baseclass.extend({
 			return E([], [
 
 			netpri.mount(),
+
+			res[4] ? E('div', { 'class': 'cbi-section tginfo' }, [ bandsui.mtkPackagePrompt() ]) : '',
 
 			E('div', { 'class': 'cbi-section tginfo', 'id': 'modem-info-block' }, [
 

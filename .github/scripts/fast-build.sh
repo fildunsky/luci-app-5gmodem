@@ -1,5 +1,10 @@
 #!/bin/bash
-set -ef
+set -efo pipefail
+
+[ "$#" -gt 0 ] || set -- luci-app-5gmodem
+for pkg in "$@"; do
+	case "$pkg" in luci-app-5gmodem|5gmodem-mtk-at) ;; *) echo "unsupported package: $pkg" >&2; exit 2 ;; esac
+done
 
 cd /builder
 if [ -f /sdk/sdk.tar ]; then
@@ -23,11 +28,12 @@ echo "::group::feeds update"
 echo "::endgroup::"
 
 echo "::group::feeds install"
-./scripts/feeds install -p modem -f luci-app-5gmodem 2>&1 | tail -40
-./scripts/feeds install -p modem -f 5gmodem-mtk-at 2>&1 | tail -5
+for pkg in "$@"; do
+	./scripts/feeds install -p modem -f "$pkg" 2>&1 | tail -40
+done
 echo "::endgroup::"
 
-KEEP=" luci-app-5gmodem 5gmodem-mtk-at luci-base lua csstidy luasrcdiet ucode "
+KEEP=" $* luci-base lua csstidy luasrcdiet ucode "
 echo "::group::prune dependencies (only build-time tools stay)"
 for d in package/feeds/*/*; do
 	[ -L "$d" ] || continue
@@ -41,8 +47,9 @@ make defconfig >/dev/null
 grep -E "5gmodem|^CONFIG_ALL" .config || true
 echo "::endgroup::"
 
-make -j"$(nproc)" V=w package/luci-app-5gmodem/compile
-make -j"$(nproc)" V=w package/5gmodem-mtk-at/compile
+for pkg in "$@"; do
+	make -j"$(nproc)" V=w "package/$pkg/compile"
+done
 
 mkdir -p /artifacts
 find bin/ -type f \( -name '*5gmodem*.ipk' -o -name '*5gmodem*.apk' \) -exec cp -v {} /artifacts/ \;
