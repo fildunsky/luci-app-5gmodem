@@ -1404,7 +1404,7 @@ sms_list() {
 		*) echo '{"error":"Invalid or empty Huawei SMS response"}'; return 0 ;;
 	esac
 	printf '%s' "$_r" | tr -d '\r' | sed 's|<|\
-<|g' | awk '
+<|g' | LC_ALL=C awk '
 		BEGIN { printf "{\"msg\":["; first = 1; inc = 0 }
 		function esc(v,   o, i, c) {
 			o = ""
@@ -1415,14 +1415,36 @@ sms_list() {
 				else o = o c
 			}
 			v = o
-			gsub(/\t/, " ", v); gsub(/\n/, " ", v)
+			gsub(/\t/, " ", v); gsub(/\n/, " ", v); gsub(/\r/, " ", v)
 			return v
 		}
-		function xdec(v) {
-			gsub(/&lt;/, "<", v); gsub(/&gt;/, ">", v)
-			gsub(/&quot;/, "\"", v); gsub(/&apos;|&#39;/, "\047", v)
-			gsub(/&amp;/, "\\&", v)
-			return v
+		function utf8(n) {
+			if (n < 128) return sprintf("%c", n)
+			if (n < 2048) return sprintf("%c%c", 192+int(n/64), 128+n%64)
+			if (n < 65536) return sprintf("%c%c%c", 224+int(n/4096), 128+int(n/64)%64, 128+n%64)
+			return sprintf("%c%c%c%c", 240+int(n/262144), 128+int(n/4096)%64, 128+int(n/64)%64, 128+n%64)
+		}
+		function xdec(v,   out, ref, digits, base, n, i, pos, size) {
+			out = ""
+			while (match(v, /&(lt|gt|quot|apos|amp|#x[0-9a-fA-F]+|#[0-9]+);/)) {
+				pos = RSTART; size = RLENGTH; ref = substr(v, pos, size)
+				if (ref == "&lt;") ref = "<"
+				else if (ref == "&gt;") ref = ">"
+				else if (ref == "&quot;") ref = "\""
+				else if (ref == "&apos;") ref = "\047"
+				else if (ref == "&amp;") ref = "&"
+				else {
+					digits = substr(ref, 3, length(ref)-3); base = 10; n = 0
+					if (substr(digits, 1, 1) == "x") { base = 16; digits = substr(digits, 2) }
+					for (i = 1; i <= length(digits); i++)
+						n = n*base + index("0123456789abcdef", tolower(substr(digits, i, 1)))-1
+					if (n == 9 || n == 10 || n == 13 || (n >= 32 && n <= 55295) || (n >= 57344 && n <= 65533) || (n >= 65536 && n <= 1114111))
+						ref = utf8(n)
+				}
+				out = out substr(v, 1, pos-1) ref
+				v = substr(v, pos+size)
+			}
+			return out v
 		}
 		/^<Message>/ { idx=""; ph=""; txt=""; dt=""; field=""; inc=0 }
 		/^<Index>/ { field="idx"; sub(/^<Index>/, "") }
