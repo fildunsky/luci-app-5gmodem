@@ -1126,7 +1126,7 @@ webpass)
 				uci -q set "$CFG.$_wp_sec.web_pass=$_wp_v"
 			fi
 			uci -q commit "$CFG"
-			rm -f /tmp/5gmodem/tendaauth_* /tmp/5gmodem/ztestok_* /tmp/5gmodem/tendaapi_* 2>/dev/null
+			rm -f /tmp/5gmodem/hilink_*.fail /tmp/5gmodem/tendaauth_* /tmp/5gmodem/ztestok_* /tmp/5gmodem/tendaapi_* 2>/dev/null
 			echo '{"ok":1}' ;;
 		*) echo '{"error":"usage: webpass <path> get|set [password]"}' ;;
 	esac

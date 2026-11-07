@@ -645,7 +645,7 @@ function isHilinkModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30923, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30924, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1079,6 +1079,7 @@ return view.extend({
 									var json;
 									try {
 										var parsed = JSON.parse(res2);
+										if (parsed.error) { throw new Error(parsed.error); }
 										json = parsed.msg || [];
 										sms_keys_apply(json, parsed.keys);
 									} catch (e) {
@@ -1258,7 +1259,7 @@ return view.extend({
 			if (n > 50) { return; }
 			window.setTimeout(function() { waitTable(n + 1); }, 100);
 		}(0));
-		poll.add(function() { return doRefresh(false); }, 15);
+		poll.add(function() { return document.hidden ? Promise.resolve() : doRefresh(false); }, 15);
 		self._doRefresh = doRefresh;
 		});
 

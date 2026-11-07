@@ -1594,7 +1594,7 @@ pre.atcommand-output.has-output::after {
 .tg-col-narrow { min-width: 40px }
 .tg-col-center { flex: 1;  text-align: center }
 
-#modemchips {
+#modemmeta {
   float: right;
   display: inline-flex;
   align-items: center;
@@ -1604,6 +1604,16 @@ pre.atcommand-output.has-output::after {
   line-height: 1.4;
   position: relative;
   top: .3rem;
+}
+#modemchips {
+  display: inline-flex;
+  align-items: center;
+  gap: .8em;
+}
+.tg-status-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
 }
 .tginfo-vidpid {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -2149,7 +2159,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 @media (max-width: 700px) {
   #modemip6 { font-size: max(12px, .78em); }
   .tginfo-vidpid { font-size: 12px; }
-  #modemname > #modemchips { top: 8px; }
+  #modemname > #modemmeta { top: 8px; }
   .tginfo .tg-sublabel { font-size: max(12px, .76em); }
   #signal medium { font-size: max(12px, .7em); }
   .tginfo-info .tginfo-freq { font-size: max(12px, .8em); }
@@ -2195,8 +2205,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
 
 @media (max-width: 700px) {
   body.tg-mv:not(.sc-simple) .tg-mv-tabs {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    display: flex;
     gap: 3px;
     padding: 3px;
     margin: 0 0 10px;
@@ -2204,6 +2213,9 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
     background: var(--tg-track);
   }
   body.tg-mv:not(.sc-simple) .tg-mv-tab {
+    flex: 1 0 auto;
+    width: auto;
+    white-space: nowrap;
     min-height: 40px;
     margin: 0;
     padding: 0 4px;
@@ -2714,3 +2726,7 @@ html.tg-theme-argon [data-page^="admin-modem-5gmodem"] .cbi-value-field:has(> .c
 @keyframes tg-updstripe { from { background-position: 0 0; } to { background-position: 16px 0; } }
 @media (prefers-reduced-motion: reduce) { .tg-updfill { animation: none; } }
 [data-page^="admin-modem-5gmodem"] .cbi-value-description:not(:empty)::before { top: .19em; top: calc((1lh - 1em) / 2); }
+
+@media (max-width: 854px) {
+  .cbi-section.tginfo .tr { margin-left: 0; margin-right: 0; }
+}

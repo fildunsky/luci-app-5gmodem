@@ -87,18 +87,13 @@ set_pdp_opt() {
 
 json() { printf '{"result":"%s","iface":"%s","proto":"%s","device":"%s"}\n' "$1" "$IF" "$2" "$3"; }
 
-MK_KEEP_OPTS="defaultroute peerdns delegate ip4table ip6table"
-_mk_keep_save() {
-	MK_KEEP=""
-	for _mk_o in $MK_KEEP_OPTS; do
-		_mk_v=$(uci -q get "network.$1.$_mk_o") || continue
-		MK_KEEP="$MK_KEEP $_mk_o=$_mk_v"
+_mk_reset_transport() {
+	_mk_old_proto=$(uci -q get "network.$1.proto")
+	for _mk_o in proto device ifname devpath usbpath pdptype iptype pdp auth allowedauth force_connection init_epsbearer init_apn init_iptype init_allowedauth init_username init_password; do
+		uci -q delete "network.$1.$_mk_o"
 	done
-}
-_mk_keep_restore() {
-	for _mk_kv in $MK_KEEP; do
-		uci -q set "network.$1.${_mk_kv%%=*}=${_mk_kv#*=}"
-	done
+	[ "$_mk_old_proto:$2" = qmi:qmi ] || uci -q delete "network.$1.modes"
+	uci set "network.$1=interface"
 }
 
 _mk_if_ok() {
@@ -284,8 +279,7 @@ if [ "$AMP" = ccci ]; then
 	if [ "$(uci -q get "network.$IF.proto")" != ccmni ]; then
 		OLDMETRIC=$(uci -q get "network.$IF.metric")
 		_mk_guard_if "$IF"
-		uci -q delete "network.$IF" 2>/dev/null
-		uci set "network.$IF=interface"
+		_mk_reset_transport "$IF" ccmni
 		uci set "network.$IF.proto=ccmni"
 		uci set "network.$IF.ifname=ccmni0"
 		uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
@@ -321,11 +315,7 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		OLDAUTH=$(uci -q get "network.$IF.auth")
 		OLDUSER=$(uci -q get "network.$IF.username")
 		OLDPASS=$(uci -q get "network.$IF.password")
-		OLDDNS=$(uci -q get "network.$IF.dns")
 		_mk_guard_if "$IF"
-		_mk_keep_save "$IF"
-		uci -q delete "network.$IF" 2>/dev/null
-		uci set "network.$IF=interface"
 
 		FPROTO=fibocom
 		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && [ -z "$OLDUSER" ] && FPROTO=xmm
@@ -345,6 +335,8 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 				logger -t 5gmodem-mkiface "Intel XMM ($AMP) - setting proto=fibocom (built-in XMM branch)"
 			fi
 		fi
+
+		_mk_reset_transport "$IF" "$FPROTO"
 
 		if [ "$FPROTO" = atc ] || [ "$FPROTO" = xmm ]; then
 			METRIC_AT=$(_mk_atport)
@@ -401,8 +393,6 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ -n "$OLDAUTH" ] && uci set "network.$IF.auth=$OLDAUTH"
 		[ -n "$OLDUSER" ] && uci set "network.$IF.username=$OLDUSER"
 		[ -n "$OLDPASS" ] && uci set "network.$IF.password=$OLDPASS"
-		[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
-		_mk_keep_restore "$IF"
 		uci commit network
 
 		_fw_zone_add "$IF"
@@ -604,7 +594,6 @@ OLDPDP=$(uci -q get "network.$IF.pdptype")
 [ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.iptype")
 OLDROAM=$(uci -q get "network.$IF.allow_roaming")
 OLDMETRIC=$(uci -q get "network.$IF.metric")
-OLDDNS=$(uci -q get "network.$IF.dns")
 OLDFORCE=$(uci -q get "network.$IF.force_connection")
 OLDEPS=$(uci -q get "network.$IF.init_epsbearer")
 OLDEPS_APN=$(uci -q get "network.$IF.init_apn")
@@ -613,9 +602,7 @@ OLDEPS_AUTH=$(uci -q get "network.$IF.init_allowedauth")
 OLDEPS_USER=$(uci -q get "network.$IF.init_username")
 OLDEPS_PASS=$(uci -q get "network.$IF.init_password")
 _mk_guard_if "$IF"
-_mk_keep_save "$IF"
-uci -q delete "network.$IF" 2>/dev/null
-uci set "network.$IF=interface"
+_mk_reset_transport "$IF" "$PROTO"
 uci set "network.$IF.proto=$PROTO"
 [ -f "/lib/netifd/proto/$PROTO.sh" ] || logger -t 5gmodem "mkiface: protocol $PROTO has no handler on this router (/lib/netifd/proto/$PROTO.sh is missing) - the interface will not come up until its package is installed (mbim: umbim, qmi: uqmi)"
 uci set "network.$IF.device=$IDEV"
@@ -662,8 +649,6 @@ fi
 [ -n "$OLDUSER" ] && uci set "network.$IF.username=$OLDUSER"
 [ -n "$OLDPASS" ] && uci set "network.$IF.password=$OLDPASS"
 uci set "network.$IF.metric=${OLDMETRIC:-$(_def_metric)}"
-[ -n "$OLDDNS" ] && uci set "network.$IF.dns=$OLDDNS"
-_mk_keep_restore "$IF"
 uci commit network
 
 # netifd holds the old section in memory; see docs/subsystems/interfaces.md#netifd-reload-after-recreate

@@ -30,4 +30,5 @@ if [ -e "$M" ]; then
 fi
 echo "$D" > "$M"
 
-( BANDS_ACTIVE_MODEM="$MPATH" /usr/share/5gmodem/bands.sh restorebands ) >/dev/null 2>&1 </dev/null &
+( unset _AT_LOCK_HELD; exec 1000>&- 7>&- 8>&- 9>&-
+  BANDS_ACTIVE_MODEM="$MPATH" /usr/share/5gmodem/bands.sh restorebands ) >/dev/null 2>&1 </dev/null &

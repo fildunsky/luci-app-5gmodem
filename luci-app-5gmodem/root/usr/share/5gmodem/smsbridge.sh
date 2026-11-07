@@ -722,6 +722,7 @@ _send_pdu() {
 		logger -t 5gmodem "smsbridge: $_sp_port is under ModemManager - PDU path skipped"
 		return 3
 	fi
+	at_lock "$_sp_port" 15 || return 1
 	_sp_cmd="${SMS_PDU_CMD:-CMGS}"
 	_sp_parts=$("$RES/smspdu.sh" encode "$2" "$3" 2>/dev/null)
 	[ -n "$_sp_parts" ] || { echo "pdu encode failed" >&2; return 1; }

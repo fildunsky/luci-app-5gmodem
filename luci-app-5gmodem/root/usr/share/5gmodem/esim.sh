@@ -411,7 +411,8 @@ run_lpac() {
 	_locked=0
 	case "$_BE" in
 	at|bridge)
-		at_lock "$PORT" 20; _locked=1
+		at_lock "$PORT" 20 || { err "port busy"; return 1; }
+		_locked=1
 		for _c in 1 2 3 4 5 6 7 8; do at_bounded "$PORT" "AT+CCHC=$_c" 2 >/dev/null; done
 		;;
 	esac

@@ -625,7 +625,10 @@ function pingOnce(host) {
 }
 var _npExtipSub = null;
 var _npPolls = [];
-function _npPollAdd(fn, n) { _npPolls.push(fn); poll.add(fn, n); }
+function _npPollAdd(fn, n) {
+	var tick = function() { return document.hidden ? Promise.resolve() : fn(); };
+	_npPolls.push(tick); poll.add(tick, n);
+}
 function _npPollsStop() {
 	_npPolls.forEach(function(fn) { poll.remove(fn); });
 	_npPolls = [];
@@ -1393,7 +1396,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30923,
+	API: 30924,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
@@ -1437,6 +1440,7 @@ return baseclass.extend({
 				if (_npExtipSub) { extip.unsubscribe(_npExtipSub); _npExtipSub = null; }
 				return Promise.resolve();
 			}
+			if (document.hidden) { return Promise.resolve(); }
 			return loadList().then(apply);
 		};
 		if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }
@@ -1473,7 +1477,7 @@ return baseclass.extend({
 					window._npListPoll = false;
 					poll.remove(pollFn); return Promise.resolve();
 				}
-				if (_npDrag || _npApplying) { return Promise.resolve(); }
+				if (document.hidden || _npDrag || _npApplying) { return Promise.resolve(); }
 				return loadList().then(redraw);
 			};
 			if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }

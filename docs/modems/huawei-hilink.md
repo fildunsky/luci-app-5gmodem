@@ -16,7 +16,13 @@ Huawei E3372/E3272/E3276 sticks come in two kinds. A HiLink composition (for exa
 
 ### Session
 
-Every request needs a `SesInfo` + `TokInfo` pair from `/api/webserver/SesTokInfo`, sent as `Cookie:` and `__RequestVerificationToken:`. For writes the token is single-use, so `api_post` always fetches a new pair. Reads reuse the cached pair and refresh it on the first error, not on a timer: one extra request is cheaper than guessing the token lifetime.
+Requests use a `SesInfo` + `TokInfo` pair from `/api/webserver/SesTokInfo`, sent as `Cookie:` and `__RequestVerificationToken:`. Token refresh sends the existing cookie to preserve an authenticated session. POSTs refresh the token before the exchange and retain rotated SessionID/token response headers. Reads reuse the cached pair for up to one minute and refresh it on a session error or an empty response.
+
+On POST error `100003` (login required), the backend logs in once with the modem section's `web_user`/`web_pass` (defaults `admin`/`admin`) and retries the request. `/api/user/state-login` selects Base64 (`password_type=3`, also the legacy default when the field is absent) or Base64 of the SHA-256 hex digest of `username + Base64(SHA256(password).hexdigest()) + token` (`password_type=4`). This covers the legacy E5573 WebUIs; newer SCRAM login is not implemented. `base64` is required, plus `sha256sum` for type 4; missing tools produce an explicit error.
+
+Failed logins are cached for 15 minutes to avoid exhausting the modem's login attempts. Saving the web password clears this backoff. POST exchanges have a per-modem/address lock so overlapping SMS polls cannot both log in or consume each other's tokens. Session/token errors `125001/125002/125003` get one refresh and retry; ambiguous transport failures are not retried automatically.
+
+The local 4PDA dump `687148/posts.jsonl`, post #5078 (lidd, 2018-08-22), contains a working MR150-3/E5573Bs-320 SMS reader using type 3, login cookies and the token returned by login. Its firmware is 21.200.15.01.209 / WebUI 17.100.11.05.209_MRE5; it does not establish the login type of every 21.200.07.00.00 installation.
 
 `api_get` retries once on `125001/125002/125003`, and also on an **empty** body. Some firmwares answer a stale session with an empty body instead of 125003. Before this, the empty answer went up as is, every field was blank, and `5gmodem.sh` cached the blank over a good snapshot.
 
@@ -43,7 +49,9 @@ The setting is `RoamAutoConnectEnable` in `/api/dialup/connection`, the same tog
 
 - `sms_list` prints the `sms_tool -j` format (`{"msg":[...]}`), so the pages parse AT and HTTP SMS the same way. The firmware joins multipart messages itself, so `part/total` is 1/1. BoxType 1 is the inbox, 2 the outbox.
 - Records are emitted on `</Message>`, not on `<Smstat>`. `Smstat` comes first in the block, and emitting on it produced an empty first record and shifted the rest by one.
-- `Content` can be multiline, so it is collected up to the closing tag.
+- XML is split at tag boundaries before parsing, so compact single-line and formatted responses both work. `Content` can be multiline; XML entities are decoded after collection.
+- API errors and empty/truncated response envelopes return `{"error":"..."}` rather than `{"msg":[]}`. The inbox page treats this as a read failure and retains already displayed messages.
+- Offline regression checks: `python3 luci-app-5gmodem/tools/hilink-tests/test_huawei.py` (requires BusyBox).
 - The length in `send-sms` is counted on the original text, not on the XML-escaped one.
 
 ### USSD
@@ -78,3 +86,12 @@ USSD works through the API (`/api/global/module-switch` has `ussd_enabled=1` on 
 - `^CHIPTEMP`: 65535 means no sensor, values above 100 are tenths of a degree, and the maximum is taken.
 - Model capitalisation changes only the first word (vendor). `tolower()` on the rest turned "E3372" into "e3372".
 - The protocol comes from the active modem's own sysfs ID. `12d1156c` used to have the string `Vendor=12d1 ProdID=1506` copied from another profile, so its protocol was never detected.
+
+
+## Legacy address-based fallback (2026-11-07 audit)
+
+The older `modem/hilink/huawei_hilink.sh` path remains separate from the primary `hilink.sh` implementation. Its LTE/NOSERVICE condition needs a space before the closing test bracket; without it the NOSERVICE branch reports a missing `]` instead of reading signal values.
+
+Huawei POST serialization uses an automatically released flock rather than a directory lock, so killing an exporter or RPC process cannot leave POSTs permanently busy. GET token/session refresh concurrency is a separate concern and is not changed by this lock.
+
+Session files, POST locks and failed-login backoff are keyed by both the modem path and its private address. Two Huawei devices commonly expose the same `192.168.8.1`; keying by address alone mixed their session cookies and let one failed login delay the other device. Existing address-only cache files are ignored and sessions are refreshed normally.

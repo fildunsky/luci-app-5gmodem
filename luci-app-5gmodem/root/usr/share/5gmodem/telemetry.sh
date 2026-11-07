@@ -20,6 +20,15 @@ _jf() { jsonfilter -i "$_SNAP" -e "@.$1" 2>/dev/null; }
 
 _int() {
 	case "$1" in ''|-|--|---) return ;; esac
+	_iv="$1"; _is=""
+	case "$_iv" in -*) _is=-; _iv="${_iv#-}" ;; esac
+	case "$_iv" in
+		*[!0-9]*) ;;
+		*)
+			while [ "${_iv#0}" != "$_iv" ]; do _iv="${_iv#0}"; done
+			if [ -n "$_iv" ]; then printf '%s%s' "$_is" "$_iv"; else printf '0'; fi
+			return ;;
+	esac
 	printf '%s' "$1" | awk '/^-?[0-9]+(\.[0-9]+)?$/ {
 		_v = ($1 < 0 ? $1 - 0.5 : $1 + 0.5); printf "%.0f", int(_v) }'
 }
@@ -28,22 +37,28 @@ _J=""
 _num() { [ -n "$2" ] && _J="$_J${_J:+,}\"$1\":$2"; }
 _str() {
 	[ -n "$2" ] || return 0
-	_s=$(printf '%s' "$2" | sed 's/\\/\\\\/g; s/"/\\"/g')
+	_s="$2"
+	case "$_s" in
+		*\\*|*\"*|*[[:cntrl:]]*) _s=$(printf '%s' "$_s" | tr -d '\000-\037' | sed 's/\\/\\\\/g; s/"/\\"/g') ;;
+	esac
 	_J="$_J${_J:+,}\"$1\":\"$_s\""
 }
 
 tele_write() {
+	_J=""
 	_fresh=""
 	if [ -n "$_AM" ] && [ -s "$_SNAP" ]; then
 		_st=$(cat "${_SNAP%.json}.stamp" 2>/dev/null)
 		case "$_st" in
 			''|*[!0-9]*) ;;
-			*) [ $(( $(cut -d. -f1 /proc/uptime) - _st )) -le 120 ] && _fresh=1 ;;
+			*) _age=$(( $(cut -d. -f1 /proc/uptime) - _st ))
+			   [ "$_age" -ge 0 ] && [ "$_age" -le 120 ] && _fresh=1 ;;
 		esac
 	fi
 
 	_tc_hit=""
-	if [ -n "$_fresh" ] && [ -s "$TSNAP" ] && [ "$(sed -n 1p "$TSNAP")" = "$_st" ]; then
+	_tc_key="$_SNAP:$_st"
+	if [ -n "$_fresh" ] && [ -s "$TSNAP" ] && [ "$(sed -n 1p "$TSNAP")" = "$_tc_key" ]; then
 		_tc_hit=1
 		_J=$(sed -n 2p "$TSNAP")
 	elif [ -n "$_fresh" ]; then
@@ -126,7 +141,7 @@ tele_write() {
 	fi
 	_str cc "$_te_cc"
 	if [ "$(_g publish_ip)" = "1" ]; then
-		_str wan_ip  "$(_jf ipaddr | sed 's/^-$//')"
+		[ -n "$_fresh" ] && _str wan_ip "$(_jf ipaddr | sed 's/^-$//')"
 		_str ext_ip  "$_te_xip"
 		_str ext_ip6 "$_te_xip6"
 	fi
@@ -198,7 +213,7 @@ tele_write() {
 		_nb=$(grep -o '"neighbors":\[[^]]*\]' "$_SNAP" 2>/dev/null | head -1)
 		_nb=${_nb#\"neighbors\":}
 		case "$_nb" in \[*\]) [ "$_nb" != "[]" ] && _J="$_J${_J:+,}\"nbrs\":$_nb" ;; esac
-		printf '%s\n%s\n%s\n' "$_st" "$_tc_main" "$_J" > "$TSNAP.tmp" && mv "$TSNAP.tmp" "$TSNAP"
+		printf '%s\n%s\n%s\n' "$_tc_key" "$_tc_main" "$_J" > "$TSNAP.tmp" && mv "$TSNAP.tmp" "$TSNAP"
 	fi
 	if [ -n "$_fresh" ]; then
 		_str ext_ip  "$_te_xip"

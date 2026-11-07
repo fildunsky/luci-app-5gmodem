@@ -504,7 +504,48 @@ _bands_after_write() {
 _bands_flush() {
 	rm -f /tmp/5gmodem/bands_* 2>/dev/null
 }
+_bands_qmi_mode() {
+	[ "$1:$2:$_AVIDPID:$_APROD" = "mode:setmode:2c7c0801:RM520N-GL" ] || return 2
+	[ -n "$_bs_am" ] && [ "$_AMP" = "$_bs_am" ] || return 2
+	_qm_if=$(uci -q get "5gmodem.$_bs_sec.network")
+	case "$_qm_if" in ''|*[!A-Za-z0-9_]*) return 2 ;; esac
+	[ "$(uci -q get "network.$_qm_if.proto")" = qmi ] || return 2
+	[ "$(uci -q get "network.$_qm_if.modem_path")" = "$_bs_am" ] || return 2
+	uqmi --help 2>&1 | grep -q 'Available modes:.*5gnr' || return 2
+	case "$3" in
+		0) _qm_modes=all ;;
+		1) _qm_modes=umts ;;
+		2) _qm_modes=lte ;;
+		3) _qm_modes=lte,5gnr ;;
+		4) _qm_modes=5gnr ;;
+		*) echo "Unsupported mode"; return 1 ;;
+	esac
+	_qm_pending=$(uci changes network) || return 1
+	[ -z "$_qm_pending" ] || { echo "Apply pending network changes first"; return 1; }
+	_qm_old=$(uci -q get "network.$_qm_if.modes")
+	if ! uci -q set "network.$_qm_if.modes=$_qm_modes" || ! uci -q commit network; then
+		uci -q revert "network.$_qm_if.modes"
+		echo "Failed to save QMI mode"
+		return 1
+	fi
+	BANDS_ACTIVE_MODEM="$_bs_am" _persist_mode "$3"
+	_bands_flush
+	at_unlock
+	if ! ubus call network reload >/dev/null 2>&1; then
+		echo "Failed to reload QMI interface; mode saved, retry applying it"
+		return 1
+	fi
+	if [ "$_qm_old" = "$_qm_modes" ]; then
+		ubus call "network.interface.$_qm_if" down >/dev/null 2>&1 &&
+			ubus call "network.interface.$_qm_if" up >/dev/null 2>&1 || return 1
+	fi
+	return 0
+}
+
 _bands_set_bg() {
+	_bands_qmi_mode "$@"
+	_sbg_qmi=$?
+	[ "$_sbg_qmi" = 2 ] || return "$_sbg_qmi"
 	(
 		_sbg_how="$1"; shift
 		case "$_sbg_how" in

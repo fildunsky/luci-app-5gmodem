@@ -116,3 +116,8 @@ For `AT+GTDUALSIM=<n>`/`AT+CEISWITCHSIM=<n>` only an explicit `ERROR` is a failu
 ## Redial after a switch
 
 A slot switch means a different SIM; netifd keeps the old SIM's address and traffic stops until ifdown/ifup. `slot_redial` waits (up to 120 s) for the target modem to return to USB (FM350 re-enumerates for tens of seconds), runs `modemswitch.sh resolve` (rebinds ttyUSB/cdc-wdm that moved and restores preferred-modem activity), then ifdown/ifup of that modem's interface. It runs in the background with fds detached on the subshell, otherwise it holds rpcd's pipes for ~120 s and the UI XHR times out.
+
+
+## AT lock failure (2026-11-07 audit)
+
+The direct AT fallback stops before vendor queries when `at_lock` fails. Read-only requests return the last slot cache if available, otherwise `port busy`; `set` always returns `port busy`. A cached answer is never treated as a successful slot change.
