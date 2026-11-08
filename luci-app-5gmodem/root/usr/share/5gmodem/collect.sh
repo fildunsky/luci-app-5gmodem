@@ -1777,6 +1777,15 @@ report() {
 		0e8d:7126|0e8d:7127) at "$P" 'AT+ETHERMAL?' ;;
 	esac
 	if [ -n "$_td_path" ] && [ "$(cat "/sys/bus/usb/devices/$_td_path/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_td_path/idProduct" 2>/dev/null)" = 3466:3301 ]; then
+		printf '\nTD Tech USB descriptors (%s)\n' "$_td_path"
+		for _td_node in /sys/bus/usb/devices/"$_td_path" /sys/bus/usb/devices/"$_td_path":*; do
+			[ -d "$_td_node" ] || continue
+			printf '%s driver=%s' "${_td_node##*/}" "$(readlink "$_td_node/driver" 2>/dev/null)"
+			for _td_attr in bConfigurationValue bInterfaceClass bInterfaceSubClass bInterfaceProtocol; do
+				[ -r "$_td_node/$_td_attr" ] && printf ' %s=%s' "$_td_attr" "$(cat "$_td_node/$_td_attr")"
+			done
+			printf '\n'
+		done
 		for _td_cmd in 'AT^SETMODE?' 'AT^SETAUTODIAL?' 'AT^NDISSTATQRY?' \
 		               'AT^SYSCFGEX?' 'AT^LTEFREQLOCK?' 'AT^NRFREQLOCK?' \
 		               'AT^HCSQ?' 'AT^MONSC' 'AT^HFREQINFO?' 'AT^MONSSC' \

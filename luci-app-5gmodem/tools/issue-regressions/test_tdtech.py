@@ -11,6 +11,8 @@ from test_runtime_audit import ROOT, SHARE, function, shell
 
 def proto_function(name):
     source = (ROOT / 'root/lib/netifd/proto/fibocom.sh').read_text()
+    if name.startswith('_td_'):
+        source = (SHARE/'tdtech.sh').read_text()
     return re.search(r'^' + name + r'\(\) \{\n.*?^\}', source, re.M | re.S)[0]
 
 
@@ -25,7 +27,7 @@ class TdTech(unittest.TestCase):
         ]:
             with self.subTest(reply=reply):
                 result = shell(proto_function('_td_up') + '''
-sms_tool() { printf '%s\r\n' "$REPLY"; }
+_td_at() { printf '%s\r\n' "$REPLY"; }
 _td_up /dev/null
 ''', dict(os.environ, REPLY=reply))
                 self.assertEqual(result.returncode, expected, result.stderr)
@@ -36,7 +38,7 @@ _td_up /dev/null
                                 ('^SETAUTODIAL: 1', '1 \n'),
                                 ('^SETAUTODIAL: 0,1', '0 1\n'), ('ERROR', '')]:
             result = shell(proto_function('_td_autodial') + '''
-sms_tool() { printf '%s\r\n' "$REPLY"; }
+_td_at() { printf '%s\r\n' "$REPLY"; }
 _td_autodial /dev/null
 ''', dict(os.environ, REPLY=reply))
             self.assertEqual(result.stdout, expected)
@@ -44,9 +46,9 @@ _td_autodial /dev/null
     def test_autodial_usb_alignment_is_verified(self):
         for verify, expected in [('1 1', 0), ('1 2', 1), ('', 1)]:
             with tempfile.TemporaryDirectory() as temp:
-                result = shell(proto_function('_td_dial') + '''
+                result = shell(proto_function('_td_enable_autodial') + '\n' + proto_function('_td_ok') + '''
 _td_autodial() { if [ -f "$STATE" ]; then echo "$VERIFY"; else echo '1 2'; fi; }
-sms_tool() {
+_td_at() {
  printf '%s\n' "$*" >> "$CALLS"
  case "$*" in
   *SETAUTODIAL=1,1) touch "$STATE"; echo OK ;;
@@ -55,13 +57,168 @@ sms_tool() {
 }
 _td_up() { return 0; }
 ip() { :; }; udhcpc() { :; }; sleep() { :; }
-_td_dial /dev/null eth4 IPV4V6 ctnet 0
+_td_enable_autodial /dev/null
 '''.replace('/tmp/5gmodem/ndis_', temp + '/ndis_'),
                     dict(os.environ, STATE=temp+'/state', CALLS=temp+'/calls', VERIFY=verify))
                 self.assertEqual(result.returncode, expected, result.stderr)
                 commands = Path(temp+'/calls').read_text()
                 self.assertIn('AT^SETAUTODIAL=1,1', commands)
                 self.assertNotIn('AT+CGDCONT=', commands)
+
+    def test_bootstrap_enables_before_netdev_and_retries(self):
+        for failures in (0, 1):
+            with tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                dev = base/'usb/devices/1-8'
+                dev.mkdir(parents=True)
+                (dev/'idVendor').write_text('3466')
+                (dev/'idProduct').write_text('3301')
+                source = proto_function('_td_bootstrap')
+                source = source.replace('/sys/bus/usb', str(base/'usb'))
+                source = source.replace('/sys/class/net', str(base/'net'))
+                source = source.replace('/usr/share/5gmodem/usbports.sh bind 3466 3301', ':')
+                result = shell(source + r'''
+sleep() { :; }
+_td_pcui() { echo /dev/ttyUSB3; }
+_td_registration() { echo 1; }
+_td_restore_bands() { return 0; }
+_td_enable_autodial() {
+ echo enable >> "$CALLS"
+ n=$((n+1))
+ [ "$n" -gt "$FAILURES" ] || return 1
+ mkdir -p "$NET/eth9"
+}
+_fibocom_netdev() { echo netdev >> "$CALLS"; echo eth9; }
+_td_data_ready() { return 0; }
+n=0
+_td_bootstrap 1-8
+rc=$?
+echo "result:$rc:$_td_netdev:$_td_port"
+exit "$rc"
+''', dict(os.environ, CALLS=temp+'/calls', NET=temp+'/net', FAILURES=str(failures)))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('result:0:eth9:/dev/ttyUSB3', result.stdout)
+                self.assertEqual((base/'calls').read_text().splitlines(),
+                                 ['enable']*(failures+1)+['netdev'])
+
+    def test_autodial_off_programs_context_then_enables_usb(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = '\n'.join(proto_function(n) for n in ('_td_enable_autodial', '_td_ok', '_td_autodial'))
+            result = shell(source + r'''
+_td_at() {
+ echo "$2" >> "$CALLS"
+ case "$2" in
+  'AT^SETAUTODIAL?') if [ -e "$STATE" ]; then echo '^SETAUTODIAL: 1,1'; else echo '^SETAUTODIAL: 0'; fi ;;
+  'AT+CGDCONT?') echo '+CGDCONT: 1,"IP","old"' ;;
+  'AT^SETAUTODIAL=1,1') touch "$STATE"; echo OK ;;
+  *) echo OK ;;
+ esac
+}
+apn=ctnet; pdptype=IPV4V6; auth=none
+_td_enable_autodial /dev/null
+''', dict(os.environ, CALLS=temp+'/calls', STATE=temp+'/state'))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Path(temp+'/calls').read_text().splitlines(), [
+                'AT^SETAUTODIAL?', 'AT+CGDCONT?', 'AT+CGDCONT=1,"IPV4V6","ctnet"',
+                'AT^SETAUTODIAL=1,1', 'AT^SETAUTODIAL?'])
+
+    def test_data_readiness_uses_data_cid_and_tolerates_unknown(self):
+        for response, expected in [('+CGACT: 1,0\n+CGACT: 2,1', 1),
+                                   ('+CGACT: 1,1', 0), ('ERROR', 0)]:
+            result = shell(proto_function('_td_data_ready') + r'''
+_td_up() { return 1; }
+_td_at() { printf '%s\n' "$REPLY"; }
+_td_data_ready /dev/null
+''', dict(os.environ, REPLY=response))
+            self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_at_busy_never_sends_and_timeout_unlocks(self):
+        for busy, expected in [('1', 'lock\n'), ('0', 'lock\nunlock\n')]:
+            result = shell(proto_function('_td_at') + r'''
+at_lock() { echo lock >&2; [ "$BUSY" = 0 ]; }
+at_unlock() { echo unlock >&2; }
+timeout() { echo send >&2; return 124; }
+_td_at /dev/null AT
+''', dict(os.environ, BUSY=busy))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stderr, expected)
+
+    def test_dhcp_children_and_creation_failure(self):
+        for protocol, rc in [('dhcp', 0), ('dhcpv6', 0), ('dhcp', 1)]:
+            result = shell(proto_function('_td_add_child') + r'''
+json_init() { :; }
+json_add_string() { echo "string:$*" >&2; }
+json_add_boolean() { echo "bool:$*" >&2; }
+json_add_int() { echo "int:$*" >&2; }
+proto_add_dynamic_defaults() { echo defaults >&2; }
+json_dump() { echo '{}'; }
+ubus() { return "$UBUS_RC"; }
+sourcefilter=0; delegate=1; mtu=1500
+_td_add_child modem 6 "$PROTOCOL" wan
+''', dict(os.environ, PROTOCOL=protocol, UBUS_RC=str(rc)))
+            self.assertEqual(result.returncode, rc)
+            self.assertIn('string:ifname @modem', result.stderr)
+            self.assertIn('string:zone wan', result.stderr)
+            self.assertIn('defaults', result.stderr)
+            if protocol == 'dhcpv6':
+                self.assertIn('bool:extendprefix 1', result.stderr)
+                self.assertIn('string:reqaddress try', result.stderr)
+
+    def test_missing_vendor_netdev_is_bounded_and_roaming_is_blocked(self):
+        for roaming in (False, True):
+            with tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                dev = base/'usb/devices/1-8'
+                dev.mkdir(parents=True)
+                for name, value in [('idVendor', '3466'), ('idProduct', '3301')]:
+                    (dev/name).write_text(value)
+                iface = base/'usb/devices/1-8:2.0'
+                iface.mkdir()
+                for name, value in [('bInterfaceClass', 'ff'), ('bInterfaceSubClass', '02'),
+                                    ('bInterfaceProtocol', '16')]:
+                    (iface/name).write_text(value)
+                source = proto_function('_td_bootstrap').replace('/sys/bus/usb', str(base/'usb'))
+                source = source.replace('/usr/share/5gmodem/usbports.sh bind 3466 3301', ':')
+                result = shell(source + r'''
+sleep() { :; }
+_td_pcui() { echo /dev/ttyUSB7; }
+_td_registration() { echo "$REGISTRATION"; }
+_td_restore_bands() { return 0; }
+_td_enable_autodial() { echo enable >> "$CALLS"; }
+_fibocom_netdev() { return 1; }
+allow_roaming=0
+_td_bootstrap 1-8
+rc=$?
+echo "error:$_td_error"
+exit "$rc"
+''', dict(os.environ, CALLS=temp+'/calls', REGISTRATION='5' if roaming else '1'))
+                self.assertEqual(result.returncode, 1, result.stderr)
+                if roaming:
+                    self.assertIn('error:ROAMING_NOT_ALLOWED', result.stdout)
+                    self.assertFalse((base/'calls').exists())
+                else:
+                    self.assertIn('error:TDTECH_VENDOR_NCM', result.stdout)
+                    self.assertEqual((base/'calls').read_text().splitlines(), ['enable']*6)
+
+    def test_setup_uses_live_pdp_for_persistent_dhcp_children(self):
+        for pdp, children in [('IP', ['4 dhcp']), ('IPV6', ['6 dhcpv6']),
+                              ('IPV4V6', ['4 dhcp', '6 dhcpv6'])]:
+            source = proto_function('_td_setup').replace('. /usr/share/5gmodem/atlock.sh', ':')
+            result = shell(source + r'''
+json_get_vars() { :; }
+_td_bootstrap() { _td_port=/dev/ttyUSB7; _td_netdev=eth9; }
+_td_at() { printf '+CGDCONT: 1,"%s","ctnet"\n' "$LIVE_PDP"; }
+_fibocom_fwzone() { echo wan; }
+proto_init_update() { echo "link:$*"; }
+proto_send_update() { echo "parent:$*"; }
+_td_add_child() { echo "child:$*"; }
+_td_setup modem 1-8
+''', dict(os.environ, LIVE_PDP=pdp))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('link:eth9 1', result.stdout)
+            self.assertEqual([line for line in result.stdout.splitlines() if line.startswith('child:')],
+                             ['child:modem '+child+' wan' for child in children])
+            self.assertLess(result.stdout.index('parent:modem'), result.stdout.index('child:'))
 
     def test_replaced_interface_cannot_dial(self):
         result = shell(proto_function('proto_fibocom_setup') + '''
@@ -89,7 +246,7 @@ uci() {
   *network.*.device) echo eth4 ;;
  esac
 }
-ubus() { echo '{}'; }; jsonfilter() { :; }; logger() { :; }
+ubus() { echo '{}'; }; jsonfilter() { case "$*" in *pending*) echo "$PENDING" ;; esac; }; logger() { :; }
 proto_set_available() { :; }
 ifup() { echo "$1" >> "$RESULT"; }
 '''
@@ -97,6 +254,11 @@ ifup() { echo "$1" >> "$RESULT"; }
                                                RESULT=temp+'/started'))
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(Path(temp+'/started').read_text(), 'modem2\n')
+            Path(temp+'/started').unlink()
+            result = shell(prefix+source, dict(os.environ, ACTION='add', INTERFACE='eth4',
+                                               RESULT=temp+'/started', PENDING='true'))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(Path(temp+'/started').exists())
 
     def test_usb_configuration_and_live_link_preservation(self):
         with tempfile.TemporaryDirectory() as temp:

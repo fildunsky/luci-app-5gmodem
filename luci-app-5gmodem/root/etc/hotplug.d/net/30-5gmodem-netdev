@@ -43,13 +43,15 @@ for _if in $(uci -q show network 2>/dev/null \
 	fi
 	[ "$_match" = 1 ] || continue
 
-	_st=$(ubus call network.interface."$_if" status 2>/dev/null \
-		| jsonfilter -e '@.up' 2>/dev/null)
+	_status=$(ubus call network.interface."$_if" status 2>/dev/null)
+	_st=$(printf '%s' "$_status" | jsonfilter -e '@.up' 2>/dev/null)
+	_pending=$(printf '%s' "$_status" | jsonfilter -e '@.pending' 2>/dev/null)
 	if [ "$ACTION" = remove ]; then
 		[ "$_st" = "true" ] && { mkdir -p "$_gone_dir"; : > "$_gone_dir/$_if"; }
 		continue
 	fi
 
+	[ "$_pending" = true ] && continue
 	if [ -e "$_gone_dir/$_if" ]; then
 		rm -f "$_gone_dir/$_if"
 		logger -t 5gmodem "netdev: $INTERFACE is back after the modem left the bus - reconnecting $_if"

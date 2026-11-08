@@ -96,77 +96,6 @@ _fibocom_auth() {
 			> "/tmp/5gmodem/fibocom_authed_$interface" 2>/dev/null
 }
 
-_td_up() {
-	sms_tool -d "$1" at "AT^NDISSTATQRY?" 2>/dev/null | tr -d '\r" ' | awk -F'[:,]' '
-		/^\^NDISSTATQRY:/ { if ($2 == 1 && $3 == 1) f = 1 }
-		END { exit !f }'
-}
-
-_td_autodial() {
-	sms_tool -d "$1" at "AT^SETAUTODIAL?" 2>/dev/null | tr -d '\r" ' | awk -F'[:,]' '
-		/^\^SETAUTOD(IAL|AIL):/ {
-			if ($2 ~ /^[01]$/) print $2, $3
-			exit
-		}'
-}
-
-_td_dial() {
-	local dial="$1" net="$2" pdp="$3" apn="$4" cold="$5" cur auto mode state n=0 l
-	td_ip=""; td_mask=""; td_gw=""; td_dns1=""; td_dns2=""
-	state=$(_td_autodial "$dial")
-	auto=${state%% *}; mode=${state#* }
-	if [ "$auto" = 1 ]; then
-		case "$mode" in
-			0|2)
-				echo "fibocom[$$] TD Tech: autodial uses mode $mode instead of USB - selecting USB mode 1"
-				if ! sms_tool -d "$dial" at "AT^SETAUTODIAL=1,1" 2>/dev/null | tr -d '\r' | grep -q '^OK$'; then
-					echo "fibocom[$$] TD Tech: USB autodial mode was rejected"
-					return 1
-				fi
-				state=$(_td_autodial "$dial")
-				case "$state" in
-					"1 "|"1 1") ;;
-					*) echo "fibocom[$$] TD Tech: USB autodial mode could not be verified"; return 1 ;;
-				esac
-				;;
-		esac
-		echo "fibocom[$$] TD Tech: the modem dials by itself (AT^SETAUTODIAL), APN is taken from its own settings"
-	else
-		cur=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
-			| sed -n 's/^+CGDCONT: *1,"[^"]*","\([^"]*\)".*/\1/p' | head -1)
-		if [ "$cold" = 1 ] || [ "$cur" != "$apn" ] || ! _td_up "$dial"; then
-			sms_tool -d "$dial" at "AT^NDISDUP=1,0" >/dev/null 2>&1
-			sleep 1
-			sms_tool -d "$dial" at "AT+CGDCONT=1,\"$pdp\",\"$apn\"" >/dev/null 2>&1
-			_fibocom_auth "$dial"
-			sms_tool -d "$dial" at "AT^NDISDUP=1,1" >/dev/null 2>&1
-		fi
-	fi
-	while [ "$n" -lt 30 ]; do
-		_td_up "$dial" && break
-		sleep 2; n=$((n + 2))
-	done
-	ip link set "$net" up 2>/dev/null
-	l="/tmp/5gmodem/ndis_$interface"
-	rm -f "$l"
-	NDIS_LEASE="$l" udhcpc -q -n -f -t 5 -T 3 -i "$net" -s /usr/share/5gmodem/ndisdhcp.sh >/dev/null 2>&1
-	if [ -s "$l" ]; then
-		td_ip=$(sed -n 's/^ip=//p' "$l")
-		td_mask=$(sed -n 's/^mask=//p' "$l")
-		td_gw=$(sed -n 's/^gw=//p' "$l")
-		td_dns1=$(sed -n 's/^dns=//p' "$l" | cut -d' ' -f1)
-		td_dns2=$(sed -n 's/^dns=//p' "$l" | cut -d' ' -f2 -s)
-		rm -f "$l"
-		return 0
-	fi
-	echo "fibocom[$$] TD Tech: no DHCP answer on $net, using the address from AT+CGPADDR"
-	td_ip=$(sms_tool -d "$dial" at "AT+CGPADDR=1" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/.*+CGPADDR: *1,//p' | tr ',' '\n' | tr -d '" ' \
-		| grep -E '^[0-9]{1,3}([.][0-9]{1,3}){3}$' | head -1)
-	[ "$td_ip" = "0.0.0.0" ] && td_ip=""
-	return 0
-}
-
 _fibocom_activate() {
 	local dial="$1" pdptype="$2" apn="$3" try ip=""
 	[ "$IS_XMM" = 1 ] && sms_tool -d "$dial" at "AT+XDNS=1,1" >/dev/null 2>&1
@@ -365,7 +294,9 @@ proto_fibocom_setup() {
 	fi
 	[ -n "$usbpath" ] || usbpath="$modem_path"
 	if [ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = 3466:3301 ]; then
-		/usr/share/5gmodem/usbports.sh bind 3466 3301
+		. /usr/share/5gmodem/tdtech.sh
+		_td_setup "$interface" "$usbpath"
+		return $?
 	fi
 
 	local netdev=""
@@ -400,9 +331,6 @@ proto_fibocom_setup() {
 	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "2cb7:000b" ] && IS_XMM=1
 	local IS_R11E=0
 	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "2cd2:0001" ] && IS_R11E=1
-
-	local IS_TDTECH=0
-	[ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = "3466:3301" ] && IS_TDTECH=1
 
 	local dial="$atport"
 	if [ -z "$dial" ] && [ -n "$usbpath" ]; then
@@ -541,13 +469,7 @@ proto_fibocom_setup() {
 			echo "fibocom[$$] R11e-LTE: the network brought up no data context (AT+CGACT? has none active)"
 		fi
 	fi
-	local td_ip="" td_mask="" td_gw="" td_dns1="" td_dns2=""
-	if [ "$IS_TDTECH" = 1 ]; then
-		_td_dial "$dial" "$netdev" "$pdptype" "$apn" "$bands_changed"
-		ip="$td_ip"
-		echo "fibocom[$$] TD Tech: address ${ip:-none}/${td_mask:-?} via ${td_gw:-?}"
-	fi
-	if [ "$IS_R11E" != 1 ] && [ "$IS_TDTECH" != 1 ] && [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
+	if [ "$IS_R11E" != 1 ] && [ "$bands_changed" = "0" ] && sms_tool -d "$dial" at "AT+CGACT?" 2>/dev/null | tr -d '\r' | grep -qE '^\+CGACT: *1,1'; then
 		local cur_ctx cur_apn cur_pdp
 		cur_ctx=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
 			| grep '^+CGDCONT: *1,' | head -1)
@@ -572,7 +494,7 @@ proto_fibocom_setup() {
 		fi
 	fi
 
-	if [ -z "$ip" ] && [ "$IS_R11E" != 1 ] && [ "$IS_TDTECH" != 1 ]; then
+	if [ -z "$ip" ] && [ "$IS_R11E" != 1 ]; then
 		ip=$(_fibocom_activate "$dial" "$pdptype" "$apn")
 		if [ -z "$ip" ]; then
 			local alt="IPV4V6"; [ "$pdptype" = "IPV4V6" ] && alt="IP"
@@ -584,7 +506,7 @@ proto_fibocom_setup() {
 	if [ -z "$ip" ]; then
 		_fib_unlock
 		proto_notify_error "$interface" NO_IP_ADDRESS
-		[ "$IS_R11E" = 1 ] || [ "$IS_TDTECH" = 1 ] || proto_block_restart "$interface"
+		[ "$IS_R11E" = 1 ] || proto_block_restart "$interface"
 		return 1
 	fi
 
@@ -595,10 +517,6 @@ proto_fibocom_setup() {
 	dns2=$(echo "$rdp" | awk -F',' '{gsub(/"/,"",$7); print $7}')
 	if [ "$IS_R11E" = 1 ]; then
 		gw="$r11e_gw"; dns1="$r11e_dns1"; dns2="$r11e_dns2"
-	fi
-	if [ "$IS_TDTECH" = 1 ] && [ -n "$td_gw" ]; then
-		gw="$td_gw"
-		[ -n "$td_dns1" ] && { dns1="$td_dns1"; dns2="$td_dns2"; }
 	fi
 
 	local ctx_pdp
@@ -618,7 +536,7 @@ proto_fibocom_setup() {
 	fi
 
 	proto_init_update "$netdev" 1
-	proto_add_ipv4_address "$ip" "${r11e_mask:-${td_mask:-255.255.255.0}}"
+	proto_add_ipv4_address "$ip" "${r11e_mask:-255.255.255.0}"
 	case "$gw" in
 		""|"0.0.0.0") proto_add_ipv4_route "0.0.0.0" "0" ;;
 		*)            proto_add_ipv4_route "0.0.0.0" "0" "$gw" ;;

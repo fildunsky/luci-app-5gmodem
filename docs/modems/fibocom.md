@@ -24,7 +24,7 @@ The 2cb7:0104 and 2cb7:0a05 profiles pick the network-card protocol from the dri
 
 ### Overview
 
-The dial sequence is plain 3GPP: `AT+CGDCONT` -> `AT+CGACT=1,1` -> `AT+CGPADDR` (IPv4) -> `AT+CGCONTRDP` (gateway/DNS). The address is set statically on the usbnet device, because the modem runs no DHCP. The interface is bound to the modem by its USB topology path (`usbpath`), so it survives ttyUSB/eth renumbering.
+For generic Fibocom profiles, the dial sequence is plain 3GPP: `AT+CGDCONT` -> `AT+CGACT=1,1` -> `AT+CGPADDR` (IPv4) -> `AT+CGCONTRDP` (gateway/DNS). The address is set statically on the usbnet device, because the modem runs no DHCP. The interface is bound to the modem by its USB topology path (`usbpath`), so it survives ttyUSB/eth renumbering.
 
 Interface options: `usbpath` (preferred), `modem_path` (ownership stamp written by the app, fallback), `device` (usbnet name, used only without `usbpath`), `atport` (auto-picked if unset), `apn` (default `internet`), `pdptype`, `auth`/`username`/`password`, `metric`, `allow_roaming`, `sourcefilter`.
 
@@ -36,11 +36,11 @@ Interface options: `usbpath` (preferred), `modem_path` (ownership stamp written 
 - If no netdev exists, the handler loads `rndis_host` and `cdc_ether` and waits up to 5 s. The FM350 in RNDIS mode (`GTUSBMODE 41`, IAD `Cls=e0 Sub=01 Prot=03`) needs `rndis_host`. Some images (Cudy WBR3000UAX, kernel 6.12) do not load it until asked, so the interfaces stay at `Driver=(none)`. Loading a usbnet module rescans devices that are already plugged in.
 - A `device` from uci that does not exist in `/sys/class/net` gets `NETDEV_MISSING` + `proto_block_restart`. Before this, `proto_send_update` on a missing `wwanN` returned "Unknown error", and netifd restarted the interface every 5 s.
 - A stale `usbpath` is detected when no USB device exists at that path but one exists at `modem_path`. `usbpath` is written once at interface creation, and the modem may move to another port.
-- An empty `usbpath` also uses `modem_path`. TD Tech prepares USB before netdev lookup. Interfaces marked `modem_swapped=1` or `modem_stale=1` are rejected before any USB or AT operation, even if an old path now belongs to another module.
+- An empty `usbpath` also uses `modem_path`. TD Tech dispatches to `tdtech.sh` before the generic netdev guard; its USB-autodial and DHCP sequence is documented in [others.md](others.md#td-tech-mt5700m-cn-34663301-balong-5000). Interfaces marked `modem_swapped=1` or `modem_stale=1` are rejected before any USB or AT operation, even if an old path now belongs to another module.
 
 ### AT port queue
 
-The whole bring-up holds `at_lock` from `atlock.sh` (wait up to 20 s, then go on without it). Without the lock, the metrics poll and third-party packages (3ginfo-lite, sms-tool-js, modemband) shared the tty, and replies got crossed. In one field case the interface got another reader's `CGPADDR` answer (a wrong address, no traffic). The lock is released by `_fib_unlock` on every exit path, and before `proto_send_update`.
+The generic Fibocom bring-up holds `at_lock` from `atlock.sh` (wait up to 20 s, then go on without it). Without the lock, the metrics poll and third-party packages (3ginfo-lite, sms-tool-js, modemband) shared the tty, and replies got crossed. In one field case the interface got another reader's `CGPADDR` answer (a wrong address, no traffic). The lock is released by `_fib_unlock` on every exit path, and before `proto_send_update`.
 
 ### PDP type normalisation
 
