@@ -320,6 +320,34 @@ getbands
             self.assertEqual((driver/'unbind').read_text().strip(), '1-8:2.1')
             self.assertEqual((driver/'remove_id').read_text().strip(), '3466 3301')
 
+    def test_vendor_ncm_is_offered_to_huawei_driver_with_reference_id(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            dev = base/'usb/devices/1-8'
+            dev.mkdir(parents=True)
+            for key, value in {'idVendor':'3466', 'idProduct':'3301', 'bConfigurationValue':'2'}.items():
+                (dev/key).write_text(value)
+            iface = base/'usb/devices/1-8:2.0'
+            iface.mkdir()
+            for key, value in {'bInterfaceClass':'ff', 'bInterfaceSubClass':'02', 'bInterfaceProtocol':'16'}.items():
+                (iface/key).write_text(value)
+            driver = base/'usb/drivers/huawei_cdc_ncm'
+            driver.mkdir(parents=True)
+            (driver/'bind').touch()
+            (driver/'new_id').touch()
+            source = (SHARE/'usbports.sh').read_text().rsplit('\ncase "$1" in', 1)[0]
+            source = source.replace('/sys/bus/usb', str(base/'usb')).replace('/tmp/5gmodem', str(base/'tmp'))
+            result = shell('modprobe() { :; }; logger() { echo "$*" >&2; }\n'+source+'\n_td_bind_ncm '+str(iface)+'\n')
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual((driver/'new_id').read_text().strip(), '3466 3301 ff 12d1 0')
+            self.assertEqual((driver/'bind').read_text().strip(), '1-8:2.0')
+            self.assertIn('did not bind', result.stderr)
+            (iface/'bInterfaceSubClass').write_text('06')
+            (driver/'new_id').write_text('')
+            result = shell('modprobe() { :; }; logger() { :; }\n'+source+'\n_td_bind_ncm '+str(iface)+'\n')
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual((driver/'new_id').read_text(), '')
+
     def test_band_write_validates_and_formats_lists(self):
         source = (SHARE/'modemband/34663301').read_text()
         for bands, expected in [('3 41', 'AT^LTEFREQLOCK=3,1,2,"3,41"'),

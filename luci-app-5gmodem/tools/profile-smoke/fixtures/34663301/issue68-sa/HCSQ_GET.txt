@@ -1,0 +1,3 @@
+## Issue #68 diagnostics, 2026-11-08
+^HCSQ: "NR",44,116,28
+OK

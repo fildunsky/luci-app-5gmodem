@@ -15,13 +15,13 @@ LUCI_DESCRIPTION:=LuCI interface for modems: connection info, diagnostics, SMS, 
 LUCI_DEPENDS:=+sms-tool +comgt +kmod-usb-serial +kmod-usb-serial-option \
 	+kmod-usb-serial-qualcomm +qmi-utils +modemmanager \
 	+luci-proto-mbim +luci-proto-qmi +luci-proto-modemmanager \
-	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
+	+kmod-usb-net-rndis +kmod-usb-net-cdc-ether +kmod-usb-net-huawei-cdc-ncm +kmod-usb-net-cdc-mbim +kmod-usb-net-qmi-wwan \
 	+usb-modeswitch +kmod-usb-acm \
 	+curl +adb \
 	+coreutils-stty \
 	+mbim-utils
 LUCI_PKGARCH:=all
-PKG_VERSION:=3.9.28
+PKG_VERSION:=3.9.29
 PKG_RELEASE:=1
 
 define Package/luci-app-5gmodem/conffiles

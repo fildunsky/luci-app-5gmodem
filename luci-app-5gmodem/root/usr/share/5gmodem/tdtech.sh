@@ -156,7 +156,7 @@ _td_bootstrap() {
 	if [ "$_td_error" = TDTECH_NO_NETDEV ] \
 	   && [ "$(cat "/sys/bus/usb/devices/$path:2.0/bInterfaceClass" 2>/dev/null):$(cat "/sys/bus/usb/devices/$path:2.0/bInterfaceSubClass" 2>/dev/null):$(cat "/sys/bus/usb/devices/$path:2.0/bInterfaceProtocol" 2>/dev/null)" = ff:02:16 ]; then
 		_td_error=TDTECH_VENDOR_NCM
-		echo "fibocom[$$] TD Tech: USB autodial is enabled but vendor NCM ff/02/16 has no network driver"
+		echo "fibocom[$$] TD Tech: USB autodial is enabled but vendor NCM ff/02/16 is not bound to huawei_cdc_ncm"
 	fi
 	return 1
 }

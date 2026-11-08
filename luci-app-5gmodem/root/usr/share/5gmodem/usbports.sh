@@ -63,7 +63,27 @@ _td_rescue_data() {
 					;;
 			esac
 		done
+		_td_bind_ncm "$_td_d:2.0"
 	done
+}
+
+_td_bind_ncm() {
+	[ -e "$1/driver" ] && return 0
+	[ "$(cat "$1/bInterfaceClass" 2>/dev/null):$(cat "$1/bInterfaceSubClass" 2>/dev/null):$(cat "$1/bInterfaceProtocol" 2>/dev/null)" = ff:02:16 ] || return 1
+	modprobe huawei_cdc_ncm >/dev/null 2>&1
+	_tn_drv=/sys/bus/usb/drivers/huawei_cdc_ncm
+	[ -d "$_tn_drv" ] || return 1
+	echo "${1##*/}" > "$_tn_drv/bind" 2>/dev/null
+	if [ ! -e "$1/driver" ]; then
+		echo "3466 3301 ff 12d1 0" > "$_tn_drv/new_id" 2>/dev/null
+		[ -e "$1/driver" ] || echo "${1##*/}" > "$_tn_drv/bind" 2>/dev/null
+	fi
+	if [ -e "$1/driver" ]; then
+		logger -t 5gmodem-usbports "TD Tech: bound vendor NCM ${1##*/} to huawei_cdc_ncm"
+		return 0
+	fi
+	logger -t 5gmodem-usbports "TD Tech: huawei_cdc_ncm did not bind ${1##*/}"
+	return 1
 }
 
 _td_drop_serial_id() {
@@ -88,9 +108,9 @@ _td_prepare_usb() {
 		_tp_i="$_tp_d:2.0"
 		if [ "$(cat "$_tp_i/bInterfaceClass" 2>/dev/null):$(cat "$_tp_i/bInterfaceSubClass" 2>/dev/null):$(cat "$_tp_i/bInterfaceProtocol" 2>/dev/null)" = ff:02:16 ]; then
 			_tp_mark="/tmp/5gmodem/td_ncm_${_tp_d##*/}_$(cat "$_tp_d/devnum" 2>/dev/null)"
-			if [ ! -f "$_tp_mark" ]; then
+			if [ ! -f "$_tp_mark" ] && ! modprobe huawei_cdc_ncm >/dev/null 2>&1; then
 				: > "$_tp_mark"
-				logger -t 5gmodem-usbports "TD Tech: configuration 2 has vendor NCM ff/02/16; standard cdc_ncm cannot bind this composition, keeping PCUI available"
+				logger -t 5gmodem-usbports "TD Tech: configuration 2 has vendor NCM ff/02/16 and huawei_cdc_ncm is not installed"
 			fi
 		fi
 	done

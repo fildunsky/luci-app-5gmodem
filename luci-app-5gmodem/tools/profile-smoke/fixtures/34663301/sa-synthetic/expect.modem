@@ -2,3 +2,4 @@ RSRP=-90
 RSRQ=-5
 SINR=12
 TEMP=47.8 &deg;C
+TEMPS=modem=47.8 pa=41.2 cpu=45.5 board=37.0
