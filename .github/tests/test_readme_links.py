@@ -15,8 +15,8 @@ class ReadmeLinks(unittest.TestCase):
         requests = []
 
         class Handler(http.server.BaseHTTPRequestHandler):
-            def do_HEAD(self):
-                requests.append(self.path)
+            def do_GET(self):
+                requests.append((self.path, self.headers.get('Range')))
                 choices = responses[self.path]
                 response = choices.pop(0) if len(choices) > 1 else choices[0]
                 self.send_response(response)
@@ -48,20 +48,25 @@ class ReadmeLinks(unittest.TestCase):
     def test_gateway_failures_retry_and_duplicate_links_are_checked_once(self):
         result, requests = self.run_check({'/package.apk': [504, 504, 200]}, ['package.apk'])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(requests, ['/package.apk']*3)
+        self.assertEqual(requests, [('/package.apk', 'bytes=0-0')]*3)
         self.assertTrue(result.stdout.startswith('200 '), result.stdout)
 
     def test_missing_asset_fails_without_retry_and_checks_remaining_links(self):
         result, requests = self.run_check({'/bad.ipk': [404], '/good.apk': [200]},
                                           ['bad.ipk', 'good.apk'])
         self.assertEqual(result.returncode, 1)
-        self.assertEqual(requests, ['/bad.ipk', '/good.apk'])
+        self.assertEqual(requests, [('/bad.ipk', 'bytes=0-0'), ('/good.apk', 'bytes=0-0')])
         self.assertIn('not committing', result.stderr)
+
+    def test_partial_download_response_is_accepted(self):
+        result, requests = self.run_check({'/package.apk': [206]}, ['package.apk'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(requests, [('/package.apk', 'bytes=0-0')])
 
     def test_release_redirect_is_followed(self):
         result, requests = self.run_check({'/download.apk': [302], '/asset': [200]}, ['download.apk'])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(requests, ['/download.apk', '/asset'])
+        self.assertEqual(requests, [('/download.apk', 'bytes=0-0'), ('/asset', 'bytes=0-0')])
 
 
 if __name__ == '__main__':

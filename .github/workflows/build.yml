@@ -5,12 +5,19 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      publish_tag:
+        description: 'Publish an existing built release and refresh README links (skip builds)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: ${{ !inputs.publish_tag }}
     name: ${{ matrix.label }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
@@ -113,14 +120,14 @@ jobs:
   publish:
     name: Publish release, point README links
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ always() && ((startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success') || (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '')) }}
     runs-on: ubuntu-latest
     concurrency:
-      group: publish-${{ github.ref_name }}
+      group: publish-${{ inputs.publish_tag || github.ref_name }}
       cancel-in-progress: false
     env:
       GH_TOKEN: ${{ github.token }}
-      TAG: ${{ github.ref_name }}
+      TAG: ${{ inputs.publish_tag || github.ref_name }}
     steps:
       - name: Checkout master
         uses: actions/checkout@v4
