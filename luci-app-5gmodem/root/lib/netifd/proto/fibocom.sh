@@ -98,16 +98,38 @@ _fibocom_auth() {
 
 _td_up() {
 	sms_tool -d "$1" at "AT^NDISSTATQRY?" 2>/dev/null | tr -d '\r" ' | awk -F'[:,]' '
-		/^\^NDISSTATQRY:/ { if ($2 == 1 || $6 == 1) f = 1 }
+		/^\^NDISSTATQRY:/ { if ($2 == 1 && $3 == 1) f = 1 }
 		END { exit !f }'
 }
 
+_td_autodial() {
+	sms_tool -d "$1" at "AT^SETAUTODIAL?" 2>/dev/null | tr -d '\r" ' | awk -F'[:,]' '
+		/^\^SETAUTOD(IAL|AIL):/ {
+			if ($2 ~ /^[01]$/) print $2, $3
+			exit
+		}'
+}
+
 _td_dial() {
-	local dial="$1" net="$2" pdp="$3" apn="$4" cold="$5" cur auto n=0 l
+	local dial="$1" net="$2" pdp="$3" apn="$4" cold="$5" cur auto mode state n=0 l
 	td_ip=""; td_mask=""; td_gw=""; td_dns1=""; td_dns2=""
-	auto=$(sms_tool -d "$dial" at "AT^SETAUTODIAL?" 2>/dev/null | tr -d '\r ' \
-		| sed -n 's/^\^SETAUTODIAL:\([0-9]\).*/\1/p' | head -1)
+	state=$(_td_autodial "$dial")
+	auto=${state%% *}; mode=${state#* }
 	if [ "$auto" = 1 ]; then
+		case "$mode" in
+			0|2)
+				echo "fibocom[$$] TD Tech: autodial uses mode $mode instead of USB - selecting USB mode 1"
+				if ! sms_tool -d "$dial" at "AT^SETAUTODIAL=1,1" 2>/dev/null | tr -d '\r' | grep -q '^OK$'; then
+					echo "fibocom[$$] TD Tech: USB autodial mode was rejected"
+					return 1
+				fi
+				state=$(_td_autodial "$dial")
+				case "$state" in
+					"1 "|"1 1") ;;
+					*) echo "fibocom[$$] TD Tech: USB autodial mode could not be verified"; return 1 ;;
+				esac
+				;;
+		esac
 		echo "fibocom[$$] TD Tech: the modem dials by itself (AT^SETAUTODIAL), APN is taken from its own settings"
 	else
 		cur=$(sms_tool -d "$dial" at "AT+CGDCONT?" 2>/dev/null | tr -d '\r' \
@@ -316,6 +338,13 @@ proto_fibocom_init_config() {
 
 proto_fibocom_setup() {
 	local interface="$1"
+	if [ "$(uci -q get "network.$interface.modem_swapped")" = 1 ] \
+	   || [ "$(uci -q get "network.$interface.modem_stale")" = 1 ]; then
+		echo "fibocom[$$] interface $interface belongs to a replaced modem - refusing to use its USB path"
+		proto_notify_error "$interface" MODEM_SWAPPED
+		proto_block_restart "$interface"
+		return 1
+	fi
 	local usbpath modem_path device atport apn pdptype metric sourcefilter
 	json_get_vars usbpath modem_path device atport apn pdptype metric allow_roaming auth username password sourcefilter
 
@@ -333,6 +362,10 @@ proto_fibocom_setup() {
 	   && [ -e "/sys/bus/usb/devices/$modem_path/idVendor" ]; then
 		echo "fibocom[$$] usbpath \"$usbpath\" is not on the bus, using modem_path \"$modem_path\""
 		usbpath="$modem_path"
+	fi
+	[ -n "$usbpath" ] || usbpath="$modem_path"
+	if [ "$(cat "/sys/bus/usb/devices/$usbpath/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$usbpath/idProduct" 2>/dev/null)" = 3466:3301 ]; then
+		/usr/share/5gmodem/usbports.sh bind 3466 3301
 	fi
 
 	local netdev=""

@@ -19,6 +19,13 @@ fi
 
 for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
+	if [ "$(uci -q get "network.$_if.auto")" = 0 ] \
+	   || [ "$(uci -q get "network.$_if.disabled")" = 1 ] \
+	   || [ "$(uci -q get "network.$_if.modem_swapped")" = 1 ] \
+	   || [ "$(uci -q get "network.$_if.modem_stale")" = 1 ]; then
+		rm -f "$_gone_dir/$_if"
+		continue
+	fi
 	_match=0
 	[ -z "$(uci -q get network."$_if".usbpath)$(uci -q get network."$_if".modem_path)" ] \
 		&& [ "$(uci -q get network."$_if".device)" = "$INTERFACE" ] && _match=1

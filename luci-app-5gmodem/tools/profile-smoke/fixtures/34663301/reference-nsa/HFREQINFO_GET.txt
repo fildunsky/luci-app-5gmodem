@@ -1,0 +1,4 @@
+## Synthetic carrier association using the reference response format.
+^HFREQINFO: 0,6,3,1650,1870000,20000,19650,1775000,20000
+^HFREQINFO: 0,7,78,633984,3509760,100000,633984,3509760,100000
+OK

@@ -1,7 +1,9 @@
 _td_val() {
-	awk -v v="$1" -v b="$2" -v s="$3" 'BEGIN {
-		if (v !~ /^[0-9]+$/ || v == 255) exit
-		printf "%g", b + v * s
+	awk -v v="$1" -v b="$2" -v s="$3" -v cap="$4" 'BEGIN {
+		if (v !~ /^[0-9]+$/ || v > 254) exit
+		x = b + v * s
+		if (cap != "" && x > cap) x = cap
+		printf "%g", x
 	}'
 }
 
@@ -17,32 +19,47 @@ case "$_TD_S" in
 		;;
 	LTE)
 		MODE="LTE"
+		_TD_V=$(_td_val "$(echo "$_TD_F" | cut -d, -f1)" -121 1 -25)
+		[ "$_TD_V" = -121 ] && _TD_V=-120
+		[ -n "$_TD_V" ] && RSSI="$_TD_V"
 		_TD_RP=$(echo "$_TD_F" | cut -d, -f2)
 		_TD_SN=$(echo "$_TD_F" | cut -d, -f3)
 		_TD_RQ=$(echo "$_TD_F" | cut -d, -f4)
 		;;
 	WCDMA)
 		MODE="WCDMA"
+		_TD_V=$(_td_val "$(echo "$_TD_F" | cut -d, -f1)" -121 1 -25)
+		[ "$_TD_V" = -121 ] && _TD_V=-120
+		[ -n "$_TD_V" ] && RSSI="$_TD_V"
+		_TD_V=$(_td_val "$(echo "$_TD_F" | cut -d, -f2)" -121 1 -25)
+		[ "$_TD_V" = -121 ] && _TD_V=-120
+		[ -n "$_TD_V" ] && RSCP="$_TD_V"
+		_TD_V=$(_td_val "$(echo "$_TD_F" | cut -d, -f3)" -32 0.5 0)
+		[ -n "$_TD_V" ] && ECIO="$_TD_V"
 		_TD_RP=""; _TD_SN=""; _TD_RQ=""
 		;;
 	GSM)
 		MODE="GSM"
+		_TD_V=$(_td_val "$(echo "$_TD_F" | cut -d, -f1)" -121 1 -25)
+		[ "$_TD_V" = -121 ] && _TD_V=-120
+		[ -n "$_TD_V" ] && RSSI="$_TD_V"
 		_TD_RP=""; _TD_SN=""; _TD_RQ=""
 		;;
 	*)
 		_TD_RP=""; _TD_SN=""; _TD_RQ=""
 		;;
 esac
-_TD_V=$(_td_val "$_TD_RP" -141 1)
+_TD_V=$(_td_val "$_TD_RP" -140 1 -44)
 [ -n "$_TD_V" ] && RSRP="${_TD_V%.*}"
-_TD_V=$(_td_val "$_TD_SN" -20.2 0.2)
+_TD_V=$(_td_val "$_TD_SN" -20 0.2 30)
 [ -n "$_TD_V" ] && SINR="$_TD_V"
-_TD_V=$(_td_val "$_TD_RQ" -20 0.5)
+_TD_V=$(_td_val "$_TD_RQ" -19.5 0.5 -3)
 [ -n "$_TD_V" ] && RSRQ="$_TD_V"
 
 _TD_C=$(sms_tool -d "$DEVICE" at "AT^HFREQINFO?" 2>/dev/null | tr -d '\r" ' | awk -F, '
 	/^\^HFREQINFO:/ {
 		if ($2 != 6 && $2 != 7) next
+		if (NF < 9 || (NF - 2) % 7) next
 		for (i = 3; i + 6 <= NF; i += 7) {
 			if ($i !~ /^[0-9]+$/) continue
 			print $2, $i, $(i + 1), $(i + 3)
@@ -86,17 +103,81 @@ TDEOF
 	[ "$_TD_I" -gt 1 ] && _CA_FROM_PROFILE=1
 fi
 
-_TD_M=$(sms_tool -d "$DEVICE" at "AT^MONSC" 2>/dev/null | tr -d '\r" ' | sed -n 's/^\^MONSC://p' | head -1)
-case "${_TD_M%%,*}" in
-	NR)
-		_TD_V=$(echo "$_TD_M" | cut -d, -f7)
-		case "$_TD_V" in ''|*[!0-9]*) ;; *) PCI="$_TD_V" ;; esac
-		;;
-	LTE)
-		_TD_V=$(echo "$_TD_M" | cut -d, -f6)
-		case "$_TD_V" in ''|*[!0-9]*) ;; *) PCI="$_TD_V" ;; esac
-		;;
-esac
+_TD_PCI_DEC=""
+_TD_M=$(sms_tool -d "$DEVICE" at "AT^MONSC" 2>/dev/null | tr -d '\r" ' | awk -F'[:,]' '
+	function num(k,v,lo,hi) {
+		if (v ~ /^-?[0-9]+([.][0-9]+)?$/ && v >= lo && v <= hi) print k "=" v
+	}
+	function hexval(v, n,i,c) {
+		v = toupper(v); sub(/^0X/, "", v)
+		if (v !~ /^[0-9A-F]+$/ || length(v) > 9) return -1
+		n = 0
+		for (i = 1; i <= length(v); i++) { c = index("0123456789ABCDEF",substr(v,i,1)) - 1; n = n * 16 + c }
+		return n
+	}
+	function hex(k,v, n) {
+		n = hexval(v)
+		if (n < 0) return
+		v = toupper(v); sub(/^0X/, "", v)
+		printf "%s_HEX=%s\n%s_DEC=%.0f\n", k,v,k,n
+	}
+	/^\^MONSC:LTE,/ && NF >= 11 {
+		num("EARFCN",$5,0,133121); hex("CID",$6); hex("TAC",$8)
+		num("_TD_PCI_DEC",hexval($7),0,503)
+		num("RSRP",$9,-140,-44); num("RSRQ",$10,-19.5,-3); num("RSSI",$11,-130,0)
+		exit
+	}
+	/^\^MONSC:NR,/ && NF >= 12 {
+		num("EARFCN",$5,0,3279165); hex("CID",$7); hex("TAC",$9)
+		num("_TD_PCI_DEC",hexval($8),0,1007)
+		num("RSRP",$10,-156,-31); num("RSRQ",$11,-43,20); num("SINR",$12,-23,40)
+		exit
+	}
+	/^\^MONSC:WCDMA,/ && NF >= 11 {
+		num("EARFCN",$5,0,16383); num("_TD_PCI_DEC",$6,0,511)
+		hex("CID",$7); hex("LAC",$8)
+		num("RSCP",$9,-130,0); num("RSSI",$10,-130,0); num("ECIO",$11,-32,0)
+		exit
+	}')
+eval "$_TD_M"
+[ -n "$_TD_PCI_DEC" ] && PCI="$_TD_PCI_DEC"
+[ -n "$TAC_HEX" ] && { T_HEX="$TAC_HEX"; T_DEC="$TAC_DEC"; }
+
+_TD_V=$(sms_tool -d "$DEVICE" at 'AT^TXPOWER?' 2>/dev/null | tr -d '\r ' | awk -F'[:,]' '
+	/^\^TXPOWER:/ && $2 ~ /^-?[0-9]+$/ && $2 != 999 && $2 >= -1000 && $2 <= 1000 { printf "%g", $2 / 10; exit }')
+[ -n "$_TD_V" ] && TXPOWER="$_TD_V dBm"
+if [ "${_TD_NR:-0}" -gt 0 ] || [ "$_TD_S" = NR ]; then
+	_TD_V=$(sms_tool -d "$DEVICE" at 'AT^NTXPOWER?' 2>/dev/null | tr -d '\r ' | awk -F'[:,]' '
+		/^\^NTXPOWER:/ {
+			for (i=2;i+4<=NF;i+=5) {
+				if ($i !~ /^-?[0-9]+([.][0-9]+)?$/ || $i == 999 || $i < -100 || $i > 100) continue
+				if (!found || $i > power) { power=$i; found=1 }
+			}
+			if (found) printf "%g",power
+			exit
+		}')
+	[ -n "$_TD_V" ] && TXPOWER="$_TD_V dBm (NR PUSCH)"
+fi
+
+_TD_AUX=$( {
+	sms_tool -d "$DEVICE" at 'AT^MONSSC' 2>/dev/null
+	sms_tool -d "$DEVICE" at 'AT^CASCELLINFO?' 2>/dev/null
+} | awk -F'[:,]' -f "$RES/tdtech-cells.awk")
+while IFS='|' read -r _td_rat _td_ch _td_pci _td_rp _td_rq _td_sn _td_rssi; do
+	[ -n "$_td_ch" ] || continue
+	_td_slot=$(printf '%s\n' "$_TD_C" | awk -v r="$_td_rat" -v c="$_td_ch" '
+		(($1 == 7 && r == "NR") || ($1 == 6 && r == "LTE")) && $3 == c { print NR-1; exit }')
+	case "$_td_slot" in 0) _td_prefix="" ;; 1|2|3|4) _td_prefix="S$_td_slot" ;; *) continue ;; esac
+	for _td_pair in "PCI:$_td_pci" "RSRP:$_td_rp" "RSRQ:$_td_rq" "SINR:$_td_sn" "RSSI:$_td_rssi"; do
+		_td_v="${_td_pair#*:}"
+		[ -n "$_td_v" ] && eval "${_td_prefix}${_td_pair%%:*}=\$_td_v"
+	done
+done <<TDAUX
+$_TD_AUX
+TDAUX
+
+NEIGHBORS=$(sms_tool -d "$DEVICE" at 'AT^MONNC' 2>/dev/null \
+	| awk -F'[:,]' -v kind=neighbors -f "$RES/tdtech-cells.awk")
 
 _TD_V=$(sms_tool -d "$DEVICE" at "AT^CHIPTEMP?" 2>/dev/null | tr -d '\r ' | awk -F'[:,]' '
 	/^\^CHIPTEMP:/ {

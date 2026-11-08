@@ -36,6 +36,7 @@ Interface options: `usbpath` (preferred), `modem_path` (ownership stamp written 
 - If no netdev exists, the handler loads `rndis_host` and `cdc_ether` and waits up to 5 s. The FM350 in RNDIS mode (`GTUSBMODE 41`, IAD `Cls=e0 Sub=01 Prot=03`) needs `rndis_host`. Some images (Cudy WBR3000UAX, kernel 6.12) do not load it until asked, so the interfaces stay at `Driver=(none)`. Loading a usbnet module rescans devices that are already plugged in.
 - A `device` from uci that does not exist in `/sys/class/net` gets `NETDEV_MISSING` + `proto_block_restart`. Before this, `proto_send_update` on a missing `wwanN` returned "Unknown error", and netifd restarted the interface every 5 s.
 - A stale `usbpath` is detected when no USB device exists at that path but one exists at `modem_path`. `usbpath` is written once at interface creation, and the modem may move to another port.
+- An empty `usbpath` also uses `modem_path`. TD Tech prepares USB before netdev lookup. Interfaces marked `modem_swapped=1` or `modem_stale=1` are rejected before any USB or AT operation, even if an old path now belongs to another module.
 
 ### AT port queue
 
@@ -97,6 +98,8 @@ Some MVNOs (for example Ekomobile, APN + login + password) give an address witho
 The routable prefix does not come from `CGPADDR`, which gives only link-local or interface-id. It arrives by RA / DHCPv6-PD on the usbnet link. If the live context type contains `V6`, setup adds a dynamic `dhcpv6` child `<iface>_6` (`ifname @<iface>`, `extendprefix 1`). The child gets the parent's firewall zone (`_fibocom_fwzone`: `fw3 -q network`, or a uci zone lookup on fw4), or its RA/DHCPv6 replies hit the default INPUT policy. Some networks (seen on FM350) also need an explicit rule that accepts ICMPv6 from `fe80::1` on `wan`.
 
 ### Teardown keeps the bearer
+
+Issue #68 had two fibocom parents using `eth4`: a parked interface for the previous modem and the current one. Both created DHCPv6 children; one repeatedly failed with `ubus error: Invalid argument`. The netdev hook ignored `auto=0` and swap flags and resurrected the parked parent. It now skips disabled/parked interfaces and clears their recovery markers; fibocom itself also refuses parked parents. The duplicate ownership and restart loop are established by the log. CPU/temperature recovery still needs field confirmation.
 
 `proto_fibocom_teardown` does nothing on purpose:
 

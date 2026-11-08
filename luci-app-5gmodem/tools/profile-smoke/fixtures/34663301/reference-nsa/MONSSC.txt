@@ -1,0 +1,3 @@
+## Synthetic scaled values in the reference MONSSC layout.
+^MONSSC: NR,633984,1F3,-640,-80,160,0
+OK

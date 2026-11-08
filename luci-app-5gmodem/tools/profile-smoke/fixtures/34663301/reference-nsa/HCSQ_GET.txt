@@ -1,0 +1,3 @@
+## Format example: LianXia233/luci-app-mt5700 rpc.js, commit 87f9f75, parseHCSQ.
+^HCSQ: "LTE",45,34,106,19
+OK

@@ -397,6 +397,10 @@ from LuCI. It also registers the proto's error codes (`NO_NETDEV`,
   race against netifd's own restart. Apple devices (vendor 05ac, or an
   interface with `modem_tether='iphone'` on remove) re-trigger
   `71-5gmodem-resolve`.
+  The hook skips `auto=0`, `disabled=1`, `modem_swapped=1` and `modem_stale=1`,
+  and clears their recovery markers. Otherwise a new modem's netdev resurrected
+  an interface parked for the previous modem at the same USB path, creating
+  duplicate IPv4/DHCPv6 owners (issue #68).
 - `hotplug.d/iface/30-5gmodem-ttl`: TTL rules are an nft include bound to the
   modem's l3 device. Late netdevs (FM350 RNDIS/xmm) appear after the firewall's
   first load, so on cold boot the rule missed the interface (third-party TTL

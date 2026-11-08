@@ -32,6 +32,7 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 
 - [Altair ALT3100 / ALT3800 (USB vendor 216f)](modems/altair.md)
 - [Fibocom modems and the `fibocom` netifd protocol](modems/fibocom.md)
+- [TD Tech MT5700 reference comparison](audits/2026-11-08-tdtech-reference.md) and [deferred follow-up](audits/2026-11-08-tdtech-follow-up.md)
 - [Foxconn / Dell / HP modules: T77W968 (DW5821e), T99W373 (MV32-W), T77W595 (HP lt4120)](modems/foxconn-dell.md)
 - [Huawei: HiLink web API and AT-mode sticks](modems/huawei-hilink.md)
 - [MediaTek MT6735 Android Mi-Fi (ZTE-style goform)](modems/mediatek-mifi.md)

@@ -4,6 +4,14 @@ Every SMS operation in the app goes through one script, `root/usr/share/5gmodem/
 
 Related docs: [notifications.md](notifications.md) (Telegram/ntfy/webhook, SMS commands, LED, cron), [ussd.md](ussd.md).
 
+## TD Tech MT5700 SMS
+
+The `3466:3301` path is selected from the send port's own USB ancestry, not the globally active modem. It uses the existing UCS2/concatenated PDU encoder, but submits each part as `AT+CMGS=<length>` followed by a literal backslash and `r`, then the PDU, in one AT command. This follows the reference implementation's documented hardware behavior: no input prompt or Ctrl-Z is needed. `AT+CMGF=0` must succeed first; only `+CMGS: <reference>` confirms submission. An `OK` without a message reference is insufficient.
+
+There is no immediate generic-send fallback on this modem. A timed-out submission may have reached the network, and restarting a multipart send after some parts were accepted duplicates those parts. Such results return code 4 and do not enter the outgoing retry queue. If an already queued message encounters this result, its entry is retained as `.unknown` and excluded from automatic retry; `queue-list` exposes `state=unknown`. Inspect delivery before resubmitting it.
+
+Reading and storage continue through `sms_tool` and the existing three-memory `CPMS` handling. Batch deletions run from the highest slot down because MT5700 may compact indices after deletion. This is verified with local behavior checks, not a live SIM; receive decoding, actual SMS delivery and SIM/ME persistence still require the field test. IMS/CEUS provisioning from the reference's specialized settings screen is not applied automatically.
+
 ## smsbridge.sh verbs
 
 | Verb | Purpose |

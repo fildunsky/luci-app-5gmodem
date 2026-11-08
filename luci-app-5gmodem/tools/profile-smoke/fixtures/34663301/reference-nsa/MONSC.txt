@@ -1,0 +1,3 @@
+## Format example: LianXia233/luci-app-mt5700 rpc.js, commit 87f9f75, parseMONSC.
+^MONSC: LTE,460,01,1650,A54933,1F3,183D,-98,-5,-72
+OK

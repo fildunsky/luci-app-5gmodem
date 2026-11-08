@@ -1,4 +1,4 @@
-RSRP=-81
+RSRP=-91
 RSRQ=-10
-SINR=3.8
+SINR=4
 TEMP=47.8 &deg;C

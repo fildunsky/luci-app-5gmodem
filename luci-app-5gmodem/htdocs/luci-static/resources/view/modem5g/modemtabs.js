@@ -552,7 +552,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30925,
+	API: 30926,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {
