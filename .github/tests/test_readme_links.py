@@ -1,72 +1,49 @@
-import http.server
+import importlib.util
 from pathlib import Path
-import subprocess
-import tempfile
-import threading
 import unittest
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/check-readme-links.sh'
-PREFIX = 'https://github.com/fildunsky/luci-app-5gmodem/releases/download/'
+SCRIPT = Path(__file__).resolve().parents[1] / 'scripts/check-readme-links.py'
+SPEC = importlib.util.spec_from_file_location('readme_links', SCRIPT)
+MODULE = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(MODULE)
+TAG = 'v3.9.31'
+URL = MODULE.PREFIX + TAG + '/luci-app-5gmodem-3.9.31-r1.apk'
 
 
 class ReadmeLinks(unittest.TestCase):
-    def run_check(self, responses, links):
-        requests = []
+    def release(self, **changes):
+        release = {'tagName': TAG, 'isDraft': False,
+                   'assets': [{'url': URL, 'state': 'uploaded', 'size': 907312}]}
+        release.update(changes)
+        return release
 
-        class Handler(http.server.BaseHTTPRequestHandler):
-            def do_GET(self):
-                requests.append((self.path, self.headers.get('Range')))
-                choices = responses[self.path]
-                response = choices.pop(0) if len(choices) > 1 else choices[0]
-                self.send_response(response)
-                if response == 302:
-                    self.send_header('Location', '/asset')
-                self.end_headers()
+    def test_exact_published_url_is_accepted_and_deduplicated(self):
+        self.assertEqual(MODULE.validate_links(self.release(), TAG, [URL, URL]), [URL])
 
-            def log_message(self, *args):
-                pass
+    def test_missing_asset_or_wrong_filename_is_rejected(self):
+        for url in (URL.replace('.apk', '.ipk'), URL.replace('-r1', '-r2')):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                MODULE.validate_links(self.release(), TAG, [url])
 
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-        thread = threading.Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            with tempfile.TemporaryDirectory() as temp:
-                base = Path(temp)
-                prefix = 'http://127.0.0.1:%d/' % server.server_port
-                script = SCRIPT.read_text().replace(PREFIX, prefix)
-                for filename in ('README.md', 'README.ru.md'):
-                    (base/filename).write_text('\n'.join(prefix+link for link in links))
-                result = subprocess.run(['sh', '-c', script], cwd=base, text=True,
-                                        capture_output=True, timeout=20)
-                return result, requests
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join()
+    def test_stale_readme_version_is_rejected(self):
+        with self.assertRaises(ValueError):
+            MODULE.validate_links(self.release(), TAG, [URL.replace('3.9.31', '3.9.30')])
 
-    def test_gateway_failures_retry_and_duplicate_links_are_checked_once(self):
-        result, requests = self.run_check({'/package.apk': [504, 504, 200]}, ['package.apk'])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(requests, [('/package.apk', 'bytes=0-0')]*3)
-        self.assertTrue(result.stdout.startswith('200 '), result.stdout)
+    def test_draft_or_wrong_release_is_rejected(self):
+        for changes in ({'isDraft': True}, {'tagName': 'v3.9.30'}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                MODULE.validate_links(self.release(**changes), TAG, [URL])
 
-    def test_missing_asset_fails_without_retry_and_checks_remaining_links(self):
-        result, requests = self.run_check({'/bad.ipk': [404], '/good.apk': [200]},
-                                          ['bad.ipk', 'good.apk'])
-        self.assertEqual(result.returncode, 1)
-        self.assertEqual(requests, [('/bad.ipk', 'bytes=0-0'), ('/good.apk', 'bytes=0-0')])
-        self.assertIn('not committing', result.stderr)
+    def test_empty_or_incomplete_upload_is_rejected(self):
+        for state, size in [('uploaded', 0), ('new', 907312)]:
+            release = self.release(assets=[{'url': URL, 'state': state, 'size': size}])
+            with self.subTest(state=state, size=size), self.assertRaises(ValueError):
+                MODULE.validate_links(release, TAG, [URL])
 
-    def test_partial_download_response_is_accepted(self):
-        result, requests = self.run_check({'/package.apk': [206]}, ['package.apk'])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(requests, [('/package.apk', 'bytes=0-0')])
-
-    def test_release_redirect_is_followed(self):
-        result, requests = self.run_check({'/download.apk': [302], '/asset': [200]}, ['download.apk'])
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(requests, [('/download.apk', 'bytes=0-0'), ('/asset', 'bytes=0-0')])
+    def test_no_download_links_is_rejected(self):
+        with self.assertRaises(ValueError):
+            MODULE.validate_links(self.release(), TAG, ['No install links'])
 
 
 if __name__ == '__main__':
