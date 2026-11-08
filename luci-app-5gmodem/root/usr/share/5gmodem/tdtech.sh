@@ -1,11 +1,10 @@
 _td_at() {
-	local port="$1" command="$2" response rc
-	at_lock "$port" 5 || return 1
-	response=$(timeout 8 sms_tool -d "$port" at "$command" 2>/dev/null 8>&-)
+	local response rc
+	response=$(at_query "$1" "$2" 8 5)
 	rc=$?
-	at_unlock
+	[ "$rc" = 0 ] || return "$rc"
+	[ -n "$response" ] || return 1
 	printf '%s\n' "$response"
-	return "$rc"
 }
 
 _td_ok() {
@@ -130,6 +129,11 @@ _td_bootstrap() {
 				;;
 			1|6|9) ;;
 			*)
+				if [ -z "$registration" ]; then
+					_td_error=TDTECH_REGISTRATION_UNAVAILABLE
+					echo "fibocom[$$] TD Tech: no usable registration reply on $_td_port - retrying"
+					continue
+				fi
 				_td_error=NOT_REGISTERED
 				response=$(_td_at "$_td_port" 'AT+COPS?' | tr -d '\r ')
 				case "$response" in *'+COPS:2,'*) _td_at "$_td_port" 'AT+COPS=0' >/dev/null ;; esac
@@ -187,7 +191,7 @@ _td_setup() {
 	local interface="$1" path="$2" zone context livepdp
 	local allow_roaming defaultroute peerdns delegate mtu ip4table ip6table
 	json_get_vars allow_roaming defaultroute peerdns delegate mtu ip4table ip6table
-	. /usr/share/5gmodem/atlock.sh
+	. /usr/share/5gmodem/lib.sh
 	if ! _td_bootstrap "$path"; then
 		proto_notify_error "$interface" "$_td_error"
 		return 1

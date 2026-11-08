@@ -132,16 +132,59 @@ _td_data_ready /dev/null
 ''', dict(os.environ, REPLY=response))
             self.assertEqual(result.returncode, expected, result.stderr)
 
-    def test_at_busy_never_sends_and_timeout_unlocks(self):
-        for busy, expected in [('1', 'lock\n'), ('0', 'lock\nunlock\n')]:
-            result = shell(proto_function('_td_at') + r'''
-at_lock() { echo lock >&2; [ "$BUSY" = 0 ]; }
-at_unlock() { echo unlock >&2; }
-timeout() { echo send >&2; return 124; }
+    def test_at_transport_works_without_timeout_utility(self):
+        for busy, silent in [(False, False), (True, False), (False, True)]:
+            with tempfile.TemporaryDirectory() as temp:
+                source = '\n'.join([proto_function('_td_at'), function('at_query', 'lib.sh'),
+                                    function('sleep_tick_init', 'lib.sh')])
+                source = source.replace('/tmp/5gmodem', temp)
+                result = shell(source + r'''
+at_lock() { echo lock >> "$CALLS"; [ "$BUSY" = 0 ]; }
+at_unlock() { echo unlock >> "$CALLS"; }
+timeout() { echo unexpected-timeout >> "$CALLS"; return 127; }
+sms_tool() {
+ echo "$*" >> "$CALLS"
+ [ "$SILENT" = 1 ] || printf '+CEREG: 2,1\r\nOK\r\n'
+}
+AT_LOCK_FD=8
+_td_at /dev/null 'AT+CEREG?'
+''', dict(os.environ, CALLS=temp+'/calls', BUSY=str(int(busy)), SILENT=str(int(silent))))
+                calls = Path(temp+'/calls').read_text().splitlines()
+                self.assertNotIn('unexpected-timeout', calls)
+                if busy:
+                    self.assertEqual(result.returncode, 2)
+                    self.assertEqual(calls, ['lock'])
+                else:
+                    self.assertEqual(calls, ['lock', '-d /dev/null at AT+CEREG?', 'unlock'])
+                    self.assertEqual(result.returncode, 1 if silent else 0)
+                    self.assertEqual(result.stdout, '' if silent else '+CEREG: 2,1\nOK\n')
+
+    def test_at_watchdog_stops_silent_child_and_unlocks(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = '\n'.join([proto_function('_td_at'), function('at_query', 'lib.sh'),
+                                function('sleep_tick_init', 'lib.sh')])
+            source = source.replace('/tmp/5gmodem', temp).replace('"$2" 8 5)', '"$2" 1 5)')
+            result = shell(source + r'''
+at_lock() { echo lock >> "$CALLS"; }
+at_unlock() { echo unlock >> "$CALLS"; }
+timeout() { echo unexpected-timeout >> "$CALLS"; return 127; }
+sms_tool() { exec sleep 20; }
+AT_LOCK_FD=8
 _td_at /dev/null AT
-''', dict(os.environ, BUSY=busy))
-            self.assertNotEqual(result.returncode, 0)
-            self.assertEqual(result.stderr, expected)
+''', dict(os.environ, CALLS=temp+'/calls'))
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.stdout, '')
+            self.assertEqual(Path(temp+'/calls').read_text(), 'lock\nunlock\n')
+            self.assertFalse(list(Path(temp).glob('atq.*')))
+
+    def test_registration_reads_reported_home_state(self):
+        for response in ('+CEREG: 2,1', '+C5GREG: 2,1,"012029","0000000021CF9401",11,4,"01.000000"'):
+            result = shell(proto_function('_td_registration') + r'''
+_td_at() { printf '%s\n' "$REPLY"; }
+_td_registration /dev/null
+''', dict(os.environ, REPLY=response))
+            self.assertEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, '1\n')
 
     def test_dhcp_children_and_creation_failure(self):
         for protocol, rc in [('dhcp', 0), ('dhcpv6', 0), ('dhcp', 1)]:
@@ -165,7 +208,7 @@ _td_add_child modem 6 "$PROTOCOL" wan
                 self.assertIn('string:reqaddress try', result.stderr)
 
     def test_missing_vendor_netdev_is_bounded_and_roaming_is_blocked(self):
-        for roaming in (False, True):
+        for roaming in (False, True, None):
             with tempfile.TemporaryDirectory() as temp:
                 base = Path(temp)
                 dev = base/'usb/devices/1-8'
@@ -191,9 +234,12 @@ _td_bootstrap 1-8
 rc=$?
 echo "error:$_td_error"
 exit "$rc"
-''', dict(os.environ, CALLS=temp+'/calls', REGISTRATION='5' if roaming else '1'))
+''', dict(os.environ, CALLS=temp+'/calls', REGISTRATION='' if roaming is None else ('5' if roaming else '1')))
                 self.assertEqual(result.returncode, 1, result.stderr)
-                if roaming:
+                if roaming is None:
+                    self.assertIn('error:TDTECH_REGISTRATION_UNAVAILABLE', result.stdout)
+                    self.assertFalse((base/'calls').exists())
+                elif roaming:
                     self.assertIn('error:ROAMING_NOT_ALLOWED', result.stdout)
                     self.assertFalse((base/'calls').exists())
                 else:
@@ -203,7 +249,7 @@ exit "$rc"
     def test_setup_uses_live_pdp_for_persistent_dhcp_children(self):
         for pdp, children in [('IP', ['4 dhcp']), ('IPV6', ['6 dhcpv6']),
                               ('IPV4V6', ['4 dhcp', '6 dhcpv6'])]:
-            source = proto_function('_td_setup').replace('. /usr/share/5gmodem/atlock.sh', ':')
+            source = proto_function('_td_setup').replace('. /usr/share/5gmodem/lib.sh', ':')
             result = shell(source + r'''
 json_get_vars() { :; }
 _td_bootstrap() { _td_port=/dev/ttyUSB7; _td_netdev=eth9; }
