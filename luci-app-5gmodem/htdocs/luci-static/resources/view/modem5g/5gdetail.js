@@ -1154,21 +1154,54 @@ function renderTemps(json) {
 	var box = document.getElementById('tempsn');
 	if (!box) { return; }
 	var raw = String(json.temps || '').trim();
-	if (!raw || raw === '-') { box.style.display = 'none'; return; }
+	var mainEl = document.getElementById('tempn');
+	if (!raw || raw === '-') {
+		box.style.display = 'none';
+		if (mainEl) { mainEl.classList.remove('tg-texp'); mainEl.title = _('Modem temperature'); var op = mainEl.querySelector('.tg-tpop'); if (op) { op.remove(); } }
+		box.removeAttribute('data-k');
+		return;
+	}
 	box.style.display = '';
+	if (mainEl) { mainEl.classList.add('tg-texp'); mainEl.removeAttribute('title'); }
 	if (box.getAttribute('data-k') === raw) { return; }
 	box.setAttribute('data-k', raw);
 	var v = {};
 	raw.split(/\s+/).forEach(function(p) { var kv = p.split('='); if (kv.length === 2) { v[kv[0]] = kv[1]; } });
 	box.innerHTML = '';
+	var pop = E('div', { 'class': 'tg-tpop' });
 	TEMP_SENSORS.forEach(function(s) {
 		if (v[s[0]] == null) { return; }
 		var t = parseFloat(v[s[0]]);
+		var ico = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + s[2] + '</svg>';
 		var chip = E('span', { 'class': 'tg-tchip', 'title': s[1] + ': ' + v[s[0]] + ' °C' });
-		chip.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + s[2] + '</svg>';
+		chip.innerHTML = ico;
 		chip.appendChild(E('span', { 'class': 'tg-tval' }, Math.round(t) + '°'));
 		box.appendChild(chip);
+		var row = E('div', { 'class': 'tg-tpop-row' });
+		row.innerHTML = ico;
+		row.appendChild(E('span', { 'class': 'tg-tpop-name' }, s[1]));
+		row.appendChild(E('span', { 'class': 'tg-tval' }, (isNaN(t) ? v[s[0]] : t.toFixed(1)) + ' °C'));
+		pop.appendChild(row);
 	});
+	var main = document.getElementById('tempn');
+	if (main) {
+		var old = main.querySelector('.tg-tpop');
+		if (old) { old.remove(); }
+		if (pop.childNodes.length) { main.appendChild(pop); }
+	}
+}
+
+function tempsOpen() {
+	try { return localStorage.getItem('5gm-temps-open') === '1'; } catch (e) { return false; }
+}
+
+function toggleTemps(ev) {
+	var row = this.parentNode, box = document.getElementById('tempsn');
+	if (!row || !box || box.style.display === 'none') { return; }
+	if (ev && ev.target && ev.target.closest && ev.target.closest('.tg-tpop')) { return; }
+	var open = !row.classList.contains('tg-topen');
+	row.classList.toggle('tg-topen', open);
+	try { localStorage.setItem('5gm-temps-open', open ? '1' : '0'); } catch (e) {}
 }
 
 function renderNa(json) {
@@ -2821,7 +2854,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30929, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30930, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -3114,11 +3147,11 @@ simDialog: baseclass.extend({
 						})(),
 						E('div', { 'class': 'tginfo-simslot', 'id': 'simslotn', 'style': 'display:none' }, [ '' ]),
 					]),
-					E('div', { 'class': 'tginfo-envrow' }, [
+					E('div', { 'class': 'tginfo-envrow' + (tempsOpen() ? ' tg-topen' : '') }, [
 						E('div', { 'class': 'tginfo-temp tginfo-batt', 'id': 'battn', 'style': 'display:none' }, []),
 						E('div', { 'class': 'tginfo-temp tginfo-temps', 'id': 'tempsn', 'style': 'display:none' }, []),
-						E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none' }, [
-							E('span', { 'class': 'tginfo-thermo', 'title': _('Modem temperature') }, [
+						E('div', { 'class': 'tginfo-temp', 'id': 'tempn', 'style': 'display:none', 'click': toggleTemps }, [
+							E('span', { 'class': 'tginfo-thermo' }, [
 								E('img', { 'src': mutil.icon('icons/5gmodem/ctemp.svg'), 'width': '16', 'height': '16', 'alt': _('Modem temperature') })
 							]),
 							E('span', { 'id': 'temp' }, [ '-' ]),
