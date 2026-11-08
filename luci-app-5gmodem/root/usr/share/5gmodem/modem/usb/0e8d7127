@@ -599,9 +599,25 @@ TM=$(echo "$OT" | awk 'BEGIN{m=-999}
 	/\+ETHERMAL:/ {
 		s = $0; sub(/^.*\+ETHERMAL:/, "", s)
 		n = split(s, a, ",")
-		if (n >= 2) { v = a[2] + 0; if (v > -40 && v < 120 && v > m) m = v }
+		gsub(/[ \t\r]/, "", a[2])
+		if (n >= 2 && a[2] ~ /^-?[0-9]+([.][0-9]+)?$/) {
+			v = a[2] + 0; if (v > -40 && v < 120 && v > m) m = v
+		}
 	}
 	END { if (m > -999) printf "%.1f", m }' | xargs)
+if [ -z "$TM" ]; then
+	OT=$(sms_tool -d "$DEVICE" at "AT+GTSENRDTEMP=1")
+	TM=$(printf '%s\n' "$OT" | tr -d '\r' | awk '
+		/\+GTSENRDTEMP:/ {
+			s = $0; sub(/^.*\+GTSENRDTEMP:/, "", s)
+			gsub(/[ \t]/, "", s)
+			n = split(s, a, ",")
+			if (n == 2 && a[1] == "1" && a[2] ~ /^-?[0-9]+$/) {
+				v = a[2] / 1000
+				if (v > -40 && v < 120) { printf "%.1f", v; exit }
+			}
+		}')
+fi
 _TF="/tmp/5gmodem/temp_$(basename "$DEVICE")"
 if [ -n "$TM" ]; then
 	_prev=""; _cnt=0; _ptime=0

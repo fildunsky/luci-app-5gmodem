@@ -48,6 +48,7 @@ AT+CGACT?
 
 # Temperature
 AT+ETHERMAL?
+AT+GTSENRDTEMP=1
 
 ## USB and SIM
 

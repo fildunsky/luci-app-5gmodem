@@ -1774,7 +1774,7 @@ report() {
 	at "$P" "AT+CGATT?"
 	_td_path=$(tty_usbpath "$P" 2>/dev/null)
 	case "$(cat "/sys/bus/usb/devices/$_td_path/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_td_path/idProduct" 2>/dev/null)" in
-		0e8d:7126|0e8d:7127) at "$P" 'AT+ETHERMAL?' ;;
+		0e8d:7126|0e8d:7127) at "$P" 'AT+ETHERMAL?'; at "$P" 'AT+GTSENRDTEMP=1' ;;
 	esac
 	if [ -n "$_td_path" ] && [ "$(cat "/sys/bus/usb/devices/$_td_path/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$_td_path/idProduct" 2>/dev/null)" = 3466:3301 ]; then
 		printf '\nTD Tech USB descriptors (%s)\n' "$_td_path"
