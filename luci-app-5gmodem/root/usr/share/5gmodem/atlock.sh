@@ -29,6 +29,7 @@ at_lock() {
 	flock -u "$AT_LOCK_FD" 2>/dev/null
 	eval "exec $AT_LOCK_FD>&-" 2>/dev/null
 	logger -t 5gmodem "at_lock: port $1 busy for over ${_al_max}s"
+	command -v _at_recover >/dev/null 2>&1 && _at_recover "$1"
 	return 1
 }
 
@@ -61,4 +62,10 @@ at_long_busy() {
 	fi
 	rm -f "$_alw_f" 2>/dev/null
 	return 1
+}
+
+_at_recover() {
+	[ -x "${RES:-/usr/share/5gmodem}/at-recover.sh" ] || return 0
+	( unset _AT_LOCK_HELD; exec 7>&- 8>&- 9>&-;
+	  exec "${RES:-/usr/share/5gmodem}/at-recover.sh" "$1" ) >/dev/null 2>&1 </dev/null &
 }

@@ -193,6 +193,12 @@ not found". Exceptions that continue without a port: proto `modemmanager`,
 - `onbus` lets the page distinguish "stuck on the bus" (power-cycle helps) from
   "removed".
 
+## SIM service-provider name encoding
+
+EF_SPN has a display-condition byte followed by the name, not an ASCII-only byte string. `sim-spn.awk` supports unpacked GSM default/extended characters and UCS2 forms 80/81/82, rejects malformed/unsupported data and converts to UTF-8 without iconv. The format follows [3GPP TS 51.011](https://www.etsi.org/deliver/etsi_ts/151000_151099/151011/04.15.00_60/ts_151011v041500p.pdf) and its referenced alpha-identifier encodings. SPN cache names use `spn_v2_<IMSI>` to bypass previously corrupted entries.
+
+In issue #68 COPS identifies CHINA TELECOM but the UI shows N-Vu5O. Applying the old ASCII filter to a UCS2 中国电信 payload (4E2D56FD75354FE1) produces exactly N-Vu5O. This is a local decoding defect, not an operator identity inferred from a telephone number. The raw EF_SPN reply itself is absent from the supplied diagnostic, so the payload is a reproduction fixture rather than a captured SIM record. The corrected name continues through the existing home/roaming operator rules and Chinese icon matching.
+
 ## `sms_tool` wrapper
 
 `sms_tool` is redefined as a shell function, so every call (here and in sourced

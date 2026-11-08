@@ -947,11 +947,26 @@ _sms_run() {
 	   && ! _via_mm && at_long_busy "$PORT"; then
 		return 1
 	fi
-	"$@" 2>/dev/null &
+	_sr_o=$(mktemp /tmp/5gmodem-smsrun.XXXXXX) || return 1
+	"$@" > "$_sr_o" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
 	_sr_p=$!
-	( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_sr_t"; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
-	wait "$_sr_p"; _sr_rc=$?
+	( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_sr_t"; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
+	if (sleep 0.0) 2>/dev/null; then _sr_step=0.1; _sr_max=$(( (_sr_t + 1) * 10 ));
+	else _sr_step=1; _sr_max=$((_sr_t + 1)); fi
+	_sr_i=0
+	while kill -0 "$_sr_p" 2>/dev/null && [ "$_sr_i" -lt "$_sr_max" ]; do
+		_sr_i=$((_sr_i + 1)); sleep "$_sr_step"
+	done
+	if kill -0 "$_sr_p" 2>/dev/null; then
+		kill -9 "$_sr_p" 2>/dev/null
+		_sr_rc=124
+		command -v _at_recover >/dev/null 2>&1 && _at_recover "$PORT"
+	else
+		wait "$_sr_p" 2>/dev/null; _sr_rc=$?
+	fi
 	kill "$_sr_w" 2>/dev/null; wait "$_sr_w" 2>/dev/null
+	cat "$_sr_o"
+	rm -f "$_sr_o"
 	return $_sr_rc
 }
 

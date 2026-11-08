@@ -633,6 +633,10 @@ active_sec() {
 	secname "$_ap"
 }
 
+sim_spn_decode() {
+	printf '%s\n' "$1" | LC_ALL=C awk -f "${RES:-/usr/share/5gmodem}/sim-spn.awk"
+}
+
 operator_clean() {
 	case "$1" in
 		*' '[Rr][Uu][Ss]) _oc=${1% *}; [ -n "$_oc" ] && printf '%s' "$_oc" || printf '%s' "$1" ;;
@@ -1219,6 +1223,9 @@ at_query() {
 			_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
 		done
 		kill -0 "$_aq_pid" 2>/dev/null || wait "$_aq_pid" 2>/dev/null
+		if kill -0 "$_aq_pid" 2>/dev/null; then
+			command -v _at_recover >/dev/null 2>&1 && _at_recover "$_aq_p"
+		fi
 		kill "$_aq_w" 2>/dev/null; wait "$_aq_w" 2>/dev/null
 	fi
 

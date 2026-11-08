@@ -126,6 +126,22 @@ function pdpLabel(v) {
 
 function operatorIcon(name) {
 	var n = (name || '').toLowerCase();
+	var compact = n.replace(/[\s_-]+/g, '');
+	if (compact.indexOf('chinabroadnet') >= 0 || compact.indexOf('chinabroadcastingnetwork') >= 0 || compact.indexOf('chinabroadcastnetwork') >= 0 || compact == 'cbn' || compact == 'chncbn' || compact == 'cbn5g' || /中国广电|中國廣電/.test(n)) { return 'op-china-broadnet'; }
+	if (compact.indexOf('chinatelecom') >= 0 || compact == 'chnct' || compact == 'ctcc' || /中国电信|中國電信/.test(n)) { return 'op-china-telecom'; }
+	if (compact.indexOf('chinaunicom') >= 0 || compact == 'chnunicom' || compact == 'cucc' || /中国联通|中國聯通/.test(n)) { return 'op-china-unicom'; }
+	if (compact.indexOf('chinamobile') >= 0 || compact == 'cmcc' || compact == 'chncmcc' || /中国移动|中國移動/.test(n)) { return 'op-china-mobile'; }
+	if (/telkomsel|simpati|kartu\s*(?:as|halo)/.test(n) || /^(?:idn)?tsel(?:4g|5g)?$/.test(compact)) { return 'op-telkomsel'; }
+	if (/indosat|im3/.test(n) || /^(?:mentari|matrix)$/.test(compact)) { return 'op-im3'; }
+	if (/^(?:3|tri|three|3id|idn3|idntri|3indonesia|triindonesia|hutchison3indonesia)$/.test(compact)) { return 'op-tri'; }
+	if (/^(?:xl|xlaxiata|xlsmart|xlprioritas|idnxl)(?:4g|5g)?$/.test(compact) || n.indexOf('excelcom') >= 0) { return 'op-xl'; }
+	if (/^(?:axis|idnaxis)(?:4g|5g)?$/.test(compact)) { return 'op-axis'; }
+	if (compact.indexOf('smartfren') >= 0) { return 'op-smartfren'; }
+	if (/sktelecom|sk텔레콤|에스케이텔레콤/.test(compact) || /^(?:skt|kskt|kor05)(?:4g|5g)?$/.test(compact)) { return 'op-sk-telecom'; }
+	if (/lguplus|lgu\+|lg유플러스|엘지유플러스/.test(compact) || /^(?:lgu|lgt|u\+)(?:4g|5g)?$/.test(compact)) { return 'op-lg-uplus'; }
+	if (compact.indexOf('viettel') >= 0) { return 'op-viettel'; }
+	if (compact.indexOf('vinaphone') >= 0 || compact == 'vnp' || compact == 'vnvinaphone') { return 'op-vinaphone'; }
+	if (compact.indexOf('mobifone') >= 0 || compact == 'vms' || compact == 'vnmobi') { return 'op-mobifone'; }
 	if (/(^|[^0-9a-zа-яё])(t-mobile|tinkoff|t-bank|т-мобайл|т-банк|тинькофф)/.test(n)) { return 'op-tbank'; }
 	if (n.indexOf('ekomobile') >= 0 || n.indexOf('eko mobile') >= 0 || n.indexOf('экомобайл') >= 0 || n.indexOf('эко мобайл') >= 0) { return 'op-ekomobile'; }
 	if (n.indexOf('dobrosim') >= 0 || n.indexOf('dobro sim') >= 0 || n.indexOf('dobrosvyaz') >= 0 || n.indexOf('добросим') >= 0 || n.indexOf('добросвязь') >= 0) { return 'op-dobrosim'; }
@@ -144,7 +160,7 @@ function operatorIcon(name) {
 	if (n.indexOf('rostelecom') >= 0 || n.indexOf('ростелеком') >= 0 ||
 	    n.indexOf('rt-mobile') >= 0 || n.indexOf('rtmobile') >= 0 || n.indexOf('рт-мобайл') >= 0 ||
 	    n.trim() == 'rtk' || n.trim() == 'ртк' || n.indexOf('rtk ') == 0 || n.indexOf(' rtk') >= 0) { return 'op-rostelecom'; }
-	if (n.trim() == 'kt' || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
+	if (compact == 'kt' || compact == 'korkt' || /케이티|한국통신/.test(n) || n.indexOf('olleh') >= 0 || n.indexOf('kt ') == 0 || n.indexOf(' kt') >= 0 || n.indexOf('ktf') >= 0 || n.indexOf('korea telecom') >= 0) { return 'op-kt'; }
 	if (n.indexOf('o2 - de') >= 0) {
 		return 'op-o2-de';
 	}
@@ -472,7 +488,7 @@ function signalSvg(p) {
 
 return baseclass.extend({
 	icon: function(p) { return icons.url(p); },
-	API: 30931,
+	API: 30932,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,

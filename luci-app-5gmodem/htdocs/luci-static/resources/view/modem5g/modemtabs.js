@@ -297,26 +297,7 @@ function isUsbStick(m) {
 }
 
 function operatorTabIcon(name) {
-	var n = String(name || '').toLowerCase();
-	if (!n) { return null; }
-	if (n.indexOf('ekomobile') >= 0 || n.indexOf('eko mobile') >= 0 || n.indexOf('экомобайл') >= 0 || n.indexOf('эко мобайл') >= 0) { return 'op-ekomobile'; }
-	if (n.indexOf('dobrosim') >= 0 || n.indexOf('dobro sim') >= 0 || n.indexOf('dobrosvyaz') >= 0 || n.indexOf('добросим') >= 0 || n.indexOf('добросвязь') >= 0) { return 'op-dobrosim'; }
-	if (n.indexOf('beeline') >= 0 || n.indexOf('билайн') >= 0 || n.indexOf('vimpel') >= 0) { return 'op-beeline'; }
-	if (n.indexOf('megafon') >= 0 || n.indexOf('мегафон') >= 0) { return 'op-megafon'; }
-	if (n.indexOf('mts') >= 0 || n.indexOf('мтс') >= 0) { return 'op-mts'; }
-	if (n.indexOf('tele2') >= 0 || n.indexOf('теле2') >= 0 || n.trim() == 't2') { return 'op-t2'; }
-	if (/(^|[^0-9a-zа-яё])(t-mobile|tinkoff|t-bank|т-мобайл|т-банк|тинькофф)/.test(n)) { return 'op-tbank'; }
-	if (n.indexOf('just esim') >= 0 || n.indexOf('justesim') >= 0 || n.indexOf('just-esim') >= 0) { return 'op-justesim'; }
-	if (n.indexOf('yota') >= 0) { return 'op-yota'; }
-	if (n.indexOf('motiv') >= 0 || n.indexOf('мотив') >= 0) { return 'op-motiv'; }
-	if (n.indexOf('sber') >= 0 || n.indexOf('сбер') >= 0) { return 'op-sbermobile'; }
-	if (n.indexOf('tattelecom') >= 0 || n.indexOf('таттелеком') >= 0 || n.indexOf('летай') >= 0) { return 'op-tattelecom'; }
-	if (n.indexOf('rostelecom') >= 0 || n.indexOf('ростелеком') >= 0 ||
-	    n.indexOf('rt-mobile') >= 0 || n.indexOf('rtmobile') >= 0 || n.indexOf('рт-мобайл') >= 0 ||
-	    n.trim() == 'rtk' || n.trim() == 'ртк' || n.indexOf('rtk ') == 0 || n.indexOf(' rtk') >= 0) { return 'op-rostelecom'; }
-	if (n.indexOf('gigsky') >= 0) { return 'op-gigsky'; }
-	if (n.indexOf('eskimo') >= 0) { return 'op-eskimo'; }
-	return null;
+	return mutil.operatorIcon(name);
 }
 function tabIconSrc(m, opIcon) {
 	if (!opIcon && m && m.tether) { opIcon = 'op-sim'; }
@@ -552,7 +533,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30931,
+	API: 30932,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {

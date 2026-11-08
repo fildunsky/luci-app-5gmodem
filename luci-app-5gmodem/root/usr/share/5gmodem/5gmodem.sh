@@ -791,6 +791,7 @@ $(sms_tool -D -d $DEVICE at "AT+CIMI")"
 			;;
 	esac
 	if [ -z "$O" ] && [ -n "$DEVICE" ]; then
+		_at_recover "$DEVICE"
 		rm -f "$PORTOK" 2>/dev/null
 		_wg=$(_snapshot_age) && {
 			logger -t 5gmodem "poll of $DEVICE is stuck - serving the previous snapshot (${_wg}s)"
@@ -1024,7 +1025,7 @@ elif [ "$COPS_FROM_MODEM" = "1" ] && [ -n "$SIMID" ] && [ -n "$COPS" ]; then
 	[ "$_opc_v" = "$COPS" ] || printf '%s\n' "$COPS" > "$OPCACHE"
 fi
 
-SPNCACHE="/tmp/5gmodem/spn_$SIMID"
+SPNCACHE="/tmp/5gmodem/spn_v2_$SIMID"
 SPN=""
 if [ -n "$SIMID" ] && [ -s "$SPNCACHE" ]; then
 	IFS= read -r SPN 2>/dev/null < "$SPNCACHE"
@@ -1035,12 +1036,7 @@ elif [ -n "$SIMID" ]; then
 	SPNHEX=$(printf '%s\n' "$_spn_raw" \
 		| sed -n 's/.*+CRSM:[^,]*,[^,]*,\([0-9A-Fa-f][0-9A-Fa-f]*\).*/\1/p')
 	if [ -n "$SPNHEX" ]; then
-		SPN=$(echo "$SPNHEX" | sed 's/^..//' | sed 's/\(..\)/\1 /g' | tr ' ' '\n' | while read b; do
-			[ -z "$b" ] && continue
-			{ [ "$b" = "FF" ] || [ "$b" = "ff" ]; } && break
-			v=$((0x$b))
-			[ "$v" -ge 32 ] && [ "$v" -lt 127 ] && printf "\\$(printf '%03o' "$v")"
-		done)
+		SPN=$(sim_spn_decode "$SPNHEX")
 		[ -n "$SPN" ] && [ -n "$SIMID" ] && printf '%s\n' "$SPN" > "$SPNCACHE"
 	fi
 	if [ -z "$SPN" ] && [ -n "$SIMID" ]; then
