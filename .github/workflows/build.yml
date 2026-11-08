@@ -158,13 +158,7 @@ jobs:
         run: |
           set -e
           .github/scripts/readme-links.sh "$PKG_V" "$PKG_R"
-          FAIL=0
-          for U in $(grep -hoE 'https://github.com/fildunsky/luci-app-5gmodem/releases/download/[^ )<>"]+' README*.md | sort -u); do
-            CODE=$(curl -sIL -o /dev/null -w '%{http_code}' "$U")
-            echo "$CODE $U"
-            [ "$CODE" = 200 ] || FAIL=1
-          done
-          [ "$FAIL" = 0 ] || { echo "::error::a README link does not resolve - not committing"; exit 1; }
+          .github/scripts/check-readme-links.sh
           if git diff --quiet -- README.md README.ru.md README.zh-CN.md README.ja.md README.vi.md README.id.md; then
             echo "README links already point at $TAG"
             exit 0
