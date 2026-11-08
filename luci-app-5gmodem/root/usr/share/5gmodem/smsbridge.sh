@@ -877,9 +877,13 @@ case "$BOX" in
 		_dj_write running ;;
 esac
 
-_sb_p=$(uci -q get "5gmodem.$_TGT_SEC.at_port")
-[ -n "$_sb_p" ] || _sb_p=$(uci -q get "5gmodem.@5gmodem[0].at_port")
-if [ "$(_active_kind)" = "hilink" ] && { hl_web_metrics "$_TGT_SEC" || ! { [ -n "$_sb_p" ] && [ -c "$_sb_p" ]; }; }; then
+if [ -z "$PORT" ]; then
+	case "$BOX" in
+		send|queue-run|queue-list) PORT=$(uci -q get "$CFG.sms.sendport") ;;
+		*) PORT=$(uci -q get "$CFG.sms.readport") ;;
+	esac
+fi
+if hl_sms_web "$_TGT_SEC" "$PORT"; then
 	case "$BOX" in
 		sent) "$RES/hilink.sh" smsread out "$_TGT_PATH" ;;
 		status)

@@ -112,3 +112,7 @@ The older `modem/hilink/huawei_hilink.sh` path remains separate from the primary
 Huawei POST serialization uses an automatically released flock rather than a directory lock, so killing an exporter or RPC process cannot leave POSTs permanently busy. GET token/session refresh concurrency is a separate concern and is not changed by this lock.
 
 Session files, POST locks and failed-login backoff are keyed by both the modem path and its private address. Two Huawei devices commonly expose the same `192.168.8.1`; keying by address alone mixed their session cookies and let one failed login delay the other device. Existing address-only cache files are ignored and sessions are refreshed normally.
+
+## E5573 debug SMS routing (2026-11-09)
+
+Paired 3.9.25 field reports show E5573Bs-320 firmware 21.329.01.00.00 with a responding HTTP API in both `12d1:14db` normal and `12d1:1566` debug compositions. The application incorrectly treated the appearance of an AT metrics port as a reason to use AT SMS. SMS now stays on the Huawei API, independently of the AT metrics port; the USSD panel offers a separate per-modem serial-port override. The [paired-report audit](../audits/2026-11-09-hilink-debug-sms.md) records the evidence, persistence defect and required hardware follow-up. The reports establish the routing defect but do not contain the failed raw SMS exchange or confirm the new implementation on the router.

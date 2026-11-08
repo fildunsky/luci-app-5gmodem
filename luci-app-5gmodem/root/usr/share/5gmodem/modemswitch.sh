@@ -248,7 +248,7 @@ smsopt)
 		_k=${_kv%%=*}; _v=${_kv#*=}
 		case "$_k" in
 			readport|sendport|ussdport|atport)
-				[ -z "$_v" ] || is_devpath "$_v" || continue ;;
+				[ -z "$_v" ] || is_smsport "$_v" || continue ;;
 			sms_count|sms_count_index)
 				_okc=1
 				for _t in $_v; do

@@ -553,7 +553,8 @@ return view.extend({
 
 	handleGo: function(ev) {
 		let ussd = document.getElementById('cmdvalue').value;
-		let port = uci.get('5gmodem', 'sms', 'ussdport');
+		var path = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		let port = uci.get('5gmodem', 'm_' + path.replace(/[^A-Za-z0-9]/g, '_'), 'ussd_port') || uci.get('5gmodem', 'sms', 'ussdport');
 		let get_via_mm = uci.get('5gmodem', 'sms', 'ussd_via_mm');
 		let via_proxy = false;
 		if (get_via_mm == '1') {
@@ -710,7 +711,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30932, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30933, [ editors, smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

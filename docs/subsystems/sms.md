@@ -243,3 +243,7 @@ With a string as the third argument, LuCI's `E(tag, props, 'string')` sets `inne
 ### Lock policy regression coverage (2026-11-07 audit)
 
 The ordinary read-lock timeout fallback above is intentional and preserved: a failed `at_lock` alone must not suppress inbox reads. Long AT operations still suppress reads through `at_long_busy`. The PDU sender explicitly acquires the requested port's lock before encoding or writing; sending remains stricter than reading, including queue and fallback entry points. Offline regression tests cover both policies separately.
+
+## HiLink SMS with debug AT ports
+
+`hl_sms_web` in `lib.sh` decides SMS transport independently of `hl_web_metrics`. Huawei modems registered as `kind=hilink` keep the HTTP inbox, sent folder, counts, send and delete operations when debug composition exposes an AT metrics port. Their CPMS setup is also skipped: HTTP SMS storage is managed by the modem's API. Other serial-capable vendors retain their AT default unless an existing special web profile or an explicit HiLink/IP SMS port selects HTTP. Port defaults are loaded before the transport decision, and `smsopt` accepts valid IPv4/HiLink selections only for an active HiLink modem. Changing the selected SMS transport does not require a reboot or clearing the metrics AT port. See the [E5573 field audit](../audits/2026-11-09-hilink-debug-sms.md).

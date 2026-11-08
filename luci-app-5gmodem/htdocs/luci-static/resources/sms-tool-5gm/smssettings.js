@@ -750,6 +750,23 @@ function addSendOptions(s) {
 
 function addUssdOptions(s) {
 	var o;
+	o = s.option(form.Value, '_ussd_port', _('USSD sending port'));
+	var path = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+	var section = 'm_' + path.replace(/[^A-Za-z0-9]/g, '_');
+	[ uci.get('5gmodem', section, 'at_port'), uci.get('5gmodem', 'sms', 'ussdport'), uci.get('5gmodem', section, 'ussd_port') ].filter(function(p, i, all) {
+		return p && p.indexOf('/dev/') === 0 && all.indexOf(p) === i;
+	}).forEach(function(p) { o.value(p, p); });
+	o.placeholder = _('Auto (detect)');
+	o.rmempty = true;
+	o.cfgvalue = function() {
+		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '';
+		return uci.get('5gmodem', 'm_' + p.replace(/[^A-Za-z0-9]/g, '_'), 'ussd_port') || '';
+	};
+	o.write = function(section_id, value) {
+		var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
+		if (p) { uci.set('5gmodem', 'm_' + p.replace(/[^A-Za-z0-9]/g, '_'), 'ussd_port', value); }
+	};
+	o.remove = function(section_id) { return this.write(section_id, null); };
 
 	o = s.option(form.Flag, 'ussd', _('Send the USSD code as plain text'),
 		_('Send the USSD code as plain text; the command is not encoded into a PDU'));
@@ -871,7 +888,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30931,
+	API: 30933,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

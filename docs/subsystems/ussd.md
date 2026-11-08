@@ -105,3 +105,7 @@ Under ModemManager on MBIM, `MBIM_USSD_RESPONSE_TERMINATED_BY_NETWORK` becomes t
 ## Busy AT ports (2026-11-07 audit)
 
 Cancellation and the AT worker honour failed `at_lock` acquisition. Cancellation returns `port busy` without writing `AT+CUSD=2` or resetting the state file. The worker reports the same error through the existing Base64 result fields; registration waits skip a busy port. If a RAT switch already happened, the restore path still runs. This is separate from the intentional SMS-read timeout fallback described in `sms.md`.
+
+## Independent per-modem AT port
+
+The expandable USSD settings panel exposes **USSD sending port** independently of the SMS backend. Its value is stored as `5gmodem.m_<path>.ussd_port`; clearing it restores automatic selection. `ussd.sh` prefers this override only if the character device still exists and `tty_usbpath` identifies the same active modem. Otherwise the existing global-port/registry/detection fallback applies. Automatic SMS port synchronization cannot overwrite this per-modem option. A Huawei HiLink in debug mode can therefore use HTTP for SMS while retaining a serial AT port for USSD and metrics. This setting affects the AT path; the separate ModemManager option still selects the ModemManager USSD path.

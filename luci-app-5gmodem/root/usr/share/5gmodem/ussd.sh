@@ -25,6 +25,14 @@ _reg_field() {
 }
 
 _port() {
+	local path section selected
+	path=$(active_path)
+	section=$(secname "$path")
+	selected=$(uci -q get "$CFG.$section.ussd_port")
+	if [ -n "$path" ] && [ -n "$selected" ] && [ -c "$selected" ] && [ "$(tty_usbpath "$selected")" = "$path" ]; then
+		printf '%s\n' "$selected"
+		return
+	fi
 	_p=$(uci -q get "$CFG.sms.ussdport")
 	[ -n "$_p" ] && [ -c "$_p" ] && { echo "$_p"; return; }
 	_p=$("$RES/registry.sh" active 2>/dev/null | jsonfilter -e '@.at_port' 2>/dev/null)
