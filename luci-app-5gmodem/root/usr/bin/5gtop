@@ -40,6 +40,7 @@ T_NOREG="no reg.";          T_RUNNING="running"
 T_PRESS_S="press t";        T_PRESS_S_LONG="press t to start"
 T_AGO_H="h ago";            T_AGO_M="m ago";      T_AGO_S="s ago"
 T_D="d"
+T_K_UPDATE="update"
 T_K_QUIT="quit";            T_K_REFRESH="refresh"
 T_K_TEST="test";            T_K_PRI="priority";   T_K_MODEM="modem"
 T_ERR_NOSRC="not found";    T_ERR_NOJF="jsonfilter required"
@@ -100,6 +101,7 @@ case "$_lang" in
 		T_PRESS_S="нажмите t";      T_PRESS_S_LONG="нажмите t для запуска"
 		T_AGO_H="ч назад";          T_AGO_M="м назад";    T_AGO_S="с назад"
 		T_D="д"
+		T_K_UPDATE="обновление"
 		T_K_QUIT="выход";           T_K_REFRESH="обновить"
 		T_K_TEST="тест";            T_K_PRI="приоритет";  T_K_MODEM="модем"
 		T_ERR_NOSRC="не найден";    T_ERR_NOJF="нужен jsonfilter"
@@ -457,6 +459,7 @@ keyhint() {
 	[ "${TINY:-0}" = 1 ] && printf ' ' || printf '\n '
 	_kh "q" "$T_K_QUIT"
 	_kh "r" "$T_K_REFRESH"
+	_kh "p" "$T_K_UPDATE"
 	if [ -n "$1" ]; then
 		printf '%s\n' "$1" | while IFS="$(printf '\t')" read -r _kk _kl; do
 			[ -n "$_kk" ] || continue
@@ -1887,6 +1890,17 @@ set_pri() {
 	rm -f "$NPFILE"; fetch
 }
 
+package_update() {
+	printf '%s[2J%s[H%s[?25h' "$ESC" "$ESC" "$ESC"
+	stty "$STTY_SAVE" 2>/dev/null
+	/usr/bin/5gmodem update
+	printf '\nEnter / Ввод...'
+	IFS= read -r _update_ack
+	stty -echo -icanon min 0 time 1 2>/dev/null
+	printf '%s[?25l' "$ESC"
+	NEED_FRAME=1
+}
+
 switch_modem() {
 	[ "$MCOUNT" -gt 1 ] || return
 	_cur=$(uci -q get 5gmodem.@5gmodem[0].active_modem | tr -c 'A-Za-z0-9' '_')
@@ -1978,6 +1992,7 @@ while :; do
 		[ "$_got" = 1 ] || _k="__timeout__"
 		case "$_k" in
 			q|Q) cleanup ;;
+			p|P) package_update ;;
 			r|R)
 				fetch
 				case "$(tab_id "$TAB")" in

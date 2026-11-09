@@ -503,6 +503,8 @@ sms fields.
 
 ## 5gtop
 
+Press `p` to check for a program update and, after confirmation, install it through `5gmodem update`. The dashboard restores normal terminal input while the updater runs and redraws on return after Enter. This is an explicit check; regular metric refreshes do not access GitHub.
+
 Terminal version of the Network page for weak routers (MT7628) where LuCI is slow or does not fit in
 RAM. It uses the same backends (`5gmodem.sh cached`, `netpri.sh`, `speedtest.sh`, `esim.sh`,
 `smsbridge.sh`, `simslot.sh`) and adds no AT commands.

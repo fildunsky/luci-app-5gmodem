@@ -1,0 +1,53 @@
+#!/bin/sh
+
+UPDATE=/usr/share/5gmodem/update.sh
+STATUS=/tmp/5gmodem/update.json
+
+field() { printf '%s' "$RESULT" | jsonfilter -e "@.$1" 2>/dev/null; }
+error() { printf '%s\n' "$*" >&2; exit 1; }
+
+case "$1" in
+update)
+	[ "$#" -eq 1 ] || error "Use: 5gmodem update"
+	command -v jsonfilter >/dev/null 2>&1 || error "jsonfilter required"
+	[ -x "$UPDATE" ] || error "Updater not found: $UPDATE"
+	printf 'Checking for updates...\n'
+	RESULT=$("$UPDATE" check)
+	[ "$(field success)" = true ] || error "Update check failed: $(field error)"
+	printf 'Installed: %s\nLatest:    %s\n' "$(field current)" "$(field latest)"
+	[ "$(field update_available)" = 1 ] || { echo 'Already up to date.'; exit 0; }
+	[ "$(id -u)" = 0 ] || error "Run the update as root"
+	printf 'Install update? [y/N] '
+	IFS= read -r ANSWER
+	case "$ANSWER" in y|Y|yes|YES) ;; *) echo 'Cancelled.'; exit 0 ;; esac
+	RESULT=$("$UPDATE" install)
+	[ "$(field started)" = true ] || error "Could not start update"
+	echo 'Installing update. The result is saved in /tmp/5gmodem/update.json.'
+	LAST=''
+	COUNT=0
+	while [ "$COUNT" -lt 600 ]; do
+		RESULT=$(cat "$STATUS" 2>/dev/null)
+		case "$(field success)" in
+			true) printf 'Updated successfully: %s\n' "$(field current)"; exit 0 ;;
+			false) error "Update failed: $(field error) $(field detail) $(field pkgs)" ;;
+		esac
+		STAGE=$(field stage)
+		if [ -n "$STAGE" ] && [ "$STAGE" != "$LAST" ]; then
+			printf '%s...\n' "$STAGE"
+			LAST=$STAGE
+		fi
+		sleep 1
+		COUNT=$((COUNT + 1))
+	done
+	error "Still waiting. Check $STATUS and /tmp/5gmodem/update.log before retrying."
+	;;
+version)
+	exec "$UPDATE" version
+	;;
+-h|--help|help|'')
+	printf 'Usage: 5gmodem update | version\n'
+	;;
+*)
+	error "Unknown command: $1. Run: 5gmodem --help"
+	;;
+esac

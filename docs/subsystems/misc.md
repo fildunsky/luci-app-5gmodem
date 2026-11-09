@@ -60,6 +60,9 @@ The "Settings" tab: application update, APN database update, Network page displa
 - Lite variant `luci-app-5gmodem-lite`: same files without heavy dependencies (modemmanager, qmi-utils, kmods, protos) for 8 MB flash routers. Built by the same CI and attached to the release (a manual `apk mkpkg` build once lost dependencies). conffiles/install/postinst/prerm are reused from the main package by plain make assignment (a copy would diverge). CONFLICTS is mandatory: both packages own the same files.
 
 ## update.sh
+
+The SSH frontend `/usr/bin/5gmodem` supports `update` and `version`. The single `5gmodem update` command checks for updates and offers installation when a newer version is available. Checks print installed/latest versions and return nonzero on network/API failure. Installation requires root and explicit confirmation; Enter or end of input cancels. It delegates to the same updater as LuCI, preserving Full/Lite and APK/IPK selection, and polls the atomic status file rather than re-executing a script being replaced. Failures include the updater detail and package blockers. Waiting is bounded to ten minutes; leaving the frontend does not cancel the background installer. No reinstall is started when the installed version is current.
+
 `update.sh version|check|install|status` - checks and installs the latest luci-app-5gmodem release from the project GitHub releases. Prints JSON.
 - Release notes on GitHub stay in English. Translations are release assets `notes-<lang>.txt` for ru, id, ja, vi, zh_Hans and zh_Hant. `check <lang>` replaces the notes with the matching asset (first 8 KB); no asset or a failed download keeps the English text. The page takes the language from the `lang` attribute of the document.
 - Downloads go through net_fetch (lib.sh): direct requests from the router die behind carrier whitelists, the local clash gets through (2026-08-19: "the updater must fetch like the widgets do").
