@@ -111,3 +111,7 @@ Built from an offline dump (`EC200AELLAR01A05M16`, ECM/RNDIS usbnet, AT usually 
 For a module on PCIe the poll builds the profile key as `pci/<vendor><device>`. The AT set does not depend on the bus, so these files reuse the USB profile and only work out the data-channel protocol: there is no USB interface driver to look at, so they check which node the module exposed next to the AT port (`wwan<N>mbim<M>` → MBIM, `wwan<N>qmi<M>` → QMI).
 
 - `pci/17cb0308` — RM520N-GLAP: the same RM520N-GL with USB cut at the factory, seen as PCI 17cb:0308 under `mhi-pci-generic` ("MHI PCI device found: quectel-rm5xx"). Before this file existed the AP variant showed no vendor metrics at all. Under `mhi-pci-generic` the channel is always MBIM (QMI only appears with the vendor driver), so MBIM is the default.
+
+### RM520N-GL `1eac:1007`: host driver prerequisite
+
+The PCI metric and band profiles already cover this ID. Issue #69 instead reaches only raw PCI enumeration (`1eac:1007`, subsystem `1eac:1009`): no bound driver or WWAN/MHI nodes. Standard Linux 6.12 matches the ID as `quectel-rm5xx`; stock OpenWrt needs `kmod-mhi-pci-generic`, `kmod-mhi-wwan-ctrl` and `kmod-mhi-wwan-mbim` before the app can discover its AT/MBIM ports. These drivers are not dependencies of the universal app package. See the [issue #69 audit](../audits/2026-11-09-issue69-rm520-pcie.md) for QModem/4pda evidence and the staged test. A successful PCI listing alone is not successful modem initialization; exact OEM firmware operation remains unverified.

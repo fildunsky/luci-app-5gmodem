@@ -85,8 +85,15 @@ mbim_verdict() {
 	[ -n "$_mv_pin" ] && echo "the modem reports: $_mv_pin"
 	case "$_mv_pin" in
 		*pin2*) echo "  PIN2 is a service code (FDN, limits); the internet does NOT need it."
-		        echo "  But umbim treats it as a blocker and fails the setup with PIN_FAILED." ;;
+			if [ "$_mv_err" = PIN_FAILED ]; then
+				echo "  The setup reports PIN_FAILED; check whether this handler rejects PIN2."
+			fi ;;
 	esac
+	if [ "$_mv_err" = NO_REGISTRATION ]; then
+		echo "The modem has not registered with a mobile network."
+		echo "  Check radio power, SIM readiness and registration status; PIN2 alone does not explain this error."
+		return
+	fi
 	[ "$_mv_log" -gt 0 ] 2>/dev/null && \
 		echo "'Failed to attach to network' appears $_mv_log time(s) in the log - umbim cannot bring up the PDP context"
 	if [ "$_mv_err" = PIN_FAILED ] || [ "$_mv_log" -gt 0 ] 2>/dev/null; then

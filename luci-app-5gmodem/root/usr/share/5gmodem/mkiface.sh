@@ -300,12 +300,15 @@ if [ "$AMP" = ccci ]; then
 fi
 
 if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] || [ "$REQ" = fibocom ] || [ "$REQ" = atc ] || [ "$REQ" = xmm ]; }; then
+	_mki_xvp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
+	_mki_td=0
+	case "$_mki_xvp:$REQ" in 3466:3301:auto|3466:3301:|3466:3301:fibocom) _mki_td=1 ;; esac
 	FNET=""
 	for n in /sys/bus/usb/devices/$AMP:*/net/*; do
 		[ -e "$n" ] || continue
 		FNET=$(basename "$n"); break
 	done
-	if [ -n "$FNET" ]; then
+	if [ -n "$FNET" ] || [ "$_mki_td" = 1 ]; then
 		OLDAPN=$(uci -q get "network.$IF.apn")
 		OLDPDP=$(uci -q get "network.$IF.pdptype")
 		[ -n "$OLDPDP" ] || OLDPDP=$(uci -q get "network.$IF.pdp")
@@ -321,7 +324,6 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		[ "$REQ" = xmm ] && [ -f /lib/netifd/proto/xmm.sh ] && [ -z "$OLDUSER" ] && FPROTO=xmm
 		[ "$REQ" = atc ] && [ -f /lib/netifd/proto/atc.sh ] && FPROTO=atc
 
-		_mki_xvp="$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null)"
 		if { [ "$REQ" = auto ] || [ -z "$REQ" ]; } \
 		   && { [ "${_mki_xvp%%:*}" = "8087" ] || [ "$_mki_xvp" = "2cb7:000b" ]; }; then
 			if [ -f /lib/netifd/proto/xmm.sh ] && [ -n "$OLDUSER" ]; then
@@ -383,7 +385,11 @@ if [ -n "$AMP" ] && [ -z "$WANTWDM" ] && { [ "$REQ" = auto ] || [ "$REQ" = "" ] 
 		else
 			uci set "network.$IF.proto=$FPROTO"
 			uci set "network.$IF.usbpath=$AMP"
-			uci set "network.$IF.device=$FNET"
+			if [ -n "$FNET" ]; then
+				uci set "network.$IF.device=$FNET"
+			else
+				uci -q delete "network.$IF.device"
+			fi
 			set_apn_opt "$IF" "$OLDAPN"
 			set_pdp_opt "$IF" pdptype upper
 			FDEV="$FNET"

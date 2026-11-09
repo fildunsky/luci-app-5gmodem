@@ -22,6 +22,67 @@ def autodial_source():
 
 
 class TdTech(unittest.TestCase):
+    def test_interface_creation_before_network_port_exists(self):
+        source = (SHARE/'mkiface.sh').read_text()
+        start = source.index('if [ -n "$AMP" ] && [ -z "$WANTWDM" ]')
+        branch = source[start:source.index('\nDEV=""; DRV=""', start)]
+        for vp, request, netdev, expected in (
+                ('3466:3301', 'auto', False, True),
+                ('3466:3301', '', False, True),
+                ('3466:3301', 'fibocom', False, True),
+                ('3466:3301', 'auto', True, True),
+                ('3466:3301', 'mbim', False, False),
+                ('3466:3301', 'atc', False, False),
+                ('2c7c:0800', 'auto', False, False)):
+            with self.subTest(vp=vp, request=request, netdev=netdev), tempfile.TemporaryDirectory() as temp:
+                base = Path(temp)
+                dev = base/'1-8'
+                dev.mkdir()
+                vendor, product = vp.split(':')
+                (dev/'idVendor').write_text(vendor)
+                (dev/'idProduct').write_text(product)
+                if netdev:
+                    (base/'1-8:2.0/net/eth4').mkdir(parents=True)
+                prefix = '''
+AMP=1-8; WANTWDM=; IF=modem2; MSEC=; _IS_ACTIVE=0
+uci() {
+    case "$*" in
+        'set '*|'-q delete '*) printf '%s\\n' "$*" >> "$RESULT" ;;
+        '-q get network.modem2.apn') echo ctnet ;;
+        '-q get network.modem2.pdptype') echo IPV4V6 ;;
+        *) return 1 ;;
+    esac
+}
+logger() { :; }
+_mk_guard_if() { :; }
+_mk_reset_transport() { :; }
+_fw_zone_add() { :; }
+stamp_iface() { :; }
+_def_metric() { echo 110; }
+ifup() { echo "ifup $1" >> "$RESULT"; }
+json() { printf '%s %s %s\\n' "$1" "$2" "$3"; }
+'''
+                script = prefix+'\n'+function('set_apn_opt', 'mkiface.sh')+'\n'+function('set_pdp_opt', 'mkiface.sh')
+                script += '\n'+branch.replace('/sys/bus/usb/devices', temp)+'\necho FALLTHROUGH\n'
+                result = shell(script, dict(os.environ, REQ=request, RESULT=temp+'/writes'))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                writes = (base/'writes').read_text() if (base/'writes').exists() else ''
+                if expected:
+                    self.assertIn('created fibocom', result.stdout)
+                    self.assertNotIn('FALLTHROUGH', result.stdout)
+                    self.assertIn('network.modem2.usbpath=1-8', writes)
+                    self.assertIn('network.modem2.pdptype=IPV4V6', writes)
+                    self.assertIn('network.modem2.apn=ctnet', writes)
+                    self.assertIn('ifup modem2', writes)
+                    if netdev:
+                        self.assertIn('network.modem2.device=eth4', writes)
+                    else:
+                        self.assertIn('delete network.modem2.device', writes)
+                        self.assertNotIn('set network.modem2.device=', writes)
+                else:
+                    self.assertEqual(result.stdout.strip(), 'FALLTHROUGH')
+                    self.assertEqual(writes, '')
+
     def test_ndis_cid_is_not_connection_state(self):
         for reply, expected in [
             ('^NDISSTATQRY: 1,1,,,"IPV4",0,,,"IPV6"', 0),
