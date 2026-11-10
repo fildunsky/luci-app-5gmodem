@@ -24,9 +24,13 @@ var callForwardSMS = rpc.declare({
     params: ['subject', 'message']
 });
 
+var smsReadOnly = false;
+
 function msg_bar(v, m) {
 var pg = document.querySelector('#msg')
 if (!pg || !pg.firstElementChild) { return; }
+pg.style.display = smsReadOnly ? 'none' : '';
+if (smsReadOnly) { return; }
 var vn = parseInt(v) || 0;
 var mn = parseInt(m) || 100;
 var pc = Math.floor((100 / mn) * vn);
@@ -36,6 +40,10 @@ pg.setAttribute('title', _('Memory: %s/%s').format(v, m));
 }
 
 function sms_parse_status(res) {
+	smsReadOnly = /read-only:\s*1/i.test(String(res || ''));
+	var remove = document.getElementById('execute');
+	if (remove) { remove.disabled = smsReadOnly; }
+
 	var u = String(res || '').match(/used:\s*(\d+)/i);
 	var t = String(res || '').match(/total:\s*(\d+)/i);
 	return { u: u ? u[1] : null, t: t ? t[1] : null };
@@ -178,12 +186,12 @@ function sms_update_selcount() {
 function sms_cache_key() {
 	var s = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 	var p = uci.get('5gmodem', 'sms', 'readport') || '';
-	return 'sms-last:' + s + ':' + p;
+	return 'sms-last:' + s + ':' + p + ':' + (uci.get('5gmodem', '@5gmodem[0]', 'active_modem') || '');
 }
 function sms_cache_save(list, u, t) {
 	try {
 		window.localStorage.setItem(sms_cache_key(),
-			JSON.stringify({ list: list, u: u, t: t }));
+			JSON.stringify({ list: list, u: u, t: t, read_only: smsReadOnly }));
 	} catch (e) {}
 }
 function sms_cache_load() {
@@ -425,7 +433,7 @@ function sms_update_newcount() {
 		badge.textContent = n ? (_('New') + ': ' + n) : '';
 		badge.style.display = n ? '' : 'none';
 	}
-	if (btn) { btn.style.display = n ? '' : 'none'; }
+	if (btn) { btn.style.display = (n && !smsReadOnly) ? '' : 'none'; }
 }
 
 function sms_mark_all_read() {
@@ -451,6 +459,24 @@ function sms_fmt_sender(s) {
 	return '+7 (' + n.slice(0, 3) + ') ' + n.slice(3, 6) + '-' + n.slice(6, 8) + '-' + n.slice(8, 10);
 }
 
+function sms_android_read(parts) {
+	if (!parts.every(function(p) { return p.android_read != null; })) { return undefined; }
+	return parts.every(function(p) { return String(p.android_read) === '1'; }) ? 1 : 0;
+}
+
+function sms_android_new(parts) {
+	if (!parts.every(function(p) { return p.android_read != null; })) { return undefined; }
+	return parts.some(function(p) { return String(p.android_read) === '0' && String(p.android_seen) !== '1'; }) ? 1 : 0;
+}
+
+function sms_item_new(item) {
+	if (item && item.android_new != null) { return String(item.android_new) === '1'; }
+	if (item && item.android_read != null) { return String(item.android_read) === '0' && String(item.android_seen) !== '1'; }
+	return !!(smsSeen && !smsSeenFirst && sms_msg_pairs(item).some(function(p) {
+		return !smsSeen.has(p[0]) && !smsSeen.has(p[1]);
+	}));
+}
+
 function sms_make_card(item, iconSrc, hide) {
 	var sender = String(item.sender || '');
 	if (hide && sender.includes(hide)) { sender = sender.slice(0, -5) + '#####'; }
@@ -459,9 +485,7 @@ function sms_make_card(item, iconSrc, hide) {
 
 	var keys = sms_msg_keys(item);
 	var key = keys[0];
-	var isNew = !!(smsSeen && !smsSeenFirst && sms_msg_pairs(item).some(function(p) {
-		return !smsSeen.has(p[0]) && !smsSeen.has(p[1]);
-	}));
+	var isNew = sms_item_new(item);
 
 	var card = E('button', {
 		'type': 'button',
@@ -490,7 +514,7 @@ function sms_make_card(item, iconSrc, hide) {
 	card.addEventListener('click', function(ev) {
 		var codeEl = ev.target.closest ? ev.target.closest('.sms-code') : null;
 		if (codeEl) { sms_copy_code(codeEl); }
-		if (card.classList.contains('sms-new')) {
+		if (!smsReadOnly && card.classList.contains('sms-new')) {
 			card.classList.remove('sms-new');
 			sms_seen_add(keys);
 			sms_modem_markread([ card ]);
@@ -635,17 +659,18 @@ function save_count() {
 	});
 }
 
-function isHilinkModem() {
+function isPortlessSmsModem() {
 	var p = uci.get('5gmodem', '@5gmodem[0]', 'active_modem');
 	if (!p) { return false; }
 	var sec = 'm_' + String(p).replace(/[^A-Za-z0-9]/g, '_');
-	return uci.get('5gmodem', sec, 'kind') === 'hilink';
+	var kind = uci.get('5gmodem', sec, 'kind');
+	return kind === 'hilink' || (kind === 'tether' && uci.get('5gmodem', sec, 'tether') === 'android');
 }
 
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30936, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30937, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -848,6 +873,8 @@ return view.extend({
     },
 
 	handleDelete: function(ev) {
+		if (smsReadOnly) { ui.addNotification(null, E('p', _('Android SMS storage is read-only.')), 'info'); return; }
+
 		var viewSelf = this;
 		if (sms_selected_cards().length == 0) {
 			ui.addNotification(null, E('p', _('Please select the message(s) to be deleted')), 'info');
@@ -1006,7 +1033,7 @@ return view.extend({
 		var ledt = (uci.get('5gmodem', 'sms', 'ledtype'));
 		var direct = (uci.get('5gmodem', 'sms', 'direction'));
 
-		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
+		if (!portR && !isPortlessSmsModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1' && !window._smsPortNagged && (window._smsPortNagged = true)) {
  			ui.addNotification(null, E('p', _('The package requires user configuration. <br /><br /><b>The following need to be set:</b> <ol><li>All ports for communication with the modem.</li><li>Additional options specific to the given modem (for handling USSD codes).</li><li>Notification LED (optional).</li></ol>')), 'info');
 		}
 		
@@ -1050,7 +1077,7 @@ return view.extend({
 		function doRefreshInner(updateCount) {
 		var storeL = uci.get('5gmodem', 'sms', 'storage') || 'ME';
 		var portR = uci.get('5gmodem', 'sms', 'readport');
-		if (!portR && !isHilinkModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1') {
+		if (!portR && !isPortlessSmsModem() && uci.get('5gmodem', 'sms', 'sms_via_mm') != '1') {
 			if (!window._smsPortNagged) {
 				window._smsPortNagged = true;
 				ui.addNotification(null, E('p', _('Please set the port for communication with the modem')), 'info');
@@ -1151,6 +1178,8 @@ return view.extend({
 													}
 												});
 												return {
+													android_new: sms_android_new(parts),
+													android_read: sms_android_read(parts),
 													sender: first.sender,
 													timestamp: first.timestamp,
 													tz: first.tz,
@@ -1249,6 +1278,7 @@ return view.extend({
 				table.appendChild(sms_make_card(c.list[i], Lres, hide));
 			}
 			smsRestoreSelection();
+			smsReadOnly = c.read_only === true;
 			sms_seen_sync(c.list);
 			sms_update_newcount();
 			sms_update_selcount();

@@ -6082,3 +6082,51 @@ msgstr "正在重启…"
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr "下载适用于您的 OpenWrt 版本的软件包，在“系统 → 软件包”中上传，然后刷新此页面。"
+
+msgid "Voltage"
+msgstr "电压"
+
+msgid "Health"
+msgstr "健康状况"
+
+msgid "overheated"
+msgstr "过热"
+
+msgid "dead"
+msgstr "已损坏"
+
+msgid "over-voltage"
+msgstr "过压"
+
+msgid "failure"
+msgstr "故障"
+
+msgid "too cold"
+msgstr "过冷"
+
+msgid "Thermal throttling"
+msgstr "温控降频"
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr "此 SIM 卡不支持 VoLTE。仅使用 LTE 时，该卡上的通话和短信将无法使用，直到选择其他模式。"
+
+msgid "Surface temperature"
+msgstr "表面温度"
+
+msgid "Mobile data"
+msgstr "移动数据"
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr "要读取蜂窝网络参数，请启用 USB 调试，并在手机上授权此路由器。"
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr "请在手机上更换用于移动数据的 SIM 卡。"
+
+msgid "Android SMS storage is read-only."
+msgstr "Android 短信存储为只读。"
+
+msgid "LAC/TAC"
+msgstr "LAC/TAC"
+
+msgid "Switching the mobile-data SIM…"
+msgstr "正在切换移动数据 SIM 卡…"

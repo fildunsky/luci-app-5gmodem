@@ -100,6 +100,19 @@ Cell lock, 5G mode and restore go through `AT+CFUN=4`. The modem re-registers on
 - The json cache is flushed after the write (EP06-E kept showing an already removed lock).
 - 5G cell lock is a separate contract (`getcelllock5g`/`setcelllock5g`, `off | cell <nr-arfcn> <pci>`): firmware keeps LTE and NR locks independently (T99W175 `AT^LTE_LOCK` / `AT^NR5G_LOCK`). No uci stamp for 5G: `_celllock_effective` applies the stamp to the 4G row only and a second stamp would show the 5G lock there.
 
+## Android phones (tether section, `tether=android`)
+
+For a section with `kind=tether` and `tether=android`, `bands.sh` answers `json`, `mgmtinfo`
+(`{"source":"vendor"}`), `getmode`, `getsupportedmodes`, `setmode`, `setall` and `restorebands`
+(a no-op) before the profile logic, through `android_radio_json`, `android_set_mode` and
+`android_set_bands` in `android.sh`. They address the active data SIM through the packaged DEX helper
+(no AT port, no root); the mode ids are `1:Auto 8:2G 2:3G 4:4G 20:4G/5G`. The supported band lists are
+the modem's own, learned once and stored in `5gmodem.<section>.android_caps`. `setall` reports
+`lte`/`nsa`/`3g`/`2g`/`mode` in the same `applyresult` format as other vendors; a band that is not in the
+list is a `badband` failure. Details, measured behaviour and limits (GSM 1800 and UMTS B26 cannot be
+written, modem camping on EDGE after a change and the background recovery) are in
+[Android phones](../modems/android-phones.md#network-mode-and-band-selection).
+
 ## Other vendor rows
 
 Each returns `Unsupported` to hide the row.

@@ -6082,3 +6082,51 @@ msgstr "Đang khởi động lại…"
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr "Tải gói phù hợp với phiên bản OpenWrt, tải lên trong Hệ thống → Phần mềm, rồi làm mới trang này."
+
+msgid "Voltage"
+msgstr "Điện áp"
+
+msgid "Health"
+msgstr "Tình trạng"
+
+msgid "overheated"
+msgstr "quá nhiệt"
+
+msgid "dead"
+msgstr "hỏng"
+
+msgid "over-voltage"
+msgstr "quá áp"
+
+msgid "failure"
+msgstr "lỗi"
+
+msgid "too cold"
+msgstr "quá lạnh"
+
+msgid "Thermal throttling"
+msgstr "Giảm hiệu năng do nhiệt"
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr "SIM này không có VoLTE. Khi chỉ dùng LTE, cuộc gọi và SMS trên SIM này sẽ ngừng hoạt động cho đến khi chọn chế độ khác."
+
+msgid "Surface temperature"
+msgstr "Nhiệt độ bề mặt"
+
+msgid "Mobile data"
+msgstr "Dữ liệu di động"
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr "Để đọc thông số mạng di động, hãy bật gỡ lỗi USB và cho phép router này trên điện thoại."
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr "Hãy đổi SIM dữ liệu di động trên điện thoại."
+
+msgid "Android SMS storage is read-only."
+msgstr "Bộ nhớ SMS của Android chỉ cho phép đọc."
+
+msgid "LAC/TAC"
+msgstr "LAC/TAC"
+
+msgid "Switching the mobile-data SIM…"
+msgstr "Đang chuyển SIM dữ liệu di động…"

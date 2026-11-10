@@ -194,6 +194,10 @@ the output lets the UI tell HiLink apart and hide AT features.
 
 ### USB tethering phones
 
+Authorized Android ADB interfaces can additionally provide read-only
+[cellular telemetry](../modems/android-phones.md). The selected USB serial
+is used for every query; this does not change tethering detection or setup.
+
 Detected by RNDIS (`ef/04/01`, older firmware `e0/01/03`), not by "network
 without ports", which also matches ordinary USB Ethernet adapters. Previously a
 phone only showed up if a section already existed; a fresh phone in a socket

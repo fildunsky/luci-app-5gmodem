@@ -749,6 +749,54 @@ _mtk_rat_json() {
 	done
 	printf '], "enabled%s": [%s]' "$1" "$(echo ${_mrj#*|} | tr ' ' ',')"
 }
+if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = tether ] \
+   && [ "$(uci -q get "5gmodem.$_bs_sec.tether")" = android ] && [ -f /usr/share/5gmodem/android.sh ]; then
+	# Android phone over USB: network mode and bands of the active data SIM (see docs/modems/android-phones.md).
+	RES=/usr/share/5gmodem
+	. "$RES/android.sh"
+	_bs_amodel=$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')
+	case "$1" in
+		json)              android_radio_json "$_bs_am" "$_bs_amodel" || echo '{}'; exit 0 ;;
+		mgmtinfo)          echo '{"source":"vendor"}'; exit 0 ;;
+		getsupportedmodes) echo "1:Auto 8:2G 2:3G 4:4G 20:4G/5G"; exit 0 ;;
+		getmode)           android_radio_json "$_bs_am" "" | jsonfilter -e '@.currentmode'; exit 0 ;;
+		restorebands)      exit 0 ;;
+		setmode)
+			case "$2" in ''|*[!0-9]*) echo "bad mode"; exit 2 ;; esac
+			_bs_out=$(android_set_mode "$_bs_am" "$2") && { _bands_flush; echo ok; exit 0; }
+			_bands_flush
+			printf '%s\n' "$(printf '%s' "$_bs_out" | jsonfilter -e '@.error' 2>/dev/null)"
+			exit 1 ;;
+		setall)
+			if [ -n "$_SA_LTE$_SA_NSA$_SA_3G$_SA_2G" ]; then
+				android_set_bands "$_bs_am" "$_SA_LTE" "$_SA_NSA" "$_SA_3G" "$_SA_2G"
+				_sa_rc=$?
+				for _sa_k in lte nsa 3g 2g; do
+					case "$_sa_k" in lte) _sa_v=$_SA_LTE ;; nsa) _sa_v=$_SA_NSA ;; 3g) _sa_v=$_SA_3G ;; 2g) _sa_v=$_SA_2G ;; esac
+					[ -n "$_sa_v" ] || continue
+					case "$_sa_rc" in
+						0) _SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$_sa_k\"" ;;
+						2) _sa_fail_add "$_sa_k" badband "" ;;
+						*) _sa_fail_add "$_sa_k" rejected "" ;;
+					esac
+				done
+			fi
+			[ -z "$_SA_SA" ] || _sa_fail_add sa unsupported ""
+			if [ -n "$_SA_MODE" ]; then
+				if android_set_mode "$_bs_am" "$_SA_MODE" >/dev/null; then
+					_SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"mode\""
+				else
+					_sa_fail_add mode rejected ""
+				fi
+			fi
+			_bands_flush
+			_sa_res_write running
+			_sa_res_write done
+			cat "$(_sa_resfile)" 2>/dev/null
+			exit 0 ;;
+		*)                 echo "Unsupported"; exit 0 ;;
+	esac
+fi
 if [ "$_bs_am" = ccci ]; then
 	_HL=/usr/share/5gmodem/hilink.sh
 	case "$1" in

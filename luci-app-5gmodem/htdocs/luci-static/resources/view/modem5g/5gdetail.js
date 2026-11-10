@@ -108,6 +108,7 @@ function sinr_bar(v) { metricBar('sinr', v, 'dB',  'sinr'); }
 function rscp_bar(v) { metricBar('rscp', v, 'dBm', 'rscp', 'umts'); }
 function ecio_bar(v) { metricBar('ecio', v, 'dB',  'ecio', 'umts'); }
 
+var _androidSwitchSlot = null;
 var _modemBusyTimer = null;
 var _modemBusySince = 0;
 var MODEM_BUSY_MIN_MS = 8000;
@@ -154,6 +155,7 @@ function setModemBusy(msg, progressSec) {
 }
 function clearModemBusy(force) {
 	if (!force && _modemBusySince && (Date.now() - _modemBusySince) < MODEM_BUSY_MIN_MS) { return; }
+	_androidSwitchSlot = null;
 	var ov = document.getElementById('modem-busy-ov');
 	if (_modemBusyBarTimer) { window.clearInterval(_modemBusyBarTimer); _modemBusyBarTimer = null; }
 	if (ov) {
@@ -230,58 +232,72 @@ function updateSmsEnvelope() {
 	}));
 }
 
+function finishAndroidSwitch(json) {
+	if (_androidSwitchSlot !== null && json.backend === 'android'
+		&& String(Number(json.android_slot) + 1) === _androidSwitchSlot && String(json.data_state) === '2') {
+		clearModemBusy(true);
+	}
+}
+
+function switchSimSlot(id, label, type, ev) {
+	ev.preventDefault();
+	if (type === 'android') { _androidSwitchSlot = String(id); setModemBusy(_('Switching the mobile-data SIM…'), 15); }
+	if (type !== 'android') { ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...'))); }
+	var args = [ 'set', String(id) ];
+	if (pageModemPath) { args.push('for=' + pageModemPath); }
+	return fs.exec('/usr/share/5gmodem/simslot.sh', args).then(function(res) {
+		if (type !== 'android') { ui.hideModal(); }
+		var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
+		if (type === 'android') { try { ok = JSON.parse((res && res.stdout) || '{}').ok === true; } catch (e) { ok = false; } }
+		if (!ok && type === 'android') { clearModemBusy(true); }
+		if (ok && type !== 'android') { setModemBusy(_('The modem is restarting after the SIM switch…')); }
+		var notification = E('p', ok ? _('SIM slot switched: %s').format(label) : _('SIM slot switch failed'));
+		if (ui.addTimeLimitedNotification) { ui.addTimeLimitedNotification(null, notification, 6000, ok ? 'info' : 'error'); }
+		else { ui.addNotification(null, notification, ok ? 'info' : 'error'); }
+		if (ok) { pollSlotUntilSwitched(id, [ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ]); }
+	}).catch(function() { if (type === 'android') { clearModemBusy(true); } else { ui.hideModal(); } });
+}
+
+function renderSimSlots(st, cb) {
+	var box = document.getElementById('simslotn');
+	if (!box) { if (cb) { cb(null); } return; }
+	if (!st.slots || st.slots.length < 2) {
+		if (!simSlotsSeen) { box.style.display = 'none'; }
+		if (cb) { cb(null); }
+		return;
+	}
+	simSlotsSeen = true;
+	if (cb) { cb(st); }
+	if (sameRender(box, JSON.stringify(st))) { return; }
+	box.innerHTML = '';
+	st.slots.forEach(function(slot) {
+		var active = String(st.active) === String(slot.id);
+		var noCard = slot.present !== undefined && String(slot.present) === '0';
+		box.appendChild(E('button', {
+			'class': 'btn cbi-button' + (active ? ' tg-current' : '') + (noCard && !active ? ' tg-slot-empty' : ''),
+			'title': noCard ? _('Slot is empty (no SIM inserted)') : null,
+			'disabled': (st.writable === false || (st.type === 'android' && noCard)) ? true : null,
+			'click': function(ev) {
+				if (active || st.writable === false || (st.type === 'android' && noCard)) { ev.preventDefault(); return; }
+				return switchSimSlot(slot.id, slot.label, st.type, ev);
+			}
+		}, [ slot.label ]));
+	});
+	box.style.display = '';
+}
+
 var slotsInflight = false;
 function loadSimSlots(cb) {
 	if (slotsInflight) { if (cb) { cb(null); } return; }
 	slotsInflight = true;
-	var _slArgs = [ 'status' ];
-	if (pageModemPath) { _slArgs.push('for=' + pageModemPath); }
-	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', _slArgs), '').then(forPage(function(out) {
+	var args = [ 'status' ];
+	if (pageModemPath) { args.push('for=' + pageModemPath); }
+	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/simslot.sh', args), '').then(forPage(function(out) {
 		slotsInflight = false;
-		var st = {};
-		try { st = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
-		var box = document.getElementById('simslotn');
-		if (!box) { if (cb) { cb(null); } return; }
-		if (!st.slots || st.slots.length < 2) {
-			if (!simSlotsSeen) {
-				box.style.display = 'none';
-			}
-			if (cb) { cb(null); }
-			return;
-		}
-		simSlotsSeen = true;
-		if (cb) { cb(st); }
-		if (sameRender(box, JSON.stringify(st))) { return; }
-		box.innerHTML = '';
-		st.slots.forEach(function(s) {
-			var on = (String(st.active) === String(s.id));
-			var noCard = (s.present !== undefined && String(s.present) === '0');
-			var empty = (noCard && !on);
-			box.appendChild(E('button', {
-				'class': 'btn cbi-button' + (on ? ' tg-current' : '') + (empty ? ' tg-slot-empty' : ''),
-				'title': noCard ? _('Slot is empty (no SIM inserted)') : null,
-				'click': function(ev) {
-					ev.preventDefault();
-					if (on) { return; }
-					ui.showModal(null, E('p', { 'class': 'spinning' }, _('Switching SIM slot...')));
-					var _stArgs = [ 'set', String(s.id) ];
-					if (pageModemPath) { _stArgs.push('for=' + pageModemPath); }
-					fs.exec('/usr/share/5gmodem/simslot.sh', _stArgs).then(function(res) {
-						ui.hideModal();
-						var ok = res && res.stdout && res.stdout.indexOf('"ok"') >= 0;
-						if (ok) { setModemBusy(_('The modem is restarting after the SIM switch…')); }
-						if (ui.addTimeLimitedNotification) {
-							ui.addTimeLimitedNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), 6000, ok ? 'info' : 'error');
-						} else {
-							ui.addNotification(null, E('p', ok ? _('SIM slot switched: %s').format(s.label) : _('SIM slot switch failed')), ok ? 'info' : 'error');
-						}
-						pollSlotUntilSwitched(s.id, [ 3000, 8000, 15000, 25000, 40000, 60000, 90000 ]);
-					}).catch(function() { ui.hideModal(); });
-				}
-			}, [ s.label ]));
-		});
-		box.style.display = '';
-	}, function() { if (cb) { cb(null); } })).catch(function(e) {
+		var status;
+		try { status = JSON.parse(out) || {}; } catch (e) { if (cb) { cb(null); } return; }
+		renderSimSlots(status, cb);
+	}, function() { if (cb) { cb(null); } })).catch(function() {
 		slotsInflight = false;
 		if (cb) { cb(null); }
 	});
@@ -380,8 +396,9 @@ var CELL_ROWS = [
 	{ id: 'mccmnc', text: function(j) {
 		var m = mutil.cellVal(j.operator_mcc), n = mutil.cellVal(j.operator_mnc);
 		return (m && n) ? (m + ' ' + n) : ''; } },
-	{ id: 'lac', text: function(j) { return mutil.decHexPair(j.lac_dec, j.lac_hex); } },
+	{ id: 'lac', text: function(j) { return (j.backend === 'android' ? (mutil.decHexPair(j.tac_d, j.tac_h) || mutil.decHexPair(j.tac_dec, j.tac_hex)) : '') || mutil.decHexPair(j.lac_dec, j.lac_hex); } },
 	{ id: 'tac', text: function(j) {
+		if (j.backend === 'android') { return ''; }
 		return mutil.decHexPair(j.tac_d, j.tac_h) || mutil.decHexPair(j.tac_dec, j.tac_hex); } },
 	{ id: 'pathloss', text: function(j) { return mutil.cellVal(j.pathloss); } },
 	{ id: 'txpower',  text: function(j) { return mutil.cellVal(j.txpower); } },
@@ -394,7 +411,9 @@ var CELL_ROWS = [
 	{ id: 'ambr',     text: function(j) {
 		var d = mutil.cellVal(j.ambrdl), u = mutil.cellVal(j.ambrul), q = mutil.cellVal(j.qci);
 		return (d && u) ? (d + ' / ' + u + ' ' + _('Mbps') + (q ? ' · QCI ' + q : '')) : ''; } },
-	{ id: 'volte',    text: function(j) { return mutil.cellVal(j.volte); } },
+	{ id: 'volte',    text: function(j) {
+		if (j.backend === 'android') { return j.volte === '1' ? _('Yes') : (j.volte === '0' ? _('No') : ''); }
+		return mutil.cellVal(j.volte); } },
 	{ id: 'pband', always: true, text: function(j) {
 		var b = mutil.cellVal(j.pband);
 		var p = mutil.cellVal(j.pci), e = mutil.cellVal(j.earfcn);
@@ -507,6 +526,7 @@ function renderNeighbors(json) {
 	if (!wrap || !tbl) { return; }
 	var list = (json && Array.isArray(json.neighbors)) ? json.neighbors : [];
 	if (!list.length) {
+		if (json && json.backend === 'android') { wrap.style.display = 'none'; return; }
 		if (wrap.getAttribute('data-hadata') !== '1') { wrap.style.display = 'none'; }
 		return;
 	}
@@ -579,6 +599,8 @@ function caSummary(json) {
 		n++;
 		bw += mhz(mutil.caSplitBand(b).bw);
 	}
+	var phoneN = parseInt(json.android_ca_carriers, 10), phoneBw = parseFloat(json.android_ca_bandwidth);
+	if (json.backend === 'android' && phoneN > n) { n = phoneN; bw = phoneBw > 0 ? phoneBw : bw; }
 	return { n: n, bw: Math.round(bw) };
 }
 
@@ -1142,9 +1164,11 @@ function renderWebPassHint(json) {
 var TEMP_SENSORS = [
 	[ 'modem', _('Modem'), '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M8 9V4M8 13h8M8 16.5h5"/>' ],
 	[ 'pa', _('Radio amplifier'), '<path d="M12 11v10M8.5 21h7"/><circle cx="12" cy="9" r="1.6"/><path d="M8.6 5.6a4.8 4.8 0 0 0 0 6.8M15.4 5.6a4.8 4.8 0 0 1 0 6.8M5.8 2.8a8.8 8.8 0 0 0 0 12.4M18.2 2.8a8.8 8.8 0 0 1 0 12.4"/>' ],
+	[ 'gpu', 'GPU', '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="4"/>' ],
 	[ 'cpu', _('Processor'), '<rect x="6" y="6" width="12" height="12" rx="1.5"/><rect x="9.5" y="9.5" width="5" height="5" rx=".6"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/>' ],
 	[ 'wifi', _('Wi-Fi'), '<path d="M2.5 9a14 14 0 0 1 19 0M5.8 12.4a9.2 9.2 0 0 1 12.4 0M9.1 15.8a4.4 4.4 0 0 1 5.8 0"/><circle cx="12" cy="19" r="1.2"/>' ],
 	[ 'pmic', _('Power controller'), '<path d="M13 2 5 13.5h6L10 22l8-11.5h-6z"/>' ],
+	[ 'skin', _('Surface temperature'), '<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 18h4"/>' ],
 	[ 'bat', _('Battery'), '<rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4M10 9h4M10 13h4M10 17h4"/>' ],
 	[ 'charger', _('Charger'), '<path d="M9 2v5M15 2v5M6.5 7h11v4a5.5 5.5 0 0 1-11 0zM12 16.5V22"/>' ],
 	[ 'board', _('Board'), '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h4v4M17 8v4h-4M7 16h10"/><circle cx="7" cy="8" r=".8"/><circle cx="17" cy="8" r=".8"/><circle cx="7" cy="16" r=".8"/>' ]
@@ -1191,6 +1215,22 @@ function renderTemps(json) {
 	}
 }
 
+function renderAndroidSlots(json) {
+	var lacLabel = document.querySelector('#lacn > td:first-child');
+	if (json.backend !== 'android') {
+		if (lacLabel && lacLabel.getAttribute('data-android') === '1') { dom.content(lacLabel, [ gl('LAC') ]); lacLabel.removeAttribute('data-android'); }
+		return;
+	}
+	if (lacLabel) { lacLabel.textContent = _('LAC/TAC'); lacLabel.setAttribute('data-android', '1'); }
+	renderSimSlots({
+		type: 'android', active: String(Number(json.android_slot) + 1),
+		writable: json.android_sim_switch === '1',
+		slots: (json.android_sims || []).map(function(sim) {
+			return { id: String(Number(sim.slot) + 1), label: 'SIM ' + (Number(sim.slot) + 1), present: sim.subscription_id ? '1' : '0' };
+		})
+	});
+}
+
 function tempsOpen() {
 	try { return localStorage.getItem('5gm-temps-open') === '1'; } catch (e) { return false; }
 }
@@ -1225,7 +1265,18 @@ function renderBattery(json) {
 	if (isNaN(b) || b < 0 || b > 100) { box.style.display = 'none'; return; }
 	var chg = json.battery_charging === '1';
 	var key = b + ':' + (chg ? 1 : 0);
-	box.title = chg ? _('Modem battery, charging') : _('Modem battery');
+	var tip = chg ? _('Modem battery, charging') : _('Modem battery');
+	if (json.backend === 'android') {
+		var extra = [];
+		var mv = parseInt(json.battery_voltage, 10);
+		if (mv > 0) { extra.push(_('Voltage') + ': ' + (mv / 1000).toFixed(2) + ' V'); }
+		var health = ({ '2': _('good'), '3': _('overheated'), '4': _('dead'), '5': _('over-voltage'), '6': _('failure'), '7': _('too cold') })[String(json.battery_health)];
+		if (health) { extra.push(_('Health') + ': ' + health); }
+		var thermal = parseInt(json.thermal_status, 10);
+		if (thermal > 0) { extra.push(_('Thermal throttling') + ': ' + thermal + '/6'); }
+		if (extra.length) { tip += ' · ' + extra.join(' · '); }
+	}
+	box.title = tip;
 	box.style.display = '';
 	if (box.getAttribute('data-k') === key) { return; }
 	box.setAttribute('data-k', key);
@@ -1862,7 +1913,9 @@ function tetherText(json) {
 		var nm = (json.tether_name && json.tether_name !== '-') ? json.tether_name : _('Phone');
 		if (json.tether_state === 'ready') {
 			return _('%s shares internet over USB.').format(nm) + (json.ipaddr ? ' ' + _('Address: %s.').format(json.ipaddr) : '')
-				+ ' ' + _('Signal, operator and SMS are not available from a phone.');
+				+ ' ' + (json.tether === 'android'
+					? _('To read cellular metrics, enable USB debugging and authorize this router on the phone.')
+					: _('Signal, operator and SMS are not available from a phone.'));
 		}
 		return _('%s is connected but does not share internet. Turn on USB tethering on the phone.').format(nm);
 	}
@@ -2077,7 +2130,7 @@ function applyMetrics(json) {
 					var _remote = (json.backend === 'router');
 					if (_cell) { _cell.style.display = _remote ? 'none' : ''; }
 					if (_freq) { _freq.style.display = _remote ? 'none' : ''; }
-					if (_rbb) { _rbb.style.display = _remote ? 'none' : ''; }
+					if (_rbb) { _rbb.style.display = (_remote || json.backend === 'android') ? 'none' : ''; }
 					if (_ttl) { _ttl.style.display = ''; }
 					histShow(!_remote);
 					if (!_remote) {
@@ -2093,7 +2146,9 @@ function applyMetrics(json) {
 						});
 					}
 
-					if (modemBusyActive()) {
+					if (_androidSwitchSlot !== null) {
+						finishAndroidSwitch(json);
+					} else if (modemBusyActive()) {
 						var _reg = String(json.registration || '');
 						var _sig = parseInt(json.signal, 10);
 						var _noAtUp = (json.no_at == '1' && (_reg === '' || _reg === '-') && !!(json.ipaddr && json.ipaddr !== '-'));
@@ -2190,7 +2245,7 @@ function applyMetrics(json) {
 					var _hasPhone = (json.phone && String(json.phone).length > 3 && json.phone != '-');
 					if (document.getElementById('phone')) {
 						var pv = document.getElementById('phone');
-						var _imsiNow = String(json.imsi || '');
+						var _imsiNow = json.backend === 'android' ? 'android:' + String(json.android_data_subscription || '') : String(json.imsi || '');
 						if (_imsiNow && _imsiNow !== '-' && pv.getAttribute('data-imsi') !== _imsiNow) {
 							if (pv.getAttribute('data-imsi') != null) { pv.removeAttribute('data-hadata'); }
 							pv.setAttribute('data-imsi', _imsiNow);
@@ -2378,8 +2433,9 @@ function applyMetrics(json) {
 						renderBattery(json);
 						renderNa(json);
 						renderTemps(json);
+						renderAndroidSlots(json);
 						var _rr = document.getElementById('rb-radio-btn');
-						if (_rr) { _rr.style.display = (json.backend === 'hilink') ? 'none' : ''; }
+						if (_rr) { _rr.style.display = (json.backend === 'hilink' || json.backend === 'android') ? 'none' : ''; }
 						renderProtoChip(json);
 						renderVidPid(json);
 						renderApnLine(json);
@@ -2854,7 +2910,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30936, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30937, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

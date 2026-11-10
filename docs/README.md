@@ -36,6 +36,7 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 - [Foxconn / Dell / HP modules: T77W968 (DW5821e), T99W373 (MV32-W), T77W595 (HP lt4120)](modems/foxconn-dell.md)
 - [Huawei: HiLink web API and AT-mode sticks](modems/huawei-hilink.md)
 - [MediaTek MT6735 Android Mi-Fi (ZTE-style goform)](modems/mediatek-mifi.md)
+- [Android USB phones: ADB telemetry and mobile-data SIM selection (Xiaomi 17)](modems/android-phones.md)
 - [Other non-Qualcomm modems (MikroTik/Marvell, ASR, ASKEY, BroadMobi, Sierra 320U)](modems/others-b.md)
 - [Other vendors: MeigLink, YUGA, generic Qualcomm MSM, plus Huawei/Fibocom files from this batch](modems/others.md)
 - [Qualcomm SDX55 family: Foxconn T99W175, Dell DW5930e, Thales MV31-W, Compal RXM-G1](modems/qualcomm-sdx55.md)

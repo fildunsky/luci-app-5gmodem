@@ -451,3 +451,51 @@ msgstr ""
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr ""
+
+msgid "Voltage"
+msgstr ""
+
+msgid "Health"
+msgstr ""
+
+msgid "overheated"
+msgstr ""
+
+msgid "dead"
+msgstr ""
+
+msgid "over-voltage"
+msgstr ""
+
+msgid "failure"
+msgstr ""
+
+msgid "too cold"
+msgstr ""
+
+msgid "Thermal throttling"
+msgstr ""
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr ""
+
+msgid "Surface temperature"
+msgstr ""
+
+msgid "Mobile data"
+msgstr ""
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr ""
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr ""
+
+msgid "Android SMS storage is read-only."
+msgstr ""
+
+msgid "LAC/TAC"
+msgstr ""
+
+msgid "Switching the mobile-data SIM…"
+msgstr ""

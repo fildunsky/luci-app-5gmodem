@@ -6082,3 +6082,51 @@ msgstr "再起動中…"
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr "お使いの OpenWrt バージョン用のパッケージをダウンロードし、「システム → ソフトウェア」でアップロードしてから、このページを更新してください。"
+
+msgid "Voltage"
+msgstr "電圧"
+
+msgid "Health"
+msgstr "状態"
+
+msgid "overheated"
+msgstr "過熱"
+
+msgid "dead"
+msgstr "故障"
+
+msgid "over-voltage"
+msgstr "過電圧"
+
+msgid "failure"
+msgstr "障害"
+
+msgid "too cold"
+msgstr "低温"
+
+msgid "Thermal throttling"
+msgstr "サーマルスロットリング"
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr "この SIM は VoLTE に対応していません。LTE のみにすると、別のモードを選ぶまでこの SIM での通話と SMS が使えなくなります。"
+
+msgid "Surface temperature"
+msgstr "表面温度"
+
+msgid "Mobile data"
+msgstr "モバイルデータ"
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr "モバイル回線の指標を読み取るには、USB デバッグを有効にし、スマートフォンでこのルーターを許可してください。"
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr "モバイルデータ用の SIM はスマートフォンで変更してください。"
+
+msgid "Android SMS storage is read-only."
+msgstr "Android の SMS は読み取り専用です。"
+
+msgid "LAC/TAC"
+msgstr "LAC/TAC"
+
+msgid "Switching the mobile-data SIM…"
+msgstr "モバイルデータ用の SIM を切り替えています…"

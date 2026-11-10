@@ -1080,7 +1080,29 @@ function setNetMode(allowed, preferred, label) {
 	});
 }
 
+var _lastPoll = null;
+
 function setNetModeAT(id, label) {
+	var j = _lastPoll;
+	// A phone SIM without VoLTE loses calls and SMS when it may only use LTE.
+	if (j && j.backend === 'android' && (String(id) === '4' || String(id) === '20') && String(j.volte) !== '1') {
+		ui.showModal(_('Network mode'), [
+			E('p', {}, _('This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected.')),
+			E('div', { 'class': 'right' }, [
+				E('button', { 'class': 'btn', 'click': ui.hideModal }, _('Cancel')),
+				' ',
+				E('button', { 'class': 'btn cbi-button-action important', 'click': function() {
+					ui.hideModal();
+					applyNetModeAT(id, label);
+				} }, _('Apply'))
+			])
+		]);
+		return Promise.resolve();
+	}
+	return applyNetModeAT(id, label);
+}
+
+function applyNetModeAT(id, label) {
 	ui.showModal(null, E('p', { 'class': 'spinning' }, _('Applying network mode...')));
 	return fs.exec('/usr/share/5gmodem/bands.sh', [ 'setmode', String(id) ]).then(function(res) {
 		ui.hideModal();
@@ -1134,6 +1156,7 @@ function pollTick() {
 }
 
 function hwTick(json) {
+	_lastPoll = json;
 	bandFilterTick(json);
 	var hw = String(json.modem || '') + '|' + String(json.vidpid || '');
 	if (hw !== '|' && window.__hwSig && window.__hwSig !== hw) {
@@ -1158,7 +1181,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30936,
+	API: 30937,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

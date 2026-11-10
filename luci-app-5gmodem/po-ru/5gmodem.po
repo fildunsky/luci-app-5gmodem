@@ -5869,6 +5869,33 @@ msgstr "Батарея модема"
 msgid "Modem battery, charging"
 msgstr "Батарея модема, заряжается"
 
+msgid "Voltage"
+msgstr "Напряжение"
+
+msgid "Health"
+msgstr "Состояние"
+
+msgid "overheated"
+msgstr "перегрев"
+
+msgid "dead"
+msgstr "неисправна"
+
+msgid "over-voltage"
+msgstr "перенапряжение"
+
+msgid "failure"
+msgstr "сбой"
+
+msgid "too cold"
+msgstr "слишком холодная"
+
+msgid "Thermal throttling"
+msgstr "Тепловое ограничение"
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr "У этой SIM нет VoLTE. В режиме только LTE звонки и SMS на ней перестанут работать, пока не выберете другой режим."
+
 msgid "The password of the modem's own web interface (user admin). With it the router reads signal, battery, SMS and can reboot the modem. Empty means admin, the factory password of most such modems."
 msgstr "Пароль от собственного веб-интерфейса модема (пользователь admin). С ним роутер читает сигнал, заряд батареи и SMS и может перезагрузить модем. Если поле пустое, используется admin: это заводской пароль большинства таких модемов."
 
@@ -6367,3 +6394,24 @@ msgstr "Перезапуск…"
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr "Скачайте пакет для вашей версии OpenWrt, загрузите его в разделе «Система → Программное обеспечение», затем обновите эту страницу."
+
+msgid "Surface temperature"
+msgstr "Температура корпуса"
+
+msgid "Mobile data"
+msgstr "Мобильный интернет"
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr "Чтобы читать параметры сотовой сети, включите отладку по USB и разрешите доступ этому роутеру на телефоне."
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr "Сменить SIM-карту для мобильного интернета можно на телефоне."
+
+msgid "Android SMS storage is read-only."
+msgstr "SMS на Android доступны только для чтения."
+
+msgid "LAC/TAC"
+msgstr "LAC/TAC"
+
+msgid "Switching the mobile-data SIM…"
+msgstr "Переключение SIM-карты для мобильного интернета…"

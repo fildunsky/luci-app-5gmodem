@@ -421,6 +421,71 @@ if [ -n "$_POLL_AM" ] \
 			| jsonfilter -e '@.route[@.target="0.0.0.0"].nexthop' 2>/dev/null | head -1)
 	fi
 	_tj_nm=$(cat "/sys/bus/usb/devices/$_POLL_AM/product" 2>/dev/null | tr -d '"\\')
+	if [ "$_tj_os" = android ] && [ -f "$RES/android.sh" ]; then
+		if [ "$1" = cached ] && _tj_age=$(_snapshot_age) && [ "$_tj_age" -lt 5 ] \
+			&& [ "$(jsonfilter -i "$CACHE" -e '@.backend' 2>/dev/null)" = android ]; then
+			serve_cache "$_tj_age"; exit 0
+		fi
+		. "$RES/android.sh"
+		_tj_android=$(android_json "$_POLL_AM" "$_tj_if" "$_tj_ip" "$_tj_nd")
+		if [ -n "$_tj_android" ]; then
+			_tj_ear=$(printf '%s' "$_tj_android" | jsonfilter -e '@.earfcn' 2>/dev/null)
+			_tj_band=$(earfcn2band "$_tj_ear")
+			_tj_bands=""
+			if [ -n "$_tj_band" ]; then
+				_tj_bands="B$_tj_band"
+				_tj_android="${_tj_android%?},\"pband\":\"B$_tj_band\"}"
+			fi
+			for _tj_c in 1 2 3 4; do
+				_tj_sb=$(printf '%s' "$_tj_android" | jsonfilter -e "@.s${_tj_c}band" 2>/dev/null)
+				if [ -z "$_tj_sb" ]; then
+					_tj_se=$(printf '%s' "$_tj_android" | jsonfilter -e "@.s${_tj_c}earfcn" 2>/dev/null)
+					_tj_sn=$(earfcn2band "$_tj_se")
+					[ -n "$_tj_sn" ] && { _tj_sb="B$_tj_sn"; _tj_android="${_tj_android%?},\"s${_tj_c}band\":\"$_tj_sb\"}"; }
+				fi
+				[ -n "$_tj_sb" ] && _tj_bands="${_tj_bands:+$_tj_bands + }${_tj_sb%% *}"
+			done
+			# 5G NSA: the NR carrier next to the LTE anchor is reported as one more carrier of the standard card.
+			_tj_nrb=$(printf '%s' "$_tj_android" | jsonfilter -e '@.nr_band' 2>/dev/null)
+			_tj_nsa=""
+			if [ -n "$_tj_nrb" ]; then
+				_tj_k=1
+				while [ "$_tj_k" -le 4 ] && [ -n "$(printf '%s' "$_tj_android" | jsonfilter -e "@.s${_tj_k}band" 2>/dev/null)" ]; do
+					_tj_k=$((_tj_k + 1))
+				done
+				if [ "$_tj_k" -le 4 ]; then
+					_tj_nrx=",\"s${_tj_k}band\":\"$_tj_nrb\",\"s${_tj_k}state\":\"activated\""
+					for _tj_f in pci:pci arfcn:earfcn rsrp:rsrp rsrq:rsrq sinr:sinr; do
+						_tj_v=$(printf '%s' "$_tj_android" | jsonfilter -e "@.nr_${_tj_f%%:*}" 2>/dev/null)
+						[ -n "$_tj_v" ] && _tj_nrx="$_tj_nrx,\"s${_tj_k}${_tj_f#*:}\":\"$_tj_v\""
+					done
+					_tj_android="${_tj_android%?}$_tj_nrx}"
+					_tj_bands="${_tj_bands:+$_tj_bands + }$_tj_nrb"
+					_tj_nsa=1
+				fi
+			fi
+			_tj_ca=$(printf '%s' "$_tj_android" | jsonfilter -e '@.android_ca' 2>/dev/null)
+			_tj_mode=LTE; [ "$_tj_ca" = 1 ] && _tj_mode=LTE-A
+			case "$_tj_bands" in *' + '*) _tj_mode=LTE-A ;; esac
+			[ -n "$_tj_nsa" ] && _tj_mode="5G NSA"
+			[ -n "$_tj_bands" ] && _tj_mode="$_tj_mode | $_tj_bands"
+			_tj_android=$(printf '%s' "$_tj_android" | sed "s/\"mode\":\"LTE\"/\"mode\":\"$_tj_mode\"/")
+			_tj_ct=$(printf '%s' "$_tj_js" | jsonfilter -e '@.uptime' 2>/dev/null)
+			_tj_ctstr=-
+			case "$_tj_ct" in
+				''|*[!0-9]*) _tj_ct=- ;;
+				*) _tj_ctstr=$(printf '%dd, %02d:%02d:%02d' $((_tj_ct / 86400)) $((_tj_ct / 3600 % 24)) $((_tj_ct / 60 % 60)) $((_tj_ct % 60))) ;;
+			esac
+			_tj_bytes=$(ifconfig "$_tj_nd" 2>/dev/null | awk -F'[()]' '/bytes/ {printf "%s|%s",$2,$4}')
+			_tj_android="${_tj_android%?},\"conn_time\":\"$_tj_ctstr\",\"conn_time_sec\":\"$_tj_ct\",\"rx\":\"$(json_esc "${_tj_bytes%%|*}")\",\"tx\":\"$(json_esc "${_tj_bytes#*|}")\"}"
+			printf '%s\n' "$_tj_android" > "$CACHE.a$$"
+			mv "$CACHE.a$$" "$CACHE" && uptime_s > "$STAMP"
+			_tj_op=$(printf '%s' "$_tj_android" | jsonfilter -e '@.operator_name' 2>/dev/null)
+			[ -n "$_tj_if" ] && [ -n "$_tj_op" ] && operator_clean "$_tj_op" > "/tmp/5gmodem/op_$_tj_if" 2>/dev/null
+			printf '%s\n' "$_tj_android"
+			exit 0
+		fi
+	fi
 	if [ "$_tj_os" = router ] && [ "$_tj_st" = ready ] && [ -n "$_tj_gw" ]; then
 		_rt=$(remote_tele "$_tj_gw")
 		_rt_rsrp=$(printf '%s' "$_rt" | jsonfilter -e '@.rsrp' 2>/dev/null)

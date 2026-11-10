@@ -18,6 +18,13 @@ _active_kind() {
 	uci -q get "$CFG.$_TGT_SEC.kind"
 }
 
+_active_is_android() {
+	[ "$(_active_kind)" = tether ] || return 1
+	[ "$(uci -q get "$CFG.$_TGT_SEC.tether")" = android ] || return 1
+	[ -f "$RES/android.sh" ] || return 1
+	[ "$(jsonfilter -i "/tmp/5gmodem/metrics_$(snap_key "$_TGT_PATH").json" -e '@.backend' 2>/dev/null)" = android ]
+}
+
 _active_is_mm() {
 	_amp="$_TGT_PATH"
 	[ -n "$_amp" ] || return 1
@@ -493,6 +500,12 @@ case "$1" in
 		printf '{"count":%s,"ts":%s,"sms":[%s]}\n' "$_nd_cnt" "$_nd_now" "$_nd_out"
 		exit 0 ;;
 	newcount)
+		if _active_is_android; then
+			. "$RES/android.sh"
+			_anc=$(android_sms "$_TGT_PATH" count | jsonfilter -e '@.unseen' 2>/dev/null)
+			case "$_anc" in ''|*[!0-9]*) _anc=0 ;; esac
+			echo "$_anc"; exit 0
+		fi
 		_ncf="/tmp/5gmodem/sms_new.json"
 		_nc_for=""
 		for _nc_a in "$@"; do case "$_nc_a" in for=*) _nc_for="${_nc_a#for=}" ;; esac; done
@@ -816,6 +829,23 @@ case "$BOX" in
 	unseen) UL="$2"; STORE="$3"; PORT="$4" ;;
 	*)      STORE="$2"; PORT="$3" ;;
 esac
+
+if _active_is_android; then
+	. "$RES/android.sh"
+	case "$BOX" in
+		status)
+			_as_count=$(android_sms "$_TGT_PATH" count)
+			_as_used=$(printf '%s' "$_as_count" | jsonfilter -e '@.used' 2>/dev/null)
+			case "$_as_used" in ''|*[!0-9]*) printf '%s\n' "$_as_count"; exit 1 ;; esac
+			printf 'Storage type: ME, used: %s, read-only: 1\n' "$_as_used" ;;
+		recv|dump) android_sms "$_TGT_PATH" inbox ;;
+		sent) android_sms "$_TGT_PATH" sent ;;
+		unseen|archive-run|archive-why) echo '{"read_only":true,"msg":[]}' ;;
+		delete-status) echo '{"state":"none","read_only":true}' ;;
+		*) echo '{"error":"Android SMS is read-only","read_only":true}'; exit 1 ;;
+	esac
+	exit $?
+fi
 
 _DJ_FILE="/tmp/5gmodem/smsdel_$(printf '%s' "$_TGT_PATH" | tr -c 'A-Za-z0-9' '_').json"
 _DJ_OK=""; _DJ_FAIL=""; _DJ_DONE=0; _DJ_TOTAL=0

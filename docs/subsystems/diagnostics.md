@@ -353,7 +353,7 @@ usb-serial itself (`fastboot_rescue`, at most once a minute, 3 attempts).
   `listmodems.sh` is skipped.
 - Output is printed line by line (`printf '%s\n' "$var"`), never unquoted: word splitting put the
   path and vid:pid on different lines (audit 2026-09-12).
-- AT ports present, no cdc-wdm and no net device. Two causes:
+- AT ports present, no cdc-wdm and no net device. Three causes:
   1. Composition without a data channel. Quectel `AT+QCFG="usbnet"`: 0 (NDIS/QMI) and 2 (MBIM)
      carry a channel, 1 (ECM) and 3 (RNDIS) do not; nothing changes, not even the port list, until
      `AT+CFUN=1,1` or a power cycle. SimCom `AT+CUSBPIDSWITCH?` must be 9001
@@ -364,6 +364,17 @@ usb-serial itself (`fastboot_rescue`, at most once a minute, 3 attempts).
      went to usbserial_generic). Distinguished via `usbports.sh dataif <vid> <pid>`; the interface
      name is matched by mask because the configuration number is not always 1 (Compal uses 3).
      usb-serial has no `remove_id`; the app rescues the interface (`usbports.sh rescue`).
+  3. Vendor NCM without its driver (issue #68, TD Tech MT5700M-CN 3466:3301, 2026-11-09). Configuration 2
+     carries interface 0 as class `ff/02/16` (the Huawei NCM signature) and four option ports. Only
+     `huawei_cdc_ncm` takes that signature (`usbports.sh` binds it with `new_id "3466 3301 ff 12d1 0"`).
+     v3.9.30 dropped `kmod-usb-net-huawei-cdc-ncm` from the dependencies and v3.9.34 restored it, so
+     an install made in between had interface 0 with no driver, `modprobe: failed to find a module
+     named huawei_cdc_ncm` in the log and the old advice "switch to a composition with QMI, MBIM or
+     NCM", which was wrong. `vendor_ncm_ifaces` finds such interfaces (no driver, or held by a serial
+     driver); `huawei_ncm_module` checks `/sys/module`, `/sys/bus/usb/drivers` and `/lib/modules/*`
+     without loading anything. Missing module: the verdict and the summary at the top of the report
+     name `apk add` / `opkg install kmod-usb-net-huawei-cdc-ncm`. Module present: the verdict points to
+     `usbports.sh rescue` and dmesg. Covered by `test_collect_ncm_verdict.py` on a fake sysfs.
 - ECM/RNDIS modules have a net device without cdc-wdm (profile 2c7c:6005); that is normal.
 - AT port binding (05c6:9025/90d5/90d6 need manual `new_id`): the same composition written into
   `new_id` of two different drivers makes the kernel hand out interfaces at random and every ttyUSB

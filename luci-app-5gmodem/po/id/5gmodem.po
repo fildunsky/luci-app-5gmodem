@@ -6082,3 +6082,51 @@ msgstr "Memulai ulang…"
 
 msgid "Download the package for your OpenWrt version, upload it in System → Software, then refresh this page."
 msgstr "Unduh paket untuk versi OpenWrt Anda, unggah di Sistem → Perangkat Lunak, lalu muat ulang halaman ini."
+
+msgid "Voltage"
+msgstr "Tegangan"
+
+msgid "Health"
+msgstr "Kondisi"
+
+msgid "overheated"
+msgstr "terlalu panas"
+
+msgid "dead"
+msgstr "rusak"
+
+msgid "over-voltage"
+msgstr "tegangan berlebih"
+
+msgid "failure"
+msgstr "gagal"
+
+msgid "too cold"
+msgstr "terlalu dingin"
+
+msgid "Thermal throttling"
+msgstr "Pembatasan termal"
+
+msgid "This SIM has no VoLTE. With LTE only, calls and SMS on it stop working until another mode is selected."
+msgstr "SIM ini tidak mendukung VoLTE. Dengan mode LTE saja, panggilan dan SMS pada SIM ini berhenti berfungsi sampai mode lain dipilih."
+
+msgid "Surface temperature"
+msgstr "Suhu permukaan"
+
+msgid "Mobile data"
+msgstr "Data seluler"
+
+msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
+msgstr "Untuk membaca metrik seluler, aktifkan USB debugging dan izinkan router ini di ponsel."
+
+msgid "Change the mobile-data SIM on the phone."
+msgstr "Ubah SIM data seluler di ponsel."
+
+msgid "Android SMS storage is read-only."
+msgstr "Penyimpanan SMS Android hanya-baca."
+
+msgid "LAC/TAC"
+msgstr "LAC/TAC"
+
+msgid "Switching the mobile-data SIM…"
+msgstr "Mengganti SIM data seluler…"

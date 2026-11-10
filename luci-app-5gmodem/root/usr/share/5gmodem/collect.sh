@@ -1007,6 +1007,28 @@ stick_verdict() {
 	echo "  kmod-usb-serial-option."
 }
 
+huawei_ncm_module() {
+	[ -d /sys/module/huawei_cdc_ncm ] && return 0
+	[ -d /sys/bus/usb/drivers/huawei_cdc_ncm ] && return 0
+	ls /lib/modules/*/huawei_cdc_ncm.ko* >/dev/null 2>&1
+}
+
+vendor_ncm_ifaces() {
+	for _vn_if in "$1":*; do
+		[ -f "$_vn_if/bInterfaceClass" ] || continue
+		[ "$(cat "$_vn_if/bInterfaceClass" 2>/dev/null):$(cat "$_vn_if/bInterfaceSubClass" 2>/dev/null):$(cat "$_vn_if/bInterfaceProtocol" 2>/dev/null)" = ff:02:16 ] || continue
+		if [ ! -e "$_vn_if/driver" ]; then
+			echo "interface ${_vn_if##*.} (vendor NCM, class ff/02/16): no driver"
+			continue
+		fi
+		_vn_drv=$(basename "$(readlink -f "$_vn_if/driver" 2>/dev/null)" 2>/dev/null)
+		case "$_vn_drv" in
+			option|option1|usb_serial_generic|usbserial_generic|generic)
+				echo "interface ${_vn_if##*.} (vendor NCM, class ff/02/16): held by serial driver $_vn_drv" ;;
+		esac
+	done
+}
+
 usbcomp_verdict() {
 	echo ""
 	echo "----- AT port present, data channel missing? (verdict) -----"
@@ -1015,6 +1037,7 @@ usbcomp_verdict() {
 	_uc_free=""
 	_uc_vids=""
 	_uc_newid=""
+	_uc_ncm=""
 	for _uc_p in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 		case "$_uc_p" in *-*) ;; *) continue ;; esac
 		_uc_d="/sys/bus/usb/devices/$_uc_p"
@@ -1036,6 +1059,9 @@ usbcomp_verdict() {
 		_uc_found="$_uc_found
    $_uc_p  $_uc_v:$_uc_i"
 		_uc_vids="$_uc_vids $_uc_v"
+		_uc_nx=$(vendor_ncm_ifaces "$_uc_d" | sed "s/^/   $_uc_p  $_uc_v:$_uc_i  /")
+		[ -z "$_uc_nx" ] || _uc_ncm="$_uc_ncm
+$_uc_nx"
 		for _uc_if in "$_uc_d":*; do
 			[ -f "$_uc_if/bInterfaceClass" ] || continue
 			[ -e "$_uc_if/driver" ] && continue
@@ -1063,6 +1089,26 @@ usbcomp_verdict() {
 	fi
 	echo "YES, the modem has ttyUSB ports but neither cdc-wdm nor a network device:"
 	printf '%s\n' "$_uc_found" | sed '/^[[:space:]]*$/d'
+	if [ -n "$_uc_ncm" ]; then
+		echo ""
+		echo "CAUSE FOUND: the composition DOES have a data channel - a vendor NCM"
+		echo "interface (class ff/02/16, the Huawei kind) - but no network driver has it:"
+		printf '%s\n' "$_uc_ncm" | sed '/^[[:space:]]*$/d'
+		if huawei_ncm_module; then
+			echo "  The driver huawei_cdc_ncm is installed, so it did not bind by itself."
+			echo "  Check by hand:  /usr/share/5gmodem/usbports.sh rescue"
+			echo "  then look at:   dmesg | grep -i -E 'ncm|option'"
+		else
+			echo "  The driver for it, huawei_cdc_ncm, is NOT installed on this system, so"
+			echo "  there is nothing to take the interface. The modem itself is fine and"
+			echo "  needs no other USB composition. Install the driver and replug the modem"
+			echo "  (or reboot):"
+			echo "    apk add kmod-usb-net-huawei-cdc-ncm        (OpenWrt 25.x)"
+			echo "    opkg install kmod-usb-net-huawei-cdc-ncm   (OpenWrt 24.10 and older)"
+			echo "  luci-app-5gmodem 3.9.34 and later depends on this package."
+		fi
+		return
+	fi
 	if [ -n "$_uc_stolen" ]; then
 		echo ""
 		echo "CAUSE FOUND: the composition DOES have a data channel, but its interface"
@@ -1564,6 +1610,19 @@ _sum_verdict() {
 			ls /sys/bus/usb/devices/"$_sv_p":*/usbmisc/cdc-wdm* >/dev/null 2>&1 && continue
 			_sv_bad="$_sv_bad $_sv_p"
 		done
+		if [ -n "$_sv_bad" ] && ! huawei_ncm_module; then
+			_sv_nm=""
+			for _sv_p in $_sv_bad; do
+				[ -z "$(vendor_ncm_ifaces "/sys/bus/usb/devices/$_sv_p")" ] || _sv_nm=1
+			done
+			if [ -n "$_sv_nm" ]; then
+				echo "The modem has NO DATA CHANNEL:$_sv_bad - its vendor NCM interface has no"
+				echo "driver: the kernel module huawei_cdc_ncm is not installed. Install it and"
+				echo "replug the modem:  apk add kmod-usb-net-huawei-cdc-ncm"
+				echo "(opkg install ... on OpenWrt 24.10 and older). See 'AT port present, data channel missing'."
+				return
+			fi
+		fi
 		if [ -n "$_sv_bad" ]; then
 			echo "The modem has NO DATA CHANNEL:$_sv_bad - neither cdc-wdm nor a network"
 			echo "device. There will be no address until the channel comes back: there is"
