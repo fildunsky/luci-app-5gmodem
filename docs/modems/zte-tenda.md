@@ -43,6 +43,7 @@ ZTE has no `/api/sms/*`. The messages are behind goform (`sms_data_total&page=0&
 4. **Date** is `yy,mm,dd,hh,mm,ss,+tz` in the modem's local time. Send uses `yy;mm;dd;hh;mm;ss;+<quarter hours>` (`_zte_smstime`).
 
 - If the modem memory is empty, the SIM store is read. Firmwares disagree on which store is primary.
+- SMS list requests omit `multi_data=1` on both API paths. Olax F90 (USB `19d2:0536`, firmware `F90_P42U17_16`, `reqproc/proc_get`) returns `{"sms_data_total":""}` with that flag, but returns the `messages` array without it, matching its own web UI ([issue #70](https://github.com/fildunsky/luci-app-5gmodem/issues/70)). Other reads, including SMS capacity and batched metrics, retain the flag. Authentication, store selection and SMS writes are unchanged.
 - **Messages are not marked read** on display. goform has `SET_MSG_READ`, but marking ahead of time would suppress the Telegram bridge, which only forwards new messages (the same rule as the AT path). Only the user marks a message read.
 - `zte_sms_count` returns the Huawei XML shape (`<LocalInbox>`), so `smsbridge.sh` parses one format.
 - Send: `SEND_SMS&Number=...&MessageBody=<UCS2 hex>&encode_type=UNICODE`. `_zte_ucs2hex` uses the same UTF-8 parser as `smspdu.sh`.

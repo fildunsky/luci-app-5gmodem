@@ -313,11 +313,13 @@ _zte_setpath() { _zsp=$(_zte_paths "$1"); printf '%s' "${_zsp##* }"; }
 _zte_get() {
 	_zg_src=$(_srcip_for "" "$1")
 	_zg_tok=$(cat "$CACHE_DIR/ztestok_$(echo "$1" | tr -c 'A-Za-z0-9' '_')" 2>/dev/null)
+	_zg_md='multi_data=1&'
+	case "${2%%&*}" in sms_data_total) _zg_md= ;; esac
 	curl -s --max-time 6 ${_zg_src:+--interface "$_zg_src"} -A "$UA" \
 		-H "Referer: http://$1/index.html" \
 		-H "X-Requested-With: XMLHttpRequest" \
 		${_zg_tok:+-b "stok=$_zg_tok"} \
-		"http://$1/$(_zte_getpath "$1")?isTest=false&multi_data=1&cmd=$2" 2>/dev/null
+		"http://$1/$(_zte_getpath "$1")?isTest=false&${_zg_md}cmd=$2" 2>/dev/null
 }
 
 _zte_set() {
