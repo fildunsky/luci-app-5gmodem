@@ -115,3 +115,7 @@ For a module on PCIe the poll builds the profile key as `pci/<vendor><device>`. 
 ### RM520N-GL `1eac:1007`: host driver prerequisite
 
 The PCI metric and band profiles already cover this ID. Issue #69 instead reaches only raw PCI enumeration (`1eac:1007`, subsystem `1eac:1009`): no bound driver or WWAN/MHI nodes. Standard Linux 6.12 matches the ID as `quectel-rm5xx`; stock OpenWrt needs `kmod-mhi-pci-generic`, `kmod-mhi-wwan-ctrl` and `kmod-mhi-wwan-mbim` before the app can discover its AT/MBIM ports. These drivers are not dependencies of the universal app package. A successful PCI listing alone is not successful modem initialization; exact OEM firmware operation remains unverified.
+
+### Failed AT transport on 5G profiles
+
+Band and LTE cell-lock writes can fail before the modem receives them, for example when the selected AT port is unavailable. The 5G profile checks the command exit status so a transport failure is not reported as a successful write or followed by the cell-lock reconnect.
