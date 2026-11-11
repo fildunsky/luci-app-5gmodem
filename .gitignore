@@ -6,3 +6,8 @@ ipkg-*/
 luci-app-5gmodem/docs/
 # Аудиты — только локально, в публичный репозиторий не уходят
 docs/audits/
+# Локальные настройки и инструкции агентов - не публикуются
+CLAUDE.local.md
+AGENTS.local.md
+.claude/settings.local.json
+*.local.md

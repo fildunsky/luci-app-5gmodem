@@ -382,14 +382,10 @@ modem's cached cards from appearing on the phone page.
 
 ## Samsung Galaxy (Exynos)
 
-Tested on a Galaxy S21 (SM-G991B, `o1sxser`, Exynos 2100, `AP3A.240905.015.A2.G991BXXUEHYD5`,
-One UI 7 / Android 15, SDK 35) on Cudy TR3000 v1, OpenWrt 25.12.6. The unit has two
-nano-SIM slots (an eSIM can replace the second one; this phone's eSIM module is damaged and
-unused); it was tested with one SIM and then with two SIMs of different operators. This particular phone is rooted
-(APatch) and its boot-state properties (`ro.boot.flash.locked`, `verifiedbootstate`) report a
-locked bootloader, so they say nothing about the real state. Every measurement below ran
-as the unprivileged `shell` user (uid 2000) over ADB; `su` was not used, so the results
-describe an unrooted S21 as well.
+Tested on a Galaxy S21 (SM-G991B, Exynos 2100, One UI 7 / Android 15, SDK 35) with
+OpenWrt 25.12.6. The model has two nano-SIM slots (an eSIM can replace the second one);
+it was tested with one SIM and then with two SIMs of different operators. Every measurement
+below ran as the unprivileged `shell` user (uid 2000) over ADB, without root.
 
 - **USB composition.** With USB tethering on, `04e8:6862` exposes RNDIS (`e0/01/03`,
   `rndis_host`), a CDC-ACM service port (`02/02/01`, `/dev/ttyACM0`), a second CDC data
@@ -461,7 +457,7 @@ describe an unrooted S21 as well.
   that was active before was restored. The data bearer of the new SIM was up within about
   eight seconds.
 - **eSIM.** The Samsung eSIM services (`com.samsung.euicc`, `esimclient`) run without
-  crashes and report the second slot as a physical SIM. Adding an eSIM fails on this phone
+  crashes and report the second slot as a physical SIM. Adding an eSIM failed on the test unit
   with `SIM_APDU_NULL_RESPONSE`, a known S21/Note20 fault whose only reported cure is a board
   replacement; the plugin does not touch the eUICC. The shell user holds
   `WRITE_EMBEDDED_SUBSCRIPTIONS`, so `EuiccManager.eraseSubscriptions` can be called over ADB
