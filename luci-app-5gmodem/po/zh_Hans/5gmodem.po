@@ -2134,14 +2134,11 @@ msgstr "状态"
 msgid "Port %d"
 msgstr "端口 %d"
 
-msgid "antenna not connected"
-msgstr "天线未连接"
+msgid "Signal too low to assess"
+msgstr "信号过弱，无法评估"
 
-msgid "antenna: weak signal"
-msgstr "天线：信号弱"
-
-msgid "antenna: normal"
-msgstr "天线：正常"
+msgid "Signal: good"
+msgstr "信号：良好"
 
 msgid "Applying 3G bands..."
 msgstr "正在应用 3G 频段..."
@@ -2161,8 +2158,8 @@ msgstr "切断调制解调器插槽供电几秒钟——相当于将其拔出。
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
 msgstr "「对 ModemManager 隐藏」已关闭：ModemManager 协议需要 MM 来管理此调制解调器"
 
-msgid "antenna: poor signal"
-msgstr "天线：信号差"
+msgid "Signal: poor"
+msgstr "信号：差"
 
 msgid "enabled"
 msgstr "已启用"
