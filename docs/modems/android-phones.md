@@ -390,7 +390,6 @@ unused); it was tested with one SIM and then with two SIMs of different operator
 locked bootloader, so they say nothing about the real state. Every measurement below ran
 as the unprivileged `shell` user (uid 2000) over ADB; `su` was not used, so the results
 describe an unrooted S21 as well.
-Evidence: [the Samsung S21 audit](../audits/2026-11-11-samsung-s21-android.md).
 
 - **USB composition.** With USB tethering on, `04e8:6862` exposes RNDIS (`e0/01/03`,
   `rndis_host`), a CDC-ACM service port (`02/02/01`, `/dev/ttyACM0`), a second CDC data
@@ -500,8 +499,6 @@ Use the phone's USB path from the app, not its serial or network address.
 Keep USB debugging enabled while testing. No changes to the computer's
 DNS or routes are part of the reader.
 
-The initial live evidence is recorded in
-[the Xiaomi 17 audit](../audits/2026-11-10-xiaomi17-android-metrics.md).
 Synthetic regression tests cover dual-SIM selection and switching,
 IWLAN/WWAN separation, units, sentinels, escaping under BusyBox and host
 awk, incomplete dumps, unauthorized devices, exact serial targeting,

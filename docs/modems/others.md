@@ -56,7 +56,7 @@ Battery: `status` Charging gives charging=1. Full and Not charging (stopped by t
 
 ## TD Tech MT5700M-CN (3466:3301, Balong 5000)
 
-The standard NCM data path is captured in issue #68. AT formats are checked against the pinned [MT5700 reference comparison](../audits/2026-11-08-tdtech-reference.md); the changes still need a cold-boot test on hardware.
+The standard NCM data path is captured in issue #68. AT formats are checked against a pinned MT5700 reference; the changes still need a cold-boot test on hardware.
 
 - USB only. In PCIe mode the module is a root complex, so a router cannot be its host. Default USB composition: NCM, DIAG, PCUI, Serial_B, Serial_C, GPS.
 - `usbports.sh` loads `cdc_ncm` and selects configuration 2 when this device has no network function. A working network function is preserved. Hotplug, coldplug and the fibocom setup path all prepare USB. The temporary serial ID is removed from the USB driver after binding; configuration-2 interfaces 0/1 are released from serial drivers. Only serial subclass `06` is moved from generic to option. Configuration-1 interface 0 is a serial port and must not be released by number alone.

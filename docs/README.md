@@ -32,7 +32,6 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 
 - [Altair ALT3100 / ALT3800 (USB vendor 216f)](modems/altair.md)
 - [Fibocom modems and the `fibocom` netifd protocol](modems/fibocom.md)
-- [TD Tech MT5700 reference comparison](audits/2026-11-08-tdtech-reference.md) and [deferred follow-up](audits/2026-11-08-tdtech-follow-up.md)
 - [Foxconn / Dell / HP modules: T77W968 (DW5821e), T99W373 (MV32-W), T77W595 (HP lt4120)](modems/foxconn-dell.md)
 - [Huawei: HiLink web API and AT-mode sticks](modems/huawei-hilink.md)
 - [MediaTek MT6735 Android Mi-Fi (ZTE-style goform)](modems/mediatek-mifi.md)
@@ -50,12 +49,4 @@ Why the code looks the way it does: hardware quirks, OpenWrt and LuCI pitfalls, 
 
 ## Other
 
-- [Runtime and resource audit, 2026-11-07](audits/2026-11-07-runtime.md)
-- [Fork comparison, 2026-11-07](audits/2026-11-07-forks.md)
-- [Fork re-audit, 2026-11-11](audits/2026-11-11-forks-recheck.md)
 - [Telemetry](telemetry.md)
-
-- [FM350 AT hang: a user follow-up](audits/2026-11-08-fm350-at-hang.md)
-
-- [2026-11-09 E5573 debug SMS / independent USSD ports](audits/2026-11-09-hilink-debug-sms.md)
-- [2026-11-09 issue #69: RM520 PCIe driver prerequisites](audits/2026-11-09-issue69-rm520-pcie.md)
