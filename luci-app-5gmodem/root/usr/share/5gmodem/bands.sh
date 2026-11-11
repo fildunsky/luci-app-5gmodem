@@ -63,6 +63,8 @@ active_modem() {
 _persist_bands() {
 	_pb_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
 	[ "$_pb_sec" != "m_" ] || return 0
+	# remembered so a write the modem rejects can be taken back (_unpersist_bands)
+	_PB_KEY="$1"; _PB_PREV=$(uci -q get "5gmodem.$_pb_sec.save_band$1"); _PB_SET=1
 	case "$2" in
 		default|'') uci -q delete "5gmodem.$_pb_sec.save_band$1" 2>/dev/null ;;
 		*)          uci -q set "5gmodem.$_pb_sec.save_band$1=$2" ;;
@@ -70,6 +72,22 @@ _persist_bands() {
 	uci -q commit 5gmodem
 	_pb_if=$(uci -q get "5gmodem.$_pb_sec.network")
 	[ -n "$_pb_if" ] && : > "/tmp/5gmodem/bandrestore_$_pb_if" 2>/dev/null
+}
+
+# A list the modem did not take must not be saved: the boot and ifup restore would
+# write it again, so the old choice comes back after a reboot (field report, FM350).
+_unpersist_bands() {
+	[ "$_PB_SET" = 1 ] || return 0
+	_PB_SET=""
+	_ub_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$_ub_sec" != "m_" ] || return 0
+	if [ -n "$_PB_PREV" ]; then
+		uci -q set "5gmodem.$_ub_sec.save_band$_PB_KEY=$_PB_PREV"
+	else
+		uci -q delete "5gmodem.$_ub_sec.save_band$_PB_KEY" 2>/dev/null
+	fi
+	uci -q commit 5gmodem
+	logger -t 5gmodem "bands: the rejected list was not saved (save_band$_PB_KEY kept as before)"
 }
 
 _persist_mode() {
@@ -559,7 +577,7 @@ _bands_set_bg() {
 	(
 		_sbg_how="$1"; shift
 		case "$_sbg_how" in
-			band)      _band_write "$@" ;;
+			band)      _band_write "$@" || _unpersist_bands ;;
 			after)     "$@" && { _bands_flush; at_unlock; _bands_after_write; } ;;
 			mode)      "$@" && { _persist_mode "$2"; _bands_flush; at_unlock; _bands_after_write; } ;;
 			reconnect) "$@"; _bands_flush; at_unlock; _reconnect_iface ;;
@@ -1559,10 +1577,26 @@ case $1 in
 				_so_d=$(printf '%s' "$_so_out" | tr -d '\r' | grep -v '^$' | tail -1 | tr -cd 'A-Za-z0-9 .,:_()/+-' | cut -c1-120)
 				logger -t 5gmodem "bands: setall $1 was not applied (rc=$_so_rc) $_so_d"
 				_sa_fail_add "$1" rejected "$_so_d"
+				_sa_unsave "$1"
 				return 1
 			fi
 			_SA_OKJ="${_SA_OKJ}${_SA_OKJ:+,}\"$1\""
 			return 0
+		}
+		_sa_unsave() {
+			case "$1" in
+				lte) _su_k="";      _su_v="$_SA_PREV_LTE"; _su_n="$_SA_LTE" ;;
+				nsa) _su_k=5gnsa;   _su_v="$_SA_PREV_NSA"; _su_n="$_SA_NSA" ;;
+				sa)  _su_k=5gsa;    _su_v="$_SA_PREV_SA";  _su_n="$_SA_SA" ;;
+				*)   return 0 ;;
+			esac
+			[ -n "$_su_n" ] && [ "$_sa_sec" != "m_" ] || return 0
+			if [ -n "$_su_v" ]; then
+				uci -q set "5gmodem.$_sa_sec.save_band$_su_k=$_su_v"
+			else
+				uci -q delete "5gmodem.$_sa_sec.save_band$_su_k" 2>/dev/null
+			fi
+			uci -q commit 5gmodem
 		}
 		_sa_apply() {
 			_SA_RAN=1
@@ -1580,7 +1614,11 @@ case $1 in
 			return "$_sa_any"
 		}
 		_sa_sec="m_$(active_modem | sed 's/[^A-Za-z0-9]/_/g')"
+		_SA_PREV_LTE=""; _SA_PREV_NSA=""; _SA_PREV_SA=""
 		if [ "$_sa_sec" != "m_" ] && [ -n "$_SA_LTE$_SA_NSA$_SA_SA" ]; then
+			_SA_PREV_LTE=$(uci -q get "5gmodem.$_sa_sec.save_band")
+			_SA_PREV_NSA=$(uci -q get "5gmodem.$_sa_sec.save_band5gnsa")
+			_SA_PREV_SA=$(uci -q get "5gmodem.$_sa_sec.save_band5gsa")
 			for _sa_p in ":$_SA_LTE" "5gnsa:$_SA_NSA" "5gsa:$_SA_SA"; do
 				_sa_pk="${_sa_p%%:*}"; _sa_pv="${_sa_p#*:}"
 				case "$_sa_pv" in

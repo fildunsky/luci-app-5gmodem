@@ -113,8 +113,26 @@ _fm350_gtact_set() {
     _gs_rat=$(echo "$_gs_line" | cut -d, -f1)
     _gs_p1=$(echo "$_gs_line" | cut -d, -f2)
     _gs_mode=$(echo "$_gs_line" | cut -d, -f1-3)
+    _gs_p2=$(echo "$_gs_line" | cut -d, -f3)
     _gs_dup=""
-    [ -n "$_gs_p1" ] && [ -z "$(echo "$_gs_line" | cut -d, -f3)" ] && _gs_dup="$_gs_rat,$_gs_p1,$_gs_p1"
+    [ -n "$_gs_p1" ] && [ -z "$_gs_p2" ] && _gs_dup="$_gs_rat,$_gs_p1,$_gs_p1"
+    # 29.21.24 reads back "2,,3,<bands>" but rejects that form, and "2,,,<bands>" too;
+    # it takes both priorities filled ("2,3,3", the form 4pda users write by hand)
+    [ -z "$_gs_p1" ] && [ -n "$_gs_p2" ] && _gs_dup="$_gs_dup $_gs_rat,$_gs_p2,$_gs_p2"
+    # last resort: a pair from the manual's RAT table, keeping the preferred RAT the
+    # modem reported (2 WCDMA, 3 LTE, 6 NR) so the user's priority does not change
+    _gs_pp="${_gs_p1:-$_gs_p2}"
+    case "$_gs_rat:$_gs_pp" in
+        2:*)          _gs_dup="$_gs_dup 2,3,3" ;;
+        14:*)         _gs_dup="$_gs_dup 14,6,6" ;;
+        20:3|17:3)    _gs_dup="$_gs_dup $_gs_rat,3,6" ;;
+        20:2)         _gs_dup="$_gs_dup 20,2,6" ;;
+        20:*|17:*)    _gs_dup="$_gs_dup $_gs_rat,6,3" ;;
+        16:2)         _gs_dup="$_gs_dup 16,2,6" ;;
+        16:*)         _gs_dup="$_gs_dup 16,6,2" ;;
+        4:2)          _gs_dup="$_gs_dup 4,2,3" ;;
+        4:*)          _gs_dup="$_gs_dup 4,3,2" ;;
+    esac
     if [ "$1" = "0" ]; then
         _fm350_caps lte >/dev/null 2>&1
         _gs_cf="/tmp/5gmodem/fm350_caps_$(basename "$_DEVICE" 2>/dev/null)"
@@ -125,7 +143,10 @@ _fm350_gtact_set() {
         _gs_want=$(echo "$1" | tr ',' '\n' | grep -E "$2" | sort -n | xargs)
     fi
     _gs_new=""
+    _gs_tried=""
     for _gs_f in "$_gs_mode" $_gs_dup ",," "$_gs_rat,," "$_gs_rat"; do
+        case " $_gs_tried " in *" $_gs_f "*) continue ;; esac
+        _gs_tried="$_gs_tried $_gs_f"
         if [ "$_gs_f" = "$_gs_rat" ]; then
             [ "$1" = "0" ] || continue
             sms_tool -d $_DEVICE at "AT+GTACT=$_gs_rat" >/dev/null 2>&1
