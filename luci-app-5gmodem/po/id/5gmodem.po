@@ -2134,14 +2134,11 @@ msgstr "Kondisi"
 msgid "Port %d"
 msgstr "Port %d"
 
-msgid "antenna not connected"
-msgstr "antena tidak terhubung"
+msgid "Signal too low to assess"
+msgstr "Sinyal terlalu lemah untuk dinilai"
 
-msgid "antenna: weak signal"
-msgstr "antena: sinyal lemah"
-
-msgid "antenna: normal"
-msgstr "antena: normal"
+msgid "Signal: good"
+msgstr "Sinyal: baik"
 
 msgid "Applying 3G bands..."
 msgstr "Menerapkan pita 3G..."
@@ -2161,8 +2158,8 @@ msgstr "Memutus daya slot modem selama beberapa detik - seolah-olah Anda mencabu
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
 msgstr "“Sembunyikan dari ModemManager” telah dimatikan: protokol ModemManager memerlukan MM untuk mengelola modem ini"
 
-msgid "antenna: poor signal"
-msgstr "antena: sinyal buruk"
+msgid "Signal: poor"
+msgstr "Sinyal: buruk"
 
 msgid "enabled"
 msgstr "diaktifkan"

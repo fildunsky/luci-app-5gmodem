@@ -2325,14 +2325,11 @@ msgstr "Состояние"
 msgid "Port %d"
 msgstr "Порт %d"
 
-msgid "antenna not connected"
-msgstr "антенна не подключена"
+msgid "Signal too low to assess"
+msgstr "Сигнал слишком слабый для оценки"
 
-msgid "antenna: weak signal"
-msgstr "слабый сигнал"
-
-msgid "antenna: normal"
-msgstr "норма"
+msgid "Signal: good"
+msgstr "Сигнал: хороший"
 
 msgid "Applying 3G bands..."
 msgstr "Применяем диапазоны 3G…"
@@ -2353,8 +2350,8 @@ msgstr "Снимает питание со слота модема на неск
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
 msgstr "Галка «Скрыть от ModemManager» снята: протоколу ModemManager нужно, чтобы модемом управлял MM"
 
-msgid "antenna: poor signal"
-msgstr "плохой сигнал"
+msgid "Signal: poor"
+msgstr "Сигнал: плохой"
 
 msgid "enabled"
 msgstr "включён"

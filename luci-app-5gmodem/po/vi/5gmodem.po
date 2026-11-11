@@ -2134,14 +2134,11 @@ msgstr "Trạng thái"
 msgid "Port %d"
 msgstr "Cổng %d"
 
-msgid "antenna not connected"
-msgstr "chưa gắn ăng-ten"
+msgid "Signal too low to assess"
+msgstr "Tín hiệu quá yếu để đánh giá"
 
-msgid "antenna: weak signal"
-msgstr "ăng-ten: tín hiệu yếu"
-
-msgid "antenna: normal"
-msgstr "ăng-ten: bình thường"
+msgid "Signal: good"
+msgstr "Tín hiệu: tốt"
 
 msgid "Applying 3G bands..."
 msgstr "Đang áp dụng băng tần 3G..."
@@ -2161,8 +2158,8 @@ msgstr "Ngắt nguồn khe modem trong vài giây - như khi rút modem ra. Mode
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
 msgstr "Đã tắt “Ẩn khỏi ModemManager”: giao thức ModemManager cần MM quản lý modem này"
 
-msgid "antenna: poor signal"
-msgstr "ăng-ten: tín hiệu kém"
+msgid "Signal: poor"
+msgstr "Tín hiệu: kém"
 
 msgid "enabled"
 msgstr "đã bật"

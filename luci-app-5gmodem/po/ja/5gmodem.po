@@ -2134,14 +2134,11 @@ msgstr "状態"
 msgid "Port %d"
 msgstr "ポート %d"
 
-msgid "antenna not connected"
-msgstr "アンテナ未接続"
+msgid "Signal too low to assess"
+msgstr "信号が弱すぎて判定できません"
 
-msgid "antenna: weak signal"
-msgstr "アンテナ: 信号が弱い"
-
-msgid "antenna: normal"
-msgstr "アンテナ: 正常"
+msgid "Signal: good"
+msgstr "信号: 良好"
 
 msgid "Applying 3G bands..."
 msgstr "3G バンドを適用中..."
@@ -2161,8 +2158,8 @@ msgstr "モデムスロットの電源を数秒間切ります (抜き差しし�
 msgid "“Hide from ModemManager” has been turned off: the ModemManager protocol needs MM to manage this modem"
 msgstr "「ModemManager から隠す」をオフにしました: ModemManager プロトコルでは MM がこのモデムを管理する必要があります"
 
-msgid "antenna: poor signal"
-msgstr "アンテナ: 信号が悪い"
+msgid "Signal: poor"
+msgstr "信号: 悪い"
 
 msgid "enabled"
 msgstr "有効"

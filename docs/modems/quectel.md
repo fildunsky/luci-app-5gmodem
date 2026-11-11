@@ -102,6 +102,10 @@ RM520N reads the driver from its own USB path (`/sys/bus/usb/devices/$_POLL_AM:*
 
 `AT+QRSRP` → `+QRSRP: -95,-99,-140,-140[,LTE]`: RSRP of PRX, DRX, RX2, RX3. The fifth field (RAT) is present only on some firmwares. NR modules may print two lines, and the first one (the serving cell) is used. Unused chains report `-140` or `-32768` and are excluded: the two-antenna EP06 physically has no RX2/RX3. `RXDIV` is the number of chains above -130: 1 = off, 2 = 2rx, 3-4 = 4rx. Models without the command (EC200 and relatives) answer ERROR and simply get no table.
 
+For `2c7c:0801`, the app also queries `AT+QRSRQ` and adds per-chain RSRQ when its reported radio type matches the RSRP sample. Invalid values are omitted. This was checked on an RG520N-EU in LTE; a chain reading is not proof of the condition or physical connector of an antenna.
+
+The antenna table labels signal strength only. A weak receive-chain value does not establish a disconnected antenna or identify a physical connector.
+
 ### EC200A-EL (`2c7c6005`)
 
 Built from an offline dump (`EC200AELLAR01A05M16`, ECM/RNDIS usbnet, AT usually on ttyUSB1), not from a module on hand. QENG `"servingcell","NOCONN","LTE","FDD",460,11,6138907,489,100,1,5,5,7706,-65,-8,-55,35,58` matches the EC25 field positions one to one. TAC `7706` is assumed to be hex, following Quectel convention. If a live module shows it is decimal, the `0x` should be dropped. Protocol detection accepts `rndis` too.
@@ -115,7 +119,3 @@ For a module on PCIe the poll builds the profile key as `pci/<vendor><device>`. 
 ### RM520N-GL `1eac:1007`: host driver prerequisite
 
 The PCI metric and band profiles already cover this ID. Issue #69 instead reaches only raw PCI enumeration (`1eac:1007`, subsystem `1eac:1009`): no bound driver or WWAN/MHI nodes. Standard Linux 6.12 matches the ID as `quectel-rm5xx`; stock OpenWrt needs `kmod-mhi-pci-generic`, `kmod-mhi-wwan-ctrl` and `kmod-mhi-wwan-mbim` before the app can discover its AT/MBIM ports. These drivers are not dependencies of the universal app package. A successful PCI listing alone is not successful modem initialization; exact OEM firmware operation remains unverified.
-
-For `2c7c:0801`, the app also queries `AT+QRSRQ` and adds per-chain RSRQ when its reported radio type matches the RSRP sample. Invalid values are omitted. This was checked on an RG520N-EU in LTE; a chain reading is not proof of the condition or physical connector of an antenna.
-
-The antenna table labels signal strength only. A weak receive-chain value does not establish a disconnected antenna or identify a physical connector.
