@@ -488,7 +488,7 @@ function signalSvg(p) {
 
 return baseclass.extend({
 	icon: function(p) { return icons.url(p); },
-	API: 30939,
+	API: 30940,
 	signalSvg: signalSvg,
 	signalSet: signalSet,
 	QUAL_T: QUAL_T,

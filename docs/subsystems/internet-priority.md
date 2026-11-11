@@ -140,6 +140,7 @@ Three independent branches, each with its own card, state, cache and poll (sever
 
 - One ICMP packet, 2 s timeout, over the default route.
 - Clash fake-IP results (198.18.0.0/15) are measured with an HTTPS request through the normal route (that is, through clash), like a client browser; ICMP to a fake IP measures the tunnel or clash's local responder.
+- Every HTTPS measurement (`_curl_rtt`, also Telegram and the custom Bot API URL) works like mihomo `unified-delay: true`: one `curl` call fetches the URL twice over one connection and reports the second request's time to first byte, so DNS, TCP and TLS setup are not counted. A single fresh request showed 3.1 s for youtube.com where the reused connection showed 0.18 s. If the second request fails, the first one's time is used. A slow server (github.com builds its page for 0.7-1.9 s) stays slow: only the handshake is removed. ICMP results are a single round trip already and are unchanged; `_clash_ping` uses the controller's own delay test, which follows the clash config's `unified-delay`.
 - ICMP silence gets a second opinion over HTTPS, because operators and services filter ICMP while the site works. Without curl: `wget --spider` and coarse timing from `/proc/uptime`.
 - The router's own traffic bypasses clash (tproxy only intercepts LAN forwarding), so blocked services look dead from the router while clients reach them. The HTTP/mixed port of clash is used when present; the tproxy port is not an HTTP proxy. In fully transparent configs only tproxy exists (05.08.2026), so `_clash_ping` asks clash itself via its delay API on up to four proxy groups from `/proxies` (service groups skipped; group names are URL-encoded for spaces, non-ASCII names like flag emoji are skipped). The API secret is sent as a Bearer header, otherwise it answers 401. `/generate_204` is tried first, then `/`. The host is saved before `set --` builds the auth header, because `set --` overwrites the positional parameters.
 - Telegram is never pinged: ICMP to its servers does not pass, and in RU the domain is spoofed by operator resolvers. The probe resolves `api.telegram.org`, checks the address against Telegram's official `cidr.txt`, then connects to 443 with the correct SNI (any HTTP answer is success; the root returns 404). DNS failure: fall back to 149.154.167.220 (api.telegram.org). A non-matching address returns `why=dns`, shown as spoofing, not "no connection". A fake-IP answer goes straight to the tunnel probe. No direct path (RU operators close direct 443; 03.08.2026: honest DNS, direct `000`, via mixed-port `302`): mixed-port, then `_clash_ping`.
@@ -184,3 +185,31 @@ The background operator refresh closes file descriptors 7, 8 and 9 and clears `_
 ## Quectel 2c7c:0801 fallback label
 
 The USB ID 2c7c:0801 is shared by RG520N-EU and RM520N variants. When no stronger model identity is available, the priority card uses a recognized product string or a generic Quectel 5G label instead of assuming RM520N from the USB ID alone.
+
+## Primary uplink event
+
+netpri and the watchdog move default routes with `ip route` directly, so netifd sends no event when the primary uplink changes. Other packages (for example a proxy core that keeps per-uplink DNS) learn about it from a hotplug event instead of polling.
+
+**Primary uplink** = the device of the IPv4 default route with the lowest metric in the main table (`default from` source routes are ignored). Its logical interface is the netifd interface on that `l3_device` that has an IPv4 address (so `wan`, not `wan6`; `modem`, not `modem_6`).
+
+When it differs from the last one seen (`/tmp/5gmodem/uplink.primary`, holds `<interface> <device>`), `uplink_notify` in `lib.sh` runs, in the background and after the routes are already in place:
+
+```
+ACTION=primary INTERFACE=<new> DEVICE=<new l3_device> PREVIOUS=<old> PREVIOUS_DEVICE=<old l3_device> REASON=<reason> \
+	/sbin/hotplug-call 5gmodem-uplink
+ubus send 5gmodem.uplink '{"action":"primary","interface":...,"device":...,"previous":...,"previous_device":...,"reason":...}'
+```
+
+| `REASON` | When |
+|---|---|
+| `netpri` | a card was made first or the order was changed (LuCI or any other caller of `netpri.sh set` / `order`), and the delayed `reapply` after an uplink came up |
+| `health` | a watchdog pass: an uplink was penalised or got its priority back ("restoring priority"), a missing default route was restored, or the watchdog was switched off and metrics were restored |
+| `iface` | 5 s after a netifd `ifup`, `ifdown` or `ifupdate` (`/etc/hotplug.d/iface/62-5gmodem-uplink`), which covers an uplink going down or up on its own |
+
+Rules for subscribers:
+
+- Scripts go to `/etc/hotplug.d/5gmodem-uplink/` (the package does not create the directory). They run one after another in the background, so a slow script does not hold netpri or the watchdog, but it delays the scripts after it.
+- The event fires only on a change. A watchdog pass that keeps the same primary sends nothing. Two reasons may race for the same change; the lock makes only the first one fire.
+- `INTERFACE` and `DEVICE` are empty when no IPv4 default route is left. `PREVIOUS` is empty on the first event after boot (`/tmp` is cleared).
+- `INTERFACE` falls back to the device name when no netifd interface owns the device.
+- File descriptors 5-9 (AT and watchdog locks) are closed for the subscriber.

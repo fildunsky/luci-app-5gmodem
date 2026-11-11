@@ -182,7 +182,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30939, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(30940, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();

@@ -1650,6 +1650,8 @@ pre.atcommand-output.has-output::after {
   position: relative;
   top: .3rem;
 }
+/* footstrap: its h3 has no bottom margin, so the shifted-down chips touch the SIM buttons */
+:root:has(link[href*="/footstrap/"]) #modemname:has(> #modemmeta) { padding-bottom: 5px; }
 #modemchips {
   display: inline-flex;
   align-items: center;
@@ -2205,6 +2207,7 @@ body:not(.sc-simple) .tg-arr-host:not(.tg-arr-edit) > .tg-arr-off { display: non
   #modemip6 { font-size: max(12px, .78em); }
   .tginfo-vidpid { font-size: 12px; }
   #modemname > #modemmeta { top: 8px; }
+  :root:has(link[href*="/footstrap/"]) #modemname:has(> #modemmeta) { padding-bottom: 8px; }
   .tginfo .tg-sublabel { font-size: max(12px, .76em); }
   #signal medium { font-size: max(12px, .7em); }
   .tginfo-info .tginfo-freq { font-size: max(12px, .8em); }

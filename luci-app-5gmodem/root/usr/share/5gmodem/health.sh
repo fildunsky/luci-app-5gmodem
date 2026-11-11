@@ -478,6 +478,7 @@ enforce() {
 		_move_defaults "$_e_dev" "$_e_target" "$_e_if"
 	done
 	[ -n "$_e_anyup" ] && _dns_demote "$_e_dead"
+	uplink_notify health
 }
 
 HEAL_COOLDOWN=$(conf heal_cooldown); case "$HEAL_COOLDOWN" in ''|*[!0-9]*) HEAL_COOLDOWN=300 ;; esac
@@ -1039,6 +1040,7 @@ _off_cleanup() {
 	exec 9>"/tmp/5gmodem/health.lock"
 	flock 9
 	_teardown
+	uplink_notify health
 	exit 0
 }
 
