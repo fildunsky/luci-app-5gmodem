@@ -180,3 +180,7 @@ See `speedtest-extip.md`.
 ### Detached refresh and inherited locks (2026-11-07 audit)
 
 The background operator refresh closes file descriptors 7, 8 and 9 and clears `_AT_LOCK_HELD` before launching its child. Otherwise a `netpri.sh list` called by a locked collector could keep the caller's flock alive after the collector exited, or falsely tell the child it owned an AT port whose descriptor had been closed.
+
+## Quectel 2c7c:0801 fallback label
+
+The USB ID 2c7c:0801 is shared by RG520N-EU and RM520N variants. When no stronger model identity is available, the priority card uses a recognized product string or a generic Quectel 5G label instead of assuming RM520N from the USB ID alone.

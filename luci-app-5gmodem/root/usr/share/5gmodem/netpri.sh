@@ -470,7 +470,9 @@ MF_EOF
 		2c7c:0512) echo "Quectel EG12"; return ;;
 		2c7c:0620) echo "Quectel EM160R"; return ;;
 		2c7c:0800) echo "Quectel RM500Q"; return ;;
-		2c7c:0801) echo "Quectel RM520N"; return ;;
+		2c7c:0801)
+			case "$prod" in RG520N*|RM520N*) echo "Quectel $prod" ;; *) echo "Quectel 5G" ;; esac
+			return ;;
 		2c7c:0900) echo "Quectel RM500U"; return ;;
 		2c7c:0901) echo "Quectel EC200U"; return ;;
 		2c7c:6005) echo "Quectel EC200A"; return ;;
