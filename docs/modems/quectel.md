@@ -17,7 +17,7 @@ The metric profiles for Quectel modules. Every `2c7c*` profile sources `_quectel
 | 2c7c:0512 | EG18-EA, EM12-G, EM160R-GL | `2c7c0512` | `_qc_scc_lte` |
 | 2c7c:0620 | EM160R-GL | `2c7c0620` | `_qc_scc_lte` |
 | 2c7c:0800 | RG500Q-EA, RG502Q-EA, RM500Q-GL, RM502Q-AE | `2c7c0800` | `_q5_core` |
-| 2c7c:0801 | RM520N-GL (RM521F-GL shares the AT manual; its PID is not confirmed) | `2c7c0801` | `_q5_core` |
+| 2c7c:0801 | RM520N-GL, RG520N-EU (RM521F-GL shares the AT manual; its PID is not confirmed) | `2c7c0801` | `_q5_core` |
 | 2c7c:0900 | RM500U-CNV | `2c7c0900` | `_q5_core` |
 | 2c7c:0122 | RM551E-GL | `2c7c0122` | `_q5_core` |
 | 2c7c:0133 | RM551E-GL | `2c7c0133` → `2c7c0122` | `_q5_core` |
