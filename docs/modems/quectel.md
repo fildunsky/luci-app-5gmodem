@@ -115,3 +115,7 @@ For a module on PCIe the poll builds the profile key as `pci/<vendor><device>`. 
 ### RM520N-GL `1eac:1007`: host driver prerequisite
 
 The PCI metric and band profiles already cover this ID. Issue #69 instead reaches only raw PCI enumeration (`1eac:1007`, subsystem `1eac:1009`): no bound driver or WWAN/MHI nodes. Standard Linux 6.12 matches the ID as `quectel-rm5xx`; stock OpenWrt needs `kmod-mhi-pci-generic`, `kmod-mhi-wwan-ctrl` and `kmod-mhi-wwan-mbim` before the app can discover its AT/MBIM ports. These drivers are not dependencies of the universal app package. A successful PCI listing alone is not successful modem initialization; exact OEM firmware operation remains unverified.
+
+For `2c7c:0801`, the app also queries `AT+QRSRQ` and adds per-chain RSRQ when its reported radio type matches the RSRP sample. Invalid values are omitted. This was checked on an RG520N-EU in LTE; a chain reading is not proof of the condition or physical connector of an antenna.
+
+The antenna table labels signal strength only. A weak receive-chain value does not establish a disconnected antenna or identify a physical connector.

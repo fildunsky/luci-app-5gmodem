@@ -1,5 +1,6 @@
 if [ -z "$ANTPORTS" ]; then
-	_QA=$(sms_tool -d $DEVICE at "at+qrsrp" 2>/dev/null | awk '
+	_QA_RAW=$(sms_tool -d $DEVICE at "at+qrsrp" 2>/dev/null | tr -d '\r')
+	_QA=$(printf '%s\n' "$_QA_RAW" | awk '
 		/^\+QRSRP:/ && !done {
 			done = 1
 			sub(/^\+QRSRP:[[:space:]]*/, "")
@@ -17,6 +18,25 @@ if [ -z "$ANTPORTS" ]; then
 	_qr_on="${_QA%%|*}"; _qr_ap="${_QA#*|}"
 	if [ -n "$_qr_ap" ] && [ "$_qr_on" -ge 1 ] 2>/dev/null; then
 		ANTPORTS="$_qr_ap"
+		if [ "${_QA_READ_RSRQ:-0}" = 1 ]; then
+			_QA_RAT=$(printf '%s\n' "$_QA_RAW" | awk -F, '/^\+QRSRP:/ {gsub(/[[:space:]]/, "", $5); print $5; exit}')
+			_QA_QUAL=$(sms_tool -d "$DEVICE" at "at+qrsrq" 2>/dev/null | tr -d '\r')
+			_QA_QRAT=$(printf '%s\n' "$_QA_QUAL" | awk -F, '/^\+QRSRQ:/ {gsub(/[[:space:]]/, "", $5); print $5; exit}')
+			if [ -n "$_QA_RAT" ] && [ "$_QA_RAT" = "$_QA_QRAT" ]; then
+				_QA_JOIN=$(printf '%s\n%s\n' "$_qr_ap" "$_QA_QUAL" | awk '
+					NR == 1 { n = split($0, a, / /); next }
+					/^\+QRSRQ:/ && !done {
+						done = 1; sub(/^\+QRSRQ:[[:space:]]*/, ""); split($0, q, /,[[:space:]]*/)
+						for (i = 1; i <= n; i++) {
+							split(a[i], p, /:/); x = p[1] + 1; v = q[x]
+							if (v !~ /^-?[0-9]+$/ || v + 0 < -50 || v + 0 > 0) v = ""
+							out = out (out ? " " : "") p[1] ":" p[2] ":" v
+						}
+						print out
+					}')
+				[ -n "$_QA_JOIN" ] && ANTPORTS="$_QA_JOIN"
+			fi
+		fi
 		case "$_qr_on" in
 			1) RXDIV="off" ;;
 			2) RXDIV="2rx" ;;

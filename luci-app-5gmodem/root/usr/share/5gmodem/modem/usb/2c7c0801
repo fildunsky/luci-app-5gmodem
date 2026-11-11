@@ -68,4 +68,5 @@ if [ -z "$_QPROTO" ]; then
 fi
 [ -n "$_QPROTO" ] && PROTO="$_QPROTO"
                                                                                                                                                                                                                                          
+_QA_READ_RSRQ=1
 . "$RES/modem/usb/_quectel_qrsrp"
