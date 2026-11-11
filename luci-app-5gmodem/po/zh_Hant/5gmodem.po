@@ -4873,8 +4873,8 @@ msgstr "已手動排除"
 msgid "has answered as a modem before"
 msgstr "此前曾以數據機身分回應"
 
-msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
-msgstr "訊息的第一個詞，位於命令詞之前：“%s” 會執行下面名為 “reboot” 的命令。請把它改成只有您知道的詞——預設值對所有人都一樣。留空表示完全不用密語，那時唯一的保護就是信任號碼清單，而傳送號碼是可以偽造的。"
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. A random code is set on install, you can change it to a word only you know. Do not use \"secret\": older versions set it on every router. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "訊息的第一個詞，位於命令詞之前：“%s” 會執行下面名為 “reboot” 的命令。安裝時會設定一個隨機密語，您可以把它改成只有您知道的詞。不要使用 “secret”：舊版本在每台路由器上都設定了它。留空表示完全不用密語，那時唯一的保護就是信任號碼清單，而傳送號碼是可以偽造的。"
 
 msgid "marked as a modem by hand"
 msgstr "已手動標記為數據機"

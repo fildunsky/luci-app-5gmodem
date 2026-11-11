@@ -817,7 +817,7 @@ function addSmsCommands(s) {
 	o.remove = function() { return Promise.resolve(); };
 
 	o = s.option(form.Value, 'cmd_secret', _('Security code'),
-		_('The FIRST word of the message, before the command word: "%s" runs the command named "reboot" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged.').format('secret reboot'));
+		_('The FIRST word of the message, before the command word: "%s" runs the command named "reboot" below. A random code is set on install, you can change it to a word only you know. Do not use "secret": older versions set it on every router. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged.').format('a1b2c3d4 reboot'));
 	o.placeholder = _('empty - no code');
 	o.depends('cmd_enabled', '1');
 
@@ -888,7 +888,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30937,
+	API: 30938,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

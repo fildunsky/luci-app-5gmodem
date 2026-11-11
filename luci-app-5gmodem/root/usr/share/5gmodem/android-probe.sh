@@ -5,6 +5,7 @@ getprop ro.product.marketname
 getprop ro.product.model
 getprop ro.build.version.incremental
 getprop gsm.version.baseband
+getprop ro.product.manufacturer
 printf "__5GM_REGISTRY__\n"
 dumpsys telephony.registry
 printf "__5GM_SUBS__\n"
@@ -25,8 +26,8 @@ printf "__5GM_THERMAL__\n"
 dumpsys thermalservice
 printf "__5GM_SENSORS__\n"
 for _zone in /sys/class/thermal/thermal_zone*; do
-read -r _name < "$_zone/type" 2>/dev/null || continue
-read -r _temp < "$_zone/temp" 2>/dev/null || continue
+{ read -r _name < "$_zone/type"; } 2>/dev/null || continue
+{ read -r _temp < "$_zone/temp"; } 2>/dev/null || continue
 printf "%s %s\n" "$_name" "$_temp"
 done
 printf "__5GM_TETHER__\n"

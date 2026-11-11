@@ -144,13 +144,22 @@ android_sec() {
 	printf 'm_%s\n' "$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"
 }
 
+# The band lists belong to one phone: another phone on the same USB port (the section is named after the port) must
+# learn its own, so a list is only used together with the serial of the phone it was read from.
 android_caps() {
-	uci -q get "5gmodem.$(android_sec "$1").android_caps"
+	_acx_c=$(uci -q get "5gmodem.$(android_sec "$1").android_caps")
+	[ -n "$_acx_c" ] || return 0
+	_acx_for=$(uci -q get "5gmodem.$(android_sec "$1").android_caps_for")
+	[ -n "$_acx_for" ] && [ "$_acx_for" = "$(android_usb_serial "$1")" ] && printf '%s\n' "$_acx_c"
+	return 0
 }
 
 android_caps_store() {
 	[ -n "$2" ] || return 0
-	uci -q set "5gmodem.$(android_sec "$1").android_caps=$2" && uci -q commit 5gmodem
+	_acs_serial=$(android_usb_serial "$1") || return 0
+	_acs_sec=$(android_sec "$1")
+	uci -q set "5gmodem.$_acs_sec.android_caps=$2" && uci -q set "5gmodem.$_acs_sec.android_caps_for=$_acs_serial" \
+		&& uci -q commit 5gmodem
 }
 
 android_radio() {
@@ -173,11 +182,13 @@ android_radio() {
 	esac
 	_rd_out=$(android_adb -s "$_rd_serial" shell "CLASSPATH=/data/local/tmp/5gmodem-cells.dex app_process /system/bin CellProbe $_rd_cmd") \
 		|| { rm -f "/tmp/5gmodem/android_cells_$_rd_serial"; echo 'ERROR|Android radio request failed'; return 1; }
-	printf '%s\n' "$_rd_out" | tr -d '\r' | grep -E '^(SUB|WRITABLE|ALLOWED|RAT|DATA|DATA_ENABLED|BANDS|ERROR)[|]|^__5GM_RADIO_END__$'
+	printf '%s\n' "$_rd_out" | tr -d '\r' | grep -E '^(SUB|WRITABLE|ALLOWED|RAT|DATA|DATA_ENABLED|BANDS|BANDS_UNSUPPORTED|ERROR)[|]|^__5GM_RADIO_END__$'
 	return 0
 }
 
-# A reset readback is the modem's own band list: it is stored once and used as the list of supported bands.
+# A reset readback is the modem's own band list: it is stored once and used as the list of supported bands. A phone
+# whose modem does not answer the band API (Samsung's Exynos modem) is not written to: the readback carries
+# BANDS_UNSUPPORTED, the stored "list" only remembers whether NR is allowed, and only the network mode is offered.
 android_radio_json() {
 	_rj_caps=$(android_caps "$1")
 	_rj_raw=""

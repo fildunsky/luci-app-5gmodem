@@ -5,7 +5,9 @@
 uci -q get 5gmodem.sms >/dev/null 2>&1 || uci -q set 5gmodem.sms=sms
 
 if [ -z "$(uci -q show 5gmodem 2>/dev/null | sed -n 's/^5gmodem\.\([^.]*\)=smscmd$/\1/p')" ]; then
-	[ -n "$(uci -q get 5gmodem.sms.cmd_secret)" ] || uci -q set 5gmodem.sms.cmd_secret='secret'
+	# a random code: a fixed default would be the same on every router
+	[ -n "$(uci -q get 5gmodem.sms.cmd_secret)" ] || \
+		uci -q set 5gmodem.sms.cmd_secret="$(head -c 32 /dev/urandom | md5sum | cut -c1-8)"
 
 	_s=$(uci -q add 5gmodem smscmd)
 	uci -q set "5gmodem.$_s.keyword=reboot"

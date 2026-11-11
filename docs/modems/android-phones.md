@@ -24,8 +24,9 @@ selected cellular `rmnet_data3` as its USB tethering upstream. The reader
 and normal poller were subsequently tested on Cudy TR3000 v1, OpenWrt
 25.12.6, with the stock ADB 1.0.32 package. An interface-bound HTTPS request
 through the phone returned HTTP 200 while the wired WAN stayed primary
-(metric 0 versus USB metric 20). Other phones are not yet validated;
-Android dumps are vendor- and version-dependent.
+(metric 0 versus USB metric 20). A Samsung Galaxy S21 (SM-G991B, Exynos 2100,
+One UI 7 / Android 15) was validated afterwards; see [Samsung Galaxy](#samsung-galaxy-exynos).
+Other phones are not yet validated; Android dumps are vendor- and version-dependent.
 
 ## Device and SIM selection
 
@@ -378,6 +379,107 @@ it is now bypassed for Android records, including merged/cached cards.
 Multipart groups are new only if a member is both unread and unseen.
 Browser SMS caches are scoped to the active modem path to prevent a former
 modem's cached cards from appearing on the phone page.
+
+## Samsung Galaxy (Exynos)
+
+Tested on a Galaxy S21 (SM-G991B, `o1sxser`, Exynos 2100, `AP3A.240905.015.A2.G991BXXUEHYD5`,
+One UI 7 / Android 15, SDK 35) on Cudy TR3000 v1, OpenWrt 25.12.6. The unit has two
+nano-SIM slots (an eSIM can replace the second one; this phone's eSIM module is damaged and
+unused); it was tested with one SIM and then with two SIMs of different operators. This particular phone is rooted
+(APatch) and its boot-state properties (`ro.boot.flash.locked`, `verifiedbootstate`) report a
+locked bootloader, so they say nothing about the real state. Every measurement below ran
+as the unprivileged `shell` user (uid 2000) over ADB; `su` was not used, so the results
+describe an unrooted S21 as well.
+Evidence: [the Samsung S21 audit](../audits/2026-11-11-samsung-s21-android.md).
+
+- **USB composition.** With USB tethering on, `04e8:6862` exposes RNDIS (`e0/01/03`,
+  `rndis_host`), a CDC-ACM service port (`02/02/01`, `/dev/ttyACM0`), a second CDC data
+  interface and ADB (`ff/42/01`). Samsung's own "default USB configuration" developer
+  option set to *USB tethering* starts the share as soon as the cable is plugged in.
+  The ACM port is the phone's service interface (Samsung's AT distributor), not a
+  baseband AT port, and the router never sends AT commands to it.
+- **Detection.** `android_phone_path` (`lib.sh`) recognises a phone by an Android vendor
+  ID plus an RNDIS interface and no `ttyUSB` serial ports. Such a phone stays a tether
+  although `cdc_acm` created `/dev/ttyACM0`: `listmodems.sh` does not list the ACM port
+  as an AT port and `is_tether` accepts it. Before this rule the S21 became an AT modem
+  with an invented `fibocom` interface and `iface_proto=fibocom`, and netifd refused to
+  start it (`MODEM_SWAPPED`). A real baseband (`option` serial ports, known modem vendor
+  IDs) is unchanged.
+- **Metric.** A new tether interface used metric 20 and could outrank the wired WAN when
+  the router's uplinks use the metric base 100. It now goes after the last existing wan
+  zone metric (`tether_def_metric`, the same rule as `mkiface.sh`); with no other
+  metrics the old 20 stays. An existing interface keeps its metric.
+- **Product id changes.** The phone re-enumerates with another product id when its USB
+  mode or SIM state changes (`04e8:6862` became `6864` after a SIM was inserted).
+  The identity code takes that for a mode change of the same vendor and used to delete
+  the section's `tether` and `netdev`, after which `simslot.sh`, `bands.sh` and
+  `smsbridge.sh` (which read `tether=android` from uci) stopped treating the phone as an
+  Android tether: SIM switching returned an empty answer. A tether now keeps `kind`,
+  `netdev` and gets `tether` set again from the vendor, `android_tether_path` (`lib.sh`)
+  lets the live vendor decide while the key is missing, and autosetup writes the key back
+  for sections that already lost it.
+- **Replacing a phone on the same USB port.** The modem section is named after the port,
+  so the band lists learnt from the previous phone used to survive the swap. They are
+  now stored with the serial of the phone they came from (`android_caps_for`), a list
+  without it is learnt again, and `swap_cleanup` deletes both.
+- **No band API.** The Exynos modem answers `getSystemSelectionChannels` with
+  `IllegalStateException: Failed to retrieve system selecton channels`, so bands can be
+  neither read nor selected. The DEX helper reports `BANDS_UNSUPPORTED|1` and skips the
+  write for `reset-bands`; the stored marker `0:nobands` makes `bands.sh json` answer with
+  the network modes and `nobandctl`, which LuCI renders as "only the network mode can be
+  switched". Samsung's own band menu (`com.samsung.android.app.telephonyui` hidden network
+  settings) is a manual screen that is reported as unreliable or removed on current One UI;
+  it is not automated.
+- **Network mode.** `setAllowedNetworkTypesForReason` works from the shell UID. Android
+  rewrites the mask: requesting 4G (266240) read back as 4096, 4G/5G (790528) as 528384
+  and Auto (906119) as 643975, the original Auto being 840583. All of them are read as
+  the same modes (the bits that matter are the 2G, 3G, 4G and NR families). Without band
+  lists the NR capability is unknown, so 2G, 3G and 4G/5G are always offered and Android
+  drops the bits the hardware lacks. Carrier aggregation (4 carriers, 45 MHz) was still
+  active after the changes.
+- **Carrier aggregation.** `isUsingCarrierAggregation` and `mCellBandwidths` give the
+  number and width of the carriers, and the primary band comes from the serving EARFCN.
+  The modem reports `mBand=0` and the channel number `2147483647` (unknown) for every
+  secondary carrier and the cell-info list has no secondary-serving cells, so the card
+  shows `4G+ | B3` together with the aggregated count and width and never the bands of the
+  secondary carriers. Their PCIs and states are published as `s1pci`...`s3pci`.
+- **Name.** `ro.product.marketname` is empty on this firmware, so the name is the maker
+  from `ro.product.manufacturer` plus the model code (`Samsung SM-G991B`; a phone with a
+  marketing name keeps it). The poll stores it as `model` (and `model_vp`) of the phone's
+  section, because the modem tabs, the uplink list and `bands.sh` name a device from the
+  section and otherwise fall back to the USB descriptor (`SAMSUNG_Android`). A leftover from
+  the time the phone was taken for an AT modem is replaced the same way.
+- **Telemetry differences.** The sysfs thermal zones are not readable by the shell UID (the HAL values `AP`, `PA`
+  and `SKIN` are used as `cpu`, `pa` and `skin`; the battery temperature comes from the battery
+  service), the empty eSIM slot reports the
+  string `null` as its operator (shown as empty), and `cmd phone get-phone-number` returned
+  nothing for this SIM.
+- **SMS.** The stock SMS provider is readable (242 inbox messages) through the usual
+  read-only path.
+- **SIM switching.** With two SIMs (slots 1 and 2, subscriptions 11 and 5) `set-data`
+  changed the data SIM both ways: the card showed the other operator, the interface kept its
+  address and an HTTPS request bound to `usb0` returned 302 after each switch. The SIM
+  that was active before was restored. The data bearer of the new SIM was up within about
+  eight seconds.
+- **eSIM.** The Samsung eSIM services (`com.samsung.euicc`, `esimclient`) run without
+  crashes and report the second slot as a physical SIM. Adding an eSIM fails on this phone
+  with `SIM_APDU_NULL_RESPONSE`, a known S21/Note20 fault whose only reported cure is a board
+  replacement; the plugin does not touch the eUICC. The shell user holds
+  `WRITE_EMBEDDED_SUBSCRIPTIONS`, so `EuiccManager.eraseSubscriptions` can be called over ADB
+  without root. The eUICC is only enumerated while the second slot is in eSIM mode: with a
+  physical SIM in tray 2, and with tray 2 merely emptied, `getUiccCardsInfo`/`getUiccSlotsInfo`
+  list two removable physical slots, `getEid()` is null, the Samsung LPA is in
+  `UnavailableState` and an erase request logs `onEraseSubscriptions(): -1`. Opening the
+  "Add eSIM" screen of the SIM manager switches slot 2 to eSIM mode (`isEuicc=true`, an EID of
+  32 digits, eUICC OS 2.2.1); an erase issued then ran `EuiccMemoryResetRequest` and finished
+  (`Euicc Memory Reset Result: 1`, no notifications pending), so the chip is alive. The result
+  value is the SGP.22 `eUICCMemoryReset` answer, where 1 means `nothingToDelete`: no profile
+  exists. A public test profile (the "Speedtest" one from the Osmocom list of known test profiles)
+  downloaded as the shell user with `EuiccManager.downloadSubscription(..., false, ...)` reached
+  the SM-DP+ and failed in `loadBoundProfilePackage` with `SLPA_E_MEMORY_FULL`: the LPA measured
+  9864 bytes available while the card's info still reports 332736 free and a limit of 20 profiles.
+  So the card's memory is exhausted by something the RSP interface cannot see or delete, which
+  is the S21 fault described on 4pda; a reset and a retry do not change it.
 
 ## Router investigation
 

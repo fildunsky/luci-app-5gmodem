@@ -1714,8 +1714,8 @@ report() {
 	run 5  "Time (matters for eSIM TLS)" sh -c "date; echo 'UTC:'; date -u"
 
 	collect "config"
-	run 5  "uci 5gmodem" sh -c "uci -q show 5gmodem | sed -E \"s/^([^=]*(token|secret|pass|psk)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\""
-	run 5  "uci 5gmodem (SMS section)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' | sed -E \"s/^([^=]*(token|secret|pass|psk)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\" || echo '(the sms section is empty)'"
+	run 5  "uci 5gmodem" sh -c "uci -q show 5gmodem | sed -E \"s/^([^=]*(token|secret|pass|psk|hook_url|hook_header)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\""
+	run 5  "uci 5gmodem (SMS section)" sh -c "uci -q show 5gmodem | grep -E '\.sms\.' | sed -E \"s/^([^=]*(token|secret|pass|psk|hook_url|hook_header)[^=]*|[^=]*[._]key)=.*/\\1='<hidden>'/\" || echo '(the sms section is empty)'"
 	run 5  "uci lpac" uci -q show lpac
 	run 5  "uci network (secrets stripped)" sh -c "uci -q show network | grep -viE 'password|key|passwd|psk|secret|token|pincode|\\.pin=|\\.puk='"
 	run 10 "Modem interfaces" sh -c "for i in \$( { uci -q show 5gmodem | sed -n \"s/.*\.network='\(.*\)'/\1/p\"; uci -q show network | sed -n \"s/^network\.\([^.]*\)\.modem_path=.*/\1/p\"; } | sort -u); do for j in \"\$i\" \"\${i}_4\" \"\${i}_6\"; do s=\$(ifstatus \"\$j\" 2>/dev/null | grep -vE '\"(dns-search|route)\"'); [ -n \"\$s\" ] && { echo \"### \$j\"; echo \"\$s\"; }; done; done"
@@ -2054,7 +2054,7 @@ report() {
 	run 15 "TTL override (verdict)" ttl_verdict
 	run 15 "Access to the admin page (verdict)" webstack_verdict
 	run 15 "Policy routing / mwan3 (verdict)" policyrouting_verdict
-	run 10 "Uncommitted uci changes (landmines)" sh -c 'uci changes 2>/dev/null | head -40 | sed -E "s/^([^=]*(token|secret|pass|psk|pincode|\\.pin|\\.puk)[^=]*|[^=]*[._]key\\+?)=.*/\\1='"'"'<hidden>'"'"'/"; [ -z "$(uci changes 2>/dev/null)" ] && echo "(empty - no landmines)"'
+	run 10 "Uncommitted uci changes (landmines)" sh -c 'uci changes 2>/dev/null | head -40 | sed -E "s/^([^=]*(token|secret|pass|psk|hook_url|hook_header|pincode|\\.pin|\\.puk)[^=]*|[^=]*[._]key\\+?)=.*/\\1='"'"'<hidden>'"'"'/"; [ -z "$(uci changes 2>/dev/null)" ] && echo "(empty - no landmines)"'
 	run 10 "netifd crashes (verdict)" netifd_crash_verdict
 	run 10 "USB power and stability (verdict)" usb_flap_verdict
 	run 10 "On the bus but unconfigured? (verdict)" usb_unconfigured_verdict

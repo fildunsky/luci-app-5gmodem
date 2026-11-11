@@ -25,7 +25,7 @@ is_tether() {
 	[ "$(uci -q get "$CFG.$(secname "$1").kind")" = "tether" ] && return 0
 	_it_d="/sys/bus/usb/devices/$1"
 	[ -f "$_it_d/idVendor" ] || return 1
-	for _it_p in "$_it_d"/*:*/ttyUSB* "$_it_d"/*:*/tty/tty* "$_it_d"/*:*/usbmisc/*; do
+	android_phone_path "$1" || for _it_p in "$_it_d"/*:*/ttyUSB* "$_it_d"/*:*/tty/tty* "$_it_d"/*:*/usbmisc/*; do
 		[ -e "$_it_p" ] && return 1
 	done
 	_it_cdc=""
@@ -78,6 +78,20 @@ hilink_netdev() {
 	return 1
 }
 
+# A phone must not take the default route from the uplinks the router already has: it goes after the last of them (the
+# rule mkiface.sh applies to modems). With no uplink metrics at all it keeps the historical 20.
+tether_def_metric() {
+	_td_v=20
+	_td_z=$(uci -q show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
+	for _td_n in $([ -n "$_td_z" ] && uci -q get "firewall.$_td_z.network"); do
+		[ "$_td_n" = "$1" ] && continue
+		_td_m=$(uci -q get "network.$_td_n.metric")
+		case "$_td_m" in ''|*[!0-9]*) continue ;; esac
+		[ $((_td_m + 10)) -gt "$_td_v" ] && _td_v=$((_td_m + 10))
+	done
+	echo "$_td_v"
+}
+
 setup_hilink() {
 	_hp="$1"; _hd="$2"; _hkind="${3:-hilink}"
 	ucitx_take; _h_lk=$?
@@ -86,6 +100,13 @@ setup_hilink() {
 	_htos=""
 	if [ "$_hkind" = tether ]; then
 		_htos=$(tether_os "$_hp") && uci -q set "$CFG.$_hsec.tether=$_htos"
+		# A phone has no AT modem behind it. A port left from the time it was taken for one (Samsung's CDC-ACM
+		# service port) must not stay as the section's AT port.
+		_h_oat=$(uci -q get "$CFG.$_hsec.at_port")
+		if [ -n "$_h_oat" ]; then
+			uci -q delete "$CFG.$_hsec.at_port"
+			[ "$(uci -q get "$CFG.@5gmodem[0].at_port")" = "$_h_oat" ] && uci -q delete "$CFG.@5gmodem[0].at_port"
+		fi
 	else
 		uci -q delete "$CFG.$_hsec.tether" 2>/dev/null
 	fi
@@ -107,7 +128,13 @@ setup_hilink() {
 	for _hk in apn pdptype usbpath auth username password devpath allow_roaming; do
 		uci -q delete "network.$_hif.$_hk" 2>/dev/null
 	done
-	[ -n "$(uci -q get "network.$_hif.metric")" ] || uci -q set "network.$_hif.metric=20"
+	if [ -z "$(uci -q get "network.$_hif.metric")" ]; then
+		if [ "$_hkind" = tether ]; then
+			uci -q set "network.$_hif.metric=$(tether_def_metric "$_hif")"
+		else
+			uci -q set "network.$_hif.metric=20"
+		fi
+	fi
 	[ -n "$_h_off" ] || uci -q delete "network.$_hif.auto" 2>/dev/null
 	uci -q delete "network.$_hif.modem_swapped" 2>/dev/null
 	uci -q delete "network.$_hif.modem_stale" 2>/dev/null

@@ -106,6 +106,8 @@ _run_cmd() {
 	[ "$_rc_dly" -gt 300 ] 2>/dev/null && _rc_dly=300
 
 	_log "from $2: $(uci -q get "$1.keyword") -> $_rc_ex"
+	[ "$(printf '%s' "$CMD_SECRET" | tr 'A-Z' 'a-z')" = secret ] && \
+		_log "warning: the security code is still the old default \"secret\", the same on every router - change it in the SMS command settings"
 
 	if [ "$_rc_dly" -gt 0 ]; then
 		[ "$_rc_ans" = "1" ] && _answer "$2" "${_rc_txt:-OK}"

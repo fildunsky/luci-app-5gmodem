@@ -54,14 +54,23 @@ jsonfilter() {
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'android.sh').write_text('android_slots() { printf \'{"path":"%s","action":"%s","slot":"%s"}\\n\' "$1" "$2" "$3"; }\n')
+            (root / 'lib.sh').write_text(function('android_tether_path', 'lib.sh') + '\ntether_os() { echo "$LIVE_OS"; }\n')
             source = '''
-uci() { case "$*" in *.kind) echo "$KIND" ;; *.tether) echo android ;; esac; }
+uci() { case "$*" in *.kind) echo "$KIND" ;; *.tether) echo "$TETHER" ;; esac; }
 set -- set 1 for=1-1
-''' + prefix.replace('RES=/usr/share/5gmodem', 'RES='+directory) + '\necho legacy\n'
-            result = shell(source, dict(os.environ, KIND='tether'))
+''' + prefix.replace('/usr/share/5gmodem', directory) + '\necho legacy\n'
+            env = dict(os.environ, KIND='tether', TETHER='android', LIVE_OS='phone')
+            result = shell(source, env)
             self.assertEqual(json.loads(result.stdout), {'path': '1-1', 'action': 'set', 'slot': '1'})
-            result = shell(source, dict(os.environ, KIND='modem'))
+            result = shell(source, dict(env, KIND='modem'))
             self.assertEqual(result.stdout.strip(), 'legacy')
+            # A phone that lost the key (its product id changed) is still an Android tether while its vendor says so.
+            result = shell(source, dict(env, TETHER='', LIVE_OS='android'))
+            self.assertEqual(json.loads(result.stdout), {'path': '1-1', 'action': 'set', 'slot': '1'})
+            # Other tethers, and a stored value that names another kind of device, are not taken over.
+            for tether, live in (('', 'iphone'), ('', 'phone'), ('iphone', 'android'), ('router', 'android')):
+                result = shell(source, dict(env, TETHER=tether, LIVE_OS=live))
+                self.assertEqual(result.stdout.strip(), 'legacy', (tether, live))
 
 
 if __name__ == '__main__':

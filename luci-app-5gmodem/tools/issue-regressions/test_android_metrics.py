@@ -64,6 +64,25 @@ class AndroidMetrics(unittest.TestCase):
                 self.assertNotIn('tac', data)
                 self.assertNotIn('cqi', data)
 
+    def test_samsung_dump_hal_names_and_an_empty_slot(self):
+        # One SIM in slot 0; the eSIM slot has no operator and Android prints the string "null".
+        text = fixture(active=1).replace('mOperatorAlphaLong=Second Carrier,', 'mOperatorAlphaLong=null,')
+        # Its HAL names the sensors AP/PA/SKIN and the sysfs thermal zones are not readable by the shell.
+        hal = (' Temperature{mValue=36.4, mType=0, mName=CPU0, mStatus=0}\n Temperature{mValue=37.2, mType=0, mName=CPU1, mStatus=0}\n'
+               ' Temperature{mValue=31.5, mType=3, mName=skin, mStatus=0}\n')
+        self.assertIn(hal, text)
+        text = text.replace(hal, ' Temperature{mValue=32.6, mType=0, mName=AP, mStatus=0}\n Temperature{mValue=32.9, mType=5, mName=PA, mStatus=0}\n'
+                                 ' Temperature{mValue=31.9, mType=3, mName=SKIN, mStatus=0}\n Temperature{mValue=0.0, mType=2, mName=SUBBAT, mStatus=0}\n')
+        for awk in [('busybox', 'awk'), ('awk',)]:
+            with self.subTest(awk=awk):
+                data = json.loads(self.parse(text, awk).stdout)
+                self.assertEqual(data['operator_name'], 'First Carrier')
+                self.assertEqual(data['android_sims'][1]['operator_name'], '')
+                self.assertEqual(data['temps'], 'bat=32.1 cpu=32.6 skin=31.9 pa=32.9')
+        # A readable sysfs power-amplifier sensor still wins over the HAL value.
+        with_sysfs = text.replace('__5GM_TETHER__', '__5GM_SENSORS__\npa_therm1 34000\n__5GM_TETHER__')
+        self.assertEqual(json.loads(self.parse(with_sysfs).stdout)['temps'], 'bat=32.1 cpu=32.6 skin=31.9 pa=34')
+
     def test_phone_battery_charging_and_detailed_sensors(self):
         text = fixture().replace('__5GM_BATTERY__', '__5GM_NUMBERS__\n5 +15551234567\n__5GM_BATTERY__\n  status: 2')
         text = text.replace('__5GM_TETHER__', '__5GM_SENSORS__\nmdmss-0 38000\ngpuss-0 37000\nwifi_therm 33000\npa_therm1 34000\nvbat 3995\ninvalid -273000\ncpu-hw-trip-0 95000\npm-bcl-lvl0 0\n__5GM_TETHER__')
@@ -234,6 +253,70 @@ _tj_nd=usb0
                 else:
                     self.assertEqual(result.stdout.strip(), 'fallback')
                     self.assertFalse(cache.exists())
+
+    def test_device_name_is_the_marketing_name_or_the_model_with_its_maker(self):
+        head = '__5GM_DEVICE__\nXiaomi "test" \\ phone\ntest-model\ntest-build\n__5GM_REGISTRY__'
+        base = fixture()
+        self.assertIn(head, base)
+
+        def name(market, model, brand=None):
+            device = '__5GM_DEVICE__\n' + market + '\n' + model + '\ntest-build\nbaseband\n' + ('' if brand is None else brand + '\n')
+            data = json.loads(self.parse(base.replace(head, device + '__5GM_REGISTRY__')).stdout)
+            return data['modem']
+
+        self.assertEqual(name('Xiaomi 17', '25113PN0EG', 'Xiaomi'), 'Xiaomi 17')
+        # Samsung has no marketing name: the maker is put in front of the model code.
+        self.assertEqual(name('', 'SM-G991B', 'samsung'), 'Samsung SM-G991B')
+        self.assertEqual(name('', 'Pixel 8', 'Google'), 'Google Pixel 8')
+        self.assertEqual(name('', 'OPPO Find', 'OPPO'), 'OPPO Find')
+        self.assertEqual(name('', 'motorola edge', 'motorola'), 'motorola edge')
+        # An older probe without the maker line and an unusable maker leave the model alone.
+        self.assertEqual(name('', 'SM-G991B'), 'SM-G991B')
+        self.assertEqual(name('', 'SM-G991B', 'sam"sung'), 'SM-G991B')
+
+    def test_the_poll_keeps_the_phone_name_in_its_section_for_the_lists(self):
+        text = (SHARE / '5gmodem.sh').read_text()
+        begin = text.index('\tif [ "$_tj_os" = android ]')
+        end = text.index('\tif [ "$_tj_os" = router ]', begin)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / 'usb/1-2'
+            device.mkdir(parents=True)
+            (device / 'idVendor').write_text('04e8\n')
+            (device / 'idProduct').write_text('6862\n')
+            (root / 'android.sh').write_text("""android_json() { echo '{"backend":"android","modem":"Samsung SM-G991B"}'; }\n""")
+            prefix = r'''
+jsonfilter() { cat >/dev/null; case "$*" in *@.modem*) echo "Samsung SM-G991B" ;; esac; }
+uci() { case "$*" in
+ "-q get 5gmodem.m_1_2.model") printf '%s' "$OLD_MODEL" ;;
+ "-q get 5gmodem.m_1_2.model_vp") printf '%s' "$OLD_VP" ;;
+ "-q set "*|"-q commit 5gmodem") echo "$*" >> "$UCILOG" ;;
+esac; }
+earfcn2band() { :; }
+json_esc() { printf '%s' "$1"; }
+uptime_s() { echo 1; }
+_tj_os=android
+_POLL_AM=1-2
+_hl_sec=m_1_2
+_tj_if=mobile
+_tj_nd=usb0
+'''
+            source = (prefix + text[begin:end] + '\necho fallback\n').replace('/sys/bus/usb/devices/', f'{root}/usb/').replace('/tmp/5gmodem', f'{root}/tmp')
+            def run(old_model, old_vp):
+                log = root / 'uci.log'
+                log.unlink(missing_ok=True)
+                env = dict(os.environ, RES=str(root), CACHE=str(root / 'cache'), STAMP=str(root / 'stamp'),
+                           OLD_MODEL=old_model, OLD_VP=old_vp, UCILOG=str(log))
+                result = shell(source, env)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                return log.read_text().splitlines() if log.exists() else []
+            # The USB descriptor name (or a leftover from the time the phone was taken for a modem) is replaced.
+            self.assertEqual(run('SAMSUNG_Android', '04e8:6862'),
+                             ['-q set 5gmodem.m_1_2.model=Samsung SM-G991B', '-q set 5gmodem.m_1_2.model_vp=04e8:6862', '-q commit 5gmodem'])
+            # Nothing is written while the stored name is current.
+            self.assertEqual(run('Samsung SM-G991B', '04e8:6862'), [])
+            # A different phone on the same port is renamed even when the name is the same.
+            self.assertEqual(len(run('Samsung SM-G991B', '2717:ff88')), 3)
 
     def test_hung_adb_is_killed_and_failure_is_propagated(self):
         with tempfile.TemporaryDirectory() as directory:

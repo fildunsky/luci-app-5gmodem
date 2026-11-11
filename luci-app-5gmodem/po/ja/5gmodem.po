@@ -4873,8 +4873,8 @@ msgstr "手動で除外"
 msgid "has answered as a modem before"
 msgstr "以前モデムとして応答したことがあります"
 
-msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
-msgstr "メッセージの最初の単語 (コマンドの単語の前) です: \"%s\" と送ると、下の \"reboot\" という名前のコマンドが実行されます。自分だけが知っている単語に変えてください (既定値は全員共通です)。空欄にするとコードなしになり、守りは信頼する番号の一覧だけになります (送信元の番号は偽装できます)。"
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. A random code is set on install, you can change it to a word only you know. Do not use \"secret\": older versions set it on every router. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "メッセージの最初の単語 (コマンドの単語の前) です: \"%s\" と送ると、下の \"reboot\" という名前のコマンドが実行されます。インストール時にランダムなコードが設定されます。自分だけが知っている単語に変えることもできます。\"secret\" は使わないでください (古いバージョンはすべてのルーターにこれを設定していました)。空欄にするとコードなしになり、守りは信頼する番号の一覧だけになります (送信元の番号は偽装できます)。"
 
 msgid "marked as a modem by hand"
 msgstr "手動でモデムに指定"

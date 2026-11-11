@@ -750,7 +750,7 @@ _mtk_rat_json() {
 	printf '], "enabled%s": [%s]' "$1" "$(echo ${_mrj#*|} | tr ' ' ',')"
 }
 if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = tether ] \
-   && [ "$(uci -q get "5gmodem.$_bs_sec.tether")" = android ] && [ -f /usr/share/5gmodem/android.sh ]; then
+   && ( . /usr/share/5gmodem/lib.sh 2>/dev/null; android_tether_path "$_bs_am" ) && [ -f /usr/share/5gmodem/android.sh ]; then
 	# Android phone over USB: network mode and bands of the active data SIM (see docs/modems/android-phones.md).
 	RES=/usr/share/5gmodem
 	. "$RES/android.sh"

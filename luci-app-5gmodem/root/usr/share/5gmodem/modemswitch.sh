@@ -759,6 +759,9 @@ autosetup)
 				[ -n "$_n" ] && [ "$(uci -q get "network.$_n.proto")" = dhcp ] \
 					&& [ -n "$_tn" ] \
 					&& [ "$(uci -q get "network.$_n.device")" = "$_tn" ] && _tok=1
+				# A section that lost its tether key (older versions wiped it when the phone changed its product id)
+				# is set up again, which writes the key back.
+				[ -n "$(uci -q get "$CFG.$_s.tether")" ] || _tok=0
 				[ "$_tok" = 1 ] || { TARGETS="$TARGETS $_p"; continue; }
 			fi
 			[ -n "$_n" ] && uci -q get "network.$_n" >/dev/null 2>&1 && continue

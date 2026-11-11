@@ -215,6 +215,39 @@ android_vid() {
 	return 1
 }
 
+# True for a phone the router handles as an Android tether (SIM switching, network modes, SMS). The section's
+# "tether=android" is written once at setup. A phone changes its USB composition, and with it the product id, whenever
+# tethering or debugging is switched; that looks like a mode change of a modem and used to wipe the key, so while the key
+# is missing the vendor of the live device decides.
+android_tether_path() {
+	_atp_sec="m_$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g')"
+	[ "$(uci -q get "5gmodem.$_atp_sec.kind")" = tether ] || return 1
+	_atp_t=$(uci -q get "5gmodem.$_atp_sec.tether")
+	[ "$_atp_t" = android ] && return 0
+	[ -z "$_atp_t" ] && [ "$(tether_os "$1")" = android ]
+}
+
+# A phone of an Android vendor that shares its USB tethering (RNDIS). Some phones (Samsung) add a CDC-ACM "modem"
+# port next to RNDIS: it is the phone's own service interface, not an AT modem of the router, so such a port must not
+# turn the phone into a modem. Serial ports of the "option" kind (ttyUSB: diag/AT of a real baseband) still do.
+android_phone_path() {
+	[ -n "$1" ] && [ -f "/sys/bus/usb/devices/$1/idVendor" ] || return 1
+	known_modem_path "$1" && return 1
+	read -r _ap_v < "/sys/bus/usb/devices/$1/idVendor"
+	android_vid "$_ap_v" || return 1
+	_ap_rndis=""
+	for _ap_i in "/sys/bus/usb/devices/$1":*; do
+		[ -f "$_ap_i/bInterfaceClass" ] || continue
+		case "$(cat "$_ap_i/bInterfaceClass" 2>/dev/null)/$(cat "$_ap_i/bInterfaceSubClass" 2>/dev/null)/$(cat "$_ap_i/bInterfaceProtocol" 2>/dev/null)" in
+			ef/04/01|e0/01/03) _ap_rndis=1 ;;
+		esac
+		for _ap_t in "$_ap_i"/ttyUSB* "$_ap_i"/tty/ttyUSB*; do
+			[ -e "$_ap_t" ] && return 1
+		done
+	done
+	[ -n "$_ap_rndis" ]
+}
+
 known_modem_path() {
 	_km_d="/sys/bus/usb/devices/$1"
 	[ -n "$1" ] && [ -f "$_km_d/idVendor" ] || return 1

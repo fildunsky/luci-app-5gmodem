@@ -23,6 +23,12 @@ def radio(allowed=381831, writable=1, rat=13, lte=LTE, gsm='8 10 12 13', umts='1
     return '\n'.join(lines) + '\n'
 
 
+def radio_without_bands(allowed=906119, writable=1, rat=13):
+    # The modem does not answer the band API (Samsung Exynos): the network mode is still readable.
+    return '\n'.join(['SUB|11', f'WRITABLE|{writable}', f'ALLOWED|{allowed}', f'RAT|{rat}', 'DATA|2', 'DATA_ENABLED|1',
+                      'BANDS_UNSUPPORTED|1', '__5GM_RADIO_END__']) + '\n'
+
+
 def awk(text, *assign, engine=('busybox', 'awk')):
     args = [*engine]
     for item in assign:
@@ -91,6 +97,30 @@ class AndroidRadioParser(unittest.TestCase):
         self.assertNotEqual(awk('', 'mode=mask', 'want=20', f'caps={no_nr}').returncode, 0)
         self.assertNotEqual(awk('', 'mode=mask', 'want=3', f'caps={CAPS}').returncode, 0)
 
+    def test_a_phone_without_the_band_api_gets_only_the_network_modes(self):
+        for engine in self.engines:
+            with self.subTest(engine=engine):
+                data = json.loads(awk(radio_without_bands(), 'model=Phone', engine=engine).stdout)
+                self.assertEqual(data['nobandctl'], 1)
+                self.assertEqual(data['supported'], [])
+                self.assertEqual(data['enabled'], [])
+                for key in ('supported2g', 'supported3g', 'supported5gnsa'):
+                    self.assertNotIn(key, data)
+                self.assertEqual(data['currentmode'], '1')
+                # Android drops the bits the hardware lacks, so every mode is offered.
+                self.assertEqual([m['id'] for m in data['modes']], ['1', '8', '2', '4', '20'])
+                self.assertEqual(awk(radio_without_bands(), 'mode=caps', engine=engine).stdout.strip(), '0:nobands')
+                # The stored marker alone is enough for later reads and for choosing a mode.
+                self.assertEqual(json.loads(awk(radio_without_bands(allowed=266240), 'caps=0:nobands', engine=engine).stdout)['currentmode'], '4')
+                for want, mask in [(1, 906119), (8, 32771), (2, 82820), (4, 266240), (20, 790528)]:
+                    self.assertEqual(awk('', 'mode=mask', f'want={want}', 'caps=0:nobands', engine=engine).stdout.strip(), str(mask))
+                # There is no list to select bands from.
+                self.assertEqual(awk('', 'mode=bands', 'caps=0:nobands', 'sel_lte=3', engine=engine).returncode, 2)
+
+    def test_band_listing_still_works_for_phones_that_have_the_api(self):
+        data = json.loads(awk(radio(), f'caps={CAPS}').stdout)
+        self.assertNotIn('nobandctl', data)
+
     def test_band_arguments_are_checked_against_the_modem_list(self):
         for engine in self.engines:
             with self.subTest(engine=engine):
@@ -111,13 +141,14 @@ class AndroidRadioParser(unittest.TestCase):
 STUB = r'''
 RES=%(res)s
 android_cells_ready() { echo "ready" >> "$READY"; echo phone-serial; }
+android_usb_serial() { echo phone-serial; }
 android_adb() { printf '%%s\n' "$*" >> "$CALLS"; printf '%%s' "$REPLY"; }
 uci() {
  case "$1" in
   -q) shift ;;
  esac
  case "$1" in
-  get) printf '%%s' "$CAPS" ;;
+  get) case "$2" in *android_caps_for) printf '%%s' "${CAPS_FOR-phone-serial}" ;; *) printf '%%s' "$CAPS" ;; esac ;;
   set) printf '%%s\n' "$2" >> "$STORED" ;;
   commit) echo committed >> "$STORED" ;;
  esac
@@ -170,6 +201,35 @@ class AndroidRadioShell(unittest.TestCase):
         self.assertIn('CellProbe radio active', calls[0])
         self.assertEqual(stored, [])
         self.assertEqual(json.loads(result.stdout)['enabled'], [3])
+
+    def test_the_learned_list_belongs_to_one_phone(self):
+        # Another phone on the same USB port (the section is named after the port) must not use the first one's bands.
+        result, calls, stored = self.run_shell('CAPS_FOR=other-phone; export CAPS_FOR\nandroid_radio_json 1-1 Phone', reply=radio(lte='1 3 7'), caps=CAPS)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('CellProbe reset-bands active', calls[0])
+        self.assertEqual(stored[0], '5gmodem.m_1_1.android_caps=1:8 10 12 13;2:1 2 4 5 8 19 26;3:1 3 7;6:' + NR)
+        self.assertEqual(stored[1], '5gmodem.m_1_1.android_caps_for=phone-serial')
+        self.assertEqual([b['band'] for b in json.loads(result.stdout)['supported']], [1, 3, 7])
+        # A list stored by an older version carries no serial and is learnt again.
+        result, calls, stored = self.run_shell('CAPS_FOR=; export CAPS_FOR\nandroid_radio_json 1-1 Phone', reply=radio(), caps=CAPS)
+        self.assertIn('CellProbe reset-bands active', calls[0])
+
+    def test_a_phone_without_the_band_api_is_not_written_and_offers_only_modes(self):
+        result, calls, stored = self.run_shell('android_radio_json 1-1 Phone', reply=radio_without_bands())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(stored[:2], ['5gmodem.m_1_1.android_caps=0:nobands', '5gmodem.m_1_1.android_caps_for=phone-serial'])
+        data = json.loads(result.stdout)
+        self.assertEqual(data['nobandctl'], 1)
+        self.assertEqual(data['supported'], [])
+        # Choosing a mode uses the stored marker, so NR is offered without a band list.
+        out = radio_without_bands(allowed=790528)
+        result, calls, _ = self.run_shell('android_mode_recover() { :; }\nandroid_set_mode 1-1 20; wait', reply=out, caps='0:nobands')
+        self.assertEqual(json.loads(result.stdout), {'ok': True, 'allowed_types': '790528'})
+        self.assertIn('CellProbe set-mode active 790528', calls[0])
+        # Band requests are refused before the phone is touched.
+        result, calls, _ = self.run_shell('android_set_bands 1-1 3 "" "" ""; echo rc=$?', reply=out, caps='0:nobands')
+        self.assertIn('rc=2', result.stdout)
+        self.assertEqual(calls, [])
 
     def test_a_failed_reset_falls_back_to_a_plain_read(self):
         script = 'android_adb() { printf "%s\\n" "$*" >> "$CALLS"; case "$*" in *reset-bands*) echo "ERROR|SecurityException: no" ;; *) printf "%s" "$REPLY" ;; esac; }\nandroid_radio_json 1-1 Phone'
@@ -325,6 +385,7 @@ android_radio_json() { printf '{"path":"%s","model":"%s"}\n' "$1" "$2"; }
 android_set_mode() { [ "$2" = 4 ] && { echo '{"ok":true}'; return 0; }; echo '{"error":"unsupported network mode"}'; return 1; }
 android_set_bands() { echo "bands $*" >> "$LOG"; case "$2" in *106*) return 2 ;; *bad*) return 1 ;; esac; return 0; }
 ''')
+        (root / 'lib.sh').write_text(function('android_tether_path', 'lib.sh') + '\ntether_os() { echo "${LIVE_OS:-phone}"; }\n')
         source = r'''
 uci() { case "$*" in *.kind) echo "$KIND" ;; *.tether) echo "$TETHER" ;; *.model) echo 'Test "Phone"' ;; esac; }
 jsonfilter() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get(sys.argv[2][2:], ""))' "$@"; }
@@ -347,6 +408,9 @@ set -- ''' + args + '\n' + self.block().replace('/usr/share/5gmodem', directory)
             self.assertEqual(self.run_block(directory, 'getmode').stdout.strip(), '')
             for kind, tether in [('modem', 'android'), ('tether', 'ios'), ('tether', '')]:
                 self.assertEqual(self.run_block(directory, 'json', kind=kind, tether=tether).stdout.strip(), 'legacy')
+            # The key is gone after a product id change: the live vendor still selects the Android handling.
+            self.assertEqual(json.loads(self.run_block(directory, 'json', tether='', LIVE_OS='android').stdout),
+                             {'path': '1-1', 'model': 'Test Phone'})
 
     def test_set_mode_reports_success_and_failure_through_the_exit_code(self):
         with tempfile.TemporaryDirectory() as directory:

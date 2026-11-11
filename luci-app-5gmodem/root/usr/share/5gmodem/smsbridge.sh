@@ -20,7 +20,7 @@ _active_kind() {
 
 _active_is_android() {
 	[ "$(_active_kind)" = tether ] || return 1
-	[ "$(uci -q get "$CFG.$_TGT_SEC.tether")" = android ] || return 1
+	android_tether_path "$_TGT_PATH" || return 1
 	[ -f "$RES/android.sh" ] || return 1
 	[ "$(jsonfilter -i "/tmp/5gmodem/metrics_$(snap_key "$_TGT_PATH").json" -e '@.backend' 2>/dev/null)" = android ]
 }

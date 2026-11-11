@@ -132,6 +132,12 @@ public class CellProbe {
         return out;
     }
 
+    // Some modems (Samsung's Exynos) answer getSystemSelectionChannels with "Failed to retrieve system selecton
+    // channels": the band API does not exist there. The network mode is a separate call and still works.
+    static boolean bandsAvailable(Object tm) {
+        try { readBands(tm); return true; } catch (Throwable e) { return false; }
+    }
+
     static Object specifier(int ran, Collection<Integer> bands) throws Exception {
         int[] values = new int[bands.size()];
         int i = 0;
@@ -159,8 +165,10 @@ public class CellProbe {
         if (dataState instanceof Number) out.append("DATA|").append(((Number) dataState).intValue()).append('\n');
         Object dataEnabled = optional(tm, "isDataEnabled");
         if (dataEnabled instanceof Boolean) out.append("DATA_ENABLED|").append(((Boolean) dataEnabled) ? 1 : 0).append('\n');
-        Map<Integer, SortedSet<Integer>> bands = readBands(tm);
-        for (int ran : RANS) {
+        Map<Integer, SortedSet<Integer>> bands = null;
+        try { bands = readBands(tm); } catch (Throwable e) { bands = null; }
+        if (bands == null) out.append("BANDS_UNSUPPORTED|1\n");
+        else for (int ran : RANS) {
             out.append("BANDS|").append(ran).append('|');
             String sep = "";
             SortedSet<Integer> set = bands.get(ran);
@@ -198,6 +206,7 @@ public class CellProbe {
             }
         } else if ("set-bands".equals(action)) {
             if (!writable) throw new SecurityException("Band selection is not permitted");
+            if (!bandsAvailable(tm)) throw new UnsupportedOperationException("This phone does not support band selection");
             Map<Integer, SortedSet<Integer>> want = new TreeMap<>();
             for (int i = 2; i < args.length; i++) {
                 String[] kv = args[i].split("=", 2);
@@ -236,8 +245,11 @@ public class CellProbe {
             }
         } else if ("reset-bands".equals(action)) {
             if (!writable) throw new SecurityException("Band selection is not permitted");
-            writeBands(tm, new ArrayList<Object>());
-            Thread.sleep(1500);
+            // Nothing to reset where the band API is missing: the readback below reports it.
+            if (bandsAvailable(tm)) {
+                writeBands(tm, new ArrayList<Object>());
+                Thread.sleep(1500);
+            }
         } else if (!"radio".equals(action)) {
             throw new IllegalArgumentException("Unknown radio action");
         }

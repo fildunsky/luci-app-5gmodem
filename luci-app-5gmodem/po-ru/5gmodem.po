@@ -5147,8 +5147,8 @@ msgstr "исключено вручную"
 msgid "has answered as a modem before"
 msgstr "уже отвечало модемом"
 
-msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. Change it to a word only you know - the default is the same for everyone. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
-msgstr "ПЕРВОЕ слово сообщения, перед словом команды: «%s» выполнит команду «reboot» из списка ниже. Смените его на слово, которое знаете только вы, - по умолчанию оно у всех одинаковое. Пустое поле означает, что кода нет вовсе, и защитой остаётся только список доверенных номеров, а номер отправителя подделывается."
+msgid "The FIRST word of the message, before the command word: \"%s\" runs the command named \"reboot\" below. A random code is set on install, you can change it to a word only you know. Do not use \"secret\": older versions set it on every router. Empty means no code at all, and then the only protection is the list of trusted numbers - a sender number can be forged."
+msgstr "ПЕРВОЕ слово сообщения, перед словом команды: «%s» выполнит команду «reboot» из списка ниже. При установке задаётся случайный код, его можно сменить на слово, которое знаете только вы. Не используйте «secret»: старые версии ставили его на всех роутерах. Пустое поле означает, что кода нет вовсе, и защитой остаётся только список доверенных номеров, а номер отправителя подделывается."
 
 msgid "marked as a modem by hand"
 msgstr "отмечено модемом вручную"

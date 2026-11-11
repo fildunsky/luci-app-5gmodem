@@ -21,7 +21,7 @@ fi
 
 _AND_SEC="m_$(printf '%s' "$_TGT" | sed 's/[^A-Za-z0-9]/_/g')"
 if [ "$(uci -q get "5gmodem.$_AND_SEC.kind")" = tether ] \
-   && [ "$(uci -q get "5gmodem.$_AND_SEC.tether")" = android ]; then
+   && ( . /usr/share/5gmodem/lib.sh 2>/dev/null; android_tether_path "$_TGT" ); then
 	RES=/usr/share/5gmodem
 	. "$RES/android.sh"
 	case "$1" in

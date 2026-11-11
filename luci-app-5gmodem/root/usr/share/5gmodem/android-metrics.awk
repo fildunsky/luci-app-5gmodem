@@ -16,7 +16,17 @@ function val(s,k, t) {
 function num(v,lo,hi) { return v ~ /^-?[0-9]+([.][0-9]+)?$/ && v+0>=lo && v+0<=hi }
 function operator(s, t) {
  if (!match(s,/mOperatorAlphaLong=/)) return ""
- t=substr(s,RSTART+RLENGTH); sub(/,.*/,"",t); return t
+ t=substr(s,RSTART+RLENGTH); sub(/,.*/,"",t)
+ if(t=="null") return ""
+ return t
+}
+# The marketing name when the firmware has one (Xiaomi 17); otherwise the model code, with the maker in front of it
+# ("Samsung SM-G991B") so that a list of uplinks says what the device is.
+function device_name(  b) {
+ if(market!="") return market
+ b=brand; gsub(/^[[:space:]]+|[[:space:]]+$/,"",b)
+ if(b=="" || b!~/^[A-Za-z0-9 ._-]+$/ || index(tolower(model),tolower(b))==1) return model
+ return toupper(substr(b,1,1)) substr(b,2) " " model
 }
 function metric(k,v,lo,hi) { if(num(v,lo,hi)) str(k,v) }
 function bandwidths(s, t,n,p,i,out) {
@@ -80,7 +90,7 @@ function sim(i, l,n,s,p,r,t,b,j,records,count,band,widths,total) {
 }
 /^__5GM_/ { section=$0; line=0; next }
 section=="__5GM_DEVICE__" {
- line++; if(line==1) market=$0; if(line==2) model=$0; if(line==3) firmware=$0; if(line==4) baseband=$0; next
+ line++; if(line==1) market=$0; if(line==2) model=$0; if(line==3) firmware=$0; if(line==4) baseband=$0; if(line==5) brand=$0; next
 }
 section=="__5GM_REGISTRY__" {
  if($0~/^  Phone Id=[0-9]+/) { slot=$0; sub(/^.*=/,"",slot); slot+=0; seen[slot]=1 }
@@ -125,8 +135,9 @@ section=="__5GM_THERMAL__" {
  if(current && /Temperature\{/) {
   s=$0; sub(/^.*Temperature\{/,"",s); t=val(s,"mValue"); type=val(s,"mType"); name=val(s,"mName")
   if(num(t,-40,150)) {
-   if(type==0 && name~/^CPU[0-9]+$/ && (cpu=="" || t+0>cpu+0)) cpu=t
-   if(type==3 && name=="skin") skin=t
+   if(type==0 && (name~/^CPU[0-9]+$/ || name=="AP") && (cpu=="" || t+0>cpu+0)) cpu=t
+   if(type==3 && tolower(name)=="skin") skin=t
+   if(type==5 && (hal_pa=="" || t+0>hal_pa+0)) hal_pa=t
   }
  }
  next
@@ -152,7 +163,7 @@ END {
  fw=baseband
  n=split(baseband,parts,",")
  if(n>=2) { fw=parts[1]; for(i=2;i<=n;i++) if(parts[i]!=parts[1]) fw=fw " / " parts[i] }
- str("modem",market!="" ? market : model); str("firmware",fw!="" ? fw : firmware)
+ str("modem",device_name()); str("firmware",fw!="" ? fw : firmware)
  if(fw!="" && firmware!="") str("android_build",firmware)
  str("iface",iface); str("ipaddr",ip); str("netdev",netdev)
  str("tether","android"); str("tether_state",netdev!="" ? "ready" : "no_netdev")
@@ -160,6 +171,7 @@ END {
  str("android_data_subscription",active); str("android_slot",chosen)
  str("simslot","SIM " chosen+1)
  sim(chosen)
+ if(pa=="" && hal_pa!="") pa=hal_pa
  temps=""; if(bat!="") temps="bat=" bat
  if(cpu!="") temps=temps " cpu=" cpu
  if(skin!="") temps=temps " skin=" skin
