@@ -11,7 +11,10 @@ _qnw_write() {
 	_qw_want=$(_qnw_norm "$2")
 	[ -n "$_qw_want" ] || return 1
 	[ "$(_qnw_read "$1")" = "$_qw_want" ] && return 1
-	sms_tool -d $_DEVICE at "at+qnwprefcfg=\"$1\",$_qw_want" >/dev/null 2>&1
+	sms_tool -d $_DEVICE at "at+qnwprefcfg=\"$1\",$_qw_want" >/dev/null 2>&1 || {
+		logger -t 5gmodem "bands: QNWPREFCFG $1=$_qw_want failed (rejected or no answer)"
+		return 1
+	}
 	_qw_have=$(_qnw_read "$1")
 	[ -z "$_qw_have" ] || [ "$_qw_have" = "$_qw_want" ] && return 0
 	logger -t 5gmodem "bands: modem did not accept $1=$_qw_want (reads back $_qw_have)"
@@ -112,22 +115,22 @@ getcelllock() {
 setcelllock() {
 	case "$1" in
 		off)
-			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",0" 2>&1 | tr -d '\r')
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",0" 2>&1); _scl_rc=$?
 			;;
 		cell)
 			case "$2" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
 			case "$3" in ''|*[!0-9]*) echo "Unsupported"; return 1 ;; esac
-			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",1,$2,$3" 2>&1 | tr -d '\r')
+			_scl_o=$(sms_tool -d $_DEVICE at "at+qnwlock=\"common/4g\",1,$2,$3" 2>&1); _scl_rc=$?
 			;;
 		arfcn)
 			echo "Unsupported"; return 1 ;;
 		*) return 1 ;;
 	esac
-	case "$_scl_o" in
-		*ERROR*)
-			logger -t 5gmodem "celllock: firmware rejected QNWLOCK: $(echo "$_scl_o" | tr '\n' ' ' | head -c 120)"
-			echo "Unsupported"; return 1 ;;
-	esac
+	# sms_tool prints no ERROR line: a rejected command and a dead port both show only in the exit code
+	if [ "$_scl_rc" != 0 ]; then
+		logger -t 5gmodem "celllock: QNWLOCK failed (sms_tool exit $_scl_rc): $(echo "$_scl_o" | tr -d '\r' | tr '\n' ' ' | head -c 120)"
+		echo "Unsupported"; return 1
+	fi
 	sms_tool -d $_DEVICE at "at+qnwlock=\"save_ctrl\",1,1" >/dev/null 2>&1
 	return 0
 }
