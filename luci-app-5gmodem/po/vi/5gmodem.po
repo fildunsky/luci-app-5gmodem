@@ -6116,6 +6116,9 @@ msgstr "Dữ liệu di động"
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr "Để đọc thông số mạng di động, hãy bật gỡ lỗi USB và cho phép router này trên điện thoại."
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr "Để quản lý băng tần và chế độ mạng, hãy bật gỡ lỗi USB và cho phép router này trên điện thoại."
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr "Hãy đổi SIM dữ liệu di động trên điện thoại."
 

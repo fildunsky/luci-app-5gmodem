@@ -774,7 +774,8 @@ if [ -n "$_bs_am" ] && [ "$(uci -q get "5gmodem.$_bs_sec.kind")" = tether ] \
 	. "$RES/android.sh"
 	_bs_amodel=$(uci -q get "5gmodem.$_bs_sec.model" | tr -d '\\"\r\n')
 	case "$1" in
-		json)              android_radio_json "$_bs_am" "$_bs_amodel" || echo '{}'; exit 0 ;;
+		# No answer without USB debugging; nolive keeps it cached for seconds, so bands show up soon after it is allowed.
+		json)              android_radio_json "$_bs_am" "$_bs_amodel" || echo '{"nolive":1,"needadb":1}'; exit 0 ;;
 		mgmtinfo)          echo '{"source":"vendor"}'; exit 0 ;;
 		getsupportedmodes) echo "1:Auto 8:2G 2:3G 4:4G 20:4G/5G"; exit 0 ;;
 		getmode)           android_radio_json "$_bs_am" "" | jsonfilter -e '@.currentmode'; exit 0 ;;

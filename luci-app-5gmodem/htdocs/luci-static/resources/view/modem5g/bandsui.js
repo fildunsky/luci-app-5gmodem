@@ -694,7 +694,16 @@ function applyVendorJson(j) {
 				var e = document.getElementById(id); if (e) { e.style.display = 'none'; }
 			});
 			if (note) { note.style.display = ctx.isMM() ? 'none' : ''; }
-			bandsStaticNote = !!j.nobandctl;
+			bandsStaticNote = !!(j.nobandctl || j.needadb);
+			if (note && j.needadb) {
+				var ntA = document.getElementById('bandnote-text');
+				if (ntA) { ntA.textContent = _('To manage bands and network mode, enable USB debugging and authorize this router on the phone.'); }
+				[ 'bandnote-mm-btn', 'bandnote-xmm-btn', 'bandnote-dbg-btn' ].forEach(function(id) {
+					var b = document.getElementById(id); if (b) { b.style.display = 'none'; }
+				});
+				note.style.display = '';
+				return;
+			}
 			if (note && j.nobandctl) {
 				var nt3 = document.getElementById('bandnote-text');
 				var nb3 = document.getElementById('bandnote-mm-btn');
@@ -1181,7 +1190,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30941,
+	API: 30942,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

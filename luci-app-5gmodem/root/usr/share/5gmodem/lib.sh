@@ -1013,6 +1013,8 @@ model_alias() {
 	set -- "$(at_strip_ok "$1")"
 	case "$1" in
 		*VOS_5G*|*RXMG1*|*SG500M2*) echo "Compal RXM-G1" ;;
+		# every Samsung phone and tablet shares this USB tethering name; the model needs USB debugging
+		SAMSUNG_Android) echo "Samsung Galaxy" ;;
 		SIMCOM_*) echo "SIMCom ${1#SIMCOM_}" ;;
 		SIMCOM\ *) echo "SIMCom ${1#SIMCOM }" ;;
 		*DW5821e*[Ee][Ss][Ii][Mm]*) echo "Dell DW5821e eSIM" ;;
@@ -1435,6 +1437,44 @@ net_proxy_port() {
 	printf '%s' "$_np_r"
 }
 
+# Ways around a blocked direct path, best first, one curl option set per line:
+# clash's mixed port, then every port a running proxy core listens on locally
+# (sing-box, xray, ss-local...), then VPN and tun interfaces that are up.
+# Nothing is configured: net_fetch probes each one and takes the first that works.
+net_alt_paths() {
+	_ap_cp=$(net_proxy_port 2>/dev/null) && [ -n "$_ap_cp" ] && echo "-x http://127.0.0.1:$_ap_cp"
+	_ap_ino=""
+	for _ap_d in /proc/[0-9]*; do
+		{ read -r _ap_c < "$_ap_d/comm"; } 2>/dev/null || continue
+		case "$_ap_c" in
+			mihomo|*clash*|sing-box|xray|v2ray|ss-local|sslocal|hysteria*|tuic*|naive|trojan*|juicity*) ;;
+			*) continue ;;
+		esac
+		_ap_ino="$_ap_ino $(ls -l "$_ap_d/fd" 2>/dev/null | sed -n 's/.*socket:\[\([0-9]*\)\].*/\1/p' | xargs)"
+	done
+	case "$_ap_ino" in *[0-9]*) ;; *) _ap_ino=0 ;; esac
+	for _ap_h in $(awk -v ino="$_ap_ino" '
+		BEGIN { n = split(ino, a, " "); for (i = 1; i <= n; i++) w[a[i]] = 1 }
+		$4 == "0A" && ($10 in w) {
+			split($2, l, ":")
+			if (l[1] ~ /^(0100007F|0+|0+10+)$/ && !seen[l[2]]++) print l[2]
+		}' /proc/net/tcp /proc/net/tcp6 2>/dev/null); do
+		_ap_p=$(printf '%d' "0x$_ap_h")
+		[ "$_ap_p" = "$_ap_cp" ] && continue
+		echo "-x socks5h://127.0.0.1:$_ap_p"
+		echo "-x http://127.0.0.1:$_ap_p"
+	done
+	# the default-route device is the direct path that already failed
+	_ap_def=" $(ip -4 route show default 2>/dev/null | sed -n 's/.* dev \([^ ]*\).*/\1/p' | xargs) "
+	for _ap_n in /sys/class/net/*; do
+		case "$_ap_def" in *" ${_ap_n##*/} "*) continue ;; esac
+		# 65534 (ARPHRD_NONE) covers wireguard, amneziawg and tun; bit 1 of flags is IFF_UP
+		[ "$(cat "$_ap_n/type" 2>/dev/null)" = 65534 ] || continue
+		[ $(( $(cat "$_ap_n/flags" 2>/dev/null || echo 0) & 1 )) -ne 0 ] || continue
+		echo "--interface ${_ap_n##*/}"
+	done
+}
+
 net_fetch() {
 	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"
 	if [ -n "$_nf_o" ]; then
@@ -1444,28 +1484,34 @@ net_fetch() {
 		_nf_b=$(wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 	fi
-	_nf_p=$(net_proxy_port) || return 1
-	[ -n "$_nf_p" ] || return 1
-	logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
-	if command -v curl >/dev/null 2>&1; then
+	if ! command -v curl >/dev/null 2>&1; then
+		_nf_p=$(net_proxy_port) && [ -n "$_nf_p" ] || return 1
+		logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
 		if [ -n "$_nf_o" ]; then
-			curl -fsSL -m "$_nf_t" -x "http://127.0.0.1:$_nf_p" -o "$_nf_o" "$_nf_u" 2>/dev/null \
-				&& [ -s "$_nf_o" ] && return 0
+			http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
+				wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 			rm -f "$_nf_o" 2>/dev/null; return 1
 		fi
-		_nf_b=$(curl -fsSL -m "$_nf_t" -x "http://127.0.0.1:$_nf_p" "$_nf_u" 2>/dev/null)
+		_nf_b=$(http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
+			wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 		return 1
 	fi
-	if [ -n "$_nf_o" ]; then
-		http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-			wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
-		rm -f "$_nf_o" 2>/dev/null; return 1
-	fi
-	_nf_b=$(http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-		wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
-	[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
-	return 1
+	net_alt_paths | {
+		while read -r _nf_a; do
+			# a one-byte probe, so a dead path costs seconds and not the whole timeout
+			curl -fsSL --connect-timeout 4 -m 8 -r 0-0 -o /dev/null $_nf_a "$_nf_u" 2>/dev/null || continue
+			logger -t 5gmodem "net: direct fetch failed - using $_nf_a"
+			if [ -n "$_nf_o" ]; then
+				curl -fsSL -m "$_nf_t" $_nf_a -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && exit 0
+				rm -f "$_nf_o" 2>/dev/null
+			else
+				_nf_b=$(curl -fsSL -m "$_nf_t" $_nf_a "$_nf_u" 2>/dev/null)
+				[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; exit 0; }
+			fi
+		done
+		exit 1
+	}
 }
 
 is_p2p_dev() {

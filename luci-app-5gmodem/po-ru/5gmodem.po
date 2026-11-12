@@ -6401,6 +6401,9 @@ msgstr "Мобильный интернет"
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr "Чтобы читать параметры сотовой сети, включите отладку по USB и разрешите доступ этому роутеру на телефоне."
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr "Чтобы управлять диапазонами и режимом сети, включите отладку по USB и разрешите доступ этому роутеру на телефоне."
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr "Сменить SIM-карту для мобильного интернета можно на телефоне."
 

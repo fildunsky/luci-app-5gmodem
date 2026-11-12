@@ -6116,6 +6116,9 @@ msgstr "Data seluler"
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr "Untuk membaca metrik seluler, aktifkan USB debugging dan izinkan router ini di ponsel."
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr "Untuk mengatur band dan mode jaringan, aktifkan USB debugging dan izinkan router ini di ponsel."
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr "Ubah SIM data seluler di ponsel."
 

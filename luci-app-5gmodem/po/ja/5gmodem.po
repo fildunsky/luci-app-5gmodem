@@ -6116,6 +6116,9 @@ msgstr "モバイルデータ"
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr "モバイル回線の指標を読み取るには、USB デバッグを有効にし、スマートフォンでこのルーターを許可してください。"
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr "バンドとネットワークモードを管理するには、USB デバッグを有効にし、スマートフォンでこのルーターを許可してください。"
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr "モバイルデータ用の SIM はスマートフォンで変更してください。"
 

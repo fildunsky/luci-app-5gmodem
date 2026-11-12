@@ -6116,6 +6116,9 @@ msgstr "移动数据"
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr "要读取蜂窝网络参数，请启用 USB 调试，并在手机上授权此路由器。"
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr "要管理频段和网络模式，请启用 USB 调试，并在手机上授权此路由器。"
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr "请在手机上更换用于移动数据的 SIM 卡。"
 

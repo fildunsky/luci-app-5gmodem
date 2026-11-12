@@ -420,7 +420,12 @@ if [ -n "$_POLL_AM" ] \
 		[ "$_tj_os" = router ] && _tj_gw=$(printf '%s' "$_tj_js" \
 			| jsonfilter -e '@.route[@.target="0.0.0.0"].nexthop' 2>/dev/null | head -1)
 	fi
-	_tj_nm=$(cat "/sys/bus/usb/devices/$_POLL_AM/product" 2>/dev/null | tr -d '"\\')
+	_tj_nm=$(model_alias "$(cat "/sys/bus/usb/devices/$_POLL_AM/product" 2>/dev/null)" | tr -d '"\\')
+	# A model read over USB debugging earlier stays the name after debugging is switched off (the product id changes
+	# with it, the vendor does not).
+	_tj_sm=$(uci -q get "5gmodem.$_hl_sec.model")
+	[ -n "$_tj_sm" ] && [ "$(uci -q get "5gmodem.$_hl_sec.model_vp" | cut -d: -f1)" = "$(cat "/sys/bus/usb/devices/$_POLL_AM/idVendor" 2>/dev/null)" ] \
+		&& _tj_nm=$(printf '%s' "$_tj_sm" | tr -d '"\\')
 	if [ "$_tj_os" = android ] && [ -f "$RES/android.sh" ]; then
 		if [ "$1" = cached ] && _tj_age=$(_snapshot_age) && [ "$_tj_age" -lt 5 ] \
 			&& [ "$(jsonfilter -i "$CACHE" -e '@.backend' 2>/dev/null)" = android ]; then

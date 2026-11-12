@@ -226,6 +226,8 @@ Order of trust:
    the poller and hilink) differs from the hardware. Needed for vendors unknown
    to `_vendor_by_vid` (2026-08-03: a Samsung phone in a SIM7100E socket showed
    as "SIMCOM SIM7100E"). Empty stamp is not judged (pre-stamp sections).
+   An Android phone (`android_vid`) keeps its name when only the PID changed: the
+   PID follows USB debugging, so the model read over adb stays after it is off.
 5. Fallback to `product`, normalised by `model_alias`: Compal `VOS_5G`/`RXMG1`
    become "Compal RXM-G1" directly (unique for Compal, T99W175 on 90d5/1e2d:00b7
    has a different string); long Dell strings lose the chipset tail
@@ -940,6 +942,23 @@ tgnotify: direct, then the HTTP port from the clash config, then the mihomo
 runtime (`/configs`, open the port with PATCH; listens on 127.0.0.1 only). Used
 for the app updater and the APN database. `curl -x` handles CONNECT for https;
 without curl, wget with proxy env vars. tgnotify still has its own copy.
+
+With curl, `net_alt_paths` lists every way around a blocked direct path, with no
+setting (a field report: the carrier blocked GitHub's release downloads while
+the API answered, so the check found the update and the download sat at 0 KB):
+1. the clash port above;
+2. every TCP port that a running proxy core (`*clash*`, mihomo, sing-box, xray,
+   v2ray, ss-local, hysteria, tuic, naive, trojan, juicity; matched by
+   `/proc/<pid>/comm`) listens on at 127.0.0.1 or any address, found through
+   its socket inodes in `/proc/net/tcp{,6}`, each tried as `socks5h://` and
+   then `http://` (mixed ports take both);
+3. every interface that is up with type 65534 (wireguard, amneziawg, tun),
+   except the default-route device, through `curl --interface`.
+
+Each path is probed first with a one-byte range request (`--connect-timeout 4
+-m 8`), so tproxy or API ports that are not proxies cost seconds, not the full
+download timeout. The first path that answers does the download and is logged
+as `net: direct fetch failed - using <option>`.
 
 ### Default routes (`route_add_default`, `is_p2p_dev`, `extra_uplink_nets`)
 

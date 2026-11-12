@@ -219,7 +219,7 @@ Read-only JSON report of USB power starvation signs. An under-powered modem enum
 `apn-update.sh version|check|update`. Updates the world APN database (providers.tsv, generated from GNOME MBPI + AOSP, see licenses/PROVIDERS-NOTICE.txt) from upstream.
 - URL from `5gmodem.@5gmodem[0].apn_db_url` (set a mirror on whitelisted-only routers). Default points to the openwrt-apn-autoconfig repository under its current owner; the URL under the previous owner name returns 404, and updates silently failed for everyone because the script is only run manually.
 - Downloaded DB goes to /etc/5gmodem/providers.tsv, not over the packaged /usr/share/5gmodem/providers.tsv: /usr/share belongs to the package manager and an app upgrade would restore the build-day snapshot, losing the user's download. Readers (apn_pick in msw/apn.sh) prefer /etc.
-- Fetch through net_fetch (lib.sh): direct, then via local clash/mihomo (carrier whitelists block direct router requests).
+- Fetch through net_fetch (lib.sh): direct, then via a local proxy core (clash, sing-box, xray...) or an up VPN/tun interface, found automatically (carrier whitelists and GitHub blocks cut direct router requests).
 - Validation: >=500 data rows with >=8 TAB fields, so an HTML error page or a truncated file never replaces the DB; replacement is a single mv.
 - Version comes from the header line `# database-version: YYYY.MM.DD`; operator count changes by a few between versions, so comparing counts alone would report "no updates".
 

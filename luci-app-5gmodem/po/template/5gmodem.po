@@ -488,6 +488,9 @@ msgstr ""
 msgid "To read cellular metrics, enable USB debugging and authorize this router on the phone."
 msgstr ""
 
+msgid "To manage bands and network mode, enable USB debugging and authorize this router on the phone."
+msgstr ""
+
 msgid "Change the mobile-data SIM on the phone."
 msgstr ""
 

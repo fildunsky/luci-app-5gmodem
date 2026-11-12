@@ -269,6 +269,13 @@ if [ -n "$AMP" ]; then
 			break
 		done
 	fi
+	# TD Tech MT5700 in vendor NCM: the cdc-wdm of huawei_cdc_ncm is an AT channel, not MBIM or QMI. Taken as a
+	# control channel it made an mbim interface that never came up; the module is dialled by fibocom over AT.
+	case "$(cat "/sys/bus/usb/devices/$AMP/idVendor" 2>/dev/null):$(cat "/sys/bus/usb/devices/$AMP/idProduct" 2>/dev/null):$REQ" in
+		3466:3301:auto|3466:3301:|3466:3301:fibocom)
+			[ -n "$WANTWDM" ] && logger -t 5gmodem-mkiface "TD Tech $AMP: $WANTWDM belongs to vendor NCM, not a control channel - using fibocom"
+			WANTWDM="" ;;
+	esac
 fi
 
 if [ "$AMP" = ccci ]; then

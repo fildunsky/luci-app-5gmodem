@@ -263,6 +263,11 @@ Android tether section and answers `json`, `getmode`, `getsupportedmodes`,
 `android-radio.awk`). Unavailable controls stay hidden; selecting an
 unsupported band is refused before the phone is touched.
 
+Without USB debugging `json` answers `{"nolive":1,"needadb":1}`: the block asks
+to enable debugging instead of offering ModemManager, and the answer is cached
+for 15 seconds instead of 5 minutes, so the bands appear shortly after the
+router is authorized on the phone.
+
 ### 2G / 3G / 4G / Auto
 
 `TelephonyManager.setAllowedNetworkTypesForReason(USER, mask)` is what Android's
@@ -442,8 +447,13 @@ below ran as the unprivileged `shell` user (uid 2000) over ADB, without root.
   from `ro.product.manufacturer` plus the model code (`Samsung SM-G991B`; a phone with a
   marketing name keeps it). The poll stores it as `model` (and `model_vp`) of the phone's
   section, because the modem tabs, the uplink list and `bands.sh` name a device from the
-  section and otherwise fall back to the USB descriptor (`SAMSUNG_Android`). A leftover from
+  section and otherwise fall back to the USB descriptor. A leftover from
   the time the phone was taken for an AT modem is replaced the same way.
+  The stored name holds while the vendor id is the same, so it survives switching USB
+  debugging off (the product id changes with it), both in the lists and in the
+  "shares internet over USB" card. A Samsung phone that never had debugging on has
+  only `SAMSUNG_Android`, the same for every Samsung phone and tablet (the USB serial
+  is unique but is not a model); `model_alias` shows it as "Samsung Galaxy".
 - **Telemetry differences.** The sysfs thermal zones are not readable by the shell UID (the HAL values `AP`, `PA`
   and `SKIN` are used as `cpu`, `pa` and `skin`; the battery temperature comes from the battery
   service), the empty eSIM slot reports the

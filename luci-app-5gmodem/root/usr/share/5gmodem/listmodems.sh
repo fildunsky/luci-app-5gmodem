@@ -255,7 +255,11 @@ PORTREC_EOF
 		model=""
 	fi
 	_mv=$(uci -q get "5gmodem.$_sec.model_vp" 2>/dev/null)
-	[ -n "$_mv" ] && [ "$_mv" != "$vid:$pid" ] && model=""
+	# A phone changes its product id when USB debugging is switched; its saved model holds while the vendor is the same.
+	if [ -n "$_mv" ] && [ "$_mv" != "$vid:$pid" ] \
+	   && ! { [ "${_mv%%:*}" = "$vid" ] && command -v android_vid >/dev/null 2>&1 && android_vid "$vid"; }; then
+		model=""
+	fi
 	if [ -z "$model" ]; then
 		_prodraw=$(cat "$n/product" 2>/dev/null)
 		model=$(model_alias "$_prodraw")
