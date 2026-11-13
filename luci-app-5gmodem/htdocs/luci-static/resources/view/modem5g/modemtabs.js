@@ -552,6 +552,17 @@ return baseclass.extend({
 	refreshEsimTab: function() { applyEsimTabVisibility(0); },
 	refreshUssdTab: function() { applyUssdTabVisibility(); },
 	refreshGateTabs: function() { return applyGateTabs(); },
+	// for pages without the modem bar: settings gates plus the remembered eSIM/USSD state, no modem calls
+	refreshMenuTabs: function() {
+		return applyGateTabs().then(function() {
+			try {
+				var k = esimSeenKey();
+				esimHideRule(!(k !== ESIM_SEEN_BASE && localStorage.getItem(k) === '1'));
+				var u = ussdSeenKey();
+				ussdHideRule(u !== USSD_SEEN_BASE && localStorage.getItem(u) === '0');
+			} catch (e) {}
+		});
+	},
 
 	attach: function() {
 		window.setTimeout(function() {

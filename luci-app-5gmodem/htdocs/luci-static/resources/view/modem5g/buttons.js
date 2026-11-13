@@ -2,40 +2,7 @@
 'require view';
 'require fs';
 'require ui';
-
-// duplicated from modemtabs.js on purpose, see docs/subsystems/ui.md#shared-css-and-theme-probes
-(function() {
-	if (document.getElementById('tg-modem-css')) { return; }
-	var l = document.createElement('link');
-	l.id = 'tg-modem-css';
-	l.rel = 'stylesheet';
-	l.type = 'text/css';
-	l.href = L.resource('view/modem5g/modem.css');
-	document.head.appendChild(l);
-})();
-
-(function() {
-	function run() {
-		var de = document.documentElement;
-		if (de.hasAttribute('data-tg-sec')) { return; }
-		de.setAttribute('data-tg-sec', '1');
-		var host = document.getElementById('view') || document.getElementById('maincontent') || document.body;
-		if (!host) { return; }
-		var p = document.createElement('div');
-		p.className = 'cbi-section';
-		p.style.cssText = 'position:absolute;left:-9999px;top:0;visibility:hidden';
-		host.appendChild(p);
-		var cs = getComputedStyle(p);
-		var bg = cs.backgroundColor || '';
-		var framed = (parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none')
-			|| (cs.boxShadow && cs.boxShadow !== 'none')
-			|| (bg !== '' && bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg));
-		host.removeChild(p);
-		if (framed) { de.classList.add('tg-boxed-sec'); }
-	}
-	if (document.body) { run(); }
-	else { document.addEventListener('DOMContentLoaded', run); }
-})();
+'require view.modem5g.modemtabs as modemtabs';
 
 function detect() {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'detect' ]).then(function(res) {
@@ -412,7 +379,8 @@ document.addEventListener('click', function() {
 });
 
 return view.extend({
-	load: function() { return Promise.all([ detect(), detectLeds(), detectServices() ]); },
+	// the page shows no modem bar, but the menu tabs hidden by settings must stay hidden here too
+	load: function() { return Promise.all([ detect(), detectLeds(), detectServices(), L.resolveDefault(modemtabs.refreshMenuTabs()) ]); },
 
 	render: function(res) {
 		var buttons = (res && res[0]) || [];

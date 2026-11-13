@@ -5,7 +5,7 @@ The web UI lives in `htdocs/luci-static/resources/view/modem5g/`. `5gdetail.js` 
 ## Shared CSS and theme probes
 
 - `modemtabs.js` injects `modem.css` once (`#tg-modem-css`). Every app page requires `modemtabs`, so one loader is enough, and the file is cached like any other static asset. Before this, 19 `<style>` blocks were rebuilt on every page load.
-- `buttons.js` keeps its own copy of the loader and of the `tg-boxed-sec` probe on purpose. That page does not show modem tabs and does not require `modemtabs`. Without the copy it rendered unstyled.
+- `buttons.js` shows no modem bar but still requires `modemtabs` and calls `refreshMenuTabs()` in `load`. Tabs hidden by settings ("Internet priorities only", alignment, statistics) and by the remembered eSIM/USSD state are hidden by style rules from `modemtabs`. Until 3.9.43 the page kept its own copy of the CSS loader instead, and opening Buttons showed every hidden tab again. `refreshMenuTabs` only reads uci and localStorage; it does not call the modem.
 - The loader IIFE has to come **after** all `'require ...'` directives. Any code between them stops LuCI from parsing the rest of the directives.
 - `tg-boxed-sec` on `<html>` means the theme draws `.cbi-section` as a card (border, background or shadow). This is true for proton2025 and argon. Only these themes get an inner section padding. bootstrap does not frame sections, so the same padding showed up as empty side margins. The probe uses a real element in the page container, because a theme rule can be scoped to it. It runs once, before rendering.
 - `tg-theme-argon` is set from the theme stylesheet URL. It scopes the few argon-only fixes (see ui-css.md).
