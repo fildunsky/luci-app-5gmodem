@@ -49,8 +49,9 @@ usb_is_modem() {
 	_im_n="$1"
 	IM_WHY=""; IM_DETAIL=""
 	[ -n "$_im_n" ] && [ -f "$_im_n/idVendor" ] || { IM_WHY=none; IM_DETAIL=""; return 1; }
-	_im_v=$(cat "$_im_n/idVendor" 2>/dev/null)
-	_im_p=$(cat "$_im_n/idProduct" 2>/dev/null)
+	_im_v=""; _im_p=""
+	read -r _im_v 2>/dev/null < "$_im_n/idVendor"
+	read -r _im_p 2>/dev/null < "$_im_n/idProduct"
 	_nm_cfg
 
 	for _im_x in $NOT_MODEM_FORCE; do
@@ -78,7 +79,10 @@ usb_is_modem() {
 		case " $MODEM_DRIVERS " in
 			*" $_im_d "*) IM_WHY=driver; IM_DETAIL="$_im_d"; return 0 ;;
 		esac
-		case "$(cat "$_im_i/bInterfaceClass" 2>/dev/null):$(cat "$_im_i/bInterfaceSubClass" 2>/dev/null)" in
+		_im_c=""; _im_sc=""
+		read -r _im_c 2>/dev/null < "$_im_i/bInterfaceClass"
+		read -r _im_sc 2>/dev/null < "$_im_i/bInterfaceSubClass"
+		case "$_im_c:$_im_sc" in
 			02:0e) IM_WHY=mbim; IM_DETAIL=""; return 0 ;;
 			02:06) IM_WHY=ecm; IM_DETAIL=""; return 0 ;;
 			02:0d) IM_WHY=ncm; IM_DETAIL=""; return 0 ;;

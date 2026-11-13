@@ -128,17 +128,17 @@ function stServiceLabel(s) {
 
 function stCardInner() {
 	return [
-		E('span', { 'class': 'netpri-sub' }, stServiceLabel(_st.service)),
+		E('span', { 'class': 'netpri-sub' }, [ stServiceLabel(_st.service) ]),
 		E('span', { 'class': 'netpri-name netpri-st-speed' }, stSpeedContent()),
 		_st.ip ? E('span', {
 			'class': 'netpri-ip',
 			'style': _st.ipLocal ? 'opacity:.55;font-style:italic' : null,
 			'data-tooltip': _st.ipLocal ? _('Modem address, not external') : null
-		}, (function() {
+		}, [ (function() {
 			if (_st.ipLocal) { return _st.ip; }
 			var fl = mutil.flagEmoji(_st.cc);
 			return fl ? (fl + ' ' + _st.ip) : _st.ip;
-		})())
+		})() ])
 		       : E('span', { 'class': 'netpri-ip empty' }, '***.***.***.***')
 	];
 }
@@ -426,7 +426,7 @@ function sscChooseProfile(kind) {
 			'style': 'width:100%;min-width:0;max-width:100%;box-sizing:border-box' });
 		select.appendChild(E('option', { 'value': '' }, _('Select configuration')));
 		(data.profiles || []).forEach(function(name) {
-			select.appendChild(E('option', { 'value': name, 'selected': name === data.active ? '' : null }, name));
+			select.appendChild(E('option', { 'value': name, 'selected': name === data.active ? '' : null }, [ name ]));
 		});
 		var apply = E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': function() {
 			if (!select.value) { return; }
@@ -457,7 +457,7 @@ function sscChooseProfile(kind) {
 				_ssc[kind].switching = false;
 				updateSscDot(kind);
 				sscRefreshLabels(kind);
-				ui.addNotification(null, E('p', err.message), 'error');
+				ui.addNotification(null, E('p', [ String(err.message || err) ]), 'error');
 			}).finally(function() {
 				apply.disabled = false; select.disabled = false; cancel.disabled = false;
 				apply.classList.remove('spinning');
@@ -478,7 +478,7 @@ function sscChooseProfile(kind) {
 			])
 		]);
 		apply.disabled = !(data.profiles || []).length;
-	}).catch(function(err) { ui.addNotification(null, E('p', err.message), 'error'); });
+	}).catch(function(err) { ui.addNotification(null, E('p', [ String(err.message || err) ]), 'error'); });
 }
 
 function ssClashBtn(kind) {
@@ -506,7 +506,7 @@ function ssClashBtn(kind) {
 		svcRankEl(ic),
 		E('span', { 'class': 'netpri-sub' }, [ String(st.version || br.name) ]),
 		E('span', { 'class': 'netpri-name' }, [ dot, ic, E('span', {}, br.name) ]),
-		kind === 'nikki' ? E('span', { 'class': 'netpri-ip' }, host) :
+		kind === 'nikki' ? E('span', { 'class': 'netpri-ip' }, [ host ]) :
 		sscProfileLine(kind)
 	]);
 }
@@ -713,7 +713,7 @@ function svcCard(service) {
 	]);
 }
 function updateSvcCard(service) {
-	var r = _svcState[service], sel = '.netpri-status[data-svc="' + service + '"]';
+	var r = _svcState[service], sel = '.netpri-status[data-svc="' + _npCssEsc(service) + '"]';
 	document.querySelectorAll(sel + ' .netpri-svcdot').forEach(function(d) {
 		d.classList.remove('on', 'off', 'unknown'); d.classList.add(_sDot(r));
 	});
@@ -751,6 +751,12 @@ function _svcAggTick() {
 		});
 	});
 }
+// several init paths register at once: run one svcall for all of them
+var _svcAggKickT = null;
+function _svcAggKick() {
+	if (_svcAggKickT) { return; }
+	_svcAggKickT = window.setTimeout(function() { _svcAggKickT = null; _svcAggTick(); }, 0);
+}
 function _svcAggStart() {
 	if (_svcAgg.started) { return; }
 	_svcAgg.started = true;
@@ -762,7 +768,7 @@ function svcStatusInit(services) {
 	});
 	if (!services.length) { return; }
 	_svcAgg.services = _svcAgg.services.concat(services);
-	_svcAggTick();
+	_svcAggKick();
 	_svcAggStart();
 }
 
@@ -786,7 +792,7 @@ function updateSscDot(kind) {
 function ssclashStatusInit(kind) {
 	if (_svcAgg.kinds.indexOf(kind) >= 0) { return; }
 	_svcAgg.kinds.push(kind);
-	_svcAggTick();
+	_svcAggKick();
 	_svcAggStart();
 }
 
@@ -957,9 +963,6 @@ function _npSwallowClick() {
 	return false;
 }
 
-function _npEnsureDragCss() {
-	}
-
 function _npCards(row, attr) {
 	return Array.prototype.slice.call(row.children).filter(function(c) {
 		return c.nodeType === 1 && c.classList.contains('netpri-btn') && c.hasAttribute(attr);
@@ -1116,7 +1119,6 @@ function _npEnd() {
 }
 
 function _npEnableReorder(row, commit, attr) {
-	_npEnsureDragCss();
 	var _attr = attr || 'data-iface';
 	_npCards(row, _attr).forEach(function(card) {
 		card.addEventListener('pointerdown', function(ev) {
@@ -1246,7 +1248,7 @@ function buildBar(list, redraw) {
 					                          : _('%dm').format(Math.round(o.healfor / 60));
 				}
 				return [
-					E('span', { 'class': 'netpri-sub' }, stepName + ' (' + o.healn + '/' + o.healmax + ')'),
+					E('span', { 'class': 'netpri-sub' }, [ stepName + ' (' + o.healn + '/' + o.healmax + ')' ]),
 					E('span', { 'class': 'netpri-name' }, [ o.iface ]),
 					E('span', { 'class': 'netpri-ip' }, [
 						E('span', { 'class': 'netpri-svcdot netpri-health off', 'title': _('No internet on this link') }),
@@ -1396,7 +1398,7 @@ function npWatchTheme() {
 }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 	mount: function() {
 		var wrap = E('div', { 'class': 'netpri-mount' });
 		var redraw = function(l2) {
@@ -1445,78 +1447,5 @@ return baseclass.extend({
 		};
 		if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }
 		return wrap;
-	},
-
-	renderBar: function() {
-		var mk = function(list) {
-			var wrap = E('div');
-			var redraw = function(l2) {
-				var fresh = buildBar(l2, redraw);
-				if (wrap.firstChild) { wrap.replaceChild(fresh, wrap.firstChild); }
-				else { wrap.appendChild(fresh); }
-				refreshStCard();
-			};
-			redraw(list);
-			extip.init().then(function(fl) {
-				if (!fl.inNetpri) { return; }
-				extip.watch('');
-				extip.subscribe(function() { if (_npDrag || _npApplying) { return; } redraw(lastList()); });
-			});
-			if (_widgets.speedtest) { stInit(); }
-			if (_widgets.status) { pingInit(); }
-			if (_widgets.services) {
-				var _svcs = effectiveSvcs();
-				_svcs.forEach(function(s) {
-					var k = sscKindForSvc(s);
-					if (k) { ssclashInit(k, redraw); ssclashStatusInit(k); }
-				});
-				svcStatusInit(_svcs);
-			}
-			var pollFn = function() {
-				if (!document.body.contains(wrap)) {
-					window._npListPoll = false;
-					poll.remove(pollFn); return Promise.resolve();
-				}
-				if (document.hidden || _npDrag || _npApplying) { return Promise.resolve(); }
-				return loadList().then(redraw);
-			};
-			if (!window._npListPoll) { window._npListPoll = true; poll.add(pollFn, 15); }
-			return { wrap: wrap, redraw: redraw };
-		};
-		return loadWidgetFlags().then(function() {
-			var extra = _widgets.status || _widgets.services || _widgets.speedtest;
-			var cached = lastList();
-			if (cached.length || extra) {
-				var b = mk(cached);
-				loadList().then(function(l) {
-					if (l && (l.length || (l._ok && _npEmptyStreak >= 2))) { b.redraw(l); }
-				});
-				return b.wrap;
-			}
-			return loadList().then(function(list) {
-				if (!list.length && !extra) { return null; }
-				return mk(list).wrap;
-			});
-		});
-	},
-
-	attach: function() {
-		if (document.querySelector('.netpribar')) { return Promise.resolve(); }
-		return this.renderBar().then(function(bar) {
-			if (!bar || document.querySelector('.netpribar')) { return; }
-			var tries = 0;
-			(function place() {
-				if (document.querySelector('.netpribar')) { return; }
-				var mb = document.querySelector('.modembar');
-				if (mb && mb.parentNode) { mb.parentNode.insertBefore(bar, mb.nextSibling); return; }
-				var anchor = document.querySelector('#tabmenu')
-					|| document.querySelector('ul.cbi-tabmenu')
-					|| document.querySelector('.cbi-tabmenu');
-				if (anchor && anchor.parentNode) { anchor.parentNode.insertBefore(bar, anchor); return; }
-				if (tries++ < 20) { window.setTimeout(place, 150); return; }
-				var c = document.querySelector('#maincontent') || document.querySelector('#view') || document.body;
-				if (c) { c.insertBefore(bar, c.firstChild); }
-			})();
-		});
 	}
 });

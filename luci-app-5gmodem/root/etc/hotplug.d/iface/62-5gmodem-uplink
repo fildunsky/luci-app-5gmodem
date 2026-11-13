@@ -1,10 +1,13 @@
 #!/bin/sh
 # An uplink going up or down can change the primary uplink without netpri or the
 # watchdog moving a route. Runs after 61-5gmodem-netpri's delayed reapply.
+# Fires on every DHCP/RA ifupdate, so it loads only uplink.sh, not lib.sh.
 case "$ACTION" in ifup|ifdown|ifupdate) ;; *) exit 0 ;; esac
-[ -f /usr/share/5gmodem/lib.sh ] || exit 0
+# loopback never carries a default route
+[ "$INTERFACE" = loopback ] && exit 0
+[ -f /usr/share/5gmodem/uplink.sh ] || exit 0
 ( exec >/dev/null 2>&1 </dev/null
   sleep 5
-  . /usr/share/5gmodem/lib.sh
+  . /usr/share/5gmodem/uplink.sh
   uplink_notify iface ) &
 exit 0

@@ -31,9 +31,10 @@ qmi_pool_exhausted() {
 _mm_failed_unknowncaps() {
 	command -v mmcli >/dev/null 2>&1 || return 1
 	for _i in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
-		_d=$(mmcli -m "$_i" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
+		_k=$(mmcli -m "$_i" -K 2>/dev/null)
+		_d=$(printf '%s\n' "$_k" | sed -n 's/^modem\.generic\.device *: *//p')
 		case "$_d" in *"$1") ;; *) continue ;; esac
-		[ "$(mmcli -m "$_i" -K 2>/dev/null | sed -n 's/^modem\.generic\.state-failed-reason *: *//p')" \
+		[ "$(printf '%s\n' "$_k" | sed -n 's/^modem\.generic\.state-failed-reason *: *//p')" \
 			= "unknown-capabilities" ] && return 0
 		return 1
 	done

@@ -14,7 +14,7 @@ _srcip_for() { echo 192.168.100.2; }
 _zte_getpath() { echo "$API_PATH"; }
 curl() { printf '%s\n' "$@"; }
 UA=5gmodem
-''' + function('_zte_get', 'hilink.sh') + '\n' + function('_zte_sms_fetch', 'hilink.sh') + r'''
+''' + function('_hl_src', 'hilink.sh') + '\n' + function('_zte_get', 'hilink.sh') + '\n' + function('_zte_sms_fetch', 'hilink.sh') + r'''
 case "$COMMAND" in
  fetch) _zte_sms_fetch 192.168.100.1 "$STORE" ;;
  *) _zte_get 192.168.100.1 "$COMMAND" ;;

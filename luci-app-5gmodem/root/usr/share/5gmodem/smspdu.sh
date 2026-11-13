@@ -44,8 +44,14 @@ encode() {
 	_e_dlen="$1"; _e_toa="$2"; _e_digits="$3"
 	[ -n "$_e_dlen" ] && [ "$_e_dlen" -gt 0 ] || return 1
 
+	# Concatenation reference: whole seconds alone repeat for two long messages
+	# sent in the same second (a command reply plus a queued SMS), and the phone
+	# then glues their parts together. Mix in hundredths and the PID.
 	IFS=' ' read -r _e_up _ < /proc/uptime
-	_e_ref=$(( ${_e_up%%.*} % 256 ))
+	_e_t="${_e_up%%.*}${_e_up#*.}"
+	case "$_e_t" in *[!0-9]*) _e_t=0 ;; esac
+	_e_t=${_e_t#"${_e_t%%[!0]*}"}
+	_e_ref=$(( (${_e_t:-0} + $$ * 7) % 256 ))
 
 	printf '%s' "$_e_txt" | LC_ALL=C awk -v dlen="$_e_dlen" -v toa="$_e_toa" -v digits="$_e_digits" -v ref="$_e_ref" '
 		BEGIN {
@@ -97,6 +103,7 @@ encode() {
 					total++
 				}
 			}
+			if (total > 255) exit 1           # UDH holds the part count in one octet
 
 			u = 1
 			for (p = 1; p <= total; p++) {

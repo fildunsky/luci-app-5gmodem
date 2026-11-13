@@ -135,7 +135,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -523,6 +523,9 @@ return view.extend({
 		};
 		var scan = function() {
 			if (polling) { return; }
+			// Claim the slot now: the result poll starts only 3 s later, and a mode
+			// toggle in between would otherwise start a second scan and poll chain.
+			polling = true;
 			var started = Date.now();
 			stat.textContent = _('Searching for networks (%d s). The connection may drop meanwhile.').format(0);
 			scanBtn.disabled = true;
@@ -785,7 +788,7 @@ return view.extend({
 
 		o = s.option(form.Value, 'device',
 			_('Port for modem communication'),
-			_("Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."));
+			_("Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."));
 		devs.sort(function(a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
 		devs.forEach(dev => o.value('/dev/' + dev.name, portLabel(dev.name)));
 		o.placeholder = _('Please select a port');

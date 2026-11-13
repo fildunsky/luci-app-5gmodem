@@ -15,7 +15,7 @@ _sw_run() {
 	_swr_t="$1"; shift
 	"$@" 2>/dev/null &
 	_swr_p=$!
-	( exec >/dev/null 2>&1; sleep "$_swr_t"; kill "$_swr_p" 2>/dev/null ) </dev/null & _swr_w=$!
+	( exec >/dev/null 2>&1; sleep "$_swr_t" & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_swr_p" 2>/dev/null ) </dev/null & _swr_w=$!
 	wait "$_swr_p"; _swr_rc=$?
 	kill "$_swr_w" 2>/dev/null; wait "$_swr_w" 2>/dev/null
 	return $_swr_rc

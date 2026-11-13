@@ -334,6 +334,7 @@ function watchModems(bar, sig) {
 	if (bar._watched) { return; }
 	bar._watched = true;
 	poll.add(function() {
+		if (document.hidden) { return Promise.resolve(); }
 		return L.resolveDefault(fs.read(LIST_CACHE), '').then(function(txt) {
 			var list = [];
 			try { list = JSON.parse(txt || '[]') || []; } catch (e) { return; }
@@ -533,7 +534,7 @@ function pageFadeIn() {
 }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 	renderBar: function() {
 		pageFadeIn();
 		return loadModems().then(function(st) {

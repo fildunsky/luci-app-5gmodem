@@ -15,7 +15,7 @@ trap 'rm -f "$OUT" 2>/dev/null' EXIT
 trap '[ -n "$p" ] && kill "$p" 2>/dev/null; exit 143' INT TERM HUP
 sms_tool -d "$D" at "$CMD" > "$OUT" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
 p=$!
-( exec 7>&- 8>&- 9>&-; sleep 2; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
+( exec 7>&- 8>&- 9>&-; sleep 2 & s=$!; trap 'kill $s 2>/dev/null; exit' TERM; wait $s; kill "$p" 2>/dev/null ) >/dev/null 2>&1 </dev/null &
 k=$!
 
 if (sleep 0.0) 2>/dev/null; then ts=0.1; tmax=30; else ts=1; tmax=3; fi

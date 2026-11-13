@@ -216,21 +216,61 @@ _kb_feed_json() {
 	done
 }
 
-_kb_feed_arch() {
-	_ka_d=$(_arch_dir)
-	for _ka_f in $(_arch_files "$_ka_d"); do
-		[ -f "$_ka_d/$_ka_f" ] || continue
-		_arch_read "$_ka_d/$_ka_f"
-		_ka_h=""
-		case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _ka_h=${_ka_f#*.} ;; esac
-		_kb_put "${_ka_f%%.*}" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_ka_h"
-	done
+_kb_feed_arch_one() {
+	_ka_h=""
+	case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _ka_h="$_A_KEY" ;; esac
+	_kb_put "$_A_IDX0" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_ka_h"
 }
+
+_kb_feed_arch() {
+	_arch_ready
+	_arch_each _kb_feed_arch_one
+}
+
+# "YYYY-MM-DD HH:MM..." -> minutes since 1970 in _KB_M (empty when unparsable).
+# Shell arithmetic instead of date(1): _kb_build runs it for every stored part.
+_kb_min() {
+	_KB_M=""
+	case "$1" in
+		[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' '[0-9][0-9]:[0-9][0-9]*) ;;
+		*) return 1 ;;
+	esac
+	_km_y=${1%%-*}; _km_r=${1#*-}
+	_km_m=${_km_r%%-*}; _km_r=${_km_r#*-}
+	_km_d=${_km_r%% *}; _km_r=${_km_r#* }
+	_km_h=${_km_r%%:*}; _km_r=${_km_r#*:}
+	_km_i=${_km_r%"${_km_r#??}"}
+	# strip one leading zero: "08" would be read as octal
+	_km_m=${_km_m#0}; _km_d=${_km_d#0}; _km_h=${_km_h#0}; _km_i=${_km_i#0}
+	[ "$_km_m" -ge 1 ] && [ "$_km_m" -le 12 ] || return 1
+	[ "$_km_m" -le 2 ] && _km_y=$((_km_y - 1))
+	_km_e=$((_km_y / 400)); _km_yoe=$((_km_y - _km_e * 400))
+	if [ "$_km_m" -gt 2 ]; then _km_mp=$((_km_m - 3)); else _km_mp=$((_km_m + 9)); fi
+	_km_doe=$((_km_yoe * 365 + _km_yoe / 4 - _km_yoe / 100 + (153 * _km_mp + 2) / 5 + _km_d - 1))
+	_KB_M=$((((_km_e * 146097 + _km_doe - 719468) * 24 + ${_km_h:-0}) * 60 + ${_km_i:-0}))
+}
+
+# Parts of one long SMS share sender, the 8-bit UDH reference and the part
+# count. The reference wraps, so one sender reuses it: a part joins a group only
+# within KB_WINDOW minutes of the group's first part and only into a free part
+# slot. A byte-identical copy of a stored part rides along (its index is deleted
+# with the group); any other part with a taken number starts its own group.
+# 24 h: parts carry the SMSC time stamp, so they are seconds apart however late
+# they are delivered, and 256 long messages from one sender within a day do not
+# happen. Keep in step with sms_merge_parts() in readsms.js.
+KB_WINDOW=1440
 
 _kb_build() {
 	_kb_i=1
 	while [ "$_kb_i" -le "$_kb_n" ]; do
-		eval "_kb_k=\$_kb_k$_kb_i; _kb_s=\$_kb_s$_kb_i; _kb_f=\$_kb_f$_kb_i; _kb_t=\$_kb_t$_kb_i; _kb_p=\$_kb_p$_kb_i; _kb_o=\$_kb_o$_kb_i; _kb_r=\$_kb_r$_kb_i; _kb_h=\$_kb_h$_kb_i"
+		eval "_kb_t=\$_kb_t$_kb_i"
+		_kb_min "$_kb_t"
+		eval "_kb_m$_kb_i=\$_KB_M"
+		_kb_i=$((_kb_i + 1))
+	done
+	_kb_i=1
+	while [ "$_kb_i" -le "$_kb_n" ]; do
+		eval "_kb_k=\$_kb_k$_kb_i; _kb_s=\$_kb_s$_kb_i; _kb_f=\$_kb_f$_kb_i; _kb_t=\$_kb_t$_kb_i; _kb_p=\$_kb_p$_kb_i; _kb_o=\$_kb_o$_kb_i; _kb_r=\$_kb_r$_kb_i; _kb_h=\$_kb_h$_kb_i; _kb_lm=\$_kb_m$_kb_i"
 		if [ -n "$_kb_k" ]; then _kb_i=$((_kb_i + 1)); continue; fi
 		_kb_multi=1
 		case "$_kb_o" in ''|0|1|*[!0-9]*) _kb_multi=0 ;; esac
@@ -249,24 +289,27 @@ _kb_build() {
 		while [ "$_kb_q" -le "$_kb_o" ]; do eval "_kb_b$_kb_q=''"; _kb_q=$((_kb_q + 1)); done
 		_kb_j="$_kb_i"
 		while [ "$_kb_j" -le "$_kb_n" ]; do
-			eval "_kb_jk=\$_kb_k$_kb_j; _kb_jf=\$_kb_f$_kb_j; _kb_jo=\$_kb_o$_kb_j; _kb_jr=\$_kb_r$_kb_j; _kb_jp=\$_kb_p$_kb_j; _kb_jt=\$_kb_t$_kb_j"
-			if [ -z "$_kb_jk" ] && [ "$_kb_jf" = "$_kb_f" ] && [ "$_kb_jo" = "$_kb_o" ] && [ "$_kb_jr" = "$_kb_r" ]; then
-				case "$_kb_jp" in
-					''|*[!0-9]*) ;;
-					*)
-						_kb_mem="$_kb_mem $_kb_j"
-						if [ "$_kb_jp" -ge 1 ] && [ "$_kb_jp" -le "$_kb_o" ]; then
-							eval "_kb_bq=\$_kb_b$_kb_jp"
-							if [ -z "$_kb_bq" ]; then
-								eval "_kb_b$_kb_jp=$_kb_j"
-							else
-								eval "_kb_bt=\$_kb_t$_kb_bq"
-								[ "$_kb_jt" \< "$_kb_bt" ] || eval "_kb_b$_kb_jp=$_kb_j"
-							fi
-						fi ;;
-				esac
-			fi
+			eval "_kb_jk=\$_kb_k$_kb_j; _kb_jf=\$_kb_f$_kb_j; _kb_jo=\$_kb_o$_kb_j; _kb_jr=\$_kb_r$_kb_j; _kb_jp=\$_kb_p$_kb_j; _kb_jm=\$_kb_m$_kb_j"
+			_kb_j0=$_kb_j
 			_kb_j=$((_kb_j + 1))
+			[ -z "$_kb_jk" ] && [ "$_kb_jf" = "$_kb_f" ] && [ "$_kb_jo" = "$_kb_o" ] && [ "$_kb_jr" = "$_kb_r" ] || continue
+			case "$_kb_jp" in ''|*[!0-9]*) continue ;; esac
+			if [ -n "$_kb_jm" ] && [ -n "$_kb_lm" ]; then
+				_kb_d=$((_kb_jm - _kb_lm))
+				[ "$_kb_d" -le "$KB_WINDOW" ] && [ "$_kb_d" -ge "-$KB_WINDOW" ] || continue
+			fi
+			if [ "$_kb_jp" -ge 1 ] && [ "$_kb_jp" -le "$_kb_o" ]; then
+				eval "_kb_bq=\$_kb_b$_kb_jp"
+				if [ -z "$_kb_bq" ]; then
+					eval "_kb_b$_kb_jp=$_kb_j0"
+				else
+					eval "_kb_jc=\$_kb_c$_kb_j0; _kb_bc=\$_kb_c$_kb_bq; _kb_jt=\$_kb_t$_kb_j0; _kb_bt=\$_kb_t$_kb_bq"
+					[ "$_kb_jc" = "$_kb_bc" ] || continue
+					# a resent segment: the later copy gives the time, as before
+					[ "$_kb_jt" \< "$_kb_bt" ] || eval "_kb_b$_kb_jp=$_kb_j0"
+				fi
+			fi
+			_kb_mem="$_kb_mem $_kb_j0"
 		done
 		_kb_txt=""; _kb_have=0; _kb_tf=""
 		_kb_q=1
@@ -378,6 +421,10 @@ _kb_unseen() {
 _kb_unseen_multi() {
 	_um_names=$(printf '%s' "$1" | tr ',' ' ')
 	_um_first=""
+	# channel names come from argv and end up in eval and in a file name
+	for _um_n in $_um_names; do
+		case "$_um_n" in *[!a-z]*) return 2 ;; esac
+	done
 	for _um_n in $_um_names; do
 		_um_f=$(_list_file "$_um_n")
 		[ -f "$_um_f" ] || _um_first="$_um_first $_um_n"
@@ -452,6 +499,59 @@ _kb_out() {
 	return 0
 }
 
+# newcount on a phone costs an adb round trip, and every open detail page asks
+# every 15 s: answers are reused for NC_TTL seconds per modem and dropped as
+# soon as messages are read, deleted or marked seen through the bridge.
+NC_TTL=10
+_nc_cache() {
+	echo "/tmp/5gmodem/smsnc_$(printf '%s' "$_TGT_PATH" | tr -c 'A-Za-z0-9' '_')"
+}
+_nc_drop() {
+	rm -f "$(_nc_cache)" 2>/dev/null
+	return 0
+}
+
+# One SIM read per sessionwatch pass. The bot (unseen), SMS commands (recv with SMS_BG=1) and the
+# archive (archive-run) used to read the whole SIM one after another every 30 s: three AT+CMGL in a
+# row, seconds each on a full SIM, while the metrics poller waited. Background readers now share a
+# read for _LIVE_TTL seconds; pages always read live and refresh the shared copy. Every delete drops
+# it, so a cached index never points at a slot that was freed and refilled.
+_LIVE_TTL=20
+_live_file() { echo "/tmp/5gmodem/smslive_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')_$(printf '%s' "${STORE:-cur}" | tr -c 'A-Za-z0-9' '_')"; }
+_live_drop() { rm -f "/tmp/5gmodem/smslive_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')_"* 2>/dev/null; return 0; }
+_live_bg() {
+	case "$BOX" in
+		archive-run|unseen) return 0 ;;
+		recv) [ "$SMS_BG" = 1 ] ;;
+		*) return 1 ;;
+	esac
+}
+_live_fresh() {
+	_lf_f=$(_live_file)
+	[ -s "$_lf_f" ] || return 1
+	_lf_n=$(cut -d. -f1 /proc/uptime 2>/dev/null); _lf_t=""
+	read -r _lf_t < "$_lf_f.t" 2>/dev/null
+	case "$_lf_n:$_lf_t" in *[!0-9:]*|:*|*:) return 1 ;; esac
+	[ $((_lf_n - _lf_t)) -ge 0 ] && [ $((_lf_n - _lf_t)) -lt "$_LIVE_TTL" ]
+}
+# _LIVE_HIT: the caller found a fresh copy before taking the AT lock and does not hold it, so the
+# copy is used even if it aged out in between: a live read without the lock is never right here.
+_live_json() {
+	_lj_f=$(_live_file)
+	if [ -n "$_LIVE_HIT" ] || { _live_bg && _live_fresh; }; then
+		cat "$_lj_f"; return 0
+	fi
+	_lj_j=$(_tz_tag "$(_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j $_STORE_ARG recv 2>/dev/null | utf8_fix)")
+	case "$_lj_j" in
+		*'"msg"'*)
+			printf '%s' "$_lj_j" > "$_lj_f.$$" 2>/dev/null && mv -f "$_lj_f.$$" "$_lj_f" \
+				&& cut -d. -f1 /proc/uptime > "$_lj_f.t" 2>/dev/null ;;
+	esac
+	printf '%s' "$_lj_j"
+}
+
+_arch_live_json() { _live_json; }
+
 case "$1" in
 	newdump)
 		_nd_active=$(uci -q get "$CFG.@5gmodem[0].active_modem")
@@ -459,12 +559,13 @@ case "$1" in
 		[ -n "$_nd_paths" ] || _nd_paths="$_nd_active"
 		_nd_store=$(uci -q get "$CFG.sms.storage")
 		_nd_now=$(cut -d. -f1 /proc/uptime 2>/dev/null); case "$_nd_now" in ''|*[!0-9]*) _nd_now=0 ;; esac
-		_nd_out=""; _nd_cnt=0
+		_nd_out=""; _nd_cnt=0; _nd_lm=""
 		for _nd_p in $_nd_paths; do
 			_nd_sec="m_$(printf '%s' "$_nd_p" | sed 's/[^A-Za-z0-9]/_/g')"
 			if [ "$(uci -q get "$CFG.$_nd_sec.kind")" != "hilink" ]; then
 				bg_at_off "$_nd_p" && continue
-				"$RES/listmodems.sh" 2>/dev/null | jsonfilter -e "@[@.path=\"$_nd_p\"].tty[0]" -e "@[@.path=\"$_nd_p\"].wdm[0]" 2>/dev/null | grep -q . || continue
+				[ -n "$_nd_lm" ] || _nd_lm=$("$RES/listmodems.sh" 2>/dev/null)
+				printf '%s' "$_nd_lm" | jsonfilter -e "@[@.path=\"$_nd_p\"].tty[0]" -e "@[@.path=\"$_nd_p\"].wdm[0]" 2>/dev/null | grep -q . || continue
 			fi
 			if [ "$_nd_p" = "$_nd_active" ]; then
 				_nd_port=$(uci -q get "$CFG.sms.readport")
@@ -501,11 +602,25 @@ case "$1" in
 		exit 0 ;;
 	newcount)
 		if _active_is_android; then
+			_nc_now=$(cut -d. -f1 /proc/uptime 2>/dev/null)
+			case "$_nc_now" in ''|*[!0-9]*) _nc_now=0 ;; esac
+			_ncc_n=""; _ncc_t=""
+			[ -f "$(_nc_cache)" ] && read -r _ncc_n _ncc_t < "$(_nc_cache)"
+			case "$_ncc_n:$_ncc_t" in :*|*:|*[!0-9:]*) ;; *)
+				if [ "$_nc_now" -gt 0 ] && [ "$_ncc_t" -le "$_nc_now" ] && [ $((_nc_now - _ncc_t)) -lt "$NC_TTL" ]; then
+					echo "$_ncc_n"; exit 0
+				fi ;;
+			esac
 			. "$RES/android.sh"
 			_anc=$(android_sms "$_TGT_PATH" count | jsonfilter -e '@.unseen' 2>/dev/null)
 			case "$_anc" in ''|*[!0-9]*) _anc=0 ;; esac
+			mkdir -p /tmp/5gmodem 2>/dev/null
+			printf '%s %s\n' "$_anc" "$_nc_now" > "$(_nc_cache).$$" 2>/dev/null \
+				&& mv "$(_nc_cache).$$" "$(_nc_cache)" 2>/dev/null
 			echo "$_anc"; exit 0
 		fi
+		# AT/HiLink/MM: only reads the sms_new.json snapshot written by newdump, no
+		# port access, so there is nothing worth caching here.
 		_ncf="/tmp/5gmodem/sms_new.json"
 		_nc_for=""
 		for _nc_a in "$@"; do case "$_nc_a" in for=*) _nc_for="${_nc_a#for=}" ;; esac; done
@@ -544,12 +659,14 @@ case "$1" in
 		exit 0 ;;
 	seen-add)
 		shift
+		_nc_drop
 		[ -n "$1" ] || { echo '{"success":true}'; exit 0; }
 		_list_add "$(_seen_file)" "$@"
 		echo '{"success":true}'
 		exit 0 ;;
 	markread)
 		shift
+		_nc_drop
 		if [ "$(_active_kind)" = "hilink" ] && [ -n "$1" ]; then
 			"$RES/hilink.sh" smsmarkread "$*" "$_TGT_PATH"
 		else
@@ -568,11 +685,13 @@ case "$1" in
 		exit 0 ;;
 	list-add)
 		_la_n="$2"; shift 2
+		case "$_la_n" in *[!a-z]*) echo '{"success":false}'; exit 2 ;; esac
 		[ "$_la_n" = tg ] && _tg_migrate
 		_list_add "$(_list_file "$_la_n")" "$@"
 		echo '{"success":true}'
 		exit 0 ;;
 	seen-reset)
+		_nc_drop
 		rm -f "$(_seen_file)" 2>/dev/null
 		echo '{"success":true}'
 		exit 0 ;;
@@ -829,6 +948,11 @@ case "$BOX" in
 	unseen) UL="$2"; STORE="$3"; PORT="$4" ;;
 	*)      STORE="$2"; PORT="$3" ;;
 esac
+# archive-run comes from sessionwatch without arguments. The bot and SMS commands read the configured
+# storage (default SM), so the archive does too: same storage, one shared read (_live_json).
+[ "$BOX" = archive-run ] && [ -z "$STORE" ] && { STORE=$(uci -q get "$CFG.sms.storage"); [ -n "$STORE" ] || STORE=SM; }
+
+case "$BOX" in delete|delete-start|delete-run) _nc_drop; _live_drop ;; esac
 
 if _active_is_android; then
 	. "$RES/android.sh"
@@ -965,7 +1089,12 @@ fi
 
 . "$RES/atlock.sh"
 _AT_INH="$_AT_LOCK_HELD"
+# A background reader with a fresh shared read needs neither the port nor the lock, nor the
+# AT+CPMS? that picking the storage costs: it only reads the copy (_live_json).
+_LIVE_HIT=""
+case "$BOX" in recv|unseen|archive-run) _live_bg && _live_fresh && _LIVE_HIT=1 ;; esac
 if [ "$BOX" = delete-run ]; then _AT_LOCKED=1
+elif [ -n "$_LIVE_HIT" ]; then _AT_LOCKED=0
 elif ! _via_mm && at_long_busy "$PORT"; then _AT_LOCKED=1
 else at_lock "$PORT" 15; _AT_LOCKED=$?; fi
 
@@ -973,6 +1102,18 @@ _ST_CACHE="/tmp/5gmodem/smsstatus_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')
 if [ "$BOX" = status ] && [ "$_AT_LOCKED" != 0 ] && ! _via_mm; then
 	cat "$_ST_CACHE" 2>/dev/null
 	exit 0
+fi
+
+# Reading past a held lock is kept for the pages only. Background readers
+# (archive-run, unseen for the bot, recv with SMS_BG=1 from smscmd) retry next
+# round instead: a read mixed with the poller's answers would be archived with
+# the wrong text, and the purge would then delete the real message from the slot.
+_BG_SKIP=""
+if [ "$_AT_LOCKED" != 0 ] && ! _via_mm; then
+	case "$BOX" in
+		archive-run|unseen) _BG_SKIP=1 ;;
+		recv) [ "$SMS_BG" = 1 ] && _BG_SKIP=1 ;;
+	esac
 fi
 
 _sms_run() {
@@ -984,7 +1125,7 @@ _sms_run() {
 	_sr_o=$(mktemp /tmp/5gmodem-smsrun.XXXXXX) || return 1
 	"$@" > "$_sr_o" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
 	_sr_p=$!
-	( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_sr_t"; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
+	( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_sr_t" & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_sr_p" 2>/dev/null ) </dev/null & _sr_w=$!
 	if (sleep 0.0) 2>/dev/null; then _sr_step=0.1; _sr_max=$(( (_sr_t + 1) * 10 ));
 	else _sr_step=1; _sr_max=$((_sr_t + 1)); fi
 	_sr_i=0
@@ -1005,7 +1146,7 @@ _sms_run() {
 }
 
 ARCH_MAX=$(uci -q get "$CFG.sms.archive_limit")
-case "$ARCH_MAX" in ''|*[!0-9]*) ARCH_MAX=200 ;; esac
+case "$ARCH_MAX" in ''|*[!0-9]*) ARCH_MAX=500 ;; esac
 [ "$ARCH_MAX" -ge 10 ] 2>/dev/null || ARCH_MAX=10
 [ "$ARCH_MAX" -le 2000 ] 2>/dev/null || ARCH_MAX=2000
 ARCH_BASE=100000
@@ -1022,9 +1163,114 @@ _arch_on() {
 	[ "$_ARCH_ON" = 1 ]
 }
 
+# The archive is one file per modem, $(_arch_dir).db. Each message is one record:
+#   @<index>|<key>|<added, epoch s>|<part/total/ref or empty>|<tz or empty>
+#   T<timestamp>
+#   F<sender>
+#    <text line>     (each text line behind one space, so any text reads back as it was)
+# One file instead of a file per message: on ubifs every small file costs a 4 KB block, so
+# 500 messages took ~2 MB; as one file they take ~80 KB, and ubifs compresses that too.
+# New records are appended; deletes and the trim rewrite the file (tmp + mv). Writers take
+# flock on fd 4. _arch_dir itself is the old one-file-per-message directory, migrated once.
 _arch_dir() {
 	_ad=$(printf '%s' "$_TGT_PATH" | sed 's/[^A-Za-z0-9]/_/g')
 	[ -n "$_ad" ] && echo "$SEEN_DIR/sms_arch.$_ad" || echo "$SEEN_DIR/sms_arch"
+}
+
+_arch_file() { echo "$(_arch_dir).db"; }
+
+_arch_lock() {
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	_alk=$(_arch_dir); _alk="/tmp/5gmodem/archlock_${_alk##*/}"
+	exec 4>"$_alk" 2>/dev/null || return 0
+	flock 4 2>/dev/null
+	return 0
+}
+
+_arch_unlock() {
+	flock -u 4 2>/dev/null
+	exec 4>&- 2>/dev/null
+	return 0
+}
+
+# One record from the _A_* fields; $1 index, $2 key, $3 added (epoch seconds).
+_arch_rec() {
+	_arp=""
+	case "$_A_TOTAL" in ''|*[!0-9]*) ;; *) _arp="${_A_PART:-1}/$_A_TOTAL/${_A_REF:-0}" ;; esac
+	printf '@%s|%s|%s|%s|%s\nT%s\nF%s\n' "$1" "$2" "${3:-0}" "$_arp" "$_A_TZ" "$_A_TS" "$_A_FROM"
+	[ -z "$_A_TEXT" ] || printf '%s\n' "$_A_TEXT" | sed 's/^/ /'
+}
+
+# Old layout (a directory, one file per message) -> one file. Indexes, keys and the time each
+# message was stored are kept, so seen lists, forwarding marks and the purge deadline carry over.
+_arch_ready() {
+	_ard=$(_arch_dir)
+	[ -d "$_ard" ] || return 0
+	_arch_lock
+	if [ -d "$_ard" ]; then
+		_arf=$(_arch_file)
+		if : > "$_arf.mig" 2>/dev/null; then
+			_arok=1
+			for _arn in $(_arch_files "$_ard"); do
+				[ -f "$_ard/$_arn" ] || continue
+				case "${_arn%%.*}" in ''|*[!0-9]*) continue ;; esac
+				_arch_read "$_ard/$_arn"
+				_arch_rec "${_arn%%.*}" "${_arn#*.}" "$(date -r "$_ard/$_arn" +%s 2>/dev/null)" \
+					>> "$_arf.mig" || { _arok=""; break; }
+			done
+			[ -s "$_arf" ] && cat "$_arf" >> "$_arf.mig"
+			if [ -n "$_arok" ] && mv -f "$_arf.mig" "$_arf"; then
+				rm -rf "$_ard"
+				logger -t 5gmodem "sms: router archive moved into one file, $_arf"
+			fi
+			rm -f "$_arf.mig" 2>/dev/null
+		fi
+	fi
+	_arch_unlock
+	[ ! -d "$_ard" ]
+}
+
+# Calls $1 for every record, with _A_IDX0, _A_KEY, _A_ADD, _A_TS, _A_FROM, _A_TEXT, _A_PART,
+# _A_TOTAL, _A_REF and _A_TZ set. A record cut short (power lost mid-append) has no F line: skipped.
+_arch_each() {
+	_aecb="$1"; _aef=$(_arch_file)
+	[ -s "$_aef" ] || return 0
+	_ae_ok=""
+	while IFS= read -r _ael || [ -n "$_ael" ]; do
+		case "$_ael" in
+			'@'*)
+				[ -n "$_ae_ok" ] && "$_aecb"
+				_aeh=${_ael#@}
+				_A_IDX0=${_aeh%%|*}; _aeh=${_aeh#*|}
+				_A_KEY=${_aeh%%|*}; _aeh=${_aeh#*|}
+				_A_ADD=${_aeh%%|*}; _aeh=${_aeh#*|}
+				_aep=${_aeh%%|*}; _A_TZ=${_aeh#*|}
+				_A_PART=""; _A_TOTAL=""; _A_REF=""
+				case "$_aep" in
+					*/*/*) _A_PART=${_aep%%/*}; _aep=${_aep#*/}; _A_TOTAL=${_aep%%/*}; _A_REF=${_aep#*/} ;;
+				esac
+				_A_TS=""; _A_FROM=""; _A_TEXT=""; _ae_nt=0; _ae_ok="" ;;
+			T*) _A_TS=${_ael#T} ;;
+			F*) _A_FROM=${_ael#F}; _ae_ok=1 ;;
+			' '*)
+				if [ "$_ae_nt" = 0 ]; then _A_TEXT=${_ael# }; _ae_nt=1
+				else _A_TEXT="$_A_TEXT
+${_ael# }"
+				fi ;;
+		esac
+	done < "$_aef"
+	[ -n "$_ae_ok" ] && "$_aecb"
+	return 0
+}
+
+# Rewrites the file without the records the awk program drops (pass "skip" = 1 on their @ line
+# and print with "!skip"). The caller holds the lock.
+_arch_drop() {
+	_adf=$(_arch_file)
+	[ -f "$_adf" ] || return 0
+	awk -F'|' "$@" "$_adf" > "$_adf.tmp" 2>/dev/null && mv -f "$_adf.tmp" "$_adf"
+	rm -f "$_adf.tmp" 2>/dev/null
+	return 0
 }
 
 _nl_trim() {
@@ -1044,14 +1290,8 @@ _arch_key() {
 }
 
 _arch_next() {
-	_an="$ARCH_BASE"
-	for _anf in "$1"/*.*; do
-		[ -f "$_anf" ] || continue
-		_ani=${_anf##*/}; _ani=${_ani%%.*}
-		case "$_ani" in ''|*[!0-9]*) continue ;; esac
-		[ "$_ani" -ge "$_an" ] && _an=$((_ani + 1))
-	done
-	echo "$_an"
+	[ -s "$1" ] || { echo "$ARCH_BASE"; return 0; }
+	awk -F'|' -v b="$ARCH_BASE" '/^@/ { i = substr($1, 2) + 0; if (i >= b) b = i + 1 } END { print b }' "$1"
 }
 
 _arch_files() {
@@ -1085,23 +1325,23 @@ _arch_read() {
 }
 
 _arch_trim() {
-	_atn=0
-	for _atf in "$1"/*.*; do [ -f "$_atf" ] && _atn=$((_atn + 1)); done
+	_atn=$(grep -c '^@' "$1" 2>/dev/null)
+	case "$_atn" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_atn" -gt "$ARCH_MAX" ] || return 0
-	for _atf in $(_arch_files "$1" | head -n "$((_atn - ARCH_MAX))"); do
-		rm -f "$1/$_atf" 2>/dev/null
-	done
+	# records are appended in index order, so the oldest are the first ones
+	_arch_drop -v d="$((_atn - ARCH_MAX))" '/^@/ { r++ } r > d'
 }
 
 _arch_merge() {
-	_amd=$(_arch_dir)
-	mkdir -p "$_amd" 2>/dev/null || return 0
+	_arch_ready || return 0
+	mkdir -p "$SEEN_DIR" 2>/dev/null || return 0
+	_amd=$(_arch_file)
 	_amj="$1"
 	_LIVE_MAP=" "
 	_AM_SEEN=" "
 	[ -n "$_amj" ] || return 0
-	_amst="/tmp/5gmodem/archmerge_${_amd##*/}"
-	_amsig=$( { printf '%s' "$_amj"; ls "$_amd"; } | md5sum | cut -c1-32)
+	_amst=$(_arch_dir); _amst="/tmp/5gmodem/archmerge_${_amst##*/}"
+	_amsig=$( { printf '%s' "$_amj"; cat "$_amd" 2>/dev/null; } | md5sum | cut -c1-32)
 	if [ "$(sed -n 1p "$_amst" 2>/dev/null)" = "$_amsig" ]; then
 		_LIVE_MAP=$(sed -n 2p "$_amst")
 		[ -n "$_LIVE_MAP" ] || _LIVE_MAP=" "
@@ -1110,7 +1350,9 @@ _arch_merge() {
 	_amn=$(printf '%s' "$_amj" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
 	case "$_amn" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_amn" -gt 0 ] || return 0
+	_arch_lock
 	_amnext=$(_arch_next "$_amd")
+	_amnow=$(date +%s 2>/dev/null)
 	_ami=0
 	while [ "$_ami" -lt "$_amn" ]; do
 		_amx=""; _ams=""; _amt=""; _amc=""; _ampt=""; _amtt=""; _amrf=""; _amtz=""
@@ -1131,24 +1373,20 @@ _arch_merge() {
 			*) _amseen=1 ;;
 		esac
 		_AM_SEEN="$_AM_SEEN$_amk:$_amseen "
-		_amhave=0
-		for _amf in "$_amd"/*."$_amk"; do [ -f "$_amf" ] && _amhave=$((_amhave + 1)); done
+		_amhave=$(grep -c "^@[0-9]*|$_amk|" "$_amd" 2>/dev/null)
+		case "$_amhave" in ''|*[!0-9]*) _amhave=0 ;; esac
 		[ "$_amseen" -le "$_amhave" ] && continue
-		_amhd=""
-		case "$_amtz" in local) _amhd='#tz=local' ;; [+-][0-9]*) _amhd="#tz=$_amtz" ;; esac
-		case "$_ampt$_amtt" in
-			''|*[!0-9]*)
-				{ [ -n "$_amhd" ] && printf '%s\n' "$_amhd"
-				  printf '%s\n%s\n%s' "$_amt" "$_ams" "$_amc"; } > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
-			*)
-				{ [ -n "$_amhd" ] && printf '%s\n' "$_amhd"
-				  printf '#p=%s/%s/%s\n%s\n%s\n%s' "$_ampt" "$_amtt" "${_amrf:-0}" \
-					"$_amt" "$_ams" "$_amc"; } > "$_amd/$_amnext.$_amk" 2>/dev/null ;;
-		esac
+		_A_TZ=""
+		case "$_amtz" in local|[+-][0-9]*) _A_TZ="$_amtz" ;; esac
+		_A_PART=""; _A_TOTAL=""; _A_REF=""
+		case "$_ampt$_amtt" in ''|*[!0-9]*) ;; *) _A_PART="$_ampt"; _A_TOTAL="$_amtt"; _A_REF="${_amrf:-0}" ;; esac
+		_A_TS="$_amt"; _A_FROM=$(printf '%s' "$_ams" | tr -d '\r\n'); _A_TEXT="$_amc"
+		_arch_rec "$_amnext" "$_amk" "$_amnow" >> "$_amd" 2>/dev/null
 		_amnext=$((_amnext + 1))
 	done
 	_arch_trim "$_amd"
-	_amsig=$( { printf '%s' "$_amj"; ls "$_amd"; } | md5sum | cut -c1-32)
+	_arch_unlock
+	_amsig=$( { printf '%s' "$_amj"; cat "$_amd" 2>/dev/null; } | md5sum | cut -c1-32)
 	printf '%s\n%s\n' "$_amsig" "$_LIVE_MAP" > "$_amst" 2>/dev/null
 }
 
@@ -1164,33 +1402,33 @@ _arch_index() {
 	esac
 }
 
+_arch_json_one() {
+	_arch_index "$_A_IDX0" "$_A_KEY"
+	_aj_h=""
+	case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _aj_h="$_A_KEY" ;; esac
+	_kb_put "$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_aj_h"
+	json_add_object ""
+	json_add_int index "$_A_IDX"
+	json_add_string sender "$_A_FROM"
+	json_add_string timestamp "$_A_TS"
+	[ -n "$_A_TZ" ] && json_add_string tz "$_A_TZ"
+	json_add_string content "$_A_TEXT"
+	case "$_A_TOTAL" in
+		''|*[!0-9]*) ;;
+		*)
+			json_add_int part "${_A_PART:-1}"
+			json_add_int total "$_A_TOTAL"
+			json_add_int reference "${_A_REF:-0}" ;;
+	esac
+	json_close_object
+}
+
 _arch_json() {
 	. /usr/share/libubox/jshn.sh
-	_ajd=$(_arch_dir)
+	_arch_ready
 	json_init
 	json_add_array msg
-	for _ajf in $(_arch_files "$_ajd"); do
-		[ -f "$_ajd/$_ajf" ] || continue
-		_arch_read "$_ajd/$_ajf"
-		_arch_index "${_ajf%%.*}" "${_ajf#*.}"
-		_aj_h=""
-		case "$_A_TOTAL" in ''|0|1|*[!0-9]*) _aj_h=${_ajf#*.} ;; esac
-		_kb_put "$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT" "$_A_PART" "$_A_TOTAL" "$_A_REF" "$_aj_h"
-		json_add_object ""
-		json_add_int index "$_A_IDX"
-		json_add_string sender "$_A_FROM"
-		json_add_string timestamp "$_A_TS"
-		[ -n "$_A_TZ" ] && json_add_string tz "$_A_TZ"
-		json_add_string content "$_A_TEXT"
-		case "$_A_TOTAL" in
-			''|*[!0-9]*) ;;
-			*)
-				json_add_int part "${_A_PART:-1}"
-				json_add_int total "$_A_TOTAL"
-				json_add_int reference "${_A_REF:-0}" ;;
-		esac
-		json_close_object
-	done
+	_arch_each _arch_json_one
 	json_close_array
 	_kb_build
 	json_add_array keys
@@ -1209,25 +1447,29 @@ _arch_json() {
 	json_dump
 }
 
+_arch_text_one() {
+	_arch_index "$_A_IDX0" "$_A_KEY"
+	printf 'MSG: %s\nFrom: %s\nDate/Time: %s\n%s\n\n' "$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT"
+}
+
 _arch_text() {
-	_axd=$(_arch_dir)
-	for _axf in $(_arch_files "$_axd"); do
-		[ -f "$_axd/$_axf" ] || continue
-		_arch_read "$_axd/$_axf"
-		_arch_index "${_axf%%.*}" "${_axf#*.}"
-		printf 'MSG: %s\nFrom: %s\nDate/Time: %s\n%s\n\n' \
-			"$_A_IDX" "$_A_FROM" "$_A_TS" "$_A_TEXT"
-	done
+	_arch_ready
+	_arch_each _arch_text_one
 }
 
 _arch_count() {
-	_acn=0
-	for _acf in "$(_arch_dir)"/*.*; do [ -f "$_acf" ] && _acn=$((_acn + 1)); done
+	_arch_ready
+	_acn=$(grep -c '^@' "$(_arch_file)" 2>/dev/null)
+	case "$_acn" in ''|*[!0-9]*) _acn=0 ;; esac
 	echo "$_acn"
 }
 
 _arch_del_index() {
-	rm -f "$(_arch_dir)/$1".* 2>/dev/null
+	case "$1" in ''|*[!0-9]*) return 0 ;; esac
+	_arch_ready
+	_arch_lock
+	_arch_drop -v x="$1" '/^@/ { skip = (substr($1, 2) == x) } !skip'
+	_arch_unlock
 }
 
 _arch_del_live() {
@@ -1240,9 +1482,11 @@ _arch_del_live() {
 			_ads=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].sender" 2>/dev/null)
 			_adt=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].timestamp" 2>/dev/null)
 			_adc=$(printf '%s' "$2" | jsonfilter -e "@.msg[$_adi].content" 2>/dev/null)
-			for _adf in "$(_arch_dir)"/*."$(_arch_key "$_ads" "$_adt" "$_adc")"; do
-				[ -f "$_adf" ] && { rm -f "$_adf" 2>/dev/null; break; }
-			done
+			_adk=$(_arch_key "$_ads" "$_adt" "$_adc")
+			_arch_ready
+			_arch_lock
+			_arch_drop -v k="$_adk" '/^@/ { skip = 0; if (!done && $2 == k) { skip = 1; done = 1 } } !skip'
+			_arch_unlock
 			return 0
 		fi
 		_adi=$((_adi + 1))
@@ -1250,7 +1494,10 @@ _arch_del_live() {
 }
 
 _arch_wipe() {
-	rm -f "$(_arch_dir)"/*.* 2>/dev/null
+	_arch_ready
+	_arch_lock
+	rm -f "$(_arch_file)" 2>/dev/null
+	_arch_unlock
 }
 
 _pdu_tz() {
@@ -1301,9 +1548,6 @@ _tz_tag() {
 	printf '%s' "$_tt_j" | sed "${_tt_sed#;}"
 }
 
-_arch_live_json() {
-	_tz_tag "$(_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' -j $_STORE_ARG recv 2>/dev/null | utf8_fix)"
-}
 
 ARCH_GRACE_MIN=60
 
@@ -1318,8 +1562,10 @@ _arch_purge() {
 		_ap_why '-' "slot purge is disabled in settings"
 		return 0
 	fi
-	_apd=$(_arch_dir)
-	[ -d "$_apd" ] || return 0
+	_arch_ready || return 0
+	_apd=$(_arch_file)
+	[ -f "$_apd" ] || return 0
+	_ap_now=$(date +%s 2>/dev/null); case "$_ap_now" in ''|*[!0-9]*) _ap_now=0 ;; esac
 	_apn=$(printf '%s' "$1" | jsonfilter -e '@.msg[*].index' 2>/dev/null | wc -l)
 	case "$_apn" in ''|*[!0-9]*) return 0 ;; esac
 	[ "$_apn" -gt 0 ] || return 0
@@ -1346,16 +1592,19 @@ _arch_purge() {
 		fi
 
 		_ap_k=$(_arch_key "$_ap_s" "$_ap_t" "$_ap_c")
-		_ap_have=""
-		for _apf in "$_apd"/*."$_ap_k"; do [ -f "$_apf" ] && { _ap_have="$_apf"; break; }; done
+		_ap_have=$(grep -m 1 "^@[0-9]*|$_ap_k|" "$_apd" 2>/dev/null)
 		if [ -z "$_ap_have" ]; then
 			_ap_stuck=$((_ap_stuck + 1))
 			_ap_why "$_ap_x" "not archived yet"
 			continue
 		fi
 
+		# record header: @index|key|added|...
+		_ap_fn=${_ap_have#@}; _ap_fn=${_ap_fn%%|*}
+		_ap_add=${_ap_have#*|}; _ap_add=${_ap_add#*|}; _ap_add=${_ap_add%%|*}
+		case "$_ap_add" in ''|*[!0-9]*) _ap_add=0 ;; esac
 		_ap_late=0
-		[ -n "$(find "$_ap_have" -mmin +"$ARCH_GRACE_MIN" 2>/dev/null)" ] && _ap_late=1
+		[ $((_ap_now - _ap_add)) -gt $((ARCH_GRACE_MIN * 60)) ] && _ap_late=1
 
 		_ap_wait=0
 		if [ -n "$_ap_chs" ] && [ "$_ap_late" = 0 ]; then
@@ -1370,7 +1619,6 @@ _arch_purge() {
 				done
 				_ap_kb=1
 			fi
-			_ap_fn=${_ap_have##*/}; _ap_fn=${_ap_fn%%.*}
 			_ap_kn=""
 			case "$_ap_fn" in ''|*[!0-9]*) ;; *) eval "_ap_kn=\$_kb_ix$_ap_fn" ;; esac
 			if [ -n "$_ap_kn" ]; then
@@ -1403,6 +1651,7 @@ _arch_purge() {
 		MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_ap_x" >/dev/null 2>&1 \
 			&& _ap_del=$((_ap_del + 1))
 	done
+	_live_drop
 	[ -n "$_AP_WHY" ] && return 0
 	if [ "$_ap_del" -gt 0 ]; then
 		logger -t 5gmodem "sms: messages moved to router storage and deleted from the modem: $_ap_del"
@@ -1470,6 +1719,7 @@ _fwd_purge() {
 		MM_MODEM_PATH="$_TGT_PATH" _sms_run 12 $(_smstool) -d "$PORT" delete "$_fp_x" >/dev/null 2>&1 \
 			&& _fp_del=$((_fp_del + 1))
 	done
+	_live_drop
 	[ "$_fp_del" -gt 0 ] && [ -z "$_AP_WHY" ] && \
 		logger -t 5gmodem "sms: forwarded messages deleted from the modem: $_fp_del"
 	return 0
@@ -1477,7 +1727,7 @@ _fwd_purge() {
 
 case "$BOX" in
 recv|unseen|sent|status|dump|archive-run|archive-why)
-	if ! _via_mm && [ "$_TGT_PATH" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ]; then
+	if [ -z "$_BG_SKIP" ] && [ -z "$_LIVE_HIT" ] && ! _via_mm && [ "$_TGT_PATH" = "$(uci -q get "$CFG.@5gmodem[0].active_modem")" ]; then
 		_cs_mark="/tmp/5gmodem/cpms_$(printf '%s' "$PORT" | tr -c 'A-Za-z0-9' '_')"
 		_cs_st=$(cat "$_cs_mark" 2>/dev/null)
 		if [ "$_cs_st" != ok ] && [ "${#_cs_st}" -lt 3 ] && ! at_long_busy "$PORT" && ! mm_assembling "$_TGT_PATH"; then
@@ -1522,7 +1772,7 @@ _cnmi_fix() {
 			logger -t 5gmodem "sms: $PORT had CNMI 0,0 (reset by the modem), set 2,1,0,0,0 so incoming SMS are stored" ;;
 	esac
 }
-[ "$BOX" = delete-run ] || { _store_pick; _cnmi_fix; }
+[ "$BOX" = delete-run ] || [ -n "$_BG_SKIP" ] || [ -n "$_LIVE_HIT" ] || { _store_pick; _cnmi_fix; }
 
 set -- -d "$PORT" -f '%Y-%m-%d %H:%M' -j
 [ -n "$_STORE_ARG" ] && set -- $_STORE_ARG "$@"
@@ -1544,6 +1794,7 @@ case "$BOX" in
 		[ -n "$_st_out" ] && printf '%s\n' "$_st_out"
 		exit $_st_rc ;;
 	archive-run)
+		[ -n "$_BG_SKIP" ] && { echo '{"result":"busy"}'; exit 0; }
 		if ! _arch_on || { _via_mm && [ "$(uci -q get "$CFG.sms.archive")" != "1" ]; }; then
 			_fwd_del_on || { _arch_on && echo '{"result":"mm"}' || echo '{"result":"off"}'; exit 0; }
 			_fwd_purge "$(_arch_live_json)"
@@ -1599,6 +1850,7 @@ case "$BOX" in
 					case "$_dl_i" in ''|*[!0-9]*) continue ;; esac
 					_sms_run 12 $(_smstool) -d "$PORT" delete "$_dl_i"
 				done
+				_live_drop
 				exit 0 ;;
 			''|*[!0-9]*) echo "bad index" >&2; exit 2 ;;
 			*)
@@ -1610,7 +1862,9 @@ case "$BOX" in
 					fi
 					_arch_del_live "$DEL" "$(_arch_live_json)"
 				fi
-				_sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; exit $? ;;
+				_sms_run 15 $(_smstool) -d "$PORT" delete "$DEL"; _dl_rc=$?
+				_live_drop
+				exit $_dl_rc ;;
 		esac ;;
 	delete-run)
 		_dr_live=""
@@ -1618,7 +1872,7 @@ case "$BOX" in
 			if [ "$_dr_i" -ge "$ARCH_BASE" ]; then
 				_arch_del_index "$_dr_i"
 				_dr_left=""
-				for _dr_f in "$(_arch_dir)/$_dr_i".*; do [ -f "$_dr_f" ] && _dr_left=1; done
+				grep -q "^@$_dr_i|" "$(_arch_file)" 2>/dev/null && _dr_left=1
 				if [ -n "$_dr_left" ]; then _dj_fail "$_dr_i" archive ""; else _dj_ok "$_dr_i"; fi
 				_dj_write running
 			else
@@ -1666,6 +1920,7 @@ case "$BOX" in
 			esac
 			_DJ_DONE=$((_DJ_DONE + 1)); _dj_write running
 		done
+		_live_drop
 		_dr_after=$(_arch_live_json)
 		_dr_seen=""
 		case "$_dr_after" in
@@ -1758,7 +2013,7 @@ case "$BOX" in
 		_sms_run 45 $(_smstool) -d "$PORT" -f '%Y-%m-%d %H:%M' $_STORE_ARG recv | utf8_fix; exit $? ;;
 	*)
 		if _arch_on; then
-			_arch_merge "$(_arch_live_json)"
+			[ -n "$_BG_SKIP" ] || _arch_merge "$(_arch_live_json)"
 			if [ "$BOX" = unseen ]; then
 				[ -n "$_AT_INH" ] || at_unlock
 				_kb_feed_arch
@@ -1769,7 +2024,8 @@ case "$BOX" in
 			_arch_json
 			exit 0
 		fi
-		_rv_j=$(_tz_tag "$(_sms_run 45 $(_smstool) "$@" recv | utf8_fix)")
+		[ -n "$_BG_SKIP" ] && exit 0
+		_rv_j=$(_live_json)
 		[ -n "$_AT_INH" ] || at_unlock
 		_kb_out "$_rv_j"
 		exit 0 ;;

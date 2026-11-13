@@ -57,15 +57,6 @@ uci() {
                     time.sleep(0.01)
                 self.assertEqual(result_file.read_text(), 'reapply 1-1')
 
-    def test_legacy_huawei_noservice_signal_branch(self):
-        source = (SHARE / 'modem/hilink/huawei_hilink.sh').read_text()
-        start = source.index('if [ "x$MODE" = "xLTE" ]')
-        block = source[start:source.index('\nMODEL=$(getvalue', start)]
-        result = shell('MODE=NOSERVICE\ngetvaluens() { echo -105; }\n' + block
-                       + '\nprintf "%s %s %s" "$RSRP" "$SINR" "$RSRQ"')
-        self.assertEqual(result.stderr, '')
-        self.assertEqual(result.stdout, '-105 -105 -105')
-
     def test_detached_operator_refresh_drops_inherited_locks(self):
         line = next(line for line in (SHARE / 'netpri.sh').read_text().splitlines()
                     if '/netpri.sh refresh &' in line)
@@ -161,19 +152,6 @@ _collect_ping
             self.assertEqual(result.stderr, '')
             self.assertEqual((temp / 'calls').read_text().splitlines(), ['call'])
             self.assertEqual((temp / 'stats/ping.wan.label').read_text(), 'wan')
-
-    def test_legacy_zte_model_and_operator(self):
-        source = (SHARE / 'modem/hilink/zte.sh').read_text()
-        fixtures = {'manufacturer_name': 'ZTE', 'model_name': 'MF823',
-                    'network_type': 'LTE', 'hmcc': '250', 'hmnc': '20',
-                    'lte_rsrp': '-105', 'lte_rsrq': '-12', 'rssi': '-71'}
-        source = source.replace('. /usr/share/libubox/jshn.sh', '\n'.join(
-            key + '=' + shlex.quote(value) for key, value in fixtures.items()))
-        source = 'wget() { :; }; json_load() { :; }; json_get_vars() { :; }\n' + source
-        result = shell('set -- 192.0.2.1\n' + source + '\nprintf "model=%s\\n" "$MODEL"')
-        self.assertEqual(result.stderr, '')
-        self.assertIn('model=ZTE MF823\n', result.stdout)
-        self.assertIn('+COPS: 0,2,"25020",x\n', result.stdout)
 
     def test_ussd_cancel_does_not_touch_busy_port(self):
         with tempfile.TemporaryDirectory() as temp:

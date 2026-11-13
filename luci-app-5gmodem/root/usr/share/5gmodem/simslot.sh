@@ -455,7 +455,7 @@ if [ "$_VIA" = qmi ]; then
 		_qo="/tmp/5gmodem/uim.$$"
 		qmicli_p "$_WDM" "$@" > "$_qo" 2>&1 &
 		_qp=$!
-		( sleep 20; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
+		( sleep 20 & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill -9 "$_qp" 2>/dev/null ) >/dev/null 2>&1 &
 		_qw=$!
 		wait "$_qp" 2>/dev/null; kill "$_qw" 2>/dev/null; wait "$_qw" 2>/dev/null
 		cat "$_qo"; rm -f "$_qo"

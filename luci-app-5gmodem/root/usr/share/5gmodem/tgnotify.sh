@@ -260,9 +260,11 @@ tick() {
 	return 0
 }
 
+_TG_LM=""
 _tg_has_sms() {
 	[ "$(uci -q get "$CFG.$(_tg_sec "$1").kind")" = "hilink" ] && return 0
-	"$RES/listmodems.sh" 2>/dev/null \
+	[ -n "$_TG_LM" ] || _TG_LM=$("$RES/listmodems.sh" 2>/dev/null)
+	printf '%s' "$_TG_LM" \
 		| jsonfilter -e "@[@.path=\"$1\"].tty[0]" -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null \
 		| grep -q .
 }

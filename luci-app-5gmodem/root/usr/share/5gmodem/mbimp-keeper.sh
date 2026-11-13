@@ -22,6 +22,7 @@ probe() {
 	done
 	kill -9 "$_kp_p" 2>/dev/null
 	wait "$_kp_p" 2>/dev/null
+	_kp_p=""
 	_kp_r=2
 	grep -q "Activation state: 'activated'" "$_kp_o" 2>/dev/null && _kp_r=0
 	grep -qE "Activation state: '(deactivated|deactivating|unknown)'" "$_kp_o" 2>/dev/null && _kp_r=1
@@ -48,16 +49,24 @@ mm_enable() {
 	_me_p=$(uci -q get "network.$IFACE.modem_path")
 	[ -n "$_me_p" ] || return 0
 	_me_now=$(cut -d. -f1 /proc/uptime)
-	_me_i=$(/usr/share/5gmodem/modemswitch.sh mmindex "$_me_p" 2>/dev/null)
-	case "$_me_i" in
-		''|*[!0-9]*)
-			if [ -n "$USBDEV" ] && [ "$(( _me_now - MM_SYNC_AT ))" -ge 120 ]; then
-				MM_SYNC_AT=$_me_now
-				mm_report add
-			fi
-			return 0 ;;
-	esac
-	_me_k=$(mmcli -m "$_me_i" -K 2>/dev/null)
+	# Same match as "modemswitch.sh mmindex", done here so the -K dump of the found
+	# modem is reused: this runs every 20 s, and the helper cost a fork of the whole
+	# modemswitch.sh plus a second mmcli -K of the same modem.
+	_me_i=""; _me_k=""
+	for _me_m in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
+		_me_k=$(mmcli -m "$_me_m" -K 2>/dev/null)
+		for _me_d in $(printf '%s\n' "$_me_k" | sed -n -e 's/^modem\.generic\.device *: *//p' \
+				-e 's/^modem\.generic\.physdev *: *//p'); do
+			case "$_me_d" in */"$_me_p") _me_i="$_me_m"; break 2 ;; esac
+		done
+	done
+	if [ -z "$_me_i" ]; then
+		if [ -n "$USBDEV" ] && [ "$(( _me_now - MM_SYNC_AT ))" -ge 120 ]; then
+			MM_SYNC_AT=$_me_now
+			mm_report add
+		fi
+		return 0
+	fi
 	if [ -n "$USBDEV" ] && ! printf '%s\n' "$_me_k" | grep -qE '^modem\.generic\.ports\.value\[[0-9]+\] *: *[A-Za-z0-9-]+ \(mbim\)'; then
 		_me_gap=300
 		[ "$MM_FIX_N" = 0 ] && _me_gap=45
@@ -85,7 +94,9 @@ mm_enable() {
 	logger -t 5gmodem "MBIM+MM: enabled modem $_me_p in ModemManager (management only, the data session stays with interface $IFACE)"
 }
 
-trap 'rm -f "/tmp/5gmodem/mbimp-keeper.$$.out" "/tmp/5gmodem/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
+# netifd stops the keeper with TERM on teardown; do not leave a probe running
+_kp_p=""
+trap '[ -n "$_kp_p" ] && kill -9 "$_kp_p" 2>/dev/null; rm -f "/tmp/5gmodem/mbimp-keeper.$$.out" "/tmp/5gmodem/mbimp-keeper.$IFACE.kick"; exit 0' TERM INT
 
 KICK="/tmp/5gmodem/mbimp-keeper.$IFACE.kick"
 FAST_UNTIL=0

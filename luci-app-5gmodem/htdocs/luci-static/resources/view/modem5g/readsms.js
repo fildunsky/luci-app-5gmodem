@@ -36,7 +36,19 @@ var mn = parseInt(m) || 100;
 var pc = Math.floor((100 / mn) * vn);
 
 pg.firstElementChild.style.width = pc + '%';
-pg.setAttribute('title', _('Memory: %s/%s').format(v, m));
+pg.setAttribute('title', sms_mem_label(v, m));
+}
+
+// Say whose memory the bar counts: with the router archive on (always on over ModemManager)
+// the numbers are the archive's, otherwise the SIM's or the modem's, as picked above the bar.
+function sms_mem_label(v, m) {
+	if (uci.get('5gmodem', 'sms', 'archive') == '1' || uci.get('5gmodem', 'sms', 'sms_via_mm') == '1') {
+		return _('Router memory: %s/%s').format(v, m);
+	}
+	if ((uci.get('5gmodem', 'sms', 'storage') || 'ME') === 'SM') {
+		return _('SIM memory: %s/%s').format(v, m);
+	}
+	return _('Modem memory: %s/%s').format(v, m);
 }
 
 function sms_parse_status(res) {
@@ -527,6 +539,79 @@ function sms_make_card(item, iconSrc, hide) {
 	return card;
 }
 
+// Parts of one long SMS share sender, the 8-bit UDH reference and the part
+// count. The reference wraps, so one sender reuses it: a part joins a group only
+// within SMS_GROUP_WINDOW of the group's first part and only into a free part
+// slot. A byte-identical copy of a stored part rides along so deleting the card
+// frees its slot too; any other part with a taken number starts its own group.
+// 24 h: parts carry the SMSC time stamp, so they are seconds apart however late
+// they arrive. Keep in step with _kb_build in smsbridge.sh.
+var SMS_GROUP_WINDOW = 24 * 3600 * 1000;
+function sms_merge_parts(json) {
+	var groups = [], open = {};
+	json.forEach(function(o) {
+		var total = parseInt(o.total, 10), pn = parseInt(o.part, 10);
+		if (o.reference == null || !(total > 1) || isNaN(pn)) {
+			groups.push({ parts: [ o ], all: [ o ] });
+			return;
+		}
+		var base = [ o.sender, o.reference, total ].join('#');
+		var ts = sms_ts_num(o.timestamp);
+		var list = open[base] = open[base] || [];
+		var g = null, dup = false;
+		for (var i = 0; i < list.length && !g; i++) {
+			var c = list[i];
+			if (ts && c.ts && Math.abs(ts - c.ts) > SMS_GROUP_WINDOW) { continue; }
+			var have = c.byPart[pn];
+			if (have === undefined) { g = c; }
+			else if (String(have.content) === String(o.content)) { g = c; dup = true; }
+		}
+		if (!g) {
+			g = { ts: ts, byPart: {}, parts: [], all: [] };
+			list.push(g);
+			groups.push(g);
+		}
+		if (!dup) { g.byPart[pn] = o; g.parts.push(o); }
+		else if (String(o.timestamp || '') >= String(g.byPart[pn].timestamp || '')) {
+			// a resent segment: the later copy gives the time, as before
+			g.parts[g.parts.indexOf(g.byPart[pn])] = o;
+			g.byPart[pn] = o;
+		}
+		g.all.push(o);
+	});
+	return groups.map(function(g) {
+		var parts = g.parts.slice().sort(function(a, b) { return (a.part || 0) - (b.part || 0); });
+		var first = parts[0];
+		var text = parts.map(function(p) { return p.content; }).join('');
+		var want = first.total || 0;
+		if (want > 1 && parts.length < want) {
+			text += ' [' + parts.length + '/' + want + ']';
+		}
+		var pkeys = [], pkp = [];
+		g.all.forEach(function(p) {
+			var pk = sms_msg_key(p), po = sms_msg_old(p);
+			if (pkeys.indexOf(pk) < 0) { pkeys.push(pk); }
+			if (!pkp.some(function(x) { return x[0] === pk && x[1] === po; })) {
+				pkp.push([ pk, po ]);
+			}
+		});
+		var idx = parts.map(function(p) { return p.index; });
+		g.all.forEach(function(p) { if (parts.indexOf(p) < 0) { idx.push(p.index); } });
+		return {
+			android_new: sms_android_new(parts),
+			android_read: sms_android_read(parts),
+			sender: first.sender,
+			timestamp: first.timestamp,
+			tz: first.tz,
+			total: first.total,
+			index: idx.join('-'),
+			content: text,
+			keys: pkeys,
+			kp: pkp
+		};
+	});
+}
+
 function sms_persist(values) {
 	var args = [ 'smsopt' ];
 	for (var k in values) {
@@ -670,13 +755,12 @@ function isPortlessSmsModem() {
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ smssettings, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
 		return Promise.all([
 			uci.load('5gmodem'),
-			L.resolveDefault(uci.load('5gmodem')),
 			L.resolveDefault(uci.load('defmodems')),
 			sms_seen_load()
 		]);
@@ -1144,52 +1228,7 @@ return view.extend({
 
 									if (smsM == "1") {
 
-											var groups = {};
-											json.forEach(function(o) {
-												var key = (o.reference != null && o.total > 1)
-													? o.sender + '#ref#' + o.reference + '#' + o.total
-													: o.sender + '#one#' + o.timestamp + '#' + o.index;
-												(groups[key] = groups[key] || []).push(o);
-											});
-											var result = Object.keys(groups).map(function(k) {
-												var parts = groups[k].sort(function(a, b) { return (a.part || 0) - (b.part || 0); });
-												var byPart = {}, dedup = [];
-												parts.forEach(function(p) {
-													var pn = (p.part == null) ? ('i' + p.index) : String(p.part);
-													var prev = byPart[pn];
-													if (prev === undefined) { byPart[pn] = dedup.push(p) - 1; return; }
-													if (String(p.timestamp || '') >= String(dedup[prev].timestamp || '')) {
-														dedup[prev] = p;
-													}
-												});
-												parts = dedup;
-												var first = parts[0];
-												var text = parts.map(function(p) { return p.content; }).join('');
-												var want = first.total || 0;
-												if (want > 1 && parts.length < want) {
-													text += ' [' + parts.length + '/' + want + ']';
-												}
-												var pkeys = [], pkp = [];
-												groups[k].forEach(function(p) {
-													var pk = sms_msg_key(p), po = sms_msg_old(p);
-													if (pkeys.indexOf(pk) < 0) { pkeys.push(pk); }
-													if (!pkp.some(function(x) { return x[0] === pk && x[1] === po; })) {
-														pkp.push([ pk, po ]);
-													}
-												});
-												return {
-													android_new: sms_android_new(parts),
-													android_read: sms_android_read(parts),
-													sender: first.sender,
-													timestamp: first.timestamp,
-													tz: first.tz,
-													total: first.total,
-													index: parts.map(function(p) { return p.index; }).join('-'),
-													content: text,
-													keys: pkeys,
-													kp: pkp
-												};
-											});
+											var result = sms_merge_parts(json);
 											result.forEach(function(o) { o._ts = sms_ts_num(o.timestamp); });
 											result.sort(function(a, b) { return b._ts - a._ts; });
 											result.forEach(function(o) { delete o._ts; });

@@ -24,6 +24,33 @@ store_arg() {
 	printf -- '-s %s' "$2"
 }
 
+# sms_tool status under the port lock and a watchdog: this runs every few
+# minutes from sms_led.sh, a bare call raced the metrics poller on the port and
+# a hung one stayed forever, with sms_led.sh starting another one each period.
+led_status() {
+	[ -c "$1" ] || return 1
+	[ -n "$AT_LOCK_FD" ] || . /usr/share/5gmodem/atlock.sh 2>/dev/null
+	_lst_sa=$(store_arg "$1" "$2")
+	if command -v at_lock >/dev/null 2>&1; then
+		at_lock "$1" 15 || return 1
+	fi
+	_lst_o=$(mktemp /tmp/5gmodem-smsled.XXXXXX 2>/dev/null) || { command -v at_unlock >/dev/null 2>&1 && at_unlock; return 1; }
+	sms_tool $_lst_sa -d "$1" status > "$_lst_o" 2>/dev/null </dev/null 7>&- 8>&- 9>&- &
+	_lst_p=$!
+	_lst_i=0
+	while kill -0 "$_lst_p" 2>/dev/null && [ "$_lst_i" -lt 20 ]; do
+		sleep 1; _lst_i=$((_lst_i + 1))
+	done
+	if kill -0 "$_lst_p" 2>/dev/null; then
+		kill -9 "$_lst_p" 2>/dev/null
+	else
+		wait "$_lst_p" 2>/dev/null
+	fi
+	command -v at_unlock >/dev/null 2>&1 && at_unlock
+	cat "$_lst_o"
+	rm -f "$_lst_o"
+}
+
 debug_log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$DEBUG_FILE"
 }
@@ -74,6 +101,12 @@ handle_old_format() {
     
     SMSD=$(echo $SMSC | tr -dc '0-9')
     debug_log "SMSD (saved count): $SMSD"
+
+    if [ -z "$SMS" ]; then
+        debug_log "No count (port busy or no answer)"
+        return 0
+    fi
+    [ -n "$SMSD" ] || SMSD=0
 
     if [ "$SMS" = "$SMSD" ]; then
         debug_log "No new SMS (SMS=$SMS equals SMSD=$SMSD)"
@@ -138,7 +171,7 @@ handle_new_format() {
         debug_log "Modem #$modem_num: storage='$MEM'"
         
         debug_log "Modem #$modem_num: reading SMS count with sms_tool..."
-        STX=$(sms_tool $(store_arg "$DEV" "$MEM") -d $DEV status 2>/dev/null | cut -c23-27)
+        STX=$(led_status "$DEV" "$MEM" | sed -n 's/.*used: *\([0-9]*\).*/\1/p' | head -1)
         SMS=$(echo $STX | tr -dc '0-9')
         
         if [ -z "$SMS" ]; then

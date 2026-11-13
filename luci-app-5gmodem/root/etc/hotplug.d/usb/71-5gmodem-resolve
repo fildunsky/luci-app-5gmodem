@@ -13,15 +13,21 @@ rm -f /tmp/5gmodem/listmodems.cache /tmp/5gmodem/listmodems.stamp 2>/dev/null
 touch /tmp/5gmodem/resolve.pending
 
 (
-	flock -n 9 || exit 0
-	while [ -f /tmp/5gmodem/resolve.pending ]; do
-		rm -f /tmp/5gmodem/resolve.pending
-		sleep 5
-		/usr/share/5gmodem/usbmode-fix.sh >/dev/null 2>&1
-		/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
-		/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
-		/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
-		/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+	while :; do
+		flock -n 9 || exit 0
+		while [ -f /tmp/5gmodem/resolve.pending ]; do
+			rm -f /tmp/5gmodem/resolve.pending
+			sleep 5
+			/usr/share/5gmodem/usbmode-fix.sh >/dev/null 2>&1
+			/usr/share/5gmodem/listmodems.sh --refresh >/dev/null 2>&1
+			/usr/share/5gmodem/modemswitch.sh resolve >/dev/null 2>&1
+			/usr/share/5gmodem/modemswitch.sh autosetup >/dev/null 2>&1
+			/usr/share/5gmodem/ensureports.sh >/dev/null 2>&1
+		done
+		# an event that set the flag after the last check but before we let go of
+		# the lock failed its own flock -n; pick it up instead of dropping it
+		flock -u 9
+		[ -f /tmp/5gmodem/resolve.pending ] || exit 0
 	done
 ) 9>/tmp/5gmodem/resolve.lock >/dev/null 2>&1 </dev/null &
 

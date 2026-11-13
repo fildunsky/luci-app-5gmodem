@@ -7,13 +7,16 @@ _MODES="1:Auto 4:4G 6:5G"
 
 _BND_NOW=""
 _BND_CAP=""
+_BND_NOW_Q=""
+_BND_CAP_Q=""
 _WS46_CAP=""
 _MODEL=""
 
 _port_ok() { [ -n "$_DEVICE" ] && [ -e "$_DEVICE" ]; }
 
 _now() {
-	if [ -z "$_BND_NOW" ] && _port_ok; then
+	if [ -z "$_BND_NOW$_BND_NOW_Q" ] && _port_ok; then
+		_BND_NOW_Q=1
 		_BND_NOW=$(sms_tool -d $_DEVICE at "AT#BND?" 2>/dev/null | tr -d '\r ' \
 			| sed -n 's/^#BND://p' | head -1)
 	fi
@@ -21,7 +24,8 @@ _now() {
 }
 
 _cap() {
-	if [ -z "$_BND_CAP" ] && _port_ok; then
+	if [ -z "$_BND_CAP$_BND_CAP_Q" ] && _port_ok; then
+		_BND_CAP_Q=1
 		_BND_CAP=$(sms_tool -d $_DEVICE at "AT#BND=?" 2>/dev/null | tr -d '\r ' \
 			| sed -n 's/^#BND://p' | head -1 | sed 's/^(//; s/)$//; s/),(/;/g')
 	fi
@@ -55,17 +59,22 @@ _himask() {
 	bandstohex "$_h"
 }
 
+# The _now/_cap memo only survives in the shell that filled it: fill it here, before
+# the $(...) helpers fork, so one getter sends one AT#BND? / AT#BND=? instead of 3-5.
 _read_pair() {
+	_now >/dev/null
 	[ "$(_nowN)" -ge $(($1 + 1)) ] 2>/dev/null || return 0
 	_pair2bands "$(_nowf "$1")" "$(_nowf $(($1 + 1)))"
 }
 
 _read_cap_pair() {
+	_cap >/dev/null
 	[ "$(_capN)" -ge $(($1 + 1)) ] 2>/dev/null || return 0
 	_pair2bands "$(_capf "$1")" "$(_capf $(($1 + 1)))"
 }
 
 _write_pair() {
+	_now >/dev/null
 	_n=$(_nowN)
 	[ "$_n" -ge $(($1 + 1)) ] 2>/dev/null || return 1
 	_out=""; _i=1
@@ -76,6 +85,8 @@ _write_pair() {
 		_out="$_out,$_v"
 		_i=$((_i + 1))
 	done
+	# the mask changed: a later write in this shell (restorebands) must read it again
+	_BND_NOW=""; _BND_NOW_Q=""
 	sms_tool -d $_DEVICE at "AT#BND=${_out#,}"
 }
 
@@ -118,6 +129,7 @@ setbands5gnsa() {
 }
 
 _sa_lo() {
+	_cap >/dev/null
 	_sn=$(_capN)
 	[ "$_sn" -gt 0 ] 2>/dev/null || _sn=$(_nowN)
 	if [ "$_sn" -ge 10 ] 2>/dev/null; then
@@ -133,16 +145,18 @@ _sa_lo() {
 }
 
 getsupportedbands5gsa() {
+	_cap >/dev/null
 	_B=$(_read_cap_pair "$(_sa_lo)")
 	[ -n "$_B" ] || { _port_ok && return; echo "$_DEFAULT_5GSA_BANDS"; }
 	echo "$_B"
 }
 
-getbands5gsa() { _read_pair "$(_sa_lo)"; }
+getbands5gsa() { _cap >/dev/null; _read_pair "$(_sa_lo)"; }
 
 setbands5gsa() {
 	_BS="$1"
 	[ "$_BS" = "default" ] && _BS="$(getsupportedbands5gsa)"
+	_cap >/dev/null
 	_write_pair "$(_sa_lo)" "$(_lomask "$_BS")" "$(_himask "$_BS")"
 }
 

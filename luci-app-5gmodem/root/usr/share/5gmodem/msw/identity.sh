@@ -159,9 +159,10 @@ modem_imei() {
 	fi
 	_mi_nc="/tmp/5gmodem/imei_none_$(snap_key "$1")"
 	_mi_now=$(uptime_s)
-	_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \
-		| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')
 	if [ -f "$_mi_nc" ]; then
+		# The port list only matters for comparing with a negative cache entry.
+		_mi_ttys=$("$RES/listmodems.sh" 2>/dev/null \
+			| jsonfilter -e "@[@.path=\"$1\"].tty[*]" 2>/dev/null | tr '\n' ' ')
 		read -r _mi_ot _mi_op 2>/dev/null < "$_mi_nc"
 		case "$_mi_ot" in ''|*[!0-9]*) _mi_ot=0 ;; esac
 		if [ "$_mi_op" = "${_mi_ttys% }" ] \

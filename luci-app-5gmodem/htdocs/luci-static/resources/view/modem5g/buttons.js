@@ -64,6 +64,11 @@ function setField(name, field, val) {
 function setLeds(name, action, spec) {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'setleds', name, action, spec || '' ]);
 }
+function saveAll(name, fields) {
+	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'save', name ].concat(fields)).then(function(res) {
+		try { return JSON.parse((res && res.stdout) || 'null'); } catch (e) { return null; }
+	});
+}
 function previewLeds(spec) {
 	return fs.exec('/usr/share/5gmodem/buttons.sh', [ 'applyleds', spec || '' ]);
 }
@@ -112,7 +117,7 @@ function ledGrid(leds, savedSpec) {
 			'style': '--ledc:' + col
 		}, [
 			E('span', { 'class': 'leddot' }),
-			E('span', {}, led.name),
+			E('span', {}, [ led.name ]),
 			stTxt
 		]);
 		chip.classList.toggle('on', st !== 'none');
@@ -176,7 +181,7 @@ function cmdField(value, presetList) {
 		(list || []).forEach(function(p) {
 			menu.appendChild(E('div', {
 				'click': function(ev) { ev.stopPropagation(); menu.classList.remove('open'); typewrite(term, input, p.cmd); input.focus(); }
-			}, p.label));
+			}, [ p.label ]));
 		});
 	}
 	fillMenu(presetList);
@@ -201,8 +206,8 @@ function widget(b, state) {
 	var cls = 'btn cbi-button btnhead-card'
 		+ (state === 'pressed' ? ' hpressed' : ' hreleased');
 	return E('div', { 'class': cls }, [
-		E('span', { 'class': 'hname' }, b.label || b.name),
-		E('span', { 'class': 'hsub' }, b.name)
+		E('span', { 'class': 'hname' }, [ b.label || b.name ]),
+		E('span', { 'class': 'hsub' }, [ b.name ])
 	]);
 }
 
@@ -369,19 +374,29 @@ function buttonCard(b, leds, services, onDelete) {
 	var save = E('button', { 'class': 'btn cbi-button cbi-button-save',
 		'click': ui.createHandlerFn(this, function() {
 			var ops = [ function() { return setField(b.name, 'debounce', dbc.value); } ];
+			var fields = [ 'debounce=' + (dbc.value || '') ];
 			[ [ 'pressed', pPanel ], [ 'released', rPanel ] ].forEach(function(pair) {
 				var st = pair[0], v = pair[1].getVals();
+				fields.push('ct_' + st + '=' + (v.ct || ''), st + '=' + (v.cmd || ''));
 				ops.push(function() { return setField(b.name, 'ct_' + st, v.ct); });
 				ops.push(function() { return setField(b.name, st, v.cmd); });
 				if (v.ct === 'conditional') {
+					fields.push('leds_on_' + st + '=' + (v.onLeds || ''), 'leds_off_' + st + '=' + (v.offLeds || ''));
 					ops.push(function() { return setLeds(b.name, 'on_' + st, v.onLeds); });
 					ops.push(function() { return setLeds(b.name, 'off_' + st, v.offLeds); });
 				} else {
+					fields.push('leds_' + st + '=' + (v.simpleLeds || ''));
 					ops.push(function() { return setLeds(b.name, st, v.simpleLeds); });
 				}
 			});
-			return ops.reduce(function(p, mk) { return p.then(mk); }, Promise.resolve())
-				.then(function() { flashSaved(status); });
+			// one exec for the whole card; the per-field calls stay only for a buttons.sh without "save"
+			return saveAll(b.name, fields).then(function(j) {
+				if (j && j.ok) { return; }
+				if (j && typeof j.error === 'string' && j.error.indexOf('usage') !== 0) { throw new Error(j.error); }
+				return ops.reduce(function(p, mk) { return p.then(mk); }, Promise.resolve());
+			}).then(function() { flashSaved(status); }, function(e) {
+				status.textContent = String((e && e.message) || e); status.style.color = '#e5484d';
+			});
 		}) }, _('Save'));
 
 	card.appendChild(E('div', { 'class': 'btndbc' }, [
@@ -447,7 +462,7 @@ return view.extend({
 					'class': 'btn cbi-button cbi-button-add', 'style': 'margin-right:.4em',
 					'title': b.name + (b.type === 'switch' ? ' · switch' : ''),
 					'click': function() { addCard(b); }
-				}, '+ ' + (b.label || b.name)));
+				}, [ '+ ' + (b.label || b.name) ]));
 			});
 		}
 

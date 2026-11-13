@@ -3,7 +3,7 @@
 android_adb() {
 	adb "$@" 2>/dev/null 6>&- 7>&- 8>&- 9>&- &
 	_ad_pid=$!
-	( sleep 8; kill -KILL "$_ad_pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+	( sleep 8 & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill -KILL "$_ad_pid" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
 	_ad_watch=$!
 	wait "$_ad_pid" 2>/dev/null
 	_ad_rc=$?
@@ -44,7 +44,7 @@ android_json() {
 		-v vidpid="$(cat "$_ad_usb/idVendor"):$(cat "$_ad_usb/idProduct")" \
 		-v sampled_at="$(date +%s)" -f "$RES/android-metrics.awk") || return 1
 	if [ -f "$RES/android-cells.dex" ] && command -v jsonfilter >/dev/null 2>&1; then
-		_ad_extra=$(android_cells "$1" "$_ad_json") && _ad_json="${_ad_json%?},${_ad_extra#?}"
+		_ad_extra=$(android_cells "$1" "$_ad_json" "$_ad_serial") && _ad_json="${_ad_json%?},${_ad_extra#?}"
 	fi
 	printf '%s\n' "$_ad_json"
 }
@@ -56,9 +56,14 @@ android_cell_fields() {
 	printf '\n'
 }
 
+# $2: serial whose ADB state the caller has just checked (android_json), saving one adb round trip per poll.
 android_cells_ready() {
-	_ar_serial=$(android_usb_serial "$1") || return 1
-	[ "$(android_adb -s "$_ar_serial" get-state)" = device ] || return 1
+	if [ -n "$2" ]; then
+		_ar_serial=$2
+	else
+		_ar_serial=$(android_usb_serial "$1") || return 1
+		[ "$(android_adb -s "$_ar_serial" get-state)" = device ] || return 1
+	fi
 	_ar_hash=$(md5sum "$RES/android-cells.dex" | cut -d' ' -f1)
 	_ar_marker="/tmp/5gmodem/android_cells_$_ar_serial"
 	if [ "$(cat "$_ar_marker" 2>/dev/null)" != "$_ar_hash" ]; then
@@ -72,7 +77,7 @@ android_cells_ready() {
 }
 
 android_cells() {
-	_ac_serial=$(android_cells_ready "$1") || return 1
+	_ac_serial=$(android_cells_ready "$1" "$3") || return 1
 	_ac_marker="/tmp/5gmodem/android_cells_$_ac_serial"
 	_ac_sub=$(jsonfilter -s "$2" -e '@.android_data_subscription' 2>/dev/null)
 	case "$_ac_sub" in ''|*[!0-9]*) return 1 ;; esac

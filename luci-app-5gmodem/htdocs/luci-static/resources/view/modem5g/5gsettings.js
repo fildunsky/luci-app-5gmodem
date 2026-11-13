@@ -222,6 +222,8 @@ var CACHED_RES = [
 	'view/modem5g/sendat.js',
 	'view/modem5g/bandsui.js', 'view/modem5g/healthform.js', 'view/modem5g/buttons.js',
 	'view/modem5g/align.js', 'view/modem5g/5gstats.js', 'view/modem5g/modem.css',
+	'view/modem5g/fresh.js', 'view/modem5g/icons.js', 'view/modem5g/netarrange.js',
+	'view/modem5g/mobileview.js',
 	'protocol/fibocom.js', 'protocol/qmiraw.js', 'protocol/mbimp.js'
 ];
 
@@ -387,7 +389,7 @@ var EXTIPBIN = '/usr/share/5gmodem/extip.sh';
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ extip, healthform, modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -1065,11 +1067,15 @@ return view.extend({
 		return Promise.resolve(m.render()).then(function(formNode) {
 			_asNode = formNode;
 			_asSig = formSig();
-			var onChange = function() { autoSave(false); };
+			// the watchdog form saves itself through health.sh; its events must not
+			// trigger a map save (a heavy one runs setopt.sh applyset)
+			var inHw = function(ev) { return !!(ev.target && ev.target.closest && ev.target.closest('.hw-form')); };
+			var onChange = function(ev) { if (!inHw(ev)) { autoSave(false); } };
 			formNode.addEventListener('change', onChange);
 			formNode.addEventListener('widget-change', onChange);
 			formNode.addEventListener('cbi-dropdown-change', onChange);
 			formNode.addEventListener('click', function(ev) {
+				if (inHw(ev)) { return; }
 				if (ev.target.closest && ev.target.closest('.cbi-button-add, .cbi-button-remove')) { autoSave(true); }
 			});
 			updVersion();

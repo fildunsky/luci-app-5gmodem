@@ -641,6 +641,12 @@ Series for the Statistics tab: `ping` (RTT from the watchdog's state files
   directory.
 - The custom path from the browser must be absolute and free of spaces/metacharacters (it reaches
   mkdir/cp).
+- `bundle [tick]` returns `{"list":…,"series":{"<kind>.<key>":[[t,v],…]},"traffic":…}`, i.e. the
+  `list`, every `series` and `traffic` answers in one JSON; with `tick` it collects first and drops
+  the collector lock before reading. The page refresh used to be `tick` + `list` + one `series` per
+  chart line + `traffic` (9 execs with two uplinks and one modem, more with more lines); now it is one.
+  Series points come from one awk per file and keep only numeric values. The old subcommands stay for
+  older cached pages, the stand tests and sessionwatch (`tick`).
 
 
 ## Runtime audit: telemetry and statistics (2026-11-07)

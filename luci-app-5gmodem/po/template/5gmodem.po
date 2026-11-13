@@ -502,3 +502,12 @@ msgstr ""
 
 msgid "Switching the mobile-data SIM…"
 msgstr ""
+
+msgid "Router memory: %s/%s"
+msgstr ""
+
+msgid "SIM memory: %s/%s"
+msgstr ""
+
+msgid "Modem memory: %s/%s"
+msgstr ""

@@ -20,10 +20,16 @@ tty_no_at() {
 	[ -r "$_na_p/bInterfaceNumber" ] || _na_p=${_na_p%/*}
 	[ -r "$_na_p/bInterfaceNumber" ] || return 1
 	_na_d=${_na_p%/*}
-	[ "$(cat "$_na_d/idVendor" 2>/dev/null):$(cat "$_na_d/idProduct" 2>/dev/null)" = 3466:3301 ] \
-		&& [ "$(cat "$_na_p/bInterfaceProtocol" 2>/dev/null)" != 12 ] && return 0
-	noat_iface "$(cat "$_na_d/idVendor" 2>/dev/null)" "$(cat "$_na_d/idProduct" 2>/dev/null)" \
-		"$(cat "$_na_p/bInterfaceNumber" 2>/dev/null)"
+	# read, not cat: this runs before every AT probe
+	_na_v=""; _na_pr=""; _na_n=""; _na_pt=""
+	read -r _na_v 2>/dev/null < "$_na_d/idVendor"
+	read -r _na_pr 2>/dev/null < "$_na_d/idProduct"
+	if [ "$_na_v:$_na_pr" = 3466:3301 ]; then
+		read -r _na_pt 2>/dev/null < "$_na_p/bInterfaceProtocol"
+		[ "$_na_pt" != 12 ] && return 0
+	fi
+	read -r _na_n 2>/dev/null < "$_na_p/bInterfaceNumber"
+	noat_iface "$_na_v" "$_na_pr" "$_na_n"
 }
 
 noat_unbind_iface() {

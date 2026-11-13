@@ -19,7 +19,7 @@ Vendor details: [huawei-hilink.md](huawei-hilink.md), [zte-tenda.md](zte-tenda.m
 
 `probe` returns `{"hilink":1,"addr":...,"classify":...}`. It tries Netgear `ATI` on 5510 for 0846:68e1, then Huawei `/api/device/basic_information` (`<classify>`), then ZTE `modem_main_state`, then Yota `/status`.
 
-The legacy scripts `modem/hilink/huawei_hilink.sh`, `alcatel_hilink.sh` and `zte.sh` are older 3ginfo-lite style collectors. They take the modem IP and print `+CSQ`-like lines from `/api/...`, `/goform/getWanInfo` and so on.
+`hilink.sh` is the only web-API backend. The 3ginfo-lite style scripts `modem/hilink/huawei_hilink.sh`, `alcatel_hilink.sh` and `zte.sh` were removed: `5gmodem.sh` sourced them when the `device` option held a `192.168.x.x` address, but by then `DEVICE` is always an AT port (or empty), so they were called without the modem address, used `wget -t` that uclient-fetch does not have, and their `exit 0` ended the sourcing poll. A web-API stick is routed by `kind=hilink` (set by autosetup from the USB ID and network card), not by the `device` option, so an old `device=192.168.x.x` value needs no migration.
 
 ## Web login defaults
 
@@ -33,6 +33,7 @@ The legacy scripts `modem/hilink/huawei_hilink.sh`, `alcatel_hilink.sh` and `zte
 
 - `_addr_for`: the modem is the default gateway on its own network card (`netdev` from the uci section, or `listmodems.sh` if it is not stored yet). The address is not hard-coded as 192.168.8.1, because firmwares differ (an E3372h used 192.168.43.1) and users change it. Without a default route (metric or policy routing), the code assumes `.1` in the card's subnet.
 - `_srcip_for`: requests are bound (`curl --interface <ip>`) to **our** address in the modem's subnet. Some firmwares also put the real WAN address on the card (for example `100.81.31.131` and `192.168.43.2` on the same `eth3`). The kernel then picks the wrong source, the modem ignores the request, and the API goes silent.
+- The source address belongs to the **polled** modem. The ZTE, Tenda and Yota helpers take the modem path as an optional last argument (`_zte_get addr cmd path`, `_tenda_get addr modules path`, `_yota_get addr path`, ...) and resolve the source through `_hl_src`, which reuses the `_hl_ctx` result of the poll. With two web-API sticks the inactive one used to be queried from the active one's address. Without the path argument the active modem decides, as before.
 
 ## Output rules
 
@@ -75,7 +76,3 @@ These Netgear Aircard/Nighthawk sticks expose AT over TCP on `<addr>:5510`. `_ng
 
 Some HiLink modems can expose serial AT ports (called "debug mode" in their web UI). After the switch the modem becomes a normal AT modem with TAC, band, EARFCN, USSD and an AT console. On an E3372: 12d1:14dc -> 12d1:1566, six ports in about 10 s. This is never done automatically, because it changes the modem's behaviour and can disable its web UI. Huawei uses `POST /api/device/mode <mode>1</mode>`. ZTE/Tenda use `goformId=SET_DEVICE_MODE&debug_enable=1` followed by a reboot (Tenda `deviceAction`, otherwise `REBOOT_DEVICE`).
 
-
-## Legacy ZTE address-based metrics fallback (2026-11-07 audit)
-
-`modem/hilink/zte.sh` is the older address-based fallback. The manufacturer and model are assigned as one quoted string, rather than executing the model as a command. MCC assignments use one equals sign, and the generated `+COPS` record uses `COPS_MCC` and `COPS_MNC`, matching the variables populated from the goform response. This does not change the primary ZTE backend in `hilink.sh`.

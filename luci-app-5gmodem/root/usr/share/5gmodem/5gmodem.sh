@@ -959,7 +959,8 @@ TX="-"
 
 SECSTATUS=$(ifstatus "$SEC" 2>/dev/null)
 _SECST_FOR="$SEC"
-NETUP=$(echo "$SECSTATUS" | grep "\"up\": true")
+NETUP=""
+case "$SECSTATUS" in *'"up": true'*) NETUP=1 ;; esac
 if [ -n "$NETUP" ]; then
 
 		CT=$(uci -q -P /var/state/ get network.$SEC.connect_time)
@@ -1243,26 +1244,8 @@ else
 	TAC_HEX="-"
 fi
 
-if [ -n "$_PINNED" ]; then
-	CONF_DEVICE="$DEVICE"
-else
-	CONF_DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
-fi
-if echo "x$CONF_DEVICE" | grep -q "192.168."; then
-	if grep -q "Vendor=1bbb" /sys/kernel/debug/usb/devices; then
-		_SAVED_IFS="$IFS"; . $RES/modem/hilink/alcatel_hilink.sh $DEVICE; IFS="$_SAVED_IFS"
-	fi
-	if grep -q "Vendor=12d1" /sys/kernel/debug/usb/devices; then
-		_SAVED_IFS="$IFS"; . $RES/modem/hilink/huawei_hilink.sh $DEVICE; IFS="$_SAVED_IFS"
-	fi
-	if grep -q "Vendor=19d2" /sys/kernel/debug/usb/devices; then
-		_SAVED_IFS="$IFS"; . $RES/modem/hilink/zte.sh $DEVICE; IFS="$_SAVED_IFS"
-	fi
-	SEC=$(uci -q get "5gmodem.$_hl_sec.network")
-	[ -n "$SEC" ] || [ -n "$_PINNED" ] || SEC=$(uci -q get 5gmodem.@5gmodem[0].network)
-	SEC=${SEC:-wan}
-else
-
+# A HiLink modem (device=192.168.x.x in old configs) is polled by hilink.sh through kind=hilink above;
+# here DEVICE is always an AT port, so there is no web-API branch any more.
 _STKEY=$(tty_usbpath "$DEVICE" 2>/dev/null | tr -d '\n' | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY=$(printf '%s' "${_POLL_AM:-$(uci -q get 5gmodem.@5gmodem[0].active_modem 2>/dev/null)}" | tr -c 'A-Za-z0-9' '_')
 [ -n "$_STKEY" ] || _STKEY="$(basename "$DEVICE" 2>/dev/null)"
@@ -1695,8 +1678,6 @@ if [ -e /usr/bin/sms_tool ]; then
 		esac
 		IFS="$_SAVED_IFS"
 	fi
-fi
-
 fi
 
 for _ok_v in MODEL FW NR_IMEI NR_IMSI NR_ICCID PHONE; do

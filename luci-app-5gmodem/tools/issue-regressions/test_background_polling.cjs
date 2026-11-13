@@ -36,7 +36,8 @@ async function main() {
     await checkToggle((document, hit) => {
         const match = read('5gstats.js').match(/poll\.add\((function\(\) \{\n[\s\S]*?\n\t\t\}), 10\);/);
         assert.ok(match);
-        return new Function('document', 'callStats', 'refresh', 'return ' + match[1])(document, hit, () => {});
+        // the refresh is one "stats.sh bundle tick" exec, so refresh itself is the backend call
+        return new Function('document', 'callStats', 'refresh', 'return ' + match[1])(document, hit, hit);
     });
 
     await checkToggle((document, hit) => {

@@ -5,7 +5,9 @@ _sierra_cnd() {
 	_sc_p=$(cat "$_sc_f" 2>/dev/null)
 	for _sc_try in ${_sc_p:+"$_sc_p"} A710 F710; do
 		sms_tool -d $_DEVICE at "AT!ENTERCND=\"$_sc_try\"" >/dev/null 2>&1
-		if sms_tool -d $_DEVICE at 'AT!BAND?' 2>/dev/null | grep -q '[0-9A-Fa-f]\{16\}'; then
+		# kept in _SC_BANDQ: getbands/setbands reuse this read instead of sending AT!BAND? again
+		_SC_BANDQ=$(sms_tool -d $_DEVICE at 'AT!BAND?' 2>/dev/null)
+		if printf '%s\n' "$_SC_BANDQ" | grep -q '[0-9A-Fa-f]\{16\}'; then
 			printf '%s' "$_sc_try" > "$_sc_f" 2>/dev/null; return 0
 		fi
 	done
@@ -68,7 +70,7 @@ getsupportedbands() {
 
 getbands() {
 	_sierra_cnd || return 1
-	O=$(sms_tool -d $_DEVICE at 'AT!BAND?')
+	O="$_SC_BANDQ"
 	HEX=$(_sierra_lte_hex "$O" cur)
 	if [ -n "$HEX" ] && [ "$HEX" != "0x" ]; then hextobands "$HEX"; fi
 }
@@ -83,7 +85,7 @@ setbands() {
 		HEXL=$(bandstohex "$BANDS")
 		if [ "$HEXL" != "0" ]; then
 			_sierra_cnd || return 1
-			O=$(sms_tool -d $_DEVICE at 'AT!BAND?')
+			O="$_SC_BANDQ"
 			HEXGW=$(echo "$O" | awk -F, '/^[0-9a-fA-F][0-9a-fA-F],/{print $3}' | awk '{print $1}')
 			_SI=10
 			_W=$(sms_tool -d $_DEVICE at 'AT!BAND='$_SI',"Custom bands",'$HEXGW','$HEXL 2>/dev/null)

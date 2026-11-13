@@ -159,6 +159,13 @@ function techBadge(j, cs) {
 	st.badge.hidden = false;
 }
 
+// Every poll tick re-renders; skip the DOM write when the markup is unchanged.
+function setHtml(el, h) {
+	if (el._mvHtml === h) { return; }
+	el._mvHtml = h;
+	el.innerHTML = h;
+}
+
 function render(j) {
 	var rat = mutil.qualRat(j.mode);
 	mutil.qualRssiCap(j.rsrq);
@@ -173,8 +180,8 @@ function render(j) {
 		if (v != null) { html += tile(d[0], d[1], d[2], v, rat); }
 	});
 	var pcc = cs.length && cs[0].t === 'PCC' ? cs[0] : null;
-	st.pccHead.innerHTML = pcc ? ccHead(pcc) : '';
-	st.tiles.innerHTML = html;
+	setHtml(st.pccHead, pcc ? ccHead(pcc) : '');
+	setHtml(st.tiles, html);
 	st.pcc.hidden = !html;
 
 	var nrc = null;
@@ -186,8 +193,8 @@ function render(j) {
 			if (v != null) { nh += tile(d[0], d[1], d[2], v, 'nr', 'nr' + d[0]); }
 		});
 	}
-	st.nrHead.innerHTML = nrc ? ccHead(nrc) : '';
-	st.nrTiles.innerHTML = nh;
+	setHtml(st.nrHead, nrc ? ccHead(nrc) : '');
+	setHtml(st.nrTiles, nh);
 	st.nr.hidden = !nrc || !nh;
 
 	var rows = cs.filter(function(c) { return c.t !== 'PCC' && c !== nrc; }).map(function(c) {
@@ -196,7 +203,7 @@ function render(j) {
 			'<span class="tg-mv-cv">RSRP ' + lvlSpan('rsrp', c.r, r) + '</span>' +
 			'<span class="tg-mv-cv">SINR ' + lvlSpan('sinr', c.s, r) + '</span></div>';
 	}).join('');
-	st.cars.innerHTML = rows;
+	setHtml(st.cars, rows);
 	st.cars.hidden = !rows;
 	st.carsTitle.hidden = !(html || nh || rows);
 }
@@ -221,18 +228,18 @@ function markMhz() {
 function clearSig() {
 	if (!st) { return; }
 	st.hist = {};
-	st.tiles.innerHTML = '';
+	setHtml(st.tiles, '');
 	st.pcc.hidden = true;
-	st.nrTiles.innerHTML = '';
+	setHtml(st.nrTiles, '');
 	st.nr.hidden = true;
-	st.cars.innerHTML = '';
+	setHtml(st.cars, '');
 	st.cars.hidden = true;
 	st.carsTitle.hidden = true;
 	st.badge.hidden = true;
 }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 
 	prepare: function(root) {
 		st = null;

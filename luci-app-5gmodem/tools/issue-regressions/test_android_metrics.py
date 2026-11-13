@@ -323,7 +323,7 @@ _tj_nd=usb0
             executable = Path(directory) / 'adb'
             executable.write_text('#!/bin/sh\nexec sleep 60\n')
             executable.chmod(0o755)
-            source = function('android_adb', 'android.sh').replace('sleep 8;', 'sleep 1;') + '\nandroid_adb devices\n'
+            source = function('android_adb', 'android.sh').replace('sleep 8 ', 'sleep 1 ') + '\nandroid_adb devices\n'
             start = time.monotonic()
             result = shell(source, dict(os.environ, PATH=directory+os.pathsep+os.environ['PATH']))
             self.assertNotEqual(result.returncode, 0)

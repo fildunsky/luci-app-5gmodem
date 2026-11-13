@@ -9,6 +9,7 @@ LOCK=/tmp/5gmodem/ussd.lock
 . "$RES/atlock.sh" 2>/dev/null
 
 REG_WAIT=25
+USSD_WAIT=45
 
 _st() {
 	_s="$1"; _g="$2"; shift 2
@@ -40,8 +41,9 @@ _port() {
 	"$RES/detect.sh" 2>/dev/null
 }
 
+# at_query: bounded, and it reuses the lock when the caller already holds it
 _act() {
-	sms_tool -d "$1" at 'AT+COPS?' 2>/dev/null | tr -d '\r' \
+	at_query "$1" 'AT+COPS?' 10 2>/dev/null \
 		| sed -n 's/^+COPS:[[:space:]]*[0-9]*,[0-9]*,"[^"]*",\([0-9]*\).*/\1/p' | head -1
 }
 
@@ -121,7 +123,7 @@ cancel)
 	_p=$(_port)
 	if [ -n "$_p" ]; then
 		at_lock "$_p" 10 2>/dev/null || { echo '{"error":"port busy"}'; exit 2; }
-		sms_tool -d "$_p" at 'AT+CUSD=2' >/dev/null 2>&1
+		at_query "$_p" 'AT+CUSD=2' 8 >/dev/null 2>&1
 		at_unlock 2>/dev/null
 	fi
 	_st idle ""
@@ -262,8 +264,24 @@ _st running starting
 		case "$_cd" in ''|auto) : ;; *) set -- "$@" -c "$_cd" ;; esac
 
 		at_lock "$PORT" 20 2>/dev/null || { OUT=""; ERR="port busy"; return 1; }
-		OUT=$(sms_tool "$@" ussd "$CODE" 2>/tmp/5gmodem/ussd.err)
+		# sms_tool has no timeout of its own: a modem that never answers +CUSD
+		# kept the AT lock, and with it the metrics poller, for good.
+		_tr_o=$(mktemp /tmp/5gmodem/ussd.out.XXXXXX 2>/dev/null) || _tr_o=/tmp/5gmodem/ussd.out.$$
+		sms_tool "$@" ussd "$CODE" > "$_tr_o" 2>/tmp/5gmodem/ussd.err </dev/null 7>&- 8>&- 9>&- &
+		_tr_p=$!
+		_tr_i=0
+		while kill -0 "$_tr_p" 2>/dev/null && [ "$_tr_i" -lt "$USSD_WAIT" ]; do
+			sleep 1; _tr_i=$((_tr_i + 1))
+		done
+		if kill -0 "$_tr_p" 2>/dev/null; then
+			kill -9 "$_tr_p" 2>/dev/null
+			logger -t 5gmodem "ussd: no answer from $PORT within ${USSD_WAIT}s - request abandoned"
+		else
+			wait "$_tr_p" 2>/dev/null
+		fi
 		at_unlock 2>/dev/null
+		OUT=$(cat "$_tr_o" 2>/dev/null)
+		rm -f "$_tr_o"
 		ERR=$(cat /tmp/5gmodem/ussd.err 2>/dev/null)
 		rm -f /tmp/5gmodem/ussd.err
 		[ -n "$OUT" ]

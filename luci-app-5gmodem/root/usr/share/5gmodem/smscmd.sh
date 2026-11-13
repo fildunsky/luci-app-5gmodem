@@ -66,6 +66,34 @@ case "$_dm_al" in ''|*[!0-9]*) _dm_al=0 ;; esac
 [ "${#_dm_al}" -le 4 ] && [ "$_dm_al" -le 2000 ] || _dm_al=2000
 DONE_MAX=$((DONE_MAX + _dm_al))
 ANS_MAX=600
+CMD_WAIT=60
+
+# `run` and `chat` are called synchronously from the sessionwatch loop: a command
+# that never exits (ping without -c, logread -f) would stall health checks and
+# recovery for good. After CMD_WAIT seconds we stop waiting and leave it running.
+_exec_cmd() {
+	_ec_o=$(mktemp /tmp/5gmodem-smscmd.XXXXXX 2>/dev/null) || {
+		SMS_FROM="$2" SMS_ARGS="$3" SMS_TEXT="$4" sh -c "$1" 2>&1 </dev/null | head -c "$ANS_MAX"
+		return 0
+	}
+	( SMS_FROM="$2" SMS_ARGS="$3" SMS_TEXT="$4" sh -c "$1" 2>&1 </dev/null \
+		| head -c "$ANS_MAX" > "$_ec_o" ) >/dev/null 2>&1 7>&- 8>&- 9>&- &
+	_ec_p=$!
+	_ec_i=0
+	while kill -0 "$_ec_p" 2>/dev/null && [ "$_ec_i" -lt "$CMD_WAIT" ]; do
+		sleep 1; _ec_i=$((_ec_i + 1))
+	done
+	if kill -0 "$_ec_p" 2>/dev/null; then
+		_log "command still running after ${CMD_WAIT} s, not waiting for it: $(printf '%s' "$1" | head -c 80)"
+		cat "$_ec_o" 2>/dev/null
+		( while kill -0 "$_ec_p" 2>/dev/null; do sleep 5; done; rm -f "$_ec_o" ) \
+			>/dev/null 2>&1 </dev/null 7>&- 8>&- 9>&- &
+		return 0
+	fi
+	wait "$_ec_p" 2>/dev/null
+	cat "$_ec_o" 2>/dev/null
+	rm -f "$_ec_o"
+}
 
 _num10() {
 	_n=$(printf '%s' "$1" | tr -cd '0-9')
@@ -119,11 +147,11 @@ _run_cmd() {
 		return 0
 	fi
 
-	_rc_out=$(SMS_FROM="$2" SMS_ARGS="$3" SMS_TEXT="$4" sh -c "$_rc_ex" 2>&1)
+	_rc_out=$(_exec_cmd "$_rc_ex" "$2" "$3" "$4")
 	if [ "$_rc_ans" = "1" ]; then
 		_rc_body="$_rc_txt"
 		[ -n "$_rc_out" ] && _rc_body="${_rc_body:+$_rc_body
-}$(printf '%s' "$_rc_out" | head -c "$ANS_MAX")"
+}$_rc_out"
 		_answer "$2" "${_rc_body:-OK}"
 	fi
 	return 0
@@ -157,7 +185,8 @@ _one() {
 		MPORT=$(uci -q get "$CFG.$_o_sec.at_port")
 	fi
 
-	_o_msgs=$(SMS_MODEM="$MPATH" "$RES/smsbridge.sh" recv "$STORE" "$MPORT" 2>/dev/null)
+	# SMS_BG: skip the round instead of reading past a held port lock
+	_o_msgs=$(SMS_BG=1 SMS_MODEM="$MPATH" "$RES/smsbridge.sh" recv "$STORE" "$MPORT" 2>/dev/null)
 	[ -n "$_o_msgs" ] || return 0
 	_o_idx=$(printf '%s' "$_o_msgs" | jsonfilter -e '@.msg[*].index' 2>/dev/null)
 	[ -n "$_o_idx" ] || return 0
@@ -170,19 +199,34 @@ _one() {
 	_o_ids=""
 	for _o_i in $_o_idx; do
 		case "$_o_i" in ''|*[!0-9]*) continue ;; esac
-		_o_s=""; _o_t=""; _o_c=""
+		_o_s=""; _o_t=""; _o_c=""; _o_p=""; _o_n=""; _o_r=""; _o_k=""
 		eval "$(printf '%s' "$_o_msgs" | jsonfilter -e "_o_s=@.msg[@.index=$_o_i].sender" \
-			-e "_o_t=@.msg[@.index=$_o_i].timestamp" -e "_o_c=@.msg[@.index=$_o_i].content" 2>/dev/null)"
+			-e "_o_t=@.msg[@.index=$_o_i].timestamp" -e "_o_c=@.msg[@.index=$_o_i].content" \
+			-e "_o_p=@.msg[@.index=$_o_i].part" -e "_o_n=@.msg[@.index=$_o_i].total" \
+			-e "_o_r=@.msg[@.index=$_o_i].reference" \
+			-e "_o_k=@.keys[@.index=$_o_i].key" 2>/dev/null)"
 		_o_nltrim _o_s; _o_nltrim _o_t; _o_nltrim _o_c
-		eval "_o_S$_o_i=\$_o_s; _o_T$_o_i=\$_o_t; _o_C$_o_i=\$_o_c"
+		# Group parts by UDH reference, like the bridge: two separate SMS from one
+		# sender in the same minute used to be glued into one text, so neither
+		# "reboot" matched a keyword and both were marked done unexecuted.
+		# The bridge's group key (keys[]) also splits a reused 8-bit reference
+		# (time window, taken part number), see _kb_build in smsbridge.sh.
+		_o_g="i$_o_i"
+		case "$_o_p" in ''|*[!0-9]*) ;; *)
+			case "$_o_n" in ''|*[!0-9]*) ;; *)
+				if [ "$_o_n" -gt 1 ] && [ "$_o_n" -le 255 ]; then
+					if [ -n "$_o_k" ]; then _o_g="k|$_o_k"; else _o_g="$_o_s|$_o_r|$_o_n"; fi
+				fi ;;
+			esac ;;
+		esac
+		eval "_o_S$_o_i=\$_o_s; _o_T$_o_i=\$_o_t; _o_C$_o_i=\$_o_c; _o_P$_o_i=\$_o_p; _o_N$_o_i=\$_o_n; _o_G$_o_i=\$_o_g"
 		_o_ids="$_o_ids $_o_i"
 	done
 	_o_idx="$_o_ids"
 
 	_o_seen_keys=""
 	for _o_i in $_o_idx; do
-		eval "_o_s=\$_o_S$_o_i; _o_t=\$_o_T$_o_i"
-		_o_grp="$_o_s|$_o_t"
+		eval "_o_s=\$_o_S$_o_i; _o_t=\$_o_T$_o_i; _o_grp=\$_o_G$_o_i"
 		case "
 $_o_seen_keys
 " in *"
@@ -195,14 +239,29 @@ $_o_grp"
 		grep -qxF "$(sms_cmd_key "$_o_s" "$_o_t" "$_o_c1")" "$_o_df" 2>/dev/null && continue
 
 		_o_text=""; _o_keys=""
-		for _o_j in $_o_idx; do
-			eval "_o_js=\$_o_S$_o_j; _o_jt=\$_o_T$_o_j"
-			[ "$_o_js" = "$_o_s" ] || continue
-			[ "$_o_jt" = "$_o_t" ] || continue
-			eval "_o_c=\$_o_C$_o_j"
-			_o_text="$_o_text$_o_c"
-			_o_keys="$_o_keys $(sms_cmd_key "$_o_s" "$_o_t" "$_o_c")"
-		done
+		case "$_o_grp" in
+			i*)
+				_o_text="$_o_c1"
+				_o_keys=" $(sms_cmd_key "$_o_s" "$_o_t" "$_o_c1")" ;;
+			*)
+				eval "_o_tot=\$_o_N$_o_i"
+				_o_q=1
+				while [ "$_o_q" -le "$_o_tot" ]; do
+					_o_pick=""
+					for _o_j in $_o_idx; do
+						eval "_o_jg=\$_o_G$_o_j; _o_jp=\$_o_P$_o_j"
+						[ "$_o_jg" = "$_o_grp" ] && [ "$_o_jp" = "$_o_q" ] && _o_pick="$_o_j"
+					done
+					[ -n "$_o_pick" ] && eval "_o_text=\$_o_text\$_o_C$_o_pick"
+					_o_q=$((_o_q + 1))
+				done
+				for _o_j in $_o_idx; do
+					eval "_o_jg=\$_o_G$_o_j"
+					[ "$_o_jg" = "$_o_grp" ] || continue
+					eval "_o_js=\$_o_S$_o_j; _o_jt=\$_o_T$_o_j; _o_c=\$_o_C$_o_j"
+					_o_keys="$_o_keys $(sms_cmd_key "$_o_js" "$_o_jt" "$_o_c")"
+				done ;;
+		esac
 
 		_o_k1=${_o_keys# }; _o_k1=${_o_k1%% *}
 		[ -n "$_o_k1" ] && grep -qxF "$_o_k1" "$_o_df" 2>/dev/null && continue
@@ -253,9 +312,11 @@ $_o_grp"
 	return 0
 }
 
+_HS_LIST=""
 _has_sms() {
 	[ "$(uci -q get "$CFG.m_$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/_/g').kind")" = "hilink" ] && return 0
-	"$RES/listmodems.sh" 2>/dev/null \
+	[ -n "$_HS_LIST" ] || _HS_LIST=$("$RES/listmodems.sh" 2>/dev/null)
+	printf '%s' "$_HS_LIST" \
 		| jsonfilter -e "@[@.path=\"$1\"].tty[0]" -e "@[@.path=\"$1\"].wdm[0]" 2>/dev/null \
 		| grep -q .
 }
@@ -308,8 +369,7 @@ chat)
 		printf '{"result":"ok","output":"%s"}\n' \
 			"$(_cjson "${_ctxt:-OK} (через ${_cdly} c)")"
 	else
-		_cout=$(SMS_FROM="telegram" SMS_ARGS="$_crest" SMS_TEXT="$_ct" \
-			sh -c "$_cex" 2>&1 | head -c "$ANS_MAX")
+		_cout=$(_exec_cmd "$_cex" telegram "$_crest" "$_ct")
 		printf '{"result":"ok","output":"%s"}\n' \
 			"$(_cjson "${_ctxt:+$_ctxt }${_cout}")"
 	fi

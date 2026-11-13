@@ -9,9 +9,6 @@ chmod +x /usr/share/5gmodem/ttl.sh /usr/share/5gmodem/mkiface.sh /usr/share/5gmo
 chmod +x /usr/share/5gmodem/check.gcom 2>&1 &
 chmod +x /usr/share/5gmodem/info.gcom 2>&1 &
 chmod +x /usr/share/5gmodem/vendorproduct.gcom 2>&1 &
-chmod +x /usr/share/5gmodem/modem/hilink/alcatel_hilink.sh 2>&1 &
-chmod +x /usr/share/5gmodem/modem/hilink/huawei_hilink.sh 2>&1 &
-chmod +x /usr/share/5gmodem/modem/hilink/zte.sh 2>&1 &
 rm -rf /tmp/luci-indexcache 2>&1 &
 rm -rf /tmp/luci-modulecache/ 2>&1 &
 

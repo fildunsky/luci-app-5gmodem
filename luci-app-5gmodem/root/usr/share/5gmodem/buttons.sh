@@ -132,6 +132,33 @@ _sync_leds_all() {
 	done
 }
 
+# same field names as "set" plus the uci options "setleds" writes
+_save_field() {
+	case "$1" in
+		pressed|released|debounce|type_override|btntype|ct_pressed|ct_released|svc_pressed|svc_released) return 0 ;;
+		leds_pressed|leds_released|leds_on_pressed|leds_off_pressed|leds_on_released|leds_off_released) return 0 ;;
+	esac
+	return 1
+}
+
+# detach LEDs named in a "name=0|1 ..." spec from their system trigger, then resync conditional ones;
+# globbing is off so a spec word like "*" cannot expand to file names
+_leds_take() {
+	[ -n "$1" ] || return 0
+	note_foreign_uci system "buttons leds"
+	_any=0
+	set -f
+	for _kv in $1; do
+		_ln="${_kv%=*}"
+		_led_dummy "$_ln" && continue
+		[ -e "$LEDS_DIR/$_ln/brightness" ] || continue
+		_led_detach "$_ln"; _any=1
+	done
+	set +f
+	[ "$_any" = 1 ] && { uci -q commit system; /etc/init.d/led reload 2>/dev/null; _sync_leds_all; }
+	return 0
+}
+
 case "$1" in
 detect)
 	_jf() { printf '%s' "$(uci -q get "$CFG.$1.$2" 2>/dev/null)" | _json_esc; }
@@ -222,17 +249,33 @@ setleds)
 		uci -q set "$CFG.$_s.leds_$3=$4"
 	fi
 	uci -q commit "$CFG"
-	if [ -n "$4" ]; then
-		note_foreign_uci system "buttons leds"
-		_any=0
-		for _kv in $4; do
-			_ln="${_kv%=*}"
-			_led_dummy "$_ln" && continue
-			[ -e "$LEDS_DIR/$_ln/brightness" ] || continue
-			_led_detach "$_ln"; _any=1
-		done
-		[ "$_any" = 1 ] && { uci -q commit system; /etc/init.d/led reload 2>/dev/null; _sync_leds_all; }
-	fi
+	_leds_take "$4"
+	echo '{"ok":1}'
+	;;
+save)
+	# whole card in one exec: save <button> field=value...; every field is checked before anything is written
+	[ -n "$2" ] || { echo '{"error":"no button"}'; exit 0; }
+	_bn="$2"; shift 2
+	for _kv in "$@"; do
+		case "$_kv" in *=*) ;; *) echo '{"error":"bad field"}'; exit 0 ;; esac
+		_save_field "${_kv%%=*}" || { echo '{"error":"bad field"}'; exit 0; }
+	done
+	_s=$(_sid "$_bn")
+	uci -q get "$CFG.$_s" >/dev/null 2>&1 || uci -q set "$CFG.$_s=button"
+	uci -q set "$CFG.$_s.name=$_bn"
+	_sv_leds=""
+	for _kv in "$@"; do
+		_k="${_kv%%=*}"; _v="${_kv#*=}"
+		if [ -z "$_v" ]; then
+			uci -q delete "$CFG.$_s.$_k" 2>/dev/null
+		else
+			uci -q set "$CFG.$_s.$_k=$_v"
+			case "$_k" in leds_*) _sv_leds="$_sv_leds $_v" ;; esac
+		fi
+	done
+	uci -q commit "$CFG"
+	# one LED detach + led reload for all states, after the commit so the sync sees the new bindings
+	_leds_take "${_sv_leds# }"
 	echo '{"ok":1}'
 	;;
 applyleds)

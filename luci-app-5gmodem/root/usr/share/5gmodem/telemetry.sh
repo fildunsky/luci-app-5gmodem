@@ -305,7 +305,7 @@ _refresh_snap() {
 	[ -n "$TELE_FORCE" ] && _rs_ttl=0
 	SW_BG=1 "$(dirname "$0")/5gmodem.sh" cached "$_rs_ttl" "for=$_AM" >/dev/null 2>&1 &
 	_rs_p=$!
-	( sleep 25; kill "$_rs_p" 2>/dev/null ) >/dev/null 2>&1 &
+	( sleep 25 & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_rs_p" 2>/dev/null ) >/dev/null 2>&1 &
 	_rs_w=$!
 	wait "$_rs_p" 2>/dev/null
 	kill "$_rs_w" 2>/dev/null; wait "$_rs_w" 2>/dev/null

@@ -1549,8 +1549,8 @@ msgstr "數據機設置"
 msgid "Port for modem communication"
 msgstr "數據機通信埠"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "用於讀取數據機/連接信息的埠。<br /><br />傳統數據機:可用的 ttyUSBX 埠之一。<br /><br />HiLink 數據機:輸入數據機可用的 IP 地址 192.168.X.X。"
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "用於讀取數據機/連接資訊的埠：可用的 ttyUSBX 埠之一。<br /><br />HiLink 及其他帶網頁介面的數據機會被自動識別，無需埠。"
 
 msgid "Port for AT / SMS / USSD"
 msgstr "AT / 簡訊 / USSD 埠"
@@ -2439,6 +2439,15 @@ msgstr "已選：%d"
 
 msgid "Memory: %s/%s"
 msgstr "存儲：%s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "路由器存儲：%s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "SIM 卡存儲：%s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "數據機存儲：%s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "此數據機不支持 USSD：它是純數據模塊，固件不支持 SS 業務。已在實機驗證——數據機對 USSD 請求完全不響應。"

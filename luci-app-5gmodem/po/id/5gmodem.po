@@ -1549,8 +1549,8 @@ msgstr "Pengaturan Modem"
 msgid "Port for modem communication"
 msgstr "Port untuk komunikasi modem"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "Port yang digunakan untuk membaca info modem/koneksi. <br /> <br />Modem biasa: salah satu port ttyUSBX yang tersedia.<br /> <br />Modem HiLink: masukkan alamat IP 192.168.X.X tempat modem dapat diakses."
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "Port untuk membaca info modem/koneksi: salah satu port ttyUSBX yang tersedia.<br /> <br />HiLink dan modem lain dengan antarmuka web terdeteksi otomatis dan tidak memerlukan port."
 
 msgid "Port for AT / SMS / USSD"
 msgstr "Port untuk AT / SMS / USSD"
@@ -2439,6 +2439,15 @@ msgstr "dipilih: %d"
 
 msgid "Memory: %s/%s"
 msgstr "Memori: %s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "Memori router: %s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "Memori SIM: %s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "Memori modem: %s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "USSD tidak berfungsi di modem ini: ini modul khusus data tanpa dukungan SS di firmware. Sudah diverifikasi pada perangkat nyata - modem sama sekali tidak menjawab permintaan USSD."

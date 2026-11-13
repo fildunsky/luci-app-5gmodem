@@ -32,7 +32,7 @@ esc() {
 [ -r /usr/share/5gmodem/notmodem.sh ] && . /usr/share/5gmodem/notmodem.sh
 
 owner_node() {
-	b=$(basename "$1")
+	b="${1##*/}"
 	p=$(readlink -f "/sys/class/tty/$b/device" 2>/dev/null)
 	[ -n "$p" ] || p=$(readlink -f "/sys/class/usbmisc/$b/device" 2>/dev/null)
 	[ -n "$p" ] || p=$(readlink -f "/sys/class/net/$b/device" 2>/dev/null)
@@ -183,13 +183,15 @@ command -v is_iphone >/dev/null 2>&1 && for _ad in /sys/bus/usb/devices/*; do
 	[ -n "$_adn" ] && PORTREC="${PORTREC}${NCNT} net ${_adn}${NL}"
 done
 
-for _ts in $(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.=]*\)=modem\$/\1/p"); do
-	_tp=$(uci -q get "5gmodem.$_ts.path")
+_UCISNAP=$(uci -q show 5gmodem 2>/dev/null)
+# path and vidpid of every saved modem section in one pass over the snapshot, not two uci calls per section
+while IFS='|' read -r _ts _tp _tsv; do
+	[ -n "$_ts" ] || continue
 	case "$_tp" in *-*) ;; *) continue ;; esac
 	_td=$(readlink -f "/sys/bus/usb/devices/$_tp" 2>/dev/null)
 	[ -n "$_td" ] && [ -f "$_td/idVendor" ] || continue
 	case " $NODES " in *" $_td "*) continue ;; esac
-	_tsv=$(uci -q get "5gmodem.$_ts.vidpid"); _tsv="${_tsv%%:*}"
+	_tsv="${_tsv%%:*}"
 	[ -n "$_tsv" ] && [ "$(cat "$_td/idVendor" 2>/dev/null)" = "$_tsv" ] || continue
 	_tn=""
 	for _ti in /sys/bus/usb/devices/"$_tp":*/net/*; do
@@ -199,9 +201,18 @@ for _ts in $(uci -q show 5gmodem 2>/dev/null | sed -n "s/^5gmodem\.\(m_[^.=]*\)=
 	NCNT=$((NCNT + 1))
 	NODES="$NODES $_td"
 	PORTREC="${PORTREC}${NCNT} net ${_tn}${NL}"
-done
+done <<TETHER_EOF
+$(printf '%s\n' "$_UCISNAP" | awk -F= -v q="'" '
+	/^5gmodem\.m_[^.=]*=modem$/ { o[++n] = substr($1, 9); next }
+	/^5gmodem\.m_[^.=]*\.(path|vidpid)=/ {
+		k = substr($1, 9); v = substr($0, length($1) + 2)
+		if (substr(v, 1, 1) == q) v = substr(v, 2)
+		if (substr(v, length(v), 1) == q) v = substr(v, 1, length(v) - 1)
+		split(k, a, "."); val[a[1] "." a[2]] = v
+	}
+	END { for (i = 1; i <= n; i++) print o[i] "|" val[o[i] ".path"] "|" val[o[i] ".vidpid"] }')
+TETHER_EOF
 
-_UCISNAP=$(uci -q show 5gmodem 2>/dev/null)
 _ALIASMAP=$(printf '%s\n' "$_UCISNAP" | awk -F"[.=]" '
 	/\.alias_imei=/ { gsub(/^.|.$/, "", $NF); imei[$2] = $NF; next }
 	/\.alias=/       { line = $0; sub(/^[^=]*=/, "", line); gsub(/^.|.$/, "", line); nm[$2] = line }

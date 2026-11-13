@@ -180,11 +180,13 @@ The scroll jumps on proton2025 had several independent causes. Rules:
 - A hidden card has a zero-width canvas. Redraw when it becomes visible.
 - Traffic rows are keyed `sim-<iccid>` or by interface name. A bare `sim-...` key with no label is shown as `ICCID: ...`, and the number formatter is not applied to it. The operator label `op.<key>` is stored per card on the router.
 - While the page is open, it triggers collection every 10 s. The background collector runs every 30 s.
+- One refresh is one exec: `stats.sh bundle tick` (the first render reuses `bundle` from `load()`). If the backend answers with a usage error (older `stats.sh`), the page switches to the old `tick`/`list`/`series`/`traffic` calls until reload; a failed exec does not trigger the switch.
 
 ## buttons.js
 
 - Buttons and switches come from DTS `linux,code` / `linux,input-type` (EV_KEY = button, EV_SW = switch). The backend is `buttons.sh`.
-- Saves run **sequentially**. Each `buttons.sh set/setleds` call does `uci set` plus `uci commit`, and commit clears the delta: a parallel write between read and clear was lost while `Promise.all` reported success. Two parallel `setleds` also restarted `/etc/init.d/led` on top of each other. `btntype` is not written, because nothing reads it and every commit is a flash write.
+- Save is one exec: `buttons.sh save <button> field=value ...` (was 7-9 `set`/`setleds` calls). Every field name is checked against the `set`/`setleds` options before anything is written, values are passed as argv and never evaluated, there is one `uci commit`, and LED detaching plus `led reload` and the LED resync run once after it. An older `buttons.sh` answers with a usage error and the page falls back to the per-field calls below.
+- Per-field saves run **sequentially**. Each `buttons.sh set/setleds` call does `uci set` plus `uci commit`, and commit clears the delta: a parallel write between read and clear was lost while `Promise.all` reported success. Two parallel `setleds` also restarted `/etc/init.d/led` on top of each other. `btntype` is not written, because nothing reads it and every commit is a flash write.
 
 - Bootstrap's help icon (`.cbi-value-description::before`, absolute, 1em) sits at the top of the first line box. With the 18 px line height of a 13 px description it was 2.5 px above the text. On our pages it is moved down by `calc((1lh - 1em) / 2)`, with `.19em` as a fallback for browsers without `lh`. Checkbox rows hide the icon (see the flag-row rules).
 

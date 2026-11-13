@@ -113,8 +113,8 @@ _collect_ping() {
 		read -r _cp_st _ _ _cp_ms _ 2>/dev/null < "$_cp_f" || continue
 		[ "$_cp_st" = up ] || _cp_ms=0
 		_push "ping.$_cp_if" "${_cp_ms:-0}"
-		_cp_mp=$(uci5g_get "$(sec_for_iface "$_cp_if")" path)
 		if [ ! -f "$DIR/ping.$_cp_if.label" ] || [ -n "$(find "$DIR/ping.$_cp_if.label" -mmin +10 2>/dev/null)" ]; then
+			_cp_mp=$(uci5g_get "$(sec_for_iface "$_cp_if")" path)
 			[ "$_NP_SNAP_DONE" = 1 ] || { _NP_SNAP=$("$RES/netpri.sh" list 2>/dev/null); _NP_SNAP_DONE=1; }
 			_cp_w=$(_iface_label "$_cp_if")
 			[ -n "$_cp_mp" ] && _mdm_dup "$_cp_mp" && _cp_w="$_cp_w ($_cp_mp)"
@@ -470,13 +470,11 @@ _series_json() {
 	printf ']}'
 }
 
-mkdir -p "$DIR" 2>/dev/null
-
-case "$1" in
-tick)
-	_enabled || exit 0
+# a busy lock means another collector is mid-tick; skip, not wait
+_tick() {
+	_enabled || return 0
 	exec 9>/tmp/5gmodem/stats.lock
-	flock -n 9 || exit 0
+	flock -n 9 || return 0
 	_restore
 	_mdm_init
 	_mdm_reconcile
@@ -484,8 +482,9 @@ tick)
 	_collect_signal
 	_collect_traffic
 	_flush
-	;;
-list)
+}
+
+_list_json() {
 	_ls_p=""; _ls_s=""; _ls_t=""; _ls_m=""; _ls_rp=""; _ls_sn=""
 	for _ls_f in "$DIR"/ping.*;    do case "$_ls_f" in *.label) continue ;; esac
 		[ -f "$_ls_f" ] && _ls_p="$_ls_p,\"${_ls_f##*/ping.}\""; done
@@ -518,14 +517,9 @@ list)
 		"$(_enabled && echo 1 || echo 0)" "$(_persist && echo 1 || echo 0)" "$_ls_bg" \
 		"$(json_esc_s "$(_cfg path)")" "$(json_esc_s "$_ls_now")" "$PDIR_DEF" \
 		"${_ls_p#,}" "${_ls_s#,}" "${_ls_t#,}" "${_ls_m#,}" "${_ls_rp#,}" "${_ls_sn#,}" "${_ls_l#,}"
-	;;
-series)
-	[ -n "$2" ] || { echo '{"error":"no series"}'; exit 1; }
-	case "$2" in *[!A-Za-z0-9._-]*) echo '{"error":"bad name"}'; exit 1 ;; esac
-	_series_json "$2"
-	echo
-	;;
-traffic)
+}
+
+_traffic_json() {
 	printf '{'
 	_tr_first=1
 	for _tr_f in "$DIR"/traffic.*; do
@@ -540,6 +534,63 @@ traffic)
 		printf '"%s|%s":{"rx":%s,"tx":%s}' "$_tr_if" "$_tr_m" "$_tr_rx" "$_tr_tx"
 	done
 	printf '}\n'
+}
+
+# one awk per file instead of a shell read loop; non-numeric values are dropped so the JSON stays valid
+_series_pts() {
+	printf '['
+	[ -f "$DIR/$1" ] && awk '$1 ~ /^[0-9]+$/ && $2 ~ /^-?[0-9]+(\.[0-9]+)?$/ { printf "%s[%s,%s]", (n++ ? "," : ""), $1, $2 }' "$DIR/$1" 2>/dev/null
+	printf ']'
+}
+
+# everything one page refresh needs (list, every chart series, traffic) in one exec
+_bundle_json() {
+	printf '{"list":'
+	_list_json | tr -d '\n'
+	printf ',"series":{'
+	_bj_n=0
+	for _bj_m in ping signal temp rsrp sinr; do
+		for _bj_f in "$DIR/$_bj_m".*; do
+			[ -f "$_bj_f" ] || continue
+			case "$_bj_f" in *.label|*.tmp) continue ;; esac
+			_bj_k="${_bj_f##*/}"
+			case "$_bj_k" in *[!A-Za-z0-9._-]*) continue ;; esac
+			[ "$_bj_n" = 0 ] || printf ','
+			_bj_n=1
+			printf '"%s":' "$_bj_k"
+			_series_pts "$_bj_k"
+		done
+	done
+	printf '},"traffic":'
+	_traffic_json | tr -d '\n'
+	printf '}\n'
+}
+
+mkdir -p "$DIR" 2>/dev/null
+
+case "$1" in
+tick)
+	_tick
+	;;
+list)
+	_list_json
+	;;
+series)
+	[ -n "$2" ] || { echo '{"error":"no series"}'; exit 1; }
+	case "$2" in *[!A-Za-z0-9._-]*) echo '{"error":"bad name"}'; exit 1 ;; esac
+	_series_json "$2"
+	echo
+	;;
+traffic)
+	_traffic_json
+	;;
+bundle)
+	# "bundle tick" collects first, then answers; the lock is dropped before the read-only part
+	if [ "$2" = tick ]; then
+		_tick
+		exec 9>&-
+	fi
+	_bundle_json
 	;;
 setconf)
 	shift
@@ -589,7 +640,7 @@ reset)
 	echo '{"result":"ok"}'
 	;;
 *)
-	echo '{"error":"usage: stats.sh tick|list|series <name>|traffic|setconf k=v|forget <key> <month>|reset"}'
+	echo '{"error":"usage: stats.sh tick|list|series <name>|traffic|bundle [tick]|setconf k=v|forget <key> <month>|reset"}'
 	exit 1
 	;;
 esac

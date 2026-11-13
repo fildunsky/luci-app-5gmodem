@@ -192,7 +192,7 @@ netpri and the watchdog move default routes with `ip route` directly, so netifd 
 
 **Primary uplink** = the device of the IPv4 default route with the lowest metric in the main table (`default from` source routes are ignored). Its logical interface is the netifd interface on that `l3_device` that has an IPv4 address (so `wan`, not `wan6`; `modem`, not `modem_6`).
 
-When it differs from the last one seen (`/tmp/5gmodem/uplink.primary`, holds `<interface> <device>`), `uplink_notify` in `lib.sh` runs, in the background and after the routes are already in place:
+When it differs from the last one seen (`/tmp/5gmodem/uplink.primary`, holds `<interface> <device>`), `uplink_notify` (`uplink.sh`, also loaded by `lib.sh`) runs, in the background and after the routes are already in place:
 
 ```
 ACTION=primary INTERFACE=<new> DEVICE=<new l3_device> PREVIOUS=<old> PREVIOUS_DEVICE=<old l3_device> REASON=<reason> \
@@ -204,7 +204,7 @@ ubus send 5gmodem.uplink '{"action":"primary","interface":...,"device":...,"prev
 |---|---|
 | `netpri` | a card was made first or the order was changed (LuCI or any other caller of `netpri.sh set` / `order`), and the delayed `reapply` after an uplink came up |
 | `health` | a watchdog pass: an uplink was penalised or got its priority back ("restoring priority"), a missing default route was restored, or the watchdog was switched off and metrics were restored |
-| `iface` | 5 s after a netifd `ifup`, `ifdown` or `ifupdate` (`/etc/hotplug.d/iface/62-5gmodem-uplink`), which covers an uplink going down or up on its own |
+| `iface` | 5 s after a netifd `ifup`, `ifdown` or `ifupdate` (`/etc/hotplug.d/iface/62-5gmodem-uplink`), which covers an uplink going down or up on its own. The hook loads only `uplink.sh`, not `lib.sh`, since it fires on every DHCP/RA renewal; `loopback` events are ignored |
 
 Rules for subscribers:
 

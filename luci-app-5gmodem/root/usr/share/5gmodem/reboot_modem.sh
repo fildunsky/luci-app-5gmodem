@@ -278,7 +278,9 @@ if [ "$MODE" = "hard" ] || [ -n "$_rb_sr" ]; then
 		( sms_tool -d "$PORT" at "AT+CFUN=1,1" ) >/dev/null 2>&1 </dev/null &
 	fi
 	if [ -n "$IF" ] && [ -n "$_AMP" ]; then
-	( eval "exec $AT_LOCK_FD>&-"
+	# the lock fd is closed here, so drop the inherited marker too: with it at_query
+	# below believed the lock was still held and sent AT+CFUN without the queue
+	( eval "exec $AT_LOCK_FD>&-"; unset _AT_LOCK_HELD
 	  _n=0
 	  while [ "$_n" -lt 40 ] && [ -e "/sys/bus/usb/devices/$_AMP" ]; do sleep 1; _n=$((_n+1)); done
 	  _n=0

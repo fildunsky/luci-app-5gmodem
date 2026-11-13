@@ -105,9 +105,9 @@ USSD works through the API (`/api/global/module-switch` has `ussd_enabled=1` on 
 - The protocol comes from the active modem's own sysfs ID. `12d1156c` used to have the string `Vendor=12d1 ProdID=1506` copied from another profile, so its protocol was never detected.
 
 
-## Legacy address-based fallback (2026-11-07 audit)
+## Legacy address-based fallback (removed)
 
-The older `modem/hilink/huawei_hilink.sh` path remains separate from the primary `hilink.sh` implementation. Its LTE/NOSERVICE condition needs a space before the closing test bracket; without it the NOSERVICE branch reports a missing `]` instead of reading signal values.
+The older `modem/hilink/huawei_hilink.sh` collector was removed; see [web-API sticks](web-api-sticks.md#dispatch). Huawei sticks are polled only by `hilink.sh`.
 
 Huawei POST serialization uses an automatically released flock rather than a directory lock, so killing an exporter or RPC process cannot leave POSTs permanently busy. GET token/session refresh concurrency is a separate concern and is not changed by this lock.
 

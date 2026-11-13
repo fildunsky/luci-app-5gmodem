@@ -6,16 +6,17 @@ STAMP=/etc/5gmodem_proto.md5
 NEED=0
 HAS_FIBO=0
 _rp_known=$(ubus call network get_proto_handlers 2>/dev/null)
+_rp_has() { case "$_rp_known" in *"\"$1\""*) return 0 ;; esac; return 1; }
 for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='fibocom'\$/\1/p"); do
 	HAS_FIBO=1
+	_rp_has fibocom && continue
 	_av=$(ubus call network.interface."$_if" status 2>/dev/null \
 		| jsonfilter -e '@.available' 2>/dev/null)
-	[ "$_av" = "false" ] && ! printf '%s' "$_rp_known" | grep -q '"fibocom"' && NEED=1
+	[ "$_av" = "false" ] && NEED=1
 done
 
-if [ -r "$HANDLER" ] && ! ubus call network get_proto_handlers 2>/dev/null \
-		| grep -q '"fibocom"'; then
+if [ -r "$HANDLER" ] && ! _rp_has fibocom; then
 	if [ "$REGISTER_PROTO_FORCE" = "1" ] || [ "$HAS_FIBO" = "1" ]; then
 		NEED=1
 	else
@@ -35,8 +36,7 @@ for _if in $(uci -q show network 2>/dev/null \
 		| sed -n "s/^network\.\([^.]*\)\.proto='qmiraw'\$/\1/p"); do
 	HAS_QMIRAW=1
 done
-if [ -r /lib/netifd/proto/qmiraw.sh ] && ! ubus call network get_proto_handlers 2>/dev/null \
-		| grep -q '"qmiraw"'; then
+if [ -r /lib/netifd/proto/qmiraw.sh ] && ! _rp_has qmiraw; then
 	if [ "$REGISTER_PROTO_FORCE" = "1" ] || [ "$HAS_QMIRAW" = "1" ]; then
 		NEED=1
 	fi

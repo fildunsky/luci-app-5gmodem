@@ -125,8 +125,9 @@ setcelllock() {
 }
 
 getcelllock() {
-	O=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' \
-		| sed -n 's/^\^*LTE_LOCK: *//p' | head -1 | tr -d '() ')
+	# one LTE_LOCK? read serves both the lock value and the "off" check at the end
+	_gcl_o=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' | grep -v '^AT')
+	O=$(printf '%s\n' "$_gcl_o" | sed -n 's/^\^*LTE_LOCK: *//p' | head -1 | tr -d '() ')
 	if [ -n "$O" ]; then
 		_PC=$(echo "$O" | cut -d, -f1)
 		_AR=$(echo "$O" | cut -d, -f2)
@@ -143,7 +144,6 @@ getcelllock() {
 		case "$_AR" in ''|*[!0-9]*) _AR="" ;; esac
 		[ -n "$_AR" ] && { echo "arfcn $_AR"; return; }
 	fi
-	_gcl_o=$(sms_tool -d $_DEVICE at "AT^LTE_LOCK?" 2>/dev/null | tr -d '\r' | grep -v '^AT')
 	case "$_gcl_o" in
 		*ERROR*)    : ;;
 		*LTE_LOCK*) echo "off"; return ;;

@@ -182,7 +182,7 @@ function parseAntports(raw) {
 var pageModemPath = '';
 
 return view.extend({
-	load: function() { return fresh.check(30942, [ modemtabs, mutil ]); },
+	load: function() { return fresh.check(30943, [ modemtabs, mutil ]); },
 
 	render: function() {
 		loadCss();
@@ -200,6 +200,8 @@ return view.extend({
 			cells: LS.gj('celllog', []), target: LS.gj('target', null),
 			page: 0, pageSize: 15, hist: [], t: 0, lastSinr: null, online: true, timer: null, foreignN: 0
 		};
+		// A damaged log in localStorage must not break the page (renderTable calls sinr.toFixed).
+		st.cells = (Array.isArray(st.cells) ? st.cells : []).filter(function(c) { return c && typeof c.sinr === 'number'; });
 		var au = {
 			on: LS.g('sndon', '0') === '1', ctx: null, geigerTimer: null, curSinr: 0, tone: null, toneGain: null, customBuf: null,
 			vGeiger: parseFloat(LS.g('vGeiger', '0.5')), vTone: parseFloat(LS.g('vTone', '0.4')), vVoice: parseFloat(LS.g('vVoice', '1'))
@@ -402,12 +404,13 @@ return view.extend({
 			var ts = [ now.getHours(), now.getMinutes(), now.getSeconds() ].map(function(x) { return (x < 10 ? '0' : '') + x; }).join(':');
 			for (var i = 0; i < st.cells.length; i++) {
 				if (st.cells[i].enb === enb && st.cells[i].pci === pci) {
-					if (sinr > st.cells[i].sinr) { st.cells[i].sinr = sinr; st.cells[i].rsrp = rsrp; st.cells[i].time = ts; LS.sj('celllog', st.cells); }
-					return;
+					if (sinr > st.cells[i].sinr) { st.cells[i].sinr = sinr; st.cells[i].rsrp = rsrp; st.cells[i].time = ts; LS.sj('celllog', st.cells); return true; }
+					return false;
 				}
 			}
 			st.cells.push({ enb: enb, pci: pci, rsrp: rsrp, sinr: sinr, time: ts });
 			LS.sj('celllog', st.cells);
+			return true;
 		}
 
 		function apply(j) {
@@ -447,7 +450,8 @@ return view.extend({
 			mode.textContent = j.mode ? String(j.mode).split('|')[0].trim() : '';
 
 			updateRx(parseAntports(j.antports));
-			if (enb && !isNaN(sinr)) { logCell(enb, pci, isNaN(rsrp) ? '-' : rsrp, sinr); renderTable(); }
+			// Rebuild the table only when the log changed, not on every tick.
+			if (enb && !isNaN(sinr) && logCell(enb, pci, isNaN(rsrp) ? '-' : rsrp, sinr)) { renderTable(); }
 			if (!isNaN(sinr)) { st.t += st.interval; st.hist.push([ st.t, sinr ]); if (st.hist.length > 30) st.hist.shift(); draw(); geiger(sinr); tone(rsrp); }
 		}
 

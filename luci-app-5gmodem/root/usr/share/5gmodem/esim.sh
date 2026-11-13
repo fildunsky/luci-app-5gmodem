@@ -450,7 +450,7 @@ at_bounded() {
 	_ao="/tmp/5gmodem/esim_at.$$"
 	sms_tool -d "$1" at "$2" > "$_ao" 2>/dev/null &
 	_ap=$!
-	( sleep "${3:-6}"; kill "$_ap" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _aw=$!
+	( sleep "${3:-6}" & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_ap" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _aw=$!
 	wait "$_ap" 2>/dev/null; kill "$_aw" 2>/dev/null; wait "$_aw" 2>/dev/null
 	tr -d '\r' < "$_ao"; rm -f "$_ao"
 }
@@ -482,7 +482,7 @@ live_port() {
 }
 
 esim_active() {
-	T=$(sms_tool -d "$1" at "AT+SIMTYPE?" 2>/dev/null | tr -d '\r' \
+	T=$(at_bounded "$1" "AT+SIMTYPE?" 6 \
 		| sed -n 's/^+SIMTYPE: *\([0-9]\).*/\1/p' | head -1)
 	case "$T" in
 		1) return 0 ;;
@@ -616,12 +616,12 @@ do_lpac() {
 					_dl_s=$(_mbim_uim_slot); case "$_dl_s" in ''|*[!0-9]*) _dl_s=2 ;; esac
 					_dl_cur=$((_dl_s - 1))
 					_dl_alt=0; [ "$_dl_cur" = 0 ] && _dl_alt=1
-					if [ -n "$_dl_p" ] && sms_tool -d "$_dl_p" at "AT^switch_slot?" 2>/dev/null \
+					if [ -n "$_dl_p" ] && at_bounded "$_dl_p" "AT^switch_slot?" 6 \
 						| grep -qi "SIM"; then
 						logger -t 5gmodem "esim: chip not responding - reinitializing the card by cycling the slot $_dl_cur -> $_dl_alt -> $_dl_cur"
-						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_alt" >/dev/null 2>&1
+						at_bounded "$_dl_p" "AT^switch_slot=$_dl_alt" 10 >/dev/null
 						sleep 5
-						sms_tool -d "$_dl_p" at "AT^switch_slot=$_dl_cur" >/dev/null 2>&1
+						at_bounded "$_dl_p" "AT^switch_slot=$_dl_cur" 10 >/dev/null
 						sleep 8
 					else
 						sleep 3
@@ -1182,12 +1182,12 @@ download)
 		_rc_p=$(live_port)
 		_rc_s=$(_mbim_uim_slot); case "$_rc_s" in ''|*[!0-9]*) _rc_s=2 ;; esac
 		_rc_cur=$((_rc_s - 1)); _rc_alt=0; [ "$_rc_cur" = 0 ] && _rc_alt=1
-		if [ -n "$_rc_p" ] && sms_tool -d "$_rc_p" at "AT^switch_slot?" 2>/dev/null \
+		if [ -n "$_rc_p" ] && at_bounded "$_rc_p" "AT^switch_slot?" 6 \
 			| grep -qi "SIM"; then
 			logger -t 5gmodem "esim: download failed - reinitializing the card so the chip responds again"
-			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_alt" >/dev/null 2>&1
+			at_bounded "$_rc_p" "AT^switch_slot=$_rc_alt" 10 >/dev/null
 			sleep 5
-			sms_tool -d "$_rc_p" at "AT^switch_slot=$_rc_cur" >/dev/null 2>&1
+			at_bounded "$_rc_p" "AT^switch_slot=$_rc_cur" 10 >/dev/null
 			sleep 8
 			rm -f "/tmp/5gmodem/esimdump_$(uci -q get 5gmodem.@5gmodem[0].active_modem)" 2>/dev/null
 		fi

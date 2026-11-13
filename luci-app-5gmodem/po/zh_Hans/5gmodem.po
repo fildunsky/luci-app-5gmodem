@@ -1549,8 +1549,8 @@ msgstr "调制解调器设置"
 msgid "Port for modem communication"
 msgstr "调制解调器通信端口"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "用于读取调制解调器/连接信息的端口。<br /><br />传统调制解调器:可用的 ttyUSBX 端口之一。<br /><br />HiLink 调制解调器:输入调制解调器可用的 IP 地址 192.168.X.X。"
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "用于读取调制解调器/连接信息的端口：可用的 ttyUSBX 端口之一。<br /><br />HiLink 及其他带网页界面的调制解调器会被自动识别，无需端口。"
 
 msgid "Port for AT / SMS / USSD"
 msgstr "AT / 短信 / USSD 端口"
@@ -2439,6 +2439,15 @@ msgstr "已选：%d"
 
 msgid "Memory: %s/%s"
 msgstr "存储：%s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "路由器存储：%s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "SIM 卡存储：%s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "调制解调器存储：%s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "此调制解调器不支持 USSD：它是纯数据模块，固件不支持 SS 业务。已在实机验证——调制解调器对 USSD 请求完全不响应。"

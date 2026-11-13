@@ -213,10 +213,14 @@ function _bandsRemember(t, j) {
 function loadBands() {
 	if (!ctx.blockExpanded('freq')) { return Promise.resolve(); }
 	warmRenderBands();
-	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtinfo' ].concat(_bandsFor())), '{}').then(ctx.forPage(function(out) {
+	// mgmtjson = mgmtinfo with the vendor band data inline, one call per tick
+	return L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/bands.sh', [ 'mgmtjson' ].concat(_bandsFor())), '{}').then(ctx.forPage(function(out) {
 		var j = {}; try { j = JSON.parse(out) || {}; } catch (e) {}
 		if (!j.source) { return; }
-		if (j.source != 'mmcli') { return loadBandsModemband(); }
+		if (j.source != 'mmcli') {
+			if (j.bands && typeof j.bands === 'object') { applyVendorJson(j.bands); return; }
+			return loadBandsModemband();
+		}
 		if (j.pending) { return; }
 		if (!j.nrat) { _nrAt = null; }
 		if (j.nrat && _nrAt) { j.nrSup = _nrAt.sup; j.nrEn = _nrAt.en; }
@@ -378,6 +382,7 @@ function renderCaEnabled(state, canSwitch) {
 	if (!row || !cell) { return; }
 	if (state !== 'off') { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, 'ca|' + state + '|' + (canSwitch ? 1 : 0))) { return; }
 	cell.innerHTML = '';
 	cell.appendChild(E('span', { 'style': 'color:#e58a00; margin-right:.6em' },
 		_('Disabled in modem')));
@@ -414,6 +419,7 @@ function render256qam(state) {
 	if (!row || !cell) { return; }
 	if (state !== 'on' && state !== 'off') { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, 'qam|' + state)) { return; }
 	cell.innerHTML = '';
 
 	var on = (state === 'on');
@@ -439,6 +445,7 @@ function renderUlca(state) {
 	if (!row || !cell) { return; }
 	if (state !== 'on' && state !== 'off') { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, 'ulca|' + state)) { return; }
 	cell.innerHTML = '';
 
 	if (state === 'on') {
@@ -464,6 +471,7 @@ function render5gMode(state) {
 	if (!row || !cell) { return; }
 	if (!state) { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, '5g|' + state)) { return; }
 	cell.innerHTML = '';
 
 	var full = (state === 'sa+nsa');
@@ -514,6 +522,7 @@ function renderCellLock(state) {
 	if (!row || !cell) { return; }
 	if (!state) { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, 'lock|' + state)) { return; }
 	cell.innerHTML = '';
 
 	var parts = String(state).split(' ');
@@ -598,6 +607,7 @@ function renderCellLock5g(state) {
 	if (!row || !cell) { return; }
 	if (!state || state === 'Unsupported') { row.style.display = 'none'; return; }
 	row.style.display = '';
+	if (ctx.sameRender(cell, 'lock5g|' + state)) { return; }
 	cell.innerHTML = '';
 
 	var parts = String(state).split(' ');
@@ -1190,7 +1200,7 @@ function ungate() {
 function setOther(list) { bandsOther = list || []; }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 	mtkPackagePrompt: mtkPackagePrompt,
 	init: function(c) { ctx = c; },
 	loadBands: function() { return loadBands(); },

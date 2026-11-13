@@ -220,8 +220,14 @@ function pollSlotUntilSwitched(wantId, delays) {
 	}, ms);
 }
 
+// newcount forks jsonfilter+awk (an adb round trip on phones): ask at most every
+// 15 s and never stack calls when the router answers slowly.
+var _smsEnvAt = 0, _smsEnvBusy = false;
 function updateSmsEnvelope() {
 	if (!document.getElementById('smsenv')) { return; }
+	if (_smsEnvBusy || Date.now() - _smsEnvAt < 15000) { return; }
+	_smsEnvBusy = true;
+	_smsEnvAt = Date.now();
 	var _args = [ 'newcount' ];
 	if (pageModemPath) { _args.push('for=' + pageModemPath); }
 	L.resolveDefault(fs.exec_direct('/usr/share/5gmodem/smsbridge.sh', _args), '').then(forPage(function(out) {
@@ -229,7 +235,7 @@ function updateSmsEnvelope() {
 		var env = document.getElementById('smsenv');
 		if (!env) { return; }
 		env.style.display = (n > 0) ? '' : 'none';
-	}));
+	})).then(function() { _smsEnvBusy = false; }, function() { _smsEnvBusy = false; });
 }
 
 function finishAndroidSwitch(json) {
@@ -318,6 +324,10 @@ function paintIpRow(kind) {
 	var src = v4 ? st.src : st.src6;
 	var srcTxt = src ? (' (' + src + ')') : '';
 	var same = !!(ext && ext === local);
+	val.classList.toggle('has-ext', !!(ext && !same));
+	row.style.display = '';
+	// Called twice per poll tick: keep the nodes (and an open tooltip) when nothing changed.
+	if (sameRender(val, [ local, ext || '', st.cc || '', srcTxt ].join('|'))) { return; }
 	var extEl = function(tip) {
 		return E('span', { 'class': 'tginfo-extip', 'data-tooltip': tip },
 			extip.withFlag(ext, st.cc));
@@ -334,9 +344,7 @@ function paintIpRow(kind) {
 			extEl(_('External address as seen from the internet%s').format(srcTxt))
 		];
 	}
-	val.classList.toggle('has-ext', !!(ext && !same));
 	dom.content(val, kids);
-	row.style.display = '';
 }
 
 function applyExtIp() { paintIpRow('v4'); paintIpRow('v6'); }
@@ -777,6 +785,7 @@ function switchModemInPlace(path) {
 	slotImsiSeen = null;
 	slotIdleTicks = 1;
 	slotsInflight = false;
+	_smsEnvAt = 0;
 	var _ssb = document.getElementById('simslotn');
 	if (_ssb) { _ssb.style.display = 'none'; _ssb.innerHTML = ''; _ssb.removeAttribute('data-sig'); }
 	resetStickyForModem();
@@ -936,7 +945,7 @@ function histSeed() {
 		h.p = res.filter(function(p) { return p[0] > now - HIST_SPAN; }).slice(-HIST_CAP);
 		if (!h.c && ck) { h.c = ck; }
 		try { window.sessionStorage.setItem('5gm-hist', JSON.stringify(st)); } catch (e) {}
-		histDraw(window._lastJson || null);
+		histDraw(_lastJson);
 	});
 }
 function histSvg(tag, attrs) {
@@ -1113,11 +1122,19 @@ function histDraw(json) {
 	});
 	histHover();
 }
+function histOpen() {
+	var body = document.querySelector('[data-blk="hist"] .tg-collapse');
+	return !!(body && body.classList.contains('open'));
+}
 function histShow(on) {
 	var el = document.querySelector('[data-blk="hist"]');
 	if (el) { el.style.display = on ? '' : 'none'; }
 }
-onBlockExpand['hist'] = function() { histDraw(_lastJson); };
+onBlockExpand['hist'] = function() {
+	histDraw(_lastJson);
+	// A collapsed block skips the seed, so catch up with the router ring on open.
+	if (Date.now() - _histSeedAt > 30000) { histSeed(); }
+};
 
 function renderDebugBtn(json) {
 	var head = document.getElementById('modemname');
@@ -1383,6 +1400,7 @@ function renderApnLine(json) {
 	if (pdp === '-') { pdp = ''; }
 	if (json.backend === 'hilink' || json.at_debug === '1' || (!apn && !pdp)) { el.style.display = 'none'; return; }
 	el.style.display = '';
+	if (sameRender(el, apn + '|' + pdp)) { return; }
 	el.innerHTML = '';
 	var mono = 'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
 	var row = [
@@ -2136,7 +2154,7 @@ function applyMetrics(json) {
 					if (!_remote) {
 						histPush(json);
 						histDraw(json);
-						if (Date.now() - _histSeedAt > 30000) { histSeed(); }
+						if (Date.now() - _histSeedAt > 30000 && histOpen()) { histSeed(); }
 					}
 
 					if (json.backend === 'hilink') {
@@ -2910,7 +2928,7 @@ simDialog: baseclass.extend({
 	
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ bandsui, extip, modemtabs, mutil, netpri, healthform, netarrange, mobileview ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {

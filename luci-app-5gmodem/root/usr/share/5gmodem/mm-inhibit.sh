@@ -33,6 +33,29 @@ _mm_excluded() {
 	_is_kernel_proto "$(_proto_for_path "$1")"
 }
 
+# One "mmcli -L" plus one "-K" per modem, shared by every modem of a pass:
+# mm_recover_missing and _mm_fix_atonly listed all modems again for each modem
+# they looked at (on the 15 s loop, 3 -L and 4 -K for a single modem).
+_mm_map_refresh() {
+	local _mmi _mmd
+	_MM_MAP=""
+	for _mmi in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
+		_mmd=$(mmcli -m "$_mmi" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
+		[ -n "$_mmd" ] && _MM_MAP="$_MM_MAP $_mmi|$_mmd"
+	done
+	_MM_MAP_OK=1
+}
+
+_mm_index_of() {
+	local _mme _mmd
+	_MM_IDX=""
+	for _mme in $_MM_MAP; do
+		_mmd="${_mme#*|}"
+		[ "${_mmd##*/}" = "$1" ] && { _MM_IDX="${_mme%%|*}"; return 0; }
+	done
+	return 1
+}
+
 inhibit_pass() {
 	command -v mmcli >/dev/null 2>&1 || return 0
 
@@ -55,10 +78,10 @@ inhibit_pass() {
 		echo "$_cur" > "$RUN/.mmpid"
 	fi
 
-	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
-		DEV=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
-		[ -n "$DEV" ] || continue
-		PATHID=$(basename "$DEV")
+	_mm_map_refresh
+	for _mme in $_MM_MAP; do
+		DEV="${_mme#*|}"
+		PATHID="${DEV##*/}"
 		case "$PATHID" in *-*) ;; *) continue ;; esac
 		_mm_excluded "$PATHID" || continue
 		if [ -f "$RUN/$PATHID.pause" ]; then
@@ -145,13 +168,14 @@ _mm_fix_atonly() {
 		[ -e "$_fw" ] && { _fwdm="$_fw"; break; }
 	done
 	[ -n "$_fwdm" ] || return 0
-	_fi=""
-	for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
-		_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
-		[ "$(basename "$_d" 2>/dev/null)" = "$_fp" ] && { _fi="$I"; break; }
-	done
-	[ -n "$_fi" ] || return 0
+	[ -n "$_MM_MAP_OK" ] || _mm_map_refresh
+	_mm_index_of "$_fp" || return 0
+	_fi="$_MM_IDX"
 	_fk=$(mmcli -m "$_fi" -K 2>/dev/null)
+	# the index comes from the start of the pass; if MM renumbered the modem since,
+	# an empty or foreign dump must not be taken for "no control port" and rebind it
+	_d=$(printf '%s\n' "$_fk" | sed -n 's/^modem\.generic\.device *: *//p')
+	[ "${_d##*/}" = "$_fp" ] || return 0
 	printf '%s\n' "$_fk" | grep -qE '^modem\.generic\.ports\.value\[[0-9]+\] *: *[A-Za-z0-9-]+ \((mbim|qmi)\)' && return 0
 	_fstate=$(printf '%s\n' "$_fk" | sed -n 's/^modem\.generic\.state *: *//p')
 	case "$_fstate" in connected|connecting|disconnecting) return 0 ;; esac
@@ -238,14 +262,13 @@ mm_recover_missing() {
 	local _rp _seen I _d _if _t _w _n _rb_mk _rb_now _rb_first _rb_cd _rb_last _rb_fail _rb_key _has_wdm _wdm_node _wdm_drv _sw_pro _sw_vp _mm_only _rb_n
 	command -v mmcli >/dev/null 2>&1 || return 0
 	pgrep -f '/usr/sbin/ModemManager' >/dev/null 2>&1 || return 0
+	# fresh list: inhibit_pass may have spent tens of seconds in _restore_stolen
+	_mm_map_refresh
 	for _rp in $("$RES/listmodems.sh" 2>/dev/null | jsonfilter -e '@[*].path' 2>/dev/null); do
 		case "$_rp" in *-*) ;; *) continue ;; esac
 		[ "$(_proto_for_path "$_rp")" = modemmanager ] || continue
 		_seen=0
-		for I in $(mmcli -L 2>/dev/null | grep -oE '/Modem/[0-9]+' | grep -oE '[0-9]+$'); do
-			_d=$(mmcli -m "$I" -K 2>/dev/null | sed -n 's/^modem\.generic\.device *: *//p')
-			[ "$(basename "$_d" 2>/dev/null)" = "$_rp" ] && { _seen=1; break; }
-		done
+		_mm_index_of "$_rp" && _seen=1
 		if [ "$_seen" = 0 ]; then
 			_rb_key=$(printf '%s' "$_rp" | tr -c 'A-Za-z0-9' '_')
 			_rb_mk="$RUN/$_rb_key.missing"
@@ -381,6 +404,7 @@ mm_recover_missing() {
 		}
 		_mm_ifup_if_down "$_rp"
 	done
+	_MM_MAP_OK=""
 }
 
 _restore_stolen() {

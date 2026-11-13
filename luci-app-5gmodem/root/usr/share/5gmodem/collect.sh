@@ -20,7 +20,7 @@ run() {
 	_tmp="/tmp/5gmodem/.diag.$$"
 	( "$@" ) > "$_tmp" 2>&1 &
 	_p=$!
-	( sleep "$_t"; kill -9 "$_p" 2>/dev/null ) >/dev/null 2>&1 &
+	( sleep "$_t" & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill -9 "$_p" 2>/dev/null ) >/dev/null 2>&1 &
 	_w=$!
 	wait "$_p" 2>/dev/null
 	kill "$_w" 2>/dev/null; wait "$_w" 2>/dev/null
@@ -170,7 +170,7 @@ cap() {
 	_c_f="/tmp/5gmodem/.diagcap.$$"
 	( "$@" ) > "$_c_f" 2>&1 &
 	_c_p=$!
-	( sleep "$_c_t"; kill -9 "$_c_p" 2>/dev/null ) >/dev/null 2>&1 &
+	( sleep "$_c_t" & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill -9 "$_c_p" 2>/dev/null ) >/dev/null 2>&1 &
 	_c_w=$!
 	wait "$_c_p" 2>/dev/null
 	kill "$_c_w" 2>/dev/null; wait "$_c_w" 2>/dev/null
@@ -2006,6 +2006,12 @@ report() {
 			at_lock "$t" 5 || { echo "  $t -> skipped: the port is busy (metrics poll or an eSIM operation holds it)"; continue; }
 			for c in 1 2 3 4; do sms_tool -d "$t" at "AT+CCHC=$c" >/dev/null 2>&1; done
 			R=$(sms_tool -d "$t" at "AT+CCHO=\"$AID\"" 2>/dev/null | tr -d "\r" | grep -v "^$" | grep -vi "^at+ccho" | head -1)
+			# the probe only needs to know the channel opens: do not leave it held on the eUICC
+			case "$R" in
+				*CCHO:*|[0-9]*)
+					C=$(printf "%s" "${R#*CCHO:}" | tr -cd "0-9")
+					[ -n "$C" ] && sms_tool -d "$t" at "AT+CCHC=$C" >/dev/null 2>&1 ;;
+			esac
 			at_unlock
 			case "$R" in
 				*CCHO:*|[0-9]*) echo "  $t -> CHANNEL OPENED [$R]  <= this is the eUICC port" ;;

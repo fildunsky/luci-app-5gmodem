@@ -43,8 +43,6 @@ function lpaFail(j) {
 	return reason ? (reason + ' (' + step + ')') : step;
 }
 
-function esimUiCss() {}
-
 function esimSimIcon(cls) {
 	return E('img', {
 		'class': cls || 'esim-simicon',
@@ -163,7 +161,7 @@ return view.extend({
 
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
@@ -709,7 +707,6 @@ return view.extend({
 
 	_doDownload: function(code, inp) {
 		var self = this;
-		esimUiCss();
 		var box = E('div', { 'class': 'esim-d' }, _('Starting…'));
 		ui.showModal(_('Add eSIM profile'), [
 			E('div', { 'class': 'esim-modal' }, [

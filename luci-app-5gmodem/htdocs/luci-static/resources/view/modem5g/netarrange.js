@@ -101,7 +101,7 @@ function save() {
 		fs.exec(BIN, args).then(function(r) {
 			if (r && r.code) { throw new Error(r.stderr || r.code); }
 		}).catch(function(e) {
-			ui.addNotification(null, E('p', _('Could not save the block order') + ': ' + (e.message || e)), 'error');
+			ui.addNotification(null, E('p', [ _('Could not save the block order') + ': ' + (e.message || e) ]), 'error');
 		});
 	}, 300);
 }
@@ -252,7 +252,7 @@ function resetAll() {
 	paintHidden();
 	if (st.timer) { window.clearTimeout(st.timer); st.timer = null; }
 	fs.exec(BIN, [ 'netblocks' ]).catch(function(e) {
-		ui.addNotification(null, E('p', _('Could not save the block order') + ': ' + (e.message || e)), 'error');
+		ui.addNotification(null, E('p', [ _('Could not save the block order') + ': ' + (e.message || e) ]), 'error');
 	});
 }
 
@@ -265,7 +265,7 @@ function toolBtn(cls, label, fn) {
 }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 
 	prepare: function(root) {
 		var mib = root.querySelector('#modem-info-block');

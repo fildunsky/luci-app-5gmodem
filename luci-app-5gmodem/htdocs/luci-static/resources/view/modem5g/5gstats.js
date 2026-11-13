@@ -381,8 +381,8 @@ function pathNowText(lst) {
 	return lst.path_now ? _('Writing to %s').format(lst.path_now) : _('Nowhere to write - check the path.');
 }
 
-function refresh() {
-	return callStats([ 'list' ]).then(function(lst) {
+function legacyRefresh(have) {
+	return (have ? Promise.resolve(have) : callStats([ 'list' ])).then(function(lst) {
 		_state.list = lst || {};
 		var names = [];
 		(lst && lst.ping || []).forEach(function(n) { names.push('ping.' + n); });
@@ -397,24 +397,58 @@ function refresh() {
 		})).then(function() {
 			return callStats([ 'traffic' ]).then(function(t) { _state.traffic = t || {}; });
 		});
+	});
+}
+
+function isBundle(b) { return !!(b && b.list && b.series && b.traffic); }
+
+function applyBundle(b) {
+	_state.list = b.list || {};
+	_state.series = b.series || {};
+	_state.traffic = b.traffic || {};
+}
+
+// one exec per refresh ("bundle", with "tick" it collects first). Only a usage
+// error proves an older stats.sh without it; a failed exec is retried next time.
+var _noBundle = false;
+function callBundle(tick) {
+	if (_noBundle) { return Promise.resolve(null); }
+	return L.resolveDefault(fs.exec(BIN, tick ? [ 'bundle', 'tick' ] : [ 'bundle' ]), null).then(function(res) {
+		var j = null;
+		try { j = JSON.parse((res && res.stdout) || 'null'); } catch (e) {}
+		if (j && typeof j.error === 'string' && j.error.indexOf('usage') === 0) { _noBundle = true; }
+		return j;
+	});
+}
+
+function refresh(have, tick) {
+	if (isBundle(have)) { applyBundle(have); redraw(); return Promise.resolve(); }
+	return callBundle(tick).then(function(b) {
+		if (isBundle(b)) { applyBundle(b); return; }
+		return (tick ? callStats([ 'tick' ]) : Promise.resolve()).then(function() {
+			return legacyRefresh(have && have.ping ? have : null);
+		});
 	}).then(redraw);
 }
 
 return view.extend({
 	load: function() {
 		var self = this, args = arguments;
-		return fresh.check(30942, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
+		return fresh.check(30943, [ modemtabs, mutil ]).then(function() { return self._load5g.apply(self, args); });
 	},
 
 	_load5g: function() {
 		return Promise.all([
 			uci.load('5gmodem'),
-			callStats([ 'list' ])
+			callBundle(false).then(function(b) {
+				return isBundle(b) ? b : callStats([ 'list' ]);
+			})
 		]);
 	},
 
 	render: function(res) {
-		var lst = (res && res[1]) || {};
+		var first = res && res[1];
+		var lst = (isBundle(first) ? first.list : first) || {};
 		_state.list = lst;
 
 		var head = E('div');
@@ -518,10 +552,10 @@ return view.extend({
 			])
 		]);
 
-		refresh();
+		refresh(first);
 		poll.add(function() {
 			if (document.hidden) { return Promise.resolve(); }
-			return callStats([ 'tick' ]).then(refresh);
+			return refresh(null, true);
 		}, 10);
 		return body;
 	},

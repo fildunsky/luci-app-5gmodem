@@ -268,6 +268,9 @@ round() {
 	ucinet_snapshot
 	uptime_s > "$HDIR/.t"
 	_HDUMP=$(ubus call network.interface dump 2>/dev/null)
+	# fill the cache in this shell: $(wan_nets) runs in a subshell and loses it,
+	# so the probe loop and the ghost cleanup below each re-ran the route scan
+	wan_nets >/dev/null
 	for _r_n in $(wan_nets); do
 		case "$_r_n" in
 			*6) _r_p=$(ucinet_get "$_r_n" proto)
@@ -433,6 +436,9 @@ _dns_restore() {
 }
 
 enforce() {
+	# re-read metrics: netpri set/order may have committed new ones while the
+	# probes ran, and the round's snapshot would move the routes back
+	ucinet_snapshot
 	_e_anyup=""; _e_cnt=0; _e_min=""; _e_dead=""
 	for _e_f in "$HDIR"/*; do
 		[ -f "$_e_f" ] || continue; case "$_e_f" in */.t|*.heal|*.demoted|*.nosim|*.nodata|*.mmoff|*.on2g|*.srch|*.radio|*.mmbusy|*.noproto) continue ;; esac
@@ -821,7 +827,7 @@ heal() {
 						fi
 						if ! pgrep -f "mmcli -m $_h_mmi --enable" >/dev/null 2>&1; then
 							( mmcli -m "$_h_mmi" --enable >/dev/null 2>&1 & _h_mep=$!
-							  ( sleep 30; kill "$_h_mep" 2>/dev/null ) >/dev/null 2>&1 & _h_mew=$!
+							  ( sleep 30 & _ws=$!; trap 'kill $_ws 2>/dev/null; exit' TERM; wait $_ws; kill "$_h_mep" 2>/dev/null ) >/dev/null 2>&1 & _h_mew=$!
 							  wait "$_h_mep" 2>/dev/null
 							  kill "$_h_mew" 2>/dev/null ) >/dev/null 2>&1 </dev/null 9>&- &
 						fi
@@ -1074,8 +1080,15 @@ event)
 	[ "$H_EN" = "1" ] || exit 0
 	case " $(wan_nets) " in *" $2 "*) ;; *) exit 0 ;; esac
 	mkdir -p "$HDIR"
+	_ev_t0=$(uptime_s)
 	exec 9>"/tmp/5gmodem/health.lock"
 	flock 9
+	# a hotplug burst queues one event per interface; a round that started
+	# after this event already saw it, and every extra round counts one more
+	# probe toward fail_n
+	_ev_t=$(cat "$HDIR/.t" 2>/dev/null)
+	case "$_ev_t" in ''|*[!0-9]*) _ev_t=0 ;; esac
+	[ "$_ev_t" -gt "$_ev_t0" ] && exit 0
 	round
 	enforce
 	;;

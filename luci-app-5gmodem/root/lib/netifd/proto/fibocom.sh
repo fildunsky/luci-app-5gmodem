@@ -80,7 +80,8 @@ _fibocom_auth() {
 			out=$(sms_tool -d "$dial" at "AT+XGAUTH=1,$am,\"$username\",\"$password\"" 2>&1)
 		fi
 		case "$out" in
-			*ERROR*) echo "fibocom[$$] AT+XGAUTH rejected, trying AT+CGAUTH" ;;
+			# stderr: this runs inside ip=$(_fibocom_activate ...), stdout is the address
+			*ERROR*) echo "fibocom[$$] AT+XGAUTH rejected, trying AT+CGAUTH" >&2 ;;
 			*) out="" ;;
 		esac
 	fi

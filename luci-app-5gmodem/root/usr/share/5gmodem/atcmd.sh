@@ -35,7 +35,8 @@ if [ "$_rc" = 2 ]; then
 	_ac_o=$(mktemp /tmp/5gmodem/atcmd.XXXXXX 2>/dev/null) || _ac_o="/tmp/5gmodem/atcmd.$$"
 	sms_tool -d "$PORT" at "$CMD" > "$_ac_o" 2>/dev/null &
 	_ac_p=$!
-	( sleep "$(( ${TMO:-8} + 1 ))"; kill "$_ac_p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _ac_k=$!
+	( sleep "$(( ${TMO:-8} + 1 ))" & _ac_s=$!; trap 'kill $_ac_s 2>/dev/null; exit' TERM; wait $_ac_s
+	  kill "$_ac_p" 2>/dev/null ) >/dev/null 2>&1 </dev/null & _ac_k=$!
 	sleep_tick_init
 	_ac_i=0; _ac_max=$(( (${TMO:-8} + 2) * _TICKS_PER_SEC ))
 	while kill -0 "$_ac_p" 2>/dev/null && [ "$_ac_i" -lt "$_ac_max" ]; do

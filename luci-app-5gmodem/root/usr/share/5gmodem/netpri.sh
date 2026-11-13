@@ -1,11 +1,15 @@
 #!/bin/sh
 
+_NP_WN=""; _NP_WN_DONE=""
 wan_nets() {
+	[ -n "$_NP_WN_DONE" ] && { printf '%s\n' "$_NP_WN"; return; }
 	z=$(uci show firewall 2>/dev/null | sed -n "s/^firewall\.\([^.]*\)\.name='wan'\$/\1/p" | head -1)
 	_wn=""
 	[ -n "$z" ] && _wn=$(uci -q get "firewall.$z.network")
 	printf '%s %s\n' "$_wn" "$(extra_uplink_nets "$_wn" | tr '\n' ' ')"
 }
+# list reads the uplink set twice; routes do not change there, so scan once
+wan_nets_cache() { _NP_WN=$(wan_nets); _NP_WN_DONE=1; }
 
 . /usr/share/5gmodem/atlock.sh
 . /usr/share/5gmodem/lib.sh
@@ -790,6 +794,7 @@ list)
 	_HEALTH_FO=$(uci5g_get health failover)
 	ms_map_build
 	_LIVE_DEV=$(live_dev)
+	wan_nets_cache
 	printf '['
 	first=1
 	NEEDREFRESH=0

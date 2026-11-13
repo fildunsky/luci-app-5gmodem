@@ -1549,8 +1549,8 @@ msgstr "Cài đặt modem"
 msgid "Port for modem communication"
 msgstr "Cổng giao tiếp modem"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "Cổng dùng để đọc thông tin modem/kết nối. <br /> <br />Modem thông thường: một trong các cổng ttyUSBX có sẵn.<br /> <br />Modem HiLink: nhập địa chỉ IP 192.168.X.X mà modem đang sử dụng."
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "Cổng dùng để đọc thông tin modem/kết nối: một trong các cổng ttyUSBX có sẵn.<br /> <br />HiLink và các modem có giao diện web khác được tự động phát hiện, không cần cổng."
 
 msgid "Port for AT / SMS / USSD"
 msgstr "Cổng cho AT / SMS / USSD"
@@ -2439,6 +2439,15 @@ msgstr "đã chọn: %d"
 
 msgid "Memory: %s/%s"
 msgstr "Bộ nhớ: %s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "Bộ nhớ router: %s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "Bộ nhớ SIM: %s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "Bộ nhớ modem: %s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "USSD không hoạt động trên modem này: đây là module chỉ dữ liệu, firmware không hỗ trợ SS. Đã kiểm chứng trên phần cứng thật - modem hoàn toàn không trả lời yêu cầu USSD."

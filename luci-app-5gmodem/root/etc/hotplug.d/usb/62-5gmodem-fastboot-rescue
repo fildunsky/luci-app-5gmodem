@@ -8,8 +8,6 @@ case "$PRODUCT" in
 	5c6/9008/*) exit 0 ;;
 esac
 
-[ "$(uci -q get 5gmodem.@5gmodem[0].fastboot_rescue)" = "0" ] && exit 0
-
 _d="/sys$DEVPATH"
 [ -f "$_d/idVendor" ] || exit 0
 _id="$(cat "$_d/idVendor" 2>/dev/null):$(cat "$_d/idProduct" 2>/dev/null)"
@@ -30,6 +28,8 @@ case "$_id" in
 		fi ;;
 esac
 [ "$_is_fb" = "1" ] || exit 0
+# read the switch only for a bootloader candidate, not on every USB add
+[ "$(uci -q get 5gmodem.@5gmodem[0].fastboot_rescue)" = "0" ] && exit 0
 
 if ps w 2>/dev/null | grep -v grep | grep -qE '[f]astboot (flash|boot|erase|oem|update)|[e]dl(\.py)? '; then
 	logger -t 5gmodem "fastboot-rescue: $_id is in fastboot, but a flashing process is running - leaving it alone"

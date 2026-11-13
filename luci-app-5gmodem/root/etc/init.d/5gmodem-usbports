@@ -5,16 +5,31 @@ START=50
 start() {
 	. /usr/share/5gmodem/netonly.sh
 	netonly_active && return 0
+	# 55-5gmodem-usbports calls start for every matching USB event (two per device),
+	# so one worker runs the 30 s coldplug window and a new request restarts it
+	# instead of starting a parallel loop that races on new_id.
+	mkdir -p /tmp/5gmodem 2>/dev/null
+	_P=/tmp/5gmodem/usbports.pending
+	: > "$_P"
 	(
 		. /usr/share/5gmodem/noatports.sh
-		noat_unbind
-		/usr/share/5gmodem/usbmode-fix.sh
-		_i=1
-		while [ "$_i" -le 6 ]; do
-			noat_unbind
-			/usr/share/5gmodem/usbports.sh coldplug
-			sleep 5
-			_i=$((_i + 1))
+		while :; do
+			flock -n 9 || exit 0
+			while [ -f "$_P" ]; do
+				rm -f "$_P"
+				noat_unbind
+				/usr/share/5gmodem/usbmode-fix.sh
+				_i=1
+				while [ "$_i" -le 6 ]; do
+					noat_unbind
+					/usr/share/5gmodem/usbports.sh coldplug
+					sleep 5
+					_i=$((_i + 1))
+					[ -f "$_P" ] && break
+				done
+			done
+			flock -u 9
+			[ -f "$_P" ] || exit 0
 		done
-	) >/dev/null 2>&1 &
+	) 9>/tmp/5gmodem/usbports.lock >/dev/null 2>&1 </dev/null &
 }

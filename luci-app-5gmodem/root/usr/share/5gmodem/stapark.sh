@@ -40,7 +40,10 @@ sta_linked() {
 }
 
 seen() {
-	timeout 20 iw dev "$1" scan ap-force 2>/dev/null | awk -v s="$2" -v b="$3" '
+	# busybox may be built without timeout: "timeout: not found" made every
+	# scan look empty, so a parked station was never brought back
+	_sn_to=""; command -v timeout >/dev/null 2>&1 && _sn_to="timeout 20"
+	$_sn_to iw dev "$1" scan ap-force 2>/dev/null | awk -v s="$2" -v b="$3" '
 		/^BSS / { m = tolower(substr($2, 1, 17)); next }
 		/^[ \t]*SSID: / { sub(/^[ \t]*SSID: /, ""); if ($0 == s && (b == "" || m == tolower(b))) f = 1 }
 		END { exit !f }'

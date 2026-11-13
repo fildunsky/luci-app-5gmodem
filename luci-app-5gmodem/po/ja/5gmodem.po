@@ -1549,8 +1549,8 @@ msgstr "モデムの設定"
 msgid "Port for modem communication"
 msgstr "モデム通信用ポート"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "モデムや接続の情報を読み取るポートです。<br /> <br />通常のモデム: 使える ttyUSBX ポートのどれか。<br /> <br />HiLink モデム: モデムにアクセスできる IP アドレス (192.168.X.X) を入力してください。"
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "モデムや接続の情報を読み取るポートです。使える ttyUSBX ポートのどれかを選びます。<br /> <br />HiLink など Web インターフェースを持つモデムは自動で検出されるため、ポートは不要です。"
 
 msgid "Port for AT / SMS / USSD"
 msgstr "AT / SMS / USSD 用ポート"
@@ -2439,6 +2439,15 @@ msgstr "選択: %d"
 
 msgid "Memory: %s/%s"
 msgstr "メモリ: %s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "ルーターのメモリ: %s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "SIM のメモリ: %s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "モデムのメモリ: %s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "このモデムでは USSD は使えません: ファームウェアが SS に対応していないデータ専用モジュールです。実機で確認済みで、モデムは USSD リクエストに一切応答しません。"

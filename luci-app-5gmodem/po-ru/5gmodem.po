@@ -1741,8 +1741,8 @@ msgstr "Настройки модема"
 msgid "Port for modem communication"
 msgstr "Порт связи с модемом"
 
-msgid "Port used to read modem/connection info. <br /> <br />Traditional modem: one of the available ttyUSBX ports.<br /> <br />HiLink modem: enter the IP address 192.168.X.X under which the modem is available."
-msgstr "Порт для чтения информации о модеме/соединении. <br /> <br />Обычный модем: один из доступных портов ttyUSBX.<br /> <br />HiLink-модем: введите IP-адрес 192.168.X.X, по которому доступен модем."
+msgid "Port used to read modem/connection info: one of the available ttyUSBX ports.<br /> <br />HiLink and other modems with a web interface are found automatically and need no port."
+msgstr "Порт для чтения информации о модеме и соединении: один из доступных портов ttyUSBX.<br /> <br />HiLink и другие модемы с веб-интерфейсом находятся автоматически, порт для них не нужен."
 msgid "Port for AT / SMS / USSD"
 msgstr "Порт для AT / SMS / USSD"
 
@@ -2631,6 +2631,15 @@ msgstr "выделено: %d"
 
 msgid "Memory: %s/%s"
 msgstr "Память: %s/%s"
+
+msgid "Router memory: %s/%s"
+msgstr "Память роутера: %s/%s"
+
+msgid "SIM memory: %s/%s"
+msgstr "Память SIM: %s/%s"
+
+msgid "Modem memory: %s/%s"
+msgstr "Память модема: %s/%s"
 
 msgid "USSD does not work on this modem: it is a data-only module without SS support in the firmware. Verified on real hardware - the modem does not answer USSD requests at all."
 msgstr "USSD на этом модеме не работает: это модуль только для передачи данных, поддержки SS в прошивке нет. Проверено на живом железе — модем не отвечает на USSD-запросы вовсе."

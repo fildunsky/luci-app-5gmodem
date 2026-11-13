@@ -17,7 +17,9 @@ return network.registerProtocol('fibocom', {
 	},
 
 	getIfname: function() {
-		return this._ubus('l3_device') || 'wan';
+		// a down interface must not answer for the real 'wan' port (DSA name on many
+		// boards) in containsDevice(); same virtual-name fallback as qmiraw/mbimp
+		return this._ubus('l3_device') || 'fibocom-%s'.format(this.sid);
 	},
 
 	getPackageName: function() {

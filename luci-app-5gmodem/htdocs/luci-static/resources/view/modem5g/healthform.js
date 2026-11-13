@@ -8,7 +8,7 @@ var NBIN = '/usr/share/5gmodem/netpri.sh';
 var PBIN = '/usr/share/5gmodem/stapark.sh';
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(fs.exec_direct(HBIN, [ 'getconf' ]), '{}'),
@@ -193,12 +193,16 @@ return baseclass.extend({
 		};
 		if (opts && opts.autosave) {
 			var _as_t = null;
+			// saves run one after another: two setconf calls must not interleave
+			var _as_q = Promise.resolve();
 			var _as_kick = function() {
 				if (_as_t) { window.clearTimeout(_as_t); }
 				_as_t = window.setTimeout(function() {
 					_as_t = null;
-					save().then(function() {
+					_as_q = _as_q.then(save).then(function() {
 						if (opts.onsaved) { opts.onsaved(); }
+					}).catch(function(e) {
+						ui.addNotification(null, E('p', [ String((e && e.message) || e) ]), 'error');
 					});
 				}, 500);
 			};

@@ -166,7 +166,7 @@ function addReceiveIncoming(s) {
 	[ '50', '100', '200', '500', '1000', '2000' ].forEach(function(v) {
 		o.value(v, _('%s messages').format(v));
 	});
-	o.default = '200';
+	o.default = '500';
 	o.depends('archive', '1');
 
 	o = s.option(form.Flag, 'mergesms', _('Merge split messages'),
@@ -888,7 +888,7 @@ function injectStyle() {
 }
 
 return baseclass.extend({
-	API: 30942,
+	API: 30943,
 	panel: function(group) {
 		var build = GROUPS[group];
 		if (!build)

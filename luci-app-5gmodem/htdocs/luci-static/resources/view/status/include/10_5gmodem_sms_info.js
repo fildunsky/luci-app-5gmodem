@@ -208,10 +208,11 @@ return baseclass.extend({
 			if (!res || res.code !== 0) return 0;
 			
 			try {
-				let output = res.stdout || '';
-				let stx = output.substring(22, 27);
-				let smsCount = parseInt(stx.replace(/[^0-9]/g, '')) || 0;
-				return smsCount;
+				/* "Storage type: XX, used: N, ..." - parse by label, not by
+				   column: a fixed offset cut counts of four digits and broke on
+				   any other storage name length. */
+				let m = String(res.stdout || '').match(/used:\s*(\d+)/i);
+				return m ? (parseInt(m[1], 10) || 0) : 0;
 			} catch(e) {
 				return 0;
 			}
@@ -467,7 +468,9 @@ return baseclass.extend({
 				return window.modemDetectorData;
 			}
 
-			window.modemDetectorCache = {};
+			/* Mark cached badges stale instead of wiping them: render() keeps
+			   showing the old values while one refresh per modem runs. */
+			window.modemDetectorGen = (window.modemDetectorGen || 0) + 1;
 
 			let defmodemSections = uci.sections('defmodems', 'defmodems') || [];
 			let smsCountString = uci.get('5gmodem', 'sms', 'sms_count') || '';
@@ -545,16 +548,23 @@ return baseclass.extend({
 		let self = this;
 		let onHeaderClick = function(ev) {
 			ev.stopPropagation();
-			self.showAlignmentModal(container);
+			/* A badge refreshed in the background may outlive this render's
+			   container, so align the container it is in now. */
+			let host = ev.currentTarget.closest ? ev.currentTarget.closest('.network-status-table') : null;
+			self.showAlignmentModal(host || container);
 		};
 		
 		data.modems.forEach(L.bind(function(modem) {
 			let badgeId = 'modem-badge-' + modem.index;
 			let skipModemData = modem.skipModemData || isSmsOnly;
-			
-			if (window.modemDetectorCache && window.modemDetectorCache[modem.index]) {
-				let cached = window.modemDetectorCache[modem.index];
-				container.appendChild(this.renderModemBadge(cached, hasDefmodems && !skipModemData, onHeaderClick));
+			let cache = window.modemDetectorCache || (window.modemDetectorCache = {});
+			let pending = window.modemDetectorPending || (window.modemDetectorPending = {});
+			let cached = cache[modem.index];
+
+			if (cached) {
+				let cachedBadge = this.renderModemBadge(cached, hasDefmodems && !skipModemData, onHeaderClick);
+				cachedBadge.id = badgeId;
+				container.appendChild(cachedBadge);
 			} else {
 				let boxStyle = skipModemData
 					? 'margin:0.2em;flex:1;min-width:80px;max-width:100px;'
@@ -583,53 +593,65 @@ return baseclass.extend({
 						])
 					])
 				);
-
-				let modemDataPromise = skipModemData
-					? Promise.resolve(null)
-					: this.getModemData(modem.comm_port, modem.forced_plmn_op, modem.mbim_op, modem.modemdata);
-
-				let sleepPromise = new Promise(function(resolve) { setTimeout(resolve, 2000); });
-
-				let smsCountPromise = this.getCurrentSmsCount(modem.comm_port, modem.storage);
-
-				Promise.all([
-					modemDataPromise,
-					smsCountPromise,
-					sleepPromise
-				]).then(L.bind(function(results) {
-					let result = results[0];
-					let currentSmsCount = results[1];
-
-					let savedSmsCount = modem.smsCount || 0;
-					let newSmsCount = Math.max(0, currentSmsCount - savedSmsCount);
-
-					let modemInfo = {
-						operator: '-',
-						mode: '-',
-						modemName: modem.modemName || _('Modem'),
-						smsCount: newSmsCount,
-						signalQuality: 0
-					};
-
-					if (result) {
-						modemInfo.operator = result.operator || '-';
-						modemInfo.mode = result.mode || '-';
-						modemInfo.signalQuality = result.signalQuality || 0;
-					}
-
-					if (!window.modemDetectorCache) {
-						window.modemDetectorCache = {};
-					}
-					window.modemDetectorCache[modem.index] = modemInfo;
-
-					let badgeElement = document.getElementById(badgeId);
-					if (badgeElement) {
-						let newBadge = this.renderModemBadge(modemInfo, hasDefmodems && !skipModemData, onHeaderClick);
-						newBadge.id = badgeId;
-						badgeElement.parentNode.replaceChild(newBadge, badgeElement);
-					}
-				}, this));
 			}
+
+			/* The Status page reruns load() and render() on every poll tick
+			   (5 s), while md_serial_ecm and the bridge talk to the modem and
+			   can outlast a tick. Start at most one query per modem, and only
+			   when load() has marked the cached values stale. */
+			if ((cached && cached.gen === window.modemDetectorGen) || pending[modem.index]) {
+				return;
+			}
+			pending[modem.index] = true;
+			let gen = window.modemDetectorGen;
+
+			let modemDataPromise = skipModemData
+				? Promise.resolve(null)
+				: this.getModemData(modem.comm_port, modem.forced_plmn_op, modem.mbim_op, modem.modemdata);
+
+			let sleepPromise = new Promise(function(resolve) { setTimeout(resolve, 2000); });
+
+			let smsCountPromise = this.getCurrentSmsCount(modem.comm_port, modem.storage);
+
+			Promise.all([
+				modemDataPromise,
+				smsCountPromise,
+				sleepPromise
+			]).then(L.bind(function(results) {
+				delete pending[modem.index];
+
+				let result = results[0];
+				let currentSmsCount = results[1];
+
+				let savedSmsCount = modem.smsCount || 0;
+				let newSmsCount = Math.max(0, currentSmsCount - savedSmsCount);
+
+				let modemInfo = {
+					gen: gen,
+					operator: '-',
+					mode: '-',
+					modemName: modem.modemName || _('Modem'),
+					smsCount: newSmsCount,
+					signalQuality: 0
+				};
+
+				if (result) {
+					modemInfo.operator = result.operator || '-';
+					modemInfo.mode = result.mode || '-';
+					modemInfo.signalQuality = result.signalQuality || 0;
+				}
+
+				cache[modem.index] = modemInfo;
+
+				let badgeElement = document.getElementById(badgeId);
+				if (badgeElement) {
+					let newBadge = this.renderModemBadge(modemInfo, hasDefmodems && !skipModemData, onHeaderClick);
+					newBadge.id = badgeId;
+					badgeElement.parentNode.replaceChild(newBadge, badgeElement);
+				}
+			}, this), function() {
+				delete pending[modem.index];
+			});
 		}, this));
 		
 		return container;

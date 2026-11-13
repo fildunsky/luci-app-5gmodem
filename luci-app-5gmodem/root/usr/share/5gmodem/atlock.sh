@@ -2,7 +2,7 @@ AT_LOCK_FD=8
 
 at_lock() {
 	[ -n "$1" ] || return 0
-	_al_key=$(basename "$1")
+	_al_key="${1##*/}"
 	[ "$_AT_LOCK_HELD" = "$_al_key" ] && return 0
 	if [ -n "$_AT_LOCK_HELD" ]; then
 		logger -t 5gmodem "at_lock: refused - already holding '$_AT_LOCK_HELD', requested '$_al_key' (at_unlock first)"
@@ -18,7 +18,9 @@ at_lock() {
 		return 0
 	fi
 	( flock "$AT_LOCK_FD" ) 2>/dev/null & _al_p=$!
-	( eval "exec $AT_LOCK_FD>&-"; sleep "$_al_max"; kill "$_al_p" 2>/dev/null ) \
+	# the sleep dies with the watchdog; a bare "sleep; kill" kept it (and the caller's other fds) for the whole wait
+	( eval "exec $AT_LOCK_FD>&-"; sleep "$_al_max" & _al_s=$!
+	  trap 'kill $_al_s 2>/dev/null; exit' TERM; wait $_al_s; kill "$_al_p" 2>/dev/null ) \
 		>/dev/null 2>&1 </dev/null & _al_w=$!
 	if wait "$_al_p" 2>/dev/null; then
 		kill "$_al_w" 2>/dev/null; wait "$_al_w" 2>/dev/null
@@ -41,19 +43,19 @@ at_unlock() {
 }
 
 at_long_begin() {
-	_alb_f="/tmp/5gmodem/atlong_$(basename "$1")"
+	_alb_f="/tmp/5gmodem/atlong_${1##*/}"
 	mkdir -p /tmp/5gmodem 2>/dev/null
 	read -r _alb_pid _ < /proc/self/stat
 	printf '%s\n' "$_alb_pid" > "$_alb_f" 2>/dev/null
 }
 
 at_long_end() {
-	rm -f "/tmp/5gmodem/atlong_$(basename "$1")" 2>/dev/null
+	rm -f "/tmp/5gmodem/atlong_${1##*/}" 2>/dev/null
 }
 
 at_long_busy() {
 	[ -n "$1" ] || return 1
-	_alw_f="/tmp/5gmodem/atlong_$(basename "$1")"
+	_alw_f="/tmp/5gmodem/atlong_${1##*/}"
 	[ -f "$_alw_f" ] || return 1
 	read -r _alw_pid < "$_alw_f" 2>/dev/null
 	if [ -n "$_alw_pid" ] && kill -0 "$_alw_pid" 2>/dev/null \

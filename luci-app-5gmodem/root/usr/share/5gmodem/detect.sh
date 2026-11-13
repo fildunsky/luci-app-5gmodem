@@ -10,7 +10,7 @@
 . /usr/share/5gmodem/notmodem.sh 2>/dev/null
 _dt_am=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
 if [ -n "$_dt_am" ]; then
-	_dt_sec="m_$(echo "$_dt_am" | sed 's/[^A-Za-z0-9]/_/g')"
+	_dt_sec=$(secname "$_dt_am")
 	_dt_p=$(uci -q get "5gmodem.$_dt_sec.at_port")
 	if [ "$(uci -q get "5gmodem.$_dt_sec.kind")" = "hilink" ]; then
 		[ -n "$_dt_p" ] && [ -c "$_dt_p" ] && { echo "$_dt_p"; exit 0; }
@@ -25,6 +25,18 @@ if [ -n "$_dt_am" ]; then
 fi
 
 _dev_ok() {
+	# An IP from the old HiLink hint is not a port: web-API modems go through hilink.sh by kind.
+	# Returned as the AT port, it left an ordinary modem at "Device not found".
+	case "$1" in
+		/dev/*) ;;
+		*)
+			if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
+				uci -q delete 5gmodem.@5gmodem[0].device
+				uci -q commit 5gmodem 2>/dev/null
+				flock -u 6
+			fi
+			return 1 ;;
+	esac
 	if ! tty_poll_unsafe "$1" && ! poll_send_settle "$_dt_am" "$1"; then return 0; fi
 	if exec 6>/tmp/5gmodem/ucitx.lock 2>/dev/null && flock -n 6; then
 		uci -q delete 5gmodem.@5gmodem[0].device
@@ -37,11 +49,13 @@ _dev_ok() {
 
 CONFIG=modemdefine
 MODEMZ=0
+_dt_dev_done=""
 [ -f /etc/config/$CONFIG ] && MODEMZ=$(uci show $CONFIG 2>/dev/null | grep -o "@modemdefine\[[0-9]*\]\.modem" | wc -l | xargs)
 if [ -n "$MODEMZ" ]; then
 
 	if [ "$MODEMZ" -eq 0 ]; then
     		DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
+		_dt_dev_done=1
 		if [ -n "$DEVICE" ] && _dev_ok "$DEVICE"; then
 			echo $DEVICE
 			exit 0
@@ -90,10 +104,13 @@ getdevicepath() {
 	esac
 }
 
-DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
-if [ -n "$DEVICE" ] && _dev_ok "$DEVICE"; then
-	echo $DEVICE
-	exit 0
+# without modemdefine the same check already ran above; a second pass would probe the ports again
+if [ -z "$_dt_dev_done" ]; then
+	DEVICE=$(uci -q get 5gmodem.@5gmodem[0].device)
+	if [ -n "$DEVICE" ] && _dev_ok "$DEVICE"; then
+		echo $DEVICE
+		exit 0
+	fi
 fi
 
 AUTO=$(uci -q get 5gmodem.@5gmodem[0].auto_port)
@@ -113,7 +130,7 @@ _sec_port_fix() {
 }
 
 ACTP=$(uci -q get 5gmodem.@5gmodem[0].at_port)
-_ACTM=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+_ACTM="$_dt_am"
 if [ -n "$ACTP" ] && [ -c "$ACTP" ] && tty_belongs "$ACTP" "$_ACTM" && ! tty_poll_unsafe "$ACTP" && ! poll_send_settle "$_ACTM" "$ACTP"; then
 	_dt_sp=""
 	[ -n "$_ACTM" ] && _dt_sp=$(uci -q get "5gmodem.$(secname "$_ACTM").at_port")
@@ -133,7 +150,7 @@ if [ -n "$ACTP" ] && [ -c "$ACTP" ]; then
 		flock -u 6
 	fi
 fi
-AMP=$(uci -q get 5gmodem.@5gmodem[0].active_modem)
+AMP="$_dt_am"
 if [ -n "$AMP" ] && [ -x /usr/share/5gmodem/listmodems.sh ]; then
 	ATCACHE="/tmp/5gmodem/atport_$(echo "$AMP" | tr -c 'A-Za-z0-9' '_')"
 	CP=$(cat "$ATCACHE" 2>/dev/null)

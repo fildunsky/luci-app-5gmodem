@@ -41,7 +41,7 @@ serial_valid() {
 		*[!A-Za-z0-9._:-]*) return 1 ;;
 	esac
 	[ "${#_sv}" -ge 6 ] || return 1
-	_sv1=$(printf '%s' "$_sv" | cut -c1)
+	_sv1="${_sv%"${_sv#?}"}"
 	case "$_sv" in
 		*[!"$_sv1"]*) ;;
 		*) return 1 ;;
@@ -72,14 +72,22 @@ stub_serial_add() {
 	return 0
 }
 
+# sysfs reads with the read builtin: listmodems.sh walks every USB device here on each rebuild
+_sysfs_line() {
+	_SFL=""
+	IFS= read -r _SFL 2>/dev/null < "$1"
+	case "$_SFL" in *[[:cntrl:]]*) _SFL=$(printf '%s' "$_SFL" | tr -d '\r\n') ;; esac
+}
+
 serial_of() {
-	_so_s=$(cat "$1/serial" 2>/dev/null | tr -d '\r\n')
+	_sysfs_line "$1/serial"; _so_s="$_SFL"
 	serial_valid "$_so_s" || { printf ''; return 1; }
 	stub_serial_known "$_so_s" && { printf ''; return 1; }
 	_so_n=0
 	for _so_d in /sys/bus/usb/devices/*; do
 		[ -f "$_so_d/serial" ] || continue
-		[ "$(cat "$_so_d/serial" 2>/dev/null | tr -d '\r\n')" = "$_so_s" ] && _so_n=$((_so_n + 1))
+		_sysfs_line "$_so_d/serial"
+		[ "$_SFL" = "$_so_s" ] && _so_n=$((_so_n + 1))
 	done
 	[ "$_so_n" = 1 ] || { stub_serial_add "$_so_s"; printf ''; return 1; }
 	printf '%s' "$_so_s"
@@ -445,14 +453,28 @@ secname() {
 _UCI_NL='
 '
 
+# Line of snapshot $1 that starts with $2 (the first one, or the last one when $3 is set), minus that prefix, in _USL.
+# A loop over lines on purpose: ${snap#*"key"} is quadratic in BusyBox ash and costs tens of
+# milliseconds per lookup on a config of a few KB, more than the uci call the snapshot saves.
+_uci_snap_line() {
+	_USL=""; _usl_rc=1
+	_usl_ifs="$IFS"; _usl_iset="${IFS+1}"; _usl_f=""
+	case "$-" in *f*) _usl_f=1 ;; esac
+	set -f; IFS="$_UCI_NL"
+	for _usl_l in $1; do
+		case "$_usl_l" in
+			"$2"*) _USL="${_usl_l#"$2"}"; _usl_rc=0; [ -n "$3" ] || break ;;
+		esac
+	done
+	if [ -n "$_usl_iset" ]; then IFS="$_usl_ifs"; else unset IFS; fi
+	[ -n "$_usl_f" ] || set +f
+	return "$_usl_rc"
+}
+
 _uci_snap_get() {
-	case "$1" in
-		*"$_UCI_NL$2="*)
-			_usv="${1#*"$_UCI_NL$2="}"
-			_usv="${_usv%%"$_UCI_NL"*}"
-			_usv="${_usv#\'}"
-			printf '%s' "${_usv%\'}" ;;
-	esac
+	_uci_snap_line "$1" "$2=" || return 0
+	_usv="${_USL#\'}"
+	printf '%s' "${_usv%\'}"
 }
 
 _UCI5G_SNAP=""
@@ -473,14 +495,9 @@ uci_sec_snap() {
 	printf '%s%s' "$_UCI_NL" "$(uci -q show "$1.$2" 2>/dev/null)"
 }
 uci_sec_val() {
-	_usv_p="$_UCI_NL$2.$3="
-	case "$1" in
-		*"$_usv_p"*)
-			_usv_v="${1##*"$_usv_p"}"
-			_usv_v="${_usv_v%%"$_UCI_NL"*}"
-			_usv_v="${_usv_v#\'}"
-			printf '%s' "${_usv_v%\'}" ;;
-	esac
+	_uci_snap_line "$1" "$2.$3=" last || return 0
+	_usv_v="${_USL#\'}"
+	printf '%s' "${_usv_v%\'}"
 }
 
 _USEC_SEC=""; _USEC_SNAP=""
@@ -855,7 +872,12 @@ tty_send_if() {
 	[ -f "$_tpu_d/bInterfaceNumber" ] || _tpu_d=${_tpu_d%/*}
 	[ -f "$_tpu_d/bInterfaceNumber" ] || return 1
 	_tpu_u=${_tpu_d%/*}
-	case "$(cat "$_tpu_u/idVendor" 2>/dev/null):$(cat "$_tpu_u/idProduct" 2>/dev/null):$(cat "$_tpu_d/bInterfaceNumber" 2>/dev/null)" in
+	_tpu_v=""; _tpu_pp=""; _tpu_n=""
+	read -r _tpu_v 2>/dev/null < "$_tpu_u/idVendor"
+	[ "$_tpu_v" = 0e8d ] || return 1
+	read -r _tpu_pp 2>/dev/null < "$_tpu_u/idProduct"
+	read -r _tpu_n 2>/dev/null < "$_tpu_d/bInterfaceNumber"
+	case "$_tpu_v:$_tpu_pp:$_tpu_n" in
 		0e8d:7127:06) _TPU_P=${_tpu_u##*/}; return 0 ;;
 	esac
 	return 1
@@ -970,7 +992,8 @@ alias_for_path() {
 tty_usbpath() {
 	[ -n "$1" ] || return 1
 	case "${1##*/}" in ttyMTK*) echo ccci; return 0 ;; esac
-	_tp=$(readlink -f "/sys/class/wwan/$(basename "$1")/device" 2>/dev/null)
+	_tp=""
+	[ -e "/sys/class/wwan/${1##*/}" ] && _tp=$(readlink -f "/sys/class/wwan/${1##*/}/device" 2>/dev/null)
 	if [ -n "$_tp" ]; then
 		while [ -n "$_tp" ] && [ "$_tp" != /sys ]; do
 			if [ -d "$_tp/remoteproc" ] || [ -e "/sys/bus/pci/devices/${_tp##*/}" ]; then
@@ -980,7 +1003,7 @@ tty_usbpath() {
 			_tp=${_tp%/*}
 		done
 	fi
-	_tp=$(readlink -f "/sys/class/tty/$(basename "$1")/device" 2>/dev/null) || return 1
+	_tp=$(readlink -f "/sys/class/tty/${1##*/}/device" 2>/dev/null) || return 1
 	[ -n "$_tp" ] || return 1
 	_tp=${_tp%/*}
 	_tp=${_tp##*/}
@@ -1119,7 +1142,8 @@ qmicli_p() {
 		_qp_w=20; [ -n "$_qp_direct" ] && _qp_w=6
 		qmicli -d "$_qp_dev" -p $_qp_mb "$@" > "$_qp_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_qp_pid=$!
-		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_qp_w"; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
+		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep "$_qp_w" & _qp_s=$!
+		  trap 'kill $_qp_s 2>/dev/null; exit' TERM; wait $_qp_s; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
 		_qp_k=$!
 		sleep_tick_init
 		_qp_i=0; _qp_max=$(( (_qp_w + 1) * _TICKS_PER_SEC ))
@@ -1137,7 +1161,8 @@ qmicli_p() {
 	if [ ! -s "$_qp_o" ] && [ -n "$_qp_direct" ] && qmi_channel_free; then
 		qmicli -d "$_qp_dev" $_qp_mb "$@" > "$_qp_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_qp_pid=$!
-		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep 20; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
+		( exec >/dev/null 2>&1 7>&- 8>&- 9>&-; sleep 20 & _qp_s=$!
+		  trap 'kill $_qp_s 2>/dev/null; exit' TERM; wait $_qp_s; kill -9 "$_qp_pid" 2>/dev/null ) </dev/null &
 		_qp_k=$!
 		sleep_tick_init
 		_qp_i=0; _qp_max2=$(( 21 * _TICKS_PER_SEC ))
@@ -1238,7 +1263,7 @@ at_query() {
 
 	_aq_mine=0
 	if command -v at_lock >/dev/null 2>&1 \
-	   && [ "$_AT_LOCK_HELD" != "$(basename "$_aq_p")" ]; then
+	   && [ "$_AT_LOCK_HELD" != "${_aq_p##*/}" ]; then
 		if at_lock "$_aq_p" "${4:-10}" 2>/dev/null; then
 			_aq_mine=1
 		else
@@ -1263,7 +1288,9 @@ at_query() {
 	else
 		sms_tool -d "$_aq_p" at "$_aq_c" > "$_aq_o" 2>/dev/null 7>&- 8>&- 9>&- &
 		_aq_pid=$!
-		( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t"; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
+		# the sleep is killed with the watchdog: a bare "sleep; kill" left it running for the whole timeout
+		( exec >/dev/null 2>&1 8>&- 9>&-; sleep "$_aq_t" & _aq_s=$!
+		  trap 'kill $_aq_s 2>/dev/null; exit' TERM; wait $_aq_s; kill "$_aq_pid" 2>/dev/null ) </dev/null & _aq_w=$!
 		_aq_i=0; _aq_max=$(( (${_aq_t:-8} + 1) * _TICKS_PER_SEC ))
 		while kill -0 "$_aq_pid" 2>/dev/null && [ "$_aq_i" -lt "$_aq_max" ]; do
 			_aq_i=$((_aq_i + 1)); sleep "$_SLEEP_TICK"
@@ -1662,49 +1689,5 @@ xmm_other_at() {
 	return 1
 }
 
-# Primary uplink = the IPv4 default route with the lowest metric in the main
-# table. When it differs from the last one seen, fire
-#   ACTION=primary INTERFACE DEVICE PREVIOUS PREVIOUS_DEVICE REASON
-#   /sbin/hotplug-call 5gmodem-uplink   (and ubus event 5gmodem.uplink)
-# in the background. Contract: docs/subsystems/internet-priority.md#primary-uplink-event
-# $1 = reason (netpri, health, iface)
-uplink_notify() {
-	[ -x /sbin/hotplug-call ] || return 0
-	mkdir -p /tmp/5gmodem 2>/dev/null
-	(
-		exec 5>/tmp/5gmodem/uplink.lock 2>/dev/null || exit 0
-		flock 5
-		_un_dev=$(ip -4 route show default 2>/dev/null | awk '
-			$1 == "default" && $2 != "from" {
-				m = 0; d = ""
-				for (i = 2; i < NF; i++) { if ($i == "dev") d = $(i + 1); if ($i == "metric") m = $(i + 1) + 0 }
-				if (d != "" && (b == "" || m < bm)) { bm = m; b = d }
-			}
-			END { print b }')
-		_un_if=""
-		if [ -n "$_un_dev" ]; then
-			_un_dump=$(ubus call network.interface dump 2>/dev/null)
-			for _un_c in $(printf '%s' "$_un_dump" | jsonfilter \
-					-e "@.interface[@.l3_device=\"$_un_dev\"].interface" 2>/dev/null); do
-				[ -n "$(printf '%s' "$_un_dump" | jsonfilter \
-					-e "@.interface[@.interface=\"$_un_c\"][\"ipv4-address\"][0].address" 2>/dev/null)" ] \
-					&& { _un_if="$_un_c"; break; }
-				[ -n "$_un_if" ] || _un_if="$_un_c"
-			done
-			[ -n "$_un_if" ] || _un_if="$_un_dev"
-		fi
-		_un_prev=""; _un_pdev=""
-		[ -f /tmp/5gmodem/uplink.primary ] && read -r _un_prev _un_pdev < /tmp/5gmodem/uplink.primary
-		[ "$_un_if" = "$_un_prev" ] && [ "$_un_dev" = "$_un_pdev" ] && exit 0
-		echo "$_un_if $_un_dev" > /tmp/5gmodem/uplink.primary
-		logger -t 5gmodem "uplink: primary ${_un_prev:-none} -> ${_un_if:-none} (${1:-unknown})"
-		(
-			exec 5>&- 6>&- 7>&- 8>&- 9>&-
-			unset _AT_LOCK_HELD
-			ACTION=primary INTERFACE="$_un_if" DEVICE="$_un_dev" \
-			PREVIOUS="$_un_prev" PREVIOUS_DEVICE="$_un_pdev" REASON="${1:-unknown}" \
-				/sbin/hotplug-call 5gmodem-uplink
-			ubus send 5gmodem.uplink "{\"action\":\"primary\",\"interface\":\"$_un_if\",\"device\":\"$_un_dev\",\"previous\":\"$_un_prev\",\"previous_device\":\"$_un_pdev\",\"reason\":\"${1:-unknown}\"}"
-		) >/dev/null 2>&1 </dev/null &
-	) >/dev/null 2>&1 </dev/null
-}
+# uplink_notify lives in uplink.sh so the iface hotplug can load it alone
+if [ -f /usr/share/5gmodem/uplink.sh ]; then . /usr/share/5gmodem/uplink.sh; fi
