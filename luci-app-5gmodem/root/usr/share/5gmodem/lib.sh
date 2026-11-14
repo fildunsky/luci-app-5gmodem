@@ -1503,12 +1503,13 @@ net_alt_paths() {
 }
 
 net_fetch() {
-	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"
+	# $4: one optional request header, e.g. "Accept: application/octet-stream"
+	_nf_t="$1"; _nf_u="$2"; _nf_o="$3"; _nf_h="$4"
 	if [ -n "$_nf_o" ]; then
-		wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+		wget -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 		rm -f "$_nf_o" 2>/dev/null
 	else
-		_nf_b=$(wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+		_nf_b=$(wget -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 	fi
 	if ! command -v curl >/dev/null 2>&1; then
@@ -1516,24 +1517,24 @@ net_fetch() {
 		logger -t 5gmodem "net: direct fetch failed - retrying via local proxy 127.0.0.1:$_nf_p"
 		if [ -n "$_nf_o" ]; then
 			http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-				wget -qO "$_nf_o" --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
+				wget -qO "$_nf_o" ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && return 0
 			rm -f "$_nf_o" 2>/dev/null; return 1
 		fi
 		_nf_b=$(http_proxy="http://127.0.0.1:$_nf_p" https_proxy="http://127.0.0.1:$_nf_p" \
-			wget -qO- --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
+			wget -qO- ${_nf_h:+"--header=$_nf_h"} --timeout="$_nf_t" "$_nf_u" 2>/dev/null)
 		[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; return 0; }
 		return 1
 	fi
 	net_alt_paths | {
 		while read -r _nf_a; do
 			# a one-byte probe, so a dead path costs seconds and not the whole timeout
-			curl -fsSL --connect-timeout 4 -m 8 -r 0-0 -o /dev/null $_nf_a "$_nf_u" 2>/dev/null || continue
+			curl -fsSL --connect-timeout 4 -m 8 -r 0-0 -o /dev/null $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null || continue
 			logger -t 5gmodem "net: direct fetch failed - using $_nf_a"
 			if [ -n "$_nf_o" ]; then
-				curl -fsSL -m "$_nf_t" $_nf_a -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && exit 0
+				curl -fsSL -m "$_nf_t" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} -o "$_nf_o" "$_nf_u" 2>/dev/null && [ -s "$_nf_o" ] && exit 0
 				rm -f "$_nf_o" 2>/dev/null
 			else
-				_nf_b=$(curl -fsSL -m "$_nf_t" $_nf_a "$_nf_u" 2>/dev/null)
+				_nf_b=$(curl -fsSL -m "$_nf_t" $_nf_a ${_nf_h:+-H} ${_nf_h:+"$_nf_h"} "$_nf_u" 2>/dev/null)
 				[ -n "$_nf_b" ] && { printf '%s' "$_nf_b"; exit 0; }
 			fi
 		done

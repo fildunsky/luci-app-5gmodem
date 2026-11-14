@@ -104,9 +104,10 @@ check)
 	NOTES=$(printf '%s' "$J" | jsonfilter -e '@.body' 2>/dev/null)
 	case "$2" in
 		ru|id|ja|vi|zh_Hans|zh_Hant)
-			_nl_url=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='notes-$2.txt'].browser_download_url" 2>/dev/null)
+			# API address for the same reason as the package below (long headers on github.com)
+			_nl_url=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='notes-$2.txt'].url" 2>/dev/null)
 			if [ -n "$_nl_url" ]; then
-				_nl_txt=$(net_fetch 10 "$_nl_url" | head -c 8192)
+				_nl_txt=$(net_fetch 10 "$_nl_url" "" "Accept: application/octet-stream" | head -c 8192)
 				[ -n "$_nl_txt" ] && NOTES="$_nl_txt"
 			fi
 			;;
@@ -158,7 +159,16 @@ install)
 			NAME=$(asset_name "$J" "$PKG" "$EXT")
 			[ -n "$NAME" ] || { fail "asset_pending"; return; }
 			TARGET=$(printf '%s' "$NAME" | sed -n 's/^.*[-_]\([0-9][0-9.]*\)-r[0-9][0-9]*[-_.].*$/\1/p')
-			URL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].browser_download_url" 2>/dev/null)
+			# The API address of the asset, not browser_download_url: github.com answers the latter
+			# with a Content-Security-Policy line over 4 KB, and uclient-fetch (wget on OpenWrt) waits
+			# for the end of a header line longer than its 4 KB buffer until the timeout. The API
+			# redirects straight to the file server with short headers.
+			URL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].url" 2>/dev/null)
+			ACC="Accept: application/octet-stream"
+			if [ -z "$URL" ]; then
+				URL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].browser_download_url" 2>/dev/null)
+				ACC=""
+			fi
 			TOTAL=$(printf '%s' "$J" | jsonfilter -e "@.assets[@.name='$NAME'].size" 2>/dev/null)
 			case "$TOTAL" in ''|*[!0-9]*) TOTAL=0 ;; esac
 			[ -n "$URL" ] || { fail "asset_pending"; return; }
@@ -172,7 +182,7 @@ install)
 			F="$TMP/$PKG.$EXT"
 			rm -f "$F"
 			st download 0 "$TOTAL"
-			( net_fetch 120 "$URL" "$F" && : > "$F.ok" ) >/dev/null 2>&1 </dev/null &
+			( net_fetch 120 "$URL" "$F" "$ACC" && : > "$F.ok" ) >/dev/null 2>&1 </dev/null &
 			_dp=$!
 			while kill -0 "$_dp" 2>/dev/null; do
 				st download "$(fsize "$F")" "$TOTAL"
